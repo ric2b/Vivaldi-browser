@@ -10,9 +10,9 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/feature_list.h"
 #include "base/location.h"
 #include "base/macros.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/single_thread_task_runner.h"
@@ -47,7 +47,6 @@
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
@@ -90,7 +89,6 @@ const char kKeyIsDesktop[] = "isDesktopUser";
 const char kKeyAvatarUrl[] = "userImage";
 const char kKeyNeedsSignin[] = "needsSignin";
 const char kKeyHasLocalCreds[] = "hasLocalCreds";
-const char kKeyStatistics[] = "statistics";
 const char kKeyIsProfileLoaded[] = "isProfileLoaded";
 
 // JS API callback names.
@@ -104,8 +102,6 @@ const char kJsApiUserManagerLogRemoveUserWarningShown[] =
     "logRemoveUserWarningShown";
 const char kJsApiUserManagerRemoveUserWarningLoadStats[] =
     "removeUserWarningLoadStats";
-const char kJsApiUserManagerGetRemoveWarningDialogMessage[] =
-    "getRemoveWarningDialogMessage";
 const char kJsApiUserManagerAreAllProfilesLocked[] =
     "areAllProfilesLocked";
 const size_t kAvatarIconSize = 180;
@@ -306,9 +302,8 @@ UserManagerScreenHandler::UserManagerScreenHandler() : weak_ptr_factory_(this) {
   const PrefService::Preference* add_person_enabled_pref =
       service->FindPreference(prefs::kBrowserAddPersonEnabled);
 
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings) &&
-      (guest_mode_enabled_pref->HasUserSetting() ||
-       add_person_enabled_pref->HasUserSetting())) {
+  if (guest_mode_enabled_pref->HasUserSetting() ||
+      add_person_enabled_pref->HasUserSetting()) {
     service->ClearPref(guest_mode_enabled_pref->name());
     service->ClearPref(add_person_enabled_pref->name());
     base::RecordAction(
@@ -352,24 +347,25 @@ void UserManagerScreenHandler::EnableInput() {
 
 void UserManagerScreenHandler::SetAuthType(
     const AccountId& account_id,
-    proximity_auth::ScreenlockBridge::LockHandler::AuthType auth_type,
+    proximity_auth::mojom::AuthType auth_type,
     const base::string16& auth_value) {
   if (GetAuthType(account_id) ==
-      proximity_auth::ScreenlockBridge::LockHandler::FORCE_OFFLINE_PASSWORD)
+      proximity_auth::mojom::AuthType::FORCE_OFFLINE_PASSWORD) {
     return;
+  }
 
   user_auth_type_map_[account_id.GetUserEmail()] = auth_type;
   web_ui()->CallJavascriptFunctionUnsafe(
       "login.AccountPickerScreen.setAuthType",
-      base::Value(account_id.GetUserEmail()), base::Value(auth_type),
-      base::Value(auth_value));
+      base::Value(account_id.GetUserEmail()),
+      base::Value(static_cast<int>(auth_type)), base::Value(auth_value));
 }
 
-proximity_auth::ScreenlockBridge::LockHandler::AuthType
-UserManagerScreenHandler::GetAuthType(const AccountId& account_id) const {
+proximity_auth::mojom::AuthType UserManagerScreenHandler::GetAuthType(
+    const AccountId& account_id) const {
   const auto it = user_auth_type_map_.find(account_id.GetUserEmail());
   if (it == user_auth_type_map_.end())
-    return proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD;
+    return proximity_auth::mojom::AuthType::OFFLINE_PASSWORD;
   return it->second;
 }
 
@@ -583,10 +579,9 @@ void UserManagerScreenHandler::HandleHardlockUserPod(
   std::string email;
   CHECK(args->GetString(0, &email));
   const AccountId account_id = AccountId::FromUserEmail(email);
-  SetAuthType(
-      account_id,
-      proximity_auth::ScreenlockBridge::LockHandler::FORCE_OFFLINE_PASSWORD,
-      base::string16());
+  SetAuthType(account_id,
+              proximity_auth::mojom::AuthType::FORCE_OFFLINE_PASSWORD,
+              base::string16());
   HideUserPodCustomIcon(account_id);
 }
 
@@ -597,6 +592,7 @@ void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
   if (!args->Get(0, &profile_path_value))
     return;
 
+  base::Time start_time = base::Time::Now();
   base::FilePath profile_path;
 
   if (!base::GetValueAsFilePath(*profile_path_value, &profile_path))
@@ -606,89 +602,45 @@ void UserManagerScreenHandler::HandleRemoveUserWarningLoadStats(
   Profile* profile = g_browser_process->profile_manager()->
       GetProfileByPath(profile_path);
 
-  if (!profile)
-    return;
-
-  if (!chrome::FindAnyBrowser(profile, true)) {
-    // If no windows are open for that profile, the statistics in
-    // ProfileAttributesStorage are up to date. The statistics in
-    // ProfileAttributesStorage are returned because the copy in user_pod_row.js
-    // may be outdated. However, if some statistics are missing in
-    // ProfileAttributesStorage (i.e. |item.success| is false), then the actual
-    // statistics are queried instead.
-    base::DictionaryValue return_value;
-    profiles::ProfileCategoryStats stats =
-        ProfileStatistics::GetProfileStatisticsFromAttributesStorage(
-            profile_path);
-    bool stats_success = true;
-    for (const auto& item : stats) {
-      std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
-      stat->SetIntegerWithoutPathExpansion("count", item.count);
-      stat->SetBooleanWithoutPathExpansion("success", item.success);
-      return_value.SetWithoutPathExpansion(item.category, std::move(stat));
-      stats_success &= item.success;
-    }
-    if (stats_success) {
-      web_ui()->CallJavascriptFunctionUnsafe("updateRemoveWarningDialog",
-                                             base::Value(profile_path.value()),
-                                             return_value);
-      return;
-    }
+  if (profile) {
+    GatherStatistics(start_time, profile);
+  } else {
+    g_browser_process->profile_manager()->LoadProfileByPath(
+        profile_path, false,
+        base::Bind(&UserManagerScreenHandler::GatherStatistics,
+                   weak_ptr_factory_.GetWeakPtr(), start_time));
   }
+}
 
-  ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
-      base::Bind(
-          &UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
-          weak_ptr_factory_.GetWeakPtr(), profile_path));
+void UserManagerScreenHandler::GatherStatistics(base::Time start_time,
+                                                Profile* profile) {
+  if (profile) {
+    ProfileStatisticsFactory::GetForProfile(profile)->GatherStatistics(
+        base::Bind(&UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback,
+                   weak_ptr_factory_.GetWeakPtr(), profile->GetPath(),
+                   start_time));
+  }
 }
 
 void UserManagerScreenHandler::RemoveUserDialogLoadStatsCallback(
     base::FilePath profile_path,
+    base::Time start_time,
     profiles::ProfileCategoryStats result) {
   // Copy result into return_value.
   base::DictionaryValue return_value;
   for (const auto& item : result) {
-    std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
+    auto stat = base::MakeUnique<base::DictionaryValue>();
     stat->SetIntegerWithoutPathExpansion("count", item.count);
-    stat->SetBooleanWithoutPathExpansion("success", item.success);
     return_value.SetWithoutPathExpansion(item.category, std::move(stat));
+  }
+  if (result.size() == profiles::kProfileStatisticsCategories.size()) {
+    // All categories are finished.
+    UMA_HISTOGRAM_TIMES("Profile.RemoveUserWarningStatsTime",
+                        base::Time::Now() - start_time);
   }
   web_ui()->CallJavascriptFunctionUnsafe("updateRemoveWarningDialog",
                                          base::Value(profile_path.value()),
                                          return_value);
-}
-
-void UserManagerScreenHandler::HandleGetRemoveWarningDialogMessage(
-    const base::ListValue* args) {
-  const base::DictionaryValue* arg;
-  if (!args->GetDictionary(0, &arg))
-    return;
-
-  std::string profile_path("");
-  bool is_synced_user = false;
-  bool has_errors = false;
-
-  if (!arg->GetString("profilePath", &profile_path) ||
-      !arg->GetBoolean("isSyncedUser", &is_synced_user) ||
-      !arg->GetBoolean("hasErrors", &has_errors))
-    return;
-
-  int total_count = 0;
-  if (!arg->GetInteger("totalCount", &total_count))
-    return;
-
-  int message_id = is_synced_user ?
-      (has_errors ? IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_WITH_ERRORS :
-                    IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC) :
-      (has_errors ? IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC_WITH_ERRORS :
-                    IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC);
-
-  base::Value message =
-      base::Value(l10n_util::GetPluralStringFUTF16(message_id, total_count));
-
-  web_ui()->CallJavascriptFunctionUnsafe("updateRemoveWarningDialogSetMessage",
-                                         base::Value(profile_path), message,
-                                         base::Value(total_count));
 }
 
 void UserManagerScreenHandler::OnGetTokenInfoResponse(
@@ -737,10 +689,6 @@ void UserManagerScreenHandler::RegisterMessages() {
       base::Bind(&UserManagerScreenHandler::HandleRemoveUserWarningLoadStats,
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
-      kJsApiUserManagerGetRemoveWarningDialogMessage,
-      base::Bind(&UserManagerScreenHandler::HandleGetRemoveWarningDialogMessage,
-                 base::Unretained(this)));
-  web_ui()->RegisterMessageCallback(
       kJsApiUserManagerAreAllProfilesLocked,
       base::Bind(&UserManagerScreenHandler::HandleAreAllProfilesLocked,
                  base::Unretained(this)));
@@ -755,7 +703,6 @@ void UserManagerScreenHandler::RegisterMessages() {
   web_ui()->RegisterMessageCallback("getTouchViewState", kDoNothingCallback);
   // Unused callbacks from display_manager.js
   web_ui()->RegisterMessageCallback("showAddUser", kDoNothingCallback);
-  web_ui()->RegisterMessageCallback("loadWallpaper", kDoNothingCallback);
   web_ui()->RegisterMessageCallback("updateCurrentScreen", kDoNothingCallback);
   web_ui()->RegisterMessageCallback("loginVisible", kDoNothingCallback);
   // Unused callbacks from user_pod_row.js
@@ -801,28 +748,23 @@ void UserManagerScreenHandler::GetLocalizedValues(
   // For AccountPickerScreen, the remove user warning overlay.
   localized_strings->SetString("removeUserWarningButtonTitle",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_BUTTON));
-  localized_strings->SetString("removeUserWarningTextNonSyncNoStats",
-      l10n_util::GetStringUTF16(
-          IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC_NOSTATS));
-  localized_strings->SetString("removeUserWarningTextNonSyncCalculating",
-      l10n_util::GetStringUTF16(
-          IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC_CALCULATING));
+  localized_strings->SetString(
+      "removeUserWarningTextNonSync",
+      l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_NONSYNC));
   localized_strings->SetString("removeUserWarningTextHistory",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_HISTORY));
   localized_strings->SetString("removeUserWarningTextPasswords",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_PASSWORDS));
   localized_strings->SetString("removeUserWarningTextBookmarks",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_BOOKMARKS));
-  localized_strings->SetString("removeUserWarningTextSettings",
-      l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_SETTINGS));
+  localized_strings->SetString(
+      "removeUserWarningTextAutofill",
+      l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_AUTOFILL));
   localized_strings->SetString("removeUserWarningTextCalculating",
       l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_CALCULATING));
-  localized_strings->SetString("removeUserWarningTextSyncNoStats",
-      l10n_util::GetStringUTF16(
-          IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_NOSTATS));
-  localized_strings->SetString("removeUserWarningTextSyncCalculating",
-      l10n_util::GetStringUTF16(
-          IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC_CALCULATING));
+  localized_strings->SetString(
+      "removeUserWarningTextSync",
+      l10n_util::GetStringUTF16(IDS_LOGIN_POD_USER_REMOVE_WARNING_SYNC));
   localized_strings->SetString("removeLegacySupervisedUserWarningText",
       l10n_util::GetStringFUTF16(
           IDS_LOGIN_POD_LEGACY_SUPERVISED_USER_REMOVE_WARNING,
@@ -927,8 +869,7 @@ void UserManagerScreenHandler::SendUserList() {
     if (entry->IsOmitted())
       continue;
 
-    std::unique_ptr<base::DictionaryValue> profile_value(
-        new base::DictionaryValue());
+    auto profile_value = base::MakeUnique<base::DictionaryValue>();
     base::FilePath profile_path = entry->GetPath();
 
     profile_value->SetString(kKeyUsername, entry->GetUserName());
@@ -948,20 +889,6 @@ void UserManagerScreenHandler::SendUserList() {
     profile_value->SetBoolean(kKeyCanRemove, can_remove);
     profile_value->SetBoolean(kKeyIsDesktop, true);
     profile_value->SetString(kKeyAvatarUrl, GetAvatarImage(entry));
-
-    profiles::ProfileCategoryStats stats =
-        ProfileStatistics::GetProfileStatisticsFromAttributesStorage(
-            profile_path);
-    std::unique_ptr<base::DictionaryValue> stats_dict(
-        new base::DictionaryValue);
-    for (const auto& item : stats) {
-      std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
-      stat->SetIntegerWithoutPathExpansion("count", item.count);
-      stat->SetBooleanWithoutPathExpansion("success", item.success);
-      stats_dict->SetWithoutPathExpansion(item.category, std::move(stat));
-    }
-    profile_value->SetWithoutPathExpansion(kKeyStatistics,
-                                           std::move(stats_dict));
 
     // GetProfileByPath returns a pointer if the profile is fully loaded, NULL
     // otherwise.

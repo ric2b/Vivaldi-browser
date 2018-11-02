@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_model.h"
-#include "ui/app_list/app_list_model_observer.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/pagination_model_observer.h"
 #include "ui/views/view.h"
@@ -27,6 +26,7 @@ namespace app_list {
 
 class AppsGridView;
 class AppListPage;
+class AppListView;
 class ApplicationDragAndDropHost;
 class AppListFolderItem;
 class AppListMainView;
@@ -43,10 +43,9 @@ class StartPageView;
 // interface for switching between launcher pages, and animates the transition
 // between them.
 class APP_LIST_EXPORT ContentsView : public views::View,
-                                     public PaginationModelObserver,
-                                     public AppListModelObserver {
+                                     public PaginationModelObserver {
  public:
-  explicit ContentsView(AppListMainView* app_list_main_view);
+  ContentsView(AppListMainView* app_list_main_view, AppListView* app_list_view);
   ~ContentsView() override;
 
   // Initialize the pages of the launcher. Should be called after
@@ -106,6 +105,8 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   AppListMainView* app_list_main_view() const { return app_list_main_view_; }
 
+  AppListView* app_list_view() const { return app_list_view_; }
+
   // Returns the pagination model for the ContentsView.
   const PaginationModel& pagination_model() { return pagination_model_; }
 
@@ -119,6 +120,9 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   // Returns the content area bounds to use for content views that do not
   // specify their own custom layout.
   gfx::Rect GetDefaultContentsBounds() const;
+
+  // Returns the maximum preferred size of the all pages.
+  gfx::Size GetMaximumContentsSize() const;
 
   // Performs the 'back' action for the active page. Returns whether the action
   // was handled.
@@ -136,8 +140,14 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   void TransitionStarted() override;
   void TransitionChanged() override;
 
-  // Overridden from AppListModelObserver:
-  void OnSearchAnswerAvailableChanged(bool has_answer) override;
+  // Returns the height of current display.
+  int GetDisplayHeight() const;
+
+  // Starts the fade out animation when the app list is closed.
+  void FadeOutOnClose(base::TimeDelta animation_duration);
+
+  // Returns selected view in active page.
+  views::View* GetSelectedView() const;
 
  private:
   // Sets the active launcher page, accounting for whether the change is for
@@ -190,15 +200,14 @@ class APP_LIST_EXPORT ContentsView : public views::View,
   StartPageView* start_page_view_;
   CustomLauncherPageView* custom_page_view_;
 
-  // Unowned pointer to the container of the search answer web view. This
-  // container view is a sub-view of search_results_page_view_.
-  View* search_answer_container_view_;
-
   // The child page views. Owned by the views hierarchy.
   std::vector<AppListPage*> app_list_pages_;
 
   // Parent view. Owned by the views hierarchy.
   AppListMainView* app_list_main_view_;
+
+  // Owned by the views hierarchy.
+  AppListView* const app_list_view_;
 
   // Maps State onto |view_model_| indices.
   std::map<AppListModel::State, int> state_to_view_;
@@ -211,6 +220,8 @@ class APP_LIST_EXPORT ContentsView : public views::View,
 
   // Manages the pagination for the launcher pages.
   PaginationModel pagination_model_;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(ContentsView);
 };

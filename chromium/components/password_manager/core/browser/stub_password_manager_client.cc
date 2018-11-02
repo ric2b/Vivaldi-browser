@@ -11,7 +11,10 @@
 
 namespace password_manager {
 
-StubPasswordManagerClient::StubPasswordManagerClient() {}
+StubPasswordManagerClient::StubPasswordManagerClient()
+    : ukm_source_id_(ukm::UkmRecorder::Get()
+                         ? ukm::UkmRecorder::Get()->GetNewSourceID()
+                         : 0) {}
 
 StubPasswordManagerClient::~StubPasswordManagerClient() {}
 
@@ -75,7 +78,25 @@ void StubPasswordManagerClient::CheckSafeBrowsingReputation(
     const GURL& frame_url) {}
 
 void StubPasswordManagerClient::CheckProtectedPasswordEntry(
-    const std::string& password_saved_domain) {}
+    const std::string& password_saved_domain,
+    bool password_field_exists) {}
 #endif
+
+ukm::UkmRecorder* StubPasswordManagerClient::GetUkmRecorder() {
+  return ukm::UkmRecorder::Get();
+}
+
+ukm::SourceId StubPasswordManagerClient::GetUkmSourceId() {
+  return ukm_source_id_;
+}
+
+PasswordManagerMetricsRecorder&
+StubPasswordManagerClient::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    metrics_recorder_.emplace(GetUkmRecorder(), GetUkmSourceId(),
+                              GetMainFrameURL());
+  }
+  return metrics_recorder_.value();
+}
 
 }  // namespace password_manager

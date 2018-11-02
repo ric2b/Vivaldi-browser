@@ -15,6 +15,8 @@
 #include "cc/trees/transform_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
+static constexpr int kMaxNumberOfSlowPathsBeforeReporting = 5;
+
 namespace cc {
 
 PictureLayer::PictureLayerInputs::PictureLayerInputs() = default;
@@ -56,14 +58,9 @@ void PictureLayer::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->SetNearestNeighbor(picture_layer_inputs_.nearest_neighbor);
   layer_impl->SetUseTransformedRasterization(
       ShouldUseTransformedRasterization());
-
-  // Preserve lcd text settings from the current raster source.
-  bool can_use_lcd_text = layer_impl->RasterSourceUsesLCDText();
-  scoped_refptr<RasterSource> raster_source =
-      recording_source_->CreateRasterSource(can_use_lcd_text);
   layer_impl->set_gpu_raster_max_texture_size(
       layer_tree_host()->device_viewport_size());
-  layer_impl->UpdateRasterSource(std::move(raster_source),
+  layer_impl->UpdateRasterSource(recording_source_->CreateRasterSource(),
                                  &last_updated_invalidation_, nullptr);
   DCHECK(last_updated_invalidation_.IsEmpty());
 }
@@ -177,18 +174,24 @@ sk_sp<SkPicture> PictureLayer::GetPicture() const {
                                          painter_reported_memory_usage);
 
   scoped_refptr<RasterSource> raster_source =
-      recording_source.CreateRasterSource(false);
-
+      recording_source.CreateRasterSource();
   return raster_source->GetFlattenedPicture();
 }
 
-bool PictureLayer::IsSuitableForGpuRasterization() const {
+bool PictureLayer::HasSlowPaths() const {
   // The display list needs to be created (see: UpdateAndExpandInvalidation)
-  // before checking for suitability. There are cases where an update will not
-  // create a display list (e.g., if the size is empty). We return true in these
-  // cases because the gpu suitability bit sticks false.
-  return !picture_layer_inputs_.display_list ||
-         picture_layer_inputs_.display_list->IsSuitableForGpuRasterization();
+  // before checking for slow paths. There are cases where an update will not
+  // create a display list (e.g., if the size is empty). We return false in
+  // these cases because the slow paths bit sticks true.
+  return picture_layer_inputs_.display_list &&
+         picture_layer_inputs_.display_list->NumSlowPaths() >
+             kMaxNumberOfSlowPathsBeforeReporting;
+}
+
+bool PictureLayer::HasNonAAPaint() const {
+  // We return false by default, as this bit sticks true.
+  return picture_layer_inputs_.display_list &&
+         picture_layer_inputs_.display_list->HasNonAAPaint();
 }
 
 void PictureLayer::ClearClient() {
@@ -204,11 +207,11 @@ void PictureLayer::SetNearestNeighbor(bool nearest_neighbor) {
   SetNeedsCommit();
 }
 
-void PictureLayer::SetAllowTransformedRasterization(bool allowed) {
-  if (picture_layer_inputs_.allow_transformed_rasterization == allowed)
+void PictureLayer::SetTransformedRasterizationAllowed(bool allowed) {
+  if (picture_layer_inputs_.transformed_rasterization_allowed == allowed)
     return;
 
-  picture_layer_inputs_.allow_transformed_rasterization = allowed;
+  picture_layer_inputs_.transformed_rasterization_allowed = allowed;
   SetNeedsCommit();
 }
 
@@ -246,7 +249,7 @@ void PictureLayer::DropRecordingSourceContentIfInvalid() {
 }
 
 bool PictureLayer::ShouldUseTransformedRasterization() const {
-  if (!picture_layer_inputs_.allow_transformed_rasterization)
+  if (!picture_layer_inputs_.transformed_rasterization_allowed)
     return false;
 
   // Background color overfill is undesirable with transformed rasterization.

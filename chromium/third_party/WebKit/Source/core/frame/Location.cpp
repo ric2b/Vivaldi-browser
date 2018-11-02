@@ -31,14 +31,13 @@
 #include "bindings/core/v8/BindingSecurity.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8DOMActivityLogger.h"
-#include "core/dom/DOMURLUtilsReadOnly.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/frame/DOMWindow.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/loader/FrameLoader.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/url/DOMURLUtilsReadOnly.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
 
@@ -227,11 +226,8 @@ void Location::reload(LocalDOMWindow* current_window) {
     return;
   if (GetDocument()->Url().ProtocolIsJavaScript())
     return;
-  dom_window_->GetFrame()->Reload(
-      RuntimeEnabledFeatures::locationHardReloadEnabled()
-          ? kFrameLoadTypeReloadBypassingCache
-          : kFrameLoadTypeReload,
-      ClientRedirectPolicy::kClientRedirect);
+  dom_window_->GetFrame()->Reload(kFrameLoadTypeReload,
+                                  ClientRedirectPolicy::kClientRedirect);
 }
 
 void Location::SetLocation(const String& url,

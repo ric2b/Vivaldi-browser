@@ -23,21 +23,21 @@
 #include <stdint.h>
 
 #include "base/macros.h"
-#include "base/strings/string_piece.h"
-#include "net/base/net_export.h"
 #include "net/http2/decoder/decode_buffer.h"
 #include "net/http2/hpack/decoder/hpack_block_decoder.h"
 #include "net/http2/hpack/decoder/hpack_decoder_listener.h"
 #include "net/http2/hpack/decoder/hpack_decoder_state.h"
 #include "net/http2/hpack/decoder/hpack_decoder_tables.h"
 #include "net/http2/hpack/decoder/hpack_whole_entry_buffer.h"
+#include "net/http2/platform/api/http2_export.h"
+#include "net/http2/platform/api/http2_string_piece.h"
 
 namespace net {
 namespace test {
 class Http2HpackDecoderPeer;
 }  // namespace test
 
-class NET_EXPORT_PRIVATE Http2HpackDecoder {
+class HTTP2_EXPORT_PRIVATE Http2HpackDecoder {
  public:
   Http2HpackDecoder(HpackDecoderListener* listener, size_t max_string_size);
   virtual ~Http2HpackDecoder();
@@ -102,7 +102,7 @@ class NET_EXPORT_PRIVATE Http2HpackDecoder {
   friend class test::Http2HpackDecoderPeer;
 
   // Reports an error to the listener IF this is the first error detected.
-  void ReportError(base::StringPiece error_message);
+  void ReportError(Http2StringPiece error_message);
 
   // The decompressor state, as defined by HPACK (i.e. the static and dynamic
   // tables).

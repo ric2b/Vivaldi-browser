@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Vivaldi Technologies AS. All rights reserved.
+// Copyright 2015-2017 Vivaldi Technologies AS. All rights reserved.
 
 // This class is just a proxy for emitting events from the Chrome ui for
 // browserAction and pageAction badges.
@@ -26,8 +26,8 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/toolbar/component_toolbar_actions_factory.h"
+#include "chrome/browser/ui/toolbar/media_router_action.h"
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
-#include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/common/extensions/api/commands/commands_handler.h"
 #include "chrome/common/extensions/api/extension_action/action_info.h"
 #include "chrome/common/extensions/command.h"
@@ -469,13 +469,149 @@ void ExtensionActionUtil::ActiveTabChanged(content::WebContents* old_contents,
   }
 }
 
+bool ExtensionActionUtil::HasComponentAction(
+    const std::string& action_id) const {
+  auto action = component_extension_actions_.find(action_id);
+  return action != component_extension_actions_.end();
+}
+
+void ExtensionActionUtil::AddComponentAction(const std::string& action_id) {
+  component_extension_actions_.insert(action_id);
+
+  std::unique_ptr<vivaldi::extension_action_utils::ExtensionInfo> info(
+      new vivaldi::extension_action_utils::ExtensionInfo());
+
+  FillInfoFromComponentExtension(&action_id, info.get(), profile_);
+
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::extension_action_utils::OnAdded::Create(*info.get());
+
+  content::BrowserContext* browser_context =
+      static_cast<content::BrowserContext*>(profile_);
+
+  BroadcastEvent(vivaldi::extension_action_utils::OnAdded::kEventName,
+                 std::move(args), browser_context);
+}
+
+void ExtensionActionUtil::RemoveComponentAction(const std::string& action_id) {
+  if (action_id != ComponentToolbarActionsFactory::kMediaRouterActionId) {
+    NOTREACHED(); // Check the new component extension!
+  }
+
+  vivaldi::extension_action_utils::ExtensionInfo info;
+  info.id = ComponentToolbarActionsFactory::kMediaRouterActionId;
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::extension_action_utils::OnRemoved::Create(info);
+
+  content::BrowserContext* browser_context =
+      static_cast<content::BrowserContext*>(profile_);
+  BroadcastEvent(vivaldi::extension_action_utils::OnRemoved::kEventName,
+                 std::move(args), browser_context);
+
+  component_extension_actions_.erase(action_id);
+  media_router_component_action_.reset(nullptr);
+}
+
+bool ExtensionActionUtil::FillInfoFromComponentExtension(
+    const std::string* action_id,
+    vivaldi::extension_action_utils::ExtensionInfo* info,
+    Profile* profile) {
+  Browser* browser = nullptr;
+  for (auto* browser_it : *BrowserList::GetInstance()) {
+    if (browser_it->profile()->GetOriginalProfile() == profile) {
+      browser = browser_it;
+      break;
+    }
+  }
+
+  if (!browser) {
+    NOTREACHED()
+        << "Querying info about component-extensions need a browser object!";
+    return false;
+  }
+
+  if (!media_router_component_action_) {
+    media_router_component_action_.reset(
+        new MediaRouterAction(browser, nullptr));
+    media_router_component_action_.get()->SetDelegate(this);
+  }
+  info->extension_type =
+      vivaldi::extension_action_utils::EXTENSION_TYPE_COMPONENTACTION;
+
+  info->id = *action_id;
+
+  info->badge_tooltip.reset(new std::string(base::UTF16ToUTF8(
+      media_router_component_action_.get()->GetTooltip(nullptr))));
+
+  info->name.reset(new std::string(base::UTF16ToUTF8(
+      media_router_component_action_.get()->GetActionName())));
+
+  info->badge_text.reset(new std::string(""));
+
+  info->action_type = vivaldi::extension_action_utils::ACTION_TYPE_BROWSER;
+
+  int icon_size = extension_misc::EXTENSION_ICON_LARGE;
+
+  gfx::Image icon_image = media_router_component_action_.get()->GetIcon(
+      nullptr /*web_contents*/, gfx::Size(icon_size, icon_size));
+
+  const SkBitmap* bitmap = nullptr;
+
+  bitmap = icon_image.CopySkBitmap();
+
+  if (bitmap)
+    info->badge_icon.reset(EncodeBitmapToPng(bitmap));
+
+  // See MediaRouterContextualMenu::ExecuteCommand()
+  const char googlecasthomepage[] =
+      "https://www.google.com/chrome/devices/chromecast/";
+
+  info->homepage.reset(new std::string(googlecasthomepage));
+
+  return true;
+}
+
+
 content::WebContents* ExtensionActionUtil::GetCurrentWebContents() const {
   return current_webcontents_;
 }
 
 // Updates the view to reflect current state.
 void ExtensionActionUtil::UpdateState() {
-  // get the current icon and emit an event
+  // This is only used for component extensions.
+  if (!media_router_component_action_.get()) {
+    return;
+  }
+
+  vivaldi::extension_action_utils::ExtensionInfo info;
+
+  int tab_id = ExtensionAction::kDefaultTabId;
+  int windowId = extension_misc::kCurrentWindowId;
+
+  Browser *browser =
+      current_webcontents_
+          ? chrome::FindBrowserWithWebContents(current_webcontents_)
+          : nullptr;
+  if (browser) {
+    TabStripModel* tab_strip = browser->tab_strip_model();
+    tab_id = SessionTabHelper::IdForTab(tab_strip->GetActiveWebContents());
+    windowId = browser->session_id().id();
+  }
+
+  std::string action_id = ComponentToolbarActionsFactory::kMediaRouterActionId;
+
+  FillInfoFromComponentExtension(&action_id, &info, profile_);
+
+  std::unique_ptr<base::ListValue> args =
+      vivaldi::extension_action_utils::OnUpdated::Create(info, windowId,
+                                                         tab_id);
+
+  content::BrowserContext* browser_context =
+      static_cast<content::BrowserContext*>(profile_);
+
+  BroadcastEvent(vivaldi::extension_action_utils::OnUpdated::kEventName,
+                 std::move(args), browser_context);
+
 }
 
 // Returns true if a context menu is running.
@@ -560,6 +696,23 @@ bool ExtensionActionUtilsExecuteExtensionActionFunction::RunAsync() {
       extensions::ExtensionRegistry::Get(GetProfile())
           ->GetExtensionById(params->extension_id,
                              extensions::ExtensionRegistry::ENABLED);
+
+  // Check if there is a component extension and run it's action.
+  if (!extension) {
+    extensions::ExtensionActionUtil* extensionactionutils =
+        extensions::ExtensionActionUtilFactory::GetForProfile(GetProfile());
+
+    if (extensionactionutils->media_router_component_action()) {
+      extensionactionutils->media_router_component_action()->ExecuteAction(
+          true);
+      vivaldi::extension_action_utils::ExtensionInfo info;
+      results_ = vivaldi::extension_action_utils::ExecuteExtensionAction::
+          Results::Create(info);
+      SendResponse(true);
+      return true;
+    }
+  }
+
   if (!extension)
     return false;
 
@@ -641,6 +794,12 @@ bool ExtensionActionUtilsToggleBrowserActionVisibilityFunction::RunAsync() {
           ComponentToolbarActionsFactory::kMediaRouterActionId ||
       params->extension_id == kBetaChromecastExtensionId ||
       params->extension_id == kStableChromecastExtensionId) {
+
+    extensions::ExtensionActionUtil* extensionactionutils =
+        extensions::ExtensionActionUtilFactory::GetForProfile(GetProfile());
+
+    // To be able to show the action again in the same session.
+    extensionactionutils->RemoveComponentAction(params->extension_id);
 
     // Synthesize an event to remove the button right away.
     vivaldi::extension_action_utils::ExtensionInfo info;

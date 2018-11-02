@@ -505,6 +505,15 @@ class CONTENT_EXPORT RenderFrameHostManager
   bool InitRenderView(RenderViewHostImpl* render_view_host,
     RenderFrameProxyHost* proxy);
 
+  // Returns the SiteInstance that should be used to host the navigation handled
+  // by |navigation_request|.
+  // Note: the SiteInstance returned by this function may not have an
+  // initialized RenderProcessHost. It will only be initialized when
+  // GetProcess() is called on the SiteInstance. In particular, calling this
+  // function will never lead to a process being created for the navigation.
+  scoped_refptr<SiteInstance> GetSiteInstanceForNavigationRequest(
+      const NavigationRequest& navigation_request);
+
  private:
   friend class NavigatorTestWithBrowserSideNavigation;
   friend class RenderFrameHostManagerTest;
@@ -551,8 +560,8 @@ class CONTENT_EXPORT RenderFrameHostManager
   void DeleteRenderFrameProxyHost(SiteInstance* site_instance);
 
   // Returns whether this tab should transition to a new renderer for
-  // cross-site URLs.  Enabled unless we see the --process-per-tab command line
-  // switch.  Can be overridden in unit tests.
+  // cross-site URLs.  Enabled unless we see the --single-process command line
+  // switch.
   bool ShouldTransitionCrossSite();
 
   // Returns true if for the navigation from |current_effective_url| to

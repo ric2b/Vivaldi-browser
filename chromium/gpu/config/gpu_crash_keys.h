@@ -24,6 +24,8 @@ extern const char kGPUGLVersion[];
 extern const char kGPUVendor[];
 extern const char kGPURenderer[];
 #endif
+extern const char kGPUGLContextIsVirtual[];
+
 }  // namespace crash_keys
 }  // namespace gpu
 

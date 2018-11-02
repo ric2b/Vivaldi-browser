@@ -1,4 +1,4 @@
-From 4db034497c5e8dc8568855f4c751dd653c2a3379 Mon Sep 17 00:00:00 2001
+From a9d3b5dc29050f562174939d7154a26ea66ac779 Mon Sep 17 00:00:00 2001
 From: Scott Hess <shess@chromium.org>
 Date: Fri, 16 Jan 2015 10:24:30 -0800
 Subject: [PATCH 01/10] [test] SQLite tests compiling on Linux.
@@ -9,7 +9,7 @@ Subject: [PATCH 01/10] [test] SQLite tests compiling on Linux.
  2 files changed, 30 insertions(+), 13 deletions(-)
 
 diff --git a/third_party/sqlite/src/Makefile.linux-gcc b/third_party/sqlite/src/Makefile.linux-gcc
-index 1491a4b02a80..a1dec21affea 100644
+index b838b844a312..62d029430803 100644
 --- a/third_party/sqlite/src/Makefile.linux-gcc
 +++ b/third_party/sqlite/src/Makefile.linux-gcc
 @@ -14,7 +14,7 @@
@@ -34,21 +34,21 @@ index 1491a4b02a80..a1dec21affea 100644
  #    thread safe
  #
 -#THREADLIB = -lpthread
--THREADLIB = 
+-THREADLIB =
 +THREADLIB = -lpthread
-+#THREADLIB = 
++#THREADLIB =
  
  #### Specify any extra libraries needed to access required functions.
  #
  #TLIBS = -lrt    # fdatasync on Solaris 8
--TLIBS = 
+-TLIBS =
 +TLIBS = -ldl
  
  #### Leave SQLITE_DEBUG undefined for maximum speed.  Use SQLITE_DEBUG=1
  #    to check for memory leaks.  Use SQLITE_DEBUG=2 to print a log of all
 @@ -58,7 +58,24 @@ TLIBS =
  #OPTS = -DSQLITE_DEBUG=1
- #OPTS = 
+ #OPTS =
  OPTS = -DNDEBUG=1
 -OPTS += -DHAVE_FDATASYNC=1
 +#OPTS += -DHAVE_FDATASYNC=1
@@ -103,18 +103,18 @@ index 1491a4b02a80..a1dec21affea 100644
  #LIBTCL = /home/drh/tcltk/8.3hpux/libtcl8.3.a -ldld -lm -lc
  
 diff --git a/third_party/sqlite/src/main.mk b/third_party/sqlite/src/main.mk
-index 85ed76a143c1..6feb638b9280 100644
+index 62ba293d5b9d..32c394e7812d 100644
 --- a/third_party/sqlite/src/main.mk
 +++ b/third_party/sqlite/src/main.mk
-@@ -760,7 +760,7 @@ sqlite3_analyzer.c: sqlite3.c $(TOP)/src/tclsqlite.c $(TOP)/tool/spaceanal.tcl
+@@ -766,7 +766,7 @@ sqlite3_analyzer.c: sqlite3.c $(TOP)/src/tclsqlite.c $(TOP)/tool/spaceanal.tcl
  	echo "; return zMainloop; }" >> $@
  
  sqlite3_analyzer$(EXE): sqlite3_analyzer.c
--	$(TCCX) $(TCL_FLAGS) sqlite3_analyzer.c -o $@ $(LIBTCL) $(THREADLIB) 
+-	$(TCCX) $(TCL_FLAGS) sqlite3_analyzer.c -o $@ $(LIBTCL) $(THREADLIB)
 +	$(TCCX) $(TCL_FLAGS) sqlite3_analyzer.c -o $@ $(LIBTCL) $(TLIBS) $(THREADLIB)
  
- # Rules to build the 'testfixture' application.
- #
+ dbdump$(EXE):	$(TOP)/ext/misc/dbdump.c sqlite3.o
+ 	$(TCCX) -DDBDUMP_STANDALONE -o dbdump$(EXE) \
 -- 
-2.11.0
+2.13.1.518.g3df882009-goog
 

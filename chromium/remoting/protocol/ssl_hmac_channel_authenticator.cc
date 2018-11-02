@@ -79,14 +79,6 @@ class IgnoresCTPolicyEnforcer : public net::CTPolicyEnforcer {
       const net::NetLogWithSource& net_log) override {
     return net::ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
   }
-
-  net::ct::EVPolicyCompliance DoesConformToCTEVPolicy(
-      net::X509Certificate* cert,
-      const net::ct::EVCertsWhitelist* ev_whitelist,
-      const net::SCTList& verified_scts,
-      const net::NetLogWithSource& net_log) override {
-    return net::ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
-  }
 };
 
 // Implements net::StreamSocket interface on top of P2PStreamSocket to be passed
@@ -223,12 +215,13 @@ SslHmacChannelAuthenticator::SslHmacChannelAuthenticator(
 }
 
 SslHmacChannelAuthenticator::~SslHmacChannelAuthenticator() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void SslHmacChannelAuthenticator::SecureAndAuthenticate(
     std::unique_ptr<P2PStreamSocket> socket,
     const DoneCallback& done_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   done_callback_ = done_callback;
 
@@ -377,7 +370,7 @@ void SslHmacChannelAuthenticator::WriteAuthenticationBytes(
 }
 
 void SslHmacChannelAuthenticator::OnAuthBytesWritten(int result) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (HandleAuthBytesWritten(result, nullptr))
     WriteAuthenticationBytes(nullptr);
@@ -417,7 +410,7 @@ void SslHmacChannelAuthenticator::ReadAuthenticationBytes() {
 }
 
 void SslHmacChannelAuthenticator::OnAuthBytesRead(int result) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (HandleAuthBytesRead(result))
     ReadAuthenticationBytes();

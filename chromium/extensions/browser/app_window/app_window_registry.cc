@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "content/public/browser/browser_context.h"
@@ -22,10 +23,6 @@
 namespace extensions {
 
 void AppWindowRegistry::Observer::OnAppWindowAdded(AppWindow* app_window) {
-}
-
-void AppWindowRegistry::Observer::OnAppWindowIconChanged(
-    AppWindow* app_window) {
 }
 
 void AppWindowRegistry::Observer::OnAppWindowRemoved(AppWindow* app_window) {
@@ -62,12 +59,6 @@ void AppWindowRegistry::AddAppWindow(AppWindow* app_window) {
   BringToFront(app_window);
   for (auto& observer : observers_)
     observer.OnAppWindowAdded(app_window);
-}
-
-void AppWindowRegistry::AppWindowIconChanged(AppWindow* app_window) {
-  AddAppWindowToList(app_window);
-  for (auto& observer : observers_)
-    observer.OnAppWindowIconChanged(app_window);
 }
 
 void AppWindowRegistry::AppWindowActivated(AppWindow* app_window) {
@@ -198,9 +189,7 @@ void AppWindowRegistry::DevToolsAgentHostDetached(
 }
 
 void AppWindowRegistry::AddAppWindowToList(AppWindow* app_window) {
-  const AppWindowList::iterator it =
-      std::find(app_windows_.begin(), app_windows_.end(), app_window);
-  if (it != app_windows_.end())
+  if (base::ContainsValue(app_windows_, app_window))
     return;
   app_windows_.push_back(app_window);
 }

@@ -19,6 +19,7 @@ group("resources") {
   public_deps = [
     ":vivaldi_native_resources",
     ":vivaldi_native_strings",
+    ":vivaldi_unscaled_native_resources",
     "resources",
   ]
 }

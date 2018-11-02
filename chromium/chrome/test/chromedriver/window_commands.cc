@@ -38,6 +38,9 @@ namespace {
 
 const std::string kUnreachableWebDataURL = "data:text/html,chromewebdata";
 
+// Defaults to 20 years into the future when adding a cookie.
+const double kDefaultCookieExpiryTime = 20*365*24*60*60;
+
 Status GetMouseButton(const base::DictionaryValue& params,
                       MouseButton* button) {
   int button_num;
@@ -103,8 +106,12 @@ std::unique_ptr<base::DictionaryValue> CreateDictionaryFrom(
 
 Status GetVisibleCookies(WebView* web_view,
                          std::list<Cookie>* cookies) {
+  std::string current_page_url;
+  Status status = GetUrl(web_view, std::string(), &current_page_url);
+  if (status.IsError())
+    return status;
   std::unique_ptr<base::ListValue> internal_cookies;
-  Status status = web_view->GetCookies(&internal_cookies);
+  status = web_view->GetCookies(&internal_cookies, current_page_url);
   if (status.IsError())
     return status;
   std::list<Cookie> cookies_tmp;
@@ -359,6 +366,14 @@ Status ExecuteSwitchToFrame(Session* session,
   base::ListValue args;
   const base::DictionaryValue* id_dict;
   if (id->GetAsDictionary(&id_dict)) {
+    std::string element_id;
+    if (!id_dict->GetString("ELEMENT", &element_id))
+      return Status(kUnknownError, "missing 'ELEMENT'");
+    bool is_displayed = false;
+    Status status = IsElementDisplayed(
+          session, web_view, element_id, true, &is_displayed);
+    if (status.IsError())
+      return status;
     script = "function(elem) { return elem; }";
     args.Append(id_dict->CreateDeepCopy());
   } else {
@@ -940,6 +955,30 @@ Status ExecuteGetCookies(Session* session,
   return Status(kOk);
 }
 
+Status ExecuteGetNamedCookie(Session* session,
+                             WebView* web_view,
+                             const base::DictionaryValue& params,
+                             std::unique_ptr<base::Value>* value,
+                             Timeout* timeout) {
+  std::string name;
+  if (!params.GetString("name", &name))
+    return Status(kUnknownError, "missing 'cookie name'");
+
+  std::list<Cookie> cookies;
+  Status status = GetVisibleCookies(web_view, &cookies);
+  if (status.IsError())
+    return status;
+
+  for (std::list<Cookie>::const_iterator it = cookies.begin();
+       it != cookies.end(); ++it) {
+    if (name == it->name) {
+      value->reset(CreateDictionaryFrom(*it)->DeepCopy());
+      return Status(kOk);
+    }
+  }
+  return Status(kNoSuchCookie);
+}
+
 Status ExecuteAddCookie(Session* session,
                         WebView* web_view,
                         const base::DictionaryValue& params,
@@ -948,11 +987,30 @@ Status ExecuteAddCookie(Session* session,
   const base::DictionaryValue* cookie;
   if (!params.GetDictionary("cookie", &cookie))
     return Status(kUnknownError, "missing 'cookie'");
-  base::ListValue args;
-  args.Append(cookie->CreateDeepCopy());
-  std::unique_ptr<base::Value> result;
-  return web_view->CallFunction(
-      session->GetCurrentFrameId(), kAddCookieScript, args, &result);
+  std::string name;
+  std::string cookie_value;
+  if (!cookie->GetString("name", &name))
+    return Status(kUnknownError, "missing 'name'");
+  if (!cookie->GetString("value", &cookie_value))
+    return Status(kUnknownError, "missing 'value'");
+  std::string url;
+  Status status = GetUrl(web_view, session->GetCurrentFrameId(), &url);
+  if (status.IsError())
+    return status;
+  std::string domain;
+  cookie->GetString("domain", &domain);
+  std::string path("/");
+  cookie->GetString("path", &path);
+  bool secure = false;
+  cookie->GetBoolean("secure", &secure);
+  bool httpOnly = false;
+  cookie->GetBoolean("httpOnly", &httpOnly);
+  double expiry;
+  if (!cookie->GetDouble("expiry", &expiry))
+    expiry = (base::Time::Now() - base::Time::UnixEpoch()).InSeconds() +
+              kDefaultCookieExpiryTime;
+  return web_view->AddCookie(name, url, cookie_value, domain, path,
+      secure, httpOnly, expiry);
 }
 
 Status ExecuteDeleteCookie(Session* session,

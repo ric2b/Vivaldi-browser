@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ANDROID_WEBVIEW_COMMON_CRASH_KEYS_H_
-#define ANDROID_WEBVIEW_COMMON_CRASH_KEYS_H_
+#ifndef ANDROID_WEBVIEW_COMMON_CRASH_REPORTER_CRASH_KEYS_H_
+#define ANDROID_WEBVIEW_COMMON_CRASH_REPORTER_CRASH_KEYS_H_
 
 #include <stddef.h>
 #include <string>
@@ -21,13 +21,6 @@ extern const char* const kWebViewCrashKeyWhiteList[];
 
 // Crash Key Name Constants ////////////////////////////////////////////////////
 
-// GPU information.
-extern const char kGPUDriverVersion[];
-extern const char kGPUPixelShaderVersion[];
-extern const char kGPUVertexShaderVersion[];
-extern const char kGPUVendor[];
-extern const char kGPURenderer[];
-
 // Application information.
 extern const char kAppPackageName[];
 extern const char kAppPackageVersionCode[];
@@ -37,4 +30,4 @@ extern const char kAndroidSdkInt[];
 }  // namespace crash_keys
 }  // namespace android_webview
 
-#endif  // ANDROID_WEBVIEW_COMMON_CRASH_KEYS_H_
+#endif  // ANDROID_WEBVIEW_COMMON_CRASH_REPORTER_CRASH_KEYS_H_

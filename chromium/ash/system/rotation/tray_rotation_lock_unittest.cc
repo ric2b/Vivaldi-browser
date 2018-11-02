@@ -10,11 +10,11 @@
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/status_area_widget_test_helper.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "base/time/time.h"
 #include "ui/display/display_switches.h"
@@ -26,7 +26,7 @@
 
 namespace ash {
 
-class TrayRotationLockTest : public test::AshTestBase {
+class TrayRotationLockTest : public AshTestBase {
  public:
   TrayRotationLockTest() {}
   ~TrayRotationLockTest() override {}
@@ -42,7 +42,7 @@ class TrayRotationLockTest : public test::AshTestBase {
 
   // Destroys only the |tray_view_|. Tests may call this to simulate destruction
   // order during the deletion of the StatusAreaWidget.
-  void DestroyTrayView();
+  void OnTrayViewDestroyed();
 
   // Sets up a TrayRotationLock, its tray view, and its default view, for the
   // given SystemTray and its display. On a primary display all will be
@@ -55,7 +55,7 @@ class TrayRotationLockTest : public test::AshTestBase {
   // SetUpForStatusAreaWidget in order to initial the components.
   void TearDownViews();
 
-  // test::AshTestBase:
+  // AshTestBase:
   void SetUp() override;
   void TearDown() override;
 
@@ -73,9 +73,9 @@ views::View* TrayRotationLockTest::CreateTrayView(
       StatusAreaWidgetTestHelper::GetUserLoginStatus());
 }
 
-void TrayRotationLockTest::DestroyTrayView() {
+void TrayRotationLockTest::OnTrayViewDestroyed() {
   tray_view_.reset();
-  tray_->DestroyTrayView();
+  tray_->OnTrayViewDestroyed();
 }
 
 void TrayRotationLockTest::SetUpForStatusAreaWidget(
@@ -99,13 +99,13 @@ void TrayRotationLockTest::SetUp() {
   // visible on internal primary displays.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       ::switches::kUseFirstDisplayAsInternal);
-  test::AshTestBase::SetUp();
+  AshTestBase::SetUp();
   SetUpForStatusAreaWidget(StatusAreaWidgetTestHelper::GetStatusAreaWidget());
 }
 
 void TrayRotationLockTest::TearDown() {
   TearDownViews();
-  test::AshTestBase::TearDown();
+  AshTestBase::TearDown();
 }
 
 // Tests that when the tray view is initially created, that it is created
@@ -114,45 +114,39 @@ TEST_F(TrayRotationLockTest, CreateTrayView) {
   EXPECT_FALSE(tray_view()->visible());
 }
 
-// Tests that when the tray view is created, while MaximizeMode is active, that
-// it must be visible, and becomes invisible exiting MaximizeMode.
-TEST_F(TrayRotationLockTest, CreateTrayViewDuringMaximizeMode) {
+// Tests that when the tray view is created, while TabletMode is active, that
+// it must be visible, and becomes invisible exiting TabletMode.
+TEST_F(TrayRotationLockTest, CreateTrayViewDuringTabletMode) {
   TearDownViews();
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   SetUpForStatusAreaWidget(StatusAreaWidgetTestHelper::GetStatusAreaWidget());
   EXPECT_TRUE(tray_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   EXPECT_FALSE(tray_view()->visible());
 }
 
-// Tests that the enabling of MaximizeMode affects a previously created tray
+// Tests that the enabling of TabletMode affects a previously created tray
 // view, changing the visibility.
-TEST_F(TrayRotationLockTest, TrayViewVisibilityChangesDuringMaximizeMode) {
+TEST_F(TrayRotationLockTest, TrayViewVisibilityChangesDuringTabletMode) {
   ASSERT_FALSE(tray_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   Shell::Get()->screen_orientation_controller()->ToggleUserRotationLock();
   EXPECT_TRUE(tray_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   EXPECT_FALSE(tray_view()->visible());
 }
 
 // Tests that when the tray view is created for a secondary display, that it is
-// not visible, and that MaximizeMode does not affect visibility.
+// not visible, and that TabletMode does not affect visibility.
 TEST_F(TrayRotationLockTest, CreateSecondaryTrayView) {
   UpdateDisplay("400x400,200x200");
 
   SetUpForStatusAreaWidget(
       StatusAreaWidgetTestHelper::GetSecondaryStatusAreaWidget());
   EXPECT_FALSE(tray_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   EXPECT_FALSE(tray_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   EXPECT_FALSE(tray_view()->visible());
 }
 
@@ -162,27 +156,23 @@ TEST_F(TrayRotationLockTest, CreateDefaultView) {
   EXPECT_FALSE(default_view()->visible());
 }
 
-// Tests that when the default view is created, while MaximizeMode is active,
+// Tests that when the default view is created, while TabletMode is active,
 // that it is visible.
-TEST_F(TrayRotationLockTest, CreateDefaultViewDuringMaximizeMode) {
+TEST_F(TrayRotationLockTest, CreateDefaultViewDuringTabletMode) {
   TearDownViews();
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   SetUpForStatusAreaWidget(StatusAreaWidgetTestHelper::GetStatusAreaWidget());
   EXPECT_TRUE(default_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   EXPECT_FALSE(default_view()->visible());
 }
 
-// Tests that the enabling of MaximizeMode affects a previously created default
+// Tests that the enabling of TabletMode affects a previously created default
 // view, changing the visibility.
-TEST_F(TrayRotationLockTest, DefaultViewVisibilityChangesDuringMaximizeMode) {
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+TEST_F(TrayRotationLockTest, DefaultViewVisibilityChangesDuringTabletMode) {
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   EXPECT_TRUE(default_view()->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   EXPECT_FALSE(default_view()->visible());
 }
 
@@ -200,12 +190,12 @@ TEST_F(TrayRotationLockTest, CreateSecondaryDefaultView) {
 // Tests that activating the default view causes the display to have its
 // rotation locked.
 TEST_F(TrayRotationLockTest, PerformActionOnDefaultView) {
-  MaximizeModeController* maximize_mode_controller =
-      Shell::Get()->maximize_mode_controller();
+  TabletModeController* tablet_mode_controller =
+      Shell::Get()->tablet_mode_controller();
   ScreenOrientationController* screen_orientation_controller =
       Shell::Get()->screen_orientation_controller();
   ASSERT_FALSE(screen_orientation_controller->rotation_locked());
-  maximize_mode_controller->EnableMaximizeModeWindowManager(true);
+  tablet_mode_controller->EnableTabletModeWindowManager(true);
   ASSERT_TRUE(tray_view()->visible());
 
   ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
@@ -214,7 +204,7 @@ TEST_F(TrayRotationLockTest, PerformActionOnDefaultView) {
   EXPECT_TRUE(screen_orientation_controller->rotation_locked());
   EXPECT_TRUE(tray_view()->visible());
 
-  maximize_mode_controller->EnableMaximizeModeWindowManager(false);
+  tablet_mode_controller->EnableTabletModeWindowManager(false);
 }
 
 // Tests that when the tray is created without the internal display being known,
@@ -232,22 +222,18 @@ TEST_F(TrayRotationLockTest, InternalDisplayNotAvailableAtCreation) {
   std::unique_ptr<views::View> default_view(tray->CreateDefaultView(
       StatusAreaWidgetTestHelper::GetUserLoginStatus()));
   EXPECT_TRUE(default_view);
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   EXPECT_TRUE(default_view->visible());
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
 }
 
 // Tests that when the tray view is deleted, while TrayRotationLock has not been
 // deleted, that updates to the rotation lock state do not crash.
 TEST_F(TrayRotationLockTest, LockUpdatedDuringDesctruction) {
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
-  DestroyTrayView();
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+  OnTrayViewDestroyed();
   Shell::Get()->screen_orientation_controller()->ToggleUserRotationLock();
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
 }
 
 }  // namespace ash

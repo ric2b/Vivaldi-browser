@@ -67,4 +67,7 @@
     <message name="IDS_VIV_SEND_BY_MAIL" desc="Send by e-mail">
         Send by Mail
     </message>
+    <message name="IDS_VIV_INSPECT_IMAGE" desc="Show information about image">
+        Image Properties...
+    </message>
 </grit-part>

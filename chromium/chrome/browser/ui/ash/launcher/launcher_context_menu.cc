@@ -6,14 +6,14 @@
 
 #include <string>
 
+#include "ash/public/cpp/shelf_model.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_model.h"
+#include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
-#include "ash/wm_window.h"
-#include "build/build_config.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "base/metrics/user_metrics.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/fullscreen.h"
 #include "chrome/browser/profiles/profile.h"
@@ -108,7 +108,11 @@ bool LauncherContextMenu::IsCommandIdEnabled(int command_id) const {
 void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
   switch (static_cast<MenuItem>(command_id)) {
     case MENU_OPEN_NEW:
-      controller_->Launch(item_.id, ui::EF_NONE);
+      controller_->LaunchApp(item_.id, ash::LAUNCH_FROM_UNKNOWN, ui::EF_NONE,
+                             display::Screen::GetScreen()
+                                 ->GetDisplayNearestWindow(
+                                     shelf_->shelf_widget()->GetNativeWindow())
+                                 .id());
       break;
     case MENU_CLOSE:
       if (item_.type == ash::TYPE_DIALOG) {
@@ -120,8 +124,13 @@ void LauncherContextMenu::ExecuteCommand(int command_id, int event_flags) {
         // TODO(simonhong): Use ShelfItemDelegate::Close().
         controller_->Close(item_.id);
       }
-      ash::ShellPort::Get()->RecordUserMetricsAction(
-          ash::UMA_CLOSE_THROUGH_CONTEXT_MENU);
+      base::RecordAction(base::UserMetricsAction("CloseFromContextMenu"));
+      if (ash::Shell::Get()
+              ->tablet_mode_controller()
+              ->IsTabletModeWindowManagerEnabled()) {
+        base::RecordAction(
+            base::UserMetricsAction("Tablet_WindowCloseFromContextMenu"));
+      }
       break;
     case MENU_PIN:
       if (controller_->IsAppPinned(item_.id.app_id))
@@ -172,8 +181,10 @@ void LauncherContextMenu::AddShelfOptionsMenu() {
   // on the type of fullscreen. Do not show the auto-hide menu item while in
   // fullscreen per display because it is confusing when the preference appears
   // not to apply.
-  int64_t display_id = shelf_->GetWindow()->GetDisplayNearestWindow().id();
-  if (!IsFullScreenMode(display_id) &&
+  display::Display display =
+      display::Screen::GetScreen()->GetDisplayNearestWindow(
+          shelf_->GetWindow()->GetRootWindow());
+  if (!IsFullScreenMode(display.id()) &&
       CanUserModifyShelfAutoHideBehavior(controller_->profile())) {
     AddCheckItemWithStringId(MENU_AUTO_HIDE,
                              IDS_ASH_SHELF_CONTEXT_MENU_AUTO_HIDE);

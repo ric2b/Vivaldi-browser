@@ -14,7 +14,6 @@ const char kActiveStylesheetsUpdate[] = "ActiveStylesheetsUpdate";
 const char kAnimation[] = "Animation";
 const char kAttribute[] = "Attribute";
 const char kCleanupPlaceholderStyles[] = "CleanupPlaceholderStyles";
-const char kCompositorProxy[] = "CompositorProxy";
 const char kControlValue[] = "ControlValue";
 const char kControl[] = "Control";
 const char kDeclarativeContent[] = "Extension declarativeContent.css";
@@ -22,6 +21,8 @@ const char kDesignMode[] = "DesignMode";
 const char kFontSizeChange[] = "FontSizeChange";
 const char kFonts[] = "Fonts";
 const char kFullScreen[] = "FullScreen";
+const char kInheritedStyleChangeFromParentFrame[] =
+    "InheritedStyleChangeFromParentFrame";
 const char kInline[] = "Inline";
 const char kInlineCSSStyleMutated[] =
     "Inline CSS style declaration was mutated";

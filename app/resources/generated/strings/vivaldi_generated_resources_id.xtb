@@ -228,7 +228,7 @@
 <translation id="4423482519432579560">&amp;Pemeriksaan Ejaan</translation>
 <translation id="4478664379124702289">Simpan Tau&amp;tan sebagai...</translation>
 <translation id="4481249487722541506">Aktifkan ekstensi yang terbongkar...</translation>
-<translation id="4522570452068850558">Detail</translation>
+<translation id="4522570452068850558">Semua Detail</translation>
 <translation id="4552089082226364758">Flash</translation>
 <translation id="4552495056028768700">Akses Halaman</translation>
 <translation id="4557136421275541763">Peringatan:</translation>
@@ -365,7 +365,6 @@
 <translation id="6639554308659482635">Memori SQLite</translation>
 <translation id="6655190889273724601">Mode Pengembang</translation>
 <translation id="6691936601825168937">&amp;Maju</translation>
-<translation id="6700480081846086223">Cast <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Cakupan</translation>
 <translation id="6786747875388722282">Ekstensi</translation>
 <translation id="6787839852456839824">Semua pintasan keyboard</translation>

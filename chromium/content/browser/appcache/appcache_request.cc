@@ -8,6 +8,10 @@
 
 namespace content {
 
+AppCacheRequest::~AppCacheRequest() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
+
 // static
 bool AppCacheRequest::IsSchemeAndMethodSupportedForAppCache(
     const AppCacheRequest* request) {
@@ -20,6 +24,14 @@ net::URLRequest* AppCacheRequest::GetURLRequest() {
 }
 
 ResourceRequest* AppCacheRequest::GetResourceRequest() {
+  return nullptr;
+}
+
+AppCacheURLRequest* AppCacheRequest::AsURLRequest() {
+  return nullptr;
+}
+
+AppCacheURLLoaderRequest* AppCacheRequest::AsURLLoaderRequest() {
   return nullptr;
 }
 

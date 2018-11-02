@@ -6,6 +6,7 @@ import("//build/buildflag_header.gni")
 import("//ios/public/provider/chrome/browser/build_config.gni")
 
 source_set("browser") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "chrome_browser_provider.h",
     "chrome_browser_provider.mm",
@@ -20,6 +21,7 @@ source_set("browser") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "test_chrome_browser_provider.h",
@@ -32,7 +34,6 @@ source_set("test_support") {
     "//base",
     "//ios/public/provider/chrome/browser/distribution:test_support",
     "//ios/public/provider/chrome/browser/images:test_support",
-    "//ios/public/provider/chrome/browser/native_app_launcher:test_support",
     "//ios/public/provider/chrome/browser/omaha:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/public/provider/chrome/browser/spotlight:test_support",

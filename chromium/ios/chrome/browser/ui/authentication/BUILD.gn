@@ -4,34 +4,8 @@
 
 import("//build/config/chrome_build.gni")
 
-bundle_data("resources") {
-  sources = [
-    "resources/signin_confirmation_more.png",
-    "resources/signin_confirmation_more@2x.png",
-    "resources/signin_confirmation_more@3x.png",
-    "resources/signin_promo_close_gray.png",
-    "resources/signin_promo_close_gray@2x.png",
-    "resources/signin_promo_close_gray@3x.png",
-  ]
-  if (is_chrome_branded) {
-    sources += [
-      "resources/signin_promo_logo_chrome_color.png",
-      "resources/signin_promo_logo_chrome_color@2x.png",
-      "resources/signin_promo_logo_chrome_color@3x.png",
-    ]
-  } else {
-    sources += [
-      "resources/signin_promo_logo_chromium_color.png",
-      "resources/signin_promo_logo_chromium_color@2x.png",
-      "resources/signin_promo_logo_chromium_color@3x.png",
-    ]
-  }
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
-
 source_set("authentication") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "authentication_flow.h",
     "authentication_flow.mm",
@@ -56,7 +30,8 @@ source_set("authentication") {
   deps = [
     ":authentication_arc",
     ":authentication_ui",
-    ":resources",
+    "resources:signin_confirmation_more",
+    "resources:signin_promo_close_gray",
     "//base",
     "//components/google/core/browser",
     "//components/infobars/core",
@@ -86,12 +61,18 @@ source_set("authentication") {
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/images",
     "//ios/public/provider/chrome/browser/signin",
+    "//ios/shared/chrome/browser/ui/commands",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ui/base",
     "//ui/gfx",
     "//url",
   ]
+  if (is_chrome_branded) {
+    deps += [ "resources:signin_promo_logo_chrome_color" ]
+  } else {
+    deps += [ "resources:signin_promo_logo_chromium_color" ]
+  }
   libs = [
     "CoreGraphics.framework",
     "QuartzCore.framework",
@@ -110,7 +91,10 @@ source_set("authentication_arc") {
   deps = [
     ":authentication_ui",
     "//base",
+    "//components/prefs",
     "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/signin",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/commands",
@@ -183,7 +167,7 @@ source_set("unit_tests") {
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/third_party/material_components_ios",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",

@@ -10,7 +10,7 @@
 #include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_interactive_ui_test_base.h"
-#include "ash/test/test_screenshot_delegate.h"
+#include "ash/test_screenshot_delegate.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/run_loop.h"
@@ -21,7 +21,6 @@
 #include "ui/base/test/ui_controls.h"
 
 namespace ash {
-namespace test {
 
 namespace {
 
@@ -208,5 +207,4 @@ TEST_F(AcceleratorInteractiveUITest, MAYBE_ToggleAppList) {
   EXPECT_EQ(2u, test_app_list_presenter.toggle_count());
 }
 
-}  // namespace test
 }  // namespace ash

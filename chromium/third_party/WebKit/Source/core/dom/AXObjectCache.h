@@ -36,12 +36,12 @@ typedef unsigned AXID;
 namespace blink {
 
 class AbstractInlineTextBox;
-class FrameView;
 class HTMLCanvasElement;
 class HTMLOptionElement;
 class HTMLSelectElement;
 class LayoutMenuList;
 class LineLayoutItem;
+class LocalFrameView;
 
 class CORE_EXPORT AXObjectCache
     : public GarbageCollectedFinalized<AXObjectCache> {
@@ -119,6 +119,7 @@ class CORE_EXPORT AXObjectCache
                                              Node* new_focused_node) = 0;
   virtual void HandleInitialFocus() = 0;
   virtual void HandleEditableTextContentChanged(Node*) = 0;
+  virtual void HandleTextMarkerDataAdded(Node* start, Node* end) = 0;
   virtual void HandleTextFormControlChanged(Node*) = 0;
   virtual void HandleValueChanged(Node*) = 0;
   virtual void HandleUpdateActiveMenuOption(LayoutMenuList*,
@@ -136,7 +137,7 @@ class CORE_EXPORT AXObjectCache
   virtual void InlineTextBoxesUpdated(LineLayoutItem) = 0;
 
   // Called when the scroll offset changes.
-  virtual void HandleScrollPositionChanged(FrameView*) = 0;
+  virtual void HandleScrollPositionChanged(LocalFrameView*) = 0;
   virtual void HandleScrollPositionChanged(LayoutObject*) = 0;
 
   // Called when scroll bars are added / removed (as the view resizes).
@@ -150,6 +151,9 @@ class CORE_EXPORT AXObjectCache
 
   typedef AXObjectCache* (*AXObjectCacheCreateFunction)(Document&);
   static void Init(AXObjectCacheCreateFunction);
+
+  // Static helper functions.
+  static bool IsInsideFocusableElementOrARIAWidget(const Node&);
 
  protected:
   AXObjectCache();

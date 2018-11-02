@@ -32,10 +32,11 @@
 #define WebSecurityOrigin_h
 
 #include "public/platform/WebCommon.h"
+#include "public/platform/WebPrivatePtr.h"
 #include "public/platform/WebString.h"
 
 #if INSIDE_BLINK
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #else
 #include "url/origin.h"
 #endif
@@ -43,15 +44,14 @@
 namespace blink {
 
 class SecurityOrigin;
-class WebSecurityOriginPrivate;
 class WebURL;
 
 class WebSecurityOrigin {
  public:
   ~WebSecurityOrigin() { Reset(); }
 
-  WebSecurityOrigin() : private_(0) {}
-  WebSecurityOrigin(const WebSecurityOrigin& s) : private_(0) { Assign(s); }
+  WebSecurityOrigin() {}
+  WebSecurityOrigin(const WebSecurityOrigin& s) { Assign(s); }
   WebSecurityOrigin& operator=(const WebSecurityOrigin& s) {
     Assign(s);
     return *this;
@@ -65,7 +65,7 @@ class WebSecurityOrigin {
   BLINK_PLATFORM_EXPORT void Reset();
   BLINK_PLATFORM_EXPORT void Assign(const WebSecurityOrigin&);
 
-  bool IsNull() const { return !private_; }
+  bool IsNull() const { return private_.IsNull(); }
 
   BLINK_PLATFORM_EXPORT WebString Protocol() const;
   BLINK_PLATFORM_EXPORT WebString Host() const;
@@ -111,10 +111,10 @@ class WebSecurityOrigin {
   BLINK_PLATFORM_EXPORT void GrantLoadLocalResources() const;
 
 #if INSIDE_BLINK
-  BLINK_PLATFORM_EXPORT WebSecurityOrigin(WTF::PassRefPtr<SecurityOrigin>);
+  BLINK_PLATFORM_EXPORT WebSecurityOrigin(WTF::RefPtr<SecurityOrigin>);
   BLINK_PLATFORM_EXPORT WebSecurityOrigin& operator=(
-      WTF::PassRefPtr<SecurityOrigin>);
-  BLINK_PLATFORM_EXPORT operator WTF::PassRefPtr<SecurityOrigin>() const;
+      WTF::RefPtr<SecurityOrigin>);
+  BLINK_PLATFORM_EXPORT operator WTF::RefPtr<SecurityOrigin>() const;
   BLINK_PLATFORM_EXPORT SecurityOrigin* Get() const;
 #else
   // TODO(mkwst): A number of properties don't survive a round-trip
@@ -127,7 +127,7 @@ class WebSecurityOrigin {
                             Suborigin().Ascii());
   }
 
-  WebSecurityOrigin(const url::Origin& origin) : private_(0) {
+  WebSecurityOrigin(const url::Origin& origin) {
     if (origin.unique()) {
       Assign(WebSecurityOrigin::CreateUnique());
       return;
@@ -150,8 +150,7 @@ class WebSecurityOrigin {
       int port,
       const WebString& suborigin);
 
-  void Assign(WebSecurityOriginPrivate*);
-  WebSecurityOriginPrivate* private_;
+  WebPrivatePtr<SecurityOrigin> private_;
 };
 
 }  // namespace blink

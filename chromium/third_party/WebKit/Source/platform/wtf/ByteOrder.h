@@ -31,16 +31,18 @@
 #ifndef WTF_ByteOrder_h
 #define WTF_ByteOrder_h
 
-#if OS(POSIX)
+#include "build/build_config.h"
+#include "platform/wtf/build_config.h"
+
+#if defined(OS_POSIX)
 #include <arpa/inet.h>
 #endif
 
-#if OS(WIN)
+#if defined(OS_WIN)
 
 #include "platform/wtf/ByteSwap.h"
-#include "platform/wtf/CPU.h"
 
-#if CPU(BIG_ENDIAN)
+#if defined(ARCH_CPU_BIG_ENDIAN)
 inline uint16_t ntohs(uint16_t x) {
   return x;
 }
@@ -52,19 +54,6 @@ inline uint32_t ntohl(uint32_t x) {
 }
 inline uint32_t htonl(uint32_t x) {
   return x;
-}
-#elif CPU(MIDDLE_ENDIAN)
-inline uint16_t ntohs(uint16_t x) {
-  return x;
-}
-inline uint16_t htons(uint16_t x) {
-  return x;
-}
-inline uint32_t ntohl(uint32_t x) {
-  return WTF::wswap32(x);
-}
-inline uint32_t htonl(uint32_t x) {
-  return WTF::wswap32(x);
 }
 #else
 inline uint16_t ntohs(uint16_t x) {
@@ -81,6 +70,6 @@ inline uint32_t htonl(uint32_t x) {
 }
 #endif
 
-#endif  // OS(WIN)
+#endif  // defined(OS_WIN)
 
 #endif  // WTF_ByteOrder_h

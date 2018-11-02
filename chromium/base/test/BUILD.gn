@@ -196,6 +196,9 @@ static_library("test_support") {
   }
 
   if (is_android) {
+    set_sources_assignment_filter([])
+    sources += [ "test_file_util_linux.cc" ]
+    set_sources_assignment_filter(sources_assignment_filter)
     deps += [
       ":base_unittests_jni_headers",
       ":test_support_jni_headers",
@@ -356,7 +359,6 @@ if (is_android) {
     ]
     srcjar_deps = [ ":test_support_java_aidl" ]
     java_files = [
-      "android/java/src/org/chromium/base/ChildProcessConstants.java",
       "android/java/src/org/chromium/base/MainReturnCodeResult.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientLauncher.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientService.java",
@@ -365,6 +367,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/MultiprocessTestClientService2.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientService3.java",
       "android/java/src/org/chromium/base/MultiprocessTestClientService4.java",
+      "android/java/src/org/chromium/base/MultiprocessTestClientServiceDelegate.java",
     ]
   }
 
@@ -376,7 +379,6 @@ if (is_android) {
     ]
     sources = [
       "android/java/src/org/chromium/base/ITestCallback.aidl",
-      "android/java/src/org/chromium/base/ITestClient.aidl",
       "android/java/src/org/chromium/base/ITestController.aidl",
     ]
   }

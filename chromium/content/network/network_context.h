@@ -12,22 +12,32 @@
 
 #include "base/macros.h"
 #include "content/common/content_export.h"
-#include "content/common/network_service.mojom.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/network_service.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 
 namespace net {
 class URLRequestContext;
+class URLRequestContextBuilder;
 }
 
 namespace content {
+class NetworkServiceImpl;
 class URLLoaderImpl;
 
 class NetworkContext : public mojom::NetworkContext {
  public:
-  NetworkContext(mojom::NetworkContextRequest request,
+  NetworkContext(NetworkServiceImpl* network_service,
+                 mojom::NetworkContextRequest request,
                  mojom::NetworkContextParamsPtr params);
+
+  // Temporary constructor that allows creating an in-process NetworkContext
+  // with a pre-populated URLRequestContextBuilder.
+  NetworkContext(mojom::NetworkContextRequest request,
+                 mojom::NetworkContextParamsPtr params,
+                 std::unique_ptr<net::URLRequestContextBuilder> builder);
+
   ~NetworkContext() override;
 
   CONTENT_EXPORT static std::unique_ptr<NetworkContext> CreateForTesting();
@@ -47,8 +57,17 @@ class NetworkContext : public mojom::NetworkContext {
   void HandleViewCacheRequest(const GURL& url,
                               mojom::URLLoaderClientPtr client) override;
 
+  // Called when the associated NetworkServiceImpl is going away. Guaranteed to
+  // destroy NetworkContext's URLRequestContext.
+  void Cleanup();
+
  private:
   NetworkContext();
+
+  // On connection errors the NetworkContext destroys itself.
+  void OnConnectionError();
+
+  NetworkServiceImpl* const network_service_;
 
   std::unique_ptr<net::URLRequestContext> url_request_context_;
 
@@ -61,10 +80,6 @@ class NetworkContext : public mojom::NetworkContext {
   // net::URLRequests held by URLLoaderImpls have to be gone when
   // net::URLRequestContext (held by NetworkContext) is destroyed.
   std::set<URLLoaderImpl*> url_loaders_;
-
-  // Set when entering the destructor, in order to avoid manipulations of the
-  // |url_loaders_| (as a url_loader might delete itself in Cleanup()).
-  bool in_shutdown_;
 
   mojom::NetworkContextParamsPtr params_;
 

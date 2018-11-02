@@ -228,12 +228,17 @@ def _RemoveKeystoneKeys(plist):
   _RemoveKeys(plist, *tag_keys)
 
 
-def _AddSparkleKeys(plist):
+def _AddSparkleKeys(plist, vivaldi_release_kind):
   """Adds the Sparkle keys."""
   plist['SUScheduledCheckInterval'] = 86400
   plist['SUEnableAutomaticChecks'] = 'YES'
   plist['SUAllowsAutomaticUpdates'] = 'NO'
-  plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/mac/appcast.xml'
+  if vivaldi_release_kind == 'vivaldi_final':
+    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/public/mac/appcast.xml'
+  elif vivaldi_release_kind == 'vivaldi_snapshot':
+    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/mac/appcast.xml'
+  else: #vivaldi_sopranos
+    plist['SUFeedURL'] = 'https://update.vivaldi.com/update/1.0/sopranos_new/mac/appcast.xml'
   #plist['SUPublicDSAKeyFile'] = 'dsa_pub.pem'
 
 def _RemoveSparkleKeys(plist):
@@ -278,6 +283,8 @@ def Main(argv):
       default=None, help='The source version string [major.minor.build.patch]')
   parser.add_option('--vivaldi-build', dest='vivaldi_build', action='store', type='string',
       default=None, help='The build number string')
+  parser.add_option('--vivaldi-release-kind', dest='vivaldi_release_kind', action='store', type='string',
+      default=None, help='The type of Vivaldi build')
   parser.add_option('--sparkle', dest='use_sparkle', action='store',
       type='int', default=False, help='Enable Sparkle [1 or 0]')
   (options, args) = parser.parse_args(argv)
@@ -364,7 +371,7 @@ def Main(argv):
 
   # Add Sparkle.
   if options.use_sparkle:
-    _AddSparkleKeys(plist)
+    _AddSparkleKeys(plist, options.vivaldi_release_kind)
   else:
     _RemoveSparkleKeys(plist)
 

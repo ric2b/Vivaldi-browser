@@ -19,7 +19,6 @@
 class Profile;
 
 namespace ui {
-class Accelerator;
 class IMEEngineHandlerInterface;
 }  // namespace ui
 
@@ -63,6 +62,13 @@ class UI_BASE_IME_EXPORT InputMethodManager {
 
     unsigned int modified;
     std::vector<MenuItem> children;
+  };
+
+  enum ImeMenuFeature {
+    FEATURE_EMOJI = 1 << 0,
+    FEATURE_HANDWRITING = 1 << 1,
+    FEATURE_VOICE = 1 << 2,
+    FEATURE_ALL = ~0,
   };
 
   class Observer {
@@ -185,25 +191,12 @@ class UI_BASE_IME_EXPORT InputMethodManager {
         const std::string& locale,
         const std::string& layout) = 0;
 
-    // Returns whether the input method (or keyboard layout) can be switched
-    // to the next or previous one. Returns false if only one input method is
-    // enabled.
-    virtual bool CanCycleInputMethod() = 0;
-
     // Switches the current input method (or keyboard layout) to the next one.
     virtual void SwitchToNextInputMethod() = 0;
 
     // Switches the current input method (or keyboard layout) to the previous
     // one.
     virtual void SwitchToPreviousInputMethod() = 0;
-
-    // Returns true if the input method can be switched to the input method
-    // associated with |accelerator|.
-    virtual bool CanSwitchInputMethod(const ui::Accelerator& accelerator) = 0;
-
-    // Switches to an input method (or keyboard layout) which is associated with
-    // the |accelerator|.
-    virtual void SwitchInputMethod(const ui::Accelerator& accelerator) = 0;
 
     // Gets the descriptor of the input method which is currently selected.
     virtual InputMethodDescriptor GetCurrentInputMethod() const = 0;
@@ -320,6 +313,13 @@ class UI_BASE_IME_EXPORT InputMethodManager {
   // Returns whether the extra inputs: emoji, handwriting and voice inputs on
   // opt-in IME menu has been enabled.
   virtual bool IsEmojiHandwritingVoiceOnImeMenuEnabled() = 0;
+
+  // Enables or disables some advanced features, e.g. handwiring, voices input.
+  virtual void SetImeMenuFeatureEnabled(ImeMenuFeature feature,
+                                        bool enabled) = 0;
+
+  // Returns the true if the given feature is enabled.
+  virtual bool GetImeMenuFeatureEnabled(ImeMenuFeature feature) const = 0;
 };
 
 }  // namespace input_method

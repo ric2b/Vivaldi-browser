@@ -97,7 +97,7 @@ class PaymentsProfileComparator : public autofill::AutofillProfileComparator {
 
   // Clears the cached evaluation result for |profile|. Must be called when a
   // profile is modified and saved during the course of a PaymentRequest.
-  void Invalidate(const autofill::AutofillProfile& profile);
+  virtual void Invalidate(const autofill::AutofillProfile& profile);
 
  private:
   ProfileFields ComputeMissingFields(
@@ -107,13 +107,6 @@ class PaymentsProfileComparator : public autofill::AutofillProfileComparator {
   base::string16 GetStringForMissingFields(ProfileFields fields) const;
   bool AreRequiredAddressFieldsPresent(
       const autofill::AutofillProfile& profile) const;
-
-  // Comparison functions suitable for sorting profiles by completeness
-  // score with std::sort.
-  bool IsContactMoreComplete(const autofill::AutofillProfile* p1,
-                             const autofill::AutofillProfile* p2) const;
-  bool IsShippingMoreComplete(const autofill::AutofillProfile* p1,
-                              const autofill::AutofillProfile* p2) const;
 
   mutable std::map<std::string, ProfileFields> cache_;
   const PaymentOptionsProvider& options_;

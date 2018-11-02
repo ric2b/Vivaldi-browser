@@ -73,10 +73,6 @@
 using content::BrowserThread;
 using content::ResourceType;
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace android_webview {
 namespace {
 
@@ -165,8 +161,8 @@ void AwContentsMessageFilter::OnSubFrameCreated(int parent_render_frame_id,
 
 // A dummy binder for mojo interface autofill::mojom::PasswordManagerDriver.
 void DummyBindPasswordManagerDriver(
-    const service_manager::BindSourceInfo& source_info,
-    autofill::mojom::PasswordManagerDriverRequest request) {}
+    autofill::mojom::PasswordManagerDriverRequest request,
+    content::RenderFrameHost* render_frame_host) {}
 
 }  // anonymous namespace
 
@@ -189,7 +185,15 @@ AwBrowserContext* AwContentBrowserClient::GetAwBrowserContext() {
   return AwBrowserContext::GetDefault();
 }
 
-AwContentBrowserClient::AwContentBrowserClient() {}
+AwContentBrowserClient::AwContentBrowserClient() {
+  frame_interfaces_.AddInterface(
+      base::Bind(&autofill::ContentAutofillDriverFactory::BindAutofillDriver));
+  // Although WebView does not support password manager feature, renderer code
+  // could still request this interface, so we register a dummy binder which
+  // just drops the incoming request, to avoid the 'Failed to locate a binder
+  // for interface' error log..
+  frame_interfaces_.AddInterface(base::Bind(&DummyBindPasswordManagerDriver));
+}
 
 AwContentBrowserClient::~AwContentBrowserClient() {}
 
@@ -355,12 +359,9 @@ AwContentBrowserClient::CreateQuotaPermissionContext() {
 void AwContentBrowserClient::GetQuotaSettings(
     content::BrowserContext* context,
     content::StoragePartition* partition,
-    const storage::OptionalQuotaSettingsCallback& callback) {
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&storage::CalculateNominalDynamicSettings,
-                 partition->GetPath(), context->IsOffTheRecord()),
-      callback);
+    storage::OptionalQuotaSettingsCallback callback) {
+  storage::GetNominalDynamicSettings(
+      partition->GetPath(), context->IsOffTheRecord(), std::move(callback));
 }
 
 void AwContentBrowserClient::AllowCertificateError(
@@ -390,7 +391,7 @@ void AwContentBrowserClient::AllowCertificateError(
 void AwContentBrowserClient::SelectClientCertificate(
     content::WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    net::CertificateList client_certs,
+    net::ClientCertIdentityList client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
   AwContentsClientBridge* client =
       AwContentsClientBridge::FromWebContents(web_contents);
@@ -542,18 +543,12 @@ std::unique_ptr<base::Value> AwContentBrowserClient::GetServiceManifestOverlay(
   return base::JSONReader::Read(manifest_contents);
 }
 
-void AwContentBrowserClient::ExposeInterfacesToFrame(
-    service_manager::BinderRegistry* registry,
-    content::RenderFrameHost* render_frame_host) {
-  registry->AddInterface(
-      base::Bind(&autofill::ContentAutofillDriverFactory::BindAutofillDriver,
-                 render_frame_host));
-
-  // Although WebView does not support password manager feature, renderer code
-  // could still request this interface, so we register a dummy binder which
-  // just drops the incoming request, to avoid the 'Failed to locate a binder
-  // for interface' error log..
-  registry->AddInterface(base::Bind(&DummyBindPasswordManagerDriver));
+void AwContentBrowserClient::BindInterfaceRequestFromFrame(
+    content::RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  frame_interfaces_.TryBindInterface(interface_name, &interface_pipe,
+                                     render_frame_host);
 }
 
 }  // namespace android_webview

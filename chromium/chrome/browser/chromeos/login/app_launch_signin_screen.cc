@@ -90,9 +90,8 @@ void AppLaunchSigninScreen::Login(const UserContext& user_context,
   authenticator_ = UserSessionManager::GetInstance()->CreateAuthenticator(this);
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&Authenticator::AuthenticateToUnlock,
-                 authenticator_.get(),
-                 user_context));
+      base::BindOnce(&Authenticator::AuthenticateToUnlock, authenticator_.get(),
+                     user_context));
 }
 
 void AppLaunchSigninScreen::MigrateUserData(const std::string& old_password) {
@@ -217,10 +216,10 @@ void AppLaunchSigninScreen::HandleGetUsers() {
   for (user_manager::UserList::const_iterator it = users.begin();
        it != users.end();
        ++it) {
-    proximity_auth::ScreenlockBridge::LockHandler::AuthType initial_auth_type =
+    proximity_auth::mojom::AuthType initial_auth_type =
         UserSelectionScreen::ShouldForceOnlineSignIn(*it)
-            ? proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN
-            : proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD;
+            ? proximity_auth::mojom::AuthType::ONLINE_SIGN_IN
+            : proximity_auth::mojom::AuthType::OFFLINE_PASSWORD;
     auto user_dict = base::MakeUnique<base::DictionaryValue>();
     UserSelectionScreen::FillUserDictionary(
         *it, true,               /* is_owner */
@@ -230,7 +229,7 @@ void AppLaunchSigninScreen::HandleGetUsers() {
     users_list.Append(std::move(user_dict));
   }
 
-  webui_handler_->LoadUsers(users_list, false);
+  webui_handler_->LoadUsers(users, users_list);
 }
 
 void AppLaunchSigninScreen::CheckUserStatus(const AccountId& account_id) {}

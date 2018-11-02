@@ -5,6 +5,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
+#include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_state.h"
@@ -16,13 +17,13 @@
 #include "ui/display/screen.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 
 namespace ash {
-namespace test {
 
 namespace {
 
@@ -90,9 +91,9 @@ class LockLayoutManagerTest : public AshTestBase {
       return;
 
     if (show) {
-      keyboard->ShowKeyboard(true);
-      if (keyboard->ui()->GetKeyboardWindow()->bounds().height() == 0) {
-        keyboard->ui()->GetKeyboardWindow()->SetBounds(
+      keyboard->ShowKeyboard(false);
+      if (keyboard->ui()->GetContentsWindow()->bounds().height() == 0) {
+        keyboard->ui()->GetContentsWindow()->SetBounds(
             keyboard::FullWidthKeyboardBoundsFromRootBounds(
                 Shell::GetPrimaryRootWindow()->bounds(),
                 kVirtualKeyboardHeight));
@@ -179,6 +180,42 @@ TEST_F(LockLayoutManagerTest, MaximizedFullscreenWindowBoundsAreEqualToScreen) {
             fullscreen_window->GetBoundsInScreen().ToString());
 }
 
+TEST_F(LockLayoutManagerTest, AccessibilityPanel) {
+  ash::ShelfLayoutManager* shelf_layout_manager =
+      GetPrimaryShelf()->shelf_layout_manager();
+  ASSERT_TRUE(shelf_layout_manager);
+
+  // Set the accessibility panel height.
+  int chromevox_panel_height = 45;
+  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+
+  views::Widget::InitParams widget_params(
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  widget_params.show_state = ui::SHOW_STATE_FULLSCREEN;
+  std::unique_ptr<aura::Window> window(
+      CreateTestLoginWindow(widget_params, false /* use_delegate */));
+
+  display::Display primary_display =
+      display::Screen::GetScreen()->GetPrimaryDisplay();
+
+  gfx::Rect target_bounds = primary_display.bounds();
+  target_bounds.Inset(0 /* left */, chromevox_panel_height /* top */,
+                      0 /* right */, 0 /* bottom */);
+
+  EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
+
+  // Update the accessibility panel height, and verify the window bounds are
+  // updated accordingly.
+  chromevox_panel_height = 25;
+  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+
+  target_bounds = primary_display.bounds();
+  target_bounds.Inset(0 /* left */, chromevox_panel_height /* top */,
+                      0 /* right */, 0 /* bottom */);
+
+  EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
+}
+
 TEST_F(LockLayoutManagerTest, KeyboardBounds) {
   display::Display primary_display =
       display::Screen::GetScreen()->GetPrimaryDisplay();
@@ -234,7 +271,7 @@ TEST_F(LockLayoutManagerTest, KeyboardBounds) {
   gfx::Rect target_bounds(screen_bounds);
   target_bounds.set_height(
       target_bounds.height() -
-      keyboard->ui()->GetKeyboardWindow()->bounds().height());
+      keyboard->ui()->GetContentsWindow()->bounds().height());
   EXPECT_EQ(target_bounds.ToString(), window->GetBoundsInScreen().ToString());
   ShowKeyboard(false);
 
@@ -291,5 +328,47 @@ TEST_F(LockLayoutManagerTest, MultipleMonitors) {
   EXPECT_EQ(screen_bounds.ToString(), window->GetBoundsInScreen().ToString());
 }
 
-}  // namespace test
+TEST_F(LockLayoutManagerTest, AccessibilityPanelWithMultipleMonitors) {
+  UpdateDisplay("300x400,400x500");
+
+  ash::ShelfLayoutManager* shelf_layout_manager =
+      GetPrimaryShelf()->shelf_layout_manager();
+  ASSERT_TRUE(shelf_layout_manager);
+
+  int chromevox_panel_height = 45;
+  shelf_layout_manager->SetChromeVoxPanelHeight(chromevox_panel_height);
+
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+
+  views::Widget::InitParams widget_params(
+      views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
+  widget_params.show_state = ui::SHOW_STATE_FULLSCREEN;
+  std::unique_ptr<aura::Window> window(
+      CreateTestLoginWindow(widget_params, false /* use_delegate */));
+  window->SetProperty(aura::client::kResizeBehaviorKey,
+                      ui::mojom::kResizeBehaviorCanMaximize);
+
+  gfx::Rect target_bounds =
+      display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
+  target_bounds.Inset(0, chromevox_panel_height, 0, 0);
+  EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
+
+  // Restore window with bounds in the second display, the window should be
+  // shown in the primary display.
+  wm::WindowState* window_state = wm::GetWindowState(window.get());
+  window_state->SetRestoreBoundsInScreen(gfx::Rect(400, 0, 30, 40));
+
+  window_state->Restore();
+  EXPECT_EQ(root_windows[0], window->GetRootWindow());
+  EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
+
+  // Force the window to secondary display - accessibility panel is only set
+  // for the primary shelf, so it should not influence the screen bounds.
+  window->SetBoundsInScreen(gfx::Rect(0, 0, 30, 40), GetSecondaryDisplay());
+
+  target_bounds = gfx::Rect(300, 0, 400, 500);
+  EXPECT_EQ(root_windows[1], window->GetRootWindow());
+  EXPECT_EQ(target_bounds, window->GetBoundsInScreen());
+}
+
 }  // namespace ash

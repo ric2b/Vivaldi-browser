@@ -74,7 +74,7 @@
 */
 
 namespace blink {
-class WebFrame;
+class WebLocalFrame;
 }
 
 namespace gin {
@@ -90,7 +90,7 @@ class DomAutomationController : public gin::Wrappable<DomAutomationController>,
  public:
   static gin::WrapperInfo kWrapperInfo;
 
-  static void Install(RenderFrame* render_frame, blink::WebFrame* frame);
+  static void Install(RenderFrame* render_frame, blink::WebLocalFrame* frame);
 
   // Makes the renderer send a javascript value to the app.
   // The value to be sent can be either of type String,
@@ -119,8 +119,6 @@ class DomAutomationController : public gin::Wrappable<DomAutomationController>,
   void OnDestruct() override;
   void DidCreateScriptContext(v8::Local<v8::Context> context,
                               int world_id) override;
-
-  int automation_id_;  // routing id to be used by the next channel.
 
   DISALLOW_COPY_AND_ASSIGN(DomAutomationController);
 };

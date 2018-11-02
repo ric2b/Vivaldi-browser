@@ -20,7 +20,6 @@
 #include "components/prefs/pref_service.h"
 #include "components/prefs/pref_service_factory.h"
 #include "components/user_prefs/user_prefs.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/ssl_status.h"
 #include "content/public/browser/web_contents.h"
@@ -217,6 +216,10 @@ bool AwAutofillClient::ShouldShowSigninPromo() {
 void AwAutofillClient::StartSigninFlow() {}
 
 void AwAutofillClient::ShowHttpNotSecureExplanation() {}
+
+bool AwAutofillClient::IsAutofillSupported() {
+  return true;
+}
 
 void AwAutofillClient::Dismissed(JNIEnv* env,
                                  const JavaParamRef<jobject>& obj) {

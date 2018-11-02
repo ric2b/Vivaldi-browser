@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef HyphenationMinikin_h
+#define HyphenationMinikin_h
+
 #include "platform/text/Hyphenation.h"
 
 #include "base/files/memory_mapped_file.h"
@@ -25,7 +28,7 @@ class PLATFORM_EXPORT HyphenationMinikin : public Hyphenation {
                             size_t before_index) const override;
   Vector<size_t, 8> HyphenLocations(const StringView&) const override;
 
-  static PassRefPtr<HyphenationMinikin> FromFileForTesting(base::File);
+  static RefPtr<HyphenationMinikin> FromFileForTesting(base::File);
 
  private:
   bool OpenDictionary(base::File);
@@ -37,3 +40,5 @@ class PLATFORM_EXPORT HyphenationMinikin : public Hyphenation {
 };
 
 }  // namespace blink
+
+#endif  // HyphenationMinikin_h

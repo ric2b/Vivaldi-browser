@@ -6,7 +6,9 @@
 
 #include <memory>
 #include "core/dom/Document.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/UseCounter.h"
 #include "modules/presentation/PresentationConnection.h"
 #include "platform/wtf/PtrUtil.h"
 #include "public/platform/WebString.h"
@@ -59,6 +61,28 @@ WebPresentationClient* PresentationController::Client() {
   return client_;
 }
 
+// static
+PresentationController* PresentationController::FromContext(
+    ExecutionContext* execution_context) {
+  if (!execution_context)
+    return nullptr;
+
+  DCHECK(execution_context->IsDocument());
+  Document* document = ToDocument(execution_context);
+  if (!document->GetFrame())
+    return nullptr;
+
+  return PresentationController::From(*document->GetFrame());
+}
+
+// static
+WebPresentationClient* PresentationController::ClientFromContext(
+    ExecutionContext* execution_context) {
+  PresentationController* controller =
+      PresentationController::FromContext(execution_context);
+  return controller ? controller->Client() : nullptr;
+}
+
 DEFINE_TRACE(PresentationController) {
   visitor->Trace(presentation_);
   visitor->Trace(connections_);
@@ -71,6 +95,7 @@ WebPresentationConnection* PresentationController::DidStartDefaultPresentation(
   if (!presentation_ || !presentation_->defaultRequest())
     return nullptr;
 
+  PresentationRequest::RecordStartOriginTypeAccess(*GetExecutionContext());
   return PresentationConnection::Take(this, presentation_info,
                                       presentation_->defaultRequest());
 }
@@ -92,25 +117,6 @@ void PresentationController::DidCloseConnection(
   if (!connection)
     return;
   connection->DidClose(reason, message);
-}
-
-void PresentationController::DidReceiveConnectionTextMessage(
-    const WebPresentationInfo& presentation_info,
-    const WebString& message) {
-  PresentationConnection* connection = FindConnection(presentation_info);
-  if (!connection)
-    return;
-  connection->DidReceiveTextMessage(message);
-}
-
-void PresentationController::DidReceiveConnectionBinaryMessage(
-    const WebPresentationInfo& presentation_info,
-    const uint8_t* data,
-    size_t length) {
-  PresentationConnection* connection = FindConnection(presentation_info);
-  if (!connection)
-    return;
-  connection->DidReceiveBinaryMessage(data, length);
 }
 
 void PresentationController::SetPresentation(Presentation* presentation) {

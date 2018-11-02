@@ -21,24 +21,24 @@ namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is
 // trivial and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
 const WrapperTypeInfo V8TestLegacyCallbackInterface::wrapperTypeInfo = {
-  gin::kEmbedderBlink,
-  V8TestLegacyCallbackInterface::DomTemplate,
-  nullptr,
-  nullptr,
-  nullptr,
-  "TestLegacyCallbackInterface",
-  nullptr,
-  WrapperTypeInfo::kWrapperTypeNoPrototype,
-  WrapperTypeInfo::kObjectClassId,
-  WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
-  WrapperTypeInfo::kDependent
+    gin::kEmbedderBlink,
+    V8TestLegacyCallbackInterface::DomTemplate,
+    nullptr,
+    nullptr,
+    nullptr,
+    "TestLegacyCallbackInterface",
+    nullptr,
+    WrapperTypeInfo::kWrapperTypeNoPrototype,
+    WrapperTypeInfo::kObjectClassId,
+    WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
+    WrapperTypeInfo::kDependent,
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -73,7 +73,9 @@ static void InstallV8TestLegacyCallbackInterfaceTemplate(
   const V8DOMConfiguration::ConstantConfiguration V8TestLegacyCallbackInterfaceConstants[] = {
       {"CONST_VALUE_USHORT_42", 42, 0, V8DOMConfiguration::kConstantTypeUnsignedShort},
   };
-  V8DOMConfiguration::InstallConstants(isolate, interfaceTemplate, prototypeTemplate, V8TestLegacyCallbackInterfaceConstants, WTF_ARRAY_LENGTH(V8TestLegacyCallbackInterfaceConstants));
+  V8DOMConfiguration::InstallConstants(
+      isolate, interfaceTemplate, prototypeTemplate,
+      V8TestLegacyCallbackInterfaceConstants, WTF_ARRAY_LENGTH(V8TestLegacyCallbackInterfaceConstants));
   static_assert(42 == TestLegacyCallbackInterface::kConstValueUshort42, "the value of TestLegacyCallbackInterface_kConstValueUshort42 does not match with implementation");
 }
 

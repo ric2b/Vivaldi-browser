@@ -5,8 +5,8 @@
 #include "content/network/network_service_url_loader_factory_impl.h"
 
 #include "base/logging.h"
-#include "content/common/resource_request.h"
 #include "content/network/url_loader_impl.h"
+#include "content/public/common/resource_request.h"
 
 namespace content {
 
@@ -26,9 +26,11 @@ void NetworkServiceURLLoaderFactoryImpl::CreateLoaderAndStart(
     int32_t request_id,
     uint32_t options,
     const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client) {
-  new URLLoaderImpl(context_, std::move(request), options, url_request,
-                    std::move(client));
+    mojom::URLLoaderClientPtr client,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
+  new URLLoaderImpl(
+      context_, std::move(request), options, url_request, std::move(client),
+      static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation));
 }
 
 void NetworkServiceURLLoaderFactoryImpl::SyncLoad(

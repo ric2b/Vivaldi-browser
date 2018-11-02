@@ -4,6 +4,7 @@
 
 import("//build/config/chrome_build.gni")
 if (is_vivaldi) {
+  import("//vivaldi/gn/config/product.gni")
   import("//vivaldi/gn/config/version.gni")
 }
 
@@ -84,6 +85,8 @@ template("tweak_info_plist") {
       args += [
              "--vivaldi-build",
              vivaldi_global_build_number,
+             "--vivaldi-release-kind",
+             VIVALDI_RELEASE_KIND,
           ]
     }
     deps = _deps

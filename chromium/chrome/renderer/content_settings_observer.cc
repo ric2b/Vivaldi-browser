@@ -6,6 +6,7 @@
 
 #include "chrome/common/render_messages.h"
 #include "chrome/common/ssl_insecure_content.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
 #include "content/public/renderer/render_frame.h"
@@ -54,7 +55,7 @@ GURL GetOriginOrURL(const WebFrame* frame) {
   // WebRemoteFrame which does not have a document(), and the WebRemoteFrame's
   // URL is not replicated.  See https://crbug.com/628759.
   if (top_origin.unique() && frame->Top()->IsWebLocalFrame())
-    return frame->Top()->GetDocument().Url();
+    return frame->Top()->ToWebLocalFrame()->GetDocument().Url();
   return top_origin.GetURL();
 }
 
@@ -71,14 +72,14 @@ ContentSetting GetContentSettingFromRules(
   if (rules.size() == 1) {
     DCHECK(rules[0].primary_pattern == ContentSettingsPattern::Wildcard());
     DCHECK(rules[0].secondary_pattern == ContentSettingsPattern::Wildcard());
-    return rules[0].setting;
+    return rules[0].GetContentSetting();
   }
   const GURL& primary_url = GetOriginOrURL(frame);
   const GURL& secondary_gurl = secondary_url;
   for (it = rules.begin(); it != rules.end(); ++it) {
     if (it->primary_pattern.Matches(primary_url) &&
         it->secondary_pattern.Matches(secondary_gurl)) {
-      return it->setting;
+      return it->GetContentSetting();
     }
   }
   NOTREACHED();
@@ -182,7 +183,7 @@ bool ContentSettingsObserver::OnMessageReceived(const IPC::Message& message) {
 void ContentSettingsObserver::DidCommitProvisionalLoad(
     bool is_new_navigation,
     bool is_same_document_navigation) {
-  WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (frame->Parent())
     return;  // Not a top-level navigation.
 
@@ -217,7 +218,6 @@ void ContentSettingsObserver::SetAllowRunningInsecureContent() {
 }
 
 void ContentSettingsObserver::OnInsecureContentRendererRequest(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::InsecureContentRendererRequest request) {
   insecure_content_renderer_bindings_.AddBinding(this, std::move(request));
 }
@@ -297,17 +297,13 @@ bool ContentSettingsObserver::AllowIndexedDB(const WebString& name,
   return result;
 }
 
-bool ContentSettingsObserver::AllowPlugins(bool enabled_per_settings) {
-  return enabled_per_settings;
-}
-
 bool ContentSettingsObserver::AllowScript(bool enabled_per_settings) {
   if (!enabled_per_settings)
     return false;
   if (is_interstitial_page_)
     return true;
 
-  WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   const auto it = cached_script_permissions_.find(frame);
   if (it != cached_script_permissions_.end())
     return it->second;
@@ -347,7 +343,7 @@ bool ContentSettingsObserver::AllowScriptFromSource(
 }
 
 bool ContentSettingsObserver::AllowStorage(bool local) {
-  WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (frame->GetSecurityOrigin().IsUnique() ||
       frame->Top()->GetSecurityOrigin().IsUnique())
     return false;
@@ -429,7 +425,7 @@ bool ContentSettingsObserver::AllowAutoplay(bool default_value) {
   if (!content_setting_rules_)
     return default_value;
 
-  WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   return GetContentSettingFromRules(
              content_setting_rules_->autoplay_rules, frame,
              url::Origin(frame->GetDocument().GetSecurityOrigin()).GetURL()) ==
@@ -486,7 +482,7 @@ void ContentSettingsObserver::ClearBlockedContentSettings() {
 
 bool ContentSettingsObserver::IsPlatformApp() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
-  WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   WebSecurityOrigin origin = frame->GetDocument().GetSecurityOrigin();
   const extensions::Extension* extension = GetExtension(origin);
   return extension && extension->is_platform_app();

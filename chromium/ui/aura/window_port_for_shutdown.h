@@ -28,13 +28,15 @@ class WindowPortForShutdown : public WindowPort {
   void OnVisibilityChanged(bool visible) override;
   void OnDidChangeBounds(const gfx::Rect& old_bounds,
                          const gfx::Rect& new_bounds) override;
+  void OnDidChangeTransform(const gfx::Transform& old_transform,
+                            const gfx::Transform& new_transform) override;
   std::unique_ptr<ui::PropertyData> OnWillChangeProperty(
       const void* key) override;
   void OnPropertyChanged(const void* key,
                          int64_t old_value,
                          std::unique_ptr<ui::PropertyData> data) override;
-  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink() override;
-  cc::SurfaceId GetSurfaceId() const override;
+  std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink() override;
+  viz::SurfaceId GetSurfaceId() const override;
   void OnWindowAddedToRootWindow() override;
   void OnWillRemoveWindowFromRootWindow() override;
 

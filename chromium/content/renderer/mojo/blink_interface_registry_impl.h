@@ -7,11 +7,8 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/InterfaceRegistry.h"
-
-namespace service_manager {
-class BinderRegistry;
-}
 
 namespace content {
 

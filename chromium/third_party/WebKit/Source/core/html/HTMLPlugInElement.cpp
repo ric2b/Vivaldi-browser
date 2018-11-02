@@ -27,11 +27,11 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Node.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/events/Event.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLContentElement.h"
@@ -39,8 +39,8 @@
 #include "core/html/PluginDocument.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutImage.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/api/LayoutEmbeddedItem.h"
 #include "core/loader/MixedContentChecker.h"
 #include "core/page/Page.h"
@@ -78,7 +78,7 @@ HTMLPlugInElement::HTMLPlugInElement(
     : HTMLFrameOwnerElement(tag_name, doc),
       is_delaying_load_event_(false),
       // m_needsPluginUpdate(!createdByParser) allows HTMLObjectElement to delay
-      // FrameViewBase updates until after all children are parsed. For
+      // EmbeddedContentView updates until after all children are parsed. For
       // HTMLEmbedElement this delay is unnecessary, but it is simpler to make
       // both classes share the same codepath in this class.
       needs_plugin_update_(!created_by_parser),
@@ -96,12 +96,16 @@ DEFINE_TRACE(HTMLPlugInElement) {
   HTMLFrameOwnerElement::Trace(visitor);
 }
 
+bool HTMLPlugInElement::HasPendingActivity() const {
+  return image_loader_ && image_loader_->HasPendingActivity();
+}
+
 void HTMLPlugInElement::SetPersistedPlugin(PluginView* plugin) {
   if (persisted_plugin_ == plugin)
     return;
   if (persisted_plugin_) {
     persisted_plugin_->Hide();
-    DisposeFrameOrPluginSoon(persisted_plugin_.Release());
+    DisposePluginSoon(persisted_plugin_.Release());
   }
   persisted_plugin_ = plugin;
 }
@@ -114,36 +118,40 @@ void HTMLPlugInElement::SetFocused(bool focused, WebFocusType focus_type) {
 }
 
 bool HTMLPlugInElement::RequestObjectInternal(
-    const String& url,
-    const String& mime_type,
     const Vector<String>& param_names,
     const Vector<String>& param_values) {
-  if (url.IsEmpty() && mime_type.IsEmpty())
+  if (url_.IsEmpty() && service_type_.IsEmpty())
     return false;
 
-  if (ProtocolIsJavaScript(url))
+  if (ProtocolIsJavaScript(url_))
     return false;
 
-  KURL completed_url = url.IsEmpty() ? KURL() : GetDocument().CompleteURL(url);
-  if (!AllowedToLoadObject(completed_url, mime_type))
+  KURL completed_url =
+      url_.IsEmpty() ? KURL() : GetDocument().CompleteURL(url_);
+  if (!AllowedToLoadObject(completed_url, service_type_))
     return false;
 
-  bool use_fallback;
-  if (!ShouldUsePlugin(completed_url, mime_type, HasFallbackContent(),
-                       use_fallback)) {
+  ObjectContentType object_type = GetObjectContentType();
+  if (object_type == ObjectContentType::kFrame ||
+      object_type == ObjectContentType::kImage) {
     // If the plugin element already contains a subframe,
     // loadOrRedirectSubframe will re-use it. Otherwise, it will create a
-    // new frame and set it as the LayoutPart's FrameViewBase, causing what was
-    // previously in the FrameViewBase to be torn down.
+    // new frame and set it as the LayoutEmbeddedContent's EmbeddedContentView,
+    // causing what was previously in the EmbeddedContentView to be torn down.
     return LoadOrRedirectSubframe(completed_url, GetNameAttribute(), true);
   }
 
-  return LoadPlugin(completed_url, mime_type, param_names, param_values,
+  // If an object's content can't be handled and it has no fallback, let
+  // it be handled as a plugin to show the broken plugin icon.
+  bool use_fallback =
+      object_type == ObjectContentType::kNone && HasFallbackContent();
+  return LoadPlugin(completed_url, service_type_, param_names, param_values,
                     use_fallback, true);
 }
 
 bool HTMLPlugInElement::CanProcessDrag() const {
-  return PluginWidget() && PluginWidget()->CanProcessDrag();
+  return PluginEmbeddedContentView() &&
+         PluginEmbeddedContentView()->CanProcessDrag();
 }
 
 bool HTMLPlugInElement::CanStartSelection() const {
@@ -154,7 +162,7 @@ bool HTMLPlugInElement::WillRespondToMouseClickEvents() {
   if (IsDisabledFormControl())
     return false;
   LayoutObject* r = GetLayoutObject();
-  return r && (r->IsEmbeddedObject() || r->IsLayoutPart());
+  return r && (r->IsEmbeddedObject() || r->IsLayoutEmbeddedContent());
 }
 
 void HTMLPlugInElement::RemoveAllEventListeners() {
@@ -170,15 +178,14 @@ void HTMLPlugInElement::DidMoveToNewDocument(Document& old_document) {
   HTMLFrameOwnerElement::DidMoveToNewDocument(old_document);
 }
 
-void HTMLPlugInElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLPlugInElement::AttachLayoutTree(AttachContext& context) {
   HTMLFrameOwnerElement::AttachLayoutTree(context);
 
   if (!GetLayoutObject() || UseFallbackContent()) {
     // If we don't have a layoutObject we have to dispose of any plugins
     // which we persisted over a reattach.
     if (persisted_plugin_) {
-      HTMLFrameOwnerElement::UpdateSuspendScope
-          suspend_widget_hierarchy_updates;
+      HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
       SetPersistedPlugin(nullptr);
     }
     return;
@@ -190,12 +197,15 @@ void HTMLPlugInElement::AttachLayoutTree(const AttachContext& context) {
     image_loader_->UpdateFromElement();
   } else if (NeedsPluginUpdate() && !GetLayoutEmbeddedItem().IsNull() &&
              !GetLayoutEmbeddedItem().ShowsUnavailablePluginIndicator() &&
-             !WouldLoadAsNetscapePlugin(url_, service_type_) &&
+             GetObjectContentType() != ObjectContentType::kPlugin &&
              !is_delaying_load_event_) {
     is_delaying_load_event_ = true;
     GetDocument().IncrementLoadEventDelayCount();
     GetDocument().LoadPluginsSoon();
   }
+  LayoutObject* layout_object = GetLayoutObject();
+  if (layout_object && !layout_object->IsFloatingOrOutOfFlowPositioned())
+    context.previous_in_flow = layout_object;
 }
 
 void HTMLPlugInElement::UpdatePlugin() {
@@ -210,9 +220,9 @@ void HTMLPlugInElement::RemovedFrom(ContainerNode* insertion_point) {
   // If we've persisted the plugin and we're removed from the tree then
   // make sure we cleanup the persistance pointer.
   if (persisted_plugin_) {
-    // TODO(dcheng): This UpdateSuspendScope doesn't seem to provide much;
-    // investigate removing it.
-    HTMLFrameOwnerElement::UpdateSuspendScope suspend_widget_hierarchy_updates;
+    // TODO(dcheng): This PluginDisposeSuspendScope doesn't seem to provide
+    // much; investigate removing it.
+    HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
     SetPersistedPlugin(nullptr);
   }
   HTMLFrameOwnerElement::RemovedFrom(insertion_point);
@@ -223,25 +233,19 @@ void HTMLPlugInElement::RequestPluginCreationWithoutLayoutObjectIfPossible() {
     return;
 
   if (!GetDocument().GetFrame() ||
-      !GetDocument()
-           .GetFrame()
-           ->Loader()
-           .Client()
-           ->CanCreatePluginWithoutRenderer(service_type_))
+      !GetDocument().GetFrame()->Client()->CanCreatePluginWithoutRenderer(
+          service_type_))
     return;
 
-  if (GetLayoutObject() && GetLayoutObject()->IsLayoutPart())
+  if (GetLayoutObject() && GetLayoutObject()->IsLayoutEmbeddedContent())
     return;
 
   CreatePluginWithoutLayoutObject();
 }
 
 void HTMLPlugInElement::CreatePluginWithoutLayoutObject() {
-  DCHECK(GetDocument()
-             .GetFrame()
-             ->Loader()
-             .Client()
-             ->CanCreatePluginWithoutRenderer(service_type_));
+  DCHECK(GetDocument().GetFrame()->Client()->CanCreatePluginWithoutRenderer(
+      service_type_));
 
   KURL url;
   // CSP can block src-less objects.
@@ -264,9 +268,25 @@ bool HTMLPlugInElement::ShouldAccelerate() const {
   return plugin && plugin->PlatformLayer();
 }
 
+Vector<WebParsedFeaturePolicyDeclaration>
+HTMLPlugInElement::ConstructContainerPolicy() const {
+  // Plugin elements (<object> and <embed>) are not allowed to enable the
+  // fullscreen feature. Add an empty whitelist for the fullscreen feature so
+  // that the nested browsing context is unable to use the API, regardless of
+  // origin.
+  // https://fullscreen.spec.whatwg.org/#model
+  Vector<WebParsedFeaturePolicyDeclaration> container_policy;
+  WebParsedFeaturePolicyDeclaration whitelist;
+  whitelist.feature = WebFeaturePolicyFeature::kFullscreen;
+  whitelist.matches_all_origins = false;
+  whitelist.origins = Vector<WebSecurityOrigin>(0UL);
+  container_policy.push_back(whitelist);
+  return container_policy;
+}
+
 void HTMLPlugInElement::DetachLayoutTree(const AttachContext& context) {
-  // Update the FrameViewBase the next time we attach (detaching destroys the
-  // plugin).
+  // Update the EmbeddedContentView the next time we attach (detaching destroys
+  // the plugin).
   // FIXME: None of this "needsPluginUpdate" related code looks right.
   if (GetLayoutObject() && !UseFallbackContent())
     SetNeedsPluginUpdate(true);
@@ -279,10 +299,10 @@ void HTMLPlugInElement::DetachLayoutTree(const AttachContext& context) {
   // Only try to persist a plugin we actually own.
   PluginView* plugin = OwnedPlugin();
   if (plugin && context.performing_reattach) {
-    SetPersistedPlugin(ToPluginView(ReleaseWidget()));
+    SetPersistedPlugin(ToPluginView(ReleaseEmbeddedContentView()));
   } else {
     // Clear the plugin; will trigger disposal of it with Oilpan.
-    SetWidget(nullptr);
+    SetEmbeddedContentView(nullptr);
   }
 
   ResetInstance();
@@ -294,7 +314,7 @@ LayoutObject* HTMLPlugInElement::CreateLayoutObject(
     const ComputedStyle& style) {
   // Fallback content breaks the DOM->layoutObject class relationship of this
   // class and all superclasses because createObject won't necessarily return
-  // a LayoutEmbeddedObject or LayoutPart.
+  // a LayoutEmbeddedObject or LayoutEmbeddedContent.
   if (UseFallbackContent())
     return LayoutObject::CreateObject(this, style);
 
@@ -337,7 +357,7 @@ v8::Local<v8::Object> HTMLPlugInElement::PluginWrapper() {
     if (persisted_plugin_)
       plugin = persisted_plugin_;
     else
-      plugin = PluginWidget();
+      plugin = PluginEmbeddedContentView();
 
     if (plugin)
       plugin_wrapper_.Reset(isolate, plugin->ScriptableObject(isolate));
@@ -345,16 +365,17 @@ v8::Local<v8::Object> HTMLPlugInElement::PluginWrapper() {
   return plugin_wrapper_.Get(isolate);
 }
 
-PluginView* HTMLPlugInElement::PluginWidget() const {
-  if (LayoutPart* layout_part = LayoutPartForJSBindings())
-    return layout_part->Plugin();
+PluginView* HTMLPlugInElement::PluginEmbeddedContentView() const {
+  if (LayoutEmbeddedContent* layout_embedded_content =
+          LayoutEmbeddedContentForJSBindings())
+    return layout_embedded_content->Plugin();
   return nullptr;
 }
 
 PluginView* HTMLPlugInElement::OwnedPlugin() const {
-  FrameOrPlugin* frame_or_plugin = OwnedWidget();
-  if (frame_or_plugin && frame_or_plugin->IsPluginView())
-    return ToPluginView(frame_or_plugin);
+  EmbeddedContentView* view = OwnedEmbeddedContentView();
+  if (view && view->IsPluginView())
+    return ToPluginView(view);
   return nullptr;
 }
 
@@ -400,7 +421,7 @@ void HTMLPlugInElement::DefaultEventHandler(Event* event) {
   // code in EventHandler; these code paths should be united.
 
   LayoutObject* r = GetLayoutObject();
-  if (!r || !r->IsLayoutPart())
+  if (!r || !r->IsLayoutEmbeddedContent())
     return;
   if (r->IsEmbeddedObject()) {
     if (LayoutEmbeddedItem(ToLayoutEmbeddedObject(r))
@@ -416,20 +437,21 @@ void HTMLPlugInElement::DefaultEventHandler(Event* event) {
   HTMLFrameOwnerElement::DefaultEventHandler(event);
 }
 
-LayoutPart* HTMLPlugInElement::LayoutPartForJSBindings() const {
+LayoutEmbeddedContent* HTMLPlugInElement::LayoutEmbeddedContentForJSBindings()
+    const {
   // Needs to load the plugin immediatedly because this function is called
   // when JavaScript code accesses the plugin.
   // FIXME: Check if dispatching events here is safe.
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets(
       Document::kRunPostLayoutTasksSynchronously);
-  return ExistingLayoutPart();
+  return ExistingLayoutEmbeddedContent();
 }
 
 bool HTMLPlugInElement::IsKeyboardFocusable() const {
   if (HTMLFrameOwnerElement::IsKeyboardFocusable())
     return true;
-  return GetDocument().IsActive() && PluginWidget() &&
-         PluginWidget()->SupportsKeyboardFocus();
+  return GetDocument().IsActive() && PluginEmbeddedContentView() &&
+         PluginEmbeddedContentView()->SupportsKeyboardFocus();
 }
 
 bool HTMLPlugInElement::HasCustomFocusLogic() const {
@@ -441,8 +463,9 @@ bool HTMLPlugInElement::IsPluginElement() const {
 }
 
 bool HTMLPlugInElement::IsErrorplaceholder() {
-  if (PluginWidget() && PluginWidget()->IsPluginContainer() &&
-      PluginWidget()->IsErrorplaceholder())
+  if (PluginEmbeddedContentView() &&
+      PluginEmbeddedContentView()->IsPluginContainer() &&
+      PluginEmbeddedContentView()->IsErrorplaceholder())
     return true;
   return false;
 }
@@ -462,17 +485,46 @@ bool HTMLPlugInElement::LayoutObjectIsFocusable() const {
   return plugin_is_available_;
 }
 
+HTMLPlugInElement::ObjectContentType HTMLPlugInElement::GetObjectContentType() {
+  String mime_type = service_type_;
+  KURL url = GetDocument().CompleteURL(url_);
+  if (mime_type.IsEmpty()) {
+    // Try to guess the MIME type based off the extension.
+    String filename = url.LastPathComponent();
+    int extension_pos = filename.ReverseFind('.');
+    if (extension_pos >= 0) {
+      String extension = filename.Substring(extension_pos + 1);
+      mime_type = MIMETypeRegistry::GetWellKnownMIMETypeForExtension(extension);
+    }
+
+    if (mime_type.IsEmpty())
+      return ObjectContentType::kFrame;
+  }
+
+  // If Chrome is started with the --disable-plugins switch, pluginData is 0.
+  PluginData* plugin_data = GetDocument().GetFrame()->GetPluginData();
+  bool plugin_supports_mime_type =
+      plugin_data && plugin_data->SupportsMimeType(mime_type);
+
+  if (MIMETypeRegistry::IsSupportedImageMIMEType(mime_type)) {
+    return should_prefer_plug_ins_for_images_ && plugin_supports_mime_type
+               ? ObjectContentType::kPlugin
+               : ObjectContentType::kImage;
+  }
+
+  if (plugin_supports_mime_type)
+    return ObjectContentType::kPlugin;
+  if (MIMETypeRegistry::IsSupportedNonImageMIMEType(mime_type))
+    return ObjectContentType::kFrame;
+  return ObjectContentType::kNone;
+}
+
 bool HTMLPlugInElement::IsImageType() {
   if (service_type_.IsEmpty() && ProtocolIs(url_, "data"))
     service_type_ = MimeTypeFromDataURL(url_);
 
-  if (LocalFrame* frame = GetDocument().GetFrame()) {
-    KURL completed_url = GetDocument().CompleteURL(url_);
-    return frame->Loader().Client()->GetObjectContentType(
-               completed_url, service_type_, ShouldPreferPlugInsForImages()) ==
-           kObjectContentImage;
-  }
-
+  if (GetDocument().GetFrame())
+    return GetObjectContentType() == ObjectContentType::kImage;
   return Image::SupportsType(service_type_);
 }
 
@@ -493,25 +545,9 @@ bool HTMLPlugInElement::AllowedToLoadFrameURL(const String& url) {
                ContentFrame()->GetSecurityContext()->GetSecurityOrigin()));
 }
 
-// We don't use m_url, or m_serviceType as they may not be the final values
-// that <object> uses depending on <param> values.
-bool HTMLPlugInElement::WouldLoadAsNetscapePlugin(const String& url,
-                                                  const String& service_type) {
-  DCHECK(GetDocument().GetFrame());
-  KURL completed_url;
-  if (!url.IsEmpty())
-    completed_url = GetDocument().CompleteURL(url);
-  return GetDocument().GetFrame()->Loader().Client()->GetObjectContentType(
-             completed_url, service_type, ShouldPreferPlugInsForImages()) ==
-         kObjectContentNetscapePlugin;
-}
-
-bool HTMLPlugInElement::RequestObject(const String& url,
-                                      const String& mime_type,
-                                      const Vector<String>& param_names,
+bool HTMLPlugInElement::RequestObject(const Vector<String>& param_names,
                                       const Vector<String>& param_values) {
-  bool result =
-      RequestObjectInternal(url, mime_type, param_names, param_values);
+  bool result = RequestObjectInternal(param_names, param_values);
 
   DEFINE_STATIC_LOCAL(
       EnumerationHistogram, result_histogram,
@@ -545,15 +581,16 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
   loaded_url_ = url;
 
   if (persisted_plugin_) {
-    SetWidget(persisted_plugin_.Release());
+    SetEmbeddedContentView(persisted_plugin_.Release());
   } else {
     bool load_manually =
         GetDocument().IsPluginDocument() && !GetDocument().ContainsPlugins();
     LocalFrameClient::DetachedPluginPolicy policy =
         require_layout_object ? LocalFrameClient::kFailOnDetachedPlugin
                               : LocalFrameClient::kAllowDetachedPlugin;
-    PluginView* plugin = frame->Loader().Client()->CreatePlugin(
-        this, url, param_names, param_values, mime_type, load_manually, policy);
+    PluginView* plugin =
+        frame->Client()->CreatePlugin(*this, url, param_names, param_values,
+                                      mime_type, load_manually, policy);
     if (!plugin) {
       if (!layout_item.IsNull() &&
           !layout_item.ShowsUnavailablePluginIndicator()) {
@@ -564,7 +601,7 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
     }
 
     if (!layout_item.IsNull()) {
-      SetWidget(plugin);
+      SetEmbeddedContentView(plugin);
       layout_item.GetFrameView()->AddPlugin(plugin);
     } else {
       SetPersistedPlugin(plugin);
@@ -583,20 +620,6 @@ bool HTMLPlugInElement::LoadPlugin(const KURL& url,
       scrolling_coordinator->NotifyGeometryChanged();
   }
   return true;
-}
-
-bool HTMLPlugInElement::ShouldUsePlugin(const KURL& url,
-                                        const String& mime_type,
-                                        bool has_fallback,
-                                        bool& use_fallback) {
-  ObjectContentType object_type =
-      GetDocument().GetFrame()->Loader().Client()->GetObjectContentType(
-          url, mime_type, ShouldPreferPlugInsForImages());
-  // If an object's content can't be handled and it has no fallback, let
-  // it be handled as a plugin to show the broken plugin icon.
-  use_fallback = object_type == kObjectContentNone && has_fallback;
-  return object_type == kObjectContentNone ||
-         object_type == kObjectContentNetscapePlugin;
 }
 
 void HTMLPlugInElement::DispatchErrorEvent() {

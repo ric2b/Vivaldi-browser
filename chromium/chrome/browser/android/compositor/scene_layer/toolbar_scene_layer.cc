@@ -9,7 +9,6 @@
 #include "cc/layers/solid_color_layer.h"
 #include "chrome/browser/android/compositor/layer/toolbar_layer.h"
 #include "content/public/browser/android/compositor.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "jni/ToolbarSceneLayer_jni.h"
 #include "ui/android/resources/resource_manager_impl.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -119,10 +118,6 @@ static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& jobj) {
   ToolbarSceneLayer* toolbar_scene_layer =
       new ToolbarSceneLayer(env, jobj);
   return reinterpret_cast<intptr_t>(toolbar_scene_layer);
-}
-
-bool RegisterToolbarSceneLayer(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

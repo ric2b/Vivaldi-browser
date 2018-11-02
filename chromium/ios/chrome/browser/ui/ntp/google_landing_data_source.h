@@ -6,6 +6,7 @@
 #define IOS_CHROME_BROWSER_UI_NTP_GOOGLE_LANDING_DATA_SOURCE_H_
 
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 
 #include "components/ntp_tiles/ntp_tile.h"
 #include "components/ntp_tiles/tile_visual_type.h"
@@ -57,6 +58,19 @@ class LargeIconService;
 
 // Gets the large icon service.
 - (favicon::LargeIconService*)largeIconService;
+
+// Asynchronously gets the favicon for |URL| with size |size| and calls
+// |imageCallback| with the |favicon| image if it's valid, or |fallbackCallback|
+// if there is valid fallback data with the |textColor| and |backgroundColor|
+// for the fallback icon to use. |isDefaultColor| is true if a default color
+// should be used instead of |backgroundColor|.
+- (void)getFaviconForURL:(GURL)URL
+                    size:(CGFloat)size
+                useCache:(BOOL)useCache
+           imageCallback:(void (^)(UIImage* favicon))imageCallback
+        fallbackCallback:(void (^)(UIColor* textColor,
+                                   UIColor* backgroundColor,
+                                   BOOL isDefaultColor))fallbackCallback;
 
 @end
 

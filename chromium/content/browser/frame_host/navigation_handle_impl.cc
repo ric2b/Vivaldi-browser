@@ -7,9 +7,9 @@
 #include <iterator>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "content/browser/appcache/appcache_navigation_handle.h"
 #include "content/browser/appcache/appcache_service_impl.h"
-#include "content/browser/browsing_data/clear_site_data_throttle.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/devtools/render_frame_devtools_agent_host.h"
 #include "content/browser/frame_host/ancestor_throttle.h"
@@ -27,13 +27,13 @@
 #include "content/browser/service_worker/service_worker_navigation_handle.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/frame_messages.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/site_isolation_policy.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/redirect_info.h"
@@ -64,16 +64,17 @@ std::unique_ptr<NavigationHandleImpl> NavigationHandleImpl::Create(
     const std::vector<GURL>& redirect_chain,
     FrameTreeNode* frame_tree_node,
     bool is_renderer_initiated,
-    bool is_same_page,
+    bool is_same_document,
     const base::TimeTicks& navigation_start,
     int pending_nav_entry_id,
     bool started_from_context_menu,
     CSPDisposition should_check_main_world_csp,
     bool is_form_submission) {
   return std::unique_ptr<NavigationHandleImpl>(new NavigationHandleImpl(
-      url, redirect_chain, frame_tree_node, is_renderer_initiated, is_same_page,
-      navigation_start, pending_nav_entry_id, started_from_context_menu,
-      should_check_main_world_csp, is_form_submission));
+      url, redirect_chain, frame_tree_node, is_renderer_initiated,
+      is_same_document, navigation_start, pending_nav_entry_id,
+      started_from_context_menu, should_check_main_world_csp,
+      is_form_submission));
 }
 
 NavigationHandleImpl::NavigationHandleImpl(
@@ -81,7 +82,7 @@ NavigationHandleImpl::NavigationHandleImpl(
     const std::vector<GURL>& redirect_chain,
     FrameTreeNode* frame_tree_node,
     bool is_renderer_initiated,
-    bool is_same_page,
+    bool is_same_document,
     const base::TimeTicks& navigation_start,
     int pending_nav_entry_id,
     bool started_from_context_menu,
@@ -94,7 +95,7 @@ NavigationHandleImpl::NavigationHandleImpl(
       net_error_code_(net::OK),
       render_frame_host_(nullptr),
       is_renderer_initiated_(is_renderer_initiated),
-      is_same_page_(is_same_page),
+      is_same_document_(is_same_document),
       was_redirected_(false),
       did_replace_entry_(false),
       should_update_history_(false),
@@ -171,7 +172,7 @@ NavigationHandleImpl::NavigationHandleImpl(
         navigation_start, "Initial URL", url_.spec());
   }
 
-  if (is_same_page_) {
+  if (is_same_document_) {
     TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
                                  "Same document");
   }
@@ -309,7 +310,7 @@ RenderFrameHostImpl* NavigationHandleImpl::GetRenderFrameHost() {
 }
 
 bool NavigationHandleImpl::IsSameDocument() {
-  return is_same_page_;
+  return is_same_document_;
 }
 
 const net::HttpResponseHeaders* NavigationHandleImpl::GetResponseHeaders() {
@@ -355,58 +356,20 @@ net::HostPortPair NavigationHandleImpl::GetSocketAddress() {
   return socket_address_;
 }
 
-void NavigationHandleImpl::Resume() {
-  if (state_ != DEFERRING_START && state_ != DEFERRING_REDIRECT &&
-      state_ != DEFERRING_RESPONSE) {
-    return;
-  }
-  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
-                               "Resume");
-
-  NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
-  if (state_ == DEFERRING_START) {
-    result = CheckWillStartRequest();
-  } else if (state_ == DEFERRING_REDIRECT) {
-    result = CheckWillRedirectRequest();
-  } else {
-    result = CheckWillProcessResponse();
-
-    // If the navigation is about to proceed after having been deferred while
-    // processing the response, then it's ready to commit. Determine which
-    // RenderFrameHost should render the response, based on its site (after any
-    // redirects).
-    // Note: if MaybeTransferAndProceed returns false, this means that this
-    // NavigationHandle was deleted, so return immediately.
-    if (result == NavigationThrottle::PROCEED && !MaybeTransferAndProceed())
-      return;
-  }
-
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
-                                 "Resuming");
-    RunCompleteCallback(result);
-  }
+void NavigationHandleImpl::Resume(NavigationThrottle* resuming_throttle) {
+  DCHECK(resuming_throttle);
+  // TODO(csharrison): Convert to DCHECK when crbug.com/736249 is resolved.
+  CHECK_EQ(resuming_throttle, GetDeferringThrottle());
+  ResumeInternal();
 }
 
 void NavigationHandleImpl::CancelDeferredNavigation(
+    NavigationThrottle* cancelling_throttle,
     NavigationThrottle::ThrottleCheckResult result) {
-  DCHECK(state_ == DEFERRING_START ||
-         state_ == DEFERRING_REDIRECT ||
-         state_ == DEFERRING_RESPONSE);
-  DCHECK(result == NavigationThrottle::CANCEL_AND_IGNORE ||
-         result == NavigationThrottle::CANCEL ||
-         result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE);
-  DCHECK(result != NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE ||
-         state_ == DEFERRING_START ||
-         (state_ == DEFERRING_REDIRECT && IsBrowserSideNavigationEnabled()));
-
-  if (result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE)
-    frame_tree_node_->SetCollapsed(true);
-
-  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
-                               "CancelDeferredNavigation");
-  state_ = CANCELING;
-  RunCompleteCallback(result);
+  DCHECK(cancelling_throttle);
+  // TODO(csharrison): Convert to DCHECK when crbug.com/736249 is resolved.
+  CHECK_EQ(cancelling_throttle, GetDeferringThrottle());
+  CancelDeferredNavigationInternal(result);
 }
 
 void NavigationHandleImpl::RegisterThrottleForTesting(
@@ -423,13 +386,13 @@ NavigationHandleImpl::CallWillStartRequestForTesting(
     bool is_external_protocol) {
   NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
 
-  scoped_refptr<ResourceRequestBodyImpl> resource_request_body;
+  scoped_refptr<ResourceRequestBody> resource_request_body;
   std::string method = "GET";
   if (is_post) {
     method = "POST";
 
     std::string body = "test=body";
-    resource_request_body = new ResourceRequestBodyImpl();
+    resource_request_body = new ResourceRequestBody();
     resource_request_body->AppendBytes(body.data(), body.size());
   }
 
@@ -454,7 +417,7 @@ NavigationHandleImpl::CallWillRedirectRequestForTesting(
   WillRedirectRequest(new_url, new_method_is_post ? "POST" : "GET",
                       new_referrer_url, new_is_external_protocol,
                       scoped_refptr<net::HttpResponseHeaders>(),
-                      net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN,
+                      net::HttpResponseInfo::CONNECTION_INFO_UNKNOWN, nullptr,
                       base::Bind(&UpdateThrottleCheckResult, &result));
 
   // Reset the callback to ensure it will not be called later.
@@ -500,6 +463,10 @@ void NavigationHandleImpl::CallDidCommitNavigationForTesting(const GURL& url) {
 
   DidCommitNavigation(params, true, false, GURL(), NAVIGATION_TYPE_NEW_PAGE,
                       render_frame_host_);
+}
+
+void NavigationHandleImpl::CallResumeForTesting() {
+  ResumeInternal();
 }
 
 bool NavigationHandleImpl::WasStartedFromContextMenu() const {
@@ -551,7 +518,7 @@ void NavigationHandleImpl::InitAppCacheHandle(
 
 void NavigationHandleImpl::WillStartRequest(
     const std::string& method,
-    scoped_refptr<content::ResourceRequestBodyImpl> resource_request_body,
+    scoped_refptr<content::ResourceRequestBody> resource_request_body,
     const Referrer& sanitized_referrer,
     bool has_user_gesture,
     ui::PageTransition transition,
@@ -561,6 +528,13 @@ void NavigationHandleImpl::WillStartRequest(
     const ThrottleChecksFinishedCallback& callback) {
   TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
                                "WillStartRequest");
+  // WillStartRequest should only be called once.
+  if (state_ != INITIAL) {
+    state_ = CANCELING;
+    RunCompleteCallback(NavigationThrottle::CANCEL);
+    return;
+  }
+
   if (method != "POST")
     DCHECK(!resource_request_body);
 
@@ -591,20 +565,23 @@ void NavigationHandleImpl::WillStartRequest(
     return;
   }
 
-  RegisterNavigationThrottles();
+  if (!IsRendererDebugURL(url_))
+    RegisterNavigationThrottles();
 
   if (IsBrowserSideNavigationEnabled())
     navigation_ui_data_ = GetDelegate()->GetNavigationUIData(this);
 
   // Notify each throttle of the request.
   NavigationThrottle::ThrottleCheckResult result = CheckWillStartRequest();
-
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "StartRequest", "result", result);
-    RunCompleteCallback(result);
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
   }
+
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "StartRequest", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::WillRedirectRequest(
@@ -614,15 +591,24 @@ void NavigationHandleImpl::WillRedirectRequest(
     bool new_is_external_protocol,
     scoped_refptr<net::HttpResponseHeaders> response_headers,
     net::HttpResponseInfo::ConnectionInfo connection_info,
+    RenderProcessHost* post_redirect_process,
     const ThrottleChecksFinishedCallback& callback) {
   TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
                                "WillRedirectRequest", "url",
                                new_url.possibly_invalid_spec());
 
+  // |new_url| is not expected to be a "renderer debug" url. It should be
+  // blocked in NavigationRequest::OnRequestRedirected or in
+  // ResourceLoader::OnReceivedRedirect. If it is not the case,
+  // DidFinishNavigation will not be called. It could confuse some
+  // WebContentsObserver because DidStartNavigation was called.
+  // See https://crbug.com/728398.
+  CHECK(!IsRendererDebugURL(new_url));
+
   // Update the navigation parameters.
   url_ = new_url;
   method_ = new_method;
-  UpdateSiteURL();
+  UpdateSiteURL(post_redirect_process);
 
   if (!(transition_ & ui::PAGE_TRANSITION_CLIENT_REDIRECT)) {
     sanitized_referrer_.url = new_referrer_url;
@@ -649,13 +635,15 @@ void NavigationHandleImpl::WillRedirectRequest(
 
   // Notify each throttle of the request.
   NavigationThrottle::ThrottleCheckResult result = CheckWillRedirectRequest();
-
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "RedirectRequest", "result", result);
-    RunCompleteCallback(result);
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
   }
+
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "RedirectRequest", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::WillProcessResponse(
@@ -687,6 +675,11 @@ void NavigationHandleImpl::WillProcessResponse(
 
   // Notify each throttle of the response.
   NavigationThrottle::ThrottleCheckResult result = CheckWillProcessResponse();
+  if (result == NavigationThrottle::DEFER) {
+    // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+    // one of the NavigationThrottle checks.
+    return;
+  }
 
   // If the navigation is done processing the response, then it's ready to
   // commit. Determine which RenderFrameHost should render the response, based
@@ -696,12 +689,9 @@ void NavigationHandleImpl::WillProcessResponse(
   if (result == NavigationThrottle::PROCEED && !MaybeTransferAndProceed())
     return;
 
-  // If the navigation is not deferred, run the callback.
-  if (result != NavigationThrottle::DEFER) {
-    TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
-                                 "ProcessResponse", "result", result);
-    RunCompleteCallback(result);
-  }
+  TRACE_EVENT_ASYNC_STEP_INTO1("navigation", "NavigationHandle", this,
+                               "ProcessResponse", "result", result);
+  RunCompleteCallback(result);
 }
 
 void NavigationHandleImpl::ReadyToCommitNavigation(
@@ -712,6 +702,18 @@ void NavigationHandleImpl::ReadyToCommitNavigation(
   DCHECK(!render_frame_host_ || render_frame_host_ == render_frame_host);
   render_frame_host_ = render_frame_host;
   state_ = READY_TO_COMMIT;
+  ready_to_commit_time_ = base::TimeTicks::Now();
+
+  // For back-forward navigations, record metrics.
+  if ((transition_ & ui::PAGE_TRANSITION_FORWARD_BACK) && !IsSameDocument()) {
+    bool is_same_process =
+        render_frame_host_->GetProcess()->GetID() ==
+        frame_tree_node_->current_frame_host()->GetProcess()->GetID();
+    UMA_HISTOGRAM_BOOLEAN("Navigation.BackForward.IsSameProcess",
+                          is_same_process);
+    UMA_HISTOGRAM_TIMES("Navigation.BackForward.TimeToReadyToCommit",
+                        ready_to_commit_time_ - navigation_start_);
+  }
 
   if (IsBrowserSideNavigationEnabled())
     SetExpectedProcess(render_frame_host->GetProcess());
@@ -742,6 +744,13 @@ void NavigationHandleImpl::DidCommitNavigation(
   socket_address_ = params.socket_address;
   navigation_type_ = navigation_type;
 
+  // For back-forward navigations, record metrics.
+  if ((transition_ & ui::PAGE_TRANSITION_FORWARD_BACK) &&
+      !ready_to_commit_time_.is_null() && !IsSameDocument()) {
+    UMA_HISTOGRAM_TIMES("Navigation.BackForward.ReadyToCommitUntilCommit",
+                        base::TimeTicks::Now() - ready_to_commit_time_);
+  }
+
   DCHECK(!IsInMainFrame() || navigation_entry_committed)
       << "Only subframe navigations can get here without changing the "
       << "NavigationEntry";
@@ -765,8 +774,9 @@ void NavigationHandleImpl::DidCommitNavigation(
     // navigation having been blocked with BLOCK_REQUEST_AND_COLLAPSE.
     if (!frame_tree_node()->IsMainFrame()) {
       // The last committed load in collapsed frames will be an error page with
-      // |kUnreachableWebDataURL|. Same-page navigation should not be possible.
-      DCHECK(!is_same_page_ || !frame_tree_node()->is_collapsed());
+      // |kUnreachableWebDataURL|. Same-document navigation should not be
+      // possible.
+      DCHECK(!is_same_document_ || !frame_tree_node()->is_collapsed());
       frame_tree_node()->SetCollapsed(false);
     }
   }
@@ -822,9 +832,15 @@ NavigationHandleImpl::CheckWillStartRequest() {
   DCHECK(state_ == WILL_SEND_REQUEST || state_ == DEFERRING_START);
   DCHECK(state_ != WILL_SEND_REQUEST || next_index_ == 0);
   DCHECK(state_ != DEFERRING_START || next_index_ != 0);
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillStartRequest();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillStartRequest: %s: %d",
@@ -862,9 +878,15 @@ NavigationHandleImpl::CheckWillRedirectRequest() {
   DCHECK(state_ != WILL_REDIRECT_REQUEST || next_index_ == 0);
   DCHECK(state_ != DEFERRING_REDIRECT || next_index_ != 0);
 
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillRedirectRequest();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillRedirectRequest: %s: %d",
@@ -909,9 +931,15 @@ NavigationHandleImpl::CheckWillProcessResponse() {
   DCHECK(state_ != WILL_PROCESS_RESPONSE || next_index_ == 0);
   DCHECK(state_ != DEFERRING_RESPONSE || next_index_ != 0);
 
+  base::WeakPtr<NavigationHandleImpl> weak_ref = weak_factory_.GetWeakPtr();
   for (size_t i = next_index_; i < throttles_.size(); ++i) {
     NavigationThrottle::ThrottleCheckResult result =
         throttles_[i]->WillProcessResponse();
+    if (!weak_ref) {
+      // The NavigationThrottle execution has destroyed this NavigationHandle.
+      // Return immediately.
+      return NavigationThrottle::DEFER;
+    }
     TRACE_EVENT_ASYNC_STEP_INTO0(
         "navigation", "NavigationHandle", this,
         base::StringPrintf("CheckWillProcessResponse: %s: %d",
@@ -940,6 +968,72 @@ NavigationHandleImpl::CheckWillProcessResponse() {
   state_ = WILL_PROCESS_RESPONSE;
 
   return NavigationThrottle::PROCEED;
+}
+
+void NavigationHandleImpl::ResumeInternal() {
+  DCHECK(state_ == DEFERRING_START || state_ == DEFERRING_REDIRECT ||
+         state_ == DEFERRING_RESPONSE)
+      << "Called ResumeInternal() in state " << state_;
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
+                               "Resume");
+
+  NavigationThrottle::ThrottleCheckResult result = NavigationThrottle::DEFER;
+  if (state_ == DEFERRING_START) {
+    result = CheckWillStartRequest();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
+  } else if (state_ == DEFERRING_REDIRECT) {
+    result = CheckWillRedirectRequest();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
+  } else {
+    result = CheckWillProcessResponse();
+    if (result == NavigationThrottle::DEFER) {
+      // DO NOT ADD CODE: the NavigationHandle might have been destroyed during
+      // one of the NavigationThrottle checks.
+      return;
+    }
+
+    // If the navigation is about to proceed after having been deferred while
+    // processing the response, then it's ready to commit. Determine which
+    // RenderFrameHost should render the response, based on its site (after any
+    // redirects).
+    // Note: if MaybeTransferAndProceed returns false, this means that this
+    // NavigationHandle was deleted, so return immediately.
+    if (result == NavigationThrottle::PROCEED && !MaybeTransferAndProceed())
+      return;
+  }
+  DCHECK_NE(NavigationThrottle::DEFER, result);
+
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
+                               "Resuming");
+  RunCompleteCallback(result);
+}
+
+void NavigationHandleImpl::CancelDeferredNavigationInternal(
+    NavigationThrottle::ThrottleCheckResult result) {
+  DCHECK(state_ == DEFERRING_START || state_ == DEFERRING_REDIRECT ||
+         state_ == DEFERRING_RESPONSE);
+  DCHECK(result == NavigationThrottle::CANCEL_AND_IGNORE ||
+         result == NavigationThrottle::CANCEL ||
+         result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE);
+  DCHECK(result != NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE ||
+         state_ == DEFERRING_START ||
+         (state_ == DEFERRING_REDIRECT && IsBrowserSideNavigationEnabled()));
+
+  if (result == NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE)
+    frame_tree_node_->SetCollapsed(true);
+
+  TRACE_EVENT_ASYNC_STEP_INTO0("navigation", "NavigationHandle", this,
+                               "CancelDeferredNavigation");
+  state_ = CANCELING;
+  RunCompleteCallback(result);
 }
 
 bool NavigationHandleImpl::MaybeTransferAndProceed() {
@@ -1055,55 +1149,43 @@ void NavigationHandleImpl::RunCompleteCallback(
 }
 
 void NavigationHandleImpl::RegisterNavigationThrottles() {
-  // Register the navigation throttles. The vector returned by
-  // CreateThrottlesForNavigation is not assigned to throttles_ directly because
-  // it would overwrite any throttles previously added with
-  // RegisterThrottleForTesting.
-  // TODO(carlosk, arthursonzogni): should simplify this to either use
-  // |throttles_| directly (except for the case described above) or
-  // |throttles_to_register| for registering all throttles.
-  std::vector<std::unique_ptr<NavigationThrottle>> throttles_to_register =
-      GetDelegate()->CreateThrottlesForNavigation(this);
+  // Note: |throttle_| might not be empty. Some NavigationThrottles might have
+  // been registered with RegisterThrottleForTesting. These must reside at the
+  // end of |throttles_|. TestNavigationManagerThrottle expects that the
+  // NavigationThrottles added for test are the last NavigationThrottles to
+  // execute. Take them out while appending the rest of the
+  // NavigationThrottles.
+  std::vector<std::unique_ptr<NavigationThrottle>> testing_throttles =
+      std::move(throttles_);
+
+  throttles_ = GetDelegate()->CreateThrottlesForNavigation(this);
 
   // Check for renderer-inititated main frame navigations to data URLs. This is
   // done first as it may block the main frame navigation altogether.
-  std::unique_ptr<NavigationThrottle> data_url_navigation_throttle =
-      DataUrlNavigationThrottle::CreateThrottleForNavigation(this);
-  if (data_url_navigation_throttle)
-    throttles_to_register.push_back(std::move(data_url_navigation_throttle));
+  AddThrottle(DataUrlNavigationThrottle::CreateThrottleForNavigation(this));
 
-  std::unique_ptr<content::NavigationThrottle> ancestor_throttle =
-      content::AncestorThrottle::MaybeCreateThrottleFor(this);
-  if (ancestor_throttle)
-    throttles_.push_back(std::move(ancestor_throttle));
-
-  std::unique_ptr<content::NavigationThrottle> form_submission_throttle =
-      content::FormSubmissionThrottle::MaybeCreateThrottleFor(this);
-  if (form_submission_throttle)
-    throttles_.push_back(std::move(form_submission_throttle));
+  AddThrottle(AncestorThrottle::MaybeCreateThrottleFor(this));
+  AddThrottle(FormSubmissionThrottle::MaybeCreateThrottleFor(this));
 
   // Check for mixed content. This is done after the AncestorThrottle and the
   // FormSubmissionThrottle so that when folks block mixed content with a CSP
   // policy, they don't get a warning. They'll still get a warning in the
   // console about CSP blocking the load.
-  std::unique_ptr<NavigationThrottle> mixed_content_throttle =
-      MixedContentNavigationThrottle::CreateThrottleForNavigation(this);
-  if (mixed_content_throttle)
-    throttles_to_register.push_back(std::move(mixed_content_throttle));
+  AddThrottle(
+      MixedContentNavigationThrottle::CreateThrottleForNavigation(this));
 
-  std::unique_ptr<NavigationThrottle> devtools_throttle =
-      RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(this);
-  if (devtools_throttle)
-    throttles_to_register.push_back(std::move(devtools_throttle));
+  AddThrottle(RenderFrameDevToolsAgentHost::CreateThrottleForNavigation(this));
 
-  std::unique_ptr<NavigationThrottle> clear_site_data_throttle =
-      ClearSiteDataThrottle::CreateThrottleForNavigation(this);
-  if (clear_site_data_throttle)
-    throttles_to_register.push_back(std::move(clear_site_data_throttle));
+  // Insert all testing NavigationThrottles last.
+  throttles_.insert(throttles_.end(),
+                    std::make_move_iterator(testing_throttles.begin()),
+                    std::make_move_iterator(testing_throttles.end()));
+}
 
-  throttles_.insert(throttles_.begin(),
-                    std::make_move_iterator(throttles_to_register.begin()),
-                    std::make_move_iterator(throttles_to_register.end()));
+void NavigationHandleImpl::AddThrottle(
+    std::unique_ptr<NavigationThrottle> throttle) {
+  if (throttle)
+    throttles_.push_back(std::move(throttle));
 }
 
 bool NavigationHandleImpl::IsSelfReferentialURL() {
@@ -1137,17 +1219,32 @@ bool NavigationHandleImpl::IsSelfReferentialURL() {
   return false;
 }
 
-void NavigationHandleImpl::UpdateSiteURL() {
+void NavigationHandleImpl::UpdateSiteURL(
+    RenderProcessHost* post_redirect_process) {
   GURL new_site_url = SiteInstance::GetSiteForURL(
       frame_tree_node_->navigator()->GetController()->GetBrowserContext(),
       url_);
-  if (new_site_url == site_url_)
+  int post_redirect_process_id = post_redirect_process
+                                     ? post_redirect_process->GetID()
+                                     : ChildProcessHost::kInvalidUniqueID;
+  if (new_site_url == site_url_ &&
+      post_redirect_process_id == expected_render_process_host_id_) {
     return;
+  }
 
-  // When redirecting cross-site, stop telling the speculative
-  // RenderProcessHost to expect a navigation commit.
+  // Stop expecting a navigation to the current site URL in the current expected
+  // process.
   SetExpectedProcess(nullptr);
+
+  // Update the site URL and the expected process.
   site_url_ = new_site_url;
+  SetExpectedProcess(post_redirect_process);
+}
+
+NavigationThrottle* NavigationHandleImpl::GetDeferringThrottle() const {
+  if (next_index_ == 0)
+    return nullptr;
+  return throttles_[next_index_ - 1].get();
 }
 
 }  // namespace content

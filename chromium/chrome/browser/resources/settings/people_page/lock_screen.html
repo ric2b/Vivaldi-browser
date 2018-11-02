@@ -48,6 +48,18 @@
       #pinPasswordSecondaryActionDiv {
         margin: auto;
       }
+
+      #easyUnlockSettingsCollapsable {
+        @apply(--settings-list-frame-padding);
+      }
+
+      .no-padding {
+        padding: 0;
+      }
+
+      .underbar {
+        border-bottom: var(--settings-separator-line);
+      }
     </style>
 
     <div>
@@ -72,7 +84,7 @@
                 </div>
               </paper-radio-button>
               <paper-radio-button name="pin+password"
-                  class="list-item underbar">
+                  class="list-item">
                 <div id="pinPasswordDiv" class="start">
                   $i18n{lockScreenPinOrPassword}
                 </div>
@@ -125,7 +137,7 @@
       </template>
 
       <template is="dom-if" if="[[easyUnlockAllowed_]]">
-        <div id="easyUnlock" class="settings-box two-line continuation">
+        <div id="easyUnlock" class="settings-box two-line">
           <div class="start">
             <div>$i18n{easyUnlockSectionTitle}</div>
             <div class="secondary">
@@ -135,13 +147,6 @@
               <a target="_blank" href="$i18n{easyUnlockLearnMoreURL}">
                 $i18n{learnMore}
               </a>
-              <template is="dom-if" if="[[getShowEasyUnlockToggle_(
-                  easyUnlockEnabled_, easyUnlockProximityDetectionAllowed_)]]">
-                <settings-toggle-button
-                    pref="{{prefs.easy_unlock.proximity_required}}"
-                    label="$i18n{easyUnlockRequireProximityLabel}">
-                </settings-toggle-button>
-              </template>
             </div>
           </div>
           <div class="separator"></div>
@@ -158,15 +163,38 @@
             </paper-button>
           </template>
         </div>
+        <iron-collapse opened="[[easyUnlockEnabled_]]"
+            id="easyUnlockSettingsCollapsable">
+          <div class="settings-box continuation no-padding underbar">
+            <settings-toggle-button
+              class="start"
+              pref="{{prefs.proximity_auth.is_chromeos_login_enabled}}"
+              label="$i18n{easyUnlockAllowSignInLabel}">
+            </settings-toggle-button>
+          </div>
+          <div class="settings-box continuation no-padding">
+            <div class="start">
+              $i18n{easyUnlockProximityThresholdLabel}
+            </div>
+            <settings-dropdown-menu
+              pref="{{prefs.easy_unlock.proximity_threshold}}"
+              menu-options="[[easyUnlockProximityThresholdMapping_]]">
+            </settings-dropdown-menu>
+          </div>
+        </iron-collapse>
       </template>
 
-      <settings-password-prompt-dialog id="passwordPrompt"
-          on-close="onPasswordClosed_" set-modes="{{setModes_}}">
-      </settings-password-prompt-dialog>
+      <template is="dom-if" if="[[showPasswordPromptDialog_]]" restamp>
+        <settings-password-prompt-dialog id="passwordPrompt"
+            on-close="onPasswordPromptDialogClose_" set-modes="{{setModes_}}">
+        </settings-password-prompt-dialog>
+      </template>
 
-      <settings-setup-pin-dialog id="setupPin" on-done="onPinSetupDone_"
-          on-close="onSetupPinClosed_" set-modes="[[setModes_]]">
-      </settings-setup-pin-dialog>
+      <template is="dom-if" if="[[showSetupPinDialog_]]" restamp>
+        <settings-setup-pin-dialog id="setupPin" set-modes="[[setModes_]]"
+            on-close="onSetupPinDialogClose_">
+        </settings-setup-pin-dialog>
+      </template>
 
       <template is="dom-if" if="[[showEasyUnlockTurnOffDialog_]]" restamp>
         <easy-unlock-turn-off-dialog id="easyUnlockTurnOffDialog"

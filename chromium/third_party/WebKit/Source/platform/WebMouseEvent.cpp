@@ -17,13 +17,16 @@ WebMouseEvent::WebMouseEvent(WebInputEvent::Type type,
                              PointerId id_param)
     : WebInputEvent(sizeof(WebMouseEvent), type, modifiers, time_stamp_seconds),
       WebPointerProperties(id_param,
-                           button_param,
-                           WebPointerProperties::PointerType::kMouse),
-      click_count(click_count_param),
-      position_in_widget_(gesture_event.x, gesture_event.y),
-      position_in_screen_(gesture_event.global_x, gesture_event.global_y) {
+                           WebPointerProperties::PointerType::kMouse,
+                           button_param),
+      click_count(click_count_param) {
+  DCHECK_GE(type, kMouseTypeFirst);
+  DCHECK_LE(type, kMouseTypeLast);
+  SetPositionInWidget(gesture_event.x, gesture_event.y);
+  SetPositionInScreen(gesture_event.global_x, gesture_event.global_y);
   SetFrameScale(gesture_event.FrameScale());
   SetFrameTranslate(gesture_event.FrameTranslate());
+  SetMenuSourceType(gesture_event.GetType());
 }
 
 WebFloatPoint WebMouseEvent::MovementInRootFrame() const {
@@ -51,6 +54,24 @@ void WebMouseEvent::FlattenTransformSelf() {
   frame_translate_.x = 0;
   frame_translate_.y = 0;
   frame_scale_ = 1;
+}
+
+void WebMouseEvent::SetMenuSourceType(WebInputEvent::Type type) {
+  switch (type) {
+    case kGestureTapDown:
+    case kGestureTap:
+    case kGestureDoubleTap:
+      menu_source_type = kMenuSourceTouch;
+      break;
+    case kGestureLongPress:
+      menu_source_type = kMenuSourceLongPress;
+      break;
+    case kGestureLongTap:
+      menu_source_type = kMenuSourceLongTap;
+      break;
+    default:
+      menu_source_type = kMenuSourceNone;
+  }
 }
 
 }  // namespace blink

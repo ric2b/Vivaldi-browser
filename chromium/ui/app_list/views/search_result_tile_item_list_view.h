@@ -12,6 +12,7 @@
 
 namespace views {
 class Textfield;
+class Separator;
 }
 
 namespace app_list {
@@ -32,6 +33,7 @@ class APP_LIST_EXPORT SearchResultTileItemListView
                            bool directional_movement) override;
   void NotifyFirstResultYIndex(int y_index) override;
   int GetYSize() override;
+  views::View* GetSelectedView() const override;
 
   // Overridden from views::View:
   bool OnKeyPressed(const ui::KeyEvent& event) override;
@@ -43,7 +45,13 @@ class APP_LIST_EXPORT SearchResultTileItemListView
 
   std::vector<SearchResultTileItemView*> tile_views_;
 
+  std::vector<views::Separator*> separator_views_;
+
   views::Textfield* search_box_;  // Owned by the views hierarchy.
+
+  const bool is_play_store_app_search_enabled_;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultTileItemListView);
 };

@@ -53,24 +53,29 @@
 
 namespace blink {
 
-class GraphicsLayerTest : public testing::Test {
+class GraphicsLayerTest : public ::testing::Test {
  public:
   GraphicsLayerTest() {
     clip_layer_ = WTF::WrapUnique(new FakeGraphicsLayer(&client_));
     scroll_elasticity_layer_ = WTF::WrapUnique(new FakeGraphicsLayer(&client_));
+    page_scale_layer_ = WTF::WrapUnique(new FakeGraphicsLayer(&client_));
     graphics_layer_ = WTF::WrapUnique(new FakeGraphicsLayer(&client_));
     clip_layer_->AddChild(scroll_elasticity_layer_.get());
-    scroll_elasticity_layer_->AddChild(graphics_layer_.get());
-    graphics_layer_->PlatformLayer()->SetScrollClipLayer(
-        clip_layer_->PlatformLayer());
+    scroll_elasticity_layer_->AddChild(page_scale_layer_.get());
+    page_scale_layer_->AddChild(graphics_layer_.get());
+    graphics_layer_->PlatformLayer()->SetScrollable(
+        clip_layer_->PlatformLayer()->Bounds());
     platform_layer_ = graphics_layer_->PlatformLayer();
     layer_tree_view_ = WTF::WrapUnique(new WebLayerTreeViewImplForTesting);
     DCHECK(layer_tree_view_);
     layer_tree_view_->SetRootLayer(*clip_layer_->PlatformLayer());
-    layer_tree_view_->RegisterViewportLayers(
-        scroll_elasticity_layer_->PlatformLayer(), clip_layer_->PlatformLayer(),
-        clip_layer_->PlatformLayer(), nullptr, graphics_layer_->PlatformLayer(),
-        nullptr);
+    WebLayerTreeView::ViewportLayers viewport_layers;
+    viewport_layers.overscroll_elasticity =
+        scroll_elasticity_layer_->PlatformLayer();
+    viewport_layers.page_scale = page_scale_layer_->PlatformLayer();
+    viewport_layers.inner_viewport_container = clip_layer_->PlatformLayer();
+    viewport_layers.inner_viewport_scroll = graphics_layer_->PlatformLayer();
+    layer_tree_view_->RegisterViewportLayers(viewport_layers);
     layer_tree_view_->SetViewportSize(WebSize(1, 1));
   }
 
@@ -84,6 +89,7 @@ class GraphicsLayerTest : public testing::Test {
  protected:
   WebLayer* platform_layer_;
   std::unique_ptr<FakeGraphicsLayer> graphics_layer_;
+  std::unique_ptr<FakeGraphicsLayer> page_scale_layer_;
   std::unique_ptr<FakeGraphicsLayer> scroll_elasticity_layer_;
   std::unique_ptr<FakeGraphicsLayer> clip_layer_;
 
@@ -171,8 +177,11 @@ class FakeScrollableArea : public GarbageCollectedFinalized<FakeScrollableArea>,
   int ScrollSize(ScrollbarOrientation) const override { return 100; }
   bool IsScrollCornerVisible() const override { return false; }
   IntRect ScrollCornerRect() const override { return IntRect(); }
-  int VisibleWidth() const override { return 10; }
-  int VisibleHeight() const override { return 10; }
+  IntRect VisibleContentRect(
+      IncludeScrollbarsInRect = kExcludeScrollbars) const override {
+    return IntRect(ScrollOffsetInt().Width(), ScrollOffsetInt().Height(), 10,
+                   10);
+  }
   IntSize ContentsSize() const override { return IntSize(100, 100); }
   bool ScrollbarsCanBeActive() const override { return false; }
   IntRect ScrollableAreaBoundingBox() const override { return IntRect(); }

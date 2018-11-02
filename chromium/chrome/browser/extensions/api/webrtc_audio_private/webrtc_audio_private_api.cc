@@ -181,9 +181,9 @@ void WebrtcAudioPrivateGetSinksFunction::
     GetOutputDeviceDescriptionsOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   media::AudioSystem::Get()->GetDeviceDescriptions(
-      base::Bind(&WebrtcAudioPrivateGetSinksFunction::
-                     ReceiveOutputDeviceDescriptionsOnIOThread,
-                 this),
+      base::BindOnce(&WebrtcAudioPrivateGetSinksFunction::
+                         ReceiveOutputDeviceDescriptionsOnIOThread,
+                     this),
       false);
 }
 
@@ -237,9 +237,9 @@ void WebrtcAudioPrivateGetAssociatedSinkFunction::
     GetInputDeviceDescriptionsOnIOThread() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   media::AudioSystem::Get()->GetDeviceDescriptions(
-      base::Bind(&WebrtcAudioPrivateGetAssociatedSinkFunction::
-                     ReceiveInputDeviceDescriptionsOnIOThread,
-                 this),
+      base::BindOnce(&WebrtcAudioPrivateGetAssociatedSinkFunction::
+                         ReceiveInputDeviceDescriptionsOnIOThread,
+                     this),
       true);
 }
 
@@ -268,7 +268,7 @@ void WebrtcAudioPrivateGetAssociatedSinkFunction::
   }
   media::AudioSystem::Get()->GetAssociatedOutputDeviceID(
       raw_source_id,
-      base::Bind(
+      base::BindOnce(
           &WebrtcAudioPrivateGetAssociatedSinkFunction::CalculateHMACOnIOThread,
           this));
 }
@@ -302,6 +302,7 @@ WebrtcAudioPrivateSetAudioExperimentsFunction::
     ~WebrtcAudioPrivateSetAudioExperimentsFunction() {}
 
 bool WebrtcAudioPrivateSetAudioExperimentsFunction::RunAsync() {
+#if BUILDFLAG(ENABLE_WEBRTC)
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   std::unique_ptr<wap::SetAudioExperiments::Params> params(
       wap::SetAudioExperiments::Params::Create(*args_));
@@ -320,6 +321,11 @@ bool WebrtcAudioPrivateSetAudioExperimentsFunction::RunAsync() {
 
   SendResponse(true);
   return true;
+#else
+  SetError("Not supported");
+  SendResponse(false);
+  return false;
+#endif
 }
 
 }  // namespace extensions

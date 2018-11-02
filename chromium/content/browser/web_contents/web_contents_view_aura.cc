@@ -67,6 +67,7 @@
 #include "ui/base/dragdrop/os_exchange_data_provider_factory.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/events/blink/web_input_event.h"
 #include "ui/events/event.h"
@@ -721,10 +722,7 @@ void GetScreenInfoForWindow(ScreenInfo* results,
   results->depth_per_component = display.depth_per_component();
   results->is_monochrome = display.is_monochrome();
   results->device_scale_factor = display.device_scale_factor();
-  results->icc_profile = gfx::ICCProfile::FromBestMonitor();
-  if (!results->icc_profile.IsValid())
-    gfx::ColorSpace::CreateSRGB().GetICCProfile(&results->icc_profile);
-  DCHECK(results->icc_profile.IsValid());
+  results->color_space = display.color_space();
 
   // The Display rotation and the ScreenInfo orientation are not the same
   // angle. The former is the physical display rotation while the later is the
@@ -1039,12 +1037,12 @@ void WebContentsViewAura::UpdateDragCursor(blink::WebDragOperation operation) {
   current_drag_op_ = operation;
 }
 
-void WebContentsViewAura::GotFocus() {
-  web_contents_->NotifyWebContentsFocused();
+void WebContentsViewAura::GotFocus(RenderWidgetHostImpl* render_widget_host) {
+  web_contents_->NotifyWebContentsFocused(render_widget_host);
 }
 
-void WebContentsViewAura::LostFocus() {
-  web_contents_->NotifyWebContentsLostFocus();
+void WebContentsViewAura::LostFocus(RenderWidgetHostImpl* render_widget_host) {
+  web_contents_->NotifyWebContentsLostFocus(render_widget_host);
 }
 
 void WebContentsViewAura::TakeFocus(bool reverse) {
@@ -1058,12 +1056,22 @@ void WebContentsViewAura::TakeFocus(bool reverse) {
 ////////////////////////////////////////////////////////////////////////////////
 // WebContentsViewAura, OverscrollControllerDelegate implementation:
 
-gfx::Rect WebContentsViewAura::GetVisibleBounds() const {
+gfx::Size WebContentsViewAura::GetVisibleSize() const {
   RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
   if (!rwhv || !rwhv->IsShowing())
-    return gfx::Rect();
+    return gfx::Size();
 
-  return rwhv->GetViewBounds();
+  return rwhv->GetViewBounds().size();
+}
+
+gfx::Size WebContentsViewAura::GetDisplaySize() const {
+  RenderWidgetHostView* rwhv = web_contents_->GetRenderWidgetHostView();
+  if (!rwhv)
+    return gfx::Size();
+
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestView(rwhv->GetNativeView())
+      .size();
 }
 
 bool WebContentsViewAura::OnOverscrollUpdate(float delta_x, float delta_y) {
@@ -1098,6 +1106,10 @@ void WebContentsViewAura::OnOverscrollModeChange(OverscrollMode old_mode,
   navigation_overlay_->relay_delegate()->OnOverscrollModeChange(
       old_mode, new_mode, source);
   completed_overscroll_gesture_ = OVERSCROLL_NONE;
+}
+
+base::Optional<float> WebContentsViewAura::GetMaxOverscrollDelta() const {
+  return navigation_overlay_->relay_delegate()->GetMaxOverscrollDelta();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

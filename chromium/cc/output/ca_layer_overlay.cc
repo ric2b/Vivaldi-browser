@@ -77,8 +77,8 @@ bool FilterOperationSupported(const FilterOperation& operation) {
 CALayerResult FromRenderPassQuad(
     ResourceProvider* resource_provider,
     const RenderPassDrawQuad* quad,
-    const base::flat_map<int, FilterOperations*>& render_pass_filters,
-    const base::flat_map<int, FilterOperations*>&
+    const base::flat_map<RenderPassId, FilterOperations*>& render_pass_filters,
+    const base::flat_map<RenderPassId, FilterOperations*>&
         render_pass_background_filters,
     CALayerOverlay* ca_layer_overlay) {
   if (render_pass_background_filters.count(quad->render_pass_id)) {
@@ -168,6 +168,7 @@ CALayerResult FromTileQuad(ResourceProvider* resource_provider,
   ca_layer_overlay->contents_rect = quad->tex_coord_rect;
   ca_layer_overlay->contents_rect.Scale(1.f / quad->texture_size.width(),
                                         1.f / quad->texture_size.height());
+  ca_layer_overlay->filter = quad->nearest_neighbor ? GL_NEAREST : GL_LINEAR;
   return CA_LAYER_SUCCESS;
 }
 
@@ -177,8 +178,9 @@ class CALayerOverlayProcessor {
       ResourceProvider* resource_provider,
       const gfx::RectF& display_rect,
       const DrawQuad* quad,
-      const base::flat_map<int, FilterOperations*>& render_pass_filters,
-      const base::flat_map<int, FilterOperations*>&
+      const base::flat_map<RenderPassId, FilterOperations*>&
+          render_pass_filters,
+      const base::flat_map<RenderPassId, FilterOperations*>&
           render_pass_background_filters,
       CALayerOverlay* ca_layer_overlay,
       bool* skip,
@@ -276,8 +278,8 @@ bool ProcessForCALayerOverlays(
     ResourceProvider* resource_provider,
     const gfx::RectF& display_rect,
     const QuadList& quad_list,
-    const base::flat_map<int, FilterOperations*>& render_pass_filters,
-    const base::flat_map<int, FilterOperations*>&
+    const base::flat_map<RenderPassId, FilterOperations*>& render_pass_filters,
+    const base::flat_map<RenderPassId, FilterOperations*>&
         render_pass_background_filters,
     CALayerOverlayList* ca_layer_overlays) {
   CALayerResult result = CA_LAYER_SUCCESS;

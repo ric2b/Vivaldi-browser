@@ -7,16 +7,36 @@
 
 #import "ios/chrome/browser/ui/bookmarks/bookmark_home_view_controller.h"
 
-// Navigate/edit the bookmark hierarchy on a handset.
-@interface BookmarkHomeHandsetViewController : BookmarkHomeViewController
-// Designated initializer.
-- (instancetype)initWithLoader:(id<UrlLoader>)loader
-                  browserState:(ios::ChromeBrowserState*)browserState;
+#import <UIKit/UIKit.h>
+
+#include <set>
+#include <vector>
+
+@class BookmarkHomeHandsetViewController;
+class GURL;
+
+@protocol UrlLoader;
+
+@protocol BookmarkHomeHandsetViewControllerDelegate
+// The view controller wants to be dismissed.
+// If |url| != GURL(), then the user has selected |url| for navigation.
+- (void)bookmarkHomeHandsetViewControllerWantsDismissal:
+            (BookmarkHomeHandsetViewController*)controller
+                                        navigationToUrl:(const GURL&)url;
 @end
 
-@interface BookmarkHomeHandsetViewController (ExposedForTesting)
-// Creates the default view to show all bookmarks, if it doesn't already exist.
-- (void)ensureAllViewExists;
+// Navigate/edit the bookmark hierarchy on a handset.
+@interface BookmarkHomeHandsetViewController : BookmarkHomeViewController
+
+#pragma mark - Properties Relevant To Presenters
+
+@property(nonatomic, weak) id<BookmarkHomeHandsetViewControllerDelegate>
+    delegate;
+
+// Dismisses any modal interaction elements. The base implementation does
+// nothing.
+- (void)dismissModals:(BOOL)animated;
+
 @end
 
 #endif  // IOS_CHROME_BROWSER_UI_BOOKMARKS_BOOKMARK_HOME_HANDSET_VIEW_CONTROLLER_H_

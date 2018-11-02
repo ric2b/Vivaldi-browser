@@ -55,7 +55,7 @@ class Element;
 class ExceptionState;
 class FloatQuad;
 class HTMLSlotElement;
-class InsertionPoint;
+class V0InsertionPoint;
 class InspectedFrames;
 class InspectorHistory;
 class Node;
@@ -153,7 +153,8 @@ class CORE_EXPORT InspectorDOMAgent final
       std::unique_ptr<protocol::Array<int>>* node_ids) override;
   protocol::Response setInspectedNode(int node_id) override;
   protocol::Response resolveNode(
-      int node_id,
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
       protocol::Maybe<String> object_group,
       std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>*)
       override;
@@ -171,12 +172,18 @@ class CORE_EXPORT InspectorDOMAgent final
   protocol::Response undo() override;
   protocol::Response redo() override;
   protocol::Response markUndoableState() override;
-  protocol::Response focus(int node_id) override;
+  protocol::Response focus(protocol::Maybe<int> node_id,
+                           protocol::Maybe<int> backend_node_id,
+                           protocol::Maybe<String> object_id) override;
   protocol::Response setFileInputFiles(
-      int node_id,
-      std::unique_ptr<protocol::Array<String>> files) override;
+      std::unique_ptr<protocol::Array<String>> files,
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
+      protocol::Maybe<String> object_id) override;
   protocol::Response getBoxModel(
-      int node_id,
+      protocol::Maybe<int> node_id,
+      protocol::Maybe<int> backend_node_id,
+      protocol::Maybe<String> object_id,
       std::unique_ptr<protocol::DOM::BoxModel>*) override;
   protocol::Response getNodeForLocation(
       int x,
@@ -221,6 +228,7 @@ class CORE_EXPORT InspectorDOMAgent final
                                            Node*&);
 
   static String DocumentURLString(Document*);
+  static String DocumentBaseURLString(Document*);
 
   std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>
   ResolveNode(Node*, const String& object_group);
@@ -244,6 +252,10 @@ class CORE_EXPORT InspectorDOMAgent final
                            HeapVector<Member<Node>>* result);
 
   protocol::Response AssertNode(int node_id, Node*&);
+  protocol::Response AssertNode(const protocol::Maybe<int>& node_id,
+                                const protocol::Maybe<int>& backend_node_id,
+                                const protocol::Maybe<String>& object_id,
+                                Node*&);
   protocol::Response AssertElement(int node_id, Element*&);
   Document* GetDocument() const { return document_.Get(); }
 
@@ -287,7 +299,7 @@ class CORE_EXPORT InspectorDOMAgent final
   std::unique_ptr<protocol::Array<protocol::DOM::Node>>
   BuildArrayForPseudoElements(Element*, NodeToIdMap* nodes_map);
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
-  BuildArrayForDistributedNodes(InsertionPoint*);
+  BuildArrayForDistributedNodes(V0InsertionPoint*);
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
   BuildDistributedNodesForSlot(HTMLSlotElement*);
 

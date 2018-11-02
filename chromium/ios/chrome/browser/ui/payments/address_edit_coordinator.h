@@ -6,7 +6,6 @@
 #define IOS_CHROME_BROWSER_UI_PAYMENTS_ADDRESS_EDIT_COORDINATOR_H_
 
 #import "ios/chrome/browser/chrome_coordinator.h"
-#import "ios/chrome/browser/ui/payments/address_edit_view_controller.h"
 #import "ios/chrome/browser/ui/payments/country_selection_coordinator.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 
@@ -14,7 +13,9 @@ namespace autofill {
 class AutofillProfile;
 }  // namespace autofill
 
+namespace payments {
 class PaymentRequest;
+}  // namespace payments
 
 @class AddressEditCoordinator;
 
@@ -38,7 +39,7 @@ class PaymentRequest;
 // controller. This view controller will be presented by the view controller
 // provided in the initializer.
 @interface AddressEditCoordinator
-    : ChromeCoordinator<AddressEditViewControllerDelegate,
+    : ChromeCoordinator<PaymentRequestEditViewControllerDelegate,
                         PaymentRequestEditViewControllerValidator,
                         CountrySelectionCoordinatorDelegate>
 
@@ -49,7 +50,7 @@ class PaymentRequest;
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This pointer is not
 // owned by this class and should outlive it.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The delegate to be notified when the user returns or finishes creating or
 // editing an address.

@@ -18,6 +18,7 @@
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/color_chooser/color_chooser_listener.h"
@@ -104,8 +105,8 @@ void DrawGradientRect(const gfx::Rect& rect, SkColor start_color,
   else
     points[1].iset(0, rect.height() + 1);
   cc::PaintFlags flags;
-  flags.setShader(cc::WrapSkShader(SkGradientShader::MakeLinear(
-      points, colors, NULL, 2, SkShader::kClamp_TileMode)));
+  flags.setShader(cc::PaintShader::MakeLinearGradient(
+      points, colors, nullptr, 2, SkShader::kClamp_TileMode));
   canvas->DrawRect(rect, flags);
 }
 
@@ -347,7 +348,7 @@ ColorChooserView::SelectedColorPatchView::SelectedColorPatchView() {
 
 void ColorChooserView::SelectedColorPatchView::SetColor(SkColor color) {
   if (!background())
-    set_background(Background::CreateSolidBackground(color));
+    SetBackground(CreateSolidBackground(color));
   else
     background()->SetNativeControlColor(color);
   SchedulePaint();
@@ -362,13 +363,13 @@ ColorChooserView::ColorChooserView(ColorChooserListener* listener,
     : listener_(listener) {
   DCHECK(listener_);
 
-  set_background(Background::CreateSolidBackground(SK_ColorLTGRAY));
-  SetLayoutManager(new BoxLayout(BoxLayout::kVertical, kMarginWidth,
-                                 kMarginWidth, kMarginWidth));
+  SetBackground(CreateSolidBackground(SK_ColorLTGRAY));
+  SetLayoutManager(new BoxLayout(BoxLayout::kVertical,
+                                 gfx::Insets(kMarginWidth), kMarginWidth));
 
   View* container = new View();
-  container->SetLayoutManager(new BoxLayout(BoxLayout::kHorizontal, 0, 0,
-                                            kMarginWidth));
+  container->SetLayoutManager(
+      new BoxLayout(BoxLayout::kHorizontal, gfx::Insets(), kMarginWidth));
   saturation_value_ = new SaturationValueView(this);
   container->AddChildView(saturation_value_);
   hue_ = new HueView(this);

@@ -13,7 +13,6 @@ const char kChromeMojoPipeTokenSwitch[] = "chrome-mojo-pipe-token";
 const char kChromePromptSwitch[] = "chrome-prompt";
 const char kChromeSystemInstallSwitch[] = "chrome-system-install";
 const char kChromeVersionSwitch[] = "chrome-version";
-const char kEnableCleanerLoggingSwitch[] = "enable-cleaner-logging";
 const char kEnableCrashReportingSwitch[] = "enable-crash-reporting";
 const char kEngineExperimentGroupSwitch[] = "engine-experiment-group";
 const char kEngineSwitch[] = "engine";
@@ -31,6 +30,7 @@ const wchar_t kCleanerSubKey[] = L"Cleaner";
 const wchar_t kScanTimesSubKey[] = L"ScanTimes";
 
 // Registry value names.
+const wchar_t kCleanupCompletedValueName[] = L"cleanup-completed";
 const wchar_t kEndTimeValueName[] = L"EndTime";
 const wchar_t kEngineErrorCodeValueName[] = L"EngineErrorCode";
 const wchar_t kExitCodeValueName[] = L"ExitCode";

@@ -119,7 +119,7 @@ TabAndroid* TabAndroid::GetNativeTab(JNIEnv* env, const JavaRef<jobject>& obj) {
 void TabAndroid::AttachTabHelpers(content::WebContents* web_contents) {
   DCHECK(web_contents);
 
-  TabHelpers::AttachTabHelpers(web_contents, base::nullopt);
+  TabHelpers::AttachTabHelpers(web_contents);
 }
 
 TabAndroid::TabAndroid(JNIEnv* env, const JavaRef<jobject>& obj)
@@ -423,7 +423,7 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
 
   if (delete_native) {
     // Terminate the renderer process if this is the last tab.
-    // If there's no unload listener, FastShutdownForPageCount kills the
+    // If there's no unload listener, FastShutdownIfPossible kills the
     // renderer process. Otherwise, we go with the slow path where renderer
     // process shuts down itself when ref count becomes 0.
     // This helps the render process exit quickly which avoids some issues
@@ -432,11 +432,14 @@ void TabAndroid::DestroyWebContents(JNIEnv* env,
     content::RenderProcessHost* process =
         web_contents()->GetRenderProcessHost();
     if (process)
-      process->FastShutdownForPageCount(1);
+      process->FastShutdownIfPossible(1, false);
 
     web_contents_.reset();
     synced_tab_delegate_->ResetWebContents();
   } else {
+    // Remove the link from the native WebContents to |this|, since the
+    // lifetimes of the two objects are no longer intertwined.
+    CoreTabHelper::FromWebContents(web_contents())->set_delegate(nullptr);
     // Release the WebContents so it does not get deleted by the scoped_ptr.
     ignore_result(web_contents_.release());
   }
@@ -566,23 +569,38 @@ void TabAndroid::SetActiveNavigationEntryTitleForUrl(
     entry->SetTitle(title);
 }
 
-bool TabAndroid::Print(JNIEnv* env, const JavaParamRef<jobject>& obj) {
+bool TabAndroid::Print(JNIEnv* env,
+                       const JavaParamRef<jobject>& obj,
+                       jint render_process_id,
+                       jint render_frame_id) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   if (!web_contents())
     return false;
 
-  printing::PrintViewManagerBasic::CreateForWebContents(web_contents());
+  content::RenderFrameHost* rfh =
+      content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+
+  if (!rfh)
+    rfh = printing::GetFrameToPrint(web_contents());
+
+  content::WebContents* contents =
+      content::WebContents::FromRenderFrameHost(rfh);
+
+  printing::PrintViewManagerBasic::CreateForWebContents(contents);
   printing::PrintViewManagerBasic* print_view_manager =
-      printing::PrintViewManagerBasic::FromWebContents(web_contents());
+      printing::PrintViewManagerBasic::FromWebContents(contents);
   if (!print_view_manager)
     return false;
 
-  print_view_manager->PrintNow(printing::GetFrameToPrint(web_contents()));
+  print_view_manager->PrintNow(rfh);
   return true;
 }
 
-void TabAndroid::SetPendingPrint() {
+void TabAndroid::SetPendingPrint(int render_process_id, int render_frame_id) {
   JNIEnv* env = base::android::AttachCurrentThread();
-  Java_Tab_setPendingPrint(env, weak_java_tab_.get(env));
+  Java_Tab_setPendingPrint(env, weak_java_tab_.get(env), render_process_id,
+                           render_frame_id);
 }
 
 ScopedJavaLocalRef<jobject> TabAndroid::GetFavicon(
@@ -801,6 +819,12 @@ void TabAndroid::AttachToTabContentManager(
     tab_content_manager_->AttachLiveLayer(GetAndroidId(), GetContentLayer());
 }
 
+void TabAndroid::ClearThumbnailPlaceholder(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj) {
+  if (tab_content_manager_)
+    tab_content_manager_->NativeRemoveTabThumbnail(GetAndroidId());
+}
+
 scoped_refptr<content::DevToolsAgentHost> TabAndroid::GetDevToolsAgentHost() {
   return devtools_host_;
 }
@@ -814,9 +838,4 @@ static void Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
   TRACE_EVENT0("native", "TabAndroid::Init");
   // This will automatically bind to the Java object and pass ownership there.
   new TabAndroid(env, obj);
-}
-
-// static
-bool TabAndroid::RegisterTabAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

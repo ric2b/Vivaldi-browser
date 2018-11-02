@@ -283,25 +283,23 @@ void ProcessDownloadedUpdates(syncable::Directory* dir,
                               const SyncEntityList& applicable_updates,
                               StatusController* status,
                               UpdateCounters* counters) {
-  for (SyncEntityList::const_iterator update_it = applicable_updates.begin();
-       update_it != applicable_updates.end(); ++update_it) {
-    DCHECK_EQ(type, GetModelType(**update_it));
-    if (!UpdateContainsNewVersion(trans, **update_it)) {
+  for (const auto* update : applicable_updates) {
+    DCHECK_EQ(type, GetModelType(*update));
+    if (!UpdateContainsNewVersion(trans, *update)) {
       status->increment_num_reflected_updates_downloaded_by(1);
       counters->num_reflected_updates_received++;
     }
-    if ((*update_it)->deleted()) {
+    if (update->deleted()) {
       status->increment_num_tombstone_updates_downloaded_by(1);
       counters->num_tombstone_updates_received++;
     }
-    VerifyResult verify_result = VerifyUpdate(trans, **update_it, type);
+    VerifyResult verify_result = VerifyUpdate(trans, *update, type);
     if (verify_result != VERIFY_SUCCESS && verify_result != VERIFY_UNDELETE)
       continue;
-    ProcessUpdate(**update_it, dir->GetCryptographer(trans), trans);
-    if ((*update_it)->ByteSize() > 0) {
+    ProcessUpdate(*update, dir->GetCryptographer(trans), trans);
+    if (update->ByteSize() > 0) {
       SyncRecordDatatypeBin("DataUse.Sync.Download.Bytes",
-                            ModelTypeToHistogramInt(type),
-                            (*update_it)->ByteSize());
+                            ModelTypeToHistogramInt(type), update->ByteSize());
     }
     UMA_HISTOGRAM_SPARSE_SLOWLY("DataUse.Sync.Download.Count",
                                 ModelTypeToHistogramInt(type));
@@ -330,6 +328,32 @@ void ExpireEntriesByVersion(syncable::Directory* dir,
     // Mark entry as deleted by server.
     entry.PutServerIsDel(true);
     entry.PutServerVersion(version_watermark);
+  }
+}
+
+void ExpireEntriesByAge(syncable::Directory* dir,
+                        syncable::ModelNeutralWriteTransaction* trans,
+                        ModelType type,
+                        int32_t age_watermark_in_days) {
+  syncable::Directory::Metahandles handles;
+  base::Time to_be_expired =
+      base::Time::Now() - base::TimeDelta::FromDays(age_watermark_in_days);
+  dir->GetMetaHandlesOfType(trans, type, &handles);
+  for (size_t i = 0; i < handles.size(); ++i) {
+    syncable::ModelNeutralMutableEntry entry(trans, syncable::GET_BY_HANDLE,
+                                             handles[i]);
+    if (!entry.good() || !entry.GetId().ServerKnows() ||
+        entry.GetUniqueServerTag() == ModelTypeToRootTag(type) ||
+        entry.GetIsUnappliedUpdate() || entry.GetIsUnsynced() ||
+        entry.GetIsDel() || entry.GetServerIsDel() ||
+        entry.GetMtime() > to_be_expired) {
+      continue;
+    }
+
+    // Mark entry as unapplied update first to ensure journaling the deletion.
+    entry.PutIsUnappliedUpdate(true);
+    // Mark entry as deleted by server.
+    entry.PutServerIsDel(true);
   }
 }
 

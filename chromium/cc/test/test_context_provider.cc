@@ -8,33 +8,100 @@
 #include <stdint.h>
 
 #include <set>
+#include <string>
 #include <vector>
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "cc/output/context_cache_controller.h"
 #include "cc/test/test_gles2_interface.h"
 #include "cc/test/test_web_graphics_context_3d.h"
+#include "components/viz/common/gpu/context_cache_controller.h"
+#include "gpu/skia_bindings/grcontext_for_gles2_interface.h"
 #include "third_party/skia/include/gpu/GrContext.h"
 #include "third_party/skia/include/gpu/gl/GrGLInterface.h"
 
 namespace cc {
 
+namespace {
+
+// Various tests rely on functionality (capabilities) enabled by these extension
+// strings.
+const char* const kExtensions[] = {"GL_EXT_stencil_wrap",
+                                   "GL_EXT_texture_format_BGRA8888",
+                                   "GL_OES_rgb8_rgba8"};
+
+class TestGLES2InterfaceForContextProvider : public TestGLES2Interface {
+ public:
+  TestGLES2InterfaceForContextProvider()
+      : extension_string_(BuildExtensionString()) {}
+  ~TestGLES2InterfaceForContextProvider() override = default;
+
+  // TestGLES2Interface:
+  const GLubyte* GetString(GLenum name) override {
+    switch (name) {
+      case GL_EXTENSIONS:
+        return reinterpret_cast<const GLubyte*>(extension_string_.c_str());
+      case GL_VERSION:
+        return reinterpret_cast<const GrGLubyte*>("4.0 Null GL");
+      case GL_SHADING_LANGUAGE_VERSION:
+        return reinterpret_cast<const GrGLubyte*>("4.20.8 Null GLSL");
+      case GL_VENDOR:
+        return reinterpret_cast<const GrGLubyte*>("Null Vendor");
+      case GL_RENDERER:
+        return reinterpret_cast<const GrGLubyte*>("The Null (Non-)Renderer");
+    }
+    return nullptr;
+  }
+  const GrGLubyte* GetStringi(GrGLenum name, GrGLuint i) override {
+    if (name == GL_EXTENSIONS && i < arraysize(kExtensions))
+      return reinterpret_cast<const GLubyte*>(kExtensions[i]);
+    return nullptr;
+  }
+  void GetIntegerv(GLenum name, GLint* params) override {
+    switch (name) {
+      case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
+        *params = 8;
+        return;
+      default:
+        break;
+    }
+    TestGLES2Interface::GetIntegerv(name, params);
+  }
+
+ private:
+  static std::string BuildExtensionString() {
+    std::string extension_string = kExtensions[0];
+    for (size_t i = 1; i < arraysize(kExtensions); ++i) {
+      extension_string += " ";
+      extension_string += kExtensions[i];
+    }
+    return extension_string;
+  }
+
+  const std::string extension_string_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestGLES2InterfaceForContextProvider);
+};
+
+}  // namespace
+
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::Create() {
-  return new TestContextProvider(base::MakeUnique<TestContextSupport>(),
-                                 base::MakeUnique<TestGLES2Interface>(),
-                                 TestWebGraphicsContext3D::Create());
+  return new TestContextProvider(
+      base::MakeUnique<TestContextSupport>(),
+      base::MakeUnique<TestGLES2InterfaceForContextProvider>(),
+      TestWebGraphicsContext3D::Create());
 }
 
 // static
 scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
   scoped_refptr<TestContextProvider> worker_context_provider(
-      new TestContextProvider(base::MakeUnique<TestContextSupport>(),
-                              base::MakeUnique<TestGLES2Interface>(),
-                              TestWebGraphicsContext3D::Create()));
+      new TestContextProvider(
+          base::MakeUnique<TestContextSupport>(),
+          base::MakeUnique<TestGLES2InterfaceForContextProvider>(),
+          TestWebGraphicsContext3D::Create()));
   // Worker contexts are bound to the thread they are created on.
   if (!worker_context_provider->BindToCurrentThread())
     return nullptr;
@@ -45,9 +112,10 @@ scoped_refptr<TestContextProvider> TestContextProvider::CreateWorker() {
 scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestWebGraphicsContext3D> context) {
   DCHECK(context);
-  return new TestContextProvider(base::MakeUnique<TestContextSupport>(),
-                                 base::MakeUnique<TestGLES2Interface>(),
-                                 std::move(context));
+  return new TestContextProvider(
+      base::MakeUnique<TestContextSupport>(),
+      base::MakeUnique<TestGLES2InterfaceForContextProvider>(),
+      std::move(context));
 }
 
 // static
@@ -65,9 +133,10 @@ scoped_refptr<TestContextProvider> TestContextProvider::Create(
     std::unique_ptr<TestContextSupport> support) {
   DCHECK(context);
   DCHECK(support);
-  return new TestContextProvider(std::move(support),
-                                 base::MakeUnique<TestGLES2Interface>(),
-                                 std::move(context));
+  return new TestContextProvider(
+      std::move(support),
+      base::MakeUnique<TestGLES2InterfaceForContextProvider>(),
+      std::move(context));
 }
 
 TestContextProvider::TestContextProvider(
@@ -84,10 +153,11 @@ TestContextProvider::TestContextProvider(
   context_thread_checker_.DetachFromThread();
   context_gl_->set_test_context(context3d_.get());
   context3d_->set_test_support(support_.get());
-  // Just pass nullptr to the ContextCacheController for its task runner. Idle
-  // handling is tested directly in ContextCacheController's unittests, and
-  // isn't needed here.
-  cache_controller_.reset(new ContextCacheController(support_.get(), nullptr));
+  // Just pass nullptr to the viz::ContextCacheController for its task runner.
+  // Idle handling is tested directly in viz::ContextCacheController's
+  // unittests, and isn't needed here.
+  cache_controller_.reset(
+      new viz::ContextCacheController(support_.get(), nullptr));
 }
 
 TestContextProvider::~TestContextProvider() {
@@ -141,23 +211,20 @@ class GrContext* TestContextProvider::GrContext() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
-    return gr_context_.get();
+    return gr_context_->get();
 
-  sk_sp<const GrGLInterface> gl_interface(GrGLCreateNullInterface());
-  gr_context_ = sk_sp<::GrContext>(GrContext::Create(
-      kOpenGL_GrBackend,
-      reinterpret_cast<GrBackendContext>(gl_interface.get())));
-
-  cache_controller_->SetGrContext(gr_context_.get());
+  gr_context_ = base::MakeUnique<skia_bindings::GrContextForGLES2Interface>(
+      context_gl_.get(), context3d_->test_capabilities());
+  cache_controller_->SetGrContext(gr_context_->get());
 
   // If GlContext is already lost, also abandon the new GrContext.
   if (ContextGL()->GetGraphicsResetStatusKHR() != GL_NO_ERROR)
-    gr_context_->abandonContext();
+    gr_context_->get()->abandonContext();
 
-  return gr_context_.get();
+  return gr_context_->get();
 }
 
-ContextCacheController* TestContextProvider::CacheController() {
+viz::ContextCacheController* TestContextProvider::CacheController() {
   DCHECK(context_thread_checker_.CalledOnValidThread());
   return cache_controller_.get();
 }
@@ -167,7 +234,7 @@ void TestContextProvider::InvalidateGrContext(uint32_t state) {
   DCHECK(context_thread_checker_.CalledOnValidThread());
 
   if (gr_context_)
-    gr_context_.get()->resetContext(state);
+    gr_context_->get()->resetContext(state);
 }
 
 base::Lock* TestContextProvider::GetLock() {
@@ -179,7 +246,7 @@ void TestContextProvider::OnLostContext() {
   if (!lost_context_callback_.is_null())
     lost_context_callback_.Run();
   if (gr_context_)
-    gr_context_->abandonContext();
+    gr_context_->get()->abandonContext();
 }
 
 TestWebGraphicsContext3D* TestContextProvider::TestContext3d() {

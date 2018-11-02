@@ -108,7 +108,9 @@ InitSessionParams::~InitSessionParams() {}
 
 namespace {
 
-std::unique_ptr<base::DictionaryValue> CreateCapabilities(Session* session) {
+std::unique_ptr<base::DictionaryValue> CreateCapabilities(
+    Session* session,
+    const Capabilities& capabilities) {
   std::unique_ptr<base::DictionaryValue> caps(new base::DictionaryValue());
   caps->SetString("browserName", "chrome");
   caps->SetString("version",
@@ -134,6 +136,13 @@ std::unique_ptr<base::DictionaryValue> CreateCapabilities(Session* session) {
   caps->SetBoolean("hasTouchScreen", session->chrome->HasTouchScreen());
   caps->SetString("unexpectedAlertBehaviour",
                   session->unexpected_alert_behaviour);
+
+  // add setWindowRect based on whether we are desktop/android/remote
+  if (capabilities.IsAndroid() || capabilities.IsRemoteBrowser()) {
+    caps->SetBoolean("setWindowRect", false);
+  } else {
+    caps->SetBoolean("setWindowRect", true);
+  }
 
   ChromeDesktopImpl* desktop = NULL;
   Status status = session->chrome->GetAsDesktop(&desktop);
@@ -181,15 +190,18 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
       new WebDriverLog(WebDriverLog::kDriverType, Log::kAll));
   const base::DictionaryValue* desired_caps;
   bool w3c_capability = false;
-  if (params.GetDictionary("capabilities.alwaysMatch", &desired_caps)
-      && desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)
-      && w3c_capability) {
+  if (params.GetDictionary("capabilities.alwaysMatch", &desired_caps) &&
+      (desired_caps->GetBoolean("goog:chromeOptions.w3c", &w3c_capability) ||
+       desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)) &&
+      w3c_capability) {
     // TODO(johnchen): Handle capabilities.firstMatch.
     session->w3c_compliant = true;
   } else if (params.GetDictionary("capabilities.desiredCapabilities",
-                                  &desired_caps)
-             && desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)
-             && w3c_capability) {
+                                  &desired_caps) &&
+             (desired_caps->GetBoolean("goog:chromeOptions.w3c",
+                                       &w3c_capability) ||
+              desired_caps->GetBoolean("chromeOptions.w3c", &w3c_capability)) &&
+             w3c_capability) {
     // TODO(johnchen): Remove when clients stop using this.
     session->w3c_compliant = true;
   } else if (!params.GetDictionary("desiredCapabilities", &desired_caps)) {
@@ -239,15 +251,28 @@ Status InitSessionHelper(const InitSessionParams& bound_params,
                                                     session->w3c_compliant);
   if (status.IsError())
     return status;
-
   session->detach = capabilities.detach;
   session->force_devtools_screenshot = capabilities.force_devtools_screenshot;
-  session->capabilities = CreateCapabilities(session);
+  session->capabilities = CreateCapabilities(session, capabilities);
   value->reset(session->capabilities->DeepCopy());
   return CheckSessionCreated(session);
 }
 
 }  // namespace
+
+bool MatchCapabilities(base::DictionaryValue* capabilities) {
+  // attempt to match the capabilities requested to the actual capabilities
+  // reject if they don't match
+  if (capabilities->HasKey("browserName")) {
+    std::string name;
+    capabilities->GetString("browserName", &name);
+    if (name != "chrome") {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 Status ExecuteInitSession(const InitSessionParams& bound_params,
                           Session* session,

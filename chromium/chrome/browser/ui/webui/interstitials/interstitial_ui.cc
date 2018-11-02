@@ -50,7 +50,7 @@ namespace {
 // as all fake certificates will contain the same issuer name, it's
 // necessary to ensure the serial number is unique, as otherwise
 // NSS will fail to parse.
-base::StaticAtomicSequenceNumber g_serial_number;
+base::AtomicSequenceNumber g_serial_number;
 
 scoped_refptr<net::X509Certificate> CreateFakeCert() {
   std::unique_ptr<crypto::RSAPrivateKey> unused_key;
@@ -126,7 +126,8 @@ class CaptivePortalBlockingPageWithNetInfo : public CaptivePortalBlockingPage {
 };
 #endif
 
-SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
+SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents,
+                                       bool is_superfish) {
   // Random parameters for SSL blocking page.
   int cert_error = net::ERR_CERT_CONTAINS_ERRORS;
   GURL request_url("https://example.com");
@@ -137,8 +138,9 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
   if (net::GetValueForKeyInQuery(web_contents->GetURL(),
                                  "url",
                                  &url_param)) {
-    if (GURL(url_param).is_valid())
+    if (GURL(url_param).is_valid()) {
       request_url = GURL(url_param);
+    }
   }
   std::string overridable_param;
   if (net::GetValueForKeyInQuery(web_contents->GetURL(),
@@ -152,6 +154,12 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
                                  &strict_enforcement_param)) {
     strict_enforcement = strict_enforcement_param == "1";
   }
+  std::string type_param;
+  if (net::GetValueForKeyInQuery(web_contents->GetURL(), "type", &type_param)) {
+    if (type_param == "hpkp_failure") {
+      cert_error = net::ERR_SSL_PINNED_KEY_NOT_IN_CERT_CHAIN;
+    }
+  }
   net::SSLInfo ssl_info;
   ssl_info.cert = ssl_info.unverified_cert = CreateFakeCert();
   // This delegate doesn't create an interstitial.
@@ -162,7 +170,7 @@ SSLBlockingPage* CreateSSLBlockingPage(content::WebContents* web_contents) {
     options_mask |= security_interstitials::SSLErrorUI::STRICT_ENFORCEMENT;
   return SSLBlockingPage::Create(
       web_contents, cert_error, ssl_info, request_url, options_mask,
-      time_triggered_, nullptr,
+      time_triggered_, nullptr, is_superfish,
       base::Callback<void(content::CertificateRequestResultType)>());
 }
 
@@ -224,8 +232,9 @@ safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
   if (net::GetValueForKeyInQuery(web_contents->GetURL(),
                                  "url",
                                  &url_param)) {
-    if (GURL(url_param).is_valid())
+    if (GURL(url_param).is_valid()) {
       request_url = GURL(url_param);
+    }
   }
   GURL main_frame_url(request_url);
   // TODO(mattm): add flag to change main_frame_url or add dedicated flag to
@@ -240,9 +249,9 @@ safe_browsing::SafeBrowsingBlockingPage* CreateSafeBrowsingBlockingPage(
     } else if (type_param == "phishing") {
       threat_type = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
     } else if (type_param == "clientside_malware") {
-      threat_type = safe_browsing::SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
+      threat_type = safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE;
     } else if (type_param == "clientside_phishing") {
-      threat_type = safe_browsing::SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL;
+      threat_type = safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING;
     }
   }
   safe_browsing::SafeBrowsingBlockingPage::UnsafeResource resource;
@@ -405,7 +414,12 @@ void InterstitialHTMLSource::StartDataRequest(
   std::unique_ptr<content::InterstitialPageDelegate> interstitial_delegate;
   std::string html;
   if (base::StartsWith(path, "ssl", base::CompareCase::SENSITIVE)) {
-    interstitial_delegate.reset(CreateSSLBlockingPage(web_contents));
+    interstitial_delegate.reset(
+        CreateSSLBlockingPage(web_contents, false /* is superfish */));
+  } else if (base::StartsWith(path, "superfish-ssl",
+                              base::CompareCase::SENSITIVE)) {
+    interstitial_delegate.reset(
+        CreateSSLBlockingPage(web_contents, true /* is superfish */));
   } else if (base::StartsWith(path, "safebrowsing",
                               base::CompareCase::SENSITIVE)) {
     interstitial_delegate.reset(CreateSafeBrowsingBlockingPage(web_contents));
@@ -447,7 +461,7 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
   std::string allow_access_requests_string;
   if (net::GetValueForKeyInQuery(url, "allow_access_requests",
                                  &allow_access_requests_string)) {
-    allow_access_requests = allow_access_requests_string == "0";
+    allow_access_requests = allow_access_requests_string == "1";
   }
 
   bool is_child_account = false;
@@ -455,6 +469,12 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
   if (net::GetValueForKeyInQuery(url, "is_child_account",
                                  &is_child_account_string)) {
     is_child_account = is_child_account_string == "1";
+  }
+
+  bool is_deprecated = false;
+  std::string is_deprecated_string;
+  if (net::GetValueForKeyInQuery(url, "is_deprecated", &is_deprecated_string)) {
+    is_deprecated = is_deprecated_string == "1" && !is_child_account;
   }
 
   std::string custodian;
@@ -475,8 +495,8 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
       supervised_user_error_page::DEFAULT;
   std::string reason_string;
   if (net::GetValueForKeyInQuery(url, "reason", &reason_string)) {
-    if (reason_string == "safe_sites") {
-      reason = supervised_user_error_page::BLACKLIST;
+    if (reason_string == "safe_sites" && is_child_account) {
+      reason = supervised_user_error_page::ASYNC_CHECKER;
     } else if (reason_string == "manual") {
       reason = supervised_user_error_page::MANUAL;
     } else if (reason_string == "not_signed_in") {
@@ -487,5 +507,6 @@ std::string InterstitialHTMLSource::GetSupervisedUserInterstitialHTML(
   return supervised_user_error_page::BuildHtml(
       allow_access_requests, profile_image_url, profile_image_url2, custodian,
       custodian_email, second_custodian, second_custodian_email,
-      is_child_account, reason, g_browser_process->GetApplicationLocale());
+      is_child_account, is_deprecated, reason,
+      g_browser_process->GetApplicationLocale());
 }

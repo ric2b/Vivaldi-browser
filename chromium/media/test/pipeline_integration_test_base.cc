@@ -66,7 +66,7 @@ std::vector<std::unique_ptr<VideoDecoder>> PipelineIntegrationTestBase::CreateVi
 #endif
   return video_decoders;
 }
-  
+
 std::vector<std::unique_ptr<AudioDecoder>> PipelineIntegrationTestBase::CreateAudioDecodersForTest(
     const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     MediaLog* media_log,
@@ -111,7 +111,7 @@ class RendererFactoryImpl final : public PipelineTestRendererFactory {
 
   DISALLOW_COPY_AND_ASSIGN(RendererFactoryImpl);
 };
-  
+
 PipelineIntegrationTestBase::PipelineIntegrationTestBase()
     : hashing_enabled_(false),
       clockless_playback_(false),
@@ -246,6 +246,13 @@ PipelineStatus PipelineIntegrationTestBase::StartInternal(
   // Should never be called as the required decryption keys for the encrypted
   // media files are provided in advance.
   EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
+
+  // SRC= demuxer does not support config changes.
+  for (auto* stream : demuxer_->GetAllStreams()) {
+    EXPECT_FALSE(stream->SupportsConfigChanges());
+  }
+  //EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(0);
+  //EXPECT_CALL(*this, OnVideoConfigChange(_)).Times(0);
 
   pipeline_->Start(demuxer_.get(),
                    renderer_factory_->CreateRenderer(prepend_video_decoders_cb,
@@ -562,6 +569,15 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
   source->set_demuxer_failure_cb(base::Bind(
       &PipelineIntegrationTestBase::OnStatusCallback, base::Unretained(this)));
   demuxer_ = source->GetDemuxer();
+
+  // MediaSource demuxer may signal config changes.
+  for (auto* stream : demuxer_->GetAllStreams()) {
+    EXPECT_TRUE(stream->SupportsConfigChanges());
+  }
+  // Config change tests should set more specific expectations about the number
+  // of calls.
+  EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(AnyNumber());
+  EXPECT_CALL(*this, OnVideoConfigChange(_)).Times(AnyNumber());
 
   if (encrypted_media) {
     EXPECT_CALL(*this, DecryptorAttached(true));

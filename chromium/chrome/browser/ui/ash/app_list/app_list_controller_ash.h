@@ -22,7 +22,7 @@ class AppListControllerDelegateAsh : public AppListControllerDelegate {
   // AppListControllerDelegate overrides:
   void DismissView() override;
   gfx::NativeWindow GetAppListWindow() override;
-  gfx::Rect GetAppListBounds() override;
+  gfx::Rect GetAppInfoDialogBounds() override;
   bool IsAppPinned(const std::string& app_id) override;
   bool IsAppOpen(const std::string& app_id) const override;
   void PinApp(const std::string& app_id) override;
@@ -42,7 +42,8 @@ class AppListControllerDelegateAsh : public AppListControllerDelegate {
   void LaunchApp(Profile* profile,
                  const extensions::Extension* extension,
                  AppListSource source,
-                 int event_flags) override;
+                 int event_flags,
+                 int64_t display_id) override;
 
  private:
   ash::ShelfLaunchSource AppListSourceToLaunchSource(AppListSource source);

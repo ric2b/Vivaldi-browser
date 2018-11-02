@@ -60,6 +60,7 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
   ~HeadlessBrowserTest() override;
 
   // BrowserTestBase:
+  void SetUp() override;
   void PreRunTestOnMainThread() override;
   void PostRunTestOnMainThread() override;
 
@@ -76,6 +77,10 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
       const std::string& script);
 
  protected:
+  // Call this instead of SetUp() to run tests without GPU rendering (i.e.,
+  // without using SwiftShader or a hardware GPU).
+  void SetUpWithoutGPU();
+
   // Returns the browser for the test.
   HeadlessBrowser* browser() const;
 
@@ -89,12 +94,25 @@ class HeadlessBrowserTest : public content::BrowserTestBase {
   DISALLOW_COPY_AND_ASSIGN(HeadlessBrowserTest);
 };
 
+// TODO(eseckler): Make macro more sheriff-friendly.
 #define HEADLESS_ASYNC_DEVTOOLED_TEST_F(TEST_FIXTURE_NAME)               \
   IN_PROC_BROWSER_TEST_F(TEST_FIXTURE_NAME, RunAsyncTest) { RunTest(); } \
   class AsyncHeadlessBrowserTestNeedsSemicolon##TEST_FIXTURE_NAME {}
 
 #define HEADLESS_ASYNC_DEVTOOLED_TEST_P(TEST_FIXTURE_NAME)               \
   IN_PROC_BROWSER_TEST_P(TEST_FIXTURE_NAME, RunAsyncTest) { RunTest(); } \
+  class AsyncHeadlessBrowserTestNeedsSemicolon##TEST_FIXTURE_NAME {}
+
+#define DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(TEST_FIXTURE_NAME)  \
+  IN_PROC_BROWSER_TEST_F(TEST_FIXTURE_NAME, DISABLED_RunAsyncTest) { \
+    RunTest();                                                       \
+  }                                                                  \
+  class AsyncHeadlessBrowserTestNeedsSemicolon##TEST_FIXTURE_NAME {}
+
+#define DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_P(TEST_FIXTURE_NAME)  \
+  IN_PROC_BROWSER_TEST_P(TEST_FIXTURE_NAME, DISABLED_RunAsyncTest) { \
+    RunTest();                                                       \
+  }                                                                  \
   class AsyncHeadlessBrowserTestNeedsSemicolon##TEST_FIXTURE_NAME {}
 
 // Base class for tests that require access to a DevToolsClient. Subclasses
@@ -120,12 +138,15 @@ class HeadlessAsyncDevTooledBrowserTest : public HeadlessBrowserTest,
   // the map returned is empty.
   virtual ProtocolHandlerMap GetProtocolHandlers();
 
-  // The TabSocket type to request when creating |web_contents_|.
-  virtual HeadlessWebContents::Builder::TabSocketType GetTabSocketType();
+  // Whether to allow TabSockets when creating |web_contents_|.
+  virtual bool GetAllowTabSockets();
 
   // Selects between creating the TabSocket only in an isolated world or the
   // main world.
   virtual bool GetCreateTabSocketOnlyForIsolatedWorld();
+
+  // Returns the ProxyConfig to us, if any.  By default null is returned.
+  virtual std::unique_ptr<net::ProxyConfig> GetProxyConfig();
 
  protected:
   void RunTest();

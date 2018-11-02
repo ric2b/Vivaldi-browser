@@ -11,6 +11,7 @@
 
 #include "base/command_line.h"
 #include "base/files/file_util.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -22,11 +23,13 @@
 #include "build/build_config.h"
 #include "cc/base/switches.h"
 #include "chromecast/base/cast_constants.h"
+#include "chromecast/base/cast_features.h"
 #include "chromecast/base/cast_paths.h"
 #include "chromecast/base/cast_sys_info_util.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/base/metrics/cast_metrics_helper.h"
 #include "chromecast/base/metrics/grouped_histogram.h"
+#include "chromecast/base/pref_names.h"
 #include "chromecast/base/version.h"
 #include "chromecast/browser/cast_browser_context.h"
 #include "chromecast/browser/cast_browser_process.h"
@@ -214,12 +217,8 @@ struct DefaultCommandLineSwitch {
   const char* const switch_value;
 };
 
-DefaultCommandLineSwitch g_default_switches[] = {
+const DefaultCommandLineSwitch kDefaultSwitches[] = {
 #if defined(OS_ANDROID)
-#if !BUILDFLAG(IS_CAST_AUDIO_ONLY)
-    // Disables Chromecast-specific WiFi-related features on ATV for now.
-    {switches::kNoWifi, ""},
-#endif  // !BUILDFLAG(IS_CAST_AUDIO_ONLY)
     // TODO(714676): this should probably set the no restrictions autoplay
     // policy instead.
     {switches::kIgnoreAutoplayRestrictionsForTests, ""},
@@ -234,7 +233,9 @@ DefaultCommandLineSwitch g_default_switches[] = {
     {switches::kDisableGpu, ""},
 #if defined(OS_ANDROID)
     {switches::kDisableGLDrawingForTests, ""},
+    {switches::kDisableGpuVsync, ""},
     {switches::kSkipGpuDataLoading, ""},
+    {switches::kDisableGpuCompositing, ""},
 #endif  // defined(OS_ANDROID)
 #endif  // BUILDFLAG(IS_CAST_AUDIO_ONLY)
 #if defined(OS_LINUX)
@@ -258,19 +259,24 @@ DefaultCommandLineSwitch g_default_switches[] = {
     {switches::kDisableES3GLContext, ""},
     // Enable navigator.connection API.
     // TODO(derekjchow): Remove this switch when enabled by default.
-    {switches::kEnableNetworkInformation, ""},
+    {switches::kEnableNetworkInformationDownlinkMax, ""},
     // TODO(halliwell): Remove after fixing b/35422666.
     {switches::kEnableUseZoomForDSF, "false"},
-    {nullptr, nullptr},  // Termination
 };
 
 void AddDefaultCommandLineSwitches(base::CommandLine* command_line) {
-  int i = 0;
-  while (g_default_switches[i].switch_name != NULL) {
-    command_line->AppendSwitchASCII(
-        std::string(g_default_switches[i].switch_name),
-        std::string(g_default_switches[i].switch_value));
-    ++i;
+  for (const auto& default_switch : kDefaultSwitches) {
+    // Don't override existing command line switch values with these defaults.
+    // This could occur primarily (or only) on Android, where the command line
+    // is initialized in Java first.
+    std::string name(default_switch.switch_name);
+    if (!command_line->HasSwitch(name)) {
+      std::string value(default_switch.switch_value);
+      VLOG(2) << "Set default switch '" << name << "' = '" << value << "'";
+      command_line->AppendSwitchASCII(name, value);
+    } else {
+      VLOG(2) << "Skip setting default switch '" << name << "', already set";
+    }
   }
 }
 
@@ -281,6 +287,7 @@ CastBrowserMainParts::CastBrowserMainParts(
     URLRequestContextFactory* url_request_context_factory)
     : BrowserMainParts(),
       cast_browser_process_(new CastBrowserProcess()),
+      field_trial_list_(nullptr),
       parameters_(parameters),
       url_request_context_factory_(url_request_context_factory),
       net_log_(new CastNetLog()),
@@ -416,9 +423,6 @@ int CastBrowserMainParts::PreCreateThreads() {
   if (!base::CreateDirectory(home_dir))
     return 1;
 
-  // Hook for internal code
-  cast_browser_process_->browser_client()->PreCreateThreads();
-
   // Set GL strings so GPU config code can make correct feature blacklisting/
   // whitelisting decisions.
   // Note: SetGLStrings can be called before GpuDataManager::Initialize.
@@ -427,6 +431,29 @@ int CastBrowserMainParts::PreCreateThreads() {
       sys_info->GetGlVendor(), sys_info->GetGlRenderer(),
       sys_info->GetGlVersion());
 #endif
+
+  scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple());
+  metrics::RegisterPrefs(pref_registry.get());
+  PrefProxyConfigTrackerImpl::RegisterPrefs(pref_registry.get());
+  cast_browser_process_->SetPrefService(
+      PrefServiceHelper::CreatePrefService(pref_registry.get()));
+
+  // As soon as the PrefService is set, initialize the base::FeatureList, so
+  // objects initialized after this point can use features from
+  // base::FeatureList.
+  const auto* features_dict =
+      cast_browser_process_->pref_service()->GetDictionary(
+          prefs::kLatestDCSFeatures);
+  const auto* experiment_ids = cast_browser_process_->pref_service()->GetList(
+      prefs::kActiveDCSExperiments);
+  auto* command_line = base::CommandLine::ForCurrentProcess();
+  InitializeFeatureList(
+      *features_dict, *experiment_ids,
+      command_line->GetSwitchValueASCII(switches::kEnableFeatures),
+      command_line->GetSwitchValueASCII(switches::kDisableFeatures));
+
+  // Hook for internal code
+  cast_browser_process_->browser_client()->PreCreateThreads();
 
 #if defined(USE_AURA)
   cast_browser_process_->SetCastScreen(base::WrapUnique(new CastScreen()));
@@ -440,11 +467,6 @@ int CastBrowserMainParts::PreCreateThreads() {
 }
 
 void CastBrowserMainParts::PreMainMessageLoopRun() {
-  scoped_refptr<PrefRegistrySimple> pref_registry(new PrefRegistrySimple());
-  metrics::RegisterPrefs(pref_registry.get());
-  PrefProxyConfigTrackerImpl::RegisterPrefs(pref_registry.get());
-  cast_browser_process_->SetPrefService(
-      PrefServiceHelper::CreatePrefService(pref_registry.get()));
 
 #if !defined(OS_ANDROID)
   memory_pressure_monitor_.reset(new CastMemoryPressureMonitor());
@@ -461,13 +483,11 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
   cast_browser_process_->SetBrowserContext(
       base::MakeUnique<CastBrowserContext>(url_request_context_factory_));
   cast_browser_process_->SetMetricsServiceClient(
-      metrics::CastMetricsServiceClient::Create(
-          content::BrowserThread::GetBlockingPool(),
+      base::MakeUnique<metrics::CastMetricsServiceClient>(
           cast_browser_process_->pref_service(),
           content::BrowserContext::GetDefaultStoragePartition(
-              cast_browser_process_->browser_context())->
-                  GetURLRequestContext()));
-
+              cast_browser_process_->browser_context())
+              ->GetURLRequestContext()));
   cast_browser_process_->SetRemoteDebuggingServer(
       base::MakeUnique<RemoteDebuggingServer>(
           cast_browser_process_->browser_client()
@@ -494,11 +514,6 @@ void CastBrowserMainParts::PreMainMessageLoopRun() {
           cast_browser_process_->browser_context(),
           cast_browser_process_->pref_service(),
           url_request_context_factory_->GetSystemGetter(),
-          base::BindOnce(&URLRequestContextFactory::DisableQuic,
-                         // Safe since |url_request_context_factory_| is owned
-                         // by CastContentBrowserClient, which lives for the
-                         // entire lifetime of cast_shell.
-                         base::Unretained(url_request_context_factory_)),
           video_plane_controller_.get(), window_manager_.get()));
   cast_browser_process_->cast_service()->Initialize();
 

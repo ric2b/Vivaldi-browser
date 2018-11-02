@@ -2,7 +2,6 @@ include_rules = [
   "+components/autofill/core/browser",
   "+components/keyed_service/core",
   "+components/pref_registry",
-  "+components/safe_browsing/password_protection",
   "+components/security_state",
   "+components/sync/base",
   "+components/sync/driver",
@@ -12,4 +11,17 @@ include_rules = [
   "+crypto",
   "+google_apis",
   "+grit",
+  "+services/metrics/public/cpp",
 ]
+
+specific_include_rules = {
+  "password_form_manager_unittest\.cc": [
+    "+components/ukm",
+  ],
+  "password_form_metrics_recorder_unittest\.cc": [
+    "+components/ukm",
+  ],
+  "password_manager_metrics_recorder_unittest\.cc": [
+    "+components/ukm",
+  ],
+}

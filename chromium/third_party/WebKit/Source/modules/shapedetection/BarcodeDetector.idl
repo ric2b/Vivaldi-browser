@@ -6,9 +6,10 @@
 
 [
     Constructor,
+    ConstructorCallWith=ExecutionContext,
     Exposed=(Window,Worker),
     MeasureAs=ShapeDetection_BarcodeDetectorConstructor,
-    RuntimeEnabled=ShapeDetection,
+    RuntimeEnabled=ShapeDetection
 ] interface BarcodeDetector {
     [CallWith=ScriptState] Promise<sequence<DetectedBarcode>> detect(ImageBitmapSource image);
 };

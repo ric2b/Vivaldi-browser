@@ -1,4 +1,4 @@
-// Copyright 2014 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -48,11 +48,11 @@ enum ContentSettingsType {
   CONTENT_SETTINGS_TYPE_PROMPT_NO_DECISION_COUNT,
   CONTENT_SETTINGS_TYPE_IMPORTANT_SITE_INFO,
   CONTENT_SETTINGS_TYPE_PERMISSION_AUTOBLOCKER_DATA,
-  CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
+  CONTENT_SETTINGS_TYPE_ADS,
 
   // Website setting which stores metadata for the subresource filter to aid in
   // decisions for whether or not to show the UI.
-  CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER_DATA,
+  CONTENT_SETTINGS_TYPE_ADS_DATA,
 
   // This is special-cased in the permissions layer to always allow, and as
   // such doesn't have associated prefs data.
@@ -67,8 +67,15 @@ enum ContentSettingsType {
   // verdicts of each origin.
   CONTENT_SETTINGS_TYPE_PASSWORD_PROTECTION,
 
-  // WARNING: This enum is going to be removed soon. Do not depend on NUM_TYPES.
-  CONTENT_SETTINGS_NUM_TYPES_DO_NOT_USE,
+  // Website setting which stores engagement data for media related to a
+  // specific origin.
+  CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT,
+
+  // Website setting which stores whether or not the site can play audible
+  // sound. This will not block playback but instead the user will not hear it.
+  CONTENT_SETTINGS_TYPE_SOUND,
+
+  CONTENT_SETTINGS_NUM_TYPES,
 };
 
 struct ContentSettingsTypeHash {

@@ -24,13 +24,14 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/input/touch_action.h"
-#include "cc/surfaces/local_surface_id.h"
+#include "components/viz/common/surfaces/local_surface_id.h"
 #include "content/common/content_export.h"
 #include "content/common/cursors/webcursor.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/common/edit_command.h"
 #include "content/common/features.h"
 #include "content/common/input/synthetic_gesture_params.h"
+#include "content/common/widget.mojom.h"
 #include "content/public/common/drop_data.h"
 #include "content/public/common/screen_info.h"
 #include "content/renderer/devtools/render_widget_screen_metrics_emulator_delegate.h"
@@ -44,6 +45,7 @@
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_message.h"
 #include "ipc/ipc_sender.h"
+#include "mojo/public/cpp/bindings/binding.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
@@ -128,6 +130,7 @@ class CONTENT_EXPORT RenderWidget
     : public IPC::Listener,
       public IPC::Sender,
       NON_EXPORTED_BASE(virtual public blink::WebWidgetClient),
+      public mojom::Widget,
       public RenderWidgetCompositorDelegate,
       public RenderWidgetInputHandlerDelegate,
       public RenderWidgetScreenMetricsEmulatorDelegate,
@@ -241,9 +244,9 @@ class CONTENT_EXPORT RenderWidget
   void RecordWheelAndTouchScrollingCount(bool has_scrolled_by_wheel,
                                          bool has_scrolled_by_touch) override;
   void BeginMainFrame(double frame_time_sec) override;
-  void RequestNewCompositorFrameSink(
+  void RequestNewLayerTreeFrameSink(
       bool fallback,
-      const CompositorFrameSinkCallback& callback) override;
+      const LayerTreeFrameSinkCallback& callback) override;
   void DidCommitAndDrawCompositorFrame() override;
   void DidCommitCompositorFrame() override;
   void DidCompletePageScaleAnimation() override;
@@ -264,7 +267,6 @@ class CONTENT_EXPORT RenderWidget
 
   void OnDidHandleKeyEvent() override;
   void OnDidOverscroll(const ui::DidOverscrollParams& params) override;
-  void OnInputEventAck(std::unique_ptr<InputEventAck> input_event_ack) override;
   void SetInputHandler(RenderWidgetInputHandler* input_handler) override;
   void ShowVirtualKeyboard() override;
   void UpdateTextInputState() override;
@@ -285,6 +287,9 @@ class CONTENT_EXPORT RenderWidget
   blink::WebLayerTreeView* InitializeLayerTreeView() override;
   void DidMeaningfulLayout(blink::WebMeaningfulLayout layout_type) override;
   void DidChangeCursor(const blink::WebCursorInfo&) override;
+  void AutoscrollStart(const blink::WebFloatPoint& point) override;
+  void AutoscrollFling(const blink::WebFloatSize& velocity) override;
+  void AutoscrollEnd() override;
   void CloseWidgetSoon() override;
   void Show(blink::WebNavigationPolicy) override;
   blink::WebRect WindowRect() override;
@@ -419,14 +424,11 @@ class CONTENT_EXPORT RenderWidget
   // Requests a BeginMainFrame callback from the compositor.
   void SetNeedsMainFrame() override;
 
-  InputEventAckState HandleInputEvent(
-      const blink::WebCoalescedInputEvent& input_event,
-      const ui::LatencyInfo& latency_info,
-      InputEventDispatchType dispatch_type) override;
+  void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
+                        const ui::LatencyInfo& latency_info,
+                        HandledEventCallback callback) override;
 
-  void SendInputEventAck(blink::WebInputEvent::Type type,
-                         InputEventAckState ack_result,
-                         uint32_t touch_event_id) override;
+  scoped_refptr<MainThreadEventQueue> GetInputEventQueue();
 
  protected:
   // Friend RefCounted so that the dtor can be non-public. Using this class
@@ -447,7 +449,8 @@ class CONTENT_EXPORT RenderWidget
                const ScreenInfo& screen_info,
                bool swapped_out,
                bool hidden,
-               bool never_visible);
+               bool never_visible,
+               mojom::WidgetRequest widget_request = nullptr);
 
   ~RenderWidget() override;
 
@@ -505,6 +508,9 @@ class CONTENT_EXPORT RenderWidget
   void OnCreateVideoAck(int32_t video_id);
   void OnUpdateVideoAck(int32_t video_id);
   void OnRequestMoveAck();
+  // Request from browser to show context menu.
+  virtual void OnShowContextMenu(ui::MenuSourceType source_type,
+                                 const gfx::Point& location);
   virtual void OnImeSetComposition(
       const base::string16& text,
       const std::vector<blink::WebCompositionUnderline>& underlines,
@@ -530,6 +536,7 @@ class CONTENT_EXPORT RenderWidget
                            const gfx::Rect& window_screen_rect);
   void OnUpdateWindowScreenRect(const gfx::Rect& window_screen_rect);
   void OnSetViewportIntersection(const gfx::Rect& viewport_intersection);
+  void OnSetIsInert(bool);
   // Real data that is dragged is not included at DragEnter time.
   void OnDragTargetDragEnter(
       const std::vector<DropData::Metadata>& drop_meta_data,
@@ -634,6 +641,9 @@ class CONTENT_EXPORT RenderWidget
 
   // Check whether the WebWidget has any touch event handlers registered.
   void HasTouchEventHandlers(bool has_handlers) override;
+
+  // Called to update whether low latency input mode is enabled or not.
+  void SetNeedsLowLatencyInput(bool) override;
 
   // Tell the browser about the actions permitted for a new touch point.
   void SetTouchAction(cc::TouchAction touch_action) override;
@@ -840,6 +850,12 @@ class CONTENT_EXPORT RenderWidget
 
   gfx::ColorSpace GetRasterColorSpace() const;
 
+  void SendInputEventAck(blink::WebInputEvent::Type type,
+                         uint32_t touch_event_id,
+                         InputEventAckState ack_state,
+                         const ui::LatencyInfo& latency_info,
+                         std::unique_ptr<ui::DidOverscrollParams>);
+
   // Indicates whether this widget has focus.
   bool has_focus_;
 
@@ -882,9 +898,11 @@ class CONTENT_EXPORT RenderWidget
   // to replace it. See https://crbug.com/695579.
   uint32_t current_content_source_id_;
 
-  cc::LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceId local_surface_id_;
 
   scoped_refptr<MainThreadEventQueue> input_event_queue_;
+
+  mojo::Binding<mojom::Widget> widget_binding_;
 
   base::WeakPtrFactory<RenderWidget> weak_ptr_factory_;
 

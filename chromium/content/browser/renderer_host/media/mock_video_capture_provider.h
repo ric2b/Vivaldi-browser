@@ -15,11 +15,13 @@ class MockVideoCaptureProvider : public VideoCaptureProvider {
   MockVideoCaptureProvider();
   ~MockVideoCaptureProvider() override;
 
+  void GetDeviceInfosAsync(GetDeviceInfosCallback result_callback) override {
+    DoGetDeviceInfosAsync(result_callback);
+  }
+
   MOCK_METHOD0(Uninitialize, void());
-  MOCK_METHOD1(GetDeviceInfosAsync,
-               void(const base::Callback<
-                    void(const std::vector<media::VideoCaptureDeviceInfo>&)>&
-                        result_callback));
+  MOCK_METHOD1(DoGetDeviceInfosAsync,
+               void(GetDeviceInfosCallback& result_callback));
 
   MOCK_METHOD0(CreateDeviceLauncher,
                std::unique_ptr<VideoCaptureDeviceLauncher>());
@@ -30,11 +32,12 @@ class MockVideoCaptureDeviceLauncher : public VideoCaptureDeviceLauncher {
   MockVideoCaptureDeviceLauncher();
   ~MockVideoCaptureDeviceLauncher() override;
 
-  MOCK_METHOD6(DoLaunchDeviceAsync,
+  MOCK_METHOD7(DoLaunchDeviceAsync,
                void(const std::string& device_id,
                     MediaStreamType stream_type,
                     const media::VideoCaptureParams& params,
                     base::WeakPtr<media::VideoFrameReceiver>* receiver,
+                    base::OnceClosure* connection_lost_cb,
                     Callbacks* callbacks,
                     base::OnceClosure* done_cb));
 
@@ -44,10 +47,11 @@ class MockVideoCaptureDeviceLauncher : public VideoCaptureDeviceLauncher {
                          MediaStreamType stream_type,
                          const media::VideoCaptureParams& params,
                          base::WeakPtr<media::VideoFrameReceiver> receiver,
+                         base::OnceClosure connection_lost_cb,
                          Callbacks* callbacks,
                          base::OnceClosure done_cb) override {
-    DoLaunchDeviceAsync(device_id, stream_type, params, &receiver, callbacks,
-                        &done_cb);
+    DoLaunchDeviceAsync(device_id, stream_type, params, &receiver,
+                        &connection_lost_cb, callbacks, &done_cb);
   }
 };
 
@@ -57,8 +61,8 @@ class MockLaunchedVideoCaptureDevice : public LaunchedVideoCaptureDevice {
   ~MockLaunchedVideoCaptureDevice() override;
 
   MOCK_CONST_METHOD1(
-      DoGetPhotoCapabilities,
-      void(media::VideoCaptureDevice::GetPhotoCapabilitiesCallback* callback));
+      DoGetPhotoState,
+      void(media::VideoCaptureDevice::GetPhotoStateCallback* callback));
   MOCK_METHOD2(
       DoSetPhotoOptions,
       void(media::mojom::PhotoSettingsPtr* settings,
@@ -73,10 +77,9 @@ class MockLaunchedVideoCaptureDevice : public LaunchedVideoCaptureDevice {
   MOCK_METHOD2(OnUtilizationReport,
                void(int frame_feedback_id, double utilization));
 
-  void GetPhotoCapabilities(
-      media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback)
+  void GetPhotoState(media::VideoCaptureDevice::GetPhotoStateCallback callback)
       const override {
-    DoGetPhotoCapabilities(&callback);
+    DoGetPhotoState(&callback);
   }
 
   void SetPhotoOptions(

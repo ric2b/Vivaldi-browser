@@ -15,11 +15,11 @@
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/font.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/label.h"
@@ -61,7 +61,7 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
   row->SetLayoutManager(layout);
 
   views::ColumnSet* columns = layout->AddColumnSet(0);
-  // The first column has resize_percent = 1 so that it streches all the way
+  // The first column has resize_percent = 1 so that it stretches all the way
   // across the row up to the amount label. This way the first label elides as
   // required.
   columns->AddColumn(views::GridLayout::LEADING, views::GridLayout::CENTER, 1,
@@ -80,15 +80,18 @@ std::unique_ptr<views::View> CreateLineItemView(const base::string16& label,
     amount_text = CreateMediumLabel(amount);
   } else {
     label_text = base::MakeUnique<views::Label>(label);
-    currency_text = base::MakeUnique<views::Label>(currency);
-    currency_text->SetDisabledColor(
-        currency_text->GetNativeTheme()->GetSystemColor(
-            ui::NativeTheme::kColorId_LabelDisabledColor));
-    currency_text->SetEnabled(false);
+    currency_text = CreateHintLabel(currency);
     amount_text = base::MakeUnique<views::Label>(amount);
   }
+  // Strings from the website may not match the locale of the device, so align
+  // them according to the language of the text. This will result, for example,
+  // in "he" labels being right-aligned in a browser that's using "en" locale.
+  label_text->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
   amount_text->set_id(static_cast<int>(amount_label_id));
   amount_text->SetMultiLine(true);
+  // The amount is formatted by the browser (and not provided by the website) so
+  // it can be aligned to left.
+  amount_text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   amount_text->SetAllowCharacterBreak(true);
 
   std::unique_ptr<views::View> amount_wrapper = base::MakeUnique<views::View>();
@@ -155,8 +158,7 @@ base::string16 OrderSummaryViewController::GetSheetTitle() {
 }
 
 void OrderSummaryViewController::FillContentView(views::View* content_view) {
-  views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kVertical, 0, 0, 0);
+  views::BoxLayout* layout = new views::BoxLayout(views::BoxLayout::kVertical);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
@@ -168,35 +170,40 @@ void OrderSummaryViewController::FillContentView(views::View* content_view) {
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_1,
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_2,
       DialogViewID::ORDER_SUMMARY_LINE_ITEM_3};
-  for (size_t i = 0; i < spec()->details().display_items.size(); i++) {
+  const auto& display_items =
+      spec()->GetDisplayItems(state()->selected_instrument());
+  for (size_t i = 0; i < display_items.size(); i++) {
     DialogViewID view_id =
         i < line_items.size() ? line_items[i] : DialogViewID::VIEW_ID_NONE;
     base::string16 currency = base::UTF8ToUTF16("");
     if (is_mixed_currency) {
-      currency = base::UTF8ToUTF16(
-          spec()->details().display_items[i]->amount->currency);
+      currency = base::UTF8ToUTF16((*display_items[i])->amount->currency);
     }
 
     content_view->AddChildView(
         CreateLineItemView(
-            base::UTF8ToUTF16(spec()->details().display_items[i]->label),
-            currency,
-            spec()->GetFormattedCurrencyAmount(
-                spec()->details().display_items[i]->amount),
+            base::UTF8ToUTF16((*display_items[i])->label), currency,
+            spec()->GetFormattedCurrencyAmount((*display_items[i])->amount),
             false, DialogViewID::VIEW_ID_NONE, view_id)
             .release());
   }
 
   base::string16 total_label_value = l10n_util::GetStringFUTF16(
       IDS_PAYMENT_REQUEST_ORDER_SUMMARY_SHEET_TOTAL_FORMAT,
-      base::UTF8ToUTF16(spec()->details().total->amount->currency),
-      spec()->GetFormattedCurrencyAmount(spec()->details().total->amount));
+      base::UTF8ToUTF16(
+          spec()->GetTotal(state()->selected_instrument())->amount->currency),
+      spec()->GetFormattedCurrencyAmount(
+          spec()->GetTotal(state()->selected_instrument())->amount));
 
   content_view->AddChildView(
       CreateLineItemView(
-          base::UTF8ToUTF16(spec()->details().total->label),
-          base::UTF8ToUTF16(spec()->details().total->amount->currency),
-          spec()->GetFormattedCurrencyAmount(spec()->details().total->amount),
+          base::UTF8ToUTF16(
+              spec()->GetTotal(state()->selected_instrument())->label),
+          base::UTF8ToUTF16(spec()
+                                ->GetTotal(state()->selected_instrument())
+                                ->amount->currency),
+          spec()->GetFormattedCurrencyAmount(
+              spec()->GetTotal(state()->selected_instrument())->amount),
           true, DialogViewID::ORDER_SUMMARY_TOTAL_CURRENCY_LABEL,
           DialogViewID::ORDER_SUMMARY_TOTAL_AMOUNT_LABEL)
           .release());

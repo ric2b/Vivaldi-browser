@@ -16,10 +16,10 @@ constexpr int kAddressNormalizationTimeoutSeconds = 5;
 }  // namespace
 
 AddressNormalizationManager::AddressNormalizationManager(
-    std::unique_ptr<AddressNormalizer> address_normalizer,
+    AddressNormalizer* address_normalizer,
     const std::string& default_country_code)
     : default_country_code_(default_country_code),
-      address_normalizer_(std::move(address_normalizer)) {
+      address_normalizer_(address_normalizer) {
   DCHECK(autofill::data_util::IsValidCountryCode(default_country_code));
   DCHECK(address_normalizer_);
 
@@ -31,9 +31,10 @@ AddressNormalizationManager::AddressNormalizationManager(
 
 AddressNormalizationManager::~AddressNormalizationManager() {}
 
-void AddressNormalizationManager::FinalizeWithCompletionCallback(
+void AddressNormalizationManager::FinalizePendingRequestsWithCompletionCallback(
     base::OnceClosure completion_callback) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  DCHECK(!completion_callback_);
   completion_callback_ = std::move(completion_callback);
   accepting_requests_ = false;
   MaybeRunCompletionCallback();
@@ -45,8 +46,8 @@ void AddressNormalizationManager::StartNormalizingAddress(
   DCHECK(accepting_requests_) << "FinalizeWithCompletionCallback has been "
                                  "called, cannot normalize more addresses";
 
-  delegates_.push_back(base::MakeUnique<NormalizerDelegate>(
-      this, address_normalizer_.get(), profile));
+  delegates_.push_back(
+      base::MakeUnique<NormalizerDelegate>(this, address_normalizer_, profile));
 }
 
 void AddressNormalizationManager::MaybeRunCompletionCallback() {
@@ -61,6 +62,10 @@ void AddressNormalizationManager::MaybeRunCompletionCallback() {
   // We're no longer accepting requests, and all the delegates have completed.
   // Now's the time to run the completion callback.
   std::move(completion_callback_).Run();
+
+  // Start accepting requests after the completion callback has run.
+  delegates_.clear();
+  accepting_requests_ = true;
 }
 
 AddressNormalizationManager::NormalizerDelegate::NormalizerDelegate(

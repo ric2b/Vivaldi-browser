@@ -85,7 +85,8 @@ ColorPicker.Spectrum = class extends UI.VBox {
     this._displayContainer = this.contentElement.createChild('div', 'spectrum-text source-code');
     this._textValues = [];
     for (var i = 0; i < 4; ++i) {
-      var inputValue = this._displayContainer.createChild('input', 'spectrum-text-value');
+      var inputValue = UI.createInput('spectrum-text-value');
+      this._displayContainer.appendChild(inputValue);
       inputValue.maxLength = 4;
       this._textValues.push(inputValue);
       inputValue.addEventListener('keydown', this._inputChanged.bind(this), false);
@@ -97,7 +98,8 @@ ColorPicker.Spectrum = class extends UI.VBox {
 
     // HEX display.
     this._hexContainer = this.contentElement.createChild('div', 'spectrum-text spectrum-text-hex source-code');
-    this._hexValue = this._hexContainer.createChild('input', 'spectrum-text-value');
+    this._hexValue = UI.createInput('spectrum-text-value');
+    this._hexContainer.appendChild(this._hexValue);
     this._hexValue.maxLength = 7;
     this._hexValue.addEventListener('keydown', this._inputChanged.bind(this), false);
     this._hexValue.addEventListener('input', this._inputChanged.bind(this), false);
@@ -113,7 +115,7 @@ ColorPicker.Spectrum = class extends UI.VBox {
     UI.installDragHandle(
         this._colorElement, dragStart.bind(this, positionColor.bind(this)), positionColor.bind(this), null, 'default');
 
-    this.element.classList.add('palettes-enabled');
+    this.element.classList.add('palettes-enabled', 'flex-none');
     /** @type {!Map.<string, !ColorPicker.Spectrum.Palette>} */
     this._palettes = new Map();
     this._palettePanel = this.contentElement.createChild('div', 'palette-panel');
@@ -915,9 +917,6 @@ ColorPicker.Spectrum._itemsPerPaletteRow = 8;
 ColorPicker.Spectrum.Palette;
 ColorPicker.Spectrum.GeneratedPaletteTitle = 'Page colors';
 
-/**
- * @unrestricted
- */
 ColorPicker.Spectrum.PaletteGenerator = class {
   /**
    * @param {function(!ColorPicker.Spectrum.Palette)} callback
@@ -929,7 +928,7 @@ ColorPicker.Spectrum.PaletteGenerator = class {
     var stylesheetPromises = [];
     for (var cssModel of SDK.targetManager.models(SDK.CSSModel)) {
       for (var stylesheet of cssModel.allStyleSheets())
-        stylesheetPromises.push(new Promise(this._processStylesheet.bind(this, stylesheet)));
+        stylesheetPromises.push(this._processStylesheet(stylesheet));
     }
     Promise.all(stylesheetPromises).catchException(null).then(this._finish.bind(this));
   }
@@ -990,25 +989,16 @@ ColorPicker.Spectrum.PaletteGenerator = class {
 
   /**
    * @param {!SDK.CSSStyleSheetHeader} stylesheet
-   * @param {function(?)} resolve
-   * @this {ColorPicker.Spectrum.PaletteGenerator}
+   * @return {!Promise}
    */
-  _processStylesheet(stylesheet, resolve) {
-    /**
-     * @param {?string} text
-     * @this {ColorPicker.Spectrum.PaletteGenerator}
-     */
-    function parseContent(text) {
-      text = text.toLowerCase();
-      var regexResult = text.match(/((?:rgb|hsl)a?\([^)]+\)|#[0-9a-f]{6}|#[0-9a-f]{3})/g) || [];
-      for (var c of regexResult) {
-        var frequency = this._frequencyMap.get(c) || 0;
-        this._frequencyMap.set(c, ++frequency);
-      }
-      resolve(null);
+  async _processStylesheet(stylesheet) {
+    var text = await stylesheet.requestContent() || '';
+    text = text.toLowerCase();
+    var regexResult = text.match(/((?:rgb|hsl)a?\([^)]+\)|#[0-9a-f]{6}|#[0-9a-f]{3})/g) || [];
+    for (var c of regexResult) {
+      var frequency = this._frequencyMap.get(c) || 0;
+      this._frequencyMap.set(c, ++frequency);
     }
-
-    stylesheet.requestContent().then(parseContent.bind(this));
   }
 };
 

@@ -10,14 +10,21 @@
 
 #include <memory>
 
+#include "net/quic/platform/api/quic_export.h"
 #include "net/quic/quartc/quartc_clock_interface.h"
 #include "net/quic/quartc/quartc_session_interface.h"
 #include "net/quic/quartc/quartc_task_runner_interface.h"
 
 namespace net {
 
+// Algorithm to use for congestion control.
+enum class QuartcCongestionControl {
+  kDefault,  // Use an arbitrary algorithm chosen by QUIC.
+  kBBR,      // Use BBR.
+};
+
 // Used to create instances for Quartc objects such as QuartcSession.
-class QuartcFactoryInterface {
+class QUIC_EXPORT_PRIVATE QuartcFactoryInterface {
  public:
   virtual ~QuartcFactoryInterface() {}
 
@@ -36,6 +43,10 @@ class QuartcFactoryInterface {
     // The maximum size of the packet can be written with the packet writer.
     // 1200 bytes by default.
     uint64_t max_packet_size = 1200;
+    // Algorithm to use for congestion control.  By default, uses an arbitrary
+    // congestion control algorithm chosen by QUIC.
+    QuartcCongestionControl congestion_control =
+        QuartcCongestionControl::kDefault;
   };
 
   virtual std::unique_ptr<QuartcSessionInterface> CreateQuartcSession(

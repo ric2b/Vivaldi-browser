@@ -5,18 +5,60 @@
 import("//build/config/features.gni")
 
 source_set("triggers") {
-  if (safe_browsing_mode != 0) {
-    sources = [
-      "trigger_manager.cc",
-      "trigger_manager.h",
-    ]
+  sources = [
+    "trigger_manager.cc",
+    "trigger_manager.h",
+  ]
+  public_deps = [
+    "//components/security_interstitials/content:security_interstitial_page",
+    "//components/security_interstitials/core:core",
+    "//content/public/browser:browser",
+  ]
+  deps = [
+    ":trigger_throttler",
+    "//base:base",
+    "//components/prefs:prefs",
+    "//components/safe_browsing:safe_browsing",
+    "//components/safe_browsing/browser:browser",
+  ]
+}
 
-    deps = [
-      "//base:base",
-      "//components/safe_browsing:safe_browsing",
-      "//components/safe_browsing/browser:browser",
-      "//components/security_interstitials/content:security_interstitial_page",
-      "//content/public/browser:browser",
-    ]
-  }
+source_set("trigger_throttler") {
+  sources = [
+    "trigger_throttler.cc",
+    "trigger_throttler.h",
+  ]
+  deps = [
+    "//base:base",
+  ]
+}
+
+source_set("ad_sampler_trigger") {
+  sources = [
+    "ad_sampler_trigger.cc",
+    "ad_sampler_trigger.h",
+  ]
+  deps = [
+    "//base:base",
+    "//components/safe_browsing:features",
+    "//content/public/browser",
+  ]
+}
+
+source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "trigger_manager_unittest.cc",
+    "trigger_throttler_unittest.cc",
+  ]
+  deps = [
+    ":trigger_throttler",
+    ":triggers",
+    "//base",
+    "//chrome/test:test_support",
+    "//components/prefs:test_support",
+    "//components/safe_browsing/browser:browser",
+    "//content/test:test_support",
+    "//testing/gtest",
+  ]
 }

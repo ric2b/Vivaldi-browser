@@ -9,9 +9,8 @@ source_set("tests") {
   testonly = true
 
   sources = [
+    "gpu_unittest.cc",
     "property_type_converters_unittest.cc",
-    "window_server_test_suite.cc",
-    "window_server_test_suite.h",
   ]
 
   deps = [

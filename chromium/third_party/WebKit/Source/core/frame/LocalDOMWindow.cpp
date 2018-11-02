@@ -26,6 +26,10 @@
 
 #include "core/frame/LocalDOMWindow.h"
 
+#include <memory>
+#include <string>
+#include <utility>
+
 #include "bindings/core/v8/ScriptController.h"
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WindowProxy.h"
@@ -37,12 +41,12 @@
 #include "core/css/StyleMedia.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMImplementation.h"
-#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/FrameRequestCallback.h"
+#include "core/dom/Modulator.h"
 #include "core/dom/SandboxFlags.h"
 #include "core/dom/SinkDocument.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/custom/CustomElementRegistry.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/editing/Editor.h"
 #include "core/events/DOMWindowEventQueue.h"
 #include "core/events/HashChangeEvent.h"
@@ -55,10 +59,10 @@
 #include "core/frame/EventHandlerRegistry.h"
 #include "core/frame/External.h"
 #include "core/frame/FrameConsole.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/History.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Navigator.h"
 #include "core/frame/Screen.h"
 #include "core/frame/ScrollToOptions.h"
@@ -67,6 +71,7 @@
 #include "core/frame/VisualViewport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/html/custom/CustomElementRegistry.h"
 #include "core/input/EventHandler.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/InspectorTraceEvents.h"
@@ -75,7 +80,6 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/CreateWindow.h"
 #include "core/page/Page.h"
-#include "core/page/WindowFeatures.h"
 #include "core/page/scrolling/ScrollingCoordinator.h"
 #include "core/probe/CoreProbes.h"
 #include "core/timing/DOMWindowPerformance.h"
@@ -90,8 +94,6 @@
 #include "public/platform/Platform.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/site_engagement.mojom-blink.h"
-
-#include <memory>
 
 namespace blink {
 
@@ -169,10 +171,10 @@ class PostMessageTimer final
 static void UpdateSuddenTerminationStatus(
     LocalDOMWindow* dom_window,
     bool added_listener,
-    LocalFrameClient::SuddenTerminationDisablerType disabler_type) {
+    WebSuddenTerminationDisablerType disabler_type) {
   Platform::Current()->SuddenTerminationChanged(!added_listener);
-  if (dom_window->GetFrame() && dom_window->GetFrame()->Loader().Client())
-    dom_window->GetFrame()->Loader().Client()->SuddenTerminationDisablerChanged(
+  if (dom_window->GetFrame() && dom_window->GetFrame()->Client())
+    dom_window->GetFrame()->Client()->SuddenTerminationDisablerChanged(
         added_listener, disabler_type);
 }
 
@@ -189,96 +191,73 @@ static DOMWindowSet& WindowsWithBeforeUnloadEventListeners() {
   return windows_with_before_unload_event_listeners;
 }
 
-static void AddUnloadEventListener(LocalDOMWindow* dom_window) {
+static void TrackUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithUnloadEventListeners();
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, true,
-                                  LocalFrameClient::kUnloadHandler);
+  if (set.insert(dom_window).is_new_entry) {
+    // The first unload handler was added.
+    UpdateSuddenTerminationStatus(dom_window, true, kUnloadHandler);
   }
-
-  set.insert(dom_window);
 }
 
-static void RemoveUnloadEventListener(LocalDOMWindow* dom_window) {
+static void UntrackUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithUnloadEventListeners();
   DOMWindowSet::iterator it = set.find(dom_window);
   if (it == set.end())
     return;
-  set.erase(it);
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, false,
-                                  LocalFrameClient::kUnloadHandler);
+  if (set.erase(it)) {
+    // The last unload handler was removed.
+    UpdateSuddenTerminationStatus(dom_window, false, kUnloadHandler);
   }
 }
 
-static void RemoveAllUnloadEventListeners(LocalDOMWindow* dom_window) {
+static void UntrackAllUnloadEventListeners(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithUnloadEventListeners();
   DOMWindowSet::iterator it = set.find(dom_window);
   if (it == set.end())
     return;
   set.RemoveAll(it);
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, false,
-                                  LocalFrameClient::kUnloadHandler);
-  }
+  UpdateSuddenTerminationStatus(dom_window, false, kUnloadHandler);
 }
 
-static void AddBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
+static void TrackBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithBeforeUnloadEventListeners();
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, true,
-                                  LocalFrameClient::kBeforeUnloadHandler);
+  if (set.insert(dom_window).is_new_entry) {
+    // The first beforeunload handler was added.
+    UpdateSuddenTerminationStatus(dom_window, true, kBeforeUnloadHandler);
   }
-
-  set.insert(dom_window);
 }
 
-static void RemoveBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
+static void UntrackBeforeUnloadEventListener(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithBeforeUnloadEventListeners();
   DOMWindowSet::iterator it = set.find(dom_window);
   if (it == set.end())
     return;
-  set.erase(it);
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, false,
-                                  LocalFrameClient::kBeforeUnloadHandler);
+  if (set.erase(it)) {
+    // The last beforeunload handler was removed.
+    UpdateSuddenTerminationStatus(dom_window, false, kBeforeUnloadHandler);
   }
 }
 
-static void RemoveAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
+static void UntrackAllBeforeUnloadEventListeners(LocalDOMWindow* dom_window) {
   DOMWindowSet& set = WindowsWithBeforeUnloadEventListeners();
   DOMWindowSet::iterator it = set.find(dom_window);
   if (it == set.end())
     return;
   set.RemoveAll(it);
-  if (set.IsEmpty()) {
-    UpdateSuddenTerminationStatus(dom_window, false,
-                                  LocalFrameClient::kBeforeUnloadHandler);
-  }
-}
-
-static bool AllowsBeforeUnloadListeners(LocalDOMWindow* window) {
-  DCHECK(window);
-  LocalFrame* frame = window->GetFrame();
-  if (!frame)
-    return false;
-  return frame->IsMainFrame();
-}
-
-unsigned LocalDOMWindow::PendingUnloadEventListeners() const {
-  return WindowsWithUnloadEventListeners().count(
-      const_cast<LocalDOMWindow*>(this));
+  UpdateSuddenTerminationStatus(dom_window, false, kBeforeUnloadHandler);
 }
 
 LocalDOMWindow::LocalDOMWindow(LocalFrame& frame)
     : DOMWindow(frame),
-      view_(DOMVisualViewport::Create(this)),
+      document_(this, nullptr),
+      visualViewport_(DOMVisualViewport::Create(this)),
       unused_preloads_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer, &frame),
           this,
           &LocalDOMWindow::WarnUnusedPreloads),
       should_print_when_finished_loading_(false),
-      custom_elements_(this, nullptr) {}
+      custom_elements_(this, nullptr),
+      modulator_(this, nullptr) {}
 
 void LocalDOMWindow::ClearDocument() {
   if (!document_)
@@ -377,14 +356,14 @@ void LocalDOMWindow::EnqueueWindowEvent(Event* event) {
   if (!event_queue_)
     return;
   event->SetTarget(this);
-  event_queue_->EnqueueEvent(event);
+  event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
 }
 
 void LocalDOMWindow::EnqueueDocumentEvent(Event* event) {
   if (!event_queue_)
     return;
   event->SetTarget(document_.Get());
-  event_queue_->EnqueueEvent(event);
+  event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
 }
 
 void LocalDOMWindow::DispatchWindowLoadEvent() {
@@ -518,7 +497,7 @@ void LocalDOMWindow::Reset() {
 }
 
 void LocalDOMWindow::SendOrientationChangeEvent() {
-  DCHECK(RuntimeEnabledFeatures::orientationEventEnabled());
+  DCHECK(RuntimeEnabledFeatures::OrientationEventEnabled());
   DCHECK(GetFrame()->IsLocalRoot());
 
   // Before dispatching the event, build a list of all frames in the page
@@ -541,7 +520,7 @@ void LocalDOMWindow::SendOrientationChangeEvent() {
 }
 
 int LocalDOMWindow::orientation() const {
-  DCHECK(RuntimeEnabledFeatures::orientationEventEnabled());
+  DCHECK(RuntimeEnabledFeatures::OrientationEventEnabled());
 
   if (!GetFrame() || !GetFrame()->GetPage())
     return 0;
@@ -648,8 +627,8 @@ void LocalDOMWindow::PostMessageTimerFired(PostMessageTimer* timer) {
 
   MessageEvent* event = timer->Event();
 
-  UserGestureIndicator gesture_indicator(DocumentUserGestureToken::Adopt(
-      document(), timer->GetUserGestureToken()));
+  UserGestureIndicator gesture_indicator(
+      UserGestureToken::Adopt(document(), timer->GetUserGestureToken()));
 
   event->EntangleMessagePorts(document());
 
@@ -697,7 +676,7 @@ void LocalDOMWindow::DispatchMessageEventWithOriginCheck(
           sender, RedirectStatus::kNoRedirect,
           SecurityViolationReportingPolicy::kSuppressReporting)) {
     UseCounter::Count(
-        GetFrame(), UseCounter::kPostMessageIncomingWouldBeBlockedByConnectSrc);
+        GetFrame(), WebFeature::kPostMessageIncomingWouldBeBlockedByConnectSrc);
   }
 
   DispatchEvent(event);
@@ -729,7 +708,7 @@ void LocalDOMWindow::print(ScriptState* script_state) {
 
   if (script_state &&
       v8::MicrotasksScope::IsRunningMicrotasks(script_state->GetIsolate())) {
-    UseCounter::Count(document(), UseCounter::kDuring_Microtask_Print);
+    UseCounter::Count(document(), WebFeature::kDuring_Microtask_Print);
   }
 
   if (GetFrame()->IsLoading()) {
@@ -738,7 +717,7 @@ void LocalDOMWindow::print(ScriptState* script_state) {
   }
 
   UseCounter::CountCrossOriginIframe(*document(),
-                                     UseCounter::kCrossOriginWindowPrint);
+                                     WebFeature::kCrossOriginWindowPrint);
 
   should_print_when_finished_loading_ = false;
   page->GetChromeClient().Print(GetFrame());
@@ -755,7 +734,7 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
     return;
 
   if (document()->IsSandboxed(kSandboxModals)) {
-    UseCounter::Count(document(), UseCounter::kDialogInSandboxedContext);
+    UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(ConsoleMessage::Create(
         kSecurityMessageSource, kErrorMessageLevel,
         "Ignored call to 'alert()'. The document is sandboxed, and the "
@@ -765,27 +744,27 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
 
   switch (document()->GetEngagementLevel()) {
     case mojom::blink::EngagementLevel::NONE:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementNone);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementNone);
       break;
     case mojom::blink::EngagementLevel::MINIMAL:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementMinimal);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementMinimal);
       break;
     case mojom::blink::EngagementLevel::LOW:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementLow);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementLow);
       break;
     case mojom::blink::EngagementLevel::MEDIUM:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementMedium);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementMedium);
       break;
     case mojom::blink::EngagementLevel::HIGH:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementHigh);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementHigh);
       break;
     case mojom::blink::EngagementLevel::MAX:
-      UseCounter::Count(document(), UseCounter::kAlertEngagementMax);
+      UseCounter::Count(document(), WebFeature::kAlertEngagementMax);
       break;
   }
 
   if (v8::MicrotasksScope::IsRunningMicrotasks(script_state->GetIsolate())) {
-    UseCounter::Count(document(), UseCounter::kDuring_Microtask_Alert);
+    UseCounter::Count(document(), WebFeature::kDuring_Microtask_Alert);
   }
 
   document()->UpdateStyleAndLayoutTree();
@@ -795,7 +774,7 @@ void LocalDOMWindow::alert(ScriptState* script_state, const String& message) {
     return;
 
   UseCounter::CountCrossOriginIframe(*document(),
-                                     UseCounter::kCrossOriginWindowAlert);
+                                     WebFeature::kCrossOriginWindowAlert);
 
   page->GetChromeClient().OpenJavaScriptAlert(GetFrame(), message);
 }
@@ -805,7 +784,7 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
     return false;
 
   if (document()->IsSandboxed(kSandboxModals)) {
-    UseCounter::Count(document(), UseCounter::kDialogInSandboxedContext);
+    UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(ConsoleMessage::Create(
         kSecurityMessageSource, kErrorMessageLevel,
         "Ignored call to 'confirm()'. The document is sandboxed, and the "
@@ -815,27 +794,27 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
 
   switch (document()->GetEngagementLevel()) {
     case mojom::blink::EngagementLevel::NONE:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementNone);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementNone);
       break;
     case mojom::blink::EngagementLevel::MINIMAL:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementMinimal);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementMinimal);
       break;
     case mojom::blink::EngagementLevel::LOW:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementLow);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementLow);
       break;
     case mojom::blink::EngagementLevel::MEDIUM:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementMedium);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementMedium);
       break;
     case mojom::blink::EngagementLevel::HIGH:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementHigh);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementHigh);
       break;
     case mojom::blink::EngagementLevel::MAX:
-      UseCounter::Count(document(), UseCounter::kConfirmEngagementMax);
+      UseCounter::Count(document(), WebFeature::kConfirmEngagementMax);
       break;
   }
 
   if (v8::MicrotasksScope::IsRunningMicrotasks(script_state->GetIsolate())) {
-    UseCounter::Count(document(), UseCounter::kDuring_Microtask_Confirm);
+    UseCounter::Count(document(), WebFeature::kDuring_Microtask_Confirm);
   }
 
   document()->UpdateStyleAndLayoutTree();
@@ -845,7 +824,7 @@ bool LocalDOMWindow::confirm(ScriptState* script_state, const String& message) {
     return false;
 
   UseCounter::CountCrossOriginIframe(*document(),
-                                     UseCounter::kCrossOriginWindowConfirm);
+                                     WebFeature::kCrossOriginWindowConfirm);
 
   return page->GetChromeClient().OpenJavaScriptConfirm(GetFrame(), message);
 }
@@ -857,7 +836,7 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
     return String();
 
   if (document()->IsSandboxed(kSandboxModals)) {
-    UseCounter::Count(document(), UseCounter::kDialogInSandboxedContext);
+    UseCounter::Count(document(), WebFeature::kDialogInSandboxedContext);
     GetFrameConsole()->AddMessage(ConsoleMessage::Create(
         kSecurityMessageSource, kErrorMessageLevel,
         "Ignored call to 'prompt()'. The document is sandboxed, and the "
@@ -867,27 +846,27 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
 
   switch (document()->GetEngagementLevel()) {
     case mojom::blink::EngagementLevel::NONE:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementNone);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementNone);
       break;
     case mojom::blink::EngagementLevel::MINIMAL:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementMinimal);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementMinimal);
       break;
     case mojom::blink::EngagementLevel::LOW:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementLow);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementLow);
       break;
     case mojom::blink::EngagementLevel::MEDIUM:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementMedium);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementMedium);
       break;
     case mojom::blink::EngagementLevel::HIGH:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementHigh);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementHigh);
       break;
     case mojom::blink::EngagementLevel::MAX:
-      UseCounter::Count(document(), UseCounter::kPromptEngagementMax);
+      UseCounter::Count(document(), WebFeature::kPromptEngagementMax);
       break;
   }
 
   if (v8::MicrotasksScope::IsRunningMicrotasks(script_state->GetIsolate())) {
-    UseCounter::Count(document(), UseCounter::kDuring_Microtask_Prompt);
+    UseCounter::Count(document(), WebFeature::kDuring_Microtask_Prompt);
   }
 
   document()->UpdateStyleAndLayoutTree();
@@ -902,7 +881,7 @@ String LocalDOMWindow::prompt(ScriptState* script_state,
     return return_value;
 
   UseCounter::CountCrossOriginIframe(*document(),
-                                     UseCounter::kCrossOriginWindowPrompt);
+                                     WebFeature::kCrossOriginWindowPrompt);
 
   return String();
 }
@@ -968,7 +947,7 @@ FloatSize LocalDOMWindow::GetViewportSize(
   if (!GetFrame())
     return FloatSize();
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return FloatSize();
 
@@ -1057,14 +1036,16 @@ double LocalDOMWindow::scrollX() const {
     return 0;
 
   if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return view_->pageLeft();
+    return visualViewport_->pageLeft();
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return 0;
 
   document()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
+  // TODO(bokan): This is wrong when the document.rootScroller is non-default.
+  // crbug.com/505516.
   double viewport_x =
       view->LayoutViewportScrollableArea()->GetScrollOffset().Width();
   return AdjustScrollForAbsoluteZoom(viewport_x, GetFrame()->PageZoomFactor());
@@ -1075,24 +1056,23 @@ double LocalDOMWindow::scrollY() const {
     return 0;
 
   if (!GetFrame()->GetPage()->GetSettings().GetInertVisualViewport())
-    return view_->pageTop();
+    return visualViewport_->pageTop();
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return 0;
 
   document()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
+  // TODO(bokan): This is wrong when the document.rootScroller is non-default.
+  // crbug.com/505516.
   double viewport_y =
       view->LayoutViewportScrollableArea()->GetScrollOffset().Height();
   return AdjustScrollForAbsoluteZoom(viewport_y, GetFrame()->PageZoomFactor());
 }
 
-DOMVisualViewport* LocalDOMWindow::view() {
-  if (!GetFrame())
-    return nullptr;
-
-  return view_;
+DOMVisualViewport* LocalDOMWindow::visualViewport() {
+  return visualViewport_;
 }
 
 const AtomicString& LocalDOMWindow::name() const {
@@ -1117,34 +1097,16 @@ void LocalDOMWindow::setName(const AtomicString& name) {
     return;
 
   GetFrame()->Tree().SetName(name);
-  DCHECK(GetFrame()->Loader().Client());
-  GetFrame()->Loader().Client()->DidChangeName(name);
+  DCHECK(GetFrame()->Client());
+  GetFrame()->Client()->DidChangeName(name);
 }
 
 void LocalDOMWindow::setStatus(const String& string) {
   status_ = string;
-
-  if (!GetFrame())
-    return;
-
-  Page* page = GetFrame()->GetPage();
-  if (!page)
-    return;
-
-  page->GetChromeClient().SetStatusbarText(status_);
 }
 
 void LocalDOMWindow::setDefaultStatus(const String& string) {
   default_status_ = string;
-
-  if (!GetFrame())
-    return;
-
-  Page* page = GetFrame()->GetPage();
-  if (!page)
-    return;
-
-  page->GetChromeClient().SetStatusbarText(default_status_);
 }
 
 String LocalDOMWindow::origin() const {
@@ -1206,7 +1168,7 @@ void LocalDOMWindow::scrollBy(double x,
 
   document()->UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return;
 
@@ -1246,7 +1208,7 @@ void LocalDOMWindow::scrollTo(double x, double y) const {
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return;
 
@@ -1275,7 +1237,7 @@ void LocalDOMWindow::scrollTo(const ScrollToOptions& scroll_to_options) const {
   if (!IsCurrentlyDisplayedInFrame())
     return;
 
-  FrameView* view = GetFrame()->View();
+  LocalFrameView* view = GetFrame()->View();
   if (!view)
     return;
 
@@ -1426,6 +1388,11 @@ CustomElementRegistry* LocalDOMWindow::MaybeCustomElements() const {
   return custom_elements_;
 }
 
+void LocalDOMWindow::SetModulator(Modulator* modulator) {
+  DCHECK(!modulator_);
+  modulator_ = modulator;
+}
+
 External* LocalDOMWindow::external() {
   if (!external_)
     external_ = new External;
@@ -1455,20 +1422,14 @@ void LocalDOMWindow::AddedEventListener(
   }
 
   if (event_type == EventTypeNames::unload) {
-    UseCounter::Count(document(), UseCounter::kDocumentUnloadRegistered);
-    AddUnloadEventListener(this);
+    UseCounter::Count(document(), WebFeature::kDocumentUnloadRegistered);
+    TrackUnloadEventListener(this);
   } else if (event_type == EventTypeNames::beforeunload) {
-    UseCounter::Count(document(), UseCounter::kDocumentBeforeUnloadRegistered);
-    if (AllowsBeforeUnloadListeners(this)) {
-      // This is confusingly named. It doesn't actually add the listener. It
-      // just increments a count so that we know we have listeners registered
-      // for the purposes of determining if we can fast terminate the renderer
-      // process.
-      AddBeforeUnloadEventListener(this);
-    } else {
-      // Subframes return false from allowsBeforeUnloadListeners.
+    UseCounter::Count(document(), WebFeature::kDocumentBeforeUnloadRegistered);
+    TrackBeforeUnloadEventListener(this);
+    if (GetFrame() && !GetFrame()->IsMainFrame()) {
       UseCounter::Count(document(),
-                        UseCounter::kSubFrameBeforeUnloadRegistered);
+                        WebFeature::kSubFrameBeforeUnloadRegistered);
     }
   }
 }
@@ -1486,10 +1447,9 @@ void LocalDOMWindow::RemovedEventListener(
   }
 
   if (event_type == EventTypeNames::unload) {
-    RemoveUnloadEventListener(this);
-  } else if (event_type == EventTypeNames::beforeunload &&
-             AllowsBeforeUnloadListeners(this)) {
-    RemoveBeforeUnloadEventListener(this);
+    UntrackUnloadEventListener(this);
+  } else if (event_type == EventTypeNames::beforeunload) {
+    UntrackBeforeUnloadEventListener(this);
   }
 }
 
@@ -1511,7 +1471,6 @@ void LocalDOMWindow::DispatchLoadEvent() {
     DocumentLoadTiming& timing = document_loader->GetTiming();
     timing.MarkLoadEventStart();
     DispatchEvent(load_event, document());
-    SetHasLoadEventFired();
     timing.MarkLoadEventEnd();
     DCHECK(document_loader->Fetcher());
     // If fetcher->countPreloads() is not empty here, it's full of link
@@ -1581,8 +1540,8 @@ void LocalDOMWindow::RemoveAllEventListeners() {
     GetFrame()->GetPage()->GetEventHandlerRegistry().DidRemoveAllEventHandlers(
         *this);
 
-  RemoveAllUnloadEventListeners(this);
-  RemoveAllBeforeUnloadEventListeners(this);
+  UntrackAllUnloadEventListeners(this);
+  UntrackAllBeforeUnloadEventListeners(this);
 }
 
 void LocalDOMWindow::FinishedLoading() {
@@ -1620,9 +1579,9 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
   if (!first_frame)
     return nullptr;
 
-  UseCounter::Count(*active_document, UseCounter::kDOMWindowOpen);
+  UseCounter::Count(*active_document, WebFeature::kDOMWindowOpen);
   if (!window_features_string.IsEmpty())
-    UseCounter::Count(*active_document, UseCounter::kDOMWindowOpenFeatures);
+    UseCounter::Count(*active_document, WebFeature::kDOMWindowOpenFeatures);
 
   // Get the target frame for the special cases of _top and _parent.
   // In those cases, we schedule a location change right now and return early.
@@ -1656,11 +1615,10 @@ DOMWindow* LocalDOMWindow::open(const String& url_string,
     return target_frame->DomWindow();
   }
 
-  WindowFeatures features(window_features_string);
   DOMWindow* new_window =
-      CreateWindow(url_string, frame_name, features, *calling_window,
-                   *first_frame, *GetFrame(), exception_state);
-  return features.noopener ? nullptr : new_window;
+      CreateWindow(url_string, frame_name, window_features_string,
+                   *calling_window, *first_frame, *GetFrame(), exception_state);
+  return new_window;
 }
 
 DEFINE_TRACE(LocalDOMWindow) {
@@ -1676,11 +1634,12 @@ DEFINE_TRACE(LocalDOMWindow) {
   visitor->Trace(navigator_);
   visitor->Trace(media_);
   visitor->Trace(custom_elements_);
+  visitor->Trace(modulator_);
   visitor->Trace(external_);
   visitor->Trace(application_cache_);
   visitor->Trace(event_queue_);
   visitor->Trace(post_message_timers_);
-  visitor->Trace(view_);
+  visitor->Trace(visualViewport_);
   visitor->Trace(event_listener_observers_);
   DOMWindow::Trace(visitor);
   Supplementable<LocalDOMWindow>::Trace(visitor);
@@ -1688,6 +1647,8 @@ DEFINE_TRACE(LocalDOMWindow) {
 
 DEFINE_TRACE_WRAPPERS(LocalDOMWindow) {
   visitor->TraceWrappers(custom_elements_);
+  visitor->TraceWrappers(document_);
+  visitor->TraceWrappers(modulator_);
   DOMWindow::TraceWrappers(visitor);
 }
 

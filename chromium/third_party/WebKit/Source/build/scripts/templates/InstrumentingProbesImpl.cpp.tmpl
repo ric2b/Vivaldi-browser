@@ -1,9 +1,9 @@
-// This file is generated from {{input_file}}
-
 // Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+{% from 'macros.tmpl' import source_files_for_generated_file %}
+{{source_files_for_generated_file(template_file, input_files)}}
 
 {% set sink_class = (name | to_singular) + "Sink" %}
 {% for file in files %}
@@ -51,13 +51,12 @@ namespace probe {
 
 {% macro probe_body(probe, common_name) %}
 {% set agent_probe_name = method_name(common_name or probe.name) %}
-  {{sink_class}}* sink = To{{sink_class}}({{probe.params[0].name}});
-  if (!sink)
+  if (!probe_sink)
     return;
 {% for agent in probe.agents %}
 {% set class_name = agent | agent_name_to_class %}
-  if (sink->has{{class_name}}s()) {
-    for ({{class_name}}* agent : sink->{{ class_name | to_lower_case }}s())
+  if (probe_sink->has{{class_name}}s()) {
+    for ({{class_name}}* agent : probe_sink->{{ class_name | to_lower_case }}s())
       agent->{{agent_probe_name}}({{caller()}});
   }
 {% endfor %}
@@ -72,6 +71,7 @@ namespace probe {
 {%- if not loop.last %},
 {% endif %}
 {% endfor %} {
+  probe_sink = To{{sink_class}}({{probe.params[0].name}});
 {% call probe_body(probe, "Will") %}*this{% endcall %}
 }
 
@@ -82,6 +82,7 @@ namespace probe {
 {% else -%}
 
 CORE_EXPORT void {{probe.name}}({{ params_list(probe) }}) {
+  {{sink_class}}* probe_sink = To{{sink_class}}({{probe.params[0].name}});
 {% call probe_body(probe, "") %}
 {%- for param in probe.params %}
 {%- if not loop.first or "Keep" in param.options -%}

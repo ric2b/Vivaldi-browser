@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/location.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -54,7 +55,12 @@ UrlData::UrlData(const GURL& url,
       multibuffer_(this, url_index_->block_shift_),
       frame_(url_index->frame()) {}
 
-UrlData::~UrlData() {}
+UrlData::~UrlData() {
+  UMA_HISTOGRAM_MEMORY_KB("Media.BytesReadFromCache",
+                          BytesReadFromCache() >> 10);
+  UMA_HISTOGRAM_MEMORY_KB("Media.BytesReadFromNetwork",
+                          BytesReadFromNetwork() >> 10);
+}
 
 std::pair<GURL, UrlData::CORSMode> UrlData::key() const {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -149,10 +155,19 @@ void UrlData::OnEmpty() {
                             scoped_refptr<UrlData>(this)));
 }
 
-bool UrlData::Valid() const {
+bool UrlData::FullyCached() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  if (length_ == kPositionNotSpecified)
+    return false;
+  // Check that the first unavailable block in the cache is after the
+  // end of the file.
+  return (multibuffer()->FindNextUnavailable(0) << kBlockSizeShift) >= length_;
+}
+
+bool UrlData::Valid() {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::Time now = base::Time::Now();
-  if (!range_supported_)
+  if (!range_supported_ && !FullyCached())
     return false;
   // When ranges are not supported, we cannot re-use cached data.
   if (valid_until_ > now)
@@ -193,9 +208,10 @@ size_t UrlData::CachedSize() {
   return multibuffer()->map().size();
 }
 
-UrlIndex::UrlIndex(blink::WebFrame* frame) : UrlIndex(frame, kBlockSizeShift) {}
+UrlIndex::UrlIndex(blink::WebLocalFrame* frame)
+    : UrlIndex(frame, kBlockSizeShift) {}
 
-UrlIndex::UrlIndex(blink::WebFrame* frame, int block_shift)
+UrlIndex::UrlIndex(blink::WebLocalFrame* frame, int block_shift)
     : frame_(frame),
       lru_(new MultiBuffer::GlobalLRU(base::ThreadTaskRunnerHandle::Get())),
       block_shift_(block_shift),

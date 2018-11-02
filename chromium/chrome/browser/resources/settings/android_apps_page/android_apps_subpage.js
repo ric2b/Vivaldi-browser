@@ -50,22 +50,6 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
-   * @private
-   */
-  onManageAndroidAppsKeydown_: function(event) {
-    if (event.key != 'Enter' && event.key != ' ')
-      return;
-    this.browserProxy_.showAndroidAppsSettings(true /** keyboardAction */);
-    event.stopPropagation();
-  },
-
-  /** @private */
-  onManageAndroidAppsTap_: function(event) {
-    this.browserProxy_.showAndroidAppsSettings(false /** keyboardAction */);
-  },
-
-  /**
    * @return {boolean}
    * @private
    */
@@ -76,7 +60,7 @@ Polymer({
 
   /**
    * Shows a confirmation dialog when disabling android apps.
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onRemoveTap_: function(event) {

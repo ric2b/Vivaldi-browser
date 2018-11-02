@@ -5,7 +5,7 @@
 #ifndef COMPONENTS_SIGNIN_CORE_COMMON_SIGNIN_SWITCHES_H_
 #define COMPONENTS_SIGNIN_CORE_COMMON_SIGNIN_SWITCHES_H_
 
-#include "base/feature_list.h"
+#include "components/signin/core/common/signin_features.h"
 
 namespace switches {
 
@@ -22,10 +22,12 @@ extern const char kEnableRefreshTokenAnnotationRequest[];
 extern const char kEnableSigninPromo[];
 extern const char kExtensionsMultiAccount[];
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
-// Note: Account consistency is already enabled on mobile platforms, so this
-// switch only exist on desktop platforms.
-extern const char kEnableAccountConsistency[];
+#if !BUILDFLAG(ENABLE_MIRROR)
+// Note: Account consistency (Mirror) is already enabled on mobile platforms, so
+// this switch only exist on desktop platforms.
+extern const char kAccountConsistency[];
+extern const char kAccountConsistencyMirror[];
+extern const char kAccountConsistencyDice[];
 #endif
 
 }  // namespace switches

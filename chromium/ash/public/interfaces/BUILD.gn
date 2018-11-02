@@ -13,13 +13,18 @@ mojom("interfaces_internal") {
 
   sources = [
     "accelerator_controller.mojom",
+    "ash_display_controller.mojom",
     "cast_config.mojom",
     "constants.mojom",
     "event_properties.mojom",
+    "ime_controller.mojom",
+    "ime_info.mojom",
     "locale.mojom",
     "lock_screen.mojom",
+    "login_user_info.mojom",
     "media.mojom",
     "new_window.mojom",
+    "night_light_controller.mojom",
     "session_controller.mojom",
     "shelf.mojom",
     "shutdown.mojom",
@@ -27,6 +32,7 @@ mojom("interfaces_internal") {
     "touch_view.mojom",
     "tray_action.mojom",
     "update.mojom",
+    "user_info.mojom",
     "volume.mojom",
     "vpn_list.mojom",
     "wallpaper.mojom",
@@ -35,6 +41,7 @@ mojom("interfaces_internal") {
   ]
 
   public_deps = [
+    "//components/proximity_auth/public/interfaces",
     "//components/signin/public/interfaces",
     "//mojo/common:common_custom_types",
     "//skia/public/interfaces",

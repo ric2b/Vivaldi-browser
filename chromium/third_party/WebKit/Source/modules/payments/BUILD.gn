@@ -6,16 +6,24 @@ import("//third_party/WebKit/Source/modules/modules.gni")
 
 blink_modules_sources("payments") {
   sources = [
+    "AbortPaymentEvent.cpp",
+    "AbortPaymentEvent.h",
+    "CanMakePaymentEvent.cpp",
+    "CanMakePaymentEvent.h",
+    "CanMakePaymentRespondWithObserver.cpp",
+    "CanMakePaymentRespondWithObserver.h",
     "HTMLIFrameElementPayments.cpp",
     "HTMLIFrameElementPayments.h",
     "PaymentAddress.cpp",
     "PaymentAddress.h",
-    "PaymentAppRequestConversion.cpp",
-    "PaymentAppRequestConversion.h",
     "PaymentAppServiceWorkerGlobalScope.h",
     "PaymentAppServiceWorkerRegistration.cpp",
     "PaymentAppServiceWorkerRegistration.h",
     "PaymentCompleter.h",
+    "PaymentEventDataConversion.cpp",
+    "PaymentEventDataConversion.h",
+    "PaymentHandlerUtils.cpp",
+    "PaymentHandlerUtils.h",
     "PaymentInstruments.cpp",
     "PaymentInstruments.h",
     "PaymentManager.cpp",
@@ -33,9 +41,5 @@ blink_modules_sources("payments") {
     "PaymentUpdater.h",
     "PaymentsValidators.cpp",
     "PaymentsValidators.h",
-  ]
-  deps = [
-    "//components/payments/mojom:mojom_blink",
-    "//components/payments/mojom:mojom_payment_app_blink",
   ]
 }

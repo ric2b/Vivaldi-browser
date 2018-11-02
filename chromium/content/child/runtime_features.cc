@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/metrics/field_trial.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
@@ -48,8 +49,11 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
   WebRuntimeFeatures::EnableOnDeviceChange(false);
   WebRuntimeFeatures::EnableMediaSession(true);
   WebRuntimeFeatures::EnableMediaControlsOverlayPlayButton(true);
+  WebRuntimeFeatures::EnableRemotePlaybackBackend(true);
 #else  // defined(OS_ANDROID)
   WebRuntimeFeatures::EnableNavigatorContentUtils(true);
+  // Tracking bug for the implementation: https://crbug.com/728609
+  WebRuntimeFeatures::EnableRemotePlaybackBackend(false);
 #endif  // defined(OS_ANDROID)
 
 #if defined(OS_ANDROID) || defined(USE_AURA)
@@ -57,14 +61,20 @@ static void SetRuntimeFeatureDefaultsForPlatform() {
 #endif
 
 #if !(defined OS_ANDROID || defined OS_CHROMEOS)
-    // Only Android, ChromeOS support NetInfo right now.
-  WebRuntimeFeatures::EnableNetworkInformation(false);
+  // Only Android, ChromeOS support NetInfo downlinkMax, type and ontypechange
+  // now.
+  WebRuntimeFeatures::EnableNetInfoDownlinkMax(false);
 #endif
 
 // Web Bluetooth is shipped on Android, ChromeOS & MacOS, experimental
 // otherwise.
 #if defined(OS_CHROMEOS) || defined(OS_ANDROID) || defined(OS_MACOSX)
   WebRuntimeFeatures::EnableWebBluetooth(true);
+#endif
+
+// Web Share is shipped on Android, experimental otherwise.
+#if defined(OS_ANDROID)
+  WebRuntimeFeatures::EnableWebShare(true);
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -185,9 +195,9 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnablePrintBrowser))
     WebRuntimeFeatures::EnablePrintBrowser(true);
 
-  if (command_line.HasSwitch(switches::kEnableNetworkInformation) ||
+  if (command_line.HasSwitch(switches::kEnableNetworkInformationDownlinkMax) ||
       enableExperimentalWebPlatformFeatures) {
-    WebRuntimeFeatures::EnableNetworkInformation(true);
+    WebRuntimeFeatures::EnableNetInfoDownlinkMax(true);
   }
 
   if (command_line.HasSwitch(switches::kReducedReferrerGranularity))
@@ -258,15 +268,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (command_line.HasSwitch(switches::kEnableSlimmingPaintV2))
     WebRuntimeFeatures::EnableSlimmingPaintV2(true);
 
-  WebRuntimeFeatures::EnableSlimmingPaintInvalidation(
-      base::FeatureList::IsEnabled(features::kSlimmingPaintInvalidation));
-
-  if (command_line.HasSwitch(switches::kEnableSlimmingPaintInvalidation))
-    WebRuntimeFeatures::EnableSlimmingPaintInvalidation(true);
-
-  if (command_line.HasSwitch(switches::kDisableSlimmingPaintInvalidation))
-    WebRuntimeFeatures::EnableSlimmingPaintInvalidation(false);
-
   if (base::FeatureList::IsEnabled(features::kDocumentWriteEvaluator))
     WebRuntimeFeatures::EnableDocumentWriteEvaluator(true);
 
@@ -275,9 +276,6 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
 
   WebRuntimeFeatures::EnableMediaDocumentDownloadButton(
       base::FeatureList::IsEnabled(features::kMediaDocumentDownloadButton));
-
-  WebRuntimeFeatures::EnablePointerEvent(
-      base::FeatureList::IsEnabled(features::kPointerEvents));
 
   WebRuntimeFeatures::EnablePassiveDocumentEventListeners(
       base::FeatureList::IsEnabled(features::kPassiveDocumentEventListeners));
@@ -329,8 +327,14 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   WebRuntimeFeatures::EnableServiceWorkerNavigationPreload(
       base::FeatureList::IsEnabled(features::kServiceWorkerNavigationPreload));
 
+  WebRuntimeFeatures::EnableServiceWorkerScriptStreaming(
+      base::FeatureList::IsEnabled(features::kServiceWorkerScriptStreaming));
+
   WebRuntimeFeatures::EnableOffMainThreadFetch(
       base::FeatureList::IsEnabled(features::kOffMainThreadFetch));
+
+  WebRuntimeFeatures::EnableMojoBlobs(
+      base::FeatureList::IsEnabled(features::kMojoBlobs));
 
   if (base::FeatureList::IsEnabled(features::kGamepadExtensions))
     WebRuntimeFeatures::EnableGamepadExtensions(true);
@@ -342,12 +346,21 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
   if (!base::FeatureList::IsEnabled(features::kCompositeOpaqueScrollers))
     WebRuntimeFeatures::EnableFeatureFromString("CompositeOpaqueScrollers",
                                                 false);
+  if (base::FeatureList::IsEnabled(features::kCompositorTouchAction))
+    WebRuntimeFeatures::EnableCompositorTouchAction(true);
+
+  if (base::FeatureList::IsEnabled(features::kSkipCompositingSmallScrollers))
+    WebRuntimeFeatures::EnableSkipCompositingSmallScrollers(true);
 
   if (base::FeatureList::IsEnabled(features::kGenericSensor))
     WebRuntimeFeatures::EnableGenericSensor(true);
 
-  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo))
+  if (base::FeatureList::IsEnabled(features::kLoadingWithMojo) ||
+      base::FeatureList::IsEnabled(features::kNetworkService))
     WebRuntimeFeatures::EnableLoadingWithMojo(true);
+
+  WebRuntimeFeatures::EnableMediaCastOverlayButton(
+      base::FeatureList::IsEnabled(media::kMediaCastOverlayButton));
 
   if (!base::FeatureList::IsEnabled(features::kBlockCredentialedSubresources)) {
     WebRuntimeFeatures::EnableFeatureFromString("BlockCredentialedSubresources",
@@ -372,8 +385,27 @@ void SetRuntimeFeaturesDefaultsAndUpdateFromArgs(
     WebRuntimeFeatures::EnableAutoplayMutedVideos(true);
   }
 
-  WebRuntimeFeatures::EnableLocationHardReload(
-      base::FeatureList::IsEnabled(features::kLocationHardReload));
+  if (!base::FeatureList::IsEnabled(features::kWebAuth) &&
+      !enableExperimentalWebPlatformFeatures)
+    WebRuntimeFeatures::EnableWebAuth(false);
+
+  WebRuntimeFeatures::EnableModuleScripts(
+      base::FeatureList::IsEnabled(features::kModuleScripts));
+
+  WebRuntimeFeatures::EnableClientPlaceholdersForServerLoFi(
+      base::GetFieldTrialParamValue("PreviewsClientLoFi",
+                                    "replace_server_placeholders") == "true");
+
+  WebRuntimeFeatures::EnableResourceLoadScheduler(
+      base::FeatureList::IsEnabled(features::kResourceLoadScheduler));
+
+  if (command_line.HasSwitch(
+          switches::kDisableOriginTrialControlledBlinkFeatures)) {
+    WebRuntimeFeatures::EnableOriginTrialControlledFeatures(false);
+  }
+
+  WebRuntimeFeatures::EnableLazyInitializeMediaControls(
+      base::FeatureList::IsEnabled(features::kLazyInitializeMediaControls));
 
   // Enable explicitly enabled features, and then disable explicitly disabled
   // ones.

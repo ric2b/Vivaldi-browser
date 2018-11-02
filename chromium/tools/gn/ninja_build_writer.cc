@@ -242,6 +242,7 @@ bool NinjaBuildWriter::RunAndWriteFile(
 }
 
 void NinjaBuildWriter::WriteNinjaRules() {
+  out_ << "ninja_required_version = 1.7.2\n\n";
   out_ << "rule gn\n";
   out_ << "  command = " << GetSelfInvocationCommand(build_settings_) << "\n";
   out_ << "  description = Regenerating ninja files\n\n";
@@ -286,6 +287,14 @@ void NinjaBuildWriter::WriteAllPools() {
   }
   for (auto* it: build_settings_->global_pools() )
     used_pools.insert(it->AsPool());
+
+  for (const Target* target : default_toolchain_targets_) {
+    if (target->output_type() == Target::ACTION) {
+      const LabelPtrPair<Pool>& pool = target->action_values().pool();
+      if (pool.ptr)
+        used_pools.insert(pool.ptr);
+    }
+  }
 
   // Write pools sorted by their name, to make output deterministic.
   std::vector<const Pool*> sorted_pools(used_pools.begin(), used_pools.end());

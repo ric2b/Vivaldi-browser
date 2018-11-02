@@ -14,6 +14,7 @@
 #include "chrome/test/base/tracing.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/test/test_utils.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
 #include "url/gurl.h"
 
 namespace {
@@ -21,8 +22,8 @@ namespace {
 using base::trace_event::MemoryDumpType;
 
 void RequestGlobalDumpCallback(base::Closure quit_closure,
-                               uint64_t,
-                               bool success) {
+                               bool success,
+                               uint64_t) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, quit_closure);
   ASSERT_TRUE(success);
 }
@@ -30,9 +31,10 @@ void RequestGlobalDumpCallback(base::Closure quit_closure,
 void OnStartTracingDoneCallback(
     base::trace_event::MemoryDumpLevelOfDetail explicit_dump_type,
     base::Closure quit_closure) {
-  base::trace_event::MemoryDumpManager::GetInstance()->RequestGlobalDump(
-      MemoryDumpType::EXPLICITLY_TRIGGERED, explicit_dump_type,
-      Bind(&RequestGlobalDumpCallback, quit_closure));
+  memory_instrumentation::MemoryInstrumentation::GetInstance()
+      ->RequestGlobalDumpAndAppendToTrace(
+          MemoryDumpType::EXPLICITLY_TRIGGERED, explicit_dump_type,
+          Bind(&RequestGlobalDumpCallback, quit_closure));
 }
 
 class ProcessMemoryMetricsEmitterFake : public ProcessMemoryMetricsEmitter {
@@ -44,11 +46,11 @@ class ProcessMemoryMetricsEmitterFake : public ProcessMemoryMetricsEmitter {
   ~ProcessMemoryMetricsEmitterFake() override {}
 
   void ReceivedMemoryDump(
-      uint64_t dump_guid,
       bool success,
+      uint64_t dump_guid,
       memory_instrumentation::mojom::GlobalMemoryDumpPtr ptr) override {
     EXPECT_TRUE(success);
-    ProcessMemoryMetricsEmitter::ReceivedMemoryDump(dump_guid, success,
+    ProcessMemoryMetricsEmitter::ReceivedMemoryDump(success, dump_guid,
                                                     std::move(ptr));
     if (run_loop_)
       run_loop_->Quit();
@@ -86,19 +88,12 @@ void CheckMemoryMetric(const std::string& name,
 
 void CheckAllMemoryMetrics(const base::HistogramTester& histogram_tester,
                            int count) {
-#if (defined(OS_MACOSX) && !defined(OS_IOS)) || defined(OS_LINUX) || \
-    defined(OS_ANDROID)
-  bool private_footprint_implemented = true;
-#else
-  bool private_footprint_implemented = false;
-#endif
-
   CheckMemoryMetric("Memory.Experimental.Browser2.Malloc", histogram_tester,
                     count, true);
   CheckMemoryMetric("Memory.Experimental.Browser2.Resident", histogram_tester,
                     count, true);
   CheckMemoryMetric("Memory.Experimental.Browser2.PrivateMemoryFootprint",
-                    histogram_tester, count, private_footprint_implemented);
+                    histogram_tester, count, true);
   CheckMemoryMetric("Memory.Experimental.Renderer2.Malloc", histogram_tester,
                     count, true);
   CheckMemoryMetric("Memory.Experimental.Renderer2.Resident", histogram_tester,
@@ -110,7 +105,9 @@ void CheckAllMemoryMetrics(const base::HistogramTester& histogram_tester,
   CheckMemoryMetric("Memory.Experimental.Renderer2.V8", histogram_tester, count,
                     true);
   CheckMemoryMetric("Memory.Experimental.Renderer2.PrivateMemoryFootprint",
-                    histogram_tester, count, private_footprint_implemented);
+                    histogram_tester, count, true);
+  CheckMemoryMetric("Memory.Experimental.Total2.PrivateMemoryFootprint",
+                    histogram_tester, count, true);
 }
 
 }  // namespace

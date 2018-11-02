@@ -13,8 +13,8 @@
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutReplaced.h"
 #include "core/layout/TextRunConstructor.h"
+#include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "core/paint/BoxPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/geometry/LayoutPoint.h"
@@ -148,12 +148,8 @@ void ImagePainter::PaintIntoRect(GraphicsContext& context,
   if (!image || image->IsNull())
     return;
 
-  // FIXME: why is interpolation quality selection not included in the
-  // Instrumentation reported cost of drawing an image?
   InterpolationQuality interpolation_quality =
-      BoxPainter::ChooseInterpolationQuality(
-          layout_image_, image.Get(), image.Get(),
-          LayoutSize(pixel_snapped_dest_rect.Size()));
+      layout_image_.StyleRef().GetInterpolationQuality();
 
   FloatRect src_rect = image->Rect();
   // If the content rect requires clipping, adjust |srcRect| and

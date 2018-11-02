@@ -230,18 +230,6 @@ bool Authorization::operator==(const Authorization& other) const {
   return key == other.key && label == other.label;
 }
 
-MountParameters::MountParameters(bool ephemeral) : ephemeral(ephemeral) {
-}
-
-MountParameters::MountParameters(const MountParameters& other) = default;
-
-bool MountParameters::operator==(const MountParameters& other) const {
-  return ephemeral == other.ephemeral && create_keys == other.create_keys;
-}
-
-MountParameters::~MountParameters() {
-}
-
 bool GetGaiaIdMigrationStatus(const AccountId& account_id) {
   return user_manager::known_user::GetGaiaIdMigrationStatus(account_id,
                                                             kCryptohome);
@@ -253,12 +241,3 @@ void SetGaiaIdMigrationStatusDone(const AccountId& account_id) {
 }
 
 }  // namespace cryptohome
-
-namespace BASE_HASH_NAMESPACE {
-
-std::size_t hash<cryptohome::Identification>::operator()(
-    const cryptohome::Identification& cryptohome_id) const {
-  return hash<std::string>()(cryptohome_id.id());
-}
-
-}  // namespace BASE_HASH_NAMESPACE

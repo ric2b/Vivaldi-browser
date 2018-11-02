@@ -6,12 +6,13 @@
 
 #import <WebKit/WebKit.h>
 
+#include <stdint.h>
+
 #include <memory>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/containers/hash_tables.h"
-#import "base/ios/weak_nsobject.h"
 #include "base/logging.h"
 #import "base/mac/bind_objc_block.h"
 #include "base/memory/ref_counted.h"
@@ -25,9 +26,6 @@
 #include "ios/chrome/browser/signin/account_consistency_service_factory.h"
 #import "ios/chrome/browser/snapshots/snapshots_util.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
-#include "ios/public/provider/chrome/browser/chrome_browser_provider.h"
-#import "ios/public/provider/chrome/browser/native_app_launcher/native_app_metadata.h"
-#import "ios/public/provider/chrome/browser/native_app_launcher/native_app_whitelist_manager.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
@@ -37,14 +35,16 @@
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace {
 // Empty callback used by DeleteAllCreatedBetweenAsync below.
-void DoNothing(int n) {}
+void DoNothing(uint32_t n) {}
 }
 
 @interface BrowsingDataRemovalController ()
-// Removes data used by the Google App Launcher.
-- (void)removeGALData;
 // Removes browsing data that is created by web views associated with
 // |browserState|. |mask| is obtained from
 // IOSChromeBrowsingDataRemover::RemoveDataMask. |deleteBegin| defines the begin
@@ -111,7 +111,7 @@ void DoNothing(int n) {}
   // operations.
   std::unique_ptr<BrowsingDataRemoverHelper> _browsingDataRemoverHelper;
   // The delegate.
-  base::WeakNSProtocol<id<BrowsingDataRemovalControllerDelegate>> _delegate;
+  __weak id<BrowsingDataRemovalControllerDelegate> _delegate;
   // A map that tracks the number of pending removals for a given
   // ChromeBrowserState.
   base::hash_map<ios::ChromeBrowserState*, int> _pendingRemovalCount;
@@ -122,7 +122,7 @@ void DoNothing(int n) {}
   if ((self = [super init])) {
     DCHECK(delegate);
     _browsingDataRemoverHelper.reset(new BrowsingDataRemoverHelper());
-    _delegate.reset(delegate);
+    _delegate = delegate;
   }
   return self;
 }
@@ -158,7 +158,7 @@ void DoNothing(int n) {}
   };
 
   scoped_refptr<CallbackCounter> callbackCounter =
-      new CallbackCounter(base::BindBlock(browsingDataCleared));
+      new CallbackCounter(base::BindBlockArc(browsingDataCleared));
   ProceduralBlock decrementCallbackCounterCount = ^{
     callbackCounter->DecrementCount();
   };
@@ -184,7 +184,7 @@ void DoNothing(int n) {}
   if (!browserState->IsOffTheRecord()) {
     callbackCounter->IncrementCount();
     _browsingDataRemoverHelper->Remove(browserState, mask, timePeriod,
-                                       base::BindBlock(^{
+                                       base::BindBlockArc(^{
                                          callbackCounter->DecrementCount();
                                        }));
   }
@@ -233,13 +233,6 @@ void DoNothing(int n) {}
     ClearIOSSnapshots();
   }
 
-  // TODO(crbug.com/227636): Support multiple profile.
-  // Google App Launcher data is tied to the normal profile.
-  if (mask & IOSChromeBrowsingDataRemover::REMOVE_GOOGLE_APP_LAUNCHER_DATA &&
-      !browserState->IsOffTheRecord()) {
-    [self removeGALData];
-  }
-
   if (browserState->IsOffTheRecord()) {
     // In incognito, only data removal for all time is currently supported.
     DCHECK_EQ(base::Time(), deleteBegin);
@@ -251,15 +244,6 @@ void DoNothing(int n) {}
                                                     mask:mask
                                              deleteBegin:deleteBegin
                                        completionHandler:browsingDataCleared];
-}
-
-- (void)removeGALData {
-  [ios::GetChromeBrowserProvider()->GetNativeAppWhitelistManager()
-      filteredAppsUsingBlock:^BOOL(const id<NativeAppMetadata> app,
-                                   BOOL* stop) {
-        [app resetInfobarHistory];
-        return NO;
-      }];
 }
 
 - (void)removeWebViewCreatedBrowsingDataFromBrowserState:
@@ -276,10 +260,10 @@ void DoNothing(int n) {}
     }
     return;
   }
-  scoped_refptr<CallbackCounter> callbackCounter =
-      new CallbackCounter(base::BindBlock(completionHandler ? completionHandler
-                                                            : ^{
-                                                              }));
+  scoped_refptr<CallbackCounter> callbackCounter = new CallbackCounter(
+      base::BindBlockArc(completionHandler ? completionHandler
+                                           : ^{
+                                             }));
 
   // Note: Before adding any method below, make sure that it can finish clearing
   // browsing data even when |browserState| is destroyed after this method call.
@@ -300,10 +284,10 @@ removeWKWebViewCreatedBrowsingDataFromBrowserState:
                                        deleteBegin:(base::Time)deleteBegin
                                  completionHandler:
                                      (ProceduralBlock)completionHandler {
-  scoped_refptr<CallbackCounter> callbackCounter =
-      new CallbackCounter(base::BindBlock(completionHandler ? completionHandler
-                                                            : ^{
-                                                              }));
+  scoped_refptr<CallbackCounter> callbackCounter = new CallbackCounter(
+      base::BindBlockArc(completionHandler ? completionHandler
+                                           : ^{
+                                             }));
   ProceduralBlock decrementCallbackCounterCount = ^{
     callbackCounter->DecrementCount();
   };
@@ -311,8 +295,7 @@ removeWKWebViewCreatedBrowsingDataFromBrowserState:
   // Converts browsing data types from
   // IOSChromeBrowsingDataRemover::RemoveDataMask to
   // WKWebsiteDataStore strings.
-  base::scoped_nsobject<NSMutableSet> dataTypesToRemove(
-      [[NSMutableSet alloc] init]);
+  NSMutableSet* dataTypesToRemove = [[NSMutableSet alloc] init];
   if (mask & IOSChromeBrowsingDataRemover::REMOVE_CACHE_STORAGE) {
     [dataTypesToRemove addObject:WKWebsiteDataTypeDiskCache];
     [dataTypesToRemove addObject:WKWebsiteDataTypeMemoryCache];
@@ -409,10 +392,10 @@ removeWKWebViewCreatedBrowsingDataFromBrowserState:
   if (mask & IOSChromeBrowsingDataRemover::REMOVE_COOKIES) {
     scoped_refptr<net::URLRequestContextGetter> contextGetter =
         browserState->GetRequestContext();
-    base::Closure callback = base::BindBlock(^{
+    base::Closure callback = base::BindBlockArc(^{
     });
     web::WebThread::PostTask(
-        web::WebThread::IO, FROM_HERE, base::BindBlock(^{
+        web::WebThread::IO, FROM_HERE, base::BindBlockArc(^{
           net::URLRequestContext* requestContext =
               contextGetter->GetURLRequestContext();
           net::ChannelIDService* channelIdService =

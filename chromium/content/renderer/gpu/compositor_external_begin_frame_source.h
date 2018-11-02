@@ -10,7 +10,7 @@
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "content/renderer/gpu/compositor_forwarding_message_filter.h"
 
@@ -31,8 +31,7 @@ namespace content {
 // directly rather than proxied by this class.
 class CompositorExternalBeginFrameSource
     : public cc::BeginFrameSource,
-      public cc::ExternalBeginFrameSourceClient,
-      public NON_EXPORTED_BASE(base::NonThreadSafe) {
+      public cc::ExternalBeginFrameSourceClient {
  public:
   explicit CompositorExternalBeginFrameSource(
       CompositorForwardingMessageFilter* filter,
@@ -43,8 +42,7 @@ class CompositorExternalBeginFrameSource
   // cc::BeginFrameSource implementation.
   void AddObserver(cc::BeginFrameObserver* obs) override;
   void RemoveObserver(cc::BeginFrameObserver* obs) override;
-  void DidFinishFrame(cc::BeginFrameObserver* obs,
-                      const cc::BeginFrameAck& ack) override;
+  void DidFinishFrame(cc::BeginFrameObserver* obs) override;
   bool IsThrottled() const override;
 
   // cc::ExternalBeginFrameSourceClient implementation.
@@ -88,6 +86,8 @@ class CompositorExternalBeginFrameSource
   scoped_refptr<IPC::SyncMessageFilter> message_sender_;
   int routing_id_;
   CompositorForwardingMessageFilter::Handler begin_frame_source_filter_handler_;
+
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(CompositorExternalBeginFrameSource);
 };

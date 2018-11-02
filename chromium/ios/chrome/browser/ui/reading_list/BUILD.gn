@@ -3,23 +3,13 @@
 # found in the LICENSE file.
 
 source_set("reading_list") {
-  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
-    "number_badge_view.h",
-    "number_badge_view.mm",
     "offline_page_native_content.h",
     "offline_page_native_content.mm",
-    "reading_list_collection_view_controller.h",
-    "reading_list_collection_view_controller.mm",
     "reading_list_collection_view_item.h",
     "reading_list_collection_view_item.mm",
-    "reading_list_collection_view_item_accessibility_delegate.h",
     "reading_list_coordinator.h",
     "reading_list_coordinator.mm",
-    "reading_list_data_sink.h",
-    "reading_list_data_source.h",
-    "reading_list_empty_collection_background.h",
-    "reading_list_empty_collection_background.mm",
     "reading_list_mediator.h",
     "reading_list_mediator.mm",
     "reading_list_menu_notification_delegate.h",
@@ -27,78 +17,122 @@ source_set("reading_list") {
     "reading_list_menu_notifier.mm",
     "reading_list_side_swipe_provider.h",
     "reading_list_side_swipe_provider.mm",
-    "reading_list_toolbar.h",
-    "reading_list_toolbar.mm",
     "reading_list_utils.h",
     "reading_list_utils.mm",
-    "reading_list_view_controller.h",
-    "reading_list_view_controller.mm",
   ]
   deps = [
-    ":resources",
+    ":reading_list_ui",
     "//base",
-    "//components/prefs",
+    "//components/favicon/core",
+    "//components/feature_engagement_tracker",
     "//components/reading_list/core",
     "//components/reading_list/ios",
-    "//components/strings",
     "//components/url_formatter",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/feature_engagement_tracker",
     "//ios/chrome/browser/reading_list",
-    "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/alert_coordinator",
-    "//ios/chrome/browser/ui/collection_view/cells",
-    "//ios/chrome/browser/ui/colors",
     "//ios/chrome/browser/ui/favicon",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
-    "//ios/chrome/browser/ui/keyboard",
-    "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/side_swipe",
     "//ios/chrome/browser/ui/static_content",
     "//ios/chrome/browser/ui/util",
-    "//ios/chrome/common",
-    "//ios/third_party/material_components_ios",
-    "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
     "//ios/web:reload_type",
-    "//net",
     "//ui/base",
     "//ui/strings",
     "//url",
   ]
+  allow_circular_includes_from = [ "//ios/chrome/browser/ui/side_swipe" ]
+  libs = [ "UIKit.framework" ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("reading_list_ui") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  sources = [
+    "number_badge_view.h",
+    "number_badge_view.mm",
+    "reading_list_collection_view_cell.h",
+    "reading_list_collection_view_cell.mm",
+    "reading_list_collection_view_controller.h",
+    "reading_list_collection_view_controller.mm",
+    "reading_list_collection_view_item_accessibility_delegate.h",
+    "reading_list_data_sink.h",
+    "reading_list_data_source.h",
+    "reading_list_empty_collection_background.h",
+    "reading_list_empty_collection_background.mm",
+    "reading_list_toolbar.h",
+    "reading_list_toolbar.mm",
+    "reading_list_view_controller.h",
+    "reading_list_view_controller.mm",
+    "text_badge_view.h",
+    "text_badge_view.mm",
+  ]
+  deps = [
+    "resources:distillation_fail",
+    "resources:distillation_success",
+    "resources:reading_list_empty_state",
+    "resources:reading_list_share_icon",
+    "resources:reading_list_side_swipe",
+    "resources:reading_list_toolbar_icon",
+    "//base",
+    "//components/strings",
+    "//components/url_formatter",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/alert_coordinator",
+    "//ios/chrome/browser/ui/collection_view/cells",
+    "//ios/chrome/browser/ui/colors",
+    "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ios/chrome/browser/ui/keyboard",
+    "//ios/chrome/browser/ui/util",
+    "//ios/chrome/common",
+    "//ios/third_party/material_components_ios",
+    "//ios/third_party/material_roboto_font_loader_ios",
+    "//ui/base",
+  ]
   public_deps = [
     "//ios/chrome/browser/ui/collection_view",
   ]
-  allow_circular_includes_from = [ "//ios/chrome/browser/ui/side_swipe" ]
   libs = [ "UIKit.framework" ]
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "offline_page_native_content_unittest.mm",
     "reading_list_collection_view_controller_unittest.mm",
     "reading_list_coordinator_unittest.mm",
+    "reading_list_mediator_unittest.mm",
+    "text_badge_view_unittest.mm",
   ]
   deps = [
     ":reading_list",
+    ":reading_list_ui",
     "//base",
+    "//base/test:test_support",
     "//components/favicon/core",
     "//components/favicon/core/test:test_support",
+    "//components/feature_engagement_tracker",
     "//components/prefs",
     "//components/reading_list/core",
     "//components/url_formatter",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/favicon",
+    "//ios/chrome/browser/feature_engagement_tracker",
     "//ios/chrome/browser/reading_list",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/static_content",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",
@@ -113,6 +147,7 @@ source_set("eg_tests") {
   ]
   deps = [
     ":reading_list",
+    ":reading_list_ui",
     "//base",
     "//base/test:test_support",
     "//components/reading_list/core",
@@ -129,37 +164,12 @@ source_set("eg_tests") {
     "//ios/third_party/material_components_ios",
     "//ios/web",
     "//ios/web:reload_type",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//net",
   ]
   libs = [
     "UIKit.framework",
     "XCTest.framework",
-  ]
-}
-
-bundle_data("resources") {
-  sources = [
-    "resources/distillation_fail.png",
-    "resources/distillation_fail@2x.png",
-    "resources/distillation_fail@3x.png",
-    "resources/distillation_success.png",
-    "resources/distillation_success@2x.png",
-    "resources/distillation_success@3x.png",
-    "resources/reading_list_empty_state.png",
-    "resources/reading_list_empty_state@2x.png",
-    "resources/reading_list_empty_state@3x.png",
-    "resources/reading_list_share_icon.png",
-    "resources/reading_list_share_icon@2x.png",
-    "resources/reading_list_share_icon@3x.png",
-    "resources/reading_list_side_swipe.png",
-    "resources/reading_list_side_swipe@2x.png",
-    "resources/reading_list_side_swipe@3x.png",
-    "resources/reading_list_toolbar_icon.png",
-    "resources/reading_list_toolbar_icon@2x.png",
-    "resources/reading_list_toolbar_icon@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
   ]
 }

@@ -19,6 +19,8 @@
 #include "base/time/time.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
+#include "content/browser/service_worker/service_worker_response_type.h"
+#include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/common/content_export.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
@@ -26,6 +28,7 @@
 #include "content/public/common/request_context_frame_type.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/service_worker_modes.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_byte_range.h"
 #include "net/url_request/url_request.h"
@@ -47,7 +50,7 @@ class BlobStorageContext;
 namespace content {
 
 class ResourceContext;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 class ServiceWorkerBlobReader;
 class ServiceWorkerDataPipeReader;
 class ServiceWorkerFetchDispatcher;
@@ -55,32 +58,7 @@ class ServiceWorkerVersion;
 
 class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
  public:
-  class CONTENT_EXPORT Delegate {
-   public:
-    virtual ~Delegate() {}
-
-    // Will be invoked before the request is restarted. The caller
-    // can use this opportunity to grab state from the
-    // ServiceWorkerURLRequestJob to determine how it should behave when the
-    // request is restarted.
-    virtual void OnPrepareToRestart() = 0;
-
-    // Returns the ServiceWorkerVersion fetch events for this request job should
-    // be dispatched to. If no appropriate worker can be determined, returns
-    // nullptr and sets |*result| to an appropriate error.
-    virtual ServiceWorkerVersion* GetServiceWorkerVersion(
-        ServiceWorkerMetrics::URLRequestJobResult* result) = 0;
-
-    // Called after dispatching the fetch event to determine if processing of
-    // the request should still continue, or if processing should be aborted.
-    // When false is returned, this sets |*result| to an appropriate error.
-    virtual bool RequestStillValid(
-        ServiceWorkerMetrics::URLRequestJobResult* result);
-
-    // Called to signal that loading failed, and that the resource being loaded
-    // was a main resource.
-    virtual void MainResourceLoadFailed() {}
-  };
+  using Delegate = ServiceWorkerURLJobWrapper::Delegate;
 
   ServiceWorkerURLRequestJob(
       net::URLRequest* request,
@@ -91,10 +69,11 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
       FetchRequestMode request_mode,
       FetchCredentialsMode credentials_mode,
       FetchRedirectMode redirect_mode,
+      const std::string& integrity,
       ResourceType resource_type,
       RequestContextType request_context_type,
       RequestContextFrameType frame_type,
-      scoped_refptr<ResourceRequestBodyImpl> body,
+      scoped_refptr<ResourceRequestBody> body,
       ServiceWorkerFetchType fetch_type,
       const base::Optional<base::TimeDelta>& timeout,
       Delegate* delegate);
@@ -103,6 +82,15 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
 
   const ResourceContext* resource_context() const { return resource_context_; }
   bool did_navigation_preload() const { return did_navigation_preload_; }
+
+  // When set, this job will pretend that navigation preload was triggered, but
+  // not actually do navigation preload. This is to aid unit tests that check
+  // UMA logging. It's difficult to get navigation preload to work in a unit
+  // test: there is a much setup of ResourceRequestInfoImpl,
+  // ResourceRequesterInfo, etc. required.
+  void set_simulate_navigation_preload_for_test() {
+    simulate_navigation_preload_for_test_ = true;
+  }
 
   // Sets the response type.
   // When an in-flight request possibly needs CORS check, use
@@ -150,16 +138,13 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
 
  private:
   class FileSizeResolver;
+  class NavigationPreloadMetrics;
+  friend class DelayHelper;
+  friend class ServiceWorkerURLRequestJobTest;
   FRIEND_TEST_ALL_PREFIXES(ServiceWorkerControlleeRequestHandlerTest,
                            LostActiveVersion);
 
-  enum ResponseType {
-    NOT_DETERMINED,
-    FAIL_DUE_TO_LOST_CONTROLLER,
-    FALLBACK_TO_NETWORK,
-    FALLBACK_TO_RENDERER,  // Use this when falling back with CORS check
-    FORWARD_TO_SERVICE_WORKER
-  };
+  using ResponseType = ServiceWorkerResponseType;
 
   enum ResponseBodyType {
     UNKNOWN,
@@ -181,6 +166,12 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   // This must not be called until all files in |body_| with unknown size have
   // their sizes populated.
   void CreateRequestBodyBlob(std::string* blob_uuid, uint64_t* blob_size);
+
+  // Returns true if this job performed a navigation that should be logged to
+  // performance-related UMA. It returns false in certain cases that are not
+  // relevant to performance analysis, such as if the worker was not already
+  // activated or DevTools was attached to the worker.
+  bool ShouldRecordNavigationMetrics(const ServiceWorkerVersion* version) const;
 
   // For FORWARD_TO_SERVICE_WORKER case.
   void DidPrepareFetchEvent(scoped_refptr<ServiceWorkerVersion> version);
@@ -282,9 +273,9 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
 
   // True if navigation preload was enabled.
   bool did_navigation_preload_ = false;
+  bool simulate_navigation_preload_for_test_ = false;
 
-  // True if navigation preload metrics were reported.
-  bool reported_navigation_preload_metrics_ = false;
+  std::unique_ptr<NavigationPreloadMetrics> nav_preload_metrics_;
 
   ResponseType response_type_;
 
@@ -311,13 +302,14 @@ class CONTENT_EXPORT ServiceWorkerURLRequestJob : public net::URLRequestJob {
   FetchRequestMode request_mode_;
   FetchCredentialsMode credentials_mode_;
   FetchRedirectMode redirect_mode_;
+  std::string integrity_;
   const ResourceType resource_type_;
   RequestContextType request_context_type_;
   RequestContextFrameType frame_type_;
   bool fall_back_required_;
   // ResourceRequestBody has a collection of BlobDataHandles attached to it
   // using the userdata mechanism. So we have to keep it not to free the blobs.
-  scoped_refptr<ResourceRequestBodyImpl> body_;
+  scoped_refptr<ResourceRequestBody> body_;
   std::unique_ptr<storage::BlobDataHandle> request_body_blob_data_handle_;
   ServiceWorkerFetchType fetch_type_;
   base::Optional<base::TimeDelta> timeout_;

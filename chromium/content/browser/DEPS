@@ -3,13 +3,15 @@ include_rules = [
   # See comment in content/DEPS for which components are allowed.
   "+components/discardable_memory/common",
   "+components/discardable_memory/service",
-  "+components/display_compositor",
   "+components/filesystem",
   "+components/leveldb",
   "+components/link_header_util",
   "+components/metrics",
   "+components/metrics:single_sample_metrics",
   "+components/mime_util",
+  "+components/network_session_configurator/common",
+  "+components/offline_pages/features/features.h",
+  "+components/offline_pages/core/request_header",
   "+components/payments",
   "+components/profile_service",
   "+components/rappor/public",
@@ -21,15 +23,13 @@ include_rules = [
 
   "+content/app/strings/grit",  # For generated headers
   "+content/public/browser",
+  "+device/base/synchronization",
   "+device/gamepad", # For gamepad API
-  "+device/generic_sensor",  # For sensors service.
   "+device/geolocation",
   "+device/nfc",
-  "+device/power_save_blocker",
   "+device/screen_orientation/public/interfaces",
   "+device/sensors",
   "+device/vr",  # For WebVR API
-  "+device/wake_lock/public/interfaces",
   # This can only be used on POSIX, in particular it mustn't be used on Windows
   # in the browser DLL.
   "+gin/v8_initializer.h",
@@ -37,9 +37,8 @@ include_rules = [
   "+services",
   "+sql",
   "+ui/aura_extra",
-  "+ui/vector_icons",
+  "+components/vector_icons",
   "+ui/webui",
-  "+win8/util",
 
   # In general, //content shouldn't depend on //device.
   # This is the an exception.
@@ -82,8 +81,10 @@ include_rules = [
   "+third_party/WebKit/public/platform/WebReferrerPolicy.h",
   "+third_party/WebKit/public/platform/WebScreenInfo.h",
   "+third_party/WebKit/public/platform/WebSecurityStyle.h",
+  "+third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h",
   "+third_party/WebKit/public/platform/WebTouchEvent.h",
   "+third_party/WebKit/public/platform/WebTextInputType.h",
+  "+third_party/WebKit/public/platform/mac/WebScrollbarTheme.h",
   "+third_party/WebKit/public/platform/mime_registry.mojom.h",
   "+third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom.h",
   "+third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h",
@@ -93,11 +94,13 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h",
   "+third_party/WebKit/public/platform/modules/installedapp/related_application.mojom.h",
   "+third_party/WebKit/public/platform/modules/keyboard_lock/keyboard_lock.mojom.h",
+  "+third_party/WebKit/public/platform/modules/manifest/manifest_manager.mojom.h",
   "+third_party/WebKit/public/platform/modules/mediasession/media_session.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/notification_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom.h",
+  "+third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h",
@@ -113,7 +116,9 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerState.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom.h",
   "+third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom.h",
+  "+third_party/WebKit/public/platform/modules/webauth/authenticator.mojom.h",
   "+third_party/WebKit/public/platform/modules/websockets/websocket.mojom.h",
+  "+third_party/WebKit/public/platform/reporting.mojom.h",
   "+third_party/WebKit/public/public_features.h",
   "+third_party/WebKit/public/web/WebAXEnums.h",
   "+third_party/WebKit/public/web/WebCompositionUnderline.h",
@@ -132,7 +137,7 @@ include_rules = [
   "+third_party/WebKit/public/web/WebSharedWorkerCreationErrors.h",
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/WebTreeScopeType.h",
-  "+third_party/WebKit/public/web/mac/WebScrollbarTheme.h",
+  "+third_party/WebKit/public/web/WebTriggeringEventInfo.h",
 
   # DO NOT ADD ANY CHROME OR COMPONENTS INCLUDES HERE!!!
   # See https://sites.google.com/a/chromium.org/dev/developers/content-module

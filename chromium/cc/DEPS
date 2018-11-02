@@ -1,4 +1,5 @@
 include_rules = [
+  "+components/viz/common",
   "+gpu/GLES2",
   "+gpu/command_buffer/client/context_support.h",
   "+gpu/command_buffer/client/gles2_interface.h",
@@ -34,5 +35,8 @@ specific_include_rules = {
   "in_process_context_provider\.h": [
     "+gpu/command_buffer/common",
     "+gpu/ipc",
+  ],
+  ".*_(unit|pixel|perf)test.*\.cc": [
+    "+components/viz/test",
   ],
 }

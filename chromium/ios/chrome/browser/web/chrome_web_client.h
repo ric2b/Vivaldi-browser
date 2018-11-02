@@ -5,6 +5,10 @@
 #ifndef IOS_CHROME_BROWSER_WEB_CHROME_WEB_CLIENT_H_
 #define IOS_CHROME_BROWSER_WEB_CHROME_WEB_CLIENT_H_
 
+#include <memory>
+#include <string>
+#include <vector>
+
 #include "base/macros.h"
 #include "ios/web/public/web_client.h"
 
@@ -15,10 +19,9 @@ class ChromeWebClient : public web::WebClient {
   ~ChromeWebClient() override;
 
   // WebClient implementation.
-  web::WebMainParts* CreateWebMainParts() override;
+  std::unique_ptr<web::WebMainParts> CreateWebMainParts() override;
   void PreWebViewCreation() const override;
-  void AddAdditionalSchemes(std::vector<url::SchemeWithType>*
-                                additional_standard_schemes) const override;
+  void AddAdditionalSchemes(Schemes* schemes) const override;
   std::string GetAcceptLangs(web::BrowserState* state) const override;
   std::string GetApplicationLocale() const override;
   bool IsAppSpecificURL(const GURL& url) const override;
@@ -42,9 +45,7 @@ class ChromeWebClient : public web::WebClient {
       const GURL& request_url,
       bool overridable,
       const base::Callback<void(bool)>& callback) override;
-  std::unique_ptr<base::TaskScheduler::InitParams> GetTaskSchedulerInitParams()
-      override;
-  void PerformExperimentalTaskSchedulerRedirections() override;
+  bool IsSlimNavigationManagerEnabled() const override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ChromeWebClient);

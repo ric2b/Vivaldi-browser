@@ -18,16 +18,16 @@
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/public/cpp/shelf_item.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/public/cpp/shelf_model.h"
+#include "ash/public/cpp/shelf_model_observer.h"
 #include "ash/shelf/shelf_application_menu_model.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_controller.h"
-#include "ash/shelf/shelf_model.h"
-#include "ash/shelf/shelf_model_observer.h"
 #include "ash/shell.h"
+#include "ash/shell_test_api.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/shell_test_api.h"
-#include "ash/test/test_shell_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/test_shell_delegate.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_util.h"
 #include "base/command_line.h"
 #include "base/compiler_specific.h"
@@ -42,6 +42,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
@@ -127,8 +128,6 @@ constexpr char kOfflineGmailUrl[] = "https://mail.google.com/mail/mu/u";
 constexpr char kGmailUrl[] = "https://mail.google.com/mail/u";
 constexpr char kGmailLaunchURL[] = "https://mail.google.com/mail/ca";
 
-constexpr char kAppListId[] = "jlfapfmkapbjlfbpjedlinehodkccjee";
-
 // An extension prefix.
 constexpr char kCrxAppPrefix[] = "_crx_";
 
@@ -161,6 +160,9 @@ class TestShelfModelObserver : public ash::ShelfModelObserver {
   void ShelfItemMoved(int start_index, int target_index) override {
     last_index_ = target_index;
   }
+
+  void ShelfItemDelegateChanged(const ash::ShelfID&,
+                                ash::ShelfItemDelegate*) override {}
 
   void clear_counts() {
     added_ = 0;
@@ -275,7 +277,7 @@ class TestV2AppLauncherItemController : public ash::ShelfItemDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestV2AppLauncherItemController);
 };
 
-// A test ShelfController implementation that tracks alignment and auto-hide.
+// A test ShelfController implementation that tracks state and function calls.
 class TestShelfController : public ash::mojom::ShelfController {
  public:
   TestShelfController() : binding_(this) {}
@@ -287,8 +289,15 @@ class TestShelfController : public ash::mojom::ShelfController {
   size_t alignment_change_count() const { return alignment_change_count_; }
   size_t auto_hide_change_count() const { return auto_hide_change_count_; }
 
+  size_t added_count() const { return added_count_; }
+  size_t removed_count() const { return removed_count_; }
+  size_t updated_count() const { return updated_count_; }
+  size_t set_delegate_count() const { return set_delegate_count_; }
+
   ash::mojom::ShelfControllerPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+    ash::mojom::ShelfControllerPtr ptr;
+    binding_.Bind(mojo::MakeRequest(&ptr));
+    return ptr;
   }
 
   // ash::mojom::ShelfController:
@@ -308,11 +317,13 @@ class TestShelfController : public ash::mojom::ShelfController {
     auto_hide_ = auto_hide;
     observer_->OnAutoHideBehaviorChanged(auto_hide_, display_id);
   }
-  void PinItem(
-      const ash::ShelfItem& item,
-      ash::mojom::ShelfItemDelegateAssociatedPtrInfo delegate) override {}
-  void UnpinItem(const std::string& app_id) override {}
-  void SetItemImage(const std::string& app_id, const SkBitmap& image) override {
+  void AddShelfItem(int32_t, const ash::ShelfItem&) override { added_count_++; }
+  void RemoveShelfItem(const ash::ShelfID&) override { removed_count_++; }
+  void MoveShelfItem(const ash::ShelfID&, int32_t) override {}
+  void UpdateShelfItem(const ash::ShelfItem&) override { updated_count_++; }
+  void SetShelfItemDelegate(const ash::ShelfID&,
+                            ash::mojom::ShelfItemDelegatePtr) override {
+    set_delegate_count_++;
   }
 
  private:
@@ -321,6 +332,11 @@ class TestShelfController : public ash::mojom::ShelfController {
 
   size_t alignment_change_count_ = 0;
   size_t auto_hide_change_count_ = 0;
+
+  size_t added_count_ = 0;
+  size_t removed_count_ = 0;
+  size_t updated_count_ = 0;
+  size_t set_delegate_count_ = 0;
 
   ash::mojom::ShelfObserverAssociatedPtr observer_;
   mojo::Binding<ash::mojom::ShelfController> binding_;
@@ -337,7 +353,8 @@ void SelectItem(ash::ShelfItemDelegate* delegate) {
       ui::ET_MOUSE_PRESSED, gfx::Point(), gfx::Point(), ui::EventTimeForNow(),
       ui::EF_NONE, 0);
   delegate->ItemSelected(std::move(event), display::kInvalidDisplayId,
-                         ash::LAUNCH_FROM_UNKNOWN, base::Bind(&NoopCallback));
+                         ash::LAUNCH_FROM_UNKNOWN,
+                         base::BindOnce(&NoopCallback));
 }
 
 }  // namespace
@@ -371,32 +388,24 @@ class TestChromeLauncherController : public ChromeLauncherController {
 // A shell delegate that owns a ChromeLauncherController, like production.
 // TODO(msw): Refine ChromeLauncherController lifetime management.
 // TODO(msw): Avoid relying on TestShellDelegate's ShelfInitializer.
-class ChromeLauncherTestShellDelegate : public ash::test::TestShellDelegate {
+class ChromeLauncherTestShellDelegate : public ash::TestShellDelegate {
  public:
-  ChromeLauncherTestShellDelegate() {}
+  ChromeLauncherTestShellDelegate() = default;
 
-  // Create a ChromeLauncherController instance.
-  ChromeLauncherController* CreateLauncherController(Profile* profile) {
-    launcher_controller_ = base::MakeUnique<ChromeLauncherController>(
-        profile, ash::Shell::Get()->shelf_model());
+  // Create a TestChromeLauncherController instance.
+  TestChromeLauncherController* CreateLauncherController(
+      Profile* profile,
+      ash::ShelfModel* model) {
+    launcher_controller_ =
+        base::MakeUnique<TestChromeLauncherController>(profile, model);
     return launcher_controller_.get();
   }
 
-  // Create a TestChromeLauncherController instance.
-  TestChromeLauncherController* CreateTestLauncherController(Profile* profile) {
-    auto controller = base::MakeUnique<TestChromeLauncherController>(
-        profile, ash::Shell::Get()->shelf_model());
-    TestChromeLauncherController* controller_weak = controller.get();
-    launcher_controller_ = std::move(controller);
-    launcher_controller_->Init();
-    return controller_weak;
-  }
-
-  // ash::test::TestShellDelegate:
+  // ash::TestShellDelegate:
   void ShelfShutdown() override { launcher_controller_.reset(); }
 
  private:
-  std::unique_ptr<ChromeLauncherController> launcher_controller_;
+  std::unique_ptr<TestChromeLauncherController> launcher_controller_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeLauncherTestShellDelegate);
 };
@@ -425,8 +434,8 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
       ASSERT_TRUE(profile_manager_->SetUp());
     }
 
-    model_ = ash::Shell::Get()->shelf_controller()->model();
-    model_observer_.reset(new TestShelfModelObserver);
+    model_observer_ = base::MakeUnique<TestShelfModelObserver>();
+    model_ = base::MakeUnique<ash::ShelfModel>();
     model_->AddObserver(model_observer_.get());
 
     base::DictionaryValue manifest;
@@ -596,17 +605,11 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
         CreateBrowser(profile, Browser::TYPE_TABBED, false, browser_window));
   }
 
-  void AddAppListLauncherItem() {
-    ash::ShelfItem app_list;
-    app_list.id = ash::ShelfID(kAppListId);
-    app_list.type = ash::TYPE_APP_LIST;
-    model_->Add(app_list);
-  }
-
   // Create a launcher controller instance, owned by the test shell delegate.
   // Returns a pointer to the uninitialized controller.
   ChromeLauncherController* CreateLauncherController() {
-    launcher_controller_ = shell_delegate_->CreateLauncherController(profile());
+    launcher_controller_ =
+        shell_delegate_->CreateLauncherController(profile(), model_.get());
     return launcher_controller_;
   }
 
@@ -633,9 +636,10 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
   ChromeLauncherController* RecreateLauncherController() {
     // Destroy any existing controller first; only one may exist at a time.
     ResetLauncherController();
-    while (model_->item_count() > 0)
-      model_->RemoveItemAt(0);
-    AddAppListLauncherItem();
+    model_->RemoveObserver(model_observer_.get());
+    model_ = base::MakeUnique<ash::ShelfModel>();
+    model_observer_ = base::MakeUnique<TestShelfModelObserver>();
+    model_->AddObserver(model_observer_.get());
     return CreateLauncherController();
   }
 
@@ -960,9 +964,9 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
   }
 
   void EnableTabletMode(bool enable) {
-    ash::MaximizeModeController* controller =
-        ash::Shell::Get()->maximize_mode_controller();
-    controller->EnableMaximizeModeWindowManager(enable);
+    ash::TabletModeController* controller =
+        ash::Shell::Get()->tablet_mode_controller();
+    controller->EnableTabletModeWindowManager(enable);
   }
 
   void ValidateArcState(bool arc_enabled,
@@ -1050,7 +1054,7 @@ class ChromeLauncherControllerTest : public BrowserWithTestWindowTest {
   ChromeLauncherController* launcher_controller_ = nullptr;
   ChromeLauncherTestShellDelegate* shell_delegate_ = nullptr;
   std::unique_ptr<TestShelfModelObserver> model_observer_;
-  ash::ShelfModel* model_ = nullptr;
+  std::unique_ptr<ash::ShelfModel> model_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
 
   // |item_delegate_manager_| owns |test_controller_|.
@@ -1084,7 +1088,7 @@ class ChromeLauncherControllerWithArcTest
 
   void SetUp() override {
     if (GetParam())
-      arc::SetArcAlwaysStartForTesting();
+      arc::SetArcAlwaysStartForTesting(true);
     ChromeLauncherControllerTest::SetUp();
   }
 
@@ -1339,7 +1343,7 @@ class ChromeLauncherControllerMultiProfileWithArcTest
 
   void SetUp() override {
     if (GetParam())
-      arc::SetArcAlwaysStartForTesting();
+      arc::SetArcAlwaysStartForTesting(true);
     MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest::SetUp();
   }
 
@@ -2336,6 +2340,7 @@ TEST_P(ChromeLauncherControllerWithArcTest, ArcCustomAppIcon) {
 
   // Set custom icon on active item. Icon should change to custom.
   arc_test_.app_instance()->SendTaskDescription(2, std::string(), png_data);
+  base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(item_delegate->image_set_by_controller());
 
   // Switch back to the item without custom icon. Icon should be changed to
@@ -2552,25 +2557,27 @@ TEST_F(MultiProfileMultiBrowserShelfLayoutChromeLauncherControllerTest,
 
   // Check the shelf model used by ShelfWindowWatcher.
   ash::ShelfModel* shelf_model = ash::Shell::Get()->shelf_model();
-  ASSERT_EQ(1, shelf_model->item_count());
+  ASSERT_EQ(2, shelf_model->item_count());
   EXPECT_EQ(ash::TYPE_APP_LIST, shelf_model->items()[0].type);
+  EXPECT_EQ(ash::TYPE_BROWSER_SHORTCUT, shelf_model->items()[1].type);
 
   // Add an app panel window; ShelfWindowWatcher will add a shelf item.
   V2App panel(profile(), extension_platform_app_.get(),
               extensions::AppWindow::WINDOW_TYPE_PANEL);
-  ASSERT_EQ(2, model_.item_count());
-  EXPECT_EQ(ash::TYPE_APP_PANEL, shelf_model->items()[1].type);
+  ASSERT_EQ(3, shelf_model->item_count());
+  EXPECT_EQ(ash::TYPE_APP_PANEL, shelf_model->items()[2].type);
 
   // After switching users the item should go away.
   TestingProfile* profile2 = CreateMultiUserProfile("user2");
   SwitchActiveUser(multi_user_util::GetAccountIdFromProfile(profile2));
-  ASSERT_EQ(1, shelf_model->item_count());
+  ASSERT_EQ(2, shelf_model->item_count());
   EXPECT_EQ(ash::TYPE_APP_LIST, shelf_model->items()[0].type);
+  EXPECT_EQ(ash::TYPE_BROWSER_SHORTCUT, shelf_model->items()[1].type);
 
   // And it should come back when switching back.
   SwitchActiveUser(multi_user_util::GetAccountIdFromProfile(profile()));
-  ASSERT_EQ(2, shelf_model->item_count());
-  EXPECT_EQ(ash::TYPE_APP_PANEL, shelf_model->items()[1].type);
+  ASSERT_EQ(3, shelf_model->item_count());
+  EXPECT_EQ(ash::TYPE_APP_PANEL, shelf_model->items()[2].type);
 }
 
 // Check that a running windowed V1 application will be properly pinned and
@@ -3474,48 +3481,6 @@ TEST_F(ChromeLauncherControllerTest, V1AppMenuDeletionExecution) {
   }
 }
 
-// Tests that panels create launcher items correctly
-TEST_F(ChromeLauncherControllerTest, AppPanels) {
-  InitLauncherController();
-  model_observer_->clear_counts();
-  const std::string app_id = extension1_->id();
-
-  // app_icon_loader is owned by ChromeLauncherController.
-  TestAppIconLoaderImpl* app_icon_loader = new TestAppIconLoaderImpl();
-  app_icon_loader->AddSupportedApp(app_id);
-  SetAppIconLoader(std::unique_ptr<AppIconLoader>(app_icon_loader));
-
-  // Make an app panel; the ShelfItem is added by ash::ShelfWindowWatcher.
-  std::unique_ptr<V2App> app_panel1 = base::MakeUnique<V2App>(
-      profile(), extension1_.get(), extensions::AppWindow::WINDOW_TYPE_PANEL);
-  EXPECT_TRUE(app_panel1->window()->GetNativeWindow()->IsVisible());
-  int panel_index = model_observer_->last_index();
-  EXPECT_EQ(1, model_observer_->added());
-  EXPECT_EQ(1, app_icon_loader->fetch_count());
-  model_observer_->clear_counts();
-
-  // App panels should have a separate identifier than the app id
-  EXPECT_FALSE(launcher_controller_->GetItem(ash::ShelfID(app_id)));
-
-  // Setting the app image should not change the panel, which has a window icon.
-  gfx::ImageSkia image;
-  launcher_controller_->OnAppImageUpdated(app_id, image);
-  EXPECT_EQ(0, model_observer_->changed());
-  model_observer_->clear_counts();
-
-  // Make a second app panel and verify that it gets the same index as the first
-  // panel, being added to the left of the existing panel.
-  std::unique_ptr<V2App> app_panel2 = base::MakeUnique<V2App>(
-      profile(), extension2_.get(), extensions::AppWindow::WINDOW_TYPE_PANEL);
-  EXPECT_EQ(panel_index, model_observer_->last_index());
-  EXPECT_EQ(1, model_observer_->added());
-  model_observer_->clear_counts();
-
-  app_panel1.reset();
-  app_panel2.reset();
-  EXPECT_EQ(2, model_observer_->removed());
-}
-
 // Tests that the Gmail extension matches more than the app itself claims with
 // the manifest file.
 TEST_F(ChromeLauncherControllerTest, GmailMatching) {
@@ -3946,7 +3911,7 @@ class ChromeLauncherControllerArcDefaultAppsTest
  protected:
   void SetUp() override {
     if (GetParam())
-      arc::SetArcAlwaysStartForTesting();
+      arc::SetArcAlwaysStartForTesting(true);
     ArcDefaultAppList::UseTestAppsDirectory();
     ChromeLauncherControllerTest::SetUp();
   }
@@ -4262,7 +4227,8 @@ TEST_F(ChromeLauncherControllerTest, PrefsLoadedOnLogin) {
   prefs->SetString(prefs::kShelfAutoHideBehavior, "Always");
 
   TestChromeLauncherController* test_launcher_controller =
-      shell_delegate_->CreateTestLauncherController(profile());
+      shell_delegate_->CreateLauncherController(profile(), model_.get());
+  test_launcher_controller->Init();
 
   // Simulate login for the test controller.
   test_launcher_controller->ReleaseProfile();
@@ -4282,7 +4248,8 @@ TEST_F(ChromeLauncherControllerTest, PrefsLoadedOnLogin) {
 // Tests that the shelf controller's changes are not wastefully echoed back.
 TEST_F(ChromeLauncherControllerTest, DoNotEchoShelfControllerChanges) {
   TestChromeLauncherController* test_launcher_controller =
-      shell_delegate_->CreateTestLauncherController(profile());
+      shell_delegate_->CreateLauncherController(profile(), model_.get());
+  test_launcher_controller->Init();
 
   // Simulate login for the test controller.
   test_launcher_controller->ReleaseProfile();
@@ -4319,4 +4286,68 @@ TEST_F(ChromeLauncherControllerTest, DoNotEchoShelfControllerChanges) {
   EXPECT_EQ("Left", prefs->GetString(prefs::kShelfAlignment));
   EXPECT_EQ("Always", prefs->GetString(prefs::kShelfAutoHideBehaviorLocal));
   EXPECT_EQ("Always", prefs->GetString(prefs::kShelfAutoHideBehavior));
+}
+
+// Ensure Ash and Chrome ShelfModel changes are synchronized correctly in Mash.
+TEST_F(ChromeLauncherControllerTest, ShelfModelSyncMash) {
+  if (chromeos::GetAshConfig() != ash::Config::MASH)
+    return;
+
+  // ShelfModel creates app list and browser shortcut items.
+  // ShelfController initializes the delegate for the app list item.
+  TestChromeLauncherController* launcher_controller =
+      shell_delegate_->CreateLauncherController(profile(), model_.get());
+  TestShelfController* shelf_controller =
+      launcher_controller->test_shelf_controller();
+  EXPECT_EQ(0u, shelf_controller->added_count());
+  EXPECT_EQ(0u, shelf_controller->removed_count());
+  EXPECT_EQ(2, model_->item_count());
+  EXPECT_EQ(ash::kAppListId, model_->items()[0].id.app_id);
+  EXPECT_EQ(ash::TYPE_APP_LIST, model_->items()[0].type);
+  EXPECT_FALSE(model_->GetShelfItemDelegate(model_->items()[0].id));
+  EXPECT_EQ(extension_misc::kChromeAppId, model_->items()[1].id.app_id);
+  EXPECT_EQ(ash::TYPE_BROWSER_SHORTCUT, model_->items()[1].type);
+  EXPECT_FALSE(model_->GetShelfItemDelegate(model_->items()[1].id));
+  EXPECT_TRUE(model_->items()[1].title.empty());
+
+  // Init updates the browser item and its delegate in Chrome's ShelfModel.
+  // Ash's ShelfController should be notified about the update and delegate.
+  launcher_controller->Init();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(2, model_->item_count());
+  EXPECT_EQ(0u, shelf_controller->added_count());
+  EXPECT_EQ(0u, shelf_controller->removed_count());
+  EXPECT_LE(1u, shelf_controller->updated_count());
+  EXPECT_EQ(1u, shelf_controller->set_delegate_count());
+  EXPECT_TRUE(model_->GetShelfItemDelegate(model_->items()[1].id));
+  EXPECT_FALSE(model_->items()[1].title.empty());
+
+  // Add a shelf item using the ShelfController interface.
+  ash::ShelfItem item;
+  item.type = ash::TYPE_PINNED_APP;
+  item.id = ash::ShelfID(kDummyAppId);
+  shelf_controller->AddShelfItem(2, item);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, shelf_controller->added_count());
+  EXPECT_EQ(0u, shelf_controller->removed_count());
+
+  // Remove a shelf item using the ShelfController interface.
+  shelf_controller->RemoveShelfItem(item.id);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(1u, shelf_controller->added_count());
+  EXPECT_EQ(1u, shelf_controller->removed_count());
+
+  // Add an item to Chrome's model; ShelfController should be notified.
+  model_->Add(item);
+  EXPECT_EQ(3, model_->item_count());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(2u, shelf_controller->added_count());
+  EXPECT_EQ(1u, shelf_controller->removed_count());
+
+  // Remove an item from Chrome's model; ShelfController should be notified.
+  model_->RemoveItemAt(2);
+  EXPECT_EQ(2, model_->item_count());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(2u, shelf_controller->added_count());
+  EXPECT_EQ(2u, shelf_controller->removed_count());
 }

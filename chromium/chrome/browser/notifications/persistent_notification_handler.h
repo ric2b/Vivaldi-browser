@@ -8,8 +8,6 @@
 #include "base/macros.h"
 #include "chrome/browser/notifications/notification_handler.h"
 
-class NotificationDelegate;
-
 // NotificationHandler implementation for persistent, service worker backed,
 // notifications.
 class PersistentNotificationHandler : public NotificationHandler {
@@ -18,6 +16,7 @@ class PersistentNotificationHandler : public NotificationHandler {
   ~PersistentNotificationHandler() override;
 
   // NotificationHandler implementation.
+  void OnShow(Profile* profile, const std::string& notification_id) override;
   void OnClose(Profile* profile,
                const std::string& origin,
                const std::string& notification_id,
@@ -28,8 +27,8 @@ class PersistentNotificationHandler : public NotificationHandler {
                int action_index,
                const base::NullableString16& reply) override;
   void OpenSettings(Profile* profile) override;
-  void RegisterNotification(const std::string& notification_id,
-                            NotificationDelegate* delegate) override;
+  bool ShouldDisplayOnFullScreen(Profile* profile,
+                                 const std::string& origin) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PersistentNotificationHandler);

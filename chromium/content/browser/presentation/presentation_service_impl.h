@@ -29,10 +29,6 @@
 #include "third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h"
 #include "url/gurl.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace content {
 
 struct PresentationConnectionMessage;
@@ -54,59 +50,64 @@ class CONTENT_EXPORT PresentationServiceImpl
   ~PresentationServiceImpl() override;
 
   using NewPresentationCallback =
-      base::Callback<void(const base::Optional<PresentationInfo>&,
-                          const base::Optional<PresentationError>&)>;
+      base::OnceCallback<void(const base::Optional<PresentationInfo>&,
+                              const base::Optional<PresentationError>&)>;
 
   // Static factory method to create an instance of PresentationServiceImpl.
   // |render_frame_host|: The RFH the instance is associated with.
   // |request|: The instance will be bound to this request. Used for Mojo setup.
   static void CreateMojoService(
       RenderFrameHost* render_frame_host,
-      const service_manager::BindSourceInfo& source_info,
       mojo::InterfaceRequest<blink::mojom::PresentationService> request);
+
+  // PresentationService implementation.
+  void SetDefaultPresentationUrls(
+      const std::vector<GURL>& presentation_urls) override;
+  void SetClient(blink::mojom::PresentationServiceClientPtr client) override;
+  void ListenForScreenAvailability(const GURL& url) override;
+  void StopListeningForScreenAvailability(const GURL& url) override;
+  void StartPresentation(const std::vector<GURL>& presentation_urls,
+                         NewPresentationCallback callback) override;
+  void ReconnectPresentation(const std::vector<GURL>& presentation_urls,
+                             const base::Optional<std::string>& presentation_id,
+                             NewPresentationCallback callback) override;
+  void CloseConnection(const GURL& presentation_url,
+                       const std::string& presentation_id) override;
+  void Terminate(const GURL& presentation_url,
+                 const std::string& presentation_id) override;
+  void SetPresentationConnection(
+      const PresentationInfo& presentation_info,
+      blink::mojom::PresentationConnectionPtr controller_connection_ptr,
+      blink::mojom::PresentationConnectionRequest receiver_connection_request)
+      override;
 
  private:
   friend class PresentationServiceImplTest;
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, Reset);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, DidNavigateThisFrame);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-      DidNavigateOtherFrame);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, ThisRenderFrameDeleted);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
       OtherRenderFrameDeleted);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest, DelegateFails);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           SetDefaultPresentationUrls);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           SetSameDefaultPresentationUrls);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           ClearDefaultPresentationUrls);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           ListenForDefaultPresentationStart);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           ListenForDefaultPresentationStartAfterSet);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           DefaultPresentationStartReset);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           ReceiveConnectionMessagesAfterReset);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           MaxPendingStartPresentationRequests);
-  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           MaxPendingReconnectPresentationRequests);
+                           SetDefaultPresentationUrlsNoopsOnNonMainFrame);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
                            ListenForConnectionStateChange);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
                            ListenForConnectionClose);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
-                           SetPresentationConnection);
+                           MaxPendingStartPresentationRequests);
+  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
+                           MaxPendingReconnectPresentationRequests);
   FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
                            ReceiverPresentationServiceDelegate);
+  FRIEND_TEST_ALL_PREFIXES(PresentationServiceImplTest,
+                           ReceiverDelegateOnSubFrame);
 
   // Maximum number of pending ReconnectPresentation requests at any given time.
   static const int kMaxQueuedRequests = 10;
 
   using ConnectionMessagesCallback =
-      base::Callback<void(std::vector<PresentationConnectionMessage>)>;
+      base::OnceCallback<void(std::vector<PresentationConnectionMessage>)>;
 
   // Listener implementation owned by PresentationServiceImpl. An instance of
   // this is created when PresentationRequest.getAvailability() is resolved.
@@ -121,8 +122,8 @@ class CONTENT_EXPORT PresentationServiceImpl
 
     // PresentationScreenAvailabilityListener implementation.
     GURL GetAvailabilityUrl() const override;
-    void OnScreenAvailabilityChanged(bool available) override;
-    void OnScreenAvailabilityNotSupported() override;
+    void OnScreenAvailabilityChanged(
+        blink::mojom::ScreenAvailability availability) override;
 
    private:
     const GURL availability_url_;
@@ -133,8 +134,7 @@ class CONTENT_EXPORT PresentationServiceImpl
   // before it goes out of scope.
   class NewPresentationCallbackWrapper {
    public:
-    explicit NewPresentationCallbackWrapper(
-        const NewPresentationCallback& callback);
+    explicit NewPresentationCallbackWrapper(NewPresentationCallback callback);
     ~NewPresentationCallbackWrapper();
 
     void Run(const base::Optional<PresentationInfo>& presentation_info,
@@ -159,29 +159,6 @@ class CONTENT_EXPORT PresentationServiceImpl
       WebContents* web_contents,
       ControllerPresentationServiceDelegate* controller_delegate,
       ReceiverPresentationServiceDelegate* receiver_delegate);
-
-  // PresentationService implementation.
-  void SetDefaultPresentationUrls(
-      const std::vector<GURL>& presentation_urls) override;
-  void SetClient(blink::mojom::PresentationServiceClientPtr client) override;
-  void ListenForScreenAvailability(const GURL& url) override;
-  void StopListeningForScreenAvailability(const GURL& url) override;
-  void StartPresentation(const std::vector<GURL>& presentation_urls,
-                         const NewPresentationCallback& callback) override;
-  void ReconnectPresentation(const std::vector<GURL>& presentation_urls,
-                             const base::Optional<std::string>& presentation_id,
-                             const NewPresentationCallback& callback) override;
-  void CloseConnection(const GURL& presentation_url,
-                       const std::string& presentation_id) override;
-  void Terminate(const GURL& presentation_url,
-                 const std::string& presentation_id) override;
-  void ListenForConnectionMessages(
-      const PresentationInfo& presentation_info) override;
-  void SetPresentationConnection(
-      const PresentationInfo& presentation_info,
-      blink::mojom::PresentationConnectionPtr controller_connection_ptr,
-      blink::mojom::PresentationConnectionRequest receiver_connection_request)
-      override;
 
   // Creates a binding between this object and |request|.
   void Bind(blink::mojom::PresentationServiceRequest request);
@@ -243,10 +220,10 @@ class CONTENT_EXPORT PresentationServiceImpl
       PresentationConnectionRequest receiver_connection_request);
 
   // Associates a ReconnectPresentation |callback| with a unique request ID and
-  // stores it in a map.
-  // Returns a positive value on success.
-  int RegisterReconnectPresentationCallback(
-      const NewPresentationCallback& callback);
+  // stores it in a map. Moves out |callback| object if |callback| is registered
+  // successfully. If the queue is full, returns a negative value and leaves
+  // |callback| as is.
+  int RegisterReconnectPresentationCallback(NewPresentationCallback* callback);
 
   // Invoked by the embedder's PresentationServiceDelegate when a
   // PresentationConnection's state has changed.
@@ -299,6 +276,9 @@ class CONTENT_EXPORT PresentationServiceImpl
   // ID of the RenderFrameHost this object is associated with.
   int render_process_id_;
   int render_frame_id_;
+
+  // If current frame is top level frame.
+  bool is_main_frame_;
 
   // NOTE: Weak pointers must be invalidated before all other member variables.
   base::WeakPtrFactory<PresentationServiceImpl> weak_factory_;

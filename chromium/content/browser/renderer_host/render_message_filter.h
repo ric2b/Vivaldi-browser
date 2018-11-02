@@ -19,7 +19,7 @@
 #include "base/sequenced_task_runner_helpers.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "cc/resources/shared_bitmap_manager.h"
+#include "components/viz/common/resources/shared_bitmap_manager.h"
 #include "content/common/cache_storage/cache_storage_types.h"
 #include "content/common/render_message_filter.mojom.h"
 #include "content/public/browser/browser_associated_interface.h"
@@ -34,13 +34,6 @@
 
 #if defined(OS_WIN)
 #include <windows.h>
-#endif
-
-#if defined(OS_MACOSX)
-#include "content/common/mac/font_loader.h"
-#endif
-
-#if defined(OS_ANDROID)
 #endif
 
 class GURL;
@@ -105,15 +98,20 @@ class CONTENT_EXPORT RenderMessageFilter
 #if defined(OS_MACOSX)
   // Messages for OOP font loading.
   void OnLoadFont(const FontDescriptor& font, IPC::Message* reply_msg);
-  void SendLoadFontReply(IPC::Message* reply, FontLoader::Result* result);
+  void SendLoadFontReply(IPC::Message* reply,
+                         uint32_t data_size,
+                         base::SharedMemoryHandle handle,
+                         uint32_t font_id);
 #endif
 
   // mojom::RenderMessageFilter:
   void GenerateRoutingID(GenerateRoutingIDCallback routing_id) override;
   void CreateNewWidget(int32_t opener_id,
                        blink::WebPopupType popup_type,
+                       mojom::WidgetPtr widget,
                        CreateNewWidgetCallback callback) override;
   void CreateFullscreenWidget(int opener_id,
+                              mojom::WidgetPtr widget,
                               CreateFullscreenWidgetCallback callback) override;
 
   // Message handlers called on the browser IO thread:

@@ -143,6 +143,7 @@
       "F3013F58BED982D1BC75943792FF877E5D458672",  // http://crbug.com/587613
       "1B7734733E207CCE5C33BFAA544CA89634BF881F",  // http://crbug.com/587613
       "23EEC2E3B4F6A62F5E6C8556364F7B749F9A809C",  // http://crbug.com/587613
+      "D238B3D5DB5836AEC1733DA4237CF93B7F96F495",  // http://crbug.com/587613
       "2F6F6FDB84E0290ABAB7A9D7571EB344821E5F12",  // http://crbug.com/610452
       "5B9E39EA374B136CBE7AED2D872003107642EAD5",  // http://crbug.com/610452
       "E0E94FB0C01FFB9CDC7A5F098C99B5A8D2F95902",  // http://crbug.com/610452
@@ -225,6 +226,49 @@
       "A28C9619C4C41306FA5236FB4D94DA812F504DE8"   // http://crbug.com/429886
     ]
   },
+  "fileSystem": [{
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "default_parent": true
+  },{
+    "channel": "stable",
+    "extension_types": ["extension"],
+    "whitelist": [
+      "2FC374607C2DF285634B67C64A2E356C607091C3",  // Quickoffice
+      "3727DD3E564B6055387425027AD74C58784ACC15",  // Quickoffice internal
+      "12E618C3C6E97495AAECF2AC12DEB082353241C6",  // QO component extension
+      "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2",  // http://crbug.com/312900
+      "D57DE394F36DC1C3220E7604C575D29C51A6C495",  // http://crbug.com/319444
+      "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9",  // http://crbug.com/371562
+      "2B6C6A4A5940017146F3E58B7F90116206E84685",  // http://crbug.com/642141
+      "B6C2EFAB3EC3BF6EF03701408B6B09A67B2D0069",  // http://crbug.com/642141
+      "96FF2FFA5C9173C76D47184B3E86D267B37781DE",  // http://crbug.com/642141
+      "0136FCB13DB29FD5CD442F56E59E53B61F1DF96F"   // http://crbug.com/642141
+    ]
+  }],
+  "fileSystem.directory": {
+    // Inherit from fileSystem's default_parent.
+  },
+  "fileSystem.retainEntries": {
+    // Inherit from fileSystem's default_parent.
+  },
+  "fileSystem.write": [{
+    // Inherit from fileSystem's default_parent.
+  },{
+    "channel": "stable",
+    "extension_types": ["extension"],
+    "whitelist": [
+      "2FC374607C2DF285634B67C64A2E356C607091C3",  // Quickoffice
+      "3727DD3E564B6055387425027AD74C58784ACC15",  // Quickoffice internal
+      "12E618C3C6E97495AAECF2AC12DEB082353241C6",  // QO component extension
+      "D5736E4B5CF695CB93A2FB57E4FDC6E5AFAB6FE2",  // http://crbug.com/312900
+      "D57DE394F36DC1C3220E7604C575D29C51A6C495",  // http://crbug.com/319444
+      "3F65507A3B39259B38C8173C6FFA3D12DF64CCE9"   // http://crbug.com/371562
+    ]
+  }],
+  "fileSystem.requestFileSystem": {
+    "platforms": ["chromeos"]
+  },
   "hid": [
     {
       "channel": "stable",
@@ -249,6 +293,21 @@
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"]
   },
+  "lockScreen": [{
+    "channel": "stable",
+    "extension_types": ["platform_app"],
+    "platforms": ["chromeos"],
+    "whitelist":  [
+      "6F9C741B8E0E546652134F1138DF0284A7C9B21E",  // http://crbug.com/728309
+      "47448626CB266C60AA2404E4EB426E025DF497DF"   // http://crbug.com/728309
+    ]
+  }, {
+    // TODO(tbarzic): Remove this once the apps in the white-list can be used
+    // to test lock screen note taking.
+    "channel": "dev",
+    "extension_types": ["platform_app"],
+    "platforms": ["chromeos"]
+  }],
   "mediaPerceptionPrivate": [{
     "channel": "stable",
     "extension_types": ["platform_app"],
@@ -335,7 +394,7 @@
     "platforms": ["chromeos"],
     "session_types": ["kiosk.autolaunched"]
   }, {
-    "channel": "dev",
+    "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
     "platforms": ["chromeos", "mac", "win", "linux"],
     "whitelist": [
@@ -358,7 +417,9 @@
       "2F6F6FDB84E0290ABAB7A9D7571EB344821E5F12",  // http://crbug.com/610452
       "5B9E39EA374B136CBE7AED2D872003107642EAD5",  // http://crbug.com/610452
       "E0E94FB0C01FFB9CDC7A5F098C99B5A8D2F95902",  // http://crbug.com/610452
-      "52E0557059A7A28F74ED1D92DDD997E0CCD37806"   // http://crbug.com/610452
+      "52E0557059A7A28F74ED1D92DDD997E0CCD37806",  // http://crbug.com/610452
+      "61FF4757F9420B62B19BA5C96084649339DB31F5",  // http://crbug.com/731941
+      "6FB7E1B6C0247B687AC14772E87A117F5F5E4497"  // http://crbug.com/731941
     ]
   }],
   "networkingPrivate": {

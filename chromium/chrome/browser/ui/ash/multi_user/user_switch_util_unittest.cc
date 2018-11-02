@@ -16,7 +16,7 @@
 
 namespace ash {
 
-class TrySwitchingUserTest : public ash::test::AshTestBase {
+class TrySwitchingUserTest : public ash::AshTestBase {
  public:
   // The action type to perform / check for upon user switching.
   enum ActionType {
@@ -33,7 +33,7 @@ class TrySwitchingUserTest : public ash::test::AshTestBase {
   ~TrySwitchingUserTest() override {}
 
   void SetUp() override {
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
     TrayItemView::DisableAnimationsForTest();
     SystemTray* system_tray = GetPrimarySystemTray();
     share_item_ = system_tray->GetScreenShareItem();
@@ -73,7 +73,7 @@ class TrySwitchingUserTest : public ash::test::AshTestBase {
   // checked) and the action the user will choose.
   void SwitchUser(ActionType action) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&CloseMessageBox, action));
+        FROM_HERE, base::BindOnce(&CloseMessageBox, action));
     TrySwitchingActiveUser(base::Bind(&TrySwitchingUserTest::SwitchCallback,
                                       base::Unretained(this)));
     base::RunLoop().RunUntilIdle();

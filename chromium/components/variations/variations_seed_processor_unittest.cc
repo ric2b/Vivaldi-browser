@@ -23,13 +23,13 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/mock_entropy_provider.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/variations/client_filterable_state.h"
 #include "components/variations/processed_study.h"
 #include "components/variations/study_filtering.h"
 #include "components/variations/variations_associated_data.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace variations {
-
 namespace {
 
 // Converts |time| to Study proto format.
@@ -262,7 +262,13 @@ TEST_F(VariationsSeedProcessorTest,
   const base::Time year_ago =
       base::Time::Now() - base::TimeDelta::FromDays(365);
 
-  const base::Version version("20.0.0.0");
+  ClientFilterableState client_state;
+  client_state.locale = "en-CA";
+  client_state.reference_date = base::Time::Now();
+  client_state.version = base::Version("20.0.0.0");
+  client_state.channel = Study::STABLE;
+  client_state.form_factor = Study::DESKTOP;
+  client_state.platform = Study::PLATFORM_ANDROID;
 
   // Check that adding [expired, non-expired] activates the non-expired one.
   ASSERT_EQ(std::string(), base::FieldTrialList::FindFullName(kTrialName));
@@ -270,10 +276,9 @@ TEST_F(VariationsSeedProcessorTest,
     base::FeatureList feature_list;
     base::FieldTrialList field_trial_list(nullptr);
     study1->set_expiry_date(TimeToProtoTime(year_ago));
-    seed_processor.CreateTrialsFromSeed(
-        seed, "en-CA", base::Time::Now(), version, Study_Channel_STABLE,
-        Study_FormFactor_DESKTOP, "", "", "", override_callback_.callback(),
-        nullptr, &feature_list);
+    seed_processor.CreateTrialsFromSeed(seed, client_state,
+                                        override_callback_.callback(), nullptr,
+                                        &feature_list);
     EXPECT_EQ(kGroup1Name, base::FieldTrialList::FindFullName(kTrialName));
   }
 
@@ -284,10 +289,9 @@ TEST_F(VariationsSeedProcessorTest,
     base::FieldTrialList field_trial_list(nullptr);
     study1->clear_expiry_date();
     study2->set_expiry_date(TimeToProtoTime(year_ago));
-    seed_processor.CreateTrialsFromSeed(
-        seed, "en-CA", base::Time::Now(), version, Study_Channel_STABLE,
-        Study_FormFactor_DESKTOP, "", "", "", override_callback_.callback(),
-        nullptr, &feature_list);
+    seed_processor.CreateTrialsFromSeed(seed, client_state,
+                                        override_callback_.callback(), nullptr,
+                                        &feature_list);
     EXPECT_EQ(kGroup1Name, base::FieldTrialList::FindFullName(kTrialName));
   }
 }
@@ -532,11 +536,18 @@ TEST_F(VariationsSeedProcessorTest, StartsActive) {
   AddExperiment("Default", 0, study3);
   study3->set_activation_type(Study_ActivationType_ACTIVATION_EXPLICIT);
 
+  ClientFilterableState client_state;
+  client_state.locale = "en-CA";
+  client_state.reference_date = base::Time::Now();
+  client_state.version = base::Version("20.0.0.0");
+  client_state.channel = Study::STABLE;
+  client_state.form_factor = Study::DESKTOP;
+  client_state.platform = Study::PLATFORM_ANDROID;
+
   VariationsSeedProcessor seed_processor;
-  seed_processor.CreateTrialsFromSeed(
-      seed, "en-CA", base::Time::Now(), base::Version("20.0.0.0"),
-      Study_Channel_STABLE, Study_FormFactor_DESKTOP, "", "", "",
-      override_callback_.callback(), nullptr, &feature_list_);
+  seed_processor.CreateTrialsFromSeed(seed, client_state,
+                                      override_callback_.callback(), nullptr,
+                                      &feature_list_);
 
   // Non-specified and ACTIVATION_EXPLICIT should not start active, but
   // ACTIVATION_AUTO should.
@@ -863,6 +874,60 @@ TEST_F(VariationsSeedProcessorTest, NoDefaultExperiment) {
             base::FieldTrialList::FindFullName("Study1"));
 }
 
+TEST_F(VariationsSeedProcessorTest, ExistingFieldTrial_ExpiredByConfig) {
+  static struct base::Feature kFeature {
+    "FeatureName", base::FEATURE_ENABLED_BY_DEFAULT
+  };
+  base::FieldTrialList field_trial_list(nullptr);
+
+  // In this case, an existing forced trial exists with a different default
+  // group than the study config, which is expired. This tests that we don't
+  // crash in such a case.
+  auto* trial = base::FieldTrialList::FactoryGetFieldTrial(
+      "Study1", 100, "ExistingDefault", base::FieldTrialList::kNoExpirationYear,
+      1, 1, base::FieldTrial::SESSION_RANDOMIZED, nullptr);
+  trial->AppendGroup("A", 100);
+  trial->SetForced();
+
+  Study study;
+  study.set_name("Study1");
+  const base::Time year_ago =
+      base::Time::Now() - base::TimeDelta::FromDays(365);
+  study.set_expiry_date(TimeToProtoTime(year_ago));
+  auto* exp1 = AddExperiment("A", 1, &study);
+  exp1->mutable_feature_association()->add_enable_feature(kFeature.name);
+  AddExperiment("Default", 1, &study);
+  study.set_default_experiment_name("Default");
+
+  EXPECT_TRUE(CreateTrialFromStudy(study));
+
+  // The expected effect is that processing the server config will expire
+  // the existing trial.
+  EXPECT_EQ("ExistingDefault", trial->group_name());
+}
+
+TEST_F(VariationsSeedProcessorTest, ExpiredStudy_NoDefaultGroup) {
+  static struct base::Feature kFeature {
+    "FeatureName", base::FEATURE_ENABLED_BY_DEFAULT
+  };
+  base::FieldTrialList field_trial_list(nullptr);
+
+  // Although it's not expected for the server to provide a study with an expiry
+  // date set, but not default experiment, this tests that we don't crash if
+  // that happens.
+  Study study;
+  study.set_name("Study1");
+  const base::Time year_ago =
+      base::Time::Now() - base::TimeDelta::FromDays(365);
+  study.set_expiry_date(TimeToProtoTime(year_ago));
+  auto* exp1 = AddExperiment("A", 1, &study);
+  exp1->mutable_feature_association()->add_enable_feature(kFeature.name);
+
+  EXPECT_TRUE(CreateTrialFromStudy(study));
+  EXPECT_EQ("VariationsDefaultExperiment",
+            base::FieldTrialList::FindFullName("Study1"));
+}
+
 TEST_F(VariationsSeedProcessorTest, LowEntropyStudyTest) {
   const std::string kTrial1Name = "A";
   const std::string kTrial2Name = "B";
@@ -872,13 +937,13 @@ TEST_F(VariationsSeedProcessorTest, LowEntropyStudyTest) {
   VariationsSeed seed;
   Study* study1 = seed.add_study();
   study1->set_name(kTrial1Name);
-  study1->set_consistency(variations::Study_Consistency_PERMANENT);
+  study1->set_consistency(Study::PERMANENT);
   study1->set_default_experiment_name(kDefaultName);
   AddExperiment(kGroup1Name, 50, study1);
   AddExperiment(kDefaultName, 50, study1);
   Study* study2 = seed.add_study();
   study2->set_name(kTrial2Name);
-  study2->set_consistency(variations::Study_Consistency_PERMANENT);
+  study2->set_consistency(Study::PERMANENT);
   study2->set_default_experiment_name(kDefaultName);
   AddExperiment(kGroup1Name, 50, study2);
   AddExperiment(kDefaultName, 50, study2);

@@ -8,9 +8,9 @@
 #include "core/css/parser/CSSParser.h"
 #include "core/css/parser/CSSParserContext.h"
 #include "core/dom/Document.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/shadow/ElementShadow.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,10 +34,10 @@ template <unsigned length>
 void RunTests(ContainerNode& scope, const QueryTest (&test_cases)[length]) {
   for (const auto& test_case : test_cases) {
     const char* selector = test_case.selector;
-    SCOPED_TRACE(testing::Message()
-                 << (test_case.query_all ? "querySelectorAll('"
-                                         : "querySelector('")
-                 << selector << "')");
+    SCOPED_TRACE(
+        ::testing::Message()
+        << (test_case.query_all ? "querySelectorAll('" : "querySelector('")
+        << selector << "')");
     if (test_case.query_all) {
       StaticElementList* match_all = scope.QuerySelectorAll(selector);
       EXPECT_EQ(test_case.matches, match_all->length());
@@ -58,7 +58,7 @@ void RunTests(ContainerNode& scope, const QueryTest (&test_cases)[length]) {
 #endif
   }
 }
-};
+};  // namespace
 
 TEST(SelectorQueryTest, NotMatchingPseudoElement) {
   Document* document = Document::Create();
@@ -68,8 +68,8 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
       "<body><style>span::before { content: 'X' }</style><span></span></body>");
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(*document, KURL(), kReferrerPolicyDefault,
-                               g_empty_string,
+      CSSParserContext::Create(*document, NullURL(), kReferrerPolicyDefault,
+                               WTF::TextEncoding(),
                                CSSParserContext::kStaticProfile),
       nullptr, "span::before");
   std::unique_ptr<SelectorQuery> query =
@@ -78,8 +78,8 @@ TEST(SelectorQueryTest, NotMatchingPseudoElement) {
   EXPECT_EQ(nullptr, elm);
 
   selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(*document, KURL(), kReferrerPolicyDefault,
-                               g_empty_string,
+      CSSParserContext::Create(*document, NullURL(), kReferrerPolicyDefault,
+                               WTF::TextEncoding(),
                                CSSParserContext::kStaticProfile),
       nullptr, "span");
   query = SelectorQuery::Adopt(std::move(selector_list));
@@ -97,8 +97,8 @@ TEST(SelectorQueryTest, LastOfTypeNotFinishedParsing) {
   document->body()->BeginParsingChildren();
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(*document, KURL(), kReferrerPolicyDefault,
-                               g_empty_string,
+      CSSParserContext::Create(*document, NullURL(), kReferrerPolicyDefault,
+                               WTF::TextEncoding(),
                                CSSParserContext::kStaticProfile),
       nullptr, "p:last-of-type");
   std::unique_ptr<SelectorQuery> query =

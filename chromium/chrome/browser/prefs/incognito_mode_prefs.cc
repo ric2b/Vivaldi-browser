@@ -29,7 +29,6 @@
 #include "base/bind_helpers.h"
 #include "base/memory/singleton.h"
 #include "base/win/scoped_comptr.h"
-#include "base/win/windows_version.h"
 #endif  // OS_WIN
 
 #if defined(OS_ANDROID)
@@ -76,10 +75,6 @@ class PlatformParentalControlsValue {
   static bool IsParentalControlActivityLoggingOn() {
     // Since we can potentially block, make sure the thread is okay with this.
     base::ThreadRestrictions::AssertIOAllowed();
-
-    // Query this info on Windows 7 and above.
-    if (base::win::GetVersion() < base::win::VERSION_WIN7)
-      return false;
 
     ThreadType thread_type = ThreadType::BLOCKING;
     if (BrowserThread::IsThreadInitialized(BrowserThread::UI) &&
@@ -199,12 +194,10 @@ bool IncognitoModePrefs::CanOpenBrowser(Profile* profile) {
 #if defined(OS_WIN)
 // static
 void IncognitoModePrefs::InitializePlatformParentalControls() {
-  // TODO(fdoray): This task uses COM. Add the WithCom() trait once supported.
-  // crbug.com/662122
-  base::PostTaskWithTraits(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(
-          base::IgnoreResult(&PlatformParentalControlsValue::GetInstance)));
+  base::CreateCOMSTATaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::USER_VISIBLE})
+      ->PostTask(FROM_HERE, base::Bind(base::IgnoreResult(
+                                &PlatformParentalControlsValue::GetInstance)));
 }
 #endif
 

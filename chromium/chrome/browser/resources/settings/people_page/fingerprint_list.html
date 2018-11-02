@@ -22,7 +22,6 @@
       .add-link {
         background-color: transparent;
         color: var(--google-blue-500);
-        padding: 0;
       }
 
       .add-link[disabled] {
@@ -55,9 +54,8 @@
             <paper-input value="{{item}}"
                 on-change="onFingerprintLabelChanged_">
             </paper-input>
-            <button is="paper-icon-button-light"
+            <button is="paper-icon-button-light" class="icon-delete-gray"
                 on-tap="onFingerprintDeleteTapped_">
-              <iron-icon icon="cr:delete"></iron-icon>
             </button>
           </div>
         </template>
@@ -71,10 +69,12 @@
     </div>
     <i class="settings-box continuation">$i18n{lockScreenFingerprintWarning}</i>
 
-    <settings-setup-fingerprint-dialog id="setupFingerprint"
-        on-add-fingerprint="updateFingerprintsList_"
-        on-close="onSetupFingerprintDialogClose_">
-    </settings-setup-fingerprint-dialog>
+    <template is="dom-if" if="[[showSetupFingerprintDialog_]]" restamp>
+      <settings-setup-fingerprint-dialog
+          on-add-fingerprint="updateFingerprintsList_"
+          on-close="onSetupFingerprintDialogClose_">
+      </settings-setup-fingerprint-dialog>
+    </template>
   </template>
   <script src="fingerprint_list.js"></script>
 </dom-module>

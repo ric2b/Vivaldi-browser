@@ -28,7 +28,7 @@ class FFmpegCommonTest : public testing::Test {
   FFmpegCommonTest() {
     FFmpegGlue::InitializeFFmpeg();
   }
-  ~FFmpegCommonTest() override{};
+  ~FFmpegCommonTest() override {}
 };
 
 uint8_t kExtraData[5] = {0x00, 0x01, 0x02, 0x03, 0x04};
@@ -123,6 +123,52 @@ TEST_F(FFmpegCommonTest, AVStreamToDecoderConfig) {
 
   ASSERT_TRUE(found_audio);
   ASSERT_TRUE(found_video);
+}
+
+TEST_F(FFmpegCommonTest, AVStreamToAudioDecoderConfig_OpusAmbisonics_4ch) {
+  base::MemoryMappedFile file;
+  file.Initialize(
+      GetTestDataFilePath("bear-opus-end-trimming-4ch-channelmapping2.webm"));
+  InMemoryUrlProtocol protocol(file.data(), file.length(), false);
+  FFmpegGlue glue(&protocol);
+  ASSERT_TRUE(glue.OpenContext());
+
+  AVFormatContext* format_context = glue.format_context();
+  EXPECT_EQ(static_cast<unsigned int>(1), format_context->nb_streams);
+  AVStream* stream = format_context->streams[0];
+
+  AVCodecParameters* codec_parameters = stream->codecpar;
+  EXPECT_EQ(AVMEDIA_TYPE_AUDIO, codec_parameters->codec_type);
+
+  AudioDecoderConfig audio_config;
+  ASSERT_TRUE(AVStreamToAudioDecoderConfig(stream, &audio_config));
+
+  EXPECT_EQ(kCodecOpus, audio_config.codec());
+  EXPECT_EQ(CHANNEL_LAYOUT_QUAD, audio_config.channel_layout());
+  EXPECT_EQ(4, audio_config.channels());
+}
+
+TEST_F(FFmpegCommonTest, AVStreamToAudioDecoderConfig_OpusAmbisonics_11ch) {
+  base::MemoryMappedFile file;
+  file.Initialize(
+      GetTestDataFilePath("bear-opus-end-trimming-11ch-channelmapping2.webm"));
+  InMemoryUrlProtocol protocol(file.data(), file.length(), false);
+  FFmpegGlue glue(&protocol);
+  ASSERT_TRUE(glue.OpenContext());
+
+  AVFormatContext* format_context = glue.format_context();
+  EXPECT_EQ(static_cast<unsigned int>(1), format_context->nb_streams);
+  AVStream* stream = format_context->streams[0];
+
+  AVCodecParameters* codec_parameters = stream->codecpar;
+  EXPECT_EQ(AVMEDIA_TYPE_AUDIO, codec_parameters->codec_type);
+
+  AudioDecoderConfig audio_config;
+  ASSERT_TRUE(AVStreamToAudioDecoderConfig(stream, &audio_config));
+
+  EXPECT_EQ(kCodecOpus, audio_config.codec());
+  EXPECT_EQ(CHANNEL_LAYOUT_DISCRETE, audio_config.channel_layout());
+  EXPECT_EQ(11, audio_config.channels());
 }
 
 TEST_F(FFmpegCommonTest, TimeBaseConversions) {

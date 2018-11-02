@@ -10,20 +10,24 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/ozone/platform/drm/host/drm_overlay_candidates_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host.h"
 #include "ui/ozone/platform/drm/host/drm_window_host_manager.h"
+#include "ui/ozone/public/overlay_surface_candidate.h"
 #include "ui/ozone/public/ozone_switches.h"
 
 namespace ui {
 
-typedef OverlayCandidatesOzone::OverlaySurfaceCandidateList
-    OverlaySurfaceCandidateList;
-typedef OverlayCandidatesOzone::OverlaySurfaceCandidate OverlaySurfaceCandidate;
+using OverlaySurfaceCandidateList =
+    OverlayCandidatesOzone::OverlaySurfaceCandidateList;
 
 namespace {
-const size_t kMaxCacheSize = 200;
+const size_t kMaxCacheSize = 10;
+// How many times a specific configuration of overlays should be requested
+// before sending a GPU validation request to the GPU process.
+const int kThrottleRequestSize = 3;
 }  // namespace
 
 DrmOverlayManager::DrmOverlayManager(GpuThreadAdapter* proxy,
@@ -44,6 +48,7 @@ DrmOverlayManager::CreateOverlayCandidates(gfx::AcceleratedWidget w) {
 void DrmOverlayManager::CheckOverlaySupport(
     OverlayCandidatesOzone::OverlaySurfaceCandidateList* candidates,
     gfx::AcceleratedWidget widget) {
+  TRACE_EVENT0("hwoverlays", "DrmOverlayManager::CheckOverlaySupport");
   std::vector<OverlayCheck_Params> overlay_params;
   for (auto& candidate : *candidates) {
     // Reject candidates that don't fall on a pixel boundary.
@@ -60,43 +65,49 @@ void DrmOverlayManager::CheckOverlaySupport(
       candidate.buffer_size = gfx::ToNearestRect(candidate.display_rect).size();
 
     overlay_params.push_back(OverlayCheck_Params(candidate));
+
+    if (!CanHandleCandidate(candidate, widget)) {
+      DCHECK(candidate.plane_z_order != 0);
+      overlay_params.back().is_overlay_candidate = false;
+    }
   }
 
-  const auto& iter = cache_.Get(overlay_params);
-  // We are still waiting on results for this candidate list from GPU.
-  if (iter != cache_.end() && iter->second)
-    return;
-
   size_t size = candidates->size();
-
+  auto iter = cache_.Get(overlay_params);
   if (iter == cache_.end()) {
     // We can skip GPU side validation in case all candidates are invalid.
-    bool needs_gpu_validation = false;
-    for (size_t i = 0; i < size; i++) {
-      if (!overlay_params.at(i).is_overlay_candidate)
-        continue;
-
-      const OverlaySurfaceCandidate& candidate = candidates->at(i);
-      if (!CanHandleCandidate(candidate, widget)) {
-        DCHECK(candidate.plane_z_order != 0);
-        overlay_params.at(i).is_overlay_candidate = false;
-        continue;
-      }
-
-      needs_gpu_validation = true;
+    bool needs_gpu_validation = std::any_of(
+        overlay_params.begin(), overlay_params.end(),
+        [](OverlayCheck_Params& c) { return c.is_overlay_candidate; });
+    OverlayValidationCacheValue value;
+    value.request_num = 0;
+    value.returns.resize(overlay_params.size());
+    for (size_t i = 0; i < value.returns.size(); ++i) {
+      value.returns[i].status =
+          needs_gpu_validation ? OVERLAY_STATUS_PENDING : OVERLAY_STATUS_NOT;
     }
+    iter = cache_.Put(overlay_params, value);
+  }
 
-    cache_.Put(overlay_params, needs_gpu_validation);
-
-    if (needs_gpu_validation)
+  OverlayValidationCacheValue& value = iter->second;
+  if (value.request_num < kThrottleRequestSize) {
+    value.request_num++;
+  } else if (value.request_num == kThrottleRequestSize) {
+    value.request_num++;
+    if (value.returns.back().status == OVERLAY_STATUS_PENDING)
       SendOverlayValidationRequest(overlay_params, widget);
   } else {
-    const std::vector<OverlayCheck_Params>& validated_params = iter->first;
-    DCHECK(size == validated_params.size());
+    // We haven't received an answer yet.
+    if (value.returns.back().status == OVERLAY_STATUS_PENDING)
+      return;
 
+    const std::vector<OverlayCheckReturn_Params>& returns = value.returns;
+    DCHECK(size == returns.size());
     for (size_t i = 0; i < size; i++) {
+      DCHECK(returns[i].status == OVERLAY_STATUS_ABLE ||
+             returns[i].status == OVERLAY_STATUS_NOT);
       candidates->at(i).overlay_handled =
-          validated_params.at(i).is_overlay_candidate;
+          returns[i].status == OVERLAY_STATUS_ABLE;
     }
   }
 }
@@ -105,19 +116,35 @@ void DrmOverlayManager::ResetCache() {
   cache_.Clear();
 }
 
+DrmOverlayManager::OverlayValidationCacheValue::OverlayValidationCacheValue() =
+    default;
+
+DrmOverlayManager::OverlayValidationCacheValue::OverlayValidationCacheValue(
+    const OverlayValidationCacheValue&) = default;
+DrmOverlayManager::OverlayValidationCacheValue::~OverlayValidationCacheValue() =
+    default;
+
 void DrmOverlayManager::SendOverlayValidationRequest(
     const std::vector<OverlayCheck_Params>& new_params,
     gfx::AcceleratedWidget widget) const {
   if (!proxy_->IsConnected())
     return;
-
+  TRACE_EVENT_ASYNC_BEGIN0(
+      "hwoverlays", "DrmOverlayManager::SendOverlayValidationRequest", this);
   proxy_->GpuCheckOverlayCapabilities(widget, new_params);
 }
 
 void DrmOverlayManager::GpuSentOverlayResult(
     gfx::AcceleratedWidget widget,
-    const std::vector<OverlayCheck_Params>& params) {
-  cache_.Put(params, false);
+    const std::vector<OverlayCheck_Params>& params,
+    const std::vector<OverlayCheckReturn_Params>& returns) {
+  TRACE_EVENT_ASYNC_END0(
+      "hwoverlays", "DrmOverlayManager::SendOverlayValidationRequest response",
+      this);
+  auto iter = cache_.Peek(params);
+  if (iter != cache_.end()) {
+    iter->second.returns = returns;
+  }
 }
 
 bool DrmOverlayManager::CanHandleCandidate(
@@ -142,9 +169,10 @@ bool DrmOverlayManager::CanHandleCandidate(
     }
   }
 
-  if (candidate.is_clipped &&
-      !candidate.clip_rect.Contains(candidate.quad_rect_in_target_space))
+  if (candidate.is_clipped && !candidate.clip_rect.Contains(
+                                  gfx::ToNearestRect(candidate.display_rect))) {
     return false;
+  }
 
   return true;
 }

@@ -15,6 +15,10 @@
 class GURL;
 class PrefService;
 
+namespace aura {
+class Window;
+}
+
 namespace gfx {
 class Image;
 }
@@ -28,6 +32,9 @@ class Connector;
 }
 
 namespace ui {
+#if defined(USE_OZONE)
+class InputDeviceControllerClient;
+#endif
 class MenuModel;
 }
 
@@ -36,12 +43,10 @@ namespace ash {
 class AccessibilityDelegate;
 class GPUSupport;
 class PaletteDelegate;
-class SessionStateDelegate;
 class Shelf;
 struct ShelfItem;
 class SystemTrayDelegate;
 class WallpaperDelegate;
-class WmWindow;
 
 // Delegate of the Shell.
 class ASH_EXPORT ShellDelegate {
@@ -64,7 +69,7 @@ class ASH_EXPORT ShellDelegate {
 
   // Returns true if |window| can be shown for the delegate's concept of current
   // user.
-  virtual bool CanShowWindowForUser(WmWindow* window) const = 0;
+  virtual bool CanShowWindowForUser(aura::Window* window) const = 0;
 
   // Returns true if the first window shown on first run should be
   // unconditionally maximized, overriding the heuristic that normally chooses
@@ -82,8 +87,8 @@ class ASH_EXPORT ShellDelegate {
   // Invoked when the user uses Ctrl-Shift-Q to close chrome.
   virtual void Exit() = 0;
 
-  // Create a shell-specific keyboard::KeyboardUI
-  virtual keyboard::KeyboardUI* CreateKeyboardUI() = 0;
+  // Create a shell-specific keyboard::KeyboardUI.
+  virtual std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() = 0;
 
   // Opens the |url| in a new browser tab.
   virtual void OpenUrlFromArc(const GURL& url) = 0;
@@ -98,9 +103,6 @@ class ASH_EXPORT ShellDelegate {
 
   // Creates a wallpaper delegate. Shell takes ownership of the delegate.
   virtual std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() = 0;
-
-  // Creates a session state delegate. Shell takes ownership of the delegate.
-  virtual SessionStateDelegate* CreateSessionStateDelegate() = 0;
 
   // Creates a accessibility delegate. Shell takes ownership of the delegate.
   virtual AccessibilityDelegate* CreateAccessibilityDelegate() = 0;
@@ -124,6 +126,8 @@ class ASH_EXPORT ShellDelegate {
 
   virtual PrefService* GetActiveUserPrefService() const = 0;
 
+  virtual PrefService* GetLocalStatePrefService() const = 0;
+
   // If |use_local_state| is true, returns the touchscreen status from local
   // state, otherwise from user prefs.
   virtual bool IsTouchscreenEnabledInPrefs(bool use_local_state) const = 0;
@@ -139,6 +143,14 @@ class ASH_EXPORT ShellDelegate {
 
   // Toggles the status of touchpad between enabled and disabled.
   virtual void ToggleTouchpad() {}
+
+  // Suspends all WebContents-associated media sessions to stop managed players.
+  virtual void SuspendMediaSessions() {}
+
+#if defined(USE_OZONE)
+  // Creator of Shell owns this; it's assumed this outlives Shell.
+  virtual ui::InputDeviceControllerClient* GetInputDeviceControllerClient() = 0;
+#endif
 };
 
 }  // namespace ash

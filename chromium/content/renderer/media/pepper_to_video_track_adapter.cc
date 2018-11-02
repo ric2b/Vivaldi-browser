@@ -46,14 +46,7 @@ class PpFrameWriter : public MediaStreamVideoSource,
 
  protected:
   // MediaStreamVideoSource implementation.
-  void GetCurrentSupportedFormats(
-      int max_requested_width,
-      int max_requested_height,
-      double max_requested_frame_rate,
-      const VideoCaptureDeviceFormatsCB& callback) override;
   void StartSourceImpl(
-      const media::VideoCaptureFormat& format,
-      const blink::WebMediaConstraints& constraints,
       const VideoCaptureDeliverFrameCB& frame_callback) override;
   void StopSourceImpl() override;
 
@@ -116,24 +109,9 @@ PpFrameWriter::~PpFrameWriter() {
   DVLOG(3) << "PpFrameWriter dtor";
 }
 
-void PpFrameWriter::GetCurrentSupportedFormats(
-    int max_requested_width,
-    int max_requested_height,
-    double max_requested_frame_rate,
-    const VideoCaptureDeviceFormatsCB& callback) {
-  DCHECK(CalledOnValidThread());
-  DVLOG(3) << "PpFrameWriter::GetCurrentSupportedFormats()";
-  // Since the input is free to change the resolution at any point in time
-  // the supported formats are unknown.
-  media::VideoCaptureFormats formats;
-  callback.Run(formats);
-}
-
 void PpFrameWriter::StartSourceImpl(
-    const media::VideoCaptureFormat& format,
-    const blink::WebMediaConstraints& constraints,
     const VideoCaptureDeliverFrameCB& frame_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!delegate_.get());
   DVLOG(3) << "PpFrameWriter::StartSourceImpl()";
   delegate_ = new FrameWriterDelegate(io_task_runner(), frame_callback);
@@ -141,14 +119,14 @@ void PpFrameWriter::StartSourceImpl(
 }
 
 void PpFrameWriter::StopSourceImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 // Note: PutFrame must copy or process image_data directly in this function,
 // because it may be overwritten as soon as we return from this function.
 void PpFrameWriter::PutFrame(PPB_ImageData_Impl* image_data,
                              int64_t time_stamp_ns) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   TRACE_EVENT0("video", "PpFrameWriter::PutFrame");
   DVLOG(3) << "PpFrameWriter::PutFrame()";
 

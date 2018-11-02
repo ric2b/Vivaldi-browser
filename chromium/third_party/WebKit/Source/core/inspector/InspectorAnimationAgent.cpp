@@ -21,8 +21,8 @@
 #include "core/css/CSSStyleRule.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/DOMNodeIds.h"
-#include "core/dom/NodeComputedStyle.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/AddStringToDigestor.h"
 #include "core/inspector/InspectedFrames.h"
 #include "core/inspector/InspectorCSSAgent.h"
 #include "core/inspector/InspectorStyleSheet.h"
@@ -245,7 +245,7 @@ Response InspectorAnimationAgent::getCurrentTime(const String& id,
   } else {
     // Use startTime where possible since currentTime is limited.
     *current_time =
-        animation->timeline()->currentTime() - animation->startTime();
+        animation->TimelineInternal()->currentTime() - animation->startTime();
   }
   return Response::OK();
 }
@@ -265,7 +265,7 @@ Response InspectorAnimationAgent::setPaused(
     if (paused && !clone->Paused()) {
       // Ensure we restore a current time if the animation is limited.
       double current_time =
-          clone->timeline()->currentTime() - clone->startTime();
+          clone->TimelineInternal()->currentTime() - clone->startTime();
       clone->pause();
       clone->setCurrentTime(current_time, false);
     } else if (!paused && clone->Paused()) {
@@ -455,13 +455,6 @@ static CSSPropertyID g_transition_properties[] = {
     CSSPropertyTransitionProperty, CSSPropertyTransitionTimingFunction,
 };
 
-static void AddStringToDigestor(WebCryptoDigestor* digestor,
-                                const String& string) {
-  digestor->Consume(
-      reinterpret_cast<const unsigned char*>(string.Ascii().data()),
-      string.length());
-}
-
 String InspectorAnimationAgent::CreateCSSId(blink::Animation& animation) {
   String type =
       id_to_animation_type_.at(String::Number(animation.SequenceNumber()));
@@ -548,18 +541,19 @@ Response InspectorAnimationAgent::AssertAnimation(const String& id,
   return Response::OK();
 }
 
-AnimationTimeline& InspectorAnimationAgent::ReferenceTimeline() {
+DocumentTimeline& InspectorAnimationAgent::ReferenceTimeline() {
   return inspected_frames_->Root()->GetDocument()->Timeline();
 }
 
 double InspectorAnimationAgent::NormalizedStartTime(
     blink::Animation& animation) {
-  if (ReferenceTimeline().PlaybackRate() == 0)
+  if (ReferenceTimeline().PlaybackRate() == 0) {
     return animation.startTime() + ReferenceTimeline().currentTime() -
-           animation.timeline()->currentTime();
-  return animation.startTime() +
-         (animation.timeline()->ZeroTime() - ReferenceTimeline().ZeroTime()) *
-             1000 * ReferenceTimeline().PlaybackRate();
+           animation.TimelineInternal()->currentTime();
+  }
+  return animation.startTime() + (animation.TimelineInternal()->ZeroTime() -
+                                  ReferenceTimeline().ZeroTime()) *
+                                     1000 * ReferenceTimeline().PlaybackRate();
 }
 
 DEFINE_TRACE(InspectorAnimationAgent) {

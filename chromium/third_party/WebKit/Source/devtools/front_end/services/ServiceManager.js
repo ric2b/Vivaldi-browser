@@ -25,21 +25,18 @@ Services.ServiceManager = class {
   /**
    * @param {string} appName
    * @param {string} serviceName
-   * @param {boolean} isSharedWorker
    * @return {!Promise<?Services.ServiceManager.Service>}
    */
-  createAppService(appName, serviceName, isSharedWorker) {
+  createAppService(appName, serviceName) {
     var url = appName + '.js';
     var remoteBase = Runtime.queryParam('remoteBase');
     var debugFrontend = Runtime.queryParam('debugFrontend');
-    // Do not pass additional query parameters to shared worker to avoid URLMismatchError
-    // in case another instance of DevTools with different query parameters creates same shared worker.
-    if (remoteBase && !isSharedWorker)
+    if (remoteBase)
       url += '?remoteBase=' + remoteBase;
-    if (debugFrontend && !isSharedWorker)
+    if (debugFrontend)
       url += '?debugFrontend=' + debugFrontend;
 
-    var worker = isSharedWorker ? new SharedWorker(url, appName) : new Worker(url);
+    var worker = new Worker(url);
     var connection = new Services.ServiceManager.Connection(new Services.ServiceManager.WorkerServicePort(worker));
     return connection._createService(serviceName);
   }
@@ -244,7 +241,7 @@ Services.ServiceManager.RemoteServicePort = class {
       try {
         socket = new WebSocket(/** @type {string} */ (this._url));
         socket.onmessage = onMessage.bind(this);
-        socket.onclose = this._closeHandler;
+        socket.onclose = onClose.bind(this);
         socket.onopen = onConnect.bind(this);
       } catch (e) {
         fulfill(false);
@@ -264,6 +261,15 @@ Services.ServiceManager.RemoteServicePort = class {
        */
       function onMessage(event) {
         this._messageHandler(event.data);
+      }
+
+      /**
+       * @this {Services.ServiceManager.RemoteServicePort}
+       */
+      function onClose() {
+        if (!this._socket)
+          fulfill(false);
+        this._socketClosed(!!this._socket);
       }
     }
   }
@@ -291,11 +297,20 @@ Services.ServiceManager.RemoteServicePort = class {
     return this._open().then(() => {
       if (this._socket) {
         this._socket.close();
-        this._socket = null;
-        delete this._connectionPromise;
+        this._socketClosed(true);
       }
       return true;
     });
+  }
+
+  /**
+   * @param {boolean=} notifyClient
+   */
+  _socketClosed(notifyClient) {
+    this._socket = null;
+    delete this._connectionPromise;
+    if (notifyClient)
+      this._closeHandler();
   }
 };
 
@@ -305,22 +320,16 @@ Services.ServiceManager.RemoteServicePort = class {
  */
 Services.ServiceManager.WorkerServicePort = class {
   /**
-   * @param {!Worker|!SharedWorker} worker
+   * @param {!Worker} worker
    */
   constructor(worker) {
     this._worker = worker;
 
     var fulfill;
     this._workerPromise = new Promise(resolve => fulfill = resolve);
-    this._isSharedWorker = worker instanceof SharedWorker;
 
-    if (this._isSharedWorker) {
-      this._worker.port.onmessage = onMessage.bind(this);
-      this._worker.port.onclose = this._closeHandler;
-    } else {
-      this._worker.onmessage = onMessage.bind(this);
-      this._worker.onclose = this._closeHandler;
-    }
+    this._worker.onmessage = onMessage.bind(this);
+    this._worker.onclose = this._closeHandler;
 
     /**
      * @param {!Event} event
@@ -353,10 +362,7 @@ Services.ServiceManager.WorkerServicePort = class {
   send(message) {
     return this._workerPromise.then(() => {
       try {
-        if (this._isSharedWorker)
-          this._worker.port.postMessage(message);
-        else
-          this._worker.postMessage(message);
+        this._worker.postMessage(message);
         return true;
       } catch (e) {
         return false;

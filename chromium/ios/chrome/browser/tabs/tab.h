@@ -17,8 +17,10 @@
 #import "ios/web/public/web_state/ui/crw_web_delegate.h"
 #include "ui/base/page_transition_types.h"
 
+@protocol ApplicationCommands;
 @class AutofillController;
 @class AutoReloadBridge;
+@protocol BrowserCommands;
 @class CastController;
 @class CRWWebController;
 @class ExternalAppLauncher;
@@ -26,7 +28,6 @@
 @class FullScreenController;
 @protocol FullScreenControllerDelegate;
 class GURL;
-@class NativeAppNavigationController;
 @class OpenInController;
 @class OverscrollActionsController;
 @protocol OverscrollActionsControllerDelegate;
@@ -101,11 +102,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 // Browser state associated with this Tab.
 @property(nonatomic, readonly) ios::ChromeBrowserState* browserState;
 
-// TODO(crbug.com/546208): Eliminate this; replace calls with either visible URL
-// or last committed URL, depending on the specific use case.
-// Do not add new calls to this method.
-@property(nonatomic, readonly) const GURL& url;
-
 // Returns the URL of the last committed NavigationItem for this Tab.
 @property(nonatomic, readonly) const GURL& lastCommittedURL;
 
@@ -166,6 +162,10 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // |YES| if the tab has finished loading.
 @property(nonatomic, readonly) BOOL loadFinished;
+
+// Dispatcher that the tab can use to send commands. This should be set
+// when other delegates are set.
+@property(nonatomic, weak) id<ApplicationCommands, BrowserCommands> dispatcher;
 
 // Creates a new Tab with the given WebState.
 - (instancetype)initWithWebState:(web::WebState*)webState;
@@ -288,9 +288,6 @@ extern NSString* const kProxyPassthroughHeaderValue;
 
 // Called when the snapshot of the content will be taken.
 - (void)willUpdateSnapshot;
-
-// Returns the NativeAppNavigationController for this tab.
-- (NativeAppNavigationController*)nativeAppNavigationController;
 
 // Called when this tab is shown.
 - (void)wasShown;

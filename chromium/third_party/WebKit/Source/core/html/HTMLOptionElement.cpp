@@ -32,8 +32,8 @@
 #include "core/dom/Document.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/html/HTMLDataListElement.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLSelectElement.h"
@@ -87,7 +87,7 @@ HTMLOptionElement* HTMLOptionElement::CreateForJSConstructor(
   return element;
 }
 
-void HTMLOptionElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLOptionElement::AttachLayoutTree(AttachContext& context) {
   AttachContext option_context(context);
   RefPtr<ComputedStyle> resolved_style;
   if (!context.resolved_style && ParentComputedStyle()) {
@@ -284,7 +284,7 @@ void HTMLOptionElement::SetSelectedState(bool selected) {
 }
 
 void HTMLOptionElement::SetDirty(bool value) {
-  is_dirty_ = true;
+  is_dirty_ = value;
 }
 
 void HTMLOptionElement::ChildrenChanged(const ChildrenChange& change) {

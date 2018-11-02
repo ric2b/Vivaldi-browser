@@ -32,10 +32,10 @@
 
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/ClientRect.h"
 #include "core/dom/DOMTokenList.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/track/vtt/VTTParser.h"
 #include "core/html/track/vtt/VTTScanner.h"
@@ -288,8 +288,7 @@ void VTTRegion::WillRemoveVTTCueBox(VTTCueBox* box) {
 
   double box_height = box->getBoundingClientRect()->height();
 
-  cue_container_->classList().remove(TextTrackCueContainerScrollingClass(),
-                                     ASSERT_NO_EXCEPTION);
+  cue_container_->classList().Remove(TextTrackCueContainerScrollingClass());
 
   current_top_ += box_height;
   cue_container_->SetInlineStyleProperty(CSSPropertyTop, current_top_,
@@ -319,15 +318,15 @@ void VTTRegion::DisplayLastVTTCueBox() {
 
   // If it's a scrolling region, add the scrolling class.
   if (IsScrollingRegion())
-    cue_container_->classList().add(TextTrackCueContainerScrollingClass(),
-                                    ASSERT_NO_EXCEPTION);
+    cue_container_->classList().Add(TextTrackCueContainerScrollingClass());
 
-  float region_bottom = region_display_tree_->getBoundingClientRect()->bottom();
+  double region_bottom =
+      region_display_tree_->getBoundingClientRect()->bottom();
 
   // Find first cue that is not entirely displayed and scroll it upwards.
   for (Element& child : ElementTraversal::ChildrenOf(*cue_container_)) {
-    ClientRect* client_rect = child.getBoundingClientRect();
-    float child_bottom = client_rect->bottom();
+    DOMRect* client_rect = child.getBoundingClientRect();
+    double child_bottom = client_rect->bottom();
 
     if (region_bottom >= child_bottom)
       continue;

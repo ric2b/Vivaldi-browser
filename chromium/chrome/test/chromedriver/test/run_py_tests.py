@@ -76,18 +76,13 @@ _VERSION_SPECIFIC_FILTER['HEAD'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
     'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
 ]
+_VERSION_SPECIFIC_FILTER['60'] = [
+    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1819
+    'ChromeExtensionsCapabilityTest.testIFrameWithExtensionsSource',
+]
 _VERSION_SPECIFIC_FILTER['58'] = [
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1673
     'ChromeDriverPageLoadTimeoutTest.testPageLoadTimeoutCrossDomain',
-]
-_VERSION_SPECIFIC_FILTER['57'] = [
-    # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1625
-    'ChromeDriverTest.testWindowMaximize',
-    'ChromeDriverTest.testWindowPosition',
-    'ChromeDriverTest.testWindowSize',
-    'ChromeExtensionsCapabilityTest.testCanInspectBackgroundPage',
-    'ChromeExtensionsCapabilityTest.testCanLaunchApp',
-    'MobileEmulationCapabilityTest.testDeviceMetricsWithStandardWidth',
 ]
 
 _OS_SPECIFIC_FILTER = {}
@@ -173,6 +168,8 @@ _ANDROID_NEGATIVE_FILTER['chromium'] = (
         'ChromeDriverTest.testHoverOverElement',
         # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1478
         'ChromeDriverTest.testShouldHandleNewWindowLoadingProperly',
+        # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1852
+        'ChromeDriverTest.testTouchScrollElement',
     ]
 )
 _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
@@ -219,6 +216,13 @@ _ANDROID_NEGATIVE_FILTER['chromedriver_webview_shell'] = (
         'ChromeDriverTest.testClickElementAfterNavigation',
         'ChromeDriverTest.testGetLogOnWindowWithAlert',
         'ChromeDriverTest.testUnexpectedAlertOpenExceptionMessage',
+        # The WebView shell that we test against (on Kitkat) does not yet
+        # support Network.setCookie DevTools command.
+        # TODO(gmanikpure): reenable when it does.
+        'ChromeDriverLogTest.testDisablingDriverLogsSuppressesChromeDriverLog',
+        'ChromeDriverTest.testCookiePath',
+        'ChromeDriverTest.testGetHttpOnlyCookie',
+        'ChromeDriverTest.testGetNamedCookie',
     ]
 )
 
@@ -485,6 +489,18 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
     self.assertTrue(self._driver.ExecuteScript('return window.top != window'))
     self._driver.ExecuteScript('parent.postMessage("remove", "*");')
     self.assertTrue(self._driver.ExecuteScript('return window.top == window'))
+
+  def testSwitchToStaleFrame(self):
+    self._driver.ExecuteScript(
+        'var frame = document.createElement("iframe");'
+        'frame.id="id";'
+        'frame.name="name";'
+        'document.body.appendChild(frame);')
+    element = self._driver.FindElement("id", "id")
+    self._driver.SwitchToFrame(element)
+    self._driver.Load(self.GetHttpUrlForFile('/chromedriver/empty.html'))
+    with self.assertRaises(chromedriver.StaleElementReference):
+      self._driver.SwitchToFrame(element)
 
   def testGetTitle(self):
     script = 'document.title = "title"; return 1;'
@@ -1366,6 +1382,32 @@ class ChromeDriverTest(ChromeDriverBaseTestWithWebServer):
       else:
         self.fail('unexpected cookie: %s' % json.dumps(cookie))
 
+  def testCookiePath(self):
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/long_url/empty.html'))
+    self._driver.AddCookie({'name': 'a', 'value': 'b'})
+    self._driver.AddCookie({
+        'name': 'x', 'value': 'y', 'path': '/chromedriver/long_url'})
+    cookies = self._driver.GetCookies()
+    self.assertEquals(2, len(cookies))
+    for cookie in cookies:
+      self.assertIn('path', cookie)
+      if cookie['name'] == 'a':
+        self.assertEquals('/' , cookie['path'])
+      if cookie['name'] == 'x':
+        self.assertEquals('/chromedriver/long_url' , cookie['path'])
+
+  def testGetNamedCookie(self):
+    self._driver.Load(self.GetHttpUrlForFile(
+        '/chromedriver/empty.html'))
+    self._driver.AddCookie({'name': 'a', 'value': 'b'})
+    named_cookie = self._driver.GetNamedCookie('a')
+    self.assertEquals('a' , named_cookie['name'])
+    self.assertEquals('b' , named_cookie['value'])
+    self.assertRaisesRegexp(
+        chromedriver.NoSuchCookie, "no such cookie",
+        self._driver.GetNamedCookie, 'foo')
+
   def testGetUrlOnInvalidUrl(self):
     # Make sure we don't return 'data:text/html,chromewebdata' (see
     # https://bugs.chromium.org/p/chromedriver/issues/detail?id=1272). RFC 6761
@@ -1963,20 +2005,20 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testDeviceName(self):
     driver = self.CreateDriver(
-        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+        mobile_emulation = {'deviceName': 'Nexus 5'})
     driver.Load(self._http_server.GetUrl() + '/userAgentUseDeviceWidth')
     self.assertEqual(360, driver.ExecuteScript('return window.screen.width'))
     self.assertEqual(640, driver.ExecuteScript('return window.screen.height'))
     body_tag = driver.FindElement('tag name', 'body')
     self.assertEqual(
-        'Mozilla/5.0 (Linux; Android 4.4.4; Nexus 5 Build/KTU84P) '
-        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/38.0.2125.114 Mobile '
+        'Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) '
+        'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/%s Mobile '
         'Safari/537.36',
         body_tag.GetText())
 
   def testSendKeysToElement(self):
     driver = self.CreateDriver(
-        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+        mobile_emulation = {'deviceName': 'Nexus 5'})
     text = driver.ExecuteScript(
         'document.body.innerHTML = \'<input type="text">\';'
         'var input = document.getElementsByTagName("input")[0];'
@@ -1991,7 +2033,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testClickElement(self):
     driver = self.CreateDriver(
-        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+        mobile_emulation = {'deviceName': 'Nexus 5'})
     driver.Load('about:blank')
     div = driver.ExecuteScript(
         'document.body.innerHTML = "<div>old</div>";'
@@ -2005,7 +2047,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testTapElement(self):
     driver = self.CreateDriver(
-        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+        mobile_emulation = {'deviceName': 'Nexus 5'})
     driver.Load('about:blank')
     div = driver.ExecuteScript(
         'document.body.innerHTML = "<div>old</div>";'
@@ -2019,7 +2061,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testHasTouchScreen(self):
     driver = self.CreateDriver(
-        mobile_emulation = {'deviceName': 'Google Nexus 5'})
+        mobile_emulation = {'deviceName': 'Nexus 5'})
     self.assertIn('hasTouchScreen', driver.capabilities)
     self.assertTrue(driver.capabilities['hasTouchScreen'])
 
@@ -2068,14 +2110,14 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
   def testNetworkConnectionEnabled(self):
     # mobileEmulation must be enabled for networkConnection to be enabled
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
     self.assertTrue(driver.capabilities['mobileEmulationEnabled'])
     self.assertTrue(driver.capabilities['networkConnectionEnabled'])
 
   def testEmulateNetworkConnection4g(self):
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
     # Test 4G connection.
     connection_type = 0x8
@@ -2086,7 +2128,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testEmulateNetworkConnectionMultipleBits(self):
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
     # Connection with 4G, 3G, and 2G bits on.
     # Tests that 4G takes precedence.
@@ -2098,7 +2140,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testWifiAndAirplaneModeEmulation(self):
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
     # Connection with both Wifi and Airplane Mode on.
     # Tests that Wifi takes precedence over Airplane Mode.
@@ -2119,7 +2161,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
       '/helloworld', respondWithString)
 
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
 
     # Set network to online
@@ -2153,7 +2195,7 @@ class MobileEmulationCapabilityTest(ChromeDriverBaseTest):
 
   def testNetworkConnectionTypeIsAppliedToAllTabs(self):
     driver = self.CreateDriver(
-        mobile_emulation={'deviceName': 'Google Nexus 5'},
+        mobile_emulation={'deviceName': 'Nexus 5'},
         network_connection=True)
     driver.Load(self._http_server.GetUrl() +'/chromedriver/page_test.html')
     window1_handle = driver.GetCurrentWindowHandle()

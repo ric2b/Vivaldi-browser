@@ -235,6 +235,34 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestClosePermissionRequestUI) {
   EXPECT_EQ(0U, settings.size());
 }
 
+IN_PROC_BROWSER_TEST_F(NotificationsTest, TestPermissionAPI) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnablePermissionsEmbargo(&scoped_feature_list);
+  ASSERT_TRUE(embedded_test_server()->Start());
+
+  // Test that Notification.permission returns the right thing.
+  ui_test_utils::NavigateToURL(browser(), GetTestPageURL());
+  EXPECT_EQ("default", QueryPermissionStatus(browser()));
+
+  AllowOrigin(GetTestPageURL().GetOrigin());
+  EXPECT_EQ("granted", QueryPermissionStatus(browser()));
+
+  DenyOrigin(GetTestPageURL().GetOrigin());
+  EXPECT_EQ("denied", QueryPermissionStatus(browser()));
+
+  DropOriginPreference(GetTestPageURL().GetOrigin());
+
+  // Verify embargo behaviour - automatically blocked after 3 dismisses.
+  ASSERT_TRUE(RequestAndDismissPermission(browser()));
+  EXPECT_EQ("default", QueryPermissionStatus(browser()));
+
+  ASSERT_TRUE(RequestAndDismissPermission(browser()));
+  EXPECT_EQ("default", QueryPermissionStatus(browser()));
+
+  ASSERT_TRUE(RequestAndDismissPermission(browser()));
+  EXPECT_EQ("denied", QueryPermissionStatus(browser()));
+}
+
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestAllowNotificationsFromAllSites) {
   ASSERT_TRUE(embedded_test_server()->Start());
 
@@ -548,7 +576,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestNotificationDoubleClose) {
 }
 
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayNormal) {
-  EnableFullscreenNotifications();
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnableFullscreenNotifications(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Creates a simple notification.
@@ -572,7 +601,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayFullscreen) {
 #if defined(OS_MACOSX)
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
-  EnableFullscreenNotifications();
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnableFullscreenNotifications(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Creates a simple notification.
@@ -609,7 +639,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayFullscreenOff) {
 #if defined(OS_MACOSX)
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
-  DisableFullscreenNotifications();
+  base::test::ScopedFeatureList scoped_feature_list;
+  DisableFullscreenNotifications(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Creates a simple notification.
@@ -647,7 +678,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayFullscreenOff) {
 // window when another is visible.
 #if !defined(OS_MACOSX)
 IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayMultiFullscreen) {
-  EnableFullscreenNotifications();
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnableFullscreenNotifications(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
   AllowAllOrigins();
 
@@ -698,7 +730,8 @@ IN_PROC_BROWSER_TEST_F(NotificationsTest, TestShouldDisplayPopupNotification) {
 #if defined(OS_MACOSX)
   ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
 #endif
-  EnableFullscreenNotifications();
+  base::test::ScopedFeatureList scoped_feature_list;
+  EnableFullscreenNotifications(&scoped_feature_list);
   ASSERT_TRUE(embedded_test_server()->Start());
 
   // Creates a simple notification.

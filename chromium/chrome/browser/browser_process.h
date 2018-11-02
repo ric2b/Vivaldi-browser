@@ -67,10 +67,6 @@ namespace gcm {
 class GCMDriver;
 }
 
-namespace memory {
-class TabManager;
-}
-
 namespace message_center {
 class MessageCenter;
 }
@@ -104,6 +100,10 @@ class BrowserPolicyConnector;
 class PolicyService;
 }
 
+namespace prefs {
+class InProcessPrefServiceFactory;
+}
+
 namespace printing {
 class BackgroundPrintingManager;
 class PrintJobManager;
@@ -112,6 +112,10 @@ class PrintPreviewDialogController;
 
 namespace rappor {
 class RapporServiceImpl;
+}
+
+namespace resource_coordinator {
+class TabManager;
 }
 
 namespace safe_browsing {
@@ -278,7 +282,7 @@ class BrowserProcess {
   virtual gcm::GCMDriver* gcm_driver() = 0;
 
   // Returns the tab manager. On non-supported platforms, this returns null.
-  virtual memory::TabManager* GetTabManager() = 0;
+  virtual resource_coordinator::TabManager* GetTabManager() = 0;
 
   // Returns the default web client state of Chrome (i.e., was it the user's
   // default browser) at the time a previous check was made sometime between
@@ -288,6 +292,8 @@ class BrowserProcess {
 
   // Returns the Physical Web data source.
   virtual physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() = 0;
+
+  virtual prefs::InProcessPrefServiceFactory* pref_service_factory() const = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(BrowserProcess);

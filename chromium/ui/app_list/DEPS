@@ -1,6 +1,7 @@
 include_rules = [
   "+components/keyed_service/core",
   "+components/sync",
+  "+components/wallpaper",
   "+mojo/public/cpp",
   "+skia",
   "+third_party/google_toolbox_for_mac/src",
@@ -12,6 +13,7 @@ include_rules = [
   "+ui/compositor",
   "+ui/events",
   "+ui/gfx",
+  "+ui/keyboard",
   "+ui/resources/grit/ui_resources.h",
   "+ui/strings/grit/ui_strings.h",
   "+ui/views",

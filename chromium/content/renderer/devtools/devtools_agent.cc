@@ -7,13 +7,14 @@
 #include <stddef.h>
 
 #include <map>
+#include <utility>
 
 #include "base/json/json_writer.h"
 #include "base/lazy_instance.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/trace_event/trace_event.h"
 #include "content/common/devtools_messages.h"
 #include "content/common/frame_messages.h"
@@ -46,13 +47,14 @@ const size_t kMaxMessageChunkSize = IPC::Channel::kMaximumMessageSize / 4;
 const char kPageGetAppManifest[] = "Page.getAppManifest";
 
 class WebKitClientMessageLoopImpl
-    : public WebDevToolsAgentClient::WebKitClientMessageLoop,
-      public base::NonThreadSafe {
+    : public WebDevToolsAgentClient::WebKitClientMessageLoop {
  public:
   WebKitClientMessageLoopImpl() = default;
-  ~WebKitClientMessageLoopImpl() override { DCHECK(CalledOnValidThread()); }
+  ~WebKitClientMessageLoopImpl() override {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  }
   void Run() override {
-    DCHECK(CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
     base::RunLoop* const previous_run_loop = run_loop_;
     base::RunLoop run_loop;
@@ -65,7 +67,7 @@ class WebKitClientMessageLoopImpl
     run_loop_ = previous_run_loop;
   }
   void QuitNow() override {
-    DCHECK(CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     DCHECK(run_loop_);
 
     run_loop_->Quit();
@@ -73,6 +75,8 @@ class WebKitClientMessageLoopImpl
 
  private:
   base::RunLoop* run_loop_ = nullptr;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 };
 
 typedef std::map<int, DevToolsAgent*> IdToAgentMap;
@@ -221,7 +225,7 @@ void DevToolsAgent::SendChunkedProtocolMessage(IPC::Sender* sender,
 
   for (size_t pos = 0; pos < message.length(); pos += kMaxMessageChunkSize) {
     chunk.is_last = pos + kMaxMessageChunkSize >= message.length();
-    chunk.session_id = chunk.is_last ? session_id : 0;
+    chunk.session_id = session_id;
     chunk.call_id = chunk.is_last ? call_id : 0;
     chunk.post_state = chunk.is_last ? post_state : std::string();
     chunk.data = message.substr(pos, kMaxMessageChunkSize);
@@ -283,14 +287,12 @@ void DevToolsAgent::ContinueProgram() {
   GetWebAgent()->ContinueProgram();
 }
 
-void DevToolsAgent::OnSetupDevToolsClient(
-    const std::string& compatibility_script) {
+void DevToolsAgent::OnSetupDevToolsClient(const std::string& api_script) {
   // We only want to register once; and only in main frame.
-  DCHECK(!frame_->GetWebFrame()->Parent());
   if (is_devtools_client_)
     return;
   is_devtools_client_ = true;
-  new DevToolsClient(frame_, compatibility_script);
+  new DevToolsClient(frame_, api_script);
 }
 
 WebDevToolsAgent* DevToolsAgent::GetWebAgent() {
@@ -338,8 +340,8 @@ void DevToolsAgent::GotManifest(int session_id,
   result->SetString("url", url.Utf16());
   if (!failed)
     result->SetString("data", debug_info.raw_data);
-  result->Set("errors", errors.release());
-  response->Set("result", result.release());
+  result->Set("errors", std::move(errors));
+  response->Set("result", std::move(result));
 
   std::string json_message;
   base::JSONWriter::Write(*response, &json_message);

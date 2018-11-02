@@ -10,10 +10,9 @@
 #include "chrome/browser/extensions/extension_message_bubble_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/grit/generated_resources.h"
-#include "components/grit/components_scaled_resources.h"
+#include "components/vector_icons/vector_icons.h"
 #include "extensions/browser/extension_registry.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/vector_icons/vector_icons.h"
 
 ExtensionMessageBubbleBridge::ExtensionMessageBubbleBridge(
     std::unique_ptr<extensions::ExtensionMessageBubbleController> controller)
@@ -52,10 +51,13 @@ base::string16 ExtensionMessageBubbleBridge::GetItemListText() {
 base::string16 ExtensionMessageBubbleBridge::GetActionButtonText() {
   const extensions::ExtensionIdList& list = controller_->GetExtensionIdList();
   DCHECK(!list.empty());
+  // Normally, the extension is enabled, but this might not be the case (such as
+  // for the SuspiciousExtensionBubbleDelegate, which warns the user about
+  // disabled extensions).
   const extensions::Extension* extension =
       extensions::ExtensionRegistry::Get(controller_->profile())
-          ->enabled_extensions()
-          .GetByID(list[0]);
+          ->GetExtensionById(list[0],
+                             extensions::ExtensionRegistry::EVERYTHING);
 
   DCHECK(extension);
   // An empty string is returned so that we don't display the button prompting
@@ -117,7 +119,7 @@ ExtensionMessageBubbleBridge::GetExtraViewInfo() {
 
   if (IsPolicyIndicationNeeded(extension)) {
     DCHECK_EQ(1u, list.size());
-    extra_view_info->resource = &ui::kBusinessIcon;
+    extra_view_info->resource = &vector_icons::kBusinessIcon;
     extra_view_info->text =
         l10n_util::GetStringUTF16(IDS_EXTENSIONS_INSTALLED_BY_ADMIN);
     extra_view_info->is_text_linked = false;

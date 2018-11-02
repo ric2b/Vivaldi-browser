@@ -31,24 +31,22 @@ class ShutdownClientApp : public Service,
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info, interface_name,
-                            std::move(interface_pipe));
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
-  void Create(const BindSourceInfo& create,
-              mojom::ShutdownTestClientControllerRequest request) {
+  void Create(mojom::ShutdownTestClientControllerRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 
   // mojom::ShutdownTestClientController:
-  void ConnectAndWait(const ConnectAndWaitCallback& callback) override {
+  void ConnectAndWait(ConnectAndWaitCallback callback) override {
     mojom::ShutdownTestServicePtr service;
     context()->connector()->BindInterface("shutdown_service", &service);
 
     mojo::Binding<mojom::ShutdownTestClient> client_binding(this);
 
-    mojom::ShutdownTestClientPtr client_ptr =
-        client_binding.CreateInterfacePtrAndBind();
+    mojom::ShutdownTestClientPtr client_ptr;
+    client_binding.Bind(mojo::MakeRequest(&client_ptr));
 
     service->SetClient(std::move(client_ptr));
 
@@ -58,7 +56,7 @@ class ShutdownClientApp : public Service,
     client_binding.set_connection_error_handler(run_loop.QuitClosure());
     run_loop.Run();
 
-    callback.Run();
+    std::move(callback).Run();
   }
 
   BinderRegistry registry_;

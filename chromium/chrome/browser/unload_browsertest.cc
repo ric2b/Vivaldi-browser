@@ -32,11 +32,6 @@
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/url_request/url_request_test_util.h"
 
-#if defined(OS_WIN)
-// For version specific disabled tests below (http://crbug.com/267597).
-#include "base/win/windows_version.h"
-#endif
-
 using base::TimeDelta;
 using content::BrowserThread;
 
@@ -195,14 +190,12 @@ class UnloadTest : public InProcessBrowserTest {
   // If |accept| is true, simulates user clicking OK, otherwise simulates
   // clicking Cancel.
   void ClickModalDialogButton(bool accept) {
-    app_modal::AppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
-    ASSERT_TRUE(dialog->IsJavaScriptModalDialog());
-    app_modal::JavaScriptAppModalDialog* js_dialog =
-        static_cast<app_modal::JavaScriptAppModalDialog*>(dialog);
+    app_modal::JavaScriptAppModalDialog* dialog =
+        ui_test_utils::WaitForAppModalDialog();
     if (accept)
-      js_dialog->native_dialog()->AcceptAppModalDialog();
+      dialog->native_dialog()->AcceptAppModalDialog();
     else
-      js_dialog->native_dialog()->CancelAppModalDialog();
+      dialog->native_dialog()->CancelAppModalDialog();
   }
 
   void PrepareForDialog(Browser* browser) {
@@ -814,12 +807,8 @@ IN_PROC_BROWSER_TEST_F(FastUnloadTest, PRE_ClosingLastTabFinishesUnload) {
 }
 
 // Fails on Mac, Linux, Win7 (http://crbug.com/301173).
+// Flaky on Windows bots (http://crbug.com/267597).
 IN_PROC_BROWSER_TEST_F(FastUnloadTest, DISABLED_ClosingLastTabFinishesUnload) {
-#if defined(OS_WIN)
-  // Flaky on Win7+ bots (http://crbug.com/267597).
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7)
-    return;
-#endif
   // Check for cookie set in unload handler of PRE_ test.
   NavigateToPage("no_listeners");
   EXPECT_EQ("unloaded=ohyeah", GetCookies("no_listeners"));

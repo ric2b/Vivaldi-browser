@@ -22,7 +22,8 @@ template("ppapi_cdm_adapter") {
 
     defines += [ "USE_PPAPI_CDM_ADAPTER" ]
     deps += [
-      "//media:cdm_api",
+      "//build/config:exe_and_shlib_deps",
+      "//media/cdm:cdm_api",
       "//ppapi/cpp",
     ]
     sources += [

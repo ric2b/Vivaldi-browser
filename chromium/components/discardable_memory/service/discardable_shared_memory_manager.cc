@@ -209,7 +209,7 @@ int64_t GetDefaultMemoryLimit() {
 const int kEnforceMemoryPolicyDelayMs = 1000;
 
 // Global atomic to generate unique discardable shared memory IDs.
-base::StaticAtomicSequenceNumber g_next_discardable_shared_memory_id;
+base::AtomicSequenceNumber g_next_discardable_shared_memory_id;
 
 }  // namespace
 
@@ -247,8 +247,8 @@ DiscardableSharedMemoryManager::~DiscardableSharedMemoryManager() {
 }
 
 void DiscardableSharedMemoryManager::Bind(
-    const service_manager::BindSourceInfo& source_info,
-    mojom::DiscardableSharedMemoryManagerRequest request) {
+    mojom::DiscardableSharedMemoryManagerRequest request,
+    const service_manager::BindSourceInfo& source_info) {
   mojo::MakeStrongBinding(
       base::MakeUnique<MojoDiscardableSharedMemoryManagerImpl>(
           next_client_id_++, this),

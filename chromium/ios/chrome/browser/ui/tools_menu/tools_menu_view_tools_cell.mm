@@ -4,23 +4,19 @@
 
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_tools_cell.h"
 
-#include "base/mac/objc_property_releaser.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
 #include "ios/chrome/browser/ui/toolbar/toolbar_resource_macros.h"
+#include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 
-// TODO(crbug.com/228521): Remove this once the new command/metric handling is
-// implemented. This is a temporary workaround to allow metrics recording to
-// distinguish the action. The value used is in the dynamic range (<
-// IDC_MinimumLabelValue) to avoid collisions.
-#define IDC_TEMP_EDIT_BOOKMARK 3900
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
-@implementation ToolsMenuViewToolsCell {
-  base::mac::ObjCPropertyReleaser _propertyReleaser_ToolsMenuViewToolsCell;
-}
+@implementation ToolsMenuViewToolsCell
 
 @synthesize reloadButton = _reloadButton;
 @synthesize shareButton = _shareButton;
@@ -46,46 +42,43 @@
 }
 
 - (void)commonInitialization {
-  _propertyReleaser_ToolsMenuViewToolsCell.Init(self,
-                                                [ToolsMenuViewToolsCell class]);
-
   [self setBackgroundColor:[UIColor whiteColor]];
   [self setOpaque:YES];
 
   int star[2][3] = TOOLBAR_IDR_TWO_STATE(STAR);
   _starButton = [self newButtonForImageIds:star
-                                 commandID:IDC_BOOKMARK_PAGE
+                                 commandID:TOOLS_BOOKMARK_ITEM
                       accessibilityLabelID:IDS_BOOKMARK_ADD_EDITOR_TITLE
                             automationName:@"Add Bookmark"];
 
   int star_pressed[2][3] = TOOLBAR_IDR_ONE_STATE(STAR_PRESSED);
   _starredButton = [self newButtonForImageIds:star_pressed
-                                    commandID:IDC_TEMP_EDIT_BOOKMARK
+                                    commandID:TOOLS_BOOKMARK_EDIT
                          accessibilityLabelID:IDS_IOS_TOOLS_MENU_EDIT_BOOKMARK
                                automationName:@"Edit Bookmark"];
 
   int reload[2][3] = TOOLBAR_IDR_TWO_STATE(RELOAD);
   _reloadButton = [self newButtonForImageIds:reload
-                                   commandID:IDC_RELOAD
+                                   commandID:TOOLS_RELOAD_ITEM
                         accessibilityLabelID:IDS_IOS_ACCNAME_RELOAD
                               automationName:@"Reload"
                                reverseForRTL:YES];
 
   int stop[2][3] = TOOLBAR_IDR_TWO_STATE(STOP);
   _stopButton = [self newButtonForImageIds:stop
-                                 commandID:IDC_STOP
+                                 commandID:TOOLS_STOP_ITEM
                       accessibilityLabelID:IDS_IOS_ACCNAME_STOP
                             automationName:@"Stop"];
 
   int share[2][3] = TOOLBAR_IDR_THREE_STATE(SHARE);
   _shareButton = [self newButtonForImageIds:share
-                                  commandID:IDC_SHARE_PAGE
+                                  commandID:TOOLS_SHARE_ITEM
                        accessibilityLabelID:IDS_IOS_TOOLS_MENU_SHARE
                              automationName:@"Stop"];
   int tools[2][3] = TOOLBAR_IDR_ONE_STATE(TOOLS_PRESSED);
   _toolsButton =
       [self newButtonForImageIds:tools
-                       commandID:IDC_SHOW_TOOLS_MENU
+                       commandID:TOOLS_MENU_ITEM
             accessibilityLabelID:IDS_IOS_TOOLBAR_CLOSE_MENU
                   automationName:@"kToolbarToolsMenuButtonIdentifier"];
 

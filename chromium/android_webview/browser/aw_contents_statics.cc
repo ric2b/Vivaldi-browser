@@ -8,11 +8,14 @@
 #include "android_webview/browser/aw_browser_context.h"
 #include "android_webview/browser/aw_contents_io_thread_client.h"
 #include "android_webview/browser/aw_safe_browsing_config_helper.h"
+#include "android_webview/browser/aw_safe_browsing_whitelist_manager.h"
 #include "android_webview/browser/net/aw_url_request_context_getter.h"
 #include "android_webview/common/aw_version_info_values.h"
+#include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/callback.h"
+#include "components/security_interstitials/core/urls.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_constants.h"
@@ -42,7 +45,23 @@ void NotifyClientCertificatesChanged() {
   net::CertDatabase::GetInstance()->OnAndroidKeyStoreChanged();
 }
 
+void SafeBrowsingWhitelistAssigned(const JavaRef<jobject>& callback,
+                                   bool success) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  Java_AwContentsStatics_safeBrowsingWhitelistAssigned(env, callback, success);
+}
+
 }  // namespace
+
+// static
+ScopedJavaLocalRef<jstring> GetSafeBrowsingPrivacyPolicyUrl(
+    JNIEnv* env,
+    const JavaParamRef<jclass>&) {
+  // TODO(ntfschr): append the locale to this URL
+  return base::android::ConvertUTF8ToJavaString(
+      env, security_interstitials::kSafeBrowsingPrivacyPolicyUrl);
+}
 
 // static
 void ClearClientCertPreferences(JNIEnv* env,
@@ -78,15 +97,31 @@ ScopedJavaLocalRef<jstring> GetProductVersion(JNIEnv* env,
 }
 
 // static
-jboolean GetSafeBrowsingEnabled(JNIEnv* env, const JavaParamRef<jclass>&) {
-  return AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabled();
+jboolean GetSafeBrowsingEnabledByManifest(JNIEnv* env,
+                                          const JavaParamRef<jclass>&) {
+  return AwSafeBrowsingConfigHelper::GetSafeBrowsingEnabledByManifest();
 }
 
 // static
-void SetSafeBrowsingEnabled(JNIEnv* env,
-                            const JavaParamRef<jclass>&,
-                            jboolean enable) {
-  AwSafeBrowsingConfigHelper::SetSafeBrowsingEnabled(enable);
+void SetSafeBrowsingEnabledByManifest(JNIEnv* env,
+                                      const JavaParamRef<jclass>&,
+                                      jboolean enable) {
+  AwSafeBrowsingConfigHelper::SetSafeBrowsingEnabledByManifest(enable);
+}
+
+// static
+void SetSafeBrowsingWhitelist(JNIEnv* env,
+                              const JavaParamRef<jclass>&,
+                              const JavaParamRef<jobjectArray>& jrules,
+                              const JavaParamRef<jobject>& callback) {
+  std::vector<std::string> rules;
+  base::android::AppendJavaStringArrayToStringVector(env, jrules, &rules);
+  AwSafeBrowsingWhitelistManager* whitelist_manager =
+      AwBrowserContext::GetDefault()->GetSafeBrowsingWhitelistManager();
+  whitelist_manager->SetWhitelistOnUIThread(
+      std::move(rules),
+      base::Bind(&SafeBrowsingWhitelistAssigned,
+                 ScopedJavaGlobalRef<jobject>(env, callback)));
 }
 
 // static

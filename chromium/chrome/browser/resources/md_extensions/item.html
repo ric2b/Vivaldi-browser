@@ -1,8 +1,13 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/html/action_link.html">
+<link rel="import" href="chrome://resources/html/action_link_css.html">
 <link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/html/load_time_data.html">
-<link rel="import" href="chrome://resources/html/polymer.html">
 <link rel="import" href="chrome://extensions/icons.html">
 <link rel="import" href="chrome://extensions/item_util.html">
 <link rel="import" href="chrome://extensions/strings.html">
@@ -14,13 +19,8 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 
 <dom-module id="extensions-item">
-  <style include="iron-flex"></style>
   <template>
-    <style>
-      [hidden] {
-        display: none !important;
-      }
-
+    <style include="iron-flex cr-hidden-style action-link paper-button-style">
       #icon-wrapper {
         align-self: flex-start;
         display: flex;
@@ -37,7 +37,6 @@
         background: white;
         display: flex;
         flex-direction: column;
-        font-size: 13px;
         height: 160px;
         width: 400px;
       }
@@ -87,19 +86,6 @@
         color: var(--paper-grey-600);
       }
 
-      #description,
-      #extension-id,
-      #inspect-views {
-        line-height: 20px;
-      }
-
-      #inspect-views paper-button {
-        color: var(--google-blue-700);
-        height: 20px;
-        padding: 0;
-        text-transform: none;
-      }
-
       #button-strip {
         -webkit-padding-end: 4px;
         -webkit-padding-start: 20px;
@@ -108,6 +94,10 @@
         height: 48px;
         padding-bottom: 8px;
         padding-top: 8px;
+      }
+
+      #button-strip paper-button {
+        margin: 0 4px;
       }
 
       #source-indicator {
@@ -152,18 +142,8 @@
         display: block;
       }
 
-      paper-button,
       paper-toggle-button {
         cursor: pointer;
-      }
-
-      #button-strip paper-button {
-        align-items: center;
-        display: flex;
-        margin: 0 4px;
-        min-height: 32px;
-        padding: 0 12px;
-        text-transform: uppercase;
       }
 
       .action-button {
@@ -231,14 +211,14 @@
                 if="[[!computeInspectViewsHidden_(data.views)]]">
               <div id="inspect-views">
                 <span>$i18n{itemInspectViews}</span>
-                <paper-button on-tap="onInspectTap_">
+                <a is="action-link" on-tap="onInspectTap_">
                   [[computeFirstInspectLabel_(data.views)]]
-                </paper-button>
-                <paper-button
+                </a>
+                <a is="action-link"
                     hidden$="[[computeExtraViewsHidden_(data.views)]]"
                     on-tap="onExtraInspectTap_">
                   [[computeExtraInspectLabel_(data.views)]]
-                </paper-button>
+                </a>
               </div>
             </template>
           </template>

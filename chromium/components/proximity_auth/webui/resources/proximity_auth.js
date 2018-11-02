@@ -26,7 +26,7 @@ ProximityAuth = {
 class CryptAuthController {
   constructor() {
     this.elements_ = {
-      publicKey: document.getElementById('public-key'),
+      localDeviceId: document.getElementById('local-device-id'),
       gcmRegistration: document.getElementById('gcm-registration'),
       currentEid: document.getElementById('current-eid'),
       enrollmentTitle: document.getElementById('enrollment-title'),
@@ -41,6 +41,14 @@ class CryptAuthController {
 
     this.elements_.enrollmentButton.onclick = this.forceEnrollment_.bind(this);
     this.elements_.deviceSyncButton.onclick = this.forceDeviceSync_.bind(this);
+  }
+
+  /**
+   * Sets the local device's ID. Note that this value is truncated since the
+   * full value is very long and does not cleanly fit on the screen.
+   */
+  setLocalDeviceId(deviceIdTruncated) {
+    this.elements_.localDeviceId.textContent = deviceIdTruncated;
   }
 
   /**
@@ -165,33 +173,37 @@ class DeviceListController {
    * Creates a DOM element for a given remote device.
    */
   createRemoteDeviceItem_(remoteDevice) {
+    var isUnlockKey = !!remoteDevice['unlockKey'];
+    var hasMobileHotspot = !!remoteDevice['hasMobileHotspot'];
+    var supportsArcPlusPlus = !!remoteDevice['supportsArcPlusPlus'];
+    var isPixelPhone = !!remoteDevice['isPixelPhone'];
+
     var t = this.remoteDeviceTemplate_.content;
     t.querySelector('.device-connection-status').setAttribute(
         'state', remoteDevice['connectionStatus']);
     t.querySelector('.device-name').textContent =
         remoteDevice['friendlyDeviceName'];
-    t.querySelector('.device-info-subtitle').textContent =
-        remoteDevice['publicKey'];
-    t.querySelector('.device-eid').textContent =
-        remoteDevice['eid'] ? 'EID: ' + remoteDevice['eid'] : '';
-
-    var attributes = '[';
-    if (remoteDevice['unlockKey']) {
-      attributes += 'KEY';
+    t.querySelector('.device-id').textContent =
+        remoteDevice['publicKeyTruncated'];
+    t.querySelector('.is-unlock-key').textContent = isUnlockKey;
+    t.querySelector('.supports-mobile-hotspot').textContent = hasMobileHotspot;
+    t.querySelector('.supports-arc-plus-plus').textContent =
+        supportsArcPlusPlus;
+    t.querySelector('.is-pixel-phone').textContent = isPixelPhone;
+    if (!!remoteDevice['bluetoothAddress']) {
+      t.querySelector('.bluetooth-address-row').classList.remove('hidden');
+      t.querySelector('.bluetooth-address').textContent =
+          remoteDevice['bluetoothAddress'];
     }
-    attributes += ']';
-    t.querySelector('.device-attributes').textContent =
-        attributes != '[]' ? attributes : '';
-    t.querySelector('.device-name').textContent =
-        remoteDevice['friendlyDeviceName'];
 
     var scanButton = t.querySelector('.device-scan');
-    scanButton.classList.toggle('hidden', !this.showScanButton_);
+    scanButton.classList.toggle(
+        'hidden', !this.showScanButton_ || !isUnlockKey);
     scanButton.textContent =
         remoteDevice['connectionStatus'] == 'disconnected'
-            ? 'Scan' : 'Disconnect';
-    t.querySelector('.device-toggle-key')
-        .classList.toggle('hidden', !this.showToggleUnlockKeyButton_);
+            ? 'EasyUnlock Scan' : 'EasyUnlock Disconnect';
+    t.querySelector('.device-toggle-key').classList.toggle(
+        'hidden', !this.showToggleUnlockKeyButton_ || !isUnlockKey);
 
     var element = document.importNode(this.remoteDeviceTemplate_.content, true);
 
@@ -254,10 +266,16 @@ class EligibleDevicesController {
  * Interface for the native WebUI to call into our JS.
  */
 LocalStateInterface = {
-  onGotLocalState: function(enrollmentState, deviceSyncState, remoteDevices) {
+  onGotLocalState: function(
+      localDeviceId, enrollmentState, deviceSyncState, remoteDevices) {
+    LocalStateInterface.setLocalDeviceId(localDeviceId);
     LocalStateInterface.onEnrollmentStateChanged(enrollmentState);
     LocalStateInterface.onDeviceSyncStateChanged(deviceSyncState);
-    LocalStateInterface.onUnlockKeysChanged(remoteDevices);
+    LocalStateInterface.onRemoteDevicesChanged(remoteDevices);
+  },
+
+  setLocalDeviceId: function(localDeviceId) {
+    ProximityAuth.cryptauthController_.setLocalDeviceId(localDeviceId);
   },
 
   onEnrollmentStateChanged: function(enrollmentState) {
@@ -268,8 +286,8 @@ LocalStateInterface = {
     ProximityAuth.cryptauthController_.updateDeviceSyncState(deviceSyncState);
   },
 
-  onUnlockKeysChanged: function(unlockKeys) {
-    ProximityAuth.remoteDevicesController_.updateRemoteDevices(unlockKeys);
+  onRemoteDevicesChanged: function(remoteDevices) {
+    ProximityAuth.remoteDevicesController_.updateRemoteDevices(remoteDevices);
   }
 };
 

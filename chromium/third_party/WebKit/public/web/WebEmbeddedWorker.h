@@ -31,27 +31,31 @@
 #ifndef WebEmbeddedWorker_h
 #define WebEmbeddedWorker_h
 
+#include <memory>
+
 #include "public/platform/WebCommon.h"
 
 namespace blink {
 
+class WebContentSettingsClient;
 class WebServiceWorkerContextClient;
+class WebServiceWorkerInstalledScriptsManager;
 class WebString;
-class WebWorkerContentSettingsClientProxy;
 struct WebConsoleMessage;
 struct WebEmbeddedWorkerStartData;
 
 // An interface to start and terminate an embedded worker.
 // All methods of this class must be called on the main thread.
-class WebEmbeddedWorker {
+class BLINK_EXPORT WebEmbeddedWorker {
  public:
   // Invoked on the main thread to instantiate a WebEmbeddedWorker.
-  // The given WebWorkerContextClient and WebWorkerContentSettingsClientProxy
-  // are going to be passed on to the worker thread and is held by a newly
-  // created WorkerGlobalScope.
-  BLINK_EXPORT static WebEmbeddedWorker* Create(
-      WebServiceWorkerContextClient*,
-      WebWorkerContentSettingsClientProxy*);
+  // The given WebWorkerContextClient and WebContentSettingsClient are going to
+  // be passed on to the worker thread and is held by a newly created
+  // WorkerGlobalScope.
+  static std::unique_ptr<WebEmbeddedWorker> Create(
+      std::unique_ptr<WebServiceWorkerContextClient>,
+      std::unique_ptr<WebServiceWorkerInstalledScriptsManager>,
+      std::unique_ptr<WebContentSettingsClient>);
 
   virtual ~WebEmbeddedWorker() {}
 

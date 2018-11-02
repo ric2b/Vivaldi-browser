@@ -11,7 +11,6 @@
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/trace_event/trace_event_synthetic_delay.h"
 #include "build/build_config.h"
 #include "cc/trees/swap_promise_monitor.h"
 #include "content/common/input/input_event_ack.h"
@@ -198,7 +197,6 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
       handling_input_event_(false),
       handling_event_overscroll_(nullptr),
       handling_event_type_(WebInputEvent::kUndefined),
-      context_menu_source_type_(ui::MENU_SOURCE_MOUSE),
       suppress_next_char_events_(false) {
   DCHECK(delegate);
   DCHECK(widget);
@@ -207,10 +205,10 @@ RenderWidgetInputHandler::RenderWidgetInputHandler(
 
 RenderWidgetInputHandler::~RenderWidgetInputHandler() {}
 
-InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
+void RenderWidgetInputHandler::HandleInputEvent(
     const blink::WebCoalescedInputEvent& coalesced_event,
     const ui::LatencyInfo& latency_info,
-    InputEventDispatchType dispatch_type) {
+    HandledEventCallback callback) {
   const WebInputEvent& input_event = coalesced_event.Event();
   base::AutoReset<bool> handling_input_event_resetter(&handling_input_event_,
                                                       true);
@@ -235,7 +233,6 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
   TRACE_EVENT1("renderer,benchmark,rail",
                "RenderWidgetInputHandler::OnHandleInputEvent", "event",
                WebInputEvent::GetName(input_event.GetType()));
-  TRACE_EVENT_SYNTHETIC_DELAY_BEGIN("blink.HandleInputEvent");
   TRACE_EVENT_WITH_FLOW1("input,benchmark", "LatencyInfo.Flow",
                          TRACE_ID_DONT_MANGLE(latency_info.trace_id()),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
@@ -248,6 +245,14 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
 
   std::unique_ptr<cc::SwapPromiseMonitor> latency_info_swap_promise_monitor;
   ui::LatencyInfo swap_latency_info(latency_info);
+
+  if (RenderThreadImpl::current()) {
+    swap_latency_info.set_expected_queueing_time_on_dispatch(
+        RenderThreadImpl::current()
+            ->GetRendererScheduler()
+            ->MostRecentExpectedQueueingTime());
+  }
+
   swap_latency_info.AddLatencyNumber(
       ui::LatencyComponentType::INPUT_EVENT_LATENCY_RENDERER_MAIN_COMPONENT, 0,
       0);
@@ -264,12 +269,10 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
     TRACE_EVENT2("renderer", "HandleMouseMove", "x",
                  mouse_event.PositionInWidget().x, "y",
                  mouse_event.PositionInWidget().y);
-    context_menu_source_type_ = ui::MENU_SOURCE_MOUSE;
     prevent_default = delegate_->WillHandleMouseEvent(mouse_event);
   }
 
   if (WebInputEvent::IsKeyboardEventType(input_event.GetType())) {
-    context_menu_source_type_ = ui::MENU_SOURCE_KEYBOARD;
 #if defined(OS_ANDROID)
     // The DPAD_CENTER key on Android has a dual semantic: (1) in the general
     // case it should behave like a select key (i.e. causing a click if a button
@@ -293,13 +296,6 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
   if (WebInputEvent::IsGestureEventType(input_event.GetType())) {
     const WebGestureEvent& gesture_event =
         static_cast<const WebGestureEvent&>(input_event);
-    if (input_event.GetType() == WebInputEvent::kGestureLongPress) {
-      context_menu_source_type_ = ui::MENU_SOURCE_LONG_PRESS;
-    } else if (input_event.GetType() == WebInputEvent::kGestureLongTap) {
-      context_menu_source_type_ = ui::MENU_SOURCE_LONG_TAP;
-    } else {
-      context_menu_source_type_ = ui::MENU_SOURCE_TOUCH;
-    }
     prevent_default =
         prevent_default || delegate_->WillHandleGestureEvent(gesture_event);
   }
@@ -368,7 +364,7 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
     for (size_t i = 0; i < touch_event.touches_length; ++i) {
       if (touch_event.touches[i].state == WebTouchPoint::kStatePressed &&
           delegate_->HasTouchEventHandlersAt(
-              gfx::ToFlooredPoint(touch_event.touches[i].position))) {
+              gfx::ToFlooredPoint(touch_event.touches[i].PositionInWidget()))) {
         ack_result = INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
         break;
       }
@@ -391,21 +387,11 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
     }
   }
 
-  TRACE_EVENT_SYNTHETIC_DELAY_END("blink.HandleInputEvent");
-
-  if (dispatch_type == DISPATCH_TYPE_BLOCKING) {
-    std::unique_ptr<InputEventAck> response(new InputEventAck(
-        InputEventAckSource::MAIN_THREAD, input_event.GetType(), ack_result,
-        swap_latency_info, std::move(event_overscroll),
-        ui::WebInputEventTraits::GetUniqueTouchEventId(input_event)));
-    delegate_->OnInputEventAck(std::move(response));
+  if (callback) {
+    std::move(callback).Run(ack_result, swap_latency_info,
+                            std::move(event_overscroll));
   } else {
     DCHECK(!event_overscroll) << "Unexpected overscroll for un-acked event";
-  }
-  if (RenderThreadImpl::current()) {
-    RenderThreadImpl::current()
-        ->GetRendererScheduler()
-        ->DidHandleInputEventOnMainThread(input_event, processed);
   }
 
   // Show the virtual keyboard if enabled and a user gesture triggers a focus
@@ -430,7 +416,6 @@ InputEventAckState RenderWidgetInputHandler::HandleInputEvent(
     delegate_->FocusChangeComplete();
   }
 #endif
-  return ack_result;
 }
 
 void RenderWidgetInputHandler::DidOverscrollFromBlink(

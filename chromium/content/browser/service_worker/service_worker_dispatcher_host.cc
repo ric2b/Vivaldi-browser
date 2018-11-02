@@ -87,17 +87,15 @@ ServiceWorkerDispatcherHost::ServiceWorkerDispatcherHost(
     ResourceContext* resource_context)
     : BrowserMessageFilter(kFilteredMessageClasses,
                            arraysize(kFilteredMessageClasses)),
+      BrowserAssociatedInterface<mojom::ServiceWorkerDispatcherHost>(this,
+                                                                     this),
       render_process_id_(render_process_id),
       resource_context_(resource_context),
-      channel_ready_(false),
-      weak_factory_(this) {
-  AddAssociatedInterface(
-      mojom::ServiceWorkerDispatcherHost::Name_,
-      base::Bind(&ServiceWorkerDispatcherHost::AddMojoBinding,
-                 base::Unretained(this)));
-}
+      channel_ready_(false) {}
 
 ServiceWorkerDispatcherHost::~ServiceWorkerDispatcherHost() {
+  // Temporary CHECK for debugging https://crbug.com/736203.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (GetContext())
     GetContext()->RemoveDispatcherHost(render_process_id_);
 }
@@ -120,6 +118,8 @@ void ServiceWorkerDispatcherHost::Init(
 void ServiceWorkerDispatcherHost::OnFilterAdded(IPC::Channel* channel) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnFilterAdded");
+  // Temporary CHECK for debugging https://crbug.com/736203.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   channel_ready_ = true;
   std::vector<std::unique_ptr<IPC::Message>> messages;
   messages.swap(pending_messages_);
@@ -129,6 +129,8 @@ void ServiceWorkerDispatcherHost::OnFilterAdded(IPC::Channel* channel) {
 }
 
 void ServiceWorkerDispatcherHost::OnFilterRemoved() {
+  // Temporary CHECK for debugging https://crbug.com/736203.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   // Don't wait until the destructor to teardown since a new dispatcher host
   // for this process might be created before then.
   if (GetContext())
@@ -138,6 +140,8 @@ void ServiceWorkerDispatcherHost::OnFilterRemoved() {
 }
 
 void ServiceWorkerDispatcherHost::OnDestruct() const {
+  // Destruct on the IO thread since |context_wrapper_| should only be accessed
+  // on the IO thread.
   BrowserThread::DeleteOnIOThread::Destruct(this);
 }
 
@@ -186,13 +190,6 @@ bool ServiceWorkerDispatcherHost::OnMessageReceived(
   }
 
   return handled;
-}
-
-void ServiceWorkerDispatcherHost::AddMojoBinding(
-    mojo::ScopedInterfaceEndpointHandle handle) {
-  bindings_.AddBinding(
-      this,
-      mojom::ServiceWorkerDispatcherHostAssociatedRequest(std::move(handle)));
 }
 
 bool ServiceWorkerDispatcherHost::Send(IPC::Message* message) {
@@ -258,8 +255,8 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
     int thread_id,
     int request_id,
     int provider_id,
-    const GURL& pattern,
-    const GURL& script_url) {
+    const GURL& script_url,
+    const ServiceWorkerRegistrationOptions& options) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnRegisterServiceWorker");
   ProviderStatus provider_status;
@@ -286,26 +283,27 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
       break;
   }
 
-  if (!pattern.is_valid() || !script_url.is_valid()) {
+  if (!options.scope.is_valid() || !script_url.is_valid()) {
     bad_message::ReceivedBadMessage(this, bad_message::SWDH_REGISTER_BAD_URL);
     return;
   }
 
   std::string error_message;
-  if (ServiceWorkerUtils::ContainsDisallowedCharacter(pattern, script_url,
+  if (ServiceWorkerUtils::ContainsDisallowedCharacter(options.scope, script_url,
                                                       &error_message)) {
     bad_message::ReceivedBadMessage(this, bad_message::SWDH_REGISTER_CANNOT);
     return;
   }
 
-  std::vector<GURL> urls = {provider_host->document_url(), pattern, script_url};
+  std::vector<GURL> urls = {provider_host->document_url(), options.scope,
+                            script_url};
   if (!ServiceWorkerUtils::AllOriginsMatchAndCanAccessServiceWorkers(urls)) {
     bad_message::ReceivedBadMessage(this, bad_message::SWDH_REGISTER_CANNOT);
     return;
   }
 
   if (!GetContentClient()->browser()->AllowServiceWorker(
-          pattern, provider_host->topmost_frame_url(), resource_context_,
+          options.scope, provider_host->topmost_frame_url(), resource_context_,
           base::Bind(&GetWebContents, render_process_id_,
                      provider_host->frame_id()))) {
     Send(new ServiceWorkerMsg_ServiceWorkerRegistrationError(
@@ -315,18 +313,14 @@ void ServiceWorkerDispatcherHost::OnRegisterServiceWorker(
     return;
   }
 
-  TRACE_EVENT_ASYNC_BEGIN2(
-      "ServiceWorker", "ServiceWorkerDispatcherHost::RegisterServiceWorker",
-      request_id, "Scope", pattern.spec(), "Script URL", script_url.spec());
+  TRACE_EVENT_ASYNC_BEGIN2("ServiceWorker",
+                           "ServiceWorkerDispatcherHost::RegisterServiceWorker",
+                           request_id, "Scope", options.scope.spec(),
+                           "Script URL", script_url.spec());
   GetContext()->RegisterServiceWorker(
-      pattern,
-      script_url,
-      provider_host,
-      base::Bind(&ServiceWorkerDispatcherHost::RegistrationComplete,
-                 this,
-                 thread_id,
-                 provider_id,
-                 request_id));
+      script_url, options, provider_host,
+      base::Bind(&ServiceWorkerDispatcherHost::RegistrationComplete, this,
+                 thread_id, provider_id, request_id));
 }
 
 void ServiceWorkerDispatcherHost::OnUpdateServiceWorker(
@@ -941,8 +935,8 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
   if (!GetContext())
     return;
   if (GetContext()->GetProviderHost(render_process_id_, info.provider_id)) {
-    bad_message::ReceivedBadMessage(this,
-                                    bad_message::SWDH_PROVIDER_CREATED_NO_HOST);
+    bad_message::ReceivedBadMessage(
+        this, bad_message::SWDH_PROVIDER_CREATED_DUPLICATE_ID);
     return;
   }
 
@@ -965,14 +959,18 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
     }
 
     // Otherwise, completed the initialization of the pre-created host.
-    DCHECK_EQ(SERVICE_WORKER_PROVIDER_FOR_WINDOW, info.type);
+    if (info.type != SERVICE_WORKER_PROVIDER_FOR_WINDOW) {
+      bad_message::ReceivedBadMessage(
+          this, bad_message::SWDH_PROVIDER_CREATED_ILLEGAL_TYPE_NOT_WINDOW);
+      return;
+    }
     provider_host->CompleteNavigationInitialized(render_process_id_,
-                                                 info.route_id, this);
+                                                 std::move(info), this);
     GetContext()->AddProviderHost(std::move(provider_host));
   } else {
     if (ServiceWorkerUtils::IsBrowserAssignedProviderId(info.provider_id)) {
       bad_message::ReceivedBadMessage(
-          this, bad_message::SWDH_PROVIDER_CREATED_NO_HOST);
+          this, bad_message::SWDH_PROVIDER_CREATED_BAD_ID);
       return;
     }
     GetContext()->AddProviderHost(ServiceWorkerProviderHost::Create(
@@ -980,29 +978,11 @@ void ServiceWorkerDispatcherHost::OnProviderCreated(
   }
 }
 
-void ServiceWorkerDispatcherHost::OnProviderDestroyed(int provider_id) {
-  TRACE_EVENT0("ServiceWorker",
-               "ServiceWorkerDispatcherHost::OnProviderDestroyed");
-  if (!GetContext())
-    return;
-  if (!GetContext()->GetProviderHost(render_process_id_, provider_id)) {
-    // PlzNavigate: in some cancellation of navigation cases, it is possible
-    // for the pre-created hoist to have been destroyed before being claimed by
-    // the renderer. The provider is then destroyed in the renderer, and no
-    // matching host will be found.
-    if (!IsBrowserSideNavigationEnabled() ||
-        !ServiceWorkerUtils::IsBrowserAssignedProviderId(provider_id)) {
-      bad_message::ReceivedBadMessage(
-          this, bad_message::SWDH_PROVIDER_DESTROYED_NO_HOST);
-    }
-    return;
-  }
-  GetContext()->RemoveProviderHost(render_process_id_, provider_id);
-}
-
-void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
-                                                       int64_t version_id,
-                                                       int embedded_worker_id) {
+void ServiceWorkerDispatcherHost::OnSetHostedVersionId(
+    int provider_id,
+    int64_t version_id,
+    int embedded_worker_id,
+    mojom::URLLoaderFactoryAssociatedRequest request) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerDispatcherHost::OnSetHostedVersionId");
   if (!GetContext())
@@ -1047,12 +1027,6 @@ void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
     base::debug::ScopedCrashKey scope_provider_host_pid(
         "swdh_set_hosted_version_host_pid",
         base::IntToString(provider_host->process_id()));
-    if (version->embedded_worker()->process_id() !=
-        ChildProcessHost::kInvalidUniqueID) {
-      base::debug::ScopedCrashKey scope_is_new_process(
-          "swdh_set_hosted_version_is_new_process",
-          version->embedded_worker()->is_new_process() ? "true" : "false");
-    }
     base::debug::ScopedCrashKey scope_worker_restart_count(
         "swdh_set_hosted_version_restart_count",
         base::IntToString(version->embedded_worker()->restart_count()));
@@ -1062,6 +1036,9 @@ void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
   }
 
   provider_host->SetHostedVersion(version);
+
+  if (ServiceWorkerUtils::IsServicificationEnabled())
+    provider_host->CreateScriptURLLoaderFactory(std::move(request));
 
   // Retrieve the registration associated with |version|. The registration
   // must be alive because the version keeps it during starting worker.
@@ -1075,8 +1052,8 @@ void ServiceWorkerDispatcherHost::OnSetHostedVersionId(int provider_id,
 
   ServiceWorkerRegistrationObjectInfo info;
   ServiceWorkerVersionAttributes attrs;
-  GetRegistrationObjectInfoAndVersionAttributes(
-      provider_host->AsWeakPtr(), registration, &info, &attrs);
+  GetRegistrationObjectInfoAndVersionAttributes(provider_host->AsWeakPtr(),
+                                                registration, &info, &attrs);
 
   Send(new ServiceWorkerMsg_AssociateRegistration(kDocumentMainThreadId,
                                                   provider_id, info, attrs));
@@ -1504,6 +1481,8 @@ void ServiceWorkerDispatcherHost::GetRegistrationForReadyComplete(
 }
 
 ServiceWorkerContextCore* ServiceWorkerDispatcherHost::GetContext() {
+  // Temporary CHECK for debugging https://crbug.com/736203.
+  CHECK(BrowserThread::CurrentlyOn(BrowserThread::IO));
   if (!context_wrapper_.get())
     return nullptr;
   return context_wrapper_->context();

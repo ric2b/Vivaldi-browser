@@ -308,7 +308,7 @@
 <translation id="5483785310822538350">撤消对文件和设备的访问权限</translation>
 <translation id="5485102783864353244">添加应用</translation>
 <translation id="5486561344817861625">模拟浏览器重启</translation>
-<translation id="5488468185303821006">允许在无痕模式中运行</translation>
+<translation id="5488468185303821006">允许在隐私模式中运行</translation>
 <translation id="5509693895992845810">另存为(&amp;A)...</translation>
 <translation id="5521078259930077036">这是您想要的主页吗？</translation>
 <translation id="5532223876348815659">全局</translation>
@@ -386,7 +386,6 @@
 <translation id="6639554308659482635">SQLite 使用的内存</translation>
 <translation id="6655190889273724601">开发者模式</translation>
 <translation id="6691936601825168937">前进(&amp;F)</translation>
-<translation id="6700480081846086223">投射 <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">范围</translation>
 <translation id="6786747875388722282">扩展程序</translation>
 <translation id="6787839852456839824">键盘快捷键</translation>

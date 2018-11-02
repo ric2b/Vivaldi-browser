@@ -21,9 +21,9 @@
 #include "cc/input/selection.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "components/viz/frame_sinks/frame_evictor.h"
-#include "content/browser/accessibility/browser_accessibility_manager.h"
-#include "content/browser/android/content_view_core_impl_observer.h"
+#include "components/viz/service/frame_sinks/frame_evictor.h"
+#include "content/browser/android/content_view_core_observer.h"
+#include "content/browser/renderer_host/input/mouse_wheel_phase_handler.h"
 #include "content/browser/renderer_host/input/stylus_text_selector.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/text_input_manager.h"
@@ -35,6 +35,7 @@
 #include "ui/android/view_android.h"
 #include "ui/android/view_client.h"
 #include "ui/android/window_android_observer.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/gesture_detection/filtered_gesture_provider.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/geometry/vector2d_f.h"
@@ -47,7 +48,7 @@ struct DidOverscrollParams;
 }
 
 namespace content {
-class ContentViewCoreImpl;
+class ContentViewCore;
 class ImeAdapterAndroid;
 class OverscrollControllerAndroid;
 class RenderWidgetHost;
@@ -55,7 +56,10 @@ class RenderWidgetHostImpl;
 class SelectionPopupController;
 class SynchronousCompositorHost;
 class SynchronousCompositorClient;
+class TouchSelectionControllerClientManagerAndroid;
+class WebContentsAccessibilityAndroid;
 struct NativeWebKeyboardEvent;
+struct ContextMenuParams;
 
 // -----------------------------------------------------------------------------
 // See comments in render_widget_host_view.h about this class and its members.
@@ -68,16 +72,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       public viz::FrameEvictorClient,
       public StylusTextSelectorClient,
       public ui::TouchSelectionControllerClient,
-      public content::ContentViewCoreImplObserver,
+      public content::ContentViewCoreObserver,
       public content::TextInputManager::Observer,
       public ui::DelegatedFrameHostAndroid::Client,
       public cc::BeginFrameObserver {
  public:
   RenderWidgetHostViewAndroid(RenderWidgetHostImpl* widget,
-                              ContentViewCoreImpl* content_view_core);
+                              ContentViewCore* content_view_core);
   ~RenderWidgetHostViewAndroid() override;
-
-  void Blur();
 
   // Interface used to observe the destruction of a RenderWidgetHostViewAndroid.
   class DestructionObserver {
@@ -91,6 +93,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void AddDestructionObserver(DestructionObserver* connector);
   void RemoveDestructionObserver(DestructionObserver* connector);
+
+  ui::TouchSelectionController* touch_selection_controller() {
+    return touch_selection_controller_.get();
+  }
 
   // RenderWidgetHostView implementation.
   bool OnMessageReceived(const IPC::Message& msg) override;
@@ -136,7 +142,6 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
                               InputEventAckState ack_result) override;
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  void OnSetNeedsFlushInput() override;
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
@@ -144,9 +149,9 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool LockMouse() override;
   void UnlockMouse() override;
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink)
+      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
   void ClearCompositorFrame() override;
@@ -160,10 +165,10 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
       override;
   void OnDidNavigateMainFrameToNewPage() override;
   void SetNeedsBeginFrames(bool needs_begin_frames) override;
-  cc::FrameSinkId GetFrameSinkId() override;
-  cc::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                     const gfx::Point& point,
-                                     gfx::Point* transformed_point) override;
+  viz::FrameSinkId GetFrameSinkId() override;
+  viz::FrameSinkId FrameSinkIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                      const gfx::Point& point,
+                                      gfx::Point* transformed_point) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
                          const ui::LatencyInfo& latency) override;
   void ProcessMouseWheelEvent(const blink::WebMouseWheelEvent& event,
@@ -173,12 +178,14 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void ProcessGestureEvent(const blink::WebGestureEvent& event,
                            const ui::LatencyInfo& latency) override;
   bool TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       const cc::SurfaceId& original_surface,
+                                       const viz::SurfaceId& original_surface,
                                        gfx::Point* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
       const gfx::Point& point,
       RenderWidgetHostViewBase* target_view,
       gfx::Point* transformed_point) override;
+  TouchSelectionControllerClientManager*
+  GetTouchSelectionControllerClientManager() override;
 
   // ui::ViewClient implementation.
   bool OnTouchEvent(const ui::MotionEventAndroid& m,
@@ -199,7 +206,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnActivityStopped() override;
   void OnActivityStarted() override;
 
-  // content::ContentViewCoreImplObserver implementation.
+  // content::ContentViewCoreObserver implementation.
   void OnContentViewCoreDestroyed() override;
   void OnAttachedToWindow() override;
   void OnDetachedFromWindow() override;
@@ -210,7 +217,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // StylusTextSelectorClient implementation.
   void OnStylusSelectBegin(float x0, float y0, float x1, float y1) override;
   void OnStylusSelectUpdate(float x, float y) override;
-  void OnStylusSelectEnd() override {};
+  void OnStylusSelectEnd(float x, float y) override;
   void OnStylusSelectTap(base::TimeTicks time, float x, float y) override;
 
   // ui::TouchSelectionControllerClient implementation.
@@ -226,7 +233,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // DelegatedFrameHostAndroid::Client implementation.
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source) override;
   void DidReceiveCompositorFrameAck() override;
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
+  void ReclaimResources(
+      const std::vector<cc::ReturnedResource>& resources) override;
 
   // cc::BeginFrameObserver implementation.
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
@@ -234,12 +242,13 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnBeginFrameSourcePausedChanged(bool paused) override;
 
   // Non-virtual methods
-  void SetContentViewCore(ContentViewCoreImpl* content_view_core);
+  void SetContentViewCore(ContentViewCore* content_view_core);
   SkColor GetCachedBackgroundColor() const;
   void SendKeyEvent(const NativeWebKeyboardEvent& event);
   void SendMouseEvent(const ui::MotionEventAndroid&, int action_button);
   void SendMouseWheelEvent(const blink::WebMouseWheelEvent& event);
   void SendGestureEvent(const blink::WebGestureEvent& event);
+  bool ShowSelectionMenu(const ContextMenuParams& params);
   void ResolveTapDisambiguation(double timestamp_seconds,
                                 gfx::Point tap_viewport_offset,
                                 bool is_long_press);
@@ -264,7 +273,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   bool HasValidFrame() const;
 
   void MoveCaret(const gfx::Point& point);
-  void ShowContextMenuAtPoint(const gfx::Point& point);
+  void ShowContextMenuAtPoint(const gfx::Point& point, ui::MenuSourceType);
   void DismissTextHandles();
   void SetTextHandlesTemporarilyHidden(bool hidden);
   void OnShowUnhandledTapUIIfNeeded(int x_dip, int y_dip);
@@ -299,7 +308,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   ImeAdapterAndroid* ime_adapter_for_testing() { return ime_adapter_android_; }
 
   // Exposed for tests.
-  cc::SurfaceId SurfaceIdForTesting() const override;
+  viz::SurfaceId SurfaceIdForTesting() const override;
+
+  ui::TouchSelectionControllerClient*
+  GetSelectionControllerClientManagerForTesting();
+  void SetSelectionControllerClientForTesting(
+      std::unique_ptr<ui::TouchSelectionControllerClient> client);
+
+  void GotFocus();
+  void LostFocus();
 
  private:
   void RunAckCallbacks();
@@ -316,6 +333,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void UpdateBackgroundColor(SkColor color);
 
+  void EvictFrameIfNecessary();
+
   // DevTools ScreenCast support for Android WebView.
   void SynchronousCopyContents(const gfx::Rect& src_subrect_in_pixel,
                                const gfx::Size& dst_size_in_pixel,
@@ -326,15 +345,15 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   void OnLostResources();
 
   enum BeginFrameRequestType {
-    FLUSH_INPUT = 1 << 0,
-    BEGIN_FRAME = 1 << 1,
-    PERSISTENT_BEGIN_FRAME = 1 << 2
+    BEGIN_FRAME = 1 << 0,
+    PERSISTENT_BEGIN_FRAME = 1 << 1
   };
   void AddBeginFrameRequest(BeginFrameRequestType request);
   void ClearBeginFrameRequest(BeginFrameRequestType request);
   void AcknowledgeBeginFrame(const cc::BeginFrameAck& ack);
   void StartObservingRootWindow();
   void StopObservingRootWindow();
+  void SendBeginFramePaused();
   void SendBeginFrame(cc::BeginFrameArgs args);
   bool Animate(base::TimeTicks frame_time);
   void RequestDisallowInterceptTouchEvent();
@@ -345,14 +364,22 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
 
   void CreateOverscrollControllerIfPossible();
 
+  void UpdateLeftClickCount(int action_button,
+                            float mousedown_x,
+                            float mouse_down_y);
+
+  WebContentsAccessibilityAndroid* GetWebContentsAccessibilityAndroid() const;
+
+  void OnFocusInternal();
+  void LostFocusInternal();
+
   // The model object.
   RenderWidgetHostImpl* host_;
 
   // The begin frame source being observed.  Null if none.
   cc::BeginFrameSource* begin_frame_source_;
   cc::BeginFrameArgs last_begin_frame_args_;
-  uint32_t latest_confirmed_begin_frame_source_id_;
-  uint64_t latest_confirmed_begin_frame_sequence_number_;
+  bool begin_frame_paused_ = false;
 
   // Indicates whether and for what reason a request for begin frames has been
   // issued. Used to control action dispatch at the next |OnBeginFrame()| call.
@@ -368,8 +395,8 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // appearance of overscroll glow and the keyboard.
   bool is_in_vr_;
 
-  // ContentViewCoreImpl is our interface to the view system.
-  ContentViewCoreImpl* content_view_core_;
+  // ContentViewCore is our interface to the view system.
+  ContentViewCore* content_view_core_;
 
   ImeAdapterAndroid* ime_adapter_android_;
   SelectionPopupController* selection_popup_controller_;
@@ -385,7 +412,7 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Manages the Compositor Frames received from the renderer.
   std::unique_ptr<ui::DelegatedFrameHostAndroid> delegated_frame_host_;
 
-  cc::ReturnedResourceArray surface_returned_resources_;
+  std::vector<cc::ReturnedResource> surface_returned_resources_;
 
   // The most recent surface size that was pushed to the surface layer.
   gfx::Size current_surface_size_;
@@ -405,6 +432,12 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   // Manages selection handle rendering and manipulation.
   // This will always be NULL if |content_view_core_| is NULL.
   std::unique_ptr<ui::TouchSelectionController> touch_selection_controller_;
+  std::unique_ptr<ui::TouchSelectionControllerClient>
+      touch_selection_controller_client_for_test_;
+  // Keeps track of currently active touch selection controller clients (some
+  // may be representing out-of-process iframes).
+  std::unique_ptr<TouchSelectionControllerClientManagerAndroid>
+      touch_selection_controller_client_manager_;
 
   // Bounds to use if we have no backing ContentViewCore
   gfx::Rect default_bounds_;
@@ -424,10 +457,16 @@ class CONTENT_EXPORT RenderWidgetHostViewAndroid
   float prev_top_shown_pix_;
   float prev_bottom_shown_pix_;
 
-  cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  base::TimeTicks prev_mousedown_timestamp_;
+  gfx::Point prev_mousedown_point_;
+  int left_click_count_ = 0;
+
+  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   base::ObserverList<DestructionObserver> destruction_observers_;
+
+  MouseWheelPhaseHandler mouse_wheel_phase_handler_;
 
   base::WeakPtrFactory<RenderWidgetHostViewAndroid> weak_ptr_factory_;
 

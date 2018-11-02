@@ -33,7 +33,6 @@
  */
 SDK.NetworkRequest = class extends Common.Object {
   /**
-   * @param {!SDK.NetworkManager} networkManager
    * @param {!Protocol.Network.RequestId} requestId
    * @param {string} url
    * @param {string} documentURL
@@ -41,10 +40,9 @@ SDK.NetworkRequest = class extends Common.Object {
    * @param {!Protocol.Network.LoaderId} loaderId
    * @param {?Protocol.Network.Initiator} initiator
    */
-  constructor(networkManager, requestId, url, documentURL, frameId, loaderId, initiator) {
+  constructor(requestId, url, documentURL, frameId, loaderId, initiator) {
     super();
 
-    this._networkManager = networkManager;
     this._requestId = requestId;
     this.setUrl(url);
     this._documentURL = documentURL;
@@ -52,6 +50,8 @@ SDK.NetworkRequest = class extends Common.Object {
     this._loaderId = loaderId;
     /** @type {?Protocol.Network.Initiator} */
     this._initiator = initiator;
+    /** @type {?SDK.NetworkRequest} */
+    this._redirectSource = null;
     this._issueTime = -1;
     this._startTime = -1;
     this._endTime = -1;
@@ -63,8 +63,8 @@ SDK.NetworkRequest = class extends Common.Object {
     this.requestMethod = '';
     this.requestTime = 0;
     this.protocol = '';
-    /** @type {!Protocol.Network.RequestMixedContentType} */
-    this.mixedContentType = Protocol.Network.RequestMixedContentType.None;
+    /** @type {!Protocol.Security.MixedContentType} */
+    this.mixedContentType = Protocol.Security.MixedContentType.None;
 
     /** @type {?Protocol.Network.ResourcePriority} */
     this._initialPriority = null;
@@ -73,14 +73,21 @@ SDK.NetworkRequest = class extends Common.Object {
 
     /** @type {!Common.ResourceType} */
     this._resourceType = Common.resourceTypes.Other;
-    this._contentEncoded = false;
-    this._pendingContentCallbacks = [];
+    /** @type {?Promise<!SDK.NetworkRequest.ContentData>} */
+    this._contentData = null;
     /** @type {!Array.<!SDK.NetworkRequest.WebSocketFrame>} */
     this._frames = [];
     /** @type {!Array.<!SDK.NetworkRequest.EventSourceMessage>} */
     this._eventSourceMessages = [];
 
+    /** @type {!Object<string, (string|undefined)>} */
     this._responseHeaderValues = {};
+    this._responseHeadersText = '';
+
+    /** @type {!Array<!SDK.NetworkRequest.NameValue>} */
+    this._requestHeaders = [];
+    /** @type {!Object<string, (string|undefined)>} */
+    this._requestHeaderValues = {};
 
     this._remoteAddress = '';
 
@@ -365,11 +372,8 @@ SDK.NetworkRequest = class extends Common.Object {
 
     this._finished = x;
 
-    if (x) {
+    if (x)
       this.dispatchEventToListeners(SDK.NetworkRequest.Events.FinishedLoading, this);
-      if (this._pendingContentCallbacks.length)
-        this._innerRequestContent();
-    }
   }
 
   /**
@@ -466,18 +470,22 @@ SDK.NetworkRequest = class extends Common.Object {
   }
 
   /**
-   * @param {!Protocol.Network.ResourceTiming|undefined} x
+   * @param {!Protocol.Network.ResourceTiming|undefined} timingInfo
    */
-  set timing(x) {
-    if (x && !this._fromMemoryCache) {
-      // Take startTime and responseReceivedTime from timing data for better accuracy.
-      // Timing's requestTime is a baseline in seconds, rest of the numbers there are ticks in millis.
-      this._startTime = x.requestTime;
-      this._responseReceivedTime = x.requestTime + x.receiveHeadersEnd / 1000.0;
+  set timing(timingInfo) {
+    if (!timingInfo || this._fromMemoryCache)
+      return;
+    // Take startTime and responseReceivedTime from timing data for better accuracy.
+    // Timing's requestTime is a baseline in seconds, rest of the numbers there are ticks in millis.
+    this._startTime = timingInfo.requestTime;
+    var headersReceivedTime = timingInfo.requestTime + timingInfo.receiveHeadersEnd / 1000.0;
+    if ((this._responseReceivedTime || -1) < 0 || this._responseReceivedTime > headersReceivedTime)
+      this._responseReceivedTime = headersReceivedTime;
+    if (this._startTime > this._responseReceivedTime)
+      this._responseReceivedTime = this._startTime;
 
-      this._timing = x;
-      this.dispatchEventToListeners(SDK.NetworkRequest.Events.TimingChanged, this);
-    }
+    this._timing = timingInfo;
+    this.dispatchEventToListeners(SDK.NetworkRequest.Events.TimingChanged, this);
   }
 
   /**
@@ -531,7 +539,8 @@ SDK.NetworkRequest = class extends Common.Object {
     } else {
       this._path = this._parsedURL.host + this._parsedURL.folderPathComponents;
 
-      var inspectedURL = this._networkManager.target().inspectedURL().asParsedURL();
+      var networkManager = SDK.NetworkManager.forRequest(this);
+      var inspectedURL = networkManager ? networkManager.target().inspectedURL().asParsedURL() : null;
       this._path = this._path.trimURL(inspectedURL ? inspectedURL.host : '');
       if (this._parsedURL.lastPathComponent || this._parsedURL.queryParams) {
         this._name =
@@ -591,24 +600,22 @@ SDK.NetworkRequest = class extends Common.Object {
   /**
    * @return {?SDK.NetworkRequest}
    */
-  get redirectSource() {
-    if (this.redirects && this.redirects.length > 0)
-      return this.redirects[this.redirects.length - 1];
+  redirectSource() {
     return this._redirectSource;
   }
 
   /**
-   * @param {?SDK.NetworkRequest} x
+   * @param {?SDK.NetworkRequest} originatingRequest
    */
-  set redirectSource(x) {
-    this._redirectSource = x;
+  setRedirectSource(originatingRequest) {
+    this._redirectSource = originatingRequest;
   }
 
   /**
    * @return {!Array.<!SDK.NetworkRequest.NameValue>}
    */
   requestHeaders() {
-    return this._requestHeaders || [];
+    return this._requestHeaders;
   }
 
   /**
@@ -642,7 +649,10 @@ SDK.NetworkRequest = class extends Common.Object {
    * @return {string|undefined}
    */
   requestHeaderValue(headerName) {
-    return this._headerValue(this.requestHeaders(), headerName);
+    if (headerName in this._requestHeaderValues)
+      return this._requestHeaderValues[headerName];
+    this._requestHeaderValues[headerName] = this._computeHeaderValue(this.requestHeaders(), headerName);
+    return this._requestHeaderValues[headerName];
   }
 
   /**
@@ -672,10 +682,24 @@ SDK.NetworkRequest = class extends Common.Object {
   /**
    * @return {string}
    */
+  _filteredProtocolName() {
+    var protocol = this.protocol.toLowerCase();
+    if (protocol === 'h2')
+      return 'http/2.0';
+    return protocol.replace(/^http\/2(\.0)?\+/, 'http/2.0+');
+  }
+
+  /**
+   * @return {string}
+   */
   requestHttpVersion() {
     var headersText = this.requestHeadersText();
-    if (!headersText)
-      return this.requestHeaderValue('version') || this.requestHeaderValue(':version') || 'unknown';
+    if (!headersText) {
+      var version = this.requestHeaderValue('version') || this.requestHeaderValue(':version');
+      if (version)
+        return version;
+      return this._filteredProtocolName();
+    }
     var firstLine = headersText.split(/\r\n/)[0];
     var match = firstLine.match(/(HTTP\/\d+\.\d+)$/);
     return match ? match[1] : 'HTTP/0.9';
@@ -736,12 +760,10 @@ SDK.NetworkRequest = class extends Common.Object {
    * @return {string|undefined}
    */
   responseHeaderValue(headerName) {
-    var value = this._responseHeaderValues[headerName];
-    if (value === undefined) {
-      value = this._headerValue(this.responseHeaders, headerName);
-      this._responseHeaderValues[headerName] = (value !== undefined) ? value : null;
-    }
-    return (value !== null) ? value : undefined;
+    if (headerName in this._responseHeaderValues)
+      return this._responseHeaderValues[headerName];
+    this._responseHeaderValues[headerName] = this._computeHeaderValue(this.responseHeaders, headerName);
+    return this._responseHeaderValues[headerName];
   }
 
   /**
@@ -822,8 +844,12 @@ SDK.NetworkRequest = class extends Common.Object {
    */
   responseHttpVersion() {
     var headersText = this._responseHeadersText;
-    if (!headersText)
-      return this.responseHeaderValue('version') || this.responseHeaderValue(':version') || 'unknown';
+    if (!headersText) {
+      var version = this.responseHeaderValue('version') || this.responseHeaderValue(':version');
+      if (version)
+        return version;
+      return this._filteredProtocolName();
+    }
     var firstLine = headersText.split(/\r\n/)[0];
     var match = firstLine.match(/^(HTTP\/\d+\.\d+)/);
     return match ? match[1] : 'HTTP/0.9';
@@ -849,7 +875,7 @@ SDK.NetworkRequest = class extends Common.Object {
    * @param {string} headerName
    * @return {string|undefined}
    */
-  _headerValue(headers, headerName) {
+  _computeHeaderValue(headers, headerName) {
     headerName = headerName.toLowerCase();
 
     var values = [];
@@ -866,24 +892,21 @@ SDK.NetworkRequest = class extends Common.Object {
   }
 
   /**
-   * @return {?string|undefined}
+   * @return {!Promise<!SDK.NetworkRequest.ContentData>}
    */
-  get content() {
-    return this._content;
+  contentData() {
+    if (this._contentData)
+      return this._contentData;
+    this._contentData = SDK.NetworkManager.requestContentData(this);
+    return this._contentData;
   }
 
   /**
-   * @return {?Protocol.Error|undefined}
+   * @param {!SDK.NetworkRequest.ContentData} data
    */
-  contentError() {
-    return this._contentError;
-  }
-
-  /**
-   * @return {boolean}
-   */
-  get contentEncoded() {
-    return this._contentEncoded;
+  setContentData(data) {
+    console.assert(!this._contentData, 'contentData can only be set once.');
+    this._contentData = Promise.resolve(data);
   }
 
   /**
@@ -906,20 +929,8 @@ SDK.NetworkRequest = class extends Common.Object {
    * @override
    * @return {!Promise<?string>}
    */
-  requestContent() {
-    // We do not support content retrieval for WebSockets at the moment.
-    // Since WebSockets are potentially long-living, fail requests immediately
-    // to prevent caller blocking until resource is marked as finished.
-    if (this._resourceType === Common.resourceTypes.WebSocket)
-      return Promise.resolve(/** @type {?string} */ (null));
-    if (typeof this._content !== 'undefined')
-      return Promise.resolve(/** @type {?string} */ (this.content || null));
-    var callback;
-    var promise = new Promise(fulfill => callback = fulfill);
-    this._pendingContentCallbacks.push(callback);
-    if (this.finished)
-      this._innerRequestContent();
-    return promise;
+  async requestContent() {
+    return (await this.contentData()).content;
   }
 
   /**
@@ -927,10 +938,10 @@ SDK.NetworkRequest = class extends Common.Object {
    * @param {string} query
    * @param {boolean} caseSensitive
    * @param {boolean} isRegex
-   * @param {function(!Array.<!Common.ContentProvider.SearchMatch>)} callback
+   * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
    */
-  searchInContent(query, caseSensitive, isRegex, callback) {
-    callback([]);
+  searchInContent(query, caseSensitive, isRegex) {
+    return Promise.resolve([]);
   }
 
   /**
@@ -998,43 +1009,6 @@ SDK.NetworkRequest = class extends Common.Object {
     }
 
     this.requestContent().then(onResourceContent.bind(this));
-  }
-
-  /**
-   * @return {?string}
-   */
-  asDataURL() {
-    var content = this._content;
-    var charset = null;
-    if (!this._contentEncoded) {
-      content = content.toBase64();
-      charset = 'utf-8';
-    }
-    return Common.ContentProvider.contentAsDataURL(content, this.mimeType, true, charset);
-  }
-
-  _innerRequestContent() {
-    if (this._contentRequested)
-      return;
-    this._contentRequested = true;
-
-    /**
-     * @param {?Protocol.Error} error
-     * @param {string} content
-     * @param {boolean} contentEncoded
-     * @this {SDK.NetworkRequest}
-     */
-    function onResourceContent(error, content, contentEncoded) {
-      this._content = error ? null : content;
-      this._contentError = error;
-      this._contentEncoded = contentEncoded;
-      var callbacks = this._pendingContentCallbacks.slice();
-      for (var i = 0; i < callbacks.length; ++i)
-        callbacks[i](this._content);
-      this._pendingContentCallbacks.length = 0;
-      delete this._contentRequested;
-    }
-    this._networkManager.target().networkAgent().getResponseBody(this._requestId, onResourceContent.bind(this));
   }
 
   /**
@@ -1107,17 +1081,6 @@ SDK.NetworkRequest = class extends Common.Object {
     this._eventSourceMessages.push(message);
     this.dispatchEventToListeners(SDK.NetworkRequest.Events.EventSourceMessageAdded, message);
   }
-
-  replayXHR() {
-    this._networkManager.target().networkAgent().replayXHR(this._requestId);
-  }
-
-  /**
-   * @return {!SDK.NetworkManager}
-   */
-  networkManager() {
-    return this._networkManager;
-  }
 };
 
 /** @enum {symbol} */
@@ -1155,3 +1118,6 @@ SDK.NetworkRequest.WebSocketFrame;
 
 /** @typedef {!{time: number, eventName: string, eventId: string, data: string}} */
 SDK.NetworkRequest.EventSourceMessage;
+
+/** @typedef {!{error: ?string, content: ?string, encoded: boolean}} */
+SDK.NetworkRequest.ContentData;

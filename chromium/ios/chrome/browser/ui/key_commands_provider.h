@@ -7,6 +7,9 @@
 
 #import <UIKit/UIKit.h>
 
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+
 @protocol KeyCommandsPlumbing<NSObject>
 
 #pragma mark Query information
@@ -52,6 +55,8 @@
 @interface KeyCommandsProvider : NSObject
 
 - (NSArray*)keyCommandsForConsumer:(id<KeyCommandsPlumbing>)consumer
+                        dispatcher:
+                            (id<ApplicationCommands, BrowserCommands>)dispatcher
                        editingText:(BOOL)editingText;
 
 @end

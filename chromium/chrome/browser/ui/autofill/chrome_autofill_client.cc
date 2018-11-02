@@ -27,6 +27,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/url_constants.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
@@ -56,7 +57,7 @@
 #include "components/autofill/core/browser/autofill_save_card_infobar_delegate_mobile.h"
 #include "components/autofill/core/browser/autofill_save_card_infobar_mobile.h"
 #include "components/infobars/core/infobar.h"
-#include "content/public/browser/android/content_view_core.h"
+#include "ui/android/window_android.h"
 #else  // !OS_ANDROID
 #include "chrome/browser/ui/autofill/save_card_bubble_controller_impl.h"
 #include "chrome/browser/ui/browser.h"
@@ -211,10 +212,15 @@ void ChromeAutofillClient::ConfirmSaveCreditCardToCloud(
     bool should_cvc_be_requested,
     const base::Closure& callback) {
 #if defined(OS_ANDROID)
-  InfoBarService::FromWebContents(web_contents())
-      ->AddInfoBar(CreateSaveCardInfoBarMobile(
+  std::unique_ptr<AutofillSaveCardInfoBarDelegateMobile>
+      save_card_info_bar_delegate_mobile =
           base::MakeUnique<AutofillSaveCardInfoBarDelegateMobile>(
-              true, card, std::move(legal_message), callback, GetPrefs())));
+              true, card, std::move(legal_message), callback, GetPrefs());
+  if (save_card_info_bar_delegate_mobile->LegalMessagesParsedSuccessfully()) {
+    InfoBarService::FromWebContents(web_contents())
+        ->AddInfoBar(CreateSaveCardInfoBarMobile(
+            std::move(save_card_info_bar_delegate_mobile)));
+  }
 #else
   // Do lazy initialization of SaveCardBubbleControllerImpl.
   autofill::SaveCardBubbleControllerImpl::CreateForWebContents(web_contents());
@@ -337,6 +343,10 @@ void ChromeAutofillClient::WebContentsDestroyed() {
   HideAutofillPopup();
 }
 
+void ChromeAutofillClient::DidAttachInterstitialPage() {
+  HideAutofillPopup();
+}
+
 #if !defined(OS_ANDROID)
 void ChromeAutofillClient::OnZoomChanged(
     const zoom::ZoomController::ZoomChangedEventData& data) {
@@ -395,9 +405,11 @@ bool ChromeAutofillClient::ShouldShowSigninPromo() {
 
 void ChromeAutofillClient::StartSigninFlow() {
 #if defined(OS_ANDROID)
-  chrome::android::SigninPromoUtilAndroid::StartAccountSigninActivityForPromo(
-      content::ContentViewCore::FromWebContents(web_contents()),
-      signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
+  auto* window = web_contents()->GetNativeView()->GetWindowAndroid();
+  if (window) {
+    chrome::android::SigninPromoUtilAndroid::StartAccountSigninActivityForPromo(
+        window, signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN);
+  }
 #endif
 }
 
@@ -421,6 +433,14 @@ void ChromeAutofillClient::ShowHttpNotSecureExplanation() {
       GURL(kSecurityIndicatorHelpCenterUrl), content::Referrer(),
       WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
       false /* is_renderer_initiated */));
+}
+
+bool ChromeAutofillClient::IsAutofillSupported() {
+  // VR browsing does not support popups at the moment.
+  if (vr::VrTabHelper::IsInVr(web_contents()))
+    return false;
+
+  return true;
 }
 
 }  // namespace autofill

@@ -10,10 +10,11 @@
 #include "base/run_loop.h"
 #include "content/child/resource_dispatcher.h"
 #include "content/child/test_request_peer.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr_info.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/redirect_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -26,14 +27,16 @@ class URLLoaderClientImplTest : public ::testing::Test,
   URLLoaderClientImplTest()
       : dispatcher_(new ResourceDispatcher(this, message_loop_.task_runner())),
         mojo_binding_(this) {
-    url_loader_factory_proxy_ = mojo_binding_.CreateInterfacePtrAndBind();
+    mojo_binding_.Bind(mojo::MakeRequest(&url_loader_factory_proxy_));
 
     request_id_ = dispatcher_->StartAsync(
         base::MakeUnique<ResourceRequest>(), 0, nullptr, url::Origin(),
         base::MakeUnique<TestRequestPeer>(dispatcher_.get(),
                                           &request_peer_context_),
         blink::WebURLRequest::LoadingIPCType::kMojo,
-        url_loader_factory_proxy_.get(), mojo::ScopedDataPipeConsumerHandle());
+        url_loader_factory_proxy_.get(),
+        std::vector<std::unique_ptr<URLLoaderThrottle>>(),
+        mojo::ScopedDataPipeConsumerHandle());
     request_peer_context_.request_id = request_id_;
 
     base::RunLoop().RunUntilIdle();
@@ -55,7 +58,9 @@ class URLLoaderClientImplTest : public ::testing::Test,
                             int32_t request_id,
                             uint32_t options,
                             const ResourceRequest& url_request,
-                            mojom::URLLoaderClientPtr client) override {
+                            mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
     url_loader_client_ = std::move(client);
   }
 

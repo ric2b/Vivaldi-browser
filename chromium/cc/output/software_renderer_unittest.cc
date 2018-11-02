@@ -63,10 +63,9 @@ class SoftwareRendererTest : public testing::Test {
     base::RunLoop loop;
 
     list->back()->copy_requests.push_back(
-        CopyOutputRequest::CreateBitmapRequest(
-            base::Bind(&SoftwareRendererTest::SaveBitmapResult,
-                       base::Unretained(&bitmap_result),
-                       loop.QuitClosure())));
+        CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
+            &SoftwareRendererTest::SaveBitmapResult,
+            base::Unretained(&bitmap_result), loop.QuitClosure())));
 
     renderer()->DrawFrame(list, device_scale_factor, viewport_size);
     loop.Run();
@@ -82,10 +81,10 @@ class SoftwareRendererTest : public testing::Test {
   }
 
  protected:
-  RendererSettings settings_;
+  viz::RendererSettings settings_;
   FakeOutputSurfaceClient output_surface_client_;
   std::unique_ptr<FakeOutputSurface> output_surface_;
-  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   std::unique_ptr<SoftwareRenderer> renderer_;
 };
@@ -143,10 +142,10 @@ TEST_F(SoftwareRendererTest, TileQuad) {
   InitializeRenderer(base::WrapUnique(new SoftwareOutputDevice));
 
   ResourceId resource_yellow = resource_provider()->CreateResource(
-      outer_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      outer_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
   ResourceId resource_cyan = resource_provider()->CreateResource(
-      inner_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      inner_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
 
   SkBitmap yellow_tile;
@@ -209,7 +208,7 @@ TEST_F(SoftwareRendererTest, TileQuadVisibleRect) {
   InitializeRenderer(base::WrapUnique(new SoftwareOutputDevice));
 
   ResourceId resource_cyan = resource_provider()->CreateResource(
-      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
 
   SkBitmap cyan_tile;  // The lowest five rows are yellow.

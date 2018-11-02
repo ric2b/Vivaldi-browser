@@ -6,8 +6,9 @@
 #define CHROME_BROWSER_EXTENSIONS_API_IDENTITY_IDENTITY_GET_PROFILE_USER_INFO_FUNCTION_H_
 
 #include "chrome/browser/extensions/chrome_extension_function.h"
-#include "components/signin/core/account_id/account_id.h"
+#include "components/signin/core/browser/account_info.h"
 #include "extensions/browser/extension_function_histogram_value.h"
+#include "services/identity/public/cpp/account_state.h"
 #include "services/identity/public/interfaces/identity_manager.mojom.h"
 
 namespace extensions {
@@ -22,7 +23,9 @@ class IdentityGetProfileUserInfoFunction
 
  private:
   ~IdentityGetProfileUserInfoFunction() override;
-  void OnReceivedPrimaryAccountId(const base::Optional<AccountId>& account_id);
+  void OnReceivedPrimaryAccountInfo(
+      const base::Optional<AccountInfo>& account_info,
+      const identity::AccountState& account_state);
 
   // UIThreadExtensionFunction implementation.
   ExtensionFunction::ResponseAction Run() override;

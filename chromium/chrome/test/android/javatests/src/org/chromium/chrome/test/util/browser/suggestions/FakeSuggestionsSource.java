@@ -4,9 +4,12 @@
 
 package org.chromium.chrome.test.util.browser.suggestions;
 
+import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.createDummySuggestions;
+
 import android.graphics.Bitmap;
 
 import org.chromium.base.Callback;
+import org.chromium.base.ObserverList;
 import org.chromium.base.ThreadUtils;
 import org.chromium.chrome.browser.ntp.cards.SuggestionsCategoryInfo;
 import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
@@ -26,7 +29,7 @@ import java.util.Map;
  * A fake Suggestions source for use in unit and instrumentation tests.
  */
 public class FakeSuggestionsSource implements SuggestionsSource {
-    private SuggestionsSource.Observer mObserver;
+    private ObserverList<Observer> mObserverList = new ObserverList<>();
     private final List<Integer> mCategories = new ArrayList<>();
     private final Map<Integer, List<SnippetArticle>> mSuggestions = new HashMap<>();
     private final Map<Integer, Integer> mCategoryStatus = new LinkedHashMap<>();
@@ -36,11 +39,15 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     private final Map<String, Bitmap> mThumbnails = new HashMap<>();
     private final Map<String, Bitmap> mFavicons = new HashMap<>();
 
+    private Bitmap mDefaultFavicon;
+
     private final List<Integer> mDismissedCategories = new ArrayList<>();
     private final Map<Integer, List<SnippetArticle>> mDismissedCategorySuggestions =
             new HashMap<>();
     private final Map<Integer, Integer> mDismissedCategoryStatus = new LinkedHashMap<>();
     private final Map<Integer, SuggestionsCategoryInfo> mDismissedCategoryInfo = new HashMap<>();
+
+    private boolean mRemoteSuggestionsEnabled = true;
 
     /**
      * Sets the status to be returned for a given category.
@@ -52,7 +59,7 @@ public class FakeSuggestionsSource implements SuggestionsSource {
         } else if (!mCategories.contains(category)) {
             mCategories.add(category);
         }
-        if (mObserver != null) mObserver.onCategoryStatusChanged(category, status);
+        for (Observer observer : mObserverList) observer.onCategoryStatusChanged(category, status);
     }
 
     /**
@@ -62,7 +69,32 @@ public class FakeSuggestionsSource implements SuggestionsSource {
             @CategoryInt int category, List<SnippetArticle> suggestions) {
         // Copy the suggestions list so that it can't be modified anymore.
         mSuggestions.put(category, new ArrayList<>(suggestions));
-        if (mObserver != null) mObserver.onNewSuggestions(category);
+        for (Observer observer : mObserverList) observer.onNewSuggestions(category);
+    }
+
+    /**
+     * Creates and sets the suggestions to be returned for a given category.
+     * @return The suggestions created.
+     * @see ContentSuggestionsTestUtils#createDummySuggestions(int, int)
+     * @see #setSuggestionsForCategory(int, List)
+     */
+    public List<SnippetArticle> createAndSetSuggestions(int count, @CategoryInt int category) {
+        List<SnippetArticle> suggestions = createDummySuggestions(count, category);
+        setSuggestionsForCategory(category, suggestions);
+        return suggestions;
+    }
+
+    /**
+     * Creates and sets the suggestions to be returned for a given category.
+     * @return The suggestions created.
+     * @see ContentSuggestionsTestUtils#createDummySuggestions(int, int, String)
+     * @see #setSuggestionsForCategory(int, List)
+     */
+    public List<SnippetArticle> createAndSetSuggestions(
+            int count, @CategoryInt int category, String suffix) {
+        List<SnippetArticle> suggestions = createDummySuggestions(count, category, suffix);
+        setSuggestionsForCategory(category, suggestions);
+        return suggestions;
     }
 
     /**
@@ -89,6 +121,15 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     }
 
     /**
+     * Sets a default favicon to be returned for suggestions that don't have a specific favicon
+     * defined.
+     * @param bitmap The favicon bitmap to be returned by default.
+     */
+    public void setDefaultFavicon(Bitmap bitmap) {
+        mDefaultFavicon = bitmap;
+    }
+
+    /**
      * Removes the given suggestion from the source and notifies any observer that it has been
      * invalidated.
      */
@@ -99,14 +140,16 @@ public class FakeSuggestionsSource implements SuggestionsSource {
                 break;
             }
         }
-        mObserver.onSuggestionInvalidated(category, idWithinCategory);
+        for (Observer observer : mObserverList) {
+            observer.onSuggestionInvalidated(category, idWithinCategory);
+        }
     }
 
     /**
      * Notifies the observer that a full refresh is required.
      */
     public void fireFullRefreshRequired() {
-        mObserver.onFullRefreshRequired();
+        for (Observer observer : mObserverList) observer.onFullRefreshRequired();
     }
 
     /**
@@ -121,6 +164,15 @@ public class FakeSuggestionsSource implements SuggestionsSource {
 
     @Override
     public void fetchRemoteSuggestions() {}
+
+    @Override
+    public boolean areRemoteSuggestionsEnabled() {
+        return mRemoteSuggestionsEnabled;
+    }
+
+    public void setRemoteSuggestionsEnabled(boolean enabled) {
+        mRemoteSuggestionsEnabled = enabled;
+    }
 
     @Override
     public void dismissSuggestion(SnippetArticle suggestion) {
@@ -165,20 +217,26 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     @Override
     public void fetchSuggestionFavicon(final SnippetArticle suggestion, int minimumSizePx,
             int desiredSizePx, final Callback<Bitmap> callback) {
-        if (mFavicons.containsKey(suggestion.mIdWithinCategory)) {
+        final Bitmap favicon = getFaviconForId(suggestion.mIdWithinCategory);
+        if (favicon != null) {
             ThreadUtils.postOnUiThread(new Runnable() {
                 @Override
                 public void run() {
-                    callback.onResult(mFavicons.get(suggestion.mIdWithinCategory));
+                    callback.onResult(favicon);
                 }
             });
         }
     }
 
-    @Override
-    public void fetchSuggestions(@CategoryInt int category, String[] displayedSuggestionIds) {
-        throw new UnsupportedOperationException();
+    private Bitmap getFaviconForId(String id) {
+        if (mFavicons.containsKey(id)) return mFavicons.get(id);
+
+        return mDefaultFavicon;
     }
+
+    @Override
+    public void fetchSuggestions(@CategoryInt int category, String[] displayedSuggestionIds,
+            Callback<List<SnippetArticle>> callback) {}
 
     @Override
     public void fetchContextualSuggestions(String url, Callback<List<SnippetArticle>> callback) {
@@ -186,9 +244,17 @@ public class FakeSuggestionsSource implements SuggestionsSource {
     }
 
     @Override
-    public void setObserver(Observer observer) {
-        mObserver = observer;
+    public void addObserver(Observer observer) {
+        mObserverList.addObserver(observer);
     }
+
+    @Override
+    public void removeObserver(Observer observer) {
+        mObserverList.removeObserver(observer);
+    }
+
+    @Override
+    public void destroy() {}
 
     @Override
     public int[] getCategories() {

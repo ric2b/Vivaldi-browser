@@ -17,24 +17,20 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string16.h"
-#include "base/synchronization/lock.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/win/jumplist_updater.h"
-#include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
 #include "components/history/core/browser/top_sites_observer.h"
-#include "components/keyed_service/core/refcounted_keyed_service.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/sessions/core/tab_restore_service_observer.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-
-#include "chrome/common/extensions/api/bookmarks.h"
-
+// Vivaldi:
 #include "extensions/schema/bookmarks_private.h"
 
 namespace base {
@@ -46,15 +42,11 @@ namespace chrome {
 struct FaviconImageResult;
 }
 
-namespace extensions {
-class AppWindow;
-}
+using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 
 class JumpListFactory;
 class PrefChangeRegistrar;
 class Profile;
-
-using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 
 // A class which implements an application JumpList.
 // This class encapsulates operations required for updating an application
@@ -69,104 +61,107 @@ using extensions::vivaldi::bookmarks_private::SpeedDialInfo;
 // Updating a JumpList requires some file operations and it is not good to
 // update it in a UI thread. To solve this problem, this class posts to a
 // runnable method when it actually updates a JumpList.
-//
-// Note. base::CancelableTaskTracker is not thread safe, so we
-// always delete JumpList on UI thread (the same thread it got constructed on).
 class JumpList : public sessions::TabRestoreServiceObserver,
                  public history::TopSitesObserver,
-                 public RefcountedKeyedService,
-                 public base::NonThreadSafe {
+                 public KeyedService {
  public:
-  struct JumpListData {
-    JumpListData();
-    ~JumpListData();
-
-    // Lock for most_visited_pages_, recently_closed_pages_, icon_urls_
-    // as they may be used by up to 2 threads.
-    base::Lock list_lock_;
-
-    // A list of URLs we need to retrieve their favicons,
-    // protected by the list_lock_.
-    typedef std::pair<std::string, scoped_refptr<ShellLinkItem> > URLPair;
-    std::list<URLPair> icon_urls_;
-
-    // Items in the "Most Visited" category of the application JumpList,
-    // protected by the list_lock_.
-    ShellLinkItemList most_visited_pages_;
-
-    // Items in the "Recently Closed" category of the application JumpList,
-    // protected by the list_lock_.
-    ShellLinkItemList recently_closed_pages_;
-
-    // A boolean flag indicating if "Most Visited" category of the JumpList
-    // has new updates therefore its icons need to be updated.
-    // By default, this flag is set to false. If there's any change in
-    // TabRestoreService, this flag will be set to true.
-    bool most_visited_pages_have_updates_ = false;
-
-    // A boolean flag indicating if "Recently Closed" category of the JumpList
-    // has new updates therefore its icons need to be updated.
-    // By default, this flag is set to false. If there's any change in TopSites
-    // service, this flag will be set to true.
-    bool recently_closed_pages_have_updates_ = false;
-
-    // Items in the "Speed Dial" category of the application JumpList,
-    // protected by the list_lock_.
-    ShellLinkItemList speed_dials_;
-  };
-
-  // Observer callback for TabRestoreService::Observer to notify when a tab is
-  // added or removed.
-  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
-
-  // Observer callback to notice when our associated TabRestoreService
-  // is destroyed.
-  void TabRestoreServiceDestroyed(
-      sessions::TabRestoreService* service) override;
-
-  // Cancel a pending jumplist update.
-  void CancelPendingUpdate();
-
-  // Terminate the jumplist: cancel any pending updates and stop observing
-  // the Profile and its services. This must be called before the |profile_|
-  // is destroyed.
-  void Terminate();
-
-  // RefcountedKeyedService:
-  void ShutdownOnUIThread() override;
-
   // Returns true if the custom JumpList is enabled.
   static bool Enabled();
 
-  // Returns true if we are the Vivaldi browser.
-  static bool IsVivaldi();
+  // KeyedService:
+  void Shutdown() override;
 
-  // Vivaldi speeddials:
-  // Update the jumplist's speeddial list.
-  void OnUpdateVivaldiSpeedDials(
-      const std::vector<SpeedDialInfo> &speed_dials);
-
-  // Create a ShellLinkItem preloaded with common switches.
-  static scoped_refptr<ShellLinkItem> CreateShellLink();
+  // Vivaldi: Notify about speed dial list changed.
+  void NotifyVivaldiSpeedDialsChanged(
+      const std::vector<SpeedDialInfo>& speed_dials);
 
  private:
+  using UrlAndLinkItem = std::pair<std::string, scoped_refptr<ShellLinkItem>>;
+  using URLIconCache = base::flat_map<std::string, base::FilePath>;
+
+  // Holds results of a RunUpdateJumpList run.
+  // In-out params:
+  //   |most_visited_icons|, |recently_closed_icons|,
+  //   |vivaldi_speed_dial_icons|,
+  // Out params:
+  //   |update_success|, |update_timeout|
+  struct UpdateTransaction {
+    UpdateTransaction();
+    ~UpdateTransaction();
+
+    // Icon file paths of the most visited links, indexed by tab url.
+    // Holding a copy of most_visited_icons_ initially, it's updated by the
+    // JumpList update run. If the update run succeeds, it overwrites
+    // most_visited_icons_.
+    URLIconCache most_visited_icons;
+
+    // Icon file paths of the recently closed links, indexed by tab url.
+    // Holding a copy of recently_closed_icons_ initially, it's updated by the
+    // JumpList update run. If the update run succeeds, it overwrites
+    // recently_closed_icons_.
+    URLIconCache recently_closed_icons;
+
+    // Vivaldi: Icon file paths of the speed dial links, indexed by tab url.
+    // Holding a copy of vivaldi_speed_dial_icons_ initially, it's updated by
+    // the JumpList update run. If the update run succeeds, it overwrites
+    // vivaldi_speed_dial_icons_.
+    URLIconCache vivaldi_speed_dial_icons;
+
+    // A flag indicating if a JumpList update run is successful.
+    bool update_success = false;
+
+    // A flag indicating if there is a timeout in notifying the JumpList update
+    // to shell. Note that this variable is independent of update_success.
+    bool update_timeout = false;
+  };
+
   friend JumpListFactory;
   explicit JumpList(Profile* profile);  // Use JumpListFactory instead
+
   ~JumpList() override;
 
-  enum class JumpListCategory { kMostVisited, kRecentlyClosed };
+  // history::TopSitesObserver:
+  void TopSitesLoaded(history::TopSites* top_sites) override;
+  void TopSitesChanged(history::TopSites* top_sites,
+                       ChangeReason change_reason) override;
 
-  // Adds a new ShellLinkItem for |tab| to |data| provided that doing so will
-  // not exceed |max_items|.
-  bool AddTab(const sessions::TabRestoreService::Tab& tab,
-              size_t max_items,
-              JumpListData* data);
+  // sessions::TabRestoreServiceObserver:
+  void TabRestoreServiceChanged(sessions::TabRestoreService* service) override;
+  void TabRestoreServiceDestroyed(
+      sessions::TabRestoreService* service) override;
 
-  // Adds a new ShellLinkItem for each tab in |window| to |data| provided that
-  // doing so will not exceed |max_items|.
+  // Callback for changes to the incognito mode availability pref.
+  void OnIncognitoAvailabilityChanged();
+
+  // Initializes the one-shot timer to update the JumpList in a while. If there
+  // is already a request queued then cancel it and post the new request. This
+  // ensures that JumpList update won't happen until there has been a brief
+  // quiet period, thus avoiding update storms.
+  void InitializeTimerForUpdate();
+
+  // Processes update notifications. Calls APIs ProcessTopSitesNotification and
+  // ProcessTabRestoreNotification on demand to do the actual work.
+  void ProcessNotifications();
+
+  // Processes notifications from TopSites service.
+  void ProcessTopSitesNotification();
+
+  // Processes notifications from TabRestore service.
+  void ProcessTabRestoreServiceNotification();
+
+  // Callback for TopSites that notifies when |data|, the "Most Visited" list,
+  // is available. This function updates the ShellLinkItemList objects and
+  // begins the process of fetching favicons for the URLs.
+  void OnMostVisitedURLsAvailable(const history::MostVisitedURLList& data);
+
+  // Adds a new ShellLinkItem for |tab| to the JumpList data provided that doing
+  // so will not exceed |max_items|.
+  bool AddTab(const sessions::TabRestoreService::Tab& tab, size_t max_items);
+
+  // Adds a new ShellLinkItem for each tab in |window| to the JumpList data
+  // provided that doing so will not exceed |max_items|.
   void AddWindow(const sessions::TabRestoreService::Window& window,
-                 size_t max_items,
-                 JumpListData* data);
+                 size_t max_items);
 
   // Starts loading a favicon for each URL in |icon_urls_|.
   // This function sends a query to HistoryService.
@@ -174,83 +169,88 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // decompresses collected favicons and updates a JumpList.
   void StartLoadingFavicon();
 
-  // A callback function for HistoryService that notify when a requested favicon
-  // is available.
-  // To avoid file operations, this function just attaches the given data to
-  // a ShellLinkItem object.
+  // Callback for HistoryService that notifies when a requested favicon is
+  // available. To avoid file operations, this function just attaches the given
+  // |image_result| to a ShellLinkItem object.
   void OnFaviconDataAvailable(
       const favicon_base::FaviconImageResult& image_result);
-
-  // Callback for TopSites that notifies when the "Most Visited" list is
-  // available. This function updates the ShellLinkItemList objects and
-  // begins the process of fetching favicons for the URLs.
-  void OnMostVisitedURLsAvailable(
-      const history::MostVisitedURLList& data);
-
-  // Callback for changes to the incognito mode availability pref.
-  void OnIncognitoAvailabilityChanged();
 
   // Posts tasks to update the JumpList and delete any obsolete JumpList related
   // folders.
   void PostRunUpdate();
 
-  extensions::AppWindow* GetAppWindow(Profile* profile);
+  // Handles the completion of an update by incorporating its results in
+  // |update_transaction| back into this instance. Additionally, a new update is
+  // triggered as needed to process notifications that arrived while the
+  // now-completed update was running.
+  void OnRunUpdateCompletion(
+      std::unique_ptr<UpdateTransaction> update_transaction);
 
-  // history::TopSitesObserver implementation.
-  void TopSitesLoaded(history::TopSites* top_sites) override;
-  void TopSitesChanged(history::TopSites* top_sites,
-                       ChangeReason change_reason) override;
+  // Cancels a pending JumpList update.
+  void CancelPendingUpdate();
 
-  // Called on a timer to update the most visited URLs after requests storms
-  // have subsided.
-  void DeferredTopSitesChanged();
+  // Terminates the JumpList, which includes cancelling any pending updates and
+  // stopping observing the Profile and its services. This must be called before
+  // the |profile_| is destroyed.
+  void Terminate();
 
-  // Called on a timer to update the "Recently Closed" category of JumpList
-  // after requests storms have subsided.
-  void DeferredTabRestoreServiceChanged();
-
-  // Deletes icon files of |category| in |icon_dir| which are not in the cache
-  // anymore.
-  void DeleteIconFiles(const base::FilePath& icon_dir,
-                       JumpListCategory category);
-
-  // Creates at most |max_items| icon files of |category| in |icon_dir| for the
-  // asynchrounously loaded icons stored in |item_list|.
-  // Returns the number of new icon files created.
-  int CreateIconFiles(const base::FilePath& icon_dir,
-                      const ShellLinkItemList& item_list,
-                      size_t max_items,
-                      JumpListCategory category);
-
-  // Updates icon files in |icon_dir|, which includes deleting old icons and
-  // creating at most |slot_limit| new icons for |page_list|.
-  // Returns the number of new icon files created.
-  int UpdateIconFiles(const base::FilePath& icon_dir,
-                      const ShellLinkItemList& page_list,
-                      size_t slot_limit,
-                      JumpListCategory category);
-
-  // Updates the jumplist, once all the data has been fetched. This method calls
-  // UpdateJumpList() to do most of the work.
-  void RunUpdateJumpList(
-      IncognitoModePrefs::Availability incognito_availability,
+  // Updates the application JumpList, which consists of 1) create a new
+  // JumpList along with any icons that are not in the cache; 2) notify the OS;
+  // 3) delete obsolete icon files. Any error along the way results in the old
+  // JumpList being left as-is.
+  static void RunUpdateJumpList(
       const base::string16& app_id,
       const base::FilePath& profile_dir,
-      base::RefCountedData<JumpListData>* ref_counted_data);
+      const ShellLinkItemList& most_visited_pages,
+      const ShellLinkItemList& recently_closed_pages,
+      const ShellLinkItemList& vivaldi_speed_dials,
+      bool most_visited_should_update,
+      bool recently_closed_should_update,
+      bool vivaldi_speed_dials_should_update,
+      IncognitoModePrefs::Availability incognito_availability,
+      UpdateTransaction* update_transaction);
 
-  // Updates the application JumpList, which consists of 1) delete old icon
-  // files; 2) create new icon files; 3) notify the OS. This method is called
-  // from RunUpdateJumpList().
-  // Note that any timeout error along the way results in the old jumplist being
-  // left as-is, while any non-timeout error results in the old jumplist being
-  // left as-is, but without icon files.
-  bool UpdateJumpList(const base::string16& app_id,
-                      const base::FilePath& profile_dir,
-                      const ShellLinkItemList& most_visited_pages,
-                      const ShellLinkItemList& recently_closed_pages,
-                      bool most_visited_pages_have_updates,
-                      bool recently_closed_pages_have_updates,
-                      IncognitoModePrefs::Availability incognito_availability);
+  // Creates a new JumpList along with any icons that are not in the cache,
+  // and notifies the OS.
+  static void CreateNewJumpListAndNotifyOS(
+      const base::string16& app_id,
+      const base::FilePath& most_visited_icon_dir,
+      const base::FilePath& recently_closed_icon_dir,
+      const base::FilePath& vivaldi_speed_dials_icon_dir,
+      const ShellLinkItemList& most_visited_pages,
+      const ShellLinkItemList& recently_closed_pages,
+      const ShellLinkItemList& vivaldi_speed_dials,
+      bool most_visited_should_update,
+      bool recently_closed_should_update,
+      bool vivaldi_speed_dials_should_update,
+      IncognitoModePrefs::Availability incognito_availability,
+      UpdateTransaction* update_transaction);
+
+  // Updates icon files for |item_list| in |icon_dir|, which consists of
+  // 1) If certain safe conditions are not met, clean the folder at |icon_dir|.
+  // If folder cleaning fails, skip step 2. Besides, clear |icon_cur| and
+  // |icon_next|.
+  // 2) Create at most |max_items| icon files which are not in |icon_cur| for
+  // the asynchrounously loaded icons stored in |item_list|.
+  static int UpdateIconFiles(const base::FilePath& icon_dir,
+                             const ShellLinkItemList& item_list,
+                             size_t max_items,
+                             URLIconCache* icon_cur,
+                             URLIconCache* icon_next);
+
+  // In |icon_dir|, creates at most |max_items| icon files which are not in
+  // |icon_cur| for the asynchrounously loaded icons stored in |item_list|.
+  // |icon_next| is updated based on the reusable icons and the newly created
+  // icons. Returns the number of new icon files created.
+  static int CreateIconFiles(const base::FilePath& icon_dir,
+                             const ShellLinkItemList& item_list,
+                             size_t max_items,
+                             const URLIconCache& icon_cur,
+                             URLIconCache* icon_next);
+
+  // Deletes icon files in |icon_dir| which are not in |icon_cache|.
+  static void DeleteIconFiles(const base::FilePath& icon_dir,
+                              const URLIconCache& icons_cache);
 
   // Tracks FaviconService tasks.
   base::CancelableTaskTracker cancelable_task_tracker_;
@@ -258,48 +258,80 @@ class JumpList : public sessions::TabRestoreServiceObserver,
   // The Profile object is used to listen for events.
   Profile* profile_;
 
-  // Lives on the UI thread.
+  // Manages the registration of pref change observers.
   std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
 
-  // App id to associate with the jump list.
+  // App id to associate with the JumpList.
   base::string16 app_id_;
 
-  // Timer for requesting delayed updates of the "Most Visited" category of
-  // jumplist.
-  base::OneShotTimer timer_most_visited_;
+  // Timer for requesting delayed JumpList updates.
+  base::OneShotTimer timer_;
 
-  // Timer for requesting delayed updates of the "Recently Closed" category of
-  // jumplist.
-  base::OneShotTimer timer_recently_closed_;
+  // A list of URLs we need to retrieve their favicons,
+  std::list<UrlAndLinkItem> icon_urls_;
+
+  // Items in the "Most Visited" category of the JumpList.
+  ShellLinkItemList most_visited_pages_;
+
+  // Items in the "Recently Closed" category of the JumpList.
+  ShellLinkItemList recently_closed_pages_;
+
+  // Vivaldi: Items in the "Speed Dial" category of the JumpList.
+  ShellLinkItemList vivaldi_speed_dials_;
+
+  // The icon file paths of the most visited links, indexed by tab url.
+  URLIconCache most_visited_icons_;
+
+  // The icon file paths of the recently closed links, indexed by tab url.
+  URLIconCache recently_closed_icons_;
+
+  // Vivaldi: The icon file paths of the speed dial links, indexed by tab url.
+  URLIconCache vivaldi_speed_dial_icons_;
+
+  // A flag indicating if TopSites service has notifications.
+  bool top_sites_has_pending_notification_ = false;
+
+  // A flag indicating if TabRestore service has notifications.
+  bool tab_restore_has_pending_notification_ = false;
+
+  // A flag indicating if "Most Visited" category should be updated.
+  bool most_visited_should_update_ = false;
+
+  // A flag indicating if "Recently Closed" category should be updated.
+  bool recently_closed_should_update_ = false;
+
+  // Vivaldi: A flag indicating if "Speed Dials" category should be updated.
+  bool vivaldi_speed_dials_should_update_ = false;
+
+  // A flag indicating if there's a JumpList update task already posted or
+  // currently running.
+  bool update_in_progress_ = false;
+
+  // A flag indicating if a session has at least one tab closed.
+  bool has_tab_closed_ = false;
+
+  // A flag indicating if a session has at least one top sites sync.
+  bool has_topsites_sync = false;
 
   // Number of updates to skip to alleviate the machine when a previous update
   // was too slow. Updates will be resumed when this reaches 0 again.
   int updates_to_skip_ = 0;
 
-  // A boolean flag indicating if a session has at least one tab closed.
-  bool has_tab_closed_ = false;
-
-  // Holds data that can be accessed from multiple threads.
-  scoped_refptr<base::RefCountedData<JumpListData>> jumplist_data_;
-
-  // The icon file paths of the most visited links and the recently closed links
-  // in the current jumplist, indexed by tab url, respectively.
-  // They may only be accessed on update_jumplist_task_runner_.
-  base::flat_map<std::string, base::FilePath> most_visited_icons_;
-  base::flat_map<std::string, base::FilePath> recently_closed_icons_;
-
   // Id of last favicon task. It's used to cancel current task if a new one
   // comes in before it finishes.
-  base::CancelableTaskTracker::TaskId task_id_;
+  base::CancelableTaskTracker::TaskId task_id_ =
+      base::CancelableTaskTracker::kBadTaskId;
 
   // A task runner running tasks to update the JumpList.
   scoped_refptr<base::SingleThreadTaskRunner> update_jumplist_task_runner_;
 
-  // A task runner running tasks to delete JumpListIcons directory and
-  // JumpListIconsOld directory.
+  // A task runner running tasks to delete the JumpListIcons and
+  // JumpListIconsOld folders.
   scoped_refptr<base::SequencedTaskRunner> delete_jumplisticons_task_runner_;
 
-  // For callbacks may be run after destruction.
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  // For callbacks may run after destruction.
   base::WeakPtrFactory<JumpList> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(JumpList);

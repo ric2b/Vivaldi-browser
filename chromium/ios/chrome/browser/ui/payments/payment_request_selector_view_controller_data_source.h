@@ -7,6 +7,8 @@
 
 #import <Foundation/Foundation.h>
 
+#import "ios/chrome/browser/ui/payments/cells/payments_is_selectable.h"
+
 @class CollectionViewItem;
 
 // The possible states the view controller can be in.
@@ -30,15 +32,17 @@ typedef NS_ENUM(NSUInteger, PaymentRequestSelectorState) {
 // Index for the currently selected item or NSUIntegerMax if there is none.
 @property(nonatomic, readonly) NSUInteger selectedItemIndex;
 
+// Whether or not the view controller supports edit mode.
+- (BOOL)allowsEditMode;
+
+// The title to display in the view controller.
+- (NSString*)title;
+
 // The header item to display in the collection, if any.
 - (CollectionViewItem*)headerItem;
 
 // The selectable items to display in the collection.
-- (NSArray<CollectionViewItem*>*)selectableItems;
-
-// The selectable item at |index| in the collection. |index| should be smaller
-// than self.selectableItems.count.
-- (CollectionViewItem*)selectableItemAtIndex:(NSUInteger)index;
+- (NSArray<CollectionViewItem<PaymentsIsSelectable>*>*)selectableItems;
 
 // The "Add" button item, if any.
 - (CollectionViewItem*)addButtonItem;

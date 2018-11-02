@@ -78,13 +78,14 @@ class CONTENT_EXPORT BlinkPlatformImpl
 
   size_t MaxDecodedImageBytes() override;
   uint32_t GetUniqueIdForProcess() override;
+  std::unique_ptr<blink::WebDataConsumerHandle> CreateDataConsumerHandle(
+      mojo::ScopedDataPipeConsumerHandle handle) override;
   blink::WebString UserAgent() override;
-  blink::WebURLError CancelledError(const blink::WebURL& url) const override;
   std::unique_ptr<blink::WebThread> CreateThread(const char* name) override;
   blink::WebThread* CurrentThread() override;
   void RecordAction(const blink::UserMetricsAction&) override;
 
-  blink::WebData LoadResource(const char* name) override;
+  blink::WebData GetDataResource(const char* name) override;
   blink::WebString QueryLocalizedString(
       blink::WebLocalizedString::Name name) override;
   virtual blink::WebString queryLocalizedString(

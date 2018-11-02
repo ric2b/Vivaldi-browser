@@ -38,6 +38,9 @@ class PermissionRequestImpl : public PermissionRequest {
  private:
   // PermissionRequest:
   IconId GetIconId() const override;
+#if defined(OS_ANDROID)
+  base::string16 GetMessageText() const override;
+#endif
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
   // Remember to call RegisterActionTaken for these methods if you are
@@ -49,6 +52,7 @@ class PermissionRequestImpl : public PermissionRequest {
   bool ShouldShowPersistenceToggle() const override;
   PermissionRequestType GetPermissionRequestType() const override;
   PermissionRequestGestureType GetGestureType() const override;
+  ContentSettingsType GetContentSettingsType() const override;
 
   GURL request_origin_;
   ContentSettingsType content_settings_type_;

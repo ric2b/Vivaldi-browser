@@ -30,9 +30,10 @@
 #define WEBPImageDecoder_h
 
 #include "platform/image-decoders/ImageDecoder.h"
-#include "third_party/skia/include/core/SkData.h"
 #include "webp/decode.h"
 #include "webp/demux.h"
+
+class SkData;
 
 namespace blink {
 
@@ -47,7 +48,7 @@ class PLATFORM_EXPORT WEBPImageDecoder final : public ImageDecoder {
   String FilenameExtension() const override { return "webp"; }
   void OnSetData(SegmentReader* data) override;
   int RepetitionCount() const override;
-  bool FrameIsCompleteAtIndex(size_t) const override;
+  bool FrameIsReceivedAtIndex(size_t) const override;
   float FrameDurationAtIndex(size_t) const override;
 
  private:

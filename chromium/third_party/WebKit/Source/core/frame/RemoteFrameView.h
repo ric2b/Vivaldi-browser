@@ -5,8 +5,9 @@
 #ifndef RemoteFrameView_h
 #define RemoteFrameView_h
 
-#include "core/frame/FrameOrPlugin.h"
+#include "core/dom/DocumentLifecycle.h"
 #include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/heap/Handle.h"
 
@@ -17,7 +18,7 @@ class GraphicsContext;
 class RemoteFrame;
 
 class RemoteFrameView final : public GarbageCollectedFinalized<RemoteFrameView>,
-                              public FrameOrPlugin {
+                              public FrameView {
   USING_GARBAGE_COLLECTED_MIXIN(RemoteFrameView);
 
  public:
@@ -25,8 +26,8 @@ class RemoteFrameView final : public GarbageCollectedFinalized<RemoteFrameView>,
 
   ~RemoteFrameView() override;
 
-  void Attach() override;
-  void Detach() override;
+  void AttachToLayout() override;
+  void DetachFromLayout() override;
   bool IsAttached() const override { return is_attached_; }
 
   RemoteFrame& GetFrame() const {
@@ -41,23 +42,25 @@ class RemoteFrameView final : public GarbageCollectedFinalized<RemoteFrameView>,
   void SetFrameRect(const IntRect&) override;
   const IntRect& FrameRect() const override { return frame_rect_; }
   void Paint(GraphicsContext&, const CullRect&) const override {}
+  void UpdateGeometry() override;
   void Hide() override;
   void Show() override;
   void SetParentVisible(bool) override;
 
-  void UpdateRemoteViewportIntersection();
+  void UpdateViewportIntersectionsForSubtree(
+      DocumentLifecycle::LifecycleState) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit RemoteFrameView(RemoteFrame*);
 
-  FrameView* ParentFrameView() const;
+  LocalFrameView* ParentFrameView() const;
   IntRect ConvertFromRootFrame(const IntRect&) const;
 
   // The properties and handling of the cycle between RemoteFrame
   // and its RemoteFrameView corresponds to that between LocalFrame
-  // and FrameView. Please see the FrameView::m_frame comment for
+  // and LocalFrameView. Please see the LocalFrameView::frame_ comment for
   // details.
   Member<RemoteFrame> remote_frame_;
   bool is_attached_;

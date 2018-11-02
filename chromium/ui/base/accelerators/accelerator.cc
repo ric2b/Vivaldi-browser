@@ -44,19 +44,22 @@ Accelerator::Accelerator(KeyboardCode key_code,
                          KeyState key_state)
     : key_code_(key_code),
       key_state_(key_state),
-      modifiers_(modifiers & kInterestingFlagsMask) {}
+      modifiers_(modifiers & kInterestingFlagsMask),
+      interrupted_by_mouse_event_(false) {}
 
 Accelerator::Accelerator(const KeyEvent& key_event)
     : key_code_(key_event.key_code()),
       key_state_(key_event.type() == ET_KEY_PRESSED ? KeyState::PRESSED
                                                     : KeyState::RELEASED),
       // |modifiers_| may include the repeat flag.
-      modifiers_(key_event.flags() & kInterestingFlagsMask) {}
+      modifiers_(key_event.flags() & kInterestingFlagsMask),
+      interrupted_by_mouse_event_(false) {}
 
 Accelerator::Accelerator(const Accelerator& accelerator) {
   key_code_ = accelerator.key_code_;
   key_state_ = accelerator.key_state_;
   modifiers_ = accelerator.modifiers_;
+  interrupted_by_mouse_event_ = accelerator.interrupted_by_mouse_event_;
   if (accelerator.platform_accelerator_)
     platform_accelerator_ = accelerator.platform_accelerator_->CreateCopy();
 }
@@ -69,11 +72,19 @@ int Accelerator::MaskOutKeyEventFlags(int flags) {
   return flags & kModifierMask;
 }
 
+KeyEvent Accelerator::ToKeyEvent() const {
+  return KeyEvent(key_state() == Accelerator::KeyState::PRESSED
+                      ? ET_KEY_PRESSED
+                      : ET_KEY_RELEASED,
+                  key_code(), modifiers());
+}
+
 Accelerator& Accelerator::operator=(const Accelerator& accelerator) {
   if (this != &accelerator) {
     key_code_ = accelerator.key_code_;
     key_state_ = accelerator.key_state_;
     modifiers_ = accelerator.modifiers_;
+    interrupted_by_mouse_event_ = accelerator.interrupted_by_mouse_event_;
     if (accelerator.platform_accelerator_)
       platform_accelerator_ = accelerator.platform_accelerator_->CreateCopy();
     else
@@ -96,7 +107,8 @@ bool Accelerator::operator <(const Accelerator& rhs) const {
 bool Accelerator::operator ==(const Accelerator& rhs) const {
   return (key_code_ == rhs.key_code_) && (key_state_ == rhs.key_state_) &&
          (MaskOutKeyEventFlags(modifiers_) ==
-          MaskOutKeyEventFlags(rhs.modifiers_));
+          MaskOutKeyEventFlags(rhs.modifiers_)) &&
+         interrupted_by_mouse_event_ == rhs.interrupted_by_mouse_event_;
 }
 
 bool Accelerator::operator !=(const Accelerator& rhs) const {

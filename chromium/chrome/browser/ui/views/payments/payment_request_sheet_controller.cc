@@ -12,6 +12,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
@@ -71,6 +72,20 @@ class SheetView : public views::View, public views::FocusTraversable {
   views::FocusTraversable* GetPaneFocusTraversable() override { return this; }
 
   void RequestFocus() override {
+    // In accessibility contexts, we want to focus the title of the sheet.
+    views::View* title =
+        GetViewByID(static_cast<int>(DialogViewID::SHEET_TITLE));
+    views::FocusManager* focus = GetFocusManager();
+    DCHECK(focus);
+
+    title->RequestFocus();
+
+    // RequestFocus only works if we are in an accessible context, and is a
+    // no-op otherwise. Thus, if the focused view didn't change, we need to
+    // proceed with setting the focus for standard usage.
+    if (focus->GetFocusedView() == title)
+      return;
+
     views::View* first_focusable = first_focusable_;
 
     if (!first_focusable) {
@@ -197,7 +212,7 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   if (GetSheetId(&sheet_id))
     view->set_id(static_cast<int>(sheet_id));
 
-  view->set_background(views::Background::CreateSolidBackground(SK_ColorWHITE));
+  view->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
 
   // Paint the sheets to layers, otherwise the MD buttons (which do paint to a
   // layer) won't do proper clipping.
@@ -234,8 +249,8 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateView() {
   content_view_ = new views::View;
   content_view_->SetPaintToLayer();
   content_view_->layer()->SetFillsBoundsOpaquely(true);
-  content_view_->set_background(
-      views::Background::CreateSolidBackground(SK_ColorWHITE));
+  content_view_->SetBackground(views::CreateSolidBackground(SK_ColorWHITE));
+  content_view_->set_id(static_cast<int>(DialogViewID::CONTENT_VIEW));
   pane_layout->AddView(content_view_);
   pane_->SizeToPreferredSize();
 
@@ -350,8 +365,9 @@ std::unique_ptr<views::View> PaymentRequestSheetController::CreateFooterView() {
   std::unique_ptr<views::View> trailing_buttons_container =
       base::MakeUnique<views::View>();
 
-  trailing_buttons_container->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kPaymentRequestButtonSpacing));
+  trailing_buttons_container->SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
+                           kPaymentRequestButtonSpacing));
 
 #if defined(OS_MACOSX)
   AddSecondaryButton(trailing_buttons_container.get());

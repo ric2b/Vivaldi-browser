@@ -10,6 +10,8 @@ define('media_router_bindings', [
     'chrome/common/media_router/mojo/media_status.mojom',
     'content/public/renderer/frame_interfaces',
     'extensions/common/mojo/keep_alive.mojom',
+    'media/mojo/interfaces/mirror_service_remoting.mojom',
+    'media/mojo/interfaces/remoting_common.mojom',
     'mojo/common/time.mojom',
     'mojo/public/js/bindings',
     'net/interfaces/ip_address.mojom',
@@ -20,6 +22,8 @@ define('media_router_bindings', [
             mediaStatusMojom,
             frameInterfaces,
             keepAliveMojom,
+            remotingMojom,
+            remotingCommonMojom,
             timeMojom,
             bindings,
             ipAddressMojom,
@@ -51,20 +55,22 @@ define('media_router_bindings', [
   function sinkIconTypeToMojo(type) {
     switch (type) {
       case 'cast':
-        return mediaRouterMojom.MediaSink.IconType.CAST;
-      case 'cast_audio':
-        return mediaRouterMojom.MediaSink.IconType.CAST_AUDIO;
+        return mediaRouterMojom.SinkIconType.CAST;
       case 'cast_audio_group':
-        return mediaRouterMojom.MediaSink.IconType.CAST_AUDIO_GROUP;
-      case 'generic':
-        return mediaRouterMojom.MediaSink.IconType.GENERIC;
-      case 'hangout':
-        return mediaRouterMojom.MediaSink.IconType.HANGOUT;
+        return mediaRouterMojom.SinkIconType.CAST_AUDIO_GROUP;
+      case 'cast_audio':
+        return mediaRouterMojom.SinkIconType.CAST_AUDIO;
       case 'meeting':
-        return mediaRouterMojom.MediaSink.IconType.MEETING;
+        return mediaRouterMojom.SinkIconType.MEETING;
+      case 'hangout':
+        return mediaRouterMojom.SinkIconType.HANGOUT;
+      case 'education':
+        return mediaRouterMojom.SinkIconType.EDUCATION;
+      case 'generic':
+        return mediaRouterMojom.SinkIconType.GENERIC;
       default:
         console.error('Unknown sink icon type : ' + type);
-        return mediaRouterMojom.MediaSink.IconType.GENERIC;
+        return mediaRouterMojom.SinkIconType.GENERIC;
     }
   }
 
@@ -83,11 +89,13 @@ define('media_router_bindings', [
       'icon_url': route.iconUrl,
       'is_local': route.isLocal,
       'custom_controller_path': route.customControllerPath,
+      'for_display': route.forDisplay,
+      'is_incognito': route.offTheRecord,
+      'is_offscreen_presentation': route.isOffscreenPresentation,
       // Begin newly added properties, followed by the milestone they were
       // added.  The guard should be safe to remove N+2 milestones later.
-      'for_display': route.forDisplay, // M47
-      'is_incognito': !!route.offTheRecord,  // M50
-      'is_offscreen_presentation': !!route.isOffscreenPresentation // M56
+      'supports_media_route_controller':
+          !!route.supportsMediaRouteController  // M61
     });
   }
 
@@ -277,11 +285,24 @@ define('media_router_bindings', [
       MediaController: mediaControllerMojom.MediaController,
       MediaStatus: mediaStatusMojom.MediaStatus,
       MediaStatusObserverPtr: mediaStatusMojom.MediaStatusObserverPtr,
+      MirrorServiceRemoter: remotingMojom.MirrorServiceRemoter,
+      MirrorServiceRemoterPtr: remotingMojom.MirrorServiceRemoterPtr,
+      MirrorServiceRemotingSourcePtr:
+          remotingMojom.MirrorServiceRemotingSourcePtr,
+      RemotingStopReason: remotingCommonMojom.RemotingStopReason,
+      RemotingStartFailReason: remotingCommonMojom.RemotingStartFailReason,
+      RemotingSinkFeatures: remotingCommonMojom.RemotingSinkFeatures,
+      RemotingSinkAudioCapabilities:
+          remotingCommonMojom.RemotingSinkAudioCapabilities,
+      RemotingSinkVideoCapabilities:
+          remotingCommonMojom.RemotingSinkVideoCapabilities,
+      SinkCapabilities: remotingCommonMojom.SinkCapabilities,
       Origin: originMojom.Origin,
       Sink: mediaRouterMojom.MediaSink,
       SinkExtraData: mediaRouterMojom.MediaSinkExtraData,
       TimeDelta: timeMojom.TimeDelta,
       Url: urlMojom.Url,
+      makeRequest: bindings.makeRequest,
     };
   };
 
@@ -463,6 +484,16 @@ define('media_router_bindings', [
   };
 
   /**
+   * @param {number} tabId
+   * @param {!remotingMojom.MirrorServiceRemoterPtr} remoter
+   * @param {!remotingMojom.MirrorServiceRemotingSourcePtr} remotingSource
+   */
+  MediaRouter.prototype.onMediaRemoterCreated = function(tabId, remoter,
+      remotingSource) {
+    this.service_.onMediaRemoterCreated(tabId, remoter, remotingSource);
+  }
+
+  /**
    * Object containing callbacks set by the provider manager.
    *
    * @constructor
@@ -588,10 +619,6 @@ define('media_router_bindings', [
    * @param {!MediaRouterHandlers} handlers
    */
   MediaRouteProvider.prototype.setHandlers = function(handlers) {
-    // TODO(mfoltz): Remove when component that supports this method is
-    // rolled out to all Chrome channels in M56.
-    if (!handlers['onBeforeInvokeHandler'])
-      handlers['onBeforeInvokeHandler'] = () => {};
     this.handlers_ = handlers;
     var requiredHandlers = [
       'stopObservingMediaRoutes',

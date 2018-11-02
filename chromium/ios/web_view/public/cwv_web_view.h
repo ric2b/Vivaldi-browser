@@ -4,8 +4,9 @@
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_H_
 #define IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_H_
 
-#import <ChromeWebView/cwv_export.h>
 #import <UIKit/UIKit.h>
+
+#import "cwv_export.h"
 
 @class CWVScrollView;
 @class CWVTranslationController;
@@ -24,7 +25,7 @@ CWV_EXPORT
 @interface CWVWebView : UIView
 
 // The configuration of the web view.
-@property(nonatomic, readonly, copy) CWVWebViewConfiguration* configuration;
+@property(nonatomic, readonly) CWVWebViewConfiguration* configuration;
 
 // This web view's navigation delegate.
 @property(nonatomic, weak) id<CWVNavigationDelegate> navigationDelegate;
@@ -39,16 +40,16 @@ CWV_EXPORT
 @property(nonatomic, readonly) BOOL canGoBack;
 @property(nonatomic, readonly) BOOL canGoForward;
 
-// Whether or not this web view is loading a page.
-@property(nonatomic, readonly) BOOL isLoading;
+// Whether or not this web view is loading a page. KVO compliant.
+@property(nonatomic, readonly, getter=isLoading) BOOL loading;
 
-// The URL displayed in the url bar.
+// The URL displayed in the url bar. KVO Compliant.
 @property(nonatomic, readonly) NSURL* visibleURL;
 
-// The URL of the current document.
+// The URL of the current document. KVO Compliant.
 @property(nonatomic, readonly) NSURL* lastCommittedURL;
 
-// The current page title.
+// The current page title. KVO compliant.
 @property(nonatomic, readonly, copy) NSString* title;
 
 // Page loading progress from 0.0 to 1.0. KVO compliant.

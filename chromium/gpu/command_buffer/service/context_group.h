@@ -36,6 +36,7 @@ namespace gles2 {
 class ProgramCache;
 class BufferManager;
 class GLES2Decoder;
+class ImageManager;
 class MailboxManager;
 class RenderbufferManager;
 class PathManager;
@@ -56,19 +57,18 @@ DisallowedFeatures AdjustDisallowedFeatures(
 // resources.
 class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
  public:
-  ContextGroup(
-      const GpuPreferences& gpu_preferences,
-      const scoped_refptr<MailboxManager>& mailbox_manager,
-      const scoped_refptr<MemoryTracker>& memory_tracker,
-      const scoped_refptr<ShaderTranslatorCache>& shader_translator_cache,
-      const scoped_refptr<FramebufferCompletenessCache>&
-          framebuffer_completeness_cache,
-      const scoped_refptr<FeatureInfo>& feature_info,
-      bool bind_generates_resource,
-      gpu::ImageFactory* image_factory,
-      ProgressReporter* progress_reporter,
-      const GpuFeatureInfo& gpu_feature_info,
-      ServiceDiscardableManager* discardable_manager);
+  ContextGroup(const GpuPreferences& gpu_preferences,
+               MailboxManager* mailbox_manager,
+               const scoped_refptr<MemoryTracker>& memory_tracker,
+               ShaderTranslatorCache* shader_translator_cache,
+               FramebufferCompletenessCache* framebuffer_completeness_cache,
+               const scoped_refptr<FeatureInfo>& feature_info,
+               bool bind_generates_resource,
+               ImageManager* image_manager,
+               gpu::ImageFactory* image_factory,
+               ProgressReporter* progress_reporter,
+               const GpuFeatureInfo& gpu_feature_info,
+               ServiceDiscardableManager* discardable_manager);
 
   // This should only be called by GLES2Decoder. This must be paired with a
   // call to destroy if it succeeds.
@@ -81,20 +81,16 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   // It should only be called by GLES2Decoder.
   void Destroy(GLES2Decoder* decoder, bool have_context);
 
-  MailboxManager* mailbox_manager() const {
-    return mailbox_manager_.get();
-  }
+  MailboxManager* mailbox_manager() const { return mailbox_manager_; }
 
-  MemoryTracker* memory_tracker() const {
-    return memory_tracker_.get();
-  }
+  MemoryTracker* memory_tracker() const { return memory_tracker_.get(); }
 
   ShaderTranslatorCache* shader_translator_cache() const {
-    return shader_translator_cache_.get();
+    return shader_translator_cache_;
   }
 
   FramebufferCompletenessCache* framebuffer_completeness_cache() const {
-    return framebuffer_completeness_cache_.get();
+    return framebuffer_completeness_cache_;
   }
 
   bool bind_generates_resource() {
@@ -157,7 +153,9 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
     return feature_info_.get();
   }
 
-  gpu::ImageFactory* image_factory() { return image_factory_; }
+  ImageManager* image_manager() const { return image_manager_; }
+
+  gpu::ImageFactory* image_factory() const { return image_factory_; }
 
   const GpuPreferences& gpu_preferences() const {
     return gpu_preferences_;
@@ -247,11 +245,13 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
   bool HaveContexts();
   void ReportProgress();
 
-  const GpuPreferences& gpu_preferences_;
-  scoped_refptr<MailboxManager> mailbox_manager_;
+  // It's safer to make a copy of the GpuPreferences struct rather
+  // than refer to the one passed in to the constructor.
+  const GpuPreferences gpu_preferences_;
+  MailboxManager* mailbox_manager_;
   scoped_refptr<MemoryTracker> memory_tracker_;
-  scoped_refptr<ShaderTranslatorCache> shader_translator_cache_;
-  scoped_refptr<FramebufferCompletenessCache> framebuffer_completeness_cache_;
+  ShaderTranslatorCache* shader_translator_cache_;
+  FramebufferCompletenessCache* framebuffer_completeness_cache_;
   std::unique_ptr<TransferBufferManager> transfer_buffer_manager_;
 
   bool enforce_gl_minimums_;
@@ -295,9 +295,11 @@ class GPU_EXPORT ContextGroup : public base::RefCounted<ContextGroup> {
 
   scoped_refptr<FeatureInfo> feature_info_;
 
+  ImageManager* image_manager_;
+
   gpu::ImageFactory* image_factory_;
 
-  std::vector<base::WeakPtr<gles2::GLES2Decoder> > decoders_;
+  std::vector<base::WeakPtr<gles2::GLES2Decoder>> decoders_;
 
   // Mappings from client side IDs to service side IDs.
   base::hash_map<GLuint, GLsync> syncs_id_map_;

@@ -18,7 +18,6 @@
 #include <vector>
 
 #include "base/callback.h"
-#include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -31,6 +30,7 @@
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "url/gurl.h"
 
 namespace base {
@@ -65,7 +65,7 @@ class LocalSafeBrowsingDatabaseManager
                       const std::vector<SBFullHash>& full_hashes,
                       Client* client,
                       ListType check_type,
-                      const std::vector<SBThreatType>& expected_threats);
+                      const SBThreatTypeSet& expected_threats);
     ~SafeBrowsingCheck();
 
     // Either |urls| or |full_hashes| is used to lookup database. |*_results|
@@ -86,7 +86,7 @@ class LocalSafeBrowsingDatabaseManager
     bool need_get_hash;
     base::TimeTicks start;  // When check was sent to SB service.
     ListType check_type;    // See comment in constructor.
-    std::vector<SBThreatType> expected_threats;
+    SBThreatTypeSet expected_threats;
     std::vector<SBPrefix> prefix_hits;
     std::vector<SBFullHashResult> cache_hits;
 
@@ -117,15 +117,19 @@ class LocalSafeBrowsingDatabaseManager
   safe_browsing::ThreatSource GetThreatSource() const override;
   bool ChecksAreAlwaysAsync() const override;
   bool CanCheckResourceType(content::ResourceType resource_type) const override;
+  bool CanCheckSubresourceFilter() const override;
   bool CanCheckUrl(const GURL& url) const override;
 
-  bool CheckBrowseUrl(const GURL& url, Client* client) override;
+  bool CheckBrowseUrl(const GURL& url,
+                      const SBThreatTypeSet& threat_types,
+                      Client* client) override;
   bool CheckUrlForSubresourceFilter(const GURL& url, Client* client) override;
   bool CheckDownloadUrl(const std::vector<GURL>& url_chain,
                         Client* client) override;
   bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
                          Client* client) override;
   bool CheckResourceUrl(const GURL& url, Client* client) override;
+  AsyncMatch CheckCsdWhitelistUrl(const GURL& url, Client* client) override;
   bool MatchCsdWhitelistUrl(const GURL& url) override;
   bool MatchMalwareIP(const std::string& ip_address) override;
   bool MatchDownloadWhitelistUrl(const GURL& url) override;
@@ -162,21 +166,21 @@ class LocalSafeBrowsingDatabaseManager
                            ServiceStopWithPendingChecks);
 
   typedef std::vector<SafeBrowsingCheck*> GetHashRequestors;
-  typedef base::hash_map<SBPrefix, GetHashRequestors> GetHashRequests;
+  typedef std::map<SBPrefix, GetHashRequestors> GetHashRequests;
 
   // Clients that we've queued up for checking later once the database is ready.
   struct QueuedCheck {
     QueuedCheck(const ListType check_type,
                 Client* client,
                 const GURL& url,
-                const std::vector<SBThreatType>& expected_threats,
+                const SBThreatTypeSet& expected_threats,
                 const base::TimeTicks& start);
     QueuedCheck(const QueuedCheck& other);
     ~QueuedCheck();
     ListType check_type;
     Client* client;
     GURL url;
-    std::vector<SBThreatType> expected_threats;
+    SBThreatTypeSet expected_threats;
     base::TimeTicks start;  // When check was queued.
   };
 

@@ -7,8 +7,9 @@
 #include <algorithm>
 
 #include "ash/metrics/user_metrics_action.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/shell_port.h"
+#include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/actionable_view.h"
 #include "ash/system/tray/system_tray_item.h"
@@ -100,8 +101,10 @@ class VolumeButton : public ButtonListenerActionableView {
     node_data->SetName(
         l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME_MUTE));
     node_data->role = ui::AX_ROLE_TOGGLE_BUTTON;
-    if (CrasAudioHandler::Get()->IsOutputMuted())
-      node_data->AddState(ui::AX_STATE_PRESSED);
+    const bool is_pressed = CrasAudioHandler::Get()->IsOutputMuted();
+    node_data->AddIntAttribute(
+        ui::AX_ATTR_CHECKED_STATE,
+        is_pressed ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE);
   }
 
   views::ImageView* image_;
@@ -131,7 +134,7 @@ VolumeView::VolumeView(SystemTrayItem* owner,
       l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_VOLUME));
   tri_view_->AddView(TriView::Container::CENTER, slider_);
 
-  set_background(views::Background::CreateThemedSolidBackground(
+  SetBackground(views::CreateThemedSolidBackground(
       this, ui::NativeTheme::kColorId_BubbleBackground));
 
   Update();
@@ -172,9 +175,6 @@ void VolumeView::UpdateDeviceTypeAndMore() {
   if (is_default_view_ && !audio_handler->has_alternative_output() &&
       !audio_handler->has_alternative_input()) {
     tri_view_->SetContainerVisible(TriView::Container::END, false);
-    // TODO(tdanderson): TriView itself should trigger a relayout when the
-    // visibility of one of its containers is changed.
-    tri_view_->InvalidateLayout();
     return;
   }
 
@@ -268,7 +268,7 @@ void VolumeView::SliderValueChanged(views::Slider* sender,
     int current_volume = CrasAudioHandler::Get()->GetOutputVolumePercent();
     if (new_volume == current_volume)
       return;
-    ShellPort::Get()->RecordUserMetricsAction(
+    Shell::Get()->metrics()->RecordUserMetricsAction(
         is_default_view_ ? UMA_STATUS_AREA_CHANGED_VOLUME_MENU
                          : UMA_STATUS_AREA_CHANGED_VOLUME_POPUP);
     if (new_volume > current_volume)

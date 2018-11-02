@@ -6,8 +6,6 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/TaskRunnerHelper.h"
@@ -18,6 +16,8 @@
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/UseCounter.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMArrayBufferView.h"
 #include "modules/EventTargetModules.h"
 #include "modules/presentation/Presentation.h"
 #include "modules/presentation/PresentationConnectionAvailableEvent.h"
@@ -31,19 +31,6 @@
 namespace blink {
 
 namespace {
-
-// TODO(mlamouri): refactor in one common place.
-WebPresentationClient* PresentationClient(ExecutionContext* execution_context) {
-  DCHECK(execution_context);
-  DCHECK(execution_context->IsDocument());
-
-  Document* document = ToDocument(execution_context);
-  if (!document->GetFrame())
-    return nullptr;
-  PresentationController* controller =
-      PresentationController::From(*document->GetFrame());
-  return controller ? controller->Client() : nullptr;
-}
 
 const AtomicString& ConnectionStateToString(
     WebPresentationConnectionState state) {
@@ -238,19 +225,20 @@ void PresentationConnection::AddedEventListener(
     RegisteredEventListener& registered_listener) {
   EventTargetWithInlineData::AddedEventListener(event_type,
                                                 registered_listener);
-  if (event_type == EventTypeNames::connect)
+  if (event_type == EventTypeNames::connect) {
     UseCounter::Count(GetExecutionContext(),
-                      UseCounter::kPresentationConnectionConnectEventListener);
-  else if (event_type == EventTypeNames::close)
+                      WebFeature::kPresentationConnectionConnectEventListener);
+  } else if (event_type == EventTypeNames::close) {
     UseCounter::Count(GetExecutionContext(),
-                      UseCounter::kPresentationConnectionCloseEventListener);
-  else if (event_type == EventTypeNames::terminate)
+                      WebFeature::kPresentationConnectionCloseEventListener);
+  } else if (event_type == EventTypeNames::terminate) {
     UseCounter::Count(
         GetExecutionContext(),
-        UseCounter::kPresentationConnectionTerminateEventListener);
-  else if (event_type == EventTypeNames::message)
+        WebFeature::kPresentationConnectionTerminateEventListener);
+  } else if (event_type == EventTypeNames::message) {
     UseCounter::Count(GetExecutionContext(),
-                      UseCounter::kPresentationConnectionMessageEventListener);
+                      WebFeature::kPresentationConnectionMessageEventListener);
+  }
 }
 
 DEFINE_TRACE(PresentationConnection) {
@@ -310,27 +298,24 @@ bool PresentationConnection::CanSendMessage(ExceptionState& exception_state) {
     return false;
   }
 
-  // The connection can send a message if there is a client available.
-  return !!PresentationClient(GetExecutionContext());
+  return !!proxy_;
 }
 
 void PresentationConnection::HandleMessageQueue() {
-  WebPresentationClient* client = PresentationClient(GetExecutionContext());
-  if (!client || !proxy_)
+  if (!proxy_)
     return;
 
   while (!messages_.IsEmpty() && !blob_loader_) {
     Message* message = messages_.front().Get();
     switch (message->type) {
       case kMessageTypeText:
-        client->SendString(url_, id_, message->text, proxy_.get());
+        proxy_->SendTextMessage(message->text);
         messages_.pop_front();
         break;
       case kMessageTypeArrayBuffer:
-        client->SendArrayBuffer(
-            url_, id_,
+        proxy_->SendBinaryMessage(
             static_cast<const uint8_t*>(message->array_buffer->Data()),
-            message->array_buffer->ByteLength(), proxy_.get());
+            message->array_buffer->ByteLength());
         messages_.pop_front();
         break;
       case kMessageTypeBlob:
@@ -402,7 +387,8 @@ void PresentationConnection::close() {
       state_ != WebPresentationConnectionState::kConnected) {
     return;
   }
-  WebPresentationClient* client = PresentationClient(GetExecutionContext());
+  WebPresentationClient* client =
+      PresentationController::ClientFromContext(GetExecutionContext());
   if (client)
     client->CloseConnection(url_, id_, proxy_.get());
 
@@ -412,7 +398,8 @@ void PresentationConnection::close() {
 void PresentationConnection::terminate() {
   if (state_ != WebPresentationConnectionState::kConnected)
     return;
-  WebPresentationClient* client = PresentationClient(GetExecutionContext());
+  WebPresentationClient* client =
+      PresentationController::ClientFromContext(GetExecutionContext());
   if (client)
     client->TerminatePresentation(url_, id_);
 
@@ -491,10 +478,9 @@ void PresentationConnection::DidFinishLoadingBlob(DOMArrayBuffer* buffer) {
   DCHECK(buffer);
   DCHECK(buffer->Buffer());
   // Send the loaded blob immediately here and continue processing the queue.
-  WebPresentationClient* client = PresentationClient(GetExecutionContext());
-  if (client) {
-    client->SendBlobData(url_, id_, static_cast<const uint8_t*>(buffer->Data()),
-                         buffer->ByteLength(), proxy_.get());
+  if (proxy_) {
+    proxy_->SendBinaryMessage(static_cast<const uint8_t*>(buffer->Data()),
+                              buffer->ByteLength());
   }
 
   messages_.pop_front();

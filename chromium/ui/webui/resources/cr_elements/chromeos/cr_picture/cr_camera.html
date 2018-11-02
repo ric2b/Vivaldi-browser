@@ -1,0 +1,120 @@
+<link rel="import" href="chrome://resources/html/polymer.html">
+
+<link rel="import" href="chrome://resources/cr_elements/shared_style_css.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-spinner/paper-spinner.html">
+
+<dom-module id="cr-camera">
+  <template>
+    <!-- Note: Do not include cr-shared-style, we use different
+         paper-icon-button-light styling -->
+    <style>
+      #perspectiveBox {
+        height: var(--cr-camera-image-size, 228px);
+        margin: auto;
+        perspective: 600px;
+        width: var(--cr-camera-image-size, 228px);
+      }
+
+      #userImageStreamCrop {
+        border-top-left-radius: 2px;
+        border-top-right-radius: 2px;
+        height: 100%;
+        overflow: hidden;
+        position: relative;
+        width: 100%;
+      }
+
+      #userImageStreamCrop.flip-x {
+        transform: rotateY(180deg);
+      }
+
+      #userImageStreamCrop::after {
+        -webkit-mask-image: radial-gradient(transparent 140px, black 140px);
+        background-color: rgba(214, 214, 214, 0.34);
+        content: '';
+        display: block;
+        height: 100%;
+        transform: translateZ(0);
+        width: 100%;
+      }
+
+      paper-spinner {
+        bottom: 0;
+        left: 0;
+        margin: auto auto;
+        position: absolute;
+        right: 0;
+        top: 0;
+      }
+
+      #cameraVideo {
+        height: var(--cr-camera-image-size, 228px);
+        /* Center image for 4:3 aspect ratio. */
+        left: -16.6%;
+        position: absolute;
+      }
+
+      #cameraControls {
+        align-items: center;
+        background-color: var(--google-blue-500);
+        border-bottom-left-radius: 2px;
+        border-bottom-right-radius: 2px;
+        display: flex;
+        height: 32px;
+        justify-content: space-between;
+        margin: auto;
+        width: var(--cr-camera-image-size, 228px);
+      }
+
+      #cameraControls > div {
+        margin: 0 4px;
+        width: 32px;
+      }
+
+      #cameraControls > button {
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: 20px;
+        display: block;
+      }
+
+      #flipPhoto {
+        -webkit-margin-end: 8px;
+        background-image: url(camera_flip_icon.svg);
+      }
+
+      :host-context([dir=rtl]) #flipPhoto {
+        float: left;
+      }
+
+      #takePhoto {
+        background-image: url(camera_alt_icon.svg);
+      }
+    </style>
+    <div id="perspectiveBox">
+      <div id="userImageStreamCrop">
+        <video id="cameraVideo" autoplay hidden="[[!cameraOnline_]]"></video>
+        <paper-spinner active="[[!cameraOnline_]]"></paper-spinner>
+      </div>
+    </div>
+    <div id="cameraControls">
+      <div>
+        <!-- Empty div for even 'space-between' justification -->
+      </div>
+      <div>
+        <button is="paper-icon-button-light" id="takePhoto" tabindex="1"
+            title="[[takePhotoLabel]]" on-tap="takePhoto"
+            disabled="[[!cameraOnline_]]">
+        </button>
+      </div>
+      <div>
+        <button is="paper-icon-button-light" id="flipPhoto" tabindex="2"
+            title="[[flipPhotoLabel]]" on-tap="onTapFlipPhoto_"
+            disabled="[[!cameraOnline_]]">
+        </button>
+      </div>
+    </div>
+  </template>
+  <script src="cr_camera.js"></script>
+</dom-module>

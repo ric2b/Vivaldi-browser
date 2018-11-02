@@ -19,8 +19,10 @@
 #include "base/threading/thread.h"
 #include "components/prefs/json_pref_store.h"
 #include "net/nqe/effective_connection_type.h"
+#include "net/nqe/effective_connection_type_observer.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/nqe/network_quality_observation_source.h"
+#include "net/nqe/rtt_throughput_estimates_observer.h"
 
 class PrefService;
 
@@ -40,6 +42,7 @@ class FileNetLogObserver;
 }  // namespace net
 
 namespace cronet {
+class HostCachePersistenceManager;
 class TestUtil;
 
 struct URLRequestContextConfig;
@@ -48,8 +51,8 @@ bool CronetUrlRequestContextAdapterRegisterJni(JNIEnv* env);
 
 // Adapter between Java CronetUrlRequestContext and net::URLRequestContext.
 class CronetURLRequestContextAdapter
-    : public net::NetworkQualityEstimator::EffectiveConnectionTypeObserver,
-      public net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver,
+    : public net::EffectiveConnectionTypeObserver,
+      public net::RTTAndThroughputEstimatesObserver,
       public net::NetworkQualityEstimator::RTTObserver,
       public net::NetworkQualityEstimator::ThroughputObserver {
  public:
@@ -105,7 +108,7 @@ class CronetURLRequestContextAdapter
                            const base::android::JavaParamRef<jobject>& jcaller);
 
   // Default net::LOAD flags used to create requests.
-  int default_load_flags() const { return default_load_flags_; }
+  int default_load_flags() const;
 
   // Called on init Java thread to initialize URLRequestContext.
   void InitRequestContextOnInitThread();
@@ -209,6 +212,10 @@ class CronetURLRequestContextAdapter
 
   std::unique_ptr<base::DictionaryValue> GetNetLogInfo() const;
 
+  // Initializes Network Quality Estimator (NQE) prefs manager on network
+  // thread.
+  void InitializeNQEPrefsOnNetworkThread() const;
+
   // Network thread is owned by |this|, but is destroyed from java thread.
   base::Thread* network_thread_;
 
@@ -218,7 +225,7 @@ class CronetURLRequestContextAdapter
   std::unique_ptr<net::FileNetLogObserver> net_log_file_observer_;
 
   // |pref_service_| should outlive the HttpServerPropertiesManager owned by
-  // |context_|.
+  // |context_| and the HostCachePersistenceManager.
   std::unique_ptr<PrefService> pref_service_;
   std::unique_ptr<net::URLRequestContext> context_;
   std::unique_ptr<net::ProxyConfigService> proxy_config_service_;
@@ -247,6 +254,11 @@ class CronetURLRequestContextAdapter
   // Manages the writing and reading of the network quality prefs.
   std::unique_ptr<net::NetworkQualitiesPrefsManager>
       network_qualities_prefs_manager_;
+
+  // Manages reading and writing the HostCache pref when persistence is enabled.
+  // Must be destroyed before |context_| (because it owns the HostResolverImpl,
+  // which owns the HostCache) and |pref_service_|.
+  std::unique_ptr<HostCachePersistenceManager> host_cache_persistence_manager_;
 
   // Java object that owns this CronetURLRequestContextAdapter.
   base::android::ScopedJavaGlobalRef<jobject> jcronet_url_request_context_;

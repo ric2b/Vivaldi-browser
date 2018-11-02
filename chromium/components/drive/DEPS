@@ -2,10 +2,11 @@ include_rules = [
   "+components/invalidation",
   "+components/keyed_service",
   "+components/prefs",
-  "+device/power_save_blocker",
   "+google_apis",
   "+google/cacheinvalidation/types.pb.h",
+  "+mojo/public/cpp/bindings/interface_request.h",
   "+net",
+  "+services/device/public/interfaces",
   "+third_party/leveldatabase",
   "+third_party/re2",
 ]

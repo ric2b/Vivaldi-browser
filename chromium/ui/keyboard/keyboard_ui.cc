@@ -17,16 +17,22 @@ KeyboardUI::KeyboardUI() : keyboard_controller_(nullptr) {}
 KeyboardUI::~KeyboardUI() {}
 
 void KeyboardUI::ShowKeyboardContainer(aura::Window* container) {
-  if (HasKeyboardWindow()) {
-    GetKeyboardWindow()->Show();
-    container->Show();
+  if (HasContentsWindow()) {
+    {
+      TRACE_EVENT0("vk", "ShowKeyboardContainerWindow");
+      GetContentsWindow()->Show();
+    }
+    {
+      TRACE_EVENT0("vk", "ShowKeyboardContainer");
+      container->Show();
+    }
   }
 }
 
 void KeyboardUI::HideKeyboardContainer(aura::Window* container) {
-  if (HasKeyboardWindow()) {
+  if (HasContentsWindow()) {
     container->Hide();
-    GetKeyboardWindow()->Hide();
+    GetContentsWindow()->Hide();
   }
 }
 
@@ -34,9 +40,11 @@ void KeyboardUI::EnsureCaretInWorkArea() {
   if (!GetInputMethod())
     return;
 
-  const aura::Window* keyboard_window = GetKeyboardWindow();
+  TRACE_EVENT0("vk", "EnsureCaretInWorkArea");
+
+  const aura::Window* contents_window = GetContentsWindow();
   const gfx::Rect keyboard_bounds_in_screen =
-      keyboard_window->IsVisible() ? keyboard_window->GetBoundsInScreen()
+      contents_window->IsVisible() ? contents_window->GetBoundsInScreen()
                                    : gfx::Rect();
 
   // Use new virtual keyboard behavior only if the flag enabled and in

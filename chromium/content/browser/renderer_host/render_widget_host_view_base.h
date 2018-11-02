@@ -18,9 +18,9 @@
 #include "base/process/kill.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
-#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
+#include "cc/ipc/compositor_frame_sink.mojom.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
@@ -46,7 +46,6 @@ struct ViewHostMsg_SelectionBounds_Params;
 
 namespace cc {
 struct BeginFrameAck;
-class SurfaceInfo;
 }  // namespace cc
 
 namespace media {
@@ -67,14 +66,21 @@ class LatencyInfo;
 struct DidOverscrollParams;
 }
 
+namespace viz {
+class SurfaceInfo;
+}
+
 namespace content {
+
 class BrowserAccessibilityDelegate;
 class BrowserAccessibilityManager;
+class CursorManager;
 class RenderWidgetHostImpl;
 class RenderWidgetHostViewBaseObserver;
 class SyntheticGestureTarget;
 class TextInputManager;
 class TouchSelectionControllerClientManager;
+class WebContentsAccessibility;
 class WebCursor;
 struct NativeWebKeyboardEvent;
 struct TextInputState;
@@ -100,8 +106,6 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   ui::TextInputClient* GetTextInputClient() override;
   void WasUnOccluded() override {}
   void WasOccluded() override {}
-  bool IsShowingContextMenu() const override;
-  void SetShowingContextMenu(bool showing_menu) override;
   void SetIsInVR(bool is_in_vr) override;
   base::string16 GetSelectedText() override;
   bool IsMouseLocked() override;
@@ -121,6 +125,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   void EndFrameSubscription() override;
   void FocusedNodeTouched(const gfx::Point& location_dips_screen,
                           bool editable) override;
+  TouchSelectionControllerClientManager*
+  GetTouchSelectionControllerClientManager() override;
 
   // This only needs to be overridden by RenderWidgetHostViewBase subclasses
   // that handle content embedded within other RenderWidgetHostViews.
@@ -190,9 +196,9 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event);
 
-  // Called by the host when it requires an input flush; the flush call should
-  // by synchronized with BeginFrame.
-  virtual void OnSetNeedsFlushInput() = 0;
+  // Allows a root RWHV to filter gesture events in a child.
+  virtual InputEventAckState FilterChildGestureEvent(
+      const blink::WebGestureEvent& gesture_event);
 
   virtual void WheelEventAck(const blink::WebMouseWheelEvent& event,
                              InputEventAckState ack_result);
@@ -226,14 +232,14 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // expected not to return resources belonging to the old
   // RendererCompositorFrameSink after this method finishes.
   virtual void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkClient*
-          renderer_compositor_frame_sink) = 0;
+      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) = 0;
 
-  virtual void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
-                                     cc::CompositorFrame frame) = 0;
+  virtual void SubmitCompositorFrame(
+      const viz::LocalSurfaceId& local_surface_id,
+      cc::CompositorFrame frame) = 0;
 
   virtual void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) {}
-  virtual void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) {}
+  virtual void OnSurfaceChanged(const viz::SurfaceInfo& surface_info) {}
 
   // This method exists to allow removing of displayed graphics, after a new
   // page has been loaded, to prevent the displayed URL from being out of sync
@@ -253,16 +259,16 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   virtual void DidStopFlinging() {}
 
   // Returns the ID associated with the CompositorFrameSink of this view.
-  virtual cc::FrameSinkId GetFrameSinkId();
+  virtual viz::FrameSinkId GetFrameSinkId();
 
-  virtual cc::LocalSurfaceId GetLocalSurfaceId() const;
+  virtual viz::LocalSurfaceId GetLocalSurfaceId() const;
 
   // When there are multiple RenderWidgetHostViews for a single page, input
   // events need to be targeted to the correct one for handling. The following
   // methods are invoked on the RenderWidgetHostView that should be able to
   // properly handle the event (i.e. it has focus for keyboard events, or has
   // been identified by hit testing mouse, touch or gesture events).
-  virtual cc::FrameSinkId FrameSinkIdAtPoint(
+  virtual viz::FrameSinkId FrameSinkIdAtPoint(
       cc::SurfaceHittestDelegate* delegate,
       const gfx::Point& point,
       gfx::Point* transformed_point);
@@ -290,7 +296,7 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // coordinate space as an intermediate step.
   virtual bool TransformPointToLocalCoordSpace(
       const gfx::Point& point,
-      const cc::SurfaceId& original_surface,
+      const viz::SurfaceId& original_surface,
       gfx::Point* transformed_point);
 
   // Transform a point that is in the coordinate space for the current
@@ -361,8 +367,17 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // helps to position the full screen widget on the correct monitor.
   virtual void InitAsFullscreen(RenderWidgetHostView* reference_host_view) = 0;
 
-  // Sets the cursor to the one associated with the specified cursor_type
+  // Sets the cursor for this view to the one associated with the specified
+  // cursor_type.
   virtual void UpdateCursor(const WebCursor& cursor) = 0;
+
+  // Changes the cursor that is displayed on screen. This may or may not match
+  // the current cursor's view which was set by UpdateCursor.
+  virtual void DisplayCursor(const WebCursor& cursor);
+
+  // Views that manage cursors for window return a CursorManager. Other views
+  // return nullptr.
+  virtual CursorManager* GetCursorManager();
 
   // Indicates whether the page has finished loading.
   virtual void SetIsLoading(bool is_loading) = 0;
@@ -403,6 +418,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // main frame.
   virtual void OnDidNavigateMainFrameToNewPage();
 
+  // Called by WebContentsImpl to notify the view about a change in visibility
+  // of context menu. The view can then perform platform specific tasks and
+  // changes.
+  virtual void SetShowingContextMenu(bool showing) {}
+
   // Add and remove observers for lifetime event notifications. The order in
   // which notifications are sent to observers is undefined. Clients must be
   // sure to remove the observer before they go away.
@@ -427,16 +447,13 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
     return wheel_scroll_latching_enabled_;
   }
 
-  // This only returns non-null on platforms that implement touch
-  // selection editing (TSE), currently Aura and (soon) Android.
-  // TODO(wjmaclean): update this comment when OOPIF TSE is implemented on
-  // Android.
-  virtual TouchSelectionControllerClientManager*
-  touch_selection_controller_client_manager();
+  void set_web_contents_accessibility(WebContentsAccessibility* wcax) {
+    web_contents_accessibility_ = wcax;
+  }
 
   // Exposed for testing.
   virtual bool IsChildFrameForTesting() const;
-  virtual cc::SurfaceId SurfaceIdForTesting() const;
+  virtual viz::SurfaceId SurfaceIdForTesting() const;
 
  protected:
   // Interface class only, do not construct.
@@ -458,11 +475,11 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   // locked.
   bool mouse_locked_;
 
-  // Whether we are showing a context menu.
-  bool showing_context_menu_;
-
   // The scale factor of the display the renderer is currently on.
   float current_device_scale_factor_;
+
+  // The color space of the display the renderer is currently on.
+  gfx::ColorSpace current_display_color_space_;
 
   // The orientation of the display the renderer is currently on.
   display::Display::Rotation current_display_rotation_;
@@ -474,6 +491,8 @@ class CONTENT_EXPORT RenderWidgetHostViewBase : public RenderWidgetHostView,
   TextInputManager* text_input_manager_;
 
   const bool wheel_scroll_latching_enabled_;
+
+  WebContentsAccessibility* web_contents_accessibility_;
 
  private:
   gfx::Rect current_display_area_;

@@ -13,6 +13,7 @@ namespace cc {
 LayerImplTestProperties::LayerImplTestProperties(LayerImpl* owning_layer)
     : owning_layer(owning_layer),
       double_sided(true),
+      cache_render_surface(false),
       force_render_surface(false),
       is_container_for_fixed_position_layers(false),
       should_flatten_transform(true),
@@ -25,7 +26,8 @@ LayerImplTestProperties::LayerImplTestProperties(LayerImpl* owning_layer)
       scroll_parent(nullptr),
       clip_parent(nullptr),
       mask_layer(nullptr),
-      parent(nullptr) {}
+      parent(nullptr),
+      scroll_boundary_behavior(ScrollBoundaryBehavior()) {}
 
 LayerImplTestProperties::~LayerImplTestProperties() {}
 
@@ -41,8 +43,6 @@ std::unique_ptr<LayerImpl> LayerImplTestProperties::RemoveChild(
   auto it = std::find(children.begin(), children.end(), child);
   if (it != children.end())
     children.erase(it);
-  owning_layer->layer_tree_impl()->property_trees()->RemoveIdFromIdToIndexMaps(
-      child->id());
   auto layer = owning_layer->layer_tree_impl()->RemoveLayer(child->id());
   owning_layer->layer_tree_impl()->BuildLayerListForTesting();
   return layer;

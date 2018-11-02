@@ -6,17 +6,20 @@
 
 #include <cert.h>
 #include <algorithm>
+#include <iterator>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/task_runner_util.h"
 #include "base/threading/worker_pool.h"
 #include "chrome/browser/chromeos/certificate_provider/certificate_provider.h"
 #include "crypto/nss_crypto_module_delegate.h"
 #include "net/ssl/ssl_cert_request_info.h"
+#include "net/ssl/ssl_private_key.h"
 
 namespace chromeos {
 
@@ -27,8 +30,9 @@ class CertNotAllowedPredicate {
   explicit CertNotAllowedPredicate(
       const ClientCertStoreChromeOS::CertFilter* filter)
       : filter_(filter) {}
-  bool operator()(const scoped_refptr<net::X509Certificate>& cert) const {
-    return !filter_->IsCertAllowed(cert);
+  bool operator()(
+      const std::unique_ptr<net::ClientCertIdentity>& identity) const {
+    return !filter_->IsCertAllowed(identity->certificate());
   }
 
  private:
@@ -51,10 +55,10 @@ void ClientCertStoreChromeOS::GetClientCerts(
     const ClientCertListCallback& callback) {
   // Caller is responsible for keeping the ClientCertStore alive until the
   // callback is run.
-  base::Callback<void(const net::CertificateList&)>
-      get_platform_certs_and_filter =
-          base::Bind(&ClientCertStoreChromeOS::GotAdditionalCerts,
-                     base::Unretained(this), &cert_request_info, callback);
+  base::Callback<void(net::ClientCertIdentityList)>
+      get_platform_certs_and_filter = base::Bind(
+          &ClientCertStoreChromeOS::GotAdditionalCerts, base::Unretained(this),
+          base::Unretained(&cert_request_info), callback);
 
   base::Closure get_additional_certs_and_continue;
   if (cert_provider_) {
@@ -63,7 +67,8 @@ void ClientCertStoreChromeOS::GetClientCerts(
         base::Unretained(cert_provider_.get()), get_platform_certs_and_filter);
   } else {
     get_additional_certs_and_continue =
-        base::Bind(get_platform_certs_and_filter, net::CertificateList());
+        base::Bind(get_platform_certs_and_filter,
+                   base::Passed(net::ClientCertIdentityList()));
   }
 
   if (cert_filter_->Init(get_additional_certs_and_continue))
@@ -73,47 +78,44 @@ void ClientCertStoreChromeOS::GetClientCerts(
 void ClientCertStoreChromeOS::GotAdditionalCerts(
     const net::SSLCertRequestInfo* request,
     const ClientCertListCallback& callback,
-    const net::CertificateList& additional_certs) {
-  std::unique_ptr<crypto::CryptoModuleBlockingPasswordDelegate>
-      password_delegate;
-  if (!password_delegate_factory_.is_null()) {
-    password_delegate.reset(
-        password_delegate_factory_.Run(request->host_and_port));
-  }
+    net::ClientCertIdentityList additional_certs) {
+  scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate> password_delegate;
+  if (!password_delegate_factory_.is_null())
+    password_delegate = password_delegate_factory_.Run(request->host_and_port);
   if (base::PostTaskAndReplyWithResult(
           base::WorkerPool::GetTaskRunner(true /* task_is_slow */).get(),
           FROM_HERE,
           base::Bind(&ClientCertStoreChromeOS::GetAndFilterCertsOnWorkerThread,
-                     base::Unretained(this), base::Passed(&password_delegate),
-                     request, additional_certs),
+                     base::Unretained(this), password_delegate,
+                     base::Unretained(request),
+                     base::Passed(&additional_certs)),
           callback)) {
     return;
   }
   // If the task could not be posted, behave as if there were no certificates.
-  callback.Run(net::CertificateList());
+  callback.Run(net::ClientCertIdentityList());
 }
 
-net::CertificateList ClientCertStoreChromeOS::GetAndFilterCertsOnWorkerThread(
-    std::unique_ptr<crypto::CryptoModuleBlockingPasswordDelegate>
+net::ClientCertIdentityList
+ClientCertStoreChromeOS::GetAndFilterCertsOnWorkerThread(
+    scoped_refptr<crypto::CryptoModuleBlockingPasswordDelegate>
         password_delegate,
     const net::SSLCertRequestInfo* request,
-    const net::CertificateList& additional_certs) {
-  net::CertificateList unfiltered_certs;
+    net::ClientCertIdentityList additional_certs) {
+  net::ClientCertIdentityList client_certs;
   net::ClientCertStoreNSS::GetPlatformCertsOnWorkerThread(
-      std::move(password_delegate), &unfiltered_certs);
+      std::move(password_delegate), &client_certs);
 
-  unfiltered_certs.erase(
-      std::remove_if(unfiltered_certs.begin(), unfiltered_certs.end(),
+  client_certs.erase(
+      std::remove_if(client_certs.begin(), client_certs.end(),
                      CertNotAllowedPredicate(cert_filter_.get())),
-      unfiltered_certs.end());
+      client_certs.end());
 
-  unfiltered_certs.insert(unfiltered_certs.end(), additional_certs.begin(),
-                          additional_certs.end());
-
-  net::CertificateList selected_certs;
-  net::ClientCertStoreNSS::FilterCertsOnWorkerThread(unfiltered_certs, *request,
-                                                     &selected_certs);
-  return selected_certs;
+  client_certs.reserve(client_certs.size() + additional_certs.size());
+  for (std::unique_ptr<net::ClientCertIdentity>& cert : additional_certs)
+    client_certs.push_back(std::move(cert));
+  net::ClientCertStoreNSS::FilterCertsOnWorkerThread(&client_certs, *request);
+  return client_certs;
 }
 
 }  // namespace chromeos

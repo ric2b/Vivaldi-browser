@@ -37,6 +37,7 @@
 #include "components/autofill/core/common/password_form_fill_data.h"
 #include "components/autofill/core/common/save_password_progress_logger.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/origin_util.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_view.h"
@@ -152,6 +153,8 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
       ignore_text_changes_(false),
       is_popup_possibly_visible_(false),
       is_generation_popup_possibly_visible_(false),
+      is_user_gesture_required_(true),
+      is_secure_context_required_(false),
       page_click_tracker_(new PageClickTracker(render_frame, this)),
       binding_(this),
       weak_ptr_factory_(this) {
@@ -165,9 +168,7 @@ AutofillAgent::AutofillAgent(content::RenderFrame* render_frame,
 
 AutofillAgent::~AutofillAgent() {}
 
-void AutofillAgent::BindRequest(
-    const service_manager::BindSourceInfo& source_info,
-    mojom::AutofillAgentRequest request) {
+void AutofillAgent::BindRequest(mojom::AutofillAgentRequest request) {
   binding_.Bind(std::move(request));
 }
 
@@ -245,6 +246,15 @@ void AutofillAgent::FocusedNodeChanged(const WebNode& node) {
     return;
 
   element_ = *element;
+
+  FormData form;
+  FormFieldData field;
+  if (form_util::FindFormAndFieldForFormControlElement(element_, &form,
+                                                       &field)) {
+    GetAutofillDriver()->FocusOnFormField(
+        form, field,
+        render_frame()->GetRenderView()->ElementBoundsInWindow(element_));
+  }
 }
 
 void AutofillAgent::OnDestruct() {
@@ -306,6 +316,10 @@ void AutofillAgent::TextFieldDidEndEditing(const WebInputElement& element) {
   GetAutofillDriver()->DidEndTextFieldEditing();
 }
 
+void AutofillAgent::SetUserGestureRequired(bool required) {
+  is_user_gesture_required_ = required;
+}
+
 void AutofillAgent::TextFieldDidChange(const WebFormControlElement& element) {
   DCHECK(ToWebInputElement(&element) || form_util::IsTextAreaElement(element));
 
@@ -315,7 +329,8 @@ void AutofillAgent::TextFieldDidChange(const WebFormControlElement& element) {
   // Disregard text changes that aren't caused by user gestures or pastes. Note
   // that pastes aren't necessarily user gestures because Blink's conception of
   // user gestures is centered around creating new windows/tabs.
-  if (!IsUserGesture() && !render_frame()->IsPasting())
+  if (is_user_gesture_required_ && !IsUserGesture() &&
+      !render_frame()->IsPasting())
     return;
 
   // We post a task for doing the Autofill as the caret position is not set
@@ -368,8 +383,10 @@ void AutofillAgent::TextFieldDidChangeImpl(
   FormFieldData field;
   if (form_util::FindFormAndFieldForFormControlElement(element, &form,
                                                        &field)) {
-    GetAutofillDriver()->TextFieldDidChange(form, field,
-                                            base::TimeTicks::Now());
+    GetAutofillDriver()->TextFieldDidChange(
+        form, field,
+        render_frame()->GetRenderView()->ElementBoundsInWindow(element),
+        base::TimeTicks::Now());
   }
 }
 
@@ -409,9 +426,10 @@ void AutofillAgent::DoAcceptDataListSuggestion(
   // If this element takes multiple values then replace the last part with
   // the suggestion.
   if (input_element->IsMultiple() && input_element->IsEmailField()) {
-    std::vector<base::StringPiece16> parts = base::SplitStringPiece(
-        input_element->EditingValue().Utf16(), base::ASCIIToUTF16(","),
-        base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+    base::string16 value = input_element->EditingValue().Utf16();
+    std::vector<base::StringPiece16> parts =
+        base::SplitStringPiece(value, base::ASCIIToUTF16(","),
+                               base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
     if (parts.size() == 0)
       parts.push_back(base::StringPiece16());
 
@@ -653,6 +671,10 @@ void AutofillAgent::ShowSuggestions(const WebFormControlElement& element,
   QueryAutofillSuggestions(element);
 }
 
+void AutofillAgent::SetSecureContextRequired(bool required) {
+  is_secure_context_required_ = required;
+}
+
 void AutofillAgent::QueryAutofillSuggestions(
     const WebFormControlElement& element) {
   if (!element.GetDocument().GetFrame())
@@ -671,6 +693,17 @@ void AutofillAgent::QueryAutofillSuggestions(
     // at providing suggestions.
     WebFormControlElementToFormField(element, nullptr, form_util::EXTRACT_VALUE,
                                      &field);
+  }
+
+  // Check the form action attribute only if it is not empty, see
+  // crbug.com/757895.
+  if (is_secure_context_required_ &&
+      !(element.GetDocument().IsSecureContext() &&
+        (form.action.is_empty() || content::IsOriginSecure(form.action)))) {
+    LOG(WARNING) << "Autofill suggestions are disabled because the document "
+                    "isn't a secure context or the form's action attribute "
+                    "isn't secure.";
+    return;
   }
 
   std::vector<base::string16> data_list_values;

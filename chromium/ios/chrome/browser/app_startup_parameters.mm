@@ -4,8 +4,6 @@
 
 #import "ios/chrome/browser/app_startup_parameters.h"
 
-#include "base/logging.h"
-#import "ios/chrome/browser/xcallback_parameters.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -16,55 +14,41 @@
   GURL _externalURL;
 }
 
-@synthesize launchVoiceSearch = _launchVoiceSearch;
+@synthesize postOpeningAction = _postOpeningAction;
 @synthesize launchInIncognito = _launchInIncognito;
-@synthesize xCallbackParameters = _xCallbackParameters;
-@synthesize launchFocusOmnibox = _launchFocusOmnibox;
-@synthesize launchQRScanner = _launchQRScanner;
 
 - (const GURL&)externalURL {
   return _externalURL;
 }
 
-
-- (instancetype)init {
-  NOTREACHED();
-  return nil;
-}
-
 - (instancetype)initWithExternalURL:(const GURL&)externalURL {
-  return [self initWithExternalURL:externalURL xCallbackParameters:nil];
-}
-
-- (instancetype)initWithExternalURL:(const GURL&)externalURL
-                xCallbackParameters:(XCallbackParameters*)xCallbackParameters {
   self = [super init];
   if (self) {
     _externalURL = externalURL;
-    _xCallbackParameters = xCallbackParameters;
   }
   return self;
 }
 
 - (NSString*)description {
-  NSMutableString* description = [NSMutableString
-      stringWithFormat:@"ExternalURL: %s \nXCallbackParams: %@",
-                       _externalURL.spec().c_str(), _xCallbackParameters];
-
-  if (self.launchQRScanner) {
-    [description appendString:@", should launch QR scanner"];
-  }
-
+  NSMutableString* description =
+      [NSMutableString stringWithFormat:@"AppStartupParameters: %s",
+                                        _externalURL.spec().c_str()];
   if (self.launchInIncognito) {
     [description appendString:@", should launch in incognito"];
   }
 
-  if (self.launchFocusOmnibox) {
-    [description appendString:@", should focus omnibox"];
-  }
-
-  if (self.launchVoiceSearch) {
-    [description appendString:@", should launch voice search"];
+  switch (self.postOpeningAction) {
+    case START_QR_CODE_SCANNER:
+      [description appendString:@", should launch QR scanner"];
+      break;
+    case START_VOICE_SEARCH:
+      [description appendString:@", should launch voice search"];
+      break;
+    case FOCUS_OMNIBOX:
+      [description appendString:@", should focus omnibox"];
+      break;
+    default:
+      break;
   }
 
   return description;

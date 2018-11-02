@@ -22,6 +22,7 @@
 #define ScriptElementBase_h
 
 #include "core/CoreExport.h"
+#include "core/frame/csp/ContentSecurityPolicy.h"
 #include "platform/heap/Handle.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -36,12 +37,7 @@ class ScriptLoader;
 
 class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
  public:
-  virtual ~ScriptElementBase() {}
-
   static ScriptElementBase* FromElementIfPossible(Element*);
-
-  virtual void DispatchLoadEvent() = 0;
-  virtual void DispatchErrorEvent() = 0;
 
   virtual bool AsyncAttributeValue() const = 0;
   virtual String CharsetAttributeValue() const = 0;
@@ -56,7 +52,6 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
   virtual String TypeAttributeValue() const = 0;
 
   virtual String TextFromChildren() = 0;
-  virtual String TextContent() const = 0;
   virtual bool HasSourceAttribute() const = 0;
   virtual bool IsConnected() const = 0;
   virtual bool HasChildren() const = 0;
@@ -65,21 +60,22 @@ class CORE_EXPORT ScriptElementBase : public GarbageCollectedMixin {
 
   virtual bool AllowInlineScriptForCSP(const AtomicString& nonce,
                                        const WTF::OrdinalNumber&,
-                                       const String& script_content) = 0;
+                                       const String& script_content,
+                                       ContentSecurityPolicy::InlineType) = 0;
   virtual Document& GetDocument() const = 0;
   virtual void SetScriptElementForBinding(
       HTMLScriptElementOrSVGScriptElement&) = 0;
 
-  ScriptLoader* Loader() const { return loader_.Get(); }
-
-  DECLARE_VIRTUAL_TRACE();
+  virtual ScriptLoader* Loader() const = 0;
 
  protected:
-  void InitializeScriptLoader(bool parser_inserted,
-                              bool already_started,
-                              bool created_during_document_write);
+  ScriptLoader* InitializeScriptLoader(bool parser_inserted,
+                                       bool already_started,
+                                       bool created_during_document_write);
 
-  Member<ScriptLoader> loader_;
+  friend class ScriptLoader;
+  virtual void DispatchLoadEvent() = 0;
+  virtual void DispatchErrorEvent() = 0;
 };
 
 }  // namespace blink

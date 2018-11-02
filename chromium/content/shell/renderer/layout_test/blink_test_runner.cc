@@ -10,6 +10,7 @@
 #include <clocale>
 #include <cmath>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "base/base64.h"
@@ -404,37 +405,6 @@ void BlinkTestRunner::SetPopupBlockingEnabled(bool block_popups) {
       new ShellViewHostMsg_SetPopupBlockingEnabled(routing_id(), block_popups));
 }
 
-std::string BlinkTestRunner::makeURLErrorDescription(const WebURLError& error) {
-  std::string domain = error.domain.Utf8();
-  int code = error.reason;
-
-  if (domain == net::kErrorDomain) {
-    domain = "NSURLErrorDomain";
-    switch (error.reason) {
-    case net::ERR_ABORTED:
-      code = -999;  // NSURLErrorCancelled
-      break;
-    case net::ERR_UNSAFE_PORT:
-      // Our unsafe port checking happens at the network stack level, but we
-      // make this translation here to match the behavior of stock WebKit.
-      domain = "WebKitErrorDomain";
-      code = 103;
-      break;
-    case net::ERR_ADDRESS_INVALID:
-    case net::ERR_ADDRESS_UNREACHABLE:
-    case net::ERR_NETWORK_ACCESS_DENIED:
-      code = -1004;  // NSURLErrorCannotConnectToHost
-      break;
-    }
-  } else {
-    DLOG(WARNING) << "Unknown error domain";
-  }
-
-  return base::StringPrintf("<NSError domain %s, code %d, failing URL \"%s\">",
-                            domain.c_str(), code,
-                            error.unreachable_url.GetString().Utf8().data());
-}
-
 void BlinkTestRunner::UseUnfortunateSynchronousResizeMode(bool enable) {
   UseSynchronousResizeModeVisitor visitor(enable);
   RenderView::ForEach(&visitor);
@@ -535,8 +505,8 @@ bool BlinkTestRunner::IsUseZoomForDSFEnabled() {
   return content::IsUseZoomForDSFEnabled();
 }
 
-void BlinkTestRunner::SetDeviceColorProfile(const std::string& name) {
-  content::SetDeviceColorProfile(render_view(), GetTestingICCProfile(name));
+void BlinkTestRunner::SetDeviceColorSpace(const std::string& name) {
+  content::SetDeviceColorSpace(render_view(), GetTestingColorSpace(name));
 }
 
 void BlinkTestRunner::SetBluetoothFakeAdapter(const std::string& adapter_name,
@@ -722,7 +692,7 @@ void BlinkTestRunner::ResetPermissions() {
   Send(new LayoutTestHostMsg_ResetPermissions(routing_id()));
 }
 
-cc::SharedBitmapManager* BlinkTestRunner::GetSharedBitmapManager() {
+viz::SharedBitmapManager* BlinkTestRunner::GetSharedBitmapManager() {
   return RenderThread::Get()->GetSharedBitmapManager();
 }
 
@@ -735,8 +705,7 @@ void BlinkTestRunner::DispatchBeforeInstallPromptEvent(
       render_view()->GetMainRenderFrame()->GetInterfaceRegistry();
   blink::mojom::AppBannerControllerRequest request =
       mojo::MakeRequest(&app_banner_service_->controller());
-  registry->BindInterface(service_manager::BindSourceInfo(),
-                          blink::mojom::AppBannerController::Name_,
+  registry->BindInterface(blink::mojom::AppBannerController::Name_,
                           request.PassMessagePipe());
   app_banner_service_->SendBannerPromptRequest(event_platforms, callback);
 }
@@ -767,7 +736,7 @@ void BlinkTestRunner::RunIdleTasks(const base::Closure& callback) {
     SchedulerRunIdleTasks(callback);
 }
 
-void BlinkTestRunner::ForceTextInputStateUpdate(WebFrame* frame) {
+void BlinkTestRunner::ForceTextInputStateUpdate(WebLocalFrame* frame) {
   ForceTextInputStateUpdateForRenderFrame(RenderFrame::FromWebFrame(frame));
 }
 
@@ -922,8 +891,13 @@ void BlinkTestRunner::CaptureDumpContinued() {
       interfaces->TestRunner()->ShouldGeneratePixelResults() &&
       !interfaces->TestRunner()->ShouldDumpAsAudio()) {
     CHECK(render_view()->GetWebView()->IsAcceleratedCompositingActive());
+
+    // Test finish should only be processed in the BlinkTestRunner associated
+    // with the current, non-swapped-out RenderView.
+    DCHECK(render_view()->GetWebView()->MainFrame()->IsWebLocalFrame());
+
     interfaces->TestRunner()->DumpPixelsAsync(
-        render_view()->GetWebView(),
+        render_view()->GetWebView()->MainFrame()->ToWebLocalFrame(),
         base::Bind(&BlinkTestRunner::OnPixelsDumpCompleted,
                    base::Unretained(this)));
     return;
@@ -1022,12 +996,16 @@ void BlinkTestRunner::OnSessionHistory(
 }
 
 void BlinkTestRunner::OnReset() {
+  // ShellViewMsg_Reset should always be sent to the *current* view.
+  DCHECK(render_view()->GetWebView()->MainFrame()->IsWebLocalFrame());
+  WebLocalFrame* main_frame =
+      render_view()->GetWebView()->MainFrame()->ToWebLocalFrame();
+
   LayoutTestRenderThreadObserver::GetInstance()->test_interfaces()->ResetAll();
   Reset(true /* for_new_test */);
   // Navigating to about:blank will make sure that no new loads are initiated
   // by the renderer.
-  WebURLRequest request = WebURLRequest(GURL(url::kAboutBlankURL));
-  render_view()->GetWebView()->MainFrame()->LoadRequest(request);
+  main_frame->LoadRequest(WebURLRequest(GURL(url::kAboutBlankURL)));
   Send(new ShellViewHostMsg_ResetDone(routing_id()));
 }
 
@@ -1046,8 +1024,12 @@ void BlinkTestRunner::OnTestFinishedInSecondaryRenderer() {
 
 void BlinkTestRunner::OnTryLeakDetection() {
   blink::WebFrame* main_frame = render_view()->GetWebView()->MainFrame();
-  DCHECK_EQ(GURL(url::kAboutBlankURL), GURL(main_frame->GetDocument().Url()));
+
   DCHECK(!main_frame->IsLoading());
+  if (main_frame->IsWebLocalFrame()) {
+    DCHECK_EQ(GURL(url::kAboutBlankURL),
+              GURL(main_frame->ToWebLocalFrame()->GetDocument().Url()));
+  }
 
   leak_detector_->TryLeakDetection(main_frame);
 }

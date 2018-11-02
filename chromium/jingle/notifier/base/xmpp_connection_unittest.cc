@@ -76,11 +76,14 @@ class XmppConnectionTest : public testing::Test {
  protected:
   XmppConnectionTest()
       : mock_pre_xmpp_auth_(new MockPreXmppAuth()) {
-    std::unique_ptr<base::MessagePump> pump(new base::MessagePumpDefault());
-    message_loop_.reset(new base::MessageLoop(std::move(pump)));
+    // GTest death tests by default execute in a fork()ed but not exec()ed
+    // process. On macOS, a CoreFoundation-backed MessageLoop will exit with a
+    // __THE_PROCESS_HAS_FORKED_AND_YOU_CANNOT_USE_THIS_COREFOUNDATION_FUNCTIONALITY___YOU_MUST_EXEC__
+    // when called. Use the threadsafe mode to avoid this problem.
+    testing::GTEST_FLAG(death_test_style) = "threadsafe";
 
-    url_request_context_getter_ = new net::TestURLRequestContextGetter(
-        message_loop_->task_runner());
+    url_request_context_getter_ =
+        new net::TestURLRequestContextGetter(message_loop_.task_runner());
   }
 
   ~XmppConnectionTest() override {}
@@ -91,7 +94,7 @@ class XmppConnectionTest : public testing::Test {
   }
 
   // Needed by XmppConnection.
-  std::unique_ptr<base::MessageLoop> message_loop_;
+  base::MessageLoop message_loop_;
   MockXmppConnectionDelegate mock_xmpp_connection_delegate_;
   std::unique_ptr<MockPreXmppAuth> mock_pre_xmpp_auth_;
   scoped_refptr<net::TestURLRequestContextGetter> url_request_context_getter_;
@@ -103,7 +106,6 @@ TEST_F(XmppConnectionTest, CreateDestroy) {
                                  &mock_xmpp_connection_delegate_, NULL);
 }
 
-#if !defined(_MSC_VER) // http://crbug.com/158570
 TEST_F(XmppConnectionTest, ImmediateFailure) {
   // ChromeAsyncSocket::Connect() will always return false since we're
   // not setting a valid host, but this gets bubbled up as ERROR_NONE
@@ -169,7 +171,6 @@ TEST_F(XmppConnectionTest, RaisedError) {
   xmpp_connection.weak_xmpp_client_->
       SignalStateChange(buzz::XmppEngine::STATE_CLOSED);
 }
-#endif
 
 TEST_F(XmppConnectionTest, Connect) {
   base::WeakPtr<rtc::Task> weak_ptr;
@@ -210,7 +211,6 @@ TEST_F(XmppConnectionTest, MultipleConnect) {
   }, "more than once");
 }
 
-#if !defined(_MSC_VER) // http://crbug.com/158570
 TEST_F(XmppConnectionTest, ConnectThenError) {
   base::WeakPtr<rtc::Task> weak_ptr;
   EXPECT_CALL(mock_xmpp_connection_delegate_, OnConnect(_)).
@@ -230,7 +230,6 @@ TEST_F(XmppConnectionTest, ConnectThenError) {
       SignalStateChange(buzz::XmppEngine::STATE_CLOSED);
   EXPECT_EQ(NULL, weak_ptr.get());
 }
-#endif
 
 // We don't destroy XmppConnection's task pump on destruction, but it
 // should still not run any more tasks.

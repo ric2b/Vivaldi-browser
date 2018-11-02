@@ -14,16 +14,14 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "services/preferences/public/interfaces/preferences_configuration.mojom.h"
+#include "services/preferences/public/interfaces/preferences.mojom.h"
 #include "services/preferences/public/interfaces/tracked_preference_validation_delegate.mojom.h"
 
 class PersistentPrefStore;
-class PrefRegistry;
 class PrefService;
 
 namespace base {
 class DictionaryValue;
-class SequencedWorkerPool;
 }  // namespace base
 
 namespace service_manager {
@@ -85,11 +83,9 @@ class ProfilePrefStoreManager {
       std::vector<prefs::mojom::TrackedPreferenceMetadataPtr>
           tracking_configuration,
       size_t reporting_ids_count,
-      base::SequencedWorkerPool* worker_pool,
+      scoped_refptr<base::SequencedTaskRunner> io_task_runner,
       prefs::mojom::ResetOnLoadObserverPtr reset_on_load_observer,
-      prefs::mojom::TrackedPreferenceValidationDelegatePtr validation_delegate,
-      service_manager::Connector* connector,
-      scoped_refptr<PrefRegistry> pref_registry);
+      prefs::mojom::TrackedPreferenceValidationDelegatePtr validation_delegate);
 
   // Initializes the preferences for the managed profile with the preference
   // values in |master_prefs|. Acts synchronously, including blocking IO.

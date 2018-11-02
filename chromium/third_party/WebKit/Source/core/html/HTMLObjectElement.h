@@ -78,6 +78,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
 
   FormAssociated* ToFormAssociatedOrNull() override { return this; };
   void AssociateWith(HTMLFormElement*) override;
+  void AttachLayoutTree(AttachContext&) final;
 
  private:
   HTMLObjectElement(Document&, bool created_by_parser);
@@ -100,7 +101,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
   const QualifiedName& SubResourceAttributeName() const override;
   const AtomicString ImageSourceURL() const override;
 
-  LayoutPart* ExistingLayoutPart() const override;
+  LayoutEmbeddedContent* ExistingLayoutEmbeddedContent() const override;
 
   void UpdatePluginInternal() override;
   void UpdateDocNamedItem();
@@ -110,9 +111,7 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
   // FIXME: This function should not deal with url or serviceType
   // so that we can better share code between <object> and <embed>.
   void ParametersForPlugin(Vector<String>& param_names,
-                           Vector<String>& param_values,
-                           String& url,
-                           String& service_type);
+                           Vector<String>& param_values);
 
   bool HasValidClassId() const;
 
@@ -125,39 +124,12 @@ class CORE_EXPORT HTMLObjectElement final : public HTMLPlugInElement,
   bool use_fallback_content_ : 1;
 };
 
-// Intentionally left unimplemented, template specialization needs to be
-// provided for specific return types.
-template <typename T>
-inline const T& ToElement(const ListedElement&);
-template <typename T>
-inline const T* ToElement(const ListedElement*);
-
-// Make toHTMLObjectElement() accept a ListedElement as input instead of
-// a Node.
-template <>
-inline const HTMLObjectElement* ToElement<HTMLObjectElement>(
-    const ListedElement* element) {
-  SECURITY_DCHECK(!element || !element->IsFormControlElement());
-  const HTMLObjectElement* object_element =
-      static_cast<const HTMLObjectElement*>(element);
-  // We need to assert after the cast because ListedElement doesn't
-  // have hasTagName.
-  SECURITY_DCHECK(!object_element ||
-                  object_element->HasTagName(HTMLNames::objectTag));
-  return object_element;
-}
-
-template <>
-inline const HTMLObjectElement& ToElement<HTMLObjectElement>(
-    const ListedElement& element) {
-  SECURITY_DCHECK(!element.IsFormControlElement());
-  const HTMLObjectElement& object_element =
-      static_cast<const HTMLObjectElement&>(element);
-  // We need to assert after the cast because ListedElement doesn't
-  // have hasTagName.
-  SECURITY_DCHECK(object_element.HasTagName(HTMLNames::objectTag));
-  return object_element;
-}
+// Like toHTMLObjectElement() but accepts a ListedElement as input
+// instead of a Node.
+const HTMLObjectElement* ToHTMLObjectElementFromListedElement(
+    const ListedElement*);
+const HTMLObjectElement& ToHTMLObjectElementFromListedElement(
+    const ListedElement&);
 
 }  // namespace blink
 

@@ -31,6 +31,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/TextEncoding.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebURLResponse.h"
@@ -48,7 +49,7 @@ class CSSStyleSheetResourceTest : public ::testing::Test {
     original_memory_cache_ =
         ReplaceMemoryCacheForTesting(MemoryCache::Create());
     page_ = DummyPageHolder::Create();
-    GetDocument().SetURL(KURL(KURL(), "https://localhost/"));
+    GetDocument().SetURL(KURL(NullURL(), "https://localhost/"));
   }
 
   ~CSSStyleSheetResourceTest() override {
@@ -63,18 +64,18 @@ class CSSStyleSheetResourceTest : public ::testing::Test {
 
 TEST_F(CSSStyleSheetResourceTest, DuplicateResourceNotCached) {
   const char kUrl[] = "https://localhost/style.css";
-  KURL image_url(KURL(), kUrl);
-  KURL css_url(KURL(), kUrl);
+  KURL image_url(NullURL(), kUrl);
+  KURL css_url(NullURL(), kUrl);
 
   // Emulate using <img> to do async stylesheet preloads.
 
-  Resource* image_resource = ImageResource::Create(ResourceRequest(image_url));
+  Resource* image_resource = ImageResource::CreateForTest(image_url);
   ASSERT_TRUE(image_resource);
   GetMemoryCache()->Add(image_resource);
   ASSERT_TRUE(GetMemoryCache()->Contains(image_resource));
 
   CSSStyleSheetResource* css_resource =
-      CSSStyleSheetResource::CreateForTest(ResourceRequest(css_url), "utf-8");
+      CSSStyleSheetResource::CreateForTest(css_url, UTF8Encoding());
   css_resource->ResponseReceived(
       ResourceResponse(css_url, "style/css", 0, g_null_atom), nullptr);
   css_resource->Finish();

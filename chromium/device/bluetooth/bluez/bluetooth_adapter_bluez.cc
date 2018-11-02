@@ -150,6 +150,17 @@ void SetIntervalErrorCallbackConnector(
   error_callback.Run(code);
 }
 
+void ResetAdvertisingErrorCallbackConnector(
+    const device::BluetoothAdapter::AdvertisementErrorCallback& error_callback,
+    const std::string& error_name,
+    const std::string& error_message) {
+  BLUETOOTH_LOG(ERROR) << "Error while resetting advertising. error_name = "
+                       << error_name << ", error_message = " << error_message;
+
+  error_callback.Run(
+      device::BluetoothAdvertisement::ErrorCode::ERROR_RESET_ADVERTISING);
+}
+
 }  // namespace
 
 // static
@@ -520,6 +531,17 @@ void BluetoothAdapterBlueZ::SetAdvertisingInterval(
       ->SetAdvertisingInterval(
           object_path_, min_ms, max_ms, callback,
           base::Bind(&SetIntervalErrorCallbackConnector, error_callback));
+}
+
+void BluetoothAdapterBlueZ::ResetAdvertising(
+    const base::Closure& callback,
+    const AdvertisementErrorCallback& error_callback) {
+  DCHECK(bluez::BluezDBusManager::Get());
+  bluez::BluezDBusManager::Get()
+      ->GetBluetoothLEAdvertisingManagerClient()
+      ->ResetAdvertising(
+          object_path_, callback,
+          base::Bind(&ResetAdvertisingErrorCallbackConnector, error_callback));
 }
 
 device::BluetoothLocalGattService* BluetoothAdapterBlueZ::GetGattService(
@@ -1543,18 +1565,7 @@ void BluetoothAdapterBlueZ::OnStartDiscoveryError(
   DCHECK(discovery_request_pending_);
   discovery_request_pending_ = false;
 
-  // Discovery request may fail if discovery was previously initiated by Chrome,
-  // but the session were invalidated due to the discovery state unexpectedly
-  // changing to false and then back to true. In this case, report success.
-  if (IsPresent() && error_name == bluetooth_device::kErrorInProgress &&
-      IsDiscovering()) {
-    BLUETOOTH_LOG(DEBUG)
-        << "Discovery previously initiated. Reporting success.";
-    num_discovery_sessions_++;
-    callback.Run();
-  } else {
-    error_callback.Run(TranslateDiscoveryErrorToUMA(error_name));
-  }
+  error_callback.Run(TranslateDiscoveryErrorToUMA(error_name));
 
   // Try to add a new discovery session for each queued request.
   ProcessQueuedDiscoveryRequests();

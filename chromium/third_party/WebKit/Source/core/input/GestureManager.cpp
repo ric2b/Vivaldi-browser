@@ -4,11 +4,12 @@
 
 #include "core/input/GestureManager.h"
 
+#include "build/build_config.h"
 #include "core/dom/Document.h"
-#include "core/dom/DocumentUserGestureToken.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/editing/SelectionController.h"
 #include "core/events/GestureEvent.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/input/EventHandler.h"
@@ -56,7 +57,7 @@ HitTestRequest::HitTestRequestType GestureManager::GetHitTypeForGestureType(
     case WebInputEvent::kGestureTapCancel:
       // A TapDownCancel received when no element is active shouldn't really be
       // changing hover state.
-      if (!frame_->GetDocument()->ActiveHoverElement())
+      if (!frame_->GetDocument()->GetActiveElement())
         hit_type |= HitTestRequest::kReadOnly;
       return hit_type | HitTestRequest::kRelease;
     case WebInputEvent::kGestureTap:
@@ -134,7 +135,7 @@ WebInputEventResult GestureManager::HandleGestureTapDown(
 
 WebInputEventResult GestureManager::HandleGestureTap(
     const GestureEventWithHitTestResults& targeted_event) {
-  FrameView* frame_view(frame_->View());
+  LocalFrameView* frame_view(frame_->View());
   const WebGestureEvent& gesture_event = targeted_event.Event();
   HitTestRequest::HitTestRequestType hit_type =
       GetHitTypeForGestureType(gesture_event.GetType());
@@ -189,7 +190,7 @@ WebInputEventResult GestureManager::HandleGestureTap(
       FlooredIntPoint(gesture_event.PositionInRootFrame());
   Node* tapped_node = current_hit_test.InnerNode();
   Element* tapped_element = current_hit_test.InnerElement();
-  UserGestureIndicator gesture_indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator gesture_indicator(UserGestureToken::Create(
       tapped_node ? &tapped_node->GetDocument() : nullptr));
 
   mouse_event_manager_->SetClickElement(tapped_element);
@@ -333,7 +334,6 @@ WebInputEventResult GestureManager::HandleGestureLongPress(
   if (inner_node && inner_node->GetLayoutObject() &&
       selection_controller_->HandleGestureLongPress(hit_test_result)) {
     mouse_event_manager_->FocusDocumentView();
-    return WebInputEventResult::kHandledSystem;
   }
 
   return SendContextMenuEventForGesture(targeted_event);
@@ -341,7 +341,7 @@ WebInputEventResult GestureManager::HandleGestureLongPress(
 
 WebInputEventResult GestureManager::HandleGestureLongTap(
     const GestureEventWithHitTestResults& targeted_event) {
-#if !OS(ANDROID)
+#if !defined(OS_ANDROID)
   if (long_tap_should_invoke_context_menu_) {
     long_tap_should_invoke_context_menu_ = false;
     Node* inner_node = targeted_event.GetHitTestResult().InnerNode();
@@ -412,12 +412,12 @@ WebInputEventResult GestureManager::SendContextMenuEventForGesture(
 WebInputEventResult GestureManager::HandleGestureShowPress() {
   last_show_press_timestamp_ = TimeTicks::Now();
 
-  FrameView* view = frame_->View();
+  LocalFrameView* view = frame_->View();
   if (!view)
     return WebInputEventResult::kNotHandled;
   if (ScrollAnimatorBase* scroll_animator = view->ExistingScrollAnimator())
     scroll_animator->CancelAnimation();
-  const FrameView::ScrollableAreaSet* areas = view->ScrollableAreas();
+  const LocalFrameView::ScrollableAreaSet* areas = view->ScrollableAreas();
   if (!areas)
     return WebInputEventResult::kNotHandled;
   for (const ScrollableArea* scrollable_area : *areas) {

@@ -22,7 +22,7 @@
 #include "device/hid/input_service_linux.h"
 
 namespace base {
-class SingleThreadTaskRunner;
+class TaskRunner;
 }
 
 namespace device {
@@ -62,7 +62,7 @@ class BluetoothHostPairingController
   };
 
   explicit BluetoothHostPairingController(
-      const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner);
+      scoped_refptr<base::TaskRunner> input_service_task_runner);
   ~BluetoothHostPairingController() override;
 
   // These functions should be only used in tests.
@@ -74,6 +74,7 @@ class BluetoothHostPairingController
 
   void ChangeStage(Stage new_stage);
   void SendHostStatus();
+  void SendErrorCodeAndMessage();
 
   void OnGetAdapter(scoped_refptr<device::BluetoothAdapter> adapter);
   void SetPowered();
@@ -109,6 +110,8 @@ class BluetoothHostPairingController
   void OnUpdateStatusChanged(UpdateStatus update_status) override;
   void OnEnrollmentStatusChanged(EnrollmentStatus enrollment_status) override;
   void SetPermanentId(const std::string& permanent_id) override;
+  void SetErrorCodeAndMessage(int error_code,
+                              const std::string& error_message) override;
   void Reset() override;
 
   // ProtoDecoder::Observer:
@@ -138,15 +141,26 @@ class BluetoothHostPairingController
                       uint32_t passkey) override;
   void AuthorizePairing(device::BluetoothDevice* device) override;
 
-  Stage current_stage_;
+  Stage current_stage_ = STAGE_NONE;
   std::string confirmation_code_;
   std::string enrollment_domain_;
-  Connectivity connectivity_status_;
-  UpdateStatus update_status_;
-  EnrollmentStatus enrollment_status_;
+  Connectivity connectivity_status_ = CONNECTIVITY_UNTESTED;
+  UpdateStatus update_status_ = UPDATE_STATUS_UNKNOWN;
+  EnrollmentStatus enrollment_status_ = ENROLLMENT_STATUS_UNKNOWN;
   std::string permanent_id_;
   std::string controller_device_address_;
   bool was_powered_ = false;
+
+  // The format of the |error_code_| is:
+  // [0, "no error"]
+  // [1*, "network error"]
+  // [2*, "authentication error"], e.g., [21, "Service unavailable"], ...
+  // [3*, "enrollment error"], e.g., [31, "DMserver registration error"], ...
+  // [4*, "other error"]
+  // The |error_code_| and |error_message_| will pass over to the master device
+  // to assist error diagnosis.
+  int error_code_ = 0;
+  std::string error_message_;
 
   scoped_refptr<device::BluetoothAdapter> adapter_;
   scoped_refptr<device::BluetoothSocket> service_socket_;
@@ -154,10 +168,10 @@ class BluetoothHostPairingController
   std::unique_ptr<ProtoDecoder> proto_decoder_;
   TestDelegate* delegate_ = nullptr;
 
-  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
-  base::ThreadChecker thread_checker_;
+  scoped_refptr<base::TaskRunner> input_service_task_runner_;
+  THREAD_CHECKER(thread_checker_);
   base::ObserverList<Observer> observers_;
-  base::WeakPtrFactory<BluetoothHostPairingController> ptr_factory_;
+  base::WeakPtrFactory<BluetoothHostPairingController> ptr_factory_{this};
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothHostPairingController);
 };

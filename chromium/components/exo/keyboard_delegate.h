@@ -14,16 +14,11 @@ enum class DomCode;
 }
 
 namespace exo {
-class Keyboard;
 class Surface;
 
 // Handles events on keyboards in context-specific ways.
 class KeyboardDelegate {
  public:
-  // Called at the top of the keyboard's destructor, to give observers a
-  // chance to remove themselves.
-  virtual void OnKeyboardDestroying(Keyboard* keyboard) = 0;
-
   // This should return true if |surface| is a valid target for this keyboard.
   // E.g. the surface is owned by the same client as the keyboard.
   virtual bool CanAcceptKeyboardEventsForSurface(Surface* surface) const = 0;
@@ -37,10 +32,12 @@ class KeyboardDelegate {
   virtual void OnKeyboardLeave(Surface* surface) = 0;
 
   // Called when keyboard key state changed. |pressed| is true when |key|
-  // was pressed and false if it was released.
-  virtual void OnKeyboardKey(base::TimeTicks time_stamp,
-                             ui::DomCode key,
-                             bool pressed) = 0;
+  // was pressed and false if it was released. Should return the serial
+  // number that will be used by the client to acknowledge the change in
+  // key state.
+  virtual uint32_t OnKeyboardKey(base::TimeTicks time_stamp,
+                                 ui::DomCode key,
+                                 bool pressed) = 0;
 
   // Called when keyboard modifier state changed.
   virtual void OnKeyboardModifiers(int modifier_flags) = 0;

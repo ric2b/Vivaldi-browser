@@ -12,12 +12,14 @@
 #include "ash/ash_export.h"
 #include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shelf_types.h"
+#include "ash/public/cpp/voice_interaction_state.h"
 #include "ash/session/session_observer.h"
 #include "ash/wm/system_modal_container_event_filter_delegate.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "ui/app_list/app_list_constants.h"
 #include "ui/aura/window.h"
 #include "ui/display/screen.h"
 #include "ui/events/event_target.h"
@@ -37,14 +39,7 @@ class UserActivityForwarder;
 class Window;
 class WindowManagerClient;
 class WindowTreeClient;
-namespace client {
-class ActivationClient;
-}
-}
-
-namespace base {
-class SequencedWorkerPool;
-}
+}  // namespace aura
 
 namespace chromeos {
 class AudioA11yController;
@@ -52,13 +47,13 @@ class AudioA11yController;
 
 namespace app_list {
 class AppList;
-}
+}  // namespace app_list
 
 namespace display {
 class DisplayChangeObserver;
 class DisplayConfigurator;
 class DisplayManager;
-}
+}  // namespace display
 
 namespace gfx {
 class Insets;
@@ -67,10 +62,7 @@ class Insets;
 namespace ui {
 class UserActivityDetector;
 class UserActivityPowerManagerNotifier;
-namespace devtools {
-class UiDevToolsServer;
-}
-}
+}  // namespace ui
 
 namespace views {
 class NonClientFrameView;
@@ -78,26 +70,29 @@ class Widget;
 namespace corewm {
 class TooltipController;
 }
-}
+}  // namespace views
 
 namespace wm {
 class AcceleratorFilter;
+class ActivationClient;
 class CompoundEventFilter;
 class FocusController;
 class ShadowController;
 class VisibilityController;
 class WindowModalityController;
-}
+}  // namespace wm
 
 namespace ash {
 
 class AcceleratorController;
 class AccessibilityDelegate;
+class AshDisplayController;
 class AppListDelegateImpl;
-class AshNativeCursorManager;
+class NativeCursorManagerAsh;
 class AshTouchTransformController;
 class AutoclickController;
 class BluetoothNotificationController;
+class BluetoothPowerController;
 class BrightnessControlDelegate;
 class CastConfigController;
 class DisplayColorManager;
@@ -110,6 +105,8 @@ class FirstRunHelper;
 class FocusCycler;
 class GPUSupport;
 class HighContrastController;
+class HighlighterController;
+class ImeController;
 class ImmersiveContextAsh;
 class ImmersiveHandlerFactoryAsh;
 class KeyboardBrightnessControlDelegate;
@@ -121,7 +118,7 @@ class LockStateController;
 class LogoutConfirmationController;
 class LockScreenController;
 class MagnificationController;
-class MaximizeModeController;
+class TabletModeController;
 class MediaController;
 class MouseCursorEventFilter;
 class MruWindowTracker;
@@ -143,7 +140,6 @@ class ScreenshotController;
 class ScreenPinningController;
 class ScreenPositionController;
 class SessionController;
-class SessionStateDelegate;
 class ShelfController;
 class ShelfModel;
 class ShelfWindowWatcher;
@@ -153,6 +149,7 @@ class ShellObserver;
 class ShutdownController;
 class ShutdownObserver;
 class SmsObserver;
+class SplitViewController;
 class StickyKeysController;
 class SystemGestureEventFilter;
 class SystemModalContainerEventFilter;
@@ -175,19 +172,10 @@ class WindowCycleController;
 class WindowPositioner;
 class WindowSelectorController;
 class WindowTreeHostManager;
-class WmWindow;
 
 enum class Config;
 enum class LoginStatus;
-
-namespace shell {
-class WindowWatcher;
-}
-
-namespace test {
-class ShellTestApi;
-class SmsObserverTest;
-}
+enum class VoiceInteractionState;
 
 // Shell is a singleton object that presents the Shell API and implements the
 // RootWindow's delegate interface.
@@ -197,7 +185,7 @@ class SmsObserverTest;
 class ASH_EXPORT Shell : public SessionObserver,
                          public SystemModalContainerEventFilterDelegate,
                          public ui::EventTarget,
-                         public aura::client::ActivationChangeObserver {
+                         public ::wm::ActivationChangeObserver {
  public:
   typedef std::vector<RootWindowController*> RootWindowControllerList;
 
@@ -222,6 +210,10 @@ class ASH_EXPORT Shell : public SessionObserver,
   // is no display for |display_id|, null is returned.
   static RootWindowController* GetRootWindowControllerWithDisplayId(
       int64_t display_id);
+
+  // Returns the root Window for the given display id. If there is no display
+  // for |display_id| null is returned.
+  static aura::Window* GetRootWindowForDisplayId(int64_t display_id);
 
   // Returns all root window controllers.
   // TODO(oshima): move this to |RootWindowController|
@@ -265,12 +257,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   static Config GetAshConfig();
   static bool ShouldUseIMEService();
 
-  // Registers all ash related prefs to the given |registry|.
-  static void RegisterPrefs(PrefRegistrySimple* registry);
+  // Registers all ash related local state prefs to the given |registry|.
+  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
-  // Returns true if simplified display management should be enabled.
-  // TODO(sky): remove this; temporary until http://crbug.com/718860 is done.
-  static bool ShouldEnableSimplifiedDisplayManagement();
+  // Registers all ash related user profile prefs to the given |registry|.
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Creates a default views::NonClientFrameView for use by windows in the
   // Ash environment.
@@ -291,11 +282,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   // controller. Destroys the old keyboard controller if it already exists.
   void CreateKeyboard();
 
-  // Deactivates the virtual keyboard.
-  void DeactivateKeyboard();
+  // Destroys the virtual keyboard.
+  void DestroyKeyboard();
 
-  // Test if MaximizeModeWindowManager is not enabled, and if
-  // MaximizeModeController is not currently setting a display rotation. Or if
+  // Test if TabletModeWindowManager is not enabled, and if
+  // TabletModeController is not currently setting a display rotation. Or if
   // the |resolution_notification_controller_| is not showing its confirmation
   // dialog. If true then changes to display settings can be saved.
   bool ShouldSaveDisplaySettings();
@@ -307,8 +298,8 @@ class ASH_EXPORT Shell : public SessionObserver,
     return accessibility_delegate_.get();
   }
   app_list::AppList* app_list() { return app_list_.get(); }
-  const scoped_refptr<base::SequencedWorkerPool>& blocking_pool() {
-    return blocking_pool_;
+  AshDisplayController* ash_display_controller() {
+    return ash_display_controller_.get();
   }
   BrightnessControlDelegate* brightness_control_delegate() {
     return brightness_control_delegate_.get();
@@ -320,6 +311,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   }
   ::wm::CompoundEventFilter* env_filter() { return env_filter_.get(); }
   FocusCycler* focus_cycler() { return focus_cycler_.get(); }
+  ImeController* ime_controller() { return ime_controller_.get(); }
   KeyboardBrightnessControlDelegate* keyboard_brightness_control_delegate() {
     return keyboard_brightness_control_delegate_.get();
   }
@@ -333,8 +325,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   LockScreenController* lock_screen_controller() {
     return lock_screen_controller_.get();
   }
-  MaximizeModeController* maximize_mode_controller() {
-    return maximize_mode_controller_.get();
+  TabletModeController* tablet_mode_controller() {
+    return tablet_mode_controller_.get();
   }
   MediaController* media_controller() { return media_controller_.get(); }
   MruWindowTracker* mru_window_tracker() { return mru_window_tracker_.get(); }
@@ -404,6 +396,9 @@ class ASH_EXPORT Shell : public SessionObserver,
   PartialMagnificationController* partial_magnification_controller() {
     return partial_magnification_controller_.get();
   }
+  HighlighterController* highlighter_controller() {
+    return highlighter_controller_.get();
+  }
   ScreenshotController* screenshot_controller() {
     return screenshot_controller_.get();
   }
@@ -414,10 +409,6 @@ class ASH_EXPORT Shell : public SessionObserver,
     return event_transformation_handler_.get();
   }
   ::wm::CursorManager* cursor_manager() { return cursor_manager_.get(); }
-
-  SessionStateDelegate* session_state_delegate() {
-    return session_state_delegate_.get();
-  }
 
   HighContrastController* high_contrast_controller() {
     return high_contrast_controller_.get();
@@ -433,7 +424,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   ToastManager* toast_manager() { return toast_manager_.get(); }
 
-  aura::client::ActivationClient* activation_client();
+  ::wm::ActivationClient* activation_client();
 
   // Force the shelf to query for it's current visibility state.
   // TODO(jamescook): Move to Shelf.
@@ -444,11 +435,14 @@ class ASH_EXPORT Shell : public SessionObserver,
   // In the case of mash, it can be null if it failed to or hasn't yet
   // connected to the pref service.
   //
-  // NOTE: Users of this pref service MUST listen to
-  // ash::SessionObserver::OnActiveUserSessionChanged() and recall this function
-  // to get the newly activated user's pref service, and use it to re-read the
-  // desired stored settings.
+  // NOTE: Code that uses PrefChangeRegistrar or otherwise observes the
+  // PrefService must use ShellObserver::OnActiveUserPrefServiceChanged() to
+  // reset its observers on user switch.
   PrefService* GetActiveUserPrefService() const;
+
+  // Gets the local state pref service. It can be null in mash if connecting to
+  // local state pref service has not completed successfully.
+  PrefService* GetLocalStatePrefService() const;
 
   // Returns WebNotificationTray on the primary root window.
   WebNotificationTray* GetWebNotificationTray();
@@ -499,6 +493,10 @@ class ASH_EXPORT Shell : public SessionObserver,
     return tray_bluetooth_helper_.get();
   }
 
+  BluetoothPowerController* bluetooth_power_controller() {
+    return bluetooth_power_controller_.get();
+  }
+
   VirtualKeyboardController* virtual_keyboard_controller() {
     return virtual_keyboard_controller_.get();
   }
@@ -542,17 +540,31 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   GPUSupport* gpu_support() { return gpu_support_.get(); }
 
+  SplitViewController* split_view_controller() {
+    return split_view_controller_.get();
+  }
+
+  // Returns true if split view mode is active.
+  bool IsSplitViewModeActive() const;
+
   void AddShellObserver(ShellObserver* observer);
   void RemoveShellObserver(ShellObserver* observer);
 
   // Shows the app list on the active root window.
-  void ShowAppList();
+  void ShowAppList(app_list::AppListShowSource toggle_method);
+
+  // Updates y position and opacity of app list. |is_end_gesture| means it is
+  // the end of the gesture dragging of app list from shelf and should restore
+  // the opacity of the app list.
+  void UpdateAppListYPositionAndOpacity(int y_position_in_screen,
+                                        float app_list_background_opacity,
+                                        bool is_end_gesture);
 
   // Dismisses the app list.
   void DismissAppList();
 
   // Shows the app list if it's not visible. Dismisses it otherwise.
-  void ToggleAppList();
+  void ToggleAppList(app_list::AppListShowSource toggle_method);
 
   // Returns app list actual visibility. This might differ from
   // GetAppListTargetVisibility() when hiding animation is still in flight.
@@ -565,23 +577,19 @@ class ASH_EXPORT Shell : public SessionObserver,
   // TODO(oshima): Investigate if we can merge this and |OnLoginStateChanged|.
   void UpdateAfterLoginStatusChange(LoginStatus status);
 
-  // Notifies observers that maximize mode has started, windows might still
-  // animate.
-  void NotifyMaximizeModeStarted();
-
-  // Notifies observers that maximize mode is about to end.
-  void NotifyMaximizeModeEnding();
-
-  // Notifies observers that maximize mode has ended, windows might still be
-  // returning to their original position.
-  void NotifyMaximizeModeEnded();
-
   // Notifies observers that overview mode is about to be started (before the
   // windows get re-arranged).
   void NotifyOverviewModeStarting();
 
   // Notifies observers that overview mode has ended.
   void NotifyOverviewModeEnded();
+
+  // Notifies observers that split view mode is about to be started (before the
+  // window gets snapped and activated).
+  void NotifySplitViewModeStarting();
+
+  // Notifies observers that split view mode has ended.
+  void NotifySplitViewModeEnded();
 
   // Notifies observers that fullscreen mode has changed for |root_window|.
   void NotifyFullscreenStateChanged(bool is_fullscreen,
@@ -597,18 +605,40 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   // Notifies observers that the shelf was created for |root_window|.
   // TODO(jamescook): Move to Shelf.
-  void NotifyShelfCreatedForRootWindow(WmWindow* root_window);
+  void NotifyShelfCreatedForRootWindow(aura::Window* root_window);
 
   // Notifies observers that |root_window|'s shelf changed alignment.
   // TODO(jamescook): Move to Shelf.
-  void NotifyShelfAlignmentChanged(WmWindow* root_window);
+  void NotifyShelfAlignmentChanged(aura::Window* root_window);
 
   // Notifies observers that |root_window|'s shelf changed auto-hide behavior.
   // TODO(jamescook): Move to Shelf.
-  void NotifyShelfAutoHideBehaviorChanged(WmWindow* root_window);
+  void NotifyShelfAutoHideBehaviorChanged(aura::Window* root_window);
 
   // Used to provide better error messages for Shell::Get() under mash.
   static void SetIsBrowserProcessWithMash();
+
+  void NotifyAppListVisibilityChanged(bool visible, aura::Window* root_window);
+
+  void NotifyVoiceInteractionStatusChanged(VoiceInteractionState state);
+
+  void NotifyVoiceInteractionEnabled(bool enabled);
+
+  void NotifyVoiceInteractionContextEnabled(bool enabled);
+
+  void NotifyVoiceInteractionSetupCompleted(bool completed);
+
+  VoiceInteractionState voice_interaction_state() const {
+    return voice_interaction_state_;
+  }
+
+  bool voice_interaction_settings_enabled() const {
+    return voice_interaction_settings_enabled_;
+  }
+
+  bool voice_interaction_setup_completed() const {
+    return voice_interaction_setup_completed_;
+  }
 
  private:
   FRIEND_TEST_ALL_PREFIXES(ExtendedDesktopTest, TestCursor);
@@ -617,9 +647,8 @@ class ASH_EXPORT Shell : public SessionObserver,
   friend class AcceleratorControllerTest;
   friend class RootWindowController;
   friend class ScopedRootWindowForNewWindows;
+  friend class ShellTestApi;
   friend class SmsObserverTest;
-  friend class test::ShellTestApi;
-  friend class shell::WindowWatcher;
 
   Shell(std::unique_ptr<ShellDelegate> shell_delegate,
         std::unique_ptr<ShellPort> shell_port);
@@ -645,12 +674,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<ui::EventTargetIterator> GetChildIterator() const override;
   ui::EventTargeter* GetEventTargeter() override;
 
-  // aura::client::ActivationChangeObserver:
+  // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
 
   // SessionObserver:
+  void OnActiveUserSessionChanged(const AccountId& account_id) override;
   void OnSessionStateChanged(session_manager::SessionState state) override;
   void OnLoginStatusChanged(LoginStatus login_status) override;
   void OnLockStateChanged(bool locked) override;
@@ -659,8 +689,11 @@ class ASH_EXPORT Shell : public SessionObserver,
   // the profile is available.
   void InitializeShelf();
 
-  // Callback for prefs::ConnectToPrefService.
-  void OnPrefServiceInitialized(std::unique_ptr<::PrefService> pref_service);
+  // Callbacks for prefs::ConnectToPrefService.
+  void OnProfilePrefServiceInitialized(
+      std::unique_ptr<::PrefService> pref_service);
+  void OnLocalStatePrefServiceInitialized(
+      std::unique_ptr<::PrefService> pref_service);
 
   static Shell* instance_;
 
@@ -678,15 +711,16 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<::wm::CompoundEventFilter> env_filter_;
 
   std::unique_ptr<UserMetricsRecorder> user_metrics_recorder_;
-  std::unique_ptr<SessionStateDelegate> session_state_delegate_;
   std::unique_ptr<WindowPositioner> window_positioner_;
 
   std::unique_ptr<AcceleratorController> accelerator_controller_;
   std::unique_ptr<AccessibilityDelegate> accessibility_delegate_;
+  std::unique_ptr<AshDisplayController> ash_display_controller_;
   std::unique_ptr<BrightnessControlDelegate> brightness_control_delegate_;
   std::unique_ptr<CastConfigController> cast_config_;
   std::unique_ptr<DragDropController> drag_drop_controller_;
   std::unique_ptr<FocusCycler> focus_cycler_;
+  std::unique_ptr<ImeController> ime_controller_;
   std::unique_ptr<ImmersiveContextAsh> immersive_context_;
   std::unique_ptr<KeyboardBrightnessControlDelegate>
       keyboard_brightness_control_delegate_;
@@ -694,7 +728,7 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<LocaleNotificationController> locale_notification_controller_;
   std::unique_ptr<LockScreenController> lock_screen_controller_;
   std::unique_ptr<LogoutConfirmationController> logout_confirmation_controller_;
-  std::unique_ptr<MaximizeModeController> maximize_mode_controller_;
+  std::unique_ptr<TabletModeController> tablet_mode_controller_;
   std::unique_ptr<MediaController> media_controller_;
   std::unique_ptr<MruWindowTracker> mru_window_tracker_;
   std::unique_ptr<NewWindowController> new_window_controller_;
@@ -720,8 +754,13 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<::wm::VisibilityController> visibility_controller_;
   std::unique_ptr<::wm::WindowModalityController> window_modality_controller_;
   std::unique_ptr<app_list::AppList> app_list_;
-  std::unique_ptr<::PrefService> pref_service_;
-  std::unique_ptr<ui::devtools::UiDevToolsServer> devtools_server_;
+
+  // Only initialized for mash. Can be null in ash_standalone (when chrome is
+  // not running) or when reconnecting to the mojo pref service after
+  // multiuser profile switch.
+  std::unique_ptr<::PrefService> profile_pref_service_;
+  std::unique_ptr<::PrefService> local_state_;
+
   std::unique_ptr<views::corewm::TooltipController> tooltip_controller_;
   LinkHandlerModelFactory* link_handler_model_factory_;
   std::unique_ptr<PowerButtonController> power_button_controller_;
@@ -773,6 +812,7 @@ class ASH_EXPORT Shell : public SessionObserver,
       resolution_notification_controller_;
   std::unique_ptr<BluetoothNotificationController>
       bluetooth_notification_controller_;
+  std::unique_ptr<BluetoothPowerController> bluetooth_power_controller_;
   std::unique_ptr<TrayBluetoothHelper> tray_bluetooth_helper_;
   std::unique_ptr<VirtualKeyboardController> virtual_keyboard_controller_;
   std::unique_ptr<chromeos::AudioA11yController> audio_a11y_controller_;
@@ -802,14 +842,33 @@ class ASH_EXPORT Shell : public SessionObserver,
   std::unique_ptr<LaserPointerController> laser_pointer_controller_;
   std::unique_ptr<PartialMagnificationController>
       partial_magnification_controller_;
+  std::unique_ptr<HighlighterController> highlighter_controller_;
+
+  // The split view controller for Chrome OS in tablet mode.
+  std::unique_ptr<SplitViewController> split_view_controller_;
 
   // |native_cursor_manager_| is owned by |cursor_manager_|, but we keep a
   // pointer to vend to test code.
-  AshNativeCursorManager* native_cursor_manager_;
+  NativeCursorManagerAsh* native_cursor_manager_;
 
   // Cursor may be hidden on certain key events in Chrome OS, whereas we never
   // hide the cursor on Windows.
   std::unique_ptr<::wm::CursorManager> cursor_manager_;
+
+  // Cached state and flags related to voice interaction.
+  // TODO(updowndota) Move the cached voice interaction flags into a separate
+  // controller after the controller is added (crbug.com/758650).
+
+  // Voice interaction state. The intial value should be set to STOPPED to make
+  // sure the burst animation could be correctly shown.
+  VoiceInteractionState voice_interaction_state_ =
+      VoiceInteractionState::STOPPED;
+
+  // Whether voice interaction is enabled in system settings.
+  bool voice_interaction_settings_enabled_ = false;
+
+  // Whether voice intearction setup flow has completed.
+  bool voice_interaction_setup_completed_ = false;
 
   // For testing only: simulate that a modal window is open
   bool simulate_modal_window_open_for_testing_;
@@ -829,7 +888,7 @@ class ASH_EXPORT Shell : public SessionObserver,
 
   base::ObserverList<ShellObserver> shell_observers_;
 
-  scoped_refptr<base::SequencedWorkerPool> blocking_pool_;
+  base::WeakPtrFactory<Shell> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(Shell);
 };

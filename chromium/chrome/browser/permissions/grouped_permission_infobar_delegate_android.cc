@@ -12,7 +12,6 @@
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/ui/android/infobars/grouped_permission_infobar.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/infobars/core/infobar.h"
 #include "components/url_formatter/elide_url.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -22,12 +21,11 @@ GroupedPermissionInfoBarDelegate::~GroupedPermissionInfoBarDelegate() {}
 
 // static
 infobars::InfoBar* GroupedPermissionInfoBarDelegate::Create(
-    PermissionPromptAndroid* permission_prompt,
-    InfoBarService* infobar_service,
-    const GURL& requesting_origin) {
-  return infobar_service->AddInfoBar(base::MakeUnique<GroupedPermissionInfoBar>(
-      base::WrapUnique(new GroupedPermissionInfoBarDelegate(
-          permission_prompt, requesting_origin))));
+    const base::WeakPtr<PermissionPromptAndroid>& permission_prompt,
+    InfoBarService* infobar_service) {
+  return infobar_service->AddInfoBar(
+      base::MakeUnique<GroupedPermissionInfoBar>(base::WrapUnique(
+          new GroupedPermissionInfoBarDelegate(permission_prompt))));
 }
 
 size_t GroupedPermissionInfoBarDelegate::PermissionCount() const {
@@ -35,7 +33,9 @@ size_t GroupedPermissionInfoBarDelegate::PermissionCount() const {
 }
 
 bool GroupedPermissionInfoBarDelegate::ShouldShowPersistenceToggle() const {
-  return PermissionUtil::ShouldShowPersistenceToggle();
+  if (!permission_prompt_)
+    return false;
+  return permission_prompt_->ShouldShowPersistenceToggle();
 }
 
 ContentSettingsType GroupedPermissionInfoBarDelegate::GetContentSettingType(
@@ -43,38 +43,29 @@ ContentSettingsType GroupedPermissionInfoBarDelegate::GetContentSettingType(
   return permission_prompt_->GetContentSettingType(position);
 }
 
-int GroupedPermissionInfoBarDelegate::GetIconIdForPermission(
-    size_t position) const {
-  return permission_prompt_->GetIconIdForPermission(position);
-}
-
-base::string16 GroupedPermissionInfoBarDelegate::GetMessageTextFragment(
-    size_t position) const {
-  return permission_prompt_->GetMessageTextFragment(position);
-}
-
-void GroupedPermissionInfoBarDelegate::ToggleAccept(size_t position,
-                                                    bool new_value) {
-  DCHECK_LT(position, PermissionCount());
-  if (permission_prompt_)
-    permission_prompt_->ToggleAccept(position, new_value);
+int GroupedPermissionInfoBarDelegate::GetIconId() const {
+  return permission_prompt_->GetIconId();
 }
 
 base::string16 GroupedPermissionInfoBarDelegate::GetMessageText() const {
-  return l10n_util::GetStringFUTF16(
-      IDS_PERMISSIONS_BUBBLE_PROMPT,
-      url_formatter::FormatUrlForSecurityDisplay(requesting_origin_));
+  return permission_prompt_->GetMessageText();
 }
 
 bool GroupedPermissionInfoBarDelegate::Accept() {
-  if (permission_prompt_)
+  if (permission_prompt_) {
+    if (permission_prompt_->ShouldShowPersistenceToggle())
+      permission_prompt_->TogglePersist(persist_);
     permission_prompt_->Accept();
+  }
   return true;
 }
 
 bool GroupedPermissionInfoBarDelegate::Cancel() {
-  if (permission_prompt_)
+  if (permission_prompt_) {
+    if (permission_prompt_->ShouldShowPersistenceToggle())
+      permission_prompt_->TogglePersist(persist_);
     permission_prompt_->Deny();
+  }
   return true;
 }
 
@@ -83,12 +74,13 @@ void GroupedPermissionInfoBarDelegate::InfoBarDismissed() {
     permission_prompt_->Closing();
 }
 
+base::string16 GroupedPermissionInfoBarDelegate::GetLinkText() const {
+  return permission_prompt_->GetLinkText();
+}
+
 GroupedPermissionInfoBarDelegate::GroupedPermissionInfoBarDelegate(
-    PermissionPromptAndroid* permission_prompt,
-    const GURL& requesting_origin)
-    : requesting_origin_(requesting_origin),
-      persist_(true),
-      permission_prompt_(permission_prompt) {
+    const base::WeakPtr<PermissionPromptAndroid>& permission_prompt)
+    : persist_(true), permission_prompt_(permission_prompt) {
   DCHECK(permission_prompt);
 }
 
@@ -103,22 +95,17 @@ GroupedPermissionInfoBarDelegate::GetInfoBarType() const {
 }
 
 int GroupedPermissionInfoBarDelegate::GetButtons() const {
-  // If there is only one permission in the infobar, we show both OK and CANCEL
-  // button to allow/deny it. If there are multiple, we only show OK button
-  // which means making decision for all permissions according to each accept
-  // toggle.
-  return (PermissionCount() > 1) ? BUTTON_OK : (BUTTON_OK | BUTTON_CANCEL);
+  return BUTTON_OK | BUTTON_CANCEL;
 }
 
 base::string16 GroupedPermissionInfoBarDelegate::GetButtonLabel(
     InfoBarButton button) const {
-  if (PermissionCount() > 1) {
-    return l10n_util::GetStringUTF16((button == BUTTON_OK) ? IDS_APP_OK
-                                                           : IDS_APP_CANCEL);
-  }
-
   return l10n_util::GetStringUTF16((button == BUTTON_OK) ? IDS_PERMISSION_ALLOW
                                                          : IDS_PERMISSION_DENY);
+}
+
+GURL GroupedPermissionInfoBarDelegate::GetLinkURL() const {
+  return permission_prompt_->GetLinkURL();
 }
 
 bool GroupedPermissionInfoBarDelegate::EqualsDelegate(

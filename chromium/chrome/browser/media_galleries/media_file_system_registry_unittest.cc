@@ -52,7 +52,6 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/device_settings_service.h"
 #endif
@@ -202,8 +201,7 @@ class MockProfileSharedRenderProcessHostFactory
       content::BrowserContext* browser_context);
 
   content::RenderProcessHost* CreateRenderProcessHost(
-      content::BrowserContext* browser_context,
-      content::SiteInstance* site_instance) const override;
+      content::BrowserContext* browser_context) const override;
 
  private:
   mutable std::map<content::BrowserContext*,
@@ -379,7 +377,6 @@ class MediaFileSystemRegistryTest : public ChromeRenderViewHostTestHarness {
 #if defined(OS_CHROMEOS)
   chromeos::ScopedTestDeviceSettingsService test_device_settings_service_;
   chromeos::ScopedTestCrosSettings test_cros_settings_;
-  std::unique_ptr<chromeos::ScopedTestUserManager> test_user_manager_;
 #endif
 
   MockProfileSharedRenderProcessHostFactory rph_factory_;
@@ -419,8 +416,7 @@ MockProfileSharedRenderProcessHostFactory::ReleaseRPH(
 
 content::RenderProcessHost*
 MockProfileSharedRenderProcessHostFactory::CreateRenderProcessHost(
-    content::BrowserContext* browser_context,
-    content::SiteInstance* site_instance) const {
+    content::BrowserContext* browser_context) const {
   auto existing = rph_map_.find(browser_context);
   if (existing != rph_map_.end())
     return existing->second.get();
@@ -777,10 +773,6 @@ void MediaFileSystemRegistryTest::SetUp() {
   test_file_system_context_ = new TestMediaFileSystemContext(
       g_browser_process->media_file_system_registry());
 
-#if defined(OS_CHROMEOS)
-  test_user_manager_.reset(new chromeos::ScopedTestUserManager());
-#endif
-
   ASSERT_TRUE(galleries_dir_.CreateUniqueTempDir());
   empty_dir_ = galleries_dir_.GetPath().AppendASCII("empty");
   ASSERT_TRUE(base::CreateDirectory(empty_dir_));
@@ -795,10 +787,6 @@ void MediaFileSystemRegistryTest::TearDown() {
   MediaFileSystemRegistry* registry =
       g_browser_process->media_file_system_registry();
   EXPECT_EQ(0U, GetExtensionGalleriesHostCount(registry));
-
-#if defined(OS_CHROMEOS)
-  test_user_manager_.reset();
-#endif
 
   // The TestingProfile must be destroyed before the TestingBrowserProcess
   // because it uses it in its destructor.

@@ -5,14 +5,13 @@
 #include "modules/media_controls/elements/MediaControlCastButtonElement.h"
 
 #include "core/InputTypeNames.h"
-#include "core/dom/ClientRect.h"
 #include "core/events/Event.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLMediaElement.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/media_controls/elements/MediaControlElementsHelper.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
 #include "modules/remoteplayback/RemotePlayback.h"
-#include "platform/Histogram.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -20,7 +19,7 @@ namespace blink {
 namespace {
 
 Element* ElementFromCenter(Element& element) {
-  ClientRect* client_rect = element.getBoundingClientRect();
+  DOMRect* client_rect = element.getBoundingClientRect();
   int center_x =
       static_cast<int>((client_rect->left() + client_rect->right()) / 2);
   int center_y =
@@ -41,9 +40,6 @@ MediaControlCastButtonElement::MediaControlCastButtonElement(
                         ? "-internal-media-controls-overlay-cast-button"
                         : "-internal-media-controls-cast-button");
   setType(InputTypeNames::button);
-
-  if (is_overlay_button_)
-    RecordMetrics(CastOverlayMetrics::kCreated);
   UpdateDisplayType();
 }
 
@@ -54,12 +50,6 @@ void MediaControlCastButtonElement::TryShowOverlay() {
   if (ElementFromCenter(*this) != &MediaElement()) {
     SetIsWanted(false);
     return;
-  }
-
-  DCHECK(IsWanted());
-  if (!show_use_counted_) {
-    show_use_counted_ = true;
-    RecordMetrics(CastOverlayMetrics::kShown);
   }
 }
 
@@ -84,15 +74,21 @@ bool MediaControlCastButtonElement::WillRespondToMouseClickEvents() {
   return true;
 }
 
-WebLocalizedString::Name
-MediaControlCastButtonElement::GetOverflowStringName() {
+WebLocalizedString::Name MediaControlCastButtonElement::GetOverflowStringName()
+    const {
   if (IsPlayingRemotely())
     return WebLocalizedString::kOverflowMenuStopCast;
   return WebLocalizedString::kOverflowMenuCast;
 }
 
-bool MediaControlCastButtonElement::HasOverflowButton() {
+bool MediaControlCastButtonElement::HasOverflowButton() const {
   return true;
+}
+
+const char* MediaControlCastButtonElement::GetNameForHistograms() const {
+  return is_overlay_button_
+             ? "CastOverlayButton"
+             : IsOverflowElement() ? "CastOverflowButton" : "CastButton";
 }
 
 void MediaControlCastButtonElement::DefaultEventHandler(Event* event) {
@@ -109,10 +105,6 @@ void MediaControlCastButtonElement::DefaultEventHandler(Event* event) {
                                            WebURL(GetDocument().Url()));
     }
 
-    if (is_overlay_button_ && !click_use_counted_) {
-      click_use_counted_ = true;
-      RecordMetrics(CastOverlayMetrics::kClicked);
-    }
     RemotePlayback* remote =
         HTMLMediaElementRemotePlayback::remote(MediaElement());
     if (remote)
@@ -123,14 +115,6 @@ void MediaControlCastButtonElement::DefaultEventHandler(Event* event) {
 
 bool MediaControlCastButtonElement::KeepEventInNode(Event* event) {
   return MediaControlElementsHelper::IsUserInteractionEvent(event);
-}
-
-void MediaControlCastButtonElement::RecordMetrics(CastOverlayMetrics metric) {
-  DCHECK(is_overlay_button_);
-  DEFINE_STATIC_LOCAL(
-      EnumerationHistogram, overlay_histogram,
-      ("Cast.Sender.Overlay", static_cast<int>(CastOverlayMetrics::kCount)));
-  overlay_histogram.Count(static_cast<int>(metric));
 }
 
 bool MediaControlCastButtonElement::IsPlayingRemotely() const {

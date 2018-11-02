@@ -201,6 +201,10 @@ class FakeAutofillAgent : public mojom::AutofillAgent {
       int32_t key,
       const PasswordFormFillData& form_data) override {}
 
+  void SetUserGestureRequired(bool required) override {}
+
+  void SetSecureContextRequired(bool required) override {}
+
   mojo::BindingSet<mojom::AutofillAgent> bindings_;
 
   base::Closure quit_closure_;
@@ -245,7 +249,11 @@ class TestContentAutofillDriver : public ContentAutofillDriver {
  public:
   TestContentAutofillDriver(content::RenderFrameHost* rfh,
                             AutofillClient* client)
-      : ContentAutofillDriver(rfh, client, kAppLocale, kDownloadState) {
+      : ContentAutofillDriver(rfh,
+                              client,
+                              kAppLocale,
+                              kDownloadState,
+                              nullptr) {
     std::unique_ptr<AutofillManager> autofill_manager(
         new MockAutofillManager(this, client));
     SetAutofillManager(std::move(autofill_manager));

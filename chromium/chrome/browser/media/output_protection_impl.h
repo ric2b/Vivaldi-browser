@@ -7,7 +7,6 @@
 
 #include "content/public/browser/render_frame_host.h"
 #include "media/mojo/interfaces/output_protection.mojom.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace chrome {
 class OutputProtectionProxy;
@@ -19,26 +18,25 @@ class OutputProtectionProxy;
 class OutputProtectionImpl : public media::mojom::OutputProtection {
  public:
   static void Create(content::RenderFrameHost* render_frame_host,
-                     const service_manager::BindSourceInfo& source_info,
                      media::mojom::OutputProtectionRequest request);
 
   OutputProtectionImpl(int render_process_id, int render_frame_id);
   ~OutputProtectionImpl() final;
 
   // media::mojom::OutputProtection implementation.
-  void QueryStatus(const QueryStatusCallback& callback) final;
+  void QueryStatus(QueryStatusCallback callback) final;
   void EnableProtection(uint32_t desired_protection_mask,
-                        const EnableProtectionCallback& callback) final;
+                        EnableProtectionCallback callback) final;
 
  private:
   // Callbacks for QueryStatus and EnableProtection results.
   // Note: These are bound using weak pointers so that we won't fire |callback|
   // after the binding is destroyed.
-  void OnQueryStatusResult(const QueryStatusCallback& callback,
+  void OnQueryStatusResult(QueryStatusCallback callback,
                            bool success,
                            uint32_t link_mask,
                            uint32_t protection_mask);
-  void OnEnableProtectionResult(const EnableProtectionCallback& callback,
+  void OnEnableProtectionResult(EnableProtectionCallback callback,
                                 bool success);
 
   // Helper function to lazily create the |proxy_| and return it.

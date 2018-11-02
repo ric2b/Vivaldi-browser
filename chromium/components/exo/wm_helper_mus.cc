@@ -58,9 +58,9 @@ aura::Window* WMHelperMus::GetFocusedWindow() const {
   return focused_window_;
 }
 
-ui::CursorSetType WMHelperMus::GetCursorSet() const {
+ui::CursorSize WMHelperMus::GetCursorSize() const {
   NOTIMPLEMENTED();
-  return ui::CursorSetType::CURSOR_SET_NORMAL;
+  return ui::CursorSize::kNormal;
 }
 
 const display::Display& WMHelperMus::GetCursorDisplay() const {
@@ -90,7 +90,7 @@ void WMHelperMus::RemovePostTargetHandler(ui::EventHandler* handler) {
   aura::Env::GetInstance()->RemovePostTargetHandler(handler);
 }
 
-bool WMHelperMus::IsMaximizeModeWindowManagerEnabled() const {
+bool WMHelperMus::IsTabletModeWindowManagerEnabled() const {
   NOTIMPLEMENTED();
   return false;
 }
@@ -148,9 +148,9 @@ void WMHelperMus::SetFocusedWindow(aura::Window* window) {
   NotifyWindowFocused(focused_window_, lost_focus);
 }
 
-aura::client::ActivationClient* WMHelperMus::GetActivationClient() {
+wm::ActivationClient* WMHelperMus::GetActivationClient() {
   return root_with_active_focus_client_
-             ? aura::client::GetActivationClient(root_with_active_focus_client_)
+             ? wm::GetActivationClient(root_with_active_focus_client_)
              : nullptr;
 }
 

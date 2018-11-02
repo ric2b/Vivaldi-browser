@@ -659,6 +659,12 @@ class QUIC_EXPORT_PRIVATE QuicConnection
   // the MTU discovery alarm.
   void DiscoverMtu();
 
+  // Sets the stream notifer on the SentPacketManager.
+  void SetStreamNotifier(StreamNotifierInterface* stream_notifier);
+
+  // Set data producer in framer.
+  void SetDataProducer(QuicStreamFrameDataProducer* data_producer);
+
   // Return the name of the cipher of the primary decrypter of the framer.
   const char* cipher_name() const { return framer_.decrypter()->cipher_name(); }
   // Return the id of the cipher of the primary decrypter of the framer.

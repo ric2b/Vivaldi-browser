@@ -34,8 +34,11 @@ const char kSupportedAudioContainer[] = "audio/webm";
 const char kUnsupportedContainer[] = "video/foo";
 
 // TODO(sandersd): Extended codec variants (requires proprietary codec support).
-const char kSupportedVideoCodec[] = "vp8";
+// TODO(xhwang): Platform Opus is not available on all Android versions, where
+// some encrypted Opus related tests may fail. See PlatformHasOpusSupport()
+// for more details.
 const char kSupportedAudioCodec[] = "opus";
+const char kSupportedVideoCodec[] = "vp8";
 const char kUnsupportedCodec[] = "foo";
 const char kUnsupportedCodecs[] = "vp8,foo";
 const char kSupportedVideoCodecs[] = "vp8,vp8";
@@ -221,7 +224,7 @@ class KeySystemConfigSelectorTest : public testing::Test {
     succeeded_count_ = 0;
     not_supported_count_ = 0;
     KeySystemConfigSelector(key_systems_.get(), media_permission_.get())
-        .SelectConfig(key_system_, configs_, security_origin_, false,
+        .SelectConfig(key_system_, configs_, security_origin_,
                       base::Bind(&KeySystemConfigSelectorTest::OnSucceeded,
                                  base::Unretained(this)),
                       base::Bind(&KeySystemConfigSelectorTest::OnNotSupported,

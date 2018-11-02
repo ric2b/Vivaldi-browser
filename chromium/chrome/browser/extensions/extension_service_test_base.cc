@@ -14,6 +14,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/extensions/component_loader.h"
 #include "chrome/browser/extensions/extension_error_reporter.h"
 #include "chrome/browser/extensions/extension_garbage_collector_factory.h"
@@ -80,16 +81,21 @@ ExtensionServiceTestBase::ExtensionServiceInitParams::
         default;
 
 ExtensionServiceTestBase::ExtensionServiceTestBase()
-    : thread_bundle_(new content::TestBrowserThreadBundle(kThreadOptions)),
-      service_(NULL),
+    : thread_bundle_(kThreadOptions),
+      service_(nullptr),
       testing_local_state_(TestingBrowserProcess::GetGlobal()),
-      registry_(NULL) {
+      registry_(nullptr) {
   base::FilePath test_data_dir;
   if (!PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir)) {
     ADD_FAILURE();
     return;
   }
   data_dir_ = test_data_dir.AppendASCII("extensions");
+
+  // The extension subsystem posts logging tasks to be done after browser
+  // startup. There's no StartupObserver as there normally would be since we're
+  // in a unit test, so we have to explicitly note tasks should be processed.
+  AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
 }
 
 ExtensionServiceTestBase::~ExtensionServiceTestBase() {

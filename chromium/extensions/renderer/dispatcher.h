@@ -58,6 +58,7 @@ class DispatcherDelegate;
 class ExtensionBindingsSystem;
 class ScriptContext;
 class ScriptInjectionManager;
+struct EventFilteringInfo;
 struct Message;
 struct PortId;
 
@@ -94,7 +95,8 @@ class Dispatcher : public content::RenderThreadObserver,
   void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
       int64_t service_worker_version_id,
-      const GURL& url);
+      const GURL& service_worker_scope,
+      const GURL& script_url);
 
   void WillReleaseScriptContext(blink::WebLocalFrame* frame,
                                 const v8::Local<v8::Context>& context,
@@ -104,7 +106,8 @@ class Dispatcher : public content::RenderThreadObserver,
   static void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> v8_context,
       int64_t service_worker_version_id,
-      const GURL& url);
+      const GURL& service_worker_scope,
+      const GURL& script_url);
 
   // This method is not allowed to run JavaScript code in the frame.
   void DidCreateDocumentElement(blink::WebLocalFrame* frame);
@@ -124,7 +127,7 @@ class Dispatcher : public content::RenderThreadObserver,
   void DispatchEvent(const std::string& extension_id,
                      const std::string& event_name,
                      const base::ListValue& event_args,
-                     const base::DictionaryValue& filtering_info) const;
+                     const EventFilteringInfo* filtering_info) const;
 
   // Shared implementation of the various MessageInvoke IPCs.
   void InvokeModuleSystemMethod(content::RenderFrame* render_frame,
@@ -141,6 +144,8 @@ class Dispatcher : public content::RenderThreadObserver,
                                      Dispatcher* dispatcher,
                                      ExtensionBindingsSystem* bindings_system,
                                      V8SchemaRegistry* v8_schema_registry);
+
+  ExtensionBindingsSystem* bindings_system() { return bindings_system_.get(); }
 
  private:
   // The RendererPermissionsPolicyDelegateTest.CannotScriptWebstore test needs
@@ -173,7 +178,8 @@ class Dispatcher : public content::RenderThreadObserver,
   void OnDispatchEvent(const ExtensionMsg_DispatchEvent_Params& params,
                        const base::ListValue& event_args);
   void OnSetSessionInfo(version_info::Channel channel,
-                        FeatureSessionType session_type);
+                        FeatureSessionType session_type,
+                        bool lock_screen_context);
   void OnSetScriptingWhitelist(
       const ExtensionsClient::ScriptingWhitelist& extension_ids);
   void OnSetSystemFont(const std::string& font_family,

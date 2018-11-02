@@ -25,12 +25,23 @@
 #ifndef BorderValue_h
 #define BorderValue_h
 
+#include <algorithm>
 #include "core/css/StyleColor.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/graphics/Color.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
+
+// In order to conserve memory, the border width uses fixed point,
+// which can be bitpacked.  This fixed point implementation is
+// essentially the same as in LayoutUnit.  Six bits are used for the
+// fraction, which leaves 20 bits for the integer part, making 1048575
+// the largest number.
+
+static const int kBorderWidthFractionalBits = 6;
+static const int kBorderWidthDenominator = 1 << kBorderWidthFractionalBits;
+static const int kMaxForBorderWidth = ((1 << 26) - 1) / kBorderWidthDenominator;
 
 class BorderValue {
   DISALLOW_NEW();
@@ -40,19 +51,14 @@ class BorderValue {
   BorderValue()
       : color_(0),
         color_is_current_color_(true),
-        style_(static_cast<unsigned>(EBorderStyle::kNone)),
-        is_auto_(kOutlineIsAutoOff) {
+        style_(static_cast<unsigned>(EBorderStyle::kNone)) {
     SetWidth(3);
   }
 
-  BorderValue(EBorderStyle style,
-              const StyleColor& color,
-              float width,
-              OutlineIsAuto is_auto) {
-    SetColor(color.Resolve(Color()));
+  BorderValue(EBorderStyle style, const StyleColor& color, float width) {
+    SetColor(color);
     SetStyle(style);
     SetWidth(width);
-    SetIsAuto(is_auto);
   }
 
   bool NonZero() const {
@@ -106,9 +112,6 @@ class BorderValue {
   EBorderStyle Style() const { return static_cast<EBorderStyle>(style_); }
   void SetStyle(EBorderStyle style) { style_ = static_cast<unsigned>(style); }
 
-  OutlineIsAuto IsAuto() const { return static_cast<OutlineIsAuto>(is_auto_); }
-  void SetIsAuto(OutlineIsAuto is_auto) { is_auto_ = is_auto; }
-
   bool ColorIsCurrentColor() const { return color_is_current_color_; }
   void SetColorIsCurrentColor(bool color_is_current_color) {
     color_is_current_color_ = static_cast<unsigned>(color_is_current_color);
@@ -126,9 +129,6 @@ class BorderValue {
 
   unsigned width_ : 26;  // Fixed point width
   unsigned style_ : 4;   // EBorderStyle
-
-  // This is only used by OutlineValue but moved here to keep the bits packed.
-  unsigned is_auto_ : 1;  // OutlineIsAuto
 };
 
 }  // namespace blink

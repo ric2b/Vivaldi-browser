@@ -16,6 +16,10 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using password_manager::PasswordFormManager;
 
 // static
@@ -30,13 +34,20 @@ void IOSChromeSavePasswordInfoBarDelegate::Create(
       infobar_manager->CreateConfirmInfoBar(std::move(delegate)));
 }
 
-IOSChromeSavePasswordInfoBarDelegate::~IOSChromeSavePasswordInfoBarDelegate() {}
+IOSChromeSavePasswordInfoBarDelegate::~IOSChromeSavePasswordInfoBarDelegate() {
+  form_to_save()->metrics_recorder()->RecordUIDismissalReason(
+      infobar_response());
+}
 
 IOSChromeSavePasswordInfoBarDelegate::IOSChromeSavePasswordInfoBarDelegate(
     bool is_smart_lock_branding_enabled,
-    std::unique_ptr<PasswordFormManager> form_to_save)
+    std::unique_ptr<PasswordFormManager> form_manager)
     : IOSChromePasswordManagerInfoBarDelegate(is_smart_lock_branding_enabled,
-                                              std::move(form_to_save)) {}
+                                              std::move(form_manager)) {
+  form_to_save()->metrics_recorder()->RecordPasswordBubbleShown(
+      form_to_save()->GetCredentialSource(),
+      password_manager::metrics_util::AUTOMATIC_WITH_PASSWORD_PENDING);
+}
 
 infobars::InfoBarDelegate::InfoBarIdentifier
 IOSChromeSavePasswordInfoBarDelegate::GetIdentifier() const {
@@ -71,4 +82,9 @@ bool IOSChromeSavePasswordInfoBarDelegate::Cancel() {
   form_to_save()->PermanentlyBlacklist();
   set_infobar_response(password_manager::metrics_util::CLICKED_NEVER);
   return true;
+}
+
+bool IOSChromeSavePasswordInfoBarDelegate::ShouldExpire(
+    const NavigationDetails& details) const {
+  return !details.is_redirect && ConfirmInfoBarDelegate::ShouldExpire(details);
 }

@@ -43,14 +43,6 @@ static_library("core") {
     "//ui/gfx",
     "//url",
   ]
-  if (!is_ios) {
-    deps += [ "//cc/paint" ]
-    sources += [
-      "fallback_icon_client.h",
-      "fallback_icon_service.cc",
-      "fallback_icon_service.h",
-    ]
-  }
 }
 
 source_set("unit_tests") {
@@ -72,6 +64,7 @@ source_set("unit_tests") {
     "//components/history/core/test:test",
     "//components/image_fetcher/core",
     "//components/variations:test_support",
+    "//net:test_support",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",

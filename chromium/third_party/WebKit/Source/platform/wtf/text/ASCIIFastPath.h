@@ -22,13 +22,14 @@
 #ifndef ASCIIFastPath_h
 #define ASCIIFastPath_h
 
+#include <stdint.h>
+#include "build/build_config.h"
 #include "platform/wtf/Alignment.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/Unicode.h"
-#include <stdint.h>
 
-#if OS(MACOSX) && (CPU(X86) || CPU(X86_64))
+#if defined(OS_MACOSX) && defined(ARCH_CPU_X86_FAMILY)
 #include <emmintrin.h>
 #endif
 
@@ -110,7 +111,7 @@ inline bool CharactersAreAllASCII(const CharacterType* characters,
 inline void CopyLCharsFromUCharSource(LChar* destination,
                                       const UChar* source,
                                       size_t length) {
-#if OS(MACOSX) && (CPU(X86) || CPU(X86_64))
+#if defined(OS_MACOSX) && defined(ARCH_CPU_X86_FAMILY)
   const uintptr_t kMemoryAccessSize =
       16;  // Memory accesses on 16 byte (128 bit) alignment
   const uintptr_t kMemoryAccessMask = kMemoryAccessSize - 1;
@@ -146,8 +147,8 @@ inline void CopyLCharsFromUCharSource(LChar* destination,
     DCHECK(!(source[i] & 0xff00));
     destination[i] = static_cast<LChar>(source[i]);
   }
-#elif COMPILER(GCC) && CPU(ARM_NEON) && \
-    !(CPU(BIG_ENDIAN) || CPU(MIDDLE_ENDIAN)) && defined(NDEBUG)
+#elif defined(COMPILER_GCC) && WTF_CPU_ARM_NEON && \
+    !defined(ARCH_CPU_BIG_ENDIAN) && defined(NDEBUG)
   const LChar* const end = destination + length;
   const uintptr_t kMemoryAccessSize = 8;
 

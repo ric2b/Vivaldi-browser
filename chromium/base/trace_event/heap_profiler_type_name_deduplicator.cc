@@ -84,6 +84,8 @@ int TypeNameDeduplicator::Insert(const char* type_name) {
 }
 
 void TypeNameDeduplicator::AppendAsTraceFormat(std::string* out) const {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("memory-infra"),
+               "TypeNameDeduplicator::AppendAsTraceFormat");
   out->append("{");  // Begin the type names dictionary.
 
   auto it = type_ids_.begin();

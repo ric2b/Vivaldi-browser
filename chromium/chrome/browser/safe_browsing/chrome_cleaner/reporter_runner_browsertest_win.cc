@@ -75,8 +75,6 @@ class ReporterRunnerTest : public InProcessBrowserTest,
     ASSERT_NE(mock_time_task_runner_, saved_task_runner_);
     base::MessageLoop::current()->SetTaskRunner(mock_time_task_runner_);
 
-    InProcessBrowserTest::SetUpOnMainThread();
-
     // SetDateInLocalState calculates a time as Now() minus an offset. Move the
     // simulated clock ahead far enough that this calculation won't underflow.
     mock_time_task_runner_->FastForwardBy(
@@ -96,9 +94,7 @@ class ReporterRunnerTest : public InProcessBrowserTest,
   }
 
   // Records that the prompt was shown.
-  void TriggerPrompt(Browser* browser, const std::string& version) override {
-    prompt_trigger_called_ = true;
-  }
+  void TriggerPrompt() override { prompt_trigger_called_ = true; }
 
   // Records that the reporter was launched with the parameters given in
   // |invocation|

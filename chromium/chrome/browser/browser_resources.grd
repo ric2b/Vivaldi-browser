@@ -13,16 +13,6 @@
         <structure name="IDR_APP_LIST_START_PAGE_HTML" file="resources\app_list\start_page.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_APP_LIST_START_PAGE_JS" file="resources\app_list\start_page.js" flattenhtml="true" type="chrome_html" />
       </if>
-      <if expr="is_win">
-        <structure name="IDR_CLEANUP_TOOL_BROWSER_PROXY_HTML" file="resources\cleanup_tool\cleanup_browser_proxy.html" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_BROWSER_PROXY_JS" file="resources\cleanup_tool\cleanup_browser_proxy.js" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_ICONS_HTML" file="resources\cleanup_tool\icons.html" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_MANAGER_HTML" file="resources\cleanup_tool\manager.html" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_MANAGER_JS" file="resources\cleanup_tool\manager.js" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_HTML" file="resources\cleanup_tool\cleanup.html" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_TOOLBAR_HTML" file="resources\cleanup_tool\toolbar.html" type="chrome_html" />
-        <structure name="IDR_CLEANUP_TOOL_TOOLBAR_JS" file="resources\cleanup_tool\toolbar.js" type="chrome_html" />
-      </if>
       <if expr="enable_extensions">
         <structure name="IDR_EXTENSIONS_HTML" file="resources\extensions\extensions.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_MD_EXTENSIONS_EXTENSIONS_HTML" file="resources\md_extensions\extensions.html" flattenhtml="true" allowexternalscript="true" type="chrome_html" />
@@ -30,8 +20,6 @@
       <if expr="chromeos">
         <structure name="IDR_FIRST_RUN_HTML" file="resources\chromeos\first_run\first_run.html" flattenhtml="true" type="chrome_html"/>
         <structure name="IDR_FIRST_RUN_JS" file="resources\chromeos\first_run\first_run.js" flattenhtml="true" type="chrome_html" />
-      </if>
-      <if expr="not is_android">
         <structure name="IDR_HELP_CSS" file="resources\help\help.css" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_HELP_HTML" file="resources\help\help.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_HELP_CONTENT_CSS" file="resources\help\help_content.css" flattenhtml="true" type="chrome_html" />
@@ -39,6 +27,8 @@
         <structure name="IDR_HELP_PAGE_HTML" file="resources\help\help_page.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_HELP_CHANNEL_CHANGE_PAGE_CSS" file="resources\help\channel_change_page.css" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_HELP_CHANNEL_CHANGE_PAGE_HTML" file="resources\help\channel_change_page.html" flattenhtml="true" type="chrome_html" />
+      </if>
+      <if expr="not is_android">
         <structure name="IDR_INCOGNITO_TAB_HTML" file="resources\ntp4\incognito_tab.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_MD_INCOGNITO_TAB_HTML" file="resources\ntp4\md_incognito_tab.html" flattenhtml="true" type="chrome_html" />
         <structure name="IDR_GUEST_TAB_HTML" file="resources\ntp4\guest_tab.html" flattenhtml="true" type="chrome_html" />
@@ -245,7 +235,6 @@
         <include name="IDR_SNIPPETS_INTERNALS_HTML" file="resources\snippets_internals.html" allowexternalscript="true" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_CSS" file="resources\snippets_internals.css" compress="gzip" type="BINDATA" />
         <include name="IDR_SNIPPETS_INTERNALS_JS" file="resources\snippets_internals.js" compress="gzip" type="BINDATA" />
-        <part file="vr_shell_resources.grdp" />
       </if>
       <include name="IDR_SUPERVISED_USER_INTERNALS_HTML" file="resources\supervised_user_internals.html" allowexternalscript="true" compress="gzip" type="BINDATA" />
       <include name="IDR_SUPERVISED_USER_INTERNALS_CSS" file="resources\supervised_user_internals.css" compress="gzip" type="BINDATA" />
@@ -258,7 +247,7 @@
         <include name="IDR_HOTWORD_MANIFEST" file="resources\hotword\manifest.json" type="BINDATA" />
         <include name="IDR_HOTWORD_AUDIO_VERIFICATION_MANIFEST" file="resources\hotword_audio_verification\manifest.json" type="BINDATA" />
       </if>
-      <if expr="not is_android">
+      <if expr="chromeos">
         <include name="IDR_HELP_JS" file="resources\help\help.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_HELP_PAGE_JS" file="resources\help\help_page.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_CHANNEL_CHANGE_PAGE_JS" file="resources\help\channel_change_page.js" flattenhtml="true" type="BINDATA" />
@@ -266,42 +255,61 @@
 
       <if expr="not is_android and not is_ios">
         <!-- MD Bookmarks. -->
-        <include name="IDR_MD_BOOKMARKS_ACTIONS_HTML" file="resources\md_bookmarks\actions.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ACTIONS_JS" file="resources\md_bookmarks\actions.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_API_LISTENER_HTML" file="resources\md_bookmarks\api_listener.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_API_LISTENER_JS" file="resources\md_bookmarks\api_listener.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_APP_HTML" file="resources\md_bookmarks\app.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_APP_JS" file="resources\md_bookmarks\app.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_BOOKMARKS_HTML" file="resources\md_bookmarks\bookmarks.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_HTML" file="resources\md_bookmarks\command_manager.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_JS" file="resources\md_bookmarks\command_manager.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_CONSTANTS_HTML" file="resources\md_bookmarks\constants.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_CONSTANTS_JS" file="resources\md_bookmarks\constants.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_DND_MANAGER_HTML" file="resources\md_bookmarks\dnd_manager.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_DND_MANAGER_JS" file="resources\md_bookmarks\dnd_manager.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_EDIT_DIALOG_HTML" file="resources\md_bookmarks\edit_dialog.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_EDIT_DIALOG_JS" file="resources\md_bookmarks\edit_dialog.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_FOLDER_NODE_HTML" file="resources\md_bookmarks\folder_node.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_FOLDER_NODE_JS" file="resources\md_bookmarks\folder_node.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ICONS_HTML" file="resources\md_bookmarks\icons.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ITEM_HTML" file="resources\md_bookmarks\item.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ITEM_JS" file="resources\md_bookmarks\item.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_LIST_HTML" file="resources\md_bookmarks\list.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_LIST_JS" file="resources\md_bookmarks\list.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_REDUCERS_HTML" file="resources\md_bookmarks\reducers.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_REDUCERS_JS" file="resources\md_bookmarks\reducers.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ROUTER_HTML" file="resources\md_bookmarks\router.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_ROUTER_JS" file="resources\md_bookmarks\router.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_SHARED_STYLE_HTML" file="resources\md_bookmarks\shared_style.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_SHARED_VARS_HTML" file="resources\md_bookmarks\shared_vars.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_HTML" file="resources\md_bookmarks\store_client.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_JS" file="resources\md_bookmarks\store_client.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_STORE_HTML" file="resources\md_bookmarks\store.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_STORE_JS" file="resources\md_bookmarks\store.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_TOOLBAR_HTML" file="resources\md_bookmarks\toolbar.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_TOOLBAR_JS" file="resources\md_bookmarks\toolbar.js" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_UTIL_HTML" file="resources\md_bookmarks\util.html" type="BINDATA" />
-        <include name="IDR_MD_BOOKMARKS_UTIL_JS" file="resources\md_bookmarks\util.js" type="BINDATA" />
+        <include name="IDR_MD_BOOKMARKS_IMAGES_FOLDER_OPEN_SVG" file="resources\md_bookmarks\images\folder_open.svg" type="BINDATA" />
+        <include name="IDR_MD_BOOKMARKS_IMAGES_FOLDER_SVG" file="resources\md_bookmarks\images\folder.svg" type="BINDATA" />
+        <if expr="use_vulcanize">
+          <then>
+            <include name="IDR_MD_BOOKMARKS_VULCANIZED_HTML" file="${root_gen_dir}\chrome\browser\resources\md_bookmarks\vulcanized.html" use_base_dir="false" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
+            <include name="IDR_MD_BOOKMARKS_CRISPER_JS" file="${root_gen_dir}\chrome\browser\resources\md_bookmarks\crisper.js" use_base_dir="false" flattenhtml="true" type="BINDATA" compress="gzip" />
+          </then>
+          <else>
+            <include name="IDR_MD_BOOKMARKS_ACTIONS_HTML" file="resources\md_bookmarks\actions.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_ACTIONS_JS" file="resources\md_bookmarks\actions.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_API_LISTENER_HTML" file="resources\md_bookmarks\api_listener.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_API_LISTENER_JS" file="resources\md_bookmarks\api_listener.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_APP_HTML" file="resources\md_bookmarks\app.html" type="BINDATA" flattenhtml="true" />
+            <include name="IDR_MD_BOOKMARKS_APP_JS" file="resources\md_bookmarks\app.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_BOOKMARKS_HTML" file="resources\md_bookmarks\bookmarks.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_HTML" file="resources\md_bookmarks\command_manager.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_COMMAND_MANAGER_JS" file="resources\md_bookmarks\command_manager.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_CONSTANTS_HTML" file="resources\md_bookmarks\constants.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_CONSTANTS_JS" file="resources\md_bookmarks\constants.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DIALOG_FOCUS_MANAGER_HTML" file="resources\md_bookmarks\dialog_focus_manager.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DIALOG_FOCUS_MANAGER_JS" file="resources\md_bookmarks\dialog_focus_manager.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DND_CHIP_HTML" file="resources\md_bookmarks\dnd_chip.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DND_CHIP_JS" file="resources\md_bookmarks\dnd_chip.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DND_MANAGER_HTML" file="resources\md_bookmarks\dnd_manager.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_DND_MANAGER_JS" file="resources\md_bookmarks\dnd_manager.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_EDIT_DIALOG_HTML" file="resources\md_bookmarks\edit_dialog.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_EDIT_DIALOG_JS" file="resources\md_bookmarks\edit_dialog.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_FOLDER_NODE_HTML" file="resources\md_bookmarks\folder_node.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_FOLDER_NODE_JS" file="resources\md_bookmarks\folder_node.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_ITEM_HTML" file="resources\md_bookmarks\item.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_ITEM_JS" file="resources\md_bookmarks\item.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_LIST_HTML" file="resources\md_bookmarks\list.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_LIST_JS" file="resources\md_bookmarks\list.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_MOUSE_FOCUS_BEHAVIOR_HTML" file="resources\md_bookmarks\mouse_focus_behavior.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_MOUSE_FOCUS_BEHAVIOR_JS" file="resources\md_bookmarks\mouse_focus_behavior.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_REDUCERS_HTML" file="resources\md_bookmarks\reducers.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_REDUCERS_JS" file="resources\md_bookmarks\reducers.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_ROUTER_HTML" file="resources\md_bookmarks\router.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_ROUTER_JS" file="resources\md_bookmarks\router.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_SHARED_STYLE_HTML" file="resources\md_bookmarks\shared_style.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_SHARED_VARS_HTML" file="resources\md_bookmarks\shared_vars.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_HTML" file="resources\md_bookmarks\store_client.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_STORE_CLIENT_JS" file="resources\md_bookmarks\store_client.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_STORE_HTML" file="resources\md_bookmarks\store.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_STORE_JS" file="resources\md_bookmarks\store.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TIMER_PROXY_HTML" file="resources\md_bookmarks\timer_proxy.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TIMER_PROXY_JS" file="resources\md_bookmarks\timer_proxy.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TOAST_MANAGER_HTML" file="resources\md_bookmarks\toast_manager.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TOAST_MANAGER_JS" file="resources\md_bookmarks\toast_manager.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TOOLBAR_HTML" file="resources\md_bookmarks\toolbar.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_TOOLBAR_JS" file="resources\md_bookmarks\toolbar.js" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_UTIL_HTML" file="resources\md_bookmarks\util.html" type="BINDATA" />
+            <include name="IDR_MD_BOOKMARKS_UTIL_JS" file="resources\md_bookmarks\util.js" type="BINDATA" />
+          </else>
+        </if>
 
         <!-- MD History. -->
         <include name="IDR_MD_HISTORY_CONSTANTS_HTML" file="resources\md_history\constants.html" type="BINDATA" />
@@ -398,6 +406,10 @@
       <include name="IDR_ORIGIN_MOJO_JS" file="${root_gen_dir}\url\mojo\origin.mojom.js" use_base_dir="false" type="BINDATA" compress="gzip"/>
       <include name="IDR_COMPONENTS_HTML" file="resources\components.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_COMPONENTS_JS" file="resources\components.js" type="BINDATA" />
+      <if expr="enable_oop_heap_profiling">
+        <include name="IDR_MEMORY_INTERNALS_HTML" file="resources/memory_internals.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_MEMORY_INTERNALS_JS" file="resources/memory_internals.js" type="BINDATA" />
+      </if>
       <if expr="enable_plugins">
         <include name="IDR_PDF_MANIFEST" file="resources\pdf\manifest.json" type="BINDATA" />
       </if>
@@ -459,11 +471,15 @@
       <include name="IDR_SIGNIN_EMAIL_CONFIRMATION_JS" file="resources\signin\signin_email_confirmation\signin_email_confirmation.js" type="BINDATA" />
       <include name="IDR_SIGNIN_ERROR_HTML" file="resources\signin\signin_error\signin_error.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
       <include name="IDR_SIGNIN_ERROR_JS" file="resources\signin\signin_error\signin_error.js" type="BINDATA" />
-      <include name="IDR_UBER_HTML" file="resources\uber\uber.html" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_UBER_JS" file="resources\uber\uber.js" type="BINDATA" />
-      <include name="IDR_UBER_FRAME_HTML" file="resources\uber\uber_frame.html" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_UBER_FRAME_JS" file="resources\uber\uber_frame.js" flattenhtml="true" type="BINDATA" />
-      <include name="IDR_UBER_UTILS_JS" file="resources\uber\uber_utils.js" type="BINDATA" />
+      <include name="IDR_SIGNIN_DICE_INTERNALS_HTML" file="resources\signin\signin_dice_internals\signin_dice_internals.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
+      <include name="IDR_SIGNIN_DICE_INTERNALS_JS" file="resources\signin\signin_dice_internals\signin_dice_internals.js" type="BINDATA" />
+      <if expr="chromeos">
+        <include name="IDR_UBER_HTML" file="resources\uber\uber.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_UBER_JS" file="resources\uber\uber.js" type="BINDATA" />
+        <include name="IDR_UBER_FRAME_HTML" file="resources\uber\uber_frame.html" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_UBER_FRAME_JS" file="resources\uber\uber_frame.js" flattenhtml="true" type="BINDATA" />
+        <include name="IDR_UBER_UTILS_JS" file="resources\uber\uber_utils.js" type="BINDATA" />
+      </if>
       <include name="IDR_USB_INTERNALS_CSS" file="resources\usb_internals\usb_internals.css" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_INTERNALS_HTML" file="resources\usb_internals\usb_internals.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
       <include name="IDR_USB_INTERNALS_JS" file="resources\usb_internals\usb_internals.js" type="BINDATA" compress="gzip" />
@@ -538,8 +554,6 @@
         <include name="IDR_MD_SUPERVISED_USER_CREATE_CONFIRM_JS" file="resources\md_user_manager\supervised_user_create_confirm.js" type="BINDATA" />
         <include name="IDR_MD_SUPERVISED_USER_LEARN_MORE_HTML" file="resources\md_user_manager\supervised_user_learn_more.html" type="BINDATA" />
         <include name="IDR_MD_SUPERVISED_USER_LEARN_MORE_JS" file="resources\md_user_manager\supervised_user_learn_more.js" type="BINDATA" />
-        <include name="IDR_MD_USER_MANAGER_DIALOG_HTML" file="resources\md_user_manager\user_manager_dialog.html" allowexternalscript="true" type="BINDATA" />
-        <include name="IDR_MD_USER_MANAGER_DIALOG_JS" file="resources\md_user_manager\user_manager_dialog.js" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_HTML" file="resources\md_user_manager\user_manager.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_JS" file="resources\md_user_manager\user_manager.js" flattenhtml="true" type="BINDATA" />
         <include name="IDR_MD_USER_MANAGER_ICONS_HTML" file="resources\md_user_manager\icons.html" type="BINDATA" />
@@ -616,7 +630,6 @@
         <if expr="_google_chrome">
           <then>
             <include name="IDR_GOOGLE_XKB_MANIFEST" file="resources\chromeos\input_method\google_xkb_manifest.json" type="BINDATA" />
-            <include name="IDR_GOOGLE_INPUT_TOOLS_MANIFEST" file="resources\chromeos\input_method\google_input_tools_manifest.json" type="BINDATA" />
           </then>
           <else>
             <include name="IDR_XKB_MANIFEST" file="resources\chromeos\input_method\xkb_manifest.json" type="BINDATA" />
@@ -665,6 +678,9 @@
         <include name="IDR_SANDBOX_INTERNALS_HTML" file="resources\sandbox_internals\sandbox_internals.html" flattenhtml="true" allowexternalscript="true" type="BINDATA" compress="gzip" />
         <include name="IDR_SANDBOX_INTERNALS_JS" file="resources\sandbox_internals\sandbox_internals.js" type="BINDATA" compress="gzip" />
       </if>
+      <include name="IDR_MEDIA_ENGAGEMENT_HTML" file="resources\media\media_engagement.html" flattenhtml="true" type="BINDATA" compress="gzip" allowexternalscript="true" />
+      <include name="IDR_MEDIA_ENGAGEMENT_JS" file="resources\media\media_engagement.js" flattenhtml="true" type="BINDATA" compress="gzip" />
+      <include name="IDR_MEDIA_ENGAGEMENT_MOJO_JS" file="${root_gen_dir}\chrome\browser\media\media_engagement_score_details.mojom.js" use_base_dir="false" type="BINDATA" compress="gzip" />
     </includes>
   </release>
 </grit>

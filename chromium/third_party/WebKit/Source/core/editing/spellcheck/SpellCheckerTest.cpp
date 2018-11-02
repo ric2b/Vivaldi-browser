@@ -5,9 +5,12 @@
 #include "core/editing/spellcheck/SpellChecker.h"
 
 #include "core/editing/Editor.h"
+#include "core/editing/markers/DocumentMarkerController.h"
+#include "core/editing/markers/SpellCheckMarker.h"
+#include "core/editing/spellcheck/SpellCheckRequester.h"
 #include "core/editing/spellcheck/SpellCheckTestBase.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
 
@@ -22,7 +25,7 @@ class SpellCheckerTest : public SpellCheckTestBase {
 };
 
 void SpellCheckerTest::ForceLayout() {
-  FrameView& frame_view = Page().GetFrameView();
+  LocalFrameView& frame_view = Page().GetFrameView();
   IntRect frame_rect = frame_view.FrameRect();
   frame_rect.SetWidth(frame_rect.Width() + 1);
   frame_rect.SetHeight(frame_rect.Height() + 1);
@@ -36,7 +39,7 @@ TEST_F(SpellCheckerTest, AdvanceToNextMisspellingWithEmptyInputNoCrash) {
   Element* input = GetDocument().QuerySelector("input");
   input->focus();
   // Do not crash in advanceToNextMisspelling.
-  GetDocument().GetFrame()->GetSpellChecker().AdvanceToNextMisspelling(false);
+  GetSpellChecker().AdvanceToNextMisspelling(false);
 }
 
 // Regression test for crbug.com/701309
@@ -52,7 +55,21 @@ TEST_F(SpellCheckerTest, AdvanceToNextMisspellingWithImageInTableNoCrash) {
   UpdateAllLifecyclePhases();
 
   // Do not crash in advanceToNextMisspelling.
-  GetDocument().GetFrame()->GetSpellChecker().AdvanceToNextMisspelling(false);
+  GetSpellChecker().AdvanceToNextMisspelling(false);
+}
+
+// Regression test for crbug.com/728801
+TEST_F(SpellCheckerTest, AdvancedToNextMisspellingWrapSearchNoCrash) {
+  SetBodyContent("<div contenteditable>  zz zz zz  </div>");
+
+  Element* div = GetDocument().QuerySelector("div");
+  div->focus();
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .Collapse(Position::LastPositionInNode(*div))
+                               .Build());
+  UpdateAllLifecyclePhases();
+
+  GetSpellChecker().AdvanceToNextMisspelling(false);
 }
 
 TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
@@ -73,13 +90,289 @@ TEST_F(SpellCheckerTest, SpellCheckDoesNotCauseUpdateLayout) {
       SelectionInDOMTree::Builder().Collapse(new_position).Build());
   ASSERT_EQ(3u, input->selectionStart());
 
-  EXPECT_TRUE(GetFrame().GetSpellChecker().IsSpellCheckingEnabled());
+  EXPECT_TRUE(GetSpellChecker().IsSpellCheckingEnabled());
   ForceLayout();
   int start_count = LayoutCount();
-  GetFrame().GetSpellChecker().RespondToChangedSelection(
-      old_selection.Start(),
-      FrameSelection::kCloseTyping | FrameSelection::kClearTypingStyle);
+  GetSpellChecker().RespondToChangedSelection(old_selection.Start(),
+                                              TypingContinuation::kEnd);
   EXPECT_EQ(start_count, LayoutCount());
+}
+
+TEST_F(SpellCheckerTest, MarkAndReplaceForHandlesMultipleReplacements) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+  EphemeralRange range_to_check =
+      EphemeralRange(Position(text, 0), Position(text, 8));
+
+  SpellCheckRequest* request = SpellCheckRequest::Create(range_to_check, 0);
+
+  TextCheckingResult result;
+  result.decoration = TextDecorationType::kTextDecorationTypeSpelling;
+  result.location = 0;
+  result.length = 8;
+  result.replacements = Vector<String>({"spellcheck", "spillchuck"});
+
+  GetDocument().GetFrame()->GetSpellChecker().MarkAndReplaceFor(
+      request, Vector<TextCheckingResult>({result}));
+
+  ASSERT_EQ(1u, GetDocument().Markers().Markers().size());
+
+  // The Spelling marker's description should be a newline-separated list of the
+  // suggested replacements
+  EXPECT_EQ(
+      "spellcheck\nspillchuck",
+      ToSpellCheckMarker(GetDocument().Markers().Markers()[0])->Description());
+}
+
+TEST_F(SpellCheckerTest, GetSpellCheckMarkerUnderSelection_FirstCharSelected) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 0), Position(text, 1))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_TRUE(result);
+}
+
+TEST_F(SpellCheckerTest, GetSpellCheckMarkerUnderSelection_LastCharSelected) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 7), Position(text, 8))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_TRUE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_SingleCharWordSelected) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "s"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 1)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 0), Position(text, 1))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_TRUE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretLeftOfSingleCharWord) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "s"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 1)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 0), Position(text, 0))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretRightOfSingleCharWord) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "s"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 1)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 1), Position(text, 1))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretLeftOfMultiCharWord) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 0), Position(text, 0))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretRightOfMultiCharWord) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 8), Position(text, 8))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
+}
+
+TEST_F(SpellCheckerTest, GetSpellCheckMarkerUnderSelection_CaretMiddleOfWord) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 4), Position(text, 4))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_TRUE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretOneCharLeftOfMisspelling) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "a spllchck"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 2), Position(text, 10)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 1), Position(text, 1))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
+}
+
+TEST_F(SpellCheckerTest,
+       GetSpellCheckMarkerUnderSelection_CaretOneCharRightOfMisspelling) {
+  SetBodyContent(
+      "<div contenteditable>"
+      "spllchck a"
+      "</div>");
+  Element* div = GetDocument().QuerySelector("div");
+  Node* text = div->firstChild();
+
+  GetDocument().Markers().AddSpellingMarker(
+      EphemeralRange(Position(text, 0), Position(text, 8)));
+
+  GetDocument().GetFrame()->Selection().SetSelection(
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text, 9), Position(text, 9))
+          .Build());
+
+  Optional<std::pair<Node*, SpellCheckMarker*>> result =
+      GetDocument()
+          .GetFrame()
+          ->GetSpellChecker()
+          .GetSpellCheckMarkerUnderSelection();
+  EXPECT_FALSE(result);
 }
 
 }  // namespace blink

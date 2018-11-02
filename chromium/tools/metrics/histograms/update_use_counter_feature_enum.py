@@ -32,9 +32,9 @@ if __name__ == '__main__':
                     'https://github.com/GoogleChrome/chromium-dashboard')
   options, args = parser.parse_args()
 
-  source_path = 'third_party/WebKit/Source/core/frame/UseCounter.h'
+  source_path = 'third_party/WebKit/public/platform/web_feature.mojom'
 
-  START_MARKER = '^enum Feature : uint32_t {'
+  START_MARKER = '^enum WebFeature {'
   END_MARKER = '^kNumberOfFeatures'
 
   if options.dashboard:

@@ -10,8 +10,9 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_mock_time_message_loop_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/browser/android/offline_pages/offliner_helper.h"
+#include "chrome/browser/loader/chrome_navigation_data.h"
 #include "chrome/browser/net/prediction_options.h"
+#include "chrome/browser/offline_pages/offliner_helper.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/common/pref_names.h"
@@ -29,6 +30,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
 #include "net/base/net_errors.h"
+#include "net/http/http_response_headers.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace offline_pages {
@@ -40,6 +42,7 @@ const GURL kHttpUrl("http://www.tunafish.com");
 const GURL kFileUrl("file://salmon.png");
 const ClientId kClientId("async_loading", "88");
 const bool kUserRequested = true;
+const char kRequestOrigin[] = "abc.xyz";
 
 class TestLoadTerminationListener : public LoadTerminationListener {
  public:
@@ -65,6 +68,7 @@ class MockOfflinePageModel : public StubOfflinePageModel {
                 const SavePageCallback& callback) override {
     mock_saving_ = true;
     save_page_callback_ = callback;
+    save_page_params_ = save_page_params;
   }
 
   void CompleteSavingAsArchiveCreationFailed() {
@@ -99,11 +103,13 @@ class MockOfflinePageModel : public StubOfflinePageModel {
 
   bool mock_saving() const { return mock_saving_; }
   bool mock_deleting() const { return mock_deleting_; }
+  SavePageParams& save_page_params() { return save_page_params_; }
 
  private:
   bool mock_saving_;
   bool mock_deleting_;
   SavePageCallback save_page_callback_;
+  SavePageParams save_page_params_;
 
   DISALLOW_COPY_AND_ASSIGN(MockOfflinePageModel);
 };
@@ -205,6 +211,10 @@ class BackgroundLoaderOfflinerTest : public testing::Test {
     PumpLoop();
   }
 
+  offline_pages::RequestStats* GetRequestStats() {
+    return offliner_->GetRequestStatsForTest();
+  }
+
  private:
   void OnCompletion(const SavePageRequest& request,
                     Offliner::RequestStatus status);
@@ -263,15 +273,6 @@ void BackgroundLoaderOfflinerTest::OnCancel(const SavePageRequest& request) {
   DCHECK(!cancel_callback_called_);
   cancel_callback_called_ = true;
 }
-
-// Two tests crash roughly 20% of runs on Android.  http://crbug.com/722556.
-#if defined(OS_ANDROID)
-#define MAYBE_FailsOnErrorPage DISABLED_FailsOnErrorPage
-#define MAYBE_NoNextOnInternetDisconnected DISABLED_NoNextOnInternetDisconnected
-#else
-#define MAYBE_FailsOnErrorPage FailsOnErrorPage
-#define MAYBE_NoNextOnInternetDisconnected NoNextOnInternetDisconnected
-#endif
 
 TEST_F(BackgroundLoaderOfflinerTest, LoadTerminationListenerSetup) {
   // Verify that back pointer to offliner is set up in the listener.
@@ -351,10 +352,13 @@ TEST_F(BackgroundLoaderOfflinerTest, CompleteLoadingInitiatesSave) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
                           kUserRequested);
+  request.set_request_origin(kRequestOrigin);
   EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
                                       progress_callback()));
   CompleteLoading();
   PumpLoop();
+  // Verify that request origin is propagated.
+  EXPECT_EQ(kRequestOrigin, model()->save_page_params().request_origin);
   EXPECT_FALSE(completion_callback_called());
   EXPECT_TRUE(SaveInProgress());
   EXPECT_EQ(Offliner::RequestStatus::UNKNOWN, request_status());
@@ -521,7 +525,7 @@ TEST_F(BackgroundLoaderOfflinerTest, ReturnsOnWebContentsDestroyed) {
   EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED, request_status());
 }
 
-TEST_F(BackgroundLoaderOfflinerTest, MAYBE_FailsOnErrorPage) {
+TEST_F(BackgroundLoaderOfflinerTest, FailsOnErrorPage) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
                           kUserRequested);
@@ -536,8 +540,8 @@ TEST_F(BackgroundLoaderOfflinerTest, MAYBE_FailsOnErrorPage) {
   // NavigationHandle destruction will trigger DidFinishNavigation code.
   handle.reset();
   histograms().ExpectBucketCount(
-      "OfflinePages.Background.BackgroundLoadingFailedCode.async_loading",
-      105,  // ERR_NAME_NOT_RESOLVED
+      "OfflinePages.Background.LoadingErrorStatusCode.async_loading",
+      -105,  // ERR_NAME_NOT_RESOLVED
       1);
   CompleteLoading();
   PumpLoop();
@@ -546,7 +550,7 @@ TEST_F(BackgroundLoaderOfflinerTest, MAYBE_FailsOnErrorPage) {
   EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED, request_status());
 }
 
-TEST_F(BackgroundLoaderOfflinerTest, MAYBE_NoNextOnInternetDisconnected) {
+TEST_F(BackgroundLoaderOfflinerTest, FailsOnInternetDisconnected) {
   base::Time creation_time = base::Time::Now();
   SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
                           kUserRequested);
@@ -567,7 +571,91 @@ TEST_F(BackgroundLoaderOfflinerTest, MAYBE_NoNextOnInternetDisconnected) {
   PumpLoop();
 
   EXPECT_TRUE(completion_callback_called());
-  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED_NO_NEXT, request_status());
+  EXPECT_EQ(Offliner::RequestStatus::LOADING_FAILED, request_status());
+}
+
+TEST_F(BackgroundLoaderOfflinerTest, DoesNotCrashWithNullResponseHeaders) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+
+  // Called after calling LoadAndSave so we have web_contents to work with.
+  std::unique_ptr<content::NavigationHandle> handle(
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          kHttpUrl, offliner()->web_contents()->GetMainFrame(), true,
+          net::Error::OK));
+  // Call DidFinishNavigation with handle.
+  offliner()->DidFinishNavigation(handle.get());
+}
+
+TEST_F(BackgroundLoaderOfflinerTest, OffliningPreviewsStatusOffHistogram) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+
+  // Called after calling LoadAndSave so we have web_contents to work with.
+  std::unique_ptr<content::NavigationHandle> handle(
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          kHttpUrl, offliner()->web_contents()->GetMainFrame(), true,
+          net::Error::OK));
+  // Set up ChromeNavigationData on the handle.
+  std::unique_ptr<ChromeNavigationData> chrome_navigation_data(
+      new ChromeNavigationData());
+  chrome_navigation_data->set_previews_state(
+      content::PreviewsTypes::PREVIEWS_NO_TRANSFORM);
+  std::unique_ptr<content::NavigationData> navigation_data(
+      chrome_navigation_data.release());
+  offliner()->web_contents_tester()->SetNavigationData(
+      handle.get(), std::move(navigation_data));
+  scoped_refptr<net::HttpResponseHeaders> header(
+      new net::HttpResponseHeaders("HTTP/1.1 200 OK"));
+  offliner()->web_contents_tester()->SetHttpResponseHeaders(handle.get(),
+                                                            header);
+  // Call DidFinishNavigation with handle.
+  offliner()->DidFinishNavigation(handle.get());
+
+  histograms().ExpectBucketCount(
+      "OfflinePages.Background.OffliningPreviewStatus.async_loading",
+      0,  // Previews Disabled
+      1);
+}
+
+TEST_F(BackgroundLoaderOfflinerTest, OffliningPreviewsStatusOnHistogram) {
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+
+  // Called after calling LoadAndSave so we have web_contents to work with.
+  std::unique_ptr<content::NavigationHandle> handle(
+      content::NavigationHandle::CreateNavigationHandleForTesting(
+          kHttpUrl, offliner()->web_contents()->GetMainFrame(), true,
+          net::Error::OK));
+  // Set up ChromeNavigationData on the handle.
+  std::unique_ptr<ChromeNavigationData> chrome_navigation_data(
+      new ChromeNavigationData());
+  chrome_navigation_data->set_previews_state(
+      content::PreviewsTypes::CLIENT_LOFI_ON);
+  std::unique_ptr<content::NavigationData> navigation_data(
+      chrome_navigation_data.release());
+  offliner()->web_contents_tester()->SetNavigationData(
+      handle.get(), std::move(navigation_data));
+  scoped_refptr<net::HttpResponseHeaders> header(
+      new net::HttpResponseHeaders("HTTP/1.1 200 OK"));
+  offliner()->web_contents_tester()->SetHttpResponseHeaders(handle.get(),
+                                                            header);
+  // Call DidFinishNavigation with handle.
+  offliner()->DidFinishNavigation(handle.get());
+
+  histograms().ExpectBucketCount(
+      "OfflinePages.Background.OffliningPreviewStatus.async_loading",
+      1,  // Previews Enabled
+      1);
 }
 
 TEST_F(BackgroundLoaderOfflinerTest, OnlySavesOnceOnMultipleLoads) {
@@ -701,6 +789,49 @@ TEST_F(BackgroundLoaderOfflinerTest, SignalCollectionEnabled) {
   content::MHTMLExtraParts* extra_parts =
       content::MHTMLExtraParts::FromWebContents(offliner()->web_contents());
   EXPECT_EQ(extra_parts->size(), 1);
+}
+
+TEST_F(BackgroundLoaderOfflinerTest, ResourceSignalCollection) {
+  // Ensure feature flag for signal collection is on.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      kOfflinePagesLoadSignalCollectingFeature);
+  EXPECT_TRUE(IsOfflinePagesLoadSignalCollectingEnabled());
+
+  base::Time creation_time = base::Time::Now();
+  SavePageRequest request(kRequestId, kHttpUrl, kClientId, creation_time,
+                          kUserRequested);
+  EXPECT_TRUE(offliner()->LoadAndSave(request, completion_callback(),
+                                      progress_callback()));
+
+  // Simulate resource requests starting and completing
+  offliner()->ObserveResourceLoading(
+      ResourceLoadingObserver::ResourceDataType::IMAGE, true);
+  offliner()->ObserveResourceLoading(
+      ResourceLoadingObserver::ResourceDataType::IMAGE, false);
+  offliner()->ObserveResourceLoading(
+      ResourceLoadingObserver::ResourceDataType::TEXT_CSS, true);
+  offliner()->ObserveResourceLoading(
+      ResourceLoadingObserver::ResourceDataType::TEXT_CSS, true);
+  offliner()->ObserveResourceLoading(
+      ResourceLoadingObserver::ResourceDataType::XHR, true);
+
+  CompleteLoading();
+  PumpLoop();
+
+  // One extra part should be added if the flag is on.
+  content::MHTMLExtraParts* extra_parts =
+      content::MHTMLExtraParts::FromWebContents(offliner()->web_contents());
+  EXPECT_EQ(extra_parts->size(), 1);
+
+  offline_pages::RequestStats* stats = GetRequestStats();
+  EXPECT_EQ(1,
+            stats[ResourceLoadingObserver::ResourceDataType::IMAGE].requested);
+  EXPECT_EQ(1,
+            stats[ResourceLoadingObserver::ResourceDataType::IMAGE].completed);
+  EXPECT_EQ(
+      2, stats[ResourceLoadingObserver::ResourceDataType::TEXT_CSS].requested);
+  EXPECT_EQ(1, stats[ResourceLoadingObserver::ResourceDataType::XHR].requested);
 }
 
 }  // namespace offline_pages

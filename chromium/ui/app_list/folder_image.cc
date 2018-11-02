@@ -7,7 +7,9 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_item_list.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -19,7 +21,6 @@
 #include "ui/gfx/image/canvas_image_source.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
-#include "ui/strings/grit/ui_strings.h"
 
 namespace app_list {
 
@@ -85,9 +86,8 @@ void FolderImageSource::Draw(gfx::Canvas* canvas) {
   bubble_center.Offset(0, -kFolderBubbleOffsetY);
   flags.setStyle(cc::PaintFlags::kFill_Style);
   flags.setAntiAlias(true);
-  flags.setColor(kFolderBubbleColor);
-  canvas->sk_canvas()->drawCircle(bubble_center.x(), bubble_center.y(),
-                                  kFolderBubbleRadius, flags);
+  flags.setColor(FolderImage::GetFolderBubbleSkColor());
+  canvas->DrawCircle(bubble_center, kFolderBubbleRadius, flags);
 
   if (icons_.size() == 0)
     return;
@@ -166,6 +166,12 @@ std::vector<gfx::Rect> FolderImage::GetTopIconsBounds(
   return top_icon_bounds;
 }
 
+// static
+SkColor FolderImage::GetFolderBubbleSkColor() {
+  return features::IsFullscreenAppListEnabled() ? kFolderBubbleColorFullScreen
+                                                : kFolderBubbleColor;
+}
+
 gfx::Rect FolderImage::GetTargetIconRectInFolderForItem(
     AppListItem* item,
     const gfx::Rect& folder_icon_bounds) const {
@@ -220,8 +226,8 @@ void FolderImage::RedrawIconAndNotify() {
     top_icons.push_back(item->icon());
 
   const gfx::Size icon_size = gfx::Size(kGridIconDimension, kGridIconDimension);
-  icon_ =
-      gfx::ImageSkia(new FolderImageSource(top_icons, icon_size), icon_size);
+  icon_ = gfx::ImageSkia(
+      base::MakeUnique<FolderImageSource>(top_icons, icon_size), icon_size);
 
   for (auto& observer : observers_)
     observer.OnFolderImageUpdated();

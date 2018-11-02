@@ -64,8 +64,11 @@ class CORE_EXPORT InspectorWorkerAgent final
   // Called from Dispatcher
   protocol::Response setAutoAttach(bool auto_attach,
                                    bool wait_for_debugger_on_start) override;
-  protocol::Response sendMessageToTarget(const String& target_id,
-                                         const String& message) override;
+  protocol::Response setAttachToFrames(bool attach) override;
+  protocol::Response sendMessageToTarget(
+      const String& message,
+      protocol::Maybe<String> session_id,
+      protocol::Maybe<String> target_id) override;
 
   void SetTracingSessionId(const String&);
 
@@ -74,15 +77,19 @@ class CORE_EXPORT InspectorWorkerAgent final
   void ConnectToAllProxies();
   void DisconnectFromAllProxies(bool report_to_frontend);
   void ConnectToProxy(WorkerInspectorProxy*, bool waiting_for_debugger);
-  protocol::DictionaryValue* AttachedWorkerIds();
+  protocol::DictionaryValue* AttachedSessionIds();
 
   // WorkerInspectorProxy::PageInspector implementation.
   void DispatchMessageFromWorker(WorkerInspectorProxy*,
+                                 int connection,
                                  const String& message) override;
 
   Member<InspectedFrames> inspected_frames_;
-  HeapHashMap<String, Member<WorkerInspectorProxy>> connected_proxies_;
+  HeapHashMap<int, Member<WorkerInspectorProxy>> connected_proxies_;
+  HashMap<int, String> connection_to_session_id_;
+  HashMap<String, int> session_id_to_connection_;
   String tracing_session_id_;
+  static int s_last_connection_;
 };
 
 }  // namespace blink

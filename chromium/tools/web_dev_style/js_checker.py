@@ -52,12 +52,6 @@ class JSChecker(object):
     return self.RegexCheck(i, line, r"((?:Array|Object|Promise)\.<)",
         "Don't use a dot after generics (Object.<T> should be Object<T>).")
 
-  def GetElementByIdCheck(self, i, line):
-    """Checks for use of 'document.getElementById' instead of '$'."""
-    return self.RegexCheck(i, line, r"(document\.getElementById)\('",
-        "Use $('id') or getSVGElement('id') from chrome://resources/js/util.js "
-        "instead of document.getElementById('id')")
-
   def InheritDocCheck(self, i, line):
     """Checks for use of '@inheritDoc' instead of '@override'."""
     return self.RegexCheck(i, line, r"\* (@inheritDoc)",
@@ -68,7 +62,7 @@ class JSChecker(object):
     return self.RegexCheck(i, line, r"(?<!this)(\.\$)[\[\.]",
         "Please only use this.$.localId, not element.$.localId")
 
-  def RunEsLintChecks(self, affected_js_files):
+  def RunEsLintChecks(self, affected_js_files, format='stylish'):
     """Runs lint checks using ESLint. The ESLint rules being applied are defined
        in the .eslintrc.js configuration file.
     """
@@ -95,17 +89,11 @@ class JSChecker(object):
     output = node.RunNode([
         node_modules.PathToEsLint(),
         '--color',
+        '--format', format,
         '--ignore-pattern \'!.eslintrc.js\'',
         ' '.join(affected_js_files_paths)])
 
     return [self.output_api.PresubmitError(output)] if output else []
-
-  def WrapperTypeCheck(self, i, line):
-    """Check for wrappers (new String()) instead of builtins (string)."""
-    return self.RegexCheck(i, line,
-        r"(?:/\*)?\*.*?@(?:param|return|type) ?"     # /** @param/@return/@type
-        r"{[^}]*\b(String|Boolean|Number)\b[^}]*}",  # {(Boolean|Number|String)}
-        "Don't use wrapper types (i.e. new String() or @type {String})")
 
   def VarNameCheck(self, i, line):
     """See the style guide. http://goo.gl/eQiXVW"""
@@ -141,12 +129,10 @@ class JSChecker(object):
             self.ChromeSendCheck(i, line),
             self.CommentIfAndIncludeCheck(i, line),
             self.ConstCheck(i, line),
-            self.GetElementByIdCheck(i, line),
             self.EndJsDocCommentCheck(i, line),
             self.ExtraDotInGenericCheck(i, line),
             self.InheritDocCheck(i, line),
             self.PolymerLocalIdCheck(i, line),
-            self.WrapperTypeCheck(i, line),
             self.VarNameCheck(i, line),
         ])
 

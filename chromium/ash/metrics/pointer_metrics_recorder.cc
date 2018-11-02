@@ -4,12 +4,13 @@
 
 #include "ash/metrics/pointer_metrics_recorder.h"
 
-#include "ash/shared/app_types.h"
+#include "ash/public/cpp/app_types.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm_window.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/metrics/histogram_macros.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window.h"
 #include "ui/events/event_constants.h"
 #include "ui/views/widget/widget.h"
 
@@ -39,16 +40,16 @@ int GetDestination(views::Widget* target) {
   if (!target)
     return static_cast<int>(AppType::OTHERS);
 
-  WmWindow* window = WmWindow::Get(target->GetNativeWindow());
+  aura::Window* window = target->GetNativeWindow();
   DCHECK(window);
-  return window->GetAppType();
+  return window->GetProperty(aura::client::kAppType);
 }
 
 void RecordUMA(ui::EventPointerType type, views::Widget* target) {
   DownEventFormFactor form_factor = DownEventFormFactor::CLAMSHELL;
   if (Shell::Get()
-          ->maximize_mode_controller()
-          ->IsMaximizeModeWindowManagerEnabled()) {
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
     form_factor = DownEventFormFactor::TOUCH_VIEW;
   }
   UMA_HISTOGRAM_ENUMERATION(
@@ -99,9 +100,10 @@ PointerMetricsRecorder::~PointerMetricsRecorder() {
 void PointerMetricsRecorder::OnPointerEventObserved(
     const ui::PointerEvent& event,
     const gfx::Point& location_in_screen,
-    views::Widget* target) {
+    gfx::NativeView target) {
   if (event.type() == ui::ET_POINTER_DOWN)
-    RecordUMA(event.pointer_details().pointer_type, target);
+    RecordUMA(event.pointer_details().pointer_type,
+              views::Widget::GetTopLevelWidgetForNativeView(target));
 }
 
 }  // namespace ash

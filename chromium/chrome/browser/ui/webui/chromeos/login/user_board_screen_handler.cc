@@ -71,8 +71,13 @@ void UserBoardScreenHandler::ShowBannerMessage(const base::string16& message) {
 
 void UserBoardScreenHandler::ShowUserPodCustomIcon(
     const AccountId& account_id,
-    const base::DictionaryValue& icon) {
-  CallJS("login.AccountPickerScreen.showUserPodCustomIcon", account_id, icon);
+    const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions&
+        icon_options) {
+  std::unique_ptr<base::DictionaryValue> icon =
+      icon_options.ToDictionaryValue();
+  if (!icon || icon->empty())
+    return;
+  CallJS("login.AccountPickerScreen.showUserPodCustomIcon", account_id, *icon);
 }
 
 void UserBoardScreenHandler::HideUserPodCustomIcon(
@@ -82,7 +87,7 @@ void UserBoardScreenHandler::HideUserPodCustomIcon(
 
 void UserBoardScreenHandler::SetAuthType(
     const AccountId& account_id,
-    proximity_auth::ScreenlockBridge::LockHandler::AuthType auth_type,
+    proximity_auth::mojom::AuthType auth_type,
     const base::string16& initial_value) {
   CallJS("login.AccountPickerScreen.setAuthType", account_id,
          static_cast<int>(auth_type), base::Value(initial_value));

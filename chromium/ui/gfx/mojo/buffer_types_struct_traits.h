@@ -26,6 +26,8 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return gfx::mojom::BufferFormat::ETC1;
       case gfx::BufferFormat::R_8:
         return gfx::mojom::BufferFormat::R_8;
+      case gfx::BufferFormat::R_16:
+        return gfx::mojom::BufferFormat::R_16;
       case gfx::BufferFormat::RG_88:
         return gfx::mojom::BufferFormat::RG_88;
       case gfx::BufferFormat::BGR_565:
@@ -74,6 +76,9 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
       case gfx::mojom::BufferFormat::R_8:
         *out = gfx::BufferFormat::R_8;
         return true;
+      case gfx::mojom::BufferFormat::R_16:
+        *out = gfx::BufferFormat::R_16;
+        return true;
       case gfx::mojom::BufferFormat::RG_88:
         *out = gfx::BufferFormat::RG_88;
         return true;
@@ -106,6 +111,7 @@ struct EnumTraits<gfx::mojom::BufferFormat, gfx::BufferFormat> {
         return true;
       case gfx::mojom::BufferFormat::UYVY_422:
         *out = gfx::BufferFormat::UYVY_422;
+        return true;
     }
     NOTREACHED();
     return false;
@@ -233,8 +239,6 @@ struct StructTraits<gfx::mojom::NativePixmapPlaneDataView,
 template <>
 struct StructTraits<gfx::mojom::NativePixmapHandleDataView,
                     gfx::NativePixmapHandle> {
-  using PixmapHandleFdList = std::vector<mojo::ScopedHandle>;
-
   static void* SetUpContext(const gfx::NativePixmapHandle& handle);
   static void TearDownContext(const gfx::NativePixmapHandle& handle,
                               void* context);
@@ -247,8 +251,9 @@ struct StructTraits<gfx::mojom::NativePixmapHandleDataView,
     return true;
 #endif
   }
-  static PixmapHandleFdList fds(const gfx::NativePixmapHandle& pixmap_handle,
-                                void* context);
+  static std::vector<mojo::ScopedHandle>& fds(
+      const gfx::NativePixmapHandle& pixmap_handle,
+      void* context);
 
   static const std::vector<gfx::NativePixmapPlane>& planes(
       const gfx::NativePixmapHandle& pixmap_handle) {

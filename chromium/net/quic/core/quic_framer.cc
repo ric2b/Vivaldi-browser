@@ -18,6 +18,7 @@
 #include "net/quic/core/quic_data_reader.h"
 #include "net/quic/core/quic_data_writer.h"
 #include "net/quic/core/quic_socket_address_coder.h"
+#include "net/quic/core/quic_stream_frame_data_producer.h"
 #include "net/quic/core/quic_utils.h"
 #include "net/quic/platform/api/quic_aligned.h"
 #include "net/quic/platform/api/quic_bug_tracker.h"
@@ -139,7 +140,8 @@ QuicFramer::QuicFramer(const QuicVersionVector& supported_versions,
       perspective_(perspective),
       validate_flags_(true),
       creation_time_(creation_time),
-      last_timestamp_(QuicTime::Delta::Zero()) {
+      last_timestamp_(QuicTime::Delta::Zero()),
+      data_producer_(nullptr) {
   DCHECK(!supported_versions.empty());
   quic_version_ = supported_versions_[0];
   decrypter_ = QuicMakeUnique<NullDecrypter>(perspective);
@@ -1316,7 +1318,10 @@ bool QuicFramer::ProcessStopWaitingFrame(QuicDataReader* reader,
     set_detailed_error("Unable to read least unacked delta.");
     return false;
   }
-  DCHECK_GE(header.packet_number, least_unacked_delta);
+  if (header.packet_number < least_unacked_delta) {
+    set_detailed_error("Invalid unacked delta.");
+    return false;
+  }
   stop_waiting->least_unacked = header.packet_number - least_unacked_delta;
 
   return true;
@@ -1807,6 +1812,19 @@ bool QuicFramer::AppendStreamFrame(const QuicStreamFrame& frame,
     }
   }
 
+  if (data_producer_ != nullptr) {
+    DCHECK_EQ(nullptr, frame.data_buffer);
+    if (frame.data_length == 0) {
+      return true;
+    }
+    if (!data_producer_->WriteStreamData(frame.stream_id, frame.offset,
+                                         frame.data_length, writer)) {
+      QUIC_BUG << "Writing frame data failed.";
+      return false;
+    }
+    return true;
+  }
+
   if (!writer->WriteBytes(frame.data_buffer, frame.data_length)) {
     QUIC_BUG << "Writing frame data failed.";
     return false;
@@ -2154,6 +2172,17 @@ bool QuicFramer::RaiseError(QuicErrorCode error) {
 
 Endianness QuicFramer::endianness() const {
   return quic_version_ > QUIC_VERSION_38 ? NETWORK_BYTE_ORDER : HOST_BYTE_ORDER;
+}
+
+void QuicFramer::SaveStreamData(QuicStreamId id,
+                                QuicIOVector iov,
+                                size_t iov_offset,
+                                QuicStreamOffset offset,
+                                QuicByteCount data_length) {
+  DCHECK_NE(nullptr, data_producer_);
+  if (data_producer_ != nullptr) {
+    data_producer_->SaveStreamData(id, iov, iov_offset, offset, data_length);
+  }
 }
 
 }  // namespace net

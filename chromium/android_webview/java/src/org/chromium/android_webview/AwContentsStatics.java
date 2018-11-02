@@ -6,6 +6,7 @@ package org.chromium.android_webview;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.net.Uri;
 import android.webkit.ValueCallback;
 
 import org.chromium.base.ThreadUtils;
@@ -13,6 +14,7 @@ import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * Implementations of various static methods, and also a home for static
@@ -89,31 +91,69 @@ public class AwContentsStatics {
     }
 
     // Can be called from any thread.
+    public static boolean getSafeBrowsingEnabledByManifest() {
+        return nativeGetSafeBrowsingEnabledByManifest();
+    }
+
+    public static void setSafeBrowsingEnabledByManifest(boolean enable) {
+        nativeSetSafeBrowsingEnabledByManifest(enable);
+    }
+
+    // TODO(ntfschr): remove this when downstream no longer depends on it
     public static boolean getSafeBrowsingEnabled() {
-        return nativeGetSafeBrowsingEnabled();
+        return getSafeBrowsingEnabledByManifest();
     }
 
+    // TODO(ntfschr): remove this when downstream no longer depends on it
     public static void setSafeBrowsingEnabled(boolean enable) {
-        nativeSetSafeBrowsingEnabled(enable);
+        setSafeBrowsingEnabledByManifest(enable);
     }
 
-    @SuppressWarnings("unchecked")
-    @TargetApi(19)
-    public static void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
+    @CalledByNative
+    private static void safeBrowsingWhitelistAssigned(
+            ValueCallback<Boolean> callback, boolean success) {
+        if (callback == null) return;
+        callback.onReceiveValue(success);
+    }
+
+    public static void setSafeBrowsingWhitelist(
+            List<String> urls, ValueCallback<Boolean> callback) {
+        String[] urlArray = urls.toArray(new String[urls.size()]);
         if (callback == null) {
             callback = new ValueCallback<Boolean>() {
                 @Override
                 public void onReceiveValue(Boolean b) {}
             };
         }
+        nativeSetSafeBrowsingWhitelist(urlArray, callback);
+    }
+
+    @SuppressWarnings("unchecked")
+    @TargetApi(19)
+    public static void initSafeBrowsing(Context context, final ValueCallback<Boolean> callback) {
+        // Wrap the callback to make sure we always invoke it on the UI thread, as guaranteed by the
+        // API.
+        ValueCallback<Boolean> wrapperCallback = new ValueCallback<Boolean>() {
+            @Override
+            public void onReceiveValue(final Boolean b) {
+                if (callback != null) {
+                    ThreadUtils.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            callback.onReceiveValue(b);
+                        }
+                    });
+                }
+            }
+        };
 
         try {
             Class cls = Class.forName(sSafeBrowsingWarmUpHelper);
             Method m =
                     cls.getDeclaredMethod("warmUpSafeBrowsing", Context.class, ValueCallback.class);
-            m.invoke(null, context, callback);
+            m.invoke(null, context, wrapperCallback);
         } catch (ReflectiveOperationException e) {
-            callback.onReceiveValue(false);
+            wrapperCallback.onReceiveValue(false);
         }
     }
 
@@ -127,6 +167,10 @@ public class AwContentsStatics {
         } catch (ReflectiveOperationException e) {
             // This is not an error; it just means this device doesn't have specialized services.
         }
+    }
+
+    public static Uri getSafeBrowsingPrivacyPolicyUrl() {
+        return Uri.parse(nativeGetSafeBrowsingPrivacyPolicyUrl());
     }
 
     public static void setCheckClearTextPermitted(boolean permitted) {
@@ -151,14 +195,17 @@ public class AwContentsStatics {
     //--------------------------------------------------------------------------------------------
     //  Native methods
     //--------------------------------------------------------------------------------------------
+    private static native String nativeGetSafeBrowsingPrivacyPolicyUrl();
     private static native void nativeClearClientCertPreferences(Runnable callback);
     private static native String nativeGetUnreachableWebDataUrl();
     private static native void nativeSetLegacyCacheRemovalDelayForTest(long timeoutMs);
     private static native String nativeGetProductVersion();
     private static native void nativeSetServiceWorkerIoThreadClient(
             AwContentsIoThreadClient ioThreadClient, AwBrowserContext browserContext);
-    private static native boolean nativeGetSafeBrowsingEnabled();
-    private static native void nativeSetSafeBrowsingEnabled(boolean enable);
+    private static native boolean nativeGetSafeBrowsingEnabledByManifest();
+    private static native void nativeSetSafeBrowsingEnabledByManifest(boolean enable);
+    private static native void nativeSetSafeBrowsingWhitelist(
+            String[] urls, ValueCallback<Boolean> callback);
     private static native void nativeSetCheckClearTextPermitted(boolean permitted);
     private static native String nativeFindAddress(String addr);
 }

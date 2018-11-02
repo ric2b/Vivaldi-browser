@@ -664,64 +664,6 @@ TEST_F(NavigatorTestWithBrowserSideNavigation,
   EXPECT_EQ(kUrl2, contents()->GetLastCommittedURL());
 }
 
-// PlzNavigate: Test that a renderer-initiated user-initiated navigation is NOT
-// canceled if a renderer-initiated non-user-initiated request is issued in the
-// meantime.
-TEST_F(NavigatorTestWithBrowserSideNavigation,
-       RendererNonUserInitiatedNavigationDoesntCancelRendererUserInitiated) {
-  const GURL kUrl0("http://www.wikipedia.org/");
-  const GURL kUrl1("http://www.chromium.org/");
-  const GURL kUrl2("http://www.google.com/");
-
-  // Initialization.
-  contents()->NavigateAndCommit(kUrl0);
-  FrameTreeNode* node = main_test_rfh()->frame_tree_node();
-
-  // Start a renderer-initiated user-initiated navigation to the 1st URL.
-  process()->sink().ClearMessages();
-  main_test_rfh()->SendRendererInitiatedNavigationRequest(kUrl1, true);
-  NavigationRequest* request1 = node->navigation_request();
-  ASSERT_TRUE(request1);
-  EXPECT_EQ(kUrl1, request1->common_params().url);
-  EXPECT_FALSE(request1->browser_initiated());
-  EXPECT_TRUE(request1->begin_params().has_user_gesture);
-  if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
-  } else {
-    EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
-  }
-
-  // Now receive a renderer-initiated non-user-initiated request. Nothing should
-  // change.
-  main_test_rfh()->SendRendererInitiatedNavigationRequest(kUrl2, false);
-  NavigationRequest* request2 = node->navigation_request();
-  ASSERT_TRUE(request2);
-  EXPECT_EQ(request1, request2);
-  EXPECT_EQ(kUrl1, request2->common_params().url);
-  EXPECT_FALSE(request2->browser_initiated());
-  EXPECT_TRUE(request2->begin_params().has_user_gesture);
-  if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_TRUE(GetSpeculativeRenderFrameHost(node));
-  } else {
-    EXPECT_FALSE(GetSpeculativeRenderFrameHost(node));
-  }
-
-  // Have the RenderFrameHost commit the navigation.
-  scoped_refptr<ResourceResponse> response(new ResourceResponse);
-  GetLoaderForNavigationRequest(request2)->CallOnResponseStarted(
-      response, MakeEmptyStream(), nullptr);
-  if (AreAllSitesIsolatedForTesting()) {
-    EXPECT_TRUE(
-        DidRenderFrameHostRequestCommit(GetSpeculativeRenderFrameHost(node)));
-  } else {
-    EXPECT_TRUE(DidRenderFrameHostRequestCommit(main_test_rfh()));
-  }
-
-  // Commit the navigation.
-  main_test_rfh()->SendNavigate(0, true, kUrl1);
-  EXPECT_EQ(kUrl1, contents()->GetLastCommittedURL());
-}
-
 // PlzNavigate: Test that a browser-initiated navigation is NOT canceled if a
 // renderer-initiated non-user-initiated request is issued in the meantime.
 TEST_F(NavigatorTestWithBrowserSideNavigation,

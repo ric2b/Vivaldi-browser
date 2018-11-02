@@ -116,6 +116,7 @@ component("gpu") {
     "//content/gpu:*",
     "//content/renderer:*",
     "//media/gpu/ipc/*",
+    "//media/mojo/*",
     ":*",
   ]
 
@@ -128,10 +129,13 @@ component("gpu") {
   defines = [ "MEDIA_GPU_IMPLEMENTATION" ]
 
   sources = [
+    "accelerated_video_decoder.h",
     "fake_jpeg_decode_accelerator.cc",
     "fake_jpeg_decode_accelerator.h",
     "fake_video_decode_accelerator.cc",
     "fake_video_decode_accelerator.h",
+    "gles2_decoder_helper.cc",
+    "gles2_decoder_helper.h",
     "gpu_video_accelerator_util.cc",
     "gpu_video_accelerator_util.h",
     "gpu_video_decode_accelerator_factory.cc",
@@ -139,6 +143,10 @@ component("gpu") {
     "gpu_video_decode_accelerator_helpers.h",
     "gpu_video_encode_accelerator_factory.cc",
     "gpu_video_encode_accelerator_factory.h",
+    "h264_decoder.cc",
+    "h264_decoder.h",
+    "h264_dpb.cc",
+    "h264_dpb.h",
     "shared_memory_region.cc",
     "shared_memory_region.h",
   ]
@@ -180,6 +188,11 @@ component("gpu") {
 
   if (is_android) {
     sources += [
+      "android/device_info.cc",
+      "android/device_info.h",
+      "android/promotion_hint_aggregator.h",
+      "android/promotion_hint_aggregator_impl.cc",
+      "android/promotion_hint_aggregator_impl.h",
       "android_video_decode_accelerator.cc",
       "android_video_decode_accelerator.h",
       "android_video_surface_chooser.h",
@@ -217,8 +230,15 @@ component("gpu") {
     if (enable_media_codec_video_decoder) {
       assert(mojo_media_host == "gpu", "MCVD requires the CDM")
       sources += [
+        "android/codec_image.cc",
+        "android/codec_image.h",
+        "android/codec_wrapper.cc",
+        "android/codec_wrapper.h",
         "android/media_codec_video_decoder.cc",
         "android/media_codec_video_decoder.h",
+        "android/video_frame_factory.h",
+        "android/video_frame_factory_impl.cc",
+        "android/video_frame_factory_impl.h",
       ]
     }
 
@@ -226,19 +246,10 @@ component("gpu") {
     # Remove this dependency after VDAs are also running as part of the mojo
     # media service. See http://crbug.com/522298
     if (mojo_media_host == "gpu") {
-      deps += [ "//media:cdm_manager" ]
+      deps += [ "//media/cdm:cdm_manager" ]
     }
   }
 
-  if (is_chromeos || is_win) {
-    sources += [
-      "accelerated_video_decoder.h",
-      "h264_decoder.cc",
-      "h264_decoder.h",
-      "h264_dpb.cc",
-      "h264_dpb.h",
-    ]
-  }
   if (is_chromeos) {
     sources += [
       "vp8_decoder.cc",
@@ -453,14 +464,26 @@ source_set("android_video_decode_accelerator_unittests") {
     sources = [
       "android/fake_codec_allocator.cc",
       "android/fake_codec_allocator.h",
+      "android/mock_device_info.cc",
+      "android/mock_device_info.h",
+      "android/promotion_hint_aggregator_impl_unittest.cc",
       "android_video_decode_accelerator_unittest.cc",
       "android_video_surface_chooser_impl_unittest.cc",
       "avda_codec_allocator_unittest.cc",
       "content_video_view_overlay_allocator_unittest.cc",
+      "fake_android_video_surface_chooser.cc",
+      "fake_android_video_surface_chooser.h",
+      "mock_surface_texture_gl_owner.cc",
+      "mock_surface_texture_gl_owner.h",
       "surface_texture_gl_owner_unittest.cc",
     ]
     if (enable_media_codec_video_decoder) {
-      sources += [ "android/media_codec_video_decoder_unittest.cc" ]
+      sources += [
+        "android/codec_image_unittest.cc",
+        "android/codec_wrapper_unittest.cc",
+        "android/media_codec_video_decoder_unittest.cc",
+        "android/video_frame_factory_impl_unittest.cc",
+      ]
     }
     deps = [
       ":gpu",
@@ -539,6 +562,20 @@ if (is_chromeos) {
       deps += [ "//ui/ozone" ]
     }
   }
+}
+
+source_set("unit_tests") {
+  testonly = true
+  deps = [
+    "//base",
+    "//media/base:test_support",
+    "//media/gpu",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+  sources = [
+    "h264_decoder_unittest.cc",
+  ]
 }
 
 test("video_decode_accelerator_service_unittest") {

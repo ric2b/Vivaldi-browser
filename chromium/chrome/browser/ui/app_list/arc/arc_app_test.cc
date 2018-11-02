@@ -82,7 +82,7 @@ void ArcAppTest::SetUp(Profile* profile) {
     ArcAppListPrefsFactory::GetInstance()->RecreateServiceInstanceForTesting(
         profile_);
   }
-  arc_service_manager_ = base::MakeUnique<arc::ArcServiceManager>(nullptr);
+  arc_service_manager_ = base::MakeUnique<arc::ArcServiceManager>();
   arc_session_manager_ = base::MakeUnique<arc::ArcSessionManager>(
       base::MakeUnique<arc::ArcSessionRunner>(
           base::Bind(arc::FakeArcSession::Create)));
@@ -90,6 +90,7 @@ void ArcAppTest::SetUp(Profile* profile) {
   arc::ArcSessionManager::DisableUIForTesting();
   arc::ArcAuthNotification::DisableForTesting();
   arc_session_manager_->SetProfile(profile_);
+  arc_session_manager_->Initialize();
   arc_play_store_enabled_preference_handler_ =
       base::MakeUnique<arc::ArcPlayStoreEnabledPreferenceHandler>(
           profile_, arc_session_manager_.get());
@@ -188,7 +189,7 @@ void ArcAppTest::TearDown() {
   arc_service_manager_.reset();
   if (dbus_thread_manager_initialized_) {
     // DBusThreadManager may be initialized from other testing utility,
-    // such as ash::test::AshTestHelper::SetUp(), so Shutdown() only when
+    // such as ash::AshTestHelper::SetUp(), so Shutdown() only when
     // it is initialized in ArcAppTest::SetUp().
     chromeos::DBusThreadManager::Shutdown();
     dbus_thread_manager_initialized_ = false;

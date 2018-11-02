@@ -7,18 +7,22 @@
 
 #include <memory>
 
+#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/optional.h"
+#include "chrome/browser/chromeos/login/screens/encryption_migration_mode.h"
 #include "chrome/browser/chromeos/login/screens/encryption_migration_screen_view.h"
 #include "chrome/browser/ui/webui/chromeos/login/base_screen_handler.h"
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/login/auth/user_context.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "third_party/cros_system_api/dbus/cryptohome/dbus-constants.h"
 
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
+namespace base {
+class TickClock;
+class TimeTicks;
+}  // namespace base
 
 namespace chromeos {
 
@@ -37,14 +41,28 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
   void Hide() override;
   void SetDelegate(Delegate* delegate) override;
   void SetUserContext(const UserContext& user_context) override;
-  void SetShouldResume(bool should_resume) override;
+  void SetMode(EncryptionMigrationMode mode) override;
   void SetContinueLoginCallback(ContinueLoginCallback callback) override;
+  void SetRestartLoginCallback(RestartLoginCallback callback) override;
   void SetupInitialView() override;
 
   // BaseScreenHandler implementation:
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
   void Initialize() override;
+
+ protected:
+  // Callback that can be used to check free disk space.
+  using FreeDiskSpaceFetcher = base::RepeatingCallback<int64_t()>;
+
+  // Testing only: Sets the free disk space fetcher.
+  void SetFreeDiskSpaceFetcherForTesting(
+      FreeDiskSpaceFetcher free_disk_space_fetcher);
+  // Testing only: Sets the tick clock used to measure elapsed time during
+  // migration.
+  void SetTickClockForTesting(std::unique_ptr<base::TickClock> tick_clock);
+
+  virtual device::mojom::WakeLock* GetWakeLock();
 
  private:
   // Enumeration for migration UI state. These values must be kept in sync with
@@ -57,6 +75,7 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
     MIGRATING = 2,
     MIGRATION_FAILED = 3,
     NOT_ENOUGH_STORAGE = 4,
+    MIGRATING_MINIMAL = 5,
     COUNT
   };
 
@@ -83,14 +102,15 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
   void OnMountExistingVault(bool success,
                             cryptohome::MountError return_code,
                             const std::string& mount_hash);
-  void StartBlockingPowerSave();
-  void StopBlockingPowerSave();
   // Removes cryptohome and shows the error screen after the removal finishes.
   void RemoveCryptohome();
   void OnRemoveCryptohome(bool success, cryptohome::MountError return_code);
 
   // Creates authorization key for MountEx method using |user_context_|.
   cryptohome::KeyDefinition GetAuthKey();
+
+  // True if the session is in ARC kiosk mode.
+  bool IsArcKiosk() const;
 
   // Handlers for cryptohome API callbacks.
   void OnMigrationProgress(cryptohome::DircryptoMigrationStatus status,
@@ -100,6 +120,23 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
 
   // Records UMA about visible screen after delay.
   void OnDelayedRecordVisibleScreen(UIState state);
+
+  // True if |mode_| suggests that we are resuming an incomplete migration.
+  bool IsResumingIncompleteMigration() const;
+
+  // True if |mode_| suggests that migration should start immediately.
+  bool IsStartImmediately() const;
+
+  // True if |mode_| suggests that we are starting or resuming a minimal
+  // migration.
+  bool IsMinimalMigration() const;
+
+  // Returns the UIState we should be in when migration is in progress.
+  // This will be different between regular and minimal migration.
+  UIState GetMigratingUIState() const;
+
+  // Stop forcing migration if it was forced by policy.
+  void MaybeStopForcingMigration();
 
   Delegate* delegate_ = nullptr;
   bool show_on_init_ = false;
@@ -114,8 +151,12 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
   // The callback which is used to log in to the session from the migration UI.
   ContinueLoginCallback continue_login_callback_;
 
-  // True if the system should resume the previous incomplete migration.
-  bool should_resume_ = false;
+  // The callback which is used to require the user to re-enter their password.
+  RestartLoginCallback restart_login_callback_;
+
+  // The migration mode (ask user / start migration automatically / resume
+  // incomplete migratoin).
+  EncryptionMigrationMode mode_ = EncryptionMigrationMode::ASK_USER;
 
   // The current battery level.
   base::Optional<double> current_battery_percent_;
@@ -127,9 +168,17 @@ class EncryptionMigrationScreenHandler : public EncryptionMigrationScreenView,
   // The battery level at the timing that the migration starts.
   double initial_battery_percent_ = 0.0;
 
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  // Point in time when minimal migration started, as reported by |tick_clock_|.
+  base::TimeTicks minimal_migration_start_;
+
+  device::mojom::WakeLockPtr wake_lock_;
 
   std::unique_ptr<LoginFeedback> login_feedback_;
+
+  // Used to measure elapsed time during migration.
+  std::unique_ptr<base::TickClock> tick_clock_;
+
+  FreeDiskSpaceFetcher free_disk_space_fetcher_;
 
   base::WeakPtrFactory<EncryptionMigrationScreenHandler> weak_ptr_factory_;
 

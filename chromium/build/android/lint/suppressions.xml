@@ -103,7 +103,9 @@ Still reading?
   </issue>
   <issue id="IconDensities">
     <!-- The large assets below only include a few densities to reduce APK size. -->
-    <ignore regexp=": data_reduction_illustration.png, physical_web_logo.png, physical_web_logo_anim1.png, physical_web_logo_anim2.png$"/>
+    <ignore regexp="data_reduction_illustration.png"/>
+    <!-- This is intentional to save on WebAPKs' size. -->
+    <ignore regexp="chrome/android/webapk/shell_apk/res/drawable-*"/>
     <!-- crbug.com/457918 is tracking missing assets -->
     <ignore regexp="chrome/android/java/res/drawable-xxhdpi"/>
     <ignore regexp="chrome/android/java/res/drawable-xxxhdpi"/>
@@ -187,15 +189,10 @@ Still reading?
   <issue id="MissingVersion">
     <ignore path="AndroidManifest.xml"/>
   </issue>
+  <!-- TODO(crbug.com/739746): Remove once platform-tools is updated. -->
+  <issue id="NewApi" severity="ignore"/>
   <issue id="NewApi">
     <ignore regexp="Attribute `paddingStart` referenced here can result in a crash on some specific devices older than API 17"/>
-    <ignore regexp="chrome/android/java/res/drawable/downloads_big.xml"/>
-    <ignore regexp="chrome/android/java/res/drawable/ic_bluetooth_connected.xml"/>
-    <ignore regexp="chrome/android/java/res/drawable/ic_signal_cellular_0_bar.xml" />
-    <ignore regexp="chrome/android/java/res/drawable/ic_signal_cellular_1_bar.xml" />
-    <ignore regexp="chrome/android/java/res/drawable/ic_signal_cellular_2_bar.xml" />
-    <ignore regexp="chrome/android/java/res/drawable/ic_signal_cellular_3_bar.xml" />
-    <ignore regexp="chrome/android/java/res/drawable/ic_signal_cellular_4_bar.xml" />
     <ignore regexp="chrome/android/java/res/values-v17/styles.xml"/>
     <ignore regexp="chromecast/internal"/>
     <ignore regexp="com/android/tv"/>
@@ -239,6 +236,7 @@ Still reading?
   </issue>
   <issue id="PackageManagerGetSignatures">
     <ignore regexp="chrome/android/webapk/libs/client/src/org/chromium/webapk/lib/client/WebApkValidator.java"/>
+    <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/customtabs/OriginVerifier.java"/>
   </issue>
   <issue id="PluralsCandidate" severity="Error">
     <ignore regexp="chrome/android/chrome_strings_grd.resources.zip/values-en-rGB/android_chrome_strings.xml"/>
@@ -273,6 +271,8 @@ Still reading?
     <ignore regexp="chrome/android/chrome_strings_grd.resources.zip/values-sv/android_chrome_strings.xml"/>
     <ignore regexp="chrome/android/chrome_strings_grd.resources.zip/values-tl/android_chrome_strings.xml"/>
   </issue>
+  <!-- We have many C++ enums that we don't care about in java -->
+  <issue id="SwitchIntDef" severity="ignore"/>
   <issue id="TextFields" severity="Error">
     <ignore regexp="chromecast/internal"/>
   </issue>
@@ -295,9 +295,14 @@ Still reading?
     <ignore regexp="chrome/android/chrome_strings_grd.resources.zip/values-zh-rCN/android_chrome_strings.xml"/>
     <ignore regexp="chrome/android/chrome_strings_grd.resources.zip/values-zh-rTW/android_chrome_strings.xml"/>
   </issue>
+  <!-- Our generated enums are allowed to have the same values. -->
+  <issue id="UniqueConstants" severity="ignore"/>
   <!-- TODO(crbug.com/635567): Fix this properly. -->
   <issue id="UnusedResources" severity="ignore"/>
   <issue id="UnusedResources">
+    <!-- The two dimens below will be changing soon so please leave them in -->
+    <ignore regexp="design_bottom_navigation_text_size"/>
+    <ignore regexp="design_bottom_navigation_active_text_size"/>
     <ignore regexp="PRODUCT_DIR/gen/remoting/android/remoting_android_raw_resources/res/raw/credits.html"/>
     <ignore regexp="PRODUCT_DIR/gen/remoting/android/remoting_android_raw_resources/res/raw/credits_css.css"/>
     <ignore regexp="PRODUCT_DIR/gen/remoting/android/remoting_android_raw_resources/res/raw/credits_js.js"/>
@@ -309,10 +314,8 @@ Still reading?
     <ignore regexp="android_webview/tools/automated_ui_tests/java/res/"/>
     <!-- TODO(crbug.com/635567): Fix this properly. -->
     <ignore regexp="chrome/android/java/res/drawable-hdpi/*"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/bubble_white.9.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/cvc_icon.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/cvc_icon_amex.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/ic_folder_white_24dp.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/ic_settings.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_3d_blocked.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/infobar_autofill_cc.png"/>
@@ -331,12 +334,9 @@ Still reading?
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_bad.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_good.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pageinfo_warning.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/permission_images.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/pr_generic.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/progress_bar_background_white.9.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/shortcut_incognito.png"/>
     <ignore regexp="chrome/android/java/res/drawable-hdpi/shortcut_newtab.png"/>
-    <ignore regexp="chrome/android/java/res/drawable-hdpi/signin_promo_illustration.png"/>
     <ignore regexp="chrome/android/java/res/drawable-nodpi/missing.png"/>
     <ignore regexp="chrome/android/java/res/values-v17/styles.xml"/>
     <ignore regexp="chromecast/browser/android/apk/res/values/strings.xml"/>
@@ -353,7 +353,6 @@ Still reading?
     <ignore regexp="remoting/android/java/res/drawable-hdpi/ic_zoom_in.png"/>
     <ignore regexp="remoting/android/java/res/drawable-hdpi/ic_zoom_out.png"/>
     <ignore regexp="remoting/android/java/res/layout/navigation_list_item.xml"/>
-    <ignore regexp="remoting/android/java/res/mipmap-hdpi/logo_remote_desktop_launcher.png"/>
     <ignore regexp="remoting/android/java/res/values-v17/styles.xml"/>
     <!-- Used by Android's policies system -->
     <ignore regexp="restriction_values.xml"/>
@@ -467,5 +466,9 @@ Still reading?
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/SSLClientCertificateRequest.java"/>
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/payments/ui/EditorDialog.java"/>
     <ignore regexp="chrome/android/java/src/org/chromium/chrome/browser/signin/SigninAndSyncView.java"/>
+  </issue>
+  <issue id="IconLauncherFormat" severity="ignore">
+    <!-- TODO(crbug.com/739746): Remove after lint version has been updated. -->
+    <ignore regexp="remoting/android/java/res/mipmap-anydpi-v26/ic_launcher.xml"/>
   </issue>
 </lint>

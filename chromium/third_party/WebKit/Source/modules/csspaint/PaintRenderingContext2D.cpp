@@ -48,10 +48,6 @@ bool PaintRenderingContext2D::ParseColorOrCurrentColor(
   return ::blink::ParseColorOrCurrentColor(color, color_string, nullptr);
 }
 
-ColorBehavior PaintRenderingContext2D::DrawImageColorBehavior() const {
-  return ColorBehavior::TransformToGlobalTarget();
-}
-
 PaintCanvas* PaintRenderingContext2D::DrawingCanvas() const {
   return image_buffer_->Canvas();
 }
@@ -78,6 +74,14 @@ void PaintRenderingContext2D::ValidateStateStack() const {
               state_stack_.size() + 1);
   }
 #endif
+}
+
+bool PaintRenderingContext2D::StateHasFilter() {
+  return GetState().HasFilterForOffscreenCanvas(IntSize(Width(), Height()));
+}
+
+sk_sp<SkImageFilter> PaintRenderingContext2D::StateGetFilter() {
+  return GetState().GetFilterForOffscreenCanvas(IntSize(Width(), Height()));
 }
 
 }  // namespace blink

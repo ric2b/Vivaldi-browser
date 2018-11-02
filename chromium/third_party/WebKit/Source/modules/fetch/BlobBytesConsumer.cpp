@@ -11,6 +11,7 @@
 #include "platform/blob/BlobURL.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -75,6 +76,8 @@ BytesConsumer::Result BlobBytesConsumer::BeginRead(const char** buffer,
 
       ResourceRequest request(blob_url_);
       request.SetRequestContext(WebURLRequest::kRequestContextInternal);
+      request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeSameOrigin);
+      request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
       request.SetUseStreamOnResponse(true);
       // We intentionally skip
       // 'setExternalRequestStateFromRequestorAddressSpace', as 'blob:'
@@ -125,7 +128,7 @@ PassRefPtr<BlobDataHandle> BlobBytesConsumer::DrainAsBlobDataHandle(
       blob_data_handle_->size() == UINT64_MAX)
     return nullptr;
   Close();
-  return blob_data_handle_.Release();
+  return std::move(blob_data_handle_);
 }
 
 PassRefPtr<EncodedFormData> BlobBytesConsumer::DrainAsFormData() {
@@ -135,7 +138,7 @@ PassRefPtr<EncodedFormData> BlobBytesConsumer::DrainAsFormData() {
     return nullptr;
   RefPtr<EncodedFormData> form_data = EncodedFormData::Create();
   form_data->AppendBlob(handle->Uuid(), handle);
-  return form_data.Release();
+  return form_data;
 }
 
 void BlobBytesConsumer::SetClient(BytesConsumer::Client* client) {
@@ -279,14 +282,11 @@ BlobBytesConsumer* BlobBytesConsumer::CreateForTesting(
 
 ThreadableLoader* BlobBytesConsumer::CreateLoader() {
   ThreadableLoaderOptions options;
-  options.preflight_policy = kConsiderPreflight;
-  options.cross_origin_request_policy = kDenyCrossOriginRequests;
-  options.content_security_policy_enforcement =
-      kDoNotEnforceContentSecurityPolicy;
-  options.initiator = FetchInitiatorTypeNames::internal;
 
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
+  resource_loader_options.initiator_info.name =
+      FetchInitiatorTypeNames::internal;
 
   return ThreadableLoader::Create(*GetExecutionContext(), this, options,
                                   resource_loader_options);

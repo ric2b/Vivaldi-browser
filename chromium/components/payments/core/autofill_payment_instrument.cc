@@ -4,6 +4,7 @@
 
 #include "components/payments/core/autofill_payment_instrument.h"
 
+#include <algorithm>
 #include <memory>
 
 #include "base/json/json_writer.h"
@@ -17,23 +18,25 @@
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/payments/core/basic_card_response.h"
+#include "components/payments/core/payment_request_base_delegate.h"
 #include "components/payments/core/payment_request_data_util.h"
-#include "components/payments/core/payment_request_delegate.h"
 
 namespace payments {
 
 AutofillPaymentInstrument::AutofillPaymentInstrument(
     const std::string& method_name,
     const autofill::CreditCard& card,
+    bool matches_merchant_card_type_exactly,
     const std::vector<autofill::AutofillProfile*>& billing_profiles,
     const std::string& app_locale,
-    PaymentRequestDelegate* payment_request_delegate)
+    PaymentRequestBaseDelegate* payment_request_delegate)
     : PaymentInstrument(
           method_name,
           autofill::data_util::GetPaymentRequestData(card.network())
               .icon_resource_id,
           PaymentInstrument::Type::AUTOFILL),
       credit_card_(card),
+      matches_merchant_card_type_exactly_(matches_merchant_card_type_exactly),
       billing_profiles_(billing_profiles),
       app_locale_(app_locale),
       delegate_(nullptr),
@@ -77,7 +80,7 @@ void AutofillPaymentInstrument::InvokePaymentApp(
                                                weak_ptr_factory_.GetWeakPtr());
 }
 
-bool AutofillPaymentInstrument::IsCompleteForPayment() {
+bool AutofillPaymentInstrument::IsCompleteForPayment() const {
   // COMPLETE or EXPIRED cards are considered valid for payment. The user will
   // be prompted to enter the new expiration at the CVC step.
   return autofill::GetCompletionStatusForCard(credit_card_, app_locale_,
@@ -85,13 +88,17 @@ bool AutofillPaymentInstrument::IsCompleteForPayment() {
          autofill::CREDIT_CARD_EXPIRED;
 }
 
-base::string16 AutofillPaymentInstrument::GetMissingInfoLabel() {
+bool AutofillPaymentInstrument::IsExactlyMatchingMerchantRequest() const {
+  return matches_merchant_card_type_exactly_;
+}
+
+base::string16 AutofillPaymentInstrument::GetMissingInfoLabel() const {
   return autofill::GetCompletionMessageForCard(
       autofill::GetCompletionStatusForCard(credit_card_, app_locale_,
                                            billing_profiles_));
 }
 
-bool AutofillPaymentInstrument::IsValidForCanMakePayment() {
+bool AutofillPaymentInstrument::IsValidForCanMakePayment() const {
   autofill::CreditCardCompletionStatus status =
       autofill::GetCompletionStatusForCard(credit_card_, app_locale_,
                                            billing_profiles_);
@@ -114,6 +121,44 @@ base::string16 AutofillPaymentInstrument::GetLabel() const {
 base::string16 AutofillPaymentInstrument::GetSublabel() const {
   return credit_card_.GetInfo(
       autofill::AutofillType(autofill::CREDIT_CARD_NAME_FULL), app_locale_);
+}
+
+bool AutofillPaymentInstrument::IsValidForModifier(
+    const std::vector<std::string>& method,
+    const std::set<autofill::CreditCard::CardType>& supported_types,
+    const std::vector<std::string>& supported_networks) const {
+  // This instrument only matches basic-card.
+  if (std::find(method.begin(), method.end(), "basic-card") == method.end())
+    return false;
+
+  // If supported_types is not specified and this instrument matches the method,
+  // the modifier is applicable. If supported_types is populated, it must
+  // contain this card's type to be applicable. The same is true for
+  // supported_networks.
+  bool is_supported_type =
+      supported_types.empty() ||
+      std::find(supported_types.begin(), supported_types.end(),
+                credit_card_.card_type()) != supported_types.end();
+
+  // supported_types may contain CARD_TYPE_UNKNOWN because of the parsing
+  // function but the modifiers shouldn't be applied since the website can't be
+  // sure that the instrument is an applicable card.
+  if (is_supported_type &&
+      credit_card_.card_type() ==
+          autofill::CreditCard::CardType::CARD_TYPE_UNKNOWN)
+    return false;
+
+  bool is_supported_network = supported_networks.empty();
+  if (!is_supported_network) {
+    std::string basic_card_network =
+        autofill::data_util::GetPaymentRequestData(credit_card_.network())
+            .basic_card_issuer_network;
+    is_supported_network =
+        std::find(supported_networks.begin(), supported_networks.end(),
+                  basic_card_network) != supported_networks.end();
+  }
+
+  return is_supported_type && is_supported_network;
 }
 
 void AutofillPaymentInstrument::OnFullCardRequestSucceeded(

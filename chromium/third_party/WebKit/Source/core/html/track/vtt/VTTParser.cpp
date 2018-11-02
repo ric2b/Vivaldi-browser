@@ -37,6 +37,7 @@
 #include "core/html/track/vtt/VTTRegion.h"
 #include "core/html/track/vtt/VTTScanner.h"
 #include "platform/RuntimeEnabledFeatures.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/text/SegmentedString.h"
 #include "platform/wtf/text/CharacterNames.h"
 #include "platform/wtf/text/WTFString.h"
@@ -82,7 +83,9 @@ bool VTTParser::ParseFloatPercentageValuePair(VTTScanner& value_scanner,
 VTTParser::VTTParser(VTTParserClient* client, Document& document)
     : document_(&document),
       state_(kInitial),
-      decoder_(TextResourceDecoder::Create("text/plain", UTF8Encoding())),
+      decoder_(TextResourceDecoder::Create(TextResourceDecoderOptions(
+          TextResourceDecoderOptions::kPlainTextContent,
+          UTF8Encoding()))),
       current_start_time_(0),
       current_end_time_(0),
       client_(client) {}
@@ -213,7 +216,7 @@ void VTTParser::CollectMetadataHeader(const String& line) {
   // WebVTT header parsing (WebVTT parser algorithm step 12)
 
   // The only currently supported header is the "Region" header.
-  if (!RuntimeEnabledFeatures::webVTTRegionsEnabled())
+  if (!RuntimeEnabledFeatures::WebVTTRegionsEnabled())
     return;
 
   // Step 12.4 If line contains the character ":" (A U+003A COLON), then set

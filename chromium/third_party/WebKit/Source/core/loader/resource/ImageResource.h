@@ -58,12 +58,13 @@ class CORE_EXPORT ImageResource final
  public:
   using ClientType = ResourceClient;
 
-  // Use ImageResourceContent::fetch() unless ImageResource is required.
-  // TODO(hiroshige): Make fetch() private.
+  // Use ImageResourceContent::Fetch() unless ImageResource is required.
+  // TODO(hiroshige): Make Fetch() private.
   static ImageResource* Fetch(FetchParameters&, ResourceFetcher*);
 
-  // TODO(hiroshige): Make create() test-only by refactoring ImageDocument.
+  // TODO(hiroshige): Make Create() test-only by refactoring ImageDocument.
   static ImageResource* Create(const ResourceRequest&);
+  static ImageResource* CreateForTest(const KURL&);
 
   ~ImageResource() override;
 
@@ -82,7 +83,7 @@ class CORE_EXPORT ImageResource final
   bool CanReuse(const FetchParameters&) const override;
   bool CanUseCacheValidator() const override;
 
-  PassRefPtr<const SharedBuffer> ResourceBuffer() const override;
+  RefPtr<const SharedBuffer> ResourceBuffer() const override;
   void NotifyStartLoad() override;
   void ResponseReceived(const ResourceResponse&,
                         std::unique_ptr<WebDataConsumerHandle>) override;
@@ -92,8 +93,6 @@ class CORE_EXPORT ImageResource final
 
   // For compatibility, images keep loading even if there are HTTP errors.
   bool ShouldIgnoreHTTPStatusCodeErrors() const override { return true; }
-
-  bool IsImage() const override { return true; }
 
   // MultipartImageResourceParser::Client
   void OnePartInMultipartReceived(const ResourceResponse&) final;
@@ -162,6 +161,11 @@ class CORE_EXPORT ImageResource final
     // Do not show or reload placeholder.
     kDoNotReloadPlaceholder,
 
+    // Show placeholder, and do not reload. The original image will still be
+    // loaded and shown if the image is explicitly reloaded, e.g. when
+    // ReloadIfLoFiOrPlaceholderImage is called with kReloadAlways.
+    kShowAndDoNotReloadPlaceholder,
+
     // Do not show placeholder, reload only when decode error occurs.
     kReloadPlaceholderOnDecodeError,
 
@@ -172,6 +176,8 @@ class CORE_EXPORT ImageResource final
 
   Timer<ImageResource> flush_timer_;
   double last_flush_time_ = 0.;
+
+  bool is_during_finish_as_error_ = false;
 };
 
 DEFINE_RESOURCE_TYPE_CASTS(Image);

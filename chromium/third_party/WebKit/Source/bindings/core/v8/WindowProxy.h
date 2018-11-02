@@ -36,6 +36,7 @@
 #include "platform/bindings/ScopedPersistent.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/RefPtr.h"
+#include "platform/wtf/debug/StackTrace.h"
 #include "v8/include/v8.h"
 
 namespace blink {
@@ -150,6 +151,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
 
   void ClearForClose();
   void ClearForNavigation();
+  void ClearForSwap();
 
   CORE_EXPORT v8::Local<v8::Object> GlobalProxyIfNotDetached();
   v8::Local<v8::Object> ReleaseGlobalProxy();
@@ -160,6 +162,8 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
   DOMWrapperWorld& World() { return *world_; }
 
   virtual bool IsLocal() const { return false; }
+
+  enum FrameReuseStatus { kFrameWillNotBeReused, kFrameWillBeReused };
 
  protected:
   // Lifecycle represents the following four states.
@@ -226,7 +230,7 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
 
   virtual void Initialize() = 0;
 
-  virtual void DisposeContext(Lifecycle next_status) = 0;
+  virtual void DisposeContext(Lifecycle next_status, FrameReuseStatus) = 0;
 
   WARN_UNUSED_RESULT v8::Local<v8::Object> AssociateWithWrapper(
       DOMWindow*,
@@ -257,6 +261,10 @@ class WindowProxy : public GarbageCollectedFinalized<WindowProxy> {
   // to be destroyed.
   ScopedPersistent<v8::Object> global_proxy_;
   Lifecycle lifecycle_;
+
+  // TODO(dcheng): Remove this temporary code for debugging
+  // https://crbug.com/728693.
+  WTF::debug::StackTrace initialization_stack_;
 };
 
 }  // namespace blink

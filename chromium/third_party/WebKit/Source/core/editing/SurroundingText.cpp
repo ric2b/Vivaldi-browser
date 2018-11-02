@@ -83,7 +83,7 @@ void SurroundingText::Initialize(const Position& start_position,
 
   CharacterIterator forward_iterator(
       end_position,
-      Position::LastPositionInNode(root_element).ParentAnchoredEquivalent(),
+      Position::LastPositionInNode(*root_element).ParentAnchoredEquivalent(),
       TextIteratorBehavior::Builder().SetStopsOnFormControls(true).Build());
   if (!forward_iterator.AtEnd())
     forward_iterator.Advance(max_length - half_max_length);
@@ -92,11 +92,18 @@ void SurroundingText::Initialize(const Position& start_position,
   // starts at the document's or input element's start and ends at the selection
   // start and will be updated.
   BackwardsCharacterIterator backwards_iterator(
-      Position::FirstPositionInNode(root_element).ParentAnchoredEquivalent(),
+      Position::FirstPositionInNode(*root_element).ParentAnchoredEquivalent(),
       start_position,
       TextIteratorBehavior::Builder().SetStopsOnFormControls(true).Build());
   if (!backwards_iterator.AtEnd())
     backwards_iterator.Advance(half_max_length);
+
+  // Upon some conditions backwards iterator yields invalid EndPosition() which
+  // causes a crash in TextIterator::RangeLength().
+  // TODO(editing-dev): Fix BackwardsCharacterIterator, http://crbug.com/758438.
+  if (backwards_iterator.EndPosition() > start_position ||
+      end_position > forward_iterator.StartPosition())
+    return;
 
   const TextIteratorBehavior behavior =
       TextIteratorBehavior::NoTrailingSpaceRangeLengthBehavior();

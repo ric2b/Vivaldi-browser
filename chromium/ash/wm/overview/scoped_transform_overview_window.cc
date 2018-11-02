@@ -7,13 +7,11 @@
 #include <algorithm>
 #include <vector>
 
-#include "ash/root_window_controller.h"
 #include "ash/wm/overview/scoped_overview_animation_settings.h"
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
@@ -179,6 +177,7 @@ ScopedTransformOverviewWindow::~ScopedTransformOverviewWindow() {}
 
 void ScopedTransformOverviewWindow::RestoreWindow() {
   ShowHeader();
+  wm::GetWindowState(window_)->set_ignored_by_shelf(ignored_by_shelf_);
   if (minimized_widget_) {
     // TODO(oshima): Use unminimize animation instead of hiding animation.
     minimized_widget_->CloseNow();
@@ -192,7 +191,6 @@ void ScopedTransformOverviewWindow::RestoreWindow() {
   ScopedOverviewAnimationSettings animation_settings(
       OverviewAnimationType::OVERVIEW_ANIMATION_LAY_OUT_SELECTOR_ITEMS,
       window_);
-  wm::GetWindowState(window_)->set_ignored_by_shelf(ignored_by_shelf_);
   SetOpacity(original_opacity_);
 }
 
@@ -407,6 +405,9 @@ void ScopedTransformOverviewWindow::UpdateMirrorWindowForMinimizedState() {
     if (!minimized_widget_)
       CreateMirrorWindowForMinimizedState();
   } else {
+    // If the original window is no longer minimized, make sure it will be
+    // visible when we restore it when selection mode ends.
+    EnsureVisible();
     minimized_widget_->CloseNow();
     minimized_widget_.reset();
   }
@@ -434,9 +435,9 @@ void ScopedTransformOverviewWindow::PrepareForOverview() {
 }
 
 void ScopedTransformOverviewWindow::CloseWidget() {
-  WmWindow* parent_window = WmWindow::Get(GetTransientRoot(window_));
+  aura::Window* parent_window = GetTransientRoot(window_);
   if (parent_window)
-    parent_window->CloseWidget();
+    wm::CloseWidgetForWindow(parent_window);
 }
 
 // static
@@ -484,10 +485,8 @@ void ScopedTransformOverviewWindow::CreateMirrorWindowForMinimizedState() {
   params.name = "OverviewModeMinimized";
   params.activatable = views::Widget::InitParams::Activatable::ACTIVATABLE_NO;
   params.accept_events = true;
-  minimized_widget_.reset(new views::Widget);
-  RootWindowController::ForWindow(window_->GetRootWindow())
-      ->ConfigureWidgetInitParamsForContainer(minimized_widget_.get(),
-                                              window_->parent()->id(), &params);
+  params.parent = window_->parent();
+  minimized_widget_ = base::MakeUnique<views::Widget>();
   minimized_widget_->set_focus_on_creation(false);
   minimized_widget_->Init(params);
 

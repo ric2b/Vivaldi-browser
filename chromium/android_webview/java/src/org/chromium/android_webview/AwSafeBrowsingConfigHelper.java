@@ -4,17 +4,17 @@
 
 package org.chromium.android_webview;
 
-import android.annotation.SuppressLint;
-import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.os.AsyncTask;
-import android.provider.Settings;
+import android.webkit.ValueCallback;
 
 import org.chromium.base.CommandLine;
 import org.chromium.base.Log;
 import org.chromium.base.annotations.JNINamespace;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 
 /**
  * Helper class for getting the configuration settings related to safebrowsing in WebView.
@@ -25,24 +25,34 @@ public class AwSafeBrowsingConfigHelper {
 
     private static final String OPT_IN_META_DATA_STR = "android.webkit.WebView.EnableSafeBrowsing";
 
+    private static Boolean sSafeBrowsingUserOptIn;
+
     public static void maybeInitSafeBrowsingFromSettings(final Context appContext) {
-        if (AwSafeBrowsingConfigHelper.shouldEnableSafeBrowsingSupport(appContext)) {
-            // Assume safebrowsing on by default initially.
-            AwContentsStatics.setSafeBrowsingEnabled(true);
-            // Fetch Android settings related to safe-browsing in the background.
-            AsyncTask.THREAD_POOL_EXECUTOR.execute(new Runnable() {
+        AwContentsStatics.setSafeBrowsingEnabledByManifest(
+                CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
+                || appHasOptedIn(appContext));
+        // If GMS is available, we will figure out if the user has opted-in to Safe Browsing and set
+        // the correct value for sSafeBrowsingUserOptIn.
+        final String getUserOptInPreferenceMethodName = "getUserOptInPreference";
+        try {
+            Class awSafeBrowsingApiHelperClass =
+                    Class.forName("com.android.webview.chromium.AwSafeBrowsingApiHandler");
+            Method getUserOptInPreference = awSafeBrowsingApiHelperClass.getDeclaredMethod(
+                    getUserOptInPreferenceMethodName, Context.class, ValueCallback.class);
+            getUserOptInPreference.invoke(null, appContext, new ValueCallback<Boolean>() {
                 @Override
-                public void run() {
-                    AwContentsStatics.setSafeBrowsingEnabled(
-                            isScanDeviceForSecurityThreatsEnabled(appContext));
+                public void onReceiveValue(Boolean optin) {
+                    setSafeBrowsingUserOptIn(optin == null ? false : optin);
                 }
             });
+        } catch (ClassNotFoundException e) {
+            // This is not an error; it just means this device doesn't have specialized services.
+        } catch (IllegalAccessException | IllegalArgumentException | NoSuchMethodException e) {
+            Log.e(TAG, "Failed to invoke " + getUserOptInPreferenceMethodName + ": " + e);
+        } catch (InvocationTargetException e) {
+            Log.e(TAG, "Failed invocation for " + getUserOptInPreferenceMethodName + ": ",
+                    e.getCause());
         }
-    }
-
-    private static boolean shouldEnableSafeBrowsingSupport(Context appContext) {
-        return CommandLine.getInstance().hasSwitch(AwSwitches.WEBVIEW_ENABLE_SAFEBROWSING_SUPPORT)
-                || appHasOptedIn(appContext);
     }
 
     private static boolean appHasOptedIn(Context appContext) {
@@ -63,12 +73,14 @@ public class AwSafeBrowsingConfigHelper {
         }
     }
 
-    @SuppressLint("NewApi") // android.provider.Settings.Global#getInt requires API level 17
-    private static boolean isScanDeviceForSecurityThreatsEnabled(Context applicationContext) {
-        // Determine if the "Scan device for security threats" functionality is enabled in
-        // Android->System->Google->Security settings.
-        ContentResolver contentResolver = applicationContext.getContentResolver();
-        return Settings.Secure.getInt(contentResolver, "package_verifier_user_consent", 1) > 0;
+    // Can be called from any thread. This returns true or false, depending on user opt-in
+    // preference. This returns null if we don't know yet what the user's preference is.
+    public static Boolean getSafeBrowsingUserOptIn() {
+        return sSafeBrowsingUserOptIn;
+    }
+
+    public static void setSafeBrowsingUserOptIn(boolean optin) {
+        sSafeBrowsingUserOptIn = optin;
     }
 
     // Not meant to be instantiated.

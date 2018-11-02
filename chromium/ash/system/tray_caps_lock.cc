@@ -5,10 +5,9 @@
 #include "ash/system/tray_caps_lock.h"
 
 #include "ash/accessibility_delegate.h"
-#include "ash/resources/grit/ash_resources.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/actionable_view.h"
@@ -53,14 +52,14 @@ bool CapsLockIsEnabled() {
 }
 
 std::unique_ptr<Notification> CreateNotification() {
-  ui::ResourceBundle& bundle = ui::ResourceBundle::GetSharedInstance();
   const int string_id =
       Shell::Get()->system_tray_delegate()->IsSearchKeyMappedToCapsLock()
           ? IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_SEARCH
           : IDS_ASH_STATUS_TRAY_CAPS_LOCK_CANCEL_BY_ALT_SEARCH;
   std::unique_ptr<Notification> notification(new Notification(
       message_center::NOTIFICATION_TYPE_SIMPLE, kCapsLockNotificationId,
-      base::string16(), bundle.GetLocalizedString(string_id),
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_CAPS_LOCK_ENABLED),
+      l10n_util::GetStringUTF16(string_id),
       gfx::Image(
           gfx::CreateVectorIcon(kSystemMenuCapsLockIcon,
                                 TrayPopupItemStyle::GetIconColor(
@@ -147,7 +146,7 @@ class CapsLockDefaultView : public ActionableView {
     chromeos::input_method::ImeKeyboard* keyboard =
         chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
     if (keyboard) {
-      ShellPort::Get()->RecordUserMetricsAction(
+      Shell::Get()->metrics()->RecordUserMetricsAction(
           keyboard->CapsLockIsEnabled()
               ? UMA_STATUS_AREA_CAPS_LOCK_DISABLED_BY_CLICK
               : UMA_STATUS_AREA_CAPS_LOCK_ENABLED_BY_CLICK);
@@ -200,7 +199,7 @@ void TrayCapsLock::OnCapsLockChanged(bool enabled) {
         message_center::MessageCenter::Get();
     if (caps_lock_enabled_) {
       if (!message_shown_) {
-        ShellPort::Get()->RecordUserMetricsAction(
+        Shell::Get()->metrics()->RecordUserMetricsAction(
             UMA_STATUS_AREA_CAPS_LOCK_POPUP);
 
         message_center->AddNotification(CreateNotification());
@@ -226,7 +225,7 @@ views::View* TrayCapsLock::CreateDefaultView(LoginStatus status) {
   return default_;
 }
 
-void TrayCapsLock::DestroyDefaultView() {
+void TrayCapsLock::OnDefaultViewDestroyed() {
   default_ = nullptr;
 }
 

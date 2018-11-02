@@ -76,6 +76,8 @@ class TestWebState : public WebState {
   void RemovePolicyDecider(WebStatePolicyDecider* decider) override {}
   WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
   bool HasOpener() const override;
+  void TakeSnapshot(const SnapshotCallback& callback,
+                    CGSize target_size) const override;
   base::WeakPtr<WebState> AsWeakPtr() override;
 
   // Setters for test data.
@@ -100,7 +102,7 @@ class TestWebState : public WebState {
   BrowserState* browser_state_;
   bool web_usage_enabled_;
   bool is_loading_;
-  base::scoped_nsobject<CRWContentView> transient_content_view_;
+  CRWContentView* transient_content_view_;
   GURL url_;
   base::string16 title_;
   URLVerificationTrustLevel trust_level_;
@@ -108,7 +110,7 @@ class TestWebState : public WebState {
   std::string mime_type_;
   std::string content_language_;
   std::unique_ptr<NavigationManager> navigation_manager_;
-  base::scoped_nsobject<UIView> view_;
+  UIView* view_;
 
   // A list of observers notified when page state changes. Weak references.
   base::ObserverList<WebStateObserver, true> observers_;

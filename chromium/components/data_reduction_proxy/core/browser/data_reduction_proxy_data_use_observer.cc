@@ -40,55 +40,13 @@ class DataUseUserDataBytes : public base::SupportsUserData::Data {
   int64_t original_bytes_;
 };
 
+// Hostname used for the other bucket which consists of chrome-services traffic.
+// This should be in sync with the same in DataReductionSiteBreakdownView.java
+const char kOtherHostName[] = "Other";
+
 // static
 const void* DataUseUserDataBytes::kUserDataKey =
     &DataUseUserDataBytes::kUserDataKey;
-
-// Estimate the size of the original headers of |request|. If |used_drp| is
-// true, then it's assumed that the original request would have used HTTP/1.1,
-// otherwise it assumes that the original request would have used the same
-// protocol as |request| did. This is to account for stuff like HTTP/2 header
-// compression.
-int64_t EstimateOriginalHeaderBytes(const net::URLRequest& request,
-                                    bool used_drp) {
-  if (used_drp) {
-    // TODO(sclittle): Remove headers added by Data Reduction Proxy when
-    // computing original size. https://crbug.com/535701.
-    return request.response_headers()->raw_headers().size();
-  }
-  return std::max<int64_t>(0, request.GetTotalReceivedBytes() -
-                                  request.received_response_content_length());
-}
-
-// Given a |request| that went through the Data Reduction Proxy if |used_drp| is
-// true, this function estimates how many bytes would have been received if the
-// response had been received directly from the origin without any data saver
-// optimizations.
-int64_t EstimateOriginalReceivedBytes(
-    const net::URLRequest& request,
-    bool used_drp,
-    const data_reduction_proxy::LoFiDecider* lofi_decider) {
-  if (request.was_cached() || !request.response_headers())
-    return request.GetTotalReceivedBytes();
-
-  if (lofi_decider) {
-    if (lofi_decider->IsClientLoFiAutoReloadRequest(request))
-      return 0;
-
-    int64_t first, last, length;
-    if (lofi_decider->IsClientLoFiImageRequest(request) &&
-        request.response_headers()->GetContentRangeFor206(&first, &last,
-                                                          &length) &&
-        length > request.received_response_content_length()) {
-      return EstimateOriginalHeaderBytes(request, used_drp) + length;
-    }
-  }
-
-  return used_drp
-             ? EstimateOriginalHeaderBytes(request, used_drp) +
-                   data_reduction_proxy::util::CalculateEffectiveOCL(request)
-             : request.GetTotalReceivedBytes();
-}
 
 }  // namespace
 
@@ -130,8 +88,12 @@ void DataReductionProxyDataUseObserver::OnPageResourceLoad(
     data_use_measurement::DataUse* data_use) {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (data_use->traffic_type() !=
-      data_use_measurement::DataUse::TrafficType::USER_TRAFFIC)
+  if (!request.url().SchemeIs(url::kHttpsScheme) &&
+      !request.url().SchemeIs(url::kHttpScheme)) {
+    return;
+  }
+
+  if (request.GetTotalReceivedBytes() <= 0)
     return;
 
   int64_t network_bytes = request.GetTotalReceivedBytes();
@@ -141,11 +103,13 @@ void DataReductionProxyDataUseObserver::OnPageResourceLoad(
 
   // Estimate how many bytes would have been used if the DataReductionProxy was
   // not used, and record the data usage.
-  int64_t original_bytes = EstimateOriginalReceivedBytes(
+  int64_t original_bytes = util::EstimateOriginalReceivedBytes(
       request, request_type == VIA_DATA_REDUCTION_PROXY,
       data_reduction_proxy_io_data_->lofi_decider());
 
-  if (!data_use->url().is_valid()) {
+  if (data_use->traffic_type() ==
+          data_use_measurement::DataUse::TrafficType::USER_TRAFFIC &&
+      !data_use->url().is_valid()) {
     // URL will be empty until pageload navigation commits. Save the data use of
     // these mainframe, subresource, redirected requests in user data until
     // then.
@@ -160,7 +124,11 @@ void DataReductionProxyDataUseObserver::OnPageResourceLoad(
     }
   } else {
     data_reduction_proxy_io_data_->UpdateDataUseForHost(
-        network_bytes, original_bytes, data_use->url().HostNoBrackets());
+        network_bytes, original_bytes,
+        data_use->traffic_type() ==
+                data_use_measurement::DataUse::TrafficType::USER_TRAFFIC
+            ? data_use->url().HostNoBrackets()
+            : kOtherHostName);
   }
 }
 

@@ -29,19 +29,20 @@ class CORE_EXPORT ThreadedObjectProxyBase : public WorkerReportingProxy {
   void ReportPendingActivity(bool has_pending_activity);
 
   // WorkerReportingProxy overrides.
-  void CountFeature(UseCounter::Feature) override;
-  void CountDeprecation(UseCounter::Feature) override;
+  void CountFeature(WebFeature) override;
+  void CountDeprecation(WebFeature) override;
   void ReportConsoleMessage(MessageSource,
                             MessageLevel,
                             const String& message,
                             SourceLocation*) override;
-  void PostMessageToPageInspector(const String&) override;
+  void PostMessageToPageInspector(int session_id, const String&) override;
   void DidCloseWorkerGlobalScope() override;
   void DidTerminateWorkerThread() override;
 
  protected:
   explicit ThreadedObjectProxyBase(ParentFrameTaskRunners*);
-  virtual WeakPtr<ThreadedMessagingProxyBase> MessagingProxyWeakPtr() = 0;
+  virtual CrossThreadWeakPersistent<ThreadedMessagingProxyBase>
+  MessagingProxyWeakPtr() = 0;
   ParentFrameTaskRunners* GetParentFrameTaskRunners();
 
  private:

@@ -13,6 +13,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -110,6 +111,10 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   void set_configure_displays(bool configure_displays) {
     configure_displays_ = configure_displays;
+  }
+
+  void set_internal_display_has_accelerometer(bool has_accelerometer) {
+    internal_display_has_accelerometer_ = has_accelerometer;
   }
 
   // Returns the display id of the first display in the outupt list.
@@ -372,6 +377,18 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
  private:
   friend class test::DisplayManagerTestApi;
 
+  // See description above |notify_depth_| for details.
+  class BeginEndNotifier {
+   public:
+    explicit BeginEndNotifier(DisplayManager* display_manager);
+    ~BeginEndNotifier();
+
+   private:
+    DisplayManager* display_manager_;
+
+    DISALLOW_COPY_AND_ASSIGN(BeginEndNotifier);
+  };
+
   bool software_mirroring_enabled() const {
     return multi_display_mode_ == MIRRORING;
   }
@@ -489,7 +506,16 @@ class DISPLAY_MANAGER_EXPORT DisplayManager
 
   bool unified_desktop_enabled_ = false;
 
+  bool internal_display_has_accelerometer_ = false;
+
+  base::Closure created_mirror_window_;
+
   base::ObserverList<DisplayObserver> observers_;
+
+  // This is incremented whenever a BeginEndNotifier is created and decremented
+  // when destroyed. BeginEndNotifier uses this to track when it should call
+  // OnWillProcessDisplayChanges() and OnDidProcessDisplayChanges().
+  int notify_depth_ = 0;
 
   base::WeakPtrFactory<DisplayManager> weak_ptr_factory_;
 

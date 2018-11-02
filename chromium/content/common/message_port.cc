@@ -7,17 +7,15 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "mojo/public/cpp/system/message_pipe.h"
 
 namespace content {
 
-MessagePort::~MessagePort() {
-}
+MessagePort::~MessagePort() {}
 
-MessagePort::MessagePort() : state_(new State()) {
-}
+MessagePort::MessagePort() : state_(new State()) {}
 
-MessagePort::MessagePort(const MessagePort& other) : state_(other.state_) {
-}
+MessagePort::MessagePort(const MessagePort& other) : state_(other.state_) {}
 
 MessagePort& MessagePort::operator=(const MessagePort& other) {
   state_ = other.state_;
@@ -25,8 +23,7 @@ MessagePort& MessagePort::operator=(const MessagePort& other) {
 }
 
 MessagePort::MessagePort(mojo::ScopedMessagePipeHandle handle)
-    : state_(new State(std::move(handle))) {
-}
+    : state_(new State(std::move(handle))) {}
 
 const mojo::ScopedMessagePipeHandle& MessagePort::GetHandle() const {
   return state_->handle();
@@ -52,65 +49,62 @@ void MessagePort::PostMessage(const base::string16& encoded_message,
 
   uint32_t num_bytes = encoded_message.size() * sizeof(base::char16);
 
-  // NOTE: It is OK to ignore the return value of MojoWriteMessage here. HTML
-  // MessagePorts have no way of reporting when the peer is gone.
+  // NOTE: It is OK to ignore the return value of mojo::WriteMessageRaw here.
+  // HTML MessagePorts have no way of reporting when the peer is gone.
 
   if (ports.empty()) {
-    MojoWriteMessage(state_->handle().get().value(), encoded_message.data(),
-                     num_bytes, nullptr, 0, MOJO_WRITE_MESSAGE_FLAG_NONE);
+    mojo::WriteMessageRaw(state_->handle().get(), encoded_message.data(),
+                          num_bytes, nullptr, 0, MOJO_WRITE_MESSAGE_FLAG_NONE);
   } else {
     uint32_t num_handles = static_cast<uint32_t>(ports.size());
     std::unique_ptr<MojoHandle[]> handles(new MojoHandle[num_handles]);
     for (uint32_t i = 0; i < num_handles; ++i)
       handles[i] = ports[i].ReleaseHandle().release().value();
-    MojoWriteMessage(state_->handle().get().value(), encoded_message.data(),
-                     num_bytes, handles.get(), num_handles,
-                     MOJO_WRITE_MESSAGE_FLAG_NONE);
+    mojo::WriteMessageRaw(state_->handle().get(), encoded_message.data(),
+                          num_bytes, handles.get(), num_handles,
+                          MOJO_WRITE_MESSAGE_FLAG_NONE);
   }
 }
 
 bool MessagePort::GetMessage(base::string16* encoded_message,
                              std::vector<MessagePort>* ports) {
   DCHECK(state_->handle().is_valid());
-
-  uint32_t num_bytes = 0;
-  uint32_t num_handles = 0;
-
-  MojoResult rv =
-      MojoReadMessage(state_->handle().get().value(), nullptr, &num_bytes,
-                      nullptr, &num_handles, MOJO_READ_MESSAGE_FLAG_NONE);
-  if (rv == MOJO_RESULT_OK) {
-    encoded_message->clear();
-    ports->clear();
-    return true;
-  }
-  if (rv != MOJO_RESULT_RESOURCE_EXHAUSTED)
-    return false;
-
-  CHECK(num_bytes % 2 == 0);
-
-  base::string16 buffer;
-  buffer.resize(num_bytes / sizeof(base::char16));
-
-  std::unique_ptr<MojoHandle[]> handles;
-  if (num_handles)
-    handles.reset(new MojoHandle[num_handles]);
-
-  rv = MojoReadMessage(
-      state_->handle().get().value(), num_bytes ? &buffer[0] : nullptr,
-      &num_bytes, handles.get(), &num_handles, MOJO_READ_MESSAGE_FLAG_NONE);
+  mojo::ScopedMessageHandle message;
+  MojoResult rv = mojo::ReadMessageNew(state_->handle().get(), &message,
+                                       MOJO_READ_MESSAGE_FLAG_NONE);
   if (rv != MOJO_RESULT_OK)
     return false;
 
-  buffer.swap(*encoded_message);
+  uint32_t num_bytes = 0;
+  uint32_t num_handles = 0;
+  void* buffer;
+  std::vector<mojo::ScopedHandle> handles;
+  rv = MojoGetSerializedMessageContents(
+      message->value(), &buffer, &num_bytes, nullptr, &num_handles,
+      MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+  if (rv == MOJO_RESULT_RESOURCE_EXHAUSTED) {
+    handles.resize(num_handles);
+    rv = MojoGetSerializedMessageContents(
+        message->value(), &buffer, &num_bytes,
+        reinterpret_cast<MojoHandle*>(handles.data()), &num_handles,
+        MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+  }
+  if (rv != MOJO_RESULT_OK)
+    return false;
 
-  if (num_handles) {
-    ports->resize(static_cast<size_t>(num_handles));
+  DCHECK_EQ(0u, num_bytes % sizeof(base::char16));
+  encoded_message->resize(num_bytes / sizeof(base::char16));
+  if (num_bytes)
+    memcpy(&encoded_message->at(0), buffer, num_bytes);
+
+  if (!handles.empty()) {
+    ports->resize(handles.size());
     for (uint32_t i = 0; i < num_handles; ++i) {
       ports->at(i) = MessagePort(
-          mojo::ScopedMessagePipeHandle(mojo::MessagePipeHandle(handles[i])));
+          mojo::ScopedMessagePipeHandle::From(std::move(handles[i])));
     }
   }
+
   return true;
 }
 
@@ -123,12 +117,10 @@ void MessagePort::ClearCallback() {
   state_->StopWatching();
 }
 
-MessagePort::State::State() {
-}
+MessagePort::State::State() {}
 
 MessagePort::State::State(mojo::ScopedMessagePipeHandle handle)
-    : handle_(std::move(handle)) {
-}
+    : handle_(std::move(handle)) {}
 
 void MessagePort::State::StartWatching(const base::Closure& callback) {
   base::AutoLock lock(lock_);
@@ -145,9 +137,9 @@ void MessagePort::State::StartWatching(const base::Closure& callback) {
 
   // NOTE: An HTML MessagePort does not receive an event to tell it when the
   // peer has gone away, so we only watch for readability here.
-  rv =
-      MojoWatch(watcher_handle_.get().value(), handle_.get().value(),
-                MOJO_HANDLE_SIGNAL_READABLE, reinterpret_cast<uintptr_t>(this));
+  rv = MojoWatch(watcher_handle_.get().value(), handle_.get().value(),
+                 MOJO_HANDLE_SIGNAL_READABLE, MOJO_WATCH_CONDITION_SATISFIED,
+                 reinterpret_cast<uintptr_t>(this));
   DCHECK_EQ(MOJO_RESULT_OK, rv);
 
   ArmWatcher();

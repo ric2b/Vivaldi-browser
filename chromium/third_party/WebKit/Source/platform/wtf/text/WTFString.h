@@ -97,7 +97,7 @@ class WTF_EXPORT String {
 
   // Construct a string referencing an existing StringImpl.
   String(StringImpl* impl) : impl_(impl) {}
-  String(PassRefPtr<StringImpl> impl) : impl_(std::move(impl)) {}
+  String(RefPtr<StringImpl> impl) : impl_(std::move(impl)) {}
 
   void swap(String& o) { impl_.Swap(o.impl_); }
 
@@ -113,7 +113,7 @@ class WTF_EXPORT String {
   bool IsEmpty() const { return !impl_ || !impl_->length(); }
 
   StringImpl* Impl() const { return impl_.Get(); }
-  PassRefPtr<StringImpl> ReleaseImpl() { return impl_.Release(); }
+  RefPtr<StringImpl> ReleaseImpl() { return std::move(impl_); }
 
   unsigned length() const {
     if (!impl_)
@@ -225,6 +225,13 @@ class WTF_EXPORT String {
                ? DISPATCH_CASE_OP(case_sensitivity, impl_->StartsWith, (prefix))
                : prefix.IsEmpty();
   }
+  bool StartsWithIgnoringCase(const StringView& prefix) const {
+    return impl_ ? impl_->StartsWithIgnoringCase(prefix) : prefix.IsEmpty();
+  }
+  bool StartsWithIgnoringASCIICase(const StringView& prefix) const {
+    return impl_ ? impl_->StartsWithIgnoringASCIICase(prefix)
+                 : prefix.IsEmpty();
+  }
   bool StartsWith(UChar character) const {
     return impl_ ? impl_->StartsWith(character) : false;
   }
@@ -234,6 +241,12 @@ class WTF_EXPORT String {
       TextCaseSensitivity case_sensitivity = kTextCaseSensitive) const {
     return impl_ ? DISPATCH_CASE_OP(case_sensitivity, impl_->EndsWith, (suffix))
                  : suffix.IsEmpty();
+  }
+  bool EndsWithIgnoringCase(const StringView& prefix) const {
+    return impl_ ? impl_->EndsWithIgnoringCase(prefix) : prefix.IsEmpty();
+  }
+  bool EndsWithIgnoringASCIICase(const StringView& prefix) const {
+    return impl_ ? impl_->EndsWithIgnoringASCIICase(prefix) : prefix.IsEmpty();
   }
   bool EndsWith(UChar character) const {
     return impl_ ? impl_->EndsWith(character) : false;
@@ -360,10 +373,11 @@ class WTF_EXPORT String {
 
   // Convert the string into a number.
 
-  int ToIntStrict(bool* ok = 0, int base = 10) const;
-  unsigned ToUIntStrict(bool* ok = 0, int base = 10) const;
-  int64_t ToInt64Strict(bool* ok = 0, int base = 10) const;
-  uint64_t ToUInt64Strict(bool* ok = 0, int base = 10) const;
+  int ToIntStrict(bool* ok = 0) const;
+  unsigned ToUIntStrict(bool* ok = 0) const;
+  unsigned HexToUIntStrict(bool* ok) const;
+  int64_t ToInt64Strict(bool* ok = 0) const;
+  uint64_t ToUInt64Strict(bool* ok = 0) const;
 
   int ToInt(bool* ok = 0) const;
   unsigned ToUInt(bool* ok = 0) const;

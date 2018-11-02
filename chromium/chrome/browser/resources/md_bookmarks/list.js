@@ -32,11 +32,21 @@ Polymer({
     },
 
     /** @private */
-    searchTerm_: String,
+    searchTerm_: {
+      type: String,
+      observer: 'onDisplayedListSourceChange_',
+    },
+
+    /** @private */
+    selectedFolder_: {
+      type: String,
+      observer: 'onDisplayedListSourceChange_',
+    },
   },
 
   listeners: {
     'click': 'deselectItems_',
+    'open-item-menu': 'onOpenItemMenu_',
   },
 
   attached: function() {
@@ -48,6 +58,9 @@ Polymer({
     });
     this.watch('searchTerm_', function(state) {
       return state.search.term;
+    });
+    this.watch('selectedFolder_', function(state) {
+      return state.selectedFolder;
     });
     this.updateFromStore();
 
@@ -73,7 +86,9 @@ Polymer({
         return {id: id};
       });
     } else {
-      var splices = Polymer.ArraySplice.calculateSplices(newValue, oldValue);
+      var splices = Polymer.ArraySplice.calculateSplices(
+          /** @type {!Array<string>} */ (newValue),
+          /** @type {!Array<string>} */ (oldValue));
       splices.forEach(function(splice) {
         // TODO(calamity): Could use notifySplices to improve performance here.
         var additions =
@@ -86,6 +101,11 @@ Polymer({
         ].concat(additions));
       }.bind(this));
     }
+  },
+
+  /** @private */
+  onDisplayedListSourceChange_: function() {
+    this.scrollTop = 0;
   },
 
   /** @private */
@@ -104,18 +124,25 @@ Polymer({
     this.dispatch(bookmarks.actions.deselectItems());
   },
 
-  /** @private */
-  selectAllItems_: function() {
-    this.dispatch(
-        bookmarks.actions.selectAll(this.displayedIds_, this.getState()));
-  },
-
   /**
    * @param{HTMLElement} el
    * @private
    */
   getIndexForItemElement_: function(el) {
     return this.$.bookmarksCard.modelForElement(el).index;
+  },
+
+  /**
+   * @param {Event} e
+   * @private
+   */
+  onOpenItemMenu_: function(e) {
+    var index = this.displayedIds_.indexOf(
+        /** @type {BookmarksItemElement} */ (e.path[0]).itemId);
+    var list = this.$.bookmarksCard;
+    // If the item is not visible, scroll to it before rendering the menu.
+    if (index < list.firstVisibleIndex || index > list.lastVisibleIndex)
+      list.scrollToIndex(index);
   },
 
   /**
@@ -128,6 +155,8 @@ Polymer({
     var focusMoved = false;
     var focusedIndex =
         this.getIndexForItemElement_(/** @type {HTMLElement} */ (e.target));
+    var oldFocusedIndex = focusedIndex;
+    var cursorModifier = cr.isMac ? e.metaKey : e.ctrlKey;
     if (e.key == 'ArrowUp') {
       focusedIndex--;
       focusMoved = true;
@@ -141,17 +170,13 @@ Polymer({
     } else if (e.key == 'End') {
       focusedIndex = list.items.length - 1;
       focusMoved = true;
-    } else if (e.key == ' ' && e.ctrlKey) {
+    } else if (e.key == ' ' && cursorModifier) {
       this.dispatch(bookmarks.actions.selectItem(
           this.displayedIds_[focusedIndex], this.getState(), {
             clear: false,
             range: false,
             toggle: true,
           }));
-    } else if (e.key == 'a' && e.ctrlKey) {
-      this.selectAllItems_();
-    } else if (e.key == 'Escape') {
-      this.deselectItems_();
     } else {
       handled = false;
     }
@@ -160,14 +185,20 @@ Polymer({
       focusedIndex = Math.min(list.items.length - 1, Math.max(0, focusedIndex));
       list.focusItem(focusedIndex);
 
-      if (e.ctrlKey && !e.shiftKey) {
+      if (cursorModifier && !e.shiftKey) {
         this.dispatch(
             bookmarks.actions.updateAnchor(this.displayedIds_[focusedIndex]));
       } else {
+        // If shift-selecting with no anchor, use the old focus index.
+        if (e.shiftKey && this.getState().selection.anchor == null) {
+          this.dispatch(bookmarks.actions.updateAnchor(
+              this.displayedIds_[oldFocusedIndex]));
+        }
+
         // If the focus moved from something other than a Ctrl + move event,
         // update the selection.
         var config = {
-          clear: !e.ctrlKey,
+          clear: !cursorModifier,
           range: e.shiftKey,
           toggle: false,
         };
@@ -175,6 +206,15 @@ Polymer({
         this.dispatch(bookmarks.actions.selectItem(
             this.displayedIds_[focusedIndex], this.getState(), config));
       }
+    }
+
+    // Prevent the iron-list from changing focus on enter.
+    if (e.path[0] instanceof HTMLButtonElement && e.key == 'Enter')
+      handled = true;
+
+    if (!handled) {
+      handled = bookmarks.CommandManager.getInstance().handleKeyEvent(
+          e, this.getState().selection.items);
     }
 
     if (handled)

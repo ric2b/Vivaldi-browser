@@ -5,6 +5,9 @@
 #include "content/public/test/layouttest_support.h"
 
 #include <stddef.h>
+
+#include <algorithm>
+#include <unordered_map>
 #include <utility>
 
 #include "base/callback.h"
@@ -13,9 +16,10 @@
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
+#include "cc/base/switches.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/test/pixel_test_output_surface.h"
-#include "cc/test/test_compositor_frame_sink.h"
+#include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "content/browser/bluetooth/bluetooth_device_chooser_controller.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -52,6 +56,7 @@
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebView.h"
 #include "ui/events/blink/blink_event_util.h"
+#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/test/icc_profiles.h"
@@ -258,7 +263,10 @@ void FetchManifest(blink::WebView* view, const GURL& url,
   // A raw pointer is used instead of a scoped_ptr as base::Passes passes
   // ownership and thus nulls the scoped_ptr. On MSVS this happens before
   // the call to Start, resulting in a crash.
-  fetcher->Start(view->MainFrame(), false,
+  CHECK(view->MainFrame()->IsWebLocalFrame())
+      << "This function cannot be called if the main frame is not a "
+         "local frame.";
+  fetcher->Start(view->MainFrame()->ToWebLocalFrame(), false,
                  base::Bind(&FetchManifestDoneCallback,
                             base::Passed(&autodeleter), callback));
 }
@@ -284,24 +292,24 @@ namespace {
 // request at SwapBuffers time.
 class CopyRequestSwapPromise : public cc::SwapPromise {
  public:
-  using FindCompositorFrameSinkCallback =
-      base::Callback<cc::TestCompositorFrameSink*()>;
+  using FindLayerTreeFrameSinkCallback =
+      base::Callback<viz::TestLayerTreeFrameSink*()>;
   CopyRequestSwapPromise(
       std::unique_ptr<cc::CopyOutputRequest> request,
-      FindCompositorFrameSinkCallback find_compositor_frame_sink_callback)
+      FindLayerTreeFrameSinkCallback find_layer_tree_frame_sink_callback)
       : copy_request_(std::move(request)),
-        find_compositor_frame_sink_callback_(
-            std::move(find_compositor_frame_sink_callback)) {}
+        find_layer_tree_frame_sink_callback_(
+            std::move(find_layer_tree_frame_sink_callback)) {}
 
   // cc::SwapPromise implementation.
   void OnCommit() override {
-    compositor_frame_sink_from_commit_ =
-        find_compositor_frame_sink_callback_.Run();
-    DCHECK(compositor_frame_sink_from_commit_);
+    layer_tree_frame_sink_from_commit_ =
+        find_layer_tree_frame_sink_callback_.Run();
+    DCHECK(layer_tree_frame_sink_from_commit_);
   }
   void DidActivate() override {}
   void WillSwap(cc::CompositorFrameMetadata*) override {
-    compositor_frame_sink_from_commit_->RequestCopyOfOutput(
+    layer_tree_frame_sink_from_commit_->RequestCopyOfOutput(
         std::move(copy_request_));
   }
   void DidSwap() override {}
@@ -314,25 +322,25 @@ class CopyRequestSwapPromise : public cc::SwapPromise {
 
  private:
   std::unique_ptr<cc::CopyOutputRequest> copy_request_;
-  FindCompositorFrameSinkCallback find_compositor_frame_sink_callback_;
-  cc::TestCompositorFrameSink* compositor_frame_sink_from_commit_ = nullptr;
+  FindLayerTreeFrameSinkCallback find_layer_tree_frame_sink_callback_;
+  viz::TestLayerTreeFrameSink* layer_tree_frame_sink_from_commit_ = nullptr;
 };
 
 }  // namespace
 
 class LayoutTestDependenciesImpl : public LayoutTestDependencies,
-                                   public cc::TestCompositorFrameSinkClient {
+                                   public viz::TestLayerTreeFrameSinkClient {
  public:
-  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink(
+  std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink(
       int32_t routing_id,
       scoped_refptr<gpu::GpuChannelHost> gpu_channel,
-      scoped_refptr<cc::ContextProvider> compositor_context_provider,
-      scoped_refptr<cc::ContextProvider> worker_context_provider,
+      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::ContextProvider> worker_context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
       CompositorDependencies* deps) override {
-    // This could override the GpuChannel for a CompositorFrameSink that was
+    // This could override the GpuChannel for a LayerTreeFrameSink that was
     // previously being created but in that case the old GpuChannel would be
-    // lost as would the CompositorFrameSink.
+    // lost as would the LayerTreeFrameSink.
     gpu_channel_ = gpu_channel;
 
     auto* task_runner = deps->GetCompositorImplThreadTaskRunner().get();
@@ -340,42 +348,46 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
     if (!task_runner)
       task_runner = base::ThreadTaskRunnerHandle::Get().get();
 
-    ScreenInfo dummy_screen_info;
-    cc::LayerTreeSettings settings =
-        RenderWidgetCompositor::GenerateLayerTreeSettings(
-            *base::CommandLine::ForCurrentProcess(), deps, 1.f, false,
-            dummy_screen_info);
+    viz::RendererSettings renderer_settings;
+    base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
+    renderer_settings.enable_color_correct_rendering =
+        base::FeatureList::IsEnabled(features::kColorCorrectRendering);
+    renderer_settings.allow_antialiasing &=
+        !cmd->HasSwitch(cc::switches::kDisableCompositedAntialiasing);
+    renderer_settings.highp_threshold_min = 2048;
 
     constexpr bool disable_display_vsync = false;
-    auto compositor_frame_sink = base::MakeUnique<cc::TestCompositorFrameSink>(
+    constexpr double refresh_rate = 60.0;
+    auto layer_tree_frame_sink = base::MakeUnique<viz::TestLayerTreeFrameSink>(
         std::move(compositor_context_provider),
         std::move(worker_context_provider), nullptr /* shared_bitmap_manager */,
-        gpu_memory_buffer_manager, settings.renderer_settings, task_runner,
-        synchronous_composite, disable_display_vsync);
-    compositor_frame_sink->SetClient(this);
-    compositor_frame_sinks_[routing_id] = compositor_frame_sink.get();
-    return std::move(compositor_frame_sink);
+        gpu_memory_buffer_manager, renderer_settings, task_runner,
+        synchronous_composite, disable_display_vsync, refresh_rate);
+    layer_tree_frame_sink->SetClient(this);
+    layer_tree_frame_sinks_[routing_id] = layer_tree_frame_sink.get();
+    return std::move(layer_tree_frame_sink);
   }
 
   std::unique_ptr<cc::SwapPromise> RequestCopyOfOutput(
       int32_t routing_id,
       std::unique_ptr<cc::CopyOutputRequest> request) override {
-    // Note that we can't immediately check compositor_frame_sinks_, since it
+    // Note that we can't immediately check layer_tree_frame_sinks_, since it
     // may not have been created yet. Instead, we wait until OnCommit to find
-    // the currently active CompositorFrameSink for the given RenderWidget
+    // the currently active LayerTreeFrameSink for the given RenderWidget
     // routing_id.
     return base::MakeUnique<CopyRequestSwapPromise>(
         std::move(request),
         base::Bind(
-            &LayoutTestDependenciesImpl::FindCompositorFrameSink,
+            &LayoutTestDependenciesImpl::FindLayerTreeFrameSink,
             // |this| will still be valid, because its lifetime is tied to
             // RenderThreadImpl, which outlives layout test execution.
             base::Unretained(this), routing_id));
   }
 
-  // TestCompositorFrameSinkClient implementation.
+  // TestLayerTreeFrameSinkClient implementation.
   std::unique_ptr<cc::OutputSurface> CreateDisplayOutputSurface(
-      scoped_refptr<cc::ContextProvider> compositor_context_provider) override {
+      scoped_refptr<viz::ContextProvider> compositor_context_provider)
+      override {
     // This is for an offscreen context for the compositor. So the default
     // framebuffer doesn't need alpha, depth, stencil, antialiasing.
     gpu::gles2::ContextCreationAttribHelper attributes;
@@ -405,7 +417,7 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
         std::move(context_provider), flipped_output_surface);
   }
   void DisplayReceivedLocalSurfaceId(
-      const cc::LocalSurfaceId& local_surface_id) override {}
+      const viz::LocalSurfaceId& local_surface_id) override {}
   void DisplayReceivedCompositorFrame(
       const cc::CompositorFrame& frame) override {}
   void DisplayWillDrawAndSwap(
@@ -414,17 +426,17 @@ class LayoutTestDependenciesImpl : public LayoutTestDependencies,
   void DisplayDidDrawAndSwap() override {}
 
  private:
-  cc::TestCompositorFrameSink* FindCompositorFrameSink(int32_t routing_id) {
-    auto it = compositor_frame_sinks_.find(routing_id);
-    return it == compositor_frame_sinks_.end() ? nullptr : it->second;
+  viz::TestLayerTreeFrameSink* FindLayerTreeFrameSink(int32_t routing_id) {
+    auto it = layer_tree_frame_sinks_.find(routing_id);
+    return it == layer_tree_frame_sinks_.end() ? nullptr : it->second;
   }
 
   // Entries are not removed, so this map can grow. However, it is only used in
   // layout tests, so this memory usage does not occur in production.
   // Entries in this map will outlive the output surface, because this object is
   // owned by RenderThreadImpl, which outlives layout test execution.
-  std::unordered_map<int32_t, cc::TestCompositorFrameSink*>
-      compositor_frame_sinks_;
+  std::unordered_map<int32_t, viz::TestLayerTreeFrameSink*>
+      layer_tree_frame_sinks_;
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
 };
 
@@ -488,25 +500,25 @@ std::unique_ptr<blink::WebInputEvent> TransformScreenToWidgetCoordinates(
   return ui::TranslateAndScaleWebInputEvent(event, delta, scale);
 }
 
-gfx::ICCProfile GetTestingICCProfile(const std::string& name) {
+gfx::ColorSpace GetTestingColorSpace(const std::string& name) {
   if (name == "genericRGB") {
-    return gfx::ICCProfileForTestingGenericRGB();
+    return gfx::ICCProfileForTestingGenericRGB().GetColorSpace();
   } else if (name == "sRGB") {
-    return gfx::ICCProfileForTestingSRGB();
+    return gfx::ColorSpace::CreateSRGB();
   } else if (name == "test" || name == "colorSpin") {
-    return gfx::ICCProfileForTestingColorSpin();
+    return gfx::ICCProfileForTestingColorSpin().GetColorSpace();
   } else if (name == "adobeRGB") {
-    return gfx::ICCProfileForTestingAdobeRGB();
+    return gfx::ICCProfileForTestingAdobeRGB().GetColorSpace();
   } else if (name == "reset") {
-    return gfx::ICCProfileForLayoutTests();
+    return display::Display::GetForcedColorProfile();
   }
-  return gfx::ICCProfile();
+  return gfx::ColorSpace();
 }
 
-void SetDeviceColorProfile(
-    RenderView* render_view, const gfx::ICCProfile& icc_profile) {
-  static_cast<RenderViewImpl*>(render_view)->
-      SetDeviceColorProfileForTesting(icc_profile);
+void SetDeviceColorSpace(RenderView* render_view,
+                         const gfx::ColorSpace& color_space) {
+  static_cast<RenderViewImpl*>(render_view)
+      ->SetDeviceColorSpaceForTesting(color_space);
 }
 
 void SetTestBluetoothScanDuration() {
@@ -546,7 +558,7 @@ std::string DumpHistoryItem(HistoryEntry::HistoryNode* node,
   const blink::WebHistoryItem& item = node->item();
   if (is_current_index) {
     result.append("curr->");
-    result.append(indent - 6, ' '); // 6 == "curr->".length()
+    result.append(indent - 6, ' ');  // 6 == "curr->".length()
   } else {
     result.append(indent, ' ');
   }

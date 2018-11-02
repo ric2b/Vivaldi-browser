@@ -475,11 +475,13 @@ String StylePropertySerializer::GetPropertyValue(
     case CSSPropertyMargin:
       return Get4Values(marginShorthand());
     case CSSPropertyOffset:
-      return GetShorthandValue(offsetShorthand());
+      return OffsetValue();
     case CSSPropertyWebkitMarginCollapse:
       return GetShorthandValue(webkitMarginCollapseShorthand());
     case CSSPropertyOverflow:
       return GetCommonValue(overflowShorthand());
+    case CSSPropertyScrollBoundaryBehavior:
+      return GetCommonValue(scrollBoundaryBehaviorShorthand());
     case CSSPropertyPadding:
       return Get4Values(paddingShorthand());
     case CSSPropertyTextDecoration:
@@ -506,6 +508,18 @@ String StylePropertySerializer::GetPropertyValue(
     }
     case CSSPropertyBorderRadius:
       return Get4Values(borderRadiusShorthand());
+    case CSSPropertyScrollPadding:
+      return Get4Values(scrollPaddingShorthand());
+    case CSSPropertyScrollPaddingBlock:
+      return Get2Values(scrollPaddingBlockShorthand());
+    case CSSPropertyScrollPaddingInline:
+      return Get2Values(scrollPaddingInlineShorthand());
+    case CSSPropertyScrollSnapMargin:
+      return Get4Values(scrollSnapMarginShorthand());
+    case CSSPropertyScrollSnapMarginBlock:
+      return Get2Values(scrollSnapMarginBlockShorthand());
+    case CSSPropertyScrollSnapMarginInline:
+      return Get2Values(scrollSnapMarginInlineShorthand());
     default:
       return String();
   }
@@ -650,6 +664,74 @@ String StylePropertySerializer::FontVariantValue() const {
     return "normal";
   }
 
+  return result.ToString();
+}
+
+String StylePropertySerializer::OffsetValue() const {
+  StringBuilder result;
+  if (RuntimeEnabledFeatures::CSSOffsetPositionAnchorEnabled()) {
+    const CSSValue* position =
+        property_set_.GetPropertyCSSValue(CSSPropertyOffsetPosition);
+    if (!position->IsInitialValue()) {
+      result.Append(position->CssText());
+    }
+  }
+  const CSSValue* path =
+      property_set_.GetPropertyCSSValue(CSSPropertyOffsetPath);
+  const CSSValue* distance =
+      property_set_.GetPropertyCSSValue(CSSPropertyOffsetDistance);
+  const CSSValue* rotate =
+      property_set_.GetPropertyCSSValue(CSSPropertyOffsetRotate);
+  if (!path->IsInitialValue()) {
+    if (!result.IsEmpty())
+      result.Append(" ");
+    result.Append(path->CssText());
+    if (!distance->IsInitialValue()) {
+      result.Append(" ");
+      result.Append(distance->CssText());
+    }
+    if (!rotate->IsInitialValue()) {
+      result.Append(" ");
+      result.Append(rotate->CssText());
+    }
+  } else {
+    DCHECK(distance->IsInitialValue());
+    DCHECK(rotate->IsInitialValue());
+  }
+  if (RuntimeEnabledFeatures::CSSOffsetPositionAnchorEnabled()) {
+    const CSSValue* anchor =
+        property_set_.GetPropertyCSSValue(CSSPropertyOffsetAnchor);
+    if (!anchor->IsInitialValue()) {
+      result.Append(" / ");
+      result.Append(anchor->CssText());
+    }
+  }
+  return result.ToString();
+}
+
+String StylePropertySerializer::Get2Values(
+    const StylePropertyShorthand& shorthand) const {
+  // Assume the properties are in the usual order start, end.
+  int start_value_index =
+      property_set_.FindPropertyIndex(shorthand.properties()[0]);
+  int end_value_index =
+      property_set_.FindPropertyIndex(shorthand.properties()[1]);
+
+  if (start_value_index == -1 || end_value_index == -1)
+    return String();
+
+  PropertyValueForSerializer start =
+      property_set_.PropertyAt(start_value_index);
+  PropertyValueForSerializer end = property_set_.PropertyAt(end_value_index);
+
+  bool show_end = !DataEquivalent(start.Value(), end.Value());
+
+  StringBuilder result;
+  result.Append(start.Value()->CssText());
+  if (show_end) {
+    result.Append(' ');
+    result.Append(end.Value()->CssText());
+  }
   return result.ToString();
 }
 

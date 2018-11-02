@@ -63,6 +63,7 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
 
   void TextFieldDidChange(const FormData& form,
                           const FormFieldData& field,
+                          const gfx::RectF& bounding_box,
                           base::TimeTicks timestamp) override {}
 
   void QueryFormFieldAutofill(int32_t id,
@@ -73,6 +74,10 @@ class FakeContentAutofillDriver : public mojom::AutofillDriver {
   void HidePopup() override {}
 
   void FocusNoLongerOnForm() override { did_unfocus_form_ = true; }
+
+  void FocusOnFormField(const FormData& form,
+                        const FormFieldData& field,
+                        const gfx::RectF& bounding_box) override {}
 
   void DidFillAutofillFormData(const FormData& form,
                                base::TimeTicks timestamp) override {}
@@ -136,7 +141,7 @@ void VerifyNoSubmitMessagesReceived(
 
 // Simulates receiving a message from the browser to fill a form.
 void SimulateOnFillForm(autofill::AutofillAgent* autofill_agent,
-                        blink::WebFrame* main_frame) {
+                        blink::WebLocalFrame* main_frame) {
   WebDocument document = main_frame->GetDocument();
   WebElement element = document.GetElementById(WebString::FromUTF8("fname"));
   ASSERT_FALSE(element.IsNull());
@@ -517,6 +522,59 @@ TEST_F(FormAutocompleteTest, CollectFormlessElements) {
   EXPECT_EQ(base::ASCIIToUTF16("check_input"), result.fields[1].name);
   EXPECT_EQ(base::ASCIIToUTF16("number_input"), result.fields[2].name);
   EXPECT_EQ(base::ASCIIToUTF16("select_input"), result.fields[3].name);
+}
+
+// Unit test for AutofillAgent::AcceptDataListSuggestion.
+TEST_F(FormAutocompleteTest, AcceptDataListSuggestion) {
+  LoadHTML(
+      "<html>"
+      "<input id='empty' type='email' multiple />"
+      "<input id='multi_one' type='email' multiple value='one@example.com'/>"
+      "<input id='multi_two' type='email' multiple"
+      "  value='one@example.com,two@example.com'/>"
+      "<input id='multi_trailing' type='email' multiple"
+      "  value='one@example.com,two@example.com,'/>"
+      "<input id='not_multi' type='email'"
+      "  value='one@example.com,two@example.com,'/>"
+      "<input id='not_email' type='text' multiple"
+      "  value='one@example.com,two@example.com,'/>"
+      "</html>");
+  WebDocument document = GetMainFrame()->GetDocument();
+
+  // Each case tests a different field value with the same suggestion.
+  const base::string16 kSuggestion =
+      base::ASCIIToUTF16("suggestion@example.com");
+  struct TestCase {
+    std::string id;
+    std::string expected;
+  } cases[] = {
+      // Empty text field; expect to populate with suggestion.
+      {"empty", "suggestion@example.com"},
+      // Single entry; expect to replace with suggestion.
+      {"multi_one", "suggestion@example.com"},
+      // Two comma-separated entries; expect to replace second with suggestion.
+      {"multi_two", "one@example.com,suggestion@example.com"},
+      // Two comma-separated entries with trailing comma; expect to append
+      // suggestion.
+      {"multi_trailing",
+       "one@example.com,two@example.com,suggestion@example.com"},
+      // Do not apply this logic for a non-multiple or non-email field.
+      {"not_multi", "suggestion@example.com"},
+      {"not_email", "suggestion@example.com"},
+  };
+
+  for (const auto& c : cases) {
+    WebElement element = document.GetElementById(WebString::FromUTF8(c.id));
+    ASSERT_FALSE(element.IsNull());
+    WebInputElement* input_element = blink::ToWebInputElement(&element);
+    ASSERT_TRUE(input_element);
+    // Select this element in |autofill_agent_|.
+    static_cast<autofill::PageClickListener*>(autofill_agent_)
+        ->FormControlElementClicked(element.To<WebInputElement>(), false);
+
+    autofill_agent_->AcceptDataListSuggestion(kSuggestion);
+    EXPECT_EQ(c.expected, input_element->Value().Utf8()) << "Case id: " << c.id;
+  }
 }
 
 // Test that a FocusNoLongerOnForm message is sent if focus goes from an

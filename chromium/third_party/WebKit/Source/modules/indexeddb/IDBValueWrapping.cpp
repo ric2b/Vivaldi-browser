@@ -75,6 +75,10 @@ IDBValueWrapper::IDBValueWrapper(
 #endif  // DCHECK_IS_ON()
 }
 
+// Explicit destructor in the .cpp file, to move the dependency on the
+// BlobDataHandle definition away from the header file.
+IDBValueWrapper::~IDBValueWrapper() {}
+
 void IDBValueWrapper::Clone(ScriptState* script_state, ScriptValue* clone) {
 #if DCHECK_IS_ON()
   DCHECK(!had_exception_) << __FUNCTION__
@@ -157,10 +161,9 @@ bool IDBValueUnwrapper::IsWrapped(IDBValue* value) {
   DCHECK(value);
 
   uint8_t header[3];
-  if (!value->data_ || value->data_->size() < sizeof(header))
+  if (!value->data_ || !value->data_->GetBytes(header, sizeof(header)))
     return false;
 
-  value->data_->GetPartAsBytes(header, static_cast<size_t>(0), sizeof(header));
   return header[0] == kVersionTag &&
          header[1] == kRequiresProcessingSSVPseudoVersion &&
          header[2] == kBlobWrappedValue;
@@ -253,6 +256,15 @@ bool IDBValueUnwrapper::ReadVarint(unsigned& value) {
     has_another_byte = byte & 0x80;
   } while (has_another_byte);
   return true;
+}
+
+bool IDBValueUnwrapper::Reset() {
+#if DCHECK_IS_ON()
+  blob_handle_.Clear();
+  current_ = nullptr;
+  end_ = nullptr;
+#endif  // DCHECK_IS_ON()
+  return false;
 }
 
 }  // namespace blink

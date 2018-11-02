@@ -22,7 +22,9 @@ class NetworkTypePatternTest : public testing::Test {
         non_virtual_(NetworkTypePattern::NonVirtual()),
         wimax_(NetworkTypePattern::Wimax()),
         wireless_(NetworkTypePattern::Wireless()),
-        tether_(NetworkTypePattern::Tether()) {}
+        tether_(NetworkTypePattern::Tether()),
+        vpn_(NetworkTypePattern::VPN()),
+        wifi_(NetworkTypePattern::WiFi()) {}
 
   bool MatchesPattern(const NetworkTypePattern& a,
                       const NetworkTypePattern& b) {
@@ -40,21 +42,38 @@ class NetworkTypePatternTest : public testing::Test {
   const NetworkTypePattern wimax_;
   const NetworkTypePattern wireless_;
   const NetworkTypePattern tether_;
+  const NetworkTypePattern vpn_;
+  const NetworkTypePattern wifi_;
 };
 
 }  // namespace
 
 TEST_F(NetworkTypePatternTest, MatchesType) {
+  // Mobile contains Cellular, Wimax, and Tether.
   EXPECT_TRUE(mobile_.MatchesType(shill::kTypeCellular));
   EXPECT_TRUE(mobile_.MatchesType(shill::kTypeWimax));
+  EXPECT_TRUE(mobile_.MatchesType(kTypeTether));
   EXPECT_FALSE(mobile_.MatchesType(shill::kTypeWifi));
+  EXPECT_FALSE(mobile_.MatchesType(shill::kTypeEthernet));
+  EXPECT_FALSE(mobile_.MatchesType(shill::kTypeVPN));
 
+  // Wireless contains Wifi, Cellular, Wimax, and Tether.
   EXPECT_TRUE(wireless_.MatchesType(shill::kTypeWifi));
   EXPECT_TRUE(wireless_.MatchesType(shill::kTypeCellular));
   EXPECT_TRUE(wireless_.MatchesType(shill::kTypeWimax));
+  EXPECT_TRUE(wireless_.MatchesType(kTypeTether));
   EXPECT_FALSE(wireless_.MatchesType(shill::kTypeEthernet));
+  EXPECT_FALSE(wireless_.MatchesType(shill::kTypeVPN));
 
-  EXPECT_FALSE(wireless_.MatchesType(kTypeTether));
+  // Non-virtual contains everything except VPN.
+  EXPECT_TRUE(non_virtual_.MatchesType(shill::kTypeCellular));
+  EXPECT_TRUE(non_virtual_.MatchesType(shill::kTypeWifi));
+  EXPECT_TRUE(non_virtual_.MatchesType(shill::kTypeEthernet));
+  EXPECT_TRUE(non_virtual_.MatchesType(shill::kTypeWimax));
+  EXPECT_TRUE(non_virtual_.MatchesType(kTypeTether));
+  EXPECT_FALSE(non_virtual_.MatchesType(shill::kTypeVPN));
+
+  EXPECT_TRUE(wimax_.MatchesType(shill::kTypeWimax));
   EXPECT_FALSE(wimax_.MatchesType(kTypeTether));
 }
 
@@ -75,8 +94,8 @@ TEST_F(NetworkTypePatternTest, MatchesPattern) {
   EXPECT_TRUE(MatchesPattern(non_virtual_, ethernet_));
   EXPECT_FALSE(MatchesPattern(cellular_, ethernet_));
 
-  EXPECT_FALSE(MatchesPattern(tether_, wireless_));
-  EXPECT_FALSE(MatchesPattern(tether_, non_virtual_));
+  EXPECT_TRUE(MatchesPattern(tether_, wireless_));
+  EXPECT_TRUE(MatchesPattern(tether_, non_virtual_));
 
   // Default matches anything.
   EXPECT_TRUE(MatchesPattern(default_, default_));
@@ -104,8 +123,15 @@ TEST_F(NetworkTypePatternTest, Primitive) {
 
 TEST_F(NetworkTypePatternTest, ToDebugString) {
   EXPECT_EQ(default_.ToDebugString(), "PatternDefault");
+  EXPECT_EQ(wireless_.ToDebugString(), "PatternWireless");
   EXPECT_EQ(mobile_.ToDebugString(), "PatternMobile");
-  EXPECT_EQ(cellular_.ToDebugString(), "cellular");
+  EXPECT_EQ(non_virtual_.ToDebugString(), "PatternNonVirtual");
+  EXPECT_EQ(ethernet_.ToDebugString(), shill::kTypeEthernet);
+  EXPECT_EQ(cellular_.ToDebugString(), shill::kTypeCellular);
+  EXPECT_EQ(wimax_.ToDebugString(), shill::kTypeWimax);
+  EXPECT_EQ(tether_.ToDebugString(), kTypeTether);
+  EXPECT_EQ(wifi_.ToDebugString(), shill::kTypeWifi);
+  EXPECT_EQ(vpn_.ToDebugString(), shill::kTypeVPN);
 }
 
 }  // namespace chromeos

@@ -10,17 +10,19 @@
 #include <utility>
 
 #include "base/callback.h"
+#include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #include "components/autofill/core/browser/autofill_address_util.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/country_combobox_model.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/payments/core/payment_request_data_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
@@ -41,7 +43,7 @@
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The address to be edited, if any. This pointer is not owned by this class and
 // should outlive it.
@@ -67,14 +69,13 @@
 @synthesize consumer = _consumer;
 @synthesize countries = _countries;
 @synthesize selectedCountryCode = _selectedCountryCode;
-@synthesize regions = _regions;
 @synthesize paymentRequest = _paymentRequest;
 @synthesize address = _address;
 @synthesize fieldsMap = _fieldsMap;
 @synthesize fields = _fields;
 @synthesize regionField = _regionField;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+- (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                                address:(autofill::AutofillProfile*)address {
   self = [super init];
   if (self) {
@@ -110,6 +111,13 @@
 
 #pragma mark - CreditCardEditViewControllerDataSource
 
+- (NSString*)title {
+  // TODO(crbug.com/602666): Title varies depending on what field is missing.
+  // e.g., Add Email vs. Add Phone Number.
+  return self.address ? l10n_util::GetNSString(IDS_PAYMENTS_EDIT_ADDRESS)
+                      : l10n_util::GetNSString(IDS_PAYMENTS_ADD_ADDRESS);
+}
+
 - (CollectionViewItem*)headerItem {
   return nil;
 }
@@ -118,15 +126,48 @@
   return NO;
 }
 
+- (void)formatValueForEditorField:(EditorField*)field {
+  if (field.autofillUIType == AutofillUITypeProfileHomePhoneWholeNumber) {
+    field.value =
+        base::SysUTF8ToNSString(payments::data_util::FormatPhoneForDisplay(
+            base::SysNSStringToUTF8(field.value),
+            base::SysNSStringToUTF8(self.selectedCountryCode)));
+  }
+}
+
+- (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
+  return nil;
+}
+
 #pragma mark - RegionDataLoaderConsumer
 
 - (void)regionDataLoaderDidSucceedWithRegions:
-    (NSMutableArray<NSString*>*)regions {
-  self.regions = regions;
+    (NSDictionary<NSString*, NSString*>*)regions {
+  // Enable the previously disabled field.
+  self.regionField.enabled = YES;
+
+  // An autofill profile may have a region code or a region name stored as the
+  // autofill::ADDRESS_HOME_STATE. If an address is being edited whose value for
+  // that field type is a valid region code or a valid region name, the editor
+  // field value is set to the respective region code. Otherwise, it is set to
+  // nil.
+  self.regionField.value = nil;
+  if (self.address) {
+    NSString* region =
+        [self fieldValueFromProfile:self.address
+                          fieldType:autofill::ADDRESS_HOME_STATE];
+    if ([regions objectForKey:region]) {
+      self.regionField.value = region;
+    } else if ([[regions allKeysForObject:region] count]) {
+      DCHECK_EQ(1U, [[regions allKeysForObject:region] count]);
+      self.regionField.value = [regions allKeysForObject:region][0];
+    }
+  }
+
   // Notify the view controller asynchronously to allow for the view to update.
   __weak AddressEditMediator* weakSelf = self;
   dispatch_async(dispatch_get_main_queue(), ^{
-    [weakSelf.consumer setOptions:weakSelf.regions
+    [weakSelf.consumer setOptions:@[ [regions allKeys] ]
                    forEditorField:weakSelf.regionField];
   });
 }
@@ -138,7 +179,7 @@
   autofill::CountryComboboxModel countryModel;
   countryModel.SetCountries(*_paymentRequest->GetPersonalDataManager(),
                             base::Callback<bool(const std::string&)>(),
-                            GetApplicationContext()->GetApplicationLocale());
+                            _paymentRequest->GetApplicationLocale());
   const autofill::CountryComboboxModel::CountryVector& countriesVector =
       countryModel.countries();
 
@@ -153,8 +194,24 @@
     }
   }
   _countries = countries;
-  _selectedCountryCode =
-      base::SysUTF8ToNSString(countryModel.GetDefaultCountryCode());
+
+  // If an address is being edited and it has a valid country code or a valid
+  // country name for the autofill::ADDRESS_HOME_COUNTRY field, the selected
+  // country code is set to the respective country code. Otherwise, the selected
+  // country code is set to the default country code.
+  NSString* country =
+      [self fieldValueFromProfile:_address
+                        fieldType:autofill::ADDRESS_HOME_COUNTRY];
+
+  if ([countries objectForKey:country]) {
+    _selectedCountryCode = country;
+  } else if ([[countries allKeysForObject:country] count]) {
+    DCHECK_EQ(1U, [[countries allKeysForObject:country] count]);
+    _selectedCountryCode = [countries allKeysForObject:country][0];
+  } else {
+    _selectedCountryCode =
+        base::SysUTF8ToNSString(countryModel.GetDefaultCountryCode());
+  }
 }
 
 // Queries the region names based on the selected country code.
@@ -176,8 +233,7 @@
   std::string unused;
   autofill::GetAddressComponents(
       base::SysNSStringToUTF8(self.selectedCountryCode),
-      GetApplicationContext()->GetApplicationLocale(), &addressComponents,
-      &unused);
+      _paymentRequest->GetApplicationLocale(), &addressComponents, &unused);
 
   for (size_t lineIndex = 0; lineIndex < addressComponents.GetSize();
        ++lineIndex) {
@@ -205,13 +261,26 @@
       NSNumber* fieldKey = [NSNumber numberWithInt:autofillUIType];
       EditorField* field = self.fieldsMap[fieldKey];
       if (!field) {
+        NSString* value =
+            [self fieldValueFromProfile:self.address
+                              fieldType:autofill::GetFieldTypeFromString(
+                                            autofillType)];
         BOOL required = autofillUIType != AutofillUITypeProfileCompanyName;
         field =
             [[EditorField alloc] initWithAutofillUIType:autofillUIType
                                               fieldType:EditorFieldTypeTextField
                                                   label:nil
-                                                  value:nil
+                                                  value:value
                                                required:required];
+        // Set the keyboardType and autoCapitalizationType as appropriate.
+        if (autofillUIType == AutofillUITypeProfileEmailAddress) {
+          field.keyboardType = UIKeyboardTypeEmailAddress;
+          field.autoCapitalizationType = UITextAutocapitalizationTypeNone;
+        } else if (autofillUIType == AutofillUITypeProfileHomeAddressZip) {
+          field.autoCapitalizationType =
+              UITextAutocapitalizationTypeAllCharacters;
+        }
+
         [self.fieldsMap setObject:field forKey:fieldKey];
       }
 
@@ -260,17 +329,35 @@
       [NSNumber numberWithInt:AutofillUITypeProfileHomePhoneWholeNumber];
   EditorField* field = self.fieldsMap[phoneNumberFieldKey];
   if (!field) {
+    NSString* value =
+        self.address
+            ? base::SysUTF16ToNSString(
+                  payments::data_util::GetFormattedPhoneNumberForDisplay(
+                      *self.address, _paymentRequest->GetApplicationLocale()))
+            : nil;
     field = [[EditorField alloc]
         initWithAutofillUIType:AutofillUITypeProfileHomePhoneWholeNumber
                      fieldType:EditorFieldTypeTextField
                          label:l10n_util::GetNSString(IDS_IOS_AUTOFILL_PHONE)
-                         value:nil
+                         value:value
                       required:YES];
+    field.keyboardType = UIKeyboardTypePhonePad;
+    field.returnKeyType = UIReturnKeyDone;
     [self.fieldsMap setObject:field forKey:phoneNumberFieldKey];
   }
   [self.fields addObject:field];
 
   return self.fields;
+}
+
+// Takes in an autofill profile and an autofill field type and returns the
+// corresponding field value. Returns nil if |profile| is nullptr.
+- (NSString*)fieldValueFromProfile:(autofill::AutofillProfile*)profile
+                         fieldType:(autofill::ServerFieldType)fieldType {
+  return profile ? base::SysUTF16ToNSString(profile->GetInfo(
+                       autofill::AutofillType(fieldType),
+                       _paymentRequest->GetApplicationLocale()))
+                 : nil;
 }
 
 @end

@@ -58,8 +58,8 @@ static const unsigned kMaxRowIndex = 0x7FFFFFFE;  // 2,147,483,646
 // for its children. LayoutTableCells are positioned with respect to the
 // enclosing LayoutTableSection (this object's parent()). This particularity is
 // why functions accumulating offset while walking the tree have to special case
-// LayoutTableRow (see e.g. PaintInvalidationState or
-// LayoutBox::positionFromPoint()).
+// LayoutTableRow (see e.g. PaintInvalidatorContext or
+// LayoutBox::PositionFromPoint()).
 //
 // LayoutTableRow is also positioned with respect to the enclosing
 // LayoutTableSection. See LayoutTableSection::layoutRows() for the placement
@@ -75,7 +75,7 @@ class CORE_EXPORT LayoutTableRow final : public LayoutTableBoxComponent {
   LayoutTableRow* NextRow() const;
 
   LayoutTableSection* Section() const { return ToLayoutTableSection(Parent()); }
-  LayoutTable* Table() const { return ToLayoutTable(Parent()->Parent()); }
+  LayoutTable* Table() const final { return ToLayoutTable(Parent()->Parent()); }
 
   static LayoutTableRow* CreateAnonymous(Document*);
   static LayoutTableRow* CreateAnonymousWithParent(const LayoutObject*);
@@ -85,9 +85,7 @@ class CORE_EXPORT LayoutTableRow final : public LayoutTableBoxComponent {
   }
 
   void SetRowIndex(unsigned row_index) {
-    if (UNLIKELY(row_index > kMaxRowIndex))
-      CRASH();
-
+    CHECK_LE(row_index, kMaxRowIndex);
     row_index_ = row_index;
   }
 
@@ -100,23 +98,6 @@ class CORE_EXPORT LayoutTableRow final : public LayoutTableBoxComponent {
              ->NeedsCellRecalc());  // index may be bogus if cells need recalc.
     return row_index_;
   }
-
-  BorderValue BorderAdjoiningTableStart() const {
-    if (Section()->HasSameDirectionAs(Table()))
-      return Style()->BorderStart();
-
-    return Style()->BorderEnd();
-  }
-
-  BorderValue BorderAdjoiningTableEnd() const {
-    if (Section()->HasSameDirectionAs(Table()))
-      return Style()->BorderEnd();
-
-    return Style()->BorderStart();
-  }
-
-  BorderValue BorderAdjoiningStartCell(const LayoutTableCell*) const;
-  BorderValue BorderAdjoiningEndCell(const LayoutTableCell*) const;
 
   bool NodeAtPoint(HitTestResult&,
                    const HitTestLocation& location_in_container,
@@ -139,8 +120,7 @@ class CORE_EXPORT LayoutTableRow final : public LayoutTableBoxComponent {
   bool BackgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const override {
     return false;
   }
-
-  bool IsFirstRowInSectionAfterHeader() const;
+  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
  private:
   void AddOverflowFromCell(const LayoutTableCell*);
@@ -159,7 +139,7 @@ class CORE_EXPORT LayoutTableRow final : public LayoutTableBoxComponent {
   PaintLayerType LayerTypeRequired() const override {
     if (HasTransformRelatedProperty() || HasHiddenBackface() || HasClipPath() ||
         CreatesGroup() || Style()->ShouldCompositeForCurrentAnimations() ||
-        IsStickyPositioned() || Style()->HasCompositorProxy())
+        IsStickyPositioned())
       return kNormalPaintLayer;
 
     if (HasOverflowClip())

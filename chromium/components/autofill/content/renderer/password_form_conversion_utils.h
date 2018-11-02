@@ -7,8 +7,11 @@
 
 #include <map>
 #include <memory>
+#include <string>
+#include <utility>
 #include <vector>
 
+#include "base/strings/string_piece.h"
 #include "components/autofill/core/common/password_form.h"
 #include "components/autofill/core/common/password_form_field_prediction_map.h"
 #include "third_party/WebKit/public/platform/WebString.h"
@@ -17,21 +20,16 @@
 namespace blink {
 class WebFormElement;
 class WebFormControlElement;
-class WebFrame;
 class WebInputElement;
+class WebLocalFrame;
 }
 
 namespace autofill {
 
 struct PasswordForm;
 
-// Tests whether the given form is a GAIA reauthentication form. The form is
-// not passed directly as WebFormElement, but by specifying its |origin| and
-// |control_elements|. This is for better performance and easier testing.
-// TODO(msramek): Move this logic to the browser.
-bool IsGaiaReauthenticationForm(
-    const GURL& origin,
-    const std::vector<blink::WebFormControlElement>& control_elements);
+// Tests whether the given form is a GAIA reauthentication form.
+bool IsGaiaReauthenticationForm(const blink::WebFormElement& form);
 
 typedef std::map<
     const blink::WebFormControlElement,
@@ -55,14 +53,14 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
 // Same as CreatePasswordFormFromWebForm() but for input elements that are not
 // enclosed in <form> element.
 std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
-    const blink::WebFrame& frame,
+    const blink::WebLocalFrame& frame,
     const FieldValueAndPropertiesMaskMap* nonscript_modified_values,
     const FormsPredictionsMap* form_predictions);
 
 // Checks in a case-insensitive way if the autocomplete attribute for the given
 // |element| is present and has the specified |value_in_lowercase|.
 bool HasAutocompleteAttributeValue(const blink::WebInputElement& element,
-                                   const char* value_in_lowercase);
+                                   base::StringPiece value_in_lowercase);
 
 // Checks in a case-insensitive way if credit card autocomplete attributes for
 // the given |element| are present.

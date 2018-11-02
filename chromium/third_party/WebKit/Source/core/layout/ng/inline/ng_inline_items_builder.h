@@ -6,7 +6,9 @@
 #define NGInlineItemsBuilder_h
 
 #include "core/CoreExport.h"
+#include "core/layout/ng/inline/empty_offset_mapping_builder.h"
 #include "core/layout/ng/inline/ng_inline_node.h"
+#include "core/layout/ng/inline/ng_offset_mapping_builder.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
@@ -27,12 +29,20 @@ class NGInlineItem;
 // By calling EnterInline/ExitInline, it inserts bidirectional control
 // characters as defined in:
 // https://drafts.csswg.org/css-writing-modes-3/#bidi-control-codes-injection-table
-class CORE_EXPORT NGInlineItemsBuilder {
+//
+// NGInlineItemsBuilder may optionally take an NGOffsetMappingBuilder template
+// parameter to construct the white-space collapsed offset mapping, which maps
+// offsets in the concatenation of all appended strings and characters to
+// offsets in |text_|.
+// See https://goo.gl/CJbxky for more details about offset mapping.
+template <typename OffsetMappingBuilder>
+class CORE_TEMPLATE_CLASS_EXPORT NGInlineItemsBuilderTemplate {
   STACK_ALLOCATED();
 
  public:
-  explicit NGInlineItemsBuilder(Vector<NGInlineItem>* items) : items_(items) {}
-  ~NGInlineItemsBuilder();
+  explicit NGInlineItemsBuilderTemplate(Vector<NGInlineItem>* items)
+      : items_(items) {}
+  ~NGInlineItemsBuilderTemplate();
 
   String ToString();
 
@@ -40,6 +50,10 @@ class CORE_EXPORT NGInlineItemsBuilder {
 
   // Returns whether the items contain any Bidi controls.
   bool HasBidiControls() const { return has_bidi_controls_; }
+
+  // Returns if the inline node has no content. For example:
+  // <span></span> or <span><float></float></span>.
+  bool IsEmptyInline() const { return is_empty_inline_; }
 
   // Append a string.
   // When appending, spaces are collapsed according to CSS Text, The white space
@@ -63,10 +77,16 @@ class CORE_EXPORT NGInlineItemsBuilder {
               const ComputedStyle* = nullptr,
               LayoutObject* = nullptr);
 
-  // Append a non-character item.
-  void Append(NGInlineItem::NGInlineItemType,
-              const ComputedStyle* = nullptr,
-              LayoutObject* = nullptr);
+  // Append a character.
+  // The character is opaque to space collapsing; i.e., spaces before this
+  // character and after this character can collapse as if this character does
+  // not exist.
+  void AppendOpaque(NGInlineItem::NGInlineItemType, UChar);
+
+  // Append a non-character item that is opaque to space collapsing.
+  void AppendOpaque(NGInlineItem::NGInlineItemType,
+                    const ComputedStyle* = nullptr,
+                    LayoutObject* = nullptr);
 
   // Append a Bidi control character, for LTR or RTL depends on the style.
   void AppendBidiControl(const ComputedStyle*, UChar ltr, UChar rtl);
@@ -76,9 +96,32 @@ class CORE_EXPORT NGInlineItemsBuilder {
   void EnterInline(LayoutObject*);
   void ExitInline(LayoutObject*);
 
+  OffsetMappingBuilder& GetOffsetMappingBuilder() { return mapping_builder_; }
+  OffsetMappingBuilder& GetConcatenatedOffsetMappingBuilder() {
+    return concatenated_mapping_builder_;
+  }
+
  private:
   Vector<NGInlineItem>* items_;
   StringBuilder text_;
+
+  // TODO(xiaochengh): Rename |mapping_builder_| to |collapsed_mapping_builder_|
+  // |collapsed_mapping_builder_| builds the whitespace-collapsed offset mapping
+  // during inline collection. It is updated whenever |text_| is modified or a
+  // white space is collapsed.
+  OffsetMappingBuilder mapping_builder_;
+
+  // |concatenated_mapping_builder_| builds the concatenated offset mapping
+  // during inline collection. It is updated whenever a non-text character is
+  // appended to |text_|. User of NGInlineItemsBuilder should also update
+  // |concatenated_mapping_builder_| whenever collecting a text node during
+  // inline collection, by appending the text-transformed offset mapping of the
+  // text node to |concatenated_mapping_builder_|.
+  OffsetMappingBuilder concatenated_mapping_builder_;
+
+  // Indicates whether we are appending a string not, to help updating
+  // |concatenated_mapping_builder_|.
+  bool is_appending_string_ = false;
 
   typedef struct OnExitNode {
     LayoutObject* node;
@@ -91,6 +134,7 @@ class CORE_EXPORT NGInlineItemsBuilder {
   CollapsibleSpace last_collapsible_space_ = CollapsibleSpace::kSpace;
   bool is_svgtext_ = false;
   bool has_bidi_controls_ = false;
+  bool is_empty_inline_ = true;
 
   void AppendWithWhiteSpaceCollapsing(const String&,
                                       unsigned start,
@@ -106,24 +150,25 @@ class CORE_EXPORT NGInlineItemsBuilder {
 
   void AppendForcedBreak(const ComputedStyle*, LayoutObject*);
 
-  // Because newlines may be removed depends on following characters, newlines
-  // at the end of input string is not added to |text_| but instead
-  // |has_pending_newline_| flag is set.
-  // This function determines whether to add the newline or ignore.
-  void ProcessPendingNewline(const String&, const ComputedStyle*);
-
-  // Removes the collapsible space at the end of |text_| if exists.
-  void RemoveTrailingCollapsibleSpaceIfExists(unsigned*);
-  void RemoveTrailingCollapsibleSpace(unsigned*);
-
-  void RemoveTrailingCollapsibleNewlineIfNeeded(unsigned*,
-                                                const String&,
+  void RemoveTrailingCollapsibleSpaceIfExists();
+  void RemoveTrailingCollapsibleSpace(unsigned);
+  void RemoveTrailingCollapsibleNewlineIfNeeded(const String&,
                                                 unsigned,
                                                 const ComputedStyle*);
 
   void Enter(LayoutObject*, UChar);
   void Exit(LayoutObject*);
 };
+
+extern template class CORE_EXTERN_TEMPLATE_EXPORT
+    NGInlineItemsBuilderTemplate<EmptyOffsetMappingBuilder>;
+extern template class CORE_EXTERN_TEMPLATE_EXPORT
+    NGInlineItemsBuilderTemplate<NGOffsetMappingBuilder>;
+
+using NGInlineItemsBuilder =
+    NGInlineItemsBuilderTemplate<EmptyOffsetMappingBuilder>;
+using NGInlineItemsBuilderForOffsetMapping =
+    NGInlineItemsBuilderTemplate<NGOffsetMappingBuilder>;
 
 }  // namespace blink
 

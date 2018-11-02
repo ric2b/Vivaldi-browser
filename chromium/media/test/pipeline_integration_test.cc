@@ -570,6 +570,24 @@ TEST_F(PipelineIntegrationTest, BasicPlaybackOpusOgg) {
   ASSERT_TRUE(WaitUntilOnEnded());
 }
 
+TEST_F(PipelineIntegrationTest, BasicPlaybackOpusOgg_4ch_ChannelMapping2) {
+  ASSERT_EQ(PIPELINE_OK,
+            Start("bear-opus-4ch-channelmapping2.ogg", kClockless));
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest, BasicPlaybackOpusOgg_11ch_ChannelMapping2) {
+  ASSERT_EQ(PIPELINE_OK,
+            Start("bear-opus-11ch-channelmapping2.ogg", kClockless));
+
+  Play();
+
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
 TEST_F(PipelineIntegrationTest, BasicPlaybackHashed) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-320x240.webm", kHashed));
 
@@ -1166,7 +1184,11 @@ TEST_F(PipelineIntegrationTest, MediaSource_ConfigChange_WebM) {
                          kAppendWholeFile);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(640, 360))).Times(1);
+  const gfx::Size kNewSize(640, 360);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-640x360.webm");
   ASSERT_TRUE(source.AppendAtTime(base::TimeDelta::FromSeconds(kAppendTimeSec),
@@ -1283,7 +1305,11 @@ TEST_F(PipelineIntegrationTest,
   EXPECT_EQ(PIPELINE_OK,
             StartPipelineWithEncryptedMedia(&source, &encrypted_media));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(640, 360))).Times(1);
+  const gfx::Size kNewSize(640, 360);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-640x360-av_enc-av.webm");
 
@@ -1312,7 +1338,11 @@ TEST_F(PipelineIntegrationTest,
   EXPECT_EQ(PIPELINE_OK,
             StartPipelineWithEncryptedMedia(&source, &encrypted_media));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(640, 360))).Times(1);
+  const gfx::Size kNewSize(640, 360);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-640x360-av_enc-av.webm");
 
@@ -1343,7 +1373,11 @@ TEST_F(PipelineIntegrationTest,
   EXPECT_EQ(PIPELINE_OK,
             StartPipelineWithEncryptedMedia(&source, &encrypted_media));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(640, 360))).Times(1);
+  const gfx::Size kNewSize(640, 360);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-640x360.webm");
 
@@ -1649,7 +1683,11 @@ TEST_F(PipelineIntegrationTest, MediaSource_ConfigChange_MP4) {
   MockMediaSource source("bear-640x360-av_frag.mp4", kMP4, kAppendWholeFile);
   EXPECT_EQ(PIPELINE_OK, StartPipelineWithMediaSource(&source));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(1280, 720))).Times(1);
+  const gfx::Size kNewSize(1280, 720);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-1280x720-av_frag.mp4");
   ASSERT_TRUE(source.AppendAtTime(base::TimeDelta::FromSeconds(kAppendTimeSec),
@@ -1709,7 +1747,11 @@ TEST_F(PipelineIntegrationTest,
   EXPECT_EQ(PIPELINE_OK,
             StartPipelineWithEncryptedMedia(&source, &encrypted_media));
 
-  EXPECT_CALL(*this, OnVideoNaturalSizeChange(gfx::Size(1280, 720))).Times(1);
+  const gfx::Size kNewSize(1280, 720);
+  EXPECT_CALL(*this, OnVideoConfigChange(::testing::Property(
+                         &VideoDecoderConfig::natural_size, kNewSize)))
+      .Times(1);
+  EXPECT_CALL(*this, OnVideoNaturalSizeChange(kNewSize)).Times(1);
   scoped_refptr<DecoderBuffer> second_file =
       ReadTestDataFile("bear-1280x720-v_frag-cenc.mp4");
   ASSERT_TRUE(source.AppendAtTime(base::TimeDelta::FromSeconds(kAppendTimeSec),
@@ -2295,6 +2337,24 @@ TEST_F(PipelineIntegrationTest, ChunkDemuxerAbortRead_VideoOnly) {
 // Verify that Opus audio in WebM containers can be played back.
 TEST_F(PipelineIntegrationTest, BasicPlayback_AudioOnly_Opus_WebM) {
   ASSERT_EQ(PIPELINE_OK, Start("bear-opus-end-trimming.webm"));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest,
+       BasicPlayback_AudioOnly_Opus_4ch_ChannelMapping2_WebM) {
+  ASSERT_EQ(
+      PIPELINE_OK,
+      Start("bear-opus-end-trimming-4ch-channelmapping2.webm", kClockless));
+  Play();
+  ASSERT_TRUE(WaitUntilOnEnded());
+}
+
+TEST_F(PipelineIntegrationTest,
+       BasicPlayback_AudioOnly_Opus_11ch_ChannelMapping2_WebM) {
+  ASSERT_EQ(
+      PIPELINE_OK,
+      Start("bear-opus-end-trimming-11ch-channelmapping2.webm", kClockless));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
 }

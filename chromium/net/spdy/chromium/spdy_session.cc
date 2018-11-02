@@ -45,6 +45,7 @@
 #include "net/proxy/proxy_server.h"
 #include "net/socket/socket.h"
 #include "net/socket/ssl_client_socket.h"
+#include "net/spdy/chromium/header_coalescer.h"
 #include "net/spdy/chromium/spdy_buffer_producer.h"
 #include "net/spdy/chromium/spdy_http_utils.h"
 #include "net/spdy/chromium/spdy_log_util.h"
@@ -181,14 +182,6 @@ std::unique_ptr<base::Value> NetLogSpdySendSettingsCallback(
         SpdyStringPrintf("[id:%u (%s) value:%u]", id, settings_string, value));
   }
   dict->Set("settings", std::move(settings_list));
-  return std::move(dict);
-}
-
-std::unique_ptr<base::Value> NetLogSpdyRecvSettingsCallback(
-    const HostPortPair& host_port_pair,
-    NetLogCaptureMode /* capture_mode */) {
-  auto dict = base::MakeUnique<base::DictionaryValue>();
-  dict->SetString("host", host_port_pair.ToString());
   return std::move(dict);
 }
 
@@ -729,6 +722,7 @@ bool SpdySession::CanPool(TransportSecurityState* transport_security_state,
 SpdySession::SpdySession(const SpdySessionKey& spdy_session_key,
                          HttpServerProperties* http_server_properties,
                          TransportSecurityState* transport_security_state,
+                         const QuicVersionVector& quic_supported_versions,
                          bool enable_sending_initial_data,
                          bool enable_ping_based_connection_checking,
                          size_t session_max_recv_window_size,
@@ -752,7 +746,6 @@ SpdySession::SpdySession(const SpdySessionKey& spdy_session_key,
       bytes_pushed_and_unclaimed_count_(0u),
       in_flight_write_frame_type_(SpdyFrameType::DATA),
       in_flight_write_frame_size_(0),
-      is_secure_(false),
       availability_state_(STATE_AVAILABLE),
       read_state_(READ_STATE_DO_READ),
       write_state_(WRITE_STATE_IDLE),
@@ -780,6 +773,7 @@ SpdySession::SpdySession(const SpdySessionKey& spdy_session_key,
           initial_settings.at(SETTINGS_INITIAL_WINDOW_SIZE)),
       net_log_(
           NetLogWithSource::Make(net_log, NetLogSourceType::HTTP2_SESSION)),
+      quic_supported_versions_(quic_supported_versions),
       enable_sending_initial_data_(enable_sending_initial_data),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
@@ -873,8 +867,7 @@ void SpdySession::CancelPush(const GURL& url) {
 
 void SpdySession::InitializeWithSocket(
     std::unique_ptr<ClientSocketHandle> connection,
-    SpdySessionPool* pool,
-    bool is_secure) {
+    SpdySessionPool* pool) {
   CHECK(!in_io_loop_);
   DCHECK_EQ(availability_state_, STATE_AVAILABLE);
   DCHECK_EQ(read_state_, READ_STATE_DO_READ);
@@ -886,7 +879,6 @@ void SpdySession::InitializeWithSocket(
   DCHECK(connection->socket());
 
   connection_ = std::move(connection);
-  is_secure_ = is_secure;
 
   session_send_window_size_ = kDefaultInitialWindowSize;
   session_recv_window_size_ = kDefaultInitialWindowSize;
@@ -895,6 +887,9 @@ void SpdySession::InitializeWithSocket(
   buffered_spdy_framer_->set_visitor(this);
   buffered_spdy_framer_->set_debug_visitor(this);
   buffered_spdy_framer_->UpdateHeaderDecoderTableSize(max_header_table_size_);
+  // Do not bother decoding response headers more than a factor over the limit.
+  buffered_spdy_framer_->set_max_decode_buffer_size_bytes(2 *
+                                                          kMaxHeaderListSize);
 
   net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_INITIALIZED,
                     base::Bind(&NetLogSpdyInitializedCallback,
@@ -1138,11 +1133,6 @@ LoadState SpdySession::GetLoadState() const {
   return LOAD_STATE_IDLE;
 }
 
-url::SchemeHostPort SpdySession::GetServer() {
-  return url::SchemeHostPort(is_secure_ ? "https" : "http",
-                             host_port_pair().host(), host_port_pair().port());
-}
-
 bool SpdySession::GetRemoteEndpoint(IPEndPoint* endpoint) {
   return GetPeerAddress(endpoint) == OK;
 }
@@ -1154,10 +1144,6 @@ bool SpdySession::GetSSLInfo(SSLInfo* ssl_info) const {
 Error SpdySession::GetTokenBindingSignature(crypto::ECPrivateKey* key,
                                             TokenBindingType tb_type,
                                             std::vector<uint8_t>* out) {
-  if (!is_secure_) {
-    NOTREACHED();
-    return ERR_FAILED;
-  }
   SSLClientSocket* ssl_socket =
       static_cast<SSLClientSocket*>(connection_->socket());
   return ssl_socket->GetTokenBindingSignature(key, tb_type, out);
@@ -1266,8 +1252,6 @@ std::unique_ptr<base::Value> SpdySession::GetInfoAsValue() const {
   dict->SetInteger("unclaimed_pushed_streams",
                    unclaimed_pushed_streams_.size());
 
-  dict->SetBoolean("is_secure", is_secure_);
-
   dict->SetString(
       "negotiated_protocol",
       NextProtoToString(connection_->socket()->GetNegotiatedProtocol()));
@@ -1333,11 +1317,6 @@ void SpdySession::RemovePooledAlias(const SpdySessionKey& alias_key) {
 }
 
 bool SpdySession::HasAcceptableTransportSecurity() const {
-  // If we're not even using TLS, we have no standards to meet.
-  if (!is_secure_) {
-    return true;
-  }
-
   SSLInfo ssl_info;
   CHECK(GetSSLInfo(&ssl_info));
 
@@ -1591,7 +1570,7 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   GURL gurl = GetUrlFromHeaderBlock(headers);
   if (!gurl.is_valid()) {
     EnqueueResetStreamFrame(
-        stream_id, request_priority, ERROR_CODE_PROTOCOL_ERROR,
+        stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
         "Pushed stream url was invalid: " + gurl.possibly_invalid_spec());
     return;
   }
@@ -1660,8 +1639,21 @@ void SpdySession::TryCreatePushStream(SpdyStreamId stream_id,
   if (pushed_it != unclaimed_pushed_streams_.end() &&
       pushed_it->first == gurl) {
     EnqueueResetStreamFrame(
-        stream_id, request_priority, ERROR_CODE_PROTOCOL_ERROR,
+        stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
         "Received duplicate pushed stream with url: " + gurl.spec());
+    return;
+  }
+
+  // "Promised requests MUST be cacheable and MUST be safe [...]" (RFC7540
+  // Section 8.2).  Only cacheable safe request methods are GET and HEAD.
+  SpdyHeaderBlock::const_iterator it = headers.find(":method");
+  if (it == headers.end() ||
+      (it->second.compare("GET") != 0 && it->second.compare("HEAD") != 0)) {
+    EnqueueResetStreamFrame(
+        stream_id, request_priority, ERROR_CODE_REFUSED_STREAM,
+        SpdyStringPrintf(
+            "Rejected push stream %d due to inadequate request method",
+            associated_stream_id));
     return;
   }
 
@@ -2123,48 +2115,76 @@ int SpdySession::DoWriteComplete(int result) {
 
 void SpdySession::SendInitialData() {
   DCHECK(enable_sending_initial_data_);
+  DCHECK(buffered_spdy_framer_.get());
 
-  auto connection_header_prefix_frame = base::MakeUnique<SpdySerializedFrame>(
-      const_cast<char*>(kHttp2ConnectionHeaderPrefix),
-      kHttp2ConnectionHeaderPrefixSize, false /* take_ownership */);
-  // Count the prefix as part of the subsequent SETTINGS frame.
-  EnqueueSessionWrite(HIGHEST, SpdyFrameType::SETTINGS,
-                      std::move(connection_header_prefix_frame));
-
-  // First, notify the server about the settings they should use when
-  // communicating with us.  Only send settings that have a value different from
-  // the protocol default value.
+  // Prepare initial SETTINGS frame.  Only send settings that have a value
+  // different from the protocol default value.
   SettingsMap settings_map;
   for (auto setting : initial_settings_) {
     if (!IsSpdySettingAtDefaultInitialValue(setting.first, setting.second)) {
       settings_map.insert(setting);
     }
   }
-  SendSettings(settings_map);
+  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_SETTINGS,
+                    base::Bind(&NetLogSpdySendSettingsCallback, &settings_map));
+  std::unique_ptr<SpdySerializedFrame> settings_frame(
+      buffered_spdy_framer_->CreateSettings(settings_map));
 
-  // Next, notify the server about our initial recv window size.
-  // Bump up the receive window size to the real initial value. This
-  // has to go here since the WINDOW_UPDATE frame sent by
-  // IncreaseRecvWindowSize() call uses |buffered_spdy_framer_|.
-  // This condition implies that |session_max_recv_window_size_| -
-  // |session_recv_window_size_| doesn't overflow.
+  // Prepare initial WINDOW_UPDATE frame.
+  // Make sure |session_max_recv_window_size_ - session_recv_window_size_|
+  // does not underflow.
   DCHECK_GE(session_max_recv_window_size_, session_recv_window_size_);
   DCHECK_GE(session_recv_window_size_, 0);
-  if (session_max_recv_window_size_ > session_recv_window_size_) {
-    IncreaseRecvWindowSize(session_max_recv_window_size_ -
-                           session_recv_window_size_);
-  }
-}
+  DCHECK_EQ(0, session_unacked_recv_window_bytes_);
+  std::unique_ptr<SpdySerializedFrame> window_update_frame;
+  const bool send_window_update =
+      session_max_recv_window_size_ > session_recv_window_size_;
+  if (send_window_update) {
+    const int32_t delta_window_size =
+        session_max_recv_window_size_ - session_recv_window_size_;
+    session_recv_window_size_ += delta_window_size;
+    net_log_.AddEvent(NetLogEventType::HTTP2_STREAM_UPDATE_RECV_WINDOW,
+                      base::Bind(&NetLogSpdySessionWindowUpdateCallback,
+                                 delta_window_size, session_recv_window_size_));
 
-void SpdySession::SendSettings(const SettingsMap& settings) {
-  net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_SETTINGS,
-                    base::Bind(&NetLogSpdySendSettingsCallback, &settings));
-  // Create the SETTINGS frame and send it.
-  DCHECK(buffered_spdy_framer_.get());
-  std::unique_ptr<SpdySerializedFrame> settings_frame(
-      buffered_spdy_framer_->CreateSettings(settings));
+    session_unacked_recv_window_bytes_ += delta_window_size;
+    net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_WINDOW_UPDATE,
+                      base::Bind(&NetLogSpdyWindowUpdateFrameCallback,
+                                 kSessionFlowControlStreamId,
+                                 session_unacked_recv_window_bytes_));
+    window_update_frame = buffered_spdy_framer_->CreateWindowUpdate(
+        kSessionFlowControlStreamId, session_unacked_recv_window_bytes_);
+    session_unacked_recv_window_bytes_ = 0;
+  }
+
+  // Create a single frame to hold connection prefix, initial SETTINGS frame,
+  // and optional initial WINDOW_UPDATE frame, so that they are sent on the wire
+  // in a single packet.
+  size_t initial_frame_size =
+      kHttp2ConnectionHeaderPrefixSize + settings_frame->size();
+  if (send_window_update)
+    initial_frame_size += window_update_frame->size();
+  auto initial_frame_data = base::MakeUnique<char[]>(initial_frame_size);
+  size_t offset = 0;
+
+  memcpy(initial_frame_data.get() + offset, kHttp2ConnectionHeaderPrefix,
+         kHttp2ConnectionHeaderPrefixSize);
+  offset += kHttp2ConnectionHeaderPrefixSize;
+
+  memcpy(initial_frame_data.get() + offset, settings_frame->data(),
+         settings_frame->size());
+  offset += settings_frame->size();
+
+  if (send_window_update) {
+    memcpy(initial_frame_data.get() + offset, window_update_frame->data(),
+           window_update_frame->size());
+  }
+
+  auto initial_frame = base::MakeUnique<SpdySerializedFrame>(
+      initial_frame_data.release(), initial_frame_size,
+      /* owns_buffer = */ true);
   EnqueueSessionWrite(HIGHEST, SpdyFrameType::SETTINGS,
-                      std::move(settings_frame));
+                      std::move(initial_frame));
 }
 
 void SpdySession::HandleSetting(uint32_t id, uint32_t value) {
@@ -2803,9 +2823,8 @@ void SpdySession::OnSettings() {
   CHECK(in_io_loop_);
 
   if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(
-        NetLogEventType::HTTP2_SESSION_RECV_SETTINGS,
-        base::Bind(&NetLogSpdyRecvSettingsCallback, host_port_pair()));
+    net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_SETTINGS);
+    net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_SEND_SETTINGS_ACK);
   }
 
   // Send an acknowledgment of the setting.
@@ -2814,6 +2833,13 @@ void SpdySession::OnSettings() {
   auto frame = base::MakeUnique<SpdySerializedFrame>(
       buffered_spdy_framer_->SerializeFrame(settings_ir));
   EnqueueSessionWrite(HIGHEST, SpdyFrameType::SETTINGS, std::move(frame));
+}
+
+void SpdySession::OnSettingsAck() {
+  CHECK(in_io_loop_);
+
+  if (net_log_.IsCapturing())
+    net_log_.AddEvent(NetLogEventType::HTTP2_SESSION_RECV_SETTINGS_ACK);
 }
 
 void SpdySession::OnSetting(SpdySettingsIds id, uint32_t value) {
@@ -2938,9 +2964,6 @@ void SpdySession::OnAltSvc(
     SpdyStreamId stream_id,
     SpdyStringPiece origin,
     const SpdyAltSvcWireFormat::AlternativeServiceVector& altsvc_vector) {
-  if (!is_secure_)
-    return;
-
   url::SchemeHostPort scheme_host_port;
   if (stream_id == 0) {
     if (origin.empty())
@@ -2971,17 +2994,50 @@ void SpdySession::OnAltSvc(
   AlternativeServiceInfoVector alternative_service_info_vector;
   alternative_service_info_vector.reserve(altsvc_vector.size());
   const base::Time now(base::Time::Now());
+  DCHECK(!quic_supported_versions_.empty());
   for (const SpdyAltSvcWireFormat::AlternativeService& altsvc : altsvc_vector) {
     const NextProto protocol = NextProtoFromString(altsvc.protocol_id);
     if (protocol == kProtoUnknown)
       continue;
+
+    // TODO(zhongyi): refactor the QUIC version filtering to a single function
+    // so that SpdySession::OnAltSvc and
+    // HttpStreamFactory::ProcessAlternativeServices
+    // could use the the same function.
+    // Check if QUIC version is supported. Filter supported QUIC versions.
+    QuicVersionVector advertised_versions;
+    if (protocol == kProtoQUIC && !altsvc.version.empty()) {
+      bool match_found = false;
+      for (const QuicVersion& supported : quic_supported_versions_) {
+        for (const uint16_t& advertised : altsvc.version) {
+          if (supported == advertised) {
+            match_found = true;
+            advertised_versions.push_back(supported);
+          }
+        }
+      }
+      if (!match_found) {
+        continue;
+      }
+    }
+
     const AlternativeService alternative_service(protocol, altsvc.host,
                                                  altsvc.port);
     const base::Time expiration =
         now + base::TimeDelta::FromSeconds(altsvc.max_age);
-    alternative_service_info_vector.push_back(
-        AlternativeServiceInfo(alternative_service, expiration));
+    AlternativeServiceInfo alternative_service_info;
+    if (protocol == kProtoQUIC) {
+      alternative_service_info =
+          AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
+              alternative_service, expiration, advertised_versions);
+    } else {
+      alternative_service_info =
+          AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
+              alternative_service, expiration);
+    }
+    alternative_service_info_vector.push_back(alternative_service_info);
   }
+
   http_server_properties_->SetAlternativeServices(
       scheme_host_port, alternative_service_info_vector);
 }

@@ -16,8 +16,6 @@ if (is_android) {
 
 config("base_config") {
   configs = [
-    # This target uses the ALLOCATOR_SHIM define.
-    "//base/allocator:allocator_shim_define",
     "//build/config:precompiled_headers",
     "//build/config/compiler:no_size_t_to_int_warning",
     "//media:media_config",
@@ -31,12 +29,14 @@ if (is_component_build) {
 } else {
   link_target_type = "static_library"
 }
+
 target(link_target_type, "base") {
   # This should only be depended on by "media" target. Other targets should
   # depend on "media" target directly.
   visibility = [
-    "//media",
+    "//media/cdm",
     "//media/formats",
+    "//media/renderers",
 
     # TODO(xhwang): Clean up the dependency graph within "media" target.
     "//media/audio",
@@ -198,6 +198,7 @@ target(link_target_type, "base") {
     "null_video_sink.h",
     "output_device_info.cc",
     "output_device_info.h",
+    "overlay_info.cc",
     "overlay_info.h",
     "pipeline.h",
     "pipeline_impl.cc",
@@ -219,6 +220,7 @@ target(link_target_type, "base") {
     "renderer_factory_selector.h",
     "sample_format.cc",
     "sample_format.h",
+    "scoped_callback_runner.h",
     "seekable_buffer.cc",
     "seekable_buffer.h",
     "serial_runner.cc",
@@ -283,6 +285,8 @@ target(link_target_type, "base") {
     "//ui/gfx:color_space",
   ]
   deps = [
+    # For BUILDFLAG(USE_ALLOCATOR_SHIM).
+    "//base/allocator:features",
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//gpu",
     "//media:media_features",
@@ -297,17 +301,11 @@ target(link_target_type, "base") {
   configs += [ ":base_config" ]
 
   if (media_use_ffmpeg) {
-    if (!is_android) {
-      sources += [
-        "audio_video_metadata_extractor.cc",
-        "audio_video_metadata_extractor.h",
-        "media_file_checker.cc",
-        "media_file_checker.h",
-      ]
-      deps += [ "//media:filters_common" ]
-    }
-
     deps += [ "//third_party/ffmpeg" ]
+  }
+
+  if (media_use_libvpx) {
+    deps += [ "//third_party/libvpx" ]
   }
 
   if (is_android) {
@@ -335,9 +333,11 @@ target(link_target_type, "base") {
     ]
   } else if (is_mac) {
     sources += [ "user_input_monitor_mac.cc" ]
-
-    # Required by video_frame.cc.
-    libs = [ "CoreVideo.framework" ]
+    libs = [
+      "CoreVideo.framework",
+      "CoreFoundation.framework",
+      "CoreGraphics.framework",
+    ]
   } else if (is_win) {
     sources += [ "user_input_monitor_win.cc" ]
   } else {
@@ -464,6 +464,7 @@ source_set("unit_tests") {
     "pipeline_impl_unittest.cc",
     "ranges_unittest.cc",
     "renderer_factory_selector_unittest.cc",
+    "scoped_callback_runner_unittest.cc",
     "seekable_buffer_unittest.cc",
     "serial_runner_unittest.cc",
     "silent_sink_suspender_unittest.cc",
@@ -496,15 +497,6 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/libyuv",
   ]
-
-  # Even if FFmpeg is enabled on Android we don't want these.
-  # TODO(watk): Refactor tests that could be made to run on Android.
-  if (media_use_ffmpeg && !is_android) {
-    sources += [
-      "audio_video_metadata_extractor_unittest.cc",
-      "media_file_checker_unittest.cc",
-    ]
-  }
 
   if (is_android) {
     deps += [

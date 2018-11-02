@@ -15,7 +15,6 @@
 #include "content/public/browser/javascript_dialog_manager.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
-#include "content/public/browser/web_contents.h"
 #include "extensions/browser/guest_view/web_view/javascript_dialog_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_find_helper.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest_delegate.h"
@@ -88,11 +87,12 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   // Request navigating the guest to the provided |src| URL.
   // |wasTyped| will set transition to PAGE_TRANSITION_TYPED so it is remembered
   // in typed history.
-  void NavigateGuest(const std::string& src,
-                     bool force_navigation,
-                     bool wasTyped = false,
-                     content::Referrer* referrer = nullptr,
-                     content::OpenURLParams* params = nullptr);
+  void NavigateGuest(
+      const std::string& src,
+      bool force_navigation,
+      ui::PageTransition transition_type = ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
+      content::Referrer* referrer = nullptr,
+      content::OpenURLParams* params = nullptr);
 
   // Shows the context menu for the guest.
   void ShowContextMenu(int request_id);
@@ -178,7 +178,6 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   void SetFullscreenState(bool is_fullscreen);
 
   // GuestViewBase implementation.
-  bool CanRunInDetachedState() const final;
   void CreateWebContents(const base::DictionaryValue& create_params,
                          const WebContentsCreatedCallback& callback) final;
   void DidAttachToEmbedder() final;
@@ -256,15 +255,12 @@ class WebViewGuest : public guest_view::GuestView<WebViewGuest>,
   content::WebContents* OpenURLFromTab(
       content::WebContents* source,
       const content::OpenURLParams& params) final;
-  void WebContentsCreated(
-      content::WebContents* source_contents,
-      int opener_render_process_id,
-      int opener_render_frame_id,
-      const std::string& frame_name,
-      const GURL& target_url,
-      content::WebContents* new_contents,
-      const base::Optional<content::WebContents::CreateParams>& create_params)
-      final;
+  void WebContentsCreated(content::WebContents* source_contents,
+                          int opener_render_process_id,
+                          int opener_render_frame_id,
+                          const std::string& frame_name,
+                          const GURL& target_url,
+                          content::WebContents* new_contents) final;
   void EnterFullscreenModeForTab(content::WebContents* web_contents,
                                  const GURL& origin) final;
   void ExitFullscreenModeForTab(content::WebContents* web_contents) final;

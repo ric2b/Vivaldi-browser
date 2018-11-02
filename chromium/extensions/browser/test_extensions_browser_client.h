@@ -5,6 +5,7 @@
 #ifndef EXTENSIONS_BROWSER_TEST_EXTENSIONS_BROWSER_CLIENT_H_
 #define EXTENSIONS_BROWSER_TEST_EXTENSIONS_BROWSER_CLIENT_H_
 
+#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -38,6 +39,10 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   }
   void set_extension_cache(std::unique_ptr<ExtensionCache> extension_cache) {
     extension_cache_ = std::move(extension_cache);
+  }
+
+  void set_lock_screen_context(content::BrowserContext* context) {
+    lock_screen_context_ = context;
   }
 
   // Sets a factory to respond to calls of the CreateUpdateClient method.
@@ -113,19 +118,24 @@ class TestExtensionsBrowserClient : public ExtensionsBrowserClient {
   KioskDelegate* GetKioskDelegate() override;
   scoped_refptr<update_client::UpdateClient> CreateUpdateClient(
       content::BrowserContext* context) override;
+  bool IsLockScreenContext(content::BrowserContext* context) override;
 
   ExtensionSystemProvider* extension_system_factory() {
     return extension_system_factory_;
   }
 
  private:
-  content::BrowserContext* main_context_;       // Not owned.
-  content::BrowserContext* incognito_context_;  // Not owned, defaults to NULL.
+  // Not owned.
+  content::BrowserContext* main_context_;
+  // Not owned, defaults to nullptr.
+  content::BrowserContext* incognito_context_;
+  // Not owned, defaults to nullptr.
+  content::BrowserContext* lock_screen_context_;
 
-  // Not owned, defaults to NULL.
+  // Not owned, defaults to nullptr.
   ProcessManagerDelegate* process_manager_delegate_;
 
-  // Not owned, defaults to NULL.
+  // Not owned, defaults to nullptr.
   ExtensionSystemProvider* extension_system_factory_;
 
   std::unique_ptr<ExtensionCache> extension_cache_;

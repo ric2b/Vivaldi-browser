@@ -8,6 +8,8 @@ component("views_examples_lib") {
   testonly = true
 
   sources = [
+    "box_layout_example.cc",
+    "box_layout_example.h",
     "bubble_example.cc",
     "bubble_example.h",
     "button_example.cc",
@@ -75,6 +77,7 @@ component("views_examples_lib") {
 
   deps = [
     "//base",
+    "//cc/paint",
     "//skia",
     "//third_party/icu",
     "//ui/base",
@@ -109,7 +112,7 @@ executable("views_examples_exe") {
     "//base/test:test_support",
     "//build/config:exe_and_shlib_deps",
     "//build/win:default_exe_manifest",
-    "//cc/surfaces",
+    "//components/viz/host",
     "//ui/base",
     "//ui/compositor",
     "//ui/compositor:test_support",

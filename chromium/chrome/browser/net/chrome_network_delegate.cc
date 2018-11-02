@@ -64,7 +64,6 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/io_thread.h"
-#include "chrome/browser/precache/precache_util.h"
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -84,6 +83,8 @@ using content::RenderViewHost;
 using content::ResourceRequestInfo;
 
 namespace {
+
+bool g_access_to_all_files_enabled = false;
 
 const char kDNTHeader[] = "DNT";
 
@@ -367,6 +368,12 @@ void ChromeNetworkDelegate::OnNetworkBytesReceived(net::URLRequest* request,
 
 void ChromeNetworkDelegate::OnNetworkBytesSent(net::URLRequest* request,
                                                int64_t bytes_sent) {
+#if !defined(OS_ANDROID)
+  // Note: Currently, OnNetworkBytesSent is only implemented for HTTP jobs,
+  // not FTP or other types, so those kinds of bytes will not be reported here.
+  task_manager::TaskManagerInterface::OnRawBytesSent(*request, bytes_sent);
+#endif  // !defined(OS_ANDROID)
+
   ReportDataUsageStats(request, bytes_sent, 0 /* rx_bytes */);
 }
 
@@ -378,12 +385,6 @@ void ChromeNetworkDelegate::OnCompleted(net::URLRequest* request,
   // TODO(amohammadkhan): Verify that there is no double recording in data use
   // of redirected requests.
   RecordNetworkErrorHistograms(request, net_error);
-
-  if (net_error == net::OK) {
-#if defined(OS_ANDROID)
-    precache::UpdatePrecacheMetricsAndState(request, profile_);
-#endif  // defined(OS_ANDROID)
-  }
 
   extensions_delegate_->OnCompleted(request, started, net_error);
   if (domain_reliability_monitor_)
@@ -457,16 +458,21 @@ bool ChromeNetworkDelegate::OnCanSetCookie(const net::URLRequest& request,
   return allow;
 }
 
-bool ChromeNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
-                                            const base::FilePath& path) const {
-#if defined(OS_CHROMEOS)
-  // browser_tests and interactive_ui_tests rely on the ability to open any
-  // files via file: scheme.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
+bool ChromeNetworkDelegate::OnCanAccessFile(
+    const net::URLRequest& request,
+    const base::FilePath& original_path,
+    const base::FilePath& absolute_path) const {
+  if (g_access_to_all_files_enabled)
     return true;
-#endif
 
-  return IsAccessAllowed(path, profile_path_);
+#if defined(OS_ANDROID)
+  // Android's whitelist relies on symbolic links (ex. /sdcard is whitelisted
+  // and commonly a symbolic link), thus do not check absolute paths.
+  return IsAccessAllowed(original_path, profile_path_);
+#else
+  return (IsAccessAllowed(original_path, profile_path_) &&
+          IsAccessAllowed(absolute_path, profile_path_));
+#endif
 }
 
 // static
@@ -477,19 +483,23 @@ bool ChromeNetworkDelegate::IsAccessAllowed(
   return true;
 #else
 
+  std::vector<base::FilePath> whitelist;
 #if defined(OS_CHROMEOS)
   // Use a whitelist to only allow access to files residing in the list of
   // directories below.
-  static const char* const kLocalAccessWhiteList[] = {
+  static const base::FilePath::CharType* const kLocalAccessWhiteList[] = {
       "/home/chronos/user/Downloads",
       "/home/chronos/user/log",
       "/home/chronos/user/WebRTC Logs",
       "/media",
       "/opt/oem",
       "/usr/share/chromeos-assets",
-      "/tmp",
       "/var/log",
   };
+
+  base::FilePath temp_dir;
+  if (PathService::Get(base::DIR_TEMP, &temp_dir))
+    whitelist.push_back(temp_dir);
 
   // The actual location of "/home/chronos/user/Xyz" is the Xyz directory under
   // the profile path ("/home/chronos/user' is a hard link to current primary
@@ -498,13 +508,9 @@ bool ChromeNetworkDelegate::IsAccessAllowed(
   // access.
   if (!profile_path.empty()) {
     const base::FilePath downloads = profile_path.AppendASCII("Downloads");
-    if (downloads == path.StripTrailingSeparators() || downloads.IsParent(path))
-      return true;
+    whitelist.push_back(downloads);
     const base::FilePath webrtc_logs = profile_path.AppendASCII("WebRTC Logs");
-    if (webrtc_logs == path.StripTrailingSeparators() ||
-        webrtc_logs.IsParent(path)) {
-      return true;
-    }
+    whitelist.push_back(webrtc_logs);
   }
 #elif defined(OS_ANDROID)
   // Access to files in external storage is allowed.
@@ -514,17 +520,18 @@ bool ChromeNetworkDelegate::IsAccessAllowed(
     return true;
 
   // Whitelist of other allowed directories.
-  static const char* const kLocalAccessWhiteList[] = {
-      "/sdcard",
-      "/mnt/sdcard",
+  static const base::FilePath::CharType* const kLocalAccessWhiteList[] = {
+      "/sdcard", "/mnt/sdcard",
   };
 #endif
 
-  for (size_t i = 0; i < arraysize(kLocalAccessWhiteList); ++i) {
-    const base::FilePath white_listed_path(kLocalAccessWhiteList[i]);
+  for (const auto* whitelisted_path : kLocalAccessWhiteList)
+    whitelist.push_back(base::FilePath(whitelisted_path));
+
+  for (const auto& whitelisted_path : whitelist) {
     // base::FilePath::operator== should probably handle trailing separators.
-    if (white_listed_path == path.StripTrailingSeparators() ||
-        white_listed_path.IsParent(path)) {
+    if (whitelisted_path == path.StripTrailingSeparators() ||
+        whitelisted_path.IsParent(path)) {
       return true;
     }
   }
@@ -532,6 +539,11 @@ bool ChromeNetworkDelegate::IsAccessAllowed(
   DVLOG(1) << "File access denied - " << path.value().c_str();
   return false;
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+}
+
+// static
+void ChromeNetworkDelegate::EnableAccessToAllFilesForTesting(bool enabled) {
+  g_access_to_all_files_enabled = enabled;
 }
 
 bool ChromeNetworkDelegate::OnCanEnablePrivacyMode(

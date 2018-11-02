@@ -39,7 +39,7 @@ class VRDisplayImplTest : public testing::Test {
     mojom::VRServiceClientPtr proxy;
     clients_.push_back(new FakeVRServiceClient(mojo::MakeRequest(&proxy)));
 
-    auto service = base::WrapUnique(new VRServiceImpl());
+    auto service = base::WrapUnique(new VRServiceImpl(-1, -1));
     service->SetClient(std::move(proxy),
                        base::Bind(&VRDisplayImplTest::onDisplaySynced,
                                   base::Unretained(this)));
@@ -51,8 +51,9 @@ class VRDisplayImplTest : public testing::Test {
     // the FakeVRDisplay doesn't access the submit client, so a nullptr
     // is ok.
     device::mojom::VRSubmitFrameClientPtr submit_client = nullptr;
+    device::mojom::VRPresentationProviderRequest request = nullptr;
     display_impl->RequestPresent(
-        true, std::move(submit_client),
+        true, std::move(submit_client), std::move(request),
         base::Bind(&VRDisplayImplTest::onPresentComplete,
                    base::Unretained(this)));
   }

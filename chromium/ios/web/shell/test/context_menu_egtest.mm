@@ -10,8 +10,8 @@
 #import "base/ios/block_types.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/testing/earl_grey/matchers.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/shell/test/app/web_shell_test_util.h"
 #include "ios/web/shell/test/app/web_view_interaction_test_util.h"
@@ -26,7 +26,6 @@
 
 using testing::ContextMenuItemWithText;
 using testing::ElementToDismissContextMenu;
-using web::WebViewContainingText;
 
 // Context menu test cases for the web shell.
 @interface ContextMenuTestCase : WebShellTestCase
@@ -52,8 +51,7 @@ using web::WebViewContainingText;
 
   web::test::SetUpSimpleHttpServer(responses);
   [ShellEarlGrey loadURL:initialURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(linkText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
       performAction:web::LongPressElementForContextMenu(
@@ -92,8 +90,7 @@ using web::WebViewContainingText;
 
   web::test::SetUpSimpleHttpServer(responses);
   [ShellEarlGrey loadURL:initialURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(linkText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
       performAction:web::LongPressElementForContextMenu(
@@ -126,8 +123,7 @@ using web::WebViewContainingText;
 
   web::test::SetUpSimpleHttpServer(responses);
   [ShellEarlGrey loadURL:initialURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(linkText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
       performAction:web::LongPressElementForContextMenu(
@@ -161,8 +157,7 @@ using web::WebViewContainingText;
 
   web::test::SetUpSimpleHttpServer(responses);
   [ShellEarlGrey loadURL:initialURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(linkText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:linkText];
 
   [[EarlGrey selectElementWithMatcher:web::WebView()]
       performAction:web::LongPressElementForContextMenu(

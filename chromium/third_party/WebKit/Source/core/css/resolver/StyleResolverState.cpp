@@ -38,23 +38,19 @@ StyleResolverState::StyleResolverState(
     : element_context_(element_context),
       document_(document),
       style_(nullptr),
-      // TODO(jchaffraix): We should make parent_style_ const
-      // (https://crbug.com/468152)
-      parent_style_(const_cast<ComputedStyle*>(parent_style)),
+      parent_style_(parent_style),
       layout_parent_style_(layout_parent_style),
       is_animation_interpolation_map_ready_(false),
       is_animating_custom_properties_(false),
       apply_property_to_regular_style_(true),
       apply_property_to_visited_link_style_(false),
       has_dir_auto_attribute_(false),
-      font_builder_(document),
+      font_builder_(&document),
       element_style_resources_(document, document.DevicePixelRatio()) {
   DCHECK(!!parent_style_ == !!layout_parent_style_);
 
   if (!parent_style_) {
-    // TODO(jchaffraix): We should make parent_style_ const
-    // (https://crbug.com/468152)
-    parent_style_ = const_cast<ComputedStyle*>(element_context_.ParentStyle());
+    parent_style_ = element_context_.ParentStyle();
   }
 
   if (!layout_parent_style_)

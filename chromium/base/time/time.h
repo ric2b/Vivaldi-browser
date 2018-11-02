@@ -129,6 +129,8 @@ class BASE_EXPORT TimeDelta {
   // when deserializing a |TimeDelta| structure, using a value known to be
   // compatible. It is not provided as a constructor because the integer type
   // may be unclear from the perspective of a caller.
+  //
+  // DEPRECATED - Do not use in new code. http://crbug.com/634507
   static TimeDelta FromInternalValue(int64_t delta) { return TimeDelta(delta); }
 
   // Returns the maximum time delta, which should be greater than any reasonable
@@ -136,10 +138,17 @@ class BASE_EXPORT TimeDelta {
   // delta to a time or another time delta has an undefined result.
   static constexpr TimeDelta Max();
 
+  // Returns the minimum time delta, which should be less than than any
+  // reasonable time delta we might compare it to. Adding or subtracting the
+  // minimum time delta to a time or another time delta has an undefined result.
+  static constexpr TimeDelta Min();
+
   // Returns the internal numeric value of the TimeDelta object. Please don't
   // use this and do arithmetic on it, as it is more error prone than using the
   // provided operators.
   // For serializing, use FromInternalValue to reconstitute.
+  //
+  // DEPRECATED - Do not use in new code. http://crbug.com/634507
   int64_t ToInternalValue() const { return delta_; }
 
   // Returns the magnitude (absolute value) of this TimeDelta.
@@ -156,8 +165,9 @@ class BASE_EXPORT TimeDelta {
     return delta_ == 0;
   }
 
-  // Returns true if the time delta is the maximum time delta.
+  // Returns true if the time delta is the maximum/minimum time delta.
   bool is_max() const { return delta_ == std::numeric_limits<int64_t>::max(); }
+  bool is_min() const { return delta_ == std::numeric_limits<int64_t>::min(); }
 
 #if defined(OS_POSIX)
   struct timespec ToTimeSpec() const;
@@ -211,7 +221,7 @@ class BASE_EXPORT TimeDelta {
       return TimeDelta(rv.ValueOrDie());
     // Matched sign overflows. Mismatched sign underflows.
     if ((delta_ < 0) ^ (a < 0))
-      return TimeDelta(-std::numeric_limits<int64_t>::max());
+      return TimeDelta(std::numeric_limits<int64_t>::min());
     return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
@@ -223,7 +233,7 @@ class BASE_EXPORT TimeDelta {
     // Matched sign overflows. Mismatched sign underflows.
     // Special case to catch divide by zero.
     if ((delta_ < 0) ^ (a <= 0))
-      return TimeDelta(-std::numeric_limits<int64_t>::max());
+      return TimeDelta(std::numeric_limits<int64_t>::min());
     return TimeDelta(std::numeric_limits<int64_t>::max());
   }
   template<typename T>
@@ -332,18 +342,25 @@ class TimeBase {
     return us_ == 0;
   }
 
-  // Returns true if this object represents the maximum time.
+  // Returns true if this object represents the maximum/minimum time.
   bool is_max() const { return us_ == std::numeric_limits<int64_t>::max(); }
+  bool is_min() const { return us_ == std::numeric_limits<int64_t>::min(); }
 
-  // Returns the maximum time, which should be greater than any reasonable time
-  // with which we might compare it.
+  // Returns the maximum/minimum times, which should be greater/less than than
+  // any reasonable time with which we might compare it.
   static TimeClass Max() {
     return TimeClass(std::numeric_limits<int64_t>::max());
+  }
+
+  static TimeClass Min() {
+    return TimeClass(std::numeric_limits<int64_t>::min());
   }
 
   // For serializing only. Use FromInternalValue() to reconstitute. Please don't
   // use this and do arithmetic on it, as it is more error prone than using the
   // provided operators.
+  //
+  // DEPRECATED - Do not use in new code. http://crbug.com/634507
   int64_t ToInternalValue() const { return us_; }
 
   TimeClass& operator=(TimeClass other) {
@@ -396,10 +413,12 @@ class TimeBase {
   // when deserializing a |TimeClass| structure, using a value known to be
   // compatible. It is not provided as a constructor because the integer type
   // may be unclear from the perspective of a caller.
+  //
+  // DEPRECATED - Do not use in new code. http://crbug.com/634507
   static TimeClass FromInternalValue(int64_t us) { return TimeClass(us); }
 
  protected:
-  explicit TimeBase(int64_t us) : us_(us) {}
+  constexpr explicit TimeBase(int64_t us) : us_(us) {}
 
   // Time value in a microsecond timebase.
   int64_t us_;
@@ -497,8 +516,9 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   static Time FromJsTime(double ms_since_epoch);
   double ToJsTime() const;
 
-  // Converts to/from Java convention for times, a number of
-  // milliseconds since the epoch.
+  // Converts to/from Java convention for times, a number of milliseconds since
+  // the epoch. Because the Java format has less resolution, converting to Java
+  // time is a lossy operation.
   static Time FromJavaTime(int64_t ms_since_epoch);
   int64_t ToJavaTime() const;
 
@@ -537,7 +557,19 @@ class BASE_EXPORT Time : public time_internal::TimeBase<Time> {
   // This is provided for testing only, and is not tracked in a thread-safe
   // way.
   static bool IsHighResolutionTimerInUse();
-#endif
+
+  // The following two functions are used to report the fraction of elapsed time
+  // that the high resolution timer is activated.
+  // ResetHighResolutionTimerUsage() resets the cumulative usage and starts the
+  // measurement interval and GetHighResolutionTimerUsage() returns the
+  // percentage of time since the reset that the high resolution timer was
+  // activated.
+  // ResetHighResolutionTimerUsage() must be called at least once before calling
+  // GetHighResolutionTimerUsage(); otherwise the usage result would be
+  // undefined.
+  static void ResetHighResolutionTimerUsage();
+  static double GetHighResolutionTimerUsage();
+#endif  // defined(OS_WIN)
 
   // Converts an exploded structure representing either the local time or UTC
   // into a Time class. Returns false on a failure when, for example, a day of
@@ -666,13 +698,18 @@ constexpr TimeDelta TimeDelta::Max() {
 }
 
 // static
+constexpr TimeDelta TimeDelta::Min() {
+  return TimeDelta(std::numeric_limits<int64_t>::min());
+}
+
+// static
 constexpr TimeDelta TimeDelta::FromDouble(double value) {
   // TODO(crbug.com/612601): Use saturated_cast<int64_t>(value) once we sort out
   // the Min() behavior.
   return value > std::numeric_limits<int64_t>::max()
              ? Max()
-             : value < -std::numeric_limits<int64_t>::max()
-                   ? -Max()
+             : value < std::numeric_limits<int64_t>::min()
+                   ? Min()
                    : TimeDelta(static_cast<int64_t>(value));
 }
 
@@ -681,16 +718,16 @@ constexpr TimeDelta TimeDelta::FromProduct(int64_t value,
                                            int64_t positive_value) {
   return (
 #if !defined(_PREFAST_) || !defined(OS_WIN)
-          // Avoid internal compiler errors in /analyze builds with VS 2015
-          // update 3.
-          // https://connect.microsoft.com/VisualStudio/feedback/details/2870865
-          DCHECK(positive_value > 0),
+      // Avoid internal compiler errors in /analyze builds with VS 2015
+      // update 3.
+      // https://connect.microsoft.com/VisualStudio/feedback/details/2870865
+      DCHECK(positive_value > 0),
 #endif
-          value > std::numeric_limits<int64_t>::max() / positive_value
-              ? Max()
-              : value < -std::numeric_limits<int64_t>::max() / positive_value
-                    ? -Max()
-                    : TimeDelta(value * positive_value));
+      value > std::numeric_limits<int64_t>::max() / positive_value
+          ? Max()
+          : value < std::numeric_limits<int64_t>::min() / positive_value
+                ? Min()
+                : TimeDelta(value * positive_value));
 }
 
 // For logging use only.
@@ -711,8 +748,7 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
     WIN_ROLLOVER_PROTECTED_TIME_GET_TIME
   };
 
-  TimeTicks() : TimeBase(0) {
-  }
+  constexpr TimeTicks() : TimeBase(0) {}
 
   // Platform-dependent tick count representing "right now." When
   // IsHighResolution() returns false, the resolution of the clock could be
@@ -734,9 +770,9 @@ class BASE_EXPORT TimeTicks : public time_internal::TimeBase<TimeTicks> {
   static bool IsConsistentAcrossProcesses() WARN_UNUSED_RESULT;
 
 #if defined(OS_FUCHSIA)
-  // Creates a TimeTicks from a mx_time_t value. Note that the mx_time_t value
-  // is interpreted in terms of the MX_CLOCK_MONOTONIC clock.
+  // Converts between TimeTicks and an MX_CLOCK_MONOTONIC mx_time_t value.
   static TimeTicks FromMXTime(mx_time_t nanos_since_boot);
+  mx_time_t ToMXTime() const;
 #endif
 
 #if defined(OS_WIN)

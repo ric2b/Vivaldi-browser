@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 20
+// Next MinVersion: 23
 
 module arc.mojom;
 
@@ -73,6 +73,31 @@ enum ShowPackageInfoPage {
 
   // Page for managing links assigned to the app.
   MANAGE_LINKS = 1,
+};
+
+// Describes a Play Store app discovery result.
+struct AppDiscoveryResult {
+  string? launch_intent_uri;
+  string? install_intent_uri;
+  string? label;
+  bool is_instant_app;
+  bool is_recent;
+  string? publisher_name;
+  string? formatted_price;
+  float review_score;
+  array<uint8> icon_png_data;
+  [MinVersion=22] string? package_name;
+};
+
+// Describes the status of an app discovery request.
+[Extensible]
+enum AppDiscoveryRequestState {
+  // Request handled successfully.
+  SUCCESS = 0,
+  // Request canceled when a newer request is sent.
+  CANCELED = 1,
+  // Request failed due to any communication error or Play Store internal error.
+  ERROR = 2,
 };
 
 // Next method ID: 18
@@ -161,7 +186,7 @@ interface AppHost {
 };
 
 // TODO(lhchavez): Migrate all request/response messages to Mojo.
-// Next method ID: 16
+// Next method ID: 18
 // Deprecated method ID: 9
 interface AppInstance {
   Init@0(AppHost host_ptr);
@@ -230,7 +255,15 @@ interface AppInstance {
   // Sets notification setting for the package.
   [MinVersion=6] SetNotificationsEnabled@10(string package_name, bool enabled);
 
+  // Sends a request to ARC to start PAI flow.
+  [MinVersion=21] StartPaiFlow@17();
+
   // Sends a request to ARC to uninstall the given package.  Error (if ever
   // happens) is ignored, and uninstall option should appear in the UI.
   [MinVersion=2] UninstallPackage@5(string package_name);
+
+  // Starts a query for Play Store apps.
+  [MinVersion=20] GetRecentAndSuggestedAppsFromPlayStore@16(
+      string query, int32 max_results) =>
+          (AppDiscoveryRequestState state@1, array<AppDiscoveryResult> results@0);
 };

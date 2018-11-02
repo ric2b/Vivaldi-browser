@@ -8,11 +8,22 @@
 #       Specifies the path suffix that output files are generated under. This
 #       path will be appended to root_gen_dir.
 #
-#       Targets that depend on the proto target will be able to include the
-#       resulting flatbuffers header with an include like:
+#       Targets that depend on the flatbuffer target will be able to include
+#       the resulting FlatBuffers header with an include like:
 #         #include "dir/for/my_flatbuffer/buffer_generated.h"
 #       If undefined, this defaults to matchign the input directory for each
 #       .fbs file (you should almost always use the default mode).
+#
+#   flatc_include_dirs (optional)
+#       Specifies the directories which FlatBuffers compiler uses to find
+#       included .fbs files in. Almost always should be empty.
+#
+#       The list always has an implicit first item corresponding to the root of
+#       the source tree. This enables including .fbs files by absolute path.
+#
+#       The compiler will try the directories in the order given, and if all
+#       fail it will try to load relative to the directory of the schema file
+#       being parsed.
 #
 #   deps (optional)
 #       Additional dependencies.
@@ -57,6 +68,7 @@ template("flatbuffer") {
     tool = "//third_party/flatbuffers:flatc"
 
     sources = invoker.sources
+    deps = []
 
     if (defined(invoker.flatc_out_dir)) {
       out_dir = "$root_gen_dir/" + invoker.flatc_out_dir
@@ -70,10 +82,23 @@ template("flatbuffer") {
 
     args = [
       "-c",
+      "--keep-prefix",
       "-o",
       "$out_dir",
-      "{{source}}",
+      "-I",
+      rebase_path("//", root_build_dir),
     ]
+
+    if (defined(invoker.flatc_include_dirs)) {
+      foreach(include_dir, invoker.flatc_include_dirs) {
+        args += [
+          "-I",
+          rebase_path(include_dir, root_build_dir),
+        ]
+      }
+    }
+
+    args += [ "{{source}}" ]
 
     # The deps may have steps that have to run before running flatc.
     if (defined(invoker.deps)) {
@@ -101,7 +126,7 @@ template("flatbuffer") {
     public_configs = [ "//third_party/flatbuffers:flatbuffers_config" ]
 
     public_deps = [
-      # The generated headers reference headers within flatbuffers, so
+      # The generated headers reference headers within FlatBuffers, so
       # dependencies must be able to find those headers too.
       "//third_party/flatbuffers",
     ]
@@ -113,6 +138,11 @@ template("flatbuffer") {
     # action won't link it).
     if (defined(invoker.deps)) {
       deps += invoker.deps
+    }
+
+    # Same for public_deps.
+    if (defined(invoker.public_deps)) {
+      public_deps += invoker.public_deps
     }
   }
 }

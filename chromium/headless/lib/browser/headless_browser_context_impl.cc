@@ -237,6 +237,11 @@ HeadlessBrowserContextImpl::GetBackgroundSyncController() {
   return nullptr;
 }
 
+content::BrowsingDataRemoverDelegate*
+HeadlessBrowserContextImpl::GetBrowsingDataRemoverDelegate() {
+  return nullptr;
+}
+
 net::URLRequestContextGetter* HeadlessBrowserContextImpl::CreateRequestContext(
     content::ProtocolHandlerMap* protocol_handlers,
     content::URLRequestInterceptorScopedVector request_interceptors) {
@@ -244,11 +249,9 @@ net::URLRequestContextGetter* HeadlessBrowserContextImpl::CreateRequestContext(
       new HeadlessURLRequestContextGetter(
           content::BrowserThread::GetTaskRunnerForThread(
               content::BrowserThread::IO),
-          content::BrowserThread::GetTaskRunnerForThread(
-              content::BrowserThread::FILE),
           protocol_handlers, context_options_->TakeProtocolHandlers(),
           std::move(request_interceptors), context_options_.get(),
-          browser_->browser_main_parts()->net_log()));
+          browser_->browser_main_parts()->net_log(), this));
   resource_context_->set_url_request_context_getter(url_request_context_getter);
   return url_request_context_getter.get();
 }
@@ -328,6 +331,32 @@ const std::string& HeadlessBrowserContextImpl::Id() const {
   return id_;
 }
 
+void HeadlessBrowserContextImpl::AddObserver(Observer* obs) {
+  base::AutoLock lock(observers_lock_);
+  observers_.AddObserver(obs);
+}
+
+void HeadlessBrowserContextImpl::RemoveObserver(Observer* obs) {
+  base::AutoLock lock(observers_lock_);
+  observers_.RemoveObserver(obs);
+}
+
+void HeadlessBrowserContextImpl::NotifyChildContentsCreated(
+    HeadlessWebContentsImpl* parent,
+    HeadlessWebContentsImpl* child) {
+  base::AutoLock lock(observers_lock_);
+  for (auto& observer : observers_)
+    observer.OnChildContentsCreated(parent, child);
+}
+
+void HeadlessBrowserContextImpl::NotifyUrlRequestFailed(
+    net::URLRequest* request,
+    int net_error) {
+  base::AutoLock lock(observers_lock_);
+  for (auto& observer : observers_)
+    observer.UrlRequestFailed(request, net_error);
+}
+
 HeadlessBrowserContext::Builder::Builder(HeadlessBrowserImpl* browser)
     : browser_(browser),
       options_(new HeadlessBrowserContextOptions(browser->options())),
@@ -352,9 +381,9 @@ HeadlessBrowserContext::Builder::SetProductNameAndVersion(
 }
 
 HeadlessBrowserContext::Builder&
-HeadlessBrowserContext::Builder::SetProxyServer(
-    const net::HostPortPair& proxy_server) {
-  options_->proxy_server_ = proxy_server;
+HeadlessBrowserContext::Builder::SetProxyConfig(
+    std::unique_ptr<net::ProxyConfig> proxy_config) {
+  options_->proxy_config_ = std::move(proxy_config);
   return *this;
 }
 

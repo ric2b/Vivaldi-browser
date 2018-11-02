@@ -72,6 +72,7 @@ enum class AutoplayPolicy {
   kNoUserGestureRequired,
   kUserGestureRequired,
   kUserGestureRequiredForCrossOrigin,
+  kDocumentUserActivationRequired,
 };
 
 // The ISO 15924 script code for undetermined script aka Common. It's the
@@ -175,7 +176,6 @@ struct CONTENT_EXPORT WebPreferences {
   ui::HoverType primary_hover_type;
   bool sync_xhr_in_documents_enabled;
   bool color_correct_rendering_enabled = false;
-  bool color_correct_rendering_default_mode_enabled = false;
   bool should_respect_image_orientation;
   int number_of_cpu_cores;
   EditingBehavior editing_behavior;
@@ -192,7 +192,6 @@ struct CONTENT_EXPORT WebPreferences {
   bool use_solid_color_scrollbars;
   bool navigate_on_drag_drop;
   V8CacheOptions v8_cache_options;
-  bool inert_visual_viewport;
   bool record_whole_document;
   bool serve_resources_only_from_cache;
 
@@ -216,13 +215,7 @@ struct CONTENT_EXPORT WebPreferences {
   // Cues will not be placed in this margin area.
   float text_track_margin_percentage;
 
-  // Specifies aggressiveness of background tab throttling.
-  // expensive_background_throttling_cpu_budget is given in percentages,
-  // other values are in seconds.
-  float expensive_background_throttling_cpu_budget;
-  float expensive_background_throttling_initial_budget;
-  float expensive_background_throttling_max_budget;
-  float expensive_background_throttling_max_delay;
+  bool page_popups_suppressed;
 
 #if defined(OS_ANDROID)
   bool text_autosizing_enabled;
@@ -260,7 +253,10 @@ struct CONTENT_EXPORT WebPreferences {
   // If enabled, video fullscreen detection will be enabled.
   bool video_fullscreen_detection_enabled;
   bool embedded_media_experience_enabled;
-  bool page_popups_suppressed;
+  // Enable support for document.scrollingElement
+  // WebView sets this to false to retain old documentElement behaviour
+  // (http://crbug.com/761016).
+  bool scroll_top_left_interop_enabled;
 #else  // defined(OS_ANDROID)
 #endif  // defined(OS_ANDROID)
 
@@ -275,14 +271,6 @@ struct CONTENT_EXPORT WebPreferences {
 
   // If enabled, disabled video track when the video is in the background.
   bool background_video_track_optimization_enabled;
-
-  // When memory pressure based garbage collection is enabled for MSE, the
-  // |enable_instant_source_buffer_gc| flag controls whether the GC is done
-  // immediately on memory pressure notification or during the next SourceBuffer
-  // append (slower, but is MSE-spec compliant).
-  // TODO(servolk, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  bool enable_instant_source_buffer_gc;
 
   // Whether it is a presentation receiver.
   bool presentation_receiver;

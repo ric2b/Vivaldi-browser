@@ -7,6 +7,8 @@
 #include <string>
 #include <utility>
 
+#include "base/metrics/histogram_macros.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_folder_item.h"
 #include "ui/app_list/app_list_item.h"
 #include "ui/app_list/app_list_model_observer.h"
@@ -20,13 +22,17 @@ AppListModel::AppListModel()
       results_(new SearchResults),
       status_(STATUS_NORMAL),
       state_(INVALID_STATE),
+      state_fullscreen_(AppListView::CLOSED),
       folders_enabled_(false),
       custom_launcher_page_enabled_(true),
-      search_engine_is_google_(false) {
+      search_engine_is_google_(false),
+      is_tablet_mode_(false) {
   top_level_item_list_->AddObserver(this);
 }
 
-AppListModel::~AppListModel() { top_level_item_list_->RemoveObserver(this); }
+AppListModel::~AppListModel() {
+  top_level_item_list_->RemoveObserver(this);
+}
 
 void AppListModel::AddObserver(AppListModelObserver* observer) {
   observers_.AddObserver(observer);
@@ -55,6 +61,14 @@ void AppListModel::SetState(State state) {
 
   for (auto& observer : observers_)
     observer.OnAppListModelStateChanged(old_state, state_);
+}
+
+void AppListModel::SetStateFullscreen(AppListView::AppListState state) {
+  state_fullscreen_ = state;
+}
+
+void AppListModel::SetTabletMode(bool started) {
+  is_tablet_mode_ = started;
 }
 
 AppListItem* AppListModel::FindItem(const std::string& id) {
@@ -163,12 +177,10 @@ const std::string AppListModel::MergeItems(const std::string& target_item_id,
 
   // Add the items to the new folder.
   target_item_ptr->set_position(
-      new_folder->item_list()->CreatePositionBefore(
-          syncer::StringOrdinal()));
+      new_folder->item_list()->CreatePositionBefore(syncer::StringOrdinal()));
   AddItemToFolderItemAndNotify(new_folder, std::move(target_item_ptr));
   source_item_ptr->set_position(
-      new_folder->item_list()->CreatePositionBefore(
-          syncer::StringOrdinal()));
+      new_folder->item_list()->CreatePositionBefore(syncer::StringOrdinal()));
   AddItemToFolderItemAndNotify(new_folder, std::move(source_item_ptr));
 
   return new_folder->id();
@@ -176,8 +188,8 @@ const std::string AppListModel::MergeItems(const std::string& target_item_id,
 
 void AppListModel::MoveItemToFolder(AppListItem* item,
                                     const std::string& folder_id) {
-  DVLOG(2) << "MoveItemToFolder: " << folder_id
-           << " <- " << item->ToDebugString();
+  DVLOG(2) << "MoveItemToFolder: " << folder_id << " <- "
+           << item->ToDebugString();
   if (item->folder_id() == folder_id)
     return;
   AppListFolderItem* dest_folder = FindOrCreateFolderItem(folder_id);
@@ -193,8 +205,8 @@ void AppListModel::MoveItemToFolder(AppListItem* item,
 bool AppListModel::MoveItemToFolderAt(AppListItem* item,
                                       const std::string& folder_id,
                                       syncer::StringOrdinal position) {
-  DVLOG(2) << "MoveItemToFolderAt: " << folder_id
-           << "[" << position.ToDebugString() << "]"
+  DVLOG(2) << "MoveItemToFolderAt: " << folder_id << "["
+           << position.ToDebugString() << "]"
            << " <- " << item->ToDebugString();
   if (item->folder_id() == folder_id)
     return false;
@@ -317,6 +329,27 @@ void AppListModel::SetFoldersEnabled(bool folders_enabled) {
     DeleteItem(folder_ids[i]);
 }
 
+void AppListModel::RecordItemsInFoldersForUMA() {
+  int number_of_items_in_folders = 0;
+  for (size_t i = 0; i < top_level_item_list_->item_count(); i++) {
+    AppListItem* item = top_level_item_list_->item_at(i);
+    if (item->GetItemType() != AppListFolderItem::kItemType)
+      continue;
+
+    AppListFolderItem* folder = static_cast<AppListFolderItem*>(item);
+    if (folder->folder_type() == AppListFolderItem::FOLDER_TYPE_OEM)
+      continue;  // Don't count OEM folders.
+    number_of_items_in_folders += folder->item_list()->item_count();
+  }
+  if (features::IsFullscreenAppListEnabled()) {
+    UMA_HISTOGRAM_COUNTS_100("Apps.AppsInFolders.FullscreenAppListEnabled",
+                             number_of_items_in_folders);
+  } else {
+    UMA_HISTOGRAM_COUNTS_100("Apps.AppsInFolders.FullscreenAppListDisabled",
+                             number_of_items_in_folders);
+  }
+}
+
 void AppListModel::SetCustomLauncherPageEnabled(bool enabled) {
   custom_launcher_page_enabled_ = enabled;
   for (auto& observer : observers_)
@@ -362,11 +395,6 @@ void AppListModel::SetSearchEngineIsGoogle(bool is_google) {
   search_engine_is_google_ = is_google;
   for (auto& observer : observers_)
     observer.OnSearchEngineIsGoogleChanged(is_google);
-}
-
-void AppListModel::SetSearchAnswerAvailable(bool has_answer) {
-  for (auto& observer : observers_)
-    observer.OnSearchAnswerAvailableChanged(has_answer);
 }
 
 // Private methods

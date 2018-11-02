@@ -121,18 +121,18 @@ void VivaldiDataSourcesAPI::SaveMappings() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
 
   std::unique_ptr<base::DictionaryValue> root(new base::DictionaryValue);
-  base::DictionaryValue* item = new base::DictionaryValue;
+  std::unique_ptr<base::DictionaryValue> item(new base::DictionaryValue);
 
   base::AutoLock lock(map_lock_);
   for (auto it : id_to_file_map_) {
-    base::DictionaryValue* subitems = new base::DictionaryValue;
+    std::unique_ptr<base::DictionaryValue> subitems(new base::DictionaryValue);
     base::FilePath path = it.second->GetPath();
 
     subitems->SetString("local_path", path.value());
 
-    item->Set(it.first, subitems);
+    item->Set(it.first, std::move(subitems));
   }
-  root->Set("mappings", item);
+  root->Set("mappings", std::move(item));
 
   Profile* profile = Profile::FromBrowserContext(browser_context_);
   base::FilePath path = profile->GetPath();

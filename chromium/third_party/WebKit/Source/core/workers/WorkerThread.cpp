@@ -37,14 +37,16 @@
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/probe/CoreProbes.h"
+#include "core/workers/GlobalScopeCreationParams.h"
+#include "core/workers/InstalledScriptsManager.h"
 #include "core/workers/ThreadedWorkletGlobalScope.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "core/workers/WorkerClients.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "core/workers/WorkerReportingProxy.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "platform/bindings/Microtask.h"
@@ -58,16 +60,28 @@
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/platform/InterfaceProvider.h"
+#include "public/platform/Platform.h"
 
 namespace blink {
 
 using ExitCode = WorkerThread::ExitCode;
 
+namespace {
+
 // TODO(nhiroki): Adjust the delay based on UMA.
-const long long kForcibleTerminationDelayInMs = 2000;  // 2 secs
+constexpr TimeDelta kForcibleTerminationDelay = TimeDelta::FromSeconds(2);
+
+void ForwardInterfaceRequest(const std::string& name,
+                             mojo::ScopedMessagePipeHandle handle) {
+  Platform::Current()->GetInterfaceProvider()->GetInterface(name.c_str(),
+                                                            std::move(handle));
+}
+
+}  // namespace
 
 static Mutex& ThreadSetMutex() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, ());
   return mutex;
 }
 
@@ -76,21 +90,6 @@ static int GetNextWorkerThreadId() {
   static int next_worker_thread_id = 1;
   CHECK_LT(next_worker_thread_id, std::numeric_limits<int>::max());
   return next_worker_thread_id++;
-}
-
-WorkerThreadLifecycleContext::WorkerThreadLifecycleContext() {
-  DCHECK(IsMainThread());
-}
-
-WorkerThreadLifecycleContext::~WorkerThreadLifecycleContext() {
-  DCHECK(IsMainThread());
-}
-
-void WorkerThreadLifecycleContext::NotifyContextDestroyed() {
-  DCHECK(IsMainThread());
-  DCHECK(!was_context_destroyed_);
-  was_context_destroyed_ = true;
-  LifecycleNotifier::NotifyContextDestroyed();
 }
 
 WorkerThread::~WorkerThread() {
@@ -102,18 +101,16 @@ WorkerThread::~WorkerThread() {
   DCHECK_NE(ExitCode::kNotTerminated, exit_code_);
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, exit_code_histogram,
-      new EnumerationHistogram("WorkerThread.ExitCode",
-                               static_cast<int>(ExitCode::kLastEnum)));
+      ("WorkerThread.ExitCode", static_cast<int>(ExitCode::kLastEnum)));
   exit_code_histogram.Count(static_cast<int>(exit_code_));
 }
 
-void WorkerThread::Start(std::unique_ptr<WorkerThreadStartupData> startup_data,
-                         ParentFrameTaskRunners* parent_frame_task_runners) {
+void WorkerThread::Start(
+    std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params,
+    const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data,
+    ParentFrameTaskRunners* parent_frame_task_runners) {
   DCHECK(IsMainThread());
-  if (requested_to_start_)
-    return;
-
-  requested_to_start_ = true;
+  DCHECK(!parent_frame_task_runners_);
   parent_frame_task_runners_ = parent_frame_task_runners;
 
   // Synchronously initialize the per-global-scope scheduler to prevent someone
@@ -127,39 +124,54 @@ void WorkerThread::Start(std::unique_ptr<WorkerThreadStartupData> startup_data,
   waitable_event.Wait();
 
   GetWorkerBackingThread().BackingThread().PostTask(
-      BLINK_FROM_HERE, CrossThreadBind(&WorkerThread::InitializeOnWorkerThread,
-                                       CrossThreadUnretained(this),
-                                       WTF::Passed(std::move(startup_data))));
+      BLINK_FROM_HERE,
+      CrossThreadBind(&WorkerThread::InitializeOnWorkerThread,
+                      CrossThreadUnretained(this),
+                      WTF::Passed(std::move(global_scope_creation_params)),
+                      thread_startup_data));
 }
 
 void WorkerThread::Terminate() {
   DCHECK(IsMainThread());
-  TerminateInternal(TerminationMode::kGraceful);
+
+  {
+    MutexLocker lock(thread_state_mutex_);
+    if (requested_to_terminate_)
+      return;
+    requested_to_terminate_ = true;
+  }
+
+  // Schedule a task to forcibly terminate the script execution in case that the
+  // shutdown sequence does not start on the worker thread in a certain time
+  // period.
+  ScheduleToTerminateScriptExecution();
+
+  worker_thread_lifecycle_context_->NotifyContextDestroyed();
+  inspector_task_runner_->Kill();
+
+  GetWorkerBackingThread().BackingThread().PostTask(
+      BLINK_FROM_HERE,
+      CrossThreadBind(&WorkerThread::PrepareForShutdownOnWorkerThread,
+                      CrossThreadUnretained(this)));
+  GetWorkerBackingThread().BackingThread().PostTask(
+      BLINK_FROM_HERE,
+      CrossThreadBind(&WorkerThread::PerformShutdownOnWorkerThread,
+                      CrossThreadUnretained(this)));
 }
 
-void WorkerThread::TerminateAndWait() {
-  DCHECK(IsMainThread());
-
-  // The main thread will be blocked, so asynchronous graceful shutdown does
-  // not work.
-  TerminateInternal(TerminationMode::kForcible);
-  shutdown_event_->Wait();
-
-  // Destruct base::Thread and join the underlying system thread.
-  ClearWorkerBackingThread();
-}
-
-void WorkerThread::TerminateAndWaitForAllWorkers() {
+void WorkerThread::TerminateAllWorkersForTesting() {
   DCHECK(IsMainThread());
 
   // Keep this lock to prevent WorkerThread instances from being destroyed.
   MutexLocker lock(ThreadSetMutex());
   HashSet<WorkerThread*> threads = WorkerThreads();
 
-  // The main thread will be blocked, so asynchronous graceful shutdown does
-  // not work.
-  for (WorkerThread* thread : threads)
-    thread->TerminateInternal(TerminationMode::kForcible);
+  for (WorkerThread* thread : threads) {
+    // Schedule a regular async worker thread termination task, and forcibly
+    // terminate the V8 script execution to ensure the task runs.
+    thread->Terminate();
+    thread->EnsureScriptExecutionTerminates(ExitCode::kSyncForciblyTerminated);
+  }
 
   for (WorkerThread* thread : threads)
     thread->shutdown_event_->Wait();
@@ -199,6 +211,13 @@ v8::Isolate* WorkerThread::GetIsolate() {
 
 bool WorkerThread::IsCurrentThread() {
   return GetWorkerBackingThread().BackingThread().IsCurrentThread();
+}
+
+ThreadableLoadingContext* WorkerThread::GetLoadingContext() {
+  DCHECK(IsCurrentThread());
+  // This should be never called after the termination sequence starts.
+  DCHECK(loading_context_);
+  return loading_context_;
 }
 
 void WorkerThread::AppendDebuggerTask(
@@ -265,8 +284,6 @@ HashSet<WorkerThread*>& WorkerThread::WorkerThreads() {
 }
 
 PlatformThreadId WorkerThread::GetPlatformThreadId() {
-  if (!requested_to_start_)
-    return 0;
   return GetWorkerBackingThread().BackingThread().PlatformThread().ThreadId();
 }
 
@@ -287,12 +304,25 @@ bool WorkerThread::IsForciblyTerminated() {
   return false;
 }
 
-WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> worker_loader_proxy,
+ExitCode WorkerThread::GetExitCodeForTesting() {
+  MutexLocker lock(thread_state_mutex_);
+  return exit_code_;
+}
+
+service_manager::InterfaceProvider& WorkerThread::GetInterfaceProvider() {
+  // TODO(https://crbug.com/734210): Instead of forwarding to the process-wide
+  // interface provider a worker-specific interface provider pipe should be
+  // passed in as part of the WorkerThreadStartupData.
+  return interface_provider_;
+}
+
+WorkerThread::WorkerThread(ThreadableLoadingContext* loading_context,
                            WorkerReportingProxy& worker_reporting_proxy)
-    : worker_thread_id_(GetNextWorkerThreadId()),
-      forcible_termination_delay_in_ms_(kForcibleTerminationDelayInMs),
+    : time_origin_(MonotonicallyIncreasingTime()),
+      worker_thread_id_(GetNextWorkerThreadId()),
+      forcible_termination_delay_(kForcibleTerminationDelay),
       inspector_task_runner_(WTF::MakeUnique<InspectorTaskRunner>()),
-      worker_loader_proxy_(std::move(worker_loader_proxy)),
+      loading_context_(loading_context),
       worker_reporting_proxy_(worker_reporting_proxy),
       shutdown_event_(WTF::WrapUnique(
           new WaitableEvent(WaitableEvent::ResetPolicy::kManual,
@@ -301,74 +331,23 @@ WorkerThread::WorkerThread(PassRefPtr<WorkerLoaderProxy> worker_loader_proxy,
   DCHECK(IsMainThread());
   MutexLocker lock(ThreadSetMutex());
   WorkerThreads().insert(this);
+  interface_provider_.Forward(
+      ConvertToBaseCallback(WTF::Bind(&ForwardInterfaceRequest)));
 }
 
-void WorkerThread::TerminateInternal(TerminationMode mode) {
-  DCHECK(IsMainThread());
-  DCHECK(requested_to_start_);
-
-  {
-    // Protect against this method, initializeOnWorkerThread() or
-    // termination via the global scope racing each other.
-    MutexLocker lock(thread_state_mutex_);
-
-    // If terminate has already been called.
-    if (requested_to_terminate_) {
-      if (running_debugger_task_) {
-        // Any debugger task is guaranteed to finish, so we can wait
-        // for the completion even if the synchronous forcible
-        // termination is requested. Shutdown sequence will start
-        // after the task.
-        DCHECK(!forcible_termination_task_handle_.IsActive());
-        return;
-      }
-
-      // The synchronous forcible termination request should overtake the
-      // scheduled termination task because the request will block the
-      // main thread and the scheduled termination task never runs.
-      if (mode == TerminationMode::kForcible &&
-          exit_code_ == ExitCode::kNotTerminated) {
-        DCHECK(forcible_termination_task_handle_.IsActive());
-        ForciblyTerminateExecution(lock, ExitCode::kSyncForciblyTerminated);
-      }
-      return;
-    }
-    requested_to_terminate_ = true;
-
-    if (ShouldScheduleToTerminateExecution(lock)) {
-      switch (mode) {
-        case TerminationMode::kForcible:
-          ForciblyTerminateExecution(lock, ExitCode::kSyncForciblyTerminated);
-          break;
-        case TerminationMode::kGraceful:
-          DCHECK(!forcible_termination_task_handle_.IsActive());
-          forcible_termination_task_handle_ =
-              parent_frame_task_runners_->Get(TaskType::kUnspecedTimer)
-                  ->PostDelayedCancellableTask(
-                      BLINK_FROM_HERE,
-                      WTF::Bind(&WorkerThread::MayForciblyTerminateExecution,
-                                WTF::Unretained(this)),
-                      TimeDelta::FromMilliseconds(
-                          forcible_termination_delay_in_ms_));
-          break;
-      }
-    }
-  }
-
-  worker_thread_lifecycle_context_->NotifyContextDestroyed();
-  inspector_task_runner_->Kill();
-
-  GetWorkerBackingThread().BackingThread().PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&WorkerThread::PrepareForShutdownOnWorkerThread,
-                      CrossThreadUnretained(this)));
-  GetWorkerBackingThread().BackingThread().PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&WorkerThread::PerformShutdownOnWorkerThread,
-                      CrossThreadUnretained(this)));
+void WorkerThread::ScheduleToTerminateScriptExecution() {
+  DCHECK(!forcible_termination_task_handle_.IsActive());
+  forcible_termination_task_handle_ =
+      parent_frame_task_runners_->Get(TaskType::kUnspecedTimer)
+          ->PostDelayedCancellableTask(
+              BLINK_FROM_HERE,
+              WTF::Bind(&WorkerThread::EnsureScriptExecutionTerminates,
+                        WTF::Unretained(this),
+                        ExitCode::kAsyncForciblyTerminated),
+              forcible_termination_delay_);
 }
 
-bool WorkerThread::ShouldScheduleToTerminateExecution(const MutexLocker& lock) {
+bool WorkerThread::ShouldTerminateScriptExecution(const MutexLocker& lock) {
   DCHECK(IsMainThread());
   DCHECK(IsThreadStateMutexLocked(lock));
 
@@ -391,26 +370,11 @@ bool WorkerThread::ShouldScheduleToTerminateExecution(const MutexLocker& lock) {
   return false;
 }
 
-void WorkerThread::MayForciblyTerminateExecution() {
+void WorkerThread::EnsureScriptExecutionTerminates(ExitCode exit_code) {
   DCHECK(IsMainThread());
   MutexLocker lock(thread_state_mutex_);
-  if (thread_state_ == ThreadState::kReadyToShutdown) {
-    // Shutdown sequence is now running. Just return.
+  if (!ShouldTerminateScriptExecution(lock))
     return;
-  }
-  if (running_debugger_task_) {
-    // Any debugger task is guaranteed to finish, so we can wait for the
-    // completion. Shutdown sequence will start after that.
-    return;
-  }
-
-  ForciblyTerminateExecution(lock, ExitCode::kAsyncForciblyTerminated);
-}
-
-void WorkerThread::ForciblyTerminateExecution(const MutexLocker& lock,
-                                              ExitCode exit_code) {
-  DCHECK(IsMainThread());
-  DCHECK(IsThreadStateMutexLocked(lock));
 
   DCHECK(exit_code == ExitCode::kSyncForciblyTerminated ||
          exit_code == ExitCode::kAsyncForciblyTerminated);
@@ -434,48 +398,42 @@ void WorkerThread::InitializeSchedulerOnWorkerThread(
 }
 
 void WorkerThread::InitializeOnWorkerThread(
-    std::unique_ptr<WorkerThreadStartupData> startup_data) {
+    std::unique_ptr<GlobalScopeCreationParams> global_scope_creation_params,
+    const WTF::Optional<WorkerBackingThreadStartupData>& thread_startup_data) {
   DCHECK(IsCurrentThread());
   DCHECK_EQ(ThreadState::kNotStarted, thread_state_);
 
-  KURL script_url = startup_data->script_url_;
-  String source_code = startup_data->source_code_;
-  WorkerThreadStartMode start_mode = startup_data->start_mode_;
-  std::unique_ptr<Vector<char>> cached_meta_data =
-      std::move(startup_data->cached_meta_data_);
+  KURL script_url = global_scope_creation_params->script_url;
+  String given_source_code = global_scope_creation_params->source_code;
+  std::unique_ptr<Vector<char>> given_cached_meta_data =
+      std::move(global_scope_creation_params->cached_meta_data);
+  // TODO(nhiroki): Rename WorkerThreadStartMode to GlobalScopeStartMode.
+  // (https://crbug.com/710364)
+  WorkerThreadStartMode start_mode = global_scope_creation_params->start_mode;
   V8CacheOptions v8_cache_options =
-      startup_data->worker_v8_settings_.v8_cache_options_;
-  bool heap_limit_increased_for_debugging =
-      startup_data->worker_v8_settings_.heap_limit_mode_ ==
-      WorkerV8Settings::HeapLimitMode::kIncreasedForDebugging;
-  bool allow_atomics_wait =
-      startup_data->worker_v8_settings_.atomics_wait_mode_ ==
-      WorkerV8Settings::AtomicsWaitMode::kAllow;
+      global_scope_creation_params->v8_cache_options;
 
   {
     MutexLocker lock(thread_state_mutex_);
 
-    if (IsOwningBackingThread())
-      GetWorkerBackingThread().Initialize();
+    if (IsOwningBackingThread()) {
+      DCHECK(thread_startup_data.has_value());
+      GetWorkerBackingThread().InitializeOnBackingThread(*thread_startup_data);
+    } else {
+      DCHECK(!thread_startup_data.has_value());
+    }
     GetWorkerBackingThread().BackingThread().AddTaskObserver(this);
 
-    // Optimize for memory usage instead of latency for the worker isolate.
-    GetIsolate()->IsolateInBackgroundNotification();
-
-    if (heap_limit_increased_for_debugging) {
-      GetIsolate()->IncreaseHeapLimitForDebugging();
-    }
-
-    GetIsolate()->SetAllowAtomicsWait(allow_atomics_wait);
-
     console_message_storage_ = new ConsoleMessageStorage();
-    global_scope_ = CreateWorkerGlobalScope(std::move(startup_data));
+    global_scope_ =
+        CreateWorkerGlobalScope(std::move(global_scope_creation_params));
     worker_reporting_proxy_.DidCreateWorkerGlobalScope(GlobalScope());
     worker_inspector_controller_ = WorkerInspectorController::Create(this);
 
     // TODO(nhiroki): Handle a case where the script controller fails to
     // initialize the context.
-    if (GlobalScope()->ScriptController()->InitializeContextIfNeeded()) {
+    if (GlobalScope()->ScriptController()->InitializeContextIfNeeded(
+            String())) {
       worker_reporting_proxy_.DidInitializeWorkerContext();
       v8::HandleScope handle_scope(GetIsolate());
       Platform::Current()->WorkerContextCreated(
@@ -496,19 +454,44 @@ void WorkerThread::InitializeOnWorkerThread(
     return;
   }
 
-  if (GlobalScope()->IsWorkerGlobalScope()) {
-    WorkerGlobalScope* worker_global_scope = ToWorkerGlobalScope(GlobalScope());
-    CachedMetadataHandler* handler =
-        worker_global_scope->CreateWorkerScriptCachedMetadataHandler(
-            script_url, cached_meta_data.get());
-    worker_reporting_proxy_.WillEvaluateWorkerScript(
-        source_code.length(),
-        cached_meta_data.get() ? cached_meta_data->size() : 0);
-    bool success = worker_global_scope->ScriptController()->Evaluate(
-        ScriptSourceCode(source_code, script_url), nullptr, handler,
-        v8_cache_options);
-    worker_reporting_proxy_.DidEvaluateWorkerScript(success);
+  if (!GlobalScope()->IsWorkerGlobalScope())
+    return;
+
+  String source_code;
+  std::unique_ptr<Vector<char>> cached_meta_data;
+  if (RuntimeEnabledFeatures::ServiceWorkerScriptStreamingEnabled() &&
+      GetInstalledScriptsManager() &&
+      GetInstalledScriptsManager()->IsScriptInstalled(script_url)) {
+    // TODO(shimazu): Set ContentSecurityPolicy, ReferrerPolicy and
+    // OriginTrialTokens to |global_scope_creation_params|.
+    // TODO(shimazu): Add a post task to the main thread for setting
+    // ContentSecurityPolicy and ReferrerPolicy.
+
+    // GetScriptData blocks until the script is received from the browser.
+    auto script_data = GetInstalledScriptsManager()->GetScriptData(script_url);
+    DCHECK(script_data);
+    DCHECK(source_code.IsEmpty());
+    DCHECK(!cached_meta_data);
+    source_code = std::move(script_data->source_text);
+    cached_meta_data = std::move(script_data->meta_data);
+    worker_reporting_proxy_.DidLoadInstalledScript();
+  } else {
+    source_code = std::move(given_source_code);
+    cached_meta_data = std::move(given_cached_meta_data);
   }
+  DCHECK(!source_code.IsNull());
+
+  WorkerGlobalScope* worker_global_scope = ToWorkerGlobalScope(GlobalScope());
+  CachedMetadataHandler* handler =
+      worker_global_scope->CreateWorkerScriptCachedMetadataHandler(
+          script_url, cached_meta_data.get());
+  worker_reporting_proxy_.WillEvaluateWorkerScript(
+      source_code.length(),
+      cached_meta_data.get() ? cached_meta_data->size() : 0);
+  bool success = worker_global_scope->ScriptController()->Evaluate(
+      ScriptSourceCode(source_code, script_url), nullptr, handler,
+      v8_cache_options);
+  worker_reporting_proxy_.DidEvaluateWorkerScript(success);
 }
 
 void WorkerThread::PrepareForShutdownOnWorkerThread() {
@@ -534,6 +517,7 @@ void WorkerThread::PrepareForShutdownOnWorkerThread() {
   GlobalScope()->Dispose();
   global_scope_scheduler_->Dispose();
   console_message_storage_.Clear();
+  loading_context_.Clear();
   GetWorkerBackingThread().BackingThread().RemoveTaskObserver(this);
 }
 
@@ -550,7 +534,7 @@ void WorkerThread::PerformShutdownOnWorkerThread() {
   global_scope_ = nullptr;
 
   if (IsOwningBackingThread())
-    GetWorkerBackingThread().Shutdown();
+    GetWorkerBackingThread().ShutdownOnBackingThread();
   // We must not touch workerBackingThread() from now on.
 
   // Notify the proxy that the WorkerOrWorkletGlobalScope has been disposed
@@ -575,8 +559,7 @@ void WorkerThread::PerformDebuggerTaskOnWorkerThread(
   {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, scoped_us_counter,
-        new CustomCountHistogram("WorkerThread.DebuggerTask.Time", 0, 10000000,
-                                 50));
+        ("WorkerThread.DebuggerTask.Time", 0, 10000000, 50));
     ScopedUsHistogramTimer timer(scoped_us_counter);
     (*task)();
   }
@@ -639,11 +622,6 @@ bool WorkerThread::IsThreadStateMutexLocked(const MutexLocker& /* unused */) {
 bool WorkerThread::CheckRequestedToTerminateOnWorkerThread() {
   MutexLocker lock(thread_state_mutex_);
   return requested_to_terminate_;
-}
-
-ExitCode WorkerThread::GetExitCodeForTesting() {
-  MutexLocker lock(thread_state_mutex_);
-  return exit_code_;
 }
 
 }  // namespace blink

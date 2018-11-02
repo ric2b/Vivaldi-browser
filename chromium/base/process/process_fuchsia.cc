@@ -49,7 +49,7 @@ Process Process::Open(ProcessId pid) {
   mx_handle_t handle;
   mx_status_t status =
       mx_object_get_child(mx_job_default(), pid, MX_RIGHT_SAME_RIGHTS, &handle);
-  if (status != NO_ERROR) {
+  if (status != MX_OK) {
     DLOG(ERROR) << "mx_object_get_child failed: " << status;
     return Process();
   }
@@ -66,7 +66,7 @@ Process Process::OpenWithExtraPrivileges(ProcessId pid) {
 Process Process::DeprecatedGetProcessFromHandle(ProcessHandle handle) {
   DCHECK_NE(handle, GetCurrentProcessHandle());
   mx_handle_t out;
-  if (mx_handle_duplicate(handle, MX_RIGHT_SAME_RIGHTS, &out) != NO_ERROR) {
+  if (mx_handle_duplicate(handle, MX_RIGHT_SAME_RIGHTS, &out) != MX_OK) {
     DLOG(ERROR) << "mx_handle_duplicate failed: " << handle;
     return Process();
   }
@@ -100,7 +100,7 @@ Process Process::Duplicate() const {
     return Process();
 
   mx_handle_t out;
-  if (mx_handle_duplicate(process_, MX_RIGHT_SAME_RIGHTS, &out) != NO_ERROR) {
+  if (mx_handle_duplicate(process_, MX_RIGHT_SAME_RIGHTS, &out) != MX_OK) {
     DLOG(ERROR) << "mx_handle_duplicate failed: " << process_;
     return Process();
   }
@@ -121,7 +121,7 @@ void Process::Close() {
   is_current_process_ = false;
   if (IsValid()) {
     mx_status_t status = mx_handle_close(process_);
-    DCHECK_EQ(status, NO_ERROR);
+    DCHECK_EQ(status, MX_OK);
     process_ = kNullProcessHandle;
   }
 }
@@ -129,16 +129,16 @@ void Process::Close() {
 bool Process::Terminate(int exit_code, bool wait) const {
   // exit_code isn't supportable.
   mx_status_t status = mx_task_kill(process_);
-  if (status == NO_ERROR && wait) {
+  if (status == MX_OK && wait) {
     mx_signals_t signals;
     status = mx_object_wait_one(process_, MX_TASK_TERMINATED,
                                 mx_deadline_after(MX_SEC(60)), &signals);
-    if (status != NO_ERROR) {
+    if (status != MX_OK) {
       DLOG(ERROR) << "Error waiting for process exit: " << status;
     } else {
       DCHECK(signals & MX_TASK_TERMINATED);
     }
-  } else if (status != NO_ERROR) {
+  } else if (status != MX_OK) {
     DLOG(ERROR) << "Unable to terminate process: " << status;
   }
 
@@ -153,22 +153,23 @@ bool Process::WaitForExitWithTimeout(TimeDelta timeout, int* exit_code) const {
   // Record the event that this thread is blocking upon (for hang diagnosis).
   base::debug::ScopedProcessWaitActivity process_activity(this);
 
-  mx_time_t mxtimeout_nanos =
-      timeout == TimeDelta::Max() ? MX_TIME_INFINITE : timeout.InNanoseconds();
-  mx_signals_t signals_observed;
+  mx_time_t deadline = timeout == TimeDelta::Max()
+                           ? MX_TIME_INFINITE
+                           : (TimeTicks::Now() + timeout).ToMXTime();
+  mx_signals_t signals_observed = 0;
   mx_status_t status = mx_object_wait_one(process_, MX_TASK_TERMINATED,
-                                          mxtimeout_nanos, &signals_observed);
+                                          deadline, &signals_observed);
   *exit_code = -1;
-  if (status != NO_ERROR && status != ERR_TIMED_OUT)
+  if (status != MX_OK && status != MX_ERR_TIMED_OUT)
     return false;
-  if (status == ERR_TIMED_OUT && !signals_observed)
+  if (status == MX_ERR_TIMED_OUT && !signals_observed)
     return false;
 
   mx_info_process_t proc_info;
   status = mx_object_get_info(process_, MX_INFO_PROCESS, &proc_info,
                               sizeof(proc_info), nullptr, nullptr);
-  if (status != NO_ERROR)
-    return status;
+  if (status != MX_OK)
+    return false;
 
   *exit_code = proc_info.return_code;
   return true;

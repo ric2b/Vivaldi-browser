@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef PaintPropertyTreeBuilderTest_h
+#define PaintPropertyTreeBuilderTest_h
+
 #include "core/layout/LayoutTestHelper.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -30,11 +33,12 @@ class PaintPropertyTreeBuilderTest
   void LoadTestData(const char* file_name);
 
   // The following helpers return paint property nodes associated with the main
-  // FrameView, accounting for differences from the RootLayerScrolls setting.
+  // LocalFrameView, accounting for differences from the RootLayerScrolls
+  // setting.
   const TransformPaintPropertyNode* FramePreTranslation();
   const TransformPaintPropertyNode* FrameScrollTranslation();
   const ClipPaintPropertyNode* FrameContentClip();
-  const ScrollPaintPropertyNode* FrameScroll(FrameView* = nullptr);
+  const ScrollPaintPropertyNode* FrameScroll(LocalFrameView* = nullptr);
 
   // Return the local border box's paint offset. For more details, see
   // ObjectPaintProperties::localBorderBoxProperties().
@@ -48,3 +52,5 @@ class PaintPropertyTreeBuilderTest
 };
 
 }  // namespace blink
+
+#endif  // PaintPropertyTreeBuilderTest_h

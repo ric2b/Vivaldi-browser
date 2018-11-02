@@ -6,6 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/events/event_utils.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/views/controls/native/native_view_host.h"
@@ -69,7 +70,7 @@ const ui::AXNodeData& NativeViewAccessibilityBase::GetData() const {
   // rather than possibly crashing.
   if (!view_->GetWidget() || view_->GetWidget()->IsClosed()) {
     data_.role = ui::AX_ROLE_UNKNOWN;
-    data_.AddState(ui::AX_STATE_DISABLED);
+    data_.AddIntAttribute(ui::AX_ATTR_RESTRICTION, ui::AX_RESTRICTION_DISABLED);
     return data_;
   }
 
@@ -83,11 +84,15 @@ const ui::AXNodeData& NativeViewAccessibilityBase::GetData() const {
   if (view_->IsAccessibilityFocusable())
     data_.AddState(ui::AX_STATE_FOCUSABLE);
 
-  if (!view_->enabled())
-    data_.AddState(ui::AX_STATE_DISABLED);
+  if (!view_->enabled()) {
+    data_.AddIntAttribute(ui::AX_ATTR_RESTRICTION, ui::AX_RESTRICTION_DISABLED);
+  }
 
   if (!view_->IsDrawn())
     data_.AddState(ui::AX_STATE_INVISIBLE);
+
+  if (view_->context_menu_controller())
+    data_.AddAction(ui::AX_ACTION_SHOW_CONTEXT_MENU);
 
   // Make sure this element is excluded from the a11y tree if there's a
   // focusable parent. All keyboard focusable elements should be leaf nodes.
@@ -95,6 +100,11 @@ const ui::AXNodeData& NativeViewAccessibilityBase::GetData() const {
   if (IsViewUnfocusableChildOfFocusableAncestor(view_))
     data_.role = ui::AX_ROLE_IGNORED;
   return data_;
+}
+
+const ui::AXTreeData& NativeViewAccessibilityBase::GetTreeData() const {
+  CR_DEFINE_STATIC_LOCAL(ui::AXTreeData, empty_data, ());
+  return empty_data;
 }
 
 int NativeViewAccessibilityBase::GetChildCount() {
@@ -189,6 +199,10 @@ gfx::NativeViewAccessible NativeViewAccessibilityBase::GetFocus() {
   return focused_view ? focused_view->GetNativeViewAccessible() : nullptr;
 }
 
+ui::AXPlatformNode* NativeViewAccessibilityBase::GetFromNodeID(int32_t id) {
+  return nullptr;
+}
+
 gfx::AcceleratedWidget
 NativeViewAccessibilityBase::GetTargetForNativeAccessibilityEvent() {
   return gfx::kNullAcceleratedWidget;
@@ -197,6 +211,10 @@ NativeViewAccessibilityBase::GetTargetForNativeAccessibilityEvent() {
 bool NativeViewAccessibilityBase::AccessibilityPerformAction(
     const ui::AXActionData& data) {
   return view_->HandleAccessibleAction(data);
+}
+
+bool NativeViewAccessibilityBase::ShouldIgnoreHoveredStateForTesting() {
+  return false;
 }
 
 void NativeViewAccessibilityBase::OnWidgetDestroying(Widget* widget) {

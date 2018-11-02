@@ -5,8 +5,9 @@
 #ifndef CONTENT_RENDERER_MANIFEST_MANIFEST_MANAGER_H_
 #define CONTENT_RENDERER_MANIFEST_MANIFEST_MANAGER_H_
 
-#include <list>
 #include <memory>
+#include <string>
+#include <vector>
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
@@ -15,6 +16,8 @@
 #include "content/public/common/manifest.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/renderer/manifest/manifest_debug_info.h"
+#include "mojo/public/cpp/bindings/associated_binding_set.h"
+#include "third_party/WebKit/public/platform/modules/manifest/manifest_manager.mojom.h"
 
 class GURL;
 
@@ -32,24 +35,25 @@ class ManifestFetcher;
 // There are two expected consumers of this helper: ManifestManagerHost, via IPC
 // messages and callers inside the renderer process. The latter should use
 // GetManifest().
-class ManifestManager : public RenderFrameObserver {
+class ManifestManager : public RenderFrameObserver,
+                        public blink::mojom::ManifestManager {
  public:
-  typedef base::Callback<void(const GURL&,
-                              const Manifest&,
-                              const ManifestDebugInfo&)> GetManifestCallback;
+  using GetManifestCallback = base::OnceCallback<
+      void(const GURL&, const Manifest&, const ManifestDebugInfo&)>;
 
   explicit ManifestManager(RenderFrame* render_frame);
   ~ManifestManager() override;
 
   // Will call the given |callback| with the Manifest associated with the
   // RenderFrame if any. Will pass an empty Manifest in case of error.
-  void GetManifest(const GetManifestCallback& callback);
+  void GetManifest(GetManifestCallback callback);
 
   // RenderFrameObserver implementation.
-  bool OnMessageReceived(const IPC::Message& message) override;
   void DidChangeManifest() override;
   void DidCommitProvisionalLoad(bool is_new_navigation,
                                 bool is_same_document_navigation) override;
+
+  void BindToRequest(blink::mojom::ManifestManagerAssociatedRequest request);
 
  private:
   enum ResolveState {
@@ -60,13 +64,14 @@ class ManifestManager : public RenderFrameObserver {
   // RenderFrameObserver implementation.
   void OnDestruct() override;
 
-  // Called when receiving a ManifestManagerMsg_RequestManifest from the browser
-  // process.
-  void OnRequestManifest(int request_id);
-  void OnRequestManifestComplete(int request_id,
-                                 const GURL&,
-                                 const Manifest&,
-                                 const ManifestDebugInfo&);
+  // blink::mojom::ManifestManager implementation.
+  void RequestManifest(RequestManifestCallback callback) override;
+
+  // Called when receiving a RequestManifest() call from the browser process.
+  void OnRequestManifestComplete(RequestManifestCallback callback,
+                                 const GURL& url,
+                                 const Manifest& manifest,
+                                 const ManifestDebugInfo& debug_info);
 
   void FetchManifest();
   void OnManifestFetchComplete(const GURL& document_url,
@@ -99,13 +104,15 @@ class ManifestManager : public RenderFrameObserver {
 
   mojom::ManifestUrlChangeObserverAssociatedPtr manifest_change_observer_;
 
-  std::list<GetManifestCallback> pending_callbacks_;
+  std::vector<GetManifestCallback> pending_callbacks_;
+
+  mojo::AssociatedBindingSet<blink::mojom::ManifestManager> bindings_;
 
   base::WeakPtrFactory<ManifestManager> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ManifestManager);
 };
 
-} // namespace content
+}  // namespace content
 
 #endif  // CONTENT_RENDERER_MANIFEST_MANIFEST_MANAGER_H_

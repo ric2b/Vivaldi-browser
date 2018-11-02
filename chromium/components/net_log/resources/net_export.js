@@ -33,8 +33,11 @@ var NetExportView = (function() {
   var kIdCaptureModeStopped = 'capture-mode-stopped';
   var kIdFilePathStoppedLogging = 'file-path-stopped';
   var kIdStartOverButton = 'startover';
-  var kIdReadMoreLink = 'privacy-read-more-link';
-  var kIdReadMoreDiv = 'privacy-read-more'
+  var kIdPrivacyReadMoreLink = 'privacy-read-more-link';
+  var kIdPrivacyReadMoreDiv = 'privacy-read-more'
+  var kIdTooBigReadMoreLink = 'toobig-read-more-link';
+  var kIdTooBigReadMoreDiv = 'toobig-read-more'
+  var kIdLogMaxFileSizeInput = 'log-max-filesize'
 
   /**
    * @constructor
@@ -54,9 +57,21 @@ var NetExportView = (function() {
      * Starts saving NetLog data to a file.
      */
     onStartLogging_: function() {
+      // Determine the capture mode to use.
       var logMode =
           document.querySelector('input[name="log-mode"]:checked').value;
-      chrome.send('startNetLog', [logMode]);
+
+      // Determine the maximum file size, as the number of bytes (or -1 to mean
+      // no limit)
+      var maxLogFileSizeBytes = -1;
+      var fileSizeString = $(kIdLogMaxFileSizeInput).value;
+      var numMegabytes = parseFloat(fileSizeString);
+      if (!isNaN(numMegabytes)) {
+        // Convert to an integral number of bytes.
+        maxLogFileSizeBytes = Math.round(numMegabytes * 1024 * 1024);
+      }
+
+      chrome.send('startNetLog', [logMode, maxLogFileSizeBytes]);
     },
 
     /**
@@ -220,8 +235,14 @@ var NetExportView = (function() {
       $(kIdCaptureModeStopped).textContent = this.getCaptureModeText_(info);
 
       // Hook up the "read more..." link for privacy information.
-      $(kIdReadMoreLink).onclick = this.showPrivacyReadMore_.bind(this, true);
+      $(kIdPrivacyReadMoreLink).onclick =
+          this.showPrivacyReadMore_.bind(this, true);
       this.showPrivacyReadMore_(false);
+
+      // Hook up the "read more..." link for reducing log size information.
+      $(kIdTooBigReadMoreLink).onclick =
+          this.showTooBigReadMore_.bind(this, true);
+      this.showTooBigReadMore_(false);
     },
 
     /**
@@ -241,8 +262,13 @@ var NetExportView = (function() {
     },
 
     showPrivacyReadMore_: function(show) {
-      $(kIdReadMoreDiv).hidden = !show;
-      $(kIdReadMoreLink).hidden = show;
+      $(kIdPrivacyReadMoreDiv).hidden = !show;
+      $(kIdPrivacyReadMoreLink).hidden = show;
+    },
+
+    showTooBigReadMore_: function(show) {
+      $(kIdTooBigReadMoreDiv).hidden = !show;
+      $(kIdTooBigReadMoreLink).hidden = show;
     },
 
     showStateDiv_: function(divId) {

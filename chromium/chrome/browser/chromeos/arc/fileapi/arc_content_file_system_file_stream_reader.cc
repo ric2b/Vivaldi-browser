@@ -8,7 +8,7 @@
 #include <unistd.h>
 
 #include "base/files/file.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner_util.h"
 #include "content/public/browser/browser_thread.h"
@@ -41,17 +41,16 @@ ArcContentFileSystemFileStreamReader::ArcContentFileSystemFileStreamReader(
     const GURL& arc_url,
     int64_t offset)
     : arc_url_(arc_url), offset_(offset), weak_ptr_factory_(this) {
-  auto* blocking_pool = content::BrowserThread::GetBlockingPool();
-  task_runner_ = blocking_pool->GetSequencedTaskRunnerWithShutdownBehavior(
-      blocking_pool->GetSequenceToken(),
-      base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
+  task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
 }
 
 ArcContentFileSystemFileStreamReader::~ArcContentFileSystemFileStreamReader() {
   // Use the task runner to destruct |file_| after the completion of all
   // in-flight operations.
   task_runner_->PostTask(
-      FROM_HERE, base::Bind(&base::DeletePointer<base::File>, file_.release()));
+      FROM_HERE,
+      base::BindOnce(&base::DeletePointer<base::File>, file_.release()));
 }
 
 int ArcContentFileSystemFileStreamReader::Read(

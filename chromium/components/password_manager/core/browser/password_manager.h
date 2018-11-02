@@ -33,7 +33,6 @@ class FormStructure;
 
 namespace password_manager {
 
-class BrowserSavePasswordProgressLogger;
 class PasswordManagerClient;
 class PasswordManagerDriver;
 class PasswordFormManager;
@@ -101,14 +100,10 @@ class PasswordManager : public LoginModel {
   void GenerationAvailableForForm(const autofill::PasswordForm& form);
 
   // Presaves the form with generated password.
-  void OnPresaveGeneratedPassword(const autofill::PasswordForm& password_form);
+  void OnPresaveGeneratedPassword(const autofill::PasswordForm& form);
 
-  // Update the state of generation for this form.
-  // If |password_is_generated| == false, removes the presaved form.
-  void SetHasGeneratedPasswordForForm(
-      password_manager::PasswordManagerDriver* driver,
-      const autofill::PasswordForm& form,
-      bool password_is_generated);
+  // Stops treating a password as generated.
+  void OnPasswordNoLongerGenerated(const autofill::PasswordForm& form);
 
   // Update the generation element and whether generation was triggered
   // manually.
@@ -194,25 +189,6 @@ class PasswordManager : public LoginModel {
   FRIEND_TEST_ALL_PREFIXES(
       PasswordManagerTest,
       ShouldBlockPasswordForSameOriginButDifferentSchemeTest);
-
-  enum ProvisionalSaveFailure {
-    SAVING_DISABLED,
-    EMPTY_PASSWORD,
-    NO_MATCHING_FORM,
-    MATCHING_NOT_COMPLETE,
-    FORM_BLACKLISTED,
-    INVALID_FORM,
-    SYNC_CREDENTIAL,
-    MAX_FAILURE_VALUE
-  };
-
-  // Log failure for UMA. Logs additional metrics if the |form_origin|
-  // corresponds to one of the top, explicitly monitored websites. For some
-  // values of |failure| also sends logs to the internals page through |logger|,
-  // it |logger| is not NULL.
-  void RecordFailure(ProvisionalSaveFailure failure,
-                     const GURL& form_origin,
-                     BrowserSavePasswordProgressLogger* logger);
 
   // Returns true if we can show possible usernames to users in cases where
   // the username for the form is ambigious.

@@ -126,9 +126,7 @@ class NotificationMessageFilter : public BrowserMessageFilter {
       const GURL& origin) const;
 
   // Verifies that Web Notification permission has been granted for |origin| in
-  // cases where the renderer shouldn't send messages if it weren't the case. If
-  // no permission has been granted, a bad message has been received and the
-  // renderer should be killed accordingly.
+  // cases where the renderer shouldn't send messages if it weren't the case.
   bool VerifyNotificationPermissionGranted(PlatformNotificationService* service,
                                            const GURL& origin);
 
@@ -136,6 +134,7 @@ class NotificationMessageFilter : public BrowserMessageFilter {
   NotificationIdGenerator* GetNotificationIdGenerator() const;
 
   int process_id_;
+  bool non_persistent__notification_shown_;
   scoped_refptr<PlatformNotificationContextImpl> notification_context_;
   ResourceContext* resource_context_;
   scoped_refptr<ServiceWorkerContextWrapper> service_worker_context_;

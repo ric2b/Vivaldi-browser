@@ -51,29 +51,46 @@ class VIEWS_MUS_EXPORT AuraInit {
     UI
   };
 
+  ~AuraInit();
+
+  // Returns an AuraInit if initialization can be completed successfully,
+  // otherwise a nullptr is returned. If initialization fails then Aura is in an
+  // unusable state, and calling services should shutdown.
   // |resource_file| is the file to load strings and 1x icons from.
   // |resource_file_200| can be an empty string, otherwise it is the file to
   // load 2x icons from.
-  AuraInit(service_manager::Connector* connector,
-           const service_manager::Identity& identity,
-           const std::string& resource_file,
-           const std::string& resource_file_200 = std::string(),
-           scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr,
-           Mode mode = Mode::UI);
-  ~AuraInit();
+  static std::unique_ptr<AuraInit> Create(
+      service_manager::Connector* connector,
+      const service_manager::Identity& identity,
+      const std::string& resource_file,
+      const std::string& resource_file_200 = std::string(),
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr,
+      Mode mode = Mode::UI);
 
   // Only valid if Mode::AURA_MUS was passed to constructor.
   MusClient* mus_client() { return mus_client_.get(); }
 
  private:
-  void InitializeResources(service_manager::Connector* connector);
+  AuraInit();
+
+  // Returns true if AuraInit was able to successfully complete initialization.
+  // If this returns false, then Aura is in an unusable state, and calling
+  // services should shutdown.
+  bool Init(
+      service_manager::Connector* connector,
+      const service_manager::Identity& identity,
+      const std::string& resource_file,
+      const std::string& resource_file_200 = std::string(),
+      scoped_refptr<base::SingleThreadTaskRunner> io_task_runner = nullptr,
+      Mode mode = Mode::UI);
+
+  bool InitializeResources(service_manager::Connector* connector,
+                           const std::string& resource_file,
+                           const std::string& resource_file_200);
 
 #if defined(OS_LINUX)
   sk_sp<font_service::FontLoader> font_loader_;
 #endif
-
-  const std::string resource_file_;
-  const std::string resource_file_200_;
 
   std::unique_ptr<aura::Env> env_;
   std::unique_ptr<MusClient> mus_client_;

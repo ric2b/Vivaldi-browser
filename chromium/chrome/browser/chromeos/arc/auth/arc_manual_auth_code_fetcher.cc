@@ -7,8 +7,8 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/logging.h"
-#include "chrome/browser/chromeos/arc/arc_auth_context.h"
 #include "chrome/browser/chromeos/arc/arc_optin_uma.h"
+#include "chrome/browser/chromeos/arc/auth/arc_auth_context.h"
 
 namespace arc {
 
@@ -17,11 +17,11 @@ ArcManualAuthCodeFetcher::ArcManualAuthCodeFetcher(ArcAuthContext* context,
     : context_(context), support_host_(support_host), weak_ptr_factory_(this) {
   DCHECK(context_);
   DCHECK(support_host_);
-  support_host_->AddObserver(this);
+  support_host_->SetAuthDelegate(this);
 }
 
 ArcManualAuthCodeFetcher::~ArcManualAuthCodeFetcher() {
-  support_host_->RemoveObserver(this);
+  support_host_->SetAuthDelegate(nullptr);
 }
 
 void ArcManualAuthCodeFetcher::Fetch(const FetchCallback& callback) {
@@ -55,13 +55,13 @@ void ArcManualAuthCodeFetcher::OnAuthSucceeded(const std::string& auth_code) {
   base::ResetAndReturn(&pending_callback_).Run(true /* success */, auth_code);
 }
 
-void ArcManualAuthCodeFetcher::OnAuthFailed() {
+void ArcManualAuthCodeFetcher::OnAuthFailed(const std::string& error_msg) {
   // Don't report via callback. Extension is already showing more detailed
   // information. Update only UMA here.
   UpdateOptInCancelUMA(OptInCancelReason::NETWORK_ERROR);
 }
 
-void ArcManualAuthCodeFetcher::OnRetryClicked() {
+void ArcManualAuthCodeFetcher::OnAuthRetryClicked() {
   DCHECK(!pending_callback_.is_null());
   FetchInternal();
 }

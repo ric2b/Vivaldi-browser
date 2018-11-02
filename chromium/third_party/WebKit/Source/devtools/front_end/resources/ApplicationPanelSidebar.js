@@ -49,8 +49,8 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
 
     this.contentElement.appendChild(this._sidebarTree.element);
     this._applicationTreeElement = this._addSidebarSection(Common.UIString('Application'));
-    this._manifestTreeElement = new Resources.AppManifestTreeElement(panel);
-    this._applicationTreeElement.appendChild(this._manifestTreeElement);
+    var manifestTreeElement = new Resources.AppManifestTreeElement(panel);
+    this._applicationTreeElement.appendChild(manifestTreeElement);
     this.serviceWorkersTreeElement = new Resources.ServiceWorkersTreeElement(panel);
     this._applicationTreeElement.appendChild(this.serviceWorkersTreeElement);
     var clearStorageTreeElement = new Resources.ClearStorageTreeElement(panel);
@@ -114,7 +114,7 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
 
     var selection = this._panel.lastSelectedItemPath();
     if (!selection.length)
-      this._manifestTreeElement.select();
+      manifestTreeElement.select();
   }
 
   /**
@@ -350,30 +350,12 @@ Resources.ApplicationPanelSidebar = class extends UI.VBox {
    * @param {!SDK.Resource} resource
    * @param {number=} line
    * @param {number=} column
-   * @return {boolean}
+   * @return {!Promise}
    */
-  showResource(resource, line, column) {
+  async showResource(resource, line, column) {
     var resourceTreeElement = Resources.FrameResourceTreeElement.forResource(resource);
     if (resourceTreeElement)
-      resourceTreeElement.revealAndSelect(true);
-
-    if (typeof line === 'number') {
-      var resourceSourceFrame = this._resourceSourceFrameViewForResource(resource);
-      if (resourceSourceFrame)
-        resourceSourceFrame.revealPosition(line, column, true);
-    }
-    return true;
-  }
-
-  /**
-   * @param {!SDK.Resource} resource
-   * @return {?SourceFrame.ResourceSourceFrame}
-   */
-  _resourceSourceFrameViewForResource(resource) {
-    var resourceView = Resources.FrameResourceTreeElement.resourceViewForResource(resource);
-    if (resourceView && resourceView instanceof SourceFrame.ResourceSourceFrame)
-      return /** @type {!SourceFrame.ResourceSourceFrame} */ (resourceView);
-    return null;
+      await resourceTreeElement.revealResource(line, column);
   }
 
   /**
@@ -718,19 +700,10 @@ Resources.DatabaseTreeElement = class extends Resources.BaseStorageTreeElement {
     this._updateChildren();
   }
 
-  _updateChildren() {
-    this.removeChildren();
-
-    /**
-     * @param {!Array.<string>} tableNames
-     * @this {Resources.DatabaseTreeElement}
-     */
-    function tableNamesCallback(tableNames) {
-      var tableNamesLength = tableNames.length;
-      for (var i = 0; i < tableNamesLength; ++i)
-        this.appendChild(new Resources.DatabaseTableTreeElement(this._sidebar, this._database, tableNames[i]));
-    }
-    this._database.getTableNames(tableNamesCallback.bind(this));
+  async _updateChildren() {
+    var tableNames = await this._database.tableNames();
+    for (var tableName of tableNames)
+      this.appendChild(new Resources.DatabaseTableTreeElement(this._sidebar, this._database, tableName));
   }
 };
 
@@ -1176,6 +1149,7 @@ Resources.IDBDatabaseTreeElement = class extends Resources.BaseStorageTreeElemen
     this._idbObjectStoreTreeElements = {};
     var icon = UI.Icon.create('mediumicon-database', 'resource-tree-item');
     this.setLeadingIcons([icon]);
+    this._model.addEventListener(Resources.IndexedDBModel.Events.DatabaseNamesRefreshed, this._refreshIndexedDB, this);
   }
 
   get itemURL() {
@@ -1197,7 +1171,7 @@ Resources.IDBDatabaseTreeElement = class extends Resources.BaseStorageTreeElemen
   }
 
   _refreshIndexedDB() {
-    this._model.refreshDatabaseNames();
+    this._model.refreshDatabase(this._databaseId);
   }
 
   /**
@@ -1299,14 +1273,9 @@ Resources.IDBObjectStoreTreeElement = class extends Resources.BaseStorageTreeEle
     contextMenu.show();
   }
 
-  _clearObjectStore() {
-    /**
-     * @this {Resources.IDBObjectStoreTreeElement}
-     */
-    function callback() {
-      this.update(this._objectStore);
-    }
-    this._model.clearObjectStore(this._databaseId, this._objectStore.name, callback.bind(this));
+  async _clearObjectStore() {
+    await this._model.clearObjectStore(this._databaseId, this._objectStore.name);
+    this.update(this._objectStore);
   }
 
   /**

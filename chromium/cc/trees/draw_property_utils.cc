@@ -238,7 +238,8 @@ static ConditionalClip ComputeAccumulatedClip(PropertyTrees* property_trees,
   while (target_node->clip_id < clip_node->id) {
     if (parent_chain.size() > 0) {
       // Search the cache.
-      for (auto& data : clip_node->cached_clip_rects) {
+      for (size_t i = 0; i < clip_node->cached_clip_rects->size(); ++i) {
+        auto& data = clip_node->cached_clip_rects[i];
         if (data.target_id == target_id) {
           cache_hit = true;
           cached_clip = data.clip;
@@ -354,11 +355,9 @@ static void SetHasContributingLayerThatEscapesClip(int lca_clip_id,
 template <typename LayerType>
 static int TransformTreeIndexForBackfaceVisibility(LayerType* layer,
                                                    const TransformTree& tree) {
-  if (!layer->use_parent_backface_visibility())
+  if (!layer->use_parent_backface_visibility() || !layer->has_transform_node())
     return layer->transform_tree_index();
-  const TransformNode* node = tree.Node(layer->transform_tree_index());
-  return layer->id() == node->owning_layer_id ? tree.parent(node)->id
-                                              : node->id;
+  return tree.Node(layer->transform_tree_index())->parent_id;
 }
 
 static bool IsTargetSpaceTransformBackFaceVisible(
@@ -385,12 +384,8 @@ template <typename LayerType>
 static bool IsLayerBackFaceVisible(LayerType* layer,
                                    int transform_tree_index,
                                    const PropertyTrees* property_trees) {
-  const TransformNode* node =
-      property_trees->transform_tree.Node(transform_tree_index);
-  return layer->use_local_transform_for_backface_visibility()
-             ? node->local.IsBackFaceVisible()
-             : IsTargetSpaceTransformBackFaceVisible(
-                   layer, transform_tree_index, property_trees);
+  return IsTargetSpaceTransformBackFaceVisible(layer, transform_tree_index,
+                                               property_trees);
 }
 
 static inline bool TransformToScreenIsKnown(Layer* layer,
@@ -562,7 +557,7 @@ static void SetSurfaceIsClipped(const ClipTree& clip_tree,
     is_clipped = false;
   } else if (render_surface->ClipTreeIndex() ==
              render_surface->render_target()->ClipTreeIndex()) {
-    // There is no clip between between the render surface and its target, so
+    // There is no clip between the render surface and its target, so
     // the surface need not be clipped.
     is_clipped = false;
   } else {
@@ -671,17 +666,22 @@ static gfx::Rect LayerVisibleRect(PropertyTrees* property_trees,
                                   LayerImpl* layer) {
   const EffectNode* effect_node =
       property_trees->effect_tree.Node(layer->effect_tree_index());
+  int effect_ancestor_with_cache_render_surface =
+      effect_node->closest_ancestor_with_cached_render_surface_id;
   int effect_ancestor_with_copy_request =
       effect_node->closest_ancestor_with_copy_request_id;
-  bool non_root_copy_request =
-      effect_ancestor_with_copy_request > EffectTree::kContentsRootNodeId;
+  int lower_effect_closest_ancestor =
+      std::max(effect_ancestor_with_cache_render_surface,
+               effect_ancestor_with_copy_request);
+  bool non_root_copy_request_or_cache_render_surface =
+      lower_effect_closest_ancestor > EffectTree::kContentsRootNodeId;
   gfx::Rect layer_content_rect = gfx::Rect(layer->bounds());
   gfx::RectF accumulated_clip_in_root_space;
-  if (non_root_copy_request) {
+  if (non_root_copy_request_or_cache_render_surface) {
     bool include_expanding_clips = true;
     ConditionalClip accumulated_clip = ComputeAccumulatedClip(
         property_trees, include_expanding_clips, layer->clip_tree_index(),
-        effect_ancestor_with_copy_request);
+        lower_effect_closest_ancestor);
     if (!accumulated_clip.is_clipped)
       return layer_content_rect;
     accumulated_clip_in_root_space = accumulated_clip.clip_rect;
@@ -693,8 +693,8 @@ static gfx::Rect LayerVisibleRect(PropertyTrees* property_trees,
   }
 
   const EffectNode* root_effect_node =
-      non_root_copy_request
-          ? property_trees->effect_tree.Node(effect_ancestor_with_copy_request)
+      non_root_copy_request_or_cache_render_surface
+          ? property_trees->effect_tree.Node(lower_effect_closest_ancestor)
           : property_trees->effect_tree.Node(EffectTree::kContentsRootNodeId);
   ConditionalClip accumulated_clip_in_layer_space =
       ComputeTargetRectInLocalSpace(
@@ -740,23 +740,6 @@ static void UpdateRenderTarget(EffectTree* effect_tree) {
   }
 }
 
-static void UpdateScrollTree(ScrollTree* scroll_tree,
-                             const LayerTreeHost* layer_tree_host) {
-  if (!scroll_tree->needs_update())
-    return;
-
-  for (int i = ScrollTree::kRootNodeId;
-       i < static_cast<int>(scroll_tree->size()); ++i) {
-    ScrollNode* scroll_node = scroll_tree->Node(i);
-    if (Layer* scroll_layer =
-            layer_tree_host->LayerById(scroll_node->owning_layer_id)) {
-      if (Layer* scroll_clip_layer = scroll_layer->scroll_clip_layer()) {
-        scroll_node->scroll_clip_layer_bounds = scroll_clip_layer->bounds();
-      }
-    }
-  }
-}
-
 static void ComputeClips(PropertyTrees* property_trees) {
   DCHECK(!property_trees->transform_tree.needs_update());
   ClipTree* clip_tree = &property_trees->clip_tree;
@@ -769,7 +752,7 @@ static void ComputeClips(PropertyTrees* property_trees) {
        i < static_cast<int>(clip_tree->size()); ++i) {
     ClipNode* clip_node = clip_tree->Node(i);
     // Clear the clip rect cache
-    clip_node->cached_clip_rects = std::vector<ClipRectData>(1);
+    clip_node->cached_clip_rects->clear();
     if (clip_node->id == ClipTree::kViewportNodeId) {
       clip_node->cached_accumulated_rect_in_screen_space = clip_node->clip;
       continue;
@@ -843,6 +826,10 @@ void FindLayersThatNeedUpdates(LayerTreeImpl* layer_tree_impl,
   const EffectTree& effect_tree = property_trees->effect_tree;
 
   for (auto* layer_impl : *layer_tree_impl) {
+    DCHECK(layer_impl);
+    DCHECK(layer_impl->layer_tree_impl());
+    layer_impl->EnsureValidPropertyTreeIndices();
+
     if (!IsRootLayer(layer_impl) &&
         LayerShouldBeSkippedForDrawPropertiesComputation(
             layer_impl, transform_tree, effect_tree))
@@ -883,7 +870,6 @@ void UpdatePropertyTrees(LayerTreeHost* layer_tree_host,
     property_trees->clip_tree.set_needs_update(true);
     property_trees->effect_tree.set_needs_update(true);
   }
-  UpdateScrollTree(&property_trees->scroll_tree, layer_tree_host);
   ComputeTransforms(&property_trees->transform_tree);
   ComputeEffects(&property_trees->effect_tree);
   // Computation of clips uses ToScreen which is updated while computing

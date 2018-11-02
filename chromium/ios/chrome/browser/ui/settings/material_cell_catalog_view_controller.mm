@@ -35,7 +35,6 @@
 #import "ios/chrome/browser/ui/payments/cells/price_item.h"
 #import "ios/chrome/browser/ui/settings/cells/account_signin_item.h"
 #import "ios/chrome/browser/ui/settings/cells/autofill_data_item.h"
-#import "ios/chrome/browser/ui/settings/cells/native_app_item.h"
 #import "ios/chrome/browser/ui/settings/cells/sync_switch_item.h"
 #import "ios/chrome/browser/ui/settings/cells/text_and_error_item.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -108,7 +107,9 @@ const CGFloat kCardIssuerNetworkIconDimension = 25.0;
 @implementation MaterialCellCatalogViewController
 
 - (instancetype)init {
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     [self loadModel];
   }
@@ -217,21 +218,6 @@ const CGFloat kCardIssuerNetworkIconDimension = 25.0;
       toSectionWithIdentifier:SectionIdentifierSwitchCell];
   [model addItem:[self syncSwitchItem]
       toSectionWithIdentifier:SectionIdentifierSwitchCell];
-
-  // Native app cells.
-  [model addSectionWithIdentifier:SectionIdentifierNativeAppCell];
-  NativeAppItem* fooApp = [[NativeAppItem alloc] initWithType:ItemTypeApp];
-  fooApp.name = @"App Foo";
-  fooApp.state = NativeAppItemSwitchOff;
-  [model addItem:fooApp toSectionWithIdentifier:SectionIdentifierNativeAppCell];
-  NativeAppItem* barApp = [[NativeAppItem alloc] initWithType:ItemTypeApp];
-  barApp.name = @"App Bar";
-  barApp.state = NativeAppItemSwitchOn;
-  [model addItem:barApp toSectionWithIdentifier:SectionIdentifierNativeAppCell];
-  NativeAppItem* bazApp = [[NativeAppItem alloc] initWithType:ItemTypeApp];
-  bazApp.name = @"App Baz Qux Bla Bug Lorem ipsum dolor sit amet";
-  bazApp.state = NativeAppItemInstall;
-  [model addItem:bazApp toSectionWithIdentifier:SectionIdentifierNativeAppCell];
 
   // Autofill cells.
   [model addSectionWithIdentifier:SectionIdentifierAutofill];
@@ -643,7 +629,7 @@ const CGFloat kCardIssuerNetworkIconDimension = 25.0;
   int resourceID =
       autofill::data_util::GetPaymentRequestData(autofill::kVisaCard)
           .icon_resource_id;
-  item.cardTypeIcon =
+  item.identifyingIcon =
       ResizeImage(NativeImage(resourceID), CGSizeMake(30.0, 30.0),
                   ProjectionMode::kAspectFillNoClipping);
   return item;
@@ -729,9 +715,6 @@ const CGFloat kCardIssuerNetworkIconDimension = 25.0;
   ContentSuggestionsItem* articleItem = [[ContentSuggestionsItem alloc]
       initWithType:ItemTypeContentSuggestions
              title:@"This is an incredible article, you should read it!"
-          subtitle:@"Really, this is the best article I have ever seen, it "
-                   @"is mandatory to read it! It describes how to write "
-                   @"the best article."
                url:GURL()];
   articleItem.publisher = @"Top Publisher.com";
   return articleItem;

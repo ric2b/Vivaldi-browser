@@ -30,7 +30,6 @@ class CORE_EXPORT FragmentData {
   void ClearPaintProperties();
 
   ClipRects* PreviousClipRects() const {
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
     return previous_clip_rects_.Get();
   }
   void SetPreviousClipRects(ClipRects& clip_rects) {

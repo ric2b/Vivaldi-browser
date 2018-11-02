@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/metrics/field_trial.h"
+#include "base/strings/string_piece.h"
 
 namespace variations {
 
@@ -21,8 +22,8 @@ struct ActiveGroupId {
 };
 
 // Returns an ActiveGroupId struct for the given trial and group names.
-ActiveGroupId MakeActiveGroupId(const std::string& trial_name,
-                                const std::string& group_name);
+ActiveGroupId MakeActiveGroupId(base::StringPiece trial_name,
+                                base::StringPiece group_name);
 
 // We need to supply a Compare class for templates since ActiveGroupId is a
 // user-defined type.
@@ -40,21 +41,34 @@ struct ActiveGroupIdCompare {
 // Fills the supplied vector |name_group_ids| (which must be empty when called)
 // with unique ActiveGroupIds for each Field Trial that has a chosen group.
 // Field Trials for which a group has not been chosen yet are NOT returned in
-// this list.
-void GetFieldTrialActiveGroupIds(std::vector<ActiveGroupId>* name_group_ids);
+// this list. Field trial names are suffixed with |suffix| before hashing is
+// executed.
+void GetFieldTrialActiveGroupIds(base::StringPiece suffix,
+                                 std::vector<ActiveGroupId>* name_group_ids);
 
 // Fills the supplied vector |output| (which must be empty when called) with
 // unique string representations of ActiveGroupIds for each Field Trial that
 // has a chosen group. The strings are formatted as "<TrialName>-<GroupName>",
 // with the names as hex strings. Field Trials for which a group has not been
-// chosen yet are NOT returned in this list.
-void GetFieldTrialActiveGroupIdsAsStrings(std::vector<std::string>* output);
+// chosen yet are NOT returned in this list. Field trial names are suffixed with
+// |suffix| before hashing is executed.
+void GetFieldTrialActiveGroupIdsAsStrings(base::StringPiece suffix,
+                                          std::vector<std::string>* output);
+
+// TODO(rkaplow): Support suffixing for synthetic trials.
+// Fills the supplied vector |output| (which must be empty when called) with
+// unique string representations of ActiveGroupIds for each Syntehtic Trial
+// group. The strings are formatted as "<TrialName>-<GroupName>",
+// with the names as hex strings. Synthetic Field Trials for which a group
+// which hasn't been chosen yet are NOT returned in this list.
+void GetSyntheticTrialGroupIdsAsString(std::vector<std::string>* output);
 
 // Expose some functions for testing. These functions just wrap functionality
 // that is implemented above.
 namespace testing {
 
 void TestGetFieldTrialActiveGroupIds(
+    base::StringPiece suffix,
     const base::FieldTrial::ActiveGroups& active_groups,
     std::vector<ActiveGroupId>* name_group_ids);
 

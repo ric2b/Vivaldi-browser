@@ -5,10 +5,8 @@
 #include "ui/message_center/views/message_center_bubble.h"
 
 #include "base/macros.h"
-#include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/message_center_view.h"
-#include "ui/strings/grit/ui_strings.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
 
@@ -77,17 +75,6 @@ void MessageCenterBubble::SetSettingsVisible() {
     message_center_view_->SetSettingsVisible(true);
   else
     initially_settings_visible_ = true;
-}
-
-views::TrayBubbleView::InitParams MessageCenterBubble::GetInitParams(
-    views::TrayBubbleView::AnchorAlignment anchor_alignment) {
-  views::TrayBubbleView::InitParams init_params =
-      GetDefaultInitParams(anchor_alignment);
-  init_params.min_width += kMarginBetweenItems * 2;
-  init_params.max_width += kMarginBetweenItems * 2;
-  init_params.max_height = max_height();
-  init_params.can_activate = true;
-  return init_params;
 }
 
 void MessageCenterBubble::InitializeContents(

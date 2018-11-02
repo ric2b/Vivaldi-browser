@@ -8,15 +8,16 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
+#import "ios/chrome/browser/ui/payments/payment_request_selector_view_controller_data_source.h"
 
 @class PaymentRequestSelectorViewController;
-@protocol PaymentRequestSelectorViewControllerDataSource;
 
 // Delegate protocol for PaymentRequestSelectorViewController.
 @protocol PaymentRequestSelectorViewControllerDelegate<NSObject>
 
 // Notifies the delegate that the user has selected an item at the given index.
-- (void)paymentRequestSelectorViewController:
+// Returns whether the selection can actually be made.
+- (BOOL)paymentRequestSelectorViewController:
             (PaymentRequestSelectorViewController*)controller
                         didSelectItemAtIndex:(NSUInteger)index;
 
@@ -30,6 +31,15 @@
 // Notifies the delegate that the user has chosen to add an item.
 - (void)paymentRequestSelectorViewControllerDidSelectAddItem:
     (PaymentRequestSelectorViewController*)controller;
+
+// Notifies the delegate if the editing mode was toggled on or off.
+- (void)paymentRequestSelectorViewControllerDidToggleEditingMode:
+    (PaymentRequestSelectorViewController*)controller;
+
+// Notifies the delegate that the user has chosen to edit an item at |index|.
+- (void)paymentRequestSelectorViewController:
+            (PaymentRequestSelectorViewController*)controller
+              didSelectItemAtIndexForEditing:(NSUInteger)index;
 
 @end
 
@@ -48,6 +58,9 @@
 // The data source for this view controller.
 @property(nonatomic, weak) id<PaymentRequestSelectorViewControllerDataSource>
     dataSource;
+
+// Whether or not the editor is in the editing mode.
+@property(nonatomic, assign, getter=isEditing) BOOL editing;
 
 // Convenience initializer. Initializes this object with the
 // CollectionViewControllerStyleAppBar style and sets up the leading (back)

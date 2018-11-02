@@ -6,7 +6,8 @@
 #define CONTENT_BROWSER_APPCACHE_APPCACHE_URL_LOADER_REQUEST_H_
 
 #include "content/browser/appcache/appcache_request.h"
-#include "content/common/resource_request.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_response.h"
 
 namespace content {
 
@@ -17,7 +18,7 @@ class CONTENT_EXPORT AppCacheURLLoaderRequest : public AppCacheRequest {
   // Factory function to create an instance of the AppCacheResourceRequest
   // class.
   static std::unique_ptr<AppCacheURLLoaderRequest> Create(
-      std::unique_ptr<ResourceRequest> request);
+      const ResourceRequest& request);
 
   ~AppCacheURLLoaderRequest() override;
 
@@ -38,14 +39,19 @@ class CONTENT_EXPORT AppCacheURLLoaderRequest : public AppCacheRequest {
   bool IsError() const override;
   int GetResponseCode() const override;
   std::string GetResponseHeaderByName(const std::string& name) const override;
-
   ResourceRequest* GetResourceRequest() override;
+  AppCacheURLLoaderRequest* AsURLLoaderRequest() override;
+
+  void set_response(const ResourceResponseHead& response) {
+    response_ = response;
+  }
 
  protected:
-  explicit AppCacheURLLoaderRequest(std::unique_ptr<ResourceRequest> request);
+  explicit AppCacheURLLoaderRequest(const ResourceRequest& request);
 
  private:
-  std::unique_ptr<ResourceRequest> request_;
+  ResourceRequest request_;
+  ResourceResponseHead response_;
 
   DISALLOW_COPY_AND_ASSIGN(AppCacheURLLoaderRequest);
 };

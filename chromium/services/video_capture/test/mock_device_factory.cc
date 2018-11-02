@@ -27,8 +27,8 @@ class RawPointerVideoCaptureDevice : public media::VideoCaptureDevice {
   }
   void RequestRefreshFrame() override { device_->RequestRefreshFrame(); }
   void StopAndDeAllocate() override { device_->StopAndDeAllocate(); }
-  void GetPhotoCapabilities(GetPhotoCapabilitiesCallback callback) override {
-    device_->GetPhotoCapabilities(std::move(callback));
+  void GetPhotoState(GetPhotoStateCallback callback) override {
+    device_->GetPhotoState(std::move(callback));
   }
   void SetPhotoOptions(media::mojom::PhotoSettingsPtr settings,
                        SetPhotoOptionsCallback callback) override {
@@ -56,7 +56,7 @@ MockDeviceFactory::~MockDeviceFactory() = default;
 void MockDeviceFactory::AddMockDevice(
     media::VideoCaptureDevice* device,
     const media::VideoCaptureDeviceDescriptor& descriptor) {
-  devices_[descriptor] = std::move(device);
+  devices_[descriptor] = device;
 }
 
 std::unique_ptr<media::VideoCaptureDevice> MockDeviceFactory::CreateDevice(

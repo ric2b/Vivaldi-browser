@@ -4,8 +4,9 @@
 
 #include "core/html/canvas/ImageElementBase.h"
 
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/ImageLoader.h"
 #include "core/svg/graphics/SVGImageForContainer.h"
@@ -41,7 +42,7 @@ PassRefPtr<Image> ImageElementBase::GetSourceImageForCanvas(
 
   RefPtr<Image> source_image;
   if (CachedImage()->GetImage()->IsSVGImage()) {
-    UseCounter::Count(GetElement().GetDocument(), UseCounter::kSVGInCanvas2D);
+    UseCounter::Count(GetElement().GetDocument(), WebFeature::kSVGInCanvas2D);
     SVGImage* svg_image = ToSVGImage(CachedImage()->GetImage());
     IntSize image_size =
         RoundedIntSize(svg_image->ConcreteObjectSize(default_object_size));
@@ -153,6 +154,11 @@ ScriptPromise ImageElementBase::CreateImageBitmap(
     return ScriptPromise();
   if (!ImageBitmap::IsResizeOptionValid(options, exception_state))
     return ScriptPromise();
+  if (IsSVGSource()) {
+    return ImageBitmap::CreateAsync(this, crop_rect,
+                                    event_target.ToLocalDOMWindow()->document(),
+                                    script_state, options);
+  }
   return ImageBitmapSource::FulfillImageBitmap(
       script_state, ImageBitmap::Create(
                         this, crop_rect,

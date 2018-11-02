@@ -234,13 +234,12 @@ void ScrollView::SetContents(View* a_view) {
   DCHECK(!a_view->layer());
   if (ScrollsWithLayers()) {
     if (!a_view->background() && GetBackgroundColor() != SK_ColorTRANSPARENT) {
-      a_view->set_background(
-          Background::CreateSolidBackground(GetBackgroundColor()));
+      a_view->SetBackground(CreateSolidBackground(GetBackgroundColor()));
     }
     a_view->SetPaintToLayer();
-    a_view->layer()->SetScrollable(
-        contents_viewport_->layer(),
+    a_view->layer()->SetDidScrollCallback(
         base::Bind(&ScrollView::OnLayerScrolled, base::Unretained(this)));
+    a_view->layer()->SetScrollable(contents_viewport_->bounds().size());
   }
   SetHeaderOrContents(contents_viewport_, a_view, &contents_);
 }
@@ -475,6 +474,7 @@ void ScrollView::Layout() {
     gfx::Size container_size = contents_ ? contents_->size() : gfx::Size();
     container_size.SetToMax(viewport_bounds.size());
     contents_->SetBoundsRect(gfx::Rect(container_size));
+    contents_->layer()->SetScrollable(viewport_bounds.size());
   }
 
   header_viewport_->SetBounds(contents_x, contents_y,
@@ -823,15 +823,13 @@ void ScrollView::UpdateBorder() {
 void ScrollView::UpdateBackground() {
   const SkColor background_color = GetBackgroundColor();
 
-  set_background(Background::CreateSolidBackground(background_color));
+  SetBackground(CreateSolidBackground(background_color));
   // In addition to setting the background of |this|, set the background on
   // the viewport as well. This way if the viewport has a layer
   // SetFillsBoundsOpaquely() is honored.
-  contents_viewport_->set_background(
-      Background::CreateSolidBackground(background_color));
+  contents_viewport_->SetBackground(CreateSolidBackground(background_color));
   if (contents_ && ScrollsWithLayers())
-    contents_->set_background(
-        Background::CreateSolidBackground(background_color));
+    contents_->SetBackground(CreateSolidBackground(background_color));
   if (contents_viewport_->layer()) {
     contents_viewport_->layer()->SetFillsBoundsOpaquely(background_color !=
                                                         SK_ColorTRANSPARENT);

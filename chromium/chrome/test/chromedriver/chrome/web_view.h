@@ -132,11 +132,21 @@ class WebView {
   virtual Status DispatchKeyEvents(const std::list<KeyEvent>& events) = 0;
 
   // Return all the cookies visible to the current page.
-  virtual Status GetCookies(std::unique_ptr<base::ListValue>* cookies) = 0;
+  virtual Status GetCookies(std::unique_ptr<base::ListValue>* cookies,
+                            const std::string& current_page_url) = 0;
 
   // Delete the cookie with the given name.
   virtual Status DeleteCookie(const std::string& name,
                               const std::string& url) = 0;
+
+  virtual Status AddCookie(const std::string& name,
+                           const std::string& url,
+                           const std::string& value,
+                           const std::string& domain,
+                           const std::string& path,
+                           bool secure,
+                           bool httpOnly,
+                           double expiry) = 0;
 
   // Waits until all pending navigations have completed in the given frame.
   // If |frame_id| is "", waits for navigations on the main frame.

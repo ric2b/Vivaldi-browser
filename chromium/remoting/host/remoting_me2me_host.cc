@@ -84,6 +84,7 @@
 #include "remoting/host/signaling_connector.h"
 #include "remoting/host/single_window_desktop_environment.h"
 #include "remoting/host/switches.h"
+#include "remoting/host/test_echo_extension.h"
 #include "remoting/host/third_party_auth_config.h"
 #include "remoting/host/token_validator_factory_impl.h"
 #include "remoting/host/usage_stats_consent.h"
@@ -100,7 +101,7 @@
 #include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/push_notification_subscriber.h"
 #include "remoting/signaling/xmpp_signal_strategy.h"
-#include "third_party/webrtc/base/scoped_ref_ptr.h"
+#include "third_party/webrtc/rtc_base/scoped_ref_ptr.h"
 
 #if defined(OS_POSIX)
 #include <signal.h>
@@ -743,7 +744,7 @@ void HostProcess::CreateAuthenticatorFactory() {
           context_->file_task_runner()));
       cert_watcher_->Start();
     }
-    cert_watcher_->SetMonitor(host_->AsWeakPtr());
+    cert_watcher_->SetMonitor(host_->status_monitor());
 #endif
 
     scoped_refptr<protocol::TokenValidatorFactory> token_validator_factory =
@@ -810,7 +811,7 @@ void HostProcess::StartOnUiThread() {
   }
 
   policy_watcher_ =
-      PolicyWatcher::Create(nullptr, context_->file_task_runner());
+      PolicyWatcher::CreateWithTaskRunner(context_->file_task_runner());
   policy_watcher_->StartWatching(
       base::Bind(&HostProcess::OnPolicyUpdate, base::Unretained(this)),
       base::Bind(&HostProcess::OnPolicyError, base::Unretained(this)));
@@ -1468,8 +1469,7 @@ void HostProcess::StartHost() {
               context_->url_request_context_getter()),
           network_settings, protocol::TransportRole::SERVER);
   transport_context->set_ice_config_url(
-      ServiceUrls::GetInstance()->ice_config_url());
-
+      ServiceUrls::GetInstance()->ice_config_url(), oauth_token_getter_.get());
   std::unique_ptr<protocol::SessionManager> session_manager(
       new protocol::JingleSessionManager(signal_strategy_.get()));
 
@@ -1493,6 +1493,8 @@ void HostProcess::StartHost() {
         base::MakeUnique<SecurityKeyExtension>(context_->file_task_runner()));
   }
 
+  host_->AddExtension(base::MakeUnique<TestEchoExtension>());
+
   // TODO(simonmorris): Get the maximum session duration from a policy.
 #if defined(OS_LINUX)
   host_->SetMaximumSessionDuration(base::TimeDelta::FromHours(20));
@@ -1501,22 +1503,21 @@ void HostProcess::StartHost() {
   host_change_notification_listener_.reset(new HostChangeNotificationListener(
       this, host_id_, signal_strategy_.get(), directory_bot_jid_));
 
-  host_status_logger_.reset(new HostStatusLogger(
-      host_->AsWeakPtr(), ServerLogEntry::ME2ME,
-      signal_strategy_.get(), directory_bot_jid_));
+  host_status_logger_.reset(
+      new HostStatusLogger(host_->status_monitor(), ServerLogEntry::ME2ME,
+                           signal_strategy_.get(), directory_bot_jid_));
 
   power_save_blocker_.reset(new HostPowerSaveBlocker(
-      host_->AsWeakPtr(),
-      context_->ui_task_runner(),
+      host_->status_monitor(), context_->ui_task_runner(),
       context_->file_task_runner()));
 
   // Set up reporting the host status notifications.
 #if defined(REMOTING_MULTI_PROCESS)
   host_event_logger_.reset(
-      new IpcHostEventLogger(host_->AsWeakPtr(), daemon_channel_.get()));
+      new IpcHostEventLogger(host_->status_monitor(), daemon_channel_.get()));
 #else  // !defined(REMOTING_MULTI_PROCESS)
   host_event_logger_ =
-      HostEventLogger::Create(host_->AsWeakPtr(), kApplicationName);
+      HostEventLogger::Create(host_->status_monitor(), kApplicationName);
 #endif  // !defined(REMOTING_MULTI_PROCESS)
 
   host_->Start(host_owner_email_);

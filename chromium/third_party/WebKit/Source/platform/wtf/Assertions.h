@@ -27,25 +27,13 @@
 #ifndef WTF_Assertions_h
 #define WTF_Assertions_h
 
-// This file uses some GCC extensions, but it should be compatible with C++ and
-// Objective C++.
-
 #include <stdarg.h>
-#include "base/allocator/partition_allocator/oom.h"
+
+#include "base/compiler_specific.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
-#include "platform/wtf/Compiler.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/WTFExport.h"
-#include "platform/wtf/build_config.h"
-
-#if OS(WIN)
-#include <windows.h>
-#endif
-
-#ifndef LOG_DISABLED
-#define LOG_DISABLED !DCHECK_IS_ON()
-#endif
 
 // WTFLogAlways() is deprecated. crbug.com/638849
 WTF_EXPORT PRINTF_FORMAT(1, 2)  // NOLINT
@@ -53,7 +41,7 @@ WTF_EXPORT PRINTF_FORMAT(1, 2)  // NOLINT
 
 namespace WTF {
 
-#if LOG_DISABLED
+#if !DCHECK_IS_ON()
 
 #define WTF_CREATE_SCOPED_LOGGER(...) ((void)0)
 #define WTF_CREATE_SCOPED_LOGGER_IF(...) ((void)0)
@@ -105,27 +93,16 @@ class WTF_EXPORT ScopedLogger {
   WTF::ScopedLogger name(condition, __VA_ARGS__)
 #define WTF_APPEND_SCOPED_LOGGER(name, ...) (name.Log(__VA_ARGS__))
 
-#endif  // LOG_DISABLED
+#endif  // !DCHECK_IS_ON()
 
 }  // namespace WTF
-
-// CRASH() - Raises a fatal error resulting in program termination and
-// triggering either the debugger or the crash reporter.
-//
-// Use CRASH() in response to known, unrecoverable errors like out-of-memory.
-// Macro is enabled in both debug and release mode.
-// To test for unknown errors and verify assumptions, use ASSERT instead, to
-// avoid impacting performance in release builds.
-#ifndef CRASH
-#define CRASH() IMMEDIATE_CRASH()
-#endif
 
 #define DCHECK_AT(assertion, file, line)                            \
   LAZY_STREAM(logging::LogMessage(file, line, #assertion).stream(), \
               DCHECK_IS_ON() ? !(assertion) : false)
 
-// Users must test "#if ENABLE(SECURITY_ASSERT)", which helps ensure
-// that code testing this macro has included this header.
+// Users must test "#if ENABLE_SECURITY_ASSERT", which helps ensure that code
+// testing this macro has included this header.
 #if defined(ADDRESS_SANITIZER) || DCHECK_IS_ON()
 #define ENABLE_SECURITY_ASSERT 1
 #else
@@ -221,5 +198,10 @@ class WTF_EXPORT ScopedLogger {
   }                                                                           \
   void To##thisType##OrDie(const thisType*);                                  \
   void To##thisType##OrDie(const thisType&)
+
+// Check at compile time that related enums stay in sync.
+#define STATIC_ASSERT_ENUM(a, b)                            \
+  static_assert(static_cast<int>(a) == static_cast<int>(b), \
+                "mismatching enum: " #a)
 
 #endif  // WTF_Assertions_h

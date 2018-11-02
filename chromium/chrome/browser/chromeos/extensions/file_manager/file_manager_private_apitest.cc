@@ -15,7 +15,6 @@
 #include "chrome/browser/extensions/extension_apitest.h"
 #include "chrome/common/extensions/api/file_system_provider_capabilities/file_system_provider_capabilities_handler.h"
 #include "chrome/test/base/testing_profile.h"
-#include "chrome/test/base/ui_test_utils.h"
 #include "chromeos/dbus/cros_disks_client.h"
 #include "chromeos/disks/mock_disk_mount_manager.h"
 #include "components/drive/file_change.h"
@@ -379,11 +378,11 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, OnFileChanged) {
       base::FilePath(FILE_PATH_LITERAL("/no-existing-fs-hash/root/aaa")),
       "extension_3", base::Bind(&AddFileWatchCallback));
 
-  // event_router->addFileWatch create some tasks which are performed on message
-  // loop of BrowserThread::FILE. Wait until they are done.
-  content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
-  // We also wait the UI thread here, since some tasks which are performed above
-  // message loop back results to the UI thread.
+  // event_router->addFileWatch create some tasks which are performed on
+  // TaskScheduler. Wait until they are done.
+  base::TaskScheduler::GetInstance()->FlushForTesting();
+  // We also wait the UI thread here, since some tasks which are performed
+  // above message loop back results to the UI thread.
   base::RunLoop().RunUntilIdle();
 
   // When /a is deleted (1 and 2 is notified).
@@ -421,9 +420,9 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, OnFileChanged) {
       base::FilePath(FILE_PATH_LITERAL("/no-existing-fs/root/aaa")),
       "extension_3");
 
-  // event_router->removeFileWatch create some tasks which are performed on
-  // message loop of BrowserThread::FILE. Wait until they are done.
-  content::RunAllPendingInMessageLoop(content::BrowserThread::FILE);
+  // event_router->addFileWatch create some tasks which are performed on
+  // TaskScheduler. Wait until they are done.
+  base::TaskScheduler::GetInstance()->FlushForTesting();
 }
 
 IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, ContentChecksum) {
@@ -445,4 +444,22 @@ IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, ContentChecksum) {
                             false /* read_only */);
 
   ASSERT_TRUE(RunComponentExtensionTest("file_browser/content_checksum_test"));
+}
+
+IN_PROC_BROWSER_TEST_F(FileManagerPrivateApiTest, Recent) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  const base::FilePath downloads_dir = temp_dir.GetPath();
+
+  ASSERT_TRUE(file_manager::VolumeManager::Get(browser()->profile())
+                  ->RegisterDownloadsDirectoryForTesting(downloads_dir));
+
+  // Create an empty file.
+  {
+    base::File file(downloads_dir.Append("all-justice.jpg"),
+                    base::File::FLAG_CREATE | base::File::FLAG_WRITE);
+    ASSERT_TRUE(file.IsValid());
+  }
+
+  ASSERT_TRUE(RunComponentExtensionTest("file_browser/recent_test"));
 }

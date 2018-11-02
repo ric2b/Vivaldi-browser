@@ -23,6 +23,8 @@ using testing::SaveArg;
 namespace offline_pages {
 
 namespace {
+const version_info::Channel kTestChannel = version_info::Channel::UNKNOWN;
+const char kTestOperationName[] = "operation/test123";
 const char kTestURL[] = "http://example.com";
 const char kTestURL2[] = "http://example.com/2";
 const char kTestURL3[] = "http://example.com/3";
@@ -53,7 +55,7 @@ class GeneratePageBundleRequestBuilder : public RequestBuilder {
                      const PrefetchRequestFinishedCallback& callback) override {
     std::vector<std::string> pages = {kTestURL, kTestURL2};
     fetcher_.reset(new GeneratePageBundleRequest(
-        kTestUserAgent, kTestGCMID, kTestMaxBundleSize, pages,
+        kTestUserAgent, kTestGCMID, kTestMaxBundleSize, pages, kTestChannel,
         request_context_getter, callback));
   }
 
@@ -65,7 +67,7 @@ class GetOperationRequestBuilder : public RequestBuilder {
  public:
   void CreateRequest(net::URLRequestContextGetter* request_context_getter,
                      const PrefetchRequestFinishedCallback& callback) override {
-    fetcher_.reset(new GetOperationRequest(kTestMethodName,
+    fetcher_.reset(new GetOperationRequest(kTestMethodName, kTestChannel,
                                            request_context_getter, callback));
   }
 
@@ -100,6 +102,7 @@ class OperationBuilder {
                              const std::string& any_type_url,
                              const std::string& any_value) {
     proto::Operation operation;
+    operation.set_name(kTestOperationName);
     operation.set_done(is_done);
     if (error_code != proto::OK) {
       operation.mutable_error()->set_code(error_code);
@@ -233,6 +236,7 @@ class PrefetchRequestOperationResponseTest : public PrefetchRequestTestBase {
         builder_.BuildFromAny(kPageBundleTypeURL, bundle_data));
   }
 
+  const std::string& operation_name() const { return operation_name_; }
   const std::vector<RenderPageInfo>& pages() const { return pages_; }
 
  private:
@@ -241,14 +245,17 @@ class PrefetchRequestOperationResponseTest : public PrefetchRequestTestBase {
     builder_.CreateRequest(request_context(), callback.Get());
 
     PrefetchRequestStatus status;
+    operation_name_.clear();
     pages_.clear();
-    EXPECT_CALL(callback, Run(_, _))
-        .WillOnce(DoAll(SaveArg<0>(&status), SaveArg<1>(&pages_)));
+    EXPECT_CALL(callback, Run(_, _, _))
+        .WillOnce(DoAll(SaveArg<0>(&status), SaveArg<1>(&operation_name_),
+                        SaveArg<2>(&pages_)));
     RespondWithData(response_data);
     return status;
   }
 
   T builder_;
+  std::string operation_name_;
   std::vector<RenderPageInfo> pages_;
 };
 
@@ -265,24 +272,28 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, EmptyOperation) {
             // No error is set for OK. Thus this will cause the operation
             // being filled with only done flag.
             this->SendWithErrorResponse(proto::OK, ""));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
 TYPED_TEST(PrefetchRequestOperationResponseTest, ErrorValue) {
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithErrorResponse(proto::UNKNOWN, kErrorMessage));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
 TYPED_TEST(PrefetchRequestOperationResponseTest, InvalidTypeUrl) {
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithAnyResponse("foo", ""));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
 TYPED_TEST(PrefetchRequestOperationResponseTest, InvalidValue) {
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithAnyResponse(kPageBundleTypeURL, "foo"));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
@@ -290,6 +301,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, EmptyPageBundle) {
   proto::PageBundle bundle;
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
@@ -298,6 +310,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, EmptyArchive) {
   bundle.add_archives();
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
@@ -308,6 +321,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, NoPageInfo) {
   archive->set_body_length(kTestBodyLength);
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
@@ -318,6 +332,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, MissingPageInfoUrl) {
   page_info->set_redirect_url(kTestURL);
   EXPECT_EQ(PrefetchRequestStatus::SHOULD_RETRY_WITH_BACKOFF,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_TRUE(this->operation_name().empty());
   EXPECT_TRUE(this->pages().empty());
 }
 
@@ -337,6 +352,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, SinglePage) {
                                               1000000);
   EXPECT_EQ(PrefetchRequestStatus::SUCCESS,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_EQ(kTestOperationName, this->operation_name());
   ASSERT_EQ(1u, this->pages().size());
   EXPECT_EQ(kTestURL, this->pages().back().url);
   EXPECT_EQ(kTestURL2, this->pages().back().redirect_url);
@@ -382,6 +398,7 @@ TYPED_TEST(PrefetchRequestOperationResponseTest, MultiplePages) {
 
   EXPECT_EQ(PrefetchRequestStatus::SUCCESS,
             this->SendWithPageBundleResponse(bundle));
+  EXPECT_EQ(kTestOperationName, this->operation_name());
   ASSERT_EQ(4u, this->pages().size());
   EXPECT_EQ(kTestURL, this->pages().at(0).url);
   EXPECT_EQ(RenderStatus::PENDING, this->pages().at(0).status);

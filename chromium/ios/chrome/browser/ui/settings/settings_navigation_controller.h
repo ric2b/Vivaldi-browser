@@ -7,8 +7,11 @@
 
 #import <UIKit/UIKit.h>
 
-@class OpenUrlCommand;
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+
+@protocol BrowserCommands;
 @protocol ImportDataControllerDelegate;
+@class OpenUrlCommand;
 @protocol UserFeedbackDataSource;
 
 namespace ios {
@@ -37,10 +40,15 @@ class ChromeBrowserState;
 // closed.
 - (void)closeSettings;
 
+// Asks the delegate for a dispatcher that can be passed into child view
+// controllers when they are created.
+- (id<ApplicationCommands, BrowserCommands>)dispatcherForSettings;
+
 @end
 
 // Controller to modify user settings.
-@interface SettingsNavigationController : UINavigationController
+@interface SettingsNavigationController
+    : UINavigationController<ApplicationSettingsCommands>
 
 // Whether sync changes should be committed when the settings are being
 // dismissed. Defaults to YES.
@@ -48,15 +56,12 @@ class ChromeBrowserState;
 
 // Creates a new SettingsCollectionViewController and the chrome around it.
 // |browserState| is used to personalize some settings aspects and should not be
-// nil. |delegate| may be nil.
-// clang-format off
-+ (SettingsNavigationController*)newSettingsMainControllerWithMainBrowserState:
-        (ios::ChromeBrowserState*)browserState
-                                                           currentBrowserState:
-        (ios::ChromeBrowserState*)currentBrowserState
-                                                                      delegate:
-        (id<SettingsNavigationControllerDelegate>)delegate;
-// clang-format on
+// nil nor Off-the-Record. |delegate| may be nil.
++ (SettingsNavigationController*)
+newSettingsMainControllerWithBrowserState:(ios::ChromeBrowserState*)browserState
+                                 delegate:
+                                     (id<SettingsNavigationControllerDelegate>)
+                                         delegate;
 
 // Creates a new AccountsCollectionViewController and the chrome around it.
 // |browserState| is used to personalize some settings aspects and should not be
@@ -81,13 +86,6 @@ newSyncEncryptionPassphraseController:(ios::ChromeBrowserState*)browserState
                              delegate:(id<SettingsNavigationControllerDelegate>)
                                           delegate;
 
-// Creates a new NativeAppsCollectionViewController and the chrome around it.
-// |browserState| is used to personalize some settings aspects and should not be
-// nil. |delegate| may be nil.
-+ (SettingsNavigationController*)
-newNativeAppsController:(ios::ChromeBrowserState*)browserState
-               delegate:(id<SettingsNavigationControllerDelegate>)delegate;
-
 // Creates a new ClearBrowsingDataCollectionViewController and the chrome around
 // it.
 // |browserState| is used to personalize some settings aspects and should not be
@@ -96,11 +94,6 @@ newNativeAppsController:(ios::ChromeBrowserState*)browserState
 newClearBrowsingDataController:(ios::ChromeBrowserState*)browserState
                       delegate:
                           (id<SettingsNavigationControllerDelegate>)delegate;
-
-+ (SettingsNavigationController*)
-newContextualSearchController:(ios::ChromeBrowserState*)browserState
-                     delegate:
-                         (id<SettingsNavigationControllerDelegate>)delegate;
 
 // Creates a new SavePasswordsCollectionViewController and the chrome around it.
 // |browserState| is used to personalize some settings aspects and should not be
@@ -134,6 +127,16 @@ newImportDataController:(ios::ChromeBrowserState*)browserState
 newAutofillController:(ios::ChromeBrowserState*)browserState
              delegate:(id<SettingsNavigationControllerDelegate>)delegate;
 
+// Initializes the UINavigationController with |rootViewController|.
+- (instancetype)
+initWithRootViewController:(UIViewController*)rootViewController
+              browserState:(ios::ChromeBrowserState*)browserState
+                  delegate:(id<SettingsNavigationControllerDelegate>)delegate
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)initWithRootViewController:(UIViewController*)rootViewController
+    NS_UNAVAILABLE;
+
 // Returns a new Done button for a UINavigationItem which will call
 // closeSettings when it is pressed. Should only be called by view controllers
 // owned by SettingsNavigationController.
@@ -153,17 +156,6 @@ newAutofillController:(ios::ChromeBrowserState*)browserState
 // the navigation stack. Closes the settings if the top view controller is the
 // only view controller in the navigation stack.
 - (void)popViewControllerOrCloseSettingsAnimated:(BOOL)animated;
-
-@end
-
-@interface SettingsNavigationController (ExposedForTesting)
-
-// Initializes the UINavigationController with |rootViewController|.
-// User of this class should not call the normal |initWithRootViewController|.
-- (instancetype)
-initWithRootViewController:(UIViewController*)rootViewController
-              browserState:(ios::ChromeBrowserState*)browserState
-                  delegate:(id<SettingsNavigationControllerDelegate>)delegate;
 
 @end
 

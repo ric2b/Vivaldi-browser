@@ -15,6 +15,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "media/filters/h264_parser.h"
+#include "media/gpu/media_gpu_export.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace media {
 
@@ -23,7 +25,7 @@ class VaapiH264Picture;
 
 // A picture (a frame or a field) in the H.264 spec sense.
 // See spec at http://www.itu.int/rec/T-REC-H.264
-class H264Picture : public base::RefCounted<H264Picture> {
+class MEDIA_GPU_EXPORT H264Picture : public base::RefCounted<H264Picture> {
  public:
   using Vector = std::vector<scoped_refptr<H264Picture>>;
 
@@ -83,6 +85,10 @@ class H264Picture : public base::RefCounted<H264Picture> {
 
   // Position in DPB (i.e. index in DPB).
   int dpb_position;
+
+  // The visible size of picture. This could be either parsed from SPS, or set
+  // to gfx::Rect(0, 0) for indicating invalid values or not available.
+  gfx::Rect visible_rect;
 
  protected:
   friend class base::RefCounted<H264Picture>;

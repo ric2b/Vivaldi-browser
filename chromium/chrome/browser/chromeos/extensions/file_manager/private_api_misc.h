@@ -8,7 +8,9 @@
 #ifndef CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_PRIVATE_API_MISC_H_
 #define CHROME_BROWSER_CHROMEOS_EXTENSIONS_FILE_MANAGER_PRIVATE_API_MISC_H_
 
+#include <memory>
 #include <string>
+#include <vector>
 
 #include "base/files/file.h"
 #include "base/macros.h"
@@ -16,7 +18,16 @@
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/extensions/chrome_extension_function_details.h"
+#include "chrome/common/extensions/api/file_manager_private.h"
 #include "google_apis/drive/drive_api_error_codes.h"
+#include "storage/browser/fileapi/file_system_url.h"
+
+namespace file_manager {
+namespace util {
+struct EntryDefinition;
+typedef std::vector<EntryDefinition> EntryDefinitionList;
+}  // namespace util
+}  // namespace file_manager
 
 namespace google_apis {
 class AuthServiceInterface;
@@ -267,6 +278,29 @@ class FileManagerPrivateInternalExecuteCustomActionFunction
   const ChromeExtensionFunctionDetails chrome_details_;
   DISALLOW_COPY_AND_ASSIGN(
       FileManagerPrivateInternalExecuteCustomActionFunction);
+};
+
+// Implements the chrome.fileManagerPrivateInternal.getRecentFiles method.
+class FileManagerPrivateInternalGetRecentFilesFunction
+    : public UIThreadExtensionFunction {
+ public:
+  FileManagerPrivateInternalGetRecentFilesFunction();
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivateInternal.getRecentFiles",
+                             FILEMANAGERPRIVATE_GETRECENTFILES)
+ protected:
+  ~FileManagerPrivateInternalGetRecentFilesFunction() override {}
+
+ private:
+  ResponseAction Run() override;
+  void OnGetRecentFiles(
+      api::file_manager_private::SourceRestriction restriction,
+      const std::vector<storage::FileSystemURL>& urls);
+  void OnConvertFileDefinitionListToEntryDefinitionList(
+      std::unique_ptr<file_manager::util::EntryDefinitionList>
+          entry_definition_list);
+
+  const ChromeExtensionFunctionDetails chrome_details_;
+  DISALLOW_COPY_AND_ASSIGN(FileManagerPrivateInternalGetRecentFilesFunction);
 };
 
 }  // namespace extensions

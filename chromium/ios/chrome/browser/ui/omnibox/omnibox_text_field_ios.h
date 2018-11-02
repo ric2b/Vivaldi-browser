@@ -9,29 +9,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/string16.h"
-
-@protocol OmniboxTextFieldDelegate<UITextFieldDelegate>
-
-@optional
-// Called when the OmniboxTextField performs a copy operation.  Returns YES if
-// the delegate handled the copy operation itself.  If the delegate returns NO,
-// the field must perform the copy.  Some platforms (iOS 4) do not expose an API
-// that allows the delegate to handle the copy.
-- (BOOL)onCopy;
-
-// Called when the OmniboxTextField performs a 'Copy URL' operation.
-- (BOOL)onCopyURL;
-
-// Returns true if the 'Copy URL' operation can performed (i.e. the text in the
-// omnibox still reflects the current navigation entry).
-- (BOOL)canCopyURL;
-
-// Called before the OmniboxTextField performs a paste operation.
-- (void)willPaste;
-
-// Called when the backspace button is tapped in the OmniboxTextField.
-- (void)onDeleteBackward;
-@end
+#import "ios/chrome/browser/ui/omnibox/omnibox_text_field_delegate.h"
 
 // Enum type specifying the direction of fade animations.
 typedef enum {
@@ -61,12 +39,6 @@ typedef enum {
 // field is not in editing mode, it will respect the text attributes set on
 // |text|.
 - (void)setText:(NSAttributedString*)text userTextLength:(size_t)userTextLength;
-
-// Sets |chipText_|.
-- (void)setChipText:(NSString*)text;
-
-// Returns YES if the omnibox is currently showing a query refinement chip.
-- (BOOL)isShowingQueryRefinementChip;
 
 // Inserts the given |text| into the text field.  The text replaces the current
 // selection, if there is one; otherwise the text is inserted at the current

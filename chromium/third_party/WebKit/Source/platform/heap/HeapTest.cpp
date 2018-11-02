@@ -30,6 +30,8 @@
 
 #include <algorithm>
 #include <memory>
+
+#include "build/build_config.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/heap/Handle.h"
@@ -5406,13 +5408,12 @@ TEST(HeapTest, IndirectStrongToWeak) {
 }
 
 static Mutex& MainThreadMutex() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, main_mutex, new Mutex);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, main_mutex, ());
   return main_mutex;
 }
 
 static ThreadCondition& MainThreadCondition() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, main_condition,
-                                  new ThreadCondition);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, main_condition, ());
   return main_condition;
 }
 
@@ -5426,13 +5427,12 @@ static void WakeMainThread() {
 }
 
 static Mutex& WorkerThreadMutex() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, worker_mutex, new Mutex);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, worker_mutex, ());
   return worker_mutex;
 }
 
 static ThreadCondition& WorkerThreadCondition() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, worker_condition,
-                                  new ThreadCondition);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadCondition, worker_condition, ());
   return worker_condition;
 }
 
@@ -5580,7 +5580,7 @@ class MemberSameThreadCheckTester {
 #if DCHECK_IS_ON()
 // TODO(keishi) This test is flaky on mac_chromium_rel_ng bot.
 // crbug.com/709069
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 TEST(HeapDeathTest, MemberSameThreadCheck) {
   EXPECT_DEATH(MemberSameThreadCheckTester().Test(), "");
 }
@@ -5623,7 +5623,7 @@ class PersistentSameThreadCheckTester {
 #if DCHECK_IS_ON()
 // TODO(keishi) This test is flaky on mac_chromium_rel_ng bot.
 // crbug.com/709069
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 TEST(HeapDeathTest, PersistentSameThreadCheck) {
   EXPECT_DEATH(PersistentSameThreadCheckTester().Test(), "");
 }
@@ -5677,7 +5677,7 @@ class MarkingSameThreadCheckTester {
 #if DCHECK_IS_ON()
 // TODO(keishi) This test is flaky on mac_chromium_rel_ng bot.
 // crbug.com/709069
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 TEST(HeapDeathTest, MarkingSameThreadCheck) {
   // This will crash during marking, at the DCHECK in Visitor::markHeader() or
   // earlier.
@@ -5744,8 +5744,7 @@ TEST(HeapTest, GarbageCollectionDuringMixinConstruction) {
 }
 
 static RecursiveMutex& GetRecursiveMutex() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(RecursiveMutex, recursive_mutex,
-                                  new RecursiveMutex);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(RecursiveMutex, recursive_mutex, ());
   return recursive_mutex;
 }
 
@@ -6036,7 +6035,7 @@ TEST(HeapTest, TraceDeepEagerly) {
 // The allocation & GC overhead is considerable for this test,
 // straining debug builds and lower-end targets too much to be
 // worth running.
-#if !DCHECK_IS_ON() && !OS(ANDROID)
+#if !DCHECK_IS_ON() && !defined(OS_ANDROID)
   DeepEagerly* obj = nullptr;
   for (int i = 0; i < 10000000; i++)
     obj = new DeepEagerly(obj);
@@ -6542,8 +6541,7 @@ class ThreadedClearOnShutdownTester : public ThreadedTesterBase {
 
   static IntWrapper& ThreadSpecificIntWrapper() {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<Persistent<IntWrapper>>,
-                                    int_wrapper,
-                                    new ThreadSpecific<Persistent<IntWrapper>>);
+                                    int_wrapper, ());
     Persistent<IntWrapper>& handle = *int_wrapper;
     if (!handle) {
       handle = new IntWrapper(42);
@@ -6588,7 +6586,7 @@ class ThreadedClearOnShutdownTester::HeapObject final
 ThreadedClearOnShutdownTester::WeakHeapObjectSet&
 ThreadedClearOnShutdownTester::GetWeakHeapObjectSet() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<WeakHeapObjectSet>, singleton,
-                                  new ThreadSpecific<WeakHeapObjectSet>);
+                                  ());
   if (!singleton.IsSet())
     singleton->RegisterAsStaticReference();
 
@@ -6597,8 +6595,7 @@ ThreadedClearOnShutdownTester::GetWeakHeapObjectSet() {
 
 ThreadedClearOnShutdownTester::HeapObjectSet&
 ThreadedClearOnShutdownTester::GetHeapObjectSet() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<HeapObjectSet>, singleton,
-                                  new ThreadSpecific<HeapObjectSet>);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<HeapObjectSet>, singleton, ());
   if (!singleton.IsSet())
     singleton->RegisterAsStaticReference();
 

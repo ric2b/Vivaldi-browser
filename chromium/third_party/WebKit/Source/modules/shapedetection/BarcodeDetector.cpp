@@ -5,32 +5,38 @@
 #include "modules/shapedetection/BarcodeDetector.h"
 
 #include "core/dom/DOMException.h"
+#include "core/frame/LocalFrame.h"
 #include "core/geometry/DOMRect.h"
 #include "core/html/canvas/CanvasImageSource.h"
+#include "core/workers/WorkerThread.h"
 #include "modules/imagecapture/Point2D.h"
 #include "modules/shapedetection/DetectedBarcode.h"
-#include "public/platform/InterfaceProvider.h"
-#include "public/platform/Platform.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
-BarcodeDetector* BarcodeDetector::Create() {
-  return new BarcodeDetector();
+BarcodeDetector* BarcodeDetector::Create(ExecutionContext* context) {
+  return new BarcodeDetector(context);
 }
 
-BarcodeDetector::BarcodeDetector() : ShapeDetector() {
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&barcode_service_));
+BarcodeDetector::BarcodeDetector(ExecutionContext* context) : ShapeDetector() {
+  auto request = mojo::MakeRequest(&barcode_service_);
+  if (context->IsDocument()) {
+    LocalFrame* frame = ToDocument(context)->GetFrame();
+    if (frame)
+      frame->GetInterfaceProvider().GetInterface(std::move(request));
+  } else {
+    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
+    thread->GetInterfaceProvider().GetInterface(std::move(request));
+  }
+
   barcode_service_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&BarcodeDetector::OnBarcodeServiceConnectionError,
                 WrapWeakPersistent(this))));
 }
 
-ScriptPromise BarcodeDetector::DoDetect(
-    ScriptPromiseResolver* resolver,
-    mojo::ScopedSharedBufferHandle shared_buffer_handle,
-    int image_width,
-    int image_height) {
+ScriptPromise BarcodeDetector::DoDetect(ScriptPromiseResolver* resolver,
+                                        skia::mojom::blink::BitmapPtr bitmap) {
   ScriptPromise promise = resolver->Promise();
   if (!barcode_service_) {
     resolver->Reject(DOMException::Create(
@@ -39,10 +45,9 @@ ScriptPromise BarcodeDetector::DoDetect(
   }
   barcode_service_requests_.insert(resolver);
   barcode_service_->Detect(
-      std::move(shared_buffer_handle), image_width, image_height,
-      ConvertToBaseCallback(WTF::Bind(&BarcodeDetector::OnDetectBarcodes,
-                                      WrapPersistent(this),
-                                      WrapPersistent(resolver))));
+      std::move(bitmap), ConvertToBaseCallback(WTF::Bind(
+                             &BarcodeDetector::OnDetectBarcodes,
+                             WrapPersistent(this), WrapPersistent(resolver))));
   return promise;
 }
 
@@ -58,15 +63,15 @@ void BarcodeDetector::OnDetectBarcodes(
     HeapVector<Point2D> corner_points;
     for (const auto& corner_point : barcode->corner_points) {
       Point2D point;
-      point.setX(corner_point->x);
-      point.setY(corner_point->y);
+      point.setX(corner_point.x);
+      point.setY(corner_point.y);
       corner_points.push_back(point);
     }
     detected_barcodes.push_back(DetectedBarcode::Create(
         barcode->raw_value,
-        DOMRect::Create(barcode->bounding_box->x, barcode->bounding_box->y,
-                        barcode->bounding_box->width,
-                        barcode->bounding_box->height),
+        DOMRect::Create(barcode->bounding_box.x, barcode->bounding_box.y,
+                        barcode->bounding_box.width,
+                        barcode->bounding_box.height),
         corner_points));
   }
 

@@ -1053,11 +1053,12 @@ EVENT_TYPE(HTTP_STREAM_JOB_WAITING)
 //   }
 EVENT_TYPE(HTTP_STREAM_REQUEST_STARTED_JOB)
 
-// Logs the proxy server resolved for the job. The event parameters are:
-//   {
-//      "proxy_server": The proxy server resolved for the Job,
-//   }
-EVENT_TYPE(HTTP_STREAM_JOB_PROXY_SERVER_RESOLVED)
+// Emitted when a job is throttled.
+EVENT_TYPE(HTTP_STREAM_JOB_THROTTLED)
+
+// Emitted when a job resumes initializing a connection after being previously
+// throttled.
+EVENT_TYPE(HTTP_STREAM_JOB_RESUME_INIT_CONNECTION)
 
 // Emitted when a job is asked to initialize a connection.
 EVENT_TYPE(HTTP_STREAM_JOB_INIT_CONNECTION)
@@ -1126,6 +1127,12 @@ EVENT_TYPE(HTTP_STREAM_JOB_CONTROLLER)
 //          URL_REQUEST if the event is logged in HTTP_STREAM_JOB_CONTROLLER>,
 //   }
 EVENT_TYPE(HTTP_STREAM_JOB_CONTROLLER_BOUND)
+
+// Logs the proxy server resolved for the controller. The event parameters are:
+//   {
+//      "proxy_server": The proxy server resolved for the Job,
+//   }
+EVENT_TYPE(HTTP_STREAM_JOB_CONTROLLER_PROXY_SERVER_RESOLVED)
 
 // ------------------------------------------------------------------------
 // HttpNetworkTransaction
@@ -1249,9 +1256,6 @@ EVENT_TYPE(BIDIRECTIONAL_STREAM_ALIVE)
 // }
 EVENT_TYPE(BIDIRECTIONAL_STREAM_READ_DATA)
 
-// Marks the SendData call of a net::BidirectionalStream.
-EVENT_TYPE(BIDIRECTIONAL_STREAM_SEND_DATA)
-
 // Marks the SendvData call of a net::BidirectionalStream.
 // The following parameters are attached:
 // {
@@ -1374,18 +1378,17 @@ EVENT_TYPE(HTTP2_SESSION_SEND_HEADERS)
 //   }
 EVENT_TYPE(HTTP2_SESSION_RECV_HEADERS)
 
-// On sending an HTTP/2 SETTINGS frame.
+// On sending an HTTP/2 SETTINGS frame without ACK flag.
 // The following parameters are attached:
 //   {
-//     "settings": <The list of setting id, flags and value>,
+//     "settings": <The list of setting ids and values>,
 //   }
 EVENT_TYPE(HTTP2_SESSION_SEND_SETTINGS)
 
-// Receipt of an HTTP/2 SETTINGS frame.
-// The following parameters are attached:
-//   {
-//     "host": <The host-port string>,
-//   }
+// On sending an HTTP/2 SETTINGS frame with ACK flag.
+EVENT_TYPE(HTTP2_SESSION_SEND_SETTINGS_ACK)
+
+// Receipt of an HTTP/2 SETTINGS frame without ACK flag.
 EVENT_TYPE(HTTP2_SESSION_RECV_SETTINGS)
 
 // Receipt of an individual HTTP/2 setting.
@@ -1395,6 +1398,9 @@ EVENT_TYPE(HTTP2_SESSION_RECV_SETTINGS)
 //     "value": <The setting value>,
 //   }
 EVENT_TYPE(HTTP2_SESSION_RECV_SETTING)
+
+// Receipt of an HTTP/2 SETTINGS frame with ACK flag.
+EVENT_TYPE(HTTP2_SESSION_RECV_SETTINGS_ACK)
 
 // The receipt of a RST_STREAM frame.
 // The following parameters are attached:
@@ -1464,6 +1470,7 @@ EVENT_TYPE(HTTP2_SESSION_UPDATE_RECV_WINDOW)
 //   {
 //     "header_name": <The header name>,
 //     "header_value": <The header value>,
+//     "error": <Error message>,
 //   }
 EVENT_TYPE(HTTP2_SESSION_RECV_INVALID_HEADER)
 
@@ -3176,3 +3183,50 @@ EVENT_TYPE(RESOURCE_SCHEDULER_REQUEST_STARTED)
 //                                  type>,
 //  }
 EVENT_TYPE(NETWORK_QUALITY_CHANGED)
+
+// -----------------------------------------------------------------------------
+// Http Server Properties Manager related events
+// -----------------------------------------------------------------------------
+
+// This event is emitted when HttpServerPropertiesManager initialization starts
+// and finishes.
+EVENT_TYPE(HTTP_SERVER_PROPERTIES_INITIALIZATION)
+
+// This event is emitted when HttpServerPropertiesManager is updating in-memory
+// version of HttpServerProperties from the serialized version from perfs/disk.
+// parameters:
+//  {
+//    "servers": <List of servers and their protocol usage information>,
+//    "supports_quic": <Local IP addresses that used QUIC>,
+//    "version": <The version number>,
+//  }
+EVENT_TYPE(HTTP_SERVER_PROPERTIES_UPDATE_CACHE)
+
+// This event is emitted when HttpServerPropertiesManager is persisting
+// in-memory version of HttpServerProperties to prefs/disk.
+// parameters:
+//  {
+//    "servers": <List of servers and their protocol usage information>,
+//    "supports_quic": <Local IP addresses that used QUIC>,
+//    "version": <The version number>,
+//  }
+EVENT_TYPE(HTTP_SERVER_PROPERTIES_UPDATE_PREFS)
+
+// -----------------------------------------------------------------------------
+// HostCachePersistenceManager related events
+// -----------------------------------------------------------------------------
+
+// The start/end of getting the persisted HostCache value and restoring it.
+// The END phase contains the following parameters:
+//  {
+//    "success": <Whether the persisted HostCache was restored successfully>,
+//  }
+EVENT_TYPE(HOST_CACHE_PREF_READ)
+
+// This event is created when the HostCachePersistenceManager writes the cache
+// contents to prefs.
+EVENT_TYPE(HOST_CACHE_PREF_WRITE)
+
+// This event is created when the HostCachePersistenceManager starts the timer
+// for writing a cache change to prefs.
+EVENT_TYPE(HOST_CACHE_PERSISTENCE_START_TIMER)

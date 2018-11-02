@@ -21,10 +21,10 @@
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/net_log/chrome_net_log.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/resource_context.h"
@@ -199,23 +199,6 @@ void OffTheRecordProfileIOData::InitializeInternal(
   net::URLRequestContextStorage* main_context_storage =
       main_request_context_storage();
 
-  IOThread* const io_thread = profile_params->io_thread;
-  IOThread::Globals* const io_thread_globals = io_thread->globals();
-
-  ApplyProfileParamsToContext(main_context);
-
-  main_context->set_transport_security_state(transport_security_state());
-  main_context->set_cert_transparency_verifier(
-      io_thread_globals->cert_transparency_verifier.get());
-  main_context->set_ct_policy_enforcer(
-      io_thread_globals->ct_policy_enforcer.get());
-
-  main_context->set_net_log(io_thread->net_log());
-
-  main_context->set_http_auth_handler_factory(
-      io_thread_globals->http_auth_handler_factory.get());
-  main_context->set_proxy_service(proxy_service());
-
   // For incognito, we use the default non-persistent HttpServerPropertiesImpl.
   main_context_storage->set_http_server_properties(
       base::MakeUnique<net::HttpServerPropertiesImpl>());
@@ -289,11 +272,13 @@ net::URLRequestContext* OffTheRecordProfileIOData::InitializeAppRequestContext(
   context->SetCookieStore(std::move(cookie_store));
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
-  net::HttpNetworkSession::Params network_params =
-      main_request_context_storage()->http_network_session()->params();
-  network_params.channel_id_service = channel_id_service.get();
+  net::HttpNetworkSession::Context session_context =
+      main_request_context_storage()->http_network_session()->context();
+  session_context.channel_id_service = channel_id_service.get();
   std::unique_ptr<net::HttpNetworkSession> http_network_session(
-      new net::HttpNetworkSession(network_params));
+      new net::HttpNetworkSession(
+          main_request_context_storage()->http_network_session()->params(),
+          session_context));
 
   // Use a separate in-memory cache for the app.
   std::unique_ptr<net::HttpCache> app_http_cache = CreateMainHttpFactory(

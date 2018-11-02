@@ -32,7 +32,9 @@
 #include "core/CoreExport.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/iterators/TextIterator.h"
+#include "core/editing/markers/CompositionMarker.h"
 #include "core/editing/markers/DocumentMarker.h"
+#include "core/editing/markers/TextMatchMarker.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashMap.h"
@@ -53,17 +55,19 @@ class CORE_EXPORT DocumentMarkerController final
   explicit DocumentMarkerController(Document&);
 
   void Clear();
-  void AddSpellingMarker(const Position& start,
-                         const Position& end,
+  void AddSpellingMarker(const EphemeralRange&,
                          const String& description = g_empty_string);
-  void AddGrammarMarker(const Position& start,
-                        const Position& end,
+  void AddGrammarMarker(const EphemeralRange&,
                         const String& description = g_empty_string);
-  void AddTextMatchMarker(const EphemeralRange&, DocumentMarker::MatchStatus);
+  void AddTextMatchMarker(const EphemeralRange&, TextMatchMarker::MatchStatus);
   void AddCompositionMarker(const EphemeralRange&,
                             Color underline_color,
-                            bool thick,
+                            StyleableMarker::Thickness,
                             Color background_color);
+  void AddActiveSuggestionMarker(const EphemeralRange&,
+                                 Color underline_color,
+                                 StyleableMarker::Thickness,
+                                 Color background_color);
 
   void MoveMarkers(Node* src_node, int length, Node* dst_node);
 
@@ -94,7 +98,7 @@ class CORE_EXPORT DocumentMarkerController final
       Node*,
       DocumentMarker::MarkerTypes = DocumentMarker::AllMarkers());
   DocumentMarkerVector Markers();
-  Vector<IntRect> RenderedRectsForTextMatchMarkers();
+  Vector<IntRect> LayoutRectsForTextMatchMarkers();
   void InvalidateRectsForAllTextMatchMarkers();
   void InvalidateRectsForTextMatchMarkersInNode(const Node&);
 
@@ -111,11 +115,10 @@ class CORE_EXPORT DocumentMarkerController final
                               unsigned new_length) final;
 
  private:
-  void AddMarker(Node*, DocumentMarker*);
-  void AddSpellCheckMarker(const Position& start,
-                           const Position& end,
-                           DocumentMarker::MarkerType,
-                           const String& description = g_empty_string);
+  void AddMarkerInternal(
+      const EphemeralRange&,
+      std::function<DocumentMarker*(int, int)> create_marker_from_offsets);
+  void AddMarkerToNode(Node*, DocumentMarker*);
 
   using MarkerLists = HeapVector<Member<DocumentMarkerList>,
                                  DocumentMarker::kMarkerTypeIndexesCount>;

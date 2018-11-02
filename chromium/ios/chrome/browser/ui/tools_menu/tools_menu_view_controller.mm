@@ -7,16 +7,14 @@
 #include <stdint.h>
 
 #include "base/ios/ios_util.h"
-#import "base/ios/weak_nsobject.h"
 #include "base/logging.h"
-#include "base/mac/objc_property_releaser.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notification_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_menu_notifier.h"
@@ -37,6 +35,11 @@
 #include "ios/web/public/user_agent.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using ios::material::TimingFunction;
 
 namespace {
@@ -105,14 +108,13 @@ NS_INLINE void AnimateInViews(NSArray* views,
 @interface ToolsMenuViewController ()<UICollectionViewDelegateFlowLayout,
                                       UICollectionViewDataSource,
                                       ReadingListMenuNotificationDelegate> {
-  base::mac::ObjCPropertyReleaser _propertyReleaser_ToolsMenuViewController;
   BOOL _waitForInk;
   // Weak pointer to ReadingListMenuNotifier, used to set the starting values
   // for the reading list badge.
-  base::WeakNSObject<ReadingListMenuNotifier> _readingListMenuNotifier;
+  __weak ReadingListMenuNotifier* _readingListMenuNotifier;
 }
-@property(nonatomic, retain) ToolsMenuCollectionView* menuView;
-@property(nonatomic, retain) MDCInkView* touchFeedbackView;
+@property(nonatomic, strong) ToolsMenuCollectionView* menuView;
+@property(nonatomic, strong) MDCInkView* touchFeedbackView;
 @property(nonatomic, assign) ToolbarType toolbarType;
 // Populated by the configuration object in |initializeMenuWithConfiguration:|
 // stores the time this view controller was requested by the user for the
@@ -132,6 +134,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
 @synthesize toolbarType = _toolbarType;
 @synthesize menuItems = _menuItems;
 @synthesize delegate = _delegate;
+@synthesize dispatcher = _dispatcher;
 @synthesize requestStartTime = _requestStartTime;
 
 #pragma mark Public methods
@@ -191,7 +194,6 @@ NS_INLINE void AnimateInViews(NSArray* views,
 - (void)setCanShowShareMenu:(BOOL)enabled {
   ToolsMenuViewToolsCell* toolsCell = [self toolsCell];
   [[toolsCell shareButton] setEnabled:enabled];
-  [self setItemEnabled:enabled withTag:IDC_SHARE_PAGE];
 }
 
 - (UIButton*)toolsButton {
@@ -217,7 +219,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
   self.requestStartTime = configuration.requestStartTime;
 
   if (configuration.readingListMenuNotifier) {
-    _readingListMenuNotifier.reset(configuration.readingListMenuNotifier);
+    _readingListMenuNotifier = configuration.readingListMenuNotifier;
     [configuration.readingListMenuNotifier setDelegate:self];
   }
 
@@ -246,11 +248,12 @@ NS_INLINE void AnimateInViews(NSArray* views,
     Class itemClass =
         item.item_class ? item.item_class : [ToolsMenuViewItem class];
     // Sanity check that the class is a useful one.
-    DCHECK([itemClass respondsToSelector:@selector(menuItemWithTitle:
-                                             accessibilityIdentifier:
-                                                             command:)]);
+    DCHECK([itemClass
+        respondsToSelector:@selector
+        (menuItemWithTitle:accessibilityIdentifier:selector:command:)]);
     [menu addObject:[itemClass menuItemWithTitle:title
                          accessibilityIdentifier:item.accessibility_id
+                                        selector:item.selector
                                          command:item.command_id]];
   }
 
@@ -296,6 +299,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
 - (ToolsMenuViewItem*)createViewSourceItem {
   return [ToolsMenuViewItem menuItemWithTitle:@"View Source"
                       accessibilityIdentifier:@"View Source"
+                                     selector:nullptr
                                       command:IDC_VIEW_SOURCE];
 }
 #endif  // !defined(NDEBUG)
@@ -331,29 +335,6 @@ NS_INLINE void AnimateInViews(NSArray* views,
 
 #pragma mark - UIViewController Overrides
 
-- (instancetype)initWithNibName:(NSString*)nibNameOrNil
-                         bundle:(NSBundle*)nibBundleOrNil {
-  self = [super initWithNibName:nibNameOrNil bundle:nibBundleOrNil];
-  if (self)
-    [self commonInitialization];
-
-  return self;
-}
-
-- (instancetype)initWithCoder:(NSCoder*)aDecoder {
-  self = [super initWithCoder:aDecoder];
-  if (self)
-    [self commonInitialization];
-
-  return self;
-}
-
-- (void)commonInitialization {
-  _propertyReleaser_ToolsMenuViewController.Init(
-      self, [ToolsMenuViewController class]);
-  _readingListMenuNotifier.reset();
-}
-
 - (void)loadView {
   [super loadView];
 
@@ -364,8 +345,8 @@ NS_INLINE void AnimateInViews(NSArray* views,
 
   _touchFeedbackView = [[MDCInkView alloc] initWithFrame:CGRectZero];
 
-  base::scoped_nsobject<UICollectionViewFlowLayout> menuItemsLayout(
-      [[UICollectionViewFlowLayout alloc] init]);
+  UICollectionViewFlowLayout* menuItemsLayout =
+      [[UICollectionViewFlowLayout alloc] init];
 
   _menuView = [[ToolsMenuCollectionView alloc] initWithFrame:[rootView bounds]
                                         collectionViewLayout:menuItemsLayout];
@@ -464,10 +445,10 @@ NS_INLINE void AnimateInViews(NSArray* views,
   [CATransaction commit];
 
   [[self readingListCell]
-      updateBadgeCount:_readingListMenuNotifier.get().readingListUnreadCount
+      updateBadgeCount:_readingListMenuNotifier.readingListUnreadCount
               animated:YES];
   [[self readingListCell]
-      updateSeenState:_readingListMenuNotifier.get().readingListUnseenItemsExist
+      updateSeenState:_readingListMenuNotifier.readingListUnseenItemsExist
              animated:YES];
 }
 
@@ -481,31 +462,41 @@ NS_INLINE void AnimateInViews(NSArray* views,
   [toolsButton removeTarget:self
                      action:@selector(buttonPressed:)
            forControlEvents:UIControlEventTouchUpInside];
-  for (UIButton* button in [[self toolsCell] allButtons]) {
+  ToolsMenuViewToolsCell* toolsCell = [self toolsCell];
+  for (UIButton* button in [toolsCell allButtons]) {
     [button removeTarget:self
                   action:@selector(buttonPressed:)
         forControlEvents:UIControlEventTouchUpInside];
   }
+  [toolsCell.stopButton removeTarget:self.dispatcher
+                              action:@selector(stopLoading)
+                    forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.reloadButton removeTarget:self.dispatcher
+                                action:@selector(reload)
+                      forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.shareButton removeTarget:self.dispatcher
+                               action:@selector(sharePage)
+                     forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.starButton removeTarget:self.dispatcher
+                              action:@selector(bookmarkPage)
+                    forControlEvents:UIControlEventTouchUpInside];
+  [toolsCell.starredButton removeTarget:self.dispatcher
+                                 action:@selector(bookmarkPage)
+                       forControlEvents:UIControlEventTouchUpInside];
 }
 
 #pragma mark - Button event handling
 
-- (IBAction)buttonPressed:(id)sender {
+- (void)buttonPressed:(id)sender {
   int commandId = [sender tag];
   DCHECK(commandId);
-  // The bookmark command workaround is only needed for metrics; remap it
-  // to the real command for the dispatch. This is very hacky, but it will go
-  // away soon.  See crbug/228521
-  DCHECK([sender respondsToSelector:@selector(setTag:)]);
-  if (commandId == IDC_TEMP_EDIT_BOOKMARK)
-    [sender setTag:IDC_BOOKMARK_PAGE];
-  // Do nothing when tapping the tools menu a second time.
-  if (commandId != IDC_SHOW_TOOLS_MENU) {
+  // Do not use -chromeExecuteCommand: for tags < 0 -- that is, items that have
+  // been refactored to use the dispatcher.
+  if (commandId > 0) {
     [self chromeExecuteCommand:sender];
   }
-  if (commandId == IDC_TEMP_EDIT_BOOKMARK)
-    [sender setTag:IDC_TEMP_EDIT_BOOKMARK];
 
+  // Do any metrics logging for the command, and then close the menu.
   [_delegate commandWasSelected:commandId];
 }
 
@@ -543,7 +534,7 @@ NS_INLINE void AnimateInViews(NSArray* views,
     didUnhighlightItemAtIndexPath:(NSIndexPath*)path {
   CGPoint touchPoint = [view touchEndPoint];
   touchPoint = [view convertPoint:touchPoint toView:_touchFeedbackView];
-  base::WeakNSObject<MDCInkView> inkView(_touchFeedbackView);
+  __weak MDCInkView* inkView = _touchFeedbackView;
   _waitForInk = YES;
   [_touchFeedbackView startTouchEndedAnimationAtPoint:touchPoint
                                            completion:^{
@@ -576,7 +567,11 @@ NS_INLINE void AnimateInViews(NSArray* views,
         ToolsMenuViewItem* menuItem = [_menuItems objectAtIndex:item];
         DCHECK([menuItem tag]);
         [_delegate commandWasSelected:[menuItem tag]];
-        [self chromeExecuteCommand:menuItem];
+        if ([menuItem tag] > 0) {
+          [self chromeExecuteCommand:menuItem];
+        } else {
+          [menuItem executeCommandWithDispatcher:self.dispatcher];
+        }
       });
 }
 
@@ -598,11 +593,31 @@ NS_INLINE void AnimateInViews(NSArray* views,
     ToolsMenuViewToolsCell* cell =
         [view dequeueReusableCellWithReuseIdentifier:kToolsItemCellID
                                         forIndexPath:path];
+    // Add specific target/action dispatch for buttons refactored away from
+    // ChromeExecuteCommand. These need to be added *before* -buttonPressed:,
+    // because -buttonPressed: closes the popup menu, which will usually
+    // destroy the buttons before any other actions can be called.
+    [cell.stopButton addTarget:self.dispatcher
+                        action:@selector(stopLoading)
+              forControlEvents:UIControlEventTouchUpInside];
+    [cell.reloadButton addTarget:self.dispatcher
+                          action:@selector(reload)
+                forControlEvents:UIControlEventTouchUpInside];
+    [cell.shareButton addTarget:self.dispatcher
+                         action:@selector(sharePage)
+               forControlEvents:UIControlEventTouchUpInside];
+    [cell.starButton addTarget:self.dispatcher
+                        action:@selector(bookmarkPage)
+              forControlEvents:UIControlEventTouchUpInside];
+    [cell.starredButton addTarget:self.dispatcher
+                           action:@selector(bookmarkPage)
+                 forControlEvents:UIControlEventTouchUpInside];
     for (UIButton* button in [cell allButtons]) {
       [button addTarget:self
                     action:@selector(buttonPressed:)
           forControlEvents:UIControlEventTouchUpInside];
     }
+
     return cell;
   }
 

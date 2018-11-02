@@ -36,7 +36,6 @@
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_filter.h"
 #include "base/trace_event/trace_event_filter_test_utils.h"
-#include "base/trace_event/trace_event_synthetic_delay.h"
 #include "base/values.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -193,8 +192,8 @@ void TraceEventTestFixture::OnTraceDataCollected(
   trace_buffer_.AddFragment(events_str->data());
   trace_buffer_.Finish();
 
-  std::unique_ptr<Value> root = base::JSONReader::Read(
-      json_output_.json_output, JSON_PARSE_RFC | JSON_DETACHABLE_CHILDREN);
+  std::unique_ptr<Value> root =
+      base::JSONReader::Read(json_output_.json_output, JSON_PARSE_RFC);
 
   if (!root.get()) {
     LOG(ERROR) << json_output_.json_output;
@@ -2809,7 +2808,6 @@ TEST_F(TraceEventTestFixture, ThreadOnceBlocking) {
   thread.task_runner()->PostTask(
       FROM_HERE, BindOnce(&TraceWithAllMacroVariants, &task_complete_event));
   task_complete_event.Wait();
-  task_complete_event.Reset();
 
   WaitableEvent task_start_event(WaitableEvent::ResetPolicy::AUTOMATIC,
                                  WaitableEvent::InitialState::NOT_SIGNALED);
@@ -2829,8 +2827,6 @@ TEST_F(TraceEventTestFixture, ThreadOnceBlocking) {
 
   // The following sequence ensures that the FlushCurrentThread task has been
   // executed in the thread before continuing.
-  task_start_event.Reset();
-  task_stop_event.Reset();
   thread.task_runner()->PostTask(
       FROM_HERE,
       BindOnce(&BlockUntilStopped, &task_start_event, &task_stop_event));
@@ -2844,7 +2840,6 @@ TEST_F(TraceEventTestFixture, ThreadOnceBlocking) {
   thread.task_runner()->PostTask(
       FROM_HERE, BindOnce(&TraceWithAllMacroVariants, &task_complete_event));
   task_complete_event.Wait();
-  task_complete_event.Reset();
   EndTraceAndFlushInThreadWithMessageLoop();
   ValidateAllTraceMacrosCreatedData(trace_parsed_);
 }
@@ -2941,49 +2936,6 @@ TEST_F(TraceEventTestFixture, TimeOffset) {
     EXPECT_LE(timestamp, end_time);
     last_timestamp = timestamp;
   }
-}
-
-TEST_F(TraceEventTestFixture, ConfigureSyntheticDelays) {
-  BeginSpecificTrace("DELAY(test.Delay;0.05)");
-
-  base::TimeTicks start = base::TimeTicks::Now();
-  {
-    TRACE_EVENT_SYNTHETIC_DELAY("test.Delay");
-  }
-  base::TimeDelta duration = base::TimeTicks::Now() - start;
-  EXPECT_GE(duration.InMilliseconds(), 50);
-
-  EndTraceAndFlush();
-}
-
-TEST_F(TraceEventTestFixture, BadSyntheticDelayConfigurations) {
-  const char* const filters[] = {
-    "",
-    "DELAY(",
-    "DELAY(;",
-    "DELAY(;)",
-    "DELAY(test.Delay)",
-    "DELAY(test.Delay;)"
-  };
-  for (size_t i = 0; i < arraysize(filters); i++) {
-    BeginSpecificTrace(filters[i]);
-    EndTraceAndFlush();
-    TraceConfig trace_config = TraceLog::GetInstance()->GetCurrentTraceConfig();
-    EXPECT_EQ(0u, trace_config.GetSyntheticDelayValues().size());
-  }
-}
-
-TEST_F(TraceEventTestFixture, SyntheticDelayConfigurationMerging) {
-  TraceConfig config1("DELAY(test.Delay1;16)", "");
-  TraceConfig config2("DELAY(test.Delay2;32)", "");
-  config1.Merge(config2);
-  EXPECT_EQ(2u, config1.GetSyntheticDelayValues().size());
-}
-
-TEST_F(TraceEventTestFixture, SyntheticDelayConfigurationToString) {
-  const char filter[] = "DELAY(test.Delay;16;oneshot)";
-  TraceConfig config(filter, "");
-  EXPECT_EQ(filter, config.ToCategoryFilterString());
 }
 
 TEST_F(TraceEventTestFixture, TraceFilteringMode) {

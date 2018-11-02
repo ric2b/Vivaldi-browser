@@ -41,7 +41,7 @@ void SerializeReports(const std::vector<const ReportingReport*>& reports,
     report_value->SetInteger("age", (now - report->queued).InMilliseconds());
     report_value->SetString("type", report->type);
     report_value->SetString("url", report->url.spec());
-    report_value->Set("report", report->body->DeepCopy());
+    report_value->Set("report", base::MakeUnique<base::Value>(*report->body));
 
     reports_value.Append(std::move(report_value));
   }
@@ -170,7 +170,8 @@ class ReportingDeliveryAgentImpl : public ReportingDeliveryAgent,
   void OnUploadComplete(const std::unique_ptr<Delivery>& delivery,
                         ReportingUploader::Outcome outcome) {
     if (outcome == ReportingUploader::Outcome::SUCCESS) {
-      cache()->RemoveReports(delivery->reports);
+      cache()->RemoveReports(delivery->reports,
+                             ReportingReport::Outcome::DELIVERED);
       endpoint_manager()->InformOfEndpointRequest(delivery->endpoint, true);
     } else {
       cache()->IncrementReportsAttempts(delivery->reports);

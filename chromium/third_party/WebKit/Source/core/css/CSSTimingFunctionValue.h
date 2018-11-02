@@ -126,7 +126,7 @@ class CSSFramesTimingFunctionValue : public CSSValue {
  private:
   CSSFramesTimingFunctionValue(int frames)
       : CSSValue(kFramesTimingFunctionClass), frames_(frames) {
-    DCHECK(RuntimeEnabledFeatures::framesTimingFunctionEnabled());
+    DCHECK(RuntimeEnabledFeatures::FramesTimingFunctionEnabled());
   }
 
   int frames_;

@@ -12,7 +12,7 @@
 <dom-module id="site-details-permission">
   <template>
     <style include="settings-shared md-select"></style>
-    <div id="details" hidden>
+    <div id="details">
       <div class="list-item underbar">
         <div>
           <iron-icon icon="[[icon]]">
@@ -23,15 +23,18 @@
           <select id="permission" class="md-select"
               aria-labelledby="permissionHeader"
               on-change="onPermissionSelectionChange_">
-            <option id="allow" value$="[[PermissionValues.ALLOW]]">
+            <option id="default" value$="[[ContentSetting.DEFAULT]]">
+              [[defaultSettingString_(
+                  defaultSetting_,
+                  '$i18nPolymer{siteSettingsActionAskDefault}',
+                  '$i18nPolymer{siteSettingsActionAllowDefault}',
+                  '$i18nPolymer{siteSettingsActionBlockDefault}')]]
+            </option>
+            <option id="allow" value$="[[ContentSetting.ALLOW]]">
               $i18n{siteSettingsActionAllow}
             </option>
-            <option id="block" value$="[[PermissionValues.BLOCK]]">
+            <option id="block" value$="[[ContentSetting.BLOCK]]">
               $i18n{siteSettingsActionBlock}
-            </option>
-            <option id="sessionOnly" value$="[[PermissionValues.SESSION_ONLY]]"
-                hidden$="[[!isCookiesCategory_(category)]]">
-              $i18n{siteSettingsActionSessionOnly}
             </option>
           </select>
           <span class="md-select-underline"></span>

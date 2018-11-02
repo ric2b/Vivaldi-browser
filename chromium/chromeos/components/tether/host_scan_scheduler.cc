@@ -24,28 +24,24 @@ HostScanScheduler::HostScanScheduler(NetworkStateHandler* network_state_handler,
 }
 
 HostScanScheduler::~HostScanScheduler() {
-  // Note: We not call NetworkStateHandler::SetTetherScanState(false) here
-  // because at the point in time when HostScanScheduler is being destroyed, the
-  // Tether DeviceState will already have been destroyed. Calling
-  // SetTetherScanState() is unnecessary and would cause a crash.
-
+  network_state_handler_->SetTetherScanState(false);
   network_state_handler_->RemoveObserver(this, FROM_HERE);
   host_scanner_->RemoveObserver(this);
 }
 
-void HostScanScheduler::UserLoggedIn() {
-  if (!IsNetworkConnectingOrConnected(network_state_handler_->DefaultNetwork()))
-    EnsureScan();
+void HostScanScheduler::ScheduleScan() {
+  EnsureScan();
 }
 
 void HostScanScheduler::DefaultNetworkChanged(const NetworkState* network) {
-  if (!IsNetworkConnectingOrConnected(network))
+  if (!IsNetworkConnectingOrConnected(network) &&
+      !IsTetherNetworkConnectingOrConnected()) {
     EnsureScan();
+  }
 }
 
 void HostScanScheduler::ScanRequested() {
-  if (!host_scanner_->HasRecentlyScanned())
-    EnsureScan();
+  EnsureScan();
 }
 
 void HostScanScheduler::ScanFinished() {
@@ -64,6 +60,13 @@ bool HostScanScheduler::IsNetworkConnectingOrConnected(
     const NetworkState* network) {
   return network &&
          (network->IsConnectingState() || network->IsConnectedState());
+}
+
+bool HostScanScheduler::IsTetherNetworkConnectingOrConnected() {
+  return network_state_handler_->ConnectingNetworkByType(
+             NetworkTypePattern::Tether()) ||
+         network_state_handler_->ConnectedNetworkByType(
+             NetworkTypePattern::Tether());
 }
 
 }  // namespace tether

@@ -74,7 +74,7 @@ bool FindTiledContentQuad(const cc::CompositorFrame& frame,
 
 }  // namespace
 
-class NonClientFrameControllerTest : public test::AshTestBase {
+class NonClientFrameControllerTest : public AshTestBase {
  public:
   NonClientFrameControllerTest() = default;
   ~NonClientFrameControllerTest() override = default;
@@ -83,7 +83,7 @@ class NonClientFrameControllerTest : public test::AshTestBase {
     return context_factory_.GetLastCompositorFrame();
   }
 
-  // test::AshTestBase:
+  // AshTestBase:
   void SetUp() override {
     aura::Env* env = aura::Env::GetInstance();
     DCHECK(env);
@@ -127,6 +127,11 @@ TEST_F(NonClientFrameControllerTest, ContentRegionNotDrawnForClient) {
 
   const gfx::Rect kTileBounds(gfx::Point(tile_x, tile_y), tile_size);
   ui::Compositor* compositor = widget->GetCompositor();
+
+  // Give the ui::Compositor a LocalSurfaceId so that it does not defer commit
+  // when a draw is scheduled.
+  viz::LocalSurfaceId local_surface_id(1, base::UnguessableToken::Create());
+  compositor->SetLocalSurfaceId(local_surface_id);
 
   // Without the window visible, there should be a tile for the wallpaper at
   // (tile_x, tile_y) of size |tile_size|.

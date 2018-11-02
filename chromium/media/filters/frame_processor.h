@@ -15,6 +15,7 @@
 #include "media/base/media_log.h"
 #include "media/base/stream_parser.h"
 #include "media/filters/chunk_demuxer.h"
+#include "media/filters/source_buffer_parse_warnings.h"
 
 namespace media {
 
@@ -29,6 +30,11 @@ class MEDIA_EXPORT FrameProcessor {
   FrameProcessor(const UpdateDurationCB& update_duration_cb,
                  MediaLog* media_log);
   ~FrameProcessor();
+
+  // This must be called exactly once, before doing any track buffer creation or
+  // frame processing.
+  void SetParseWarningCallback(
+      const SourceBufferParseWarningCB& parse_warning_cb);
 
   // Get/set the current append mode, which if true means "sequence" and if
   // false means "segments".
@@ -145,17 +151,14 @@ class MEDIA_EXPORT FrameProcessor {
   // set to false ("segments").
   bool sequence_mode_ = false;
 
-  // Tracks whether or not the next processed frame is a continuation of a coded
-  // frame group (see https://w3c.github.io/media-source/#coded-frame-group).
-  // Resets to kNoDecodeTimestamp() upon detection of 'segments' mode
-  // discontinuity, parser reset during 'segments' mode, or switching from
-  // 'sequence' to 'segments' mode.
-  // Once a processed coded frame is emitted for the current coded frame group,
-  // tracks the decode timestamp of the last frame emitted.
-  // Explicit setting of timestampOffset will trigger subsequent notification of
-  // a new coded frame start to the tracks' streams, even in 'sequence' mode, if
-  // the resulting frame has a DTS less than this.
-  DecodeTimestamp coded_frame_group_last_dts_ = kNoDecodeTimestamp();
+  // Tracks whether or not we need to notify all track buffers of a new coded
+  // frame group (see https://w3c.github.io/media-source/#coded-frame-group)
+  // upon the next successfully processed frame.  Set true initially and upon
+  // detection of 'segments' mode discontinuity, parser reset during 'segments'
+  // mode, or switching from 'sequence' to 'segments' mode.  Individual track
+  // buffers can also be notified of an updated coded frame group start in edge
+  // cases. See further comments in ProcessFrame().
+  bool pending_notify_all_group_start_ = true;
 
   // Tracks the MSE coded frame processing variable of same name.
   // Initially kNoTimestamp, meaning "unset".
@@ -172,9 +175,14 @@ class MEDIA_EXPORT FrameProcessor {
   // MediaLog for reporting messages and properties to debug content and engine.
   MediaLog* media_log_;
 
+  // Callback for reporting problematic conditions that are not necessarily
+  // errors.
+  SourceBufferParseWarningCB parse_warning_cb_;
+
   // Counters that limit spam to |media_log_| for frame processor warnings.
   int num_dropped_preroll_warnings_ = 0;
   int num_dts_beyond_pts_warnings_ = 0;
+  int num_muxed_sequence_mode_warnings_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(FrameProcessor);
 };

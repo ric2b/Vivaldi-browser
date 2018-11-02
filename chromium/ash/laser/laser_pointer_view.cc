@@ -4,42 +4,12 @@
 
 #include "ash/laser/laser_pointer_view.h"
 
-#include <GLES2/gl2.h>
-#include <GLES2/gl2ext.h>
-#include <GLES2/gl2extchromium.h>
-
-#include <algorithm>
-#include <array>
-#include <cmath>
-#include <memory>
-
-#include "ash/laser/laser_pointer_points.h"
 #include "ash/laser/laser_segment_utils.h"
-#include "ash/public/cpp/shell_window_ids.h"
-#include "ash/shell.h"
-#include "base/containers/adapters.h"
-#include "base/memory/ptr_util.h"
-#include "base/threading/thread_task_runner_handle.h"
-#include "base/trace_event/trace_event.h"
-#include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_sink.h"
-#include "cc/output/compositor_frame_sink_client.h"
-#include "cc/output/context_provider.h"
-#include "cc/quads/texture_draw_quad.h"
-#include "cc/resources/texture_mailbox.h"
-#include "cc/resources/transferable_resource.h"
-#include "gpu/command_buffer/client/context_support.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
-#include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkTypes.h"
-#include "ui/aura/env.h"
 #include "ui/aura/window.h"
-#include "ui/base/layout.h"
 #include "ui/events/base_event_utils.h"
-#include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
-#include "ui/gfx/gpu_memory_buffer.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -184,259 +154,86 @@ class LaserSegment {
   DISALLOW_COPY_AND_ASSIGN(LaserSegment);
 };
 
-class LaserCompositorFrameSinkHolder : public cc::CompositorFrameSinkClient {
- public:
-  LaserCompositorFrameSinkHolder(
-      LaserPointerView* view,
-      std::unique_ptr<cc::CompositorFrameSink> frame_sink)
-      : view_(view), frame_sink_(std::move(frame_sink)) {
-    frame_sink_->BindToClient(this);
-  }
-  ~LaserCompositorFrameSinkHolder() override {
-    frame_sink_->DetachFromClient();
-  }
-
-  cc::CompositorFrameSink* frame_sink() { return frame_sink_.get(); }
-
-  // Called before laser pointer view is destroyed.
-  void OnLaserPointerViewDestroying() { view_ = nullptr; }
-
-  // Overridden from cc::CompositorFrameSinkClient:
-  void SetBeginFrameSource(cc::BeginFrameSource* source) override {}
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override {
-    if (view_)
-      view_->ReclaimResources(resources);
-  }
-  void SetTreeActivationCallback(const base::Closure& callback) override {}
-  void DidReceiveCompositorFrameAck() override {
-    if (view_)
-      view_->DidReceiveCompositorFrameAck();
-  }
-  void DidLoseCompositorFrameSink() override {}
-  void OnDraw(const gfx::Transform& transform,
-              const gfx::Rect& viewport,
-              bool resourceless_software_draw) override {}
-  void SetMemoryPolicy(const cc::ManagedMemoryPolicy& policy) override {}
-  void SetExternalTilePriorityConstraints(
-      const gfx::Rect& viewport_rect,
-      const gfx::Transform& transform) override {}
-
- private:
-  LaserPointerView* view_;
-  std::unique_ptr<cc::CompositorFrameSink> frame_sink_;
-
-  DISALLOW_COPY_AND_ASSIGN(LaserCompositorFrameSinkHolder);
-};
-
-// This struct contains the resources associated with a laser pointer frame.
-struct LaserResource {
-  LaserResource() {}
-  ~LaserResource() {
-    if (context_provider) {
-      gpu::gles2::GLES2Interface* gles2 = context_provider->ContextGL();
-      if (texture)
-        gles2->DeleteTextures(1, &texture);
-      if (image)
-        gles2->DestroyImageCHROMIUM(image);
-    }
-  }
-  scoped_refptr<cc::ContextProvider> context_provider;
-  uint32_t texture = 0;
-  uint32_t image = 0;
-  gpu::Mailbox mailbox;
-};
-
 // LaserPointerView
 LaserPointerView::LaserPointerView(base::TimeDelta life_duration,
                                    base::TimeDelta presentation_delay,
+                                   base::TimeDelta stationary_point_delay,
                                    aura::Window* root_window)
-    : laser_points_(life_duration),
+    : FastInkView(root_window),
+      laser_points_(life_duration),
       predicted_laser_points_(life_duration),
       presentation_delay_(presentation_delay),
-      weak_ptr_factory_(this) {
-  widget_.reset(new views::Widget);
-  views::Widget::InitParams params;
-  params.type = views::Widget::InitParams::TYPE_WINDOW_FRAMELESS;
-  params.name = "LaserOverlay";
-  params.accept_events = false;
-  params.activatable = views::Widget::InitParams::ACTIVATABLE_NO;
-  params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
-  params.parent =
-      Shell::GetContainer(root_window, kShellWindowId_OverlayContainer);
-  params.layer_type = ui::LAYER_SOLID_COLOR;
+      stationary_timer_(new base::Timer(
+          FROM_HERE,
+          stationary_point_delay,
+          base::Bind(&LaserPointerView::UpdateTime, base::Unretained(this)),
+          true /* is_repeating */)) {}
 
-  widget_->Init(params);
-  widget_->Show();
-  widget_->SetContentsView(this);
-  widget_->SetBounds(root_window->GetBoundsInScreen());
-  set_owned_by_client();
-
-  scale_factor_ = ui::GetScaleFactorForNativeView(widget_->GetNativeView());
-
-  frame_sink_holder_ = base::MakeUnique<LaserCompositorFrameSinkHolder>(
-      this, widget_->GetNativeView()->CreateCompositorFrameSink());
-}
-
-LaserPointerView::~LaserPointerView() {
-  frame_sink_holder_->OnLaserPointerViewDestroying();
-}
-
-void LaserPointerView::Stop() {
-  buffer_damage_rect_.Union(GetBoundingBox());
-  laser_points_.Clear();
-  predicted_laser_points_.Clear();
-  OnPointsUpdated();
-}
+LaserPointerView::~LaserPointerView() {}
 
 void LaserPointerView::AddNewPoint(const gfx::PointF& new_point,
                                    const base::TimeTicks& new_time) {
   TRACE_EVENT1("ui", "LaserPointerView::AddNewPoint", "new_point",
                new_point.ToString());
-  TRACE_COUNTER1(
-      "ui", "LaserPointerPredictionError",
-      predicted_laser_points_.GetNumberOfPoints()
-          ? std::round((new_point -
-                        predicted_laser_points_.laser_points().front().location)
-                           .Length())
-          : 0);
+  TRACE_COUNTER1("ui", "LaserPointerPredictionError",
+                 predicted_laser_points_.GetNumberOfPoints()
+                     ? std::round((new_point -
+                                   predicted_laser_points_.GetOldest().location)
+                                      .Length())
+                     : 0);
+  AddPoint(new_point, new_time);
+  stationary_timer_->Reset();
+}
 
-  buffer_damage_rect_.Union(GetBoundingBox());
-  laser_points_.AddPoint(new_point, new_time);
+void LaserPointerView::AddPoint(const gfx::PointF& point,
+                                const base::TimeTicks& time) {
+  UpdateDamageRect(GetBoundingBox());
+  laser_points_.AddPoint(point, time);
 
   // Current time is needed to determine presentation time and the number of
   // predicted points to add.
   base::TimeTicks current_time = ui::EventTimeForNow();
-
-  // Create a new set of predicted points based on the last four points added.
-  // We add enough predicted points to fill the time between the new point and
-  // the expected presentation time. Note that estimated presentation time is
-  // based on current time and inefficient rendering of points can result in an
-  // actual presentation time that is later.
-  predicted_laser_points_.Clear();
-
-  // Normalize all coordinates to screen size.
-  gfx::Size screen_size = widget_->GetNativeView()->GetBoundsInScreen().size();
-  gfx::Vector2dF scale(1.0f / screen_size.width(), 1.0f / screen_size.height());
-
-  // TODO(reveman): Determine interval based on history when event time stamps
-  // are accurate. b/36137953
-  const float kPredictionIntervalMs = 5.0f;
-  const float kMaxPointIntervalMs = 10.0f;
-  base::TimeDelta prediction_interval =
-      base::TimeDelta::FromMilliseconds(kPredictionIntervalMs);
-  base::TimeDelta max_point_interval =
-      base::TimeDelta::FromMilliseconds(kMaxPointIntervalMs);
-  base::TimeTicks last_point_time = new_time;
-  gfx::PointF last_point_location =
-      gfx::ScalePoint(new_point, scale.x(), scale.y());
-
-  // Use the last four points for prediction.
-  using PositionArray = std::array<gfx::PointF, 4>;
-  PositionArray position;
-  PositionArray::iterator it = position.begin();
-  for (const auto& point : base::Reversed(laser_points_.laser_points())) {
-    // Stop adding positions if interval between points is too large to provide
-    // an accurate history for prediction.
-    if ((last_point_time - point.time) > max_point_interval)
-      break;
-
-    last_point_time = point.time;
-    last_point_location = gfx::ScalePoint(point.location, scale.x(), scale.y());
-    *it++ = last_point_location;
-
-    // Stop when no more positions are needed.
-    if (it == position.end())
-      break;
-  }
-  // Pad with last point if needed.
-  std::fill(it, position.end(), last_point_location);
-
-  // Note: Currently there's no need to divide by the time delta between
-  // points as we assume a constant delta between points that matches the
-  // prediction point interval.
-  gfx::Vector2dF velocity[3];
-  for (size_t i = 0; i < arraysize(velocity); ++i)
-    velocity[i] = position[i] - position[i + 1];
-
-  gfx::Vector2dF acceleration[2];
-  for (size_t i = 0; i < arraysize(acceleration); ++i)
-    acceleration[i] = velocity[i] - velocity[i + 1];
-
-  gfx::Vector2dF jerk = acceleration[0] - acceleration[1];
-
-  // Adjust max prediction time based on speed as prediction data is not great
-  // at lower speeds.
-  const float kMaxPredictionScaleSpeed = 1e-5;
-  double speed = velocity[0].LengthSquared();
-  base::TimeTicks max_prediction_time =
-      current_time +
-      std::min(presentation_delay_ * (speed / kMaxPredictionScaleSpeed),
-               presentation_delay_);
-
-  // Add predicted points until we reach the max prediction time.
-  gfx::PointF location = position[0];
-  for (base::TimeTicks time = new_time + prediction_interval;
-       time < max_prediction_time; time += prediction_interval) {
-    // Note: Currently there's no need to multiply by the prediction interval
-    // as the velocity is calculated based on a time delta between points that
-    // is the same as the prediction interval.
-    velocity[0] += acceleration[0];
-    acceleration[0] += jerk;
-    location += velocity[0];
-
-    predicted_laser_points_.AddPoint(
-        gfx::ScalePoint(location, screen_size.width(), screen_size.height()),
-        time);
-
-    // Always stop at three predicted points as a four point history doesn't
-    // provide accurate prediction of more points.
-    if (predicted_laser_points_.GetNumberOfPoints() == 3)
-      break;
-  }
+  predicted_laser_points_.Predict(
+      laser_points_, current_time, presentation_delay_,
+      GetWidget()->GetNativeView()->GetBoundsInScreen().size());
 
   // Move forward to next presentation time.
   base::TimeTicks next_presentation_time = current_time + presentation_delay_;
   laser_points_.MoveForwardToTime(next_presentation_time);
   predicted_laser_points_.MoveForwardToTime(next_presentation_time);
 
-  buffer_damage_rect_.Union(GetBoundingBox());
-  OnPointsUpdated();
+  UpdateDamageRect(GetBoundingBox());
+  RequestRedraw();
+}
+
+void LaserPointerView::FadeOut(const base::Closure& done) {
+  fadeout_done_ = done;
 }
 
 void LaserPointerView::UpdateTime() {
-  buffer_damage_rect_.Union(GetBoundingBox());
+  if (fadeout_done_.is_null()) {
+    // Pointer still active but stationary, repeat the most recent position.
+    DCHECK(!laser_points_.IsEmpty());
+    AddPoint(laser_points_.GetNewest().location, ui::EventTimeForNow());
+    return;
+  }
+
+  if (laser_points_.IsEmpty() && predicted_laser_points_.IsEmpty()) {
+    // No points left to show, complete the fadeout.
+    fadeout_done_.Run();  // this will delete this LaserPointerView instance.
+    return;
+  }
+
+  // Continue fading out the existing points
+  UpdateDamageRect(GetBoundingBox());
   // Do not add the point but advance the time if the view is in process of
   // fading away.
   base::TimeTicks next_presentation_time =
       ui::EventTimeForNow() + presentation_delay_;
   laser_points_.MoveForwardToTime(next_presentation_time);
   predicted_laser_points_.MoveForwardToTime(next_presentation_time);
-  buffer_damage_rect_.Union(GetBoundingBox());
-  OnPointsUpdated();
-}
-
-void LaserPointerView::DidReceiveCompositorFrameAck() {
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&LaserPointerView::OnDidDrawSurface,
-                            weak_ptr_factory_.GetWeakPtr()));
-}
-
-void LaserPointerView::ReclaimResources(
-    const cc::ReturnedResourceArray& resources) {
-  DCHECK_EQ(resources.size(), 1u);
-
-  auto it = resources_.find(resources.front().id);
-  DCHECK(it != resources_.end());
-  std::unique_ptr<LaserResource> resource = std::move(it->second);
-  resources_.erase(it);
-
-  gpu::gles2::GLES2Interface* gles2 = resource->context_provider->ContextGL();
-  if (resources.front().sync_token.HasData())
-    gles2->WaitSyncTokenCHROMIUM(resources.front().sync_token.GetConstData());
-
-  if (!resources.front().lost)
-    returned_resources_.push_back(std::move(resource));
+  UpdateDamageRect(GetBoundingBox());
+  RequestRedraw();
 }
 
 gfx::Rect LaserPointerView::GetBoundingBox() {
@@ -450,289 +247,69 @@ gfx::Rect LaserPointerView::GetBoundingBox() {
   return bounding_box;
 }
 
-void LaserPointerView::OnPointsUpdated() {
-  if (pending_update_buffer_)
-    return;
-
-  pending_update_buffer_ = true;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&LaserPointerView::UpdateBuffer,
-                            weak_ptr_factory_.GetWeakPtr()));
-}
-
-void LaserPointerView::UpdateBuffer() {
-  TRACE_EVENT1("ui", "LaserPointerView::UpdatedBuffer", "damage",
-               buffer_damage_rect_.ToString());
-
-  DCHECK(pending_update_buffer_);
-  pending_update_buffer_ = false;
-
-  gfx::Rect screen_bounds = widget_->GetNativeView()->GetBoundsInScreen();
-  gfx::Rect update_rect = buffer_damage_rect_;
-  buffer_damage_rect_ = gfx::Rect();
-
-  // Create and map a single GPU memory buffer. The laser pointer will be
-  // written into this buffer without any buffering. The result is that we
-  // might be modifying the buffer while it's being displayed. This provides
-  // minimal latency but potential tearing. Note that we have to draw into
-  // a temporary surface and copy it into GPU memory buffer to avoid flicker.
-  if (!gpu_memory_buffer_) {
-    gpu_memory_buffer_ =
-        aura::Env::GetInstance()
-            ->context_factory()
-            ->GetGpuMemoryBufferManager()
-            ->CreateGpuMemoryBuffer(
-                gfx::ScaleToCeiledSize(screen_bounds.size(), scale_factor_),
-                SK_B32_SHIFT ? gfx::BufferFormat::RGBA_8888
-                             : gfx::BufferFormat::BGRA_8888,
-                gfx::BufferUsage::SCANOUT_CPU_READ_WRITE,
-                gpu::kNullSurfaceHandle);
-    if (!gpu_memory_buffer_) {
-      LOG(ERROR) << "Failed to allocate GPU memory buffer";
-      return;
-    }
-
-    // Make sure the first update rectangle covers the whole buffer.
-    update_rect = gfx::Rect(screen_bounds.size());
-  }
-
-  // Constrain update rectangle to buffer size and early out if empty.
-  update_rect.Intersect(gfx::Rect(screen_bounds.size()));
-  if (update_rect.IsEmpty())
-    return;
-
-  // Map buffer for writing.
-  if (!gpu_memory_buffer_->Map()) {
-    LOG(ERROR) << "Failed to map GPU memory buffer";
-    return;
-  }
-
-  // Create a temporary canvas for update rectangle.
-  gfx::Canvas canvas(update_rect.size(), scale_factor_, false);
-
+void LaserPointerView::OnRedraw(gfx::Canvas& canvas) {
   cc::PaintFlags flags;
   flags.setStyle(cc::PaintFlags::kFill_Style);
   flags.setAntiAlias(true);
 
-  // Compute the offset of the current widget.
-  gfx::Vector2d widget_offset(
-      widget_->GetNativeView()->GetBoundsInRootWindow().origin().x(),
-      widget_->GetNativeView()->GetBoundsInRootWindow().origin().y());
-
   int num_points = laser_points_.GetNumberOfPoints() +
                    predicted_laser_points_.GetNumberOfPoints();
-  if (num_points) {
-    LaserPointerPoints::LaserPoint previous_point = laser_points_.GetOldest();
-    previous_point.location -= widget_offset + update_rect.OffsetFromOrigin();
-    LaserPointerPoints::LaserPoint current_point;
-    std::vector<gfx::PointF> previous_segment_points;
-    float previous_radius;
-    int current_opacity;
+  if (!num_points)
+    return;
 
-    for (int i = 0; i < num_points; ++i) {
-      if (i < laser_points_.GetNumberOfPoints()) {
-        current_point = laser_points_.laser_points()[i];
-      } else {
-        current_point =
-            predicted_laser_points_
-                .laser_points()[i - laser_points_.GetNumberOfPoints()];
-      }
-      current_point.location -= widget_offset + update_rect.OffsetFromOrigin();
+  gfx::PointF previous_point;
+  std::vector<gfx::PointF> previous_segment_points;
+  float previous_radius;
 
-      // Set the radius and opacity based on the distance.
-      float current_radius = LinearInterpolate(
-          kPointInitialRadius, kPointFinalRadius, current_point.age);
-      current_opacity = static_cast<int>(LinearInterpolate(
-          kPointInitialOpacity, kPointFinalOpacity, current_point.age));
+  for (int i = 0; i < num_points; ++i) {
+    gfx::PointF current_point;
+    float fadeout_factor;
+    if (i < laser_points_.GetNumberOfPoints()) {
+      current_point = laser_points_.points()[i].location;
+      fadeout_factor = laser_points_.GetFadeoutFactor(i);
+    } else {
+      int index = i - laser_points_.GetNumberOfPoints();
+      current_point = predicted_laser_points_.points()[index].location;
+      fadeout_factor = predicted_laser_points_.GetFadeoutFactor(index);
+    }
 
+    // Set the radius and opacity based on the age of the point.
+    float current_radius = LinearInterpolate(kPointInitialRadius,
+                                             kPointFinalRadius, fadeout_factor);
+    int current_opacity = static_cast<int>(LinearInterpolate(
+        kPointInitialOpacity, kPointFinalOpacity, fadeout_factor));
+
+    if (i < laser_points_.GetNumberOfPoints())
+      flags.setColor(SkColorSetA(kPointColor, current_opacity));
+    else
+      flags.setColor(SkColorSetA(kPredictionPointColor, current_opacity));
+
+    if (i != 0) {
       // If we draw laser_points_ that are within a stroke width of each other,
       // the result will be very jagged, unless we are on the last point, then
       // we draw regardless.
       float distance_threshold = current_radius * 2.0f;
-      if (DistanceBetweenPoints(previous_point.location,
-                                current_point.location) <= distance_threshold &&
+      if (DistanceBetweenPoints(previous_point, current_point) <=
+              distance_threshold &&
           i != num_points - 1) {
         continue;
       }
 
-      LaserSegment current_segment(
-          previous_segment_points, gfx::PointF(previous_point.location),
-          gfx::PointF(current_point.location), previous_radius, current_radius,
-          i == num_points - 1);
-
-      SkPath path = current_segment.path();
-      if (i < laser_points_.GetNumberOfPoints())
-        flags.setColor(SkColorSetA(kPointColor, current_opacity));
-      else
-        flags.setColor(SkColorSetA(kPredictionPointColor, current_opacity));
-      canvas.DrawPath(path, flags);
-
+      LaserSegment current_segment(previous_segment_points,
+                                   gfx::PointF(previous_point),
+                                   gfx::PointF(current_point), previous_radius,
+                                   current_radius, i == num_points - 1);
+      canvas.DrawPath(current_segment.path(), flags);
       previous_segment_points = current_segment.path_points();
-      previous_radius = current_radius;
-      previous_point = current_point;
     }
 
-    // Draw the last point as a circle.
-    flags.setStyle(cc::PaintFlags::kFill_Style);
-    canvas.DrawCircle(current_point.location, kPointInitialRadius, flags);
+    previous_radius = current_radius;
+    previous_point = current_point;
   }
 
-  // Copy result to GPU memory buffer. This is effectiely a memcpy and unlike
-  // drawing to the buffer directly this ensures that the buffer is never in a
-  // state that would result in flicker.
-  {
-    TRACE_EVENT0("ui", "LaserPointerView::OnPointsUpdated::Copy");
-
-    // Convert update rectangle to pixel coordinates.
-    gfx::Rect pixel_rect =
-        gfx::ScaleToEnclosingRect(update_rect, scale_factor_);
-    uint8_t* data = static_cast<uint8_t*>(gpu_memory_buffer_->memory(0));
-    int stride = gpu_memory_buffer_->stride(0);
-    canvas.GetBitmap().readPixels(
-        SkImageInfo::MakeN32Premul(pixel_rect.width(), pixel_rect.height()),
-        data + pixel_rect.y() * stride + pixel_rect.x() * 4, stride, 0, 0);
-  }
-
-  // Unmap to flush writes to buffer.
-  gpu_memory_buffer_->Unmap();
-
-  // Update surface damage rectangle.
-  surface_damage_rect_.Union(update_rect);
-
-  needs_update_surface_ = true;
-
-  // Early out if waiting for last surface update to be drawn.
-  if (pending_draw_surface_)
-    return;
-
-  UpdateSurface();
-}
-
-void LaserPointerView::UpdateSurface() {
-  TRACE_EVENT1("ui", "LaserPointerView::UpdatedSurface", "damage",
-               surface_damage_rect_.ToString());
-
-  DCHECK(needs_update_surface_);
-  needs_update_surface_ = false;
-
-  std::unique_ptr<LaserResource> resource;
-  // Reuse returned resource if available.
-  if (!returned_resources_.empty()) {
-    resource = std::move(returned_resources_.back());
-    returned_resources_.pop_back();
-  }
-
-  // Create new resource if needed.
-  if (!resource)
-    resource = base::MakeUnique<LaserResource>();
-
-  // Acquire context provider for resource if needed.
-  // Note: We make no attempts to recover if the context provider is later
-  // lost. It is expected that this class is short-lived and requiring a
-  // new instance to be created in lost context situations is acceptable and
-  // keeps the code simple.
-  if (!resource->context_provider) {
-    resource->context_provider = aura::Env::GetInstance()
-                                     ->context_factory()
-                                     ->SharedMainThreadContextProvider();
-    if (!resource->context_provider) {
-      LOG(ERROR) << "Failed to acquire a context provider";
-      return;
-    }
-  }
-
-  gpu::gles2::GLES2Interface* gles2 = resource->context_provider->ContextGL();
-
-  if (resource->texture) {
-    gles2->ActiveTexture(GL_TEXTURE0);
-    gles2->BindTexture(GL_TEXTURE_2D, resource->texture);
-  } else {
-    gles2->GenTextures(1, &resource->texture);
-    gles2->ActiveTexture(GL_TEXTURE0);
-    gles2->BindTexture(GL_TEXTURE_2D, resource->texture);
-    gles2->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    gles2->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    gles2->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    gles2->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    gles2->GenMailboxCHROMIUM(resource->mailbox.name);
-    gles2->ProduceTextureCHROMIUM(GL_TEXTURE_2D, resource->mailbox.name);
-  }
-
-  gfx::Size buffer_size = gpu_memory_buffer_->GetSize();
-
-  if (resource->image) {
-    gles2->ReleaseTexImage2DCHROMIUM(GL_TEXTURE_2D, resource->image);
-  } else {
-    resource->image = gles2->CreateImageCHROMIUM(
-        gpu_memory_buffer_->AsClientBuffer(), buffer_size.width(),
-        buffer_size.height(), SK_B32_SHIFT ? GL_RGBA : GL_BGRA_EXT);
-    if (!resource->image) {
-      LOG(ERROR) << "Failed to create image";
-      return;
-    }
-  }
-  gles2->BindTexImage2DCHROMIUM(GL_TEXTURE_2D, resource->image);
-
-  gpu::SyncToken sync_token;
-  uint64_t fence_sync = gles2->InsertFenceSyncCHROMIUM();
-  gles2->OrderingBarrierCHROMIUM();
-  gles2->GenUnverifiedSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
-
-  cc::TransferableResource transferable_resource;
-  transferable_resource.id = next_resource_id_++;
-  transferable_resource.format = cc::RGBA_8888;
-  transferable_resource.filter = GL_LINEAR;
-  transferable_resource.size = buffer_size;
-  transferable_resource.mailbox_holder =
-      gpu::MailboxHolder(resource->mailbox, sync_token, GL_TEXTURE_2D);
-  transferable_resource.is_overlay_candidate = true;
-
-  gfx::Rect quad_rect(widget_->GetNativeView()->GetBoundsInScreen().size());
-
-  const int kRenderPassId = 1;
-  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetNew(kRenderPassId, quad_rect, surface_damage_rect_,
-                      gfx::Transform());
-  surface_damage_rect_ = gfx::Rect();
-
-  cc::SharedQuadState* quad_state =
-      render_pass->CreateAndAppendSharedQuadState();
-  quad_state->quad_layer_rect = quad_rect;
-  quad_state->visible_quad_layer_rect = quad_rect;
-  quad_state->opacity = 1.0f;
-
-  cc::CompositorFrame frame;
-  // TODO(eseckler): LaserPointerView should use BeginFrames and set the ack
-  // accordingly.
-  frame.metadata.begin_frame_ack =
-      cc::BeginFrameAck::CreateManualAckWithDamage();
-  frame.metadata.device_scale_factor =
-      widget_->GetLayer()->device_scale_factor();
-  cc::TextureDrawQuad* texture_quad =
-      render_pass->CreateAndAppendDrawQuad<cc::TextureDrawQuad>();
-  float vertex_opacity[4] = {1.0, 1.0, 1.0, 1.0};
-  gfx::PointF uv_top_left(0.f, 0.f);
-  gfx::PointF uv_bottom_right(1.f, 1.f);
-  texture_quad->SetNew(quad_state, quad_rect, gfx::Rect(), quad_rect,
-                       transferable_resource.id, true, uv_top_left,
-                       uv_bottom_right, SK_ColorTRANSPARENT, vertex_opacity,
-                       false, false, false);
-  texture_quad->set_resource_size_in_pixels(transferable_resource.size);
-  frame.resource_list.push_back(transferable_resource);
-  frame.render_pass_list.push_back(std::move(render_pass));
-
-  frame_sink_holder_->frame_sink()->SubmitCompositorFrame(std::move(frame));
-
-  resources_[transferable_resource.id] = std::move(resource);
-
-  DCHECK(!pending_draw_surface_);
-  pending_draw_surface_ = true;
-}
-
-void LaserPointerView::OnDidDrawSurface() {
-  pending_draw_surface_ = false;
-  if (needs_update_surface_)
-    UpdateSurface();
+  // Draw the last point as a circle.
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  canvas.DrawCircle(previous_point, kPointInitialRadius, flags);
 }
 
 }  // namespace ash

@@ -31,6 +31,7 @@
 #include "content/shell/common/layout_test/layout_test_switches.h"
 #include "content/shell/common/shell_content_client.h"
 #include "content/shell/common/shell_switches.h"
+#include "content/shell/gpu/shell_content_gpu_client.h"
 #include "content/shell/renderer/layout_test/layout_test_content_renderer_client.h"
 #include "content/shell/renderer/shell_content_renderer_client.h"
 #include "content/shell/utility/shell_content_utility_client.h"
@@ -44,7 +45,6 @@
 #include "ui/base/ui_base_paths.h"
 #include "ui/base/ui_base_switches.h"
 #include "ui/display/display_switches.h"
-#include "ui/gfx/switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
 
@@ -166,7 +166,6 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
     }
 #endif
     command_line.AppendSwitch(cc::switches::kEnableGpuBenchmarking);
-    command_line.AppendSwitch(switches::kProcessPerTab);
     command_line.AppendSwitch(switches::kEnableLogging);
     command_line.AppendSwitch(switches::kAllowFileAccessFromFiles);
     // only default to a software GL if the flag isn't already specified.
@@ -213,17 +212,9 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
       command_line.AppendSwitch(switches::kDisableGpuRasterization);
     }
 
-    // If the virtual test suite didn't specify a color space, then use the
-    // default layout test color space (GenericRGB for Mac and sRGB for all
-    // other platforms).
-    if (!command_line.HasSwitch(switches::kForceColorProfile)) {
-#if defined(OS_MACOSX)
-      command_line.AppendSwitchASCII(switches::kForceColorProfile,
-                                     "generic-rgb");
-#else
+    // If the virtual test suite didn't specify a color space, then force sRGB.
+    if (!command_line.HasSwitch(switches::kForceColorProfile))
       command_line.AppendSwitchASCII(switches::kForceColorProfile, "srgb");
-#endif
-    }
 
     // We want stable/baseline results when running layout tests.
     command_line.AppendSwitch(switches::kDisableSkiaRuntimeOpts);
@@ -240,6 +231,13 @@ bool ShellMainDelegate::BasicStartupComplete(int* exit_code) {
       *exit_code = 1;
       return true;
     }
+
+    // Enable additional base::Features. Note that there already may exist a
+    // list of enabled features from the virtual or physical test suite.
+    std::string enabled_features =
+        command_line.GetSwitchValueASCII(switches::kEnableFeatures);
+    enabled_features = "ColorCorrectRendering," + enabled_features;
+    command_line.AppendSwitchASCII(switches::kEnableFeatures, enabled_features);
   }
 
   content_client_.reset(base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -377,6 +375,11 @@ ContentBrowserClient* ShellMainDelegate::CreateContentBrowserClient() {
                             : new ShellContentBrowserClient);
 
   return browser_client_.get();
+}
+
+ContentGpuClient* ShellMainDelegate::CreateContentGpuClient() {
+  gpu_client_.reset(new ShellContentGpuClient);
+  return gpu_client_.get();
 }
 
 ContentRendererClient* ShellMainDelegate::CreateContentRendererClient() {

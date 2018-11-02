@@ -16,6 +16,7 @@
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "components/data_usage/core/data_use.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
@@ -28,12 +29,16 @@ namespace chrome_browser_data_usage {
 
 namespace {
 
-// Attempts to get the associated tab ID for a given render frame. Returns -1 if
-// no associated tab was found.
-int32_t GetTabIdForRenderFrame(int render_process_id, int render_frame_id) {
+// Attempts to get the associated tab info for render frame identified by
+// |render_process_id| and |render_frame_id|. |global_request_id| is also
+// populated in the tab info.
+int32_t GetTabInfoForRequest(int render_process_id,
+                             int render_frame_id,
+                             content::GlobalRequestID global_request_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // TODO(sclittle): For prerendering tabs, investigate if it's possible to find
   // the original tab that initiated the prerender.
+
   return SessionTabHelper::IdForTab(content::WebContents::FromRenderFrameHost(
       content::RenderFrameHost::FromID(render_process_id, render_frame_id)));
 }
@@ -46,9 +51,11 @@ int32_t GetTabIdForRenderFrame(int render_process_id, int render_frame_id) {
 void AnnotateDataUse(
     std::unique_ptr<DataUse> data_use,
     const data_usage::DataUseAnnotator::DataUseConsumerCallback& callback,
-    int32_t tab_id) {
+    int32_t tab_info) {
   DCHECK(data_use);
-  data_use->tab_id = tab_id;
+  data_use->tab_id = tab_info;
+  data_use->main_frame_global_request_id =
+      data_usage::DataUse::kInvalidMainFrameGlobalRequestID;
   callback.Run(std::move(data_use));
 }
 
@@ -63,14 +70,16 @@ void TabIdAnnotator::Annotate(net::URLRequest* request,
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(data_use);
 
-  TabIdProvider* existing_tab_id_provider = reinterpret_cast<TabIdProvider*>(
-      request->GetUserData(TabIdProvider::kUserDataKey));
+  TabIdProvider* existing_tab_id_provider = static_cast<TabIdProvider*>(
+      request->GetUserData(TabIdProvider::kTabIdProviderUserDataKey));
   if (existing_tab_id_provider) {
     existing_tab_id_provider->ProvideTabId(
         base::Bind(&AnnotateDataUse, base::Passed(&data_use), callback));
     return;
   }
 
+  const content::ResourceRequestInfo* request_info =
+      content::ResourceRequestInfo::ForRequest(request);
   int render_process_id = -1, render_frame_id = -1;
   if (!content::ResourceRequestInfo::GetRenderFrameForRequest(
           request, &render_process_id, &render_frame_id)) {
@@ -80,15 +89,24 @@ void TabIdAnnotator::Annotate(net::URLRequest* request,
     return;
   }
 
+  // Populate global request ID only for main frame request.
+  content::GlobalRequestID global_request_id;
+  if (request_info &&
+      request_info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME) {
+    global_request_id = request_info->GetGlobalRequestID();
+  }
+
   scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner =
       BrowserThread::GetTaskRunnerForThread(BrowserThread::UI);
-  std::unique_ptr<TabIdProvider> tab_id_provider(new TabIdProvider(
-      ui_thread_task_runner.get(), FROM_HERE,
-      base::Bind(&GetTabIdForRenderFrame, render_process_id, render_frame_id)));
+  std::unique_ptr<TabIdProvider> tab_id_provider(
+      new TabIdProvider(ui_thread_task_runner.get(), FROM_HERE,
+                        base::Bind(&GetTabInfoForRequest, render_process_id,
+                                   render_frame_id, global_request_id)));
   tab_id_provider->ProvideTabId(
       base::Bind(&AnnotateDataUse, base::Passed(&data_use), callback));
 
-  request->SetUserData(TabIdProvider::kUserDataKey, std::move(tab_id_provider));
+  request->SetUserData(TabIdProvider::kTabIdProviderUserDataKey,
+                       std::move(tab_id_provider));
 }
 
 }  // namespace chrome_browser_data_usage

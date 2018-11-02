@@ -24,9 +24,9 @@
 
 #include "core/dom/Element.h"
 #include "core/events/EventDispatcher.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/layout/LayoutObject.h"
 #include "core/paint/PaintLayer.h"
@@ -45,7 +45,7 @@ LayoutSize ContentsScrollOffset(AbstractView* abstract_view) {
   LocalFrame* frame = ToLocalDOMWindow(abstract_view)->GetFrame();
   if (!frame)
     return LayoutSize();
-  FrameView* frame_view = frame->View();
+  LocalFrameView* frame_view = frame->View();
   if (!frame_view)
     return LayoutSize();
   float scale_factor = frame->PageZoomFactor();
@@ -178,7 +178,8 @@ MouseEvent::MouseEvent(const AtomicString& event_type,
       related_target_(related_target),
       synthetic_event_type_(event.FromTouch() ? kFromTouch
                                               : kRealOrIndistinguishable),
-      region_(region) {
+      region_(region),
+      menu_source_type_(event.menu_source_type) {
   IntPoint root_frame_coordinates =
       FlooredIntPoint(event.PositionInRootFrame());
   InitCoordinatesFromRootFrame(root_frame_coordinates.X(),
@@ -266,7 +267,7 @@ void MouseEvent::InitCoordinatesFromRootFrame(int window_x, int window_y) {
                           ? ToLocalDOMWindow(view())->GetFrame()
                           : nullptr;
   if (frame && HasPosition()) {
-    if (FrameView* frame_view = frame->View()) {
+    if (LocalFrameView* frame_view = frame->View()) {
       adjusted_page_location =
           frame_view->RootFrameToContents(IntPoint(window_x, window_y));
       scroll_offset = frame_view->ScrollOffsetInt();
@@ -454,7 +455,7 @@ DispatchEventResult MouseEventDispatchMediator::DispatchEvent(
 
   bool is_click = mouse_event.type() == EventTypeNames::click;
   bool send_to_disabled_form_controls =
-      RuntimeEnabledFeatures::sendMouseEventsDisabledFormControlsEnabled();
+      RuntimeEnabledFeatures::SendMouseEventsDisabledFormControlsEnabled();
 
   if (send_to_disabled_form_controls && is_click &&
       mouse_event.GetEventPath().DisabledFormControlExistsInPath()) {

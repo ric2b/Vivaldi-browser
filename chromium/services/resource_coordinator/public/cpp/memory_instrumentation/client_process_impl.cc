@@ -7,16 +7,84 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/pattern.h"
+#include "base/strings/string_piece.h"
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_request_args.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "services/resource_coordinator/public/cpp/memory_instrumentation/coordinator.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
+#include "services/resource_coordinator/public/cpp/memory_instrumentation/tracing_observer.h"
 #include "services/resource_coordinator/public/interfaces/memory_instrumentation/memory_instrumentation.mojom.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 namespace memory_instrumentation {
 
-ClientProcessImpl::Config::~Config() {}
+namespace {
+
+void FillOsDumpFromProcessMemoryDump(
+    const base::trace_event::ProcessMemoryDump* pmd,
+    base::trace_event::MemoryDumpCallbackResult::OSMemDump* osDump) {
+  if (pmd->has_process_totals()) {
+    const base::trace_event::ProcessMemoryTotals* totals =
+        pmd->process_totals();
+    osDump->resident_set_kb = totals->resident_set_bytes() / 1024;
+    osDump->platform_private_footprint = totals->GetPlatformPrivateFootprint();
+  }
+}
+
+uint32_t GetDumpsSumKb(const std::string& pattern,
+                       const base::trace_event::ProcessMemoryDump* pmd) {
+  uint64_t sum = 0;
+  for (const auto& kv : pmd->allocator_dumps()) {
+    auto name = base::StringPiece(kv.first);
+    if (base::MatchPattern(name, pattern)) {
+      sum += kv.second->GetSizeInternal();
+    }
+  }
+  return sum / 1024;
+}
+
+void CreateDumpSummary(
+    const base::trace_event::ProcessMemoryDumpsMap& process_dumps,
+    base::trace_event::MemoryDumpCallbackResult* result) {
+  for (const auto& kv : process_dumps) {
+    base::ProcessId pid = kv.first;  // kNullProcessId for the current process.
+    const base::trace_event::ProcessMemoryDump* process_memory_dump =
+        kv.second.get();
+
+    // TODO(hjd): Transitional until we send the full PMD. See crbug.com/704203
+    if (pid == base::kNullProcessId) {
+      result->chrome_dump.malloc_total_kb =
+          GetDumpsSumKb("malloc", process_memory_dump);
+      result->chrome_dump.v8_total_kb =
+          GetDumpsSumKb("v8/*", process_memory_dump);
+
+      result->chrome_dump.command_buffer_total_kb =
+          GetDumpsSumKb("gpu/gl/textures/*", process_memory_dump);
+      result->chrome_dump.command_buffer_total_kb +=
+          GetDumpsSumKb("gpu/gl/buffers/*", process_memory_dump);
+      result->chrome_dump.command_buffer_total_kb +=
+          GetDumpsSumKb("gpu/gl/renderbuffers/*", process_memory_dump);
+
+      // partition_alloc reports sizes for both allocated_objects and
+      // partitions. The memory allocated_objects uses is a subset of
+      // the partitions memory so to avoid double counting we only
+      // count partitions memory.
+      result->chrome_dump.partition_alloc_total_kb =
+          GetDumpsSumKb("partition_alloc/partitions/*", process_memory_dump);
+      result->chrome_dump.blink_gc_total_kb =
+          GetDumpsSumKb("blink_gc", process_memory_dump);
+      FillOsDumpFromProcessMemoryDump(process_memory_dump, &result->os_dump);
+    } else {
+      auto& os_dump = result->extra_processes_dumps[pid];
+      FillOsDumpFromProcessMemoryDump(process_memory_dump, &os_dump);
+    }
+  }
+}
+
+}  // namespace
 
 // static
 void ClientProcessImpl::CreateInstance(const Config& config) {
@@ -29,26 +97,41 @@ void ClientProcessImpl::CreateInstance(const Config& config) {
 }
 
 ClientProcessImpl::ClientProcessImpl(const Config& config)
-    : binding_(this),
-      config_(config),
-      task_runner_(nullptr),
-      pending_memory_dump_guid_(0) {
-  if (config.connector() != nullptr) {
-    config.connector()->BindInterface(config.service_name(),
-                                      mojo::MakeRequest(&coordinator_));
-  } else {
-    task_runner_ = base::ThreadTaskRunnerHandle::Get();
-    config.coordinator()->BindCoordinatorRequest(
-        service_manager::BindSourceInfo(), mojo::MakeRequest(&coordinator_));
-  }
-  coordinator_->RegisterClientProcess(binding_.CreateInterfacePtrAndBind());
+    : binding_(this), process_type_(config.process_type), task_runner_() {
+  // |config.connector| can be null in tests.
+  if (config.connector) {
+    config.connector->BindInterface(config.service_name,
+                                    mojo::MakeRequest(&coordinator_));
+    mojom::ClientProcessPtr process;
+    binding_.Bind(mojo::MakeRequest(&process));
+    coordinator_->RegisterClientProcess(std::move(process),
+                                        config.process_type);
 
-  // Only one process should handle periodic dumping.
-  bool is_coordinator_process = !!config.coordinator();
+    // Initialize the public-facing MemoryInstrumentation helper.
+    MemoryInstrumentation::CreateInstance(config.connector,
+                                          config.service_name);
+  } else {
+    config.coordinator_for_testing->BindCoordinatorRequest(
+        mojo::MakeRequest(&coordinator_), service_manager::BindSourceInfo());
+  }
+
+  task_runner_ = base::ThreadTaskRunnerHandle::Get();
+
+  // TODO(primiano): this is a temporary workaround to tell the
+  // base::MemoryDumpManager that it is special and should coordinate periodic
+  // dumps for tracing. Remove this once the periodic dump scheduler is moved
+  // from base to the service. MDM should not care about being the coordinator.
+  bool is_coordinator_process =
+      config.process_type == mojom::ProcessType::BROWSER;
   base::trace_event::MemoryDumpManager::GetInstance()->Initialize(
-      base::BindRepeating(&ClientProcessImpl::RequestGlobalMemoryDump,
-                          base::Unretained(this)),
+      base::BindRepeating(
+          &ClientProcessImpl::RequestGlobalMemoryDump_NoCallback,
+          base::Unretained(this)),
       is_coordinator_process);
+
+  tracing_observer_ = base::MakeUnique<TracingObserver>(
+      base::trace_event::TraceLog::GetInstance(),
+      base::trace_event::MemoryDumpManager::GetInstance());
 }
 
 ClientProcessImpl::~ClientProcessImpl() {}
@@ -56,93 +139,89 @@ ClientProcessImpl::~ClientProcessImpl() {}
 void ClientProcessImpl::RequestProcessMemoryDump(
     const base::trace_event::MemoryDumpRequestArgs& args,
     const RequestProcessMemoryDumpCallback& callback) {
+  DCHECK(!callback.is_null());
   base::trace_event::MemoryDumpManager::GetInstance()->CreateProcessDump(
       args, base::Bind(&ClientProcessImpl::OnProcessMemoryDumpDone,
-                       base::Unretained(this), callback));
+                       base::Unretained(this), callback, args));
 }
 
 void ClientProcessImpl::OnProcessMemoryDumpDone(
     const RequestProcessMemoryDumpCallback& callback,
-    uint64_t dump_guid,
+    const base::trace_event::MemoryDumpRequestArgs& req_args,
     bool success,
-    const base::Optional<base::trace_event::MemoryDumpCallbackResult>& result) {
-  mojom::ProcessMemoryDumpPtr process_memory_dump(
-      mojom::ProcessMemoryDump::New());
-  process_memory_dump->process_type = config_.process_type();
-  if (result) {
-    process_memory_dump->os_dump = result->os_dump;
-    process_memory_dump->chrome_dump = result->chrome_dump;
-    for (const auto& kv : result->extra_processes_dump) {
+    uint64_t dump_guid,
+    const base::trace_event::ProcessMemoryDumpsMap& process_dumps) {
+  DCHECK(success || process_dumps.empty());
+  for (const auto& kv : process_dumps) {
+    base::ProcessId pid = kv.first;  // kNullProcessId for the current process.
+    base::trace_event::ProcessMemoryDump* process_memory_dump = kv.second.get();
+
+    // SUMMARY_ONLY dumps are just return the summarized result in the
+    // ProcessMemoryDumpCallback. These shouldn't be added to the trace to
+    // avoid confusing trace consumers.
+    if (req_args.dump_type != base::trace_event::MemoryDumpType::SUMMARY_ONLY) {
+      bool added_to_trace = tracing_observer_->AddDumpToTraceIfEnabled(
+          &req_args, pid, process_memory_dump);
+
+      success = success && added_to_trace;
+    }
+  }
+
+  mojom::RawProcessMemoryDumpPtr process_memory_dump(
+      mojom::RawProcessMemoryDump::New());
+
+  // TODO(hjd): Transitional until we send the full PMD. See crbug.com/704203
+  // Don't try to fill the struct in detailed mode since it is hard to avoid
+  // double counting.
+  if (req_args.level_of_detail !=
+      base::trace_event::MemoryDumpLevelOfDetail::DETAILED) {
+    // The results struct to fill.
+    base::trace_event::MemoryDumpCallbackResult result;
+
+    CreateDumpSummary(process_dumps, &result);
+
+    process_memory_dump->os_dump = result.os_dump;
+    process_memory_dump->chrome_dump = result.chrome_dump;
+    for (const auto& kv : result.extra_processes_dumps) {
       const base::ProcessId pid = kv.first;
       const base::trace_event::MemoryDumpCallbackResult::OSMemDump&
           os_mem_dump = kv.second;
-      DCHECK_EQ(0u, process_memory_dump->extra_processes_dump.count(pid));
-      process_memory_dump->extra_processes_dump[pid] = os_mem_dump;
+      DCHECK_EQ(0u, process_memory_dump->extra_processes_dumps.count(pid));
+      process_memory_dump->extra_processes_dumps[pid] = os_mem_dump;
     }
   }
-  callback.Run(dump_guid, success, std::move(process_memory_dump));
+  callback.Run(success, dump_guid, std::move(process_memory_dump));
 }
 
-void ClientProcessImpl::RequestGlobalMemoryDump(
-    const base::trace_event::MemoryDumpRequestArgs& args,
-    const base::trace_event::GlobalMemoryDumpCallback& callback) {
-  // Note: This condition is here to match the old behavior. If the delegate is
-  // in the browser process, we do not drop parallel requests in the delegate
-  // and so they will be queued by the Coordinator service (see
-  // CoordinatorImpl::RequestGlobalMemoryDump). If the delegate is in a child
-  // process, parallel requests will be cancelled.
-  //
-  // TODO(primiano): Remove all this boilerplate. There should be no need of
-  // any lock, proxy, callback adaption or early out. The service is able to
-  // deal with queueing.
-  if (task_runner_) {
-    auto callback_proxy =
-        base::Bind(&ClientProcessImpl::MemoryDumpCallbackProxy,
-                   base::Unretained(this), callback);
+void ClientProcessImpl::RequestGlobalMemoryDump_NoCallback(
+    const base::trace_event::MemoryDumpRequestArgs& args) {
+  if (!task_runner_->RunsTasksInCurrentSequence()) {
     task_runner_->PostTask(
         FROM_HERE,
-        base::Bind(&mojom::Coordinator::RequestGlobalMemoryDump,
-                   base::Unretained(coordinator_.get()), args, callback_proxy));
+        base::Bind(&ClientProcessImpl::RequestGlobalMemoryDump_NoCallback,
+                   base::Unretained(this), args));
     return;
   }
 
-  bool early_out_because_of_another_dump_pending = false;
-  {
-    base::AutoLock lock(pending_memory_dump_guid_lock_);
-    if (pending_memory_dump_guid_)
-      early_out_because_of_another_dump_pending = true;
-    else
-      pending_memory_dump_guid_ = args.dump_guid;
-  }
-  if (early_out_because_of_another_dump_pending) {
-    callback.Run(args.dump_guid, false);
-    return;
-  }
-
-  auto callback_proxy = base::Bind(&ClientProcessImpl::MemoryDumpCallbackProxy,
-                                   base::Unretained(this), callback);
-  coordinator_->RequestGlobalMemoryDump(args, callback_proxy);
+  coordinator_->RequestGlobalMemoryDump(
+      args, mojom::Coordinator::RequestGlobalMemoryDumpCallback());
 }
 
-void ClientProcessImpl::MemoryDumpCallbackProxy(
-    const base::trace_event::GlobalMemoryDumpCallback& callback,
-    uint64_t dump_guid,
-    bool success,
-    mojom::GlobalMemoryDumpPtr) {
-  {
-    base::AutoLock lock(pending_memory_dump_guid_lock_);
-    pending_memory_dump_guid_ = 0;
-  }
-
-  // The GlobalMemoryDumpPtr argument is ignored. The actual data of the dump
-  // is exposed only through the service and is not passed back to base.
-  // TODO(primiano): All these roundtrips are transitional until we move all
-  // the clients of memory-infra to use directly the service. crbug.com/720352 .
-  callback.Run(dump_guid, success);
+void ClientProcessImpl::RequestOSMemoryDump(
+    const std::vector<base::ProcessId>& ids,
+    const RequestOSMemoryDumpCallback& callback) {
+  using OSMemDump = base::trace_event::MemoryDumpCallbackResult::OSMemDump;
+  std::unordered_map<base::ProcessId, OSMemDump> results;
+  callback.Run(true, results);
 }
 
-void ClientProcessImpl::SetAsNonCoordinatorForTesting() {
-  task_runner_ = nullptr;
-}
+ClientProcessImpl::Config::Config(service_manager::Connector* connector,
+                                  const std::string& service_name,
+                                  mojom::ProcessType process_type)
+    : connector(connector),
+      service_name(service_name),
+      process_type(process_type) {}
+
+ClientProcessImpl::Config::~Config() {}
 
 }  // namespace memory_instrumentation

@@ -16,6 +16,7 @@
 #include "chrome/browser/media/router/media_routes_observer.h"
 #include "chrome/browser/media/router/media_sinks_observer.h"
 #include "content/public/browser/presentation_service_delegate.h"
+#include "content/public/common/presentation_connection_message.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 namespace media_router {
@@ -49,6 +50,9 @@ MATCHER_P(StateChangeInfoEquals, other, "") {
          arg.message == other.message;
 }
 
+std::string PresentationConnectionMessageToString(
+    const content::PresentationConnectionMessage& message);
+
 class MockIssuesObserver : public IssuesObserver {
  public:
   explicit MockIssuesObserver(MediaRouter* router);
@@ -76,6 +80,26 @@ class MockMediaRoutesObserver : public MediaRoutesObserver {
 
   MOCK_METHOD2(OnRoutesUpdated, void(const std::vector<MediaRoute>& routes,
       const std::vector<MediaRoute::Id>& joinable_route_ids));
+};
+
+class MockPresentationConnectionProxy
+    : public NON_EXPORTED_BASE(blink::mojom::PresentationConnection) {
+ public:
+  // PresentationConnectionMessage is move-only.
+  // TODO(crbug.com/729950): Use MOCK_METHOD directly once GMock gets the
+  // move-only type support.
+  MockPresentationConnectionProxy();
+  ~MockPresentationConnectionProxy() override;
+  void OnMessage(content::PresentationConnectionMessage message,
+                 OnMessageCallback cb) {
+    OnMessageInternal(message, cb);
+  }
+  MOCK_METHOD2(OnMessageInternal,
+               void(const content::PresentationConnectionMessage&,
+                    OnMessageCallback&));
+  MOCK_METHOD1(DidChangeState,
+               void(content::PresentationConnectionState state));
+  MOCK_METHOD0(OnClose, void());
 };
 
 }  // namespace media_router

@@ -34,12 +34,12 @@
 #include <memory>
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/inspector/InspectedFrames.h"
-#include "core/layout/LayoutPart.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
@@ -169,8 +169,10 @@ static std::unique_ptr<protocol::LayerTree::Layer> BuildObjectForLayer(
 }
 
 InspectorLayerTreeAgent::InspectorLayerTreeAgent(
-    InspectedFrames* inspected_frames)
+    InspectedFrames* inspected_frames,
+    Client* client)
     : inspected_frames_(inspected_frames),
+      client_(client),
       suppress_layer_paint_events_(false) {}
 
 InspectorLayerTreeAgent::~InspectorLayerTreeAgent() {}
@@ -210,8 +212,8 @@ void InspectorLayerTreeAgent::DidPaint(const GraphicsLayer* graphics_layer,
                                        const LayoutRect& rect) {
   if (suppress_layer_paint_events_)
     return;
-  // Should only happen for FrameView paints when compositing is off. Consider
-  // different instrumentation method for that.
+  // Should only happen for LocalFrameView paints when compositing is off.
+  // Consider different instrumentation method for that.
   if (!graphics_layer)
     return;
 
@@ -265,8 +267,8 @@ void InspectorLayerTreeAgent::BuildLayerIdToNodeIdMap(
     BuildLayerIdToNodeIdMap(child, layer_id_to_node_id_map);
   if (!root->GetLayoutObject().IsLayoutIFrame())
     return;
-  FrameView* child_frame_view =
-      ToLayoutPart(root->GetLayoutObject()).ChildFrameView();
+  LocalFrameView* child_frame_view =
+      ToLayoutEmbeddedContent(root->GetLayoutObject()).ChildFrameView();
   LayoutViewItem child_layout_view_item = child_frame_view->GetLayoutViewItem();
   if (!child_layout_view_item.IsNull()) {
     if (PaintLayerCompositor* child_compositor =
@@ -282,9 +284,9 @@ void InspectorLayerTreeAgent::GatherGraphicsLayers(
     std::unique_ptr<Array<protocol::LayerTree::Layer>>& layers,
     bool has_wheel_event_handlers,
     int scrolling_layer_id) {
-  int layer_id = root->PlatformLayer()->Id();
-  if (page_overlay_layer_ids_.Find(layer_id) != WTF::kNotFound)
+  if (client_->IsInspectorLayer(root))
     return;
+  int layer_id = root->PlatformLayer()->Id();
   layers->addItem(BuildObjectForLayer(
       root, layer_id_to_node_id_map.at(layer_id),
       has_wheel_event_handlers && layer_id == scrolling_layer_id));
@@ -498,17 +500,6 @@ Response InspectorLayerTreeAgent::snapshotCommandLog(
   if (errors.hasErrors())
     return Response::Error(errors.errors());
   return Response::OK();
-}
-
-void InspectorLayerTreeAgent::WillAddPageOverlay(const GraphicsLayer* layer) {
-  page_overlay_layer_ids_.push_back(layer->PlatformLayer()->Id());
-}
-
-void InspectorLayerTreeAgent::DidRemovePageOverlay(const GraphicsLayer* layer) {
-  size_t index = page_overlay_layer_ids_.Find(layer->PlatformLayer()->Id());
-  if (index == WTF::kNotFound)
-    return;
-  page_overlay_layer_ids_.erase(index);
 }
 
 }  // namespace blink

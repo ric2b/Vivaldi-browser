@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/accessibility/ax_tree_data.h"
 #include "ui/accessibility/platform/ax_platform_node.h"
 #include "ui/accessibility/platform/ax_platform_node_delegate.h"
 #include "ui/gfx/native_widget_types.h"
@@ -38,6 +39,7 @@ class VIEWS_EXPORT NativeViewAccessibilityBase
 
   // ui::AXPlatformNodeDelegate
   const ui::AXNodeData& GetData() const override;
+  const ui::AXTreeData& GetTreeData() const override;
   int GetChildCount() override;
   gfx::NativeViewAccessible ChildAtIndex(int index) override;
   gfx::NativeWindow GetTopLevelWidget() override;
@@ -45,8 +47,10 @@ class VIEWS_EXPORT NativeViewAccessibilityBase
   gfx::Rect GetScreenBoundsRect() const override;
   gfx::NativeViewAccessible HitTestSync(int x, int y) override;
   gfx::NativeViewAccessible GetFocus() override;
+  ui::AXPlatformNode* GetFromNodeID(int32_t id) override;
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override;
   bool AccessibilityPerformAction(const ui::AXActionData& data) override;
+  bool ShouldIgnoreHoveredStateForTesting() override;
 
   // WidgetObserver
   void OnWidgetDestroying(Widget* widget) override;

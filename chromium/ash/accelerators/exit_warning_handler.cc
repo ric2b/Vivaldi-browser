@@ -4,13 +4,12 @@
 
 #include "ash/accelerators/exit_warning_handler.h"
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
-#include "ash/wm_window.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
@@ -58,7 +57,6 @@ class ExitWarningWidgetDelegateView : public views::WidgetDelegateView {
     label->SetHorizontalAlignment(gfx::ALIGN_CENTER);
     label->SetFontList(font_list);
     label->SetEnabledColor(kTextColor);
-    label->SetDisabledColor(kTextColor);
     label->SetAutoColorReadabilityEnabled(false);
     label->SetSubpixelRenderingEnabled(false);
     AddChildView(label);
@@ -102,13 +100,13 @@ void ExitWarningHandler::HandleAccelerator() {
       state_ = WAIT_FOR_DOUBLE_PRESS;
       Show();
       StartTimer();
-      ShellPort::Get()->RecordUserMetricsAction(UMA_ACCEL_EXIT_FIRST_Q);
+      Shell::Get()->metrics()->RecordUserMetricsAction(UMA_ACCEL_EXIT_FIRST_Q);
       break;
     case WAIT_FOR_DOUBLE_PRESS:
       state_ = EXITING;
       CancelTimer();
       Hide();
-      ShellPort::Get()->RecordUserMetricsAction(UMA_ACCEL_EXIT_SECOND_Q);
+      Shell::Get()->metrics()->RecordUserMetricsAction(UMA_ACCEL_EXIT_SECOND_Q);
       Shell::Get()->shell_delegate()->Exit();
       break;
     case EXITING:
@@ -153,10 +151,9 @@ void ExitWarningHandler::Show() {
   params.delegate = delegate;
   params.bounds = bounds;
   params.name = "ExitWarningWindow";
-  widget_.reset(new views::Widget);
-  GetRootWindowController(root_window)
-      ->ConfigureWidgetInitParamsForContainer(
-          widget_.get(), kShellWindowId_SettingBubbleContainer, &params);
+  params.parent =
+      root_window->GetChildById(kShellWindowId_SettingBubbleContainer);
+  widget_ = base::MakeUnique<views::Widget>();
   widget_->Init(params);
   widget_->Show();
 

@@ -33,6 +33,7 @@ const int kNonTouchLargestIconSize = 192;
 
 // Size (along each axis) of a touch icon. This currently corresponds to
 // the apple touch icon for iPad.
+// TODO(crbug.com/736290): Consider changing this to 192x192 for Android.
 const int kTouchIconSize = 144;
 
 // Return true if |bitmap_result| is expired.
@@ -126,7 +127,12 @@ bool HasValidResult(
 }
 
 std::vector<int> GetDesiredPixelSizes(
-    FaviconDriverObserver::NotificationIconType handler_type) {
+    FaviconDriverObserver::NotificationIconType handler_type,
+    bool candidates_from_web_manifest) {
+  // When reading icons from web manifests, prefer kNonTouchLargestIconSize.
+  if (candidates_from_web_manifest)
+    return std::vector<int>(1U, kNonTouchLargestIconSize);
+
   switch (handler_type) {
     case FaviconDriverObserver::NON_TOUCH_16_DIP: {
       std::vector<int> pixel_sizes;
@@ -416,9 +422,10 @@ void FaviconHandler::OnDidDownloadManifest(
 
 void FaviconHandler::OnGotFinalIconURLCandidates(
     const std::vector<FaviconURL>& candidates) {
-  std::vector<FaviconCandidate> sorted_candidates;
   const std::vector<int> desired_pixel_sizes =
-      GetDesiredPixelSizes(handler_type_);
+      GetDesiredPixelSizes(handler_type_, !manifest_url_.is_empty());
+
+  std::vector<FaviconCandidate> sorted_candidates;
   for (const FaviconURL& candidate : candidates) {
     if (!candidate.icon_url.is_empty() && (candidate.icon_type & icon_types_)) {
       sorted_candidates.push_back(
@@ -439,10 +446,13 @@ void FaviconHandler::OnGotFinalIconURLCandidates(
 
 // static
 int FaviconHandler::GetMaximalIconSize(
-    FaviconDriverObserver::NotificationIconType handler_type) {
+    FaviconDriverObserver::NotificationIconType handler_type,
+    bool candidates_from_web_manifest) {
   int max_size = 0;
-  for (int size : GetDesiredPixelSizes(handler_type))
+  for (int size :
+       GetDesiredPixelSizes(handler_type, candidates_from_web_manifest)) {
     max_size = std::max(max_size, size);
+  }
   return max_size;
 }
 
@@ -487,9 +497,10 @@ void FaviconHandler::OnDidDownloadFavicon(
     gfx::ImageSkia image_skia;
     if (download_largest_icon_) {
       std::vector<size_t> best_indices;
-      SelectFaviconFrameIndices(original_bitmap_sizes,
-                                GetDesiredPixelSizes(handler_type_),
-                                &best_indices, &score);
+      SelectFaviconFrameIndices(
+          original_bitmap_sizes,
+          GetDesiredPixelSizes(handler_type_, !manifest_url_.is_empty()),
+          &best_indices, &score);
       DCHECK_EQ(1U, best_indices.size());
       image_skia =
           gfx::ImageSkia::CreateFrom1xBitmap(bitmaps[best_indices.front()]);
@@ -669,9 +680,9 @@ void FaviconHandler::ScheduleImageDownload(const GURL& image_url,
   // A max bitmap size is specified to avoid receiving huge bitmaps in
   // OnDidDownloadFavicon(). See FaviconDriver::StartDownload()
   // for more details about the max bitmap size.
-  const int download_id =
-      delegate_->DownloadImage(image_url, GetMaximalIconSize(handler_type_),
-                               image_download_request_.callback());
+  const int download_id = delegate_->DownloadImage(
+      image_url, GetMaximalIconSize(handler_type_, !manifest_url_.is_empty()),
+      image_download_request_.callback());
   DCHECK_NE(download_id, 0);
 }
 

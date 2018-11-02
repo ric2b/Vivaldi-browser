@@ -54,6 +54,7 @@ TEST(JourneyLoggerTest,
   // The merchant does not query CanMakePayment, show the PaymentRequest and the
   // user aborts it.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
   histogram_tester.ExpectBucketCount("PaymentRequest.CanMakePayment.Usage",
@@ -83,6 +84,7 @@ TEST(JourneyLoggerTest,
   // The merchant does not query CanMakePayment, show the PaymentRequest and
   // there is an abort not initiated by the user.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
 
   histogram_tester.ExpectBucketCount("PaymentRequest.CanMakePayment.Usage",
@@ -112,6 +114,7 @@ TEST(JourneyLoggerTest,
   // The merchant does not query CanMakePayment, show the PaymentRequest and the
   // user completes it.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCompleted();
 
   histogram_tester.ExpectBucketCount("PaymentRequest.CanMakePayment.Usage",
@@ -207,6 +210,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(false);
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
@@ -240,6 +244,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(false);
   logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
 
@@ -273,6 +278,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(false);
   logger.SetCompleted();
 
@@ -307,6 +313,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(true);
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
@@ -342,6 +349,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(true);
   logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
 
@@ -377,6 +385,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(true);
   logger.SetCompleted();
 
@@ -412,6 +421,7 @@ TEST(JourneyLoggerTest,
 
   // The user cannot make payment and the PaymentRequest is not shown.
   logger.SetShowCalled();
+  logger.SetRequestedInformation(true, false, false, false);
   logger.SetCanMakePaymentValue(true);
   logger.SetCompleted();
 
@@ -429,20 +439,43 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
   // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 1);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user completes the checkout.
   logger.SetCompleted();
 
+  // Make sure that the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserHadSuggestionsForEverything.EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_COMPLETED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -453,20 +486,43 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
   // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 1);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user aborts the checkout.
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
+  // Make sure the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserHadSuggestionsForEverything.EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_USER_ABORTED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -477,20 +533,43 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
   // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 1);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the checkout is aborted.
   logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
 
+  // Make sure the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserHadSuggestionsForEverything.EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_OTHER_ABORTED, 1);
 
+  // Make sure that the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -502,20 +581,43 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/true, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
   // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 1);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user completes the checkout.
   logger.SetCompleted();
 
+  // Make sure the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserHadSuggestionsForEverything.EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_COMPLETED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -526,21 +628,44 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
-  // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 0);
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had suggestions for none of the requested sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 0,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user completes the checkout.
   logger.SetCompleted();
 
+  // Make sure the expected metrics was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
       "EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_COMPLETED, 1);
 
+  // Make sure the opposite metrics was not logged.
   EXPECT_THAT(
       histogram_tester.GetTotalCountsForPrefix(
           "PaymentRequest.UserHadSuggestionsForEverything.EffectOnCompletion"),
       testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -551,21 +676,44 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
-  // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 0);
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had suggestions for none of the requested sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 0,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user aborts the checkout.
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
+  // Make sure the metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
       "EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_USER_ABORTED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserHadSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -576,21 +724,44 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
-  // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 0);
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had suggestions for none of the requested sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 0,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the the checkout is aborted.
   logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
 
+  // Make sure the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
       "EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_OTHER_ABORTED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserHadSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
 }
 
 // Tests that the completion status metrics based on whether the user had
@@ -602,21 +773,199 @@ TEST(JourneyLoggerTest,
   JourneyLogger logger(/*is_incognito=*/true, /*url=*/GURL(""),
                        /*ukm_recorder=*/nullptr);
 
-  // Simulate that the user had suggestions for all the requested sections.
-  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 0);
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had suggestions for none of the requested sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 0,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
 
   // Simulate that the user aborts the checkout.
   logger.SetAborted(JourneyLogger::ABORT_REASON_ABORTED_BY_USER);
 
+  // Make sure the expected metric was logged.
   histogram_tester.ExpectBucketCount(
       "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
       "EffectOnCompletion",
       JourneyLogger::COMPLETION_STATUS_USER_ABORTED, 1);
 
+  // Make sure the opposite metric was not logged.
   EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
                   "PaymentRequest.UserHadSuggestionsForEverything."
                   "EffectOnCompletion"),
               testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+}
+
+// Tests that the completion status metrics based on whether the user had
+// suggestions for all the requested sections are logged as correctly.
+TEST(
+    JourneyLoggerTest,
+    RecordJourneyStatsHistograms_NoCompleteSuggestionsForEverything_OtherAborted) {
+  base::HistogramTester histogram_tester;
+  JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
+                       /*ukm_recorder=*/nullptr);
+
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/false, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had incomplete suggestions for the requested
+  // sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 2,
+                                     /*has_complete_suggestion=*/false);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
+
+  // Simulate that the the checkout is aborted.
+  logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
+
+  // Make sure the expected metric was logged.
+  histogram_tester.ExpectBucketCount(
+      "PaymentRequest.UserDidNotHaveCompleteSuggestionsForEverything."
+      "EffectOnCompletion",
+      JourneyLogger::COMPLETION_STATUS_OTHER_ABORTED, 1);
+
+  // Makes sure the opposite metric was not logged.
+  EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                  "PaymentRequest.UserHadCompleteSuggestionsForEverything."
+                  "EffectOnCompletion"),
+              testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+}
+
+// Tests that the completion status metrics based on whether the user had
+// suggestions for all the requested sections are logged as correctly.
+TEST(
+    JourneyLoggerTest,
+    RecordJourneyStatsHistograms_NoCompleteSuggestionsForEverything_SomeComplete_OtherAborted) {
+  base::HistogramTester histogram_tester;
+  JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
+                       /*ukm_recorder=*/nullptr);
+
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/true, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had incomplete suggestions for one of the requested
+  // sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 2,
+                                     /*has_complete_suggestion=*/false);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_SHIPPING_ADDRESS, 1,
+                                     /*has_complete_suggestion=*/true);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
+
+  // Simulate that the the checkout is aborted.
+  logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
+
+  // Make sure that the expected metric was logged.
+  histogram_tester.ExpectBucketCount(
+      "PaymentRequest.UserDidNotHaveCompleteSuggestionsForEverything."
+      "EffectOnCompletion",
+      JourneyLogger::COMPLETION_STATUS_OTHER_ABORTED, 1);
+
+  // Make sure that the opposite metric was not logged.
+  EXPECT_THAT(histogram_tester.GetTotalCountsForPrefix(
+                  "PaymentRequest.UserHadCompleteSuggestionsForEverything."
+                  "EffectOnCompletion"),
+              testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_FALSE(buckets[0].min &
+               JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
+}
+
+// Tests that the completion status metrics based on whether the user had
+// suggestions for all the requested sections are logged as correctly.
+TEST(
+    JourneyLoggerTest,
+    RecordJourneyStatsHistograms_CompleteSuggestionsForEverything_OtherAborted) {
+  base::HistogramTester histogram_tester;
+  JourneyLogger logger(/*is_incognito=*/false, /*url=*/GURL(""),
+                       /*ukm_recorder=*/nullptr);
+
+  // The merchant only requests payment information.
+  logger.SetRequestedInformation(
+      /*requested_shipping=*/true, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
+
+  // Simulate that the user had incomplete suggestions for one of the requested
+  // sections.
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 2,
+                                     /*has_complete_suggestion=*/true);
+  logger.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_SHIPPING_ADDRESS, 1,
+                                     /*has_complete_suggestion=*/true);
+
+  // Simulate that the Payment Request was shown to the user.
+  logger.SetShowCalled();
+
+  // Simulate that the the checkout is aborted.
+  logger.SetAborted(JourneyLogger::ABORT_REASON_OTHER);
+
+  // Make sure that the expected metric was logged.
+  histogram_tester.ExpectBucketCount(
+      "PaymentRequest.UserHadCompleteSuggestionsForEverything."
+      "EffectOnCompletion",
+      JourneyLogger::COMPLETION_STATUS_OTHER_ABORTED, 1);
+
+  // Make sure that the opposite metric was not logged.
+  EXPECT_THAT(
+      histogram_tester.GetTotalCountsForPrefix(
+          "PaymentRequest.UserDidNotHaveCompleteSuggestionsForEverything."
+          "EffectOnCompletion"),
+      testing::ContainerEq(base::HistogramTester::CountsMap()));
+
+  // Make sure the correct events were logged.
+  std::vector<base::Bucket> buckets =
+      histogram_tester.GetAllSamples("PaymentRequest.Events");
+  ASSERT_EQ(1U, buckets.size());
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS);
+  EXPECT_TRUE(buckets[0].min &
+              JourneyLogger::EVENT_HAD_INITIAL_FORM_OF_PAYMENT);
+  EXPECT_TRUE(buckets[0].min & JourneyLogger::EVENT_OTHER_ABORTED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_COMPLETED);
+  EXPECT_FALSE(buckets[0].min & JourneyLogger::EVENT_USER_ABORTED);
 }
 
 // Tests that the metrics are logged correctly for two simultaneous Payment
@@ -630,12 +979,20 @@ TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_TwoPaymentRequests) {
 
   // Make the two loggers have different data.
   logger1.SetShowCalled();
+  logger1.SetRequestedInformation(
+      /*requested_shipping=*/true, /*requested_email=*/true,
+      /*requested_phone=*/false, /*requested_name=*/false);
   logger2.SetShowCalled();
+  logger2.SetRequestedInformation(
+      /*requested_shipping=*/true, /*requested_email=*/false,
+      /*requested_phone=*/false, /*requested_name=*/false);
 
   logger1.SetCanMakePaymentValue(true);
 
-  logger1.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 1);
-  logger2.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_CREDIT_CARDS, 0);
+  logger1.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 1,
+                                      /*has_complete_suggestion=*/false);
+  logger2.SetNumberOfSuggestionsShown(JourneyLogger::SECTION_PAYMENT_METHOD, 0,
+                                      /*has_complete_suggestion=*/false);
 
   // Simulate that the user completes one checkout and aborts the other.
   logger1.SetCompleted();
@@ -664,9 +1021,11 @@ TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_TwoPaymentRequests) {
       JourneyLogger::COMPLETION_STATUS_USER_ABORTED, 1);
 }
 
-// Tests that the Payment Request UKMs are logged correctly.
-TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_CheckoutFunnelUkm) {
-  ukm::TestUkmRecorder ukm_recorder;
+// Tests that the Payment Request UKMs are logged correctly when the user aborts
+// the Payment Request.
+TEST(JourneyLoggerTest,
+     RecordJourneyStatsHistograms_CheckoutFunnelUkm_UserAborted) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
   char test_url[] = "http://www.google.com/";
 
   base::HistogramTester histogram_tester;
@@ -701,6 +1060,43 @@ TEST(JourneyLoggerTest, RecordJourneyStatsHistograms_CheckoutFunnelUkm) {
   ASSERT_NE(nullptr, step_metric);
   EXPECT_EQ(JourneyLogger::EVENT_SHOWN | JourneyLogger::EVENT_PAY_CLICKED,
             step_metric->value);
+}
+
+// Tests that the Payment Request UKMs are logged correctly when the user
+// completes the Payment Request.
+TEST(JourneyLoggerTest,
+     RecordJourneyStatsHistograms_CheckoutFunnelUkm_Completed) {
+  ukm::TestAutoSetUkmRecorder ukm_recorder;
+  char test_url[] = "http://www.google.com/";
+
+  base::HistogramTester histogram_tester;
+  JourneyLogger logger(/*is_incognito=*/true, /*url=*/GURL(test_url),
+                       /*ukm_recorder=*/&ukm_recorder);
+
+  // Simulate that the user aborts after being shown the Payment Request.
+  logger.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
+  logger.SetCompleted();
+
+  // Make sure the UKM was logged correctly.
+  ASSERT_EQ(1U, ukm_recorder.sources_count());
+  const ukm::UkmSource* source = ukm_recorder.GetSourceForUrl(test_url);
+  ASSERT_NE(nullptr, source);
+
+  ASSERT_EQ(1U, ukm_recorder.entries_count());
+  const ukm::mojom::UkmEntry* entry = ukm_recorder.GetEntry(0);
+  EXPECT_EQ(source->id(), entry->source_id);
+  EXPECT_EQ(base::HashMetricName(internal::kUKMCheckoutEventsEntryName),
+            entry->event_hash);
+
+  const ukm::mojom::UkmMetric* status_metric = ukm::TestUkmRecorder::FindMetric(
+      entry, internal::kUKMCompletionStatusMetricName);
+  ASSERT_NE(nullptr, status_metric);
+  EXPECT_EQ(JourneyLogger::COMPLETION_STATUS_COMPLETED, status_metric->value);
+
+  const ukm::mojom::UkmMetric* step_metric =
+      ukm::TestUkmRecorder::FindMetric(entry, internal::kUKMEventsMetricName);
+  ASSERT_NE(nullptr, step_metric);
+  EXPECT_EQ(JourneyLogger::EVENT_SHOWN, step_metric->value);
 }
 
 }  // namespace payments

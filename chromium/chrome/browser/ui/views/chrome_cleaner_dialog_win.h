@@ -6,8 +6,10 @@
 #define CHROME_BROWSER_UI_VIEWS_CHROME_CLEANER_DIALOG_WIN_H_
 
 #include <memory>
+#include <set>
 
 #include "base/macros.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -16,6 +18,11 @@ class Browser;
 namespace safe_browsing {
 class ChromeCleanerDialogController;
 }
+
+namespace views {
+class Checkbox;
+class LabelButton;
+}  // namespace views
 
 // A modal dialog asking the user if they want to remove harmful software from
 // their computers by running the Chrome Cleanup tool.
@@ -26,26 +33,28 @@ class ChromeCleanerDialogController;
 // itself and will delete itself once it has received information about the
 // user's interaction with the dialog. See the |ChromeCleanerDialogController|
 // class's description for more details.
-class ChromeCleanerDialog : public views::DialogDelegateView,
-                            public views::ButtonListener {
+class ChromeCleanerDialog
+    : public views::DialogDelegateView,
+      public views::ButtonListener,
+      public safe_browsing::ChromeCleanerController::Observer {
  public:
   // The |controller| object manages its own lifetime and is not owned by
   // |ChromeCleanerDialog|. See the description of the
   // |ChromeCleanerDialogController| class for details.
-  explicit ChromeCleanerDialog(
-      safe_browsing::ChromeCleanerDialogController* controller);
+  ChromeCleanerDialog(
+      safe_browsing::ChromeCleanerDialogController* dialog_controller,
+      safe_browsing::ChromeCleanerController* cleaner_controller);
   ~ChromeCleanerDialog() override;
 
   void Show(Browser* browser);
 
-  // ui::DialogModel overrides.
-  bool ShouldDefaultButtonBeBlue() const override;
-
   // views::WidgetDelegate overrides.
   ui::ModalType GetModalType() const override;
   base::string16 GetWindowTitle() const override;
+  views::View* GetInitiallyFocusedView() override;
 
   // views::DialogDelegate overrides.
+  views::View* CreateFootnoteView() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   views::View* CreateExtraView() override;
   bool Accept() override;
@@ -58,11 +67,26 @@ class ChromeCleanerDialog : public views::DialogDelegateView,
   // views::ButtonListener overrides.
   void ButtonPressed(views::Button* sender, const ui::Event& event) override;
 
+  // safe_browsing::ChromeCleanerController::Observer overrides.
+  void OnIdle(
+      safe_browsing::ChromeCleanerController::IdleReason idle_reason) override;
+  void OnScanning() override;
+  void OnCleaning(const std::set<base::FilePath>& files_to_delete) override;
+  void OnRebootRequired() override;
+
  private:
+  enum class DialogInteractionResult;
+
+  void HandleDialogInteraction(DialogInteractionResult result);
+  void Abort();
+
   Browser* browser_;
   // The pointer will be set to nullptr once the controller has been notified of
   // user interaction since the controller can delete itself after that point.
-  safe_browsing::ChromeCleanerDialogController* controller_;
+  safe_browsing::ChromeCleanerDialogController* dialog_controller_;
+  safe_browsing::ChromeCleanerController* cleaner_controller_;
+  views::LabelButton* details_button_;
+  views::Checkbox* logs_permission_checkbox_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeCleanerDialog);
 };

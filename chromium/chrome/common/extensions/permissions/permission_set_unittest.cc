@@ -757,7 +757,6 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kImeWindowEnabled);
   skip.insert(APIPermission::kInlineInstallPrivate);
   skip.insert(APIPermission::kIdltest);
-  skip.insert(APIPermission::kLogPrivate);
   skip.insert(APIPermission::kOverrideEscFullscreen);
   skip.insert(APIPermission::kPointerLock);
   skip.insert(APIPermission::kPower);
@@ -876,6 +875,10 @@ TEST(PermissionsTest, PermissionMessages) {
   skip.insert(APIPermission::kUsb);
   skip.insert(APIPermission::kVirtualKeyboard);
   skip.insert(APIPermission::kLauncherSearchProvider);
+
+  // The lock screen apps are set by user through settings, no need to warn at
+  // installation time.
+  skip.insert(APIPermission::kLockScreen);
 
   // We already have a generic message for declaring externally_connectable.
   skip.insert(APIPermission::kExternallyConnectableAllUrls);

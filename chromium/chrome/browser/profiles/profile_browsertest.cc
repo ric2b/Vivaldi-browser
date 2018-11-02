@@ -566,12 +566,12 @@ void CompareURLRequestContexts(
   // the one directly on the URLRequestContext.
   EXPECT_EQ(extension_context->http_transaction_factory()
                 ->GetSession()
-                ->params()
+                ->context()
                 .channel_id_service,
             extension_context->channel_id_service());
   EXPECT_EQ(main_context->http_transaction_factory()
                 ->GetSession()
-                ->params()
+                ->context()
                 .channel_id_service,
             main_context->channel_id_service());
 }
@@ -607,8 +607,9 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest, URLRequestContextIsolation) {
     base::RunLoop run_loop;
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&CompareURLRequestContexts, extension_context_getter,
-                       main_context_getter),
+        base::BindOnce(&CompareURLRequestContexts,
+                       base::RetainedRef(extension_context_getter),
+                       base::RetainedRef(main_context_getter)),
         run_loop.QuitClosure());
     run_loop.Run();
   }
@@ -646,8 +647,9 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     base::RunLoop run_loop;
     content::BrowserThread::PostTaskAndReply(
         content::BrowserThread::IO, FROM_HERE,
-        base::BindOnce(&CompareURLRequestContexts, extension_context_getter,
-                       main_context_getter),
+        base::BindOnce(&CompareURLRequestContexts,
+                       base::RetainedRef(extension_context_getter),
+                       base::RetainedRef(main_context_getter)),
         run_loop.QuitClosure());
     run_loop.Run();
   }
@@ -714,11 +716,6 @@ IN_PROC_BROWSER_TEST_F(ProfileBrowserTest,
     // Flush the profile data to disk for all loaded profiles.
     profile->SetExitType(Profile::EXIT_CRASHED);
     profile->GetPrefs()->CommitPendingWrite();
-    if (base::FeatureList::IsEnabled(features::kPrefService)) {
-      FlushTaskRunner(content::BrowserThread::GetTaskRunnerForThread(
-                          content::BrowserThread::IO)
-                          .get());
-    }
     FlushTaskRunner(profile->GetIOTaskRunner().get());
 
     // Make sure that the prefs file was written with the expected key/value.

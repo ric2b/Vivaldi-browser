@@ -36,7 +36,7 @@ const char* kUsers[] = {
 
 namespace chromeos {
 
-class SigninPrepareUserListTest : public ash::test::AshTestBase,
+class SigninPrepareUserListTest : public ash::AshTestBase,
                                   public MultiProfileUserControllerDelegate {
  public:
   SigninPrepareUserListTest()
@@ -46,7 +46,7 @@ class SigninPrepareUserListTest : public ash::test::AshTestBase,
   ~SigninPrepareUserListTest() override {}
 
   void SetUp() override {
-    ash::test::AshTestBase::SetUp();
+    ash::AshTestBase::SetUp();
     profile_manager_.reset(
         new TestingProfileManager(TestingBrowserProcess::GetGlobal()));
     ASSERT_TRUE(profile_manager_->SetUp());
@@ -70,7 +70,7 @@ class SigninPrepareUserListTest : public ash::test::AshTestBase,
     chromeos::WallpaperManager::Shutdown();
     controller_.reset();
     profile_manager_.reset();
-    ash::test::AshTestBase::TearDown();
+    ash::AshTestBase::TearDown();
   }
 
   // MultiProfileUserControllerDelegate overrides:
@@ -79,8 +79,7 @@ class SigninPrepareUserListTest : public ash::test::AshTestBase,
   FakeChromeUserManager* fake_user_manager_;
   ScopedUserManagerEnabler user_manager_enabler_;
   std::unique_ptr<TestingProfileManager> profile_manager_;
-  std::map<std::string, proximity_auth::ScreenlockBridge::LockHandler::AuthType>
-      user_auth_type_map;
+  std::map<std::string, proximity_auth::mojom::AuthType> user_auth_type_map;
   std::unique_ptr<MultiProfileUserController> controller_;
 
   DISALLOW_COPY_AND_ASSIGN(SigninPrepareUserListTest);

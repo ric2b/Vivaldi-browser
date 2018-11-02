@@ -170,6 +170,12 @@ bool TouchSelectionControllerClientAura::HandleContextMenu(
     UpdateQuickMenu();
     return true;
   }
+
+  const bool from_touch = params.source_type == ui::MENU_SOURCE_LONG_PRESS ||
+                          params.source_type == ui::MENU_SOURCE_TOUCH;
+  if (from_touch && !params.selection_text.empty())
+    return true;
+
   rwhva_->selection_controller()->HideAndDisallowShowingAutomatically();
   return false;
 }
@@ -317,9 +323,10 @@ void TouchSelectionControllerClientAura::MoveCaret(
 
 void TouchSelectionControllerClientAura::InternalClient::MoveCaret(
     const gfx::PointF& position) {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(rwhva_->GetRenderWidgetHost());
-  host->MoveCaret(gfx::ToRoundedPoint(position));
+  RenderWidgetHostDelegate* host_delegate =
+      RenderWidgetHostImpl::From(rwhva_->GetRenderWidgetHost())->delegate();
+  if (host_delegate)
+    host_delegate->MoveCaret(gfx::ToRoundedPoint(position));
 }
 
 void TouchSelectionControllerClientAura::MoveRangeSelectionExtent(
@@ -466,9 +473,8 @@ void TouchSelectionControllerClientAura::RunContextMenu() {
       gfx::PointF(anchor_rect.CenterPoint().x(), anchor_rect.y());
   RenderWidgetHostImpl* host =
       RenderWidgetHostImpl::From(rwhva_->GetRenderWidgetHost());
-  host->Send(new ViewMsg_ShowContextMenu(host->GetRoutingID(),
-                                         ui::MENU_SOURCE_TOUCH_EDIT_MENU,
-                                         gfx::ToRoundedPoint(anchor_point)));
+  host->ShowContextMenuAtPoint(gfx::ToRoundedPoint(anchor_point),
+                               ui::MENU_SOURCE_TOUCH_EDIT_MENU);
 
   // Hide selection handles after getting rect-between-bounds from touch
   // selection controller; otherwise, rect would be empty and the above

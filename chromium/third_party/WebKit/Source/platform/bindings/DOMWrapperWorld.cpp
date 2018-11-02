@@ -47,8 +47,7 @@ unsigned DOMWrapperWorld::number_of_non_main_worlds_in_main_thread_ = 0;
 // (see https://crbug.com/704778#c6).
 using WorldMap = HashMap<int, DOMWrapperWorld*>;
 static WorldMap& GetWorldMap() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<WorldMap>, map,
-                                  new ThreadSpecific<WorldMap>);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<WorldMap>, map, ());
   return *map;
 }
 
@@ -56,6 +55,10 @@ static WorldMap& GetWorldMap() {
 static bool IsIsolatedWorldId(int world_id) {
   return DOMWrapperWorld::kMainWorldId < world_id &&
          world_id < DOMWrapperWorld::kIsolatedWorldIdLimit;
+}
+
+static bool IsMainWorldId(int world_id) {
+  return world_id == DOMWrapperWorld::kMainWorldId;
 }
 #endif
 
@@ -158,7 +161,7 @@ PassRefPtr<DOMWrapperWorld> DOMWrapperWorld::EnsureIsolatedWorld(
     RefPtr<DOMWrapperWorld> world = it->value;
     DCHECK(world->IsIsolatedWorld());
     DCHECK_EQ(world_id, world->GetWorldId());
-    return world.Release();
+    return world;
   }
 
   return AdoptRef(new DOMWrapperWorld(isolate, WorldType::kIsolated, world_id));
@@ -197,16 +200,16 @@ static IsolatedWorldHumanReadableNameMap& IsolatedWorldHumanReadableNames() {
   return map;
 }
 
-String DOMWrapperWorld::IsolatedWorldHumanReadableName() {
-  DCHECK(this->IsIsolatedWorld());
+String DOMWrapperWorld::NonMainWorldHumanReadableName() {
+  DCHECK(!this->IsMainWorld());
   return IsolatedWorldHumanReadableNames().at(GetWorldId());
 }
 
-void DOMWrapperWorld::SetIsolatedWorldHumanReadableName(
+void DOMWrapperWorld::SetNonMainWorldHumanReadableName(
     int world_id,
     const String& human_readable_name) {
 #if DCHECK_IS_ON()
-  DCHECK(IsIsolatedWorldId(world_id));
+  DCHECK(!IsMainWorldId(world_id));
 #endif
   IsolatedWorldHumanReadableNames().Set(world_id, human_readable_name);
 }
@@ -262,8 +265,7 @@ void DOMWrapperWorld::WeakCallbackForDOMObjectHolder(
 
 // static
 int DOMWrapperWorld::GenerateWorldIdForType(WorldType world_type) {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<int>, next_world_id,
-                                  new ThreadSpecific<int>);
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<int>, next_world_id, ());
   if (!next_world_id.IsSet())
     *next_world_id = WorldId::kUnspecifiedWorldIdStart;
   switch (world_type) {

@@ -12,9 +12,11 @@
 #include "base/optional.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
+#include "components/ukm/ukm_source.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/resource_type.h"
+#include "net/base/host_port_pair.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "url/gurl.h"
 
@@ -123,7 +125,8 @@ struct PageLoadExtraInfo {
       UserInitiatedInfo page_end_user_initiated_info,
       const base::Optional<base::TimeDelta>& page_end_time,
       const mojom::PageLoadMetadata& main_frame_metadata,
-      const mojom::PageLoadMetadata& subframe_metadata);
+      const mojom::PageLoadMetadata& subframe_metadata,
+      ukm::SourceId source_id);
 
   // Simplified version of the constructor, intended for use in tests.
   static PageLoadExtraInfo CreateForTesting(const GURL& url,
@@ -196,6 +199,9 @@ struct PageLoadExtraInfo {
 
   // PageLoadMetadata for subframes of the current page load.
   const mojom::PageLoadMetadata subframe_metadata;
+
+  // UKM SourceId for the current page load.
+  const ukm::SourceId source_id;
 };
 
 // Container for various information about a completed request within a page
@@ -203,18 +209,25 @@ struct PageLoadExtraInfo {
 struct ExtraRequestCompleteInfo {
   ExtraRequestCompleteInfo(
       const GURL& url,
+      const net::HostPortPair& host_port_pair,
       int frame_tree_node_id,
       bool was_cached,
       int64_t raw_body_bytes,
       int64_t original_network_content_length,
       std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
           data_reduction_proxy_data,
-      content::ResourceType detected_resource_type);
+      content::ResourceType detected_resource_type,
+      int net_error);
+
+  ExtraRequestCompleteInfo(const ExtraRequestCompleteInfo& other);
 
   ~ExtraRequestCompleteInfo();
 
   // The URL for the request.
   const GURL url;
+
+  // The host (IP address) and port for the request.
+  const net::HostPortPair host_port_pair;
 
   // The frame tree node id that initiated the request.
   const int frame_tree_node_id;
@@ -238,21 +251,11 @@ struct ExtraRequestCompleteInfo {
   // examine the type headers that arrived with the request.  During XHRs, we
   // sometimes see resources come back as a different type than we expected.
   const content::ResourceType resource_type;
-};
 
-// Container for various information about a started request within a page load.
-struct ExtraRequestStartInfo {
-  explicit ExtraRequestStartInfo(content::ResourceType type);
-
-  ExtraRequestStartInfo(const ExtraRequestStartInfo& other);
-
-  ~ExtraRequestStartInfo();
-
-  // The type of the request as gleaned from the DOM or the file extension. This
-  // may be less accurate than the type at request completion time, which has
-  // access to mime-type headers.  During XHRs, we sometimes see resources come
-  // back as a different type than we expected.
-  const content::ResourceType resource_type;
+  // The network error encountered by the request, as defined by
+  // net/base/net_error_list.h. If no error was encountered, this value will be
+  // 0.
+  const int net_error;
 };
 
 // Interface for PageLoadMetrics observers. All instances of this class are
@@ -273,6 +276,8 @@ class PageLoadMetricsObserver {
   using FrameTreeNodeId = int;
 
   virtual ~PageLoadMetricsObserver() {}
+
+  static bool IsStandardWebPageMimeType(const std::string& mime_type);
 
   // The page load started, with the given navigation handle.
   // currently_committed_url contains the URL of the committed page load at the
@@ -296,7 +301,8 @@ class PageLoadMetricsObserver {
   // reference to it.
   // Observers that return STOP_OBSERVING will not receive any additional
   // callbacks, and will be deleted after invocation of this method returns.
-  virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle);
+  virtual ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
+                                 ukm::SourceId source_id);
 
   // OnDidFinishSubFrameNavigation is triggered when a sub-frame of the
   // committed page has finished navigating. It has either committed, aborted,
@@ -440,15 +446,15 @@ class PageLoadMetricsObserver {
       const FailedProvisionalLoadInfo& failed_provisional_load_info,
       const PageLoadExtraInfo& extra_info) {}
 
-  // Called whenever a request load begins.
-  virtual void OnStartedResource(
-      const ExtraRequestStartInfo& extra_request_start_info) {}
-
   // Called whenever a request is loaded for this page load. This comes
   // unfiltered from the ResourceDispatcherHost and may include blob requests
   // and data uris.
   virtual void OnLoadedResource(
       const ExtraRequestCompleteInfo& extra_request_complete_info) {}
+
+  // Called when the event corresponding to |event_key| occurs in this page
+  // load.
+  virtual void OnEventOccurred(const void* const event_key) {}
 };
 
 }  // namespace page_load_metrics

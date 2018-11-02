@@ -9,6 +9,7 @@ import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertTrue;
 
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.DELAYED_RESPONSE;
+import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.ENABLE_WEB_PAYMENTS_MODIFIERS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.HAVE_INSTRUMENTS;
 import static org.chromium.chrome.browser.payments.PaymentRequestTestRule.IMMEDIATE_RESPONSE;
 
@@ -23,6 +24,7 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
+import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -38,7 +40,7 @@ import java.util.concurrent.TimeoutException;
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({
         ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
-        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG,
+        ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG, ENABLE_WEB_PAYMENTS_MODIFIERS,
 })
 public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest
         implements PaymentRequestTestRule.MainActivityStartCallback {
@@ -56,11 +58,11 @@ public class PaymentRequestPaymentAppAndBasicCardWithModifiersTest
         // Mastercard card without a billing address.
         helper.setCreditCard(new CreditCard("", "https://example.com", true, true, "Jon Doe",
                 "5454545454545454", "", "12", "2050", "mastercard", R.drawable.mc_card,
-                "" /* billingAddressId */, "" /* serverId */));
+                CardType.UNKNOWN, "" /* billingAddressId */, "" /* serverId */));
         // Visa card with complete set of information.
         helper.setCreditCard(new CreditCard("", "https://example.com", true, true, "Jon Doe",
                 "4111111111111111", "", "12", "2050", "visa", R.drawable.visa_card,
-                billingAddressId, "" /* serverId */));
+                CardType.UNKNOWN, billingAddressId, "" /* serverId */));
     }
 
     /**

@@ -36,13 +36,13 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/offscreencanvas/OffscreenCanvas.h"
 #include "core/svg/SVGImageElement.h"
@@ -137,7 +137,7 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(
     const ImageBitmapSourceUnion& bitmap_source,
     const ImageBitmapOptions& options,
     ExceptionState& exception_state) {
-  UseCounter::Feature feature = UseCounter::kCreateImageBitmap;
+  WebFeature feature = WebFeature::kCreateImageBitmap;
   UseCounter::Count(ExecutionContext::From(script_state), feature);
   ImageBitmapSource* bitmap_source_internal = ToImageBitmapSourceInternal(
       bitmap_source, exception_state, options, false);
@@ -157,7 +157,7 @@ ScriptPromise ImageBitmapFactories::createImageBitmap(
     int sh,
     const ImageBitmapOptions& options,
     ExceptionState& exception_state) {
-  UseCounter::Feature feature = UseCounter::kCreateImageBitmap;
+  WebFeature feature = WebFeature::kCreateImageBitmap;
   UseCounter::Count(ExecutionContext::From(script_state), feature);
   ImageBitmapSource* bitmap_source_internal = ToImageBitmapSourceInternal(
       bitmap_source, exception_state, options, true);

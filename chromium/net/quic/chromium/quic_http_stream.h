@@ -35,10 +35,7 @@ class QuicHttpStreamPeer;
 // The QuicHttpStream is a QUIC-specific HttpStream subclass.  It holds a
 // non-owning pointer to a QuicChromiumClientStream which it uses to
 // send and receive data.
-class NET_EXPORT_PRIVATE QuicHttpStream
-    : public QuicChromiumClientStream::Delegate,
-      public QuicClientPushPromiseIndex::Delegate,
-      public MultiplexedHttpStream {
+class NET_EXPORT_PRIVATE QuicHttpStream : public MultiplexedHttpStream {
  public:
   explicit QuicHttpStream(
       std::unique_ptr<QuicChromiumClientSession::Handle> session);
@@ -67,22 +64,6 @@ class NET_EXPORT_PRIVATE QuicHttpStream
       AlternativeService* alternative_service) const override;
   void PopulateNetErrorDetails(NetErrorDetails* details) override;
   void SetPriority(RequestPriority priority) override;
-
-  // QuicChromiumClientStream::Delegate implementation
-  void OnDataAvailable() override;
-  void OnTrailingHeadersAvailable(const SpdyHeaderBlock& headers,
-                                  size_t frame_len) override;
-  void OnClose() override;
-  void OnError(int error) override;
-
-  // QuicClientPushPromiseIndex::Delegate implementation
-  bool CheckVary(const SpdyHeaderBlock& client_request,
-                 const SpdyHeaderBlock& promise_request,
-                 const SpdyHeaderBlock& promise_response) override;
-  // TODO(rch): QuicClientPushPromiseIndex::Delegate is part of shared code.
-  // Figure out how to make the QuicHttpStream receive a Handle in this
-  // case instead of a QuicSpdyStream.
-  void OnRendezvousResult(QuicSpdyStream* stream) override;
 
   static HttpResponseInfo::ConnectionInfo ConnectionInfoFromQuicVersion(
       QuicVersion quic_version);
@@ -124,11 +105,19 @@ class NET_EXPORT_PRIVATE QuicHttpStream
 
   void OnReadResponseHeadersComplete(int rv);
   int ProcessResponseHeaders(const SpdyHeaderBlock& headers);
+  void ReadTrailingHeaders();
+  void OnReadTrailingHeadersComplete(int rv);
 
-  int ReadAvailableData(IOBuffer* buf, int buf_len);
+  void OnReadBodyComplete(int rv);
+  int HandleReadComplete(int rv);
+
   void EnterStateSendHeaders();
 
   void ResetStream();
+
+  // Returns ERR_QUIC_HANDSHAKE_FAILED, if |rv| is ERR_QUIC_PROTOCOL_ERROR and
+  // the handshake was never confirmed. Otherwise, returns |rv|.
+  int MapStreamError(int rv);
 
   // If |has_response_status_| is false, sets |response_status| to the result
   // of ComputeResponseStatus(). Returns |response_status_|.
@@ -183,6 +172,9 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   SpdyHeaderBlock response_header_block_;
   bool response_headers_received_;
 
+  SpdyHeaderBlock trailing_header_block_;
+  bool trailing_headers_received_;
+
   // Number of bytes received by the headers stream on behalf of this stream.
   int64_t headers_bytes_received_;
   // Number of bytes sent by the headers stream on behalf of this stream.
@@ -212,15 +204,8 @@ class NET_EXPORT_PRIVATE QuicHttpStream
   NetLogWithSource stream_net_log_;
 
   int session_error_;  // Error code from the connection shutdown.
-  QuicErrorCode quic_connection_error_;       // Cached connection error code.
-  QuicRstStreamErrorCode quic_stream_error_;  // Cached stream error code.
 
   bool found_promise_;
-  // |QuicClientPromisedInfo| owns this. It will be set when |Try()|
-  // is asynchronous, i.e. it returned QUIC_PENDING, and remains valid
-  // until |OnRendezvouResult()| fires or |push_handle_->Cancel()| is
-  // invoked.
-  QuicClientPushPromiseIndex::TryHandle* push_handle_;
 
   // Set to true when DoLoop() is being executed, false otherwise.
   bool in_loop_;

@@ -50,6 +50,7 @@ class WebURL;
 class WebURLRequest;
 class WebView;
 class WebWidget;
+enum class WebSandboxFlags;
 struct WebDateTimeChooserParams;
 struct WebPoint;
 struct WebRect;
@@ -76,7 +77,8 @@ class WebViewClient : protected WebWidgetClient {
                               const WebWindowFeatures& features,
                               const WebString& name,
                               WebNavigationPolicy policy,
-                              bool suppress_opener) {
+                              bool suppress_opener,
+                              WebSandboxFlags) {
     return 0;
   }
 
@@ -144,9 +146,6 @@ class WebViewClient : protected WebWidgetClient {
   virtual void MoveValidationMessage(const WebRect& anchor_in_viewport) {}
 
   // UI ------------------------------------------------------------------
-
-  // Called when script modifies window.status
-  virtual void SetStatusText(const WebString&) {}
 
   // Called when hovering over an anchor with the given URL.
   virtual void SetMouseOverURL(const WebURL&) {}
@@ -230,10 +229,7 @@ class WebViewClient : protected WebWidgetClient {
   // Informs the browser that the page scale has changed.
   virtual void PageScaleFactorChanged() {}
 
-  // Draggable regions ----------------------------------------------------
-
-  // Informs the browser that the draggable regions have been updated.
-  virtual void DraggableRegionsChanged() {}
+  // Gestures -------------------------------------------------------------
 
   virtual bool CanHandleGestureEvent() { return false; }
 

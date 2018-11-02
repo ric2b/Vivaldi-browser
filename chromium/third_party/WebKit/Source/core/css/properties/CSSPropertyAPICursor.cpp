@@ -11,14 +11,13 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "core/frame/UseCounter.h"
 
+class CSSParserLocalContext;
 namespace blink {
-
-using CSSCursorImageValue = cssvalue::CSSCursorImageValue;
 
 const CSSValue* CSSPropertyAPICursor::parseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    CSSPropertyID) {
+    const CSSParserLocalContext&) {
   bool in_quirks_mode = IsQuirksModeBehavior(context.Mode());
   CSSValueList* list = nullptr;
   while (CSSValue* image = CSSPropertyParserHelpers::ConsumeImage(
@@ -38,8 +37,8 @@ const CSSValue* CSSPropertyAPICursor::parseSingleValue(
     if (!list)
       list = CSSValueList::CreateCommaSeparated();
 
-    list->Append(
-        *CSSCursorImageValue::Create(*image, hot_spot_specified, hot_spot));
+    list->Append(*cssvalue::CSSCursorImageValue::Create(
+        *image, hot_spot_specified, hot_spot));
     if (!CSSPropertyParserHelpers::ConsumeCommaIncludingWhitespace(range))
       return nullptr;
   }
@@ -47,9 +46,9 @@ const CSSValue* CSSPropertyAPICursor::parseSingleValue(
   CSSValueID id = range.Peek().Id();
   if (!range.AtEnd()) {
     if (id == CSSValueWebkitZoomIn)
-      context.Count(UseCounter::kPrefixedCursorZoomIn);
+      context.Count(WebFeature::kPrefixedCursorZoomIn);
     else if (id == CSSValueWebkitZoomOut)
-      context.Count(UseCounter::kPrefixedCursorZoomOut);
+      context.Count(WebFeature::kPrefixedCursorZoomOut);
   }
   CSSValue* cursor_type = nullptr;
   if (id == CSSValueHand) {

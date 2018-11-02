@@ -23,7 +23,7 @@ ForeignLayerDisplayItem::ForeignLayerDisplayItem(
       layer_(std::move(layer)),
       location_(location),
       bounds_(bounds) {
-  DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+  DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
   DCHECK(IsForeignLayerType(type));
   DCHECK(layer_);
 }
@@ -35,7 +35,7 @@ void ForeignLayerDisplayItem::Replay(GraphicsContext&) const {
 }
 
 void ForeignLayerDisplayItem::AppendToWebDisplayItemList(
-    const IntRect&,
+    const LayoutSize&,
     WebDisplayItemList*) const {
   NOTREACHED();
 }

@@ -48,13 +48,9 @@ void RecordDaysSinceEnabledMetric(int days_since_enabled) {
 
 namespace data_reduction_proxy {
 
-const char kDataReductionPassThroughHeader[] =
-    "Chrome-Proxy-Accept-Transform: identity\nCache-Control: no-cache";
-
 DataReductionProxySettings::DataReductionProxySettings()
     : unreachable_(false),
       deferred_initialization_(false),
-      promo_allowed_(false),
       data_reduction_proxy_enabled_pref_name_(),
       prefs_(NULL),
       config_(nullptr),
@@ -79,11 +75,6 @@ void DataReductionProxySettings::InitPrefMembers() {
                  base::Unretained(this)));
 }
 
-void DataReductionProxySettings::UpdateConfigValues() {
-  DCHECK(config_);
-  promo_allowed_ = config_->promo_allowed();
-}
-
 void DataReductionProxySettings::InitDataReductionProxySettings(
     const std::string& data_reduction_proxy_enabled_pref_name,
     PrefService* prefs,
@@ -102,7 +93,6 @@ void DataReductionProxySettings::InitDataReductionProxySettings(
   data_reduction_proxy_service_ = std::move(data_reduction_proxy_service);
   data_reduction_proxy_service_->AddObserver(this);
   InitPrefMembers();
-  UpdateConfigValues();
   RecordDataReductionInit();
   data_reduction_proxy_service_->InitializeLoFiPrefs();
 

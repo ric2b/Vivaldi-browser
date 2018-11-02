@@ -72,6 +72,8 @@ class HostPairingScreen
 
   // Overridden from EnterpriseEnrollmentHelper::EnrollmentStatusConsumer:
   void OnAuthError(const GoogleServiceAuthError& error) override;
+  void OnMultipleLicensesAvailable(
+      const EnrollmentLicenseMap& licenses) override;
   void OnEnrollmentError(policy::EnrollmentStatus status) override;
   void OnOtherError(EnterpriseEnrollmentHelper::OtherError error) override;
   void OnDeviceEnrolled(const std::string& additional_token) override;
@@ -90,6 +92,10 @@ class HostPairingScreen
   pairing_chromeos::HostPairingController* remora_controller_ = nullptr;
 
   std::unique_ptr<EnterpriseEnrollmentHelper> enrollment_helper_;
+
+  // Describes the error code of an enrollment operation. For the format, see
+  // the definition of |error_code_| in bluetooth_host_pairing_controller.h.
+  int enrollment_error_code_ = 0;
   std::string enrollment_error_string_;
 
   // Current stage of pairing process.

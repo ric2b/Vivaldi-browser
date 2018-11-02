@@ -1,7 +1,8 @@
 include_rules = [
   "+cc/switches.h", # For cc command line switches.
-  "+components/display_compositor",
-  "+components/variations",
+  "+components/viz/common",
+  "+components/viz/host",
+  "+components/viz/service",
   "+services/ui/public",
   "+third_party/zlib",
   "+ui/latency",
@@ -27,10 +28,6 @@ specific_include_rules = {
     "+content/browser/frame_host/render_frame_message_filter.h",
   ],
   "render_widget_host_view_mac\.mm": [
-    "+content/browser/frame_host",
-    "+content/public/browser/web_contents.h",
-  ],
-  "ime_adapter_android\.cc": [
     "+content/browser/frame_host",
     "+content/public/browser/web_contents.h",
   ],

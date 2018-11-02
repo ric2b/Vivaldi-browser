@@ -29,6 +29,7 @@
 #import "ios/web_view/internal/translate/cwv_translation_controller_internal.h"
 #import "ios/web_view/internal/translate/web_view_translate_client.h"
 #include "ios/web_view/internal/web_view_browser_state.h"
+#include "ios/web_view/internal/web_view_global_state_util.h"
 #import "ios/web_view/internal/web_view_java_script_dialog_presenter.h"
 #import "ios/web_view/internal/web_view_web_state_policy_decider.h"
 #import "ios/web_view/public/cwv_navigation_delegate.h"
@@ -72,17 +73,23 @@ NSString* const kSessionStorageKey = @"sessionStorage";
       _javaScriptDialogPresenter;
 }
 
-// Redefine the property as readwrite.
-@property(nonatomic, copy) CWVWebViewConfiguration* configuration;
 // Redefine these properties as readwrite to define setters, which send KVO
 // notifications.
 @property(nonatomic, readwrite) double estimatedProgress;
 @property(nonatomic, readwrite) BOOL canGoBack;
 @property(nonatomic, readwrite) BOOL canGoForward;
+@property(nonatomic, readwrite) NSURL* lastCommittedURL;
+@property(nonatomic, readwrite) BOOL loading;
+@property(nonatomic, readwrite, copy) NSString* title;
+@property(nonatomic, readwrite) NSURL* visibleURL;
 
 // Updates the availability of the back/forward navigation properties exposed
 // through |canGoBack| and |canGoForward|.
 - (void)updateNavigationAvailability;
+// Updates the URLs exposed through |lastCommittedURL| and |visibleURL|.
+- (void)updateCurrentURLs;
+// Updates |title| property.
+- (void)updateTitle;
 
 @end
 
@@ -94,10 +101,22 @@ static NSString* gUserAgentProduct = nil;
 @synthesize canGoForward = _canGoForward;
 @synthesize configuration = _configuration;
 @synthesize estimatedProgress = _estimatedProgress;
+@synthesize lastCommittedURL = _lastCommittedURL;
+@synthesize loading = _loading;
 @synthesize navigationDelegate = _navigationDelegate;
+@synthesize title = _title;
 @synthesize translationController = _translationController;
 @synthesize UIDelegate = _UIDelegate;
 @synthesize scrollView = _scrollView;
+@synthesize visibleURL = _visibleURL;
+
++ (void)initialize {
+  if (self != [CWVWebView class]) {
+    return;
+  }
+
+  ios_web_view::InitializeGlobalState();
+}
 
 + (NSString*)userAgentProduct {
   return gUserAgentProduct;
@@ -126,27 +145,11 @@ static NSString* gUserAgentProduct = nil;
                 configuration:(CWVWebViewConfiguration*)configuration {
   self = [super initWithFrame:frame];
   if (self) {
-    _configuration = [configuration copy];
+    _configuration = configuration;
     _scrollView = [[CWVScrollView alloc] init];
     [self resetWebStateWithSessionStorage:nil];
   }
   return self;
-}
-
-- (BOOL)isLoading {
-  return _webState->IsLoading();
-}
-
-- (NSURL*)visibleURL {
-  return net::NSURLWithGURL(_webState->GetVisibleURL());
-}
-
-- (NSURL*)lastCommittedURL {
-  return net::NSURLWithGURL(_webState->GetLastCommittedURL());
-}
-
-- (NSString*)title {
-  return base::SysUTF16ToNSString(_webState->GetTitle());
 }
 
 - (void)goBack {
@@ -179,6 +182,7 @@ static NSString* gUserAgentProduct = nil;
   params.extra_headers.reset([request.allHTTPHeaderFields copy]);
   params.post_data.reset([request.HTTPBody copy]);
   _webState->GetNavigationManager()->LoadURLWithParams(params);
+  [self updateCurrentURLs];
 }
 
 - (void)evaluateJavaScript:(NSString*)javaScriptString
@@ -195,6 +199,11 @@ static NSString* gUserAgentProduct = nil;
 
 // -----------------------------------------------------------------------
 // WebStateObserver implementation.
+
+- (void)webState:(web::WebState*)webState
+    navigationItemsPruned:(size_t)pruned_item_count {
+  [self updateCurrentURLs];
+}
 
 - (void)webState:(web::WebState*)webState
     didStartNavigation:(web::NavigationContext*)navigation {
@@ -216,6 +225,7 @@ static NSString* gUserAgentProduct = nil;
 - (void)webState:(web::WebState*)webState
     didFinishNavigation:(web::NavigationContext*)navigation {
   [self updateNavigationAvailability];
+  [self updateCurrentURLs];
 }
 
 - (void)webState:(web::WebState*)webState didLoadPageWithSuccess:(BOOL)success {
@@ -229,6 +239,18 @@ static NSString* gUserAgentProduct = nil;
 - (void)webState:(web::WebState*)webState
     didChangeLoadingProgress:(double)progress {
   self.estimatedProgress = progress;
+}
+
+- (void)webStateDidStopLoading:(web::WebState*)webState {
+  self.loading = _webState->IsLoading();
+}
+
+- (void)webStateDidStartLoading:(web::WebState*)webState {
+  self.loading = _webState->IsLoading();
+}
+
+- (void)webStateDidChangeTitle:(web::WebState*)webState {
+  [self updateTitle];
 }
 
 - (void)renderProcessGoneForWebState:(web::WebState*)webState {
@@ -362,6 +384,12 @@ static NSString* gUserAgentProduct = nil;
   _translationController.webState = _webState.get();
 
   [self addInternalWebViewAsSubview];
+
+  [self updateNavigationAvailability];
+  [self updateCurrentURLs];
+  [self updateTitle];
+  self.loading = NO;
+  self.estimatedProgress = 0.0;
 }
 
 // Adds the web view provided by |_webState| as a subview unless it has already.
@@ -380,6 +408,15 @@ static NSString* gUserAgentProduct = nil;
   self.canGoBack = _webState && _webState->GetNavigationManager()->CanGoBack();
   self.canGoForward =
       _webState && _webState->GetNavigationManager()->CanGoForward();
+}
+
+- (void)updateCurrentURLs {
+  self.lastCommittedURL = net::NSURLWithGURL(_webState->GetLastCommittedURL());
+  self.visibleURL = net::NSURLWithGURL(_webState->GetVisibleURL());
+}
+
+- (void)updateTitle {
+  self.title = base::SysUTF16ToNSString(_webState->GetTitle());
 }
 
 @end

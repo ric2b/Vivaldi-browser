@@ -234,7 +234,7 @@ void SupervisedUserCreationScreenHandler::Show() {
     auto user_dict = base::MakeUnique<base::DictionaryValue>();
     UserSelectionScreen::FillUserDictionary(
         *it, is_owner, false, /* is_signin_to_add */
-        proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD,
+        proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
         NULL, /* public_session_recommended_locales */
         user_dict.get());
     users_list->Append(std::move(user_dict));
@@ -407,23 +407,12 @@ void SupervisedUserCreationScreenHandler::HandleAuthenticateManager(
 // TODO(antrim) : this is an explicit code duplications with UserImageScreen.
 // It should be removed by issue 251179.
 void SupervisedUserCreationScreenHandler::HandleGetImages() {
-  base::ListValue image_urls;
-  for (int i = default_user_image::kFirstDefaultImageIndex;
-       i < default_user_image::kDefaultImagesCount; ++i) {
-    std::unique_ptr<base::DictionaryValue> image_data(
-        new base::DictionaryValue);
-    image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
-    image_data->SetString("author",
-                          l10n_util::GetStringUTF16(
-                              default_user_image::kDefaultImageAuthorIDs[i]));
-    image_data->SetString("website",
-                          l10n_util::GetStringUTF16(
-                              default_user_image::kDefaultImageWebsiteIDs[i]));
-    image_data->SetString("title",
-                          default_user_image::GetDefaultImageDescription(i));
-    image_urls.Append(std::move(image_data));
-  }
-  CallJS("setDefaultImages", image_urls);
+  base::DictionaryValue result;
+  result.SetInteger("first", default_user_image::GetFirstDefaultImage());
+  std::unique_ptr<base::ListValue> default_images =
+      default_user_image::GetAsDictionary(true /* all */);
+  result.Set("images", std::move(default_images));
+  CallJS("setDefaultImages", result);
 }
 
 void SupervisedUserCreationScreenHandler::HandlePhotoTaken
@@ -448,8 +437,8 @@ void SupervisedUserCreationScreenHandler::HandleDiscardPhoto() {
 }
 
 void SupervisedUserCreationScreenHandler::HandleSelectImage(
-    const std::string& image_url,
-    const std::string& image_type) {
+    const std::string& image_type,
+    const std::string& image_url) {
   if (delegate_)
     delegate_->OnImageSelected(image_type, image_url);
 }

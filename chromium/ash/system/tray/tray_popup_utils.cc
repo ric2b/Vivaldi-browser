@@ -19,6 +19,7 @@
 #include "base/memory/ptr_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
@@ -49,7 +50,8 @@ namespace {
 std::unique_ptr<views::LayoutManager> CreateDefaultCenterLayoutManager() {
   // TODO(bruthig): Use constants instead of magic numbers.
   auto box_layout = base::MakeUnique<views::BoxLayout>(
-      views::BoxLayout::kVertical, kTrayPopupLabelHorizontalPadding, 8, 0);
+      views::BoxLayout::kVertical,
+      gfx::Insets(8, kTrayPopupLabelHorizontalPadding));
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   box_layout->set_cross_axis_alignment(
@@ -60,8 +62,8 @@ std::unique_ptr<views::LayoutManager> CreateDefaultCenterLayoutManager() {
 // Creates a layout manager that positions Views horizontally. The Views will be
 // centered along the horizontal and vertical axis.
 std::unique_ptr<views::LayoutManager> CreateDefaultEndsLayoutManager() {
-  auto box_layout = base::MakeUnique<views::BoxLayout>(
-      views::BoxLayout::kHorizontal, 0, 0, 0);
+  auto box_layout =
+      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kHorizontal);
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   box_layout->set_cross_axis_alignment(
@@ -185,23 +187,6 @@ TriView* TrayPopupUtils::CreateSubHeaderRowView(bool start_visible) {
   return tri_view;
 }
 
-views::View* TrayPopupUtils::CreateInfoLabelRowView(int message_id) {
-  views::Label* label = TrayPopupUtils::CreateDefaultLabel();
-  label->SetText(l10n_util::GetStringUTF16(message_id));
-  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::SYSTEM_INFO);
-  style.SetupLabel(label);
-
-  TriView* tri_view = CreateMultiTargetRowView();
-  tri_view->SetInsets(
-      gfx::Insets(0, kMenuExtraMarginFromLeftEdge + kTrayPopupPaddingHorizontal,
-                  0, kTrayPopupPaddingHorizontal));
-  tri_view->SetContainerVisible(TriView::Container::START, false);
-  tri_view->SetContainerVisible(TriView::Container::END, false);
-  tri_view->AddView(TriView::Container::CENTER, label);
-
-  return tri_view;
-}
-
 TriView* TrayPopupUtils::CreateMultiTargetRowView() {
   TriView* tri_view = new TriView(0 /* padding_between_items */);
 
@@ -227,7 +212,7 @@ views::Label* TrayPopupUtils::CreateDefaultLabel() {
   // Frequently the label will paint to a layer that's non-opaque, so subpixel
   // rendering won't work unless we explicitly set a background. See
   // crbug.com/686363
-  label->set_background(views::Background::CreateThemedSolidBackground(
+  label->SetBackground(views::CreateThemedSolidBackground(
       label, ui::NativeTheme::kColorId_BubbleBackground));
   return label;
 }
@@ -250,7 +235,8 @@ views::ImageView* TrayPopupUtils::CreateMoreImageView() {
 
 views::Slider* TrayPopupUtils::CreateSlider(views::SliderListener* listener) {
   views::Slider* slider = new views::Slider(listener);
-  slider->SetBorder(views::CreateEmptyBorder(gfx::Insets(0, 16)));
+  slider->SetBorder(views::CreateEmptyBorder(
+      gfx::Insets(0, kTrayPopupSliderHorizontalPadding)));
   return slider;
 }
 
@@ -275,10 +261,7 @@ std::unique_ptr<views::Painter> TrayPopupUtils::CreateFocusPainter() {
 }
 
 void TrayPopupUtils::ConfigureTrayPopupButton(views::CustomButton* button) {
-  // All buttons that call into here want this focus painter, but
-  // SetFocusPainter is defined separately on derived classes and isn't part of
-  // CustomButton. TODO(estade): Address this.
-  // button->SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
+  button->SetFocusPainter(TrayPopupUtils::CreateFocusPainter());
   button->SetFocusForPlatform();
 
   button->SetInkDropMode(views::InkDropHostView::InkDropMode::ON);
@@ -289,7 +272,7 @@ void TrayPopupUtils::ConfigureTrayPopupButton(views::CustomButton* button) {
 
 void TrayPopupUtils::ConfigureAsStickyHeader(views::View* view) {
   view->set_id(VIEW_ID_STICKY_HEADER);
-  view->set_background(views::Background::CreateThemedSolidBackground(
+  view->SetBackground(views::CreateThemedSolidBackground(
       view, ui::NativeTheme::kColorId_BubbleBackground));
   view->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kMenuSeparatorVerticalPadding, 0)));

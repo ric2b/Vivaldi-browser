@@ -43,3 +43,10 @@ post_process_target("//components/sessions:shared") {
     "//vivaldi/components/sessions/vivaldi_session_service_commands.h",
   ]
 }
+
+post_process_target("//rlz:rlz_lib") {
+  sources -= [
+      "lib/financial_ping.cc",
+      "lib/rlz_lib.cc",
+  ]
+}

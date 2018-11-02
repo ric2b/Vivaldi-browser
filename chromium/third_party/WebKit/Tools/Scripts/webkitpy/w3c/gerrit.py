@@ -48,7 +48,7 @@ class GerritAPI(object):
     def query_exportable_open_cls(self, limit=200):
         path = ('/changes/?q=project:\"chromium/src\"+status:open'
                 '&o=CURRENT_FILES&o=CURRENT_REVISION&o=COMMIT_FOOTERS'
-                '&o=DETAILED_ACCOUNTS&n={}').format(limit)
+                '&o=DETAILED_ACCOUNTS&o=DETAILED_LABELS&n={}').format(limit)
         open_cls_data = self.get(path)
         open_cls = [GerritCL(data, self) for data in open_cls_data]
 
@@ -87,6 +87,10 @@ class GerritCL(object):
     def current_revision(self):
         return self._data['revisions'][self.current_revision_sha]
 
+    @property
+    def has_review_started(self):
+        return self._data.get('has_review_started')
+
     def latest_commit_message_with_footers(self):
         return self.current_revision['commit_with_footers']
 
@@ -114,6 +118,9 @@ class GerritCL(object):
         if 'Import' in self.subject:
             return False
 
+        if 'No-Export: true' in self.current_revision['commit_with_footers']:
+            return False
+
         if 'NOEXPORT=true' in self.current_revision['commit_with_footers']:
             return False
 
@@ -129,6 +136,7 @@ class GerritCL(object):
         return True
 
     def exportable_filename(self, filename):
+        """Returns True if the file could be exportable, or False otherwise."""
         filename = os.path.basename(filename.lower())
         return (
             not filename.endswith('-expected.txt')
@@ -165,13 +173,13 @@ class GerritCL(object):
                 continue
 
             # File is being changed, detect if it's exportable.
-            if CHROMIUM_WPT_DIR in line:
+            if CHROMIUM_WPT_DIR in line and not line.endswith('-expected.txt'):
                 in_exportable_diff = True
                 filtered_patch.append(line)
             else:
                 in_exportable_diff = False
 
-        # Join into string, newline at end is required.
+        # Join into string; the newline at the end is required.
         if not filtered_patch[-1].strip():
             filtered_patch = filtered_patch[:-1]
         patch = '\n'.join(filtered_patch) + '\n'

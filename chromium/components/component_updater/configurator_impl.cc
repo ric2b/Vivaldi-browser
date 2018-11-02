@@ -10,6 +10,7 @@
 
 #include "base/command_line.h"
 #include "base/feature_list.h"
+#include "base/stl_util.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/version.h"
@@ -56,14 +57,7 @@ const char kSwitchDisableBackgroundDownloads[] = "disable-background-downloads";
 #endif  // defined(OS_WIN)
 
 const base::Feature kAlternateComponentUrls{"AlternateComponentUrls",
-                                            base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Returns true if and only if |test| is contained in |vec|.
-bool HasSwitchValue(const std::vector<std::string>& vec, const char* test) {
-  if (vec.empty())
-    return 0;
-  return (std::find(vec.begin(), vec.end(), test) != vec.end());
-}
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
 // If there is an element of |vec| of the form |test|=.*, returns the right-
 // hand side of that assignment. Otherwise, returns an empty string.
@@ -101,13 +95,14 @@ ConfiguratorImpl::ConfiguratorImpl(
   std::vector<std::string> switch_values = base::SplitString(
       cmdline->GetSwitchValueASCII(switches::kComponentUpdater), ",",
       base::KEEP_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-  fast_update_ = HasSwitchValue(switch_values, kSwitchFastUpdate);
-  pings_enabled_ = !HasSwitchValue(switch_values, kSwitchDisablePings);
-  deltas_enabled_ = !HasSwitchValue(switch_values, kSwitchDisableDeltaUpdates);
+  fast_update_ = base::ContainsValue(switch_values, kSwitchFastUpdate);
+  pings_enabled_ = !base::ContainsValue(switch_values, kSwitchDisablePings);
+  deltas_enabled_ =
+      !base::ContainsValue(switch_values, kSwitchDisableDeltaUpdates);
 
 #if defined(OS_WIN)
   background_downloads_enabled_ =
-      !HasSwitchValue(switch_values, kSwitchDisableBackgroundDownloads);
+      !base::ContainsValue(switch_values, kSwitchDisableBackgroundDownloads);
 #else
   background_downloads_enabled_ = false;
 #endif
@@ -119,7 +114,7 @@ ConfiguratorImpl::ConfiguratorImpl(
     DCHECK(url_source_override_.is_valid());
   }
 
-  if (HasSwitchValue(switch_values, kSwitchRequestParam))
+  if (base::ContainsValue(switch_values, kSwitchRequestParam))
     extra_info_ += "testrequest=\"1\"";
 }
 
@@ -200,6 +195,13 @@ bool ConfiguratorImpl::EnabledBackgroundDownloader() const {
 
 bool ConfiguratorImpl::EnabledCupSigning() const {
   return true;
+}
+
+std::vector<uint8_t> ConfiguratorImpl::GetRunActionKeyHash() const {
+  return std::vector<uint8_t>{0x5f, 0x94, 0xe0, 0x3c, 0x64, 0x30, 0x9f, 0xbc,
+                              0xfe, 0x00, 0x9a, 0x27, 0x3e, 0x52, 0xbf, 0xa5,
+                              0x84, 0xb9, 0xb3, 0x75, 0x07, 0x29, 0xde, 0xfa,
+                              0x32, 0x76, 0xd9, 0x93, 0xb5, 0xa3, 0xce, 0x02};
 }
 
 }  // namespace component_updater

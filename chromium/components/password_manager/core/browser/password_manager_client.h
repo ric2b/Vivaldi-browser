@@ -12,6 +12,7 @@
 #include "components/autofill/core/common/password_form.h"
 #include "components/password_manager/core/browser/credentials_filter.h"
 #include "components/password_manager/core/browser/password_store.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 class PrefService;
 
@@ -32,6 +33,7 @@ namespace password_manager {
 class LogManager;
 class PasswordFormManager;
 class PasswordManager;
+class PasswordManagerMetricsRecorder;
 class PasswordStore;
 
 enum PasswordSyncState {
@@ -211,8 +213,23 @@ class PasswordManagerClient {
   // Checks the safe browsing reputation of the webpage where password reuse
   // happens.
   virtual void CheckProtectedPasswordEntry(
-      const std::string& password_saved_domain) = 0;
+      const std::string& password_saved_domain,
+      bool password_field_exists) = 0;
 #endif
+
+  // Gets the UKM service associated with this client (for metrics).
+  virtual ukm::UkmRecorder* GetUkmRecorder() = 0;
+
+  // Gets a ukm::SourceId that is associated with the WebContents object
+  // and its last committed main frame navigation. Note that the URL binding
+  // has to happen by the caller at a later point.
+  virtual ukm::SourceId GetUkmSourceId() = 0;
+
+  // Gets a metrics recorder for the currently committed navigation.
+  // As PasswordManagerMetricsRecorder submits metrics on destruction, a new
+  // instance will be returned for each committed navigation. A caller must not
+  // hold on to the pointer.
+  virtual PasswordManagerMetricsRecorder& GetMetricsRecorder() = 0;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PasswordManagerClient);

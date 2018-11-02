@@ -5,12 +5,12 @@
 #include "ash/system/tiles/tray_tiles.h"
 
 #include "ash/ash_switches.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/night_light/night_light_toggle_button.h"
 #include "ash/system/tiles/tiles_default_view.h"
 #include "ash/system/tray/system_menu_button.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_session_controller_client.h"
 #include "base/command_line.h"
 #include "components/user_manager/user_type.h"
 #include "ui/views/view.h"
@@ -20,7 +20,7 @@ using views::Button;
 namespace ash {
 
 // Tests manually control their session state.
-class TrayTilesTest : public test::NoSessionAshTestBase {
+class TrayTilesTest : public NoSessionAshTestBase {
  public:
   TrayTilesTest() {}
   ~TrayTilesTest() override {}
@@ -30,13 +30,13 @@ class TrayTilesTest : public test::NoSessionAshTestBase {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         ash::switches::kAshEnableNightLight);
 
-    test::NoSessionAshTestBase::SetUp();
+    NoSessionAshTestBase::SetUp();
     tray_tiles_.reset(new TrayTiles(GetPrimarySystemTray()));
   }
 
   void TearDown() override {
     tray_tiles_.reset();
-    test::NoSessionAshTestBase::TearDown();
+    NoSessionAshTestBase::TearDown();
   }
 
   views::CustomButton* GetSettingsButton() {

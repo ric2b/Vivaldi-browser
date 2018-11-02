@@ -9,8 +9,8 @@
 
 #include "base/strings/stringprintf.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/shell/test/earl_grey/shell_earl_grey.h"
 #import "ios/web/shell/test/earl_grey/shell_matchers.h"
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
@@ -20,7 +20,6 @@
 #error "This file requires ARC support."
 #endif
 
-using web::WebViewContainingText;
 using web::WebViewCssSelector;
 
 namespace {
@@ -57,10 +56,8 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that placeholder image is not displayed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFallbackText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
+  [ShellEarlGrey waitForWebViewContainingText:kFallbackText];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img")]
       assertWithMatcher:grey_nil()];
 }
@@ -78,8 +75,7 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that plugin object is replaced with placeholder image.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img[src*='data']")]
       assertWithMatcher:grey_notNil()];
 }
@@ -101,8 +97,7 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that plugin object is replaced with placeholder image.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img[src*='data']")]
       assertWithMatcher:grey_notNil()];
 }
@@ -124,10 +119,8 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that placeholder image is not displayed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFallbackText)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
+  [ShellEarlGrey waitForWebViewContainingText:kFallbackText];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img")]
       assertWithMatcher:grey_nil()];
 }
@@ -146,8 +139,7 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that plugin object is replaced with placeholder image.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img[src*='data']")]
       assertWithMatcher:grey_notNil()];
 }
@@ -165,8 +157,7 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that placeholder image is not displayed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img")]
       assertWithMatcher:grey_nil()];
 }
@@ -203,8 +194,7 @@ void LoadPage(const std::string& page_content) {
   LoadPage(page);
 
   // Verify that placeholder image is not displayed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageDescription)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kPageDescription];
   [[EarlGrey selectElementWithMatcher:WebViewCssSelector("img")]
       assertWithMatcher:grey_nil()];
 }

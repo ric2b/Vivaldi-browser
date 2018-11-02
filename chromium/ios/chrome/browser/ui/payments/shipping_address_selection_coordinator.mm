@@ -4,11 +4,14 @@
 
 #import "ios/chrome/browser/ui/payments/shipping_address_selection_coordinator.h"
 
+#include <vector>
+
+#include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/browser/autofill_profile.h"
-#include "components/payments/core/strings_util.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
+#import "ios/chrome/browser/ui/payments/cells/autofill_profile_item.h"
 #include "ios/chrome/browser/ui/payments/payment_request_selector_view_controller.h"
 #include "ios/chrome/browser/ui/payments/shipping_address_selection_mediator.h"
 
@@ -17,10 +20,6 @@
 #endif
 
 namespace {
-using ::payment_request_util::GetShippingAddressSelectorErrorMessage;
-using ::payments::GetShippingAddressSectionString;
-using ::payments::GetShippingAddressSelectorInfoMessage;
-
 // The delay in nano seconds before notifying the delegate of the selection.
 const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
 }  // namespace
@@ -33,6 +32,11 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
     PaymentRequestSelectorViewController* viewController;
 
 @property(nonatomic, strong) ShippingAddressSelectionMediator* mediator;
+
+// Initializes and starts the AddressEditCoordinator. Sets |address| as the
+// address to be edited.
+- (void)startAddressEditCoordinatorWithAddress:
+    (autofill::AutofillProfile*)address;
 
 // Called when the user selects a shipping address. The cell is checked, the
 // UI is locked so that the user can't interact with it, then the delegate is
@@ -54,15 +58,8 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
 - (void)start {
   self.mediator = [[ShippingAddressSelectionMediator alloc]
       initWithPaymentRequest:self.paymentRequest];
-  self.mediator.headerText =
-      self.paymentRequest->shipping_options().empty()
-          ? base::SysUTF16ToNSString(GetShippingAddressSelectorInfoMessage(
-                self.paymentRequest->shipping_type()))
-          : nil;
 
   self.viewController = [[PaymentRequestSelectorViewController alloc] init];
-  self.viewController.title = base::SysUTF16ToNSString(
-      GetShippingAddressSectionString(self.paymentRequest->shipping_type()));
   self.viewController.delegate = self;
   self.viewController.dataSource = self.mediator;
   [self.viewController loadModel];
@@ -87,8 +84,6 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
   self.viewController.view.userInteractionEnabled = YES;
 
   DCHECK(self.paymentRequest);
-  self.mediator.headerText =
-      GetShippingAddressSelectorErrorMessage(*self.paymentRequest);
   self.mediator.state = PaymentRequestSelectorStateError;
   [self.viewController loadModel];
   [self.viewController.collectionView reloadData];
@@ -96,15 +91,27 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
 
 #pragma mark - PaymentRequestSelectorViewControllerDelegate
 
-- (void)paymentRequestSelectorViewController:
+- (BOOL)paymentRequestSelectorViewController:
             (PaymentRequestSelectorViewController*)controller
                         didSelectItemAtIndex:(NSUInteger)index {
-  // Update the data source with the selection.
-  self.mediator.selectedItemIndex = index;
+  CollectionViewItem<PaymentsIsSelectable>* selectedItem =
+      self.mediator.selectableItems[index];
 
-  DCHECK(index < self.paymentRequest->shipping_profiles().size());
-  [self delayedNotifyDelegateOfSelection:self.paymentRequest
-                                             ->shipping_profiles()[index]];
+  DCHECK(index < self.paymentRequest->billing_profiles().size());
+  autofill::AutofillProfile* shippingProfile =
+      self.paymentRequest->shipping_profiles()[index];
+
+  // Proceed with item selection only if the item has all required info, or
+  // else bring up the address editor.
+  if (selectedItem.complete) {
+    // Update the data source with the selection.
+    self.mediator.selectedItemIndex = index;
+    [self delayedNotifyDelegateOfSelection:shippingProfile];
+    return YES;
+  } else {
+    [self startAddressEditCoordinatorWithAddress:shippingProfile];
+    return NO;
+  }
 }
 
 - (void)paymentRequestSelectorViewControllerDidFinish:
@@ -114,23 +121,59 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
 
 - (void)paymentRequestSelectorViewControllerDidSelectAddItem:
     (PaymentRequestSelectorViewController*)controller {
-  self.addressEditCoordinator = [[AddressEditCoordinator alloc]
-      initWithBaseViewController:self.viewController];
-  self.addressEditCoordinator.paymentRequest = self.paymentRequest;
-  self.addressEditCoordinator.delegate = self;
-  [self.addressEditCoordinator start];
+  [self startAddressEditCoordinatorWithAddress:nil];
+}
+
+- (void)paymentRequestSelectorViewControllerDidToggleEditingMode:
+    (PaymentRequestSelectorViewController*)controller {
+  [self.viewController loadModel];
+  [self.viewController.collectionView reloadData];
+}
+
+- (void)paymentRequestSelectorViewController:
+            (PaymentRequestSelectorViewController*)controller
+              didSelectItemAtIndexForEditing:(NSUInteger)index {
+  DCHECK(index < self.paymentRequest->shipping_profiles().size());
+  [self
+      startAddressEditCoordinatorWithAddress:self.paymentRequest
+                                                 ->shipping_profiles()[index]];
 }
 
 #pragma mark - AddressEditCoordinatorDelegate
 
 - (void)addressEditCoordinator:(AddressEditCoordinator*)coordinator
        didFinishEditingAddress:(autofill::AutofillProfile*)address {
+  // Update the data source with the new data.
+  [self.mediator loadItems];
+
+  const std::vector<autofill::AutofillProfile*>& shippingProfiles =
+      self.paymentRequest->shipping_profiles();
+  const auto position =
+      std::find(shippingProfiles.begin(), shippingProfiles.end(), address);
+  DCHECK(position != shippingProfiles.end());
+
+  // Mark the edited item as complete meaning all required information has been
+  // filled out.
+  CollectionViewItem<PaymentsIsSelectable>* editedItem =
+      self.mediator.selectableItems[position - shippingProfiles.begin()];
+  editedItem.complete = YES;
+
+  if (![self.viewController isEditing]) {
+    // Update the data source with the selection.
+    self.mediator.selectedItemIndex = position - shippingProfiles.begin();
+  }
+
+  [self.viewController loadModel];
+  [self.viewController.collectionView reloadData];
+
   [self.addressEditCoordinator stop];
   self.addressEditCoordinator = nil;
 
-  // Inform |self.delegate| that |address| has been selected.
-  [self.delegate shippingAddressSelectionCoordinator:self
-                            didSelectShippingAddress:address];
+  if (![self.viewController isEditing]) {
+    // Inform |self.delegate| that |address| has been selected.
+    [self.delegate shippingAddressSelectionCoordinator:self
+                              didSelectShippingAddress:address];
+  }
 }
 
 - (void)addressEditCoordinatorDidCancel:(AddressEditCoordinator*)coordinator {
@@ -139,6 +182,16 @@ const int64_t kDelegateNotificationDelayInNanoSeconds = 0.2 * NSEC_PER_SEC;
 }
 
 #pragma mark - Helper methods
+
+- (void)startAddressEditCoordinatorWithAddress:
+    (autofill::AutofillProfile*)address {
+  self.addressEditCoordinator = [[AddressEditCoordinator alloc]
+      initWithBaseViewController:self.viewController];
+  self.addressEditCoordinator.paymentRequest = self.paymentRequest;
+  self.addressEditCoordinator.address = address;
+  self.addressEditCoordinator.delegate = self;
+  [self.addressEditCoordinator start];
+}
 
 - (void)delayedNotifyDelegateOfSelection:
     (autofill::AutofillProfile*)shippingAddress {

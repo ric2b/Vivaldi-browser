@@ -14,8 +14,9 @@
 namespace cc {
 namespace {
 
-void ExpectTranslateX(SkMScalar translate_x, const gfx::Transform& transform) {
-  EXPECT_FLOAT_EQ(translate_x, transform.matrix().get(0, 3));
+void ExpectTranslateX(SkMScalar translate_x,
+                      const TransformOperations& operations) {
+  EXPECT_FLOAT_EQ(translate_x, operations.Apply().matrix().get(0, 3));
 }
 
 void ExpectBrightness(double brightness, const FilterOperations& filter) {
@@ -293,7 +294,8 @@ TEST(KeyframedAnimationCurveTest, RepeatedTransformKeyTimes) {
   ExpectTranslateX(4.f, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
 
   // There is a discontinuity at 1. Any value between 4 and 6 is valid.
-  gfx::Transform value = curve->GetValue(base::TimeDelta::FromSecondsD(1.f));
+  gfx::Transform value =
+      curve->GetValue(base::TimeDelta::FromSecondsD(1.f)).Apply();
   EXPECT_GE(value.matrix().get(0, 3), 4.f);
   EXPECT_LE(value.matrix().get(0, 3), 6.f);
 
@@ -984,6 +986,176 @@ TEST(KeyframedAnimationCurveTest, ScaledDuration) {
                   curve->GetValue(base::TimeDelta::FromSecondsD(scale * 4.f)));
   EXPECT_FLOAT_EQ(9.f,
                   curve->GetValue(base::TimeDelta::FromSecondsD(scale * 5.f)));
+}
+
+// Tests that a size animation with one keyframe works as expected.
+TEST(KeyframedAnimationCurveTest, OneSizeKeyFrame) {
+  gfx::SizeF size = gfx::SizeF(100, 100);
+  std::unique_ptr<KeyframedSizeAnimationCurve> curve(
+      KeyframedSizeAnimationCurve::Create());
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta(), size, nullptr));
+
+  EXPECT_SIZEF_EQ(size, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_SIZEF_EQ(size, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_SIZEF_EQ(size, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_SIZEF_EQ(size, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_SIZEF_EQ(size, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+}
+
+// Tests that a size animation with two keyframes works as expected.
+TEST(KeyframedAnimationCurveTest, TwoSizeKeyFrame) {
+  gfx::SizeF size_a = gfx::SizeF(100, 100);
+  gfx::SizeF size_b = gfx::SizeF(100, 0);
+  gfx::SizeF size_midpoint = gfx::Tween::SizeValueBetween(0.5, size_a, size_b);
+  std::unique_ptr<KeyframedSizeAnimationCurve> curve(
+      KeyframedSizeAnimationCurve::Create());
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta(), size_a, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                          size_b, nullptr));
+
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_SIZEF_EQ(size_midpoint,
+                  curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+}
+
+// Tests that a size animation with three keyframes works as expected.
+TEST(KeyframedAnimationCurveTest, ThreeSizeKeyFrame) {
+  gfx::SizeF size_a = gfx::SizeF(100, 100);
+  gfx::SizeF size_b = gfx::SizeF(100, 0);
+  gfx::SizeF size_c = gfx::SizeF(200, 0);
+  gfx::SizeF size_midpoint1 = gfx::Tween::SizeValueBetween(0.5, size_a, size_b);
+  gfx::SizeF size_midpoint2 = gfx::Tween::SizeValueBetween(0.5, size_b, size_c);
+  std::unique_ptr<KeyframedSizeAnimationCurve> curve(
+      KeyframedSizeAnimationCurve::Create());
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta(), size_a, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                          size_b, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(2.0),
+                                          size_c, nullptr));
+
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_SIZEF_EQ(size_midpoint1,
+                  curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_SIZEF_EQ(size_midpoint2,
+                  curve->GetValue(base::TimeDelta::FromSecondsD(1.5f)));
+  EXPECT_SIZEF_EQ(size_c, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+  EXPECT_SIZEF_EQ(size_c, curve->GetValue(base::TimeDelta::FromSecondsD(3.f)));
+}
+
+// Tests that a size animation with multiple keys at a given time works sanely.
+TEST(KeyframedAnimationCurveTest, RepeatedSizeKeyFrame) {
+  gfx::SizeF size_a = gfx::SizeF(100, 64);
+  gfx::SizeF size_b = gfx::SizeF(100, 192);
+
+  std::unique_ptr<KeyframedSizeAnimationCurve> curve(
+      KeyframedSizeAnimationCurve::Create());
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta(), size_a, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                          size_a, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                          size_b, nullptr));
+  curve->AddKeyframe(SizeKeyframe::Create(base::TimeDelta::FromSecondsD(2.0),
+                                          size_b, nullptr));
+
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_SIZEF_EQ(size_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+
+  gfx::SizeF value = curve->GetValue(base::TimeDelta::FromSecondsD(1.0f));
+  EXPECT_FLOAT_EQ(100.0f, value.width());
+  EXPECT_LE(64.0f, value.height());
+  EXPECT_GE(192.0f, value.height());
+
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.5f)));
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+  EXPECT_SIZEF_EQ(size_b, curve->GetValue(base::TimeDelta::FromSecondsD(3.f)));
+}
+
+// Tests that a boolean animation with one keyframe works as expected.
+TEST(KeyframedAnimationCurveTest, OneBooleanKeyFrame) {
+  bool value = true;
+  std::unique_ptr<KeyframedBooleanAnimationCurve> curve(
+      KeyframedBooleanAnimationCurve::Create());
+  curve->AddKeyframe(
+      BooleanKeyframe::Create(base::TimeDelta(), value, nullptr));
+
+  EXPECT_EQ(value, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_EQ(value, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_EQ(value, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_EQ(value, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_EQ(value, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+}
+
+// Tests that a boolean animation with two keyframes works as expected.
+TEST(KeyframedAnimationCurveTest, TwoBooleanKeyFrame) {
+  bool value_a = true;
+  bool value_b = false;
+  std::unique_ptr<KeyframedBooleanAnimationCurve> curve(
+      KeyframedBooleanAnimationCurve::Create());
+  curve->AddKeyframe(
+      BooleanKeyframe::Create(base::TimeDelta(), value_a, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                             value_b, nullptr));
+
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+}
+
+// Tests that a boolean animation with three keyframes works as expected.
+TEST(KeyframedAnimationCurveTest, ThreeBooleanKeyFrame) {
+  bool value_a = false;
+  bool value_b = true;
+  bool value_c = false;
+  std::unique_ptr<KeyframedBooleanAnimationCurve> curve(
+      KeyframedBooleanAnimationCurve::Create());
+  curve->AddKeyframe(
+      BooleanKeyframe::Create(base::TimeDelta(), value_a, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                             value_b, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(2.0),
+                                             value_c, nullptr));
+
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.5f)));
+  EXPECT_EQ(value_c, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+  EXPECT_EQ(value_c, curve->GetValue(base::TimeDelta::FromSecondsD(3.f)));
+}
+
+// Tests that a boolean animation with multiple keys at a given time works
+// sanely.
+TEST(KeyframedAnimationCurveTest, RepeatedBooleanKeyFrame) {
+  bool value_a = true;
+  bool value_b = false;
+
+  std::unique_ptr<KeyframedBooleanAnimationCurve> curve(
+      KeyframedBooleanAnimationCurve::Create());
+  curve->AddKeyframe(
+      BooleanKeyframe::Create(base::TimeDelta(), value_a, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                             value_a, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(1.0),
+                                             value_b, nullptr));
+  curve->AddKeyframe(BooleanKeyframe::Create(base::TimeDelta::FromSecondsD(2.0),
+                                             value_b, nullptr));
+
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(-1.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.f)));
+  EXPECT_EQ(value_a, curve->GetValue(base::TimeDelta::FromSecondsD(0.5f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.0f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(1.5f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(2.f)));
+  EXPECT_EQ(value_b, curve->GetValue(base::TimeDelta::FromSecondsD(3.f)));
 }
 
 }  // namespace

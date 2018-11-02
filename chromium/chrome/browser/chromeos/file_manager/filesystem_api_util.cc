@@ -9,6 +9,9 @@
 #include "base/callback.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_content_file_system_url_util.h"
+#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
 #include "chrome/browser/chromeos/drive/file_system_util.h"
 #include "chrome/browser/chromeos/file_manager/app_id.h"
 #include "chrome/browser/chromeos/file_manager/fileapi_util.h"
@@ -16,6 +19,7 @@
 #include "chrome/browser/chromeos/file_system_provider/provided_file_system_interface.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/drive/chromeos/file_system_interface.h"
 #include "components/drive/file_errors.h"
 #include "components/drive/file_system_core_util.h"
@@ -57,6 +61,19 @@ void GetMimeTypeAfterGetMetadataForProvidedFileSystem(
     return;
   }
   callback.Run(true, *metadata->mime_type);
+}
+
+// Helper function used to implement GetNonNativeLocalPathMimeType. It passes
+// the returned mime type to the callback.
+void GetMimeTypeAfterGetMimeTypeForArcContentFileSystem(
+    const base::Callback<void(bool, const std::string&)>& callback,
+    const base::Optional<std::string>& mime_type) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (mime_type.has_value()) {
+    callback.Run(true, mime_type.value());
+  } else {
+    callback.Run(false, std::string());
+  }
 }
 
 // Helper function to converts a callback that takes boolean value to that takes
@@ -151,9 +168,8 @@ void GetNonNativeLocalPathMimeType(
         drive::util::GetFileSystemByProfile(profile);
     if (!file_system) {
       content::BrowserThread::PostTask(
-          content::BrowserThread::UI,
-          FROM_HERE,
-          base::Bind(callback, false, std::string()));
+          content::BrowserThread::UI, FROM_HERE,
+          base::BindOnce(callback, false, std::string()));
       return;
     }
 
@@ -168,9 +184,8 @@ void GetNonNativeLocalPathMimeType(
     chromeos::file_system_provider::util::LocalPathParser parser(profile, path);
     if (!parser.Parse()) {
       content::BrowserThread::PostTask(
-          content::BrowserThread::UI,
-          FROM_HERE,
-          base::Bind(callback, false, std::string()));
+          content::BrowserThread::UI, FROM_HERE,
+          base::BindOnce(callback, false, std::string()));
       return;
     }
 
@@ -183,13 +198,29 @@ void GetNonNativeLocalPathMimeType(
     return;
   }
 
+  if (arc::IsArcAllowedForProfile(profile) &&
+      base::FilePath(arc::kContentFileSystemMountPointPath).IsParent(path)) {
+    GURL arc_url = arc::PathToArcUrl(path);
+    auto* runner =
+        arc::ArcFileSystemOperationRunner::GetForBrowserContext(profile);
+    if (!runner) {
+      content::BrowserThread::PostTask(
+          content::BrowserThread::UI, FROM_HERE,
+          base::BindOnce(callback, false, std::string()));
+      return;
+    }
+    runner->GetMimeType(
+        arc_url, base::Bind(&GetMimeTypeAfterGetMimeTypeForArcContentFileSystem,
+                            callback));
+    return;
+  }
+
   // We don't have a way to obtain metadata other than drive and FSP. Returns an
   // error with empty MIME type, that leads fallback guessing mime type from
   // file extensions.
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(callback, false /* failure */, std::string()));
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(callback, false /* failure */, std::string()));
 }
 
 void IsNonNativeLocalPathDirectory(
@@ -216,9 +247,8 @@ void PrepareNonNativeLocalFileForWritableApp(
            profile, path, kFileManagerAppId, &url)) {
     // Posting to the current thread, so that we always call back asynchronously
     // independent from whether or not the operation succeeds.
-    content::BrowserThread::PostTask(content::BrowserThread::UI,
-                                     FROM_HERE,
-                                     base::Bind(callback, false));
+    content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
+                                     base::BindOnce(callback, false));
     return;
   }
 
@@ -233,8 +263,8 @@ void PrepareNonNativeLocalFileForWritableApp(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&PrepareFileOnIOThread, file_system_context, internal_url,
-                 google_apis::CreateRelayCallback(callback)));
+      base::BindOnce(&PrepareFileOnIOThread, file_system_context, internal_url,
+                     google_apis::CreateRelayCallback(callback)));
 }
 
 }  // namespace util

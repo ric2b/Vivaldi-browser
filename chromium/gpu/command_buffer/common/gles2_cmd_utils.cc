@@ -1820,22 +1820,6 @@ uint32_t GLES2Util::ConvertToSizedFormat(uint32_t format, uint32_t type) {
   return format;
 }
 
-// static
-bool GLES2Util::ComputeDataSize(uint32_t count,
-                                size_t size,
-                                unsigned int elements_per_unit,
-                                uint32_t* dst) {
-  uint32_t value;
-  if (!SafeMultiplyUint32(count, static_cast<uint32_t>(size), &value)) {
-    return false;
-  }
-  if (!SafeMultiplyUint32(value, elements_per_unit, &value)) {
-    return false;
-  }
-  *dst = value;
-  return true;
-}
-
 namespace {
 
 // GL context configuration attributes. Those in the 16-bit range are the same
@@ -1856,6 +1840,7 @@ const int32_t kSampleBuffers = 0x3032;    // EGL_SAMPLE_BUFFERS
 const int32_t kNone = 0x3038;             // EGL_NONE
 const int32_t kSwapBehavior = 0x3093;     // EGL_SWAP_BEHAVIOR
 const int32_t kBufferPreserved = 0x3094;  // EGL_BUFFER_PRESERVED
+const int32_t kSingleBuffer = 0x3085;     // EGL_SINGLE_BUFFER
 
 // Chromium only.
 const int32_t kBindGeneratesResource = 0x10000;
@@ -1927,6 +1912,7 @@ ContextCreationAttribHelper::ContextCreationAttribHelper()
       lose_context_when_out_of_memory(false),
       should_use_native_gmb_for_backbuffer(false),
       own_offscreen_surface(false),
+      single_buffer(false),
       context_type(CONTEXT_TYPE_OPENGLES2) {}
 
 ContextCreationAttribHelper::ContextCreationAttribHelper(
@@ -1985,6 +1971,9 @@ bool ContextCreationAttribHelper::Parse(const std::vector<int32_t>& attribs) {
         break;
       case kShouldUseNativeGMBForBackbuffer:
         should_use_native_gmb_for_backbuffer = value != 0;
+        break;
+      case kSingleBuffer:
+        single_buffer = value != 0;
         break;
       case kContextType:
         context_type = static_cast<ContextType>(value);

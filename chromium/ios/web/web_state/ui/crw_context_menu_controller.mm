@@ -7,6 +7,7 @@
 #import <objc/runtime.h>
 #include <stddef.h>
 
+#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -14,6 +15,7 @@
 #import "ios/web/public/web_state/context_menu_params.h"
 #import "ios/web/public/web_state/js/crw_js_injection_evaluator.h"
 #import "ios/web/public/web_state/ui/crw_context_menu_delegate.h"
+#import "ios/web/web_state/context_menu_constants.h"
 #import "ios/web/web_state/context_menu_params_utils.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -53,6 +55,9 @@ void CancelTouches(UIGestureRecognizer* gesture_recognizer) {
 // Returns the x, y offset the content has been scrolled.
 @property(nonatomic, readonly) CGPoint scrollPosition;
 
+// Returns a gesture recognizers with |fragment| in it's description.
+- (UIGestureRecognizer*)gestureRecognizerWithDescriptionFragment:
+    (NSString*)fragment;
 // Called when the window has determined there was a long-press and context menu
 // must be shown.
 - (void)showContextMenu:(UIGestureRecognizer*)gestureRecognizer;
@@ -77,8 +82,8 @@ void CancelTouches(UIGestureRecognizer* gesture_recognizer) {
   // DOM element information for the point where the user made the last touch.
   // Can be nil if has not been calculated yet. Precalculation is necessary
   // because retreiving DOM element relies on async API so element info can not
-  // be built on demand. May contain the following keys: @"href", @"src",
-  // @"title", @"referrerPolicy". All values are strings.
+  // be built on demand. May contain the keys defined in
+  // ios/web/web_state/context_menu_constants.h. All values are strings.
   NSDictionary* _DOMElementForLastTouch;
 }
 
@@ -106,8 +111,44 @@ void CancelTouches(UIGestureRecognizer* gesture_recognizer) {
     [_contextMenuRecognizer setAllowableMovement:kLongPressMoveDeltaPixels];
     [_contextMenuRecognizer setDelegate:self];
     [_webView addGestureRecognizer:_contextMenuRecognizer];
+
+    if (base::ios::IsRunningOnIOS11OrLater()) {
+      // WKWebView's default context menu gesture recognizer interferes with
+      // the detection of a long press by |_contextMenuRecognizer|. WKWebView's
+      // context menu gesture recognizer should fail if |_contextMenuRecognizer|
+      // detects a long press.
+      NSString* fragment = @"action=_longPressRecognized:";
+      UIGestureRecognizer* systemContextMenuRecognizer =
+          [self gestureRecognizerWithDescriptionFragment:fragment];
+      if (systemContextMenuRecognizer) {
+        [systemContextMenuRecognizer
+            requireGestureRecognizerToFail:_contextMenuRecognizer];
+        // requireGestureRecognizerToFail: doesn't retain the recognizer, so it
+        // is possible for |iRecognizer| to outlive |recognizer| and end up with
+        // a dangling pointer. Add a retaining associative reference to ensure
+        // that the lifetimes work out.
+        // Note that normally using the value as the key wouldn't make any
+        // sense, but here it's fine since nothing needs to look up the value.
+        void* associated_object_key = (__bridge void*)_contextMenuRecognizer;
+        objc_setAssociatedObject(systemContextMenuRecognizer.view,
+                                 associated_object_key, _contextMenuRecognizer,
+                                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+      }
+    }
   }
   return self;
+}
+
+- (UIGestureRecognizer*)gestureRecognizerWithDescriptionFragment:
+    (NSString*)fragment {
+  for (UIView* view in [[_webView scrollView] subviews]) {
+    for (UIGestureRecognizer* recognizer in [view gestureRecognizers]) {
+      if ([recognizer.description rangeOfString:fragment].length) {
+        return recognizer;
+      }
+    }
+  }
+  return nil;
 }
 
 - (UIScrollView*)webScrollView {

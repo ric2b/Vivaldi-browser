@@ -35,6 +35,7 @@ namespace blink {
 
 class DocumentMarker;
 class GraphicsContext;
+class TextMatchMarker;
 
 // The two truncation values below are used as tokens representing truncation
 // state for the text box, are intended to be relative to |m_start|, and are set
@@ -136,7 +137,10 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
     return LayoutRect(X(), Y(), Width(), Height());
   }
 
-  virtual LayoutRect LocalSelectionRect(int start_pos, int end_pos) const;
+  virtual LayoutRect LocalSelectionRect(
+      int start_pos,
+      int end_pos,
+      bool include_newline_space_width = true) const;
   bool IsSelected(int start_pos, int end_pos) const;
   void SelectionStartEnd(int& s_pos, int& e_pos) const;
 
@@ -148,12 +152,12 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
                                    bool grammar) const;
   virtual void PaintTextMatchMarkerForeground(const PaintInfo&,
                                               const LayoutPoint& box_origin,
-                                              const DocumentMarker&,
+                                              const TextMatchMarker&,
                                               const ComputedStyle&,
                                               const Font&) const;
   virtual void PaintTextMatchMarkerBackground(const PaintInfo&,
                                               const LayoutPoint& box_origin,
-                                              const DocumentMarker&,
+                                              const TextMatchMarker&,
                                               const ComputedStyle&,
                                               const Font&) const;
 
@@ -189,7 +193,7 @@ class CORE_EXPORT InlineTextBox : public InlineBox {
                               LayoutUnit visible_right_edge,
                               LayoutUnit ellipsis_width,
                               LayoutUnit& truncated_width,
-                              bool& found_box,
+                              InlineBox** found_box,
                               LayoutUnit logical_left_offset) final;
 
  public:

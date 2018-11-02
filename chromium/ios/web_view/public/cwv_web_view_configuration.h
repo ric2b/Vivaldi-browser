@@ -5,15 +5,17 @@
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_CONFIGURATION_H_
 #define IOS_WEB_VIEW_PUBLIC_CWV_WEB_VIEW_CONFIGURATION_H_
 
-#import <ChromeWebView/cwv_export.h>
 #import <Foundation/Foundation.h>
 
+#import "cwv_export.h"
+
+@class CWVPreferences;
 @class CWVUserContentController;
 @class CWVWebsiteDataStore;
 
 // Configuration used for creation of a CWVWebView.
 CWV_EXPORT
-@interface CWVWebViewConfiguration : NSObject<NSCopying>
+@interface CWVWebViewConfiguration : NSObject
 
 // Configuration with persistent data store which stores all data on disk.
 + (instancetype)defaultConfiguration;
@@ -22,6 +24,9 @@ CWV_EXPORT
 + (instancetype)incognitoConfiguration;
 
 - (instancetype)init NS_UNAVAILABLE;
+
+// The preferences object associated with this web view configuration.
+@property(nonatomic, readonly) CWVPreferences* preferences;
 
 // The user content controller to associate with web views created using this
 // configuration.

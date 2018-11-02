@@ -11,6 +11,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/singleton.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
@@ -39,8 +40,6 @@
 #include "components/keyed_service/content/browser_context_keyed_service_shutdown_notifier_factory.h"
 #include "components/prefs/pref_service.h"
 #include "components/rappor/rappor_service_impl.h"
-#include "components/ukm/public/ukm_entry_builder.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/plugin_service.h"
 #include "content/public/browser/plugin_service_filter.h"
@@ -49,6 +48,8 @@
 #include "extensions/features/features.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "ppapi/features/features.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 #include "widevine_cdm_version.h"  // In SHARED_INTERMEDIATE_DIR.
@@ -232,7 +233,7 @@ void PluginInfoMessageFilter::OnGetPluginInfo(
     IPC::Message* reply_msg) {
   GetPluginInfo_Params params = {render_frame_id, url, main_frame_origin,
                                  mime_type};
-  PluginService::GetInstance()->GetPlugins(base::Bind(
+  PluginService::GetInstance()->GetPlugins(base::BindOnce(
       &PluginInfoMessageFilter::PluginsLoaded, this, params, reply_msg));
 }
 
@@ -497,10 +498,10 @@ void PluginInfoMessageFilter::ComponentPluginLookupDone(
       output->status =
           ChromeViewHostMsg_GetPluginInfo_Status::kRestartRequired;
     }
-#endif  // defined(OS_LINUX)
-    plugin_metadata.reset(new PluginMetadata(
+#endif
+    plugin_metadata = base::MakeUnique<PluginMetadata>(
         cus_plugin_info->id, cus_plugin_info->name, false, GURL(), GURL(),
-        base::ASCIIToUTF16(cus_plugin_info->id), std::string()));
+        base::ASCIIToUTF16(cus_plugin_info->id), std::string());
   }
   GetPluginInfoReply(params, std::move(output), std::move(plugin_metadata),
                      reply_msg);

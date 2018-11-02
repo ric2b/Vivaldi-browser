@@ -137,10 +137,16 @@ void TestWindowTree::SetWindowBounds(
     uint32_t change_id,
     uint32_t window_id,
     const gfx::Rect& bounds,
-    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   window_id_ = window_id;
   last_local_surface_id_ = local_surface_id;
   OnChangeReceived(change_id, WindowTreeChangeType::BOUNDS);
+}
+
+void TestWindowTree::SetWindowTransform(uint32_t change_id,
+                                        uint32_t window_id,
+                                        const gfx::Transform& transform) {
+  OnChangeReceived(change_id, WindowTreeChangeType::TRANSFORM);
 }
 
 void TestWindowTree::SetClientArea(
@@ -181,8 +187,8 @@ void TestWindowTree::SetWindowOpacity(uint32_t change_id,
 
 void TestWindowTree::AttachCompositorFrameSink(
     uint32_t window_id,
-    mojo::InterfaceRequest<cc::mojom::MojoCompositorFrameSink> surface,
-    cc::mojom::MojoCompositorFrameSinkClientPtr client) {}
+    mojo::InterfaceRequest<cc::mojom::CompositorFrameSink> surface,
+    cc::mojom::CompositorFrameSinkClientPtr client) {}
 
 void TestWindowTree::AddWindow(uint32_t change_id,
                                uint32_t parent,

@@ -63,7 +63,7 @@ class MEDIA_EXPORT AAC {
   // unchanged.
   bool ConvertEsdsToADTS(std::vector<uint8_t>* buffer) const;
 
-#if defined(OS_ANDROID) || defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID)
   // Returns the codec specific data needed by android MediaCodec.
   std::vector<uint8_t> codec_specific_data() const {
     return codec_specific_data_;
@@ -81,7 +81,7 @@ class MEDIA_EXPORT AAC {
   uint8_t frequency_index_;
   uint8_t channel_config_;
 
-#if defined(OS_ANDROID) || defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID)
   // The codec specific data needed by the android MediaCodec.
   std::vector<uint8_t> codec_specific_data_;
 #endif

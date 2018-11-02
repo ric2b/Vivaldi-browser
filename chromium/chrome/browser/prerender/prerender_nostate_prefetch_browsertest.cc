@@ -5,6 +5,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -23,7 +24,6 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/appcache_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -120,6 +120,11 @@ class NoStatePrefetchBrowserTest
           content::BrowserThread::IO, FROM_HERE,
           base::BindOnce(WaitForAppcacheOnIO, manifest_url, appcache_service,
                          wait_loop.QuitClosure(), &found_manifest));
+      // There seems to be some flakiness in the appcache getting back to us, so
+      // use a timeout task to try the appcache query again.
+      content::BrowserThread::PostDelayedTask(
+          content::BrowserThread::UI, FROM_HERE, wait_loop.QuitClosure(),
+          base::TimeDelta::FromMilliseconds(2000));
       wait_loop.Run();
     } while (!found_manifest);
   }
@@ -594,11 +599,10 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, HistoryUntouchedByPrefetch) {
   // Check that the URL that was explicitly navigated to is already in history.
   ui_test_utils::HistoryEnumerator enumerator(profile);
   std::vector<GURL>& urls = enumerator.urls();
-  EXPECT_TRUE(std::find(urls.begin(), urls.end(), navigated_url) != urls.end());
+  EXPECT_TRUE(base::ContainsValue(urls, navigated_url));
 
   // Check that the URL that was prefetched is not in history.
-  EXPECT_TRUE(std::find(urls.begin(), urls.end(), prefetched_url) ==
-              urls.end());
+  EXPECT_FALSE(base::ContainsValue(urls, prefetched_url));
 
   // The loader URL is the remaining entry.
   EXPECT_EQ(2U, urls.size());
@@ -714,7 +718,13 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, AppCacheHtmlInitialized) {
 
 // If a page has been cached by another AppCache, the prefetch should be
 // canceled.
-IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, AppCacheRegistered) {
+// Flaky on mac crbug.com/733504
+#if defined(OS_MACOSX)
+#define MAYBE_AppCacheRegistered DISABLED_AppCacheRegistered
+#else
+#define MAYBE_AppCacheRegistered AppCacheRegistered
+#endif
+IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, MAYBE_AppCacheRegistered) {
   base::TimeTicks current_time = GetPrerenderManager()->GetCurrentTimeTicks();
   auto* clock = OverridePrerenderManagerTimeTicks();
   // Some navigations have already occurred in test setup. In order to track

@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "base/android/record_histogram.h"
-
 #include <stdint.h>
 
 #include <map>
@@ -315,8 +313,18 @@ jint GetHistogramValueCountForTesting(
   return samples->GetCount(static_cast<int>(sample));
 }
 
-bool RegisterRecordHistogram(JNIEnv* env) {
-  return RegisterNativesImpl(env);
+jint GetHistogramTotalCountForTesting(
+    JNIEnv* env,
+    const JavaParamRef<jclass>& clazz,
+    const JavaParamRef<jstring>& histogram_name) {
+  HistogramBase* histogram = StatisticsRecorder::FindHistogram(
+      android::ConvertJavaStringToUTF8(env, histogram_name));
+  if (histogram == nullptr) {
+    // No samples have been recorded for this histogram.
+    return 0;
+  }
+
+  return histogram->SnapshotSamples()->TotalCount();
 }
 
 }  // namespace android

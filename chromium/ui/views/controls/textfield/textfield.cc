@@ -97,14 +97,6 @@ const gfx::SelectionBehavior kMoveParagraphSelectionBehavior =
 // Default placeholder text color.
 const SkColor kDefaultPlaceholderTextColor = SK_ColorLTGRAY;
 
-void ConvertRectToScreen(const View* src, gfx::Rect* r) {
-  DCHECK(src);
-
-  gfx::Point new_origin = r->origin();
-  View::ConvertPointToScreen(src, &new_origin);
-  r->set_origin(new_origin);
-}
-
 // Get the default command for a given key |event|.
 ui::TextEditCommand GetCommandForKeyEvent(const ui::KeyEvent& event) {
   if (event.type() != ui::ET_KEY_PRESSED || event.IsUnicodeKeyCode())
@@ -272,6 +264,7 @@ Textfield::Textfield()
       selection_text_color_(SK_ColorWHITE),
       selection_background_color_(SK_ColorBLUE),
       placeholder_text_color_(kDefaultPlaceholderTextColor),
+      placeholder_text_draw_flags_(gfx::Canvas::DefaultCanvasTextAlignment()),
       invalid_(false),
       text_input_type_(ui::TEXT_INPUT_TYPE_TEXT),
       text_input_flags_(0),
@@ -336,7 +329,7 @@ void Textfield::SetText(const base::string16& new_text) {
   model_->SetText(new_text);
   OnCaretBoundsChanged();
   SchedulePaint();
-  NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
+  NotifyAccessibilityEvent(ui::AX_EVENT_VALUE_CHANGED, true);
 }
 
 void Textfield::AppendText(const base::string16& new_text) {
@@ -345,6 +338,7 @@ void Textfield::AppendText(const base::string16& new_text) {
   model_->Append(new_text);
   OnCaretBoundsChanged();
   SchedulePaint();
+  NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
 }
 
 void Textfield::InsertOrReplaceText(const base::string16& new_text) {
@@ -384,9 +378,9 @@ SkColor Textfield::GetTextColor() const {
   if (!use_default_text_color_)
     return text_color_;
 
-  return GetNativeTheme()->GetSystemColor(read_only() || !enabled() ?
-      ui::NativeTheme::kColorId_TextfieldReadOnlyColor :
-      ui::NativeTheme::kColorId_TextfieldDefaultColor);
+  int style = (read_only() || !enabled()) ? style::STYLE_DISABLED
+                                          : style::STYLE_PRIMARY;
+  return style::GetColor(style::CONTEXT_TEXTFIELD, style, GetNativeTheme());
 }
 
 void Textfield::SetTextColor(SkColor color) {
@@ -404,9 +398,10 @@ SkColor Textfield::GetBackgroundColor() const {
   if (!use_default_background_color_)
     return background_color_;
 
-  return GetNativeTheme()->GetSystemColor(read_only() || !enabled() ?
-      ui::NativeTheme::kColorId_TextfieldReadOnlyBackground :
-      ui::NativeTheme::kColorId_TextfieldDefaultBackground);
+  return GetNativeTheme()->GetSystemColor(
+      read_only() || !enabled()
+          ? ui::NativeTheme::kColorId_TextfieldReadOnlyBackground
+          : ui::NativeTheme::kColorId_TextfieldDefaultBackground);
 }
 
 void Textfield::SetBackgroundColor(SkColor color) {
@@ -421,10 +416,10 @@ void Textfield::UseDefaultBackgroundColor() {
 }
 
 SkColor Textfield::GetSelectionTextColor() const {
-  return use_default_selection_text_color_ ?
-      GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_TextfieldSelectionColor) :
-      selection_text_color_;
+  return use_default_selection_text_color_
+             ? GetNativeTheme()->GetSystemColor(
+                   ui::NativeTheme::kColorId_TextfieldSelectionColor)
+             : selection_text_color_;
 }
 
 void Textfield::SetSelectionTextColor(SkColor color) {
@@ -441,10 +436,11 @@ void Textfield::UseDefaultSelectionTextColor() {
 }
 
 SkColor Textfield::GetSelectionBackgroundColor() const {
-  return use_default_selection_background_color_ ?
-      GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused) :
-      selection_background_color_;
+  return use_default_selection_background_color_
+             ? GetNativeTheme()->GetSystemColor(
+                   ui::NativeTheme::
+                       kColorId_TextfieldSelectionBackgroundFocused)
+             : selection_background_color_;
 }
 
 void Textfield::SetSelectionBackgroundColor(SkColor color) {
@@ -588,7 +584,8 @@ int Textfield::GetBaseline() const {
 gfx::Size Textfield::CalculatePreferredSize() const {
   const gfx::Insets& insets = GetInsets();
   return gfx::Size(GetFontList().GetExpectedTextWidth(default_width_in_chars_) +
-                   insets.width(), GetFontList().GetHeight() + insets.height());
+                       insets.width(),
+                   GetFontList().GetHeight() + insets.height());
 }
 
 const char* Textfield::GetClassName() const {
@@ -625,8 +622,9 @@ bool Textfield::OnMousePressed(const ui::MouseEvent& event) {
 #endif
 
   return selection_controller_.OnMousePressed(
-      event, handled, had_focus ? SelectionController::FOCUSED
-                                : SelectionController::UNFOCUSED);
+      event, handled,
+      had_focus ? SelectionController::FOCUSED
+                : SelectionController::UNFOCUSED);
 }
 
 bool Textfield::OnMouseDragged(const ui::MouseEvent& event) {
@@ -639,6 +637,10 @@ void Textfield::OnMouseReleased(const ui::MouseEvent& event) {
 
 void Textfield::OnMouseCaptureLost() {
   selection_controller_.OnMouseCaptureLost();
+}
+
+bool Textfield::OnMouseWheel(const ui::MouseWheelEvent& event) {
+  return controller_ && controller_->HandleMouseEvent(this, event);
 }
 
 WordLookupClient* Textfield::GetWordLookupClient() {
@@ -695,6 +697,10 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
       event->SetHandled();
       break;
     case ui::ET_GESTURE_TAP:
+      if (controller_ && controller_->HandleGestureEvent(this, *event)) {
+        event->SetHandled();
+        return;
+      }
       if (event->details().tap_count() == 1) {
         // If tap is on the selection and touch handles are not present, handles
         // should be shown without changing selection. Otherwise, cursor should
@@ -762,7 +768,7 @@ void Textfield::OnGestureEvent(ui::GestureEvent* event) {
       break;
     case ui::ET_GESTURE_SCROLL_UPDATE: {
       int new_offset = drag_start_display_offset_ + event->location().x() -
-          drag_start_location_.x();
+                       drag_start_location_.x();
       GetRenderText()->SetDisplayOffset(new_offset);
       SchedulePaint();
       event->SetHandled();
@@ -843,7 +849,8 @@ int Textfield::OnDragUpdated(const ui::DropTargetEvent& event) {
   gfx::RenderText* render_text = GetRenderText();
   const gfx::Range& selection = render_text->selection();
   drop_cursor_position_ = render_text->FindCursorPosition(event.location());
-  bool in_selection = !selection.is_empty() &&
+  bool in_selection =
+      !selection.is_empty() &&
       selection.Contains(gfx::Range(drop_cursor_position_.caret_pos()));
   drop_cursor_visible_ = !in_selection;
   // TODO(msw): Pan over text when the user drags to the visible text edge.
@@ -855,8 +862,8 @@ int Textfield::OnDragUpdated(const ui::DropTargetEvent& event) {
   if (initiating_drag_) {
     if (in_selection)
       return ui::DragDropTypes::DRAG_NONE;
-    return event.IsControlDown() ? ui::DragDropTypes::DRAG_COPY :
-                                   ui::DragDropTypes::DRAG_MOVE;
+    return event.IsControlDown() ? ui::DragDropTypes::DRAG_COPY
+                                 : ui::DragDropTypes::DRAG_MOVE;
   }
   return ui::DragDropTypes::DRAG_COPY | ui::DragDropTypes::DRAG_MOVE;
 }
@@ -916,17 +923,22 @@ void Textfield::OnDragDone() {
 void Textfield::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_TEXT_FIELD;
   node_data->SetName(accessible_name_);
+  // Editable state indicates support of editable interface, and is always set
+  // for a textfield, even if disabled or readonly.
+  node_data->AddState(ui::AX_STATE_EDITABLE);
   if (enabled()) {
     node_data->AddIntAttribute(ui::AX_ATTR_DEFAULT_ACTION_VERB,
                                ui::AX_DEFAULT_ACTION_VERB_ACTIVATE);
+    // Only readonly if enabled. Don't overwrite the disabled restriction.
+    if (read_only()) {
+      node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
+                                 ui::AX_RESTRICTION_READ_ONLY);
+    }
   }
-  if (read_only())
-    node_data->AddState(ui::AX_STATE_READ_ONLY);
-  else
-    node_data->AddState(ui::AX_STATE_EDITABLE);
   if (text_input_type_ == ui::TEXT_INPUT_TYPE_PASSWORD) {
     node_data->AddState(ui::AX_STATE_PROTECTED);
-    node_data->SetValue(base::string16(text().size(), '*'));
+    node_data->SetValue(base::string16(
+        text().size(), gfx::RenderText::kPasswordReplacementChar));
   } else {
     node_data->SetValue(text());
   }
@@ -975,6 +987,8 @@ void Textfield::OnBoundsChanged(const gfx::Rect& previous_bounds) {
   bounds.Inset(gfx::Insets(0, kTextPadding, 0, kTextPadding));
   GetRenderText()->SetDisplayRect(bounds);
   OnCaretBoundsChanged();
+  UpdateCursorViewPosition();
+  UpdateCursorVisibility();
 }
 
 bool Textfield::GetNeedsNotificationWhenVisibleBoundsChange() const {
@@ -1397,8 +1411,8 @@ bool Textfield::GetCompositionCharacterBounds(uint32_t index,
     return false;
   gfx::RenderText* render_text = GetRenderText();
   if (!render_text->IsValidCursorIndex(text_index)) {
-    text_index = render_text->IndexOfAdjacentGrapheme(
-        text_index, gfx::CURSOR_BACKWARD);
+    text_index =
+        render_text->IndexOfAdjacentGrapheme(text_index, gfx::CURSOR_BACKWARD);
   }
   if (text_index < composition_range.start())
     return false;
@@ -1478,8 +1492,9 @@ bool Textfield::ChangeTextDirectionAndLayoutAlignment(
   // Restore text directionality mode when the indicated direction matches the
   // current forced mode; otherwise, force the mode indicated. This helps users
   // manage BiDi text layout without getting stuck in forced LTR or RTL modes.
-  const gfx::DirectionalityMode mode = direction == base::i18n::RIGHT_TO_LEFT ?
-      gfx::DIRECTIONALITY_FORCE_RTL : gfx::DIRECTIONALITY_FORCE_LTR;
+  const gfx::DirectionalityMode mode = direction == base::i18n::RIGHT_TO_LEFT
+                                           ? gfx::DIRECTIONALITY_FORCE_RTL
+                                           : gfx::DIRECTIONALITY_FORCE_LTR;
   if (mode == GetRenderText()->directionality_mode())
     GetRenderText()->SetDirectionalityMode(gfx::DIRECTIONALITY_FROM_TEXT);
   else
@@ -1625,8 +1640,8 @@ gfx::Point Textfield::GetLastClickLocation() const {
 
 base::string16 Textfield::GetSelectionClipboardText() const {
   base::string16 selection_clipboard_text;
-  ui::Clipboard::GetForCurrentThread()->ReadText(
-      ui::CLIPBOARD_TYPE_SELECTION, &selection_clipboard_text);
+  ui::Clipboard::GetForCurrentThread()->ReadText(ui::CLIPBOARD_TYPE_SELECTION,
+                                                 &selection_clipboard_text);
   return selection_clipboard_text;
 }
 
@@ -1910,17 +1925,17 @@ void Textfield::UpdateSelectionClipboard() {
 void Textfield::UpdateBackgroundColor() {
   const SkColor color = GetBackgroundColor();
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    set_background(Background::CreateBackgroundPainter(
-        Painter::CreateSolidRoundRectPainter(
+    SetBackground(
+        CreateBackgroundFromPainter(Painter::CreateSolidRoundRectPainter(
             color, FocusableBorder::kCornerRadiusDp)));
   } else {
-    set_background(Background::CreateSolidBackground(color));
+    SetBackground(CreateSolidBackground(color));
   }
   // Disable subpixel rendering when the background color is transparent
   // because it draws incorrect colors around the glyphs in that case.
   // See crbug.com/115198
-  GetRenderText()->set_subpixel_rendering_suppressed(
-      SkColorGetA(color) != SK_AlphaOPAQUE);
+  GetRenderText()->set_subpixel_rendering_suppressed(SkColorGetA(color) !=
+                                                     SK_AlphaOPAQUE);
   SchedulePaint();
 }
 
@@ -1935,7 +1950,7 @@ void Textfield::UpdateAfterChange(bool text_changed, bool cursor_changed) {
   if (text_changed) {
     if (controller_)
       controller_->ContentsChanged(this, text());
-    NotifyAccessibilityEvent(ui::AX_EVENT_TEXT_CHANGED, true);
+    NotifyAccessibilityEvent(ui::AX_EVENT_VALUE_CHANGED, true);
   }
   if (cursor_changed) {
     UpdateCursorViewPosition();
@@ -1969,11 +1984,12 @@ void Textfield::PaintTextAndCursor(gfx::Canvas* canvas) {
   // Draw placeholder text if needed.
   gfx::RenderText* render_text = GetRenderText();
   if (text().empty() && !GetPlaceholderText().empty()) {
-    canvas->DrawStringRect(GetPlaceholderText(), GetFontList(),
-                           ui::MaterialDesignController::IsSecondaryUiMaterial()
-                               ? SkColorSetA(GetTextColor(), 0x83)
-                               : placeholder_text_color_,
-                           render_text->display_rect());
+    canvas->DrawStringRectWithFlags(
+        GetPlaceholderText(), GetFontList(),
+        ui::MaterialDesignController::IsSecondaryUiMaterial()
+            ? SkColorSetA(GetTextColor(), 0x83)
+            : placeholder_text_color_,
+        render_text->display_rect(), placeholder_text_draw_flags_);
   }
 
   render_text->Draw(canvas);
@@ -2075,7 +2091,8 @@ void Textfield::RevealPasswordChar(int index) {
   SchedulePaint();
 
   if (index != -1) {
-    password_reveal_timer_.Start(FROM_HERE, GetPasswordRevealDuration(),
+    password_reveal_timer_.Start(
+        FROM_HERE, GetPasswordRevealDuration(),
         base::Bind(&Textfield::RevealPasswordChar,
                    weak_ptr_factory_.GetWeakPtr(), -1));
   }
@@ -2108,9 +2125,10 @@ bool Textfield::ShouldBlinkCursor() const {
 
 void Textfield::StartBlinkingCursor() {
   DCHECK(ShouldBlinkCursor());
-  cursor_blink_timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(
-                                           Textfield::GetCaretBlinkMs()),
-                            this, &Textfield::OnCursorBlinkTimerFired);
+  cursor_blink_timer_.Start(
+      FROM_HERE,
+      base::TimeDelta::FromMilliseconds(Textfield::GetCaretBlinkMs()), this,
+      &Textfield::OnCursorBlinkTimerFired);
 }
 
 void Textfield::StopBlinkingCursor() {
@@ -2119,8 +2137,8 @@ void Textfield::StopBlinkingCursor() {
 
 void Textfield::OnCursorBlinkTimerFired() {
   DCHECK(ShouldBlinkCursor());
-  cursor_view_.SetVisible(!cursor_view_.visible());
   UpdateCursorViewPosition();
+  cursor_view_.SetVisible(!cursor_view_.visible());
 }
 
 }  // namespace views

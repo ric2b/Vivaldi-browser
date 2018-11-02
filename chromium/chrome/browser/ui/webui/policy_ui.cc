@@ -25,7 +25,10 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
   source->AddLocalizedString("status", IDS_POLICY_STATUS);
   source->AddLocalizedString("statusDevice", IDS_POLICY_STATUS_DEVICE);
   source->AddLocalizedString("statusUser", IDS_POLICY_STATUS_USER);
-  source->AddLocalizedString("labelDomain", IDS_POLICY_LABEL_DOMAIN);
+  source->AddLocalizedString("labelEnterpriseEnrollmentDomain",
+                             IDS_POLICY_LABEL_ENTERPRISE_ENROLLMENT_DOMAIN);
+  source->AddLocalizedString("labelEnterpriseDisplayDomain",
+                             IDS_POLICY_LABEL_ENTERPRISE_DISPLAY_DOMAIN);
   source->AddLocalizedString("labelUsername", IDS_POLICY_LABEL_USERNAME);
   source->AddLocalizedString("labelClientId", IDS_POLICY_LABEL_CLIENT_ID);
   source->AddLocalizedString("labelAssetId", IDS_POLICY_LABEL_ASSET_ID);
@@ -46,7 +49,6 @@ content::WebUIDataSource* CreatePolicyUIHtmlSource() {
   // Add required resources.
   source->AddResourcePath("policy.css", IDR_POLICY_CSS);
   source->AddResourcePath("policy.js", IDR_POLICY_JS);
-  source->AddResourcePath("uber_utils.js", IDR_UBER_UTILS_JS);
   source->SetDefaultResource(IDR_POLICY_HTML);
   return source;
 }

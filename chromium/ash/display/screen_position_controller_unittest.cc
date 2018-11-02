@@ -9,8 +9,8 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/screen_util.h"
 #include "ash/shell.h"
+#include "ash/shell_test_api.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/shell_test_api.h"
 #include "ui/aura/env.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window_tracker.h"
@@ -22,7 +22,6 @@
 #include "ui/events/test/event_generator.h"
 
 namespace ash {
-namespace test {
 
 namespace {
 
@@ -31,7 +30,7 @@ ScreenPositionController* GetScreenPositionController() {
   return test_api.screen_position_controller();
 }
 
-class ScreenPositionControllerTest : public test::AshTestBase {
+class ScreenPositionControllerTest : public AshTestBase {
  public:
   ScreenPositionControllerTest() {}
   ~ScreenPositionControllerTest() override {}
@@ -209,12 +208,12 @@ TEST_F(ScreenPositionControllerTest, ConvertHostPointToScreenRotate) {
                              display::Screen::GetScreen()->GetPrimaryDisplay());
 
   // The point is on the 1st host.
-  EXPECT_EQ("70,149", ConvertHostPointToScreen(50, 70));
+  EXPECT_EQ("70,150", ConvertHostPointToScreen(50, 70));
   // The point is out of the host windows.
-  EXPECT_EQ("250,-51", ConvertHostPointToScreen(250, 250));
+  EXPECT_EQ("250,-50", ConvertHostPointToScreen(250, 250));
   // The point is on the 2nd host. Point on 2nd host (30,150) -
   // rotate 270 clockwise -> (149, 30) - layout [+(200,0)] -> (349,30).
-  EXPECT_EQ("349,30", ConvertHostPointToScreen(30, 450));
+  EXPECT_EQ("350,30", ConvertHostPointToScreen(30, 450));
 
   // Move |window_| to the 2nd.
   window_->SetBoundsInScreen(gfx::Rect(300, 20, 50, 50),
@@ -224,12 +223,12 @@ TEST_F(ScreenPositionControllerTest, ConvertHostPointToScreenRotate) {
 
   // The point is on the 2nd host. (50,70) on 2n host -
   // roatate 270 clockwise -> (129,50) -layout [+(200,0)] -> (329,50)
-  EXPECT_EQ("329,50", ConvertHostPointToScreen(50, 70));
+  EXPECT_EQ("330,50", ConvertHostPointToScreen(50, 70));
   // The point is out of the host windows.
-  EXPECT_EQ("449,50", ConvertHostPointToScreen(50, -50));
+  EXPECT_EQ("450,50", ConvertHostPointToScreen(50, -50));
   // The point is on the 2nd host. Point on 2nd host (50,50) -
   // rotate 90 clockwise -> (50, 149)
-  EXPECT_EQ("50,149", ConvertHostPointToScreen(50, -350));
+  EXPECT_EQ("50,150", ConvertHostPointToScreen(50, -350));
 }
 
 TEST_F(ScreenPositionControllerTest, ConvertHostPointToScreenUIScale) {
@@ -339,5 +338,4 @@ TEST_F(ScreenPositionControllerTest,
   EXPECT_TRUE(event_handler->could_convert_to_screen());
 }
 
-}  // namespace test
 }  // namespace ash

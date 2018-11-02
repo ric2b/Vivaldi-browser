@@ -30,6 +30,7 @@
 
 #include "platform/image-decoders/FastSharedBufferReader.h"
 #include "platform/image-decoders/SegmentReader.h"
+#include "third_party/skia/include/core/SkRWBuffer.h"
 
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -53,8 +54,7 @@ PassRefPtr<SegmentReader> CopyToROBufferSegmentReader(
     rw_buffer.append(segment, length);
     position += length;
   }
-  return SegmentReader::CreateFromSkROBuffer(
-      sk_sp<SkROBuffer>(rw_buffer.newRBufferSnapshot()));
+  return SegmentReader::CreateFromSkROBuffer(rw_buffer.makeROBufferSnapshot());
 }
 
 PassRefPtr<SegmentReader> CopyToDataSegmentReader(
@@ -219,8 +219,8 @@ TEST(SegmentReaderTest, variableSegments) {
     rw_buffer.append(reference_data + 3 * SharedBuffer::kSegmentSize,
                      .5 * SharedBuffer::kSegmentSize);
 
-    segment_reader = SegmentReader::CreateFromSkROBuffer(
-        sk_sp<SkROBuffer>(rw_buffer.newRBufferSnapshot()));
+    segment_reader =
+        SegmentReader::CreateFromSkROBuffer(rw_buffer.makeROBufferSnapshot());
   }
 
   const char* segment;

@@ -27,10 +27,13 @@
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "base/trace_event/trace_event.h"
 #include "base/values.h"
+#include "build/build_config.h"
 #include "chrome/browser/io_thread.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile_io_data.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
@@ -57,10 +60,48 @@ namespace chrome_browser_net {
 
 namespace {
 
-const base::Feature kNetworkPrediction{"NetworkPrediction",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
+#if defined(OS_ANDROID)
+// Disabled on Android, as there are no "pinned tabs", meaning that a startup
+// is unlikely to request the same URL, and hence to resolve the same domains
+// as the previous one.
+constexpr bool kInitialDnsPrefetchListEnabled = false;
+#else
+constexpr bool kInitialDnsPrefetchListEnabled = true;
+#endif  // defined(OS_ANDROID)
 
 }  // namespace
+
+// The InitialObserver monitors navigations made by the network stack. This
+// is only used to identify startup time resolutions (for re-resolution
+// during our next process startup).
+// TODO(jar): Consider preconnecting at startup, which may be faster than
+// waiting for render process to start and request a connection.
+class InitialObserver {
+ public:
+  InitialObserver();
+  ~InitialObserver();
+  // Recording of when we observed each navigation.
+  typedef std::map<GURL, base::TimeTicks> FirstNavigations;
+
+  // Potentially add a new URL to our startup list.
+  void Append(const GURL& url, Predictor* predictor);
+
+  // Get an HTML version of our current planned first_navigations_.
+  void GetFirstResolutionsHtml(std::string* output);
+
+  // Persist the current first_navigations_ for storage in a list.
+  void GetInitialDnsResolutionList(base::ListValue* startup_list);
+
+  // Discards all initial loading history.
+  void DiscardInitialNavigationHistory() { first_navigations_.clear(); }
+
+ private:
+  // List of the first N URL resolutions observed in this run.
+  FirstNavigations first_navigations_;
+
+  // The number of URLs we'll save for pre-resolving at next startup.
+  static const size_t kStartupResolutionCount = 10;
+};
 
 // static
 const int Predictor::kPredictorReferrerVersion = 2;
@@ -128,7 +169,8 @@ Predictor::~Predictor() {
 
 // static
 Predictor* Predictor::CreatePredictor(bool simple_shutdown) {
-  bool predictor_enabled = base::FeatureList::IsEnabled(kNetworkPrediction);
+  bool predictor_enabled =
+      base::FeatureList::IsEnabled(features::kNetworkPrediction);
   if (simple_shutdown)
     return new SimplePredictor(predictor_enabled);
   return new Predictor(predictor_enabled);
@@ -252,7 +294,7 @@ void Predictor::PreconnectUrlAndSubresources(const GURL& url,
   UrlInfo::ResolutionMotivation motivation(UrlInfo::EARLY_LOAD_MOTIVATED);
   const int kConnectionsNeeded = 1;
   PreconnectUrl(canonicalized_url, first_party_for_cookies, motivation,
-                kConnectionsNeeded, kAllowCredentialsOnPreconnectByDefault);
+                kAllowCredentialsOnPreconnectByDefault, kConnectionsNeeded);
   PredictFrameSubresources(canonicalized_url.GetWithEmptyPath(),
                            first_party_for_cookies);
 }
@@ -506,7 +548,7 @@ void Predictor::GetHtmlReferrerLists(std::string* output) {
 
 void Predictor::GetHtmlInfo(std::string* output) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (initial_observer_.get())
+  if (kInitialDnsPrefetchListEnabled && initial_observer_)
     initial_observer_->GetFirstResolutionsHtml(output);
   // Show list of subresource predictions and stats.
   GetHtmlReferrerLists(output);
@@ -587,7 +629,7 @@ void Predictor::DeserializeReferrers(const base::ListValue& referral_list) {
 
 void Predictor::DiscardInitialNavigationHistory() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (initial_observer_.get())
+  if (kInitialDnsPrefetchListEnabled && initial_observer_)
     initial_observer_->DiscardInitialNavigationHistory();
 }
 
@@ -597,9 +639,11 @@ void Predictor::FinalizeInitializationOnIOThread(
     IOThread* io_thread,
     ProfileIOData* profile_io_data) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  TRACE_EVENT0("net", "Predictor::FinalizeInitializationOnIOThread");
 
   profile_io_data_ = profile_io_data;
-  initial_observer_.reset(new InitialObserver());
+  if (kInitialDnsPrefetchListEnabled)
+    initial_observer_ = base::MakeUnique<InitialObserver>();
 
   net::URLRequestContext* context =
       url_request_context_getter_->GetURLRequestContext();
@@ -612,7 +656,8 @@ void Predictor::FinalizeInitializationOnIOThread(
   io_weak_factory_.reset(new base::WeakPtrFactory<Predictor>(this));
 
   // Prefetch these hostnames on startup.
-  DnsPrefetchMotivatedList(startup_urls, UrlInfo::STARTUP_LIST_MOTIVATED);
+  if (kInitialDnsPrefetchListEnabled)
+    DnsPrefetchMotivatedList(startup_urls, UrlInfo::STARTUP_LIST_MOTIVATED);
 
   DeserializeReferrers(*referral_list);
 
@@ -628,8 +673,8 @@ void Predictor::FinalizeInitializationOnIOThread(
 
 void Predictor::LearnAboutInitialNavigation(const GURL& url) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (!PredictorEnabled() || nullptr == initial_observer_.get() ||
-      !CanPreresolveAndPreconnect()) {
+  if (!PredictorEnabled() || !kInitialDnsPrefetchListEnabled ||
+      !initial_observer_ || !CanPreresolveAndPreconnect()) {
     return;
   }
   initial_observer_->Append(url, this);
@@ -683,8 +728,8 @@ void Predictor::SaveStateForNextStartup() {
   if (!CanPreresolveAndPreconnect())
     return;
 
-  std::unique_ptr<base::ListValue> startup_list(new base::ListValue);
-  std::unique_ptr<base::ListValue> referral_list(new base::ListValue);
+  auto startup_list = base::MakeUnique<base::ListValue>();
+  auto referral_list = base::MakeUnique<base::ListValue>();
 
   // Get raw pointers to pass to the first task. Ownership of the unique_ptrs
   // will be passed to the reply task.
@@ -708,13 +753,16 @@ void Predictor::UpdatePrefsOnUIThread(
     std::unique_ptr<base::ListValue> referral_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   user_prefs_->Set(prefs::kDnsPrefetchingStartupList, *startup_list);
+
+  // May be empty if kInitialDnsPrefetchListEnabled is false. Still update the
+  // prefs to clear the state.
   user_prefs_->Set(prefs::kDnsPrefetchingHostReferralList, *referral_list);
 }
 
 void Predictor::WriteDnsPrefetchState(base::ListValue* startup_list,
                                       base::ListValue* referral_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (initial_observer_.get())
+  if (kInitialDnsPrefetchListEnabled && initial_observer_)
     initial_observer_->GetInitialDnsResolutionList(startup_list);
 
   SerializeReferrers(referral_list);
@@ -751,14 +799,15 @@ void Predictor::PreconnectUrlOnIOThread(
   GURL url = GetHSTSRedirectOnIOThread(original_url);
 
   // TODO(csharrison): The observer should only be notified after the null check
-  // for the ProfileIOData. The predictor tests should be fixed to allow for
-  // this, as they currently expect a callback with no getter.
+  // for the URLRequestContextGetter. The predictor tests should be fixed to
+  // allow for this, as they currently expect a callback with no getter.
   if (observer_) {
     observer_->OnPreconnectUrl(
         url, first_party_for_cookies, motivation, count);
   }
 
-  if (!profile_io_data_)
+  net::URLRequestContextGetter* getter = url_request_context_getter_.get();
+  if (!getter)
     return;
 
   // Translate the motivation from UrlRequest motivations to HttpRequest
@@ -784,9 +833,8 @@ void Predictor::PreconnectUrlOnIOThread(
   }
   UMA_HISTOGRAM_ENUMERATION("Net.PreconnectMotivation", motivation,
                             UrlInfo::MAX_MOTIVATED);
-  content::PreconnectUrl(profile_io_data_->GetResourceContext(), url,
-                         first_party_for_cookies, count, allow_credentials,
-                         request_motivation);
+  content::PreconnectUrl(getter, url, first_party_for_cookies, count,
+                         allow_credentials, request_motivation);
 }
 
 void Predictor::PredictFrameSubresources(const GURL& url,
@@ -1008,7 +1056,7 @@ void Predictor::StartSomeQueuedResolutions() {
     }
 
     int status =
-        content::PreresolveUrl(profile_io_data_->GetResourceContext(), url,
+        content::PreresolveUrl(url_request_context_getter_.get(), url,
                                base::Bind(&Predictor::OnLookupFinished,
                                           io_weak_factory_->GetWeakPtr(), url));
     if (status == net::ERR_IO_PENDING) {
@@ -1107,19 +1155,13 @@ GURL Predictor::HostNameQueue::Pop() {
 //-----------------------------------------------------------------------------
 // Member definitions for InitialObserver class.
 
-Predictor::InitialObserver::InitialObserver() {
-}
+InitialObserver::InitialObserver() = default;
 
-Predictor::InitialObserver::~InitialObserver() {
-}
+InitialObserver::~InitialObserver() = default;
 
-void Predictor::InitialObserver::Append(const GURL& url,
-                                        Predictor* predictor) {
+void InitialObserver::Append(const GURL& url, Predictor* predictor) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  // TODO(rlp): Do we really need the predictor check here?
-  if (nullptr == predictor)
-    return;
   if (kStartupResolutionCount <= first_navigations_.size())
     return;
 
@@ -1129,38 +1171,32 @@ void Predictor::InitialObserver::Append(const GURL& url,
     first_navigations_[url] = base::TimeTicks::Now();
 }
 
-void Predictor::InitialObserver::GetInitialDnsResolutionList(
+void InitialObserver::GetInitialDnsResolutionList(
     base::ListValue* startup_list) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(startup_list);
   DCHECK(startup_list->empty());
   DCHECK_EQ(0u, startup_list->GetSize());
   startup_list->AppendInteger(kPredictorStartupFormatVersion);
-  for (FirstNavigations::iterator it = first_navigations_.begin();
-       it != first_navigations_.end();
-       ++it) {
-    DCHECK(it->first == Predictor::CanonicalizeUrl(it->first));
-    startup_list->AppendString(it->first.spec());
+  for (const auto& url_time : first_navigations_) {
+    DCHECK(url_time.first == Predictor::CanonicalizeUrl(url_time.first));
+    startup_list->AppendString(url_time.first.spec());
   }
 }
 
-void Predictor::InitialObserver::GetFirstResolutionsHtml(
-    std::string* output) {
+void InitialObserver::GetFirstResolutionsHtml(std::string* output) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   UrlInfo::UrlInfoTable resolution_list;
-  {
-    for (FirstNavigations::iterator it(first_navigations_.begin());
-         it != first_navigations_.end();
-         it++) {
-      UrlInfo info;
-      info.SetUrl(it->first);
-      info.set_time(it->second);
-      resolution_list.push_back(info);
-    }
+  for (const auto& url_time : first_navigations_) {
+    UrlInfo info;
+    info.SetUrl(url_time.first);
+    info.set_time(url_time.second);
+    resolution_list.push_back(info);
   }
   UrlInfo::GetHtmlTable(resolution_list,
-      "Future startups will prefetch DNS records for ", false, output);
+                        "Future startups will prefetch DNS records for ", false,
+                        output);
 }
 
 //-----------------------------------------------------------------------------

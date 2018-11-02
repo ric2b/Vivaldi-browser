@@ -4,8 +4,8 @@
 
 #include "modules/fetch/FormDataBytesConsumer.h"
 
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMArrayBufferView.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMArrayBufferView.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
@@ -75,7 +75,7 @@ class SimpleFormDataBytesConsumer : public BytesConsumer {
       return nullptr;
 
     state_ = PublicState::kClosed;
-    return form_data_.Release();
+    return std::move(form_data_);
   }
   void SetClient(BytesConsumer::Client* client) override { DCHECK(client); }
   void ClearClient() override {}
@@ -177,13 +177,13 @@ class ComplexFormDataBytesConsumer final : public BytesConsumer {
         blob_bytes_consumer_->DrainAsBlobDataHandle(policy);
     if (handle)
       form_data_ = nullptr;
-    return handle.Release();
+    return handle;
   }
   PassRefPtr<EncodedFormData> DrainAsFormData() override {
     if (!form_data_)
       return nullptr;
     blob_bytes_consumer_->Cancel();
-    return form_data_.Release();
+    return std::move(form_data_);
   }
   void SetClient(BytesConsumer::Client* client) override {
     blob_bytes_consumer_->SetClient(client);

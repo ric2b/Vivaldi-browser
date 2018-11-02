@@ -36,7 +36,6 @@ import traceback
 from webkitpy.common import exit_codes
 from webkitpy.common.host import Host
 from webkitpy.layout_tests.controllers.manager import Manager
-from webkitpy.layout_tests.generate_results_dashboard import DashBoardGenerator
 from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.factory import configuration_options, platform_options
 from webkitpy.layout_tests.views import buildbot_results
@@ -80,6 +79,10 @@ def main(argv, stdout, stderr):
         return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
 
+def deprecate(option, opt_str, _, parser):
+    parser.error('%s: %s' % (opt_str, option.help))
+
+
 def parse_args(args):
     option_group_definitions = []
 
@@ -117,8 +120,9 @@ def parse_args(args):
                 '--add-platform-exceptions',
                 action='store_true',
                 default=False,
-                help=('Save generated results into the *most-specific-platform* directory rather '
-                      'than the *generic-platform* directory')),
+                help=('For --reset-results and --new-flag-specific-baseline, save generated '
+                      'results into the *most-specific-platform* directory rather than the '
+                      'current baseline directory or *generic-platform* directory')),
             optparse.make_option(
                 '--additional-driver-flag',
                 '--additional-drt-flag',
@@ -142,8 +146,9 @@ def parse_args(args):
                       'multiple search path entries.')),
             optparse.make_option(
                 '--build-directory',
-                help=('Path to the directory under which build files are kept (should not '
-                      'include configuration)')),
+                default='out',
+                help=('Path to the directory where build files are kept, not including '
+                      'configuration. In general this will be "out".')),
             optparse.make_option(
                 '--clobber-old-results',
                 action='store_true',
@@ -174,16 +179,23 @@ def parse_args(args):
                 help='Path to write the JSON test results for only *failing* tests.'),
             optparse.make_option(
                 '--new-baseline',
+                action='callback',
+                callback=deprecate,
+                help=('Deprecated. Use "webkit-patch rebaseline-cl" instead, or '
+                      '"--reset-results --add-platform-exceptions" if you do want to create '
+                      'new baselines for the *most-specific-platform* locally.')),
+            optparse.make_option(
+                '--new-flag-specific-baseline',
                 action='store_true',
                 default=False,
-                help=('Save generated results as new baselines into the *most-specific-platform* '
-                      "directory, overwriting whatever's already there. Equivalent to "
-                      '--reset-results --add-platform-exceptions')),
+                help=('Together with --addtional-driver-flag, if actual results are '
+                      'different from expected, save actual results as new baselines '
+                      'into the flag-specific generic-platform directory.')),
             optparse.make_option(
                 '--new-test-results',
-                action='store_true',
-                default=False,
-                help='Create new baselines when no expected results exist'),
+                action='callback',
+                callback=deprecate,
+                help='Deprecated. Use --reset-results instead.'),
             optparse.make_option(
                 '--no-show-results',
                 dest='show_results',
@@ -357,6 +369,7 @@ def parse_args(args):
                 help='Output per-test profile information, using the specified profiler.'),
             optparse.make_option(
                 '--repeat-each',
+                '--gtest_repeat',
                 type='int',
                 default=1,
                 help='Number of times to run each test (e.g. AAABBBCCC)'),
@@ -480,7 +493,12 @@ def parse_args(args):
         option_group.add_options(group_options)
         option_parser.add_option_group(option_group)
 
-    return option_parser.parse_args(args)
+    (options, args) = option_parser.parse_args(args)
+
+    if options.new_flag_specific_baseline and not options.additional_driver_flag:
+        option_parser.error('--new-flag-specific-baseline requires --additional-driver-flag')
+
+    return (options, args)
 
 
 def _set_up_derived_options(port, options, args):
@@ -509,9 +527,8 @@ def _set_up_derived_options(port, options, args):
             additional_platform_directories.append(port.host.filesystem.abspath(path))
         options.additional_platform_directory = additional_platform_directories
 
-    if options.new_baseline:
+    if options.new_flag_specific_baseline:
         options.reset_results = True
-        options.add_platform_exceptions = True
 
     if options.pixel_test_directories:
         options.pixel_tests = True
@@ -587,11 +604,6 @@ def run(port, options, args, logging_stream, stdout):
             bot_printer = buildbot_results.BuildBotPrinter(stdout, options.debug_rwt_logging)
             bot_printer.print_results(run_details)
             stdout.flush()
-
-            _log.debug('Generating dashboard...')
-            gen_dash_board = DashBoardGenerator(port)
-            gen_dash_board.generate()
-            _log.debug('Dashboard generated.')
 
         _log.debug('')
         _log.debug('Testing completed, Exit status: %d', run_details.exit_code)

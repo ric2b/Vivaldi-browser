@@ -25,7 +25,7 @@ constexpr uint32_t recursive_hash<1>(const char* str) {
 
 // Entry point to function that computes hash as constant expression.
 #define COMPUTE_STRING_HASH(S) \
-  static_cast<int32_t>(recursive_hash<sizeof(S)>(S))
+  static_cast<int32_t>(recursive_hash<sizeof(S) - 1>(S))
 
 }  // namespace
 
@@ -38,7 +38,7 @@ struct NetworkTrafficAnnotationTag {
 struct PartialNetworkTrafficAnnotationTag {
   const int32_t unique_id_hash_code;
 
-#if defined(_DEBUG) || defined(DCHECK_ALWAYS_ON)
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
   // |completing_id_hash_code| holds a reference to the hash coded unique id
   // of a network traffic annotation (or group id of several network traffic
   // annotations) that complete a partial network annotation. Please refer to
@@ -97,7 +97,7 @@ constexpr PartialNetworkTrafficAnnotationTag
 DefinePartialNetworkTrafficAnnotation(const char (&unique_id)[N1],
                                       const char (&completing_id)[N2],
                                       const char (&proto)[N3]) {
-#if defined(_DEBUG) || defined(DCHECK_ALWAYS_ON)
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
   return PartialNetworkTrafficAnnotationTag(
       {COMPUTE_STRING_HASH(unique_id), COMPUTE_STRING_HASH(completing_id)});
 #else
@@ -114,9 +114,13 @@ NetworkTrafficAnnotationTag CompleteNetworkTrafficAnnotation(
     const char (&unique_id)[N1],
     const PartialNetworkTrafficAnnotationTag& partial_annotation,
     const char (&proto)[N2]) {
-#if defined(_DEBUG) || defined(DCHECK_ALWAYS_ON)
-  DCHECK_EQ(COMPUTE_STRING_HASH(unique_id),
-            partial_annotation.completing_id_hash_code);
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+  DCHECK(partial_annotation.completing_id_hash_code ==
+             COMPUTE_STRING_HASH(unique_id) ||
+         partial_annotation.unique_id_hash_code ==
+             COMPUTE_STRING_HASH("test_partial") ||
+         partial_annotation.unique_id_hash_code ==
+             COMPUTE_STRING_HASH("undefined"));
 #endif
   return NetworkTrafficAnnotationTag({partial_annotation.unique_id_hash_code});
 }
@@ -131,9 +135,13 @@ NetworkTrafficAnnotationTag BranchedCompleteNetworkTrafficAnnotation(
     const char (&group_id)[N2],
     const PartialNetworkTrafficAnnotationTag& partial_annotation,
     const char (&proto)[N3]) {
-#if defined(_DEBUG) || defined(DCHECK_ALWAYS_ON)
-  DCHECK_EQ(COMPUTE_STRING_HASH(group_id),
-            partial_annotation.completing_id_hash_code);
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+  DCHECK(partial_annotation.completing_id_hash_code ==
+             COMPUTE_STRING_HASH(unique_id) ||
+         partial_annotation.unique_id_hash_code ==
+             COMPUTE_STRING_HASH("test_partial") ||
+         partial_annotation.unique_id_hash_code ==
+             COMPUTE_STRING_HASH("undefined"));
 #endif
   return NetworkTrafficAnnotationTag({COMPUTE_STRING_HASH(unique_id)});
 }
@@ -186,11 +194,67 @@ NetworkTrafficAnnotationTag BranchedCompleteNetworkTrafficAnnotation(
 //   }
 // }
 
+#define TRAFFIC_ANNOTATION_UNINITIALIZED -1
+
+// Do not use this unless net-serialization is required.
+// TODO(crbug.com/690323): Add tools to check constructor of this structure is
+// used only in .mojom.cc files.
+struct MutableNetworkTrafficAnnotationTag {
+  MutableNetworkTrafficAnnotationTag()
+      : unique_id_hash_code(TRAFFIC_ANNOTATION_UNINITIALIZED) {}
+  explicit MutableNetworkTrafficAnnotationTag(
+      const NetworkTrafficAnnotationTag& traffic_annotation)
+      : unique_id_hash_code(traffic_annotation.unique_id_hash_code) {}
+
+  int32_t unique_id_hash_code;
+
+  explicit operator NetworkTrafficAnnotationTag() const {
+    return NetworkTrafficAnnotationTag({unique_id_hash_code});
+  }
+};
+
+struct MutablePartialNetworkTrafficAnnotationTag {
+#if !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+  MutablePartialNetworkTrafficAnnotationTag()
+      : unique_id_hash_code(TRAFFIC_ANNOTATION_UNINITIALIZED),
+        completing_id_hash_code(TRAFFIC_ANNOTATION_UNINITIALIZED) {}
+  explicit MutablePartialNetworkTrafficAnnotationTag(
+      const PartialNetworkTrafficAnnotationTag& partial_traffic_annotation)
+      : unique_id_hash_code(partial_traffic_annotation.unique_id_hash_code),
+        completing_id_hash_code(
+            partial_traffic_annotation.completing_id_hash_code) {}
+
+  int32_t unique_id_hash_code;
+  int32_t completing_id_hash_code;
+
+  explicit operator PartialNetworkTrafficAnnotationTag() const {
+    return PartialNetworkTrafficAnnotationTag(
+        {unique_id_hash_code, completing_id_hash_code});
+  }
+#else
+  MutablePartialNetworkTrafficAnnotationTag()
+      : unique_id_hash_code(TRAFFIC_ANNOTATION_UNINITIALIZED) {}
+  explicit MutablePartialNetworkTrafficAnnotationTag(
+      const PartialNetworkTrafficAnnotationTag& partial_traffic_annotation)
+      : unique_id_hash_code(partial_traffic_annotation.unique_id_hash_code) {}
+
+  int32_t unique_id_hash_code;
+
+  explicit operator PartialNetworkTrafficAnnotationTag() const {
+    return PartialNetworkTrafficAnnotationTag({unique_id_hash_code});
+  }
+#endif  // !defined(NDEBUG) || defined(DCHECK_ALWAYS_ON)
+};
+
 }  // namespace net
 
 // Placeholder for unannotated usages.
 #define NO_TRAFFIC_ANNOTATION_YET \
   net::DefineNetworkTrafficAnnotation("undefined", "Nothing here yet.")
+
+#define NO_PARTIAL_TRAFFIC_ANNOTATION_YET                              \
+  net::DefinePartialNetworkTrafficAnnotation("undefined", "undefined", \
+                                             "Nothing here yet.")
 
 #define MISSING_TRAFFIC_ANNOTATION     \
   net::DefineNetworkTrafficAnnotation( \

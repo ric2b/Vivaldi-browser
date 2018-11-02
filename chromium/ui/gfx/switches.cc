@@ -21,14 +21,4 @@ const char kEnableHarfBuzzRenderText[] = "enable-harfbuzz-rendertext";
 // Run in headless mode, i.e., without a UI or display server dependencies.
 const char kHeadless[] = "headless";
 
-// Convert rasterization and compositing inputs to the output color space
-// before operating on them.
-const char kEnableColorCorrectRendering[] = "enable-color-correct-rendering";
-
-// Force all monitors to be treated as though they have the specified color
-// profile. Accepted values are "srgb" and "generic-rgb" (currently used by Mac
-// layout tests) and "bt2020-gamma18" (to be used by Mac layout tests in the
-// future).
-const char kForceColorProfile[] = "force-color-profile";
-
 }  // namespace switches

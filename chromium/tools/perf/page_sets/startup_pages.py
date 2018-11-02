@@ -23,7 +23,8 @@ class StartedPage(page_module.Page):
   def __init__(self, url, page_set):
     super(StartedPage, self).__init__(
         url=url, page_set=page_set, startup_url=url,
-        shared_page_state_class=BrowserStartupSharedState)
+        shared_page_state_class=BrowserStartupSharedState,
+        name=url)
     self.archive_data_file = 'data/startup_pages.json'
 
   def RunNavigateSteps(self, action_runner):
@@ -53,7 +54,22 @@ class StartupPagesPageSet(story.StorySet):
     self.AddStory(StartedPage('about:blank', self))
     # Typical page.
     self.AddStory(StartedPage('http://bbc.co.uk', self))
-    # TODO(charliea): Reenable this when kabook.com is working again.
-    # crbug.com/667470
     # Horribly complex page - stress test!
-    # self.AddStory(StartedPage('http://kapook.com', self))
+    self.AddStory(StartedPage('http://kapook.com', self))
+
+
+# TODO(rnephew): Test if kapook.com fails on both or just one of the configs.
+class WarmStartupStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    self.PermanentlyDisableBenchmark(
+        [story.expectations.ALL_DESKTOP], 'Mobile benchmark')
+    self.DisableStory(
+        'http://kapook.com', [story.expectations.ALL], 'crbug.com/667470')
+
+
+class ColdStartupStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    self.PermanentlyDisableBenchmark(
+        [story.expectations.ALL_DESKTOP], 'Mobile benchmark')
+    self.DisableStory(
+        'http://kapook.com', [story.expectations.ALL], 'crbug.com/667470')

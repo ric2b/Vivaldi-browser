@@ -31,10 +31,6 @@ class RootWindowController;
 class BackdropDelegate;
 class BackdropController;
 
-namespace test {
-class WorkspaceControllerTestApi;
-}
-
 namespace wm {
 class WMEvent;
 }
@@ -43,7 +39,7 @@ class WMEvent;
 class ASH_EXPORT WorkspaceLayoutManager
     : public aura::LayoutManager,
       public aura::WindowObserver,
-      public aura::client::ActivationChangeObserver,
+      public ::wm::ActivationChangeObserver,
       public keyboard::KeyboardControllerObserver,
       public display::DisplayObserver,
       public ShellObserver,
@@ -79,10 +75,11 @@ class ASH_EXPORT WorkspaceLayoutManager
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
 
-  // aura::client::ActivationChangeObserver overrides:
-  void OnWindowActivated(ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override;
+  // wm::ActivationChangeObserver overrides:
+  void OnWindowActivated(
+      ::wm::ActivationChangeObserver::ActivationReason reason,
+      aura::Window* gained_active,
+      aura::Window* lost_active) override;
 
   // keyboard::KeyboardControllerObserver overrides:
   void OnKeyboardBoundsChanging(const gfx::Rect& new_bounds) override;
@@ -104,7 +101,7 @@ class ASH_EXPORT WorkspaceLayoutManager
                                      aura::Window* root_window) override;
 
  private:
-  friend class test::WorkspaceControllerTestApi;
+  friend class WorkspaceControllerTestApi;
   typedef std::set<aura::Window*> WindowSet;
 
   // Adjusts the bounds of all managed windows when the display area changes.

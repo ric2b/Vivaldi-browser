@@ -20,6 +20,7 @@
 #include "chrome/browser/ui/ash/ash_util.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/session_util.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/presenter/app_list_presenter_delegate_factory.h"
 #include "ui/app_list/presenter/app_list_presenter_impl.h"
@@ -99,6 +100,7 @@ AppListServiceAsh::AppListServiceAsh() {
       base::MakeUnique<app_list::AppListPresenterImpl>(std::move(factory));
   controller_delegate_ =
       base::MakeUnique<AppListControllerDelegateAsh>(app_list_presenter_.get());
+  app_list_presenter_service_ = base::MakeUnique<AppListPresenterService>();
 }
 
 AppListServiceAsh::~AppListServiceAsh() {}
@@ -108,10 +110,7 @@ app_list::AppListPresenterImpl* AppListServiceAsh::GetAppListPresenter() {
 }
 
 void AppListServiceAsh::Init(Profile* initial_profile) {
-  // The AppListPresenterService ctor calls AppListServiceAsh::GetInstance(),
-  // which isn't available in the AppListServiceAsh constructor, so init here.
-  // This establishes the mojo connections between the app list and presenter.
-  app_list_presenter_service_ = base::MakeUnique<AppListPresenterService>();
+  app_list_presenter_service_->Init();
 
   // Ensure the StartPageService is created here. This early initialization is
   // necessary to allow the WebContents to load before the app list is shown.
@@ -160,6 +159,8 @@ void AppListServiceAsh::ShowForProfile(Profile* /*default_profile*/) {
 void AppListServiceAsh::ShowForAppInstall(Profile* profile,
                                           const std::string& extension_id,
                                           bool start_discovery_tracking) {
+  if (app_list::features::IsFullscreenAppListEnabled())
+    return;
   ShowAndSwitchToState(app_list::AppListModel::STATE_APPS);
   AppListServiceImpl::ShowForAppInstall(profile, extension_id,
                                         start_discovery_tracking);

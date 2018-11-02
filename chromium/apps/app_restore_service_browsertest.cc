@@ -7,10 +7,11 @@
 #include "apps/saved_files_service.h"
 #include "base/threading/thread_restrictions.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
-#include "chrome/browser/extensions/api/file_system/file_system_api.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/test/test_utils.h"
+#include "extensions/browser/api/file_system/file_system_api.h"
+#include "extensions/browser/api/file_system/saved_file_entry.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/notification_types.h"
 #include "extensions/common/extension.h"
@@ -20,6 +21,7 @@ using extensions::Extension;
 using extensions::ExtensionPrefs;
 using extensions::ExtensionSystem;
 using extensions::FileSystemChooseEntryFunction;
+using extensions::SavedFileEntry;
 
 // TODO(benwells): Move PlatformAppBrowserTest to apps namespace in apps
 // component.

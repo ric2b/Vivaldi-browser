@@ -7,7 +7,6 @@
 #include <stddef.h>
 
 #include <set>
-#include <utility>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -19,7 +18,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/default_clock.h"
 #include "base/time/time.h"
-#include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/favicon/large_icon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -27,7 +25,7 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
-#include "chrome/browser/ui/webui/large_icon_source.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/features.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
@@ -50,12 +48,6 @@
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_url_filter.h"
-#endif
-
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/preferences/preferences_launcher.h"
-#else
-#include "chrome/common/chrome_features.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -85,15 +77,6 @@ base::string16 GetRelativeDateLocalized(base::Clock* clock,
         base::TimeFormatFriendlyDate(visit_time));
   }
   return date_str;
-}
-
-// Sets the correct year when substracting months from a date.
-void NormalizeMonths(base::Time::Exploded* exploded) {
-  // Decrease a year at a time until we have a proper date.
-  while (exploded->month < 1) {
-    exploded->month += 12;
-    exploded->year--;
-  }
 }
 
 // Gets the name and type of a device for the given sync client ID.
@@ -152,12 +135,10 @@ void SetHistoryEntryUrlAndTitle(BrowsingHistoryService::HistoryEntry* entry,
       base::i18n::AdjustStringForLocaleDirection(&title_to_set);
   }
 
-#if !defined(OS_ANDROID)
   // Number of chars to truncate titles when making them "short".
   static const size_t kShortTitleLength = 300;
   if (title_to_set.size() > kShortTitleLength)
     title_to_set.resize(kShortTitleLength);
-#endif
 
   result->SetString("title", title_to_set);
 }
@@ -272,14 +253,7 @@ void BrowsingHistoryHandler::RegisterMessages() {
 
   // Create our favicon data source.
   Profile* profile = Profile::FromWebUI(web_ui());
-
-#if defined(OS_ANDROID)
-  favicon::LargeIconService* large_icon_service =
-      LargeIconServiceFactory::GetForBrowserContext(profile);
-  content::URLDataSource::Add(profile, new LargeIconSource(large_icon_service));
-#else
   content::URLDataSource::Add(profile, new FaviconSource(profile));
-#endif
 
   web_ui()->RegisterMessageCallback("queryHistory",
       base::Bind(&BrowsingHistoryHandler::HandleQueryHistory,
@@ -295,59 +269,27 @@ void BrowsingHistoryHandler::RegisterMessages() {
                  base::Unretained(this)));
 }
 
-bool BrowsingHistoryHandler::ExtractIntegerValueAtIndex(
-    const base::ListValue* value,
-    int index,
-    int* out_int) {
-  double double_value;
-  if (value->GetDouble(index, &double_value)) {
-    *out_int = static_cast<int>(double_value);
-    return true;
-  }
-  NOTREACHED();
-  return false;
-}
-
 void BrowsingHistoryHandler::HandleQueryHistory(const base::ListValue* args) {
   history::QueryOptions options;
 
   // Parse the arguments from JavaScript. There are five required arguments:
   // - the text to search for (may be empty)
-  // - the offset from which the search should start (in multiples of week or
-  //   month, set by the next argument).
-  // - the range (BrowsingHistoryHandler::Range) Enum value that sets the range
-  //   of the query.
   // - the end time for the query. Only results older than this time will be
   //   returned.
   // - the maximum number of results to return (may be 0, meaning that there
   //   is no maximum).
   base::string16 search_text = ExtractStringValue(args);
-  int offset;
-  if (!args->GetInteger(1, &offset)) {
-    NOTREACHED() << "Failed to convert argument 1. ";
-    return;
-  }
-  int range;
-  if (!args->GetInteger(2, &range)) {
-    NOTREACHED() << "Failed to convert argument 2. ";
-    return;
-  }
-
-  if (range == BrowsingHistoryHandler::MONTH)
-    SetQueryTimeInMonths(offset, &options);
-  else if (range == BrowsingHistoryHandler::WEEK)
-    SetQueryTimeInWeeks(offset, &options);
 
   double end_time;
-  if (!args->GetDouble(3, &end_time)) {
-    NOTREACHED() << "Failed to convert argument 3. ";
+  if (!args->GetDouble(1, &end_time)) {
+    NOTREACHED() << "Failed to convert argument 1. ";
     return;
   }
   if (end_time)
     options.end_time = base::Time::FromJsTime(end_time);
 
-  if (!ExtractIntegerValueAtIndex(args, 4, &options.max_count)) {
-    NOTREACHED() << "Failed to convert argument 4.";
+  if (!args->GetInteger(2, &options.max_count)) {
+    NOTREACHED() << "Failed to convert argument 2.";
     return;
   }
 
@@ -371,7 +313,7 @@ void BrowsingHistoryHandler::HandleRemoveVisits(const base::ListValue* args) {
       NOTREACHED() << "Unable to extract arguments";
       return;
     }
-    DCHECK(timestamps->GetSize() > 0);
+    DCHECK_GT(timestamps->GetSize(), 0U);
     std::unique_ptr<BrowsingHistoryService::HistoryEntry> entry(
             new BrowsingHistoryService::HistoryEntry());
 
@@ -398,10 +340,6 @@ void BrowsingHistoryHandler::HandleRemoveVisits(const base::ListValue* args) {
 
 void BrowsingHistoryHandler::HandleClearBrowsingData(
     const base::ListValue* args) {
-#if defined(OS_ANDROID)
-  chrome::android::PreferencesLauncher::OpenClearBrowsingData(
-      web_ui()->GetWebContents());
-#else
   // TODO(beng): This is an improper direct dependency on Browser. Route this
   // through some sort of delegate.
   Browser* browser = NULL;
@@ -412,7 +350,6 @@ void BrowsingHistoryHandler::HandleClearBrowsingData(
       web_ui()->GetWebContents());
   }
   chrome::ShowClearBrowsingDataDialog(browser);
-#endif
 }
 
 void BrowsingHistoryHandler::HandleRemoveBookmark(const base::ListValue* args) {
@@ -420,59 +357,6 @@ void BrowsingHistoryHandler::HandleRemoveBookmark(const base::ListValue* args) {
   Profile* profile = Profile::FromWebUI(web_ui());
   BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile);
   bookmarks::RemoveAllBookmarks(model, GURL(url));
-}
-
-void BrowsingHistoryHandler::SetQueryTimeInWeeks(
-    int offset, history::QueryOptions* options) {
-  // LocalMidnight returns the beginning of the current day so get the
-  // beginning of the next one.
-  base::Time midnight =
-      clock_->Now().LocalMidnight() + base::TimeDelta::FromDays(1);
-  options->end_time = midnight -
-      base::TimeDelta::FromDays(7 * offset);
-  options->begin_time = midnight -
-      base::TimeDelta::FromDays(7 * (offset + 1));
-}
-
-void BrowsingHistoryHandler::SetQueryTimeInMonths(
-    int offset, history::QueryOptions* options) {
-  // Configure the begin point of the search to the start of the
-  // current month.
-  base::Time::Exploded exploded;
-  clock_->Now().LocalMidnight().LocalExplode(&exploded);
-  exploded.day_of_month = 1;
-
-  if (offset == 0) {
-    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
-      // TODO(maksims): implement errors handling here.
-      NOTIMPLEMENTED();
-    }
-
-    // Set the end time of this first search to null (which will
-    // show results from the future, should the user's clock have
-    // been set incorrectly).
-    options->end_time = base::Time();
-  } else {
-    // Go back |offset| months in the past. The end time is not inclusive, so
-    // use the first day of the |offset| - 1 and |offset| months (e.g. for
-    // the last month, |offset| = 1, use the first days of the last month and
-    // the current month.
-    exploded.month -= offset - 1;
-    // Set the correct year.
-    NormalizeMonths(&exploded);
-    if (!base::Time::FromLocalExploded(exploded, &options->end_time)) {
-      // TODO(maksims): implement errors handling here.
-      NOTIMPLEMENTED();
-    }
-
-    exploded.month -= 1;
-    // Set the correct year
-    NormalizeMonths(&exploded);
-    if (!base::Time::FromLocalExploded(exploded, &options->begin_time)) {
-      // TODO(maksims): implement errors handling here.
-      NOTIMPLEMENTED();
-    }
-  }
 }
 
 void BrowsingHistoryHandler::OnQueryComplete(
@@ -517,20 +401,6 @@ void BrowsingHistoryHandler::OnQueryComplete(
   results_info.SetString(
       "queryEndTime",
       GetRelativeDateLocalized(clock_.get(), query_results_info->end_time));
-
-// Not used in mobile UI, and cause ~16kb of code bloat (crbug/683386).
-#ifndef OS_ANDROID
-  // TODO(calamity): Clean up grouped-specific fields once grouped history is
-  // removed.
-  results_info.SetString(
-      "queryStartMonth",
-      base::TimeFormatMonthAndYear(query_results_info->start_time));
-  results_info.SetString(
-      "queryInterval",
-      base::DateIntervalFormat(query_results_info->start_time,
-                               query_results_info->end_time,
-                               base::DATE_FORMAT_MONTH_WEEKDAY_DAY));
-#endif
 
   web_ui()->CallJavascriptFunctionUnsafe("historyResult", results_info,
                                          results_value);

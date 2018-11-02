@@ -5,7 +5,7 @@
 #ifndef BaseRenderingContext2D_h
 #define BaseRenderingContext2D_h
 
-#include "bindings/modules/v8/CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas.h"
+#include "bindings/modules/v8/CanvasImageSource.h"
 #include "bindings/modules/v8/StringOrCanvasGradientOrCanvasPattern.h"
 #include "core/html/ImageData.h"
 #include "modules/ModulesExport.h"
@@ -248,8 +248,6 @@ class MODULES_EXPORT BaseRenderingContext2D : public GarbageCollectedMixin,
 
   virtual bool isContextLost() const = 0;
 
-  virtual ColorBehavior DrawImageColorBehavior() const = 0;
-
   virtual void WillDrawImage(CanvasImageSource*) const {}
 
   virtual CanvasColorSpace ColorSpace() const {
@@ -462,8 +460,8 @@ void BaseRenderingContext2D::CompositedDraw(
       PaintFlags foreground_flags =
           *GetState().GetFlags(paint_type, kDrawForegroundOnly, image_type);
       foreground_flags.setImageFilter(SkComposeImageFilter::Make(
-          SkComposeImageFilter::Make(foreground_flags.refImageFilter(),
-                                     shadow_flags.refImageFilter()),
+          SkComposeImageFilter::Make(foreground_flags.getImageFilter(),
+                                     shadow_flags.getImageFilter()),
           filter));
       c->setMatrix(ctm);
       draw_func(c, &foreground_flags);

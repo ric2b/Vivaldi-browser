@@ -2,6 +2,10 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef DrawingBufferTestHelpers_h
+#define DrawingBufferTestHelpers_h
+
+#include "build/build_config.h"
 #include "gpu/command_buffer/common/capabilities.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/CanvasColorParams.h"
@@ -49,7 +53,7 @@ class WebGraphicsContext3DProviderForTests
 
 // The target to use when binding a texture to a Chromium image.
 GLenum ImageCHROMIUMTextureTarget() {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   return GC3D_TEXTURE_RECTANGLE_ARB;
 #else
   return GL_TEXTURE_2D;
@@ -58,7 +62,7 @@ GLenum ImageCHROMIUMTextureTarget() {
 
 // The target to use when preparing a mailbox texture.
 GLenum DrawingBufferTextureTarget() {
-  if (RuntimeEnabledFeatures::webGLImageChromiumEnabled())
+  if (RuntimeEnabledFeatures::WebGLImageChromiumEnabled())
     return ImageCHROMIUMTextureTarget();
   return GL_TEXTURE_2D;
 }
@@ -143,8 +147,16 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
   }
 
   void BindBuffer(GLenum target, GLuint buffer) override {
-    if (target == GL_PIXEL_UNPACK_BUFFER)
-      state_.pixel_unpack_buffer_binding = buffer;
+    switch (target) {
+      case GL_PIXEL_UNPACK_BUFFER:
+        state_.pixel_unpack_buffer_binding = buffer;
+        break;
+      case GL_PIXEL_PACK_BUFFER:
+        state_.pixel_pack_buffer_binding = buffer;
+        break;
+      default:
+        break;
+    }
   }
 
   GLuint64 InsertFenceSyncCHROMIUM() override {
@@ -275,7 +287,8 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
     state_.depth_mask = saved_state_.depth_mask;
     state_.stencil_mask = saved_state_.stencil_mask;
   }
-  void DrawingBufferClientRestorePixelPackAlignment() override {
+  void DrawingBufferClientRestorePixelPackParameters() override {
+    // TODO(zmo): restore ES3 pack parameters?
     state_.pack_alignment = saved_state_.pack_alignment;
   }
   void DrawingBufferClientRestoreTexture2DBinding() override {
@@ -291,6 +304,9 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
   void DrawingBufferClientRestorePixelUnpackBufferBinding() override {
     state_.pixel_unpack_buffer_binding =
         saved_state_.pixel_unpack_buffer_binding;
+  }
+  void DrawingBufferClientRestorePixelPackBufferBinding() override {
+    state_.pixel_pack_buffer_binding = saved_state_.pixel_pack_buffer_binding;
   }
 
   // Testing methods.
@@ -327,6 +343,8 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
               saved_state_.read_framebuffer_binding);
     EXPECT_EQ(state_.pixel_unpack_buffer_binding,
               saved_state_.pixel_unpack_buffer_binding);
+    EXPECT_EQ(state_.pixel_pack_buffer_binding,
+              saved_state_.pixel_pack_buffer_binding);
   }
 
  private:
@@ -352,6 +370,7 @@ class GLES2InterfaceForTests : public gpu::gles2::GLES2InterfaceStub,
     GLuint draw_framebuffer_binding = 0;
     GLuint read_framebuffer_binding = 0;
     GLuint pixel_unpack_buffer_binding = 0;
+    GLuint pixel_pack_buffer_binding = 0;
   };
   State state_;
   State saved_state_;
@@ -385,7 +404,7 @@ class DrawingBufferForTests : public DrawingBuffer {
       drawing_buffer->BeginDestruction();
       return nullptr;
     }
-    return drawing_buffer.Release();
+    return drawing_buffer;
   }
 
   DrawingBufferForTests(
@@ -423,3 +442,5 @@ class DrawingBufferForTests : public DrawingBuffer {
 };
 
 }  // blink
+
+#endif  // DrawingBufferTestHelpers_h

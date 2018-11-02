@@ -26,6 +26,7 @@
 #include "content/browser/appcache/chrome_appcache_service.h"
 #include "content/browser/background_fetch/background_fetch_context.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
+#include "content/browser/devtools/devtools_url_request_interceptor.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/resource_context_impl.h"
@@ -84,8 +85,7 @@ class BlobProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
       // the main thread but we want blob_protocol_handler_ constructed
       // on the IO thread.
       blob_protocol_handler_.reset(new storage::BlobProtocolHandler(
-          blob_storage_context_->context(), file_system_context_.get(),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get()));
+          blob_storage_context_->context(), file_system_context_.get()));
     }
     return blob_protocol_handler_->MaybeCreateJob(request, network_delegate);
   }
@@ -425,6 +425,8 @@ StoragePartitionImpl* StoragePartitionImplMap::Get(
               browser_context_->GetResourceContext()));
 
   URLRequestInterceptorScopedVector request_interceptors;
+  request_interceptors.push_back(
+      base::MakeUnique<DevToolsURLRequestInterceptor>(browser_context_));
   request_interceptors.push_back(ServiceWorkerRequestHandler::CreateInterceptor(
       browser_context_->GetResourceContext()));
   if (ForeignFetchRequestHandler::IsForeignFetchEnabled()) {

@@ -9,18 +9,19 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
+class CSSParserLocalContext;
 namespace blink {
 
 const CSSValue* CSSPropertyAPIImageOrientation::parseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    CSSPropertyID) {
-  DCHECK(RuntimeEnabledFeatures::imageOrientationEnabled());
+    const CSSParserLocalContext&) {
+  DCHECK(RuntimeEnabledFeatures::ImageOrientationEnabled());
   if (range.Peek().Id() == CSSValueFromImage)
     return CSSPropertyParserHelpers::ConsumeIdent(range);
   if (range.Peek().GetType() != kNumberToken) {
     CSSPrimitiveValue* angle = CSSPropertyParserHelpers::ConsumeAngle(
-        range, context, WTF::Optional<UseCounter::Feature>());
+        range, context, WTF::Optional<WebFeature>());
     if (angle && angle->GetDoubleValue() == 0)
       return angle;
   }

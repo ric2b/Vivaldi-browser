@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/stringprintf.h"
+#include "net/http/http_network_session.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/ssl_config.h"
 
@@ -78,6 +79,47 @@ bool IsAlternateProtocolValid(NextProto protocol) {
   return false;
 }
 
+// static
+AlternativeServiceInfo
+AlternativeServiceInfo::CreateHttp2AlternativeServiceInfo(
+    const AlternativeService& alternative_service,
+    base::Time expiration) {
+  DCHECK_EQ(alternative_service.protocol, kProtoHTTP2);
+  return AlternativeServiceInfo(alternative_service, expiration,
+                                QuicVersionVector());
+}
+
+// static
+AlternativeServiceInfo AlternativeServiceInfo::CreateQuicAlternativeServiceInfo(
+    const AlternativeService& alternative_service,
+    base::Time expiration,
+    const QuicVersionVector& advertised_versions) {
+  DCHECK_EQ(alternative_service.protocol, kProtoQUIC);
+  return AlternativeServiceInfo(alternative_service, expiration,
+                                advertised_versions);
+}
+
+AlternativeServiceInfo::AlternativeServiceInfo() : alternative_service_() {}
+
+AlternativeServiceInfo::~AlternativeServiceInfo() {}
+
+AlternativeServiceInfo::AlternativeServiceInfo(
+    const AlternativeService& alternative_service,
+    base::Time expiration,
+    const QuicVersionVector& advertised_versions)
+    : alternative_service_(alternative_service), expiration_(expiration) {
+  if (alternative_service_.protocol == kProtoQUIC) {
+    advertised_versions_ = advertised_versions;
+    std::sort(advertised_versions_.begin(), advertised_versions_.end());
+  }
+}
+
+AlternativeServiceInfo::AlternativeServiceInfo(
+    const AlternativeServiceInfo& alternative_service_info) = default;
+
+AlternativeServiceInfo& AlternativeServiceInfo::operator=(
+    const AlternativeServiceInfo& alternative_service_info) = default;
+
 std::string AlternativeService::ToString() const {
   return base::StringPrintf("%s %s:%d", NextProtoToString(protocol),
                             host.c_str(), port);
@@ -85,10 +127,10 @@ std::string AlternativeService::ToString() const {
 
 std::string AlternativeServiceInfo::ToString() const {
   base::Time::Exploded exploded;
-  expiration.LocalExplode(&exploded);
+  expiration_.LocalExplode(&exploded);
   return base::StringPrintf(
       "%s, expires %04d-%02d-%02d %02d:%02d:%02d",
-      alternative_service.ToString().c_str(), exploded.year, exploded.month,
+      alternative_service_.ToString().c_str(), exploded.year, exploded.month,
       exploded.day_of_month, exploded.hour, exploded.minute, exploded.second);
 }
 

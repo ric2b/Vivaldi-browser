@@ -55,7 +55,6 @@ DialDeviceDescriptionParserImpl::~DialDeviceDescriptionParserImpl() {
 
 // static
 void DialDeviceDescriptionParserImpl::Create(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::DialDeviceDescriptionParserRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<DialDeviceDescriptionParserImpl>(),
                           std::move(request));
@@ -63,13 +62,13 @@ void DialDeviceDescriptionParserImpl::Create(
 
 void DialDeviceDescriptionParserImpl::ParseDialDeviceDescription(
     const std::string& device_description_xml_data,
-    const ParseDialDeviceDescriptionCallback& callback) {
+    ParseDialDeviceDescriptionCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(!callback.is_null());
 
   chrome::mojom::DialDeviceDescriptionPtr device_description =
       Parse(device_description_xml_data);
-  callback.Run(std::move(device_description));
+  std::move(callback).Run(std::move(device_description));
 }
 
 chrome::mojom::DialDeviceDescriptionPtr DialDeviceDescriptionParserImpl::Parse(

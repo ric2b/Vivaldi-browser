@@ -16,10 +16,11 @@
 namespace blink {
 namespace {
 
-class MockScheduler final : public WebScheduler {
+class MockScriptedIdleTaskControllerScheduler final : public WebScheduler {
  public:
-  MockScheduler(bool should_yield) : should_yield_(should_yield) {}
-  ~MockScheduler() override {}
+  MockScriptedIdleTaskControllerScheduler(bool should_yield)
+      : should_yield_(should_yield) {}
+  ~MockScriptedIdleTaskControllerScheduler() override {}
 
   // WebScheduler implementation:
   WebTaskRunner* LoadingTaskRunner() override { return nullptr; }
@@ -36,7 +37,7 @@ class MockScheduler final : public WebScheduler {
                                WebThread::IdleTask*) override {}
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
-      WebViewScheduler::WebViewSchedulerSettings*) override {
+      WebViewScheduler::WebViewSchedulerDelegate*) override {
     return nullptr;
   }
   void SuspendTimerQueue() override {}
@@ -56,13 +57,14 @@ class MockScheduler final : public WebScheduler {
   bool should_yield_;
   std::unique_ptr<WebThread::IdleTask> idle_task_;
 
-  DISALLOW_COPY_AND_ASSIGN(MockScheduler);
+  DISALLOW_COPY_AND_ASSIGN(MockScriptedIdleTaskControllerScheduler);
 };
 
-class MockThread final : public WebThread {
+class MockScriptedIdleTaskControllerThread final : public WebThread {
  public:
-  MockThread(bool should_yield) : scheduler_(should_yield) {}
-  ~MockThread() override {}
+  MockScriptedIdleTaskControllerThread(bool should_yield)
+      : scheduler_(should_yield) {}
+  ~MockScriptedIdleTaskControllerThread() override {}
   bool IsCurrentThread() const override { return true; }
   WebScheduler* Scheduler() const override { return &scheduler_; }
 
@@ -70,22 +72,23 @@ class MockThread final : public WebThread {
   bool HasIdleTask() const { return scheduler_.HasIdleTask(); }
 
  private:
-  mutable MockScheduler scheduler_;
-  DISALLOW_COPY_AND_ASSIGN(MockThread);
+  mutable MockScriptedIdleTaskControllerScheduler scheduler_;
+  DISALLOW_COPY_AND_ASSIGN(MockScriptedIdleTaskControllerThread);
 };
 
-class MockPlatform : public TestingPlatformSupport {
+class MockScriptedIdleTaskControllerPlatform : public TestingPlatformSupport {
  public:
-  MockPlatform(bool should_yield) : thread_(should_yield) {}
-  ~MockPlatform() override {}
+  MockScriptedIdleTaskControllerPlatform(bool should_yield)
+      : thread_(should_yield) {}
+  ~MockScriptedIdleTaskControllerPlatform() override {}
   WebThread* CurrentThread() override { return &thread_; }
 
   void RunIdleTask() { thread_.RunIdleTask(); }
   bool HasIdleTask() const { return thread_.HasIdleTask(); }
 
  private:
-  MockThread thread_;
-  DISALLOW_COPY_AND_ASSIGN(MockPlatform);
+  MockScriptedIdleTaskControllerThread thread_;
+  DISALLOW_COPY_AND_ASSIGN(MockScriptedIdleTaskControllerPlatform);
 };
 
 class MockIdleRequestCallback : public IdleRequestCallback {
@@ -95,7 +98,7 @@ class MockIdleRequestCallback : public IdleRequestCallback {
 
 }  // namespace
 
-class ScriptedIdleTaskControllerTest : public testing::Test {
+class ScriptedIdleTaskControllerTest : public ::testing::Test {
  public:
   void SetUp() override { execution_context_ = new NullExecutionContext(); }
 
@@ -104,7 +107,8 @@ class ScriptedIdleTaskControllerTest : public testing::Test {
 };
 
 TEST_F(ScriptedIdleTaskControllerTest, RunCallback) {
-  ScopedTestingPlatformSupport<MockPlatform, bool> platform(false);
+  ScopedTestingPlatformSupport<MockScriptedIdleTaskControllerPlatform, bool>
+      platform(false);
   NullExecutionContext execution_context;
   ScriptedIdleTaskController* controller =
       ScriptedIdleTaskController::Create(execution_context_);
@@ -116,14 +120,15 @@ TEST_F(ScriptedIdleTaskControllerTest, RunCallback) {
   EXPECT_TRUE(platform->HasIdleTask());
   EXPECT_NE(0, id);
 
-  EXPECT_CALL(*callback, handleEvent(testing::_));
+  EXPECT_CALL(*callback, handleEvent(::testing::_));
   platform->RunIdleTask();
-  testing::Mock::VerifyAndClearExpectations(callback);
+  ::testing::Mock::VerifyAndClearExpectations(callback);
   EXPECT_FALSE(platform->HasIdleTask());
 }
 
 TEST_F(ScriptedIdleTaskControllerTest, DontRunCallbackWhenAskedToYield) {
-  ScopedTestingPlatformSupport<MockPlatform, bool> platform(true);
+  ScopedTestingPlatformSupport<MockScriptedIdleTaskControllerPlatform, bool>
+      platform(true);
   NullExecutionContext execution_context;
   ScriptedIdleTaskController* controller =
       ScriptedIdleTaskController::Create(execution_context_);
@@ -133,9 +138,9 @@ TEST_F(ScriptedIdleTaskControllerTest, DontRunCallbackWhenAskedToYield) {
   int id = controller->RegisterCallback(callback, options);
   EXPECT_NE(0, id);
 
-  EXPECT_CALL(*callback, handleEvent(testing::_)).Times(0);
+  EXPECT_CALL(*callback, handleEvent(::testing::_)).Times(0);
   platform->RunIdleTask();
-  testing::Mock::VerifyAndClearExpectations(callback);
+  ::testing::Mock::VerifyAndClearExpectations(callback);
 
   // The idle task should have been reposted.
   EXPECT_TRUE(platform->HasIdleTask());

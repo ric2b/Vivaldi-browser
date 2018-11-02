@@ -7,6 +7,7 @@
 
 #include "base/callback_forward.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
+#include "chrome/browser/chromeos/login/screens/encryption_migration_mode.h"
 #include "chrome/browser/chromeos/login/screens/encryption_migration_screen_view.h"
 
 namespace chromeos {
@@ -18,6 +19,7 @@ class EncryptionMigrationScreen
       public EncryptionMigrationScreenView::Delegate {
  public:
   using ContinueLoginCallback = base::OnceCallback<void(const UserContext&)>;
+  using RestartLoginCallback = base::OnceCallback<void(const UserContext&)>;
 
   EncryptionMigrationScreen(BaseScreenDelegate* base_screen_delegate,
                             EncryptionMigrationScreenView* view);
@@ -34,12 +36,16 @@ class EncryptionMigrationScreen
   // Sets the UserContext for a user whose cryptohome should be migrated.
   void SetUserContext(const UserContext& user_context);
 
-  // Sets whether the migration process should resume the previous one or not.
-  void SetShouldResume(bool should_resume);
+  // Sets the migration mode.
+  void SetMode(EncryptionMigrationMode mode);
 
   // Sets a callback, which should be called when the user want to log in to the
   // session from the migration UI.
   void SetContinueLoginCallback(ContinueLoginCallback callback);
+
+  // Sets a callback, which should be called when the user should re-enter their
+  // password.
+  void SetRestartLoginCallback(RestartLoginCallback callback);
 
   // Setup the initial view in the migration UI.
   // This should be called after other state like UserContext, etc... are set.

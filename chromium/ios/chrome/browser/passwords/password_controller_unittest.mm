@@ -1296,10 +1296,6 @@ TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
   MockPasswordManagerClient* weak_client = nullptr;
   PasswordController* passwordController =
       CreatePasswordController(&web_state, nullptr, &weak_client);
-  static_cast<TestingPrefServiceSimple*>(weak_client->GetPrefs())
-      ->registry()
-      ->RegisterBooleanPref(
-          password_manager::prefs::kPasswordManagerSavingEnabled, true);
 
   // Use a mock LogManager to detect that OnPasswordFormsRendered has been
   // called. TODO(crbug.com/598672): this is a hack, we should modularize the
@@ -1319,6 +1315,7 @@ TEST(PasswordControllerTestSimple, SaveOnNonHTMLLandingPage) {
   web_state.SetContentIsHTML(false);
   web_state.SetCurrentURL(GURL("https://example.com"));
   [passwordController webState:&web_state didLoadPageWithSuccess:YES];
+  [passwordController detach];
 }
 
 // Tests that an HTTP page without a password field does not update the SSL

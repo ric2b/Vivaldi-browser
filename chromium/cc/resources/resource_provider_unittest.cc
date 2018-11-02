@@ -18,9 +18,7 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/resources/returned_resource.h"
-#include "cc/resources/shared_bitmap_manager.h"
 #include "cc/resources/single_release_callback.h"
 #include "cc/test/test_context_provider.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
@@ -28,6 +26,9 @@
 #include "cc/test/test_texture.h"
 #include "cc/test/test_web_graphics_context_3d.h"
 #include "cc/trees/blocking_task_runner.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
+#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/common/resources/shared_bitmap_manager.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -72,13 +73,13 @@ static void ReleaseCallback(
 }
 
 static void SharedBitmapReleaseCallback(
-    std::unique_ptr<SharedBitmap> bitmap,
+    std::unique_ptr<viz::SharedBitmap> bitmap,
     const gpu::SyncToken& sync_token,
     bool lost_resource,
     BlockingTaskRunner* main_thread_task_runner) {}
 
 static void ReleaseSharedBitmapCallback(
-    std::unique_ptr<SharedBitmap> shared_bitmap,
+    std::unique_ptr<viz::SharedBitmap> shared_bitmap,
     bool* release_called,
     gpu::SyncToken* release_sync_token,
     bool* lost_resource_result,
@@ -90,17 +91,29 @@ static void ReleaseSharedBitmapCallback(
   *lost_resource_result = lost_resource;
 }
 
-static std::unique_ptr<SharedBitmap> CreateAndFillSharedBitmap(
-    SharedBitmapManager* manager,
+static std::unique_ptr<viz::SharedBitmap> CreateAndFillSharedBitmap(
+    viz::SharedBitmapManager* manager,
     const gfx::Size& size,
     uint32_t value) {
-  std::unique_ptr<SharedBitmap> shared_bitmap =
+  std::unique_ptr<viz::SharedBitmap> shared_bitmap =
       manager->AllocateSharedBitmap(size);
   CHECK(shared_bitmap);
   uint32_t* pixels = reinterpret_cast<uint32_t*>(shared_bitmap->pixels());
   CHECK(pixels);
   std::fill_n(pixels, size.GetArea(), value);
   return shared_bitmap;
+}
+
+static viz::ResourceSettings CreateResourceSettings(
+    size_t texture_id_allocation_chunk_size = 1) {
+  viz::ResourceSettings resource_settings;
+  resource_settings.texture_id_allocation_chunk_size =
+      texture_id_allocation_chunk_size;
+  resource_settings.use_gpu_memory_buffer_resources =
+      kUseGpuMemoryBufferResources;
+  resource_settings.buffer_to_texture_target_map =
+      viz::DefaultBufferToTextureTargetMapForTesting();
+  return resource_settings;
 }
 
 class TextureStateTrackingContext : public TestWebGraphicsContext3D {
@@ -324,7 +337,7 @@ class ResourceProviderContext : public TestWebGraphicsContext3D {
   }
 
   void GetPixels(const gfx::Size& size,
-                 ResourceFormat format,
+                 viz::ResourceFormat format,
                  uint8_t* pixels) {
     CheckTextureIsBound(GL_TEXTURE_2D);
     base::AutoLock lock_for_texture_access(namespace_->lock);
@@ -341,13 +354,13 @@ class ResourceProviderContext : public TestWebGraphicsContext3D {
  private:
   void AllocateTexture(const gfx::Size& size, GLenum format) {
     CheckTextureIsBound(GL_TEXTURE_2D);
-    ResourceFormat texture_format = RGBA_8888;
+    viz::ResourceFormat texture_format = viz::RGBA_8888;
     switch (format) {
       case GL_RGBA:
-        texture_format = RGBA_8888;
+        texture_format = viz::RGBA_8888;
         break;
       case GL_BGRA_EXT:
-        texture_format = BGRA_8888;
+        texture_format = viz::BGRA_8888;
         break;
     }
     base::AutoLock lock_for_texture_access(namespace_->lock);
@@ -392,7 +405,7 @@ void GetResourcePixels(ResourceProvider* resource_provider,
                        ResourceProviderContext* context,
                        ResourceId id,
                        const gfx::Size& size,
-                       ResourceFormat format,
+                       viz::ResourceFormat format,
                        uint8_t* pixels) {
   resource_provider->WaitSyncTokenIfNeeded(id);
   switch (resource_provider->default_resource_type()) {
@@ -449,29 +462,29 @@ class ResourceProviderTest
     child_gpu_memory_buffer_manager_ =
         gpu_memory_buffer_manager_->CreateClientGpuMemoryBufferManager();
 
+    viz::ResourceSettings resource_settings = CreateResourceSettings();
     resource_provider_ = base::MakeUnique<ResourceProvider>(
         context_provider_.get(), shared_bitmap_manager_.get(),
-        gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 1,
-        kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-        kEnableColorCorrectRendering,
-        DefaultBufferToTextureTargetMapForTesting());
+        gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
+        kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+        resource_settings);
     child_resource_provider_ = base::MakeUnique<ResourceProvider>(
         child_context_provider_.get(), shared_bitmap_manager_.get(),
         child_gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
-        1, child_needs_sync_token, kUseGpuMemoryBufferResources,
-        kEnableColorCorrectRendering,
-        DefaultBufferToTextureTargetMapForTesting());
+        child_needs_sync_token, kEnableColorCorrectRendering,
+        resource_settings);
   }
 
   ResourceProviderTest() : ResourceProviderTest(true) {}
 
-  static void CollectResources(ReturnedResourceArray* array,
-                               const ReturnedResourceArray& returned,
+  static void CollectResources(std::vector<ReturnedResource>* array,
+                               const std::vector<ReturnedResource>& returned,
                                BlockingTaskRunner* main_thread_task_runner) {
     array->insert(array->end(), returned.begin(), returned.end());
   }
 
-  static ReturnCallback GetReturnCallback(ReturnedResourceArray* array) {
+  static ReturnCallback GetReturnCallback(
+      std::vector<ReturnedResource>* array) {
     return base::Bind(&ResourceProviderTest::CollectResources, array);
   }
 
@@ -498,26 +511,26 @@ class ResourceProviderTest
                                    sync_token->GetData());
       EXPECT_TRUE(sync_token->HasData());
 
-      std::unique_ptr<SharedBitmap> shared_bitmap;
+      std::unique_ptr<viz::SharedBitmap> shared_bitmap;
       std::unique_ptr<SingleReleaseCallbackImpl> callback =
           SingleReleaseCallbackImpl::Create(base::Bind(
               ReleaseSharedBitmapCallback, base::Passed(&shared_bitmap),
               release_called, release_sync_token, lost_resource));
       return child_resource_provider_->CreateResourceFromTextureMailbox(
-          TextureMailbox(gpu_mailbox, *sync_token, GL_TEXTURE_2D),
+          viz::TextureMailbox(gpu_mailbox, *sync_token, GL_TEXTURE_2D),
           std::move(callback));
     } else {
       gfx::Size size(64, 64);
-      std::unique_ptr<SharedBitmap> shared_bitmap(
+      std::unique_ptr<viz::SharedBitmap> shared_bitmap(
           CreateAndFillSharedBitmap(shared_bitmap_manager_.get(), size, 0));
 
-      SharedBitmap* shared_bitmap_ptr = shared_bitmap.get();
+      viz::SharedBitmap* shared_bitmap_ptr = shared_bitmap.get();
       std::unique_ptr<SingleReleaseCallbackImpl> callback =
           SingleReleaseCallbackImpl::Create(base::Bind(
               ReleaseSharedBitmapCallback, base::Passed(&shared_bitmap),
               release_called, release_sync_token, lost_resource));
       return child_resource_provider_->CreateResourceFromTextureMailbox(
-          TextureMailbox(shared_bitmap_ptr, size), std::move(callback));
+          viz::TextureMailbox(shared_bitmap_ptr, size), std::move(callback));
     }
   }
 
@@ -541,7 +554,7 @@ void CheckCreateResource(ResourceProvider::ResourceType expected_default_type,
   DCHECK_EQ(expected_default_type, resource_provider->default_resource_type());
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -573,7 +586,7 @@ TEST_P(ResourceProviderTest, Basic) {
 
 TEST_P(ResourceProviderTest, SimpleUpload) {
   gfx::Size size(2, 2);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(16U, pixel_size);
 
@@ -608,7 +621,7 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -645,14 +658,14 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
   EXPECT_TRUE(external_sync_token.HasData());
 
   gfx::ColorSpace color_space4 = gfx::ColorSpace::CreateXYZD50();
-  TextureMailbox id4_mailbox(external_mailbox, external_sync_token,
-                             GL_TEXTURE_EXTERNAL_OES);
+  viz::TextureMailbox id4_mailbox(external_mailbox, external_sync_token,
+                                  GL_TEXTURE_EXTERNAL_OES);
   id4_mailbox.set_color_space(color_space4);
   ResourceId id4 = child_resource_provider_->CreateResourceFromTextureMailbox(
       id4_mailbox,
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback)));
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -667,7 +680,7 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(4u, list.size());
@@ -759,7 +772,7 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
     resource_ids_to_transfer.push_back(id1);
     resource_ids_to_transfer.push_back(id2);
     resource_ids_to_transfer.push_back(id3);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(3u, list.size());
@@ -772,8 +785,8 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
               list[1].mailbox_holder.texture_target);
     EXPECT_EQ(static_cast<GLenum>(GL_TEXTURE_2D),
               list[2].mailbox_holder.texture_target);
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     child_resource_provider_->ReceiveReturnsFromParent(returned);
     // ids were exported twice, we returned them only once, they should still
     // be in-use.
@@ -831,7 +844,7 @@ TEST_P(ResourceProviderTest, TransferGLResources) {
     resource_ids_to_transfer.push_back(id2);
     resource_ids_to_transfer.push_back(id3);
     resource_ids_to_transfer.push_back(id4);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(4u, list.size());
@@ -898,8 +911,8 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
                                external_sync_token.GetData());
   EXPECT_TRUE(external_sync_token.HasData());
 
-  TextureMailbox id1_mailbox(external_mailbox, external_sync_token,
-                             GL_TEXTURE_EXTERNAL_OES);
+  viz::TextureMailbox id1_mailbox(external_mailbox, external_sync_token,
+                                  GL_TEXTURE_EXTERNAL_OES);
   id1_mailbox.set_wants_promotion_hint(true);
   id1_mailbox.set_is_overlay_candidate(true);
   id1_mailbox.set_is_backed_by_surface_texture(true);
@@ -907,8 +920,8 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
       id1_mailbox,
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback)));
 
-  TextureMailbox id2_mailbox(external_mailbox, external_sync_token,
-                             GL_TEXTURE_EXTERNAL_OES);
+  viz::TextureMailbox id2_mailbox(external_mailbox, external_sync_token,
+                                  GL_TEXTURE_EXTERNAL_OES);
   id2_mailbox.set_wants_promotion_hint(false);
   id2_mailbox.set_is_overlay_candidate(true);
   id2_mailbox.set_is_backed_by_surface_texture(false);
@@ -916,7 +929,7 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
       id2_mailbox,
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback)));
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -929,7 +942,7 @@ TEST_P(ResourceProviderTest, OverlayPromotionHint) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(2u, list.size());
@@ -989,7 +1002,7 @@ class ResourceProviderTestNoSyncToken : public ResourceProviderTest {
 
 TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1022,11 +1035,11 @@ TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
                                external_sync_token.GetData());
   EXPECT_TRUE(external_sync_token.HasData());
   ResourceId id3 = child_resource_provider_->CreateResourceFromTextureMailbox(
-      TextureMailbox(external_mailbox, external_sync_token,
-                     GL_TEXTURE_EXTERNAL_OES),
+      viz::TextureMailbox(external_mailbox, external_sync_token,
+                          GL_TEXTURE_EXTERNAL_OES),
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback)));
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   resource_provider_->SetChildNeedsSyncTokens(child_id, false);
@@ -1036,7 +1049,7 @@ TEST_P(ResourceProviderTestNoSyncToken, TransferGLResources) {
     resource_ids_to_transfer.push_back(id1);
     resource_ids_to_transfer.push_back(id2);
     resource_ids_to_transfer.push_back(id3);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
@@ -1099,10 +1112,10 @@ TEST_P(ResourceProviderTest, SetBatchPreventsReturn) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   uint8_t data1[4] = {1, 2, 3, 4};
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -1120,7 +1133,7 @@ TEST_P(ResourceProviderTest, SetBatchPreventsReturn) {
   child_resource_provider_->GenerateSyncTokenForResources(
       resource_ids_to_transfer);
 
-  TransferableResourceArray list;
+  std::vector<TransferableResource> list;
   child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                 &list);
   ASSERT_EQ(2u, list.size());
@@ -1160,7 +1173,7 @@ TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   ResourceId id1 = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -1168,7 +1181,7 @@ TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
   uint8_t data1[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data1, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1179,7 +1192,7 @@ TEST_P(ResourceProviderTest, ReadLockCountStopsReturnToChildOrDelete) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(1u, list.size());
@@ -1230,7 +1243,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceStopsReturnToChildOrDelete) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   ResourceId id1 = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -1238,7 +1251,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceStopsReturnToChildOrDelete) {
   uint8_t data1[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id1, data1, size);
   child_resource_provider_->EnableReadLockFencesForTesting(id1);
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -1249,7 +1262,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceStopsReturnToChildOrDelete) {
   child_resource_provider_->GenerateSyncTokenForResources(
       resource_ids_to_transfer);
 
-  TransferableResourceArray list;
+  std::vector<TransferableResource> list;
   child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                 &list);
   ASSERT_EQ(1u, list.size());
@@ -1285,7 +1298,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceDestroyChild) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   ResourceId id1 = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -1299,7 +1312,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceDestroyChild) {
       gfx::ColorSpace());
   child_resource_provider_->CopyToResource(id2, data, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -1311,7 +1324,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceDestroyChild) {
   child_resource_provider_->GenerateSyncTokenForResources(
       resource_ids_to_transfer);
 
-  TransferableResourceArray list;
+  std::vector<TransferableResource> list;
   child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                 &list);
   ASSERT_EQ(2u, list.size());
@@ -1353,7 +1366,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   ResourceId id1 = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -1367,7 +1380,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
       gfx::ColorSpace());
   child_resource_provider_->CopyToResource(id2, data, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
 
@@ -1379,7 +1392,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
   child_resource_provider_->GenerateSyncTokenForResources(
       resource_ids_to_transfer);
 
-  TransferableResourceArray list;
+  std::vector<TransferableResource> list;
   child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                 &list);
   ASSERT_EQ(2u, list.size());
@@ -1401,7 +1414,7 @@ TEST_P(ResourceProviderTest, ReadLockFenceContextLost) {
   EXPECT_EQ(0u, returned_to_child.size());
 
   EXPECT_EQ(2u, resource_provider_->num_resources());
-  resource_provider_->DidLoseContextProvider();
+  resource_provider_->DidLoseVulkanContextProvider();
   resource_provider_ = nullptr;
 
   EXPECT_EQ(2u, returned_to_child.size());
@@ -1415,7 +1428,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
     return;
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1431,15 +1444,15 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
   uint8_t data2[4] = { 5, 5, 5, 5 };
   child_resource_provider_->CopyToResource(id2, data2, size);
 
-  std::unique_ptr<SharedBitmap> shared_bitmap(CreateAndFillSharedBitmap(
+  std::unique_ptr<viz::SharedBitmap> shared_bitmap(CreateAndFillSharedBitmap(
       shared_bitmap_manager_.get(), gfx::Size(1, 1), 0));
-  SharedBitmap* shared_bitmap_ptr = shared_bitmap.get();
+  viz::SharedBitmap* shared_bitmap_ptr = shared_bitmap.get();
   ResourceId id3 = child_resource_provider_->CreateResourceFromTextureMailbox(
-      TextureMailbox(shared_bitmap_ptr, gfx::Size(1, 1)),
+      viz::TextureMailbox(shared_bitmap_ptr, gfx::Size(1, 1)),
       SingleReleaseCallbackImpl::Create(base::Bind(
           &SharedBitmapReleaseCallback, base::Passed(&shared_bitmap))));
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1452,7 +1465,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(3u, list.size());
@@ -1503,14 +1516,14 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(2u, list.size());
     EXPECT_EQ(id1, list[0].id);
     EXPECT_EQ(id2, list[1].id);
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     child_resource_provider_->ReceiveReturnsFromParent(returned);
     // ids were exported twice, we returned them only once, they should still
     // be in-use.
@@ -1573,7 +1586,7 @@ TEST_P(ResourceProviderTest, TransferSoftwareResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(3u, list.size());
@@ -1627,13 +1640,12 @@ TEST_P(ResourceProviderTest, TransferGLToSoftware) {
   std::unique_ptr<ResourceProvider> child_resource_provider(
       base::MakeUnique<ResourceProvider>(
           child_context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1644,14 +1656,14 @@ TEST_P(ResourceProviderTest, TransferGLToSoftware) {
   child_resource_provider->CopyToResource(id1, data1, size);
   child_resource_provider->GenerateSyncTokenForResource(id1);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(id1);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider->PrepareSendToParent(resource_ids_to_transfer,
                                                  &list);
     ASSERT_EQ(1u, list.size());
@@ -1682,7 +1694,7 @@ TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
     return;
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1692,7 +1704,7 @@ TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
   uint8_t data1[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id1, data1, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1702,7 +1714,7 @@ TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(1u, list.size());
@@ -1734,7 +1746,7 @@ TEST_P(ResourceProviderTest, TransferInvalidSoftware) {
 
 TEST_P(ResourceProviderTest, DeleteExportedResources) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1750,7 +1762,7 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
   uint8_t data2[4] = {5, 5, 5, 5};
   child_resource_provider_->CopyToResource(id2, data2, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1762,7 +1774,7 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(2u, list.size());
@@ -1799,7 +1811,7 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
 
     ASSERT_EQ(2u, list.size());
@@ -1823,8 +1835,8 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
     EXPECT_EQ(2u, list.size());
     EXPECT_EQ(mapped_id1, list[0].id);
     EXPECT_EQ(mapped_id2, list[1].id);
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     resource_provider_->ReceiveReturnsFromParent(returned);
 
     EXPECT_EQ(0u, resource_provider_->num_resources());
@@ -1840,7 +1852,7 @@ TEST_P(ResourceProviderTest, DeleteExportedResources) {
 
 TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1856,7 +1868,7 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
   uint8_t data2[4] = {5, 5, 5, 5};
   child_resource_provider_->CopyToResource(id2, data2, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1868,7 +1880,7 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(2u, list.size());
@@ -1905,7 +1917,7 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
 
     ASSERT_EQ(2u, list.size());
@@ -1935,11 +1947,11 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
     EXPECT_EQ(2u, list.size());
     EXPECT_EQ(mapped_id1, list[0].id);
     EXPECT_EQ(mapped_id2, list[1].id);
-    TransferableResourceArray return_list;
+    std::vector<TransferableResource> return_list;
     return_list.push_back(list[1]);
     list.pop_back();
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(return_list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(return_list);
     resource_provider_->ReceiveReturnsFromParent(returned);
 
     EXPECT_EQ(1u, resource_provider_->num_resources());
@@ -1963,7 +1975,7 @@ TEST_P(ResourceProviderTest, DestroyChildWithExportedResources) {
 
 TEST_P(ResourceProviderTest, DeleteTransferredResources) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -1973,7 +1985,7 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
   uint8_t data[4] = { 1, 2, 3, 4 };
   child_resource_provider_->CopyToResource(id, data, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
@@ -1984,7 +1996,7 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     ASSERT_EQ(1u, list.size());
@@ -2019,7 +2031,7 @@ TEST_P(ResourceProviderTest, DeleteTransferredResources) {
 
 TEST_P(ResourceProviderTest, UnuseTransferredResources) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   size_t pixel_size = TextureSizeBytes(size, format);
   ASSERT_EQ(4U, pixel_size);
 
@@ -2029,7 +2041,7 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
   uint8_t data[4] = {1, 2, 3, 4};
   child_resource_provider_->CopyToResource(id, data, size);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   const ResourceProvider::ResourceIdMap& map =
@@ -2042,7 +2054,7 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
     child_resource_provider_->GenerateSyncTokenForResources(
         resource_ids_to_transfer);
 
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_TRUE(child_resource_provider_->InUseByConsumer(id));
@@ -2052,7 +2064,7 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
     resource_provider_->DeclareUsedResourcesFromChild(child_id,
                                                       resource_ids_to_receive);
   }
-  TransferableResourceArray sent_to_top_level;
+  std::vector<TransferableResource> sent_to_top_level;
   {
     // Parent transfers to top-level.
     ASSERT_TRUE(map.find(id) != map.end());
@@ -2075,7 +2087,7 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
     // Send the resource to the parent again.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(id);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_TRUE(child_resource_provider_->InUseByConsumer(id));
@@ -2087,8 +2099,8 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
   }
   {
     // Receive returns back from top-level.
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(sent_to_top_level, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(sent_to_top_level);
     resource_provider_->ReceiveReturnsFromParent(returned);
     // Resource is still not yet returned to the child, since it's declared used
     // in the parent.
@@ -2110,8 +2122,8 @@ TEST_P(ResourceProviderTest, UnuseTransferredResources) {
   }
   {
     // Receive returns back from top-level.
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(sent_to_top_level, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(sent_to_top_level);
     resource_provider_->ReceiveReturnsFromParent(returned);
     // Resource is still not yet returned to the child, since it's still
     // declared used in the parent.
@@ -2147,12 +2159,12 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     child_context_provider->BindToCurrentThread();
     auto shared_bitmap_manager = base::MakeUnique<TestSharedBitmapManager>();
 
+    viz::ResourceSettings resource_settings = CreateResourceSettings();
     std::unique_ptr<ResourceProvider> child_resource_provider(
         base::MakeUnique<ResourceProvider>(
             child_context_provider.get(), shared_bitmap_manager.get(), nullptr,
-            nullptr, 1, kDelegatedSyncPointsRequired,
-            kUseGpuMemoryBufferResources, kEnableColorCorrectRendering,
-            DefaultBufferToTextureTargetMapForTesting()));
+            nullptr, kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+            resource_settings));
 
     std::unique_ptr<TextureStateTrackingContext> parent_context_owned(
         new TextureStateTrackingContext);
@@ -2165,12 +2177,11 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     std::unique_ptr<ResourceProvider> parent_resource_provider(
         base::MakeUnique<ResourceProvider>(
             parent_context_provider.get(), shared_bitmap_manager.get(), nullptr,
-            nullptr, 1, kDelegatedSyncPointsRequired,
-            kUseGpuMemoryBufferResources, kEnableColorCorrectRendering,
-            DefaultBufferToTextureTargetMapForTesting()));
+            nullptr, kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+            resource_settings));
 
     gfx::Size size(1, 1);
-    ResourceFormat format = RGBA_8888;
+    viz::ResourceFormat format = viz::RGBA_8888;
     int child_texture_id = 1;
     int parent_texture_id = 2;
 
@@ -2216,14 +2227,14 @@ class ResourceProviderTestTextureFilters : public ResourceProviderTest {
     SetResourceFilter(child_resource_provider.get(), id, child_filter);
     Mock::VerifyAndClearExpectations(child_context);
 
-    ReturnedResourceArray returned_to_child;
+    std::vector<ReturnedResource> returned_to_child;
     int child_id = parent_resource_provider->CreateChild(
         GetReturnCallback(&returned_to_child));
     {
       // Transfer some resource to the parent.
       ResourceProvider::ResourceIdArray resource_ids_to_transfer;
       resource_ids_to_transfer.push_back(id);
-      TransferableResourceArray list;
+      std::vector<TransferableResource> list;
 
       EXPECT_CALL(*child_context,
                   produceTextureDirectCHROMIUM(_, GL_TEXTURE_2D, _));
@@ -2340,7 +2351,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
       base::Bind(ReleaseCallback, &release_sync_token, &lost_resource,
                  &main_thread_task_runner);
   ResourceId resource = resource_provider_->CreateResourceFromTextureMailbox(
-      TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
+      viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
       SingleReleaseCallbackImpl::Create(callback));
   EXPECT_EQ(1u, context()->NumTextures());
   EXPECT_FALSE(release_sync_token.HasData());
@@ -2348,7 +2359,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
     // Transfer the resource, expect the sync points to be consistent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
     ASSERT_EQ(1u, list.size());
     EXPECT_LE(sync_token.release_count(),
@@ -2363,8 +2374,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
     unsigned other_texture =
         context()->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
     uint8_t test_data[4] = { 0 };
-    context()->GetPixels(
-        gfx::Size(1, 1), RGBA_8888, test_data);
+    context()->GetPixels(gfx::Size(1, 1), viz::RGBA_8888, test_data);
     EXPECT_EQ(0, memcmp(data, test_data, sizeof(data)));
 
     context()->produceTextureDirectCHROMIUM(other_texture, GL_TEXTURE_2D,
@@ -2376,8 +2386,8 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
 
     // Receive the resource, then delete it, expect the sync points to be
     // consistent.
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     resource_provider_->ReceiveReturnsFromParent(returned);
     EXPECT_EQ(1u, context()->NumTextures());
     EXPECT_FALSE(release_sync_token.HasData());
@@ -2395,7 +2405,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
   EXPECT_LT(0u, sync_token.release_count());
   release_sync_token.Clear();
   resource = resource_provider_->CreateResourceFromTextureMailbox(
-      TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
+      viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
       SingleReleaseCallbackImpl::Create(callback));
   EXPECT_EQ(1u, context()->NumTextures());
   EXPECT_FALSE(release_sync_token.HasData());
@@ -2403,7 +2413,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
     // Transfer the resource, expect the sync points to be consistent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
     ASSERT_EQ(1u, list.size());
     EXPECT_LE(sync_token.release_count(),
@@ -2418,8 +2428,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
     unsigned other_texture =
         context()->createAndConsumeTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
     uint8_t test_data[4] = { 0 };
-    context()->GetPixels(
-        gfx::Size(1, 1), RGBA_8888, test_data);
+    context()->GetPixels(gfx::Size(1, 1), viz::RGBA_8888, test_data);
     EXPECT_EQ(0, memcmp(data, test_data, sizeof(data)));
 
     context()->produceTextureDirectCHROMIUM(other_texture, GL_TEXTURE_2D,
@@ -2436,8 +2445,8 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
 
     // Then receive the resource which should release the mailbox, expect the
     // sync points to be consistent.
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     resource_provider_->ReceiveReturnsFromParent(returned);
     EXPECT_LE(list[0].mailbox_holder.sync_token.release_count(),
               release_sync_token.release_count());
@@ -2453,7 +2462,7 @@ TEST_P(ResourceProviderTest, TransferMailboxResources) {
 
 TEST_P(ResourceProviderTest, LostResourceInParent) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   ResourceId resource = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
       gfx::ColorSpace());
@@ -2462,14 +2471,14 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
   bool should_lose_resource =
       GetParam() == ResourceProvider::RESOURCE_TYPE_GL_TEXTURE;
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
     // Transfer the resource to the parent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(1u, list.size());
@@ -2482,7 +2491,7 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
   }
 
   // Lose the output surface in the parent.
-  resource_provider_->DidLoseContextProvider();
+  resource_provider_->DidLoseVulkanContextProvider();
 
   {
     EXPECT_EQ(0u, returned_to_child.size());
@@ -2509,20 +2518,20 @@ TEST_P(ResourceProviderTest, LostResourceInParent) {
 
 TEST_P(ResourceProviderTest, LostResourceInGrandParent) {
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   ResourceId resource = child_resource_provider_->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
       gfx::ColorSpace());
   child_resource_provider_->AllocateForTesting(resource);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
     // Transfer the resource to the parent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(1u, list.size());
@@ -2543,14 +2552,14 @@ TEST_P(ResourceProviderTest, LostResourceInGrandParent) {
     // Transfer to a grandparent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(parent_resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
 
     // Receive back a lost resource from the grandparent.
     EXPECT_EQ(1u, list.size());
     EXPECT_EQ(parent_resource, list[0].id);
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     EXPECT_EQ(1u, returned.size());
     EXPECT_EQ(parent_resource, returned[0].id);
     returned[0].lost = true;
@@ -2593,14 +2602,14 @@ TEST_P(ResourceProviderTest, LostMailboxInParent) {
   ResourceId resource = CreateChildMailbox(&release_sync_token, &lost_resource,
                                            &release_called, &sync_token);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
     // Transfer the resource to the parent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(1u, list.size());
@@ -2613,7 +2622,7 @@ TEST_P(ResourceProviderTest, LostMailboxInParent) {
   }
 
   // Lose the output surface in the parent.
-  resource_provider_->DidLoseContextProvider();
+  resource_provider_->DidLoseVulkanContextProvider();
 
   {
     EXPECT_EQ(0u, returned_to_child.size());
@@ -2646,14 +2655,14 @@ TEST_P(ResourceProviderTest, LostMailboxInGrandParent) {
   ResourceId resource = CreateChildMailbox(&release_sync_token, &lost_resource,
                                            &release_called, &sync_token);
 
-  ReturnedResourceArray returned_to_child;
+  std::vector<ReturnedResource> returned_to_child;
   int child_id =
       resource_provider_->CreateChild(GetReturnCallback(&returned_to_child));
   {
     // Transfer the resource to the parent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                   &list);
     EXPECT_EQ(1u, list.size());
@@ -2674,14 +2683,14 @@ TEST_P(ResourceProviderTest, LostMailboxInGrandParent) {
     // Transfer to a grandparent.
     ResourceProvider::ResourceIdArray resource_ids_to_transfer;
     resource_ids_to_transfer.push_back(parent_resource);
-    TransferableResourceArray list;
+    std::vector<TransferableResource> list;
     resource_provider_->PrepareSendToParent(resource_ids_to_transfer, &list);
 
     // Receive back a lost resource from the grandparent.
     EXPECT_EQ(1u, list.size());
     EXPECT_EQ(parent_resource, list[0].id);
-    ReturnedResourceArray returned;
-    TransferableResource::ReturnResources(list, &returned);
+    std::vector<ReturnedResource> returned =
+        TransferableResource::ReturnResources(list);
     EXPECT_EQ(1u, returned.size());
     EXPECT_EQ(parent_resource, returned[0].id);
     returned[0].lost = true;
@@ -2739,7 +2748,7 @@ TEST_P(ResourceProviderTest, ShutdownWithExportedResource) {
   // Transfer the resource, so we can't release it properly on shutdown.
   ResourceProvider::ResourceIdArray resource_ids_to_transfer;
   resource_ids_to_transfer.push_back(resource);
-  TransferableResourceArray list;
+  std::vector<TransferableResource> list;
   child_resource_provider_->PrepareSendToParent(resource_ids_to_transfer,
                                                 &list);
 
@@ -2753,7 +2762,7 @@ TEST_P(ResourceProviderTest, ShutdownWithExportedResource) {
 }
 
 TEST_P(ResourceProviderTest, LostContext) {
-  // TextureMailbox callbacks only exist for GL textures for now.
+  // viz::TextureMailbox callbacks only exist for GL textures for now.
   if (GetParam() != ResourceProvider::RESOURCE_TYPE_GL_TEXTURE)
     return;
   unsigned texture = context()->createTexture();
@@ -2774,13 +2783,14 @@ TEST_P(ResourceProviderTest, LostContext) {
           base::Bind(ReleaseCallback, &release_sync_token, &lost_resource,
                      &main_thread_task_runner));
   resource_provider_->CreateResourceFromTextureMailbox(
-      TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D), std::move(callback));
+      viz::TextureMailbox(mailbox, sync_token, GL_TEXTURE_2D),
+      std::move(callback));
 
   EXPECT_FALSE(release_sync_token.HasData());
   EXPECT_FALSE(lost_resource);
   EXPECT_FALSE(main_thread_task_runner);
 
-  resource_provider_->DidLoseContextProvider();
+  resource_provider_->DidLoseVulkanContextProvider();
   resource_provider_ = nullptr;
 
   EXPECT_LE(sync_token.release_count(), release_sync_token.release_count());
@@ -2802,13 +2812,12 @@ TEST_P(ResourceProviderTest, ScopedSampler) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   int texture_id = 1;
 
   ResourceId id = resource_provider->CreateResource(
@@ -2882,13 +2891,12 @@ TEST_P(ResourceProviderTest, ManagedResource) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   int texture_id = 1;
 
   // Check that the texture gets created with the right sampler settings.
@@ -2926,13 +2934,12 @@ TEST_P(ResourceProviderTest, TextureWrapMode) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   for (int texture_id = 1; texture_id <= 2; ++texture_id) {
     // Check that the texture gets created with the right sampler settings.
@@ -2971,13 +2978,12 @@ TEST_P(ResourceProviderTest, TextureHint) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   const ResourceProvider::TextureHint hints[4] = {
       ResourceProvider::TEXTURE_HINT_DEFAULT,
@@ -3021,16 +3027,15 @@ TEST_P(ResourceProviderTest, TextureMailbox_SharedMemory) {
 
   gfx::Size size(64, 64);
   const uint32_t kBadBeef = 0xbadbeef;
-  std::unique_ptr<SharedBitmap> shared_bitmap(
+  std::unique_ptr<viz::SharedBitmap> shared_bitmap(
       CreateAndFillSharedBitmap(shared_bitmap_manager_.get(), size, kBadBeef));
 
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           nullptr, shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gpu::SyncToken release_sync_token;
   bool lost_resource = false;
@@ -3039,7 +3044,7 @@ TEST_P(ResourceProviderTest, TextureMailbox_SharedMemory) {
       SingleReleaseCallbackImpl::Create(
           base::Bind(&ReleaseCallback, &release_sync_token, &lost_resource,
                      &main_thread_task_runner));
-  TextureMailbox mailbox(shared_bitmap.get(), size);
+  viz::TextureMailbox mailbox(shared_bitmap.get(), size);
 
   ResourceId id = resource_provider->CreateResourceFromTextureMailbox(
       mailbox, std::move(callback));
@@ -3077,10 +3082,9 @@ class ResourceProviderTestTextureMailboxGLFilters
     std::unique_ptr<ResourceProvider> resource_provider(
         base::MakeUnique<ResourceProvider>(
             context_provider.get(), shared_bitmap_manager,
-            gpu_memory_buffer_manager, main_thread_task_runner, 1,
-            kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-            kEnableColorCorrectRendering,
-            DefaultBufferToTextureTargetMapForTesting()));
+            gpu_memory_buffer_manager, main_thread_task_runner,
+            kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+            CreateResourceSettings()));
 
     unsigned texture_id = 1;
     gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
@@ -3104,7 +3108,7 @@ class ResourceProviderTestTextureMailboxGLFilters
             base::Bind(&ReleaseCallback, &release_sync_token, &lost_resource,
                        &mailbox_task_runner));
 
-    TextureMailbox mailbox(gpu_mailbox, sync_token, target);
+    viz::TextureMailbox mailbox(gpu_mailbox, sync_token, target);
     mailbox.set_nearest_neighbor(mailbox_nearest_neighbor);
 
     ResourceId id = resource_provider->CreateResourceFromTextureMailbox(
@@ -3222,10 +3226,9 @@ TEST_P(ResourceProviderTest, TextureMailbox_GLTextureExternalOES) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
                             gpu::CommandBufferId::FromUnsafeValue(0x12), 0x34);
@@ -3242,7 +3245,7 @@ TEST_P(ResourceProviderTest, TextureMailbox_GLTextureExternalOES) {
   std::unique_ptr<SingleReleaseCallbackImpl> callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback));
 
-  TextureMailbox mailbox(gpu_mailbox, sync_token, target);
+  viz::TextureMailbox mailbox(gpu_mailbox, sync_token, target);
 
   ResourceId id = resource_provider->CreateResourceFromTextureMailbox(
       mailbox, std::move(callback));
@@ -3292,10 +3295,9 @@ TEST_P(ResourceProviderTest,
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gpu::SyncToken sync_token(gpu::CommandBufferNamespace::GPU_IO, 0,
                             gpu::CommandBufferId::FromUnsafeValue(0x12), 0x34);
@@ -3312,7 +3314,7 @@ TEST_P(ResourceProviderTest,
   std::unique_ptr<SingleReleaseCallbackImpl> callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback));
 
-  TextureMailbox mailbox(gpu_mailbox, sync_token, target);
+  viz::TextureMailbox mailbox(gpu_mailbox, sync_token, target);
 
   ResourceId id = resource_provider->CreateResourceFromTextureMailbox(
       mailbox, std::move(callback));
@@ -3348,10 +3350,9 @@ TEST_P(ResourceProviderTest, TextureMailbox_WaitSyncTokenIfNeeded_NoSyncToken) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gpu::SyncToken sync_token;
   const GLuint64 current_fence_sync = context->GetNextFenceSync();
@@ -3367,7 +3368,7 @@ TEST_P(ResourceProviderTest, TextureMailbox_WaitSyncTokenIfNeeded_NoSyncToken) {
   std::unique_ptr<SingleReleaseCallbackImpl> callback =
       SingleReleaseCallbackImpl::Create(base::Bind(&EmptyReleaseCallback));
 
-  TextureMailbox mailbox(gpu_mailbox, sync_token, target);
+  viz::TextureMailbox mailbox(gpu_mailbox, sync_token, target);
 
   ResourceId id = resource_provider->CreateResourceFromTextureMailbox(
       mailbox, std::move(callback));
@@ -3470,14 +3471,13 @@ TEST_P(ResourceProviderTest, TextureAllocation) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(2, 2);
   gfx::Vector2d offset(0, 0);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   ResourceId id = 0;
   uint8_t pixels[16] = { 0 };
   int texture_id = 123;
@@ -3528,14 +3528,14 @@ TEST_P(ResourceProviderTest, TextureAllocationHint) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(2, 2);
 
-  const ResourceFormat formats[3] = {RGBA_8888, BGRA_8888, RGBA_F16};
+  const viz::ResourceFormat formats[3] = {viz::RGBA_8888, viz::BGRA_8888,
+                                          viz::RGBA_F16};
   const ResourceProvider::TextureHint hints[4] = {
       ResourceProvider::TEXTURE_HINT_DEFAULT,
       ResourceProvider::TEXTURE_HINT_IMMUTABLE,
@@ -3553,7 +3553,7 @@ TEST_P(ResourceProviderTest, TextureAllocationHint) {
       bool is_immutable_hint =
           hints[texture_id - 1] & ResourceProvider::TEXTURE_HINT_IMMUTABLE;
       bool support_immutable_texture =
-          is_immutable_hint && formats[i] != BGRA_8888;
+          is_immutable_hint && formats[i] != viz::BGRA_8888;
       EXPECT_CALL(*context, texStorage2DEXT(_, _, _, 2, 2))
           .Times(support_immutable_texture ? 1 : 0);
       EXPECT_CALL(*context, texImage2D(_, _, _, 2, 2, _, _, _, _))
@@ -3584,13 +3584,12 @@ TEST_P(ResourceProviderTest, TextureAllocationHint_BGRA) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   gfx::Size size(2, 2);
-  const ResourceFormat formats[2] = {RGBA_8888, BGRA_8888};
+  const viz::ResourceFormat formats[2] = {viz::RGBA_8888, viz::BGRA_8888};
 
   const ResourceProvider::TextureHint hints[4] = {
       ResourceProvider::TEXTURE_HINT_DEFAULT,
@@ -3635,7 +3634,7 @@ TEST_P(ResourceProviderTest, Image_GLTexture) {
   const int kWidth = 2;
   const int kHeight = 2;
   gfx::Size size(kWidth, kHeight);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   ResourceId id = 0;
   const unsigned kTextureId = 123u;
   const unsigned kImageId = 234u;
@@ -3643,10 +3642,9 @@ TEST_P(ResourceProviderTest, Image_GLTexture) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
 
   id = resource_provider->CreateResource(
       size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -3722,14 +3720,14 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Allocate) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
   int texture_id = 123;
 
   ResourceId id = resource_provider->CreateResource(
-      size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, ETC1, gfx::ColorSpace());
+      size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::ETC1,
+      gfx::ColorSpace());
   EXPECT_NE(0u, id);
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
   EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id)).Times(2);
@@ -3754,15 +3752,15 @@ TEST_P(ResourceProviderTest, CompressedTextureETC1Upload) {
   std::unique_ptr<ResourceProvider> resource_provider(
       base::MakeUnique<ResourceProvider>(
           context_provider.get(), shared_bitmap_manager_.get(),
-          gpu_memory_buffer_manager_.get(), nullptr, 1,
-          kDelegatedSyncPointsRequired, kUseGpuMemoryBufferResources,
-          kEnableColorCorrectRendering,
-          DefaultBufferToTextureTargetMapForTesting()));
+          gpu_memory_buffer_manager_.get(), nullptr,
+          kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+          CreateResourceSettings()));
   int texture_id = 123;
   uint8_t pixels[8];
 
   ResourceId id = resource_provider->CreateResource(
-      size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, ETC1, gfx::ColorSpace());
+      size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::ETC1,
+      gfx::ColorSpace());
   EXPECT_NE(0u, id);
   EXPECT_CALL(*context, NextTextureId()).WillOnce(Return(texture_id));
   EXPECT_CALL(*context, bindTexture(GL_TEXTURE_2D, texture_id)).Times(3);
@@ -3803,16 +3801,15 @@ TEST(ResourceProviderTest, TextureAllocationChunkSize) {
   auto shared_bitmap_manager = base::MakeUnique<TestSharedBitmapManager>();
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   {
     size_t kTextureAllocationChunkSize = 1;
     std::unique_ptr<ResourceProvider> resource_provider(
         base::MakeUnique<ResourceProvider>(
             context_provider.get(), shared_bitmap_manager.get(), nullptr,
-            nullptr, kTextureAllocationChunkSize, kDelegatedSyncPointsRequired,
-            kUseGpuMemoryBufferResources, kEnableColorCorrectRendering,
-            DefaultBufferToTextureTargetMapForTesting()));
+            nullptr, kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+            CreateResourceSettings(kTextureAllocationChunkSize)));
 
     ResourceId id = resource_provider->CreateResource(
         size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -3829,9 +3826,8 @@ TEST(ResourceProviderTest, TextureAllocationChunkSize) {
     std::unique_ptr<ResourceProvider> resource_provider(
         base::MakeUnique<ResourceProvider>(
             context_provider.get(), shared_bitmap_manager.get(), nullptr,
-            nullptr, kTextureAllocationChunkSize, kDelegatedSyncPointsRequired,
-            kUseGpuMemoryBufferResources, kEnableColorCorrectRendering,
-            DefaultBufferToTextureTargetMapForTesting()));
+            nullptr, kDelegatedSyncPointsRequired, kEnableColorCorrectRendering,
+            CreateResourceSettings(kTextureAllocationChunkSize)));
 
     ResourceId id = resource_provider->CreateResource(
         size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, format,
@@ -3849,7 +3845,7 @@ TEST_P(ResourceProviderTest, GetSyncTokenForResources) {
     return;
 
   gfx::Size size(1, 1);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
 
   // ~Random set of |release_count|s to set on sync tokens.
   uint64_t release_counts[5] = {7, 3, 10, 2, 5};

@@ -28,8 +28,10 @@ void TestWindowManagerClient::RemoveActivationParent(Id transport_window_id) {}
 
 void TestWindowManagerClient::ActivateNextWindow() {}
 
-void TestWindowManagerClient::SetExtendedHitArea(Id window_id,
-                                                 const gfx::Insets& hit_area) {}
+void TestWindowManagerClient::SetExtendedHitRegionForChildren(
+    Id window_id,
+    const gfx::Insets& mouse_insets,
+    const gfx::Insets& touch_insets) {}
 
 void TestWindowManagerClient::AddAccelerators(
     std::vector<ui::mojom::WmAcceleratorPtr> accelerators,
@@ -37,12 +39,30 @@ void TestWindowManagerClient::AddAccelerators(
 
 void TestWindowManagerClient::RemoveAccelerator(uint32_t id) {}
 
+void TestWindowManagerClient::SetKeyEventsThatDontHideCursor(
+    std::vector<::ui::mojom::EventMatcherPtr> dont_hide_cursor_list) {}
+
 void TestWindowManagerClient::SetDisplayRoot(
     const display::Display& display,
     ui::mojom::WmViewportMetricsPtr viewport_metrics,
     bool is_primary_display,
     Id window_id,
     const SetDisplayRootCallback& callback) {}
+
+void TestWindowManagerClient::SetDisplayConfiguration(
+    const std::vector<display::Display>& displays,
+    std::vector<::ui::mojom::WmViewportMetricsPtr> viewport_metrics,
+    int64_t primary_display_id,
+    int64_t internal_display_id,
+    const SetDisplayConfigurationCallback& callback) {
+  last_internal_display_id_ = internal_display_id;
+  changes_.push_back(WindowManagerClientChangeType::SET_DISPLAY_CONFIGURATION);
+}
+
+void TestWindowManagerClient::SwapDisplayRoots(
+    int64_t display_id1,
+    int64_t display_id2,
+    const SwapDisplayRootsCallback& callback) {}
 
 void TestWindowManagerClient::WmResponse(uint32_t change_id, bool response) {}
 
@@ -63,8 +83,14 @@ void TestWindowManagerClient::WmUnlockCursor() {}
 
 void TestWindowManagerClient::WmSetCursorVisible(bool visible) {}
 
+void TestWindowManagerClient::WmSetCursorSize(ui::CursorSize cursor_size) {}
+
 void TestWindowManagerClient::WmSetGlobalOverrideCursor(
     base::Optional<ui::CursorData> cursor) {}
+
+void TestWindowManagerClient::WmMoveCursorToDisplayLocation(
+    const gfx::Point& display_pixels,
+    int64_t display_id) {}
 
 void TestWindowManagerClient::OnWmCreatedTopLevelWindow(
     uint32_t change_id,

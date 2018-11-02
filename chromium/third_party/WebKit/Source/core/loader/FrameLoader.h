@@ -49,6 +49,7 @@
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashSet.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
+#include "public/web/WebTriggeringEventInfo.h"
 
 #include <memory>
 
@@ -86,7 +87,7 @@ class CORE_EXPORT FrameLoader final {
 
   ProgressTracker& Progress() const { return *progress_tracker_; }
 
-  // Starts a load. It will eventually call startLoad() or loadInSameDocument().
+  // Starts a load. It will eventually call StartLoad() or LoadInSameDocument().
   // For history navigations or reloads, an appropriate FrameLoadType should be
   // given. Otherwise, FrameLoadTypeStandard should be used (and the final
   // FrameLoadType will be computed). For history navigations, a history item
@@ -120,8 +121,6 @@ class CORE_EXPORT FrameLoader final {
 
   bool ShouldTreatURLAsSameAsCurrent(const KURL&) const;
   bool ShouldTreatURLAsSrcdocDocument(const KURL&) const;
-
-  LocalFrameClient* Client() const;
 
   void SetDefersLoading(bool);
 
@@ -163,8 +162,6 @@ class CORE_EXPORT FrameLoader final {
 
   FrameLoaderStateMachine* StateMachine() const { return &state_machine_; }
 
-  void ApplyUserAgent(ResourceRequest&);
-
   bool AllAncestorsAreComplete() const;  // including this
 
   bool ShouldClose(bool is_reload = false);
@@ -194,6 +191,7 @@ class CORE_EXPORT FrameLoader final {
       NavigationPolicy,
       FrameLoadType,
       bool is_client_redirect,
+      WebTriggeringEventInfo,
       HTMLFormElement*);
 
   // Like ShouldContinueForNavigationPolicy, but should be used when following
@@ -219,6 +217,8 @@ class CORE_EXPORT FrameLoader final {
   DECLARE_TRACE();
 
   static void SetReferrerForFrameRequest(FrameLoadRequest&);
+
+  void ClientDroppedNavigation();
 
  private:
   bool PrepareRequestForThisFrame(FrameLoadRequest&);
@@ -247,7 +247,10 @@ class CORE_EXPORT FrameLoader final {
                           HistoryItem*,
                           ClientRedirectPolicy,
                           Document*);
-  void RestoreScrollPositionAndViewStateForLoadType(FrameLoadType);
+  void RestoreScrollPositionAndViewState(FrameLoadType,
+                                         HistoryLoadType,
+                                         HistoryItem::ViewState*,
+                                         HistoryScrollRestorationType);
 
   void ScheduleCheckCompleted();
 
@@ -262,6 +265,8 @@ class CORE_EXPORT FrameLoader final {
                                        const FrameLoadRequest&,
                                        FrameLoadType,
                                        NavigationType);
+
+  LocalFrameClient* Client() const;
 
   Member<LocalFrame> frame_;
   AtomicString required_csp_;

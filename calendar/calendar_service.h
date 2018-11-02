@@ -70,10 +70,34 @@ class CalendarService : public KeyedService {
   typedef base::Callback<void(std::shared_ptr<EventQueryResults>)>
       QueryCalendarCallback;
 
+  typedef base::Callback<void(std::shared_ptr<CalendarQueryResults>)>
+      GetALLQueryCalendarCallback;
+
+  // Provides the result of a event create. See CreateEventResult in
+  // event_type.h.
+  typedef base::Callback<void(std::shared_ptr<CreateEventResult>)>
+      CreateEventCallback;
+
   // Provides the result of a event update. See UpdateEventResult in
-  // calendar_types.h.
+  // event_type.h.
   typedef base::Callback<void(std::shared_ptr<UpdateEventResult>)>
       UpdateEventCallback;
+
+  // Provides the result of a delete calendar event. See DeleteEventResult in
+  // event_type.h.
+  typedef base::Callback<void(std::shared_ptr<DeleteEventResult>)>
+      DeleteEventCallback;
+
+  // Provides the result of a create calendar. See CreateCalendarResult in
+  // calendar_type.h.
+  typedef base::Callback<void(std::shared_ptr<CreateCalendarResult>)>
+      CreateCalendarCallback;
+
+  typedef base::Callback<void(std::shared_ptr<UpdateCalendarResult>)>
+      UpdateCalendarCallback;
+
+  typedef base::Callback<void(std::shared_ptr<DeleteCalendarResult>)>
+      DeleteCalendarCallback;
 
   base::CancelableTaskTracker::TaskId GetAllEvents(
       const QueryCalendarCallback& callback,
@@ -84,11 +108,40 @@ class CalendarService : public KeyedService {
   // want to check state during their own initializer.
   bool IsDoingExtensiveChanges() const { return extensive_changes_ > 0; }
 
-  void CreateCalendarEvent(EventRow ev);
+  base::CancelableTaskTracker::TaskId CreateCalendarEvent(
+      EventRow ev,
+      const CreateEventCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
   base::CancelableTaskTracker::TaskId UpdateCalendarEvent(
       EventID event_id,
       CalendarEvent event,
       const UpdateEventCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteCalendarEvent(
+      EventID event_id,
+      const DeleteEventCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId CreateCalendar(
+      CalendarRow ev,
+      const CreateCalendarCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId GetAllCalendars(
+      const GetALLQueryCalendarCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId UpdateCalendar(
+      CalendarID calendar_id,
+      Calendar calendar,
+      const UpdateCalendarCallback& callback,
+      base::CancelableTaskTracker* tracker);
+
+  base::CancelableTaskTracker::TaskId DeleteCalendar(
+      CalendarID event_id,
+      const DeleteCalendarCallback& callback,
       base::CancelableTaskTracker* tracker);
 
  private:
@@ -107,6 +160,15 @@ class CalendarService : public KeyedService {
   // CalendarService has finished loading.
   void NotifyCalendarServiceLoaded();
   void NotifyCalendarServiceBeingDeleted();
+
+  void OnEventCreated(const EventRow& row);
+  void OnEventDeleted(const EventRow& row);
+  void OnEventChanged(const EventRow& row);
+
+  void OnCalendarCreated(const CalendarRow& row);
+  void OnCalendarDeleted(const CalendarRow& row);
+  void OnCalendarChanged(const CalendarRow& row);
+
   void Cleanup();
 
   Profile* profile_;

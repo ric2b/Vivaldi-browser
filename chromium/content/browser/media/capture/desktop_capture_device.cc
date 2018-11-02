@@ -28,11 +28,11 @@
 #include "content/public/browser/desktop_media_id.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
-#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "media/base/video_util.h"
 #include "media/capture/content/capture_resolution_chooser.h"
 #include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "third_party/libyuv/include/libyuv/scale_argb.h"
 #include "third_party/webrtc/modules/desktop_capture/cropping_window_capturer.h"
@@ -154,7 +154,7 @@ class DesktopCaptureDevice::Core : public webrtc::DesktopCapturer::Callback {
 
   // TODO(jiayl): Remove wake_lock_ when there is an API to keep the
   // screen from sleeping for the drive-by web.
-  device::mojom::WakeLockServicePtr wake_lock_;
+  device::mojom::WakeLockPtr wake_lock_;
 
   base::WeakPtrFactory<Core> weak_factory_;
 

@@ -5,11 +5,11 @@
 #include "content/browser/renderer_host/input/touch_selection_controller_client_child_frame.h"
 
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
-#include "content/browser/renderer_host/input/touch_selection_controller_client_manager.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/common/content_switches_internal.h"
 #include "content/common/view_messages.h"
+#include "content/public/browser/touch_selection_controller_client_manager.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/strings/grit/ui_strings.h"
@@ -86,9 +86,10 @@ void TouchSelectionControllerClientChildFrame::SetNeedsAnimate() {
 
 void TouchSelectionControllerClientChildFrame::MoveCaret(
     const gfx::PointF& position) {
-  RenderWidgetHostImpl* host =
-      RenderWidgetHostImpl::From(rwhv_->GetRenderWidgetHost());
-  host->MoveCaret(ConvertFromRoot(position));
+  RenderWidgetHostDelegate* host_delegate =
+      RenderWidgetHostImpl::From(rwhv_->GetRenderWidgetHost())->delegate();
+  if (host_delegate)
+    host_delegate->MoveCaret(ConvertFromRoot(position));
 }
 
 void TouchSelectionControllerClientChildFrame::MoveRangeSelectionExtent(
@@ -124,19 +125,10 @@ bool TouchSelectionControllerClientChildFrame::IsCommandIdEnabled(
     int command_id) const {
   bool editable = rwhv_->GetTextInputType() != ui::TEXT_INPUT_TYPE_NONE;
   bool readable = rwhv_->GetTextInputType() != ui::TEXT_INPUT_TYPE_PASSWORD;
-  // TODO(wjmaclean): The test for has_selection should be changed to
-  //
-  //  rwhv_->GetSelectionRange(&selection_range);
-  //  bool has_selection = !selection_range.is_empty();
-  //
-  // like in TouchSelectionControllerClientAura. Unfortunately this fails here
-  // due to https://crbug.com/723790, which means that the first text
-  // selected in an oopif subframe when it acquires focus will fail to send
-  // a FrameHostMsg_SelectionChanged, meaning the TextInputManager won't
-  // know about the new selection.
-  bool has_selection = selection_start_.type() != gfx::SelectionBound::EMPTY &&
-                       selection_end_.type() != gfx::SelectionBound::EMPTY &&
-                       selection_start_ != selection_end_;
+
+  gfx::Range selection_range;
+  bool has_selection =
+      rwhv_->GetSelectionRange(&selection_range) && !selection_range.is_empty();
   switch (command_id) {
     case IDS_APP_CUT:
       return editable && readable && has_selection;
@@ -187,9 +179,6 @@ void TouchSelectionControllerClientChildFrame::RunContextMenu() {
   anchor_point.Offset(-origin.x(), -origin.y());
   RenderWidgetHostImpl* host =
       RenderWidgetHostImpl::From(rwhv_->GetRenderWidgetHost());
-  // TODO(wjmaclean): Probably this ViewMsg should be converted to a FrameMsg
-  // since it will need to go to a RenderFrame once the Blink-side plumbing for
-  // this is hooked up.
   host->Send(new ViewMsg_ShowContextMenu(host->GetRoutingID(),
                                          ui::MENU_SOURCE_TOUCH_EDIT_MENU,
                                          gfx::ToRoundedPoint(anchor_point)));

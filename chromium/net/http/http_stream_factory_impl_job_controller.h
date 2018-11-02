@@ -11,10 +11,17 @@
 #include "net/base/privacy_mode.h"
 #include "net/http/http_stream_factory_impl_job.h"
 #include "net/http/http_stream_factory_impl_request.h"
+#include "net/socket/next_proto.h"
 
 namespace net {
 
 class NetLogWithSource;
+
+namespace test {
+
+class JobControllerPeer;
+
+}  // namespace test
 
 // HttpStreamFactoryImpl::JobController manages Request and Job(s).
 class HttpStreamFactoryImpl::JobController
@@ -28,7 +35,9 @@ class HttpStreamFactoryImpl::JobController
                 const HttpRequestInfo& request_info,
                 bool is_preconnect,
                 bool enable_ip_based_pooling,
-                bool enable_alternative_services);
+                bool enable_alternative_services,
+                const SSLConfig& server_ssl_config,
+                const SSLConfig& proxy_ssl_config);
 
   ~JobController() override;
 
@@ -43,20 +52,14 @@ class HttpStreamFactoryImpl::JobController
   // Methods below are called by HttpStreamFactoryImpl only.
   // Creates request and hands out to HttpStreamFactoryImpl, this will also
   // create Job(s) and start serving the created request.
-  Request* Start(const HttpRequestInfo& request_info,
-                 HttpStreamRequest::Delegate* delegate,
-                 WebSocketHandshakeStreamBase::CreateHelper*
-                     websocket_handshake_stream_create_helper,
-                 const NetLogWithSource& source_net_log,
-                 HttpStreamRequest::StreamType stream_type,
-                 RequestPriority priority,
-                 const SSLConfig& server_ssl_config,
-                 const SSLConfig& proxy_ssl_config);
+  std::unique_ptr<Request> Start(HttpStreamRequest::Delegate* delegate,
+                                 WebSocketHandshakeStreamBase::CreateHelper*
+                                     websocket_handshake_stream_create_helper,
+                                 const NetLogWithSource& source_net_log,
+                                 HttpStreamRequest::StreamType stream_type,
+                                 RequestPriority priority);
 
-  void Preconnect(int num_streams,
-                  const HttpRequestInfo& request_info,
-                  const SSLConfig& server_ssl_config,
-                  const SSLConfig& proxy_ssl_config);
+  void Preconnect(int num_streams);
 
   // From HttpStreamFactoryImpl::Request::Helper.
   // Returns the LoadState for Request.
@@ -74,6 +77,18 @@ class HttpStreamFactoryImpl::JobController
   // Called when the priority of transaction changes.
   void SetPriority(RequestPriority priority) override;
 
+  // Called when SpdySessionPool notifies the Request
+  // that it can be served on a SpdySession created by another Request,
+  // therefore the Jobs can be destroyed.
+  void OnStreamReadyOnPooledConnection(
+      const SSLConfig& used_ssl_config,
+      const ProxyInfo& proxy_info,
+      std::unique_ptr<HttpStream> stream) override;
+  void OnBidirectionalStreamImplReadyOnPooledConnection(
+      const SSLConfig& used_ssl_config,
+      const ProxyInfo& used_proxy_info,
+      std::unique_ptr<BidirectionalStreamImpl> stream) override;
+
   // From HttpStreamFactoryImpl::Job::Delegate.
   // Invoked when |job| has an HttpStream ready.
   void OnStreamReady(Job* job, const SSLConfig& used_ssl_config) override;
@@ -89,7 +104,7 @@ class HttpStreamFactoryImpl::JobController
       Job* job,
       const SSLConfig& used_ssl_config,
       const ProxyInfo& used_proxy_info,
-      WebSocketHandshakeStreamBase* stream) override;
+      std::unique_ptr<WebSocketHandshakeStreamBase> stream) override;
 
   // Invoked when |job| fails to create a stream.
   void OnStreamFailed(Job* job,
@@ -124,13 +139,6 @@ class HttpStreamFactoryImpl::JobController
 
   bool OnInitConnection(const ProxyInfo& proxy_info) override;
 
-  void OnResolveProxyComplete(
-      Job* job,
-      const HttpRequestInfo& request_info,
-      RequestPriority priority,
-      const SSLConfig& server_ssl_config,
-      const SSLConfig& proxy_ssl_config,
-      HttpStreamRequest::StreamType stream_type) override;
 
   // Invoked to notify the Request and Factory of the readiness of new
   // SPDY session.
@@ -191,15 +199,23 @@ class HttpStreamFactoryImpl::JobController
   size_t EstimateMemoryUsage() const;
 
  private:
-  friend class JobControllerPeer;
+  friend class test::JobControllerPeer;
 
-  // Creates Job(s) for |request_|. Job(s) will be owned by |this|.
-  void CreateJobs(const HttpRequestInfo& request_info,
-                  RequestPriority priority,
-                  const SSLConfig& server_ssl_config,
-                  const SSLConfig& proxy_ssl_config,
-                  HttpStreamRequest::Delegate* delegate,
-                  HttpStreamRequest::StreamType stream_type);
+  enum State {
+    STATE_RESOLVE_PROXY,
+    STATE_RESOLVE_PROXY_COMPLETE,
+    STATE_CREATE_JOBS,
+    STATE_NONE
+  };
+
+  void OnIOComplete(int result);
+  void OnResolveProxyError(int error);
+  void RunLoop(int result);
+  int DoLoop(int result);
+  int DoResolveProxy();
+  int DoResolveProxyComplete(int result);
+  // Creates Job(s) for |request_info_|. Job(s) will be owned by |this|.
+  int DoCreateJobs();
 
   // Called to bind |job| to the |request_| and orphan all other jobs that are
   // still associated with |request_|.
@@ -225,15 +241,21 @@ class HttpStreamFactoryImpl::JobController
                            NextProto negotiated_protocol,
                            bool using_spdy);
 
-  // Must be called when the alternative job fails. |net_error| is the net error
-  // of the failed alternative job.
-  void OnAlternativeJobFailed(int net_error);
+  // Must be called when the alternative service job fails. |net_error| is the
+  // net error of the failed alternative service job.
+  void OnAlternativeServiceJobFailed(int net_error);
+
+  // Must be called when the alternative proxy job fails. |net_error| is the
+  // net error of the failed alternative proxy job.
+  void OnAlternativeProxyJobFailed(int net_error);
 
   // Called to report to http_server_properties to mark alternative service
   // broken.
   void ReportBrokenAlternativeService();
 
   void MaybeNotifyFactoryOfCompletion();
+
+  void NotifyRequestFailed(int rv);
 
   // Called to resume the main job with delay. Main job is resumed only when
   // |alternative_job_| has failed or |main_job_wait_time_| elapsed.
@@ -255,6 +277,13 @@ class HttpStreamFactoryImpl::JobController
       HttpStreamRequest::Delegate* delegate,
       HttpStreamRequest::StreamType stream_type);
 
+  // Returns a QuicVersion that has been advertised in |advertised_versions|
+  // and is supported.  If more than one QuicVersions are supported, the first
+  // matched in the supported versions will be returned.  If no mutually
+  // supported version is found, QUIC_VERSION_UNSUPPORTED_VERSION will be
+  // returned.
+  QuicVersion SelectQuicVersion(const QuicVersionVector& advertised_versions);
+
   // Remove session from the SpdySessionRequestMap.
   void RemoveRequestFromSpdySessionRequestMap();
 
@@ -263,7 +292,6 @@ class HttpStreamFactoryImpl::JobController
   // alternative proxy server. |alternative_proxy_server| should not be null,
   // and is owned by the caller.
   bool ShouldCreateAlternativeProxyServerJob(
-      Job* job,
       const ProxyInfo& proxy_info_,
       const GURL& url,
       ProxyServer* alternative_proxy_server) const;
@@ -272,11 +300,16 @@ class HttpStreamFactoryImpl::JobController
   // called when |job| has succeeded and the other job will be orphaned.
   void ReportAlternateProtocolUsage(Job* job) const;
 
-  // Starts the |alternative_job_|.
-  void StartAlternativeProxyServerJob();
-
   // Returns whether |job| is an orphaned job.
   bool IsJobOrphaned(Job* job) const;
+
+  // Called when a Job encountered a network error that could be resolved by
+  // trying a new proxy configuration. If there is another proxy configuration
+  // to try then this method sets |next_state_| appropriately and returns either
+  // OK or ERR_IO_PENDING depending on whether or not the new proxy
+  // configuration is available synchronously or asynchronously.  Otherwise, the
+  // given error code is simply returned.
+  int ReconsiderProxyAfterError(Job* job, int error);
 
   HttpStreamFactoryImpl* factory_;
   HttpNetworkSession* session_;
@@ -305,14 +338,12 @@ class HttpStreamFactoryImpl::JobController
   // |main_job_| to proceed and then race the two jobs.
   std::unique_ptr<Job> main_job_;
   std::unique_ptr<Job> alternative_job_;
+  // The alternative service used by |alternative_job_|
+  // (or by |main_job_| if |is_preconnect_|.)
+  AlternativeServiceInfo alternative_service_info_;
 
   // Net error code of the failed alternative job. Set to OK by default.
   int alternative_job_net_error_;
-
-  // Either and only one of these records failed alternative service/proxy
-  // server that |alternative_job_| uses.
-  AlternativeService failed_alternative_service_;
-  ProxyServer failed_alternative_proxy_server_;
 
   // True if a Job has ever been bound to the |request_|.
   bool job_bound_;
@@ -334,9 +365,16 @@ class HttpStreamFactoryImpl::JobController
   // True if an alternative proxy server job can be started to fetch |request_|.
   bool can_start_alternative_proxy_job_;
 
-  // Privacy mode that should be used for fetching the resource.
-  PrivacyMode privacy_mode_;
-
+  State next_state_;
+  ProxyService::PacRequest* pac_request_;
+  CompletionCallback io_callback_;
+  const HttpRequestInfo request_info_;
+  ProxyInfo proxy_info_;
+  const SSLConfig server_ssl_config_;
+  const SSLConfig proxy_ssl_config_;
+  int num_streams_;
+  HttpStreamRequest::StreamType stream_type_;
+  RequestPriority priority_;
   const NetLogWithSource net_log_;
 
   base::WeakPtrFactory<JobController> ptr_factory_;

@@ -4,24 +4,26 @@
 
 #include "modules/bluetooth/Bluetooth.h"
 
+#include <memory>
+#include <utility>
 #include "bindings/core/v8/CallbackPromiseAdapter.h"
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "build/build_config.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalFrame.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "modules/bluetooth/BluetoothDevice.h"
 #include "modules/bluetooth/BluetoothError.h"
 #include "modules/bluetooth/BluetoothRemoteGATTCharacteristic.h"
 #include "modules/bluetooth/BluetoothUUID.h"
 #include "modules/bluetooth/RequestDeviceOptions.h"
-#include "platform/UserGestureIndicator.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
-#include <memory>
-#include <utility>
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
@@ -153,6 +155,15 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
                                        ExceptionState& exception_state) {
   ExecutionContext* context = ExecutionContext::From(script_state);
 
+// Remind developers when they are using Web Bluetooth on unsupported platforms.
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID) && !defined(OS_MACOSX)
+  context->AddConsoleMessage(ConsoleMessage::Create(
+      kJSMessageSource, kInfoMessageLevel,
+      "Web Bluetooth is experimental on this platform. See "
+      "https://github.com/WebBluetoothCG/web-bluetooth/blob/gh-pages/"
+      "implementation-status.md"));
+#endif
+
   // If the Relevant settings object is not a secure context, reject promise
   // with a SecurityError and abort these steps.
   String error_message;
@@ -171,16 +182,11 @@ ScriptPromise Bluetooth::requestDevice(ScriptState* script_state,
             "Must be handling a user gesture to show a permission request."));
   }
 
-  if (!service_) {
-    InterfaceProvider* interface_provider = nullptr;
-    if (context->IsDocument()) {
-      Document* document = ToDocument(context);
-      if (document->GetFrame())
-        interface_provider = document->GetFrame()->GetInterfaceProvider();
+  if (!service_ && context->IsDocument()) {
+    LocalFrame* frame = ToDocument(context)->GetFrame();
+    if (frame) {
+      frame->GetInterfaceProvider().GetInterface(mojo::MakeRequest(&service_));
     }
-
-    if (interface_provider)
-      interface_provider->GetInterface(mojo::MakeRequest(&service_));
   }
 
   if (!service_) {

@@ -9,12 +9,13 @@
 #include "base/time/time.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/html_response_provider.h"
+#include "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -22,7 +23,6 @@
 #endif
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
-using chrome_test_util::WebViewContainingText;
 
 namespace {
 
@@ -106,8 +106,7 @@ class InfinitePendingResponseProvider : public HtmlResponseProvider {
   }
 
   // Wait until the page is half loaded.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kPageText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kPageText];
 
   // On iPhone Stop/Reload button is a part of tools menu, so open it.
   if (!IsIPadIdiom()) {

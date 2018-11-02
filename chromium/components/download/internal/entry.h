@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_DOWNLOAD_INTERNAL_ENTRY_H_
 #define COMPONENTS_DOWNLOAD_INTERNAL_ENTRY_H_
 
+#include "base/time/time.h"
 #include "components/download/public/client.h"
 #include "components/download/public/clients.h"
 #include "components/download/public/download_params.h"
@@ -32,24 +33,29 @@ struct Entry {
     // be run until it is resumed by the Client.
     PAUSED = 3,
 
-    // The download is 'complete' by some definition of that term (could have
-    // failed, could have succeeded, etc.).  It is ready to have UMA logs saved.
+    // The download is 'complete' and successful.  At this point we are leaving
+    // this entry around to make sure the files on disk are cleaned up.
     COMPLETE = 4,
 
-    // The download is finished.  We are leaving this entry around to make sure
-    // the files on disk are cleaned up.
-    WATCHDOG = 5,
+    // The count of entries for the enum.
+    COUNT = 5,
   };
 
   Entry();
   Entry(const Entry& other);
+  explicit Entry(const DownloadParams& params);
   ~Entry();
+
+  bool operator==(const Entry& other) const;
 
   // The feature that is requesting this download.
   DownloadClient client = DownloadClient::INVALID;
 
   // A unique GUID that represents this download.  See | base::GenerateGUID()|.
   std::string guid;
+
+  // The time when the entry is created.
+  base::Time create_time;
 
   // The parameters that determine under what device conditions this download
   // will occur.
@@ -61,6 +67,16 @@ struct Entry {
   // The state of the download to help the scheduler and loggers make the right
   // decisions about the download object.
   State state = State::NEW;
+
+  // Target file path for this download.
+  base::FilePath target_file_path;
+
+  // Time the download was marked as complete, base::Time() if the download is
+  // not yet complete.
+  base::Time completion_time;
+
+  // Stores the number of retries for this download.
+  uint32_t attempt_count;
 };
 
 }  // namespace download

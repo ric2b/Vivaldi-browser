@@ -4,11 +4,11 @@
 
 #include "modules/fetch/FormDataBytesConsumer.h"
 
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMTypedArray.h"
 #include "core/dom/Document.h"
 #include "core/html/FormData.h"
 #include "core/testing/DummyPageHolder.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/fetch/BytesConsumerTestUtil.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
@@ -29,16 +29,13 @@ using ::testing::Return;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
 using MockBytesConsumer = BytesConsumerTestUtil::MockBytesConsumer;
 
-String ToString(const Vector<char>& v) {
-  return String(v.data(), v.size());
-}
-
 PassRefPtr<EncodedFormData> ComplexFormData() {
   RefPtr<EncodedFormData> data = EncodedFormData::Create();
 
   data->AppendData("foo", 3);
   data->AppendFileRange("/foo/bar/baz", 3, 4, 5);
-  data->AppendFileSystemURLRange(KURL(KURL(), "file:///foo/bar/baz"), 6, 7, 8);
+  data->AppendFileSystemURLRange(KURL(NullURL(), "file:///foo/bar/baz"), 6, 7,
+                                 8);
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   blob_data->AppendText("hello", false);
   auto size = blob_data->length();
@@ -48,7 +45,7 @@ PassRefPtr<EncodedFormData> ComplexFormData() {
   Vector<char> boundary;
   boundary.Append("\0", 1);
   data->SetBoundary(boundary);
-  return data.Release();
+  return data;
 }
 
 class NoopClient final : public GarbageCollectedFinalized<NoopClient>,
@@ -74,7 +71,8 @@ TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromString) {
                      new FormDataBytesConsumer("hello, world")))
                     ->Run();
   EXPECT_EQ(Result::kDone, result.first);
-  EXPECT_EQ("hello, world", ToString(result.second));
+  EXPECT_EQ("hello, world",
+            BytesConsumerTestUtil::CharVectorToString(result.second));
 }
 
 TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromStringNonLatin) {
@@ -83,7 +81,8 @@ TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromStringNonLatin) {
                      new FormDataBytesConsumer(String(kCs))))
                     ->Run();
   EXPECT_EQ(Result::kDone, result.first);
-  EXPECT_EQ("\xe3\x81\x82", ToString(result.second));
+  EXPECT_EQ("\xe3\x81\x82",
+            BytesConsumerTestUtil::CharVectorToString(result.second));
 }
 
 TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromArrayBuffer) {
@@ -127,7 +126,8 @@ TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromSimpleFormData) {
                      new FormDataBytesConsumer(GetDocument(), data)))
                     ->Run();
   EXPECT_EQ(Result::kDone, result.first);
-  EXPECT_EQ("foohoge", ToString(result.second));
+  EXPECT_EQ("foohoge",
+            BytesConsumerTestUtil::CharVectorToString(result.second));
 }
 
 TEST_F(FormDataBytesConsumerTest, TwoPhaseReadFromComplexFormData) {

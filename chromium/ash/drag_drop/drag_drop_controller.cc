@@ -9,8 +9,6 @@
 #include "ash/drag_drop/drag_drop_tracker.h"
 #include "ash/drag_drop/drag_image_view.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
-#include "ash/wm_window.h"
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -40,8 +38,10 @@ namespace ash {
 namespace {
 
 // The duration of the drag cancel animation in millisecond.
-const int kCancelAnimationDuration = 250;
-const int kTouchCancelAnimationDuration = 20;
+constexpr base::TimeDelta kCancelAnimationDuration =
+    base::TimeDelta::FromMilliseconds(250);
+constexpr base::TimeDelta kTouchCancelAnimationDuration =
+    base::TimeDelta::FromMilliseconds(20);
 // The frame rate of the drag cancel animation in hertz.
 const int kCancelAnimationFrameRate = 60;
 
@@ -137,11 +137,11 @@ DragDropController::DragDropController()
       current_drag_event_source_(ui::DragDropTypes::DRAG_EVENT_SOURCE_MOUSE),
       weak_factory_(this) {
   Shell::Get()->PrependPreTargetHandler(this);
-  ShellPort::Get()->AddDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
 DragDropController::~DragDropController() {
-  ShellPort::Get()->RemoveDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
   Shell::Get()->RemovePreTargetHandler(this);
   Cleanup();
   if (cancel_animation_)
@@ -394,7 +394,7 @@ void DragDropController::OnWindowDestroyed(aura::Window* window) {
 // DragDropController, protected:
 
 gfx::LinearAnimation* DragDropController::CreateCancelAnimation(
-    int duration,
+    base::TimeDelta duration,
     int frame_rate,
     gfx::AnimationDelegate* delegate) {
   return new gfx::LinearAnimation(duration, frame_rate, delegate);
@@ -424,6 +424,7 @@ void DragDropController::DragUpdate(aura::Window* target,
       e.set_location_f(event.location_f());
       e.set_root_location_f(event.root_location_f());
       e.set_flags(event.flags());
+      ui::Event::DispatcherApi(&e).set_target(target);
       delegate->OnDragEntered(e);
     }
   } else {
@@ -435,6 +436,7 @@ void DragDropController::DragUpdate(aura::Window* target,
       e.set_location_f(event.location_f());
       e.set_root_location_f(event.root_location_f());
       e.set_flags(event.flags());
+      ui::Event::DispatcherApi(&e).set_target(target);
       op = delegate->OnDragUpdated(e);
       gfx::NativeCursor cursor = ui::CursorType::kNoDrop;
       if (op & ui::DragDropTypes::DRAG_COPY)
@@ -477,6 +479,7 @@ void DragDropController::Drop(aura::Window* target,
     e.set_location_f(event.location_f());
     e.set_root_location_f(event.root_location_f());
     e.set_flags(event.flags());
+    ui::Event::DispatcherApi(&e).set_target(target);
     drag_operation_ = delegate->OnPerformDrop(e);
     if (drag_operation_ == 0)
       StartCanceledAnimation(kCancelAnimationDuration);
@@ -514,7 +517,8 @@ void DragDropController::AnimationEnded(const gfx::Animation* animation) {
   }
 }
 
-void DragDropController::DoDragCancel(int drag_cancel_animation_duration_ms) {
+void DragDropController::DoDragCancel(
+    base::TimeDelta drag_cancel_animation_duration) {
   ash::Shell::Get()->cursor_manager()->SetCursor(ui::CursorType::kPointer);
 
   // |drag_window_| can be NULL if we have just started the drag and have not
@@ -527,7 +531,7 @@ void DragDropController::DoDragCancel(int drag_cancel_animation_duration_ms) {
 
   Cleanup();
   drag_operation_ = 0;
-  StartCanceledAnimation(drag_cancel_animation_duration_ms);
+  StartCanceledAnimation(drag_cancel_animation_duration);
   if (should_block_during_drag_drop_)
     quit_closure_.Run();
 }
@@ -550,13 +554,14 @@ void DragDropController::OnDisplayConfigurationChanging() {
     DragCancel();
 }
 
-void DragDropController::StartCanceledAnimation(int animation_duration_ms) {
+void DragDropController::StartCanceledAnimation(
+    base::TimeDelta animation_duration) {
   DCHECK(drag_image_.get());
   drag_image_->SetTouchDragOperationHintOff();
   drag_image_initial_bounds_for_cancel_animation_ =
       drag_image_->GetBoundsInScreen();
   cancel_animation_.reset(CreateCancelAnimation(
-      animation_duration_ms, kCancelAnimationFrameRate, this));
+      animation_duration, kCancelAnimationFrameRate, this));
   cancel_animation_->Start();
 }
 

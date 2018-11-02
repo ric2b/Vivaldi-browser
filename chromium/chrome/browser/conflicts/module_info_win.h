@@ -77,6 +77,17 @@ struct ModuleInspectionResult {
 // Contains the inspection result of a module and additional information that is
 // useful to the ModuleDatabase.
 struct ModuleInfoData {
+  // The possible types of module we are dealing with. Used as bit set values.
+  enum ModuleType : uint32_t {
+    // These modules are or were loaded into one of chrome's process at some
+    // point.
+    kTypeLoadedModule = 1 << 0,
+    // These modules are registered as a shell extension.
+    kTypeShellExtension = 1 << 1,
+    // These modules are registered as an Input Method Editor.
+    kTypeIme = 1 << 2,
+  };
+
   ModuleInfoData();
   ~ModuleInfoData();
 
@@ -85,6 +96,9 @@ struct ModuleInfoData {
   // ProcessType enumeration to a bitfield. See "ProcessTypeToBit" and
   // "BitIndexToProcessType" for details.
   uint32_t process_types;
+
+  // Set that describes the type of the module.
+  uint32_t module_types;
 
   // The inspection result obtained via InspectModule().
   std::unique_ptr<ModuleInspectionResult> inspection_result;

@@ -76,8 +76,7 @@ Polymer({
   /** @override */
   ready: function() {
     cr.addWebUIListener(
-        'storage-size-stat-changed',
-        this.handleSizeStatChanged_.bind(this));
+        'storage-size-stat-changed', this.handleSizeStatChanged_.bind(this));
     cr.addWebUIListener(
         'storage-downloads-size-changed',
         this.handleDownloadsSizeChanged_.bind(this));
@@ -108,7 +107,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.STORAGE)
+    if (settings.getCurrentRoute() == settings.routes.STORAGE)
       this.onPageShown_();
   },
 
@@ -145,7 +144,7 @@ Polymer({
    * @private
    */
   onBrowsingDataTap_: function() {
-    settings.navigateTo(settings.Route.CLEAR_BROWSER_DATA);
+    settings.navigateTo(settings.routes.CLEAR_BROWSER_DATA);
   },
 
   /**
@@ -161,7 +160,7 @@ Polymer({
    * @private
    */
   onOtherUsersTap_: function() {
-    settings.navigateTo(settings.Route.ACCOUNTS);
+    settings.navigateTo(settings.routes.ACCOUNTS);
   },
 
   /**
@@ -248,7 +247,7 @@ Polymer({
     // We update the storage usage every 5 seconds.
     if (this.updateTimerId_ == -1) {
       this.updateTimerId_ = window.setInterval(function() {
-        if (settings.getCurrentRoute() != settings.Route.STORAGE) {
+        if (settings.getCurrentRoute() != settings.routes.STORAGE) {
           this.stopPeriodicUpdate_();
           return;
         }

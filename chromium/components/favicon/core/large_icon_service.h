@@ -12,6 +12,7 @@
 #include "components/favicon_base/favicon_callback.h"
 #include "components/image_fetcher/core/image_fetcher.h"
 #include "components/keyed_service/core/keyed_service.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 class GURL;
 
@@ -38,15 +39,19 @@ class LargeIconService : public KeyedService {
   ~LargeIconService() override;
 
   // Requests the best large icon for the page at |page_url|.
-  // Case 1. An icon exists whose size is >= |min_source_size_in_pixel|:
+  // Case 1. An icon exists whose size is >= MAX(|min_source_size_in_pixel|,
+  // |desired_size_in_pixel|):
   // - If |desired_size_in_pixel| == 0: returns icon as is.
   // - Else: returns the icon resized to |desired_size_in_pixel|.
-  // Case 2. An icon exists whose size is < |min_source_size_in_pixel|:
+  // Case 2. An icon exists whose size is >= |min_source_size_in_pixel| and <
+  // |desired_size_in_pixel|:
+  // - Same as 1 with the biggest icon.
+  // Case 4. An icon exists whose size is < |min_source_size_in_pixel|:
   // - Extracts dominant color of smaller image, returns a fallback icon style
   //   that has a matching background.
-  // Case 3. No icon exists.
+  // Case 5. No icon exists.
   // - Returns the default fallback icon style.
-  // For cases 2 and 3, this function returns the style of the fallback icon
+  // For cases 4 and 5, this function returns the style of the fallback icon
   // instead of rendering an icon so clients can render the icon themselves.
   // TODO(jkrcal): Rename to GetLargeIconRawBitmapOrFallbackStyle.
   base::CancelableTaskTracker::TaskId GetLargeIconOrFallbackStyle(
@@ -94,7 +99,16 @@ class LargeIconService : public KeyedService {
       int min_source_size_in_pixel,
       int desired_size_in_pixel,
       bool may_page_url_be_private,
-      const base::Callback<void(bool success)>& callback);
+      const net::NetworkTrafficAnnotationTag& traffic_annotation,
+      const favicon_base::GoogleFaviconServerCallback& callback);
+
+  // Update the time that the icon at |icon_url| was requested. This should be
+  // called after obtaining the icon by GetLargeIcon*OrFallbackStyle() for any
+  // icon that _may_ originate from the Google favicon server (i.e. if the
+  // caller uses
+  // GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache()). This
+  // postpones the automatic eviction of the favicon from the database.
+  void TouchIconFromGoogleServer(const GURL& icon_url);
 
  private:
   base::CancelableTaskTracker::TaskId GetLargeIconOrFallbackStyleImpl(

@@ -71,8 +71,10 @@ void Display::Init(const display::ViewportMetrics& metrics,
 
   CreateRootWindow(metrics.bounds_in_pixels.size());
 
-  platform_display_ = PlatformDisplay::Create(root_.get(), metrics);
+  platform_display_ = PlatformDisplay::Create(
+      root_.get(), metrics, window_server_->GetThreadedImageCursorsFactory());
   platform_display_->Init(this);
+  UpdateCursorConfig();
 }
 
 int64_t Display::GetId() const {
@@ -82,6 +84,8 @@ int64_t Display::GetId() const {
 
 void Display::SetDisplay(const display::Display& display) {
   display_ = display;
+
+  UpdateCursorConfig();
 }
 
 const display::Display& Display::GetDisplay() {
@@ -190,6 +194,8 @@ void Display::RemoveWindowManagerDisplayRoot(
        it != window_manager_display_root_map_.end(); ++it) {
     if (it->second == display_root) {
       window_manager_display_root_map_.erase(it);
+      if (window_manager_display_root_map_.empty())
+        display_manager()->DestroyDisplay(this);
       return;
     }
   }
@@ -198,6 +204,10 @@ void Display::RemoveWindowManagerDisplayRoot(
 
 void Display::SetNativeCursor(const ui::CursorData& cursor) {
   platform_display_->SetCursor(cursor);
+}
+
+void Display::SetNativeCursorSize(ui::CursorSize cursor_size) {
+  platform_display_->SetCursorSize(cursor_size);
 }
 
 void Display::SetSize(const gfx::Size& size) {
@@ -268,6 +278,16 @@ void Display::CreateRootWindow(const gfx::Size& size) {
   focus_controller_->AddObserver(this);
 }
 
+void Display::UpdateCursorConfig() {
+  float scale = display_.device_scale_factor();
+
+  if (!display_manager()->IsInternalDisplay(display_))
+    scale *= ui::mojom::kCursorMultiplierForExternalDisplays;
+
+  if (platform_display_)
+    platform_display_->SetCursorConfig(display_.rotation(), scale);
+}
+
 ServerWindow* Display::GetRootWindow() {
   return root_.get();
 }
@@ -299,10 +319,14 @@ void Display::OnViewportMetricsChanged(
     const display::ViewportMetrics& metrics) {
   platform_display_->UpdateViewportMetrics(metrics);
 
-  if (root_->bounds().size() == metrics.bounds_in_pixels.size())
+  SetBoundsInPixels(metrics.bounds_in_pixels);
+}
+
+void Display::SetBoundsInPixels(const gfx::Rect& bounds_in_pixels) {
+  if (root_->bounds().size() == bounds_in_pixels.size())
     return;
 
-  gfx::Rect new_bounds(metrics.bounds_in_pixels.size());
+  gfx::Rect new_bounds(bounds_in_pixels.size());
   root_->SetBounds(new_bounds, allocator_.GenerateId());
   for (auto& pair : window_manager_display_root_map_)
     pair.second->root()->SetBounds(new_bounds, allocator_.GenerateId());

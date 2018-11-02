@@ -17,8 +17,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner.h"
-#include "chrome/browser/chromeos/arc/fileapi/arc_file_system_operation_runner_util.h"
 #include "components/arc/common/file_system.mojom.h"
 #include "storage/browser/fileapi/async_file_util.h"
 #include "storage/browser/fileapi/watcher_manager.h"
@@ -29,20 +29,31 @@ namespace arc {
 
 // Represents a file system root in Android Documents Provider.
 //
-// All methods must be called on the IO thread.
+// All methods must be called on the UI thread.
 // If this object is deleted while there are in-flight operations, callbacks
 // for those operations will be never called.
 class ArcDocumentsProviderRoot : public ArcFileSystemOperationRunner::Observer {
  public:
+  struct ThinFileInfo {
+    base::FilePath::StringType name;
+    std::string document_id;
+    bool is_directory;
+    base::Time last_modified;
+  };
+
+  // TODO(crbug.com/755451): Use OnceCallback/RepeatingCallback.
   using GetFileInfoCallback = storage::AsyncFileUtil::GetFileInfoCallback;
-  using ReadDirectoryCallback = storage::AsyncFileUtil::ReadDirectoryCallback;
+  using ReadDirectoryCallback =
+      base::OnceCallback<void(base::File::Error error,
+                              std::vector<ThinFileInfo> files)>;
   using ChangeType = storage::WatcherManager::ChangeType;
   using WatcherCallback = base::Callback<void(ChangeType type)>;
   using StatusCallback = base::Callback<void(base::File::Error error)>;
   using ResolveToContentUrlCallback =
       base::Callback<void(const GURL& content_url)>;
 
-  ArcDocumentsProviderRoot(const std::string& authority,
+  ArcDocumentsProviderRoot(ArcFileSystemOperationRunner* runner,
+                           const std::string& authority,
                            const std::string& root_document_id);
   ~ArcDocumentsProviderRoot() override;
 
@@ -53,7 +64,7 @@ class ArcDocumentsProviderRoot : public ArcFileSystemOperationRunner::Observer {
   // Queries a list of files under a directory just like
   // AsyncFileUtil.ReadDirectory().
   void ReadDirectory(const base::FilePath& path,
-                     const ReadDirectoryCallback& callback);
+                     ReadDirectoryCallback callback);
 
   // Installs a document watcher.
   //
@@ -112,64 +123,45 @@ class ArcDocumentsProviderRoot : public ArcFileSystemOperationRunner::Observer {
   void ResolveToContentUrl(const base::FilePath& path,
                            const ResolveToContentUrlCallback& callback);
 
+  // Instructs to make directory caches expire "soon" after callbacks are
+  // called, that is, when the message loop gets idle.
+  void SetDirectoryCacheExpireSoonForTesting();
+
   // ArcFileSystemOperationRunner::Observer overrides:
   void OnWatchersCleared() override;
 
  private:
-  // Thin representation of a document in documents provider.
-  struct ThinDocument {
-    std::string document_id;
-    bool is_directory;
-  };
-
-  // Represents the status of a document watcher.
-  struct WatcherData {
-    // ID of a watcher in the remote file system service.
-    //
-    // Valid IDs are represented by positive integers. An invalid watcher is
-    // represented by |kInvalidWatcherId|, which occurs in several cases:
-    //
-    // - AddWatcher request is still in-flight. In this case, a valid ID is set
-    //   to |inflight_request_id|.
-    //
-    // - The remote file system service notified us that it stopped and all
-    //   watchers were forgotten. Such watchers are still tracked here, but they
-    //   are not known by the remote service.
-    int64_t id;
-
-    // A unique ID of AddWatcher() request.
-    //
-    // While AddWatcher() is in-flight, a positive integer is set to this
-    // variable, and |id| is |kInvalidWatcherId|. Otherwise it is set to
-    // |kInvalidWatcherRequestId|.
-    uint64_t inflight_request_id;
-  };
+  struct WatcherData;
+  struct DirectoryCache;
 
   static const int64_t kInvalidWatcherId;
   static const uint64_t kInvalidWatcherRequestId;
   static const WatcherData kInvalidWatcherData;
 
-  // Mapping from a file name to a ThinDocument.
-  using NameToThinDocumentMap =
-      std::map<base::FilePath::StringType, ThinDocument>;
+  // Mapping from a file name to a Document.
+  using NameToDocumentMap =
+      std::map<base::FilePath::StringType, mojom::DocumentPtr>;
 
+  // TODO(nya): Use OnceCallback.
   using ResolveToDocumentIdCallback =
       base::Callback<void(const std::string& document_id)>;
   using ReadDirectoryInternalCallback =
       base::Callback<void(base::File::Error error,
-                          NameToThinDocumentMap mapping)>;
+                          const NameToDocumentMap& mapping)>;
 
-  void GetFileInfoWithDocumentId(const GetFileInfoCallback& callback,
-                                 const std::string& document_id);
-  void GetFileInfoWithDocument(const GetFileInfoCallback& callback,
-                               mojom::DocumentPtr document);
+  void GetFileInfoWithParentDocumentId(const GetFileInfoCallback& callback,
+                                       const base::FilePath& basename,
+                                       const std::string& parent_document_id);
+  void GetFileInfoWithNameToDocumentMap(const GetFileInfoCallback& callback,
+                                        const base::FilePath& basename,
+                                        base::File::Error error,
+                                        const NameToDocumentMap& mapping);
 
-  void ReadDirectoryWithDocumentId(const ReadDirectoryCallback& callback,
+  void ReadDirectoryWithDocumentId(ReadDirectoryCallback callback,
                                    const std::string& document_id);
-  void ReadDirectoryWithNameToThinDocumentMap(
-      const ReadDirectoryCallback& callback,
-      base::File::Error error,
-      NameToThinDocumentMap mapping);
+  void ReadDirectoryWithNameToDocumentMap(ReadDirectoryCallback callback,
+                                          base::File::Error error,
+                                          const NameToDocumentMap& mapping);
 
   void AddWatcherWithDocumentId(const base::FilePath& path,
                                 uint64_t watcher_request_id,
@@ -199,22 +191,45 @@ class ArcDocumentsProviderRoot : public ArcFileSystemOperationRunner::Observer {
       const std::string& document_id,
       const std::vector<base::FilePath::StringType>& components,
       const ResolveToDocumentIdCallback& callback);
-  void ResolveToDocumentIdRecursivelyWithNameToThinDocumentMap(
+  void ResolveToDocumentIdRecursivelyWithNameToDocumentMap(
       const std::vector<base::FilePath::StringType>& components,
       const ResolveToDocumentIdCallback& callback,
       base::File::Error error,
-      NameToThinDocumentMap mapping);
+      const NameToDocumentMap& mapping);
 
   // Enumerates child documents of a directory specified by |document_id|.
-  // The result is returned as a NameToThinDocumentMap.
+  // If |force_refresh| is true, the backend is queried even if there is a
+  // directory cache.
+  // The result is returned as a NameToDocumentMap. It is valid only within
+  // the callback and might get deleted immediately after the callback
+  // returns.
   void ReadDirectoryInternal(const std::string& document_id,
+                             bool force_refresh,
                              const ReadDirectoryInternalCallback& callback);
   void ReadDirectoryInternalWithChildDocuments(
-      const ReadDirectoryInternalCallback& callback,
+      const std::string& document_id,
       base::Optional<std::vector<mojom::DocumentPtr>> maybe_children);
+
+  // Clears a directory cache.
+  void ClearDirectoryCache(const std::string& document_id);
+
+  // |runner_| outlives this object. ArcDocumentsProviderRootMap, the owner of
+  // this object, depends on ArcFileSystemOperationRunner in the
+  // BrowserContextKeyedServiceFactory dependency graph.
+  ArcFileSystemOperationRunner* const runner_;
 
   const std::string authority_;
   const std::string root_document_id_;
+
+  bool directory_cache_expire_soon_ = false;
+
+  // Cache of directory contents. Keys are document IDs of directories.
+  std::map<std::string, DirectoryCache> directory_cache_;
+
+  // Map from a document ID to callbacks pending for ReadDirectoryInternal()
+  // calls.
+  std::map<std::string, std::vector<ReadDirectoryInternalCallback>>
+      pending_callbacks_map_;
 
   // Map from a file path to a watcher data.
   //
@@ -225,11 +240,6 @@ class ArcDocumentsProviderRoot : public ArcFileSystemOperationRunner::Observer {
   std::map<base::FilePath, WatcherData> path_to_watcher_data_;
 
   uint64_t next_watcher_request_id_ = 1;
-
-  // Can be null if this instance is not observing ArcFileSystemOperationRunner.
-  // Observation is started on the first call of AddWatcher().
-  scoped_refptr<file_system_operation_runner_util::ObserverIOThreadWrapper>
-      observer_wrapper_;
 
   base::WeakPtrFactory<ArcDocumentsProviderRoot> weak_ptr_factory_;
 

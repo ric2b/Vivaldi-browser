@@ -36,8 +36,8 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/StyleEngine.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/Histogram.h"
 #include "platform/bindings/ScriptState.h"
@@ -137,10 +137,9 @@ bool FontFaceSet::InActiveDocumentContext() const {
   return context && ToDocument(context)->IsActive();
 }
 
-void FontFaceSet::AddFontFacesToFontFaceCache(FontFaceCache* font_face_cache,
-                                              CSSFontSelector* font_selector) {
+void FontFaceSet::AddFontFacesToFontFaceCache(FontFaceCache* font_face_cache) {
   for (const auto& font_face : non_css_connected_faces_)
-    font_face_cache->AddFontFace(font_selector, font_face, false);
+    font_face_cache->AddFontFace(font_face, false);
 }
 
 const AtomicString& FontFaceSet::InterfaceName() const {
@@ -268,8 +267,7 @@ FontFaceSet* FontFaceSet::addForBinding(ScriptState*,
   CSSFontSelector* font_selector =
       GetDocument()->GetStyleEngine().FontSelector();
   non_css_connected_faces_.insert(font_face);
-  font_selector->GetFontFaceCache()->AddFontFace(font_selector, font_face,
-                                                 false);
+  font_selector->GetFontFaceCache()->AddFontFace(font_face, false);
   if (font_face->LoadStatus() == FontFace::kLoading)
     AddToLoadingFonts(font_face);
   font_selector->FontFaceInvalidated();

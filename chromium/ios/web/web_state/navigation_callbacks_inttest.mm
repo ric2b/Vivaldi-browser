@@ -9,8 +9,8 @@
 #include "base/strings/stringprintf.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/web_state/navigation_context.h"
 #include "ios/web/public/web_state/web_state_observer.h"
 #include "ios/web/test/test_url_constants.h"
@@ -39,6 +39,7 @@ ACTION_P3(VerifyNewPageStartedContext, web_state, url, context) {
       PageTransitionCoreTypeIs(ui::PageTransition::PAGE_TRANSITION_TYPED,
                                (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   ASSERT_FALSE((*context)->GetResponseHeaders());
   ASSERT_TRUE(web_state->IsLoading());
@@ -60,6 +61,7 @@ ACTION_P3(VerifyNewPageFinishedContext, web_state, url, context) {
       PageTransitionCoreTypeIs(ui::PageTransition::PAGE_TRANSITION_TYPED,
                                (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   ASSERT_TRUE((*context)->GetResponseHeaders());
   std::string mime_type;
@@ -81,9 +83,19 @@ ACTION_P3(VerifyPostStartedContext, web_state, url, context) {
   EXPECT_EQ(web_state, (*context)->GetWebState());
   EXPECT_EQ(url, (*context)->GetUrl());
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_TRUE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   ASSERT_FALSE((*context)->GetResponseHeaders());
   ASSERT_TRUE(web_state->IsLoading());
+  // TODO(crbug.com/676129): Reload does not create a pending item. Remove this
+  // workaround once the bug is fixed.
+  if (!ui::PageTransitionTypeIncludingQualifiersIs(
+          ui::PageTransition::PAGE_TRANSITION_RELOAD,
+          (*context)->GetPageTransition())) {
+    NavigationManager* navigation_manager = web_state->GetNavigationManager();
+    NavigationItem* item = navigation_manager->GetPendingItem();
+    EXPECT_EQ(url, item->GetURL());
+  }
 }
 
 // Verifies correctness of |NavigationContext| (|arg0|) for navigations via POST
@@ -96,6 +108,7 @@ ACTION_P3(VerifyPostFinishedContext, web_state, url, context) {
   EXPECT_EQ(web_state, (*context)->GetWebState());
   EXPECT_EQ(url, (*context)->GetUrl());
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_TRUE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   ASSERT_TRUE(web_state->IsLoading());
   NavigationManager* navigation_manager = web_state->GetNavigationManager();
@@ -119,6 +132,7 @@ ACTION_P4(VerifySameDocumentStartedContext,
   EXPECT_TRUE(PageTransitionTypeIncludingQualifiersIs(
       page_transition, (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   EXPECT_FALSE((*context)->GetResponseHeaders());
 }
@@ -138,6 +152,7 @@ ACTION_P4(VerifySameDocumentFinishedContext,
   EXPECT_TRUE(PageTransitionTypeIncludingQualifiersIs(
       page_transition, (*context)->GetPageTransition()));
   EXPECT_TRUE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   EXPECT_FALSE((*context)->GetResponseHeaders());
   NavigationManager* navigation_manager = web_state->GetNavigationManager();
@@ -158,6 +173,7 @@ ACTION_P3(VerifyNewNativePageStartedContext, web_state, url, context) {
       PageTransitionCoreTypeIs(ui::PageTransition::PAGE_TRANSITION_TYPED,
                                (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   EXPECT_FALSE((*context)->GetResponseHeaders());
   ASSERT_TRUE(web_state->IsLoading());
@@ -178,6 +194,7 @@ ACTION_P3(VerifyNewNativePageFinishedContext, web_state, url, context) {
       PageTransitionCoreTypeIs(ui::PageTransition::PAGE_TRANSITION_TYPED,
                                (*context)->GetPageTransition()));
   EXPECT_FALSE((*context)->IsSameDocument());
+  EXPECT_FALSE((*context)->IsPost());
   EXPECT_FALSE((*context)->GetError());
   EXPECT_FALSE((*context)->GetResponseHeaders());
   NavigationManager* navigation_manager = web_state->GetNavigationManager();
@@ -277,6 +294,40 @@ TEST_F(NavigationCallbacksTest, NewPageNavigation) {
       .WillOnce(VerifyNewPageFinishedContext(web_state(), url, &context));
   EXPECT_CALL(*observer_, DidStopLoading());
   LoadUrl(url);
+}
+
+// Tests web page reload navigation.
+TEST_F(NavigationCallbacksTest, WebPageReloadNavigation) {
+  const GURL url = HttpServer::MakeUrl("http://chromium.test");
+  std::map<GURL, std::string> responses;
+  responses[url] = "Chromium Test";
+  web::test::SetUpSimpleHttpServer(responses);
+
+  // Perform new page navigation.
+  NavigationContext* context = nullptr;
+  EXPECT_CALL(*observer_, DidStartNavigation(_));
+  EXPECT_CALL(*observer_, DidStartLoading());
+  EXPECT_CALL(*observer_, DidFinishNavigation(_));
+  EXPECT_CALL(*observer_, DidStopLoading());
+  LoadUrl(url);
+
+  // Reload web page.
+  EXPECT_CALL(*observer_, DidStartNavigation(_))
+      .WillOnce(VerifyReloadStartedContext(web_state(), url, &context));
+  EXPECT_CALL(*observer_, DidStartLoading());
+  EXPECT_CALL(*observer_, DidFinishNavigation(_))
+      .WillOnce(VerifyReloadFinishedContext(web_state(), url, &context,
+                                            true /* is_web_page */));
+  EXPECT_CALL(*observer_, DidStopLoading());
+  // TODO(crbug.com/700958): ios/web ignores |check_for_repost| flag and current
+  // delegate does not run callback for ShowRepostFormWarningDialog. Clearing
+  // the delegate will allow form resubmission. Remove this workaround (clearing
+  // the delegate, once |check_for_repost| is supported).
+  web_state()->SetDelegate(nullptr);
+  ExecuteBlockAndWaitForLoad(url, ^{
+    navigation_manager()->Reload(ReloadType::NORMAL,
+                                 false /*check_for_repost*/);
+  });
 }
 
 // Tests user-initiated hash change.
@@ -435,6 +486,35 @@ TEST_F(NavigationCallbacksTest, NativeContentReload) {
 }
 
 // Tests successful navigation to a new page with post HTTP method.
+// TODO (crbug/729602): This test is disabled due to failing on iOS 9.3 devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_UserInitiatedPostNavigation UserInitiatedPostNavigation
+#else
+#define MAYBE_UserInitiatedPostNavigation DISABLED_UserInitiatedPostNavigation
+#endif
+TEST_F(NavigationCallbacksTest, MAYBE_UserInitiatedPostNavigation) {
+  const GURL url = HttpServer::MakeUrl("http://chromium.test");
+  std::map<GURL, std::string> responses;
+  responses[url] = "Chromium Test";
+  web::test::SetUpSimpleHttpServer(responses);
+
+  // Perform new page navigation.
+  NavigationContext* context = nullptr;
+  EXPECT_CALL(*observer_, DidStartNavigation(_))
+      .WillOnce(VerifyPostStartedContext(web_state(), url, &context));
+  EXPECT_CALL(*observer_, DidStartLoading());
+  EXPECT_CALL(*observer_, DidFinishNavigation(_))
+      .WillOnce(VerifyPostFinishedContext(web_state(), url, &context));
+  EXPECT_CALL(*observer_, DidStopLoading());
+
+  // Load request using POST HTTP method.
+  web::NavigationManager::WebLoadParams params(url);
+  params.post_data.reset([@"foo" dataUsingEncoding:NSUTF8StringEncoding]);
+  params.extra_headers.reset(@{ @"Content-Type" : @"text/html" });
+  LoadWithParams(params);
+}
+
+// Tests successful navigation to a new page with post HTTP method.
 TEST_F(NavigationCallbacksTest, RendererInitiatedPostNavigation) {
   const GURL url = HttpServer::MakeUrl("http://chromium.test");
   std::map<GURL, std::string> responses;
@@ -460,7 +540,13 @@ TEST_F(NavigationCallbacksTest, RendererInitiatedPostNavigation) {
 }
 
 // Tests successful reload of a page returned for post request.
-TEST_F(NavigationCallbacksTest, ReloadPostNavigation) {
+// TODO (crbug/729602): This test is disabled due to failing on iOS 9.3 devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_ReloadPostNavigation ReloadPostNavigation
+#else
+#define MAYBE_ReloadPostNavigation DISABLED_ReloadPostNavigation
+#endif
+TEST_F(NavigationCallbacksTest, MAYBE_ReloadPostNavigation) {
   const GURL url = HttpServer::MakeUrl("http://chromium.test");
   std::map<GURL, std::string> responses;
   const GURL action = HttpServer::MakeUrl("http://action.test");
@@ -505,7 +591,13 @@ TEST_F(NavigationCallbacksTest, ReloadPostNavigation) {
 }
 
 // Tests going forward to a page rendered from post response.
-TEST_F(NavigationCallbacksTest, ForwardPostNavigation) {
+// TODO (crbug/729602): This test is disabled due to failing on iOS 9.3 devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_ForwardPostNavigation ForwardPostNavigation
+#else
+#define MAYBE_ForwardPostNavigation DISABLED_ForwardPostNavigation
+#endif
+TEST_F(NavigationCallbacksTest, MAYBE_ForwardPostNavigation) {
   const GURL url = HttpServer::MakeUrl("http://chromium.test");
   std::map<GURL, std::string> responses;
   const GURL action = HttpServer::MakeUrl("http://action.test");

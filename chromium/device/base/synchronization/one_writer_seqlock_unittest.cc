@@ -33,7 +33,7 @@ class BasicSeqLockTestThread : public base::PlatformThread::Delegate {
     ready_ = ready;
   }
   void ThreadMain() override {
-    while (base::AtomicRefCountIsZero(ready_)) {
+    while (ready_->IsZero()) {
       base::PlatformThread::YieldCurrentThread();
     }
 
@@ -49,7 +49,7 @@ class BasicSeqLockTestThread : public base::PlatformThread::Delegate {
       EXPECT_EQ(copy.c, copy.b + copy.a);
     }
 
-    base::AtomicRefCountDec(ready_);
+    ready_->Decrement();
   }
 
  private:
@@ -68,7 +68,7 @@ class BasicSeqLockTestThread : public base::PlatformThread::Delegate {
 TEST(OneWriterSeqLockTest, MAYBE_ManyThreads) {
   OneWriterSeqLock seqlock;
   TestData data = {0, 0, 0};
-  base::AtomicRefCount ready = 0;
+  base::AtomicRefCount ready(0);
 
   ANNOTATE_BENIGN_RACE_SIZED(&data, sizeof(data), "Racey reads are discarded");
 
@@ -91,9 +91,9 @@ TEST(OneWriterSeqLockTest, MAYBE_ManyThreads) {
     seqlock.WriteEnd();
 
     if (counter == 1)
-      base::AtomicRefCountIncN(&ready, kNumReaderThreads);
+      ready.Increment(kNumReaderThreads);
 
-    if (base::AtomicRefCountIsZero(&ready))
+    if (ready.IsZero())
       break;
   }
 

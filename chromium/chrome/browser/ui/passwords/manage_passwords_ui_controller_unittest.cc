@@ -249,6 +249,7 @@ ManagePasswordsUIControllerTest::CreateFormManagerWithBestMatches(
       new password_manager::PasswordFormManager(
           &password_manager_, &client_, driver_.AsWeakPtr(), observed_form,
           base::WrapUnique(new password_manager::StubFormSaver), &fetcher_));
+  test_form_manager->Init(nullptr);
   fetcher_.SetNonFederated(best_matches, 0u);
   return test_form_manager;
 }
@@ -405,7 +406,7 @@ TEST_F(ManagePasswordsUIControllerTest, PasswordSaved) {
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
 
-  controller()->SavePassword();
+  controller()->SavePassword(test_local_form().username_value);
   ExpectIconStateIs(password_manager::ui::MANAGE_STATE);
 }
 
@@ -446,7 +447,7 @@ TEST_F(ManagePasswordsUIControllerTest, NormalNavigationsClosedBubble) {
       CreateFormManager());
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnPasswordSubmitted(std::move(test_form_manager));
-  controller()->SavePassword();
+  controller()->SavePassword(test_local_form().username_value);
   EXPECT_CALL(*controller(), OnUpdateBubbleAndIconVisibility());
   controller()->OnBubbleHidden();
   ExpectIconStateIs(password_manager::ui::MANAGE_STATE);

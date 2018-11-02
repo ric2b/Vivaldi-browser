@@ -32,15 +32,11 @@
 #include "core/editing/FindOptions.h"
 #include "core/editing/iterators/FullyClippedStateStack.h"
 #include "core/editing/iterators/TextIteratorBehavior.h"
+#include "core/editing/iterators/TextIteratorTextNodeHandler.h"
 #include "core/editing/iterators/TextIteratorTextState.h"
 #include "platform/heap/Handle.h"
-#include "platform/wtf/Vector.h"
 
 namespace blink {
-
-class InlineTextBox;
-class LayoutText;
-class LayoutTextFragment;
 
 CORE_EXPORT String
 PlainText(const EphemeralRange&,
@@ -63,6 +59,12 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   TextIteratorAlgorithm(const PositionTemplate<Strategy>& start,
                         const PositionTemplate<Strategy>& end,
                         const TextIteratorBehavior& = TextIteratorBehavior());
+
+  // Same behavior as previous constructor but takes an EphemeralRange instead
+  // of two Positions
+  TextIteratorAlgorithm(const EphemeralRangeTemplate<Strategy>&,
+                        const TextIteratorBehavior& = TextIteratorBehavior());
+
   ~TextIteratorAlgorithm();
 
   bool AtEnd() const { return !text_state_.PositionNode() || should_stop_; }
@@ -103,9 +105,15 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
   // Computes the length of the given range using a text iterator according to
   // the specified iteration behavior. The default iteration behavior is to
   // always emit object replacement characters for replaced elements.
+  // TODO(editing-dev): We should remove start/end version of |RangeLength()|.
   static int RangeLength(
       const PositionTemplate<Strategy>& start,
       const PositionTemplate<Strategy>& end,
+      const TextIteratorBehavior& =
+          TextIteratorBehavior::DefaultRangeLengthBehavior());
+
+  static int RangeLength(
+      const EphemeralRangeTemplate<Strategy>&,
       const TextIteratorBehavior& =
           TextIteratorBehavior::DefaultRangeLengthBehavior());
 
@@ -125,42 +133,22 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
     kHandledChildren
   };
 
-  void Initialize(Node* start_container,
-                  int start_offset,
-                  Node* end_container,
-                  int end_offset);
-
   void ExitNode();
   bool ShouldRepresentNodeOffsetZero();
   bool ShouldEmitSpaceBeforeAndAfterNode(Node*);
   void RepresentNodeOffsetZero();
 
-  // Return true if the iteration progress should advance to |kHandledNode|
-  // after calling a |HandleXXX| function.
-  // TODO(xiaochengh): The meaning of the return values is unclear, and they do
-  // not always clearly control the iteration progress. Should consider removing
-  // the return values and control the iteration in a cleaner way.
-  bool HandleTextNode();
-  bool HandlePreFormattedTextNode();
-  bool HandleReplacedElement();
-  bool HandleNonTextNode();
+  // Returns true if text is emitted from the remembered progress (if any).
+  bool HandleRememberedProgress();
 
-  void HandleTextBox();
-  void HandleTextNodeFirstLetter(LayoutTextFragment*);
-  bool ShouldHandleFirstLetter(const LayoutText&) const;
-  bool ShouldProceedToRemainingText() const;
-  void ProceedToRemainingText();
+  void HandleTextNode();
+  void HandleReplacedElement();
+  void HandleNonTextNode();
   void SpliceBuffer(UChar,
                     Node* text_node,
                     Node* offset_base_node,
                     int text_start_offset,
                     int text_end_offset);
-  void EmitText(Node* text_node,
-                LayoutText* layout_object,
-                int text_start_offset,
-                int text_end_offset);
-  size_t RestoreCollapsedTrailingSpace(InlineTextBox* next_text_box,
-                                       size_t subrun_end);
 
   // Used by selection preservation code. There should be one character emitted
   // between every VisiblePosition in the Range used to create the TextIterator.
@@ -212,56 +200,44 @@ class CORE_TEMPLATE_CLASS_EXPORT TextIteratorAlgorithm {
                        int position,
                        int copy_length) const;
 
+  // The range.
+  const Member<Node> start_container_;
+  const int start_offset_;
+  const Member<Node> end_container_;
+  const int end_offset_;
+  // |m_endNode| stores |Strategy::childAt(*m_endContainer, m_endOffset - 1)|,
+  // if it exists, or |nullptr| otherwise.
+  const Member<Node> end_node_;
+  const Member<Node> past_end_node_;
+
   // Current position, not necessarily of the text being returned, but position
   // as we walk through the DOM tree.
   Member<Node> node_;
-  int offset_;
   IterationProgress iteration_progress_;
   FullyClippedStateStackAlgorithm<Strategy> fully_clipped_stack_;
   int shadow_depth_;
 
-  // The range.
-  Member<Node> start_container_;
-  int start_offset_;
-  Member<Node> end_container_;
-  int end_offset_;
-  // |m_endNode| stores |Strategy::childAt(*m_endContainer, m_endOffset - 1)|,
-  // if it exists, or |nullptr| otherwise.
-  Member<Node> end_node_;
-  Member<Node> past_end_node_;
-
   // Used when there is still some pending text from the current node; when
-  // these are false and 0, we go back to normal iterating.
-  bool needs_another_newline_;
-  InlineTextBox* text_box_;
-  // Used when iteration over :first-letter text to save pointer to
-  // remaining text box.
-  InlineTextBox* remaining_text_box_;
-  // Used to point to LayoutText object for :first-letter.
-  LayoutText* first_letter_text_;
+  // these are false, we go back to normal iterating.
+  bool needs_another_newline_ = false;
+  bool needs_handle_replaced_element_ = false;
 
-  // Used to do the whitespace collapsing logic.
   Member<Text> last_text_node_;
-  bool last_text_node_ended_with_collapsed_space_;
-
-  // Used when text boxes are out of order (Hebrew/Arabic w/ embeded LTR text)
-  Vector<InlineTextBox*> sorted_text_boxes_;
-  size_t sorted_text_boxes_position_;
 
   const TextIteratorBehavior behavior_;
 
-  // Used when deciding text fragment created by :first-letter should be looked
-  // into.
-  bool handled_first_letter_;
   // Used when stopsOnFormControls() is true to determine if the iterator should
   // keep advancing.
-  bool should_stop_;
+  bool should_stop_ = false;
   // Used for use counter |InnerTextWithShadowTree| and
   // |SelectionToStringWithShadowTree|, we should not use other purpose.
-  bool handle_shadow_root_;
+  bool handle_shadow_root_ = false;
 
   // Contains state of emitted text.
   TextIteratorTextState text_state_;
+
+  // Helper for extracting text content from text nodes.
+  TextIteratorTextNodeHandler text_node_handler_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT

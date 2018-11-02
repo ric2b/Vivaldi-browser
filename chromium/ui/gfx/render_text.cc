@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/i18n/break_iterator.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,14 +54,13 @@ const SkColor kDefaultColor = SK_ColorBLACK;
 // Default color used for drawing selection background.
 const SkColor kDefaultSelectionBackgroundColor = SK_ColorGRAY;
 
-// Fraction of the text size to lower a strike through below the baseline.
-const SkScalar kStrikeThroughOffset = (-SK_Scalar1 * 6 / 21);
+// Fraction of the text size to raise the center of a strike-through line above
+// the baseline.
+const SkScalar kStrikeThroughOffset = (SK_Scalar1 * 65 / 252);
 // Fraction of the text size to lower an underline below the baseline.
 const SkScalar kUnderlineOffset = (SK_Scalar1 / 9);
-// Fraction of the text size to use for a strike through or under-line.
-const SkScalar kLineThickness = (SK_Scalar1 / 18);
-// Fraction of the text size to use for a top margin of a diagonal strike.
-const SkScalar kDiagonalStrikeMarginOffset = (SK_Scalar1 / 4);
+// Default fraction of the text size to use for a strike-through or underline.
+const SkScalar kLineThicknessFactor = (SK_Scalar1 / 18);
 
 // Invalid value of baseline.  Assigning this value to |baseline_| causes
 // re-calculation of baseline.
@@ -105,11 +105,11 @@ void AddFadeEffect(const Rect& text_rect,
 
 // Creates a SkShader to fade the text, with |left_part| specifying the left
 // fade effect, if any, and |right_part| specifying the right fade effect.
-sk_sp<SkShader> CreateFadeShader(const FontList& font_list,
-                                 const Rect& text_rect,
-                                 const Rect& left_part,
-                                 const Rect& right_part,
-                                 SkColor color) {
+sk_sp<cc::PaintShader> CreateFadeShader(const FontList& font_list,
+                                        const Rect& text_rect,
+                                        const Rect& left_part,
+                                        const Rect& right_part,
+                                        SkColor color) {
   // The shader should only specify transparency of the fade itself, not the
   // original transparency, which will be applied by the actual renderer.
   DCHECK_EQ(SkColorGetA(color), static_cast<uint8_t>(0xff));
@@ -144,9 +144,9 @@ sk_sp<SkShader> CreateFadeShader(const FontList& font_list,
 
   const SkPoint points[2] = { PointToSkPoint(text_rect.origin()),
                               PointToSkPoint(text_rect.top_right()) };
-  return
-      SkGradientShader::MakeLinear(&points[0], &colors[0], &positions[0],
-                                   colors.size(), SkShader::kClamp_TileMode);
+  return cc::PaintShader::MakeLinearGradient(&points[0], &colors[0],
+                                             &positions[0], colors.size(),
+                                             SkShader::kClamp_TileMode);
 }
 
 // Converts a FontRenderParams::Hinting value to the corresponding
@@ -189,15 +189,8 @@ void RestoreBreakList(RenderText* render_text, BreakList<T>* break_list) {
 
 namespace internal {
 
-// Value of |underline_thickness_| that indicates that underline metrics have
-// not been set explicitly.
-const SkScalar kUnderlineMetricsNotSet = -1.0f;
-
 SkiaTextRenderer::SkiaTextRenderer(Canvas* canvas)
-    : canvas_(canvas),
-      canvas_skia_(canvas->sk_canvas()),
-      underline_thickness_(kUnderlineMetricsNotSet),
-      underline_position_(0.0f) {
+    : canvas_(canvas), canvas_skia_(canvas->sk_canvas()) {
   DCHECK(canvas_skia_);
   flags_.setTextEncoding(cc::PaintFlags::kGlyphID_TextEncoding);
   flags_.setStyle(cc::PaintFlags::kFill_Style);
@@ -231,14 +224,8 @@ void SkiaTextRenderer::SetForegroundColor(SkColor foreground) {
   flags_.setColor(foreground);
 }
 
-void SkiaTextRenderer::SetShader(sk_sp<SkShader> shader) {
-  flags_.setShader(cc::WrapSkShader(std::move(shader)));
-}
-
-void SkiaTextRenderer::SetUnderlineMetrics(SkScalar thickness,
-                                           SkScalar position) {
-  underline_thickness_ = thickness;
-  underline_position_ = position;
+void SkiaTextRenderer::SetShader(sk_sp<cc::PaintShader> shader) {
+  flags_.setShader(std::move(shader));
 }
 
 void SkiaTextRenderer::DrawPosText(const SkPoint* pos,
@@ -248,94 +235,26 @@ void SkiaTextRenderer::DrawPosText(const SkPoint* pos,
   canvas_skia_->drawPosText(&glyphs[0], byte_length, &pos[0], flags_);
 }
 
-void SkiaTextRenderer::DrawDecorations(int x, int y, int width, bool underline,
-                                       bool strike, bool diagonal_strike) {
-  if (underline)
-    DrawUnderline(x, y, width);
-  if (strike)
-    DrawStrike(x, y, width);
-  if (diagonal_strike) {
-    if (!diagonal_)
-      diagonal_.reset(new DiagonalStrike(canvas_, Point(x, y), flags_));
-    diagonal_->AddPiece(width, flags_.getColor());
-  } else if (diagonal_) {
-    EndDiagonalStrike();
-  }
-}
-
-void SkiaTextRenderer::EndDiagonalStrike() {
-  if (diagonal_) {
-    diagonal_->Draw();
-    diagonal_.reset();
-  }
-}
-
 void SkiaTextRenderer::DrawUnderline(int x, int y, int width) {
   SkScalar x_scalar = SkIntToScalar(x);
+  const SkScalar text_size = flags_.getTextSize();
   SkRect r = SkRect::MakeLTRB(
-      x_scalar, y + underline_position_, x_scalar + width,
-      y + underline_position_ + underline_thickness_);
-  if (underline_thickness_ == kUnderlineMetricsNotSet) {
-    const SkScalar text_size = flags_.getTextSize();
-    r.fTop = text_size * kUnderlineOffset + y;
-    r.fBottom = r.fTop + text_size * kLineThickness;
-  }
+      x_scalar, y + text_size * kUnderlineOffset, x_scalar + width,
+      y + (text_size * (kUnderlineOffset + kLineThicknessFactor)));
   canvas_skia_->drawRect(r, flags_);
 }
 
-void SkiaTextRenderer::DrawStrike(int x, int y, int width) const {
+void SkiaTextRenderer::DrawStrike(int x,
+                                  int y,
+                                  int width,
+                                  SkScalar thickness_factor) {
   const SkScalar text_size = flags_.getTextSize();
-  const SkScalar height = text_size * kLineThickness;
-  const SkScalar offset = text_size * kStrikeThroughOffset + y;
+  const SkScalar height = text_size * thickness_factor;
+  const SkScalar top = y - text_size * kStrikeThroughOffset - height / 2;
   SkScalar x_scalar = SkIntToScalar(x);
   const SkRect r =
-      SkRect::MakeLTRB(x_scalar, offset, x_scalar + width, offset + height);
+      SkRect::MakeLTRB(x_scalar, top, x_scalar + width, top + height);
   canvas_skia_->drawRect(r, flags_);
-}
-
-SkiaTextRenderer::DiagonalStrike::DiagonalStrike(Canvas* canvas,
-                                                 Point start,
-                                                 const cc::PaintFlags& flags)
-    : canvas_(canvas), start_(start), flags_(flags), total_length_(0) {}
-
-SkiaTextRenderer::DiagonalStrike::~DiagonalStrike() {
-}
-
-void SkiaTextRenderer::DiagonalStrike::AddPiece(int length, SkColor color) {
-  pieces_.push_back(Piece(length, color));
-  total_length_ += length;
-}
-
-void SkiaTextRenderer::DiagonalStrike::Draw() {
-  const SkScalar text_size = flags_.getTextSize();
-  const SkScalar offset = text_size * kDiagonalStrikeMarginOffset;
-  const int thickness = SkScalarCeilToInt(text_size * kLineThickness * 2);
-  const int height = SkScalarCeilToInt(text_size - offset);
-  const Point end = start_ + Vector2d(total_length_, -height);
-  const int clip_height = height + 2 * thickness;
-
-  flags_.setAntiAlias(true);
-  flags_.setStrokeWidth(SkIntToScalar(thickness));
-
-  const bool clipped = pieces_.size() > 1;
-  int x = start_.x();
-
-  for (size_t i = 0; i < pieces_.size(); ++i) {
-    flags_.setColor(pieces_[i].second);
-
-    if (clipped) {
-      canvas_->Save();
-      canvas_->ClipRect(
-          Rect(x, end.y() - thickness, pieces_[i].first, clip_height));
-    }
-
-    canvas_->DrawLine(start_, end, flags_);
-
-    if (clipped)
-      canvas_->Restore();
-
-    x += pieces_[i].first;
-  }
 }
 
 StyleIterator::StyleIterator(const BreakList<SkColor>& colors,
@@ -1063,7 +982,8 @@ RenderText::RenderText()
       subpixel_rendering_suppressed_(false),
       clip_to_display_rect_(true),
       baseline_(kInvalidBaseline),
-      cached_bounds_and_offset_valid_(false) {}
+      cached_bounds_and_offset_valid_(false),
+      strike_thickness_factor_(kLineThicknessFactor) {}
 
 SelectionModel RenderText::GetAdjacentSelectionModel(
     const SelectionModel& current,

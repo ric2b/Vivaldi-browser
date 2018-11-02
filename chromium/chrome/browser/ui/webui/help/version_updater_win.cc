@@ -5,10 +5,8 @@
 #include "chrome/browser/ui/webui/help/version_updater_win.h"
 
 #include "base/memory/weak_ptr.h"
-#include "base/task_runner_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/first_run/upgrade_util.h"
 #include "chrome/grit/generated_resources.h"
@@ -31,45 +29,28 @@ void VersionUpdaterWin::CheckForUpdate(const StatusCallback& callback,
   // There is no supported integration with Google Update for Chromium.
   callback_ = callback;
 
-  // On-demand updates for Chrome don't work in Vista RTM when UAC is turned
-  // off. So, in this case, the version updater must not mention
-  // on-demand updates. Silent updates (in the background) should still
-  // work as before - enabling UAC or installing the latest service pack
-  // for Vista is another option.
-  if (!(base::win::GetVersion() == base::win::VERSION_VISTA &&
-        (base::win::OSInfo::GetInstance()->service_pack().major == 0) &&
-        !base::win::UserAccountControlIsEnabled())) {
-    callback_.Run(CHECKING, 0, std::string(), 0, base::string16());
-    BeginUpdateCheckOnFileThread(false /* !install_update_if_possible */);
-  }
+  callback_.Run(CHECKING, 0, std::string(), 0, base::string16());
+  DoBeginUpdateCheck(false /* !install_update_if_possible */);
 }
 
 void VersionUpdaterWin::OnUpdateCheckComplete(
     const base::string16& new_version) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  Status status = CHECKING;
   if (new_version.empty()) {
     // Google Update says that no new version is available. Check to see if a
     // restart is needed for a previously-applied update to take effect.
-    if (base::PostTaskAndReplyWithResult(
-            content::BrowserThread::GetBlockingPool(),
-            FROM_HERE,
-            base::Bind(&upgrade_util::IsUpdatePendingRestart),
-            base::Bind(&VersionUpdaterWin::OnPendingRestartCheck,
-                       weak_factory_.GetWeakPtr()))) {
-      // Early exit since callback_ will be Run in OnPendingRestartCheck.
-      return;
-    }
-    // Failure to post the task means that Chrome is shutting down. A pending
-    // update (if there is one) will be applied as Chrome exits, so tell the
-    // caller that it is up to date in either case.
-    status = UPDATED;
-  } else {
-    // Notify the caller that the update is now beginning and initiate it.
-    status = UPDATING;
-    BeginUpdateCheckOnFileThread(true /* install_update_if_possible */);
+    base::PostTaskWithTraitsAndReplyWithResult(
+        FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
+        base::Bind(&upgrade_util::IsUpdatePendingRestart),
+        base::Bind(&VersionUpdaterWin::OnPendingRestartCheck,
+                   weak_factory_.GetWeakPtr()));
+    // Early exit since callback_ will be Run in OnPendingRestartCheck.
+    return;
   }
-  callback_.Run(status, 0, std::string(), 0, base::string16());
+
+  // Notify the caller that the update is now beginning and initiate it.
+  DoBeginUpdateCheck(true /* install_update_if_possible */);
+  callback_.Run(UPDATING, 0, std::string(), 0, base::string16());
 }
 
 void VersionUpdaterWin::OnUpgradeProgress(int progress,
@@ -114,13 +95,10 @@ void VersionUpdaterWin::OnError(GoogleUpdateErrorCode error_code,
   callback_.Run(status, 0, std::string(), 0, message);
 }
 
-void VersionUpdaterWin::BeginUpdateCheckOnFileThread(
-    bool install_update_if_possible) {
+void VersionUpdaterWin::DoBeginUpdateCheck(bool install_update_if_possible) {
   // Disconnect from any previous attempts to avoid redundant callbacks.
   weak_factory_.InvalidateWeakPtrs();
-  BeginUpdateCheck(content::BrowserThread::GetTaskRunnerForThread(
-                       content::BrowserThread::FILE),
-                   g_browser_process->GetApplicationLocale(),
+  BeginUpdateCheck(g_browser_process->GetApplicationLocale(),
                    install_update_if_possible, owner_widget_,
                    weak_factory_.GetWeakPtr());
 }

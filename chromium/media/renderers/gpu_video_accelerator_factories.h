@@ -96,6 +96,7 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
                               uint32_t texture_target) = 0;
   virtual void DeleteTexture(uint32_t texture_id) = 0;
   virtual gpu::SyncToken CreateSyncToken() = 0;
+  virtual void ShallowFlushCHROMIUM() = 0;
 
   virtual void WaitSyncToken(const gpu::SyncToken& sync_token) = 0;
 
@@ -127,12 +128,6 @@ class MEDIA_EXPORT GpuVideoAcceleratorFactories {
   // Returns the supported codec profiles of video encode accelerator.
   virtual VideoEncodeAccelerator::SupportedProfiles
       GetVideoEncodeAcceleratorSupportedProfiles() = 0;
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  // Returns route ID used internally by the factory to communicate with
-  // GPU process.
-  virtual int GetRouteID() = 0;
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
  protected:
   friend class base::RefCounted<GpuVideoAcceleratorFactories>;

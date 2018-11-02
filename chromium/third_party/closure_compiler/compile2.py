@@ -14,7 +14,6 @@ import sys
 import tempfile
 
 import processor
-import error_filter
 
 
 _CURRENT_DIR = os.path.join(os.path.dirname(__file__))
@@ -45,7 +44,6 @@ class Checker(object):
     self._target = None
     self._temp_files = []
     self._verbose = verbose
-    self._error_filter = error_filter.PromiseErrorFilter()
 
   def _nuke_temp_files(self):
     """Deletes any temp files this class knows about."""
@@ -121,29 +119,6 @@ class Checker(object):
     """
     real_file = self._processor.get_file_from_line(match.group(1))
     return "%s:%d" % (os.path.abspath(real_file.file), real_file.line_number)
-
-  def _filter_errors(self, errors):
-    """Removes some extraneous errors. For example, we ignore:
-
-      Variable x first declared in /tmp/expanded/file
-
-    Because it's just a duplicated error (it'll only ever show up 2+ times).
-    We also ignore Promise-based errors:
-
-      found   : function (VolumeInfo): (Promise<(DirectoryEntry|null)>|null)
-      required: (function (Promise<VolumeInfo>): ?|null|undefined)
-
-    as templates don't work with Promises in all cases yet. See
-    https://github.com/google/closure-compiler/issues/715 for details.
-
-    Args:
-      errors: A list of string errors extracted from Closure Compiler output.
-
-    Return:
-      A slimmer, sleeker list of relevant errors (strings).
-    """
-    first_declared_in = lambda e: " first declared in " not in e
-    return self._error_filter.filter(filter(first_declared_in, errors))
 
   def _clean_up_error(self, error):
     """Reverse the effects that funky <include> preprocessing steps have on
@@ -268,7 +243,7 @@ class Checker(object):
 
     self._log_debug("Args: %s" % " ".join(args))
 
-    _, stderr = self.run_jar(self._compiler_jar, args)
+    return_code, stderr = self.run_jar(self._compiler_jar, args)
 
     errors = stderr.strip().split("\n\n")
     maybe_summary = errors.pop()
@@ -287,7 +262,7 @@ class Checker(object):
         os.remove(out_file)
       if os.path.exists(self._MAP_FILE_FORMAT % out_file):
         os.remove(self._MAP_FILE_FORMAT % out_file)
-    elif checks_only:
+    elif checks_only and return_code == 0:
       # Compile succeeded but --checks_only disables --js_output_file from
       # actually writing a file. Write a file ourselves so incremental builds
       # still work.
@@ -295,8 +270,7 @@ class Checker(object):
         f.write('')
 
     if process_includes:
-      filtered_errors = self._filter_errors(errors)
-      errors = map(self._clean_up_error, filtered_errors)
+      errors = map(self._clean_up_error, errors)
       output = self._format_errors(errors)
 
       if errors:
@@ -306,7 +280,7 @@ class Checker(object):
         self._log_debug("Output: %s" % output)
 
     self._nuke_temp_files()
-    return bool(errors), stderr
+    return bool(errors) or return_code > 0, stderr
 
 
 if __name__ == "__main__":

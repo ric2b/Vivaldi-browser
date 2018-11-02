@@ -12,15 +12,15 @@
 
 #include "base/memory/shared_memory.h"
 #include "base/values.h"
-#include "components/version_info/version_info.h"
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/socket_permission_request.h"
 #include "extensions/common/api/messaging/message.h"
 #include "extensions/common/api/messaging/port_id.h"
+#include "extensions/common/common_param_traits.h"
 #include "extensions/common/draggable_region.h"
+#include "extensions/common/event_filtering_info.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extensions_client.h"
-#include "extensions/common/features/feature_session_type.h"
 #include "extensions/common/host_id.h"
 #include "extensions/common/permissions/media_galleries_permission_data.h"
 #include "extensions/common/permissions/permission_set.h"
@@ -47,9 +47,6 @@ IPC_ENUM_TRAITS_MAX_VALUE(extensions::UserScript::RunLocation,
                           extensions::UserScript::RUN_LOCATION_LAST - 1)
 
 IPC_ENUM_TRAITS_MAX_VALUE(HostID::HostType, HostID::HOST_TYPE_LAST)
-IPC_ENUM_TRAITS_MAX_VALUE(version_info::Channel, version_info::Channel::STABLE)
-IPC_ENUM_TRAITS_MAX_VALUE(extensions::FeatureSessionType,
-                          extensions::FeatureSessionType::LAST)
 
 // Parameters structure for ExtensionHostMsg_AddAPIActionToActivityLog and
 // ExtensionHostMsg_AddEventToActivityLog.
@@ -120,6 +117,10 @@ IPC_STRUCT_BEGIN(ExtensionHostMsg_Request_Params)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(ExtensionMsg_DispatchEvent_Params)
+  // If this event is for a service worker, then this is the worker thread
+  // id. Otherwise, this is 0.
+  IPC_STRUCT_MEMBER(int, worker_thread_id)
+
   // The id of the extension to dispatch the event to.
   IPC_STRUCT_MEMBER(std::string, extension_id)
 
@@ -133,7 +134,7 @@ IPC_STRUCT_BEGIN(ExtensionMsg_DispatchEvent_Params)
   IPC_STRUCT_MEMBER(bool, is_user_gesture)
 
   // Additional filtering info for the event.
-  IPC_STRUCT_MEMBER(base::DictionaryValue, filtering_info)
+  IPC_STRUCT_MEMBER(extensions::EventFilteringInfo, filtering_info)
 IPC_STRUCT_END()
 
 // Allows an extension to execute code in a tab.
@@ -265,6 +266,14 @@ IPC_STRUCT_TRAITS_BEGIN(extensions::PortId)
   IPC_STRUCT_TRAITS_MEMBER(context_id)
   IPC_STRUCT_TRAITS_MEMBER(port_number)
   IPC_STRUCT_TRAITS_MEMBER(is_opener)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(extensions::EventFilteringInfo)
+  IPC_STRUCT_TRAITS_MEMBER(url)
+  IPC_STRUCT_TRAITS_MEMBER(service_type)
+  IPC_STRUCT_TRAITS_MEMBER(instance_id)
+  IPC_STRUCT_TRAITS_MEMBER(window_type)
+  IPC_STRUCT_TRAITS_MEMBER(window_exposed_by_default)
 IPC_STRUCT_TRAITS_END()
 
 // Singly-included section for custom IPC traits.
@@ -643,9 +652,10 @@ IPC_MESSAGE_ROUTED2(ExtensionMsg_DispatchOnDisconnect,
 
 // Informs the renderer what channel (dev, beta, stable, etc) and user session
 // type is running.
-IPC_MESSAGE_CONTROL2(ExtensionMsg_SetSessionInfo,
+IPC_MESSAGE_CONTROL3(ExtensionMsg_SetSessionInfo,
                      version_info::Channel /* channel */,
-                     extensions::FeatureSessionType /* session_type */)
+                     extensions::FeatureSessionType /* session_type */,
+                     bool /* is_lock_screen_context */)
 
 // Notify the renderer that its window has closed.
 IPC_MESSAGE_ROUTED0(ExtensionMsg_AppWindowClosed)
@@ -683,17 +693,19 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_RequestForIOThread,
                      ExtensionHostMsg_Request_Params)
 
 // Notify the browser that the given extension added a listener to an event.
-IPC_MESSAGE_CONTROL3(ExtensionHostMsg_AddListener,
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_AddListener,
                      std::string /* extension_id */,
-                     GURL /* listener_url */,
-                     std::string /* name */)
+                     GURL /* listener_or_worker_scope_url */,
+                     std::string /* name */,
+                     int /* worker_thread_id */)
 
 // Notify the browser that the given extension removed a listener from an
 // event.
-IPC_MESSAGE_CONTROL3(ExtensionHostMsg_RemoveListener,
+IPC_MESSAGE_CONTROL4(ExtensionHostMsg_RemoveListener,
                      std::string /* extension_id */,
-                     GURL /* listener_url */,
-                     std::string /* name */)
+                     GURL /* listener_or_worker_scope_url */,
+                     std::string /* name */,
+                     int /* worker_thread_id */)
 
 // Notify the browser that the given extension added a listener to an event from
 // a lazy background page.
@@ -705,7 +717,21 @@ IPC_MESSAGE_CONTROL2(ExtensionHostMsg_AddLazyListener,
 // receiving the given event from a lazy background page.
 IPC_MESSAGE_CONTROL2(ExtensionHostMsg_RemoveLazyListener,
                      std::string /* extension_id */,
-                     std::string /* name */)
+                     std::string /* event_name */)
+
+// Notify the browser that the given extension added a listener to an event from
+// an extension service worker.
+IPC_MESSAGE_CONTROL3(ExtensionHostMsg_AddLazyServiceWorkerListener,
+                     std::string /* extension_id */,
+                     std::string /* name */,
+                     GURL /* service_worker_scope */)
+
+// Notify the browser that the given extension is no longer interested in
+// receiving the given event from an extension service worker.
+IPC_MESSAGE_CONTROL3(ExtensionHostMsg_RemoveLazyServiceWorkerListener,
+                     std::string /* extension_id */,
+                     std::string /* name */,
+                     GURL /* service_worker_scope */)
 
 // Notify the browser that the given extension added a listener to instances of
 // the named event that satisfy the filter.

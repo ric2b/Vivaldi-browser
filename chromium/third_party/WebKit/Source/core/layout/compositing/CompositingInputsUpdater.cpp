@@ -5,7 +5,8 @@
 #include "core/layout/compositing/CompositingInputsUpdater.h"
 
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
+#include "core/frame/UseCounter.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
@@ -105,8 +106,8 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
   const PaintLayer* previous_overflow_layer = layer->AncestorOverflowLayer();
   layer->UpdateAncestorOverflowLayer(info.last_overflow_clip_layer);
   if (info.last_overflow_clip_layer && layer->NeedsCompositingInputsUpdate() &&
-      layer->GetLayoutObject().Style()->GetPosition() == EPosition::kSticky) {
-    if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+      layer->GetLayoutObject().Style()->HasStickyConstrainedPosition()) {
+    if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
       if (info.last_overflow_clip_layer != previous_overflow_layer) {
         // Old ancestor scroller should no longer have these constraints.
         DCHECK(!previous_overflow_layer ||
@@ -157,7 +158,7 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
     PaintLayer::AncestorDependentCompositingInputs properties;
 
     if (!layer->IsRootLayer()) {
-      if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+      if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
         properties.unclipped_absolute_bounding_box =
             EnclosingIntRect(geometry_map_.AbsoluteRect(
                 FloatRect(layer->BoundingBoxForCompositingOverlapTest())));
@@ -191,7 +192,7 @@ void CompositingInputsUpdater::UpdateRecursive(PaintLayer* layer,
       if (layer_is_fixed_position && properties.filter_ancestor &&
           layer->FixedToViewport()) {
         UseCounter::Count(layer->GetLayoutObject().GetDocument(),
-                          UseCounter::kViewportFixedPositionUnderFilter);
+                          WebFeature::kViewportFixedPositionUnderFilter);
       }
 
       properties.nearest_fixed_position_layer =

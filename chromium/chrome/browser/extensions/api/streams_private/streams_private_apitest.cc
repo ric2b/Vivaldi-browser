@@ -30,6 +30,7 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "net/test/embedded_test_server/http_request.h"
 #include "net/test/embedded_test_server/http_response.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
 using content::BrowserContext;
@@ -321,10 +322,17 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateCrossSite) {
   EXPECT_TRUE(catcher.GetNextResult());
 }
 
+// Flaky on ChromeOS: http://crbug.com/746526.
+#if defined(OS_CHROMEOS)
+#define MAYBE_NavigateToAnAttachment DISABLED_NavigateToAnAttachment
+#else
+#define MAYBE_NavigateToAnAttachment NavigateToAnAttachment
+#endif
+
 // Tests that navigation to an attachment starts a download, even if there is an
 // extension with a file browser handler that can handle the attachment's MIME
 // type.
-IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateToAnAttachment) {
+IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_NavigateToAnAttachment) {
   InitializeDownloadSettings();
 
   ASSERT_TRUE(LoadTestExtension()) << message_;
@@ -359,10 +367,17 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, NavigateToAnAttachment) {
   EXPECT_TRUE(catcher.GetNextResult());
 }
 
+// Flaky on ChromeOS: http://crbug.com/746526.
+#if defined(OS_CHROMEOS)
+#define MAYBE_DirectDownload DISABLED_DirectDownload
+#else
+#define MAYBE_DirectDownload DirectDownload
+#endif
+
 // Tests that direct download requests don't get intercepted by
 // StreamsResourceThrottle, even if there is an extension with a file
 // browser handler that can handle the download's MIME type.
-IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, DirectDownload) {
+IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, MAYBE_DirectDownload) {
   InitializeDownloadSettings();
 
   ASSERT_TRUE(LoadTestExtension()) << message_;
@@ -386,7 +401,7 @@ IN_PROC_BROWSER_TEST_F(StreamsPrivateApiTest, DirectDownload) {
   ASSERT_TRUE(web_contents);
   std::unique_ptr<DownloadUrlParameters> params(
       DownloadUrlParameters::CreateForWebContentsMainFrame(
-          web_contents, url));
+          web_contents, url, TRAFFIC_ANNOTATION_FOR_TESTS));
   params->set_file_path(target_path);
 
   // Start download of the URL with a path "/text_path.txt" on the test server.

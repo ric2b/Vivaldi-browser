@@ -282,6 +282,7 @@ bool GestureRecognizerImpl::ProcessTouchEventPreDispatch(
 GestureRecognizer::Gestures GestureRecognizerImpl::AckTouchEvent(
     uint32_t unique_event_id,
     ui::EventResult result,
+    bool is_source_touch_event_set_non_blocking,
     GestureConsumer* consumer) {
   GestureProviderAura* gesture_provider = nullptr;
 
@@ -295,13 +296,19 @@ GestureRecognizer::Gestures GestureRecognizerImpl::AckTouchEvent(
   } else {
     gesture_provider = GetGestureProviderForConsumer(consumer);
   }
-  gesture_provider->OnTouchEventAck(unique_event_id, result != ER_UNHANDLED);
+  gesture_provider->OnTouchEventAck(unique_event_id, result != ER_UNHANDLED,
+                                    is_source_touch_event_set_non_blocking);
   return gesture_provider->GetAndResetPendingGestures();
 }
 
 bool GestureRecognizerImpl::CleanupStateForConsumer(
     GestureConsumer* consumer) {
   bool state_cleaned_up = false;
+  state_cleaned_up |= RemoveValueFromMap(&touch_id_target_, consumer);
+
+  // This is a bandaid fix for crbug/732232 that should be further looked into.
+  if (consumer_gesture_provider_.empty())
+    return state_cleaned_up;
 
   auto consumer_gesture_provider_it = consumer_gesture_provider_.find(consumer);
   if (consumer_gesture_provider_it != consumer_gesture_provider_.end()) {
@@ -312,8 +319,6 @@ bool GestureRecognizerImpl::CleanupStateForConsumer(
     state_cleaned_up = true;
     consumer_gesture_provider_.erase(consumer_gesture_provider_it);
   }
-
-  state_cleaned_up |= RemoveValueFromMap(&touch_id_target_, consumer);
   return state_cleaned_up;
 }
 

@@ -9,7 +9,9 @@
 #include "base/bind.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/sequenced_task_runner.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "chrome/browser/image_decoder.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -27,7 +29,7 @@ class IconImageRequest : public ImageDecoder::ImageRequest {
     gfx::ImageSkia image = gfx::ImageSkia::CreateFrom1xBitmap(decoded_image);
     image.MakeThreadSafe();
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                            base::Bind(result_callback_, image));
+                            base::BindOnce(result_callback_, image));
     delete this;
   }
 
@@ -35,7 +37,7 @@ class IconImageRequest : public ImageDecoder::ImageRequest {
     LOG(ERROR) << "Failed to decode icon image.";
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(result_callback_, base::Optional<gfx::ImageSkia>()));
+        base::BindOnce(result_callback_, base::Optional<gfx::ImageSkia>()));
     delete this;
   }
 
@@ -55,7 +57,7 @@ void LoadOnBlockingPool(
     LOG(ERROR) << "Failed to read icon file.";
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(result_callback, base::Optional<gfx::ImageSkia>()));
+        base::BindOnce(result_callback, base::Optional<gfx::ImageSkia>()));
     return;
   }
 
@@ -72,15 +74,14 @@ KioskAppIconLoader::KioskAppIconLoader(Delegate* delegate)
 KioskAppIconLoader::~KioskAppIconLoader() = default;
 
 void KioskAppIconLoader::Start(const base::FilePath& icon_path) {
-  base::SequencedWorkerPool* pool = BrowserThread::GetBlockingPool();
-  base::SequencedWorkerPool::SequenceToken token = pool->GetSequenceToken();
-  task_runner_ = pool->GetSequencedTaskRunnerWithShutdownBehavior(
-      token, base::SequencedWorkerPool::SKIP_ON_SHUTDOWN);
-  task_runner_->PostTask(
+  scoped_refptr<base::SequencedTaskRunner> task_runner =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+  task_runner->PostTask(
       FROM_HERE,
-      base::Bind(&LoadOnBlockingPool, icon_path, task_runner_,
-                 base::Bind(&KioskAppIconLoader::OnImageDecodingFinished,
-                            weak_factory_.GetWeakPtr())));
+      base::BindOnce(&LoadOnBlockingPool, icon_path, task_runner,
+                     base::Bind(&KioskAppIconLoader::OnImageDecodingFinished,
+                                weak_factory_.GetWeakPtr())));
 }
 
 void KioskAppIconLoader::OnImageDecodingFinished(

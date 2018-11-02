@@ -15,7 +15,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "components/viz/display_compositor/host_shared_bitmap_manager.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
@@ -31,8 +31,10 @@
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_iterator.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/service_manager_connection.h"
 #include "media/media_features.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
+#include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
 
 namespace content {
 
@@ -47,9 +49,11 @@ MockRenderProcessHost::MockRenderProcessHost(BrowserContext* browser_context)
       deletion_callback_called_(false),
       is_for_guests_only_(false),
       is_process_backgrounded_(false),
+      is_unused_(true),
       worker_ref_count_(0),
       shared_bitmap_allocation_notifier_impl_(
-          viz::HostSharedBitmapManager::current()) {
+          viz::ServerSharedBitmapManager::current()),
+      weak_ptr_factory_(this) {
   // Child process security operations can't be unit tested unless we add
   // ourselves as an existing child process.
   ChildProcessSecurityPolicyImpl::GetInstance()->Add(GetID());
@@ -150,9 +154,14 @@ bool MockRenderProcessHost::IsForGuestsOnly() const {
   return is_for_guests_only_;
 }
 
-void MockRenderProcessHost::OnAudioStreamAdded() {}
+RendererAudioOutputStreamFactoryContext*
+MockRenderProcessHost::GetRendererAudioOutputStreamFactoryContext() {
+  return nullptr;
+}
 
-void MockRenderProcessHost::OnAudioStreamRemoved() {}
+void MockRenderProcessHost::OnMediaStreamAdded() {}
+
+void MockRenderProcessHost::OnMediaStreamRemoved() {}
 
 StoragePartition* MockRenderProcessHost::GetStoragePartition() const {
   return BrowserContext::GetDefaultStoragePartition(browser_context_);
@@ -165,7 +174,10 @@ bool MockRenderProcessHost::Shutdown(int exit_code, bool wait) {
   return true;
 }
 
-bool MockRenderProcessHost::FastShutdownIfPossible() {
+bool MockRenderProcessHost::FastShutdownIfPossible(size_t page_count,
+                                                   bool skip_unload_handlers) {
+  if (GetActiveViewCount() != page_count)
+    return false;
   // We aren't actually going to do anything, but set |fast_shutdown_started_|
   // to true so that tests know we've been called.
   fast_shutdown_started_ = true;
@@ -210,11 +222,19 @@ bool MockRenderProcessHost::IgnoreInputEvents() const {
   return false;
 }
 
+static void DeleteIt(base::WeakPtr<MockRenderProcessHost> h) {
+  if (h)
+    delete h.get();
+}
+
 void MockRenderProcessHost::Cleanup() {
   if (listeners_.IsEmpty()) {
     for (auto& observer : observers_)
       observer.RenderProcessHostDestroyed(this);
-    base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, this);
+    // Post the delete of |this| as a WeakPtr so that if |this| is deleted by a
+    // test directly, we don't double free.
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&DeleteIt, weak_ptr_factory_.GetWeakPtr()));
     RenderProcessHostImpl::UnregisterHost(GetID());
     deletion_callback_called_ = true;
   }
@@ -254,12 +274,6 @@ IPC::ChannelProxy* MockRenderProcessHost::GetChannel() {
 }
 
 void MockRenderProcessHost::AddFilter(BrowserMessageFilter* filter) {
-}
-
-bool MockRenderProcessHost::FastShutdownForPageCount(size_t count) {
-  if (GetActiveViewCount() == count)
-    return FastShutdownIfPossible();
-  return false;
 }
 
 base::TimeDelta MockRenderProcessHost::GetChildProcessIdleTime() const {
@@ -333,12 +347,36 @@ mojom::Renderer* MockRenderProcessHost::GetRendererInterface() {
   return renderer_interface_->get();
 }
 
+resource_coordinator::ResourceCoordinatorInterface*
+MockRenderProcessHost::GetProcessResourceCoordinator() {
+  if (!process_resource_coordinator_) {
+    service_manager::Connector* connector =
+        content::ServiceManagerConnection::GetForProcess()->GetConnector();
+    process_resource_coordinator_ =
+        base::MakeUnique<resource_coordinator::ResourceCoordinatorInterface>(
+            connector, resource_coordinator::CoordinationUnitType::kProcess);
+  }
+  return process_resource_coordinator_.get();
+}
+
 void MockRenderProcessHost::SetIsNeverSuitableForReuse() {
   NOTREACHED();
 }
 
 bool MockRenderProcessHost::MayReuseHost() {
   return true;
+}
+
+bool MockRenderProcessHost::IsUnused() {
+  return is_unused_;
+}
+
+void MockRenderProcessHost::SetIsUsed() {
+  is_unused_ = false;
+}
+
+bool MockRenderProcessHost::HostHasNotBeenUsed() {
+  return IsUnused() && listeners_.IsEmpty() && GetWorkerRefCount() == 0;
 }
 
 void MockRenderProcessHost::FilterURL(bool empty_allowed, GURL* url) {
@@ -406,8 +444,7 @@ MockRenderProcessHostFactory::~MockRenderProcessHostFactory() {
 }
 
 RenderProcessHost* MockRenderProcessHostFactory::CreateRenderProcessHost(
-    BrowserContext* browser_context,
-    SiteInstance* site_instance) const {
+    BrowserContext* browser_context) const {
   processes_.push_back(
       base::MakeUnique<MockRenderProcessHost>(browser_context));
   processes_.back()->SetFactory(this);
@@ -424,7 +461,7 @@ void MockRenderProcessHostFactory::Remove(MockRenderProcessHost* host) const {
   }
 }
 
-viz::HostSharedBitmapManagerClient*
+viz::SharedBitmapAllocationNotifierImpl*
 MockRenderProcessHost::GetSharedBitmapAllocationNotifier() {
   return &shared_bitmap_allocation_notifier_impl_;
 }

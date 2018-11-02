@@ -30,6 +30,7 @@
 #include "ui/events/null_event_targeter.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 
 namespace ash {
 
@@ -42,10 +43,6 @@ AshWindowTreeHostX11::AshWindowTreeHostX11(const gfx::Rect& initial_bounds)
 AshWindowTreeHostX11::~AshWindowTreeHostX11() {
   aura::Env::GetInstance()->RemoveObserver(this);
   UnConfineCursor();
-}
-
-void AshWindowTreeHostX11::ToggleFullScreen() {
-  NOTIMPLEMENTED();
 }
 
 bool AshWindowTreeHostX11::ConfineCursorToRootWindow() {
@@ -216,7 +213,7 @@ void AshWindowTreeHostX11::SetCrOSTapPaused(bool state) {
   if (!ui::IsXInput2Available())
     return;
   // Temporarily pause tap-to-click when the cursor is hidden.
-  Atom prop = atom_cache()->GetAtom("Tap Paused");
+  Atom prop = gfx::GetAtom("Tap Paused");
   unsigned char value = state;
   const XIDeviceList& dev_list =
       ui::DeviceListCacheX11::GetInstance()->GetXI2DeviceList(xdisplay());

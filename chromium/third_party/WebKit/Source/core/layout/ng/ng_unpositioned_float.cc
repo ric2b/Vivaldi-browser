@@ -4,20 +4,21 @@
 
 #include "core/layout/ng/ng_unpositioned_float.h"
 
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/style/ComputedStyle.h"
 
 namespace blink {
 
 bool NGUnpositionedFloat::IsLeft() const {
-  return node->Style().Floating() == EFloat::kLeft;
+  return node.Style().Floating() == EFloat::kLeft;
 }
 
 bool NGUnpositionedFloat::IsRight() const {
-  return node->Style().Floating() == EFloat::kRight;
+  return node.Style().Floating() == EFloat::kRight;
 }
 
 EClear NGUnpositionedFloat::ClearType() const {
-  return node->Style().Clear();
+  return node.Style().Clear();
 }
 
 }  // namespace blink

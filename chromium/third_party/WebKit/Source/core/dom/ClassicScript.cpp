@@ -22,24 +22,23 @@ void LogScriptMIMEType(LocalFrame* frame,
                        const SecurityOrigin* security_origin) {
   if (MIMETypeRegistry::IsSupportedJavaScriptMIMEType(mime_type))
     return;
-  bool is_text = mime_type.StartsWith("text/", kTextCaseASCIIInsensitive);
+  bool is_text = mime_type.StartsWithIgnoringASCIICase("text/");
   if (is_text && MIMETypeRegistry::IsLegacySupportedJavaScriptLanguage(
                      mime_type.Substring(5)))
     return;
   bool is_same_origin = security_origin->CanRequest(resource->Url());
   bool is_application =
-      !is_text &&
-      mime_type.StartsWith("application/", kTextCaseASCIIInsensitive);
+      !is_text && mime_type.StartsWithIgnoringASCIICase("application/");
 
-  UseCounter::Feature feature =
+  WebFeature feature =
       is_same_origin
-          ? (is_text ? UseCounter::kSameOriginTextScript
-                     : is_application ? UseCounter::kSameOriginApplicationScript
-                                      : UseCounter::kSameOriginOtherScript)
+          ? (is_text ? WebFeature::kSameOriginTextScript
+                     : is_application ? WebFeature::kSameOriginApplicationScript
+                                      : WebFeature::kSameOriginOtherScript)
           : (is_text
-                 ? UseCounter::kCrossOriginTextScript
-                 : is_application ? UseCounter::kCrossOriginApplicationScript
-                                  : UseCounter::kCrossOriginOtherScript);
+                 ? WebFeature::kCrossOriginTextScript
+                 : is_application ? WebFeature::kCrossOriginApplicationScript
+                                  : WebFeature::kCrossOriginOtherScript);
 
   UseCounter::Count(frame, feature);
 }
@@ -49,10 +48,6 @@ void LogScriptMIMEType(LocalFrame* frame,
 DEFINE_TRACE(ClassicScript) {
   Script::Trace(visitor);
   visitor->Trace(script_source_code_);
-}
-
-bool ClassicScript::IsEmpty() const {
-  return GetScriptSourceCode().IsEmpty();
 }
 
 bool ClassicScript::CheckMIMETypeBeforeRunScript(
@@ -82,13 +77,13 @@ bool ClassicScript::CheckMIMETypeBeforeRunScript(
             "' because its MIME type ('" + mime_type +
             "') is not executable."));
     if (mime_type.StartsWith("image/"))
-      UseCounter::Count(frame, UseCounter::kBlockedSniffingImageToScript);
+      UseCounter::Count(frame, WebFeature::kBlockedSniffingImageToScript);
     else if (mime_type.StartsWith("audio/"))
-      UseCounter::Count(frame, UseCounter::kBlockedSniffingAudioToScript);
+      UseCounter::Count(frame, WebFeature::kBlockedSniffingAudioToScript);
     else if (mime_type.StartsWith("video/"))
-      UseCounter::Count(frame, UseCounter::kBlockedSniffingVideoToScript);
+      UseCounter::Count(frame, WebFeature::kBlockedSniffingVideoToScript);
     else if (mime_type == "text/csv")
-      UseCounter::Count(frame, UseCounter::kBlockedSniffingCSVToScript);
+      UseCounter::Count(frame, WebFeature::kBlockedSniffingCSVToScript);
     return false;
   }
 
@@ -107,8 +102,7 @@ void ClassicScript::RunScript(LocalFrame* frame,
   } else {
     CHECK(GetScriptSourceCode().GetResource());
     access_control_status =
-        GetScriptSourceCode().GetResource()->CalculateAccessControlStatus(
-            security_origin);
+        GetScriptSourceCode().GetResource()->CalculateAccessControlStatus();
   }
 
   frame->GetScriptController().ExecuteScriptInMainWorld(GetScriptSourceCode(),

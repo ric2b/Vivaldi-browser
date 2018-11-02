@@ -34,7 +34,9 @@
 
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/memory_dump_manager.h"
+#include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
+#include "platform/Language.h"
 #include "platform/MemoryCoordinator.h"
 #include "platform/PartitionAllocMemoryDumpProvider.h"
 #include "platform/fonts/FontCacheMemoryDumpProvider.h"
@@ -53,6 +55,7 @@
 #include "public/platform/WebPrerenderingSupport.h"
 #include "public/platform/WebRTCCertificateGenerator.h"
 #include "public/platform/WebRTCPeerConnectionHandler.h"
+#include "public/platform/WebSocketHandshakeThrottle.h"
 #include "public/platform/WebStorageNamespace.h"
 #include "public/platform/WebThread.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerCacheStorage.h"
@@ -121,6 +124,12 @@ void Platform::Initialize(Platform* platform) {
         base::ThreadTaskRunnerHandle::Get());
 
   ThreadState::AttachMainThread();
+
+  // FontFamilyNames are used by platform/fonts and are initialized by core.
+  // In case core is not available (like on PPAPI plugins), we need to init
+  // them here.
+  FontFamilyNames::init();
+  InitializePlatformLanguage();
 
   // TODO(ssid): remove this check after fixing crbug.com/486782.
   if (g_platform->main_thread_) {
@@ -224,6 +233,11 @@ std::unique_ptr<WebCanvasCaptureHandler> Platform::CreateCanvasCaptureHandler(
     const WebSize&,
     double,
     WebMediaStreamTrack*) {
+  return nullptr;
+}
+
+std::unique_ptr<WebSocketHandshakeThrottle>
+Platform::CreateWebSocketHandshakeThrottle() {
   return nullptr;
 }
 

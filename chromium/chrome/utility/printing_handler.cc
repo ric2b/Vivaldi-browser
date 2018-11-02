@@ -37,8 +37,8 @@ bool Send(IPC::Message* message) {
   return content::UtilityThread::Get()->Send(message);
 }
 
-void ReleaseProcessIfNeeded() {
-  content::UtilityThread::Get()->ReleaseProcessIfNeeded();
+void ReleaseProcess() {
+  content::UtilityThread::Get()->ReleaseProcess();
 }
 
 #if defined(OS_WIN)
@@ -91,18 +91,22 @@ void PrintingHandler::OnRenderPDFPagesToMetafile(
   pdf_rendering_settings_ = settings;
   chrome_pdf::SetPDFUseGDIPrinting(pdf_rendering_settings_.mode ==
                                    PdfRenderSettings::Mode::GDI_TEXT);
-  int postscript_level;
+  int printing_mode;
   switch (pdf_rendering_settings_.mode) {
+    case PdfRenderSettings::Mode::TEXTONLY:
+      printing_mode = chrome_pdf::PrintingMode::kTextOnly;
+      break;
     case PdfRenderSettings::Mode::POSTSCRIPT_LEVEL2:
-      postscript_level = 2;
+      printing_mode = chrome_pdf::PrintingMode::kPostScript2;
       break;
     case PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3:
-      postscript_level = 3;
+      printing_mode = chrome_pdf::PrintingMode::kPostScript3;
       break;
     default:
-      postscript_level = 0;  // Not using postscript.
+      // Not using postscript or text only.
+      printing_mode = chrome_pdf::PrintingMode::kEmf;
   }
-  chrome_pdf::SetPDFPostscriptPrintingLevel(postscript_level);
+  chrome_pdf::SetPDFUsePrintMode(printing_mode);
 
   base::File pdf_file = IPC::PlatformFileForTransitToFile(pdf_transit);
   int page_count = LoadPDF(std::move(pdf_file));
@@ -126,7 +130,7 @@ void PrintingHandler::OnRenderPDFPagesToMetafileGetPage(
 }
 
 void PrintingHandler::OnRenderPDFPagesToMetafileStop() {
-  ReleaseProcessIfNeeded();
+  ReleaseProcess();
 }
 
 #endif  // defined(OS_WIN)
@@ -145,7 +149,7 @@ void PrintingHandler::OnRenderPDFPagesToPWGRaster(
   } else {
     Send(new ChromeUtilityHostMsg_RenderPDFPagesToPWGRaster_Failed());
   }
-  ReleaseProcessIfNeeded();
+  ReleaseProcess();
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 
@@ -317,7 +321,7 @@ void PrintingHandler::OnGetPrinterCapsAndDefaults(
     Send(new ChromeUtilityHostMsg_GetPrinterCapsAndDefaults_Failed(
         printer_name));
   }
-  ReleaseProcessIfNeeded();
+  ReleaseProcess();
 }
 
 void PrintingHandler::OnGetPrinterSemanticCapsAndDefaults(
@@ -337,7 +341,7 @@ void PrintingHandler::OnGetPrinterSemanticCapsAndDefaults(
     Send(new ChromeUtilityHostMsg_GetPrinterSemanticCapsAndDefaults_Failed(
         printer_name));
   }
-  ReleaseProcessIfNeeded();
+  ReleaseProcess();
 }
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
 

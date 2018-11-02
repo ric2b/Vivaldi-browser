@@ -4,6 +4,7 @@
 
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
 
+#include <sstream>
 #include <utility>
 #include <vector>
 
@@ -61,6 +62,10 @@ SubresourceFilterSafeBrowsingActivationThrottle::
                        base::OnTaskRunnerDeleter(io_task_runner_)),
       client_(client) {
   DCHECK(handle->IsInMainFrame());
+
+  CheckCurrentUrl();
+  // Check added to investigate crbug.com/733099.
+  CHECK(!database_client_ || !check_results_.empty());
 }
 
 SubresourceFilterSafeBrowsingActivationThrottle::
@@ -85,18 +90,24 @@ bool SubresourceFilterSafeBrowsingActivationThrottle::NavigationIsPageReload(
 
 content::NavigationThrottle::ThrottleCheckResult
 SubresourceFilterSafeBrowsingActivationThrottle::WillStartRequest() {
-  CheckCurrentUrl();
+  will_start_request_called_ = true;
   return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
 }
 
 content::NavigationThrottle::ThrottleCheckResult
 SubresourceFilterSafeBrowsingActivationThrottle::WillRedirectRequest() {
   CheckCurrentUrl();
+  // Check added to investigate crbug.com/733099.
+  CHECK(!database_client_ || !check_results_.empty());
   return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
 }
 
 content::NavigationThrottle::ThrottleCheckResult
 SubresourceFilterSafeBrowsingActivationThrottle::WillProcessResponse() {
+  // Checks added to investigate crbug.com/733099.
+  CHECK(will_start_request_called_);
+  CHECK(!database_client_ || !check_results_.empty());
+
   // No need to defer the navigation if the check already happened.
   if (!database_client_ || check_results_.back().finished) {
     NotifyResult();
@@ -122,7 +133,7 @@ void SubresourceFilterSafeBrowsingActivationThrottle::OnCheckUrlResultOnUI(
   stored_result = result;
   if (!defer_time_.is_null() && request_id == check_results_.size() - 1) {
     NotifyResult();
-    navigation_handle()->Resume();
+    Resume();
   }
 }
 
@@ -209,13 +220,13 @@ SubresourceFilterSafeBrowsingActivationThrottle::ComputeActivation(
   bool has_activated_config =
       highest_priority_activated_config !=
       config_list->configs_by_decreasing_priority().end();
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("loading"),
-               "ContentSubresourceFilterDriverFactory::"
-               "ComputeActivationForMainFrameNavigation",
-               "highest_priority_activated_config",
-               has_activated_config
-                   ? highest_priority_activated_config->ToTracedValue()
-                   : base::MakeUnique<base::trace_event::TracedValue>());
+  TRACE_EVENT1(
+      TRACE_DISABLED_BY_DEFAULT("loading"),
+      "SubresourceFilterSafeBrowsingActivationThrottle::ComputeActivation",
+      "highest_priority_activated_config",
+      has_activated_config
+          ? highest_priority_activated_config->ToTracedValue()
+          : base::MakeUnique<base::trace_event::TracedValue>());
 
   if (!has_activated_config)
     return ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET;
@@ -239,6 +250,17 @@ bool SubresourceFilterSafeBrowsingActivationThrottle::
         bool scheme_is_http_or_https,
         const Configuration::ActivationConditions& conditions,
         ActivationList matched_list) const {
+  // Avoid copies when tracing disabled.
+  auto list_to_string = [](ActivationList activation_list) {
+    std::ostringstream matched_list_stream;
+    matched_list_stream << activation_list;
+    return matched_list_stream.str();
+  };
+  TRACE_EVENT2(TRACE_DISABLED_BY_DEFAULT("loading"),
+               "SubresourceFilterSafeBrowsingActivationThrottle::"
+               "DoesMainFrameURLSatisfyActivationConditions",
+               "matched_list", list_to_string(matched_list), "conditions",
+               conditions.ToTracedValue());
   switch (conditions.activation_scope) {
     case ActivationScope::ALL_SITES:
       return true;

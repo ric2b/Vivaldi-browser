@@ -7,6 +7,8 @@
 #include "base/bind.h"
 #include "base/guid.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/time/default_clock.h"
 #include "chromeos/network/network_connect.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
@@ -25,12 +27,18 @@ WifiHotspotConnector::WifiHotspotConnector(
     : network_state_handler_(network_state_handler),
       network_connect_(network_connect),
       timer_(base::MakeUnique<base::OneShotTimer>()),
+      clock_(base::MakeUnique<base::DefaultClock>()),
       weak_ptr_factory_(this) {
   network_state_handler_->AddObserver(this, FROM_HERE);
 }
 
 WifiHotspotConnector::~WifiHotspotConnector() {
   network_state_handler_->RemoveObserver(this, FROM_HERE);
+
+  // If a connection attempt is active when this class is destroyed, the attempt
+  // has no time to finish successfully, so it is considered a failure.
+  if (!wifi_network_guid_.empty())
+    CompleteActiveConnectionAttempt(false /* success */);
 }
 
 void WifiHotspotConnector::ConnectToWifiHotspot(
@@ -52,16 +60,16 @@ void WifiHotspotConnector::ConnectToWifiHotspot(
         network_state_handler_->DisassociateTetherNetworkStateFromWifiNetwork(
             tether_network_guid_);
     if (successful_disassociation) {
-      PA_LOG(INFO) << "Wifi network with ID " << wifi_network_guid_
-                   << " successfully disassociated from Tether network with ID "
-                   << tether_network_guid_ << ".";
+      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                   << "successfully disassociated from Tether network (ID "
+                   << "\"" << tether_network_guid_ << "\").";
     } else {
-      PA_LOG(INFO) << "Wifi network with ID " << wifi_network_guid_
-                   << " failed to disassociate from Tether network with ID "
-                   << tether_network_guid_ << ".";
+      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                   << "failed to disassociate from Tether network ID (\""
+                   << tether_network_guid_ << "\").";
     }
 
-    InvokeWifiConnectionCallback(std::string());
+    CompleteActiveConnectionAttempt(false /* success */);
   }
 
   ssid_ = ssid;
@@ -73,10 +81,43 @@ void WifiHotspotConnector::ConnectToWifiHotspot(
                 base::TimeDelta::FromSeconds(kConnectionTimeoutSeconds),
                 base::Bind(&WifiHotspotConnector::OnConnectionTimeout,
                            weak_ptr_factory_.GetWeakPtr()));
+  connection_attempt_start_time_ = clock_->Now();
 
-  base::DictionaryValue properties =
-      CreateWifiPropertyDictionary(ssid, password);
-  network_connect_->CreateConfiguration(&properties, false /* shared */);
+  // If Wi-Fi is enabled, continue with creating the configuration of the
+  // hotspot. Otherwise, request that Wi-Fi be enabled and wait; see
+  // DeviceListChanged().
+  if (network_state_handler_->IsTechnologyEnabled(NetworkTypePattern::WiFi())) {
+    // Ensure that a possible previous pending callback to DeviceListChanged()
+    // won't result in a second call to CreateWifiConfiguration().
+    is_waiting_for_wifi_to_enable_ = false;
+
+    CreateWifiConfiguration();
+  } else if (!is_waiting_for_wifi_to_enable_) {
+    is_waiting_for_wifi_to_enable_ = true;
+
+    // Once Wi-Fi is enabled, DeviceListChanged() will be called.
+    network_state_handler_->SetTechnologyEnabled(
+        NetworkTypePattern::WiFi(), true /*enabled */,
+        base::Bind(&WifiHotspotConnector::OnEnableWifiError,
+                   weak_ptr_factory_.GetWeakPtr()));
+  }
+}
+
+void WifiHotspotConnector::OnEnableWifiError(
+    const std::string& error_name,
+    std::unique_ptr<base::DictionaryValue> error_data) {
+  is_waiting_for_wifi_to_enable_ = false;
+  PA_LOG(ERROR) << "Failed to enable Wi-Fi: " << error_name;
+}
+
+void WifiHotspotConnector::DeviceListChanged() {
+  if (is_waiting_for_wifi_to_enable_ &&
+      network_state_handler_->IsTechnologyEnabled(NetworkTypePattern::WiFi())) {
+    is_waiting_for_wifi_to_enable_ = false;
+
+    if (!ssid_.empty())
+      CreateWifiConfiguration();
+  }
 }
 
 void WifiHotspotConnector::NetworkPropertiesUpdated(
@@ -89,11 +130,17 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
 
   if (network->IsConnectedState()) {
     // If a connection occurred, notify observers and exit early.
-    InvokeWifiConnectionCallback(wifi_network_guid_);
+    CompleteActiveConnectionAttempt(true /* success */);
     return;
   }
 
-  if (network->connectable()) {
+  if (network->connectable() && !has_initiated_connection_to_current_network_) {
+    // Set |has_initiated_connection_to_current_network_| to true to ensure that
+    // this code path is only run once per connection attempt. Without this
+    // field, the association and connection code below would be re-run multiple
+    // times for one network.
+    has_initiated_connection_to_current_network_ = true;
+
     // If the network is now connectable, associate it with a Tether network
     // ASAP so that the correct icon will be displayed in the tray while the
     // network is connecting.
@@ -101,17 +148,15 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
         network_state_handler_->AssociateTetherNetworkStateWithWifiNetwork(
             tether_network_guid_, wifi_network_guid_);
     if (successful_association) {
-      PA_LOG(INFO) << "Wifi network with ID " << wifi_network_guid_
-                   << " is connectable, and successfully associated "
-                      "with Tether network. Tether network ID: \""
-                   << tether_network_guid_ << "\", Wi-Fi network ID: \""
-                   << wifi_network_guid_ << "\"";
+      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                   << "successfully associated with Tether network (ID \""
+                   << tether_network_guid_ << "\"). Starting connection "
+                   << "attempt.";
     } else {
-      PA_LOG(INFO) << "Wifi network with ID " << wifi_network_guid_
-                   << " is connectable, but failed to associate tether network "
-                      "with ID \""
-                   << tether_network_guid_ << "\" to Wi-Fi network with ID: \""
-                   << wifi_network_guid_ << "\"";
+      PA_LOG(INFO) << "Wi-Fi network (ID \"" << wifi_network_guid_ << "\") "
+                   << "failed to associate with Tether network (ID \""
+                   << tether_network_guid_ << "\"). Starting connection "
+                   << "attempt.";
     }
 
     // Initiate a connection to the network.
@@ -119,22 +164,52 @@ void WifiHotspotConnector::NetworkPropertiesUpdated(
   }
 }
 
-void WifiHotspotConnector::InvokeWifiConnectionCallback(
-    const std::string& wifi_guid) {
+void WifiHotspotConnector::CompleteActiveConnectionAttempt(bool success) {
   DCHECK(!callback_.is_null());
+  DCHECK(!wifi_network_guid_.empty());
 
-  // |wifi_guid| may be a reference to |wifi_network_guid_|, so make a copy of
-  // it first before clearing it below.
-  std::string wifi_network_guid_copy = wifi_guid;
+  // Note: Empty string is passed to callback to signify a failed attempt.
+  std::string wifi_guid_for_callback =
+      success ? wifi_network_guid_ : std::string();
+
+  // If the connection attempt has failed (e.g., due to cancellation or
+  // timeout) and ConnectToNetworkId() has already been called, the in-progress
+  // connection attempt should be stopped; there is no cancellation mechanism,
+  // so DisconnectFromNetworkId() is called here instead. Without this, it would
+  // be possible for the connection to complete after the Tether component had
+  // already shut down. See crbug.com/761569.
+  if (!success && has_initiated_connection_to_current_network_)
+    network_connect_->DisconnectFromNetworkId(wifi_network_guid_);
 
   ssid_.clear();
   password_.clear();
   wifi_network_guid_.clear();
+  has_initiated_connection_to_current_network_ = false;
+  is_waiting_for_wifi_to_enable_ = false;
 
   timer_->Stop();
 
-  callback_.Run(wifi_network_guid_copy);
+  if (!wifi_guid_for_callback.empty()) {
+    // UMA_HISTOGRAM_MEDIUM_TIMES is used because UMA_HISTOGRAM_TIMES has a max
+    // of 10 seconds.
+    DCHECK(!connection_attempt_start_time_.is_null());
+    UMA_HISTOGRAM_MEDIUM_TIMES(
+        "InstantTethering.Performance.ConnectToHotspotDuration",
+        clock_->Now() - connection_attempt_start_time_);
+    connection_attempt_start_time_ = base::Time();
+  }
+
+  callback_.Run(wifi_guid_for_callback);
   callback_.Reset();
+}
+
+void WifiHotspotConnector::CreateWifiConfiguration() {
+  base::DictionaryValue properties =
+      CreateWifiPropertyDictionary(ssid_, password_);
+
+  // This newly configured network will eventually be passed as an argument to
+  // NetworkPropertiesUpdated().
+  network_connect_->CreateConfiguration(&properties, false /* shared */);
 }
 
 base::DictionaryValue WifiHotspotConnector::CreateWifiPropertyDictionary(
@@ -170,11 +245,16 @@ base::DictionaryValue WifiHotspotConnector::CreateWifiPropertyDictionary(
 }
 
 void WifiHotspotConnector::OnConnectionTimeout() {
-  InvokeWifiConnectionCallback(std::string());
+  CompleteActiveConnectionAttempt(false /* success */);
 }
 
 void WifiHotspotConnector::SetTimerForTest(std::unique_ptr<base::Timer> timer) {
   timer_ = std::move(timer);
+}
+
+void WifiHotspotConnector::SetClockForTest(
+    std::unique_ptr<base::Clock> clock_for_test) {
+  clock_ = std::move(clock_for_test);
 }
 
 }  // namespace tether

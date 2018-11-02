@@ -46,7 +46,7 @@ CSSParserContext* CSSParserContext::Create(
     const CSSParserContext* other,
     const KURL& base_url,
     ReferrerPolicy referrer_policy,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     const Document* use_counter_document) {
   return new CSSParserContext(
       base_url, charset, other->mode_, other->match_mode_, other->profile_,
@@ -62,15 +62,15 @@ CSSParserContext* CSSParserContext::Create(
     SelectorProfile profile,
     const Document* use_counter_document) {
   return new CSSParserContext(
-      KURL(), g_empty_string, mode, mode, profile, Referrer(), false, false,
-      kDoNotCheckContentSecurityPolicy, use_counter_document);
+      KURL(), WTF::TextEncoding(), mode, mode, profile, Referrer(), false,
+      false, kDoNotCheckContentSecurityPolicy, use_counter_document);
 }
 
 // static
 CSSParserContext* CSSParserContext::Create(const Document& document) {
   return CSSParserContext::Create(document, document.BaseURL(),
-                                  document.GetReferrerPolicy(), g_empty_string,
-                                  kDynamicProfile);
+                                  document.GetReferrerPolicy(),
+                                  WTF::TextEncoding(), kDynamicProfile);
 }
 
 // static
@@ -78,13 +78,13 @@ CSSParserContext* CSSParserContext::Create(
     const Document& document,
     const KURL& base_url_override,
     ReferrerPolicy referrer_policy_override,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     SelectorProfile profile) {
   CSSParserMode mode =
       document.InQuirksMode() ? kHTMLQuirksMode : kHTMLStandardMode;
   CSSParserMode match_mode;
-  if (HTMLImportsController* imports_controller =
-          document.ImportsController()) {
+  HTMLImportsController* imports_controller = document.ImportsController();
+  if (imports_controller && profile == kDynamicProfile) {
     match_mode = imports_controller->Master()->InQuirksMode()
                      ? kHTMLQuirksMode
                      : kHTMLStandardMode;
@@ -115,7 +115,7 @@ CSSParserContext* CSSParserContext::Create(
 
 CSSParserContext::CSSParserContext(
     const KURL& base_url,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     CSSParserMode mode,
     CSSParserMode match_mode,
     SelectorProfile profile,
@@ -146,25 +146,31 @@ bool CSSParserContext::operator==(const CSSParserContext& other) const {
 }
 
 const CSSParserContext* StrictCSSParserContext() {
-  DEFINE_STATIC_LOCAL(CSSParserContext, strict_context,
-                      (CSSParserContext::Create(kHTMLStandardMode)));
-  return &strict_context;
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<Persistent<CSSParserContext>>,
+                                  strict_context_pool, ());
+  Persistent<CSSParserContext>& context = *strict_context_pool;
+  if (!context) {
+    context = CSSParserContext::Create(kHTMLStandardMode);
+    context.RegisterAsStaticReference();
+  }
+
+  return context;
 }
 
 KURL CSSParserContext::CompleteURL(const String& url) const {
   if (url.IsNull())
     return KURL();
-  if (Charset().IsEmpty())
+  if (!Charset().IsValid())
     return KURL(BaseURL(), url);
   return KURL(BaseURL(), url, Charset());
 }
 
-void CSSParserContext::Count(UseCounter::Feature feature) const {
+void CSSParserContext::Count(WebFeature feature) const {
   if (IsUseCounterRecordingEnabled())
     UseCounter::Count(*document_, feature);
 }
 
-void CSSParserContext::CountDeprecation(UseCounter::Feature feature) const {
+void CSSParserContext::CountDeprecation(WebFeature feature) const {
   if (IsUseCounterRecordingEnabled())
     Deprecation::CountDeprecation(*document_, feature);
 }

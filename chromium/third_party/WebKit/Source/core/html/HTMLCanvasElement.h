@@ -32,7 +32,6 @@
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/CoreExport.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/dom/DOMTypedArray.h"
 #include "core/dom/Document.h"
 #include "core/fileapi/BlobCallback.h"
 #include "core/html/HTMLElement.h"
@@ -41,14 +40,15 @@
 #include "core/html/canvas/CanvasRenderingContextHost.h"
 #include "core/imagebitmap/ImageBitmapSource.h"
 #include "core/page/PageVisibilityObserver.h"
+#include "core/typed_arrays/DOMTypedArray.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/geometry/FloatRect.h"
 #include "platform/geometry/IntSize.h"
-#include "platform/graphics/CanvasSurfaceLayerBridge.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/graphics/GraphicsTypes3D.h"
 #include "platform/graphics/ImageBufferClient.h"
 #include "platform/graphics/OffscreenCanvasPlaceholder.h"
+#include "platform/graphics/SurfaceLayerBridge.h"
 #include "platform/heap/Handle.h"
 
 #define CanvasDefaultInterpolationQuality kInterpolationLow
@@ -56,6 +56,7 @@
 namespace blink {
 
 class AffineTransform;
+class CanvasColorParams;
 class CanvasContextCreationAttributes;
 class CanvasRenderingContext;
 class CanvasRenderingContextFactory;
@@ -74,16 +75,15 @@ class
 typedef CanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContextOrImageBitmapRenderingContext
     RenderingContext;
 
-class CORE_EXPORT HTMLCanvasElement final
-    : public HTMLElement,
-      public ContextLifecycleObserver,
-      public PageVisibilityObserver,
-      public CanvasImageSource,
-      public CanvasRenderingContextHost,
-      public CanvasSurfaceLayerBridgeObserver,
-      public ImageBufferClient,
-      public ImageBitmapSource,
-      public OffscreenCanvasPlaceholder {
+class CORE_EXPORT HTMLCanvasElement final : public HTMLElement,
+                                            public ContextLifecycleObserver,
+                                            public PageVisibilityObserver,
+                                            public CanvasImageSource,
+                                            public CanvasRenderingContextHost,
+                                            public SurfaceLayerBridgeObserver,
+                                            public ImageBufferClient,
+                                            public ImageBitmapSource,
+                                            public OffscreenCanvasPlaceholder {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLCanvasElement);
   USING_PRE_FINALIZER(HTMLCanvasElement, Dispose);
@@ -198,7 +198,7 @@ class CORE_EXPORT HTMLCanvasElement final
   int SourceWidth() override { return size_.Width(); }
   int SourceHeight() override { return size_.Height(); }
 
-  // CanvasSurfaceLayerBridgeObserver implementation
+  // SurfaceLayerBridgeObserver implementation
   void OnWebLayerReplaced() override;
 
   // ImageBufferClient implementation
@@ -242,7 +242,7 @@ class CORE_EXPORT HTMLCanvasElement final
   String GetIdFromControl(const Element*);
 
   // For OffscreenCanvas that controls this html canvas element
-  CanvasSurfaceLayerBridge* SurfaceLayerBridge() const {
+  ::blink::SurfaceLayerBridge* SurfaceLayerBridge() const {
     return surface_layer_bridge_.get();
   }
   void CreateLayer();
@@ -262,6 +262,8 @@ class CORE_EXPORT HTMLCanvasElement final
   DispatchEventResult HostDispatchEvent(Event* event) override {
     return DispatchEvent(event);
   }
+
+  bool IsWebGLAllowed() const override;
 
  protected:
   void DidMoveToNewDocument(Document& old_document) override;
@@ -302,6 +304,7 @@ class CORE_EXPORT HTMLCanvasElement final
   void SetSurfaceSize(const IntSize&);
 
   bool PaintsIntoCanvasBuffer() const;
+  CanvasColorParams GetCanvasColorParams() const;
 
   ImageData* ToImageData(SourceDrawingBuffer, SnapshotReason) const;
 
@@ -333,7 +336,7 @@ class CORE_EXPORT HTMLCanvasElement final
   mutable RefPtr<Image> copied_image_;
 
   // Used for OffscreenCanvas that controls this HTML canvas element
-  std::unique_ptr<CanvasSurfaceLayerBridge> surface_layer_bridge_;
+  std::unique_ptr<::blink::SurfaceLayerBridge> surface_layer_bridge_;
 
   bool did_notify_listeners_for_current_frame_ = false;
 };

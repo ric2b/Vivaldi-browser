@@ -7,18 +7,17 @@
 #include "core/HTMLNames.h"
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/dom/Document.h"
-#include "core/dom/DocumentUserGestureToken.h"
-#include "core/dom/Fullscreen.h"
-#include "core/frame/FrameView.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLAudioElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "modules/media_controls/MediaControlsImpl.h"
 #include "modules/screen_orientation/ScreenOrientationControllerImpl.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "platform/wtf/text/AtomicString.h"
@@ -95,11 +94,11 @@ class MediaControlsRotateToFullscreenDelegateTest : public ::testing::Test {
 
   void SetUp() override {
     previous_video_fullscreen_orientation_lock_value_ =
-        RuntimeEnabledFeatures::videoFullscreenOrientationLockEnabled();
+        RuntimeEnabledFeatures::VideoFullscreenOrientationLockEnabled();
     previous_video_rotate_to_fullscreen_value_ =
-        RuntimeEnabledFeatures::videoRotateToFullscreenEnabled();
-    RuntimeEnabledFeatures::setVideoFullscreenOrientationLockEnabled(true);
-    RuntimeEnabledFeatures::setVideoRotateToFullscreenEnabled(true);
+        RuntimeEnabledFeatures::VideoRotateToFullscreenEnabled();
+    RuntimeEnabledFeatures::SetVideoFullscreenOrientationLockEnabled(true);
+    RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(true);
 
     chrome_client_ = new MockChromeClient();
 
@@ -117,9 +116,9 @@ class MediaControlsRotateToFullscreenDelegateTest : public ::testing::Test {
   }
 
   void TearDown() override {
-    RuntimeEnabledFeatures::setVideoFullscreenOrientationLockEnabled(
+    RuntimeEnabledFeatures::SetVideoFullscreenOrientationLockEnabled(
         previous_video_fullscreen_orientation_lock_value_);
-    RuntimeEnabledFeatures::setVideoRotateToFullscreenEnabled(
+    RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(
         previous_video_rotate_to_fullscreen_value_);
   }
 
@@ -218,8 +217,7 @@ void MediaControlsRotateToFullscreenDelegateTest::InitScreenAndVideo(
 
 void MediaControlsRotateToFullscreenDelegateTest::PlayVideo() {
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -243,7 +241,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest, DelegateRequiresFlag) {
   EXPECT_TRUE(HasDelegate(GetMediaControls()));
 
   // No delegate when flag is off.
-  RuntimeEnabledFeatures::setVideoRotateToFullscreenEnabled(false);
+  RuntimeEnabledFeatures::SetVideoRotateToFullscreenEnabled(false);
   HTMLVideoElement* video = HTMLVideoElement::Create(GetDocument());
   GetDocument().body()->AppendChild(video);
   EXPECT_FALSE(HasDelegate(*video->GetMediaControls()));
@@ -305,8 +303,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Should start observing visibility when played.
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -326,8 +323,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Should resume observing visibility when playback resumes.
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     GetVideo().Play();
   }
   testing::RunPendingTasks();
@@ -563,12 +559,11 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     Fullscreen::RequestFullscreen(*GetDocument().body());
   }
   testing::RunPendingTasks();
-  EXPECT_TRUE(Fullscreen::IsCurrentFullScreenElement(*GetDocument().body()));
+  EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
 
   // Play video.
@@ -581,7 +576,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   RotateTo(kWebScreenOrientationLandscapePrimary);
 
   // Should not enter fullscreen on video, since document is already fullscreen.
-  EXPECT_TRUE(Fullscreen::IsCurrentFullScreenElement(*GetDocument().body()));
+  EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
 }
 
@@ -594,8 +589,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Start in fullscreen.
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     GetMediaControls().EnterFullscreen();
   }
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
@@ -608,8 +602,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   EXPECT_TRUE(GetVideo().paused());
   EXPECT_FALSE(ObservedVisibility());
 
-  // Rotate screen to portrait. This relies on the screen orientation no longer
-  // being locked by MediaControlsOrientationLockDelegate.
+  // Rotate screen to portrait. This relies on the screen orientation not being
+  // locked by MediaControlsOrientationLockDelegate (which has its own tests).
   RotateTo(kWebScreenOrientationPortraitPrimary);
 
   // Should exit fullscreen.
@@ -625,8 +619,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
 
   // Start in fullscreen.
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     GetMediaControls().EnterFullscreen();
   }
   // n.b. omit to call Fullscreen::From(GetDocument()).DidEnterFullscreen() so
@@ -639,8 +632,8 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   EXPECT_TRUE(GetVideo().paused());
   EXPECT_FALSE(ObservedVisibility());
 
-  // Rotate screen to portrait. This relies on the screen orientation no longer
-  // being locked by MediaControlsOrientationLockDelegate.
+  // Rotate screen to landscape. This relies on the screen orientation not being
+  // locked by MediaControlsOrientationLockDelegate (which has its own tests).
   RotateTo(kWebScreenOrientationLandscapePrimary);
 
   // Should exit fullscreen.
@@ -657,12 +650,11 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   // Simulate the webpage requesting fullscreen on some other element than the
   // video (in this case document.body).
   {
-    UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&GetDocument()));
+    UserGestureIndicator gesture(UserGestureToken::Create(&GetDocument()));
     Fullscreen::RequestFullscreen(*GetDocument().body());
   }
   testing::RunPendingTasks();
-  EXPECT_TRUE(Fullscreen::IsCurrentFullScreenElement(*GetDocument().body()));
+  EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
 
   // Leave video paused (playing is not a requirement to exit fullscreen).
@@ -673,7 +665,7 @@ TEST_F(MediaControlsRotateToFullscreenDelegateTest,
   RotateTo(kWebScreenOrientationPortraitPrimary);
 
   // Should not exit fullscreen, since video was not the fullscreen element.
-  EXPECT_TRUE(Fullscreen::IsCurrentFullScreenElement(*GetDocument().body()));
+  EXPECT_TRUE(Fullscreen::IsFullscreenElement(*GetDocument().body()));
   EXPECT_FALSE(GetVideo().IsFullscreen());
 }
 

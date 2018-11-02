@@ -15,7 +15,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "content/common/content_export.h"
 #include "content/common/media/media_devices.h"
 #include "content/common/media/media_devices.mojom.h"
@@ -37,10 +37,11 @@ class TaskRunner;
 }
 
 namespace content {
-class PeerConnectionDependencyFactory;
+class AudioCaptureSettings;
 class MediaStreamAudioSource;
 class MediaStreamDispatcher;
 class MediaStreamVideoSource;
+class PeerConnectionDependencyFactory;
 class VideoCaptureSettings;
 
 // UserMediaClientImpl is a delegate for the Media Stream GetUserMedia API.
@@ -51,8 +52,7 @@ class VideoCaptureSettings;
 class CONTENT_EXPORT UserMediaClientImpl
     : public RenderFrameObserver,
       NON_EXPORTED_BASE(public blink::WebUserMediaClient),
-      public MediaStreamDispatcherEventHandler,
-      NON_EXPORTED_BASE(public base::NonThreadSafe) {
+      public MediaStreamDispatcherEventHandler {
  public:
   // |render_frame| and |dependency_factory| must outlive this instance.
   UserMediaClientImpl(
@@ -102,8 +102,7 @@ class CONTENT_EXPORT UserMediaClientImpl
   // |request| have completed.
   virtual void GetUserMediaRequestSucceeded(const blink::WebMediaStream& stream,
                                             blink::WebUserMediaRequest request);
-  virtual void GetUserMediaRequestFailed(blink::WebUserMediaRequest request,
-                                         MediaStreamRequestResult result,
+  virtual void GetUserMediaRequestFailed(MediaStreamRequestResult result,
                                          const blink::WebString& result_name);
 
   virtual void EnumerateDevicesSucceded(
@@ -115,16 +114,20 @@ class CONTENT_EXPORT UserMediaClientImpl
   virtual MediaStreamAudioSource* CreateAudioSource(
       const StreamDeviceInfo& device,
       const blink::WebMediaConstraints& constraints,
-      const MediaStreamSource::ConstraintsCallback& source_ready);
+      const MediaStreamSource::ConstraintsCallback& source_ready,
+      bool* has_sw_echo_cancellation);
   virtual MediaStreamVideoSource* CreateVideoSource(
       const StreamDeviceInfo& device,
       const MediaStreamSource::SourceStoppedCallback& stop_callback);
 
   // Returns no value if there is no request being processed. Use only for
   // testing.
-  // TODO(guidou): Remove this method once spec-compliant constraints algorithm
-  // for audio is implemented. http://crbug.com/543997
+  // TODO(guidou): Remove this function. http://crbug.com/706408
   base::Optional<bool> AutomaticOutputDeviceSelectionEnabledForCurrentRequest();
+
+  // Intended to be used only for testing.
+  const AudioCaptureSettings& AudioCaptureSettingsForTesting() const;
+  const VideoCaptureSettings& VideoCaptureSettingsForTesting() const;
 
  private:
   class UserMediaRequestInfo;
@@ -226,21 +229,25 @@ class CONTENT_EXPORT UserMediaClientImpl
 
   const ::mojom::MediaDevicesDispatcherHostPtr& GetMediaDevicesDispatcher();
 
-  void SelectAudioInputDevice(
+  // TODO(guidou): Remove these functions. http://crbug.com/706408
+  void LegacySetupAudioInput();
+  void LegacySelectAudioInputDevice(
       const blink::WebUserMediaRequest& user_media_request,
       const EnumerationResult& device_enumeration);
 
-  void SetupVideoInput(const blink::WebUserMediaRequest& user_media_request);
+  void SetupAudioInput();
+  void SelectAudioSettings(const blink::WebUserMediaRequest& user_media_request,
+                           std::vector<::mojom::AudioInputDeviceCapabilitiesPtr>
+                               audio_input_capabilities);
 
+  void SetupVideoInput();
   void SelectVideoDeviceSettings(
       const blink::WebUserMediaRequest& user_media_request,
       std::vector<::mojom::VideoInputDeviceCapabilitiesPtr>
           video_input_capabilities);
-
   void FinalizeSelectVideoDeviceSettings(
       const blink::WebUserMediaRequest& user_media_request,
       const VideoCaptureSettings& settings);
-
   void FinalizeSelectVideoContentSettings(
       const blink::WebUserMediaRequest& user_media_request,
       const VideoCaptureSettings& settings);
@@ -279,6 +286,8 @@ class CONTENT_EXPORT UserMediaClientImpl
   blink::WebMediaDeviceChangeObserver media_device_change_observer_;
 
   const scoped_refptr<base::TaskRunner> worker_task_runner_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Note: This member must be the last to ensure all outstanding weak pointers
   // are invalidated first.

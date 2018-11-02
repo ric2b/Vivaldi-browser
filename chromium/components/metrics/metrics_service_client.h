@@ -102,10 +102,6 @@ class MetricsServiceClient {
   // Returns the standard interval between upload attempts.
   virtual base::TimeDelta GetStandardUploadInterval() = 0;
 
-  // Returns the name of a key under HKEY_CURRENT_USER that can be used to store
-  // backups of metrics data. Unused except on Windows.
-  virtual base::string16 GetRegistryBackupKey();
-
   // Called on plugin loading errors.
   virtual void OnPluginLoadingError(const base::FilePath& plugin_path) {}
 
@@ -130,7 +126,6 @@ class MetricsServiceClient {
   // Sets the callback to run MetricsServiceManager::UpdateRunningServices.
   void SetUpdateRunningServicesCallback(const base::Closure& callback);
 
- protected:
   // Notify MetricsServiceManager to UpdateRunningServices using callback.
   void UpdateRunningServices();
 

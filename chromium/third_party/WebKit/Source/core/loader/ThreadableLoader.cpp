@@ -34,7 +34,6 @@
 #include "core/dom/ExecutionContext.h"
 #include "core/loader/DocumentThreadableLoader.h"
 #include "core/loader/ThreadableLoadingContext.h"
-#include "core/loader/WorkerFetchContext.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -49,8 +48,8 @@ ThreadableLoader* ThreadableLoader::Create(
   DCHECK(client);
 
   if (context.IsWorkerGlobalScope()) {
-    if (RuntimeEnabledFeatures::offMainThreadFetchEnabled()) {
-      DCHECK(ToWorkerGlobalScope(&context)->GetFetchContext());
+    if (RuntimeEnabledFeatures::OffMainThreadFetchEnabled()) {
+      DCHECK(ToWorkerGlobalScope(&context)->GetResourceFetcher());
       // TODO(horo): Rename DocumentThreadableLoader. We will use it on the
       // worker thread when off-main-thread-fetch is enabled.
       return DocumentThreadableLoader::Create(

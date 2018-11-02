@@ -9,7 +9,6 @@
 #include "chrome/browser/ui/passwords/manage_passwords_view_utils.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/common/password_form.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -195,9 +194,7 @@ void CredentialsItemView::Layout() {
   }
 }
 
-void CredentialsItemView::OnPaint(gfx::Canvas* canvas) {
+void CredentialsItemView::OnPaintBackground(gfx::Canvas* canvas) {
   if (state() == STATE_PRESSED || state() == STATE_HOVERED)
     canvas->DrawColor(hover_color_);
-
-  CustomButton::OnPaint(canvas);
 }

@@ -46,6 +46,7 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
                             const GURL& password_form_frame_url,
                             const std::string& saved_domain,
                             LoginReputationClientRequest::TriggerType type,
+                            bool password_field_exists,
                             PasswordProtectionService* pps,
                             int request_timeout_in_ms);
 
@@ -67,7 +68,15 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
 
   GURL main_frame_url() const { return main_frame_url_; }
 
-  LoginReputationClientRequest* request_proto() { return request_proto_.get(); }
+  const LoginReputationClientRequest* request_proto() const {
+    return request_proto_.get();
+  }
+
+  content::WebContents* web_contents() const { return web_contents_; }
+
+  LoginReputationClientRequest::TriggerType trigger_type() const {
+    return trigger_type_;
+  }
 
  private:
   friend class base::RefCountedThreadSafe<PasswordProtectionRequest>;
@@ -76,16 +85,16 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   friend class base::DeleteHelper<PasswordProtectionRequest>;
   ~PasswordProtectionRequest() override;
 
-  void CheckWhitelistOnUIThread();
+  // Start checking the whitelist.
+  void CheckWhitelist();
+
+  static void OnWhitelistCheckDoneOnIO(
+      base::WeakPtr<PasswordProtectionRequest> weak_request,
+      bool match_whitelist);
 
   // If |main_frame_url_| matches whitelist, call Finish() immediately;
-  // otherwise call CheckCachedVerdicts(). It is the task posted back to UI
-  // thread by the PostTaskAndReply() in CheckWhitelistOnUIThread().
-  // |match_whitelist| boolean pointer is used to pass whitelist checking result
-  // between UI and IO thread. The object it points to will be deleted at the
-  // end of OnWhitelistCheckDone(), since base::Owned() transfers its ownership
-  // to this callback function.
-  void OnWhitelistCheckDone(const bool* match_whitelist);
+  // otherwise call CheckCachedVerdicts().
+  void OnWhitelistCheckDone(bool match_whitelist);
 
   // Looks up cached verdicts. If verdict is already cached, call SendRequest();
   // otherwise call Finish().
@@ -120,7 +129,10 @@ class PasswordProtectionRequest : public base::RefCountedThreadSafe<
   const std::string saved_domain_;
 
   // If this request is for unfamiliar login page or for a password reuse event.
-  const LoginReputationClientRequest::TriggerType request_type_;
+  const LoginReputationClientRequest::TriggerType trigger_type_;
+
+  // If there is a password field on the page.
+  const bool password_field_exists_;
 
   // When request is sent.
   base::TimeTicks request_start_time_;

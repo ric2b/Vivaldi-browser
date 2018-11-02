@@ -6,6 +6,7 @@
 
 #include "base/base64.h"
 #include "base/macros.h"
+#include "base/test/histogram_tester.h"
 #include "build/build_config.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/pref_names.h"
@@ -33,27 +34,37 @@ class TestVariationsSeedStore : public VariationsSeedStore {
                          base::Time::Now(), false, false, nullptr);
   }
 
-  VariationsSeedStore::VerifySignatureResult VerifySeedSignature(
-      const std::string& seed_bytes,
-      const std::string& base64_seed_signature) override {
-    return VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_ENUM_SIZE;
-  }
+  bool SignatureVerificationEnabled() override { return false; }
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestVariationsSeedStore);
 };
 
+// Signature verification is disabled on Android and iOS for performance
+// reasons. This class re-enables it for tests, which don't mind the (small)
+// performance penalty.
+class SignatureVerifyingVariationsSeedStore : public VariationsSeedStore {
+ public:
+  explicit SignatureVerifyingVariationsSeedStore(PrefService* local_state)
+      : VariationsSeedStore(local_state) {}
+  ~SignatureVerifyingVariationsSeedStore() override {}
+
+  bool SignatureVerificationEnabled() override { return true; }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SignatureVerifyingVariationsSeedStore);
+};
 
 // Populates |seed| with simple test data. The resulting seed will contain one
 // study called "test", which contains one experiment called "abc" with
 // probability weight 100. |seed|'s study field will be cleared before adding
 // the new study.
-variations::VariationsSeed CreateTestSeed() {
-  variations::VariationsSeed seed;
-  variations::Study* study = seed.add_study();
+VariationsSeed CreateTestSeed() {
+  VariationsSeed seed;
+  Study* study = seed.add_study();
   study->set_name("test");
   study->set_default_experiment_name("abc");
-  variations::Study_Experiment* experiment = study->add_experiment();
+  Study_Experiment* experiment = study->add_experiment();
   experiment->set_name("abc");
   experiment->set_probability_weight(100);
   seed.set_serial_number("123");
@@ -61,7 +72,7 @@ variations::VariationsSeed CreateTestSeed() {
 }
 
 // Serializes |seed| to protobuf binary format.
-std::string SerializeSeed(const variations::VariationsSeed& seed) {
+std::string SerializeSeed(const VariationsSeed& seed) {
   std::string serialized_seed;
   seed.SerializeToString(&serialized_seed);
   return serialized_seed;
@@ -76,7 +87,7 @@ std::string Compress(const std::string& data) {
 }
 
 // Serializes |seed| to compressed base64-encoded protobuf binary format.
-std::string SerializeSeedBase64(const variations::VariationsSeed& seed) {
+std::string SerializeSeedBase64(const VariationsSeed& seed) {
   std::string serialized_seed = SerializeSeed(seed);
   std::string base64_serialized_seed;
   base::Base64Encode(Compress(serialized_seed), &base64_serialized_seed);
@@ -94,7 +105,7 @@ bool PrefHasDefaultValue(const TestingPrefServiceSimple& prefs,
 
 TEST(VariationsSeedStoreTest, LoadSeed) {
   // Store good seed data to test if loading from prefs works.
-  const variations::VariationsSeed seed = CreateTestSeed();
+  const VariationsSeed seed = CreateTestSeed();
   const std::string base64_seed = SerializeSeedBase64(seed);
 
   TestingPrefServiceSimple prefs;
@@ -103,7 +114,7 @@ TEST(VariationsSeedStoreTest, LoadSeed) {
 
   TestVariationsSeedStore seed_store(&prefs);
 
-  variations::VariationsSeed loaded_seed;
+  VariationsSeed loaded_seed;
   // Check that loading a seed works correctly.
   EXPECT_TRUE(seed_store.LoadSeed(&loaded_seed));
 
@@ -127,16 +138,12 @@ TEST(VariationsSeedStoreTest, LoadSeed) {
 }
 
 TEST(VariationsSeedStoreTest, GetInvalidSignature) {
-  const variations::VariationsSeed seed = CreateTestSeed();
-  const std::string base64_seed = SerializeSeedBase64(seed);
-
   TestingPrefServiceSimple prefs;
   VariationsSeedStore::RegisterPrefs(prefs.registry());
-  prefs.SetString(prefs::kVariationsSeed, base64_seed);
 
   // The below seed and signature pair were generated using the server's
   // private key.
-  const std::string base64_seed_data =
+  const std::string uncompressed_base64_seed_data =
       "CigxZDI5NDY0ZmIzZDc4ZmYxNTU2ZTViNTUxYzY0NDdjYmM3NGU1ZmQwEr0BCh9VTUEtVW5p"
       "Zm9ybWl0eS1UcmlhbC0xMC1QZXJjZW50GICckqUFOAFCB2RlZmF1bHRKCwoHZGVmYXVsdBAB"
       "SgwKCGdyb3VwXzAxEAFKDAoIZ3JvdXBfMDIQAUoMCghncm91cF8wMxABSgwKCGdyb3VwXzA0"
@@ -149,20 +156,32 @@ TEST(VariationsSeedStoreTest, GetInvalidSignature) {
       "AEQCIDD1IVxjzWYncun+9IGzqYjZvqxxujQEayJULTlbTGA/AiAr0oVmEgVUQZBYq5VLOSvy"
       "96JkMYgzTkHPwbv7K/CmgA==";
 
+  std::string uncompressed_seed_data;
+  ASSERT_TRUE(base::Base64Decode(uncompressed_base64_seed_data,
+                                 &uncompressed_seed_data));
+  std::string compressed_base64_seed_data;
+  base::Base64Encode(Compress(uncompressed_seed_data),
+                     &compressed_base64_seed_data);
+
   // Set seed and valid signature in prefs.
-  prefs.SetString(prefs::kVariationsSeed, base64_seed_data);
+  prefs.SetString(prefs::kVariationsCompressedSeed,
+                  compressed_base64_seed_data);
   prefs.SetString(prefs::kVariationsSeedSignature, base64_seed_signature);
 
   VariationsSeedStore seed_store(&prefs);
-  variations::VariationsSeed loaded_seed;
-  seed_store.LoadSeed(&loaded_seed);
+  VariationsSeed loaded_seed;
+  EXPECT_TRUE(seed_store.LoadSeed(&loaded_seed));
   std::string invalid_signature = seed_store.GetInvalidSignature();
   // Valid signature so we get an empty string.
   EXPECT_EQ(std::string(), invalid_signature);
 
   prefs.SetString(prefs::kVariationsSeedSignature,
                   base64_seed_signature_invalid);
-  seed_store.LoadSeed(&loaded_seed);
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  EXPECT_TRUE(seed_store.LoadSeed(&loaded_seed));
+#else
+  EXPECT_FALSE(seed_store.LoadSeed(&loaded_seed));
+#endif
   // Invalid signature, so we should get the signature itself, except on mobile
   // where we should get an empty string because verification is not enabled.
   invalid_signature = seed_store.GetInvalidSignature();
@@ -173,14 +192,18 @@ TEST(VariationsSeedStoreTest, GetInvalidSignature) {
 #endif
 
   prefs.SetString(prefs::kVariationsSeedSignature, std::string());
-  seed_store.LoadSeed(&loaded_seed);
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  EXPECT_TRUE(seed_store.LoadSeed(&loaded_seed));
+#else
+  EXPECT_FALSE(seed_store.LoadSeed(&loaded_seed));
+#endif
   invalid_signature = seed_store.GetInvalidSignature();
   // Empty signature, not considered invalid.
   EXPECT_EQ(std::string(), invalid_signature);
 }
 
 TEST(VariationsSeedStoreTest, StoreSeedData) {
-  const variations::VariationsSeed seed = CreateTestSeed();
+  const VariationsSeed seed = CreateTestSeed();
   const std::string serialized_seed = SerializeSeed(seed);
 
   TestingPrefServiceSimple prefs;
@@ -207,14 +230,14 @@ TEST(VariationsSeedStoreTest, StoreSeedData) {
 }
 
 TEST(VariationsSeedStoreTest, StoreSeedData_ParsedSeed) {
-  const variations::VariationsSeed seed = CreateTestSeed();
+  const VariationsSeed seed = CreateTestSeed();
   const std::string serialized_seed = SerializeSeed(seed);
 
   TestingPrefServiceSimple prefs;
   VariationsSeedStore::RegisterPrefs(prefs.registry());
   TestVariationsSeedStore seed_store(&prefs);
 
-  variations::VariationsSeed parsed_seed;
+  VariationsSeed parsed_seed;
   EXPECT_TRUE(seed_store.StoreSeedData(serialized_seed, std::string(),
                                        std::string(), base::Time::Now(), false,
                                        false, &parsed_seed));
@@ -226,40 +249,22 @@ TEST(VariationsSeedStoreTest, StoreSeedData_CountryCode) {
   VariationsSeedStore::RegisterPrefs(prefs.registry());
   TestVariationsSeedStore seed_store(&prefs);
 
-  // Test with a seed country code and no header value.
-  variations::VariationsSeed seed = CreateTestSeed();
-  seed.set_country_code("test_country");
-  EXPECT_TRUE(seed_store.StoreSeedData(SerializeSeed(seed), std::string(),
-                                       std::string(), base::Time::Now(), false,
-                                       false, nullptr));
+  // Test with a valid header value.
+  std::string seed = SerializeSeed(CreateTestSeed());
+  EXPECT_TRUE(seed_store.StoreSeedData(seed, std::string(), "test_country",
+                                       base::Time::Now(), false, false,
+                                       nullptr));
   EXPECT_EQ("test_country", prefs.GetString(prefs::kVariationsCountry));
 
-  // Test with a header value and no seed country.
-  prefs.ClearPref(prefs::kVariationsCountry);
-  seed.clear_country_code();
-  EXPECT_TRUE(seed_store.StoreSeedData(SerializeSeed(seed), std::string(),
-                                       "test_country2", base::Time::Now(),
-                                       false, false,  nullptr));
-  EXPECT_EQ("test_country2", prefs.GetString(prefs::kVariationsCountry));
-
-  // Test with a seed country code and header value.
-  prefs.ClearPref(prefs::kVariationsCountry);
-  seed.set_country_code("test_country3");
-  EXPECT_TRUE(seed_store.StoreSeedData(SerializeSeed(seed), std::string(),
-                                       "test_country4", base::Time::Now(),
-                                       false, false, nullptr));
-  EXPECT_EQ("test_country4", prefs.GetString(prefs::kVariationsCountry));
-
   // Test with no country code specified - which should preserve the old value.
-  seed.clear_country_code();
-  EXPECT_TRUE(seed_store.StoreSeedData(SerializeSeed(seed), std::string(),
-                                       std::string(), base::Time::Now(), false,
-                                       false, nullptr));
-  EXPECT_EQ("test_country4", prefs.GetString(prefs::kVariationsCountry));
+  EXPECT_TRUE(seed_store.StoreSeedData(seed, std::string(), std::string(),
+                                       base::Time::Now(), false, false,
+                                       nullptr));
+  EXPECT_EQ("test_country", prefs.GetString(prefs::kVariationsCountry));
 }
 
 TEST(VariationsSeedStoreTest, StoreSeedData_GzippedSeed) {
-  const variations::VariationsSeed seed = CreateTestSeed();
+  const VariationsSeed seed = CreateTestSeed();
   const std::string serialized_seed = SerializeSeed(seed);
   std::string compressed_seed;
   ASSERT_TRUE(compression::GzipCompress(serialized_seed, &compressed_seed));
@@ -268,7 +273,7 @@ TEST(VariationsSeedStoreTest, StoreSeedData_GzippedSeed) {
   VariationsSeedStore::RegisterPrefs(prefs.registry());
   TestVariationsSeedStore seed_store(&prefs);
 
-  variations::VariationsSeed parsed_seed;
+  VariationsSeed parsed_seed;
   EXPECT_TRUE(seed_store.StoreSeedData(compressed_seed, std::string(),
                                        std::string(), base::Time::Now(), false,
                                        true, &parsed_seed));
@@ -284,7 +289,7 @@ TEST(VariationsSeedStoreTest, StoreSeedData_GzippedEmptySeed) {
   VariationsSeedStore::RegisterPrefs(prefs.registry());
   TestVariationsSeedStore seed_store(&prefs);
 
-  variations::VariationsSeed parsed_seed;
+  VariationsSeed parsed_seed;
   EXPECT_FALSE(seed_store.StoreSeedData(compressed_seed, std::string(),
                                        std::string(), base::Time::Now(), false,
                                        true, &parsed_seed));
@@ -293,7 +298,7 @@ TEST(VariationsSeedStoreTest, StoreSeedData_GzippedEmptySeed) {
 TEST(VariationsSeedStoreTest, VerifySeedSignature) {
   // The below seed and signature pair were generated using the server's
   // private key.
-  const std::string base64_seed_data =
+  const std::string uncompressed_base64_seed_data =
       "CigxZDI5NDY0ZmIzZDc4ZmYxNTU2ZTViNTUxYzY0NDdjYmM3NGU1ZmQwEr0BCh9VTUEtVW5p"
       "Zm9ybWl0eS1UcmlhbC0xMC1QZXJjZW50GICckqUFOAFCB2RlZmF1bHRKCwoHZGVmYXVsdBAB"
       "SgwKCGdyb3VwXzAxEAFKDAoIZ3JvdXBfMDIQAUoMCghncm91cF8wMxABSgwKCGdyb3VwXzA0"
@@ -304,40 +309,101 @@ TEST(VariationsSeedStoreTest, VerifySeedSignature) {
       "96JkMYgzTkHPwbv7K/CmgA==";
 
   std::string seed_data;
-  EXPECT_TRUE(base::Base64Decode(base64_seed_data, &seed_data));
+  ASSERT_TRUE(base::Base64Decode(uncompressed_base64_seed_data, &seed_data));
+  VariationsSeed seed;
+  ASSERT_TRUE(seed.ParseFromString(seed_data));
+  std::string base64_seed_data = SerializeSeedBase64(seed);
 
-  VariationsSeedStore seed_store(NULL);
-
-#if defined(OS_IOS) || defined(OS_ANDROID)
-  // Signature verification is not enabled on mobile.
-  if (seed_store.VerifySeedSignature(seed_data, base64_seed_signature) ==
-      VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_ENUM_SIZE) {
-    return;
-  }
-#endif
+  TestingPrefServiceSimple prefs;
+  VariationsSeedStore::RegisterPrefs(prefs.registry());
 
   // The above inputs should be valid.
-  EXPECT_EQ(VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_VALID,
-            seed_store.VerifySeedSignature(seed_data, base64_seed_signature));
+  {
+    prefs.SetString(prefs::kVariationsCompressedSeed, base64_seed_data);
+    prefs.SetString(prefs::kVariationsSeedSignature, base64_seed_signature);
+    SignatureVerifyingVariationsSeedStore seed_store(&prefs);
+
+    base::HistogramTester histogram_tester;
+    VariationsSeed seed;
+    EXPECT_TRUE(seed_store.LoadSeed(&seed));
+    histogram_tester.ExpectUniqueSample(
+        "Variations.LoadSeedSignature",
+        static_cast<base::HistogramBase::Sample>(
+            VerifySignatureResult::VALID_SIGNATURE),
+        1);
+  }
 
   // If there's no signature, the corresponding result should be returned.
-  EXPECT_EQ(VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_MISSING,
-            seed_store.VerifySeedSignature(seed_data, std::string()));
+  {
+    prefs.SetString(prefs::kVariationsCompressedSeed, base64_seed_data);
+    prefs.SetString(prefs::kVariationsSeedSignature, std::string());
+    SignatureVerifyingVariationsSeedStore seed_store(&prefs);
 
-  // Using non-base64 encoded value as signature (e.g. seed data) should fail.
-  EXPECT_EQ(VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_DECODE_FAILED,
-            seed_store.VerifySeedSignature(seed_data, seed_data));
+    base::HistogramTester histogram_tester;
+    VariationsSeed seed;
+    EXPECT_FALSE(seed_store.LoadSeed(&seed));
+    histogram_tester.ExpectUniqueSample(
+        "Variations.LoadSeedSignature",
+        static_cast<base::HistogramBase::Sample>(
+            VerifySignatureResult::MISSING_SIGNATURE),
+        1);
+  }
+
+  // Using non-base64 encoded value as signature should fail.
+  {
+    prefs.SetString(prefs::kVariationsCompressedSeed, base64_seed_data);
+    prefs.SetString(prefs::kVariationsSeedSignature,
+                    "not a base64-encoded string");
+    SignatureVerifyingVariationsSeedStore seed_store(&prefs);
+
+    base::HistogramTester histogram_tester;
+    VariationsSeed seed;
+    EXPECT_FALSE(seed_store.LoadSeed(&seed));
+    histogram_tester.ExpectUniqueSample(
+        "Variations.LoadSeedSignature",
+        static_cast<base::HistogramBase::Sample>(
+            VerifySignatureResult::DECODE_FAILED),
+        1);
+  }
 
   // Using a different signature (e.g. the base64 seed data) should fail.
   // OpenSSL doesn't distinguish signature decode failure from the
   // signature not matching.
-  EXPECT_EQ(VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_INVALID_SEED,
-            seed_store.VerifySeedSignature(seed_data, base64_seed_data));
+  {
+    prefs.SetString(prefs::kVariationsCompressedSeed, base64_seed_data);
+    prefs.SetString(prefs::kVariationsSeedSignature, base64_seed_data);
+    SignatureVerifyingVariationsSeedStore seed_store(&prefs);
+
+    base::HistogramTester histogram_tester;
+    VariationsSeed seed;
+    EXPECT_FALSE(seed_store.LoadSeed(&seed));
+    histogram_tester.ExpectUniqueSample(
+        "Variations.LoadSeedSignature",
+        static_cast<base::HistogramBase::Sample>(
+            VerifySignatureResult::INVALID_SEED),
+        1);
+  }
 
   // Using a different seed should not match the signature.
-  seed_data[0] = 'x';
-  EXPECT_EQ(VariationsSeedStore::VARIATIONS_SEED_SIGNATURE_INVALID_SEED,
-            seed_store.VerifySeedSignature(seed_data, base64_seed_signature));
+  {
+    VariationsSeed wrong_seed;
+    ASSERT_TRUE(wrong_seed.ParseFromString(seed_data));
+    (*wrong_seed.mutable_study(0)->mutable_name())[0] = 'x';
+    std::string base64_wrong_seed_data = SerializeSeedBase64(wrong_seed);
+
+    prefs.SetString(prefs::kVariationsCompressedSeed, base64_wrong_seed_data);
+    prefs.SetString(prefs::kVariationsSeedSignature, base64_seed_signature);
+    SignatureVerifyingVariationsSeedStore seed_store(&prefs);
+
+    base::HistogramTester histogram_tester;
+    VariationsSeed seed;
+    EXPECT_FALSE(seed_store.LoadSeed(&seed));
+    histogram_tester.ExpectUniqueSample(
+        "Variations.LoadSeedSignature",
+        static_cast<base::HistogramBase::Sample>(
+            VerifySignatureResult::INVALID_SEED),
+        1);
+  }
 }
 
 TEST(VariationsSeedStoreTest, ApplyDeltaPatch) {

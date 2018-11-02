@@ -11,25 +11,23 @@
 
 namespace WTF {
 
-static bool IsCharacterAllowedInBase(UChar c, int base) {
-  if (c > 0x7F)
-    return false;
-  if (IsASCIIDigit(c))
-    return c - '0' < base;
-  if (IsASCIIAlpha(c)) {
-    if (base > 36)
-      base = 36;
-    return (c >= 'a' && c < 'a' + base - 10) ||
-           (c >= 'A' && c < 'A' + base - 10);
-  }
-  return false;
+template <int base>
+bool IsCharacterAllowedInBase(UChar);
+
+template <>
+bool IsCharacterAllowedInBase<10>(UChar c) {
+  return IsASCIIDigit(c);
 }
 
-template <typename IntegralType, typename CharType>
+template <>
+bool IsCharacterAllowedInBase<16>(UChar c) {
+  return IsASCIIHexDigit(c);
+}
+
+template <typename IntegralType, typename CharType, int base>
 static inline IntegralType ToIntegralType(const CharType* data,
                                           size_t length,
-                                          bool* ok,
-                                          int base) {
+                                          NumberParsingState* parsing_state) {
   static_assert(std::is_integral<IntegralType>::value,
                 "IntegralType must be an integral type.");
   static constexpr IntegralType kIntegralMax =
@@ -38,10 +36,12 @@ static inline IntegralType ToIntegralType(const CharType* data,
       std::numeric_limits<IntegralType>::min();
   static constexpr bool kIsSigned =
       std::numeric_limits<IntegralType>::is_signed;
+  DCHECK(parsing_state);
 
   IntegralType value = 0;
-  bool is_ok = false;
+  NumberParsingState state = NumberParsingState::kError;
   bool is_negative = false;
+  bool overflow = false;
 
   if (!data)
     goto bye;
@@ -61,10 +61,10 @@ static inline IntegralType ToIntegralType(const CharType* data,
     ++data;
   }
 
-  if (!length || !IsCharacterAllowedInBase(*data, base))
+  if (!length || !IsCharacterAllowedInBase<base>(*data))
     goto bye;
 
-  while (length && IsCharacterAllowedInBase(*data, base)) {
+  while (length && IsCharacterAllowedInBase<base>(*data)) {
     --length;
     IntegralType digit_value;
     CharType c = *data;
@@ -75,28 +75,33 @@ static inline IntegralType ToIntegralType(const CharType* data,
     else
       digit_value = c - 'A' + 10;
 
-    bool overflow;
     if (is_negative) {
       // Overflow condition:
-      //       value * base - digitValue < integralMin
-      //   <=> value < (integralMin + digitValue) / base
+      //       value * base - digit_value < kIntegralMin
+      //   <=> value < (kIntegralMin + digit_value) / base
       // We must be careful of rounding errors here, but the default rounding
       // mode (round to zero) works well, so we can use this formula as-is.
-      overflow = value < (kIntegralMin + digit_value) / base;
+      if (value < (kIntegralMin + digit_value) / base) {
+        state = NumberParsingState::kOverflowMin;
+        overflow = true;
+      }
     } else {
       // Overflow condition:
-      //       value * base + digitValue > integralMax
-      //   <=> value > (integralMax + digitValue) / base
+      //       value * base + digit_value > kIntegralMax
+      //   <=> value > (kIntegralMax + digit_value) / base
       // Ditto regarding rounding errors.
-      overflow = value > (kIntegralMax - digit_value) / base;
+      if (value > (kIntegralMax - digit_value) / base) {
+        state = NumberParsingState::kOverflowMax;
+        overflow = true;
+      }
     }
-    if (overflow)
-      goto bye;
 
-    if (is_negative)
-      value = base * value - digit_value;
-    else
-      value = base * value + digit_value;
+    if (!overflow) {
+      if (is_negative)
+        value = base * value - digit_value;
+      else
+        value = base * value + digit_value;
+    }
     ++data;
   }
 
@@ -106,12 +111,28 @@ static inline IntegralType ToIntegralType(const CharType* data,
     ++data;
   }
 
-  if (!length)
-    is_ok = true;
+  if (length == 0) {
+    if (!overflow)
+      state = NumberParsingState::kSuccess;
+  } else {
+    // Even if we detected overflow, we return kError for trailing garbage.
+    state = NumberParsingState::kError;
+  }
 bye:
+  *parsing_state = state;
+  return state == NumberParsingState::kSuccess ? value : 0;
+}
+
+template <typename IntegralType, typename CharType, int base>
+static inline IntegralType ToIntegralType(const CharType* data,
+                                          size_t length,
+                                          bool* ok) {
+  NumberParsingState state;
+  IntegralType value =
+      ToIntegralType<IntegralType, CharType, base>(data, length, &state);
   if (ok)
-    *ok = is_ok;
-  return is_ok ? value : 0;
+    *ok = state == NumberParsingState::kSuccess;
+  return value;
 }
 
 template <typename CharType>
@@ -138,100 +159,96 @@ static unsigned LengthOfCharactersAsInteger(const CharType* data,
   return i;
 }
 
-int CharactersToIntStrict(const LChar* data,
-                          size_t length,
-                          bool* ok,
-                          int base) {
-  return ToIntegralType<int, LChar>(data, length, ok, base);
-}
-
-int CharactersToIntStrict(const UChar* data,
-                          size_t length,
-                          bool* ok,
-                          int base) {
-  return ToIntegralType<int, UChar>(data, length, ok, base);
-}
-
 unsigned CharactersToUIntStrict(const LChar* data,
                                 size_t length,
-                                bool* ok,
-                                int base) {
-  return ToIntegralType<unsigned, LChar>(data, length, ok, base);
+                                NumberParsingState* state) {
+  return ToIntegralType<unsigned, LChar, 10>(data, length, state);
 }
 
 unsigned CharactersToUIntStrict(const UChar* data,
                                 size_t length,
-                                bool* ok,
-                                int base) {
-  return ToIntegralType<unsigned, UChar>(data, length, ok, base);
+                                NumberParsingState* state) {
+  return ToIntegralType<unsigned, UChar, 10>(data, length, state);
 }
 
-int64_t CharactersToInt64Strict(const LChar* data,
-                                size_t length,
-                                bool* ok,
-                                int base) {
-  return ToIntegralType<int64_t, LChar>(data, length, ok, base);
+int CharactersToIntStrict(const LChar* data, size_t length, bool* ok) {
+  return ToIntegralType<int, LChar, 10>(data, length, ok);
 }
 
-int64_t CharactersToInt64Strict(const UChar* data,
-                                size_t length,
-                                bool* ok,
-                                int base) {
-  return ToIntegralType<int64_t, UChar>(data, length, ok, base);
+int CharactersToIntStrict(const UChar* data, size_t length, bool* ok) {
+  return ToIntegralType<int, UChar, 10>(data, length, ok);
 }
 
-uint64_t CharactersToUInt64Strict(const LChar* data,
-                                  size_t length,
-                                  bool* ok,
-                                  int base) {
-  return ToIntegralType<uint64_t, LChar>(data, length, ok, base);
+unsigned CharactersToUIntStrict(const LChar* data, size_t length, bool* ok) {
+  return ToIntegralType<unsigned, LChar, 10>(data, length, ok);
 }
 
-uint64_t CharactersToUInt64Strict(const UChar* data,
-                                  size_t length,
-                                  bool* ok,
-                                  int base) {
-  return ToIntegralType<uint64_t, UChar>(data, length, ok, base);
+unsigned CharactersToUIntStrict(const UChar* data, size_t length, bool* ok) {
+  return ToIntegralType<unsigned, UChar, 10>(data, length, ok);
+}
+
+unsigned HexCharactersToUIntStrict(const LChar* data, size_t length, bool* ok) {
+  return ToIntegralType<unsigned, LChar, 16>(data, length, ok);
+}
+
+unsigned HexCharactersToUIntStrict(const UChar* data, size_t length, bool* ok) {
+  return ToIntegralType<unsigned, UChar, 16>(data, length, ok);
+}
+
+int64_t CharactersToInt64Strict(const LChar* data, size_t length, bool* ok) {
+  return ToIntegralType<int64_t, LChar, 10>(data, length, ok);
+}
+
+int64_t CharactersToInt64Strict(const UChar* data, size_t length, bool* ok) {
+  return ToIntegralType<int64_t, UChar, 10>(data, length, ok);
+}
+
+uint64_t CharactersToUInt64Strict(const LChar* data, size_t length, bool* ok) {
+  return ToIntegralType<uint64_t, LChar, 10>(data, length, ok);
+}
+
+uint64_t CharactersToUInt64Strict(const UChar* data, size_t length, bool* ok) {
+  return ToIntegralType<uint64_t, UChar, 10>(data, length, ok);
 }
 
 int CharactersToInt(const LChar* data, size_t length, bool* ok) {
-  return ToIntegralType<int, LChar>(
-      data, LengthOfCharactersAsInteger<LChar>(data, length), ok, 10);
+  return ToIntegralType<int, LChar, 10>(
+      data, LengthOfCharactersAsInteger<LChar>(data, length), ok);
 }
 
 int CharactersToInt(const UChar* data, size_t length, bool* ok) {
-  return ToIntegralType<int, UChar>(
-      data, LengthOfCharactersAsInteger(data, length), ok, 10);
+  return ToIntegralType<int, UChar, 10>(
+      data, LengthOfCharactersAsInteger(data, length), ok);
 }
 
 unsigned CharactersToUInt(const LChar* data, size_t length, bool* ok) {
-  return ToIntegralType<unsigned, LChar>(
-      data, LengthOfCharactersAsInteger<LChar>(data, length), ok, 10);
+  return ToIntegralType<unsigned, LChar, 10>(
+      data, LengthOfCharactersAsInteger<LChar>(data, length), ok);
 }
 
 unsigned CharactersToUInt(const UChar* data, size_t length, bool* ok) {
-  return ToIntegralType<unsigned, UChar>(
-      data, LengthOfCharactersAsInteger<UChar>(data, length), ok, 10);
+  return ToIntegralType<unsigned, UChar, 10>(
+      data, LengthOfCharactersAsInteger<UChar>(data, length), ok);
 }
 
 int64_t CharactersToInt64(const LChar* data, size_t length, bool* ok) {
-  return ToIntegralType<int64_t, LChar>(
-      data, LengthOfCharactersAsInteger<LChar>(data, length), ok, 10);
+  return ToIntegralType<int64_t, LChar, 10>(
+      data, LengthOfCharactersAsInteger<LChar>(data, length), ok);
 }
 
 int64_t CharactersToInt64(const UChar* data, size_t length, bool* ok) {
-  return ToIntegralType<int64_t, UChar>(
-      data, LengthOfCharactersAsInteger<UChar>(data, length), ok, 10);
+  return ToIntegralType<int64_t, UChar, 10>(
+      data, LengthOfCharactersAsInteger<UChar>(data, length), ok);
 }
 
 uint64_t CharactersToUInt64(const LChar* data, size_t length, bool* ok) {
-  return ToIntegralType<uint64_t, LChar>(
-      data, LengthOfCharactersAsInteger<LChar>(data, length), ok, 10);
+  return ToIntegralType<uint64_t, LChar, 10>(
+      data, LengthOfCharactersAsInteger<LChar>(data, length), ok);
 }
 
 uint64_t CharactersToUInt64(const UChar* data, size_t length, bool* ok) {
-  return ToIntegralType<uint64_t, UChar>(
-      data, LengthOfCharactersAsInteger<UChar>(data, length), ok, 10);
+  return ToIntegralType<uint64_t, UChar, 10>(
+      data, LengthOfCharactersAsInteger<UChar>(data, length), ok);
 }
 
 enum TrailingJunkPolicy { kDisallowTrailingJunk, kAllowTrailingJunk };

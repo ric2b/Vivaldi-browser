@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/workers/WorkerBackingThread.h"
+#include "core/workers/WorkerBackingThreadStartupData.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
 #include "platform/wtf/PtrUtil.h"
@@ -76,7 +77,7 @@ class WorkletThreadHolder {
   ~WorkletThreadHolder() {}
 
   static Mutex& HolderInstanceMutex() {
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, holder_mutex, new Mutex);
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, holder_mutex, ());
     return holder_mutex;
   }
 
@@ -91,7 +92,8 @@ class WorkletThreadHolder {
   void InitializeOnWorkletThread() {
     MutexLocker locker(HolderInstanceMutex());
     DCHECK(!initialized_);
-    thread_->Initialize();
+    thread_->InitializeOnBackingThread(
+        WorkerBackingThreadStartupData::CreateDefault());
     initialized_ = true;
   }
 
@@ -107,7 +109,7 @@ class WorkletThreadHolder {
   }
 
   void ShutdownOnWorlketThread(WaitableEvent* waitable_event) {
-    thread_->Shutdown();
+    thread_->ShutdownOnBackingThread();
     waitable_event->Signal();
   }
 

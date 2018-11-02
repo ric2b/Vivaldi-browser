@@ -14,6 +14,7 @@
 #include "chrome/browser/profiles/profile_metrics.h"
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
@@ -27,7 +28,7 @@ namespace {
 
 void ShowUserManager(const ProfileManager::CreateCallback& callback) {
   if (!UserManager::IsShowing()) {
-    UserManager::Show(base::FilePath(), profiles::USER_MANAGER_NO_TUTORIAL,
+    UserManager::Show(base::FilePath(),
                       profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
   }
 
@@ -72,7 +73,7 @@ void DeleteProfileCallback(std::unique_ptr<ScopedKeepAlive> keep_alive,
 
 void OpenNewWindowForProfile(Profile* profile) {
   if (profiles::IsProfileLocked(profile->GetPath())) {
-    if (signin::IsForceSigninEnabled()) {
+    if (signin_util::IsForceSigninEnabled()) {
       ShowUserManager(base::Bind(&ShowSigninDialog, profile->GetPath()));
     } else {
       ShowUserManager(

@@ -10,12 +10,15 @@
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
 #include "chrome/browser/apps/app_browsertest_util.h"
-#include "chrome/browser/extensions/api/file_system/file_system_api.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
+#include "extensions/browser/api/file_system/file_system_api.h"
+#include "extensions/browser/api/file_system/saved_file_entry.h"
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_registry_observer.h"
+
+// TODO(michaelpg): Port these tests to app_shell: crbug.com/505926.
 
 namespace content {
 class BrowserContext;
@@ -615,8 +618,9 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTest, FileSystemApiRetainEntry) {
       &test_file);
   ASSERT_TRUE(RunPlatformAppTest(
       "api_test/file_system/retain_entry")) << message_;
-  std::vector<apps::SavedFileEntry> file_entries = apps::SavedFilesService::Get(
-      profile())->GetAllFileEntries(GetSingleLoadedExtension()->id());
+  std::vector<SavedFileEntry> file_entries =
+      apps::SavedFilesService::Get(profile())->GetAllFileEntries(
+          GetSingleLoadedExtension()->id());
   ASSERT_EQ(1u, file_entries.size());
   EXPECT_EQ(test_file, file_entries[0].path);
   EXPECT_EQ(1, file_entries[0].sequence_number);
@@ -631,8 +635,9 @@ IN_PROC_BROWSER_TEST_F(FileSystemApiTest, FileSystemApiRetainDirectoryEntry) {
       &test_directory);
   ASSERT_TRUE(RunPlatformAppTest("api_test/file_system/retain_directory"))
       << message_;
-  std::vector<apps::SavedFileEntry> file_entries = apps::SavedFilesService::Get(
-      profile())->GetAllFileEntries(GetSingleLoadedExtension()->id());
+  std::vector<SavedFileEntry> file_entries =
+      apps::SavedFilesService::Get(profile())->GetAllFileEntries(
+          GetSingleLoadedExtension()->id());
   ASSERT_EQ(1u, file_entries.size());
   EXPECT_EQ(test_directory, file_entries[0].path);
   EXPECT_EQ(1, file_entries[0].sequence_number);

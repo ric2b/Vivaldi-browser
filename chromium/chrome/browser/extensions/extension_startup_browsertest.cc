@@ -41,6 +41,7 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/feature_switch.h"
 #include "extensions/common/manifest.h"
+#include "extensions/common/switches.h"
 #include "net/base/filename_util.h"
 
 #if defined(OS_CHROMEOS)
@@ -80,7 +81,8 @@ class ExtensionStartupTestBase : public InProcessBrowserTest {
     } else {
       base::FilePath::StringType paths = base::JoinString(
           load_extensions_, base::FilePath::StringType(1, ','));
-      command_line->AppendSwitchNative(switches::kLoadExtension, paths);
+      command_line->AppendSwitchNative(extensions::switches::kLoadExtension,
+                                       paths);
       command_line->AppendSwitch(switches::kDisableExtensionsFileAccessCheck);
     }
   }
@@ -109,8 +111,6 @@ class ExtensionStartupTestBase : public InProcessBrowserTest {
   }
 
   void SetUpInProcessBrowserTestFixture() override {
-    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
-
     // Bots are on a domain, turn off the domain check for settings hardening in
     // order to be able to test all SettingsEnforcement groups.
     chrome_prefs::DisableDomainCheckForTesting();

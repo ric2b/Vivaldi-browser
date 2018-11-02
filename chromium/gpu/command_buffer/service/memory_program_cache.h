@@ -40,7 +40,7 @@ class GPU_EXPORT MemoryProgramCache : public ProgramCache {
       const LocationMap* bind_attrib_location_map,
       const std::vector<std::string>& transform_feedback_varyings,
       GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& shader_callback) override;
+      GLES2DecoderClient* client) override;
   void SaveLinkedProgram(
       GLuint program,
       const Shader* shader_a,
@@ -48,9 +48,11 @@ class GPU_EXPORT MemoryProgramCache : public ProgramCache {
       const LocationMap* bind_attrib_location_map,
       const std::vector<std::string>& transform_feedback_varyings,
       GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& shader_callback) override;
+      GLES2DecoderClient* client) override;
 
-  void LoadProgram(const std::string& program) override;
+  void LoadProgram(const std::string& key, const std::string& program) override;
+
+  size_t Trim(size_t limit) override;
 
  private:
   void ClearBackend() override;

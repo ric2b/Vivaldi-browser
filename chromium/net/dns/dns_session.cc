@@ -234,9 +234,15 @@ void DnsSession::RecordRTT(unsigned server_index, base::TimeDelta rtt) {
       std::abs(current_error.ToInternalValue()));
   deviation += (abs_error - deviation) / 4;  // * delta
 
+  // RTT values shouldn't be less than 0, but it shouldn't cause a crash if they
+  // are anyway, so clip to 0. See https://crbug.com/753568.
+  int32_t rtt_ms = rtt.InMilliseconds();
+  if (rtt_ms < 0)
+    rtt_ms = 0;
+
   // Histogram-based method.
   server_stats_[server_index]->rtt_histogram->Accumulate(
-      static_cast<base::HistogramBase::Sample>(rtt.InMilliseconds()), 1);
+      static_cast<base::HistogramBase::Sample>(rtt_ms), 1);
 }
 
 void DnsSession::RecordLostPacket(unsigned server_index, int attempt) {
@@ -252,11 +258,11 @@ void DnsSession::RecordServerStats() {
   for (size_t index = 0; index < server_stats_.size(); ++index) {
     if (server_stats_[index]->last_failure_count) {
       if (server_stats_[index]->last_success.is_null()) {
-        UMA_HISTOGRAM_COUNTS("AsyncDNS.ServerFailuresWithoutSuccess",
-                             server_stats_[index]->last_failure_count);
+        UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.ServerFailuresWithoutSuccess",
+                                server_stats_[index]->last_failure_count);
       } else {
-        UMA_HISTOGRAM_COUNTS("AsyncDNS.ServerFailuresAfterSuccess",
-                             server_stats_[index]->last_failure_count);
+        UMA_HISTOGRAM_COUNTS_1M("AsyncDNS.ServerFailuresAfterSuccess",
+                                server_stats_[index]->last_failure_count);
       }
     }
   }

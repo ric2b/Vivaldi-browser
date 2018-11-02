@@ -43,23 +43,30 @@
 #include "media/capture/video/android/video_capture_device_factory_android.h"
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "media/capture/video/chromeos/video_capture_device_arc_chromeos.h"
+#include "media/capture/video/chromeos/video_capture_device_factory_chromeos.h"
+#include "mojo/edk/embedder/embedder.h"
+#include "mojo/edk/embedder/scoped_ipc_support.h"
+#endif
+
 #if defined(OS_MACOSX)
 // Mac will always give you the size you ask for and this case will fail.
 #define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
 // We will always get YUYV from the Mac AVFoundation implementations.
 #define MAYBE_CaptureMjpeg DISABLED_CaptureMjpeg
 #define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
+#define MAYBE_GetPhotoState GetPhotoState
 #elif defined(OS_WIN)
 #define MAYBE_AllocateBadSize AllocateBadSize
 #define MAYBE_CaptureMjpeg CaptureMjpeg
 #define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
+#define MAYBE_GetPhotoState GetPhotoState
 #elif defined(OS_ANDROID)
 #define MAYBE_AllocateBadSize AllocateBadSize
 #define MAYBE_CaptureMjpeg CaptureMjpeg
 #define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
+#define MAYBE_GetPhotoState GetPhotoState
 #elif defined(OS_LINUX)
 // AllocateBadSize will hang when a real camera is attached and if more than one
 // test is trying to use the camera (even across processes). Do NOT renable
@@ -68,12 +75,12 @@
 #define MAYBE_AllocateBadSize DISABLED_AllocateBadSize
 #define MAYBE_CaptureMjpeg CaptureMjpeg
 #define MAYBE_TakePhoto TakePhoto
-#define MAYBE_GetPhotoCapabilities GetPhotoCapabilities
+#define MAYBE_GetPhotoState GetPhotoState
 #else
 #define MAYBE_AllocateBadSize AllocateBadSize
 #define MAYBE_CaptureMjpeg CaptureMjpeg
 #define MAYBE_TakePhoto DISABLED_TakePhoto
-#define MAYBE_GetPhotoCapabilities DISABLED_GetPhotoCapabilities
+#define MAYBE_GetPhotoState DISABLED_GetPhotoState
 #endif
 
 using ::testing::_;
@@ -185,26 +192,69 @@ class MockImageCaptureClient
     }
   }
   MOCK_METHOD0(OnCorrectPhotoTaken, void(void));
-  MOCK_METHOD1(OnTakePhotoFailure,
-               void(const base::Callback<void(mojom::BlobPtr)>&));
+
+  void OnTakePhotoFailure(mojom::ImageCapture::TakePhotoCallback callback) {
+    OnTakePhotoFailureInternal(callback);
+  }
+
+  MOCK_METHOD1(OnTakePhotoFailureInternal,
+               void(mojom::ImageCapture::TakePhotoCallback&));
 
   // GMock doesn't support move-only arguments, so we use this forward method.
-  void DoOnGetPhotoCapabilities(mojom::PhotoCapabilitiesPtr capabilities) {
-    capabilities_ = std::move(capabilities);
-    OnCorrectGetPhotoCapabilities();
+  void DoOnGetPhotoState(mojom::PhotoStatePtr state) {
+    state_ = std::move(state);
+    OnCorrectGetPhotoState();
   }
-  MOCK_METHOD0(OnCorrectGetPhotoCapabilities, void(void));
-  MOCK_METHOD1(OnGetPhotoCapabilitiesFailure,
-               void(const base::Callback<void(mojom::PhotoCapabilitiesPtr)>&));
+  MOCK_METHOD0(OnCorrectGetPhotoState, void(void));
 
-  const mojom::PhotoCapabilities* capabilities() { return capabilities_.get(); }
+  void OnGetPhotoStateFailure(
+      mojom::ImageCapture::GetPhotoStateCallback callback) {
+    OnGetPhotoStateFailureInternal(callback);
+  }
+  MOCK_METHOD1(OnGetPhotoStateFailureInternal,
+               void(mojom::ImageCapture::GetPhotoStateCallback&));
+
+  const mojom::PhotoState* capabilities() { return state_.get(); }
 
  private:
   friend class base::RefCountedThreadSafe<MockImageCaptureClient>;
   virtual ~MockImageCaptureClient() {}
 
-  mojom::PhotoCapabilitiesPtr capabilities_;
+  mojom::PhotoStatePtr state_;
 };
+
+#if defined(OS_CHROMEOS)
+
+class MojoEnabledTestEnvironment final : public testing::Environment {
+ public:
+  MojoEnabledTestEnvironment() : mojo_ipc_thread_("MojoIpcThread") {}
+
+  ~MojoEnabledTestEnvironment() final {}
+
+  void SetUp() final {
+    mojo::edk::Init();
+    mojo_ipc_thread_.StartWithOptions(
+        base::Thread::Options(base::MessageLoop::TYPE_IO, 0));
+    mojo_ipc_support_.reset(new mojo::edk::ScopedIPCSupport(
+        mojo_ipc_thread_.task_runner(),
+        mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
+    VLOG(1) << "Mojo initialized";
+  }
+
+  void TearDown() final {
+    mojo_ipc_support_.reset();
+    VLOG(1) << "Mojo IPC tear down";
+  }
+
+ private:
+  base::Thread mojo_ipc_thread_;
+  std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
+};
+
+testing::Environment* const mojo_test_env =
+    testing::AddGlobalTestEnvironment(new MojoEnabledTestEnvironment());
+
+#endif
 
 }  // namespace
 
@@ -268,6 +318,13 @@ class VideoCaptureDeviceTest : public testing::TestWithParam<gfx::Size> {
       }
     }
 #endif
+
+    if (device_descriptors_->empty())
+      LOG(WARNING) << "No camera found";
+    else {
+      LOG(INFO) << "Using camera " << device_descriptors_->front().display_name
+                << " (" << device_descriptors_->front().model_id << ")";
+    }
 
     return !device_descriptors_->empty();
   }
@@ -528,6 +585,13 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
   if (!FindUsableDevices())
     return;
 
+#if defined(OS_CHROMEOS)
+  // TODO(jcliang): Remove this after we implement TakePhoto.
+  if (VideoCaptureDeviceFactoryChromeOS::ShouldEnable()) {
+    return;
+  }
+#endif
+
 #if defined(OS_ANDROID)
   // TODO(mcasas): fails on Lollipop devices, reconnect https://crbug.com/646840
   if (base::android::BuildInfo::GetInstance()->sdk_int() <
@@ -551,8 +615,8 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
 
   VideoCaptureDevice::TakePhotoCallback scoped_callback(
-      base::Bind(&MockImageCaptureClient::DoOnPhotoTaken,
-                 image_capture_client_),
+      base::BindOnce(&MockImageCaptureClient::DoOnPhotoTaken,
+                     image_capture_client_),
       media::BindToCurrentLoop(base::Bind(
           &MockImageCaptureClient::OnTakePhotoFailure, image_capture_client_)));
 
@@ -569,9 +633,16 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_TakePhoto) {
 }
 
 // Starts the camera and verifies that the photo capabilities can be retrieved.
-TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoCapabilities) {
+TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoState) {
   if (!FindUsableDevices())
     return;
+
+#if defined(OS_CHROMEOS)
+  // TODO(jcliang): Remove this after we implement GetPhotoCapabilities.
+  if (VideoCaptureDeviceFactoryChromeOS::ShouldEnable()) {
+    return;
+  }
+#endif
 
 #if defined(OS_ANDROID)
   // TODO(mcasas): fails on Lollipop devices, reconnect https://crbug.com/646840
@@ -595,20 +666,20 @@ TEST_F(VideoCaptureDeviceTest, MAYBE_GetPhotoCapabilities) {
   capture_params.requested_format.pixel_format = PIXEL_FORMAT_I420;
   device->AllocateAndStart(capture_params, std::move(video_capture_client_));
 
-  VideoCaptureDevice::GetPhotoCapabilitiesCallback scoped_get_callback(
-      base::Bind(&MockImageCaptureClient::DoOnGetPhotoCapabilities,
-                 image_capture_client_),
+  VideoCaptureDevice::GetPhotoStateCallback scoped_get_callback(
+      base::BindOnce(&MockImageCaptureClient::DoOnGetPhotoState,
+                     image_capture_client_),
       media::BindToCurrentLoop(
-          base::Bind(&MockImageCaptureClient::OnGetPhotoCapabilitiesFailure,
-                     image_capture_client_)));
+          base::BindOnce(&MockImageCaptureClient::OnGetPhotoStateFailure,
+                         image_capture_client_)));
 
   base::RunLoop run_loop;
   base::Closure quit_closure = media::BindToCurrentLoop(run_loop.QuitClosure());
-  EXPECT_CALL(*image_capture_client_.get(), OnCorrectGetPhotoCapabilities())
+  EXPECT_CALL(*image_capture_client_.get(), OnCorrectGetPhotoState())
       .Times(1)
       .WillOnce(RunClosure(quit_closure));
 
-  device->GetPhotoCapabilities(std::move(scoped_get_callback));
+  device->GetPhotoState(std::move(scoped_get_callback));
   run_loop.Run();
 
   ASSERT_TRUE(image_capture_client_->capabilities());

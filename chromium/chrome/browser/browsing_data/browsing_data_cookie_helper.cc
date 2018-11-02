@@ -68,8 +68,9 @@ void BrowsingDataCookieHelper::FetchCookiesOnIOThread(
     const FetchCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(!callback.is_null());
-  request_context_getter_->GetURLRequestContext()->cookie_store()->
-      GetAllCookiesAsync(base::Bind(&OnFetchComplete, callback));
+  request_context_getter_->GetURLRequestContext()
+      ->cookie_store()
+      ->GetAllCookiesAsync(base::BindOnce(&OnFetchComplete, callback));
 }
 
 void BrowsingDataCookieHelper::DeleteCookieOnIOThread(
@@ -128,9 +129,8 @@ size_t CannedBrowsingDataCookieHelper::GetCookieCount() const {
   return count;
 }
 
-
 void CannedBrowsingDataCookieHelper::StartFetching(
-    const net::CookieStore::GetCookieListCallback& callback) {
+    const FetchCallback& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   net::CookieList cookie_list;
   for (const auto& pair : origin_cookie_set_map_) {

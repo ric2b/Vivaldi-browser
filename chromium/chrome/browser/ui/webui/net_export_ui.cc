@@ -24,11 +24,12 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/url_constants.h"
 #include "components/grit/components_resources.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/net_log/net_export_file_writer.h"
 #include "components/net_log/net_export_ui_constants.h"
-#include "components/net_log/net_log_file_writer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/browser/url_data_source.h"
@@ -50,29 +51,6 @@ using content::WebContents;
 using content::WebUIMessageHandler;
 
 namespace {
-
-class ProxyScriptFetcherContextGetter : public net::URLRequestContextGetter {
- public:
-  explicit ProxyScriptFetcherContextGetter(IOThread* io_thread)
-      : io_thread_(io_thread) {}
-
-  net::URLRequestContext* GetURLRequestContext() override {
-    DCHECK_CURRENTLY_ON(BrowserThread::IO);
-    DCHECK(io_thread_->globals()->proxy_script_fetcher_context.get());
-    return io_thread_->globals()->proxy_script_fetcher_context.get();
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> GetNetworkTaskRunner()
-      const override {
-    return BrowserThread::GetTaskRunnerForThread(BrowserThread::IO);
-  }
-
- protected:
-  ~ProxyScriptFetcherContextGetter() override {}
-
- private:
-  IOThread* const io_thread_;  // Owned by BrowserProcess.
-};
 
 // May only be accessed on the UI thread
 base::LazyInstance<base::FilePath>::Leaky
@@ -103,7 +81,7 @@ class NetExportMessageHandler
     : public WebUIMessageHandler,
       public base::SupportsWeakPtr<NetExportMessageHandler>,
       public ui::SelectFileDialog::Listener,
-      public net_log::NetLogFileWriter::StateObserver {
+      public net_log::NetExportFileWriter::StateObserver {
  public:
   NetExportMessageHandler();
   ~NetExportMessageHandler() override;
@@ -124,7 +102,7 @@ class NetExportMessageHandler
                     void* params) override;
   void FileSelectionCanceled(void* params) override;
 
-  // net_log::NetLogFileWriter::StateObserver implementation.
+  // net_log::NetExportFileWriter::StateObserver implementation.
   void OnNewState(const base::DictionaryValue& state) override;
 
  private:
@@ -133,6 +111,8 @@ class NetExportMessageHandler
 
   // Send NetLog data via email.
   static void SendEmail(const base::FilePath& file_to_send);
+
+  void StartNetLog(const base::FilePath& path);
 
   // Reveal |path| in the shell on desktop platforms.
   void ShowFileInShell(const base::FilePath& path);
@@ -150,7 +130,7 @@ class NetExportMessageHandler
   static bool UsingMobileUI();
 
   // Calls NetExportView.onExportNetLogInfoChanged JavaScript function in the
-  // renderer, passing in |file_writer_state|.
+  // renderer.
   void NotifyUIWithState(std::unique_ptr<base::DictionaryValue> state);
 
   // Opens the SelectFileDialog UI with the default path to save a
@@ -161,18 +141,20 @@ class NetExportMessageHandler
   // logging starts so that net log entries can be added for those events.
   URLRequestContextGetterList GetURLRequestContexts() const;
 
-  // Cache of g_browser_process->net_log()->net_log_file_writer(). This
+  // Cache of g_browser_process->net_log()->net_export_file_writer(). This
   // is owned by ChromeNetLog which is owned by BrowserProcessImpl.
-  net_log::NetLogFileWriter* file_writer_;
+  net_log::NetExportFileWriter* file_writer_;
 
-  ScopedObserver<net_log::NetLogFileWriter,
-                 net_log::NetLogFileWriter::StateObserver>
+  ScopedObserver<net_log::NetExportFileWriter,
+                 net_log::NetExportFileWriter::StateObserver>
       state_observer_manager_;
 
-  // The capture mode the user chose in the UI when logging started is cached
-  // here and is read after a file path is chosen in the save dialog.
-  // Its value is only valid while the save dialog is open on the desktop UI.
+  // The capture mode and file size bound that the user chose in the UI when
+  // logging started is cached here and is read after a file path is chosen in
+  // the save dialog. Their values are only valid while the save dialog is open
+  // on the desktop UI.
   net::NetLogCaptureMode capture_mode_;
+  size_t max_log_file_size_;
 
   scoped_refptr<ui::SelectFileDialog> select_file_dialog_;
 
@@ -182,7 +164,7 @@ class NetExportMessageHandler
 };
 
 NetExportMessageHandler::NetExportMessageHandler()
-    : file_writer_(g_browser_process->net_log()->net_log_file_writer()),
+    : file_writer_(g_browser_process->net_log()->net_export_file_writer()),
       state_observer_manager_(this),
       weak_ptr_factory_(this) {
   file_writer_->Initialize(
@@ -237,16 +219,24 @@ void NetExportMessageHandler::OnEnableNotifyUIWithState(
 
 void NetExportMessageHandler::OnStartNetLog(const base::ListValue* list) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  std::string capture_mode_string;
-  bool result = list->GetString(0, &capture_mode_string);
-  DCHECK(result);
 
-  capture_mode_ =
-      net_log::NetLogFileWriter::CaptureModeFromString(capture_mode_string);
+  const base::Value::ListStorage& params = list->GetList();
+
+  // Determine the capture mode.
+  capture_mode_ = net::NetLogCaptureMode::Default();
+  if (params.size() > 0 && params[0].is_string()) {
+    capture_mode_ = net_log::NetExportFileWriter::CaptureModeFromString(
+        params[0].GetString());
+  }
+
+  // Determine the max file size.
+  max_log_file_size_ = net_log::NetExportFileWriter::kNoLimit;
+  if (params.size() > 1 && params[1].is_int() && params[1].GetInt() > 0) {
+    max_log_file_size_ = params[1].GetInt();
+  }
 
   if (UsingMobileUI()) {
-    file_writer_->StartNetLog(base::FilePath(), capture_mode_,
-                              GetURLRequestContexts());
+    StartNetLog(base::FilePath());
   } else {
     base::FilePath initial_dir = last_save_dir.Pointer()->empty() ?
         DownloadPrefs::FromBrowserContext(
@@ -303,7 +293,7 @@ void NetExportMessageHandler::FileSelected(const base::FilePath& path,
   DCHECK(select_file_dialog_);
   *last_save_dir.Pointer() = path.DirName();
 
-  file_writer_->StartNetLog(path, capture_mode_, GetURLRequestContexts());
+  StartNetLog(path);
 
   // IMPORTANT: resetting the dialog may lead to the deletion of |path|, so keep
   // this line last.
@@ -338,6 +328,15 @@ void NetExportMessageHandler::SendEmail(const base::FilePath& file_to_send) {
 #endif
 }
 
+void NetExportMessageHandler::StartNetLog(const base::FilePath& path) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  file_writer_->StartNetLog(
+      path, capture_mode_, max_log_file_size_,
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
+      chrome::GetChannelString(), GetURLRequestContexts());
+}
+
 void NetExportMessageHandler::ShowFileInShell(const base::FilePath& path) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (path.empty())
@@ -351,7 +350,7 @@ void NetExportMessageHandler::ShowFileInShell(const base::FilePath& path) {
 
 // static
 bool NetExportMessageHandler::UsingMobileUI() {
-#if defined(OS_ANDROID) || defined(OS_IOS)
+#if defined(OS_ANDROID)
   return true;
 #else
   return false;
@@ -399,8 +398,6 @@ NetExportMessageHandler::GetURLRequestContexts() const {
           ->GetMediaURLRequestContext());
   context_getters.push_back(
       g_browser_process->io_thread()->system_url_request_context_getter());
-  context_getters.push_back(
-      new ProxyScriptFetcherContextGetter(g_browser_process->io_thread()));
 
   return context_getters;
 }

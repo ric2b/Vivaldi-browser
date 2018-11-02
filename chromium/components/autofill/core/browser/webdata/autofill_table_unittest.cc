@@ -14,7 +14,6 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/guid.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -1760,6 +1759,28 @@ TEST_F(AutofillTableTest, SetServerCardModify) {
   EXPECT_EQ(ASCIIToUTF16("1111"), outputs[0]->GetRawInfo(CREDIT_CARD_NUMBER));
 
   outputs.clear();
+}
+
+TEST_F(AutofillTableTest, ServerCardBankName) {
+  // Add a masked card.
+  CreditCard masked_card(CreditCard::MASKED_SERVER_CARD, "a123");
+  masked_card.SetRawInfo(CREDIT_CARD_NAME_FULL,
+                         ASCIIToUTF16("Paul F. Tompkins"));
+  masked_card.SetRawInfo(CREDIT_CARD_EXP_MONTH, ASCIIToUTF16("1"));
+  masked_card.SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, ASCIIToUTF16("2020"));
+  masked_card.SetRawInfo(CREDIT_CARD_NUMBER, ASCIIToUTF16("1111"));
+  masked_card.SetNetworkForMaskedCard(kVisaCard);
+  masked_card.set_bank_name("Chase");
+
+  // Set server credit cards
+  std::vector<CreditCard> inputs = {masked_card};
+  test::SetServerCreditCards(table_.get(), inputs);
+
+  // Get server credit cards and check bank names equal
+  std::vector<std::unique_ptr<CreditCard>> outputs;
+  table_->GetServerCreditCards(&outputs);
+  ASSERT_EQ(1u, outputs.size());
+  EXPECT_EQ("Chase", outputs[0]->bank_name());
 }
 
 TEST_F(AutofillTableTest, SetServerCardUpdateUsageStatsAndBillingAddress) {

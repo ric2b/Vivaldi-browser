@@ -21,8 +21,8 @@
 // The value of the text field.
 @property(nonatomic, copy) NSString* textFieldValue;
 
-// An image corresponding to the type of the credit card, if any.
-@property(nonatomic, copy) UIImage* cardTypeIcon;
+// An icon identifying the text field or its current value, if any.
+@property(nonatomic, copy) UIImage* identifyingIcon;
 
 // The inputView for the text field, if any.
 @property(nonatomic, strong) UIPickerView* inputView;
@@ -38,6 +38,16 @@
 // Whether the text field is enabled for editing.
 @property(nonatomic, getter=isTextFieldEnabled) BOOL textFieldEnabled;
 
+// Controls the display of the return key when the keyboard is displaying.
+@property(nonatomic, assign) UIReturnKeyType returnKeyType;
+
+// Keyboard type to be displayed when the text field becomes first responder.
+@property(nonatomic, assign) UIKeyboardType keyboardType;
+
+// Controls autocapitalization behavior of the text field.
+@property(nonatomic, assign)
+    UITextAutocapitalizationType autoCapitalizationType;
+
 @end
 
 // AutofillEditCell implements an MDCCollectionViewCell subclass containing a
@@ -51,8 +61,8 @@
 // |textFieldValue|.
 @property(nonatomic, readonly, strong) UITextField* textField;
 
-// UIImageView containing the credit card type icon.
-@property(nonatomic, readonly, strong) UIImageView* cardTypeIconView;
+// UIImageView containing the icon identifying |textField| or its current value.
+@property(nonatomic, readonly, strong) UIImageView* identifyingIconView;
 
 @end
 

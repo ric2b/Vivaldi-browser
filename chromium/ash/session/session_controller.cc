@@ -7,10 +7,14 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/public/interfaces/user_info.mojom.h"
 #include "ash/session/session_observer.h"
 #include "ash/shell.h"
 #include "ash/system/power/power_event_observer.h"
 #include "ash/wm/lock_state_controller.h"
+#include "ash/wm/window_state.h"
+#include "ash/wm/window_util.h"
+#include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
@@ -135,11 +139,22 @@ const mojom::UserSession* SessionController::GetUserSession(
   return user_sessions_[index].get();
 }
 
+const mojom::UserSession* SessionController::GetPrimaryUserSession() const {
+  auto it = std::find_if(user_sessions_.begin(), user_sessions_.end(),
+                         [this](const mojom::UserSessionPtr& session) {
+                           return session->session_id == primary_session_id_;
+                         });
+  if (it == user_sessions_.end())
+    return nullptr;
+
+  return (*it).get();
+}
+
 bool SessionController::IsUserSupervised() const {
   if (!IsActiveUserSessionStarted())
     return false;
 
-  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
   return active_user_type == user_manager::USER_TYPE_SUPERVISED ||
          active_user_type == user_manager::USER_TYPE_CHILD;
 }
@@ -148,15 +163,36 @@ bool SessionController::IsUserChild() const {
   if (!IsActiveUserSessionStarted())
     return false;
 
-  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
   return active_user_type == user_manager::USER_TYPE_CHILD;
+}
+
+base::Optional<user_manager::UserType> SessionController::GetUserType() const {
+  if (!IsActiveUserSessionStarted())
+    return base::nullopt;
+
+  return base::make_optional(GetUserSession(0)->user_info->type);
+}
+
+bool SessionController::IsUserPrimary() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  return GetUserSession(0)->session_id == primary_session_id_;
+}
+
+bool SessionController::IsUserFirstLogin() const {
+  if (!IsActiveUserSessionStarted())
+    return false;
+
+  return GetUserSession(0)->user_info->is_new_profile;
 }
 
 bool SessionController::IsKioskSession() const {
   if (!IsActiveUserSessionStarted())
     return false;
 
-  user_manager::UserType active_user_type = GetUserSession(0)->type;
+  user_manager::UserType active_user_type = GetUserSession(0)->user_info->type;
   return active_user_type == user_manager::USER_TYPE_KIOSK_APP ||
          active_user_type == user_manager::USER_TYPE_ARC_KIOSK_APP;
 }
@@ -174,6 +210,11 @@ void SessionController::SwitchActiveUser(const AccountId& account_id) {
 void SessionController::CycleActiveUser(CycleUserDirection direction) {
   if (client_)
     client_->CycleActiveUser(direction);
+}
+
+void SessionController::ShowMultiProfileLogin() {
+  if (client_)
+    client_->ShowMultiProfileLogin();
 }
 
 void SessionController::AddObserver(SessionObserver* observer) {
@@ -208,7 +249,7 @@ void SessionController::UpdateUserSession(mojom::UserSessionPtr user_session) {
 
   *it = std::move(user_session);
   for (auto& observer : observers_)
-    observer.OnUserSessionUpdated((*it)->account_id);
+    observer.OnUserSessionUpdated((*it)->user_info->account_id);
 
   UpdateLoginStatus();
 }
@@ -238,11 +279,28 @@ void SessionController::SetUserSessionOrder(
   if (user_sessions_[0]->session_id != active_session_id_) {
     active_session_id_ = user_sessions_[0]->session_id;
 
-    for (auto& observer : observers_)
-      observer.OnActiveUserSessionChanged(user_sessions_[0]->account_id);
+    for (auto& observer : observers_) {
+      observer.OnActiveUserSessionChanged(
+          user_sessions_[0]->user_info->account_id);
+    }
 
     UpdateLoginStatus();
   }
+}
+
+void SessionController::PrepareForLock(PrepareForLockCallback callback) {
+  // If the active window is fullscreen, exit fullscreen to avoid the web page
+  // or app mimicking the lock screen. Do not exit fullscreen if the shelf is
+  // visible while in fullscreen because the shelf makes it harder for a web
+  // page or app to mimick the lock screen.
+  wm::WindowState* active_window_state = wm::GetActiveWindowState();
+  if (active_window_state && active_window_state->IsFullscreen() &&
+      active_window_state->hide_shelf_when_fullscreen()) {
+    const wm::WMEvent event(wm::WM_EVENT_TOGGLE_FULLSCREEN);
+    active_window_state->OnWMEvent(&event);
+  }
+
+  std::move(callback).Run();
 }
 
 void SessionController::StartLock(StartLockCallback callback) {
@@ -277,8 +335,18 @@ void SessionController::NotifyChromeTerminating() {
     observer.OnChromeTerminating();
 }
 
+void SessionController::SetSessionLengthLimit(base::TimeDelta length_limit,
+                                              base::TimeTicks start_time) {
+  session_length_limit_ = length_limit;
+  session_start_time_ = start_time;
+  for (auto& observer : observers_)
+    observer.OnSessionLengthLimitChanged();
+}
+
 void SessionController::ClearUserSessionsForTest() {
   user_sessions_.clear();
+  active_session_id_ = 0u;
+  primary_session_id_ = 0u;
 }
 
 void SessionController::FlushMojoForTest() {
@@ -312,7 +380,10 @@ void SessionController::SetSessionState(SessionState state) {
 }
 
 void SessionController::AddUserSession(mojom::UserSessionPtr user_session) {
-  const AccountId account_id(user_session->account_id);
+  const AccountId account_id(user_session->user_info->account_id);
+
+  if (primary_session_id_ == 0u)
+    primary_session_id_ = user_session->session_id;
 
   user_sessions_.push_back(std::move(user_session));
 
@@ -350,7 +421,7 @@ LoginStatus SessionController::CalculateLoginStatusForActiveSession() const {
   if (user_sessions_.empty())  // Can be empty in tests.
     return LoginStatus::USER;
 
-  switch (user_sessions_[0]->type) {
+  switch (user_sessions_[0]->user_info->type) {
     case user_manager::USER_TYPE_REGULAR:
       // TODO: This needs to distinguish between owner and non-owner.
       return LoginStatus::USER;
@@ -391,6 +462,12 @@ void SessionController::UpdateLoginStatus() {
 void SessionController::OnLockAnimationFinished() {
   if (!start_lock_callback_.is_null())
     std::move(start_lock_callback_).Run(true /* locked */);
+}
+
+// HACK for M61. See SessionObserver comment.
+void SessionController::NotifyActiveUserPrefServiceChanged(PrefService* prefs) {
+  for (auto& observer : observers_)
+    observer.OnActiveUserPrefServiceChanged(prefs);
 }
 
 }  // namespace ash

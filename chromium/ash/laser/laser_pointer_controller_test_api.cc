@@ -4,8 +4,8 @@
 
 #include "ash/laser/laser_pointer_controller_test_api.h"
 
+#include "ash/fast_ink/fast_ink_points.h"
 #include "ash/laser/laser_pointer_controller.h"
-#include "ash/laser/laser_pointer_points.h"
 #include "ash/laser/laser_pointer_view.h"
 
 namespace ash {
@@ -25,19 +25,16 @@ bool LaserPointerControllerTestApi::IsShowingLaserPointer() const {
 }
 
 bool LaserPointerControllerTestApi::IsFadingAway() const {
-  return IsShowingLaserPointer() && instance_->is_fading_away_;
+  return IsShowingLaserPointer() &&
+         !instance_->laser_pointer_view_->fadeout_done_.is_null();
 }
 
-void LaserPointerControllerTestApi::SetIsFadingAway(bool fading_away) {
-  instance_->is_fading_away_ = fading_away;
-}
-
-const LaserPointerPoints& LaserPointerControllerTestApi::laser_points() const {
+const FastInkPoints& LaserPointerControllerTestApi::laser_points() const {
   return instance_->laser_pointer_view_->laser_points_;
 }
 
-const LaserPointerPoints&
-LaserPointerControllerTestApi::predicted_laser_points() const {
+const FastInkPoints& LaserPointerControllerTestApi::predicted_laser_points()
+    const {
   return instance_->laser_pointer_view_->predicted_laser_points_;
 }
 

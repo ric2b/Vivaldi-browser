@@ -10,11 +10,12 @@
 
 namespace blink {
 
+class LayoutObject;
 class Node;
-class AXObjectImpl;
+class AXObject;
 
 // AXObjectCacheBase is a temporary class that sits between AXObjectCache and
-// AXObjectImpl and contains methods required by web/ that we don't want to be
+// AXObject and contains methods required by web/ that we don't want to be
 // available in the public API (AXObjectCache).
 // TODO(dmazzoni): Once all dependencies in web/ use this class instead of
 // AXObjectCacheImpl, refactor usages to use AXObjectCache instead (introducing
@@ -25,7 +26,8 @@ class CORE_EXPORT AXObjectCacheBase : public AXObjectCache {
  public:
   virtual ~AXObjectCacheBase();
 
-  virtual AXObjectImpl* Get(Node*) = 0;
+  virtual AXObject* Get(const Node*) = 0;
+  virtual AXObject* GetOrCreate(LayoutObject*) = 0;
 
  protected:
   AXObjectCacheBase();

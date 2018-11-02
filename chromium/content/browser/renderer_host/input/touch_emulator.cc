@@ -6,6 +6,7 @@
 
 #include "build/build_config.h"
 #include "content/browser/renderer_host/input/motion_event_web.h"
+#include "content/browser/renderer_host/ui_events_helper.h"
 #include "content/common/input/web_touch_event_traits.h"
 #include "content/grit/content_resources.h"
 #include "content/public/common/content_client.h"
@@ -13,6 +14,7 @@
 #include "third_party/WebKit/public/platform/WebCursorInfo.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseEvent.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/base_event_utils.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
@@ -160,8 +162,10 @@ bool TouchEmulator::HandleMouseEvent(const WebMouseEvent& mouse_event) {
 
   if (mouse_event.button == WebMouseEvent::Button::kRight &&
       mouse_event.GetType() == WebInputEvent::kMouseDown) {
-    client_->ShowContextMenuAtPoint(gfx::Point(
-        mouse_event.PositionInWidget().x, mouse_event.PositionInWidget().y));
+    client_->ShowContextMenuAtPoint(
+        gfx::Point(mouse_event.PositionInWidget().x,
+                   mouse_event.PositionInWidget().y),
+        ui::MENU_SOURCE_MOUSE);
   }
 
   if (mouse_event.button != WebMouseEvent::Button::kLeft)
@@ -255,10 +259,12 @@ void TouchEmulator::HandleEmulatedTouchEvent(blink::WebTouchEvent event) {
     return;
 
   const bool event_consumed = true;
+  const bool is_source_touch_event_set_non_blocking = false;
   // Block emulated event when emulated native stream is active.
   if (native_stream_active_sequence_count_) {
     gesture_provider_->OnTouchEventAck(event.unique_touch_event_id,
-                                       event_consumed);
+                                       event_consumed,
+                                       is_source_touch_event_set_non_blocking);
     return;
   }
 
@@ -266,7 +272,8 @@ void TouchEmulator::HandleEmulatedTouchEvent(blink::WebTouchEvent event) {
   // Do not allow middle-sequence event to pass through, if start was blocked.
   if (!emulated_stream_active_sequence_count_ && !is_sequence_start) {
     gesture_provider_->OnTouchEventAck(event.unique_touch_event_id,
-                                       event_consumed);
+                                       event_consumed,
+                                       is_source_touch_event_set_non_blocking);
     return;
   }
 
@@ -286,8 +293,9 @@ bool TouchEmulator::HandleTouchEventAck(
 
     const bool event_consumed = ack_result == INPUT_EVENT_ACK_STATE_CONSUMED;
     if (gesture_provider_)
-      gesture_provider_->OnTouchEventAck(event.unique_touch_event_id,
-                                         event_consumed);
+      gesture_provider_->OnTouchEventAck(
+          event.unique_touch_event_id, event_consumed,
+          InputEventAckStateIsSetNonBlocking(ack_result));
     return true;
   }
 
@@ -467,10 +475,10 @@ void TouchEmulator::FillTouchEventAndPoint(const WebMouseEvent& mouse_event) {
   point.radius_y = 0.5f * cursor_size_.height();
   point.force = eventType == WebInputEvent::kTouchEnd ? 0.f : 1.f;
   point.rotation_angle = 0.f;
-  point.position.x = mouse_event.PositionInWidget().x;
-  point.screen_position.x = mouse_event.PositionInScreen().x;
-  point.position.y = mouse_event.PositionInWidget().y;
-  point.screen_position.y = mouse_event.PositionInScreen().y;
+  point.SetPositionInWidget(mouse_event.PositionInWidget().x,
+                            mouse_event.PositionInWidget().y);
+  point.SetPositionInScreen(mouse_event.PositionInScreen().x,
+                            mouse_event.PositionInScreen().y);
   point.tilt_x = 0;
   point.tilt_y = 0;
   point.pointer_type = blink::WebPointerProperties::PointerType::kTouch;

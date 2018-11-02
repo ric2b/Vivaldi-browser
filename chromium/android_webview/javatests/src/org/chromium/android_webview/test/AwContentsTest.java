@@ -27,13 +27,13 @@ import org.chromium.android_webview.test.TestAwContentsClient.OnDownloadStartHel
 import org.chromium.android_webview.test.util.CommonResources;
 import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
-import org.chromium.base.test.util.parameter.ParameterizedTest;
+import org.chromium.base.test.util.parameter.SkipCommandLineParameterization;
 import org.chromium.content.browser.BindingManager;
-import org.chromium.content.browser.ChildProcessConnection;
-import org.chromium.content.browser.ChildProcessLauncher;
+import org.chromium.content.browser.ChildProcessLauncherHelper;
 import org.chromium.content_public.common.ContentUrlConstants;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
@@ -452,9 +452,7 @@ public class AwContentsTest extends AwTestBase {
             extraHeaders.put("X-foo", "bar");
             loadUrlSync(awContents, mContentsClient.getOnPageFinishedHelper(), url, extraHeaders);
 
-            String xfoo = maybeStripDoubleQuotes(JSUtils.executeJavaScriptAndWaitForResult(this,
-                    awContents, mContentsClient.getOnEvaluateJavaScriptResultHelper(),
-                    "document.body.textContent"));
+            String xfoo = getJavaScriptResultBodyTextContent(awContents, mContentsClient);
             assertEquals("bar", xfoo);
 
             url = testServer.getURL("/echoheader?Referer");
@@ -463,9 +461,7 @@ public class AwContentsTest extends AwTestBase {
             extraHeaders.put("Referer", "http://www.example.com/");
             loadUrlSync(awContents, mContentsClient.getOnPageFinishedHelper(), url, extraHeaders);
 
-            String referer = maybeStripDoubleQuotes(JSUtils.executeJavaScriptAndWaitForResult(this,
-                    awContents, mContentsClient.getOnEvaluateJavaScriptResultHelper(),
-                    "document.body.textContent"));
+            String referer = getJavaScriptResultBodyTextContent(awContents, mContentsClient);
             assertEquals("http://www.example.com/", referer);
         } finally {
             testServer.stopAndDestroyServer();
@@ -619,10 +615,10 @@ public class AwContentsTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     @SmallTest
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_SANDBOXED_RENDERER)
-    @ParameterizedTest.Set
+    @SkipCommandLineParameterization
     public void testSandboxedRendererWorks() throws Throwable {
         MockBindingManager bindingManager = new MockBindingManager();
-        ChildProcessLauncher.setBindingManagerForTesting(bindingManager);
+        ChildProcessLauncherHelper.setBindingManagerForTesting(bindingManager);
         assertFalse(bindingManager.isChildProcessCreated());
 
         AwTestContainerView testView = createAwTestContainerViewOnMainSync(mContentsClient);
@@ -648,10 +644,10 @@ public class AwContentsTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     @SmallTest
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_SANDBOXED_RENDERER)
-    @ParameterizedTest.Set
+    @SkipCommandLineParameterization
     public void testRendererPriorityStartsHigh() throws Throwable {
         MockBindingManager bindingManager = new MockBindingManager();
-        ChildProcessLauncher.setBindingManagerForTesting(bindingManager);
+        ChildProcessLauncherHelper.setBindingManagerForTesting(bindingManager);
         assertFalse(bindingManager.isChildProcessCreated());
 
         AwTestContainerView testView = createAwTestContainerViewOnMainSync(mContentsClient);
@@ -670,10 +666,10 @@ public class AwContentsTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     @SmallTest
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_SANDBOXED_RENDERER)
-    @ParameterizedTest.Set
+    @SkipCommandLineParameterization
     public void testRendererPriorityLow() throws Throwable {
         MockBindingManager bindingManager = new MockBindingManager();
-        ChildProcessLauncher.setBindingManagerForTesting(bindingManager);
+        ChildProcessLauncherHelper.setBindingManagerForTesting(bindingManager);
         assertFalse(bindingManager.isChildProcessCreated());
 
         final AwTestContainerView testView = createAwTestContainerViewOnMainSync(mContentsClient);
@@ -700,10 +696,10 @@ public class AwContentsTest extends AwTestBase {
     @Feature({"AndroidWebView"})
     @SmallTest
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_SANDBOXED_RENDERER)
-    @ParameterizedTest.Set
+    @SkipCommandLineParameterization
     public void testRendererPriorityManaged() throws Throwable {
         MockBindingManager bindingManager = new MockBindingManager();
-        ChildProcessLauncher.setBindingManagerForTesting(bindingManager);
+        ChildProcessLauncherHelper.setBindingManagerForTesting(bindingManager);
         assertFalse(bindingManager.isChildProcessCreated());
 
         final AwTestContainerView testView = createAwTestContainerViewOnMainSync(mContentsClient);
@@ -733,7 +729,7 @@ public class AwContentsTest extends AwTestBase {
     @SmallTest
     @UiThreadTest
     @CommandLineFlags.Add(AwSwitches.WEBVIEW_SANDBOXED_RENDERER)
-    @ParameterizedTest.Set
+    @SkipCommandLineParameterization
     public void testPauseDestroyResume() throws Throwable {
         AwContents awContents;
         awContents = createAwTestContainerView(mContentsClient).getAwContents();

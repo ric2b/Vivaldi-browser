@@ -67,8 +67,6 @@ class URLRequestContextFactory {
   // after the CastService is created, but before any URL requests are made.
   void InitializeNetworkDelegates();
 
-  void DisableQuic();
-
  private:
   class URLRequestContextGetter;
   class MainURLRequestContextGetter;
@@ -82,9 +80,10 @@ class URLRequestContextFactory {
       content::URLRequestInterceptorScopedVector request_interceptors);
   void InitializeMediaContextDependencies(net::HttpTransactionFactory* factory);
 
-  void PopulateNetworkSessionParams(bool ignore_certificate_errors,
-                                    net::HttpNetworkSession::Params* params);
-  void DisableQuicOnBrowserIOThread();
+  void PopulateNetworkSessionParams(
+      bool ignore_certificate_errors,
+      net::HttpNetworkSession::Params* session_params,
+      net::HttpNetworkSession::Context* session_context);
 
   // These are called by the RequestContextGetters to create each
   // RequestContext.
@@ -133,11 +132,6 @@ class URLRequestContextFactory {
   std::unique_ptr<net::HttpTransactionFactory> media_transaction_factory_;
 
   std::unique_ptr<PrefProxyConfigTracker> pref_proxy_config_tracker_impl_;
-
-  // Determines if QUIC is enabled for a URLContextGetter when it is created.
-  // QUIC can be disabled at runtime by calling DisableQuic() above.
-  // Only accessed on content::BrowserThread::IO thread.
-  bool enable_quic_;
 
   net::NetLog* net_log_;
 };

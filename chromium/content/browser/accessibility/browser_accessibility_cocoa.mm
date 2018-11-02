@@ -13,6 +13,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/mac/availability.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_cftyperef.h"
 #include "base/strings/string16.h"
@@ -27,6 +28,8 @@
 #include "content/public/common/content_client.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/accessibility/ax_range.h"
+#include "ui/accessibility/ax_role_properties.h"
+
 #import "ui/accessibility/platform/ax_platform_node_mac.h"
 
 using AXPlatformPositionInstance =
@@ -140,25 +143,24 @@ AXTextMarkerRef AXTextMarkerRangeCopyEndMarker(
 
 }  // extern "C"
 
-// to call |release| on it to transfer ownership of the position to the text
-// marker object.
+// AXTextMarkerCreate copies from data buffer given to it.
 id CreateTextMarker(AXPlatformPositionInstance position) {
   AXTextMarkerRef text_marker = AXTextMarkerCreate(
-      kCFAllocatorDefault, reinterpret_cast<const UInt8*>(position.release()),
+      kCFAllocatorDefault, reinterpret_cast<const UInt8*>(position.get()),
       sizeof(AXPlatformPosition));
   return static_cast<id>(
       base::mac::CFTypeRefToNSObjectAutorelease(text_marker));
 }
 
-// |range| is destructed at the end of this method and ownership of its |anchor|
-// and |focus| are transfered to the marker range object.
+// |range| is destructed at the end of this method. |anchor| and |focus| are
+// copied into the individual text markers.
 id CreateTextMarkerRange(const AXPlatformRange range) {
-  AXTextMarkerRef start_marker = AXTextMarkerCreate(
+  base::ScopedCFTypeRef<AXTextMarkerRef> start_marker(AXTextMarkerCreate(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(range.anchor()),
-      sizeof(AXPlatformPosition));
-  AXTextMarkerRef end_marker = AXTextMarkerCreate(
+      sizeof(AXPlatformPosition)));
+  base::ScopedCFTypeRef<AXTextMarkerRef> end_marker(AXTextMarkerCreate(
       kCFAllocatorDefault, reinterpret_cast<const UInt8*>(range.focus()),
-      sizeof(AXPlatformPosition));
+      sizeof(AXPlatformPosition)));
   AXTextMarkerRangeRef marker_range =
       AXTextMarkerRangeCreate(kCFAllocatorDefault, start_marker, end_marker);
   return static_cast<id>(
@@ -516,13 +518,20 @@ bool InitializeAccessibilityTreeSearch(
 
 }  // namespace
 
-// The following private WebKit accessibility attribute became public in 10.12.
-#if !defined(MAC_OS_X_VERSION_10_12) || \
-    MAC_OS_X_VERSION_MIN_REQUIRED < MAC_OS_X_VERSION_10_12
+#if defined(MAC_OS_X_VERSION_10_12) && \
+    (MAC_OS_X_VERSION_MIN_REQUIRED >= MAC_OS_X_VERSION_10_12)
+#warning NSAccessibilityRequiredAttributeChrome \
+  should be removed since the deployment target is >= 10.12
+#endif
+
+// The following private WebKit accessibility attribute became public in 10.12,
+// but it can't be used on all OS because it has availability of 10.12. Instead,
+// define a similarly named constant with the "Chrome" suffix, and the same
+// string. This is used as the key to a dictionary, so string-comparison will
+// work.
 extern "C" {
-NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
+NSString* const NSAccessibilityRequiredAttributeChrome = @"AXRequired";
 }
-#endif  // MAC_OS_X_VERSION_10_12
 
 @implementation BrowserAccessibilityCocoa
 
@@ -575,7 +584,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
       {NSAccessibilityParentAttribute, @"parent"},
       {NSAccessibilityPlaceholderValueAttribute, @"placeholderValue"},
       {NSAccessibilityPositionAttribute, @"position"},
-      {NSAccessibilityRequiredAttribute, @"required"},
+      {NSAccessibilityRequiredAttributeChrome, @"required"},
       {NSAccessibilityRoleAttribute, @"role"},
       {NSAccessibilityRoleDescriptionAttribute, @"roleDescription"},
       {NSAccessibilityRowHeaderUIElementsAttribute, @"rowHeaders"},
@@ -658,7 +667,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaColumnCount {
-  if (!browserAccessibility_->IsTableLikeRole())
+  if (!ui::IsTableLikeRole(browserAccessibility_->GetRole()))
     return nil;
   int count = -1;
   if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_COLUMN_COUNT,
@@ -669,7 +678,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaColumnIndex {
-  if (!browserAccessibility_->IsCellOrTableHeaderRole())
+  if (!ui::IsCellOrTableHeaderRole(browserAccessibility_->GetRole()))
     return nil;
   int index = -1;
   if (!browserAccessibility_->GetIntAttribute(
@@ -701,7 +710,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaRowCount {
-  if (!browserAccessibility_->IsTableLikeRole())
+  if (!ui::IsTableLikeRole(browserAccessibility_->GetRole()))
     return nil;
   int count = -1;
   if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_ROW_COUNT,
@@ -712,7 +721,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 }
 
 - (NSNumber*)ariaRowIndex {
-  if (!browserAccessibility_->IsCellOrTableHeaderRole())
+  if (!ui::IsCellOrTableHeaderRole(browserAccessibility_->GetRole()))
     return nil;
   int index = -1;
   if (!browserAccessibility_->GetIntAttribute(ui::AX_ATTR_ARIA_CELL_ROW_INDEX,
@@ -782,7 +791,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSArray*)columnHeaders {
   if (![self instanceActive])
     return nil;
-  if (!browserAccessibility_->IsTableLikeRole()) {
+  if (!ui::IsTableLikeRole(browserAccessibility_->GetRole())) {
     return nil;
   }
 
@@ -802,7 +811,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSValue*)columnIndexRange {
   if (![self instanceActive])
     return nil;
-  if (!browserAccessibility_->IsCellOrTableHeaderRole())
+  if (!ui::IsCellOrTableHeaderRole(browserAccessibility_->GetRole()))
     return nil;
 
   int column = -1;
@@ -881,8 +890,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   // from its descendants.
   base::string16 value = browserAccessibility_->GetValue();
   if (browserAccessibility_->HasState(ui::AX_STATE_FOCUSABLE) &&
-      !browserAccessibility_->IsControl() &&
-      value.empty() &&
+      !IsControl(browserAccessibility_->GetRole()) && value.empty() &&
       [self internalRole] != ui::AX_ROLE_DATE_TIME &&
       [self internalRole] != ui::AX_ROLE_WEB_AREA &&
       [self internalRole] != ui::AX_ROLE_ROOT_WEB_AREA) {
@@ -963,8 +971,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSNumber*)enabled {
   if (![self instanceActive])
     return nil;
-  return [NSNumber numberWithBool:
-      !GetState(browserAccessibility_, ui::AX_STATE_DISABLED)];
+  return [NSNumber numberWithBool:browserAccessibility_->GetIntAttribute(
+                                      ui::AX_ATTR_RESTRICTION) !=
+                                  ui::AX_RESTRICTION_DISABLED];
 }
 
 // Returns a text marker that points to the last character in the document that
@@ -1010,7 +1019,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (![self instanceActive])
     return nil;
   int headerElementId = -1;
-  if (browserAccessibility_->IsTableLikeRole()) {
+  if (ui::IsTableLikeRole(browserAccessibility_->GetRole())) {
     browserAccessibility_->GetIntAttribute(
         ui::AX_ATTR_TABLE_HEADER_ID, &headerElementId);
   } else if ([self internalRole] == ui::AX_ROLE_COLUMN) {
@@ -1302,7 +1311,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 // internal
 - (BOOL)shouldExposeTitleUIElement {
   // VoiceOver ignores TitleUIElement if the element isn't a control.
-  if (!browserAccessibility_->IsControl())
+  if (!IsControl(browserAccessibility_->GetRole()))
     return false;
 
   ui::AXNameFrom nameFrom = static_cast<ui::AXNameFrom>(
@@ -1368,17 +1377,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
           ui::AX_ATTR_CANVAS_HAS_FALLBACK)) {
     return NSAccessibilityGroupRole;
   }
-  if (role == ui::AX_ROLE_BUTTON || role == ui::AX_ROLE_TOGGLE_BUTTON) {
-    bool isAriaPressedDefined;
-    bool isMixed;
-    browserAccessibility_->GetAriaTristate("aria-pressed",
-                                           &isAriaPressedDefined,
-                                           &isMixed);
-    if (isAriaPressedDefined)
-      return NSAccessibilityCheckBoxRole;
-    else
-      return NSAccessibilityButtonRole;
-  }
+
   if ((browserAccessibility_->IsSimpleTextControl() &&
        browserAccessibility_->HasState(ui::AX_STATE_MULTILINE)) ||
       browserAccessibility_->IsRichTextControl()) {
@@ -1465,6 +1464,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   case ui::AX_ROLE_DESCRIPTION_LIST_TERM:
     return base::SysUTF16ToNSString(content_client->GetLocalizedString(
         IDS_AX_ROLE_DESCRIPTION_TERM));
+  case ui::AX_ROLE_DISCLOSURE_TRIANGLE:
+    return base::SysUTF16ToNSString(content_client->GetLocalizedString(
+        IDS_AX_ROLE_DISCLOSURE_TRIANGLE));
   case ui::AX_ROLE_FIGURE:
     return base::SysUTF16ToNSString(content_client->GetLocalizedString(
         IDS_AX_ROLE_FIGURE));
@@ -1518,7 +1520,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSArray*)rowHeaders {
   if (![self instanceActive])
     return nil;
-  if (!browserAccessibility_->IsTableLikeRole()) {
+  if (!ui::IsTableLikeRole(browserAccessibility_->GetRole())) {
     return nil;
   }
 
@@ -1538,7 +1540,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
 - (NSValue*)rowIndexRange {
   if (![self instanceActive])
     return nil;
-  if (!browserAccessibility_->IsCellOrTableHeaderRole())
+  if (!ui::IsCellOrTableHeaderRole(browserAccessibility_->GetRole()))
     return nil;
 
   int row = -1;
@@ -1870,22 +1872,9 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   } else if ([role isEqualToString:NSAccessibilityButtonRole]) {
     // AXValue does not make sense for pure buttons.
     return @"";
-  } else if ([self internalRole] == ui::AX_ROLE_TOGGLE_BUTTON) {
-    int value = 0;
-    bool isAriaPressedDefined;
-    bool isMixed;
-    value = browserAccessibility_->GetAriaTristate(
-        "aria-pressed", &isAriaPressedDefined, &isMixed) ? 1 : 0;
-
-    if (isMixed)
-      value = 2;
-
-    return [NSNumber numberWithInt:value];
-
-  } else if ([role isEqualToString:NSAccessibilityCheckBoxRole] ||
-             [role isEqualToString:NSAccessibilityRadioButtonRole] ||
-             [self internalRole] == ui::AX_ROLE_MENU_ITEM_CHECK_BOX ||
-             [self internalRole] == ui::AX_ROLE_MENU_ITEM_RADIO) {
+  } else if (browserAccessibility_->HasIntAttribute(
+                 ui::AX_ATTR_CHECKED_STATE) ||
+             [role isEqualToString:NSAccessibilityRadioButtonRole]) {
     int value;
     const auto checkedState = static_cast<ui::AXCheckedState>(
         browserAccessibility_->GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
@@ -2136,7 +2125,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
            j < child->PlatformChildCount();
            ++j) {
         BrowserAccessibility* cell = child->PlatformGetChild(j);
-        if (!cell->IsCellOrTableHeaderRole())
+        if (!ui::IsCellOrTableHeaderRole(cell->GetRole()))
           continue;
         int colIndex;
         if (!cell->GetIntAttribute(
@@ -2525,7 +2514,7 @@ NSString* const NSAccessibilityRequiredAttribute = @"AXRequired";
   if (browserAccessibility_->IsClickable())
     [actions insertObject:NSAccessibilityPressAction atIndex:0];
 
-  if (browserAccessibility_->IsMenuRelated())
+  if (IsMenuRelated(browserAccessibility_->GetRole()))
     [actions addObject:NSAccessibilityCancelAction];
 
   if ([self internalRole] == ui::AX_ROLE_SLIDER) {

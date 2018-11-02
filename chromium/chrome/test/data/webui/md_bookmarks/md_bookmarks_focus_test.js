@@ -24,6 +24,7 @@ MaterialBookmarksFocusTest.prototype = {
       [{switchName: 'enable-features', switchValue: 'MaterialDesignBookmarks'}],
 
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
+    'test_command_manager.js',
     'test_store.js',
     'test_util.js',
   ]),
@@ -60,7 +61,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
         selectedFolder: '1',
       });
       store.setReducersEnabled(true);
-      bookmarks.Store.instance_ = store;
+      store.replaceSingleton();
 
       rootNode = document.createElement('bookmarks-folder-node');
       rootNode.itemId = '0';
@@ -72,7 +73,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
     test('keyboard selection', function() {
       function assertFocused(oldFocus, newFocus) {
         assertEquals(
-            '', getFolderNode(oldFocus).$.container.getAttribute('tabindex'));
+            '-1', getFolderNode(oldFocus).$.container.getAttribute('tabindex'));
         assertEquals(
             '0', getFolderNode(newFocus).$.container.getAttribute('tabindex'));
         assertEquals(
@@ -87,8 +88,9 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       assertEquals(
           '0', getFolderNode('1').$.container.getAttribute('tabindex'));
 
-      // Only the selected folder should be focusable.
-      assertEquals('', getFolderNode('2').$.container.getAttribute('tabindex'));
+      // Only the selected folder should be keyboard focusable.
+      assertEquals(
+          '-1', getFolderNode('2').$.container.getAttribute('tabindex'));
 
       // Give keyboard focus to the first item.
       getFolderNode('1').$.container.focus();
@@ -100,7 +102,8 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       store.data.selectedFolder = '2';
       store.notifyObservers();
 
-      assertEquals('', getFolderNode('1').$.container.getAttribute('tabindex'));
+      assertEquals(
+          '-1', getFolderNode('1').$.container.getAttribute('tabindex'));
       assertEquals(
           '0', getFolderNode('2').$.container.getAttribute('tabindex'));
       assertFocused('1', '2');
@@ -178,12 +181,28 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
 
       document.body.style.direction = 'ltr';
     });
+
+    test('keyboard commands are passed to command manager', function() {
+      var commandManager = new TestCommandManager();
+      document.body.appendChild(commandManager);
+      chrome.bookmarkManagerPrivate.removeTrees = function() {};
+
+      store.data.selection.items = new Set(['3', '4']);
+      store.data.selectedFolder = '2';
+      store.notifyObservers();
+
+      getFolderNode('2').$.container.focus();
+      keydown('2', 'Delete');
+
+      commandManager.assertLastCommand(Command.DELETE, ['2']);
+    });
   });
 
   suite('<bookmarks-list>', function() {
     var list;
     var store;
     var items;
+    var commandManager;
     var multiKey = cr.isMac ? 'meta' : 'ctrl';
 
     function keydown(item, key, modifiers) {
@@ -205,7 +224,7 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
         selectedFolder: '1',
       });
       store.setReducersEnabled(true);
-      bookmarks.Store.instance_ = store;
+      store.replaceSingleton();
 
       list = document.createElement('bookmarks-list');
       list.style.height = '100%';
@@ -214,6 +233,9 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       replaceBody(list);
       Polymer.dom.flush();
       items = list.root.querySelectorAll('bookmarks-item');
+
+      commandManager = new TestCommandManager();
+      document.body.appendChild(commandManager);
     });
 
     test('simple keyboard selection', function() {
@@ -258,21 +280,23 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       keydown(focusedItem, 'Escape');
       assertDeepEquals([], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'a', 'ctrl');
+      keydown(focusedItem, 'a', multiKey);
       assertDeepEquals(
           ['2', '3', '4', '5', '6', '7'],
           normalizeSet(store.data.selection.items));
     });
 
     test('shift selection', function() {
-      // TODO(calamity): Make the first item the anchor index when a new folder
-      // is selected.
       var focusedItem = items[0];
       focusedItem.focus();
 
-      keydown(focusedItem, 'ArrowDown');
+      keydown(focusedItem, 'ArrowDown', 'shift');
       focusedItem = items[1];
-      assertDeepEquals(['3'], normalizeSet(store.data.selection.items));
+      assertDeepEquals(['2', '3'], normalizeSet(store.data.selection.items));
+
+      keydown(focusedItem, 'Escape');
+      focusedItem = items[1];
+      assertDeepEquals([], normalizeSet(store.data.selection.items));
 
       keydown(focusedItem, 'ArrowUp', 'shift');
       focusedItem = items[0];
@@ -300,22 +324,22 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       var focusedItem = items[0];
       focusedItem.focus();
 
-      keydown(focusedItem, ' ', 'ctrl');
+      keydown(focusedItem, ' ', multiKey);
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'ArrowDown', 'ctrl');
+      keydown(focusedItem, 'ArrowDown', multiKey);
       focusedItem = items[1];
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
       assertEquals('3', store.data.selection.anchor);
 
-      keydown(focusedItem, 'ArrowDown', 'ctrl');
+      keydown(focusedItem, 'ArrowDown', multiKey);
       focusedItem = items[2];
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, ' ', 'ctrl');
+      keydown(focusedItem, ' ', multiKey);
       assertDeepEquals(['2', '4'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, ' ', 'ctrl');
+      keydown(focusedItem, ' ', multiKey);
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
     });
 
@@ -323,26 +347,172 @@ TEST_F('MaterialBookmarksFocusTest', 'All', function() {
       var focusedItem = items[0];
       focusedItem.focus();
 
-      keydown(focusedItem, ' ', 'ctrl');
+      keydown(focusedItem, ' ', multiKey);
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'ArrowDown', 'ctrl');
+      keydown(focusedItem, 'ArrowDown', multiKey);
       focusedItem = items[1];
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'ArrowDown', 'ctrl');
+      keydown(focusedItem, 'ArrowDown', multiKey);
       focusedItem = items[2];
       assertDeepEquals(['2'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'ArrowDown', ['ctrl', 'shift']);
+      keydown(focusedItem, 'ArrowDown', [multiKey, 'shift']);
       focusedItem = items[3];
       assertDeepEquals(
           ['2', '4', '5'], normalizeSet(store.data.selection.items));
 
-      keydown(focusedItem, 'ArrowDown', ['ctrl', 'shift']);
+      keydown(focusedItem, 'ArrowDown', [multiKey, 'shift']);
       focusedItem = items[3];
       assertDeepEquals(
           ['2', '4', '5', '6'], normalizeSet(store.data.selection.items));
+    });
+
+    test('keyboard commands are passed to command manager', function() {
+      chrome.bookmarkManagerPrivate.removeTrees = function() {}
+
+      store.data.selection.items = new Set(['2', '3']);
+      store.notifyObservers();
+
+      var focusedItem = items[4];
+      focusedItem.focus();
+
+      keydown(focusedItem, 'Delete');
+      // Commands should take affect on the selection, even if something else is
+      // focused.
+      commandManager.assertLastCommand(Command.DELETE, ['2', '3']);
+    });
+
+    test('iron-list does not steal focus on enter', function() {
+      // Iron-list attempts to focus the whole <bookmarks-item> when pressing
+      // enter on the menu button. This checks that we block this behavior
+      // during keydown on <bookmarks-list>.
+      var button = items[0].$$('.more-vert-button');
+      button.focus();
+      keydown(button, 'Enter');
+
+      assertEquals(button, items[0].root.activeElement);
+    });
+  });
+
+  suite('DialogFocusManager', function() {
+    var list;
+    var store;
+    var items;
+    var commandManager;
+    var dialogFocusManager;
+
+    function waitForClose(el) {
+      return new Promise(function(resolve) {
+        listenOnce(el, 'close', function(e) {
+          resolve();
+        })
+      });
+    }
+
+    function keydown(el, key) {
+      MockInteractions.keyDownOn(el, '', '', key);
+    }
+
+    setup(function() {
+      store = new bookmarks.TestStore({
+        nodes: testTree(createFolder(
+            '1',
+            [
+              createItem('2'),
+              createItem('3'),
+              createItem('4'),
+              createItem('5'),
+              createItem('6'),
+              createFolder('7', []),
+            ])),
+        selectedFolder: '1',
+      });
+      store.setReducersEnabled(true);
+      store.replaceSingleton();
+
+      list = document.createElement('bookmarks-list');
+      list.style.height = '100%';
+      list.style.width = '100%';
+      list.style.position = 'absolute';
+      replaceBody(list);
+      Polymer.dom.flush();
+      items = list.root.querySelectorAll('bookmarks-item');
+
+      commandManager = new TestCommandManager();
+      document.body.appendChild(commandManager);
+
+      dialogFocusManager = new bookmarks.DialogFocusManager();
+      bookmarks.DialogFocusManager.instance_ = dialogFocusManager;
+    });
+
+    test('restores focus on dialog dismissal', function() {
+      var focusedItem = items[0];
+      focusedItem.focus();
+      assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+      commandManager.openCommandMenuAtPosition(0, 0);
+      var dropdown = commandManager.$.dropdown.getIfExists();
+
+      assertTrue(dropdown.open);
+      assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+      keydown(dropdown, 'Escape');
+      assertFalse(dropdown.open);
+
+      return waitForClose(dropdown).then(() => {
+        assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+      });
+    });
+
+    test('restores focus after stacked dialogs', function() {
+      var focusedItem = items[0];
+      focusedItem.focus();
+      assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+      commandManager.openCommandMenuAtPosition(0, 0);
+      var dropdown = commandManager.$.dropdown.getIfExists();
+      dropdown.close();
+      assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+      var editDialog = commandManager.$.editDialog.get();
+      editDialog.showEditDialog(store.data.nodes['2']);
+
+      return waitForClose(dropdown).then(() => {
+        editDialog.onCancelButtonTap_();
+        assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+        return waitForClose(editDialog);
+      }).then(() => {
+        assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+      });
+    });
+
+    test('restores focus after multiple shows of same dialog', function() {
+      var focusedItem = items[0];
+      focusedItem.focus();
+      assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+
+      commandManager.openCommandMenuAtPosition(0, 0);
+      assertNotEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+      var dropdown = commandManager.$.dropdown.getIfExists();
+      dropdown.close();
+
+      focusedItem = items[3];
+      focusedItem.focus();
+      commandManager.openCommandMenuAtPosition(0, 0);
+
+      return waitForClose(dropdown).then(() => {
+        assertTrue(dropdown.open);
+        dropdown.close();
+        assertNotEquals(
+            focusedItem, dialogFocusManager.getFocusedElement_());
+
+        return waitForClose(dropdown);
+      }).then(() => {
+        assertEquals(focusedItem, dialogFocusManager.getFocusedElement_());
+      });
     });
   });
 

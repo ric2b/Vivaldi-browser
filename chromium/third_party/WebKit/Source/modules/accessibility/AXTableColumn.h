@@ -48,7 +48,7 @@ class MODULES_EXPORT AXTableColumn final : public AXMockObject {
   ~AXTableColumn() override;
 
   // retrieves the topmost "column" header (th)
-  AXObjectImpl* HeaderObject();
+  AXObject* HeaderObject();
   // retrieves the "column" headers (th, scope) from top to bottom
   void HeaderObjectsForColumn(AXObjectVector&);
 
@@ -56,9 +56,10 @@ class MODULES_EXPORT AXTableColumn final : public AXMockObject {
 
   void SetColumnIndex(int column_index) { column_index_ = column_index; }
   int ColumnIndex() const { return column_index_; }
+  virtual bool CanSetSelectedAttribute() const { return false; }
 
   void AddChildren() override;
-  void SetParent(AXObjectImpl*) override;
+  void SetParent(AXObject*) override;
 
  private:
   unsigned column_index_;

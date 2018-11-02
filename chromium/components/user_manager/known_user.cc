@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/logging.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/values.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/scoped_user_pref_update.h"
@@ -55,6 +56,10 @@ const char kGaiaIdMigration[] = "gaia_id_migration";
 
 // Key of the boolean flag telling if user session has finished init yet.
 const char kProfileEverInitialized[] = "profile_ever_initialized";
+
+// Key of the boolean flag telling if a minimal user home migration has been
+// attempted.
+const char kMinimalMigrationAttempted[] = "minimal_migration_attempted";
 
 PrefService* GetLocalState() {
   if (!UserManager::IsInitialized())
@@ -456,8 +461,13 @@ bool IsUsingSAML(const AccountId& account_id) {
 
 bool WasProfileEverInitialized(const AccountId& account_id) {
   bool profile_ever_initialized;
-  if (GetBooleanPref(account_id, kProfileEverInitialized,
-                     &profile_ever_initialized))
+  const bool pref_set = GetBooleanPref(account_id, kProfileEverInitialized,
+                                       &profile_ever_initialized);
+  // TODO(atwilson): Remove migration code below once this UMA stat reports
+  // that migration is completed - crbug.com/736760.
+  UMA_HISTOGRAM_BOOLEAN("UserManager.ProfileEverInitializedMigrationCompleted",
+                        pref_set);
+  if (pref_set)
     return profile_ever_initialized;
 
   // Sessions created before we started setting the session_initialized flag
@@ -476,6 +486,24 @@ void UpdateReauthReason(const AccountId& account_id, const int reauth_reason) {
 
 bool FindReauthReason(const AccountId& account_id, int* out_value) {
   return GetIntegerPref(account_id, kReauthReasonKey, out_value);
+}
+
+bool WasUserHomeMinimalMigrationAttempted(const AccountId& account_id) {
+  bool minimal_migration_attempted;
+  const bool pref_set = GetBooleanPref(account_id, kMinimalMigrationAttempted,
+                                       &minimal_migration_attempted);
+  if (pref_set)
+    return minimal_migration_attempted;
+
+  // If we haven't recorded that a minimal migration has been attempted, assume
+  // no.
+  return false;
+}
+
+void SetUserHomeMinimalMigrationAttempted(const AccountId& account_id,
+                                          bool minimal_migration_attempted) {
+  SetBooleanPref(account_id, kMinimalMigrationAttempted,
+                 minimal_migration_attempted);
 }
 
 void RemovePrefs(const AccountId& account_id) {

@@ -9,12 +9,12 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/viz/host/server_gpu_memory_buffer_manager.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "gpu/ipc/client/gpu_memory_buffer_impl_shared_memory.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "mojo/public/cpp/system/platform_handle.h"
-#include "services/ui/common/server_gpu_memory_buffer_manager.h"
 #include "services/ui/ws/gpu_client.h"
 #include "services/ui/ws/gpu_host_delegate.h"
 #include "ui/gfx/buffer_format_util.h"
@@ -33,7 +33,7 @@ const int32_t kInternalGpuChannelClientId = 2;
 
 }  // namespace
 
-GpuHost::GpuHost(GpuHostDelegate* delegate)
+DefaultGpuHost::DefaultGpuHost(GpuHostDelegate* delegate)
     : delegate_(delegate),
       next_client_id_(kInternalGpuChannelClientId + 1),
       main_thread_task_runner_(base::ThreadTaskRunnerHandle::Get()),
@@ -45,38 +45,43 @@ GpuHost::GpuHost(GpuHostDelegate* delegate)
   // TODO(sad): Correctly initialize gpu::GpuPreferences (like it is initialized
   // in GpuProcessHost::Init()).
   gpu::GpuPreferences preferences;
+  mojom::GpuHostPtr gpu_host_proxy;
+  gpu_host_binding_.Bind(mojo::MakeRequest(&gpu_host_proxy));
   gpu_main_->CreateGpuService(MakeRequest(&gpu_service_),
-                              gpu_host_binding_.CreateInterfacePtrAndBind(),
-                              preferences, mojo::ScopedSharedBufferHandle());
-  gpu_memory_buffer_manager_ = base::MakeUnique<ServerGpuMemoryBufferManager>(
-      gpu_service_.get(), next_client_id_++);
+                              std::move(gpu_host_proxy), preferences,
+                              mojo::ScopedSharedBufferHandle());
+  gpu_memory_buffer_manager_ =
+      base::MakeUnique<viz::ServerGpuMemoryBufferManager>(gpu_service_.get(),
+                                                          next_client_id_++);
 }
 
-GpuHost::~GpuHost() {}
+DefaultGpuHost::~DefaultGpuHost() {}
 
-void GpuHost::Add(mojom::GpuRequest request) {
+void DefaultGpuHost::Add(mojom::GpuRequest request) {
   AddInternal(std::move(request));
 }
 
-void GpuHost::OnAcceleratedWidgetAvailable(gfx::AcceleratedWidget widget) {
+void DefaultGpuHost::OnAcceleratedWidgetAvailable(
+    gfx::AcceleratedWidget widget) {
 #if defined(OS_WIN)
   gfx::RenderingWindowManager::GetInstance()->RegisterParent(widget);
 #endif
 }
 
-void GpuHost::OnAcceleratedWidgetDestroyed(gfx::AcceleratedWidget widget) {
+void DefaultGpuHost::OnAcceleratedWidgetDestroyed(
+    gfx::AcceleratedWidget widget) {
 #if defined(OS_WIN)
   gfx::RenderingWindowManager::GetInstance()->UnregisterParent(widget);
 #endif
 }
 
-void GpuHost::CreateFrameSinkManager(
+void DefaultGpuHost::CreateFrameSinkManager(
     cc::mojom::FrameSinkManagerRequest request,
     cc::mojom::FrameSinkManagerClientPtr client) {
   gpu_main_->CreateFrameSinkManager(std::move(request), std::move(client));
 }
 
-GpuClient* GpuHost::AddInternal(mojom::GpuRequest request) {
+GpuClient* DefaultGpuHost::AddInternal(mojom::GpuRequest request) {
   auto client(base::MakeUnique<GpuClient>(next_client_id_++, &gpu_info_,
                                           gpu_memory_buffer_manager_.get(),
                                           gpu_service_.get()));
@@ -85,32 +90,33 @@ GpuClient* GpuHost::AddInternal(mojom::GpuRequest request) {
   return client_ref;
 }
 
-void GpuHost::OnBadMessageFromGpu() {
+void DefaultGpuHost::OnBadMessageFromGpu() {
   // TODO(sad): Received some unexpected message from the gpu process. We
   // should kill the process and restart it.
   NOTIMPLEMENTED();
 }
 
-void GpuHost::DidInitialize(const gpu::GPUInfo& gpu_info,
-                            const gpu::GpuFeatureInfo& gpu_feature_info) {
+void DefaultGpuHost::DidInitialize(
+    const gpu::GPUInfo& gpu_info,
+    const gpu::GpuFeatureInfo& gpu_feature_info) {
   gpu_info_ = gpu_info;
   delegate_->OnGpuServiceInitialized();
 }
 
-void GpuHost::DidFailInitialize() {}
+void DefaultGpuHost::DidFailInitialize() {}
 
-void GpuHost::DidCreateOffscreenContext(const GURL& url) {}
+void DefaultGpuHost::DidCreateOffscreenContext(const GURL& url) {}
 
-void GpuHost::DidDestroyOffscreenContext(const GURL& url) {}
+void DefaultGpuHost::DidDestroyOffscreenContext(const GURL& url) {}
 
-void GpuHost::DidDestroyChannel(int32_t client_id) {}
+void DefaultGpuHost::DidDestroyChannel(int32_t client_id) {}
 
-void GpuHost::DidLoseContext(bool offscreen,
-                             gpu::error::ContextLostReason reason,
-                             const GURL& active_url) {}
+void DefaultGpuHost::DidLoseContext(bool offscreen,
+                                    gpu::error::ContextLostReason reason,
+                                    const GURL& active_url) {}
 
-void GpuHost::SetChildSurface(gpu::SurfaceHandle parent,
-                              gpu::SurfaceHandle child) {
+void DefaultGpuHost::SetChildSurface(gpu::SurfaceHandle parent,
+                                     gpu::SurfaceHandle child) {
 #if defined(OS_WIN)
   // Verify that |parent| was created by the window server.
   DWORD process_id = 0;
@@ -131,13 +137,13 @@ void GpuHost::SetChildSurface(gpu::SurfaceHandle parent,
 #endif
 }
 
-void GpuHost::StoreShaderToDisk(int32_t client_id,
-                                const std::string& key,
-                                const std::string& shader) {}
+void DefaultGpuHost::StoreShaderToDisk(int32_t client_id,
+                                       const std::string& key,
+                                       const std::string& shader) {}
 
-void GpuHost::RecordLogMessage(int32_t severity,
-                               const std::string& header,
-                               const std::string& message) {}
+void DefaultGpuHost::RecordLogMessage(int32_t severity,
+                                      const std::string& header,
+                                      const std::string& message) {}
 
 }  // namespace ws
 }  // namespace ui

@@ -65,6 +65,12 @@ bool DictionaryToPrinter(const DictionaryValue& value, Printer* printer) {
   if (value.GetString(kModel, &model))
     printer->set_model(model);
 
+  std::string make_and_model = manufacturer;
+  if (!manufacturer.empty() && !model.empty())
+    make_and_model.append(" ");
+  make_and_model.append(model);
+  printer->set_make_and_model(make_and_model);
+
   std::string uuid;
   if (value.GetString(kUUID, &uuid))
     printer->set_uuid(uuid);
@@ -74,22 +80,17 @@ bool DictionaryToPrinter(const DictionaryValue& value, Printer* printer) {
 
 }  // namespace
 
-namespace printing {
-
 const char kPrinterId[] = "id";
 
 std::unique_ptr<Printer> RecommendedPrinterToPrinter(
-    const base::DictionaryValue& pref,
-    const base::Time& timestamp) {
-  DCHECK(!timestamp.is_null());
-
+    const base::DictionaryValue& pref) {
   std::string id;
-  if (!pref.GetString(printing::kPrinterId, &id)) {
+  if (!pref.GetString(kPrinterId, &id)) {
     LOG(WARNING) << "Record id required";
     return nullptr;
   }
 
-  std::unique_ptr<Printer> printer = base::MakeUnique<Printer>(id, timestamp);
+  std::unique_ptr<Printer> printer = base::MakeUnique<Printer>(id);
   if (!DictionaryToPrinter(pref, printer.get())) {
     LOG(WARNING) << "Failed to parse policy printer.";
     return nullptr;
@@ -111,5 +112,4 @@ std::unique_ptr<Printer> RecommendedPrinterToPrinter(
   return printer;
 }
 
-}  // namespace printing
 }  // namespace chromeos

@@ -35,7 +35,7 @@ InFlightBoundsChange::InFlightBoundsChange(
     WindowTreeClient* window_tree_client,
     WindowMus* window,
     const gfx::Rect& revert_bounds,
-    const base::Optional<cc::LocalSurfaceId>& revert_local_surface_id)
+    const base::Optional<viz::LocalSurfaceId>& revert_local_surface_id)
     : InFlightChange(window, ChangeType::BOUNDS),
       window_tree_client_(window_tree_client),
       revert_bounds_(revert_bounds),
@@ -65,6 +65,28 @@ InFlightDragChange::InFlightDragChange(WindowMus* window, ChangeType type)
 void InFlightDragChange::SetRevertValueFrom(const InFlightChange& change) {}
 
 void InFlightDragChange::Revert() {}
+
+// InFlightTransformChange -----------------------------------------------------
+
+InFlightTransformChange::InFlightTransformChange(
+    WindowTreeClient* window_tree_client,
+    WindowMus* window,
+    const gfx::Transform& revert_transform)
+    : InFlightChange(window, ChangeType::TRANSFORM),
+      window_tree_client_(window_tree_client),
+      revert_transform_(revert_transform) {}
+
+InFlightTransformChange::~InFlightTransformChange() {}
+
+void InFlightTransformChange::SetRevertValueFrom(const InFlightChange& change) {
+  revert_transform_ =
+      static_cast<const InFlightTransformChange&>(change).revert_transform_;
+}
+
+void InFlightTransformChange::Revert() {
+  window_tree_client_->SetWindowTransformFromServer(window(),
+                                                    revert_transform_);
+}
 
 // CrashInFlightChange --------------------------------------------------------
 

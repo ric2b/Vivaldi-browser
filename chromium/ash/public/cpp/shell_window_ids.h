@@ -56,6 +56,9 @@ enum ShellWindowId {
   // The container for top-level windows with the 'always-on-top' flag set.
   kShellWindowId_AlwaysOnTopContainer,
 
+  // The container for the app list.
+  kShellWindowId_AppListContainer,
+
   // The container for the shelf.
   kShellWindowId_ShelfContainer,
 
@@ -65,9 +68,6 @@ enum ShellWindowId {
   // The container for panel windows.
   kShellWindowId_PanelContainer,
 
-  // The container for the app list.
-  kShellWindowId_AppListContainer,
-
   // The container for user-specific modal windows.
   kShellWindowId_SystemModalContainer,
 
@@ -76,6 +76,14 @@ enum ShellWindowId {
 
   // The container for the lock screen.
   kShellWindowId_LockScreenContainer,
+
+  // The container for windows that handle lock tray actions (e.g. new note
+  // action). The action handler container's children should be visible on lock
+  // screen, but only when an action is being handled - i.e. action handling
+  // state is either:
+  //  *  active - the container is stacked above LockScreenContainer
+  //  *  background - the container is stacked below LockScreenContainer
+  kShellWindowId_LockActionHandlerContainer,
 
   // The container for the lock screen modal windows.
   kShellWindowId_LockSystemModalContainer,
@@ -129,13 +137,14 @@ const int32_t kAllShellContainerIds[] = {
     kShellWindowId_VirtualKeyboardContainer,
     kShellWindowId_DefaultContainer,
     kShellWindowId_AlwaysOnTopContainer,
+    kShellWindowId_AppListContainer,
     kShellWindowId_ShelfContainer,
     kShellWindowId_ShelfBubbleContainer,
     kShellWindowId_PanelContainer,
-    kShellWindowId_AppListContainer,
     kShellWindowId_SystemModalContainer,
     kShellWindowId_LockScreenWallpaperContainer,
     kShellWindowId_LockScreenContainer,
+    kShellWindowId_LockActionHandlerContainer,
     kShellWindowId_LockSystemModalContainer,
     kShellWindowId_StatusContainer,
     kShellWindowId_ImeWindowParentContainer,

@@ -16,52 +16,67 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
+#include "base/time/default_tick_clock.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/ip_address.h"
 #include "net/base/linked_hash_map.h"
 #include "net/base/net_export.h"
+#include "net/http/broken_alternative_services.h"
 #include "net/http/http_server_properties.h"
 
 namespace base {
-class ListValue;
+class TickClock;
 }
 
 namespace net {
 
-struct AlternativeServiceHash {
-  size_t operator()(const net::AlternativeService& entry) const {
-    return entry.protocol ^ std::hash<std::string>()(entry.host) ^ entry.port;
-  }
-};
-
 // The implementation for setting/retrieving the HTTP server properties.
 class NET_EXPORT HttpServerPropertiesImpl
     : public HttpServerProperties,
-      NON_EXPORTED_BASE(public base::NonThreadSafe) {
+      public BrokenAlternativeServices::Delegate {
  public:
+  // |clock| is used for setting expiration times and scheduling the
+  // expiration of broken alternative services. If null, default clock will be
+  // used.
+  explicit HttpServerPropertiesImpl(base::TickClock* clock);
+
+  // Default clock will be used.
   HttpServerPropertiesImpl();
+
   ~HttpServerPropertiesImpl() override;
 
   // Sets |spdy_servers_map_| with the servers (host/port) from
   // |spdy_servers| that either support SPDY or not.
-  void SetSpdyServers(std::vector<std::string>* spdy_servers,
-                      bool support_spdy);
+  void SetSpdyServers(std::unique_ptr<SpdyServersMap> spdy_servers_map);
 
   void SetAlternativeServiceServers(
-      AlternativeServiceMap* alternate_protocol_servers);
+      std::unique_ptr<AlternativeServiceMap> alternate_protocol_servers);
 
-  void SetSupportsQuic(IPAddress* last_address);
+  void SetSupportsQuic(const IPAddress& last_address);
 
-  void SetServerNetworkStats(ServerNetworkStatsMap* server_network_stats_map);
+  void SetServerNetworkStats(
+      std::unique_ptr<ServerNetworkStatsMap> server_network_stats_map);
 
-  void SetQuicServerInfoMap(QuicServerInfoMap* quic_server_info_map);
+  void SetQuicServerInfoMap(
+      std::unique_ptr<QuicServerInfoMap> quic_server_info_map);
 
   // Get the list of servers (host/port) that support SPDY. The max_size is the
   // number of MRU servers that support SPDY that are to be returned.
-  void GetSpdyServerList(base::ListValue* spdy_server_list,
+  void GetSpdyServerList(std::vector<std::string>* spdy_servers,
                          size_t max_size) const;
+
+  void SetBrokenAndRecentlyBrokenAlternativeServices(
+      std::unique_ptr<BrokenAlternativeServiceList>
+          broken_alternative_service_list,
+      std::unique_ptr<RecentlyBrokenAlternativeServices>
+          recently_broken_alternative_services);
+
+  const BrokenAlternativeServiceList& broken_alternative_service_list() const;
+
+  const RecentlyBrokenAlternativeServices&
+  recently_broken_alternative_services() const;
 
   // Returns flattened string representation of the |host_port_pair|. Used by
   // unittests.
@@ -86,9 +101,14 @@ class NET_EXPORT HttpServerPropertiesImpl
                         SSLConfig* ssl_config) override;
   AlternativeServiceInfoVector GetAlternativeServiceInfos(
       const url::SchemeHostPort& origin) override;
-  bool SetAlternativeService(const url::SchemeHostPort& origin,
-                             const AlternativeService& alternative_service,
-                             base::Time expiration) override;
+  bool SetHttp2AlternativeService(const url::SchemeHostPort& origin,
+                                  const AlternativeService& alternative_service,
+                                  base::Time expiration) override;
+  bool SetQuicAlternativeService(
+      const url::SchemeHostPort& origin,
+      const AlternativeService& alternative_service,
+      base::Time expiration,
+      const QuicVersionVector& advertised_versions) override;
   bool SetAlternativeServices(const url::SchemeHostPort& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -122,23 +142,18 @@ class NET_EXPORT HttpServerPropertiesImpl
       size_t max_server_configs_stored_in_properties) override;
   bool IsInitialized() const override;
 
+  // BrokenAlternativeServices::Delegate method.
+  void OnExpireBrokenAlternativeService(
+      const AlternativeService& expired_alternative_service) override;
+
  private:
+  // TODO (wangyix): modify HttpServerPropertiesImpl unit tests so this
+  // friendness is no longer required.
   friend class HttpServerPropertiesImplPeer;
 
-  // |spdy_servers_map_| has flattened representation of servers
-  // (scheme, host, port) that either support or not support SPDY protocol.
-  typedef base::MRUCache<std::string, bool> SpdyServersMap;
   typedef std::map<url::SchemeHostPort, url::SchemeHostPort> CanonicalHostMap;
   typedef std::vector<std::string> CanonicalSufficList;
   typedef std::set<HostPortPair> Http11ServerHostPortSet;
-
-  // Linked hash map from AlternativeService to expiration time.  This container
-  // is a queue with O(1) enqueue and dequeue, and a hash_map with O(1) lookup
-  // at the same time.
-  typedef linked_hash_map<AlternativeService,
-                          base::TimeTicks,
-                          AlternativeServiceHash>
-      BrokenAlternativeServices;
 
   // Return the iterator for |server|, or for its canonical host, or end.
   AlternativeServiceMap::const_iterator GetAlternateProtocolIterator(
@@ -150,17 +165,15 @@ class NET_EXPORT HttpServerPropertiesImpl
 
   // Remove the cononical host for |server|.
   void RemoveCanonicalHost(const url::SchemeHostPort& server);
-  void ExpireBrokenAlternateProtocolMappings();
-  void ScheduleBrokenAlternateProtocolMappingsExpiration();
+
+  base::DefaultTickClock default_clock_;
 
   SpdyServersMap spdy_servers_map_;
   Http11ServerHostPortSet http11_servers_;
 
   AlternativeServiceMap alternative_service_map_;
+
   BrokenAlternativeServices broken_alternative_services_;
-  // Class invariant:  Every alternative service in broken_alternative_services_
-  // must also be in recently_broken_alternative_services_.
-  RecentlyBrokenAlternativeServices recently_broken_alternative_services_;
 
   IPAddress last_quic_address_;
   ServerNetworkStatsMap server_network_stats_map_;
@@ -175,7 +188,7 @@ class NET_EXPORT HttpServerPropertiesImpl
   QuicServerInfoMap quic_server_info_map_;
   size_t max_server_configs_stored_in_properties_;
 
-  base::WeakPtrFactory<HttpServerPropertiesImpl> weak_ptr_factory_;
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(HttpServerPropertiesImpl);
 };

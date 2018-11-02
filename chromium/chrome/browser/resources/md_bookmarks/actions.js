@@ -241,6 +241,29 @@ cr.define('bookmarks.actions', function() {
     };
   }
 
+  /**
+   * @param {IncognitoAvailability} availability
+   * @return {!Action}
+   */
+  function setIncognitoAvailability(availability) {
+    assert(availability != IncognitoAvailability.FORCED);
+    return {
+      name: 'set-incognito-availability',
+      value: availability,
+    };
+  }
+
+  /**
+   * @param {boolean} canEdit
+   * @return {!Action}
+   */
+  function setCanEditBookmarks(canEdit) {
+    return {
+      name: 'set-can-edit',
+      value: canEdit,
+    };
+  }
+
   return {
     changeFolderOpen: changeFolderOpen,
     clearSearch: clearSearch,
@@ -254,6 +277,8 @@ cr.define('bookmarks.actions', function() {
     selectAll: selectAll,
     selectFolder: selectFolder,
     selectItem: selectItem,
+    setCanEditBookmarks: setCanEditBookmarks,
+    setIncognitoAvailability: setIncognitoAvailability,
     setSearchResults: setSearchResults,
     setSearchTerm: setSearchTerm,
     updateAnchor: updateAnchor,

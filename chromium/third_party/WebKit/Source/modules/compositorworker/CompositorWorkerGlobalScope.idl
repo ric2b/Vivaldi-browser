@@ -5,9 +5,9 @@
 [
     Exposed=CompositorWorker,
     Global=CompositorWorker,
-    RuntimeEnabled=CompositorWorker,
+    RuntimeEnabled=CompositorWorker
 ] interface CompositorWorkerGlobalScope : WorkerGlobalScope {
-    [PostMessage, RaisesException] void postMessage(any message, optional sequence<Transferable> transfer);
+    [PostMessage, RaisesException] void postMessage(any message, optional sequence<object> transfer = []);
     attribute EventHandler onmessage;
 
     long requestAnimationFrame(FrameRequestCallback callback);

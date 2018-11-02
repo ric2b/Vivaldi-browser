@@ -5,13 +5,13 @@
 #ifndef CONTENT_BROWSER_WEBUI_WEB_UI_URL_LOADER_FACTORY_H_
 #define CONTENT_BROWSER_WEBUI_WEB_UI_URL_LOADER_FACTORY_H_
 
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 
 namespace content {
 class FrameTreeNode;
 
-// Returns a URLLoaderFactory interface pointer for serving WebUI requests.
-mojom::URLLoaderFactoryPtr GetWebUIURLLoader(FrameTreeNode* node);
+// Creates a URLLoaderFactory interface pointer for serving WebUI requests.
+mojom::URLLoaderFactoryPtr CreateWebUIURLLoader(FrameTreeNode* node);
 
 }  // namespace content
 

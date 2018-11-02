@@ -105,25 +105,15 @@ cr.define('print_preview', function() {
       this.tracker.add(
           assert(this.allRadio_), 'click', this.onAllRadioClick_.bind(this));
       this.tracker.add(
-          assert(this.customRadio_),
-          'click',
+          assert(this.customRadio_), 'click',
           this.onCustomRadioClick_.bind(this));
+      this.tracker.add(customInput, 'blur', this.onCustomInputBlur_.bind(this));
       this.tracker.add(
-          customInput,
-          'blur',
-          this.onCustomInputBlur_.bind(this));
+          customInput, 'focus', this.onCustomInputFocus_.bind(this));
       this.tracker.add(
-          customInput,
-          'focus',
-          this.onCustomInputFocus_.bind(this));
+          customInput, 'keydown', this.onCustomInputKeyDown_.bind(this));
       this.tracker.add(
-          customInput,
-          'keydown',
-          this.onCustomInputKeyDown_.bind(this));
-      this.tracker.add(
-          customInput,
-          'input',
-          this.onCustomInputChange_.bind(this));
+          customInput, 'input', this.onCustomInputChange_.bind(this));
       this.tracker.add(
           this.pageRangeTicketItem_,
           print_preview.ticket_items.TicketItem.EventType.CHANGE,
@@ -156,29 +146,28 @@ cr.define('print_preview', function() {
      * @private
      */
     setInvalidStateVisible_: function(validity) {
-      if (validity !== PageRangeStatus.NO_ERROR) {
-        var message;
-        if (validity === PageRangeStatus.LIMIT_ERROR) {
-          if (this.pageRangeTicketItem_.getDocumentNumPages()) {
-            message = loadTimeData.getStringF(
-                'pageRangeLimitInstructionWithValue',
-                this.pageRangeTicketItem_.getDocumentNumPages());
-          } else {
-            message = loadTimeData.getString(
-                'pageRangeLimitInstruction');
-          }
-        } else {
-          message = loadTimeData.getStringF(
-              'pageRangeSyntaxInstruction',
-              loadTimeData.getString('examplePageRangeText'));
-        }
-        this.customHintEl_.textContent = message;
-        this.customInput_.classList.add('invalid');
-        fadeInElement(this.customHintEl_);
-      } else {
+      if (validity === PageRangeStatus.NO_ERROR) {
         this.customInput_.classList.remove('invalid');
         fadeOutElement(this.customHintEl_);
+        return;
       }
+      var message;
+      if (validity === PageRangeStatus.LIMIT_ERROR) {
+        if (this.pageRangeTicketItem_.getDocumentNumPages()) {
+          message = loadTimeData.getStringF(
+              'pageRangeLimitInstructionWithValue',
+              this.pageRangeTicketItem_.getDocumentNumPages());
+        } else {
+          message = loadTimeData.getString('pageRangeLimitInstruction');
+        }
+      } else {
+        message = loadTimeData.getStringF(
+            'pageRangeSyntaxInstruction',
+            loadTimeData.getString('examplePageRangeText'));
+      }
+      this.customHintEl_.textContent = message;
+      this.customInput_.classList.add('invalid');
+      fadeInElement(this.customHintEl_);
     },
 
     /**
@@ -283,7 +272,5 @@ cr.define('print_preview', function() {
   };
 
   // Export
-  return {
-    PageSettings: PageSettings
-  };
+  return {PageSettings: PageSettings};
 });

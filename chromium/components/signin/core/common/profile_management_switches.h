@@ -9,21 +9,41 @@
 #ifndef COMPONENTS_SIGNIN_CORE_COMMON_PROFILE_MANAGEMENT_SWITCHES_H_
 #define COMPONENTS_SIGNIN_CORE_COMMON_PROFILE_MANAGEMENT_SWITCHES_H_
 
+#include "components/signin/core/common/signin_features.h"
+
 namespace base {
 class CommandLine;
 }
 
 namespace switches {
 
-// Checks whether account consistency is enabled. If enabled, the account
+enum class AccountConsistencyMethod {
+  kDisabled,  // No account consistency.
+  kMirror,    // Account management UI in the avatar bubble.
+  kDice       // Account management UI on Gaia webpages.
+};
+
+// Returns the account consistency method.
+AccountConsistencyMethod GetAccountConsistencyMethod();
+
+// Checks whether Mirror account consistency is enabled. If enabled, the account
 // management UI is available in the avatar bubble.
-bool IsEnableAccountConsistency();
+bool IsAccountConsistencyMirrorEnabled();
+
+// Checks whether Dice account consistency is enabled. If enabled, then account
+// management UI is available on the Gaia webpages.
+bool IsAccountConsistencyDiceEnabled();
 
 // Whether the chrome.identity API should be multi-account.
 bool IsExtensionsMultiAccount();
 
-// Called in tests to force enable account consistency.
-void EnableAccountConsistencyForTesting(base::CommandLine* command_line);
+// Called in tests to force enable Mirror account consistency.
+void EnableAccountConsistencyMirrorForTesting(base::CommandLine* command_line);
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+// Called in tests to force enable Dice account consistency.
+void EnableAccountConsistencyDiceForTesting(base::CommandLine* command_line);
+#endif
 
 }  // namespace switches
 

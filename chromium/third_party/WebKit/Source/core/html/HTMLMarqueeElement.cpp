@@ -37,7 +37,7 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLContentElement.h"
@@ -49,7 +49,7 @@ namespace blink {
 
 inline HTMLMarqueeElement::HTMLMarqueeElement(Document& document)
     : HTMLElement(HTMLNames::marqueeTag, document) {
-  UseCounter::Count(document, UseCounter::kHTMLMarqueeElement);
+  UseCounter::Count(document, WebFeature::kHTMLMarqueeElement);
 }
 
 HTMLMarqueeElement* HTMLMarqueeElement::Create(Document& document) {

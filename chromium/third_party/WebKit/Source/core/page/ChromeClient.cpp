@@ -31,7 +31,6 @@
 #include "core/page/FrameTree.h"
 #include "core/page/Page.h"
 #include "core/page/ScopedPageSuspender.h"
-#include "core/page/WindowFeatures.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/network/NetworkHints.h"
@@ -42,6 +41,20 @@ namespace blink {
 DEFINE_TRACE(ChromeClient) {
   visitor->Trace(last_mouse_over_node_);
   PlatformChromeClient::Trace(visitor);
+}
+
+ChromeClient::SupplementInstallCallback
+    ChromeClient::supplement_install_callback_ = nullptr;
+
+void ChromeClient::RegisterSupplementInstallCallback(
+    SupplementInstallCallback callback) {
+  supplement_install_callback_ = callback;
+}
+
+void ChromeClient::InstallSupplements(LocalFrame& frame) {
+  if (supplement_install_callback_) {
+    supplement_install_callback_(frame);
+  }
 }
 
 void ChromeClient::SetWindowRectWithAdjustment(const IntRect& pending_rect,
@@ -84,15 +97,6 @@ bool ChromeClient::CanOpenModalIfDuringPageDismissal(
     }
   }
   return true;
-}
-
-void ChromeClient::SetWindowFeatures(const WindowFeatures& features) {
-  SetToolbarsVisible(features.tool_bar_visible ||
-                     features.location_bar_visible);
-  SetStatusbarVisible(features.status_bar_visible);
-  SetScrollbarsVisible(features.scrollbars_visible);
-  SetMenubarVisible(features.menu_bar_visible);
-  SetResizable(features.resizable);
 }
 
 template <typename Delegate>
@@ -229,7 +233,7 @@ bool ChromeClient::Print(LocalFrame* frame) {
   }
 
   if (frame->GetDocument()->IsSandboxed(kSandboxModals)) {
-    UseCounter::Count(frame, UseCounter::kDialogInSandboxedContext);
+    UseCounter::Count(frame, WebFeature::kDialogInSandboxedContext);
     frame->Console().AddMessage(ConsoleMessage::Create(
         kSecurityMessageSource, kErrorMessageLevel,
         "Ignored call to 'print()'. The document is sandboxed, and the "

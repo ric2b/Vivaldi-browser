@@ -5,8 +5,11 @@
 #ifndef CHROMEOS_COMPONENTS_TETHER_HOST_SCANNER_H_
 #define CHROMEOS_COMPONENTS_TETHER_HOST_SCANNER_H_
 
+#include <string>
+#include <unordered_set>
 #include <vector>
 
+#include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/time/clock.h"
@@ -39,7 +42,8 @@ class HostScanner : public HostScannerOperation::Observer {
     void virtual ScanFinished() = 0;
   };
 
-  HostScanner(TetherHostFetcher* tether_host_fetcher,
+  HostScanner(NetworkStateHandler* network_state_handler,
+              TetherHostFetcher* tether_host_fetcher,
               BleConnectionManager* connection_manager,
               HostScanDevicePrioritizer* host_scan_device_prioritizer,
               TetherHostResponseRecorder* tether_host_response_recorder,
@@ -52,13 +56,11 @@ class HostScanner : public HostScannerOperation::Observer {
   // Returns true if a scan is currently in progress.
   virtual bool IsScanActive();
 
-  // Returns true if a scan has occurred recently within a timespan, determined
-  // by HostScanCache::kNumMinutesBeforeCacheEntryExpires.
-  virtual bool HasRecentlyScanned();
-
   // Starts a host scan if there is no current scan. If a scan is active, this
   // function is a no-op.
   virtual void StartScan();
+
+  void NotifyScanFinished();
 
   // HostScannerOperation::Observer:
   void OnTetherAvailabilityResponse(
@@ -72,13 +74,26 @@ class HostScanner : public HostScannerOperation::Observer {
  private:
   friend class HostScannerTest;
   friend class HostScanSchedulerTest;
+  FRIEND_TEST_ALL_PREFIXES(HostScannerTest, TestScan_ResultsFromNoDevices);
 
-  void NotifyScanFinished();
+  enum HostScanResultEventType {
+    NO_HOSTS_FOUND = 0,
+    NOTIFICATION_SHOWN_SINGLE_HOST = 1,
+    NOTIFICATION_SHOWN_MULTIPLE_HOSTS = 2,
+    HOSTS_FOUND_BUT_NO_NOTIFICATION_SHOWN = 3,
+    HOST_SCAN_RESULT_MAX
+  };
 
   void OnTetherHostsFetched(const cryptauth::RemoteDeviceList& tether_hosts);
   void SetCacheEntry(
       const HostScannerOperation::ScannedDeviceInfo& scanned_device_info);
+  void OnFinalScanResultReceived(
+      std::vector<HostScannerOperation::ScannedDeviceInfo>& final_scan_results);
+  void RecordHostScanResult(HostScanResultEventType event_type);
+  bool IsPotentialHotspotNotificationShowing();
+  bool CanAvailableHostNotificationBeShown();
 
+  NetworkStateHandler* network_state_handler_;
   TetherHostFetcher* tether_host_fetcher_;
   BleConnectionManager* connection_manager_;
   HostScanDevicePrioritizer* host_scan_device_prioritizer_;
@@ -88,9 +103,12 @@ class HostScanner : public HostScannerOperation::Observer {
   HostScanCache* host_scan_cache_;
   base::Clock* clock_;
 
-  bool is_fetching_hosts_;
+  bool is_fetching_hosts_ = false;
+  bool was_notification_showing_when_current_scan_started_ = false;
+  bool was_notification_shown_in_current_scan_ = false;
+  bool has_notification_been_shown_in_previous_scan_ = false;
   std::unique_ptr<HostScannerOperation> host_scanner_operation_;
-  base::Time previous_scan_time_;
+  std::unordered_set<std::string> tether_guids_in_cache_before_scan_;
 
   base::ObserverList<Observer> observer_list_;
   base::WeakPtrFactory<HostScanner> weak_ptr_factory_;

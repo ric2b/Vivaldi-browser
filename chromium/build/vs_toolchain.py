@@ -343,11 +343,11 @@ def _GetDesiredVsToolchainHashes():
   to build with."""
   env_version = GetVisualStudioVersion()
   if env_version == '2015':
-    # Update 3 final with patches with 10.0.14393.0 SDK.
-    return ['d3cb0e37bdd120ad0ac4650b674b09e81be45616']
+    # Update 3 final with 10.0.15063.468 SDK and no vctip.exe.
+    return ['f53e4598951162bad6330f7a167486c7ae5db1e5']
   if env_version == '2017':
-    # VS 2017 RTM with 10.0.14393.0 SDK and dbghelp.dll fixes.
-    return ['4e8a360587a3c8ff3fa46aa9271e982bf3e948ec']
+    # VS 2017 Update 3 Preview 4 with 10.0.15063.468 SDK.
+    return ['1f52d730755ac72dddaf121b73c9d6fd5c24ddf8']
   raise Exception('Unsupported VS version %s' % env_version)
 
 

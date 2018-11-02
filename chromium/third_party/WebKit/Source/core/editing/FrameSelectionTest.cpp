@@ -12,7 +12,8 @@
 #include "core/editing/EditingTestBase.h"
 #include "core/editing/FrameCaret.h"
 #include "core/editing/SelectionController.h"
-#include "core/frame/FrameView.h"
+#include "core/editing/SelectionModifier.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBlock.h"
@@ -71,7 +72,7 @@ TEST_F(FrameSelectionTest, FirstEphemeralRangeOf) {
   const EphemeralRange& range =
       FirstEphemeralRangeOf(Selection().ComputeVisibleSelectionInDOMTree());
   EXPECT_EQ(Position(sample->nextSibling(), 0), range.StartPosition())
-      << "firstRagne() should return current selection value";
+      << "firstRange() should return current selection value";
   EXPECT_EQ(Position(sample->nextSibling(), 0), range.EndPosition());
 }
 
@@ -106,7 +107,7 @@ TEST_F(FrameSelectionTest, PaintCaretShouldNotLayout) {
   int start_count = LayoutCount();
   {
     // To force layout in next updateLayout calling, widen view.
-    FrameView& frame_view = GetDummyPageHolder().GetFrameView();
+    LocalFrameView& frame_view = GetDummyPageHolder().GetFrameView();
     IntRect frame_rect = frame_view.FrameRect();
     frame_rect.SetWidth(frame_rect.Width() + 1);
     frame_rect.SetHeight(frame_rect.Height() + 1);
@@ -166,17 +167,18 @@ TEST_F(FrameSelectionTest, ModifyExtendWithFlatTree) {
   // Select "two" for selection in DOM tree
   // Select "twoone" for selection in Flat tree
   Selection().SetSelection(
-      SelectionInFlatTree::Builder()
-          .Collapse(PositionInFlatTree(host, 0))
-          .Extend(PositionInFlatTree(GetDocument().body(), 2))
+      SelectionInDOMTree::Builder()
+          .Collapse(ToPositionInDOMTree(PositionInFlatTree(host, 0)))
+          .Extend(
+              ToPositionInDOMTree(PositionInFlatTree(GetDocument().body(), 2)))
           .Build());
-  Selection().Modify(FrameSelection::kAlterationExtend, kDirectionForward,
-                     kWordGranularity);
+  Selection().Modify(SelectionModifyAlteration::kExtend, kDirectionForward,
+                     TextGranularity::kWord);
   EXPECT_EQ(Position(two, 0), VisibleSelectionInDOMTree().Start());
-  EXPECT_EQ(Position(two, 3), VisibleSelectionInDOMTree().end());
+  EXPECT_EQ(Position(two, 3), VisibleSelectionInDOMTree().End());
   EXPECT_EQ(PositionInFlatTree(two, 0),
             GetVisibleSelectionInFlatTree().Start());
-  EXPECT_EQ(PositionInFlatTree(two, 3), GetVisibleSelectionInFlatTree().end());
+  EXPECT_EQ(PositionInFlatTree(two, 3), GetVisibleSelectionInFlatTree().End());
 }
 
 TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
@@ -186,17 +188,17 @@ TEST_F(FrameSelectionTest, ModifyWithUserTriggered) {
   Selection().SetSelection(
       SelectionInDOMTree::Builder().Collapse(end_of_text).Build());
 
-  EXPECT_FALSE(Selection().Modify(FrameSelection::kAlterationMove,
-                                  kDirectionForward, kCharacterGranularity,
-                                  kNotUserTriggered))
+  EXPECT_FALSE(
+      Selection().Modify(SelectionModifyAlteration::kMove, kDirectionForward,
+                         TextGranularity::kCharacter, kNotUserTriggered))
       << "Selection.modify() returns false for non-user-triggered call when "
          "selection isn't modified.";
   EXPECT_EQ(end_of_text,
             Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start())
       << "Selection isn't modified";
 
-  EXPECT_TRUE(Selection().Modify(FrameSelection::kAlterationMove,
-                                 kDirectionForward, kCharacterGranularity,
+  EXPECT_TRUE(Selection().Modify(SelectionModifyAlteration::kMove,
+                                 kDirectionForward, TextGranularity::kCharacter,
                                  kUserTriggered))
       << "Selection.modify() returns true for user-triggered call";
   EXPECT_EQ(end_of_text,
@@ -219,23 +221,44 @@ TEST_F(FrameSelectionTest, MoveRangeSelectionTest) {
   // "Foo B|ar B>az," with the Character granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 9)),
-                                 kCharacterGranularity);
+                                 TextGranularity::kCharacter);
   EXPECT_EQ_SELECTED_TEXT("ar B");
   // "Foo B|ar B>az," with the Word granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 9)),
-                                 kWordGranularity);
+                                 TextGranularity::kWord);
   EXPECT_EQ_SELECTED_TEXT("Bar Baz");
   // "Fo<o B|ar Baz," with the Character granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 2)),
-                                 kCharacterGranularity);
+                                 TextGranularity::kCharacter);
   EXPECT_EQ_SELECTED_TEXT("o B");
   // "Fo<o B|ar Baz," with the Word granularity.
   Selection().MoveRangeSelection(CreateVisiblePosition(Position(text, 5)),
                                  CreateVisiblePosition(Position(text, 2)),
-                                 kWordGranularity);
+                                 TextGranularity::kWord);
   EXPECT_EQ_SELECTED_TEXT("Foo Bar");
+}
+
+TEST_F(FrameSelectionTest, MoveRangeSelectionNoLiveness) {
+  SetBodyContent("<span id=sample>xyz</span>");
+  Element* const sample = GetDocument().getElementById("sample");
+  // Select as: <span id=sample>^xyz|</span>
+  Selection().MoveRangeSelection(
+      CreateVisiblePosition(Position(sample->firstChild(), 1)),
+      CreateVisiblePosition(Position(sample->firstChild(), 1)),
+      TextGranularity::kWord);
+  EXPECT_EQ("xyz", Selection().SelectedText());
+  sample->insertBefore(Text::Create(GetDocument(), "abc"),
+                       sample->firstChild());
+  GetDocument().UpdateStyleAndLayout();
+  const VisibleSelection& selection =
+      Selection().ComputeVisibleSelectionInDOMTree();
+  // Inserting "abc" before "xyz" should not affect to selection.
+  EXPECT_EQ(Position(sample->lastChild(), 0), selection.Start());
+  EXPECT_EQ(Position(sample->lastChild(), 3), selection.End());
+  EXPECT_EQ("xyz", Selection().SelectedText());
+  EXPECT_EQ("abcxyz", sample->innerText());
 }
 
 // For http://crbug.com/695317
@@ -249,12 +272,12 @@ TEST_F(FrameSelectionTest, SelectAllWithInputElement) {
   const SelectionInFlatTree& result_in_flat_tree =
       Selection().ComputeVisibleSelectionInFlatTree().AsSelection();
   EXPECT_EQ(SelectionInDOMTree::Builder(result_in_dom_tree)
-                .Collapse(Position::BeforeNode(input))
+                .Collapse(Position::BeforeNode(*input))
                 .Extend(Position(last_child, 3))
                 .Build(),
             result_in_dom_tree);
   EXPECT_EQ(SelectionInFlatTree::Builder(result_in_flat_tree)
-                .Collapse(PositionInFlatTree::BeforeNode(input))
+                .Collapse(PositionInFlatTree::BeforeNode(*input))
                 .Extend(PositionInFlatTree(last_child, 3))
                 .Build(),
             result_in_flat_tree);
@@ -282,8 +305,8 @@ TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
   EXPECT_FALSE(Selection().IsHandleVisible());
   Selection().SelectAll();
   EXPECT_FALSE(Selection().IsHandleVisible())
-      << "If handles weren't present before"
-         "selectAll. Then they shouldn't be present"
+      << "If handles weren't present before "
+         "selectAll. Then they shouldn't be present "
          "after it.";
 
   Selection().SetSelection(SelectionInDOMTree::Builder()
@@ -293,9 +316,38 @@ TEST_F(FrameSelectionTest, SelectAllPreservesHandle) {
   EXPECT_TRUE(Selection().IsHandleVisible());
   Selection().SelectAll();
   EXPECT_TRUE(Selection().IsHandleVisible())
-      << "If handles were present before"
-         "selectAll. Then they should be present"
+      << "If handles were present before "
+         "selectAll. Then they should be present "
          "after it.";
+}
+
+TEST_F(FrameSelectionTest, BoldCommandPreservesHandle) {
+  SetBodyContent("<div id=sample>abc</div>");
+  Element* sample = GetDocument().getElementById("sample");
+  const Position end_of_text(sample->firstChild(), 3);
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .Collapse(end_of_text)
+                               .SetIsHandleVisible(false)
+                               .Build());
+  EXPECT_FALSE(Selection().IsHandleVisible());
+  Selection().SelectAll();
+  GetDocument().execCommand("bold", false, "", ASSERT_NO_EXCEPTION);
+  EXPECT_FALSE(Selection().IsHandleVisible())
+      << "If handles weren't present before "
+         "bold command. Then they shouldn't "
+         "be present after it.";
+
+  Selection().SetSelection(SelectionInDOMTree::Builder()
+                               .Collapse(end_of_text)
+                               .SetIsHandleVisible(true)
+                               .Build());
+  EXPECT_TRUE(Selection().IsHandleVisible());
+  Selection().SelectAll();
+  GetDocument().execCommand("bold", false, "", ASSERT_NO_EXCEPTION);
+  EXPECT_TRUE(Selection().IsHandleVisible())
+      << "If handles were present before "
+         "bold command. Then they should "
+         "be present after it.";
 }
 
 TEST_F(FrameSelectionTest, SelectionOnRangeHidesHandles) {
@@ -342,7 +394,7 @@ TEST_F(FrameSelectionTest, SelectInvalidPositionInFlatTreeDoesntCrash) {
   Selection().SetSelection(SelectionInDOMTree::Builder()
                                .Collapse(Position(body, 0))
                                // SELECT@AfterAnchor is invalid in flat tree.
-                               .Extend(Position::AfterNode(select))
+                               .Extend(Position::AfterNode(*select))
                                .Build());
   // Should not crash inside.
   const VisibleSelectionInFlatTree& selection =
@@ -400,9 +452,8 @@ TEST_F(FrameSelectionTest, RangeInShadowTree) {
 
   Node* text_node = shadow_root->firstChild();
   Selection().SetSelection(
-      SelectionInFlatTree::Builder()
-          .SetBaseAndExtent(PositionInFlatTree(text_node, 0),
-                            PositionInFlatTree(text_node, 3))
+      SelectionInDOMTree::Builder()
+          .SetBaseAndExtent(Position(text_node, 0), Position(text_node, 3))
           .Build());
   EXPECT_EQ_SELECTED_TEXT("hey");
   EXPECT_TRUE(Selection().GetSelectionInDOMTree().IsRange());
@@ -944,8 +995,8 @@ TEST_F(FrameSelectionTest, InconsistentVisibleSelectionNoCrash) {
   // |start| and |end| are valid Positions in DOM tree, but do not participate
   // in flat tree. They should be canonicalized to null VisiblePositions, but
   // are currently not. See crbug.com/729636 for details.
-  const Position& start = Position::BeforeNode(anchor);
-  const Position& end = Position::AfterNode(anchor);
+  const Position& start = Position::BeforeNode(*anchor);
+  const Position& end = Position::AfterNode(*anchor);
   Selection().SetSelection(
       SelectionInDOMTree::Builder().Collapse(start).Extend(end).Build());
 

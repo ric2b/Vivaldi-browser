@@ -672,6 +672,22 @@ world (note that the DOM object is shared among multiple worlds), it leaks the S
 to the world. ScriptState must be carefully maintained in a way that doesn't leak
 to another world.
 
+### [ContextEnabled] _(i)_
+
+Summary: `[ContextEnabled]` renders the generated interface bindings unavailable by default, but also generates code which allows individual script contexts opt into installing the bindings.
+
+Usage: `[ContextEnabled=FeatureName]`. FeatureName is an arbitrary name used to identify the feature at runtime.
+
+```webidl
+[
+    ContextEnabled=MojoJS
+] interface Mojo { ... };
+```
+
+When applied to an interface, the generated code for the relevant global object will include a public `installFeatureName()` method which can be called to install the interface on the global object.
+
+Note that `[ContextEnabled]` is not mututally exclusive to `[RuntimeEnabled]`, and a feature which may be enabled by either mechanism will be enabled if the appropriate `[RuntimeEnabled]` feature is enabled; _or_ if the appropriate `[ContextEnabled]` feature is enabled; _or_ if both are enabled.
+
 ### [Custom] _(i, m, s, a, f)_
 
 Summary: They allow you to write bindings code manually as you like: full bindings for methods and attributes, certain functions for interfaces.
@@ -1447,6 +1463,32 @@ Summary: `[PermissiveDictionaryConversion]` relaxes the rules about what types o
 Ordinarily when passing in a value for a dictionary argument, the value must be either undefined, null, or an object. In other words, passing a boolean value like true or false must raise TypeError. The PermissiveDictionaryConversion extended attribute ignores non-object types, treating them the same as undefined and null. In order to effect this change, this extended attribute must be specified both on the dictionary type as well as the arguments of methods where it is passed. It exists only to eliminate certain custom bindings.
 
 Usage: applies to dictionaries and arguments of methods. Takes no arguments itself.
+
+### [RuntimeCallStatsCounter] _(m, a)_
+
+Summary: Adding `[RuntimeCallStatsCounter=<Counter>]` as an extended attribute to an interface method or attribute results in call counts and run times of the method or attribute getter (and setter if present) using RuntimeCallStats (see Source/platform/bindings/RuntimeCallStats.h for more details about RuntimeCallStats). \<Counter\> is used to identify a group of counters that will be used to keep track of run times for a particular method/attribute.
+
+A counter with id `k<Counter>` will keep track of the execution time and counts for methods (including the time spent in the bindings layer). For attribute getters, it is `k<Counter>_Getter` and for setters, `k<Counter>_Setter`.
+
+Usage:
+
+```webidl
+interface Node {
+  [RuntimeCallStatsCounter=NodeOwnerDocument] readonly attribute Document? ownerDocument;
+  [RuntimeCallStatsCounter=NodeTextContent] attribute DOMString? textContent;
+  [RuntimeCallStatsCounter=NodeHasChildNodes] boolean hasChildNodes();
+}
+```
+
+The counters specified in the IDL file also need to be defined in Source/platform/bindings/RuntimeCallStats.h (under FOR_EACH_COUNTER) as follows:
+
+```cpp
+#define FOR_EACH_COUNTER(V)                          \
+...                                                  \
+  BINDINGS_READ_ONLY_ATTRIBUTE(V, NodeOwnerDocument) \
+  BINDINGS_ATTRIBUTE(V, NodeTextContent)             \
+  BINDINGS_METHOD(V, NodeHasChildNodes)
+```
 
 ### [URL] _(a)_
 

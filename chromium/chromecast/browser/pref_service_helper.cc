@@ -44,7 +44,6 @@ std::unique_ptr<PrefService> PrefServiceHelper::CreatePrefService(
   const base::FilePath config_path(GetConfigPath());
   VLOG(1) << "Loading config from " << config_path.value();
 
-  registry->RegisterBooleanPref(prefs::kEnableRemoteDebugging, false);
   registry->RegisterBooleanPref(prefs::kMetricsIsNewClientID, false);
   // Opt-in stats default to true to handle two different cases:
   //  1) Any crashes or UMA logs are recorded prior to setup completing
@@ -54,6 +53,8 @@ std::unique_ptr<PrefService> PrefServiceHelper::CreatePrefService(
   //     opts out, nothing further will be sent (honoring the user's setting).
   //  2) Dogfood users (see dogfood agreement).
   registry->RegisterBooleanPref(prefs::kOptInStats, true);
+  registry->RegisterListPref(prefs::kActiveDCSExperiments);
+  registry->RegisterDictionaryPref(prefs::kLatestDCSFeatures);
 
   RegisterPlatformPrefs(registry);
 

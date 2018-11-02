@@ -1,4 +1,4 @@
 
 post_process_target("//components:components_unittests") {
-  sources += [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
+  sources = [ "//vivaldi/prefs/vivaldi_tab_zoom_pref_tests.cc" ]
 }

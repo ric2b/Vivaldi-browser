@@ -40,6 +40,15 @@ default_chrome_public_jinja_variables = [
 template("chrome_public_apk_tmpl") {
   android_apk(target_name) {
     forward_variables_from(invoker, "*")
+    exclude_xxxhdpi = true
+
+    # Whitelist rationale in https://crbug.com/691733.
+    xxxhdpi_whitelist = [
+      "*shadow*",  # Combination of gradient & transparency cause pixelation.
+      "*.9.*",  # Most nine-patches contain shadows.
+      "*ic_file_download_white*",  # Bottom edge seems misaligned.
+      "*ic_lock.*",  # Bottom edge seems misaligned.
+    ]
     _native_lib_file =
         rebase_path("$root_gen_dir/CHROME_VERSION.json", root_out_dir)
     native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
@@ -82,6 +91,7 @@ template("chrome_public_apk_tmpl") {
         enable_relocation_packing = chrome_public_apk_use_relocation_packer
       }
     }
+    command_line_flags_file = "chrome-command-line"
   }
 }
 
@@ -122,9 +132,11 @@ template("monochrome_public_apk_tmpl") {
     }
     deps += [
       "//android_webview:monochrome_webview_assets",
+      "//android_webview/apk:webview_license_activity_java",
       "//android_webview/glue",
       "//chrome/android:chrome_public_non_pak_assets",
       "//chrome/android:monochrome_pak_assets",
+      "//chrome/android/monochrome:monochrome_license_provider_java",
     ]
 
     if (!is_java_debug) {
@@ -132,6 +144,7 @@ template("monochrome_public_apk_tmpl") {
         proguard_configs = []
       }
       proguard_configs += [ "//android_webview/apk/java/proguard.flags" ]
+      png_to_webp = true
     }
   }
 }

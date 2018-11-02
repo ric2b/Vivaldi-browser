@@ -20,8 +20,8 @@
 #include "mojo/edk/system/core.h"
 #include "mojo/edk/system/data_pipe_control_message.h"
 #include "mojo/edk/system/node_controller.h"
-#include "mojo/edk/system/ports_message.h"
 #include "mojo/edk/system/request_context.h"
+#include "mojo/edk/system/user_message_impl.h"
 #include "mojo/public/c/system/data_pipe.h"
 
 namespace mojo {
@@ -39,6 +39,8 @@ struct SerializedState {
   uint32_t read_offset;
   uint32_t bytes_available;
   uint8_t flags;
+  uint64_t buffer_guid_high;
+  uint64_t buffer_guid_low;
   char padding[7];
 };
 
@@ -114,8 +116,7 @@ MojoResult DataPipeConsumerDispatcher::ReadData(void* elements,
         (flags & MOJO_READ_DATA_FLAG_DISCARD))
       return MOJO_RESULT_INVALID_ARGUMENT;
     DCHECK(!(flags & MOJO_READ_DATA_FLAG_DISCARD));  // Handled above.
-    DVLOG_IF(2, elements)
-        << "Query mode: ignoring non-null |elements|";
+    DVLOG_IF(2, elements) << "Query mode: ignoring non-null |elements|";
     *num_bytes = static_cast<uint32_t>(bytes_available_);
 
     if (had_new_data)
@@ -128,8 +129,7 @@ MojoResult DataPipeConsumerDispatcher::ReadData(void* elements,
     // These flags are mutally exclusive.
     if (flags & MOJO_READ_DATA_FLAG_PEEK)
       return MOJO_RESULT_INVALID_ARGUMENT;
-    DVLOG_IF(2, elements)
-        << "Discard mode: ignoring non-null |elements|";
+    DVLOG_IF(2, elements) << "Discard mode: ignoring non-null |elements|";
     discard = true;
   }
 
@@ -138,8 +138,7 @@ MojoResult DataPipeConsumerDispatcher::ReadData(void* elements,
     return MOJO_RESULT_INVALID_ARGUMENT;
 
   bool all_or_none = flags & MOJO_READ_DATA_FLAG_ALL_OR_NONE;
-  uint32_t min_num_bytes_to_read =
-      all_or_none ? max_num_bytes_to_read : 0;
+  uint32_t min_num_bytes_to_read = all_or_none ? max_num_bytes_to_read : 0;
 
   if (min_num_bytes_to_read > bytes_available_) {
     if (had_new_data)
@@ -203,7 +202,8 @@ MojoResult DataPipeConsumerDispatcher::BeginReadData(const void** buffer,
   // These flags may not be used in two-phase mode.
   if ((flags & MOJO_READ_DATA_FLAG_DISCARD) ||
       (flags & MOJO_READ_DATA_FLAG_QUERY) ||
-      (flags & MOJO_READ_DATA_FLAG_PEEK))
+      (flags & MOJO_READ_DATA_FLAG_PEEK) ||
+      (flags & MOJO_READ_DATA_FLAG_ALL_OR_NONE))
     return MOJO_RESULT_INVALID_ARGUMENT;
 
   const bool had_new_data = new_data_available_;
@@ -217,8 +217,8 @@ MojoResult DataPipeConsumerDispatcher::BeginReadData(const void** buffer,
   }
 
   DCHECK_LT(read_offset_, options_.capacity_num_bytes);
-  uint32_t bytes_to_read = std::min(bytes_available_,
-                                    options_.capacity_num_bytes - read_offset_);
+  uint32_t bytes_to_read =
+      std::min(bytes_available_, options_.capacity_num_bytes - read_offset_);
 
   CHECK(ring_buffer_mapping_);
   uint8_t* data = static_cast<uint8_t*>(ring_buffer_mapping_->GetBase());
@@ -317,6 +317,10 @@ bool DataPipeConsumerDispatcher::EndSerialize(
   state->bytes_available = bytes_available_;
   state->flags = peer_closed_ ? kFlagPeerClosed : 0;
 
+  base::UnguessableToken guid = shared_ring_buffer_->GetGUID();
+  state->buffer_guid_high = guid.GetHighForSerialization();
+  state->buffer_guid_low = guid.GetLowForSerialization();
+
   ports[0] = control_port_.name();
 
   buffer_handle_for_transit_ = shared_ring_buffer_->DuplicatePlatformHandle();
@@ -374,12 +378,13 @@ DataPipeConsumerDispatcher::Deserialize(const void* data,
   if (node_controller->node()->GetPort(ports[0], &port) != ports::OK)
     return nullptr;
 
+  base::UnguessableToken guid = base::UnguessableToken::Deserialize(
+      state->buffer_guid_high, state->buffer_guid_low);
   PlatformHandle buffer_handle;
   std::swap(buffer_handle, handles[0]);
   scoped_refptr<PlatformSharedBuffer> ring_buffer =
       PlatformSharedBuffer::CreateFromPlatformHandle(
-          state->options.capacity_num_bytes,
-          false /* read_only */,
+          state->options.capacity_num_bytes, false /* read_only */, guid,
           ScopedPlatformHandle(buffer_handle));
   if (!ring_buffer) {
     DLOG(ERROR) << "Failed to deserialize shared buffer handle.";
@@ -438,8 +443,7 @@ bool DataPipeConsumerDispatcher::InitializeNoLock() {
 
   base::AutoUnlock unlock(lock_);
   node_controller_->SetPortObserver(
-      control_port_,
-      make_scoped_refptr(new PortObserverThunk(this)));
+      control_port_, make_scoped_refptr(new PortObserverThunk(this)));
 
   return true;
 }
@@ -461,8 +465,8 @@ MojoResult DataPipeConsumerDispatcher::CloseNoLock() {
   return MOJO_RESULT_OK;
 }
 
-HandleSignalsState
-DataPipeConsumerDispatcher::GetHandleSignalsStateNoLock() const {
+HandleSignalsState DataPipeConsumerDispatcher::GetHandleSignalsStateNoLock()
+    const {
   lock_.AssertAcquired();
 
   HandleSignalsState rv;
@@ -482,17 +486,22 @@ DataPipeConsumerDispatcher::GetHandleSignalsStateNoLock() const {
       rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_NEW_DATA_READABLE;
   }
 
-  if (peer_closed_)
+  if (peer_closed_) {
     rv.satisfied_signals |= MOJO_HANDLE_SIGNAL_PEER_CLOSED;
+  } else {
+    rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_PEER_REMOTE;
+    if (peer_remote_)
+      rv.satisfied_signals |= MOJO_HANDLE_SIGNAL_PEER_REMOTE;
+  }
   rv.satisfiable_signals |= MOJO_HANDLE_SIGNAL_PEER_CLOSED;
 
   return rv;
 }
 
 void DataPipeConsumerDispatcher::NotifyRead(uint32_t num_bytes) {
-  DVLOG(1) << "Data pipe consumer " << pipe_id_ << " notifying peer: "
-           << num_bytes << " bytes read. [control_port="
-           << control_port_.name() << "]";
+  DVLOG(1) << "Data pipe consumer " << pipe_id_
+           << " notifying peer: " << num_bytes
+           << " bytes read. [control_port=" << control_port_.name() << "]";
 
   SendDataPipeControlMessage(node_controller_, control_port_,
                              DataPipeCommand::DATA_WAS_READ, num_bytes);
@@ -517,31 +526,33 @@ void DataPipeConsumerDispatcher::OnPortStatusChanged() {
 void DataPipeConsumerDispatcher::UpdateSignalsStateNoLock() {
   lock_.AssertAcquired();
 
-  bool was_peer_closed = peer_closed_;
+  const bool was_peer_closed = peer_closed_;
+  const bool was_peer_remote = peer_remote_;
   size_t previous_bytes_available = bytes_available_;
 
   ports::PortStatus port_status;
   int rv = node_controller_->node()->GetStatus(control_port_, &port_status);
+  peer_remote_ = rv == ports::OK && port_status.peer_remote;
   if (rv != ports::OK || !port_status.receiving_messages) {
     DVLOG(1) << "Data pipe consumer " << pipe_id_ << " is aware of peer closure"
              << " [control_port=" << control_port_.name() << "]";
     peer_closed_ = true;
   } else if (rv == ports::OK && port_status.has_messages && !in_transit_) {
-    ports::ScopedMessage message;
+    std::unique_ptr<ports::UserMessageEvent> message_event;
     do {
-      int rv = node_controller_->node()->GetMessage(
-          control_port_, &message, nullptr);
+      int rv = node_controller_->node()->GetMessage(control_port_,
+                                                    &message_event, nullptr);
       if (rv != ports::OK)
         peer_closed_ = true;
-      if (message) {
-        if (message->num_payload_bytes() < sizeof(DataPipeControlMessage)) {
+      if (message_event) {
+        auto* message = message_event->GetMessage<UserMessageImpl>();
+        if (message->user_payload_size() < sizeof(DataPipeControlMessage)) {
           peer_closed_ = true;
           break;
         }
 
         const DataPipeControlMessage* m =
-            static_cast<const DataPipeControlMessage*>(
-                message->payload_bytes());
+            static_cast<const DataPipeControlMessage*>(message->user_payload());
 
         if (m->command != DataPipeCommand::DATA_WAS_WRITTEN) {
           DLOG(ERROR) << "Unexpected control message from producer.";
@@ -550,7 +561,7 @@ void DataPipeConsumerDispatcher::UpdateSignalsStateNoLock() {
         }
 
         if (static_cast<size_t>(bytes_available_) + m->num_bytes >
-              options_.capacity_num_bytes) {
+            options_.capacity_num_bytes) {
           DLOG(ERROR) << "Producer claims to have written too many bytes.";
           peer_closed_ = true;
           break;
@@ -562,15 +573,17 @@ void DataPipeConsumerDispatcher::UpdateSignalsStateNoLock() {
 
         bytes_available_ += m->num_bytes;
       }
-    } while (message);
+    } while (message_event);
   }
 
   bool has_new_data = bytes_available_ != previous_bytes_available;
   if (has_new_data)
     new_data_available_ = true;
 
-  if (peer_closed_ != was_peer_closed || has_new_data)
+  if (peer_closed_ != was_peer_closed || has_new_data ||
+      peer_remote_ != was_peer_remote) {
     watchers_.NotifyState(GetHandleSignalsStateNoLock());
+  }
 }
 
 }  // namespace edk

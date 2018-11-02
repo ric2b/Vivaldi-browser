@@ -20,7 +20,7 @@
 <translation id="119944043368869598">すべてクリア</translation>
 <translation id="1221825588892235038">選択したコンテンツのみ</translation>
 <translation id="1244303850296295656">拡張機能のエラー</translation>
-<translation id="1278049586634282054">検証:</translation>
+<translation id="1278049586634282054">ビューを検証:</translation>
 <translation id="1297175357211070620">送信先</translation>
 <translation id="1303101771013849280">ブックマークHTMLファイル</translation>
 <translation id="1303319084542230573">プリンターを追加する</translation>
@@ -35,7 +35,7 @@
 <translation id="1546280085599573572">この拡張機能により、ホームボタンをクリックしたときに表示されるページが変更されました。</translation>
 <translation id="1580652505892042215">コンテキスト:</translation>
 <translation id="1588438908519853928">通常</translation>
-<translation id="1588870296199743671">リンクを開く…</translation>
+<translation id="1588870296199743671">リンクを開く...</translation>
 <translation id="159359590073980872">画像キャッシュ</translation>
 <translation id="1601560923496285236">適用</translation>
 <translation id="1603914832182249871">(プライベート)</translation>
@@ -181,7 +181,7 @@
 <translation id="3511307672085573050">リンクのアドレスをコピー (&amp;E)</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt;さんがあなたのグループ&lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;と&lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt;プリンターの共有を希望しています。共有を許可すると、グループのメンバー全員がこのプリンターに印刷できるようになります。</translation>
 <translation id="3587482841069643663">すべて</translation>
-<translation id="3618849550573277856">“<ph name="LOOKUP_STRING" />” を辞書で検索</translation>
+<translation id="3618849550573277856">「<ph name="LOOKUP_STRING" />」を辞書で検索</translation>
 <translation id="3627588569887975815">プライベートウィンドウで開く (&amp;G)</translation>
 <translation id="3640006360782160348">プリンター設定のキャンセル</translation>
 <translation id="3678156199662914018">拡張機能: <ph name="EXTENSION_NAME" /></translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">SQLiteメモリー</translation>
 <translation id="6655190889273724601">デベロッパーモード</translation>
 <translation id="6691936601825168937">進む (&amp;F)</translation>
-<translation id="6700480081846086223"><ph name="HOST_NAME" />をキャストします</translation>
 <translation id="6706210727756204531">スコープ</translation>
 <translation id="6786747875388722282">拡張機能</translation>
 <translation id="6787839852456839824">キーボードショートカット</translation>

@@ -25,6 +25,7 @@ namespace switches {
 extern const char kDelay[];
 extern const char kSetDisplayVersionProduct[];
 extern const char kSetDisplayVersionValue[];
+extern const char kUserExperiment[];
 
 }  // namespace switches
 

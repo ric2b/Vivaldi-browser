@@ -58,6 +58,9 @@ enum ShelfBackgroundType {
 
   // The background when a window is maximized.
   SHELF_BACKGROUND_MAXIMIZED,
+
+  // The background when fullscreen app list is visible.
+  SHELF_BACKGROUND_APP_LIST,
 };
 
 // Source of the launch or activation request, for tracking.
@@ -164,6 +167,8 @@ struct ASH_PUBLIC_EXPORT ShelfID {
   // An id passed on app launch, to support multiple shelf items per app.
   std::string launch_id;
 };
+
+ASH_PUBLIC_EXPORT std::ostream& operator<<(std::ostream& o, const ShelfID& id);
 
 }  // namespace ash
 

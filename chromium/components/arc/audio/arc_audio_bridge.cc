@@ -4,16 +4,49 @@
 
 #include "components/arc/audio/arc_audio_bridge.h"
 
+#include <utility>
+
 #include "ash/system/audio/tray_audio.h"
 #include "base/logging.h"
+#include "base/memory/singleton.h"
 #include "chromeos/audio/audio_device.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 
 namespace arc {
+namespace {
 
-ArcAudioBridge::ArcAudioBridge(ArcBridgeService* bridge_service)
-    : ArcService(bridge_service), binding_(this) {
-  arc_bridge_service()->audio()->AddObserver(this);
+// Singleton factory for ArcAccessibilityHelperBridge.
+class ArcAudioBridgeFactory
+    : public internal::ArcBrowserContextKeyedServiceFactoryBase<
+          ArcAudioBridge,
+          ArcAudioBridgeFactory> {
+ public:
+  // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
+  static constexpr const char* kName = "ArcAudioBridgeFactory";
+
+  static ArcAudioBridgeFactory* GetInstance() {
+    return base::Singleton<ArcAudioBridgeFactory>::get();
+  }
+
+ private:
+  friend base::DefaultSingletonTraits<ArcAudioBridgeFactory>;
+  ArcAudioBridgeFactory() = default;
+  ~ArcAudioBridgeFactory() override = default;
+};
+
+}  // namespace
+
+// static
+ArcAudioBridge* ArcAudioBridge::GetForBrowserContext(
+    content::BrowserContext* context) {
+  return ArcAudioBridgeFactory::GetForBrowserContext(context);
+}
+
+ArcAudioBridge::ArcAudioBridge(content::BrowserContext* context,
+                               ArcBridgeService* bridge_service)
+    : arc_bridge_service_(bridge_service), binding_(this) {
+  arc_bridge_service_->audio()->AddObserver(this);
   if (chromeos::CrasAudioHandler::IsInitialized()) {
     cras_audio_handler_ = chromeos::CrasAudioHandler::Get();
     cras_audio_handler_->AddAudioObserver(this);
@@ -21,22 +54,44 @@ ArcAudioBridge::ArcAudioBridge(ArcBridgeService* bridge_service)
 }
 
 ArcAudioBridge::~ArcAudioBridge() {
-  if (cras_audio_handler_ && chromeos::CrasAudioHandler::IsInitialized()) {
+  if (cras_audio_handler_)
     cras_audio_handler_->RemoveAudioObserver(this);
-  }
-  arc_bridge_service()->audio()->RemoveObserver(this);
+
+  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
+  // BrowserContextKeyedService is not nested.
+  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
+  // so do not touch it.
+  if (ArcServiceManager::Get())
+    arc_bridge_service_->audio()->RemoveObserver(this);
 }
 
 void ArcAudioBridge::OnInstanceReady() {
   mojom::AudioInstance* audio_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->audio(), Init);
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->audio(), Init);
   DCHECK(audio_instance);  // the instance on ARC side is too old.
-  audio_instance->Init(binding_.CreateInterfacePtrAndBind());
+  mojom::AudioHostPtr host_proxy;
+  binding_.Bind(mojo::MakeRequest(&host_proxy));
+  audio_instance->Init(std::move(host_proxy));
+  available_ = true;
+}
+
+void ArcAudioBridge::OnInstanceClosed() {
+  available_ = false;
 }
 
 void ArcAudioBridge::ShowVolumeControls() {
   DVLOG(2) << "ArcAudioBridge::ShowVolumeControls";
   ash::TrayAudio::ShowPopUpVolumeView();
+}
+
+void ArcAudioBridge::OnSystemVolumeUpdateRequest(int32_t percent) {
+  if (percent < 0 || percent > 100)
+    return;
+  cras_audio_handler_->SetOutputVolumePercent(percent);
+  bool is_muted =
+      percent <= cras_audio_handler_->GetOutputDefaultVolumeMuteThreshold();
+  if (cras_audio_handler_->IsOutputMuted() != is_muted)
+    cras_audio_handler_->SetOutputMute(is_muted);
 }
 
 void ArcAudioBridge::OnAudioNodesChanged() {
@@ -84,16 +139,20 @@ void ArcAudioBridge::SendSwitchState(bool headphone_inserted,
   }
 
   DVLOG(1) << "Send switch state " << switch_state;
+  if (!available_)
+    return;
   mojom::AudioInstance* audio_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service()->audio(), NotifySwitchState);
+      arc_bridge_service_->audio(), NotifySwitchState);
   if (audio_instance)
     audio_instance->NotifySwitchState(switch_state);
 }
 
 void ArcAudioBridge::SendVolumeState() {
   DVLOG(1) << "Send volume " << volume_ << " muted " << muted_;
+  if (!available_)
+    return;
   mojom::AudioInstance* audio_instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service()->audio(), NotifyVolumeState);
+      arc_bridge_service_->audio(), NotifyVolumeState);
   if (audio_instance)
     audio_instance->NotifyVolumeState(volume_, muted_);
 }

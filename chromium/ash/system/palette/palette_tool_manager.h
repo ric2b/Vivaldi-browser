@@ -52,7 +52,8 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
     virtual aura::Window* GetWindow() = 0;
 
     // Record usage of each pen palette option.
-    virtual void RecordPaletteOptionsUsage(PaletteTrayOptions option) = 0;
+    virtual void RecordPaletteOptionsUsage(PaletteTrayOptions option,
+                                           PaletteInvocationMethod method) = 0;
 
     // Record mode cancellation of pen palette.
     virtual void RecordPaletteModeCancellation(PaletteModeCancelType type) = 0;
@@ -64,6 +65,9 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
   // Creates the tool manager.
   PaletteToolManager(Delegate* delegate);
   ~PaletteToolManager() override;
+
+  // Returns true if the given tool has been added to the tool manager.
+  bool HasTool(PaletteToolId tool_id);
 
   // Adds the given |tool| to the tool manager. The tool is assumed to be in a
   // deactivated state. This class takes ownership over |tool|.
@@ -82,12 +86,12 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
   // Returns the active tool for the given group.
   PaletteToolId GetActiveTool(PaletteGroup group);
 
-  // Fetch the active tray icon for the given tool. Returns
-  // gfx::VectorIconId::VECTOR_ICON_NONE if not available.
+  // Fetch the active tray icon for the given tool. Returns an empty icon if
+  // not available.
   const gfx::VectorIcon& GetActiveTrayIcon(PaletteToolId tool_id) const;
 
-  // Create views for all of the registered tools.
-  std::vector<PaletteToolView> CreateViews();
+  // Create views for all of the registered mode tools with group |group|.
+  std::vector<PaletteToolView> CreateViewsForGroup(PaletteGroup group);
 
   // Called when the views returned by CreateViews have been destroyed. This
   // should clear any (now) stale references.
@@ -103,7 +107,8 @@ class ASH_EXPORT PaletteToolManager : public PaletteTool::Delegate {
   void HidePalette() override;
   void HidePaletteImmediately() override;
   aura::Window* GetWindow() override;
-  void RecordPaletteOptionsUsage(ash::PaletteTrayOptions option) override;
+  void RecordPaletteOptionsUsage(ash::PaletteTrayOptions option,
+                                 PaletteInvocationMethod method) override;
   void RecordPaletteModeCancellation(PaletteModeCancelType type) override;
 
   PaletteTool* FindToolById(PaletteToolId tool_id) const;

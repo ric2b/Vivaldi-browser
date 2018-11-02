@@ -4,9 +4,16 @@
 
 #include <memory>
 
+#include "base/base_paths.h"
+#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
+#include "base/json/json_writer.h"
 #include "base/message_loop/message_loop.h"
+#include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/strings/string_util.h"
+#include "base/threading/thread_restrictions.h"
+#include "build/build_config.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/url_constants.h"
@@ -14,6 +21,7 @@
 #include "headless/lib/browser/headless_web_contents_impl.h"
 #include "headless/public/devtools/domains/browser.h"
 #include "headless/public/devtools/domains/dom.h"
+#include "headless/public/devtools/domains/dom_snapshot.h"
 #include "headless/public/devtools/domains/emulation.h"
 #include "headless/public/devtools/domains/inspector.h"
 #include "headless/public/devtools/domains/network.h"
@@ -146,7 +154,7 @@ class HeadlessDevToolsClientWindowManagementTest
       const browser::WindowState state,
       std::unique_ptr<browser::GetWindowBoundsResult> result) {
     const headless::browser::Bounds* actual_bounds = result->GetBounds();
-// https://crbug.com/726288: Mac does not currently support repositioning.
+// Mac does not support repositioning, as we don't show any actual window.
 #if !defined(OS_MACOSX)
     EXPECT_EQ(bounds.x(), actual_bounds->GetLeft());
     EXPECT_EQ(bounds.y(), actual_bounds->GetTop());
@@ -451,7 +459,11 @@ class TargetDomainCreateAndDeletePageTest
   }
 };
 
+#if defined(OS_WIN)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainCreateAndDeletePageTest);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainCreateAndDeletePageTest);
+#endif
 
 class TargetDomainCreateAndDeleteBrowserContextTest
     : public HeadlessAsyncDevTooledBrowserTest {
@@ -519,7 +531,12 @@ class TargetDomainCreateAndDeleteBrowserContextTest
   std::string browser_context_id_;
 };
 
+#if defined(OS_WIN)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
+    TargetDomainCreateAndDeleteBrowserContextTest);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainCreateAndDeleteBrowserContextTest);
+#endif
 
 class TargetDomainDisposeContextFailsIfInUse
     : public HeadlessAsyncDevTooledBrowserTest {
@@ -595,7 +612,12 @@ class TargetDomainDisposeContextFailsIfInUse
   std::string page_id_;
 };
 
+#if defined(OS_WIN)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(
+    TargetDomainDisposeContextFailsIfInUse);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainDisposeContextFailsIfInUse);
+#endif
 
 class TargetDomainCreateTwoContexts : public HeadlessAsyncDevTooledBrowserTest,
                                       public target::ExperimentalObserver,
@@ -867,7 +889,11 @@ class TargetDomainCreateTwoContexts : public HeadlessAsyncDevTooledBrowserTest,
   int context_closed_count_ = 0;
 };
 
+#if defined(OS_WIN)
+DISABLED_HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainCreateTwoContexts);
+#else
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(TargetDomainCreateTwoContexts);
+#endif
 
 class HeadlessDevToolsNavigationControlTest
     : public HeadlessAsyncDevTooledBrowserTest,
@@ -1204,5 +1230,349 @@ class DevToolsAttachAndDetachNotifications
 };
 
 HEADLESS_ASYNC_DEVTOOLED_TEST_F(DevToolsAttachAndDetachNotifications);
+
+class DomTreeExtractionBrowserTest : public HeadlessAsyncDevTooledBrowserTest,
+                                     public page::Observer {
+ public:
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetPage()->AddObserver(this);
+    devtools_client_->GetPage()->Enable();
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/dom_tree_test.html").spec());
+  }
+
+  void OnLoadEventFired(const page::LoadEventFiredParams& params) override {
+    devtools_client_->GetPage()->Disable();
+    devtools_client_->GetPage()->RemoveObserver(this);
+
+    std::vector<std::string> css_whitelist = {
+        "color",       "display",      "font-style", "font-family",
+        "margin-left", "margin-right", "margin-top", "margin-bottom"};
+    devtools_client_->GetDOMSnapshot()->GetExperimental()->GetSnapshot(
+        dom_snapshot::GetSnapshotParams::Builder()
+            .SetComputedStyleWhitelist(std::move(css_whitelist))
+            .Build(),
+        base::Bind(&DomTreeExtractionBrowserTest::OnGetSnapshotResult,
+                   base::Unretained(this)));
+  }
+
+  void OnGetSnapshotResult(
+      std::unique_ptr<dom_snapshot::GetSnapshotResult> result) {
+    GURL::Replacements replace_port;
+    replace_port.SetPortStr("");
+
+    std::vector<std::unique_ptr<base::DictionaryValue>> dom_nodes(
+        result->GetDomNodes()->size());
+
+    // For convenience, flatten the dom tree into an array of dicts.
+    for (size_t i = 0; i < result->GetDomNodes()->size(); i++) {
+      dom_snapshot::DOMNode* node = (*result->GetDomNodes())[i].get();
+
+      dom_nodes[i].reset(
+          static_cast<base::DictionaryValue*>(node->Serialize().release()));
+      base::DictionaryValue* node_dict = dom_nodes[i].get();
+
+      // Frame IDs are random.
+      if (node_dict->HasKey("frameId"))
+        node_dict->SetString("frameId", "?");
+
+      // Ports are random.
+      std::string url;
+      if (node_dict->GetString("baseURL", &url)) {
+        node_dict->SetString("baseURL",
+                             GURL(url).ReplaceComponents(replace_port).spec());
+      }
+
+      if (node_dict->GetString("documentURL", &url)) {
+        node_dict->SetString("documentURL",
+                             GURL(url).ReplaceComponents(replace_port).spec());
+      }
+
+      // Merge LayoutTreeNode data into the dictionary.
+      int layout_node_index;
+      if (node_dict->GetInteger("layoutNodeIndex", &layout_node_index)) {
+        ASSERT_LE(0, layout_node_index);
+        ASSERT_GT(result->GetLayoutTreeNodes()->size(),
+                  static_cast<size_t>(layout_node_index));
+        const std::unique_ptr<dom_snapshot::LayoutTreeNode>& layout_node =
+            (*result->GetLayoutTreeNodes())[layout_node_index];
+
+        node_dict->Set("boundingBox",
+                       layout_node->GetBoundingBox()->Serialize());
+
+        if (layout_node->HasLayoutText())
+          node_dict->SetString("layoutText", layout_node->GetLayoutText());
+
+        if (layout_node->HasStyleIndex())
+          node_dict->SetInteger("styleIndex", layout_node->GetStyleIndex());
+
+        if (layout_node->HasInlineTextNodes()) {
+          std::unique_ptr<base::ListValue> inline_text_nodes(
+              new base::ListValue());
+          for (const std::unique_ptr<css::InlineTextBox>& inline_text_box :
+               *layout_node->GetInlineTextNodes()) {
+            size_t index = inline_text_nodes->GetSize();
+            inline_text_nodes->Set(index, inline_text_box->Serialize());
+          }
+          node_dict->Set("inlineTextNodes", std::move(inline_text_nodes));
+        }
+      }
+    }
+
+    std::vector<std::unique_ptr<base::DictionaryValue>> computed_styles(
+        result->GetComputedStyles()->size());
+
+    for (size_t i = 0; i < result->GetComputedStyles()->size(); i++) {
+      std::unique_ptr<base::DictionaryValue> style(new base::DictionaryValue());
+      for (const auto& style_property :
+           *(*result->GetComputedStyles())[i]->GetProperties()) {
+        style->SetString(style_property->GetName(), style_property->GetValue());
+      }
+      computed_styles[i] = std::move(style);
+    }
+
+    base::ThreadRestrictions::SetIOAllowed(true);
+    base::FilePath source_root_dir;
+    base::PathService::Get(base::DIR_SOURCE_ROOT, &source_root_dir);
+    base::FilePath expected_dom_nodes_path =
+        source_root_dir.Append(FILE_PATH_LITERAL(
+            "headless/lib/dom_tree_extraction_expected_nodes.txt"));
+    std::string expected_dom_nodes;
+    ASSERT_TRUE(
+        base::ReadFileToString(expected_dom_nodes_path, &expected_dom_nodes));
+
+    std::string dom_nodes_result;
+    for (size_t i = 0; i < dom_nodes.size(); i++) {
+      std::string result_json;
+      base::JSONWriter::WriteWithOptions(
+          *dom_nodes[i], base::JSONWriter::OPTIONS_PRETTY_PRINT, &result_json);
+
+      dom_nodes_result += result_json;
+    }
+
+#if defined(OS_WIN)
+    ASSERT_TRUE(base::RemoveChars(dom_nodes_result, "\r", &dom_nodes_result));
+#endif
+
+    EXPECT_EQ(expected_dom_nodes, dom_nodes_result);
+
+    base::FilePath expected_styles_path =
+        source_root_dir.Append(FILE_PATH_LITERAL(
+            "headless/lib/dom_tree_extraction_expected_styles.txt"));
+    std::string expected_computed_styles;
+    ASSERT_TRUE(base::ReadFileToString(expected_styles_path,
+                                       &expected_computed_styles));
+
+    std::string computed_styles_result;
+    for (size_t i = 0; i < computed_styles.size(); i++) {
+      std::string result_json;
+      base::JSONWriter::WriteWithOptions(*computed_styles[i],
+                                         base::JSONWriter::OPTIONS_PRETTY_PRINT,
+                                         &result_json);
+
+      computed_styles_result += result_json;
+    }
+
+#if defined(OS_WIN)
+    ASSERT_TRUE(base::RemoveChars(computed_styles_result, "\r",
+                                  &computed_styles_result));
+#endif
+
+    EXPECT_EQ(expected_computed_styles, computed_styles_result);
+    FinishAsynchronousTest();
+  }
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(DomTreeExtractionBrowserTest);
+
+class FailedUrlRequestTest : public HeadlessAsyncDevTooledBrowserTest,
+                             public HeadlessBrowserContext::Observer,
+                             public network::ExperimentalObserver,
+                             public page::Observer {
+ public:
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetNetwork()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetNetwork()->Enable();
+    devtools_client_->GetNetwork()
+        ->GetExperimental()
+        ->SetRequestInterceptionEnabled(
+            network::SetRequestInterceptionEnabledParams::Builder()
+                .SetEnabled(true)
+                .Build());
+
+    browser_context_->AddObserver(this);
+
+    devtools_client_->GetPage()->AddObserver(this);
+
+    base::RunLoop run_loop;
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
+
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/dom_tree_test.html").spec());
+  }
+
+  void OnRequestIntercepted(
+      const network::RequestInterceptedParams& params) override {
+    if (EndsWith(params.GetRequest()->GetUrl(), "/iframe.html",
+                 base::CompareCase::INSENSITIVE_ASCII)) {
+      // Block the iframe resource load.
+      devtools_client_->GetNetwork()
+          ->GetExperimental()
+          ->ContinueInterceptedRequest(
+              network::ContinueInterceptedRequestParams::Builder()
+                  .SetInterceptionId(params.GetInterceptionId())
+                  .SetErrorReason(network::ErrorReason::ABORTED)
+                  .Build());
+    } else {
+      // Allow everything else to continue.
+      devtools_client_->GetNetwork()
+          ->GetExperimental()
+          ->ContinueInterceptedRequest(
+              network::ContinueInterceptedRequestParams::Builder()
+                  .SetInterceptionId(params.GetInterceptionId())
+                  .Build());
+    }
+  }
+
+  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+    base::AutoLock lock(lock_);
+    EXPECT_EQ("iframe.html", url_that_failed_to_load_);
+    FinishAsynchronousTest();
+  }
+
+  void UrlRequestFailed(net::URLRequest* request, int net_error) override {
+    base::AutoLock lock(lock_);
+    url_that_failed_to_load_ = request->url().ExtractFileName();
+  }
+
+ private:
+  base::Lock lock_;
+  std::string url_that_failed_to_load_;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(FailedUrlRequestTest);
+
+class DevToolsSetCookieTest : public HeadlessAsyncDevTooledBrowserTest,
+                              public network::Observer {
+ public:
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetNetwork()->AddObserver(this);
+
+    base::RunLoop run_loop;
+    devtools_client_->GetNetwork()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
+
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/set-cookie?cookie1").spec());
+  }
+
+  void OnResponseReceived(
+      const network::ResponseReceivedParams& params) override {
+    EXPECT_NE(std::string::npos, params.GetResponse()->GetHeadersText().find(
+                                     "Set-Cookie: cookie1"));
+    FinishAsynchronousTest();
+  }
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(DevToolsSetCookieTest);
+
+class DevtoolsInterceptionWithAuthProxyTest
+    : public HeadlessAsyncDevTooledBrowserTest,
+      public network::ExperimentalObserver,
+      public page::Observer {
+ public:
+  DevtoolsInterceptionWithAuthProxyTest()
+      : proxy_server_(net::SpawnedTestServer::TYPE_BASIC_AUTH_PROXY,
+                      net::SpawnedTestServer::kLocalhost,
+                      base::FilePath(FILE_PATH_LITERAL("headless/test/data"))) {
+  }
+
+  void SetUp() override {
+    ASSERT_TRUE(proxy_server_.Start());
+    HeadlessAsyncDevTooledBrowserTest::SetUp();
+  }
+
+  void RunDevTooledTest() override {
+    EXPECT_TRUE(embedded_test_server()->Start());
+    devtools_client_->GetNetwork()->GetExperimental()->AddObserver(this);
+    devtools_client_->GetNetwork()->Enable();
+    devtools_client_->GetNetwork()
+        ->GetExperimental()
+        ->SetRequestInterceptionEnabled(
+            network::SetRequestInterceptionEnabledParams::Builder()
+                .SetEnabled(true)
+                .Build());
+
+    devtools_client_->GetPage()->AddObserver(this);
+
+    base::RunLoop run_loop;
+    devtools_client_->GetPage()->Enable(run_loop.QuitClosure());
+    base::MessageLoop::ScopedNestableTaskAllower nest_loop(
+        base::MessageLoop::current());
+    run_loop.Run();
+
+    devtools_client_->GetPage()->Navigate(
+        embedded_test_server()->GetURL("/dom_tree_test.html").spec());
+  }
+
+  void OnRequestIntercepted(
+      const network::RequestInterceptedParams& params) override {
+    if (params.HasAuthChallenge()) {
+      auth_challenge_seen_ = true;
+      devtools_client_->GetNetwork()
+          ->GetExperimental()
+          ->ContinueInterceptedRequest(
+              network::ContinueInterceptedRequestParams::Builder()
+                  .SetInterceptionId(params.GetInterceptionId())
+                  .SetAuthChallengeResponse(
+                      network::AuthChallengeResponse::Builder()
+                          .SetResponse(network::AuthChallengeResponseResponse::
+                                           PROVIDE_CREDENTIALS)
+                          .SetUsername("foo")  // These are tested by the proxy.
+                          .SetPassword("bar")
+                          .Build())
+                  .Build());
+    } else {
+      devtools_client_->GetNetwork()
+          ->GetExperimental()
+          ->ContinueInterceptedRequest(
+              network::ContinueInterceptedRequestParams::Builder()
+                  .SetInterceptionId(params.GetInterceptionId())
+                  .Build());
+      GURL url(params.GetRequest()->GetUrl());
+      files_loaded_.insert(url.path());
+    }
+  }
+
+  void OnLoadEventFired(const page::LoadEventFiredParams&) override {
+    EXPECT_TRUE(auth_challenge_seen_);
+    EXPECT_THAT(files_loaded_,
+                ElementsAre("/Ahem.ttf", "/dom_tree_test.css",
+                            "/dom_tree_test.html", "/iframe.html"));
+    FinishAsynchronousTest();
+  }
+
+  std::unique_ptr<net::ProxyConfig> GetProxyConfig() override {
+    std::unique_ptr<net::ProxyConfig> proxy_config(new net::ProxyConfig);
+    proxy_config->proxy_rules().ParseFromString(
+        proxy_server_.host_port_pair().ToString());
+    return proxy_config;
+  }
+
+ private:
+  net::SpawnedTestServer proxy_server_;
+  bool auth_challenge_seen_ = false;
+  std::set<std::string> files_loaded_;
+};
+
+HEADLESS_ASYNC_DEVTOOLED_TEST_F(DevtoolsInterceptionWithAuthProxyTest);
 
 }  // namespace headless

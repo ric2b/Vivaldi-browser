@@ -34,140 +34,224 @@ settings.PowerSource;
 settings.BatteryStatus;
 
 /**
+ * Mirrors chromeos::settings::PowerHandler::IdleBehavior.
+ * @enum {number}
+ */
+settings.IdleBehavior = {
+  DISPLAY_OFF_SLEEP: 0,
+  DISPLAY_OFF: 1,
+  DISPLAY_ON: 2,
+  OTHER: 3,
+};
+
+/**
+ * Mirrors chromeos::PowerPolicyController::Action.
+ * @enum {number}
+ */
+settings.LidClosedBehavior = {
+  SUSPEND: 0,
+  STOP_SESSION: 1,
+  SHUT_DOWN: 2,
+  DO_NOTHING: 3,
+};
+
+/**
+ * @typedef {{
+ *   idleBehavior: settings.IdleBehavior,
+ *   idleControlled: boolean,
+ *   lidClosedBehavior: settings.LidClosedBehavior,
+ *   lidClosedControlled: boolean,
+ *   hasLid: boolean,
+ * }}
+ */
+settings.PowerManagementSettings;
+
+/**
+ * A note app's availability for running as note handler app from lock screen.
+ * Mirrors chromeos::NoteTakingLockScreenSupport.
+ * @enum {number}
+ */
+settings.NoteAppLockScreenSupport = {
+  NOT_SUPPORTED: 0,
+  NOT_ALLOWED_BY_POLICY: 1,
+  SUPPORTED: 2,
+  ENABLED: 3
+};
+
+/**
  * @typedef {{name:string,
  *            value:string,
  *            preferred:boolean,
- *            supportsLockScreen: boolean}}
+ *            lockScreenSupport: settings.NoteAppLockScreenSupport}}
  */
 settings.NoteAppInfo;
 
 cr.define('settings', function() {
   /** @interface */
-  function DevicePageBrowserProxy() {}
-
-  DevicePageBrowserProxy.prototype = {
+  class DevicePageBrowserProxy {
     /** Initializes the mouse and touchpad handler. */
-    initializePointers: function() {},
+    initializePointers() {}
 
     /** Initializes the stylus handler. */
-    initializeStylus: function() {},
+    initializeStylus() {}
 
     /**
      * Override to interact with the on-tap/on-keydown event on the Learn More
      * link.
      * @param {!Event} e
      */
-    handleLinkEvent: function(e) {},
+    handleLinkEvent(e) {}
 
     /** Initializes the keyboard WebUI handler. */
-    initializeKeyboard: function() {},
+    initializeKeyboard() {}
 
     /** Shows the Ash keyboard shortcuts overlay. */
-    showKeyboardShortcutsOverlay: function() {},
+    showKeyboardShortcutsOverlay() {}
 
     /** Requests a power status update. */
-    updatePowerStatus: function() {},
+    updatePowerStatus() {}
 
     /**
      * Sets the ID of the power source to use.
      * @param {string} powerSourceId ID of the power source. '' denotes the
      *     battery (no external power source).
      */
-    setPowerSource: function(powerSourceId) {},
+    setPowerSource(powerSourceId) {}
+
+    /** Requests the current power management settings. */
+    requestPowerManagementSettings() {}
+
+    /**
+     * Sets the idle power management behavior.
+     * @param {settings.IdleBehavior} behavior Idle behavior.
+     */
+    setIdleBehavior(behavior) {}
+
+    /**
+     * Sets the lid-closed power management behavior.
+     * @param {settings.LidClosedBehavior} behavior Lid-closed behavior.
+     */
+    setLidClosedBehavior(behavior) {}
 
     /**
      * |callback| is run when there is new note-taking app information
      * available or after |requestNoteTakingApps| has been called.
      * @param {function(Array<settings.NoteAppInfo>, boolean):void} callback
      */
-    setNoteTakingAppsUpdatedCallback: function(callback) {},
+    setNoteTakingAppsUpdatedCallback(callback) {}
 
     /**
      * Open up the play store with the given URL.
      * @param {string} url
      */
-    showPlayStore: function(url) {},
+    showPlayStore(url) {}
 
     /**
      * Request current note-taking app info. Invokes any callback registered in
      * |onNoteTakingAppsUpdated|.
      */
-    requestNoteTakingApps: function() {},
+    requestNoteTakingApps() {}
 
     /**
      * Changes the preferred note taking app.
      * @param {string} appId The app id. This should be a value retrieved from a
      *     |onNoteTakingAppsUpdated| callback.
      */
-    setPreferredNoteTakingApp: function(appId) {},
-  };
+    setPreferredNoteTakingApp(appId) {}
+
+    /**
+     * Sets whether the preferred note taking app should be enabled to run as a
+     * lock screen note action handler.
+     * @param {boolean} enabled Whether the app should be enabled to handle note
+     *     actions from the lock screen.
+     */
+    setPreferredNoteTakingAppEnabledOnLockScreen(enabled) {}
+  }
 
   /**
-   * @constructor
    * @implements {settings.DevicePageBrowserProxy}
    */
-  function DevicePageBrowserProxyImpl() {}
-  cr.addSingletonGetter(DevicePageBrowserProxyImpl);
-
-  DevicePageBrowserProxyImpl.prototype = {
+  class DevicePageBrowserProxyImpl {
     /** @override */
-    initializePointers: function() {
+    initializePointers() {
       chrome.send('initializePointerSettings');
-    },
+    }
 
     /** @override */
-    initializeStylus: function() {
+    initializeStylus() {
       chrome.send('initializeStylusSettings');
-    },
+    }
 
     /** override */
-    handleLinkEvent: function(e) {
+    handleLinkEvent(e) {
       // Prevent the link from activating its parent element when tapped or
       // when Enter is pressed.
       if (e.type != 'keydown' || e.keyCode == 13)
         e.stopPropagation();
-    },
+    }
 
     /** @override */
-    initializeKeyboard: function() {
+    initializeKeyboard() {
       chrome.send('initializeKeyboardSettings');
-    },
+    }
 
     /** @override */
-    showKeyboardShortcutsOverlay: function() {
+    showKeyboardShortcutsOverlay() {
       chrome.send('showKeyboardShortcutsOverlay');
-    },
+    }
 
     /** @override */
-    updatePowerStatus: function() {
+    updatePowerStatus() {
       chrome.send('updatePowerStatus');
-    },
+    }
 
     /** @override */
-    setPowerSource: function(powerSourceId) {
+    setPowerSource(powerSourceId) {
       chrome.send('setPowerSource', [powerSourceId]);
-    },
+    }
 
     /** @override */
-    setNoteTakingAppsUpdatedCallback: function(callback) {
+    requestPowerManagementSettings() {
+      chrome.send('requestPowerManagementSettings');
+    }
+
+    /** @override */
+    setIdleBehavior(behavior) {
+      chrome.send('setIdleBehavior', [behavior]);
+    }
+
+    /** @override */
+    setLidClosedBehavior(behavior) {
+      chrome.send('setLidClosedBehavior', [behavior]);
+    }
+
+    /** @override */
+    setNoteTakingAppsUpdatedCallback(callback) {
       cr.addWebUIListener('onNoteTakingAppsUpdated', callback);
-    },
+    }
 
     /** @override */
-    showPlayStore: function(url) {
+    showPlayStore(url) {
       chrome.send('showPlayStoreApps', [url]);
-    },
+    }
 
     /** @override */
-    requestNoteTakingApps: function() {
+    requestNoteTakingApps() {
       chrome.send('requestNoteTakingApps');
-    },
+    }
 
     /** @override */
-    setPreferredNoteTakingApp: function(appId) {
+    setPreferredNoteTakingApp(appId) {
       chrome.send('setPreferredNoteTakingApp', [appId]);
-    },
-  };
+    }
+
+    /** @override */
+    setPreferredNoteTakingAppEnabledOnLockScreen(enabled) {
+      chrome.send('setPreferredNoteTakingAppEnabledOnLockScreen', [enabled]);
+    }
+  }
+
+  cr.addSingletonGetter(DevicePageBrowserProxyImpl);
 
   return {
     DevicePageBrowserProxy: DevicePageBrowserProxy,

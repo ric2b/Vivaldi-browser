@@ -4,6 +4,7 @@
 
 #include "modules/csspaint/PaintWorklet.h"
 
+#include <memory>
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
@@ -11,29 +12,40 @@
 #include "core/testing/DummyPageHolder.h"
 #include "modules/csspaint/CSSPaintDefinition.h"
 #include "modules/csspaint/PaintWorkletGlobalScope.h"
+#include "modules/csspaint/PaintWorkletGlobalScopeProxy.h"
 #include "modules/csspaint/WindowPaintWorklet.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
-class PaintWorkletTest : public testing::Test {
+class PaintWorkletTest : public ::testing::Test {
  public:
   PaintWorkletTest() : page_(DummyPageHolder::Create()) {}
+
+  void SetUp() override { proxy_ = GetPaintWorklet()->CreateGlobalScope(); }
 
   PaintWorklet* GetPaintWorklet() {
     return WindowPaintWorklet::From(*page_->GetFrame().DomWindow())
         .paintWorklet();
   }
 
- protected:
+  PaintWorkletGlobalScopeProxy* GetProxy() {
+    return PaintWorkletGlobalScopeProxy::From(proxy_.Get());
+  }
+
+  void Terminate() {
+    page_.reset();
+    proxy_->TerminateWorkletGlobalScope();
+    proxy_ = nullptr;
+  }
+
+ private:
   std::unique_ptr<DummyPageHolder> page_;
+  Persistent<WorkletGlobalScopeProxy> proxy_;
 };
 
 TEST_F(PaintWorkletTest, GarbageCollectionOfCSSPaintDefinition) {
-  PaintWorkletGlobalScopeProxy* proxy = PaintWorkletGlobalScopeProxy::From(
-      GetPaintWorklet()->GetWorkletGlobalScopeProxy());
-  PaintWorkletGlobalScope* global_scope = proxy->global_scope();
+  PaintWorkletGlobalScope* global_scope = GetProxy()->global_scope();
   global_scope->ScriptController()->Evaluate(
       ScriptSourceCode("registerPaint('foo', class { paint() { } });"));
 
@@ -60,7 +72,7 @@ TEST_F(PaintWorkletTest, GarbageCollectionOfCSSPaintDefinition) {
   DCHECK(!handle.IsEmpty());
 
   // Delete the page & associated objects.
-  page_.reset();
+  Terminate();
 
   // Run a GC, the persistent should have been collected.
   ThreadState::Current()->CollectAllGarbage();

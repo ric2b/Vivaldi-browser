@@ -29,6 +29,7 @@
 #import "ios/chrome/browser/sessions/session_service_ios.h"
 #import "ios/chrome/browser/sessions/session_window_ios.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache.h"
+#import "ios/chrome/browser/snapshots/snapshot_cache_factory.h"
 #import "ios/chrome/browser/snapshots/snapshot_cache_web_state_list_observer.h"
 #include "ios/chrome/browser/tab_parenting_global_observer.h"
 #import "ios/chrome/browser/tabs/legacy_tab_helper.h"
@@ -47,7 +48,6 @@
 #import "ios/chrome/browser/web_state_list/web_state_list_observer.h"
 #import "ios/chrome/browser/web_state_list/web_state_list_serialization.h"
 #import "ios/chrome/browser/web_state_list/web_state_opener.h"
-#import "ios/chrome/browser/xcallback_parameters.h"
 #include "ios/web/public/browser_state.h"
 #include "ios/web/public/certificate_policy_cache.h"
 #include "ios/web/public/navigation_item.h"
@@ -56,7 +56,6 @@
 #include "ios/web/public/web_state/session_certificate_policy_cache.h"
 #include "ios/web/public/web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
-#import "ios/web/web_state/web_state_impl.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -294,9 +293,13 @@ std::unique_ptr<web::WebState> CreateWebState(
         base::MakeUnique<WebStateListObserverBridge>(
             tabModelClosingWebStateObserver));
 
-    _webStateListObservers.push_back(
-        base::MakeUnique<SnapshotCacheWebStateListObserver>(
-            [SnapshotCache sharedInstance]));
+    SnapshotCache* snapshotCache =
+        SnapshotCacheFactory::GetForBrowserState(_browserState);
+    if (snapshotCache) {
+      _webStateListObservers.push_back(
+          base::MakeUnique<SnapshotCacheWebStateListObserver>(snapshotCache));
+    }
+
     if (_tabUsageRecorder) {
       _webStateListObservers.push_back(
           base::MakeUnique<TabUsageRecorderWebStateListObserver>(
@@ -376,7 +379,11 @@ std::unique_ptr<web::WebState> CreateWebState(
     return;
   NSString* statePath =
       base::SysUTF8ToNSString(_browserState->GetStatePath().AsUTF8Unsafe());
-  [_sessionService saveSession:self.sessionForSaving
+  __weak TabModel* weakSelf = self;
+  SessionIOSFactory sessionFactory = ^{
+    return weakSelf.sessionForSaving;
+  };
+  [_sessionService saveSession:sessionFactory
                      directory:statePath
                    immediately:immediately];
 }
@@ -593,9 +600,16 @@ std::unique_ptr<web::WebState> CreateWebState(
     return referencedFiles;
   // Check the currently open tabs for external files.
   for (Tab* tab in self) {
-    if (UrlIsExternalFileReference(tab.url)) {
-      NSString* fileName = base::SysUTF8ToNSString(tab.url.ExtractFileName());
-      [referencedFiles addObject:fileName];
+    const GURL& lastCommittedURL = tab.lastCommittedURL;
+    if (UrlIsExternalFileReference(lastCommittedURL)) {
+      [referencedFiles addObject:base::SysUTF8ToNSString(
+                                     lastCommittedURL.ExtractFileName())];
+    }
+    web::NavigationItem* pendingItem =
+        tab.webState->GetNavigationManager()->GetPendingItem();
+    if (pendingItem && UrlIsExternalFileReference(pendingItem->GetURL())) {
+      [referencedFiles addObject:base::SysUTF8ToNSString(
+                                     pendingItem->GetURL().ExtractFileName())];
     }
   }
   // Do the same for the recently closed tabs.
@@ -748,7 +762,9 @@ std::unique_ptr<web::WebState> CreateWebState(
   BOOL closedNTPTab = NO;
   if (oldCount == 1) {
     Tab* tab = [self tabAtIndex:0];
-    if (tab.url == GURL(kChromeUINewTabURL)) {
+    BOOL hasPendingLoad =
+        tab.webState->GetNavigationManager()->GetPendingItem() != nullptr;
+    if (!hasPendingLoad && tab.lastCommittedURL == GURL(kChromeUINewTabURL)) {
       [self closeTab:tab];
       closedNTPTab = YES;
       oldCount = 0;
@@ -764,7 +780,7 @@ std::unique_ptr<web::WebState> CreateWebState(
 // Called when UIApplicationWillResignActiveNotification is received.
 - (void)willResignActive:(NSNotification*)notify {
   if (_webUsageEnabled && self.currentTab) {
-    [[SnapshotCache sharedInstance]
+    [SnapshotCacheFactory::GetForBrowserState(_browserState)
         willBeSavedGreyWhenBackgrounding:self.currentTab.tabId];
   }
 }
@@ -791,7 +807,7 @@ std::unique_ptr<web::WebState> CreateWebState(
 
   // Write out a grey version of the current website to disk.
   if (_webUsageEnabled && self.currentTab) {
-    [[SnapshotCache sharedInstance]
+    [SnapshotCacheFactory::GetForBrowserState(_browserState)
         saveGreyInBackgroundForSessionID:self.currentTab.tabId];
   }
 }

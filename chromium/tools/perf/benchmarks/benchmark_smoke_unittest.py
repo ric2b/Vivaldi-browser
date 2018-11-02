@@ -14,11 +14,12 @@ import sys
 import unittest
 
 from telemetry import benchmark as benchmark_module
-from telemetry.core import discover
 from telemetry import decorators
 from telemetry.internal.browser import browser_finder
 from telemetry.testing import options_for_unittests
 from telemetry.testing import progress_reporter
+
+from py_utils import discover
 
 from benchmarks import battor
 from benchmarks import image_decoding
@@ -122,14 +123,6 @@ def load_tests(loader, standard_tests, pattern):
       index_by_class_name=False).values()
   for benchmark in all_benchmarks:
     if sys.modules[benchmark.__module__] in _BLACK_LIST_TEST_MODULES:
-      continue
-    # TODO(tonyg): Smoke doesn't work with session_restore yet.
-    if (benchmark.Name().startswith('session_restore') or
-        benchmark.Name().startswith('skpicture_printer')):
-      continue
-
-    if hasattr(benchmark, 'generated_profile_archive'):
-      # We'd like to test these, but don't know how yet.
       continue
 
     class BenchmarkSmokeTest(unittest.TestCase):

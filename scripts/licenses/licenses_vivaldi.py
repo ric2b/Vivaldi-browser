@@ -123,6 +123,12 @@ SPECIAL_CASES = {
         "License": "MIT",
         "License File": "/../third_party/sparkle_lib/LICENSE",
     },
+    os.path.join('..', 'vivapp', 'src', 'components', 'imagePanel'): {
+        "Name": "Exif.js",
+        "URL": "https://github.com/exif-js/exif-js",
+        "License": "MIT",
+        "License File": "/../vivapp/src/components/imagePanel/exif_js_license.txt",
+    },
 }
 
 def GetEntries(entry_template, EvaluateTemplate):

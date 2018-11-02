@@ -29,12 +29,11 @@
 #include <string.h>  // for memcpy
 #include <memory>
 #include "SkMatrix44.h"
+#include "build/build_config.h"
 #include "platform/geometry/FloatPoint.h"
 #include "platform/geometry/FloatPoint3D.h"
 #include "platform/wtf/Alignment.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/CPU.h"
-#include "platform/wtf/Compiler.h"
 #include "platform/wtf/PtrUtil.h"
 
 namespace blink {
@@ -46,7 +45,7 @@ class FloatRect;
 class FloatQuad;
 class FloatBox;
 struct Rotation;
-#if CPU(X86_64)
+#if defined(ARCH_CPU_X86_64)
 #define TRANSFORMATION_MATRIX_USE_X86_64_SSE2
 #endif
 
@@ -437,6 +436,12 @@ class PLATFORM_EXPORT TransformationMatrix {
     TransformationMatrix result = *this;
     result.Multiply(t);
     return result;
+  }
+
+  bool IsFlat() const {
+    return matrix_[0][2] == 0.f && matrix_[1][2] == 0.f &&
+           matrix_[2][0] == 0.f && matrix_[2][1] == 0.f &&
+           matrix_[2][2] == 1.f && matrix_[2][3] == 0.f && matrix_[3][2] == 0.f;
   }
 
   bool IsIdentityOrTranslation() const {

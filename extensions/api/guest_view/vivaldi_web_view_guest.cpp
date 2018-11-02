@@ -32,8 +32,11 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/origin_util.h"
+#include "extensions/browser/extension_registry.h"
 #include "extensions/browser/guest_view/web_view/web_view_constants.h"
+#include "extensions/browser/process_manager.h"
 #include "extensions/browser/view_type_utils.h"
+#include "extensions/common/manifest_handlers/incognito_info.h"
 #include "extensions/helper/vivaldi_init_helpers.h"
 #include "net/cert/x509_certificate.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -199,7 +202,23 @@ WebContents::CreateParams WebViewGuest::GetWebContentsCreateParams(
     // Create the SiteInstance in a new BrowsingInstance, which will ensure
     // that webview tags are also not allowed to send messages across
     // different partitions.
-    guest_site_instance = content::SiteInstance::CreateForURL(context, site);
+    Profile* profile = Profile::FromBrowserContext(context);
+
+    ExtensionRegistry *registry = ExtensionRegistry::Get(profile);
+    if (registry) {
+      std::string extension_id = site.host();
+      const Extension *extension =
+          registry->enabled_extensions().GetByID(extension_id);
+
+      if (extension && !IncognitoInfo::IsSplitMode(extension)) {
+        // If it's not split-mode the host is associated with the original
+        // profile.
+        profile = profile->GetOriginalProfile();
+        context = profile;
+      }
+    }
+    guest_site_instance =
+        ProcessManager::Get(profile)->GetSiteInstanceForURL(site);
   }
 
   WebContents::CreateParams params(context, guest_site_instance);
@@ -780,7 +799,7 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
 
 bool WebViewGuest::RequestPageInfo(const GURL& url) {
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->Set(webview::kTargetURL, new base::Value(url.spec()));
+  args->Set(webview::kTargetURL, base::WrapUnique(new base::Value(url.spec())));
   DispatchEventToView(base::WrapUnique(
       new GuestViewEvent(webview::kEventRequestPageInfo, std::move(args))));
   return true;

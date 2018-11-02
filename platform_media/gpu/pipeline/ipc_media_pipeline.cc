@@ -93,6 +93,8 @@ void IPCMediaPipeline::OnInitialize(int64_t data_source_size,
       media::PlatformMediaDecodingMode::SOFTWARE;
   PlatformMediaPipeline::MakeGLContextCurrentCB make_gl_context_current_cb;
   if (command_buffer_) {
+    LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << " Setting preferred video decoding to HARDWARE ";
     preferred_video_decoding_mode = media::PlatformMediaDecodingMode::HARDWARE;
     make_gl_context_current_cb =
         base::Bind(&MakeDecoderContextCurrent, command_buffer_->AsWeakPtr());

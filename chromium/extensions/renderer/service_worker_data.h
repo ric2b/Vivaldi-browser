@@ -8,18 +8,18 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "extensions/renderer/service_worker_request_sender.h"
 #include "extensions/renderer/v8_schema_registry.h"
 
 namespace extensions {
 class ExtensionBindingsSystem;
+class ScriptContext;
 
 // Per ServiceWorker data in worker thread.
-// Contains: RequestSender, V8SchemaRegistry.
 // TODO(lazyboy): Also put worker ScriptContexts in this.
 class ServiceWorkerData {
  public:
   ServiceWorkerData(int64_t service_worker_version_id,
+                    ScriptContext* context,
                     std::unique_ptr<ExtensionBindingsSystem> bindings_system);
   ~ServiceWorkerData();
 
@@ -28,9 +28,11 @@ class ServiceWorkerData {
   int64_t service_worker_version_id() const {
     return service_worker_version_id_;
   }
+  ScriptContext* context() const { return context_; }
 
  private:
   const int64_t service_worker_version_id_;
+  ScriptContext* const context_;
 
   std::unique_ptr<V8SchemaRegistry> v8_schema_registry_;
   std::unique_ptr<ExtensionBindingsSystem> bindings_system_;

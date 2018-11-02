@@ -9,12 +9,22 @@
 #include "core/layout/ng/inline/ng_inline_node.h"
 #include "core/layout/ng/inline/ng_physical_line_box_fragment.h"
 #include "core/layout/ng/ng_fragment.h"
+#include "core/layout/ng/ng_layout_result.h"
+#include "core/layout/ng/ng_unpositioned_float.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
-NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(NGInlineNode* node)
-    : direction_(TextDirection::kLtr), node_(node) {}
+NGLineBoxFragmentBuilder::NGLineBoxFragmentBuilder(NGInlineNode node)
+    : writing_mode_(kHorizontalTopBottom),
+      direction_(TextDirection::kLtr),
+      node_(node) {}
+
+NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetWritingMode(
+    NGWritingMode writing_mode) {
+  writing_mode_ = writing_mode;
+  return *this;
+}
 
 NGLineBoxFragmentBuilder& NGLineBoxFragmentBuilder::SetDirection(
     TextDirection direction) {
@@ -42,18 +52,6 @@ void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta) {
     offset.block_offset += delta;
 }
 
-void NGLineBoxFragmentBuilder::MoveChildrenInInlineDirection(LayoutUnit delta) {
-  NGWritingMode writing_mode(
-      FromPlatformWritingMode(node_->Style().GetWritingMode()));
-  LayoutUnit child_inline_size;
-  for (size_t i = 0; i < children_.size(); ++i) {
-    offsets_[i].inline_offset = delta + child_inline_size;
-    NGPhysicalFragment* child = children_[i].Get();
-    child_inline_size +=
-        child->Size().ConvertToLogical(writing_mode).inline_size;
-  }
-}
-
 void NGLineBoxFragmentBuilder::MoveChildrenInBlockDirection(LayoutUnit delta,
                                                             unsigned start,
                                                             unsigned end) {
@@ -75,7 +73,7 @@ NGLineBoxFragmentBuilder::ToLineBoxFragment() {
   DCHECK_EQ(offsets_.size(), children_.size());
 
   NGWritingMode writing_mode(
-      FromPlatformWritingMode(node_->Style().GetWritingMode()));
+      FromPlatformWritingMode(node_.Style().GetWritingMode()));
   NGPhysicalSize physical_size =
       NGLogicalSize(inline_size_, Metrics().LineHeight())
           .ConvertToPhysical(writing_mode);

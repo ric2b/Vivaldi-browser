@@ -10,10 +10,10 @@ cr.define('settings_main_page', function() {
    * TestProxy).
    *
    * @implements {SearchManager}
-   * @extends {settings.TestBrowserProxy}
+   * @extends {TestBrowserProxy}
    */
   var TestSearchManager = function() {
-    settings.TestBrowserProxy.call(this, [
+    TestBrowserProxy.call(this, [
       'search',
     ]);
 
@@ -25,7 +25,7 @@ cr.define('settings_main_page', function() {
   }
 
   TestSearchManager.prototype = {
-    __proto__: settings.TestBrowserProxy.prototype,
+    __proto__: TestBrowserProxy.prototype,
 
     /**
      * @param {boolean} matchesFound
@@ -64,7 +64,7 @@ cr.define('settings_main_page', function() {
       var settingsMain = null;
 
       setup(function() {
-        settings.navigateTo(settings.Route.BASIC);
+        settings.navigateTo(settings.routes.BASIC);
         searchManager = new TestSearchManager();
         settings.setSearchManagerForTesting(searchManager);
         PolymerTest.clearBody();
@@ -193,60 +193,63 @@ cr.define('settings_main_page', function() {
       /**
        * Asserts the visibility of the basic and advanced pages after exiting
        * search mode.
-       * @param {string} Expected 'display' value for the basic page.
        * @param {string} Expected 'display' value for the advanced page.
        * @return {!Promise}
        */
-      function assertPageVisibilityAfterSearch(
-          expectedBasic, expectedAdvanced) {
+      function assertAdvancedVisibilityAfterSearch(expectedAdvanced) {
         searchManager.setMatchesFound(true);
-        return settingsMain.searchContents('Query1').then(function() {
-          searchManager.setMatchesFound(false);
-          return settingsMain.searchContents('');
-        }).then(function() {
-          return assertPageVisibility(expectedBasic, expectedAdvanced);
-        });
+        return settingsMain.searchContents('Query1')
+            .then(function() {
+              searchManager.setMatchesFound(false);
+              return settingsMain.searchContents('');
+            })
+            .then(function() {
+              // Imitate behavior of clearing search.
+              settings.navigateTo(settings.routes.BASIC);
+              Polymer.dom.flush();
+              return assertPageVisibility('block', expectedAdvanced);
+            });
       }
 
       test('exiting search mode, advanced collapsed', function() {
         // Simulating searching while the advanced page is collapsed.
-        settingsMain.currentRouteChanged(settings.Route.BASIC);
+        settingsMain.currentRouteChanged(settings.routes.BASIC);
         Polymer.dom.flush();
-        return assertPageVisibilityAfterSearch('block', 'none');
+        return assertAdvancedVisibilityAfterSearch('none');
       });
 
       // Ensure that clearing the search results restores both "basic" and
       // "advanced" page, when the search has been initiated from a subpage
       // whose parent is the "advanced" page.
       test('exiting search mode, advanced expanded', function() {
-        settings.navigateTo(settings.Route.SITE_SETTINGS);
+        settings.navigateTo(settings.routes.SITE_SETTINGS);
         Polymer.dom.flush();
-        return assertPageVisibilityAfterSearch('block', 'block');
+        return assertAdvancedVisibilityAfterSearch('block');
       });
 
       // Ensure that searching, then entering a subpage, then going back
       // lands the user in a page where both basic and advanced sections are
       // visible, because the page is still in search mode.
       test('returning from subpage to search results', function() {
-        settings.navigateTo(settings.Route.BASIC);
+        settings.navigateTo(settings.routes.BASIC);
         Polymer.dom.flush();
 
         searchManager.setMatchesFound(true);
         return settingsMain.searchContents('Query1').then(function() {
           // Simulate navigating into a subpage.
-          settings.navigateTo(settings.Route.SEARCH_ENGINES);
+          settings.navigateTo(settings.routes.SEARCH_ENGINES);
           settingsMain.$$('settings-basic-page').fire('subpage-expand');
           Polymer.dom.flush();
 
           // Simulate clicking the left arrow to go back to the search results.
-          settings.navigateTo(settings.Route.BASIC);
+          settings.navigateTo(settings.routes.BASIC);
           return assertPageVisibility('block', 'block');
         });
       });
 
       // TODO(michaelpg): Move these to a new test for settings-basic-page.
       test('can collapse advanced on advanced section route', function() {
-        settings.navigateTo(settings.Route.PRIVACY);
+        settings.navigateTo(settings.routes.PRIVACY);
         Polymer.dom.flush();
 
         var basicPage = settingsMain.$$('settings-basic-page');
@@ -271,12 +274,12 @@ cr.define('settings_main_page', function() {
       });
 
       test('navigating to a basic page does not collapse advanced', function() {
-        settings.navigateTo(settings.Route.PRIVACY);
+        settings.navigateTo(settings.routes.PRIVACY);
         Polymer.dom.flush();
 
         assertToggleContainerVisible(true);
 
-        settings.navigateTo(settings.Route.PEOPLE);
+        settings.navigateTo(settings.routes.PEOPLE);
         Polymer.dom.flush();
 
         return assertPageVisibility('block', 'block');

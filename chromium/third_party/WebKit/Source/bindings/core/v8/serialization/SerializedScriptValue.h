@@ -51,7 +51,9 @@ namespace blink {
 class BlobDataHandle;
 class Transferables;
 class ExceptionState;
+class SharedBuffer;
 class StaticBitmapImage;
+class UnpackedSerializedScriptValue;
 class WebBlobInfo;
 
 typedef HashMap<String, RefPtr<BlobDataHandle>> BlobDataHandleMap;
@@ -78,6 +80,8 @@ class CORE_EXPORT SerializedScriptValue
   // [versions skipped]
   // Version 16: Separate versioning between V8 and Blink.
   // Version 17: Remove unnecessary byte swapping.
+  // Version 18: Add a list of key-value pairs for ImageBitmap and ImageData to
+  //             support color space information, compression, etc.
   //
   // The following versions cannot be used, in order to be able to
   // deserialize version 0 SSVs. The class implementation has details.
@@ -90,7 +94,7 @@ class CORE_EXPORT SerializedScriptValue
   //
   // Recent changes are routinely reverted in preparation for branch, and this
   // has been the cause of at least one bug in the past.
-  static constexpr uint32_t kWireFormatVersion = 17;
+  static constexpr uint32_t kWireFormatVersion = 18;
 
   // This enumeration specifies whether we're serializing a value for storage;
   // e.g. when writing to IndexedDB. This corresponds to the forStorage flag of
@@ -132,6 +136,7 @@ class CORE_EXPORT SerializedScriptValue
 
   static PassRefPtr<SerializedScriptValue> Create();
   static PassRefPtr<SerializedScriptValue> Create(const String&);
+  static PassRefPtr<SerializedScriptValue> Create(RefPtr<const SharedBuffer>);
   static PassRefPtr<SerializedScriptValue> Create(const char* data,
                                                   size_t length);
 
@@ -158,6 +163,18 @@ class CORE_EXPORT SerializedScriptValue
     return Deserialize(isolate, DeserializeOptions());
   }
   v8::Local<v8::Value> Deserialize(v8::Isolate*, const DeserializeOptions&);
+
+  // Takes ownership of a reference and creates an "unpacked" version of this
+  // value, where the transferred contents have been turned into complete
+  // objects local to this thread. A SerializedScriptValue can only be unpacked
+  // once, and the result is bound to a thread.
+  // See UnpackedSerializedScriptValue.h for more details.
+  static UnpackedSerializedScriptValue* Unpack(RefPtr<SerializedScriptValue>);
+
+  // Used for debugging. Returns true if there are "packed" transferred contents
+  // which would require this value to be unpacked before deserialization.
+  // See UnpackedSerializedScriptValue.h for more details.
+  bool HasPackedContents() const;
 
   // Helper function which pulls the values out of a JS sequence and into a
   // MessagePortArray.  Also validates the elements per sections 4.1.13 and
@@ -204,22 +221,13 @@ class CORE_EXPORT SerializedScriptValue
   const uint8_t* Data() const { return data_buffer_.get(); }
   size_t DataLengthInBytes() const { return data_buffer_size_; }
 
-  // These are only accessible once we have "received" the transferred data on
-  // the new thread or context.
-  void ReceiveTransfer();
-  const HeapVector<Member<DOMArrayBufferBase>>& ReceivedArrayBuffers() const {
-    return received_->array_buffers;
-  }
-  const HeapVector<Member<ImageBitmap>>& ReceivedImageBitmaps() const {
-    return received_->image_bitmaps;
-  }
-
   TransferredWasmModulesArray& WasmModules() { return wasm_modules_; }
   BlobDataHandleMap& BlobDataHandles() { return blob_data_handles_; }
 
  private:
   friend class ScriptValueSerializer;
   friend class V8ScriptValueSerializer;
+  friend class UnpackedSerializedScriptValue;
 
   struct BufferDeleter {
     void operator()(uint8_t* buffer) { WTF::Partitions::BufferFree(buffer); }
@@ -227,7 +235,9 @@ class CORE_EXPORT SerializedScriptValue
   using DataBufferPtr = std::unique_ptr<uint8_t[], BufferDeleter>;
 
   SerializedScriptValue();
-  explicit SerializedScriptValue(const String& wire_data);
+  SerializedScriptValue(DataBufferPtr, size_t data_size);
+
+  static DataBufferPtr AllocateBuffer(size_t);
 
   void SetData(DataBufferPtr data, size_t size) {
     data_buffer_ = std::move(data);
@@ -248,7 +258,7 @@ class CORE_EXPORT SerializedScriptValue
   size_t data_buffer_size_ = 0;
 
   // These two have one-use transferred contents, and are stored in
-  // ReceivedObjects thereafter.
+  // UnpackedSerializedScriptValue thereafter.
   ArrayBufferContentsArray array_buffer_contents_array_;
   ImageBitmapContentsArray image_bitmap_contents_array_;
 
@@ -256,18 +266,11 @@ class CORE_EXPORT SerializedScriptValue
   TransferredWasmModulesArray wasm_modules_;
   BlobDataHandleMap blob_data_handles_;
 
-  // These replace their corresponding ordinary members, once set.
-  // Once the SerializedScriptValue is being deserialized, real objects will be
-  // materialized here, but only the contents should exist when moving between
-  // threads, frames, etc.
-  struct ReceivedObjects {
-    PersistentHeapVector<Member<DOMArrayBufferBase>> array_buffers;
-    PersistentHeapVector<Member<ImageBitmap>> image_bitmaps;
-  };
-  Optional<ReceivedObjects> received_;
-
   bool has_registered_external_allocation_;
   bool transferables_need_external_allocation_registration_;
+#if DCHECK_IS_ON()
+  bool was_unpacked_ = false;
+#endif
 };
 
 template <>

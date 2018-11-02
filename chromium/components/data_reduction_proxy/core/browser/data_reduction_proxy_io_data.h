@@ -15,11 +15,11 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/single_thread_task_runner.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data_use_observer.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_metrics.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_network_delegate.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_request_options.h"
-#include "components/data_reduction_proxy/core/browser/data_use_group_provider.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_storage_delegate.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/data_reduction_proxy/core/common/lofi_decider.h"
@@ -53,13 +53,10 @@ class DataReductionProxyService;
 // the IO thread.
 class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
  public:
-  // Constructs a DataReductionProxyIOData object. |param_flags| is used to
-  // set information about the DNS names used by the proxy, and allowable
-  // configurations. |enabled| sets the initial state of the Data Reduction
-  // Proxy.
+  // Constructs a DataReductionProxyIOData object. |enabled| sets the initial
+  // state of the Data Reduction Proxy.
   DataReductionProxyIOData(
       Client client,
-      int param_flags,
       net::NetLog* net_log,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner,
@@ -71,6 +68,9 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
 
   // Performs UI thread specific shutdown logic.
   void ShutdownOnUIThread();
+
+  void SetDataUseAscriber(
+      data_use_measurement::DataUseAscriber* data_use_ascriber);
 
   // Sets the Data Reduction Proxy service after it has been created.
   // Virtual for testing.
@@ -127,7 +127,6 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
       int64_t original_size,
       bool data_reduction_proxy_enabled,
       DataReductionProxyRequestType request_type,
-      const scoped_refptr<DataUseGroup>& data_usage_source,
       const std::string& mime_type);
   void SetLoFiModeActiveOnMainFrame(bool lo_fi_mode_active);
 
@@ -209,11 +208,6 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
     resource_type_provider_ = std::move(resource_type_provider);
   }
 
-  void set_data_usage_source_provider(
-      std::unique_ptr<DataUseGroupProvider> data_usage_source_provider) {
-    data_use_group_provider_ = std::move(data_usage_source_provider);
-  }
-
   // The production channel of this build.
   std::string channel() const { return channel_; }
 
@@ -291,9 +285,8 @@ class DataReductionProxyIOData : public DataReductionProxyEventStorageDelegate {
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
 
-  // Manages instances of |DataUsageSource| and maps |URLRequest| instances to
-  // their appropriate |DataUsageSource|.
-  std::unique_ptr<DataUseGroupProvider> data_use_group_provider_;
+  // Observes pageload events and records per host data use.
+  std::unique_ptr<DataReductionProxyDataUseObserver> data_use_observer_;
 
   // Whether the Data Reduction Proxy has been enabled or not by the user. In
   // practice, this can be overridden by the command line.

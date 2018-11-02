@@ -14,8 +14,10 @@
 #include "content/public/browser/readback_types.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "ui/base/page_transition_types.h"
 
 namespace content {
+class NavigationHandle;
 class RenderViewHost;
 class RenderWidgetHost;
 }
@@ -38,6 +40,10 @@ class ThumbnailTabHelper
 
   // content::WebContentsObserver overrides.
   void RenderViewDeleted(content::RenderViewHost* render_view_host) override;
+  void DidStartNavigation(
+      content::NavigationHandle* navigation_handle) override;
+  void DidFinishNavigation(
+      content::NavigationHandle* navigation_handle) override;
   void DidStartLoading() override;
   void DidStopLoading() override;
   void NavigationStopped() override;
@@ -51,14 +57,11 @@ class ThumbnailTabHelper
 
   // Create a thumbnail from the web contents bitmap.
   void ProcessCapturedBitmap(
-      scoped_refptr<thumbnails::ThumbnailingAlgorithm> algorithm,
       const SkBitmap& bitmap,
       content::ReadbackResponse response);
 
   // Pass the thumbnail to the thumbnail service.
-  void UpdateThumbnail(
-      const thumbnails::ThumbnailingContext& context,
-      const SkBitmap& thumbnail);
+  void UpdateThumbnail(const SkBitmap& thumbnail);
 
   // Clean up after thumbnail generation has ended.
   void CleanUpFromThumbnailGeneration();
@@ -70,15 +73,16 @@ class ThumbnailTabHelper
   void WidgetHidden(content::RenderWidgetHost* widget);
 
   const bool capture_on_load_finished_;
+  const bool capture_on_navigating_away_;
 
   content::NotificationRegistrar registrar_;
 
+  ui::PageTransition page_transition_;
   bool load_interrupted_;
 
   scoped_refptr<thumbnails::ThumbnailingContext> thumbnailing_context_;
 
   base::TimeTicks copy_from_surface_start_time_;
-  base::TimeTicks process_bitmap_start_time_;
 
   base::WeakPtrFactory<ThumbnailTabHelper> weak_factory_;
 

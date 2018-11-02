@@ -20,6 +20,7 @@
 #include "base/trace_event/heap_profiler_stack_frame_deduplicator.h"
 #include "base/trace_event/heap_profiler_type_name_deduplicator.h"
 #include "base/trace_event/trace_config.h"
+#include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "base/trace_event/trace_log.h"
 
@@ -183,8 +184,7 @@ HeapDumpWriter::HeapDumpWriter(StackFrameDeduplicator* stack_frame_deduplicator,
                                uint32_t breakdown_threshold_bytes)
     : stack_frame_deduplicator_(stack_frame_deduplicator),
       type_name_deduplicator_(type_name_deduplicator),
-      breakdown_threshold_bytes_(breakdown_threshold_bytes) {
-}
+      breakdown_threshold_bytes_(breakdown_threshold_bytes) {}
 
 HeapDumpWriter::~HeapDumpWriter() {}
 
@@ -201,8 +201,8 @@ bool HeapDumpWriter::AddEntryForBucket(const Bucket& bucket) {
   DCHECK_LE(bucket.backtrace_cursor, arraysize(context->backtrace.frames));
 
   Entry entry;
-  entry.stack_frame_id = stack_frame_deduplicator_->Insert(
-      backtrace_begin, backtrace_end);
+  entry.stack_frame_id =
+      stack_frame_deduplicator_->Insert(backtrace_begin, backtrace_end);
 
   // Deduplicate the type name, or use ID -1 if type name is not set.
   entry.type_id = bucket.is_broken_down_by_type_name
@@ -217,11 +217,9 @@ bool HeapDumpWriter::AddEntryForBucket(const Bucket& bucket) {
 }
 
 void HeapDumpWriter::BreakDown(const Bucket& bucket) {
-  auto by_backtrace = BreakDownBy(bucket,
-                                  BreakDownMode::kByBacktrace,
+  auto by_backtrace = BreakDownBy(bucket, BreakDownMode::kByBacktrace,
                                   breakdown_threshold_bytes_);
-  auto by_type_name = BreakDownBy(bucket,
-                                  BreakDownMode::kByTypeName,
+  auto by_type_name = BreakDownBy(bucket, BreakDownMode::kByTypeName,
                                   breakdown_threshold_bytes_);
 
   // Insert entries for the buckets. If a bucket was not present before, it has
@@ -312,6 +310,7 @@ std::unique_ptr<TracedValue> ExportHeapDump(
     const std::unordered_map<AllocationContext, AllocationMetrics>&
         metrics_by_context,
     const HeapProfilerSerializationState& heap_profiler_serialization_state) {
+  TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("memory-infra"), "ExportHeapDump");
   internal::HeapDumpWriter writer(
       heap_profiler_serialization_state.stack_frame_deduplicator(),
       heap_profiler_serialization_state.type_name_deduplicator(),

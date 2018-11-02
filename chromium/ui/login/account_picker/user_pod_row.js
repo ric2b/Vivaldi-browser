@@ -99,7 +99,7 @@ cr.define('login', function() {
 
   /**
    * Supported authentication types. Keep in sync with the enum in
-   * chrome/browser/signin/screenlock_bridge.h
+   * components/proximity_auth/public/interfaces/auth_type.mojom
    * @enum {number}
    * @const
    */
@@ -149,6 +149,15 @@ cr.define('login', function() {
     {state: FINGERPRINT_STATES.SIGNIN, class: 'signin'},
     {state: FINGERPRINT_STATES.FAILED, class: 'failed'}
   ];
+
+  // Supported multi-profile user behavior values.
+  // Keep in sync with the enum in login_user_info.mojom
+  var MULTI_PROFILE_USER_BEHAVIOR = {
+    UNRESTRICTED: 0,
+    PRIMARY_ONLY: 1,
+    NOT_ALLOWED: 2,
+    OWNER_PRIMARY_ONLY: 3
+  };
 
   // Focus and tab order are organized as follows:
   //
@@ -812,8 +821,6 @@ cr.define('login', function() {
           this.handlePasswordKeyPress_.bind(this));
       this.passwordElement.addEventListener('input',
           this.handleInputChanged_.bind(this));
-      this.passwordElement.addEventListener('mouseup',
-          this.handleInputMouseUp_.bind(this));
 
       if (this.submitButton) {
         this.submitButton.addEventListener('click',
@@ -941,6 +948,14 @@ cr.define('login', function() {
      */
     get imageElement() {
       return this.querySelector('.user-image');
+    },
+
+    /**
+     * Gets animated image element.
+     * @type {!HTMLImageElement}
+     */
+    get animatedImageElement() {
+      return this.querySelector('.user-image.animated-image');
     },
 
     /**
@@ -1137,8 +1152,8 @@ cr.define('login', function() {
               this.querySelector('.action-box-remove-user-warning-passwords'),
           'Bookmarks':
               this.querySelector('.action-box-remove-user-warning-bookmarks'),
-          'Settings':
-              this.querySelector('.action-box-remove-user-warning-settings')
+          'Autofill':
+              this.querySelector('.action-box-remove-user-warning-autofill')
       }
     },
 
@@ -1154,8 +1169,10 @@ cr.define('login', function() {
      * Updates the user pod element.
      */
     update: function() {
-      this.imageElement.src = 'chrome://userimage/' + this.user.username +
+      var animatedImageSrc = 'chrome://userimage/' + this.user.username +
           '?id=' + UserPod.userImageSalt_[this.user.username];
+      this.imageElement.src = animatedImageSrc + '&frame=0';
+      this.animatedImageElement.src = animatedImageSrc;
 
       this.nameElement.textContent = this.user_.displayName;
       this.reauthNameHintElement.textContent = this.user_.displayName;
@@ -1210,12 +1227,15 @@ cr.define('login', function() {
         this.classList.add('multiprofiles-policy-applied');
         this.setUserPodIconType('policy');
 
-        if (this.user.multiProfilesPolicy == 'primary-only')
+        if (this.user.multiProfilesPolicy ==
+            MULTI_PROFILE_USER_BEHAVIOR.PRIMARY_ONLY) {
           this.querySelector('.mp-policy-primary-only-msg').hidden = false;
-        else if (this.user.multiProfilesPolicy == 'owner-primary-only')
+        } else if (this.user.multiProfilesPolicy ==
+            MULTI_PROFILE_USER_BEHAVIOR.OWNER_PRIMARY_ONLY) {
           this.querySelector('.mp-owner-primary-only-msg').hidden = false;
-        else
+        } else {
           this.querySelector('.mp-policy-not-allowed-msg').hidden = false;
+        }
       } else if (this.user_.isApp) {
         this.setUserPodIconType('app');
       }
@@ -1258,8 +1278,6 @@ cr.define('login', function() {
       // Change the password placeholder based on pin keyboard visibility.
       this.passwordElement.placeholder = loadTimeData.getString(visible ?
           'pinKeyboardPlaceholderPinPassword' : 'passwordHint');
-
-      chrome.send('setForceDisableVirtualKeyboard', [visible]);
     },
 
     isPinShown: function() {
@@ -1707,11 +1725,14 @@ cr.define('login', function() {
         // Show extra statistics information for desktop users
         this.querySelector(
           '.action-box-remove-non-owner-user-warning-text').hidden = true;
-        this.RemoveWarningDialogSetMessage_(true, false);
+        this.RemoveWarningDialogSetMessage_();
         // set a global handler for the callback
         window.updateRemoveWarningDialog =
             this.updateRemoveWarningDialog_.bind(this);
-        chrome.send('removeUserWarningLoadStats', [this.user.profilePath]);
+        var is_synced_user = this.user.emailAddress !== "";
+        if (!is_synced_user) {
+          chrome.send('removeUserWarningLoadStats', [this.user.profilePath]);
+        }
       }
       chrome.send('logRemoveUserWarningShown');
     },
@@ -1727,83 +1748,23 @@ cr.define('login', function() {
 
       var stats_elements = this.statsMapElements;
       // Update individual statistics
-      var hasErrors = false;
       for (var key in profileStats) {
         if (stats_elements.hasOwnProperty(key)) {
-          if (profileStats[key].success) {
-            this.user.statistics[key] = profileStats[key];
-          } else if (!this.user.statistics[key].success) {
-            hasErrors = true;
-            stats_elements[key].textContent = '';
-          }
+          stats_elements[key].textContent = profileStats[key].count;
         }
       }
-
-      this.RemoveWarningDialogSetMessage_(false, hasErrors);
     },
 
     /**
      * Set the new message in the dialog.
-     * @param {boolean} Whether this is the first output, that requires setting
-     * a in-progress message.
-     * @param {boolean} Whether any actual query to the statistics have failed.
-     * Should be true only if there is an error and the corresponding statistic
-     * is also unavailable in ProfileAttributesStorage.
      */
-    RemoveWarningDialogSetMessage_: function(isInitial, hasErrors) {
-      var stats_elements = this.statsMapElements;
-      var total_count = 0;
-      var num_stats_loaded = 0;
-      for (var key in stats_elements) {
-        if (this.user.statistics[key].success) {
-          var count = this.user.statistics[key].count;
-          stats_elements[key].textContent = count;
-          total_count += count;
-          num_stats_loaded++;
-        }
-      }
-
-      // this.classList is used for selecting the appropriate dialog.
-      if (total_count)
-        this.classList.remove('has-no-stats');
-
+    RemoveWarningDialogSetMessage_: function() {
       var is_synced_user = this.user.emailAddress !== "";
-      // Write total number if all statistics are loaded.
-      if (num_stats_loaded === Object.keys(stats_elements).length) {
-        if (!total_count) {
-          this.classList.add('has-no-stats');
-          var message = loadTimeData.getString(
-              is_synced_user ? 'removeUserWarningTextSyncNoStats' :
-                               'removeUserWarningTextNonSyncNoStats');
-          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
-                                                    message);
-        } else {
-          window.updateRemoveWarningDialogSetMessage =
-              this.updateRemoveWarningDialogSetMessage_.bind(this);
-          chrome.send('getRemoveWarningDialogMessage',[{
-              profilePath: this.user.profilePath,
-              isSyncedUser: is_synced_user,
-              hasErrors: hasErrors,
-              totalCount: total_count
-          }]);
-        }
-      } else if (isInitial) {
-        if (!this.user.isProfileLoaded) {
-          message = loadTimeData.getString(
-              is_synced_user ? 'removeUserWarningTextSyncNoStats' :
-                               'removeUserWarningTextNonSyncNoStats');
-          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
-                                                    message);
-        } else {
-          message = loadTimeData.getString(
-              is_synced_user ? 'removeUserWarningTextSyncCalculating' :
-                               'removeUserWarningTextNonSyncCalculating');
-          substitute = loadTimeData.getString(
-              'removeUserWarningTextCalculating');
-          this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
-                                                    message, substitute);
-        }
-      }
+      message = loadTimeData.getString(
+          is_synced_user ? 'removeUserWarningTextSync' :
+                           'removeUserWarningTextNonSync');
+      this.updateRemoveWarningDialogSetMessage_(this.user.profilePath,
+                                                message);
     },
 
     /**
@@ -2024,19 +1985,6 @@ cr.define('login', function() {
      */
     handleInputChanged_: function(e) {
       this.updateInput_();
-    },
-
-    /**
-     * Handles mouse up event on the password element.
-     * @param {Event} e Mouse up event.
-     */
-    handleInputMouseUp_: function(e) {
-      // If the PIN keyboard is shown and the user clicks on the password
-      // element, the virtual keyboard should pop up if it is enabled, so we
-      // must disable the virtual keyboard override.
-      if (this.isPinShown()) {
-        chrome.send('setForceDisableVirtualKeyboard', [false]);
-      }
     },
 
     /**
@@ -2263,7 +2211,7 @@ cr.define('login', function() {
           this.user_.displayName;
       this.querySelector('.info').textContent =
           loadTimeData.getStringF('publicAccountInfoFormat',
-                                  this.user_.enterpriseDomain);
+                                  this.user_.enterpriseDisplayDomain);
     },
 
     /** @override */
@@ -2529,6 +2477,7 @@ cr.define('login', function() {
     /** @override */
     update: function() {
       this.imageElement.src = this.user.userImage;
+      this.animatedImageElement.src = this.user.userImage;
       this.nameElement.textContent = this.user.displayName;
       this.reauthNameHintElement.textContent = this.user.displayName;
 
@@ -2541,8 +2490,6 @@ cr.define('login', function() {
       this.classList.toggle('legacy-supervised', isLegacySupervisedUser);
       this.classList.toggle('child', isChildUser);
       this.classList.toggle('synced', isSyncedUser);
-      this.classList.toggle('has-no-stats',
-          !isProfileLoaded && !this.user.statistics.length);
 
       if (this.isAuthTypeUserClick)
         this.passwordLabelElement.textContent = this.authValue;
@@ -2615,6 +2562,9 @@ cr.define('login', function() {
       this.imageElement.src = this.user.iconUrl;
       this.imageElement.alt = this.user.label;
       this.imageElement.title = this.user.label;
+      this.animatedImageElement.src = this.user.iconUrl;
+      this.animatedImageElement.alt = this.user.label;
+      this.animatedImageElement.title = this.user.label;
       this.passwordEntryContainerElement.hidden = true;
       this.launchAppButtonContainerElement.hidden = false;
       this.nameElement.textContent = this.user.label;
@@ -3583,9 +3533,10 @@ cr.define('login', function() {
           podToFocus.focus();
         }
 
-        // focusPod() automatically loads wallpaper
         if (!podToFocus.user.isApp)
-          chrome.send('focusPod', [podToFocus.user.username]);
+          chrome.send(
+              'focusPod',
+              [podToFocus.user.username, true /* loads wallpaper */]);
         this.firstShown_ = false;
         this.lastFocusedPod_ = podToFocus;
         this.scrollFocusedPodIntoView();
@@ -3595,14 +3546,6 @@ cr.define('login', function() {
         chrome.send('noPodFocused');
       }
       this.insideFocusPod_ = false;
-    },
-
-    /**
-     * Resets wallpaper to the last active user's wallpaper, if any.
-     */
-    loadLastWallpaper: function() {
-      if (this.lastFocusedPod_ && !this.lastFocusedPod_.user.isApp)
-        chrome.send('loadWallpaper', [this.lastFocusedPod_.user.username]);
     },
 
     /**

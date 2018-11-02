@@ -3,7 +3,8 @@
 // found in the LICENSE file.
 
 #include "mojo/public/cpp/bindings/associated_binding.h"
-#include "base/single_thread_task_runner.h"
+
+#include "mojo/public/cpp/bindings/lib/task_runner_helper.h"
 
 namespace mojo {
 
@@ -28,15 +29,16 @@ void AssociatedBindingBase::CloseWithReason(uint32_t custom_reason,
 }
 
 void AssociatedBindingBase::set_connection_error_handler(
-    const base::Closure& error_handler) {
+    base::OnceClosure error_handler) {
   DCHECK(is_bound());
-  endpoint_client_->set_connection_error_handler(error_handler);
+  endpoint_client_->set_connection_error_handler(std::move(error_handler));
 }
 
 void AssociatedBindingBase::set_connection_error_with_reason_handler(
-    const ConnectionErrorWithReasonCallback& error_handler) {
+    ConnectionErrorWithReasonCallback error_handler) {
   DCHECK(is_bound());
-  endpoint_client_->set_connection_error_with_reason_handler(error_handler);
+  endpoint_client_->set_connection_error_with_reason_handler(
+      std::move(error_handler));
 }
 
 void AssociatedBindingBase::FlushForTesting() {
@@ -57,7 +59,9 @@ void AssociatedBindingBase::BindImpl(
 
   endpoint_client_.reset(new InterfaceEndpointClient(
       std::move(handle), receiver, std::move(payload_validator),
-      expect_sync_requests, std::move(runner), interface_version));
+      expect_sync_requests,
+      internal::GetTaskRunnerToUseFromUserProvidedTaskRunner(std::move(runner)),
+      interface_version));
 }
 
 }  // namespace mojo

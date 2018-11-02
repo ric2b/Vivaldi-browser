@@ -8,6 +8,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #include "base/optional.h"
 #include "components/sync/engine/non_blocking_sync_common.h"
@@ -106,7 +107,7 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
   std::unique_ptr<MetadataChangeList> CreateMetadataChangeList() override;
   base::Optional<ModelError> MergeSyncData(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
-      EntityDataMap entity_data_map) override;
+      EntityChangeList entity_data) override;
   base::Optional<ModelError> ApplySyncChanges(
       std::unique_ptr<MetadataChangeList> metadata_change_list,
       EntityChangeList entity_changes) override;
@@ -114,6 +115,8 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
   void GetAllData(DataCallback callback) override;
   std::string GetClientTag(const EntityData& entity_data) override;
   std::string GetStorageKey(const EntityData& entity_data) override;
+  bool SupportsGetStorageKey() const override;
+  void SetSupportsGetStorageKey(bool supports_get_storage_key);
   ConflictResolution ResolveConflict(
       const EntityData& local_data,
       const EntityData& remote_data) const override;
@@ -130,6 +133,9 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
   // test code here, this function is needed to manually copy it.
   static std::unique_ptr<EntityData> CopyEntityData(const EntityData& old_data);
 
+  // Set storage key which will be ignored by bridge.
+  void SetKeyToIgnore(const std::string key);
+
   const Store& db() { return *db_; }
 
  protected:
@@ -140,11 +146,21 @@ class FakeModelTypeSyncBridge : public ModelTypeSyncBridge {
   // Applies |change_list| to the metadata store.
   void ApplyMetadataChangeList(std::unique_ptr<MetadataChangeList> change_list);
 
+  std::string GetStorageKeyImpl(const EntityData& entity_data);
+
   // The conflict resolution to use for calls to ResolveConflict.
   std::unique_ptr<ConflictResolution> conflict_resolution_;
 
+  // The storage keys which bridge will ignore.
+  std::unordered_set<std::string> keys_to_ignore_;
+
   // Whether an error should be produced on the next bridge call.
   bool error_next_ = false;
+
+  // Whether the bridge supports call to GetStorageKey. If it doesn't bridge is
+  // responsible for calling UpdateStorageKey when processing new entities in
+  // MergeSyncData/ApplySyncChanges.
+  bool supports_get_storage_key_ = true;
 };
 
 }  // namespace syncer

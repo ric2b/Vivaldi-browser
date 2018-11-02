@@ -5,11 +5,11 @@
 #include "core/fileapi/URLFileAPI.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/DOMURL.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/PublicURLManager.h"
+#include "core/url/DOMURL.h"
 #include "platform/bindings/ScriptState.h"
 
 namespace blink {
@@ -31,7 +31,7 @@ String URLFileAPI::createObjectURL(ScriptState* script_state,
     return String();
   }
 
-  UseCounter::Count(execution_context, UseCounter::kCreateObjectURLBlob);
+  UseCounter::Count(execution_context, WebFeature::kCreateObjectURLBlob);
   return DOMURL::CreatePublicURL(execution_context, blob, blob->Uuid());
 }
 
@@ -41,7 +41,7 @@ void URLFileAPI::revokeObjectURL(ScriptState* script_state,
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   DCHECK(execution_context);
 
-  KURL url(KURL(), url_string);
+  KURL url(NullURL(), url_string);
   execution_context->RemoveURLFromMemoryCache(url);
   execution_context->GetPublicURLManager().Revoke(url);
 }

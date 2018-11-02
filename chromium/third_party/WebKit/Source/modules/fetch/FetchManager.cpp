@@ -7,7 +7,6 @@
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
@@ -20,6 +19,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/probe/CoreProbes.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/fetch/Body.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/BytesConsumer.h"
@@ -31,8 +31,10 @@
 #include "platform/HTTPNames.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8ThrowException.h"
+#include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/network/NetworkUtils.h"
@@ -40,7 +42,6 @@
 #include "platform/weborigin/SchemeRegistry.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/weborigin/SecurityPolicy.h"
-#include "platform/weborigin/Suborigin.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
@@ -162,7 +163,6 @@ class FetchManager::Loader final
                           std::unique_ptr<WebDataConsumerHandle>) override;
   void DidFinishLoading(unsigned long, double) override;
   void DidFail(const ResourceError&) override;
-  void DidFailAccessControlCheck(const ResourceError&) override;
   void DidFailRedirectCheck() override;
 
   void Start();
@@ -266,7 +266,7 @@ class FetchManager::Loader final
          FetchRequestData*,
          bool is_isolated_world);
 
-  void PerformBasicFetch();
+  void PerformSchemeFetch();
   void PerformNetworkError(const String& message);
   void PerformHTTPFetch(bool cors_flag, bool cors_preflight_flag);
   void PerformDataFetch();
@@ -338,7 +338,7 @@ void FetchManager::Loader::DidReceiveResponse(
 
   if (response.Url().ProtocolIs("blob") && response.HttpStatusCode() == 404) {
     // "If |blob| is null, return a network error."
-    // https://fetch.spec.whatwg.org/#concept-basic-fetch
+    // https://fetch.spec.whatwg.org/#concept-scheme-fetch
     PerformNetworkError("Blob not found.");
     return;
   }
@@ -464,7 +464,8 @@ void FetchManager::Loader::DidReceiveResponse(
         break;
       case FetchRequestData::kCORSTainting: {
         HTTPHeaderSet header_names;
-        ExtractCorsExposedHeaderNamesList(response, header_names);
+        CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(
+            response, header_names);
         tainted_response =
             response_data->CreateCORSFilteredResponse(header_names);
         break;
@@ -481,7 +482,7 @@ void FetchManager::Loader::DidReceiveResponse(
     // An "Access-Control-Allow-Origin" header is added for data: URLs
     // but no headers except for "Content-Type" should exist,
     // according to the spec:
-    // https://fetch.spec.whatwg.org/#concept-basic-fetch
+    // https://fetch.spec.whatwg.org/#concept-scheme-fetch
     // "... return a response whose header list consist of a single header
     //  whose name is `Content-Type` and value is the MIME type and
     //  parameters returned from obtaining a resource"
@@ -512,16 +513,6 @@ void FetchManager::Loader::DidFinishLoading(unsigned long, double) {
 }
 
 void FetchManager::Loader::DidFail(const ResourceError& error) {
-  if (error.IsCancellation() || error.IsTimeout() ||
-      error.Domain() != kErrorDomainBlinkInternal)
-    Failed(String());
-  else
-    Failed("Fetch API cannot load " + error.FailingURL() + ". " +
-           error.LocalizedDescription());
-}
-
-void FetchManager::Loader::DidFailAccessControlCheck(
-    const ResourceError& error) {
   if (error.IsCancellation() || error.IsTimeout() ||
       error.Domain() != kErrorDomainBlinkInternal)
     Failed(String());
@@ -603,8 +594,8 @@ void FetchManager::Loader::Start() {
       (request_->Url().ProtocolIsData() && request_->SameOriginDataURLFlag()) ||
       (request_->Url().ProtocolIsAbout()) ||
       (request_->Mode() == WebURLRequest::kFetchRequestModeNavigate)) {
-    // "The result of performing a basic fetch using request."
-    PerformBasicFetch();
+    // "The result of performing a scheme fetch using request."
+    PerformSchemeFetch();
     return;
   }
 
@@ -622,8 +613,8 @@ void FetchManager::Loader::Start() {
   if (request_->Mode() == WebURLRequest::kFetchRequestModeNoCORS) {
     // "Set |request|'s response tainting to |opaque|."
     request_->SetResponseTainting(FetchRequestData::kOpaqueTainting);
-    // "The result of performing a basic fetch using |request|."
-    PerformBasicFetch();
+    // "The result of performing a scheme fetch using |request|."
+    PerformSchemeFetch();
     return;
   }
 
@@ -639,15 +630,15 @@ void FetchManager::Loader::Start() {
     return;
   }
 
-  // "- |request|'s mode is |CORS-with-forced-preflight|.
+  // "- |request|'s mode is |CORS-with-forced-preflight|."
   // "- |request|'s unsafe request flag is set and either |request|'s method
-  // is not a simple method or a header in |request|'s header list is not a
-  // simple header"
+  // is not a CORS-safelisted method or a header in |request|'s header list is
+  // not a CORS-safelisted header"
   if (request_->Mode() ==
           WebURLRequest::kFetchRequestModeCORSWithForcedPreflight ||
       (request_->UnsafeRequestFlag() &&
-       (!FetchUtils::IsSimpleMethod(request_->Method()) ||
-        request_->HeaderList()->ContainsNonSimpleHeader()))) {
+       (!FetchUtils::IsCORSSafelistedMethod(request_->Method()) ||
+        request_->HeaderList()->ContainsNonCORSSafelistedHeader()))) {
     // "Set |request|'s response tainting to |CORS|."
     request_->SetResponseTainting(FetchRequestData::kCORSTainting);
     // "The result of performing an HTTP fetch using |request| with the
@@ -675,8 +666,8 @@ void FetchManager::Loader::Dispose() {
   execution_context_ = nullptr;
 }
 
-void FetchManager::Loader::PerformBasicFetch() {
-  // "To perform a basic fetch using |request|, switch on |request|'s url's
+void FetchManager::Loader::PerformSchemeFetch() {
+  // "To perform a scheme fetch using |request|, switch on |request|'s url's
   // scheme, and run the associated steps:"
   if (SchemeRegistry::ShouldTreatURLSchemeAsSupportingFetchAPI(
           request_->Url().Protocol())) {
@@ -714,7 +705,31 @@ void FetchManager::Loader::PerformHTTPFetch(bool cors_flag,
   ResourceRequest request(request_->Url());
   request.SetRequestContext(request_->Context());
   request.SetHTTPMethod(request_->Method());
-  request.SetFetchRequestMode(request_->Mode());
+
+  switch (request_->Mode()) {
+    case WebURLRequest::kFetchRequestModeSameOrigin:
+    case WebURLRequest::kFetchRequestModeNoCORS:
+      request.SetFetchRequestMode(request_->Mode());
+      break;
+    case WebURLRequest::kFetchRequestModeCORS:
+    case WebURLRequest::kFetchRequestModeCORSWithForcedPreflight:
+      // TODO(tyoshino): Use only the flag or the mode enum inside the
+      // FetchManager. Currently both are used due to ongoing refactoring.
+      // See http://crbug.com/727596.
+      if (cors_preflight_flag) {
+        request.SetFetchRequestMode(
+            WebURLRequest::kFetchRequestModeCORSWithForcedPreflight);
+      } else {
+        request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+      }
+      break;
+    case WebURLRequest::kFetchRequestModeNavigate:
+      // Using kFetchRequestModeSameOrigin here to reduce the security risk.
+      // "navigate" request is only available in ServiceWorker.
+      request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeSameOrigin);
+      break;
+  }
+
   request.SetFetchCredentialsMode(request_->Credentials());
   for (const auto& header : request_->HeaderList()->List()) {
     request.AddHTTPHeaderField(AtomicString(header.first),
@@ -766,65 +781,14 @@ void FetchManager::Loader::PerformHTTPFetch(bool cors_flag,
 
   // "5. Let |credentials flag| be set if either |HTTPRequest|'s credentials
   // mode is |include|, or |HTTPRequest|'s credentials mode is |same-origin|
-  // and the |CORS flag| is unset, and unset otherwise.
-  //
-  // Also, for the last case,
-  // https://w3c.github.io/webappsec-suborigins/#security-model-opt-outs:
-  // "request's credentials mode is "same-origin" and request's environment
-  // settings object has the suborigin unsafe credentials flag set and the
-  // request’s current url is same-physical-origin with request origin."
+  // and the |CORS flag| is unset, and unset otherwise."
+
   ResourceLoaderOptions resource_loader_options;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
-  bool suborigin_forces_credentials =
-      (request_->Credentials() ==
-           WebURLRequest::kFetchCredentialsModeSameOrigin &&
-       request_->Origin()->HasSuborigin() &&
-       request_->Origin()->GetSuborigin()->PolicyContains(
-           Suborigin::SuboriginPolicyOptions::kUnsafeCredentials) &&
-       SecurityOrigin::Create(request_->Url())
-           ->IsSameSchemeHostPort(request_->Origin().Get()));
-  if (request_->Credentials() == WebURLRequest::kFetchCredentialsModeInclude ||
-      request_->Credentials() == WebURLRequest::kFetchCredentialsModePassword ||
-      (request_->Credentials() ==
-           WebURLRequest::kFetchCredentialsModeSameOrigin &&
-       !cors_flag) ||
-      suborigin_forces_credentials) {
-    resource_loader_options.allow_credentials = kAllowStoredCredentials;
-  }
-  if (request_->Credentials() == WebURLRequest::kFetchCredentialsModeInclude ||
-      request_->Credentials() == WebURLRequest::kFetchCredentialsModePassword ||
-      suborigin_forces_credentials) {
-    resource_loader_options.credentials_requested = kClientRequestedCredentials;
-  }
   resource_loader_options.security_origin = request_->Origin().Get();
 
   ThreadableLoaderOptions threadable_loader_options;
-  threadable_loader_options.content_security_policy_enforcement =
-      ContentSecurityPolicy::ShouldBypassMainWorld(execution_context_)
-          ? kDoNotEnforceContentSecurityPolicy
-          : kEnforceContentSecurityPolicy;
-  if (cors_preflight_flag)
-    threadable_loader_options.preflight_policy = kForcePreflight;
-  switch (request_->Mode()) {
-    case WebURLRequest::kFetchRequestModeSameOrigin:
-      threadable_loader_options.cross_origin_request_policy =
-          kDenyCrossOriginRequests;
-      break;
-    case WebURLRequest::kFetchRequestModeNoCORS:
-      threadable_loader_options.cross_origin_request_policy =
-          kAllowCrossOriginRequests;
-      break;
-    case WebURLRequest::kFetchRequestModeCORS:
-    case WebURLRequest::kFetchRequestModeCORSWithForcedPreflight:
-      threadable_loader_options.cross_origin_request_policy = kUseAccessControl;
-      break;
-    case WebURLRequest::kFetchRequestModeNavigate:
-      // Using DenyCrossOriginRequests here to reduce the security risk.
-      // "navigate" request is only available in ServiceWorker.
-      threadable_loader_options.cross_origin_request_policy =
-          kDenyCrossOriginRequests;
-      break;
-  }
+
   probe::willStartFetch(execution_context_, this);
   loader_ = ThreadableLoader::Create(*execution_context_, this,
                                      threadable_loader_options,
@@ -843,6 +807,7 @@ void FetchManager::Loader::PerformDataFetch() {
   request.SetRequestContext(request_->Context());
   request.SetUseStreamOnResponse(true);
   request.SetHTTPMethod(request_->Method());
+  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
   request.SetFetchRedirectMode(WebURLRequest::kFetchRedirectModeError);
   // We intentionally skip 'setExternalRequestStateFromRequestorAddressSpace',
   // as 'data:' can never be external.
@@ -852,12 +817,6 @@ void FetchManager::Loader::PerformDataFetch() {
   resource_loader_options.security_origin = request_->Origin().Get();
 
   ThreadableLoaderOptions threadable_loader_options;
-  threadable_loader_options.content_security_policy_enforcement =
-      ContentSecurityPolicy::ShouldBypassMainWorld(execution_context_)
-          ? kDoNotEnforceContentSecurityPolicy
-          : kEnforceContentSecurityPolicy;
-  threadable_loader_options.cross_origin_request_policy =
-      kAllowCrossOriginRequests;
 
   probe::willStartFetch(execution_context_, this);
   loader_ = ThreadableLoader::Create(*execution_context_, this,

@@ -8,14 +8,14 @@
 #include <string>
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 
 // This class serves as the single repository for cloud print auth tokens. This
 // is only used within the CloudPrintProxyCoreThread.
 
 namespace cloud_print {
 
-class CloudPrintTokenStore : public base::NonThreadSafe {
+class CloudPrintTokenStore {
  public:
   // Returns the CloudPrintTokenStore instance for this thread. Will be NULL
   // if no instance was created in this thread before.
@@ -26,12 +26,15 @@ class CloudPrintTokenStore : public base::NonThreadSafe {
 
   void SetToken(const std::string& token);
   std::string token() const {
-    DCHECK(CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
     return token_;
   }
 
  private:
   std::string token_;
+
+  // Thread-affine per use of TLS in impl.
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(CloudPrintTokenStore);
 };

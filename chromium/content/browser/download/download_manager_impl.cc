@@ -55,7 +55,7 @@
 #include "storage/browser/blob/blob_url_request_job_factory.h"
 #include "url/origin.h"
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
 #include "base/nix/xdg_util.h"
 #endif
 
@@ -178,7 +178,7 @@ class DownloadItemFactoryImpl : public DownloadItemFactory {
   }
 };
 
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
 base::FilePath GetTemporaryDownloadDirectory() {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
   return base::nix::GetXDGDirectory(env.get(), "XDG_DATA_HOME", ".local/share");
@@ -357,7 +357,7 @@ void DownloadManagerImpl::StartDownloadWithId(
       // If the download is no longer known to the DownloadManager, then it was
       // removed after it was resumed. Ignore. If the download is cancelled
       // while resuming, then also ignore the request.
-      info->request_handle->CancelRequest();
+      info->request_handle->CancelRequest(true);
       if (!on_started.is_null())
         on_started.Run(nullptr, DOWNLOAD_INTERRUPT_REASON_USER_CANCELED);
       // The ByteStreamReader lives and dies on the FILE thread.
@@ -370,7 +370,7 @@ void DownloadManagerImpl::StartDownloadWithId(
   }
 
   base::FilePath default_download_directory;
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+#if defined(USE_X11) && !defined(OS_CHROMEOS)
   // TODO(thomasanderson): Remove this when all Linux distros with
   // versions of GTK lower than 3.14.7 are no longer supported.  This
   // should happen when support for Ubuntu Trusty and Debian Jessie
@@ -489,12 +489,6 @@ void DownloadManagerImpl::CreateSavePackageDownloadItemWithId(
     observer.OnDownloadCreated(this, download_item);
   if (!item_created.is_null())
     item_created.Run(download_item);
-}
-
-void DownloadManagerImpl::OnSavePackageSuccessfullyFinished(
-    DownloadItem* download_item) {
-  for (auto& observer : observers_)
-    observer.OnSavePackageSuccessfullyFinished(this, download_item);
 }
 
 // Resume a download of a specific URL. We send the request to the

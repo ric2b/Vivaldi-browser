@@ -32,6 +32,7 @@
 
 #include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorPendingAnimations.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/animation/KeyframeEffectReadOnly.h"
 #include "core/animation/css/CSSAnimations.h"
 #include "core/dom/DOMNodeIds.h"
@@ -68,24 +69,49 @@ static unsigned NextSequenceNumber() {
 
 Animation* Animation::Create(AnimationEffectReadOnly* effect,
                              AnimationTimeline* timeline) {
-  if (!timeline) {
+  if (!timeline || !timeline->IsDocumentTimeline()) {
     // FIXME: Support creating animations without a timeline.
+    NOTREACHED();
     return nullptr;
   }
 
-  Animation* animation = new Animation(
-      timeline->GetDocument()->ContextDocument(), *timeline, effect);
+  DocumentTimeline* subtimeline = ToDocumentTimeline(timeline);
 
-  if (timeline) {
-    timeline->AnimationAttached(*animation);
+  Animation* animation = new Animation(
+      subtimeline->GetDocument()->ContextDocument(), *subtimeline, effect);
+
+  if (subtimeline) {
+    subtimeline->AnimationAttached(*animation);
     animation->AttachCompositorTimeline();
   }
 
   return animation;
 }
 
+Animation* Animation::Create(ExecutionContext* execution_context,
+                             AnimationEffectReadOnly* effect,
+                             ExceptionState& exception_state) {
+  DCHECK(RuntimeEnabledFeatures::WebAnimationsAPIEnabled());
+
+  Document* document = ToDocument(execution_context);
+  return Create(effect, &document->Timeline());
+}
+
+Animation* Animation::Create(ExecutionContext* execution_context,
+                             AnimationEffectReadOnly* effect,
+                             AnimationTimeline* timeline,
+                             ExceptionState& exception_state) {
+  DCHECK(RuntimeEnabledFeatures::WebAnimationsAPIEnabled());
+
+  if (!timeline) {
+    return Create(execution_context, effect, exception_state);
+  }
+
+  return Create(effect, timeline);
+}
+
 Animation::Animation(ExecutionContext* execution_context,
-                     AnimationTimeline& timeline,
+                     DocumentTimeline& timeline,
                      AnimationEffectReadOnly* content)
     : ContextLifecycleObserver(execution_context),
       play_state_(kIdle),
@@ -124,7 +150,7 @@ Animation::~Animation() {
 
 void Animation::Dispose() {
   DestroyCompositorPlayer();
-  // If the AnimationTimeline and its Animation objects are
+  // If the DocumentTimeline and its Animation objects are
   // finalized by the same GC, we have to eagerly clear out
   // this Animation object's compositor player registration.
   DCHECK(!compositor_player_);
@@ -298,13 +324,13 @@ bool Animation::PreCommit(
   if (should_start) {
     compositor_group_ = compositor_group;
     if (start_on_compositor) {
-      if (IsCandidateForAnimationOnCompositor(composited_element_ids))
+      if (CheckCanStartAnimationOnCompositor(composited_element_ids).Ok()) {
         CreateCompositorPlayer();
-
-      if (MaybeStartAnimationOnCompositor(composited_element_ids))
+        StartAnimationOnCompositor(composited_element_ids);
         compositor_state_ = WTF::WrapUnique(new CompositorState(*this));
-      else
+      } else {
         CancelIncompatibleAnimationsOnCompositor();
+      }
     }
   }
 
@@ -731,63 +757,104 @@ void Animation::ForceServiceOnNextFrame() {
   timeline_->Wake();
 }
 
-bool Animation::CanStartAnimationOnCompositor(
+CompositorAnimations::FailureCode Animation::CheckCanStartAnimationOnCompositor(
     const Optional<CompositorElementIdSet>& composited_element_ids) const {
-  if (is_composited_animation_disabled_for_testing_ || EffectSuppressed())
-    return false;
+  CompositorAnimations::FailureCode code =
+      CheckCanStartAnimationOnCompositorInternal(composited_element_ids);
+  if (!code.Ok()) {
+    return code;
+  }
+  return ToKeyframeEffectReadOnly(content_.Get())
+      ->CheckCanStartAnimationOnCompositor(playback_rate_);
+}
+
+CompositorAnimations::FailureCode
+Animation::CheckCanStartAnimationOnCompositorInternal(
+    const Optional<CompositorElementIdSet>& composited_element_ids) const {
+  if (is_composited_animation_disabled_for_testing_) {
+    return CompositorAnimations::FailureCode::NonActionable(
+        "Accelerated animations disabled for testing");
+  }
+  if (EffectSuppressed()) {
+    return CompositorAnimations::FailureCode::NonActionable(
+        "Animation effect suppressed by DevTools");
+  }
+
+  if (playback_rate_ == 0) {
+    return CompositorAnimations::FailureCode::Actionable(
+        "Animation is not playing");
+  }
+
+  if (std::isinf(EffectEnd()) && playback_rate_ < 0) {
+    return CompositorAnimations::FailureCode::Actionable(
+        "Accelerated animations do not support reversed infinite duration "
+        "animations");
+  }
 
   // FIXME: Timeline playback rates should be compositable
-  if (playback_rate_ == 0 || (std::isinf(EffectEnd()) && playback_rate_ < 0) ||
-      (timeline() && timeline()->PlaybackRate() != 1))
-    return false;
+  if (TimelineInternal() && TimelineInternal()->PlaybackRate() != 1) {
+    return CompositorAnimations::FailureCode::NonActionable(
+        "Accelerated animations do not support timelines with playback rates "
+        "other than 1");
+  }
 
-  if (!timeline_ || !content_ || !content_->IsKeyframeEffectReadOnly())
-    return false;
+  if (!timeline_) {
+    return CompositorAnimations::FailureCode::Actionable(
+        "Animation is not attached to a timeline");
+  }
+  if (!content_) {
+    return CompositorAnimations::FailureCode::Actionable(
+        "Animation has no animation effect");
+  }
+  if (!content_->IsKeyframeEffectReadOnly()) {
+    return CompositorAnimations::FailureCode::NonActionable(
+        "Animation effect is not keyframe-based");
+  }
 
   // If the optional element id set has no value we must be in SPv1 mode in
   // which case we trust the compositing logic will create a layer if needed.
   if (composited_element_ids.has_value()) {
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+    DCHECK(RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
     Element* target_element =
         ToKeyframeEffectReadOnly(content_.Get())->Target();
-    if (!target_element)
-      return false;
+    if (!target_element) {
+      return CompositorAnimations::FailureCode::Actionable(
+          "Animation is not attached to an element");
+    }
 
+    bool has_own_layer_id = false;
     if (target_element->GetLayoutObject() &&
         target_element->GetLayoutObject()->IsBoxModelObject() &&
         target_element->GetLayoutObject()->HasLayer()) {
-      PaintLayer* paint_layer =
-          ToLayoutBoxModelObject(target_element->GetLayoutObject())->Layer();
       CompositorElementId target_element_id =
-          CompositorElementIdFromPaintLayerId(
-              paint_layer->UniqueId(), CompositorElementIdNamespace::kPrimary);
-      if (!composited_element_ids->Contains(target_element_id))
-        return false;
-    } else {
-      return false;
+          CompositorElementIdFromLayoutObjectId(
+              target_element->GetLayoutObject()->UniqueId(),
+              CompositorElementIdNamespace::kPrimary);
+      if (composited_element_ids->Contains(target_element_id)) {
+        has_own_layer_id = true;
+      }
+    }
+    if (!has_own_layer_id) {
+      return CompositorAnimations::FailureCode::NonActionable(
+          "Target element does not have its own compositing layer");
     }
   }
 
-  return Playing();
+  if (!Playing()) {
+    return CompositorAnimations::FailureCode::Actionable(
+        "Animation is not playing");
+  }
+
+  return CompositorAnimations::FailureCode::None();
 }
 
-bool Animation::IsCandidateForAnimationOnCompositor(
-    const Optional<CompositorElementIdSet>& composited_element_ids) const {
-  if (!CanStartAnimationOnCompositor(composited_element_ids))
-    return false;
-
-  return ToKeyframeEffectReadOnly(content_.Get())
-      ->IsCandidateForAnimationOnCompositor(playback_rate_);
-}
-
-bool Animation::MaybeStartAnimationOnCompositor(
+void Animation::StartAnimationOnCompositor(
     const Optional<CompositorElementIdSet>& composited_element_ids) {
-  if (!CanStartAnimationOnCompositor(composited_element_ids))
-    return false;
+  DCHECK(CheckCanStartAnimationOnCompositor(composited_element_ids).Ok());
 
   bool reversed = playback_rate_ < 0;
 
-  double start_time = timeline()->ZeroTime() + StartTimeInternal();
+  double start_time = TimelineInternal()->ZeroTime() + StartTimeInternal();
   if (reversed) {
     start_time -= EffectEnd() / fabs(playback_rate_);
   }
@@ -799,9 +866,9 @@ bool Animation::MaybeStartAnimationOnCompositor(
     time_offset = time_offset / fabs(playback_rate_);
   }
   DCHECK_NE(compositor_group_, 0);
-  return ToKeyframeEffectReadOnly(content_.Get())
-      ->MaybeStartAnimationOnCompositor(compositor_group_, start_time,
-                                        time_offset, playback_rate_);
+  ToKeyframeEffectReadOnly(content_.Get())
+      ->StartAnimationOnCompositor(compositor_group_, start_time, time_offset,
+                                   playback_rate_);
 }
 
 void Animation::SetCompositorPending(bool effect_changed) {
@@ -820,7 +887,8 @@ void Animation::SetCompositorPending(bool effect_changed) {
       compositor_state_->playback_rate != playback_rate_ ||
       compositor_state_->start_time != start_time_) {
     compositor_pending_ = true;
-    timeline()->GetDocument()->GetCompositorPendingAnimations().Add(this);
+    TimelineInternal()->GetDocument()->GetCompositorPendingAnimations().Add(
+        this);
   }
 }
 
@@ -876,8 +944,9 @@ bool Animation::Update(TimingUpdateReason reason) {
         const AtomicString& event_type = EventTypeNames::cancel;
         if (GetExecutionContext() && HasEventListeners(event_type)) {
           double event_current_time = NullValue();
-          pending_cancelled_event_ = AnimationPlaybackEvent::Create(
-              event_type, event_current_time, timeline()->currentTime());
+          pending_cancelled_event_ =
+              AnimationPlaybackEvent::Create(event_type, event_current_time,
+                                             TimelineInternal()->currentTime());
           pending_cancelled_event_->SetTarget(this);
           pending_cancelled_event_->SetCurrentTarget(this);
           timeline_->GetDocument()->EnqueueAnimationFrameEvent(
@@ -887,8 +956,9 @@ bool Animation::Update(TimingUpdateReason reason) {
         const AtomicString& event_type = EventTypeNames::finish;
         if (GetExecutionContext() && HasEventListeners(event_type)) {
           double event_current_time = CurrentTimeInternal() * 1000;
-          pending_finished_event_ = AnimationPlaybackEvent::Create(
-              event_type, event_current_time, timeline()->currentTime());
+          pending_finished_event_ =
+              AnimationPlaybackEvent::Create(event_type, event_current_time,
+                                             TimelineInternal()->currentTime());
           pending_finished_event_->SetTarget(this);
           pending_finished_event_->SetCurrentTarget(this);
           timeline_->GetDocument()->EnqueueAnimationFrameEvent(
@@ -1000,7 +1070,7 @@ void Animation::DetachCompositedLayers() {
 }
 
 void Animation::NotifyAnimationStarted(double monotonic_time, int group) {
-  timeline()
+  TimelineInternal()
       ->GetDocument()
       ->GetCompositorPendingAnimations()
       .NotifyCompositorAnimationStarted(monotonic_time, group);
@@ -1104,9 +1174,9 @@ Animation::PlayStateUpdateScope::~PlayStateUpdateScope() {
   animation_->EndUpdatingState();
 
   if (old_play_state != new_play_state) {
-    probe::animationPlayStateChanged(animation_->timeline()->GetDocument(),
-                                     animation_, old_play_state,
-                                     new_play_state);
+    probe::animationPlayStateChanged(
+        animation_->TimelineInternal()->GetDocument(), animation_,
+        old_play_state, new_play_state);
   }
 }
 
@@ -1116,7 +1186,7 @@ void Animation::AddedEventListener(
   EventTargetWithInlineData::AddedEventListener(event_type,
                                                 registered_listener);
   if (event_type == EventTypeNames::finish)
-    UseCounter::Count(GetExecutionContext(), UseCounter::kAnimationFinishEvent);
+    UseCounter::Count(GetExecutionContext(), WebFeature::kAnimationFinishEvent);
 }
 
 void Animation::PauseForTesting(double pause_time) {
@@ -1143,12 +1213,18 @@ void Animation::InvalidateKeyframeEffect(const TreeScope& tree_scope) {
   if (!content_ || !content_->IsKeyframeEffectReadOnly())
     return;
 
-  Element& target = *ToKeyframeEffectReadOnly(content_.Get())->Target();
+  Element* target = ToKeyframeEffectReadOnly(content_.Get())->Target();
 
-  if (CSSAnimations::IsAffectedByKeyframesFromScope(target, tree_scope))
-    target.SetNeedsStyleRecalc(kLocalStyleChange,
-                               StyleChangeReasonForTracing::Create(
-                                   StyleChangeReason::kStyleSheetChange));
+  // TODO(alancutter): Remove dependency of this function on CSSAnimations.
+  // This function makes the incorrect assumption that the animation uses
+  // @keyframes for its effect model when it may instead be using JS provided
+  // keyframes.
+  if (target &&
+      CSSAnimations::IsAffectedByKeyframesFromScope(*target, tree_scope)) {
+    target->SetNeedsStyleRecalc(kLocalStyleChange,
+                                StyleChangeReasonForTracing::Create(
+                                    StyleChangeReason::kStyleSheetChange));
+  }
 }
 
 void Animation::ResolvePromiseMaybeAsync(AnimationPromise* promise) {

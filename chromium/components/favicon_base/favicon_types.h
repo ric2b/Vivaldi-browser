@@ -103,7 +103,8 @@ struct LargeIconResult {
 // Contains either the gfx::Image if the favicon database has a sufficiently
 // large favicon bitmap and the style of the fallback icon otherwise.
 struct LargeIconImageResult {
-  explicit LargeIconImageResult(const gfx::Image& image_in);
+  explicit LargeIconImageResult(const gfx::Image& image_in,
+                                const GURL& icon_url_in);
 
   // Takes ownership of |fallback_icon_style_in|.
   explicit LargeIconImageResult(FallbackIconStyle* fallback_icon_style_in);
@@ -114,9 +115,34 @@ struct LargeIconImageResult {
   // large one.
   gfx::Image image;
 
+  // The URL of the containing favicon. Specified only if |image| is not empty.
+  GURL icon_url;
+
   // The fallback icon style if a sufficiently large icon isn't available. This
   // uses the dominant color of a smaller icon as the background if available.
   std::unique_ptr<FallbackIconStyle> fallback_icon_style;
+};
+
+// Enumeration listing all possible outcomes for fetch attempts from Google
+// favicon server. Used for UMA enum GoogleFaviconServerRequestStatus, so do not
+// change existing values. Insert new values at the end, and update the
+// histogram definition.
+enum class GoogleFaviconServerRequestStatus {
+  // Request sent out and the favicon successfully fetched.
+  SUCCESS = 0,
+  // Request sent out and a connection error occurred (no valid HTTP response
+  // recevied).
+  FAILURE_CONNECTION_ERROR = 1,
+  // Request sent out and a HTTP error received.
+  FAILURE_HTTP_ERROR = 2,
+  // Request not sent out (previous HTTP error in cache).
+  FAILURE_HTTP_ERROR_CACHED = 3,
+  // Request sent out and favicon fetched but writing to database failed.
+  FAILURE_ON_WRITE = 4,
+  // Request not sent out (the request or the fetcher was invalid).
+  FAILURE_INVALID = 5,
+  // Insert new values here.
+  COUNT
 };
 
 }  // namespace favicon_base

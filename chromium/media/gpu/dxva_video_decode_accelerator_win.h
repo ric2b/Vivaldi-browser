@@ -28,7 +28,6 @@
 #include "base/memory/linked_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/synchronization/lock.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
 #include "base/win/scoped_comptr.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
@@ -144,6 +143,7 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
 
  private:
   friend class DXVAPictureBuffer;
+  friend class EGLStreamDelayedCopyPictureBuffer;
   friend class EGLStreamCopyPictureBuffer;
   friend class EGLStreamPictureBuffer;
   friend class PbufferPictureBuffer;
@@ -151,14 +151,37 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   typedef void* EGLSurface;
   typedef std::list<base::win::ScopedComPtr<IMFSample>> PendingInputs;
 
+  enum class PictureBufferMechanism {
+    // Copy to either a BGRA8 or FP16 texture using the video processor.
+    COPY_TO_RGB,
+
+    // Copy to another NV12 texture that can be used in ANGLE.
+    COPY_TO_NV12,
+
+    // Bind the resulting GLImage to the NV12 texture. If the texture's used
+    // in a an overlay than use it directly, otherwise copy it to another NV12
+    // texture when necessary.
+    DELAYED_COPY_TO_NV12,
+
+    // Bind the NV12 decoder texture directly to the texture used in ANGLE.
+    BIND
+  };
+
   // Returns the minimum resolution for the |profile| passed in.
-  static std::pair<int, int> GetMinResolution(const VideoCodecProfile profile);
+  static gfx::Size GetMinResolution(VideoCodecProfile profile);
 
   // Returns the maximum resolution for the |profile| passed in.
-  static std::pair<int, int> GetMaxResolution(const VideoCodecProfile profile);
+  static gfx::Size GetMaxResolution(VideoCodecProfile profile);
 
-  // Returns the maximum resolution for H264 video.
-  static std::pair<int, int> GetMaxH264Resolution();
+  // Returns the maximum resolution for by attempting to create a decoder for
+  // each of the resolutions in |resolutions_to_test| for the first decoder
+  // matching a GUID from |valid_guids|. |resolutions_to_test| should be ordered
+  // from smallest to largest resolution. |default_max_resolution| will be
+  // returned if any errors occur during the process.
+  static gfx::Size GetMaxResolutionForGUIDs(
+      const gfx::Size& default_max_resolution,
+      const std::vector<GUID>& valid_guids,
+      const std::vector<gfx::Size>& resolutions_to_test);
 
   // Certain AMD GPU drivers like R600, R700, Evergreen and Cayman and
   // some second generation Intel GPU drivers crash if we create a video
@@ -375,6 +398,8 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
 
   uint32_t GetTextureTarget() const;
 
+  PictureBufferMechanism GetPictureBufferMechanism() const;
+  bool ShouldUseANGLEDevice() const;
   ID3D11Device* D3D11Device() const;
 
   // To expose client callbacks from VideoDecodeAccelerator.
@@ -517,10 +542,15 @@ class MEDIA_GPU_EXPORT DXVAVideoDecodeAccelerator
   // Use CODECAPI_AVLowLatencyMode.
   bool enable_low_latency_;
 
-  bool share_nv12_textures_;
+  // Supports sharing the decoded NV12 textures with ANGLE
+  bool support_share_nv12_textures_;
 
-  // Copy NV12 texture to another NV12 texture.
-  bool copy_nv12_textures_;
+  // Supports copying the NV12 texture to another NV12 texture to use in
+  // ANGLE.
+  bool support_copy_nv12_textures_;
+
+  // Supports copying NV12 textures on the main thread to use in ANGLE.
+  bool support_delayed_copy_nv12_textures_;
 
   // Copy video to FP16 scRGB textures.
   bool use_fp16_ = false;

@@ -53,7 +53,7 @@ base::string16 RegionComboboxModel::GetItemAt(int index) {
   if (static_cast<size_t>(index) >= regions_.size())
     return l10n_util::GetStringUTF16(IDS_AUTOFILL_LOADING_REGIONS);
 
-  if (!regions_[index].first.empty())
+  if (!regions_[index].second.empty())
     return base::UTF8ToUTF16(regions_[index].second);
 
   // The separator item. Implemented for platforms that don't yet support

@@ -7,10 +7,12 @@
  * and selections.
  */
 
+goog.provide('cvox.BrailleTextStyleSpan');
 goog.provide('cvox.ExtraCellsSpan');
 goog.provide('cvox.ValueSelectionSpan');
 goog.provide('cvox.ValueSpan');
 
+goog.require('cvox.LibLouis.FormType');
 goog.require('Spannable');
 
 /**
@@ -47,9 +49,7 @@ cvox.ValueSpan.prototype.toJson = function() {
 
 
 Spannable.registerSerializableSpan(
-    cvox.ValueSpan,
-    'cvox.ValueSpan',
-    cvox.ValueSpan.fromJson,
+    cvox.ValueSpan, 'cvox.ValueSpan', cvox.ValueSpan.fromJson,
     cvox.ValueSpan.prototype.toJson);
 
 
@@ -57,8 +57,7 @@ Spannable.registerSerializableSpan(
  * Attached to the selected text within a value.
  * @constructor
  */
-cvox.ValueSelectionSpan = function() {
-};
+cvox.ValueSelectionSpan = function() {};
 
 
 Spannable.registerStatelessSerializableSpan(
@@ -74,4 +73,15 @@ Spannable.registerStatelessSerializableSpan(
 cvox.ExtraCellsSpan = function() {
   /** @type {ArrayBuffer} */
   this.cells = new Uint8Array(0).buffer;
+};
+
+
+/**
+ * Indicates a text form during translation in Liblouis.
+ * @param {cvox.LibLouis.FormType} formType
+ * @constructor
+ */
+cvox.BrailleTextStyleSpan = function(formType) {
+  /** @type {cvox.LibLouis.FormType} */
+  this.formType = formType;
 };

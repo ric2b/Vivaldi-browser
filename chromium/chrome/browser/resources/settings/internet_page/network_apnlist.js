@@ -181,7 +181,7 @@ Polymer({
    * @private
    */
   onSelectApnChange_: function(event) {
-    var target = /** @type {!HTMLSelectElement} */(event.target);
+    var target = /** @type {!HTMLSelectElement} */ (event.target);
     var accessPointName = target.value;
     // When selecting 'Other', don't set a change event unless a valid
     // non-default value has been set for Other.
@@ -206,7 +206,7 @@ Polymer({
 
   /**
    * Event triggered when the Other APN 'Save' button is tapped.
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onSaveOtherTap_: function(event) {

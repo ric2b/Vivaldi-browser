@@ -52,6 +52,12 @@ struct STORAGE_COMMON_EXPORT BlobStorageLimits {
   // This is the maximum size of a shared memory handle.
   size_t max_shared_memory_size = kDefaultSharedMemorySize;
 
+  // This is the maximum size of a bytes BlobDataItem. Only used for mojo
+  // based blob transportation, as the old IPC/shared memory based
+  // implementation doesn't support different values for this and
+  // max_shared_memory_size.
+  size_t max_bytes_data_item_size = kDefaultSharedMemorySize;
+
   // This is the maximum amount of memory we can use to store blobs.
   size_t max_blob_in_memory_space = kDefaultMaxBlobInMemorySpace;
   // The ratio applied to |max_blob_in_memory_space| to reduce memory usage
@@ -116,7 +122,10 @@ enum class BlobStatus {
   // has been populated. See BlobEntry::BuildingState for more info.
   // TODO(dmurph): Change to PENDING_REFERENCED_BLOBS (crbug.com/670398).
   PENDING_INTERNALS = 203,
-  LAST = PENDING_INTERNALS
+  // Waiting for construction to begin.
+  PENDING_CONSTRUCTION = 204,
+  LAST_PENDING = PENDING_CONSTRUCTION,
+  LAST = LAST_PENDING
 };
 
 using BlobStatusCallback = base::Callback<void(BlobStatus)>;

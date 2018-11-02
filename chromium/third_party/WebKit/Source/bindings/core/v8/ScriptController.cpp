@@ -39,6 +39,7 @@
 #include "bindings/core/v8/WindowProxy.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptableDocumentParser.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
@@ -55,7 +56,6 @@
 #include "core/plugins/PluginView.h"
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/CurrentTime.h"
@@ -359,20 +359,20 @@ void ScriptController::ExecuteScriptInIsolatedWorld(
   }
 }
 
-int ScriptController::CreateNewDInspectorIsolatedWorld(
+PassRefPtr<DOMWrapperWorld> ScriptController::CreateNewInspectorIsolatedWorld(
     const String& world_name) {
   RefPtr<DOMWrapperWorld> world = DOMWrapperWorld::Create(
       GetIsolate(), DOMWrapperWorld::WorldType::kInspectorIsolated);
   // Bail out if we could not create an isolated world.
   if (!world)
-    return DOMWrapperWorld::kInvalidWorldId;
+    return nullptr;
   if (!world_name.IsEmpty()) {
-    DOMWrapperWorld::SetIsolatedWorldHumanReadableName(world->GetWorldId(),
-                                                       world_name);
+    DOMWrapperWorld::SetNonMainWorldHumanReadableName(world->GetWorldId(),
+                                                      world_name);
   }
   // Make sure the execution context exists.
   WindowProxy(*world);
-  return world->GetWorldId();
+  return world;
 }
 
 }  // namespace blink

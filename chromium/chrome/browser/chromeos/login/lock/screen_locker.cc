@@ -10,10 +10,6 @@
 #include "ash/login/ui/lock_screen.h"
 #include "ash/public/interfaces/constants.mojom.h"
 #include "ash/public/interfaces/session_controller.mojom.h"
-#include "ash/shell.h"
-#include "ash/wm/window_state.h"
-#include "ash/wm/window_util.h"
-#include "ash/wm/wm_event.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
@@ -29,6 +25,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
+#include "chrome/browser/chromeos/login/lock/views_screen_locker.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
@@ -54,6 +51,7 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/authenticator.h"
+#include "chromeos/login/auth/authpolicy_login_helper.h"
 #include "chromeos/login/auth/extended_authenticator.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
 #include "components/session_manager/core/session_manager.h"
@@ -165,37 +163,6 @@ class ScreenLockObserver : public SessionManagerClient::StubDelegate,
   DISALLOW_COPY_AND_ASSIGN(ScreenLockObserver);
 };
 
-// Mojo delegate that calls into the views-based lock screen via mojo.
-class MojoDelegate : public ScreenLocker::Delegate {
- public:
-  MojoDelegate() = default;
-  ~MojoDelegate() override = default;
-
-  // ScreenLocker::Delegate:
-  void SetPasswordInputEnabled(bool enabled) override { NOTIMPLEMENTED(); }
-  void ShowErrorMessage(int error_msg_id,
-                        HelpAppLauncher::HelpTopic help_topic_id) override {
-    // TODO(xiaoyinh): Complete the implementation here.
-    LockScreenClient::Get()->ShowErrorMessage(0 /* login_attempts */,
-                                              std::string(), std::string(),
-                                              static_cast<int>(help_topic_id));
-  }
-  void ClearErrors() override { LockScreenClient::Get()->ClearErrors(); }
-  void AnimateAuthenticationSuccess() override { NOTIMPLEMENTED(); }
-  void OnLockWebUIReady() override { NOTIMPLEMENTED(); }
-  void OnLockBackgroundDisplayed() override { NOTIMPLEMENTED(); }
-  void OnHeaderBarVisible() override { NOTIMPLEMENTED(); }
-  void OnAshLockAnimationFinished() override { NOTIMPLEMENTED(); }
-  void SetFingerprintState(const AccountId& account_id,
-                           ScreenLocker::FingerprintState state) override {
-    NOTIMPLEMENTED();
-  }
-  content::WebContents* GetWebContents() override { return nullptr; }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MojoDelegate);
-};
-
 ScreenLockObserver* g_screen_lock_observer = nullptr;
 
 }  // namespace
@@ -214,7 +181,7 @@ ScreenLocker::Delegate::~Delegate() = default;
 // ScreenLocker, public:
 
 ScreenLocker::ScreenLocker(const user_manager::UserList& users)
-    : users_(users), binding_(this), weak_factory_(this) {
+    : users_(users), fingerprint_observer_binding_(this), weak_factory_(this) {
   DCHECK(!screen_locker_);
   screen_locker_ = this;
 
@@ -227,7 +194,10 @@ ScreenLocker::ScreenLocker(const user_manager::UserList& users)
   service_manager::Connector* connector =
       content::ServiceManagerConnection::GetForProcess()->GetConnector();
   connector->BindInterface(device::mojom::kServiceName, &fp_service_);
-  fp_service_->AddFingerprintObserver(binding_.CreateInterfacePtrAndBind());
+
+  device::mojom::FingerprintObserverPtr observer;
+  fingerprint_observer_binding_.Bind(mojo::MakeRequest(&observer));
+  fp_service_->AddFingerprintObserver(std::move(observer));
 }
 
 void ScreenLocker::Init() {
@@ -240,21 +210,21 @@ void ScreenLocker::Init() {
   extended_authenticator_ = ExtendedAuthenticator::Create(this);
   if (IsUsingMdLogin()) {
     // Create delegate that calls into the views-based lock screen via mojo.
-    delegate_ = new MojoDelegate();
-    owns_delegate_ = true;
+    views_screen_locker_ = base::MakeUnique<ViewsScreenLocker>(this);
+    delegate_ = views_screen_locker_.get();
 
     // Create and display lock screen.
-    // TODO(jdufault): Calling ash::ShowLockScreenInWidget should be a mojo
-    // call. We should only set the session state to locked after the mojo call
-    // has completed.
-    if (ash::ShowLockScreen()) {
-      session_manager::SessionManager::Get()->SetSessionState(
-          session_manager::SessionState::LOCKED);
-    }
+    LockScreenClient::Get()->ShowLockScreen(base::BindOnce(
+        [](ViewsScreenLocker* screen_locker, bool did_show) {
+          CHECK(did_show);
+          screen_locker->OnLockScreenReady();
+        },
+        views_screen_locker_.get()));
+
+    views_screen_locker_->Init();
   } else {
     web_ui_.reset(new WebUIScreenLocker(this));
     delegate_ = web_ui_.get();
-    owns_delegate_ = false;
     web_ui_->LockScreen();
 
     // Ownership of |icon_image_source| is passed.
@@ -294,6 +264,9 @@ void ScreenLocker::OnAuthFailure(const AuthFailure& error) {
 
   if (auth_status_consumer_)
     auth_status_consumer_->OnAuthFailure(error);
+
+  if (on_auth_complete_)
+    std::move(on_auth_complete_).Run(false);
 }
 
 void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
@@ -344,10 +317,14 @@ void ScreenLocker::OnAuthSuccess(const UserContext& user_context) {
   // Add guard for case when something get broken in call chain to unlock
   // for sure.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&ScreenLocker::UnlockOnLoginSuccess,
-                            weak_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&ScreenLocker::UnlockOnLoginSuccess,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kUnlockGuardTimeoutMs));
   delegate_->AnimateAuthenticationSuccess();
+
+  if (on_auth_complete_)
+    std::move(on_auth_complete_).Run(true);
 }
 
 void ScreenLocker::OnPasswordAuthSuccess(const UserContext& user_context) {
@@ -377,9 +354,13 @@ void ScreenLocker::UnlockOnLoginSuccess() {
   chromeos::ScreenLocker::Hide();
 }
 
-void ScreenLocker::Authenticate(const UserContext& user_context) {
+void ScreenLocker::Authenticate(const UserContext& user_context,
+                                AuthenticateCallback callback) {
   LOG_ASSERT(IsUserLoggedIn(user_context.GetAccountId()))
       << "Invalid user trying to unlock.";
+
+  DCHECK(!on_auth_complete_);
+  on_auth_complete_ = std::move(callback);
 
   authentication_start_time_ = base::Time::Now();
   delegate_->SetPasswordInputEnabled(false);
@@ -414,20 +395,40 @@ void ScreenLocker::Authenticate(const UserContext& user_context) {
                                         ->TransformKey(user_context);
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&ExtendedAuthenticator::AuthenticateToCheck,
-                     extended_authenticator_.get(), updated_context,
-                     base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
-                                weak_factory_.GetWeakPtr(), updated_context)));
+          base::BindOnce(
+              &ExtendedAuthenticator::AuthenticateToCheck,
+              extended_authenticator_.get(), updated_context,
+              base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
+                         weak_factory_.GetWeakPtr(), updated_context)));
       return;
     }
   }
 
+  if (user_context.GetAccountId().GetAccountType() ==
+          AccountType::ACTIVE_DIRECTORY &&
+      user_context.GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN) {
+    // TODO(rsorokin): This won't work in the new views-based lock screen.
+    // The password sent back via mojo is hashed before sending back. If we need
+    // raw password here, we might need to do similar tricks as current AD
+    // daemon does, i.e. use a one time pipe FD to pass it back. (see
+    // https://crbug.com/676337)
+    //
+    // Try to get kerberos TGT while we have user's password typed on the lock
+    // screen. Failure to get TGT here is OK - that could mean e.g. Active
+    // Directory server is not reachable. AuthPolicyCredentialsManager regularly
+    // checks TGT status inside the user session.
+    AuthPolicyLoginHelper::TryAuthenticateUser(
+        user_context.GetAccountId().GetUserEmail(),
+        user_context.GetAccountId().GetObjGuid(),
+        user_context.GetKey()->GetSecret());
+  }
+
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(&ExtendedAuthenticator::AuthenticateToCheck,
-                 extended_authenticator_.get(), user_context,
-                 base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
-                            weak_factory_.GetWeakPtr(), user_context)));
+      base::BindOnce(&ExtendedAuthenticator::AuthenticateToCheck,
+                     extended_authenticator_.get(), user_context,
+                     base::Bind(&ScreenLocker::OnPasswordAuthSuccess,
+                                weak_factory_.GetWeakPtr(), user_context)));
 }
 
 const user_manager::User* ScreenLocker::FindUnlockUser(
@@ -534,26 +535,13 @@ void ScreenLocker::Show() {
     return;
   }
 
-  // Manipulating active window state directly does not work in mash so skip it
-  // for mash. http://crbug.com/714677 tracks work to add the support for mash.
-  if (!ash_util::IsRunningInMash()) {
-    // If the active window is fullscreen, exit fullscreen to avoid the web page
-    // or app mimicking the lock screen. Do not exit fullscreen if the shelf is
-    // visible while in fullscreen because the shelf makes it harder for a web
-    // page or app to mimick the lock screen.
-    ash::wm::WindowState* active_window_state = ash::wm::GetActiveWindowState();
-    if (active_window_state && active_window_state->IsFullscreen() &&
-        active_window_state->hide_shelf_when_fullscreen()) {
-      const ash::wm::WMEvent event(ash::wm::WM_EVENT_TOGGLE_FULLSCREEN);
-      active_window_state->OnWMEvent(&event);
-    }
-  }
-
   if (!screen_locker_) {
-    ScreenLocker* locker =
-        new ScreenLocker(user_manager::UserManager::Get()->GetUnlockUsers());
-    VLOG(1) << "Created ScreenLocker " << locker;
-    locker->Init();
+    SessionControllerClient::Get()->PrepareForLock(base::Bind([]() {
+      ScreenLocker* locker =
+          new ScreenLocker(user_manager::UserManager::Get()->GetUnlockUsers());
+      VLOG(1) << "Created ScreenLocker " << locker;
+      locker->Init();
+    }));
   } else {
     VLOG(1) << "ScreenLocker " << screen_locker_ << " already exists; "
             << " calling session manager's HandleLockScreenShown D-Bus method";
@@ -618,12 +606,6 @@ ScreenLocker::~ScreenLocker() {
 
   if (saved_ime_state_.get()) {
     input_method::InputMethodManager::Get()->SetState(saved_ime_state_);
-  }
-
-  if (owns_delegate_) {
-    owns_delegate_ = false;
-    delete delegate_;
-    delegate_ = nullptr;
   }
 }
 

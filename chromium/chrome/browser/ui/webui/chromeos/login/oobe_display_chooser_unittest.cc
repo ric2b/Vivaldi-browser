@@ -25,9 +25,9 @@ namespace chromeos {
 
 namespace {
 
-class OobeDisplayChooserTest : public ash::test::AshTestBase {
+class OobeDisplayChooserTest : public ash::AshTestBase {
  public:
-  OobeDisplayChooserTest() : ash::test::AshTestBase() {}
+  OobeDisplayChooserTest() : ash::AshTestBase() {}
 
   int64_t GetPrimaryDisplay() {
     return display::Screen::GetScreen()->GetPrimaryDisplay().id();

@@ -23,13 +23,15 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/media_stream_request.h"
 #include "content/public/common/resource_type.h"
-#include "content/public/common/service_info.h"
+#include "content/public/common/sandbox_type.h"
 #include "content/public/common/socket_permission_request.h"
 #include "content/public/common/window_container_type.mojom.h"
 #include "media/media_features.h"
 #include "media/mojo/interfaces/remoting.mojom.h"
 #include "net/base/mime_util.h"
 #include "net/cookies/canonical_cookie.h"
+#include "services/service_manager/embedder/embedded_service_info.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
@@ -71,28 +73,23 @@ class ScopedInterfaceEndpointHandle;
 }
 
 namespace service_manager {
-class BinderRegistry;
 class Service;
 struct BindSourceInfo;
 }
 
 namespace net {
+class ClientCertIdentity;
+using ClientCertIdentityList = std::vector<std::unique_ptr<ClientCertIdentity>>;
 class CookieOptions;
 class NetLog;
 class SSLCertRequestInfo;
 class SSLInfo;
 class URLRequest;
 class URLRequestContext;
-class X509Certificate;
-typedef std::vector<scoped_refptr<X509Certificate>> CertificateList;
 }
 
 namespace rappor {
 class RapporService;
-}
-
-namespace ukm {
-class UkmRecorder;
 }
 
 namespace sandbox {
@@ -137,6 +134,7 @@ class SiteInstance;
 class SpeechRecognitionManagerDelegate;
 class StoragePartition;
 class TracingDelegate;
+class URLLoaderThrottle;
 class VpnServiceProxy;
 class WebContents;
 class WebContentsViewDelegate;
@@ -312,6 +310,10 @@ class CONTENT_EXPORT ContentBrowserClient {
   // current SiteInstance, if it does not yet have a site.
   virtual bool ShouldAssignSiteForURL(const GURL& url);
 
+  // Allows the embedder to provide a list of origins that require a dedicated
+  // process.
+  virtual std::vector<url::Origin> GetOriginsRequiringDedicatedProcess();
+
   // Allows the embedder to pass extra command line flags.
   // switches::kProcessType will already be set at this point.
   virtual void AppendExtraCommandLineSwitches(base::CommandLine* command_line,
@@ -327,6 +329,10 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Returns the default favicon.  The callee doesn't own the given bitmap.
   virtual const gfx::ImageSkia* GetDefaultFavicon();
+
+  // Returns the fully qualified path to the log file name, or an empty path.
+  // This function is used by the sandbox to allow write access to the log.
+  virtual base::FilePath GetLoggingFileName();
 
   // Allow the embedder to control if an AppCache can be used for the given url.
   // This is called on the IO thread.
@@ -462,7 +468,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void GetQuotaSettings(
       content::BrowserContext* context,
       content::StoragePartition* partition,
-      const storage::OptionalQuotaSettingsCallback& callback);
+      storage::OptionalQuotaSettingsCallback callback);
 
   // Informs the embedder that a certificate error has occured.  If
   // |overridable| is true and if |strict_enforcement| is false, the user
@@ -486,7 +492,7 @@ class CONTENT_EXPORT ContentBrowserClient {
   virtual void SelectClientCertificate(
       WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
-      net::CertificateList client_certs,
+      net::ClientCertIdentityList client_certs,
       std::unique_ptr<ClientCertificateDelegate> delegate);
 
   // Returns a class to get notifications about media event. The embedder can
@@ -538,18 +544,6 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Notifies that BrowserURLHandler has been created, so that the embedder can
   // optionally add their own handlers.
   virtual void BrowserURLHandlerCreated(BrowserURLHandler* handler) {}
-
-  // Clears |browser_context|'s data stored for the given |origin|.
-  // The datatypes to be removed are specified by |remove_cookies|,
-  // |remove_storage|, and |remove_cache|. Note that cookies should be removed
-  // for the entire eTLD+1 of |origin|. Must call |callback| when finished.
-  // TODO(crbug.com/668114): Depreacated. Use BrowsingDataRemover instead.
-  virtual void ClearSiteData(content::BrowserContext* browser_context,
-                             const url::Origin& origin,
-                             bool remove_cookies,
-                             bool remove_storage,
-                             bool remove_cache,
-                             const base::Closure& callback) {}
 
   // Returns the default download directory.
   // This can be called on any thread.
@@ -663,11 +657,12 @@ class CONTENT_EXPORT ContentBrowserClient {
       service_manager::BinderRegistry* registry,
       RenderFrameHost* render_frame_host) {}
 
-  // Allows to register browser Mojo interfaces exposed through the
-  // RenderFrameHost.
-  virtual void ExposeInterfacesToFrame(
-      service_manager::BinderRegistry* registry,
-      RenderFrameHost* render_frame_host) {}
+  // Content was unable to bind a request for this interface, so the embedder
+  // should try.
+  virtual void BindInterfaceRequestFromFrame(
+      RenderFrameHost* render_frame_host,
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle interface_pipe) {}
 
   // Content was unable to bind a request for this associated interface, so the
   // embedder should try. Returns true if the |handle| was actually taken and
@@ -686,28 +681,25 @@ class CONTENT_EXPORT ContentBrowserClient {
       const std::string& interface_name,
       mojo::ScopedMessagePipeHandle* interface_pipe) {}
 
-  using StaticServiceMap = std::map<std::string, ServiceInfo>;
+  using StaticServiceMap =
+      std::map<std::string, service_manager::EmbeddedServiceInfo>;
 
   // Registers services to be loaded in the browser process by the Service
   // Manager.
   virtual void RegisterInProcessServices(StaticServiceMap* services) {}
 
-  using OutOfProcessServiceMap = std::map<std::string, base::string16>;
+  using OutOfProcessServiceMap =
+      std::map<std::string, std::pair<base::string16, SandboxType>>;
 
-  // Registers services to be loaded out of the browser process, in a sandboxed
-  // utility process. The value of each map entry should be the process name to
-  // use for the service's host process when launched.
-  virtual void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) {}
-
-  // Registers services to be loaded out of the browser process (in a utility
-  // process) without the sandbox.
+  // Registers services to be loaded out of the browser process, in an
+  // utility process. The value of each map entry should be a { process name,
+  // sandbox type } pair to use for the service's host process when launched.
   //
-  // WARNING: This path is NOT recommended! If a service needs another service
-  // that is only available out of the sandbox, it could ask the browser
-  // process to provide it. Only use this method when that approach does not
-  // work.
-  virtual void RegisterUnsandboxedOutOfProcessServices(
-      OutOfProcessServiceMap* services) {}
+  // WARNING: SANDBOX_TYPE_NO_SANDBOX is NOT recommended as it creates an
+  // unsandboxed process! If a service needs another service that is only
+  // available out of the sandbox, it could ask the browser process to provide
+  // it. Only use this method when that approach does not work.
+  virtual void RegisterOutOfProcessServices(OutOfProcessServiceMap* services) {}
 
   // Allow the embedder to provide a dictionary loaded from a JSON file
   // resembling a service manifest whose capabilities section will be merged
@@ -755,6 +747,13 @@ class CONTENT_EXPORT ContentBrowserClient {
 
   // Allows the embedder to record |metric| for a specific |url|.
   virtual void RecordURLMetric(const std::string& metric, const GURL& url) {}
+
+  // Allows the embedder to map URLs to strings, intended to be used as suffixes
+  // for metric names. For example, the embedder can map
+  // "my-special-site-with-a-complicated-name.example.com/and-complicated-path"
+  // to the string "MySpecialSite", which will cause some UMA involving that URL
+  // to be logged as "UmaName.MySpecialSite".
+  virtual std::string GetMetricSuffixForURL(const GURL& url);
 
   // Allows the embedder to register one or more NavigationThrottles for the
   // navigation indicated by |navigation_handle|.  A NavigationThrottle is used
@@ -816,24 +815,16 @@ class CONTENT_EXPORT ContentBrowserClient {
   // Returns the RapporService from the browser process.
   virtual ::rappor::RapporService* GetRapporService();
 
-  // Returns the UkmRecorder from the browser process.
-  virtual ::ukm::UkmRecorder* GetUkmRecorder();
-
   // Provides parameters for initializing the global task scheduler. Default
   // params are used if this returns nullptr.
   virtual std::unique_ptr<base::TaskScheduler::InitParams>
   GetTaskSchedulerInitParams();
 
-  // Performs any necessary PostTask API redirection to the task scheduler.
-  virtual void PerformExperimentalTaskSchedulerRedirections() {}
-
-  // Returns true if the DOMStorageTaskRunner should be redirected to the task
-  // scheduler.
-  virtual bool ShouldRedirectDOMStorageTaskRunner();
-
-  // If this returns true, all BrowserThreads (but UI/IO) that support it on
-  // this platform will experimentally be redirected to TaskScheduler.
-  virtual bool RedirectNonUINonIOBrowserThreadsToTaskScheduler();
+  // Allows the embedder to register one or more URLLoaderThrottles for a
+  // URL request. This is used only when --enable-network-service is in effect.
+  // This is called on the IO thread.
+  virtual std::vector<std::unique_ptr<URLLoaderThrottle>>
+  CreateURLLoaderThrottles(const base::Callback<WebContents*()>& wc_getter);
 };
 
 }  // namespace content

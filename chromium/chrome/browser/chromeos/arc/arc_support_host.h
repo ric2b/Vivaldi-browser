@@ -10,12 +10,13 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
-#include "base/observer_list.h"
 #include "chrome/browser/chromeos/arc/extensions/arc_support_message_host.h"
 #include "extensions/browser/api/messaging/native_message_host.h"
 #include "ui/display/display_observer.h"
+#include "url/gurl.h"
 
 class Profile;
+class GURL;
 
 // Native interface to control ARC support chrome App.
 // TODO(hidehiko,lhchavez): Move this into extensions/ directory, and put it
@@ -24,11 +25,12 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
                        public display::DisplayObserver {
  public:
   enum class UIPage {
-    NO_PAGE,      // Hide everything.
-    TERMS,        // Terms content page.
-    LSO,          // LSO page to enter user's credentials.
-    ARC_LOADING,  // ARC loading progress page.
-    ERROR,        // ARC start error page.
+    NO_PAGE,                // Hide everything.
+    TERMS,                  // Terms content page.
+    LSO,                    // LSO page to enter user's credentials.
+    ARC_LOADING,            // ARC loading progress page.
+    ACTIVE_DIRECTORY_AUTH,  // Active Directory user SAML authentication.
+    ERROR,                  // ARC start error page.
   };
 
   // Error types whose corresponding message ARC support has.
@@ -44,30 +46,63 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
     SIGN_IN_UNKNOWN_ERROR,
   };
 
-  // Observer to notify UI event.
-  class Observer {
+  // Delegate to handle authentication related events. Currently used for Active
+  // Directory and LSO auth.
+  class AuthDelegate {
    public:
-    virtual ~Observer() = default;
+    // Called when authentication succeeded. LSO auth returns the auth token
+    // |auth_code|, Active Directory auth returns an empty string.
+    virtual void OnAuthSucceeded(const std::string& auth_code) = 0;
 
-    // Called when the ARC support window is closed.
-    virtual void OnWindowClosed() {}
+    // Called when authentication failed. |error_msg| contains error details.
+    virtual void OnAuthFailed(const std::string& error_msg) = 0;
 
-    // Called when the user press AGREE button on ToS page.
+    // Called when "RETRY" button on the error page is clicked during
+    // authentication.
+    virtual void OnAuthRetryClicked() = 0;
+
+   protected:
+    virtual ~AuthDelegate() = default;
+  };
+
+  // Delegate to handle manual authentication related events.
+  class TermsOfServiceDelegate {
+   public:
+    // Called when the user press AGREE button on terms of service page.
     virtual void OnTermsAgreed(bool is_metrics_enabled,
                                bool is_backup_and_restore_enabled,
-                               bool is_location_service_enabled) {}
+                               bool is_location_service_enabled) = 0;
 
-    // Called when LSO auth token fetch is successfully completed.
-    virtual void OnAuthSucceeded(const std::string& auth_code) {}
+    // Called when the user rejects the terms of service or closes the page.
+    virtual void OnTermsRejected() = 0;
 
-    // Called when LSO auth token fetch has failed.
-    virtual void OnAuthFailed() {}
+    // Called when "RETRY" button on the error page is clicked during terms of
+    // service negotiation.
+    virtual void OnTermsRetryClicked() = 0;
 
-    // Called when "RETRY" button on the error page is clicked.
-    virtual void OnRetryClicked() {}
+   protected:
+    virtual ~TermsOfServiceDelegate() = default;
+  };
+
+  // Delegate to handle general error events. Note that some of the callback
+  // will only be called when more the specific callback in the other delegate
+  // is not appropriate.
+  class ErrorDelegate {
+   public:
+    // Called when the window is closed but only when terms of service
+    // negotiation is not ongoing, in which case OnTermsRejected will be called.
+    virtual void OnWindowClosed() = 0;
+
+    // Called when "RETRY" button on the error page is clicked, except when
+    // terms of service negotiation or manual authentication is onging. In those
+    // cases, the more specific retry function in the other delegates is called.
+    virtual void OnRetryClicked() = 0;
 
     // Called when send feedback button on error page is clicked.
-    virtual void OnSendFeedbackClicked() {}
+    virtual void OnSendFeedbackClicked() = 0;
+
+   protected:
+    virtual ~ErrorDelegate() = default;
   };
 
   static const char kStorageId[];
@@ -77,9 +112,11 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
   explicit ArcSupportHost(Profile* profile);
   ~ArcSupportHost() override;
 
-  void AddObserver(Observer* observer);
-  void RemoveObserver(Observer* observer);
-  bool HasObserver(Observer* observer);
+  void SetAuthDelegate(AuthDelegate* delegate);
+  void SetTermsOfServiceDelegate(TermsOfServiceDelegate* delegate);
+  void SetErrorDelegate(ErrorDelegate* delegate);
+
+  bool HasAuthDelegate() const { return auth_delegate_ != nullptr; }
 
   // Called when the communication to arc_support Chrome App is ready.
   void SetMessageHost(arc::ArcSupportMessageHost* message_host);
@@ -106,6 +143,14 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
 
   // Requests to show the "ARC is loading" page.
   void ShowArcLoading();
+
+  // Requests to show the "Active Directory SAML auth" page. |federation_url| is
+  // the Active Directory Federation Services URL (aka the SAML redirect URL)
+  // that handles user authentication. |device_management_url_prefix| is the
+  // device management (DM) server URL prefix that is used to detect whether the
+  // SAML flow finished. The DM server is the SAML service provider.
+  void ShowActiveDirectoryAuth(const GURL& federation_url,
+                               const std::string& device_management_url_prefix);
 
   // Requests to show the error page
   void ShowError(Error error, bool should_show_send_feedback);
@@ -164,7 +209,9 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
   Profile* const profile_;
   RequestOpenAppCallback request_open_app_callback_;
 
-  base::ObserverList<Observer> observer_list_;
+  AuthDelegate* auth_delegate_ = nullptr;           // not owned
+  TermsOfServiceDelegate* tos_delegate_ = nullptr;  // not owned
+  ErrorDelegate* error_delegate_ = nullptr;         // not owned
 
   // True, if ARC support app is requested to start, but the connection is not
   // yet established. Reset to false, when the app is started and the
@@ -188,6 +235,12 @@ class ArcSupportHost : public arc::ArcSupportMessageHost::Observer,
   PreferenceCheckboxData metrics_checkbox_;
   PreferenceCheckboxData backup_and_restore_checkbox_;
   PreferenceCheckboxData location_services_checkbox_;
+
+  // Federation Services URL for Active Directory user SAML authentication.
+  GURL active_directory_auth_federation_url_;
+  // Prefix of the device management (DM) server URL used to detect whether the
+  // SAML flow finished. The DM server is the SAML service provider.
+  std::string active_directory_auth_device_management_url_prefix_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcSupportHost);
 };

@@ -10,8 +10,8 @@
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/platform_util.h"
-#include "chrome/browser/thumbnails/simple_thumbnail_crop.h"
 #include "chrome/browser/thumbnails/thumbnailing_context.h"
+#include "chrome/browser/thumbnails/thumbnail_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -138,9 +138,7 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
     case extensions::api::extension_types::IMAGE_FORMAT_JPEG:
       if (bitmap.getPixels()) {
         encoded = gfx::JPEGCodec::Encode(
-            reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
-            gfx::JPEGCodec::FORMAT_SkBitmap, bitmap.width(), bitmap.height(),
-            static_cast<int>(bitmap.rowBytes()), image_quality, data);
+            bitmap, image_quality, data);
         *mime_type = "image/jpeg";  // kMimeTypeJpeg;
       }
       break;
@@ -158,13 +156,27 @@ bool EncodeBitmap(const SkBitmap& screen_capture,
   return encoded;
 }
 
+SkBitmap GetClippedBitmap(const SkBitmap& bitmap,
+                          int desired_width,
+                          int desired_height,
+                          thumbnails::ClipResult* clip_result) {
+  gfx::Rect clipping_rect =
+      thumbnails::GetClippingRect(gfx::Size(bitmap.width(), bitmap.height()),
+                      gfx::Size(desired_width, desired_height), clip_result);
+  SkIRect src_rect = { clipping_rect.x(), clipping_rect.y(),
+    clipping_rect.right(), clipping_rect.bottom() };
+  SkBitmap clipped_bitmap;
+  bitmap.extractSubset(&clipped_bitmap, src_rect);
+  return clipped_bitmap;
+}
+
 SkBitmap SmartCropAndSize(const SkBitmap& capture,
                           int target_width,
                           int target_height) {
   thumbnails::ClipResult clip_result = thumbnails::CLIP_RESULT_NOT_CLIPPED;
   // Clip it to a more reasonable position.
-  SkBitmap clipped_bitmap = thumbnails::SimpleThumbnailCrop::GetClippedBitmap(
-      capture, target_width, target_height, &clip_result);
+  SkBitmap clipped_bitmap =
+      GetClippedBitmap(capture, target_width, target_height, &clip_result);
   // Resize the result to the target size.
   SkBitmap result = skia::ImageOperations::Resize(
       clipped_bitmap, skia::ImageOperations::RESIZE_BEST, target_width,

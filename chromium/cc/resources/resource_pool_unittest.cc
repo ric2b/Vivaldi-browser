@@ -41,7 +41,7 @@ class ResourcePoolTest : public testing::Test {
   }
 
   scoped_refptr<TestContextProvider> context_provider_;
-  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<ResourceProvider> resource_provider_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
   std::unique_ptr<ResourcePool> resource_pool_;
@@ -49,7 +49,7 @@ class ResourcePoolTest : public testing::Test {
 
 TEST_F(ResourcePoolTest, AcquireRelease) {
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
   Resource* resource =
       resource_pool_->AcquireResource(size, format, color_space);
@@ -67,7 +67,7 @@ TEST_F(ResourcePoolTest, AccountingSingleResource) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
   size_t resource_bytes =
       ResourceUtil::UncheckedSizeInBytes<size_t>(size, format);
@@ -108,7 +108,7 @@ TEST_F(ResourcePoolTest, SimpleResourceReuse) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space1;
   gfx::ColorSpace color_space2 = gfx::ColorSpace::CreateSRGB();
 
@@ -124,8 +124,8 @@ TEST_F(ResourcePoolTest, SimpleResourceReuse) {
   EXPECT_EQ(1u, resource_provider_->num_resources());
 
   // Different size/format should allocate new resource.
-  resource = resource_pool_->AcquireResource(gfx::Size(50, 50), LUMINANCE_8,
-                                             color_space1);
+  resource = resource_pool_->AcquireResource(gfx::Size(50, 50),
+                                             viz::LUMINANCE_8, color_space1);
   EXPECT_EQ(2u, resource_provider_->num_resources());
   CheckAndReturnResource(resource);
   EXPECT_EQ(2u, resource_provider_->num_resources());
@@ -144,7 +144,7 @@ TEST_F(ResourcePoolTest, LostResource) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
 
   Resource* resource =
@@ -171,7 +171,7 @@ TEST_F(ResourcePoolTest, BusyResourcesEventuallyFreed) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space;
 
   Resource* resource =
@@ -212,7 +212,7 @@ TEST_F(ResourcePoolTest, UnusedResourcesEventuallyFreed) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space;
 
   Resource* resource =
@@ -249,7 +249,7 @@ TEST_F(ResourcePoolTest, UnusedResourcesEventuallyFreed) {
 
 TEST_F(ResourcePoolTest, UpdateContentId) {
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space;
   uint64_t content_id = 42;
   uint64_t new_content_id = 43;
@@ -273,7 +273,7 @@ TEST_F(ResourcePoolTest, UpdateContentId) {
 
 TEST_F(ResourcePoolTest, UpdateContentIdAndInvalidatedRect) {
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space;
   uint64_t content_ids[] = {42, 43, 44};
   gfx::Rect invalidated_rect(20, 20, 10, 10);
@@ -317,7 +317,7 @@ TEST_F(ResourcePoolTest, UpdateContentIdAndInvalidatedRect) {
 }
 
 TEST_F(ResourcePoolTest, ReuseResource) {
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
 
   // Create unused resource with size 100x100.
@@ -346,13 +346,23 @@ TEST_F(ResourcePoolTest, ReuseResource) {
                                                    color_space));
 
   // Try some cases that are smaller than 100x100, but within 2x area. Reuse
-  // should succeed.
-  CheckAndReturnResource(
-      resource_pool_->ReuseResource(gfx::Size(50, 100), format, color_space));
-  CheckAndReturnResource(
-      resource_pool_->ReuseResource(gfx::Size(100, 50), format, color_space));
-  CheckAndReturnResource(
-      resource_pool_->ReuseResource(gfx::Size(71, 71), format, color_space));
+  // should succeed if non-exact requests are supported. Some platforms never
+  // support these.
+  if (resource_pool_->AllowsNonExactReUseForTesting()) {
+    CheckAndReturnResource(
+        resource_pool_->ReuseResource(gfx::Size(50, 100), format, color_space));
+    CheckAndReturnResource(
+        resource_pool_->ReuseResource(gfx::Size(100, 50), format, color_space));
+    CheckAndReturnResource(
+        resource_pool_->ReuseResource(gfx::Size(71, 71), format, color_space));
+  } else {
+    EXPECT_EQ(nullptr, resource_pool_->ReuseResource(gfx::Size(50, 100), format,
+                                                     color_space));
+    EXPECT_EQ(nullptr, resource_pool_->ReuseResource(gfx::Size(100, 50), format,
+                                                     color_space));
+    EXPECT_EQ(nullptr, resource_pool_->ReuseResource(gfx::Size(71, 71), format,
+                                                     color_space));
+  }
 
   // 100x100 is an exact match and should succeed. A subsequent request for
   // the same size should fail (the resource is already in use).
@@ -370,7 +380,7 @@ TEST_F(ResourcePoolTest, MemoryStateSuspended) {
   resource_pool_->SetResourceUsageLimits(bytes_limit, count_limit);
 
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
   Resource* resource =
       resource_pool_->AcquireResource(size, format, color_space);
@@ -399,7 +409,7 @@ TEST_F(ResourcePoolTest, MemoryStateSuspended) {
 
 TEST_F(ResourcePoolTest, TextureHintRespected) {
   gfx::Size size(100, 100);
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space;
 
   resource_pool_ =
@@ -421,7 +431,7 @@ TEST_F(ResourcePoolTest, TextureHintRespected) {
 }
 
 TEST_F(ResourcePoolTest, ExactRequestsRespected) {
-  ResourceFormat format = RGBA_8888;
+  viz::ResourceFormat format = viz::RGBA_8888;
   gfx::ColorSpace color_space = gfx::ColorSpace::CreateSRGB();
 
   resource_pool_ =
@@ -434,7 +444,7 @@ TEST_F(ResourcePoolTest, ExactRequestsRespected) {
       resource_pool_->CreateResource(gfx::Size(100, 100), format, color_space));
 
   // Try some cases that are smaller than 100x100, but within 2x area which
-  // would typically allow reuse. Reuse should fail due to the .
+  // would typically allow reuse. Reuse should fail.
   EXPECT_EQ(nullptr, resource_pool_->ReuseResource(gfx::Size(50, 100), format,
                                                    color_space));
   EXPECT_EQ(nullptr, resource_pool_->ReuseResource(gfx::Size(100, 50), format,

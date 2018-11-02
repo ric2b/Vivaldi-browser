@@ -4,9 +4,11 @@
 
 #include "tools/gn/action_target_generator.h"
 
+#include "base/stl_util.h"
 #include "tools/gn/build_settings.h"
 #include "tools/gn/err.h"
 #include "tools/gn/filesystem_utils.h"
+#include "tools/gn/functions.h"
 #include "tools/gn/parse_tree.h"
 #include "tools/gn/scope.h"
 #include "tools/gn/value.h"
@@ -57,7 +59,7 @@ void ActionTargetGenerator::DoRun() {
   if (!FillDepfile())
     return;
 
-  if (!FillConsole())
+  if (!FillPool())
     return;
 
   if (!FillCheckIncludes())
@@ -73,10 +75,8 @@ void ActionTargetGenerator::DoRun() {
   // together.
   const auto& required_args_substitutions =
       target_->action_values().args().required_types();
-  bool has_rsp_file_name = std::find(required_args_substitutions.begin(),
-                                     required_args_substitutions.end(),
-                                     SUBSTITUTION_RSP_FILE_NAME) !=
-      required_args_substitutions.end();
+  bool has_rsp_file_name = base::ContainsValue(required_args_substitutions,
+                                               SUBSTITUTION_RSP_FILE_NAME);
   if (target_->action_values().uses_rsp_file() && !has_rsp_file_name) {
     *err_ = Err(function_call_, "Missing {{response_file_name}} in args.",
         "This target defines response_file_contents but doesn't use\n"
@@ -160,13 +160,20 @@ bool ActionTargetGenerator::FillDepfile() {
   return true;
 }
 
-bool ActionTargetGenerator::FillConsole() {
-  const Value* value = scope_->GetValue(variables::kConsole, true);
+bool ActionTargetGenerator::FillPool() {
+  const Value* value = scope_->GetValue(variables::kPool, true);
   if (!value)
     return true;
-  if (!value->VerifyTypeIs(Value::BOOLEAN, err_))
+
+  Label label = Label::Resolve(scope_->GetSourceDir(),
+                               ToolchainLabelForScope(scope_), *value, err_);
+  if (err_->has_error())
     return false;
-  target_->action_values().set_console(value->boolean_value());
+
+  LabelPtrPair<Pool> pair(label);
+  pair.origin = target_->defined_from();
+
+  target_->action_values().set_pool(std::move(pair));
   return true;
 }
 

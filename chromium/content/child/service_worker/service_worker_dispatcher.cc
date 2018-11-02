@@ -137,13 +137,15 @@ void ServiceWorkerDispatcher::RegisterServiceWorker(
   }
 
   int request_id = pending_registration_callbacks_.Add(std::move(callbacks));
+  ServiceWorkerRegistrationOptions options(pattern);
+
   TRACE_EVENT_ASYNC_BEGIN2("ServiceWorker",
                            "ServiceWorkerDispatcher::RegisterServiceWorker",
                            request_id,
                            "Scope", pattern.spec(),
                            "Script URL", script_url.spec());
   thread_safe_sender_->Send(new ServiceWorkerHostMsg_RegisterServiceWorker(
-      CurrentWorkerId(), request_id, provider_id, pattern, script_url));
+      CurrentWorkerId(), request_id, provider_id, script_url, options));
 }
 
 void ServiceWorkerDispatcher::UpdateServiceWorker(
@@ -887,6 +889,11 @@ void ServiceWorkerDispatcher::OnPostMessage(
 void ServiceWorkerDispatcher::OnCountFeature(int thread_id,
                                              int provider_id,
                                              uint32_t feature) {
+  ProviderContextMap::iterator provider = provider_contexts_.find(provider_id);
+  if (provider != provider_contexts_.end()) {
+    provider->second->CountFeature(feature);
+  }
+
   ProviderClientMap::iterator found = provider_clients_.find(provider_id);
   if (found != provider_clients_.end())
     found->second->CountFeature(feature);

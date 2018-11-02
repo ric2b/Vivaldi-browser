@@ -41,7 +41,7 @@ class V8TestSubObject {
     visitor->Trace(scriptWrappable->ToImpl<TestSubObject>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestSubObject>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestSubObject>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 
@@ -51,6 +51,11 @@ class V8TestSubObject {
   MODULES_EXPORT static void unforgeableStringAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   MODULES_EXPORT static void unforgeableLongAttributeAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   MODULES_EXPORT static void unforgeableLongAttributeAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+  static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
 };
 
 template <>

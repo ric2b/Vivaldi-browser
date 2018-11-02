@@ -7,13 +7,13 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <unordered_map>
 #include <vector>
 
 #include "base/base_export.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/trace_event/heap_profiler_serialization_state.h"
 #include "base/trace_event/memory_allocator_dump.h"
 #include "base/trace_event/memory_allocator_dump_guid.h"
@@ -29,6 +29,9 @@
 #endif
 
 namespace base {
+
+class UnguessableToken;
+
 namespace trace_event {
 
 class HeapProfilerSerializationState;
@@ -43,6 +46,7 @@ class BASE_EXPORT ProcessMemoryDump {
     MemoryAllocatorDumpGuid target;
     int importance;
     const char* type;
+    bool overridable;
   };
 
   // Maps allocator dumps absolute names (allocator_name/heap/subheap) to
@@ -52,6 +56,10 @@ class BASE_EXPORT ProcessMemoryDump {
 
   using HeapDumpsMap =
       std::unordered_map<std::string, std::unique_ptr<TracedValue>>;
+
+  // Stores allocator dump edges indexed by source allocator dump GUID.
+  using AllocatorDumpEdgesMap =
+      std::map<MemoryAllocatorDumpGuid, MemoryAllocatorDumpEdge>;
 
 #if defined(COUNT_RESIDENT_BYTES_SUPPORTED)
   // Returns the number of bytes in a kernel memory page. Some platforms may
@@ -137,7 +145,40 @@ class BASE_EXPORT ProcessMemoryDump {
   void AddOwnershipEdge(const MemoryAllocatorDumpGuid& source,
                         const MemoryAllocatorDumpGuid& target);
 
-  const std::vector<MemoryAllocatorDumpEdge>& allocator_dumps_edges() const {
+  // Adds edges that can be overriden by a later or earlier call to
+  // AddOwnershipEdge() with the same source and target with a different
+  // |importance| value.
+  void AddOverridableOwnershipEdge(const MemoryAllocatorDumpGuid& source,
+                                   const MemoryAllocatorDumpGuid& target,
+                                   int importance);
+
+  // Creates ownership edges for memory backed by base::SharedMemory. Handles
+  // the case of cross process sharing and importnace of ownership for the case
+  // with and without the base::SharedMemory dump provider. The new version
+  // should just use global dumps created by SharedMemoryTracker and this
+  // function handles the transition until we get SharedMemory IDs through mojo
+  // channel crbug.com/713763. The weak version creates a weak global dump.
+  // |client_local_dump_guid| The guid of the local dump created by the client
+  // of base::SharedMemory.
+  // |client_global_dump_guid| The global guid given by the clients to create
+  // ownership edges of their own. These global dumps will no longer be required
+  // after the transition.
+  // |shared_memory_guid| The ID of the base::SharedMemory that is assigned
+  // globally, used to create global dump edges in the new model.
+  // |importance| Importance of the global dump edges to say if the current
+  // process owns the memory segment.
+  void CreateSharedMemoryOwnershipEdge(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const MemoryAllocatorDumpGuid& client_global_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance);
+  void CreateWeakSharedMemoryOwnershipEdge(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const MemoryAllocatorDumpGuid& client_global_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance);
+
+  const AllocatorDumpEdgesMap& allocator_dumps_edges_for_testing() const {
     return allocator_dumps_edges_;
   }
 
@@ -188,6 +229,13 @@ class BASE_EXPORT ProcessMemoryDump {
   MemoryAllocatorDump* AddAllocatorDumpInternal(
       std::unique_ptr<MemoryAllocatorDump> mad);
 
+  void CreateSharedMemoryOwnershipEdgeInternal(
+      const MemoryAllocatorDumpGuid& client_local_dump_guid,
+      const MemoryAllocatorDumpGuid& client_global_dump_guid,
+      const UnguessableToken& shared_memory_guid,
+      int importance,
+      bool is_weak);
+
   MemoryAllocatorDump* GetBlackHoleMad();
 
   ProcessMemoryTotals process_totals_;
@@ -204,7 +252,7 @@ class BASE_EXPORT ProcessMemoryDump {
       heap_profiler_serialization_state_;
 
   // Keeps track of relationships between MemoryAllocatorDump(s).
-  std::vector<MemoryAllocatorDumpEdge> allocator_dumps_edges_;
+  AllocatorDumpEdgesMap allocator_dumps_edges_;
 
   // Level of detail of the current dump.
   const MemoryDumpArgs dump_args_;

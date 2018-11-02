@@ -135,15 +135,19 @@ class PDFiumEngine : public PDFEngine,
     ~SelectionChangeInvalidator();
 
    private:
-    // Sets the given container to the all the currently visible selection
-    // rectangles, in screen coordinates.
-    void GetVisibleSelectionsScreenRects(std::vector<pp::Rect>* rects);
+    // Returns all the currently visible selection rectangles, in screen
+    // coordinates.
+    std::vector<pp::Rect> GetVisibleSelections() const;
 
-    PDFiumEngine* engine_;
+    // Invalidates |selection|, but with |selection| slightly expanded to
+    // compensate for any rounding errors.
+    void Invalidate(const pp::Rect& selection);
+
+    PDFiumEngine* const engine_;
+    // The origin at the time this object was constructed.
+    const pp::Point previous_origin_;
     // Screen rectangles that were selected on construction.
     std::vector<pp::Rect> old_selections_;
-    // The origin at the time this object was constructed.
-    pp::Point previous_origin_;
   };
 
   // Used to store mouse down state to handle it in other mouse event handlers.
@@ -312,11 +316,15 @@ class PDFiumEngine : public PDFEngine,
                                  uint32_t page_range_count,
                                  const PP_PrintSettings_Dev& print_settings);
 
-  pp::Buffer_Dev GetFlattenedPrintData(const FPDF_DOCUMENT& doc);
+  pp::Buffer_Dev GetFlattenedPrintData(FPDF_DOCUMENT doc);
   void FitContentsToPrintableAreaIfRequired(
-      const FPDF_DOCUMENT& doc,
+      FPDF_DOCUMENT doc,
       const PP_PrintSettings_Dev& print_settings);
   void SaveSelectedFormForPrint();
+
+  // Checks if |page| has selected text in a form element. If so, sets that as
+  // the plugin's text selection.
+  void SetFormSelectedText(FPDF_FORMHANDLE form_handle, FPDF_PAGE page);
 
   // Given a mouse event, returns which page and character location it's closest
   // to.
@@ -437,8 +445,16 @@ class PDFiumEngine : public PDFEngine,
   // Common code shared by RotateClockwise() and RotateCounterclockwise().
   void RotateInternal();
 
-  // Setting selection status of document.
+  // Sets text selection status of document. This does not include text
+  // within form text fields.
   void SetSelecting(bool selecting);
+
+  // Sets whether or not focus is in form text field or form combobox text
+  // field.
+  void SetInFormTextArea(bool in_form_text_area);
+
+  // Sets whether or not left mouse button is currently being held down.
+  void SetMouseLeftButtonDown(bool is_mouse_left_button_down);
 
   bool PageIndexInBounds(int index) const;
 
@@ -640,13 +656,22 @@ class PDFiumEngine : public PDFEngine,
   bool defer_page_unload_;
   std::vector<int> deferred_page_unloads_;
 
-  // Used for selection.  There could be more than one range if selection spans
-  // more than one page.
+  // Used for text selection, but does not include text within form text areas.
+  // There could be more than one range if selection spans more than one page.
   std::vector<PDFiumRange> selection_;
-  // True if we're in the middle of selection.
+  // True if we're in the middle of text selection.
   bool selecting_;
 
   MouseDownState mouse_down_state_;
+
+  // Text selection within form text fields and form combobox text fields.
+  std::string selected_form_text_;
+
+  // True if focus is in form text field or form combobox text field.
+  bool in_form_text_area_;
+
+  // True if left mouse button is currently being held down.
+  bool mouse_left_button_down_;
 
   // Used for searching.
   std::vector<PDFiumRange> find_results_;
@@ -783,8 +808,7 @@ class PDFiumEngineExports : public PDFEngineExports {
       PDFEnsureTypefaceCharactersAccessible func) override;
 
   void SetPDFUseGDIPrinting(bool enable) override;
-
-  void SetPDFPostscriptPrintingLevel(int postscript_level) override;
+  void SetPDFUsePrintMode(int mode) override;
 #endif  // defined(OS_WIN)
   bool RenderPDFPageToBitmap(const void* pdf_buffer,
                              int pdf_buffer_size,

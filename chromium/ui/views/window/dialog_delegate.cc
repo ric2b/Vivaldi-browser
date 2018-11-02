@@ -16,7 +16,6 @@
 #include "ui/views/bubble/bubble_border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/label_button.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
@@ -148,10 +147,6 @@ int DialogDelegate::GetDefaultDialogButton() const {
   return ui::DIALOG_BUTTON_NONE;
 }
 
-bool DialogDelegate::ShouldDefaultButtonBeBlue() const {
-  return false;
-}
-
 base::string16 DialogDelegate::GetDialogButtonLabel(
     ui::DialogButton button) const {
   if (button == ui::DIALOG_BUTTON_OK)
@@ -199,17 +194,15 @@ ClientView* DialogDelegate::CreateClientView(Widget* widget) {
 
 NonClientFrameView* DialogDelegate::CreateNonClientFrameView(Widget* widget) {
   if (ShouldUseCustomFrame())
-    return CreateDialogFrameView(widget, gfx::Insets());
+    return CreateDialogFrameView(widget);
   return WidgetDelegate::CreateNonClientFrameView(widget);
 }
 
 // static
-NonClientFrameView* DialogDelegate::CreateDialogFrameView(
-    Widget* widget,
-    const gfx::Insets& content_margins) {
+NonClientFrameView* DialogDelegate::CreateDialogFrameView(Widget* widget) {
   BubbleFrameView* frame = new BubbleFrameView(
       LayoutProvider::Get()->GetInsetsMetric(INSETS_DIALOG_TITLE),
-      content_margins);
+      gfx::Insets());
   const BubbleBorder::Shadow kShadow = BubbleBorder::SMALL_SHADOW;
   std::unique_ptr<BubbleBorder> border(
       new BubbleBorder(BubbleBorder::FLOAT, kShadow, gfx::kPlaceholderColor));
@@ -262,11 +255,6 @@ const Widget* DialogDelegateView::GetWidget() const {
 
 View* DialogDelegateView::GetContentsView() {
   return this;
-}
-
-void DialogDelegateView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(GetWindowTitle());
-  node_data->role = ui::AX_ROLE_DIALOG;
 }
 
 void DialogDelegateView::ViewHierarchyChanged(

@@ -19,7 +19,7 @@
 
 namespace payments {
 
-class PaymentRequestDelegate;
+class PaymentRequestBaseDelegate;
 
 // Represents an Autofill/Payments credit card form of payment in Payment
 // Request.
@@ -33,19 +33,25 @@ class AutofillPaymentInstrument
   AutofillPaymentInstrument(
       const std::string& method_name,
       const autofill::CreditCard& card,
+      bool matches_merchant_card_type_exactly,
       const std::vector<autofill::AutofillProfile*>& billing_profiles,
       const std::string& app_locale,
-      PaymentRequestDelegate* payment_request_delegate);
+      PaymentRequestBaseDelegate* payment_request_delegate);
   ~AutofillPaymentInstrument() override;
 
   // PaymentInstrument:
   void InvokePaymentApp(PaymentInstrument::Delegate* delegate) override;
-  bool IsCompleteForPayment() override;
-  base::string16 GetMissingInfoLabel() override;
-  bool IsValidForCanMakePayment() override;
+  bool IsCompleteForPayment() const override;
+  bool IsExactlyMatchingMerchantRequest() const override;
+  base::string16 GetMissingInfoLabel() const override;
+  bool IsValidForCanMakePayment() const override;
   void RecordUse() override;
   base::string16 GetLabel() const override;
   base::string16 GetSublabel() const override;
+  bool IsValidForModifier(
+      const std::vector<std::string>& method,
+      const std::set<autofill::CreditCard::CardType>& supported_types,
+      const std::vector<std::string>& supported_networks) const override;
 
   // autofill::payments::FullCardRequest::ResultDelegate:
   void OnFullCardRequestSucceeded(const autofill::CreditCard& card,
@@ -65,13 +71,20 @@ class AutofillPaymentInstrument
 
   // A copy of the card is owned by this object.
   autofill::CreditCard credit_card_;
+
+  // Whether the card type (credit, debit, prepaid) matches the merchant's
+  // requested card type exactly. If the merchant accepts all card types, then
+  // this variable is always "true". If the merchant accepts only a subset of
+  // the card types, then this variable is "false" for unknown card types.
+  const bool matches_merchant_card_type_exactly_;
+
   // Not owned by this object, should outlive this.
   const std::vector<autofill::AutofillProfile*>& billing_profiles_;
 
   const std::string app_locale_;
 
   PaymentInstrument::Delegate* delegate_;
-  PaymentRequestDelegate* payment_request_delegate_;
+  PaymentRequestBaseDelegate* payment_request_delegate_;
   autofill::AutofillProfile billing_address_;
 
   base::string16 cvc_;

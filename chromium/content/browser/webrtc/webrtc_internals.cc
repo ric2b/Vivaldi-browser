@@ -9,6 +9,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
@@ -18,11 +19,11 @@
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/service_manager_connection.h"
-#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
 #include "ipc/ipc_platform_file.h"
 #include "media/audio/audio_manager.h"
 #include "media/media_features.h"
 #include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_WIN)
@@ -44,10 +45,8 @@ base::LazyInstance<WebRTCInternals>::Leaky g_webrtc_internals =
 // Makes sure that |dict| has a ListValue under path "log".
 base::ListValue* EnsureLogList(base::DictionaryValue* dict) {
   base::ListValue* log = NULL;
-  if (!dict->GetList("log", &log)) {
-    log = new base::ListValue();
-    dict->Set("log", log);
-  }
+  if (!dict->GetList("log", &log))
+    log = dict->SetList("log", base::MakeUnique<base::ListValue>());
   return log;
 }
 
@@ -191,7 +190,7 @@ void WebRTCInternals::OnUpdatePeerConnection(
   if (!observers_.might_have_observers())
     return;
 
-  std::unique_ptr<base::DictionaryValue> log_entry(new base::DictionaryValue());
+  auto log_entry = base::MakeUnique<base::DictionaryValue>();
 
   double epoch_time = base::Time::Now().ToJsTime();
   string time = base::DoubleToString(epoch_time);
@@ -199,7 +198,7 @@ void WebRTCInternals::OnUpdatePeerConnection(
   log_entry->SetString("type", type);
   log_entry->SetString("value", value);
 
-  std::unique_ptr<base::DictionaryValue> update(new base::DictionaryValue());
+  auto update = base::MakeUnique<base::DictionaryValue>();
   update->SetInteger("pid", static_cast<int>(pid));
   update->SetInteger("lid", lid);
   update->MergeDictionary(log_entry.get());
@@ -215,11 +214,11 @@ void WebRTCInternals::OnAddStats(base::ProcessId pid, int lid,
   if (!observers_.might_have_observers())
     return;
 
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetInteger("pid", static_cast<int>(pid));
   dict->SetInteger("lid", lid);
 
-  dict->Set("reports", value.CreateDeepCopy());
+  dict->Set("reports", base::MakeUnique<base::Value>(value));
 
   SendUpdate("addStats", std::move(dict));
 }
@@ -233,7 +232,7 @@ void WebRTCInternals::OnGetUserMedia(int rid,
                                      const std::string& video_constraints) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetInteger("rid", rid);
   dict->SetInteger("pid", static_cast<int>(pid));
   dict->SetString("origin", origin);
@@ -549,19 +548,18 @@ void WebRTCInternals::UpdateWakeLock() {
     DVLOG(1)
         << ("Cancel the wake lock on application suspension since no "
             "PeerConnections are active anymore.");
-    GetWakeLockService()->CancelWakeLock();
+    GetWakeLock()->CancelWakeLock();
   } else if (num_open_connections_ != 0) {
     DVLOG(1) << ("Preventing the application from being suspended while one or "
                  "more PeerConnections are active.");
-    GetWakeLockService()->RequestWakeLock();
+    GetWakeLock()->RequestWakeLock();
   }
 }
 
-device::mojom::WakeLockService* WebRTCInternals::GetWakeLockService() {
+device::mojom::WakeLock* WebRTCInternals::GetWakeLock() {
   // Here is a lazy binding, and will not reconnect after connection error.
-  if (!wake_lock_service_) {
-    device::mojom::WakeLockServiceRequest request =
-        mojo::MakeRequest(&wake_lock_service_);
+  if (!wake_lock_) {
+    device::mojom::WakeLockRequest request = mojo::MakeRequest(&wake_lock_);
     // In some testing contexts, the service manager connection isn't
     // initialized.
     if (ServiceManagerConnection::GetForProcess()) {
@@ -577,7 +575,7 @@ device::mojom::WakeLockService* WebRTCInternals::GetWakeLockService() {
           "WebRTC has active PeerConnections", std::move(request));
     }
   }
-  return wake_lock_service_.get();
+  return wake_lock_.get();
 }
 
 void WebRTCInternals::ProcessPendingUpdates() {

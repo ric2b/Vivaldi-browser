@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("translate") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "after_translate_infobar_controller.h",
     "after_translate_infobar_controller.mm",
@@ -33,6 +34,7 @@ source_set("translate") {
     "//components/metrics/proto",
     "//components/prefs",
     "//components/strings",
+    "//components/sync",
     "//components/translate/core/browser",
     "//components/translate/core/common",
     "//components/translate/ios/browser",
@@ -42,16 +44,20 @@ source_set("translate") {
     "//ios/chrome/browser",
     "//ios/chrome/browser/browser_state",
     "//ios/chrome/browser/infobars",
+    "//ios/chrome/browser/language",
+    "//ios/chrome/browser/sync",
     "//ios/chrome/browser/ui/infobars",
     "//ios/web",
     "//ui/base",
     "//ui/gfx",
     "//url",
   ]
+
   allow_circular_includes_from = [ "//ios/chrome/browser/infobars" ]
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "js_language_detection_manager_unittest.mm",
@@ -63,11 +69,13 @@ source_set("unit_tests") {
     "//base/test:test_support",
     "//components/translate/ios/browser",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/web:test_support",
     "//ios/chrome/common",
     "//ios/public/provider/chrome/browser:test_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//testing/gmock:gmock",
     "//testing/gtest",
     "//url",
   ]
@@ -96,7 +104,8 @@ source_set("external_url_eg_tests") {
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/testing:ios_test_support",
     "//ios/third_party/earl_grey",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//net",
     "//ui/base",
   ]

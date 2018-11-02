@@ -34,7 +34,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/FrameOwner.h"
 #include "core/frame/FrameTypes.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/loader/DocumentLoader.h"
@@ -43,19 +43,25 @@
 #include "core/page/Page.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
+#include "platform/loader/fetch/FetchInitiatorTypeNames.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/loader/fetch/UniqueIdentifier.h"
 #include "platform/loader/testing/MockResource.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "public/platform/WebAddressSpace.h"
 #include "public/platform/WebCachePolicy.h"
+#include "public/platform/WebClientHintsType.h"
 #include "public/platform/WebDocumentSubresourceFilter.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
+
+using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
 
 class StubLocalFrameClientWithParent final : public EmptyLocalFrameClient {
  public:
@@ -76,12 +82,15 @@ class StubLocalFrameClientWithParent final : public EmptyLocalFrameClient {
   Member<Frame> parent_;
 };
 
-class MockLocalFrameClient : public EmptyLocalFrameClient {
+class FrameFetchContextMockLocalFrameClient : public EmptyLocalFrameClient {
  public:
-  MockLocalFrameClient() : EmptyLocalFrameClient() {}
+  FrameFetchContextMockLocalFrameClient() : EmptyLocalFrameClient() {}
   MOCK_METHOD1(DidDisplayContentWithCertificateErrors, void(const KURL&));
   MOCK_METHOD2(DispatchDidLoadResourceFromMemoryCache,
                void(const ResourceRequest&, const ResourceResponse&));
+  MOCK_METHOD0(UserAgent, String());
+  MOCK_METHOD0(MayUseClientLoFiForImageRequests, bool());
+  MOCK_METHOD0(IsClientLoFiActiveForFrame, bool());
 };
 
 class FixedPolicySubresourceFilter : public WebDocumentSubresourceFilter {
@@ -128,7 +137,8 @@ class FrameFetchContextTest : public ::testing::Test {
     child_client = StubLocalFrameClientWithParent::Create(document->GetFrame());
     child_frame = LocalFrame::Create(
         child_client.Get(), *document->GetFrame()->GetPage(), owner.Get());
-    child_frame->SetView(FrameView::Create(*child_frame, IntSize(500, 500)));
+    child_frame->SetView(
+        LocalFrameView::Create(*child_frame, IntSize(500, 500)));
     child_frame->Init();
     child_document = child_frame->GetDocument();
     FrameFetchContext* child_fetch_context = static_cast<FrameFetchContext*>(
@@ -169,8 +179,8 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
 
   void SetFilterPolicy(WebDocumentSubresourceFilter::LoadPolicy policy) {
     document->Loader()->SetSubresourceFilter(SubresourceFilter::Create(
-        document->Loader(), WTF::MakeUnique<FixedPolicySubresourceFilter>(
-                                policy, &filtered_load_callback_counter_)));
+        *document, WTF::MakeUnique<FixedPolicySubresourceFilter>(
+                       policy, &filtered_load_callback_counter_)));
   }
 
   ResourceRequestBlockedReason CanRequest() {
@@ -187,8 +197,11 @@ class FrameFetchContextSubresourceFilterTest : public FrameFetchContextTest {
       SecurityViolationReportingPolicy reporting_policy) {
     KURL input_url(kParsedURLString, "http://example.com/");
     ResourceRequest resource_request(input_url);
+    resource_request.SetFetchCredentialsMode(
+        WebURLRequest::kFetchCredentialsModeOmit);
+    ResourceLoaderOptions options;
     return fetch_context->CanRequest(
-        Resource::kImage, resource_request, input_url, ResourceLoaderOptions(),
+        Resource::kImage, resource_request, input_url, options,
         reporting_policy, FetchParameters::kUseDefaultOriginRestrictionForType);
   }
 
@@ -200,9 +213,9 @@ class FrameFetchContextMockedLocalFrameClientTest
     : public FrameFetchContextTest {
  protected:
   void SetUp() override {
-    url = KURL(KURL(), "https://example.test/foo");
-    main_resource_url = KURL(KURL(), "https://www.example.test");
-    client = new testing::NiceMock<MockLocalFrameClient>();
+    url = KURL(NullURL(), "https://example.test/foo");
+    main_resource_url = KURL(NullURL(), "https://www.example.test");
+    client = new ::testing::NiceMock<FrameFetchContextMockLocalFrameClient>();
     dummy_page_holder =
         DummyPageHolder::Create(IntSize(500, 500), nullptr, client);
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
@@ -217,7 +230,7 @@ class FrameFetchContextMockedLocalFrameClientTest
   KURL url;
   KURL main_resource_url;
 
-  Persistent<testing::NiceMock<MockLocalFrameClient>> client;
+  Persistent<::testing::NiceMock<FrameFetchContextMockLocalFrameClient>> client;
 };
 
 class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
@@ -291,7 +304,7 @@ class FrameFetchContextModifyRequestTest : public FrameFetchContextTest {
     fetch_context->ModifyRequestForCSP(resource_request);
 
     EXPECT_EQ(expected_required_csp,
-              resource_request.HttpHeaderField(HTTPNames::Required_CSP));
+              resource_request.HttpHeaderField(HTTPNames::Sec_Required_CSP));
   }
 
   void SetFrameOwnerBasedOnFrameType(WebURLRequest::FrameType frame_type,
@@ -482,16 +495,19 @@ TEST_F(FrameFetchContextTest, PopulateResourceRequestChecksReportOnlyCSP) {
   policy->DidReceiveHeader("script-src https://bar.test",
                            kContentSecurityPolicyHeaderTypeReport,
                            kContentSecurityPolicyHeaderSourceHTTP);
-  KURL url(KURL(), "http://baz.test");
+  KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
+  ResourceLoaderOptions options;
   fetch_context->PopulateResourceRequest(
       url, Resource::kScript, ClientHintsPreferences(),
-      FetchParameters::ResourceWidth(), ResourceLoaderOptions(),
+      FetchParameters::ResourceWidth(), options,
       SecurityViolationReportingPolicy::kReport, resource_request);
   EXPECT_EQ(1u, policy->violation_reports_sent_.size());
   // Check that the resource was upgraded to a secure URL.
-  EXPECT_EQ(KURL(KURL(), "https://baz.test"), resource_request.Url());
+  EXPECT_EQ(KURL(NullURL(), "https://baz.test"), resource_request.Url());
 }
 
 class FrameFetchContextHintsTest : public FrameFetchContextTest {
@@ -523,10 +539,28 @@ class FrameFetchContextHintsTest : public FrameFetchContextTest {
   }
 };
 
+TEST_F(FrameFetchContextHintsTest, MonitorDeviceMemoryHints) {
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", false, "");
+  ClientHintsPreferences preferences;
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeDeviceMemory);
+  document->GetClientHintsPreferences().UpdateFrom(preferences);
+  MemoryCoordinator::SetPhysicalMemoryMBForTesting(4096);
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "4");
+  MemoryCoordinator::SetPhysicalMemoryMBForTesting(2048);
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "2");
+  MemoryCoordinator::SetPhysicalMemoryMBForTesting(64385);
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "64");
+  MemoryCoordinator::SetPhysicalMemoryMBForTesting(768);
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "0.75");
+  ExpectHeader("http://www.example.com/1.gif", "DPR", false, "");
+  ExpectHeader("http://www.example.com/1.gif", "Width", false, "");
+  ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", false, "");
+}
+
 TEST_F(FrameFetchContextHintsTest, MonitorDPRHints) {
   ExpectHeader("http://www.example.com/1.gif", "DPR", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendDPR(true);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "DPR", true, "1");
   dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(2.5);
@@ -538,7 +572,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorDPRHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
   ExpectHeader("http://www.example.com/1.gif", "Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendResourceWidth(true);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeResourceWidth);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "500", 500);
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "667", 666.6666);
@@ -551,7 +585,7 @@ TEST_F(FrameFetchContextHintsTest, MonitorResourceWidthHints) {
 TEST_F(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", false, "");
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendViewportWidth(true);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeViewportWidth);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", true, "500");
   dummy_page_holder->GetFrameView().SetLayoutSizeFixedToFrameSize(false);
@@ -563,18 +597,43 @@ TEST_F(FrameFetchContextHintsTest, MonitorViewportWidthHints) {
 }
 
 TEST_F(FrameFetchContextHintsTest, MonitorAllHints) {
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", false, "");
   ExpectHeader("http://www.example.com/1.gif", "DPR", false, "");
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", false, "");
   ExpectHeader("http://www.example.com/1.gif", "Width", false, "");
 
   ClientHintsPreferences preferences;
-  preferences.SetShouldSendDPR(true);
-  preferences.SetShouldSendResourceWidth(true);
-  preferences.SetShouldSendViewportWidth(true);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeDeviceMemory);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeResourceWidth);
+  preferences.SetShouldSendForTesting(kWebClientHintsTypeViewportWidth);
+  MemoryCoordinator::SetPhysicalMemoryMBForTesting(4096);
   document->GetClientHintsPreferences().UpdateFrom(preferences);
+  ExpectHeader("http://www.example.com/1.gif", "Device-Memory", true, "4");
   ExpectHeader("http://www.example.com/1.gif", "DPR", true, "1");
   ExpectHeader("http://www.example.com/1.gif", "Width", true, "400", 400);
   ExpectHeader("http://www.example.com/1.gif", "Viewport-Width", true, "500");
+}
+
+TEST_F(FrameFetchContextHintsTest, ClientHintsDeviceMemory) {
+  EXPECT_EQ(0.125, FrameFetchContext::ClientHintsDeviceMemory(128));  // 128MB
+  EXPECT_EQ(0.25, FrameFetchContext::ClientHintsDeviceMemory(256));   // 256MB
+  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(510));    // <512MB
+  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(512));    // 512MB
+  EXPECT_EQ(0.5, FrameFetchContext::ClientHintsDeviceMemory(640));  // 512+128MB
+  EXPECT_EQ(0.75,
+            FrameFetchContext::ClientHintsDeviceMemory(768));      // 512+256MB
+  EXPECT_EQ(1, FrameFetchContext::ClientHintsDeviceMemory(1000));  // <1GB
+  EXPECT_EQ(1, FrameFetchContext::ClientHintsDeviceMemory(1024));  // 1GB
+  EXPECT_EQ(1.5, FrameFetchContext::ClientHintsDeviceMemory(1536));  // 1.5GB
+  EXPECT_EQ(2, FrameFetchContext::ClientHintsDeviceMemory(2000));    // <2GB
+  EXPECT_EQ(2, FrameFetchContext::ClientHintsDeviceMemory(2048));    // 2GB
+  EXPECT_EQ(3, FrameFetchContext::ClientHintsDeviceMemory(3000));    // <3GB
+  EXPECT_EQ(4, FrameFetchContext::ClientHintsDeviceMemory(5120));    // 5GB
+  EXPECT_EQ(8, FrameFetchContext::ClientHintsDeviceMemory(8192));    // 8GB
+  EXPECT_EQ(16, FrameFetchContext::ClientHintsDeviceMemory(16384));  // 16GB
+  EXPECT_EQ(32, FrameFetchContext::ClientHintsDeviceMemory(32768));  // 32GB
+  EXPECT_EQ(64, FrameFetchContext::ClientHintsDeviceMemory(64385));  // <64GB
 }
 
 TEST_F(FrameFetchContextTest, MainResourceCachePolicy) {
@@ -721,9 +780,9 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieAndRequestorOrigin) {
   struct TestCase {
     const char* document_url;
     bool document_sandboxed;
-    const char* requestor_origin;  // "" => unique origin
+    const char* requestor_origin;  // "" => null
     WebURLRequest::FrameType frame_type;
-    const char* serialized_origin;  // "" => unique origin
+    const char* serialized_origin;  // "" => null
   } cases[] = {
       // No document origin => unique request origin
       {"", false, "", WebURLRequest::kFrameTypeNone, "null"},
@@ -736,28 +795,23 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieAndRequestorOrigin) {
        "http://example.test"},
 
       // If the request already has a requestor origin, then
-      // 'setFirstPartyCookieAndRequestorOrigin' leaves it alone:
+      // 'SetFirstPartyCookieAndRequestorOrigin' leaves it alone:
       {"http://example.test", false, "http://not-example.test",
        WebURLRequest::kFrameTypeNone, "http://not-example.test"},
       {"http://example.test", true, "http://not-example.test",
        WebURLRequest::kFrameTypeNone, "http://not-example.test"},
-
-      // If the request's frame type is not 'none', then
-      // 'setFirstPartyCookieAndRequestorOrigin'
-      // leaves it alone:
-      {"http://example.test", false, "", WebURLRequest::kFrameTypeTopLevel, ""},
-      {"http://example.test", false, "", WebURLRequest::kFrameTypeAuxiliary,
-       ""},
-      {"http://example.test", false, "", WebURLRequest::kFrameTypeNested, ""},
   };
 
+  int index = 0;
   for (const auto& test : cases) {
-    SCOPED_TRACE(::testing::Message()
-                 << test.document_url << " => " << test.serialized_origin);
+    SCOPED_TRACE(::testing::Message() << index++ << " " << test.document_url
+                                      << " => " << test.serialized_origin);
     // Set up a new document to ensure sandbox flags are cleared:
     dummy_page_holder = DummyPageHolder::Create(IntSize(500, 500));
     dummy_page_holder->GetPage().SetDeviceScaleFactorDeprecated(1.0);
     document = &dummy_page_holder->GetDocument();
+    fetch_context =
+        static_cast<FrameFetchContext*>(&document->Fetcher()->Context());
     FrameFetchContext::ProvideDocumentToContext(*fetch_context, document.Get());
 
     // Setup the test:
@@ -777,7 +831,7 @@ TEST_F(FrameFetchContextTest, SetFirstPartyCookieAndRequestorOrigin) {
     // Compare the populated |requestorOrigin| against |test.serializedOrigin|
     fetch_context->SetFirstPartyCookieAndRequestorOrigin(request);
     if (strlen(test.serialized_origin) == 0) {
-      EXPECT_TRUE(request.RequestorOrigin()->IsUnique());
+      EXPECT_TRUE(!request.RequestorOrigin());
     } else {
       EXPECT_EQ(String(test.serialized_origin),
                 request.RequestorOrigin()->ToString());
@@ -844,15 +898,17 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
        DispatchDidLoadResourceFromMemoryCache) {
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextImage);
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
   Resource* resource = MockResource::Create(resource_request);
   EXPECT_CALL(*client,
               DispatchDidLoadResourceFromMemoryCache(
-                  testing::AllOf(
-                      testing::Property(&ResourceRequest::Url, url),
-                      testing::Property(&ResourceRequest::GetFrameType,
-                                        WebURLRequest::kFrameTypeNone),
-                      testing::Property(&ResourceRequest::GetRequestContext,
-                                        WebURLRequest::kRequestContextImage)),
+                  ::testing::AllOf(
+                      ::testing::Property(&ResourceRequest::Url, url),
+                      ::testing::Property(&ResourceRequest::GetFrameType,
+                                          WebURLRequest::kFrameTypeNone),
+                      ::testing::Property(&ResourceRequest::GetRequestContext,
+                                          WebURLRequest::kRequestContextImage)),
                   ResourceResponse()));
   fetch_context->DispatchDidLoadResourceFromMemoryCache(
       CreateUniqueIdentifier(), resource_request, resource->GetResponse());
@@ -864,6 +920,8 @@ TEST_F(FrameFetchContextMockedLocalFrameClientTest,
        MemoryCacheCertificateError) {
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextImage);
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
   ResourceResponse response;
   response.SetURL(url);
   response.SetHasMajorCertificateErrors(true);
@@ -909,6 +967,370 @@ TEST_F(FrameFetchContextSubresourceFilterTest, WouldDisallow) {
 
   EXPECT_EQ(ResourceRequestBlockedReason::kNone, CanRequestPreload());
   EXPECT_EQ(0, GetFilteredLoadCallCount());
+}
+
+TEST_F(FrameFetchContextTest, AddAdditionalRequestHeadersWhenDetached) {
+  const KURL document_url(NullURL(), "https://www2.example.com/fuga/hoge.html");
+  const String origin = "https://www2.example.com";
+  ResourceRequest request(KURL(NullURL(), "https://localhost/"));
+  request.SetHTTPMethod("PUT");
+
+  Settings* settings = document->GetFrame()->GetSettings();
+  settings->SetDataSaverEnabled(true);
+  document->SetSecurityOrigin(SecurityOrigin::Create(KURL(NullURL(), origin)));
+  document->SetURL(document_url);
+  document->SetReferrerPolicy(kReferrerPolicyOrigin);
+  document->SetAddressSpace(kWebAddressSpacePublic);
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_FALSE(request.IsExternalRequest());
+
+  fetch_context->AddAdditionalRequestHeaders(request, kFetchSubresource);
+
+  EXPECT_EQ(origin, request.HttpHeaderField(HTTPNames::Origin));
+  EXPECT_EQ(String(origin + "/"), request.HttpHeaderField(HTTPNames::Referer));
+  EXPECT_EQ(String(), request.HttpHeaderField("Save-Data"));
+  EXPECT_TRUE(request.IsExternalRequest());
+}
+
+TEST_F(FrameFetchContextTest, ResourceRequestCachePolicyWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://localhost/"));
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_EQ(WebCachePolicy::kUseProtocolCachePolicy,
+            fetch_context->ResourceRequestCachePolicy(
+                request, Resource::kRaw, FetchParameters::kNoDefer));
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidChangePriorityWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidChangeResourcePriority(2, kResourceLoadPriorityLow,
+                                                   3);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextMockedLocalFrameClientTest,
+       PrepareRequestWhenDetached) {
+  Checkpoint checkpoint;
+
+  EXPECT_CALL(checkpoint, Call(1));
+  EXPECT_CALL(*client, UserAgent()).WillOnce(::testing::Return(String("hi")));
+  EXPECT_CALL(checkpoint, Call(2));
+
+  checkpoint.Call(1);
+  dummy_page_holder = nullptr;
+  checkpoint.Call(2);
+
+  ResourceRequest request(KURL(NullURL(), "https://localhost/"));
+  fetch_context->PrepareRequest(request,
+                                FetchContext::RedirectType::kNotForRedirect);
+
+  EXPECT_EQ("hi", request.HttpHeaderField(HTTPNames::User_Agent));
+}
+
+TEST_F(FrameFetchContextTest, DispatchWillSendRequestWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://www.example.com/"));
+  ResourceResponse response;
+  FetchInitiatorInfo initiator_info;
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchWillSendRequest(1, request, response, initiator_info);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest,
+       DispatchDidLoadResourceFromMemoryCacheWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://www.example.com/"));
+  ResourceResponse response;
+  FetchInitiatorInfo initiator_info;
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidLoadResourceFromMemoryCache(8, request, response);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidReceiveResponseWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://www.example.com/"));
+  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  Resource* resource = MockResource::Create(request);
+  ResourceResponse response;
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidReceiveResponse(
+      3, response, WebURLRequest::kFrameTypeTopLevel,
+      WebURLRequest::kRequestContextFetch, resource,
+      FetchContext::ResourceResponseType::kNotFromMemoryCache);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidReceiveDataWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidReceiveData(3, "abcd", 4);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidReceiveEncodedDataWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidReceiveEncodedData(8, 9);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidDownloadDataWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidDownloadData(4, 7, 9);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidFinishLoadingWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidFinishLoading(4, 0.3, 8, 10);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DispatchDidFailWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->DispatchDidFail(8, ResourceError(), 5, false);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, ShouldLoadNewResourceWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  EXPECT_FALSE(fetch_context->ShouldLoadNewResource(Resource::kImage));
+  EXPECT_FALSE(fetch_context->ShouldLoadNewResource(Resource::kRaw));
+  EXPECT_FALSE(fetch_context->ShouldLoadNewResource(Resource::kScript));
+  EXPECT_FALSE(fetch_context->ShouldLoadNewResource(Resource::kMainResource));
+}
+
+TEST_F(FrameFetchContextTest, RecordLoadingActivityWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://www.example.com/"));
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->RecordLoadingActivity(4, request, Resource::kRaw,
+                                       FetchInitiatorTypeNames::xmlhttprequest);
+  // Should not crash.
+
+  fetch_context->RecordLoadingActivity(8, request, Resource::kRaw,
+                                       FetchInitiatorTypeNames::document);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, DidLoadResourceWhenDetached) {
+  ResourceRequest request(KURL(NullURL(), "https://www.example.com/"));
+  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  Resource* resource = MockResource::Create(request);
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->DidLoadResource(resource);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, AddResourceTimingWhenDetached) {
+  RefPtr<ResourceTimingInfo> info =
+      ResourceTimingInfo::Create("type", 0.3, false);
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->AddResourceTiming(*info);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, AllowImageWhenDetached) {
+  KURL url(NullURL(), "https://www.example.com/");
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_TRUE(fetch_context->AllowImage(true, url));
+  EXPECT_TRUE(fetch_context->AllowImage(false, url));
+}
+
+TEST_F(FrameFetchContextTest, IsControlledByServiceWorkerWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  EXPECT_FALSE(fetch_context->IsControlledByServiceWorker());
+}
+
+TEST_F(FrameFetchContextTest, IsMainFrameWhenDetached) {
+  FetchContext* child_fetch_context = CreateChildFrame();
+
+  EXPECT_TRUE(fetch_context->IsMainFrame());
+  EXPECT_FALSE(child_fetch_context->IsMainFrame());
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_TRUE(fetch_context->IsMainFrame());
+  EXPECT_FALSE(child_fetch_context->IsMainFrame());
+}
+
+TEST_F(FrameFetchContextTest, DefersLoadingWhenDetached) {
+  EXPECT_FALSE(fetch_context->DefersLoading());
+}
+
+TEST_F(FrameFetchContextTest, IsLoadCompleteWhenDetached_1) {
+  document->open();
+  EXPECT_FALSE(fetch_context->IsLoadComplete());
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_TRUE(fetch_context->IsLoadComplete());
+}
+
+TEST_F(FrameFetchContextTest, IsLoadCompleteWhenDetached_2) {
+  EXPECT_TRUE(fetch_context->IsLoadComplete());
+
+  dummy_page_holder = nullptr;
+
+  EXPECT_TRUE(fetch_context->IsLoadComplete());
+}
+
+TEST_F(FrameFetchContextTest, PageDismissalEventBeingDispatchedWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  EXPECT_FALSE(fetch_context->PageDismissalEventBeingDispatched());
+}
+
+TEST_F(FrameFetchContextTest, UpdateTimingInfoForIFrameNavigationWhenDetached) {
+  RefPtr<ResourceTimingInfo> info =
+      ResourceTimingInfo::Create("type", 0.3, false);
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->UpdateTimingInfoForIFrameNavigation(info.Get());
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, SendImagePingWhenDetached) {
+  KURL url(NullURL(), "https://www.example.com/");
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->SendImagePing(url);
+  // Should not crash. Nothing should be sent.
+}
+
+TEST_F(FrameFetchContextTest, AddConsoleMessageWhenDetached) {
+  dummy_page_holder = nullptr;
+
+  fetch_context->AddConsoleMessage("foobar");
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest, GetSecurityOriginWhenDetached) {
+  RefPtr<SecurityOrigin> origin =
+      SecurityOrigin::Create(KURL(NullURL(), "https://www.example.com"));
+  document->SetSecurityOrigin(origin);
+
+  dummy_page_holder = nullptr;
+  EXPECT_EQ(origin.Get(), fetch_context->GetSecurityOrigin());
+}
+
+TEST_F(FrameFetchContextTest, PopulateResourceRequestWhenDetached) {
+  KURL url(NullURL(), "https://www.example.com/");
+  ResourceRequest request(url);
+  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+
+  ClientHintsPreferences client_hints_preferences;
+  client_hints_preferences.SetShouldSendForTesting(
+      kWebClientHintsTypeDeviceMemory);
+  client_hints_preferences.SetShouldSendForTesting(kWebClientHintsTypeDpr);
+  client_hints_preferences.SetShouldSendForTesting(
+      kWebClientHintsTypeResourceWidth);
+  client_hints_preferences.SetShouldSendForTesting(
+      kWebClientHintsTypeViewportWidth);
+
+  FetchParameters::ResourceWidth resource_width;
+  ResourceLoaderOptions options;
+
+  document->GetClientHintsPreferences().SetShouldSendForTesting(
+      kWebClientHintsTypeDeviceMemory);
+  document->GetClientHintsPreferences().SetShouldSendForTesting(
+      kWebClientHintsTypeDpr);
+  document->GetClientHintsPreferences().SetShouldSendForTesting(
+      kWebClientHintsTypeResourceWidth);
+  document->GetClientHintsPreferences().SetShouldSendForTesting(
+      kWebClientHintsTypeViewportWidth);
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->PopulateResourceRequest(
+      url, Resource::kRaw, client_hints_preferences, resource_width, options,
+      SecurityViolationReportingPolicy::kReport, request);
+  // Should not crash.
+}
+
+TEST_F(FrameFetchContextTest,
+       SetFirstPartyCookieAndRequestorOriginWhenDetached) {
+  KURL url(NullURL(), "https://www.example.com/hoge/fuga");
+  ResourceRequest request(url);
+  KURL document_url(NullURL(), "https://www2.example.com/foo/bar");
+  RefPtr<SecurityOrigin> origin = SecurityOrigin::Create(document_url);
+
+  document->SetSecurityOrigin(origin);
+  document->SetURL(document_url);
+
+  dummy_page_holder = nullptr;
+
+  fetch_context->SetFirstPartyCookieAndRequestorOrigin(request);
+
+  EXPECT_EQ(document_url, request.FirstPartyForCookies());
+  EXPECT_EQ(origin, request.RequestorOrigin());
+}
+
+TEST_F(FrameFetchContextTest, ArchiveWhenDetached) {
+  FetchContext* child_fetch_context = CreateChildFrame();
+
+  dummy_page_holder = nullptr;
+  child_frame->Detach(FrameDetachType::kRemove);
+  child_frame = nullptr;
+
+  EXPECT_EQ(nullptr, child_fetch_context->Archive());
+}
+
+// Tests if "Intervention" header is added for frame with Client Lo-Fi enabled.
+TEST_F(FrameFetchContextMockedLocalFrameClientTest,
+       ClientLoFiInterventionHeader) {
+  // Verify header not added if Lo-Fi not active.
+  EXPECT_CALL(*client, IsClientLoFiActiveForFrame())
+      .WillRepeatedly(::testing::Return(false));
+  ResourceRequest resource_request("http://www.example.com/style.css");
+  fetch_context->AddAdditionalRequestHeaders(resource_request,
+                                             kFetchMainResource);
+  EXPECT_EQ(g_null_atom, resource_request.HttpHeaderField("Intervention"));
+
+  // Verify header is added if Lo-Fi is active.
+  EXPECT_CALL(*client, IsClientLoFiActiveForFrame())
+      .WillRepeatedly(::testing::Return(true));
+  fetch_context->AddAdditionalRequestHeaders(resource_request,
+                                             kFetchSubresource);
+  EXPECT_EQ(
+      "<https://www.chromestatus.com/features/6072546726248448>; "
+      "level=\"warning\"",
+      resource_request.HttpHeaderField("Intervention"));
+
+  // Verify appended to an existing "Intervention" header value.
+  ResourceRequest resource_request2("http://www.example.com/getad.js");
+  resource_request2.SetHTTPHeaderField("Intervention",
+                                       "<https://otherintervention.org>");
+  fetch_context->AddAdditionalRequestHeaders(resource_request2,
+                                             kFetchSubresource);
+  EXPECT_EQ(
+      "<https://otherintervention.org>, "
+      "<https://www.chromestatus.com/features/6072546726248448>; "
+      "level=\"warning\"",
+      resource_request2.HttpHeaderField("Intervention"));
 }
 
 }  // namespace blink

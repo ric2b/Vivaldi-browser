@@ -25,7 +25,6 @@
 #import "ios/chrome/common/material_timing.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #import "ui/gfx/ios/NSString+CrStringDrawing.h"
@@ -81,7 +80,7 @@ inline UIColor* PageInfoHelpButtonColor() {
 }
 
 inline UIFont* PageInfoHeadlineFont() {
-  return [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:16];
+  return [[MDCTypography fontLoader] mediumFontOfSize:16];
 }
 
 inline CATransform3D PageInfoAnimationScale() {
@@ -202,6 +201,7 @@ void PageInfoModelBubbleBridge::PerformLayout() {
 
 @synthesize containerView = containerView_;
 @synthesize popupContainer = popupContainer_;
+@synthesize dispatcher = dispatcher_;
 
 - (id)initWithModel:(PageInfoModel*)model
              bridge:(PageInfoModelObserver*)bridge
@@ -407,6 +407,7 @@ void PageInfoModelBubbleBridge::PerformLayout() {
 }
 
 - (void)close {
+  // Refactoring note: _containerView.tag is IDC_HIDE_PAGE_INFO.
   [containerView_ chromeExecuteCommand:containerView_];
 }
 
@@ -472,8 +473,7 @@ void PageInfoModelBubbleBridge::PerformLayout() {
     return nil;
   }
   UIButton* button = [[UIButton alloc] initWithFrame:CGRectZero];
-  int messageId = IDS_IOS_PAGE_INFO_RELOAD;
-  NSInteger tag = IDC_RELOAD;
+  int messageId;
   NSString* accessibilityID = @"Reload button";
   switch (buttonAction) {
     case PageInfoModel::BUTTON_NONE:
@@ -481,15 +481,20 @@ void PageInfoModelBubbleBridge::PerformLayout() {
       return nil;
     case PageInfoModel::BUTTON_SHOW_SECURITY_HELP:
       messageId = IDS_LEARN_MORE;
-      tag = IDC_SHOW_SECURITY_HELP;
+      button.tag = IDC_SHOW_SECURITY_HELP;
       accessibilityID = @"Learn more";
+      [button addTarget:nil
+                    action:@selector(chromeExecuteCommand:)
+          forControlEvents:UIControlEventTouchUpInside];
       break;
     case PageInfoModel::BUTTON_RELOAD:
       messageId = IDS_IOS_PAGE_INFO_RELOAD;
-      tag = IDC_RELOAD;
       accessibilityID = @"Reload button";
       [button addTarget:self
                     action:@selector(close)
+          forControlEvents:UIControlEventTouchUpInside];
+      [button addTarget:self.dispatcher
+                    action:@selector(reload)
           forControlEvents:UIControlEventTouchUpInside];
       break;
   };
@@ -497,10 +502,6 @@ void PageInfoModelBubbleBridge::PerformLayout() {
   NSString* title = l10n_util::GetNSStringWithFixup(messageId);
   SetA11yLabelAndUiAutomationName(button, messageId, accessibilityID);
   [button setTitle:title forState:UIControlStateNormal];
-  [button setTag:tag];
-  [button addTarget:nil
-                action:@selector(chromeExecuteCommand:)
-      forControlEvents:UIControlEventTouchUpInside];
   return button;
 }
 

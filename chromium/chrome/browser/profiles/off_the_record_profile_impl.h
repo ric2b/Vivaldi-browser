@@ -71,6 +71,7 @@ class OffTheRecordProfileImpl : public Profile {
   net::URLRequestContextGetter* CreateMediaRequestContextForStoragePartition(
       const base::FilePath& partition_path,
       bool in_memory) override;
+  void RegisterInProcessServices(StaticServiceMap* services) override;
   net::SSLConfigService* GetSSLConfigService() override;
   bool IsSameProfile(Profile* profile) override;
   Time GetStartTime() const override;
@@ -111,6 +112,8 @@ class OffTheRecordProfileImpl : public Profile {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
+      override;
 
  private:
   void InitIoData();
@@ -135,8 +138,7 @@ class OffTheRecordProfileImpl : public Profile {
   // The real underlying profile.
   Profile* profile_;
 
-  // Weak pointer owned by |profile_|.
-  sync_preferences::PrefServiceSyncable* prefs_;
+  std::unique_ptr<sync_preferences::PrefServiceSyncable> prefs_;
 
 #if !defined(OS_ANDROID)
   std::unique_ptr<content::HostZoomMap::Subscription> track_zoom_subscription_;

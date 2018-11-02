@@ -35,7 +35,9 @@ void MockMediaController::Bind(mojom::MediaControllerRequest request) {
 }
 
 mojom::MediaControllerPtr MockMediaController::BindInterfacePtr() {
-  return binding_.CreateInterfacePtrAndBind();
+  mojom::MediaControllerPtr controller;
+  binding_.Bind(mojo::MakeRequest(&controller));
+  return controller;
 }
 
 void MockMediaController::CloseBinding() {
@@ -58,12 +60,7 @@ MockMediaRouteControllerObserver::MockMediaRouteControllerObserver(
 
 MockMediaRouteControllerObserver::~MockMediaRouteControllerObserver() {}
 
-MediaRouterMojoTest::MediaRouterMojoTest()
-    : mock_media_router_(new MediaRouterMojoImpl(&mock_event_page_tracker_)) {
-  mock_media_router_->Initialize();
-  mock_media_router_->set_instance_id_for_test(kInstanceId);
-  extension_ = extensions::test_util::CreateEmptyExtension();
-}
+MediaRouterMojoTest::MediaRouterMojoTest() {}
 
 MediaRouterMojoTest::~MediaRouterMojoTest() {}
 
@@ -75,18 +72,20 @@ void MediaRouterMojoTest::ConnectProviderManagerService() {
   // Bind the Mojo MediaRouter interface used by |mock_media_router_| to
   // |mock_media_route_provider_service_|.
   mojom::MediaRouteProviderPtr mojo_media_router;
-  binding_.reset(new mojo::Binding<mojom::MediaRouteProvider>(
-      &mock_media_route_provider_, mojo::MakeRequest(&mojo_media_router)));
+  binding_ = base::MakeUnique<mojo::Binding<mojom::MediaRouteProvider>>(
+      &mock_media_route_provider_, mojo::MakeRequest(&mojo_media_router));
   EXPECT_CALL(provide_handler_, InvokeInternal(kInstanceId, testing::_));
   media_router_proxy_->RegisterMediaRouteProvider(
       std::move(mojo_media_router),
-      base::Bind(&RegisterMediaRouteProviderHandler::Invoke,
-                 base::Unretained(&provide_handler_)));
+      base::BindOnce(&RegisterMediaRouteProviderHandler::Invoke,
+                     base::Unretained(&provide_handler_)));
 }
 
 void MediaRouterMojoTest::SetUp() {
-  ON_CALL(mock_event_page_tracker_, IsEventPageSuspended(extension_id()))
-      .WillByDefault(testing::Return(false));
+  mock_media_router_.reset(new MediaRouterMojoImpl(&profile_));
+  mock_media_router_->Initialize();
+  mock_media_router_->set_instance_id_for_test(kInstanceId);
+  extension_ = extensions::test_util::CreateEmptyExtension();
   ConnectProviderManagerService();
   base::RunLoop().RunUntilIdle();
 }

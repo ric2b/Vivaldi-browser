@@ -10,6 +10,7 @@
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/drive/drive_integration_service.h"
@@ -55,15 +56,14 @@ void PostFileSystemCallback(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&fileapi_internal::RunFileSystemCallback,
-                 file_system_getter, function,
-                 on_error_callback.is_null() ?
-                 base::Closure() :
-                 base::Bind(&google_apis::RunTaskWithTaskRunner,
-                            base::ThreadTaskRunnerHandle::Get(),
-                            on_error_callback)));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&fileapi_internal::RunFileSystemCallback,
+                     file_system_getter, function,
+                     on_error_callback.is_null()
+                         ? base::Closure()
+                         : base::Bind(&google_apis::RunTaskWithTaskRunner,
+                                      base::ThreadTaskRunnerHandle::Get(),
+                                      on_error_callback)));
 }
 
 // Runs CreateOrOpenFile callback based on the given |error| and |file|.
@@ -120,7 +120,9 @@ void RunCreateSnapshotFileCallback(
 
   scoped_refptr<storage::ShareableFileReference> file_reference =
       storage::ShareableFileReference::GetOrCreate(storage::ScopedFile(
-          local_path, scope_out_policy, BrowserThread::GetBlockingPool()));
+          local_path, scope_out_policy,
+          base::CreateSequencedTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::USER_BLOCKING})));
   callback.Run(error, file_info, local_path, file_reference);
 }
 

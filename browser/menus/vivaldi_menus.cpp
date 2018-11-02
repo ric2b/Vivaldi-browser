@@ -167,6 +167,8 @@ void VivaldiAddImageItems(SimpleMenuModel* menu,
     DCHECK_GE(index, 0);
     menu->InsertSeparatorAt(++index, ui::NORMAL_SEPARATOR);
     if (!IsVivaldiWebPanel(web_contents)) {
+      menu->InsertItemWithStringIdAt(++index, IDC_VIV_INSPECT_IMAGE,
+                                     IDS_VIV_INSPECT_IMAGE);
       menu->InsertItemWithStringIdAt(++index, IDC_VIV_USE_IMAGE_AS_BACKGROUND,
                                      IDS_VIV_USE_IMAGE_AS_BACKGROUND);
     }
@@ -336,6 +338,7 @@ bool IsVivaldiCommandIdEnabled(const SimpleMenuModel& menu,
     case IDC_VIV_SEND_PAGE_BY_MAIL:
     case IDC_VIV_SEND_SELECTION_BY_MAIL:
     case IDC_VIV_COPY_PAGE_ADDRESS:
+    case IDC_VIV_INSPECT_IMAGE:
     case IDC_VIV_USE_IMAGE_AS_BACKGROUND:
     case IDC_VIV_VALIDATE_PAGE:
     case IDC_VIV_FULLSCREEN:
@@ -479,6 +482,13 @@ bool VivaldiExecuteCommand(RenderViewContextMenu* context_menu,
       if (IsVivaldiRunning()) {
         SendSimpleAction(source_web_contents, event_flags, "copyUrlToClipboard",
                          base::ASCIIToUTF16(""), params.page_url.spec());
+      }
+      break;
+
+    case IDC_VIV_INSPECT_IMAGE:
+      if (IsVivaldiRunning()) {
+        SendSimpleAction(source_web_contents, event_flags, "inspectImageUrl",
+                         base::ASCIIToUTF16(""), params.src_url.spec());
       }
       break;
 

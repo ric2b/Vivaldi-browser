@@ -186,7 +186,6 @@ def build_gn_with_ninja_manually(tempdir, options):
   write_buildflag_header_manually(root_gen_dir, 'base/debug/debugging_flags.h',
       {
           'ENABLE_PROFILING': 'false',
-          'ENABLE_MEMORY_TASK_PROFILER': 'false',
           'CAN_UNWIND_WITH_FRAME_POINTERS': 'false'
       })
 
@@ -326,6 +325,12 @@ def write_gn_ninja(path, root_gen_dir, options):
     cxx = os.environ.get('CXX', 'c++')
     ld = os.environ.get('LD', cxx)
     ar = os.environ.get('AR', 'ar -X64')
+  elif  is_linux:
+    prefix = os.path.join(SRC_ROOT, "third_party/llvm-build/Release+Asserts/bin")
+    cc = os.environ.get('CC', os.path.join(prefix, 'clang'))
+    cxx = os.environ.get('CXX', os.path.join(prefix, 'clang++'))
+    ld = cxx
+    ar = os.environ.get('AR', os.path.join(prefix, 'llvm-ar'))
   else:
     cc = os.environ.get('CC', 'cc')
     cxx = os.environ.get('CXX', 'c++')
@@ -368,7 +373,7 @@ def write_gn_ninja(path, root_gen_dir, options):
   elif is_win:
     if not options.debug:
       cflags.extend(['/Ox', '/DNDEBUG', '/GL'])
-      ldflags.extend(['/LTCG', '/OPT:REF', '/OPT:ICF'])
+      ldflags.extend(['/LTCG', '/OPT:REF', '/OPT:ICF', "shlwapi.lib", ])
 
     cflags.extend([
         '/FS',
@@ -431,6 +436,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/debug/dump_without_crashing.cc',
       'base/debug/stack_trace.cc',
       'base/debug/task_annotator.cc',
+      'base/debug/thread_heap_usage_tracker.cc',
       'base/environment.cc',
       'base/feature_list.cc',
       'base/files/file.cc',
@@ -456,6 +462,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/memory/ref_counted_memory.cc',
       'base/memory/singleton.cc',
       'base/memory/shared_memory_handle.cc',
+      'base/memory/shared_memory_tracker.cc',
       'base/memory/weak_ptr.cc',
       'base/message_loop/incoming_task_queue.cc',
       'base/message_loop/message_loop.cc',
@@ -467,6 +474,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/metrics/field_trial_param_associator.cc',
       'base/metrics/histogram.cc',
       'base/metrics/histogram_base.cc',
+      'base/metrics/histogram_functions.cc',
       'base/metrics/histogram_samples.cc',
       'base/metrics/metrics_hashes.cc',
       'base/metrics/persistent_histogram_allocator.cc',
@@ -486,7 +494,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/process/process_metrics.cc',
       'base/profiler/scoped_profile.cc',
       'base/profiler/scoped_tracker.cc',
-      'base/profiler/tracked_time.cc',
       'base/rand_util.cc',
       'base/run_loop.cc',
       'base/sequence_token.cc',
@@ -528,8 +535,8 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/third_party/dmg_fp/g_fmt.cc',
       'base/third_party/icu/icu_utf.cc',
       'base/third_party/nspr/prtime.cc',
-      'base/threading/non_thread_safe_impl.cc',
       'base/threading/post_task_and_reply_impl.cc',
+      'base/threading/sequence_local_storage_map.cc',
       'base/threading/sequenced_task_runner_handle.cc',
       'base/threading/sequenced_worker_pool.cc',
       'base/threading/simple_thread.cc',
@@ -554,7 +561,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/heap_profiler_allocation_context_tracker.cc',
       'base/trace_event/heap_profiler_allocation_register.cc',
       'base/trace_event/heap_profiler_event_filter.cc',
-      'base/trace_event/heap_profiler_heap_dump_writer.cc',
+      "base/trace_event/heap_profiler_heap_dump_writer.cc",
       'base/trace_event/heap_profiler_serialization_state.cc',
       'base/trace_event/heap_profiler_stack_frame_deduplicator.cc',
       'base/trace_event/heap_profiler_type_name_deduplicator.cc',
@@ -567,7 +574,6 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/memory_dump_scheduler.cc',
       'base/trace_event/memory_infra_background_whitelist.cc',
       'base/trace_event/memory_peak_detector.cc',
-      'base/trace_event/memory_tracing_observer.cc',
       'base/trace_event/memory_usage_estimator.cc',
       'base/trace_event/process_memory_dump.cc',
       'base/trace_event/process_memory_maps.cc',
@@ -580,13 +586,13 @@ def write_gn_ninja(path, root_gen_dir, options):
       'base/trace_event/trace_event_filter.cc',
       'base/trace_event/trace_event_impl.cc',
       'base/trace_event/trace_event_memory_overhead.cc',
-      'base/trace_event/trace_event_synthetic_delay.cc',
       'base/trace_event/trace_log.cc',
       'base/trace_event/trace_log_constants.cc',
       'base/trace_event/tracing_agent.cc',
       'base/tracked_objects.cc',
       'base/tracking_info.cc',
       'base/unguessable_token.cc',
+      'base/value_iterators.cc',
       'base/values.cc',
       'base/vlog.cc',
   ])
@@ -596,7 +602,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/base_paths_posix.cc',
         'base/debug/debugger_posix.cc',
         'base/debug/stack_trace_posix.cc',
-        'base/files/file_descriptor_watcher_posix.cc',
         'base/files/file_enumerator_posix.cc',
         'base/files/file_descriptor_watcher_posix.cc',
         'base/files/file_posix.cc',
@@ -616,7 +621,6 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/synchronization/condition_variable_posix.cc',
         'base/synchronization/lock_impl_posix.cc',
         'base/synchronization/read_write_lock_posix.cc',
-        'base/synchronization/waitable_event_posix.cc',
         'base/sys_info_posix.cc',
         'base/task_scheduler/task_tracker_posix.cc',
         'base/threading/platform_thread_internal_posix.cc',
@@ -664,7 +668,6 @@ def write_gn_ninja(path, root_gen_dir, options):
     static_libraries['base']['sources'].extend([
         'base/memory/shared_memory_handle_posix.cc',
         'base/memory/shared_memory_posix.cc',
-        'base/memory/shared_memory_tracker.cc',
         'base/nix/xdg_util.cc',
         'base/process/internal_linux.cc',
         'base/process/memory_linux.cc',
@@ -681,6 +684,7 @@ def write_gn_ninja(path, root_gen_dir, options):
       static_libraries['base']['sources'].extend([
         'base/allocator/allocator_shim.cc',
         'base/allocator/allocator_shim_default_dispatch_to_glibc.cc',
+        "base/synchronization/waitable_event_posix.cc",
       ])
       libs.extend(['-lrt', '-latomic'])
       static_libraries['libevent']['include_dirs'].extend([
@@ -721,6 +725,7 @@ def write_gn_ninja(path, root_gen_dir, options):
         'base/process/process_iterator_mac.cc',
         'base/process/process_metrics_mac.cc',
         'base/strings/sys_string_conversions_mac.mm',
+        "base/synchronization/waitable_event_posix.cc",
         'base/sys_info_mac.mm',
         'base/time/time_mac.cc',
         'base/threading/platform_thread_mac.mm',

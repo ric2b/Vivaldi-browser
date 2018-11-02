@@ -6,6 +6,8 @@
 
 #include <vector>
 
+#include "base/json/json_writer.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/payments/core/basic_card_response.h"
@@ -93,6 +95,55 @@ TEST(PaymentRequestTest, PaymentItemFromDictionaryValueFailure) {
   item_dict.Set("amount", std::move(amount_dict));
   item_dict.SetInteger("label", 42);
   EXPECT_FALSE(actual.FromDictionaryValue(item_dict));
+}
+
+// Tests the success case when populating a PaymentDetails from a dictionary.
+TEST(PaymentRequestTest, PaymentDetailsFromDictionaryValueSuccess) {
+  PaymentDetails expected;
+  expected.error = base::ASCIIToUTF16("Error in details");
+
+  base::DictionaryValue details_dict;
+  details_dict.SetString("error", "Error in details");
+  PaymentDetails actual;
+  EXPECT_TRUE(
+      actual.FromDictionaryValue(details_dict, /*requires_total=*/false));
+  EXPECT_EQ(expected, actual);
+
+  expected.total.label = base::ASCIIToUTF16("TOTAL");
+  expected.total.amount.currency = base::ASCIIToUTF16("GBP");
+  expected.total.amount.value = base::ASCIIToUTF16("6.66");
+
+  std::unique_ptr<base::DictionaryValue> total_dict(new base::DictionaryValue);
+  total_dict->SetString("label", "TOTAL");
+  std::unique_ptr<base::DictionaryValue> amount_dict(new base::DictionaryValue);
+  amount_dict->SetString("currency", "GBP");
+  amount_dict->SetString("value", "6.66");
+  total_dict->Set("amount", std::move(amount_dict));
+  details_dict.Set("total", std::move(total_dict));
+
+  EXPECT_TRUE(
+      actual.FromDictionaryValue(details_dict, /*requires_total=*/false));
+  EXPECT_EQ(expected, actual);
+
+  EXPECT_TRUE(
+      actual.FromDictionaryValue(details_dict, /*requires_total=*/true));
+  EXPECT_EQ(expected, actual);
+}
+
+// Tests the failure case when populating a PaymentDetails from a dictionary.
+TEST(PaymentRequestTest, PaymentDetailsFromDictionaryValueFailure) {
+  PaymentDetails expected;
+  expected.total.label = base::ASCIIToUTF16("TOTAL");
+  expected.total.amount.currency = base::ASCIIToUTF16("GBP");
+  expected.total.amount.value = base::ASCIIToUTF16("6.66");
+  expected.error = base::ASCIIToUTF16("Error in details");
+
+  base::DictionaryValue details_dict;
+  details_dict.SetString("error", "Error in details");
+
+  PaymentDetails actual;
+  EXPECT_FALSE(
+      actual.FromDictionaryValue(details_dict, /*requires_total=*/true));
 }
 
 // Tests the success case when populating a PaymentShippingOption from a
@@ -202,6 +253,8 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   base::DictionaryValue request_dict;
 
   // Add the expected values to expected_request.
+  expected_request.payment_request_id = "123456789";
+  expected_request.details.id = "12345";
   expected_request.details.total.label = base::ASCIIToUTF16("TOTAL");
   expected_request.details.total.amount.currency = base::ASCIIToUTF16("GBP");
   expected_request.details.total.amount.value = base::ASCIIToUTF16("6.66");
@@ -223,6 +276,7 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   amount_dict->SetString("value", "6.66");
   total_dict->Set("amount", std::move(amount_dict));
   details_dict->Set("total", std::move(total_dict));
+  details_dict->SetString("id", "12345");
   details_dict->SetString("error", "Error in details");
   request_dict.Set("details", std::move(details_dict));
 
@@ -234,6 +288,7 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
   method_data_dict->Set("supportedMethods", std::move(supported_methods_list));
   method_data_list->Append(std::move(method_data_dict));
   request_dict.Set("methodData", std::move(method_data_list));
+  request_dict.SetString("id", "123456789");
 
   // With the required values present, parsing should succeed.
   EXPECT_TRUE(output_request.FromDictionaryValue(request_dict));
@@ -263,11 +318,22 @@ TEST(PaymentRequestTest, ParsingFullyPopulatedRequestDictionarySucceeds) {
 TEST(PaymentRequestTest, EmptyResponseDictionary) {
   base::DictionaryValue expected_value;
 
-  std::unique_ptr<base::DictionaryValue> details(new base::DictionaryValue);
-  details->SetString("cardNumber", "");
-  expected_value.Set("details", std::move(details));
-  expected_value.SetString("paymentRequestID", "");
+  expected_value.SetString("requestId", "");
   expected_value.SetString("methodName", "");
+  std::unique_ptr<base::DictionaryValue> shipping_address(
+      new base::DictionaryValue);
+  shipping_address->SetString("country", "");
+  shipping_address->Set("addressLine", base::MakeUnique<base::ListValue>());
+  shipping_address->SetString("region", "");
+  shipping_address->SetString("dependentLocality", "");
+  shipping_address->SetString("city", "");
+  shipping_address->SetString("postalCode", "");
+  shipping_address->SetString("languageCode", "");
+  shipping_address->SetString("sortingCode", "");
+  shipping_address->SetString("organization", "");
+  shipping_address->SetString("recipient", "");
+  shipping_address->SetString("phone", "");
+  expected_value.Set("shippingAddress", std::move(shipping_address));
 
   PaymentResponse payment_response;
   EXPECT_TRUE(
@@ -287,14 +353,34 @@ TEST(PaymentRequestTest, PopulatedResponseDictionary) {
   details->SetString("cardSecurityCode", "111");
   std::unique_ptr<base::DictionaryValue> billing_address(
       new base::DictionaryValue);
+  billing_address->SetString("country", "");
+  billing_address->Set("addressLine", base::MakeUnique<base::ListValue>());
+  billing_address->SetString("region", "");
+  billing_address->SetString("dependentLocality", "");
+  billing_address->SetString("city", "");
   billing_address->SetString("postalCode", "90210");
+  billing_address->SetString("languageCode", "");
+  billing_address->SetString("sortingCode", "");
+  billing_address->SetString("organization", "");
+  billing_address->SetString("recipient", "");
+  billing_address->SetString("phone", "");
   details->Set("billingAddress", std::move(billing_address));
   expected_value.Set("details", std::move(details));
-  expected_value.SetString("paymentRequestID", "12345");
+  expected_value.SetString("requestId", "12345");
   expected_value.SetString("methodName", "American Express");
   std::unique_ptr<base::DictionaryValue> shipping_address(
       new base::DictionaryValue);
+  shipping_address->SetString("country", "");
+  shipping_address->Set("addressLine", base::MakeUnique<base::ListValue>());
+  shipping_address->SetString("region", "");
+  shipping_address->SetString("dependentLocality", "");
+  shipping_address->SetString("city", "");
   shipping_address->SetString("postalCode", "94115");
+  shipping_address->SetString("languageCode", "");
+  shipping_address->SetString("sortingCode", "");
+  shipping_address->SetString("organization", "");
+  shipping_address->SetString("recipient", "");
+  shipping_address->SetString("phone", "");
   expected_value.Set("shippingAddress", std::move(shipping_address));
   expected_value.SetString("shippingOption", "666");
   expected_value.SetString("payerName", "Jane Doe");
@@ -302,16 +388,25 @@ TEST(PaymentRequestTest, PopulatedResponseDictionary) {
   expected_value.SetString("payerPhone", "1234-567-890");
 
   PaymentResponse payment_response;
-  payment_response.payment_request_id = base::ASCIIToUTF16("12345");
+  payment_response.payment_request_id = "12345";
   payment_response.method_name = base::ASCIIToUTF16("American Express");
-  payment_response.details.card_number =
+
+  payments::BasicCardResponse payment_response_details;
+  payment_response_details.card_number =
       base::ASCIIToUTF16("1111-1111-1111-1111");
-  payment_response.details.cardholder_name = base::ASCIIToUTF16("Jon Doe");
-  payment_response.details.expiry_month = base::ASCIIToUTF16("02");
-  payment_response.details.expiry_year = base::ASCIIToUTF16("2090");
-  payment_response.details.card_security_code = base::ASCIIToUTF16("111");
-  payment_response.details.billing_address.postal_code =
+  payment_response_details.cardholder_name = base::ASCIIToUTF16("Jon Doe");
+  payment_response_details.expiry_month = base::ASCIIToUTF16("02");
+  payment_response_details.expiry_year = base::ASCIIToUTF16("2090");
+  payment_response_details.card_security_code = base::ASCIIToUTF16("111");
+  payment_response_details.billing_address.postal_code =
       base::ASCIIToUTF16("90210");
+  std::unique_ptr<base::DictionaryValue> response_value =
+      payment_response_details.ToDictionaryValue();
+  std::string payment_response_stringified_details;
+  base::JSONWriter::Write(*response_value,
+                          &payment_response_stringified_details);
+  payment_response.details = payment_response_stringified_details;
+
   payment_response.shipping_address.postal_code = base::ASCIIToUTF16("94115");
   payment_response.shipping_option = base::ASCIIToUTF16("666");
   payment_response.payer_name = base::ASCIIToUTF16("Jane Doe");
@@ -462,6 +557,13 @@ TEST(PaymentRequestTest, PaymentDetailsEquality) {
   PaymentDetails details2;
   EXPECT_EQ(details1, details2);
 
+  details1.id = "12345";
+  EXPECT_NE(details1, details2);
+  details2.id = "54321";
+  EXPECT_NE(details1, details2);
+  details2.id = details1.id;
+  EXPECT_EQ(details1, details2);
+
   details1.total.label = base::ASCIIToUTF16("Total");
   EXPECT_NE(details1, details2);
   details2.total.label = base::ASCIIToUTF16("Shipping");
@@ -563,6 +665,13 @@ TEST(PaymentRequestTest, PaymentRequestEquality) {
   PaymentRequest request2;
   EXPECT_EQ(request1, request2);
 
+  request1.payment_request_id = "12345";
+  EXPECT_NE(request1, request2);
+  request2.payment_request_id = "54321";
+  EXPECT_NE(request1, request2);
+  request2.payment_request_id = request1.payment_request_id;
+  EXPECT_EQ(request1, request2);
+
   payments::PaymentAddress address1;
   address1.recipient = base::ASCIIToUTF16("Jessica Jones");
   request1.shipping_address = address1;
@@ -630,13 +739,21 @@ TEST(PaymentRequestTest, PaymentResponseEquality) {
 
   payments::BasicCardResponse card_response1;
   card_response1.card_number = base::ASCIIToUTF16("1234");
+  std::unique_ptr<base::DictionaryValue> response_value1 =
+      card_response1.ToDictionaryValue();
+  std::string stringified_card_response1;
+  base::JSONWriter::Write(*response_value1, &stringified_card_response1);
   payments::BasicCardResponse card_response2;
   card_response2.card_number = base::ASCIIToUTF16("8888");
-  response1.details = card_response1;
+  std::unique_ptr<base::DictionaryValue> response_value2 =
+      card_response2.ToDictionaryValue();
+  std::string stringified_card_response2;
+  base::JSONWriter::Write(*response_value2, &stringified_card_response2);
+  response1.details = stringified_card_response1;
   EXPECT_NE(response1, response2);
-  response2.details = card_response2;
+  response2.details = stringified_card_response2;
   EXPECT_NE(response1, response2);
-  response2.details = card_response1;
+  response2.details = stringified_card_response1;
   EXPECT_EQ(response1, response2);
 }
 

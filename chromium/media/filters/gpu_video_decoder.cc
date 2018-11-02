@@ -44,10 +44,6 @@
 namespace media {
 namespace {
 
-// Size of shared-memory segments we allocate.  Since we reuse them we let them
-// be on the beefy side.
-static const size_t kSharedMemorySegmentBytes = 100 << 10;
-
 #if defined(OS_ANDROID) && BUILDFLAG(USE_PROPRIETARY_CODECS)
 // Extract the SPS and PPS lists from |extra_data|. Each SPS and PPS is prefixed
 // with 0x0001, the Annex B framing bytes. The out parameters are not modified
@@ -86,21 +82,19 @@ const char GpuVideoDecoder::kDecoderName[] = "GpuVideoDecoder";
 // resources.
 enum { kMaxInFlightDecodes = 4 };
 
+// Number of bitstream buffers returned before GC is attempted on shared memory
+// segments. Value chosen arbitrarily.
+enum { kBufferCountBeforeGC = 1024 };
+
 struct GpuVideoDecoder::PendingDecoderBuffer {
-  PendingDecoderBuffer(std::unique_ptr<SHMBuffer> s,
+  PendingDecoderBuffer(std::unique_ptr<base::SharedMemory> s,
                        const scoped_refptr<DecoderBuffer>& b,
                        const DecodeCB& done_cb)
-      : shm_buffer(std::move(s)), buffer(b), done_cb(done_cb) {}
-  std::unique_ptr<SHMBuffer> shm_buffer;
+      : shared_memory(std::move(s)), buffer(b), done_cb(done_cb) {}
+  std::unique_ptr<base::SharedMemory> shared_memory;
   scoped_refptr<DecoderBuffer> buffer;
   DecodeCB done_cb;
 };
-
-GpuVideoDecoder::SHMBuffer::SHMBuffer(std::unique_ptr<base::SharedMemory> m,
-                                      size_t s)
-    : shm(std::move(m)), size(s) {}
-
-GpuVideoDecoder::SHMBuffer::~SHMBuffer() {}
 
 GpuVideoDecoder::BufferData::BufferData(int32_t bbid,
                                         base::TimeDelta ts,
@@ -130,6 +124,8 @@ GpuVideoDecoder::GpuVideoDecoder(
       supports_deferred_initialization_(false),
       requires_texture_copy_(false),
       cdm_id_(CdmContext::kInvalidCdmId),
+      min_shared_memory_segment_size_(0),
+      bitstream_buffer_id_of_last_gc_(0),
       weak_factory_(this) {
   DCHECK(factories_);
 }
@@ -258,6 +254,24 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
       VideoDecodeAccelerator::Capabilities::SUPPORTS_DEFERRED_INITIALIZATION);
   output_cb_ = output_cb;
 
+  // Attempt to choose a reasonable size for the shared memory segments based on
+  // the size of video. These values are chosen based on experiments with common
+  // videos from the web. Too small and you'll end up creating too many segments
+  // too large and you end up wasting significant amounts of memory.
+  const int height = config.coded_size().height();
+  if (height >= 4000)  // ~4320p
+    min_shared_memory_segment_size_ = 384 * 1024;
+  else if (height >= 2000)  // ~2160p
+    min_shared_memory_segment_size_ = 192 * 1024;
+  else if (height >= 1000)  // ~1080p
+    min_shared_memory_segment_size_ = 96 * 1024;
+  else if (height >= 700)  // ~720p
+    min_shared_memory_segment_size_ = 72 * 1024;
+  else if (height >= 400)  // ~480p
+    min_shared_memory_segment_size_ = 48 * 1024;
+  else  // ~360p or less
+    min_shared_memory_segment_size_ = 32 * 1024;
+
   if (config.is_encrypted() && !supports_deferred_initialization_) {
     DVLOG(1) << __func__
              << " Encrypted stream requires deferred initialialization.";
@@ -316,8 +330,7 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
   }
 
   // If external surfaces are not supported we can complete initialization now.
-  CompleteInitialization(SurfaceManager::kNoSurfaceID,
-                         base::UnguessableToken());
+  CompleteInitialization(OverlayInfo());
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
   pipeline_stats::ReportVideoDecoderInitResult(true);
@@ -329,9 +342,7 @@ void GpuVideoDecoder::Initialize(const VideoDecoderConfig& config,
 // the current state.
 // At most one of |surface_id| and |token| should be provided.  The other will
 // be kNoSurfaceID or an empty token, respectively.
-void GpuVideoDecoder::OnOverlayInfoAvailable(
-    int surface_id,
-    const base::Optional<base::UnguessableToken>& token) {
+void GpuVideoDecoder::OnOverlayInfoAvailable(const OverlayInfo& overlay_info) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
 
   if (!vda_)
@@ -342,18 +353,16 @@ void GpuVideoDecoder::OnOverlayInfoAvailable(
   // SetSurface() before initializing because there is no remote VDA to handle
   // the call yet.
   if (!vda_initialized_) {
-    CompleteInitialization(surface_id, token);
+    CompleteInitialization(overlay_info);
     return;
   }
 
   // The VDA must be already initialized (or async initialization is in
   // progress) so we can call SetSurface().
-  vda_->SetSurface(surface_id, token);
+  vda_->SetOverlayInfo(overlay_info);
 }
 
-void GpuVideoDecoder::CompleteInitialization(
-    int surface_id,
-    const base::Optional<base::UnguessableToken>& token) {
+void GpuVideoDecoder::CompleteInitialization(const OverlayInfo& overlay_info) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
   DCHECK(vda_);
   DCHECK(!init_cb_.is_null());
@@ -362,8 +371,7 @@ void GpuVideoDecoder::CompleteInitialization(
   VideoDecodeAccelerator::Config vda_config;
   vda_config.profile = config_.profile();
   vda_config.cdm_id = cdm_id_;
-  vda_config.surface_id = surface_id;
-  vda_config.overlay_routing_token = token;
+  vda_config.overlay_info = overlay_info;
   vda_config.encryption_scheme = config_.encryption_scheme();
   vda_config.is_deferred_initialization_allowed = true;
   vda_config.initial_expected_coded_size = config_.coded_size();
@@ -406,6 +414,7 @@ void GpuVideoDecoder::DestroyPictureBuffers(PictureBufferMap* buffers) {
     for (uint32_t id : kv.second.client_texture_ids())
       factories_->DeleteTexture(id);
   }
+  factories_->ShallowFlushCHROMIUM();
 
   buffers->clear();
 }
@@ -459,17 +468,17 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
   }
 
   size_t size = buffer->data_size();
-  std::unique_ptr<SHMBuffer> shm_buffer = GetSHM(size);
-  if (!shm_buffer) {
+  auto shared_memory = GetSharedMemory(size);
+  if (!shared_memory) {
     bound_decode_cb.Run(DecodeStatus::DECODE_ERROR);
     return;
   }
 
-  memcpy(shm_buffer->shm->memory(), buffer->data(), size);
+  memcpy(shared_memory->memory(), buffer->data(), size);
   // AndroidVideoDecodeAccelerator needs the timestamp to output frames in
   // presentation order.
   BitstreamBuffer bitstream_buffer(next_bitstream_buffer_id_,
-                                   shm_buffer->shm->handle(), size, 0,
+                                   shared_memory->handle(), size, 0,
                                    buffer->timestamp());
 
   if (buffer->decrypt_config())
@@ -481,7 +490,7 @@ void GpuVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
       !base::ContainsKey(bitstream_buffers_in_decoder_, bitstream_buffer.id()));
   bitstream_buffers_in_decoder_.emplace(
       bitstream_buffer.id(),
-      PendingDecoderBuffer(std::move(shm_buffer), buffer, decode_cb));
+      PendingDecoderBuffer(std::move(shared_memory), buffer, decode_cb));
   DCHECK_LE(static_cast<int>(bitstream_buffers_in_decoder_.size()),
             kMaxInFlightDecodes);
   RecordBufferData(bitstream_buffer, *buffer.get());
@@ -738,6 +747,9 @@ void GpuVideoDecoder::ReleaseMailbox(
   // because GpuVideoDecoder was destructed.
   for (uint32_t id : ids)
     factories->DeleteTexture(id);
+
+  // Flush the delete(s) to the server, to avoid crbug.com/737992 .
+  factories->ShallowFlushCHROMIUM();
 }
 
 void GpuVideoDecoder::ReusePictureBuffer(int64_t picture_buffer_id) {
@@ -765,27 +777,43 @@ void GpuVideoDecoder::ReusePictureBuffer(int64_t picture_buffer_id) {
     vda_->ReusePictureBuffer(picture_buffer_id);
 }
 
-std::unique_ptr<GpuVideoDecoder::SHMBuffer> GpuVideoDecoder::GetSHM(
+std::unique_ptr<base::SharedMemory> GpuVideoDecoder::GetSharedMemory(
     size_t min_size) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
-  if (available_shm_segments_.empty() ||
-      available_shm_segments_.back()->size < min_size) {
-    size_t size_to_allocate = std::max(min_size, kSharedMemorySegmentBytes);
-    std::unique_ptr<base::SharedMemory> shm =
-        factories_->CreateSharedMemory(size_to_allocate);
-    // CreateSharedMemory() can return NULL during Shutdown.
-    if (!shm)
-      return NULL;
-    return base::MakeUnique<SHMBuffer>(std::move(shm), size_to_allocate);
+  auto it = std::lower_bound(available_shm_segments_.begin(),
+                             available_shm_segments_.end(), min_size,
+                             [](const ShMemEntry& entry, const size_t size) {
+                               return entry.first->mapped_size() < size;
+                             });
+  if (it != available_shm_segments_.end()) {
+    auto ret = std::move(it->first);
+    available_shm_segments_.erase(it);
+    return ret;
   }
-  std::unique_ptr<SHMBuffer> ret(std::move(available_shm_segments_.back()));
-  available_shm_segments_.pop_back();
-  return ret;
+
+  return factories_->CreateSharedMemory(
+      std::max(min_shared_memory_segment_size_, min_size));
 }
 
-void GpuVideoDecoder::PutSHM(std::unique_ptr<SHMBuffer> shm_buffer) {
+void GpuVideoDecoder::PutSharedMemory(
+    std::unique_ptr<base::SharedMemory> shared_memory,
+    int32_t last_bitstream_buffer_id) {
   DCheckGpuVideoAcceleratorFactoriesTaskRunnerIsCurrent();
-  available_shm_segments_.push_back(std::move(shm_buffer));
+  available_shm_segments_.emplace(std::move(shared_memory),
+                                  last_bitstream_buffer_id);
+
+  if (next_bitstream_buffer_id_ < bitstream_buffer_id_of_last_gc_ ||
+      next_bitstream_buffer_id_ - bitstream_buffer_id_of_last_gc_ >
+          kBufferCountBeforeGC) {
+    base::EraseIf(available_shm_segments_, [this](const ShMemEntry& entry) {
+      // Check for overflow rollover...
+      if (next_bitstream_buffer_id_ < entry.second)
+        return next_bitstream_buffer_id_ > kBufferCountBeforeGC;
+
+      return next_bitstream_buffer_id_ - entry.second > kBufferCountBeforeGC;
+    });
+    bitstream_buffer_id_of_last_gc_ = next_bitstream_buffer_id_;
+  }
 }
 
 void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
@@ -800,7 +828,7 @@ void GpuVideoDecoder::NotifyEndOfBitstreamBuffer(int32_t id) {
     return;
   }
 
-  PutSHM(std::move(it->second.shm_buffer));
+  PutSharedMemory(std::move(it->second.shared_memory), id);
   it->second.done_cb.Run(state_ == kError ? DecodeStatus::DECODE_ERROR
                                           : DecodeStatus::OK);
   bitstream_buffers_in_decoder_.erase(it);
@@ -837,6 +865,10 @@ void GpuVideoDecoder::NotifyFlushDone() {
   DCHECK_EQ(state_, kDrainingDecoder);
   state_ = kDecoderDrained;
   base::ResetAndReturn(&eos_decode_cb_).Run(DecodeStatus::OK);
+
+  // Assume flush is for a config change, so drop shared memory segments in
+  // anticipation of a resize occurring.
+  available_shm_segments_.clear();
 }
 
 void GpuVideoDecoder::NotifyResetDone() {

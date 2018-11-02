@@ -44,7 +44,7 @@ ExtensionSettingsWebUITest.prototype = {
    * @type {string}
    * @const
    */
-  browsePreload: 'chrome://extensions-frame/',
+  browsePreload: 'chrome://extensions/',
 
   /** @override */
   typedefCppFixture: 'ExtensionSettingsUIBrowserTest',
@@ -299,7 +299,7 @@ AutoScrollExtensionSettingsWebUITest.prototype = {
   __proto__: BasicExtensionSettingsWebUITest.prototype,
 
   /** @override */
-  browsePreload: 'chrome://extensions-frame/?id=' + GOOD_EXTENSION_ID,
+  browsePreload: 'chrome://extensions/?id=' + GOOD_EXTENSION_ID,
 
   /** @override */
   testGenPreamble: function() {
@@ -312,19 +312,20 @@ AutoScrollExtensionSettingsWebUITest.prototype = {
 
 TEST_F('AutoScrollExtensionSettingsWebUITest', 'testAutoScroll', function() {
   var checkHasScrollbar = function() {
-    assertGT(document.body.scrollHeight, document.body.clientHeight);
+    assertGT(document.scrollingElement.scrollHeight,
+             document.body.clientHeight);
     this.nextStep();
   };
   var checkIsScrolled = function() {
-    assertGT(document.body.scrollTop, 0);
+    assertGT(document.scrollingElement.scrollTop, 0);
     this.nextStep();
   };
   var checkScrolledToTop = function() {
-    assertEquals(0, document.body.scrollTop);
+    assertEquals(0, document.scrollingElement.scrollTop);
     this.nextStep();
   };
   var scrollToTop = function() {
-    document.body.scrollTop = 0;
+    document.scrollingElement.scrollTop = 0;
     this.nextStep();
   };
   // Test that a) autoscroll works on first page load and b) updating the
@@ -398,7 +399,7 @@ SettingsCommandsExtensionSettingsWebUITest.prototype = {
    * @type {string}
    * @const
    */
-  browsePreload: 'chrome://extensions-frame/configureCommands',
+  browsePreload: 'chrome://extensions/configureCommands',
 };
 
 TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'testChromeSendHandler',
@@ -421,8 +422,7 @@ TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'extensionSettingsUri',
     assertTrue($('extension-commands-overlay').classList.contains('showing'));
     assertEquals($('extension-commands-overlay').getAttribute('aria-hidden'),
                  'false');
-    assertEquals(window.location.href,
-                 'chrome://extensions-frame/configureCommands');
+    assertEquals(window.location.href, 'chrome://extensions/configureCommands');
 
     // Close command overlay.
     $('extension-commands-dismiss').click();
@@ -436,7 +436,7 @@ TEST_F('SettingsCommandsExtensionSettingsWebUITest', 'extensionSettingsUri',
   var checkExtensionsUrl = function() {
     // After closing the overlay, the URL shouldn't include commands overlay
     // reference.
-    assertEquals(window.location.href, 'chrome://extensions-frame/');
+    assertEquals(window.location.href, 'chrome://extensions/');
     this.nextStep();
   };
 
@@ -515,6 +515,14 @@ function OptionsDialogExtensionSettingsWebUITest() {}
 
 OptionsDialogExtensionSettingsWebUITest.prototype = {
   __proto__: InstallGoodExtensionSettingsWebUITest.prototype,
+
+  setUp() {
+    InstallGoodExtensionSettingsWebUITest.prototype.setUp.call(this);
+
+    // False positive on iframe hosting the <extensionoptions> guest view.
+    this.accessibilityAuditConfig.ignoreSelectors(
+        'focusableElementNotVisibleAndNotAriaHidden', 'iframe');
+  },
 
   /** @override */
   browsePreload: ExtensionSettingsWebUITest.prototype.browsePreload +

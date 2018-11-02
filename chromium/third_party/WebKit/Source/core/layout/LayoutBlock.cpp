@@ -28,12 +28,12 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleEngine.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/DragCaret.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMarqueeElement.h"
 #include "core/layout/HitTestLocation.h"
@@ -278,11 +278,9 @@ void LayoutBlock::UpdateFromStyle() {
     if (!should_clip_overflow)
       GetScrollableArea()->InvalidateAllStickyConstraints();
     SetMayNeedPaintInvalidationSubtree();
-    if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
-      // The overflow clip paint property depends on whether overflow clip is
-      // present so we need to update paint properties if this changes.
-      SetNeedsPaintPropertyUpdate();
-    }
+    // The overflow clip paint property depends on whether overflow clip is
+    // present so we need to update paint properties if this changes.
+    SetNeedsPaintPropertyUpdate();
   }
   SetHasOverflowClip(should_clip_overflow);
 }
@@ -559,18 +557,6 @@ void LayoutBlock::AddVisualOverflowFromTheme() {
   AddSelfVisualOverflow(LayoutRect(inflated_rect));
 }
 
-DISABLE_CFI_PERF
-bool LayoutBlock::CreatesNewFormattingContext() const {
-  return IsInlineBlockOrInlineTable() || IsFloatingOrOutOfFlowPositioned() ||
-         HasOverflowClip() || IsFlexItemIncludingDeprecated() ||
-         Style()->SpecifiesColumns() || IsLayoutFlowThread() || IsTableCell() ||
-         IsTableCaption() || IsFieldset() || IsWritingModeRoot() ||
-         IsDocumentElement() || IsGridItem() ||
-         Style()->GetColumnSpan() == kColumnSpanAll ||
-         Style()->ContainsPaint() || Style()->ContainsLayout() ||
-         IsSVGForeignObject() || Style()->Display() == EDisplay::kFlowRoot;
-}
-
 static inline bool ChangeInAvailableLogicalHeightAffectsChild(
     LayoutBlock* parent,
     LayoutBox& child) {
@@ -740,8 +726,8 @@ LayoutUnit LayoutBlock::MarginIntrinsicLogicalWidthForChild(
   // A margin has three types: fixed, percentage, and auto (variable).
   // Auto and percentage margins become 0 when computing min/max width.
   // Fixed margins can be added in as is.
-  Length margin_left = child.Style()->MarginStartUsing(Style());
-  Length margin_right = child.Style()->MarginEndUsing(Style());
+  Length margin_left = child.StyleRef().MarginStartUsing(StyleRef());
+  Length margin_right = child.StyleRef().MarginEndUsing(StyleRef());
   LayoutUnit margin;
   if (margin_left.IsFixed())
     margin += margin_left.Value();
@@ -922,8 +908,10 @@ LayoutUnit LayoutBlock::LogicalRightSelectionOffset(
 void LayoutBlock::SetSelectionState(SelectionState state) {
   LayoutBox::SetSelectionState(state);
 
-  if (InlineBoxWrapper() && CanUpdateSelectionOnRootLineBoxes())
-    InlineBoxWrapper()->Root().SetHasSelectedChildren(state != SelectionNone);
+  if (InlineBoxWrapper() && CanUpdateSelectionOnRootLineBoxes()) {
+    InlineBoxWrapper()->Root().SetHasSelectedChildren(state !=
+                                                      SelectionState::kNone);
+  }
 }
 
 TrackedLayoutBoxListHashSet* LayoutBlock::PositionedObjectsInternal() const {
@@ -934,6 +922,8 @@ TrackedLayoutBoxListHashSet* LayoutBlock::PositionedObjectsInternal() const {
 void LayoutBlock::InsertPositionedObject(LayoutBox* o) {
   DCHECK(!IsAnonymousBlock());
   DCHECK_EQ(o->ContainingBlock(), this);
+
+  o->ClearContainingBlockOverrideSize();
 
   if (g_positioned_container_map) {
     auto container_map_it = g_positioned_container_map->find(o);
@@ -1010,7 +1000,7 @@ void LayoutBlock::RemovePositionedObjects(
         // invalidation container.
         // Invalidate it (including non-compositing descendants) on its original
         // paint invalidation container.
-        if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+        if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
           // This valid because we need to invalidate based on the current
           // status.
           DisableCompositingQueryAsserts compositing_disabler;
@@ -1440,6 +1430,7 @@ void LayoutBlock::ComputePreferredLogicalWidths() {
   }
 
   LayoutUnit border_and_padding = BorderAndPaddingLogicalWidth();
+  DCHECK_GE(border_and_padding, LayoutUnit());
   min_preferred_logical_width_ += border_and_padding;
   max_preferred_logical_width_ += border_and_padding;
 
@@ -1463,6 +1454,14 @@ void LayoutBlock::ComputeBlockPreferredLogicalWidths(
       continue;
     }
 
+    if (child->IsBox() &&
+        ToLayoutBox(child)->NeedsPreferredWidthsRecalculation()) {
+      // We don't really know whether the containing block of this child did
+      // change or is going to change size. However, this is our only
+      // opportunity to make sure that it gets its min/max widths calculated.
+      child->SetPreferredLogicalWidthsDirty();
+    }
+
     RefPtr<ComputedStyle> child_style = child->MutableStyle();
     if (child->IsFloating() ||
         (child->IsBox() && ToLayoutBox(child)->AvoidsFloats())) {
@@ -1483,8 +1482,8 @@ void LayoutBlock::ComputeBlockPreferredLogicalWidths(
     // (variable).
     // Auto and percentage margins simply become 0 when computing min/max width.
     // Fixed margins can be added in as is.
-    Length start_margin_length = child_style->MarginStartUsing(&style_to_use);
-    Length end_margin_length = child_style->MarginEndUsing(&style_to_use);
+    Length start_margin_length = child_style->MarginStartUsing(style_to_use);
+    Length end_margin_length = child_style->MarginEndUsing(style_to_use);
     LayoutUnit margin;
     LayoutUnit margin_start;
     LayoutUnit margin_end;
@@ -1725,11 +1724,23 @@ int LayoutBlock::FirstLineBoxBaseline() const {
   return -1;
 }
 
+bool LayoutBlock::UseLogicalBottomMarginEdgeForInlineBlockBaseline() const {
+  // CSS2.1 states that the baseline of an 'inline-block' is:
+  // the baseline of the last line box in the normal flow, unless it has
+  // either no in-flow line boxes or if its 'overflow' property has a computed
+  // value other than 'visible', in which case the baseline is the bottom
+  // margin edge.
+  // We likewise avoid using the last line box in the case of size containment,
+  // where the block's contents shouldn't be considered when laying out its
+  // ancestors or siblings.
+  return (!Style()->IsOverflowVisible() &&
+          !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
+         Style()->ContainsSize();
+}
+
 int LayoutBlock::InlineBlockBaseline(LineDirectionMode line_direction) const {
   DCHECK(!ChildrenInline());
-  if ((!Style()->IsOverflowVisible() &&
-       !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
-      Style()->ContainsSize()) {
+  if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
     // We are not calling LayoutBox::baselinePosition here because the caller
     // should add the margin-top/margin-right, not us.
     return (line_direction == kHorizontalLine ? Size().Height() + MarginBottom()

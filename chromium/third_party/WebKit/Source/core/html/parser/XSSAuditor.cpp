@@ -33,6 +33,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLParamElement.h"
 #include "core/html/LinkRelAttribute.h"
 #include "core/html/parser/HTMLDocumentParser.h"
@@ -130,6 +131,15 @@ static bool StartsOpeningScriptTagAt(const String& string, size_t start) {
     return false;
   // TODO(esprehn): StringView should probably have startsWith.
   StringView script("<script");
+  return EqualIgnoringASCIICase(StringView(string, start, script.length()),
+                                script);
+}
+
+static bool StartsClosingScriptTagAt(const String& string, size_t start) {
+  if (start + 7 >= string.length())
+    return false;
+  // TODO(esprehn): StringView should probably have startsWith.
+  StringView script("</script");
   return EqualIgnoringASCIICase(StringView(string, start, script.length()),
                                 script);
 }
@@ -386,13 +396,13 @@ void XSSAuditor::Init(Document* document,
         header_value, error_details, error_position, report_url);
 
     if (xss_protection_header == kAllowReflectedXSS)
-      UseCounter::Count(*document, UseCounter::kXSSAuditorDisabled);
+      UseCounter::Count(*document, WebFeature::kXSSAuditorDisabled);
     else if (xss_protection_header == kFilterReflectedXSS)
-      UseCounter::Count(*document, UseCounter::kXSSAuditorEnabledFilter);
+      UseCounter::Count(*document, WebFeature::kXSSAuditorEnabledFilter);
     else if (xss_protection_header == kBlockReflectedXSS)
-      UseCounter::Count(*document, UseCounter::kXSSAuditorEnabledBlock);
+      UseCounter::Count(*document, WebFeature::kXSSAuditorEnabledBlock);
     else if (xss_protection_header == kReflectedXSSInvalid)
-      UseCounter::Count(*document, UseCounter::kXSSAuditorInvalid);
+      UseCounter::Count(*document, WebFeature::kXSSAuditorInvalid);
 
     did_send_valid_xss_protection_header_ =
         xss_protection_header != kReflectedXSSUnset &&
@@ -879,7 +889,8 @@ String XSSAuditor::CanonicalizedSnippetForJavaScript(
         break;
 
       if (last_non_space_position != kNotFound &&
-          StartsOpeningScriptTagAt(string, found_position)) {
+          (StartsOpeningScriptTagAt(string, found_position) ||
+           StartsClosingScriptTagAt(string, found_position))) {
         found_position = last_non_space_position + 1;
         break;
       }

@@ -60,7 +60,7 @@ source_set("browser") {
   public_deps = [
     ":sync",
     "//vivaldi/sync/glue",
-    "//chrome/browser",
+    #"//chrome/browser",
     "//components/sync/protocol",
     "//vivaldi/extensions",
   ]

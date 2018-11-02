@@ -4,17 +4,17 @@
 
 #include "core/html/HTMLImageElement.h"
 
+#include <memory>
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
 const int kViewportWidth = 500;
 const int kViewportHeight = 600;
-class HTMLImageElementTest : public testing::Test {
+class HTMLImageElementTest : public ::testing::Test {
  protected:
   HTMLImageElementTest()
       : dummy_page_holder_(

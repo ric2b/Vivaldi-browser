@@ -116,7 +116,7 @@ bool SVGPaintContext::ApplyClipMaskAndFilterIfNecessary() {
 }
 
 void SVGPaintContext::ApplyPaintPropertyState() {
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   // SVGRoot works like normal CSS replaced element and its effects are
@@ -144,8 +144,8 @@ void SVGPaintContext::ApplyCompositingIfNecessary() {
   float opacity = style.Opacity();
   WebBlendMode blend_mode = style.HasBlendMode() && object_.IsBlendingAllowed()
                                 ? style.BlendMode()
-                                : kWebBlendModeNormal;
-  if (opacity < 1 || blend_mode != kWebBlendModeNormal) {
+                                : WebBlendMode::kNormal;
+  if (opacity < 1 || blend_mode != WebBlendMode::kNormal) {
     const FloatRect compositing_bounds =
         object_.VisualRectInLocalSVGCoordinates();
     compositing_recorder_ = WTF::WrapUnique(new CompositingRecorder(
@@ -159,7 +159,7 @@ void SVGPaintContext::ApplyClipIfNecessary() {
   ClipPathOperation* clip_path_operation = object_.StyleRef().ClipPath();
   if (!clip_path_operation)
     return;
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     clip_path_clipper_.emplace(GetPaintInfo().context, *clip_path_operation,
                                object_, object_.ObjectBoundingBox(),
                                FloatPoint());
@@ -217,7 +217,7 @@ bool SVGPaintContext::IsIsolationInstalled() const {
     return true;
   if (masker_ || filter_)
     return true;
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled() && clip_path_clipper_ &&
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && clip_path_clipper_ &&
       clip_path_clipper_->UsingMask())
     return true;
   return false;

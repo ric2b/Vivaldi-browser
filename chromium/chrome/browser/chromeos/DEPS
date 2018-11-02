@@ -1,4 +1,13 @@
 include_rules = [
+  # TODO(crbug.com/678705): Convert to using mojo interfaces in
+  # //ash/public/interfaces and eliminate this.
+  "+ash",
+  
+  # TODO(ananta): Remove this when we move files which display UI in
+  # chrome/browser/chromeos to chrome/browser/ui/views/chromeos
+  # crbug.com/728877
+  "+chrome/browser/ui/views/harmony/chrome_layout_provider.h",
+
   "+components/constrained_window",
   "+components/drive/drive_pref_names.h",
   "+components/pairing",
@@ -14,5 +23,9 @@ include_rules = [
   "+media/base/media_switches.h",  # For media command line switches.
   "+media/mojo/interfaces",  # For platform verification mojom interface.
   "+mojo/edk/embedder",
-  "+ui/ozone/public",
+
+  # Chromeos should not use ozone directly, it must go through mojo as ozone
+  # does not run in process in mus.
+  "-ui/ozone/public",
+  "+ui/ozone/public/ozone_switches.h",
 ]

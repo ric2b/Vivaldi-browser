@@ -14,7 +14,8 @@ class IntlArFaHePage(page_cycler_story.PageCyclerStory):
     super(IntlArFaHePage, self).__init__(
         url=url, page_set=page_set,
         shared_page_state_class=shared_page_state.SharedDesktopPageState,
-        cache_temperature=cache_temperature)
+        cache_temperature=cache_temperature,
+        name=url)
     self.archive_data_file = 'data/intl_ar_fa_he.json'
 
 
@@ -43,3 +44,8 @@ class IntlArFaHePageSet(story.StorySet):
     for url in urls_list:
       for temp in cache_temperatures:
         self.AddStory(IntlArFaHePage(url, self, cache_temperature=temp))
+
+
+class IntlArFaHeStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass

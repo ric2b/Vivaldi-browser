@@ -34,7 +34,9 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
 
   int save() override;
   int saveLayer(const SkRect* bounds, const PaintFlags* flags) override;
-  int saveLayerAlpha(const SkRect* bounds, uint8_t alpha) override;
+  int saveLayerAlpha(const SkRect* bounds,
+                     uint8_t alpha,
+                     bool preserve_lcd_text_requests) override;
 
   void restore() override;
   int getSaveCount() const override;
@@ -110,9 +112,6 @@ class CC_PAINT_EXPORT RecordPaintCanvas final : public PaintCanvas {
                     SkScalar x,
                     SkScalar y,
                     const PaintFlags& flags) override;
-
-  void drawDisplayItemList(
-      scoped_refptr<DisplayItemList> display_item_list) override;
 
   void drawPicture(sk_sp<const PaintRecord> record) override;
 

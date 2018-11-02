@@ -1,4 +1,6 @@
 include_rules = [
+  "+components/viz/common/gpu",
+  "+components/viz/host",
   "+gpu/command_buffer/client",
   "+gpu/config",
   "+gpu/ipc/client",

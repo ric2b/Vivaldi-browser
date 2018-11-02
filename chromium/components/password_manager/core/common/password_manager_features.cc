@@ -27,6 +27,10 @@ const base::Feature kEnablePasswordForceSaving = {
 extern const base::Feature kEnableManualPasswordGeneration = {
     "enable-manual-password-generation", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables username correction while saving username and password details.
+extern const base::Feature kEnableUsernameCorrection{
+    "EnableUsernameCorrection", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Disallow autofilling of the sync credential.
 const base::Feature kProtectSyncCredential = {
     "protect-sync-credential", base::FEATURE_DISABLED_BY_DEFAULT};
@@ -40,7 +44,7 @@ const base::Feature kPasswordImportExport = {"password-import-export",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Control whether users can view and copy passwords. This is only used for
-// Android, the desktop version of Chrome always allows users to view
+// mobile, the desktop version of Chrome always allows users to view
 // passwords.
 const base::Feature kViewPasswords = {"view-passwords",
                                       base::FEATURE_DISABLED_BY_DEFAULT};

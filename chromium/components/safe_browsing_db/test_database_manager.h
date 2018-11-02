@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 
 namespace safe_browsing {
 
@@ -24,8 +25,12 @@ class TestSafeBrowsingDatabaseManager
   void CancelCheck(Client* client) override;
   bool CanCheckResourceType(content::ResourceType resource_type) const override;
   bool CanCheckUrl(const GURL& url) const override;
+  bool CanCheckSubresourceFilter() const override;
   bool ChecksAreAlwaysAsync() const override;
-  bool CheckBrowseUrl(const GURL& url, Client* client) override;
+  bool CheckBrowseUrl(const GURL& url,
+                      const SBThreatTypeSet& threat_types,
+                      Client* client) override;
+  AsyncMatch CheckCsdWhitelistUrl(const GURL& url, Client* client) override;
   bool CheckDownloadUrl(const std::vector<GURL>& url_chain,
                         Client* client) override;
   bool CheckExtensionIDs(const std::set<std::string>& extension_ids,
@@ -47,7 +52,7 @@ class TestSafeBrowsingDatabaseManager
   void StopOnIOThread(bool shutdown) override;
 
  protected:
-  ~TestSafeBrowsingDatabaseManager() override {};
+  ~TestSafeBrowsingDatabaseManager() override {}
 };
 
 }  // namespace safe_browsing

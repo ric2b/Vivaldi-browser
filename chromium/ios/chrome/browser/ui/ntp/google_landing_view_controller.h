@@ -14,6 +14,7 @@
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/public/provider/chrome/browser/voice/logo_animation_controller.h"
 
+@protocol BrowserCommands;
 @protocol GoogleLandingDataSource;
 @protocol OmniboxFocuser;
 @protocol UrlLoader;
@@ -25,9 +26,10 @@
                        NewTabPagePanelProtocol,
                        ToolbarOwner>
 
-@property(nonatomic, assign) id<GoogleLandingDataSource> dataSource;
+@property(nonatomic, weak) id<GoogleLandingDataSource> dataSource;
 
-@property(nonatomic, assign) id<UrlLoader, OmniboxFocuser> dispatcher;
+@property(nonatomic, weak) id<BrowserCommands, OmniboxFocuser, UrlLoader>
+    dispatcher;
 
 @end
 

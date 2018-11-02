@@ -50,9 +50,6 @@ class NET_EXPORT_PRIVATE BidirectionalStreamSpdyImpl
              std::unique_ptr<base::Timer> timer) override;
   void SendRequestHeaders() override;
   int ReadData(IOBuffer* buf, int buf_len) override;
-  void SendData(const scoped_refptr<IOBuffer>& data,
-                int length,
-                bool end_stream) override;
   void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
                  const std::vector<int>& lengths,
                  bool end_stream) override;
@@ -60,6 +57,7 @@ class NET_EXPORT_PRIVATE BidirectionalStreamSpdyImpl
   int64_t GetTotalReceivedBytes() const override;
   int64_t GetTotalSentBytes() const override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
 
   // SpdyStream::Delegate implementation:
   void OnHeadersSent() override;

@@ -10,7 +10,6 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
-#include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "build/build_config.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -29,16 +28,6 @@ namespace variations {
 
 namespace {
 
-// Signature verification is disabled on mobile platforms for now, since it
-// adds about ~15ms to the startup time on mobile (vs. a couple ms on desktop).
-bool SignatureVerificationEnabled() {
-#if defined(OS_IOS) || defined(OS_ANDROID)
-  return false;
-#else
-  return true;
-#endif
-}
-
 // The ECDSA public key of the variations server for verifying variations seed
 // signatures.
 const uint8_t kPublicKey[] = {
@@ -51,55 +40,36 @@ const uint8_t kPublicKey[] = {
   0x2b, 0xff, 0x82, 0x4d, 0xd3, 0xfe, 0xc5, 0xef, 0x20, 0xc6, 0xa3, 0x10, 0xbf,
 };
 
-// Note: UMA histogram enum - don't re-order or remove entries.
-enum VariationSeedEmptyState {
-  VARIATIONS_SEED_NOT_EMPTY,
-  VARIATIONS_SEED_EMPTY,
-  VARIATIONS_SEED_CORRUPT,
-  VARIATIONS_SEED_INVALID_SIGNATURE,
-  VARIATIONS_SEED_CORRUPT_BASE64,
-  VARIATIONS_SEED_CORRUPT_PROTOBUF,
-  VARIATIONS_SEED_CORRUPT_GZIP,
-  VARIATIONS_SEED_EMPTY_ENUM_SIZE,
-};
+// Verifies a variations seed (the serialized proto bytes) with the specified
+// base-64 encoded signature that was received from the server and returns the
+// result. The signature is assumed to be an "ECDSA with SHA-256" signature
+// (see kECDSAWithSHA256AlgorithmID in the .cc file). Returns the result of
+// signature verification.
+VerifySignatureResult VerifySeedSignature(
+    const std::string& seed_bytes,
+    const std::string& base64_seed_signature) {
+  if (base64_seed_signature.empty())
+    return VerifySignatureResult::MISSING_SIGNATURE;
 
-void RecordVariationSeedEmptyHistogram(VariationSeedEmptyState state) {
-  UMA_HISTOGRAM_ENUMERATION("Variations.SeedEmpty", state,
-                            VARIATIONS_SEED_EMPTY_ENUM_SIZE);
+  std::string signature;
+  if (!base::Base64Decode(base64_seed_signature, &signature))
+    return VerifySignatureResult::DECODE_FAILED;
+
+  crypto::SignatureVerifier verifier;
+  if (!verifier.VerifyInit(crypto::SignatureVerifier::ECDSA_SHA256,
+                           reinterpret_cast<const uint8_t*>(signature.data()),
+                           signature.size(), kPublicKey,
+                           arraysize(kPublicKey))) {
+    return VerifySignatureResult::INVALID_SIGNATURE;
+  }
+
+  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(seed_bytes.data()),
+                        seed_bytes.size());
+  if (!verifier.VerifyFinal())
+    return VerifySignatureResult::INVALID_SEED;
+
+  return VerifySignatureResult::VALID_SIGNATURE;
 }
-
-enum VariationsSeedStoreResult {
-  VARIATIONS_SEED_STORE_SUCCESS,
-  VARIATIONS_SEED_STORE_FAILED_EMPTY,
-  VARIATIONS_SEED_STORE_FAILED_PARSE,
-  VARIATIONS_SEED_STORE_FAILED_SIGNATURE,
-  VARIATIONS_SEED_STORE_FAILED_GZIP,
-  // DELTA_COUNT is not so much a result of the seed store, but rather counting
-  // the number of delta-compressed seeds the SeedStore() function saw. Kept in
-  // the same histogram for convenience of comparing against the other values.
-  VARIATIONS_SEED_STORE_DELTA_COUNT,
-  VARIATIONS_SEED_STORE_FAILED_DELTA_READ_SEED,
-  VARIATIONS_SEED_STORE_FAILED_DELTA_APPLY,
-  VARIATIONS_SEED_STORE_FAILED_DELTA_STORE,
-  VARIATIONS_SEED_STORE_FAILED_UNGZIP,
-  VARIATIONS_SEED_STORE_FAILED_EMPTY_GZIP_CONTENTS,
-  VARIATIONS_SEED_STORE_FAILED_UNSUPPORTED_SEED_FORMAT,
-  VARIATIONS_SEED_STORE_RESULT_ENUM_SIZE,
-};
-
-void RecordSeedStoreHistogram(VariationsSeedStoreResult result) {
-  UMA_HISTOGRAM_ENUMERATION("Variations.SeedStoreResult", result,
-                            VARIATIONS_SEED_STORE_RESULT_ENUM_SIZE);
-}
-
-// Note: UMA histogram enum - don't re-order or remove entries.
-enum VariationsSeedDateChangeState {
-  SEED_DATE_NO_OLD_DATE,
-  SEED_DATE_NEW_DATE_OLDER,
-  SEED_DATE_SAME_DAY,
-  SEED_DATE_NEW_DAY,
-  SEED_DATE_ENUM_SIZE,
-};
 
 // Truncates a time to the start of the day in UTC. If given a time representing
 // 2014-03-11 10:18:03.1 UTC, it will return a time representing
@@ -118,47 +88,30 @@ base::Time TruncateToUTCDay(const base::Time& time) {
   return out_time;
 }
 
-VariationsSeedDateChangeState GetSeedDateChangeState(
+UpdateSeedDateResult GetSeedDateChangeState(
     const base::Time& server_seed_date,
     const base::Time& stored_seed_date) {
   if (server_seed_date < stored_seed_date)
-    return SEED_DATE_NEW_DATE_OLDER;
+    return UpdateSeedDateResult::NEW_DATE_IS_OLDER;
 
   if (TruncateToUTCDay(server_seed_date) !=
       TruncateToUTCDay(stored_seed_date)) {
-    // The server date is earlier than the stored date, and they are from
+    // The server date is later than the stored date, and they are from
     // different UTC days, so |server_seed_date| is a valid new day.
-    return SEED_DATE_NEW_DAY;
+    return UpdateSeedDateResult::NEW_DAY;
   }
-  return SEED_DATE_SAME_DAY;
+  return UpdateSeedDateResult::SAME_DAY;
 }
-
-#if defined(OS_ANDROID)
-enum FirstRunResult {
-  FIRST_RUN_SEED_IMPORT_SUCCESS,
-  FIRST_RUN_SEED_IMPORT_FAIL_NO_CALLBACK,
-  FIRST_RUN_SEED_IMPORT_FAIL_NO_FIRST_RUN_SEED,
-  FIRST_RUN_SEED_IMPORT_FAIL_STORE_FAILED,
-  FIRST_RUN_SEED_IMPORT_FAIL_INVALID_RESPONSE_DATE,
-  FIRST_RUN_RESULT_ENUM_SIZE,
-};
-
-void RecordFirstRunResult(FirstRunResult result) {
-  UMA_HISTOGRAM_ENUMERATION("Variations.FirstRunResult", result,
-                            FIRST_RUN_RESULT_ENUM_SIZE);
-}
-#endif  // OS_ANDROID
 
 }  // namespace
 
 VariationsSeedStore::VariationsSeedStore(PrefService* local_state)
-    : local_state_(local_state), seed_has_country_code_(false) {
-}
+    : local_state_(local_state) {}
 
 VariationsSeedStore::~VariationsSeedStore() {
 }
 
-bool VariationsSeedStore::LoadSeed(variations::VariationsSeed* seed) {
+bool VariationsSeedStore::LoadSeed(VariationsSeed* seed) {
   invalid_base64_signature_.clear();
 
 #if defined(OS_ANDROID)
@@ -167,41 +120,37 @@ bool VariationsSeedStore::LoadSeed(variations::VariationsSeed* seed) {
 #endif  // OS_ANDROID
 
   std::string seed_data;
-  if (!ReadSeedData(&seed_data))
+  LoadSeedResult read_result = ReadSeedData(&seed_data);
+  if (read_result != LoadSeedResult::SUCCESS) {
+    RecordLoadSeedResult(read_result);
     return false;
+  }
 
-  const std::string base64_seed_signature =
-      local_state_->GetString(prefs::kVariationsSeedSignature);
-  const VerifySignatureResult result =
-      VerifySeedSignature(seed_data, base64_seed_signature);
-  if (result != VARIATIONS_SEED_SIGNATURE_ENUM_SIZE) {
+  if (SignatureVerificationEnabled()) {
+    const std::string base64_signature =
+        local_state_->GetString(prefs::kVariationsSeedSignature);
+
+    const VerifySignatureResult result =
+        VerifySeedSignature(seed_data, base64_signature);
     UMA_HISTOGRAM_ENUMERATION("Variations.LoadSeedSignature", result,
-                              VARIATIONS_SEED_SIGNATURE_ENUM_SIZE);
-    if (result != VARIATIONS_SEED_SIGNATURE_VALID) {
-      ClearPrefs();
-      RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_INVALID_SIGNATURE);
+                              VerifySignatureResult::ENUM_SIZE);
+    if (result != VerifySignatureResult::VALID_SIGNATURE) {
       // Record the invalid signature.
-      invalid_base64_signature_ = base64_seed_signature;
+      invalid_base64_signature_ = base64_signature;
+      ClearPrefs();
+      RecordLoadSeedResult(LoadSeedResult::INVALID_SIGNATURE);
       return false;
     }
   }
 
   if (!seed->ParseFromString(seed_data)) {
     ClearPrefs();
-    RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_CORRUPT_PROTOBUF);
+    RecordLoadSeedResult(LoadSeedResult::CORRUPT_PROTOBUF);
     return false;
   }
 
-  // Migrate any existing country code from the seed to the pref, if the pref is
-  // empty. TODO(asvitkine): Clean up the code in M50+ when sufficient number
-  // of clients have migrated.
-  if (seed->has_country_code() &&
-      local_state_->GetString(prefs::kVariationsCountry).empty()) {
-    local_state_->SetString(prefs::kVariationsCountry, seed->country_code());
-  }
   variations_serial_number_ = seed->serial_number();
-  seed_has_country_code_ = seed->has_country_code();
-  RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_NOT_EMPTY);
+  RecordLoadSeedResult(LoadSeedResult::SUCCESS);
   return true;
 }
 
@@ -212,14 +161,16 @@ bool VariationsSeedStore::StoreSeedData(
     const base::Time& date_fetched,
     bool is_delta_compressed,
     bool is_gzip_compressed,
-    variations::VariationsSeed* parsed_seed) {
+    VariationsSeed* parsed_seed) {
+  UMA_HISTOGRAM_BOOLEAN("Variations.StoreSeed.HasCountry",
+                        !country_code.empty());
+
   // If the data is gzip compressed, first uncompress it.
   std::string ungzipped_data;
   if (is_gzip_compressed) {
     if (compression::GzipUncompress(data, &ungzipped_data)) {
       if (ungzipped_data.empty()) {
-        RecordSeedStoreHistogram(
-            VARIATIONS_SEED_STORE_FAILED_EMPTY_GZIP_CONTENTS);
+        RecordStoreSeedResult(StoreSeedResult::FAILED_EMPTY_GZIP_CONTENTS);
         return false;
       }
 
@@ -229,7 +180,7 @@ bool VariationsSeedStore::StoreSeedData(
       UMA_HISTOGRAM_COUNTS_1000("Variations.StoreSeed.GzipSize",
                                 data.length() / 1024);
     } else {
-      RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_UNGZIP);
+      RecordStoreSeedResult(StoreSeedResult::FAILED_UNGZIP);
       return false;
     }
   } else {
@@ -249,17 +200,18 @@ bool VariationsSeedStore::StoreSeedData(
 
   // If the data is delta compressed, first decode it.
   DCHECK(invalid_base64_signature_.empty());
-  RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_DELTA_COUNT);
+  RecordStoreSeedResult(StoreSeedResult::DELTA_COUNT);
 
   std::string existing_seed_data;
   std::string updated_seed_data;
-  if (!ReadSeedData(&existing_seed_data)) {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_DELTA_READ_SEED);
+  LoadSeedResult read_result = ReadSeedData(&existing_seed_data);
+  if (read_result != LoadSeedResult::SUCCESS) {
+    RecordStoreSeedResult(StoreSeedResult::FAILED_DELTA_READ_SEED);
     return false;
   }
   if (!ApplyDeltaPatch(existing_seed_data, ungzipped_data,
                        &updated_seed_data)) {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_DELTA_APPLY);
+    RecordStoreSeedResult(StoreSeedResult::FAILED_DELTA_APPLY);
     return false;
   }
 
@@ -275,14 +227,14 @@ bool VariationsSeedStore::StoreSeedData(
     UMA_HISTOGRAM_COUNTS_1000("Variations.StoreSeed.DeltaSize",
                               ungzipped_data.length() / 1024);
   } else {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_DELTA_STORE);
+    RecordStoreSeedResult(StoreSeedResult::FAILED_DELTA_STORE);
   }
   return result;
 }
 
 void VariationsSeedStore::UpdateSeedDateAndLogDayChange(
     const base::Time& server_date_fetched) {
-  VariationsSeedDateChangeState date_change = SEED_DATE_NO_OLD_DATE;
+  UpdateSeedDateResult result = UpdateSeedDateResult::NO_OLD_DATE;
 
   if (local_state_->HasPrefPath(prefs::kVariationsSeedDate)) {
     const int64_t stored_date_value =
@@ -290,11 +242,11 @@ void VariationsSeedStore::UpdateSeedDateAndLogDayChange(
     const base::Time stored_date =
         base::Time::FromInternalValue(stored_date_value);
 
-    date_change = GetSeedDateChangeState(server_date_fetched, stored_date);
+    result = GetSeedDateChangeState(server_date_fetched, stored_date);
   }
 
-  UMA_HISTOGRAM_ENUMERATION("Variations.SeedDateChange", date_change,
-                            SEED_DATE_ENUM_SIZE);
+  UMA_HISTOGRAM_ENUMERATION("Variations.SeedDateChange", result,
+                            UpdateSeedDateResult::ENUM_SIZE);
 
   local_state_->SetInt64(prefs::kVariationsSeedDate,
                          server_date_fetched.ToInternalValue());
@@ -307,45 +259,25 @@ std::string VariationsSeedStore::GetInvalidSignature() const {
 // static
 void VariationsSeedStore::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kVariationsCompressedSeed, std::string());
-  registry->RegisterStringPref(prefs::kVariationsSeed, std::string());
+  registry->RegisterStringPref(prefs::kVariationsCountry, std::string());
   registry->RegisterInt64Pref(prefs::kVariationsSeedDate,
                               base::Time().ToInternalValue());
   registry->RegisterStringPref(prefs::kVariationsSeedSignature, std::string());
-  registry->RegisterStringPref(prefs::kVariationsCountry, std::string());
 }
 
-VariationsSeedStore::VerifySignatureResult
-VariationsSeedStore::VerifySeedSignature(
-    const std::string& seed_bytes,
-    const std::string& base64_seed_signature) {
-  if (!SignatureVerificationEnabled())
-    return VARIATIONS_SEED_SIGNATURE_ENUM_SIZE;
-
-  if (base64_seed_signature.empty())
-    return VARIATIONS_SEED_SIGNATURE_MISSING;
-
-  std::string signature;
-  if (!base::Base64Decode(base64_seed_signature, &signature))
-    return VARIATIONS_SEED_SIGNATURE_DECODE_FAILED;
-
-  crypto::SignatureVerifier verifier;
-  if (!verifier.VerifyInit(crypto::SignatureVerifier::ECDSA_SHA256,
-                           reinterpret_cast<const uint8_t*>(signature.data()),
-                           signature.size(), kPublicKey,
-                           arraysize(kPublicKey))) {
-    return VARIATIONS_SEED_SIGNATURE_INVALID_SIGNATURE;
-  }
-
-  verifier.VerifyUpdate(reinterpret_cast<const uint8_t*>(seed_bytes.data()),
-                        seed_bytes.size());
-  if (verifier.VerifyFinal())
-    return VARIATIONS_SEED_SIGNATURE_VALID;
-  return VARIATIONS_SEED_SIGNATURE_INVALID_SEED;
+bool VariationsSeedStore::SignatureVerificationEnabled() {
+#if defined(OS_IOS) || defined(OS_ANDROID)
+  // Signature verification is disabled on mobile platforms for now, since it
+  // adds about ~15ms to the startup time on mobile (vs. a couple ms on
+  // desktop).
+  return false;
+#else
+  return true;
+#endif
 }
 
 void VariationsSeedStore::ClearPrefs() {
   local_state_->ClearPref(prefs::kVariationsCompressedSeed);
-  local_state_->ClearPref(prefs::kVariationsSeed);
   local_state_->ClearPref(prefs::kVariationsSeedDate);
   local_state_->ClearPref(prefs::kVariationsSeedSignature);
 }
@@ -363,57 +295,48 @@ void VariationsSeedStore::ImportFirstRunJavaSeed() {
   android::GetVariationsFirstRunSeed(&seed_data, &seed_signature, &seed_country,
                                      &response_date, &is_gzip_compressed);
   if (seed_data.empty()) {
-    RecordFirstRunResult(FIRST_RUN_SEED_IMPORT_FAIL_NO_FIRST_RUN_SEED);
+    RecordFirstRunSeedImportResult(
+        FirstRunSeedImportResult::FAIL_NO_FIRST_RUN_SEED);
     return;
   }
 
   base::Time current_date;
   if (!base::Time::FromUTCString(response_date.c_str(), &current_date)) {
-    RecordFirstRunResult(FIRST_RUN_SEED_IMPORT_FAIL_INVALID_RESPONSE_DATE);
+    RecordFirstRunSeedImportResult(
+        FirstRunSeedImportResult::FAIL_INVALID_RESPONSE_DATE);
     LOG(WARNING) << "Invalid response date: " << response_date;
     return;
   }
 
   if (!StoreSeedData(seed_data, seed_signature, seed_country, current_date,
                      false, is_gzip_compressed, nullptr)) {
-    RecordFirstRunResult(FIRST_RUN_SEED_IMPORT_FAIL_STORE_FAILED);
+    RecordFirstRunSeedImportResult(FirstRunSeedImportResult::FAIL_STORE_FAILED);
     LOG(WARNING) << "First run variations seed is invalid.";
     return;
   }
-  RecordFirstRunResult(FIRST_RUN_SEED_IMPORT_SUCCESS);
+  RecordFirstRunSeedImportResult(FirstRunSeedImportResult::SUCCESS);
 }
 #endif  // OS_ANDROID
 
-bool VariationsSeedStore::ReadSeedData(std::string* seed_data) {
+LoadSeedResult VariationsSeedStore::ReadSeedData(std::string* seed_data) {
   std::string base64_seed_data =
       local_state_->GetString(prefs::kVariationsCompressedSeed);
-  const bool is_compressed = !base64_seed_data.empty();
-  // If there's no compressed seed, fall back to the uncompressed one.
-  if (!is_compressed)
-    base64_seed_data = local_state_->GetString(prefs::kVariationsSeed);
-
-  if (base64_seed_data.empty()) {
-    RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_EMPTY);
-    return false;
-  }
+  if (base64_seed_data.empty())
+    return LoadSeedResult::EMPTY;
 
   // If the decode process fails, assume the pref value is corrupt and clear it.
   std::string decoded_data;
   if (!base::Base64Decode(base64_seed_data, &decoded_data)) {
     ClearPrefs();
-    RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_CORRUPT_BASE64);
-    return false;
+    return LoadSeedResult::CORRUPT_BASE64;
   }
 
-  if (!is_compressed) {
-    seed_data->swap(decoded_data);
-  } else if (!compression::GzipUncompress(decoded_data, seed_data)) {
+  if (!compression::GzipUncompress(decoded_data, seed_data)) {
     ClearPrefs();
-    RecordVariationSeedEmptyHistogram(VARIATIONS_SEED_CORRUPT_GZIP);
-    return false;
+    return LoadSeedResult::CORRUPT_GZIP;
   }
 
-  return true;
+  return LoadSeedResult::SUCCESS;
 }
 
 bool VariationsSeedStore::StoreSeedDataNoDelta(
@@ -421,26 +344,26 @@ bool VariationsSeedStore::StoreSeedDataNoDelta(
     const std::string& base64_seed_signature,
     const std::string& country_code,
     const base::Time& date_fetched,
-    variations::VariationsSeed* parsed_seed) {
+    VariationsSeed* parsed_seed) {
   if (seed_data.empty()) {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_EMPTY_GZIP_CONTENTS);
+    RecordStoreSeedResult(StoreSeedResult::FAILED_EMPTY_GZIP_CONTENTS);
     return false;
   }
 
   // Only store the seed data if it parses correctly.
-  variations::VariationsSeed seed;
+  VariationsSeed seed;
   if (!seed.ParseFromString(seed_data)) {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_PARSE);
+    RecordStoreSeedResult(StoreSeedResult::FAILED_PARSE);
     return false;
   }
 
-  const VerifySignatureResult result =
-      VerifySeedSignature(seed_data, base64_seed_signature);
-  if (result != VARIATIONS_SEED_SIGNATURE_ENUM_SIZE) {
+  if (SignatureVerificationEnabled()) {
+    const VerifySignatureResult result =
+        VerifySeedSignature(seed_data, base64_seed_signature);
     UMA_HISTOGRAM_ENUMERATION("Variations.StoreSeedSignature", result,
-                              VARIATIONS_SEED_SIGNATURE_ENUM_SIZE);
-    if (result != VARIATIONS_SEED_SIGNATURE_VALID) {
-      RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_SIGNATURE);
+                              VerifySignatureResult::ENUM_SIZE);
+    if (result != VerifySignatureResult::VALID_SIGNATURE) {
+      RecordStoreSeedResult(StoreSeedResult::FAILED_SIGNATURE);
       return false;
     }
   }
@@ -448,16 +371,12 @@ bool VariationsSeedStore::StoreSeedDataNoDelta(
   // Compress the seed before base64-encoding and storing.
   std::string compressed_seed_data;
   if (!compression::GzipCompress(seed_data, &compressed_seed_data)) {
-    RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_FAILED_GZIP);
+    RecordStoreSeedResult(StoreSeedResult::FAILED_GZIP);
     return false;
   }
 
   std::string base64_seed_data;
   base::Base64Encode(compressed_seed_data, &base64_seed_data);
-
-  // TODO(asvitkine): This pref is no longer being used. Remove it completely
-  // in M45+.
-  local_state_->ClearPref(prefs::kVariationsSeed);
 
 #if defined(OS_ANDROID)
   // If currently we do not have any stored pref then we mark seed storing as
@@ -470,12 +389,8 @@ bool VariationsSeedStore::StoreSeedDataNoDelta(
 #endif
 
   // Update the saved country code only if one was returned from the server.
-  // Prefer the country code that was transmitted in the header over the one in
-  // the seed (which is deprecated).
   if (!country_code.empty())
     local_state_->SetString(prefs::kVariationsCountry, country_code);
-  else if (seed.has_country_code())
-    local_state_->SetString(prefs::kVariationsCountry, seed.country_code());
 
   local_state_->SetString(prefs::kVariationsCompressedSeed, base64_seed_data);
   UpdateSeedDateAndLogDayChange(date_fetched);
@@ -485,7 +400,7 @@ bool VariationsSeedStore::StoreSeedDataNoDelta(
   if (parsed_seed)
     seed.Swap(parsed_seed);
 
-  RecordSeedStoreHistogram(VARIATIONS_SEED_STORE_SUCCESS);
+  RecordStoreSeedResult(StoreSeedResult::SUCCESS);
   return true;
 }
 
@@ -538,8 +453,7 @@ bool VariationsSeedStore::ApplyDeltaPatch(const std::string& existing_data,
 }
 
 void VariationsSeedStore::ReportUnsupportedSeedFormatError() {
-  RecordSeedStoreHistogram(
-      VARIATIONS_SEED_STORE_FAILED_UNSUPPORTED_SEED_FORMAT);
+  RecordStoreSeedResult(StoreSeedResult::FAILED_UNSUPPORTED_SEED_FORMAT);
 }
 
 }  // namespace variations

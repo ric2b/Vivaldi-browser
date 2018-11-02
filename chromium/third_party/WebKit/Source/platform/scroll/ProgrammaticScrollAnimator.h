@@ -29,20 +29,21 @@ class ProgrammaticScrollAnimator : public ScrollAnimatorCompositorCoordinator {
 
   virtual ~ProgrammaticScrollAnimator();
 
-  void ScrollToOffsetWithoutAnimation(const ScrollOffset&);
-  void AnimateToOffset(const ScrollOffset&);
+  void ScrollToOffsetWithoutAnimation(const ScrollOffset&,
+                                      bool is_sequenced_scroll);
+  void AnimateToOffset(const ScrollOffset&, bool is_sequenced_scroll = false);
 
   // ScrollAnimatorCompositorCoordinator implementation.
   void ResetAnimationState() override;
   void CancelAnimation() override;
-  void TakeOverCompositorAnimation() override{};
+  void TakeOverCompositorAnimation() override {}
   ScrollableArea* GetScrollableArea() const override {
     return scrollable_area_;
   }
   void TickAnimation(double monotonic_time) override;
   void UpdateCompositorAnimations() override;
   void NotifyCompositorAnimationFinished(int group_id) override;
-  void NotifyCompositorAnimationAborted(int group_id) override{};
+  void NotifyCompositorAnimationAborted(int group_id) override {}
   void LayerForCompositedScrollingDidChange(
       CompositorAnimationTimeline*) override;
 
@@ -52,11 +53,17 @@ class ProgrammaticScrollAnimator : public ScrollAnimatorCompositorCoordinator {
   explicit ProgrammaticScrollAnimator(ScrollableArea*);
 
   void NotifyOffsetChanged(const ScrollOffset&);
+  void AnimationFinished();
 
   Member<ScrollableArea> scrollable_area_;
   std::unique_ptr<CompositorScrollOffsetAnimationCurve> animation_curve_;
   ScrollOffset target_offset_;
   double start_time_;
+  // is_sequenced_scroll_ is true for the entire duration of an animated scroll
+  // as well as during an instant scroll if that scroll is part of a sequence.
+  // It resets to false at the end of the scroll. It controls whether we should
+  // abort the smooth scroll sequence after an instant SetScrollOffset.
+  bool is_sequenced_scroll_;
 };
 
 }  // namespace blink

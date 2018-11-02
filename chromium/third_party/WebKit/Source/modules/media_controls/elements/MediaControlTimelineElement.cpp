@@ -59,6 +59,10 @@ void MediaControlTimelineElement::OnPlaying() {
       MediaElement().IsFullscreen(), TimelineWidth());
 }
 
+const char* MediaControlTimelineElement::GetNameForHistograms() const {
+  return "TimelineSlider";
+}
+
 void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
   if (event->IsMouseEvent() &&
       ToMouseEvent(event)->button() !=
@@ -70,9 +74,9 @@ void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
 
   // TODO(crbug.com/706504): These should listen for pointerdown/up.
   if (event->type() == EventTypeNames::mousedown)
-    static_cast<MediaControlsImpl&>(GetMediaControls()).BeginScrubbing();
+    GetMediaControls().BeginScrubbing();
   if (event->type() == EventTypeNames::mouseup)
-    static_cast<MediaControlsImpl&>(GetMediaControls()).EndScrubbing();
+    GetMediaControls().EndScrubbing();
 
   // Only respond to main button of primary pointer(s).
   if (event->IsPointerEvent() && ToPointerEvent(event)->isPrimary() &&
@@ -81,7 +85,7 @@ void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
     if (event->type() == EventTypeNames::pointerdown) {
       Platform::Current()->RecordAction(
           UserMetricsAction("Media.Controls.ScrubbingBegin"));
-      static_cast<MediaControlsImpl&>(GetMediaControls()).BeginScrubbing();
+      GetMediaControls().BeginScrubbing();
       Element* thumb = UserAgentShadowRoot()->getElementById(
           ShadowElementNames::SliderThumb());
       bool started_from_thumb = thumb && thumb == event->target()->ToNode();
@@ -90,7 +94,7 @@ void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
     if (event->type() == EventTypeNames::pointerup) {
       Platform::Current()->RecordAction(
           UserMetricsAction("Media.Controls.ScrubbingEnd"));
-      static_cast<MediaControlsImpl&>(GetMediaControls()).EndScrubbing();
+      GetMediaControls().EndScrubbing();
       metrics_.RecordEndGesture(TimelineWidth(), MediaElement().duration());
     }
   }
@@ -103,6 +107,11 @@ void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
   }
 
   MediaControlInputElement::DefaultEventHandler(event);
+
+  if (event->IsMouseEvent() || event->IsKeyboardEvent() ||
+      event->IsGestureEvent() || event->IsPointerEvent()) {
+    MaybeRecordInteracted();
+  }
 
   if (event->type() != EventTypeNames::input)
     return;
@@ -125,8 +134,7 @@ void MediaControlTimelineElement::DefaultEventHandler(Event* event) {
 
   // Provide immediate feedback (without waiting for media to seek) to make it
   // easier for user to seek to a precise time.
-  static_cast<MediaControlsImpl&>(GetMediaControls())
-      .UpdateCurrentTimeDisplay();
+  GetMediaControls().UpdateCurrentTimeDisplay();
 }
 
 bool MediaControlTimelineElement::KeepEventInNode(Event* event) {

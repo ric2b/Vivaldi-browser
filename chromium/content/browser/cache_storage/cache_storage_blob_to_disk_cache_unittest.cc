@@ -62,10 +62,8 @@ class NullURLRequestContextGetter : public net::URLRequestContextGetter {
 // the memory.
 std::unique_ptr<storage::BlobProtocolHandler> CreateMockBlobProtocolHandler(
     storage::BlobStorageContext* blob_storage_context) {
-  // The FileSystemContext and thread task runner are not actually used but a
-  // task runner is needed to avoid a DCHECK in BlobURLRequestJob ctor.
-  return base::MakeUnique<storage::BlobProtocolHandler>(
-      blob_storage_context, nullptr, base::ThreadTaskRunnerHandle::Get().get());
+  return base::MakeUnique<storage::BlobProtocolHandler>(blob_storage_context,
+                                                        nullptr);
 }
 
 // A CacheStorageBlobToDiskCache that can delay reading from blobs.
@@ -177,8 +175,8 @@ class CacheStorageBlobToDiskCacheTest : public testing::Test {
     cache_storage_blob_to_disk_cache_->StreamBlobToCache(
         std::move(disk_cache_entry_), kCacheEntryIndex,
         url_request_context_getter_.get(), std::move(new_data_handle),
-        base::Bind(&CacheStorageBlobToDiskCacheTest::StreamCallback,
-                   base::Unretained(this)));
+        base::BindOnce(&CacheStorageBlobToDiskCacheTest::StreamCallback,
+                       base::Unretained(this)));
 
     base::RunLoop().RunUntilIdle();
 

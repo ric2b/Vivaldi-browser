@@ -39,6 +39,9 @@ class CHROMEOS_EXPORT Printer {
 
     // True if the printer should be auto-configured and a PPD is unnecessary.
     bool autoconf = false;
+
+    // Explicitly support equivalence, to detect if a reference has changed.
+    bool operator==(const PpdReference& other) const;
   };
 
   // The location where the printer is stored.
@@ -65,8 +68,8 @@ class CHROMEOS_EXPORT Printer {
   // Constructs a printer object that is completely empty.
   Printer();
 
-  // Constructs a printer object with an |id| and a |last_updated| timestamp.
-  explicit Printer(const std::string& id, const base::Time& last_updated = {});
+  // Constructs a printer object with the given |id|.
+  explicit Printer(const std::string& id);
 
   // Copy constructor and assignment.
   Printer(const Printer& printer);
@@ -87,16 +90,30 @@ class CHROMEOS_EXPORT Printer {
     description_ = description;
   }
 
+  // Returns the |manufacturer| of the printer.
+  // DEPRECATED(skau@chromium.org): Use make_and_model() instead.
   const std::string& manufacturer() const { return manufacturer_; }
   void set_manufacturer(const std::string& manufacturer) {
     manufacturer_ = manufacturer;
   }
 
+  // Returns the |model| of the printer.
+  // DEPRECATED(skau@chromium.org): Use make_and_model() instead.
   const std::string& model() const { return model_; }
   void set_model(const std::string& model) { model_ = model; }
 
+  const std::string& make_and_model() const { return make_and_model_; }
+  void set_make_and_model(const std::string& make_and_model) {
+    make_and_model_ = make_and_model;
+  }
+
   const std::string& uri() const { return uri_; }
   void set_uri(const std::string& uri) { uri_ = uri; }
+
+  const std::string& effective_uri() const { return effective_uri_; }
+  void set_effective_uri(const std::string& effective_uri) {
+    effective_uri_ = effective_uri;
+  }
 
   const PpdReference& ppd_reference() const { return ppd_reference_; }
   PpdReference* mutable_ppd_reference() { return &ppd_reference_; }
@@ -115,10 +132,6 @@ class CHROMEOS_EXPORT Printer {
   Source source() const { return source_; }
   void set_source(const Source source) { source_ = source; }
 
-  // Returns the timestamp for the most recent update.  Returns 0 if the
-  // printer was not created with a valid timestamp.
-  base::Time last_updated() const { return last_updated_; }
-
  private:
   // Globally unique identifier. Empty indicates a new printer.
   std::string id_;
@@ -130,14 +143,30 @@ class CHROMEOS_EXPORT Printer {
   std::string description_;
 
   // The manufacturer of the printer, e.g. HP
+  // DEPRECATED(skau@chromium.org): Migrating to make_and_model.  This is kept
+  // for backward compatibility until migration is complete.
   std::string manufacturer_;
 
   // The model of the printer, e.g. OfficeJet 415
+  // DEPRECATED(skau@chromium.org): Migrating to make_and_model.  This is kept
+  // for backward compatibility until migration is complete.
   std::string model_;
+
+  // The manufactuer and model of the printer in one string. e.g. HP OfficeJet
+  // 415. This is either read from or derived from printer information and is
+  // not necessarily suitable for display.
+  std::string make_and_model_;
 
   // The full path for the printer. Suitable for configuration in CUPS.
   // Contains protocol, hostname, port, and queue.
   std::string uri_;
+
+  // When non-empty, the uri to use with cups instead of uri_.  This field
+  // is ephemeral, and not saved to sync service.  This allows us to do
+  // on the fly rewrites of uris to work around limitations in the OS such
+  // as CUPS not being able to directly resolve mDNS addresses, see crbug/626377
+  // for details.
+  std::string effective_uri_;
 
   // How to find the associated postscript printer description.
   PpdReference ppd_reference_;
@@ -147,9 +176,6 @@ class CHROMEOS_EXPORT Printer {
 
   // The datastore which holds this printer.
   Source source_;
-
-  // Timestamp of most recent change.
-  base::Time last_updated_;
 };
 
 }  // namespace chromeos

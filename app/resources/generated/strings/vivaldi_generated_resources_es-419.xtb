@@ -313,7 +313,7 @@
 <translation id="5483785310822538350">Revocar acceso al archivo y al dispositivo</translation>
 <translation id="5485102783864353244">Agregar aplicación</translation>
 <translation id="5486561344817861625">Simular reinicio del navegador</translation>
-<translation id="5488468185303821006">Permitir en incógnito</translation>
+<translation id="5488468185303821006">Permitir en modo incógnito</translation>
 <translation id="5509693895992845810">Gu&amp;ardar como...</translation>
 <translation id="5521078259930077036">¿Esta es la página principal que esperabas ver?</translation>
 <translation id="5532223876348815659">Global</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">Memoria SQLite</translation>
 <translation id="6655190889273724601">Modo desarrollador</translation>
 <translation id="6691936601825168937">&amp;Reenviar</translation>
-<translation id="6700480081846086223">Transmitir <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Campo de aplicación</translation>
 <translation id="6786747875388722282">Extensiones</translation>
 <translation id="6787839852456839824">Combinaciones de teclas para acceso directo</translation>

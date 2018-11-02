@@ -41,7 +41,7 @@ void LayoutTextCombine::StyleDidChange(StyleDifference diff,
   UpdateIsCombined();
 }
 
-void LayoutTextCombine::SetTextInternal(PassRefPtr<StringImpl> text) {
+void LayoutTextCombine::SetTextInternal(RefPtr<StringImpl> text) {
   LayoutText::SetTextInternal(std::move(text));
 
   UpdateIsCombined();
@@ -53,7 +53,8 @@ float LayoutTextCombine::Width(unsigned from,
                                LayoutUnit x_position,
                                TextDirection direction,
                                HashSet<const SimpleFontData*>* fallback_fonts,
-                               FloatRect* glyph_bounds) const {
+                               FloatRect* glyph_bounds,
+                               float) const {
   if (!length)
     return 0;
 

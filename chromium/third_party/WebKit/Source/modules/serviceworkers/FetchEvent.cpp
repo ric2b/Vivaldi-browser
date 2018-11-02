@@ -6,6 +6,7 @@
 
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/UseCounter.h"
 #include "core/timing/WorkerGlobalScopePerformance.h"
 #include "modules/fetch/BytesConsumerForDataConsumerHandle.h"
 #include "modules/fetch/Request.h"
@@ -50,6 +51,7 @@ String FetchEvent::clientId() const {
 }
 
 bool FetchEvent::isReload() const {
+  UseCounter::Count(GetExecutionContext(), WebFeature::kFetchEventIsReload);
   return is_reload_;
 }
 
@@ -164,6 +166,10 @@ void FetchEvent::OnNavigationPreloadError(
   if (!script_state->ContextIsValid())
     return;
   DCHECK(preload_response_property_);
+  if (preload_response_property_->GetState() !=
+      PreloadResponseProperty::kPending) {
+    return;
+  }
   preload_response_property_->Reject(
       ServiceWorkerError::Take(nullptr, *error.get()));
 }

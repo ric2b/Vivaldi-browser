@@ -12,16 +12,15 @@
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/browser/ui/views/toolbar/app_menu_button.h"
 #include "chrome/browser/ui/views/toolbar/browser_actions_container.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "extensions/common/feature_switch.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/views/controls/button/checkbox.h"
-#include "ui/views/layout/layout_constants.h"
 
 using extensions::Extension;
 
@@ -68,10 +67,6 @@ bool ImeWarningBubbleView::Cancel() {
   return true;
 }
 
-bool ImeWarningBubbleView::ShouldDefaultButtonBeBlue() const {
-  return true;
-}
-
 void ImeWarningBubbleView::OnToolbarActionsBarAnimationEnded() {
   if (!bubble_has_shown_) {
     views::BubbleDialogDelegateView::CreateBubble(this)->Show();
@@ -96,7 +91,7 @@ ImeWarningBubbleView::ImeWarningBubbleView(
     : extension_(extension),
       browser_view_(browser_view),
       browser_(browser_view->browser()),
-      anchor_to_browser_action_(false),
+      anchor_to_action_(false),
       never_show_checkbox_(nullptr),
       response_callback_(callback),
       bubble_has_shown_(false),
@@ -135,10 +130,10 @@ ImeWarningBubbleView::~ImeWarningBubbleView() {
 void ImeWarningBubbleView::InitAnchorView() {
   views::View* reference_view = nullptr;
 
-  anchor_to_browser_action_ =
+  anchor_to_action_ =
       extensions::ActionInfo::GetBrowserActionInfo(extension_) ||
-      extensions::FeatureSwitch::extension_action_redesign()->IsEnabled();
-  if (anchor_to_browser_action_) {
+      extensions::ActionInfo::GetPageActionInfo(extension_);
+  if (anchor_to_action_) {
     // Anchors the bubble to the browser action of the extension.
     reference_view = container_->GetViewForId(extension_->id());
   }
@@ -174,22 +169,24 @@ void ImeWarningBubbleView::InitLayout() {
   main_cs->AddColumn(views::GridLayout::LEADING, views::GridLayout::LEADING, 0,
                      views::GridLayout::FIXED, kColumnWidth, 0);
 
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+  const int vertical_spacing =
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
   layout->StartRow(0, cs_id);
   base::string16 extension_name = base::UTF8ToUTF16(extension_->name());
   base::i18n::AdjustStringForLocaleDirection(&extension_name);
   views::Label* warning = CreateExtensionNameLabel(l10n_util::GetStringFUTF16(
       IDS_IME_API_ACTIVATED_WARNING, extension_name));
   layout->AddView(warning);
-  layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
+  layout->AddPaddingRow(0, vertical_spacing);
 
   // The seconde row which shows the check box.
   layout->StartRow(0, cs_id);
   never_show_checkbox_ =
       new views::Checkbox(l10n_util::GetStringUTF16(IDS_IME_API_NEVER_SHOW));
   layout->AddView(never_show_checkbox_);
-  layout->AddPaddingRow(0, views::kRelatedControlVerticalSpacing);
 }
 
 bool ImeWarningBubbleView::IsToolbarAnimating() {
-  return anchor_to_browser_action_ && container_->animating();
+  return anchor_to_action_ && container_->animating();
 }

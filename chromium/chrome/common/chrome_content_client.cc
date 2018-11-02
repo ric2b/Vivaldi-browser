@@ -9,6 +9,7 @@
 #include <map>
 #include <memory>
 #include <tuple>
+#include <utility>
 
 #include "base/command_line.h"
 #include "base/debug/crash_logging.h"
@@ -166,7 +167,7 @@ void ComputeBuiltInPlugins(std::vector<content::PepperPluginInfo>* plugins) {
   content::PepperPluginInfo pdf_info;
   pdf_info.is_internal = true;
   pdf_info.is_out_of_process = true;
-  pdf_info.name = ChromeContentClient::kPDFPluginName;
+  pdf_info.name = ChromeContentClient::kPDFInternalPluginName;
   pdf_info.description = kPDFPluginDescription;
   pdf_info.path = base::FilePath::FromUTF8Unsafe(
       ChromeContentClient::kPDFPluginPath);
@@ -649,12 +650,12 @@ void ChromeContentClient::AddAdditionalSchemes(Schemes* schemes) {
 
   schemes->secure_origins = GetSecureOriginWhitelist();
 
-  schemes->no_access_schemes.push_back(chrome::kChromeNativeScheme);
-
   // chrome-native: is a scheme used for placeholder navigations that allow
   // UIs to be drawn with platform native widgets instead of HTML.  These pages
   // should be treated as empty documents that can commit synchronously.
   schemes->empty_document_schemes.push_back(chrome::kChromeNativeScheme);
+  schemes->no_access_schemes.push_back(chrome::kChromeNativeScheme);
+  schemes->secure_schemes.push_back(chrome::kChromeNativeScheme);
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   if (extensions::feature_util::ExtensionServiceWorkersEnabled())

@@ -4,9 +4,13 @@
 
 #include "core/layout/ng/ng_box_fragment.h"
 
+#include "core/layout/LayoutBox.h"
 #include "core/layout/ng/geometry/ng_logical_size.h"
+#include "core/layout/ng/inline/ng_line_height_metrics.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/layout/ng/ng_macros.h"
 #include "core/layout/ng/ng_physical_box_fragment.h"
+#include "core/layout/ng/ng_unpositioned_float.h"
 
 namespace blink {
 
@@ -15,19 +19,40 @@ NGLogicalSize NGBoxFragment::OverflowSize() const {
   return physical_fragment->OverflowSize().ConvertToLogical(WritingMode());
 }
 
-const WTF::Optional<NGLogicalOffset>& NGBoxFragment::BfcOffset() const {
-  WRITING_MODE_IGNORED(
-      "Accessing BFC offset is allowed here because writing"
-      "modes are irrelevant in this case.");
-  return ToNGPhysicalBoxFragment(physical_fragment_)->BfcOffset();
-}
+NGLineHeightMetrics NGBoxFragment::BaselineMetrics(
+    const NGBaselineRequest& request) const {
+  LayoutBox* layout_box = ToLayoutBox(physical_fragment_->GetLayoutObject());
 
-const NGMarginStrut& NGBoxFragment::EndMarginStrut() const {
-  WRITING_MODE_IGNORED(
-      "Accessing the margin strut is fine here. Changing the writing mode"
-      "establishes a new formatting context, for which a margin strut is"
-      "never set for a fragment.");
-  return ToNGPhysicalBoxFragment(physical_fragment_)->EndMarginStrut();
+  // Find the baseline from the computed results.
+  const NGPhysicalBoxFragment* physical_fragment =
+      ToNGPhysicalBoxFragment(physical_fragment_);
+  if (const NGBaseline* baseline = physical_fragment->Baseline(request)) {
+    LayoutUnit ascent = baseline->offset;
+    LayoutUnit descent = BlockSize() - ascent;
+
+    // For replaced elements, inline-block elements, and inline-table
+    // elements, the height is the height of their margin box.
+    // https://drafts.csswg.org/css2/visudet.html#line-height
+    if (layout_box->IsAtomicInlineLevel()) {
+      ascent += layout_box->MarginOver();
+      descent += layout_box->MarginUnder();
+    }
+
+    return NGLineHeightMetrics(ascent, descent);
+  }
+
+  // The baseline type was not found. This is either this box should synthesize
+  // box-baseline without propagating from children, or caller forgot to add
+  // baseline requests to constraint space when it called Layout().
+  LayoutUnit block_size = BlockSize();
+
+  // If atomic inline, use the margin box. See above.
+  if (layout_box->IsAtomicInlineLevel())
+    block_size += layout_box->MarginLogicalHeight();
+
+  if (request.baseline_type == kAlphabeticBaseline)
+    return NGLineHeightMetrics(block_size, LayoutUnit());
+  return NGLineHeightMetrics(block_size - block_size / 2, block_size / 2);
 }
 
 }  // namespace blink

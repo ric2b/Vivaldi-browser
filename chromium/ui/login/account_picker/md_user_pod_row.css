@@ -6,10 +6,7 @@
  */
 
 podrow {
-  /* Temporarily disabled because animation interferes with updating screen's
-   size. */
   overflow: visible;
-  position: absolute;
 }
 
 /* Hide the pod row while images are loading. */
@@ -25,7 +22,7 @@ pin-keyboard {
   -webkit-tap-highlight-color: transparent;
   border-radius: 2px;
   cursor: pointer;
-  opacity: 0.64;
+  opacity: 0.54;
   outline: none;
   position: absolute;
   z-index: 0;
@@ -33,11 +30,6 @@ pin-keyboard {
 
 .account-picker.flying-pods .pod {
   transition: all 180ms;
-}
-
-.pod.pin-enabled {
-  height: 417px;
-  top: -87px !important;
 }
 
 .pod .pin-container {
@@ -82,7 +74,7 @@ pin-keyboard {
 
 html[dir=rtl] .user-image-pane {
   left: auto;
-  right: 10px;
+  right: 105px;
 }
 
 .user-image-container {
@@ -93,14 +85,58 @@ html[dir=rtl] .user-image-pane {
   width: 100%;
 }
 
-.user-image {
+.pod .user-image {
   border-radius: 50%;
+  flex: none;
   height: 100%;
   width: 100%;
 }
 
-.pod .user-image {
-  flex: none;
+.pod .user-image.switch-image-animation {
+  animation: switch-image 180ms;
+}
+
+.pod.hovered .user-image {
+  display: none;
+}
+
+.pod.focused .user-image {
+  display: none;
+}
+
+.pod .animated-image {
+  display: none;
+}
+
+.pod.hovered .animated-image {
+  display: block;
+}
+
+.pod.focused .animated-image {
+  display: block;
+}
+
+.pod .badge-container {
+  background: #FFF;
+  border-radius: 50%;
+  bottom: 0;
+  display: none;
+  height: 27px;
+  position: absolute;
+  right: 0;
+  width: 27px;
+}
+
+.pod .badge-container iron-icon {
+  --iron-icon-height: 25px;
+  --iron-icon-width: 25px;
+  display: none;
+  padding: 0;
+}
+
+.pod.legacy-supervised .badge-container,
+.pod.legacy-supervised .legacy-supervised-badge {
+  display: block;
 }
 
 /* TODO(noms): Refactor this out into a CrOS-specific file and simplify the
@@ -120,13 +156,7 @@ html:not([screen=login-add-user]) .pod.focused .user-image {
 }
 
 .main-pane {
-  position: absolute;
   z-index: 2;
-}
-
-html[dir=rtl] .main-pane {
-  left: auto;
-  right: 10px;
 }
 
 .name-container {
@@ -135,13 +165,12 @@ html[dir=rtl] .main-pane {
   top: 182px;
 }
 
-.pod.focused:not(.multiprofiles-policy-applied) .auth-container {
+.pod.focused:not(.multiprofiles-policy-applied):not(.public-account) .auth-container {
   display: flex;
   height: 40px;
   left: 51px;
-  padding-bottom: 16px;
   position: absolute;
-  top: 244px;
+  top: 236px;
 /* On chromeos we extend the width to cover the padding on the user pods. This
  is so the submit button on chromeos can extend onto the padding as shown on
  mocks. */
@@ -153,16 +182,26 @@ html[dir=rtl] .main-pane {
 </if>
 }
 
+html[dir=rtl] .pod.focused:not(.multiprofiles-policy-applied):not(.public-account) .auth-container {
+  left: auto;
+  right: 51px;
+}
+
 .auth-container .submit-button[disabled] {
   opacity: 0.34;
 }
 
 .auth-container .submit-button {
   color: #FFFFFF;
-  height: 40px;
+  height: 24px;
+  margin: 12px 0 4px 0;
   opacity: 1;
-  padding: 12px 0 4px 0;
+  padding: 0;
   width: 24px;
+}
+
+.auth-container .custom-icon-shown .submit-button {
+  margin: 11px 0 5px 0;
 }
 
 .name-container {
@@ -179,10 +218,9 @@ html[dir=rtl] .main-pane {
 
 .name {
   color: #FFFFFF;
-  /* This should be 15.6px - the equivalent of 14px at 90% scale. */
   flex: auto;
-  font-family: "Roboto";
-  font-size: 26px;
+  font: 24px Roboto;
+  font-weight: 300; /* roboto-light */
   outline: none;
   overflow: hidden;
   text-align: center;
@@ -190,22 +228,24 @@ html[dir=rtl] .main-pane {
   white-space: nowrap;
 }
 
-.learn-more-container,
 .auth-container,
 .password-entry-container,
 .reauth-hint-container {
   display: none;
 }
 
-#input-line {
+.input-line {
+  display: none;
+  height: 1px;
   opacity: 0.34;
   position: absolute;
   stroke: #FFFFFF;
-  stroke-width: 1;
+  stroke-width: 1px;
   top: 40px;
+  width: 204px;
 }
 
-#input-line[active] {
+.input-present .input-line {
   opacity: 1;
 }
 
@@ -214,14 +254,32 @@ html[dir=rtl] .main-pane {
 }
 
 .pod[auth-type='offlinePassword'].focused .password-entry-container,
-.pod[auth-type='forceOfflinePassword'].focused .password-entry-container {
+.pod[auth-type='forceOfflinePassword'].focused .password-entry-container,
+.pod[auth-type='offlinePassword'].focused .input-line,
+.pod[auth-type='forceOfflinePassword'].focused .input-line {
   display: flex;
   flex: auto;
 }
 
 .password-container {
-  height: 40px;
+  height: 34px;
+  margin-top: 6px;
   width: 180px;
+}
+
+.capslock-on .password-container {
+  width: 160px;
+}
+
+.custom-icon-shown .password-container {
+  -webkit-padding-start: 8px;
+  height: 39px;
+  margin-top: 1px;
+  width: 145px;
+}
+
+.capslock-on .custom-icon-shown .password-container {
+  width: 125px;
 }
 
 .pod input[type='password'] {
@@ -229,14 +287,16 @@ html[dir=rtl] .main-pane {
   border: none;
   color: rgba(255, 255, 255, .67);
   font-family: "Roboto";
-  font-size: 13px;
+  font-size: 16px;
   height: 100%;
-  letter-spacing: 8px;
+  letter-spacing: 6px;
   padding: 0;
   width: 100%;
 }
 
 .pod input[type='password']::-webkit-input-placeholder {
+  color: rgba(255, 255, 255, .67);
+  font-size: 13px;
   letter-spacing: 0;
 }
 
@@ -248,18 +308,25 @@ html[dir=rtl] .main-pane {
 .capslock-on .capslock-hint-container {
   display: block;
   flex: none;
-  height: 43px;
+  height: 40px;
   position: relative;
   width: 20px;
 }
 </if>
 
 .capslock-hint {
-  -webkit-margin-end: 6px;
-  -webkit-margin-start: -2px;
-  margin: auto;
-  position: relative;
-  top: 15px;
+  --iron-icon-height: 22px;
+  --iron-icon-width: 22px;
+  opacity: 0.34;
+  padding: 13px 0 5px;
+}
+
+.custom-icon-shown .capslock-hint {
+  padding: 12px 0 6px;
+}
+
+.input-present .capslock-hint {
+  opacity: 1;
 }
 
 .password-label,
@@ -438,15 +505,14 @@ html[dir=rtl] .main-pane {
   -webkit-mask-position: center;
   -webkit-mask-repeat: no-repeat;
   -webkit-mask-size: 20px;
-  background-color: #f4b400;
-  height: 24px;
+  background-color: #E67C73;
   width: 24px;
 }
 
 .reauth-hint-container .reauth-name-hint {
   align-self: center;
-  color: #565656;
-  font-size: 16px;
+  color: #E67C73;
+  font-size: 12px;
   outline: none;
   overflow: hidden;
   padding: 0 6px;
@@ -469,12 +535,6 @@ html[dir=rtl] .main-pane {
   z-index: 4;
 }
 
-html[dir=rtl] .action-box-area {
-  left: 0;
-  position: absolute;
-  right: auto;
-}
-
 .action-box-area:focus,
 .action-box-area.hovered,
 .action-box-area.active,
@@ -483,10 +543,30 @@ html[dir=rtl] .action-box-area {
 }
 
 .action-box-button {
+  -webkit-margin-start: 8px;
   height: 24px;
-  margin: 3px 0 0 8px;
+  margin-top: 3px;
   padding: 0;
   width: 24px;
+}
+
+.action-box-button.ripple-circle {
+  background: #FFF;
+  border-radius: 50%;
+  opacity: .08;
+  position: absolute;
+  transform: scale(0);
+}
+
+.action-box-area.active .action-box-button.ripple-circle {
+  animation: ripple 360ms;
+  transform: scale(1);
+}
+
+@keyframes ripple {
+  0% { transform: scale(0); }
+  30% { transform: scale(1); }
+  100% { transform: scale(1); }
 }
 
 .action-box-area .action-box-icon {
@@ -554,34 +634,21 @@ html[dir=rtl] .user-type-icon-area {
   background-image: url(../../webui/resources/images/fingerprint_failed.svg);
 }
 
-.pod input[type='password'].hidden::-webkit-input-placeholder {
-  color: grey;
-}
-
-.pod input[type='password'].default::-webkit-input-placeholder {
-  color: grey;
-}
-
-.pod input[type='password'].signin::-webkit-input-placeholder {
-  color: var(--google-blue-500);
-}
-
-.pod input[type='password'].failed::-webkit-input-placeholder {
-  color: var(--google-red-500);
-}
-
 .action-box-menu {
   display: none;
+  position: absolute;
   z-index: 6;
 }
 
 .action-box-area.active ~ .action-box-menu {
-  background-color: rgba(0, 0, 0, .34);
+  -webkit-margin-start: 12px;
+  animation: fade-in 180ms;
+  background-color: rgba(0, 0, 0, 0.8);
   border-radius: 2px;
   display: flex;
   flex-direction: column;
   font-size: 13px;
-  margin: 3px 0 0 12px;
+  margin-top: 3px;
   width: 220px;
 }
 
@@ -603,11 +670,6 @@ html[dir=rtl] .user-type-icon-area {
 
 .action-box-area.menu-moved-up {
   transform: rotate(180deg);
-}
-
-html[dir=rtl] .action-box-area.active ~ .action-box-menu {
-  left: 5px;
-  right: auto;
 }
 
 .action-box-menu-title {
@@ -638,19 +700,18 @@ html[dir=rtl] .action-box-area.active ~ .action-box-menu {
 }
 
 .action-box-menu-remove {
-  border-top: 0.25px solid grey;
+  border-top: 0.17px solid rgba(255, 255, 255, .34);
   color: #7BAAF7;
   outline: none;
   padding: 18px 14px;
 }
 
-.action-box-menu-remove:hover,
 .action-box-menu-remove:focus {
   font-weight: bold;
 }
 
 .action-box-remove-user-warning {
-  border-top: 0.25px solid grey;
+  border-top: 0.17px solid rgba(255, 255, 255, .34);
   color: white;
   font-size: 13px;
   line-height: 18px;
@@ -687,20 +748,21 @@ html[dir=rtl] .action-box-area.active ~ .action-box-menu {
 .pod.legacy-supervised .action-box-remove-non-owner-user-warning-text,
 .pod:not(.legacy-supervised)
     .action-box-remove-legacy-supervised-user-warning-text,
-.pod.synced .non-sync,
-.pod.has-no-stats .has-stats {
+.pod.synced .non-sync {
   display: none;
 }
 
 .user-type-bubble {
-  background-color: white;
-  border: 1px solid lightgray;
-  border-radius: 2px;
-  left: 5px;
+  background-color: rgba(0, 0, 0, 0.9);
+  border-radius: 4px;
+  color: #FFF;
+  font-family: "Roboto";
+  font-size: 13px;
+  left: 36px;
   opacity: 0;
   padding: 17px;
   position: absolute;
-  top: 20px;
+  top: 35px;
   transition: all 100ms;
   visibility: hidden;
   width: 200px;
@@ -709,7 +771,7 @@ html[dir=rtl] .action-box-area.active ~ .action-box-menu {
 
 html[dir=rtl] .user-type-bubble {
   left: auto;
-  right: 5px;
+  right: 36px;
 }
 
 .bubble-shown,
@@ -721,87 +783,52 @@ html[dir=rtl] .user-type-bubble {
 .user-type-bubble-header {
   font-weight: bold;
   margin-bottom: 14px;
+  text-align: center;
 }
 
 /**** Public account user pod rules *******************************************/
 
+.public-account-expanded > div,
+.public-account-expanded .pod:not(.expanded) {
+  opacity: 0; /* Cannot be replaced with display: none, otherwise the tab
+                 indexes of other elements in the pod row will be ignored. */
+}
+
 .pod.public-account.expanded {
-  height: 230px;
-  width: 500px;
-}
-
-.pod.public-account.expanded.advanced {
-  height: 280px;
-  width: 610px;
-}
-
-.pod.public-account.focused .name-container {
-  display: flex;
-}
-
-.pod.public-account.expanded .name-container {
-  display: flex;
-}
-
-.pod.public-account .learn-more-container {
-  display: block;
-  flex: none;
-}
-
-.pod.public-account .learn-more {
-  top: 22px;
+  animation: fade-in 180ms;
+  background-color: rgba(0, 0, 0, 0.56);
+  border-radius: 2px;
+  height: 324px;
+  transition: none;
+  width: 622px;
 }
 
 .expanded-pane {
   display: none;
 }
 
-.pod.public-account.animating .expanded-pane,
 .pod.public-account.expanded .expanded-pane {
+  border-left: 0.17px solid rgba(255, 255, 255, .34);
+  color: rgba(255, 255, 255, .87);
   display: block;
-  font-size: 12px;
-  margin: 10px;
+  font-family: "Roboto";
+  font-size: 13px;
+  height: 324px;
+  left: 322px;
   overflow: hidden;
+  position: absolute;
+  top: 0;
+  width: 300px;
   z-index: 1;
 }
 
-.expanded-pane-contents {
-  display: flex;
-  flex-direction: column;
-  float: right;
-  height: 213px;
-  width: 490px;
-}
-
-.pod.public-account.transitioning-to-advanced .expanded-pane-contents {
-  transition: width 180ms;
-}
-
-.pod.public-account.expanded.advanced .expanded-pane-contents {
-  height: 263px;
-  width: 600px;
-}
-
-html[dir=rtl] .expanded-pane-contents {
+html[dir=rtl] .expanded-pane {
   float: left;
 }
 
-.side-container {
-  -webkit-margin-start: 200px;
-  flex: auto;
-}
-
-.expanded-pane-name {
-  font-size: 19px;
-  margin-bottom: 11px;
-  margin-top: -2px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .expanded-pane-container {
-  color: grey;
+  margin-left: 28px;
+  margin-right: 28px;
 }
 
 .reminder {
@@ -812,26 +839,23 @@ html[dir=rtl] .expanded-pane-contents {
   display: none;
 }
 
-.pod.public-account.transitioning-to-advanced .language-and-input-section {
-  display: block;
-  opacity: 0;
-  transition: opacity 180ms ease 180ms;
-}
-
 .pod.public-account.expanded.advanced .language-and-input-section {
   display: block;
+  margin-left: 28px;
+  margin-right: 28px;
+  margin-top: 37px;
   opacity: 1;
 }
 
 .select-with-label {
   display: flex;
+  flex-direction: column;
   margin-top: 20px;
 }
 
 .language-select-label,
 .keyboard-select-label {
-  flex: none;
-  margin-top: 3px;
+  opacity: .34;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -839,7 +863,9 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .select-container {
-  flex: auto;
+  height: 16px;
+  margin-top: 5px;
+  width: 178px;
 }
 
 .language-select,
@@ -847,51 +873,113 @@ html[dir=rtl] .expanded-pane-contents {
   width: 100%;
 }
 
-.bottom-container {
-  -webkit-margin-start: 20px;
-  align-items: center;
-  display: flex;
-  flex-direction: row-reverse;
-  flex: none;
-  font-size: 13px;
-  justify-content: space-between;
-  margin-bottom: 4px;
-}
-
-.expanded-pane-learn-more-container,
 .enter-button {
   flex: none;
 }
 
-.expanded-pane-learn-more,
-.pod.public-account .learn-more {
-  background-image: url(../../webui/resources/images/business.svg);
-  background-size: 18px;
-  height: 18px;
-  margin-top: -10px;
-  position: relative;
-  width: 18px;
+.pod.public-account .full-name {
+  display: none;
+  left: 50%;
+  position: absolute;
+  top: 100%;
+  z-index: 3;
 }
 
-.expanded-pane-learn-more {
-  top: 5px;
+html[dir=rtl] .pod.public-account .full-name {
+  left: auto;
+  right: 50%;
 }
 
-.info {
-  flex: auto;
-  margin: -10px 25px;
+.pod.public-account .name-container:hover .full-name {
+  animation: fade-in 180ms;
+  background-color: rgba(0, 0, 0, 0.8);
+  border-radius: 2px;
+  color: rgba(255, 255, 255, .87);
+  display: flex;
+  font-size: 13px;
+  padding: 8px;
+}
+
+.pod .public-account-info-container {
+  display: none;
+}
+
+.pod.public-account .public-account-info-container {
+  display: block;
+  position: absolute;
+  top: 230px;
+}
+
+.public-account-info-container .learn-more {
+  --iron-icon-height: 12px;
+  --iron-icon-width: 12px;
+  display: block;
+  opacity: .67;
+  padding: 0;
+  position: absolute;
+}
+
+.public-account-info-container .info {
+  -webkit-padding-start: 8px;
+  color: rgba(255, 255, 255, .67);
+  font-family: "Roboto";
+  font-size: 13px;
   overflow: hidden;
+  position: absolute;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.pod.public-account .button-container {
+  background: rgba(255, 255, 255, .17);
+  border-radius: 50%;
+  display: none;
+  height: 40px;
+  left: 133px;
+  position: absolute;
+  top: 59px;
+  width: 40px;
+}
+
+html[dir=rtl] .pod.public-account .button-container {
+  left: auto;
+  right: 133px;
+}
+
+.pod.public-account .button-container.forced,
+.pod.public-account.hovered .button-container,
+.pod.public-account.focused .button-container {
+  display: block;
+}
+
+.pod.public-account.expanded .button-container {
+  display: none;
+}
+
+.public-account-submit-button {
+  color: #FFF;
+  opacity: 1;
+  padding: 10px 7px 8px 11px;
+}
+
 .monitoring-container {
+  margin-top: 106px;
+}
+
+.advanced .monitoring-container {
   margin-top: 35px;
+  transition: margin-top 180ms;
 }
 
 .monitoring-learn-more {
-  color: rgb(49, 106, 197);
+  color: #7BAAF7;
   text-decoration: none;
+}
+
+.monitoring-learn-more:focus,
+.language-and-input:focus {
+  font-weight: bold;
+  outline: none;
 }
 
 .monitoring-dialog-container .cr-dialog-shield {
@@ -905,16 +993,9 @@ html[dir=rtl] .expanded-pane-contents {
 
 .monitoring-dialog-container .cr-dialog-frame {
   height: 170px;
-  left: -46px;
   padding: 0px;
   position: relative;
-  top: -24px;
   width: 430px;
-}
-
-.monitoring-dialog-container.advanced .cr-dialog-frame {
-  left: -110px;
-  top: 0px;
 }
 
 .monitoring-dialog-container .cr-dialog-close {
@@ -948,34 +1029,35 @@ html[dir=rtl] .expanded-pane-contents {
 }
 
 .language-and-input-container {
-  -webkit-margin-end: 25px;
+  margin-top: 20px;
   flex: none;
 }
 
 .language-and-input {
-  color: rgb(49, 106, 197);
+  color: #7BAAF7;
   text-decoration: none;
 }
 
-.pod.public-account.expanded.advanced .language-and-input-container {
-  display: none;
+.enter-button-container {
+  background-color: #4285F4;
+  border-radius: 50%;
+  bottom: 28px;
+  height: 40px;
+  position: absolute;
+  right: 28px;
+  width: 40px;
 }
 
-.enter-button {
-  background-color: rgb(66, 133, 244);
-  color: white;
-  font-size: 12px;
-  text-transform: none;
+html[dir=rtl] .enter-button-container {
+  left: 28px;
+  right: auto;
 }
 
-.enter-button.keyboard-focus {
-  font-weight: normal;
-}
-
-.horizontal-line {
-  border-bottom: 1px double #cccccc;
-  bottom: 8px;
-  position: relative;
+.language-and-input-dropdown {
+  -webkit-margin-start: 6px;
+  height: 16px;
+  padding: 0;
+  width: 16px;
 }
 
 /* Animations for the animated ellipsis: */
@@ -1020,6 +1102,16 @@ html[dir=rtl] .expanded-pane-contents {
   width: 306px;
 }
 
+.pod.pin-enabled .large-pod {
+  height: 618px;
+}
+
+.pod.public-account.expanded .large-pod {
+  left: 8px;
+  position: absolute;
+  top: 8px;
+}
+
 .small-pod {
   height: 74px;
   width: 304px;
@@ -1048,17 +1140,11 @@ html[dir=rtl] .expanded-pane-contents {
   width: 60px;
 }
 
-.small-pod-image {
-  border-radius: 50%;
-  height: 100%;
-  width: 100%;
-}
-
 .small-pod-name {
   color: #FFFFFF;
   flex: auto;
-  font-family: "Roboto";
-  font-size: 20px;
+  font: 20px Roboto;
+  font-weight: 300; /* roboto-light */
   height: 28px;
   left: 90px;
   opacity: 1;
@@ -1071,25 +1157,28 @@ html[dir=rtl] .expanded-pane-contents {
   width: 214px;
 }
 
+html[dir=rtl] .small-pod-name {
+  left: auto;
+  right: 90px;
+}
+
 .small-pod.extra-small .small-pod-name {
   left: 76px;
   padding: 16px 0;
   width: 190px;
 }
 
-.small-pod-container.scroll {
-  background-color: rgba(20, 29, 40, .2);
+html[dir=rtl] .small-pod.extra-small .small-pod-name {
+  left: auto;
+  right: 76px;
 }
 
-.small-pod-container-mask {
-  background: linear-gradient(#00B0FF, transparent);
-  height: 112px;
-  opacity: 0.6;
-  position: absolute;
-  width: 100%;
-  z-index: 2;
+@keyframes switch-image {
+  from { transform: rotate3d(0, 1, 0, 90deg); }
+  to { transform: none; }
 }
 
-.small-pod-container-mask.rotate {
-  transform: rotate(180deg);
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

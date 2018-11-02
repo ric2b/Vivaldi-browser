@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// https://github.com/WICG/web-share/blob/master/docs/interface.md
+// https://wicg.github.io/web-share/
 
 [
-  OriginTrialEnabled=WebShare,
+  RuntimeEnabled=WebShare
 ] partial interface Navigator {
-  [CallWith=ScriptState, MeasureAs=WebShareShare]
-  Promise<void> share(ShareData data);
+  [SecureContext, CallWith=ScriptState, MeasureAs=WebShareShare]
+  Promise<void> share(optional ShareData data);
 };

@@ -110,7 +110,7 @@ and [http://es6-features.org/](http://es6-features.org/)
 
 The following features are allowed in Chromium development.
 
-## `=>` (Arrow Functions)
+## => (Arrow Functions)
 
 Arrow functions provide a concise syntax to create a function, and fix a number
 of difficulties with `this` (e.g. eliminating the need to write `const self =
@@ -150,7 +150,7 @@ iOS.  There's a presubmit that should warn you about this.
 
 ---
 
-## `Promise`
+## Promise
 
 The Promise object is used for asynchronous computations. A Promise represents a
 value which may be available now, or in the future, or never.
@@ -183,6 +183,104 @@ this document.
 
 ---
 
+## Classes
+
+OOP-style and boilerplate-free class syntax, including inheritance, `super()`,
+static members, and getters and setters.
+
+**Usage Example:**
+
+```js
+class Shape {
+  constructor(x, y) {
+    this.x = x;
+    this.y = y;
+  }
+}
+// Note: let Shape = class {...}; is also valid.
+
+class Rectangle extends Shape {
+  constructor(x, y, width, height) {
+    super(id, x, y);
+    this.width  = width;
+    this.height = height;
+  }
+
+  static goldenRectangle() {
+    var PHI = (1 + Math.sqrt(5)) / 2;
+    return new Rectangle(0, 0, PHI, 1);
+  }
+}
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-class-definitions)
+
+**Discussion Notes / Link to Thread:**
+https://groups.google.com/a/chromium.org/d/msg/chromium-dev/S1h-0m2ohOw/jyaiMGDlCwAJ
+
+**Note**: Not fully supported in iOS9.  Don't use it in code that runs on Chrome
+for iOS, unless you can verify it works. TODO: Remove this note once support for
+iOS9 is dropped.
+
+---
+
+## Map
+
+A simple key/value map in which any value (both objects and primitive values)
+may be used as either a key or a value.
+
+**Usage Example:**
+
+```js
+var map = new Map();
+map.size === 0;  // true
+map.get('foo');  // undefined
+
+var key = 54;
+map.set(key, 123);
+map.size === 1;  // true
+map.has(key);  // true
+map.get(key);  // 123
+
+map.delete(key);
+map.has(key);  // false
+map.size === 0;  // true
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-map-objects)
+[link](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)
+
+**Discussion Notes:** Feature already extensively used prior to creation of
+this document.
+
+---
+
+## Set
+
+An object that lets you store unique values of any type, whether primitive
+values or object references.
+
+**Usage Example:**
+
+```js
+var set = new Set();
+
+set.add(123);
+set.size();  // 1
+set.has(123);  // true
+
+set.add(123);
+set.size();  // 1
+```
+
+**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-set-objects)
+[link](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set)
+
+**Discussion Notes:** Feature already extensively used prior to creation of
+this document.
+
+---
+
 # Banned Features
 
 The following features are banned for Chromium development.
@@ -193,7 +291,7 @@ The following features are currently disallowed. See the top of this page on
 how to propose moving a feature from this list into the allowed or banned
 sections.
 
-## `let` (Block-Scoped Variables)
+## let (Block-Scoped Variables)
 
 `let` declares a variable within the scope of a block.  This differs from `var`,
 which uses function level scope.
@@ -236,7 +334,7 @@ function f() {
 
 ---
 
-## `const` (Block-Scoped Constants)
+## const (Block-Scoped Constants)
 
 Constants (also known as "immutable variables") are variables which cannot be
 re-assigned new content. Note that if the value is an object, the object itself
@@ -259,42 +357,6 @@ frobber.isFrobbing = false;  // Works.
 **Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-let-and-const-declarations)
 
 **See also:** [Object.freeze()](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object/freeze)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## Classes
-
-OOP-style and boilerplate-free class syntax, including inheritance, `super()`,
-static members, and getters and setters.
-
-**Usage Example:**
-
-```js
-class Shape {
-  constructor(x, y) {
-    this.x = x;
-    this.y = y;
-  }
-}
-// Note: let Shape = class {...}; is also valid.
-
-class Rectangle extends Shape {
-  constructor(x, y, width, height) {
-    super(id, x, y);
-    this.width  = width;
-    this.height = height;
-  }
-
-  static goldenRectangle() {
-		var PHI = (1 + Math.sqrt(5)) / 2;
-    return new Rectangle(0, 0, PHI, 1);
-  }
-}
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-class-definitions)
 
 **Discussion Notes / Link to Thread:**
 
@@ -614,7 +676,7 @@ Object.getOwnPropertySymbols(obj);  // [foo, bar]
 
 ---
 
-## `for ...of` Loops
+## for...of Loops
 
 Convenient operator to iterate over all values in an iterable collection. This
 differs from `for ...in`, which iterates over all iterable properties.
@@ -776,62 +838,7 @@ for (let i of range(0, 10, 2)) {
 
 ---
 
-## `Map`
-
-A simple key/value map in which any value (both objects and primitive values)
-may be used as either a key or a value.
-
-**Usage Example:**
-
-```js
-var map = new Map();
-map.size === 0;  // true
-map.get('foo');  // undefined
-
-var key = {};
-map.set(key, 123);
-map.size === 1;  // true
-map.has(key);  // true
-map.get(key);  // 123
-
-map.delete(key);
-map.has(key);  // false
-map.size === 0;  // true
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-map-objects)
-[link](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Map)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## `Set`
-
-An object that lets you store unique values of any type, whether primitive
-values or object references.
-
-**Usage Example:**
-
-```js
-var set = new Set();
-
-set.add(123);
-set.size();  // 1
-set.has(123);  // true
-
-set.add(123);
-set.size();  // 1
-```
-
-**Documentation:** [link](http://www.ecma-international.org/ecma-262/6.0/#sec-set-objects)
-[link](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set)
-
-**Discussion Notes / Link to Thread:**
-
----
-
-## `WeakMap`
+## WeakMap
 
 WeakMap does not prevent garbage collection if nothing else refers to an object
 within the collection.
@@ -853,7 +860,7 @@ weakmap.has(key) && weakmap.get(key) === 123;  // true
 
 ---
 
-## `WeakSet`
+## WeakSet
 
 WeakSet does not prevent garbage collection if nothing else refers to an object
 within the collection.
@@ -895,7 +902,7 @@ new UInt8ClampedArray();
 
 ---
 
-## `Proxy`
+## Proxy
 
 Hooking into runtime-level object meta-operations.
 
@@ -927,7 +934,7 @@ keyTracker.key2;  // '2 keys created!'
 
 ---
 
-## `Reflection`
+## Reflection
 
 Make calls corresponding to the object meta-operations.
 

@@ -1,8 +1,9 @@
 include_rules = [
     # To whitelist base/ stuff Blink is allowed to include, we list up all
     # directories and files instead of writing 'base/'.
-    "+base/allocator/oom.h",
     "+base/allocator/partition_allocator",
+    "+base/process/process_metrics.h",
+    "+base/atomic_ref_count.h",
     "+base/auto_reset.h",
     "+base/bind.h",
     "+base/bits.h",
@@ -18,7 +19,6 @@ include_rules = [
     "+base/threading/thread_checker.h",
     "+base/time/time.h",
     "+base/tuple.h",
-    "+build",
     # To avoid recursive dependency, we impose a blanket ban on using other
     # platform files. Think carefully if you want to relax this restriction.
     "-platform",

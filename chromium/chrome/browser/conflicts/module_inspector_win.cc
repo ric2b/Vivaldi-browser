@@ -18,13 +18,22 @@ StringMapping GetPathMapping() {
   });
 }
 
+// Wrapper function for InspectModule() that takes the StringMapping via a
+// scoped_refptr. This saves a copy per invocation.
+std::unique_ptr<ModuleInspectionResult> InspectModuleOnBlockingSequence(
+    scoped_refptr<base::RefCountedData<StringMapping>> env_variable_mapping,
+    const ModuleInfoKey& module_key) {
+  return InspectModule(env_variable_mapping->data, module_key);
+}
+
 }  // namespace
 
 ModuleInspector::ModuleInspector(
     const OnModuleInspectedCallback& on_module_inspected_callback)
     : on_module_inspected_callback_(on_module_inspected_callback),
       inspection_task_priority_(base::TaskPriority::BACKGROUND),
-      path_mapping_(GetPathMapping()),
+      path_mapping_(base::MakeRefCounted<base::RefCountedData<StringMapping>>(
+          GetPathMapping())),
       weak_ptr_factory_(this) {}
 
 ModuleInspector::~ModuleInspector() = default;
@@ -42,15 +51,19 @@ void ModuleInspector::IncreaseInspectionPriority() {
   inspection_task_priority_ = base::TaskPriority::USER_VISIBLE;
 }
 
+bool ModuleInspector::IsIdle() {
+  return queue_.empty();
+}
+
 void ModuleInspector::StartInspectingModule() {
   ModuleInfoKey module_key = queue_.front();
-  queue_.pop();
 
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE,
       {base::MayBlock(), inspection_task_priority_,
        base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-      base::BindOnce(&InspectModule, path_mapping_, module_key),
+      base::BindOnce(&InspectModuleOnBlockingSequence, path_mapping_,
+                     module_key),
       base::BindOnce(&ModuleInspector::OnInspectionFinished,
                      weak_ptr_factory_.GetWeakPtr(), module_key));
 }
@@ -58,6 +71,10 @@ void ModuleInspector::StartInspectingModule() {
 void ModuleInspector::OnInspectionFinished(
     const ModuleInfoKey& module_key,
     std::unique_ptr<ModuleInspectionResult> inspection_result) {
+  // Pop first, because the callback may want to know if there is any work left
+  // to be done, which is caracterized by a non-empty queue.
+  queue_.pop();
+
   on_module_inspected_callback_.Run(module_key, std::move(inspection_result));
 
   // Continue the work.

@@ -12,12 +12,22 @@
 
 namespace media_router {
 
+namespace {
+
+void OnMessageReceivedByRenderer(bool success) {
+  DLOG_IF(ERROR, !success)
+      << "Renderer PresentationConnection failed to process message!";
+}
+
+}  // namespace
+
 BrowserPresentationConnectionProxy::BrowserPresentationConnectionProxy(
     MediaRouter* router,
     const MediaRoute::Id& route_id,
     blink::mojom::PresentationConnectionRequest receiver_connection_request,
     blink::mojom::PresentationConnectionPtr controller_connection_ptr)
-    : router_(router),
+    : RouteMessageObserver(router, route_id),
+      router_(router),
       route_id_(route_id),
       binding_(this),
       target_connection_ptr_(std::move(controller_connection_ptr)) {
@@ -33,17 +43,27 @@ BrowserPresentationConnectionProxy::~BrowserPresentationConnectionProxy() {}
 
 void BrowserPresentationConnectionProxy::OnMessage(
     content::PresentationConnectionMessage message,
-    const OnMessageCallback& on_message_callback) {
+    OnMessageCallback on_message_callback) {
   DVLOG(2) << "BrowserPresentationConnectionProxy::OnMessage";
   if (message.is_binary()) {
     router_->SendRouteBinaryMessage(
         route_id_,
         base::MakeUnique<std::vector<uint8_t>>(std::move(message.data.value())),
-        on_message_callback);
+        std::move(on_message_callback));
   } else {
     router_->SendRouteMessage(route_id_, message.message.value(),
-                              on_message_callback);
+                              std::move(on_message_callback));
   }
 }
 
+void BrowserPresentationConnectionProxy::OnMessagesReceived(
+    const std::vector<content::PresentationConnectionMessage>& messages) {
+  DVLOG(2) << __func__ << ", number of messages : " << messages.size();
+  // TODO(imcheng): It would be slightly more efficient to send messages in
+  // a single batch.
+  for (const auto& message : messages) {
+    target_connection_ptr_->OnMessage(
+        message, base::BindOnce(&OnMessageReceivedByRenderer));
+  }
+}
 }  // namespace media_router

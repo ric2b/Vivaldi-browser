@@ -22,8 +22,10 @@
 #include "cc/benchmarks/micro_benchmark.h"
 #include "cc/cc_export.h"
 #include "cc/input/input_handler.h"
+#include "cc/input/scroll_boundary_behavior.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_position_constraint.h"
+#include "cc/layers/touch_action_region.h"
 #include "cc/paint/paint_record.h"
 #include "cc/trees/element_id.h"
 #include "cc/trees/mutator_host_client.h"
@@ -58,7 +60,6 @@ class ScrollbarLayerInterface;
 class CC_EXPORT Layer : public base::RefCounted<Layer> {
  public:
   using LayerListType = LayerList;
-  using LayerIdMap = std::unordered_map<int, scoped_refptr<Layer>>;
 
   enum LayerIdLabels {
     INVALID_ID = -1,
@@ -114,6 +115,11 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetBounds(const gfx::Size& bounds);
   gfx::Size bounds() const { return inputs_.bounds; }
 
+  void SetScrollBoundaryBehavior(const ScrollBoundaryBehavior& behavior);
+  ScrollBoundaryBehavior scroll_boundary_behavior() const {
+    return inputs_.scroll_boundary_behavior;
+  }
+
   void SetMasksToBounds(bool masks_to_bounds);
   bool masks_to_bounds() const { return inputs_.masks_to_bounds; }
 
@@ -140,6 +146,9 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   bool is_root_for_isolated_group() const {
     return inputs_.is_root_for_isolated_group;
   }
+
+  void SetShouldHitTest(bool should_hit_test);
+  bool should_hit_test() const { return inputs_.should_hit_test; }
 
   void SetFilters(const FilterOperations& filters);
   const FilterOperations& filters() const { return inputs_.filters; }
@@ -173,6 +182,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   const LayerStickyPositionConstraint& sticky_position_constraint() const {
     return inputs_.sticky_position_constraint;
   }
+
+  TransformNode* GetTransformNode() const;
 
   void SetTransform(const gfx::Transform& transform);
   const gfx::Transform& transform() const { return inputs_.transform; }
@@ -212,9 +223,14 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   gfx::ScrollOffset scroll_offset() const { return inputs_.scroll_offset; }
   void SetScrollOffsetFromImplSide(const gfx::ScrollOffset& scroll_offset);
 
-  void SetScrollClipLayerId(int clip_layer_id);
-  bool scrollable() const { return inputs_.scroll_clip_layer_id != INVALID_ID; }
-  Layer* scroll_clip_layer() const;
+  // Marks this layer as being scrollable and needing an associated scroll node.
+  // The scroll node's bounds and container_bounds will be kept in sync
+  // with this layer. Once scrollable, a Layer cannot become un-scrollable.
+  void SetScrollable(const gfx::Size& scroll_container_bounds);
+  gfx::Size scroll_container_bounds() const {
+    return inputs_.scroll_container_bounds;
+  }
+  bool scrollable() const { return inputs_.scrollable; }
 
   void SetUserScrollable(bool horizontal, bool vertical);
   bool user_scrollable_horizontal() const {
@@ -239,15 +255,18 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     return inputs_.non_fast_scrollable_region;
   }
 
-  void SetTouchEventHandlerRegion(const Region& touch_event_handler_region);
-  const Region& touch_event_handler_region() const {
-    return inputs_.touch_event_handler_region;
+  void SetTouchActionRegion(TouchActionRegion touch_action_region);
+  const TouchActionRegion& touch_action_region() const {
+    return inputs_.touch_action_region;
   }
 
   void set_did_scroll_callback(
-      const base::Callback<void(const gfx::ScrollOffset&)>& callback) {
-    inputs_.did_scroll_callback = callback;
+      base::Callback<void(const gfx::ScrollOffset&)> callback) {
+    inputs_.did_scroll_callback = std::move(callback);
   }
+
+  void SetCacheRenderSurface(bool cache_render_surface);
+  bool cache_render_surface() const { return cache_render_surface_; }
 
   void SetForceRenderSurfaceForTesting(bool force_render_surface);
   bool force_render_surface_for_testing() const {
@@ -271,11 +290,6 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   void SetUseParentBackfaceVisibility(bool use);
   bool use_parent_backface_visibility() const {
     return inputs_.use_parent_backface_visibility;
-  }
-
-  void SetUseLocalTransformForBackfaceVisibility(bool use_local);
-  bool use_local_transform_for_backface_visibility() const {
-    return use_local_transform_for_backface_visibility_;
   }
 
   void SetShouldCheckBackfaceVisibility(bool should_check_backface_visibility);
@@ -303,7 +317,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   // Returns true iff anything was updated that needs to be committed.
   virtual bool Update();
   virtual void SetLayerMaskType(Layer::LayerMaskType type) {}
-  virtual bool IsSuitableForGpuRasterization() const;
+  virtual bool HasSlowPaths() const;
+  virtual bool HasNonAAPaint() const;
 
   virtual std::unique_ptr<base::trace_event::ConvertableToTraceFormat>
   TakeDebugInfo();
@@ -412,14 +427,15 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
   void SetScrollbarsHiddenFromImplSide(bool hidden);
 
-  void set_is_scroll_clip_layer() { is_scroll_clip_layer_ = true; }
-
   const gfx::Rect& update_rect() const { return inputs_.update_rect; }
 
   LayerTreeHost* layer_tree_host() const { return layer_tree_host_; }
 
   // Called on the scroll layer to trigger showing the overlay scrollbars.
   void ShowScrollbars() { needs_show_scrollbars_ = true; }
+
+  bool has_transform_node() { return has_transform_node_; }
+  void SetHasTransformNode(bool val) { has_transform_node_ = val; }
 
  protected:
   friend class LayerImpl;
@@ -535,6 +551,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
     bool is_root_for_isolated_group : 1;
 
+    bool should_hit_test : 1;
+
     bool contents_opaque : 1;
 
     gfx::PointF position;
@@ -561,17 +579,21 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
 
     gfx::ScrollOffset scroll_offset;
 
-    // This variable indicates which ancestor layer (if any) whose size,
-    // transformed relative to this layer, defines the maximum scroll offset
-    // for this layer.
-    int scroll_clip_layer_id;
+    // Size of the scroll container that this layer scrolls in.
+    gfx::Size scroll_container_bounds;
+
+    // Indicates that this layer will need a scroll property node and that this
+    // layer's bounds correspond to the scroll node's bounds (both |bounds| and
+    // |scroll_container_bounds|).
+    bool scrollable : 1;
+
     bool user_scrollable_horizontal : 1;
     bool user_scrollable_vertical : 1;
 
     uint32_t main_thread_scrolling_reasons;
     Region non_fast_scrollable_region;
 
-    Region touch_event_handler_region;
+    TouchActionRegion touch_action_region;
 
     bool is_container_for_fixed_position_layers : 1;
     LayerPositionConstraint position_constraint;
@@ -593,6 +615,8 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
     LayerClient* client;
     base::Callback<void(const gfx::ScrollOffset&)> did_scroll_callback;
     std::vector<std::unique_ptr<CopyOutputRequest>> copy_requests;
+
+    ScrollBoundaryBehavior scroll_boundary_behavior;
   };
 
   Layer* parent_;
@@ -613,13 +637,16 @@ class CC_EXPORT Layer : public base::RefCounted<Layer> {
   gfx::Vector2dF offset_to_transform_parent_;
   bool should_flatten_transform_from_property_tree_ : 1;
   bool draws_content_ : 1;
-  bool use_local_transform_for_backface_visibility_ : 1;
   bool should_check_backface_visibility_ : 1;
+  // Force use of and cache render surface.
+  bool cache_render_surface_ : 1;
   bool force_render_surface_for_testing_ : 1;
   bool subtree_property_changed_ : 1;
   bool may_contain_video_ : 1;
-  bool is_scroll_clip_layer_ : 1;
   bool needs_show_scrollbars_ : 1;
+  // Whether the nodes referred to by *_tree_index_
+  // "belong" to this layer. Only applicable if use_layer_lists is false.
+  bool has_transform_node_ : 1;
   // This value is valid only when LayerTreeHost::has_copy_request() is true
   bool subtree_has_copy_request_ : 1;
   SkColor safe_opaque_background_color_;

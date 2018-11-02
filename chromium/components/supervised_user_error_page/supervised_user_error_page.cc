@@ -74,6 +74,7 @@ std::string BuildHtml(bool allow_access_requests,
                       const std::string& second_custodian,
                       const std::string& second_custodian_email,
                       bool is_child_account,
+                      bool is_deprecated,
                       FilteringBehaviorReason reason,
                       const std::string& app_locale) {
   base::DictionaryValue strings;
@@ -113,7 +114,12 @@ std::string BuildHtml(bool allow_access_requests,
   } else {
     block_header = l10n_util::GetStringUTF16(
         IDS_BLOCK_INTERSTITIAL_HEADER_ACCESS_REQUESTS_DISABLED);
-    // If access requests are disabled, there is no block message.
+
+    if (is_deprecated) {
+      DCHECK(!is_child_account);
+      block_message = l10n_util::GetStringUTF16(
+          IDS_BLOCK_INTERSTITIAL_MESSAGE_SUPERVISED_USERS_DEPRECATED);
+    }
   }
   strings.SetString("blockPageHeader", block_header);
   strings.SetString("blockPageMessage", block_message);

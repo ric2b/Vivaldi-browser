@@ -96,9 +96,9 @@ TEST_F(BackgroundLoaderContentsTest, CannotDownload) {
 
 TEST_F(BackgroundLoaderContentsTest, ShouldNotCreateWebContents) {
   ASSERT_FALSE(contents()->ShouldCreateWebContents(
-      nullptr /* contents */, nullptr /* source_site_instance */,
-      0 /* route_id */, 0 /* main_frame_route_id */,
-      0 /* main_frame_widget_route_id */,
+      nullptr /* contents */, nullptr /* opener */,
+      nullptr /* source_site_instance */, 0 /* route_id */,
+      0 /* main_frame_route_id */, 0 /* main_frame_widget_route_id */,
       content::mojom::WindowContainerType::NORMAL /* window_container_type */,
       GURL() /* opener_url */, "foo" /* frame_name */,
       GURL::EmptyGURL() /* target_url */, "bar" /* partition_id */,
@@ -144,6 +144,36 @@ TEST_F(BackgroundLoaderContentsTest, CheckMediaAccessPermissionFalse) {
   ASSERT_FALSE(contents()->CheckMediaAccessPermission(
       nullptr /* contents */, GURL::EmptyGURL() /* security_origin */,
       content::MediaStreamType::MEDIA_TAB_VIDEO_CAPTURE /* type */));
+}
+
+TEST_F(BackgroundLoaderContentsTest, AdjustPreviewsState) {
+  content::PreviewsState previews_state;
+
+  // If the state starts out as off or disabled, it should stay that way.
+  previews_state = content::PREVIEWS_OFF;
+  contents()->AdjustPreviewsStateForNavigation(&previews_state);
+  EXPECT_EQ(previews_state, content::PREVIEWS_OFF);
+  previews_state = content::PREVIEWS_NO_TRANSFORM;
+  contents()->AdjustPreviewsStateForNavigation(&previews_state);
+  EXPECT_EQ(previews_state, content::PREVIEWS_NO_TRANSFORM);
+
+  // If the state starts out as a state unfriendly to offlining, we should
+  // and out the unfriendly previews.
+  previews_state = content::SERVER_LOFI_ON | content::CLIENT_LOFI_ON;
+  contents()->AdjustPreviewsStateForNavigation(&previews_state);
+  EXPECT_EQ(previews_state, content::SERVER_LOFI_ON);
+
+  // If the state starts out as offlining friendly previews, we should preserve
+  // them.
+  previews_state = content::PARTIAL_CONTENT_SAFE_PREVIEWS;
+  contents()->AdjustPreviewsStateForNavigation(&previews_state);
+  EXPECT_EQ(previews_state, content::PARTIAL_CONTENT_SAFE_PREVIEWS);
+
+  // If there are only offlining unfriendly previews, they should all get turned
+  // off.
+  previews_state = content::CLIENT_LOFI_ON;
+  contents()->AdjustPreviewsStateForNavigation(&previews_state);
+  EXPECT_EQ(previews_state, content::PREVIEWS_OFF);
 }
 
 }  // namespace background_loader

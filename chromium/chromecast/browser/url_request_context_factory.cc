@@ -12,15 +12,16 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task_scheduler/post_task.h"
+#include "chromecast/base/cast_features.h"
 #include "chromecast/base/chromecast_switches.h"
 #include "chromecast/browser/cast_browser_process.h"
 #include "chromecast/browser/cast_http_user_agent_settings.h"
 #include "chromecast/browser/cast_network_delegate.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "components/proxy_config/pref_proxy_config_tracker_impl.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
-#include "content/public/common/content_switches.h"
 #include "content/public/common/url_constants.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
@@ -62,14 +63,6 @@ class IgnoresCTPolicyEnforcer : public net::CTPolicyEnforcer {
       const net::SCTList& verified_scts,
       const net::NetLogWithSource& net_log) override {
     return net::ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
-  }
-
-  net::ct::EVPolicyCompliance DoesConformToCTEVPolicy(
-      net::X509Certificate* cert,
-      const net::ct::EVCertsWhitelist* ev_whitelist,
-      const net::SCTList& verified_scts,
-      const net::NetLogWithSource& net_log) override {
-    return net::ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
   }
 };
 
@@ -172,8 +165,7 @@ URLRequestContextFactory::URLRequestContextFactory()
       system_network_delegate_(CastNetworkDelegate::Create()),
       system_dependencies_initialized_(false),
       main_dependencies_initialized_(false),
-      media_dependencies_initialized_(false),
-      enable_quic_(true) {}
+      media_dependencies_initialized_(false) {}
 
 URLRequestContextFactory::~URLRequestContextFactory() {
   pref_proxy_config_tracker_impl_->DetachFromPrefService();
@@ -320,31 +312,39 @@ void URLRequestContextFactory::InitializeMediaContextDependencies(
 
 void URLRequestContextFactory::PopulateNetworkSessionParams(
     bool ignore_certificate_errors,
-    net::HttpNetworkSession::Params* params) {
+    net::HttpNetworkSession::Params* session_params,
+    net::HttpNetworkSession::Context* session_context) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  params->host_resolver = host_resolver_.get();
-  params->cert_verifier = cert_verifier_.get();
-  params->channel_id_service = channel_id_service_.get();
-  params->ssl_config_service = ssl_config_service_.get();
-  params->transport_security_state = transport_security_state_.get();
-  params->cert_transparency_verifier = cert_transparency_verifier_.get();
-  params->ct_policy_enforcer = ct_policy_enforcer_.get();
-  params->http_auth_handler_factory = http_auth_handler_factory_.get();
-  params->http_server_properties = http_server_properties_.get();
-  params->ignore_certificate_errors = ignore_certificate_errors;
-  params->proxy_service = proxy_service_.get();
+  session_context->host_resolver = host_resolver_.get();
+  session_context->cert_verifier = cert_verifier_.get();
+  session_context->channel_id_service = channel_id_service_.get();
+  session_context->ssl_config_service = ssl_config_service_.get();
+  session_context->transport_security_state = transport_security_state_.get();
+  session_context->cert_transparency_verifier =
+      cert_transparency_verifier_.get();
+  session_context->ct_policy_enforcer = ct_policy_enforcer_.get();
+  session_context->http_auth_handler_factory = http_auth_handler_factory_.get();
+  session_context->http_server_properties = http_server_properties_.get();
+  session_context->proxy_service = proxy_service_.get();
 
-  LOG(INFO) << "Set HttpNetworkSessionParams.enable_quic = " << enable_quic_;
-  params->enable_quic = enable_quic_;
+  session_params->ignore_certificate_errors = ignore_certificate_errors;
+
+  // Enable QUIC if instructed by DCS. This remains constant for the lifetime of
+  // the process.
+  session_params->enable_quic = base::FeatureList::IsEnabled(kEnableQuic);
+  LOG(INFO) << "Set HttpNetworkSessionParams.enable_quic = "
+            << session_params->enable_quic;
 }
 
 net::URLRequestContext* URLRequestContextFactory::CreateSystemRequestContext() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   InitializeSystemContextDependencies();
-  net::HttpNetworkSession::Params system_params;
-  PopulateNetworkSessionParams(IgnoreCertificateErrors(), &system_params);
+  net::HttpNetworkSession::Params session_params;
+  net::HttpNetworkSession::Context session_context;
+  PopulateNetworkSessionParams(IgnoreCertificateErrors(), &session_params,
+                               &session_context);
   system_transaction_factory_.reset(new net::HttpNetworkLayer(
-      new net::HttpNetworkSession(system_params)));
+      new net::HttpNetworkSession(session_params, session_context)));
   system_job_factory_.reset(new net::URLRequestJobFactoryImpl());
   system_cookie_store_ =
       content::CreateCookieStore(content::CookieStoreConfig());
@@ -398,12 +398,13 @@ net::URLRequestContext* URLRequestContextFactory::CreateMainRequestContext(
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
   InitializeSystemContextDependencies();
 
-  net::HttpNetworkSession::Params network_session_params;
-  PopulateNetworkSessionParams(IgnoreCertificateErrors(),
-                               &network_session_params);
+  net::HttpNetworkSession::Params session_params;
+  net::HttpNetworkSession::Context session_context;
+  PopulateNetworkSessionParams(IgnoreCertificateErrors(), &session_params,
+                               &session_context);
   InitializeMainContextDependencies(
       new net::HttpNetworkLayer(
-          new net::HttpNetworkSession(network_session_params)),
+          new net::HttpNetworkSession(session_params, session_context)),
       protocol_handlers, std::move(request_interceptors));
 
   content::CookieStoreConfig cookie_config(
@@ -434,48 +435,10 @@ net::URLRequestContext* URLRequestContextFactory::CreateMainRequestContext(
 }
 
 void URLRequestContextFactory::InitializeNetworkDelegates() {
-  app_network_delegate_->Initialize(false);
+  app_network_delegate_->Initialize();
   LOG(INFO) << "Initialized app network delegate.";
-  system_network_delegate_->Initialize(false);
+  system_network_delegate_->Initialize();
   LOG(INFO) << "Initialized system network delegate.";
-}
-
-void URLRequestContextFactory::DisableQuic() {
-  content::BrowserThread::PostTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&URLRequestContextFactory::DisableQuicOnBrowserIOThread,
-                 base::Unretained(this)));
-}
-
-void URLRequestContextFactory::DisableQuicOnBrowserIOThread() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  if (!enable_quic_)
-    return;
-
-  LOG(INFO) << "Disabled QUIC.";
-
-  enable_quic_ = false;
-
-  if (main_getter_) {
-    main_getter_->GetURLRequestContext()
-        ->http_transaction_factory()
-        ->GetSession()
-        ->DisableQuic();
-  }
-
-  if (system_getter_) {
-    system_getter_->GetURLRequestContext()
-        ->http_transaction_factory()
-        ->GetSession()
-        ->DisableQuic();
-  }
-
-  if (media_getter_) {
-    media_getter_->GetURLRequestContext()
-        ->http_transaction_factory()
-        ->GetSession()
-        ->DisableQuic();
-  }
 }
 
 }  // namespace shell

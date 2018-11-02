@@ -11,6 +11,8 @@ _inspector_protocol_dir = "//third_party/inspector_protocol"
 
 blink_core_sources("inspector") {
   sources = [
+    "AddStringToDigestor.cpp",
+    "AddStringToDigestor.h",
     "ConsoleMessage.cpp",
     "ConsoleMessage.h",
     "ConsoleMessageStorage.cpp",
@@ -20,6 +22,8 @@ blink_core_sources("inspector") {
     "DOMEditor.h",
     "DOMPatchSupport.cpp",
     "DOMPatchSupport.h",
+    "DevToolsEmulator.cpp",
+    "DevToolsEmulator.h",
     "DevToolsHost.cpp",
     "DevToolsHost.h",
     "IdentifiersFactory.cpp",
@@ -30,6 +34,7 @@ blink_core_sources("inspector") {
     "InspectorAnimationAgent.h",
     "InspectorApplicationCacheAgent.cpp",
     "InspectorApplicationCacheAgent.h",
+    "InspectorBaseAgent.cpp",
     "InspectorBaseAgent.h",
     "InspectorCSSAgent.cpp",
     "InspectorCSSAgent.h",
@@ -37,6 +42,10 @@ blink_core_sources("inspector") {
     "InspectorDOMAgent.h",
     "InspectorDOMDebuggerAgent.cpp",
     "InspectorDOMDebuggerAgent.h",
+    "InspectorDOMSnapshotAgent.cpp",
+    "InspectorDOMSnapshotAgent.h",
+    "InspectorEmulationAgent.cpp",
+    "InspectorEmulationAgent.h",
     "InspectorFrontendClient.h",
     "InspectorHighlight.cpp",
     "InspectorHighlight.h",
@@ -52,6 +61,8 @@ blink_core_sources("inspector") {
     "InspectorMemoryAgent.h",
     "InspectorNetworkAgent.cpp",
     "InspectorNetworkAgent.h",
+    "InspectorOverlayAgent.cpp",
+    "InspectorOverlayAgent.h",
     "InspectorOverlayHost.cpp",
     "InspectorOverlayHost.h",
     "InspectorPageAgent.cpp",
@@ -84,6 +95,15 @@ blink_core_sources("inspector") {
     "WorkerInspectorController.h",
     "WorkerThreadDebugger.cpp",
     "WorkerThreadDebugger.h",
+  ]
+
+  jumbo_excluded_sources = [
+    # Collides with InspectorPageAgent.cpp and
+    # NetworkResourcesData.cpp (patch incoming)
+    "InspectorNetworkAgent.cpp",
+
+    # Collides with InspectorPageAgent.cpp (patch incoming)
+    "MainThreadDebugger.cpp",
   ]
 
   configs += [
@@ -129,6 +149,8 @@ inspector_protocol_generate("protocol_sources") {
     "inspector/protocol/DOMDebugger.cpp",
     "inspector/protocol/DOMDebugger.h",
     "inspector/protocol/DOM.h",
+    "inspector/protocol/DOMSnapshot.cpp",
+    "inspector/protocol/DOMSnapshot.h",
     "inspector/protocol/DOMStorage.cpp",
     "inspector/protocol/DOMStorage.h",
     "inspector/protocol/Emulation.cpp",

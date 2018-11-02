@@ -40,6 +40,7 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
   int MarginHeight() const final { return margin_height_; }
 
  protected:
+  friend class HTMLFrameElementTest;
   friend class HTMLIFrameElementTest;
 
   HTMLFrameElementBase(const QualifiedName&, Document&);
@@ -48,7 +49,7 @@ class CORE_EXPORT HTMLFrameElementBase : public HTMLFrameOwnerElement {
 
   InsertionNotificationRequest InsertedInto(ContainerNode*) override;
   void DidNotifySubtreeInsertionsToDocument() final;
-  void AttachLayoutTree(const AttachContext& = AttachContext()) override;
+  void AttachLayoutTree(AttachContext&) override;
 
   void SetScrollingMode(ScrollbarMode);
   void SetMarginWidth(int);

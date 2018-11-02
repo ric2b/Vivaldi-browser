@@ -4,6 +4,7 @@
 
 #include "ui/gfx/skia_paint_util.h"
 
+#include "base/memory/ptr_util.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
 #include "third_party/skia/include/effects/SkBlurMaskFilter.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
@@ -13,15 +14,15 @@
 namespace gfx {
 
 sk_sp<cc::PaintShader> CreateImageRepShader(const gfx::ImageSkiaRep& image_rep,
-                                            cc::PaintShader::TileMode tile_mode,
+                                            SkShader::TileMode tile_mode,
                                             const SkMatrix& local_matrix) {
-  return cc::WrapSkShader(CreateImageRepShaderForScale(
-      image_rep, tile_mode, local_matrix, image_rep.scale()));
+  return CreateImageRepShaderForScale(image_rep, tile_mode, local_matrix,
+                                      image_rep.scale());
 }
 
 sk_sp<cc::PaintShader> CreateImageRepShaderForScale(
     const gfx::ImageSkiaRep& image_rep,
-    cc::PaintShader::TileMode tile_mode,
+    SkShader::TileMode tile_mode,
     const SkMatrix& local_matrix,
     SkScalar scale) {
   // Unscale matrix by |scale| such that the bitmap is drawn at the
@@ -36,8 +37,9 @@ sk_sp<cc::PaintShader> CreateImageRepShaderForScale(
   shader_scale.setScaleX(local_matrix.getScaleX() / scale);
   shader_scale.setScaleY(local_matrix.getScaleY() / scale);
 
-  return cc::PaintShader::MakeBitmapShader(image_rep.sk_bitmap(), tile_mode,
-                                           tile_mode, &shader_scale);
+  return cc::PaintShader::MakeImage(
+      SkImage::MakeFromBitmap(image_rep.sk_bitmap()), tile_mode, tile_mode,
+      &shader_scale);
 }
 
 sk_sp<cc::PaintShader> CreateGradientShader(int start_point,
@@ -49,8 +51,8 @@ sk_sp<cc::PaintShader> CreateGradientShader(int start_point,
   grad_points[0].iset(0, start_point);
   grad_points[1].iset(0, end_point);
 
-  return cc::WrapSkShader(SkGradientShader::MakeLinear(
-      grad_points, grad_colors, NULL, 2, cc::PaintShader::kClamp_TileMode));
+  return cc::PaintShader::MakeLinearGradient(grad_points, grad_colors, nullptr,
+                                             2, SkShader::kClamp_TileMode);
 }
 
 // This is copied from

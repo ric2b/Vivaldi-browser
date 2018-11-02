@@ -58,6 +58,7 @@ class KeyboardContentsDelegate : public content::WebContentsDelegate,
 
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
+      content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,
@@ -77,7 +78,7 @@ class KeyboardContentsDelegate : public content::WebContentsDelegate,
 
   void MoveContents(content::WebContents* source,
                     const gfx::Rect& pos) override {
-    aura::Window* keyboard = ui_->GetKeyboardWindow();
+    aura::Window* keyboard = ui_->GetContentsWindow();
     // keyboard window must have been added to keyboard container window at this
     // point. Otherwise, wrong keyboard bounds is used and may cause problem as
     // described in crbug.com/367788.
@@ -173,15 +174,6 @@ KeyboardUIContent::~KeyboardUIContent() {
   ResetInsets();
 }
 
-void KeyboardUIContent::LoadSystemKeyboard() {
-  DCHECK(keyboard_contents_);
-  if (keyboard_contents_->GetURL() != default_url_) {
-    // TODO(bshe): The height of system virtual keyboard and IME virtual
-    // keyboard may different. The height needs to be restored too.
-    LoadContents(default_url_);
-  }
-}
-
 void KeyboardUIContent::UpdateInsetsForWindow(aura::Window* window) {
   aura::Window* keyboard_container =
       keyboard_controller()->GetContainerWindow();
@@ -206,7 +198,7 @@ void KeyboardUIContent::UpdateInsetsForWindow(aura::Window* window) {
   }
 }
 
-aura::Window* KeyboardUIContent::GetKeyboardWindow() {
+aura::Window* KeyboardUIContent::GetContentsWindow() {
   if (!keyboard_contents_) {
     keyboard_contents_.reset(CreateWebContents());
     keyboard_contents_->SetDelegate(new KeyboardContentsDelegate(this));
@@ -218,7 +210,7 @@ aura::Window* KeyboardUIContent::GetKeyboardWindow() {
   return keyboard_contents_->GetNativeView();
 }
 
-bool KeyboardUIContent::HasKeyboardWindow() const {
+bool KeyboardUIContent::HasContentsWindow() const {
   return !!keyboard_contents_;
 }
 
@@ -235,7 +227,8 @@ void KeyboardUIContent::ReloadKeyboardIfNeeded() {
       // navigate to a keyboard in a different extension. This keeps the UX the
       // same as Android. Note we need to explicitly close current page as it
       // might try to resize keyboard window in javascript on a resize event.
-      GetKeyboardWindow()->SetBounds(gfx::Rect());
+      TRACE_EVENT0("vk", "ReloadKeyboardIfNeeded");
+      GetContentsWindow()->SetBounds(gfx::Rect());
       keyboard_contents_->ClosePage();
       keyboard_controller()->SetKeyboardMode(FULL_WIDTH);
     }
@@ -323,6 +316,7 @@ content::WebContents* KeyboardUIContent::CreateWebContents() {
 
 void KeyboardUIContent::LoadContents(const GURL& url) {
   if (keyboard_contents_) {
+    TRACE_EVENT0("vk", "LoadContents");
     content::OpenURLParams params(url, content::Referrer(),
                                   WindowOpenDisposition::SINGLETON_TAB,
                                   ui::PAGE_TRANSITION_AUTO_TOPLEVEL, false);
@@ -340,10 +334,10 @@ const GURL& KeyboardUIContent::GetVirtualKeyboardUrl() {
 }
 
 bool KeyboardUIContent::ShouldEnableInsets(aura::Window* window) {
-  aura::Window* keyboard_window = GetKeyboardWindow();
-  return (keyboard_window->GetRootWindow() == window->GetRootWindow() &&
+  aura::Window* contents_window = GetContentsWindow();
+  return (contents_window->GetRootWindow() == window->GetRootWindow() &&
           keyboard::IsKeyboardOverscrollEnabled() &&
-          keyboard_window->IsVisible() &&
+          contents_window->IsVisible() &&
           keyboard_controller()->keyboard_visible());
 }
 

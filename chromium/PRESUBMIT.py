@@ -189,28 +189,42 @@ _BANNED_CPP_FUNCTIONS = (
       ),
     ),
     (
-      'ScopedAllowIO',
+      r'XInternAtom|xcb_intern_atom',
       (
-       'New code should not use ScopedAllowIO. Post a task to the blocking',
-       'pool or the FILE thread instead.',
+       'Use gfx::GetAtom() instead of interning atoms directly.',
       ),
       True,
       (
+        r"^gpu[\\\/]ipc[\\\/]service[\\\/]gpu_watchdog_thread\.cc$",
+        r"^remoting[\\\/]host[\\\/]linux[\\\/]x_server_clipboard\.cc$",
+        r"^ui[\\\/]gfx[\\\/]x[\\\/]x11_atom_cache\.cc$",
+      ),
+    ),
+    (
+      'ScopedAllowIO',
+      (
+       'New production code should not use ScopedAllowIO (using it in',
+       'tests is fine). Post a task to a MayBlock task runner instead.',
+      ),
+      True,
+      (
+        r"^.*(browser|unit)(|_)test[a-z_]*\.cc$",
         r"^base[\\\/]memory[\\\/]shared_memory_posix\.cc$",
         r"^base[\\\/]process[\\\/]internal_aix\.cc$",
         r"^base[\\\/]process[\\\/]process_linux\.cc$",
         r"^base[\\\/]process[\\\/]process_metrics_linux\.cc$",
         r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]boot_times_recorder\.cc$",
+        r"^chrome[\\\/]browser[\\\/]extensions[\\\/]" +
+            r"chrome_test_extension_loader.cc$",
         r"^chrome[\\\/]browser[\\\/]lifetime[\\\/]application_lifetime\.cc$",
-        r"^chrome[\\\/]browser[\\\/]chromeos[\\\/]"
-            "customization_document_browsertest\.cc$",
         r"^components[\\\/]crash[\\\/]app[\\\/]breakpad_mac\.mm$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]layout_test[\\\/]" +
             r"test_info_extractor\.cc$",
-        r"^content[\\\/].*browser(|_)test[a-zA-Z_]*\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_browser_main\.cc$",
         r"^content[\\\/]shell[\\\/]browser[\\\/]shell_message_filter\.cc$",
         r"^content[\\\/]test[\\\/]ppapi[\\\/]ppapi_test\.cc$",
+        r"^media[\\\/]cast[\\\/]test[\\\/]utility[\\\/]" +
+            r"standalone_cast_environment\.cc$",
         r"^mojo[\\\/]edk[\\\/]embedder[\\\/]" +
             r"simple_platform_shared_buffer_posix\.cc$",
         r"^net[\\\/]disk_cache[\\\/]cache_util\.cc$",
@@ -330,9 +344,11 @@ _BANNED_CPP_FUNCTIONS = (
       (),
     ),
     (
-      'base::NonThreadSafe',
+      'BrowserThread::(FILE|FILE_USER_BLOCKING|DB|PROCESS_LAUNCHER|CACHE)',
       (
-        'base::NonThreadSafe is deprecated.',
+        'The non-UI/IO BrowserThreads are deprecated, please migrate this',
+        'code to TaskScheduler. See https://goo.gl/mDSxKl for details.',
+        'For questions, contact base/task_scheduler/OWNERS.',
       ),
       True,
       (),
@@ -353,6 +369,47 @@ _BANNED_CPP_FUNCTIONS = (
       False,
       (),
     ),
+    (
+      r'/(Time(|Delta|Ticks)|ThreadTicks)::FromInternalValue|ToInternalValue',
+      (
+        'base::TimeXXX::FromInternalValue() and ToInternalValue() are',
+        'deprecated (http://crbug.com/634507). Please avoid converting away',
+        'from the Time types in Chromium code, especially if any math is',
+        'being done on time values. For interfacing with platform/library',
+        'APIs, use FromMicroseconds() or InMicroseconds(), or one of the other',
+        'type converter methods instead. For faking TimeXXX values (for unit',
+        'testing only), use TimeXXX() + TimeDelta::FromMicroseconds(N). For',
+        'other use cases, please contact base/time/OWNERS.',
+      ),
+      False,
+      (),
+    ),
+    (
+      'CallJavascriptFunctionUnsafe',
+      (
+        "Don't use CallJavascriptFunctionUnsafe() in new code. Instead, use",
+        'AllowJavascript(), OnJavascriptAllowed()/OnJavascriptDisallowed(),',
+        'and CallJavascriptFunction(). See https://goo.gl/qivavq.',
+      ),
+      False,
+      (
+        r'^content[\\\/]browser[\\\/]webui[\\\/]web_ui_impl\.(cc|h)$',
+        r'^content[\\\/]public[\\\/]browser[\\\/]web_ui\.h$',
+        r'^content[\\\/]public[\\\/]test[\\\/]test_web_ui\.(cc|h)$',
+      ),
+    ),
+    (
+      'leveldb::DB::Open',
+      (
+        'Instead of leveldb::DB::Open() use leveldb_env::OpenDB() from',
+        'third_party/leveldatabase/env_chromium.h. It exposes databases to',
+        "Chrome's tracing, making their memory usage visible.",
+      ),
+      True,
+      (
+        r'^third_party/leveldatabase/.*\.(cc|h)$',
+      ),
+    )
 )
 
 
@@ -861,165 +918,6 @@ def _CheckNoAuraWindowPropertyHInHeaders(input_api, output_api):
   return results
 
 
-def _CheckIncludeOrderForScope(scope, input_api, file_path, changed_linenums):
-  """Checks that the lines in scope occur in the right order.
-
-  1. C system files in alphabetical order
-  2. C++ system files in alphabetical order
-  3. Project's .h files
-  """
-
-  c_system_include_pattern = input_api.re.compile(r'\s*#include <.*\.h>')
-  cpp_system_include_pattern = input_api.re.compile(r'\s*#include <.*>')
-  custom_include_pattern = input_api.re.compile(r'\s*#include ".*')
-
-  C_SYSTEM_INCLUDES, CPP_SYSTEM_INCLUDES, CUSTOM_INCLUDES = range(3)
-
-  state = C_SYSTEM_INCLUDES
-
-  previous_line = ''
-  previous_line_num = 0
-  problem_linenums = []
-  out_of_order = " - line belongs before previous line"
-  for line_num, line in scope:
-    if c_system_include_pattern.match(line):
-      if state != C_SYSTEM_INCLUDES:
-        problem_linenums.append((line_num, previous_line_num,
-            " - C system include file in wrong block"))
-      elif previous_line and previous_line > line:
-        problem_linenums.append((line_num, previous_line_num,
-            out_of_order))
-    elif cpp_system_include_pattern.match(line):
-      if state == C_SYSTEM_INCLUDES:
-        state = CPP_SYSTEM_INCLUDES
-      elif state == CUSTOM_INCLUDES:
-        problem_linenums.append((line_num, previous_line_num,
-            " - c++ system include file in wrong block"))
-      elif previous_line and previous_line > line:
-        problem_linenums.append((line_num, previous_line_num, out_of_order))
-    elif custom_include_pattern.match(line):
-      if state != CUSTOM_INCLUDES:
-        state = CUSTOM_INCLUDES
-      elif previous_line and previous_line > line:
-        problem_linenums.append((line_num, previous_line_num, out_of_order))
-    else:
-      problem_linenums.append((line_num, previous_line_num,
-          "Unknown include type"))
-    previous_line = line
-    previous_line_num = line_num
-
-  warnings = []
-  for (line_num, previous_line_num, failure_type) in problem_linenums:
-    if line_num in changed_linenums or previous_line_num in changed_linenums:
-      warnings.append('    %s:%d:%s' % (file_path, line_num, failure_type))
-  return warnings
-
-
-def _CheckIncludeOrderInFile(input_api, f, changed_linenums):
-  """Checks the #include order for the given file f."""
-
-  system_include_pattern = input_api.re.compile(r'\s*#include \<.*')
-  # Exclude the following includes from the check:
-  # 1) #include <.../...>, e.g., <sys/...> includes often need to appear in a
-  # specific order.
-  # 2) <atlbase.h>, "build/build_config.h"
-  excluded_include_pattern = input_api.re.compile(
-      r'\s*#include (\<.*/.*|\<atlbase\.h\>|"build/build_config.h")')
-  custom_include_pattern = input_api.re.compile(r'\s*#include "(?P<FILE>.*)"')
-  # Match the final or penultimate token if it is xxxtest so we can ignore it
-  # when considering the special first include.
-  test_file_tag_pattern = input_api.re.compile(
-    r'_[a-z]+test(?=(_[a-zA-Z0-9]+)?\.)')
-  if_pattern = input_api.re.compile(
-      r'\s*#\s*(if|elif|else|endif|define|undef).*')
-  # Some files need specialized order of includes; exclude such files from this
-  # check.
-  uncheckable_includes_pattern = input_api.re.compile(
-      r'\s*#include '
-      '("ipc/.*macros\.h"|<windows\.h>|".*gl.*autogen.h")\s*')
-
-  contents = f.NewContents()
-  warnings = []
-  line_num = 0
-
-  # Handle the special first include. If the first include file is
-  # some/path/file.h, the corresponding including file can be some/path/file.cc,
-  # some/other/path/file.cc, some/path/file_platform.cc, some/path/file-suffix.h
-  # etc. It's also possible that no special first include exists.
-  # If the included file is some/path/file_platform.h the including file could
-  # also be some/path/file_xxxtest_platform.h.
-  including_file_base_name = test_file_tag_pattern.sub(
-    '', input_api.os_path.basename(f.LocalPath()))
-
-  for line in contents:
-    line_num += 1
-    if system_include_pattern.match(line):
-      # No special first include -> process the line again along with normal
-      # includes.
-      line_num -= 1
-      break
-    match = custom_include_pattern.match(line)
-    if match:
-      match_dict = match.groupdict()
-      header_basename = test_file_tag_pattern.sub(
-        '', input_api.os_path.basename(match_dict['FILE'])).replace('.h', '')
-
-      if header_basename not in including_file_base_name:
-        # No special first include -> process the line again along with normal
-        # includes.
-        line_num -= 1
-      break
-
-  # Split into scopes: Each region between #if and #endif is its own scope.
-  scopes = []
-  current_scope = []
-  for line in contents[line_num:]:
-    line_num += 1
-    if uncheckable_includes_pattern.match(line):
-      continue
-    if if_pattern.match(line):
-      scopes.append(current_scope)
-      current_scope = []
-    elif ((system_include_pattern.match(line) or
-           custom_include_pattern.match(line)) and
-          not excluded_include_pattern.match(line)):
-      current_scope.append((line_num, line))
-  scopes.append(current_scope)
-
-  for scope in scopes:
-    warnings.extend(_CheckIncludeOrderForScope(scope, input_api, f.LocalPath(),
-                                               changed_linenums))
-  return warnings
-
-
-def _CheckIncludeOrder(input_api, output_api):
-  """Checks that the #include order is correct.
-
-  1. The corresponding header for source files.
-  2. C system files in alphabetical order
-  3. C++ system files in alphabetical order
-  4. Project's .h files in alphabetical order
-
-  Each region separated by #if, #elif, #else, #endif, #define and #undef follows
-  these rules separately.
-  """
-  def FileFilterIncludeOrder(affected_file):
-    black_list = (_EXCLUDED_PATHS + input_api.DEFAULT_BLACK_LIST)
-    return input_api.FilterSourceFile(affected_file, black_list=black_list)
-
-  warnings = []
-  for f in input_api.AffectedFiles(file_filter=FileFilterIncludeOrder):
-    if f.LocalPath().endswith(('.cc', '.h', '.mm')):
-      changed_linenums = set(line_num for line_num, _ in f.ChangedContents())
-      warnings.extend(_CheckIncludeOrderInFile(input_api, f, changed_linenums))
-
-  results = []
-  if warnings:
-    results.append(output_api.PresubmitPromptOrNotify(_INCLUDE_ORDER_WARNING,
-                                                      warnings))
-  return results
-
-
 def _CheckForVersionControlConflictsInFile(input_api, f):
   pattern = input_api.re.compile('^(?:<<<<<<<|>>>>>>>) |^=======$')
   errors = []
@@ -1278,6 +1176,7 @@ def _CheckSpamLogging(input_api, output_api):
                  r"^chrome[\\\/]browser[\\\/]ui[\\\/]startup[\\\/]"
                      r"startup_browser_creator\.cc$",
                  r"^chrome[\\\/]installer[\\\/]setup[\\\/].*",
+                 r"^chrome[\\\/]installer[\\\/]zucchini[\\\/].*",
                  r"chrome[\\\/]browser[\\\/]diagnostics[\\\/]" +
                      r"diagnostics_writer\.cc$",
                  r"^chrome_elf[\\\/]dll_hash[\\\/]dll_hash_main\.cc$",
@@ -1389,24 +1288,6 @@ def _CheckForAnonymousVariables(input_api, output_api):
     return [output_api.PresubmitError(
       'These lines create anonymous variables that need to be named:',
       items=errors)]
-  return []
-
-
-def _CheckCygwinShell(input_api, output_api):
-  source_file_filter = lambda x: input_api.FilterSourceFile(
-      x, white_list=(r'.+\.(gyp|gypi)$',))
-  cygwin_shell = []
-
-  for f in input_api.AffectedSourceFiles(source_file_filter):
-    for linenum, line in f.ChangedContents():
-      if 'msvs_cygwin_shell' in line:
-        cygwin_shell.append(f.LocalPath())
-        break
-
-  if cygwin_shell:
-    return [output_api.PresubmitError(
-      'These files should not use msvs_cygwin_shell (the default is 0):',
-      items=cygwin_shell)]
   return []
 
 
@@ -1669,7 +1550,7 @@ def _CheckIpcOwners(input_api, output_api):
       files.extend(['  %s' % f.LocalPath() for f in entry['files']])
     if missing_lines:
       errors.append(
-          '%s is missing the following lines:\n\n%s\n\nfor changed files:\n%s' %
+          '%s needs the following lines added:\n\n%s\n\nfor files:\n%s' %
           (owners_file, '\n'.join(missing_lines), '\n'.join(files)))
 
   results = []
@@ -1679,7 +1560,8 @@ def _CheckIpcOwners(input_api, output_api):
     else:
       output = output_api.PresubmitPromptWarning
     results.append(output(
-        'Found changes to IPC files without a security OWNER!',
+        'Found OWNERS files that need to be updated for IPC security ' +
+        'review coverage.\nPlease update the OWNERS files below:',
         long_text='\n\n'.join(errors)))
 
   return results
@@ -2090,7 +1972,6 @@ def _CheckNoDeprecatedCss(input_api, output_api):
                 (r"^chrome/common/extensions/docs",
                  r"^chrome/docs",
                  r"^components/dom_distiller/core/css/distilledpage_ios.css",
-                 r"^components/flags_ui/resources/apple_flags.css",
                  r"^components/neterror/resources/neterror.css",
                  r"^native_client_sdk"))
   file_filter = lambda f: input_api.FilterSourceFile(
@@ -2150,6 +2031,54 @@ https://chromium.googlesource.com/chromium/src/+/master/docs/es6_chromium.md#Arr
 """ % "\n".join("  %s:%d\n" % line for line in arrow_lines))]
 
 
+def _CheckForRelativeIncludes(input_api, output_api):
+  # Need to set the sys.path so PRESUBMIT_test.py runs properly
+  import sys
+  original_sys_path = sys.path
+  try:
+    sys.path = sys.path + [input_api.os_path.join(
+        input_api.PresubmitLocalPath(), 'buildtools', 'checkdeps')]
+    from cpp_checker import CppChecker
+  finally:
+    # Restore sys.path to what it was before.
+    sys.path = original_sys_path
+
+  bad_files = {}
+  for f in input_api.AffectedFiles(include_deletes=False):
+    if (f.LocalPath().startswith('third_party') and
+      not f.LocalPath().startswith('third_party/WebKit') and
+      not f.LocalPath().startswith('third_party\\WebKit')):
+      continue
+
+    if not CppChecker.IsCppFile(f.LocalPath()):
+      continue
+
+    relative_includes = [line for line_num, line in f.ChangedContents()
+                         if "#include" in line and "../" in line]
+    if not relative_includes:
+      continue
+    bad_files[f.LocalPath()] = relative_includes
+
+  if not bad_files:
+    return []
+
+  error_descriptions = []
+  for file_path, bad_lines in bad_files.iteritems():
+    error_description = file_path
+    for line in bad_lines:
+      error_description += '\n    ' + line
+    error_descriptions.append(error_description)
+
+  results = []
+  results.append(output_api.PresubmitError(
+        'You added one or more relative #include paths (including "../").\n'
+        'These shouldn\'t be used because they can be used to include headers\n'
+        'from code that\'s not correctly specified as a dependency in the\n'
+        'relevant BUILD.gn file(s).',
+        error_descriptions))
+
+  return results
+
 def _AndroidSpecificOnUploadChecks(input_api, output_api):
   """Groups checks that target android code."""
   results = []
@@ -2182,11 +2111,11 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckFilePermissions(input_api, output_api))
   results.extend(_CheckTeamTags(input_api, output_api))
   results.extend(_CheckNoAuraWindowPropertyHInHeaders(input_api, output_api))
-  results.extend(_CheckIncludeOrder(input_api, output_api))
   results.extend(_CheckForVersionControlConflicts(input_api, output_api))
   results.extend(_CheckPatchFiles(input_api, output_api))
   results.extend(_CheckHardcodedGoogleHostsInLowerLayers(input_api, output_api))
   results.extend(_CheckNoAbbreviationInPngFileName(input_api, output_api))
+  results.extend(_CheckBuildConfigMacrosWithoutInclude(input_api, output_api))
   results.extend(_CheckForInvalidOSMacros(input_api, output_api))
   results.extend(_CheckForInvalidIfDefinedMacros(input_api, output_api))
   results.extend(_CheckFlakyTestUsage(input_api, output_api))
@@ -2198,7 +2127,6 @@ def _CommonChecks(input_api, output_api):
           source_file_filter=lambda x: x.LocalPath().endswith('.grd')))
   results.extend(_CheckSpamLogging(input_api, output_api))
   results.extend(_CheckForAnonymousVariables(input_api, output_api))
-  results.extend(_CheckCygwinShell(input_api, output_api))
   results.extend(_CheckUserActionUpdate(input_api, output_api))
   results.extend(_CheckNoDeprecatedCss(input_api, output_api))
   results.extend(_CheckNoDeprecatedJs(input_api, output_api))
@@ -2211,6 +2139,7 @@ def _CommonChecks(input_api, output_api):
   results.extend(_CheckIpcOwners(input_api, output_api))
   results.extend(_CheckUselessForwardDeclarations(input_api, output_api))
   results.extend(_CheckForRiskyJsFeatures(input_api, output_api))
+  results.extend(_CheckForRelativeIncludes(input_api, output_api))
 
   if any('PRESUBMIT.py' == f.LocalPath() for f in input_api.AffectedFiles()):
     results.extend(input_api.canned_checks.RunUnitTestsInDirectory(
@@ -2228,6 +2157,52 @@ def _CheckPatchFiles(input_api, output_api):
         "Don't commit .rej and .orig files.", problems)]
   else:
     return []
+
+
+def _CheckBuildConfigMacrosWithoutInclude(input_api, output_api):
+  # Excludes OS_CHROMEOS, which is not defined in build_config.h.
+  macro_re = input_api.re.compile(r'^\s*#(el)?if.*\bdefined\(((OS_(?!CHROMEOS)|'
+                                  'COMPILER_|ARCH_CPU_|WCHAR_T_IS_)[^)]*)')
+  include_re = input_api.re.compile(
+      r'^#include\s+"build/build_config.h"', input_api.re.MULTILINE)
+  extension_re = input_api.re.compile(r'\.[a-z]+$')
+  errors = []
+  for f in input_api.AffectedFiles():
+    if not f.LocalPath().endswith(('.h', '.c', '.cc', '.cpp', '.m', '.mm')):
+      continue
+    found_line_number = None
+    found_macro = None
+    for line_num, line in f.ChangedContents():
+      match = macro_re.search(line)
+      if match:
+        found_line_number = line_num
+        found_macro = match.group(2)
+        break
+    if not found_line_number:
+      continue
+
+    found_include = False
+    for line in f.NewContents():
+      if include_re.search(line):
+        found_include = True
+        break
+    if found_include:
+      continue
+
+    if not f.LocalPath().endswith('.h'):
+      primary_header_path = extension_re.sub('.h', f.AbsoluteLocalPath())
+      try:
+        content = input_api.ReadFile(primary_header_path, 'r')
+        if include_re.search(content):
+          continue
+      except IOError:
+        pass
+    errors.append('%s:%d %s macro is used without including build/'
+                  'build_config.h.'
+                  % (f.LocalPath(), found_line_number, found_macro))
+  if errors:
+    return [output_api.PresubmitPromptWarning('\n'.join(errors))]
+  return []
 
 
 def _DidYouMeanOSMacro(bad_macro):

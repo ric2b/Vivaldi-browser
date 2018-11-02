@@ -4,34 +4,61 @@
 
 source_set("content_suggestions") {
   sources = [
+    "content_suggestions_collection_controlling.h",
+    "content_suggestions_collection_synchronizing.h",
     "content_suggestions_collection_updater.h",
     "content_suggestions_collection_updater.mm",
-    "content_suggestions_collection_utils.h",
-    "content_suggestions_collection_utils.mm",
     "content_suggestions_commands.h",
     "content_suggestions_data_sink.h",
     "content_suggestions_data_source.h",
-    "content_suggestions_image_fetcher.h",
+    "content_suggestions_header_controlling.h",
+    "content_suggestions_header_synchronizer.h",
+    "content_suggestions_header_synchronizer.mm",
+    "content_suggestions_header_synchronizing.h",
+    "content_suggestions_layout.h",
+    "content_suggestions_layout.mm",
     "content_suggestions_view_controller.h",
     "content_suggestions_view_controller.mm",
+    "content_suggestions_view_controller_audience.h",
+    "content_suggestions_view_controller_delegate.h",
   ]
   deps = [
-    ":resources",
+    ":content_suggestions_util",
+    "resources:content_suggestions_no_image",
+    "resources:content_suggestions_offline",
     "//base",
     "//components/strings",
-    "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view",
-    "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
-    "//ios/chrome/browser/ui/toolbar",
-    "//mojo/common:common_custom_types",
+    "//ios/chrome/browser/ui/ntp:ntp_header",
+    "//ios/chrome/browser/ui/overscroll_actions",
     "//ui/base",
   ]
   public_deps = [
     "//ios/third_party/material_components_ios",
+  ]
+  configs += [ "//build/config/compiler:enable_arc" ]
+}
+
+source_set("content_suggestions_util") {
+  sources = [
+    "content_suggestions_collection_utils.h",
+    "content_suggestions_collection_utils.mm",
+  ]
+  deps = [
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui",
+    "//ios/chrome/browser/ui/commands",
+    "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
+    "//ios/chrome/browser/ui/toolbar",
+    "//ios/third_party/material_components_ios",
+    "//mojo/common:common_custom_types",
+    "//ui/base",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
 }
@@ -41,9 +68,11 @@ source_set("unit_tests") {
   sources = [
     "content_suggestions_collection_updater_unittest.mm",
     "content_suggestions_collection_utils_unittest.mm",
+    "content_suggestions_header_synchronizer_unittest.mm",
   ]
   deps = [
     ":content_suggestions",
+    ":content_suggestions_util",
     "//base",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view",
@@ -54,18 +83,4 @@ source_set("unit_tests") {
     "//third_party/ocmock",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
-}
-
-bundle_data("resources") {
-  sources = [
-    "resources/content_suggestions_no_image.png",
-    "resources/content_suggestions_no_image@2x.png",
-    "resources/content_suggestions_no_image@3x.png",
-    "resources/content_suggestions_offline.png",
-    "resources/content_suggestions_offline@2x.png",
-    "resources/content_suggestions_offline@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
 }

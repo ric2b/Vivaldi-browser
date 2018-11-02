@@ -34,6 +34,7 @@
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/ScriptController.h"
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
@@ -42,8 +43,8 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/fileapi/File.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLImageElement.h"
@@ -55,6 +56,7 @@
 #include "core/html/canvas/CanvasFontCache.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/HitTestCanvasResult.h"
 #include "core/layout/LayoutHTMLCanvas.h"
@@ -94,7 +96,7 @@ namespace {
 const int kDefaultWidth = 300;
 const int kDefaultHeight = 150;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 // We estimate that the max limit for android phones is a quarter of that for
 // desktops based on local experimental results on Android One.
 const int kMaxGlobalAcceleratedImageBufferCount = 25;
@@ -144,7 +146,7 @@ inline HTMLCanvasElement::HTMLCanvasElement(Document& document)
       did_fail_to_create_image_buffer_(false),
       image_buffer_is_clear_(false) {
   CanvasMetrics::CountCanvasContextUsage(CanvasMetrics::kCanvasCreated);
-  UseCounter::Count(document, UseCounter::kHTMLCanvasElement);
+  UseCounter::Count(document, WebFeature::kHTMLCanvasElement);
 }
 
 DEFINE_NODE_FACTORY(HTMLCanvasElement)
@@ -269,7 +271,7 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContext(
     return nullptr;
   }
 
-  context_ = factory->Create(this, attributes, GetDocument());
+  context_ = factory->Create(this, attributes);
   if (!context_)
     return nullptr;
 
@@ -304,6 +306,20 @@ bool HTMLCanvasElement::IsPaintable() const {
 
 bool HTMLCanvasElement::IsAccelerated() const {
   return context_ && context_->IsAccelerated();
+}
+
+bool HTMLCanvasElement::IsWebGLAllowed() const {
+  Document& document = GetDocument();
+  LocalFrame* frame = document.GetFrame();
+  if (!frame)
+    return false;
+  Settings* settings = frame->GetSettings();
+  // The LocalFrameClient might block creation of a new WebGL context despite
+  // the page settings; in particular, if WebGL contexts were lost one or more
+  // times via the GL_ARB_robustness extension.
+  if (!frame->Client()->AllowWebGL(settings && settings->GetWebGLEnabled()))
+    return false;
+  return true;
 }
 
 void HTMLCanvasElement::DidDraw(const FloatRect& rect) {
@@ -447,8 +463,10 @@ void HTMLCanvasElement::Reset() {
   if (!ok || h < 0)
     h = kDefaultHeight;
 
-  if (Is2d())
+  if (Is2d()) {
     context_->Reset();
+    origin_clean_ = true;
+  }
 
   IntSize old_size = Size();
   IntSize new_size(w, h);
@@ -494,6 +512,12 @@ bool HTMLCanvasElement::PaintsIntoCanvasBuffer() const {
   return true;
 }
 
+CanvasColorParams HTMLCanvasElement::GetCanvasColorParams() const {
+  if (context_)
+    return context_->color_params();
+  return CanvasColorParams();
+}
+
 void HTMLCanvasElement::NotifyListenersCanvasChanged() {
   if (listeners_.size() == 0)
     return;
@@ -534,7 +558,7 @@ void HTMLCanvasElement::Paint(GraphicsContext& context, const LayoutRect& r) {
 
   const ComputedStyle* style = EnsureComputedStyle();
   SkFilterQuality filter_quality =
-      (style && style->ImageRendering() == kImageRenderingPixelated)
+      (style && style->ImageRendering() == EImageRendering::kPixelated)
           ? kNone_SkFilterQuality
           : kLow_SkFilterQuality;
 
@@ -680,20 +704,17 @@ String HTMLCanvasElement::ToDataURLInternal(
   if (encoding_mime_type == "image/png") {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, scoped_us_counter_png,
-        new CustomCountHistogram("Blink.Canvas.ToDataURL.PNG", 0, 10000000,
-                                 50));
+        ("Blink.Canvas.ToDataURL.PNG", 0, 10000000, 50));
     timer.emplace(scoped_us_counter_png);
   } else if (encoding_mime_type == "image/jpeg") {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, scoped_us_counter_jpeg,
-        new CustomCountHistogram("Blink.Canvas.ToDataURL.JPEG", 0, 10000000,
-                                 50));
+        ("Blink.Canvas.ToDataURL.JPEG", 0, 10000000, 50));
     timer.emplace(scoped_us_counter_jpeg);
   } else if (encoding_mime_type == "image/webp") {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, scoped_us_counter_webp,
-        new CustomCountHistogram("Blink.Canvas.ToDataURL.WEBP", 0, 10000000,
-                                 50));
+        ("Blink.Canvas.ToDataURL.WEBP", 0, 10000000, 50));
     timer.emplace(scoped_us_counter_webp);
   } else {
     // Currently we only support three encoding types.
@@ -796,10 +817,10 @@ bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
   if (context_ && !Is2d())
     return false;
 
-  if (RuntimeEnabledFeatures::forceDisplayList2dCanvasEnabled())
+  if (RuntimeEnabledFeatures::ForceDisplayList2dCanvasEnabled())
     return false;
 
-  if (!RuntimeEnabledFeatures::accelerated2dCanvasEnabled())
+  if (!RuntimeEnabledFeatures::Accelerated2dCanvasEnabled())
     return false;
 
   // The following is necessary for handling the special case of canvases in the
@@ -814,7 +835,7 @@ bool HTMLCanvasElement::ShouldAccelerate(AccelerationCriteria criteria) const {
     return false;
   int canvas_pixel_count = checked_canvas_pixel_count.ValueOrDie();
 
-  if (RuntimeEnabledFeatures::displayList2dCanvasEnabled()) {
+  if (RuntimeEnabledFeatures::DisplayList2dCanvasEnabled()) {
 #if 0
         // TODO(junov): re-enable this code once we solve the problem of recording
         // GPU-backed images to a PaintRecord for cross-context rendering crbug.com/490328
@@ -859,13 +880,21 @@ bool HTMLCanvasElement::ShouldUseDisplayList() {
   // Rasterization of web contents will blend in the output space. Only embed
   // the canvas as a display list if it intended to do output space blending as
   // well.
-  if (!context_->color_params().UsesOutputSpaceBlending())
+  if (!GetCanvasColorParams().UsesOutputSpaceBlending())
     return false;
 
-  if (RuntimeEnabledFeatures::forceDisplayList2dCanvasEnabled())
+  if (RuntimeEnabledFeatures::ForceDisplayList2dCanvasEnabled())
     return true;
 
-  if (!RuntimeEnabledFeatures::displayList2dCanvasEnabled())
+  if (GetDocument().GetSettings() &&
+      GetDocument().GetSettings()->GetForceDisplayList2dCanvasEnabled()) {
+    return true;
+  }
+
+  if (MemoryCoordinator::IsLowEndDevice())
+    return false;
+
+  if (!RuntimeEnabledFeatures::DisplayList2dCanvasEnabled())
     return false;
 
   // TODO(crbug.com/721727): Due to a rendering regression with display-
@@ -881,7 +910,7 @@ HTMLCanvasElement::CreateWebGLImageBufferSurface(OpacityMode opacity_mode) {
   // then make a non-accelerated ImageBuffer. This means copying the internal
   // Image will require a pixel readback, but that is unavoidable in this case.
   auto surface = WTF::MakeUnique<AcceleratedImageBufferSurface>(
-      Size(), opacity_mode, context_->color_params());
+      Size(), opacity_mode, GetCanvasColorParams());
   if (surface->IsValid())
     return std::move(surface);
   return nullptr;
@@ -910,12 +939,15 @@ HTMLCanvasElement::CreateAcceleratedImageBufferSurface(OpacityMode opacity_mode,
 
   auto surface = WTF::MakeUnique<Canvas2DImageBufferSurface>(
       std::move(context_provider), Size(), *msaa_sample_count, opacity_mode,
-      Canvas2DLayerBridge::kEnableAcceleration, context_->color_params());
+      Canvas2DLayerBridge::kEnableAcceleration, GetCanvasColorParams());
   if (!surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kGPUAccelerated2DCanvasImageBufferCreationFailed);
     return nullptr;
   }
+
+  if (MemoryCoordinator::IsLowEndDevice())
+    surface->DisableDeferral(kDisableDeferralReasonLowEndDevice);
 
   CanvasMetrics::CountCanvasContextUsage(
       CanvasMetrics::kGPUAccelerated2DCanvasImageBufferCreated);
@@ -928,7 +960,7 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
   if (ShouldUseDisplayList()) {
     auto surface = WTF::MakeUnique<RecordingImageBufferSurface>(
         Size(), RecordingImageBufferSurface::kAllowFallback, opacity_mode,
-        context_->color_params());
+        GetCanvasColorParams());
     if (surface->IsValid()) {
       CanvasMetrics::CountCanvasContextUsage(
           CanvasMetrics::kDisplayList2DCanvasImageBufferCreated);
@@ -939,7 +971,7 @@ HTMLCanvasElement::CreateUnacceleratedImageBufferSurface(
   }
 
   auto surface = WTF::MakeUnique<UnacceleratedImageBufferSurface>(
-      Size(), opacity_mode, kInitializeImagePixels, context_->color_params());
+      Size(), opacity_mode, kInitializeImagePixels, GetCanvasColorParams());
   if (surface->IsValid()) {
     CanvasMetrics::CountCanvasContextUsage(
         CanvasMetrics::kUnaccelerated2DCanvasImageBufferCreated);
@@ -1164,10 +1196,12 @@ AffineTransform HTMLCanvasElement::BaseTransform() const {
 }
 
 void HTMLCanvasElement::PageVisibilityChanged() {
+  bool hidden = !GetPage()->IsPageVisible();
+  SetSuspendOffscreenCanvasAnimation(hidden);
+
   if (!context_)
     return;
 
-  bool hidden = !GetPage()->IsPageVisible();
   context_->SetIsHidden(hidden);
   if (hidden) {
     ClearCopiedImage();
@@ -1258,7 +1292,7 @@ PassRefPtr<Image> HTMLCanvasElement::GetSourceImageForCanvas(
     }
   } else {
     if (CanvasHeuristicParameters::kDisableAccelerationToAvoidReadbacks &&
-        !RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled() &&
+        !RuntimeEnabledFeatures::Canvas2dFixedRenderingModeEnabled() &&
         hint == kPreferNoAcceleration && GetImageBuffer() &&
         GetImageBuffer()->IsAccelerated()) {
       GetImageBuffer()->DisableAcceleration();
@@ -1429,7 +1463,7 @@ void HTMLCanvasElement::CreateLayer() {
     layer_tree_view =
         frame->GetPage()->GetChromeClient().GetWebLayerTreeView(frame);
     surface_layer_bridge_ =
-        WTF::MakeUnique<CanvasSurfaceLayerBridge>(this, layer_tree_view);
+        WTF::MakeUnique<::blink::SurfaceLayerBridge>(this, layer_tree_view);
     // Creates a placeholder layer first before Surface is created.
     surface_layer_bridge_->CreateSolidColorLayer();
   }

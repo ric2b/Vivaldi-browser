@@ -212,9 +212,10 @@ void ResourceBundle::InitSharedInstanceWithPakFileRegion(
     base::File pak_file,
     const base::MemoryMappedFile::Region& region) {
   InitSharedInstance(NULL);
-  std::unique_ptr<DataPack> data_pack(new DataPack(SCALE_FACTOR_100P));
+  auto data_pack = base::MakeUnique<DataPack>(SCALE_FACTOR_100P);
   if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
-    NOTREACHED() << "failed to load pak file";
+    LOG(WARNING) << "failed to load pak file";
+    NOTREACHED();
     return;
   }
   g_shared_instance_->locale_resources_data_ = std::move(data_pack);
@@ -247,6 +248,18 @@ ResourceBundle& ResourceBundle::GetSharedInstance() {
   // Must call InitSharedInstance before this function.
   CHECK(g_shared_instance_ != NULL);
   return *g_shared_instance_;
+}
+
+void ResourceBundle::LoadSecondaryLocaleDataWithPakFileRegion(
+    base::File pak_file,
+    const base::MemoryMappedFile::Region& region) {
+  auto data_pack = base::MakeUnique<DataPack>(SCALE_FACTOR_100P);
+  if (!data_pack->LoadFromFileRegion(std::move(pak_file), region)) {
+    LOG(WARNING) << "failed to load secondary pak file";
+    NOTREACHED();
+    return;
+  }
+  secondary_locale_resources_data_ = std::move(data_pack);
 }
 
 #if !defined(OS_ANDROID)
@@ -401,6 +414,7 @@ void ResourceBundle::LoadTestResources(const base::FilePath& path,
 
 void ResourceBundle::UnloadLocaleResources() {
   locale_resources_data_.reset();
+  secondary_locale_resources_data_.reset();
 }
 
 void ResourceBundle::OverrideLocalePakForTest(const base::FilePath& pak_path) {
@@ -466,8 +480,9 @@ gfx::Image& ResourceBundle::GetImageNamed(int resource_id) {
     // ResourceBundle::GetSharedInstance() is destroyed after the
     // BrowserMainLoop has finished running. |image_skia| is guaranteed to be
     // destroyed before the resource bundle is destroyed.
-    gfx::ImageSkia image_skia(new ResourceBundleImageSource(this, resource_id),
-                              GetScaleForScaleFactor(scale_factor_to_load));
+    gfx::ImageSkia image_skia(
+        base::MakeUnique<ResourceBundleImageSource>(this, resource_id),
+        GetScaleForScaleFactor(scale_factor_to_load));
     if (image_skia.isNull()) {
       LOG(WARNING) << "Unable to load image with id " << resource_id;
       NOTREACHED();  // Want to assert in debug mode.
@@ -562,20 +577,28 @@ base::string16 ResourceBundle::GetLocalizedString(int message_id) {
   }
 
   base::StringPiece data;
+  ResourceHandle::TextEncodingType encoding =
+      locale_resources_data_->GetTextEncodingType();
   if (!locale_resources_data_->GetStringPiece(static_cast<uint16_t>(message_id),
                                               &data)) {
-    // Fall back on the main data pack (shouldn't be any strings here except in
-    // unittests).
-    data = GetRawDataResource(message_id);
-    if (data.empty()) {
-      NOTREACHED() << "unable to find resource: " << message_id;
-      return base::string16();
+    if (secondary_locale_resources_data_.get() &&
+        secondary_locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(message_id), &data)) {
+      // Fall back on the secondary locale pak if it exists.
+      encoding = secondary_locale_resources_data_->GetTextEncodingType();
+    } else {
+      // Fall back on the main data pack (shouldn't be any strings here except
+      // in unittests).
+      data = GetRawDataResource(message_id);
+      if (data.empty()) {
+        LOG(WARNING) << "unable to find resource: " << message_id;
+        NOTREACHED();
+        return base::string16();
+      }
     }
   }
 
   // Strings should not be loaded from a data pack that contains binary data.
-  ResourceHandle::TextEncodingType encoding =
-      locale_resources_data_->GetTextEncodingType();
   DCHECK(encoding == ResourceHandle::UTF16 || encoding == ResourceHandle::UTF8)
       << "requested localized string from binary pack file";
 
@@ -595,8 +618,16 @@ base::RefCountedMemory* ResourceBundle::LoadLocalizedResourceBytes(
   {
     base::AutoLock lock_scope(*locale_resources_data_lock_);
     base::StringPiece data;
+
     if (locale_resources_data_.get() &&
         locale_resources_data_->GetStringPiece(
+            static_cast<uint16_t>(resource_id), &data) &&
+        !data.empty()) {
+      return new base::RefCountedStaticMemory(data.data(), data.length());
+    }
+
+    if (secondary_locale_resources_data_.get() &&
+        secondary_locale_resources_data_->GetStringPiece(
             static_cast<uint16_t>(resource_id), &data) &&
         !data.empty()) {
       return new base::RefCountedStaticMemory(data.data(), data.length());
@@ -698,9 +729,7 @@ ScaleFactor ResourceBundle::GetMaxScaleFactor() const {
 bool ResourceBundle::IsScaleFactorSupported(ScaleFactor scale_factor) {
   const std::vector<ScaleFactor>& supported_scale_factors =
       ui::GetSupportedScaleFactors();
-  return std::find(supported_scale_factors.begin(),
-                   supported_scale_factors.end(),
-                   scale_factor) != supported_scale_factors.end();
+  return base::ContainsValue(supported_scale_factors, scale_factor);
 }
 
 ResourceBundle::ResourceBundle(Delegate* delegate)

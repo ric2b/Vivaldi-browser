@@ -12,6 +12,7 @@
 #include "base/files/file_util.h"
 #include "base/guid.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
 #include "base/stl_util.h"
@@ -25,6 +26,8 @@
 #include "components/sync/engine_impl/loopback_server/persistent_unique_client_entity.h"
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
+
+#include "sync/test/fake_server/notes_entity.h"
 
 using std::string;
 using std::vector;
@@ -52,104 +55,91 @@ static const char kSyncedBookmarksFolderServerTag[] = "synced_bookmarks";
 static const char kSyncedBookmarksFolderName[] = "Synced Bookmarks";
 
 // A filter used during GetUpdates calls to determine what information to
-// send back to the client. There is a 1:1 correspondence between any given
-// GetUpdates call and an UpdateSieve instance.
+// send back to the client; filtering out old entities and tracking versions to
+// use in response progress markers. Note that only the GetUpdatesMessage's
+// from_progress_marker is used to determine this; legacy fields are ignored.
 class UpdateSieve {
  public:
+  explicit UpdateSieve(const sync_pb::GetUpdatesMessage& message)
+      : UpdateSieve(MessageToVersionMap(message)) {}
   ~UpdateSieve() {}
 
-  // Factory method for creating an UpdateSieve.
-  static std::unique_ptr<UpdateSieve> Create(
-      const sync_pb::GetUpdatesMessage& get_updates_message);
-
-  // Sets the progress markers in |get_updates_response| given the progress
-  // markers from the original GetUpdatesMessage and |new_version| (the latest
-  // version in the entries sent back).
-  void UpdateProgressMarkers(
-      int64_t new_version,
+  // Sets the progress markers in |get_updates_response| based on the highest
+  // version between request progress markers and response entities.
+  void SetProgressMarkers(
       sync_pb::GetUpdatesResponse* get_updates_response) const {
-    ModelTypeToVersionMap::const_iterator it;
-    for (it = request_from_version_.begin(); it != request_from_version_.end();
-         ++it) {
+    for (const auto& kv : response_version_map_) {
       sync_pb::DataTypeProgressMarker* new_marker =
           get_updates_response->add_new_progress_marker();
       new_marker->set_data_type_id(
-          GetSpecificsFieldNumberFromModelType(it->first));
-
-      int64_t version = std::max(new_version, it->second);
-      new_marker->set_token(base::Int64ToString(version));
+          GetSpecificsFieldNumberFromModelType(kv.first));
+      new_marker->set_token(base::Int64ToString(kv.second));
     }
   }
 
   // Determines whether the server should send an |entity| to the client as
-  // part of a GetUpdatesResponse.
-  bool ClientWantsItem(const LoopbackServerEntity& entity) const {
+  // part of a GetUpdatesResponse. Update internal tracking of max versions as a
+  // side effect which will later be used to set response progress markers.
+  bool ClientWantsItem(const LoopbackServerEntity& entity) {
     int64_t version = entity.GetVersion();
-    if (version <= min_version_) {
-      return false;
-    } else if (entity.IsDeleted()) {
-      return true;
-    }
-
-    ModelTypeToVersionMap::const_iterator it =
-        request_from_version_.find(entity.GetModelType());
-
-    return it == request_from_version_.end() ? false : it->second < version;
+    ModelType type = entity.GetModelType();
+    response_version_map_[type] =
+        std::max(response_version_map_[type], version);
+    auto it = request_version_map_.find(type);
+    return it == request_version_map_.end() ? false : it->second < version;
   }
-
-  // Returns the minimum version seen across all types.
-  int64_t GetMinVersion() const { return min_version_; }
 
  private:
   using ModelTypeToVersionMap = std::map<ModelType, int64_t>;
 
-  // Creates an UpdateSieve.
-  UpdateSieve(const ModelTypeToVersionMap request_from_version,
-              const int64_t min_version)
-      : request_from_version_(request_from_version),
-        min_version_(min_version) {}
+  static UpdateSieve::ModelTypeToVersionMap MessageToVersionMap(
+      const sync_pb::GetUpdatesMessage& get_updates_message) {
+    CHECK_GT(get_updates_message.from_progress_marker_size(), 0)
+        << "A GetUpdates request must have at least one progress marker.";
+    ModelTypeToVersionMap request_version_map;
 
-  // Maps data type IDs to the latest version seen for that type.
-  const ModelTypeToVersionMap request_from_version_;
+    for (int i = 0; i < get_updates_message.from_progress_marker_size(); i++) {
+      sync_pb::DataTypeProgressMarker marker =
+          get_updates_message.from_progress_marker(i);
 
-  // The minimum version seen among all data types.
-  const int min_version_;
-};
+      int64_t version = 0;
+      // Let the version remain zero if there is no token or an empty token (the
+      // first request for this type).
+      if (marker.has_token() && !marker.token().empty()) {
+        bool parsed = base::StringToInt64(marker.token(), &version);
+        CHECK(parsed) << "Unable to parse progress marker token.";
+      }
 
-std::unique_ptr<UpdateSieve> UpdateSieve::Create(
-    const sync_pb::GetUpdatesMessage& get_updates_message) {
-  CHECK_GT(get_updates_message.from_progress_marker_size(), 0)
-      << "A GetUpdates request must have at least one progress marker.";
-
-  UpdateSieve::ModelTypeToVersionMap request_from_version;
-  int64_t min_version = std::numeric_limits<int64_t>::max();
-  for (int i = 0; i < get_updates_message.from_progress_marker_size(); i++) {
-    sync_pb::DataTypeProgressMarker marker =
-        get_updates_message.from_progress_marker(i);
-
-    int64_t version = 0;
-    // Let the version remain zero if there is no token or an empty token (the
-    // first request for this type).
-    if (marker.has_token() && !marker.token().empty()) {
-      bool parsed = base::StringToInt64(marker.token(), &version);
-      CHECK(parsed) << "Unable to parse progress marker token.";
+      ModelType model_type =
+          syncer::GetModelTypeFromSpecificsFieldNumber(marker.data_type_id());
+      DCHECK(request_version_map.find(model_type) == request_version_map.end());
+      request_version_map[model_type] = version;
     }
-    ModelType model_type =
-        syncer::GetModelTypeFromSpecificsFieldNumber(marker.data_type_id());
-    request_from_version[model_type] = version;
-
-    if (version < min_version)
-      min_version = version;
+    return request_version_map;
   }
 
-  return std::unique_ptr<UpdateSieve>(
-      new UpdateSieve(request_from_version, min_version));
-}
+  explicit UpdateSieve(const ModelTypeToVersionMap request_version_map)
+      : request_version_map_(request_version_map),
+        response_version_map_(request_version_map) {}
+
+  // The largest versions the client has seen before this request, and is used
+  // to filter entities to send back to clients. The values in this map are not
+  // updated after being initially set. The presence of a type in this map is a
+  // proxy for the desire to receive results about this type.
+  const ModelTypeToVersionMap request_version_map_;
+
+  // The largest versions seen between client and server, ultimately used to
+  // send progress markers back to the client.
+  ModelTypeToVersionMap response_version_map_;
+};
 
 }  // namespace
 
 LoopbackServer::LoopbackServer(const base::FilePath& persistent_file)
-    : version_(0), store_birthday_(0), persistent_file_(persistent_file) {
+    : version_(0),
+      store_birthday_(0),
+      persistent_file_(persistent_file),
+      observer_for_tests_(NULL) {
   Init();
 }
 
@@ -175,8 +165,25 @@ bool LoopbackServer::CreatePermanentBookmarkFolder(
     const std::string& name) {
   DCHECK(thread_checker_.CalledOnValidThread());
   std::unique_ptr<LoopbackServerEntity> entity =
-      PersistentPermanentEntity::Create(syncer::BOOKMARKS, server_tag, name,
-                                        ModelTypeToRootTag(syncer::BOOKMARKS));
+      PersistentPermanentEntity::CreateNew(
+          syncer::BOOKMARKS, server_tag, name,
+          ModelTypeToRootTag(syncer::BOOKMARKS));
+  if (!entity)
+    return false;
+
+  SaveEntity(std::move(entity));
+  return true;
+}
+
+
+bool LoopbackServer::CreatePermanentNotesFolder(
+  const std::string& server_tag,
+  const std::string& name) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  std::unique_ptr<LoopbackServerEntity> entity =
+    PersistentPermanentEntity::CreateNew(
+      syncer::NOTES, server_tag, name,
+      ModelTypeToRootTag(syncer::NOTES));
   if (!entity)
     return false;
 
@@ -189,6 +196,7 @@ bool LoopbackServer::CreateDefaultPermanentItems() {
   // structure) and Nigori (data stored in permanent root folder).
   ModelTypeSet permanent_folder_types =
       ModelTypeSet(syncer::BOOKMARKS, syncer::NIGORI);
+  permanent_folder_types.Put(syncer::NOTES);
 
   for (ModelTypeSet::Iterator it = permanent_folder_types.First(); it.Good();
        it.Inc()) {
@@ -207,6 +215,16 @@ bool LoopbackServer::CreateDefaultPermanentItems() {
         return false;
       if (!CreatePermanentBookmarkFolder(kOtherBookmarksFolderServerTag,
                                          kOtherBookmarksFolderName))
+        return false;
+      if (!CreatePermanentBookmarkFolder("trash_bookmarks", "Trash"))
+        return false;
+    }
+    else if (model_type == syncer::NOTES) {
+      if (!CreatePermanentNotesFolder("main_notes", "Notes"))
+        return false;
+      if (!CreatePermanentNotesFolder("other_notes", "Other Notes"))
+        return false;
+      if (!CreatePermanentNotesFolder("trash_notes", "Trash"))
         return false;
     }
   }
@@ -290,7 +308,7 @@ bool LoopbackServer::HandleGetUpdatesRequest(
   // at once.
   response->set_changes_remaining(0);
 
-  std::unique_ptr<UpdateSieve> sieve = UpdateSieve::Create(get_updates);
+  auto sieve = base::MakeUnique<UpdateSieve>(get_updates);
 
   // This folder is called "Synced Bookmarks" by sync and is renamed
   // "Mobile Bookmarks" by the mobile client UIs.
@@ -301,16 +319,12 @@ bool LoopbackServer::HandleGetUpdatesRequest(
   }
 
   bool send_encryption_keys_based_on_nigori = false;
-  int64_t max_response_version = 0;
   for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
        ++it) {
     const LoopbackServerEntity& entity = *it->second;
     if (sieve->ClientWantsItem(entity)) {
       sync_pb::SyncEntity* response_entity = response->add_entries();
       entity.SerializeAsProto(response_entity);
-
-      max_response_version =
-          std::max(max_response_version, response_entity->version());
 
       if (entity.GetModelType() == syncer::NIGORI) {
         send_encryption_keys_based_on_nigori =
@@ -328,7 +342,7 @@ bool LoopbackServer::HandleGetUpdatesRequest(
     }
   }
 
-  sieve->UpdateProgressMarkers(max_response_version, response);
+  sieve->SetProgressMarkers(response);
   return true;
 }
 
@@ -342,19 +356,29 @@ string LoopbackServer::CommitEntity(
   }
 
   std::unique_ptr<LoopbackServerEntity> entity;
+  syncer::ModelType type = GetModelType(client_entity);
   if (client_entity.deleted()) {
-    entity = PersistentTombstoneEntity::Create(client_entity);
+    entity = PersistentTombstoneEntity::CreateFromEntity(client_entity);
     DeleteChildren(client_entity.id_string());
-  } else if (GetModelType(client_entity) == syncer::NIGORI) {
+  } else if (type == syncer::NIGORI) {
     // NIGORI is the only permanent item type that should be updated by the
     // client.
     EntityMap::const_iterator iter = entities_.find(client_entity.id_string());
     CHECK(iter != entities_.end());
     entity = PersistentPermanentEntity::CreateUpdatedNigoriEntity(
         client_entity, *iter->second);
-  } else if (client_entity.has_client_defined_unique_tag()) {
-    entity = PersistentUniqueClientEntity::Create(client_entity);
-  } else {
+  } else if (type == syncer::NOTES) {
+    EntityMap::const_iterator iter = entities_.find(client_entity.id_string());
+    if (iter != entities_.end()) {
+      entity = PersistentNotesEntity::CreateUpdatedVersion(
+        client_entity,
+        *iter->second,
+        parent_id);
+    } else {
+      entity = PersistentNotesEntity::CreateNew(client_entity, parent_id,
+                                                client_guid);
+    }
+  } else if (type == syncer::BOOKMARKS) {
     // TODO(pvalenzuela): Validate entity's parent ID.
     EntityMap::const_iterator iter = entities_.find(client_entity.id_string());
     if (iter != entities_.end()) {
@@ -364,13 +388,8 @@ string LoopbackServer::CommitEntity(
       entity = PersistentBookmarkEntity::CreateNew(client_entity, parent_id,
                                                    client_guid);
     }
-  }
-
-  if (!entity) {
-    LOG(ERROR) << "No server entity was created for client entity with type: "
-               << GetModelType(client_entity)
-               << " and ID: " << client_entity.id_string() << ".";
-    return string();
+  } else {
+    entity = PersistentUniqueClientEntity::CreateFromEntity(client_entity);
   }
 
   const std::string id = entity->GetId();
@@ -379,13 +398,20 @@ string LoopbackServer::CommitEntity(
   return id;
 }
 
+void LoopbackServer::OverrideResponseType(
+    ResponseTypeProvider response_type_override) {
+  response_type_override_ = std::move(response_type_override);
+}
+
 void LoopbackServer::BuildEntryResponseForSuccessfulCommit(
     const std::string& entity_id,
     sync_pb::CommitResponse_EntryResponse* entry_response) {
   EntityMap::const_iterator iter = entities_.find(entity_id);
   CHECK(iter != entities_.end());
   const LoopbackServerEntity& entity = *iter->second;
-  entry_response->set_response_type(sync_pb::CommitResponse::SUCCESS);
+  entry_response->set_response_type(response_type_override_
+                                        ? response_type_override_.Run(entity)
+                                        : sync_pb::CommitResponse::SUCCESS);
   entry_response->set_id_string(entity.GetId());
 
   if (entity.IsDeleted()) {
@@ -425,7 +451,7 @@ void LoopbackServer::DeleteChildren(const string& id) {
   }
 
   for (auto& tombstone : tombstones) {
-    SaveEntity(PersistentTombstoneEntity::Create(tombstone));
+    SaveEntity(PersistentTombstoneEntity::CreateFromEntity(tombstone));
   }
 }
 
@@ -465,6 +491,9 @@ bool LoopbackServer::HandleCommitRequest(
     committed_model_types.Put(iter->second->GetModelType());
   }
 
+  if (observer_for_tests_)
+    observer_for_tests_->OnCommit(invalidator_client_id, committed_model_types);
+
   return true;
 }
 
@@ -473,12 +502,105 @@ void LoopbackServer::ClearServerData() {
   entities_.clear();
   keystore_keys_.clear();
   ++store_birthday_;
+  base::DeleteFile(persistent_file_, false);
   Init();
 }
 
 std::string LoopbackServer::GetStoreBirthday() const {
   DCHECK(thread_checker_.CalledOnValidThread());
   return base::Int64ToString(store_birthday_);
+}
+
+std::vector<sync_pb::SyncEntity> LoopbackServer::GetSyncEntitiesByModelType(
+    ModelType model_type) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  std::vector<sync_pb::SyncEntity> sync_entities;
+  for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
+       ++it) {
+    const LoopbackServerEntity& entity = *it->second;
+    if (!(entity.IsDeleted() || entity.IsPermanent()) &&
+        entity.GetModelType() == model_type) {
+      sync_pb::SyncEntity sync_entity;
+      entity.SerializeAsProto(&sync_entity);
+      sync_entities.push_back(sync_entity);
+    }
+  }
+  return sync_entities;
+}
+
+std::unique_ptr<base::DictionaryValue>
+LoopbackServer::GetEntitiesAsDictionaryValue() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  std::unique_ptr<base::DictionaryValue> dictionary(
+      new base::DictionaryValue());
+
+  // Initialize an empty ListValue for all ModelTypes.
+  ModelTypeSet all_types = ModelTypeSet::All();
+  for (ModelTypeSet::Iterator it = all_types.First(); it.Good(); it.Inc()) {
+    dictionary->Set(ModelTypeToString(it.Get()),
+                    base::MakeUnique<base::ListValue>());
+  }
+
+  for (EntityMap::const_iterator it = entities_.begin(); it != entities_.end();
+       ++it) {
+    const LoopbackServerEntity& entity = *it->second;
+    if (entity.IsDeleted() || entity.IsPermanent()) {
+      // Tombstones are ignored as they don't represent current data. Folders
+      // are also ignored as current verification infrastructure does not
+      // consider them.
+      continue;
+    }
+    base::ListValue* list_value;
+    if (!dictionary->GetList(ModelTypeToString(entity.GetModelType()),
+                             &list_value)) {
+      return std::unique_ptr<base::DictionaryValue>();
+    }
+    // TODO(pvalenzuela): Store more data for each entity so additional
+    // verification can be performed. One example of additional verification
+    // is checking the correctness of the bookmark hierarchy.
+    list_value->AppendString(entity.GetName());
+  }
+
+  return dictionary;
+}
+
+bool LoopbackServer::ModifyEntitySpecifics(
+    const std::string& id,
+    const sync_pb::EntitySpecifics& updated_specifics) {
+  EntityMap::const_iterator iter = entities_.find(id);
+  if (iter == entities_.end() ||
+      iter->second->GetModelType() !=
+          GetModelTypeFromSpecifics(updated_specifics)) {
+    return false;
+  }
+
+  LoopbackServerEntity* entity = iter->second.get();
+  entity->SetSpecifics(updated_specifics);
+  UpdateEntityVersion(entity);
+  return true;
+}
+
+bool LoopbackServer::ModifyBookmarkEntity(
+    const std::string& id,
+    const std::string& parent_id,
+    const sync_pb::EntitySpecifics& updated_specifics) {
+  EntityMap::const_iterator iter = entities_.find(id);
+  if (iter == entities_.end() ||
+      iter->second->GetModelType() != syncer::BOOKMARKS ||
+      GetModelTypeFromSpecifics(updated_specifics) != syncer::BOOKMARKS) {
+    return false;
+  }
+
+  PersistentBookmarkEntity* entity =
+      static_cast<PersistentBookmarkEntity*>(iter->second.get());
+
+  entity->SetParentId(parent_id);
+  entity->SetSpecifics(updated_specifics);
+  if (updated_specifics.has_bookmark()) {
+    entity->SetName(updated_specifics.bookmark().title());
+  }
+  UpdateEntityVersion(entity);
+  return true;
 }
 
 void LoopbackServer::SerializeState(sync_pb::LoopbackServerProto* proto) const {

@@ -4,12 +4,18 @@
 
 #include "ash/system/bluetooth/tray_bluetooth.h"
 
-#include "ash/resources/grit/ash_resources.h"
+#include <map>
+#include <memory>
+#include <set>
+#include <string>
+
+#include "ash/ash_view_ids.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/session/session_state_delegate.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
+#include "ash/system/bluetooth/bluetooth_power_controller.h"
 #include "ash/system/bluetooth/tray_bluetooth_helper.h"
 #include "ash/system/tray/hover_highlight_view.h"
 #include "ash/system/tray/system_tray.h"
@@ -17,6 +23,7 @@
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_details_view.h"
+#include "ash/system/tray/tray_info_label.h"
 #include "ash/system/tray/tray_item_more.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -24,6 +31,7 @@
 #include "device/bluetooth/bluetooth_common.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/vector_icon_types.h"
@@ -112,7 +120,9 @@ const int kDisabledPanelLabelBaselineY = 20;
 
 class BluetoothDefaultView : public TrayItemMore {
  public:
-  explicit BluetoothDefaultView(SystemTrayItem* owner) : TrayItemMore(owner) {}
+  explicit BluetoothDefaultView(SystemTrayItem* owner) : TrayItemMore(owner) {
+    set_id(VIEW_ID_BLUETOOTH_DEFAULT_VIEW);
+  }
   ~BluetoothDefaultView() override {}
 
   void Update() {
@@ -310,8 +320,8 @@ class BluetoothDetailedView : public TrayDetailsView {
 
     // Show user Bluetooth state if there is no bluetooth devices in list.
     if (device_map_.size() == 0 && bluetooth_available && bluetooth_enabled) {
-      scroll_content()->AddChildView(TrayPopupUtils::CreateInfoLabelRowView(
-          IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING));
+      scroll_content()->AddChildView(new TrayInfoLabel(
+          nullptr /* delegate */, IDS_ASH_STATUS_TRAY_BLUETOOTH_DISCOVERING));
     }
 
     // Focus the device which was focused before the device-list update.
@@ -331,24 +341,11 @@ class BluetoothDetailedView : public TrayDetailsView {
       HoverHighlightView* container =
           AddScrollListItem(icon, device.display_name);
       if (device.connected)
-        SetupConnectedItem(container);
+        SetupConnectedScrollListItem(container);
       else if (device.connecting)
-        SetupConnectingItem(container);
+        SetupConnectingScrollListItem(container);
       device_map_[container] = device.address;
     }
-  }
-
-  void SetupConnectedItem(HoverHighlightView* container) {
-    container->SetSubText(l10n_util::GetStringUTF16(
-        IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED));
-    TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::CAPTION);
-    style.set_color_style(TrayPopupItemStyle::ColorStyle::CONNECTED);
-    style.SetupLabel(container->sub_text_label());
-  }
-
-  void SetupConnectingItem(HoverHighlightView* container) {
-    container->SetSubText(l10n_util::GetStringUTF16(
-        IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING));
   }
 
   // Returns true if the device with |device_id| is found in |device_list|.
@@ -368,7 +365,7 @@ class BluetoothDetailedView : public TrayDetailsView {
     if (FoundDevice(device_id, paired_not_connected_devices_)) {
       HoverHighlightView* container =
           static_cast<HoverHighlightView*>(item_container);
-      SetupConnectingItem(container);
+      SetupConnectingScrollListItem(container);
       scroll_content()->SizeToPreferredSize();
       scroller()->Layout();
     }
@@ -397,10 +394,12 @@ class BluetoothDetailedView : public TrayDetailsView {
                            const ui::Event& event) override {
     if (sender == toggle_) {
       TrayBluetoothHelper* helper = Shell::Get()->tray_bluetooth_helper();
-      ShellPort::Get()->RecordUserMetricsAction(
+      BluetoothPowerController* power_controller =
+          Shell::Get()->bluetooth_power_controller();
+      Shell::Get()->metrics()->RecordUserMetricsAction(
           helper->GetBluetoothEnabled() ? UMA_STATUS_AREA_BLUETOOTH_DISABLED
                                         : UMA_STATUS_AREA_BLUETOOTH_ENABLED);
-      helper->ToggleBluetoothEnabled();
+      power_controller->ToggleBluetoothEnabled();
     } else if (sender == settings_) {
       ShowSettings();
     } else {
@@ -428,7 +427,7 @@ class BluetoothDetailedView : public TrayDetailsView {
   void ShowSettings() {
     if (TrayPopupUtils::CanOpenWebUISettings()) {
       Shell::Get()->system_tray_controller()->ShowBluetoothSettings();
-      owner()->system_tray()->CloseSystemBubble();
+      owner()->system_tray()->CloseBubble();
     }
   }
 
@@ -464,7 +463,7 @@ class BluetoothDetailedView : public TrayDetailsView {
   views::View* CreateDisabledPanel() {
     views::View* container = new views::View;
     views::BoxLayout* box_layout =
-        new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0);
+        new views::BoxLayout(views::BoxLayout::kVertical);
     box_layout->set_main_axis_alignment(
         views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
     container->SetLayoutManager(box_layout);
@@ -543,37 +542,43 @@ TrayBluetooth::~TrayBluetooth() {
   Shell::Get()->system_tray_notifier()->RemoveBluetoothObserver(this);
 }
 
-views::View* TrayBluetooth::CreateTrayView(LoginStatus status) {
-  return NULL;
-}
-
 views::View* TrayBluetooth::CreateDefaultView(LoginStatus status) {
-  CHECK(default_ == NULL);
+  CHECK(default_ == nullptr);
+  SessionController* session_controller = Shell::Get()->session_controller();
   default_ = new tray::BluetoothDefaultView(this);
-  default_->SetEnabled(status != LoginStatus::LOCKED);
+  if (!session_controller->IsActiveUserSessionStarted()) {
+    // Bluetooth power setting is always mutable in login screen before any
+    // user logs in. The changes will affect local state preferences.
+    default_->SetEnabled(true);
+  } else {
+    // The bluetooth setting should be mutable only if:
+    // * the active user is the primary user, and
+    // * the session is not in lock screen
+    // The changes will affect the primary user's preferences.
+    default_->SetEnabled(session_controller->IsUserPrimary() &&
+                         status != LoginStatus::LOCKED);
+  }
   default_->Update();
   return default_;
 }
 
 views::View* TrayBluetooth::CreateDetailedView(LoginStatus status) {
   if (!Shell::Get()->tray_bluetooth_helper()->GetBluetoothAvailable())
-    return NULL;
-  ShellPort::Get()->RecordUserMetricsAction(
+    return nullptr;
+  Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DETAILED_BLUETOOTH_VIEW);
-  CHECK(detailed_ == NULL);
+  CHECK(detailed_ == nullptr);
   detailed_ = new tray::BluetoothDetailedView(this, status);
   detailed_->Update();
   return detailed_;
 }
 
-void TrayBluetooth::DestroyTrayView() {}
-
-void TrayBluetooth::DestroyDefaultView() {
-  default_ = NULL;
+void TrayBluetooth::OnDefaultViewDestroyed() {
+  default_ = nullptr;
 }
 
-void TrayBluetooth::DestroyDetailedView() {
-  detailed_ = NULL;
+void TrayBluetooth::OnDetailedViewDestroyed() {
+  detailed_ = nullptr;
 }
 
 void TrayBluetooth::UpdateAfterLoginStatusChange(LoginStatus status) {}

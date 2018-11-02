@@ -17,16 +17,11 @@ class WebFrameScheduler;
 
 class PLATFORM_EXPORT WebViewScheduler {
  public:
-  // Helper interface to plumb settings from WebSettings to scheduler.
-  class PLATFORM_EXPORT WebViewSchedulerSettings {
+  class PLATFORM_EXPORT WebViewSchedulerDelegate {
    public:
-    virtual ~WebViewSchedulerSettings() {}
+    virtual ~WebViewSchedulerDelegate() {}
 
-    // Background throttling aggressiveness settings.
-    virtual float ExpensiveBackgroundThrottlingCPUBudget() = 0;
-    virtual float ExpensiveBackgroundThrottlingInitialBudget() = 0;
-    virtual float ExpensiveBackgroundThrottlingMaxBudget() = 0;
-    virtual float ExpensiveBackgroundThrottlingMaxDelay() = 0;
+    virtual void RequestBeginMainFrameNotExpected(bool new_state) = 0;
   };
 
   virtual ~WebViewScheduler() {}
@@ -93,6 +88,8 @@ class PLATFORM_EXPORT WebViewScheduler {
   virtual void AudioStateChanged(bool is_audio_playing) = 0;
 
   virtual bool HasActiveConnectionForTest() const = 0;
+
+  virtual void RequestBeginMainFrameNotExpected(bool new_state) = 0;
 };
 
 }  // namespace blink

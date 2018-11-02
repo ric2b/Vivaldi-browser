@@ -166,7 +166,7 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // Returns whether this guest has an associated embedder.
   bool attached() const {
-    return element_instance_id_ != kInstanceIDNone;
+    return (element_instance_id_ != kInstanceIDNone) && !attach_in_progress_;
   }
 
   // Returns the instance ID of the <*view> element.
@@ -205,6 +205,11 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
 
   // Destroy this guest.
   void Destroy(bool also_delete);
+
+  // Indicates whether a guest should call destroy during DidDetach().
+  // TODO(wjmaclean): Delete this when browser plugin goes away;
+  // https://crbug.com/533069 .
+  virtual bool ShouldDestroyOnDetach() const;
 
   // Saves the attach state of the custom element hosting this GuestView.
   void SetAttachParams(const base::DictionaryValue& params);
@@ -437,6 +442,12 @@ class GuestViewBase : public content::BrowserPluginGuestDelegate,
   // |element_instance_id_| is an identifer that's unique to a particular
   // GuestViewContainer element.
   int element_instance_id_;
+
+  // |attach_in_progress_| is used to make sure that attached() doesn't return
+  // true until after DidAttach() is called, since that's when we are guaranteed
+  // that the contentWindow for cross-process-iframe based guests will become
+  // valid.
+  bool attach_in_progress_;
 
   // |initialized_| indicates whether GuestViewBase::Init has been called for
   // this object.

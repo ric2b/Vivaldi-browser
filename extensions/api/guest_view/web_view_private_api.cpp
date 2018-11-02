@@ -24,6 +24,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/web_contents.h"
+#include "extensions/api/history/history_private_api.h"
 #include "extensions/api/tabs/tabs_private_api.h"
 #include "extensions/helper/vivaldi_frame_observer.h"
 #include "extensions/schema/web_view_private.h"
@@ -268,7 +269,7 @@ void WebViewPrivateGetThumbnailFromServiceFunction::SendResultFromBitmap(
   }
 
   SetResult(base::MakeUnique<base::Value>(std::string("chrome://thumb/") +
-                                                context->url.spec()));
+                                          context->url.spec()));
   SendResponse(true);
 }
 
@@ -304,8 +305,8 @@ void WebViewPrivateAddToThumbnailServiceFunction::SetPageThumbnailOnUIThread(
   thumbnail_service->SetPageThumbnail(*context, thumbnail);
 
   if (send_result) {
-    SetResult(base::MakeUnique<base::Value>(
-        std::string("chrome://thumb/") + context->url.spec()));
+    SetResult(base::MakeUnique<base::Value>(std::string("chrome://thumb/") +
+                                            context->url.spec()));
     SendResponse(true);
   }
   Release();
@@ -345,8 +346,8 @@ void WebViewPrivateAddToThumbnailServiceFunction::SendResultFromBitmap(
   }
   // Do not store any urls for private windows.
   if (is_incognito_) {
-    SetResult(base::MakeUnique<base::Value>(
-        std::string("chrome://thumb/") + context->url.spec()));
+    SetResult(base::MakeUnique<base::Value>(std::string("chrome://thumb/") +
+                                            context->url.spec()));
     SendResponse(true);
   } else {
     AddRef();
@@ -513,20 +514,20 @@ bool WebViewPrivateSendRequestFunction::RunAsyncSafe(WebViewGuest* guest) {
       vivaldi::web_view_private::SendRequest::Params::Create(*args_));
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
+  ui::PageTransition transition =
+      HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
+          params->transition_type);
   // All the arguments passed to the constructor are ultimately ignored
-  content::OpenURLParams url_params(
-      GURL(params->url), content::Referrer(), WindowOpenDisposition::UNKNOWN,
-      params->was_typed ? ui::PAGE_TRANSITION_TYPED
-                        : ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
-      false);
+  content::OpenURLParams url_params(GURL(params->url), content::Referrer(),
+                                    WindowOpenDisposition::UNKNOWN, transition,
+                                    false);
 
   url_params.uses_post = params->use_post;
   url_params.post_data = content::ResourceRequestBody::CreateFromBytes(
       params->post_data.c_str(), params->post_data.length());
   url_params.extra_headers = params->extra_headers;
 
-  guest->NavigateGuest(params->url, true, params->was_typed, nullptr,
-                       &url_params);
+  guest->NavigateGuest(params->url, true, transition, nullptr, &url_params);
   SendResponse(true);
   return true;
 }

@@ -19,6 +19,7 @@
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/core/service_access_type.h"
+#include "components/language/core/browser/url_language_histogram.h"
 #include "components/omnibox/browser/omnibox_pref_names.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/prefs/pref_service.h"
@@ -30,6 +31,7 @@
 #include "ios/chrome/browser/history/history_service_factory.h"
 #include "ios/chrome/browser/history/web_history_service_factory.h"
 #include "ios/chrome/browser/ios_chrome_io_thread.h"
+#include "ios/chrome/browser/language/url_language_histogram_factory.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #include "ios/chrome/browser/sessions/ios_chrome_tab_restore_service_factory.h"
@@ -245,6 +247,12 @@ void IOSChromeBrowsingDataRemover::RemoveImpl(int remove_mask) {
         data_manager->Refresh();
     }
 
+    // Remove language histogram history.
+    language::UrlLanguageHistogram* language_histogram =
+        UrlLanguageHistogramFactory::GetForBrowserState(browser_state_);
+    if (language_histogram) {
+      language_histogram->ClearHistory(delete_begin_, delete_end_);
+    }
   }
 
   if (remove_mask & REMOVE_COOKIES) {
@@ -439,7 +447,7 @@ void IOSChromeBrowsingDataRemover::OnClearedPasswords() {
   NotifyAndDeleteIfDone();
 }
 
-void IOSChromeBrowsingDataRemover::OnClearedCookies(int num_deleted) {
+void IOSChromeBrowsingDataRemover::OnClearedCookies(uint32_t num_deleted) {
   if (!WebThread::CurrentlyOn(WebThread::UI)) {
     WebThread::PostTask(
         WebThread::UI, FROM_HERE,

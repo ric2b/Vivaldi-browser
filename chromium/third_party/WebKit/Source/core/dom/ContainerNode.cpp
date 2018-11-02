@@ -27,6 +27,7 @@
 #include "core/dom/ChildFrameDisconnector.h"
 #include "core/dom/ChildListMutationScope.h"
 #include "core/dom/ClassCollection.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/NameNodeList.h"
@@ -35,13 +36,13 @@
 #include "core/dom/NodeRareData.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/SelectorQuery.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/WhitespaceAttacher.h"
 #include "core/events/MutationEvent.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLTagCollection.h"
@@ -63,9 +64,72 @@ using namespace HTMLNames;
 static void DispatchChildInsertionEvents(Node&);
 static void DispatchChildRemovalEvents(Node&);
 
+namespace {
+
+// This class is helpful to detect necessity of
+// RecheckNodeInsertionStructuralPrereq() after removeChild*() inside
+// InsertBefore(), AppendChild(), and ReplaceChild().
+//
+// After removeChild*(), we can detect necessity of
+// RecheckNodeInsertionStructuralPrereq() by
+//  - DOM tree version of |node_document_| was increased by at most one.
+//  - If |node| and |parent| are in different documents, Document for
+//    |parent| must not be changed.
+class DOMTreeMutationDetector {
+  STACK_ALLOCATED();
+
+ public:
+  DOMTreeMutationDetector(const Node& node, const Node& parent)
+      : node_document_(node.GetDocument()),
+        parent_document_(parent.GetDocument()),
+        parent_(parent),
+        original_node_document_version_(node_document_->DomTreeVersion()),
+        original_parent_document_version_(parent_document_->DomTreeVersion()) {}
+
+  bool HadAtMostOneDOMMutation() {
+    if (node_document_->DomTreeVersion() > original_node_document_version_ + 1)
+      return false;
+    if (parent_document_ != parent_->GetDocument())
+      return false;
+    if (node_document_ == parent_document_)
+      return true;
+    return parent_document_->DomTreeVersion() ==
+           original_parent_document_version_;
+  }
+
+ private:
+  const Member<Document> node_document_;
+  const Member<Document> parent_document_;
+  const Member<const Node> parent_;
+  const uint64_t original_node_document_version_;
+  const uint64_t original_parent_document_version_;
+};
+
+inline bool CheckReferenceChildParent(const Node& parent,
+                                      const Node* next,
+                                      const Node* old_child,
+                                      ExceptionState& exception_state) {
+  if (next && next->parentNode() != &parent) {
+    exception_state.ThrowDOMException(kNotFoundError,
+                                      "The node before which the new node is "
+                                      "to be inserted is not a child of this "
+                                      "node.");
+    return false;
+  }
+  if (old_child && old_child->parentNode() != &parent) {
+    exception_state.ThrowDOMException(
+        kNotFoundError, "The node to be replaced is not a child of this node.");
+    return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 // This dispatches various events; DOM mutation events, blur events, IFRAME
 // unload events, etc.
-static inline void CollectChildrenAndRemoveFromOldParent(
+// Returns true if DOM mutation should be proceeded.
+static inline bool CollectChildrenAndRemoveFromOldParent(
     Node& node,
     NodeVector& nodes,
     ExceptionState& exception_state) {
@@ -73,11 +137,12 @@ static inline void CollectChildrenAndRemoveFromOldParent(
     DocumentFragment& fragment = ToDocumentFragment(node);
     GetChildNodes(fragment, nodes);
     fragment.RemoveChildren();
-    return;
+    return !nodes.IsEmpty();
   }
   nodes.push_back(&node);
   if (ContainerNode* old_parent = node.parentNode())
     old_parent->RemoveChild(&node, exception_state);
+  return !exception_state.HadException() && !nodes.IsEmpty();
 }
 
 void ContainerNode::ParserTakeAllChildrenFrom(ContainerNode& old_parent) {
@@ -106,68 +171,85 @@ bool ContainerNode::IsChildTypeAllowed(const Node& child) const {
   return true;
 }
 
-bool ContainerNode::ContainsConsideringHostElements(
-    const Node& new_child) const {
+// Returns true if |new_child| contains this node. In that case,
+// |exception_state| has an exception.
+// https://dom.spec.whatwg.org/#concept-tree-host-including-inclusive-ancestor
+bool ContainerNode::IsHostIncludingInclusiveAncestorOfThis(
+    const Node& new_child,
+    ExceptionState& exception_state) const {
+  // Non-ContainerNode can contain nothing.
+  if (!new_child.IsContainerNode())
+    return false;
+
+  bool child_contains_parent = false;
   if (IsInShadowTree() || GetDocument().IsTemplateDocument())
-    return new_child.ContainsIncludingHostElements(*this);
-  return new_child.contains(this);
+    child_contains_parent = new_child.ContainsIncludingHostElements(*this);
+  else
+    child_contains_parent = new_child.contains(this);
+  if (child_contains_parent) {
+    exception_state.ThrowDOMException(
+        kHierarchyRequestError, "The new child element contains the parent.");
+  }
+  return child_contains_parent;
 }
 
+// EnsurePreInsertionValidity() is an implementation of step 2 to 6 of
+// https://dom.spec.whatwg.org/#concept-node-ensure-pre-insertion-validity and
+// https://dom.spec.whatwg.org/#concept-node-replace .
 DISABLE_CFI_PERF
-bool ContainerNode::CheckAcceptChild(const Node* new_child,
-                                     const Node* old_child,
-                                     ExceptionState& exception_state) const {
-  // Not mentioned in spec: throw NotFoundError if newChild is null
-  if (!new_child) {
-    exception_state.ThrowDOMException(kNotFoundError,
-                                      "The new child element is null.");
-    return false;
-  }
+bool ContainerNode::EnsurePreInsertionValidity(
+    const Node& new_child,
+    const Node* next,
+    const Node* old_child,
+    ExceptionState& exception_state) const {
+  DCHECK(!(next && old_child));
 
   // Use common case fast path if possible.
-  if ((new_child->IsElementNode() || new_child->IsTextNode()) &&
+  if ((new_child.IsElementNode() || new_child.IsTextNode()) &&
       IsElementNode()) {
-    DCHECK(IsChildTypeAllowed(*new_child));
-    if (ContainsConsideringHostElements(*new_child)) {
-      exception_state.ThrowDOMException(
-          kHierarchyRequestError, "The new child element contains the parent.");
+    DCHECK(IsChildTypeAllowed(new_child));
+    // 2. If node is a host-including inclusive ancestor of parent, throw a
+    // HierarchyRequestError.
+    if (IsHostIncludingInclusiveAncestorOfThis(new_child, exception_state))
       return false;
-    }
-    return true;
+    // 3. If child is not null and its parent is not parent, then throw a
+    // NotFoundError.
+    return CheckReferenceChildParent(*this, next, old_child, exception_state);
   }
 
   // This should never happen, but also protect release builds from tree
   // corruption.
-  DCHECK(!new_child->IsPseudoElement());
-  if (new_child->IsPseudoElement()) {
+  DCHECK(!new_child.IsPseudoElement());
+  if (new_child.IsPseudoElement()) {
     exception_state.ThrowDOMException(
         kHierarchyRequestError, "The new child element is a pseudo-element.");
     return false;
   }
 
-  return CheckAcceptChildGuaranteedNodeTypes(*new_child, old_child,
-                                             exception_state);
-}
-
-bool ContainerNode::CheckAcceptChildGuaranteedNodeTypes(
-    const Node& new_child,
-    const Node* old_child,
-    ExceptionState& exception_state) const {
-  if (IsDocumentNode())
-    return ToDocument(this)->CanAcceptChild(new_child, old_child,
+  if (IsDocumentNode()) {
+    // Step 2 is unnecessary. No one can have a Document child.
+    // Step 3:
+    if (!CheckReferenceChildParent(*this, next, old_child, exception_state))
+      return false;
+    // Step 4-6.
+    return ToDocument(this)->CanAcceptChild(new_child, next, old_child,
                                             exception_state);
-  // Skip containsIncludingHostElements() if !newChild.parentNode() &&
-  // isConnected(). |newChild| typically has no parentNode(), and it means
-  // it's !isConnected(). In such case, the contains check for connected
-  // |this| is unnecessary.
-  if (new_child.IsContainerNode() &&
-      (new_child.IsDocumentNode() || new_child.parentNode() ||
-       !isConnected()) &&
-      new_child.ContainsIncludingHostElements(*this)) {
-    exception_state.ThrowDOMException(
-        kHierarchyRequestError, "The new child element contains the parent.");
-    return false;
   }
+
+  // 2. If node is a host-including inclusive ancestor of parent, throw a
+  // HierarchyRequestError.
+  if (IsHostIncludingInclusiveAncestorOfThis(new_child, exception_state))
+    return false;
+
+  // 3. If child is not null and its parent is not parent, then throw a
+  // NotFoundError.
+  if (!CheckReferenceChildParent(*this, next, old_child, exception_state))
+    return false;
+
+  // 4. If node is not a DocumentFragment, DocumentType, Element, Text,
+  // ProcessingInstruction, or Comment node, throw a HierarchyRequestError.
+  // 5. If either node is a Text node and parent is a document, or node is a
+  // doctype and parent is not a document, throw a HierarchyRequestError.
   if (!IsChildTypeAllowed(new_child)) {
     exception_state.ThrowDOMException(
         kHierarchyRequestError,
@@ -175,41 +257,37 @@ bool ContainerNode::CheckAcceptChildGuaranteedNodeTypes(
             "' may not be inserted inside nodes of type '" + nodeName() + "'.");
     return false;
   }
+
+  // Step 6 is unnecessary for non-Document nodes.
   return true;
 }
 
-bool ContainerNode::CollectChildrenAndRemoveFromOldParentWithCheck(
+// We need this extra structural check because prior DOM mutation operations
+// dispatched synchronous events, and their handlers might modified DOM trees.
+bool ContainerNode::RecheckNodeInsertionStructuralPrereq(
+    const NodeVector& new_children,
     const Node* next,
-    const Node* old_child,
-    Node& new_child,
-    NodeVector& new_children,
-    ExceptionState& exception_state) const {
-  CollectChildrenAndRemoveFromOldParent(new_child, new_children,
-                                        exception_state);
-  if (exception_state.HadException() || new_children.IsEmpty())
-    return false;
-
-  // We need this extra check because collectChildrenAndRemoveFromOldParent()
-  // can fire various events.
+    ExceptionState& exception_state) {
   for (const auto& child : new_children) {
     if (child->parentNode()) {
       // A new child was added to another parent before adding to this
       // node.  Firefox and Edge don't throw in this case.
       return false;
     }
-    if (!CheckAcceptChildGuaranteedNodeTypes(*child, old_child,
-                                             exception_state))
-      return false;
+    if (IsDocumentNode()) {
+      // For Document, no need to check host-including inclusive ancestor
+      // because a Document node can't be a child of other nodes.
+      // However, status of existing doctype or root element might be changed
+      // and we need to check it again.
+      if (!ToDocument(this)->CanAcceptChild(*child, next, nullptr,
+                                            exception_state))
+        return false;
+    } else {
+      if (IsHostIncludingInclusiveAncestorOfThis(*child, exception_state))
+        return false;
+    }
   }
-  if (next && next->parentNode() != this) {
-    exception_state.ThrowDOMException(
-        kNotFoundError,
-        "The node before which the new node is to "
-        "be inserted is not a child of this "
-        "node.");
-    return false;
-  }
-  return true;
+  return CheckReferenceChildParent(*this, next, nullptr, exception_state);
 }
 
 template <typename Functor>
@@ -281,22 +359,19 @@ class ContainerNode::AdoptAndAppendChild {
 Node* ContainerNode::InsertBefore(Node* new_child,
                                   Node* ref_child,
                                   ExceptionState& exception_state) {
+  DCHECK(new_child);
   // https://dom.spec.whatwg.org/#concept-node-pre-insert
 
-  // insertBefore(node, 0) is equivalent to appendChild(node)
+  // insertBefore(node, null) is equivalent to appendChild(node)
   if (!ref_child)
     return AppendChild(new_child, exception_state);
 
-  // NotFoundError: Raised if refChild is not a child of this node
-  if (ref_child->parentNode() != this) {
-    exception_state.ThrowDOMException(
-        kNotFoundError,
-        "The node before which the new node is to "
-        "be inserted is not a child of this "
-        "node.");
-    return nullptr;
-  }
+  // 1. Ensure pre-insertion validity of node into parent before child.
+  if (!EnsurePreInsertionValidity(*new_child, ref_child, nullptr,
+                                  exception_state))
+    return new_child;
 
+  // 2. Let reference child be child.
   // 3. If reference child is node, set it to node’s next sibling.
   if (ref_child == new_child) {
     ref_child = new_child->nextSibling();
@@ -304,16 +379,19 @@ Node* ContainerNode::InsertBefore(Node* new_child,
       return AppendChild(new_child, exception_state);
   }
 
-  // Make sure adding the new child is OK.
-  if (!CheckAcceptChild(new_child, 0, exception_state))
-    return new_child;
-  DCHECK(new_child);
-
+  // 4. Adopt node into parent’s node document.
   NodeVector targets;
-  if (!CollectChildrenAndRemoveFromOldParentWithCheck(
-          ref_child, nullptr, *new_child, targets, exception_state))
+  DOMTreeMutationDetector detector(*new_child, *this);
+  if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
+                                             exception_state))
     return new_child;
+  if (!detector.HadAtMostOneDOMMutation()) {
+    if (!RecheckNodeInsertionStructuralPrereq(targets, ref_child,
+                                              exception_state))
+      return new_child;
+  }
 
+  // 5. Insert node into parent before reference child.
   NodeVector post_insertion_notification_targets;
   {
     ChildListMutationScope mutation(*this);
@@ -373,7 +451,7 @@ bool ContainerNode::CheckParserAcceptChild(const Node& new_child) const {
     return true;
   // TODO(esprehn): Are there other conditions where the parser can create
   // invalid trees?
-  return ToDocument(*this).CanAcceptChild(new_child, nullptr,
+  return ToDocument(*this).CanAcceptChild(new_child, nullptr, nullptr,
                                           IGNORE_EXCEPTION_FOR_TESTING);
 }
 
@@ -417,6 +495,7 @@ void ContainerNode::ParserInsertBefore(Node* new_child, Node& next_child) {
 Node* ContainerNode::ReplaceChild(Node* new_child,
                                   Node* old_child,
                                   ExceptionState& exception_state) {
+  DCHECK(new_child);
   // https://dom.spec.whatwg.org/#concept-node-replace
 
   if (!old_child) {
@@ -425,25 +504,10 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
     return nullptr;
   }
 
-  // 1. If parent is not a Document, DocumentFragment, or Element node, throw a
-  // HierarchyRequestError.
-  // 2. If node is a host-including inclusive ancestor of parent, throw a
-  // HierarchyRequestError.
-  // 4. If node is not a DocumentFragment, DocumentType, Element, Text,
-  // ProcessingInstruction, or Comment node, throw a HierarchyRequestError.
-  // 5. If either node is a Text node and parent is a document, or node is a
-  // doctype and parent is not a document, throw a HierarchyRequestError.
-  // 6. If parent is a document, and any of the statements below, switched on
-  // node, are true, throw a HierarchyRequestError.
-  if (!CheckAcceptChild(new_child, old_child, exception_state))
+  // Step 2 to 6.
+  if (!EnsurePreInsertionValidity(*new_child, nullptr, old_child,
+                                  exception_state))
     return old_child;
-
-  // 3. If child’s parent is not parent, then throw a NotFoundError.
-  if (old_child->parentNode() != this) {
-    exception_state.ThrowDOMException(
-        kNotFoundError, "The node to be replaced is not a child of this node.");
-    return nullptr;
-  }
 
   // 7. Let reference child be child’s next sibling.
   Node* next = old_child->nextSibling();
@@ -451,16 +515,21 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
   if (next == new_child)
     next = new_child->nextSibling();
 
+  bool needs_recheck = false;
   // 10. Adopt node into parent’s node document.
   // TODO(tkent): Actually we do only RemoveChild() as a part of 'adopt'
   // operation.
-  // Though the following CollectChildrenAndRemoveFromOldParentWithCheck() also
-  // calls RemoveChild(), we'd like to call RemoveChild() here to make a
-  // separated MutationRecord.
+  //
+  // Though the following CollectChildrenAndRemoveFromOldParent() also calls
+  // RemoveChild(), we'd like to call RemoveChild() here to make a separated
+  // MutationRecord.
   if (ContainerNode* new_child_parent = new_child->parentNode()) {
+    DOMTreeMutationDetector detector(*new_child, *this);
     new_child_parent->RemoveChild(new_child, exception_state);
     if (exception_state.HadException())
       return nullptr;
+    if (!detector.HadAtMostOneDOMMutation())
+      needs_recheck = true;
   }
 
   NodeVector targets;
@@ -477,20 +546,24 @@ Node* ContainerNode::ReplaceChild(Node* new_child,
     //    1. Set removedNodes to a list solely containing child.
     //    2. Remove child from its parent with the suppress observers flag set.
     if (ContainerNode* old_child_parent = old_child->parentNode()) {
+      DOMTreeMutationDetector detector(*old_child, *this);
       old_child_parent->RemoveChild(old_child, exception_state);
       if (exception_state.HadException())
         return nullptr;
+      if (!detector.HadAtMostOneDOMMutation())
+        needs_recheck = true;
     }
-
-    // Does this one more time because removeChild() fires a MutationEvent.
-    if (!CheckAcceptChild(new_child, old_child, exception_state))
-      return old_child;
 
     // 13. Let nodes be node’s children if node is a DocumentFragment node, and
     // a list containing solely node otherwise.
-    if (!CollectChildrenAndRemoveFromOldParentWithCheck(
-            next, old_child, *new_child, targets, exception_state))
+    DOMTreeMutationDetector detector(*new_child, *this);
+    if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
+                                               exception_state))
       return old_child;
+    if (!detector.HadAtMostOneDOMMutation() || needs_recheck) {
+      if (!RecheckNodeInsertionStructuralPrereq(targets, next, exception_state))
+        return old_child;
+    }
 
     // 10. Adopt node into parent’s node document.
     // 14. Insert node into parent before reference child with the suppress
@@ -599,8 +672,8 @@ Node* ContainerNode::RemoveChild(Node* old_child,
   }
 
   {
-    HTMLFrameOwnerElement::UpdateSuspendScope suspend_widget_hierarchy_updates;
-    DocumentOrderedMap::RemoveScope tree_remove_scope;
+    HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
+    TreeOrderedMap::RemoveScope tree_remove_scope;
 
     Node* prev = child->previousSibling();
     Node* next = child->nextSibling();
@@ -655,8 +728,8 @@ void ContainerNode::ParserRemoveChild(Node& old_child) {
   ChildListMutationScope(*this).WillRemoveChild(old_child);
   old_child.NotifyMutationObserversNodeWillDetach();
 
-  HTMLFrameOwnerElement::UpdateSuspendScope suspend_widget_hierarchy_updates;
-  DocumentOrderedMap::RemoveScope tree_remove_scope;
+  HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
+  TreeOrderedMap::RemoveScope tree_remove_scope;
 
   Node* prev = old_child.previousSibling();
   Node* next = old_child.nextSibling();
@@ -693,8 +766,8 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
   }
 
   {
-    HTMLFrameOwnerElement::UpdateSuspendScope suspend_widget_hierarchy_updates;
-    DocumentOrderedMap::RemoveScope tree_remove_scope;
+    HTMLFrameOwnerElement::PluginDisposeSuspendScope suspend_plugin_dispose;
+    TreeOrderedMap::RemoveScope tree_remove_scope;
     {
       EventDispatchForbiddenScope assert_no_event_dispatch;
       ScriptForbiddenScope forbid_script;
@@ -716,15 +789,22 @@ void ContainerNode::RemoveChildren(SubtreeModificationAction action) {
 
 Node* ContainerNode::AppendChild(Node* new_child,
                                  ExceptionState& exception_state) {
-  // Make sure adding the new child is ok
-  if (!CheckAcceptChild(new_child, 0, exception_state))
-    return new_child;
   DCHECK(new_child);
+  // Make sure adding the new child is ok
+  if (!EnsurePreInsertionValidity(*new_child, nullptr, nullptr,
+                                  exception_state))
+    return new_child;
 
   NodeVector targets;
-  if (!CollectChildrenAndRemoveFromOldParentWithCheck(
-          nullptr, nullptr, *new_child, targets, exception_state))
+  DOMTreeMutationDetector detector(*new_child, *this);
+  if (!CollectChildrenAndRemoveFromOldParent(*new_child, targets,
+                                             exception_state))
     return new_child;
+  if (!detector.HadAtMostOneDOMMutation()) {
+    if (!RecheckNodeInsertionStructuralPrereq(targets, nullptr,
+                                              exception_state))
+      return new_child;
+  }
 
   NodeVector post_insertion_notification_targets;
   {
@@ -830,9 +910,13 @@ void ContainerNode::NotifyNodeRemoved(Node& root) {
 }
 
 DISABLE_CFI_PERF
-void ContainerNode::AttachLayoutTree(const AttachContext& context) {
+void ContainerNode::AttachLayoutTree(AttachContext& context) {
   AttachContext children_context(context);
   children_context.resolved_style = nullptr;
+  bool clear_previous_in_flow = !!GetLayoutObject();
+  if (clear_previous_in_flow)
+    children_context.previous_in_flow = nullptr;
+  children_context.use_previous_in_flow = true;
 
   for (Node* child = firstChild(); child; child = child->nextSibling()) {
 #if DCHECK_IS_ON()
@@ -842,6 +926,9 @@ void ContainerNode::AttachLayoutTree(const AttachContext& context) {
     if (child->NeedsAttach())
       child->AttachLayoutTree(children_context);
   }
+
+  if (children_context.previous_in_flow && !clear_previous_in_flow)
+    context.previous_in_flow = children_context.previous_in_flow;
 
   ClearChildNeedsStyleRecalc();
   ClearChildNeedsReattachLayoutTree();
@@ -1067,16 +1154,15 @@ void ContainerNode::FocusStateChanged() {
   if (!GetLayoutObject())
     return;
 
-  if (GetComputedStyle()->AffectedByFocus()) {
-    StyleChangeType change_type =
-        GetComputedStyle()->HasPseudoStyle(kPseudoIdFirstLetter)
-            ? kSubtreeStyleChange
-            : kLocalStyleChange;
-    SetNeedsStyleRecalc(
-        change_type,
-        StyleChangeReasonForTracing::CreateWithExtraData(
-            StyleChangeReason::kPseudoClass, StyleChangeExtraData::g_focus));
-  }
+  StyleChangeType change_type =
+      GetComputedStyle()->HasPseudoStyle(kPseudoIdFirstLetter)
+          ? kSubtreeStyleChange
+          : kLocalStyleChange;
+  SetNeedsStyleRecalc(
+      change_type,
+      StyleChangeReasonForTracing::CreateWithExtraData(
+          StyleChangeReason::kPseudoClass, StyleChangeExtraData::g_focus));
+
   if (IsElementNode() && ToElement(this)->ChildrenOrSiblingsAffectedByFocus())
     ToElement(this)->PseudoStateChanged(CSSSelector::kPseudoFocus);
 
@@ -1373,16 +1459,15 @@ void ContainerNode::RecalcDescendantStyles(StyleRecalcChange change) {
   }
 }
 
-void ContainerNode::RebuildLayoutTreeForChild(Node* child,
-                                              Text*& next_text_sibling) {
-  bool rebuild_child =
-      child->NeedsReattachLayoutTree() || child->ChildNeedsReattachLayoutTree();
-
+void ContainerNode::RebuildLayoutTreeForChild(
+    Node* child,
+    WhitespaceAttacher& whitespace_attacher) {
   if (child->IsTextNode()) {
     Text* text_node = ToText(child);
-    if (rebuild_child)
-      text_node->RebuildTextLayoutTree(next_text_sibling);
-    next_text_sibling = text_node;
+    if (child->NeedsReattachLayoutTree())
+      text_node->RebuildTextLayoutTree(whitespace_attacher);
+    else
+      whitespace_attacher.DidVisitText(text_node);
     return;
   }
 
@@ -1390,20 +1475,24 @@ void ContainerNode::RebuildLayoutTreeForChild(Node* child,
     return;
 
   Element* element = ToElement(child);
-  if (rebuild_child)
-    element->RebuildLayoutTree(next_text_sibling);
-  if (element->GetLayoutObject())
-    next_text_sibling = nullptr;
+  if (element->NeedsRebuildLayoutTree(whitespace_attacher))
+    element->RebuildLayoutTree(whitespace_attacher);
+  else
+    whitespace_attacher.DidVisitElement(element);
 }
 
-void ContainerNode::RebuildChildrenLayoutTrees(Text*& next_text_sibling) {
+void ContainerNode::RebuildChildrenLayoutTrees(
+    WhitespaceAttacher& whitespace_attacher) {
   DCHECK(!NeedsReattachLayoutTree());
 
-  if (IsActiveSlotOrActiveInsertionPoint()) {
-    if (isHTMLSlotElement(this))
-      toHTMLSlotElement(this)->RebuildDistributedChildrenLayoutTrees();
-    else
-      ToInsertionPoint(this)->RebuildDistributedChildrenLayoutTrees();
+  if (IsActiveSlotOrActiveV0InsertionPoint()) {
+    if (isHTMLSlotElement(this)) {
+      toHTMLSlotElement(this)->RebuildDistributedChildrenLayoutTrees(
+          whitespace_attacher);
+    } else {
+      ToV0InsertionPoint(this)->RebuildDistributedChildrenLayoutTrees(
+          whitespace_attacher);
+    }
   }
 
   // This loop is deliberately backwards because we use insertBefore in the
@@ -1412,7 +1501,7 @@ void ContainerNode::RebuildChildrenLayoutTrees(Text*& next_text_sibling) {
   // and work our way back means in the common case, we'll find the insertion
   // point in O(1) time.  See crbug.com/288225
   for (Node* child = lastChild(); child; child = child->previousSibling())
-    RebuildLayoutTreeForChild(child, next_text_sibling);
+    RebuildLayoutTreeForChild(child, whitespace_attacher);
 
   // This is done in ContainerNode::AttachLayoutTree but will never be cleared
   // if we don't enter ContainerNode::AttachLayoutTree so we do it here.
@@ -1588,7 +1677,7 @@ bool ChildAttachedAllowedWhenAttachingChildren(ContainerNode* node) {
   if (node->IsShadowRoot())
     return true;
 
-  if (node->IsInsertionPoint())
+  if (node->IsV0InsertionPoint())
     return true;
 
   if (isHTMLSlotElement(node))

@@ -131,10 +131,10 @@ class PersonalDataManager : public KeyedService,
       const CreditCard& imported_credit_card);
 
   // Adds |profile| to the web database.
-  void AddProfile(const AutofillProfile& profile);
+  virtual void AddProfile(const AutofillProfile& profile);
 
   // Updates |profile| which already exists in the web database.
-  void UpdateProfile(const AutofillProfile& profile);
+  virtual void UpdateProfile(const AutofillProfile& profile);
 
   // Removes the profile or credit card represented by |guid|.
   virtual void RemoveByGUID(const std::string& guid);
@@ -212,7 +212,13 @@ class PersonalDataManager : public KeyedService,
   virtual const std::vector<CreditCard*>& GetCreditCards() const;
 
   // Returns the profiles to suggest to the user, ordered by frecency.
-  const std::vector<AutofillProfile*> GetProfilesToSuggest() const;
+  std::vector<AutofillProfile*> GetProfilesToSuggest() const;
+
+  // Remove profiles that haven't been used after |min_last_used| from
+  // |profiles|. The relative ordering of |profiles| is maintained.
+  static void RemoveProfilesNotUsedSinceTimestamp(
+      base::Time min_last_used,
+      std::vector<AutofillProfile*>* profiles);
 
   // Loads profiles that can suggest data for |type|. |field_contents| is the
   // part the user has already typed. |field_is_autofilled| is true if the field
@@ -390,9 +396,9 @@ class PersonalDataManager : public KeyedService,
   // Notifies observers that personal data has changed.
   void NotifyPersonalDataChanged();
 
-  // The first time this is called, logs an UMA metric for the number of
-  // profiles the user has. On subsequent calls, does nothing.
-  void LogProfileCount() const;
+  // The first time this is called, logs a UMA metrics about the user's profile.
+  // On subsequent calls, does nothing.
+  void LogStoredProfileMetrics() const;
 
   // The first time this is called, logs an UMA metric for the number of local
   // credit cards the user has. On subsequent calls, does nothing.
@@ -592,8 +598,8 @@ class PersonalDataManager : public KeyedService,
   // Default value is false.
   bool is_off_the_record_;
 
-  // Whether we have already logged the number of profiles this session.
-  mutable bool has_logged_profile_count_;
+  // Whether we have already logged the stored profile metrics this session.
+  mutable bool has_logged_stored_profile_metrics_;
 
   // Whether we have already logged the number of local credit cards this
   // session.

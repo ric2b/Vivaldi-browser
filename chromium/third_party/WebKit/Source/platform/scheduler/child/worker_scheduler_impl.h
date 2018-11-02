@@ -29,7 +29,7 @@ class PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
 
   // WorkerScheduler implementation:
   scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner() override;
-  scoped_refptr<TaskQueue> DefaultTaskQueue() override;
+  scoped_refptr<WorkerTaskQueue> DefaultTaskQueue() override;
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   bool CanExceedIdleDeadlineIfRequired() const override;
   bool ShouldYieldForHighPriorityWork() override;
@@ -40,10 +40,8 @@ class PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
   void Shutdown() override;
 
   // TaskTimeObserver implementation:
-  void WillProcessTask(TaskQueue* task_queue, double start_time) override;
-  void DidProcessTask(TaskQueue* task_queue,
-                      double start_time,
-                      double end_time) override;
+  void WillProcessTask(double start_time) override;
+  void DidProcessTask(double start_time, double end_time) override;
   void OnBeginNestedRunLoop() override;
 
   SchedulerHelper* GetSchedulerHelperForTesting();
@@ -57,6 +55,7 @@ class PLATFORM_EXPORT WorkerSchedulerImpl : public WorkerScheduler,
   void IsNotQuiescent() override {}
   void OnIdlePeriodStarted() override {}
   void OnIdlePeriodEnded() override {}
+  void OnPendingTasksChanged(bool new_state) override {}
 
  private:
   void MaybeStartLongIdlePeriod();

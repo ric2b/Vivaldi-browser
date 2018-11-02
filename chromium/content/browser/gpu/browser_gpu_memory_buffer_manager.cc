@@ -12,18 +12,16 @@
 #include "base/strings/stringprintf.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "content/browser/gpu/gpu_process_host.h"
 #include "content/common/child_process_host_impl.h"
-#include "content/common/generic_shared_memory_id_generator.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
-#include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/ipc/client/gpu_memory_buffer_impl.h"
 #include "gpu/ipc/client/gpu_memory_buffer_impl_shared_memory.h"
-#include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/gpu_memory_buffer_tracing.h"
 #include "ui/gl/gl_switches.h"
@@ -74,6 +72,14 @@ BrowserGpuMemoryBufferManager::BrowserGpuMemoryBufferManager(
       gpu_client_tracing_id_(gpu_client_tracing_id) {
   DCHECK(!g_gpu_memory_buffer_manager);
   g_gpu_memory_buffer_manager = this;
+
+  // Enable the dump provider with IO thread affinity. Note that
+  // unregistration happens on the IO thread (See
+  // BrowserProcessSubThread::IOThreadPreCleanUp).
+  DCHECK(BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      this, "BrowserGpuMemoryBufferManager",
+      BrowserThread::GetTaskRunnerForThread(BrowserThread::IO));
 }
 
 BrowserGpuMemoryBufferManager::~BrowserGpuMemoryBufferManager() {
@@ -130,8 +136,10 @@ void BrowserGpuMemoryBufferManager::AllocateGpuMemoryBufferForChildProcess(
     return;
   }
 
-  callback.Run(gpu::GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
-      id, size, format));
+  auto handle = gpu::GpuMemoryBufferImplSharedMemory::CreateGpuMemoryBuffer(
+      id, size, format);
+  buffers.find(id)->second.shared_memory_guid = handle.handle.GetGUID();
+  callback.Run(handle);
 }
 
 void BrowserGpuMemoryBufferManager::SetDestructionSyncToken(
@@ -173,16 +181,18 @@ bool BrowserGpuMemoryBufferManager::OnMemoryDump(
       uint64_t client_tracing_process_id =
           ClientIdToTracingProcessId(client_id);
 
-      base::trace_event::MemoryAllocatorDumpGuid shared_buffer_guid;
       if (buffer.second.type == gfx::SHARED_MEMORY_BUFFER) {
-        shared_buffer_guid = gfx::GetSharedMemoryGUIDForTracing(
+        auto shared_buffer_guid = gfx::GetSharedMemoryGUIDForTracing(
             client_tracing_process_id, buffer_id);
+        pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), shared_buffer_guid,
+                                             buffer.second.shared_memory_guid,
+                                             0 /* importance */);
       } else {
-        shared_buffer_guid = gfx::GetGenericSharedGpuMemoryGUIDForTracing(
+        auto shared_buffer_guid = gfx::GetGenericSharedGpuMemoryGUIDForTracing(
             client_tracing_process_id, buffer_id);
+        pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
+        pmd->AddOwnershipEdge(dump->guid(), shared_buffer_guid);
       }
-      pmd->CreateSharedGlobalAllocatorDump(shared_buffer_guid);
-      pmd->AddOwnershipEdge(dump->guid(), shared_buffer_guid);
     }
   }
 
@@ -258,8 +268,7 @@ void BrowserGpuMemoryBufferManager::HandleCreateGpuMemoryBufferOnIO(
     CreateGpuMemoryBufferRequest* request) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
-  gfx::GpuMemoryBufferId new_id = content::GetNextGenericSharedMemoryId();
-
+  gfx::GpuMemoryBufferId new_id(next_gpu_memory_id_++);
   // Use service side allocation for native configurations.
   if (IsNativeGpuMemoryBufferConfiguration(request->format, request->usage)) {
     // Note: Unretained is safe as this is only used for synchronous allocation
@@ -293,6 +302,10 @@ void BrowserGpuMemoryBufferManager::HandleCreateGpuMemoryBufferOnIO(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
           base::Bind(&BrowserGpuMemoryBufferManager::DestroyGpuMemoryBufferOnIO,
                      base::Unretained(this), new_id, request->client_id)));
+  if (request->result) {
+    buffers.find(new_id)->second.shared_memory_guid =
+        request->result->GetHandle().handle.GetGUID();
+  }
   request->event.Signal();
 }
 
@@ -343,13 +356,11 @@ void BrowserGpuMemoryBufferManager::CreateGpuMemoryBufferOnIO(
   }
 
   GpuProcessHost* host = GpuProcessHost::Get();
-
   if (!host) {
-      DLOG(ERROR) << "Could not create GpuProcessHost";
-      callback.Run(gfx::GpuMemoryBufferHandle());
-      return;
+    DLOG(ERROR) << "Cannot allocate GpuMemoryBuffer with no GpuProcessHost.";
+    callback.Run(gfx::GpuMemoryBufferHandle());
+    return;
   }
-
   // Note: Unretained is safe as IO thread is stopped before manager is
   // destroyed.
   host->CreateGpuMemoryBuffer(
@@ -418,6 +429,7 @@ void BrowserGpuMemoryBufferManager::GpuMemoryBufferCreatedOnIO(
   // client is removed.
   buffer_it->second.type = handle.type;
   buffer_it->second.gpu_host_id = gpu_host_id;
+  buffer_it->second.shared_memory_guid = handle.handle.GetGUID();
 
   callback.Run(handle);
 }
@@ -463,8 +475,6 @@ uint64_t BrowserGpuMemoryBufferManager::ClientIdToTracingProcessId(
   return ChildProcessHostImpl::ChildProcessUniqueIdToTracingProcessId(
       client_id);
 }
-
-BrowserGpuMemoryBufferManager::BufferInfo::BufferInfo() = default;
 
 BrowserGpuMemoryBufferManager::BufferInfo::BufferInfo(
     const gfx::Size& size,

@@ -599,14 +599,14 @@ initiationType:(web::NavigationInitiationType)initiationType;
                                     andItem:(web::NavigationItem*)secondItem {
   if (!firstItem || !secondItem || firstItem == secondItem)
     return NO;
-  NSUInteger firstIndex = [self indexOfItem:firstItem];
-  NSUInteger secondIndex = [self indexOfItem:secondItem];
-  if (firstIndex == NSNotFound || secondIndex == NSNotFound)
+  int firstIndex = [self indexOfItem:firstItem];
+  int secondIndex = [self indexOfItem:secondItem];
+  if (firstIndex == -1 || secondIndex == -1)
     return NO;
-  NSUInteger startIndex = firstIndex < secondIndex ? firstIndex : secondIndex;
-  NSUInteger endIndex = firstIndex < secondIndex ? secondIndex : firstIndex;
+  int startIndex = firstIndex < secondIndex ? firstIndex : secondIndex;
+  int endIndex = firstIndex < secondIndex ? secondIndex : firstIndex;
 
-  for (NSUInteger i = startIndex + 1; i <= endIndex; i++) {
+  for (int i = startIndex + 1; i <= endIndex; i++) {
     web::NavigationItemImpl* item = self.items[i].get();
     // Every item in the sequence has to be created from a hash change or
     // pushState() call.
@@ -621,13 +621,13 @@ initiationType:(web::NavigationInitiationType)initiationType;
   return YES;
 }
 
-- (NSInteger)indexOfItem:(const web::NavigationItem*)item {
+- (int)indexOfItem:(const web::NavigationItem*)item {
   DCHECK(item);
   for (size_t index = 0; index < self.items.size(); ++index) {
     if (self.items[index].get() == item)
       return index;
   }
-  return NSNotFound;
+  return -1;
 }
 
 - (web::NavigationItemImpl*)itemAtIndex:(NSInteger)index {
@@ -657,6 +657,20 @@ initiationType:(web::NavigationInitiationType)initiationType {
   if (!urlWasRewritten) {
     web::BrowserURLRewriter::GetInstance()->RewriteURLIfNecessary(
         &loaded_url, _browserState);
+  }
+
+  if (initiationType == web::NavigationInitiationType::RENDERER_INITIATED &&
+      loaded_url != url && web::GetWebClient()->IsAppSpecificURL(loaded_url)) {
+    bool lastCommittedURLIsAppSpecific =
+        self.lastCommittedItem &&
+        web::GetWebClient()->IsAppSpecificURL(self.lastCommittedItem->GetURL());
+    if (!lastCommittedURLIsAppSpecific) {
+      // The URL should not be changed to app-specific URL if the load was
+      // renderer-initiated requested by non app-specific URL. Pages with
+      // app-specific urls have elevated previledges and should not be allowed
+      // to open app-specific URLs.
+      loaded_url = url;
+    }
   }
 
   std::unique_ptr<web::NavigationItemImpl> item(new web::NavigationItemImpl());

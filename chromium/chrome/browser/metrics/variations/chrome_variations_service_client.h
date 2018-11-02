@@ -8,7 +8,6 @@
 #include <string>
 
 #include "base/macros.h"
-#include "build/build_config.h"
 #include "components/variations/service/variations_service_client.h"
 
 // ChromeVariationsServiceClient provides an implementation of
@@ -21,14 +20,12 @@ class ChromeVariationsServiceClient
 
   // variations::VariationsServiceClient:
   std::string GetApplicationLocale() override;
-  base::SequencedWorkerPool* GetBlockingPool() override;
   base::Callback<base::Version(void)> GetVersionForSimulationCallback()
       override;
   net::URLRequestContextGetter* GetURLRequestContext() override;
   network_time::NetworkTimeTracker* GetNetworkTimeTracker() override;
   version_info::Channel GetChannel() override;
   bool OverridesRestrictParameter(std::string* parameter) override;
-  void OnInitialStartup() override;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeVariationsServiceClient);
 };

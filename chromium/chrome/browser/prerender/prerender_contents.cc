@@ -6,13 +6,13 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <functional>
 #include <utility>
 
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
 #include "base/process/process_metrics.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -140,6 +140,7 @@ class PrerenderContents::WebContentsDelegateImpl
 
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
+      content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,
@@ -287,11 +288,8 @@ void PrerenderContents::StartPrerendering(
 
   prerendering_has_started_ = true;
 
-  content::WebContents::CreateParams create_params =
-      WebContents::CreateParams(profile_);
-  prerender_contents_.reset(
-      CreateWebContents(create_params, session_storage_namespace));
-  TabHelpers::AttachTabHelpers(prerender_contents_.get(), create_params);
+  prerender_contents_.reset(CreateWebContents(session_storage_namespace));
+  TabHelpers::AttachTabHelpers(prerender_contents_.get());
   content::WebContentsObserver::Observe(prerender_contents_.get());
 
   // Tag the prerender contents with the task manager specific prerender tag, so
@@ -450,14 +448,13 @@ void PrerenderContents::OnRenderViewHostCreated(
 }
 
 WebContents* PrerenderContents::CreateWebContents(
-    const content::WebContents::CreateParams& create_params,
     SessionStorageNamespace* session_storage_namespace) {
   // TODO(ajwong): Remove the temporary map once prerendering is aware of
   // multiple session storage namespaces per tab.
   content::SessionStorageNamespaceMap session_storage_namespace_map;
   session_storage_namespace_map[std::string()] = session_storage_namespace;
-  return WebContents::CreateWithSessionStorage(create_params,
-                                               session_storage_namespace_map);
+  return WebContents::CreateWithSessionStorage(
+      WebContents::CreateParams(profile_), session_storage_namespace_map);
 }
 
 void PrerenderContents::NotifyPrerenderStart() {
@@ -522,8 +519,7 @@ bool PrerenderContents::Matches(
       session_storage_namespace_id_ != session_storage_namespace->id()) {
     return false;
   }
-  return std::find(alias_urls_.begin(), alias_urls_.end(), url) !=
-         alias_urls_.end();
+  return base::ContainsValue(alias_urls_, url);
 }
 
 void PrerenderContents::RenderProcessGone(base::TerminationStatus status) {
@@ -777,7 +773,6 @@ void PrerenderContents::CancelPrerenderForPrinting() {
 }
 
 void PrerenderContents::OnPrerenderCancelerRequest(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::PrerenderCancelerRequest request) {
   if (!prerender_canceler_binding_.is_bound())
     prerender_canceler_binding_.Bind(std::move(request));

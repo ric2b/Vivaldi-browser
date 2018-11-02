@@ -13,6 +13,8 @@
 #include "ui/aura/window.h"
 #include "ui/compositor/layer_animation_observer.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 
 namespace content {
 
@@ -35,8 +37,7 @@ OverscrollWindowAnimation::OverscrollWindowAnimation(Delegate* delegate)
   DCHECK(delegate_);
 }
 
-OverscrollWindowAnimation::~OverscrollWindowAnimation() {
-}
+OverscrollWindowAnimation::~OverscrollWindowAnimation() {}
 
 void OverscrollWindowAnimation::CancelSlide() {
   overscroll_cancelled_ = true;
@@ -48,15 +49,21 @@ void OverscrollWindowAnimation::CancelSlide() {
 
 float OverscrollWindowAnimation::GetTranslationForOverscroll(float delta_x) {
   DCHECK(direction_ != SLIDE_NONE);
-  const float bounds_width = GetVisibleBounds().width();
+  const float bounds_width = GetVisibleSize().width();
   if (direction_ == SLIDE_FRONT)
     return std::max(-bounds_width, delta_x);
   else
     return std::min(bounds_width, delta_x);
 }
 
-gfx::Rect OverscrollWindowAnimation::GetVisibleBounds() const {
-  return delegate_->GetMainWindow()->bounds();
+gfx::Size OverscrollWindowAnimation::GetVisibleSize() const {
+  return delegate_->GetMainWindow()->bounds().size();
+}
+
+gfx::Size OverscrollWindowAnimation::GetDisplaySize() const {
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestView(delegate_->GetMainWindow())
+      .size();
 }
 
 bool OverscrollWindowAnimation::OnOverscrollUpdate(float delta_x,
@@ -101,7 +108,7 @@ void OverscrollWindowAnimation::OnOverscrollModeChange(
     slide_window_->layer()->GetAnimator()->StopAnimating();
     delegate_->GetMainWindow()->layer()->GetAnimator()->StopAnimating();
   }
-  gfx::Rect slide_window_bounds = gfx::Rect(GetVisibleBounds().size());
+  gfx::Rect slide_window_bounds(GetVisibleSize());
   if (new_direction == SLIDE_FRONT) {
     slide_window_bounds.Offset(base::i18n::IsRTL()
                                    ? -slide_window_bounds.width()
@@ -114,7 +121,6 @@ void OverscrollWindowAnimation::OnOverscrollModeChange(
                                0);
   }
 
-  DCHECK_EQ(overscroll_source_, OverscrollSource::NONE);
   overscroll_source_ = source;
   slide_window_ = new_direction == SLIDE_FRONT
                       ? delegate_->CreateFrontWindow(slide_window_bounds)
@@ -130,12 +136,16 @@ void OverscrollWindowAnimation::OnOverscrollModeChange(
   shadow_.reset(new ShadowLayerDelegate(GetFrontLayer()));
 }
 
+base::Optional<float> OverscrollWindowAnimation::GetMaxOverscrollDelta() const {
+  return base::nullopt;
+}
+
 void OverscrollWindowAnimation::OnOverscrollComplete(
     OverscrollMode overscroll_mode) {
   if (!is_active())
     return;
   delegate_->OnOverscrollCompleting();
-  int content_width = GetVisibleBounds().width();
+  int content_width = GetVisibleSize().width();
   float translate_x;
   if ((base::i18n::IsRTL() && direction_ == SLIDE_FRONT) ||
       (!base::i18n::IsRTL() && direction_ == SLIDE_BACK)) {

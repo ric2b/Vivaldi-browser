@@ -367,7 +367,9 @@ ExtensionFunction::ResponseAction WebViewInternalNavigateFunction::Run() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
   std::string src = params->src;
   bool wasTyped = *params->was_typed;
-  guest_->NavigateGuest(src, true /* force_navigation */, wasTyped);
+  guest_->NavigateGuest(
+      src, true /* force_navigation */,
+      wasTyped ? ui::PAGE_TRANSITION_TYPED : ui::PAGE_TRANSITION_AUTO_TOPLEVEL);
   return RespondNow(NoArguments());
 }
 

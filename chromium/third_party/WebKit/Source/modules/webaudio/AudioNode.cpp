@@ -359,14 +359,6 @@ void AudioHandler::CheckNumberOfChannelsForInput(AudioNodeInput* input) {
   input->UpdateInternalBus();
 }
 
-double AudioHandler::TailTime() const {
-  return 0;
-}
-
-double AudioHandler::LatencyTime() const {
-  return 0;
-}
-
 bool AudioHandler::PropagatesSilence() const {
   return last_non_silent_time_ + LatencyTime() + TailTime() <
          Context()->currentTime();
@@ -550,9 +542,10 @@ void AudioNode::Dispose() {
 #endif
   BaseAudioContext::AutoLocker locker(context());
   Handler().Dispose();
-  if (context()->ContextState() == BaseAudioContext::kRunning)
+  if (context()->ContextState() == BaseAudioContext::kRunning) {
     context()->GetDeferredTaskHandler().AddRenderingOrphanHandler(
-        handler_.Release());
+        std::move(handler_));
+  }
 }
 
 void AudioNode::SetHandler(PassRefPtr<AudioHandler> handler) {

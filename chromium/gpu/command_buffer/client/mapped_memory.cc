@@ -26,7 +26,7 @@ namespace {
 
 // Generates process-unique IDs to use for tracing a MappedMemoryManager's
 // chunks.
-base::StaticAtomicSequenceNumber g_next_mapped_memory_manager_tracing_id;
+base::AtomicSequenceNumber g_next_mapped_memory_manager_tracing_id;
 
 }  // namespace
 
@@ -188,9 +188,16 @@ bool MappedMemoryManager::OnMemoryDump(
 
     auto guid = GetBufferGUIDForTracing(tracing_process_id, chunk->shm_id());
 
+    auto shared_memory_guid =
+        chunk->shared_memory()->backing()->shared_memory_handle().GetGUID();
     const int kImportance = 2;
-    pmd->CreateSharedGlobalAllocatorDump(guid);
-    pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+    if (!shared_memory_guid.is_empty()) {
+      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), guid,
+                                           shared_memory_guid, kImportance);
+    } else {
+      pmd->CreateSharedGlobalAllocatorDump(guid);
+      pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+    }
   }
 
   return true;

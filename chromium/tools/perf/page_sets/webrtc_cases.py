@@ -51,20 +51,18 @@ class VideoCall(WebrtcPage):
 
 
 class DataChannel(WebrtcPage):
-  """Why: Transfer as much data as possible through a data channel in 20s."""
+  """Why: Transfer as much data as possible through a data channel in 10s."""
 
   def __init__(self, page_set, tags):
     super(DataChannel, self).__init__(
         url='file://webrtc_cases/datatransfer.html',
-        name='30s_datachannel_transfer',
+        name='10s_datachannel_transfer',
         page_set=page_set, tags=tags)
 
   def RunPageInteractions(self, action_runner):
-    # It won't have time to finish the 512 MB, but we're only interested in
-    # cpu + memory anyway rather than how much data we manage to transfer.
-    action_runner.ExecuteJavaScript('megsToSend.value = 512;')
+    action_runner.ExecuteJavaScript('megsToSend.value = 100;')
     action_runner.ClickElement('button[id="sendTheData"]')
-    action_runner.Wait(30)
+    action_runner.Wait(10)
 
 
 class AudioCall(WebrtcPage):
@@ -110,13 +108,30 @@ class MultiplePeerConnections(WebrtcPage):
   def RunPageInteractions(self, action_runner):
     with action_runner.CreateInteraction('Action_Create_PeerConnection',
                                          repeatable=False):
-      # Set the number of peer connections to create to 15.
+      # Set the number of peer connections to create to 10.
       action_runner.ExecuteJavaScript(
-          'document.getElementById("num-peerconnections").value=15')
+          'document.getElementById("num-peerconnections").value=10')
       action_runner.ExecuteJavaScript(
           'document.getElementById("cpuoveruse-detection").checked=false')
       action_runner.ClickElement('button[id="start-test"]')
-      action_runner.Wait(45)
+      action_runner.Wait(20)
+
+
+class PausePlayPeerConnections(WebrtcPage):
+  """Why: Ensures frequent pause and plays of peer connection streams work."""
+
+  def __init__(self, page_set, tags):
+    super(PausePlayPeerConnections, self).__init__(
+        url='file://webrtc_cases/pause-play.html',
+        name='pause_play_peerconnections',
+        page_set=page_set, tags=tags)
+
+  def RunPageInteractions(self, action_runner):
+    action_runner.ExecuteJavaScript(
+        'startTest({test_runtime_s}, {num_peerconnections},'
+        '{iteration_delay_ms}, "video");'.format(
+            test_runtime_s=20, num_peerconnections=10, iteration_delay_ms=20))
+    action_runner.Wait(20)
 
 
 class WebrtcPageSet(story.StorySet):
@@ -124,21 +139,32 @@ class WebrtcPageSet(story.StorySet):
     super(WebrtcPageSet, self).__init__(
         cloud_storage_bucket=story.PUBLIC_BUCKET)
 
-    self.AddStory(GetUserMedia(self, tags=['getusermedia']))
+    self.AddStory(PausePlayPeerConnections(self, tags=['pauseplay']))
     self.AddStory(MultiplePeerConnections(self, tags=['stress']))
-    self.AddStory(VideoCall(self, tags=['peerconnection', 'smoothness']))
     self.AddStory(DataChannel(self, tags=['datachannel']))
+    self.AddStory(GetUserMedia(self, tags=['getusermedia']))
+    self.AddStory(VideoCall(self, tags=['peerconnection', 'smoothness']))
     self.AddStory(CanvasCapturePeerConnection(self, tags=['smoothness']))
-    # TODO(qyearsley, mcasas): Add webrtc.audio when http://crbug.com/468732
-    # is fixed, or revert https://codereview.chromium.org/1544573002/ when
-    # http://crbug.com/568333 is fixed.
-    # self.AddStory(AudioCall(self, 'OPUS'))
-    # self.AddStory(AudioCall(self, 'G772'))
-    # self.AddStory(AudioCall(self, 'PCMU'))
-    # self.AddStory(AudioCall(self, 'ISAC/1600'))
+    self.AddStory(AudioCall(self, 'OPUS', tags=['audio']))
+    self.AddStory(AudioCall(self, 'G772', tags=['audio']))
+    self.AddStory(AudioCall(self, 'PCMU', tags=['audio']))
+    self.AddStory(AudioCall(self, 'ISAC/1600', tags=['audio']))
 
 
 class WebrtcExpectations(story.expectations.StoryExpectations):
   def SetExpectations(self):
-    self.DisableStory('multiple_peerconnections', [story.expectations.ALL],
-                      'crbug.com/725502')
+    # TODO(qyearsley, mcasas): Add webrtc.audio when http://crbug.com/468732
+    # is fixed, or revert https://codereview.chromium.org/1544573002/ when
+    # http://crbug.com/568333 is fixed.
+    self.DisableStory('audio_call_opus_10s',
+                      [story.expectations.ALL],
+                      'crbug.com/468732')
+    self.DisableStory('audio_call_g772_10s',
+                      [story.expectations.ALL],
+                      'crbug.com/468732')
+    self.DisableStory('audio_call_pcmu_10s',
+                      [story.expectations.ALL],
+                      'crbug.com/468732')
+    self.DisableStory('audio_call_isac/1600_10s',
+                      [story.expectations.ALL],
+                      'crbug.com/468732')

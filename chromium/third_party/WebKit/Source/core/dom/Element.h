@@ -35,6 +35,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ElementData.h"
 #include "core/dom/SpaceSplitString.h"
+#include "core/dom/WhitespaceAttacher.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "public/platform/WebFocusType.h"
@@ -46,10 +47,10 @@ class AccessibleNode;
 class Attr;
 class Attribute;
 class CSSStyleDeclaration;
-class ClientRect;
-class ClientRectList;
 class CompositorMutation;
 class CustomElementDefinition;
+class DOMRect;
+class DOMRectList;
 class DOMStringMap;
 class DOMTokenList;
 class ElementRareData;
@@ -65,6 +66,8 @@ class PseudoElement;
 class PseudoStyleRequest;
 class ResizeObservation;
 class ResizeObserver;
+class ScrollIntoViewOptions;
+class ScrollIntoViewOptionsOrBoolean;
 class ScrollState;
 class ScrollStateCallback;
 class ScrollToOptions;
@@ -137,7 +140,6 @@ class CORE_EXPORT Element : public ContainerNode {
   DEFINE_ATTRIBUTE_EVENT_LISTENER(paste);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(selectstart);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   bool hasAttribute(const QualifiedName&) const;
   const AtomicString& getAttribute(const QualifiedName&) const;
@@ -154,7 +156,8 @@ class CORE_EXPORT Element : public ContainerNode {
   int GetIntegralAttribute(const QualifiedName& attribute_name) const;
   void SetIntegralAttribute(const QualifiedName& attribute_name, int value);
   void SetUnsignedIntegralAttribute(const QualifiedName& attribute_name,
-                                    unsigned value);
+                                    unsigned value,
+                                    unsigned default_value = 0);
   double GetFloatingPointAttribute(
       const QualifiedName& attribute_name,
       double fallback_value = std::numeric_limits<double>::quiet_NaN()) const;
@@ -227,7 +230,9 @@ class CORE_EXPORT Element : public ContainerNode {
   // attributes.
   AttributeCollection AttributesWithoutUpdate() const;
 
+  void scrollIntoView(ScrollIntoViewOptionsOrBoolean);
   void scrollIntoView(bool align_to_top = true);
+  void scrollIntoViewWithOptions(const ScrollIntoViewOptions&);
   void scrollIntoViewIfNeeded(bool center_if_needed = true);
 
   int OffsetLeft();
@@ -258,8 +263,8 @@ class CORE_EXPORT Element : public ContainerNode {
   // used to show popups beside this element.
   IntRect VisibleBoundsInVisualViewport() const;
 
-  ClientRectList* getClientRects();
-  ClientRect* getBoundingClientRect();
+  DOMRectList* getClientRects();
+  DOMRect* getBoundingClientRect();
 
   bool HasNonEmptyLayoutSize() const;
 
@@ -368,6 +373,7 @@ class CORE_EXPORT Element : public ContainerNode {
 
   // For exposing to DOM only.
   NamedNodeMap* attributesForBindings() const;
+  Vector<AtomicString> getAttributeNames() const;
 
   enum class AttributeModificationReason { kDirectly, kByParser, kByCloning };
   struct AttributeModificationParams {
@@ -427,13 +433,20 @@ class CORE_EXPORT Element : public ContainerNode {
 
   virtual void CopyNonAttributePropertiesFromElement(const Element&) {}
 
-  void AttachLayoutTree(const AttachContext& = AttachContext()) override;
+  void AttachLayoutTree(AttachContext&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
 
   virtual LayoutObject* CreateLayoutObject(const ComputedStyle&);
   virtual bool LayoutObjectIsNeeded(const ComputedStyle&);
   void RecalcStyle(StyleRecalcChange);
-  void RebuildLayoutTree(Text* next_text_sibling = nullptr);
+  bool NeedsRebuildLayoutTree(
+      const WhitespaceAttacher& whitespace_attacher) const {
+    return NeedsReattachLayoutTree() || ChildNeedsReattachLayoutTree() ||
+           IsActiveSlotOrActiveV0InsertionPoint() ||
+           (whitespace_attacher.LastTextNodeNeedsReattach() &&
+            HasDisplayContentsStyle());
+  }
+  void RebuildLayoutTree(WhitespaceAttacher&);
   void PseudoStateChanged(CSSSelector::PseudoType);
   void SetAnimationStyleChange(bool);
   void ClearAnimationStyleChange();
@@ -628,9 +641,6 @@ class CORE_EXPORT Element : public ContainerNode {
   // used only in UA stylesheet.
   void SetShadowPseudoId(const AtomicString&);
 
-  LayoutSize MinimumSizeForResizing() const;
-  void SetMinimumSizeForResizing(const LayoutSize&);
-
   // Called by the parser when this element's close tag is reached, signaling
   // that all child tags have been parsed and added.  This is needed for
   // <applet> and <object> elements, which can't lay themselves out until they
@@ -754,15 +764,6 @@ class CORE_EXPORT Element : public ContainerNode {
   void setTabIndex(int);
   int tabIndex() const override;
 
-  // A compositor proxy is a very limited wrapper around an element. It
-  // exposes only those properties that are requested at the time the proxy is
-  // created. In order to know which properties are actually proxied, we
-  // maintain a count of the number of compositor proxies associated with each
-  // property.
-  bool HasCompositorProxy() const;
-  void IncrementCompositorProxiedProperties(uint32_t mutable_properties);
-  void DecrementCompositorProxiedProperties(uint32_t mutable_properties);
-  uint32_t CompositorMutableProperties() const;
   void UpdateFromCompositorMutation(const CompositorMutation&);
 
   // Helpers for V8DOMActivityLogger::logEvent.  They call logEvent only if
@@ -888,9 +889,8 @@ class CORE_EXPORT Element : public ContainerNode {
   PassRefPtr<ComputedStyle> PropagateInheritedProperties(StyleRecalcChange);
 
   StyleRecalcChange RecalcOwnStyle(StyleRecalcChange);
-  void RebuildPseudoElementLayoutTree(PseudoId,
-                                      Text* next_text_sibling = nullptr);
-  void RebuildShadowRootLayoutTree(Text*& next_text_sibling);
+  void RebuildPseudoElementLayoutTree(PseudoId, WhitespaceAttacher&);
+  void RebuildShadowRootLayoutTree(WhitespaceAttacher&);
   inline void CheckForEmptyStyleChange();
 
   void UpdatePseudoElement(PseudoId, StyleRecalcChange);

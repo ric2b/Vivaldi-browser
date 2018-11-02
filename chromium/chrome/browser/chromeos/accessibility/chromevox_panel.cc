@@ -10,7 +10,6 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/wm_window.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
@@ -191,7 +190,7 @@ void ChromeVoxPanel::UpdateWidgetBounds() {
 
   // If we're in full-screen mode, give the panel a height of 0 unless
   // it's active.
-  if (ash::GetRootWindowController(GetRootWindow())
+  if (ash::RootWindowController::ForWindow(GetRootWindow())
           ->GetWindowForFullscreenMode() &&
       !widget_->IsActive()) {
     bounds.set_height(0);

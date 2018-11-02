@@ -17,14 +17,16 @@ class StructTraitsTest : public testing::Test, public mojom::TraitsTestService {
 
  protected:
   mojom::TraitsTestServicePtr GetTraitsTestProxy() {
-    return traits_test_bindings_.CreateInterfacePtrAndBind(this);
+    mojom::TraitsTestServicePtr proxy;
+    traits_test_bindings_.AddBinding(this, mojo::MakeRequest(&proxy));
+    return proxy;
   }
 
  private:
   // TraitsTestService:
   void EchoVersion(const base::Optional<base::Version>& m,
-                   const EchoVersionCallback& callback) override {
-    callback.Run(m);
+                   EchoVersionCallback callback) override {
+    std::move(callback).Run(m);
   }
 
   base::MessageLoop loop_;

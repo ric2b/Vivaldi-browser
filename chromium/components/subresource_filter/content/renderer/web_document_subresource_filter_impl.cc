@@ -6,8 +6,12 @@
 
 #include <utility>
 
+#include "base/bind.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
+#include "base/message_loop/message_loop.h"
 #include "components/subresource_filter/core/common/activation_state.h"
+#include "components/subresource_filter/core/common/load_policy.h"
 #include "components/subresource_filter/core/common/memory_mapped_ruleset.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -15,6 +19,8 @@
 #include "url/origin.h"
 
 namespace subresource_filter {
+
+namespace proto = url_pattern_index::proto;
 
 namespace {
 
@@ -87,6 +93,11 @@ WebLoadPolicy ToWebLoadPolicy(LoadPolicy load_policy) {
   }
 }
 
+void ProxyToTaskRunner(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                       base::OnceClosure callback) {
+  task_runner->PostTask(FROM_HERE, std::move(callback));
+}
+
 }  // namespace
 
 WebDocumentSubresourceFilterImpl::~WebDocumentSubresourceFilterImpl() = default;
@@ -96,7 +107,8 @@ WebDocumentSubresourceFilterImpl::WebDocumentSubresourceFilterImpl(
     ActivationState activation_state,
     scoped_refptr<const MemoryMappedRuleset> ruleset,
     base::OnceClosure first_disallowed_load_callback)
-    : filter_(std::move(document_origin), activation_state, std::move(ruleset)),
+    : activation_state_(activation_state),
+      filter_(std::move(document_origin), activation_state, std::move(ruleset)),
       first_disallowed_load_callback_(
           std::move(first_disallowed_load_callback)) {}
 
@@ -119,7 +131,7 @@ void WebDocumentSubresourceFilterImpl::ReportDisallowedLoad() {
 }
 
 bool WebDocumentSubresourceFilterImpl::ShouldLogToConsole() {
-  return filter_.activation_state().enable_logging;
+  return activation_state().enable_logging;
 }
 
 WebLoadPolicy WebDocumentSubresourceFilterImpl::getLoadPolicyImpl(
@@ -133,6 +145,31 @@ WebLoadPolicy WebDocumentSubresourceFilterImpl::getLoadPolicyImpl(
 
   // TODO(pkalinnikov): Would be good to avoid converting to GURL.
   return ToWebLoadPolicy(filter_.GetLoadPolicy(GURL(url), element_type));
+}
+
+WebDocumentSubresourceFilterImpl::BuilderImpl::BuilderImpl(
+    url::Origin document_origin,
+    ActivationState activation_state,
+    base::File ruleset_file,
+    base::OnceClosure first_disallowed_load_callback)
+    : document_origin_(std::move(document_origin)),
+      activation_state_(std::move(activation_state)),
+      ruleset_file_(std::move(ruleset_file)),
+      first_disallowed_load_callback_(
+          std::move(first_disallowed_load_callback)),
+      main_task_runner_(base::MessageLoop::current()->task_runner()) {}
+
+WebDocumentSubresourceFilterImpl::BuilderImpl::~BuilderImpl() {}
+
+std::unique_ptr<blink::WebDocumentSubresourceFilter>
+WebDocumentSubresourceFilterImpl::BuilderImpl::Build() {
+  DCHECK(ruleset_file_.IsValid());
+  DCHECK(!main_task_runner_->BelongsToCurrentThread());
+  return base::MakeUnique<WebDocumentSubresourceFilterImpl>(
+      document_origin_, activation_state_,
+      base::MakeRefCounted<MemoryMappedRuleset>(std::move(ruleset_file_)),
+      base::BindOnce(&ProxyToTaskRunner, main_task_runner_,
+                     std::move(first_disallowed_load_callback_)));
 }
 
 }  // namespace subresource_filter

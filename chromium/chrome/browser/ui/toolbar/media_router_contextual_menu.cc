@@ -8,7 +8,10 @@
 
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
+#include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/media/router/event_page_request_manager.h"
+#include "chrome/browser/media/router/event_page_request_manager_factory.h"
 #include "chrome/browser/media/router/media_router_factory.h"
 #include "chrome/browser/media/router/mojo/media_router_mojo_impl.h"
 #include "chrome/browser/profiles/profile.h"
@@ -23,11 +26,11 @@
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/signin/core/browser/signin_manager.h"
+#include "components/vector_icons/vector_icons.h"
 #include "extensions/common/constants.h"
 #include "ui/base/models/menu_model_delegate.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/vector_icons/vector_icons.h"
 
 // static
 std::unique_ptr<MediaRouterContextualMenu>
@@ -63,7 +66,7 @@ MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser,
                                     IDS_MEDIA_ROUTER_SHOWN_BY_POLICY);
     menu_model_.SetIcon(
         menu_model_.GetIndexOfCommandId(IDC_MEDIA_ROUTER_SHOWN_BY_POLICY),
-        gfx::Image(gfx::CreateVectorIcon(ui::kBusinessIcon, 16,
+        gfx::Image(gfx::CreateVectorIcon(vector_icons::kBusinessIcon, 16,
                                          gfx::kChromeIconGrey)));
   } else {
     menu_model_.AddCheckItemWithStringId(
@@ -72,15 +75,19 @@ MediaRouterContextualMenu::MediaRouterContextualMenu(Browser* browser,
   }
   menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_SHOW_IN_TOOLBAR,
                                   GetChangeVisibilityTextId());
-  menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
+
+  if (!browser_->profile()->IsOffTheRecord()) {
+    menu_model_.AddSeparator(ui::NORMAL_SEPARATOR);
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_CHROMEOS)
-  menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_MANAGE_DEVICES,
-                                  IDS_MEDIA_ROUTER_MANAGE_DEVICES);
+    menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_MANAGE_DEVICES,
+                                    IDS_MEDIA_ROUTER_MANAGE_DEVICES);
 #endif
-  menu_model_.AddCheckItemWithStringId(IDC_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE,
-                                       IDS_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE);
-  menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_REPORT_ISSUE,
-                                  IDS_MEDIA_ROUTER_REPORT_ISSUE);
+    menu_model_.AddCheckItemWithStringId(
+        IDC_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE,
+        IDS_MEDIA_ROUTER_CLOUD_SERVICES_TOGGLE);
+    menu_model_.AddItemWithStringId(IDC_MEDIA_ROUTER_REPORT_ISSUE,
+                                    IDS_MEDIA_ROUTER_REPORT_ISSUE);
+  }
 }
 
 MediaRouterContextualMenu::~MediaRouterContextualMenu() {}
@@ -180,17 +187,15 @@ void MediaRouterContextualMenu::ExecuteCommand(int command_id,
 void MediaRouterContextualMenu::ReportIssue() {
   // Opens feedback page loaded from the media router extension.
   // This is temporary until feedback UI is redesigned.
-  // TODO(crbug.com/597778): remove reference to MediaRouterMojoImpl
-  media_router::MediaRouterMojoImpl* media_router =
-      static_cast<media_router::MediaRouterMojoImpl*>(
-          media_router::MediaRouterFactory::GetApiForBrowserContext(
-              static_cast<content::BrowserContext*>(browser_->profile())));
-  if (media_router->media_route_provider_extension_id().empty())
+  media_router::EventPageRequestManager* request_manager =
+      media_router::EventPageRequestManagerFactory::GetApiForBrowserContext(
+          browser_->profile());
+  if (request_manager->media_route_provider_extension_id().empty())
     return;
-  std::string feedback_url(extensions::kExtensionScheme +
-                           std::string(url::kStandardSchemeSeparator) +
-                           media_router->media_route_provider_extension_id() +
-                           "/feedback.html");
+  std::string feedback_url(
+      extensions::kExtensionScheme +
+      std::string(url::kStandardSchemeSeparator) +
+      request_manager->media_route_provider_extension_id() + "/feedback.html");
   chrome::ShowSingletonTab(browser_, GURL(feedback_url));
 }
 

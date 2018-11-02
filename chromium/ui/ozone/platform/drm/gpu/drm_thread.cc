@@ -12,7 +12,10 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/trace_event/trace_event.h"
 #include "ui/display/types/display_mode.h"
+#include "ui/display/types/display_snapshot_mojo.h"
+#include "ui/ozone/common/display_snapshot_proxy.h"
 #include "ui/ozone/platform/drm/common/drm_util.h"
 #include "ui/ozone/platform/drm/gpu/drm_buffer.h"
 #include "ui/ozone/platform/drm/gpu/drm_device_generator.h"
@@ -220,21 +223,26 @@ void DrmThread::CheckOverlayCapabilities(
     gfx::AcceleratedWidget widget,
     const std::vector<OverlayCheck_Params>& overlays,
     base::OnceCallback<void(gfx::AcceleratedWidget,
-                            const std::vector<OverlayCheck_Params>&)>
+                            const std::vector<OverlayCheck_Params>&,
+                            const std::vector<OverlayCheckReturn_Params>&)>
         callback) {
+  TRACE_EVENT0("drm,hwoverlays", "DrmThread::CheckOverlayCapabilities");
+
   std::move(callback).Run(
-      widget, screen_manager_->GetWindow(widget)->TestPageFlip(overlays));
+      widget, overlays,
+      screen_manager_->GetWindow(widget)->TestPageFlip(overlays));
 }
 
 void DrmThread::RefreshNativeDisplays(
-    base::OnceCallback<void(const std::vector<DisplaySnapshot_Params>&)>
-        callback) {
-  std::move(callback).Run(display_manager_->GetDisplays());
+    base::OnceCallback<void(MovableDisplaySnapshots)> callback) {
+  auto snapshots =
+      CreateMovableDisplaySnapshotsFromParams(display_manager_->GetDisplays());
+  std::move(callback).Run(std::move(snapshots));
 }
 
 void DrmThread::ConfigureNativeDisplay(
     int64_t id,
-    std::unique_ptr<const display::DisplayMode> mode,
+    std::unique_ptr<display::DisplayMode> mode,
     const gfx::Point& origin,
     base::OnceCallback<void(int64_t, bool)> callback) {
   std::move(callback).Run(

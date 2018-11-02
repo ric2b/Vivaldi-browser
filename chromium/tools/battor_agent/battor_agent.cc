@@ -108,11 +108,9 @@ bool ParseSampleFrame(BattOrMessageType type,
 BattOrAgent::BattOrAgent(
     const std::string& path,
     Listener* listener,
-    scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
     : connection_(new BattOrConnectionImpl(path,
                                            this,
-                                           file_thread_task_runner,
                                            ui_thread_task_runner)),
       listener_(listener),
       last_action_(Action::INVALID),
@@ -188,7 +186,7 @@ void BattOrAgent::OnConnectionOpened(bool success) {
       PerformAction(Action::SEND_CURRENT_SAMPLE_REQUEST);
       return;
     case Command::GET_FIRMWARE_GIT_HASH:
-      PerformAction(Action::SEND_INIT);
+      PerformAction(Action::SEND_GIT_HASH_REQUEST);
       return;
     case Command::INVALID:
       NOTREACHED();
@@ -271,9 +269,6 @@ void BattOrAgent::OnMessageRead(bool success,
       switch (command_) {
         case Command::START_TRACING:
           PerformAction(Action::SEND_SET_GAIN);
-          return;
-        case Command::GET_FIRMWARE_GIT_HASH:
-          PerformAction(Action::SEND_GIT_HASH_REQUEST);
           return;
         default:
           NOTREACHED();

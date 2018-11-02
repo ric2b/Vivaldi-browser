@@ -30,12 +30,12 @@ Notes_Node::Notes_Node(int64_t id)
 
 Notes_Node::~Notes_Node() {}
 
-base::Value* Notes_Node::Encode(
+std::unique_ptr<base::Value> Notes_Node::Encode(
     NotesCodec* checksummer,
     const std::vector<const Notes_Node*>* extra_nodes) const {
   DCHECK(checksummer);
 
-  base::DictionaryValue* value = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> value(new base::DictionaryValue());
 
   std::string node_id = base::Int64ToString(id_);
   value->SetString("id", node_id);
@@ -70,17 +70,17 @@ base::Value* Notes_Node::Encode(
   value->SetString("date_added", temp);
 
   if (type_ == FOLDER || type_ == TRASH || type_ == OTHER) {
-    base::ListValue* children = new base::ListValue();
+    std::unique_ptr<base::ListValue> children(new base::ListValue());
 
     for (int i = 0; i < child_count(); i++) {
-      children->Append(base::WrapUnique(GetChild(i)->Encode(checksummer)));
+      children->Append(GetChild(i)->Encode(checksummer));
     }
     if (extra_nodes) {
       for (auto* it : *extra_nodes) {
-        children->Append(base::WrapUnique(it->Encode(checksummer)));
+        children->Append(it->Encode(checksummer));
       }
     }
-    value->Set("children", children);
+    value->Set("children", std::move(children));
   } else {
     if (!filename_.empty()) {
       value->SetString("filename", filename_);
@@ -98,15 +98,15 @@ base::Value* Notes_Node::Encode(
       value->Set("icon", note_icon_.Encode(checksummer));
 
     if (attachments_.size()) {
-      base::ListValue* attachments = new base::ListValue();
+      std::unique_ptr<base::ListValue> attachments(new base::ListValue());
 
       std::vector<Notes_attachment>::const_iterator item;
       for (item = attachments_.begin(); item < attachments_.end(); item++) {
-        base::Value* val = item->Encode(checksummer);
-        attachments->Append(base::WrapUnique(val));
+        std::unique_ptr<base::Value> val(item->Encode(checksummer));
+        attachments->Append(std::move(val));
       }
 
-      value->Set("attachments", attachments);
+      value->Set("attachments", std::move(attachments));
     }
   }
 

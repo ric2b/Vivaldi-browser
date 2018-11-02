@@ -25,7 +25,6 @@
 #include "components/arc/arc_util.h"
 #include "components/arc/test/fake_arc_session.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -97,6 +96,7 @@ class ArcPlayStoreEnabledPreferenceHandlerTest : public testing::Test {
 TEST_F(ArcPlayStoreEnabledPreferenceHandlerTest, PrefChangeTriggersService) {
   ASSERT_FALSE(IsArcPlayStoreEnabledForProfile(profile()));
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
   preference_handler()->Start();
 
   EXPECT_FALSE(
@@ -120,16 +120,10 @@ TEST_F(ArcPlayStoreEnabledPreferenceHandlerTest,
   SetArcPlayStoreEnabledForProfile(profile(), true);
 
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
   preference_handler()->Start();
 
   // Setting profile initiates a code fetching process.
-  ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
-            arc_session_manager()->state());
-
-  content::BrowserThread::GetBlockingPool()->FlushForTesting();
-  base::RunLoop().RunUntilIdle();
-
-  // UI is disabled in unit tests and this code is unchanged.
   ASSERT_EQ(ArcSessionManager::State::NEGOTIATING_TERMS_OF_SERVICE,
             arc_session_manager()->state());
 }
@@ -142,6 +136,7 @@ TEST_F(ArcPlayStoreEnabledPreferenceHandlerTest, RemoveDataDir_Managed) {
   // Starting session manager with prefs::kArcEnabled off in a managed profile
   // does automatically remove Android's data folder.
   arc_session_manager()->SetProfile(profile());
+  arc_session_manager()->Initialize();
   preference_handler()->Start();
   EXPECT_TRUE(
       profile()->GetPrefs()->GetBoolean(prefs::kArcDataRemoveRequested));

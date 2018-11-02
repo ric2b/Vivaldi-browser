@@ -11,6 +11,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/translate/translate_bubble_model.h"
 #include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event_constants.h"
@@ -144,6 +145,9 @@ class TranslateBubbleViewTest : public views::ViewsTestBase {
  protected:
   void SetUp() override {
     views::ViewsTestBase::SetUp();
+    // Set the ChromeLayoutProvider as the default layout provider.
+    test_views_delegate()->set_layout_provider(
+        ChromeLayoutProvider::CreateLayoutProvider());
 
     // The bubble needs the parent as an anchor.
     views::Widget::InitParams params =
@@ -165,7 +169,7 @@ class TranslateBubbleViewTest : public views::ViewsTestBase {
   void CreateAndShowBubble() {
     std::unique_ptr<TranslateBubbleModel> model(mock_model_);
     bubble_ = new TranslateBubbleView(anchor_widget_->GetContentsView(),
-                                      std::move(model),
+                                      gfx::Point(), std::move(model),
                                       translate::TranslateErrors::NONE, NULL);
     views::BubbleDialogDelegateView::CreateBubble(bubble_)->Show();
   }

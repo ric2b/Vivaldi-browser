@@ -81,13 +81,14 @@ class MakeElementFactoryWriter(MakeQualifiedNamesWriter):
         self._template_context.update({
             'fallback_interface': fallback_interface,
             'fallback_js_interface': fallback_js_interface,
+            'input_files': self._input_files,
         })
 
-    @template_expander.use_jinja('ElementFactory.h.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/ElementFactory.h.tmpl', filters=filters)
     def generate_factory_header(self):
         return self._template_context
 
-    @template_expander.use_jinja('ElementFactory.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/ElementFactory.cpp.tmpl', filters=filters)
     def generate_factory_implementation(self):
         return self._template_context
 

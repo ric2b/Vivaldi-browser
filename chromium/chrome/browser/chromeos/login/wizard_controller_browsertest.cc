@@ -275,10 +275,8 @@ class WizardControllerTest : public WizardInProcessBrowserTest {
       run_loop.Run();
   }
 
-  bool JSExecute(const std::string& expression) {
-    return content::ExecuteScript(
-        GetWebContents(),
-        "window.domAutomationController.send(!!(" + expression + "));");
+  bool JSExecute(const std::string& script) {
+    return content::ExecuteScript(GetWebContents(), script);
   }
 
   bool JSExecuteBooleanExpression(const std::string& expression) {
@@ -1347,7 +1345,9 @@ IN_PROC_BROWSER_TEST_F(WizardControllerCellularFirstTest, CellularFirstFlow) {
 
 // TODO(fukino): Add tests for encryption migration UI.
 // http://crbug.com/706017
-static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 27,
+
+// TODO(updowndota): Add tests for Voice Interaction OptIn flow.
+static_assert(static_cast<int>(ScreenExitCode::EXIT_CODES_COUNT) == 31,
               "tests for new control flow are missing");
 
 }  // namespace chromeos

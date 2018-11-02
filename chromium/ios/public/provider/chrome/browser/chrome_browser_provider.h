@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
+#include "base/observer_list.h"
 
 class AppDistributionProvider;
 class BrandedImageProvider;
@@ -64,6 +65,23 @@ std::unique_ptr<ChromeBrowserProvider> CreateChromeBrowserProvider();
 // ios_chrome_browser target.
 class ChromeBrowserProvider {
  public:
+  // Observer handling events related to the ChromeBrowserProvider.
+  class Observer {
+   public:
+    Observer() {}
+    virtual ~Observer() {}
+
+    // Called when a new ChromeIdentityService has been installed.
+    virtual void OnChromeIdentityServiceDidChange(
+        ChromeIdentityService* new_service) {}
+
+    // Called when the ChromeBrowserProvider will be destroyed.
+    virtual void OnChromeBrowserProviderWillBeDestroyed() {}
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(Observer);
+  };
+
   // The constructor is called before web startup.
   ChromeBrowserProvider();
   virtual ~ChromeBrowserProvider();
@@ -126,9 +144,6 @@ class ChromeBrowserProvider {
   // Returns an instance of the branded image provider.
   virtual BrandedImageProvider* GetBrandedImageProvider() const;
 
-  // Returns the NativeAppWhitelistManager implementation.
-  virtual id<NativeAppWhitelistManager> GetNativeAppWhitelistManager() const;
-
   // Hides immediately the modals related to this provider.
   virtual void HideModalViewStack() const;
 
@@ -138,6 +153,20 @@ class ChromeBrowserProvider {
 
   // Returns an instance of the spotlight provider.
   virtual SpotlightProvider* GetSpotlightProvider() const;
+
+  // Checks for native iOS apps that are installed.
+  virtual void CheckForFirstPartyApps() const;
+
+  // Adds and removes observers.
+  void AddObserver(Observer* observer);
+  void RemoveObserver(Observer* observer);
+
+ protected:
+  // Fires |OnChromeIdentityServiceDidChange| on all observers.
+  void FireChromeIdentityServiceDidChange(ChromeIdentityService* new_service);
+
+ private:
+  base::ObserverList<Observer, true> observer_list_;
 };
 
 }  // namespace ios

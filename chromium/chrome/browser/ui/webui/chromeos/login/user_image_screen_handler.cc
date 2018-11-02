@@ -91,7 +91,7 @@ void UserImageScreenHandler::DeclareLocalizedValues(
     ::login::LocalizedValuesBuilder* builder) {
   builder->Add("userImageScreenTitle", IDS_USER_IMAGE_SCREEN_TITLE);
   builder->Add("userImageScreenDescription",
-               IDS_OPTIONS_CHANGE_PICTURE_DIALOG_TEXT);
+               IDS_USER_IMAGE_SCREEN_DESCRIPTION);
   builder->Add("takePhoto", IDS_OPTIONS_CHANGE_PICTURE_TAKE_PHOTO);
   builder->Add("discardPhoto", IDS_OPTIONS_CHANGE_PICTURE_DISCARD_PHOTO);
   builder->Add("flipPhoto", IDS_OPTIONS_CHANGE_PICTURE_FLIP_PHOTO);
@@ -99,23 +99,13 @@ void UserImageScreenHandler::DeclareLocalizedValues(
   builder->Add("profilePhotoLoading",
                IDS_IMAGE_SCREEN_PROFILE_LOADING_PHOTO);
   builder->Add("okButtonText", IDS_OK);
-  builder->Add("authorCredit", IDS_OPTIONS_SET_WALLPAPER_AUTHOR_TEXT);
   builder->Add("photoFromCamera", IDS_OPTIONS_CHANGE_PICTURE_PHOTO_FROM_CAMERA);
-  builder->Add("photoFlippedAccessibleText",
-               IDS_OPTIONS_PHOTO_FLIP_ACCESSIBLE_TEXT);
-  builder->Add("photoFlippedBackAccessibleText",
-               IDS_OPTIONS_PHOTO_FLIPBACK_ACCESSIBLE_TEXT);
-  builder->Add("photoCaptureAccessibleText",
-               IDS_OPTIONS_PHOTO_CAPTURE_ACCESSIBLE_TEXT);
-  builder->Add("photoDiscardAccessibleText",
-               IDS_OPTIONS_PHOTO_DISCARD_ACCESSIBLE_TEXT);
   builder->Add("syncingPreferences", IDS_IMAGE_SCREEN_SYNCING_PREFERENCES);
 }
 
 void UserImageScreenHandler::RegisterMessages() {
   AddCallback("getImages", &UserImageScreenHandler::HandleGetImages);
   AddCallback("screenReady", &UserImageScreenHandler::HandleScreenReady);
-  AddCallback("takePhoto", &UserImageScreenHandler::HandleTakePhoto);
   AddCallback("discardPhoto", &UserImageScreenHandler::HandleDiscardPhoto);
   AddCallback("photoTaken", &UserImageScreenHandler::HandlePhotoTaken);
   AddCallback("selectImage", &UserImageScreenHandler::HandleSelectImage);
@@ -127,23 +117,12 @@ void UserImageScreenHandler::RegisterMessages() {
 
 // TODO(antrim) : It looks more like parameters for "Init" rather than callback.
 void UserImageScreenHandler::HandleGetImages() {
-  base::ListValue image_urls;
-  for (int i = default_user_image::kFirstDefaultImageIndex;
-       i < default_user_image::kDefaultImagesCount; ++i) {
-    std::unique_ptr<base::DictionaryValue> image_data(
-        new base::DictionaryValue);
-    image_data->SetString("url", default_user_image::GetDefaultImageUrl(i));
-    image_data->SetString("author",
-                          l10n_util::GetStringUTF16(
-                              default_user_image::kDefaultImageAuthorIDs[i]));
-    image_data->SetString("website",
-                          l10n_util::GetStringUTF16(
-                              default_user_image::kDefaultImageWebsiteIDs[i]));
-    image_data->SetString("title",
-                          default_user_image::GetDefaultImageDescription(i));
-    image_urls.Append(std::move(image_data));
-  }
-  CallJS("setDefaultImages", image_urls);
+  base::DictionaryValue result;
+  result.SetInteger("first", default_user_image::GetFirstDefaultImage());
+  std::unique_ptr<base::ListValue> default_images =
+      default_user_image::GetAsDictionary(true /* all */);
+  result.Set("images", std::move(default_images));
+  CallJS("setDefaultImages", result);
 }
 
 void UserImageScreenHandler::HandleScreenReady() {
@@ -157,14 +136,11 @@ void UserImageScreenHandler::HandlePhotoTaken(const std::string& image_url) {
   if (!net::DataURL::Parse(GURL(image_url), &mime_type, &charset, &raw_data))
     NOTREACHED();
   DCHECK_EQ("image/png", mime_type);
+  AccessibilityManager::Get()->PlayEarcon(
+      SOUND_CAMERA_SNAP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
 
   if (screen_)
     screen_->OnPhotoTaken(raw_data);
-}
-
-void UserImageScreenHandler::HandleTakePhoto() {
-  AccessibilityManager::Get()->PlayEarcon(
-      SOUND_CAMERA_SNAP, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
 }
 
 void UserImageScreenHandler::HandleDiscardPhoto() {
@@ -172,8 +148,8 @@ void UserImageScreenHandler::HandleDiscardPhoto() {
       SOUND_OBJECT_DELETE, PlaySoundOption::SPOKEN_FEEDBACK_ENABLED);
 }
 
-void UserImageScreenHandler::HandleSelectImage(const std::string& image_url,
-                                               const std::string& image_type,
+void UserImageScreenHandler::HandleSelectImage(const std::string& image_type,
+                                               const std::string& image_url,
                                                bool is_user_selection) {
   if (screen_)
     screen_->OnImageSelected(image_type, image_url, is_user_selection);

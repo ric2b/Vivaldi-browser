@@ -107,7 +107,9 @@
   const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
   bool hasCustomThemeImage = themeProvider &&
       themeProvider->HasCustomImage(IDR_THEME_FRAME);
-  BOOL supportsVibrancy = [self visualEffectView] != nil;
+  BOOL supportsVibrancy = false;
+  if (@available(macOS 10.10, *))
+    supportsVibrancy = [self visualEffectView] != nil;
   BOOL isMainWindow = [[self window] isMainWindow];
 
   // If in Material Design mode, decrease the tabstrip background's translucency
@@ -353,24 +355,9 @@
   newTabButton_.reset([button retain]);
 }
 
-- (NSVisualEffectView*)visualEffectView {
-  // NSVisualEffectView is only available on OS X 10.10 and higher.
-  if (!base::mac::IsAtLeastOS10_10())
-    return nil;
-
-  NSView* rootView = [[self window] contentView];
-  if (!chrome::ShouldUseFullSizeContentView()) {
-    rootView = [rootView superview];
-  }
-
-  Class nsVisualEffectViewClass = NSClassFromString(@"NSVisualEffectView");
-  DCHECK(nsVisualEffectViewClass);
-  for (NSView* view in [rootView subviews]) {
-    if ([view isKindOfClass:nsVisualEffectViewClass]) {
-      return base::mac::ObjCCast<NSVisualEffectView>(view);
-    }
-  }
-  return nil;
+- (NSVisualEffectView*)visualEffectView API_AVAILABLE(macos(10.10)) {
+  return [[BrowserWindowController
+      browserWindowControllerForWindow:[self window]] visualEffectView];
 }
 
 - (void)setController:(TabStripController*)controller {
@@ -382,21 +369,24 @@
 
   // Finish configuring the NSVisualEffectView so that it matches the window's
   // theme.
-  NSVisualEffectView* visualEffectView = [self visualEffectView];
-  const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
-  if (!visualEffectView || !themeProvider) {
-    return;
-  }
+  if (@available(macOS 10.10, *)) {
+    NSVisualEffectView* visualEffectView = [self visualEffectView];
+    const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
+    if (!visualEffectView || !themeProvider) {
+      return;
+    }
 
-  // Themes with custom frame images don't use vibrancy. Otherwise, if Incognito
-  // use Material Dark.
-  if (themeProvider->HasCustomImage(IDR_THEME_FRAME) ||
-      themeProvider->HasCustomColor(ThemeProperties::COLOR_FRAME)) {
-    [visualEffectView setState:NSVisualEffectStateInactive];
-  } else if (themeProvider->InIncognitoMode()) {
-    [visualEffectView setMaterial:NSVisualEffectMaterialDark];
-    [visualEffectView setAppearance:
-        [NSAppearance appearanceNamed:NSAppearanceNameVibrantDark]];
+    // Themes with custom frame images don't use vibrancy. Otherwise, if
+    // Incognito use Material Dark.
+    if (themeProvider->HasCustomImage(IDR_THEME_FRAME) ||
+        themeProvider->HasCustomColor(ThemeProperties::COLOR_FRAME)) {
+      [visualEffectView setState:NSVisualEffectStateInactive];
+    } else if (themeProvider->InIncognitoMode()) {
+      [visualEffectView setMaterial:NSVisualEffectMaterialDark];
+      [visualEffectView
+          setAppearance:[NSAppearance
+                            appearanceNamed:NSAppearanceNameVibrantDark]];
+    }
   }
 }
 
@@ -417,20 +407,22 @@
 }
 
 - (void)updateVisualEffectState {
-  // Configure the NSVisualEffectView so that it does nothing if the user has
-  // switched to a custom theme, or uses vibrancy if the user has switched back
-  // to the default theme.
-  NSVisualEffectView* visualEffectView = [self visualEffectView];
-  const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
-  if (!visualEffectView || !themeProvider) {
-    return;
-  }
-  if (visualEffectsDisabledForFullscreen_ ||
-      themeProvider->HasCustomImage(IDR_THEME_FRAME) ||
-      themeProvider->HasCustomColor(ThemeProperties::COLOR_FRAME)) {
-    [visualEffectView setState:NSVisualEffectStateInactive];
-  } else {
-    [visualEffectView setState:NSVisualEffectStateFollowsWindowActiveState];
+  if (@available(macOS 10.10, *)) {
+    // Configure the NSVisualEffectView so that it does nothing if the user has
+    // switched to a custom theme, or uses vibrancy if the user has switched
+    // back to the default theme.
+    NSVisualEffectView* visualEffectView = [self visualEffectView];
+    const ui::ThemeProvider* themeProvider = [[self window] themeProvider];
+    if (!visualEffectView || !themeProvider) {
+      return;
+    }
+    if (visualEffectsDisabledForFullscreen_ ||
+        themeProvider->HasCustomImage(IDR_THEME_FRAME) ||
+        themeProvider->HasCustomColor(ThemeProperties::COLOR_FRAME)) {
+      [visualEffectView setState:NSVisualEffectStateInactive];
+    } else {
+      [visualEffectView setState:NSVisualEffectStateFollowsWindowActiveState];
+    }
   }
 }
 

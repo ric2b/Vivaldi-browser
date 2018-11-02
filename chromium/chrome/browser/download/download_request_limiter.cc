@@ -8,9 +8,12 @@
 #include "base/stl_util.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/download/download_permission_request.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_contents/tab_util.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "content/public/browser/browser_context.h"
@@ -27,9 +30,6 @@
 
 #if defined(OS_ANDROID)
 #include "chrome/browser/download/download_request_infobar_delegate_android.h"
-#else
-#include "chrome/browser/download/download_permission_request.h"
-#include "chrome/browser/permissions/permission_request_manager.h"
 #endif
 
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -176,12 +176,13 @@ void DownloadRequestLimiter::TabDownloadState::DidGetUserInteraction(
     return;
   }
 
-#if defined(OS_ANDROID)
-  bool promptable = InfoBarService::FromWebContents(web_contents()) != nullptr;
-#else
-  bool promptable =
-      PermissionRequestManager::FromWebContents(web_contents()) != nullptr;
-#endif
+  bool promptable;
+  if (PermissionRequestManager::IsEnabled()) {
+    promptable =
+        PermissionRequestManager::FromWebContents(web_contents()) != nullptr;
+  } else {
+    promptable = InfoBarService::FromWebContents(web_contents()) != nullptr;
+  }
 
   // See PromptUserForDownload(): if there's no InfoBarService, then
   // DOWNLOADS_NOT_ALLOWED is functionally equivalent to PROMPT_BEFORE_DOWNLOAD.
@@ -210,19 +211,29 @@ void DownloadRequestLimiter::TabDownloadState::PromptUserForDownload(
   if (is_showing_prompt())
     return;
 
-#if defined(OS_ANDROID)
-  DownloadRequestInfoBarDelegateAndroid::Create(
-      InfoBarService::FromWebContents(web_contents_), factory_.GetWeakPtr());
-#else
-  PermissionRequestManager* permission_request_manager =
-      PermissionRequestManager::FromWebContents(web_contents_);
-  if (permission_request_manager) {
-    permission_request_manager->AddRequest(
-        new DownloadPermissionRequest(factory_.GetWeakPtr()));
-  } else {
+  if (vr::VrTabHelper::IsInVr(web_contents_)) {
+    // Permission request UI cannot currently be rendered binocularly in VR
+    // mode, so we suppress the UI and return cancelled to inform the caller
+    // that the request will not progress. crbug.com/736568
     Cancel();
+    return;
   }
+
+  if (PermissionRequestManager::IsEnabled()) {
+    PermissionRequestManager* permission_request_manager =
+        PermissionRequestManager::FromWebContents(web_contents_);
+    if (permission_request_manager) {
+      permission_request_manager->AddRequest(
+          new DownloadPermissionRequest(factory_.GetWeakPtr()));
+    } else {
+      Cancel();
+    }
+  } else {
+#if defined(OS_ANDROID)
+    DownloadRequestInfoBarDelegateAndroid::Create(
+        InfoBarService::FromWebContents(web_contents_), factory_.GetWeakPtr());
 #endif
+  }
 }
 
 void DownloadRequestLimiter::TabDownloadState::SetContentSetting(

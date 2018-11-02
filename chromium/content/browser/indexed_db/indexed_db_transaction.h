@@ -34,8 +34,8 @@ class IndexedDBDatabaseCallbacks;
 
 class CONTENT_EXPORT IndexedDBTransaction {
  public:
-  using Operation = base::Callback<leveldb::Status(IndexedDBTransaction*)>;
-  using AbortOperation = base::Closure;
+  using Operation = base::OnceCallback<leveldb::Status(IndexedDBTransaction*)>;
+  using AbortOperation = base::OnceClosure;
 
   enum State {
     CREATED,     // Created, but not yet started by coordinator.
@@ -49,8 +49,7 @@ class CONTENT_EXPORT IndexedDBTransaction {
 
   leveldb::Status Commit();
 
-  // This object is destroyed by these method calls.
-  virtual void Abort();
+  // This object is destroyed by this method.
   void Abort(const IndexedDBDatabaseError& error);
 
   // Called by the transaction coordinator when this transaction is unblocked.
@@ -65,7 +64,7 @@ class CONTENT_EXPORT IndexedDBTransaction {
 
   // Tasks cannot call Commit.
   void ScheduleTask(Operation task) {
-    ScheduleTask(blink::kWebIDBTaskTypeNormal, task);
+    ScheduleTask(blink::kWebIDBTaskTypeNormal, std::move(task));
   }
   void ScheduleTask(blink::WebIDBTaskType, Operation task);
   void ScheduleAbortTask(AbortOperation abort_task);

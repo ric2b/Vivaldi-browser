@@ -32,6 +32,11 @@
             "type": "string",
             "optional": true,
             "description": "data-url for the current icon."
+          },
+          "mimeType": {
+            "type": "string",
+            "optional": true,
+            "description": "The current documents mimetype."
           }
         }
       },
@@ -285,6 +290,18 @@
             "type": "string",
             "description": "Current permission setting. 'allow', 'block', 'ask' or 'default'",
             "name": "blocked"
+          }
+        ]
+      },
+      {
+        "name": "onKeyboardShortcut",
+        "type": "function",
+        "description": "Fires when on a keystroke that hasn't been consumed by the browser",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "shortcutText",
+            "description": "String representation of a keyboard shortcut"
           }
         ]
       }

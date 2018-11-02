@@ -12,9 +12,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/extensions/blob_reader.h"
-#include "chrome/browser/feedback/system_logs/scrubbed_system_logs_fetcher.h"
 #include "components/feedback/feedback_data.h"
+#include "components/feedback/system_logs/system_logs_fetcher.h"
 
 class Profile;
 

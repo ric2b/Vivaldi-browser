@@ -75,8 +75,6 @@ enum class AllPoolsState {
 // debug::DumpWithoutCrashing() in case of waterfall failures.
 AllPoolsState g_all_pools_state = AllPoolsState::USE_WORKER_POOL;
 
-TaskPriority g_max_task_priority = TaskPriority::HIGHEST;
-
 struct SequencedTask : public TrackingInfo  {
   SequencedTask()
       : sequence_token_id(0),
@@ -478,7 +476,7 @@ class SequencedWorkerPool::Inner {
   // only does threadsafe increment operations, you do not need to hold the
   // lock. This is class-static to make SequenceTokens issued by
   // GetSequenceToken unique across SequencedWorkerPool instances.
-  static base::StaticAtomicSequenceNumber g_last_sequence_number_;
+  static base::AtomicSequenceNumber g_last_sequence_number_;
 
   // This lock protects |everything in this class|. Do not read or modify
   // anything without holding this lock. Do not block while holding this
@@ -656,10 +654,7 @@ SequencedWorkerPool::Inner::Inner(SequencedWorkerPool* worker_pool,
       cleanup_idlers_(0),
       cleanup_cv_(&lock_),
       testing_observer_(observer),
-      task_priority_(static_cast<int>(task_priority) <=
-                             static_cast<int>(g_max_task_priority)
-                         ? task_priority
-                         : g_max_task_priority) {
+      task_priority_(task_priority) {
   DCHECK_GT(max_threads_, 1U);
 }
 
@@ -680,7 +675,7 @@ SequencedWorkerPool::Inner::~Inner() {
 // static
 SequencedWorkerPool::SequenceToken
 SequencedWorkerPool::Inner::GetSequenceToken() {
-  // Need to add one because StaticAtomicSequenceNumber starts at zero, which
+  // Need to add one because AtomicSequenceNumber starts at zero, which
   // is used as a sentinel value in SequenceTokens.
   return SequenceToken(g_last_sequence_number_.GetNext() + 1);
 }
@@ -1425,8 +1420,7 @@ bool SequencedWorkerPool::Inner::CanShutdown() const {
          blocking_shutdown_pending_task_count_ == 0;
 }
 
-base::StaticAtomicSequenceNumber
-SequencedWorkerPool::Inner::g_last_sequence_number_;
+base::AtomicSequenceNumber SequencedWorkerPool::Inner::g_last_sequence_number_;
 
 // SequencedWorkerPool --------------------------------------------------------
 
@@ -1464,15 +1458,13 @@ void SequencedWorkerPool::EnableForProcess() {
 }
 
 // static
-void SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess(
-    TaskPriority max_task_priority) {
+void SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess() {
   // TODO(fdoray): Uncomment this line. It is initially commented to avoid a
   // revert of the CL that adds debug::DumpWithoutCrashing() in case of
   // waterfall failures.
   // DCHECK_EQ(AllPoolsState::POST_TASK_DISABLED, g_all_pools_state);
   DCHECK(TaskScheduler::GetInstance());
   g_all_pools_state = AllPoolsState::REDIRECTED_TO_TASK_SCHEDULER;
-  g_max_task_priority = max_task_priority;
 }
 
 // static

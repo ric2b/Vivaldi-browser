@@ -35,7 +35,7 @@ var FilesQuickView = Polymer({
   },
 
   listeners: {
-    'iron-overlay-closed': 'clear',
+    'close': 'clear',
     'files-safe-media-tap-outside': 'close',
   },
 
@@ -51,25 +51,29 @@ var FilesQuickView = Polymer({
     this.browsable = false;
   },
 
+  /** @return {boolean} */
+  isOpened: function() {
+    return this.$.dialog.open;
+  },
+
   // Opens the dialog.
   open: function() {
-    if (!this.isOpened())
-      this.$.dialog.open();
+    if (!this.isOpened()) {
+      this.$.dialog.showModal();
+      // Make dialog focusable and set focus to a dialog. This is how we can
+      // prevent default behaviour of a dialog which by default sets focus to
+      // the first input inside itself. When a dialog gains focus we remove
+      // focusability to prevent selecting dialog when moving with a keyboard.
+      this.$.dialog.setAttribute('tabindex', '0');
+      this.$.dialog.focus();
+      this.$.dialog.setAttribute('tabindex', '-1');
+    }
   },
 
   // Closes the dialog.
   close: function() {
     if (this.isOpened())
       this.$.dialog.close();
-  },
-
-  /**
-   * @return {boolean}
-   */
-  isOpened: function() {
-    // TODO(oka): This is a workaround to satisfy closure compiler.
-    // Update ['opened'] to .opened.
-    return (/** @type{Object} */ (this.$.dialog))['opened'];
   },
 
   /**

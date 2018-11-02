@@ -25,6 +25,7 @@
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/it2me/it2me_confirmation_dialog.h"
 #include "remoting/host/policy_watcher.h"
+#include "remoting/protocol/errors.h"
 #include "remoting/protocol/transport_context.h"
 #include "remoting/signaling/fake_signal_strategy.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -34,6 +35,8 @@
 #endif  // defined(OS_LINUX)
 
 namespace remoting {
+
+using protocol::ErrorCode;
 
 namespace {
 
@@ -53,6 +56,8 @@ const char kMismatchedDomain2[] = "gmail_at_the_beginning.com";
 const char kMismatchedDomain3[] = "not_even_close.com";
 // Note that this is intentionally different from the default port range.
 const char kPortRange[] = "12401-12408";
+
+const char kTestStunServer[] = "test_relay_server.com";
 
 }  // namespace
 
@@ -143,8 +148,7 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
   void OnStoreAccessCode(const std::string& access_code,
                          base::TimeDelta access_code_lifetime) override;
   void OnNatPolicyChanged(bool nat_traversal_enabled) override;
-  void OnStateChanged(It2MeHostState state,
-                      const std::string& error_message) override;
+  void OnStateChanged(It2MeHostState state, ErrorCode error_code) override;
 
   void SetPolicies(
       std::initializer_list<std::pair<base::StringPiece, const base::Value&>>
@@ -160,6 +164,8 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
   static base::ListValue MakeList(
       std::initializer_list<base::StringPiece> values);
 
+  ChromotingHost* GetHost() { return it2me_host_->host_.get(); }
+
   ValidationResult validation_result_ = ValidationResult::SUCCESS;
 
   base::Closure state_change_callback_;
@@ -169,6 +175,8 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
   // Used to set ConfirmationDialog behavior.
   FakeIt2MeDialogFactory* dialog_factory_ = nullptr;
 
+  std::unique_ptr<base::DictionaryValue> policies_;
+
   scoped_refptr<It2MeHost> it2me_host_;
 
  private:
@@ -176,7 +184,9 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
 
   std::unique_ptr<base::MessageLoop> message_loop_;
   std::unique_ptr<base::RunLoop> run_loop_;
+  std::unique_ptr<FakeSignalStrategy> fake_bot_signal_strategy_;
 
+  std::unique_ptr<ChromotingHostContext> host_context_;
   scoped_refptr<AutoThreadTaskRunner> network_task_runner_;
   scoped_refptr<AutoThreadTaskRunner> ui_task_runner_;
 
@@ -186,7 +196,6 @@ class It2MeHostTest : public testing::Test, public It2MeHost::Observer {
 };
 
 It2MeHostTest::It2MeHostTest() : weak_factory_(this) {}
-
 It2MeHostTest::~It2MeHostTest() {}
 
 void It2MeHostTest::SetUp() {
@@ -198,23 +207,12 @@ void It2MeHostTest::SetUp() {
   message_loop_.reset(new base::MessageLoop());
   run_loop_.reset(new base::RunLoop());
 
-  std::unique_ptr<ChromotingHostContext> host_context(
-      ChromotingHostContext::Create(new AutoThreadTaskRunner(
-          base::ThreadTaskRunnerHandle::Get(), run_loop_->QuitClosure())));
-  network_task_runner_ = host_context->network_task_runner();
-  ui_task_runner_ = host_context->ui_task_runner();
-
-  std::unique_ptr<FakeIt2MeDialogFactory> dialog_factory(
-      new FakeIt2MeDialogFactory());
-  dialog_factory_ = dialog_factory.get();
-  it2me_host_ = new It2MeHost(
-      std::move(host_context),
-      std::move(dialog_factory), weak_factory_.GetWeakPtr(),
-      base::WrapUnique(
-          new FakeSignalStrategy(SignalingAddress("fake_local_jid"))),
-      kTestUserName, "fake_bot_jid");
-
-  it2me_host_->OnPolicyUpdate(PolicyWatcher::GetDefaultPolicies());
+  host_context_ = ChromotingHostContext::Create(new AutoThreadTaskRunner(
+      base::ThreadTaskRunnerHandle::Get(), run_loop_->QuitClosure()));
+  network_task_runner_ = host_context_->network_task_runner();
+  ui_task_runner_ = host_context_->ui_task_runner();
+  fake_bot_signal_strategy_.reset(
+      new FakeSignalStrategy(SignalingAddress("fake_bot_jid")));
 }
 
 void It2MeHostTest::TearDown() {
@@ -223,6 +221,7 @@ void It2MeHostTest::TearDown() {
   it2me_host_->Disconnect();
   network_task_runner_ = nullptr;
   ui_task_runner_ = nullptr;
+  host_context_.reset();
   it2me_host_ = nullptr;
   run_loop_->Run();
 }
@@ -237,11 +236,13 @@ void It2MeHostTest::OnValidationComplete(const base::Closure& resume_callback,
 void It2MeHostTest::SetPolicies(
     std::initializer_list<std::pair<base::StringPiece, const base::Value&>>
         policies) {
-  auto dictionary = base::MakeUnique<base::DictionaryValue>();
+  policies_ = base::MakeUnique<base::DictionaryValue>();
   for (const auto& policy : policies) {
-    dictionary->Set(policy.first, policy.second.CreateDeepCopy());
+    policies_->Set(policy.first, policy.second.CreateDeepCopy());
   }
-  it2me_host_->OnPolicyUpdate(std::move(dictionary));
+  if (it2me_host_) {
+    it2me_host_->OnPolicyUpdate(std::move(policies_));
+  }
 }
 
 void It2MeHostTest::StartupHostStateHelper(const base::Closure& quit_closure) {
@@ -249,7 +250,7 @@ void It2MeHostTest::StartupHostStateHelper(const base::Closure& quit_closure) {
     network_task_runner_->PostTask(
         FROM_HERE,
         base::Bind(&It2MeHost::SetStateForTesting, it2me_host_.get(),
-                   It2MeHostState::kReceivedAccessCode, std::string()));
+                   It2MeHostState::kReceivedAccessCode, ErrorCode::OK));
   } else if (last_host_state_ != It2MeHostState::kStarting) {
     quit_closure.Run();
     return;
@@ -259,7 +260,29 @@ void It2MeHostTest::StartupHostStateHelper(const base::Closure& quit_closure) {
 }
 
 void It2MeHostTest::StartHost() {
-  it2me_host_->Connect();
+  if (!policies_) {
+    policies_ = PolicyWatcher::GetDefaultPolicies();
+  }
+
+  std::unique_ptr<FakeIt2MeDialogFactory> dialog_factory(
+      new FakeIt2MeDialogFactory());
+  dialog_factory_ = dialog_factory.get();
+
+  protocol::IceConfig ice_config;
+  ice_config.stun_servers.push_back(rtc::SocketAddress(kTestStunServer, 100));
+  ice_config.expiration_time =
+      base::Time::Now() + base::TimeDelta::FromHours(1);
+
+  auto fake_signal_strategy =
+      base::MakeUnique<FakeSignalStrategy>(SignalingAddress("fake_local_jid"));
+  fake_bot_signal_strategy_->ConnectTo(fake_signal_strategy.get());
+
+  it2me_host_ = new It2MeHost();
+  it2me_host_->Connect(host_context_->Copy(),
+                       base::MakeUnique<base::DictionaryValue>(*policies_),
+                       std::move(dialog_factory), weak_factory_.GetWeakPtr(),
+                       std::move(fake_signal_strategy), kTestUserName,
+                       "fake_bot_jid", ice_config);
 
   base::RunLoop run_loop;
   state_change_callback_ =
@@ -298,8 +321,7 @@ void It2MeHostTest::OnStoreAccessCode(const std::string& access_code,
 
 void It2MeHostTest::OnNatPolicyChanged(bool nat_traversal_enabled) {}
 
-void It2MeHostTest::OnStateChanged(It2MeHostState state,
-                                   const std::string& error_message) {
+void It2MeHostTest::OnStateChanged(It2MeHostState state, ErrorCode error_code) {
   last_host_state_ = state;
 
   if (state_change_callback_) {
@@ -324,9 +346,32 @@ base::ListValue It2MeHostTest::MakeList(
   return result;
 }
 
-TEST_F(It2MeHostTest, HostValidation_NoHostDomainListPolicy) {
+// Callback to receive IceConfig from TransportContext
+void ReceiveIceConfig(protocol::IceConfig* ice_config,
+                      const protocol::IceConfig& received_ice_config) {
+  *ice_config = received_ice_config;
+}
+
+TEST_F(It2MeHostTest, StartAndStop) {
   StartHost();
   ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+
+  ShutdownHost();
+  ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
+}
+
+// Verify that IceConfig is passed to the TransportContext.
+TEST_F(It2MeHostTest, IceConfig) {
+  StartHost();
+  ASSERT_EQ(It2MeHostState::kReceivedAccessCode, last_host_state_);
+
+  protocol::IceConfig ice_config;
+  GetHost()->transport_context_for_tests()->set_relay_mode(
+      protocol::TransportContext::TURN);
+  GetHost()->transport_context_for_tests()->GetIceConfig(
+      base::Bind(&ReceiveIceConfig, &ice_config));
+  EXPECT_EQ(ice_config.stun_servers[0].hostname(), kTestStunServer);
+
   ShutdownHost();
   ASSERT_EQ(It2MeHostState::kDisconnected, last_host_state_);
 }
@@ -516,18 +561,16 @@ TEST_F(It2MeHostTest, HostUdpPortRangePolicy_ValidRange) {
   SetPolicies(
       {{policy::key::kRemoteAccessHostUdpPortRange, base::Value(kPortRange)}});
   StartHost();
-  PortRange port_range = it2me_host_->host_->transport_context_for_tests()
-                             ->network_settings()
-                             .port_range;
+  PortRange port_range =
+      GetHost()->transport_context_for_tests()->network_settings().port_range;
   ASSERT_EQ(port_range_actual.min_port, port_range.min_port);
   ASSERT_EQ(port_range_actual.max_port, port_range.max_port);
 }
 
 TEST_F(It2MeHostTest, HostUdpPortRangePolicy_NoRange) {
   StartHost();
-  PortRange port_range = it2me_host_->host_->transport_context_for_tests()
-                             ->network_settings()
-                             .port_range;
+  PortRange port_range =
+      GetHost()->transport_context_for_tests()->network_settings().port_range;
   ASSERT_TRUE(port_range.is_null());
 }
 
@@ -541,8 +584,8 @@ TEST_F(It2MeHostTest, ConnectionValidation_ConfirmationDialog_Accept) {
 }
 
 TEST_F(It2MeHostTest, ConnectionValidation_ConfirmationDialog_Reject) {
-  dialog_factory_->set_dialog_result(DialogResult::CANCEL);
   StartHost();
+  dialog_factory_->set_dialog_result(DialogResult::CANCEL);
   RunValidationCallback(kTestClientJid);
   ASSERT_EQ(ValidationResult::ERROR_REJECTED_BY_USER, validation_result_);
   RunUntilStateChanged(It2MeHostState::kDisconnected);

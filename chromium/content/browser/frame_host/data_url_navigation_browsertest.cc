@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/strings/pattern.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
@@ -648,10 +649,18 @@ IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
   NavigateAndCheckDownload(GURL("data:application/octet-stream,test"));
 }
 
+#if defined(OS_ANDROID)
+// Flaky on android: https://crbug.com/734563
+#define MAYBE_OctetStream_WindowOpen_Download \
+  DISABLED_OctetStream_WindowOpen_Download
+#else
+#define MAYBE_OctetStream_WindowOpen_Download OctetStream_WindowOpen_Download
+#endif
+
 // Test that window.open to a data URL results in a download if the URL has a
 // binary mime type.
 IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
-                       OctetStream_WindowOpen_Download) {
+                       MAYBE_OctetStream_WindowOpen_Download) {
   NavigateToURL(shell(),
                 embedded_test_server()->GetURL("/data_url_navigations.html"));
   ExecuteScriptAndCheckWindowOpenDownload(
@@ -704,10 +713,19 @@ IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
   NavigateAndCheckDownload(GURL("data:unknown/mimetype,test"));
 }
 
+#if defined(OS_ANDROID)
+// Flaky on android: https://crbug.com/734563
+#define MAYBE_UnknownMimeType_WindowOpen_Download \
+  DISABLED_UnknownMimeType_WindowOpen_Download
+#else
+#define MAYBE_UnknownMimeType_WindowOpen_Download \
+  UnknownMimeType_WindowOpen_Download
+#endif
+
 // Test that window.open to a data URL results in a download if the URL has an
 // unknown mime type.
 IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
-                       UnknownMimeType_WindowOpen_Download) {
+                       MAYBE_UnknownMimeType_WindowOpen_Download) {
   NavigateToURL(shell(),
                 embedded_test_server()->GetURL("/data_url_navigations.html"));
   ExecuteScriptAndCheckWindowOpenDownload(
@@ -959,12 +977,18 @@ IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
 
   // The window.open() should have resulted in an error page. The blocked
   // URL should be in the virtual URL, not the actual URL.
+  //
+  // TODO(nasko): Now that the error commits on the previous URL, the blocked
+  // navigation logic is no longer needed. https://crbug.com/723796
   {
     EXPECT_EQ(0, controller->GetLastCommittedEntryIndex());
     NavigationEntry* entry = controller->GetLastCommittedEntry();
     EXPECT_EQ(PAGE_TYPE_ERROR, entry->GetPageType());
     EXPECT_FALSE(entry->GetURL().SchemeIs(url::kDataScheme));
-    EXPECT_TRUE(entry->GetVirtualURL().SchemeIs(url::kDataScheme));
+    EXPECT_TRUE(base::StartsWith(
+        entry->GetVirtualURL().spec(),
+        embedded_test_server()->GetURL("/server-redirect?").spec(),
+        base::CompareCase::SENSITIVE));
   }
 
   // Navigate forward and then go back to ensure the navigation to data: URL
@@ -981,7 +1005,10 @@ IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
     NavigationEntry* entry = controller->GetLastCommittedEntry();
     EXPECT_EQ(0, controller->GetLastCommittedEntryIndex());
     EXPECT_FALSE(entry->GetURL().SchemeIs(url::kDataScheme));
-    EXPECT_TRUE(entry->GetVirtualURL().SchemeIs(url::kDataScheme));
+    EXPECT_TRUE(base::StartsWith(
+        entry->GetVirtualURL().spec(),
+        embedded_test_server()->GetURL("/server-redirect?").spec(),
+        base::CompareCase::SENSITIVE));
     EXPECT_EQ(url::kAboutBlankURL, entry->GetURL().spec());
   }
 
@@ -998,7 +1025,10 @@ IN_PROC_BROWSER_TEST_F(DataUrlNavigationBrowserTest,
     NavigationEntry* entry = controller->GetLastCommittedEntry();
     EXPECT_EQ(0, controller->GetLastCommittedEntryIndex());
     EXPECT_FALSE(entry->GetURL().SchemeIs(url::kDataScheme));
-    EXPECT_TRUE(entry->GetVirtualURL().SchemeIs(url::kDataScheme));
+    EXPECT_TRUE(base::StartsWith(
+        entry->GetVirtualURL().spec(),
+        embedded_test_server()->GetURL("/server-redirect?").spec(),
+        base::CompareCase::SENSITIVE));
     EXPECT_EQ(url::kAboutBlankURL, entry->GetURL().spec());
   }
 }

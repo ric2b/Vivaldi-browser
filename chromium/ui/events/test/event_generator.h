@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/events/event.h"
+#include "ui/events/event_dispatcher.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/native_widget_types.h"
@@ -72,8 +73,9 @@ class EventGeneratorDelegate {
   // Determines if the input method should be the first to handle key events
   // before dispatching to Views. If it does, the given |event| will be
   // dispatched and processed by the input method from the host of |target|.
-  virtual void DispatchKeyEventToIME(EventTarget* target,
-                                     ui::KeyEvent* event) = 0;
+  virtual ui::EventDispatchDetails DispatchKeyEventToIME(EventTarget* target,
+                                                         ui::KeyEvent* event)
+      WARN_UNUSED_RESULT = 0;
 
   // Offers the event to pointer watchers on systems that provide them.
   // Does not consume the event (pointer watchers cannot consume events).
@@ -356,29 +358,26 @@ class EventGenerator {
   // Generates press, move, release touch-events to generate a sequence of
   // multi-finger scroll events. |count| specifies the number of touch-points
   // that should generate the scroll events. |start| are the starting positions
-  // of all the touch points. |steps| and |event_separation_time_ms| are
-  // relevant when testing velocity/fling/swipe, otherwise these can be any
-  // non-zero value. |delta_x| and |delta_y| are the amount that each finger
-  // should be moved. Internally calls GestureMultiFingerScrollWithDelays
-  // with zeros as |delay_adding_finger_ms| forcing all touch down events to be
-  // immediate.
-  void GestureMultiFingerScroll(int count,
-                                const gfx::Point start[],
-                                int event_separation_time_ms,
-                                int steps,
-                                int move_x,
-                                int move_y);
+  // of all the touch points. |delta| specifies the moving vectors for all
+  // fingers. |delay_adding_finger_ms| are delays in ms from the starting time
+  // till touching down of each finger. |delay_releasing_finger_ms| are delays
+  // in ms from starting time till touching release of each finger. These two
+  // parameters are useful when testing complex gestures that start with 1 or 2
+  // fingers and add fingers with a delay. |steps| and
+  // |event_separation_time_ms| are relevant when testing velocity/fling/swipe,
+  // otherwise these can be any non-zero value.
+  void GestureMultiFingerScrollWithDelays(int count,
+                                          const gfx::Point start[],
+                                          const gfx::Vector2d delta[],
+                                          const int delay_adding_finger_ms[],
+                                          const int delay_releasing_finger_ms[],
+                                          int event_separation_time_ms,
+                                          int steps);
 
-  // Generates press, move, release touch-events to generate a sequence of
-  // multi-finger scroll events. |count| specifies the number of touch-points
-  // that should generate the scroll events. |start| are the starting positions
-  // of all the touch points. |delay_adding_finger_ms| are delays in ms from the
-  // starting time till touching down of each finger. |delay_adding_finger_ms|
-  // is useful when testing complex gestures that start with 1 or 2 fingers and
-  // add fingers with a delay. |steps| and |event_separation_time_ms| are
-  // relevant when testing velocity/fling/swipe, otherwise these can be any
-  // non-zero value. |delta_x| and |delta_y| are the amount that each finger
-  // should be moved.
+  // Similar to GestureMultiFingerScrollWithDelays() above. Generates press,
+  // move, release touch-events to generate a sequence of multi-finger scroll
+  // events. All fingers are released at the end of scrolling together. All
+  // fingers move the same amount specified by |move_x| and |move_y|.
   void GestureMultiFingerScrollWithDelays(int count,
                                           const gfx::Point start[],
                                           const int delay_adding_finger_ms[],
@@ -386,6 +385,18 @@ class EventGenerator {
                                           int steps,
                                           int move_x,
                                           int move_y);
+
+  // Similar to GestureMultiFingerScrollWithDelays(). Generates press, move,
+  // release touch-events to generate a sequence of multi-finger scroll events.
+  // All fingers are pressed at the beginning together and are released at the
+  // end of scrolling together. All fingers move move the same amount specified
+  // by |move_x| and |move_y|.
+  void GestureMultiFingerScroll(int count,
+                                const gfx::Point start[],
+                                int event_separation_time_ms,
+                                int steps,
+                                int move_x,
+                                int move_y);
 
   // Generates scroll sequences of a FlingCancel, Scrolls, FlingStart, with
   // constant deltas to |x_offset| and |y_offset| in |steps|.

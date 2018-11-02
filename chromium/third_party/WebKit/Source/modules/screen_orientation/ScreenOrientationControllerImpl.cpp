@@ -4,11 +4,13 @@
 
 #include "modules/screen_orientation/ScreenOrientationControllerImpl.h"
 
+#include <memory>
+#include <utility>
 #include "core/dom/Document.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "modules/screen_orientation/ScreenOrientation.h"
@@ -17,8 +19,6 @@
 #include "platform/ScopedOrientationChangeIndicator.h"
 #include "public/platform/WebScreenInfo.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationClient.h"
-#include <memory>
-#include <utility>
 
 namespace blink {
 
@@ -62,6 +62,12 @@ WebScreenOrientationType ScreenOrientationControllerImpl::ComputeOrientation(
 
   bool is_tall_display = rotation % 180 ? rect.Height() < rect.Width()
                                         : rect.Height() > rect.Width();
+
+  // https://w3c.github.io/screen-orientation/#dfn-current-orientation-angle
+  // allows the UA to associate *-primary and *-secondary values at will. Blink
+  // arbitrarily chooses rotation 0 to always be portrait-primary or
+  // landscape-primary, and portrait-primary + 90 to be landscape-primary, which
+  // together fully determine the relationship.
   switch (rotation) {
     case 0:
       return is_tall_display ? kWebScreenOrientationPortraitPrimary

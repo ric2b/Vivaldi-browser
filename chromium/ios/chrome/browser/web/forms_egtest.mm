@@ -17,9 +17,11 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/wait_util.h"
-#import "ios/web/public/test/http_server.h"
-#import "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/data_response_provider.h"
+#import "ios/web/public/test/earl_grey/web_view_actions.h"
+#import "ios/web/public/test/earl_grey/web_view_matchers.h"
+#include "ios/web/public/test/http_server/data_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ios/web/public/test/url_test_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -28,7 +30,6 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::OmniboxText;
-using chrome_test_util::WebViewContainingText;
 
 namespace {
 
@@ -55,12 +56,17 @@ const GURL GetFormUrl() {
   return web::test::HttpServer::MakeUrl("http://form");
 }
 
+// GURL of a page with a form that posts data to |GetDestinationUrl|.
+const GURL GetFormPostOnSamePageUrl() {
+  return web::test::HttpServer::MakeUrl("http://form");
+}
+
 // GURL of the page to which the |GetFormUrl| posts data to.
 const GURL GetDestinationUrl() {
   return web::test::HttpServer::MakeUrl("http://destination");
 }
 
-#pragma mark - TestFormRedirectResponseProvider
+#pragma mark - TestFormResponseProvider
 
 // URL that redirects to |GetDestinationUrl| with a 302.
 const GURL GetRedirectUrl() {
@@ -72,8 +78,8 @@ const GURL GetRedirectFormUrl() {
   return web::test::HttpServer::MakeUrl("http://formRedirect");
 }
 
-// A ResponseProvider that provides html response or a redirect.
-class TestFormRedirectResponseProvider : public web::DataResponseProvider {
+// A ResponseProvider that provides html response, post response or a redirect.
+class TestFormResponseProvider : public web::DataResponseProvider {
  public:
   // TestResponseProvider implementation.
   bool CanHandleRequest(const Request& request) override;
@@ -83,14 +89,14 @@ class TestFormRedirectResponseProvider : public web::DataResponseProvider {
       std::string* response_body) override;
 };
 
-bool TestFormRedirectResponseProvider::CanHandleRequest(
-    const Request& request) {
+bool TestFormResponseProvider::CanHandleRequest(const Request& request) {
   const GURL& url = request.url;
   return url == GetDestinationUrl() || url == GetRedirectUrl() ||
-         url == GetRedirectFormUrl();
+         url == GetRedirectFormUrl() || url == GetFormPostOnSamePageUrl() ||
+         url == GetGenericUrl();
 }
 
-void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
+void TestFormResponseProvider::GetResponseHeadersAndBody(
     const Request& request,
     scoped_refptr<net::HttpResponseHeaders>* headers,
     std::string* response_body) {
@@ -102,6 +108,21 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
   }
 
   *headers = web::ResponseProvider::GetDefaultResponseHeaders();
+  if (url == GetGenericUrl()) {
+    *response_body = "A generic page";
+    return;
+  }
+  if (url == GetFormPostOnSamePageUrl()) {
+    if (request.method == "POST") {
+      *response_body = request.method + std::string(" ") + request.body;
+    } else {
+      *response_body =
+          "<form method='post'>"
+          "<input value='button' type='submit' id='button'></form>";
+    }
+    return;
+  }
+
   if (url == GetRedirectFormUrl()) {
     *response_body =
         base::StringPrintf(kFormHtmlTemplate, GetRedirectUrl().spec().c_str());
@@ -120,6 +141,11 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 @end
 
 @implementation FormsTestCase
+
+// Matcher for a Go button that is interactable.
+id<GREYMatcher> GoButtonMatcher() {
+  return grey_allOf(grey_accessibilityID(@"Go"), grey_interactable(), nil);
+}
 
 // Waits for view with Tab History accessibility ID.
 - (void)waitForTabHistoryView {
@@ -171,16 +197,14 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey reload];
   [self confirmResendWarning];
 
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -193,8 +217,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -202,8 +225,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
   [ChromeEarlGrey loadURL:GetGenericUrl()];
   [ChromeEarlGrey goBack];
   [self confirmResendWarning];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -216,16 +238,14 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   [ChromeEarlGrey goBack];
   [ChromeEarlGrey goForward];
   [self confirmResendWarning];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -238,8 +258,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -253,8 +272,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   [self confirmResendWarning];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -266,8 +284,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -296,8 +313,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   // Verify that navigation was cancelled, and forward navigation is possible.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kSubmitButtonLabel)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kSubmitButtonLabel];
   [[EarlGrey selectElementWithMatcher:OmniboxText(GetFormUrl().GetContent())]
       assertWithMatcher:grey_notNil()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::ForwardButton()]
@@ -312,23 +328,20 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
 
   [ChromeEarlGrey loadURL:GetFormUrl()];
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationText)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationText];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   // Go back and verify the browser navigates to the original URL.
   [ChromeEarlGrey goBack];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kSubmitButtonLabel)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kSubmitButtonLabel];
   [[EarlGrey selectElementWithMatcher:OmniboxText(GetFormUrl().GetContent())]
       assertWithMatcher:grey_notNil()];
 }
 
 // Tests that a POST followed by a redirect does not show the popup.
 - (void)testRepostFormCancellingAfterRedirect {
-  web::test::SetUpHttpServer(
-      base::MakeUnique<TestFormRedirectResponseProvider>());
+  web::test::SetUpHttpServer(base::MakeUnique<TestFormResponseProvider>());
   const GURL destinationURL = GetDestinationUrl();
 
   [ChromeEarlGrey loadURL:GetRedirectFormUrl()];
@@ -337,8 +350,7 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
   chrome_test_util::TapWebViewElementWithId(kSubmitButtonLabel);
 
   // Check that the redirect changes the POST to a GET.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("GET")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"GET"];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -349,10 +361,121 @@ void TestFormRedirectResponseProvider::GetResponseHeadersAndBody(
       ButtonWithAccessibilityLabelId(IDS_HTTP_POST_WARNING_RESEND);
   [[EarlGrey selectElementWithMatcher:resendWarning]
       assertWithMatcher:grey_nil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("GET")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"GET"];
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
+}
+
+// Tests that pressing the button on a POST-based form with same-page action
+// does not change the page URL and that the back button works as expected
+// afterwards.
+// TODO(crbug.com/714303): Re-enable this test on devices.
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_testPostFormToSamePage testPostFormToSamePage
+#else
+#define MAYBE_testPostFormToSamePage FLAKY_testPostFormToSamePage
+#endif
+- (void)MAYBE_testPostFormToSamePage {
+  web::test::SetUpHttpServer(base::MakeUnique<TestFormResponseProvider>());
+  const GURL formURL = GetFormPostOnSamePageUrl();
+
+  // Open the first URL so it's in history.
+  [ChromeEarlGrey loadURL:GetGenericUrl()];
+
+  // Open the second URL, tap the button, and verify the browser navigates to
+  // the expected URL.
+  [ChromeEarlGrey loadURL:formURL];
+  chrome_test_util::TapWebViewElementWithId("button");
+  [ChromeEarlGrey waitForWebViewContainingText:"POST"];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(formURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  // Go back once and verify the browser navigates to the form URL.
+  [ChromeEarlGrey goBack];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(formURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  // Go back a second time and verify the browser navigates to the first URL.
+  [ChromeEarlGrey goBack];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(GetGenericUrl().GetContent())]
+      assertWithMatcher:grey_notNil()];
+}
+
+// Tests that submitting a POST-based form by tapping the 'Go' button on the
+// keyboard navigates to the correct URL and the back button works as expected
+// afterwards.
+- (void)testPostFormEntryWithKeyboard {
+// TODO(crbug.com/704618): Re-enable this test on devices.
+#if !TARGET_IPHONE_SIMULATOR
+  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
+#endif
+
+  [self setUpFormTestSimpleHttpServer];
+  const GURL destinationURL = GetDestinationUrl();
+
+  [ChromeEarlGrey loadURL:GetFormUrl()];
+  [self submitFormUsingKeyboardGoButtonWithInputID:"textfield"];
+
+  // Verify that the browser navigates to the expected URL.
+  [ChromeEarlGrey waitForWebViewContainingText:"bar!"];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
+      assertWithMatcher:grey_notNil()];
+
+  // Go back and verify that the browser navigates to the original URL.
+  [ChromeEarlGrey goBack];
+  [[EarlGrey selectElementWithMatcher:OmniboxText(GetFormUrl().GetContent())]
+      assertWithMatcher:grey_notNil()];
+}
+
+// Tap the text field indicated by |ID| to open the keyboard, and then
+// press the keyboard's "Go" button to submit the form.
+- (void)submitFormUsingKeyboardGoButtonWithInputID:(const std::string&)ID {
+  // Disable EarlGrey's synchronization since it is blocked by opening the
+  // keyboard from a web view.
+  [[GREYConfiguration sharedInstance]
+          setValue:@NO
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
+
+  // Wait for web view to be interactable before tapping.
+  GREYCondition* interactableCondition = [GREYCondition
+      conditionWithName:@"Wait for web view to be interactable."
+                  block:^BOOL {
+                    NSError* error = nil;
+                    id<GREYMatcher> webViewMatcher = WebViewInWebState(
+                        chrome_test_util::GetCurrentWebState());
+                    [[EarlGrey selectElementWithMatcher:webViewMatcher]
+                        assertWithMatcher:grey_interactable()
+                                    error:&error];
+                    return !error;
+                  }];
+  GREYAssert(
+      [interactableCondition waitWithTimeout:testing::kWaitForUIElementTimeout],
+      @"Web view did not become interactable.");
+
+  web::WebState* currentWebState = chrome_test_util::GetCurrentWebState();
+  [[EarlGrey selectElementWithMatcher:web::WebViewInWebState(currentWebState)]
+      performAction:web::WebViewTapElement(currentWebState, ID)];
+
+  // Wait until the keyboard shows up before tapping.
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for the keyboard to show up."
+                  block:^BOOL {
+                    NSError* error = nil;
+                    [[EarlGrey selectElementWithMatcher:GoButtonMatcher()]
+                        assertWithMatcher:grey_notNil()
+                                    error:&error];
+                    return (error == nil);
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"No keyboard with 'Go' button showed up.");
+
+  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Go")]
+      performAction:grey_tap()];
+
+  // Reenable synchronization now that the keyboard has been closed.
+  [[GREYConfiguration sharedInstance]
+          setValue:@YES
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
 }
 
 @end

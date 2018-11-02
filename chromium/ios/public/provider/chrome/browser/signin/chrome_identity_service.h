@@ -9,7 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 
@@ -102,19 +101,19 @@ class ChromeIdentityService {
 
   // Returns a new account details controller to present. A cancel button is
   // present as leading navigation item.
-  virtual base::scoped_nsobject<UINavigationController> NewAccountDetails(
+  virtual UINavigationController* CreateAccountDetailsController(
       ChromeIdentity* identity,
       id<ChromeIdentityBrowserOpener> browser_opener);
 
   // Returns a new Web and App Setting Details controller to present.
-  virtual base::scoped_nsobject<UINavigationController>
-  NewWebAndAppSettingDetails(ChromeIdentity* identity,
-                             id<ChromeIdentityBrowserOpener> browser_opener);
+  virtual UINavigationController* CreateWebAndAppSettingDetailsController(
+      ChromeIdentity* identity,
+      id<ChromeIdentityBrowserOpener> browser_opener);
 
   // Returns a new ChromeIdentityInteractionManager with |delegate| as its
   // delegate.
-  virtual base::scoped_nsobject<ChromeIdentityInteractionManager>
-  NewChromeIdentityInteractionManager(
+  virtual ChromeIdentityInteractionManager*
+  CreateChromeIdentityInteractionManager(
       ios::ChromeBrowserState* browser_state,
       id<ChromeIdentityInteractionManagerDelegate> delegate) const;
 
@@ -158,14 +157,14 @@ class ChromeIdentityService {
   // Uses the default client id and client secret.
   virtual void GetAccessToken(ChromeIdentity* identity,
                               const std::set<std::string>& scopes,
-                              const AccessTokenCallback& callback);
+                              AccessTokenCallback callback);
 
   // Asynchronously retrieves access tokens for the given identity and scopes.
   virtual void GetAccessToken(ChromeIdentity* identity,
                               const std::string& client_id,
                               const std::string& client_secret,
                               const std::set<std::string>& scopes,
-                              const AccessTokenCallback& callback);
+                              AccessTokenCallback callback);
 
   // Fetches the profile avatar, from the cache or the network.
   // For high resolution iPads, returns large images (200 x 200) to avoid

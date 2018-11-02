@@ -216,7 +216,7 @@ class PLATFORM_EXPORT FramesTimingFunction final : public TimingFunction {
   FramesTimingFunction(int frames)
       : TimingFunction(Type::FRAMES),
         frames_(cc::FramesTimingFunction::Create(frames)) {
-    DCHECK(RuntimeEnabledFeatures::framesTimingFunctionEnabled());
+    DCHECK(RuntimeEnabledFeatures::FramesTimingFunctionEnabled());
   }
 
   std::unique_ptr<cc::FramesTimingFunction> frames_;

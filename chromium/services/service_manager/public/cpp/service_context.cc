@@ -17,7 +17,8 @@ namespace service_manager {
 
 namespace {
 
-using ServiceNameToBinderRegistryMap = std::map<std::string, BinderRegistry>;
+using ServiceNameToBinderRegistryMap =
+    std::map<std::string, BinderRegistryWithArgs<const BindSourceInfo&>>;
 
 base::LazyInstance<std::unique_ptr<ServiceNameToBinderRegistryMap>>::Leaky
     g_overridden_binder_registries = LAZY_INSTANCE_INITIALIZER;
@@ -25,8 +26,8 @@ base::LazyInstance<std::unique_ptr<ServiceNameToBinderRegistryMap>>::Leaky
 // Returns the overridden binder registry which intercepts interface bind
 // requests to all |service_name| service instances, returns nullptr if no such
 // one.
-BinderRegistry* GetGlobalBinderRegistryForService(
-    const std::string& service_name) {
+BinderRegistryWithArgs<const BindSourceInfo&>*
+GetGlobalBinderRegistryForService(const std::string& service_name) {
   const auto& registries = g_overridden_binder_registries.Get();
   if (registries) {
     auto it = registries->find(service_name);
@@ -46,8 +47,8 @@ BinderRegistry* GetGlobalBinderRegistryForService(
 void ServiceContext::SetGlobalBinderForTesting(
     const std::string& service_name,
     const std::string& interface_name,
-    const BinderRegistry::Binder& binder,
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
+    const BinderRegistryWithArgs<const BindSourceInfo&>::Binder& binder,
+    const scoped_refptr<base::SequencedTaskRunner>& task_runner) {
   if (!g_overridden_binder_registries.Get()) {
     g_overridden_binder_registries.Get() =
         base::MakeUnique<ServiceNameToBinderRegistryMap>();
@@ -117,10 +118,10 @@ void ServiceContext::QuitNow() {
 // ServiceContext, mojom::Service implementation:
 
 void ServiceContext::OnStart(const Identity& identity,
-                             const OnStartCallback& callback) {
+                             OnStartCallback callback) {
   identity_ = identity;
-  callback.Run(std::move(pending_connector_request_),
-               mojo::MakeRequest(&service_control_));
+  std::move(callback).Run(std::move(pending_connector_request_),
+                          mojo::MakeRequest(&service_control_));
   service_->OnStart();
 }
 
@@ -128,16 +129,15 @@ void ServiceContext::OnBindInterface(
     const BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe,
-    const OnBindInterfaceCallback& callback) {
+    OnBindInterfaceCallback callback) {
   // Acknowledge the request regardless of whether it's accepted.
-  callback.Run();
+  std::move(callback).Run();
 
-  BinderRegistry* global_registry =
+  BinderRegistryWithArgs<const BindSourceInfo&>* global_registry =
       GetGlobalBinderRegistryForService(identity_.name());
-  if (global_registry && global_registry->CanBindInterface(interface_name)) {
+  if (global_registry && global_registry->TryBindInterface(
+                             interface_name, &interface_pipe, source_info)) {
     // Just use the binder overridden globally.
-    global_registry->BindInterface(source_info, interface_name,
-                                   std::move(interface_pipe));
     return;
   }
   service_->OnBindInterface(source_info, interface_name,

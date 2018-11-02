@@ -12,11 +12,22 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/ui_manager.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/common/pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
+#include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/password_protection/password_protection_request.h"
 #include "components/safe_browsing_db/database_manager.h"
+#include "components/signin/core/browser/account_info.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/signin_manager.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
+#include "content/public/browser/web_contents.h"
 
 using content::BrowserThread;
 
@@ -39,6 +50,7 @@ ChromePasswordProtectionService::ChromePasswordProtectionService(
               profile,
               ServiceAccessType::EXPLICIT_ACCESS),
           HostContentSettingsMapFactory::GetForProfile(profile)),
+      ui_manager_(sb_service->ui_manager()),
       profile_(profile),
       navigation_observer_manager_(sb_service->navigation_observer_manager()) {
   DCHECK(profile_);
@@ -48,8 +60,15 @@ ChromePasswordProtectionService::~ChromePasswordProtectionService() {
   if (content_settings()) {
     CleanUpExpiredVerdicts();
     UMA_HISTOGRAM_COUNTS_1000(
-        "PasswordProtection.NumberOfCachedVerdictBeforeShutdown",
-        GetStoredVerdictCount());
+        "PasswordProtection.NumberOfCachedVerdictBeforeShutdown."
+        "PasswordOnFocus",
+        GetStoredVerdictCount(
+            LoginReputationClientRequest::UNFAMILIAR_LOGIN_PAGE));
+    UMA_HISTOGRAM_COUNTS_1000(
+        "PasswordProtection.NumberOfCachedVerdictBeforeShutdown."
+        "ProtectedPasswordEntry",
+        GetStoredVerdictCount(
+            LoginReputationClientRequest::PASSWORD_REUSE_EVENT));
   }
 }
 
@@ -82,6 +101,13 @@ bool ChromePasswordProtectionService::IsIncognito() {
 bool ChromePasswordProtectionService::IsPingingEnabled(
     const base::Feature& feature,
     RequestOutcome* reason) {
+  // Don't start pinging on an invalid profile, or if user turns off Safe
+  // Browsing service.
+  if (!profile_ ||
+      !profile_->GetPrefs()->GetBoolean(prefs::kSafeBrowsingEnabled)) {
+    return false;
+  }
+
   DCHECK(feature.name == kProtectedPasswordEntryPinging.name ||
          feature.name == kPasswordFieldOnFocusPinging.name);
   if (!base::FeatureList::IsEnabled(feature)) {
@@ -123,6 +149,56 @@ bool ChromePasswordProtectionService::IsHistorySyncEnabled() {
          sync->GetActiveDataTypes().Has(syncer::HISTORY_DELETE_DIRECTIVES);
 }
 
-ChromePasswordProtectionService::ChromePasswordProtectionService()
-    : PasswordProtectionService(nullptr, nullptr, nullptr, nullptr) {}
+PasswordProtectionService::SyncAccountType
+ChromePasswordProtectionService::GetSyncAccountType() {
+  DCHECK(profile_);
+  SigninManagerBase* signin_manager =
+      SigninManagerFactory::GetForProfileIfExists(profile_);
+
+  if (!signin_manager)
+    return LoginReputationClientRequest::PasswordReuseEvent::NOT_SIGNED_IN;
+
+  AccountInfo account_info = signin_manager->GetAuthenticatedAccountInfo();
+
+  if (account_info.account_id.empty() || account_info.hosted_domain.empty()) {
+    return LoginReputationClientRequest::PasswordReuseEvent::NOT_SIGNED_IN;
+  }
+
+  // For gmail or googlemail account, the hosted_domain will always be
+  // kNoHostedDomainFound.
+  return account_info.hosted_domain ==
+                 std::string(AccountTrackerService::kNoHostedDomainFound)
+             ? LoginReputationClientRequest::PasswordReuseEvent::GMAIL
+             : LoginReputationClientRequest::PasswordReuseEvent::GSUITE;
+}
+
+void ChromePasswordProtectionService::ShowPhishingInterstitial(
+    const GURL& phishing_url,
+    const std::string& token,
+    content::WebContents* web_contents) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  if (!ui_manager_)
+    return;
+  security_interstitials::UnsafeResource resource;
+  resource.url = phishing_url;
+  resource.original_url = phishing_url;
+  resource.is_subresource = false;
+  resource.threat_type = SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING;
+  resource.threat_source =
+      safe_browsing::ThreatSource::PASSWORD_PROTECTION_SERVICE;
+  resource.web_contents_getter =
+      safe_browsing::SafeBrowsingUIManager::UnsafeResource::
+          GetWebContentsGetter(web_contents->GetRenderProcessHost()->GetID(),
+                               web_contents->GetMainFrame()->GetRoutingID());
+  resource.token = token;
+  if (!ui_manager_->IsWhitelisted(resource)) {
+    web_contents->GetController().DiscardNonCommittedEntries();
+  }
+  ui_manager_->DisplayBlockingPage(resource);
+}
+
+ChromePasswordProtectionService::ChromePasswordProtectionService(
+    Profile* profile)
+    : PasswordProtectionService(nullptr, nullptr, nullptr, nullptr),
+      profile_(profile) {}
 }  // namespace safe_browsing

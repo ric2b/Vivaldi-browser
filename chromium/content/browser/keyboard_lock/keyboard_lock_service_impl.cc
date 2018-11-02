@@ -18,7 +18,6 @@ KeyboardLockServiceImpl::~KeyboardLockServiceImpl() = default;
 
 // static
 void KeyboardLockServiceImpl::CreateMojoService(
-    const service_manager::BindSourceInfo& source_info,
     blink::mojom::KeyboardLockServiceRequest request) {
   mojo::MakeStrongBinding(
         base::MakeUnique<KeyboardLockServiceImpl>(),
@@ -27,9 +26,9 @@ void KeyboardLockServiceImpl::CreateMojoService(
 
 void KeyboardLockServiceImpl::RequestKeyboardLock(
     const std::vector<std::string>& key_codes,
-    const RequestKeyboardLockCallback& callback) {
+    RequestKeyboardLockCallback callback) {
   // TODO(zijiehe): Implementation required.
-  callback.Run(blink::mojom::KeyboardLockRequestResult::SUCCESS);
+  std::move(callback).Run(blink::mojom::KeyboardLockRequestResult::SUCCESS);
 }
 
 void KeyboardLockServiceImpl::CancelKeyboardLock() {

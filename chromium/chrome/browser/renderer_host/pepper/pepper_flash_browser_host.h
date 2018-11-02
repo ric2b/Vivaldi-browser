@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "ppapi/host/host_message_context.h"
 #include "ppapi/host/resource_host.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 
 namespace base {
 class Time;
@@ -24,10 +25,6 @@ class BrowserPpapiHost;
 
 namespace content_settings {
 class CookieSettings;
-}
-
-namespace device {
-class PowerSaveBlocker;
 }
 
 class GURL;
@@ -60,12 +57,14 @@ class PepperFlashBrowserHost : public ppapi::host::ResourceHost {
       const GURL& plugin_url,
       scoped_refptr<content_settings::CookieSettings> cookie_settings);
 
+  device::mojom::WakeLock* GetWakeLock();
+
   content::BrowserPpapiHost* host_;
   int render_process_id_;
 
-  // A power save blocker to prevent going to sleep, and a timer to destroy it
+  // Requests a wake lock to prevent going to sleep, and a timer to cancel it
   // after a certain amount of time has elapsed without an UpdateActivity.
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  device::mojom::WakeLockPtr wake_lock_;
   base::DelayTimer delay_timer_;
 
   // For fetching the Flash LSO settings.

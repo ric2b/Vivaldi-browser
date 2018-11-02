@@ -11,7 +11,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "components/policy/core/common/policy_namespace.h"
 #include "components/policy/core/common/schema.h"
 #include "components/policy/core/common/schema_map.h"
@@ -25,7 +25,7 @@ class SchemaMap;
 // observers to get notified whenever it is updated.
 // This object is not thread safe and must be used from the owner's thread,
 // usually UI.
-class POLICY_EXPORT SchemaRegistry : public base::NonThreadSafe {
+class POLICY_EXPORT SchemaRegistry {
  public:
   class POLICY_EXPORT Observer {
    public:
@@ -90,6 +90,8 @@ class POLICY_EXPORT SchemaRegistry : public base::NonThreadSafe {
 
  protected:
   void Notify(bool has_new_schemas);
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   scoped_refptr<SchemaMap> schema_map_;
 

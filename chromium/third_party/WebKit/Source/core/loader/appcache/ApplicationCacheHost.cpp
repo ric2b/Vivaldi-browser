@@ -49,6 +49,8 @@
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
+#include "platform/wtf/Assertions.h"
+#include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebURL.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLRequest.h"
@@ -95,7 +97,7 @@ void ApplicationCacheHost::WillStartLoadingMainResource(
 
   DCHECK(document_loader_->GetFrame());
   LocalFrame& frame = *document_loader_->GetFrame();
-  host_ = frame.Loader().Client()->CreateApplicationCacheHost(this);
+  host_ = frame.Client()->CreateApplicationCacheHost(this);
   if (!host_)
     return;
 
@@ -142,14 +144,14 @@ void ApplicationCacheHost::SelectCacheWithManifest(const KURL& manifest_url) {
   }
   if (document->IsSecureContext()) {
     UseCounter::Count(document,
-                      UseCounter::kApplicationCacheManifestSelectSecureOrigin);
+                      WebFeature::kApplicationCacheManifestSelectSecureOrigin);
     UseCounter::CountCrossOriginIframe(
-        *document, UseCounter::kApplicationCacheManifestSelectSecureOrigin);
+        *document, WebFeature::kApplicationCacheManifestSelectSecureOrigin);
   } else {
     Deprecation::CountDeprecation(
-        document, UseCounter::kApplicationCacheManifestSelectInsecureOrigin);
+        document, WebFeature::kApplicationCacheManifestSelectInsecureOrigin);
     Deprecation::CountDeprecationCrossOriginIframe(
-        *document, UseCounter::kApplicationCacheManifestSelectInsecureOrigin);
+        *document, WebFeature::kApplicationCacheManifestSelectInsecureOrigin);
     HostsUsingFeatures::CountAnyWorld(
         *document, HostsUsingFeatures::Feature::
                        kApplicationCacheManifestSelectInsecureHost);
@@ -233,12 +235,18 @@ void ApplicationCacheHost::NotifyApplicationCache(
 
 ApplicationCacheHost::CacheInfo ApplicationCacheHost::ApplicationCacheInfo() {
   if (!host_)
-    return CacheInfo(KURL(), 0, 0, 0);
+    return CacheInfo(NullURL(), 0, 0, 0);
 
   WebApplicationCacheHost::CacheInfo web_info;
   host_->GetAssociatedCacheInfo(&web_info);
   return CacheInfo(web_info.manifest_url, web_info.creation_time,
                    web_info.update_time, web_info.total_size);
+}
+
+int ApplicationCacheHost::GetHostID() const {
+  if (!host_)
+    return WebApplicationCacheHost::kAppCacheNoHostId;
+  return host_->GetHostID();
 }
 
 void ApplicationCacheHost::FillResourceList(ResourceInfoList* resources) {
@@ -358,5 +366,33 @@ DEFINE_TRACE(ApplicationCacheHost) {
   visitor->Trace(dom_application_cache_);
   visitor->Trace(document_loader_);
 }
+
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kUncached,
+                   ApplicationCacheHost::kUncached);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kIdle, ApplicationCacheHost::kIdle);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kChecking,
+                   ApplicationCacheHost::kChecking);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kDownloading,
+                   ApplicationCacheHost::kDownloading);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kUpdateReady,
+                   ApplicationCacheHost::kUpdateready);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kObsolete,
+                   ApplicationCacheHost::kObsolete);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kCheckingEvent,
+                   ApplicationCacheHost::kCheckingEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kErrorEvent,
+                   ApplicationCacheHost::kErrorEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kNoUpdateEvent,
+                   ApplicationCacheHost::kNoupdateEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kDownloadingEvent,
+                   ApplicationCacheHost::kDownloadingEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kProgressEvent,
+                   ApplicationCacheHost::kProgressEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kUpdateReadyEvent,
+                   ApplicationCacheHost::kUpdatereadyEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kCachedEvent,
+                   ApplicationCacheHost::kCachedEvent);
+STATIC_ASSERT_ENUM(WebApplicationCacheHost::kObsoleteEvent,
+                   ApplicationCacheHost::kObsoleteEvent);
 
 }  // namespace blink

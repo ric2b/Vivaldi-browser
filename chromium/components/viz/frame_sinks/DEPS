@@ -1,7 +1,0 @@
-include_rules = [
-  "+cc/base",
-  "+cc/ipc",
-  "+cc/surfaces",
-  "+cc/scheduler",
-  "+components/viz/display_compositor",
-]

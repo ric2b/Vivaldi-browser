@@ -25,10 +25,12 @@
 #include "chrome/browser/bookmarks/chrome_bookmark_client.h"
 #include "chrome/browser/bookmarks/managed_bookmark_service_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
+#include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate_factory.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/arc/arc_service_launcher.h"
+#include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
-#include "chrome/browser/favicon/chrome_fallback_icon_client_factory.h"
-#include "chrome/browser/favicon/fallback_icon_service_factory.h"
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/history/chrome_history_client.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -57,7 +59,6 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/common/bookmark_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
-#include "components/favicon/core/fallback_icon_service.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/history/content/browser/content_visit_delegate.h"
 #include "components/history/content/browser/history_database_helper.h"
@@ -68,6 +69,7 @@
 #include "components/history/core/browser/history_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/core/refcounted_keyed_service.h"
+#include "components/offline_pages/features/features.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/history_index_restore_observer.h"
 #include "components/omnibox/browser/in_memory_url_index.h"
@@ -129,8 +131,8 @@
 #include "chrome/browser/supervised_user/supervised_user_settings_service_factory.h"
 #endif
 
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "components/offline_pages/core/stub_offline_page_model.h"
 #endif
 
@@ -253,7 +255,7 @@ std::unique_ptr<KeyedService> BuildWebDataService(
       &TestProfileErrorCallback);
 }
 
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
 std::unique_ptr<KeyedService> BuildOfflinePageModel(
     content::BrowserContext* context) {
   return base::MakeUnique<offline_pages::StubOfflinePageModel>();
@@ -431,8 +433,6 @@ void TestingProfile::Init() {
 
   BrowserContext::Initialize(this, profile_path_);
 
-  browser_context_dependency_manager_->MarkBrowserContextLive(this);
-
 #if defined(OS_ANDROID)
   // Make sure token service knows its running in tests.
   OAuth2TokenServiceDelegateAndroid::set_is_testing_profile();
@@ -471,6 +471,16 @@ void TestingProfile::Init() {
 
   if (!base::PathExists(profile_path_))
     base::CreateDirectory(profile_path_);
+
+#if defined(OS_CHROMEOS)
+  if (!chromeos::CrosSettings::IsInitialized()) {
+    scoped_cros_settings_test_helper_.reset(
+        new chromeos::ScopedCrosSettingsTestHelper);
+  }
+  arc::ArcServiceLauncher* launcher = arc::ArcServiceLauncher::Get();
+  if (launcher)
+    launcher->MaybeSetProfile(this);
+#endif
 
   // TODO(joaodasilva): remove this once this PKS isn't created in ProfileImpl
   // anymore, after converting the PrefService to a PKS. Until then it must
@@ -633,7 +643,7 @@ void TestingProfile::CreateBookmarkModel(bool delete_file) {
     base::FilePath path = GetPath().Append(bookmarks::kBookmarksFileName);
     base::DeleteFile(path, false);
   }
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   offline_pages::OfflinePageModelFactory::GetInstance()->SetTestingFactory(
       this, BuildOfflinePageModel);
 #endif
@@ -821,7 +831,7 @@ void TestingProfile::CreateIncognitoPrefService() {
   // Simplified version of ProfileImpl::GetOffTheRecordPrefs(). Note this
   // leaves testing_prefs_ unset.
   prefs_.reset(CreateIncognitoPrefServiceSyncable(
-      original_profile_->prefs_.get(), NULL));
+      original_profile_->prefs_.get(), nullptr, nullptr));
   user_prefs::UserPrefs::Set(this, prefs_.get());
 }
 
@@ -986,6 +996,19 @@ content::PermissionManager* TestingProfile::GetPermissionManager() {
 content::BackgroundSyncController*
 TestingProfile::GetBackgroundSyncController() {
   return nullptr;
+}
+
+content::BrowsingDataRemoverDelegate*
+TestingProfile::GetBrowsingDataRemoverDelegate() {
+  // TestingProfile contains a real BrowsingDataRemover from BrowserContext.
+  // Since ChromeBrowsingDataRemoverDelegate is just a Chrome-specific extension
+  // of BrowsingDataRemover, we include it here for consistency.
+  //
+  // This is not a problem, since ChromeBrowsingDataRemoverDelegate mostly
+  // just serves as an interface to deletion mechanisms of various browsing
+  // data backends, which are already mocked if considered too heavy-weight
+  // for TestingProfile.
+  return ChromeBrowsingDataRemoverDelegateFactory::GetForProfile(this);
 }
 
 net::URLRequestContextGetter* TestingProfile::CreateRequestContext(

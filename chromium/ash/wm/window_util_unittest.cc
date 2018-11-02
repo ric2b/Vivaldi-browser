@@ -7,7 +7,6 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/window_positioning_utils.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "ui/aura/window.h"
 #include "ui/display/screen.h"
 
@@ -24,7 +23,7 @@ std::string GetAdjustedBounds(const gfx::Rect& visible,
 
 }  // namespace
 
-typedef test::AshTestBase WindowUtilTest;
+using WindowUtilTest = AshTestBase;
 
 TEST_F(WindowUtilTest, CenterWindow) {
   UpdateDisplay("500x400, 600x400");

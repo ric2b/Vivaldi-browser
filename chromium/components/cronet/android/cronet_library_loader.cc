@@ -8,18 +8,18 @@
 #include <vector>
 
 #include "base/android/base_jni_onload.h"
-#include "base/android/base_jni_registrar.h"
 #include "base/android/jni_android.h"
 #include "base/android/jni_registrar.h"
 #include "base/android/jni_utils.h"
 #include "base/android/library_loader/library_loader_hooks.h"
-#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/statistics_recorder.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "components/cronet/android/cronet_bidirectional_stream_adapter.h"
+#include "components/cronet/android/cronet_jni_registration.h"
 #include "components/cronet/android/cronet_upload_data_stream_adapter.h"
 #include "components/cronet/android/cronet_url_request_adapter.h"
 #include "components/cronet/android/cronet_url_request_context_adapter.h"
@@ -42,7 +42,6 @@ namespace cronet {
 namespace {
 
 const base::android::RegistrationMethod kCronetRegisteredMethods[] = {
-    {"BaseAndroid", base::android::RegisterJni},
     {"CronetBidirectionalStreamAdapter",
      CronetBidirectionalStreamAdapter::RegisterJni},
     {"CronetLibraryLoader", RegisterNativesImpl},
@@ -67,10 +66,13 @@ bool RegisterJNI(JNIEnv* env) {
 bool NativeInit() {
   if (!base::android::OnJNIOnLoadInit())
     return false;
-  url::Initialize();
   // Initializes the statistics recorder system. This needs to be done before
   // emitting histograms to prevent memory leaks (crbug.com/707836).
   base::StatisticsRecorder::Initialize();
+  if (!base::TaskScheduler::GetInstance())
+    base::TaskScheduler::CreateAndStartWithDefaultParams("Cronet");
+
+  url::Initialize();
   return true;
 }
 
@@ -85,14 +87,21 @@ bool OnInitThread() {
 jint CronetOnLoad(JavaVM* vm, void* reserved) {
   base::android::InitVM(vm);
   JNIEnv* env = base::android::AttachCurrentThread();
-  if (!base::android::OnJNIOnLoadRegisterJNI(env) || !RegisterJNI(env) ||
-      !NativeInit()) {
+  if (!RegisterMainDexNatives(env) || !RegisterNonMainDexNatives(env)) {
+    return -1;
+  }
+  // TODO(agrieve): Delete this block, this is a no-op now.
+  // https://crbug.com/683256.
+  if (!RegisterJNI(env) || !NativeInit()) {
     return -1;
   }
   return JNI_VERSION_1_6;
 }
 
 void CronetOnUnLoad(JavaVM* jvm, void* reserved) {
+  if (base::TaskScheduler::GetInstance())
+    base::TaskScheduler::GetInstance()->Shutdown();
+
   base::android::LibraryLoaderExitHook();
 }
 
@@ -102,9 +111,6 @@ void CronetInitOnInitThread(JNIEnv* env, const JavaParamRef<jclass>& jcaller) {
 #endif
 
   base::FeatureList::InitializeInstance(std::string(), std::string());
-  // TODO(bengr): Remove once Data Reduction Proxy no longer needs this for
-  // configuration information.
-  base::CommandLine::Init(0, nullptr);
   DCHECK(!base::MessageLoop::current());
   DCHECK(!g_init_message_loop);
   g_init_message_loop =

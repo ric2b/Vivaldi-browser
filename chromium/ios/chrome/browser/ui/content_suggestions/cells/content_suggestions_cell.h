@@ -19,17 +19,22 @@
 @property(nonatomic, assign) BOOL displayImage;
 
 // Sets an |image| to illustrate the article, replacing the "no image" icon.
-- (void)setContentImage:(UIImage*)image;
+- (void)setContentImage:(UIImage*)image animated:(BOOL)animated;
 
 // Sets the publisher |name| and |date| and add an icon to signal the offline
 // availability if |availableOffline| is YES.
 - (void)setAdditionalInformationWithPublisherName:(NSString*)publisherName
-                                             date:(NSDate*)publishDate
+                                             date:(NSString*)publishDate
                               offlineAvailability:(BOOL)availableOffline;
 
-// Setst the subtitle text. If |subtitle| is nil, the space taken by the
-// subtitle is removed.
-- (void)setSubtitleText:(NSString*)subtitle;
+// Returns the height needed by a cell contained in |width| and containing the
+// listed informations.
++ (CGFloat)heightForWidth:(CGFloat)width
+                withImage:(BOOL)hasImage
+                    title:(NSString*)title
+            publisherName:(NSString*)publisherName
+          publicationDate:(NSString*)publicationDate
+         availableOffline:(BOOL)availableOffline;
 
 @end
 

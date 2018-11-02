@@ -4,16 +4,26 @@
 
 #include "services/ui/ws/gpu_client.h"
 
-#include "services/ui/common/server_gpu_memory_buffer_manager.h"
+#include "components/viz/host/server_gpu_memory_buffer_manager.h"
 #include "services/ui/gpu/interfaces/gpu_service.mojom.h"
+
+namespace {
+
+void RunCallback(const ui::mojom::Gpu::CreateGpuMemoryBufferCallback& callback,
+                 const gfx::GpuMemoryBufferHandle& handle) {
+  callback.Run(handle);
+}
+
+}  // namespace
 
 namespace ui {
 namespace ws {
 
-GpuClient::GpuClient(int client_id,
-                     gpu::GPUInfo* gpu_info,
-                     ServerGpuMemoryBufferManager* gpu_memory_buffer_manager,
-                     mojom::GpuService* gpu_service)
+GpuClient::GpuClient(
+    int client_id,
+    gpu::GPUInfo* gpu_info,
+    viz::ServerGpuMemoryBufferManager* gpu_memory_buffer_manager,
+    mojom::GpuService* gpu_service)
     : client_id_(client_id),
       gpu_info_(gpu_info),
       gpu_memory_buffer_manager_(gpu_memory_buffer_manager),
@@ -34,7 +44,7 @@ void GpuClient::OnGpuChannelEstablished(
 }
 
 // mojom::Gpu overrides:
-void GpuClient::EstablishGpuChannel(bool force_access_to_gpu,
+void GpuClient::EstablishGpuChannel(
     const EstablishGpuChannelCallback& callback) {
   // TODO(sad): crbug.com/617415 figure out how to generate a meaningful
   // tracing id.
@@ -46,15 +56,25 @@ void GpuClient::EstablishGpuChannel(bool force_access_to_gpu,
                  weak_factory_.GetWeakPtr(), callback));
 }
 
+void GpuClient::CreateJpegDecodeAccelerator(
+    media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) {
+  gpu_service_->CreateJpegDecodeAccelerator(std::move(jda_request));
+}
+
+void GpuClient::CreateVideoEncodeAccelerator(
+    media::mojom::VideoEncodeAcceleratorRequest vea_request) {
+  NOTIMPLEMENTED();
+}
+
 void GpuClient::CreateGpuMemoryBuffer(
     gfx::GpuMemoryBufferId id,
     const gfx::Size& size,
     gfx::BufferFormat format,
     gfx::BufferUsage usage,
     const mojom::Gpu::CreateGpuMemoryBufferCallback& callback) {
-  auto handle = gpu_memory_buffer_manager_->CreateGpuMemoryBufferHandle(
-      id, client_id_, size, format, usage, gpu::kNullSurfaceHandle);
-  callback.Run(handle);
+  gpu_memory_buffer_manager_->AllocateGpuMemoryBuffer(
+      id, client_id_, size, format, usage, gpu::kNullSurfaceHandle,
+      base::BindOnce(&RunCallback, callback));
 }
 
 void GpuClient::DestroyGpuMemoryBuffer(gfx::GpuMemoryBufferId id,

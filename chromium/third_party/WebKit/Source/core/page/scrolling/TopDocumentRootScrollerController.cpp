@@ -6,7 +6,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/PageScaleConstraintsSet.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -49,10 +49,8 @@ void TopDocumentRootScrollerController::DidResizeViewport() {
   // paint so we need to do that manually here.
   GlobalRootScroller()->SetNeedsCompositingUpdate();
 
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
-    if (GlobalRootScroller()->GetLayoutObject())
-      GlobalRootScroller()->GetLayoutObject()->SetNeedsPaintPropertyUpdate();
-  }
+  if (GlobalRootScroller()->GetLayoutObject())
+    GlobalRootScroller()->GetLayoutObject()->SetNeedsPaintPropertyUpdate();
 }
 
 ScrollableArea* TopDocumentRootScrollerController::RootScrollerArea() const {
@@ -69,7 +67,11 @@ IntSize TopDocumentRootScrollerController::RootScrollerVisibleArea() const {
       ceilf(page_->GetVisualViewport().BrowserControlsAdjustment() /
             minimum_page_scale);
 
-  return TopDocument()->View()->VisibleContentSize(kExcludeScrollbars) +
+  return TopDocument()
+             ->View()
+             ->LayoutViewportScrollableArea()
+             ->VisibleContentRect(kExcludeScrollbars)
+             .Size() +
          IntSize(0, browser_controls_adjustment);
 }
 
@@ -170,7 +172,7 @@ void TopDocumentRootScrollerController::DidDisposeScrollableArea(
   if (TopDocument()->Lifecycle().GetState() >= DocumentLifecycle::kStopping)
     return;
 
-  FrameView* frame_view = TopDocument()->View();
+  LocalFrameView* frame_view = TopDocument()->View();
 
   RootFrameViewport* rfv = frame_view->GetRootFrameViewport();
 

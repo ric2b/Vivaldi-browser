@@ -46,7 +46,6 @@
 #include "platform/loader/fetch/ClientHintsPreferences.h"
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/ResourceError.h"
-#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/loader/fetch/SubstituteData.h"
@@ -71,6 +70,7 @@ class SerializedScriptValue;
 class WebServiceWorkerNetworkProvider;
 struct ViewportDescriptionWrapper;
 
+// The DocumentLoader fetches a main resource and handles the result.
 class CORE_EXPORT DocumentLoader
     : public GarbageCollectedFinalized<DocumentLoader>,
       private RawResourceClient {
@@ -164,7 +164,7 @@ class CORE_EXPORT DocumentLoader
   void SetItemForHistoryNavigation(HistoryItem* item) { history_item_ = item; }
   HistoryItem* GetHistoryItem() const { return history_item_; }
 
-  void StartLoadingMainResource();
+  void StartLoading();
 
   DocumentLoadTiming& GetTiming() { return document_load_timing_; }
   const DocumentLoadTiming& GetTiming() const { return document_load_timing_; }
@@ -239,7 +239,7 @@ class CORE_EXPORT DocumentLoader
                           InstallNewDocumentReason,
                           ParserSynchronizationPolicy,
                           const KURL& overriding_url);
-  void DidInstallNewDocument(Document*);
+  void DidInstallNewDocument(Document*, InstallNewDocumentReason);
   void DidCommitNavigation();
 
   void EnsureWriter(const AtomicString& mime_type,
@@ -335,6 +335,11 @@ class CORE_EXPORT DocumentLoader
   InitialScrollState initial_scroll_state_;
 
   bool was_blocked_after_csp_;
+
+  static bool ShouldPersistUserGestureValue(
+      const SecurityOrigin* previous_security_origin,
+      const SecurityOrigin* new_security_origin);
+  static bool CheckOriginIsHttpOrHttps(const SecurityOrigin*);
 
   // PlzNavigate: set when committing a navigation. The data has originally been
   // captured when the navigation was sent to the browser process, and it is

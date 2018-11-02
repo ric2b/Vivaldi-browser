@@ -9,28 +9,16 @@
 
 @class CollectionViewItem;
 @class ContentSuggestionIdentifier;
-@class FaviconAttributes;
 @protocol SuggestedContent;
-
-// Delegate for SuggestedContent.
-@protocol SuggestedContentDelegate
-
-// Loads the image associated with the |suggestedItem|.
-- (void)loadImageForSuggestedItem:
-    (CollectionViewItem<SuggestedContent>*)suggestedItem;
-
-@end
 
 // Behavior shared by the items in ContentSuggestions.
 @protocol SuggestedContent
 
-@property(nonatomic, weak) id<SuggestedContentDelegate> delegate;
-// Image associated with this content.
-@property(nonatomic, strong) UIImage* image;
-// Attributes for favicon.
-@property(nonatomic, strong) FaviconAttributes* attributes;
 // Identifier for this content.
 @property(nonatomic, strong) ContentSuggestionIdentifier* suggestionIdentifier;
+
+// The height needed by a cell configured by this item, for a |width|.
+- (CGFloat)cellHeightForWidth:(CGFloat)width;
 
 @end
 

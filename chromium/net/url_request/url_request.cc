@@ -174,6 +174,7 @@ void URLRequest::Delegate::OnResponseStarted(URLRequest* request) {
 // URLRequest
 
 URLRequest::~URLRequest() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   Cancel();
 
   if (network_delegate_) {
@@ -647,7 +648,7 @@ void URLRequest::StartJob(URLRequestJob* job) {
   response_info_.was_cached = false;
 
   GURL referrer_url(referrer_);
-  if (referrer_url != URLRequestJob::ComputeReferrerForRedirect(
+  if (referrer_url != URLRequestJob::ComputeReferrerForPolicy(
                           referrer_policy_, referrer_url, url())) {
     if (!network_delegate_ ||
         !network_delegate_->CancelURLRequestWithPolicyViolatingReferrerHeader(
@@ -874,15 +875,17 @@ void URLRequest::CancelAuth() {
   job_->CancelAuth();
 }
 
-void URLRequest::ContinueWithCertificate(X509Certificate* client_cert,
-                                         SSLPrivateKey* client_private_key) {
+void URLRequest::ContinueWithCertificate(
+    scoped_refptr<X509Certificate> client_cert,
+    scoped_refptr<SSLPrivateKey> client_private_key) {
   DCHECK(job_.get());
 
   // Matches the call in NotifyCertificateRequested.
   OnCallToDelegateComplete();
 
   status_ = URLRequestStatus::FromError(ERR_IO_PENDING);
-  job_->ContinueWithCertificate(client_cert, client_private_key);
+  job_->ContinueWithCertificate(std::move(client_cert),
+                                std::move(client_private_key));
 }
 
 void URLRequest::ContinueDespiteLastError() {
@@ -916,8 +919,12 @@ void URLRequest::PrepareToRestart() {
   proxy_server_ = ProxyServer();
 }
 
-int URLRequest::Redirect(const RedirectInfo& redirect_info) {
-  // Matches call in NotifyReceivedRedirect.
+void URLRequest::Redirect(const RedirectInfo& redirect_info) {
+  // This method always succeeds. Whether |job_| is allowed to redirect to
+  // |redirect_info| is checked in URLRequestJob::CanFollowRedirect, before
+  // NotifyReceivedRedirect. This means the delegate can assume that, if it
+  // accepted the redirect, future calls to OnResponseStarted correspond to
+  // |redirect_info.new_url|.
   OnCallToDelegateComplete();
   if (net_log_.IsCapturing()) {
     net_log_.AddEvent(
@@ -929,19 +936,6 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
   if (network_delegate_)
     network_delegate_->NotifyBeforeRedirect(this, redirect_info.new_url);
 
-  if (redirect_limit_ <= 0) {
-    DVLOG(1) << "disallowing redirect: exceeds limit";
-    return ERR_TOO_MANY_REDIRECTS;
-  }
-
-  if (!redirect_info.new_url.is_valid())
-    return ERR_INVALID_URL;
-
-  if (!job_->IsSafeRedirect(redirect_info.new_url)) {
-    DVLOG(1) << "disallowing redirect: unsafe protocol";
-    return ERR_UNSAFE_REDIRECT;
-  }
-
   if (!final_upload_progress_.position() && upload_data_stream_)
     final_upload_progress_ = upload_data_stream_->GetUploadProgress();
   PrepareToRestart();
@@ -951,8 +945,8 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
     if (method_ == "POST") {
       // If being switched from POST, must remove Origin header.
       // TODO(jww): This is Origin header removal is probably layering violation
-      // and
-      // should be refactored into //content. See https://crbug.com/471397.
+      // and should be refactored into //content. See https://crbug.com/471397.
+      // See also: https://crbug.com/760487
       extra_request_headers_.RemoveHeader(HttpRequestHeaders::kOrigin);
     }
     // The inclusion of a multipart Content-Type header can cause problems with
@@ -996,7 +990,6 @@ int URLRequest::Redirect(const RedirectInfo& redirect_info) {
   --redirect_limit_;
 
   Start();
-  return OK;
 }
 
 const URLRequestContext* URLRequest::context() const {

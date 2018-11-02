@@ -4,9 +4,12 @@
 
 #include "ash/system/session/tray_session_length_limit.h"
 
+#include "ash/session/session_controller.h"
+#include "ash/shell.h"
+#include "ash/system/tray/label_tray_view.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/time/time.h"
 #include "ui/message_center/message_center.h"
@@ -14,30 +17,22 @@
 #include "ui/message_center/notification_types.h"
 
 namespace ash {
-namespace test {
 
 class TraySessionLengthLimitTest : public AshTestBase {
  public:
-  TraySessionLengthLimitTest() {}
-  ~TraySessionLengthLimitTest() override {}
-
-  void SetUp() override {
-    AshTestBase::SetUp();
-    SystemTray* system_tray = GetPrimarySystemTray();
-    tray_session_length_limit_ = new TraySessionLengthLimit(system_tray);
-    system_tray->AddTrayItem(base::WrapUnique(tray_session_length_limit_));
-  }
-
-  void TearDown() override {
-    ClearSessionLengthLimit();
-    AshTestBase::TearDown();
-  }
+  TraySessionLengthLimitTest() = default;
+  ~TraySessionLengthLimitTest() override = default;
 
  protected:
+  LabelTrayView* GetSessionLengthLimitTrayView() {
+    return SystemTrayTestApi(GetPrimarySystemTray())
+        .tray_session_length_limit()
+        ->tray_bubble_view_;
+  }
+
   void UpdateSessionLengthLimitInMin(int mins) {
-    GetSystemTrayDelegate()->SetSessionLengthLimitForTest(
-        base::TimeDelta::FromMinutes(mins));
-    tray_session_length_limit_->OnSessionLengthLimitChanged();
+    Shell::Get()->session_controller()->SetSessionLengthLimit(
+        base::TimeDelta::FromMinutes(mins), base::TimeTicks::Now());
   }
 
   message_center::Notification* GetNotification() {
@@ -53,8 +48,8 @@ class TraySessionLengthLimitTest : public AshTestBase {
   }
 
   void ClearSessionLengthLimit() {
-    GetSystemTrayDelegate()->ClearSessionLengthLimit();
-    tray_session_length_limit_->OnSessionLengthLimitChanged();
+    Shell::Get()->session_controller()->SetSessionLengthLimit(
+        base::TimeDelta(), base::TimeTicks());
   }
 
   void RemoveNotification() {
@@ -62,16 +57,31 @@ class TraySessionLengthLimitTest : public AshTestBase {
         TraySessionLengthLimit::kNotificationId, false /* by_user */);
   }
 
-  TraySessionLengthLimit* tray_session_length_limit() {
-    return tray_session_length_limit_;
-  }
-
  private:
-  // Weak reference, owned by the SystemTray.
-  TraySessionLengthLimit* tray_session_length_limit_;
-
   DISALLOW_COPY_AND_ASSIGN(TraySessionLengthLimitTest);
 };
+
+TEST_F(TraySessionLengthLimitTest, Visibility) {
+  SystemTray* system_tray = GetPrimarySystemTray();
+
+  // By default there is no session length limit item.
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  EXPECT_FALSE(GetSessionLengthLimitTrayView());
+  system_tray->CloseBubble();
+
+  // Setting a length limit shows an item in the system tray menu.
+  UpdateSessionLengthLimitInMin(10);
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  ASSERT_TRUE(GetSessionLengthLimitTrayView());
+  EXPECT_TRUE(GetSessionLengthLimitTrayView()->visible());
+  system_tray->CloseBubble();
+
+  // Removing the session length limit removes the tray menu item.
+  UpdateSessionLengthLimitInMin(0);
+  system_tray->ShowDefaultView(BUBBLE_CREATE_NEW);
+  EXPECT_FALSE(GetSessionLengthLimitTrayView());
+  system_tray->CloseBubble();
+}
 
 TEST_F(TraySessionLengthLimitTest, Notification) {
   // No notifications when no session limit.
@@ -153,5 +163,23 @@ TEST_F(TraySessionLengthLimitTest, RemoveNotification) {
                   .should_make_spoken_feedback_for_popup_updates);
 }
 
-}  // namespace test
+class TraySessionLengthLimitLoginTest : public TraySessionLengthLimitTest {
+ public:
+  TraySessionLengthLimitLoginTest() { set_start_session(false); }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(TraySessionLengthLimitLoginTest);
+};
+
+TEST_F(TraySessionLengthLimitLoginTest, NotificationShownAfterLogin) {
+  UpdateSessionLengthLimitInMin(15);
+
+  // No notifications before login.
+  EXPECT_FALSE(GetNotification());
+
+  // Notification is shown after login.
+  SetSessionStarted(true);
+  EXPECT_TRUE(GetNotification());
+}
+
 }  // namespace ash

@@ -15,6 +15,7 @@
 
 namespace blink {
 
+class ExecutionContext;
 class FaceDetectorOptions;
 
 class MODULES_EXPORT FaceDetector final : public ShapeDetector,
@@ -22,18 +23,16 @@ class MODULES_EXPORT FaceDetector final : public ShapeDetector,
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static FaceDetector* Create(const FaceDetectorOptions&);
+  static FaceDetector* Create(ExecutionContext*, const FaceDetectorOptions&);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  explicit FaceDetector(const FaceDetectorOptions&);
+  FaceDetector(ExecutionContext*, const FaceDetectorOptions&);
   ~FaceDetector() override = default;
 
   ScriptPromise DoDetect(ScriptPromiseResolver*,
-                         mojo::ScopedSharedBufferHandle,
-                         int image_width,
-                         int image_height) override;
+                         skia::mojom::blink::BitmapPtr) override;
   void OnDetectFaces(
       ScriptPromiseResolver*,
       Vector<shape_detection::mojom::blink::FaceDetectionResultPtr>);

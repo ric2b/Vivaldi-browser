@@ -134,6 +134,11 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
   static bool IsAccessAllowed(const base::FilePath& path,
                               const base::FilePath& profile_path);
 
+  // Enables access to all files for testing purposes. This function is used
+  // to bypass the access control for file: scheme. Calling this function
+  // with false brings back the original (production) behaviors.
+  static void EnableAccessToAllFilesForTesting(bool enabled);
+
  private:
   // NetworkDelegate implementation.
   int OnBeforeURLRequest(net::URLRequest* request,
@@ -173,7 +178,8 @@ class ChromeNetworkDelegate : public net::NetworkDelegateImpl {
                       const std::string& cookie_line,
                       net::CookieOptions* options) override;
   bool OnCanAccessFile(const net::URLRequest& request,
-                       const base::FilePath& path) const override;
+                       const base::FilePath& original_path,
+                       const base::FilePath& absolute_path) const override;
   bool OnCanEnablePrivacyMode(
       const GURL& url,
       const GURL& first_party_for_cookies) const override;

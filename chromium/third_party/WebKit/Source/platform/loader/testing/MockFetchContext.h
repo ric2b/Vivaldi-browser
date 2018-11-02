@@ -5,6 +5,8 @@
 #ifndef MockFetchContext_h
 #define MockFetchContext_h
 
+#include "platform/WebFrameScheduler.h"
+#include "platform/exported/WrappedResourceRequest.h"
 #include "platform/loader/fetch/FetchContext.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceTimingInfo.h"
@@ -28,19 +30,22 @@ class MockFetchContext : public FetchContext {
     kShouldLoadNewResource,
     kShouldNotLoadNewResource,
   };
-  // TODO(toyoshim): Disallow to pass nullptr for |taskRunner|, and force to use
-  // FetchTestingPlatformSupport's WebTaskRunner. Probably, MockFetchContext
-  // would be available only through the FetchTestingPlatformSupport in the
-  // future.
-  static MockFetchContext* Create(LoadPolicy load_policy,
-                                  RefPtr<WebTaskRunner> task_runner = nullptr) {
-    return new MockFetchContext(load_policy, std::move(task_runner));
+  static MockFetchContext* Create(LoadPolicy load_policy) {
+    return new MockFetchContext(load_policy);
   }
 
   ~MockFetchContext() override {}
 
   void SetLoadComplete(bool complete) { complete_ = complete; }
   long long GetTransferSize() const { return transfer_size_; }
+
+  SecurityOrigin* GetSecurityOrigin() const override {
+    return security_origin_.Get();
+  }
+
+  void SetSecurityOrigin(RefPtr<SecurityOrigin> security_origin) {
+    security_origin_ = security_origin;
+  }
 
   // FetchContext:
   bool AllowImage(bool images_enabled, const KURL&) const override {
@@ -68,27 +73,54 @@ class MockFetchContext : public FetchContext {
   bool ShouldLoadNewResource(Resource::Type) const override {
     return load_policy_ == kShouldLoadNewResource;
   }
-  RefPtr<WebTaskRunner> LoadingTaskRunner() const override { return runner_; }
   bool IsLoadComplete() const override { return complete_; }
   void AddResourceTiming(
       const ResourceTimingInfo& resource_timing_info) override {
     transfer_size_ = resource_timing_info.TransferSize();
   }
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader() override {
-    return Platform::Current()->CreateURLLoader();
+  std::unique_ptr<WebURLLoader> CreateURLLoader(
+      const ResourceRequest& request) override {
+    WrappedResourceRequest wrapped(request);
+    return Platform::Current()->CreateURLLoader(
+        wrapped, runner_->ToSingleThreadTaskRunner());
+  }
+
+  WebFrameScheduler* GetFrameScheduler() override {
+    return frame_scheduler_.get();
   }
 
  private:
-  MockFetchContext(LoadPolicy load_policy, RefPtr<WebTaskRunner> task_runner)
+  class MockFrameScheduler final : public WebFrameScheduler {
+   public:
+    MockFrameScheduler(RefPtr<WebTaskRunner> runner)
+        : runner_(std::move(runner)) {}
+    void AddThrottlingObserver(ObserverType, Observer*) override {}
+    void RemoveThrottlingObserver(ObserverType, Observer*) override {}
+    RefPtr<WebTaskRunner> TimerTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> LoadingTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> SuspendableTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> UnthrottledTaskRunner() override { return runner_; }
+    RefPtr<WebTaskRunner> UnthrottledButBlockableTaskRunner() override {
+      return runner_;
+    }
+
+   private:
+    RefPtr<WebTaskRunner> runner_;
+  };
+
+  MockFetchContext(LoadPolicy load_policy)
       : load_policy_(load_policy),
-        runner_(task_runner ? std::move(task_runner)
-                            : AdoptRef(new scheduler::FakeWebTaskRunner)),
+        runner_(AdoptRef(new scheduler::FakeWebTaskRunner)),
+        security_origin_(SecurityOrigin::CreateUnique()),
+        frame_scheduler_(new MockFrameScheduler(runner_)),
         complete_(false),
         transfer_size_(-1) {}
 
   enum LoadPolicy load_policy_;
   RefPtr<WebTaskRunner> runner_;
+  RefPtr<SecurityOrigin> security_origin_;
+  std::unique_ptr<WebFrameScheduler> frame_scheduler_;
   bool complete_;
   long long transfer_size_;
 };

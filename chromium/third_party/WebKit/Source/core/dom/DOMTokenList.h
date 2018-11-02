@@ -26,6 +26,7 @@
 #define DOMTokenList_h
 
 #include "core/CoreExport.h"
+#include "core/dom/QualifiedName.h"
 #include "core/dom/SpaceSplitString.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
@@ -34,16 +35,8 @@
 
 namespace blink {
 
+class Element;
 class ExceptionState;
-
-class CORE_EXPORT DOMTokenListObserver : public GarbageCollectedMixin {
- public:
-  // Called when the value property is set, even if the tokens in
-  // the set have not changed.
-  virtual void ValueWasSet() = 0;
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-};
 
 class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
                                  public ScriptWrappable {
@@ -51,55 +44,55 @@ class CORE_EXPORT DOMTokenList : public GarbageCollectedFinalized<DOMTokenList>,
   WTF_MAKE_NONCOPYABLE(DOMTokenList);
 
  public:
-  static DOMTokenList* Create(DOMTokenListObserver* observer = nullptr) {
-    return new DOMTokenList(observer);
+  static DOMTokenList* Create(Element& element, const QualifiedName& attr) {
+    return new DOMTokenList(element, attr);
   }
-
   virtual ~DOMTokenList() {}
+  DECLARE_VIRTUAL_TRACE();
 
-  virtual unsigned length() const { return tokens_.size(); }
-  virtual const AtomicString item(unsigned index) const;
-
+  unsigned length() const { return token_set_.size(); }
+  const AtomicString item(unsigned index) const;
   bool contains(const AtomicString&) const;
-  virtual void add(const Vector<String>&, ExceptionState&);
-  void add(const AtomicString&, ExceptionState&);
-  virtual void remove(const Vector<String>&, ExceptionState&);
-  void remove(const AtomicString&, ExceptionState&);
+  void add(const Vector<String>&, ExceptionState&);
+  void remove(const Vector<String>&, ExceptionState&);
   bool toggle(const AtomicString&, ExceptionState&);
   bool toggle(const AtomicString&, bool force, ExceptionState&);
+  void replace(const AtomicString& token,
+               const AtomicString& new_token,
+               ExceptionState&);
   bool supports(const AtomicString&, ExceptionState&);
-
-  virtual const AtomicString& value() const { return value_; }
-  virtual void setValue(const AtomicString&);
-
-  const SpaceSplitString& Tokens() const { return tokens_; }
-  void SetObserver(DOMTokenListObserver* observer) { observer_ = observer; }
-
+  const AtomicString& value() const { return value_; }
+  void setValue(const AtomicString&);
   const AtomicString& toString() const { return value(); }
 
-  DEFINE_INLINE_VIRTUAL_TRACE() { visitor->Trace(observer_); }
+  // This function should be called when the associated attribute value was
+  // updated.
+  void DidUpdateAttributeValue(const AtomicString& old_value,
+                               const AtomicString& new_value);
+
+  const SpaceSplitString& TokenSet() const { return token_set_; }
+  // Add() and Remove() have DCHECK for syntax of the specified token.
+  void Add(const AtomicString&);
+  void Remove(const AtomicString&);
 
  protected:
-  DOMTokenList(DOMTokenListObserver* observer) : observer_(observer) {}
+  DOMTokenList(Element& element, const QualifiedName& attr)
+      : element_(element), attribute_name_(attr) {}
+  Element& GetElement() const { return *element_; }
 
-  virtual void AddInternal(const AtomicString&);
-  virtual bool ContainsInternal(const AtomicString&) const;
-  virtual void RemoveInternal(const AtomicString&);
-
-  bool ValidateToken(const String&, ExceptionState&) const;
-  bool ValidateTokens(const Vector<String>&, ExceptionState&) const;
   virtual bool ValidateTokenValue(const AtomicString&, ExceptionState&) const;
-  AtomicString AddToken(const AtomicString&);
-  AtomicString AddTokens(const Vector<String>&);
-  AtomicString RemoveToken(const AtomicString&);
-  AtomicString RemoveTokens(const Vector<String>&);
-  virtual SpaceSplitString& MutableSet() { return tokens_; }
-  static AtomicString SerializeSet(const SpaceSplitString&);
 
  private:
-  SpaceSplitString tokens_;
+  void AddTokens(const Vector<String>&);
+  void RemoveTokens(const Vector<String>&);
+  void UpdateWithTokenSet(const SpaceSplitString&);
+  static AtomicString SerializeTokenSet(const SpaceSplitString&);
+
+  SpaceSplitString token_set_;
   AtomicString value_;
-  WeakMember<DOMTokenListObserver> observer_;
+  const Member<Element> element_;
+  const QualifiedName attribute_name_;
+  bool is_in_update_step_ = false;
 };
 
 }  // namespace blink

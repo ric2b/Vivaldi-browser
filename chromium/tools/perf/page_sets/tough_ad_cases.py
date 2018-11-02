@@ -13,7 +13,8 @@ class SwiffyPage(page_module.Page):
 
   def __init__(self, url, page_set):
     super(SwiffyPage, self).__init__(url=url, page_set=page_set,
-                                     make_javascript_deterministic=False)
+                                     make_javascript_deterministic=False,
+                                     name=url)
 
   def RunNavigateSteps(self, action_runner):
     super(SwiffyPage, self).RunNavigateSteps(action_runner)
@@ -42,13 +43,17 @@ class AdPage(page_module.Page):
                y_scroll_distance_multiplier=0.5,
                scroll=False,
                wait_for_interactive_or_better=False):
+    name = url
+    if not name.startswith('http'):
+      name = url.split('/')[-1]
     super(AdPage, self).__init__(
         url=url,
         page_set=page_set,
         make_javascript_deterministic=make_javascript_deterministic,
         shared_page_state_class=(
             repeatable_synthesize_scroll_gesture_shared_state.\
-                RepeatableSynthesizeScrollGestureSharedState))
+                RepeatableSynthesizeScrollGestureSharedState),
+        name=name)
     self._y_scroll_distance_multiplier = y_scroll_distance_multiplier
     self._scroll = scroll
     self._wait_for_interactive_or_better = wait_for_interactive_or_better
@@ -197,13 +202,11 @@ class ToughAdCasesPageSet(story.StorySet):
     self.AddStory(AdPage(('http://www.cnn.com/2015/01/09/politics/'
                           'nebraska-keystone-pipeline/index.html'),
                          self, scroll=scroll))
-    # Disabled: crbug.com/520509
-    #self.AddStory(AdPage('http://time.com/3977891/'
-    #    'donald-trump-debate-republican/', self, scroll=scroll))
+    self.AddStory(AdPage('http://time.com/3977891/'
+        'donald-trump-debate-republican/', self, scroll=scroll))
     self.AddStory(AdPage('http://www.theguardian.com/uk', self, scroll=scroll))
-    # Disabled: http://crbug.com/597656
-    # self.AddStory(AdPage('http://m.tmz.com', self, scroll=scroll,
-    #     y_scroll_distance_multiplier=0.25))
+    self.AddStory(AdPage('http://m.tmz.com', self, scroll=scroll,
+        y_scroll_distance_multiplier=0.25))
     self.AddStory(AdPage('http://androidpolice.com', self, scroll=scroll,
         wait_for_interactive_or_better=True))
 

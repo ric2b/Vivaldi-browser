@@ -297,9 +297,9 @@
             "description": "The URL of the page to navigate to."
           },
           {
-            "type": "boolean",
-            "name": "wasTyped",
-            "description":  "Whether the URL was typed out by the user."
+            "$ref": "historyPrivate.TransitionType",
+            "name": "transitionType",
+            "description":  "How the URL was reached."
           },
           {
             "type": "boolean",

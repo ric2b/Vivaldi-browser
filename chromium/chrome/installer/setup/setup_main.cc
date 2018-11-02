@@ -43,7 +43,6 @@
 #include "base/win/scoped_com_initializer.h"
 #include "base/win/scoped_handle.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
@@ -59,6 +58,7 @@
 #include "chrome/installer/setup/setup_singleton.h"
 #include "chrome/installer/setup/setup_util.h"
 #include "chrome/installer/setup/uninstall.h"
+#include "chrome/installer/setup/user_experiment.h"
 #include "chrome/installer/util/browser_distribution.h"
 #include "chrome/installer/util/delete_after_reboot_helper.h"
 #include "chrome/installer/util/delete_old_versions.h"
@@ -903,13 +903,11 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
     // NOTE: Should the work done here, on kConfigureUserSettings, change:
     // kActiveSetupVersion in install_worker.cc needs to be increased for Active
     // Setup to invoke this again for all users of this install.
-    const Product& chrome_install = installer_state->product();
     installer::InstallStatus status = installer::INVALID_STATE_FOR_OPTION;
     if (installer_state->system_install()) {
       bool force =
           cmd_line.HasSwitch(installer::switches::kForceConfigureUserSettings);
-      installer::HandleActiveSetupForBrowser(installer_state->target_path(),
-                                             chrome_install, force);
+      installer::HandleActiveSetupForBrowser(*installer_state, force);
       status = installer::INSTALL_REPAIRED;
     } else {
       LOG(DFATAL)
@@ -1011,6 +1009,11 @@ bool HandleNonInstallCmdLineOptions(const base::FilePath& setup_exe,
                   << setup_exe.value();
     }
     *exit_code = InstallUtil::GetInstallReturnCode(status);
+  } else if (cmd_line.HasSwitch(installer::switches::kUserExperiment)) {
+    installer::RunUserExperiment(cmd_line,
+                                 MasterPreferences::ForCurrentProcess(),
+                                 original_state, installer_state);
+    exit_code = 0;
   } else if (cmd_line.HasSwitch(installer::switches::kInactiveUserToast)) {
     // Launch the inactive user toast experiment.
     int flavor = -1;
@@ -1826,8 +1829,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
   }
 
   if (system_install && !IsUserAnAdmin()) {
-    if (base::win::GetVersion() >= base::win::VERSION_VISTA &&
-        !cmd_line.HasSwitch(installer::switches::kRunAsAdmin)) {
+    if (!cmd_line.HasSwitch(installer::switches::kRunAsAdmin)) {
       base::CommandLine new_cmd(base::CommandLine::NO_PROGRAM);
       new_cmd.AppendArguments(cmd_line, true);
       // Append --run-as-admin flag to let the new instance of setup.exe know
@@ -1887,6 +1889,15 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE prev_instance,
         InstallProducts(original_state, setup_exe, cmd_line, prefs,
                         &installer_state, &installer_directory);
     DoLegacyCleanups(installer_state, install_status);
+
+    // It may be time to kick off an experiment if this was a successful update.
+    if ((install_status == installer::NEW_VERSION_UPDATED ||
+         install_status == installer::IN_USE_UPDATED) &&
+        installer::ShouldRunUserExperiment(installer_state)) {
+      installer::BeginUserExperiment(
+          installer_state, installer_directory.Append(setup_exe.BaseName()),
+          !system_install);
+    }
   }
 
   UMA_HISTOGRAM_ENUMERATION("Setup.Install.Result", install_status,

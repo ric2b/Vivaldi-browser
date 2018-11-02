@@ -12,20 +12,22 @@ namespace chromecast {
 namespace shell {
 
 CastNetworkDelegate::CastNetworkDelegate() {
-  DetachFromThread();
+  DETACH_FROM_THREAD(thread_checker_);
 }
 
 CastNetworkDelegate::~CastNetworkDelegate() {
 }
 
-bool CastNetworkDelegate::OnCanAccessFile(const net::URLRequest& request,
-                                          const base::FilePath& path) const {
+bool CastNetworkDelegate::OnCanAccessFile(
+    const net::URLRequest& request,
+    const base::FilePath& original_path,
+    const base::FilePath& absolute_path) const {
   if (base::CommandLine::ForCurrentProcess()->
       HasSwitch(switches::kEnableLocalFileAccesses)) {
     return true;
   }
 
-  LOG(WARNING) << "Could not access file " << path.value()
+  LOG(WARNING) << "Could not access file " << original_path.value()
                << ". All file accesses are forbidden.";
   return false;
 }

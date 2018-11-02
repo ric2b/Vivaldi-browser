@@ -11,12 +11,13 @@
 <link rel="import" href="../settings_main/settings_main.html">
 <link rel="import" href="../settings_menu/settings_menu.html">
 <link rel="import" href="../settings_shared_css.html">
+<link rel="import" href="../page_visibility.html">
 <link rel="import" href="../prefs/prefs.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="../settings_vars_css.html">
 
 <if expr="chromeos">
-<link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
+<link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_onc_types.html">
 </if>
 
 <dom-module id="settings-ui">
@@ -24,16 +25,12 @@
     <style include="settings-shared">
       :host {
         @apply(--layout-fit);
-        -webkit-user-select: none;
+        -webkit-user-select: text;
         color: var(--primary-text-color);
         display: flex;
         flex-direction: column;
         line-height: 154%; /* Apply 20px line-height to all texts by default. */
         overflow: hidden;  /* Prevent double scroll bar bugs. */
-      }
-
-      .drawer-header {
-        outline: none;
       }
 
       .last {
@@ -92,12 +89,14 @@
         role="none"
         show-menu>
     </cr-toolbar>
-    <dialog id="drawer" is="cr-drawer" on-close="onMenuClosed_">
-      <div class="drawer-header" tabindex="-1">$i18n{settings}</div>
+    <dialog id="drawer" is="cr-drawer" on-close="onMenuClosed_"
+        heading="$i18n{settings}">
       <div class="drawer-content">
         <template is="dom-if" id="drawerTemplate">
           <settings-menu page-visibility="[[pageVisibility_]]"
               show-android-apps="[[showAndroidApps_]]"
+              show-multidevice="[[showMultidevice_]]"
+              have-play-store-app="[[havePlayStoreApp_]]"
               on-iron-activate="onIronActivate_"
               advanced-opened="{{advancedOpened_}}">
           </settings-menu>
@@ -112,6 +111,8 @@
           toolbar-spinner-active="{{toolbarSpinnerActive_}}"
           page-visibility="[[pageVisibility_]]"
           show-android-apps="[[showAndroidApps_]]"
+          show-multidevice="[[showMultidevice_]]"
+          have-play-store-app="[[havePlayStoreApp_]]"
           advanced-toggle-expanded="{{advancedOpened_}}">
       </settings-main>
     </div>

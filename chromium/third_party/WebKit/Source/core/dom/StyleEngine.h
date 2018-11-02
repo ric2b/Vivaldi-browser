@@ -31,6 +31,7 @@
 #define StyleEngine_h
 
 #include <memory>
+#include <utility>
 #include "core/CoreExport.h"
 #include "core/css/ActiveStyleSheets.h"
 #include "core/css/CSSFontSelectorClient.h"
@@ -39,9 +40,9 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/dom/Document.h"
-#include "core/dom/DocumentOrderedList.h"
 #include "core/dom/DocumentStyleSheetCollection.h"
 #include "core/dom/StyleEngineContext.h"
+#include "core/dom/TreeOrderedList.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
@@ -50,6 +51,7 @@
 #include "platform/wtf/ListHashSet.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/web/WebDocument.h"
 
 namespace blink {
 
@@ -93,7 +95,8 @@ class CORE_EXPORT StyleEngine final
   const HeapVector<TraceWrapperMember<StyleSheet>>&
   StyleSheetsForStyleSheetList(TreeScope&);
 
-  const HeapVector<TraceWrapperMember<CSSStyleSheet>>&
+  const HeapVector<
+      std::pair<WebStyleSheetId, TraceWrapperMember<CSSStyleSheet>>>&
   InjectedAuthorStyleSheets() const {
     return injected_author_style_sheets_;
   }
@@ -112,7 +115,8 @@ class CORE_EXPORT StyleEngine final
   void ViewportRulesChanged();
   void HtmlImportAddedOrRemoved();
 
-  void InjectAuthorSheet(StyleSheetContents* author_sheet);
+  WebStyleSheetId InjectAuthorSheet(StyleSheetContents* author_sheet);
+  void RemoveInjectedAuthorSheet(WebStyleSheetId author_sheet_id);
   CSSStyleSheet& EnsureInspectorStyleSheet();
   RuleSet* WatchedSelectorsRuleSet() {
     DCHECK(IsMaster());
@@ -181,7 +185,7 @@ class CORE_EXPORT StyleEngine final
 
   void ShadowRootRemovedFromDocument(ShadowRoot*);
   void AddTreeBoundaryCrossingScope(const TreeScope&);
-  const DocumentOrderedList& TreeBoundaryCrossingScopes() const {
+  const TreeOrderedList& TreeBoundaryCrossingScopes() const {
     return tree_boundary_crossing_scopes_;
   }
   void ResetAuthorStyle(TreeScope&);
@@ -356,7 +360,8 @@ class CORE_EXPORT StyleEngine final
   int pending_render_blocking_stylesheets_ = 0;
   int pending_body_stylesheets_ = 0;
 
-  HeapVector<TraceWrapperMember<CSSStyleSheet>> injected_author_style_sheets_;
+  HeapVector<std::pair<WebStyleSheetId, TraceWrapperMember<CSSStyleSheet>>>
+      injected_author_style_sheets_;
   Member<CSSStyleSheet> inspector_style_sheet_;
 
   TraceWrapperMember<DocumentStyleSheetCollection>
@@ -374,7 +379,7 @@ class CORE_EXPORT StyleEngine final
   bool tree_scopes_removed_ = false;
   UnorderedTreeScopeSet dirty_tree_scopes_;
   UnorderedTreeScopeSet active_tree_scopes_;
-  DocumentOrderedList tree_boundary_crossing_scopes_;
+  TreeOrderedList tree_boundary_crossing_scopes_;
 
   String preferred_stylesheet_set_name_;
   String selected_stylesheet_set_name_;
@@ -397,6 +402,8 @@ class CORE_EXPORT StyleEngine final
 
   std::unique_ptr<StyleResolverStats> style_resolver_stats_;
   unsigned style_for_element_count_ = 0;
+
+  WebStyleSheetId injected_author_sheets_id_count_ = 0;
 
   friend class StyleEngineTest;
 };

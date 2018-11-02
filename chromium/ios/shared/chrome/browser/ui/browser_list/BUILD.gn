@@ -15,6 +15,7 @@ source_set("browser_list") {
     "browser_list_session_service_factory.mm",
     "browser_list_session_service_impl.h",
     "browser_list_session_service_impl.mm",
+    "browser_user_data.h",
     "browser_web_state_list_delegate.h",
     "browser_web_state_list_delegate.mm",
   ]
@@ -28,7 +29,9 @@ source_set("browser_list") {
     "//ios/chrome/browser/sessions",
     "//ios/chrome/browser/sessions:serialisation",
     "//ios/chrome/browser/ssl",
+    "//ios/chrome/browser/web",
     "//ios/chrome/browser/web_state_list",
+    "//ios/shared/chrome/browser/ui/broadcaster",
     "//ios/shared/chrome/browser/ui/commands",
     "//ios/web",
   ]

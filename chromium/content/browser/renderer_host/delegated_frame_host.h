@@ -13,8 +13,8 @@
 #include "cc/output/begin_frame_args.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/compositor_frame_sink_support_client.h"
-#include "components/viz/frame_sinks/frame_evictor.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
+#include "components/viz/service/frame_sinks/frame_evictor.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/compositor/owned_mailbox.h"
 #include "content/browser/renderer_host/dip_util.h"
@@ -33,15 +33,12 @@ namespace base {
 class TickClock;
 }
 
-namespace cc {
-class CompositorFrameSinkSupport;
-}
-
 namespace media {
 class VideoFrame;
 }
 
 namespace viz {
+class CompositorFrameSinkSupport;
 class ReadbackYUVInterface;
 }
 
@@ -70,7 +67,7 @@ class CONTENT_EXPORT DelegatedFrameHostClient {
   virtual std::unique_ptr<CompositorResizeLock>
   DelegatedFrameHostCreateResizeLock() = 0;
 
-  virtual void OnBeginFrame(const cc::BeginFrameArgs& args) = 0;
+  virtual void OnBeginFrame() = 0;
   virtual bool IsAutoResizeEnabled() const = 0;
 };
 
@@ -83,10 +80,10 @@ class CONTENT_EXPORT DelegatedFrameHost
       public ui::CompositorVSyncManager::Observer,
       public ui::ContextFactoryObserver,
       public viz::FrameEvictorClient,
-      public NON_EXPORTED_BASE(cc::CompositorFrameSinkSupportClient),
+      public NON_EXPORTED_BASE(viz::CompositorFrameSinkSupportClient),
       public base::SupportsWeakPtr<DelegatedFrameHost> {
  public:
-  DelegatedFrameHost(const cc::FrameSinkId& frame_sink_id,
+  DelegatedFrameHost(const viz::FrameSinkId& frame_sink_id,
                      DelegatedFrameHostClient* client);
   ~DelegatedFrameHost() override;
 
@@ -108,19 +105,21 @@ class CONTENT_EXPORT DelegatedFrameHost
   // FrameEvictorClient implementation.
   void EvictDelegatedFrame() override;
 
-  // cc::CompositorFrameSinkSupportClient implementation.
+  // viz::CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const cc::ReturnedResourceArray& resources) override;
+      const std::vector<cc::ReturnedResource>& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface(const cc::LocalSurfaceId& id,
+  void ReclaimResources(
+      const std::vector<cc::ReturnedResource>& resources) override;
+  void WillDrawSurface(const viz::LocalSurfaceId& id,
                        const gfx::Rect& damage_rect) override;
+  void OnBeginFramePausedChanged(bool paused) override;
 
   // Public interface exposed to RenderWidgetHostView.
 
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink);
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink);
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame);
   void ClearDelegatedFrame();
   void WasHidden();
@@ -146,19 +145,19 @@ class CONTENT_EXPORT DelegatedFrameHost
       std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber);
   void EndFrameSubscription();
   bool HasFrameSubscriber() const { return !!frame_subscriber_; }
-  cc::FrameSinkId GetFrameSinkId();
+  viz::FrameSinkId GetFrameSinkId();
   // Returns a null SurfaceId if this DelegatedFrameHost has not yet created
   // a compositor Surface.
-  cc::SurfaceId SurfaceIdAtPoint(cc::SurfaceHittestDelegate* delegate,
-                                 const gfx::Point& point,
-                                 gfx::Point* transformed_point);
+  viz::SurfaceId SurfaceIdAtPoint(cc::SurfaceHittestDelegate* delegate,
+                                  const gfx::Point& point,
+                                  gfx::Point* transformed_point);
 
   // Given the SurfaceID of a Surface that is contained within this class'
   // Surface, find the relative transform between the Surfaces and apply it
   // to a point. Returns false if a Surface has not yet been created or if
   // |original_surface| is not embedded within our current Surface.
   bool TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       const cc::SurfaceId& original_surface,
+                                       const viz::SurfaceId& original_surface,
                                        gfx::Point* transformed_point);
 
   // Given a RenderWidgetHostViewBase that renders to a Surface that is
@@ -174,8 +173,8 @@ class CONTENT_EXPORT DelegatedFrameHost
   void DidNotProduceFrame(const cc::BeginFrameAck& ack);
 
   // Exposed for tests.
-  cc::SurfaceId SurfaceIdForTesting() const {
-    return cc::SurfaceId(frame_sink_id_, local_surface_id_);
+  viz::SurfaceId SurfaceIdForTesting() const {
+    return viz::SurfaceId(frame_sink_id_, local_surface_id_);
   }
 
   bool HasFrameForTesting() const { return has_frame_; }
@@ -249,10 +248,8 @@ class CONTENT_EXPORT DelegatedFrameHost
   void CreateCompositorFrameSinkSupport();
   void ResetCompositorFrameSinkSupport();
 
-  void DidFinishFrame(const cc::BeginFrameAck& ack);
-
-  const cc::FrameSinkId frame_sink_id_;
-  cc::LocalSurfaceId local_surface_id_;
+  const viz::FrameSinkId frame_sink_id_;
+  viz::LocalSurfaceId local_surface_id_;
   DelegatedFrameHostClient* const client_;
   ui::Compositor* compositor_;
 
@@ -279,10 +276,10 @@ class CONTENT_EXPORT DelegatedFrameHost
   SkColor background_color_;
 
   // State for rendering into a Surface.
-  std::unique_ptr<cc::CompositorFrameSinkSupport> support_;
+  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
   gfx::Size current_surface_size_;
   float current_scale_factor_;
-  cc::ReturnedResourceArray surface_returned_resources_;
+  std::vector<cc::ReturnedResource> surface_returned_resources_;
 
   // This lock is the one waiting for a frame of the right size to come back
   // from the renderer/GPU process. It is set from the moment the aura window
@@ -315,12 +312,9 @@ class CONTENT_EXPORT DelegatedFrameHost
   std::unique_ptr<viz::ReadbackYUVInterface> yuv_readback_pipeline_;
 
   bool needs_begin_frame_ = false;
-  uint32_t latest_confirmed_begin_frame_source_id_ = 0;
-  uint64_t latest_confirmed_begin_frame_sequence_number_ =
-      cc::BeginFrameArgs::kInvalidFrameNumber;
 
   bool has_frame_ = false;
-  cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   std::unique_ptr<viz::FrameEvictor> frame_evictor_;

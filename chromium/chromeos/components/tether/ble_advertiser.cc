@@ -6,7 +6,7 @@
 
 #include "base/bind.h"
 #include "chromeos/components/tether/ble_constants.h"
-#include "chromeos/components/tether/local_device_data_provider.h"
+#include "components/cryptauth/local_device_data_provider.h"
 #include "components/cryptauth/proto/cryptauth_api.pb.h"
 #include "components/cryptauth/remote_beacon_seed_fetcher.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -20,15 +20,82 @@ namespace {
 
 uint8_t kInvertedConnectionFlag = 0x01;
 
+// Handles the unregistration of a BluetoothAdvertisement in the case that its
+// intended owner (an IndividualAdvertisement) was destroyed before successful
+// registration. See
+// BleAdvertiser::IndividualAdvertisement::OnAdvertisementRegistered().
+void OnAdvertisementUnregisteredAfterOwnerDestruction(
+    const std::string& associated_device_id) {
+  PA_LOG(ERROR) << "Unregistered advertisement for device ID: "
+                << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(
+                       associated_device_id);
+}
+
+// Handles the failed unregistration of a BluetoothAdvertisement in the case
+// that its intended owner (an IndividualAdvertisement) was destroyed before
+// successful registration. See
+// BleAdvertiser::IndividualAdvertisement::OnAdvertisementRegistered().
+//
+// It is not expected that this function ever be called; that would indicate an
+// error in Bluetooth.
+void OnAdvertisementUnregisteredAfterOwnerDestructionFailure(
+    const std::string& associated_device_id,
+    device::BluetoothAdvertisement::ErrorCode error_code) {
+  PA_LOG(ERROR) << "Error unregistering advertisement. "
+                << "Device ID: \""
+                << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(
+                       associated_device_id)
+                << "\", Error code: " << error_code;
+}
+
 }  // namespace
 
+// TODO (hansberry): Remove this workaround once crbug.com/741050 has been
+// resolved.
+// static
+void BleAdvertiser::IndividualAdvertisement::OnAdvertisementRegistered(
+    base::WeakPtr<BleAdvertiser::IndividualAdvertisement>
+        individual_advertisement,
+    const std::string& associated_device_id,
+    scoped_refptr<device::BluetoothAdvertisement> advertisement) {
+  // It's possible that the IndividualAdvertisement that registered this
+  // BluetoothAdvertisement has been destroyed before being able to own the
+  // BluetoothAdvertisement. If the IndividualAdvertisement still exists, simply
+  // give it the BluetoothAdvertisement it registered. If not, unregister the
+  // BluetoothAdvertisement, because otherwise it will remain registered
+  // forever.
+  if (individual_advertisement.get()) {
+    individual_advertisement->OnAdvertisementRegisteredCallback(advertisement);
+  } else {
+    PA_LOG(WARNING) << "BluetoothAdvertisement registered, but the "
+                    << "IndividualAdvertisement which registered it no longer "
+                    << "exists. Unregistering the BluetoothAdvertisement.";
+    advertisement->Unregister(
+        base::Bind(&OnAdvertisementUnregisteredAfterOwnerDestruction,
+                   associated_device_id),
+        base::Bind(&OnAdvertisementUnregisteredAfterOwnerDestructionFailure,
+                   associated_device_id));
+  }
+}
+
 BleAdvertiser::IndividualAdvertisement::IndividualAdvertisement(
+    const std::string& device_id,
     scoped_refptr<device::BluetoothAdapter> adapter,
-    std::unique_ptr<cryptauth::DataWithTimestamp> advertisement_data)
-    : adapter_(adapter),
-      is_initializing_advertising_(false),
+    std::unique_ptr<cryptauth::DataWithTimestamp> advertisement_data,
+    const base::Closure& on_unregister_advertisement_success_callback,
+    const base::Callback<void(device::BluetoothAdvertisement::ErrorCode)>&
+        on_unregister_advertisement_error_callback,
+    std::unordered_set<std::string>* active_advertisement_device_ids_set)
+    : device_id_(device_id),
+      adapter_(adapter),
       advertisement_data_(std::move(advertisement_data)),
+      is_initializing_advertising_(false),
       advertisement_(nullptr),
+      on_unregister_advertisement_success_callback_(
+          on_unregister_advertisement_success_callback),
+      on_unregister_advertisement_error_callback_(
+          on_unregister_advertisement_error_callback),
+      active_advertisement_device_ids_set_(active_advertisement_device_ids_set),
       weak_ptr_factory_(this) {
   adapter_->AddObserver(this);
   AdvertiseIfPossible();
@@ -36,14 +103,18 @@ BleAdvertiser::IndividualAdvertisement::IndividualAdvertisement(
 
 BleAdvertiser::IndividualAdvertisement::~IndividualAdvertisement() {
   if (advertisement_) {
-    advertisement_->Unregister(
-        base::Bind(&IndividualAdvertisement::OnAdvertisementUnregisterSuccess,
-                   weak_ptr_factory_.GetWeakPtr()),
-        base::Bind(&IndividualAdvertisement::OnAdvertisementUnregisterFailure,
-                   weak_ptr_factory_.GetWeakPtr()));
+    advertisement_->Unregister(on_unregister_advertisement_success_callback_,
+                               on_unregister_advertisement_error_callback_);
   }
 
   adapter_->RemoveObserver(this);
+}
+
+void BleAdvertiser::IndividualAdvertisement::
+    OnPreviousAdvertisementUnregistered() {
+  DCHECK(active_advertisement_device_ids_set_->find(device_id_) ==
+         active_advertisement_device_ids_set_->end());
+  AdvertiseIfPossible();
 }
 
 void BleAdvertiser::IndividualAdvertisement::AdapterPoweredChanged(
@@ -59,13 +130,21 @@ void BleAdvertiser::IndividualAdvertisement::AdvertisementReleased(
 
   // If the advertisement was released, delete it and try again. Note that this
   // situation is not expected to occur under normal circumstances.
+  advertisement_->RemoveObserver(this);
   advertisement_ = nullptr;
+  active_advertisement_device_ids_set_->erase(device_id_);
+
   AdvertiseIfPossible();
 }
 
 void BleAdvertiser::IndividualAdvertisement::AdvertiseIfPossible() {
   if (!adapter_->IsPowered() || is_initializing_advertising_ ||
-      advertisement_) {
+      advertisement_ ||
+      active_advertisement_device_ids_set_->find(device_id_) !=
+          active_advertisement_device_ids_set_->end()) {
+    // It is not possible to advertise if the adapter is not powered. Likewise,
+    // we should not try to advertise if there is an advertisement already in
+    // progress.
     return;
   }
 
@@ -80,8 +159,8 @@ void BleAdvertiser::IndividualAdvertisement::AdvertiseIfPossible() {
 
   adapter_->RegisterAdvertisement(
       std::move(advertisement_data),
-      base::Bind(&IndividualAdvertisement::OnAdvertisementRegisteredCallback,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::Bind(&OnAdvertisementRegistered, weak_ptr_factory_.GetWeakPtr(),
+                 device_id_),
       base::Bind(&IndividualAdvertisement::OnAdvertisementErrorCallback,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -89,27 +168,25 @@ void BleAdvertiser::IndividualAdvertisement::AdvertiseIfPossible() {
 void BleAdvertiser::IndividualAdvertisement::OnAdvertisementRegisteredCallback(
     scoped_refptr<device::BluetoothAdvertisement> advertisement) {
   is_initializing_advertising_ = false;
+
   advertisement_ = advertisement;
+  advertisement_->AddObserver(this);
+  active_advertisement_device_ids_set_->insert(device_id_);
+
   PA_LOG(INFO) << "Advertisement registered. "
-               << "Service data: " << advertisement_data_->DataInHex() << ".";
+               << "Device ID: \""
+               << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(device_id_)
+               << "\", Service data: " << advertisement_data_->DataInHex();
 }
 
 void BleAdvertiser::IndividualAdvertisement::OnAdvertisementErrorCallback(
     device::BluetoothAdvertisement::ErrorCode error_code) {
   is_initializing_advertising_ = false;
-  PA_LOG(WARNING) << "Error registering advertisement. "
-                  << "Service data: " << advertisement_data_->DataInHex()
-                  << ", "
-                  << "Error code: " << error_code;
-}
-
-void BleAdvertiser::IndividualAdvertisement::
-    OnAdvertisementUnregisterSuccess() {}
-
-void BleAdvertiser::IndividualAdvertisement::OnAdvertisementUnregisterFailure(
-    device::BluetoothAdvertisement::ErrorCode error_code) {
-  PA_LOG(ERROR) << "Error while unregistering advertisement. Error code: "
-                << error_code;
+  PA_LOG(ERROR) << "Error registering advertisement. "
+                << "Device ID: \""
+                << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(device_id_)
+                << "\", Service data: " << advertisement_data_->DataInHex()
+                << ", Error code: " << error_code;
 }
 
 std::unique_ptr<device::BluetoothAdvertisement::UUIDList>
@@ -141,7 +218,7 @@ BleAdvertiser::IndividualAdvertisement::CreateServiceData() const {
 
 BleAdvertiser::BleAdvertiser(
     scoped_refptr<device::BluetoothAdapter> adapter,
-    const LocalDeviceDataProvider* local_device_data_provider,
+    const cryptauth::LocalDeviceDataProvider* local_device_data_provider,
     const cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher)
     : BleAdvertiser(adapter,
                     base::MakeUnique<cryptauth::ForegroundEidGenerator>(),
@@ -154,15 +231,17 @@ BleAdvertiser::BleAdvertiser(
     scoped_refptr<device::BluetoothAdapter> adapter,
     std::unique_ptr<cryptauth::ForegroundEidGenerator> eid_generator,
     const cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-    const LocalDeviceDataProvider* local_device_data_provider)
+    const cryptauth::LocalDeviceDataProvider* local_device_data_provider)
     : adapter_(adapter),
       eid_generator_(std::move(eid_generator)),
       remote_beacon_seed_fetcher_(remote_beacon_seed_fetcher),
-      local_device_data_provider_(local_device_data_provider) {}
+      local_device_data_provider_(local_device_data_provider),
+      weak_ptr_factory_(this) {}
 
 bool BleAdvertiser::StartAdvertisingToDevice(
     const cryptauth::RemoteDevice& remote_device) {
-  if (device_id_to_advertisement_map_.size() >= kMaxConcurrentAdvertisements) {
+  if (device_id_to_individual_advertisement_map_.size() >=
+      kMaxConcurrentAdvertisements) {
     PA_LOG(ERROR) << "Attempted to register a device when the maximum number "
                   << "of devices have already been registered.";
     return false;
@@ -204,15 +283,52 @@ bool BleAdvertiser::StartAdvertisingToDevice(
     return false;
   }
 
-  device_id_to_advertisement_map_[remote_device.GetDeviceId()] =
-      base::MakeUnique<IndividualAdvertisement>(adapter_,
-                                                std::move(advertisement));
+  std::string device_id = remote_device.GetDeviceId();
+  device_id_to_individual_advertisement_map_[device_id] =
+      base::MakeUnique<IndividualAdvertisement>(
+          remote_device.GetDeviceId(), adapter_, std::move(advertisement),
+          base::Bind(&BleAdvertiser::OnUnregisterAdvertisementSuccess,
+                     weak_ptr_factory_.GetWeakPtr(), device_id),
+          base::Bind(&BleAdvertiser::OnUnregisterAdvertisementError,
+                     weak_ptr_factory_.GetWeakPtr(), device_id),
+          &active_advertisement_device_ids_set_);
   return true;
 }
 
 bool BleAdvertiser::StopAdvertisingToDevice(
     const cryptauth::RemoteDevice& remote_device) {
-  return device_id_to_advertisement_map_.erase(remote_device.GetDeviceId()) > 0;
+  return device_id_to_individual_advertisement_map_.erase(
+             remote_device.GetDeviceId()) > 0;
+}
+
+void BleAdvertiser::OnUnregisterAdvertisementSuccess(
+    const std::string& associated_device_id) {
+  RemoveAdvertisingDeviceIdAndRetry(associated_device_id);
+}
+
+void BleAdvertiser::OnUnregisterAdvertisementError(
+    const std::string& associated_device_id,
+    device::BluetoothAdvertisement::ErrorCode error_code) {
+  PA_LOG(ERROR) << "Error unregistering advertisement. "
+                << "Device ID: \""
+                << cryptauth::RemoteDevice::TruncateDeviceIdForLogs(
+                       associated_device_id)
+                << "\", Error code: " << error_code;
+
+  // Even though there was an error unregistering the advertisement, remove it
+  // from the set anyway so that it is possible to try registering the
+  // advertisement again. Note that this situation is not expected to occur
+  // since unregistering an active advertisement should always succeed.
+  RemoveAdvertisingDeviceIdAndRetry(associated_device_id);
+}
+
+void BleAdvertiser::RemoveAdvertisingDeviceIdAndRetry(
+    const std::string& device_id) {
+  active_advertisement_device_ids_set_.erase(device_id);
+
+  auto it = device_id_to_individual_advertisement_map_.find(device_id);
+  if (it != device_id_to_individual_advertisement_map_.end())
+    it->second->OnPreviousAdvertisementUnregistered();
 }
 
 }  // namespace tether

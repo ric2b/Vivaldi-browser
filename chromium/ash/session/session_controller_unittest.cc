@@ -91,10 +91,12 @@ class SessionControllerTest : public testing::Test {
   void UpdateSession(uint32_t session_id, const std::string& email) {
     mojom::UserSessionPtr session = mojom::UserSession::New();
     session->session_id = session_id;
-    session->type = user_manager::USER_TYPE_REGULAR;
-    session->account_id = AccountId::FromUserEmail(email);
-    session->display_name = email;
-    session->display_email = email;
+    session->user_info = mojom::UserInfo::New();
+    session->user_info->type = user_manager::USER_TYPE_REGULAR;
+    session->user_info->account_id = AccountId::FromUserEmail(email);
+    session->user_info->display_name = email;
+    session->user_info->display_email = email;
+    session->user_info->is_new_profile = false;
 
     controller_->UpdateUserSession(std::move(session));
   }
@@ -102,7 +104,7 @@ class SessionControllerTest : public testing::Test {
   std::string GetUserSessionEmails() const {
     std::string emails;
     for (const auto& session : controller_->GetUserSessions()) {
-      emails += session->display_email + ",";
+      emails += session->user_info->display_email + ",";
     }
     return emails;
   }
@@ -256,10 +258,11 @@ TEST_F(SessionControllerTest, GetLoginStateForActiveSession) {
   for (const auto& test_case : kTestCases) {
     mojom::UserSessionPtr session = mojom::UserSession::New();
     session->session_id = 1u;
-    session->type = test_case.user_type;
-    session->account_id = AccountId::FromUserEmail("user1@test.com");
-    session->display_name = "User 1";
-    session->display_email = "user1@test.com";
+    session->user_info = mojom::UserInfo::New();
+    session->user_info->type = test_case.user_type;
+    session->user_info->account_id = AccountId::FromUserEmail("user1@test.com");
+    session->user_info->display_name = "User 1";
+    session->user_info->display_email = "user1@test.com";
     controller()->UpdateUserSession(std::move(session));
 
     EXPECT_EQ(test_case.expected_status, controller()->login_status())
@@ -349,7 +352,8 @@ TEST_F(SessionControllerTest, UserSessionUnblockedWithRunningUnlockAnimation) {
 TEST_F(SessionControllerTest, IsUserSupervised) {
   mojom::UserSessionPtr session = mojom::UserSession::New();
   session->session_id = 1u;
-  session->type = user_manager::USER_TYPE_SUPERVISED;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_SUPERVISED;
   controller()->UpdateUserSession(std::move(session));
 
   EXPECT_TRUE(controller()->IsUserSupervised());
@@ -358,13 +362,72 @@ TEST_F(SessionControllerTest, IsUserSupervised) {
 TEST_F(SessionControllerTest, IsUserChild) {
   mojom::UserSessionPtr session = mojom::UserSession::New();
   session->session_id = 1u;
-  session->type = user_manager::USER_TYPE_CHILD;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_CHILD;
   controller()->UpdateUserSession(std::move(session));
 
   EXPECT_TRUE(controller()->IsUserChild());
 
   // Child accounts are supervised.
   EXPECT_TRUE(controller()->IsUserSupervised());
+}
+
+TEST_F(SessionControllerTest, GetUserType) {
+  // Child accounts
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_CHILD;
+  controller()->UpdateUserSession(std::move(session));
+  EXPECT_EQ(user_manager::USER_TYPE_CHILD, controller()->GetUserType());
+
+  // Regular accounts
+  session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_REGULAR;
+  controller()->UpdateUserSession(std::move(session));
+  EXPECT_EQ(user_manager::USER_TYPE_REGULAR, controller()->GetUserType());
+}
+
+TEST_F(SessionControllerTest, IsUserPrimary) {
+  controller()->ClearUserSessionsForTest();
+
+  // The first added user is a primary user
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_REGULAR;
+  controller()->UpdateUserSession(std::move(session));
+  EXPECT_TRUE(controller()->IsUserPrimary());
+
+  // The users added thereafter are not primary users
+  session = mojom::UserSession::New();
+  session->session_id = 2u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_REGULAR;
+  controller()->UpdateUserSession(std::move(session));
+  // Simulates user switching by changing the order of session_ids.
+  controller()->SetUserSessionOrder({2u, 1u});
+  EXPECT_FALSE(controller()->IsUserPrimary());
+}
+
+TEST_F(SessionControllerTest, IsUserFirstLogin) {
+  mojom::UserSessionPtr session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_REGULAR;
+  controller()->UpdateUserSession(std::move(session));
+  EXPECT_FALSE(controller()->IsUserFirstLogin());
+
+  // user_info->is_new_profile being true means the user is first time login.
+  session = mojom::UserSession::New();
+  session->session_id = 1u;
+  session->user_info = mojom::UserInfo::New();
+  session->user_info->type = user_manager::USER_TYPE_REGULAR;
+  session->user_info->is_new_profile = true;
+  controller()->UpdateUserSession(std::move(session));
+  EXPECT_TRUE(controller()->IsUserFirstLogin());
 }
 
 }  // namespace

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/ios/ios_util.h"
 #include "base/mac/bind_objc_block.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
@@ -15,6 +16,7 @@
 #import "ios/chrome/browser/ui/settings/settings_collection_view_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #include "ios/chrome/browser/ui/tools_menu/tools_menu_constants.h"
+#include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/histogram_test_util.h"
@@ -22,17 +24,16 @@
 #import "ios/chrome/test/app/tab_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
-#import "ios/web/public/test/http_server.h"
-#import "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/delayed_response_provider.h"
-#include "ios/web/public/test/response_providers/html_response_provider.h"
+#include "ios/web/public/test/http_server/delayed_response_provider.h"
+#include "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
 
@@ -42,6 +43,7 @@
 
 using chrome_test_util::OpenLinkInNewTabButton;
 using chrome_test_util::SettingsMenuButton;
+using chrome_test_util::SettingsMenuPrivacyButton;
 using tab_usage_recorder_test_util::OpenNewIncognitoTabUsingUIAndEvictMainTabs;
 using tab_usage_recorder_test_util::SwitchToNormalMode;
 
@@ -91,10 +93,8 @@ void NewMainTabWithURL(const GURL& url, const std::string& word) {
   int number_of_tabs = chrome_test_util::GetMainTabCount();
   chrome_test_util::OpenNewTab();
   [ChromeEarlGrey loadURL:url];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::WebViewContainingText(word)]
-      assertWithMatcher:grey_notNil()];
-  chrome_test_util::AssertMainTabCount(number_of_tabs + 1);
+  [ChromeEarlGrey waitForWebViewContainingText:word];
+  [ChromeEarlGrey waitForMainTabCount:(number_of_tabs + 1)];
 }
 
 // Opens 2 new tabs with different URLs.
@@ -117,8 +117,7 @@ void OpenNewMainTabUsingUIUnsynced() {
   id<GREYMatcher> new_main_tab_button_matcher =
       grey_accessibilityID(kToolsMenuNewTabId);
   WaitAndTap(new_main_tab_button_matcher, @"New tab button");
-
-  chrome_test_util::AssertMainTabCount(nb_main_tab + 1);
+  [ChromeEarlGrey waitForMainTabCount:(nb_main_tab + 1)];
 }
 
 // Closes a tab in the current tab model. Synchronize on tab number afterwards.
@@ -131,16 +130,6 @@ void CloseTabAtIndexAndSync(NSUInteger i) {
   GREYAssert(
       testing::WaitUntilConditionOrTimeout(kWaitElementTimeout, condition),
       @"Waiting for tab to close");
-}
-
-// Open the settings submenu. Assumes that settings menu is visible.
-void OpenSettingsSubMenuUnsynced(int submenu) {
-  id<GREYMatcher> settings_button_matcher =
-      grey_text(l10n_util::GetNSString(submenu));
-  [[[EarlGrey selectElementWithMatcher:settings_button_matcher]
-         usingSearchAction:grey_swipeSlowInDirection(kGREYDirectionUp)
-      onElementWithMatcher:grey_accessibilityID(kSettingsCollectionViewId)]
-      performAction:grey_tap()];
 }
 
 // Open the settings menu. Wait for the settings menu to appear.
@@ -188,7 +177,7 @@ void SelectTabUsingUI(NSString* title) {
 
   // Open two tabs with urls.
   OpenTwoTabs();
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   // Switch between the two tabs.  Both are currently in memory.
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
 
@@ -205,9 +194,7 @@ void SelectTabUsingUI(NSString* title) {
 
   // Switch back to the normal tabs. Should be on tab one.
   SwitchToNormalMode();
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
 
   histogramTester.ExpectTotalCount(kSelectedTabHistogramName, 2, failureBlock);
   histogramTester.ExpectBucketCount(kSelectedTabHistogramName,
@@ -232,11 +219,9 @@ void SelectTabUsingUI(NSString* title) {
   for (NSUInteger i = 0; i < numberOfTabs; i++) {
     chrome_test_util::OpenNewTab();
     [ChromeEarlGrey loadURL:url1];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                            kURL1FirstWord)]
-        assertWithMatcher:grey_notNil()];
+    [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
+    [ChromeEarlGrey waitForMainTabCount:(i + 1)];
   }
-  chrome_test_util::AssertMainTabCount(numberOfTabs);
 
   // Switch between the tabs. They are currently in memory.
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
@@ -262,23 +247,19 @@ void SelectTabUsingUI(NSString* title) {
                                                     }),
                @"JavaScript to reload each tab did not finish");
     [ChromeEarlGreyUI reload];
-    [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                            kURL1FirstWord)]
-        assertWithMatcher:grey_notNil()];
+    [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
   }
 
   // Evict the tab. Create a dummy tab so that switching back to normal mode
   // does not trigger a reload immediatly.
   chrome_test_util::OpenNewTab();
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
-  chrome_test_util::AssertIncognitoTabCount(1);
+  [ChromeEarlGrey waitForIncognitoTabCount:1];
 
   // Switch back to the normal tabs. Should be on tab one.
   SwitchToNormalMode();
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
 
   // Verify that one page-load count has been recorded. It should contain two
   // page loads for each tab created.
@@ -303,7 +284,7 @@ void SelectTabUsingUI(NSString* title) {
 
   // Open two tabs with urls.
   OpenTwoTabs();
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   // Set the normal tabs as 'cold start' tabs.
   GREYAssertTrue(chrome_test_util::SetCurrentTabsToBeColdStartTabs(),
                  @"Fail to state tabs as cold start tabs");
@@ -311,20 +292,15 @@ void SelectTabUsingUI(NSString* title) {
   // Open two incognito tabs with urls, clearing normal tabs from memory.
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
-  chrome_test_util::AssertIncognitoTabCount(2);
+  [ChromeEarlGrey waitForIncognitoTabCount:2];
 
   // Switch back to the normal tabs.
   SwitchToNormalMode();
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL2FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL2FirstWord];
 
   // Select the other one so it also reloads.
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
-
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
   FailureBlock failureBlock = ^(NSString* error) {
     GREYFail(error);
   };
@@ -340,9 +316,7 @@ void SelectTabUsingUI(NSString* title) {
   chrome_test_util::SelectTabAtIndexInCurrentMode(1);
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
 
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
   histogramTester.ExpectBucketCount(kSelectedTabHistogramName,
                                     TabUsageRecorder::EVICTED_DUE_TO_COLD_START,
                                     1, failureBlock);
@@ -362,7 +336,7 @@ void SelectTabUsingUI(NSString* title) {
 
   // Open two tabs with urls.
   OpenTwoTabs();
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Simulate going into the background.
   GREYAssertTrue(chrome_test_util::SimulateTabsBackgrounding(),
@@ -376,9 +350,7 @@ void SelectTabUsingUI(NSString* title) {
 
   // Switch back to the normal tabs.
   SwitchToNormalMode();
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL2FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL2FirstWord];
 
   const GURL url1 = web::test::HttpServer::MakeUrl(kTestUrl1);
   const GURL url2 = web::test::HttpServer::MakeUrl(kTestUrl2);
@@ -388,9 +360,7 @@ void SelectTabUsingUI(NSString* title) {
   histogramTester.ExpectTotalCount(kEvictedTabReloadTime, 1, failureBlock);
 
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
   [[EarlGrey
       selectElementWithMatcher:chrome_test_util::OmniboxText(url1.GetContent())]
       assertWithMatcher:grey_notNil()];
@@ -406,13 +376,13 @@ void SelectTabUsingUI(NSString* title) {
     GREYFail(error);
   };
 
+  chrome_test_util::CloseAllTabsInCurrentMode();
   GURL URL = web::test::HttpServer::MakeUrl(kTestUrl1);
   NewMainTabWithURL(URL, kURL1FirstWord);
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
   SwitchToNormalMode();
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kURL1FirstWord)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kURL1FirstWord];
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   histogramTester.ExpectUniqueSample(kEvictedTabReloadSuccessRate,
                                      TabUsageRecorder::LOAD_SUCCESS, 1,
@@ -449,12 +419,19 @@ void SelectTabUsingUI(NSString* title) {
 
   SwitchToNormalMode();
 
+  // Turn off synchronization of GREYAssert to test the pending states.
+  [[GREYConfiguration sharedInstance]
+          setValue:@(NO)
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
   GREYAssert(
       [[GREYCondition conditionWithName:@"Wait for tab to restart loading."
                                   block:^BOOL() {
                                     return chrome_test_util::IsLoading();
                                   }] waitWithTimeout:kWaitElementTimeout],
       @"Tab did not start loading.");
+  [[GREYConfiguration sharedInstance]
+          setValue:@(YES)
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
 
   // This method is not synced on EarlGrey.
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
@@ -528,15 +505,13 @@ void SelectTabUsingUI(NSString* title) {
           setValue:@(NO)
       forConfigKey:kGREYConfigKeySynchronizationEnabled];
   OpenSettingsMenuUnsynced();
-  OpenSettingsSubMenuUnsynced(IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY);
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsMenuPrivacyButton()];
   Wait(grey_accessibilityID(kPrivacyCollectionViewId),
        @"Privacy settings view.");
 
   WaitAndTap(chrome_test_util::NavigationBarDoneButton(), @"Close settings");
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          responses[slowURL])]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:responses[slowURL]];
 
   [[GREYConfiguration sharedInstance]
           setValue:@(YES)
@@ -647,9 +622,7 @@ void SelectTabUsingUI(NSString* title) {
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
   SwitchToNormalMode();
   chrome_test_util::SelectTabAtIndexInCurrentMode(tabIndex);
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          "arrived")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"arrived"];
 
   FailureBlock failureBlock = ^(NSString* error) {
     GREYFail(error);
@@ -689,18 +662,13 @@ void SelectTabUsingUI(NSString* title) {
   // Click the link.
   chrome_test_util::TapWebViewElementWithId("link");
 
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::WebViewContainingText("Whee")]
-      assertWithMatcher:grey_notNil()];
-
+  [ChromeEarlGrey waitForWebViewContainingText:"Whee"];
   NSUInteger tabIndex = chrome_test_util::GetMainTabCount() - 1;
   chrome_test_util::OpenNewTab();
   OpenNewIncognitoTabUsingUIAndEvictMainTabs();
   SwitchToNormalMode();
   chrome_test_util::SelectTabAtIndexInCurrentMode(tabIndex);
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::WebViewContainingText("Whee")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"Whee"];
 
   // Verify that the page-load count has been recorded.  It should contain a
   // sum of 2 - one sample with 2 page loads.
@@ -752,14 +720,12 @@ void SelectTabUsingUI(NSString* title) {
 
   [[EarlGrey selectElementWithMatcher:OpenLinkInNewTabButton()]
       performAction:grey_tap()];
-  chrome_test_util::AssertMainTabCount(numberOfTabs + 1);
+  [ChromeEarlGrey waitForMainTabCount:(numberOfTabs + 1)];
 
   SelectTabUsingUI(base::SysUTF8ToNSString(destinationURL.GetContent()));
 
   [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
-  [[EarlGrey
-      selectElementWithMatcher:chrome_test_util::WebViewContainingText("Whee")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"Whee"];
 
   FailureBlock failureBlock = ^(NSString* error) {
     GREYFail(error);

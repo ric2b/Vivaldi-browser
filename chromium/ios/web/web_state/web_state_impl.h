@@ -30,6 +30,7 @@
 @protocol CRWWebViewProxy;
 @class NSURLRequest;
 @class NSURLResponse;
+@protocol CRWWebViewNavigationProxy;
 
 namespace net {
 class HttpResponseHeaders;
@@ -208,6 +209,8 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   id<CRWWebViewProxy> GetWebViewProxy() const override;
   WebStateInterfaceProvider* GetWebStateInterfaceProvider() override;
   bool HasOpener() const override;
+  void TakeSnapshot(const SnapshotCallback& callback,
+                    CGSize target_size) const override;
   base::WeakPtr<WebState> AsWeakPtr() override;
 
   // Adds |interstitial|'s view to the web controller's content view.
@@ -267,6 +270,7 @@ class WebStateImpl : public WebState, public NavigationManagerDelegate {
   void UpdateHttpResponseHeaders(const GURL& url);
 
   WebState* GetWebState() override;
+  id<CRWWebViewNavigationProxy> GetWebViewNavigationProxy() const override;
 
  protected:
   void AddObserver(WebStateObserver* observer) override;

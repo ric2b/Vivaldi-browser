@@ -15,6 +15,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/update_client/action_runner.h"
 #include "components/update_client/component_unpacker.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/protocol_builder.h"
@@ -25,36 +26,35 @@
 
 // The state machine representing how a CRX component changes during an update.
 //
-//
-//                  on-demand                on-demand
-//   +--------------------------> kNew <---------------+-------------+
-//   |                              |                  |             |
-//   |                              V                  |             |
-//   |   +---------------0----> kChecking -<-------+---|---<-----+   |
-//   |   |                          |              |   |         |   |
-//   |   |            error         V       no     |   |         |   |
-//  kUpdateError <------------- [update?] ->---- kUpToDate     kUpdated
-//     ^                            |                              ^
-//     |                        yes |                              |
-//     |                            V                              |
-//     |                        kCanUpdate                         |
-//     |                            |                              |
-//     |                            V              no              |
-//     |                 [differential update?]--->----+           |
-//     |                            |                  |           |
-//     |                        yes |                  |           |
-//     |                            V          error   |           |
-//     |                 kDownloadingDiff --->---------+           |
-//     |                            |                  |           |
-//     |                            |                  |           |
-//     |                            V          error   |           |
-//     |                     kUpdatingDiff --->--------+-----------+ success
-//     |                                               |           |
-//     |              error                            V           |
-//     +----------------------------------------- kDownloading     |
-//     |                                               |           |
-//     |              error                            V           |
-//     +------------------------------------------ kUpdating ->----+ success
+//     +------------------------> kNew <---------------------+--------+
+//     |                            |                        |        |
+//     |                            V                        |        |
+//     |                        kChecking                    |        |
+//     |                            |                        |        |
+//     |                error       V     no           no    |        |
+//  kUpdateError <------------- [update?] -> [action?] -> kUpToDate  kUpdated
+//     ^                            |           |            ^        ^
+//     |                        yes |           | yes        |        |
+//     |                            V           |            |        |
+//     |                        kCanUpdate      +--------> kRun       |
+//     |                            |                                 |
+//     |                no          V                                 |
+//     |               +-<- [differential update?]                    |
+//     |               |               |                              |
+//     |               |           yes |                              |
+//     |               | error         V                              |
+//     |               +-<----- kDownloadingDiff            kRun---->-+
+//     |               |               |                     ^        |
+//     |               |               |                 yes |        |
+//     |               | error         V                     |        |
+//     |               +-<----- kUpdatingDiff ---------> [action?] ->-+
+//     |               |                                     ^     no
+//     |    error      V                                     |
+//     +-<-------- kDownloading                              |
+//     |               |                                     |
+//     |               |                                     |
+//     |    error      V                                     |
+//     +-<-------- kUpdating --------------------------------+
 
 namespace update_client {
 
@@ -70,7 +70,7 @@ CrxInstaller::Result DoInstallOnBlockingTaskRunner(
     const std::string& fingerprint,
     const scoped_refptr<CrxInstaller>& installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
-  DCHECK(blocking_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner->RunsTasksInCurrentSequence());
 
   if (static_cast<int>(fingerprint.size()) !=
       base::WriteFile(
@@ -83,7 +83,7 @@ CrxInstaller::Result DoInstallOnBlockingTaskRunner(
   if (!manifest)
     return CrxInstaller::Result(InstallError::BAD_MANIFEST);
 
-  return installer->Install(*manifest, unpack_path);
+  return installer->Install(std::move(manifest), unpack_path);
 }
 
 void InstallOnBlockingTaskRunner(
@@ -93,7 +93,7 @@ void InstallOnBlockingTaskRunner(
     const std::string& fingerprint,
     const scoped_refptr<CrxInstaller>& installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
-  DCHECK(blocking_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner->RunsTasksInCurrentSequence());
 
   DCHECK(base::DirectoryExists(unpack_path));
   const auto result = DoInstallOnBlockingTaskRunner(
@@ -117,7 +117,7 @@ void UnpackCompleteOnBlockingTaskRunner(
     const scoped_refptr<CrxInstaller>& installer,
     InstallOnBlockingTaskRunnerCompleteCallback callback,
     const ComponentUnpacker::Result& result) {
-  DCHECK(blocking_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner->RunsTasksInCurrentSequence());
 
   update_client::DeleteFileAndEmptyParentDirectory(crx_path);
 
@@ -144,7 +144,7 @@ void StartInstallOnBlockingTaskRunner(
     const scoped_refptr<CrxInstaller>& installer,
     const scoped_refptr<OutOfProcessPatcher>& oop_patcher,
     InstallOnBlockingTaskRunnerCompleteCallback callback) {
-  DCHECK(blocking_task_runner->RunsTasksOnCurrentThread());
+  DCHECK(blocking_task_runner->RunsTasksInCurrentSequence());
 
   auto unpacker = base::MakeRefCounted<ComponentUnpacker>(
       pk_hash, crx_path, installer, oop_patcher, blocking_task_runner);
@@ -175,6 +175,7 @@ void Component::Handle(CallbackHandleComplete callback) {
 void Component::ChangeState(std::unique_ptr<State> next_state) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
+  previous_state_ = state();
   if (next_state)
     state_ = std::move(next_state);
 
@@ -348,7 +349,10 @@ void Component::StateChecking::UpdateCheckComplete() {
     }
 
     if (component.status_ == "noupdate") {
-      TransitionState(base::MakeUnique<StateUpToDate>(&component));
+      if (component.action_run_.empty())
+        TransitionState(base::MakeUnique<StateUpToDate>(&component));
+      else
+        TransitionState(base::MakeUnique<StateRun>(&component));
       return;
     }
   }
@@ -429,8 +433,8 @@ void Component::StateUpToDate::DoHandle() {
 
   auto& component = State::component();
 
-  TransitionState(nullptr);
   component.NotifyObservers(Events::COMPONENT_NOT_UPDATED);
+  TransitionState(nullptr);
 }
 
 Component::StateDownloadingDiff::StateDownloadingDiff(Component* component)
@@ -448,8 +452,7 @@ void Component::StateDownloadingDiff::DoHandle() {
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
-      update_context.config->RequestContext(),
-      update_context.blocking_task_runner);
+      update_context.config->RequestContext());
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
@@ -515,8 +518,7 @@ void Component::StateDownloading::DoHandle() {
 
   crx_downloader_ = update_context.crx_downloader_factory(
       component.CanDoBackgroundDownload(),
-      update_context.config->RequestContext(),
-      update_context.blocking_task_runner);
+      update_context.config->RequestContext());
 
   const auto& id = component.id_;
   crx_downloader_->set_progress_callback(
@@ -619,7 +621,10 @@ void Component::StateUpdatingDiff::InstallComplete(int error_category,
   DCHECK_EQ(0, component.error_code_);
   DCHECK_EQ(0, component.extra_code1_);
 
-  TransitionState(base::MakeUnique<StateUpdated>(&component));
+  if (component.action_run_.empty())
+    TransitionState(base::MakeUnique<StateUpdated>(&component));
+  else
+    TransitionState(base::MakeUnique<StateRun>(&component));
 }
 
 Component::StateUpdating::StateUpdating(Component* component)
@@ -670,7 +675,10 @@ void Component::StateUpdating::InstallComplete(int error_category,
   DCHECK_EQ(0, component.error_code_);
   DCHECK_EQ(0, component.extra_code1_);
 
-  TransitionState(base::MakeUnique<StateUpdated>(&component));
+  if (component.action_run_.empty())
+    TransitionState(base::MakeUnique<StateUpdated>(&component));
+  else
+    TransitionState(base::MakeUnique<StateRun>(&component));
 }
 
 Component::StateUpdated::StateUpdated(Component* component)
@@ -691,8 +699,8 @@ void Component::StateUpdated::DoHandle() {
 
   component.AppendEvent(BuildUpdateCompleteEventElement(component));
 
-  TransitionState(nullptr);
   component.NotifyObservers(Events::COMPONENT_UPDATED);
+  TransitionState(nullptr);
 }
 
 Component::StateUninstalled::StateUninstalled(Component* component)
@@ -711,6 +719,48 @@ void Component::StateUninstalled::DoHandle() {
   component.AppendEvent(BuildUninstalledEventElement(component));
 
   TransitionState(nullptr);
+}
+
+Component::StateRun::StateRun(Component* component)
+    : State(component, ComponentState::kRun) {}
+
+Component::StateRun::~StateRun() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+}
+
+void Component::StateRun::DoHandle() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  const auto& component = State::component();
+  action_runner_ = base::MakeUnique<ActionRunner>(
+      component, component.update_context_.blocking_task_runner,
+      component.update_context_.config->GetRunActionKeyHash());
+
+  action_runner_->Run(
+      base::Bind(&StateRun::ActionRunComplete, base::Unretained(this)));
+}
+
+void Component::StateRun::ActionRunComplete(bool succeeded,
+                                            int error_code,
+                                            int extra_code1) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  auto& component = State::component();
+
+  component.AppendEvent(
+      BuildActionRunEventElement(succeeded, error_code, extra_code1));
+  switch (component.previous_state_) {
+    case ComponentState::kChecking:
+      TransitionState(base::MakeUnique<StateUpToDate>(&component));
+      return;
+    case ComponentState::kUpdating:
+    case ComponentState::kUpdatingDiff:
+      TransitionState(base::MakeUnique<StateUpdated>(&component));
+      return;
+    default:
+      break;
+  }
+  NOTREACHED();
 }
 
 }  // namespace update_client

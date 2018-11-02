@@ -33,18 +33,11 @@ void WriteMessage(const ScopedMessagePipeHandle& handle,
 }
 
 std::string ReadMessage(const ScopedMessagePipeHandle& handle) {
-  uint32_t num_bytes = 0;
-  uint32_t num_handles = 0;
-  MojoResult rv = ReadMessageRaw(handle.get(), nullptr, &num_bytes, nullptr,
-                                 &num_handles, MOJO_READ_MESSAGE_FLAG_NONE);
-  CHECK_EQ(MOJO_RESULT_RESOURCE_EXHAUSTED, rv);
-  CHECK_EQ(0u, num_handles);
-
-  std::vector<char> buffer(num_bytes);
-  rv = ReadMessageRaw(handle.get(), buffer.data(), &num_bytes, nullptr,
-                      &num_handles, MOJO_READ_MESSAGE_FLAG_NONE);
+  std::vector<uint8_t> bytes;
+  MojoResult rv = ReadMessageRaw(handle.get(), &bytes, nullptr,
+                                 MOJO_READ_MESSAGE_FLAG_NONE);
   CHECK_EQ(MOJO_RESULT_OK, rv);
-  return std::string(buffer.data(), buffer.size());
+  return std::string(bytes.begin(), bytes.end());
 }
 
 class ThreadedRunner : public base::SimpleThread {
@@ -98,7 +91,7 @@ TEST_F(WaitTest, Basic) {
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE,
             c_hss.satisfied_signals);
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE |
-                MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+                MOJO_HANDLE_SIGNAL_PEER_CLOSED | MOJO_HANDLE_SIGNAL_PEER_REMOTE,
             c_hss.satisfiable_signals);
 
   HandleSignalsState hss;
@@ -207,12 +200,12 @@ TEST_F(WaitManyTest, Basic) {
   EXPECT_EQ(1u, result_index);
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_WRITABLE, c_hss[0].satisfied_signals);
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE |
-                MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+                MOJO_HANDLE_SIGNAL_PEER_CLOSED | MOJO_HANDLE_SIGNAL_PEER_REMOTE,
             c_hss[0].satisfiable_signals);
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE,
             c_hss[1].satisfied_signals);
   EXPECT_EQ(MOJO_HANDLE_SIGNAL_READABLE | MOJO_HANDLE_SIGNAL_WRITABLE |
-                MOJO_HANDLE_SIGNAL_PEER_CLOSED,
+                MOJO_HANDLE_SIGNAL_PEER_CLOSED | MOJO_HANDLE_SIGNAL_PEER_REMOTE,
             c_hss[1].satisfiable_signals);
 
   EXPECT_EQ(MOJO_RESULT_OK, WaitMany(handles, signals, 2, &result_index, hss));

@@ -28,7 +28,6 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/l10n/l10n_util.h"
-#include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
 
 namespace chromeos {
 
@@ -145,8 +144,7 @@ class NetworkConfigMessageHandler : public content::WebUIMessageHandler {
     std::string shill_type = (onc_type == ::onc::network_type::kVPN)
                                  ? shill::kTypeVPN
                                  : shill::kTypeWifi;
-    NetworkConfigView::ShowForType(
-        shill_type, web_ui()->GetWebContents()->GetTopLevelNativeWindow());
+    NetworkConfigView::ShowForType(shill_type);
   }
 
   base::WeakPtrFactory<NetworkConfigMessageHandler> weak_ptr_factory_;

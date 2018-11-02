@@ -4,17 +4,31 @@
 
 #include "modules/payments/PaymentRequestEvent.h"
 
+#include "bindings/core/v8/ScriptPromiseResolver.h"
+#include "core/dom/DOMException.h"
+#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerLocation.h"
 #include "modules/serviceworkers/RespondWithObserver.h"
+#include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
+#include "modules/serviceworkers/ServiceWorkerWindowClientCallback.h"
+#include "platform/bindings/ScriptState.h"
+#include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
 PaymentRequestEvent* PaymentRequestEvent::Create(
     const AtomicString& type,
-    const PaymentAppRequest& app_request,
+    const PaymentRequestEventInit& initializer) {
+  return new PaymentRequestEvent(type, initializer, nullptr, nullptr);
+}
+
+PaymentRequestEvent* PaymentRequestEvent::Create(
+    const AtomicString& type,
+    const PaymentRequestEventInit& initializer,
     RespondWithObserver* respond_with_observer,
     WaitUntilObserver* wait_until_observer) {
-  return new PaymentRequestEvent(type, app_request, respond_with_observer,
+  return new PaymentRequestEvent(type, initializer, respond_with_observer,
                                  wait_until_observer);
 }
 
@@ -40,8 +54,8 @@ const HeapVector<PaymentMethodData>& PaymentRequestEvent::methodData() const {
   return method_data_;
 }
 
-void PaymentRequestEvent::total(PaymentItem& value) const {
-  value = total_;
+const ScriptValue PaymentRequestEvent::total(ScriptState* script_state) const {
+  return ScriptValue::From(script_state, total_);
 }
 
 const HeapVector<PaymentDetailsModifier>& PaymentRequestEvent::modifiers()
@@ -51,6 +65,47 @@ const HeapVector<PaymentDetailsModifier>& PaymentRequestEvent::modifiers()
 
 const String& PaymentRequestEvent::instrumentKey() const {
   return instrument_key_;
+}
+
+ScriptPromise PaymentRequestEvent::openWindow(ScriptState* script_state,
+                                              const String& url) {
+  ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);
+  ScriptPromise promise = resolver->Promise();
+  ExecutionContext* context = ExecutionContext::From(script_state);
+
+  // TODO(gogerald): Check payment request state so as to reject promise with
+  // "InvalidStateError" appropriately (refer
+  // https://w3c.github.io/payment-handler/#dfn-open-window-algorithm).
+
+  KURL parsed_url_to_open = context->CompleteURL(url);
+  if (!parsed_url_to_open.IsValid()) {
+    resolver->Reject(V8ThrowException::CreateTypeError(
+        script_state->GetIsolate(), "'" + url + "' is not a valid URL."));
+    return promise;
+  }
+
+  // TODO(gogerald): Once the issue of the spec is resolved, we should apply the
+  // changes. Refer https://github.com/w3c/payment-handler/issues/168.
+  if (!context->GetSecurityOrigin()->IsSameSchemeHostPortAndSuborigin(
+          SecurityOrigin::Create(parsed_url_to_open).Get())) {
+    resolver->Reject(DOMException::Create(
+        kSecurityError,
+        "'" + parsed_url_to_open.ElidedString() + "' is not allowed."));
+    return promise;
+  }
+
+  // TODO(gogerald): Once the issue of the spec is resolved, we should apply the
+  // changes. Refer https://github.com/w3c/payment-handler/issues/169.
+  if (!context->IsWindowInteractionAllowed()) {
+    resolver->Reject(DOMException::Create(kInvalidAccessError,
+                                          "Not allowed to open a window."));
+    return promise;
+  }
+  context->ConsumeWindowInteraction();
+
+  ServiceWorkerGlobalScopeClient::From(context)->OpenWindowForPaymentHandler(
+      parsed_url_to_open, WTF::MakeUnique<NavigateClientCallback>(resolver));
+  return promise;
 }
 
 void PaymentRequestEvent::respondWith(ScriptState* script_state,
@@ -71,17 +126,17 @@ DEFINE_TRACE(PaymentRequestEvent) {
 
 PaymentRequestEvent::PaymentRequestEvent(
     const AtomicString& type,
-    const PaymentAppRequest& app_request,
+    const PaymentRequestEventInit& initializer,
     RespondWithObserver* respond_with_observer,
     WaitUntilObserver* wait_until_observer)
-    : ExtendableEvent(type, ExtendableEventInit(), wait_until_observer),
-      top_level_origin_(app_request.topLevelOrigin()),
-      payment_request_origin_(app_request.paymentRequestOrigin()),
-      payment_request_id_(app_request.paymentRequestId()),
-      method_data_(std::move(app_request.methodData())),
-      total_(app_request.total()),
-      modifiers_(app_request.modifiers()),
-      instrument_key_(app_request.instrumentKey()),
+    : ExtendableEvent(type, initializer, wait_until_observer),
+      top_level_origin_(initializer.topLevelOrigin()),
+      payment_request_origin_(initializer.paymentRequestOrigin()),
+      payment_request_id_(initializer.paymentRequestId()),
+      method_data_(std::move(initializer.methodData())),
+      total_(initializer.total()),
+      modifiers_(initializer.modifiers()),
+      instrument_key_(initializer.instrumentKey()),
       observer_(respond_with_observer) {}
 
 }  // namespace blink

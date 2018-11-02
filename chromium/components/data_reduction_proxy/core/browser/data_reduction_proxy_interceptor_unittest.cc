@@ -116,8 +116,6 @@ class DataReductionProxyInterceptorTest : public testing::Test {
   DataReductionProxyInterceptorTest() {
     test_context_ =
         DataReductionProxyTestContext::Builder()
-            .WithParamsFlags(0)
-            .WithParamsDefinitions(TestDataReductionProxyParams::HAS_EVERYTHING)
             .Build();
     default_context_.reset(new TestURLRequestContextWithDataReductionProxy(
         test_context_->config()
@@ -128,6 +126,7 @@ class DataReductionProxyInterceptorTest : public testing::Test {
         &default_network_delegate_));
     default_context_->set_network_delegate(&default_network_delegate_);
     default_context_->set_net_log(test_context_->net_log());
+    test_context_->config()->test_params()->UseNonSecureProxiesForHttp();
   }
 
   ~DataReductionProxyInterceptorTest() override {
@@ -215,7 +214,6 @@ class DataReductionProxyInterceptorWithServerTest : public testing::Test {
     ASSERT_TRUE(direct_.Start());
 
     test_context_ = DataReductionProxyTestContext::Builder()
-                        .WithParamsFlags(0)
                         .WithURLRequestContext(&context_)
                         .Build();
     std::string spec;
@@ -301,6 +299,7 @@ class DataReductionProxyInterceptorEndToEndTest : public testing::Test {
             .WithURLRequestContext(&context_)
             .WithMockClientSocketFactory(&mock_socket_factory_)
             .Build();
+    drp_test_context_->config()->test_params()->UseNonSecureProxiesForHttp();
     drp_test_context_->AttachToURLRequestContext(&context_storage_);
     context_.set_client_socket_factory(&mock_socket_factory_);
     proxy_delegate_ = drp_test_context_->io_data()->CreateProxyDelegate();

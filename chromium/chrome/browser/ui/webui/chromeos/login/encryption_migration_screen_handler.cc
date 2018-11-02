@@ -17,6 +17,8 @@
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/default_tick_clock.h"
+#include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/arc/arc_migration_constants.h"
@@ -35,7 +37,11 @@
 #include "components/login/localized_values_builder.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
-#include "device/power_save_blocker/power_save_blocker.h"
+#include "content/public/common/service_manager_connection.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
+#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/text/bytes_formatting.h"
 
 namespace {
@@ -52,6 +58,10 @@ constexpr char kJsApiRequestRestartOnLowStorage[] =
     "requestRestartOnLowStorage";
 constexpr char kJsApiRequestRestartOnFailure[] = "requestRestartOnFailure";
 constexpr char kJsApiOpenFeedbackDialog[] = "openFeedbackDialog";
+
+// If minimal migration takes this threshold or longer (in seconds), we
+// will ask the user to re-enter their password.
+constexpr int64_t kMinimalMigrationReenterPasswordThreshold = 45;
 
 // UMA names.
 constexpr char kUmaNameFirstScreen[] = "Cryptohome.MigrationUI.FirstScreen";
@@ -71,6 +81,10 @@ enum class FirstScreen {
   FIRST_SCREEN_READY = 0,
   FIRST_SCREEN_RESUME = 1,
   FIRST_SCREEN_LOW_STORAGE = 2,
+  FIRST_SCREEN_ARC_KIOSK = 3,
+  FIRST_SCREEN_START_AUTOMATICALLY = 4,
+  FIRST_SCREEN_RESUME_MINIMAL = 5,
+  FIRST_SCREEN_START_AUTOMATICALLY_MINIMAL = 6,
   FIRST_SCREEN_COUNT
 };
 
@@ -98,6 +112,10 @@ enum class MigrationResult {
   REQUEST_FAILURE_IN_RESUMED_MIGRATION = 5,
   MOUNT_FAILURE_IN_NEW_MIGRATION = 6,
   MOUNT_FAILURE_IN_RESUMED_MIGRATION = 7,
+  SUCCESS_IN_ARC_KIOSK_MIGRATION = 8,
+  GENERAL_FAILURE_IN_ARC_KIOSK_MIGRATION = 9,
+  REQUEST_FAILURE_IN_ARC_KIOSK_MIGRATION = 10,
+  MOUNT_FAILURE_IN_ARC_KIOSK_MIGRATION = 11,
   COUNT
 };
 
@@ -109,6 +127,8 @@ enum class RemoveCryptohomeResult {
   SUCCESS_IN_RESUMED_MIGRATION = 1,
   FAILURE_IN_NEW_MIGRATION = 2,
   FAILURE_IN_RESUMED_MIGRATION = 3,
+  SUCCESS_IN_ARC_KIOSK_MIGRATION = 4,
+  FAILURE_IN_ARC_KIOSK_MIGRATION = 5,
   COUNT
 };
 
@@ -133,16 +153,98 @@ void RecordMigrationResult(MigrationResult migration_result) {
                             MigrationResult::COUNT);
 }
 
-void RecordRemoveCryptohomeResult(bool success, bool is_resumed_migration) {
-  RemoveCryptohomeResult result =
-      success ? (is_resumed_migration
-                     ? RemoveCryptohomeResult::SUCCESS_IN_RESUMED_MIGRATION
-                     : RemoveCryptohomeResult::SUCCESS_IN_NEW_MIGRATION)
-              : (is_resumed_migration
-                     ? RemoveCryptohomeResult::FAILURE_IN_RESUMED_MIGRATION
-                     : RemoveCryptohomeResult::FAILURE_IN_NEW_MIGRATION);
+void RecordMigrationResultSuccess(bool resume, bool arc_kiosk) {
+  if (arc_kiosk)
+    RecordMigrationResult(MigrationResult::SUCCESS_IN_ARC_KIOSK_MIGRATION);
+  else if (resume)
+    RecordMigrationResult(MigrationResult::SUCCESS_IN_RESUMED_MIGRATION);
+  else
+    RecordMigrationResult(MigrationResult::SUCCESS_IN_NEW_MIGRATION);
+}
+
+void RecordMigrationResultGeneralFailure(bool resume, bool arc_kiosk) {
+  if (arc_kiosk) {
+    RecordMigrationResult(
+        MigrationResult::GENERAL_FAILURE_IN_ARC_KIOSK_MIGRATION);
+  } else if (resume) {
+    RecordMigrationResult(
+        MigrationResult::GENERAL_FAILURE_IN_RESUMED_MIGRATION);
+  } else {
+    RecordMigrationResult(MigrationResult::GENERAL_FAILURE_IN_NEW_MIGRATION);
+  }
+}
+
+void RecordMigrationResultRequestFailure(bool resume, bool arc_kiosk) {
+  if (arc_kiosk) {
+    RecordMigrationResult(
+        MigrationResult::REQUEST_FAILURE_IN_ARC_KIOSK_MIGRATION);
+  } else if (resume) {
+    RecordMigrationResult(
+        MigrationResult::REQUEST_FAILURE_IN_RESUMED_MIGRATION);
+  } else {
+    RecordMigrationResult(MigrationResult::REQUEST_FAILURE_IN_NEW_MIGRATION);
+  }
+}
+
+void RecordMigrationResultMountFailure(bool resume, bool arc_kiosk) {
+  if (arc_kiosk) {
+    RecordMigrationResult(
+        MigrationResult::MOUNT_FAILURE_IN_ARC_KIOSK_MIGRATION);
+  } else if (resume) {
+    RecordMigrationResult(MigrationResult::MOUNT_FAILURE_IN_RESUMED_MIGRATION);
+  } else {
+    RecordMigrationResult(MigrationResult::MOUNT_FAILURE_IN_NEW_MIGRATION);
+  }
+}
+
+void RecordRemoveCryptohomeResult(RemoveCryptohomeResult result) {
   UMA_HISTOGRAM_ENUMERATION(kUmaNameRemoveCryptohomeResult, result,
                             RemoveCryptohomeResult::COUNT);
+}
+
+void RecordRemoveCryptohomeResultSuccess(bool resume, bool arc_kiosk) {
+  if (arc_kiosk) {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::SUCCESS_IN_ARC_KIOSK_MIGRATION);
+  } else if (resume) {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::SUCCESS_IN_RESUMED_MIGRATION);
+  } else {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::SUCCESS_IN_NEW_MIGRATION);
+  }
+}
+
+void RecordRemoveCryptohomeResultFailure(bool resume, bool arc_kiosk) {
+  if (arc_kiosk) {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::FAILURE_IN_ARC_KIOSK_MIGRATION);
+  } else if (resume) {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::FAILURE_IN_RESUMED_MIGRATION);
+  } else {
+    RecordRemoveCryptohomeResult(
+        RemoveCryptohomeResult::FAILURE_IN_NEW_MIGRATION);
+  }
+}
+
+// Chooses the value for the MigrationUIFirstScreen UMA stat. Not used for ARC
+// kiosk.
+FirstScreen GetFirstScreenForMode(chromeos::EncryptionMigrationMode mode) {
+  switch (mode) {
+    case chromeos::EncryptionMigrationMode::ASK_USER:
+      return FirstScreen::FIRST_SCREEN_READY;
+    case chromeos::EncryptionMigrationMode::START_MIGRATION:
+      return FirstScreen::FIRST_SCREEN_START_AUTOMATICALLY;
+    case chromeos::EncryptionMigrationMode::START_MINIMAL_MIGRATION:
+      return FirstScreen::FIRST_SCREEN_START_AUTOMATICALLY_MINIMAL;
+    case chromeos::EncryptionMigrationMode::RESUME_MIGRATION:
+      return FirstScreen::FIRST_SCREEN_RESUME;
+    case chromeos::EncryptionMigrationMode::RESUME_MINIMAL_MIGRATION:
+      return FirstScreen::FIRST_SCREEN_RESUME_MINIMAL;
+    default:
+      NOTREACHED();
+  }
 }
 
 }  // namespace
@@ -150,8 +252,12 @@ void RecordRemoveCryptohomeResult(bool success, bool is_resumed_migration) {
 namespace chromeos {
 
 EncryptionMigrationScreenHandler::EncryptionMigrationScreenHandler()
-    : BaseScreenHandler(kScreenId), weak_ptr_factory_(this) {
+    : BaseScreenHandler(kScreenId),
+      tick_clock_(base::MakeUnique<base::DefaultTickClock>()),
+      weak_ptr_factory_(this) {
   set_call_js_prefix(kJsScreenPath);
+  free_disk_space_fetcher_ = base::Bind(&base::SysInfo::AmountOfFreeDiskSpace,
+                                        base::FilePath(kCheckStoragePath));
 }
 
 EncryptionMigrationScreenHandler::~EncryptionMigrationScreenHandler() {
@@ -183,9 +289,9 @@ void EncryptionMigrationScreenHandler::SetUserContext(
   user_context_ = user_context;
 }
 
-void EncryptionMigrationScreenHandler::SetShouldResume(bool should_resume) {
-  should_resume_ = should_resume;
-  CallJS("setIsResuming", should_resume_);
+void EncryptionMigrationScreenHandler::SetMode(EncryptionMigrationMode mode) {
+  mode_ = mode;
+  CallJS("setIsResuming", IsStartImmediately());
 }
 
 void EncryptionMigrationScreenHandler::SetContinueLoginCallback(
@@ -193,7 +299,23 @@ void EncryptionMigrationScreenHandler::SetContinueLoginCallback(
   continue_login_callback_ = std::move(callback);
 }
 
+void EncryptionMigrationScreenHandler::SetRestartLoginCallback(
+    RestartLoginCallback callback) {
+  restart_login_callback_ = std::move(callback);
+}
+
 void EncryptionMigrationScreenHandler::SetupInitialView() {
+  // Pass constant value(s) to the UI.
+  CallJS("setNecessaryBatteryPercent", arc::kMigrationMinimumBatteryPercent);
+
+  // If old encryption is detected in ARC kiosk mode, skip all checks (user
+  // confirmation, battery level, and remaining space) and start migration
+  // immediately.
+  if (IsArcKiosk()) {
+    RecordFirstScreen(FirstScreen::FIRST_SCREEN_ARC_KIOSK);
+    StartMigration();
+    return;
+  }
   DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(this);
   CheckAvailableStorage();
 }
@@ -242,6 +364,7 @@ void EncryptionMigrationScreenHandler::DeclareLocalizedValues(
                IDS_ENCRYPTION_MIGRATION_BUTTON_CONTINUE);
   builder->Add("migrationButtonSignIn", IDS_ENCRYPTION_MIGRATION_BUTTON_SIGNIN);
   builder->Add("migrationButtonReportAnIssue", IDS_REPORT_AN_ISSUE);
+  builder->Add("gaiaLoading", IDS_LOGIN_GAIA_LOADING_MESSAGE);
 }
 
 void EncryptionMigrationScreenHandler::Initialize() {
@@ -252,6 +375,16 @@ void EncryptionMigrationScreenHandler::Initialize() {
     Show();
     show_on_init_ = false;
   }
+}
+
+void EncryptionMigrationScreenHandler::SetFreeDiskSpaceFetcherForTesting(
+    FreeDiskSpaceFetcher free_disk_space_fetcher) {
+  free_disk_space_fetcher_ = std::move(free_disk_space_fetcher);
+}
+
+void EncryptionMigrationScreenHandler::SetTickClockForTesting(
+    std::unique_ptr<base::TickClock> tick_clock) {
+  tick_clock_ = std::move(tick_clock);
 }
 
 void EncryptionMigrationScreenHandler::RegisterMessages() {
@@ -274,8 +407,12 @@ void EncryptionMigrationScreenHandler::PowerChanged(
     if (!current_battery_percent_) {
       // If initial battery level is below the minimum, migration should start
       // automatically once the device is charged enough.
-      if (proto.battery_percent() < arc::kMigrationMinimumBatteryPercent)
+      if (proto.battery_percent() < arc::kMigrationMinimumBatteryPercent) {
         should_migrate_on_enough_battery_ = true;
+        // If migration was forced by policy, stop forcing it (we don't want the
+        // user to have to wait until the battery is charged).
+        MaybeStopForcingMigration();
+      }
     }
     current_battery_percent_ = proto.battery_percent();
   } else {
@@ -348,12 +485,13 @@ void EncryptionMigrationScreenHandler::UpdateUIState(UIState state) {
   if (state == UIState::READY)
     DBusThreadManager::Get()->GetPowerManagerClient()->RequestStatusUpdate();
 
-  // We should block power save and not shut down on lid close during migration.
-  if (state == UIState::MIGRATING) {
-    StartBlockingPowerSave();
+  // We should request wake lock and not shut down on lid close during
+  // migration.
+  if (state == UIState::MIGRATING || state == UIState::MIGRATING_MINIMAL) {
+    GetWakeLock()->RequestWakeLock();
     PowerPolicyController::Get()->SetEncryptionMigrationActive(true);
   } else {
-    StopBlockingPowerSave();
+    GetWakeLock()->CancelWakeLock();
     PowerPolicyController::Get()->SetEncryptionMigrationActive(false);
   }
 
@@ -371,19 +509,20 @@ void EncryptionMigrationScreenHandler::UpdateUIState(UIState state) {
 void EncryptionMigrationScreenHandler::CheckAvailableStorage() {
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_VISIBLE},
-      base::Bind(&base::SysInfo::AmountOfFreeDiskSpace,
-                 base::FilePath(kCheckStoragePath)),
+      free_disk_space_fetcher_,
       base::Bind(&EncryptionMigrationScreenHandler::OnGetAvailableStorage,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
 void EncryptionMigrationScreenHandler::OnGetAvailableStorage(int64_t size) {
   if (size >= arc::kMigrationMinimumAvailableStorage || IsTestingUI()) {
-    if (should_resume_) {
-      RecordFirstScreen(FirstScreen::FIRST_SCREEN_RESUME);
-      WaitBatteryAndMigrate();
+    RecordFirstScreen(GetFirstScreenForMode(mode_));
+    if (IsStartImmediately()) {
+      if (IsMinimalMigration())
+        StartMigration();
+      else
+        WaitBatteryAndMigrate();
     } else {
-      RecordFirstScreen(FirstScreen::FIRST_SCREEN_READY);
       UpdateUIState(UIState::READY);
     }
   } else {
@@ -396,10 +535,15 @@ void EncryptionMigrationScreenHandler::OnGetAvailableStorage(int64_t size) {
 }
 
 void EncryptionMigrationScreenHandler::WaitBatteryAndMigrate() {
-  if (current_battery_percent_ &&
-      *current_battery_percent_ >= arc::kMigrationMinimumBatteryPercent) {
-    StartMigration();
-    return;
+  if (current_battery_percent_) {
+    if (*current_battery_percent_ >= arc::kMigrationMinimumBatteryPercent) {
+      StartMigration();
+      return;
+    } else {
+      // If migration was forced by policy, stop forcing it (we don't want the
+      // user to have to wait until the battery is charged).
+      MaybeStopForcingMigration();
+    }
   }
   UpdateUIState(UIState::READY);
 
@@ -408,17 +552,28 @@ void EncryptionMigrationScreenHandler::WaitBatteryAndMigrate() {
 }
 
 void EncryptionMigrationScreenHandler::StartMigration() {
-  UpdateUIState(UIState::MIGRATING);
-  initial_battery_percent_ = *current_battery_percent_;
+  UpdateUIState(GetMigratingUIState());
+  if (current_battery_percent_)
+    initial_battery_percent_ = *current_battery_percent_;
 
   // Mount the existing eCryptfs vault to a temporary location for migration.
-  cryptohome::MountParameters mount(false);
-  mount.to_migrate_from_ecryptfs = true;
-  cryptohome::HomedirMethods::GetInstance()->MountEx(
-      cryptohome::Identification(user_context_.GetAccountId()),
-      cryptohome::Authorization(GetAuthKey()), mount,
-      base::Bind(&EncryptionMigrationScreenHandler::OnMountExistingVault,
-                 weak_ptr_factory_.GetWeakPtr()));
+  cryptohome::MountRequest mount;
+  mount.set_to_migrate_from_ecryptfs(true);
+  if (IsArcKiosk()) {
+    mount.set_public_mount(true);
+    cryptohome::HomedirMethods::GetInstance()->MountEx(
+        cryptohome::Identification(user_context_.GetAccountId()),
+        cryptohome::Authorization(cryptohome::KeyDefinition()), mount,
+        base::Bind(&EncryptionMigrationScreenHandler::OnMountExistingVault,
+                   weak_ptr_factory_.GetWeakPtr()));
+
+  } else {
+    cryptohome::HomedirMethods::GetInstance()->MountEx(
+        cryptohome::Identification(user_context_.GetAccountId()),
+        cryptohome::Authorization(GetAuthKey()), mount,
+        base::Bind(&EncryptionMigrationScreenHandler::OnMountExistingVault,
+                   weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void EncryptionMigrationScreenHandler::OnMountExistingVault(
@@ -426,12 +581,16 @@ void EncryptionMigrationScreenHandler::OnMountExistingVault(
     cryptohome::MountError return_code,
     const std::string& mount_hash) {
   if (!success || return_code != cryptohome::MOUNT_ERROR_NONE) {
-    RecordMigrationResult(
-        should_resume_ ? MigrationResult::MOUNT_FAILURE_IN_RESUMED_MIGRATION
-                       : MigrationResult::MOUNT_FAILURE_IN_NEW_MIGRATION);
+    RecordMigrationResultMountFailure(IsResumingIncompleteMigration(),
+                                      IsArcKiosk());
     UpdateUIState(UIState::MIGRATION_FAILED);
     return;
   }
+
+  // For minimal migration, start a timer which will measure how long migration
+  // took, so we can require a re sign-in if it took too long.
+  if (IsMinimalMigration())
+    minimal_migration_start_ = tick_clock_->NowTicks();
 
   DBusThreadManager::Get()
       ->GetCryptohomeClient()
@@ -440,27 +599,36 @@ void EncryptionMigrationScreenHandler::OnMountExistingVault(
                      weak_ptr_factory_.GetWeakPtr()));
   cryptohome::HomedirMethods::GetInstance()->MigrateToDircrypto(
       cryptohome::Identification(user_context_.GetAccountId()),
+      IsMinimalMigration(),
       base::Bind(&EncryptionMigrationScreenHandler::OnMigrationRequested,
                  weak_ptr_factory_.GetWeakPtr()));
 }
 
-void EncryptionMigrationScreenHandler::StartBlockingPowerSave() {
-  if (!power_save_blocker_) {
-    power_save_blocker_.reset(new device::PowerSaveBlocker(
-        device::PowerSaveBlocker::kPowerSaveBlockPreventAppSuspension,
-        device::PowerSaveBlocker::kReasonOther,
-        "Encryption migration is in progress...",
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::UI),
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::FILE)));
-  }
-}
+device::mojom::WakeLock* EncryptionMigrationScreenHandler::GetWakeLock() {
+  // |wake_lock_| is lazy bound and reused, even after a connection error.
+  if (wake_lock_)
+    return wake_lock_.get();
 
-void EncryptionMigrationScreenHandler::StopBlockingPowerSave() {
-  if (power_save_blocker_.get()) {
-    power_save_blocker_.reset();
-  }
+  device::mojom::WakeLockRequest request = mojo::MakeRequest(&wake_lock_);
+
+  // Service manager connection might be not initialized in some testing
+  // contexts.
+  if (!content::ServiceManagerConnection::GetForProcess())
+    return wake_lock_.get();
+
+  service_manager::Connector* connector =
+      content::ServiceManagerConnection::GetForProcess()->GetConnector();
+  DCHECK(connector);
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
+  device::mojom::WakeLockProviderPtr wake_lock_provider;
+  connector->BindInterface(device::mojom::kServiceName,
+                           mojo::MakeRequest(&wake_lock_provider));
+  wake_lock_provider->GetWakeLockWithoutContext(
+      device::mojom::WakeLockType::PreventAppSuspension,
+      device::mojom::WakeLockReason::ReasonOther,
+      "Encryption migration is in progress...", std::move(request));
+  return wake_lock_.get();
 }
 
 void EncryptionMigrationScreenHandler::RemoveCryptohome() {
@@ -480,7 +648,13 @@ void EncryptionMigrationScreenHandler::OnRemoveCryptohome(
     cryptohome::MountError return_code) {
   LOG_IF(ERROR, !success) << "Removing cryptohome failed. return code: "
                           << return_code;
-  RecordRemoveCryptohomeResult(success, should_resume_);
+  if (success)
+    RecordRemoveCryptohomeResultSuccess(IsResumingIncompleteMigration(),
+                                        IsArcKiosk());
+  else
+    RecordRemoveCryptohomeResultFailure(IsResumingIncompleteMigration(),
+                                        IsArcKiosk());
+
   UpdateUIState(UIState::MIGRATION_FAILED);
 }
 
@@ -499,37 +673,58 @@ cryptohome::KeyDefinition EncryptionMigrationScreenHandler::GetAuthKey() {
                                    cryptohome::PRIV_DEFAULT);
 }
 
+bool EncryptionMigrationScreenHandler::IsArcKiosk() const {
+  return user_context_.GetUserType() == user_manager::USER_TYPE_ARC_KIOSK_APP;
+}
+
 void EncryptionMigrationScreenHandler::OnMigrationProgress(
     cryptohome::DircryptoMigrationStatus status,
     uint64_t current,
     uint64_t total) {
   switch (status) {
     case cryptohome::DIRCRYPTO_MIGRATION_INITIALIZING:
-      UpdateUIState(UIState::MIGRATING);
+      UpdateUIState(GetMigratingUIState());
       break;
     case cryptohome::DIRCRYPTO_MIGRATION_IN_PROGRESS:
-      UpdateUIState(UIState::MIGRATING);
+      UpdateUIState(GetMigratingUIState());
       CallJS("setMigrationProgress", static_cast<double>(current) / total);
       break;
     case cryptohome::DIRCRYPTO_MIGRATION_SUCCESS:
-      RecordMigrationResult(should_resume_
-                                ? MigrationResult::SUCCESS_IN_RESUMED_MIGRATION
-                                : MigrationResult::SUCCESS_IN_NEW_MIGRATION);
+      RecordMigrationResultSuccess(IsResumingIncompleteMigration(),
+                                   IsArcKiosk());
       // If the battery level decreased during migration, record the consumed
       // battery level.
-      if (*current_battery_percent_ < initial_battery_percent_) {
+      if (current_battery_percent_ &&
+          *current_battery_percent_ < initial_battery_percent_) {
         UMA_HISTOGRAM_PERCENTAGE(
             kUmaNameConsumedBatteryPercent,
             static_cast<int>(std::round(initial_battery_percent_ -
                                         *current_battery_percent_)));
       }
-      // Restart immediately after successful migration.
-      DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
+      if (IsMinimalMigration() && !continue_login_callback_.is_null() &&
+          !restart_login_callback_.is_null()) {
+        GetWakeLock()->CancelWakeLock();
+        PowerPolicyController::Get()->SetEncryptionMigrationActive(false);
+        // If minimal migration was fast enough, continue with same sign-in
+        // data. Fast enough means that the elapsed time is under the defined
+        // threshold.
+        const base::TimeDelta elapsed_time =
+            tick_clock_->NowTicks() - minimal_migration_start_;
+        const bool require_password_reentry =
+            elapsed_time.InSeconds() >
+            kMinimalMigrationReenterPasswordThreshold;
+        if (require_password_reentry)
+          std::move(restart_login_callback_).Run(user_context_);
+        else
+          std::move(continue_login_callback_).Run(user_context_);
+      } else {
+        // Restart immediately after successful full migration.
+        DBusThreadManager::Get()->GetPowerManagerClient()->RequestRestart();
+      }
       break;
     case cryptohome::DIRCRYPTO_MIGRATION_FAILED:
-      RecordMigrationResult(
-          should_resume_ ? MigrationResult::GENERAL_FAILURE_IN_RESUMED_MIGRATION
-                         : MigrationResult::GENERAL_FAILURE_IN_NEW_MIGRATION);
+      RecordMigrationResultGeneralFailure(IsResumingIncompleteMigration(),
+                                          IsArcKiosk());
       // Stop listening to the progress updates.
       DBusThreadManager::Get()
           ->GetCryptohomeClient()
@@ -546,9 +741,8 @@ void EncryptionMigrationScreenHandler::OnMigrationProgress(
 void EncryptionMigrationScreenHandler::OnMigrationRequested(bool success) {
   if (!success) {
     LOG(ERROR) << "Requesting MigrateToDircrypto failed.";
-    RecordMigrationResult(
-        should_resume_ ? MigrationResult::REQUEST_FAILURE_IN_RESUMED_MIGRATION
-                       : MigrationResult::REQUEST_FAILURE_IN_NEW_MIGRATION);
+    RecordMigrationResultRequestFailure(IsResumingIncompleteMigration(),
+                                        IsArcKiosk());
     UpdateUIState(UIState::MIGRATION_FAILED);
   }
 }
@@ -561,6 +755,35 @@ void EncryptionMigrationScreenHandler::OnDelayedRecordVisibleScreen(
   // If |current_ui_state_| is not changed for a second, record the current
   // screen as a "visible" screen.
   UMA_HISTOGRAM_ENUMERATION(kUmaNameVisibleScreen, ui_state, UIState::COUNT);
+}
+
+bool EncryptionMigrationScreenHandler::IsResumingIncompleteMigration() const {
+  return mode_ == EncryptionMigrationMode::RESUME_MIGRATION;
+}
+
+bool EncryptionMigrationScreenHandler::IsStartImmediately() const {
+  return mode_ == EncryptionMigrationMode::START_MIGRATION ||
+         mode_ == EncryptionMigrationMode::START_MINIMAL_MIGRATION ||
+         mode_ == EncryptionMigrationMode::RESUME_MIGRATION ||
+         mode_ == EncryptionMigrationMode::RESUME_MINIMAL_MIGRATION;
+}
+
+bool EncryptionMigrationScreenHandler::IsMinimalMigration() const {
+  return mode_ == EncryptionMigrationMode::START_MINIMAL_MIGRATION ||
+         mode_ == EncryptionMigrationMode::RESUME_MINIMAL_MIGRATION;
+}
+
+EncryptionMigrationScreenHandler::UIState
+EncryptionMigrationScreenHandler::GetMigratingUIState() const {
+  return IsMinimalMigration() ? UIState::MIGRATING_MINIMAL : UIState::MIGRATING;
+}
+
+void EncryptionMigrationScreenHandler::MaybeStopForcingMigration() {
+  // |mode_| will be START_MIGRATION if migration was forced by user policy.
+  // If an incomplete migration is being resumed, it would be RESUME_MIGRATION.
+  // We only want to disable auto-starting migration in the first case.
+  if (mode_ == EncryptionMigrationMode::START_MIGRATION)
+    CallJS("setIsResuming", false);
 }
 
 }  // namespace chromeos

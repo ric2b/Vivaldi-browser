@@ -15,7 +15,7 @@
 #include "ios/chrome/test/app/signin_test_util.h"
 #import "ios/chrome/test/app/sync_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
-#import "ios/web/public/test/http_server.h"
+#import "ios/web/public/test/http_server/http_server.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -260,7 +260,6 @@ const CFTimeInterval kDrainTimeout = 5;
 
 + (void)startHTTPServer {
   web::test::HttpServer& server = web::test::HttpServer::GetSharedInstance();
-  DCHECK(!server.IsRunning());
   server.StartOrDie();
 }
 

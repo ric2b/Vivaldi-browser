@@ -15,7 +15,6 @@
 
 namespace cc {
 
-class DisplayItemList;
 class PaintFlags;
 class PaintOpBuffer;
 
@@ -42,7 +41,9 @@ class CC_PAINT_EXPORT PaintCanvas {
 
   virtual int save() = 0;
   virtual int saveLayer(const SkRect* bounds, const PaintFlags* flags) = 0;
-  virtual int saveLayerAlpha(const SkRect* bounds, uint8_t alpha) = 0;
+  virtual int saveLayerAlpha(const SkRect* bounds,
+                             uint8_t alpha,
+                             bool preserve_lcd_text_requests) = 0;
 
   virtual void restore() = 0;
   virtual int getSaveCount() const = 0;
@@ -162,9 +163,6 @@ class CC_PAINT_EXPORT PaintCanvas {
                             SkScalar x,
                             SkScalar y,
                             const PaintFlags& flags) = 0;
-
-  virtual void drawDisplayItemList(
-      scoped_refptr<DisplayItemList> display_item_list) = 0;
 
   // Unlike SkCanvas::drawPicture, this only plays back the PaintRecord and does
   // not add an additional clip.  This is closer to SkPicture::playback.

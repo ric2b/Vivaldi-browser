@@ -55,8 +55,9 @@ CSSPaintDefinition::CSSPaintDefinition(
     Vector<CSSSyntaxDescriptor>& input_argument_types,
     bool has_alpha)
     : script_state_(script_state),
-      constructor_(script_state->GetIsolate(), constructor),
-      paint_(script_state->GetIsolate(), paint),
+      constructor_(script_state->GetIsolate(), this, constructor),
+      paint_(script_state->GetIsolate(), this, paint),
+      instance_(this),
       did_call_constructor_(false),
       has_alpha_(has_alpha) {
   native_invalidation_properties_.swap(native_invalidation_properties);
@@ -67,10 +68,13 @@ CSSPaintDefinition::CSSPaintDefinition(
 CSSPaintDefinition::~CSSPaintDefinition() {}
 
 PassRefPtr<Image> CSSPaintDefinition::Paint(
-    const LayoutObject& layout_object,
+    const ImageResourceObserver& client,
     const IntSize& size,
     const CSSStyleValueVector* paint_arguments) {
   DCHECK(paint_arguments);
+
+  // TODO: Break dependency on LayoutObject. Passing the Node should work.
+  const LayoutObject& layout_object = static_cast<const LayoutObject&>(client);
 
   float zoom = layout_object.StyleRef().EffectiveZoom();
   const IntSize specified_size = GetSpecifiedSize(size, zoom);
@@ -143,6 +147,12 @@ void CSSPaintDefinition::MaybeCreatePaintInstance() {
   }
 
   did_call_constructor_ = true;
+}
+
+DEFINE_TRACE_WRAPPERS(CSSPaintDefinition) {
+  visitor->TraceWrappers(constructor_.Cast<v8::Value>());
+  visitor->TraceWrappers(paint_.Cast<v8::Value>());
+  visitor->TraceWrappers(instance_.Cast<v8::Value>());
 }
 
 }  // namespace blink

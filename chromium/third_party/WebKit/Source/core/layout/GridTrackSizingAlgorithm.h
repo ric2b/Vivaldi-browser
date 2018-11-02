@@ -275,10 +275,6 @@ class GridTrackSizingAlgorithmStrategy {
   }
 
   // Helper functions
-  static LayoutUnit ComputeMarginLogicalSizeForChild(
-      MarginDirection for_direction,
-      const LayoutGrid*,
-      const LayoutBox& child);
   static bool HasOverrideContainingBlockContentSizeForChild(
       const LayoutBox& child,
       GridTrackSizingDirection);
@@ -286,6 +282,7 @@ class GridTrackSizingAlgorithmStrategy {
       const LayoutBox& child,
       GridTrackSizingDirection);
   static bool ShouldClearOverrideContainingBlockContentSizeForChild(
+      const LayoutGrid&,
       const LayoutBox& child,
       GridTrackSizingDirection);
   static void SetOverrideContainingBlockContentSizeForChild(

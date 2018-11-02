@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "ash/session/session_controller.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/tray/system_tray.h"
@@ -14,8 +15,7 @@
 #include "ash/system/user/tray_user.h"
 #include "ash/system/user/user_view.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_session_controller_client.h"
-#include "ash/test/test_shell_delegate.h"
+#include "ash/test_shell_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -47,7 +47,7 @@ gfx::ImageSkia CreateImageSkiaWithColor(int width, int height, SkColor color) {
   return gfx::ImageSkia::CreateFrom1xBitmap(bitmap);
 }
 
-class TrayUserTest : public test::AshTestBase {
+class TrayUserTest : public AshTestBase {
  public:
   TrayUserTest() = default;
 
@@ -81,7 +81,7 @@ class TrayUserTest : public test::AshTestBase {
 };
 
 void TrayUserTest::SetUp() {
-  test::AshTestBase::SetUp();
+  AshTestBase::SetUp();
   tray_ = GetPrimarySystemTray();
 }
 
@@ -97,8 +97,8 @@ void TrayUserTest::InitializeParameters(int users_logged_in,
   GetSessionControllerClient()->SetSessionState(
       session_manager::SessionState::ACTIVE);
 
-  test::TestShellDelegate* shell_delegate =
-      static_cast<test::TestShellDelegate*>(Shell::Get()->shell_delegate());
+  TestShellDelegate* shell_delegate =
+      static_cast<TestShellDelegate*>(Shell::Get()->shell_delegate());
   shell_delegate->set_multi_profiles_enabled(multiprofile);
 
   // Instead of using the existing tray panels we create new ones which makes
@@ -157,7 +157,7 @@ TEST_F(TrayUserTest, SingleUserModeDoesNotAllowAddingUser) {
   EXPECT_TRUE(tray()->IsSystemBubbleVisible());
 
   EXPECT_EQ(TrayUser::SHOWN, tray_user()->GetStateForTest());
-  tray()->CloseSystemBubble();
+  tray()->CloseBubble();
 }
 
 TEST_F(TrayUserTest, AccessibleLabelContainsSingleUserInfo) {
@@ -230,7 +230,7 @@ TEST_F(TrayUserTest, MultiUserModeDoesNotAllowToAddUser) {
   EXPECT_EQ(TrayUser::HOVERED, tray_user()->GetStateForTest());
 
   // Close and check that everything is deleted.
-  tray()->CloseSystemBubble();
+  tray()->CloseBubble();
   EXPECT_FALSE(tray()->IsSystemBubbleVisible());
   EXPECT_EQ(TrayUser::HIDDEN, tray_user()->GetStateForTest());
 }
@@ -257,11 +257,13 @@ TEST_F(TrayUserTest, MultiUserModeButtonClicks) {
   RunAllPendingInMessageLoop();
 
   const mojom::UserSession* active_user = controller()->GetUserSession(0);
-  EXPECT_EQ(active_user->account_id, second_user->account_id);
+  EXPECT_EQ(active_user->user_info->account_id,
+            second_user->user_info->account_id);
   // Since the name is capitalized, the email should be different than the
   // user_id.
-  EXPECT_NE(active_user->account_id.GetUserEmail(), second_user->display_email);
-  tray()->CloseSystemBubble();
+  EXPECT_NE(active_user->user_info->account_id.GetUserEmail(),
+            second_user->user_info->display_email);
+  tray()->CloseBubble();
 }
 
 // Test SessionController updates avatar image.
@@ -275,7 +277,7 @@ TEST_F(TrayUserTest, AvatarChange) {
   const gfx::ImageSkia red_icon =
       CreateImageSkiaWithColor(kTrayItemSize, kTrayItemSize, SK_ColorRED);
   mojom::UserSessionPtr user = controller()->GetUserSession(0)->Clone();
-  user->avatar = red_icon;
+  user->user_info->avatar = red_icon;
   controller()->UpdateUserSession(std::move(user));
   EXPECT_TRUE(gfx::test::AreImagesEqual(
       gfx::Image(red_icon),

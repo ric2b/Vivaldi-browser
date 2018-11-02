@@ -14,7 +14,6 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Functional.h"
 #include "platform/wtf/text/WTFString.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -36,12 +35,11 @@ WebSocketHandleImpl::~WebSocketHandleImpl() {
     websocket_->StartClosingHandshake(kAbnormalShutdownOpCode, g_empty_string);
 }
 
-void WebSocketHandleImpl::Initialize(InterfaceProvider* interface_provider) {
+void WebSocketHandleImpl::Initialize(mojom::blink::WebSocketPtr websocket) {
   NETWORK_DVLOG(1) << this << " initialize(...)";
 
   DCHECK(!websocket_);
-  interface_provider->GetInterface(mojo::MakeRequest(&websocket_));
-
+  websocket_ = std::move(websocket);
   websocket_.set_connection_error_with_reason_handler(
       ConvertToBaseCallback(WTF::Bind(&WebSocketHandleImpl::OnConnectionError,
                                       WTF::Unretained(this))));
@@ -62,15 +60,17 @@ void WebSocketHandleImpl::Connect(const KURL& url,
   DCHECK(client);
   client_ = client;
 
+  mojom::blink::WebSocketClientPtr client_proxy;
+  client_binding_.Bind(
+      mojo::MakeRequest(&client_proxy, Platform::Current()
+                                           ->CurrentThread()
+                                           ->Scheduler()
+                                           ->LoadingTaskRunner()
+                                           ->ToSingleThreadTaskRunner()));
   websocket_->AddChannelRequest(
       url, protocols, origin, first_party_for_cookies,
       user_agent_override.IsNull() ? g_empty_string : user_agent_override,
-      client_binding_.CreateInterfacePtrAndBind(
-          Platform::Current()
-              ->CurrentThread()
-              ->Scheduler()
-              ->LoadingTaskRunner()
-              ->ToSingleThreadTaskRunner()));
+      std::move(client_proxy));
 }
 
 void WebSocketHandleImpl::Send(bool fin,

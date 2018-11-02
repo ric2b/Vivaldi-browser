@@ -58,28 +58,29 @@ const char kServerHostname[] = "test.example.com";
 const uint16_t kServerPort = 443;
 const size_t kMaxReadersPerQuicSession = 5;
 
-class MockStreamDelegate : public QuicChromiumClientStream::Delegate {
+// A subclass of QuicChromiumClientSession with GetSSLInfo overriden to allow
+// forcing the value of SSLInfo::channel_id_sent to true.
+class TestingQuicChromiumClientSession : public QuicChromiumClientSession {
  public:
-  MockStreamDelegate() {}
+  using QuicChromiumClientSession::QuicChromiumClientSession;
 
-  MOCK_METHOD0(OnSendData, int());
-  MOCK_METHOD2(OnSendDataComplete, int(int, bool*));
-  MOCK_METHOD2(OnInitialHeadersAvailable,
-               void(const SpdyHeaderBlock& headers, size_t frame_len));
-  MOCK_METHOD2(OnTrailingHeadersAvailable,
-               void(const SpdyHeaderBlock& headers, size_t frame_len));
-  MOCK_METHOD2(OnDataReceived, int(const char*, int));
-  MOCK_METHOD0(OnDataAvailable, void());
-  MOCK_METHOD0(OnClose, void());
-  MOCK_METHOD1(OnError, void(int));
+  bool GetSSLInfo(SSLInfo* ssl_info) const override {
+    bool ret = QuicChromiumClientSession::GetSSLInfo(ssl_info);
+    if (ret)
+      ssl_info->channel_id_sent =
+          ssl_info->channel_id_sent || force_channel_id_sent_;
+    return ret;
+  }
+
+  void OverrideChannelIDSent() { force_channel_id_sent_ = true; }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(MockStreamDelegate);
+  bool force_channel_id_sent_ = false;
 };
 
 class QuicChromiumClientSessionTest
     : public ::testing::TestWithParam<QuicVersion> {
- protected:
+ public:
   QuicChromiumClientSessionTest()
       : crypto_config_(crypto_test_utils::ProofVerifierForTesting()),
         default_read_(new MockRead(SYNCHRONOUS, ERR_IO_PENDING, 0)),
@@ -102,6 +103,14 @@ class QuicChromiumClientSessionTest
     clock_.AdvanceTime(QuicTime::Delta::FromSeconds(1));
   }
 
+  void ResetHandleOnError(
+      std::unique_ptr<QuicChromiumClientSession::Handle>* handle,
+      int net_error) {
+    EXPECT_NE(OK, net_error);
+    handle->reset();
+  }
+
+ protected:
   void Initialize() {
     if (socket_data_)
       socket_factory_.AddSocketDataProvider(socket_data_.get());
@@ -116,7 +125,7 @@ class QuicChromiumClientSessionTest
         0, QuicSocketAddress(QuicSocketAddressImpl(kIpEndPoint)), &helper_,
         &alarm_factory_, writer, true, Perspective::IS_CLIENT,
         SupportedVersions(GetParam()));
-    session_.reset(new QuicChromiumClientSession(
+    session_.reset(new TestingQuicChromiumClientSession(
         connection, std::move(socket),
         /*stream_factory=*/nullptr, &crypto_client_stream_factory_, &clock_,
         &transport_security_state_,
@@ -178,8 +187,7 @@ class QuicChromiumClientSessionTest
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
   QuicClientPushPromiseIndex push_promise_index_;
   QuicServerId server_id_;
-  MockStreamDelegate delegate_;
-  std::unique_ptr<QuicChromiumClientSession> session_;
+  std::unique_ptr<TestingQuicChromiumClientSession> session_;
   TestServerPushDelegate test_push_delegate_;
   QuicConnectionVisitorInterface* visitor_;
   TestCompletionCallback callback_;
@@ -240,7 +248,7 @@ TEST_P(QuicChromiumClientSessionTest, Handle) {
   TestCompletionCallback callback;
   ASSERT_EQ(OK, handle->RequestStream(/*requires_confirmation=*/false,
                                       callback.callback()));
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -302,7 +310,7 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequest) {
   TestCompletionCallback callback;
   ASSERT_EQ(OK, handle->RequestStream(/*requires_confirmation=*/false,
                                       callback.callback()));
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -325,7 +333,7 @@ TEST_P(QuicChromiumClientSessionTest, ConfirmationRequiredStreamRequest) {
   TestCompletionCallback callback;
   ASSERT_EQ(OK, handle->RequestStream(/*requires_confirmation=*/true,
                                       callback.callback()));
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -353,7 +361,7 @@ TEST_P(QuicChromiumClientSessionTest, StreamRequestBeforeConfirmation) {
 
   EXPECT_THAT(callback.WaitForResult(), IsOk());
 
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
@@ -419,8 +427,55 @@ TEST_P(QuicChromiumClientSessionTest, AsyncStreamRequest) {
   session_->OnRstStream(rst);
   ASSERT_TRUE(callback.have_result());
   EXPECT_THAT(callback.WaitForResult(), IsOk());
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 
+  quic_data.Resume();
+  EXPECT_TRUE(quic_data.AllReadDataConsumed());
+  EXPECT_TRUE(quic_data.AllWriteDataConsumed());
+}
+
+TEST_P(QuicChromiumClientSessionTest, ClosedWithAsyncStreamRequest) {
+  MockQuicData quic_data;
+  quic_data.AddWrite(client_maker_.MakeInitialSettingsPacket(1, nullptr));
+  quic_data.AddRead(ASYNC, ERR_IO_PENDING);
+  quic_data.AddRead(ASYNC, OK);  // EOF
+  quic_data.AddSocketDataToFactory(&socket_factory_);
+
+  Initialize();
+  CompleteCryptoHandshake();
+
+  // Open the maximum number of streams so that a subsequent request
+  // can not proceed immediately.
+  const size_t kMaxOpenStreams = session_->max_open_outgoing_streams();
+  for (size_t i = 0; i < kMaxOpenStreams; i++) {
+    session_->CreateOutgoingDynamicStream(kDefaultPriority);
+  }
+  EXPECT_EQ(kMaxOpenStreams, session_->GetNumOpenOutgoingStreams());
+
+  // Request two streams which will both be pending.
+  std::unique_ptr<QuicChromiumClientSession::Handle> handle =
+      session_->CreateHandle();
+  std::unique_ptr<QuicChromiumClientSession::Handle> handle2 =
+      session_->CreateHandle();
+
+  ASSERT_EQ(ERR_IO_PENDING,
+            handle->RequestStream(
+                /*requires_confirmation=*/false,
+                base::Bind(&QuicChromiumClientSessionTest::ResetHandleOnError,
+                           base::Unretained(this), &handle2)));
+
+  TestCompletionCallback callback2;
+  ASSERT_EQ(ERR_IO_PENDING,
+            handle2->RequestStream(/*requires_confirmation=*/false,
+                                   callback2.callback()));
+
+  session_->connection()->CloseConnection(
+      QUIC_NETWORK_IDLE_TIMEOUT, "Timed out",
+      ConnectionCloseBehavior::SILENT_CLOSE);
+
+  // Pump the message loop to read the connection close packet.
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(handle2.get());
   quic_data.Resume();
   EXPECT_TRUE(quic_data.AllReadDataConsumed());
   EXPECT_TRUE(quic_data.AllWriteDataConsumed());
@@ -924,7 +979,7 @@ TEST_P(QuicChromiumClientSessionTest, MaxNumStreamsViaRequest) {
   session_->OnRstStream(rst1);
   ASSERT_TRUE(callback.have_result());
   EXPECT_THAT(callback.WaitForResult(), IsOk());
-  EXPECT_TRUE(handle->ReleaseStream(&delegate_) != nullptr);
+  EXPECT_TRUE(handle->ReleaseStream() != nullptr);
 }
 
 TEST_P(QuicChromiumClientSessionTest, GoAwayReceived) {
@@ -996,7 +1051,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithTlsChannelId) {
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
   QuicChromiumClientSessionPeer::SetHostname(session_.get(), "www.example.org");
-  QuicChromiumClientSessionPeer::SetChannelIDSent(session_.get(), true);
+  session_->OverrideChannelIDSent();
 
   EXPECT_TRUE(session_->CanPool("www.example.org", PRIVACY_MODE_DISABLED));
   EXPECT_TRUE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED));
@@ -1032,7 +1087,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionNotPooledWithDifferentPin) {
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
   QuicChromiumClientSessionPeer::SetHostname(session_.get(), "www.example.org");
-  QuicChromiumClientSessionPeer::SetChannelIDSent(session_.get(), true);
+  session_->OverrideChannelIDSent();
 
   EXPECT_FALSE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED));
 }
@@ -1064,7 +1119,7 @@ TEST_P(QuicChromiumClientSessionTest, ConnectionPooledWithMatchingPin) {
   CompleteCryptoHandshake();
   session_->OnProofVerifyDetailsAvailable(details);
   QuicChromiumClientSessionPeer::SetHostname(session_.get(), "www.example.org");
-  QuicChromiumClientSessionPeer::SetChannelIDSent(session_.get(), true);
+  session_->OverrideChannelIDSent();
 
   EXPECT_TRUE(session_->CanPool("mail.example.org", PRIVACY_MODE_DISABLED));
 }

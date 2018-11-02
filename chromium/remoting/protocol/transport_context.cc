@@ -15,7 +15,7 @@
 #include "remoting/protocol/http_ice_config_request.h"
 #include "remoting/protocol/jingle_info_request.h"
 #include "remoting/protocol/port_allocator_factory.h"
-#include "third_party/webrtc/base/socketaddress.h"
+#include "third_party/webrtc/rtc_base/socketaddress.h"
 
 #if !defined(OS_NACL)
 #include "jingle/glue/thread_wrapper.h"
@@ -25,6 +25,14 @@
 
 namespace remoting {
 namespace protocol {
+
+namespace {
+
+// Ensure ICE config is correct at least one hour after session starts.
+constexpr base::TimeDelta kMinimumIceConfigLifetime =
+    base::TimeDelta::FromHours(1);
+
+}  // namespace
 
 #if !defined(OS_NACL)
 // static
@@ -80,7 +88,8 @@ void TransportContext::EnsureFreshIceConfig() {
   }
 
   if (ice_config_[relay_mode_].is_null() ||
-      base::Time::Now() > ice_config_[relay_mode_].expiration_time) {
+      base::Time::Now() + kMinimumIceConfigLifetime >
+          ice_config_[relay_mode_].expiration_time) {
     std::unique_ptr<IceConfigRequest> request;
     switch (relay_mode_) {
       case RelayMode::TURN:
@@ -88,8 +97,8 @@ void TransportContext::EnsureFreshIceConfig() {
           LOG(WARNING) << "ice_config_url isn't set.";
           return;
         }
-        request.reset(new HttpIceConfigRequest(url_request_factory_.get(),
-                                               ice_config_url_));
+        request.reset(new HttpIceConfigRequest(
+            url_request_factory_.get(), ice_config_url_, oauth_token_getter_));
         break;
       case RelayMode::GTURN:
         request.reset(new JingleInfoRequest(signal_strategy_));

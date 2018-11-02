@@ -16,6 +16,8 @@
 #include "content/browser/appcache/appcache_entry.h"
 #include "content/browser/appcache/appcache_host.h"
 #include "content/browser/appcache/appcache_service_impl.h"
+#include "content/browser/loader/url_loader_request_handler.h"
+#include "content/browser/url_loader_factory_getter.h"
 #include "content/common/content_export.h"
 #include "content/public/common/resource_type.h"
 
@@ -26,9 +28,12 @@ class URLRequest;
 
 namespace content {
 class AppCacheJob;
+class AppCacheNavigationHandleCore;
 class AppCacheRequest;
 class AppCacheRequestHandlerTest;
 class AppCacheURLRequestJob;
+class AppCacheHost;
+struct SubresourceLoadInfo;
 
 // An instance is created for each net::URLRequest. The instance survives all
 // http transactions involved in the processing of its net::URLRequest, and is
@@ -39,7 +44,8 @@ class CONTENT_EXPORT AppCacheRequestHandler
     : public base::SupportsUserData::Data,
       public AppCacheHost::Observer,
       public AppCacheServiceImpl::Observer,
-      public AppCacheStorage::Delegate {
+      public AppCacheStorage::Delegate,
+      public URLLoaderRequestHandler {
  public:
   ~AppCacheRequestHandler() override;
 
@@ -68,6 +74,21 @@ class CONTENT_EXPORT AppCacheRequestHandler
     return IsResourceTypeFrame(type) ||
            type == RESOURCE_TYPE_SHARED_WORKER;
   }
+
+  static std::unique_ptr<AppCacheRequestHandler>
+  InitializeForNavigationNetworkService(
+      const ResourceRequest& request,
+      AppCacheNavigationHandleCore* appcache_handle_core,
+      URLLoaderFactoryGetter* url_loader_factory_getter);
+
+  // The following setters only apply for the network service code.
+  void set_network_url_loader_factory_getter(
+      URLLoaderFactoryGetter* url_loader_factory_getter) {
+    network_url_loader_factory_getter_ = url_loader_factory_getter;
+  }
+
+  void SetSubresourceRequestLoadInfo(
+      std::unique_ptr<SubresourceLoadInfo> subresource_load_info);
 
  private:
   friend class AppCacheHost;
@@ -103,6 +124,10 @@ class CONTENT_EXPORT AppCacheRequestHandler
   std::unique_ptr<AppCacheJob> CreateJob(
       net::NetworkDelegate* network_delegate);
 
+  // Helper method to create an AppCacheJob for fallback responses.
+  std::unique_ptr<AppCacheJob> MaybeCreateJobForFallback(
+      net::NetworkDelegate* network_delegate);
+
   // Helper to retrieve a pointer to the storage object.
   AppCacheStorage* storage() const;
 
@@ -134,6 +159,12 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   // AppCacheHost::Observer override
   void OnCacheSelectionComplete(AppCacheHost* host) override;
+
+  // URLLoaderRequestHandler override
+  void MaybeCreateLoader(const ResourceRequest& resource_request,
+                         ResourceContext* resource_context,
+                         LoaderCallback callback) override;
+  mojom::URLLoaderFactoryPtr MaybeCreateSubresourceFactory() override;
 
   // Data members -----------------------------------------------
 
@@ -195,7 +226,28 @@ class CONTENT_EXPORT AppCacheRequestHandler
 
   std::unique_ptr<AppCacheRequest> request_;
 
+  // Network service related members.
+
+  // In the network service world we are queried via the URLLoaderRequestHandler
+  // interface to see if the navigation request can be handled via the
+  // AppCache. We hold onto the AppCache job created here until the client
+  // binds to it (Serviced via AppCache). If the request cannot be handled via
+  // the AppCache, we delete the job.
+  std::unique_ptr<AppCacheJob> navigation_request_job_;
+
+  // In the network service world, points to the getter for the network URL
+  // loader.
+  scoped_refptr<URLLoaderFactoryGetter> network_url_loader_factory_getter_;
+
   friend class content::AppCacheRequestHandlerTest;
+
+  // Subresource load information.
+  std::unique_ptr<SubresourceLoadInfo> subresource_load_info_;
+
+  // The AppCache host instance. We pass this to the
+  // AppCacheSubresourceURLFactory instance on creation.
+  base::WeakPtr<AppCacheHost> appcache_host_;
+
   DISALLOW_COPY_AND_ASSIGN(AppCacheRequestHandler);
 };
 

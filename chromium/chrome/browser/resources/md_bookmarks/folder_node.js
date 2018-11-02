@@ -39,11 +39,21 @@ Polymer({
       reflectToAttribute: true,
       computed: 'computeIsSelected_(itemId, selectedFolder_, searchActive_)'
     },
+
+    /** @private */
+    hasChildFolder_: {
+      type: Boolean,
+      computed: 'computeHasChildFolder_(item_.children)',
+    },
   },
 
   listeners: {
     'keydown': 'onKeydown_',
   },
+
+  observers: [
+    'updateAriaExpanded_(hasChildFolder_, isClosed_)',
+  ],
 
   /** @override */
   attached: function() {
@@ -69,7 +79,10 @@ Polymer({
     }
   },
 
-  /** @return {HTMLElement} */
+  /**
+   * Overriden from bookmarks.MouseFocusBehavior.
+   * @return {!HTMLElement}
+   */
   getFocusTarget: function() {
     return this.$.container;
   },
@@ -77,11 +90,6 @@ Polymer({
   /** @return {HTMLElement} */
   getDropTarget: function() {
     return this.$.container;
-  },
-
-  /** @return {boolean} */
-  isTopLevelFolder_: function() {
-    return this.depth == 0;
   },
 
   /**
@@ -110,6 +118,11 @@ Polymer({
     this.changeKeyboardSelection_(
         xDirection, yDirection, this.root.activeElement);
 
+    if (!handled) {
+      handled = bookmarks.CommandManager.getInstance().handleKeyEvent(
+          e, new Set([this.itemId]));
+    }
+
     if (!handled)
       return;
 
@@ -131,7 +144,7 @@ Polymer({
     if (xDirection == 1) {
       // The right arrow opens a folder if closed and goes to the first child
       // otherwise.
-      if (this.hasChildFolder_()) {
+      if (this.hasChildFolder_) {
         if (this.isClosed_) {
           this.dispatch(
               bookmarks.actions.changeFolderOpen(this.item_.id, true));
@@ -142,7 +155,7 @@ Polymer({
     } else if (xDirection == -1) {
       // The left arrow closes a folder if open and goes to the parent
       // otherwise.
-      if (this.hasChildFolder_() && !this.isClosed_) {
+      if (this.hasChildFolder_ && !this.isClosed_) {
         this.dispatch(bookmarks.actions.changeFolderOpen(this.item_.id, false));
       } else {
         var parentFolderNode = this.getParentFolderNode_();
@@ -245,18 +258,23 @@ Polymer({
     return children.pop().getLastVisibleDescendant_();
   },
 
-  /**
-   * @private
-   * @return {string}
-   */
-  getFolderIcon_: function() {
-    return this.isSelectedFolder_ ? 'bookmarks:folder-open' : 'cr:folder';
-  },
-
   /** @private */
   selectFolder_: function() {
-    this.dispatch(
-        bookmarks.actions.selectFolder(this.item_.id, this.getState().nodes));
+    if (!this.isSelectedFolder_) {
+      this.dispatch(
+          bookmarks.actions.selectFolder(this.itemId, this.getState().nodes));
+    }
+  },
+
+  /**
+   * @param {!Event} e
+   * @private
+   */
+  onContextMenu_: function(e) {
+    e.preventDefault();
+    this.selectFolder_();
+    bookmarks.CommandManager.getInstance().openCommandMenuAtPosition(
+        e.clientX, e.clientY, MenuSource.TREE, new Set([this.itemId]));
   },
 
   /**
@@ -274,7 +292,7 @@ Polymer({
    */
   toggleFolder_: function(e) {
     this.dispatch(
-        bookmarks.actions.changeFolderOpen(this.item_.id, this.isClosed_));
+        bookmarks.actions.changeFolderOpen(this.itemId, this.isClosed_));
     e.stopPropagation();
   },
 
@@ -300,13 +318,15 @@ Polymer({
    * @private
    * @return {boolean}
    */
-  hasChildFolder_: function() {
+  computeHasChildFolder_: function() {
     return bookmarks.util.hasChildFolders(this.itemId, this.getState().nodes);
   },
 
   /** @private */
   depthChanged_: function() {
     this.style.setProperty('--node-depth', String(this.depth));
+    if (this.depth == -1)
+      this.$.descendants.removeAttribute('role');
   },
 
   /**
@@ -339,6 +359,20 @@ Polymer({
    * @return {string}
    */
   getTabIndex_: function() {
-    return this.isSelectedFolder_ ? '0' : '';
+    return this.isSelectedFolder_ ? '0' : '-1';
+  },
+
+  /**
+   * Sets the 'aria-expanded' accessibility on nodes which need it. Note that
+   * aria-expanded="false" is different to having the attribute be undefined.
+   * @param {boolean} hasChildFolder
+   * @param {boolean} isClosed
+   * @private
+   */
+  updateAriaExpanded_: function(hasChildFolder, isClosed) {
+    if (hasChildFolder)
+      this.getFocusTarget().setAttribute('aria-expanded', String(!isClosed));
+    else
+      this.getFocusTarget().removeAttribute('aria-expanded');
   },
 });

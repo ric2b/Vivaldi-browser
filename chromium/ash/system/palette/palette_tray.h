@@ -17,19 +17,22 @@
 #include "base/memory/weak_ptr.h"
 #include "ui/events/devices/input_device_event_observer.h"
 
+class PrefChangeRegistrar;
+class PrefRegistrySimple;
+class PrefService;
+
 namespace gfx {
 class Point;
 }
 
 namespace views {
 class ImageView;
-class Widget;
 }
 
 namespace ash {
 
-class TrayBubbleWrapper;
 class PaletteToolManager;
+class TrayBubbleWrapper;
 
 // The PaletteTray shows the palette in the bottom area of the screen. This
 // class also controls the lifetime for all of the tools available in the
@@ -39,14 +42,34 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
                                public SessionObserver,
                                public ShellObserver,
                                public PaletteToolManager::Delegate,
-                               public ui::InputDeviceEventObserver,
-                               public views::TrayBubbleView::Delegate {
+                               public ui::InputDeviceEventObserver {
  public:
+  // For testing.
+  class TestApi {
+   public:
+    explicit TestApi(PaletteTray* palette_tray);
+    ~TestApi();
+
+    PaletteToolManager* GetPaletteToolManager() {
+      return palette_tray_->palette_tool_manager_.get();
+    }
+
+    TrayBubbleWrapper* GetTrayBubbleWrapper() {
+      return palette_tray_->bubble_.get();
+    }
+
+    bool IsStylusWatcherActive() { return !!palette_tray_->watcher_; }
+
+   private:
+    PaletteTray* palette_tray_ = nullptr;  // not owned
+
+    DISALLOW_COPY_AND_ASSIGN(TestApi);
+  };
+
   explicit PaletteTray(Shelf* shelf);
   ~PaletteTray() override;
 
-  // ActionableView:
-  bool PerformAction(const ui::Event& event) override;
+  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
 
   // SessionObserver:
   void OnSessionStateChanged(session_manager::SessionState state) override;
@@ -60,22 +83,25 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
   void AnchorUpdated() override;
   void Initialize() override;
+  bool PerformAction(const ui::Event& event) override;
+  void CloseBubble() override;
+  void ShowBubble() override;
+  views::TrayBubbleView* GetBubbleView() override;
 
   // PaletteToolManager::Delegate:
   void HidePalette() override;
   void HidePaletteImmediately() override;
-  void RecordPaletteOptionsUsage(PaletteTrayOptions option) override;
+  void RecordPaletteOptionsUsage(PaletteTrayOptions option,
+                                 PaletteInvocationMethod method) override;
   void RecordPaletteModeCancellation(PaletteModeCancelType type) override;
-
-  // Opens up the palette if it is not already open. Returns true if the palette
-  // was opened.
-  bool ShowPalette();
 
   // Returns true if the palette tray contains the given point. This is useful
   // for determining if an event should be propagated through to the palette.
   bool ContainsPointInScreen(const gfx::Point& point);
 
  private:
+  class StylusWatcher;
+
   // ui::InputDeviceObserver:
   void OnTouchscreenDeviceConfigurationChanged() override;
   void OnStylusStateChanged(ui::StylusState stylus_state) override;
@@ -85,10 +111,7 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   void OnMouseEnteredView() override;
   void OnMouseExitedView() override;
   base::string16 GetAccessibleNameForBubble() override;
-  void OnBeforeBubbleWidgetInit(
-      views::Widget* anchor_widget,
-      views::Widget* bubble_widget,
-      views::Widget::InitParams* params) const override;
+  bool ShouldEnableExtraKeyboardAccessibility() override;
   void HideBubble(const views::TrayBubbleView* bubble_view) override;
 
   // PaletteToolManager::Delegate:
@@ -104,19 +127,27 @@ class ASH_EXPORT PaletteTray : public TrayBackgroundView,
   // Called when the palette enabled pref has changed.
   void OnPaletteEnabledPrefChanged(bool enabled);
 
+  // Called when the has seen stylus pref has changed.
+  void OnHasSeenStylusPrefChanged();
+
   std::unique_ptr<PaletteToolManager> palette_tool_manager_;
   std::unique_ptr<TrayBubbleWrapper> bubble_;
+  std::unique_ptr<StylusWatcher> watcher_;
 
   // Manages the callback OnPaletteEnabledPrefChanged callback registered to
   // the PaletteDelegate instance.
   std::unique_ptr<PaletteDelegate::EnableListenerSubscription>
       palette_enabled_subscription_;
 
+  PrefService* local_state_pref_service_ = nullptr;  // Not owned.
+  std::unique_ptr<PrefChangeRegistrar> pref_change_registrar_;
+
   // Weak pointer, will be parented by TrayContainer for its lifetime.
   views::ImageView* icon_;
 
-  // Cached palette enabled/disabled pref value.
+  // Cached palette pref values.
   bool is_palette_enabled_ = true;
+  bool has_seen_stylus_ = false;
 
   // Used to indicate whether the palette bubble is automatically opened by a
   // stylus eject event.

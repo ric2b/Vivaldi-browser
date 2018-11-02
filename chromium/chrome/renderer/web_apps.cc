@@ -9,8 +9,6 @@
 #include <string>
 #include <vector>
 
-#include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
@@ -19,21 +17,20 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "third_party/WebKit/public/platform/WebIconSizesParser.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
 using blink::WebDocument;
 using blink::WebElement;
-using blink::WebFrame;
+using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebString;
 
@@ -124,7 +121,7 @@ bool ParseIconSizes(const base::string16& text,
   return (*is_any || !sizes->empty());
 }
 
-void ParseWebAppFromWebDocument(WebFrame* frame,
+void ParseWebAppFromWebDocument(WebLocalFrame* frame,
                                 WebApplicationInfo* app_info) {
   WebDocument document = frame->GetDocument();
   if (document.IsNull())
@@ -150,17 +147,10 @@ void ParseWebAppFromWebDocument(WebFrame* frame,
       //
       // Bookmark apps also support "apple-touch-icon" and
       // "apple-touch-icon-precomposed".
-#if defined(OS_MACOSX)
-      bool bookmark_apps_enabled =
-          base::FeatureList::IsEnabled(features::kBookmarkApps);
-#else
-      bool bookmark_apps_enabled = true;
-#endif
       if (base::LowerCaseEqualsASCII(rel, "icon") ||
           base::LowerCaseEqualsASCII(rel, "shortcut icon") ||
-          (bookmark_apps_enabled &&
-           (base::LowerCaseEqualsASCII(rel, "apple-touch-icon") ||
-            base::LowerCaseEqualsASCII(rel, "apple-touch-icon-precomposed")))) {
+          base::LowerCaseEqualsASCII(rel, "apple-touch-icon") ||
+          base::LowerCaseEqualsASCII(rel, "apple-touch-icon-precomposed")) {
         AddInstallIcon(elem, &app_info->icons);
       }
     } else if (elem.HasHTMLTagName("meta") && elem.HasAttribute("name")) {

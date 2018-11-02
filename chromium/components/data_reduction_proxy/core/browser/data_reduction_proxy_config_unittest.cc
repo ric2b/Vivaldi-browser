@@ -93,7 +93,8 @@ class TestPreviewsDecider : public previews::PreviewsDecider {
   bool ShouldAllowPreviewAtECT(
       const net::URLRequest& request,
       previews::PreviewsType type,
-      net::EffectiveConnectionType effective_connection_type_threshold)
+      net::EffectiveConnectionType effective_connection_type_threshold,
+      const std::vector<std::string>& host_blacklist_from_server)
       const override {
     return allow_previews_;
   }
@@ -123,21 +124,12 @@ class DataReductionProxyConfigTest : public testing::Test {
                         .WithMockDataReductionProxyService()
                         .Build();
 
-    ResetSettings(true, false);
+    ResetSettings();
 
-    expected_params_.reset(new TestDataReductionProxyParams(
-        DataReductionProxyParams::kPromoAllowed,
-        TestDataReductionProxyParams::HAS_EVERYTHING));
+    expected_params_.reset(new TestDataReductionProxyParams());
   }
 
-  void ResetSettings(bool promo_allowed, bool holdback) {
-    int flags = 0;
-    if (promo_allowed)
-      flags |= DataReductionProxyParams::kPromoAllowed;
-    if (holdback)
-      flags |= DataReductionProxyParams::kHoldback;
-    config()->ResetParamFlagsForTest(flags);
-  }
+  void ResetSettings() { config()->ResetParamFlagsForTest(); }
 
   const scoped_refptr<base::SingleThreadTaskRunner>& task_runner() {
     return message_loop_.task_runner();
@@ -167,9 +159,9 @@ class DataReductionProxyConfigTest : public testing::Test {
     responder.response = response;
     responder.status = status;
     responder.http_response_code = response_code;
-    EXPECT_CALL(*config(), SecureProxyCheck(_, _))
+    EXPECT_CALL(*config(), SecureProxyCheck(_))
         .Times(1)
-        .WillRepeatedly(testing::WithArgs<1>(
+        .WillRepeatedly(testing::WithArgs<0>(
             testing::Invoke(&responder, &TestResponder::ExecuteCallback)));
     config()->SetIsCaptivePortal(is_captive_portal);
     net::NetworkChangeNotifier::NotifyObserversOfIPAddressChangeForTests();
@@ -235,13 +227,17 @@ class DataReductionProxyConfigTest : public testing::Test {
 };
 
 TEST_F(DataReductionProxyConfigTest, TestReloadConfigHoldback) {
+  base::FieldTrialList field_trial_list(nullptr);
+  ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
+      "DataCompressionProxyHoldback", "Enabled"));
+
   const net::ProxyServer kHttpsProxy = net::ProxyServer::FromURI(
       "https://secure_origin.net:443", net::ProxyServer::SCHEME_HTTP);
   const net::ProxyServer kHttpProxy = net::ProxyServer::FromURI(
       "insecure_origin.net:80", net::ProxyServer::SCHEME_HTTP);
   SetProxiesForHttpOnCommandLine({kHttpsProxy, kHttpProxy});
 
-  ResetSettings(true, true);
+  ResetSettings();
 
   config()->UpdateConfigForTesting(true, false);
   config()->ReloadConfig();
@@ -256,7 +252,7 @@ TEST_F(DataReductionProxyConfigTest, TestOnIPAddressChanged) {
       "insecure_origin.net:80", net::ProxyServer::SCHEME_HTTP);
 
   SetProxiesForHttpOnCommandLine({kHttpsProxy, kHttpProxy});
-  ResetSettings(true, false);
+  ResetSettings();
 
   // The proxy is enabled initially.
   config()->UpdateConfigForTesting(true, true);
@@ -367,7 +363,7 @@ TEST_F(DataReductionProxyConfigTest, WarmupURL) {
     base::HistogramTester histogram_tester;
     SetProxiesForHttpOnCommandLine({kHttpsProxy, kHttpProxy});
 
-    ResetSettings(true, false);
+    ResetSettings();
 
     variations::testing::ClearAllVariationParams();
     std::map<std::string, std::string> variation_params;
@@ -383,9 +379,8 @@ TEST_F(DataReductionProxyConfigTest, WarmupURL) {
                                            "Enabled");
 
     base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    TestDataReductionProxyConfig config(
-        0, TestDataReductionProxyParams::HAS_EVERYTHING, task_runner(), nullptr,
-        configurator(), event_creator());
+    TestDataReductionProxyConfig config(task_runner(), nullptr, configurator(),
+                                        event_creator());
 
     scoped_refptr<net::URLRequestContextGetter> request_context_getter_ =
         new net::TestURLRequestContextGetter(task_runner());
@@ -574,10 +569,19 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
   };
 
   // The retry map has the scheme prefix for https but not for http.
-  std::string origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultOrigin());
-  std::string fallback_origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultFallbackOrigin());
+  std::string origin = GetRetryMapKeyFromOrigin(params()
+                                                    ->proxies_for_http()
+                                                    .front()
+                                                    .proxy_server()
+                                                    .host_port_pair()
+                                                    .ToString());
+  std::string fallback_origin =
+      GetRetryMapKeyFromOrigin(params()
+                                   ->proxies_for_http()
+                                   .at(1)
+                                   .proxy_server()
+                                   .host_port_pair()
+                                   .ToString());
 
   for (size_t i = 0; i < arraysize(tests); ++i) {
     net::ProxyConfig::ProxyRules rules;
@@ -593,10 +597,8 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
 
     rules.ParseFromString(proxy_rules);
 
-    int flags = 0;
-    unsigned int has_definitions = TestDataReductionProxyParams::HAS_EVERYTHING;
     std::unique_ptr<TestDataReductionProxyParams> params(
-        new TestDataReductionProxyParams(flags, has_definitions));
+        new TestDataReductionProxyParams());
     std::unique_ptr<DataReductionProxyConfig> config =
         BuildConfig(std::move(params));
 
@@ -619,10 +621,19 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassed) {
 }
 
 TEST_F(DataReductionProxyConfigTest, AreProxiesBypassedRetryDelay) {
-  std::string origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultOrigin());
-  std::string fallback_origin = GetRetryMapKeyFromOrigin(
-      TestDataReductionProxyParams::DefaultFallbackOrigin());
+  std::string origin = GetRetryMapKeyFromOrigin(params()
+                                                    ->proxies_for_http()
+                                                    .front()
+                                                    .proxy_server()
+                                                    .host_port_pair()
+                                                    .ToString());
+  std::string fallback_origin =
+      GetRetryMapKeyFromOrigin(params()
+                                   ->proxies_for_http()
+                                   .at(1)
+                                   .proxy_server()
+                                   .host_port_pair()
+                                   .ToString());
 
   net::ProxyConfig::ProxyRules rules;
   std::vector<std::string> proxies;
@@ -635,10 +646,8 @@ TEST_F(DataReductionProxyConfigTest, AreProxiesBypassedRetryDelay) {
 
   rules.ParseFromString(proxy_rules);
 
-  int flags = 0;
-  unsigned int has_definitions = TestDataReductionProxyParams::HAS_EVERYTHING;
   std::unique_ptr<TestDataReductionProxyParams> params(
-      new TestDataReductionProxyParams(flags, has_definitions));
+      new TestDataReductionProxyParams());
   std::unique_ptr<DataReductionProxyConfig> config =
       BuildConfig(std::move(params));
 
@@ -685,28 +694,16 @@ TEST_F(DataReductionProxyConfigTest, IsDataReductionProxyWithParams) {
     net::ProxyServer expected_second;
     bool expected_is_fallback;
   } tests[] = {
-      {net::ProxyServer::FromURI(TestDataReductionProxyParams::DefaultOrigin(),
-                                 net::ProxyServer::SCHEME_HTTP),
-       true,
-       net::ProxyServer::FromURI(TestDataReductionProxyParams::DefaultOrigin(),
-                                 net::ProxyServer::SCHEME_HTTP),
-       net::ProxyServer::FromURI(
-           TestDataReductionProxyParams::DefaultFallbackOrigin(),
-           net::ProxyServer::SCHEME_HTTP),
-       false},
-      {net::ProxyServer::FromURI(
-           TestDataReductionProxyParams::DefaultFallbackOrigin(),
-           net::ProxyServer::SCHEME_HTTP),
-       true, net::ProxyServer::FromURI(
-                 TestDataReductionProxyParams::DefaultFallbackOrigin(),
-                 net::ProxyServer::SCHEME_HTTP),
-       net::ProxyServer(), true},
+      {params()->proxies_for_http().front().proxy_server(), true,
+       params()->proxies_for_http().front().proxy_server(),
+       params()->proxies_for_http().at(1).proxy_server(), false},
+      {params()->proxies_for_http().at(1).proxy_server(), true,
+       params()->proxies_for_http().at(1).proxy_server(), net::ProxyServer(),
+       true},
   };
   for (size_t i = 0; i < arraysize(tests); ++i) {
-    int flags = 0;
-    unsigned int has_definitions = TestDataReductionProxyParams::HAS_EVERYTHING;
     std::unique_ptr<TestDataReductionProxyParams> params(
-        new TestDataReductionProxyParams(flags, has_definitions));
+        new TestDataReductionProxyParams());
     DataReductionProxyTypeInfo proxy_type_info;
     std::unique_ptr<DataReductionProxyConfig> config(
         new DataReductionProxyConfig(task_runner(), net_log(),
@@ -865,8 +862,8 @@ TEST_F(DataReductionProxyConfigTest, LoFiOn) {
       },
       {
           // Lo-Fi is enabled through command line switch, but opted out. LoFi
-          // should not be used.
-          true, false, std::string(), false, false, 0,
+          // should be used.
+          true, false, std::string(), false, true, 0,
           0,  // not in enabled field trial, UMA is not recorded
           true,
       },
@@ -954,8 +951,8 @@ TEST_F(DataReductionProxyConfigTest, LoFiOn) {
       },
       {
           // Lo-Fi is enabled through command line switch, but opted out. LoFi
-          // should not be used.
-          true, true, std::string(), false, false, 0,
+          // should be used.
+          true, true, std::string(), false, true, 0,
           0,  // not in enabled field trial, UMA is not recorded
           true,
       },
@@ -1273,9 +1270,8 @@ TEST_F(DataReductionProxyConfigTest, LoFiAccuracy) {
   std::vector<base::TimeDelta> lofi_accuracy_recording_intervals;
   lofi_accuracy_recording_intervals.push_back(base::TimeDelta::FromSeconds(0));
 
-  TestDataReductionProxyConfig config(
-      0, TestDataReductionProxyParams::HAS_EVERYTHING, task_runner(), nullptr,
-      configurator(), event_creator());
+  TestDataReductionProxyConfig config(task_runner(), nullptr, configurator(),
+                                      event_creator());
   config.SetLofiAccuracyRecordingIntervals(lofi_accuracy_recording_intervals);
   config.SetTickClock(tick_clock.get());
 
@@ -1361,9 +1357,8 @@ TEST_F(DataReductionProxyConfigTest, LoFiAccuracyNonZeroDelay) {
   std::vector<base::TimeDelta> lofi_accuracy_recording_intervals;
   lofi_accuracy_recording_intervals.push_back(base::TimeDelta::FromSeconds(1));
 
-  TestDataReductionProxyConfig config(
-      0, TestDataReductionProxyParams::HAS_EVERYTHING, task_runner(), nullptr,
-      configurator(), event_creator());
+  TestDataReductionProxyConfig config(task_runner(), nullptr, configurator(),
+                                      event_creator());
   config.SetLofiAccuracyRecordingIntervals(lofi_accuracy_recording_intervals);
   config.SetTickClock(tick_clock.get());
 
@@ -1553,12 +1548,16 @@ TEST_F(DataReductionProxyConfigTest, ShouldEnableLitePagesWithoutECTCheck) {
       config()->ShouldEnableLitePages(*request.get(), *previews_decider.get()));
 }
 
-TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerLoFi) {
+TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerPreview) {
   // Turn on proxy-decides-transform feature to satisfy DCHECK.
   base::test::ScopedFeatureList scoped_feature_list;
   scoped_feature_list.InitAndEnableFeature(
       features::kDataReductionProxyDecidesTransform);
+  base::FieldTrialList field_trial_list(nullptr);
+  base::FieldTrialList::CreateFieldTrial(
+      "DataReductionProxyPreviewsBlackListTransition", "Enabled");
 
+  base::HistogramTester histogram_tester;
   net::TestURLRequestContext context_;
   net::TestDelegate delegate_;
   std::unique_ptr<net::URLRequest> request = context_.CreateRequest(
@@ -1566,37 +1565,30 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerLoFi) {
   request->SetLoadFlags(request->load_flags() |
                         net::LOAD_MAIN_FRAME_DEPRECATED);
   std::unique_ptr<TestPreviewsDecider> previews_decider =
-      base::MakeUnique<TestPreviewsDecider>(false);
+      base::MakeUnique<TestPreviewsDecider>(true);
 
-  // Verify false for no flags.
-  EXPECT_FALSE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                                *previews_decider.get()));
+  // Verify true for no flags.
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                  *previews_decider.get()));
 
-  // Verify true for Always-On flag.
+  // Verify false for kill switch.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
-      switches::kDataReductionProxyLoFiValueAlwaysOn);
-  EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                               *previews_decider.get()));
-
-  // Verify true for Always-On with LitePages enabled too.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxyLoFi,
-      switches::kDataReductionProxyLoFiValueAlwaysOn);
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDataReductionProxyLitePage);
-  EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                               *previews_decider.get()));
+      switches::kDataReductionProxyLoFiValueDisabled);
+  EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                   *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      0 /* NOT_ACCEPTING_TRANSFORM_DISABLED */, 1);
 
   // Verify true for Slow Connection flag.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueSlowConnectionsOnly);
-  EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                               *previews_decider.get()));
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                  *previews_decider.get()));
 
   // Verify false for Cellular Only flag and WIFI connection.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
@@ -1605,142 +1597,40 @@ TEST_F(DataReductionProxyConfigTest, ShouldAcceptServerLoFi) {
       switches::kDataReductionProxyLoFiValueCellularOnly);
   config()->SetConnectionTypeForTesting(
       net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI);
-  EXPECT_FALSE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                                *previews_decider.get()));
+  EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                   *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      2 /* NOT_ACCEPTING_TRANSFORM_CELLULAR_ONLY */, 1);
 
   // Verify true for Cellular Only flag and 3G connection.
   config()->SetConnectionTypeForTesting(
       net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                               *previews_decider.get()));
-
-  // Verify true for field trial.
-  {
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
-                                           "Enabled");
-    EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                                 *previews_decider.get()));
-  }
-
-  // Verify false for control field trial.
-  {
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
-                                           "Control");
-    EXPECT_FALSE(config()->ShouldAcceptServerLoFi(*request.get(),
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
                                                   *previews_decider.get()));
-  }
 
   // Verify PreviewsDecider check.
-  {
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kDataReductionProxyLoFi,
-        switches::kDataReductionProxyLoFiValueAlwaysOn);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(
-        "DataReductionProxyPreviewsBlackListTransition", "Enabled");
-    EXPECT_FALSE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                                  *previews_decider.get()));
-    previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
-    EXPECT_TRUE(config()->ShouldAcceptServerLoFi(*request.get(),
-                                                 *previews_decider.get()));
-  }
-}
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(false);
+  EXPECT_FALSE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                   *previews_decider.get()));
+  histogram_tester.ExpectBucketCount(
+      "DataReductionProxy.Protocol.NotAcceptingTransform",
+      1 /* NOT_ACCEPTING_TRANSFORM_BLACKLISTED */, 1);
+  previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
 
-TEST_F(DataReductionProxyConfigTest, ShouldAcceptLitePages) {
-  // Turn on proxy-decides-transform feature to satisfy DCHECK.
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kDataReductionProxyDecidesTransform);
-
-  net::TestURLRequestContext context_;
-  net::TestDelegate delegate_;
-  std::unique_ptr<net::URLRequest> request = context_.CreateRequest(
-      GURL(), net::IDLE, &delegate_, TRAFFIC_ANNOTATION_FOR_TESTS);
-  request->SetLoadFlags(request->load_flags() |
-                        net::LOAD_MAIN_FRAME_DEPRECATED);
-  std::unique_ptr<TestPreviewsDecider> previews_decider =
-      base::MakeUnique<TestPreviewsDecider>(false);
-
-  // Verify false for no flags.
-  EXPECT_FALSE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-
-  // Verify true for Always-On flag and LitePage flag.
+  // Verfiy true for always on.
   base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
   base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
       switches::kDataReductionProxyLoFi,
       switches::kDataReductionProxyLoFiValueAlwaysOn);
-  EXPECT_FALSE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDataReductionProxyLitePage);
-  EXPECT_TRUE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                  *previews_decider.get()));
 
-  // Verify true for Slow Connection flag and LitePage flag.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxyLoFi,
-      switches::kDataReductionProxyLoFiValueSlowConnectionsOnly);
-  EXPECT_FALSE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDataReductionProxyLitePage);
-  EXPECT_TRUE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-
-  // Verify true for Cellular Only flag and 3G connection.
-  base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-      switches::kDataReductionProxyLoFi,
-      switches::kDataReductionProxyLoFiValueCellularOnly);
-  config()->SetConnectionTypeForTesting(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_3G);
-  EXPECT_FALSE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      switches::kEnableDataReductionProxyLitePage);
-  EXPECT_TRUE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-
-  // Verify false for Cellular Only flag and WIFI connection.
-  config()->SetConnectionTypeForTesting(
-      net::NetworkChangeNotifier::ConnectionType::CONNECTION_WIFI);
-  EXPECT_FALSE(
-      config()->ShouldAcceptLitePages(*request.get(), *previews_decider.get()));
-
-  // Verify true for field trial.
-  {
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(params::GetLoFiFieldTrialName(),
-                                           "Enabled_Preview");
-    EXPECT_TRUE(config()->ShouldAcceptLitePages(*request.get(),
-                                                *previews_decider.get()));
-  }
-
-  // Verify PreviewsDecider check.
-  {
-    base::CommandLine::ForCurrentProcess()->InitFromArgv(0, NULL);
-    base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-        switches::kDataReductionProxyLoFi,
-        switches::kDataReductionProxyLoFiValueAlwaysOn);
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableDataReductionProxyLitePage);
-    base::FieldTrialList field_trial_list(nullptr);
-    base::FieldTrialList::CreateFieldTrial(
-        "DataReductionProxyPreviewsBlackListTransition", "Enabled");
-    EXPECT_FALSE(config()->ShouldAcceptLitePages(*request.get(),
-                                                 *previews_decider.get()));
-    previews_decider = base::MakeUnique<TestPreviewsDecider>(true);
-    EXPECT_TRUE(config()->ShouldAcceptLitePages(*request.get(),
-                                                *previews_decider.get()));
-  }
+  // DataReductionProxyPreviewsBlackListTransition should not be affected by
+  // lofi being off by the prefs rules.
+  config()->SetLoFiModeOff();
+  EXPECT_TRUE(config()->ShouldAcceptServerPreview(*request.get(),
+                                                  *previews_decider.get()));
 }
 
 }  // namespace data_reduction_proxy

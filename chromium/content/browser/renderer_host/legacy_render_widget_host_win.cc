@@ -11,14 +11,13 @@
 
 #include "base/command_line.h"
 #include "base/win/win_util.h"
-#include "base/win/windows_version.h"
 #include "content/browser/accessibility/browser_accessibility_manager_win.h"
 #include "content/browser/accessibility/browser_accessibility_state_impl.h"
 #include "content/browser/accessibility/browser_accessibility_win.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "content/public/common/content_switches.h"
-#include "ui/accessibility/platform/ax_fake_caret_win.h"
+#include "ui/accessibility/platform/ax_system_caret_win.h"
 #include "ui/base/view_prop.h"
 #include "ui/base/win/internal_constants.h"
 #include "ui/base/win/window_event_target.h"
@@ -90,8 +89,8 @@ void LegacyRenderWidgetHostHWND::SetBounds(const gfx::Rect& bounds) {
 }
 
 void LegacyRenderWidgetHostHWND::MoveCaretTo(const gfx::Rect& bounds) {
-  DCHECK(ax_fake_caret_);
-  ax_fake_caret_->MoveCaretTo(bounds);
+  DCHECK(ax_system_caret_);
+  ax_system_caret_->MoveCaretTo(bounds);
 }
 
 void LegacyRenderWidgetHostHWND::OnFinalMessage(HWND hwnd) {
@@ -112,10 +111,10 @@ LegacyRenderWidgetHostHWND::LegacyRenderWidgetHostHWND(HWND parent)
   Base::Create(parent, rect, L"Chrome Legacy Window",
                WS_CHILDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS,
                WS_EX_TRANSPARENT);
-  // We create the fake caret regardless of accessibility mode since not all
-  // assistive software that makes use of a fake caret is classified as a screen
+  // We create a system caret regardless of accessibility mode since not all
+  // assistive software that makes use of a caret is classified as a screen
   // reader, e.g. the built-in Windows Magnifier.
-  ax_fake_caret_ = std::make_unique<ui::AXFakeCaretWin>(hwnd());
+  ax_system_caret_ = std::make_unique<ui::AXSystemCaretWin>(hwnd());
 }
 
 LegacyRenderWidgetHostHWND::~LegacyRenderWidgetHostHWND() {
@@ -123,8 +122,7 @@ LegacyRenderWidgetHostHWND::~LegacyRenderWidgetHostHWND() {
 }
 
 bool LegacyRenderWidgetHostHWND::Init() {
-  if (base::win::GetVersion() >= base::win::VERSION_WIN7)
-    RegisterTouchWindow(hwnd(), TWF_WANTPALM);
+  RegisterTouchWindow(hwnd(), TWF_WANTPALM);
 
   HRESULT hr = ::CreateStdAccessibleObject(hwnd(), OBJID_WINDOW,
                                            IID_PPV_ARGS(&window_accessible_));
@@ -203,11 +201,11 @@ LRESULT LegacyRenderWidgetHostHWND::OnGetObject(UINT message,
   }
 
   if (static_cast<DWORD>(OBJID_CARET) == obj_id && host_->HasFocus()) {
-    DCHECK(ax_fake_caret_);
-    base::win::ScopedComPtr<IAccessible> fake_caret_accessible =
-        ax_fake_caret_->GetCaret();
+    DCHECK(ax_system_caret_);
+    base::win::ScopedComPtr<IAccessible> ax_system_caret_accessible =
+        ax_system_caret_->GetCaret();
     return LresultFromObject(IID_IAccessible, w_param,
-                             fake_caret_accessible.Detach());
+                             ax_system_caret_accessible.Detach());
   }
 
   return static_cast<LRESULT>(0L);

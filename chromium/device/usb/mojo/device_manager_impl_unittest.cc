@@ -74,7 +74,9 @@ class MockDeviceManagerClient : public mojom::UsbDeviceManagerClient {
   ~MockDeviceManagerClient() {}
 
   UsbDeviceManagerClientPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+    UsbDeviceManagerClientPtr client;
+    binding_.Bind(mojo::MakeRequest(&client));
+    return client;
   }
 
   MOCK_METHOD1(DoOnDeviceAdded, void(mojom::UsbDeviceInfo*));
@@ -120,11 +122,11 @@ TEST_F(USBDeviceManagerImplTest, GetDevices) {
 
   UsbDeviceManagerPtr device_manager = ConnectToDeviceManager();
 
+  auto filter = mojom::UsbDeviceFilter::New();
+  filter->has_vendor_id = true;
+  filter->vendor_id = 0x1234;
   UsbEnumerationOptionsPtr options = mojom::UsbEnumerationOptions::New();
-  UsbDeviceFilter filter;
-  filter.vendor_id = 0x1234;
-  options->filters.emplace();
-  options->filters->push_back(filter);
+  options->filters.push_back(std::move(filter));
 
   std::set<std::string> guids;
   guids.insert(device0->guid());

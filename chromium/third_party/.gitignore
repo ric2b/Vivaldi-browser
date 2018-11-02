@@ -9,6 +9,7 @@
 /android_protobuf/src
 /android_support_test_runner/lib/*.aar
 /android_support_test_runner/lib/*.jar
+/android_system_sdk/*.jar
 /android_tools/
 /android_tools_internal/
 /android_webview_glue/src
@@ -43,6 +44,7 @@
 /cros_system_api
 /custom_tabs_client/src
 /cygwin
+/depot_tools
 /deqp/src
 /directxsdk
 /dom_distiller_js/dist
@@ -105,6 +107,7 @@
 /liblouis/src
 /libphonenumber/dist
 /libsrtp
+/libsync/src
 /libupnp
 /libvpx/source/libvpx
 /libwebm/source
@@ -115,9 +118,11 @@
 /llvm-bootstrap
 /llvm-build
 /lss
+/material_design_icons/src
 /mesa/src
 /mingw-w64
 /minigbm/src
+/minizip/src
 /mkl
 /mocha
 /mockito/src

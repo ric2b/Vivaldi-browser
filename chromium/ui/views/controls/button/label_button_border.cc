@@ -13,7 +13,6 @@
 #include "ui/gfx/skia_util.h"
 #include "ui/gfx/sys_color_change_listener.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/resources/grit/ui_resources.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/native_theme_delegate.h"
@@ -148,7 +147,7 @@ void LabelButtonAssetBorder::Paint(const View& view, gfx::Canvas* canvas) {
     {
       // First, modulate the background by 1 - alpha.
       cc::PaintCanvasAutoRestore auto_restore(canvas->sk_canvas(), false);
-      canvas->sk_canvas()->saveLayerAlpha(&sk_rect, 255 - fg_alpha);
+      canvas->sk_canvas()->saveLayerAlpha(&sk_rect, 255 - fg_alpha, false);
       state = native_theme_delegate->GetBackgroundThemeState(&extra);
       PaintHelper(this, canvas, state, rect, extra);
     }

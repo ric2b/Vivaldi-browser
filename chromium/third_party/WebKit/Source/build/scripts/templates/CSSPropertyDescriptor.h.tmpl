@@ -2,13 +2,22 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+{% from 'templates/macros.tmpl' import source_files_for_generated_file %}
+{{source_files_for_generated_file(template_file, input_files)}}
+
+#ifndef CSSPropertyDescriptor_h
+#define CSSPropertyDescriptor_h
+
 #include "core/CSSPropertyNames.h"
+#include "platform/heap/HeapAllocator.h"
 
 namespace blink {
 
-class CSSValue;
 class CSSParserTokenRange;
 class CSSParserContext;
+class CSSParserLocalContext;
+class CSSProperty;
+class CSSValue;
 
 // Stores function pointers matching those declared in CSSPropertyAPI.
 struct CSSPropertyDescriptor {
@@ -23,3 +32,5 @@ struct CSSPropertyDescriptor {
 };
 
 }  // namespace blink
+
+#endif  // CSSPropertyDescriptor_h

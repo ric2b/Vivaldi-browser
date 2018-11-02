@@ -23,6 +23,10 @@ bool TestSafeBrowsingDatabaseManager::CanCheckResourceType(
   return false;
 }
 
+bool TestSafeBrowsingDatabaseManager::CanCheckSubresourceFilter() const {
+  return false;
+}
+
 bool TestSafeBrowsingDatabaseManager::CanCheckUrl(const GURL& url) const {
   NOTIMPLEMENTED();
   return false;
@@ -33,8 +37,10 @@ bool TestSafeBrowsingDatabaseManager::ChecksAreAlwaysAsync() const {
   return false;
 }
 
-bool TestSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& url,
-                                                     Client* client) {
+bool TestSafeBrowsingDatabaseManager::CheckBrowseUrl(
+    const GURL& url,
+    const SBThreatTypeSet& threat_types,
+    Client* client) {
   NOTIMPLEMENTED();
   return true;
 }
@@ -64,6 +70,13 @@ bool TestSafeBrowsingDatabaseManager::CheckUrlForSubresourceFilter(
     Client* client) {
   NOTIMPLEMENTED();
   return true;
+}
+
+AsyncMatch TestSafeBrowsingDatabaseManager::CheckCsdWhitelistUrl(
+    const GURL& url,
+    Client* client) {
+  NOTIMPLEMENTED();
+  return AsyncMatch::MATCH;
 }
 
 bool TestSafeBrowsingDatabaseManager::MatchCsdWhitelistUrl(const GURL& url) {

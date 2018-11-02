@@ -160,7 +160,7 @@ bool UsbChooserContext::HasDevicePermission(
   auto it = ephemeral_devices_.find(
       std::make_pair(requesting_origin, embedding_origin));
   if (it != ephemeral_devices_.end() &&
-      base::ContainsValue(it->second, device->guid())) {
+      base::ContainsKey(it->second, device->guid())) {
     return true;
   }
 
@@ -194,7 +194,8 @@ bool UsbChooserContext::IsValidObject(const base::DictionaryValue& object) {
          object.HasKey(kSerialNumberKey);
 }
 
-void UsbChooserContext::OnDeviceRemoved(scoped_refptr<UsbDevice> device) {
+void UsbChooserContext::OnDeviceRemovedCleanup(
+    scoped_refptr<UsbDevice> device) {
   for (auto& map_entry : ephemeral_devices_)
     map_entry.second.erase(device->guid());
 }

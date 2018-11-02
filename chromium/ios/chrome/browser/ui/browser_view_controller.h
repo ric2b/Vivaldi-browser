@@ -10,6 +10,8 @@
 #import <UIKit/UIKit.h>
 
 #import "base/ios/block_types.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/side_swipe/side_swipe_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 #import "ios/chrome/browser/ui/toolbar/web_toolbar_controller.h"
@@ -60,16 +62,20 @@ extern NSString* const kLocationBarResignsFirstResponderNotification;
 // webUsageSuspended property for this BVC will be based on |model|, and future
 // changes to |model|'s suspension state should be made through this BVC
 // instead of directly on the model.
-- (instancetype)initWithTabModel:(TabModel*)model
-                    browserState:(ios::ChromeBrowserState*)browserState
-               dependencyFactory:
-                   (BrowserViewControllerDependencyFactory*)factory
+- (instancetype)
+          initWithTabModel:(TabModel*)model
+              browserState:(ios::ChromeBrowserState*)browserState
+         dependencyFactory:(BrowserViewControllerDependencyFactory*)factory
+applicationCommandEndpoint:(id<ApplicationCommands>)applicationCommandEndpoint
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)initWithNibName:(NSString*)nibNameOrNil
                          bundle:(NSBundle*)nibBundleOrNil NS_UNAVAILABLE;
 
 - (instancetype)initWithCoder:(NSCoder*)aDecoder NS_UNAVAILABLE;
+
+@property(nonatomic, readonly) id<ApplicationCommands, BrowserCommands>
+    dispatcher;
 
 // The top-level browser container view.
 @property(nonatomic, strong) BrowserContainerView* contentArea;
@@ -98,13 +104,6 @@ extern NSString* const kLocationBarResignsFirstResponderNotification;
 // Called when the typing shield is tapped.
 - (void)shieldWasTapped:(id)sender;
 
-// Called when a UI element to create a new tab is triggered.
-- (void)newTab:(id)sender;
-
-// Makes sure that the view hierarchy has been built. Equivalent to calling
-// -view, but without the annoying compiler warning.
-- (void)ensureViewCreated;
-
 // Called when the browser state provided to this instance is being destroyed.
 // At this point the browser will no longer ever be active, and will likely be
 // deallocated soon.
@@ -122,10 +121,14 @@ extern NSString* const kLocationBarResignsFirstResponderNotification;
                       atIndex:(NSUInteger)position
                    transition:(ui::PageTransition)transition;
 
-// This will dismiss the web views on all the tabs and reload the frontmost one
-// if there is one. This is used when a userdefault changes and the web views
-// need to be re-created to pick it up.
-- (void)resetAllWebViews;
+// Add a new tab with the given url, at the given |position|,
+// and makes it the selected tab. The selected tab is returned.
+// If |position| == NSNotFound the tab will be added at the end of the stack.
+// |tabAddedCompletion| is called after the tab is added (if not nil).
+- (Tab*)addSelectedTabWithURL:(const GURL&)url
+                      atIndex:(NSUInteger)position
+                   transition:(ui::PageTransition)transition
+           tabAddedCompletion:(ProceduralBlock)tabAddedCompletion;
 
 // Informs the BVC that a new foreground tab is about to be opened. This is
 // intended to be called before setWebUsageSuspended:NO in cases where a new tab
@@ -154,6 +157,9 @@ extern NSString* const kLocationBarResignsFirstResponderNotification;
 // when files have been removed.
 - (void)removeExternalFilesImmediately:(BOOL)immediately
                      completionHandler:(ProceduralBlock)completionHandler;
+
+// Called before the instance is deallocated.
+- (void)shutdown;
 
 @end
 

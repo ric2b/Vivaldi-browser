@@ -51,7 +51,7 @@ class CatalogViewerContents : public views::WidgetDelegateView,
         capability_(new views::Textfield) {
     constexpr int kPadding = 5;
     SetBorder(views::CreateEmptyBorder(gfx::Insets(kPadding)));
-    set_background(views::Background::CreateStandardPanelBackground());
+    SetBackground(views::CreateStandardPanelBackground());
 
     views::GridLayout* layout = new views::GridLayout(this);
     SetLayoutManager(layout);
@@ -222,17 +222,18 @@ void CatalogViewer::RemoveWindow(views::Widget* window) {
 }
 
 void CatalogViewer::OnStart() {
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  if (!aura_init_)
+    context()->QuitNow();
 }
 
 void CatalogViewer::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void CatalogViewer::Launch(uint32_t what, mojom::LaunchMode how) {
@@ -252,8 +253,7 @@ void CatalogViewer::Launch(uint32_t what, mojom::LaunchMode how) {
   windows_.push_back(window);
 }
 
-void CatalogViewer::Create(const service_manager::BindSourceInfo& source_info,
-                           mojom::LaunchableRequest request) {
+void CatalogViewer::Create(mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

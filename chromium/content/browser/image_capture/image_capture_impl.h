@@ -7,10 +7,6 @@
 
 #include "media/capture/mojo/image_capture.mojom.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace content {
 
 class ImageCaptureImpl : public media::mojom::ImageCapture {
@@ -18,18 +14,17 @@ class ImageCaptureImpl : public media::mojom::ImageCapture {
   ImageCaptureImpl();
   ~ImageCaptureImpl() override;
 
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     media::mojom::ImageCaptureRequest request);
+  static void Create(media::mojom::ImageCaptureRequest request);
 
-  void GetCapabilities(const std::string& source_id,
-                       const GetCapabilitiesCallback& callback) override;
+  void GetPhotoState(const std::string& source_id,
+                     GetPhotoStateCallback callback) override;
 
   void SetOptions(const std::string& source_id,
                   media::mojom::PhotoSettingsPtr settings,
-                  const SetOptionsCallback& callback) override;
+                  SetOptionsCallback callback) override;
 
   void TakePhoto(const std::string& source_id,
-                 const TakePhotoCallback& callback) override;
+                 TakePhotoCallback callback) override;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ImageCaptureImpl);

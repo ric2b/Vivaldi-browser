@@ -4,7 +4,7 @@
 
 #include "modules/compositorworker/AnimationWorkletThread.h"
 
-#include "core/workers/WorkerThreadStartupData.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "modules/compositorworker/AnimationWorkletGlobalScope.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -13,39 +13,38 @@
 namespace blink {
 
 std::unique_ptr<AnimationWorkletThread> AnimationWorkletThread::Create(
-    PassRefPtr<WorkerLoaderProxy> worker_loader_proxy,
+    ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("animation-worklet"),
                "AnimationWorkletThread::create");
   DCHECK(IsMainThread());
-  return WTF::WrapUnique(new AnimationWorkletThread(
-      std::move(worker_loader_proxy), worker_reporting_proxy));
+  return WTF::WrapUnique(
+      new AnimationWorkletThread(loading_context, worker_reporting_proxy));
 }
 
 AnimationWorkletThread::AnimationWorkletThread(
-    PassRefPtr<WorkerLoaderProxy> worker_loader_proxy,
+    ThreadableLoadingContext* loading_context,
     WorkerReportingProxy& worker_reporting_proxy)
-    : AbstractAnimationWorkletThread(std::move(worker_loader_proxy),
-                                     worker_reporting_proxy) {}
+    : AbstractAnimationWorkletThread(loading_context, worker_reporting_proxy) {}
 
 AnimationWorkletThread::~AnimationWorkletThread() {}
 
 WorkerOrWorkletGlobalScope* AnimationWorkletThread::CreateWorkerGlobalScope(
-    std::unique_ptr<WorkerThreadStartupData> startup_data) {
+    std::unique_ptr<GlobalScopeCreationParams> creation_params) {
   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("animation-worklet"),
                "AnimationWorkletThread::createWorkerGlobalScope");
 
   RefPtr<SecurityOrigin> security_origin =
-      SecurityOrigin::Create(startup_data->script_url_);
-  if (startup_data->starter_origin_privilege_data_)
+      SecurityOrigin::Create(creation_params->script_url);
+  if (creation_params->starter_origin_privilege_data) {
     security_origin->TransferPrivilegesFrom(
-        std::move(startup_data->starter_origin_privilege_data_));
+        std::move(creation_params->starter_origin_privilege_data));
+  }
 
-  // TODO(ikilpatrick): The AnimationWorkletGlobalScope will need to store a
-  // WorkerClients object for using a CompositorWorkerProxyClient object.
   return AnimationWorkletGlobalScope::Create(
-      startup_data->script_url_, startup_data->user_agent_,
-      security_origin.Release(), this->GetIsolate(), this);
+      creation_params->script_url, creation_params->user_agent,
+      std::move(security_origin), this->GetIsolate(), this,
+      creation_params->worker_clients);
 }
 
 }  // namespace blink

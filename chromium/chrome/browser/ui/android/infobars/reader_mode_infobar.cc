@@ -46,6 +46,18 @@ ScopedJavaLocalRef<jobject> ReaderModeInfoBar::CreateRenderInfoBar(
   return Java_ReaderModeInfoBar_create(env);
 }
 
+base::android::ScopedJavaLocalRef<jobject> ReaderModeInfoBar::GetTab(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  content::WebContents* web_contents =
+      InfoBarService::WebContentsFromInfoBar(this);
+  if (!web_contents)
+    return nullptr;
+
+  TabAndroid* tab_android = TabAndroid::FromWebContents(web_contents);
+  return tab_android ? tab_android->GetJavaObject() : nullptr;
+}
+
 void ReaderModeInfoBar::ProcessButton(int action) {}
 
 void Create(JNIEnv* env,
@@ -56,8 +68,4 @@ void Create(JNIEnv* env,
 
   service->AddInfoBar(base::MakeUnique<ReaderModeInfoBar>(
       base::MakeUnique<ReaderModeInfoBarDelegate>()));
-}
-
-bool RegisterReaderModeInfoBar(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

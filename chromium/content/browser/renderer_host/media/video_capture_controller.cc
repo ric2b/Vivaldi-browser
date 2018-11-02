@@ -16,7 +16,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "build/build_config.h"
-#include "components/viz/display_compositor/gl_helper.h"
+#include "components/viz/common/gl_helper.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/common/video_capture.mojom.h"
@@ -447,6 +447,8 @@ void VideoCaptureController::OnFrameReadyInBuffer(
       }
     }
     UMA_HISTOGRAM_COUNTS("Media.VideoCapture.FrameRate", frame_rate);
+    UMA_HISTOGRAM_TIMES("Media.VideoCapture.DelayUntilFirstFrame",
+                        base::TimeTicks::Now() - time_of_start_request_);
     OnLog("First frame received at VideoCaptureController");
     has_received_frames_ = true;
   }
@@ -498,7 +500,6 @@ void VideoCaptureController::OnDeviceLaunched(
     entry.set_consumer_feedback_observer(launched_device_.get());
   if (device_launch_observer_) {
     device_launch_observer_->OnDeviceLaunched(this);
-    device_launch_observer_ = nullptr;
   }
 }
 
@@ -518,15 +519,26 @@ void VideoCaptureController::OnDeviceLaunchAborted() {
   }
 }
 
+void VideoCaptureController::OnDeviceConnectionLost() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  if (device_launch_observer_) {
+    device_launch_observer_->OnDeviceConnectionLost(this);
+    device_launch_observer_ = nullptr;
+  }
+}
+
 void VideoCaptureController::CreateAndStartDeviceAsync(
     const media::VideoCaptureParams& params,
     VideoCaptureDeviceLaunchObserver* observer,
     base::OnceClosure done_cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  time_of_start_request_ = base::TimeTicks::Now();
   device_launch_observer_ = observer;
-  device_launcher_->LaunchDeviceAsync(device_id_, stream_type_, params,
-                                      GetWeakPtrForIOThread(), this,
-                                      std::move(done_cb));
+  device_launcher_->LaunchDeviceAsync(
+      device_id_, stream_type_, params, GetWeakPtrForIOThread(),
+      base::Bind(&VideoCaptureController::OnDeviceConnectionLost,
+                 GetWeakPtrForIOThread()),
+      this, std::move(done_cb));
 }
 
 void VideoCaptureController::ReleaseDeviceAsync(base::OnceClosure done_cb) {
@@ -543,11 +555,11 @@ bool VideoCaptureController::IsDeviceAlive() const {
   return launched_device_ != nullptr;
 }
 
-void VideoCaptureController::GetPhotoCapabilities(
-    media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) const {
+void VideoCaptureController::GetPhotoState(
+    media::VideoCaptureDevice::GetPhotoStateCallback callback) const {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(launched_device_);
-  launched_device_->GetPhotoCapabilities(std::move(callback));
+  launched_device_->GetPhotoState(std::move(callback));
 }
 
 void VideoCaptureController::SetPhotoOptions(

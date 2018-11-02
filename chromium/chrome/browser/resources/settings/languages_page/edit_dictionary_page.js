@@ -21,7 +21,7 @@ Polymer({
      */
     subpageRoute: {
       type: Object,
-      value: settings.Route.EDIT_DICTIONARY,
+      value: settings.routes.EDIT_DICTIONARY,
     },
 
     /** @private {!Array<string>} */
@@ -38,9 +38,9 @@ Polymer({
 
   /** @override */
   ready: function() {
-    this.languageSettingsPrivate =
-        settings.languageSettingsPrivateApiForTest ||
-        /** @type {!LanguageSettingsPrivate} */(chrome.languageSettingsPrivate);
+    this.languageSettingsPrivate = settings.languageSettingsPrivateApiForTest ||
+        /** @type {!LanguageSettingsPrivate} */
+        (chrome.languageSettingsPrivate);
 
     this.languageSettingsPrivate.getSpellcheckWords(function(words) {
       this.words_ = words;
@@ -111,7 +111,7 @@ Polymer({
   },
 
   /**
-   * Handles tapping on a paper-item's Remove Word icon button.
+   * Handles tapping on a "Remove word" icon button.
    * @param {!{model: !{item: string}}} e
    */
   onRemoveWordTap_: function(e) {

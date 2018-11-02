@@ -8,7 +8,6 @@ import("//build/config/ui.gni")
 # implementation (and private haders) are in 'internal'.
 source_set("cpp") {
   sources = [
-    "client_compositor_frame_sink.h",
     "property_type_converters.h",
     "raster_thread_helper.h",
   ]
@@ -17,7 +16,7 @@ source_set("cpp") {
     "//base",
     "//cc",
     "//cc/surfaces",
-    "//cc/surfaces:surface_id",
+    "//components/viz/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/interfaces",
     "//services/ui/common:mus_common",
@@ -54,8 +53,6 @@ source_set("internal") {
   ]
 
   sources = [
-    "client_compositor_frame_sink.cc",
-    "client_compositor_frame_sink.h",
     "property_type_converters.cc",
     "raster_thread_helper.cc",
   ]
@@ -64,7 +61,7 @@ source_set("internal") {
     "//base",
     "//cc",
     "//cc/surfaces",
-    "//cc/surfaces:surface_id",
+    "//components/viz/common",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",

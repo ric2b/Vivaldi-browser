@@ -4,4 +4,27 @@
 
 #include "core/css/properties/CSSPropertyAPIBorderWidth.h"
 
-namespace blink {}  // namespace blink
+#include "core/css/parser/CSSParserContext.h"
+#include "core/css/parser/CSSParserLocalContext.h"
+#include "core/css/parser/CSSParserMode.h"
+#include "core/css/parser/CSSPropertyParserHelpers.h"
+#include "core/css/properties/CSSPropertyWebkitBorderWidthUtils.h"
+
+namespace blink {
+
+const CSSValue* CSSPropertyAPIBorderWidth::parseSingleValue(
+    CSSParserTokenRange& range,
+    const CSSParserContext& context,
+    const CSSParserLocalContext& local_context) {
+  CSSPropertyID shorthand = local_context.CurrentShorthand();
+  bool allow_quirky_lengths =
+      IsQuirksModeBehavior(context.Mode()) &&
+      (shorthand == CSSPropertyInvalid || shorthand == CSSPropertyBorderWidth);
+  CSSPropertyParserHelpers::UnitlessQuirk unitless =
+      allow_quirky_lengths ? CSSPropertyParserHelpers::UnitlessQuirk::kAllow
+                           : CSSPropertyParserHelpers::UnitlessQuirk::kForbid;
+  return CSSPropertyWebkitBorderWidthUtils::ConsumeBorderWidth(
+      range, context.Mode(), unitless);
+}
+
+}  // namespace blink

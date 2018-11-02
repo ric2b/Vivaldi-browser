@@ -24,14 +24,9 @@ class ScriptWrappable;
 // FetchEvent.Request.
 // Apply |X| for each pair of (InterfaceName, PrivateKeyName).
 #define V8_PRIVATE_PROPERTY_FOR_EACH(X)               \
-  X(CustomElement, AdoptedCallback)                   \
-  X(CustomElement, AttributeChangedCallback)          \
-  X(CustomElement, ConnectedCallback)                 \
-  X(CustomElement, DisconnectedCallback)              \
   X(CustomElement, Document)                          \
   X(CustomElement, IsInterfacePrototypeObject)        \
   X(CustomElement, NamespaceURI)                      \
-  X(CustomElement, RegistryMap)                       \
   X(CustomElement, TagName)                           \
   X(CustomElement, Type)                              \
   X(CustomElementLifecycle, AttachedCallback)         \
@@ -53,7 +48,6 @@ class ScriptWrappable;
   X(MessageEvent, CachedData)                         \
   X(MutationObserver, Callback)                       \
   X(NamedConstructor, Initialized)                    \
-  X(PerformanceObserver, Callback)                    \
   X(PopStateEvent, State)                             \
   X(SameObject, DetectedBarcodeCornerPoints)          \
   X(SameObject, DetectedFaceLandmarks)                \
@@ -62,6 +56,8 @@ class ScriptWrappable;
   X(SameObject, NotificationVibrate)                  \
   X(SameObject, PerformanceLongTaskTimingAttribution) \
   X(SameObject, PushManagerSupportedContentEncodings) \
+  X(V8EventListener, AttributeListener)               \
+  X(V8EventListener, Listener)                        \
   SCRIPT_PROMISE_PROPERTIES(X, Promise)               \
   SCRIPT_PROMISE_PROPERTIES(X, Resolver)
 

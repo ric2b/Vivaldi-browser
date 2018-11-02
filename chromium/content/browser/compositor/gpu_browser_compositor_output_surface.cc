@@ -9,7 +9,7 @@
 #include "build/build_config.h"
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
-#include "components/viz/display_compositor/compositor_overlay_candidate_validator.h"
+#include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -143,6 +143,11 @@ bool GpuBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane() const {
 
 unsigned GpuBrowserCompositorOutputSurface::GetOverlayTextureId() const {
   return 0;
+}
+
+gfx::BufferFormat GpuBrowserCompositorOutputSurface::GetOverlayBufferFormat()
+    const {
+  return gfx::BufferFormat::RGBX_8888;
 }
 
 bool GpuBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle() const {

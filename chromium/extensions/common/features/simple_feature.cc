@@ -105,6 +105,8 @@ std::string GetDisplayName(Feature::Context context) {
       return "webui";
     case Feature::SERVICE_WORKER_CONTEXT:
       return "service worker";
+    case Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
+      return "lock screen app";
   }
   NOTREACHED();
   return "";
@@ -259,8 +261,9 @@ Feature::Availability SimpleFeature::IsAvailableToContext(
 
   // TODO(kalman): Assert that if the context was a webpage or WebUI context
   // then at some point a "matches" restriction was checked.
-  return CheckDependencies(base::Bind(&IsAvailableToContextForBind, extension,
-                                      context, url, platform));
+  return CheckDependencies(base::Bind(&IsAvailableToContextForBind,
+                                      base::RetainedRef(extension), context,
+                                      url, platform));
 }
 
 std::string SimpleFeature::GetAvailabilityMessage(

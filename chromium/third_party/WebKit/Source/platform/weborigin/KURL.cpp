@@ -191,6 +191,11 @@ bool KURL::IsAboutSrcdocURL() const {
   return *this == SrcdocURL();
 }
 
+const KURL& NullURL() {
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(KURL, static_null_url, ());
+  return static_null_url;
+}
+
 String KURL::ElidedString() const {
   if (GetString().length() <= 1024)
     return GetString();
@@ -207,7 +212,7 @@ KURL::KURL() : is_valid_(false), protocol_is_in_http_family_(false) {}
 // UTF-8 just in case.
 KURL::KURL(ParsedURLStringTag, const String& url) {
   if (!url.IsNull())
-    Init(KURL(), url, 0);
+    Init(NullURL(), url, 0);
   else {
     // WebCore expects us to preserve the nullness of strings when this
     // constructor is used. In all other cases, it expects a non-null

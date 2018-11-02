@@ -5,6 +5,8 @@
 #ifndef UI_APP_LIST_VIEWS_TILE_ITEM_VIEW_H_
 #define UI_APP_LIST_VIEWS_TILE_ITEM_VIEW_H_
 
+#include <memory>
+
 #include "base/macros.h"
 #include "base/strings/string16.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -25,6 +27,8 @@ class Label;
 namespace app_list {
 
 // The view for a tile in the app list on the start/search page.
+// TODO(warx): Merge this class to its subclass SearchResultTileItemView once
+// bubble launcher deprecates.
 class APP_LIST_EXPORT TileItemView : public views::CustomButton,
                                      public views::ButtonListener,
                                      public ImageShadowAnimator::Delegate {
@@ -50,6 +54,7 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
 
   // Overridden from views::CustomButton:
   void StateChanged(ButtonState old_state) override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
 
   // Overridden from views::View:
   void Layout() override;
@@ -59,25 +64,43 @@ class APP_LIST_EXPORT TileItemView : public views::CustomButton,
   void ImageShadowAnimationProgressed(ImageShadowAnimator* animator) override;
 
  protected:
-  void SetIcon(const gfx::ImageSkia& icon);
-
-  void SetTitle(const base::string16& title);
-
- private:
-  void UpdateBackgroundColor();
-
   // Overridden from views::View:
   gfx::Size CalculatePreferredSize() const override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
 
+  views::ImageView* icon() const { return icon_; }
+  void SetIcon(const gfx::ImageSkia& icon);
+
+  views::ImageView* badge() const { return badge_; }
+  void SetBadgeIcon(const gfx::ImageSkia& badge_icon);
+
+  views::Label* title() const { return title_; }
+  void SetTitle(const base::string16& title);
+
+  void set_is_recommendation(bool is_recommendation) {
+    is_recommendation_ = is_recommendation;
+  }
+
+ private:
+  void UpdateBackgroundColor();
+
   SkColor parent_background_color_;
   std::unique_ptr<ImageShadowAnimator> image_shadow_animator_;
 
-  views::ImageView* icon_;  // Owned by views hierarchy.
-  views::Label* title_;     // Owned by views hierarchy.
+  views::ImageView* icon_;   // Owned by views hierarchy.
+  views::ImageView* badge_;  // Owned by views hierarchy.
+  views::Label* title_;      // Owned by views hierarchy.
 
-  bool selected_;
+  bool selected_ = false;
+
+  // Indicates whether this view is the base class for recommendation display
+  // type SearchResultTileItemView.
+  // TODO(warx): It is not needed once TileItemView class is merged to
+  // SearchResultTileItemVIew.
+  bool is_recommendation_ = false;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(TileItemView);
 };

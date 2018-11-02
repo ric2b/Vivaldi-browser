@@ -3,17 +3,19 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include "bindings/core/v8/V8CacheOptions.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/MessageEvent.h"
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/testing/DummyPageHolder.h"
 #include "core/workers/DedicatedWorkerGlobalScope.h"
 #include "core/workers/DedicatedWorkerThread.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/InProcessWorkerMessagingProxy.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
+#include "core/workers/WorkerBackingThreadStartupData.h"
 #include "core/workers/WorkerInspectorProxy.h"
 #include "core/workers/WorkerThread.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "core/workers/WorkerThreadTestHelper.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -29,34 +31,30 @@ namespace {
 // activity report separately. If the intervals are very short, they are
 // notified to the main thread almost at the same time and the thread may miss
 // the second notification.
-const double kDefaultIntervalInSec = 0.01;
-const double kNextIntervalInSec = 0.01;
-const double kMaxIntervalInSec = 0.02;
+constexpr double kDefaultIntervalInSec = 0.01;
+constexpr double kNextIntervalInSec = 0.01;
+constexpr double kMaxIntervalInSec = 0.02;
 
 }  // namespace
 
 class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
  public:
-  DedicatedWorkerThreadForTest(
-      WorkerLoaderProxyProvider* worker_loader_proxy_provider,
-      InProcessWorkerObjectProxy& worker_object_proxy)
-      : DedicatedWorkerThread(
-            WorkerLoaderProxy::Create(worker_loader_proxy_provider),
-            worker_object_proxy,
-            MonotonicallyIncreasingTime()) {
+  DedicatedWorkerThreadForTest(InProcessWorkerObjectProxy& worker_object_proxy)
+      : DedicatedWorkerThread(nullptr /* ThreadableLoadingContext */,
+                              worker_object_proxy) {
     worker_backing_thread_ = WorkerBackingThread::CreateForTest("Test thread");
   }
 
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
-      std::unique_ptr<WorkerThreadStartupData> startup_data) override {
+      std::unique_ptr<GlobalScopeCreationParams> creation_params) override {
     return new DedicatedWorkerGlobalScope(
-        startup_data->script_url_, startup_data->user_agent_, this,
-        time_origin_, std::move(startup_data->starter_origin_privilege_data_),
-        std::move(startup_data->worker_clients_));
+        creation_params->script_url, creation_params->user_agent, this,
+        time_origin_, std::move(creation_params->starter_origin_privilege_data),
+        std::move(creation_params->worker_clients));
   }
 
   // Emulates API use on DedicatedWorkerGlobalScope.
-  void CountFeature(UseCounter::Feature feature) {
+  void CountFeature(WebFeature feature) {
     EXPECT_TRUE(IsCurrentThread());
     GlobalScope()->CountFeature(feature);
     GetParentFrameTaskRunners()
@@ -65,7 +63,7 @@ class DedicatedWorkerThreadForTest final : public DedicatedWorkerThread {
   }
 
   // Emulates deprecated API use on DedicatedWorkerGlobalScope.
-  void CountDeprecation(UseCounter::Feature feature) {
+  void CountDeprecation(WebFeature feature) {
     EXPECT_TRUE(IsCurrentThread());
     GlobalScope()->CountDeprecation(feature);
 
@@ -84,27 +82,26 @@ class InProcessWorkerObjectProxyForTest final
     : public InProcessWorkerObjectProxy {
  public:
   InProcessWorkerObjectProxyForTest(
-      const WeakPtr<InProcessWorkerMessagingProxy>& messaging_proxy_weak_ptr,
+      InProcessWorkerMessagingProxy* messaging_proxy,
       ParentFrameTaskRunners* parent_frame_task_runners)
-      : InProcessWorkerObjectProxy(messaging_proxy_weak_ptr,
-                                   parent_frame_task_runners),
-        reported_features_(UseCounter::kNumberOfFeatures) {
+      : InProcessWorkerObjectProxy(messaging_proxy, parent_frame_task_runners),
+        reported_features_(static_cast<int>(WebFeature::kNumberOfFeatures)) {
     default_interval_in_sec_ = kDefaultIntervalInSec;
     next_interval_in_sec_ = kNextIntervalInSec;
     max_interval_in_sec_ = kMaxIntervalInSec;
   }
 
-  void CountFeature(UseCounter::Feature feature) override {
+  void CountFeature(WebFeature feature) override {
     // Any feature should be reported only one time.
-    EXPECT_FALSE(reported_features_.QuickGet(feature));
-    reported_features_.QuickSet(feature);
+    EXPECT_FALSE(reported_features_.QuickGet(static_cast<int>(feature)));
+    reported_features_.QuickSet(static_cast<int>(feature));
     InProcessWorkerObjectProxy::CountFeature(feature);
   }
 
-  void CountDeprecation(UseCounter::Feature feature) override {
+  void CountDeprecation(WebFeature feature) override {
     // Any feature should be reported only one time.
-    EXPECT_FALSE(reported_features_.QuickGet(feature));
-    reported_features_.QuickSet(feature);
+    EXPECT_FALSE(reported_features_.QuickGet(static_cast<int>(feature)));
+    reported_features_.QuickSet(static_cast<int>(feature));
     InProcessWorkerObjectProxy::CountDeprecation(feature);
   }
 
@@ -120,23 +117,11 @@ class InProcessWorkerMessagingProxyForTest
                                       nullptr /* workerObject */,
                                       nullptr /* workerClients */) {
     worker_object_proxy_ = WTF::MakeUnique<InProcessWorkerObjectProxyForTest>(
-        weak_ptr_factory_.CreateWeakPtr(), GetParentFrameTaskRunners());
-    worker_loader_proxy_provider_ =
-        WTF::MakeUnique<WorkerLoaderProxyProvider>();
-    worker_thread_ = WTF::WrapUnique(new DedicatedWorkerThreadForTest(
-        worker_loader_proxy_provider_.get(), WorkerObjectProxy()));
-    mock_worker_thread_lifecycle_observer_ =
-        new MockWorkerThreadLifecycleObserver(
-            worker_thread_->GetWorkerThreadLifecycleContext());
-    EXPECT_CALL(*mock_worker_thread_lifecycle_observer_,
-                ContextDestroyed(::testing::_))
-        .Times(1);
+        this, GetParentFrameTaskRunners());
   }
 
   ~InProcessWorkerMessagingProxyForTest() override {
     EXPECT_FALSE(blocking_);
-    worker_thread_->GetWorkerLoaderProxy()->DetachProvider(
-        worker_loader_proxy_provider_.get());
   }
 
   void StartWithSourceCode(const String& source) {
@@ -147,22 +132,15 @@ class InProcessWorkerMessagingProxyForTest
     CSPHeaderAndType header_and_type("contentSecurityPolicy",
                                      kContentSecurityPolicyHeaderTypeReport);
     headers->push_back(header_and_type);
-    WorkerV8Settings worker_v8_settings = WorkerV8Settings::Default();
-    worker_v8_settings.atomics_wait_mode_ =
-        WorkerV8Settings::AtomicsWaitMode::kAllow;
-    GetWorkerThread()->Start(
-        WorkerThreadStartupData::Create(
+    InitializeWorkerThread(
+        WTF::MakeUnique<GlobalScopeCreationParams>(
             script_url, "fake user agent", source, nullptr /* cachedMetaData */,
             kDontPauseWorkerGlobalScopeOnStart, headers.get(),
             "" /* referrerPolicy */, security_origin_.Get(),
             nullptr /* workerClients */, kWebAddressSpaceLocal,
             nullptr /* originTrialTokens */, nullptr /* workerSettings */,
-            worker_v8_settings),
-        GetParentFrameTaskRunners());
-
-    GetWorkerInspectorProxy()->WorkerThreadCreated(
-        ToDocument(GetExecutionContext()), worker_thread_.get(), script_url);
-    WorkerThreadCreated();
+            kV8CacheOptionsDefault),
+        CreateBackingThreadStartupData(nullptr /* isolate */), script_url);
   }
 
   enum class Notification {
@@ -203,29 +181,47 @@ class InProcessWorkerMessagingProxyForTest
 
   void WorkerThreadTerminated() override {
     EXPECT_TRUE(IsMainThread());
+    ThreadedMessagingProxyBase::WorkerThreadTerminated();
     events_.push_back(Notification::kThreadTerminated);
     if (blocking_)
       testing::ExitRunLoop();
     blocking_ = false;
   }
 
-  std::unique_ptr<WorkerThread> CreateWorkerThread(
-      double origin_time) override {
-    NOTREACHED();
-    return nullptr;
-  }
-
-  DedicatedWorkerThreadForTest* GetWorkerThread() {
-    return static_cast<DedicatedWorkerThreadForTest*>(worker_thread_.get());
+  DedicatedWorkerThreadForTest* GetDedicatedWorkerThread() {
+    return static_cast<DedicatedWorkerThreadForTest*>(GetWorkerThread());
   }
 
   unsigned UnconfirmedMessageCount() const {
     return unconfirmed_message_count_;
   }
 
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->Trace(mock_worker_thread_lifecycle_observer_);
+    InProcessWorkerMessagingProxy::Trace(visitor);
+  }
+
  private:
-  std::unique_ptr<WorkerLoaderProxyProvider> worker_loader_proxy_provider_;
-  Persistent<MockWorkerThreadLifecycleObserver>
+  std::unique_ptr<WorkerThread> CreateWorkerThread() override {
+    auto worker_thread =
+        WTF::MakeUnique<DedicatedWorkerThreadForTest>(WorkerObjectProxy());
+    mock_worker_thread_lifecycle_observer_ =
+        new MockWorkerThreadLifecycleObserver(
+            worker_thread->GetWorkerThreadLifecycleContext());
+    EXPECT_CALL(*mock_worker_thread_lifecycle_observer_,
+                ContextDestroyed(::testing::_))
+        .Times(1);
+    return std::move(worker_thread);
+  }
+
+  WTF::Optional<WorkerBackingThreadStartupData> CreateBackingThreadStartupData(
+      v8::Isolate*) override {
+    return WorkerBackingThreadStartupData(
+        WorkerBackingThreadStartupData::HeapLimitMode::kDefault,
+        WorkerBackingThreadStartupData::AtomicsWaitMode::kAllow);
+  }
+
+  Member<MockWorkerThreadLifecycleObserver>
       mock_worker_thread_lifecycle_observer_;
   RefPtr<SecurityOrigin> security_origin_;
 
@@ -241,8 +237,8 @@ class DedicatedWorkerTest : public ::testing::Test {
 
   void SetUp() override {
     page_ = DummyPageHolder::Create();
-    worker_messaging_proxy_ = WTF::WrapUnique(
-        new InProcessWorkerMessagingProxyForTest(&page_->GetDocument()));
+    worker_messaging_proxy_ =
+        new InProcessWorkerMessagingProxyForTest(&page_->GetDocument());
   }
 
   void TearDown() override {
@@ -257,18 +253,18 @@ class DedicatedWorkerTest : public ::testing::Test {
   }
 
   InProcessWorkerMessagingProxyForTest* WorkerMessagingProxy() {
-    return worker_messaging_proxy_.get();
+    return worker_messaging_proxy_.Get();
   }
 
   DedicatedWorkerThreadForTest* GetWorkerThread() {
-    return worker_messaging_proxy_->GetWorkerThread();
+    return worker_messaging_proxy_->GetDedicatedWorkerThread();
   }
 
   Document& GetDocument() { return page_->GetDocument(); }
 
  private:
   std::unique_ptr<DummyPageHolder> page_;
-  std::unique_ptr<InProcessWorkerMessagingProxyForTest> worker_messaging_proxy_;
+  Persistent<InProcessWorkerMessagingProxyForTest> worker_messaging_proxy_;
 };
 
 TEST_F(DedicatedWorkerTest, PendingActivity_NoActivity) {
@@ -392,8 +388,8 @@ TEST_F(DedicatedWorkerTest, PendingActivity_SetIntervalOnMessageEvent) {
   // pending activity until it's stopped. The delay is equal to the max
   // interval so that the pending activity timer may be able to have a chance
   // to run before the next expectation check.
-  const double kDelayInMs = kMaxIntervalInSec * 1000;
-  testing::RunDelayedTasks(kDelayInMs);
+  constexpr TimeDelta kDelay = TimeDelta::FromSecondsD(kMaxIntervalInSec);
+  testing::RunDelayedTasks(kDelay);
   EXPECT_TRUE(WorkerMessagingProxy()->HasPendingActivity());
 
   // Stop the timer.
@@ -416,7 +412,7 @@ TEST_F(DedicatedWorkerTest, DISABLED_UseCounter) {
   WorkerMessagingProxy()->StartWithSourceCode(source_code);
 
   // This feature is randomly selected.
-  const UseCounter::Feature kFeature1 = UseCounter::Feature::kRequestFileSystem;
+  const WebFeature kFeature1 = WebFeature::kRequestFileSystem;
 
   // API use on the DedicatedWorkerGlobalScope should be recorded in UseCounter
   // on the Document.
@@ -439,8 +435,7 @@ TEST_F(DedicatedWorkerTest, DISABLED_UseCounter) {
   testing::EnterRunLoop();
 
   // This feature is randomly selected from Deprecation::deprecationMessage().
-  const UseCounter::Feature kFeature2 =
-      UseCounter::Feature::kPrefixedStorageInfo;
+  const WebFeature kFeature2 = WebFeature::kPrefixedStorageInfo;
 
   // Deprecated API use on the DedicatedWorkerGlobalScope should be recorded in
   // UseCounter on the Document.

@@ -30,7 +30,10 @@
 #define Biquad_h
 
 #include <sys/types.h>
+
 #include <complex>
+
+#include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/audio/AudioArray.h"
 #include "platform/wtf/Allocator.h"
@@ -70,6 +73,13 @@ class PLATFORM_EXPORT Biquad final {
   // Resets filter state
   void Reset();
 
+  // Compute tail frame based on the filter coefficents at index
+  // |coef_index|.  The tail frame is the frame number where the
+  // impulse response of the filter falls below a threshold value.
+  // The maximum allowed frame value is given by |max_frame|.  This
+  // limits how much work is done in computing the frame numer.
+  double TailFrame(int coef_index, double max_frame);
+
   // Filter response at a set of n frequencies. The magnitude and
   // phase response are returned in magResponse and phaseResponse.
   // The phase response is in radians.
@@ -100,7 +110,7 @@ class PLATFORM_EXPORT Biquad final {
   AudioDoubleArray a1_;
   AudioDoubleArray a2_;
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   void ProcessFast(const float* source_p,
                    float* dest_p,
                    size_t frames_to_process);

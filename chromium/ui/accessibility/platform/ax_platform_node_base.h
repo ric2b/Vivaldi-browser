@@ -62,11 +62,82 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   base::string16 GetString16Attribute(
       ui::AXStringAttribute attribute) const;
 
-  AXPlatformNodeDelegate* delegate_;  // Weak. Owns this.
+  bool HasIntListAttribute(ui::AXIntListAttribute attribute) const;
+  const std::vector<int32_t>& GetIntListAttribute(
+      ui::AXIntListAttribute attribute) const;
+
+  bool GetIntListAttribute(ui::AXIntListAttribute attribute,
+                           std::vector<int32_t>* value) const;
+
+  // Returns the table or ARIA grid if inside one.
+  AXPlatformNodeBase* GetTable() const;
+
+  // If inside a table or ARIA grid, returns the cell found at the given index.
+  // Indices are in row major order and each cell is counted once regardless of
+  // its span.
+  AXPlatformNodeBase* GetTableCell(int index) const;
+
+  // If inside a table or ARIA grid, returns the cell at the given row and
+  // column (0-based). Works correctly with cells that span multiple rows or
+  // columns.
+  AXPlatformNodeBase* GetTableCell(int row, int column) const;
+
+  // If inside a table or ARIA grid, returns the zero-based index of the cell.
+  // Indices are in row major order and each cell is counted once regardless of
+  // its span. Returns -1 if the cell is not found or if not inside a table.
+  int GetTableCellIndex() const;
+
+  // If inside a table or ARIA grid, returns the physical column number for the
+  // current cell. In contrast to logical columns, physical columns always start
+  // from 0 and have no gaps in their numbering. Logical columns can be set
+  // using aria-colindex.
+  int GetTableColumn() const;
+
+  // If inside a table or ARIA grid, returns the number of physical columns,
+  // otherwise returns 0.
+  int GetTableColumnCount() const;
+
+  // If inside a table or ARIA grid, returns the number of physical columns that
+  // this cell spans. If not a cell, returns 0.
+  int GetTableColumnSpan() const;
+
+  // If inside a table or ARIA grid, returns the physical row number for the
+  // current cell. In contrast to logical rows, physical rows always start from
+  // 0 and have no gaps in their numbering. Logical rows can be set using
+  // aria-rowindex.
+  int GetTableRow() const;
+
+  // If inside a table or ARIA grid, returns the number of physical rows,
+  // otherwise returns 0.
+  int GetTableRowCount() const;
+
+  // If inside a table or ARIA grid, returns the number of physical rows that
+  // this cell spans. If not a cell, returns 0.
+  int GetTableRowSpan() const;
+
+  //
+  // Delegate.  This is a weak reference which owns |this|.
+  //
+  AXPlatformNodeDelegate* delegate_;
 
  protected:
   AXPlatformNodeBase();
   ~AXPlatformNodeBase() override;
+
+  bool IsTextOnlyObject() const;
+  bool IsNativeTextControl() const;
+  bool IsSimpleTextControl() const;
+  bool IsRichTextControl();
+  bool IsRangeValueSupported() const;
+
+  // Get the range value text, which might come from aria-valuetext or
+  // a floating-point value. This is different from the value string
+  // attribute used in input controls such as text boxes and combo boxes.
+  base::string16 GetRangeValueText();
+
+  // |GetInnerText| recursively includes all the text from descendants such as
+  // text found in any embedded object.
+  base::string16 GetInnerText();
 
   // Cast a gfx::NativeViewAccessible to an AXPlatformNodeBase if it is one,
   // or return NULL if it's not an instance of this class.

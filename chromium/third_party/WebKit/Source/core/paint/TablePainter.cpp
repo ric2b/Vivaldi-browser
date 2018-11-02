@@ -44,24 +44,10 @@ void TablePainter::PaintObject(const PaintInfo& paint_info,
       }
     }
 
-    if (layout_table_.ShouldCollapseBorders() &&
+    if (layout_table_.HasCollapsedBorders() &&
         ShouldPaintDescendantBlockBackgrounds(paint_phase) &&
         layout_table_.Style()->Visibility() == EVisibility::kVisible) {
-      // Using our cached sorted styles, we then do individual passes,
-      // painting each style of border from lowest precedence to highest
-      // precedence.
-      LayoutTable::CollapsedBorderValues collapsed_borders =
-          layout_table_.CollapsedBorders();
-      size_t count = collapsed_borders.size();
-      for (size_t i = 0; i < count; ++i) {
-        for (LayoutTableSection* section = layout_table_.BottomSection();
-             section; section = layout_table_.SectionAbove(section)) {
-          LayoutPoint child_point =
-              layout_table_.FlipForWritingModeForChild(section, paint_offset);
-          TableSectionPainter(*section).PaintCollapsedBorders(
-              paint_info_for_descendants, child_point, collapsed_borders[i]);
-        }
-      }
+      PaintCollapsedBorders(paint_info_for_descendants, paint_offset);
     }
   }
 
@@ -98,6 +84,29 @@ void TablePainter::PaintMask(const PaintInfo& paint_info,
   LayoutObjectDrawingRecorder recorder(paint_info.context, layout_table_,
                                        paint_info.phase, rect);
   BoxPainter(layout_table_).PaintMaskImages(paint_info, rect);
+}
+
+void TablePainter::PaintCollapsedBorders(const PaintInfo& paint_info,
+                                         const LayoutPoint& paint_offset) {
+  Optional<LayoutObjectDrawingRecorder> recorder;
+  if (UNLIKELY(layout_table_.ShouldPaintAllCollapsedBorders())) {
+    if (DrawingRecorder::UseCachedDrawingIfPossible(
+            paint_info.context, layout_table_,
+            DisplayItem::kTableCollapsedBorders))
+      return;
+    recorder.emplace(paint_info.context, layout_table_,
+                     DisplayItem::kTableCollapsedBorders,
+                     LayoutRect(paint_offset, layout_table_.Size()));
+  }
+  // Otherwise each rows will create its own recorder.
+
+  for (LayoutTableSection* section = layout_table_.BottomSection(); section;
+       section = layout_table_.SectionAbove(section)) {
+    LayoutPoint child_point =
+        layout_table_.FlipForWritingModeForChild(section, paint_offset);
+    TableSectionPainter(*section).PaintCollapsedBorders(paint_info,
+                                                        child_point);
+  }
 }
 
 }  // namespace blink

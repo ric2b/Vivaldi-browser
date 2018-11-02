@@ -67,7 +67,7 @@ class BluetoothHostPairingNoInputTest : public OobeBaseTest {
   using InputDeviceInfo = device::InputServiceLinux::InputDeviceInfo;
 
   BluetoothHostPairingNoInputTest() {
-    InputServiceProxy::SetThreadIdForTesting(content::BrowserThread::UI);
+    InputServiceProxy::SetUseUIThreadForTesting(true);
     device::InputServiceLinux::SetForTesting(
         base::MakeUnique<device::FakeInputServiceLinux>());
 
@@ -161,7 +161,7 @@ class BluetoothHostPairingNoInputTest : public OobeBaseTest {
   pairing_chromeos::BluetoothHostPairingController* controller_ = nullptr;
 
   bluez::FakeBluetoothDeviceClient* fake_bluetooth_device_client_ = nullptr;
-  base::MessageLoop message_loop_;
+  base::MessageLoopForUI message_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(BluetoothHostPairingNoInputTest);
 };

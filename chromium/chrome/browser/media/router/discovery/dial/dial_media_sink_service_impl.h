@@ -11,6 +11,7 @@
 #include "chrome/browser/media/router/discovery/dial/device_description_service.h"
 #include "chrome/browser/media/router/discovery/dial/dial_registry.h"
 #include "chrome/browser/media/router/discovery/media_sink_service_base.h"
+#include "chrome/browser/media/router/media_router_metrics.h"
 
 namespace media_router {
 
@@ -47,6 +48,7 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   FRIEND_TEST_ALL_PREFIXES(DialMediaSinkServiceImplTest, TestTimer);
   FRIEND_TEST_ALL_PREFIXES(DialMediaSinkServiceImplTest,
                            TestOnDeviceDescriptionAvailable);
+  FRIEND_TEST_ALL_PREFIXES(DialMediaSinkServiceImplTest, TestRestartAfterStop);
 
   // api::dial::DialRegistry::Observer implementation
   void OnDialDeviceEvent(const DialRegistry::DeviceList& devices) override;
@@ -62,15 +64,23 @@ class DialMediaSinkServiceImpl : public MediaSinkServiceBase,
   void OnDeviceDescriptionError(const DialDeviceData& device,
                                 const std::string& error_message);
 
+  // MediaSinkServiceBase implementation.
+  void RecordDeviceCounts() override;
+
   std::unique_ptr<DeviceDescriptionService> description_service_;
 
   // Raw pointer to DialRegistry singleton.
   DialRegistry* dial_registry_ = nullptr;
 
+  // DialRegistry for unit test.
+  DialRegistry* test_dial_registry_ = nullptr;
+
   // Device data list from current round of discovery.
   DialRegistry::DeviceList current_devices_;
 
   scoped_refptr<net::URLRequestContextGetter> request_context_;
+
+  MediaRouterMetrics metrics_;
 };
 
 }  // namespace media_router

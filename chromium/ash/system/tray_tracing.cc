@@ -5,9 +5,9 @@
 #include "ash/system/tray_tracing.h"
 
 #include "ash/metrics/user_metrics_action.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/actionable_view.h"
 #include "ash/system/tray/system_tray.h"
@@ -55,7 +55,7 @@ class DefaultTracingView : public ActionableView {
 
  private:
   bool PerformAction(const ui::Event& event) override {
-    ShellPort::Get()->RecordUserMetricsAction(
+    Shell::Get()->metrics()->RecordUserMetricsAction(
         UMA_STATUS_AREA_TRACING_DEFAULT_SELECTED);
     Shell::Get()->system_tray_controller()->ShowChromeSlow();
     CloseSystemBubble();
@@ -91,21 +91,21 @@ bool TrayTracing::GetInitialVisibility() {
 }
 
 views::View* TrayTracing::CreateDefaultView(LoginStatus status) {
-  CHECK(default_ == NULL);
+  CHECK(default_ == nullptr);
   if (tray_view() && tray_view()->visible())
     default_ = new tray::DefaultTracingView(this);
   return default_;
 }
 
 views::View* TrayTracing::CreateDetailedView(LoginStatus status) {
-  return NULL;
+  return nullptr;
 }
 
-void TrayTracing::DestroyDefaultView() {
-  default_ = NULL;
+void TrayTracing::OnDefaultViewDestroyed() {
+  default_ = nullptr;
 }
 
-void TrayTracing::DestroyDetailedView() {}
+void TrayTracing::OnDetailedViewDestroyed() {}
 
 void TrayTracing::OnTracingModeChanged(bool value) {
   SetTrayIconVisible(value);

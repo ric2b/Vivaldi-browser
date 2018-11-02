@@ -12,7 +12,7 @@
 #include "base/bind.h"
 #include "base/macros.h"
 #include "base/scoped_observer.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "device/base/device_info_query_win.h"
 #include "device/base/device_monitor_win.h"
 #include "third_party/re2/src/re2/re2.h"
@@ -151,9 +151,8 @@ bool GetCOMPort(const std::string friendly_name, std::string* com_port) {
 
 // static
 scoped_refptr<SerialIoHandler> SerialIoHandler::Create(
-    scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner) {
-  return new SerialIoHandlerWin(file_thread_task_runner, ui_thread_task_runner);
+  return new SerialIoHandlerWin(ui_thread_task_runner);
 }
 
 class SerialIoHandlerWin::UiThreadHelper final
@@ -196,7 +195,7 @@ class SerialIoHandlerWin::UiThreadHelper final
 };
 
 void SerialIoHandlerWin::OnDeviceRemoved(const std::string& device_path) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DeviceInfoQueryWin device_info_query;
   if (!device_info_query.device_info_list_valid()) {
@@ -266,7 +265,7 @@ bool SerialIoHandlerWin::PostOpen() {
 }
 
 void SerialIoHandlerWin::ReadImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_read_buffer());
   DCHECK(file().IsValid());
 
@@ -285,7 +284,7 @@ void SerialIoHandlerWin::ReadImpl() {
 }
 
 void SerialIoHandlerWin::WriteImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_write_buffer());
   DCHECK(file().IsValid());
 
@@ -301,13 +300,13 @@ void SerialIoHandlerWin::WriteImpl() {
 }
 
 void SerialIoHandlerWin::CancelReadImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(file().IsValid());
   ::CancelIo(file().GetPlatformFile());
 }
 
 void SerialIoHandlerWin::CancelWriteImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(file().IsValid());
   ::CancelIo(file().GetPlatformFile());
 }
@@ -359,9 +358,8 @@ bool SerialIoHandlerWin::ConfigurePortImpl() {
 }
 
 SerialIoHandlerWin::SerialIoHandlerWin(
-    scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
-    : SerialIoHandler(file_thread_task_runner, ui_thread_task_runner),
+    : SerialIoHandler(ui_thread_task_runner),
       event_mask_(0),
       is_comm_pending_(false),
       helper_(nullptr),
@@ -375,7 +373,7 @@ void SerialIoHandlerWin::OnIOCompleted(
     base::MessageLoopForIO::IOContext* context,
     DWORD bytes_transferred,
     DWORD error) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (context == comm_context_.get()) {
     DWORD errors;
     COMSTAT status;

@@ -486,7 +486,7 @@ void IDBDatabase::EnqueueEvent(Event* event) {
   DCHECK(GetExecutionContext());
   EventQueue* event_queue = GetExecutionContext()->GetEventQueue();
   event->SetTarget(this);
-  event_queue->EnqueueEvent(event);
+  event_queue->EnqueueEvent(BLINK_FROM_HERE, event);
   enqueued_events_.push_back(event);
 }
 
@@ -592,8 +592,7 @@ ExecutionContext* IDBDatabase::GetExecutionContext() const {
 void IDBDatabase::RecordApiCallsHistogram(IndexedDatabaseMethods method) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, api_calls_histogram,
-      new EnumerationHistogram("WebCore.IndexedDB.FrontEndAPICalls",
-                               kIDBMethodsMax));
+      ("WebCore.IndexedDB.FrontEndAPICalls", kIDBMethodsMax));
   api_calls_histogram.Count(method);
 }
 

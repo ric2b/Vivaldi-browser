@@ -52,21 +52,19 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
     : layer_id_(id),
       layer_tree_impl_(tree_impl),
       test_properties_(nullptr),
-      scroll_clip_layer_id_(Layer::INVALID_ID),
       main_thread_scrolling_reasons_(
           MainThreadScrollingReason::kNotScrollingOnMain),
-      user_scrollable_horizontal_(true),
-      user_scrollable_vertical_(true),
+      scrollable_(false),
       should_flatten_transform_from_property_tree_(false),
       layer_property_changed_(false),
       may_contain_video_(false),
       masks_to_bounds_(false),
       contents_opaque_(false),
       use_parent_backface_visibility_(false),
-      use_local_transform_for_backface_visibility_(false),
       should_check_backface_visibility_(false),
       draws_content_(false),
       contributes_to_drawn_render_surface_(false),
+      should_hit_test_(false),
       viewport_layer_type_(NOT_VIEWPORT_LAYER),
       background_color_(0),
       safe_opaque_background_color_(0),
@@ -81,7 +79,8 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
       needs_push_properties_(false),
       scrollbars_hidden_(false),
       needs_show_scrollbars_(false),
-      raster_even_if_not_in_rsll_(false) {
+      raster_even_if_not_drawn_(false),
+      has_transform_node_(false) {
   DCHECK_GT(layer_id_, 0);
 
   DCHECK(layer_tree_impl_);
@@ -94,7 +93,6 @@ LayerImpl::LayerImpl(LayerTreeImpl* tree_impl, int id)
 LayerImpl::~LayerImpl() {
   DCHECK_EQ(DRAW_MODE_NONE, current_draw_mode_);
 
-  layer_tree_impl_->UnregisterScrollLayer(this);
   layer_tree_impl_->UnregisterLayer(this);
 
   layer_tree_impl_->RemoveFromElementMap(this);
@@ -272,34 +270,21 @@ gfx::Vector2dF LayerImpl::ScrollBy(const gfx::Vector2dF& scroll) {
   return scroll_tree.ScrollBy(scroll_node, scroll, layer_tree_impl());
 }
 
-void LayerImpl::SetScrollClipLayer(int scroll_clip_layer_id) {
-  if (scroll_clip_layer_id_ == scroll_clip_layer_id)
+void LayerImpl::SetScrollable(const gfx::Size& bounds) {
+  if (scrollable_ && scroll_container_bounds_ == bounds)
     return;
+  scrollable_ = true;
+  scroll_container_bounds_ = bounds;
 
-  layer_tree_impl()->UnregisterScrollLayer(this);
-  scroll_clip_layer_id_ = scroll_clip_layer_id;
-  layer_tree_impl()->RegisterScrollLayer(this);
-}
+  // Scrollbar positions depend on the bounds.
+  layer_tree_impl()->SetScrollbarGeometriesNeedUpdate();
 
-LayerImpl* LayerImpl::scroll_clip_layer() const {
-  return layer_tree_impl()->LayerById(scroll_clip_layer_id_);
-}
+  if (layer_tree_impl()->settings().scrollbar_animator ==
+      LayerTreeSettings::AURA_OVERLAY) {
+    set_needs_show_scrollbars(true);
+  }
 
-bool LayerImpl::scrollable() const {
-  return scroll_clip_layer_id_ != Layer::INVALID_ID;
-}
-
-void LayerImpl::set_user_scrollable_horizontal(bool scrollable) {
-  user_scrollable_horizontal_ = scrollable;
-}
-
-void LayerImpl::set_user_scrollable_vertical(bool scrollable) {
-  user_scrollable_vertical_ = scrollable;
-}
-
-bool LayerImpl::user_scrollable(ScrollbarOrientation orientation) const {
-  return (orientation == HORIZONTAL) ? user_scrollable_horizontal_
-                                     : user_scrollable_vertical_;
+  NoteLayerPropertyChanged();
 }
 
 std::unique_ptr<LayerImpl> LayerImpl::CreateLayerImpl(
@@ -318,22 +303,20 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   // as LayerImpl::SetScrollClipLayer.
   layer->SetElementId(element_id_);
 
+  layer->has_transform_node_ = has_transform_node_;
   layer->offset_to_transform_parent_ = offset_to_transform_parent_;
   layer->main_thread_scrolling_reasons_ = main_thread_scrolling_reasons_;
-  layer->user_scrollable_horizontal_ = user_scrollable_horizontal_;
-  layer->user_scrollable_vertical_ = user_scrollable_vertical_;
   layer->should_flatten_transform_from_property_tree_ =
       should_flatten_transform_from_property_tree_;
   layer->masks_to_bounds_ = masks_to_bounds_;
   layer->contents_opaque_ = contents_opaque_;
   layer->may_contain_video_ = may_contain_video_;
   layer->use_parent_backface_visibility_ = use_parent_backface_visibility_;
-  layer->use_local_transform_for_backface_visibility_ =
-      use_local_transform_for_backface_visibility_;
   layer->should_check_backface_visibility_ = should_check_backface_visibility_;
   layer->draws_content_ = draws_content_;
+  layer->should_hit_test_ = should_hit_test_;
   layer->non_fast_scrollable_region_ = non_fast_scrollable_region_;
-  layer->touch_event_handler_region_ = touch_event_handler_region_;
+  layer->touch_action_region_ = touch_action_region_;
   layer->background_color_ = background_color_;
   layer->safe_opaque_background_color_ = safe_opaque_background_color_;
   layer->position_ = position_;
@@ -343,7 +326,8 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   layer->scroll_tree_index_ = scroll_tree_index_;
   layer->has_will_change_transform_hint_ = has_will_change_transform_hint_;
   layer->scrollbars_hidden_ = scrollbars_hidden_;
-  layer->needs_show_scrollbars_ = needs_show_scrollbars_;
+  if (needs_show_scrollbars_)
+    layer->needs_show_scrollbars_ = needs_show_scrollbars_;
 
   if (layer_property_changed_) {
     layer->layer_tree_impl()->set_needs_update_draw_properties();
@@ -351,7 +335,8 @@ void LayerImpl::PushPropertiesTo(LayerImpl* layer) {
   }
 
   layer->SetBounds(bounds_);
-  layer->SetScrollClipLayer(scroll_clip_layer_id_);
+  if (scrollable_)
+    layer->SetScrollable(scroll_container_bounds_);
   layer->SetMutableProperties(mutable_properties_);
 
   // If the main thread commits multiple times before the impl thread actually
@@ -409,8 +394,9 @@ std::unique_ptr<base::DictionaryValue> LayerImpl::LayerTreeAsJson() {
   if (scrollable())
     result->SetBoolean("Scrollable", true);
 
-  if (!touch_event_handler_region_.IsEmpty()) {
-    std::unique_ptr<base::Value> region = touch_event_handler_region_.AsValue();
+  if (!touch_action_region_.region().IsEmpty()) {
+    std::unique_ptr<base::Value> region =
+        touch_action_region_.region().AsValue();
     result->Set("TouchRegion", std::move(region));
   }
 
@@ -437,6 +423,10 @@ bool LayerImpl::LayerPropertyChanged() const {
   if (effect_node && effect_node->effect_changed)
     return true;
   return false;
+}
+
+bool LayerImpl::LayerPropertyChangedNotFromPropertyTrees() const {
+  return layer_property_changed_;
 }
 
 void LayerImpl::NoteLayerPropertyChanged() {
@@ -470,10 +460,7 @@ bool LayerImpl::has_copy_requests_in_target_subtree() {
   return GetEffectTree().Node(effect_tree_index())->subtree_has_copy_request;
 }
 
-void LayerImpl::UpdatePropertyTreeForScrollingAndAnimationIfNeeded() {
-  if (scrollable())
-    UpdatePropertyTreeScrollOffset();
-
+void LayerImpl::UpdatePropertyTreeForAnimationIfNeeded() {
   if (HasAnyAnimationTargetingProperty(TargetProperty::TRANSFORM)) {
     if (TransformNode* node =
             GetTransformTree().FindNodeFromElementId(element_id())) {
@@ -516,7 +503,9 @@ void LayerImpl::SetBounds(const gfx::Size& bounds) {
 
   bounds_ = bounds;
 
-  layer_tree_impl()->DidUpdateScrollState(id());
+  // Scrollbar positions depend on the scrolling layer bounds.
+  if (scrollable())
+    layer_tree_impl()->SetScrollbarGeometriesNeedUpdate();
 
   NoteLayerPropertyChanged();
 }
@@ -543,17 +532,19 @@ void LayerImpl::SetViewportBoundsDelta(const gfx::Vector2dF& bounds_delta) {
       NOTREACHED();
   }
 
-  layer_tree_impl()->DidUpdateScrollState(id());
+  // Viewport scrollbar positions are determined using the viewport bounds
+  // delta.
+  layer_tree_impl()->SetScrollbarGeometriesNeedUpdate();
 
   if (masks_to_bounds()) {
     // If layer is clipping, then update the clip node using the new bounds.
-    if (ClipNode* clip_node =
-            property_trees->clip_tree.UpdateNodeFromOwningLayerId(id())) {
-      DCHECK_EQ(clip_node->id, clip_tree_index());
-      clip_node->clip = gfx::RectF(gfx::PointF() + offset_to_transform_parent(),
-                                   gfx::SizeF(bounds()));
-      property_trees->clip_tree.set_needs_update(true);
-    }
+    ClipNode* clip_node = property_trees->clip_tree.Node(clip_tree_index());
+    CHECK(clip_node);
+    DCHECK_EQ(clip_node->id, clip_tree_index());
+    clip_node->clip = gfx::RectF(gfx::PointF() + offset_to_transform_parent(),
+                                 gfx::SizeF(bounds()));
+    property_trees->clip_tree.set_needs_update(true);
+
     property_trees->full_tree_damaged = true;
     layer_tree_impl()->set_needs_update_draw_properties();
   } else {
@@ -583,6 +574,16 @@ void LayerImpl::SetDrawsContent(bool draws_content) {
     return;
 
   draws_content_ = draws_content;
+  if (draws_content)
+    SetShouldHitTest(true);
+  NoteLayerPropertyChanged();
+}
+
+void LayerImpl::SetShouldHitTest(bool should_hit_test) {
+  if (should_hit_test_ == should_hit_test)
+    return;
+
+  should_hit_test_ = should_hit_test;
   NoteLayerPropertyChanged();
 }
 
@@ -621,15 +622,14 @@ void LayerImpl::SetContentsOpaque(bool opaque) {
 }
 
 float LayerImpl::Opacity() const {
-  if (const EffectNode* node = GetEffectTree().FindNodeFromOwningLayerId(id()))
+  if (const EffectNode* node = GetEffectTree().Node(effect_tree_index()))
     return node->opacity;
   else
     return 1.f;
 }
 
 const gfx::Transform& LayerImpl::Transform() const {
-  DCHECK_NE(GetTransformTree().FindNodeFromOwningLayerId(id()), nullptr);
-  return GetTransformTree().FindNodeFromOwningLayerId(id())->local;
+  return GetTransformTree().Node(transform_tree_index())->local;
 }
 
 void LayerImpl::SetElementId(ElementId element_id) {
@@ -678,11 +678,6 @@ bool LayerImpl::HasFilterAnimationThatInflatesBounds() const {
   return GetMutatorHost()->HasFilterAnimationThatInflatesBounds(element_id());
 }
 
-bool LayerImpl::HasTransformAnimationThatInflatesBounds() const {
-  return GetMutatorHost()->HasTransformAnimationThatInflatesBounds(
-      element_id());
-}
-
 bool LayerImpl::HasAnimationThatInflatesBounds() const {
   return GetMutatorHost()->HasAnimationThatInflatesBounds(element_id());
 }
@@ -710,30 +705,12 @@ void LayerImpl::AddDamageRect(const gfx::Rect& damage_rect) {
 
 void LayerImpl::SetCurrentScrollOffset(const gfx::ScrollOffset& scroll_offset) {
   DCHECK(IsActive());
-  if (GetScrollTree().SetScrollOffset(id(), scroll_offset))
-    layer_tree_impl()->DidUpdateScrollOffset(id());
+  if (GetScrollTree().SetScrollOffset(element_id(), scroll_offset))
+    layer_tree_impl()->DidUpdateScrollOffset(element_id());
 }
 
 gfx::ScrollOffset LayerImpl::CurrentScrollOffset() const {
-  return GetScrollTree().current_scroll_offset(id());
-}
-
-void LayerImpl::UpdatePropertyTreeScrollOffset() {
-  // TODO(enne): in the future, scrolling should update the scroll tree
-  // directly instead of going through layers.
-  TransformTree& transform_tree = GetTransformTree();
-  TransformNode* node = transform_tree.Node(transform_tree_index_);
-  DCHECK(node);
-  // TODO(pdr): This is a workaround for https://crbug.com/712298 to avoid
-  // crashing when there's no transform node. This workaround should be removed.
-  if (!node)
-    return;
-  gfx::ScrollOffset current_offset = CurrentScrollOffset();
-  if (node->scroll_offset != current_offset) {
-    node->scroll_offset = current_offset;
-    node->needs_local_transform_update = true;
-    transform_tree.set_needs_update(true);
-  }
+  return GetScrollTree().current_scroll_offset(element_id());
 }
 
 SimpleEnclosedRegion LayerImpl::VisibleOpaqueRegion() const {
@@ -771,7 +748,8 @@ gfx::Vector2dF LayerImpl::ClampScrollToMaxScrollOffset() {
 }
 
 void LayerImpl::SetNeedsPushProperties() {
-  if (layer_tree_impl_ && !needs_push_properties_) {
+  // There's no need to push layer properties on the active tree.
+  if (!needs_push_properties_ && !layer_tree_impl()->IsActiveTree()) {
     needs_push_properties_ = true;
     layer_tree_impl()->AddLayerShouldPushProperties(this);
   }
@@ -816,9 +794,9 @@ void LayerImpl::AsValueInto(base::trace_event::TracedValue* state) const {
       MathUtil::MapQuad(ScreenSpaceTransform(),
                         gfx::QuadF(gfx::RectF(gfx::Rect(bounds()))), &clipped);
   MathUtil::AddToTracedValue("layer_quad", layer_quad, state);
-  if (!touch_event_handler_region_.IsEmpty()) {
-    state->BeginArray("touch_event_handler_region");
-    touch_event_handler_region_.AsValueInto(state);
+  if (!touch_action_region_.region().IsEmpty()) {
+    state->BeginArray("touch_action_region_region");
+    touch_action_region_.region().AsValueInto(state);
     state->EndArray();
   }
   if (!non_fast_scrollable_region_.IsEmpty()) {
@@ -953,9 +931,30 @@ float LayerImpl::GetIdealContentsScale() const {
   const auto& transform = ScreenSpaceTransform();
   if (transform.HasPerspective()) {
     float scale = MathUtil::ComputeApproximateMaxScale(transform);
+
+    const int kMaxTilesToCoverLayerDimension = 5;
+    // Cap the scale in a way that it should be covered by at most
+    // |kMaxTilesToCoverLayerDimension|^2 default tile sizes. If this is left
+    // uncapped, then we can fairly easily use too much memory (or too many
+    // tiles). See crbug.com/752382 for an example of such a page. Note that
+    // because this is an approximation anyway, it's fine to use a smaller scale
+    // that desired. On top of this, the layer has a perspective transform so
+    // technically it could all be within the viewport, so it's important for us
+    // to have a reasonable scale here. The scale we use would also be at least
+    // |default_scale|, as checked below.
+    float scale_cap = std::min(
+        (layer_tree_impl()->settings().default_tile_size.width() - 2) *
+            kMaxTilesToCoverLayerDimension /
+            static_cast<float>(bounds().width()),
+        (layer_tree_impl()->settings().default_tile_size.height() - 2) *
+            kMaxTilesToCoverLayerDimension /
+            static_cast<float>(bounds().height()));
+    scale = std::min(scale, scale_cap);
+
     // Since we're approximating the scale anyway, round it to the nearest
     // integer to prevent jitter when animating the transform.
     scale = std::round(scale);
+
     // Don't let the scale fall below the default scale.
     return std::max(scale, default_scale);
   }
@@ -983,6 +982,13 @@ ScrollTree& LayerImpl::GetScrollTree() const {
 
 TransformTree& LayerImpl::GetTransformTree() const {
   return GetPropertyTrees()->transform_tree;
+}
+
+void LayerImpl::EnsureValidPropertyTreeIndices() const {
+  DCHECK(GetTransformTree().Node(transform_tree_index()));
+  DCHECK(GetEffectTree().Node(effect_tree_index()));
+  DCHECK(GetClipTree().Node(clip_tree_index()));
+  DCHECK(GetScrollTree().Node(scroll_tree_index()));
 }
 
 }  // namespace cc

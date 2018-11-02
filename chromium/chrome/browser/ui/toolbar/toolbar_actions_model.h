@@ -225,8 +225,6 @@ class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
       ExtensionAction* extension_action,
       content::WebContents* web_contents,
       content::BrowserContext* browser_context) override;
-  void OnExtensionActionVisibilityChanged(const std::string& extension_id,
-                                          bool is_now_visible) override;
 
   void OnPageActionsUpdated(content::WebContents* web_contents) override;
 
@@ -300,9 +298,6 @@ class ToolbarActionsModel : public extensions::ExtensionActionAPI::Observer,
 
   // True if we've handled the initial EXTENSIONS_READY notification.
   bool actions_initialized_;
-
-  // If true, we include all actions in the toolbar model.
-  bool use_redesign_;
 
   // Ordered list of browser actions.
   std::vector<ToolbarItem> toolbar_items_;

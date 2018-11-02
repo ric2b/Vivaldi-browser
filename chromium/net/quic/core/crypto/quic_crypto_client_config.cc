@@ -443,6 +443,10 @@ void QuicCryptoClientConfig::FillInchoateClientHello(
     out->SetStringPiece(kUAID, user_agent_id_);
   }
 
+  if (!alpn_.empty()) {
+    out->SetStringPiece(kALPN, alpn_);
+  }
+
   // Even though this is an inchoate CHLO, send the SCID so that
   // the STK can be validated by the server.
   const CryptoHandshakeMessage* scfg = cached->GetServerConfig();
@@ -503,9 +507,7 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
     CryptoHandshakeMessage* out,
     string* error_details) const {
   DCHECK(error_details != nullptr);
-  if (QuicUtils::IsConnectionIdWireFormatBigEndian(Perspective::IS_CLIENT)) {
-    connection_id = QuicEndian::HostToNet64(connection_id);
-  }
+  connection_id = QuicEndian::HostToNet64(connection_id);
 
   FillInchoateClientHello(server_id, preferred_version, cached, rand,
                           /* demand_x509_proof= */ true, out_params, out);
@@ -527,13 +529,10 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
 
   out->SetStringPiece(kCertificateSCTTag, "");
 
-  const QuicTag* their_aeads;
-  const QuicTag* their_key_exchanges;
-  size_t num_their_aeads, num_their_key_exchanges;
-  if (scfg->GetTaglist(kAEAD, &their_aeads, &num_their_aeads) !=
-          QUIC_NO_ERROR ||
-      scfg->GetTaglist(kKEXS, &their_key_exchanges, &num_their_key_exchanges) !=
-          QUIC_NO_ERROR) {
+  QuicTagVector their_aeads;
+  QuicTagVector their_key_exchanges;
+  if (scfg->GetTaglist(kAEAD, &their_aeads) != QUIC_NO_ERROR ||
+      scfg->GetTaglist(kKEXS, &their_key_exchanges) != QUIC_NO_ERROR) {
     *error_details = "Missing AEAD or KEXS";
     return QUIC_INVALID_CRYPTO_MESSAGE_PARAMETER;
   }
@@ -544,10 +543,9 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
   // Key exchange: the client does more work than the server, so favor the
   // client's preference.
   size_t key_exchange_index;
-  if (!FindMutualQuicTag(aead, their_aeads, num_their_aeads, &out_params->aead,
-                         nullptr) ||
-      !FindMutualQuicTag(kexs, their_key_exchanges, num_their_key_exchanges,
-                         &out_params->key_exchange, &key_exchange_index)) {
+  if (!FindMutualQuicTag(aead, their_aeads, &out_params->aead, nullptr) ||
+      !FindMutualQuicTag(kexs, their_key_exchanges, &out_params->key_exchange,
+                         &key_exchange_index)) {
     *error_details = "Unsupported AEAD or KEXS";
     return QUIC_CRYPTO_NO_SUPPORT;
   }
@@ -556,13 +554,12 @@ QuicErrorCode QuicCryptoClientConfig::FillClientHello(
 
   if (!tb_key_params.empty() &&
       server_id.privacy_mode() == PRIVACY_MODE_DISABLED) {
-    const QuicTag* their_tbkps;
-    size_t num_their_tbkps;
-    switch (scfg->GetTaglist(kTBKP, &their_tbkps, &num_their_tbkps)) {
+    QuicTagVector their_tbkps;
+    switch (scfg->GetTaglist(kTBKP, &their_tbkps)) {
       case QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND:
         break;
       case QUIC_NO_ERROR:
-        if (FindMutualQuicTag(tb_key_params, their_tbkps, num_their_tbkps,
+        if (FindMutualQuicTag(tb_key_params, their_tbkps,
                               &out_params->token_binding_key_param, nullptr)) {
           out->SetVector(kTBKP,
                          QuicTagVector{out_params->token_binding_key_param});
@@ -826,9 +823,7 @@ QuicErrorCode QuicCryptoClientConfig::ProcessRejection(
       *error_details = "Missing kRCID";
       return QUIC_CRYPTO_MESSAGE_PARAMETER_NOT_FOUND;
     }
-    if (QuicUtils::IsConnectionIdWireFormatBigEndian(Perspective::IS_CLIENT)) {
-      connection_id = QuicEndian::NetToHost64(connection_id);
-    }
+    connection_id = QuicEndian::NetToHost64(connection_id);
     cached->add_server_designated_connection_id(connection_id);
     if (!nonce.empty()) {
       cached->add_server_nonce(nonce.as_string());

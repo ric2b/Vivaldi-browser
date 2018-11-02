@@ -220,8 +220,7 @@ TEST(HeapDumpWriterTest, BacktraceTypeNameTable) {
   auto stack_frame_deduplicator = WrapUnique(new StackFrameDeduplicator);
   auto type_name_deduplicator = WrapUnique(new TypeNameDeduplicator);
   HeapDumpWriter writer(stack_frame_deduplicator.get(),
-                        type_name_deduplicator.get(),
-                        10u);
+                        type_name_deduplicator.get(), 10u);
   const std::set<Entry>& dump = writer.Summarize(metrics_by_context);
 
   // Get the indices of the backtraces and types by adding them again to the
@@ -296,8 +295,7 @@ TEST(HeapDumpWriterTest, InsignificantValuesNotDumped) {
   auto stack_frame_deduplicator = WrapUnique(new StackFrameDeduplicator);
   auto type_name_deduplicator = WrapUnique(new TypeNameDeduplicator);
   HeapDumpWriter writer(stack_frame_deduplicator.get(),
-                        type_name_deduplicator.get(),
-                        512u);
+                        type_name_deduplicator.get(), 512u);
   const std::set<Entry>& dump = writer.Summarize(metrics_by_context);
 
   // Get the indices of the backtraces and types by adding them again to the

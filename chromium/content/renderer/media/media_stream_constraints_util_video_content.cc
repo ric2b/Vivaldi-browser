@@ -45,31 +45,12 @@ using Point = ResolutionSet::Point;
 using StringSet = DiscreteSet<std::string>;
 using BoolSet = DiscreteSet<bool>;
 
-
 constexpr double kMinScreenCastAspectRatio =
     static_cast<double>(kMinScreenCastDimension) /
     static_cast<double>(kMaxScreenCastDimension);
 constexpr double kMaxScreenCastAspectRatio =
     static_cast<double>(kMaxScreenCastDimension) /
     static_cast<double>(kMinScreenCastDimension);
-
-StringSet StringSetFromConstraint(const blink::StringConstraint& constraint) {
-  if (!constraint.HasExact())
-    return StringSet::UniversalSet();
-
-  std::vector<std::string> elements;
-  for (const auto& entry : constraint.Exact())
-    elements.push_back(entry.Ascii());
-
-  return StringSet(std::move(elements));
-}
-
-BoolSet BoolSetFromConstraint(const blink::BooleanConstraint& constraint) {
-  if (!constraint.HasExact())
-    return BoolSet::UniversalSet();
-
-  return BoolSet({constraint.Exact()});
-}
 
 using DoubleRangeSet = NumericRangeSet<double>;
 
@@ -78,9 +59,8 @@ class VideoContentCaptureCandidates {
   VideoContentCaptureCandidates()
       : has_explicit_max_height_(false),
         has_explicit_max_width_(false),
-        has_explicit_max_frame_rate_(false),
-        device_id_set_(StringSet::UniversalSet()),
-        noise_reduction_set_(BoolSet::UniversalSet()) {}
+        has_explicit_min_frame_rate_(false),
+        has_explicit_max_frame_rate_(false) {}
   explicit VideoContentCaptureCandidates(
       const blink::WebMediaTrackConstraintSet& constraint_set)
       : resolution_set_(ResolutionSet::FromConstraintSet(constraint_set)),
@@ -92,6 +72,9 @@ class VideoContentCaptureCandidates {
                                     kMaxScreenCastDimension),
         frame_rate_set_(
             DoubleRangeSet::FromConstraint(constraint_set.frame_rate)),
+        has_explicit_min_frame_rate_(
+            ConstraintHasMin(constraint_set.frame_rate) &&
+            ConstraintMin(constraint_set.frame_rate) >= 0.0),
         has_explicit_max_frame_rate_(
             ConstraintHasMax(constraint_set.frame_rate) &&
             ConstraintMax(constraint_set.frame_rate) <=
@@ -121,6 +104,8 @@ class VideoContentCaptureCandidates {
         has_explicit_max_width_ || other.has_explicit_max_width_;
     intersection.frame_rate_set_ =
         frame_rate_set_.Intersection(other.frame_rate_set_);
+    intersection.has_explicit_min_frame_rate_ =
+        has_explicit_min_frame_rate_ || other.has_explicit_min_frame_rate_;
     intersection.has_explicit_max_frame_rate_ =
         has_explicit_max_frame_rate_ || other.has_explicit_max_frame_rate_;
     intersection.device_id_set_ =
@@ -134,6 +119,9 @@ class VideoContentCaptureCandidates {
   bool has_explicit_max_height() const { return has_explicit_max_height_; }
   bool has_explicit_max_width() const { return has_explicit_max_width_; }
   const DoubleRangeSet& frame_rate_set() const { return frame_rate_set_; }
+  bool has_explicit_min_frame_rate() const {
+    return has_explicit_min_frame_rate_;
+  }
   bool has_explicit_max_frame_rate() const {
     return has_explicit_max_frame_rate_;
   }
@@ -147,6 +135,7 @@ class VideoContentCaptureCandidates {
   bool has_explicit_max_height_;
   bool has_explicit_max_width_;
   DoubleRangeSet frame_rate_set_;
+  bool has_explicit_min_frame_rate_;
   bool has_explicit_max_frame_rate_;
   StringSet device_id_set_;
   BoolSet noise_reduction_set_;
@@ -350,9 +339,17 @@ VideoCaptureSettings SelectResultFromCandidates(
       candidates.frame_rate_set(), capture_params.requested_format,
       expect_source_native_size);
 
+  base::Optional<double> min_frame_rate;
+  if (candidates.has_explicit_min_frame_rate())
+    min_frame_rate = candidates.frame_rate_set().Min();
+
+  base::Optional<double> max_frame_rate;
+  if (candidates.has_explicit_max_frame_rate())
+    max_frame_rate = candidates.frame_rate_set().Max();
+
   return VideoCaptureSettings(std::move(device_id), capture_params,
                               noise_reduction, track_adapter_settings,
-                              candidates.frame_rate_set().Min());
+                              min_frame_rate, max_frame_rate);
 }
 
 VideoCaptureSettings UnsatisfiedConstraintsResult(

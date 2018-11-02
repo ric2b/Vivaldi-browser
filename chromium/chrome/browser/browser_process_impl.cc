@@ -129,13 +129,13 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/features/features.h"
 #include "printing/features/features.h"
+#include "services/preferences/public/cpp/in_process_service_factory.h"
 #include "ui/base/idle/idle.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/message_center/message_center.h"
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "ui/views/focus/view_storage.h"
 #elif defined(OS_MACOSX)
 #include "chrome/browser/chrome_browser_main_mac.h"
 #endif
@@ -174,7 +174,7 @@
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #endif
 
 #if !defined(OS_ANDROID) && !defined(OS_CHROMEOS)
@@ -229,7 +229,9 @@ BrowserProcessImpl::BrowserProcessImpl(
       tearing_down_(false),
       download_status_updater_(new DownloadStatusUpdater),
       local_state_task_runner_(local_state_task_runner),
-      cached_default_web_client_state_(shell_integration::UNKNOWN_DEFAULT) {
+      cached_default_web_client_state_(shell_integration::UNKNOWN_DEFAULT),
+      pref_service_factory_(
+          base::MakeUnique<prefs::InProcessPrefServiceFactory>()) {
   g_browser_process = this;
   rappor::SetDefaultServiceAccessor(&GetBrowserRapporService);
   platform_part_.reset(new BrowserProcessPlatformPart());
@@ -239,12 +241,14 @@ BrowserProcessImpl::BrowserProcessImpl(
   print_job_manager_.reset(new printing::PrintJobManager);
 #endif
 
-  base::FilePath net_log_path;
-  if (command_line.HasSwitch(switches::kLogNetLog))
-    net_log_path = command_line.GetSwitchValuePath(switches::kLogNetLog);
-  net_log_.reset(new net_log::ChromeNetLog(
-      net_log_path, GetNetCaptureModeFromCommandLine(command_line),
-      command_line.GetCommandLineString(), chrome::GetChannelString()));
+  net_log_ = base::MakeUnique<net_log::ChromeNetLog>();
+
+  if (command_line.HasSwitch(switches::kLogNetLog)) {
+    net_log_->StartWritingToFile(
+        command_line.GetSwitchValuePath(switches::kLogNetLog),
+        GetNetCaptureModeFromCommandLine(command_line),
+        command_line.GetCommandLineString(), chrome::GetChannelString());
+  }
 
   ChildProcessSecurityPolicy::GetInstance()->RegisterWebSafeScheme(
       chrome::kChromeSearchScheme);
@@ -280,6 +284,7 @@ BrowserProcessImpl::BrowserProcessImpl(
 }
 
 BrowserProcessImpl::~BrowserProcessImpl() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   extensions::ExtensionsBrowserClient::Set(nullptr);
 #endif
@@ -442,9 +447,9 @@ RundownTaskCounter::RundownTaskCounter()
 void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
   // As the count starts off at one, it should never get to zero unless
   // TimedWait has been called.
-  DCHECK(!base::AtomicRefCountIsZero(&count_));
+  DCHECK(!count_.IsZero());
 
-  base::AtomicRefCountInc(&count_);
+  count_.Increment();
 
   // The task must be non-nestable to guarantee that it runs after all tasks
   // currently scheduled on |task_runner| have completed.
@@ -453,7 +458,7 @@ void RundownTaskCounter::Post(base::SequencedTaskRunner* task_runner) {
 }
 
 void RundownTaskCounter::Decrement() {
-  if (!base::AtomicRefCountDec(&count_))
+  if (!count_.Decrement())
     waitable_event_.Signal();
 }
 
@@ -471,22 +476,12 @@ void BrowserProcessImpl::EndSession() {
   ProfileManager* pm = profile_manager();
   std::vector<Profile*> profiles(pm->GetLoadedProfiles());
   scoped_refptr<RundownTaskCounter> rundown_counter(new RundownTaskCounter());
-  const bool pref_service_enabled =
-      base::FeatureList::IsEnabled(features::kPrefService);
-  std::vector<scoped_refptr<base::SequencedTaskRunner>> profile_writer_runners;
   for (size_t i = 0; i < profiles.size(); ++i) {
     Profile* profile = profiles[i];
     profile->SetExitType(Profile::EXIT_SESSION_ENDED);
     if (profile->GetPrefs()) {
       profile->GetPrefs()->CommitPendingWrite();
-      if (pref_service_enabled) {
-        rundown_counter->Post(content::BrowserThread::GetTaskRunnerForThread(
-                                  content::BrowserThread::IO)
-                                  .get());
-        profile_writer_runners.push_back(profile->GetIOTaskRunner());
-      } else {
-        rundown_counter->Post(profile->GetIOTaskRunner().get());
-      }
+      rundown_counter->Post(profile->GetIOTaskRunner().get());
     }
   }
 
@@ -528,15 +523,7 @@ void BrowserProcessImpl::EndSession() {
   // processes to launch, this can result in a hang. See
   // http://crbug.com/318527.
   const base::TimeTicks end_time = base::TimeTicks::Now() + kEndSessionTimeout;
-  const bool timed_out = !rundown_counter->TimedWaitUntil(end_time);
-  if (timed_out || !pref_service_enabled)
-    return;
-
-  scoped_refptr<RundownTaskCounter> profile_write_rundown_counter(
-      new RundownTaskCounter());
-  for (auto& profile_writer_runner : profile_writer_runners)
-    profile_write_rundown_counter->Post(profile_writer_runner.get());
-  profile_write_rundown_counter->TimedWaitUntil(end_time);
+  rundown_counter->TimedWaitUntil(end_time);
 #elif !defined(OS_MACOSX)
   NOTIMPLEMENTED();
 #endif
@@ -544,7 +531,7 @@ void BrowserProcessImpl::EndSession() {
 
 metrics_services_manager::MetricsServicesManager*
 BrowserProcessImpl::GetMetricsServicesManager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!metrics_services_manager_) {
     metrics_services_manager_.reset(
         new metrics_services_manager::MetricsServicesManager(
@@ -555,28 +542,28 @@ BrowserProcessImpl::GetMetricsServicesManager() {
 }
 
 metrics::MetricsService* BrowserProcessImpl::metrics_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetMetricsServicesManager()->GetMetricsService();
 }
 
 rappor::RapporServiceImpl* BrowserProcessImpl::rappor_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetMetricsServicesManager()->GetRapporServiceImpl();
 }
 
 ukm::UkmRecorder* BrowserProcessImpl::ukm_recorder() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetMetricsServicesManager()->GetUkmService();
 }
 
 IOThread* BrowserProcessImpl::io_thread() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(io_thread_.get());
   return io_thread_.get();
 }
 
 WatchDogThread* BrowserProcessImpl::watchdog_thread() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_watchdog_thread_)
     CreateWatchdogThread();
   DCHECK(watchdog_thread_.get() != NULL);
@@ -584,26 +571,26 @@ WatchDogThread* BrowserProcessImpl::watchdog_thread() {
 }
 
 ProfileManager* BrowserProcessImpl::profile_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_profile_manager_)
     CreateProfileManager();
   return profile_manager_.get();
 }
 
 PrefService* BrowserProcessImpl::local_state() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_local_state_)
     CreateLocalState();
   return local_state_.get();
 }
 
 net::URLRequestContextGetter* BrowserProcessImpl::system_request_context() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return io_thread()->system_url_request_context_getter();
 }
 
 variations::VariationsService* BrowserProcessImpl::variations_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return GetMetricsServicesManager()->GetVariationsService();
 }
 
@@ -621,7 +608,7 @@ BrowserProcessImpl::extension_event_router_forwarder() {
 }
 
 NotificationUIManager* BrowserProcessImpl::notification_ui_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 // TODO(miguelg) return NULL for MAC as well once native notifications
 // are enabled by default.
 #if defined(OS_ANDROID)
@@ -644,12 +631,12 @@ NotificationPlatformBridge* BrowserProcessImpl::notification_platform_bridge() {
 }
 
 message_center::MessageCenter* BrowserProcessImpl::message_center() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return message_center::MessageCenter::Get();
 }
 
 policy::BrowserPolicyConnector* BrowserProcessImpl::browser_policy_connector() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_browser_policy_connector_) {
     DCHECK(!browser_policy_connector_);
     browser_policy_connector_ = platform_part_->CreateBrowserPolicyConnector();
@@ -663,21 +650,21 @@ policy::PolicyService* BrowserProcessImpl::policy_service() {
 }
 
 IconManager* BrowserProcessImpl::icon_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_icon_manager_)
     CreateIconManager();
   return icon_manager_.get();
 }
 
 GpuProfileCache* BrowserProcessImpl::gpu_profile_cache() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!gpu_profile_cache_.get())
     gpu_profile_cache_.reset(GpuProfileCache::Create());
   return gpu_profile_cache_.get();
 }
 
 GpuModeManager* BrowserProcessImpl::gpu_mode_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!gpu_mode_manager_.get())
     gpu_mode_manager_.reset(new GpuModeManager());
   return gpu_mode_manager_.get();
@@ -686,7 +673,7 @@ GpuModeManager* BrowserProcessImpl::gpu_mode_manager() {
 void BrowserProcessImpl::CreateDevToolsHttpProtocolHandler(
     const std::string& ip,
     uint16_t port) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if !defined(OS_ANDROID)
   // StartupBrowserCreator::LaunchBrowser can be run multiple times when browser
   // is started with several profiles or existing browser process is reused.
@@ -697,7 +684,7 @@ void BrowserProcessImpl::CreateDevToolsHttpProtocolHandler(
 }
 
 void BrowserProcessImpl::CreateDevToolsAutoOpener() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if !defined(OS_ANDROID)
   // StartupBrowserCreator::LaunchBrowser can be run multiple times when browser
   // is started with several profiles or existing browser process is reused.
@@ -707,21 +694,21 @@ void BrowserProcessImpl::CreateDevToolsAutoOpener() {
 }
 
 bool BrowserProcessImpl::IsShuttingDown() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // TODO(crbug.com/560486): Fix the tests that make the check of
   // |tearing_down_| necessary here.
   return shutting_down_ || tearing_down_;
 }
 
 printing::PrintJobManager* BrowserProcessImpl::print_job_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return print_job_manager_.get();
 }
 
 printing::PrintPreviewDialogController*
     BrowserProcessImpl::print_preview_dialog_controller() {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!print_preview_dialog_controller_.get())
     CreatePrintPreviewDialogController();
   return print_preview_dialog_controller_.get();
@@ -734,7 +721,7 @@ printing::PrintPreviewDialogController*
 printing::BackgroundPrintingManager*
     BrowserProcessImpl::background_printing_manager() {
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!background_printing_manager_.get())
     CreateBackgroundPrintingManager();
   return background_printing_manager_.get();
@@ -745,7 +732,7 @@ printing::BackgroundPrintingManager*
 }
 
 IntranetRedirectDetector* BrowserProcessImpl::intranet_redirect_detector() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!intranet_redirect_detector_.get())
     CreateIntranetRedirectDetector();
   return intranet_redirect_detector_.get();
@@ -803,17 +790,17 @@ network_time::NetworkTimeTracker* BrowserProcessImpl::network_time_tracker() {
 }
 
 gcm::GCMDriver* BrowserProcessImpl::gcm_driver() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!gcm_driver_)
     CreateGCMDriver();
   return gcm_driver_.get();
 }
 
-memory::TabManager* BrowserProcessImpl::GetTabManager() {
-  DCHECK(CalledOnValidThread());
+resource_coordinator::TabManager* BrowserProcessImpl::GetTabManager() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
   if (!tab_manager_.get())
-    tab_manager_.reset(new memory::TabManager());
+    tab_manager_.reset(new resource_coordinator::TabManager());
   return tab_manager_.get();
 #else
   return nullptr;
@@ -827,7 +814,7 @@ BrowserProcessImpl::CachedDefaultWebClientState() {
 
 physical_web::PhysicalWebDataSource*
 BrowserProcessImpl::GetPhysicalWebDataSource() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if defined(OS_ANDROID)
   if (!physical_web_data_source_) {
     CreatePhysicalWebDataSource();
@@ -837,6 +824,11 @@ BrowserProcessImpl::GetPhysicalWebDataSource() {
 #else
   return nullptr;
 #endif
+}
+
+prefs::InProcessPrefServiceFactory* BrowserProcessImpl::pref_service_factory()
+    const {
+  return pref_service_factory_.get();
 }
 
 // static
@@ -877,14 +869,14 @@ void BrowserProcessImpl::RegisterPrefs(PrefRegistrySimple* registry) {
 }
 
 DownloadRequestLimiter* BrowserProcessImpl::download_request_limiter() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!download_request_limiter_.get())
     download_request_limiter_ = new DownloadRequestLimiter();
   return download_request_limiter_.get();
 }
 
 BackgroundModeManager* BrowserProcessImpl::background_mode_manager() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 #if BUILDFLAG(ENABLE_BACKGROUND)
   if (!background_mode_manager_.get())
     CreateBackgroundModeManager();
@@ -903,7 +895,7 @@ void BrowserProcessImpl::set_background_mode_manager_for_test(
 }
 
 StatusTray* BrowserProcessImpl::status_tray() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!status_tray_.get())
     CreateStatusTray();
   return status_tray_.get();
@@ -911,7 +903,7 @@ StatusTray* BrowserProcessImpl::status_tray() {
 
 safe_browsing::SafeBrowsingService*
 BrowserProcessImpl::safe_browsing_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_safe_browsing_service_)
     CreateSafeBrowsingService();
   return safe_browsing_service_.get();
@@ -919,7 +911,7 @@ BrowserProcessImpl::safe_browsing_service() {
 
 safe_browsing::ClientSideDetectionService*
     BrowserProcessImpl::safe_browsing_detection_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (safe_browsing_service())
     return safe_browsing_service()->safe_browsing_detection_service();
   return NULL;
@@ -927,7 +919,7 @@ safe_browsing::ClientSideDetectionService*
 
 subresource_filter::ContentRulesetService*
 BrowserProcessImpl::subresource_filter_ruleset_service() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!created_subresource_filter_ruleset_service_)
     CreateSubresourceFilterRulesetService();
   return subresource_filter_ruleset_service_.get();
@@ -1049,9 +1041,11 @@ void BrowserProcessImpl::CreateLocalState() {
   chrome::RegisterLocalState(pref_registry.get());
   vivaldi::RegisterLocalState(pref_registry.get());
 
+  auto delegate = pref_service_factory_->CreateDelegate();
+  delegate->InitPrefRegistry(pref_registry.get());
   local_state_ = chrome_prefs::CreateLocalState(
       local_state_path, local_state_task_runner_.get(), policy_service(),
-      pref_registry, false);
+      pref_registry, false, std::move(delegate));
 
   pref_change_registrar_.Init(local_state_.get());
 
@@ -1305,15 +1299,15 @@ void BrowserProcessImpl::ApplyAllowCrossOriginAuthPromptPolicy() {
   ResourceDispatcherHost::Get()->SetAllowCrossOriginAuthPrompt(value);
 }
 
-void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
 #if !defined(OS_ANDROID)
-  CHECK(BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
+void BrowserProcessImpl::ApplyMetricsReportingPolicy() {
+  GoogleUpdateSettings::CollectStatsConsentTaskRunner()->PostTask(
+      FROM_HERE,
       base::BindOnce(
           base::IgnoreResult(&GoogleUpdateSettings::SetCollectStatsConsent),
-          ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled())));
-#endif
+          ChromeMetricsServiceAccessor::IsMetricsAndCrashReportingEnabled()));
 }
+#endif
 
 void BrowserProcessImpl::CacheDefaultWebClientState() {
 #if defined(OS_CHROMEOS)
@@ -1324,7 +1318,7 @@ void BrowserProcessImpl::CacheDefaultWebClientState() {
 }
 
 void BrowserProcessImpl::Pin() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // CHECK(!IsShuttingDown());
   if (IsShuttingDown()) {
@@ -1336,7 +1330,7 @@ void BrowserProcessImpl::Pin() {
 }
 
 void BrowserProcessImpl::Unpin() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   release_last_reference_callstack_ = base::debug::StackTrace();
 
   shutting_down_ = true;

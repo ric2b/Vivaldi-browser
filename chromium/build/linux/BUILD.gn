@@ -29,24 +29,9 @@ if (use_gio) {
     # GYP build.
     #ignore_libs = true  # Loader generated below.
   }
-
-  deps = [
-    "//build/linux/libgio",
-  ]
 }
 
 # Looking for libspeechd? Use //third_party/speech-dispatcher
-
-group("fontconfig") {
-  if (is_chromecast) {
-    # Chromecast platform does not provide fontconfig
-    public_deps = [
-      "//third_party/fontconfig",
-    ]
-  } else {
-    public_configs = [ "//build/config/linux:fontconfig" ]
-  }
-}
 
 if (!is_chromecast) {
   # Only provided for distributions which prefer to keep linking to FreeType on

@@ -12,7 +12,6 @@
 #include <vector>
 
 #include "ash/accessibility_types.h"
-#include "ash/system/tray/ime_info.h"
 #include "ash/system/tray/system_tray_delegate.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
@@ -25,8 +24,6 @@
 #include "content/public/browser/notification_registrar.h"
 #include "extensions/browser/app_window/app_window_registry.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/chromeos/ime/input_method_menu_manager.h"
 
 namespace ash {
 class SystemTrayNotifier;
@@ -34,14 +31,15 @@ class SystemTrayNotifier;
 
 namespace chromeos {
 
+// DEPRECATED. Do not add new code here. This class is being removed as part of
+// the transition to mustash. New code should be added to SystemTrayClient.
+// Use system_tray.mojom methods if you need to send information to ash.
+// Please contact jamescook@chromium.org if you have questions or need help.
 class SystemTrayDelegateChromeOS
-    : public ui::ime::InputMethodMenuManager::Observer,
-      public ash::SystemTrayDelegate,
+    : public ash::SystemTrayDelegate,
       public content::NotificationObserver,
-      public input_method::InputMethodManager::Observer,
       public chrome::BrowserListObserver,
       public extensions::AppWindowRegistry::Observer,
-      public input_method::InputMethodManager::ImeMenuObserver,
       public UpdateEngineClient::Observer {
  public:
   SystemTrayDelegateChromeOS();
@@ -49,14 +47,7 @@ class SystemTrayDelegateChromeOS
 
   // Overridden from ash::SystemTrayDelegate:
   void Initialize() override;
-  void ShowUserLogin() override;
-  void GetCurrentIME(ash::IMEInfo* info) override;
-  void GetAvailableIMEList(ash::IMEInfoList* list) override;
-  void GetCurrentIMEProperties(ash::IMEPropertyInfoList* list) override;
-  base::string16 GetIMEManagedMessage() override;
   ash::NetworkingConfigDelegate* GetNetworkingConfigDelegate() const override;
-  bool GetSessionStartTime(base::TimeTicks* session_start_time) override;
-  bool GetSessionLengthLimit(base::TimeDelta* session_length_limit) override;
   void ActiveUserWasChanged() override;
   bool IsSearchKeyMappedToCapsLock() override;
 
@@ -91,17 +82,6 @@ class SystemTrayDelegateChromeOS
   void OnAccessibilityModeChanged(
       ash::AccessibilityNotificationVisibility notify);
 
-  void UpdatePerformanceTracing();
-
-  // Overridden from InputMethodManager::Observer.
-  void InputMethodChanged(input_method::InputMethodManager* manager,
-                          Profile* profile,
-                          bool show_message) override;
-
-  // Overridden from InputMethodMenuManager::Observer.
-  void InputMethodMenuItemChanged(
-      ui::ime::InputMethodMenuManager* manager) override;
-
   // Overridden from chrome::BrowserListObserver:
   void OnBrowserRemoved(Browser* browser) override;
 
@@ -111,27 +91,13 @@ class SystemTrayDelegateChromeOS
   void OnAccessibilityStatusChanged(
       const AccessibilityStatusEventDetails& details);
 
-  // input_method::InputMethodManager::ImeMenuObserver:
-  void ImeMenuActivationChanged(bool is_active) override;
-  void ImeMenuListChanged() override;
-  void ImeMenuItemsChanged(
-      const std::string& engine_id,
-      const std::vector<input_method::InputMethodManager::MenuItem>& items)
-      override;
-
   // Overridden from UpdateEngineClient::Observer.
   void OnUpdateOverCellularTargetSet(bool success) override;
 
   std::unique_ptr<content::NotificationRegistrar> registrar_;
-  std::unique_ptr<PrefChangeRegistrar> local_state_registrar_;
   std::unique_ptr<PrefChangeRegistrar> user_pref_registrar_;
   Profile* user_profile_ = nullptr;
   int search_key_mapped_to_ = input_method::kSearchKey;
-  bool have_session_start_time_ = false;
-  base::TimeTicks session_start_time_;
-  bool have_session_length_limit_ = false;
-  base::TimeDelta session_length_limit_;
-  bool session_started_ = false;
 
   std::unique_ptr<ash::NetworkingConfigDelegate> networking_config_delegate_;
   std::unique_ptr<AccessibilityStatusSubscription> accessibility_subscription_;

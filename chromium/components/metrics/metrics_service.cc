@@ -140,11 +140,13 @@
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_piece.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/tracked_objects.h"
 #include "build/build_config.h"
 #include "components/metrics/environment_recorder.h"
+#include "components/metrics/field_trials_provider.h"
 #include "components/metrics/metrics_log.h"
 #include "components/metrics/metrics_log_manager.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -162,11 +164,6 @@ namespace metrics {
 
 namespace {
 
-// This drops records if the number of events (user action and omnibox) exceeds
-// the kEventLimit.
-const base::Feature kUMAThrottleEvents{"UMAThrottleEvents",
-                                       base::FEATURE_ENABLED_BY_DEFAULT};
-
 // The delay, in seconds, after starting recording before doing expensive
 // initialization work.
 #if defined(OS_ANDROID) || defined(OS_IOS)
@@ -178,9 +175,6 @@ const int kInitializationDelaySeconds = 5;
 #else
 const int kInitializationDelaySeconds = 30;
 #endif
-
-// The maximum number of events in a log uploaded to the UMA server.
-const int kEventLimit = 2400;
 
 #if defined(OS_ANDROID) || defined(OS_IOS)
 void MarkAppCleanShutdownAndCommit(CleanExitBeacon* clean_exit_beacon,
@@ -223,7 +217,6 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
       state_manager_(state_manager),
       client_(client),
       local_state_(local_state),
-      clean_exit_beacon_(client->GetRegistryBackupKey(), local_state),
       recording_state_(UNSET),
       test_mode_active_(false),
       state_(INITIALIZED),
@@ -240,8 +233,11 @@ MetricsService::MetricsService(MetricsStateManager* state_manager,
   if (install_date == 0)
     local_state_->SetInt64(prefs::kInstallDate, base::Time::Now().ToTimeT());
 
-  RegisterMetricsProvider(std::unique_ptr<metrics::MetricsProvider>(
-      new StabilityMetricsProvider(local_state_)));
+  RegisterMetricsProvider(
+      base::MakeUnique<StabilityMetricsProvider>(local_state_));
+
+  RegisterMetricsProvider(base::MakeUnique<variations::FieldTrialsProvider>(
+      &synthetic_trial_registry_, base::StringPiece()));
 }
 
 MetricsService::~MetricsService() {
@@ -309,7 +305,7 @@ int64_t MetricsService::GetMetricsReportingEnabledDate() {
 }
 
 bool MetricsService::WasLastShutdownClean() const {
-  return clean_exit_beacon_.exited_cleanly();
+  return state_manager_->clean_exit_beacon()->exited_cleanly();
 }
 
 void MetricsService::EnableRecording() {
@@ -412,7 +408,8 @@ void MetricsService::OnAppEnterBackground() {
   rotation_scheduler_->Stop();
   reporting_service_.Stop();
 
-  MarkAppCleanShutdownAndCommit(&clean_exit_beacon_, local_state_);
+  MarkAppCleanShutdownAndCommit(state_manager_->clean_exit_beacon(),
+                                local_state_);
 
   // Give providers a chance to persist histograms as part of being
   // backgrounded.
@@ -433,13 +430,13 @@ void MetricsService::OnAppEnterBackground() {
 }
 
 void MetricsService::OnAppEnterForeground() {
-  clean_exit_beacon_.WriteBeaconValue(false);
+  state_manager_->clean_exit_beacon()->WriteBeaconValue(false);
   ExecutionPhaseManager(local_state_).OnAppEnterForeground();
   StartSchedulerIfNecessary();
 }
 #else
 void MetricsService::LogNeedForCleanShutdown() {
-  clean_exit_beacon_.WriteBeaconValue(false);
+  state_manager_->clean_exit_beacon()->WriteBeaconValue(false);
   // Redundant setting to be sure we call for a clean shutdown.
   clean_shutdown_status_ = NEED_TO_SHUTDOWN;
 }
@@ -501,11 +498,11 @@ void MetricsService::InitializeMetricsState() {
   session_id_ = local_state_->GetInteger(prefs::kMetricsSessionID);
 
   StabilityMetricsProvider provider(local_state_);
-  if (!clean_exit_beacon_.exited_cleanly()) {
+  if (!state_manager_->clean_exit_beacon()->exited_cleanly()) {
     provider.LogCrash();
     // Reset flag, and wait until we call LogNeedForCleanShutdown() before
     // monitoring.
-    clean_exit_beacon_.WriteBeaconValue(true);
+    state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
     ExecutionPhaseManager manager(local_state_);
     UMA_HISTOGRAM_SPARSE_SLOWLY("Chrome.Browser.CrashedExecutionPhase",
                                 static_cast<int>(manager.GetExecutionPhase()));
@@ -516,7 +513,7 @@ void MetricsService::InitializeMetricsState() {
   // bypassed.
   const bool is_initial_stability_log_required =
       ProvidersHaveInitialStabilityMetrics() ||
-      !clean_exit_beacon_.exited_cleanly();
+      !state_manager_->clean_exit_beacon()->exited_cleanly();
   bool has_initial_stability_log = false;
   if (is_initial_stability_log_required) {
     // If the previous session didn't exit cleanly, or if any provider
@@ -633,6 +630,12 @@ void MetricsService::OpenNewLog() {
         FROM_HERE, base::Bind(&MetricsService::StartInitTask,
                               self_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(kInitializationDelaySeconds));
+
+    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&MetricsService::PrepareProviderMetricsTask,
+                   self_ptr_factory_.GetWeakPtr()),
+        base::TimeDelta::FromSeconds(2 * kInitializationDelaySeconds));
   }
 }
 
@@ -645,16 +648,6 @@ void MetricsService::StartInitTask() {
 void MetricsService::CloseCurrentLog() {
   if (!log_manager_.current_log())
     return;
-
-  // TODO(rkaplow): Evaluate if this is needed.
-  if (log_manager_.current_log()->num_events() > kEventLimit) {
-    UMA_HISTOGRAM_COUNTS("UMA.Discarded Log Events",
-                         log_manager_.current_log()->num_events());
-    if (base::FeatureList::IsEnabled(kUMAThrottleEvents)) {
-      log_manager_.DiscardCurrentLog();
-      OpenNewLog();  // Start trivial log to hold our histograms.
-    }
-  }
 
   // If a persistent allocator is in use, update its internal histograms (such
   // as how much memory is being used) before reporting.
@@ -678,6 +671,7 @@ void MetricsService::CloseCurrentLog() {
 
   current_log->RecordGeneralMetrics(metrics_providers_);
   RecordCurrentHistograms();
+  current_log->TruncateEvents();
   DVLOG(1) << "Generated an ongoing log.";
   log_manager_.FinishCurrentLog(log_store());
 }
@@ -856,96 +850,14 @@ bool MetricsService::UmaMetricsProperlyShutdown() {
   return clean_shutdown_status_ == CLEANLY_SHUTDOWN;
 }
 
-void MetricsService::AddSyntheticTrialObserver(
-    variations::SyntheticTrialObserver* observer) {
-  synthetic_trial_observer_list_.AddObserver(observer);
-  if (!synthetic_trial_groups_.empty())
-    observer->OnSyntheticTrialsChanged(synthetic_trial_groups_);
-}
-
-void MetricsService::RemoveSyntheticTrialObserver(
-    variations::SyntheticTrialObserver* observer) {
-  synthetic_trial_observer_list_.RemoveObserver(observer);
-}
-
-void MetricsService::RegisterSyntheticFieldTrial(
-    const variations::SyntheticTrialGroup& trial) {
-  for (size_t i = 0; i < synthetic_trial_groups_.size(); ++i) {
-    if (synthetic_trial_groups_[i].id.name == trial.id.name) {
-      if (synthetic_trial_groups_[i].id.group != trial.id.group) {
-        synthetic_trial_groups_[i].id.group = trial.id.group;
-        synthetic_trial_groups_[i].start_time = base::TimeTicks::Now();
-        NotifySyntheticTrialObservers();
-      }
-      return;
-    }
-  }
-
-  variations::SyntheticTrialGroup trial_group = trial;
-  trial_group.start_time = base::TimeTicks::Now();
-  synthetic_trial_groups_.push_back(trial_group);
-  NotifySyntheticTrialObservers();
-}
-
-void MetricsService::RegisterSyntheticMultiGroupFieldTrial(
-    uint32_t trial_name_hash,
-    const std::vector<uint32_t>& group_name_hashes) {
-  auto has_same_trial_name =
-      [trial_name_hash](const variations::SyntheticTrialGroup& x) {
-        return x.id.name == trial_name_hash;
-      };
-  synthetic_trial_groups_.erase(
-      std::remove_if(synthetic_trial_groups_.begin(),
-                     synthetic_trial_groups_.end(), has_same_trial_name),
-      synthetic_trial_groups_.end());
-
-  if (group_name_hashes.empty())
-    return;
-
-  variations::SyntheticTrialGroup trial_group(trial_name_hash,
-                                              group_name_hashes[0]);
-  trial_group.start_time = base::TimeTicks::Now();
-  for (uint32_t group_name_hash : group_name_hashes) {
-    // Note: Adding the trial group will copy it, so this re-uses the same
-    // |trial_group| struct for convenience (e.g. so start_time's all match).
-    trial_group.id.group = group_name_hash;
-    synthetic_trial_groups_.push_back(trial_group);
-  }
-  NotifySyntheticTrialObservers();
-}
-
-void MetricsService::GetCurrentSyntheticFieldTrialsForTesting(
-    std::vector<variations::ActiveGroupId>* synthetic_trials) {
-  GetSyntheticFieldTrialsOlderThan(base::TimeTicks::Now(), synthetic_trials);
-}
-
 void MetricsService::RegisterMetricsProvider(
     std::unique_ptr<MetricsProvider> provider) {
   DCHECK_EQ(INITIALIZED, state_);
   metrics_providers_.push_back(std::move(provider));
 }
 
-void MetricsService::CheckForClonedInstall(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  state_manager_->CheckForClonedInstall(task_runner);
-}
-
-void MetricsService::NotifySyntheticTrialObservers() {
-  for (variations::SyntheticTrialObserver& observer :
-       synthetic_trial_observer_list_) {
-    observer.OnSyntheticTrialsChanged(synthetic_trial_groups_);
-  }
-}
-
-void MetricsService::GetSyntheticFieldTrialsOlderThan(
-    base::TimeTicks time,
-    std::vector<variations::ActiveGroupId>* synthetic_trials) {
-  DCHECK(synthetic_trials);
-  synthetic_trials->clear();
-  for (size_t i = 0; i < synthetic_trial_groups_.size(); ++i) {
-    if (synthetic_trial_groups_[i].start_time <= time)
-      synthetic_trials->push_back(synthetic_trial_groups_[i].id);
-  }
+void MetricsService::CheckForClonedInstall() {
+  state_manager_->CheckForClonedInstall();
 }
 
 std::unique_ptr<MetricsLog> MetricsService::CreateLog(
@@ -956,11 +868,8 @@ std::unique_ptr<MetricsLog> MetricsService::CreateLog(
 
 void MetricsService::RecordCurrentEnvironment(MetricsLog* log) {
   DCHECK(client_);
-  std::vector<variations::ActiveGroupId> synthetic_trials;
-  GetSyntheticFieldTrialsOlderThan(log->creation_time(), &synthetic_trials);
   std::string serialized_environment = log->RecordEnvironment(
-      metrics_providers_, synthetic_trials, GetInstallDate(),
-      GetMetricsReportingEnabledDate());
+      metrics_providers_, GetInstallDate(), GetMetricsReportingEnabledDate());
   client_->OnEnvironmentUpdate(&serialized_environment);
 }
 
@@ -988,13 +897,44 @@ void MetricsService::RecordCurrentStabilityHistograms() {
     provider->RecordInitialHistogramSnapshots(&histogram_snapshot_manager_);
 }
 
+bool MetricsService::PrepareProviderMetricsLog() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  // Create a new log. This will have some defaut values injected in it but
+  // those will be overwritten when an embedded profile is extracted.
+  std::unique_ptr<MetricsLog> log = CreateLog(MetricsLog::INDEPENDENT_LOG);
+
+  for (auto& provider : metrics_providers_) {
+    if (log->LoadIndependentMetrics(provider.get())) {
+      log_manager_.PauseCurrentLog();
+      log_manager_.BeginLoggingWithLog(std::move(log));
+      log_manager_.FinishCurrentLog(log_store());
+      log_manager_.ResumePausedLog();
+      return true;
+    }
+  }
+  return false;
+}
+
+void MetricsService::PrepareProviderMetricsTask() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  bool found = PrepareProviderMetricsLog();
+  base::TimeDelta next_check = found ? base::TimeDelta::FromSeconds(5)
+                                     : base::TimeDelta::FromMinutes(15);
+  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
+      FROM_HERE,
+      base::Bind(&MetricsService::PrepareProviderMetricsTask,
+                 self_ptr_factory_.GetWeakPtr()),
+      next_check);
+}
+
 void MetricsService::LogCleanShutdown(bool end_completed) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // Redundant setting to assure that we always reset this value at shutdown
   // (and that we don't use some alternate path, and not call LogCleanShutdown).
   clean_shutdown_status_ = CLEANLY_SHUTDOWN;
   client_->OnLogCleanShutdown();
-  clean_exit_beacon_.WriteBeaconValue(true);
+  state_manager_->clean_exit_beacon()->WriteBeaconValue(true);
   SetExecutionPhase(ExecutionPhase::SHUTDOWN_COMPLETE, local_state_);
   StabilityMetricsProvider(local_state_).MarkSessionEndCompleted(end_completed);
 }

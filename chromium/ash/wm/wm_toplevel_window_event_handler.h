@@ -8,8 +8,8 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/wm/wm_types.h"
-#include "ash/wm_display_observer.h"
 #include "base/callback.h"
 #include "base/macros.h"
 #include "ui/gfx/geometry/rect.h"
@@ -32,7 +32,8 @@ namespace wm {
 // WmToplevelWindowEventHandler handles dragging and resizing of top level
 // windows. WmToplevelWindowEventHandler is forwarded events, such as from an
 // EventHandler.
-class ASH_EXPORT WmToplevelWindowEventHandler : public WmDisplayObserver {
+class ASH_EXPORT WmToplevelWindowEventHandler
+    : public WindowTreeHostManager::Observer {
  public:
   // Describes what triggered ending the drag.
   enum class DragResult {
@@ -59,7 +60,7 @@ class ASH_EXPORT WmToplevelWindowEventHandler : public WmDisplayObserver {
   bool AttemptToStartDrag(aura::Window* window,
                           const gfx::Point& point_in_parent,
                           int window_component,
-                          aura::client::WindowMoveSource source,
+                          ::wm::WindowMoveSource source,
                           const EndClosure& end_closure);
 
   // If there is a drag in progress it is reverted, otherwise does nothing.
@@ -98,12 +99,16 @@ class ASH_EXPORT WmToplevelWindowEventHandler : public WmDisplayObserver {
   // Invoked from ScopedWindowResizer if the window is destroyed.
   void ResizerWindowDestroyed();
 
-  // WmDisplayObserver:
+  // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanging() override;
 
   // The hittest result for the first finger at the time that it initially
   // touched the screen. |first_finger_hittest_| is one of ui/base/hit_test.h
   int first_finger_hittest_;
+
+  // The point for the first finger at the time that it initially touched the
+  // screen.
+  gfx::Point first_finger_touch_point_;
 
   // The window bounds when the drag was started. When a window is minimized,
   // maximized or snapped via a swipe/fling gesture, the restore bounds should

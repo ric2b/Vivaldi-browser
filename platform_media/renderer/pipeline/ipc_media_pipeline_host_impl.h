@@ -107,6 +107,8 @@ class IPCMediaPipelineHostImpl : public media::IPCMediaPipelineHost,
     return !decoded_data_read_callbacks_[type].is_null();
   }
 
+  int32_t command_buffer_route_id() const;
+
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   media::DataSource* data_source_;

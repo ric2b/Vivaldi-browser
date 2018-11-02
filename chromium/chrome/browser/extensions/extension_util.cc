@@ -36,6 +36,7 @@
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/grit/extensions_browser_resources.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "url/gurl.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/file_manager/app_id.h"
@@ -268,12 +269,6 @@ bool IsExtensionIdle(const std::string& extension_id,
   return true;
 }
 
-GURL GetSiteForExtensionId(const std::string& extension_id,
-                           content::BrowserContext* context) {
-  return content::SiteInstance::GetSiteForURL(
-      context, Extension::GetBaseURLFromExtensionId(extension_id));
-}
-
 std::unique_ptr<base::DictionaryValue> GetExtensionInfo(
     const Extension* extension) {
   DCHECK(extension);
@@ -303,7 +298,9 @@ const gfx::ImageSkia& GetDefaultExtensionIcon() {
 
 bool IsNewBookmarkAppsEnabled() {
 #if defined(OS_MACOSX)
-  return base::FeatureList::IsEnabled(features::kBookmarkApps);
+  return base::FeatureList::IsEnabled(features::kBookmarkApps) ||
+         base::FeatureList::IsEnabled(features::kAppBanners) ||
+         base::FeatureList::IsEnabled(features::kExperimentalAppBanners);
 #else
   return true;
 #endif
@@ -312,7 +309,8 @@ bool IsNewBookmarkAppsEnabled() {
 bool CanHostedAppsOpenInWindows() {
 #if defined(OS_MACOSX)
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableHostedAppsInWindows);
+             switches::kEnableHostedAppsInWindows) ||
+         base::FeatureList::IsEnabled(features::kDesktopPWAWindowing);
 #else
   return true;
 #endif

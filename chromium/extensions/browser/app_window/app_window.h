@@ -19,7 +19,6 @@
 #include "content/public/browser/web_contents_delegate.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "extensions/browser/extension_function_dispatcher.h"
-#include "extensions/browser/extension_icon_image.h"
 #include "extensions/browser/extension_registry_observer.h"
 #include "ui/base/ui_base_types.h"  // WindowShowState
 #include "ui/gfx/geometry/rect.h"
@@ -88,7 +87,6 @@ class AppWindowContents {
 class AppWindow : public content::WebContentsDelegate,
                   public content::WebContentsObserver,
                   public web_modal::WebContentsModalDialogManagerDelegate,
-                  public IconImage::Observer,
                   public ExtensionFunctionDispatcher::Delegate,
                   public ExtensionRegistryObserver {
  public:
@@ -187,6 +185,10 @@ class AppWindow : public content::WebContentsDelegate,
     // If true, the window will be visible on all workspaces. Defaults to false.
     bool visible_on_all_workspaces;
 
+    // Whether the app window should be shown on the lock screen.
+    // Chrome OS only.
+    bool show_on_lock_screen;
+
     // If true, the window will have its own shelf icon. Otherwise the window
     // will be grouped in the shelf with other windows that are associated with
     // the app. Defaults to false.
@@ -245,7 +247,7 @@ class AppWindow : public content::WebContentsDelegate,
     return window_type_ == WINDOW_TYPE_PANEL;
   }
   content::BrowserContext* browser_context() const { return browser_context_; }
-  const gfx::Image& app_icon() const { return app_icon_; }
+  const gfx::Image& custom_app_icon() const { return custom_app_icon_; }
   const GURL& app_icon_url() const { return app_icon_url_; }
   const GURL& initial_url() const { return initial_url_; }
   bool is_hidden() const { return is_hidden_; }
@@ -370,10 +372,6 @@ class AppWindow : public content::WebContentsDelegate,
   // unblock resource requests.
   void NotifyRenderViewReady();
 
-  // Returns true if window has custom icon in case either |window_icon_url_| or
-  // |app_icon_url_| is set. Custom icon may be not loaded yet.
-  bool HasCustomIcon() const;
-
   // Whether the app window wants to be alpha enabled.
   bool requested_alpha_enabled() const { return requested_alpha_enabled_; }
 
@@ -383,9 +381,11 @@ class AppWindow : public content::WebContentsDelegate,
   // remove this TODO.
   bool is_ime_window() const { return is_ime_window_; }
 
+  bool show_on_lock_screen() const { return show_on_lock_screen_; }
+
   bool show_in_shelf() const { return show_in_shelf_; }
 
-  const GURL& window_icon_url() const { return window_icon_url_; }
+  AppDelegate* app_delegate() { return app_delegate_.get(); }
 
   void SetAppWindowContentsForTesting(
       std::unique_ptr<AppWindowContents> contents) {
@@ -450,6 +450,7 @@ class AppWindow : public content::WebContentsDelegate,
   std::unique_ptr<content::BluetoothChooser> RunBluetoothChooser(
       content::RenderFrameHost* frame,
       const content::BluetoothChooser::EventHandler& event_handler) override;
+  bool TakeFocus(content::WebContents* source, bool reverse) override;
   void ContentsMouseEvent(content::WebContents* source,
                           const gfx::Point& location,
                           bool motion,
@@ -490,9 +491,6 @@ class AppWindow : public content::WebContentsDelegate,
   // CreateParams that should be used to create the window.
   CreateParams LoadDefaults(CreateParams params) const;
 
-  // Load the app's image, firing a load state change when loaded.
-  void UpdateExtensionAppIcon();
-
   // Set the fullscreen state in the native app window.
   void SetNativeWindowFullscreen();
 
@@ -518,9 +516,6 @@ class AppWindow : public content::WebContentsDelegate,
                           const std::vector<SkBitmap>& bitmaps,
                           const std::vector<gfx::Size>& original_bitmap_sizes);
 
-  // IconImage::Observer implementation.
-  void OnExtensionIconImageChanged(IconImage* image) override;
-
   // The browser context with which this window is associated. AppWindow does
   // not own this object.
   content::BrowserContext* browser_context_;
@@ -534,15 +529,12 @@ class AppWindow : public content::WebContentsDelegate,
   const SessionID session_id_;
   WindowType window_type_;
 
-  // Icon shown in the task bar.
-  gfx::Image app_icon_;
+  // Custom icon shown in the task bar or in Chrome OS shelf.
+  gfx::Image custom_app_icon_;
 
   // Icon URL to be used for setting the app icon. If not empty, app_icon_ will
   // be fetched and set using this URL.
   GURL app_icon_url_;
-
-  // An object to load the app's icon as an extension resource.
-  std::unique_ptr<IconImage> app_icon_image_;
 
   std::unique_ptr<NativeAppWindow> native_app_window_;
   std::unique_ptr<AppWindowContents> app_window_contents_;
@@ -581,17 +573,15 @@ class AppWindow : public content::WebContentsDelegate,
   // Whether |is_ime_window| was set in the CreateParams.
   bool is_ime_window_;
 
+  // Whether |show_on_lock_screen| was set in the CreateParams.
+  bool show_on_lock_screen_;
+
   // Whether |show_in_shelf| was set in the CreateParams.
   bool show_in_shelf_;
 
   // If the mouse has entered the app-window. Used for ContentsMouseEvent
   // leaving and entering.
   bool mouse_has_entered_ = false;
-
-  // Icon URL to be used for setting the window icon. If not empty,
-  // app_icon_ will be fetched and set using this URL and will have
-  // app_icon_image_ as a badge.
-  GURL window_icon_url_;
 
   // PlzNavigate: this is called when the first navigation is ready to commit.
   base::Closure on_first_commit_callback_;

@@ -6,7 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "cc/layers/layer.h"
-#include "cc/output/compositor_frame_sink.h"
+#include "cc/output/layer_tree_frame_sink.h"
 #include "cc/raster/bitmap_raster_buffer_provider.h"
 #include "cc/raster/gpu_raster_buffer_provider.h"
 #include "cc/raster/one_copy_raster_buffer_provider.h"
@@ -128,10 +128,10 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
   DCHECK(task_runner);
   DCHECK(initialized_);
 
-  ContextProvider* compositor_context_provider =
-      host_impl->compositor_frame_sink()->context_provider();
-  ContextProvider* worker_context_provider =
-      host_impl->compositor_frame_sink()->worker_context_provider();
+  viz::ContextProvider* compositor_context_provider =
+      host_impl->layer_tree_frame_sink()->context_provider();
+  viz::ContextProvider* worker_context_provider =
+      host_impl->layer_tree_frame_sink()->worker_context_provider();
   ResourceProvider* resource_provider = host_impl->resource_provider();
   int max_bytes_per_copy_operation = 1024 * 1024;
   int max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;
@@ -156,7 +156,7 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
 
       *raster_buffer_provider = base::MakeUnique<GpuRasterBufferProvider>(
           compositor_context_provider, worker_context_provider,
-          resource_provider, false, 0, PlatformColor::BestTextureFormat(),
+          resource_provider, false, 0, viz::PlatformColor::BestTextureFormat(),
           false);
       break;
     case RASTER_BUFFER_PROVIDER_TYPE_ZERO_COPY:
@@ -164,7 +164,7 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       EXPECT_EQ(PIXEL_TEST_GL, test_type_);
 
       *raster_buffer_provider = ZeroCopyRasterBufferProvider::Create(
-          resource_provider, PlatformColor::BestTextureFormat());
+          resource_provider, viz::PlatformColor::BestTextureFormat());
       break;
     case RASTER_BUFFER_PROVIDER_TYPE_ONE_COPY:
       EXPECT_TRUE(compositor_context_provider);
@@ -174,8 +174,8 @@ void LayerTreeHostPixelResourceTest::CreateResourceAndRasterBufferProvider(
       *raster_buffer_provider = base::MakeUnique<OneCopyRasterBufferProvider>(
           task_runner, compositor_context_provider, worker_context_provider,
           resource_provider, max_bytes_per_copy_operation, false,
-          max_staging_buffer_usage_in_bytes, PlatformColor::BestTextureFormat(),
-          false);
+          max_staging_buffer_usage_in_bytes,
+          viz::PlatformColor::BestTextureFormat(), false);
       break;
   }
 }

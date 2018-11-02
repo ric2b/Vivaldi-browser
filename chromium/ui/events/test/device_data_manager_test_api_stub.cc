@@ -39,7 +39,32 @@ void DeviceDataManagerTestAPI::NotifyObserversDeviceListsComplete() {
   NOTREACHED();
 }
 
+void DeviceDataManagerTestAPI::NotifyObserversStylusStateChanged(
+    StylusState stylus_state) {
+  NOTREACHED();
+}
+
 void DeviceDataManagerTestAPI::OnDeviceListsComplete() {
+  NOTREACHED();
+}
+
+void DeviceDataManagerTestAPI::SetTouchscreenDevices(
+    const std::vector<TouchscreenDevice>& devices) {
+  NOTREACHED();
+}
+
+void DeviceDataManagerTestAPI::SetKeyboardDevices(
+    const std::vector<InputDevice>& devices) {
+  NOTREACHED();
+}
+
+void DeviceDataManagerTestAPI::SetMouseDevices(
+    const std::vector<InputDevice>& devices) {
+  NOTREACHED();
+}
+
+void DeviceDataManagerTestAPI::SetTouchpadDevices(
+    const std::vector<InputDevice>& devices) {
   NOTREACHED();
 }
 

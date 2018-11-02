@@ -7,6 +7,8 @@
 
 #include <array>
 #include <memory>
+#include <string>
+#include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
@@ -192,10 +194,10 @@ class SiteEngagementScore {
   static ParamValues BuildParamValues();
 
   // Keys used in the content settings dictionary.
-  static const char* kRawScoreKey;
-  static const char* kPointsAddedTodayKey;
-  static const char* kLastEngagementTimeKey;
-  static const char* kLastShortcutLaunchTimeKey;
+  static const char kRawScoreKey[];
+  static const char kPointsAddedTodayKey[];
+  static const char kLastEngagementTimeKey[];
+  static const char kLastShortcutLaunchTimeKey[];
 
   // This version of the constructor is used in unit tests.
   SiteEngagementScore(base::Clock* clock,

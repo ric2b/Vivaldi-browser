@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/android/ssl_client_certificate_request.h"
-
 #include <stddef.h>
 #include <utility>
 
@@ -16,13 +14,13 @@
 #include "base/memory/ref_counted.h"
 #include "chrome/browser/ssl/ssl_client_certificate_selector.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/client_certificate_delegate.h"
 #include "jni/SSLClientCertificateRequest_jni.h"
 #include "net/base/host_port_pair.h"
 #include "net/cert/cert_database.h"
 #include "net/cert/x509_certificate.h"
-#include "net/ssl/openssl_client_key_store.h"
 #include "net/ssl/ssl_cert_request_info.h"
 #include "net/ssl/ssl_client_cert_type.h"
 #include "net/ssl/ssl_platform_key_android.h"
@@ -36,15 +34,6 @@ using base::android::ScopedJavaLocalRef;
 namespace chrome {
 
 namespace {
-
-// Must be called on the I/O thread to record a client certificate
-// and its private key in the OpenSSLClientKeyStore.
-void RecordClientCertificateKey(net::X509Certificate* client_cert,
-                                scoped_refptr<net::SSLPrivateKey> private_key) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  net::OpenSSLClientKeyStore::GetInstance()->RecordClientCertPrivateKey(
-      client_cert, std::move(private_key));
-}
 
 void StartClientCertificateRequest(
     const net::SSLCertRequestInfo* cert_request_info,
@@ -135,7 +124,7 @@ static void OnSystemRequestCompletion(
 
   if (encoded_chain_ref == NULL || private_key_ref == NULL) {
     LOG(ERROR) << "No client certificate selected";
-    delegate->ContinueWithCertificate(nullptr);
+    delegate->ContinueWithCertificate(nullptr, nullptr);
     return;
   }
 
@@ -166,16 +155,8 @@ static void OnSystemRequestCompletion(
     return;
   }
 
-  // RecordClientCertificateKey() must be called on the I/O thread,
-  // before the callback is called with the selected certificate on
-  // the UI thread.
-  content::BrowserThread::PostTaskAndReply(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&RecordClientCertificateKey, base::RetainedRef(client_cert),
-                 base::Passed(&private_key)),
-      base::Bind(&content::ClientCertificateDelegate::ContinueWithCertificate,
-                 base::Owned(delegate.release()),
-                 base::RetainedRef(client_cert)));
+  delegate->ContinueWithCertificate(std::move(client_cert),
+                                    std::move(private_key));
 }
 
 static void NotifyClientCertificatesChanged() {
@@ -195,17 +176,18 @@ static void NotifyClientCertificatesChangedOnIOThread(
   }
 }
 
-bool RegisterSSLClientCertificateRequestAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 }  // namespace android
 
 void ShowSSLClientCertificateSelector(
     content::WebContents* contents,
     net::SSLCertRequestInfo* cert_request_info,
-    net::CertificateList unused_client_certs,
+    net::ClientCertIdentityList unused_client_certs,
     std::unique_ptr<content::ClientCertificateDelegate> delegate) {
+  if (vr::VrTabHelper::IsInVr(contents)) {
+    delegate->ContinueWithCertificate(nullptr, nullptr);
+    return;
+  }
+
   ui::WindowAndroid* window = ViewAndroidHelper::FromWebContents(contents)
       ->GetViewAndroid()->GetWindowAndroid();
   DCHECK(window);

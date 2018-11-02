@@ -92,7 +92,7 @@ codesign --verify --verbose=6 --deep "${notification_service}"
 # Check the framework twice: once deep with no-strict, and once shallow with
 # strict verification.
 codesign --verify --verbose=6 --deep --no-strict "${framework}"
-codesign --verify --verbose=6 "${framework}" #--strict 
+codesign --verify --verbose=6 "${framework}" #--strict
 codesign --verify --verbose=6 --deep "${helper_app}"
 codesign --verify --verbose=6 --deep "${sparkle_framework}"
 

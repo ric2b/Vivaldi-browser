@@ -8,13 +8,10 @@
 
 #include "base/metrics/histogram_macros.h"
 #include "base/task_runner_util.h"
-#include "base/threading/thread_checker.h"
 #include "content/browser/renderer_host/media/renderer_audio_output_stream_factory_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
 #include "media/base/audio_parameters.h"
 #include "media/mojo/services/mojo_audio_output_stream_provider.h"
-#include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/message.h"
 
 namespace content {
@@ -28,13 +25,44 @@ void UMALogDeviceAuthorizationTime(base::TimeTicks auth_start_time) {
                              base::TimeDelta::FromMilliseconds(5000), 50);
 }
 
-url::Origin GetOrigin(int process_id, int frame_id) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  RenderFrameHost* frame = RenderFrameHost::FromID(process_id, frame_id);
-  return frame ? frame->GetLastCommittedOrigin() : url::Origin();
+}  // namespace
+
+// static
+std::unique_ptr<RenderFrameAudioOutputStreamFactoryHandle,
+                BrowserThread::DeleteOnIOThread>
+RenderFrameAudioOutputStreamFactoryHandle::CreateFactory(
+    RendererAudioOutputStreamFactoryContext* context,
+    int render_frame_id,
+    mojom::RendererAudioOutputStreamFactoryRequest request) {
+  std::unique_ptr<RenderFrameAudioOutputStreamFactoryHandle,
+                  BrowserThread::DeleteOnIOThread>
+      handle(new RenderFrameAudioOutputStreamFactoryHandle(context,
+                                                           render_frame_id));
+  // Unretained is safe since |*handle| must be posted to the IO thread prior to
+  // deletion.
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&RenderFrameAudioOutputStreamFactoryHandle::Init,
+                     base::Unretained(handle.get()), std::move(request)));
+  return handle;
 }
 
-}  // namespace
+RenderFrameAudioOutputStreamFactoryHandle::
+    ~RenderFrameAudioOutputStreamFactoryHandle() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+}
+
+RenderFrameAudioOutputStreamFactoryHandle::
+    RenderFrameAudioOutputStreamFactoryHandle(
+        RendererAudioOutputStreamFactoryContext* context,
+        int render_frame_id)
+    : impl_(render_frame_id, context), binding_(&impl_) {}
+
+void RenderFrameAudioOutputStreamFactoryHandle::Init(
+    mojom::RendererAudioOutputStreamFactoryRequest request) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  binding_.Bind(std::move(request));
+}
 
 RenderFrameAudioOutputStreamFactory::RenderFrameAudioOutputStreamFactory(
     int render_frame_id,
@@ -43,6 +71,9 @@ RenderFrameAudioOutputStreamFactory::RenderFrameAudioOutputStreamFactory(
       context_(context),
       weak_ptr_factory_(this) {
   DCHECK(context_);
+  // No thread-hostile state has been initialized yet, so we don't have to bind
+  // to this specific thread.
+  thread_checker_.DetachFromThread();
 }
 
 RenderFrameAudioOutputStreamFactory::~RenderFrameAudioOutputStreamFactory() {
@@ -69,43 +100,22 @@ void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorization(
     return;
   }
 
-  BrowserThread::PostTaskAndReplyWithResult(
-      BrowserThread::UI, FROM_HERE,
-      base::BindOnce(GetOrigin, context_->GetRenderProcessId(),
-                     render_frame_id_),
-      base::BindOnce(&RenderFrameAudioOutputStreamFactory::
-                         RequestDeviceAuthorizationForOrigin,
-                     weak_ptr_factory_.GetWeakPtr(), auth_start_time,
-                     std::move(stream_provider_request),
-                     static_cast<int>(session_id), device_id,
-                     std::move(callback)));
-}
-
-void RenderFrameAudioOutputStreamFactory::RequestDeviceAuthorizationForOrigin(
-    base::TimeTicks auth_start_time,
-    media::mojom::AudioOutputStreamProviderRequest stream_provider_request,
-    int session_id,
-    const std::string& device_id,
-    RequestDeviceAuthorizationCallback callback,
-    const url::Origin& origin) {
-  DCHECK(thread_checker_.CalledOnValidThread());
   context_->RequestDeviceAuthorization(
-      render_frame_id_, session_id, device_id, origin,
+      render_frame_id_, session_id, device_id,
       base::BindOnce(
           &RenderFrameAudioOutputStreamFactory::AuthorizationCompleted,
           weak_ptr_factory_.GetWeakPtr(), auth_start_time,
-          std::move(stream_provider_request), std::move(callback), origin));
+          std::move(stream_provider_request), std::move(callback)));
 }
 
 void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
     base::TimeTicks auth_start_time,
     media::mojom::AudioOutputStreamProviderRequest request,
     RequestDeviceAuthorizationCallback callback,
-    const url::Origin& origin,
     media::OutputDeviceStatus status,
-    bool should_send_id,
     const media::AudioParameters& params,
-    const std::string& raw_device_id) {
+    const std::string& raw_device_id,
+    const std::string& device_id_for_renderer) {
   DCHECK(thread_checker_.CalledOnValidThread());
   UMALogDeviceAuthorizationTime(auth_start_time);
 
@@ -127,10 +137,8 @@ void RenderFrameAudioOutputStreamFactory::AuthorizationCompleted(
           base::BindOnce(&RenderFrameAudioOutputStreamFactory::RemoveStream,
                          base::Unretained(this))));
 
-  std::move(callback).Run(
-      media::OutputDeviceStatus(status), params,
-      should_send_id ? context_->GetHMACForDeviceId(origin, raw_device_id)
-                     : std::string());
+  std::move(callback).Run(media::OutputDeviceStatus(status), params,
+                          device_id_for_renderer);
 }
 
 void RenderFrameAudioOutputStreamFactory::RemoveStream(

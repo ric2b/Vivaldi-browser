@@ -7,10 +7,16 @@
 #include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/image_util.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
-#include "ios/chrome/browser/ui/toolbar/new_tab_button.h"
+#import "ios/chrome/browser/ui/toolbar/new_tab_button.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using base::UserMetricsAction;
 
@@ -21,19 +27,23 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
 }
 
 @implementation StackViewToolbarController {
-  base::scoped_nsobject<UIView> _stackViewToolbar;
-  base::scoped_nsobject<NewTabButton> _openNewTabButton;
+  UIView* _stackViewToolbar;
+  NewTabButton* _openNewTabButton;
+  __weak id<ApplicationCommands, BrowserCommands> _dispatcher;
 }
 
-- (instancetype)initWithStackViewToolbar {
-  self = [super initWithStyle:ToolbarControllerStyleDarkMode];
+- (instancetype)initWithDispatcher:
+    (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  self = [super initWithStyle:ToolbarControllerStyleDarkMode
+                   dispatcher:dispatcher];
   if (self) {
-    _stackViewToolbar.reset(
-        [[UIView alloc] initWithFrame:[self specificControlsArea]]);
+    _dispatcher = dispatcher;
+    _stackViewToolbar =
+        [[UIView alloc] initWithFrame:[self specificControlsArea]];
     [_stackViewToolbar setAutoresizingMask:UIViewAutoresizingFlexibleHeight |
                                            UIViewAutoresizingFlexibleWidth];
 
-    _openNewTabButton.reset([[NewTabButton alloc] initWithFrame:CGRectZero]);
+    _openNewTabButton = [[NewTabButton alloc] initWithFrame:CGRectZero];
 
     [_openNewTabButton
         setAutoresizingMask:UIViewAutoresizingFlexibleTopMargin |
@@ -44,7 +54,10 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
         kNewTabLeadingOffset, [_stackViewToolbar bounds].size.width, 0,
         buttonSize, buttonSize);
     [_openNewTabButton setFrame:LayoutRectGetRect(newTabButtonLayout)];
-    // Set additional button action.
+    // Set button actions.
+    [_openNewTabButton addTarget:self
+                          action:@selector(sendNewTabCommand:)
+                forControlEvents:UIControlEventTouchUpInside];
     [_openNewTabButton addTarget:self
                           action:@selector(recordUserMetrics:)
                 forControlEvents:UIControlEventTouchUpInside];
@@ -61,11 +74,24 @@ const CGFloat kBackgroundViewColorAlpha = 0.95;
 }
 
 - (NewTabButton*)openNewTabButton {
-  return _openNewTabButton.get();
+  return _openNewTabButton;
+}
+
+- (void)sendNewTabCommand:(id)sender {
+  if (sender != _openNewTabButton)
+    return;
+
+  CGPoint center =
+      [_openNewTabButton.superview convertPoint:_openNewTabButton.center
+                                         toView:_openNewTabButton.window];
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithIncognito:_openNewTabButton.isIncognito
+                                       originPoint:center];
+  [_dispatcher openNewTab:command];
 }
 
 - (IBAction)recordUserMetrics:(id)sender {
-  if (sender == _openNewTabButton.get())
+  if (sender == _openNewTabButton)
     base::RecordAction(UserMetricsAction("MobileToolbarStackViewNewTab"));
   else
     [super recordUserMetrics:sender];

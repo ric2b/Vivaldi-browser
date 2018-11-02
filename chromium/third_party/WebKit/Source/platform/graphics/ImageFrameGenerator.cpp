@@ -78,7 +78,7 @@ class ExternalMemoryAllocator final : public SkBitmap::Allocator {
                           size_t row_bytes)
       : info_(info), pixels_(pixels), row_bytes_(row_bytes) {}
 
-  bool allocPixelRef(SkBitmap* dst, SkColorTable* ctable) override {
+  bool allocPixelRef(SkBitmap* dst) override {
     const SkImageInfo& info = dst->info();
     if (kUnknown_SkColorType == info.colorType())
       return false;
@@ -101,15 +101,12 @@ static bool UpdateYUVComponentSizes(ImageDecoder* decoder,
   if (!decoder->CanDecodeToYUV())
     return false;
 
-  IntSize size = decoder->DecodedYUVSize(0);
-  component_sizes[0].set(size.Width(), size.Height());
-  component_width_bytes[0] = decoder->DecodedYUVWidthBytes(0);
-  size = decoder->DecodedYUVSize(1);
-  component_sizes[1].set(size.Width(), size.Height());
-  component_width_bytes[1] = decoder->DecodedYUVWidthBytes(1);
-  size = decoder->DecodedYUVSize(2);
-  component_sizes[2].set(size.Width(), size.Height());
-  component_width_bytes[2] = decoder->DecodedYUVWidthBytes(2);
+  for (int yuv_index = 0; yuv_index < 3; ++yuv_index) {
+    IntSize size = decoder->DecodedYUVSize(yuv_index);
+    component_sizes[yuv_index].set(size.Width(), size.Height());
+    component_width_bytes[yuv_index] = decoder->DecodedYUVWidthBytes(yuv_index);
+  }
+
   return true;
 }
 
@@ -347,11 +344,13 @@ bool ImageFrameGenerator::Decode(SegmentReader* data,
 
   ImageFrame* frame = (*decoder)->FrameBufferAtIndex(index);
 
+  // SetMemoryAllocator() can try to access decoder's data, so
+  // we have to do it before clearing SegmentReader.
+  if (using_external_allocator)
+    (*decoder)->SetMemoryAllocator(nullptr);
   (*decoder)->SetData(PassRefPtr<SegmentReader>(nullptr),
                       false);  // Unref SegmentReader from ImageDecoder.
   (*decoder)->ClearCacheExceptFrame(index);
-  if (using_external_allocator)
-    (*decoder)->SetMemoryAllocator(0);
 
   if (!frame || frame->GetStatus() == ImageFrame::kFrameEmpty)
     return false;

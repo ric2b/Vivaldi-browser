@@ -33,13 +33,6 @@ namespace {
 
 const char kChromeInfobarURL[] = "chromeinternal://infobar/";
 
-// UX configuration constants for the shadow/rounded corners on the icon.
-const CGFloat kBaseSizeForEffects = 57.0;
-const CGFloat kCornerRadius = 10.0;
-const CGFloat kShadowVerticalOffset = 1.0;
-const CGFloat kShadowOpacity = 0.5;
-const CGFloat kShadowRadius = 0.8;
-
 // UX configuration for the layout of items.
 const CGFloat kLeftMarginOnFirstLineWhenIconAbsent = 20.0;
 const CGFloat kMinimumSpaceBetweenRightAndLeftAlignedWidgets = 30.0;
@@ -658,9 +651,7 @@ enum InfoBarButtonPosition { ON_FIRST_LINE, CENTER, LEFT, RIGHT };
                        action:(SEL)action {
   DCHECK(!closeButton_);
   // TODO(crbug/228611): Add IDR_ constant and use GetNativeImageNamed().
-  NSString* imagePath =
-      [[NSBundle mainBundle] pathForResource:@"infobar_close" ofType:@"png"];
-  UIImage* image = [UIImage imageWithContentsOfFile:imagePath];
+  UIImage* image = [UIImage imageNamed:@"infobar_close"];
   closeButton_ = [UIButton buttonWithType:UIButtonTypeCustom];
   [closeButton_ setExclusiveTouch:YES];
   [closeButton_ setImage:image forState:UIControlStateNormal];
@@ -689,31 +680,6 @@ enum InfoBarButtonPosition { ON_FIRST_LINE, CENTER, LEFT, RIGHT };
   }
   imageView_ = [[UIImageView alloc] initWithImage:image];
   [imageViewContainer_ addSubview:imageView_];
-}
-
-- (void)addPlaceholderTransparentIcon:(CGSize const&)imageSize {
-  UIGraphicsBeginImageContext(imageSize);
-  UIImage* placeholder = UIGraphicsGetImageFromCurrentImageContext();
-  UIGraphicsEndImageContext();
-  [self addLeftIcon:placeholder];
-}
-
-// Since shadows & rounded corners cannot be applied simultaneously to a
-// UIView, this method adds rounded corners to the UIImageView and then adds
-// drop shadow to the UIView containing the UIImageView.
-- (void)addLeftIconWithRoundedCornersAndShadow:(UIImage*)image {
-  CGFloat effectScaleFactor = image.size.width / kBaseSizeForEffects;
-  [self addLeftIcon:image];
-  CALayer* layer = [imageView_ layer];
-  [layer setMasksToBounds:YES];
-  [layer setCornerRadius:kCornerRadius * effectScaleFactor];
-  layer = [imageViewContainer_ layer];
-  [layer setShadowColor:[UIColor blackColor].CGColor];
-  [layer
-      setShadowOffset:CGSizeMake(0, kShadowVerticalOffset * effectScaleFactor)];
-  [layer setShadowOpacity:kShadowOpacity];
-  [layer setShadowRadius:kShadowRadius * effectScaleFactor];
-  [imageViewContainer_ setClipsToBounds:NO];
 }
 
 - (NSString*)stripMarkersFromString:(NSString*)string {

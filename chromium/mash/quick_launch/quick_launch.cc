@@ -42,7 +42,7 @@ class QuickLaunchUI : public views::WidgetDelegateView,
         connector_(connector),
         prompt_(new views::Textfield),
         catalog_(std::move(catalog)) {
-    set_background(views::Background::CreateStandardPanelBackground());
+    SetBackground(views::CreateStandardPanelBackground());
     prompt_->set_controller(this);
     AddChildView(prompt_);
 
@@ -171,9 +171,16 @@ void QuickLaunch::RemoveWindow(views::Widget* window) {
 }
 
 void QuickLaunch::OnStart() {
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  // If AuraInit was unable to initialize there is no longer a peer connection.
+  // The ServiceManager is in the process of shutting down, however we haven't
+  // been notified yet. Close our ServiceContext and shutdown.
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  if (!aura_init_) {
+    context()->QuitNow();
+    return;
+  }
 
   Launch(mojom::kWindow, mojom::LaunchMode::MAKE_NEW);
 }
@@ -182,8 +189,7 @@ void QuickLaunch::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
@@ -204,8 +210,7 @@ void QuickLaunch::Launch(uint32_t what, mojom::LaunchMode how) {
   windows_.push_back(window);
 }
 
-void QuickLaunch::Create(const service_manager::BindSourceInfo& source_info,
-                         ::mash::mojom::LaunchableRequest request) {
+void QuickLaunch::Create(::mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

@@ -33,7 +33,7 @@ class MockDesktopMediaListObserver : public DesktopMediaListObserver {
                void(DesktopMediaList* list, int index));
 };
 
-class DesktopMediaListAshTest : public ash::test::AshTestBase {
+class DesktopMediaListAshTest : public ash::AshTestBase {
  public:
   DesktopMediaListAshTest() {}
   ~DesktopMediaListAshTest() override {}
@@ -41,11 +41,11 @@ class DesktopMediaListAshTest : public ash::test::AshTestBase {
   void TearDown() override {
     // Reset the unique_ptr so the list stops refreshing.
     list_.reset();
-    ash::test::AshTestBase::TearDown();
+    ash::AshTestBase::TearDown();
   }
 
-  void CreateList(int source_types) {
-    list_.reset(new DesktopMediaListAsh(source_types));
+  void CreateList(content::DesktopMediaID::Type type) {
+    list_.reset(new DesktopMediaListAsh(type));
     list_->SetThumbnailSize(gfx::Size(kThumbnailSize, kThumbnailSize));
 
     // Set update period to reduce the time it takes to run tests.
@@ -63,40 +63,8 @@ ACTION(QuitMessageLoop) {
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure());
 }
 
-TEST_F(DesktopMediaListAshTest, Screen) {
-  CreateList(DesktopMediaListAsh::SCREENS | DesktopMediaListAsh::WINDOWS);
-
-  EXPECT_CALL(observer_, OnSourceAdded(list_.get(), 0));
-  EXPECT_CALL(observer_, OnSourceThumbnailChanged(list_.get(), 0))
-      .WillOnce(QuitMessageLoop())
-      .WillRepeatedly(DoDefault());
-  list_->StartUpdating(&observer_);
-  base::RunLoop().Run();
-}
-
-TEST_F(DesktopMediaListAshTest, OneWindow) {
-  CreateList(DesktopMediaListAsh::SCREENS | DesktopMediaListAsh::WINDOWS);
-
-  std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
-
-  EXPECT_CALL(observer_, OnSourceAdded(list_.get(), 0));
-  EXPECT_CALL(observer_, OnSourceAdded(list_.get(), 1));
-  EXPECT_CALL(observer_, OnSourceThumbnailChanged(list_.get(), 0))
-      .Times(AtLeast(1));
-  EXPECT_CALL(observer_, OnSourceThumbnailChanged(list_.get(), 1))
-      .WillOnce(QuitMessageLoop())
-      .WillRepeatedly(DoDefault());
-  EXPECT_CALL(observer_, OnSourceRemoved(list_.get(), 1))
-      .WillOnce(QuitMessageLoop());
-
-  list_->StartUpdating(&observer_);
-  base::RunLoop().Run();
-  window.reset();
-  base::RunLoop().Run();
-}
-
 TEST_F(DesktopMediaListAshTest, ScreenOnly) {
-  CreateList(DesktopMediaListAsh::SCREENS);
+  CreateList(content::DesktopMediaID::TYPE_SCREEN);
 
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
 
@@ -110,7 +78,7 @@ TEST_F(DesktopMediaListAshTest, ScreenOnly) {
 }
 
 TEST_F(DesktopMediaListAshTest, WindowOnly) {
-  CreateList(DesktopMediaListAsh::WINDOWS);
+  CreateList(content::DesktopMediaID::TYPE_WINDOW);
 
   std::unique_ptr<aura::Window> window(CreateTestWindowInShellWithId(0));
 

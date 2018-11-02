@@ -4,10 +4,17 @@ include_rules = [
   "+components/autofill/core",
   "+components/keyed_service/core",
   "+components/metrics",
+  "+components/prefs",
   "+components/pref_registry",
   "+components/strings",
-  "+components/ukm",
+  "+services/metrics/public",
   "+third_party/libaddressinput",
   "+third_party/libphonenumber",
   "+ui/base",
 ]
+
+specific_include_rules = {
+  "journey_logger_unittest\.cc": [
+    "+components/ukm",
+  ],
+}

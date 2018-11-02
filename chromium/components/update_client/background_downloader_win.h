@@ -5,8 +5,9 @@
 #ifndef COMPONENTS_UPDATE_CLIENT_BACKGROUND_DOWNLOADER_WIN_H_
 #define COMPONENTS_UPDATE_CLIENT_BACKGROUND_DOWNLOADER_WIN_H_
 
-#include <windows.h>
 #include <bits.h>
+#include <windows.h>
+#include <wrl/client.h>
 
 #include <memory>
 
@@ -16,7 +17,6 @@
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
-#include "base/win/scoped_comptr.h"
 #include "components/update_client/crx_downloader.h"
 
 namespace base {
@@ -40,21 +40,19 @@ namespace update_client {
 class BackgroundDownloader : public CrxDownloader {
  protected:
   friend class CrxDownloader;
-  BackgroundDownloader(
-      std::unique_ptr<CrxDownloader> successor,
-      net::URLRequestContextGetter* context_getter,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+  BackgroundDownloader(std::unique_ptr<CrxDownloader> successor,
+                       net::URLRequestContextGetter* context_getter);
   ~BackgroundDownloader() override;
 
  private:
   // Overrides for CrxDownloader.
   void DoStartDownload(const GURL& url) override;
 
-  // Called asynchronously on the |task_runner_| at different stages during
+  // Called asynchronously on the |com_task_runner_| at different stages during
   // the download. |OnDownloading| can be called multiple times.
-  // |EndDownload| switches the execution flow from the |task_runner_| to the
-  // main thread. Accessing any data members of this object from the
-  // |task_runner_| after calling |EndDownload| is unsafe.
+  // |EndDownload| switches the execution flow from the |com_task_runner_| to
+  // the main thread. Accessing any data members of this object from the
+  // |com_task_runner_| after calling |EndDownload| is unsafe.
   void BeginDownload(const GURL& url);
   void OnDownloading();
   void EndDownload(HRESULT hr);
@@ -87,14 +85,15 @@ class BackgroundDownloader : public CrxDownloader {
   void StartTimer();
   void OnTimer();
 
-  // Returns true if the timer is running or false if the timer is not
-  // created or not running at all.
-  bool TimerIsRunning() const;
-
-  HRESULT QueueBitsJob(const GURL& url, IBackgroundCopyJob** job);
-  HRESULT CreateOrOpenJob(const GURL& url, IBackgroundCopyJob** job);
+  // Creates or opens a job for the given url and queues it up. Returns S_OK if
+  // a new job was created or S_FALSE if an existing job for the |url| was found
+  // in the BITS queue.
+  HRESULT QueueBitsJob(const GURL& url,
+                       Microsoft::WRL::ComPtr<IBackgroundCopyJob>* job);
+  HRESULT CreateOrOpenJob(const GURL& url,
+                          Microsoft::WRL::ComPtr<IBackgroundCopyJob>* job);
   HRESULT InitializeNewJob(
-      const base::win::ScopedComPtr<IBackgroundCopyJob>& job,
+      const Microsoft::WRL::ComPtr<IBackgroundCopyJob>& job,
       const GURL& url);
 
   // Returns true if at the time of the call, it appears that the job
@@ -117,8 +116,18 @@ class BackgroundDownloader : public CrxDownloader {
   // from the thread pool leaves the object to release the interface pointers.
   void ResetInterfacePointers();
 
+  // Returns the number of jobs in the BITS queue which were created by this
+  // downloader.
+  HRESULT GetBackgroundDownloaderJobCount(size_t* num_jobs);
+
+  // Cleans up incompleted jobs that are too old.
+  void CleanupStaleJobs();
+
   // Ensures that we are running on the same thread we created the object on.
   base::ThreadChecker thread_checker_;
+
+  // Executes blocking COM calls to BITS.
+  scoped_refptr<base::SequencedTaskRunner> com_task_runner_;
 
   net::URLRequestContextGetter* context_getter_;
 
@@ -132,8 +141,8 @@ class BackgroundDownloader : public CrxDownloader {
   // COM interface pointers are valid for the thread that called
   // |UpdateInterfacePointers| to get pointers to COM proxies, which are valid
   // for that thread only.
-  base::win::ScopedComPtr<IBackgroundCopyManager> bits_manager_;
-  base::win::ScopedComPtr<IBackgroundCopyJob> job_;
+  Microsoft::WRL::ComPtr<IBackgroundCopyManager> bits_manager_;
+  Microsoft::WRL::ComPtr<IBackgroundCopyJob> job_;
 
   // Contains the time when the download of the current url has started.
   base::TimeTicks download_start_time_;

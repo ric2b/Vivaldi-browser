@@ -25,9 +25,8 @@
 
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefCounted.h"
 #include "platform/wtf/RefPtr.h"
+#include "platform/wtf/ThreadSafeRefCounted.h"
 #include "platform/wtf/text/Unicode.h"
 
 namespace blink {
@@ -35,13 +34,13 @@ namespace blink {
 enum BidiEmbeddingSource { kFromStyleOrDOM, kFromUnicode };
 
 // Used to keep track of explicit embeddings.
-class PLATFORM_EXPORT BidiContext : public RefCounted<BidiContext> {
+class PLATFORM_EXPORT BidiContext : public ThreadSafeRefCounted<BidiContext> {
  public:
-  static PassRefPtr<BidiContext> Create(unsigned char level,
-                                        WTF::Unicode::CharDirection,
-                                        bool override = false,
-                                        BidiEmbeddingSource = kFromStyleOrDOM,
-                                        BidiContext* parent = 0);
+  static RefPtr<BidiContext> Create(unsigned char level,
+                                    WTF::Unicode::CharDirection,
+                                    bool override = false,
+                                    BidiEmbeddingSource = kFromStyleOrDOM,
+                                    BidiContext* parent = 0);
 
   BidiContext* Parent() const { return parent_.Get(); }
   unsigned char Level() const { return level_; }
@@ -53,7 +52,7 @@ class PLATFORM_EXPORT BidiContext : public RefCounted<BidiContext> {
     return static_cast<BidiEmbeddingSource>(source_);
   }
 
-  PassRefPtr<BidiContext> CopyStackRemovingUnicodeEmbeddingContexts();
+  RefPtr<BidiContext> CopyStackRemovingUnicodeEmbeddingContexts();
 
   // http://www.unicode.org/reports/tr9/#Modifications
   // 6.3 raised the limit from 61 to 125.
@@ -74,11 +73,11 @@ class PLATFORM_EXPORT BidiContext : public RefCounted<BidiContext> {
     DCHECK(level <= kMaxLevel);
   }
 
-  static PassRefPtr<BidiContext> CreateUncached(unsigned char level,
-                                                WTF::Unicode::CharDirection,
-                                                bool override,
-                                                BidiEmbeddingSource,
-                                                BidiContext* parent);
+  static RefPtr<BidiContext> CreateUncached(unsigned char level,
+                                            WTF::Unicode::CharDirection,
+                                            bool override,
+                                            BidiEmbeddingSource,
+                                            BidiContext* parent);
 
   // The maximium bidi level is 125:
   // http://unicode.org/reports/tr9/#Explicit_Levels_and_Directions

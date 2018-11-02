@@ -23,8 +23,6 @@
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
 #include "components/sync/test/fake_server/fake_server_verifier.h"
 #include "components/sync/test/fake_server/sessions_hierarchy.h"
-#include "components/sync/test/fake_server/tombstone_entity.h"
-#include "components/sync/test/fake_server/unique_client_entity.h"
 #include "ios/chrome/browser/autofill/personal_data_manager_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/history/history_service_factory.h"
@@ -33,6 +31,10 @@
 #include "ios/chrome/browser/sync/sync_setup_service_factory.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -174,9 +176,9 @@ void InjectAutofillProfileOnFakeSyncServer(std::string guid,
   autofill_profile->add_name_full(full_name);
   autofill_profile->set_guid(guid);
 
-  std::unique_ptr<fake_server::FakeServerEntity> entity =
-      fake_server::UniqueClientEntity::CreateForInjection(guid,
-                                                          entity_specifics);
+  std::unique_ptr<syncer::LoopbackServerEntity> entity =
+      syncer::PersistentUniqueClientEntity::CreateFromEntitySpecifics(
+          guid, entity_specifics);
   gSyncFakeServer->InjectEntity(std::move(entity));
 }
 
@@ -193,8 +195,9 @@ void DeleteAutofillProfileOnFakeSyncServer(std::string guid) {
   }
   // Delete the entity if it exists.
   if (!entity_id.empty()) {
-    std::unique_ptr<fake_server::FakeServerEntity> entity;
-    entity = fake_server::TombstoneEntity::Create(entity_id, std::string());
+    std::unique_ptr<syncer::LoopbackServerEntity> entity;
+    entity =
+        syncer::PersistentTombstoneEntity::CreateNew(entity_id, std::string());
     gSyncFakeServer->InjectEntity(std::move(entity));
   }
 }
@@ -263,8 +266,9 @@ void InjectTypedURLOnFakeSyncServer(const std::string& url) {
   typedUrl->add_visits(base::Time::Max().ToInternalValue());
   typedUrl->add_visit_transitions(sync_pb::SyncEnums::TYPED);
 
-  std::unique_ptr<fake_server::FakeServerEntity> entity =
-      fake_server::UniqueClientEntity::CreateForInjection(url, entitySpecifics);
+  std::unique_ptr<syncer::LoopbackServerEntity> entity =
+      syncer::PersistentUniqueClientEntity::CreateFromEntitySpecifics(
+          url, entitySpecifics);
   gSyncFakeServer->InjectEntity(std::move(entity));
 }
 
@@ -286,7 +290,7 @@ BOOL IsTypedUrlPresentOnClient(const GURL& url,
   __block int count = 0;
   using history::OriginCountAndLastVisitMap;
   history_service->GetCountsAndLastVisitForOrigins(
-      origins, base::BindBlock(^(const OriginCountAndLastVisitMap& result) {
+      origins, base::BindBlockArc(^(const OriginCountAndLastVisitMap& result) {
         auto iter = result.find(block_safe_url);
         if (iter != result.end())
           count = iter->second.first;
@@ -342,8 +346,9 @@ void DeleteTypedUrlFromFakeSyncServer(std::string url) {
     }
   }
   if (!entity_id.empty()) {
-    std::unique_ptr<fake_server::FakeServerEntity> entity;
-    entity = fake_server::TombstoneEntity::Create(entity_id, std::string());
+    std::unique_ptr<syncer::LoopbackServerEntity> entity;
+    entity =
+        syncer::PersistentTombstoneEntity::CreateNew(entity_id, std::string());
     gSyncFakeServer->InjectEntity(std::move(entity));
   }
 }

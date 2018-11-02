@@ -4,14 +4,14 @@
 
 #include "core/frame/RemoteFrameView.h"
 
-#include "core/dom/IntersectionObserverEntry.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameClient.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "core/intersection_observer/IntersectionObserverEntry.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/api/LayoutPartItem.h"
+#include "core/layout/api/LayoutEmbeddedContentItem.h"
 
 namespace blink {
 
@@ -22,7 +22,7 @@ RemoteFrameView::RemoteFrameView(RemoteFrame* remote_frame)
 
 RemoteFrameView::~RemoteFrameView() {}
 
-FrameView* RemoteFrameView::ParentFrameView() const {
+LocalFrameView* RemoteFrameView::ParentFrameView() const {
   if (!is_attached_)
     return nullptr;
 
@@ -33,7 +33,7 @@ FrameView* RemoteFrameView::ParentFrameView() const {
   return nullptr;
 }
 
-void RemoteFrameView::Attach() {
+void RemoteFrameView::AttachToLayout() {
   DCHECK(!is_attached_);
   is_attached_ = true;
   if (ParentFrameView()->IsVisible())
@@ -41,7 +41,7 @@ void RemoteFrameView::Attach() {
   FrameRectsChanged();
 }
 
-void RemoteFrameView::Detach() {
+void RemoteFrameView::DetachFromLayout() {
   DCHECK(is_attached_);
   SetParentVisible(false);
   is_attached_ = false;
@@ -53,11 +53,12 @@ RemoteFrameView* RemoteFrameView::Create(RemoteFrame* remote_frame) {
   return view;
 }
 
-void RemoteFrameView::UpdateRemoteViewportIntersection() {
+void RemoteFrameView::UpdateViewportIntersectionsForSubtree(
+    DocumentLifecycle::LifecycleState target_state) {
   if (!remote_frame_->OwnerLayoutObject())
     return;
 
-  FrameView* local_root_view =
+  LocalFrameView* local_root_view =
       ToLocalFrame(remote_frame_->Tree().Parent())->LocalFrameRoot().View();
   if (!local_root_view)
     return;
@@ -95,12 +96,12 @@ void RemoteFrameView::Dispose() {
   HTMLFrameOwnerElement* owner_element = remote_frame_->DeprecatedLocalOwner();
   // ownerElement can be null during frame swaps, because the
   // RemoteFrameView is disconnected before detachment.
-  if (owner_element && owner_element->OwnedWidget() == this)
-    owner_element->SetWidget(nullptr);
+  if (owner_element && owner_element->OwnedEmbeddedContentView() == this)
+    owner_element->SetEmbeddedContentView(nullptr);
 }
 
 void RemoteFrameView::InvalidateRect(const IntRect& rect) {
-  LayoutPartItem layout_item = remote_frame_->OwnerLayoutItem();
+  LayoutEmbeddedContentItem layout_item = remote_frame_->OwnerLayoutItem();
   if (layout_item.IsNull())
     return;
 
@@ -124,9 +125,14 @@ void RemoteFrameView::FrameRectsChanged() {
   // any remote frames, if any, is accounted for by the embedder.
   IntRect new_rect = frame_rect_;
 
-  if (FrameView* parent = ParentFrameView())
+  if (LocalFrameView* parent = ParentFrameView())
     new_rect = parent->ConvertToRootFrame(parent->ContentsToFrame(new_rect));
   remote_frame_->Client()->FrameRectsChanged(new_rect);
+}
+
+void RemoteFrameView::UpdateGeometry() {
+  if (LayoutEmbeddedContent* layout = remote_frame_->OwnerLayoutObject())
+    layout->UpdateGeometry(*this);
 }
 
 void RemoteFrameView::Hide() {
@@ -152,7 +158,7 @@ void RemoteFrameView::SetParentVisible(bool visible) {
 
 IntRect RemoteFrameView::ConvertFromRootFrame(
     const IntRect& rect_in_root_frame) const {
-  if (FrameView* parent = ParentFrameView()) {
+  if (LocalFrameView* parent = ParentFrameView()) {
     IntRect parent_rect = parent->ConvertFromRootFrame(rect_in_root_frame);
     parent_rect.SetLocation(
         parent->ConvertSelfToChild(*this, parent_rect.Location()));

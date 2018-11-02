@@ -8,19 +8,19 @@
 #include <map>
 
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/shell.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_mirror_view.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/scoped_layer_animation_settings.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -30,6 +30,7 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/visibility_controller.h"
+#include "ui/wm/core/window_animations.h"
 
 namespace ash {
 
@@ -89,9 +90,8 @@ class WindowPreviewView : public views::View, public aura::WindowObserver {
     AddChildView(window_title_);
 
     // Preview padding is black at 50% opacity.
-    preview_background_->set_background(
-        views::Background::CreateSolidBackground(
-            SkColorSetA(SK_ColorBLACK, 0xFF / 2)));
+    preview_background_->SetBackground(
+        views::CreateSolidBackground(SkColorSetA(SK_ColorBLACK, 0xFF / 2)));
     AddChildView(preview_background_);
 
     AddChildView(mirror_view_);
@@ -229,8 +229,8 @@ class WindowCycleView : public views::WidgetDelegateView {
     const int kInsideBorderPaddingDip = 64;
     const int kBetweenChildPaddingDip = 10;
     views::BoxLayout* layout = new views::BoxLayout(
-        views::BoxLayout::kHorizontal, kInsideBorderPaddingDip,
-        kInsideBorderPaddingDip, kBetweenChildPaddingDip);
+        views::BoxLayout::kHorizontal, gfx::Insets(kInsideBorderPaddingDip),
+        kBetweenChildPaddingDip);
     layout->set_cross_axis_alignment(
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
     mirror_container_->SetLayoutManager(layout);
@@ -247,7 +247,7 @@ class WindowCycleView : public views::WidgetDelegateView {
     // The background needs to be painted to fill the layer, not the View,
     // because the layer animates bounds changes but the View's bounds change
     // immediately.
-    highlight_view_->set_background(new LayerFillBackgroundPainter(
+    highlight_view_->SetBackground(base::MakeUnique<LayerFillBackgroundPainter>(
         views::Painter::CreateRoundRectWith1PxBorderPainter(
             SkColorSetA(SK_ColorWHITE, 0x4D), SkColorSetA(SK_ColorWHITE, 0x33),
             kBackgroundCornerRadius)));
@@ -534,9 +534,7 @@ void WindowCycleList::InitWindowCycleView() {
   // TODO(estade): make sure nothing untoward happens when the lock screen
   // or a system modal dialog is shown.
   aura::Window* root_window = Shell::GetRootWindowForNewWindows();
-  GetRootWindowController(root_window)
-      ->ConfigureWidgetInitParamsForContainer(
-          widget, kShellWindowId_OverlayContainer, &params);
+  params.parent = root_window->GetChildById(kShellWindowId_OverlayContainer);
   gfx::Rect widget_rect = display::Screen::GetScreen()
                               ->GetDisplayNearestWindow(root_window)
                               .bounds();

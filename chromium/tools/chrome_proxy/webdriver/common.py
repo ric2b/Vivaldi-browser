@@ -228,8 +228,9 @@ class TestDriver:
         'networkConnectionEnabled': True,
         'mobileEmulationEnabled': True,
       })
-      chrome_options.add_experimental_option('mobileEmulation',
-        {'deviceName': 'Google Nexus 5'})
+      if not self._flags.android:
+        chrome_options.add_experimental_option('mobileEmulation',
+          {'deviceName': 'Google Nexus 5'})
     for arg in self._chrome_args:
       chrome_options.add_argument(arg)
     self._logger.info('Starting Chrome with these flags: %s',
@@ -742,6 +743,8 @@ class IntegrationTest(unittest.TestCase):
     Args:
       run_all_tests: If True, all tests in the directory will be run, Otherwise
         only the tests in the file given on the command line will be run.
+    Returns:
+      the TestResult object from the test runner
     """
     flags = ParseFlags()
     logger = GetLogger()
@@ -767,4 +770,4 @@ class IntegrationTest(unittest.TestCase):
             tests.addTest(test)
     testRunner = unittest.runner.TextTestRunner(verbosity=2,
       failfast=flags.failfast, buffer=(not flags.disable_buffer))
-    testRunner.run(tests)
+    return testRunner.run(tests)

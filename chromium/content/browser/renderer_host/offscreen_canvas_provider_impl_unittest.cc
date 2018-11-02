@@ -11,13 +11,15 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
-#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
+#include "cc/ipc/compositor_frame_sink.mojom.h"
 #include "cc/output/compositor_frame.h"
+#include "content/browser/compositor/surface_utils.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/renderer_host/offscreen_canvas_surface_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom.h"
+#include "ui/compositor/compositor.h"
 
 #if !defined(OS_ANDROID)
 #include "content/browser/compositor/image_transport_factory.h"
@@ -30,9 +32,9 @@ namespace content {
 namespace {
 
 constexpr uint32_t kRendererClientId = 3;
-constexpr cc::FrameSinkId kFrameSinkParent(kRendererClientId, 1);
-constexpr cc::FrameSinkId kFrameSinkA(kRendererClientId, 3);
-constexpr cc::FrameSinkId kFrameSinkB(kRendererClientId, 4);
+constexpr viz::FrameSinkId kFrameSinkParent(kRendererClientId, 1);
+constexpr viz::FrameSinkId kFrameSinkA(kRendererClientId, 3);
+constexpr viz::FrameSinkId kFrameSinkB(kRendererClientId, 4);
 
 // Stub OffscreenCanvasSurfaceClient that stores the latest SurfaceInfo.
 class StubOffscreenCanvasSurfaceClient
@@ -42,44 +44,50 @@ class StubOffscreenCanvasSurfaceClient
   ~StubOffscreenCanvasSurfaceClient() override {}
 
   blink::mojom::OffscreenCanvasSurfaceClientPtr GetInterfacePtr() {
-    return binding_.CreateInterfacePtrAndBind();
+    blink::mojom::OffscreenCanvasSurfaceClientPtr client;
+    binding_.Bind(mojo::MakeRequest(&client));
+    return client;
   }
 
-  const cc::SurfaceInfo& GetLastSurfaceInfo() const {
+  const viz::SurfaceInfo& GetLastSurfaceInfo() const {
     return last_surface_info_;
   }
 
  private:
   // blink::mojom::OffscreenCanvasSurfaceClient:
-  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override {
+  void OnSurfaceCreated(const viz::SurfaceInfo& surface_info) override {
     last_surface_info_ = surface_info;
   }
 
   mojo::Binding<blink::mojom::OffscreenCanvasSurfaceClient> binding_;
-  cc::SurfaceInfo last_surface_info_;
+  viz::SurfaceInfo last_surface_info_;
 
   DISALLOW_COPY_AND_ASSIGN(StubOffscreenCanvasSurfaceClient);
 };
 
-// Stub MojoCompositorFrameSinkClient that does nothing.
+// Stub CompositorFrameSinkClient that does nothing.
 class StubCompositorFrameSinkClient
-    : public cc::mojom::MojoCompositorFrameSinkClient {
+    : public cc::mojom::CompositorFrameSinkClient {
  public:
   StubCompositorFrameSinkClient() : binding_(this) {}
   ~StubCompositorFrameSinkClient() override {}
 
-  cc::mojom::MojoCompositorFrameSinkClientPtr GetInterfacePtr() {
-    return binding_.CreateInterfacePtrAndBind();
+  cc::mojom::CompositorFrameSinkClientPtr GetInterfacePtr() {
+    cc::mojom::CompositorFrameSinkClientPtr client;
+    binding_.Bind(mojo::MakeRequest(&client));
+    return client;
   }
 
  private:
-  // cc::mojom::MojoCompositorFrameSinkClient:
+  // cc::mojom::CompositorFrameSinkClient:
   void DidReceiveCompositorFrameAck(
-      const cc::ReturnedResourceArray& resources) override {}
+      const std::vector<cc::ReturnedResource>& resources) override {}
   void OnBeginFrame(const cc::BeginFrameArgs& begin_frame_args) override {}
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override {}
+  void OnBeginFramePausedChanged(bool paused) override {}
+  void ReclaimResources(
+      const std::vector<cc::ReturnedResource>& resources) override {}
 
-  mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient> binding_;
+  mojo::Binding<cc::mojom::CompositorFrameSinkClient> binding_;
 
   DISALLOW_COPY_AND_ASSIGN(StubCompositorFrameSinkClient);
 };
@@ -116,7 +124,7 @@ class OffscreenCanvasProviderImplTest : public testing::Test {
   // Gets the OffscreenCanvasSurfaceImpl for |frame_sink_id| or null if it
   // it doesn't exist.
   OffscreenCanvasSurfaceImpl* GetOffscreenCanvasSurface(
-      const cc::FrameSinkId& frame_sink_id) {
+      const viz::FrameSinkId& frame_sink_id) {
     auto iter = provider_->canvas_map_.find(frame_sink_id);
     if (iter == provider_->canvas_map_.end())
       return nullptr;
@@ -124,8 +132,8 @@ class OffscreenCanvasProviderImplTest : public testing::Test {
   }
 
   // Gets list of FrameSinkId for all offscreen canvases.
-  std::vector<cc::FrameSinkId> GetAllCanvases() {
-    std::vector<cc::FrameSinkId> frame_sink_ids;
+  std::vector<viz::FrameSinkId> GetAllCanvases() {
+    std::vector<viz::FrameSinkId> frame_sink_ids;
     for (auto& map_entry : provider_->canvas_map_)
       frame_sink_ids.push_back(map_entry.second->frame_sink_id());
     std::sort(frame_sink_ids.begin(), frame_sink_ids.end());
@@ -140,24 +148,33 @@ class OffscreenCanvasProviderImplTest : public testing::Test {
   void SetUp() override {
 #if !defined(OS_ANDROID)
     ImageTransportFactory::InitializeForUnitTests(
-        std::unique_ptr<ImageTransportFactory>(
-            new NoTransportImageTransportFactory));
-    ImageTransportFactory::GetInstance()
-        ->GetFrameSinkManagerHost()
-        ->ConnectToFrameSinkManager();
+        base::MakeUnique<NoTransportImageTransportFactory>());
 #endif
-    provider_ =
-        base::MakeUnique<OffscreenCanvasProviderImpl>(kRendererClientId);
+    host_frame_sink_manager_ = base::MakeUnique<viz::HostFrameSinkManager>();
+
+    // The FrameSinkManagerImpl implementation is in-process here for tests.
+    frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>();
+    surface_utils::ConnectWithLocalFrameSinkManager(
+        host_frame_sink_manager_.get(), frame_sink_manager_.get());
+
+    provider_ = base::MakeUnique<OffscreenCanvasProviderImpl>(
+        host_frame_sink_manager_.get(), kRendererClientId);
   }
   void TearDown() override {
     provider_.reset();
+    frame_sink_manager_.reset();
+    host_frame_sink_manager_.reset();
 #if !defined(OS_ANDROID)
     ImageTransportFactory::Terminate();
 #endif
   }
 
  private:
+  // A MessageLoop is required for mojo bindings which are used to
+  // connect to graphics services.
   base::MessageLoop message_loop_;
+  std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_;
   std::unique_ptr<OffscreenCanvasProviderImpl> provider_;
 };
 
@@ -181,14 +198,14 @@ TEST_F(OffscreenCanvasProviderImplTest,
   EXPECT_THAT(GetAllCanvases(), ElementsAre(kFrameSinkA));
 
   // Mimic connection from the renderer main or worker thread to browser.
-  cc::mojom::MojoCompositorFrameSinkPtr compositor_frame_sink;
+  cc::mojom::CompositorFrameSinkPtr compositor_frame_sink;
   StubCompositorFrameSinkClient compositor_frame_sink_client;
   provider()->CreateCompositorFrameSink(
       kFrameSinkA, compositor_frame_sink_client.GetInterfacePtr(),
       mojo::MakeRequest(&compositor_frame_sink));
 
   // Renderer submits a CompositorFrame with |local_id|.
-  const cc::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
+  const viz::LocalSurfaceId local_id(1, base::UnguessableToken::Create());
   compositor_frame_sink->SubmitCompositorFrame(local_id, MakeCompositorFrame());
 
   RunUntilIdle();
@@ -258,13 +275,13 @@ TEST_F(OffscreenCanvasProviderImplTest, ProviderClosesConnections) {
   EXPECT_TRUE(connection_error);
 }
 
-// Check that connecting MojoCompositorFrameSink without first making a
+// Check that connecting CompositorFrameSink without first making a
 // OffscreenCanvasSurface connection fails.
 TEST_F(OffscreenCanvasProviderImplTest, ClientConnectionWrongOrder) {
   // Mimic connection from the renderer main or worker thread.
-  cc::mojom::MojoCompositorFrameSinkPtr compositor_frame_sink;
+  cc::mojom::CompositorFrameSinkPtr compositor_frame_sink;
   StubCompositorFrameSinkClient compositor_frame_sink_client;
-  // Try to connect MojoCompositorFrameSink without first making
+  // Try to connect CompositorFrameSink without first making
   // OffscreenCanvasSurface connection. This should fail.
   provider()->CreateCompositorFrameSink(
       kFrameSinkA, compositor_frame_sink_client.GetInterfacePtr(),
@@ -285,7 +302,7 @@ TEST_F(OffscreenCanvasProviderImplTest, ClientConnectionWrongOrder) {
 // Check that trying to create an OffscreenCanvasSurfaceImpl with a client id
 // that doesn't match the renderer fails.
 TEST_F(OffscreenCanvasProviderImplTest, InvalidClientId) {
-  const cc::FrameSinkId invalid_frame_sink_id(4, 3);
+  const viz::FrameSinkId invalid_frame_sink_id(4, 3);
   EXPECT_NE(kRendererClientId, invalid_frame_sink_id.client_id());
 
   StubOffscreenCanvasSurfaceClient surface_client;

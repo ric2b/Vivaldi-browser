@@ -53,7 +53,7 @@ class ASH_EXPORT TrayUpdate : public TrayImageItem, public UpdateObserver {
   // Overridden from TrayImageItem.
   bool GetInitialVisibility() override;
   views::View* CreateDefaultView(LoginStatus status) override;
-  void DestroyDefaultView() override;
+  void OnDefaultViewDestroyed() override;
 
   // Overridden from UpdateObserver.
   void OnUpdateOverCellularTargetSet(bool success) override;

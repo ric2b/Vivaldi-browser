@@ -365,8 +365,14 @@ HotwordService::HotwordService(Profile* profile)
           &HotwordService::MaybeReinstallHotwordExtension),
                  weak_factory_.GetWeakPtr()));
 
+// This service is actually used only on ChromeOS, and the next function
+// results in a sequence of calls that triggers
+// HotwordAudioHistoryHandler::GetAudioHistoryEnabled which is not supported
+// on other platforms.
+#if defined(OS_CHROMEOS)
   SetAudioHistoryHandler(new HotwordAudioHistoryHandler(
       profile_, base::ThreadTaskRunnerHandle::Get()));
+#endif
 
   if (HotwordServiceFactory::IsAlwaysOnAvailable() &&
       IsHotwordAllowed()) {
@@ -376,14 +382,16 @@ HotwordService::HotwordService(Profile* profile)
     base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
     if (command_line->HasSwitch(switches::kEnableExperimentalHotwordHardware)) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&HotwordService::ShowHotwordNotification,
-                                weak_factory_.GetWeakPtr()),
+          FROM_HERE,
+          base::BindOnce(&HotwordService::ShowHotwordNotification,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromSeconds(5));
     } else if (!profile_->GetPrefs()->GetBoolean(
                    prefs::kHotwordAlwaysOnNotificationSeen)) {
       base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-          FROM_HERE, base::Bind(&HotwordService::ShowHotwordNotification,
-                                weak_factory_.GetWeakPtr()),
+          FROM_HERE,
+          base::BindOnce(&HotwordService::ShowHotwordNotification,
+                         weak_factory_.GetWeakPtr()),
           base::TimeDelta::FromMinutes(10));
     }
   }
@@ -400,8 +408,8 @@ HotwordService::HotwordService(Profile* profile)
   // availability.
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&HotwordService::InitializeMicrophoneObserver,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&HotwordService::InitializeMicrophoneObserver,
+                     weak_factory_.GetWeakPtr()));
 }
 
 HotwordService::~HotwordService() {
@@ -480,11 +488,9 @@ void HotwordService::InstalledFromWebstoreCallback(
   if (result != extensions::webstore_install::SUCCESS && num_tries) {
     // Try again on failure.
     content::BrowserThread::PostDelayedTask(
-        content::BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&HotwordService::InstallHotwordExtensionFromWebstore,
-                   weak_factory_.GetWeakPtr(),
-                   num_tries),
+        content::BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&HotwordService::InstallHotwordExtensionFromWebstore,
+                       weak_factory_.GetWeakPtr(), num_tries),
         base::TimeDelta::FromSeconds(kInstallRetryDelaySeconds));
   }
 }

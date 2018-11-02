@@ -57,14 +57,15 @@ void AppListPresenterDelegateMus::Init(app_list::AppListView* view,
                                        int64_t display_id,
                                        int current_apps_page) {
   view_ = view;
-
+  // TODO(newcomer): replace Initialize parameters with proper mus
+  // implementation as per crbug.com/726838
   // Note: This would place the app list into the USER_WINDOWS container, unlike
   // in classic ash, where it has it's own container.
   // TODO(mfomitchev): We are currently passing NULL for |parent|. It seems like
   // the only thing this is used for is choosing the right scale factor in
   // AppListMainView::PreloadIcons(), so we take care of that - perhaps by
   // passing the display_id or the scale factor directly
-  view->Initialize(nullptr /* parent */, current_apps_page);
+  view->Initialize(nullptr /* parent */, current_apps_page, false, false);
 
   view->MaybeSetAnchorPoint(
       GetCenterOfDisplay(display_id, GetMinimumBoundsHeightForAppList(view)));
@@ -101,13 +102,24 @@ gfx::Vector2d AppListPresenterDelegateMus::GetVisibilityAnimationOffset(
   return gfx::Vector2d(0, kAnimationOffset);
 }
 
+base::TimeDelta AppListPresenterDelegateMus::GetVisibilityAnimationDuration(
+    aura::Window* root_window,
+    bool is_visible) {
+  // TODO(crbug.com/752695): Classic ash does a different animation here
+  // depending on shelf alignment. We should probably do that too.
+  return is_visible ? base::TimeDelta::FromMilliseconds(0)
+                    : animation_duration();
+}
+
 void AppListPresenterDelegateMus::OnPointerEventObserved(
     const ui::PointerEvent& event,
     const gfx::Point& location_in_screen,
-    views::Widget* target) {
+    gfx::NativeView target) {
+  views::Widget* target_widget =
+      views::Widget::GetTopLevelWidgetForNativeView(target);
   // Dismiss app list on a mouse click or touch outside of the app list window.
   if ((event.type() == ui::ET_TOUCH_PRESSED ||
        event.type() == ui::ET_POINTER_DOWN) &&
-      (!target || (view_ && (target != view_->GetWidget()))))
+      (!target || (view_ && target_widget != view_->GetWidget())))
     presenter_->Dismiss();
 }

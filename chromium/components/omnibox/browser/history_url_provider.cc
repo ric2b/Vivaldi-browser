@@ -180,8 +180,8 @@ void RecordAdditionalInfoFromUrlRow(const history::URLRow& info,
 }
 
 // If |create_if_necessary| is true, ensures that |matches| contains an entry
-// for |info|, creating a new such entry if necessary (using |input_location|
-// and |match_in_scheme|).
+// for |info|, creating a new such entry if necessary (using |match_template|
+// to get all the other match data).
 //
 // If |promote| is true, this also ensures the entry is the first element in
 // |matches|, moving or adding it to the front as appropriate.  When |promote|
@@ -193,8 +193,7 @@ void RecordAdditionalInfoFromUrlRow(const history::URLRow& info,
 //
 // Returns whether the match exists regardless if it was promoted/created.
 bool CreateOrPromoteMatch(const history::URLRow& info,
-                          size_t input_location,
-                          bool match_in_scheme,
+                          const history::HistoryMatch& match_template,
                           history::HistoryMatches* matches,
                           bool create_if_necessary,
                           bool promote) {
@@ -212,8 +211,9 @@ bool CreateOrPromoteMatch(const history::URLRow& info,
   if (!create_if_necessary)
     return false;
 
-  // No entry, so create one.
-  history::HistoryMatch match(info, input_location, match_in_scheme, true);
+  // No entry, so create one using |match_template| as a basis.
+  history::HistoryMatch match = match_template;
+  match.url_info = info;
   if (promote)
     matches->push_front(match);
   else
@@ -568,9 +568,9 @@ AutocompleteMatch HistoryURLProvider::SuggestExactInput(
   if (destination_url.is_valid()) {
     match.destination_url = destination_url;
 
-    // Trim off "http://" if the user didn't type it.
-    DCHECK(!trim_http ||
-           !AutocompleteInput::HasHTTPScheme(input.text()));
+    // If the input explicitly contains "http://", callers must set |trim_http|
+    // to false. Otherwise, |trim_http| may be either true or false.
+    DCHECK(!(trim_http && AutocompleteInput::HasHTTPScheme(input.text())));
     base::string16 display_string(url_formatter::FormatUrl(
         destination_url,
         url_formatter::kFormatUrlOmitAll & ~url_formatter::kFormatUrlOmitHTTP,
@@ -710,17 +710,40 @@ void HistoryURLProvider::DoAutocomplete(history::HistoryBackend* backend,
       // more results than we need, of every prefix type, in hopes this will
       // give us far more than enough to work with.  CullRedirects() will then
       // reduce the list to the best kMaxMatches results.
-      db->AutocompleteForPrefix(
-          base::UTF16ToUTF8(i->prefix + params->input.text()), kMaxMatches * 2,
-          !backend, &url_matches);
+      std::string prefixed_input =
+          base::UTF16ToUTF8(i->prefix + params->input.text());
+      db->AutocompleteForPrefix(prefixed_input, kMaxMatches * 2, !backend,
+                                &url_matches);
       for (history::URLRows::const_iterator j(url_matches.begin());
            j != url_matches.end(); ++j) {
+        const GURL& row_url = j->url();
         const URLPrefix* best_prefix = URLPrefix::BestURLPrefix(
-            base::UTF8ToUTF16(j->url().spec()), base::string16());
+            base::UTF8ToUTF16(row_url.spec()), base::string16());
         DCHECK(best_prefix);
-        params->matches.push_back(history::HistoryMatch(
-            *j, i->prefix.length(), !i->num_components,
-            i->num_components >= best_prefix->num_components));
+        history::HistoryMatch match;
+        match.url_info = *j;
+        match.input_location = i->prefix.length();
+        match.match_in_scheme = !i->num_components;
+
+        bool url_has_subdomain =
+            row_url.host_piece().length() >
+            net::registry_controlled_domains::GetDomainAndRegistry(
+                row_url.host_piece(),
+                net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES)
+                .size();
+        bool input_matches_host =
+            row_url.host_piece().find(base::UTF16ToUTF8(
+                params->input.text())) != base::StringPiece::npos;
+        match.match_in_subdomain = url_has_subdomain && input_matches_host;
+
+        size_t path_pos =
+            row_url.parsed_for_possibly_invalid_spec().CountCharactersBefore(
+                url::Parsed::PATH, false);
+        match.match_after_host = prefixed_input.length() >= path_pos;
+
+        match.innermost_match =
+            i->num_components >= best_prefix->num_components;
+        params->matches.push_back(std::move(match));
       }
     }
 
@@ -959,7 +982,7 @@ bool HistoryURLProvider::FixupExactSuggestion(
     return false;
 
   // Put it on the front of the HistoryMatches for redirect culling.
-  CreateOrPromoteMatch(classifier.url_row(), base::string16::npos, false,
+  CreateOrPromoteMatch(classifier.url_row(), history::HistoryMatch(),
                        &params->matches, true, true);
   return true;
 }
@@ -1044,9 +1067,8 @@ bool HistoryURLProvider::PromoteOrCreateShorterSuggestion(
   // Promote or add the desired URL to the list of matches.
   const bool ensure_can_inline =
       promote && CanPromoteMatchForInlineAutocomplete(match);
-  return CreateOrPromoteMatch(info, match.input_location, match.match_in_scheme,
-                              &params->matches, true, promote) &&
-      ensure_can_inline;
+  return CreateOrPromoteMatch(info, match, &params->matches, true, promote) &&
+         ensure_can_inline;
 }
 
 void HistoryURLProvider::CullPoorMatches(
@@ -1142,15 +1164,14 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
   DCHECK(match.destination_url.is_valid());
   size_t inline_autocomplete_offset =
       history_match.input_location + params.input.text().length();
-  const url_formatter::FormatUrlTypes format_types =
-      url_formatter::kFormatUrlOmitAll &
-      ~((params.trim_http && !history_match.match_in_scheme)
-            ? 0
-            : url_formatter::kFormatUrlOmitHTTP);
+
+  auto fill_into_edit_format_types = url_formatter::kFormatUrlOmitAll;
+  if (!params.trim_http || history_match.match_in_scheme)
+    fill_into_edit_format_types &= ~url_formatter::kFormatUrlOmitHTTP;
   match.fill_into_edit =
       AutocompleteInput::FormattedStringWithEquivalentMeaning(
           info.url(),
-          url_formatter::FormatUrl(info.url(), format_types,
+          url_formatter::FormatUrl(info.url(), fill_into_edit_format_types,
                                    net::UnescapeRule::SPACES, nullptr, nullptr,
                                    &inline_autocomplete_offset),
           client()->GetSchemeClassifier());
@@ -1174,6 +1195,8 @@ AutocompleteMatch HistoryURLProvider::HistoryMatchToACMatch(
        (inline_autocomplete_offset >= match.fill_into_edit.length()));
 
   size_t match_start = history_match.input_location;
+  const auto format_types = AutocompleteMatch::GetFormatTypes(
+      params.trim_http && !history_match.match_in_scheme);
   match.contents = url_formatter::FormatUrl(info.url(), format_types,
                                             net::UnescapeRule::SPACES, nullptr,
                                             nullptr, &match_start);

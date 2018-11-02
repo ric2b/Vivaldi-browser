@@ -38,7 +38,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/cookie_config/cookie_store_util.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
@@ -46,11 +45,13 @@
 #include "components/data_reduction_proxy/core/browser/data_store_impl.h"
 #include "components/domain_reliability/monitor.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/offline_pages/features/features.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_filter.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
 #include "components/previews/core/previews_io_data.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/cookie_store_factory.h"
 #include "content/public/browser/notification_service.h"
@@ -73,9 +74,9 @@
 #include "net/url_request/url_request_job_factory_impl.h"
 #include "storage/browser/quota/special_storage_policy.h"
 
-#if defined(OS_ANDROID)
-#include "chrome/browser/android/offline_pages/offline_page_request_interceptor.h"
-#endif  // defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/offline_page_request_interceptor.h"
+#endif
 
 namespace {
 
@@ -131,7 +132,7 @@ ProfileImplIOData::Handle::~Handle() {
   }
 
   if (io_data_->http_server_properties_manager_)
-    io_data_->http_server_properties_manager_->ShutdownOnPrefThread();
+    io_data_->http_server_properties_manager_->ShutdownOnPrefSequence();
 
   // io_data_->data_reduction_proxy_io_data() might be NULL if Init() was
   // never called.
@@ -176,7 +177,7 @@ void ProfileImplIOData::Handle::Init(
   PrefService* pref_service = profile_->GetPrefs();
   lazy_params->http_server_properties_manager.reset(
       chrome_browser_net::HttpServerPropertiesManagerFactory::CreateManager(
-          pref_service));
+          pref_service, g_browser_process->io_thread()->net_log()));
   io_data_->http_server_properties_manager_ =
       lazy_params->http_server_properties_manager.get();
 
@@ -469,24 +470,14 @@ void ProfileImplIOData::InitializeInternal(
   IOThread* const io_thread = profile_params->io_thread;
   IOThread::Globals* const io_thread_globals = io_thread->globals();
 
-  ApplyProfileParamsToContext(main_context);
-
   if (lazy_params_->http_server_properties_manager) {
-    lazy_params_->http_server_properties_manager->InitializeOnNetworkThread();
+    lazy_params_->http_server_properties_manager->InitializeOnNetworkSequence();
     main_context_storage->set_http_server_properties(
         std::move(lazy_params_->http_server_properties_manager));
   }
 
-  main_context->set_transport_security_state(transport_security_state());
-  main_context->set_ct_policy_enforcer(
-      io_thread_globals->ct_policy_enforcer.get());
-
-  main_context->set_net_log(io_thread->net_log());
-
-  main_context->set_http_auth_handler_factory(
-      io_thread_globals->http_auth_handler_factory.get());
-
-  main_context->set_proxy_service(proxy_service());
+  main_context->set_network_quality_estimator(
+      io_thread_globals->network_quality_estimator.get());
 
   // Create a single task runner to use with the CookieStore and ChannelIDStore.
   scoped_refptr<base::SequencedTaskRunner> cookie_background_task_runner =
@@ -535,7 +526,7 @@ void ProfileImplIOData::InitializeInternal(
   InstallProtocolHandlers(main_job_factory.get(), protocol_handlers);
 
   // Install the Offline Page Interceptor.
-#if defined(OS_ANDROID)
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   request_interceptors.push_back(
       base::MakeUnique<offline_pages::OfflinePageRequestInterceptor>(
           previews_io_data()));
@@ -546,13 +537,13 @@ void ProfileImplIOData::InitializeInternal(
   request_interceptors.insert(
       request_interceptors.begin(),
       data_reduction_proxy_io_data()->CreateInterceptor());
+  data_reduction_proxy_io_data()->SetDataUseAscriber(
+      io_thread_globals->data_use_ascriber.get());
   main_context_storage->set_job_factory(SetUpJobFactoryDefaults(
       std::move(main_job_factory), std::move(request_interceptors),
       std::move(profile_params->protocol_handler_interceptor),
       main_context->network_delegate(),
-      io_thread_globals->host_resolver.get()));
-  main_context->set_network_quality_estimator(
-      io_thread_globals->network_quality_estimator.get());
+      io_thread_globals->system_request_context->host_resolver()));
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   InitializeExtensionsRequestContext(profile_params);
@@ -649,15 +640,17 @@ net::URLRequestContext* ProfileImplIOData::InitializeAppRequestContext(
   cookie_store->SetChannelIDServiceID(channel_id_service->GetUniqueID());
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
-  // TODO(mmenke):  It weird to combine state from
+  // TODO(mmenke):  It's weird to combine state from
   // main_request_context_storage() objects and the argumet to this method,
   // |main_context|.  Remove |main_context| as an argument, and just use
   // main_context() instead.
-  net::HttpNetworkSession::Params network_params =
-      main_request_context_storage()->http_network_session()->params();
-  network_params.channel_id_service = channel_id_service.get();
+  net::HttpNetworkSession::Context session_context =
+      main_request_context_storage()->http_network_session()->context();
+  session_context.channel_id_service = channel_id_service.get();
   std::unique_ptr<net::HttpNetworkSession> http_network_session(
-      new net::HttpNetworkSession(network_params));
+      new net::HttpNetworkSession(
+          main_request_context_storage()->http_network_session()->params(),
+          session_context));
   std::unique_ptr<net::HttpCache> app_http_cache =
       CreateMainHttpFactory(http_network_session.get(), std::move(app_backend));
 
@@ -792,9 +785,9 @@ void ProfileImplIOData::ClearNetworkingHistorySinceOnIOThread(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(initialized());
 
-  DCHECK(transport_security_state());
   // Completes synchronously.
-  transport_security_state()->DeleteAllDynamicDataSince(time);
+  main_request_context()->transport_security_state()->DeleteAllDynamicDataSince(
+      time);
   DCHECK(http_server_properties_manager_);
   http_server_properties_manager_->Clear(completion);
 }

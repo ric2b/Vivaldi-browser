@@ -31,7 +31,7 @@ std::vector<std::unique_ptr<APIPermissionInfo>>
 ExtensionsAPIPermissions::GetAllPermissions() const {
   // WARNING: If you are modifying a permission message in this list, be sure to
   // add the corresponding permission message rule to
-  // ChromePermissionMessageProvider::GetPermissionMessages as well.
+  // ChromePermissionMessageRule::GetAllRules as well.
   APIPermissionInfo::InitInfo permissions_to_register[] = {
       {APIPermission::kAlarms, "alarms"},
       {APIPermission::kAlphaEnabled, "app.window.alpha"},
@@ -58,17 +58,33 @@ ExtensionsAPIPermissions::GetAllPermissions() const {
       {APIPermission::kExternallyConnectableAllUrls,
        "externally_connectable.all_urls"},
       {APIPermission::kFullscreen, "app.window.fullscreen"},
+
+      // The permission string for "fileSystem" is only shown when
+      // "write" or "directory" is present. Read-only access is only
+      // granted after the user has been shown a file or directory
+      // chooser dialog and selected a file or directory. Selecting
+      // the file or directory is considered consent to read it.
+      {APIPermission::kFileSystem, "fileSystem"},
+      {APIPermission::kFileSystemDirectory, "fileSystem.directory"},
+      {APIPermission::kFileSystemRequestFileSystem,
+       "fileSystem.requestFileSystem"},
+      {APIPermission::kFileSystemRetainEntries, "fileSystem.retainEntries"},
+      {APIPermission::kFileSystemWrite, "fileSystem.write"},
+
       {APIPermission::kHid, "hid"},
       {APIPermission::kImeWindowEnabled, "app.window.ime"},
       {APIPermission::kOverrideEscFullscreen,
        "app.window.fullscreen.overrideEsc"},
       {APIPermission::kIdle, "idle"},
+      {APIPermission::kLockScreen, "lockScreen"},
       {APIPermission::kMediaPerceptionPrivate, "mediaPerceptionPrivate"},
       {APIPermission::kMetricsPrivate, "metricsPrivate",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kNetworkingConfig, "networking.config"},
       {APIPermission::kNetworkingOnc, "networking.onc"},
       {APIPermission::kNetworkingPrivate, "networkingPrivate",
+       APIPermissionInfo::kFlagCannotBeOptional},
+      {APIPermission::kNewTabPageOverride, "newTabPageOverride",
        APIPermissionInfo::kFlagCannotBeOptional},
       {APIPermission::kPower, "power"},
       {APIPermission::kPrinterProvider, "printerProvider"},

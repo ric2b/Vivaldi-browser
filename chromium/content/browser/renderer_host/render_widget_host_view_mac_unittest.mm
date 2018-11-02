@@ -10,13 +10,16 @@
 #include <tuple>
 
 #include "base/command_line.h"
+#include "base/mac/mac_util.h"
 #include "base/mac/scoped_nsautorelease_pool.h"
 #include "base/mac/sdk_forward_declarations.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_tick_clock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
@@ -28,6 +31,7 @@
 #include "content/common/view_messages.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/render_widget_host_view_mac_delegate.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/test_browser_context.h"
@@ -52,6 +56,7 @@
 @interface MockPhaseMethods : NSObject {
 }
 
+- (NSEventPhase)phaseNone;
 - (NSEventPhase)phaseBegan;
 - (NSEventPhase)phaseChanged;
 - (NSEventPhase)phaseEnded;
@@ -59,6 +64,9 @@
 
 @implementation MockPhaseMethods
 
+- (NSEventPhase)phaseNone {
+  return NSEventPhaseNone;
+}
 - (NSEventPhase)phaseBegan {
   return NSEventPhaseBegan;
 }
@@ -171,8 +179,17 @@ NSEvent* MockMouseEventWithParams(CGEventType mouse_type,
   return event;
 }
 
+NSEventPhase PhaseForEventType(NSEventType type) {
+  if (type == NSEventTypeBeginGesture)
+    return NSEventPhaseBegan;
+  if (type == NSEventTypeEndGesture)
+    return NSEventPhaseEnded;
+  return NSEventPhaseChanged;
+}
+
 id MockGestureEvent(NSEventType type, double magnification) {
   id event = [OCMockObject mockForClass:[NSEvent class]];
+  NSEventPhase phase = PhaseForEventType(type);
   NSPoint locationInWindow = NSMakePoint(0, 0);
   CGFloat deltaX = 0;
   CGFloat deltaY = 0;
@@ -180,6 +197,7 @@ id MockGestureEvent(NSEventType type, double magnification) {
   NSUInteger modifierFlags = 0;
 
   [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(type)] type];
+  [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(phase)] phase];
   [(NSEvent*)[[event stub]
       andReturnValue:OCMOCK_VALUE(locationInWindow)] locationInWindow];
   [(NSEvent*)[[event stub] andReturnValue:OCMOCK_VALUE(deltaX)] deltaX];
@@ -203,6 +221,9 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   }
 
  private:
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {}
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -293,6 +314,23 @@ NSEvent* MockScrollWheelEventWithPhase(SEL mockPhaseSelector, int32_t delta) {
   CFRelease(cg_event);
   method_setImplementation(
       class_getInstanceMethod([NSEvent class], @selector(phase)),
+      [MockPhaseMethods instanceMethodForSelector:mockPhaseSelector]);
+  return event;
+}
+
+NSEvent* MockScrollWheelEventWithMomentumPhase(SEL mockPhaseSelector,
+                                               int32_t delta) {
+  // Create a dummy event with phaseNone. This is for resetting the phase info
+  // of CGEventRef.
+  MockScrollWheelEventWithPhase(@selector(phaseNone), 0);
+  CGEventRef cg_event = CGEventCreateScrollWheelEvent(
+      nullptr, kCGScrollEventUnitLine, 1, delta, 0);
+  CGEventTimestamp timestamp = 0;
+  CGEventSetTimestamp(cg_event, timestamp);
+  NSEvent* event = [NSEvent eventWithCGEvent:cg_event];
+  CFRelease(cg_event);
+  method_setImplementation(
+      class_getInstanceMethod([NSEvent class], @selector(momentumPhase)),
       [MockPhaseMethods instanceMethodForSelector:mockPhaseSelector]);
   return event;
 }
@@ -1308,9 +1346,213 @@ TEST_F(RenderWidgetHostViewMacTest, Background) {
   host->ShutdownAndDestroyWidget(true);
 }
 
+class RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest
+    : public RenderWidgetHostViewMacTest {
+ public:
+  RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest() {
+    feature_list_.InitFromCommandLine(
+        features::kTouchpadAndWheelScrollLatching.name, "");
+  }
+
+ private:
+  base::test::ScopedFeatureList feature_list_;
+};
+
+// When wheel scroll latching is enabled, wheel end events are not sent
+// immediately, instead we start a timer to see if momentum phase of the scroll
+// starts or not.
+TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
+       WheelWithPhaseEndedIsNotForwardedImmediately) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send an initial wheel event for scrolling by 3 lines.
+  NSEvent* wheelEvent1 =
+      MockScrollWheelEventWithPhase(@selector(phaseBegan), 3);
+  [view->cocoa_view() scrollWheel:wheelEvent1];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Indicate that the wheel event was unhandled.
+  InputEventAck unhandled_ack(InputEventAckSource::COMPOSITOR_THREAD,
+                              blink::WebInputEvent::kMouseWheel,
+                              INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  std::unique_ptr<IPC::Message> response1(
+      new InputHostMsg_HandleInputEvent_ACK(0, unhandled_ack));
+  host->OnMessageReceived(*response1);
+  // Only wheel event ack exists since GSB event is blocking.
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Send a wheel event with phaseEnded. When wheel scroll latching is enabled
+  // the event will be dropped and the mouse_wheel_end_dispatch_timer_ will
+  // start.
+  NSEvent* wheelEvent2 =
+      MockScrollWheelEventWithPhase(@selector(phaseEnded), 0);
+  [view->cocoa_view() scrollWheel:wheelEvent2];
+  ASSERT_EQ(0U, process_host->sink().message_count());
+  DCHECK(view->HasPendingWheelEndEventForTesting());
+  process_host->sink().ClearMessages();
+
+  host->ShutdownAndDestroyWidget(true);
+}
+
+TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
+       WheelWithMomentumPhaseBeganStopsTheWheelEndDispatchTimer) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send an initial wheel event for scrolling by 3 lines.
+  NSEvent* wheelEvent1 =
+      MockScrollWheelEventWithPhase(@selector(phaseBegan), 3);
+  [view->cocoa_view() scrollWheel:wheelEvent1];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Indicate that the wheel event was unhandled.
+  InputEventAck unhandled_ack(InputEventAckSource::COMPOSITOR_THREAD,
+                              blink::WebInputEvent::kMouseWheel,
+                              INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  std::unique_ptr<IPC::Message> response1(
+      new InputHostMsg_HandleInputEvent_ACK(0, unhandled_ack));
+  host->OnMessageReceived(*response1);
+  // Only wheel event ack exists since GSB event is blocking.
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Send a wheel event with phaseEnded. When wheel scroll latching is enabled
+  // the event will be dropped and the mouse_wheel_end_dispatch_timer_ will
+  // start.
+  NSEvent* wheelEvent2 =
+      MockScrollWheelEventWithPhase(@selector(phaseEnded), 0);
+  [view->cocoa_view() scrollWheel:wheelEvent2];
+  ASSERT_EQ(0U, process_host->sink().message_count());
+  DCHECK(view->HasPendingWheelEndEventForTesting());
+  process_host->sink().ClearMessages();
+
+  // Send a wheel event with momentum phase started, this should stop the wheel
+  // end dispatch timer.
+  NSEvent* wheelEvent3 =
+      MockScrollWheelEventWithMomentumPhase(@selector(phaseBegan), 3);
+  ASSERT_TRUE(wheelEvent3);
+  [view->cocoa_view() scrollWheel:wheelEvent3];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  DCHECK(!view->HasPendingWheelEndEventForTesting());
+  process_host->sink().ClearMessages();
+
+  host->ShutdownAndDestroyWidget(true);
+}
+
+TEST_F(RenderWidgetHostViewMacWithWheelScrollLatchingEnabledTest,
+       WheelWithPhaseBeganDispatchesThePendingWheelEnd) {
+  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
+  // the MockRenderProcessHost that is set up by the test harness which mocks
+  // out |OnMessageReceived()|.
+  TestBrowserContext browser_context;
+  MockRenderProcessHost* process_host =
+      new MockRenderProcessHost(&browser_context);
+  process_host->Init();
+  MockRenderWidgetHostDelegate delegate;
+  int32_t routing_id = process_host->GetNextRoutingID();
+  MockRenderWidgetHostImpl* host =
+      new MockRenderWidgetHostImpl(&delegate, process_host, routing_id);
+  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
+  process_host->sink().ClearMessages();
+
+  // Send an initial wheel event for scrolling by 3 lines.
+  NSEvent* wheelEvent1 =
+      MockScrollWheelEventWithPhase(@selector(phaseBegan), 3);
+  [view->cocoa_view() scrollWheel:wheelEvent1];
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Indicate that the wheel event was unhandled.
+  InputEventAck unhandled_ack(InputEventAckSource::COMPOSITOR_THREAD,
+                              blink::WebInputEvent::kMouseWheel,
+                              INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  std::unique_ptr<IPC::Message> response1(
+      new InputHostMsg_HandleInputEvent_ACK(0, unhandled_ack));
+  host->OnMessageReceived(*response1);
+  // Only wheel event ack exists since GSB event is blocking.
+  ASSERT_EQ(1U, process_host->sink().message_count());
+  process_host->sink().ClearMessages();
+
+  // Send a wheel event with phaseEnded. When wheel scroll latching is enabled
+  // the event will be dropped and the mouse_wheel_end_dispatch_timer_ will
+  // start.
+  NSEvent* wheelEvent2 =
+      MockScrollWheelEventWithPhase(@selector(phaseEnded), 0);
+  [view->cocoa_view() scrollWheel:wheelEvent2];
+  ASSERT_EQ(0U, process_host->sink().message_count());
+  DCHECK(view->HasPendingWheelEndEventForTesting());
+  process_host->sink().ClearMessages();
+
+  // Send a wheel event with phase started, this should stop the wheel end
+  // dispatch timer and dispatch the pending wheel end event for the previous
+  // scroll sequence.
+  NSEvent* wheelEvent3 =
+      MockScrollWheelEventWithPhase(@selector(phaseBegan), 3);
+  ASSERT_TRUE(wheelEvent3);
+  [view->cocoa_view() scrollWheel:wheelEvent3];
+  ASSERT_EQ(2U, process_host->sink().message_count());
+  DCHECK(!view->HasPendingWheelEndEventForTesting());
+  process_host->sink().ClearMessages();
+
+  host->ShutdownAndDestroyWidget(true);
+}
+
 class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
  public:
-  RenderWidgetHostViewMacPinchTest() : process_host_(nullptr) {}
+  RenderWidgetHostViewMacPinchTest() = default;
+
+  void SetUp() override {
+    RenderWidgetHostViewMacTest::SetUp();
+    // Initialize the view associated with a MockRenderWidgetHostImpl, rather
+    // than the MockRenderProcessHost that is set up by the test harness which
+    // mocks out |OnMessageReceived()|.
+    browser_context_.reset(new TestBrowserContext);
+    process_host_.reset(new MockRenderProcessHost(browser_context_.get()));
+    process_host_->Init();
+    delegate_.reset(new MockRenderWidgetHostDelegate);
+    int32_t routing_id = process_host_->GetNextRoutingID();
+    host_.reset(new MockRenderWidgetHostImpl(delegate_.get(),
+                                             process_host_.get(), routing_id));
+    view_ = new RenderWidgetHostViewMac(host_.get(), false);
+    cocoa_view_.reset([view_->cocoa_view() retain]);
+    process_host_->sink().ClearMessages();
+  }
+
+  void TearDown() override {
+    cocoa_view_.reset();
+    host_->ShutdownAndDestroyWidget(false);
+    host_.reset();
+    delegate_.reset();
+    process_host_.reset();
+    browser_context_.reset();
+    RenderWidgetHostViewMacTest::TearDown();
+  }
 
   bool ZoomDisabledForPinchUpdateMessage() {
     const IPC::Message* message = nullptr;
@@ -1339,26 +1581,42 @@ class RenderWidgetHostViewMacPinchTest : public RenderWidgetHostViewMacTest {
     return gesture_event->data.pinch_update.zoom_disabled;
   }
 
-  MockRenderProcessHost* process_host_;
+  bool ShouldSendGestureEvents() {
+#if defined(MAC_OS_X_VERSION_10_11) && \
+    MAC_OS_X_VERSION_MAX_ALLOWED >= MAC_OS_X_VERSION_10_11
+    return base::mac::IsAtMostOS10_10();
+#endif
+    return true;
+  }
+
+  void SendBeginEvent() {
+    NSEvent* pinchBeginEvent = MockGestureEvent(NSEventTypeBeginGesture, 0);
+    if (ShouldSendGestureEvents())
+      [cocoa_view_ beginGestureWithEvent:pinchBeginEvent];
+    [cocoa_view_ magnifyWithEvent:pinchBeginEvent];
+  }
+
+  void SendEndEvent() {
+    NSEvent* pinchEndEvent = MockGestureEvent(NSEventTypeEndGesture, 0);
+    [cocoa_view_ magnifyWithEvent:pinchEndEvent];
+    if (ShouldSendGestureEvents())
+      [cocoa_view_ endGestureWithEvent:pinchEndEvent];
+  }
+
+  std::unique_ptr<TestBrowserContext> browser_context_;
+  std::unique_ptr<MockRenderProcessHost> process_host_;
+  std::unique_ptr<MockRenderWidgetHostImpl> host_;
+  std::unique_ptr<MockRenderWidgetHostDelegate> delegate_;
+
+  // Owned by view_->cocoa_view(), which is stored in cocoa_view_.
+  RenderWidgetHostViewMac* view_;
+  base::scoped_nsobject<RenderWidgetHostViewCocoa> cocoa_view_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewMacPinchTest);
 };
 
 TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
-  // Initialize the view associated with a MockRenderWidgetHostImpl, rather than
-  // the MockRenderProcessHost that is set up by the test harness which mocks
-  // out |OnMessageReceived()|.
-  TestBrowserContext browser_context;
-  process_host_ = new MockRenderProcessHost(&browser_context);
-  process_host_->Init();
-  MockRenderWidgetHostDelegate delegate;
-  int32_t routing_id = process_host_->GetNextRoutingID();
-  MockRenderWidgetHostImpl* host =
-      new MockRenderWidgetHostImpl(&delegate, process_host_, routing_id);
-  RenderWidgetHostViewMac* view = new RenderWidgetHostViewMac(host, false);
-  process_host_->sink().ClearMessages();
-
   // We'll use this IPC message to ack events.
   InputEventAck ack(InputEventAckSource::COMPOSITOR_THREAD,
                     blink::WebInputEvent::kGesturePinchUpdate,
@@ -1368,42 +1626,38 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
 
   // Do a gesture that crosses the threshold.
   {
-    NSEvent* pinchBeginEvent =
-        MockGestureEvent(NSEventTypeBeginGesture, 0);
     NSEvent* pinchUpdateEvents[3] = {
         MockGestureEvent(NSEventTypeMagnify, 0.25),
         MockGestureEvent(NSEventTypeMagnify, 0.25),
         MockGestureEvent(NSEventTypeMagnify, 0.25),
     };
-    NSEvent* pinchEndEvent =
-        MockGestureEvent(NSEventTypeEndGesture, 0);
 
-    [view->cocoa_view() beginGestureWithEvent:pinchBeginEvent];
+    SendBeginEvent();
     EXPECT_EQ(0U, process_host_->sink().message_count());
 
     // No zoom is sent for the first update event.
-    [view->cocoa_view() magnifyWithEvent:pinchUpdateEvents[0]];
-    host->OnMessageReceived(*response);
+    [cocoa_view_ magnifyWithEvent:pinchUpdateEvents[0]];
+    host_->OnMessageReceived(*response);
     EXPECT_EQ(2U, process_host_->sink().message_count());
     EXPECT_TRUE(ZoomDisabledForPinchUpdateMessage());
     process_host_->sink().ClearMessages();
 
     // The second update event crosses the threshold of 0.4, and so zoom is no
     // longer disabled.
-    [view->cocoa_view() magnifyWithEvent:pinchUpdateEvents[1]];
+    [cocoa_view_ magnifyWithEvent:pinchUpdateEvents[1]];
     EXPECT_FALSE(ZoomDisabledForPinchUpdateMessage());
-    host->OnMessageReceived(*response);
+    host_->OnMessageReceived(*response);
     EXPECT_EQ(1U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
 
     // The third update still has zoom enabled.
-    [view->cocoa_view() magnifyWithEvent:pinchUpdateEvents[2]];
+    [cocoa_view_ magnifyWithEvent:pinchUpdateEvents[2]];
     EXPECT_FALSE(ZoomDisabledForPinchUpdateMessage());
-    host->OnMessageReceived(*response);
+    host_->OnMessageReceived(*response);
     EXPECT_EQ(1U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
 
-    [view->cocoa_view() endGestureWithEvent:pinchEndEvent];
+    SendEndEvent();
     EXPECT_EQ(1U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
   }
@@ -1411,23 +1665,21 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
   // Do a gesture that doesn't cross the threshold, but happens when we're not
   // at page scale factor one, so it should be sent to the renderer.
   {
-    NSEvent* pinchBeginEvent = MockGestureEvent(NSEventTypeBeginGesture, 0);
     NSEvent* pinchUpdateEvent = MockGestureEvent(NSEventTypeMagnify, 0.25);
-    NSEvent* pinchEndEvent = MockGestureEvent(NSEventTypeEndGesture, 0);
 
-    view->page_at_minimum_scale_ = false;
+    view_->page_at_minimum_scale_ = false;
 
-    [view->cocoa_view() beginGestureWithEvent:pinchBeginEvent];
+    SendBeginEvent();
     EXPECT_EQ(0U, process_host_->sink().message_count());
 
     // Expect that a zoom happen because the time threshold has not passed.
-    [view->cocoa_view() magnifyWithEvent:pinchUpdateEvent];
+    [cocoa_view_ magnifyWithEvent:pinchUpdateEvent];
     EXPECT_FALSE(ZoomDisabledForPinchUpdateMessage());
-    host->OnMessageReceived(*response);
+    host_->OnMessageReceived(*response);
     EXPECT_EQ(2U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
 
-    [view->cocoa_view() endGestureWithEvent:pinchEndEvent];
+    SendEndEvent();
     EXPECT_EQ(1U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
   }
@@ -1435,33 +1687,28 @@ TEST_F(RenderWidgetHostViewMacPinchTest, PinchThresholding) {
   // Do a gesture again, after the page scale is no longer at one, and ensure
   // that it is thresholded again.
   {
-    NSEvent* pinchBeginEvent = MockGestureEvent(NSEventTypeBeginGesture, 0);
     NSEvent* pinchUpdateEvent = MockGestureEvent(NSEventTypeMagnify, 0.25);
-    NSEvent* pinchEndEvent = MockGestureEvent(NSEventTypeEndGesture, 0);
 
-    view->page_at_minimum_scale_ = true;
+    view_->page_at_minimum_scale_ = true;
 
-    [view->cocoa_view() beginGestureWithEvent:pinchBeginEvent];
+    SendBeginEvent();
     EXPECT_EQ(0U, process_host_->sink().message_count());
 
     // Get back to zoom one right after the begin event. This should still keep
     // the thresholding in place (it is latched at the begin event).
-    view->page_at_minimum_scale_ = false;
+    view_->page_at_minimum_scale_ = false;
 
     // Expect that zoom be disabled because the time threshold has passed.
-    [view->cocoa_view() magnifyWithEvent:pinchUpdateEvent];
+    [cocoa_view_ magnifyWithEvent:pinchUpdateEvent];
     EXPECT_EQ(2U, process_host_->sink().message_count());
     EXPECT_TRUE(ZoomDisabledForPinchUpdateMessage());
-    host->OnMessageReceived(*response);
+    host_->OnMessageReceived(*response);
     process_host_->sink().ClearMessages();
 
-    [view->cocoa_view() endGestureWithEvent:pinchEndEvent];
+    SendEndEvent();
     EXPECT_EQ(1U, process_host_->sink().message_count());
     process_host_->sink().ClearMessages();
   }
-
-  // Clean up.
-  host->ShutdownAndDestroyWidget(true);
 }
 
 TEST_F(RenderWidgetHostViewMacTest, EventLatencyOSMouseWheelHistogram) {

@@ -7,7 +7,7 @@
  * This is the main code for the OOBE WebUI implementation.
  */
 
-// <include src="login_shared.js">
+// <include src="md_login_shared.js">
 // <include src="login_non_lock_shared.js">
 // <include src="oobe_screen_auto_enrollment_check.js">
 // <include src="oobe_screen_controller_pairing.js">
@@ -55,7 +55,7 @@ cr.define('cr.ui.Oobe', function() {
         select.addEventListener('click', runCallback);
         select.addEventListener('keyup', function(event) {
           var keycodeInterested = [
-            9,  // Tab
+            9,   // Tab
             13,  // Enter
             27,  // Escape
           ];
@@ -134,9 +134,13 @@ cr.define('cr.ui.Oobe', function() {
       login.HostPairingScreen.register();
       login.DeviceDisabledScreen.register();
       login.ActiveDirectoryPasswordChangeScreen.register(/* lazyInit= */ true);
+      login.VoiceInteractionValuePropScreen.register();
+      login.WaitForContainerReadyScreen.register();
 
       cr.ui.Bubble.decorate($('bubble'));
       login.HeaderBar.decorate($('login-header-bar'));
+      if ($('top-header-bar'))
+        login.TopHeaderBar.decorate($('top-header-bar'));
 
       Oobe.initializeA11yMenu();
 
@@ -148,34 +152,30 @@ cr.define('cr.ui.Oobe', function() {
      */
     initializeA11yMenu: function() {
       cr.ui.Bubble.decorate($('accessibility-menu'));
-      $('connect-accessibility-link').addEventListener(
-        'click', Oobe.handleAccessibilityLinkClick);
-      $('eula-accessibility-link').addEventListener(
-        'click', Oobe.handleAccessibilityLinkClick);
-      $('update-accessibility-link').addEventListener(
-        'click', Oobe.handleAccessibilityLinkClick);
+      $('connect-accessibility-link')
+          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
+      $('eula-accessibility-link')
+          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
+      $('update-accessibility-link')
+          .addEventListener('click', Oobe.handleAccessibilityLinkClick);
       // Same behaviour on hitting spacebar. See crbug.com/342991.
       function reactOnSpace(event) {
         if (event.keyCode == 32)
           Oobe.handleAccessibilityLinkClick(event);
       }
-      $('connect-accessibility-link').addEventListener(
-        'keyup', reactOnSpace);
-      $('eula-accessibility-link').addEventListener(
-        'keyup', reactOnSpace);
-      $('update-accessibility-link').addEventListener(
-        'keyup', reactOnSpace);
+      $('connect-accessibility-link').addEventListener('keyup', reactOnSpace);
+      $('eula-accessibility-link').addEventListener('keyup', reactOnSpace);
+      $('update-accessibility-link').addEventListener('keyup', reactOnSpace);
 
-      $('high-contrast').addEventListener('click',
-                                          Oobe.handleHighContrastClick);
-      $('large-cursor').addEventListener('click',
-                                         Oobe.handleLargeCursorClick);
-      $('spoken-feedback').addEventListener('click',
-                                            Oobe.handleSpokenFeedbackClick);
-      $('screen-magnifier').addEventListener('click',
-                                             Oobe.handleScreenMagnifierClick);
-      $('virtual-keyboard').addEventListener('click',
-                                             Oobe.handleVirtualKeyboardClick);
+      $('high-contrast')
+          .addEventListener('click', Oobe.handleHighContrastClick);
+      $('large-cursor').addEventListener('click', Oobe.handleLargeCursorClick);
+      $('spoken-feedback')
+          .addEventListener('click', Oobe.handleSpokenFeedbackClick);
+      $('screen-magnifier')
+          .addEventListener('click', Oobe.handleScreenMagnifierClick);
+      $('virtual-keyboard')
+          .addEventListener('click', Oobe.handleVirtualKeyboardClick);
 
       $('high-contrast').addEventListener('keypress', Oobe.handleA11yKeyPress);
       $('large-cursor').addEventListener('keypress', Oobe.handleA11yKeyPress);
@@ -198,16 +198,18 @@ cr.define('cr.ui.Oobe', function() {
     handleAccessibilityLinkClick: function(e) {
       /** @const */ var BUBBLE_OFFSET = 5;
       /** @const */ var BUBBLE_PADDING = 10;
-      $('accessibility-menu').showForElement(e.target,
-                                             cr.ui.Bubble.Attachment.BOTTOM,
-                                             BUBBLE_OFFSET, BUBBLE_PADDING);
+      $('accessibility-menu')
+          .showForElement(
+              e.target, cr.ui.Bubble.Attachment.BOTTOM, BUBBLE_OFFSET,
+              BUBBLE_PADDING);
 
       var maxHeight = cr.ui.LoginUITools.getMaxHeightBeforeShelfOverlapping(
           $('accessibility-menu'));
       if (maxHeight < $('accessibility-menu').offsetHeight) {
-        $('accessibility-menu').showForElement(e.target,
-                                               cr.ui.Bubble.Attachment.TOP,
-                                               BUBBLE_OFFSET, BUBBLE_PADDING);
+        $('accessibility-menu')
+            .showForElement(
+                e.target, cr.ui.Bubble.Attachment.TOP, BUBBLE_OFFSET,
+                BUBBLE_PADDING);
       }
 
       $('accessibility-menu').firstBubbleElement = $('spoken-feedback');
@@ -217,7 +219,7 @@ cr.define('cr.ui.Oobe', function() {
       if (Oobe.getInstance().currentScreen &&
           Oobe.getInstance().currentScreen.defaultControl) {
         $('accessibility-menu').elementToFocusOnHide =
-          Oobe.getInstance().currentScreen.defaultControl;
+            Oobe.getInstance().currentScreen.defaultControl;
       } else {
         // Update screen falls into this category. Since it doesn't have any
         // controls other than a11y link we don't want that link to receive
@@ -239,7 +241,7 @@ cr.define('cr.ui.Oobe', function() {
         return;
 
       // Simulate click on the checkbox.
-      e.target.click()
+      e.target.click();
     },
 
     /**
@@ -380,11 +382,9 @@ cr.define('cr.ui.Oobe', function() {
     setMDMode_: function() {
       if (loadTimeData.getString('newOobeUI') == 'on') {
         $('oobe').setAttribute('md-mode', 'true');
-        $('oobe-shield').setAttribute('md-mode', 'true');
         $('popup-overlay').setAttribute('md-mode', 'true');
       } else {
         $('oobe').removeAttribute('md-mode');
-        $('oobe-shield').removeAttribute('md-mode');
         $('popup-overlay').removeAttribute('md-mode');
       }
     },

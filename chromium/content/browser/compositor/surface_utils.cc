@@ -6,12 +6,14 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
-#include "base/memory/ref_counted.h"
+#include "base/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "cc/output/copy_output_result.h"
 #include "cc/resources/single_release_callback.h"
-#include "components/viz/display_compositor/gl_helper.h"
-#include "content/browser/compositor/frame_sink_manager_host.h"
+#include "components/viz/common/gl_helper.h"
+#include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
+#include "content/browser/browser_main_loop.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
 #include "third_party/skia/include/core/SkColorFilter.h"
@@ -87,7 +89,7 @@ void PrepareTextureCopyOutputResult(
 
   uint8_t* pixels = static_cast<uint8_t*>(bitmap->getPixels());
 
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
@@ -153,7 +155,7 @@ void PrepareBitmapCopyOutputResult(
 
 namespace content {
 
-cc::FrameSinkId AllocateFrameSinkId() {
+viz::FrameSinkId AllocateFrameSinkId() {
 #if defined(OS_ANDROID)
   return CompositorImpl::AllocateFrameSinkId();
 #else
@@ -162,25 +164,25 @@ cc::FrameSinkId AllocateFrameSinkId() {
 #endif
 }
 
-cc::SurfaceManager* GetSurfaceManager() {
+viz::FrameSinkManagerImpl* GetFrameSinkManager() {
 #if defined(OS_ANDROID)
-  return CompositorImpl::GetSurfaceManager();
-#else
-  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  if (factory == NULL)
-    return nullptr;
-  return factory->GetContextFactoryPrivate()->GetSurfaceManager();
-#endif
-}
-
-FrameSinkManagerHost* GetFrameSinkManagerHost() {
-#if defined(OS_ANDROID)
-  return CompositorImpl::GetFrameSinkManagerHost();
+  return CompositorImpl::GetFrameSinkManager();
 #else
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
   if (!factory)
     return nullptr;
-  return factory->GetFrameSinkManagerHost();
+  return factory->GetContextFactoryPrivate()->GetFrameSinkManager();
+#endif
+}
+
+viz::HostFrameSinkManager* GetHostFrameSinkManager() {
+#if defined(OS_ANDROID)
+  return CompositorImpl::GetHostFrameSinkManager();
+#else
+  ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
+  if (!factory)
+    return nullptr;
+  return factory->GetContextFactoryPrivate()->GetHostFrameSinkManager();
 #endif
 }
 
@@ -212,5 +214,39 @@ void CopyFromCompositingSurfaceHasResult(
   PrepareBitmapCopyOutputResult(output_size_in_pixel, color_type, callback,
                                 std::move(result));
 }
+
+namespace surface_utils {
+
+void ConnectWithInProcessFrameSinkManager(
+    viz::HostFrameSinkManager* host,
+    viz::FrameSinkManagerImpl* manager,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
+  // A mojo pointer to |host| which is the FrameSinkManagerImpl's client.
+  cc::mojom::FrameSinkManagerClientPtr host_mojo;
+  // A mojo pointer to |manager|.
+  cc::mojom::FrameSinkManagerPtr manager_mojo;
+
+  // A request to bind to each of the above interfaces.
+  cc::mojom::FrameSinkManagerClientRequest host_mojo_request =
+      mojo::MakeRequest(&host_mojo);
+  cc::mojom::FrameSinkManagerRequest manager_mojo_request =
+      mojo::MakeRequest(&manager_mojo);
+
+  // Sets |manager_mojo| which is given to the |host|.
+  manager->BindAndSetClient(std::move(manager_mojo_request), task_runner,
+                            std::move(host_mojo));
+  // Sets |host_mojo| which was given to the |manager|.
+  host->BindAndSetManager(std::move(host_mojo_request), task_runner,
+                          std::move(manager_mojo));
+}
+
+void ConnectWithLocalFrameSinkManager(
+    viz::HostFrameSinkManager* host_frame_sink_manager,
+    viz::FrameSinkManagerImpl* frame_sink_manager_impl) {
+  host_frame_sink_manager->SetLocalManager(frame_sink_manager_impl);
+  frame_sink_manager_impl->SetLocalClient(host_frame_sink_manager);
+}
+
+}  // namespace surface_utils
 
 }  // namespace content

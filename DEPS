@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 hooks = [
-    {
+  {
     # This clobbers when necessary (based on get_landmines.py). It must be the
     # first hook so that other things that get/generate into the output
     # directory will not subsequently be clobbered.
@@ -11,8 +11,19 @@ hooks = [
       'python',
       'vivaldi/chromium/build/landmines.py'
       ],
-    },
-    {
+  },
+  {
+    # Ensure that the DEPS'd "depot_tools" has its self-update capability
+    # disabled.
+    'name': 'disable_depot_tools_selfupdate',
+    'pattern': '.',
+    'action': [
+        'python',
+        'vivaldi/chromium/third_party/depot_tools/update_depot_tools_toggle.py',
+        '--disable',
+    ],
+  },
+  {
     # Ensure that while generating dependencies lists in .gyp files we don't
     # accidentally reference any .pyc files whose corresponding .py files have
     # already been deleted.
@@ -116,7 +127,8 @@ hooks = [
   {
     'name': 'clang_format_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=win32',
       '--no_auth',
@@ -127,7 +139,8 @@ hooks = [
   {
     'name': 'clang_format_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=darwin',
       '--no_auth',
@@ -138,7 +151,8 @@ hooks = [
   {
     'name': 'clang_format_linux',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=linux*',
       '--no_auth',
@@ -150,7 +164,8 @@ hooks = [
   {
     'name': 'luci-go_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=win32',
       '--no_auth',
@@ -161,7 +176,8 @@ hooks = [
   {
     'name': 'luci-go_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=darwin',
       '--no_auth',
@@ -172,7 +188,8 @@ hooks = [
   {
     'name': 'luci-go_linux',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=linux*',
       '--no_auth',
@@ -180,22 +197,11 @@ hooks = [
       '-d', 'vivaldi/chromium/tools/luci-go/linux64'
     ],
   },
-  # Pull eu-strip binaries using checked-in hashes.
-  {
-    'name': 'eu-strip',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-      '--no_resume',
-      '--platform=linux*',
-      '--no_auth',
-      '--bucket', 'chromium-eu-strip',
-      '-s', 'vivaldi/chromium/build/linux/bin/eu-strip.sha1'
-      ],
-  },
   {
     'name': 'drmemory',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+      'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
       '--no_resume',
       '--platform=win32',
       '--no_auth',
@@ -210,7 +216,7 @@ hooks = [
     'action': ['python',
       'vivaldi/chromium/build/get_syzygy_binaries.py',
       '--output-dir', 'vivaldi/chromium/third_party/syzygy/binaries',
-      '--revision=dbb218b6d05ff1c17a4d86252b10880c2d8ebe08',
+      '--revision=190dbfe74c6f5b5913820fa66d9176877924d7c5',
       '--overwrite',
       '--copy-dia-binaries',
     ],
@@ -238,7 +244,8 @@ hooks = [
   {
     'name': 'webui_node_modules',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'vivaldi/chromium/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--extract',
                 '--no_auth',
@@ -252,6 +259,8 @@ hooks = [
     'name': 'fetch_telemetry_binary_dependencies',
     'pattern': '.',
     'action': [ 'python',
+                'vivaldi/chromium/tools/perf/conditionally_execute',
+                '--gyp-condition', 'fetch_telemetry_dependencies=1',
                 'vivaldi/chromium/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
     ],
   },

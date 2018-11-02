@@ -11,6 +11,7 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/DOMException.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "modules/payments/PaymentInstrument.h"
 #include "modules/payments/PaymentManager.h"
 #include "platform/wtf/Vector.h"
@@ -41,6 +42,26 @@ bool rejectError(ScriptPromiseResolver* resolver,
       resolver->Reject(DOMException::Create(kInvalidStateError,
                                             "Storage operation is failed"));
       return true;
+    case payments::mojom::blink::PaymentHandlerStatus::
+        FETCH_INSTRUMENT_ICON_FAILED:
+      resolver->Reject(DOMException::Create(
+          kNotFoundError, "Fetch or decode instrument icon failed"));
+      return true;
+    case payments::mojom::blink::PaymentHandlerStatus::
+        FETCH_PAYMENT_APP_INFO_FAILED:
+      // FETCH_PAYMENT_APP_INFO_FAILED indicates everything works well except
+      // fetching payment handler's name and/or icon from its web app manifest.
+      // The origin or name will be used to label this payment handler in
+      // UI in this case, so only show warnning message instead of reject the
+      // promise.
+      ExecutionContext* context =
+          ExecutionContext::From(resolver->GetScriptState());
+      context->AddConsoleMessage(ConsoleMessage::Create(
+          kJSMessageSource, kWarningMessageLevel,
+          "Unable to fetch payment handler's name and icon from its web app "
+          "manifest. User may not recognize this payment handler in UI, "
+          "because it will be labeled only by its origin."));
+      return false;
   }
   NOTREACHED();
   return false;
@@ -139,6 +160,22 @@ ScriptPromise PaymentInstruments::set(ScriptState* script_state,
   payments::mojom::blink::PaymentInstrumentPtr instrument =
       payments::mojom::blink::PaymentInstrument::New();
   instrument->name = details.hasName() ? details.name() : WTF::g_empty_string;
+  if (details.hasIcons()) {
+    ExecutionContext* context = ExecutionContext::From(script_state);
+    for (const ImageObject image_object : details.icons()) {
+      KURL parsed_url = context->CompleteURL(image_object.src());
+      if (!parsed_url.IsValid() || !parsed_url.ProtocolIsInHTTPFamily()) {
+        resolver->Reject(V8ThrowException::CreateTypeError(
+            script_state->GetIsolate(),
+            "'" + image_object.src() + "' is not a valid URL."));
+        return promise;
+      }
+
+      instrument->icons.push_back(payments::mojom::blink::ImageObject::New());
+      instrument->icons.back()->src = parsed_url;
+    }
+  }
+
   if (details.hasEnabledMethods()) {
     instrument->enabled_methods = details.enabledMethods();
   }
@@ -200,6 +237,15 @@ void PaymentInstruments::onGetPaymentInstrument(
     return;
   PaymentInstrument instrument;
   instrument.setName(stored_instrument->name);
+
+  HeapVector<ImageObject> icons;
+  for (const auto& icon : stored_instrument->icons) {
+    ImageObject image_object;
+    image_object.setSrc(icon->src.GetString());
+    icons.emplace_back(image_object);
+  }
+  instrument.setIcons(icons);
+
   Vector<String> enabled_methods;
   for (const auto& method : stored_instrument->enabled_methods) {
     enabled_methods.push_back(method);

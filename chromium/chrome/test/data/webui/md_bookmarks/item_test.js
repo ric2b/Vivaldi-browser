@@ -16,7 +16,7 @@ suite('<bookmarks-item>', function() {
             createItem('3'),
           ])),
     });
-    bookmarks.Store.instance_ = store;
+    store.replaceSingleton();
 
     item = document.createElement('bookmarks-item');
     item.itemId = '2';
@@ -32,14 +32,12 @@ suite('<bookmarks-item>', function() {
 
   test('changing to folder hides/unhides the folder/icon', function() {
     // Starts test as an item.
-    assertTrue(item.$['folder-icon'].hidden);
-    assertFalse(item.$.icon.hidden);
+    assertEquals('website-icon', item.$.icon.className);
 
     // Change to a folder.
     item.itemId = '1';
 
-    assertFalse(item.$['folder-icon'].hidden);
-    assertTrue(item.$.icon.hidden);
+    assertEquals('folder-icon', item.$.icon.className);
   });
 
   test('pressing the menu button selects the item', function() {
@@ -53,13 +51,13 @@ suite('<bookmarks-item>', function() {
         store.lastAction);
   });
 
-  test('context menu selects item if unselected', function() {
+  function testEventSelection(eventname) {
     item.isSelectedItem_ = true;
-    item.dispatchEvent(new MouseEvent('contextmenu'));
+    item.dispatchEvent(new MouseEvent(eventname));
     assertEquals(null, store.lastAction);
 
     item.isSelectedItem_ = false;
-    item.dispatchEvent(new MouseEvent('contextmenu'));
+    item.dispatchEvent(new MouseEvent(eventname));
     assertDeepEquals(
         bookmarks.actions.selectItem('2', store.data, {
           clear: true,
@@ -67,5 +65,15 @@ suite('<bookmarks-item>', function() {
           toggle: false,
         }),
         store.lastAction);
+  }
+
+  test('context menu selects item if unselected', function() {
+    testEventSelection('contextmenu');
+  });
+
+  test('doubleclicking selects item if unselected', function() {
+    document.body.appendChild(
+        document.createElement('bookmarks-command-manager'));
+    testEventSelection('dblclick');
   });
 });

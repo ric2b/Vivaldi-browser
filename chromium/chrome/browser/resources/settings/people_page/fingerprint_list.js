@@ -31,7 +31,10 @@ Polymer({
       value: function() {
         return [];
       }
-    }
+    },
+
+    /** @private */
+    showSetupFingerprintDialog_: Boolean,
   },
 
   /** @private {?settings.FingerprintBrowserProxy} */
@@ -59,10 +62,10 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function(newRoute, oldRoute) {
-    if (newRoute != settings.Route.FINGERPRINT) {
+    if (newRoute != settings.routes.FINGERPRINT) {
       if (this.browserProxy_)
         this.browserProxy_.endCurrentAuthentication();
-    } else if (oldRoute == settings.Route.LOCK_SCREEN) {
+    } else if (oldRoute == settings.routes.LOCK_SCREEN) {
       // Start fingerprint authentication when going from LOCK_SCREEN to
       // FINGERPRINT page.
       this.browserProxy_.startAuthentication();
@@ -93,9 +96,11 @@ Polymer({
         ripple.simulatedRipple();
 
       // Flash the background.
-      listItem.animate({
-        backgroundColor: ['var(--google-grey-300)', 'white'],
-      }, FLASH_DURATION_MS);
+      listItem.animate(
+          {
+            backgroundColor: ['var(--google-grey-300)', 'white'],
+          },
+          FLASH_DURATION_MS);
     });
   },
 
@@ -121,11 +126,10 @@ Polymer({
    * @private
    */
   onFingerprintDeleteTapped_: function(e) {
-    this.browserProxy_.removeEnrollment(e.model.index).then(
-        function(success) {
-          if (success)
-            this.updateFingerprintsList_();
-        }.bind(this));
+    this.browserProxy_.removeEnrollment(e.model.index).then(function(success) {
+      if (success)
+        this.updateFingerprintsList_();
+    }.bind(this));
   },
 
   /**
@@ -133,8 +137,8 @@ Polymer({
    * @private
    */
   onFingerprintLabelChanged_: function(e) {
-    this.browserProxy_.changeEnrollmentLabel(e.model.index, e.model.item).then(
-        function(success) {
+    this.browserProxy_.changeEnrollmentLabel(e.model.index, e.model.item)
+        .then(function(success) {
           if (success)
             this.updateFingerprintsList_();
         }.bind(this));
@@ -145,11 +149,12 @@ Polymer({
    * @private
    */
   openAddFingerprintDialog_: function() {
-    this.$.setupFingerprint.open();
+    this.showSetupFingerprintDialog_ = true;
   },
 
   /** @private */
   onSetupFingerprintDialogClose_: function() {
+    this.showSetupFingerprintDialog_ = false;
     cr.ui.focusWithoutInk(assert(this.$$('#addFingerprint')));
     this.browserProxy_.startAuthentication();
   },
@@ -161,8 +166,8 @@ Polymer({
    */
   onScreenLocked_: function(screenIsLocked) {
     if (!screenIsLocked &&
-        settings.getCurrentRoute() == settings.Route.FINGERPRINT) {
-      this.$.setupFingerprint.close();
+        settings.getCurrentRoute() == settings.routes.FINGERPRINT) {
+      this.onSetupFingerprintDialogClose_();
     }
   },
 });

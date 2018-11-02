@@ -40,31 +40,31 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling Skia
   # and whatever else without interference from each other.
-  'skia_revision': '6533159f2c83d0af51f79c3d85461580e2346080',
+  'skia_revision': 'af1813e3bf617edc663bef2e5bb07d3f5eb4da2e',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling V8
   # and whatever else without interference from each other.
-  'v8_revision': '789ec38b623c0fa9a57bc598b5447a8e859b4790',
+  'v8_revision': '1bf2e10ddb194d4c2871a87a4732613419de892d',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling swarming_client
   # and whatever else without interference from each other.
-  'swarming_revision': 'a941a089ff1000403078b74cb628eb430f07d271',
+  'swarming_revision': 'a56c2b39ca23bdf41458421a7f825ddbf3f43f28',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling ANGLE
   # and whatever else without interference from each other.
-  'angle_revision': 'ff77c359221485886b8207e8afd23c11e0768cf4',
+  'angle_revision': '0d2ecb4ea992ee0b58c3730e826516c28c055882',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling build tools
   # and whatever else without interference from each other.
-  'buildtools_revision': '104574186c17cd4701857454feba8872e52a7d82',
+  'buildtools_revision': 'd511e4d53d6fc8037badbdf4b225c137e94b52fb',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling SwiftShader
   # and whatever else without interference from each other.
-  'swiftshader_revision': '2b6ac18d05ac8dd15577408ff9c531e96542958c',
+  'swiftshader_revision': '010a464878f32daed863edee3fc6ad21920d605b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling PDFium
   # and whatever else without interference from each other.
-  'pdfium_revision': '797ca5cad52edde7c65da45a15216f20b1bfd8fd',
+  'pdfium_revision': '3f753f20e9c51f7170a616a355b3f9578505c0ee',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling openmax_dl
   # and whatever else without interference from each other.
@@ -72,11 +72,11 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling BoringSSL
   # and whatever else without interference from each other.
-  'boringssl_revision': '68f84f5c40644e029ed066999448696b01caba7a',
+  'boringssl_revision': '0e4a448ab8aa66a38593f68d19fa0a2e340833e4',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling google-toolbox-for-mac
   # and whatever else without interference from each other.
-  'google_toolbox_for_mac_revision': '038a2399b20e67ab17685e23ee873a66811fa107',
+  'google_toolbox_for_mac_revision': 'ec72a2bc500a716369c383837bffdc7d2a22855b',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling lighttpd
   # and whatever else without interference from each other.
@@ -88,15 +88,15 @@ vars = {
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling NaCl
   # and whatever else without interference from each other.
-  'nacl_revision': '3e3253af7d201e8793cca4f36c5163bdb58074c7',
+  'nacl_revision': '01a28a6069a98718184e31c10c5880496a1a9d95',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling freetype
   # and whatever else without interference from each other.
-  'freetype_revision': '7819aeb622a94be0d89caf8382f290d0266c4aed',
+  'freetype_revision': '38bdf22bfe68432aebdd33c198a0bd11b4ebb96f',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling catapult
   # and whatever else without interference from each other.
-  'catapult_revision': '621c724fe4f9788003cd88b4009eabc6eae408c4',
+  'catapult_revision': 'd8bc21bf34bf8b80c606fa21dc8de9caa2911f89',
   # Three lines of non-changing comments so that
   # the commit queue can handle CLs rolling libFuzzer
   # and whatever else without interference from each other.
@@ -124,7 +124,7 @@ allowed_hosts = [
 
 deps = {
   'src/breakpad/src':
-    Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + '97a230bd4e7217bc04626880a8975fbe591a7ea7',
+    Var('chromium_git') + '/breakpad/breakpad/src.git' + '@' + '7a65a47345a86c9e9a3fbc2e92a756a429a0c82f',
 
   'src/buildtools':
     Var('chromium_git') + '/chromium/buildtools.git' + '@' +  Var('buildtools_revision'),
@@ -150,20 +150,23 @@ deps = {
   'src/third_party/colorama/src':
     Var('chromium_git') + '/external/colorama.git' + '@' + '799604a1041e9b3bc5d2789ecbd7e8db2e18e6b8',
 
+  'src/third_party/depot_tools':
+    Var('chromium_git') + '/chromium/tools/depot_tools.git' + '@' + '6d0d04458d9c345bc7d77681996d89d6e5fc742c',
+
   'src/third_party/googletest/src':
     Var('chromium_git') + '/external/github.com/google/googletest.git' + '@' + '42bc671f47b122fad36db5eccbc06868afdf7862',
 
   'src/third_party/icu':
-    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + 'c844075aa0f1758d04f9192825f1b1e7e607992e',
+    Var('chromium_git') + '/chromium/deps/icu.git' + '@' + '1fec0c83e9ad7f5a075ae0b50af9a3889f54be0e',
 
   'src/third_party/hunspell_dictionaries':
     Var('chromium_git') + '/chromium/deps/hunspell_dictionaries.git' + '@' + 'dc6e7c25bf47cbfb466e0701fd2728b4a12e79d5',
 
   'src/third_party/leveldatabase/src':
-    Var('chromium_git') + '/external/leveldb.git' + '@' + 'a53934a3ae1244679f812d998a4f16f2c7f309a6',
+    Var('chromium_git') + '/external/leveldb.git' + '@' + '8415f00eeedd96934d3578572d3802900e61a556',
 
   'src/third_party/snappy/src':
-    Var('chromium_git') + '/external/github.com/google/snappy.git' + '@' + '8b60aac4fdbbb8f1dcce778accb5c04136c3a908',
+    Var('chromium_git') + '/external/github.com/google/snappy.git' + '@' + '513df5fb5a2d51146f409141f9eb8736935cc486',
 
   'src/tools/gyp':
     Var('chromium_git') + '/external/gyp.git' + '@' + 'eb296f67da078ec01f5e3a9ea9cdc6d26d680161',
@@ -196,22 +199,22 @@ deps = {
     Var('chromium_git') + '/external/bidichecker/lib.git' + '@' + '97f2aa645b74c28c57eca56992235c79850fa9e0',
 
   'src/third_party/webgl/src':
-    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '9422979e2a13b6d80de866a271a34653998d4c85',
+    Var('chromium_git') + '/external/khronosgroup/webgl.git' + '@' + '72eda82d069da578af04e5c4e8e411ae006b6a18',
 
   'src/third_party/webdriver/pylib':
     Var('chromium_git') + '/external/selenium/py.git' + '@' + '5fd78261a75fe08d27ca4835fb6c5ce4b42275bd',
 
   'src/third_party/libvpx/source/libvpx':
-    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'b3bf91bdc60220c004a22d21c867cc392e684b81',
+    Var('chromium_git') + '/webm/libvpx.git' + '@' +  'b578d59623ddb0f3f76efe5e160aff253b40d19b',
 
   'src/third_party/ffmpeg':
-    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + 'cb7f9fc2adbe20d57520176bb239683b08d3bcc8',
+    Var('chromium_git') + '/chromium/third_party/ffmpeg.git' + '@' + '97ebed67951a157f6add59046024bff5fa20f4ae',
 
   'src/third_party/usrsctp/usrsctplib':
     Var('chromium_git') + '/external/github.com/sctplab/usrsctp' + '@' + '2f6478eb8d40f1766a96b5b033ed26c0c2244589',
 
   'src/third_party/libsrtp':
-    Var('chromium_git') + '/chromium/deps/libsrtp.git' + '@' + 'ccf84786f8ef803cb9c75e919e5a3976b9f5a672',
+    Var('chromium_git') + '/chromium/deps/libsrtp.git' + '@' + '1d45b8e599dc2db6ea3ae22dbc94a8c504652423',
 
   'src/third_party/yasm/source/patched-yasm':
     Var('chromium_git') + '/chromium/deps/yasm/patched-yasm.git' + '@' + '7da28c6c7c6a1387217352ce02b31754deb54d2a',
@@ -223,7 +226,7 @@ deps = {
     Var('chromium_git') + '/chromium/deps/flac.git' + '@' + '7d0f5b3a173ffe98db08057d1f52b7787569e0a6',
 
   'src/third_party/flatbuffers/src':
-    Var('chromium_git') + '/external/github.com/google/flatbuffers.git' + '@' + 'e92ae5199d52fd59540a800bec7eef46cd778257',
+    Var('chromium_git') + '/external/github.com/google/flatbuffers.git' + '@' + '01c50d57a67a52ee3cddd81b54d4647e9123a290',
 
   'src/third_party/pyftpdlib/src':
     Var('chromium_git') + '/external/pyftpdlib.git' + '@' + '2be6d65e31c7ee6320d059f581f05ae8d89d7e45',
@@ -232,7 +235,7 @@ deps = {
     Var('chromium_git') + '/native_client/src/third_party/scons-2.0.1.git' + '@' + '1c1550e17fc26355d08627fbdec13d8291227067',
 
   'src/third_party/webrtc':
-    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + '01915025bc1873e556d09b5083b5d7ccc31da068', # commit position 18252
+    Var('chromium_git') + '/external/webrtc/trunk/webrtc.git' + '@' + 'a7461e3086866272cb69fbfa23c7fc8b0321a425', # commit position 19097
 
   'src/third_party/openmax_dl':
     Var('chromium_git') + '/external/webrtc/deps/third_party/openmax.git' + '@' +  Var('openmax_dl_revision'),
@@ -241,7 +244,7 @@ deps = {
     Var('chromium_git') + '/external/github.com/open-source-parsers/jsoncpp.git' + '@' + 'f572e8e42e22cfcf5ab0aea26574f408943edfa4', # from svn 248
 
   'src/third_party/libyuv':
-    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '8edd2286fdf9df2b9da806bda7ed262492f95921',  # from r1655
+    Var('chromium_git') + '/libyuv/libyuv.git' + '@' + '7bffe5e1c54bc22daebd57003735e61693719ac6',  # from r1655
 
   'src/third_party/smhasher/src':
     Var('chromium_git') + '/external/smhasher.git' + '@' + 'e87738e57558e0ec472b2fc3a643b838e5b6e88f',
@@ -259,13 +262,13 @@ deps = {
     Var('chromium_git') + '/external/github.com/google/pywebsocket.git' + '@' + '2d7b73c3acbd0f41dcab487ae5c97c6feae06ce2',
 
   'src/media/cdm/api':
-    Var('chromium_git') + '/chromium/cdm.git' + '@' + '46eebfa522b06c1f0b52b4233caa56793badf112',
+    Var('chromium_git') + '/chromium/cdm.git' + '@' + '6e4c388c0117fe408b66fbede91081fb1018c5fe',
 
   'src/third_party/mesa/src':
     Var('chromium_git') + '/chromium/deps/mesa.git' + '@' + 'ef811c6bd4de74e13e7035ca882cc77f85793fef',
 
   'src/third_party/ced/src':
-    Var('chromium_git') + '/external/github.com/google/compact_enc_det.git' + '@' + 'e21eb6aed10b9f6e2727f136c52420033214d458',
+    Var('chromium_git') + '/external/github.com/google/compact_enc_det.git' + '@' + '910cca22d881b02cbc8950fa02ccbcdcfb782456',
 
   'src/third_party/swiftshader':
     Var('swiftshader_git') + '/SwiftShader.git' + '@' +  Var('swiftshader_revision'),
@@ -284,9 +287,6 @@ deps = {
 
   'src/third_party/boringssl/src':
     Var('boringssl_git') + '/boringssl.git' + '@' +  Var('boringssl_revision'),
-
-  'src/third_party/py_trace_event/src':
-    Var('chromium_git') + '/external/py_trace_event.git' + '@' + 'dd463ea9e2c430de2b9e53dea57a77b4c3ac9b30',
 
   'src/third_party/dom_distiller_js/dist':
     Var('chromium_git') + '/external/github.com/chromium/dom-distiller-dist.git' + '@' + '232c293a4d3ebcbc4320f642af017ee054b3be93',
@@ -354,7 +354,7 @@ deps_os = {
   },
   'ios': {
     'src/ios/third_party/earl_grey/src':
-      Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '9fc7647d0cfcca132bbb96996c537002425be7d7',
+      Var('chromium_git') + '/external/github.com/google/EarlGrey.git' + '@' + '83e8379d838e4ee4777aa803ed8615965e1cd3e7',
 
     'src/ios/third_party/fishhook/src':
       Var('chromium_git') + '/external/github.com/facebook/fishhook.git' + '@' + 'd172d5247aa590c25d0b1885448bae76036ea22c',
@@ -363,7 +363,7 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/swisspol/GCDWebServer.git' + '@' + '43555c66627f6ed44817855a0f6d465f559d30e0',
 
     'src/ios/third_party/material_components_ios/src':
-      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + '6bc1117ad8d9779e3d2f4006f28c675cfeada9eb',
+      Var('chromium_git') + '/external/github.com/material-components/material-components-ios.git' + '@' + 'cb191e7c014cc871b5351a3911a1d0bc71b71699',
 
     'src/ios/third_party/material_font_disk_loader_ios/src':
       Var('chromium_git') + '/external/github.com/material-foundation/material-font-disk-loader-ios.git' + '@' + '8e30188777b016182658fbaa0a4a020a48183224',
@@ -382,6 +382,10 @@ deps_os = {
 
     'src/third_party/google_toolbox_for_mac/src':
       Var('chromium_git') + '/external/github.com/google/google-toolbox-for-mac.git' + '@' + Var('google_toolbox_for_mac_revision'),
+
+    'src/third_party/material_design_icons/src':
+      Var('chromium_git') + '/external/github.com/google/material-design-icons.git' + '@' +
+      '5ab428852e35dc177a8c37a2df9dc9ccf768c65a',
   },
   'mac': {
     'src/chrome/installer/mac/third_party/xz/xz':
@@ -403,11 +407,11 @@ deps_os = {
 
     # For Linux and Chromium OS.
     'src/third_party/cros_system_api':
-      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '6b09df23f8a968fc72956218a62302b89d5334b1',
+      Var('chromium_git') + '/chromiumos/platform/system_api.git' + '@' + '8a400ce97612e4264a8e4c6098701547a9d906ef',
 
     # Build tools for Chrome OS. Note: This depends on third_party/pyelftools.
     'src/third_party/chromite':
-      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '9a66c4dd0d61dad05b3505c4be8f914f54fb7f20',
+      Var('chromium_git') + '/chromiumos/chromite.git' + '@' + '80232cab3e7df136f6f2b10cc015fe2120694c73',
 
     # Dependency of chromite.git and skia.
     'src/third_party/pyelftools':
@@ -422,7 +426,7 @@ deps_os = {
 
     # Graphics buffer allocator for Chrome OS.
     'src/third_party/minigbm/src':
-      Var('chromium_git') + '/chromiumos/platform/minigbm.git' + '@' + '878fed4088662309dc57689650fa4648cc4b480b',
+      Var('chromium_git') + '/chromiumos/platform/minigbm.git' + '@' + '3909dc011bf32c13858fb80c33a3cce68769cb26',
 
     # Userspace interface to kernel DRM services.
     'src/third_party/libdrm/src':
@@ -430,11 +434,11 @@ deps_os = {
 
     # Display server protocol for Linux.
     'src/third_party/wayland/src':
-      Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland.git' + '@' + '6a18a87727c64719c68168568b9ab1e4d7c2d9c1',
+      Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland.git' + '@' + '1361da9cd5a719b32d978485a29920429a31ed25',
 
     # Wayland protocols that add functionality not available in the core protocol.
     'src/third_party/wayland-protocols/src':
-      Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland-protocols.git' + '@' + '2e541a36deff5f2e16e25e27f7f93d26822eecc2',
+      Var('chromium_git') + '/external/anongit.freedesktop.org/git/wayland/wayland-protocols.git' + '@' + '26c99346ab5f2273fe5581bc4f6397bbb834f747',
 
     # The libevdev library (Chrome OS version).
     'src/third_party/libevdev/src':
@@ -450,14 +454,22 @@ deps_os = {
 
     # DevTools node modules. Used on Linux buildbots only.
     'src/third_party/WebKit/Source/devtools/devtools-node-modules':
-      Var('chromium_git') + '/external/github.com/ChromeDevTools/devtools-node-modules' + '@' + Var('devtools_node_modules_revision')
+      Var('chromium_git') + '/external/github.com/ChromeDevTools/devtools-node-modules' + '@' + Var('devtools_node_modules_revision'),
+
+    # Minizip library. Used on Chrome OS.
+    'src/third_party/minizip/src':
+      Var('chromium_git') + '/external/github.com/nmoinvaz/minizip' + '@' + 'dc3ad01e3d5928e9105f770b7e896a8e9fe0d3b4',
+
+    # Android Explicit Synchronization.
+    'src/third_party/libsync/src':
+      Var('chromium_git') + '/aosp/platform/system/core/libsync.git' + '@' + 'aa6cda6f638bd57d3a024f0d201f723a5c3bb875',
   },
   'android': {
     'src/third_party/android_protobuf/src':
-      Var('chromium_git') + '/external/android_protobuf.git' + '@' + '999188d0dc72e97f7fe08bb756958a2cf090f4e7',
+      Var('chromium_git') + '/external/android_protobuf.git' + '@' + '7fca48d8ce97f7ba3ab8eea5c472f1ad3711762f',
 
     'src/third_party/android_tools':
-      Var('chromium_git') + '/android_tools.git' + '@' + 'cb6bc21107001e2f2eeee2707b482b2b755baf51',
+      Var('chromium_git') + '/android_tools.git' + '@' + 'e9d4018e149d50172ed462a7c21137aa915940ec',
 
     'src/third_party/apache-portable-runtime/src':
       Var('chromium_git') + '/external/apache-portable-runtime.git' + '@' + 'c76a8c4277e09a82eaa229e35246edea1ee0a6a1',
@@ -502,10 +514,10 @@ deps_os = {
       Var('chromium_git') + '/external/github.com/kennethreitz/requests.git' + '@' + 'f172b30356d821d180fa4ecfa3e71c7274a32de4',
 
     'src/third_party/custom_tabs_client/src':
-      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + '4889dd9d552d24f08584dde29f639c0da4ea0f12',
+      Var('chromium_git') + '/external/github.com/GoogleChrome/custom-tabs-client.git' + '@' + 'bbdd5c4537fd4372d4339984fadc4791055bc182',
 
     'src/third_party/gvr-android-sdk/src':
-      Var('chromium_git') + '/external/github.com/googlevr/gvr-android-sdk.git' + '@' + '8d1395957283ee13ebe2bc672ba24e5ca4ec343f',
+      Var('chromium_git') + '/external/github.com/googlevr/gvr-android-sdk.git' + '@' + 'a27f768b13682189c23eed69656319db5ef7cbfc',
   },
 }
 
@@ -549,6 +561,17 @@ hooks = [
     'action': [
         'python',
         'src/build/landmines.py',
+    ],
+  },
+  {
+    # Ensure that the DEPS'd "depot_tools" has its self-update capability
+    # disabled.
+    'name': 'disable_depot_tools_selfupdate',
+    'pattern': '.',
+    'action': [
+        'python',
+        'src/third_party/depot_tools/update_depot_tools_toggle.py',
+        '--disable',
     ],
   },
   {
@@ -646,7 +669,8 @@ hooks = [
   {
     'name': 'gn_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--no_auth',
@@ -657,7 +681,8 @@ hooks = [
   {
     'name': 'gn_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=darwin',
                 '--no_auth',
@@ -668,7 +693,8 @@ hooks = [
   {
     'name': 'gn_linux64',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=linux*',
                 '--no_auth',
@@ -680,7 +706,8 @@ hooks = [
   {
     'name': 'clang_format_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--no_auth',
@@ -691,7 +718,8 @@ hooks = [
   {
     'name': 'clang_format_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=darwin',
                 '--no_auth',
@@ -702,7 +730,8 @@ hooks = [
   {
     'name': 'clang_format_linux',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=linux*',
                 '--no_auth',
@@ -710,11 +739,25 @@ hooks = [
                 '-s', 'src/buildtools/linux64/clang-format.sha1',
     ],
   },
+  # Pull order files for the win/clang build.
+  {
+    'name': 'orderfiles_win',
+    'pattern': '.',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--platform=win32',
+                '--no_auth',
+                '--bucket', 'chromium-browser-clang/orderfiles',
+                '-d', 'src/chrome/build',
+    ],
+  },
   # Pull luci-go binaries (isolate, swarming) using checked-in hashes.
   {
     'name': 'luci-go_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--no_auth',
@@ -725,7 +768,8 @@ hooks = [
   {
     'name': 'luci-go_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=darwin',
                 '--no_auth',
@@ -736,7 +780,8 @@ hooks = [
   {
     'name': 'luci-go_linux',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=linux*',
                 '--no_auth',
@@ -744,22 +789,11 @@ hooks = [
                 '-d', 'src/tools/luci-go/linux64',
     ],
   },
-  # Pull eu-strip binaries using checked-in hashes.
-  {
-    'name': 'eu-strip',
-    'pattern': '.',
-    'action': [ 'download_from_google_storage',
-                '--no_resume',
-                '--platform=linux*',
-                '--no_auth',
-                '--bucket', 'chromium-eu-strip',
-                '-s', 'src/build/linux/bin/eu-strip.sha1',
-    ],
-  },
   {
     'name': 'drmemory',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--no_auth',
@@ -774,7 +808,7 @@ hooks = [
     'action': ['python',
                'src/build/get_syzygy_binaries.py',
                '--output-dir=src/third_party/syzygy/binaries',
-               '--revision=dbb218b6d05ff1c17a4d86252b10880c2d8ebe08',
+               '--revision=190dbfe74c6f5b5913820fa66d9176877924d7c5',
                '--overwrite',
                '--copy-dia-binaries',
     ],
@@ -782,7 +816,8 @@ hooks = [
   {
     'name': 'apache_win32',
     'pattern': '\\.sha1',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--directory',
@@ -803,23 +838,13 @@ hooks = [
   {
     "name": "wasm_fuzzer",
     "pattern": ".",
-    "action": [ "download_from_google_storage",
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 "--no_resume",
                 "--no_auth",
                 "-u",
                 "--bucket", "v8-wasm-fuzzer",
                 "-s", "src/v8/test/fuzzer/wasm_corpus.tar.gz.sha1",
-    ],
-  },
-  {
-    "name": "wasm_asmjs_fuzzer",
-    "pattern": ".",
-    "action": [ "download_from_google_storage",
-                "--no_resume",
-                "--no_auth",
-                "-u",
-                "--bucket", "v8-wasm-asmjs-fuzzer",
-                "-s", "src/v8/test/fuzzer/wasm_asmjs_corpus.tar.gz.sha1",
     ],
   },
   {
@@ -835,7 +860,8 @@ hooks = [
   {
     'name': 'node_linux64',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=linux*',
                 '--extract',
@@ -847,7 +873,8 @@ hooks = [
   {
     'name': 'node_mac',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=darwin',
                 '--extract',
@@ -859,7 +886,8 @@ hooks = [
   {
     'name': 'node_win',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--platform=win32',
                 '--no_auth',
@@ -872,7 +900,8 @@ hooks = [
   {
     'name': 'webui_node_modules',
     'pattern': '.',
-    'action': [ 'download_from_google_storage',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
                 '--no_resume',
                 '--extract',
                 '--no_auth',
@@ -886,7 +915,24 @@ hooks = [
     'name': 'fetch_telemetry_binary_dependencies',
     'pattern': '.',
     'action': [ 'python',
+                'src/tools/perf/conditionally_execute',
+                '--gyp-condition', 'fetch_telemetry_dependencies=1',
                 'src/third_party/catapult/telemetry/bin/fetch_telemetry_binary_dependencies',
+    ],
+  },
+
+  # Download checkstyle for use in PRESUBMIT for Java changes.
+  # TODO(jbudorick): Move this back down to the android section of hooks_os
+  # once it's no longer necessary for the chromium_presubmit bot.
+  {
+    'name': 'checkstyle',
+    'pattern': '.',
+    'action': [ 'python',
+                'src/third_party/depot_tools/download_from_google_storage.py',
+                '--no_resume',
+                '--no_auth',
+                '--bucket', 'chromium-android-tools/checkstyle',
+                '-s', 'src/third_party/checkstyle/checkstyle-8.0-all.jar.sha1'
     ],
   },
 ]
@@ -905,6 +951,16 @@ hooks_os = {
       'action': ['python',
                  'src/build/android/play_services/update.py',
                  'download'
+      ],
+    },
+    {
+      'name': 'android_system_sdk',
+      'pattern': '.',
+      'action': ['python',
+                 'src/build/android/update_deps/update_third_party_deps.py',
+                 'download',
+                 '-b', 'android_system_stubs',
+                 '-l', 'third_party/android_system_sdk'
       ],
     },
     {
@@ -1088,19 +1144,10 @@ hooks_os = {
       ],
     },
     {
-      'name': 'checkstyle',
-      'pattern': '.',
-      'action': [ 'download_from_google_storage',
-                  '--no_resume',
-                  '--no_auth',
-                  '--bucket', 'chromium-android-tools/checkstyle',
-                  '-s', 'src/third_party/checkstyle/checkstyle-7.6.1-all.jar.sha1'
-      ],
-    },
-    {
       'name': 'gvr_static_shim_android_arm',
       'pattern': '\\.sha1',
-      'action': [ 'download_from_google_storage',
+    'action': [   'python',
+                  'src/third_party/depot_tools/download_from_google_storage.py',
                   '--no_resume',
                   '--platform=linux*',
                   '--no_auth',
@@ -1111,7 +1158,8 @@ hooks_os = {
     {
       'name': 'gvr_static_shim_android_arm64',
       'pattern': '\\.sha1',
-      'action': [ 'download_from_google_storage',
+    'action': [   'python',
+                  'src/third_party/depot_tools/download_from_google_storage.py',
                   '--no_resume',
                   '--platform=linux*',
                   '--no_auth',
@@ -1122,7 +1170,8 @@ hooks_os = {
     {
       'name': 'gvr_common_aar',
       'pattern': '\\.sha1',
-      'action': [ 'download_from_google_storage',
+    'action': [   'python',
+                  'src/third_party/depot_tools/download_from_google_storage.py',
                   '--no_resume',
                   '--platform=linux*',
                   '--no_auth',
@@ -1133,7 +1182,8 @@ hooks_os = {
     {
       'name': 'vr_controller_test_api',
       'pattern': '\\.sha1',
-      'action': [ 'download_from_google_storage',
+    'action': [   'python',
+                  'src/third_party/depot_tools/download_from_google_storage.py',
                   '--no_resume',
                   '--platform=linux*',
                   '--no_auth',
@@ -1165,7 +1215,7 @@ hooks_os = {
       'action': [
         'python',
         'src/build/fuchsia/update_sdk.py',
-        '3886a632c4a472fa7ef9eab35b45b63359e387fa',
+        '06ab789730c8f0749bda7eb4fd1e7988eccc38e0',
       ],
     },
   ],

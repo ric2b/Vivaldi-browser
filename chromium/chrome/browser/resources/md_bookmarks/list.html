@@ -3,6 +3,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-list/iron-list.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/shadow.html">
+<link rel="import" href="chrome://bookmarks/command_manager.html">
 <link rel="import" href="chrome://bookmarks/item.html">
 <link rel="import" href="chrome://bookmarks/shared_style.html">
 <link rel="import" href="chrome://bookmarks/store_client.html">
@@ -28,15 +29,17 @@
       .centered-message {
         align-items: center;
         color: #6e6e6e;
+        cursor: default;
         display: flex;
         font-size: 14px;
         font-weight: 500;
         height: 100%;
         justify-content: center;
+        user-select: none;
       }
     </style>
     <iron-list items="[[displayedList_]]" id="bookmarksCard"
-        hidden$="[[isEmptyList_(displayedList_.length)]]">
+        hidden$="[[isEmptyList_(displayedList_.length)]]" role="list">
       <template>
         <bookmarks-item item-id="[[item.id]]" draggable="true"
             tabindex$="[[tabIndex]]" iron-list-tab-index="[[tabIndex]]">

@@ -14,7 +14,7 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
-#include "base/message_loop/message_loop.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
@@ -37,6 +37,7 @@
 #include "components/update_client/crx_update_item.h"
 #include "components/update_client/update_client.h"
 #include "components/update_client/utils.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -202,6 +203,7 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
   SupervisedUserWhitelistInstallerTest()
       : testing_profile_manager_(TestingBrowserProcess::GetGlobal()),
         user_data_dir_override_(chrome::DIR_USER_DATA),
+        manifest_(base::MakeUnique<base::DictionaryValue>()),
         component_update_service_(base::ThreadTaskRunnerHandle::Get()) {}
 
   ~SupervisedUserWhitelistInstallerTest() override {}
@@ -238,15 +240,15 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
     std::unique_ptr<base::DictionaryValue> whitelist_dict(
         new base::DictionaryValue);
     whitelist_dict->SetString("sites", kWhitelistFile);
-    manifest_.Set("whitelisted_content", std::move(whitelist_dict));
+    manifest_->Set("whitelisted_content", std::move(whitelist_dict));
 
     large_icon_path_ = whitelist_version_directory_.AppendASCII(kLargeIconFile);
     std::unique_ptr<base::DictionaryValue> icons_dict(
         new base::DictionaryValue);
     icons_dict->SetString("128", kLargeIconFile);
-    manifest_.Set("icons", std::move(icons_dict));
+    manifest_->Set("icons", std::move(icons_dict));
 
-    manifest_.SetString("version", kVersion);
+    manifest_->SetString("version", kVersion);
 
     std::unique_ptr<base::DictionaryValue> crx_dict(new base::DictionaryValue);
     crx_dict->SetString("name", kName);
@@ -277,7 +279,7 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
     PrepareWhitelistFile(whitelist_directory.AppendASCII(kWhitelistFile));
     base::FilePath manifest_file =
         whitelist_directory.AppendASCII("manifest.json");
-    ASSERT_TRUE(JSONFileValueSerializer(manifest_file).Serialize(manifest_));
+    ASSERT_TRUE(JSONFileValueSerializer(manifest_file).Serialize(*manifest_));
   }
 
   void RegisterExistingComponents() {
@@ -295,11 +297,9 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
     EXPECT_EQ(version, component->version.GetString());
   }
 
-  base::MessageLoop message_loop_;
   TestingProfileManager testing_profile_manager_;
   base::ScopedPathOverride user_data_dir_override_;
   safe_json::TestingJsonParser::ScopedFactoryOverride json_parser_override_;
-  MockComponentUpdateService component_update_service_;
   TestingPrefServiceSimple local_state_;
   std::unique_ptr<SupervisedUserWhitelistInstaller> installer_;
   base::FilePath whitelist_base_directory_;
@@ -308,8 +308,10 @@ class SupervisedUserWhitelistInstallerTest : public testing::Test {
   base::FilePath installed_whitelist_directory_;
   base::FilePath whitelist_path_;
   base::FilePath large_icon_path_;
-  base::DictionaryValue manifest_;
+  std::unique_ptr<base::DictionaryValue> manifest_;
   base::DictionaryValue pref_;
+  content::TestBrowserThreadBundle thread_bundle_;
+  MockComponentUpdateService component_update_service_;
 };
 
 TEST_F(SupervisedUserWhitelistInstallerTest, GetHashFromCrxId) {
@@ -353,7 +355,8 @@ TEST_F(SupervisedUserWhitelistInstallerTest, InstallNewWhitelist) {
   const CrxComponent* component =
       component_update_service_.registered_component();
   ASSERT_TRUE(component);
-  const auto result = component->installer->Install(manifest_, unpacked_path);
+  const auto result =
+      component->installer->Install(std::move(manifest_), unpacked_path);
   EXPECT_EQ(0, result.error);
   EXPECT_EQ(0, result.extended_error);
 

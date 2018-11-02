@@ -22,6 +22,7 @@
 #include "chrome/browser/extensions/extension_management.h"
 #include "chrome/browser/extensions/install_gate.h"
 #include "chrome/browser/extensions/pending_extension_manager.h"
+#include "chrome/browser/upgrade_observer.h"
 #include "components/sync/model/string_ordinal.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
@@ -169,8 +170,6 @@ class ExtensionServiceInterface
   // Whether the extension service is ready.
   virtual bool is_ready() = 0;
 
-  // Returns task runner for crx installation file I/O operations.
-  virtual base::SequencedTaskRunner* GetFileTaskRunner() = 0;
 };
 
 // Manages installed and running Chromium extensions. An instance is shared
@@ -180,7 +179,8 @@ class ExtensionService
       public extensions::ExternalProviderInterface::VisitorInterface,
       public content::NotificationObserver,
       public extensions::Blacklist::Observer,
-      public extensions::ExtensionManagement::Observer {
+      public extensions::ExtensionManagement::Observer,
+      public UpgradeObserver {
  public:
   // Attempts to uninstall an extension from a given ExtensionService. Returns
   // true iff the target extension exists.
@@ -225,7 +225,6 @@ class ExtensionService
   void CheckManagementPolicy() override;
   void CheckForUpdatesSoon() override;
   bool is_ready() override;
-  base::SequencedTaskRunner* GetFileTaskRunner() override;
 
   // ExternalProvider::VisitorInterface implementation.
   // Exposed for testing.
@@ -317,9 +316,6 @@ class ExtensionService
   // Check for updates (or potentially new extensions from external providers)
   void CheckForExternalUpdates();
 
-  // Called when the initial extensions load has completed.
-  virtual void OnLoadedInstalledExtensions();
-
   // Informs the service that an extension's files are in place for loading.
   //
   // |extension|     the extension
@@ -367,6 +363,9 @@ class ExtensionService
   void RegisterInstallGate(extensions::ExtensionPrefs::DelayReason reason,
                            extensions::InstallGate* install_delayer);
   void UnregisterInstallGate(extensions::InstallGate* install_delayer);
+
+  // Returns task runner for crx installation file I/O operations.
+  base::SequencedTaskRunner* GetFileTaskRunner();
 
   //////////////////////////////////////////////////////////////////////////////
   // Simple Accessors
@@ -464,6 +463,9 @@ class ExtensionService
 
   // extensions::Blacklist::Observer implementation.
   void OnBlacklistUpdated() override;
+
+  // UpgradeObserver implementation.
+  void OnUpgradeRecommended() override;
 
   // Similar to FinishInstallation, but first checks if there still is an update
   // pending for the extension, and makes sure the extension is still idle.
@@ -587,6 +589,13 @@ class ExtensionService
       const base::FilePath& install_dir,
       const base::FilePath& extension_path);
 
+  // Called when the initial extensions load has completed.
+  void OnInstalledExtensionsLoaded();
+
+  // Upon reloading an extension, spins up its lazy background page if
+  // necessary.
+  void MaybeSpinUpLazyBackgroundPage(const extensions::Extension* extension_id);
+
   const base::CommandLine* command_line_ = nullptr;
 
   // The normal profile associated with this ExtensionService.
@@ -701,9 +710,6 @@ class ExtensionService
   // The manager for extensions that were externally installed that is
   // responsible for prompting the user about suspicious extensions.
   std::unique_ptr<extensions::ExternalInstallManager> external_install_manager_;
-
-  // Sequenced task runner for extension related file operations.
-  const scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
 
   std::unique_ptr<extensions::ExtensionActionStorageManager>
       extension_action_storage_manager_;

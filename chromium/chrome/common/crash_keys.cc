@@ -86,6 +86,9 @@ const char kViewCount[] = "view-count";
 
 const char kZeroEncodeDetails[] = "zero-encode-details";
 
+const char kUserCloudPolicyManagerConnectTrace[] =
+    "user-cloud-policy-manager-connect-trace";
+
 size_t RegisterChromeCrashKeys() {
   // The following keys may be chunked by the underlying crash logging system,
   // but ultimately constitute a single key-value pair.
@@ -112,6 +115,8 @@ size_t RegisterChromeCrashKeys() {
     {kApValue, kSmallSize},
     {kCohortName, kSmallSize},
 #endif  // defined(OS_WIN)
+
+// gpu
 #if !defined(OS_ANDROID)
     {gpu::crash_keys::kGPUVendorID, kSmallSize},
     {gpu::crash_keys::kGPUDeviceID, kSmallSize},
@@ -125,6 +130,7 @@ size_t RegisterChromeCrashKeys() {
     {gpu::crash_keys::kGPUVendor, kSmallSize},
     {gpu::crash_keys::kGPURenderer, kSmallSize},
 #endif
+    {gpu::crash_keys::kGPUGLContextIsVirtual, kSmallSize},
 
     // content/:
     {"bad_message_reason", kSmallSize},
@@ -147,11 +153,6 @@ size_t RegisterChromeCrashKeys() {
     {kInputEventFilterSendFailure, kSmallSize},
 #if defined(OS_CHROMEOS)
     {kNumberOfUsers, kSmallSize},
-    // Temporary for https://crbug.com/629521
-    {"mmap_params", kSmallSize},
-    {"buffer_size", kSmallSize},
-    {"errno", kSmallSize},
-    {"number_of_fds", kSmallSize},
 #endif
 #if defined(OS_MACOSX)
     {mac::kFirstNSException, kMediumSize},
@@ -169,7 +170,7 @@ size_t RegisterChromeCrashKeys() {
     {"channel_error_bt", kMediumSize},
     {"remove_route_bt", kMediumSize},
     {"rwhvm_window", kMediumSize},
-    // media/:
+// media/:
 #endif
     {kBug464926CrashKey, kSmallSize},
     {kViewCount, kSmallSize},
@@ -219,9 +220,11 @@ size_t RegisterChromeCrashKeys() {
     {"engine1_params", crash_keys::kMediumSize},
     {"engine2_params", crash_keys::kMediumSize},
 
-    // Temporary for http://crbug.com/703649.
-    {"field_trial_shmem_create_error", crash_keys::kSmallSize},
-    {"field_trial_shmem_map_error", crash_keys::kSmallSize},
+    // Temporary for https://crbug.com/685996.
+    {kUserCloudPolicyManagerConnectTrace, kMediumSize},
+
+    // TODO(asvitkine): Remove after fixing https://crbug.com/736675
+    {"bad_histogram", kMediumSize},
   };
 
   // This dynamic set of keys is used for sets of key value pairs when gathering

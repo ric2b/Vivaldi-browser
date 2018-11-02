@@ -40,7 +40,7 @@ TEST_F(HTMLIFrameElementTest, SetAllowAttributeJS) {
 // and that frames which should inherit their parent document's origin do so.
 TEST_F(HTMLIFrameElementTest, FramesUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -70,7 +70,7 @@ TEST_F(HTMLIFrameElementTest, FramesUseCorrectOrigin) {
 // sandboxed iframe.
 TEST_F(HTMLIFrameElementTest, SandboxFramesUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -95,7 +95,7 @@ TEST_F(HTMLIFrameElementTest, SandboxFramesUseCorrectOrigin) {
 // parent document's origin for the container policy.
 TEST_F(HTMLIFrameElementTest, SameOriginSandboxFramesUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -114,7 +114,7 @@ TEST_F(HTMLIFrameElementTest, SameOriginSandboxFramesUseCorrectOrigin) {
 // container policy in a srcdoc iframe.
 TEST_F(HTMLIFrameElementTest, SrcdocFramesUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -131,7 +131,7 @@ TEST_F(HTMLIFrameElementTest, SrcdocFramesUseCorrectOrigin) {
 // sandboxed iframe with a srcdoc.
 TEST_F(HTMLIFrameElementTest, SandboxedSrcdocFramesUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -150,7 +150,7 @@ TEST_F(HTMLIFrameElementTest, SandboxedSrcdocFramesUseCorrectOrigin) {
 // relative to the parent document.
 TEST_F(HTMLIFrameElementTest, RelativeURLsUseCorrectOrigin) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -176,7 +176,7 @@ TEST_F(HTMLIFrameElementTest, RelativeURLsUseCorrectOrigin) {
 // Test that the correct container policy is constructed on an iframe element.
 TEST_F(HTMLIFrameElementTest, DefaultContainerPolicy) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -194,7 +194,7 @@ TEST_F(HTMLIFrameElementTest, DefaultContainerPolicy) {
 // restricted to the domain in the src attribute.
 TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -237,7 +237,7 @@ TEST_F(HTMLIFrameElementTest, AllowAttributeContainerPolicy) {
 // policy which is restricted to a unique origin.
 TEST_F(HTMLIFrameElementTest, SandboxAttributeContainerPolicy) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -263,7 +263,7 @@ TEST_F(HTMLIFrameElementTest, SandboxAttributeContainerPolicy) {
 // containing document.
 TEST_F(HTMLIFrameElementTest, SameOriginSandboxAttributeContainerPolicy) {
   Document* document = Document::Create();
-  KURL document_url = KURL(KURL(), "http://example.com");
+  KURL document_url = KURL(NullURL(), "http://example.com");
   document->SetURL(document_url);
   document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
 
@@ -283,6 +283,127 @@ TEST_F(HTMLIFrameElementTest, SameOriginSandboxAttributeContainerPolicy) {
   EXPECT_EQ(1UL, container_policy[0].origins.size());
   EXPECT_FALSE(container_policy[0].origins[0].IsUnique());
   EXPECT_EQ("http://example.net", container_policy[0].origins[0].ToString());
+}
+
+// Test the ConstructContainerPolicy method when no attributes are set on the
+// iframe element.
+TEST_F(HTMLIFrameElementTest, ConstructEmptyContainerPolicy) {
+  Document* document = Document::Create();
+  KURL document_url = KURL(NullURL(), "http://example.com");
+  document->SetURL(document_url);
+  document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
+
+  HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
+
+  WebParsedFeaturePolicy container_policy =
+      frame_element->ConstructContainerPolicy();
+  EXPECT_EQ(0UL, container_policy.size());
+}
+
+// Test the ConstructContainerPolicy method when the "allow" attribute is used
+// to enable features in the frame.
+TEST_F(HTMLIFrameElementTest, ConstructContainerPolicy) {
+  Document* document = Document::Create();
+  KURL document_url = KURL(NullURL(), "http://example.com");
+  document->SetURL(document_url);
+  document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
+
+  HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
+  frame_element->setAttribute(HTMLNames::allowAttr, "payment usb");
+  WebParsedFeaturePolicy container_policy =
+      frame_element->ConstructContainerPolicy();
+  EXPECT_EQ(2UL, container_policy.size());
+  EXPECT_EQ(WebFeaturePolicyFeature::kPayment, container_policy[0].feature);
+  EXPECT_FALSE(container_policy[0].matches_all_origins);
+  EXPECT_EQ(1UL, container_policy[0].origins.size());
+  EXPECT_TRUE(GetOriginForFeaturePolicy(frame_element)
+                  ->IsSameSchemeHostPortAndSuborigin(
+                      container_policy[0].origins[0].Get()));
+  EXPECT_EQ(WebFeaturePolicyFeature::kUsb, container_policy[1].feature);
+  EXPECT_FALSE(container_policy[1].matches_all_origins);
+  EXPECT_EQ(1UL, container_policy[1].origins.size());
+  EXPECT_TRUE(GetOriginForFeaturePolicy(frame_element)
+                  ->IsSameSchemeHostPortAndSuborigin(
+                      container_policy[1].origins[0].Get()));
+}
+
+// Test the ConstructContainerPolicy method when the "allowfullscreen" attribute
+// is used to enable fullscreen in the frame.
+TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowFullscreen) {
+  Document* document = Document::Create();
+  KURL document_url = KURL(NullURL(), "http://example.com");
+  document->SetURL(document_url);
+  document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
+
+  HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
+  frame_element->SetBooleanAttribute(HTMLNames::allowfullscreenAttr, true);
+
+  WebParsedFeaturePolicy container_policy =
+      frame_element->ConstructContainerPolicy();
+  EXPECT_EQ(1UL, container_policy.size());
+  EXPECT_EQ(WebFeaturePolicyFeature::kFullscreen, container_policy[0].feature);
+  EXPECT_TRUE(container_policy[0].matches_all_origins);
+}
+
+// Test the ConstructContainerPolicy method when the "allowpaymentrequest"
+// attribute is used to enable the paymentrequest API in the frame.
+TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowPaymentRequest) {
+  Document* document = Document::Create();
+  KURL document_url = KURL(NullURL(), "http://example.com");
+  document->SetURL(document_url);
+  document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
+
+  HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
+  frame_element->setAttribute(HTMLNames::allowAttr, "usb");
+  frame_element->SetBooleanAttribute(HTMLNames::allowpaymentrequestAttr, true);
+
+  WebParsedFeaturePolicy container_policy =
+      frame_element->ConstructContainerPolicy();
+  EXPECT_EQ(2UL, container_policy.size());
+  EXPECT_EQ(WebFeaturePolicyFeature::kUsb, container_policy[0].feature);
+  EXPECT_FALSE(container_policy[0].matches_all_origins);
+  EXPECT_EQ(1UL, container_policy[0].origins.size());
+  EXPECT_TRUE(GetOriginForFeaturePolicy(frame_element)
+                  ->IsSameSchemeHostPortAndSuborigin(
+                      container_policy[0].origins[0].Get()));
+  EXPECT_EQ(WebFeaturePolicyFeature::kPayment, container_policy[1].feature);
+  EXPECT_TRUE(container_policy[1].matches_all_origins);
+}
+
+// Test the ConstructContainerPolicy method when both "allowfullscreen" and
+// "allowpaymentrequest" attributes are set on the iframe element, and the
+// "allow" attribute is also used to override the paymentrequest feature. In the
+// resulting container policy, the payment and usb features should be enabled
+// only for the frame's origin, (since the allow attribute overrides
+// allowpaymentrequest,) while fullscreen should be enabled for all origins.
+TEST_F(HTMLIFrameElementTest, ConstructContainerPolicyWithAllowAttributes) {
+  Document* document = Document::Create();
+  KURL document_url = KURL(NullURL(), "http://example.com");
+  document->SetURL(document_url);
+  document->UpdateSecurityOrigin(SecurityOrigin::Create(document_url));
+
+  HTMLIFrameElement* frame_element = HTMLIFrameElement::Create(*document);
+  frame_element->setAttribute(HTMLNames::allowAttr, "payment usb");
+  frame_element->SetBooleanAttribute(HTMLNames::allowfullscreenAttr, true);
+  frame_element->SetBooleanAttribute(HTMLNames::allowpaymentrequestAttr, true);
+
+  WebParsedFeaturePolicy container_policy =
+      frame_element->ConstructContainerPolicy();
+  EXPECT_EQ(3UL, container_policy.size());
+  EXPECT_EQ(WebFeaturePolicyFeature::kPayment, container_policy[0].feature);
+  EXPECT_FALSE(container_policy[0].matches_all_origins);
+  EXPECT_EQ(1UL, container_policy[0].origins.size());
+  EXPECT_TRUE(GetOriginForFeaturePolicy(frame_element)
+                  ->IsSameSchemeHostPortAndSuborigin(
+                      container_policy[0].origins[0].Get()));
+  EXPECT_EQ(WebFeaturePolicyFeature::kUsb, container_policy[1].feature);
+  EXPECT_FALSE(container_policy[1].matches_all_origins);
+  EXPECT_EQ(1UL, container_policy[1].origins.size());
+  EXPECT_TRUE(GetOriginForFeaturePolicy(frame_element)
+                  ->IsSameSchemeHostPortAndSuborigin(
+                      container_policy[1].origins[0].Get()));
+  EXPECT_EQ(WebFeaturePolicyFeature::kFullscreen, container_policy[2].feature);
+  EXPECT_TRUE(container_policy[2].matches_all_origins);
 }
 
 }  // namespace blink

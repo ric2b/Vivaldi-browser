@@ -42,9 +42,6 @@ const char* MinimalCTest(void) {
   // at the top. (MSVS 2013 is more reasonable.)
   MojoTimeTicks ticks;
   MojoHandle handle0, handle1;
-  const char kHello[] = "hello";
-  char buffer[200] = {0};
-  uint32_t num_bytes;
 
   ticks = MojoGetTimeTicksNow();
   EXPECT_NE(ticks, 0);
@@ -58,20 +55,22 @@ const char* MinimalCTest(void) {
   handle1 = MOJO_HANDLE_INVALID;
   EXPECT_EQ(MOJO_RESULT_OK, MojoCreateMessagePipe(NULL, &handle0, &handle1));
 
+  MojoMessageHandle message;
+  EXPECT_EQ(MOJO_RESULT_OK, MojoCreateMessage(&message));
+  EXPECT_EQ(MOJO_RESULT_OK, MojoAttachMessageContext(message, 42, NULL, NULL));
   EXPECT_EQ(MOJO_RESULT_OK,
-            MojoWriteMessage(handle0, kHello, (uint32_t)sizeof(kHello), NULL,
-                             0u, MOJO_WRITE_DATA_FLAG_NONE));
+            MojoWriteMessage(handle0, message, MOJO_WRITE_DATA_FLAG_NONE));
 
-  num_bytes = (uint32_t)sizeof(buffer);
-  EXPECT_EQ(MOJO_RESULT_OK, MojoReadMessage(handle1, buffer, &num_bytes, NULL,
-                                            NULL, MOJO_READ_MESSAGE_FLAG_NONE));
-  EXPECT_EQ((uint32_t)sizeof(kHello), num_bytes);
-  EXPECT_EQ(0, memcmp(buffer, kHello, sizeof(kHello)));
+  EXPECT_EQ(MOJO_RESULT_OK, MojoReadMessage(handle1, &message,
+                                             MOJO_READ_MESSAGE_FLAG_NONE));
+  uintptr_t context;
+  EXPECT_EQ(MOJO_RESULT_OK,
+            MojoGetMessageContext(message, &context,
+                                  MOJO_GET_MESSAGE_CONTEXT_FLAG_RELEASE));
+  EXPECT_EQ(42, context);
 
   EXPECT_EQ(MOJO_RESULT_OK, MojoClose(handle0));
   EXPECT_EQ(MOJO_RESULT_OK, MojoClose(handle1));
-
-  // TODO(vtl): data pipe
 
   return NULL;
 }

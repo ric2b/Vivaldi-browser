@@ -42,16 +42,33 @@ const base::Feature kNewOmniboxAnswerTypes{"NewOmniboxAnswerTypes",
 const base::Feature kOmniboxEntitySuggestions{
     "OmniboxEntitySuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature used to force on the experiment of transmission of tail suggestions
+// from GWS to this client, currently testing for desktop.
+const base::Feature kOmniboxTailSuggestions{
+    "OmniboxTailSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Feature used to enable clipboard provider, which provides the user with
 // suggestions of the URL in the user's clipboard (if any) upon omnibox focus.
 const base::Feature kEnableClipboardProvider {
   "OmniboxEnableClipboardProvider",
-#if defined(OS_IOS)
+#if defined(OS_IOS) || defined(OS_ANDROID)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Feature to enable demotion of URLs when the fakebox is selected.  Only used
+// on Android tablets unless kAndroidFakeboxDemotionOnPhones is also enabled.
+const base::Feature kAndroidFakeboxDemotion{"OmniboxAndroidFakeboxDemotion",
+                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature to enable demotion of URLs when the fakebox is selected on a device
+// with a phone form factor.  Android phones have only one box on the NTP, so
+// the user doesn't have a choice between boxes.  This makes the case for
+// demoting URLs less clear, hence the separate feature flag.
+const base::Feature kAndroidFakeboxDemotionOnPhones{
+    "OmniboxAndroidFakeboxDemotionOnPhones", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Feature to enable the search provider to send a request to the suggest
 // server on focus.  This allows the suggest server to warm up, by, for
@@ -59,14 +76,20 @@ const base::Feature kEnableClipboardProvider {
 // in memory allows the suggest server to respond more quickly with
 // personalized suggestions as the user types.
 const base::Feature kSearchProviderWarmUpOnFocus{
-    "OmniboxWarmUpSearchProviderOnFocus", base::FEATURE_DISABLED_BY_DEFAULT};
+  "OmniboxWarmUpSearchProviderOnFocus",
+#if defined(OS_IOS)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Feature used to enable the transmission of HTTPS URLs as part of the
 // context to the suggest server (assuming SearchProvider is permitted to
 // transmit URLs for context in the first place).
 const base::Feature kSearchProviderContextAllowHttpsUrls{
     "OmniboixSearchProviderContextAllowHttpsUrls",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Feature used for the Zero Suggest Redirect to Chrome Field Trial.
 const base::Feature kZeroSuggestRedirectToChrome{
@@ -86,9 +109,41 @@ const base::Feature kUIExperimentMaxAutocompleteMatches{
     "OmniboxUIExperimentMaxAutocompleteMatches",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Feature used for eliding the suggestion URL after the host as a UI
+// experiment.
+const base::Feature kUIExperimentElideSuggestionUrlAfterHost{
+    "OmniboxUIExperimentElideSuggestionUrlAfterHost",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used for hiding the suggestion URL scheme as a UI experiment.
+const base::Feature kUIExperimentHideSuggestionUrlScheme{
+    "OmniboxUIExperimentHideSuggestionUrlScheme",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used for hiding the suggestion URL subdomain as a UI experiment.
+// This only hides some trivially informative subdomains such as "www" or "m".
+const base::Feature kUIExperimentHideSuggestionUrlTrivialSubdomains{
+    "OmniboxUIExperimentHideSuggestionUrlTrivialSubdomains",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used for the omnibox narrow suggestions dropdown UI experiment.
+const base::Feature kUIExperimentNarrowDropdown{
+    "OmniboxUIExperimentNarrowDropdown", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used for the vertical margin UI experiment.
+const base::Feature kUIExperimentVerticalLayout{
+    "OmniboxUIExperimentVerticalLayout", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Feature used for the vertical margin UI experiment.
 const base::Feature kUIExperimentVerticalMargin{
     "OmniboxUIExperimentVerticalMargin", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature used to enable speculatively starting a service worker associated
+// with the destination of the default match when the user's input looks like a
+// query.
+const base::Feature kSpeculativeServiceWorkerStartOnQueryInput{
+    "OmniboxSpeculativeServiceWorkerStartOnQueryInput",
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace omnibox
 

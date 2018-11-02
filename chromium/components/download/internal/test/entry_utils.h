@@ -13,13 +13,33 @@
 namespace download {
 namespace test {
 
-bool SuperficialEntryCompare(const Entry* const& expected,
-                             const Entry* const& actual);
+bool CompareEntry(const Entry* const& expected, const Entry* const& actual);
 
-bool SuperficialEntryListCompare(const std::vector<Entry*>& a,
-                                 const std::vector<Entry*>& b);
+bool CompareEntryList(const std::vector<Entry*>& a,
+                      const std::vector<Entry*>& b);
+
+bool CompareEntryList(const std::vector<Entry>& list1,
+                      const std::vector<Entry>& list2);
+
+Entry BuildBasicEntry();
+
+Entry BuildBasicEntry(Entry::State state);
 
 Entry BuildEntry(DownloadClient client, const std::string& guid);
+
+Entry BuildEntry(DownloadClient client,
+                 const std::string& guid,
+                 base::Time cancel_time,
+                 SchedulingParams::NetworkRequirements network_requirements,
+                 SchedulingParams::BatteryRequirements battery_requirements,
+                 SchedulingParams::Priority priority,
+                 const GURL& url,
+                 const std::string& request_method,
+                 Entry::State state,
+                 const base::FilePath& file_path,
+                 base::Time create_time,
+                 base::Time completion_time,
+                 int attempt_count);
 
 }  // namespace test
 }  // namespace download

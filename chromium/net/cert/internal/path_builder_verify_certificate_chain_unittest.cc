@@ -30,7 +30,7 @@ class PathBuilderDelegate {
         trust_store.AddTrustAnchorWithConstraints(test.chain.back());
         break;
       case CertificateTrustType::UNSPECIFIED:
-        LOG(ERROR) << "Unexpected CertificateTrustType";
+        trust_store.AddCertificateWithUnspecifiedTrust(test.chain.back());
         break;
       case CertificateTrustType::DISTRUSTED:
         trust_store.AddDistrustedCertificateForTest(test.chain.back());
@@ -43,9 +43,11 @@ class PathBuilderDelegate {
 
     CertPathBuilder::Result result;
     // First cert in the |chain| is the target.
-    CertPathBuilder path_builder(test.chain.front(), &trust_store,
-                                 &signature_policy, test.time, test.key_purpose,
-                                 &result);
+    CertPathBuilder path_builder(
+        test.chain.front(), &trust_store, &signature_policy, test.time,
+        test.key_purpose, test.initial_explicit_policy,
+        test.user_initial_policy_set, test.initial_policy_mapping_inhibit,
+        test.initial_any_policy_inhibit, &result);
     path_builder.AddCertIssuerSource(&intermediate_cert_issuer_source);
 
     path_builder.Run();

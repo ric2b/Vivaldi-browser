@@ -50,11 +50,11 @@ class BASE_EXPORT TaskTrackerPosix : public TaskTracker {
   }
 #endif
 
- private:
+ protected:
   // TaskTracker:
-  void PerformRunTask(std::unique_ptr<Task> task,
-                      const SequenceToken& sequence_token) override;
+  void PerformRunTask(std::unique_ptr<Task> task, Sequence* sequence) override;
 
+ private:
 #if DCHECK_IS_ON()
   bool IsPostingBlockShutdownTaskAfterShutdownAllowed() override;
 #endif

@@ -8,7 +8,7 @@
 #include <memory>
 #include <string>
 
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "components/reading_list/core/reading_list_model_storage.h"
 #include "components/reading_list/core/reading_list_store_delegate.h"
 #include "components/sync/model/model_error.h"
@@ -21,8 +21,7 @@ class MutableDataBatch;
 class ReadingListModel;
 
 // A ReadingListModelStorage storing and syncing data in protobufs.
-class ReadingListStore : public ReadingListModelStorage,
-                         public base::NonThreadSafe {
+class ReadingListStore : public ReadingListModelStorage {
   using StoreFactoryFunction = base::Callback<void(
       const syncer::ModelTypeStore::InitCallback& callback)>;
 
@@ -49,19 +48,19 @@ class ReadingListStore : public ReadingListModelStorage,
   // Perform the initial merge between local and sync data. This should only be
   // called when a data type is first enabled to start syncing, and there is no
   // sync metadata. Best effort should be made to match local and sync data. The
-  // keys in the |entity_data_map| will have been created via GetClientTag(...),
-  // and if a local and sync data should match/merge but disagree on tags, the
-  // service should use the sync data's tag. Any local pieces of data that are
-  // not present in sync should immediately be Put(...) to the processor before
-  // returning. The same MetadataChangeList that was passed into this function
-  // can be passed to Put(...) calls. Delete(...) can also be called but should
-  // not be needed for most model types. Durable storage writes, if not able to
-  // combine all change atomically, should save the metadata after the data
-  // changes, so that this merge will be re-driven by sync if is not completely
-  // saved during the current run.
+  // storage keys in the |entity_data| are populated with GetStorageKey(...),
+  // local and sync copies of the same entity should resolve to the same storage
+  // key. Any local pieces of data that are not present in sync should
+  // immediately be Put(...) to the processor before returning. The same
+  // MetadataChangeList that was passed into this function can be passed to
+  // Put(...) calls. Delete(...) can also be called but should not be needed for
+  // most model types. Durable storage writes, if not able to combine all change
+  // atomically, should save the metadata after the data changes, so that this
+  // merge will be re-driven by sync if is not completely saved during the
+  // current run.
   base::Optional<syncer::ModelError> MergeSyncData(
       std::unique_ptr<syncer::MetadataChangeList> metadata_change_list,
-      syncer::EntityDataMap entity_data_map) override;
+      syncer::EntityChangeList entity_data) override;
 
   // Apply changes from the sync server locally.
   // Please note that |entity_changes| might have fewer entries than
@@ -167,6 +166,8 @@ class ReadingListStore : public ReadingListModelStorage,
   std::unique_ptr<syncer::ModelTypeStore::WriteBatch> batch_;
 
   base::Clock* clock_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(ReadingListStore);
 };

@@ -134,7 +134,8 @@ class VideoCaptureTest : public testing::Test,
         base::MakeUnique<MediaStreamManager>(audio_system_.get());
 
     // Create a Host and connect it to a simulated IPC channel.
-    host_.reset(new VideoCaptureHost(media_stream_manager_.get()));
+    host_.reset(new VideoCaptureHost(0 /* render_process_id */,
+                                     media_stream_manager_.get()));
 
     OpenSession();
   }
@@ -232,8 +233,9 @@ class VideoCaptureTest : public testing::Test,
         .Times(AnyNumber())
         .WillRepeatedly(ExitMessageLoop(task_runner_, run_loop.QuitClosure()));
 
-    host_->Start(kDeviceId, opened_session_id_, params,
-                 observer_binding_.CreateInterfacePtrAndBind());
+    mojom::VideoCaptureObserverPtr observer;
+    observer_binding_.Bind(mojo::MakeRequest(&observer));
+    host_->Start(kDeviceId, opened_session_id_, params, std::move(observer));
 
     run_loop.Run();
   }
@@ -252,8 +254,9 @@ class VideoCaptureTest : public testing::Test,
     // capture is stopped immediately.
     EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STARTED))
         .Times(AtMost(1));
-    host_->Start(kDeviceId, opened_session_id_, params,
-                 observer_binding_.CreateInterfacePtrAndBind());
+    mojom::VideoCaptureObserverPtr observer;
+    observer_binding_.Bind(mojo::MakeRequest(&observer));
+    host_->Start(kDeviceId, opened_session_id_, params, std::move(observer));
 
     EXPECT_CALL(*this, OnStateChanged(mojom::VideoCaptureState::STOPPED));
     host_->Stop(kDeviceId);

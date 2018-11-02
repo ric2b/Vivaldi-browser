@@ -29,15 +29,15 @@
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebFormControlElement.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebInputElement.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/re2/src/re2/re2.h"
 
 using blink::WebDocument;
 using blink::WebFormControlElement;
 using blink::WebFormElement;
-using blink::WebFrame;
 using blink::WebInputElement;
+using blink::WebLocalFrame;
 using blink::WebString;
 
 namespace autofill {
@@ -306,8 +306,6 @@ void FindPredictedElements(
   }
 }
 
-// TODO(crbug.com/543085): Move the reauthentication recognition code to the
-// browser.
 const char kPasswordSiteUrlRegex[] =
     "passwords(?:-[a-z-]+\\.corp)?\\.google\\.com";
 
@@ -339,10 +337,10 @@ bool FieldHasNonscriptModifiedValue(
 
 // Helper function that checks the presence of visible password and username
 // fields in |form.control_elements|.
-// Iff a visible password found, then |*found_visible_password| is set to true.
-// Iff a visible password found AND there is a visible username before it, then
-// |*found_visible_username_before_visible_password| is set to true.
-void FoundVisiblePasswordAndVisibleUsernameBeforePassword(
+// Iff a visible password is found, then |*found_visible_password| is set to
+// true. Iff a visible password is found AND there is a visible username before
+// it, then |*found_visible_username_before_visible_password| is set to true.
+void FindVisiblePasswordAndVisibleUsernameBeforePassword(
     const SyntheticForm& form,
     bool* found_visible_password,
     bool* found_visible_username_before_visible_password) {
@@ -394,15 +392,6 @@ bool GetPasswordForm(
       last_text_input_before_password;
   autofill::PossibleUsernamesVector other_possible_usernames;
 
-  // Bail if this is a GAIA passwords site reauthentication form, so that
-  // the form will be ignored.
-  // TODO(msramek): Move this logic to the browser, and disable filling only
-  // for the sync credential and if passwords are being synced.
-  if (IsGaiaReauthenticationForm(GURL(form.document.Url()).GetOrigin(),
-                                 form.control_elements)) {
-    return false;
-  }
-
   std::map<WebInputElement, PasswordFormFieldPredictionType> predicted_elements;
   if (form_predictions) {
     FindPredictedElements(form, password_form->form_data, *form_predictions,
@@ -417,7 +406,7 @@ bool GetPasswordForm(
   // the latest username field just before selected password field).
   bool ignore_invisible_passwords = false;
   bool ignore_invisible_usernames = false;
-  FoundVisiblePasswordAndVisibleUsernameBeforePassword(
+  FindVisiblePasswordAndVisibleUsernameBeforePassword(
       form, &ignore_invisible_passwords, &ignore_invisible_usernames);
   std::string layout_sequence;
   layout_sequence.reserve(form.control_elements.size());
@@ -649,16 +638,19 @@ bool GetPasswordForm(
 
 }  // namespace
 
-bool IsGaiaReauthenticationForm(
-    const GURL& origin,
-    const std::vector<blink::WebFormControlElement>& control_elements) {
-  if (origin != GaiaUrls::GetInstance()->gaia_url().GetOrigin())
+bool IsGaiaReauthenticationForm(const blink::WebFormElement& form) {
+  if (GURL(form.GetDocument().Url()).GetOrigin() !=
+      GaiaUrls::GetInstance()->gaia_url().GetOrigin()) {
     return false;
+  }
 
   bool has_rart_field = false;
   bool has_continue_field = false;
 
-  for (const blink::WebFormControlElement& element : control_elements) {
+  blink::WebVector<blink::WebFormControlElement> web_control_elements;
+  form.GetFormControlElements(web_control_elements);
+
+  for (const blink::WebFormControlElement& element : web_control_elements) {
     // We're only interested in the presence
     // of <input type="hidden" /> elements.
     CR_DEFINE_STATIC_LOCAL(WebString, kHidden, ("hidden"));
@@ -711,7 +703,7 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromWebForm(
 }
 
 std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
-    const WebFrame& frame,
+    const WebLocalFrame& frame,
     const FieldValueAndPropertiesMaskMap* field_value_and_properties_map,
     const FormsPredictionsMap* form_predictions) {
   SyntheticForm synthetic_form;
@@ -740,31 +732,37 @@ std::unique_ptr<PasswordForm> CreatePasswordFormFromUnownedInputElements(
 }
 
 bool HasAutocompleteAttributeValue(const blink::WebInputElement& element,
-                                   const char* value_in_lowercase) {
-  std::string autocomplete_value_lowercase = base::ToLowerASCII(
-      base::UTF16ToUTF8(element.GetAttribute("autocomplete").Utf16()));
+                                   base::StringPiece value_in_lowercase) {
+  CR_DEFINE_STATIC_LOCAL(WebString, kAutocomplete, ("autocomplete"));
+  const std::string autocomplete_value =
+      element.GetAttribute(kAutocomplete)
+          .Utf8(WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
 
-  std::vector<base::StringPiece> tokens = base::SplitStringPiece(
-      autocomplete_value_lowercase, base::kWhitespaceASCII,
-      base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
-
-  return base::ContainsValue(tokens, value_in_lowercase);
+  std::vector<base::StringPiece> tokens =
+      base::SplitStringPiece(autocomplete_value, base::kWhitespaceASCII,
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return std::find_if(tokens.begin(), tokens.end(),
+                      [value_in_lowercase](base::StringPiece token) {
+                        return base::LowerCaseEqualsASCII(token,
+                                                          value_in_lowercase);
+                      }) != tokens.end();
 }
 
 bool HasCreditCardAutocompleteAttributes(
     const blink::WebInputElement& element) {
-  std::string autocomplete_value_lowercase = base::ToLowerASCII(
-      base::UTF16ToUTF8(element.GetAttribute("autocomplete").Utf16()));
+  CR_DEFINE_STATIC_LOCAL(WebString, kAutocomplete, ("autocomplete"));
+  const std::string autocomplete_value =
+      element.GetAttribute(kAutocomplete)
+          .Utf8(WebString::UTF8ConversionMode::kStrictReplacingErrorsWithFFFD);
 
-  for (const auto& token : base::SplitStringPiece(
-           autocomplete_value_lowercase, base::kWhitespaceASCII,
-           base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY)) {
-    if (base::StartsWith(token, kAutocompleteCreditCardPrefix,
-                         base::CompareCase::SENSITIVE)) {
-      return true;
-    }
-  }
-  return false;
+  std::vector<base::StringPiece> tokens =
+      base::SplitStringPiece(autocomplete_value, base::kWhitespaceASCII,
+                             base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  return std::find_if(
+             tokens.begin(), tokens.end(), [](base::StringPiece token) {
+               return base::StartsWith(token, kAutocompleteCreditCardPrefix,
+                                       base::CompareCase::INSENSITIVE_ASCII);
+             }) != tokens.end();
 }
 
 bool IsCreditCardVerificationPasswordField(

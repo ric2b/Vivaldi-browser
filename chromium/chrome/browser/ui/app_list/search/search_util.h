@@ -24,6 +24,12 @@ enum SearchResultType {
   SUGGESTIONS_SEARCH_RESULT,
   // A result that is provided by the custom launcher search provider.
   LAUNCHER_SEARCH_PROVIDER_RESULT,
+  // A result that is an uninstalled app from a Play Store app search.
+  PLAY_STORE_UNINSTALLED_APP,
+  // A result that is an instant app from a Play Store app search.
+  PLAY_STORE_INSTANT_APP,
+  // A result that is an answer card.
+  ANSWER_CARD,
   // Boundary is always last.
   SEARCH_RESULT_TYPE_BOUNDARY
 };

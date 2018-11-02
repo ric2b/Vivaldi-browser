@@ -15,6 +15,7 @@
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_switches.h"
@@ -155,7 +156,6 @@ ShellBrowserContext::CreateURLRequestContextGetter(
   return new ShellURLRequestContextGetter(
       ignore_certificate_errors_, GetPath(),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
       protocol_handlers, std::move(request_interceptors), net_log_);
 }
 
@@ -221,6 +221,11 @@ BackgroundSyncController* ShellBrowserContext::GetBackgroundSyncController() {
   if (!background_sync_controller_)
     background_sync_controller_.reset(new MockBackgroundSyncController());
   return background_sync_controller_.get();
+}
+
+BrowsingDataRemoverDelegate*
+ShellBrowserContext::GetBrowsingDataRemoverDelegate() {
+  return nullptr;
 }
 
 }  // namespace content

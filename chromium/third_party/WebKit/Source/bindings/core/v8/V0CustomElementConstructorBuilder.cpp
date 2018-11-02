@@ -40,11 +40,11 @@
 #include "core/SVGNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementRegistrationOptions.h"
-#include "core/dom/custom/V0CustomElementDefinition.h"
-#include "core/dom/custom/V0CustomElementDescriptor.h"
-#include "core/dom/custom/V0CustomElementException.h"
-#include "core/dom/custom/V0CustomElementProcessingStack.h"
 #include "core/frame/UseCounter.h"
+#include "core/html/custom/V0CustomElementDefinition.h"
+#include "core/html/custom/V0CustomElementDescriptor.h"
+#include "core/html/custom/V0CustomElementException.h"
+#include "core/html/custom/V0CustomElementProcessingStack.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/V0CustomElementBinding.h"
 #include "platform/bindings/V8PerContextData.h"
@@ -343,11 +343,11 @@ static void ConstructCustomElement(
                                  "CustomElement");
   V0CustomElementProcessingStack::CallbackDeliveryScope delivery_scope;
   Element* element = document->createElementNS(
-      nullptr, namespace_uri, tag_name,
+      namespace_uri, tag_name,
       StringOrDictionary::fromString(maybe_type->IsNull() ? g_null_atom : type),
       exception_state);
   if (element) {
-    UseCounter::Count(document, UseCounter::kV0CustomElementsConstruct);
+    UseCounter::Count(document, WebFeature::kV0CustomElementsConstruct);
   }
   V8SetReturnValueFast(info, element, document);
 }

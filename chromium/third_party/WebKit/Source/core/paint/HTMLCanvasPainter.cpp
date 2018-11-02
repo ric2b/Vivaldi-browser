@@ -26,7 +26,7 @@ void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
   HTMLCanvasElement* canvas =
       toHTMLCanvasElement(layout_html_canvas_.GetNode());
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
       canvas->RenderingContext() &&
       canvas->RenderingContext()->IsComposited()) {
     if (WebLayer* layer = canvas->RenderingContext()->PlatformLayer()) {
@@ -56,10 +56,11 @@ void HTMLCanvasPainter::PaintReplaced(const PaintInfo& paint_info,
   // is set.  See bug for more details: crbug.com/353716.
   InterpolationQuality interpolation_quality =
       layout_html_canvas_.Style()->ImageRendering() ==
-              kImageRenderingOptimizeContrast
+              EImageRendering::kWebkitOptimizeContrast
           ? kInterpolationLow
           : CanvasDefaultInterpolationQuality;
-  if (layout_html_canvas_.Style()->ImageRendering() == kImageRenderingPixelated)
+  if (layout_html_canvas_.Style()->ImageRendering() ==
+      EImageRendering::kPixelated)
     interpolation_quality = kInterpolationNone;
 
   InterpolationQuality previous_interpolation_quality =

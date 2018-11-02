@@ -42,12 +42,14 @@
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/features.h"
+#include "chrome/common/pdf_uma.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/safe_browsing/file_type_policies.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_member.h"
 #include "components/prefs/pref_service.h"
+#include "content/public/browser/download_interrupt_reasons.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/notification_source.h"
@@ -85,6 +87,11 @@ using safe_browsing::DownloadFileType;
 using safe_browsing::DownloadProtectionService;
 
 namespace {
+
+// The first id assigned to a download when download database failed to
+// initialize.
+const uint32_t kFirstDownloadIdNoPersist =
+    content::DownloadItem::kInvalidId + 1;
 
 #if defined(FULL_SAFE_BROWSING)
 
@@ -249,8 +256,18 @@ ChromeDownloadManagerDelegate::GetDownloadIdReceiverCallback() {
 void ChromeDownloadManagerDelegate::SetNextId(uint32_t next_id) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   DCHECK(!profile_->IsOffTheRecord());
-  DCHECK_NE(content::DownloadItem::kInvalidId, next_id);
-  next_download_id_ = next_id;
+
+  // |content::DownloadItem::kInvalidId| will be returned only when download
+  // database failed to initialize.
+  bool download_db_available = (next_id != content::DownloadItem::kInvalidId);
+  RecordDatabaseAvailability(download_db_available);
+  if (download_db_available) {
+    next_download_id_ = next_id;
+  } else {
+    // Still download files without download database, all download history in
+    // this browser session will not be persisted.
+    next_download_id_ = kFirstDownloadIdNoPersist;
+  }
 
   IdCallbackVector callbacks;
   id_callbacks_.swap(callbacks);
@@ -286,6 +303,11 @@ void ChromeDownloadManagerDelegate::ReturnNextId(
 bool ChromeDownloadManagerDelegate::DetermineDownloadTarget(
     DownloadItem* download,
     const content::DownloadTargetCallback& callback) {
+  if (download->GetTargetFilePath().empty() &&
+      download->GetMimeType() == kPDFMimeType && !download->HasUserGesture()) {
+    ReportPDFLoadStatus(PDFLoadStatus::kTriggeredNoGestureDriveByDownload);
+  }
+
   DownloadTargetDeterminer::CompletionCallback target_determined_callback =
       base::Bind(&ChromeDownloadManagerDelegate::OnDownloadTargetDetermined,
                  weak_ptr_factory_.GetWeakPtr(),
@@ -333,6 +355,11 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
     const base::Closure& internal_complete_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 #if defined(FULL_SAFE_BROWSING)
+  if (!download_prefs_->safebrowsing_for_trusted_sources_enabled() &&
+      download_prefs_->IsFromTrustedSource(*item)) {
+    return true;
+  }
+
   SafeBrowsingState* state = static_cast<SafeBrowsingState*>(
       item->GetUserData(&kSafeBrowsingUserDataKey));
   if (!state) {
@@ -362,8 +389,17 @@ bool ChromeDownloadManagerDelegate::IsDownloadReadyForCompletion(
              content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT)) {
       DVLOG(2) << __func__
                << "() SB service disabled. Marking download as DANGEROUS FILE";
-      item->OnContentCheckCompleted(
-          content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE);
+      if (ShouldBlockFile(content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE)) {
+        item->OnContentCheckCompleted(
+            // Specifying a dangerous type here would take precendence over the
+            // blocking of the file.
+            content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+            content::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED);
+      } else {
+        item->OnContentCheckCompleted(
+            content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE,
+            content::DOWNLOAD_INTERRUPT_REASON_NONE);
+      }
       UMA_HISTOGRAM_ENUMERATION("Download.DangerousFile.Reason",
                                 SB_NOT_AVAILABLE, DANGEROUS_FILE_REASON_MAX);
       content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
@@ -717,8 +753,7 @@ void ChromeDownloadManagerDelegate::CheckDownloadUrl(
     DVLOG(2) << __func__ << "() Start SB URL check for download = "
              << download->DebugString(false);
     service->CheckDownloadUrl(download,
-                              base::Bind(&CheckDownloadUrlDone,
-                                         callback,
+                              base::Bind(&CheckDownloadUrlDone, callback,
                                          is_content_check_supported));
     return;
   }
@@ -789,8 +824,18 @@ void ChromeDownloadManagerDelegate::CheckClientDownloadDone(
     DCHECK_NE(danger_type,
               content::DOWNLOAD_DANGER_TYPE_MAYBE_DANGEROUS_CONTENT);
 
-    if (danger_type != content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS)
-      item->OnContentCheckCompleted(danger_type);
+    if (danger_type != content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS) {
+      if (ShouldBlockFile(danger_type)) {
+        item->OnContentCheckCompleted(
+            // Specifying a dangerous type here would take precendence over the
+            // blocking of the file.
+            content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
+            content::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED);
+      } else {
+        item->OnContentCheckCompleted(danger_type,
+                                      content::DOWNLOAD_INTERRUPT_REASON_NONE);
+      }
+    }
   }
 
   SafeBrowsingState* state = static_cast<SafeBrowsingState*>(
@@ -837,6 +882,12 @@ void ChromeDownloadManagerDelegate::OnDownloadTargetDetermined(
 
     DownloadItemModel(item).SetDangerLevel(target_info->danger_level);
   }
+  if (ShouldBlockFile(target_info->danger_type)) {
+    target_info->result = content::DOWNLOAD_INTERRUPT_REASON_FILE_BLOCKED;
+    // A dangerous type would take precendence over the blocking of the file.
+    target_info->danger_type = content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
+  }
+
   callback.Run(target_info->target_path, target_info->target_disposition,
                target_info->danger_type, target_info->intermediate_path,
                target_info->result);
@@ -869,5 +920,33 @@ bool ChromeDownloadManagerDelegate::IsOpenInBrowserPreferreredForFile(
     return true;
   }
 #endif
+  return false;
+}
+
+bool ChromeDownloadManagerDelegate::ShouldBlockFile(
+    content::DownloadDangerType danger_type) const {
+  DownloadPrefs::DownloadRestriction download_restriction =
+      download_prefs_->download_restriction();
+
+  switch (download_restriction) {
+    case (DownloadPrefs::DownloadRestriction::NONE):
+      return false;
+
+    case (DownloadPrefs::DownloadRestriction::POTENTIALLY_DANGEROUS_FILES):
+      return danger_type != content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS;
+
+    case (DownloadPrefs::DownloadRestriction::DANGEROUS_FILES): {
+      return (danger_type == content::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT ||
+              danger_type == content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE ||
+              danger_type == content::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL);
+    }
+
+    case (DownloadPrefs::DownloadRestriction::ALL_FILES):
+      return true;
+
+    default:
+      LOG(ERROR) << "Invalid download restruction value: "
+                 << static_cast<int>(download_restriction);
+  }
   return false;
 }

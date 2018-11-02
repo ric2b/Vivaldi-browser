@@ -28,6 +28,7 @@
 #include "net/quic/platform/api/quic_string_piece.h"
 #include "net/quic/test_tools/mock_clock.h"
 #include "net/quic/test_tools/mock_random.h"
+#include "net/quic/test_tools/simple_data_producer.h"
 #include "net/test/gtest_util.h"
 #include "net/tools/quic/quic_per_connection_packet_writer.h"
 #include "net/tools/quic/test_tools/mock_quic_session_visitor.h"
@@ -177,10 +178,6 @@ QuicPacket* BuildUnsizedDataPacket(QuicFramer* framer,
 
 // Compute SHA-1 hash of the supplied std::string.
 std::string Sha1Hash(QuicStringPiece data);
-
-// Given endpoint in memory |connection_id|, returns peer's in memory connection
-// id.
-QuicConnectionId GetPeerInMemoryConnectionId(QuicConnectionId connection_id);
 
 // Simple random number generator used to compute random numbers suitable
 // for pseudo-randomly dropping packets in tests.  It works by computing
@@ -477,8 +474,8 @@ class MockQuicSession : public QuicSession {
   MOCK_METHOD1(MaybeCreateIncomingDynamicStream, QuicStream*(QuicStreamId id));
   MOCK_METHOD1(MaybeCreateOutgoingDynamicStream,
                QuicStream*(SpdyPriority priority));
-  MOCK_METHOD1(ShouldCreateIncomingDynamicStream, bool(QuicStreamId id));
-  MOCK_METHOD0(ShouldCreateOutgoingDynamicStream, bool());
+  MOCK_METHOD1(ShouldCreateIncomingDynamicStream2, bool(QuicStreamId id));
+  MOCK_METHOD0(ShouldCreateOutgoingDynamicStream2, bool());
   MOCK_METHOD6(
       WritevData,
       QuicConsumedData(QuicStream* stream,
@@ -515,10 +512,36 @@ class MockQuicSession : public QuicSession {
       const QuicReferenceCountedPointer<QuicAckListenerInterface>&
           ack_listener);
 
+  QuicConsumedData ConsumeAndSaveAllData(
+      QuicStream* stream,
+      QuicStreamId id,
+      const QuicIOVector& data,
+      QuicStreamOffset offset,
+      StreamSendingState state,
+      const QuicReferenceCountedPointer<QuicAckListenerInterface>&
+          ack_listener);
+
  private:
   std::unique_ptr<QuicCryptoStream> crypto_stream_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuicSession);
+};
+
+class MockQuicCryptoStream : public QuicCryptoStream {
+ public:
+  explicit MockQuicCryptoStream(QuicSession* session);
+
+  ~MockQuicCryptoStream() override;
+
+  bool encryption_established() const override;
+  bool handshake_confirmed() const override;
+  const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
+      const override;
+  CryptoMessageParser* crypto_message_parser() override;
+
+ private:
+  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
+  CryptoFramer crypto_framer_;
 };
 
 class MockQuicSpdySession : public QuicSpdySession {
@@ -618,6 +641,15 @@ class MockQuicSpdySession : public QuicSpdySession {
   bool QuicSpdySessionShouldCreateOutgoingDynamicStream2() {
     return QuicSpdySession::ShouldCreateOutgoingDynamicStream2();
   }
+
+  QuicConsumedData ConsumeAndSaveAllData(
+      QuicStream* stream,
+      QuicStreamId id,
+      const QuicIOVector& data,
+      QuicStreamOffset offset,
+      StreamSendingState state,
+      const QuicReferenceCountedPointer<QuicAckListenerInterface>&
+          ack_listener);
 
   using QuicSession::ActivateStream;
 
@@ -904,6 +936,21 @@ class MockConnectionCloseDelegate
                void(QuicErrorCode,
                     const std::string&,
                     ConnectionCloseSource source));
+};
+
+class MockPacketCreatorDelegate : public QuicPacketCreator::DelegateInterface {
+ public:
+  MockPacketCreatorDelegate();
+  ~MockPacketCreatorDelegate() override;
+
+  MOCK_METHOD1(OnSerializedPacket, void(SerializedPacket* packet));
+  MOCK_METHOD3(OnUnrecoverableError,
+               void(QuicErrorCode,
+                    const std::string&,
+                    ConnectionCloseSource source));
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MockPacketCreatorDelegate);
 };
 
 // Creates a client session for testing.

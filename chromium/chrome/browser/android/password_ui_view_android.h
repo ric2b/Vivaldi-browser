@@ -7,6 +7,8 @@
 
 #include <stddef.h>
 
+#include <memory>
+#include <string>
 #include <vector>
 
 #include "base/android/jni_weak_ref.h"
@@ -61,9 +63,6 @@ class PasswordUIViewAndroid : public PasswordUIView {
       int index);
   // Destroy the native implementation.
   void Destroy(JNIEnv*, const base::android::JavaParamRef<jobject>&);
-
-  // JNI registration
-  static bool RegisterPasswordUIViewAndroid(JNIEnv* env);
 
  private:
   PasswordManagerPresenter password_manager_presenter_;

@@ -4,6 +4,7 @@
 <translation id="1152921474424827756">Otevřete <ph name="BEGIN_LINK" />archivovanou kopii<ph name="END_LINK" /> stránky <ph name="URL" /></translation>
 <translation id="1158211211994409885">Web <ph name="HOST_NAME" /> neočekávaně ukončil připojení.</translation>
 <translation id="1161325031994447685">obnovit připojení k síti Wi-Fi</translation>
+<translation id="1175364870820465910">&amp;Tisk…</translation>
 <translation id="129863573139666797"><ph name="BEGIN_LINK" />Zkuste vymazat soubory cookie<ph name="END_LINK" /></translation>
 <translation id="1375198122581997741">O verzi aplikace</translation>
 <translation id="139305205187523129">Web <ph name="HOST_NAME" /> neodeslal žádná data.</translation>
@@ -20,7 +21,6 @@
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />zkontrolovat proxy server a firewall<ph name="END_LINK" /></translation>
 <translation id="2166378884831602661">Tento web nemůže poskytnout zabezpečené připojení</translation>
 <translation id="2230458221926704099">Opravte své připojení pomocí <ph name="BEGIN_LINK" />diagnostické aplikace<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Vyhledejte na Googlu <ph name="LINK" /></translation>
 <translation id="2292556288342944218">Vaše připojení k internetu je blokováno</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />spustit diagnostiku sítě<ph name="END_LINK" /></translation>
 <translation id="255002559098805027">Web <ph name="HOST_NAME" /> vrátil neplatnou odpověď.</translation>
@@ -30,6 +30,7 @@
 <translation id="2730326759066348565"><ph name="BEGIN_LINK" />spustit diagnostiku připojení<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Připojení bylo resetováno.</translation>
 <translation id="2909946352844186028">Byla zjištěna změna sítě.</translation>
+<translation id="2948083400971632585">Nastavená spojení s proxy servery můžete vypnout v nastavení.</translation>
 <translation id="3005723025932146533">Zobrazit uloženou kopii</translation>
 <translation id="3093245981617870298">Nejste připojeni k Internetu.</translation>
 <translation id="3109728660330352905">K zobrazení této stránky nemáte oprávnění.</translation>

@@ -18,9 +18,9 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/html_response_provider.h"
+#include "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ios/web/public/test/url_test_util.h"
 #include "url/gurl.h"
 
@@ -28,7 +28,6 @@
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::WebViewContainingText;
 using chrome_test_util::OmniboxText;
 
 namespace {
@@ -198,8 +197,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -219,8 +217,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL2 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage2)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage2];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -233,6 +230,11 @@ class PausableResponseProvider : public HtmlResponseProvider {
   PurgeCachedWebViewPages();
   [self setServerPaused:YES];
 
+  // Re-enable synchronization here to synchronize EarlGrey LongPress and Tap
+  // actions.
+  [[GREYConfiguration sharedInstance]
+          setValue:@(YES)
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
   // Go back in history and verify that URL2 (committed URL) is displayed even
   // though URL1 is a pending URL.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
@@ -241,6 +243,11 @@ class PausableResponseProvider : public HtmlResponseProvider {
       base::SysUTF16ToNSString(web::GetDisplayTitleForUrl(_testURL1));
   [[EarlGrey selectElementWithMatcher:grey_text(URL1Title)]
       performAction:grey_tap()];
+
+  [[GREYConfiguration sharedInstance]
+          setValue:@(NO)
+      forConfigKey:kGREYConfigKeySynchronizationEnabled];
+
   GREYAssert([self waitForServerToReceiveRequestWithURL:_testURL1],
              @"Last request URL: %@", self.lastRequestURLSpec);
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
@@ -248,8 +255,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -281,8 +287,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond and verify that page2 was reloaded, not page1.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage2)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage2];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -305,8 +310,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -326,8 +330,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL2 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage2)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage2];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -351,8 +354,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 
@@ -372,8 +374,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL2 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage2)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage2];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -402,15 +403,14 @@ class PausableResponseProvider : public HtmlResponseProvider {
   // pending URL.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
       performAction:grey_tap()];
-  GREYAssert([self waitForServerToReceiveRequestWithURL:_testURL1],
-             @"Last request URL: %@", self.lastRequestURLSpec);
+  // TODO(crbug.com/724560): Re-evaluate if necessary to check receiving URL1
+  // request here.
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -432,15 +432,14 @@ class PausableResponseProvider : public HtmlResponseProvider {
   // even though URL1 is a pending URL.
   [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
       performAction:grey_tap()];
-  GREYAssert([self waitForServerToReceiveRequestWithURL:_testURL1],
-             @"Last request URL: %@", self.lastRequestURLSpec);
+  // TODO(crbug.com/724560): Re-evaluate if necessary to check receiving URL1
+  // request here.
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL2.GetContent())]
       assertWithMatcher:grey_notNil()];
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -470,8 +469,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage3)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage3];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL3.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -501,8 +499,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -519,19 +516,14 @@ class PausableResponseProvider : public HtmlResponseProvider {
       performAction:grey_tap()];
   [[EarlGrey selectElementWithMatcher:chrome_test_util::BackButton()]
       performAction:grey_tap()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
 
-  // Quickly (using chrome command) navigate forward twice and wait for
-  // kChromeUIVersionURL to load.
-  GenericChromeCommand* forwardCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_FORWARD];
-  chrome_test_util::RunCommandWithActiveViewController(forwardCommand);
-  chrome_test_util::RunCommandWithActiveViewController(forwardCommand);
+  // Quickly navigate forward twice and wait for kChromeUIVersionURL to load.
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goForward];
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goForward];
 
   const std::string version = version_info::GetVersionNumber();
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(version)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:version];
 
   // Make sure that kChromeUIVersionURL URL is displayed in the omnibox.
   std::string expectedText = base::UTF16ToUTF8(web::GetDisplayTitleForUrl(URL));
@@ -562,8 +554,7 @@ class PausableResponseProvider : public HtmlResponseProvider {
 
   // Make server respond so URL1 becomes committed.
   [self setServerPaused:NO];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTestPage1)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTestPage1];
   [[EarlGrey selectElementWithMatcher:OmniboxText(_testURL1.GetContent())]
       assertWithMatcher:grey_notNil()];
 }

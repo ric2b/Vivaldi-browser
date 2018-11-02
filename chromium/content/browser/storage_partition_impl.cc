@@ -5,6 +5,7 @@
 #include "content/browser/storage_partition_impl.h"
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include <set>
 #include <vector>
@@ -15,6 +16,8 @@
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
+#include "content/browser/blob_storage/blob_registry_wrapper.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/browsing_data/storage_partition_http_cache_data_remover.h"
 #include "content/browser/fileapi/browser_file_system_helper.h"
@@ -27,11 +30,11 @@
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/indexed_db_context.h"
 #include "content/public/browser/local_storage_usage_info.h"
+#include "content/public/browser/network_service_instance.h"
 #include "content/public/browser/session_storage_usage_info.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_manager_connection.h"
-#include "content/public/common/service_names.mojom.h"
 #include "net/base/completion_callback.h"
 #include "net/base/net_errors.h"
 #include "net/cookies/canonical_cookie.h"
@@ -40,6 +43,8 @@
 #include "net/url_request/url_request_context_getter.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "storage/browser/blob/blob_registry_impl.h"
+#include "storage/browser/blob/blob_storage_context.h"
 #include "storage/browser/database/database_tracker.h"
 #include "storage/browser/quota/quota_manager.h"
 
@@ -60,7 +65,7 @@ bool DoesCookieMatchHost(const std::string& host,
   return cookie.IsHostCookie() && cookie.IsDomainMatch(host);
 }
 
-void OnClearedCookies(const base::Closure& callback, int num_deleted) {
+void OnClearedCookies(const base::Closure& callback, uint32_t num_deleted) {
   // The final callback needs to happen from UI thread.
   if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
     BrowserThread::PostTask(
@@ -228,6 +233,12 @@ void ClearSessionStorageOnUIThread(
       base::Bind(&OnSessionStorageUsageInfo, dom_storage_context,
                  special_storage_policy, origin_matcher,
                  callback));
+}
+
+base::WeakPtr<storage::BlobStorageContext> BlobStorageContextGetter(
+    scoped_refptr<ChromeBlobStorageContext> blob_context) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return blob_context->context()->AsWeakPtr();
 }
 
 }  // namespace
@@ -407,9 +418,6 @@ StoragePartitionImpl::~StoragePartitionImpl() {
   if (GetPlatformNotificationContext())
     GetPlatformNotificationContext()->Shutdown();
 
-  if (GetBackgroundFetchContext())
-    GetBackgroundFetchContext()->Shutdown();
-
   if (GetBackgroundSyncContext())
     GetBackgroundSyncContext()->Shutdown();
 
@@ -463,28 +471,14 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
       in_memory ? base::FilePath() : context->GetPath(),
       relative_partition_path, context->GetSpecialStoragePolicy());
 
-  // BrowserMainLoop may not be initialized in unit tests. Tests will
-  // need to inject their own task runner into the IndexedDBContext.
-  base::SequencedTaskRunner* idb_task_runner =
-      BrowserThread::CurrentlyOn(BrowserThread::UI) &&
-              BrowserMainLoop::GetInstance()
-          ? BrowserMainLoop::GetInstance()
-                ->indexed_db_thread()
-                ->task_runner()
-                .get()
-          : NULL;
-
   base::FilePath path = in_memory ? base::FilePath() : partition_path;
-  partition->indexed_db_context_ =
-      new IndexedDBContextImpl(path, context->GetSpecialStoragePolicy(),
-                               quota_manager_proxy.get(), idb_task_runner);
+  partition->indexed_db_context_ = new IndexedDBContextImpl(
+      path, context->GetSpecialStoragePolicy(), quota_manager_proxy);
 
   partition->cache_storage_context_ = new CacheStorageContextImpl(context);
   partition->cache_storage_context_->Init(path, quota_manager_proxy);
 
   partition->service_worker_context_ = new ServiceWorkerContextWrapper(context);
-  partition->service_worker_context_->Init(path, quota_manager_proxy.get(),
-                                           context->GetSpecialStoragePolicy());
   partition->service_worker_context_->set_storage_partition(partition.get());
 
   partition->appcache_service_ =
@@ -503,8 +497,8 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
                                           partition->service_worker_context_);
   partition->platform_notification_context_->Initialize();
 
-  partition->background_fetch_context_ = new BackgroundFetchContext(
-      context, partition.get(), partition->service_worker_context_);
+  partition->background_fetch_context_ =
+      new BackgroundFetchContext(context, partition->service_worker_context_);
 
   partition->background_sync_context_ = new BackgroundSyncContext();
   partition->background_sync_context_->Init(partition->service_worker_context_);
@@ -516,21 +510,34 @@ std::unique_ptr<StoragePartitionImpl> StoragePartitionImpl::Create(
 
   partition->bluetooth_allowed_devices_map_ = new BluetoothAllowedDevicesMap();
 
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableNetworkService)) {
-    mojom::NetworkServicePtr network_service;
-    ServiceManagerConnection::GetForProcess()->GetConnector()->BindInterface(
-        mojom::kNetworkServiceName, &network_service);
+  scoped_refptr<ChromeBlobStorageContext> blob_context =
+      ChromeBlobStorageContext::GetFor(context);
+
+  if (base::FeatureList::IsEnabled(features::kNetworkService)) {
     mojom::NetworkContextParamsPtr context_params =
         mojom::NetworkContextParams::New();
     // TODO: fill this
     // context_params->cache_dir =
     // context_params->cookie_path =
-    network_service->CreateNetworkContext(
+    GetNetworkService()->CreateNetworkContext(
         MakeRequest(&partition->network_context_), std::move(context_params));
+
+    BlobURLLoaderFactory::BlobContextGetter blob_getter =
+        base::BindOnce(&BlobStorageContextGetter, blob_context);
+    partition->blob_url_loader_factory_ = BlobURLLoaderFactory::Create(
+        std::move(blob_getter), partition->filesystem_context_);
 
     partition->url_loader_factory_getter_ = new URLLoaderFactoryGetter();
     partition->url_loader_factory_getter_->Initialize(partition.get());
+  }
+
+  partition->service_worker_context_->Init(
+      path, quota_manager_proxy.get(), context->GetSpecialStoragePolicy(),
+      blob_context.get(), partition->url_loader_factory_getter_.get());
+
+  if (base::FeatureList::IsEnabled(features::kMojoBlobs)) {
+    partition->blob_registry_ = BlobRegistryWrapper::Create(
+        blob_context, partition->filesystem_context_);
   }
 
   return partition;
@@ -621,6 +628,14 @@ BroadcastChannelProvider* StoragePartitionImpl::GetBroadcastChannelProvider() {
 BluetoothAllowedDevicesMap*
 StoragePartitionImpl::GetBluetoothAllowedDevicesMap() {
   return bluetooth_allowed_devices_map_.get();
+}
+
+BlobURLLoaderFactory* StoragePartitionImpl::GetBlobURLLoaderFactory() {
+  return blob_url_loader_factory_.get();
+}
+
+BlobRegistryWrapper* StoragePartitionImpl::GetBlobRegistry() {
+  return blob_registry_.get();
 }
 
 void StoragePartitionImpl::OpenLocalStorage(
@@ -963,9 +978,9 @@ void StoragePartitionImpl::SetMediaURLRequestContext(
 }
 
 void StoragePartitionImpl::GetQuotaSettings(
-    const storage::OptionalQuotaSettingsCallback& callback) {
+    storage::OptionalQuotaSettingsCallback callback) {
   GetContentClient()->browser()->GetQuotaSettings(browser_context_, this,
-                                                  callback);
+                                                  std::move(callback));
 }
 
 }  // namespace content

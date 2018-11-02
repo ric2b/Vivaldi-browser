@@ -93,8 +93,7 @@ void CheckWillStartRequestOnUIThread(
     int render_process_id,
     int render_frame_host_id,
     const std::string& method,
-    const scoped_refptr<content::ResourceRequestBodyImpl>&
-        resource_request_body,
+    const scoped_refptr<content::ResourceRequestBody>& resource_request_body,
     const Referrer& sanitized_referrer,
     bool has_user_gesture,
     ui::PageTransition transition,
@@ -135,7 +134,7 @@ void CheckWillRedirectRequestOnUIThread(
       ->FilterURL(false, &new_validated_url);
   navigation_handle->WillRedirectRequest(
       new_validated_url, new_method, new_referrer_url, new_is_external_protocol,
-      headers, connection_info,
+      headers, connection_info, nullptr,
       base::Bind(&SendCheckResultToIOThread, callback));
 }
 

@@ -4,6 +4,10 @@
 
 #import "ios/web/public/test/fakes/test_navigation_manager.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace web {
 
 TestNavigationManager::TestNavigationManager()
@@ -73,6 +77,15 @@ int TestNavigationManager::GetItemCount() const {
 
 web::NavigationItem* TestNavigationManager::GetItemAtIndex(size_t index) const {
   return items_[index].get();
+}
+
+int TestNavigationManager::GetIndexOfItem(
+    const web::NavigationItem* item) const {
+  for (size_t index = 0; index < items_.size(); ++index) {
+    if (items_[index].get() == item)
+      return index;
+  }
+  return -1;
 }
 
 void TestNavigationManager::SetLastCommittedItemIndex(const int index) {

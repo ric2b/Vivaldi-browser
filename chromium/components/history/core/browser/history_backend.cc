@@ -41,7 +41,6 @@
 #include "components/history/core/browser/in_memory_history_backend.h"
 #include "components/history/core/browser/keyword_search_term.h"
 #include "components/history/core/browser/page_usage_data.h"
-#include "components/history/core/browser/typed_url_sync_bridge.h"
 #include "components/history/core/browser/typed_url_syncable_service.h"
 #include "components/history/core/browser/url_utils.h"
 #include "components/sync/driver/sync_driver_switches.h"
@@ -226,6 +225,7 @@ void HistoryBackend::Init(
             &ModelTypeChangeProcessor::Create,
             // TODO(gangwu): use ReportUnrecoverableError before launch.
             base::BindRepeating(base::IgnoreResult(&DumpWithoutCrashing))));
+    typed_url_sync_bridge_->Init();
   } else {
     typed_url_syncable_service_ =
         base::MakeUnique<TypedUrlSyncableService>(this);
@@ -1239,13 +1239,15 @@ void HistoryBackend::QueryHistoryWStatement(const char* sql_query,
     db_->GetMatchesWStatement(sql_query, search_string, max_hits,
                               &text_matches);
 
+    std::vector<URLResult> matching_results;
     // todo: Check if this can be further optimized.
     for (size_t i = 0; i < text_matches.size(); i++) {
       const URLRow& text_match = text_matches[i];
       // Get all visits for given URL match.
       URLResult url_result(text_match);
-      query_results->AppendURLBySwapping(&url_result);
+      matching_results.push_back(std::move(url_result));
     }
+    query_results->SetURLResults(std::move(matching_results));
   }
 }
 
@@ -1276,6 +1278,7 @@ void HistoryBackend::QueryHistoryBasic(const QueryOptions& options,
   DCHECK_LE(static_cast<int>(visits.size()), options.EffectiveMaxCount());
 
   // Now add them and the URL rows to the results.
+  std::vector<URLResult> matching_results;
   URLResult url_result;
   for (size_t i = 0; i < visits.size(); i++) {
     const VisitRow visit = visits[i];
@@ -1301,8 +1304,9 @@ void HistoryBackend::QueryHistoryBasic(const QueryOptions& options,
 
     // We don't set any of the query-specific parts of the URLResult, since
     // snippets and stuff don't apply to basic querying.
-    result->AppendURLBySwapping(&url_result);
+    matching_results.push_back(std::move(url_result));
   }
+  result->SetURLResults(std::move(matching_results));
 
   if (!has_more_results && options.begin_time <= first_recorded_time_)
     result->set_reached_beginning(true);
@@ -1335,13 +1339,14 @@ void HistoryBackend::QueryHistoryText(const base::string16& text_query,
   size_t max_results = options.max_count == 0
                            ? std::numeric_limits<size_t>::max()
                            : static_cast<int>(options.max_count);
-  for (std::vector<URLResult>::iterator it = matching_visits.begin();
-       it != matching_visits.end() && result->size() < max_results; ++it) {
-    result->AppendURLBySwapping(&(*it));
+  bool has_more_results = false;
+  if (matching_visits.size() > max_results) {
+    has_more_results = true;
+    matching_visits.resize(max_results);
   }
+  result->SetURLResults(std::move(matching_visits));
 
-  if (matching_visits.size() == result->size() &&
-      options.begin_time <= first_recorded_time_)
+  if(!has_more_results && options.begin_time <= first_recorded_time_)
     result->set_reached_beginning(true);
 }
 
@@ -1676,8 +1681,9 @@ void HistoryBackend::MergeFavicon(
       thumbnail_db_->DeleteFaviconBitmap(bitmap_id_sizes[0].bitmap_id);
       favicon_sizes.erase(favicon_sizes.begin());
     }
-    thumbnail_db_->AddFaviconBitmap(favicon_id, bitmap_data, base::Time::Now(),
-                                    pixel_size);
+    thumbnail_db_->AddFaviconBitmap(favicon_id, bitmap_data,
+                                    FaviconBitmapType::ON_VISIT,
+                                    base::Time::Now(), pixel_size);
     favicon_sizes.push_back(pixel_size);
   }
 
@@ -1738,9 +1744,10 @@ void HistoryBackend::MergeFavicon(
 
       // Add the favicon bitmap as expired as it is not consistent with the
       // merged in data.
-      thumbnail_db_->AddFaviconBitmap(
-          favicon_id, bitmaps_to_copy[j].bitmap_data, base::Time(),
-          bitmaps_to_copy[j].pixel_size);
+      thumbnail_db_->AddFaviconBitmap(favicon_id,
+                                      bitmaps_to_copy[j].bitmap_data,
+                                      FaviconBitmapType::ON_VISIT, base::Time(),
+                                      bitmaps_to_copy[j].pixel_size);
       favicon_sizes.push_back(bitmaps_to_copy[j].pixel_size);
       favicon_bitmaps_copied = true;
 
@@ -1773,14 +1780,13 @@ void HistoryBackend::SetFavicons(const GURL& page_url,
                                  const GURL& icon_url,
                                  const std::vector<SkBitmap>& bitmaps) {
   SetFaviconsImpl(page_url, icon_type, icon_url, bitmaps,
-                  /*bitmaps_are_expired=*/false);
+                  FaviconBitmapType::ON_VISIT);
 }
 
-bool HistoryBackend::SetLastResortFavicons(
-    const GURL& page_url,
-    favicon_base::IconType icon_type,
-    const GURL& icon_url,
-    const std::vector<SkBitmap>& bitmaps) {
+bool HistoryBackend::SetOnDemandFavicons(const GURL& page_url,
+                                         favicon_base::IconType icon_type,
+                                         const GURL& icon_url,
+                                         const std::vector<SkBitmap>& bitmaps) {
   if (!thumbnail_db_ || !db_)
     return false;
 
@@ -1791,7 +1797,7 @@ bool HistoryBackend::SetLastResortFavicons(
   }
 
   return SetFaviconsImpl(page_url, icon_type, icon_url, bitmaps,
-                         /*bitmaps_are_expired=*/true);
+                         FaviconBitmapType::ON_DEMAND);
 }
 
 void HistoryBackend::SetFaviconsOutOfDateForPage(const GURL& page_url) {
@@ -1805,6 +1811,14 @@ void HistoryBackend::SetFaviconsOutOfDateForPage(const GURL& page_url) {
        m != icon_mappings.end(); ++m) {
     thumbnail_db_->SetFaviconOutOfDate(m->icon_id);
   }
+  ScheduleCommit();
+}
+
+void HistoryBackend::TouchOnDemandFavicon(const GURL& icon_url) {
+  if (!thumbnail_db_)
+    return;
+
+  thumbnail_db_->TouchOnDemandFavicon(icon_url, Time::Now());
   ScheduleCommit();
 }
 
@@ -1827,8 +1841,8 @@ void HistoryBackend::SetImportedFavicons(
       // TODO(pkotwicz): Pass in real pixel size.
       favicon_id = thumbnail_db_->AddFavicon(
           favicon_usage[i].favicon_url, favicon_base::FAVICON,
-          new base::RefCountedBytes(favicon_usage[i].png_data), now,
-          gfx::Size());
+          new base::RefCountedBytes(favicon_usage[i].png_data),
+          FaviconBitmapType::ON_VISIT, now, gfx::Size());
     }
 
     // Save the mapping from all the URLs to the favicon.
@@ -1873,7 +1887,7 @@ bool HistoryBackend::SetFaviconsImpl(const GURL& page_url,
                                      favicon_base::IconType icon_type,
                                      const GURL& icon_url,
                                      const std::vector<SkBitmap>& bitmaps,
-                                     bool bitmaps_are_expired) {
+                                     FaviconBitmapType type) {
   if (!thumbnail_db_ || !db_)
     return false;
 
@@ -1889,11 +1903,9 @@ bool HistoryBackend::SetFaviconsImpl(const GURL& page_url,
   }
 
   bool favicon_data_modified = false;
-  if (favicon_created || !bitmaps_are_expired)
-    favicon_data_modified = SetFaviconBitmaps(icon_id, bitmaps);
-
-  if (favicon_created && bitmaps_are_expired)
-    thumbnail_db_->SetFaviconOutOfDate(icon_id);
+  if (favicon_created || type == FaviconBitmapType::ON_VISIT) {
+    favicon_data_modified = SetFaviconBitmaps(icon_id, bitmaps, type);
+  }
 
   std::vector<favicon_base::FaviconID> icon_ids(1u, icon_id);
   bool mapping_changed =
@@ -1947,7 +1959,8 @@ void HistoryBackend::UpdateFaviconMappingsAndFetchImpl(
 }
 
 bool HistoryBackend::SetFaviconBitmaps(favicon_base::FaviconID icon_id,
-                                       const std::vector<SkBitmap>& bitmaps) {
+                                       const std::vector<SkBitmap>& bitmaps,
+                                       FaviconBitmapType type) {
   std::vector<FaviconBitmapIDSize> bitmap_id_sizes;
   thumbnail_db_->GetFaviconBitmapIDSizes(icon_id, &bitmap_id_sizes);
 
@@ -1984,11 +1997,12 @@ bool HistoryBackend::SetFaviconBitmaps(favicon_base::FaviconID icon_id,
     } else {
       if (!favicon_bitmaps_changed &&
           IsFaviconBitmapDataEqual(bitmap_id, match_it->first)) {
-        thumbnail_db_->SetFaviconBitmapLastUpdateTime(bitmap_id,
-                                                      base::Time::Now());
+        thumbnail_db_->SetFaviconBitmapLastUpdateTime(
+            bitmap_id, base::Time::Now() /* new last updated time */);
       } else {
-        thumbnail_db_->SetFaviconBitmap(bitmap_id, match_it->first,
-                                        base::Time::Now());
+        thumbnail_db_->SetFaviconBitmap(
+            bitmap_id, match_it->first,
+            base::Time::Now() /* new last updated time */);
         favicon_bitmaps_changed = true;
       }
       to_add.erase(match_it);
@@ -1996,8 +2010,10 @@ bool HistoryBackend::SetFaviconBitmaps(favicon_base::FaviconID icon_id,
   }
 
   for (size_t i = 0; i < to_add.size(); ++i) {
-    thumbnail_db_->AddFaviconBitmap(icon_id, to_add[i].first, base::Time::Now(),
-                                    to_add[i].second);
+    thumbnail_db_->AddFaviconBitmap(
+        icon_id, to_add[i].first, type,
+        base::Time::Now() /* new last updated / last requested time */,
+        to_add[i].second);
 
     favicon_bitmaps_changed = true;
   }

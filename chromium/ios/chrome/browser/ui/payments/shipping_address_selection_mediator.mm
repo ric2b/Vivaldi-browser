@@ -6,7 +6,9 @@
 
 #import "ios/chrome/browser/ui/payments/shipping_address_selection_mediator.h"
 
+#include "base/strings/sys_string_conversions.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
@@ -21,9 +23,13 @@
 #endif
 
 namespace {
+using ::payments::GetShippingAddressSectionString;
+using ::payments::GetShippingAddressSelectorInfoMessage;
+using ::payment_request_util::GetShippingAddressSelectorErrorMessage;
+using ::payment_request_util::GetAddressNotificationLabelFromAutofillProfile;
 using ::payment_request_util::GetNameLabelFromAutofillProfile;
-using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
 using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
+using ::payment_request_util::GetShippingAddressLabelFromAutofillProfile;
 }  // namespace
 
 @interface ShippingAddressSelectionMediator ()
@@ -31,39 +37,59 @@ using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The selectable items to display in the collection.
-@property(nonatomic, strong) NSArray<AutofillProfileItem*>* items;
+@property(nonatomic, strong) NSMutableArray<AutofillProfileItem*>* items;
 
 @end
 
 @implementation ShippingAddressSelectionMediator
 
-@synthesize headerText = _headerText;
 @synthesize state = _state;
 @synthesize selectedItemIndex = _selectedItemIndex;
 @synthesize paymentRequest = _paymentRequest;
 @synthesize items = _items;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest {
+- (instancetype)initWithPaymentRequest:
+    (payments::PaymentRequest*)paymentRequest {
   self = [super init];
   if (self) {
     _paymentRequest = paymentRequest;
     _selectedItemIndex = NSUIntegerMax;
-    _items = [self createItems];
+    [self loadItems];
   }
   return self;
 }
 
+- (NSString*)getHeaderText {
+  if (self.state == PaymentRequestSelectorStateError) {
+    return GetShippingAddressSelectorErrorMessage(*self.paymentRequest);
+  } else {
+    return self.paymentRequest->shipping_options().empty()
+               ? base::SysUTF16ToNSString(GetShippingAddressSelectorInfoMessage(
+                     self.paymentRequest->shipping_type()))
+               : nil;
+  }
+}
+
 #pragma mark - PaymentRequestSelectorViewControllerDataSource
 
+- (BOOL)allowsEditMode {
+  return YES;
+}
+
+- (NSString*)title {
+  return base::SysUTF16ToNSString(
+      GetShippingAddressSectionString(self.paymentRequest->shipping_type()));
+}
+
 - (CollectionViewItem*)headerItem {
-  if (!self.headerText.length)
+  if (![self getHeaderText].length)
     return nil;
 
   PaymentsTextItem* headerItem = [[PaymentsTextItem alloc] init];
-  headerItem.text = self.headerText;
+  headerItem.text = [self getHeaderText];
   if (self.state == PaymentRequestSelectorStateError)
     headerItem.image = NativeImage(IDR_IOS_PAYMENTS_WARNING);
   return headerItem;
@@ -73,11 +99,6 @@ using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
   return self.items;
 }
 
-- (CollectionViewItem*)selectableItemAtIndex:(NSUInteger)index {
-  DCHECK(index < self.items.count);
-  return [self.items objectAtIndex:index];
-}
-
 - (CollectionViewItem*)addButtonItem {
   PaymentsTextItem* addButtonItem = [[PaymentsTextItem alloc] init];
   addButtonItem.text = l10n_util::GetNSString(IDS_PAYMENTS_ADD_ADDRESS);
@@ -85,13 +106,12 @@ using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
   return addButtonItem;
 }
 
-#pragma mark - Helper methods
+#pragma mark - Public methods
 
-- (NSArray<AutofillProfileItem*>*)createItems {
+- (void)loadItems {
   const std::vector<autofill::AutofillProfile*>& shippingProfiles =
       _paymentRequest->shipping_profiles();
-  NSMutableArray<AutofillProfileItem*>* items =
-      [NSMutableArray arrayWithCapacity:shippingProfiles.size()];
+  _items = [NSMutableArray arrayWithCapacity:shippingProfiles.size()];
   for (size_t index = 0; index < shippingProfiles.size(); ++index) {
     autofill::AutofillProfile* shippingAddress = shippingProfiles[index];
     DCHECK(shippingAddress);
@@ -99,12 +119,15 @@ using ::payment_request_util::GetPhoneNumberLabelFromAutofillProfile;
     item.name = GetNameLabelFromAutofillProfile(*shippingAddress);
     item.address = GetShippingAddressLabelFromAutofillProfile(*shippingAddress);
     item.phoneNumber = GetPhoneNumberLabelFromAutofillProfile(*shippingAddress);
+    item.notification = GetAddressNotificationLabelFromAutofillProfile(
+        *_paymentRequest, *shippingAddress);
+    item.complete = _paymentRequest->profile_comparator()->IsShippingComplete(
+        shippingAddress);
     if (_paymentRequest->selected_shipping_profile() == shippingAddress)
       _selectedItemIndex = index;
 
-    [items addObject:item];
+    [_items addObject:item];
   }
-  return items;
 }
 
 @end

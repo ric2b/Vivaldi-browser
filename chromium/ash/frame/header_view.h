@@ -8,12 +8,17 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller_delegate.h"
 #include "ash/public/interfaces/window_style.mojom.h"
-#include "ash/shared/immersive_fullscreen_controller_delegate.h"
 #include "ash/shell_observer.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/macros.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/views/view.h"
+
+namespace gfx {
+class ImageSkia;
+}
 
 namespace views {
 class ImageView;
@@ -29,7 +34,8 @@ class FrameCaptionButtonContainerView;
 // and on screen in immersive fullscreen.
 class ASH_EXPORT HeaderView : public views::View,
                               public ImmersiveFullscreenControllerDelegate,
-                              public ShellObserver {
+                              public ShellObserver,
+                              public TabletModeObserver {
  public:
   // |target_widget| is the widget that the caption buttons act on.
   // |target_widget| is not necessarily the same as the widget the header is
@@ -58,7 +64,8 @@ class ASH_EXPORT HeaderView : public views::View,
   // Returns the view's minimum width.
   int GetMinimumWidth() const;
 
-  void UpdateAvatarIcon();
+  // Sets the avatar icon to be displayed on the frame header.
+  void SetAvatarIcon(const gfx::ImageSkia& avatar);
 
   void SizeConstraintsChanged();
 
@@ -74,8 +81,10 @@ class ASH_EXPORT HeaderView : public views::View,
   // ShellObserver:
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
-  void OnMaximizeModeStarted() override;
-  void OnMaximizeModeEnded() override;
+
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
   FrameCaptionButtonContainerView* caption_button_container() {
     return caption_button_container_;

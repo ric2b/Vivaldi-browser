@@ -88,6 +88,7 @@ MEDIA_EXPORT extern const char kEnableInternalMediaSession[];
 
 namespace autoplay {
 
+MEDIA_EXPORT extern const char kDocumentUserActivationRequiredPolicy[];
 MEDIA_EXPORT extern const char kNoUserGestureRequiredPolicy[];
 MEDIA_EXPORT extern const char kUserGestureRequiredPolicy[];
 MEDIA_EXPORT extern const char kUserGestureRequiredForCrossOriginPolicy[];
@@ -103,19 +104,24 @@ namespace media {
 
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoPauseOptimization;
 MEDIA_EXPORT extern const base::Feature kBackgroundVideoTrackOptimization;
+MEDIA_EXPORT extern const base::Feature kComplexityBasedVideoBuffering;
 MEDIA_EXPORT extern const base::Feature kExternalClearKeyForTesting;
 MEDIA_EXPORT extern const base::Feature kLowDelayVideoRenderingOnLiveStream;
+MEDIA_EXPORT extern const base::Feature kMediaCastOverlayButton;
+MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kMemoryPressureBasedSourceBufferGC;
 MEDIA_EXPORT extern const base::Feature kMojoCdm;
 MEDIA_EXPORT extern const base::Feature kNewAudioRenderingMixingStrategy;
 MEDIA_EXPORT extern const base::Feature kNewRemotePlaybackPipeline;
 MEDIA_EXPORT extern const base::Feature kOverlayFullscreenVideo;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
+MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
+MEDIA_EXPORT extern const base::Feature kSupportExperimentalCdmInterface;
 MEDIA_EXPORT extern const base::Feature kUseAndroidOverlay;
 MEDIA_EXPORT extern const base::Feature kUseNewMediaCache;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
 MEDIA_EXPORT extern const base::Feature kVideoColorManagement;
-MEDIA_EXPORT extern const base::Feature kMediaEngagement;
+MEDIA_EXPORT extern const base::Feature kUseSurfaceLayerForVideo;
 
 #if defined(OS_ANDROID)
 MEDIA_EXPORT extern const base::Feature kVideoFullscreenOrientationLock;
@@ -125,6 +131,7 @@ MEDIA_EXPORT extern const base::Feature kMediaDrmPersistentLicense;
 
 #if defined(OS_WIN)
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoding;
+MEDIA_EXPORT extern const base::Feature kDelayCopyNV12Textures;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationH264Encoding;
 #endif  // defined(OS_WIN)
 

@@ -177,11 +177,9 @@ public class NavigateTest {
     @MediumTest
     @Feature({"Navigation"})
     public void testNavigateMany() throws Exception {
-        final String[] urls = {
-                mTestServer.getURL("/chrome/test/data/android/navigate/one.html"),
-                mTestServer.getURL("/chrome/test/data/android/navigate/two.html"),
-                mTestServer.getURL("/chrome/test/data/android/navigate/three.html")
-        };
+        final String[] urls = mTestServer.getURLs("/chrome/test/data/android/navigate/one.html",
+                "/chrome/test/data/android/navigate/two.html",
+                "/chrome/test/data/android/navigate/three.html");
         final String[] titles = {"One", "Two", "Three"};
         final int repeats = 3;
 
@@ -251,6 +249,35 @@ public class NavigateTest {
         ChromeTabUtils.waitForTabPageLoaded(tab, url2);
         Assert.assertEquals("Desired Link not open", url2,
                 mActivityTestRule.getActivity().getActivityTab().getUrl());
+    }
+
+    /**
+     * Test 'Request Desktop Site' option is preserved after navigation to a new entry
+     * through a click on a link.
+     */
+    @Test
+    @MediumTest
+    @Feature({"Navigation"})
+    @RetryOnFailure
+    public void testRequestDesktopSiteSettingPers() throws Exception {
+        String url1 = mTestServer.getURL("/chrome/test/data/android/google.html");
+        String url2 = mTestServer.getURL("/chrome/test/data/android/about.html");
+
+        navigateAndObserve(url1, url1);
+
+        final Tab tab = mActivityTestRule.getActivity().getActivityTab();
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                tab.setUseDesktopUserAgent(true /* useDesktop */, true /* reloadOnChange */);
+            }
+        });
+        ChromeTabUtils.waitForTabPageLoaded(tab, url1);
+
+        DOMUtils.clickNode(tab.getContentViewCore(), "aboutLink");
+        ChromeTabUtils.waitForTabPageLoaded(tab, url2);
+        Assert.assertEquals("Request Desktop site setting should stay turned on", true,
+                mActivityTestRule.getActivity().getActivityTab().getUseDesktopUserAgent());
     }
 
     /**

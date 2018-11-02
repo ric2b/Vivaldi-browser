@@ -14,11 +14,11 @@
 #include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
+#include "components/machine_intelligence/proto/ranker_model.pb.h"
+#include "components/machine_intelligence/proto/translate_ranker_model.pb.h"
+#include "components/machine_intelligence/ranker_model.h"
 #include "components/metrics/proto/translate_event.pb.h"
 #include "components/metrics/proto/ukm/source.pb.h"
-#include "components/translate/core/browser/proto/ranker_model.pb.h"
-#include "components/translate/core/browser/proto/translate_ranker_model.pb.h"
-#include "components/translate/core/browser/ranker_model.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "components/ukm/ukm_source.h"
 #include "net/url_request/test_url_fetcher_factory.h"
@@ -73,7 +73,7 @@ class TranslateRankerImplTest : public ::testing::Test {
       CreateTranslateEvent("es", "de", "de", 4, 5, 6);
 
  private:
-  ukm::TestUkmRecorder test_ukm_recorder_;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder_;
 
   // Sets up the task scheduling/task-runner environment for each test.
   base::test::ScopedTaskEnvironment scoped_task_environment_;
@@ -94,7 +94,7 @@ void TranslateRankerImplTest::InitFeatures(
 
 std::unique_ptr<TranslateRankerImpl> TranslateRankerImplTest::GetRankerForTest(
     float threshold) {
-  auto model = base::MakeUnique<chrome_intelligence::RankerModel>();
+  auto model = base::MakeUnique<machine_intelligence::RankerModel>();
   model->mutable_proto()->mutable_translate()->set_version(kModelVersion);
   auto* details = model->mutable_proto()
                       ->mutable_translate()
@@ -236,7 +236,7 @@ TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_AllDisabled) {
             translate_event.ranker_response());
 }
 
-TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_QueryOnly) {
+TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_QueryOnlyDontShow) {
   InitFeatures({kTranslateRankerQuery},
                {kTranslateRankerEnforcement, kTranslateRankerDecisionOverride});
   metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
@@ -250,12 +250,24 @@ TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_QueryOnly) {
             translate_event.ranker_response());
 }
 
-TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_EnforcementOnly) {
+TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_QueryOnlyShow) {
+  InitFeatures({kTranslateRankerQuery},
+               {kTranslateRankerEnforcement, kTranslateRankerDecisionOverride});
+  metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
+  EXPECT_TRUE(
+      GetRankerForTest(0.01f)->ShouldOfferTranslation(&translate_event));
+  EXPECT_NE(0U, translate_event.ranker_request_timestamp_sec());
+  EXPECT_EQ(kModelVersion, translate_event.ranker_version());
+  EXPECT_EQ(metrics::TranslateEventProto::SHOW,
+            translate_event.ranker_response());
+}
+
+TEST_F(TranslateRankerImplTest,
+       ShouldOfferTranslation_EnforcementOnlyDontShow) {
   InitFeatures({kTranslateRankerEnforcement},
                {kTranslateRankerQuery, kTranslateRankerDecisionOverride});
   metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
-  // If either enforcement or decision override are turned on, returns the
-  // ranker decision.
+  // If enforcement is turned on, returns the ranker decision.
   EXPECT_FALSE(
       GetRankerForTest(0.99f)->ShouldOfferTranslation(&translate_event));
   EXPECT_NE(0U, translate_event.ranker_request_timestamp_sec());
@@ -264,12 +276,24 @@ TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_EnforcementOnly) {
             translate_event.ranker_response());
 }
 
-TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_OverrideOnly) {
-  InitFeatures({kTranslateRankerDecisionOverride},
-               {kTranslateRankerQuery, kTranslateRankerEnforcement});
+TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_EnforcementOnlyShow) {
+  InitFeatures({kTranslateRankerEnforcement},
+               {kTranslateRankerQuery, kTranslateRankerDecisionOverride});
   metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
-  // If either enforcement or decision override are turned on, returns the
-  // ranker decision.
+  // If enforcement is turned on, returns the ranker decision.
+  EXPECT_TRUE(
+      GetRankerForTest(0.01f)->ShouldOfferTranslation(&translate_event));
+  EXPECT_NE(0U, translate_event.ranker_request_timestamp_sec());
+  EXPECT_EQ(kModelVersion, translate_event.ranker_version());
+  EXPECT_EQ(metrics::TranslateEventProto::SHOW,
+            translate_event.ranker_response());
+}
+
+TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_OverrideAndEnforcement) {
+  InitFeatures({kTranslateRankerEnforcement, kTranslateRankerDecisionOverride},
+               {kTranslateRankerQuery});
+  metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
+  // DecisionOverride will not interact with Query or Enforcement.
   EXPECT_FALSE(
       GetRankerForTest(0.99f)->ShouldOfferTranslation(&translate_event));
   EXPECT_NE(0U, translate_event.ranker_request_timestamp_sec());
@@ -295,6 +319,7 @@ TEST_F(TranslateRankerImplTest, ShouldOfferTranslation_NoModel) {
 
 TEST_F(TranslateRankerImplTest, RecordAndFlushEvents) {
   std::unique_ptr<translate::TranslateRanker> ranker = GetRankerForTest(0.0f);
+  ranker->EnableLogging(true);
   std::vector<metrics::TranslateEventProto> flushed_events;
 
   GURL url0("https://www.google.com");
@@ -334,30 +359,76 @@ TEST_F(TranslateRankerImplTest, RecordAndFlushEvents) {
       GetTestUkmRecorder()->GetSourceForUrl(url1.spec().c_str())->url().spec());
 }
 
-TEST_F(TranslateRankerImplTest, LoggingDisabledViaOverride) {
+TEST_F(TranslateRankerImplTest, EnableLogging) {
   std::unique_ptr<translate::TranslateRankerImpl> ranker =
       GetRankerForTest(0.0f);
   std::vector<metrics::TranslateEventProto> flushed_events;
 
+  // Logging is disabled by default. No events will be cached.
+  ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
+  ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
+
   ranker->FlushTranslateEvents(&flushed_events);
   EXPECT_EQ(0U, flushed_events.size());
 
+  // Once we enable logging, events will be cached.
+  ranker->EnableLogging(true);
   ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
   ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
-  ranker->RecordTranslateEvent(2, GURL(), &translate_event3_);
 
-  // Logging is enabled by default, so events should be cached.
   ranker->FlushTranslateEvents(&flushed_events);
-  EXPECT_EQ(3U, flushed_events.size());
+  EXPECT_EQ(2U, flushed_events.size());
+  flushed_events.clear();
 
-  // Override the feature setting to disable logging.
+  // Turning logging back off, caching is disabled once again.
   ranker->EnableLogging(false);
-
   ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
   ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
-  ranker->RecordTranslateEvent(2, GURL(), &translate_event3_);
 
   // Logging is disabled, so no events should be cached.
+  ranker->FlushTranslateEvents(&flushed_events);
+  EXPECT_EQ(0U, flushed_events.size());
+}
+
+TEST_F(TranslateRankerImplTest, EnableLoggingClearsCache) {
+  std::unique_ptr<translate::TranslateRankerImpl> ranker =
+      GetRankerForTest(0.0f);
+  std::vector<metrics::TranslateEventProto> flushed_events;
+  // Logging is disabled by default. No events will be cached.
+  ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
+  // Making sure that cache is still empty once logging is turned on.
+  ranker->EnableLogging(true);
+  ranker->FlushTranslateEvents(&flushed_events);
+  EXPECT_EQ(0U, flushed_events.size());
+
+  // These events will be cached.
+  ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
+  ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
+  // Cache will not be cleared if the logging state does not change.
+  ranker->EnableLogging(true);
+  ranker->FlushTranslateEvents(&flushed_events);
+  EXPECT_EQ(2U, flushed_events.size());
+  flushed_events.clear();
+  // Cache is now empty after being flushed.
+  ranker->FlushTranslateEvents(&flushed_events);
+  EXPECT_EQ(0U, flushed_events.size());
+
+  // Filling cache again.
+  ranker->EnableLogging(true);
+  ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
+  ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
+  // Switching logging off will clear the cache.
+  ranker->EnableLogging(false);
+  ranker->FlushTranslateEvents(&flushed_events);
+  EXPECT_EQ(0U, flushed_events.size());
+
+  // Filling cache again.
+  ranker->EnableLogging(true);
+  ranker->RecordTranslateEvent(0, GURL(), &translate_event1_);
+  ranker->RecordTranslateEvent(1, GURL(), &translate_event2_);
+  // Switching logging off and on again will clear the cache.
+  ranker->EnableLogging(false);
+  ranker->EnableLogging(true);
   ranker->FlushTranslateEvents(&flushed_events);
   EXPECT_EQ(0U, flushed_events.size());
 }
@@ -366,6 +437,7 @@ TEST_F(TranslateRankerImplTest, ShouldOverrideDecision_OverrideDisabled) {
   InitFeatures({}, {kTranslateRankerDecisionOverride});
   std::unique_ptr<translate::TranslateRankerImpl> ranker =
       GetRankerForTest(0.0f);
+  ranker->EnableLogging(true);
   const int kEventType = 12;
   metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
 
@@ -381,11 +453,17 @@ TEST_F(TranslateRankerImplTest, ShouldOverrideDecision_OverrideDisabled) {
 }
 
 TEST_F(TranslateRankerImplTest, ShouldOverrideDecision_OverrideEnabled) {
-  InitFeatures({kTranslateRankerDecisionOverride}, {});
+  InitFeatures({kTranslateRankerDecisionOverride},
+               {kTranslateRankerQuery, kTranslateRankerEnforcement});
   std::unique_ptr<translate::TranslateRankerImpl> ranker =
       GetRankerForTest(0.0f);
+  ranker->EnableLogging(true);
   metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
-
+  // DecisionOverride is decoupled from querying and enforcement. Enabling
+  // only DecisionOverride will not query the Ranker. Ranker returns its default
+  // response.
+  EXPECT_TRUE(
+      GetRankerForTest(0.99f)->ShouldOfferTranslation(&translate_event));
   EXPECT_TRUE(ranker->ShouldOverrideDecision(1, GURL(), &translate_event));
   EXPECT_TRUE(ranker->ShouldOverrideDecision(2, GURL(), &translate_event));
 
@@ -396,4 +474,38 @@ TEST_F(TranslateRankerImplTest, ShouldOverrideDecision_OverrideEnabled) {
   ASSERT_EQ(1, translate_event.decision_overrides(0));
   ASSERT_EQ(2, translate_event.decision_overrides(1));
   ASSERT_EQ(0, translate_event.event_type());
+  EXPECT_EQ(metrics::TranslateEventProto::NOT_QUERIED,
+            translate_event.ranker_response());
+}
+
+TEST_F(TranslateRankerImplTest,
+       ShouldOverrideDecision_OverrideAndQueryEnabled) {
+  InitFeatures({kTranslateRankerDecisionOverride, kTranslateRankerQuery},
+               {kTranslateRankerEnforcement});
+  // This test checks that translate events are properly logged when ranker is
+  // queried and a decision is overridden.
+  std::unique_ptr<translate::TranslateRankerImpl> ranker =
+      GetRankerForTest(0.0f);
+  ranker->EnableLogging(true);
+  metrics::TranslateEventProto translate_event = CreateDefaultTranslateEvent();
+  // Ranker's decision is DONT_SHOW, but we are in query mode only, so Ranker
+  // does not suppress the UI.
+  EXPECT_TRUE(
+      GetRankerForTest(0.99f)->ShouldOfferTranslation(&translate_event));
+
+  int kOverrideType = 1;
+  EXPECT_TRUE(
+      ranker->ShouldOverrideDecision(kOverrideType, GURL(), &translate_event));
+
+  int kEventType = 5;
+  ranker->RecordTranslateEvent(kEventType, GURL(), &translate_event);
+  std::vector<metrics::TranslateEventProto> flushed_events;
+  ranker->FlushTranslateEvents(&flushed_events);
+
+  EXPECT_EQ(1U, flushed_events.size());
+  ASSERT_EQ(1, flushed_events[0].decision_overrides_size());
+  ASSERT_EQ(kOverrideType, flushed_events[0].decision_overrides(0));
+  ASSERT_EQ(kEventType, flushed_events[0].event_type());
+  EXPECT_EQ(metrics::TranslateEventProto::DONT_SHOW,
+            flushed_events[0].ranker_response());
 }

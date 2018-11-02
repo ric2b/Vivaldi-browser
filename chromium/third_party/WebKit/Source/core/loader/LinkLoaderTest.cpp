@@ -116,7 +116,7 @@ TEST_P(LinkLoaderPreloadTest, Preload) {
   Persistent<MockLinkLoaderClient> loader_client =
       MockLinkLoaderClient::Create(test_case.link_loader_should_load_value);
   LinkLoader* loader = LinkLoader::Create(loader_client.Get());
-  KURL href_url = KURL(KURL(), test_case.href);
+  KURL href_url = KURL(NullURL(), test_case.href);
   URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
   loader->LoadLink(LinkRelAttribute("preload"), kCrossOriginAttributeNotSet,
                    test_case.type, test_case.as, test_case.media,
@@ -125,7 +125,7 @@ TEST_P(LinkLoaderPreloadTest, Preload) {
   if (test_case.expecting_load &&
       test_case.priority != kResourceLoadPriorityUnresolved) {
     ASSERT_EQ(1, fetcher->CountPreloads());
-    Resource* resource = loader->LinkPreloadedResourceForTesting();
+    Resource* resource = loader->GetResourceForTesting();
     ASSERT_NE(resource, nullptr);
     EXPECT_TRUE(fetcher->ContainsAsPreload(resource));
     EXPECT_EQ(test_case.priority, resource->GetResourceRequest().Priority());
@@ -166,10 +166,13 @@ constexpr PreloadTestParams kPreloadTestParams[] = {
      kReferrerPolicyDefault},
     // TODO(yoav): subresource should be *very* low priority (rather than
     // low).
-    {"http://example.test/cat.empty", "", "", "", kReferrerPolicyDefault,
+    {"http://example.test/cat.empty", "fetch", "", "", kReferrerPolicyDefault,
      kResourceLoadPriorityHigh, WebURLRequest::kRequestContextSubresource, true,
      true, kReferrerPolicyDefault},
     {"http://example.test/cat.blob", "blabla", "", "", kReferrerPolicyDefault,
+     kResourceLoadPriorityLow, WebURLRequest::kRequestContextSubresource, false,
+     false, kReferrerPolicyDefault},
+    {"http://example.test/cat.blob", "", "", "", kReferrerPolicyDefault,
      kResourceLoadPriorityLow, WebURLRequest::kRequestContextSubresource, false,
      false, kReferrerPolicyDefault},
     {"bla://example.test/cat.gif", "image", "", "", kReferrerPolicyDefault,
@@ -222,13 +225,17 @@ constexpr PreloadTestParams kPreloadTestParams[] = {
     {"http://example.test/cat.woff", "font", "font/woff84", "",
      kReferrerPolicyDefault, kResourceLoadPriorityUnresolved,
      WebURLRequest::kRequestContextFont, false, false, kReferrerPolicyDefault},
-    {"http://example.test/cat.empty", "", "foo/bar", "", kReferrerPolicyDefault,
-     kResourceLoadPriorityHigh, WebURLRequest::kRequestContextSubresource, true,
-     true, kReferrerPolicyDefault},
+    {"http://example.test/cat.empty", "fetch", "foo/bar", "",
+     kReferrerPolicyDefault, kResourceLoadPriorityHigh,
+     WebURLRequest::kRequestContextSubresource, true, true,
+     kReferrerPolicyDefault},
     {"http://example.test/cat.blob", "blabla", "foo/bar", "",
      kReferrerPolicyDefault, kResourceLoadPriorityLow,
      WebURLRequest::kRequestContextSubresource, false, false,
      kReferrerPolicyDefault},
+    {"http://example.test/cat.blob", "", "foo/bar", "", kReferrerPolicyDefault,
+     kResourceLoadPriorityLow, WebURLRequest::kRequestContextSubresource, false,
+     false, kReferrerPolicyDefault},
     // Media tests
     {"http://example.test/cat.gif", "image", "image/gif", "(max-width: 600px)",
      kReferrerPolicyDefault, kResourceLoadPriorityLow,
@@ -247,6 +254,18 @@ constexpr PreloadTestParams kPreloadTestParams[] = {
      kReferrerPolicyOriginWhenCrossOrigin, kResourceLoadPriorityLow,
      WebURLRequest::kRequestContextImage, true, true,
      kReferrerPolicyOriginWhenCrossOrigin},
+    {"http://example.test/cat.gif", "image", "image/gif", "",
+     kReferrerPolicySameOrigin, kResourceLoadPriorityLow,
+     WebURLRequest::kRequestContextImage, true, true,
+     kReferrerPolicySameOrigin},
+    {"http://example.test/cat.gif", "image", "image/gif", "",
+     kReferrerPolicyStrictOrigin, kResourceLoadPriorityLow,
+     WebURLRequest::kRequestContextImage, true, true,
+     kReferrerPolicyStrictOrigin},
+    {"http://example.test/cat.gif", "image", "image/gif", "",
+     kReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin,
+     kResourceLoadPriorityLow, WebURLRequest::kRequestContextImage, true, true,
+     kReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin},
     {"http://example.test/cat.gif", "image", "image/gif", "",
      kReferrerPolicyNever, kResourceLoadPriorityLow,
      WebURLRequest::kRequestContextImage, true, true, kReferrerPolicyNever}};
@@ -284,14 +303,14 @@ TEST(LinkLoaderTest, Prefetch) {
     Persistent<MockLinkLoaderClient> loader_client =
         MockLinkLoaderClient::Create(test_case.link_loader_should_load_value);
     LinkLoader* loader = LinkLoader::Create(loader_client.Get());
-    KURL href_url = KURL(KURL(), test_case.href);
+    KURL href_url = KURL(NullURL(), test_case.href);
     URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
     loader->LoadLink(LinkRelAttribute("prefetch"), kCrossOriginAttributeNotSet,
                      test_case.type, "", test_case.media,
                      test_case.referrer_policy, href_url,
                      dummy_page_holder->GetDocument(), NetworkHintsMock());
     ASSERT_TRUE(dummy_page_holder->GetDocument().Fetcher());
-    Resource* resource = loader->GetResource();
+    Resource* resource = loader->GetResourceForTesting();
     if (test_case.expecting_load) {
       EXPECT_TRUE(resource);
     } else {
@@ -376,6 +395,27 @@ TEST(LinkLoaderTest, Preconnect) {
     EXPECT_EQ(test_case.is_https, network_hints.IsHTTPS());
     EXPECT_EQ(test_case.is_cross_origin, network_hints.IsCrossOrigin());
   }
+}
+
+TEST(LinkLoaderTest, PreloadAndPrefetch) {
+  std::unique_ptr<DummyPageHolder> dummy_page_holder =
+      DummyPageHolder::Create(IntSize(500, 500));
+  ResourceFetcher* fetcher = dummy_page_holder->GetDocument().Fetcher();
+  ASSERT_TRUE(fetcher);
+  dummy_page_holder->GetFrame().GetSettings()->SetScriptEnabled(true);
+  Persistent<MockLinkLoaderClient> loader_client =
+      MockLinkLoaderClient::Create(true);
+  LinkLoader* loader = LinkLoader::Create(loader_client.Get());
+  KURL href_url = KURL(KURL(), "https://www.example.com/");
+  URLTestHelpers::RegisterMockedErrorURLLoad(href_url);
+  loader->LoadLink(LinkRelAttribute("preload prefetch"),
+                   kCrossOriginAttributeNotSet, "application/javascript",
+                   "script", "", kReferrerPolicyDefault, href_url,
+                   dummy_page_holder->GetDocument(), NetworkHintsMock());
+  ASSERT_EQ(1, fetcher->CountPreloads());
+  Resource* resource = loader->GetResourceForTesting();
+  ASSERT_NE(resource, nullptr);
+  EXPECT_TRUE(resource->IsLinkPreload());
 }
 
 }  // namespace

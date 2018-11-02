@@ -89,11 +89,6 @@ class MEDIA_EXPORT MediaLog {
   std::unique_ptr<MediaLogEvent> CreatePipelineErrorEvent(PipelineStatus error);
   std::unique_ptr<MediaLogEvent> CreateVideoSizeSetEvent(size_t width,
                                                          size_t height);
-  std::unique_ptr<MediaLogEvent> CreateBufferedExtentsChangedEvent(
-      int64_t start,
-      int64_t current,
-      int64_t end);
-
   std::unique_ptr<MediaLogEvent> CreateBufferingStateChangedEvent(
       const std::string& property,
       BufferingState state);
@@ -105,6 +100,10 @@ class MEDIA_EXPORT MediaLog {
   void SetStringProperty(const std::string& key, const std::string& value);
   void SetDoubleProperty(const std::string& key, double value);
   void SetBooleanProperty(const std::string& key, bool value);
+
+  // Getter for |id_|. Used by MojoMediaLogService to construct MediaLogEvents
+  // to log into this MediaLog.
+  int32_t id() const { return id_; }
 
  private:
   // A unique (to this process) id for this MediaLog.

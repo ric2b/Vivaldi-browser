@@ -11,8 +11,8 @@
 #include "content/child/resource_dispatcher.h"
 #include "content/child/site_isolation_stats_gatherer.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request_completion_status.h"
 #include "content/public/child/request_peer.h"
+#include "content/public/common/resource_request_completion_status.h"
 
 namespace content {
 
@@ -56,7 +56,6 @@ URLResponseBodyConsumer::URLResponseBodyConsumer(
   handle_watcher_.Watch(
       handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
       base::Bind(&URLResponseBodyConsumer::OnReadable, base::Unretained(this)));
-  handle_watcher_.ArmOrNotify();
 }
 
 URLResponseBodyConsumer::~URLResponseBodyConsumer() {}
@@ -82,6 +81,12 @@ void URLResponseBodyConsumer::SetDefersLoading() {
 void URLResponseBodyConsumer::UnsetDefersLoading() {
   is_deferred_ = false;
   OnReadable(MOJO_RESULT_OK);
+}
+
+void URLResponseBodyConsumer::ArmOrNotify() {
+  if (has_been_cancelled_)
+    return;
+  handle_watcher_.ArmOrNotify();
 }
 
 void URLResponseBodyConsumer::Reclaim(uint32_t size) {

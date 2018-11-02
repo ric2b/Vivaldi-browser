@@ -20,7 +20,7 @@ namespace chromecast {
 namespace media {
 
 DecryptContextImplClearKey::DecryptContextImplClearKey(
-    crypto::SymmetricKey* key)
+    const crypto::SymmetricKey* key)
     : DecryptContextImpl(KEY_SYSTEM_CLEAR_KEY), key_(key) {
   CHECK(key);
 }
@@ -30,8 +30,8 @@ DecryptContextImplClearKey::~DecryptContextImplClearKey() {}
 void DecryptContextImplClearKey::DecryptAsync(CastDecoderBuffer* buffer,
                                               uint8_t* output,
                                               size_t data_offset,
-                                              const DecryptCB& decrypt_cb) {
-  decrypt_cb.Run(DoDecrypt(buffer, output, data_offset));
+                                              DecryptCB decrypt_cb) {
+  std::move(decrypt_cb).Run(DoDecrypt(buffer, output, data_offset));
 }
 
 bool DecryptContextImplClearKey::DoDecrypt(CastDecoderBuffer* buffer,
@@ -51,17 +51,13 @@ bool DecryptContextImplClearKey::DoDecrypt(CastDecoderBuffer* buffer,
   output += data_offset;
 
   // Get the key.
-  std::string raw_key;
-  if (!key_->GetRawKey(&raw_key)) {
-    LOG(ERROR) << "Failed to get the underlying AES key";
-    return false;
-  }
+  const std::string& raw_key = key_->key();
   DCHECK_EQ(static_cast<int>(raw_key.length()), AES_BLOCK_SIZE);
   const uint8_t* key_u8 = reinterpret_cast<const uint8_t*>(raw_key.data());
   AES_KEY aes_key;
   if (AES_set_encrypt_key(key_u8, AES_BLOCK_SIZE * 8, &aes_key) != 0) {
     LOG(ERROR) << "Failed to set the AES key";
-    return buffer;
+    return false;
   }
 
   // Get the IV.

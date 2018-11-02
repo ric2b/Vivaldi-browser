@@ -7,9 +7,10 @@ from telemetry import story
 
 class ImageDecodingMeasurementPage(page_module.Page):
 
-  def __init__(self, url, page_set):
+  def __init__(self, url, page_set, name):
     super(ImageDecodingMeasurementPage, self).__init__(url=url,
-                                                       page_set=page_set)
+                                                       page_set=page_set,
+                                                       name=name)
     self.image_decoding_measurement_limit_results_to_min_iterations = True
 
   def RunNavigateSteps(self, action_runner):
@@ -34,4 +35,9 @@ class ImageDecodingMeasurementPageSet(story.StorySet):
     ]
 
     for url in urls_list:
-      self.AddStory(ImageDecodingMeasurementPage(url, self))
+      self.AddStory(ImageDecodingMeasurementPage(url, self, url.split('/')[-1]))
+
+class ImageDecodingMeasurementStoryExpectations(
+    story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass # Nothing disabled.

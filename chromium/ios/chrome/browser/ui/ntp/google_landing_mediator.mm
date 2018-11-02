@@ -4,11 +4,13 @@
 
 #import "ios/chrome/browser/ui/ntp/google_landing_mediator.h"
 
-#import "base/ios/weak_nsobject.h"
-#include "base/mac/scoped_nsobject.h"
+#include "base/mac/bind_objc_block.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/task/cancelable_task_tracker.h"
+#include "components/favicon/core/large_icon_service.h"
+#include "components/favicon_base/fallback_icon_style.h"
 #include "components/ntp_tiles/metrics.h"
 #include "components/ntp_tiles/most_visited_sites.h"
 #include "components/ntp_tiles/ntp_tile.h"
@@ -19,6 +21,7 @@
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_cache_factory.h"
 #include "ios/chrome/browser/favicon/ios_chrome_large_icon_service_factory.h"
+#include "ios/chrome/browser/favicon/large_icon_cache.h"
 #import "ios/chrome/browser/metrics/new_tab_page_uma.h"
 #include "ios/chrome/browser/ntp_tiles/ios_most_visited_sites_factory.h"
 #import "ios/chrome/browser/ntp_tiles/most_visited_sites_observer_bridge.h"
@@ -37,11 +40,17 @@
 #include "ios/public/provider/chrome/browser/voice/voice_search_provider.h"
 #import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #include "ios/web/public/web_state/web_state.h"
+#include "skia/ext/skia_utils_ios.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using base::UserMetricsAction;
 
 namespace {
 
+const CGFloat kFaviconMinSize = 32;
 const NSInteger kMaxNumMostVisitedFavicons = 8;
 
 }  // namespace
@@ -63,7 +72,7 @@ class SearchEngineObserver : public TemplateURLServiceObserver {
   void OnTemplateURLServiceChanged() override;
 
  private:
-  base::WeakNSObject<GoogleLandingMediator> _owner;
+  __weak GoogleLandingMediator* _owner;
   TemplateURLService* _templateURLService;  // weak
 };
 
@@ -93,7 +102,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   BOOL _recordedPageImpression;
 
   // Controller to fetch and show doodles or a default Google logo.
-  base::scoped_nsprotocol<id<LogoVendor>> _doodleController;
+  id<LogoVendor> _doodleController;
 
   // Listen for default search engine changes.
   std::unique_ptr<google_landing::SearchEngineObserver> _observer;
@@ -109,42 +118,46 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   // Most visited data from the MostVisitedSites service currently in use.
   ntp_tiles::NTPTilesVector _mostVisitedData;
 
+  // Most visited data from the MostVisitedSites service (copied upon receiving
+  // the callback), not yet used by the collection. It will be used after a user
+  // interaction.
+  ntp_tiles::NTPTilesVector _freshMostVisitedData;
+
+  // Most visited data used for logging the tiles impression. The data are
+  // copied when receiving the first non-empty data. This copy is used to make
+  // sure only the data received the first time are logged, and only once.
+  ntp_tiles::NTPTilesVector _mostVisitedDataForLogging;
+
   // Observes the WebStateList so that this mediator can update the UI when the
   // active WebState changes.
   std::unique_ptr<WebStateListObserverBridge> _webStateListObserver;
 
   // What's new promo.
-  std::unique_ptr<NotificationPromoWhatsNew> _notification_promo;
+  std::unique_ptr<NotificationPromoWhatsNew> _notificationPromo;
+
+  // Used to cancel tasks for the LargeIconService.
+  base::CancelableTaskTracker _cancelable_task_tracker;
 }
 
 // Consumer to handle google landing update notifications.
-@property(nonatomic) id<GoogleLandingConsumer> consumer;
+@property(nonatomic, weak) id<GoogleLandingConsumer> consumer;
 
 // The WebStateList that is being observed by this mediator.
-@property(nonatomic, assign) WebStateList* webStateList;
+@property(nonatomic, assign, readonly) WebStateList* webStateList;
 
 // The dispatcher for this mediator.
-@property(nonatomic, assign) id<ChromeExecuteCommand, UrlLoader> dispatcher;
-
-// Most visited data from the MostVisitedSites service (copied upon receiving
-// the callback), not yet used.
-@property(nonatomic, assign) ntp_tiles::NTPTilesVector freshMostVisitedData;
+@property(nonatomic, weak) id<ChromeExecuteCommand, UrlLoader> dispatcher;
 
 // Perform initial setup.
 - (void)setUp;
-
-// If there is some fresh most visited tiles, they become the current tiles and
-// the consumer gets notified.
-- (void)useFreshData;
 
 @end
 
 @implementation GoogleLandingMediator
 
+@synthesize webStateList = _webStateList;
 @synthesize consumer = _consumer;
 @synthesize dispatcher = _dispatcher;
-@synthesize webStateList = _webStateList;
-@synthesize freshMostVisitedData = _freshMostVisitedData;
 
 - (instancetype)initWithConsumer:(id<GoogleLandingConsumer>)consumer
                     browserState:(ios::ChromeBrowserState*)browserState
@@ -168,21 +181,21 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 - (void)shutdown {
   _webStateList->RemoveObserver(_webStateListObserver.get());
   [[NSNotificationCenter defaultCenter] removeObserver:self.consumer];
+  _observer.reset();
 }
 
 - (void)setUp {
-  [_consumer setIsOffTheRecord:_browserState->IsOffTheRecord()];
-  [_consumer setVoiceSearchIsEnabled:ios::GetChromeBrowserProvider()
-                                         ->GetVoiceSearchProvider()
-                                         ->IsVoiceSearchEnabled()];
-  [_consumer
+  [self.consumer setVoiceSearchIsEnabled:ios::GetChromeBrowserProvider()
+                                             ->GetVoiceSearchProvider()
+                                             ->IsVoiceSearchEnabled()];
+  [self.consumer
       setMaximumMostVisitedSitesShown:[GoogleLandingMediator maxSitesShown]];
-  [_consumer setTabCount:self.webStateList->count()];
+  [self.consumer setTabCount:self.webStateList->count()];
   web::WebState* webState = _webStateList->GetActiveWebState();
   if (webState) {
     web::NavigationManager* nav = webState->GetNavigationManager();
-    [_consumer setCanGoForward:nav->CanGoForward()];
-    [_consumer setCanGoBack:nav->CanGoBack()];
+    [self.consumer setCanGoForward:nav->CanGoForward()];
+    [self.consumer setCanGoBack:nav->CanGoBack()];
   }
 
   // Set up template URL service to listen for default search engine changes.
@@ -191,8 +204,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   _observer.reset(
       new google_landing::SearchEngineObserver(self, _templateURLService));
   _templateURLService->Load();
-  _doodleController.reset(ios::GetChromeBrowserProvider()->CreateLogoVendor(
-      _browserState, self.dispatcher));
+  _doodleController = ios::GetChromeBrowserProvider()->CreateLogoVendor(
+      _browserState, self.dispatcher);
   [_consumer setLogoVendor:_doodleController];
   [self updateShowLogo];
 
@@ -209,24 +222,24 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   // Set up notifications;
   NSNotificationCenter* defaultCenter = [NSNotificationCenter defaultCenter];
   [defaultCenter
-      addObserver:_consumer
+      addObserver:self.consumer
          selector:@selector(locationBarBecomesFirstResponder)
              name:ios_internal::kLocationBarBecomesFirstResponderNotification
            object:nil];
   [defaultCenter
-      addObserver:_consumer
+      addObserver:self.consumer
          selector:@selector(locationBarResignsFirstResponder)
              name:ios_internal::kLocationBarResignsFirstResponderNotification
            object:nil];
 
   // Set up what's new.
-  _notification_promo.reset(
+  _notificationPromo.reset(
       new NotificationPromoWhatsNew(GetApplicationContext()->GetLocalState()));
-  _notification_promo->Init();
-  [_consumer setPromoText:[base::SysUTF8ToNSString(
-                              _notification_promo->promo_text()) copy]];
-  [_consumer setPromoIcon:_notification_promo->icon()];
-  [_consumer setPromoCanShow:_notification_promo->CanShow()];
+  _notificationPromo->Init();
+  [self.consumer setPromoText:[base::SysUTF8ToNSString(
+                                  _notificationPromo->promo_text()) copy]];
+  [self.consumer setPromoIcon:_notificationPromo->icon()];
+  [self.consumer setPromoCanShow:_notificationPromo->CanShow()];
 }
 
 - (void)updateShowLogo {
@@ -251,7 +264,7 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
   if (_mostVisitedData.size() > 0) {
     // If some content is already displayed to the user, do not update it to
     // prevent updating the all the tiles without any action from the user.
-    self.freshMostVisitedData = data;
+    _freshMostVisitedData = data;
     return;
   }
 
@@ -260,13 +273,8 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 
   if (data.size() && !_recordedPageImpression) {
     _recordedPageImpression = YES;
-    std::vector<ntp_tiles::metrics::TileImpression> tiles;
-    for (const ntp_tiles::NTPTile& ntpTile : data) {
-      tiles.emplace_back(ntpTile.source, ntp_tiles::UNKNOWN_TILE_TYPE,
-                         ntpTile.url);
-    }
-    ntp_tiles::metrics::RecordPageImpression(
-        tiles, GetApplicationContext()->GetRapporServiceImpl());
+    _mostVisitedDataForLogging = data;
+    ntp_tiles::metrics::RecordPageImpression(data.size());
   }
 }
 
@@ -278,6 +286,67 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
       break;
     }
   }
+}
+
+- (void)getFaviconForURL:(GURL)URL
+                    size:(CGFloat)size
+                useCache:(BOOL)useCache
+           imageCallback:(void (^)(UIImage* favicon))imageCallback
+        fallbackCallback:(void (^)(UIColor* textColor,
+                                   UIColor* backgroundColor,
+                                   BOOL isDefaultColor))fallbackCallback {
+  __weak GoogleLandingMediator* weakSelf = self;
+
+  void (^faviconBlock)(const favicon_base::LargeIconResult&) = ^(
+      const favicon_base::LargeIconResult& result) {
+    ntp_tiles::TileVisualType tileType;
+
+    if (result.bitmap.is_valid()) {
+      scoped_refptr<base::RefCountedMemory> data =
+          result.bitmap.bitmap_data.get();
+      UIImage* favicon = [UIImage
+          imageWithData:[NSData dataWithBytes:data->front() length:data->size()]
+                  scale:[UIScreen mainScreen].scale];
+      if (imageCallback) {
+        imageCallback(favicon);
+      }
+      tileType = ntp_tiles::TileVisualType::ICON_REAL;
+    } else if (result.fallback_icon_style) {
+      UIColor* backgroundColor = skia::UIColorFromSkColor(
+          result.fallback_icon_style->background_color);
+      UIColor* textColor =
+          skia::UIColorFromSkColor(result.fallback_icon_style->text_color);
+      BOOL isDefaultColor =
+          result.fallback_icon_style->is_default_background_color;
+      if (fallbackCallback) {
+        fallbackCallback(textColor, backgroundColor, isDefaultColor);
+      }
+      tileType = isDefaultColor ? ntp_tiles::TileVisualType::ICON_DEFAULT
+                                : ntp_tiles::TileVisualType::ICON_COLOR;
+    }
+
+    GoogleLandingMediator* strongSelf = weakSelf;
+    if (strongSelf) {
+      if (result.bitmap.is_valid() || result.fallback_icon_style) {
+        [strongSelf largeIconCache]->SetCachedResult(URL, result);
+      }
+      [strongSelf faviconOfType:tileType fetchedForURL:URL];
+    }
+  };
+
+  if (useCache) {
+    std::unique_ptr<favicon_base::LargeIconResult> cached_result =
+        [self largeIconCache]->GetCachedResult(URL);
+    if (cached_result) {
+      faviconBlock(*cached_result);
+    }
+  }
+
+  CGFloat faviconSize = [UIScreen mainScreen].scale * size;
+  CGFloat faviconMinSize = [UIScreen mainScreen].scale * kFaviconMinSize;
+  [self largeIconService]->GetLargeIconOrFallbackStyle(
+      URL, faviconMinSize, faviconSize, base::BindBlockArc(faviconBlock),
+      &_cancelable_task_tracker);
 }
 
 #pragma mark - WebStateListObserving
@@ -352,28 +421,27 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 }
 
 - (void)promoViewed {
-  DCHECK(_notification_promo);
-  _notification_promo->HandleViewed();
-  [self.consumer setPromoCanShow:_notification_promo->CanShow()];
+  DCHECK(_notificationPromo);
+  _notificationPromo->HandleViewed();
+  [self.consumer setPromoCanShow:_notificationPromo->CanShow()];
 }
 
 - (void)promoTapped {
-  DCHECK(_notification_promo);
-  _notification_promo->HandleClosed();
-  [self.consumer setPromoCanShow:_notification_promo->CanShow()];
+  DCHECK(_notificationPromo);
+  _notificationPromo->HandleClosed();
+  [self.consumer setPromoCanShow:_notificationPromo->CanShow()];
 
-  if (_notification_promo->IsURLPromo()) {
-    [self.dispatcher webPageOrderedOpen:_notification_promo->url()
+  if (_notificationPromo->IsURLPromo()) {
+    [self.dispatcher webPageOrderedOpen:_notificationPromo->url()
                                referrer:web::Referrer()
                            inBackground:NO
                                appendTo:kCurrentTab];
     return;
   }
 
-  if (_notification_promo->IsChromeCommand()) {
-    base::scoped_nsobject<GenericChromeCommand> command(
-        [[GenericChromeCommand alloc]
-            initWithTag:_notification_promo->command_id()]);
+  if (_notificationPromo->IsChromeCommand()) {
+    GenericChromeCommand* command = [[GenericChromeCommand alloc]
+        initWithTag:_notificationPromo->command_id()];
     [self.dispatcher chromeExecuteCommand:command];
     return;
   }
@@ -382,9 +450,28 @@ void SearchEngineObserver::OnTemplateURLServiceChanged() {
 
 #pragma mark - Private
 
+// If there is some fresh most visited tiles, they become the current tiles and
+// the consumer gets notified.
 - (void)useFreshData {
-  _mostVisitedData = self.freshMostVisitedData;
+  _mostVisitedData = _freshMostVisitedData;
   [self.consumer mostVisitedDataUpdated];
+}
+
+// If it is the first time we see the favicon corresponding to |URL|, we log the
+// |tileType| impression.
+- (void)faviconOfType:(ntp_tiles::TileVisualType)tileType
+        fetchedForURL:(const GURL&)URL {
+  for (size_t i = 0; i < _mostVisitedDataForLogging.size(); ++i) {
+    ntp_tiles::NTPTile& ntpTile = _mostVisitedDataForLogging[i];
+    if (ntpTile.url == URL) {
+      ntp_tiles::metrics::RecordTileImpression(
+          i, ntpTile.source, tileType, URL,
+          GetApplicationContext()->GetRapporServiceImpl());
+      // Reset the URL to be sure to log the impression only once.
+      ntpTile.url = GURL();
+      break;
+    }
+  }
 }
 
 @end

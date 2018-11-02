@@ -223,6 +223,8 @@ bool SyncSetTypesFunction::RunAsync() {
     if (type.enabled)
       chosen_types.Put(syncer::ModelTypeFromString(type.name));
   }
+  if (chosen_types.Has(syncer::TYPED_URLS))
+    chosen_types.Put(syncer::PROXY_TABS);
 
   sync_manager->ConfigureTypes(params->sync_everything, chosen_types);
 
@@ -244,8 +246,10 @@ bool SyncGetTypesFunction::RunAsync() {
   std::vector<vivaldi::sync::SyncDataType> data_types;
   for (const auto& model_type : model_type_map) {
     // Skip the model types that don't make sense for us to synchronize.
-    if (model_type.first == syncer::THEMES)
+    if (model_type.first == syncer::THEMES ||
+        model_type.first == syncer::PROXY_TABS) {
       continue;
+    }
     vivaldi::sync::SyncDataType data_type;
     data_type.name.assign(syncer::ModelTypeToString(model_type.first));
     data_type.enabled = chosen_types.Has(model_type.first);

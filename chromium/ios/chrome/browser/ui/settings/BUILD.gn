@@ -2,29 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-bundle_data("resources") {
-  sources = [
-    "resources/app_icon_placeholder.png",
-    "resources/app_icon_placeholder@2x.png",
-    "resources/app_icon_placeholder@3x.png",
-    "resources/encryption_error.png",
-    "resources/encryption_error@2x.png",
-    "resources/encryption_error@3x.png",
-    "resources/settings_accounts_add_account.png",
-    "resources/settings_accounts_add_account@2x.png",
-    "resources/settings_accounts_add_account@3x.png",
-    "resources/settings_error.png",
-    "resources/settings_error@2x.png",
-    "resources/settings_error@3x.png",
-    "resources/settings_sync.png",
-    "resources/settings_sync@2x.png",
-    "resources/settings_sync@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
-
 source_set("settings") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -53,8 +30,6 @@ source_set("settings") {
     "compose_email_handler_collection_view_controller.mm",
     "content_settings_collection_view_controller.h",
     "content_settings_collection_view_controller.mm",
-    "contextual_search_collection_view_controller.h",
-    "contextual_search_collection_view_controller.mm",
     "dataplan_usage_collection_view_controller.h",
     "dataplan_usage_collection_view_controller.mm",
     "do_not_track_collection_view_controller.h",
@@ -65,11 +40,9 @@ source_set("settings") {
     "import_data_collection_view_controller.mm",
     "material_cell_catalog_view_controller.h",
     "material_cell_catalog_view_controller.mm",
-    "native_apps_collection_view_controller.h",
-    "native_apps_collection_view_controller.mm",
-    "native_apps_collection_view_controller_private.h",
     "password_details_collection_view_controller.h",
     "password_details_collection_view_controller.mm",
+    "password_details_collection_view_controller_delegate.h",
     "physical_web_collection_view_controller.h",
     "physical_web_collection_view_controller.mm",
     "privacy_collection_view_controller.h",
@@ -105,7 +78,11 @@ source_set("settings") {
     "voicesearch_collection_view_controller.mm",
   ]
   deps = [
-    ":resources",
+    "resources:app_icon_placeholder",
+    "resources:encryption_error",
+    "resources:settings_accounts_add_account",
+    "resources:settings_error",
+    "resources:settings_sync",
     "//base",
     "//base:i18n",
     "//components/autofill/core/browser",
@@ -115,6 +92,7 @@ source_set("settings") {
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
+    "//components/feature_engagement_tracker",
     "//components/google/core/browser",
     "//components/handoff",
     "//components/history/core/browser",
@@ -124,6 +102,7 @@ source_set("settings") {
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/physical_web/data_source",
+    "//components/pref_registry",
     "//components/prefs",
     "//components/resources",
     "//components/search_engines",
@@ -144,14 +123,13 @@ source_set("settings") {
     "//ios/chrome/browser/browser_state:browser_state_impl",
     "//ios/chrome/browser/browsing_data",
     "//ios/chrome/browser/content_settings",
+    "//ios/chrome/browser/feature_engagement_tracker",
     "//ios/chrome/browser/history",
-    "//ios/chrome/browser/native_app_launcher:native_app_launcher_internal",
     "//ios/chrome/browser/passwords",
     "//ios/chrome/browser/physical_web",
     "//ios/chrome/browser/prefs",
     "//ios/chrome/browser/search_engines",
     "//ios/chrome/browser/signin",
-    "//ios/chrome/browser/store_kit",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/translate",
     "//ios/chrome/browser/ui",
@@ -167,7 +145,6 @@ source_set("settings") {
     "//ios/chrome/browser/ui/commands",
     "//ios/chrome/browser/ui/content_suggestions/cells",
     "//ios/chrome/browser/ui/content_suggestions/cells:cells_ui",
-    "//ios/chrome/browser/ui/contextual_search",
     "//ios/chrome/browser/ui/icons",
     "//ios/chrome/browser/ui/keyboard",
     "//ios/chrome/browser/ui/material_components",
@@ -180,10 +157,10 @@ source_set("settings") {
     "//ios/chrome/common",
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/images",
-    "//ios/public/provider/chrome/browser/native_app_launcher",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/user_feedback",
     "//ios/public/provider/chrome/browser/voice",
+    "//ios/shared/chrome/browser/ui/commands",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
     "//ios/web",
@@ -198,7 +175,6 @@ source_set("settings") {
   libs = [
     "CoreLocation.framework",
     "LocalAuthentication.framework",
-    "StoreKit.framework",
     "UIKit.framework",
   ]
 }
@@ -235,7 +211,7 @@ source_set("test_support") {
     "//ios/chrome/browser/sync:test_support",
     "//ios/chrome/browser/ui/collection_view:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
   ]
 }
@@ -252,11 +228,9 @@ source_set("unit_tests") {
     "clear_browsing_data_collection_view_controller_unittest.mm",
     "compose_email_handler_collection_view_controller_unittest.mm",
     "content_settings_collection_view_controller_unittest.mm",
-    "contextual_search_collection_view_controller_unittest.mm",
     "dataplan_usage_collection_view_controller_unittest.mm",
     "do_not_track_collection_view_controller_unittest.mm",
     "import_data_collection_view_controller_unittest.mm",
-    "native_apps_collection_view_controller_unittest.mm",
     "password_details_collection_view_controller_unittest.mm",
     "physical_web_collection_view_controller_unittest.mm",
     "privacy_collection_view_controller_unittest.mm",
@@ -315,7 +289,6 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui/collection_view:test_support",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/commands",
-    "//ios/chrome/browser/ui/contextual_search",
     "//ios/chrome/browser/ui/icons",
     "//ios/chrome/browser/ui/settings/cells",
     "//ios/chrome/browser/ui/sync",
@@ -325,11 +298,10 @@ source_set("unit_tests") {
     "//ios/chrome/common",
     "//ios/chrome/test:test_support",
     "//ios/public/provider/chrome/browser",
-    "//ios/public/provider/chrome/browser/native_app_launcher:test_support",
     "//ios/public/provider/chrome/browser/voice",
     "//ios/third_party/material_components_ios",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//net",
     "//net:test_support",
     "//testing/gmock",
@@ -356,6 +328,7 @@ source_set("eg_tests") {
   deps = [
     ":settings",
     "//base",
+    "//base/test:test_support",
     "//components/autofill/core/common",
     "//components/browsing_data/core",
     "//components/content_settings/core/browser",
@@ -383,10 +356,12 @@ source_set("eg_tests") {
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//net",
     "//ui/base",
     "//url",

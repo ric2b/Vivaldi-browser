@@ -40,11 +40,6 @@ class DataUse : public base::SupportsUserData {
   explicit DataUse(TrafficType traffic_type);
   ~DataUse() override;
 
-  // Merge data use from another instance.
-  // TODO(rajendrant): Check if the merge can be removed. Otherwise user data
-  // needs to support mergeability.
-  void MergeFrom(const DataUse& other);
-
   // Returns the page URL.
   const GURL& url() const { return url_; }
 
@@ -56,6 +51,10 @@ class DataUse : public base::SupportsUserData {
     description_ = description;
   }
 
+  // Increments the total received and sent byte counts. Can be used to
+  // decrement the byte counts as well.
+  void IncrementTotalBytes(int64_t bytes_received, int64_t bytes_sent);
+
   int64_t total_bytes_received() const { return total_bytes_received_; }
 
   int64_t total_bytes_sent() const { return total_bytes_sent_; }
@@ -63,10 +62,6 @@ class DataUse : public base::SupportsUserData {
   TrafficType traffic_type() const { return traffic_type_; }
 
  private:
-  // TODO(rajendrant): Remove this friend after adding member function to
-  // increment total sent/received bytes.
-  friend class DataUseRecorder;
-
   GURL url_;
   std::string description_;
   const TrafficType traffic_type_;

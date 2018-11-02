@@ -12,9 +12,9 @@
 
 namespace blink {
 
-class FrameView;
 class LayoutAPIShim;
 class LocalFrame;
+class LocalFrameView;
 class LayoutViewItem;
 class Node;
 class ObjectPaintProperties;
@@ -57,7 +57,9 @@ class LayoutItem {
 
   bool IsTextControl() const { return layout_object_->IsTextControl(); }
 
-  bool IsLayoutPart() const { return layout_object_->IsLayoutPart(); }
+  bool IsLayoutEmbeddedContent() const {
+    return layout_object_->IsLayoutEmbeddedContent();
+  }
 
   bool IsEmbeddedObject() const { return layout_object_->IsEmbeddedObject(); }
 
@@ -119,7 +121,7 @@ class LayoutItem {
 
   LayoutViewItem View() const;
 
-  FrameView* GetFrameView() const {
+  LocalFrameView* GetFrameView() const {
     return layout_object_->GetDocument().View();
   }
 
@@ -199,10 +201,6 @@ class LayoutItem {
 
   bool NeedsOverflowRecalcAfterStyleChange() const {
     return layout_object_->NeedsOverflowRecalcAfterStyleChange();
-  }
-
-  void DeprecatedInvalidateTree(const PaintInvalidationState& state) {
-    layout_object_->DeprecatedInvalidateTree(state);
   }
 
   CompositingState GetCompositingState() const {

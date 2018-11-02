@@ -4,13 +4,14 @@
 
 #include "components/payments/core/payment_request_data_util.h"
 
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_country.h"
 #include "components/autofill/core/browser/autofill_data_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
-#include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
@@ -18,6 +19,8 @@
 #include "components/payments/core/payment_address.h"
 #include "components/payments/core/payment_method_data.h"
 #include "third_party/libphonenumber/phonenumber_api.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace payments {
 namespace data_util {
@@ -90,17 +93,22 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
   return response;
 }
 
-void ParseBasicCardSupportedNetworks(
+void ParseSupportedMethods(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
-    std::set<std::string>* out_basic_card_specified_networks) {
+    std::set<std::string>* out_basic_card_specified_networks,
+    std::vector<std::string>* out_url_payment_method_identifiers) {
   DCHECK(out_supported_networks->empty());
   DCHECK(out_basic_card_specified_networks->empty());
+  DCHECK(out_url_payment_method_identifiers->empty());
 
   const std::set<std::string> kBasicCardNetworks{
       "amex",       "diners", "discover", "jcb",
       "mastercard", "mir",    "unionpay", "visa"};
   std::set<std::string> remaining_card_networks(kBasicCardNetworks);
+
+  std::set<GURL> url_payment_method_identifiers;
+
   for (const PaymentMethodData& method_data_entry : method_data) {
     if (method_data_entry.supported_methods.empty())
       return;
@@ -148,9 +156,53 @@ void ParseBasicCardSupportedNetworks(
             }
           }
         }
+      } else {
+        // Here |method| could be a repeated deprecated supported network (e.g.,
+        // "visa"), some invalid string or a URL Payment Method Identifier.
+        // Capture this last category if the URL is valid. A valid URL must have
+        // an https scheme and its username and password must be empty:
+        // https://www.w3.org/TR/payment-method-id/#dfn-validate-a-url-based-payment-method-identifier
+        // Avoid duplicate URLs.
+        GURL url(method);
+        if (url.is_valid() && url.SchemeIs(url::kHttpsScheme) &&
+            !url.has_username() && !url.has_password()) {
+          const auto result = url_payment_method_identifiers.insert(url);
+          if (result.second)
+            out_url_payment_method_identifiers->push_back(method);
+        }
       }
     }
   }
+}
+
+void ParseSupportedCardTypes(
+    const std::vector<PaymentMethodData>& method_data,
+    std::set<autofill::CreditCard::CardType>* out_supported_card_types_set) {
+  DCHECK(out_supported_card_types_set->empty());
+
+  for (const PaymentMethodData& method_data_entry : method_data) {
+    // Ignore |supported_types| if |supported_methods| does not contain
+    // "basic_card".
+    if (!base::ContainsValue(method_data_entry.supported_methods, "basic-card"))
+      continue;
+
+    for (const autofill::CreditCard::CardType& card_type :
+         method_data_entry.supported_types) {
+      out_supported_card_types_set->insert(card_type);
+    }
+  }
+
+  // Omitting the card types means all 3 card types are supported.
+  if (out_supported_card_types_set->empty()) {
+    out_supported_card_types_set->insert(
+        autofill::CreditCard::CARD_TYPE_CREDIT);
+    out_supported_card_types_set->insert(autofill::CreditCard::CARD_TYPE_DEBIT);
+    out_supported_card_types_set->insert(
+        autofill::CreditCard::CARD_TYPE_PREPAID);
+  }
+
+  // Let the user decide whether an unknown card type should be used.
+  out_supported_card_types_set->insert(autofill::CreditCard::CARD_TYPE_UNKNOWN);
 }
 
 base::string16 GetFormattedPhoneNumberForDisplay(
@@ -189,6 +241,26 @@ std::string FormatPhoneForResponse(const std::string& phone_number,
                                    const std::string& country_code) {
   return FormatPhoneNumber(phone_number, country_code,
                            PhoneNumberUtil::PhoneNumberFormat::E164);
+}
+
+base::string16 FormatCardNumberForDisplay(const base::string16& card_number) {
+  base::string16 number = autofill::CreditCard::StripSeparators(card_number);
+  if (number.empty() || !base::IsAsciiDigit(number[0]))
+    return card_number;
+
+  std::vector<size_t> positions = {4U, 9U, 14U};
+  if (autofill::CreditCard::GetCardNetwork(number) ==
+      autofill::kAmericanExpressCard) {
+    positions = {4U, 11U};
+  }
+
+  static const base::char16 kSeparator = base::ASCIIToUTF16(" ")[0];
+  for (size_t i : positions) {
+    if (number.size() > i)
+      number.insert(i, 1U, kSeparator);
+  }
+
+  return number;
 }
 
 std::string GetCountryCodeWithFallback(const autofill::AutofillProfile* profile,

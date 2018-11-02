@@ -30,6 +30,7 @@
 #include "bindings/core/v8/ScriptStreamer.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
@@ -46,7 +47,7 @@
 #include "platform/wtf/CurrentTime.h"
 #include "public/platform/Platform.h"
 
-#if OS(WIN)
+#if defined(OS_WIN)
 #include <malloc.h>
 #else
 #include <alloca.h>
@@ -82,24 +83,21 @@ V8CompileHistogram::~V8CompileHistogram() {
     case kCacheable: {
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, compile_cacheable_histogram,
-          new CustomCountHistogram("V8.CompileCacheableMicroSeconds", 0,
-                                   1000000, 50));
+          ("V8.CompileCacheableMicroSeconds", 0, 1000000, 50));
       compile_cacheable_histogram.Count(elapsed_micro_seconds);
       break;
     }
     case kNoncacheable: {
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, compile_non_cacheable_histogram,
-          new CustomCountHistogram("V8.CompileNoncacheableMicroSeconds", 0,
-                                   1000000, 50));
+          ("V8.CompileNoncacheableMicroSeconds", 0, 1000000, 50));
       compile_non_cacheable_histogram.Count(elapsed_micro_seconds);
       break;
     }
     case kInlineScript: {
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, compile_inline_histogram,
-          new CustomCountHistogram("V8.CompileInlineScriptMicroSeconds", 0,
-                                   1000000, 50));
+          ("V8.CompileInlineScriptMicroSeconds", 0, 1000000, 50));
       compile_inline_histogram.Count(elapsed_micro_seconds);
       break;
     }
@@ -194,9 +192,9 @@ v8::MaybeLocal<v8::Script> CompileAndProduceCache(
     if (length > 1024) {
       // Omit histogram samples for small cache data to avoid outliers.
       int cache_size_ratio = static_cast<int>(100.0 * length / code->Length());
-      DEFINE_THREAD_SAFE_STATIC_LOCAL(
-          CustomCountHistogram, code_cache_size_histogram,
-          new CustomCountHistogram("V8.CodeCacheSizeRatio", 0, 10000, 50));
+      DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram,
+                                      code_cache_size_histogram,
+                                      ("V8.CodeCacheSizeRatio", 0, 10000, 50));
       code_cache_size_histogram.Count(cache_size_ratio);
     }
     cache_handler->ClearCachedMetadata(CachedMetadataHandler::kCacheLocally);
@@ -467,6 +465,12 @@ v8::MaybeLocal<v8::Script> V8ScriptRunner::CompileScript(
       "v8,devtools.timeline", "v8.compile", "fileName", file_name.Utf8(),
       "data",
       InspectorCompileScriptEvent::Data(file_name, script_start_position));
+  // TODO(maxlg): probe will use a execution context once
+  // DocumentWriteEvaluator::EnsureEvaluationContext provide script state, see
+  // https://crbug.com/746961.
+  probe::V8Compile probe(nullptr, file_name,
+                         script_start_position.line_.ZeroBasedInt(),
+                         script_start_position.column_.ZeroBasedInt());
 
   DCHECK(!streamer || resource);
   DCHECK(!resource || resource->CacheHandler() == cache_handler);
@@ -524,17 +528,19 @@ v8::MaybeLocal<v8::Module> V8ScriptRunner::CompileModule(
   return v8::ScriptCompiler::CompileModule(isolate, &script_source);
 }
 
-void V8ScriptRunner::ReportExceptionForModule(v8::Isolate* isolate,
-                                              v8::Local<v8::Value> exception,
-                                              const String& file_name) {
+void V8ScriptRunner::ReportExceptionForModule(
+    v8::Isolate* isolate,
+    v8::Local<v8::Value> exception,
+    const String& file_name,
+    const TextPosition& start_position) {
   // |origin| is for compiling a fragment that throws |exception|.
   // Therefore |is_module| is false and |access_control_status| is
   // kSharableCrossOrigin.
   AccessControlStatus access_control_status = kSharableCrossOrigin;
   v8::ScriptOrigin origin(
       V8String(isolate, file_name),
-      v8::Integer::New(isolate, 0),  // line_offset
-      v8::Integer::New(isolate, 0),  // col_offset
+      v8::Integer::New(isolate, start_position.line_.ZeroBasedInt()),
+      v8::Integer::New(isolate, start_position.column_.ZeroBasedInt()),
       v8::Boolean::New(isolate, access_control_status == kSharableCrossOrigin),
       v8::Local<v8::Integer>(),    // script id
       v8::String::Empty(isolate),  // source_map_url
@@ -555,6 +561,8 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledScript(
   TRACE_EVENT1("v8", "v8.run", "fileName",
                TRACE_STR_COPY(*v8::String::Utf8Value(
                    script->GetUnboundScript()->GetScriptName())));
+  RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
 
   if (v8::MicrotasksScope::GetCurrentDepth(isolate) >= kMaxRecursionDepth)
     return ThrowStackOverflowExceptionIfNeeded(isolate);
@@ -591,6 +599,8 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CompileAndRunInternalScript(
     return v8::MaybeLocal<v8::Value>();
 
   TRACE_EVENT0("v8", "v8.run");
+  RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::MaybeLocal<v8::Value> result = script->Run(isolate->GetCurrentContext());
@@ -602,6 +612,9 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::RunCompiledInternalScript(
     v8::Isolate* isolate,
     v8::Local<v8::Script> script) {
   TRACE_EVENT0("v8", "v8.run");
+  RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
+
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
   v8::MaybeLocal<v8::Value> result = script->Run(isolate->GetCurrentContext());
@@ -616,6 +629,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallAsConstructor(
     int argc,
     v8::Local<v8::Value> argv[]) {
   TRACE_EVENT0("v8", "v8.callAsConstructor");
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
 
   int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
   if (depth >= kMaxRecursionDepth)
@@ -656,6 +670,8 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallFunction(
       context->IsDocument() ? ToDocument(context)->GetFrame() : nullptr;
   ScopedFrameBlamer frame_blamer(frame);
   TRACE_EVENT0("v8", "v8.callFunction");
+  RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
 
   int depth = v8::MicrotasksScope::GetCurrentDepth(isolate);
   if (depth >= kMaxRecursionDepth)
@@ -690,6 +706,9 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::CallInternalFunction(
     v8::Local<v8::Value> args[],
     v8::Isolate* isolate) {
   TRACE_EVENT0("v8", "v8.callFunction");
+  RuntimeCallStatsScopedTracer rcs_scoped_tracer(isolate);
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
+
   CHECK(!ThreadState::Current()->IsWrapperTracingForbidden());
   v8::MicrotasksScope microtasks_scope(
       isolate, v8::MicrotasksScope::kDoNotRunMicrotasks);
@@ -704,6 +723,7 @@ v8::MaybeLocal<v8::Value> V8ScriptRunner::EvaluateModule(
     v8::Local<v8::Context> context,
     v8::Isolate* isolate) {
   TRACE_EVENT0("v8", "v8.evaluateModule");
+  RUNTIME_CALL_TIMER_SCOPE(isolate, RuntimeCallStats::CounterId::kV8);
   v8::MicrotasksScope microtasks_scope(isolate,
                                        v8::MicrotasksScope::kRunMicrotasks);
   return module->Evaluate(context);
@@ -731,6 +751,10 @@ void V8ScriptRunner::SetCacheTimeStamp(CachedMetadataHandler* cache_handler) {
 void V8ScriptRunner::ThrowException(v8::Isolate* isolate,
                                     v8::Local<v8::Value> exception,
                                     const v8::ScriptOrigin& origin) {
+  // This is intentionally a CHECK, as CallInternalFunction below will deref
+  // nullptr if this condition is false.
+  CHECK(!exception.IsEmpty());
+
   // In order for the current TryCatch to catch this exception and
   // call MessageCallback when SetVerbose(true), create a v8::Function
   // that calls isolate->throwException().
@@ -741,10 +765,21 @@ void V8ScriptRunner::ThrowException(v8::Isolate* isolate,
   // be "muted" (sanitized in our terminology) if CORS does not allow.
   // https://html.spec.whatwg.org/multipage/webappapis.html#report-the-error
   // Avoid compile and run scripts when API is available: crbug.com/639739
+  v8::ScriptOriginOptions origin_options = origin.Options();
+  // Create a new ScriptOrigin with is_wasm and is_module bits left off
+  // (they default to false).
+  v8::ScriptOrigin origin_copy(
+      origin.ResourceName(), origin.ResourceLineOffset(),
+      origin.ResourceColumnOffset(),
+      v8::Boolean::New(isolate, origin_options.IsSharedCrossOrigin()),
+      origin.ScriptID(), origin.SourceMapUrl(),
+      v8::Boolean::New(isolate, origin_options.IsOpaque()));
+  DCHECK(!origin_copy.Options().IsWasm());
+  DCHECK(!origin_copy.Options().IsModule());
   v8::Local<v8::Script> script =
       CompileWithoutOptions(
           V8CompileHistogram::Cacheability::kNoncacheable, isolate,
-          V8AtomicString(isolate, "((e) => { throw e; })"), origin)
+          V8AtomicString(isolate, "((e) => { throw e; })"), origin_copy)
           .ToLocalChecked();
   v8::Local<v8::Function> thrower = RunCompiledInternalScript(isolate, script)
                                         .ToLocalChecked()

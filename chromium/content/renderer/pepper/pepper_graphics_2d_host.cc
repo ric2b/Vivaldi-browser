@@ -15,8 +15,9 @@
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/resources/shared_bitmap.h"
-#include "cc/resources/texture_mailbox.h"
+#include "components/viz/client/client_shared_bitmap_manager.h"
+#include "components/viz/common/quads/shared_bitmap.h"
+#include "components/viz/common/quads/texture_mailbox.h"
 #include "content/public/renderer/render_thread.h"
 #include "content/public/renderer/renderer_ppapi_host.h"
 #include "content/renderer/pepper/gfx_conversion.h"
@@ -34,7 +35,6 @@
 #include "ppapi/proxy/ppapi_messages.h"
 #include "ppapi/shared_impl/ppb_view_shared.h"
 #include "ppapi/thunk/enter.h"
-#include "services/ui/public/cpp/bitmap/child_shared_bitmap_manager.h"
 #include "skia/ext/platform_canvas.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkSwizzle.h"
@@ -546,7 +546,7 @@ int32_t PepperGraphics2DHost::OnHostMsgReadImageData(
 }
 
 void PepperGraphics2DHost::ReleaseCallback(
-    std::unique_ptr<cc::SharedBitmap> bitmap,
+    std::unique_ptr<viz::SharedBitmap> bitmap,
     const gfx::Size& bitmap_size,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
@@ -559,13 +559,13 @@ void PepperGraphics2DHost::ReleaseCallback(
 }
 
 bool PepperGraphics2DHost::PrepareTextureMailbox(
-    cc::TextureMailbox* mailbox,
+    viz::TextureMailbox* mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
   if (!texture_mailbox_modified_)
     return false;
   // TODO(jbauman): Send image_data_ through mailbox to avoid copy.
   gfx::Size pixel_image_size(image_data_->width(), image_data_->height());
-  std::unique_ptr<cc::SharedBitmap> shared_bitmap;
+  std::unique_ptr<viz::SharedBitmap> shared_bitmap;
   if (cached_bitmap_) {
     if (cached_bitmap_size_ == pixel_image_size)
       shared_bitmap = std::move(cached_bitmap_);
@@ -580,12 +580,11 @@ bool PepperGraphics2DHost::PrepareTextureMailbox(
   if (!shared_bitmap)
     return false;
   void* src = image_data_->Map();
-  memcpy(shared_bitmap->pixels(),
-         src,
-         cc::SharedBitmap::CheckedSizeInBytes(pixel_image_size));
+  memcpy(shared_bitmap->pixels(), src,
+         viz::SharedBitmap::CheckedSizeInBytes(pixel_image_size));
   image_data_->Unmap();
 
-  *mailbox = cc::TextureMailbox(shared_bitmap.get(), pixel_image_size);
+  *mailbox = viz::TextureMailbox(shared_bitmap.get(), pixel_image_size);
   *release_callback = cc::SingleReleaseCallback::Create(
       base::Bind(&PepperGraphics2DHost::ReleaseCallback,
                  this->AsWeakPtr(),

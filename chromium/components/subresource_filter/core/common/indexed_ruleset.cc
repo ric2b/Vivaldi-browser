@@ -11,10 +11,12 @@
 
 namespace subresource_filter {
 
+namespace proto = url_pattern_index::proto;
+
 // RulesetIndexer --------------------------------------------------------------
 
 // static
-const int RulesetIndexer::kIndexedFormatVersion = 17;
+const int RulesetIndexer::kIndexedFormatVersion = 18;
 
 RulesetIndexer::RulesetIndexer()
     : blacklist_(&builder_), whitelist_(&builder_), deactivation_(&builder_) {}
@@ -22,7 +24,7 @@ RulesetIndexer::RulesetIndexer()
 RulesetIndexer::~RulesetIndexer() = default;
 
 bool RulesetIndexer::AddUrlRule(const proto::UrlRule& rule) {
-  const UrlRuleOffset offset = SerializeUrlRule(rule, &builder_);
+  const auto offset = url_pattern_index::SerializeUrlRule(rule, &builder_);
   // Note: A zero offset.o means a "nullptr" offset. It is returned when the
   // rule has not been serialized.
   if (!offset.o)

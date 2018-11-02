@@ -15,6 +15,7 @@ class Browser;
 
 // This is the class that implements the UI for the bubble showing that there
 // is a 3rd party module loaded that conflicts with Chrome.
+// TODO(pmonette): Delete this view when EnumerateModulesModel gets removed.
 class ConflictingModuleView : public views::BubbleDialogDelegateView,
                               public EnumerateModulesModel::Observer {
  public:
@@ -31,14 +32,12 @@ class ConflictingModuleView : public views::BubbleDialogDelegateView,
   // Shows the bubble and updates the counter for how often it has been shown.
   void ShowBubble();
 
-  // views::BubbleDialogDelegateView implementation:
+  // views::BubbleDialogDelegateView:
+  ui::AXRole GetAccessibleWindowRole() const override;
   void OnWidgetClosing(views::Widget* widget) override;
   bool Accept() override;
   base::string16 GetDialogButtonLabel(ui::DialogButton button) const override;
   void Init() override;
-
-  // views::View implementation.
-  void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
 
   // EnumerateModulesModel::Observer:
   void OnConflictsAcknowledged() override;

@@ -11,12 +11,6 @@
 #error Should only be built with USE_SYSTEM_PROPRIETARY_CODECS
 #endif
 
-#define TURN_ON_MSE_VIVALDI true
-// PipelineIntegrationTest.MediaSource_MP3_Icecast
-// PipelineIntegrationTest.MediaSource_ADTS
-// PipelineIntegrationTest.MediaSource_ADTS_TimestampOffset
-// PipelineIntegrationTest.MediaSource_MP3_TimestampOffset
-
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_export.h"
 

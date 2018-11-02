@@ -4,7 +4,7 @@
 
 #include "core/layout/ScrollAnchor.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/api/LayoutBoxItem.h"
@@ -32,7 +32,7 @@ ScrollAnchor::~ScrollAnchor() {}
 void ScrollAnchor::SetScroller(ScrollableArea* scroller) {
   DCHECK_NE(scroller_, scroller);
   DCHECK(scroller);
-  DCHECK(scroller->IsRootFrameViewport() || scroller->IsFrameView() ||
+  DCHECK(scroller->IsRootFrameViewport() || scroller->IsLocalFrameView() ||
          scroller->IsPaintLayerScrollableArea());
   scroller_ = scroller;
   ClearSelf();
@@ -50,9 +50,12 @@ static LayoutBoxItem ScrollerLayoutBoxItem(const ScrollableArea* scroller) {
   return LayoutBoxItem(ScrollerLayoutBox(scroller));
 }
 
+// TODO(skobes): Storing a "corner" doesn't make much sense anymore since we
+// adjust only on the block flow axis.  This could probably be refactored to
+// simply measure the movement of the block-start edge.
 static Corner CornerToAnchor(const ScrollableArea* scroller) {
   const ComputedStyle* style = ScrollerLayoutBox(scroller)->Style();
-  if (style->IsFlippedBlocksWritingMode() || !style->IsLeftToRightDirection())
+  if (style->IsFlippedBlocksWritingMode())
     return Corner::kTopRight;
   return Corner::kTopLeft;
 }
@@ -116,7 +119,8 @@ static LayoutPoint ComputeRelativeOffset(const LayoutObject* layout_object,
 static bool CandidateMayMoveWithScroller(const LayoutObject* candidate,
                                          const ScrollableArea* scroller) {
   if (const ComputedStyle* style = candidate->Style()) {
-    if (style->HasViewportConstrainedPosition())
+    if (style->HasViewportConstrainedPosition() ||
+        style->HasStickyConstrainedPosition())
       return false;
   }
 
@@ -254,7 +258,7 @@ void ScrollAnchor::NotifyBeforeLayout() {
   scroll_anchor_disabling_style_changed_ =
       ComputeScrollAnchorDisablingStyleChanged();
 
-  FrameView* frame_view = ScrollerLayoutBox(scroller_)->GetFrameView();
+  LocalFrameView* frame_view = ScrollerLayoutBox(scroller_)->GetFrameView();
   ScrollableArea* owning_scroller =
       scroller_->IsRootFrameViewport()
           ? &ToRootFrameViewport(scroller_)->LayoutViewport()
@@ -315,7 +319,7 @@ void ScrollAnchor::Adjust() {
                       ("Layout.ScrollAnchor.AdjustedScrollOffset", 2));
   adjusted_offset_histogram.Count(1);
   UseCounter::Count(ScrollerLayoutBox(scroller_)->GetDocument(),
-                    UseCounter::kScrollAnchored);
+                    WebFeature::kScrollAnchored);
 }
 
 void ScrollAnchor::ClearSelf() {
@@ -344,7 +348,7 @@ void ScrollAnchor::Clear() {
     layer = layer->Parent();
   }
 
-  if (FrameView* view = layout_object->GetFrameView()) {
+  if (LocalFrameView* view = layout_object->GetFrameView()) {
     ScrollAnchor* anchor = view->GetScrollAnchor();
     DCHECK(anchor);
     anchor->ClearSelf();

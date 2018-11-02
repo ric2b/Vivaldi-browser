@@ -101,48 +101,18 @@ public class WebShareTest {
     }
 
     /**
-     * Verify that WebShare is missing by default (without a flag).
-     * @throws Exception
-     */
-    @Test
-    @MediumTest
-    @Feature({"WebShare"})
-    public void testWebShareMissingWithoutFlag() throws Exception {
-        mActivityTestRule.loadUrl(mUrl);
-        mActivityTestRule.runJavaScriptCodeInCurrentTab("initiate_share()");
-        Assert.assertEquals("Fail: navigator.share === undefined", mUpdateWaiter.waitForUpdate());
-    }
-
-    /**
      * Verify that WebShare fails if called without a user gesture.
      * @throws Exception
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-blink-features=WebShare")
     @Feature({"WebShare"})
     public void testWebShareNoUserGesture() throws Exception {
         mActivityTestRule.loadUrl(mUrl);
         mActivityTestRule.runJavaScriptCodeInCurrentTab("initiate_share()");
-        Assert.assertEquals(
-                "Fail: SecurityError: Must be handling a user gesture to perform a share request.",
+        Assert.assertEquals("Fail: NotAllowedError: "
+                        + "Must be handling a user gesture to perform a share request.",
                 mUpdateWaiter.waitForUpdate());
-    }
-
-    /**
-     * Verify that WebShare fails if the origin trial is disabled.
-     * @throws Exception
-     */
-    @Test
-    @MediumTest
-    @CommandLineFlags.Add({"enable-blink-features=WebShare",
-            "origin-trial-disabled-features=WebShare"})
-    @Feature({"WebShare"})
-    public void testWebShareOriginTrialDisabled() throws Exception {
-        mActivityTestRule.loadUrl(mUrl);
-        TouchCommon.singleClickView(mTab.getView());
-        Assert.assertEquals(
-                "Fail: SecurityError: WebShare is disabled.", mUpdateWaiter.waitForUpdate());
     }
 
     /**
@@ -151,7 +121,6 @@ public class WebShareTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-blink-features=WebShare")
     @Feature({"WebShare"})
     public void testWebShareCancel() throws Exception {
         // This test tests functionality that is only available post Lollipop MR1.
@@ -184,7 +153,6 @@ public class WebShareTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-blink-features=WebShare")
     @Feature({"WebShare"})
     public void testWebShareSuccess() throws Exception {
         // This test tests functionality that is only available post Lollipop MR1.
@@ -240,7 +208,6 @@ public class WebShareTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-blink-features=WebShare")
     @Feature({"WebShare"})
     public void testWebShareCancelPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new ShareHelper.FakeIntentReceiver() {
@@ -271,7 +238,6 @@ public class WebShareTest {
      */
     @Test
     @MediumTest
-    @CommandLineFlags.Add("enable-blink-features=WebShare")
     @Feature({"WebShare"})
     public void testWebShareSuccessPreLMR1() throws Exception {
         ShareHelper.setFakeIntentReceiverForTesting(new ShareHelper.FakeIntentReceiver() {
@@ -291,7 +257,6 @@ public class WebShareTest {
         });
 
         ShareHelper.setForceCustomChooserForTesting(true);
-
         mActivityTestRule.loadUrl(mUrl);
         // Click (instead of directly calling the JavaScript function) to simulate a user gesture.
         TouchCommon.singleClickView(mTab.getView());

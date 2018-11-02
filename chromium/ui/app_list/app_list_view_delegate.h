@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "base/time/time.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/app_list/app_list_export.h"
 
 namespace gfx {
@@ -21,6 +22,7 @@ class View;
 namespace app_list {
 
 class AppListModel;
+class AppListViewDelegateObserver;
 class SearchResult;
 class SpeechUIModel;
 
@@ -38,9 +40,6 @@ class APP_LIST_EXPORT AppListViewDelegate {
   // SearchBoxModel and populates SearchResults. Both models are sub models
   // of AppListModel.
   virtual void StartSearch() = 0;
-
-  // Invoked to stop the current search.
-  virtual void StopSearch() = 0;
 
   // Invoked to open the search result.
   virtual void OpenSearchResult(SearchResult* result,
@@ -83,10 +82,6 @@ class APP_LIST_EXPORT AppListViewDelegate {
   virtual std::vector<views::View*> CreateCustomPageWebViews(
       const gfx::Size& size) = 0;
 
-  // Gets the web view for the search answer. The caller doesn't take the
-  // ownership of the returned view.
-  virtual views::View* GetSearchAnswerWebView() = 0;
-
   // Invoked when the custom launcher page's animation changes.
   virtual void CustomLauncherPageAnimationChanged(double progress) = 0;
 
@@ -95,6 +90,13 @@ class APP_LIST_EXPORT AppListViewDelegate {
 
   // Returns true if the delegate supports speech recognition.
   virtual bool IsSpeechRecognitionEnabled() = 0;
+
+  // Gets the wallpaper prominent colors.
+  virtual void GetWallpaperProminentColors(std::vector<SkColor>* colors) = 0;
+
+  // Add/remove observer for AppListViewDelegate.
+  virtual void AddObserver(AppListViewDelegateObserver* observer) = 0;
+  virtual void RemoveObserver(AppListViewDelegateObserver* observer) = 0;
 };
 
 }  // namespace app_list

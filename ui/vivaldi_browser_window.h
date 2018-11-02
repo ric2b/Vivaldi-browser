@@ -15,15 +15,10 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "chrome/browser/win/jumplist.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
 
 class Browser;
-
-#if defined(OS_WIN)
-class JumpList;
-#endif
 
 namespace extensions {
 class Extension;
@@ -41,10 +36,6 @@ class VivaldiBrowserWindow : public BrowserWindow,
   VivaldiBrowserWindow();
   ~VivaldiBrowserWindow() override;
 
-#if defined(OS_WIN)
-  JumpList* GetJumpList() const { return jumplist_.get(); }
-#endif
-
   // Takes ownership of |browser|.
   void Init(Browser* browser);
 
@@ -58,10 +49,6 @@ class VivaldiBrowserWindow : public BrowserWindow,
   // Returns a Browser instance of this view.
   Browser* browser() { return browser_.get(); }
   const Browser* browser() const { return browser_.get(); }
-
-  // LoadCompleteListener::Delegate implementation. Creates and initializes the
-  // |jumplist_| after the first page load.
-  // virtual void OnLoadCompleted() override;
 
   // BrowserWindow:
   void Show() override;
@@ -124,9 +111,6 @@ class VivaldiBrowserWindow : public BrowserWindow,
   bool IsToolbarVisible() const override;
   void ShowUpdateChromeDialog() override {}
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
-  void ShowBookmarkAppBubble(
-      const WebApplicationInfo& web_app_info,
-      const ShowBookmarkAppBubbleCallback& callback) override{};
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -216,11 +200,6 @@ class VivaldiBrowserWindow : public BrowserWindow,
 
   // The window bounds.
   gfx::Rect bounds_;
-
-#if defined(OS_WIN)
-  // The custom JumpList for Windows 7.
-  scoped_refptr<JumpList> jumplist_;
-#endif
 
   DISALLOW_COPY_AND_ASSIGN(VivaldiBrowserWindow);
 };

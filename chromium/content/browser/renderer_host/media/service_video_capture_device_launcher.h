@@ -17,7 +17,8 @@ class CONTENT_EXPORT ServiceVideoCaptureDeviceLauncher
     : public VideoCaptureDeviceLauncher {
  public:
   explicit ServiceVideoCaptureDeviceLauncher(
-      video_capture::mojom::DeviceFactoryPtr* device_factory);
+      video_capture::mojom::DeviceFactoryPtr* device_factory,
+      base::OnceClosure destruction_cb);
   ~ServiceVideoCaptureDeviceLauncher() override;
 
   // VideoCaptureDeviceLauncher implementation.
@@ -25,6 +26,7 @@ class CONTENT_EXPORT ServiceVideoCaptureDeviceLauncher
                          MediaStreamType stream_type,
                          const media::VideoCaptureParams& params,
                          base::WeakPtr<media::VideoFrameReceiver> receiver,
+                         base::OnceClosure connection_lost_cb,
                          Callbacks* callbacks,
                          base::OnceClosure done_cb) override;
   void AbortLaunch() override;
@@ -42,11 +44,13 @@ class CONTENT_EXPORT ServiceVideoCaptureDeviceLauncher
       const media::VideoCaptureParams& params,
       video_capture::mojom::DevicePtr device,
       base::WeakPtr<media::VideoFrameReceiver> receiver,
+      base::OnceClosure connection_lost_cb,
       video_capture::mojom::DeviceAccessResultCode result_code);
 
   void OnConnectionLostWhileWaitingForCallback();
 
   video_capture::mojom::DeviceFactoryPtr* const device_factory_;
+  base::OnceClosure destruction_cb_;
   State state_;
   base::SequenceChecker sequence_checker_;
   base::OnceClosure done_cb_;

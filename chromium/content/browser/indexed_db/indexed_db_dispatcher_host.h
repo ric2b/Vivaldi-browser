@@ -82,7 +82,7 @@ class CONTENT_EXPORT IndexedDBDispatcherHost
                            int exit_code) override;
 
  private:
-  class IDBThreadHelper;
+  class IDBSequenceHelper;
   // Friends to enable OnDestruct() delegation.
   friend class BrowserThread;
   friend class IndexedDBDispatcherHostTest;
@@ -106,12 +106,19 @@ class CONTENT_EXPORT IndexedDBDispatcherHost
       const url::Origin& origin,
       const base::string16& name,
       bool force_close) override;
+  void AbortTransactionsAndCompactDatabase(
+      const url::Origin& origin,
+      AbortTransactionsAndCompactDatabaseCallback callback) override;
+  void AbortTransactionsForDatabase(
+      const url::Origin& origin,
+      AbortTransactionsForDatabaseCallback callback) override;
 
   void InvalidateWeakPtrsAndClearBindings();
 
+  base::SequencedTaskRunner* IDBTaskRunner() const;
+
   scoped_refptr<IndexedDBContextImpl> indexed_db_context_;
   scoped_refptr<ChromeBlobStorageContext> blob_storage_context_;
-  scoped_refptr<base::SequencedTaskRunner> idb_runner_;
 
   // Maps blob uuid to a pair (handle, ref count). Entry is added and/or count
   // is incremented in HoldBlobData(), and count is decremented and/or entry
@@ -131,7 +138,7 @@ class CONTENT_EXPORT IndexedDBDispatcherHost
   mojo::StrongAssociatedBindingSet<::indexed_db::mojom::Cursor>
       cursor_bindings_;
 
-  IDBThreadHelper* idb_helper_;
+  IDBSequenceHelper* idb_helper_;
 
   base::WeakPtrFactory<IndexedDBDispatcherHost> weak_factory_;
 

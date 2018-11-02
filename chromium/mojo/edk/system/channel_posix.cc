@@ -133,8 +133,9 @@ class ChannelPosix : public Channel,
     if (write_error) {
       // Do not synchronously invoke OnError(). Write() may have been called by
       // the delegate and we don't want to re-enter it.
-      io_task_runner_->PostTask(FROM_HERE,
-                                base::Bind(&ChannelPosix::OnError, this));
+      io_task_runner_->PostTask(
+          FROM_HERE,
+          base::Bind(&ChannelPosix::OnError, this, Error::kDisconnected));
     }
   }
 
@@ -143,11 +144,10 @@ class ChannelPosix : public Channel,
     leak_handle_ = true;
   }
 
-  bool GetReadPlatformHandles(
-      size_t num_handles,
-      const void* extra_header,
-      size_t extra_header_size,
-      ScopedPlatformHandleVectorPtr* handles) override {
+  bool GetReadPlatformHandles(size_t num_handles,
+                              const void* extra_header,
+                              size_t extra_header_size,
+                              ScopedPlatformHandleVectorPtr* handles) override {
     if (num_handles > std::numeric_limits<uint16_t>::max())
       return false;
 #if defined(OS_MACOSX) && !defined(OS_IOS)
@@ -155,12 +155,15 @@ class ChannelPosix : public Channel,
     // section.
     using MachPortsEntry = Channel::Message::MachPortsEntry;
     using MachPortsExtraHeader = Channel::Message::MachPortsExtraHeader;
-    CHECK(extra_header_size >=
-          sizeof(MachPortsExtraHeader) + num_handles * sizeof(MachPortsEntry));
+    if (extra_header_size <
+        sizeof(MachPortsExtraHeader) + num_handles * sizeof(MachPortsEntry)) {
+      return false;
+    }
     const MachPortsExtraHeader* mach_ports_header =
         reinterpret_cast<const MachPortsExtraHeader*>(extra_header);
     size_t num_mach_ports = mach_ports_header->num_ports;
-    CHECK(num_mach_ports <= num_handles);
+    if (num_mach_ports > num_handles)
+      return false;
     if (incoming_platform_handles_.size() + num_mach_ports < num_handles) {
       handles->reset();
       return true;
@@ -173,13 +176,15 @@ class ChannelPosix : public Channel,
           mach_ports[mach_port_index].index == i) {
         (*handles)->at(i) = PlatformHandle(
             static_cast<mach_port_t>(mach_ports[mach_port_index].mach_port));
-        CHECK((*handles)->at(i).type == PlatformHandle::Type::MACH);
+        if ((*handles)->at(i).type != PlatformHandle::Type::MACH)
+          return false;
         // These are actually just Mach port names until they're resolved from
         // the remote process.
         (*handles)->at(i).type = PlatformHandle::Type::MACH_NAME;
         mach_port_index++;
       } else {
-        CHECK(!incoming_platform_handles_.empty());
+        if (incoming_platform_handles_.empty())
+          return false;
         (*handles)->at(i) = incoming_platform_handles_.front();
         incoming_platform_handles_.pop_front();
       }
@@ -284,7 +289,7 @@ class ChannelPosix : public Channel,
       ScopedPlatformHandle accept_fd;
       ServerAcceptConnection(handle_.get(), &accept_fd);
       if (!accept_fd.is_valid()) {
-        OnError();
+        OnError(Error::kConnectionFailed);
         return;
       }
       handle_ = std::move(accept_fd);
@@ -295,6 +300,7 @@ class ChannelPosix : public Channel,
       return;
     }
 
+    bool validation_error = false;
     bool read_error = false;
     size_t next_read_size = 0;
     size_t buffer_capacity = 0;
@@ -306,16 +312,14 @@ class ChannelPosix : public Channel,
       DCHECK_GT(buffer_capacity, 0u);
 
       ssize_t read_result = PlatformChannelRecvmsg(
-          handle_.get(),
-          buffer,
-          buffer_capacity,
-          &incoming_platform_handles_);
+          handle_.get(), buffer, buffer_capacity, &incoming_platform_handles_);
 
       if (read_result > 0) {
         bytes_read = static_cast<size_t>(read_result);
         total_bytes_read += bytes_read;
         if (!OnReadComplete(bytes_read, &next_read_size)) {
           read_error = true;
+          validation_error = true;
           break;
         }
       } else if (read_result == 0 ||
@@ -324,13 +328,14 @@ class ChannelPosix : public Channel,
         break;
       }
     } while (bytes_read == buffer_capacity &&
-             total_bytes_read < kMaxBatchReadCapacity &&
-             next_read_size > 0);
+             total_bytes_read < kMaxBatchReadCapacity && next_read_size > 0);
     if (read_error) {
       // Stop receiving read notifications.
       read_watcher_.reset();
-
-      OnError();
+      if (validation_error)
+        OnError(Error::kReceivedMalformedData);
+      else
+        OnError(Error::kDisconnected);
     }
   }
 
@@ -343,7 +348,7 @@ class ChannelPosix : public Channel,
         reject_writes_ = write_error = true;
     }
     if (write_error)
-      OnError();
+      OnError(Error::kDisconnected);
   }
 
   // Attempts to write a message directly to the channel. If the full message
@@ -361,10 +366,8 @@ class ChannelPosix : public Channel,
       ssize_t result;
       ScopedPlatformHandleVectorPtr handles = message_view.TakeHandles();
       if (handles && handles->size()) {
-        iovec iov = {
-          const_cast<void*>(message_view.data()),
-          message_view.data_num_bytes()
-        };
+        iovec iov = {const_cast<void*>(message_view.data()),
+                     message_view.data_num_bytes()};
         // TODO: Handle lots of handles.
         result = PlatformChannelSendmsgWithHandles(
             handle_.get(), &iov, 1, handles->data(), handles->size());
@@ -403,7 +406,8 @@ class ChannelPosix : public Channel,
       }
 
       if (result < 0) {
-        if (errno != EAGAIN && errno != EWOULDBLOCK
+        if (errno != EAGAIN &&
+            errno != EWOULDBLOCK
 #if defined(OS_MACOSX)
             // On OS X if sendmsg() is trying to send fds between processes and
             // there isn't enough room in the output buffer to send the fd

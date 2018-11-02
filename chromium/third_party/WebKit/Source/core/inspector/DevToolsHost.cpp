@@ -32,13 +32,13 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "core/clipboard/Pasteboard.h"
-#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/events/EventTarget.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/inspector/InspectorFrontendClient.h"
 #include "core/layout/LayoutTheme.h"
@@ -51,7 +51,6 @@
 #include "platform/PlatformChromeClient.h"
 #include "platform/ScriptForbiddenScope.h"
 #include "platform/SharedBuffer.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
@@ -135,7 +134,7 @@ void DevToolsHost::EvaluateScript(const String& expression) {
     return;
   ScriptState::Scope scope(script_state);
   UserGestureIndicator gesture_indicator(
-      DocumentUserGestureToken::Create(frontend_frame_->GetDocument()));
+      UserGestureToken::Create(frontend_frame_->GetDocument()));
   v8::MicrotasksScope microtasks(script_state->GetIsolate(),
                                  v8::MicrotasksScope::kRunMicrotasks);
   v8::Local<v8::String> source =
@@ -163,12 +162,6 @@ float DevToolsHost::zoomFactor() {
       frontend_frame_->View()->GetChromeClient();
   float window_to_viewport_ratio = client->WindowToViewportScalar(1.0f);
   return zoom_factor / window_to_viewport_ratio;
-}
-
-void DevToolsHost::setInjectedScriptForOrigin(const String& origin,
-                                              const String& script) {
-  if (client_)
-    client_->SetInjectedScriptForOrigin(origin, script);
 }
 
 void DevToolsHost::copyText(const String& text) {

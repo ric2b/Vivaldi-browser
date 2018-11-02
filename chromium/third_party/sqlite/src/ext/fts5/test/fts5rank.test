@@ -51,7 +51,7 @@ do_execsql_test 2.0 {
   INSERT INTO tt VALUES('x a a x x');
 }
 
-proc firstinst {cmd} { 
+proc firstinst {cmd} {
   foreach {p c o} [$cmd xInst 0] {}
   return $o
 }
@@ -90,6 +90,7 @@ do_test 2.7 {
   execsql { SELECT rowid FROM tt('a') ORDER BY rank; } db
 } {1 3 2}
 
+db2 close
 
 #--------------------------------------------------------------------------
 # At one point there was a problem with queries such as:
@@ -138,12 +139,12 @@ foreach_detail_mode $::testprefix {
 do_execsql_test 4.1 {
   DROP TABLE IF EXISTS VTest;
   CREATE virtual TABLE VTest USING FTS5(
-    Title, AUthor, tokenize ='porter unicode61 remove_diacritics 1', 
+    Title, AUthor, tokenize ='porter unicode61 remove_diacritics 1',
     columnsize='1', detail=full
   );
   INSERT INTO VTest (Title, Author) VALUES ('wrinkle in time', 'Bill Smith');
 
-  SELECT * FROM VTest WHERE 
+  SELECT * FROM VTest WHERE
   VTest MATCH 'wrinkle in time OR a wrinkle in time' ORDER BY rank;
 } {{wrinkle in time} {Bill Smith}}
 
@@ -151,4 +152,3 @@ do_execsql_test 4.1 {
 
 
 finish_test
-

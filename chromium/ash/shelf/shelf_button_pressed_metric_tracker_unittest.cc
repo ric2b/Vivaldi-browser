@@ -8,10 +8,10 @@
 
 #include "ash/public/cpp/config.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_button_pressed_metric_tracker_test_api.h"
+#include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/shelf_button_pressed_metric_tracker_test_api.h"
-#include "ash/test/shelf_view_test_api.h"
 #include "base/macros.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_tick_clock.h"
@@ -21,7 +21,6 @@
 #include "ui/views/controls/button/button.h"
 
 namespace ash {
-namespace test {
 namespace {
 
 // A simple light weight test double dummy for a views::Button.
@@ -312,5 +311,4 @@ TEST_F(ShelfButtonPressedMetricTrackerTest,
       kTimeDeltaInMilliseconds, 1);
 }
 
-}  // namespace test
 }  // namespace ash

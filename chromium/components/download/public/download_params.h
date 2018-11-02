@@ -30,6 +30,9 @@ struct SchedulingParams {
 
     // The download can occur only if the network isn't metered.
     UNMETERED = 2,
+
+    // Last value of the enum.
+    COUNT = 3,
   };
 
   enum class BatteryRequirements {
@@ -41,6 +44,9 @@ struct SchedulingParams {
     // The download can only occur when charging or in optimal battery
     // conditions.
     BATTERY_SENSITIVE = 1,
+
+    // Last value of the enum.
+    COUNT = 2,
   };
 
   enum class Priority {
@@ -61,13 +67,19 @@ struct SchedulingParams {
 
     // The default priority for all tasks unless overridden.
     DEFAULT = NORMAL,
+
+    // Last value of the enum.
+    COUNT = 4,
   };
 
   SchedulingParams();
   SchedulingParams(const SchedulingParams& other) = default;
   ~SchedulingParams() = default;
 
+  bool operator==(const SchedulingParams& rhs) const;
+
   // Cancel the download after this time.  Will cancel in-progress downloads.
+  // base::Time::Max() if not specified.
   base::Time cancel_time;
 
   // The suggested priority.  Non-UI priorities may not be honored by the
@@ -102,11 +114,26 @@ struct DownloadParams {
     // The DownloadService has too many downloads.  Backoff and retry.
     BACKOFF,
 
-    // Failed to create the download.  Invalid input parameters.
-    BAD_PARAMETERS,
+    // The DownloadService has no knowledge of the DownloadClient associated
+    // with this request.
+    UNEXPECTED_CLIENT,
+
+    // Failed to create the download.  The guid is already in use.
+    UNEXPECTED_GUID,
+
+    // The download was cancelled by the Client while it was being persisted.
+    CLIENT_CANCELLED,
+
+    // The DownloadService was unable to accept and persist this download due to
+    // an internal error like the underlying DB store failing to write to disk.
+    INTERNAL_ERROR,
 
     // TODO(dtrainor): Add more error codes.
+    // The count of entries for the enum.
+    COUNT,
   };
+
+  using StartCallback = base::Callback<void(const std::string&, StartResult)>;
 
   DownloadParams();
   DownloadParams(const DownloadParams& other);
@@ -116,11 +143,13 @@ struct DownloadParams {
   DownloadClient client;
 
   // A unique GUID that represents this download.  See |base::GenerateGUID()|.
+  // TODO(xingliu): guid in content download must be upper case, see
+  // http://crbug.com/734818.
   std::string guid;
 
   // A callback that will be notified if this download has been accepted and
   // persisted by the DownloadService.
-  base::Callback<void(const DownloadParams&, StartResult)> callback;
+  StartCallback callback;
 
   // The parameters that determine under what device conditions this download
   // will occur.

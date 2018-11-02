@@ -14,14 +14,15 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/supports_user_data.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/loader/resource_requester_info.h"
-#include "content/common/resource_request_body_impl.h"
-#include "content/common/url_loader.mojom.h"
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/resource_request_info.h"
 #include "content/public/common/previews_state.h"
 #include "content/public/common/referrer.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "net/base/load_states.h"
 
 namespace content {
@@ -72,7 +73,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
       bool report_raw_headers,
       bool is_async,
       PreviewsState previews_state,
-      const scoped_refptr<ResourceRequestBodyImpl> body,
+      const scoped_refptr<ResourceRequestBody> body,
       bool initiated_in_secure_context);
   ~ResourceRequestInfoImpl() override;
 
@@ -114,7 +115,9 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   // request).
   int frame_tree_node_id() const { return frame_tree_node_id_; }
 
-  ResourceRequesterInfo* requester_info() { return requester_info_.get(); }
+  ResourceRequesterInfo* requester_info() const {
+    return requester_info_.get();
+  }
 
   // Updates the data associated with this request after it is is transferred
   // to a new renderer process.  Not all data will change during a transfer.
@@ -181,7 +184,7 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
     do_not_prompt_for_login_ = do_not_prompt;
   }
 
-  const scoped_refptr<ResourceRequestBodyImpl>& body() const { return body_; }
+  const scoped_refptr<ResourceRequestBody>& body() const { return body_; }
   void ResetBody();
 
   bool initiated_in_secure_context() const {
@@ -199,6 +202,8 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   void set_on_transfer(const TransferCallback& on_transfer) {
     on_transfer_ = on_transfer;
   }
+
+  void SetBlobHandles(BlobHandles blob_handles);
 
   // Vivaldi specific
   void set_ask_for_save_target(bool ask) {
@@ -250,9 +255,12 @@ class ResourceRequestInfoImpl : public ResourceRequestInfo,
   bool report_raw_headers_;
   bool is_async_;
   PreviewsState previews_state_;
-  scoped_refptr<ResourceRequestBodyImpl> body_;
+  scoped_refptr<ResourceRequestBody> body_;
   bool initiated_in_secure_context_;
   std::unique_ptr<NavigationUIData> navigation_ui_data_;
+
+  // Keeps upload body blobs alive for the duration of the request.
+  BlobHandles blob_handles_;
 
   // This callback is set by MojoAsyncResourceHandler to update its mojo binding
   // and remote endpoint. This callback will be removed once PlzNavigate is

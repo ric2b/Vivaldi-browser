@@ -13,7 +13,8 @@ class SimplePage(page_module.Page):
         url=url,
         page_set=page_set,
         shared_page_state_class=shared_page_state.Shared10InchTabletPageState,
-        credentials_path='data/credentials.json')
+        credentials_path='data/credentials.json',
+        name=url)
 
   def RunNavigateSteps(self, action_runner):
     super(SimplePage, self).RunNavigateSteps(action_runner)
@@ -30,8 +31,8 @@ class SimpleScrollPage(SimplePage):
     with action_runner.CreateGestureInteraction('ScrollAction'):
       action_runner.ScrollPage(direction='down', speed_in_pixels_per_second=300)
 
-class SimpleMobileSitesPageSet(story.StorySet):
 
+class SimpleMobileSitesPageSet(story.StorySet):
   """ Simple mobile sites """
 
   def __init__(self):
@@ -43,7 +44,6 @@ class SimpleMobileSitesPageSet(story.StorySet):
       # Why: Scrolls moderately complex pages (up to 60 layers)
       'http://www.ebay.co.uk/',
       'https://www.flickr.com/',
-      'http://www.apple.com/mac/',
       'http://www.nyc.gov',
       'http://m.nytimes.com/'
     ]
@@ -51,3 +51,7 @@ class SimpleMobileSitesPageSet(story.StorySet):
     for url in scroll_page_list:
       self.AddStory(SimpleScrollPage(url, self))
 
+
+class SimpleMobileSitesStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass

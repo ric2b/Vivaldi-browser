@@ -42,6 +42,7 @@
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/wtf/StdLibExtras.h"
+#include "platform/wtf/text/WTFString.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebData.h"
 #include "third_party/skia/include/core/SkImage.h"
@@ -51,10 +52,11 @@
 
 namespace blink {
 
-Image::Image(ImageObserver* observer)
+Image::Image(ImageObserver* observer, bool is_multipart)
     : image_observer_disabled_(false),
       image_observer_(observer),
-      stable_image_id_(PaintImage::GetNextId()) {}
+      stable_image_id_(PaintImage::GetNextId()),
+      is_multipart_(is_multipart) {}
 
 Image::~Image() {}
 
@@ -65,20 +67,20 @@ Image* Image::NullImage() {
 }
 
 PassRefPtr<Image> Image::LoadPlatformResource(const char* name) {
-  const WebData& resource = Platform::Current()->LoadResource(name);
+  const WebData& resource = Platform::Current()->GetDataResource(name);
   if (resource.IsEmpty())
     return Image::NullImage();
 
   RefPtr<Image> image = BitmapImage::Create();
   image->SetData(resource, true);
-  return image.Release();
+  return image;
 }
 
 bool Image::SupportsType(const String& type) {
   return MIMETypeRegistry::IsSupportedImageResourceMIMEType(type);
 }
 
-Image::SizeAvailability Image::SetData(PassRefPtr<SharedBuffer> data,
+Image::SizeAvailability Image::SetData(RefPtr<SharedBuffer> data,
                                        bool all_data_received) {
   encoded_image_data_ = std::move(data);
   if (!encoded_image_data_.Get())
@@ -89,6 +91,10 @@ Image::SizeAvailability Image::SetData(PassRefPtr<SharedBuffer> data,
     return kSizeAvailable;
 
   return DataChanged(all_data_received);
+}
+
+String Image::FilenameExtension() const {
+  return String();
 }
 
 void Image::DrawTiledBackground(GraphicsContext& ctxt,
@@ -215,7 +221,8 @@ void Image::DrawTiledBorder(GraphicsContext& ctxt,
     InterpolationQuality previous_interpolation_quality =
         ctxt.ImageInterpolationQuality();
     ctxt.SetImageInterpolationQuality(kInterpolationLow);
-    DrawPattern(ctxt, src_rect, tile_scale_factor, pattern_phase, op, dst_rect);
+    DrawPattern(ctxt, src_rect, tile_scale_factor, pattern_phase, op, dst_rect,
+                FloatSize());
     ctxt.SetImageInterpolationQuality(previous_interpolation_quality);
   } else {
     DrawPattern(ctxt, src_rect, tile_scale_factor, pattern_phase, op, dst_rect,
@@ -233,8 +240,9 @@ sk_sp<PaintShader> CreatePatternShader(const PaintImage& image,
                                        const FloatSize& spacing,
                                        SkShader::TileMode tmx,
                                        SkShader::TileMode tmy) {
-  if (spacing.IsZero())
-    return MakePaintShaderImage(image.sk_image(), tmx, tmy, &shader_matrix);
+  if (spacing.IsZero()) {
+    return PaintShader::MakeImage(image.sk_image(), tmx, tmy, &shader_matrix);
+  }
 
   // Arbitrary tiling is currently only supported for SkPictureShader, so we use
   // that instead of a plain bitmap shader to implement spacing.
@@ -246,8 +254,8 @@ sk_sp<PaintShader> CreatePatternShader(const PaintImage& image,
   PaintCanvas* canvas = recorder.beginRecording(tile_rect);
   canvas->drawImage(image, 0, 0, &paint);
 
-  return MakePaintShaderRecord(recorder.finishRecordingAsPicture(), tile_rect,
-                               tmx, tmy, &shader_matrix);
+  return PaintShader::MakePaintRecord(recorder.finishRecordingAsPicture(),
+                                      tile_rect, tmx, tmy, &shader_matrix);
 }
 
 SkShader::TileMode ComputeTileMode(float left,
@@ -298,10 +306,10 @@ void Image::DrawPattern(GraphicsContext& context,
   // Fetch this now as subsetting may swap the image.
   auto image_id = image.sk_image()->uniqueID();
 
-  image =
-      PaintImage(stable_image_id_,
-                 image.sk_image()->makeSubset(EnclosingIntRect(norm_src_rect)),
-                 image.animation_type(), image.completion_state());
+  image = PaintImage(
+      stable_image_id_,
+      image.sk_image()->makeSubset(EnclosingIntRect(norm_src_rect)),
+      image.animation_type(), image.completion_state(), image.frame_count());
   if (!image)
     return;
 
@@ -327,7 +335,7 @@ void Image::DrawPattern(GraphicsContext& context,
   // If the shader could not be instantiated (e.g. non-invertible matrix),
   // draw transparent.
   // Note: we can't simply bail, because of arbitrary blend mode.
-  if (!flags.getShader())
+  if (!flags.HasShader())
     flags.setColor(SK_ColorTRANSPARENT);
 
   context.DrawRect(dest_rect, flags);
@@ -339,7 +347,7 @@ void Image::DrawPattern(GraphicsContext& context,
 PassRefPtr<Image> Image::ImageForDefaultFrame() {
   RefPtr<Image> image(this);
 
-  return image.Release();
+  return image;
 }
 
 PaintImage Image::PaintImageForCurrentFrame() {
@@ -349,7 +357,7 @@ PaintImage Image::PaintImageForCurrentFrame() {
                               ? PaintImage::CompletionState::DONE
                               : PaintImage::CompletionState::PARTIALLY_DONE;
   return PaintImage(stable_image_id_, ImageForCurrentFrame(), animation_type,
-                    completion_state);
+                    completion_state, FrameCount(), is_multipart_);
 }
 
 bool Image::ApplyShader(PaintFlags& flags, const SkMatrix& local_matrix) {
@@ -359,9 +367,10 @@ bool Image::ApplyShader(PaintFlags& flags, const SkMatrix& local_matrix) {
   if (!image)
     return false;
 
-  flags.setShader(image->makeShader(SkShader::kRepeat_TileMode,
-                                    SkShader::kRepeat_TileMode, &local_matrix));
-  if (!flags.getShader())
+  flags.setShader(
+      PaintShader::MakeImage(std::move(image), SkShader::kRepeat_TileMode,
+                             SkShader::kRepeat_TileMode, &local_matrix));
+  if (!flags.HasShader())
     return false;
 
   // Animation is normally refreshed in draw() impls, which we don't call when

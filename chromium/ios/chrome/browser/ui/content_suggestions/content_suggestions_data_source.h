@@ -34,24 +34,6 @@ typedef void (^MoreSuggestionsFetched)(
 - (nonnull NSArray<CollectionViewItem<SuggestedContent>*>*)itemsForSectionInfo:
     (nonnull ContentSuggestionsSectionInformation*)sectionInfo;
 
-// Returns an image updater for the suggestions provided by this data source.
-- (nullable id<ContentSuggestionsImageFetcher>)imageFetcher;
-
-// Fetches favicon attributes associated with the |item| and calls the
-// |completion| block.
-- (void)fetchFaviconAttributesForItem:
-            (nonnull CollectionViewItem<SuggestedContent>*)item
-                           completion:
-                               (void (^_Nonnull)(FaviconAttributes* _Nonnull))
-                                   completion;
-
-// Fetches the favicon image associated with the |item|. If there is no image
-// cached locally and the provider allows it, it tries to download it. The
-// |completion| block is only called if an image is found.
-- (void)
-fetchFaviconImageForItem:(nonnull CollectionViewItem<SuggestedContent>*)item
-              completion:(void (^_Nonnull)(UIImage* _Nonnull))completion;
-
 // Fetches additional content. All the |knownSuggestions| must come from the
 // same |sectionInfo|. If the fetch was completed, the given |callback| is
 // called with the new content.
@@ -61,6 +43,14 @@ fetchFaviconImageForItem:(nonnull CollectionViewItem<SuggestedContent>*)item
                         (nonnull ContentSuggestionsSectionInformation*)
                             sectionInfo
                            callback:(nonnull MoreSuggestionsFetched)callback;
+
+// Dismisses the suggestion from the content suggestions service. It doesn't
+// change the UI.
+- (void)dismissSuggestion:
+    (nonnull ContentSuggestionIdentifier*)suggestionIdentifier;
+
+// Returns the header view containing the logo and omnibox to be displayed.
+- (nullable UIView*)headerViewForWidth:(CGFloat)width;
 
 @end
 

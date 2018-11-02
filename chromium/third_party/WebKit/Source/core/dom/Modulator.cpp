@@ -7,6 +7,7 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/dom/Document.h"
 #include "core/dom/ModulatorImpl.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "platform/bindings/ScriptState.h"
@@ -35,12 +36,19 @@ Modulator* Modulator::From(ScriptState* script_state) {
     Document* document = ToDocument(execution_context);
     modulator = ModulatorImpl::Create(script_state, document->Fetcher());
     Modulator::SetModulator(script_state, modulator);
+
+    // See comment in LocalDOMWindow::modulator_ for this workaround.
+    LocalDOMWindow* window = document->ExecutingWindow();
+    window->SetModulator(modulator);
   } else if (execution_context->IsMainThreadWorkletGlobalScope()) {
     MainThreadWorkletGlobalScope* global_scope =
         ToMainThreadWorkletGlobalScope(execution_context);
     modulator = ModulatorImpl::Create(
         script_state, global_scope->GetFrame()->GetDocument()->Fetcher());
     Modulator::SetModulator(script_state, modulator);
+
+    // See comment in WorkletGlobalScope::modulator_ for this workaround.
+    global_scope->SetModulator(modulator);
   } else {
     NOTREACHED();
   }
@@ -67,7 +75,7 @@ KURL Modulator::ResolveModuleSpecifier(const String& module_request,
                                        const KURL& base_url) {
   // Step 1. Apply the URL parser to specifier. If the result is not failure,
   // return the result.
-  KURL url(KURL(), module_request);
+  KURL url(NullURL(), module_request);
   if (url.IsValid())
     return url;
 

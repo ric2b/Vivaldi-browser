@@ -18,7 +18,7 @@
 
 @interface WhatsNewHeaderView : UICollectionReusableView
 
-@property(nonatomic, assign) id<WhatsNewHeaderViewDelegate> delegate;
+@property(nonatomic, weak) id<WhatsNewHeaderViewDelegate> delegate;
 
 // Sets the text for the attributed label.
 - (void)setText:(NSString*)text;
@@ -27,7 +27,7 @@
 - (void)setIcon:(WhatsNewIcon)icon;
 
 // Sets the value to use for the left and right margin.
-- (void)setSideMargin:(CGFloat)sideMargin;
+- (void)setSideMargin:(CGFloat)sideMargin forWidth:(CGFloat)width;
 
 // Returns the minimum height required for WhatsNewHeaderView to fit in |width|,
 // for a given |text|.

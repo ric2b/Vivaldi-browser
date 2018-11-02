@@ -8,11 +8,9 @@
 {% endfor %}
 
 namespace blink {
-{% set dom_template = '%s::domTemplate' % v8_class if not is_array_buffer_or_view else '0' %}
+{% set dom_template = '%s::domTemplate' % v8_class if not is_array_buffer_or_view else 'nullptr' %}
 {% set parent_wrapper_type_info = '&V8%s::wrapperTypeInfo' % parent_interface
-                                  if parent_interface else '0' %}
-{% set wrapper_type_prototype = 'kWrapperTypeExceptionPrototype' if is_exception else
-                                'kWrapperTypeObjectPrototype' %}
+                                  if parent_interface else 'nullptr' %}
 {% set active_scriptwrappable_inheritance =
     'kInheritFromActiveScriptWrappable'
     if active_scriptwrappable else
@@ -22,12 +20,24 @@ namespace blink {
 {% if not is_partial %}
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = { gin::kEmbedderBlink, {{dom_template}}, {{v8_class}}::Trace, {{v8_class}}::TraceWrappers, {{prepare_prototype_and_interface_object_func or 'nullptr'}}, "{{interface_name}}", {{parent_wrapper_type_info}}, WrapperTypeInfo::{{wrapper_type_prototype}}, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{lifetime}} };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+{{wrapper_type_info_const}}WrapperTypeInfo {{v8_class}}::wrapperTypeInfo = {
+    gin::kEmbedderBlink,
+    {{dom_template}},
+    {{v8_class}}::Trace,
+    {{v8_class}}::TraceWrappers,
+    {{prepare_prototype_and_interface_object_func or 'nullptr'}},
+    "{{interface_name}}",
+    {{parent_wrapper_type_info}},
+    WrapperTypeInfo::kWrapperTypeObjectPrototype,
+    WrapperTypeInfo::{{wrapper_class_id}},
+    WrapperTypeInfo::{{active_scriptwrappable_inheritance}},
+    WrapperTypeInfo::{{lifetime}},
+};
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -135,6 +145,7 @@ static void (*{{method.name}}MethodForPartialInterface)(const v8::FunctionCallba
 {% block named_property_query %}{% endblock %}
 {% block named_property_enumerator %}{% endblock %}
 {% block indexed_property_getter %}{% endblock %}
+{% block indexed_property_descriptor %}{% endblock %}
 {% block indexed_property_setter %}{% endblock %}
 {% block indexed_property_deleter %}{% endblock %}
 {##############################################################################}
@@ -230,8 +241,10 @@ static const struct {
 {% block named_property_query_callback %}{% endblock %}
 {% block named_property_enumerator_callback %}{% endblock %}
 {% block indexed_property_getter_callback %}{% endblock %}
+{% block indexed_property_descriptor_callback %}{% endblock %}
 {% block indexed_property_setter_callback %}{% endblock %}
 {% block indexed_property_deleter_callback %}{% endblock %}
+{% block indexed_property_definer_callback %}{% endblock %}
 
 {% if has_access_check_callbacks and not is_partial %}
 bool {{v8_class_or_partial}}::securityCheck(v8::Local<v8::Context> accessingContext, v8::Local<v8::Object> accessedObject, v8::Local<v8::Value> data) {
@@ -335,7 +348,7 @@ void {{v8_class_or_partial}}::crossOriginIndexedGetter(uint32_t index, const v8:
 {% if data_attributes %}
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -344,7 +357,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
     {{attribute_configuration(data_attribute) | indent(4)}},
     {% endfor %}
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -356,7 +369,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}Attributes[]
 {% if lazy_data_attributes %}
 // Suppress warning: global constructors, because AttributeConfiguration is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
@@ -365,7 +378,7 @@ static const V8DOMConfiguration::AttributeConfiguration {{v8_class}}LazyDataAttr
     {{attribute_configuration(data_attribute) | indent(4)}},
     {% endfor %}
 };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -402,16 +415,23 @@ static const V8DOMConfiguration::MethodConfiguration {{v8_class}}Methods[] = {
 {##############################################################################}
 {% block install_dom_template %}
 {% if not is_array_buffer_or_view %}
-{% from 'methods.cpp.tmpl' import install_custom_signature with context %}
+{% from 'methods.cpp.tmpl' import install_custom_signature,
+        method_configuration with context %}
 {% from 'attributes.cpp.tmpl' import accessor_configuration,
         attribute_configuration,
         with context %}
-{% from 'constants.cpp.tmpl' import install_constants with context %}
-{% from 'methods.cpp.tmpl' import method_configuration with context %}
+{% from 'constants.cpp.tmpl' import install_constants,
+        constant_configuration with context %}
 {% if has_partial_interface or is_partial %}
-void {{v8_class_or_partial}}::install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {
+void {{v8_class_or_partial}}::install{{v8_class}}Template(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::FunctionTemplate> interfaceTemplate) {
 {% else %}
-static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::FunctionTemplate> interfaceTemplate) {
+static void install{{v8_class}}Template(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::FunctionTemplate> interfaceTemplate) {
 {% endif %}
   // Initialize the interface object's template.
   {% if is_partial %}
@@ -430,7 +450,7 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {% endif %}
   {% endif %}{# is_partial #}
 
-  {% if runtime_enabled_feature_name %}
+  {% if runtime_enabled_feature_name and not context_enabled_feature_name %}
   if (!{{runtime_enabled_feature_name | runtime_enabled_function}}) {
     return;
   }
@@ -457,21 +477,29 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   instanceTemplate->SetImmutableProto();
   {% endif %}
 
-  // Register DOM constants, attributes and operations.
+  // Register IDL constants, attributes and operations.
   {% if constants %}
   {{install_constants() | indent(2)}}
   {% endif %}
   {% if data_attributes %}
-  V8DOMConfiguration::InstallAttributes(isolate, world, instanceTemplate, prototypeTemplate, {{'%sAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAttributes)' % v8_class}});
+  V8DOMConfiguration::InstallAttributes(
+      isolate, world, instanceTemplate, prototypeTemplate,
+      {{'%sAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAttributes)' % v8_class}});
   {% endif %}
   {% if lazy_data_attributes %}
-  V8DOMConfiguration::InstallLazyDataAttributes(isolate, world, instanceTemplate, prototypeTemplate, {{'%sLazyDataAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sLazyDataAttributes)' % v8_class}});
+  V8DOMConfiguration::InstallLazyDataAttributes(
+      isolate, world, instanceTemplate, prototypeTemplate,
+      {{'%sLazyDataAttributes' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sLazyDataAttributes)' % v8_class}});
   {% endif %}
   {% if accessors %}
-  V8DOMConfiguration::InstallAccessors(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, {{'%sAccessors' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAccessors)' % v8_class}});
+  V8DOMConfiguration::InstallAccessors(
+      isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate,
+      signature, {{'%sAccessors' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sAccessors)' % v8_class}});
   {% endif %}
   {% if methods | has_method_configuration(is_partial) %}
-  V8DOMConfiguration::InstallMethods(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, {{'%sMethods' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sMethods)' % v8_class}});
+  V8DOMConfiguration::InstallMethods(
+      isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate,
+      signature, {{'%sMethods' % v8_class}}, {{'WTF_ARRAY_LENGTH(%sMethods)' % v8_class}});
   {% endif %}
 
   {% if has_access_check_callbacks and not is_partial %}
@@ -480,28 +508,17 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {% set cross_origin_named_setter = '%s::crossOriginNamedSetter' % v8_class_or_partial if has_cross_origin_named_setter else 'nullptr' %}
   {% set cross_origin_named_enumerator = '%s::crossOriginNamedEnumerator' % v8_class_or_partial if has_cross_origin_named_enumerator else 'nullptr' %}
   {% set cross_origin_indexed_getter = '%s::crossOriginIndexedGetter' % v8_class_or_partial if has_cross_origin_indexed_getter else 'nullptr' %}
-  instanceTemplate->SetAccessCheckCallbackAndHandler({{v8_class_or_partial}}::securityCheck, v8::NamedPropertyHandlerConfiguration({{cross_origin_named_getter}}, {{cross_origin_named_setter}}, nullptr, nullptr, {{cross_origin_named_enumerator}}), v8::IndexedPropertyHandlerConfiguration({{cross_origin_indexed_getter}}), v8::External::New(isolate, const_cast<WrapperTypeInfo*>(&{{v8_class}}::wrapperTypeInfo)));
+  instanceTemplate->SetAccessCheckCallbackAndHandler(
+      {{v8_class_or_partial}}::securityCheck,
+      v8::NamedPropertyHandlerConfiguration(
+          {{cross_origin_named_getter}},
+          {{cross_origin_named_setter}},
+          nullptr,
+          nullptr,
+          {{cross_origin_named_enumerator}}),
+      v8::IndexedPropertyHandlerConfiguration({{cross_origin_indexed_getter}}),
+      v8::External::New(isolate, const_cast<WrapperTypeInfo*>(&{{v8_class}}::wrapperTypeInfo)));
   {% endif %}
-
-  {% for feature_name, attribute_list in runtime_enabled_attributes | groupby('runtime_enabled_feature_name') %}
-  {% filter runtime_enabled(feature_name) %}
-  {% for attribute in attribute_list | unique_by('name') | sort %}
-  {% if attribute.is_data_type_property %}
-  static const V8DOMConfiguration::AttributeConfiguration attribute{{attribute.name}}Configuration[] = {
-    {{attribute_configuration(attribute) | indent(2)}}
-  };
-  for (const auto& attributeConfig : attribute{{attribute.name}}Configuration)
-    V8DOMConfiguration::InstallAttribute(isolate, world, instanceTemplate, prototypeTemplate, attributeConfig);
-  {% else %}
-  static const V8DOMConfiguration::AccessorConfiguration accessor{{attribute.name}}Configuration[] = {
-    {{accessor_configuration(attribute) | indent(2)}}
-  };
-  for (const auto& accessorConfig : accessor{{attribute.name}}Configuration)
-    V8DOMConfiguration::InstallAccessor(isolate, world, instanceTemplate, prototypeTemplate, interfaceTemplate, signature, accessorConfig);
-  {% endif %}
-  {% endfor %}
-  {% endfilter %}
-  {% endfor %}
 
   {% if (indexed_property_getter or named_property_getter) and not is_partial %}
   // Indexed properties
@@ -528,15 +545,23 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   {% endif %}
   {% endif %}
 
-  {% if iterator_method %}
+  {% if iterator_method and not iterator_method.runtime_enabled_feature_name %}
   {% filter exposed(iterator_method.exposed_test) %}
-  {% filter runtime_enabled(iterator_method.runtime_enabled_feature_name) %}
   {% set symbol_alias = '"%s"' % iterator_method_alias
                         if iterator_method_alias else 'nullptr' %}
   // Iterator (@@iterator)
-  static const V8DOMConfiguration::SymbolKeyedMethodConfiguration symbolKeyedIteratorConfiguration = { v8::Symbol::GetIterator, {{symbol_alias}}, {{v8_class_or_partial}}::iteratorMethodCallback, 0, v8::DontEnum, V8DOMConfiguration::kOnPrototype, V8DOMConfiguration::kCheckHolder, V8DOMConfiguration::kDoNotCheckAccess };
+  static const V8DOMConfiguration::SymbolKeyedMethodConfiguration
+  symbolKeyedIteratorConfiguration = {
+      v8::Symbol::GetIterator,
+      {{symbol_alias}},
+      {{v8_class_or_partial}}::iteratorMethodCallback,
+      0,
+      v8::DontEnum,
+      V8DOMConfiguration::kOnPrototype,
+      V8DOMConfiguration::kCheckHolder,
+      V8DOMConfiguration::kDoNotCheckAccess
+  };
   V8DOMConfiguration::InstallMethod(isolate, world, prototypeTemplate, signature, symbolKeyedIteratorConfiguration);
-  {% endfilter %}
   {% endfilter %}
   {% endif %}
 
@@ -559,7 +584,8 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   //   and sets the "prototype" property of its function object.
   //   When |interfaceTemplate|'s function object is created, its
   //   prototype.__proto__ will point to the value of the "prototype" property
-  //   of |iteratorPrototypeTemplate|, which is exactly what we want.
+  //   of |intrinsicIteratorPrototypeInterfaceTemplate|, which is exactly what
+  //   we want.
   //
   // Finally, creating a FunctionTemplate here might look expensive since they
   // have the same lifetime as their context, but:
@@ -574,6 +600,30 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   intrinsicIteratorPrototypeInterfaceTemplate->SetIntrinsicDataProperty(
       V8AtomicString(isolate, "prototype"), v8::kIteratorPrototype);
   interfaceTemplate->Inherit(intrinsicIteratorPrototypeInterfaceTemplate);
+  {% endif %}
+
+  {% if interface_name == 'DOMException' %}
+  // The WebIDL spec states that DOMException objects have a few peculiarities.
+  // One of them is similar to what it mandates for Iterator objects when it
+  // comes to the inheritance chain. Instead of
+  //     DOMException -> prototype -> %ObjectPrototype%
+  // we have
+  //     DOMException -> prototype -> %ErrorPrototype% -> %ObjectPrototype%
+  // so that DOMException objects "inherit" toString() and a few properties
+  // from %ErrorPrototype%.
+  // See https://heycam.github.io/webidl/#es-DOMException-specialness.
+  //
+  // We achieve this with the same hack we use for Iterators: create a new
+  // function template with no prototype, set its "prototype" property to
+  // %ErrorPrototype% and make |interfaceTemplate| inherit from it. When
+  // |interfaceTemplate| is instantiated, its prototype.__proto__ will point to
+  // |intrinsicErrorPrototypeInterfaceTemplate|'s "prototype" property.
+  v8::Local<v8::FunctionTemplate> intrinsicErrorPrototypeInterfaceTemplate =
+      v8::FunctionTemplate::New(isolate);
+  intrinsicErrorPrototypeInterfaceTemplate->RemovePrototype();
+  intrinsicErrorPrototypeInterfaceTemplate->SetIntrinsicDataProperty(
+      V8AtomicString(isolate, "prototype"), v8::kErrorPrototype);
+  interfaceTemplate->Inherit(intrinsicErrorPrototypeInterfaceTemplate);
   {% endif %}
 
   {% if interface_name == 'Location' %}
@@ -598,25 +648,131 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
   instanceTemplate->MarkAsUndetectable();
   {% endif %}
 
-  {% if methods | custom_registration(is_partial) %}
+  // Custom signature
   {% for method in methods | custom_registration(is_partial) %}
-  {# install_custom_signature #}
   {% filter exposed(method.overloads.exposed_test_all
                     if method.overloads else method.exposed_test) %}
-  {% filter runtime_enabled(method.overloads.runtime_enabled_all
-                            if method.overloads else method.runtime_enabled_feature_name) %}
+  {% set feature_name = method.overloads.runtime_enabled_all
+                        if method.overloads else method.runtime_enabled_feature_name %}
+  {% if not feature_name %}
   {% if method.is_cross_origin %}
-  {# TODO(dcheng): Currently, bindings must create a function object for each
-     realm as a hack to support the incumbent realm. Remove this when Blink
-     properly supports the incumbent realm. #}
   {{install_origin_safe_method(method, 'instanceTemplate', 'prototypeTemplate') | indent(2)}}
   {% else %}
   {{install_custom_signature(method, 'instanceTemplate', 'prototypeTemplate', 'interfaceTemplate', 'signature') | indent(2)}}
   {% endif %}
-  {% endfilter %}
+  {% endif %}
   {% endfilter %}
   {% endfor %}
+  {% if not has_partial_interface %}
+
+  {{v8_class_or_partial}}::InstallRuntimeEnabledFeaturesOnTemplate(
+      isolate, world, interfaceTemplate);
   {% endif %}
+}
+
+void {{v8_class_or_partial}}::InstallRuntimeEnabledFeaturesOnTemplate(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::FunctionTemplate> interface_template) {
+  {% if runtime_enabled_feature_name and not context_enabled_feature_name %}
+  if (!{{runtime_enabled_feature_name | runtime_enabled_function}}) {
+    return;
+  }
+  {% endif %}
+
+  {% if is_partial %}
+  {{v8_class}}::InstallRuntimeEnabledFeaturesOnTemplate(isolate, world, interface_template);
+  {% endif %}
+
+  v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interface_template);
+  ALLOW_UNUSED_LOCAL(signature);
+  v8::Local<v8::ObjectTemplate> instance_template = interface_template->InstanceTemplate();
+  ALLOW_UNUSED_LOCAL(instance_template);
+  v8::Local<v8::ObjectTemplate> prototype_template = interface_template->PrototypeTemplate();
+  ALLOW_UNUSED_LOCAL(prototype_template);
+
+  // Register IDL constants, attributes and operations.
+  {% for feature_name, constants_list in constants | selectattr('runtime_enabled_feature_name') | groupby('runtime_enabled_feature_name') %}
+  {% filter runtime_enabled(feature_name) %}
+  static const V8DOMConfiguration::ConstantConfiguration constant_configurations[] = {
+      {% for constant in constants_list %}
+      {{constant_configuration(constant) | indent(6)}},
+      {% endfor %}
+  };
+  V8DOMConfiguration::InstallConstants(
+      isolate, interface_template, prototype_template,
+      constant_configurations, WTF_ARRAY_LENGTH(constant_configurations));
+  {% endfilter %}
+  {% endfor %}
+
+  {% for feature_name, attribute_list in runtime_enabled_attributes | selectattr('is_data_type_property') | groupby('runtime_enabled_feature_name') %}
+  {% filter runtime_enabled(feature_name) %}
+  static const V8DOMConfiguration::AttributeConfiguration attribute_configurations[] = {
+      {% for attribute in attribute_list | sort %}
+      {{attribute_configuration(attribute) | indent(6)}},
+      {% endfor %}
+  };
+  V8DOMConfiguration::InstallAttributes(
+      isolate, world, instance_template, prototype_template,
+      attribute_configurations, WTF_ARRAY_LENGTH(attribute_configurations));
+  {% endfilter %}
+  {% endfor %}
+
+  {% for feature_name, attribute_list in runtime_enabled_attributes | selectattr('is_data_type_property', 'equalto', False) | groupby('runtime_enabled_feature_name') %}
+  {% filter runtime_enabled(feature_name) %}
+  static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[] = {
+      {% for attribute in attribute_list | sort %}
+      {{accessor_configuration(attribute) | indent(6)}},
+      {% endfor %}
+  };
+  V8DOMConfiguration::InstallAccessors(
+      isolate, world, instance_template, prototype_template, interface_template,
+      signature, accessor_configurations,
+      WTF_ARRAY_LENGTH(accessor_configurations));
+  {% endfilter %}
+  {% endfor %}
+
+  {% if iterator_method and iterator_method.runtime_enabled_feature_name %}
+  {% filter exposed(iterator_method.exposed_test) %}
+  {% filter runtime_enabled(iterator_method.runtime_enabled_feature_name) %}
+  {% set symbol_alias = '"%s"' % iterator_method_alias
+                        if iterator_method_alias else 'nullptr' %}
+  // Iterator (@@iterator)
+  static const V8DOMConfiguration::SymbolKeyedMethodConfiguration
+      symbol_keyed_iterator_configuration = {
+      v8::Symbol::GetIterator,
+      {{symbol_alias}},
+      {{v8_class_or_partial}}::iteratorMethodCallback,
+      0,
+      v8::DontEnum,
+      V8DOMConfiguration::kOnPrototype,
+      V8DOMConfiguration::kCheckHolder,
+      V8DOMConfiguration::kDoNotCheckAccess
+  };
+  V8DOMConfiguration::InstallMethod(
+      isolate, world, prototype_template, signature,
+      symbol_keyed_iterator_configuration);
+  {% endfilter %}
+  {% endfilter %}
+  {% endif %}
+
+  // Custom signature
+  {% for method in methods | custom_registration(is_partial) %}
+  {% filter exposed(method.overloads.exposed_test_all
+                    if method.overloads else method.exposed_test) %}
+  {% set feature_name = method.overloads.runtime_enabled_all
+        if method.overloads else method.runtime_enabled_feature_name %}
+  {% if feature_name %}
+  {% filter runtime_enabled(feature_name) %}
+  {% if method.is_cross_origin %}
+  {{install_origin_safe_method(method, 'instance_template', 'prototype_template') | indent(2)}}
+  {% else %}
+  {{install_custom_signature(method, 'instance_template', 'prototype_template', 'interface_template', 'signature') | indent(2)}}
+  {% endif %}
+  {% endfilter %}
+  {% endif %}
+  {% endfilter %}
+  {% endfor %}
 }
 
 {% endif %}{# not is_array_buffer_or_view #}
@@ -628,48 +784,53 @@ static void install{{v8_class}}Template(v8::Isolate* isolate, const DOMWrapperWo
         attribute_configuration,
         with context %}
 {% from 'methods.cpp.tmpl' import install_custom_signature with context %}
-void {{v8_class_or_partial}}::installRuntimeEnabledFeatures(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface) {
+void {{v8_class_or_partial}}::InstallRuntimeEnabledFeatures(
+    v8::Isolate* isolate,
+    const DOMWrapperWorld& world,
+    v8::Local<v8::Object> instance,
+    v8::Local<v8::Object> prototype,
+    v8::Local<v8::Function> interface) {
   {% if runtime_enabled_feature_name %}
-#error "We don't expect a runtime enabled interface {{v8_class_or_partial}} to have installRuntimeEnabledFeatures()."
+#error "We don't expect a runtime enabled interface {{v8_class_or_partial}} to have InstallRuntimeEnabledFeatures()."
   {% endif %}
 
   {% if is_partial %}
-  {{v8_class}}::installRuntimeEnabledFeatures(isolate, world, instance, prototype, interface);
+  {{v8_class}}::InstallRuntimeEnabledFeatures(isolate, world, instance, prototype, interface);
   {% endif %}
 
-  v8::Local<v8::FunctionTemplate> interfaceTemplate = {{v8_class}}::wrapperTypeInfo.domTemplate(isolate, world);
-  v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interfaceTemplate);
+  v8::Local<v8::FunctionTemplate> interface_template = {{v8_class}}::wrapperTypeInfo.domTemplate(isolate, world);
+  v8::Local<v8::Signature> signature = v8::Signature::New(isolate, interface_template);
   ALLOW_UNUSED_LOCAL(signature);
 
   {# TODO(peria): Generate code to install constants. It depends on runtime_enabled_feaure of this interface. #}
 
-  {% for feature_name, attrs in runtime_enabled_attributes | groupby('runtime_enabled_feature_name') %}
+  {% for feature_name, attrs in runtime_enabled_attributes | selectattr('is_data_type_property') | groupby('runtime_enabled_feature_name') %}
   {% filter runtime_enabled(feature_name) %}
-  {% for attribute in attrs | unique_by('name') | sort %}
-  {% if attribute.is_data_type_property %}
-  static const V8DOMConfiguration::AttributeConfiguration attribute{{attribute.name}}Configuration[] = {
-    {{attribute_configuration(attribute) | indent(2)}}
+  static const V8DOMConfiguration::AttributeConfiguration attribute_configurations[] = {
+      {% for attribute in attrs | sort %}
+      {{attribute_configuration(attribute) | indent(6)}},
+      {% endfor %}
   };
-  for (const auto& attributeConfig : attribute{{attribute.name}}Configuration)
-    V8DOMConfiguration::InstallAttribute(isolate, world, instance, prototype, attributeConfig);
-  {% else %}
-  static const V8DOMConfiguration::AccessorConfiguration accessor{{attribute.name}}Configuration[] = {
-    {{accessor_configuration(attribute) | indent(2)}}
-  };
-  for (const auto& accessorConfig : accessor{{attribute.name}}Configuration)
-    V8DOMConfiguration::InstallAccessor(isolate, world, instance, prototype, interface, signature, accessorConfig);
-  {% endif %}
+  V8DOMConfiguration::InstallAttributes(isolate, world, instance, prototype,
+      attribute_configurations, WTF_ARRAY_LENGTH(attribute_configurations));
+  {% endfilter %}
   {% endfor %}
+
+  {% for feature_name, attrs in runtime_enabled_attributes | selectattr('is_data_type_property', 'equalto', False) | groupby('runtime_enabled_feature_name') %}
+  {% filter runtime_enabled(feature_name) %}
+  static const V8DOMConfiguration::AccessorConfiguration accessor_configurations[] = {
+      {% for attribute in attrs | sort %}
+      {{accessor_configuration(attribute) | indent(6)}},
+      {% endfor %}
+  };
+  V8DOMConfiguration::InstallAccessors(isolate, world, instance, prototype,
+      interface, signature, accessor_configurations,
+      WTF_ARRAY_LENGTH(accessor_configurations));
   {% endfilter %}
   {% endfor %}
 
   {% if iterator_method and iterator_method.runtime_enabled_feature_name %}
-  {% filter exposed(iterator_method.exposed_test) %}
-  {% filter runtime_enabled(iterator_method.runtime_enabled_feature_name) %}
-  // Runtime enabled iterator (@@iterator)
-#error "{{v8_class_or_partial}} should not have runtime enabled iterators."
-  {% endfilter %}
-  {% endfilter %}
+#error "{{v8_class_or_partial}} should not have runtime enabled iterator (@@iterator)."
   {% endif %}
 
   {% if methods | custom_registration(is_partial) %}
@@ -701,7 +862,7 @@ void {{v8_class_or_partial}}::installRuntimeEnabledFeatures(v8::Isolate* isolate
         with context %}
 {% from 'constants.cpp.tmpl' import constant_configuration with context %}
 {% from 'methods.cpp.tmpl' import method_configuration with context %}
-{% for feature in origin_trial_features %}
+{% for feature in optional_features %}
 void {{v8_class_or_partial}}::install{{feature.name}}(v8::Isolate* isolate, const DOMWrapperWorld& world, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface) {
   {% if feature.attributes or feature.methods %}
   v8::Local<v8::FunctionTemplate> interfaceTemplate = {{v8_class}}::wrapperTypeInfo.domTemplate(isolate, world);

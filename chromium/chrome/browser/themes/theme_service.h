@@ -15,15 +15,18 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
 #include "components/keyed_service/core/keyed_service.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/features/features.h"
 #include "ui/base/theme_provider.h"
 
+class BrowserThemePack;
 class CustomThemeSupplier;
 class ThemeSyncableService;
 class Profile;
@@ -59,9 +62,7 @@ class ResourceBundle;
 extern "C" NSString* const kBrowserThemeDidChangeNotification;
 #endif  // __OBJC__
 
-class ThemeService : public base::NonThreadSafe,
-                     public content::NotificationObserver,
-                     public KeyedService {
+class ThemeService : public content::NotificationObserver, public KeyedService {
  public:
   // Public constants used in ThemeService and its subclasses:
   static const char kDefaultThemeID[];
@@ -82,7 +83,10 @@ class ThemeService : public base::NonThreadSafe,
   // Set the current theme to the theme defined in |extension|.
   // |extension| must already be added to this profile's
   // ExtensionService.
-  virtual void SetTheme(const extensions::Extension* extension);
+  void SetTheme(const extensions::Extension* extension);
+
+  // Similar to SetTheme, but doesn't show an undo infobar.
+  void RevertToTheme(const extensions::Extension* extension);
 
   // Reset the theme to default.
   virtual void UseDefaultTheme();
@@ -232,6 +236,10 @@ class ThemeService : public base::NonThreadSafe,
   // and contrasting with the foreground tab is the most important).
   static SkColor GetSeparatorColor(SkColor tab_color, SkColor frame_color);
 
+  // virtual for testing.
+  virtual void DoSetTheme(const extensions::Extension* extension,
+                          bool suppress_infobar);
+
   // These methods provide the implementation for ui::ThemeProvider (exposed
   // via BrowserThemeProvider).
   gfx::ImageSkia* GetImageSkiaNamed(int id, bool incognito) const;
@@ -272,8 +280,15 @@ class ThemeService : public base::NonThreadSafe,
   void SaveThemeID(const std::string& id);
 
   // Implementation of SetTheme() (and the fallback from LoadThemePrefs() in
-  // case we don't have a theme pack).
-  void BuildFromExtension(const extensions::Extension* extension);
+  // case we don't have a theme pack). |new_theme| indicates whether this is a
+  // newly installed theme or a migration.
+  void BuildFromExtension(const extensions::Extension* extension,
+                          bool new_theme);
+
+  // Callback when |pack| has finished or failed building.
+  void OnThemeBuiltFromExtension(const extensions::ExtensionId& extension_id,
+                                 scoped_refptr<BrowserThemePack> pack,
+                                 bool new_theme);
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
   // Returns true if the profile belongs to a supervised user.
@@ -327,6 +342,16 @@ class ThemeService : public base::NonThreadSafe,
 
   BrowserThemeProvider original_theme_provider_;
   BrowserThemeProvider incognito_theme_provider_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  // Allows us to cancel building a theme pack from an extension.
+  base::CancelableTaskTracker build_extension_task_tracker_;
+
+  // The ID of the theme that's currently being built on a different thread.
+  // We hold onto this just to be sure not to uninstall the extension view
+  // RemoveUnusedThemes while it's still being built.
+  std::string building_extension_id_;
 
   base::WeakPtrFactory<ThemeService> weak_ptr_factory_;
 

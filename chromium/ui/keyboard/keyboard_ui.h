@@ -29,12 +29,13 @@ class KEYBOARD_EXPORT KeyboardUI {
   KeyboardUI();
   virtual ~KeyboardUI();
 
-  // Gets the virtual keyboard window. May return null if the window has not yet
+  // Gets the virtual keyboard contents window i.e. the WebContents window where
+  // keyboard extensions are loaded. May return null if the window has not yet
   // been created.
-  virtual aura::Window* GetKeyboardWindow() = 0;
+  virtual aura::Window* GetContentsWindow() = 0;
 
-  // Whether the keyboard window has been created.
-  virtual bool HasKeyboardWindow() const = 0;
+  // Whether the keyboard contents window has been created.
+  virtual bool HasContentsWindow() const = 0;
 
   // Whether this window should do an overscroll to avoid occlusion by the
   // virtual keyboard. IME windows and virtual keyboard windows should always
@@ -54,9 +55,6 @@ class KEYBOARD_EXPORT KeyboardUI {
   // simply hides the container. An overridden implementation can set up
   // necesasry animation, or delay the visibility change as it desires.
   virtual void HideKeyboardContainer(aura::Window* container);
-
-  // Updates the type of the focused text input box.
-  virtual void SetUpdateInputType(ui::TextInputType type) = 0;
 
   // Ensures caret in current work area (not occluded by virtual keyboard
   // window).

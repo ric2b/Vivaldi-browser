@@ -4,47 +4,29 @@
 
 #include "core/paint/BoxPainter.h"
 
-#include "core/HTMLNames.h"
-#include "core/frame/Settings.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/BackgroundBleedAvoidance.h"
-#include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutBox.h"
-#include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/compositing/CompositedLayerMapping.h"
-#include "core/layout/line/RootInlineBox.h"
 #include "core/paint/BackgroundImageGeometry.h"
-#include "core/paint/BoxBorderPainter.h"
 #include "core/paint/BoxDecorationData.h"
+#include "core/paint/BoxModelObjectPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/NinePieceImagePainter.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
-#include "core/paint/PaintLayer.h"
-#include "core/paint/RoundedInnerRectClipper.h"
 #include "core/paint/ScrollRecorder.h"
 #include "core/paint/ThemePainter.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/LayoutPoint.h"
-#include "platform/geometry/LayoutRectOutsets.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
-#include "platform/graphics/paint/CompositingDisplayItem.h"
 #include "platform/wtf/Optional.h"
 
 namespace blink {
-
-bool BoxPainter::IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-    const LayoutBoxModelObject* obj,
-    const PaintInfo& paint_info) {
-  return paint_info.PaintFlags() & kPaintLayerPaintingOverflowContents &&
-         !(paint_info.PaintFlags() &
-           kPaintLayerPaintingCompositingBackgroundPhase) &&
-         obj == paint_info.PaintContainer();
-}
 
 void BoxPainter::Paint(const PaintInfo& paint_info,
                        const LayoutPoint& paint_offset) {
@@ -65,8 +47,9 @@ void BoxPainter::PaintBoxDecorationBackground(const PaintInfo& paint_info,
                                               const LayoutPoint& paint_offset) {
   LayoutRect paint_rect;
   Optional<ScrollRecorder> scroll_recorder;
-  if (IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-          &layout_box_, paint_info)) {
+  if (BoxModelObjectPainter::
+          IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
+              &layout_box_, paint_info)) {
     // For the case where we are painting the background into the scrolling
     // contents layer of a composited scroller we need to include the entire
     // overflow rect.
@@ -90,8 +73,9 @@ LayoutRect BoxPainter::BoundsForDrawingRecorder(
     const PaintInfo& paint_info,
     const LayoutPoint& adjusted_paint_offset) {
   LayoutRect bounds =
-      IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-          &layout_box_, paint_info)
+      BoxModelObjectPainter::
+              IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
+                  &layout_box_, paint_info)
           ? layout_box_.LayoutOverflowRect()
           : layout_box_.SelfVisualOverflowRect();
   bounds.MoveBy(adjusted_paint_offset);
@@ -102,7 +86,7 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset,
     const LayoutRect& paint_rect) {
-  bool painting_overflow_contents =
+  bool painting_overflow_contents = BoxModelObjectPainter::
       IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
           &layout_box_, paint_info);
   const ComputedStyle& style = layout_box_.StyleRef();
@@ -111,7 +95,7 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
   // Disable cache in under-invalidation checking mode for MediaSliderPart
   // because we always paint using the latest data (buffered ranges, current
   // time and duration) which may be different from the cached data.
-  if ((RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled() &&
+  if ((RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() &&
        style.Appearance() == kMediaSliderPart)
       // We may paint a delayed-invalidation object before it's actually
       // invalidated. Note this would be handled for us by
@@ -189,8 +173,8 @@ void BoxPainter::PaintBoxDecorationBackgroundWithRect(
               layout_box_, paint_info, snapped_paint_rect))) &&
         !(layout_box_.IsTable() &&
           ToLayoutTable(&layout_box_)->ShouldCollapseBorders())) {
-      PaintBorder(layout_box_, paint_info, paint_rect, style,
-                  box_decoration_data.bleed_avoidance);
+      PaintBorder(layout_box_, layout_box_.GetDocument(), GetNode(), paint_info,
+                  paint_rect, style, box_decoration_data.bleed_avoidance);
     }
   }
 
@@ -208,394 +192,11 @@ void BoxPainter::PaintBackground(const PaintInfo& paint_info,
     return;
   if (layout_box_.BackgroundIsKnownToBeObscured())
     return;
-  PaintFillLayers(paint_info, background_color,
-                  layout_box_.Style()->BackgroundLayers(), paint_rect,
-                  bleed_avoidance);
-}
-
-void BoxPainter::PaintFillLayers(const PaintInfo& paint_info,
-                                 const Color& c,
-                                 const FillLayer& fill_layer,
-                                 const LayoutRect& rect,
-                                 BackgroundBleedAvoidance bleed_avoidance,
-                                 SkBlendMode op,
-                                 const LayoutObject* background_object) {
-  FillLayerOcclusionOutputList reversed_paint_list;
-  bool should_draw_background_in_separate_buffer =
-      CalculateFillLayerOcclusionCulling(reversed_paint_list, fill_layer,
-                                         layout_box_.GetDocument(),
-                                         layout_box_.StyleRef());
-
-  // TODO(trchen): We can optimize out isolation group if we have a
-  // non-transparent background color and the bottom layer encloses all other
-  // layers.
-
-  GraphicsContext& context = paint_info.context;
-
-  if (should_draw_background_in_separate_buffer)
-    context.BeginLayer();
-
-  for (auto it = reversed_paint_list.rbegin(); it != reversed_paint_list.rend();
-       ++it)
-    PaintFillLayer(layout_box_, paint_info, c, **it, rect, bleed_avoidance, 0,
-                   LayoutSize(), op, background_object);
-
-  if (should_draw_background_in_separate_buffer)
-    context.EndLayer();
-}
-
-namespace {
-
-// RAII image paint helper.
-class ImagePaintContext {
-  STACK_ALLOCATED();
-
- public:
-  ImagePaintContext(const LayoutBoxModelObject& obj,
-                    GraphicsContext& context,
-                    const FillLayer& layer,
-                    const StyleImage& style_image,
-                    SkBlendMode op,
-                    const LayoutObject* background_object,
-                    const LayoutSize& container_size)
-      : context_(context),
-        previous_interpolation_quality_(context.ImageInterpolationQuality()) {
-    SkBlendMode bg_op =
-        WebCoreCompositeToSkiaComposite(layer.Composite(), layer.BlendMode());
-    // if op != SkBlendMode::kSrcOver, a mask is being painted.
-    composite_op_ = (op == SkBlendMode::kSrcOver) ? bg_op : op;
-
-    const LayoutObject& image_client =
-        background_object ? *background_object : obj;
-    image_ = style_image.GetImage(image_client, FlooredIntSize(container_size));
-
-    interpolation_quality_ = BoxPainter::ChooseInterpolationQuality(
-        image_client, image_.Get(), &layer, container_size);
-    if (interpolation_quality_ != previous_interpolation_quality_)
-      context.SetImageInterpolationQuality(interpolation_quality_);
-
-    if (layer.MaskSourceType() == kMaskLuminance)
-      context.SetColorFilter(kColorFilterLuminanceToAlpha);
-  }
-
-  ~ImagePaintContext() {
-    if (interpolation_quality_ != previous_interpolation_quality_)
-      context_.SetImageInterpolationQuality(previous_interpolation_quality_);
-  }
-
-  Image* GetImage() const { return image_.Get(); }
-
-  SkBlendMode CompositeOp() const { return composite_op_; }
-
- private:
-  RefPtr<Image> image_;
-  GraphicsContext& context_;
-  SkBlendMode composite_op_;
-  InterpolationQuality interpolation_quality_;
-  InterpolationQuality previous_interpolation_quality_;
-};
-
-inline bool PaintFastBottomLayer(const LayoutBoxModelObject& obj,
-                                 const PaintInfo& paint_info,
-                                 const BoxPainterBase::FillLayerInfo& info,
-                                 const FillLayer& layer,
-                                 const LayoutRect& rect,
-                                 BackgroundBleedAvoidance bleed_avoidance,
-                                 bool has_line_box_sibling,
-                                 const LayoutSize& box_size,
-                                 SkBlendMode op,
-                                 const LayoutObject* background_object,
-                                 Optional<BackgroundImageGeometry>& geometry) {
-  // Painting a background image from an ancestor onto a cell is a complex case.
-  if (obj.IsTableCell() && background_object &&
-      !background_object->IsTableCell())
-    return false;
-  // Complex cases not handled on the fast path.
-  if (!info.is_bottom_layer || !info.is_border_fill ||
-      info.is_clipped_with_local_scrolling)
-    return false;
-
-  // Transparent layer, nothing to paint.
-  if (!info.should_paint_color && !info.should_paint_image)
-    return true;
-
-  // When the layer has an image, figure out whether it is covered by a single
-  // tile.
-  FloatRect image_tile;
-  if (info.should_paint_image) {
-    // Avoid image shaders when printing (poorly supported in PDF).
-    if (info.is_rounded_fill && paint_info.IsPrinting())
-      return false;
-
-    DCHECK(!geometry);
-    geometry.emplace();
-    geometry->Calculate(obj, background_object, paint_info.PaintContainer(),
-                        paint_info.GetGlobalPaintFlags(), layer, rect);
-
-    if (!geometry->DestRect().IsEmpty()) {
-      // The tile is too small.
-      if (geometry->TileSize().Width() < rect.Width() ||
-          geometry->TileSize().Height() < rect.Height())
-        return false;
-
-      image_tile = Image::ComputeTileContaining(
-          FloatPoint(geometry->DestRect().Location()),
-          FloatSize(geometry->TileSize()), FloatPoint(geometry->Phase()),
-          FloatSize(geometry->SpaceSize()));
-
-      // The tile is misaligned.
-      if (!image_tile.Contains(FloatRect(rect)))
-        return false;
-    }
-  }
-
-  // At this point we're committed to the fast path: the destination (r)rect
-  // fits within a single tile, and we can paint it using direct draw(R)Rect()
-  // calls.
-  GraphicsContext& context = paint_info.context;
-  FloatRoundedRect border =
-      info.is_rounded_fill
-          ? BoxPainterBase::BackgroundRoundedRectAdjustedForBleedAvoidance(
-                obj.StyleRef(), rect, bleed_avoidance, has_line_box_sibling,
-                box_size, info.include_left_edge, info.include_right_edge)
-          : FloatRoundedRect(PixelSnappedIntRect(rect));
-
-  Optional<RoundedInnerRectClipper> clipper;
-  if (info.is_rounded_fill && !border.IsRenderable()) {
-    // When the rrect is not renderable, we resort to clipping.
-    // RoundedInnerRectClipper handles this case via discrete, corner-wise
-    // clipping.
-    clipper.emplace(obj, paint_info, rect, border, kApplyToContext);
-    border.SetRadii(FloatRoundedRect::Radii());
-  }
-
-  // Paint the color if needed.
-  if (info.should_paint_color)
-    context.FillRoundedRect(border, info.color);
-
-  // Paint the image if needed.
-  if (!info.should_paint_image || image_tile.IsEmpty())
-    return true;
-
-  const ImagePaintContext image_context(obj, context, layer, *info.image, op,
-                                        background_object,
-                                        geometry->TileSize());
-  if (!image_context.GetImage())
-    return true;
-
-  const FloatSize intrinsic_tile_size =
-      image_context.GetImage()->HasRelativeSize()
-          ? image_tile.Size()
-          : FloatSize(image_context.GetImage()->Size());
-  const FloatRect src_rect = Image::ComputeSubsetForTile(
-      image_tile, border.Rect(), intrinsic_tile_size);
-
-  TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-               "data", InspectorPaintImageEvent::Data(obj, *info.image));
-  context.DrawImageRRect(image_context.GetImage(), border, src_rect,
-                         image_context.CompositeOp());
-
-  return true;
-}
-
-}  // anonymous namespace
-
-void BoxPainter::PaintFillLayer(const LayoutBoxModelObject& obj,
-                                const PaintInfo& paint_info,
-                                const Color& color,
-                                const FillLayer& bg_layer,
-                                const LayoutRect& rect,
-                                BackgroundBleedAvoidance bleed_avoidance,
-                                const InlineFlowBox* box,
-                                const LayoutSize& box_size,
-                                SkBlendMode op,
-                                const LayoutObject* background_object) {
-  GraphicsContext& context = paint_info.context;
-  if (rect.IsEmpty())
-    return;
-
-  const BoxPainterBase::FillLayerInfo info(
-      obj.GetDocument(), obj.StyleRef(), obj.HasOverflowClip(), color, bg_layer,
-      bleed_avoidance, (box ? box->IncludeLogicalLeftEdge() : true),
-      (box ? box->IncludeLogicalRightEdge() : true));
-
-  Optional<BackgroundImageGeometry> geometry;
-  bool has_line_box_sibling = box && (box->NextLineBox() || box->PrevLineBox());
-
-  // Fast path for drawing simple color backgrounds.
-  if (PaintFastBottomLayer(obj, paint_info, info, bg_layer, rect,
-                           bleed_avoidance, has_line_box_sibling, box_size, op,
-                           background_object, geometry)) {
-    return;
-  }
-
-  Optional<RoundedInnerRectClipper> clip_to_border;
-  if (info.is_rounded_fill) {
-    FloatRoundedRect border =
-        info.is_border_fill
-            ? BackgroundRoundedRectAdjustedForBleedAvoidance(
-                  obj.StyleRef(), rect, bleed_avoidance, has_line_box_sibling,
-                  box_size, info.include_left_edge, info.include_right_edge)
-            : GetBackgroundRoundedRect(
-                  obj.StyleRef(), rect, has_line_box_sibling, box_size,
-                  info.include_left_edge, info.include_right_edge);
-
-    // Clip to the padding or content boxes as necessary.
-    if (bg_layer.Clip() == kContentFillBox) {
-      border = obj.Style()->GetRoundedInnerBorderFor(
-          LayoutRect(border.Rect()),
-          LayoutRectOutsets(-(obj.PaddingTop() + obj.BorderTop()),
-                            -(obj.PaddingRight() + obj.BorderRight()),
-                            -(obj.PaddingBottom() + obj.BorderBottom()),
-                            -(obj.PaddingLeft() + obj.BorderLeft())),
-          info.include_left_edge, info.include_right_edge);
-    } else if (bg_layer.Clip() == kPaddingFillBox) {
-      border = obj.Style()->GetRoundedInnerBorderFor(LayoutRect(border.Rect()),
-                                                     info.include_left_edge,
-                                                     info.include_right_edge);
-    }
-
-    clip_to_border.emplace(obj, paint_info, rect, border, kApplyToContext);
-  }
-
-  LayoutUnit b_left = info.include_left_edge ? obj.BorderLeft() : LayoutUnit();
-  LayoutUnit b_right =
-      info.include_right_edge ? obj.BorderRight() : LayoutUnit();
-  LayoutUnit p_left = info.include_left_edge ? obj.PaddingLeft() : LayoutUnit();
-  LayoutUnit p_right =
-      info.include_right_edge ? obj.PaddingRight() : LayoutUnit();
-
-  GraphicsContextStateSaver clip_with_scrolling_state_saver(
-      context, info.is_clipped_with_local_scrolling);
-  LayoutRect scrolled_paint_rect = rect;
-  if (info.is_clipped_with_local_scrolling &&
-      !IsPaintingBackgroundOfPaintContainerIntoScrollingContentsLayer(
-          &obj, paint_info)) {
-    // Clip to the overflow area.
-    const LayoutBox& this_box = ToLayoutBox(obj);
-    // TODO(chrishtr): this should be pixel-snapped.
-    context.Clip(FloatRect(this_box.OverflowClipRect(rect.Location())));
-
-    // Adjust the paint rect to reflect a scrolled content box with borders at
-    // the ends.
-    IntSize offset = this_box.ScrolledContentOffset();
-    scrolled_paint_rect.Move(-offset);
-    scrolled_paint_rect.SetWidth(b_left + this_box.ScrollWidth() + b_right);
-    scrolled_paint_rect.SetHeight(this_box.BorderTop() +
-                                  this_box.ScrollHeight() +
-                                  this_box.BorderBottom());
-  }
-
-  GraphicsContextStateSaver background_clip_state_saver(context, false);
-  IntRect mask_rect;
-
-  switch (bg_layer.Clip()) {
-    case kPaddingFillBox:
-    case kContentFillBox: {
-      if (info.is_rounded_fill)
-        break;
-
-      // Clip to the padding or content boxes as necessary.
-      bool include_padding = bg_layer.Clip() == kContentFillBox;
-      LayoutRect clip_rect(
-          scrolled_paint_rect.X() + b_left +
-              (include_padding ? p_left : LayoutUnit()),
-          scrolled_paint_rect.Y() + obj.BorderTop() +
-              (include_padding ? obj.PaddingTop() : LayoutUnit()),
-          scrolled_paint_rect.Width() - b_left - b_right -
-              (include_padding ? p_left + p_right : LayoutUnit()),
-          scrolled_paint_rect.Height() - obj.BorderTop() - obj.BorderBottom() -
-              (include_padding ? obj.PaddingTop() + obj.PaddingBottom()
-                               : LayoutUnit()));
-      background_clip_state_saver.Save();
-      // TODO(chrishtr): this should be pixel-snapped.
-      context.Clip(FloatRect(clip_rect));
-
-      break;
-    }
-    case kTextFillBox: {
-      // First figure out how big the mask has to be. It should be no bigger
-      // than what we need to actually render, so we should intersect the dirty
-      // rect with the border box of the background.
-      mask_rect = PixelSnappedIntRect(rect);
-
-      // We draw the background into a separate layer, to be later masked with
-      // yet another layer holding the text content.
-      background_clip_state_saver.Save();
-      context.Clip(mask_rect);
-      context.BeginLayer();
-
-      break;
-    }
-    case kBorderFillBox:
-      break;
-    default:
-      NOTREACHED();
-      break;
-  }
-
-  // Paint the color first underneath all images, culled if background image
-  // occludes it.
-  // TODO(trchen): In the !bgLayer.hasRepeatXY() case, we could improve the
-  // culling test by verifying whether the background image covers the entire
-  // painting area.
-  if (info.is_bottom_layer && info.color.Alpha() && info.should_paint_color) {
-    IntRect background_rect(PixelSnappedIntRect(scrolled_paint_rect));
-    context.FillRect(background_rect, info.color);
-  }
-
-  // no progressive loading of the background image
-  if (info.should_paint_image) {
-    if (!geometry) {
-      geometry.emplace();
-      geometry->Calculate(obj, background_object, paint_info.PaintContainer(),
-                          paint_info.GetGlobalPaintFlags(), bg_layer,
-                          scrolled_paint_rect);
-    } else {
-      // The geometry was calculated in paintFastBottomLayer().
-      DCHECK(info.is_bottom_layer && info.is_border_fill &&
-             !info.is_clipped_with_local_scrolling);
-    }
-
-    if (!geometry->DestRect().IsEmpty()) {
-      const ImagePaintContext image_context(obj, context, bg_layer, *info.image,
-                                            op, background_object,
-                                            geometry->TileSize());
-      TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-                   "data", InspectorPaintImageEvent::Data(obj, *info.image));
-      context.DrawTiledImage(
-          image_context.GetImage(), FloatRect(geometry->DestRect()),
-          FloatPoint(geometry->Phase()), FloatSize(geometry->TileSize()),
-          image_context.CompositeOp(), FloatSize(geometry->SpaceSize()));
-    }
-  }
-
-  if (bg_layer.Clip() == kTextFillBox) {
-    // Create the text mask layer.
-    context.BeginLayer(1, SkBlendMode::kDstIn);
-
-    // Now draw the text into the mask. We do this by painting using a special
-    // paint phase that signals to
-    // InlineTextBoxes that they should just add their contents to the clip.
-    PaintInfo info(context, mask_rect, kPaintPhaseTextClip,
-                   kGlobalPaintNormalPhase, 0);
-    if (box) {
-      const RootInlineBox& root = box->Root();
-      box->Paint(info,
-                 LayoutPoint(scrolled_paint_rect.X() - box->X(),
-                             scrolled_paint_rect.Y() - box->Y()),
-                 root.LineTop(), root.LineBottom());
-    } else {
-      // FIXME: this should only have an effect for the line box list within
-      // |obj|. Change this to create a LineBoxListPainter directly.
-      LayoutSize local_offset =
-          obj.IsBox() ? ToLayoutBox(&obj)->LocationOffset() : LayoutSize();
-      obj.Paint(info, scrolled_paint_rect.Location() - local_offset);
-    }
-
-    context.EndLayer();
-    context.EndLayer();
-  }
+  BackgroundImageGeometry geometry(layout_box_);
+  BoxModelObjectPainter box_model_painter(layout_box_);
+  box_model_painter.PaintFillLayers(paint_info, background_color,
+                                    layout_box_.Style()->BackgroundLayers(),
+                                    paint_rect, geometry, bleed_avoidance);
 }
 
 void BoxPainter::PaintMask(const PaintInfo& paint_info,
@@ -645,11 +246,15 @@ void BoxPainter::PaintMaskImages(const PaintInfo& paint_info,
   }
 
   if (all_mask_images_loaded) {
-    PaintFillLayers(paint_info, Color::kTransparent,
-                    layout_box_.Style()->MaskLayers(), paint_rect);
-    PaintNinePieceImage(layout_box_, paint_info.context, paint_rect,
-                        layout_box_.StyleRef(),
-                        layout_box_.Style()->MaskBoxImage());
+    BackgroundImageGeometry geometry(layout_box_);
+    BoxModelObjectPainter box_model_painter(layout_box_);
+    box_model_painter.PaintFillLayers(paint_info, Color::kTransparent,
+                                      layout_box_.Style()->MaskLayers(),
+                                      paint_rect, geometry);
+    NinePieceImagePainter::Paint(paint_info.context, layout_box_,
+                                 layout_box_.GetDocument(), GetNode(),
+                                 paint_rect, layout_box_.StyleRef(),
+                                 layout_box_.StyleRef().MaskBoxImage());
   }
 
   if (push_transparency_layer)
@@ -678,40 +283,13 @@ void BoxPainter::PaintClippingMask(const PaintInfo& paint_info,
   paint_info.context.FillRect(paint_rect, Color::kBlack);
 }
 
-InterpolationQuality BoxPainter::ChooseInterpolationQuality(
-    const LayoutObject& obj,
-    Image* image,
-    const void* layer,
-    const LayoutSize& size) {
-  return ImageQualityController::GetImageQualityController()
-      ->ChooseInterpolationQuality(obj, image, layer, size);
-}
-
-bool BoxPainter::PaintNinePieceImage(const LayoutBoxModelObject& obj,
-                                     GraphicsContext& graphics_context,
-                                     const LayoutRect& rect,
-                                     const ComputedStyle& style,
-                                     const NinePieceImage& nine_piece_image,
-                                     SkBlendMode op) {
-  return NinePieceImagePainter().Paint(graphics_context, obj, rect, style,
-                                       nine_piece_image, op);
-}
-
-void BoxPainter::PaintBorder(const LayoutBoxModelObject& obj,
-                             const PaintInfo& info,
-                             const LayoutRect& rect,
-                             const ComputedStyle& style,
-                             BackgroundBleedAvoidance bleed_avoidance,
-                             bool include_logical_left_edge,
-                             bool include_logical_right_edge) {
-  // border-image is not affected by border-radius.
-  if (PaintNinePieceImage(obj, info.context, rect, style, style.BorderImage()))
-    return;
-
-  const BoxBorderPainter border_painter(rect, style, bleed_avoidance,
-                                        include_logical_left_edge,
-                                        include_logical_right_edge);
-  border_painter.PaintBorder(info, rect);
+Node* BoxPainter::GetNode() {
+  Node* node = nullptr;
+  const LayoutObject* layout_object = &layout_box_;
+  for (; layout_object && !node; layout_object = layout_object->Parent()) {
+    node = layout_object->GeneratingNode();
+  }
+  return node;
 }
 
 }  // namespace blink

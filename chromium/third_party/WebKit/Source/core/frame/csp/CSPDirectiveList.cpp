@@ -172,13 +172,14 @@ void CSPDirectiveList::ReportViolationWithLocation(
                            RedirectStatus::kNoRedirect, element, source);
 }
 
-void CSPDirectiveList::ReportViolationWithState(
+void CSPDirectiveList::ReportEvalViolation(
     const String& directive_text,
     const ContentSecurityPolicy::DirectiveType& effective_type,
     const String& message,
     const KURL& blocked_url,
     ScriptState* script_state,
-    const ContentSecurityPolicy::ExceptionStatus exception_status) const {
+    const ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) const {
   String report_message = IsReportOnly() ? "[Report Only] " + message : message;
   // Print a console message if it won't be redundant with a
   // JavaScript exception that the caller will throw. (Exceptions will
@@ -193,7 +194,8 @@ void CSPDirectiveList::ReportViolationWithState(
   policy_->ReportViolation(directive_text, effective_type, message, blocked_url,
                            report_endpoints_, header_, header_type_,
                            ContentSecurityPolicy::kEvalViolation,
-                           std::unique_ptr<SourceLocation>());
+                           std::unique_ptr<SourceLocation>(), nullptr,
+                           RedirectStatus::kFollowedRedirect, nullptr, content);
 }
 
 bool CSPDirectiveList::CheckEval(SourceListDirective* directive) const {
@@ -276,7 +278,7 @@ bool CSPDirectiveList::CheckAncestors(SourceListDirective* directive,
     //
     // TODO(mkwst): Move this check up into the browser process.  See
     // https://crbug.com/555418.
-    KURL url(KURL(),
+    KURL url(NullURL(),
              current->GetSecurityContext()->GetSecurityOrigin()->ToString());
     if (!directive->Allows(url, ResourceRequest::RedirectStatus::kNoRedirect))
       return false;
@@ -382,7 +384,8 @@ bool CSPDirectiveList::CheckEvalAndReportViolation(
     SourceListDirective* directive,
     const String& console_message,
     ScriptState* script_state,
-    ContentSecurityPolicy::ExceptionStatus exception_status) const {
+    ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) const {
   if (CheckEval(directive))
     return true;
 
@@ -392,10 +395,11 @@ bool CSPDirectiveList::CheckEvalAndReportViolation(
         " Note that 'script-src' was not explicitly set, so 'default-src' is "
         "used as a fallback.";
 
-  ReportViolationWithState(
+  ReportEvalViolation(
       directive->GetText(), ContentSecurityPolicy::DirectiveType::kScriptSrc,
       console_message + "\"" + directive->GetText() + "\"." + suffix + "\n",
-      KURL(), script_state, exception_status);
+      KURL(), script_state, exception_status,
+      directive->AllowReportSample() ? content : g_empty_string);
   if (!IsReportOnly()) {
     policy_->ReportBlockedScriptExecutionToInspector(directive->GetText());
     return false;
@@ -424,7 +428,7 @@ bool CSPDirectiveList::CheckMediaTypeAndReportViolation(
   // targets, as we won't have had a chance to redirect yet.
   ReportViolation(
       directive->GetText(), ContentSecurityPolicy::DirectiveType::kPluginTypes,
-      message + "\n", KURL(), ResourceRequest::RedirectStatus::kNoRedirect);
+      message + "\n", NullURL(), ResourceRequest::RedirectStatus::kNoRedirect);
   return DenyIfEnforcingPolicy();
 }
 
@@ -648,14 +652,15 @@ bool CSPDirectiveList::AllowInlineStyle(
 bool CSPDirectiveList::AllowEval(
     ScriptState* script_state,
     SecurityViolationReportingPolicy reporting_policy,
-    ContentSecurityPolicy::ExceptionStatus exception_status) const {
+    ContentSecurityPolicy::ExceptionStatus exception_status,
+    const String& content) const {
   if (reporting_policy == SecurityViolationReportingPolicy::kReport) {
     return CheckEvalAndReportViolation(
         OperativeDirective(script_src_.Get()),
         "Refused to evaluate a string as JavaScript because 'unsafe-eval' is "
         "not an allowed source of script in the following Content Security "
         "Policy directive: ",
-        script_state, exception_status);
+        script_state, exception_status, content);
   }
   return CheckEval(OperativeDirective(script_src_.Get()));
 }
@@ -841,7 +846,7 @@ bool CSPDirectiveList::AllowBaseURI(
   if (result &&
       !CheckSource(OperativeDirective(base_uri_.Get()), url, redirect_status)) {
     UseCounter::Count(policy_->GetDocument(),
-                      UseCounter::kBaseWouldBeBlockedByDefaultSrc);
+                      WebFeature::kBaseWouldBeBlockedByDefaultSrc);
   }
 
   return result;
@@ -878,7 +883,7 @@ bool CSPDirectiveList::AllowWorkerFromSource(
       child_src_ && CheckSource(child_src_, url, redirect_status)) {
     Deprecation::CountDeprecation(
         policy_->GetDocument(),
-        UseCounter::kChildSrcAllowedWorkerThatScriptSrcBlocked);
+        WebFeature::kChildSrcAllowedWorkerThatScriptSrcBlocked);
     return true;
   }
 
@@ -1111,6 +1116,14 @@ void CSPDirectiveList::ParseReportURI(const String& name, const String& value) {
       report_endpoints_.push_back(url);
     }
   }
+
+  if (report_endpoints_.size() > 1) {
+    UseCounter::Count(policy_->GetDocument(),
+                      WebFeature::kReportUriMultipleEndpoints);
+  } else {
+    UseCounter::Count(policy_->GetDocument(),
+                      WebFeature::kReportUriSingleEndpoint);
+  }
 }
 
 template <class CSPDirectiveType>
@@ -1225,9 +1238,7 @@ void CSPDirectiveList::AddDirective(const String& name, const String& value) {
     policy_->UsesScriptHashAlgorithms(script_src_->HashAlgorithmsUsed());
   } else if (type == ContentSecurityPolicy::DirectiveType::kObjectSrc) {
     SetCSPDirective<SourceListDirective>(name, value, object_src_);
-  } else if (type ==
-
-             ContentSecurityPolicy::DirectiveType::kFrameAncestors) {
+  } else if (type == ContentSecurityPolicy::DirectiveType::kFrameAncestors) {
     SetCSPDirective<SourceListDirective>(name, value, frame_ancestors_);
   } else if (type == ContentSecurityPolicy::DirectiveType::kFrameSrc) {
     SetCSPDirective<SourceListDirective>(name, value, frame_src_);
@@ -1396,6 +1407,11 @@ WebContentSecurityPolicy CSPDirectiveList::ExposeForNavigationalChecks() const {
           directive->DirectiveName(),
           directive->ExposeForNavigationalChecks()});
     }
+  }
+  if (upgrade_insecure_requests_) {
+    directives.push_back(WebContentSecurityPolicyDirective{
+        blink::WebString("upgrade-insecure-requests"),
+        WebContentSecurityPolicySourceList()});
   }
   policy.directives = directives;
   policy.report_endpoints = ReportEndpoints();

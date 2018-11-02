@@ -5,24 +5,9 @@
 #ifndef ASH_SYSTEM_TRAY_SYSTEM_TRAY_DELEGATE_H_
 #define ASH_SYSTEM_TRAY_SYSTEM_TRAY_DELEGATE_H_
 
-#include <string>
-#include <vector>
-
 #include "ash/ash_export.h"
-#include "base/i18n/time_formatting.h"
-#include "base/strings/string16.h"
-
-namespace base {
-class TimeDelta;
-class TimeTicks;
-}
 
 namespace ash {
-struct IMEInfo;
-struct IMEPropertyInfo;
-
-using IMEInfoList = std::vector<IMEInfo>;
-using IMEPropertyInfoList = std::vector<IMEPropertyInfo>;
 
 class NetworkingConfigDelegate;
 
@@ -41,29 +26,8 @@ class ASH_EXPORT SystemTrayDelegate {
   // Called after SystemTray has been instantiated.
   virtual void Initialize();
 
-  // Shows login UI to add other users to this session.
-  virtual void ShowUserLogin();
-
-  // Returns the currently selected IME.
-  virtual void GetCurrentIME(IMEInfo* info);
-
-  // Returns a list of availble IMEs.
-  virtual void GetAvailableIMEList(IMEInfoList* list);
-
-  // Returns a list of properties for the currently selected IME.
-  virtual void GetCurrentIMEProperties(IMEPropertyInfoList* list);
-
-  // Returns a non-empty string if IMEs are managed by policy.
-  virtual base::string16 GetIMEManagedMessage();
-
   // Returns NetworkingConfigDelegate. May return nullptr.
   virtual NetworkingConfigDelegate* GetNetworkingConfigDelegate() const;
-
-  // Retrieves the session start time. Returns |false| if the time is not set.
-  virtual bool GetSessionStartTime(base::TimeTicks* session_start_time);
-
-  // Retrieves the session length limit. Returns |false| if no limit is set.
-  virtual bool GetSessionLengthLimit(base::TimeDelta* session_length_limit);
 
   // The active user has been changed. This will be called when the UI is ready
   // to be switched to the new user.

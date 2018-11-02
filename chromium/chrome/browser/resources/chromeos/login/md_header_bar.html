@@ -1,5 +1,4 @@
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
-
+<link rel="stylesheet" href="oobe_flex_layout.css">
 <div id="login-header-bar" hidden
     class="login-header-bar-hidden layout horizontal">
   <div id="shutdown-header-bar-item" class="header-bar-item">
@@ -17,8 +16,10 @@
     </button>
   </div>
   <div id="apps-header-bar-item" class="header-bar-item" hidden>
-    <button id="show-apps-button" class="custom-appearance"
-        i18n-content="showApps">
+    <button id="show-apps-button" class="custom-appearance layout vertical">
+       <div id="show-apps-button-text" class="flex layout horizontal center"
+          i18n-content="showApps">
+       </div>
     </button>
   </div>
   <div id="guest-user-header-bar-item" class="header-bar-item" hidden>

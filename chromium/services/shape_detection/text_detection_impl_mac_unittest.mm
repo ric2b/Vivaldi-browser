@@ -13,6 +13,7 @@
 #include "base/run_loop.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/utils/mac/SkCGUtils.h"
 #include "ui/gl/gl_switches.h"
 
 namespace shape_detection {
@@ -31,7 +32,7 @@ class TextDetectionImplMacTest : public ::testing::Test {
   }
   MOCK_METHOD1(Detection, void(size_t));
 
-  TextDetectionImplMac impl_;
+  API_AVAILABLE(macosx(10.11)) std::unique_ptr<TextDetectionImplMac> impl_;
   const base::MessageLoop message_loop_;
 };
 
@@ -46,67 +47,56 @@ TEST_F(TextDetectionImplMacTest, ScanOnce) {
     return;
   }
 
-  base::ScopedCFTypeRef<CGColorSpaceRef> rgb_colorspace(
-      CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB));
+  if (@available(macOS 10.11, *)) {
+    impl_.reset(new TextDetectionImplMac);
+    base::ScopedCFTypeRef<CGColorSpaceRef> rgb_colorspace(
+        CGColorSpaceCreateWithName(kCGColorSpaceGenericRGB));
 
-  const int width = 200;
-  const int height = 50;
-  base::ScopedCFTypeRef<CGContextRef> context(CGBitmapContextCreate(
-      nullptr, width, height, 8 /* bitsPerComponent */,
-      width * 4 /* rowBytes */, rgb_colorspace,
-      kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host));
+    const int width = 200;
+    const int height = 50;
+    base::ScopedCFTypeRef<CGContextRef> context(CGBitmapContextCreate(
+        nullptr, width, height, 8 /* bitsPerComponent */,
+        width * 4 /* rowBytes */, rgb_colorspace,
+        kCGImageAlphaPremultipliedFirst | kCGBitmapByteOrder32Host));
 
-  // Draw a white background.
-  CGContextSetRGBFillColor(context, 1.0, 1.0, 1.0, 1.0);
-  CGContextFillRect(context, CGRectMake(0.0, 0.0, width, height));
+    // Draw a white background.
+    CGContextSetRGBFillColor(context, 1.0, 1.0, 1.0, 1.0);
+    CGContextFillRect(context, CGRectMake(0.0, 0.0, width, height));
 
-  // Create a line of Helvetica 16 text, and draw it in the |context|.
-  base::scoped_nsobject<NSFont> helvetica(
-      [NSFont fontWithName:@"Helvetica" size:16]);
-  NSDictionary* attributes = [NSDictionary
-      dictionaryWithObjectsAndKeys:helvetica, kCTFontAttributeName, nil];
+    // Create a line of Helvetica 16 text, and draw it in the |context|.
+    base::scoped_nsobject<NSFont> helvetica(
+        [NSFont fontWithName:@"Helvetica" size:16]);
+    NSDictionary* attributes = [NSDictionary
+        dictionaryWithObjectsAndKeys:helvetica, kCTFontAttributeName, nil];
 
-  base::scoped_nsobject<NSAttributedString> info([[NSAttributedString alloc]
-      initWithString:@"https://www.chromium.org"
-          attributes:attributes]);
+    base::scoped_nsobject<NSAttributedString> info([[NSAttributedString alloc]
+        initWithString:@"https://www.chromium.org"
+            attributes:attributes]);
 
-  base::ScopedCFTypeRef<CTLineRef> line(
-      CTLineCreateWithAttributedString((CFAttributedStringRef)info.get()));
+    base::ScopedCFTypeRef<CTLineRef> line(
+        CTLineCreateWithAttributedString((CFAttributedStringRef)info.get()));
 
-  CGContextSetTextPosition(context, 10.0, height / 2.0);
-  CTLineDraw(line, context);
+    CGContextSetTextPosition(context, 10.0, height / 2.0);
+    CTLineDraw(line, context);
 
-  // Extract a CGImage and its raw pixels from |context|.
-  base::ScopedCFTypeRef<CGImageRef> cg_image(
-      CGBitmapContextCreateImage(context));
-  EXPECT_EQ(static_cast<size_t>(width), CGImageGetWidth(cg_image));
-  EXPECT_EQ(static_cast<size_t>(height), CGImageGetHeight(cg_image));
+    // Extract a CGImage and its raw pixels from |context|.
+    base::ScopedCFTypeRef<CGImageRef> cg_image(
+        CGBitmapContextCreateImage(context));
+    EXPECT_EQ(static_cast<size_t>(width), CGImageGetWidth(cg_image));
+    EXPECT_EQ(static_cast<size_t>(height), CGImageGetHeight(cg_image));
 
-  base::ScopedCFTypeRef<CFDataRef> raw_cg_image_data(
-      CGDataProviderCopyData(CGImageGetDataProvider(cg_image)));
-  EXPECT_TRUE(CFDataGetBytePtr(raw_cg_image_data));
-  const int num_bytes = width * height * 4;
-  EXPECT_EQ(num_bytes, CFDataGetLength(raw_cg_image_data));
+    SkBitmap bitmap;
+    ASSERT_TRUE(SkCreateBitmapFromCGImage(&bitmap, cg_image));
 
-  // Generate a new ScopedSharedBufferHandle of the aproppriate size, map it and
-  // copy the generated text image pixels into it.
-  auto handle = mojo::SharedBufferHandle::Create(num_bytes);
-  ASSERT_TRUE(handle->is_valid());
+    base::RunLoop run_loop;
+    base::Closure quit_closure = run_loop.QuitClosure();
+    // Send the image to Detect() and expect the response in callback.
+    EXPECT_CALL(*this, Detection(1)).WillOnce(RunClosure(quit_closure));
+    impl_->Detect(bitmap, base::Bind(&TextDetectionImplMacTest::DetectCallback,
+                                     base::Unretained(this)));
 
-  mojo::ScopedSharedBufferMapping mapping = handle->Map(num_bytes);
-  ASSERT_TRUE(mapping);
-
-  memcpy(mapping.get(), CFDataGetBytePtr(raw_cg_image_data), num_bytes);
-
-  base::RunLoop run_loop;
-  base::Closure quit_closure = run_loop.QuitClosure();
-  // Send the image to Detect() and expect the response in callback.
-  EXPECT_CALL(*this, Detection(1)).WillOnce(RunClosure(quit_closure));
-  impl_.Detect(std::move(handle), width, height,
-               base::Bind(&TextDetectionImplMacTest::DetectCallback,
-                          base::Unretained(this)));
-
-  run_loop.Run();
+    run_loop.Run();
+  }
 }
 
 }  // shape_detection namespace

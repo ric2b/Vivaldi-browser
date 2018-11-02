@@ -111,7 +111,11 @@ class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
   void RevertMetadata(RefPtr<IDBIndexMetadata> old_metadata);
 
   // Used internally and by InspectorIndexedDBAgent:
-  IDBRequest* openCursor(ScriptState*, IDBKeyRange*, WebIDBCursorDirection);
+  IDBRequest* openCursor(
+      ScriptState*,
+      IDBKeyRange*,
+      WebIDBCursorDirection,
+      IDBRequest::AsyncTraceState = IDBRequest::AsyncTraceState());
 
   WebIDBDatabase* BackendDB() const;
 
@@ -123,12 +127,14 @@ class IDBIndex final : public GarbageCollectedFinalized<IDBIndex>,
   IDBRequest* GetInternal(ScriptState*,
                           const ScriptValue& key,
                           ExceptionState&,
-                          bool key_only);
+                          bool key_only,
+                          IDBRequest::AsyncTraceState metrics);
   IDBRequest* GetAllInternal(ScriptState*,
                              const ScriptValue& range,
                              unsigned long max_count,
                              ExceptionState&,
-                             bool key_only);
+                             bool key_only,
+                             IDBRequest::AsyncTraceState metrics);
 
   RefPtr<IDBIndexMetadata> metadata_;
   Member<IDBObjectStore> object_store_;

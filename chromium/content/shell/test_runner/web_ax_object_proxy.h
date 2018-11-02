@@ -17,7 +17,7 @@
 #include "v8/include/v8.h"
 
 namespace blink {
-class WebFrame;
+class WebLocalFrame;
 }
 
 namespace test_runner {
@@ -44,7 +44,7 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   virtual bool IsRoot() const;
   bool IsEqualToObject(const blink::WebAXObject& object);
 
-  void NotificationReceived(blink::WebFrame* frame,
+  void NotificationReceived(blink::WebLocalFrame* frame,
                             const std::string& notification_name);
   void Reset();
 
@@ -94,7 +94,6 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
 
   bool IsAtomic();
   bool IsBusy();
-  bool IsEnabled();
   bool IsRequired();
   bool IsEditable();
   bool IsRichlyEditable();
@@ -107,13 +106,14 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   bool IsMultiSelectable();
   bool IsSelectedOptionActive();
   bool IsExpanded();
-  bool IsChecked();
+  std::string Checked();
   bool IsVisible();
   bool IsOffScreen();
   bool IsCollapsed();
   bool HasPopup();
   bool IsValid();
   bool IsReadOnly();
+  std::string Restriction();
   unsigned int BackgroundColor();
   unsigned int Color();
   // For input elements of type color.
@@ -139,14 +139,16 @@ class WebAXObjectProxy : public gin::Wrappable<WebAXObjectProxy> {
   int32_t ColumnCount();
   int32_t ColumnHeadersCount();
   bool IsClickable();
-  bool IsButtonStateMixed();
   float BoundsX();
   float BoundsY();
   float BoundsWidth();
   float BoundsHeight();
 
   // Bound methods.
+  v8::Local<v8::Object> AriaActiveDescendantElement();
   v8::Local<v8::Object> AriaControlsElementAtIndex(unsigned index);
+  v8::Local<v8::Object> AriaDetailsElement();
+  v8::Local<v8::Object> AriaErrorMessageElement();
   v8::Local<v8::Object> AriaFlowToElementAtIndex(unsigned index);
   v8::Local<v8::Object> AriaOwnsElementAtIndex(unsigned index);
   std::string AllAttributes();

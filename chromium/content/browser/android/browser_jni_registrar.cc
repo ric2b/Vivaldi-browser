@@ -8,13 +8,12 @@
 #include "base/android/jni_registrar.h"
 #include "base/macros.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
-#include "content/browser/accessibility/browser_accessibility_manager_android.h"
+#include "content/browser/accessibility/web_contents_accessibility_android.h"
 #include "content/browser/android/app_web_message_port.h"
 #include "content/browser/android/background_sync_network_observer_android.h"
 #include "content/browser/android/browser_startup_controller.h"
 #include "content/browser/android/content_feature_list.h"
 #include "content/browser/android/content_video_view.h"
-#include "content/browser/android/content_view_core_impl.h"
 #include "content/browser/android/content_view_render_view.h"
 #include "content/browser/android/content_view_statics.h"
 #include "content/browser/android/date_time_chooser_android.h"
@@ -49,8 +48,6 @@ base::android::RegistrationMethod kContentRegisteredMethods[] = {
     {"BackgroundSyncNetworkObserverAndroid",
      content::BackgroundSyncNetworkObserverAndroid::Observer::
          RegisterNetworkObserver},
-    {"BrowserAccessibilityManager",
-     content::RegisterBrowserAccessibilityManager},
     {"ContentViewCore", content::RegisterContentViewCore},
     {"ContentViewRenderView",
      content::ContentViewRenderView::RegisterContentViewRenderView},
@@ -72,6 +69,8 @@ base::android::RegistrationMethod kContentRegisteredMethods[] = {
     {"SpeechRecognizerImplAndroid",
      content::SpeechRecognizerImplAndroid::RegisterSpeechRecognizer},
     {"TracingControllerAndroid", content::RegisterTracingControllerAndroid},
+    {"WebContentsAccessibilityAndroid",
+     content::RegisterWebContentsAccessibilityAndroid},
     {"WebContentsAndroid", content::WebContentsAndroid::Register},
     {"WebContentsObserver", content::RegisterWebContentsObserverProxy},
     {"WebViewStatics", content::RegisterWebViewStatics},

@@ -37,8 +37,10 @@
 #include "platform/loader/fetch/ResourceClient.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceLoader.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceLoadingLog.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/StdLibExtras.h"
@@ -46,11 +48,22 @@
 #include "v8/include/v8.h"
 
 namespace blink {
+
 namespace {
+
 // The amount of time to wait before informing the clients that the image has
 // been updated (in seconds). This effectively throttles invalidations that
 // result from new data arriving for this image.
 constexpr double kFlushDelaySeconds = 1.;
+
+bool HasServerLoFiResponseHeaders(const ResourceResponse& response) {
+  return response.HttpHeaderField("chrome-proxy-content-transform")
+             .Contains("empty-image") ||
+         // Check for the legacy Server Lo-Fi response headers, since it's
+         // possible that an old Lo-Fi image could be served from the cache.
+         response.HttpHeaderField("chrome-proxy").Contains("q=low");
+}
+
 }  // namespace
 
 class ImageResource::ImageResourceInfoImpl final
@@ -107,7 +120,7 @@ class ImageResource::ImageResourceInfoImpl final
 
   void SetDecodedSize(size_t size) override { resource_->SetDecodedSize(size); }
   void WillAddClientOrObserver() override {
-    resource_->WillAddClientOrObserver(Resource::kMarkAsReferenced);
+    resource_->WillAddClientOrObserver();
   }
   void DidRemoveClientOrObserver() override {
     resource_->DidRemoveClientOrObserver();
@@ -124,16 +137,16 @@ class ImageResource::ImageResourceInfoImpl final
   const Member<ImageResource> resource_;
 };
 
-class ImageResource::ImageResourceFactory : public ResourceFactory {
+class ImageResource::ImageResourceFactory : public NonTextResourceFactory {
   STACK_ALLOCATED();
 
  public:
   ImageResourceFactory(const FetchParameters& fetch_params)
-      : ResourceFactory(Resource::kImage), fetch_params_(&fetch_params) {}
+      : NonTextResourceFactory(Resource::kImage),
+        fetch_params_(&fetch_params) {}
 
   Resource* Create(const ResourceRequest& request,
-                   const ResourceLoaderOptions& options,
-                   const String&) const override {
+                   const ResourceLoaderOptions& options) const override {
     return new ImageResource(request, options,
                              ImageResourceContent::CreateNotStarted(),
                              fetch_params_->GetPlaceholderImageRequestType() ==
@@ -179,7 +192,8 @@ bool ImageResource::CanReuse(const FetchParameters& params) const {
           FetchParameters::kAllowPlaceholder &&
       placeholder_option_ != PlaceholderOption::kDoNotReloadPlaceholder)
     return false;
-  return true;
+
+  return Resource::CanReuse(params);
 }
 
 bool ImageResource::CanUseCacheValidator() const {
@@ -193,8 +207,14 @@ bool ImageResource::CanUseCacheValidator() const {
 }
 
 ImageResource* ImageResource::Create(const ResourceRequest& request) {
-  return new ImageResource(request, ResourceLoaderOptions(),
+  ResourceLoaderOptions options;
+  return new ImageResource(request, options,
                            ImageResourceContent::CreateNotStarted(), false);
+}
+
+ImageResource* ImageResource::CreateForTest(const KURL& url) {
+  ResourceRequest request(url);
+  return Create(request);
 }
 
 ImageResource::ImageResource(const ResourceRequest& resource_request,
@@ -260,7 +280,7 @@ void ImageResource::DestroyDecodedDataForFailedRevalidation() {
 
 void ImageResource::DestroyDecodedDataIfPossible() {
   GetContent()->DestroyDecodedData();
-  if (GetContent()->HasImage() && !IsPreloaded() &&
+  if (GetContent()->HasImage() && !IsUnusedPreload() &&
       GetContent()->IsRefetchableDataFromDiskCache()) {
     UMA_HISTOGRAM_MEMORY_KB("Memory.Renderer.EstimatedDroppableEncodedSize",
                             EncodedSize() / 1024);
@@ -268,7 +288,14 @@ void ImageResource::DestroyDecodedDataIfPossible() {
 }
 
 void ImageResource::AllClientsAndObserversRemoved() {
-  CHECK(!GetContent()->HasImage() || !ErrorOccurred());
+  // After ErrorOccurred() is set true in Resource::FinishAsError() before
+  // the subsequent UpdateImage() in ImageResource::FinishAsError(),
+  // HasImage() is true and ErrorOccurred() is true.
+  // |is_during_finish_as_error_| is introduced to allow such cases.
+  // crbug.com/701723
+  // TODO(hiroshige): Make the CHECK condition cleaner.
+  CHECK(is_during_finish_as_error_ || !GetContent()->HasImage() ||
+        !ErrorOccurred());
   // If possible, delay the resetting until back at the event loop. Doing so
   // after a conservative GC prevents resetAnimation() from upsetting ongoing
   // animation updates (crbug.com/613709)
@@ -284,7 +311,7 @@ void ImageResource::AllClientsAndObserversRemoved() {
   Resource::AllClientsAndObserversRemoved();
 }
 
-PassRefPtr<const SharedBuffer> ImageResource::ResourceBuffer() const {
+RefPtr<const SharedBuffer> ImageResource::ResourceBuffer() const {
   if (Data())
     return Data();
   return GetContent()->ResourceBuffer();
@@ -339,6 +366,7 @@ void ImageResource::DecodeError(bool all_data_received) {
   if (!ErrorOccurred())
     SetStatus(ResourceStatus::kDecodeError);
 
+  bool is_multipart = !!multipart_parser_;
   // Finishes loading if needed, and notifies observers.
   if (!all_data_received && Loader()) {
     // Observers are notified via ImageResource::finish().
@@ -347,7 +375,8 @@ void ImageResource::DecodeError(bool all_data_received) {
   } else {
     auto result = GetContent()->UpdateImage(
         nullptr, GetStatus(),
-        ImageResourceContent::kClearImageAndNotifyObservers, all_data_received);
+        ImageResourceContent::kClearImageAndNotifyObservers, all_data_received,
+        is_multipart);
     DCHECK_EQ(result, ImageResourceContent::UpdateImageResult::kNoDecodeError);
   }
 
@@ -387,7 +416,9 @@ void ImageResource::FinishAsError(const ResourceError& error) {
   // TODO(hiroshige): Move setEncodedSize() call to Resource::error() if it
   // is really needed, or remove it otherwise.
   SetEncodedSize(0);
+  is_during_finish_as_error_ = true;
   Resource::FinishAsError(error);
+  is_during_finish_as_error_ = false;
   UpdateImage(nullptr, ImageResourceContent::kClearImageAndNotifyObservers,
               true);
 }
@@ -418,10 +449,17 @@ void ImageResource::ResponseReceived(
     multipart_parser_ = new MultipartImageResourceParser(
         response, response.MultipartBoundary(), this);
   }
+
+  // Notify the base class that a response has been received. Note that after
+  // this call, |GetResponse()| will represent the full effective
+  // ResourceResponse, while |response| might just be a revalidation response
+  // (e.g. a 304) with a partial set of updated headers that were folded into
+  // the cached response.
   Resource::ResponseReceived(response, std::move(handle));
-  if (RuntimeEnabledFeatures::clientHintsEnabled()) {
+
+  if (RuntimeEnabledFeatures::ClientHintsEnabled()) {
     device_pixel_ratio_header_value_ =
-        this->GetResponse()
+        GetResponse()
             .HttpHeaderField(HTTPNames::Content_DPR)
             .ToFloat(&has_device_pixel_ratio_header_value_);
     if (!has_device_pixel_ratio_header_value_ ||
@@ -433,9 +471,9 @@ void ImageResource::ResponseReceived(
 
   if (placeholder_option_ ==
           PlaceholderOption::kShowAndReloadPlaceholderAlways &&
-      IsEntireResource(this->GetResponse())) {
-    if (this->GetResponse().HttpStatusCode() < 400 ||
-        this->GetResponse().HttpStatusCode() >= 600) {
+      IsEntireResource(GetResponse())) {
+    if (GetResponse().HttpStatusCode() < 400 ||
+        GetResponse().HttpStatusCode() >= 600) {
       // Don't treat a complete and broken image as a placeholder if the
       // response code is something other than a 4xx or 5xx error.
       // This is done to prevent reissuing the request in cases like
@@ -446,11 +484,47 @@ void ImageResource::ResponseReceived(
       placeholder_option_ = PlaceholderOption::kReloadPlaceholderOnDecodeError;
     }
   }
+
+  if (HasServerLoFiResponseHeaders(GetResponse())) {
+    // Ensure that the PreviewsState bit for Server Lo-Fi is set iff Chrome
+    // received the appropriate Server Lo-Fi response headers for this image.
+    //
+    // Normally, the |kServerLoFiOn| bit should already be set if Server Lo-Fi
+    // response headers are coming back, but it's possible for legacy Lo-Fi
+    // images to be served from the cache even if Chrome isn't in Lo-Fi mode.
+    // This also serves as a nice last line of defence to ensure that Server
+    // Lo-Fi images can be reloaded to show the original even if e.g. a server
+    // bug causes Lo-Fi images to be sent when they aren't expected.
+    SetPreviewsState(GetResourceRequest().GetPreviewsState() |
+                     WebURLRequest::kServerLoFiOn);
+  } else if (GetResourceRequest().GetPreviewsState() &
+             WebURLRequest::kServerLoFiOn) {
+    // If Chrome expects a Lo-Fi response, but the server decided to send the
+    // full image, then clear the Server Lo-Fi Previews state bit.
+    WebURLRequest::PreviewsState new_previews_state =
+        GetResourceRequest().GetPreviewsState();
+
+    new_previews_state &= ~WebURLRequest::kServerLoFiOn;
+    if (new_previews_state == WebURLRequest::kPreviewsUnspecified)
+      new_previews_state = WebURLRequest::kPreviewsOff;
+
+    SetPreviewsState(new_previews_state);
+  }
 }
 
 bool ImageResource::ShouldShowPlaceholder() const {
+  if (RuntimeEnabledFeatures::ClientPlaceholdersForServerLoFiEnabled() &&
+      (GetResourceRequest().GetPreviewsState() &
+       WebURLRequest::kServerLoFiOn)) {
+    // If the runtime feature is enabled, show Client Lo-Fi placeholder images
+    // in place of Server Lo-Fi responses. This is done so that all Lo-Fi images
+    // have a consistent appearance.
+    return true;
+  }
+
   switch (placeholder_option_) {
     case PlaceholderOption::kShowAndReloadPlaceholderAlways:
+    case PlaceholderOption::kShowAndDoNotReloadPlaceholder:
       return true;
     case PlaceholderOption::kReloadPlaceholderOnDecodeError:
     case PlaceholderOption::kDoNotReloadPlaceholder:
@@ -466,24 +540,12 @@ bool ImageResource::ShouldReloadBrokenPlaceholder() const {
       return ErrorOccurred();
     case PlaceholderOption::kReloadPlaceholderOnDecodeError:
       return GetStatus() == ResourceStatus::kDecodeError;
+    case PlaceholderOption::kShowAndDoNotReloadPlaceholder:
     case PlaceholderOption::kDoNotReloadPlaceholder:
       return false;
   }
   NOTREACHED();
   return false;
-}
-
-static bool IsLoFiImage(const ImageResource& resource) {
-  if (resource.IsLoaded()) {
-    return resource.GetResponse()
-               .HttpHeaderField("chrome-proxy-content-transform")
-               .Contains("empty-image") ||
-           resource.GetResponse()
-               .HttpHeaderField("chrome-proxy")
-               .Contains("q=low");
-  }
-  return resource.GetResourceRequest().GetPreviewsState() &
-         WebURLRequest::kServerLoFiOn;
 }
 
 void ImageResource::ReloadIfLoFiOrPlaceholderImage(
@@ -492,8 +554,15 @@ void ImageResource::ReloadIfLoFiOrPlaceholderImage(
   if (policy == kReloadIfNeeded && !ShouldReloadBrokenPlaceholder())
     return;
 
+  // If the image is loaded, then the |PreviewsState::kServerLoFiOn| bit should
+  // be set iff the image has Server Lo-Fi response headers.
+  DCHECK(!IsLoaded() ||
+         HasServerLoFiResponseHeaders(GetResponse()) ==
+             static_cast<bool>(GetResourceRequest().GetPreviewsState() &
+                               WebURLRequest::kServerLoFiOn));
+
   if (placeholder_option_ == PlaceholderOption::kDoNotReloadPlaceholder &&
-      !IsLoFiImage(*this))
+      !(GetResourceRequest().GetPreviewsState() & WebURLRequest::kServerLoFiOn))
     return;
 
   // Prevent clients and observers from being notified of completion while the
@@ -508,6 +577,8 @@ void ImageResource::ReloadIfLoFiOrPlaceholderImage(
   // The reloaded image should not use any previews transformations.
   WebURLRequest::PreviewsState previews_state_for_reload =
       WebURLRequest::kPreviewsNoTransform;
+  WebURLRequest::PreviewsState old_previews_state =
+      GetResourceRequest().GetPreviewsState();
 
   if (policy == kReloadIfNeeded && (GetResourceRequest().GetPreviewsState() &
                                     WebURLRequest::kClientLoFiOn)) {
@@ -522,7 +593,13 @@ void ImageResource::ReloadIfLoFiOrPlaceholderImage(
 
   if (placeholder_option_ != PlaceholderOption::kDoNotReloadPlaceholder)
     ClearRangeRequestHeader();
-  placeholder_option_ = PlaceholderOption::kDoNotReloadPlaceholder;
+
+  if (old_previews_state & WebURLRequest::kClientLoFiOn &&
+      policy != kReloadAlways) {
+    placeholder_option_ = PlaceholderOption::kShowAndDoNotReloadPlaceholder;
+  } else {
+    placeholder_option_ = PlaceholderOption::kDoNotReloadPlaceholder;
+  }
 
   if (IsLoading()) {
     Loader()->Cancel();
@@ -579,15 +656,16 @@ bool ImageResource::IsAccessAllowed(
     SecurityOrigin* security_origin,
     ImageResourceInfo::DoesCurrentFrameHaveSingleSecurityOrigin
         does_current_frame_has_single_security_origin) const {
-  if (GetResponse().WasFetchedViaServiceWorker()) {
-    return GetResponse().ServiceWorkerResponseType() !=
-           kWebServiceWorkerResponseTypeOpaque;
-  }
+  if (GetCORSStatus() == CORSStatus::kServiceWorkerOpaque)
+    return false;
+
   if (does_current_frame_has_single_security_origin !=
       ImageResourceInfo::kHasSingleSecurityOrigin)
     return false;
-  if (PassesAccessControlCheck(security_origin))
+
+  if (IsSameOriginOrCORSSuccessful())
     return true;
+
   return !security_origin->TaintsCanvas(GetResponse().Url());
 }
 
@@ -607,9 +685,10 @@ void ImageResource::UpdateImage(
     PassRefPtr<SharedBuffer> shared_buffer,
     ImageResourceContent::UpdateImageOption update_image_option,
     bool all_data_received) {
-  auto result =
-      GetContent()->UpdateImage(std::move(shared_buffer), GetStatus(),
-                                update_image_option, all_data_received);
+  bool is_multipart = !!multipart_parser_;
+  auto result = GetContent()->UpdateImage(std::move(shared_buffer), GetStatus(),
+                                          update_image_option,
+                                          all_data_received, is_multipart);
   if (result == ImageResourceContent::UpdateImageResult::kShouldDecodeError) {
     // In case of decode error, we call imageNotifyFinished() iff we don't
     // initiate reloading:

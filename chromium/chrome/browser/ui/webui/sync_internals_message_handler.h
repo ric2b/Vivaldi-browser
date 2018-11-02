@@ -61,6 +61,10 @@ class SyncInternalsMessageHandler : public content::WebUIMessageHandler,
   // Handler for requests to get UserEvents tab visibility.
   void HandleRequestUserEventsVisibility(const base::ListValue* args);
 
+  // Handler for setting internal state of if specifics should be included in
+  // protocol events when sent to be displayed.
+  void HandleSetIncludeSpecifics(const base::ListValue* args);
+
   // Handler for writeUserEvent message.
   void HandleWriteUserEvent(const base::ListValue* args);
 
@@ -96,16 +100,14 @@ class SyncInternalsMessageHandler : public content::WebUIMessageHandler,
                          std::unique_ptr<base::DictionaryValue> value);
 
  protected:
-  using SyncServiceProvider = base::RepeatingCallback<syncer::SyncService*()>;
-
   using AboutSyncDataDelegate =
       base::RepeatingCallback<std::unique_ptr<base::DictionaryValue>(
           syncer::SyncService* service,
           version_info::Channel channel)>;
 
   // Constructor used for unit testing to override dependencies.
-  SyncInternalsMessageHandler(SyncServiceProvider sync_service_provider,
-                              AboutSyncDataDelegate about_sync_data_delegate);
+  explicit SyncInternalsMessageHandler(
+      AboutSyncDataDelegate about_sync_data_delegate);
 
  private:
   // Fetches updated aboutInfo and sends it to the page in the form of an
@@ -113,9 +115,8 @@ class SyncInternalsMessageHandler : public content::WebUIMessageHandler,
   void SendAboutInfo();
 
   // Gets the ProfileSyncService of the underlying original profile. May return
-  // nullptr (e.g., if sync is disabled on the command line). Shouldn't be
-  // called directly, but instead through |sync_service_provider_|.
-  syncer::SyncService* BindForSyncServiceProvider();
+  // nullptr (e.g., if sync is disabled on the command line).
+  syncer::SyncService* GetSyncService();
 
   // Sends a dispatch event to the UI. Javascript must be enabled.
   void DispatchEvent(const std::string& name, const base::Value& details_value);
@@ -133,8 +134,9 @@ class SyncInternalsMessageHandler : public content::WebUIMessageHandler,
   // ProfileSyncService.
   bool is_registered_for_counters_ = false;
 
-  // An abstraction of who provides the SyncService.
-  SyncServiceProvider sync_service_provider_;
+  // Whether specifics should be included when converting protocol events to a
+  // human readable format.
+  bool include_specifics_ = false;
 
   // An abstraction of who creates the about sync info value map.
   AboutSyncDataDelegate about_sync_data_delegate_;

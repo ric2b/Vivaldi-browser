@@ -37,6 +37,7 @@
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceLoadPriority.h"
+#include "platform/loader/fetch/ResourceLoadScheduler.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/SubstituteData.h"
 #include "platform/wtf/HashMap.h"
@@ -65,8 +66,12 @@ class PLATFORM_EXPORT ResourceFetcher
   USING_PRE_FINALIZER(ResourceFetcher, ClearPreloads);
 
  public:
-  static ResourceFetcher* Create(FetchContext* context) {
-    return new ResourceFetcher(context);
+  static ResourceFetcher* Create(FetchContext* context,
+                                 RefPtr<WebTaskRunner> task_runner = nullptr) {
+    return new ResourceFetcher(
+        context, task_runner
+                     ? std::move(task_runner)
+                     : context->GetFrameScheduler()->LoadingTaskRunner());
   }
   virtual ~ResourceFetcher();
   DECLARE_VIRTUAL_TRACE();
@@ -82,8 +87,11 @@ class PLATFORM_EXPORT ResourceFetcher
     return document_resources_;
   }
 
-  // Actually starts loading a Resource if it wasn't started during
-  // requestResource().
+  // Binds the given Resource instance to this ResourceFetcher instance to
+  // start loading the Resource actually.
+  // Usually, RequestResource() calls this method internally, but needs to
+  // call this method explicitly on cases such as ResourceNeedsLoad() returning
+  // false.
   bool StartLoad(Resource*);
 
   void SetAutoLoadImages(bool);
@@ -117,7 +125,6 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void SetDefersLoading(bool);
   void StopFetching();
-  bool IsFetching() const;
 
   bool ShouldDeferImageLoad(const KURL&) const;
 
@@ -127,8 +134,6 @@ class PLATFORM_EXPORT ResourceFetcher
   void HandleLoaderFinish(Resource*, double finish_time, LoaderFinishType);
   void HandleLoaderError(Resource*, const ResourceError&);
   bool IsControlledByServiceWorker() const;
-
-  static const ResourceLoaderOptions& DefaultResourceOptions();
 
   String GetCacheIdentifier() const;
 
@@ -152,6 +157,8 @@ class PLATFORM_EXPORT ResourceFetcher
 
   void RemovePreload(Resource*);
 
+  void OnNetworkQuiet() { scheduler_->OnNetworkQuiet(); }
+
   // Workaround for https://crbug.com/666214.
   // TODO(hiroshige): Remove this hack.
   void EmulateLoadStartedForInspector(Resource*,
@@ -162,11 +169,10 @@ class PLATFORM_EXPORT ResourceFetcher
  private:
   friend class ResourceCacheValidationSuppressor;
 
-  explicit ResourceFetcher(FetchContext*);
+  ResourceFetcher(FetchContext*, RefPtr<WebTaskRunner>);
 
   void InitializeRevalidation(ResourceRequest&, Resource*);
   Resource* CreateResourceForLoading(FetchParameters&,
-                                     const String& charset,
                                      const ResourceFactory&);
   void StorePerformanceTimingInitiatorInformation(Resource*);
   ResourceLoadPriority ComputeLoadPriority(
@@ -240,6 +246,7 @@ class PLATFORM_EXPORT ResourceFetcher
                               bool is_static_data) const;
 
   Member<FetchContext> context_;
+  Member<ResourceLoadScheduler> scheduler_;
 
   HashSet<String> validated_urls_;
   mutable DocumentResourceMap document_resources_;

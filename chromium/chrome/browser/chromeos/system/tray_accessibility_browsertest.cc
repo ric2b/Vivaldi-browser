@@ -6,9 +6,10 @@
 #include "ash/login_status.h"
 #include "ash/magnifier/magnification_controller.h"
 #include "ash/shell.h"
+#include "ash/shell_test_api.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_test_api.h"
 #include "ash/system/tray_accessibility.h"
-#include "ash/test/shell_test_api.h"
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
@@ -19,6 +20,7 @@
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/startup_utils.h"
+#include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/api/braille_display_private/mock_braille_controller.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -61,6 +63,18 @@ enum PrefSettingMechanism {
 
 void SetMagnifierEnabled(bool enabled) {
   MagnificationManager::Get()->SetMagnifierEnabled(enabled);
+}
+
+// Simulates how UserSessionManager creates and starts a user session.
+void CreateAndStartUserSession(const AccountId& account_id) {
+  using session_manager::SessionManager;
+
+  const std::string user_id_hash =
+      ProfileHelper::GetUserIdHashByUserIdForTesting(account_id.GetUserEmail());
+
+  SessionManager::Get()->CreateSession(account_id, user_id_hash);
+  ProfileHelper::GetProfileByUserIdHashForTest(user_id_hash);
+  SessionManager::Get()->SessionStarted();
 }
 
 class TrayAccessibilityTest
@@ -115,15 +129,13 @@ class TrayAccessibilityTest
   }
 
   ash::TrayAccessibility* tray() {
-    return ash::Shell::Get()
-        ->GetPrimarySystemTray()
-        ->GetTrayAccessibilityForTest();
+    return const_cast<ash::TrayAccessibility*>(
+        const_cast<const TrayAccessibilityTest*>(this)->tray());
   }
 
   const ash::TrayAccessibility* tray() const {
-    return ash::Shell::Get()
-        ->GetPrimarySystemTray()
-        ->GetTrayAccessibilityForTest();
+    return ash::SystemTrayTestApi(ash::Shell::Get()->GetPrimarySystemTray())
+        .tray_accessibility();
   }
 
   bool IsTrayIconVisible() const { return tray()->tray_icon_visible_; }
@@ -132,9 +144,7 @@ class TrayAccessibilityTest
     return tray()->CreateDefaultView(GetLoginStatus());
   }
 
-  void DestroyMenuItem() {
-    return tray()->DestroyDefaultView();
-  }
+  void DestroyMenuItem() { return tray()->OnDefaultViewDestroyed(); }
 
   bool CanCreateMenuItem() {
     views::View* menu_item_view = CreateMenuItem();
@@ -154,9 +164,9 @@ class TrayAccessibilityTest
   }
 
   void CloseDetailMenu() {
-    CHECK(tray()->detailed_menu_);
-    tray()->DestroyDetailedView();
-    tray()->detailed_menu_ = NULL;
+    ASSERT_TRUE(tray()->detailed_menu_);
+    tray()->OnDetailedViewDestroyed();
+    EXPECT_FALSE(tray()->detailed_menu_);
   }
 
   void ClickSpokenFeedbackOnDetailMenu() {
@@ -355,9 +365,7 @@ class TrayAccessibilityTest
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, LoginStatus) {
   EXPECT_EQ(ash::LoginStatus::NOT_LOGGED_IN, GetLoginStatus());
 
-  session_manager::SessionManager::Get()->CreateSession(
-      AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain");
-  session_manager::SessionManager::Get()->SessionStarted();
+  CreateAndStartUserSession(AccountId::FromUserEmail("owner@invalid.domain"));
   // Flush to ensure the session state reaches ash and updates login status.
   SessionControllerClient::FlushForTesting();
 
@@ -370,9 +378,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowTrayIcon) {
   // Confirms that the icon is invisible before login.
   EXPECT_FALSE(IsTrayIconVisible());
 
-  session_manager::SessionManager::Get()->CreateSession(
-      AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain");
-  session_manager::SessionManager::Get()->SessionStarted();
+  CreateAndStartUserSession(AccountId::FromUserEmail("owner@invalid.domain"));
 
   // Confirms that the icon is invisible just after login.
   EXPECT_FALSE(IsTrayIconVisible());
@@ -511,9 +517,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowTrayIcon) {
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenu) {
   // Login
-  session_manager::SessionManager::Get()->CreateSession(
-      AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain");
-  session_manager::SessionManager::Get()->SessionStarted();
+  CreateAndStartUserSession(AccountId::FromUserEmail("owner@invalid.domain"));
   // Flush to ensure the session state reaches ash and updates login status.
   SessionControllerClient::FlushForTesting();
 
@@ -651,9 +655,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenu) {
 
 IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, ShowMenuWithShowMenuOption) {
   // Login
-  session_manager::SessionManager::Get()->CreateSession(
-      AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain");
-  session_manager::SessionManager::Get()->SessionStarted();
+  CreateAndStartUserSession(AccountId::FromUserEmail("owner@invalid.domain"));
   // Flush to ensure the session state reaches ash and updates login status.
   SessionControllerClient::FlushForTesting();
 
@@ -1642,9 +1644,7 @@ IN_PROC_BROWSER_TEST_P(TrayAccessibilityTest, CheckMenuVisibilityOnDetailMenu) {
   CloseDetailMenu();
 
   // Simulate login.
-  session_manager::SessionManager::Get()->CreateSession(
-      AccountId::FromUserEmail("owner@invalid.domain"), "owner@invalid.domain");
-  session_manager::SessionManager::Get()->SessionStarted();
+  CreateAndStartUserSession(AccountId::FromUserEmail("owner@invalid.domain"));
   // Flush to ensure the session state reaches ash and updates login status.
   SessionControllerClient::FlushForTesting();
   EXPECT_TRUE(CreateDetailedMenu());

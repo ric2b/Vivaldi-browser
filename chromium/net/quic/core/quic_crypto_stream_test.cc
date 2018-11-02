@@ -24,10 +24,13 @@ namespace net {
 namespace test {
 namespace {
 
-class MockQuicCryptoStream : public QuicCryptoStream {
+class MockQuicCryptoStream : public QuicCryptoStream,
+                             public QuicCryptoHandshaker {
  public:
   explicit MockQuicCryptoStream(QuicSession* session)
-      : QuicCryptoStream(session) {}
+      : QuicCryptoStream(session),
+        QuicCryptoHandshaker(this, session),
+        params_(new QuicCryptoNegotiatedParameters) {}
 
   void OnHandshakeMessage(const CryptoHandshakeMessage& message) override {
     messages_.push_back(message);
@@ -35,7 +38,19 @@ class MockQuicCryptoStream : public QuicCryptoStream {
 
   std::vector<CryptoHandshakeMessage>* messages() { return &messages_; }
 
+  bool encryption_established() const override { return false; }
+  bool handshake_confirmed() const override { return false; }
+
+  const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
+      const override {
+    return *params_;
+  }
+  CryptoMessageParser* crypto_message_parser() override {
+    return QuicCryptoHandshaker::crypto_message_parser();
+  }
+
  private:
+  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
   std::vector<CryptoHandshakeMessage> messages_;
 
   DISALLOW_COPY_AND_ASSIGN(MockQuicCryptoStream);

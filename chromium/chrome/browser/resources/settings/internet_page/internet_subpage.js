@@ -25,10 +25,19 @@ Polymer({
     defaultNetwork: Object,
 
     /**
-     * Device state for the network type.
+     * Device state for the network type. Note: when both Cellular and Tether
+     * are available this will always be set to the Cellular device state and
+     * |tetherDeviceState| will be set to the Tether device state.
      * @type {!CrOnc.DeviceStateProperties|undefined}
      */
     deviceState: Object,
+
+    /**
+     * If both Cellular and Tether technologies exist, we combine the subpages
+     * and set this to the device state for Tether.
+     * @type {!CrOnc.DeviceStateProperties|undefined}
+     */
+    tetherDeviceState: Object,
 
     /** @type {!chrome.networkingPrivate.GlobalPolicy|undefined} */
     globalPolicy: Object,
@@ -75,7 +84,7 @@ Polymer({
     },
   },
 
-  observers: ['updateScanning_(networkingPrivate, deviceState)'],
+  observers: ['deviceStateChanged_(networkingPrivate, deviceState)'],
 
   /** @private {number|null} */
   scanIntervalId_: null,
@@ -89,8 +98,6 @@ Polymer({
 
   /** override */
   attached: function() {
-    this.scanIntervalId_ = null;
-
     this.networkListChangedListener_ = this.networkListChangedListener_ ||
         this.onNetworkListChangedEvent_.bind(this);
     this.networkingPrivate.onNetworkListChanged.addListener(
@@ -110,7 +117,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function(route) {
-    if (route != settings.Route.INTERNET_NETWORKS) {
+    if (route != settings.routes.INTERNET_NETWORKS) {
       this.stopScanning_();
       return;
     }
@@ -123,16 +130,50 @@ Polymer({
   },
 
   /** @private */
+  deviceStateChanged_: function() {
+    this.showSpinner = !!this.deviceState.Scanning;
+
+    // Scans should only be triggered by the "networks" subpage.
+    if (settings.getCurrentRoute() != settings.routes.INTERNET_NETWORKS) {
+      this.stopScanning_();
+      return;
+    }
+
+    this.updateScanning_();
+  },
+
+  /** @private */
   updateScanning_: function() {
     if (!this.deviceState)
       return;
-    if (this.deviceState.Type != CrOnc.Type.WI_FI) {
-      // deviceState probably changed, re-request networks.
-      this.getNetworkStateList_();
+
+    if (this.shouldStartScan_()) {
+      this.startScanning_();
       return;
     }
-    this.showSpinner = !!this.deviceState.Scanning;
-    this.startScanning_();
+
+    // deviceState probably changed, re-request networks.
+    this.getNetworkStateList_();
+  },
+
+  /**
+   * @return {boolean}
+   * @private
+   */
+  shouldStartScan_: function() {
+    // Scans should be kicked off from the Wi-Fi networks subpage.
+    if (this.deviceState.Type == CrOnc.Type.WI_FI)
+      return true;
+
+    // Scans should be kicked off from the Mobile data subpage, as long as it
+    // includes Tether networks.
+    if (this.deviceState.Type == CrOnc.Type.TETHER ||
+        (this.deviceState.Type == CrOnc.Type.CELLULAR &&
+         this.tetherDeviceState)) {
+      return true;
+    }
+
+    return false;
   },
 
   /** @private */
@@ -171,15 +212,34 @@ Polymer({
       visible: true,
       configured: false
     };
-    this.networkingPrivate.getNetworks(filter, function(networkStates) {
-      if (!this.deviceState)
-        return;
-      if (this.deviceState.Type != CrOnc.Type.VPN) {
-        this.networkStateList_ = networkStates;
-        return;
-      }
-      // For VPNs, separate out third party VPNs.
-      var networkStateList = [];
+    this.networkingPrivate.getNetworks(filter, this.onGetNetworks_.bind(this));
+  },
+
+  /**
+   * @param {!Array<!CrOnc.NetworkStateProperties>} networkStates
+   * @private
+   */
+  onGetNetworks_: function(networkStates) {
+    if (!this.deviceState)
+      return;  // Edge case when device states change before this callback.
+
+    // For the Cellular/Mobile subpage, request Tether networks if available.
+    if (this.deviceState.Type == CrOnc.Type.CELLULAR &&
+        this.tetherDeviceState) {
+      var filter = {
+        networkType: CrOnc.Type.TETHER,
+        visible: true,
+        configured: false
+      };
+      this.networkingPrivate.getNetworks(filter, function(tetherNetworkStates) {
+        this.networkStateList_ = networkStates.concat(tetherNetworkStates);
+      }.bind(this));
+      return;
+    }
+
+    // For VPNs, separate out third party VPNs.
+    if (this.deviceState.Type == CrOnc.Type.VPN) {
+      var builtinNetworkStates = [];
       var thirdPartyVpns = {};
       for (var i = 0; i < networkStates.length; ++i) {
         var state = networkStates[i];
@@ -189,12 +249,14 @@ Polymer({
           thirdPartyVpns[providerType] = thirdPartyVpns[providerType] || [];
           thirdPartyVpns[providerType].push(state);
         } else {
-          networkStateList.push(state);
+          builtinNetworkStates.push(state);
         }
       }
-      this.networkStateList_ = networkStateList;
+      networkStates = builtinNetworkStates;
       this.thirdPartyVpns_ = thirdPartyVpns;
-    }.bind(this));
+    }
+
+    this.networkStateList_ = networkStates;
   },
 
   /**
@@ -246,7 +308,6 @@ Polymer({
       return '';
     switch (deviceState.Type) {
       case CrOnc.Type.TETHER:
-        return this.i18n('internetToggleTetherA11yLabel');
       case CrOnc.Type.CELLULAR:
         return this.i18n('internetToggleMobileA11yLabel');
       case CrOnc.Type.WI_FI:
@@ -405,11 +466,72 @@ Polymer({
   },
 
   /**
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} tetherDeviceState
+   * @return {boolean}
+   * @private
+   */
+  tetherToggleIsVisible_: function(deviceState, tetherDeviceState) {
+    return !!deviceState && deviceState.Type == CrOnc.Type.CELLULAR &&
+        !!tetherDeviceState;
+  },
+
+  /**
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} tetherDeviceState
+   * @return {boolean}
+   * @private
+   */
+  tetherToggleIsEnabled_: function(deviceState, tetherDeviceState) {
+    return this.tetherToggleIsVisible_(deviceState, tetherDeviceState) &&
+        this.enableToggleIsEnabled_(tetherDeviceState) &&
+        tetherDeviceState.State != CrOnc.DeviceState.UNINITIALIZED;
+  },
+
+  /**
+   * @param {!Event} event
+   * @private
+   */
+  onTetherEnabledTap_: function(event) {
+    this.fire('device-enabled-toggled', {
+      enabled: !this.deviceIsEnabled_(this.tetherDeviceState),
+      type: CrOnc.Type.TETHER,
+    });
+    event.stopPropagation();
+  },
+
+  /**
    * @param {*} lhs
    * @param {*} rhs
    * @return {boolean}
+   * @private
    */
   isEqual_: function(lhs, rhs) {
     return lhs === rhs;
+  },
+
+  /**
+   * @param {!Array<!CrOnc.NetworkStateProperties>} networkStateList
+   * @return {boolean}
+   * @private
+   */
+  shouldShowNetworkList_: function(networkStateList) {
+    return networkStateList.length > 0;
+  },
+
+  /**
+   * @param {!CrOnc.DeviceStateProperties|undefined} deviceState
+   * @param {!CrOnc.DeviceStateProperties|undefined} tetherDeviceState
+   * @return {string}
+   * @private
+   */
+  getNoNetworksString_: function(deviceState, tetherDeviceState) {
+    var type = deviceState.Type;
+    if (type == CrOnc.Type.TETHER ||
+        (type == CrOnc.Type.CELLULAR && this.tetherDeviceState)) {
+      return this.i18nAdvanced('internetNoNetworksMobileData');
+    }
+
+    return this.i18n('internetNoNetworks');
   },
 });

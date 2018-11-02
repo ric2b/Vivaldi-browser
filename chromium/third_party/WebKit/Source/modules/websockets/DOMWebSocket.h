@@ -34,10 +34,10 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <memory>
-#include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/SuspendableObject.h"
 #include "core/events/EventListener.h"
 #include "core/events/EventTarget.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "modules/EventTargetModules.h"
 #include "modules/ModulesExport.h"
 #include "modules/websockets/WebSocketChannel.h"
@@ -235,20 +235,19 @@ class MODULES_EXPORT DOMWebSocket : public EventTargetWithInlineData,
   void RecordReceiveTypeHistogram(WebSocketReceiveType);
   void RecordReceiveMessageSizeHistogram(WebSocketReceiveType, size_t);
 
-  void SetBinaryTypeInternal(BinaryType);
-  void LogBinaryTypeChangesAfterOpen();
-
   Member<WebSocketChannel> channel_;
 
   State state_;
+
   KURL url_;
+  String origin_string_;
+
   uint64_t buffered_amount_;
   // The consumed buffered amount that will be reflected to m_bufferedAmount
   // later. It will be cleared once reflected.
   uint64_t consumed_buffered_amount_;
   uint64_t buffered_amount_after_close_;
   BinaryType binary_type_;
-  int binary_type_changes_after_open_;
   // The subprotocol the server selected.
   String subprotocol_;
   String extensions_;

@@ -98,8 +98,25 @@ static int execSqlF(sqlite3 *db, char **pzErrMsg, const char *zSql, ...){
 */
 void sqlite3Vacuum(Parse *pParse, Token *pNm){
   Vdbe *v = sqlite3GetVdbe(pParse);
-  int iDb = pNm ? sqlite3TwoPartName(pParse, pNm, pNm, &pNm) : 0;
-  if( v && (iDb>=2 || iDb==0) ){
+  int iDb = 0;
+  if( v==0 ) return;
+  if( pNm ){
+#ifndef SQLITE_BUG_COMPATIBLE_20160819
+    /* Default behavior:  Report an error if the argument to VACUUM is
+    ** not recognized */
+    iDb = sqlite3TwoPartName(pParse, pNm, pNm, &pNm);
+    if( iDb<0 ) return;
+#else
+    /* When SQLITE_BUG_COMPATIBLE_20160819 is defined, unrecognized arguments
+    ** to VACUUM are silently ignored.  This is a back-out of a bug fix that
+    ** occurred on 2016-08-19 (https://www.sqlite.org/src/info/083f9e6270).
+    ** The buggy behavior is required for binary compatibility with some
+    ** legacy applications. */
+    iDb = sqlite3FindDb(pParse->db, pNm);
+    if( iDb<0 ) iDb = 0;
+#endif
+  }
+  if( iDb!=1 ){
     sqlite3VdbeAddOp1(v, OP_Vacuum, iDb);
     sqlite3VdbeUsesBtree(v, iDb);
   }
@@ -132,7 +149,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
     return SQLITE_ERROR;
   }
 
-  /* Save the current value of the database flags so that it can be 
+  /* Save the current value of the database flags so that it can be
   ** restored before returning. Then set the writable-schema flag, and
   ** disable CHECK and foreign key constraints.  */
   saved_flags = db->flags;
@@ -184,7 +201,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
     extern void sqlite3CodecGetKey(sqlite3*, int, void**, int*);
     int nKey;
     char *zKey;
-    sqlite3CodecGetKey(db, 0, (void**)&zKey, &nKey);
+    sqlite3CodecGetKey(db, iDb, (void**)&zKey, &nKey);
     if( nKey ) db->nextPagesize = 0;
   }
 #endif
@@ -269,7 +286,7 @@ int sqlite3RunVacuum(char **pzErrMsg, sqlite3 *db, int iDb){
   );
   if( rc ) goto end_of_vacuum;
 
-  /* At this point, there is a write transaction open on both the 
+  /* At this point, there is a write transaction open on both the
   ** vacuum database and the main database. Assuming no error occurs,
   ** both transactions are closed by this block - the main database
   ** transaction by sqlite3BtreeCopyFile() and the other by an explicit
@@ -342,7 +359,7 @@ end_of_vacuum:
   }
 
   /* This both clears the schemas and reduces the size of the db->aDb[]
-  ** array. */ 
+  ** array. */
   sqlite3ResetAllSchemasOfConnection(db);
 
   return rc;

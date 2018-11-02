@@ -9,6 +9,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/payments/core/currency_formatter.h"
+#include "components/payments/core/strings_util.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #include "ios/chrome/browser/ui/uikit_ui_util.h"
@@ -19,15 +20,22 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+using payments::GetShippingOptionSectionString;
+}  // namespace
+
 @interface ShippingOptionSelectionMediator ()
 
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The selectable items to display in the collection.
-@property(nonatomic, strong) NSArray<PaymentsTextItem*>* items;
+@property(nonatomic, strong) NSMutableArray<PaymentsTextItem*>* items;
+
+// Creates and stores the selectable items to display in the collection.
+- (void)loadItems;
 
 @end
 
@@ -39,17 +47,27 @@
 @synthesize paymentRequest = _paymentRequest;
 @synthesize items = _items;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest {
+- (instancetype)initWithPaymentRequest:
+    (payments::PaymentRequest*)paymentRequest {
   self = [super init];
   if (self) {
     _paymentRequest = paymentRequest;
     _selectedItemIndex = NSUIntegerMax;
-    _items = [self createItems];
+    [self loadItems];
   }
   return self;
 }
 
 #pragma mark - PaymentRequestSelectorViewControllerDataSource
+
+- (BOOL)allowsEditMode {
+  return NO;
+}
+
+- (NSString*)title {
+  return base::SysUTF16ToNSString(
+      GetShippingOptionSectionString(self.paymentRequest->shipping_type()));
+}
 
 - (CollectionViewItem*)headerItem {
   if (!self.headerText.length)
@@ -66,22 +84,16 @@
   return self.items;
 }
 
-- (CollectionViewItem*)selectableItemAtIndex:(NSUInteger)index {
-  DCHECK(index < self.items.count);
-  return [self.items objectAtIndex:index];
-}
-
 - (CollectionViewItem*)addButtonItem {
   return nil;
 }
 
 #pragma mark - Helper methods
 
-- (NSArray<PaymentsTextItem*>*)createItems {
+- (void)loadItems {
   const std::vector<web::PaymentShippingOption*>& shippingOptions =
       _paymentRequest->shipping_options();
-  NSMutableArray<PaymentsTextItem*>* items =
-      [NSMutableArray arrayWithCapacity:shippingOptions.size()];
+  _items = [NSMutableArray arrayWithCapacity:shippingOptions.size()];
   for (size_t index = 0; index < shippingOptions.size(); ++index) {
     web::PaymentShippingOption* shippingOption = shippingOptions[index];
     DCHECK(shippingOption);
@@ -94,9 +106,8 @@
     if (_paymentRequest->selected_shipping_option() == shippingOption)
       _selectedItemIndex = index;
 
-    [items addObject:item];
+    [_items addObject:item];
   }
-  return items;
 }
 
 @end

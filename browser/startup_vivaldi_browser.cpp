@@ -75,7 +75,7 @@ bool LaunchVivaldi(const base::CommandLine& command_line,
     InitializeSparkle(command_line, base::Bind(&IsAutoupdateEnabled, profile));
 #endif
   }
-  LaunchUpdateNotifier();
+  LaunchUpdateNotifier(profile);
 
   AppLaunchParams params(profile, extension, extensions::LAUNCH_CONTAINER_NONE,
                          WindowOpenDisposition::NEW_WINDOW,

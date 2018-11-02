@@ -18,7 +18,7 @@
 #include "media/blink/lru.h"
 #include "media/blink/media_blink_export.h"
 #include "media/blink/multibuffer.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "url/gurl.h"
 
 namespace media {
@@ -93,6 +93,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Returns the number of blocks cached for this resource.
   size_t CachedSize();
 
+  // Returns true if this resource is fully cached in memory.
+  bool FullyCached();
+
   // Returns our url_index, or nullptr if it's been destroyed.
   UrlIndex* url_index() const { return url_index_.get(); }
 
@@ -134,16 +137,18 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Returns true it is valid to keep using this to access cached data.
   // A single media player instance may choose to ignore this for resources
   // that have already been opened.
-  bool Valid() const;
+  bool Valid();
 
   // Virtual so we can override it for testing.
   virtual ResourceMultiBuffer* multibuffer();
 
   // Accessor
-  blink::WebFrame* frame() const { return frame_; }
+  blink::WebLocalFrame* frame() const { return frame_; }
 
   void AddBytesRead(int64_t b) { bytes_read_from_cache_ += b; }
-  int64_t BytesReadFromCache() { return bytes_read_from_cache_; }
+  int64_t BytesReadFromCache() const { return bytes_read_from_cache_; }
+  void AddBytesReadFromNetwork(int64_t b) { bytes_read_from_network_ += b; }
+  int64_t BytesReadFromNetwork() const { return bytes_read_from_network_; }
 
  protected:
   UrlData(const GURL& url,
@@ -179,6 +184,9 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   // Number of bytes read from this resource.
   int64_t bytes_read_from_cache_ = 0;
 
+  // Number of bytes read from network into the cache for this resource.
+  int64_t bytes_read_from_network_ = 0;
+
   std::string mime_type_;
 
   // Does the server support ranges?
@@ -208,7 +216,7 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
   ResourceMultiBuffer multibuffer_;
   std::vector<RedirectCB> redirect_callbacks_;
 
-  blink::WebFrame* frame_;
+  blink::WebLocalFrame* frame_;
 
   base::ThreadChecker thread_checker_;
   DISALLOW_COPY_AND_ASSIGN(UrlData);
@@ -217,8 +225,8 @@ class MEDIA_BLINK_EXPORT UrlData : public base::RefCounted<UrlData> {
 // The UrlIndex lets you look up UrlData instances by url.
 class MEDIA_BLINK_EXPORT UrlIndex {
  public:
-  explicit UrlIndex(blink::WebFrame*);
-  UrlIndex(blink::WebFrame*, int block_shift);
+  explicit UrlIndex(blink::WebLocalFrame*);
+  UrlIndex(blink::WebLocalFrame*, int block_shift);
   virtual ~UrlIndex();
 
   // Look up an UrlData in the index and return it. If none is found,
@@ -244,7 +252,7 @@ class MEDIA_BLINK_EXPORT UrlIndex {
   // TODO(hubbe): Add etag support.
   scoped_refptr<UrlData> TryInsert(const scoped_refptr<UrlData>& url_data);
 
-  blink::WebFrame* frame() const { return frame_; }
+  blink::WebLocalFrame* frame() const { return frame_; }
   int block_shift() const { return block_shift_; }
 
  private:
@@ -257,7 +265,7 @@ class MEDIA_BLINK_EXPORT UrlIndex {
                                             UrlData::CORSMode cors_mode);
 
   std::map<UrlData::KeyType, scoped_refptr<UrlData>> by_url_;
-  blink::WebFrame* frame_;
+  blink::WebLocalFrame* frame_;
   scoped_refptr<MultiBuffer::GlobalLRU> lru_;
 
   // log2 of block size in multibuffer cache. Defaults to kBlockSizeShift.

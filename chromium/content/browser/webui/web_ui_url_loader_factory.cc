@@ -22,11 +22,11 @@
 #include "content/browser/webui/network_error_url_loader.h"
 #include "content/browser/webui/url_data_manager_backend.h"
 #include "content/browser/webui/url_data_source_impl.h"
-#include "content/common/network_service.mojom.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/network_service.mojom.h"
 #include "content/public/common/url_constants.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "third_party/zlib/google/compression_utils.h"
@@ -218,7 +218,9 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
   ~WebUIURLLoaderFactory() override {}
 
   mojom::URLLoaderFactoryPtr CreateBinding() {
-    return loader_factory_bindings_.CreateInterfacePtrAndBind(this);
+    mojom::URLLoaderFactoryPtr factory;
+    loader_factory_bindings_.AddBinding(this, mojo::MakeRequest(&factory));
+    return factory;
   }
 
   // mojom::URLLoaderFactory implementation:
@@ -227,7 +229,9 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
                             int32_t request_id,
                             uint32_t options,
                             const ResourceRequest& request,
-                            mojom::URLLoaderClientPtr client) override {
+                            mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (request.url.host_piece() == kChromeUINetworkViewCacheHost) {
       storage_partition_->network_context()->HandleViewCacheRequest(
@@ -286,7 +290,7 @@ class WebUIURLLoaderFactory : public mojom::URLLoaderFactory,
 
 }  // namespace
 
-mojom::URLLoaderFactoryPtr GetWebUIURLLoader(FrameTreeNode* node) {
+mojom::URLLoaderFactoryPtr CreateWebUIURLLoader(FrameTreeNode* node) {
   int ftn_id = node->frame_tree_node_id();
   if (g_factories.Get()[ftn_id].get() == nullptr)
     g_factories.Get()[ftn_id] = base::MakeUnique<WebUIURLLoaderFactory>(node);

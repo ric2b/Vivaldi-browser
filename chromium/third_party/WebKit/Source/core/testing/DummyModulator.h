@@ -41,6 +41,7 @@ class DummyModulator : public Modulator {
   void FetchTreeInternal(const ModuleScriptFetchRequest&,
                          const AncestorList&,
                          ModuleGraphLevel,
+                         ModuleTreeReachedUrlSet*,
                          ModuleTreeClient*) override;
   void FetchSingle(const ModuleScriptFetchRequest&,
                    ModuleGraphLevel,
@@ -55,10 +56,12 @@ class DummyModulator : public Modulator {
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
                              AccessControlStatus,
-                             const TextPosition&) override;
+                             const TextPosition&,
+                             ExceptionState&) override;
   ScriptValue InstantiateModule(ScriptModule) override;
-  ScriptValue GetInstantiationError(const ModuleScript*) override;
-  Vector<String> ModuleRequestsFromScriptModule(ScriptModule) override;
+  ScriptModuleState GetRecordStatus(ScriptModule) override;
+  ScriptValue GetError(const ModuleScript*) override;
+  Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
   void ExecuteModule(const ModuleScript*) override;
 
   Member<ScriptModuleResolver> resolver_;

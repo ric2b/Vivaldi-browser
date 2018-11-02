@@ -14,7 +14,8 @@ class IntlHiRuPage(page_cycler_story.PageCyclerStory):
     super(IntlHiRuPage, self).__init__(
         url=url, page_set=page_set,
         shared_page_state_class=shared_page_state.SharedDesktopPageState,
-        cache_temperature=cache_temperature)
+        cache_temperature=cache_temperature,
+        name=url)
     self.archive_data_file = 'data/intl_hi_ru.json'
 
 
@@ -52,3 +53,7 @@ class IntlHiRuPageSet(story.StorySet):
     for url in urls_list:
       for temp in cache_temperatures:
         self.AddStory(IntlHiRuPage(url, self, cache_temperature=temp))
+
+class IntlHiRuStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass

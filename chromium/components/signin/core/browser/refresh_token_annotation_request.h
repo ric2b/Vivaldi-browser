@@ -10,7 +10,7 @@
 #include "base/callback.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "google_apis/gaia/oauth2_api_call_flow.h"
 #include "google_apis/gaia/oauth2_token_service.h"
 
@@ -22,8 +22,7 @@ class SigninClient;
 // important to keep server QPS low therefore this request is sent on average
 // once per 10 days per profile.
 // This code shold be removed once majority of refresh tokens are updated.
-class RefreshTokenAnnotationRequest : public base::NonThreadSafe,
-                                      public OAuth2TokenService::Consumer,
+class RefreshTokenAnnotationRequest : public OAuth2TokenService::Consumer,
                                       public OAuth2ApiCallFlow {
  public:
   ~RefreshTokenAnnotationRequest() override;
@@ -59,6 +58,8 @@ class RefreshTokenAnnotationRequest : public base::NonThreadSafe,
   std::string CreateApiCallBody() override;
   void ProcessApiCallSuccess(const net::URLFetcher* source) override;
   void ProcessApiCallFailure(const net::URLFetcher* source) override;
+  net::PartialNetworkTrafficAnnotationTag GetNetworkTrafficAnnotationTag()
+      override;
 
  private:
   FRIEND_TEST_ALL_PREFIXES(RefreshTokenAnnotationRequestTest, ShouldSendNow);
@@ -83,6 +84,8 @@ class RefreshTokenAnnotationRequest : public base::NonThreadSafe,
   base::Closure request_callback_;
 
   std::unique_ptr<OAuth2TokenService::Request> access_token_request_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(RefreshTokenAnnotationRequest);
 };

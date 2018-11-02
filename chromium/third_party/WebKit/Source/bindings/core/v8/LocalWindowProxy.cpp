@@ -64,7 +64,8 @@
 
 namespace blink {
 
-void LocalWindowProxy::DisposeContext(Lifecycle next_status) {
+void LocalWindowProxy::DisposeContext(Lifecycle next_status,
+                                      FrameReuseStatus frame_reuse_status) {
   DCHECK(next_status == Lifecycle::kGlobalObjectIsDetached ||
          next_status == Lifecycle::kFrameIsDetached);
 
@@ -76,8 +77,7 @@ void LocalWindowProxy::DisposeContext(Lifecycle next_status) {
   // The embedder could run arbitrary code in response to the
   // willReleaseScriptContext callback, so all disposing should happen after
   // it returns.
-  GetFrame()->Loader().Client()->WillReleaseScriptContext(context,
-                                                          world_->GetWorldId());
+  GetFrame()->Client()->WillReleaseScriptContext(context, world_->GetWorldId());
   MainThreadDebugger::Instance()->ContextWillBeDestroyed(script_state_.Get());
 
   if (next_status == Lifecycle::kGlobalObjectIsDetached) {
@@ -99,12 +99,11 @@ void LocalWindowProxy::DisposeContext(Lifecycle next_status) {
   }
 
   script_state_->DisposePerContextData();
-
   // It's likely that disposing the context has created a lot of
   // garbage. Notify V8 about this so it'll have a chance of cleaning
   // it up when idle.
   V8GCForContextDispose::Instance().NotifyContextDisposed(
-      GetFrame()->IsMainFrame());
+      GetFrame()->IsMainFrame(), frame_reuse_status);
 
   if (next_status == Lifecycle::kFrameIsDetached) {
     // The context's frame is detached from the DOM, so there shouldn't be a
@@ -148,7 +147,8 @@ void LocalWindowProxy::Initialize() {
     ContentSecurityPolicy* csp =
         GetFrame()->GetDocument()->GetContentSecurityPolicy();
     context->AllowCodeGenerationFromStrings(csp->AllowEval(
-        0, SecurityViolationReportingPolicy::kSuppressReporting));
+        0, SecurityViolationReportingPolicy::kSuppressReporting,
+        ContentSecurityPolicy::kWillNotThrowException, g_empty_string));
     context->SetErrorMessageForCodeGenerationFromStrings(
         V8String(GetIsolate(), csp->EvalDisabledErrorMessage()));
   } else {
@@ -159,8 +159,7 @@ void LocalWindowProxy::Initialize() {
 
   MainThreadDebugger::Instance()->ContextCreated(script_state_.Get(),
                                                  GetFrame(), origin);
-  GetFrame()->Loader().Client()->DidCreateScriptContext(context,
-                                                        world_->GetWorldId());
+  GetFrame()->Client()->DidCreateScriptContext(context, world_->GetWorldId());
   // If conditional features for window have been queued before the V8 context
   // was ready, then inject them into the context now
   if (world_->IsMainWorld()) {
@@ -180,7 +179,7 @@ void LocalWindowProxy::CreateContext() {
 
   Vector<const char*> extension_names;
   // Dynamically tell v8 about our extensions now.
-  if (GetFrame()->Loader().Client()->AllowScriptExtensions()) {
+  if (GetFrame()->Client()->AllowScriptExtensions()) {
     const V8Extensions& extensions = ScriptController::RegisteredExtensions();
     extension_names.ReserveInitialCapacity(extensions.size());
     for (const auto* extension : extensions)

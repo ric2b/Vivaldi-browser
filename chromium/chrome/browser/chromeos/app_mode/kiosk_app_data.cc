@@ -96,7 +96,7 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
   }
 
  private:
-  ~CrxLoader() override {};
+  ~CrxLoader() override {}
 
   // extensions::SandboxedUnpackerClient
   void OnUnpackSuccess(const base::FilePath& temp_dir,
@@ -152,7 +152,7 @@ class KioskAppData::CrxLoader : public extensions::SandboxedUnpackerClient {
 
     BrowserThread::PostTask(
         BrowserThread::UI, FROM_HERE,
-        base::Bind(&CrxLoader::NotifyFinishedOnUIThread, this));
+        base::BindOnce(&CrxLoader::NotifyFinishedOnUIThread, this));
   }
 
   void NotifyFinishedOnUIThread() {

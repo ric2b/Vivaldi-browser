@@ -17,6 +17,7 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/checkbox.h"
@@ -130,7 +131,7 @@ void MediaGalleriesDialogViews::InitChildViews() {
       provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL);
   ScrollableView* scroll_container = new ScrollableView();
   scroll_container->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kVertical, 0, 0, small_vertical_padding));
+      views::BoxLayout::kVertical, gfx::Insets(), small_vertical_padding));
   scroll_container->SetBorder(
       views::CreateEmptyBorder(vertical_padding, 0, vertical_padding, 0));
 
@@ -150,8 +151,7 @@ void MediaGalleriesDialogViews::InitChildViews() {
       header->SetHorizontalAlignment(gfx::ALIGN_LEFT);
       header->SetBorder(views::CreateEmptyBorder(
           vertical_padding,
-          provider->GetDistanceMetric(
-              views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
+          provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS).left(),
           vertical_padding, 0));
       scroll_container->AddChildView(header);
     }

@@ -40,31 +40,6 @@
   } while (0)
 
 namespace media {
-namespace {
-
-// Creates a SurfaceTexture and attaches a new gl texture to it.
-scoped_refptr<SurfaceTextureGLOwner> CreateAttachedSurfaceTexture(
-    base::WeakPtr<gpu::gles2::GLES2Decoder> gl_decoder) {
-  scoped_refptr<SurfaceTextureGLOwner> surface_texture =
-      SurfaceTextureGLOwner::Create();
-  if (!surface_texture)
-    return nullptr;
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_EXTERNAL_OES, surface_texture->texture_id());
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_EXTERNAL_OES, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-  gl_decoder->RestoreTextureUnitBindings(0);
-  gl_decoder->RestoreActiveTexture();
-  DCHECK_EQ(static_cast<GLenum>(GL_NO_ERROR), glGetError());
-
-  return surface_texture;
-}
-
-}  // namespace
 
 AVDAPictureBufferManager::AVDAPictureBufferManager(
     AVDAStateProvider* state_provider)
@@ -79,19 +54,19 @@ bool AVDAPictureBufferManager::Initialize(
 
   if (!surface_bundle->overlay) {
     // Create the surface texture.
-    surface_texture_ =
-        CreateAttachedSurfaceTexture(state_provider_->GetGlDecoder());
+    surface_texture_ = SurfaceTextureGLOwnerImpl::Create();
     if (!surface_texture_)
       return false;
 
     surface_bundle->surface_texture_surface =
-        gl::ScopedJavaSurface(surface_texture_.get());
+        surface_texture_->CreateJavaSurface();
     surface_bundle->surface_texture = surface_texture_;
   }
 
   // Only do this once the surface texture is filled in, since the constructor
   // assumes that it will be.
   shared_state_ = new AVDASharedState(surface_bundle);
+  shared_state_->SetPromotionHintCB(state_provider_->GetPromotionHintCB());
 
   return true;
 }
@@ -289,6 +264,15 @@ bool AVDAPictureBufferManager::HasUnrenderedPictures() const {
       return true;
   }
   return false;
+}
+
+void AVDAPictureBufferManager::ImmediatelyForgetOverlay(
+    const PictureBufferMap& buffers) {
+  if (!shared_state_ || !shared_state_->overlay())
+    return;
+
+  ReleaseCodecBuffers(buffers);
+  shared_state_->ClearOverlay(shared_state_->overlay());
 }
 
 }  // namespace media

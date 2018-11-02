@@ -38,6 +38,8 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
+#include "core/animation/CompositorAnimations.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/dom/ContextLifecycleObserver.h"
 #include "core/dom/DOMException.h"
 #include "core/events/EventTarget.h"
@@ -50,7 +52,6 @@
 
 namespace blink {
 
-class AnimationTimeline;
 class CompositorAnimationPlayer;
 class Element;
 class ExceptionState;
@@ -75,6 +76,16 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   };
 
   static Animation* Create(AnimationEffectReadOnly*, AnimationTimeline*);
+
+  // Web Animations API IDL constructors.
+  static Animation* Create(ExecutionContext*,
+                           AnimationEffectReadOnly*,
+                           ExceptionState&);
+  static Animation* Create(ExecutionContext*,
+                           AnimationEffectReadOnly*,
+                           AnimationTimeline*,
+                           ExceptionState&);
+
   ~Animation();
   void Dispose();
 
@@ -128,8 +139,11 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
 
   double playbackRate() const;
   void setPlaybackRate(double);
-  const AnimationTimeline* timeline() const { return timeline_; }
-  AnimationTimeline* timeline() { return timeline_; }
+  AnimationTimeline* timeline() {
+    return static_cast<AnimationTimeline*>(timeline_);
+  }
+  const DocumentTimeline* TimelineInternal() const { return timeline_; }
+  DocumentTimeline* TimelineInternal() { return timeline_; }
 
   double CalculateStartTime(double current_time) const;
   bool HasStartTime() const { return !IsNull(start_time_); }
@@ -157,11 +171,9 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   void SetOutdated();
   bool Outdated() { return outdated_; }
 
-  bool CanStartAnimationOnCompositor(
+  CompositorAnimations::FailureCode CheckCanStartAnimationOnCompositor(
       const Optional<CompositorElementIdSet>& composited_element_ids) const;
-  bool IsCandidateForAnimationOnCompositor(
-      const Optional<CompositorElementIdSet>& composited_element_ids) const;
-  bool MaybeStartAnimationOnCompositor(
+  void StartAnimationOnCompositor(
       const Optional<CompositorElementIdSet>& composited_element_ids);
   void CancelAnimationOnCompositor();
   void RestartAnimationOnCompositor();
@@ -205,7 +217,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
                           RegisteredEventListener&) override;
 
  private:
-  Animation(ExecutionContext*, AnimationTimeline&, AnimationEffectReadOnly*);
+  Animation(ExecutionContext*, DocumentTimeline&, AnimationEffectReadOnly*);
 
   void ClearOutdated();
   void ForceServiceOnNextFrame();
@@ -223,6 +235,8 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   void BeginUpdatingState();
   void EndUpdatingState();
 
+  CompositorAnimations::FailureCode CheckCanStartAnimationOnCompositorInternal(
+      const Optional<CompositorElementIdSet>&) const;
   void CreateCompositorPlayer();
   void DestroyCompositorPlayer();
   void AttachCompositorTimeline();
@@ -254,7 +268,7 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   Member<AnimationPromise> ready_promise_;
 
   Member<AnimationEffectReadOnly> content_;
-  Member<AnimationTimeline> timeline_;
+  Member<DocumentTimeline> timeline_;
 
   // Reflects all pausing, including via pauseForTesting().
   bool paused_;
@@ -355,6 +369,9 @@ class CORE_EXPORT Animation final : public EventTargetWithInlineData,
   bool state_is_being_updated_;
 
   bool effect_suppressed_;
+
+  FRIEND_TEST_ALL_PREFIXES(AnimationAnimationTest,
+                           NoCompositeWithoutCompositedElementId);
 };
 
 }  // namespace blink

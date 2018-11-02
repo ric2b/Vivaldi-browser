@@ -40,11 +40,12 @@
 namespace blink {
 
 struct WebBackgroundFetchSettledFetch;
+struct WebCanMakePaymentEventData;
 class WebDataConsumerHandle;
 class WebServiceWorkerRequest;
 class WebString;
 struct WebNotificationData;
-struct WebPaymentAppRequest;
+struct WebPaymentRequestEventData;
 struct WebServiceWorkerClientInfo;
 struct WebServiceWorkerError;
 class WebURLResponse;
@@ -115,8 +116,13 @@ class WebServiceWorkerContextProxy {
                                  const WebString& tag,
                                  LastChanceOption) = 0;
 
-  virtual void DispatchPaymentRequestEvent(int event_id,
-                                           const WebPaymentAppRequest&) = 0;
+  virtual void DispatchCanMakePaymentEvent(
+      int event_id,
+      const WebCanMakePaymentEventData&) = 0;
+
+  virtual void DispatchPaymentRequestEvent(
+      int event_id,
+      const WebPaymentRequestEventData&) = 0;
 
   virtual void OnNavigationPreloadResponse(
       int fetch_event_id,

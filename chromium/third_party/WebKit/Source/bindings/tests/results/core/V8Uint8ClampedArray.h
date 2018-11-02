@@ -18,9 +18,9 @@
 #include "bindings/core/v8/V8ArrayBufferView.h"
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/CoreExport.h"
-#include "core/dom/ArrayBufferViewHelpers.h"
-#include "core/dom/DOMTypedArray.h"
-#include "core/dom/FlexibleArrayBufferView.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
+#include "core/typed_arrays/DOMTypedArray.h"
+#include "core/typed_arrays/FlexibleArrayBufferView.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/WrapperTypeInfo.h"
@@ -38,7 +38,7 @@ class V8Uint8ClampedArray {
     visitor->Trace(scriptWrappable->ToImpl<TestUint8ClampedArray>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestUint8ClampedArray>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestUint8ClampedArray>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 

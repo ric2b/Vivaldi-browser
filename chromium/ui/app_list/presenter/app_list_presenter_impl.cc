@@ -6,6 +6,7 @@
 
 #include "base/metrics/user_metrics.h"
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/pagination_model.h"
 #include "ui/app_list/presenter/app_list_presenter_delegate_factory.h"
@@ -20,9 +21,6 @@
 namespace app_list {
 namespace {
 
-// Duration for show/hide animation in milliseconds.
-constexpr int kAnimationDurationMs = 200;
-
 // The maximum shift in pixels when over-scroll happens.
 constexpr int kMaxOverScrollShift = 48;
 
@@ -34,7 +32,8 @@ inline ui::Layer* GetLayer(views::Widget* widget) {
 
 AppListPresenterImpl::AppListPresenterImpl(
     std::unique_ptr<AppListPresenterDelegateFactory> factory)
-    : factory_(std::move(factory)) {
+    : factory_(std::move(factory)),
+      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
   DCHECK(factory_);
 }
 
@@ -59,8 +58,10 @@ void AppListPresenterImpl::Show(int64_t display_id) {
     return;
 
   is_visible_ = true;
-  if (app_list_)
+  if (app_list_) {
     app_list_->OnTargetVisibilityChanged(GetTargetVisibility());
+    app_list_->OnVisibilityChanged(GetTargetVisibility(), display_id);
+  }
 
   if (view_) {
     ScheduleAnimation();
@@ -78,6 +79,15 @@ void AppListPresenterImpl::Show(int64_t display_id) {
   base::RecordAction(base::UserMetricsAction("Launcher_Show"));
 }
 
+void AppListPresenterImpl::UpdateYPositionAndOpacity(int y_position_in_screen,
+                                                     float background_opacity,
+                                                     bool is_end_gesture) {
+  if (view_) {
+    view_->UpdateYPositionAndOpacity(y_position_in_screen, background_opacity,
+                                     is_end_gesture);
+  }
+}
+
 void AppListPresenterImpl::Dismiss() {
   if (!is_visible_)
     return;
@@ -86,9 +96,10 @@ void AppListPresenterImpl::Dismiss() {
   DCHECK(view_);
 
   is_visible_ = false;
-  if (app_list_)
+  if (app_list_) {
     app_list_->OnTargetVisibilityChanged(GetTargetVisibility());
-
+    app_list_->OnVisibilityChanged(GetTargetVisibility(), GetDisplayId());
+  }
   // The dismissal may have occurred in response to the app list losing
   // activation. Otherwise, our widget is currently active. When the animation
   // completes we'll hide the widget, changing activation. If a menu is shown
@@ -166,23 +177,35 @@ void AppListPresenterImpl::ScheduleAnimation() {
   views::Widget* widget = view_->GetWidget();
   ui::Layer* layer = GetLayer(widget);
   layer->GetAnimator()->StopAnimating();
-
-  gfx::Rect target_bounds = widget->GetWindowBoundsInScreen();
-  gfx::Vector2d offset = presenter_delegate_->GetVisibilityAnimationOffset(
-      widget->GetNativeView()->GetRootWindow());
-  if (is_visible_) {
-    gfx::Rect start_bounds = gfx::Rect(target_bounds);
-    start_bounds.Offset(offset);
-    widget->SetBounds(start_bounds);
-  } else {
+  ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
+  aura::Window* root_window = widget->GetNativeView()->GetRootWindow();
+  const gfx::Vector2d offset =
+      presenter_delegate_->GetVisibilityAnimationOffset(root_window);
+  base::TimeDelta animation_duration =
+      presenter_delegate_->GetVisibilityAnimationDuration(root_window,
+                                                          is_visible_);
+  animation.SetTransitionDuration(animation_duration);
+  gfx::Rect target_bounds = is_fullscreen_app_list_enabled_
+                                ? widget->GetNativeView()->bounds()
+                                : widget->GetWindowBoundsInScreen();
+  if (is_fullscreen_app_list_enabled_) {
+    view_->StartCloseAnimation(animation_duration);
     target_bounds.Offset(offset);
+  } else {
+    if (is_visible_) {
+      gfx::Rect start_bounds = gfx::Rect(target_bounds);
+      start_bounds.Offset(offset);
+      widget->SetBounds(start_bounds);
+    } else {
+      target_bounds.Offset(offset);
+    }
   }
 
-  ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
-  animation.SetTransitionDuration(base::TimeDelta::FromMilliseconds(
-      is_visible_ ? 0 : kAnimationDurationMs));
   animation.AddObserver(this);
-
+  if (is_fullscreen_app_list_enabled_) {
+    widget->GetNativeView()->SetBounds(target_bounds);
+    return;
+  }
   layer->SetOpacity(is_visible_ ? 1.0 : 0.0);
   widget->SetBounds(target_bounds);
 }
@@ -265,10 +288,16 @@ void AppListPresenterImpl::TransitionChanged() {
   if (!view_)
     return;
 
+  // Disable overscroll animation when the fullscreen app list feature is
+  // enabled.
+  if (is_fullscreen_app_list_enabled_)
+    return;
+
   PaginationModel* pagination_model = view_->GetAppsPaginationModel();
 
   const PaginationModel::Transition& transition =
       pagination_model->transition();
+
   if (pagination_model->is_valid_page(transition.target_page))
     return;
 

@@ -337,7 +337,7 @@ void WindowState::set_bounds_changed_by_user(bool bounds_changed_by_user) {
 
 void WindowState::CreateDragDetails(const gfx::Point& point_in_parent,
                                     int window_component,
-                                    aura::client::WindowMoveSource source) {
+                                    ::wm::WindowMoveSource source) {
   drag_details_ = base::MakeUnique<DragDetails>(window_, point_in_parent,
                                                 window_component, source);
 }
@@ -452,7 +452,8 @@ void WindowState::SetBoundsDirect(const gfx::Rect& bounds) {
         std::max(min_size.height(), actual_new_bounds.height()));
   }
   BoundsSetter().SetBounds(window_, actual_new_bounds);
-  wm::SnapWindowToPixelBoundary(window_);
+  if (!allow_set_bounds_direct())
+    wm::SnapWindowToPixelBoundary(window_);
 }
 
 void WindowState::SetBoundsConstrained(const gfx::Rect& bounds) {

@@ -31,6 +31,7 @@
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
+#include "components/url_pattern_index/proto/rules.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents_observer.h"
@@ -166,7 +167,7 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
     Configure();
     test_io_task_runner_ = new base::TestMockTimeTaskRunner();
     // Note: Using NiceMock to allow uninteresting calls and suppress warnings.
-    std::vector<proto::UrlRule> rules;
+    std::vector<url_pattern_index::proto::UrlRule> rules;
     rules.push_back(testing::CreateSuffixRule("disallowed.html"));
     ASSERT_NO_FATAL_FAILURE(test_ruleset_creator_.CreateRulesetWithRules(
         rules, &test_ruleset_pair_));
@@ -192,7 +193,17 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
 
   void TearDown() override {
     client_.reset();
+
+    // RunUntilIdle() must be called multiple times to flush any outstanding
+    // cross-thread interactions.
+    // TODO(csharrison): Clean up test teardown logic.
     RunUntilIdle();
+    RunUntilIdle();
+
+    // RunUntilIdle() called once more, to delete the database on the IO thread.
+    fake_safe_browsing_database_ = nullptr;
+    RunUntilIdle();
+
     content::RenderViewHostTestHarness::TearDown();
   }
 
@@ -303,7 +314,9 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
                                                     metadata);
   }
 
-  void SimulateTimeout() { fake_safe_browsing_database_->SimulateTimeout(); }
+  FakeSafeBrowsingDatabaseManager* fake_safe_browsing_database() {
+    return fake_safe_browsing_database_.get();
+  }
 
   void ClearAllBlacklistedUrls() {
     fake_safe_browsing_database_->RemoveAllBlacklistedUrls();
@@ -313,8 +326,8 @@ class SubresourceFilterSafeBrowsingActivationThrottleTest
   void UsePassThroughThrottle() { fake_safe_browsing_database_ = nullptr; }
 
   void RunUntilIdle() {
-    test_io_task_runner_->RunUntilIdle();
     base::RunLoop().RunUntilIdle();
+    test_io_task_runner_->RunUntilIdle();
   }
 
   content::NavigationSimulator* navigation_simulator() {
@@ -700,11 +713,11 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, ActivationList) {
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
       {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
        ActivationList::PHISHING_INTERSTITIAL,
-       safe_browsing::SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL,
+       safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
       {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
        ActivationList::PHISHING_INTERSTITIAL,
-       safe_browsing::SB_THREAT_TYPE_BINARY_MALWARE_URL,
+       safe_browsing::SB_THREAT_TYPE_URL_BINARY_MALWARE,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
       {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
        ActivationList::PHISHING_INTERSTITIAL,
@@ -716,7 +729,7 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, ActivationList) {
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
       {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
        ActivationList::PHISHING_INTERSTITIAL,
-       safe_browsing::SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL,
+       safe_browsing::SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING,
        safe_browsing::ThreatPatternType::SOCIAL_ENGINEERING_ADS},
       {ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
        ActivationList::PHISHING_INTERSTITIAL,
@@ -753,6 +766,18 @@ TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest, ActivationList) {
     EXPECT_EQ(test_case.expected_activation_decision,
               factory()->GetActivationDecisionForLastCommittedPageLoad());
   }
+}
+
+// Regression test for an issue where synchronous failure from the SB database
+// caused a double cancel. This is DCHECKed in the fake database.
+TEST_F(SubresourceFilterSafeBrowsingActivationThrottleTest,
+       SynchronousResponse) {
+  const GURL url(kURL);
+  fake_safe_browsing_database()->set_synchronous_failure();
+  SimulateStartAndExpectProceed(url);
+  SimulateCommitAndExpectProceed();
+  tester().ExpectTotalCount(kMatchesPatternHistogramNameSubresourceFilterSuffix,
+                            0);
 }
 
 TEST_P(SubresourceFilterSafeBrowsingActivationThrottleScopeTest,
@@ -898,7 +923,7 @@ TEST_P(SubresourceFilterSafeBrowsingActivationThrottleParamTest,
   const ActivationListTestData& test_data = GetParam();
   const GURL url(kURL);
   const std::string suffix(GetSuffixForList(test_data.activation_list_type));
-  SimulateTimeout();
+  fake_safe_browsing_database()->SimulateTimeout();
   SimulateStartAndExpectProceed(url);
 
   // Flush the pending tasks on the IO thread, so the delayed task surely gets

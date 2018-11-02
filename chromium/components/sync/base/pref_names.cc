@@ -72,7 +72,7 @@ const char kSyncNotes[] = "sync.notes";
 const char kSyncManaged[] = "sync.managed";
 
 // Boolean to prevent sync from automatically starting up.  This is
-// used when sync is disabled by the user via the privacy dashboard.
+// used when sync is disabled by the user in sync settings.
 const char kSyncSuppressStart[] = "sync.suppress_start";
 
 // A string that can be used to restore sync encryption infrastructure on

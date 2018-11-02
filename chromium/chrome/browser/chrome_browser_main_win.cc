@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "base/base_switches.h"
+#include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_enumerator.h"
@@ -33,11 +34,16 @@
 #include "base/win/win_util.h"
 #include "base/win/windows_version.h"
 #include "base/win/wrapped_window_proc.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/conflicts/enumerate_input_method_editors_win.h"
+#include "chrome/browser/conflicts/enumerate_shell_extensions_win.h"
 #include "chrome/browser/conflicts/module_database_win.h"
 #include "chrome/browser/conflicts/module_event_sink_impl_win.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/install_verification/win/install_verification.h"
+#include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_shortcut_manager.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/settings_resetter_win.h"
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_config.h"
 #include "chrome/browser/safe_browsing/settings_reset_prompt/settings_reset_prompt_controller.h"
 #include "chrome/browser/shell_integration.h"
@@ -51,7 +57,6 @@
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_result_codes.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/conflicts/module_watcher_win.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/env_vars.h"
@@ -65,8 +70,6 @@
 #include "chrome/installer/util/l10n_string_util.h"
 #include "chrome/installer/util/shell_util.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/utility_process_host.h"
-#include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "ui/base/cursor/cursor_loader_win.h"
@@ -77,10 +80,6 @@
 #include "ui/gfx/platform_font_win.h"
 #include "ui/gfx/switches.h"
 #include "ui/strings/grit/app_locale_settings.h"
-
-#if defined(GOOGLE_CHROME_BUILD)
-#include "chrome/browser/google/did_run_updater_win.h"
-#endif
 
 namespace {
 
@@ -207,7 +206,8 @@ void OnModuleEvent(uint32_t process_id,
 }
 
 // Helper function for initializing the module database subsystem. Populates
-// the provided |module_watcher|.
+// the provided |module_watcher|, and starts the enumeration of registered
+// modules in the Windows Registry.
 void SetupModuleDatabase(std::unique_ptr<ModuleWatcher>* module_watcher) {
   uint64_t creation_time = 0;
   ModuleEventSinkImpl::GetProcessCreationTime(::GetCurrentProcess(),
@@ -225,10 +225,21 @@ void SetupModuleDatabase(std::unique_ptr<ModuleWatcher>* module_watcher) {
   module_database->OnProcessStarted(process_id, creation_time,
                                     content::PROCESS_TYPE_BROWSER);
   *module_watcher = ModuleWatcher::Create(
-      base::Bind(&OnModuleEvent, process_id, creation_time));
-}
+      base::BindRepeating(&OnModuleEvent, process_id, creation_time));
 
-}  // namespace
+  // Enumerate shell extensions and input method editors. It is safe to use
+  // base::Unretained() here because the ModuleDatabase is never freed.
+  EnumerateShellExtensions(
+      base::BindRepeating(&ModuleDatabase::OnShellExtensionEnumerated,
+                          base::Unretained(module_database)),
+      base::BindOnce(&ModuleDatabase::OnShellExtensionEnumerationFinished,
+                     base::Unretained(module_database)));
+  EnumerateInputMethodEditors(
+      base::BindRepeating(&ModuleDatabase::OnImeEnumerated,
+                          base::Unretained(module_database)),
+      base::BindOnce(&ModuleDatabase::OnImeEnumerationFinished,
+                     base::Unretained(module_database)));
+}
 
 void ShowCloseBrowserFirstMessageBox() {
   int message_id = IDS_UNINSTALL_CLOSE_APP;
@@ -241,6 +252,18 @@ void ShowCloseBrowserFirstMessageBox() {
                                 l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
                                 l10n_util::GetStringUTF16(message_id));
 }
+
+void MaybePostSettingsResetPrompt() {
+  if (base::FeatureList::IsEnabled(safe_browsing::kSettingsResetPrompt)) {
+    content::BrowserThread::PostAfterStartupTask(
+        FROM_HERE,
+        content::BrowserThread::GetTaskRunnerForThread(
+            content::BrowserThread::UI),
+        base::Bind(safe_browsing::MaybeShowSettingsResetPromptWithDelay));
+  }
+}
+
+}  // namespace
 
 int DoUninstallTasks(bool chrome_still_running) {
   // We want to show a warning to user (and exit) if Chrome is already running
@@ -330,17 +353,7 @@ int ChromeBrowserMainPartsWin::PreCreateThreads() {
   base::debug::SetCrashKeyValue(
       crash_keys::kCohortName, base::UTF16ToUTF8(details.update_cohort_name()));
 
-  int rv = ChromeBrowserMainParts::PreCreateThreads();
-
-  // TODO(viettrungluu): why don't we run this earlier?
-  if (!parsed_command_line().HasSwitch(switches::kNoErrorDialogs) &&
-      base::win::GetVersion() < base::win::VERSION_XP) {
-    chrome::ShowWarningMessageBox(
-        NULL, l10n_util::GetStringUTF16(IDS_PRODUCT_NAME),
-        l10n_util::GetStringUTF16(IDS_UNSUPPORTED_OS_PRE_WIN_XP));
-  }
-
-  return rv;
+  return ChromeBrowserMainParts::PreCreateThreads();
 }
 
 void ChromeBrowserMainPartsWin::ShowMissingLocaleMessageBox() {
@@ -352,15 +365,6 @@ void ChromeBrowserMainPartsWin::ShowMissingLocaleMessageBox() {
 
 void ChromeBrowserMainPartsWin::PostProfileInit() {
   ChromeBrowserMainParts::PostProfileInit();
-
-  // TODO(kulshin): remove this cleanup code in 2017. http://crbug.com/603718
-  // Attempt to delete the font cache and ignore any errors.
-  base::FilePath path(
-      profile()->GetPath().AppendASCII("ChromeDWriteFontCache"));
-  content::BrowserThread::PostAfterStartupTask(
-      FROM_HERE, content::BrowserThread::GetTaskRunnerForThread(
-                     content::BrowserThread::FILE),
-      base::Bind(base::IgnoreResult(&base::DeleteFile), path, false));
 
   // Create the module database and hook up the in-process module watcher. This
   // needs to be done before any child processes are initialized as the
@@ -381,16 +385,21 @@ void ChromeBrowserMainPartsWin::PostBrowserStart() {
 
   InitializeChromeElf();
 
-#if defined(GOOGLE_CHROME_BUILD)
-  did_run_updater_.reset(new DidRunUpdater);
-#endif
-
-  if (base::FeatureList::IsEnabled(safe_browsing::kSettingsResetPrompt)) {
-    content::BrowserThread::PostAfterStartupTask(
-        FROM_HERE,
-        content::BrowserThread::GetTaskRunnerForThread(
-            content::BrowserThread::UI),
-        base::Bind(safe_browsing::MaybeShowSettingsResetPromptWithDelay));
+  // Reset settings for the current profile if it's tagged to be reset after a
+  // complete run of the Chrome Cleanup tool. If post-cleanup settings reset is
+  // enabled, we delay checks for settings reset prompt until the scheduled
+  // reset is finished.
+  if (safe_browsing::PostCleanupSettingsResetter::IsEnabled()) {
+    // Using last opened profiles, because we want to find reset the profile
+    // that was open in the last Chrome run, which may not be open yet in
+    // the current run.
+    safe_browsing::PostCleanupSettingsResetter().ResetTaggedProfiles(
+        g_browser_process->profile_manager()->GetLastOpenedProfiles(),
+        base::BindOnce(&MaybePostSettingsResetPrompt),
+        base::MakeUnique<
+            safe_browsing::PostCleanupSettingsResetter::Delegate>());
+  } else {
+    MaybePostSettingsResetPrompt();
   }
 
   // Record UMA data about whether the fault-tolerant heap is enabled.
@@ -476,16 +485,9 @@ void ChromeBrowserMainPartsWin::RegisterApplicationRestart(
 int ChromeBrowserMainPartsWin::HandleIconsCommands(
     const base::CommandLine& parsed_command_line) {
   if (parsed_command_line.HasSwitch(switches::kHideIcons)) {
-    base::string16 cp_applet;
-    base::win::Version version = base::win::GetVersion();
-    if (version >= base::win::VERSION_VISTA) {
-      cp_applet.assign(L"Programs and Features");  // Windows Vista and later.
-    } else if (version >= base::win::VERSION_XP) {
-      cp_applet.assign(L"Add/Remove Programs");  // Windows XP.
-    } else {
-      return chrome::RESULT_CODE_UNSUPPORTED_PARAM;  // Not supported
-    }
-
+    // TODO(740976): This is not up-to-date and not localized. Figure out if
+    // the --hide-icons and --show-icons switches are still used.
+    base::string16 cp_applet(L"Programs and Features");
     const base::string16 msg =
         l10n_util::GetStringFUTF16(IDS_HIDE_ICONS_NOT_SUPPORTED, cp_applet);
     const base::string16 caption = l10n_util::GetStringUTF16(IDS_PRODUCT_NAME);

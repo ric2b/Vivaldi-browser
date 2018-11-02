@@ -6,16 +6,17 @@
 
 #include "chrome/browser/chromeos/extensions/quick_unlock_private/quick_unlock_private_api.h"
 
-#include <algorithm>
-
 #include "base/bind.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_storage.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
 #include "chrome/browser/extensions/extension_api_unittest.h"
+#include "chrome/browser/signin/easy_unlock_service_factory.h"
+#include "chrome/browser/signin/easy_unlock_service_regular.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/login/auth/fake_extended_authenticator.h"
 #include "extensions/browser/api_test_utils.h"
@@ -37,6 +38,35 @@ const char* kTestUserEmail = "testuser@gmail.com";
 const char* kTestUserEmailHash = "testuser@gmail.com-hash";
 const char* kValidPassword = "valid";
 const char* kInvalidPassword = "invalid";
+
+class FakeEasyUnlockService : public EasyUnlockServiceRegular {
+ public:
+  explicit FakeEasyUnlockService(Profile* profile)
+      : EasyUnlockServiceRegular(profile), reauth_count_(0) {}
+  ~FakeEasyUnlockService() override {}
+
+  // EasyUnlockServiceRegular:
+  void InitializeInternal() override {}
+  void ShutdownInternal() override {}
+  void HandleUserReauth(const chromeos::UserContext& user_context) override {
+    ++reauth_count_;
+  }
+
+  void ResetReauthCount() { reauth_count_ = 0; }
+
+  int reauth_count() const { return reauth_count_; }
+
+ private:
+  int reauth_count_;
+
+  DISALLOW_COPY_AND_ASSIGN(FakeEasyUnlockService);
+};
+
+std::unique_ptr<KeyedService> CreateEasyUnlockServiceForTest(
+    content::BrowserContext* context) {
+  return base::MakeUnique<FakeEasyUnlockService>(
+      Profile::FromBrowserContext(context));
+}
 
 ExtendedAuthenticator* CreateFakeAuthenticator(
     AuthStatusConsumer* auth_status_consumer) {
@@ -87,6 +117,13 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     SetModes(QuickUnlockModeList{}, CredentialList{});
 
     modes_changed_handler_ = base::Bind(&DoNothing);
+  }
+
+  TestingProfile* CreateProfile() override {
+    TestingProfile::Builder builder;
+    builder.AddTestingFactory(EasyUnlockServiceFactory::GetInstance(),
+                              &CreateEasyUnlockServiceForTest);
+    return builder.Build().release();
   }
 
   // If a mode change event is raised, fail the test.
@@ -142,13 +179,6 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     return modes;
   }
 
-  // Returns true if |problem| is contained in |problems|.
-  bool HasProblem(CredentialProblem problem,
-                  const std::vector<CredentialProblem> problems) {
-    return std::find(problems.begin(), problems.end(), problem) !=
-           problems.end();
-  }
-
   bool HasFlag(int outcome, int flag) { return (outcome & flag) != 0; }
 
   // Helper function for checking whether |IsCredentialUsableUsingPin| will
@@ -161,22 +191,22 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
     // A pin is considered good if it emits no errors or warnings.
     EXPECT_EQ(HasFlag(expected_outcome, PIN_GOOD),
               errors.empty() && warnings.empty());
-    EXPECT_EQ(
-        HasFlag(expected_outcome, PIN_TOO_SHORT),
-        HasProblem(CredentialProblem::CREDENTIAL_PROBLEM_TOO_SHORT, errors));
-    EXPECT_EQ(
-        HasFlag(expected_outcome, PIN_TOO_LONG),
-        HasProblem(CredentialProblem::CREDENTIAL_PROBLEM_TOO_LONG, errors));
-    EXPECT_EQ(
-        HasFlag(expected_outcome, PIN_WEAK_WARNING),
-        HasProblem(CredentialProblem::CREDENTIAL_PROBLEM_TOO_WEAK, warnings));
-    EXPECT_EQ(
-        HasFlag(expected_outcome, PIN_WEAK_ERROR),
-        HasProblem(CredentialProblem::CREDENTIAL_PROBLEM_TOO_WEAK, errors));
+    EXPECT_EQ(HasFlag(expected_outcome, PIN_TOO_SHORT),
+              base::ContainsValue(
+                  errors, CredentialProblem::CREDENTIAL_PROBLEM_TOO_SHORT));
+    EXPECT_EQ(HasFlag(expected_outcome, PIN_TOO_LONG),
+              base::ContainsValue(
+                  errors, CredentialProblem::CREDENTIAL_PROBLEM_TOO_LONG));
+    EXPECT_EQ(HasFlag(expected_outcome, PIN_WEAK_WARNING),
+              base::ContainsValue(
+                  warnings, CredentialProblem::CREDENTIAL_PROBLEM_TOO_WEAK));
+    EXPECT_EQ(HasFlag(expected_outcome, PIN_WEAK_ERROR),
+              base::ContainsValue(
+                  errors, CredentialProblem::CREDENTIAL_PROBLEM_TOO_WEAK));
     EXPECT_EQ(
         HasFlag(expected_outcome, PIN_CONTAINS_NONDIGIT),
-        HasProblem(CredentialProblem::CREDENTIAL_PROBLEM_CONTAINS_NONDIGIT,
-                   errors));
+        base::ContainsValue(
+            errors, CredentialProblem::CREDENTIAL_PROBLEM_CONTAINS_NONDIGIT));
   }
 
   CredentialCheck CheckCredentialUsingPin(const std::string& pin) {
@@ -304,8 +334,19 @@ class QuickUnlockPrivateUnitTest : public ExtensionApiUnittest {
 
 // Verify that password checking works.
 TEST_F(QuickUnlockPrivateUnitTest, CheckPassword) {
+  // A successful password validation should be fed into EasyUnlock in order to
+  // prepare the setup flow.
+  FakeEasyUnlockService* easy_unlock_service =
+      static_cast<FakeEasyUnlockService*>(EasyUnlockService::Get(profile()));
+  easy_unlock_service->ResetReauthCount();
+
+  EXPECT_EQ(0, easy_unlock_service->reauth_count());
   EXPECT_TRUE(CheckPassword(kValidPassword));
+  EXPECT_EQ(1, easy_unlock_service->reauth_count());
+
+  easy_unlock_service->ResetReauthCount();
   EXPECT_FALSE(CheckPassword(kInvalidPassword));
+  EXPECT_EQ(0, easy_unlock_service->reauth_count());
 }
 
 // Verifies that this returns PIN for GetAvailableModes.

@@ -55,6 +55,7 @@ source_set("lib") {
     "//cc/surfaces",
     "//components/discardable_memory/public/interfaces",
     "//components/discardable_memory/service",
+    "//components/viz/service",
     "//mojo/common:common_base",
     "//services/catalog/public/cpp",
     "//services/catalog/public/interfaces:constants",
@@ -63,7 +64,6 @@ source_set("lib") {
     "//services/ui/ime:lib",
     "//services/ui/input_devices",
     "//services/ui/public/interfaces",
-    "//services/ui/surfaces",
     "//services/ui/ws:lib",
     "//services/ui/ws:test_interface",
     "//ui/events",
@@ -80,6 +80,10 @@ source_set("lib") {
 
   if (use_ozone) {
     deps += [ "//ui/ozone:ozone" ]
+  }
+
+  if (use_ozone && is_chromeos) {
+    deps += [ "//services/ui/public/cpp/input_devices:input_device_controller" ]
   }
 }
 

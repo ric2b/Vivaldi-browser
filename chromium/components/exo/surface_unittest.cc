@@ -6,13 +6,13 @@
 #include "base/bind.h"
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "cc/surfaces/surface_manager.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_external_begin_frame_source.h"
 #include "components/exo/buffer.h"
 #include "components/exo/surface.h"
 #include "components/exo/test/exo_test_base.h"
 #include "components/exo/test/exo_test_helper.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/aura/env.h"
 #include "ui/compositor/layer_tree_owner.h"
@@ -52,8 +52,8 @@ TEST_F(SurfaceTest, Attach) {
   // attached buffer.
   surface->Attach(nullptr);
   surface->Commit();
-  // CompositorFrameSinkHolder::ReclaimResources() gets called via
-  // MojoCompositorFrameSinkClient interface. We need to wait here for the mojo
+  // LayerTreeFrameSinkHolder::ReclaimResources() gets called via
+  // CompositorFrameSinkClient interface. We need to wait here for the mojo
   // call to finish so that the release callback finishes running before
   // the assertion below.
   RunAllPendingInMessageLoop();
@@ -100,9 +100,11 @@ TEST_F(SurfaceTest, RequestFrameCallback) {
 }
 
 const cc::CompositorFrame& GetFrameFromSurface(Surface* surface) {
-  cc::SurfaceId surface_id = surface->GetSurfaceId();
-  cc::SurfaceManager* surface_manager =
-      aura::Env::GetInstance()->context_factory_private()->GetSurfaceManager();
+  viz::SurfaceId surface_id = surface->GetSurfaceId();
+  cc::SurfaceManager* surface_manager = aura::Env::GetInstance()
+                                            ->context_factory_private()
+                                            ->GetFrameSinkManager()
+                                            ->surface_manager();
   const cc::CompositorFrame& frame =
       surface_manager->GetSurfaceForId(surface_id)->GetActiveFrame();
   return frame;
@@ -130,6 +132,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_FALSE(frame.render_pass_list.back()
                      ->quad_list.back()
                      ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 1, 1),
+              frame.render_pass_list.back()->damage_rect);
   }
 
   // Setting an empty opaque region requires draw with blending.
@@ -144,6 +148,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_TRUE(frame.render_pass_list.back()
                     ->quad_list.back()
                     ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 1, 1),
+              frame.render_pass_list.back()->damage_rect);
   }
 
   std::unique_ptr<Buffer> buffer_without_alpha(
@@ -163,6 +169,8 @@ TEST_F(SurfaceTest, SetOpaqueRegion) {
     EXPECT_FALSE(frame.render_pass_list.back()
                      ->quad_list.back()
                      ->ShouldDrawWithBlending());
+    EXPECT_EQ(gfx::Rect(0, 0, 0, 0),
+              frame.render_pass_list.back()->damage_rect);
   }
 }
 
@@ -194,6 +202,13 @@ TEST_F(SurfaceTest, SetBufferScale) {
   EXPECT_EQ(
       gfx::ScaleToFlooredSize(buffer_size, 1.0f / kBufferScale).ToString(),
       surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 256, 256),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, MirrorLayers) {
@@ -238,6 +253,13 @@ TEST_F(SurfaceTest, SetViewport) {
   EXPECT_EQ(viewport2.ToString(),
             surface->window()->bounds().size().ToString());
   EXPECT_EQ(viewport2.ToString(), surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 512, 512),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, SetCrop) {
@@ -253,6 +275,13 @@ TEST_F(SurfaceTest, SetCrop) {
   EXPECT_EQ(crop_size.ToString(),
             surface->window()->bounds().size().ToString());
   EXPECT_EQ(crop_size.ToString(), surface->content_size().ToString());
+
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 12, 12),
+            frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, SetBlendMode) {
@@ -304,6 +333,11 @@ TEST_F(SurfaceTest, SetAlpha) {
   surface->Attach(buffer.get());
   surface->SetAlpha(0.5f);
   surface->Commit();
+  RunAllPendingInMessageLoop();
+
+  const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  ASSERT_EQ(1u, frame.render_pass_list.size());
+  EXPECT_EQ(gfx::Rect(0, 0, 1, 1), frame.render_pass_list.back()->damage_rect);
 }
 
 TEST_F(SurfaceTest, Commit) {
@@ -339,15 +373,14 @@ TEST_F(SurfaceTest, SendsBeginFrameAcks) {
   source.TestOnBeginFrame(args);  // Runs the frame callback.
   EXPECT_EQ(args.frame_time, frame_time);
 
-  surface->Commit();  // Acknowledges the BeginFrame.
+  surface->Commit();  // Acknowledges the BeginFrame via CompositorFrame.
   RunAllPendingInMessageLoop();
 
-  cc::BeginFrameAck expected_ack(args.source_id, args.sequence_number,
-                                 args.sequence_number, true);
-  EXPECT_EQ(expected_ack, source.LastAckForObserver(surface.get()));
-
   const cc::CompositorFrame& frame = GetFrameFromSurface(surface.get());
+  cc::BeginFrameAck expected_ack(args.source_id, args.sequence_number, true);
   EXPECT_EQ(expected_ack, frame.metadata.begin_frame_ack);
+
+  // TODO(eseckler): Add test for DidNotProduceFrame plumbing.
 }
 
 }  // namespace

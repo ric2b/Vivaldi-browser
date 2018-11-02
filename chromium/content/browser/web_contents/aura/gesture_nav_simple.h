@@ -12,6 +12,7 @@
 
 namespace content {
 
+class Affordance;
 class WebContentsImpl;
 
 // A simple delegate for the overscroll controller that paints an arrow on top
@@ -21,19 +22,23 @@ class GestureNavSimple : public OverscrollControllerDelegate {
   explicit GestureNavSimple(WebContentsImpl* web_contents);
   ~GestureNavSimple() override;
 
- private:
-  class Affordance;
+  // Called by the affordance when its complete/abort animation is finished so
+  // that the affordance instance can be destroyed.
+  void OnAffordanceAnimationEnded();
 
+ private:
   void AbortGestureAnimation();
   void CompleteGestureAnimation();
 
   // OverscrollControllerDelegate:
-  gfx::Rect GetVisibleBounds() const override;
+  gfx::Size GetVisibleSize() const override;
+  gfx::Size GetDisplaySize() const override;
   bool OnOverscrollUpdate(float delta_x, float delta_y) override;
   void OnOverscrollComplete(OverscrollMode overscroll_mode) override;
   void OnOverscrollModeChange(OverscrollMode old_mode,
                               OverscrollMode new_mode,
                               OverscrollSource source) override;
+  base::Optional<float> GetMaxOverscrollDelta() const override;
 
   WebContentsImpl* web_contents_;
   std::unique_ptr<Affordance> affordance_;

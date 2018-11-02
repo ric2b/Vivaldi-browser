@@ -12,6 +12,8 @@
 #include "chrome/common/extensions/api/tabs.h"
 #include "ui/base/window_open_disposition.h"
 
+#include "ui/base/page_transition_types.h"
+
 class Browser;
 class ChromeExtensionFunctionDetails;
 class ChromeUIThreadExtensionFunction;
@@ -51,6 +53,7 @@ class ExtensionTabUtil {
     std::unique_ptr<bool> active;
     std::unique_ptr<bool> pinned;
     std::unique_ptr<int> index;
+    std::unique_ptr<ui::PageTransition> transition;
   };
 
   // Platform specific delegate.

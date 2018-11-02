@@ -6,7 +6,6 @@
 
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/resize_shadow_controller.h"
 #include "ash/wm/window_resizer.h"
 #include "ash/wm/window_state.h"
@@ -162,11 +161,11 @@ void WmToplevelWindowEventHandler::ScopedWindowResizer::OnWindowDestroying(
 
 WmToplevelWindowEventHandler::WmToplevelWindowEventHandler()
     : first_finger_hittest_(HTNOWHERE) {
-  ShellPort::Get()->AddDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
 WmToplevelWindowEventHandler::~WmToplevelWindowEventHandler() {
-  ShellPort::Get()->RemoveDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 void WmToplevelWindowEventHandler::OnKeyEvent(ui::KeyEvent* event) {
@@ -258,6 +257,9 @@ void WmToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event,
     }
     case ui::ET_GESTURE_BEGIN: {
       if (event->details().touch_points() == 1) {
+        first_finger_touch_point_ = event->location();
+        aura::Window::ConvertPointToTarget(target, target->parent(),
+                                           &first_finger_touch_point_);
         first_finger_hittest_ =
             GetNonClientComponent(target, event->location());
       } else if (window_resizer_.get()) {
@@ -275,11 +277,8 @@ void WmToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event,
             GetNonClientComponent(target, event->location());
         if (CanStartTwoFingerMove(target, first_finger_hittest_,
                                   second_finger_hittest)) {
-          gfx::Point location_in_parent =
-              event->details().bounding_box().CenterPoint();
-          AttemptToStartDrag(target, location_in_parent, HTCAPTION,
-                             aura::client::WINDOW_MOVE_SOURCE_TOUCH,
-                             EndClosure());
+          AttemptToStartDrag(target, first_finger_touch_point_, HTCAPTION,
+                             ::wm::WINDOW_MOVE_SOURCE_TOUCH, EndClosure());
           event->StopPropagation();
         }
       }
@@ -300,7 +299,7 @@ void WmToplevelWindowEventHandler::OnGestureEvent(ui::GestureEvent* event,
       aura::Window::ConvertPointToTarget(target, target->parent(),
                                          &location_in_parent);
       AttemptToStartDrag(target, location_in_parent, component,
-                         aura::client::WINDOW_MOVE_SOURCE_TOUCH, EndClosure());
+                         ::wm::WINDOW_MOVE_SOURCE_TOUCH, EndClosure());
       event->StopPropagation();
       return;
     }
@@ -383,7 +382,7 @@ bool WmToplevelWindowEventHandler::AttemptToStartDrag(
     aura::Window* window,
     const gfx::Point& point_in_parent,
     int window_component,
-    aura::client::WindowMoveSource source,
+    ::wm::WindowMoveSource source,
     const EndClosure& end_closure) {
   if (window_resizer_.get())
     return false;
@@ -396,7 +395,7 @@ bool WmToplevelWindowEventHandler::AttemptToStartDrag(
   window_resizer_.reset(new ScopedWindowResizer(this, std::move(resizer)));
 
   pre_drag_window_bounds_ = window->bounds();
-  in_gesture_drag_ = (source == aura::client::WINDOW_MOVE_SOURCE_TOUCH);
+  in_gesture_drag_ = (source == ::wm::WINDOW_MOVE_SOURCE_TOUCH);
   return true;
 }
 
@@ -449,7 +448,7 @@ void WmToplevelWindowEventHandler::HandleMousePressed(aura::Window* target,
     aura::Window::ConvertPointToTarget(target, target->parent(),
                                        &location_in_parent);
     AttemptToStartDrag(target, location_in_parent, component,
-                       aura::client::WINDOW_MOVE_SOURCE_MOUSE, EndClosure());
+                       ::wm::WINDOW_MOVE_SOURCE_MOUSE, EndClosure());
     // Set as handled so that other event handlers do no act upon the event
     // but still receive it so that they receive both parts of each pressed/
     // released pair.

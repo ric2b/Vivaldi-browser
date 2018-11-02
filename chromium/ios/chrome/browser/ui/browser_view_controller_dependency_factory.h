@@ -10,6 +10,8 @@
 #include "ios/chrome/browser/ui/tabs/tab_strip_controller.h"
 
 @class AlertCoordinator;
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 @class KeyCommandsProvider;
 @class MessageBubbleView;
 @class PKPass;
@@ -57,7 +59,10 @@ extern NSString* const kBrowserViewControllerSnackbarCategory;
 // Caller is responsible for releasing all of the created objects.
 - (PreloadController*)newPreloadController;
 
-- (TabStripController*)newTabStripControllerWithTabModel:(TabModel*)model;
+- (TabStripController*)
+newTabStripControllerWithTabModel:(TabModel*)model
+                       dispatcher:
+                           (id<ApplicationCommands, BrowserCommands>)dispatcher;
 
 - (ToolbarModelIOS*)newToolbarModelIOSWithDelegate:
     (ToolbarModelDelegateIOS*)delegate;
@@ -65,7 +70,9 @@ extern NSString* const kBrowserViewControllerSnackbarCategory;
 - (WebToolbarController*)
 newWebToolbarControllerWithDelegate:(id<WebToolbarDelegate>)delegate
                           urlLoader:(id<UrlLoader>)urlLoader
-                    preloadProvider:(id<PreloadProvider>)preload;
+                    preloadProvider:(id<PreloadProvider>)preload
+                         dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                        dispatcher;
 
 // Returns a new keyboard commands coordinator to handle keyboard commands.
 - (KeyCommandsProvider*)newKeyCommandsProvider;

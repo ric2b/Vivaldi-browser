@@ -18,6 +18,8 @@
 #include "components/payments/content/payment_request_web_contents_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "content/public/test/browser_test_utils.h"
+#include "ui/views/controls/link.h"
+#include "ui/views/controls/styled_label.h"
 
 namespace payments {
 
@@ -205,11 +207,12 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestAbortTest,
   ExpectBodyContains({"Cannot abort"});
 }
 
-class PaymentRequestBasicCardTest : public PaymentRequestBrowserTestBase {
+class PaymentRequestPaymentMethodIdentifierTest
+    : public PaymentRequestBrowserTestBase {
  protected:
-  PaymentRequestBasicCardTest()
-      : PaymentRequestBrowserTestBase("/payment_request_basic_card_test.html") {
-  }
+  PaymentRequestPaymentMethodIdentifierTest()
+      : PaymentRequestBrowserTestBase(
+            "/payment_request_payment_method_identifier_test.html") {}
 
   void InvokePaymentRequestWithJs(const std::string& js) {
     ResetEventObserver(DialogEvent::DIALOG_OPENED);
@@ -220,11 +223,11 @@ class PaymentRequestBasicCardTest : public PaymentRequestBrowserTestBase {
   }
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(PaymentRequestBasicCardTest);
+  DISALLOW_COPY_AND_ASSIGN(PaymentRequestPaymentMethodIdentifierTest);
 };
 
 // One network is specified in 'basic-card' data, one in supportedMethods.
-IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
                        BasicCard_NetworksSpecified) {
   InvokePaymentRequestWithJs("buy();");
 
@@ -242,7 +245,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
 
 // Only specifying 'basic-card' with no supportedNetworks means all networks are
 // supported.
-IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
                        BasicCard_NoNetworksSpecified) {
   InvokePaymentRequestWithJs("buyBasicCard();");
 
@@ -265,7 +268,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
 
 // Specifying 'basic-card' after having explicitely included a network yields
 // the expected order when in different supportedMethods lists.
-IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
                        BasicCard_NetworkThenBasicCard_DifferentList) {
   InvokePaymentRequestWithJs(
       "buyHelper([{"
@@ -294,7 +297,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
 
 // Specifying 'basic-card' after having explicitely included a network yields
 // the expected order when in the same supportedMethods list.
-IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
                        BasicCard_NetworkThenBasicCard_SameList) {
   InvokePaymentRequestWithJs(
       "buyHelper([{"
@@ -321,7 +324,7 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
 
 // Specifying 'basic-card' with some networks after having explicitely included
 // the same networks does not yield duplicates and has the expected order.
-IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
                        BasicCard_NetworkThenBasicCardWithSameNetwork) {
   InvokePaymentRequestWithJs(
       "buyHelper([{"
@@ -342,6 +345,59 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestBasicCardTest,
   EXPECT_EQ("mastercard", supported_card_networks[0]);
   EXPECT_EQ("visa", supported_card_networks[1]);
   EXPECT_EQ("jcb", supported_card_networks[2]);
+}
+
+// A url-based payment method identifier is only supported if it has an https
+// scheme.
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest, Url_Valid) {
+  InvokePaymentRequestWithJs(
+      "buyHelper([{"
+      "  supportedMethods: ['https://bobpay.xyz', 'http://bobpay.xyz']"
+      "}, {"
+      "  supportedMethods: ['basic-card']"
+      "}]);");
+
+  std::vector<PaymentRequest*> requests =
+      GetPaymentRequests(GetActiveWebContents());
+  EXPECT_EQ(1u, requests.size());
+  std::vector<std::string> url_payment_method_identifiers =
+      requests[0]->spec()->url_payment_method_identifiers();
+  EXPECT_EQ(1u, url_payment_method_identifiers.size());
+  EXPECT_EQ("https://bobpay.xyz", url_payment_method_identifiers[0]);
+}
+
+// Specifiying multiple different types of payment method identifiers still
+// yields the correct supported methods in payment request.
+IN_PROC_BROWSER_TEST_F(PaymentRequestPaymentMethodIdentifierTest,
+                       MultiplePaymentMethodIdentifiers) {
+  InvokePaymentRequestWithJs(
+      "buyHelper([{"
+      "  supportedMethods: ['https://bobpay.xyz', 'http://bobpay.xyz']"
+      "}, {"
+      "  supportedMethods: ['mastercard', 'visa', 'https://alicepay.com']"
+      "}, {"
+      "  supportedMethods: ['basic-card'],"
+      "  data: {"
+      "    supportedNetworks: ['visa', 'mastercard', 'jcb'],"
+      "  }"
+      "}]);");
+
+  std::vector<PaymentRequest*> requests =
+      GetPaymentRequests(GetActiveWebContents());
+  EXPECT_EQ(1u, requests.size());
+
+  std::vector<std::string> supported_card_networks =
+      requests[0]->spec()->supported_card_networks();
+  EXPECT_EQ(3u, supported_card_networks.size());
+  EXPECT_EQ("mastercard", supported_card_networks[0]);
+  EXPECT_EQ("visa", supported_card_networks[1]);
+  EXPECT_EQ("jcb", supported_card_networks[2]);
+
+  std::vector<std::string> url_payment_method_identifiers =
+      requests[0]->spec()->url_payment_method_identifiers();
+  EXPECT_EQ(2u, url_payment_method_identifiers.size());
+  EXPECT_EQ("https://bobpay.xyz", url_payment_method_identifiers[0]);
+  EXPECT_EQ("https://alicepay.com", url_payment_method_identifiers[1]);
 }
 
 // Test harness integrating with DialogBrowserTest to present the dialog in an
@@ -368,6 +424,41 @@ class PaymentsRequestVisualTest
 
 IN_PROC_BROWSER_TEST_F(PaymentsRequestVisualTest, InvokeDialog_NoShipping) {
   RunDialog();
+}
+
+class PaymentRequestSettingsLinkTest : public PaymentRequestBrowserTestBase {
+ protected:
+  PaymentRequestSettingsLinkTest()
+      : PaymentRequestBrowserTestBase(
+            "/payment_request_no_shipping_test.html") {}
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(PaymentRequestSettingsLinkTest);
+};
+
+// Tests that clicking the settings link brings the user to settings.
+IN_PROC_BROWSER_TEST_F(PaymentRequestSettingsLinkTest, ClickSettingsLink) {
+  // Setup a credit card with an associated billing address.
+  autofill::AutofillProfile billing_address = autofill::test::GetFullProfile();
+  AddAutofillProfile(billing_address);
+  autofill::CreditCard card = autofill::test::GetCreditCard();
+  card.set_billing_address_id(billing_address.guid());
+  AddCreditCard(card);  // Visa.
+
+  // Click on the settings link in the payment request dialog window.
+  InvokePaymentRequestUI();
+  views::StyledLabel* styled_label =
+      static_cast<views::StyledLabel*>(dialog_view()->GetViewByID(
+          static_cast<int>(DialogViewID::DATA_SOURCE_LABEL)));
+  EXPECT_TRUE(styled_label);
+  // The Link is the only child of the StyledLabel.
+  content::WebContentsAddedObserver web_contents_added_observer;
+  styled_label->LinkClicked(nullptr, 0);
+  content::WebContents* new_tab_contents =
+      web_contents_added_observer.GetWebContents();
+
+  EXPECT_EQ("chrome://settings/autofill",
+            new_tab_contents->GetVisibleURL().spec());
 }
 
 }  // namespace payments

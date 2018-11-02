@@ -7,9 +7,11 @@
 
 #include <vector>
 
+#include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "url/gurl.h"
 
 namespace content {
 class WebContents;
@@ -17,27 +19,30 @@ class WebContents;
 
 class PermissionPromptAndroid : public PermissionPrompt {
  public:
-  explicit PermissionPromptAndroid(content::WebContents* web_contents);
+  PermissionPromptAndroid(content::WebContents* web_contents,
+                          Delegate* delegate);
   ~PermissionPromptAndroid() override;
 
   // PermissionPrompt:
-  void SetDelegate(Delegate* delegate) override;
-  void Show() override;
   bool CanAcceptRequestUpdate() override;
-  bool HidesAutomatically() override;
-  void Hide() override;
   void UpdateAnchorPosition() override;
   gfx::NativeWindow GetNativeWindow() override;
 
   void Closing();
-  void ToggleAccept(int index, bool value);
+  void TogglePersist(bool value);
   void Accept();
   void Deny();
 
+  // We show one permission at a time except for grouped mic+camera, for which
+  // we still have a single icon and message text.
   size_t PermissionCount() const;
+  bool ShouldShowPersistenceToggle() const;
   ContentSettingsType GetContentSettingType(size_t position) const;
-  int GetIconIdForPermission(size_t position) const;
-  base::string16 GetMessageTextFragment(size_t position) const;
+  int GetIconId() const;
+  base::string16 GetMessageText() const;
+
+  base::string16 GetLinkText() const;
+  GURL GetLinkURL() const;
 
  private:
   // PermissionPromptAndroid is owned by PermissionRequestManager, so it should
@@ -46,6 +51,10 @@ class PermissionPromptAndroid : public PermissionPrompt {
   content::WebContents* web_contents_;
   // |delegate_| is the PermissionRequestManager, which owns this object.
   Delegate* delegate_;
+
+  bool persist_;
+
+  base::WeakPtrFactory<PermissionPromptAndroid> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PermissionPromptAndroid);
 };

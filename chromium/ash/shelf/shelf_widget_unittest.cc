@@ -9,15 +9,13 @@
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_view.h"
+#include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/shelf_view_test_api.h"
-#include "ash/test/test_shell_delegate.h"
+#include "ash/test_shell_delegate.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/display/display.h"
 #include "ui/events/event_utils.h"
@@ -28,7 +26,7 @@ namespace ash {
 namespace {
 
 ShelfWidget* GetShelfWidget() {
-  return test::AshTestBase::GetPrimaryShelf()->shelf_widget();
+  return AshTestBase::GetPrimaryShelf()->shelf_widget();
 }
 
 ShelfLayoutManager* GetShelfLayoutManager() {
@@ -38,14 +36,14 @@ ShelfLayoutManager* GetShelfLayoutManager() {
 void TestLauncherAlignment(aura::Window* root,
                            ShelfAlignment alignment,
                            const gfx::Rect& expected) {
-  GetRootWindowController(root)->GetShelf()->SetAlignment(alignment);
+  Shelf::ForWindow(root)->SetAlignment(alignment);
   EXPECT_EQ(expected.ToString(), display::Screen::GetScreen()
                                      ->GetDisplayNearestWindow(root)
                                      .work_area()
                                      .ToString());
 }
 
-using ShelfWidgetTest = test::AshTestBase;
+using ShelfWidgetTest = AshTestBase;
 
 TEST_F(ShelfWidgetTest, TestAlignment) {
   UpdateDisplay("400x400");
@@ -322,7 +320,7 @@ TEST_F(ShelfWidgetTest, HiddenShelfHitTestTouch) {
   }
 }
 
-class ShelfWidgetAfterLoginTest : public test::AshTestBase {
+class ShelfWidgetAfterLoginTest : public AshTestBase {
  public:
   ShelfWidgetAfterLoginTest() { set_start_session(false); }
   ~ShelfWidgetAfterLoginTest() override = default;

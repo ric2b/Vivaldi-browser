@@ -44,9 +44,9 @@ class ChromeVariationsConfigurationTest : public ::testing::Test {
         base::FieldTrialList::CreateFieldTrial(kBarTrialName, kGroupName);
     base::FieldTrial* qux_trial =
         base::FieldTrialList::CreateFieldTrial(kQuxTrialName, kGroupName);
-    trials_[&kTestFeatureFoo] = foo_trial;
-    trials_[&kTestFeatureBar] = bar_trial;
-    trials_[&kTestFeatureQux] = qux_trial;
+    trials_[kTestFeatureFoo.name] = foo_trial;
+    trials_[kTestFeatureBar.name] = bar_trial;
+    trials_[kTestFeatureQux.name] = qux_trial;
 
     std::unique_ptr<base::FeatureList> feature_list(new base::FeatureList);
     feature_list->RegisterFieldTrialOverride(
@@ -73,9 +73,10 @@ class ChromeVariationsConfigurationTest : public ::testing::Test {
  protected:
   void SetFeatureParams(const base::Feature& feature,
                         std::map<std::string, std::string> params) {
-    ASSERT_TRUE(base::FieldTrialParamAssociator::GetInstance()
-                    ->AssociateFieldTrialParams(trials_[&feature]->trial_name(),
-                                                kGroupName, params));
+    ASSERT_TRUE(
+        base::FieldTrialParamAssociator::GetInstance()
+            ->AssociateFieldTrialParams(trials_[feature.name]->trial_name(),
+                                        kGroupName, params));
 
     std::map<std::string, std::string> actualParams;
     EXPECT_TRUE(base::GetFieldTrialParamsByFeature(feature, &actualParams));
@@ -100,7 +101,7 @@ class ChromeVariationsConfigurationTest : public ::testing::Test {
 
  private:
   base::FieldTrialList field_trials_;
-  std::map<const base::Feature*, base::FieldTrial*> trials_;
+  std::map<std::string, base::FieldTrial*> trials_;
   base::test::ScopedFeatureList scoped_feature_list;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeVariationsConfigurationTest);
@@ -280,10 +281,13 @@ TEST_F(ChromeVariationsConfigurationTest, WhitespaceIsValid) {
 }
 
 TEST_F(ChromeVariationsConfigurationTest, IgnoresInvalidConfigKeys) {
+  base::HistogramTester histogram_tester;
   std::map<std::string, std::string> foo_params;
   foo_params["event_used"] = "name:eu;comparator:any;window:0;storage:360";
   foo_params["event_trigger"] = "name:et;comparator:any;window:0;storage:360";
-  foo_params["not_there_yet"] = "bogus value";
+  foo_params["not_there_yet"] = "bogus value";                // Unrecognized.
+  foo_params["still_not_there"] = "another bogus value";      // Unrecognized.
+  foo_params["x_this_is_ignored"] = "this value is ignored";  // Ignored.
   SetFeatureParams(kTestFeatureFoo, foo_params);
 
   std::vector<const base::Feature*> features = {&kTestFeatureFoo};
@@ -297,6 +301,11 @@ TEST_F(ChromeVariationsConfigurationTest, IgnoresInvalidConfigKeys) {
   expected_foo.used = EventConfig("eu", Comparator(ANY, 0), 0, 360);
   expected_foo.trigger = EventConfig("et", Comparator(ANY, 0), 0, 360);
   EXPECT_EQ(expected_foo, foo);
+
+  // Exactly 2 keys should be unrecognized and not ignored.
+  histogram_tester.ExpectBucketCount(
+      kConfigParseEventName,
+      static_cast<int>(stats::ConfigParsingEvent::FAILURE_UNKNOWN_KEY), 2);
 }
 
 TEST_F(ChromeVariationsConfigurationTest, IgnoresInvalidEventConfigTokens) {

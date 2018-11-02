@@ -144,7 +144,7 @@ Console.ConsoleView = class extends UI.VBox {
 
     this._messagesElement.addEventListener('contextmenu', this._handleContextMenuEvent.bind(this), false);
 
-    this._linkifier = new Components.Linkifier();
+    this._linkifier = new Components.Linkifier(Console.ConsoleViewMessage.MaxLengthForLinks);
     this._badgePool = new ProductRegistry.BadgePool();
 
     /** @type {!Array.<!Console.ConsoleViewMessage>} */
@@ -548,14 +548,13 @@ Console.ConsoleView = class extends UI.VBox {
     var filterSubMenu = contextMenu.appendSubMenuItem(Common.UIString('Filter'));
 
     if (consoleMessage && consoleMessage.url) {
-      var menuTitle =
-          Common.UIString.capitalize('Hide ^messages from %s', new Common.ParsedURL(consoleMessage.url).displayName);
+      var menuTitle = Common.UIString('Hide messages from %s', new Common.ParsedURL(consoleMessage.url).displayName);
       filterSubMenu.appendItem(menuTitle, this._filter.addMessageURLFilter.bind(this._filter, consoleMessage.url));
     }
 
     filterSubMenu.appendSeparator();
-    var unhideAll = filterSubMenu.appendItem(
-        Common.UIString.capitalize('Unhide ^all'), this._filter.removeMessageURLFilter.bind(this._filter));
+    var unhideAll =
+        filterSubMenu.appendItem(Common.UIString('Unhide all'), this._filter.removeMessageURLFilter.bind(this._filter));
     filterSubMenu.appendSeparator();
 
     var hasFilters = false;
@@ -576,15 +575,15 @@ Console.ConsoleView = class extends UI.VBox {
     contextMenu.appendItem(Common.UIString('Save as...'), this._saveConsole.bind(this));
 
     var request = consoleMessage ? consoleMessage.request : null;
-    if (request && request.resourceType() === Common.resourceTypes.XHR) {
+    if (request && SDK.NetworkManager.canReplayRequest(request)) {
       contextMenu.appendSeparator();
-      contextMenu.appendItem(Common.UIString('Replay XHR'), request.replayXHR.bind(request));
+      contextMenu.appendItem(Common.UIString('Replay XHR'), SDK.NetworkManager.replayRequest.bind(null, request));
     }
 
     contextMenu.show();
   }
 
-  _saveConsole() {
+  async _saveConsole() {
     var url = SDK.targetManager.mainTarget().inspectedURL();
     var parsedURL = url.asParsedURL();
     var filename = String.sprintf('%s-%d.log', parsedURL ? parsedURL.host : 'console', Date.now());
@@ -596,41 +595,25 @@ Console.ConsoleView = class extends UI.VBox {
 
     /** @const */
     var chunkSize = 350;
+
+    if (!await stream.open(filename))
+      return;
+    this._progressToolbarItem.element.appendChild(progressIndicator.element);
+
     var messageIndex = 0;
-
-    stream.open(filename, openCallback.bind(this));
-
-    /**
-     * @param {boolean} accepted
-     * @this {Console.ConsoleView}
-     */
-    function openCallback(accepted) {
-      if (!accepted)
-        return;
-      this._progressToolbarItem.element.appendChild(progressIndicator.element);
-      writeNextChunk.call(this, stream);
-    }
-
-    /**
-     * @param {!Common.OutputStream} stream
-     * @param {string=} error
-     * @this {Console.ConsoleView}
-     */
-    function writeNextChunk(stream, error) {
-      if (messageIndex >= this.itemCount() || error) {
-        stream.close();
-        progressIndicator.done();
-        return;
-      }
+    while (messageIndex < this.itemCount() && !progressIndicator.isCanceled()) {
       var messageContents = [];
       for (var i = 0; i < chunkSize && i + messageIndex < this.itemCount(); ++i) {
         var message = this.itemElement(messageIndex + i);
         messageContents.push(message.toExportString());
       }
       messageIndex += i;
-      stream.write(messageContents.join('\n') + '\n', writeNextChunk.bind(this));
+      await stream.write(messageContents.join('\n') + '\n');
       progressIndicator.setWorked(messageIndex);
     }
+
+    stream.close();
+    progressIndicator.done();
   }
 
   /**
@@ -670,10 +653,8 @@ Console.ConsoleView = class extends UI.VBox {
    * @param {!Event} event
    */
   _messagesClicked(event) {
-    var targetElement = event.deepElementFromPoint();
-
     // Do not focus prompt if messages have selection.
-    if (!targetElement || targetElement.isComponentSelectionCollapsed()) {
+    if (!this._messagesElement.hasSelection()) {
       var clickedOutsideMessageList = event.target === this._messagesElement;
       if (clickedOutsideMessageList)
         this._prompt.moveCaretToEndOfPrompt();
@@ -1356,6 +1337,7 @@ Console.ConsoleView.ActionDelegate = class {
   handleAction(context, actionId) {
     switch (actionId) {
       case 'console.show':
+        InspectorFrontendHost.bringToFront();
         Common.console.show();
         return true;
       case 'console.clear':

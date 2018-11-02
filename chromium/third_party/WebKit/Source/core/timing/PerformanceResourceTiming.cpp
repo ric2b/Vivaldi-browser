@@ -45,7 +45,8 @@ PerformanceResourceTiming::PerformanceResourceTiming(
     double start_time,
     double last_redirect_end_time,
     bool allow_timing_details,
-    bool allow_redirect_details)
+    bool allow_redirect_details,
+    PerformanceServerTimingVector& serverTiming)
     : PerformanceEntry(info.InitialURL().GetString(),
                        "resource",
                        PerformanceBase::MonotonicTimeToDOMHighResTimeStamp(
@@ -57,6 +58,8 @@ PerformanceResourceTiming::PerformanceResourceTiming(
                            info.LoadFinishTime(),
                            info.NegativeAllowed())),
       initiator_type_(info.InitiatorType()),
+      alpn_negotiated_protocol_(info.FinalResponse().AlpnNegotiatedProtocol()),
+      connection_info_(info.FinalResponse().ConnectionInfoString()),
       time_origin_(time_origin),
       timing_(info.FinalResponse().GetResourceLoadTiming()),
       last_redirect_end_time_(last_redirect_end_time),
@@ -67,14 +70,20 @@ PerformanceResourceTiming::PerformanceResourceTiming(
       did_reuse_connection_(info.FinalResponse().ConnectionReused()),
       allow_timing_details_(allow_timing_details),
       allow_redirect_details_(allow_redirect_details),
-      allow_negative_value_(info.NegativeAllowed()) {}
+      allow_negative_value_(info.NegativeAllowed()),
+      serverTiming_(serverTiming) {}
 
 // This constructor is for PerformanceNavigationTiming.
-PerformanceResourceTiming::PerformanceResourceTiming(const String& name,
-                                                     const String& entry_type,
-                                                     double start_time,
-                                                     double duration)
-    : PerformanceEntry(name, entry_type, start_time, duration) {}
+PerformanceResourceTiming::PerformanceResourceTiming(
+    const String& name,
+    const String& entry_type,
+    double time_origin,
+    double start_time,
+    double duration,
+    PerformanceServerTimingVector& serverTiming)
+    : PerformanceEntry(name, entry_type, start_time, duration),
+      time_origin_(time_origin),
+      serverTiming_(serverTiming) {}
 
 PerformanceResourceTiming::~PerformanceResourceTiming() {}
 
@@ -104,6 +113,37 @@ unsigned long long PerformanceResourceTiming::GetDecodedBodySize() const {
 
 AtomicString PerformanceResourceTiming::initiatorType() const {
   return initiator_type_;
+}
+
+AtomicString PerformanceResourceTiming::AlpnNegotiatedProtocol() const {
+  return alpn_negotiated_protocol_;
+}
+
+AtomicString PerformanceResourceTiming::ConnectionInfo() const {
+  return connection_info_;
+}
+
+AtomicString PerformanceResourceTiming::GetNextHopProtocol(
+    const AtomicString& alpn_negotiated_protocol,
+    const AtomicString& connection_info) {
+  // Fallback to connection_info when alpn_negotiated_protocol is unknown.
+  AtomicString returnedProtocol = (alpn_negotiated_protocol == "unknown")
+                                      ? connection_info
+                                      : alpn_negotiated_protocol;
+  // If connection_info is also unknown, return empty string.
+  // (https://github.com/w3c/navigation-timing/issues/71)
+  returnedProtocol = (returnedProtocol == "unknown") ? "" : returnedProtocol;
+  // If the protocol is http over quic (e.g. http/2+quic/37), convert it to the
+  // alpn id "hq". (https://github.com/w3c/navigation-timing/issues/71)
+  if (returnedProtocol.Contains("quic"))
+    returnedProtocol = "hq";
+
+  return returnedProtocol;
+}
+
+AtomicString PerformanceResourceTiming::nextHopProtocol() const {
+  return PerformanceResourceTiming::GetNextHopProtocol(AlpnNegotiatedProtocol(),
+                                                       ConnectionInfo());
 }
 
 DOMHighResTimeStamp PerformanceResourceTiming::workerStart() const {
@@ -274,9 +314,15 @@ unsigned long long PerformanceResourceTiming::decodedBodySize() const {
   return GetDecodedBodySize();
 }
 
-void PerformanceResourceTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
-  PerformanceEntry::BuildJSONValue(builder);
+PerformanceServerTimingVector PerformanceResourceTiming::serverTiming() const {
+  return serverTiming_;
+}
+
+void PerformanceResourceTiming::BuildJSONValue(ScriptState* script_state,
+                                               V8ObjectBuilder& builder) const {
+  PerformanceEntry::BuildJSONValue(script_state, builder);
   builder.AddString("initiatorType", initiatorType());
+  builder.AddString("nextHopProtocol", nextHopProtocol());
   builder.AddNumber("workerStart", workerStart());
   builder.AddNumber("redirectStart", redirectStart());
   builder.AddNumber("redirectEnd", redirectEnd());
@@ -292,6 +338,17 @@ void PerformanceResourceTiming::BuildJSONValue(V8ObjectBuilder& builder) const {
   builder.AddNumber("transferSize", transferSize());
   builder.AddNumber("encodedBodySize", encodedBodySize());
   builder.AddNumber("decodedBodySize", decodedBodySize());
+
+  Vector<ScriptValue> serverTiming;
+  for (unsigned i = 0; i < serverTiming_.size(); i++) {
+    serverTiming.push_back(serverTiming_[i]->toJSONForBinding(script_state));
+  }
+  builder.Add("serverTiming", serverTiming);
+}
+
+DEFINE_TRACE(PerformanceResourceTiming) {
+  visitor->Trace(serverTiming_);
+  PerformanceEntry::Trace(visitor);
 }
 
 }  // namespace blink

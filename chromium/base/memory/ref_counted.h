@@ -142,10 +142,18 @@ class BASE_EXPORT RefCountedThreadSafeBase {
 
   ~RefCountedThreadSafeBase();
 
-  void AddRef() const;
-
+// Release and AddRef are suitable for inlining on X86 because they generate
+// very small code sequences. On other platforms (ARM), it causes a size
+// regression and is probably not worth it.
+#if defined(ARCH_CPU_X86_FAMILY)
+  // Returns true if the object should self-delete.
+  bool Release() const { return ReleaseImpl(); }
+  void AddRef() const { AddRefImpl(); }
+#else
   // Returns true if the object should self-delete.
   bool Release() const;
+  void AddRef() const;
+#endif
 
  private:
   template <typename U>
@@ -158,7 +166,32 @@ class BASE_EXPORT RefCountedThreadSafeBase {
 #endif
   }
 
-  mutable AtomicRefCount ref_count_ = 0;
+  ALWAYS_INLINE void AddRefImpl() const {
+#if DCHECK_IS_ON()
+    DCHECK(!in_dtor_);
+    DCHECK(!needs_adopt_ref_)
+        << "This RefCounted object is created with non-zero reference count."
+        << " The first reference to such a object has to be made by AdoptRef or"
+        << " MakeRefCounted.";
+#endif
+    ref_count_.Increment();
+  }
+
+  ALWAYS_INLINE bool ReleaseImpl() const {
+#if DCHECK_IS_ON()
+    DCHECK(!in_dtor_);
+    DCHECK(!ref_count_.IsZero());
+#endif
+    if (!ref_count_.Decrement()) {
+#if DCHECK_IS_ON()
+      in_dtor_ = true;
+#endif
+      return true;
+    }
+    return false;
+  }
+
+  mutable AtomicRefCount ref_count_{0};
 #if DCHECK_IS_ON()
   mutable bool needs_adopt_ref_ = false;
   mutable bool in_dtor_ = false;
@@ -250,6 +283,11 @@ class RefCounted : public subtle::RefCountedBase {
 
   void Release() const {
     if (subtle::RefCountedBase::Release()) {
+      // Prune the code paths which the static analyzer may take to simulate
+      // object destruction. Use-after-free errors aren't possible given the
+      // lifetime guarantees of the refcounting system.
+      ANALYZER_SKIP_THIS_PATH();
+
       delete static_cast<const T*>(this);
     }
   }
@@ -307,6 +345,7 @@ class RefCountedThreadSafe : public subtle::RefCountedThreadSafeBase {
 
   void Release() const {
     if (subtle::RefCountedThreadSafeBase::Release()) {
+      ANALYZER_SKIP_THIS_PATH();
       Traits::Destruct(static_cast<const T*>(this));
     }
   }
@@ -506,13 +545,19 @@ class scoped_refptr {
   }
 
   scoped_refptr<T>& operator=(scoped_refptr<T>&& r) {
-    scoped_refptr<T>(std::move(r)).swap(*this);
+    scoped_refptr<T> tmp(std::move(r));
+    tmp.swap(*this);
     return *this;
   }
 
   template <typename U>
   scoped_refptr<T>& operator=(scoped_refptr<U>&& r) {
-    scoped_refptr<T>(std::move(r)).swap(*this);
+    // We swap with a temporary variable to guarantee that |ptr_| is released
+    // immediately. A naive implementation which swaps |this| and |r| would
+    // unintentionally extend the lifetime of |ptr_| to at least the lifetime of
+    // |r|.
+    scoped_refptr<T> tmp(std::move(r));
+    tmp.swap(*this);
     return *this;
   }
 

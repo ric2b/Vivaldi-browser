@@ -17,9 +17,10 @@ class CanvasContextCreationAttributes;
 class OffscreenCanvas;
 
 class MODULES_EXPORT OffscreenCanvasModules {
-  STATIC_ONLY(OffscreenCanvasModules)
+  STATIC_ONLY(OffscreenCanvasModules);
+
  public:
-  static void getContext(ScriptState*,
+  static void getContext(ExecutionContext*,
                          OffscreenCanvas&,
                          const String&,
                          const CanvasContextCreationAttributes&,

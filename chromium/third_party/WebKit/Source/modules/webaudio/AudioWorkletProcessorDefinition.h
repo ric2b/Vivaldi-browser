@@ -6,7 +6,9 @@
 #define AudioWorkletProcessorDefinition_h
 
 #include "modules/ModulesExport.h"
-#include "platform/bindings/ScopedPersistent.h"
+#include "modules/webaudio/AudioParamDescriptor.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperV8Reference.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 #include "v8/include/v8.h"
@@ -21,7 +23,8 @@ namespace blink {
 // This is constructed and destroyed on a worker thread, and all methods also
 // must be called on the worker thread.
 class MODULES_EXPORT AudioWorkletProcessorDefinition final
-    : public GarbageCollectedFinalized<AudioWorkletProcessorDefinition> {
+    : public GarbageCollectedFinalized<AudioWorkletProcessorDefinition>,
+      public TraceWrapperBase {
  public:
   static AudioWorkletProcessorDefinition* Create(
       v8::Isolate*,
@@ -34,24 +37,28 @@ class MODULES_EXPORT AudioWorkletProcessorDefinition final
   const String& GetName() const { return name_; }
   v8::Local<v8::Function> ConstructorLocal(v8::Isolate*);
   v8::Local<v8::Function> ProcessLocal(v8::Isolate*);
+  void SetAudioParamDescriptors(const HeapVector<AudioParamDescriptor>&);
+  const Vector<String> GetAudioParamDescriptorNames() const;
+  const AudioParamDescriptor* GetAudioParamDescriptor(const String& key) const;
 
-  DEFINE_INLINE_TRACE(){};
+  DEFINE_INLINE_TRACE() { visitor->Trace(audio_param_descriptors_); };
+  DECLARE_TRACE_WRAPPERS();
 
  private:
-  AudioWorkletProcessorDefinition(v8::Isolate*,
-                                  const String& name,
-                                  v8::Local<v8::Function> constructor,
-                                  v8::Local<v8::Function> process);
+  AudioWorkletProcessorDefinition(
+      v8::Isolate*,
+      const String& name,
+      v8::Local<v8::Function> constructor,
+      v8::Local<v8::Function> process);
 
   const String name_;
 
   // The definition is per global scope. The active instance of
   // |AudioProcessorWorklet| should be passed into these to perform JS function.
-  ScopedPersistent<v8::Function> constructor_;
-  ScopedPersistent<v8::Function> process_;
+  TraceWrapperV8Reference<v8::Function> constructor_;
+  TraceWrapperV8Reference<v8::Function> process_;
 
-  // TODO(hongchan): A container for AudioParamDescriptor objects.
-  // ScopedPersistent<v8::Array> m_parameterDescriptors;
+  HeapVector<AudioParamDescriptor> audio_param_descriptors_;
 };
 
 }  // namespace blink

@@ -16,6 +16,7 @@
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/test/test_service.mojom.h"
+#include "content/shell/common/power_monitor_test_impl.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/renderer/shell_render_view_observer.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -89,8 +90,7 @@ class TestServiceImpl : public mojom::TestService {
   DISALLOW_COPY_AND_ASSIGN(TestServiceImpl);
 };
 
-void CreateTestService(const service_manager::BindSourceInfo& source_info,
-                       mojom::TestServiceRequest request) {
+void CreateTestService(mojom::TestServiceRequest request) {
   // Owns itself.
   new TestServiceImpl(std::move(request));
 }
@@ -108,6 +108,10 @@ void ShellContentRendererClient::RenderThreadStarted() {
   auto registry = base::MakeUnique<service_manager::BinderRegistry>();
   registry->AddInterface<mojom::TestService>(
       base::Bind(&CreateTestService), base::ThreadTaskRunnerHandle::Get());
+  registry->AddInterface<mojom::PowerMonitorTest>(
+      base::Bind(&PowerMonitorTestImpl::MakeStrongBinding,
+                 base::Passed(base::MakeUnique<PowerMonitorTestImpl>())),
+      base::ThreadTaskRunnerHandle::Get());
   content::ChildThread::Get()
       ->GetServiceManagerConnection()
       ->AddConnectionFilter(

@@ -12,12 +12,6 @@ typemaps = [
   "//content/common/service_worker/service_worker_fetch_request.typemap",
   "//content/common/service_worker/service_worker_provider.typemap",
   "//content/common/service_worker/service_worker_types.typemap",
-  "//content/common/ssl_info.typemap",
-  "//content/common/url_loader_status.typemap",
-  "//content/common/url_request.typemap",
-  "//content/common/url_request_redirect_info.typemap",
-  "//content/common/url_response_head.typemap",
-  "//content/common/url_sync_load_result.typemap",
   "//content/common/web_preferences.typemap",
   "//content/common/media/media_session.typemap",
 ]

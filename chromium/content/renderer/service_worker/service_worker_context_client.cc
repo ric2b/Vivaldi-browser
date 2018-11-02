@@ -38,6 +38,7 @@
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_status_code.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/common/worker_url_loader_factory_provider.mojom.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/push_event_payload.h"
@@ -65,8 +66,8 @@
 #include "third_party/WebKit/public/platform/WebURLResponse.h"
 #include "third_party/WebKit/public/platform/modules/background_fetch/WebBackgroundFetchSettledFetch.h"
 #include "third_party/WebKit/public/platform/modules/notifications/WebNotificationData.h"
-#include "third_party/WebKit/public/platform/modules/payments/WebPaymentAppRequest.h"
-#include "third_party/WebKit/public/platform/modules/payments/WebPaymentAppResponse.h"
+#include "third_party/WebKit/public/platform/modules/payments/WebPaymentHandlerResponse.h"
+#include "third_party/WebKit/public/platform/modules/payments/WebPaymentRequestEventData.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerClientQueryOptions.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerError.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
@@ -101,6 +102,19 @@ class WebServiceWorkerNetworkProviderImpl
     // are initiated in a secure context.
     extra_data->set_initiated_in_secure_context(true);
     request.SetExtraData(extra_data.release());
+  }
+
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override {
+    RenderThreadImpl* child_thread = RenderThreadImpl::current();
+    if (child_thread && provider_->script_loader_factory() &&
+        ServiceWorkerUtils::IsServicificationEnabled()) {
+      return base::MakeUnique<WebURLLoaderImpl>(
+          child_thread->resource_dispatcher(), task_runner,
+          provider_->script_loader_factory());
+    }
+    return nullptr;
   }
 
   int GetProviderID() const override { return provider_->provider_id(); }
@@ -210,6 +224,7 @@ void ToWebServiceWorkerRequest(const ServiceWorkerFetchRequest& request,
   web_request->SetFrameType(GetBlinkFrameType(request.frame_type));
   web_request->SetClientId(blink::WebString::FromUTF8(request.client_id));
   web_request->SetIsReload(request.is_reload);
+  web_request->SetIntegrity(blink::WebString::FromUTF8(request.integrity));
 }
 
 // Converts |response| to its equivalent type in the Blink API.
@@ -235,7 +250,7 @@ void ToWebServiceWorkerResponse(const ServiceWorkerResponse& response,
                           response.blob_size);
   }
   web_response->SetError(response.error);
-  web_response->SetResponseTime(response.response_time.ToInternalValue());
+  web_response->SetResponseTime(response.response_time);
   if (response.is_in_cache_storage) {
     web_response->SetCacheStorageCacheName(
         blink::WebString::FromUTF8(response.cache_storage_cache_name));
@@ -352,7 +367,7 @@ struct ServiceWorkerContextClient::WorkerContextData {
 
   // Pending callbacks for Payment App Response.
   std::map<int /* payment_request_id */,
-           payments::mojom::PaymentAppResponseCallbackPtr>
+           payments::mojom::PaymentHandlerResponseCallbackPtr>
       payment_response_callbacks;
 
   // Pending callbacks for Payment Request Events.
@@ -631,13 +646,20 @@ void ServiceWorkerContextClient::GetClients(
       GetRoutingID(), request_id, options));
 }
 
-void ServiceWorkerContextClient::OpenWindow(
+void ServiceWorkerContextClient::OpenNewTab(
     const blink::WebURL& url,
     std::unique_ptr<blink::WebServiceWorkerClientCallbacks> callbacks) {
   DCHECK(callbacks);
   int request_id = context_->client_callbacks.Add(std::move(callbacks));
-  Send(new ServiceWorkerHostMsg_OpenWindow(
-      GetRoutingID(), request_id, url));
+  Send(new ServiceWorkerHostMsg_OpenNewTab(GetRoutingID(), request_id, url));
+}
+
+void ServiceWorkerContextClient::OpenNewPopup(
+    const blink::WebURL& url,
+    std::unique_ptr<blink::WebServiceWorkerClientCallbacks> callbacks) {
+  DCHECK(callbacks);
+  int request_id = context_->client_callbacks.Add(std::move(callbacks));
+  Send(new ServiceWorkerHostMsg_OpenNewPopup(GetRoutingID(), request_id, url));
 }
 
 void ServiceWorkerContextClient::SetCachedMetadata(const blink::WebURL& url,
@@ -668,9 +690,6 @@ void ServiceWorkerContextClient::WorkerContextFailedToStart() {
 }
 
 void ServiceWorkerContextClient::WorkerScriptLoaded() {
-  DCHECK(main_thread_task_runner_->RunsTasksInCurrentSequence());
-  DCHECK(!proxy_);
-
   (*instance_host_)->OnScriptLoaded();
 }
 
@@ -737,7 +756,8 @@ void ServiceWorkerContextClient::DidInitializeWorkerContext(
   GetContentClient()
       ->renderer()
       ->DidInitializeServiceWorkerContextOnWorkerThread(
-          context, service_worker_version_id_, script_url_);
+          context, service_worker_version_id_, service_worker_scope_,
+          script_url_);
 }
 
 void ServiceWorkerContextClient::WillDestroyWorkerContext(
@@ -771,7 +791,7 @@ void ServiceWorkerContextClient::WillDestroyWorkerContext(
   g_worker_client_tls.Pointer()->Set(NULL);
 
   GetContentClient()->renderer()->WillDestroyServiceWorkerContextOnWorkerThread(
-      context, service_worker_version_id_, script_url_);
+      context, service_worker_version_id_, service_worker_scope_, script_url_);
 }
 
 void ServiceWorkerContextClient::WorkerContextDestroyed() {
@@ -1061,14 +1081,15 @@ void ServiceWorkerContextClient::DidHandleSyncEvent(
 
 void ServiceWorkerContextClient::RespondToPaymentRequestEvent(
     int payment_request_id,
-    const blink::WebPaymentAppResponse& web_response,
+    const blink::WebPaymentHandlerResponse& web_response,
     double dispatch_event_time) {
-  const payments::mojom::PaymentAppResponseCallbackPtr& response_callback =
+  const payments::mojom::PaymentHandlerResponseCallbackPtr& response_callback =
       context_->payment_response_callbacks[payment_request_id];
-  payments::mojom::PaymentAppResponsePtr response =
-      payments::mojom::PaymentAppResponse::New();
+  payments::mojom::PaymentHandlerResponsePtr response =
+      payments::mojom::PaymentHandlerResponse::New();
   response->method_name = web_response.method_name.Utf8();
-  response_callback->OnPaymentAppResponse(
+  response->stringified_details = web_response.stringified_details.Utf8();
+  response_callback->OnPaymentHandlerResponse(
       std::move(response), base::Time::FromDoubleT(dispatch_event_time));
   context_->payment_response_callbacks.erase(payment_request_id);
 }
@@ -1206,8 +1227,8 @@ void ServiceWorkerContextClient::DispatchSyncEvent(
 
 void ServiceWorkerContextClient::DispatchPaymentRequestEvent(
     int payment_request_id,
-    payments::mojom::PaymentAppRequestPtr app_request,
-    payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+    payments::mojom::PaymentRequestEventDataPtr eventData,
+    payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
     DispatchPaymentRequestEventCallback callback) {
   TRACE_EVENT0("ServiceWorker",
                "ServiceWorkerContextClient::DispatchPaymentRequestEvent");
@@ -1216,9 +1237,9 @@ void ServiceWorkerContextClient::DispatchPaymentRequestEvent(
   context_->payment_request_event_callbacks.insert(
       std::make_pair(payment_request_id, std::move(callback)));
 
-  blink::WebPaymentAppRequest webAppRequest =
-      mojo::ConvertTo<blink::WebPaymentAppRequest>(std::move(app_request));
-  proxy_->DispatchPaymentRequestEvent(payment_request_id, webAppRequest);
+  blink::WebPaymentRequestEventData webEventData =
+      mojo::ConvertTo<blink::WebPaymentRequestEventData>(std::move(eventData));
+  proxy_->DispatchPaymentRequestEvent(payment_request_id, webEventData);
 }
 
 void ServiceWorkerContextClient::Send(IPC::Message* message) {
@@ -1230,7 +1251,11 @@ void ServiceWorkerContextClient::SendWorkerStarted() {
   TRACE_EVENT_ASYNC_END0("ServiceWorker",
                          "ServiceWorkerContextClient::StartingWorkerContext",
                          this);
-  (*instance_host_)->OnStarted();
+  mojom::EmbeddedWorkerStartTimingPtr timing =
+      mojom::EmbeddedWorkerStartTiming::New();
+  timing->start_worker_received_time = start_worker_received_time_;
+  timing->blink_initialized_time = blink_initialized_time_;
+  (*instance_host_)->OnStarted(std::move(timing));
 }
 
 void ServiceWorkerContextClient::SetRegistrationInServiceWorkerGlobalScope(

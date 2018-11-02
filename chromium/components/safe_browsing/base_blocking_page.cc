@@ -79,6 +79,7 @@ BaseBlockingPage::CreateDefaultDisplayOptions(
       false,                 // is_extended_reporting
       false,                 // is_scout
       false,                 // kSafeBrowsingProceedAnywayDisabled
+      false,                 // should_open_links_in_new_tab
       "cpn_safe_browsing");  // help_center_article_link
 }
 
@@ -103,7 +104,8 @@ void BaseBlockingPage::ShowBlockingPage(
     BaseBlockingPage* blocking_page = new BaseBlockingPage(
         ui_manager, web_contents, entry ? entry->GetURL() : GURL(),
         unsafe_resources,
-        CreateControllerClient(web_contents, unsafe_resources, ui_manager),
+        CreateControllerClient(web_contents, unsafe_resources, ui_manager,
+                               nullptr),
         CreateDefaultDisplayOptions(unsafe_resources));
     blocking_page->Show();
   }
@@ -264,6 +266,8 @@ std::string BaseBlockingPage::GetExtraMetricsSuffix(
       return "from_device_v4";
     case safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION:
       return "from_client_side_detection";
+    case safe_browsing::ThreatSource::PASSWORD_PROTECTION_SERVICE:
+      return "from_password_protection_service";
     case safe_browsing::ThreatSource::UNKNOWN:
       break;
   }
@@ -281,13 +285,14 @@ BaseBlockingPage::GetInterstitialReason(
     const BaseUIManager::UnsafeResource& resource = *iter;
     safe_browsing::SBThreatType threat_type = resource.threat_type;
     if (threat_type == SB_THREAT_TYPE_URL_MALWARE ||
-        threat_type == SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL) {
+        threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE) {
       return BaseSafeBrowsingErrorUI::SB_REASON_MALWARE;
     } else if (threat_type == SB_THREAT_TYPE_URL_UNWANTED) {
       harmful = true;
     } else {
       DCHECK(threat_type == SB_THREAT_TYPE_URL_PHISHING ||
-             threat_type == SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL);
+             threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
+             threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING);
     }
   }
 
@@ -335,7 +340,8 @@ std::unique_ptr<SecurityInterstitialControllerClient>
 BaseBlockingPage::CreateControllerClient(
     content::WebContents* web_contents,
     const UnsafeResourceList& unsafe_resources,
-    BaseUIManager* ui_manager) {
+    BaseUIManager* ui_manager,
+    PrefService* pref_service) {
   history::HistoryService* history_service =
       ui_manager->history_service(web_contents);
 
@@ -345,7 +351,7 @@ BaseBlockingPage::CreateControllerClient(
           history_service);
 
   return base::MakeUnique<SecurityInterstitialControllerClient>(
-      web_contents, std::move(metrics_helper), nullptr, /* prefs */
+      web_contents, std::move(metrics_helper), pref_service,
       ui_manager->app_locale(), ui_manager->default_safe_page());
 }
 
@@ -356,6 +362,16 @@ int BaseBlockingPage::GetHTMLTemplateId() {
 void BaseBlockingPage::set_sb_error_ui(
     std::unique_ptr<BaseSafeBrowsingErrorUI> sb_error_ui) {
   sb_error_ui_ = std::move(sb_error_ui);
+}
+
+// static
+bool BaseBlockingPage::ShouldReportThreatDetails(SBThreatType threat_type) {
+  return threat_type == SB_THREAT_TYPE_URL_PHISHING ||
+         threat_type == SB_THREAT_TYPE_URL_MALWARE ||
+         threat_type == SB_THREAT_TYPE_URL_UNWANTED ||
+         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING ||
+         threat_type == SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE ||
+         threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING;
 }
 
 }  // namespace safe_browsing

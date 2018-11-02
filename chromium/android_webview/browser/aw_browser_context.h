@@ -42,10 +42,15 @@ namespace visitedlink {
 class VisitedLinkMaster;
 }
 
+namespace safe_browsing {
+class TriggerManager;
+}  // namespace safe_browsing
+
 namespace android_webview {
 
 class AwFormDatabaseService;
 class AwQuotaManagerBridge;
+class AwSafeBrowsingWhitelistManager;
 class AwURLRequestContextGetter;
 
 namespace prefs {
@@ -97,6 +102,8 @@ class AwBrowserContext : public content::BrowserContext,
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
+      override;
   net::URLRequestContextGetter* CreateRequestContext(
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
@@ -113,8 +120,10 @@ class AwBrowserContext : public content::BrowserContext,
   // visitedlink::VisitedLinkDelegate implementation.
   void RebuildTable(const scoped_refptr<URLEnumerator>& enumerator) override;
 
-  AwSafeBrowsingUIManager* GetSafeBrowsingUIManager();
+  AwSafeBrowsingUIManager* GetSafeBrowsingUIManager() const;
   safe_browsing::RemoteSafeBrowsingDatabaseManager* GetSafeBrowsingDBManager();
+  safe_browsing::TriggerManager* GetSafeBrowsingTriggerManager() const;
+  AwSafeBrowsingWhitelistManager* GetSafeBrowsingWhitelistManager() const;
 
  private:
   void InitUserPrefService();
@@ -148,9 +157,13 @@ class AwBrowserContext : public content::BrowserContext,
   PrefChangeRegistrar pref_change_registrar_;
 
   scoped_refptr<AwSafeBrowsingUIManager> safe_browsing_ui_manager_;
+  std::unique_ptr<safe_browsing::TriggerManager> safe_browsing_trigger_manager_;
   scoped_refptr<safe_browsing::RemoteSafeBrowsingDatabaseManager>
       safe_browsing_db_manager_;
   bool safe_browsing_db_manager_started_ = false;
+
+  std::unique_ptr<AwSafeBrowsingWhitelistManager>
+      safe_browsing_whitelist_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(AwBrowserContext);
 };

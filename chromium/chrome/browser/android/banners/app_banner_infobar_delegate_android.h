@@ -39,11 +39,9 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   // app, and adds the infobar to the InfoBarManager for |web_contents|.
   static bool Create(content::WebContents* web_contents,
                      base::WeakPtr<AppBannerManager> weak_manager,
-                     const base::string16& app_title,
                      std::unique_ptr<ShortcutInfo> info,
                      const SkBitmap& primary_icon,
                      const SkBitmap& badge_icon,
-                     int event_request_id,
                      bool is_webapk,
                      webapk::InstallSource webapk_install_source);
 
@@ -54,9 +52,8 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
       const base::string16& app_title,
       const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
       const SkBitmap& icon,
-      const std::string& native_app_package,
-      const std::string& referrer,
-      int event_request_id);
+      const std::string& native_app_package_name,
+      const std::string& referrer);
 
   ~AppBannerInfoBarDelegateAndroid() override;
 
@@ -78,9 +75,6 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   // ConfirmInfoBarDelegate:
   bool Accept() override;
 
-  // Update the AppBannerInfoBarAndroid with installed WebAPK's information.
-  void UpdateStateForInstalledWebAPK(const std::string& webapk_package_name);
-
  private:
   // The states of a WebAPK installation, where the infobar is displayed during
   // the entire installation process. This state is used to correctly record
@@ -94,11 +88,9 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   // Delegate for promoting a web app.
   AppBannerInfoBarDelegateAndroid(
       base::WeakPtr<AppBannerManager> weak_manager,
-      const base::string16& app_title,
       std::unique_ptr<ShortcutInfo> info,
       const SkBitmap& primary_icon,
       const SkBitmap& badge_icon,
-      int event_request_id,
       bool is_webapk,
       webapk::InstallSource webapk_install_source);
 
@@ -107,9 +99,8 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
       const base::string16& app_title,
       const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
       const SkBitmap& icon,
-      const std::string& native_app_package,
-      const std::string& referrer,
-      int event_request_id);
+      const std::string& native_app_package_name,
+      const std::string& referrer);
 
   void CreateJavaDelegate();
   bool AcceptNativeApp(content::WebContents* web_contents);
@@ -158,9 +149,8 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
   const SkBitmap primary_icon_;
   const SkBitmap badge_icon_;
 
-  std::string native_app_package_;
+  std::string package_name_;
   std::string referrer_;
-  int event_request_id_;
   bool has_user_interaction_;
 
   bool is_webapk_;
@@ -176,9 +166,6 @@ class AppBannerInfoBarDelegateAndroid : public ConfirmInfoBarDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(AppBannerInfoBarDelegateAndroid);
 };
-
-// Register native methods.
-bool RegisterAppBannerInfoBarDelegateAndroid(JNIEnv* env);
 
 }  // namespace banners
 

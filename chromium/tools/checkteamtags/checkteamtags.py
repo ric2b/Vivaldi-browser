@@ -52,7 +52,7 @@ def validate_mappings(options, args):
       team = mappings_file['component-to-team'].get(component)
     else:
       team = None
-    current_mappings[dir_name] = (team, component)
+    current_mappings[dir_name] = {'team': team, 'component': component}
 
   # Extract dir -> (team, component) for affected files
   affected = {}
@@ -73,7 +73,8 @@ def validate_mappings(options, args):
   team_to_dir = defaultdict(list)
   errors = {}
   for dir_name, tags in current_mappings.iteritems():
-    team, component = tags
+    team = tags.get('team')
+    component = tags.get('component')
     if component:
       new_dir_to_component[dir_name] = component
     if team:
@@ -90,9 +91,11 @@ def validate_mappings(options, args):
     error_message = 'The component "%s" has more than one team: ' % component
     team_details = []
     for team in teams:
+      offending_dirs = [d for d in team_to_dir[team]
+                        if new_dir_to_component[d] == component]
       team_details.append('%(team)s is used in %(paths)s' % {
           'team': team,
-          'paths': ', '.join(team_to_dir[team]),
+          'paths': ', '.join(offending_dirs),
       })
     error_message += '; '.join(team_details)
     result.append({

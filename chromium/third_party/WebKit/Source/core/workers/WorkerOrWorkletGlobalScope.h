@@ -7,27 +7,24 @@
 
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/UseCounter.h"
+#include "core/workers/WorkerClients.h"
 
 namespace blink {
 
+class ResourceFetcher;
 class ScriptWrappable;
 class WorkerOrWorkletScriptController;
 class WorkerThread;
 
 class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
  public:
-  explicit WorkerOrWorkletGlobalScope(v8::Isolate*);
+  WorkerOrWorkletGlobalScope(v8::Isolate*, WorkerClients*);
   virtual ~WorkerOrWorkletGlobalScope();
 
   // ExecutionContext
   bool IsWorkerOrWorkletGlobalScope() const final { return true; }
   bool IsJSExecutionForbidden() const final;
   void DisableEval(const String& error_message) final;
-  void PostTask(
-      TaskType,
-      const WebTraceLocation&,
-      std::unique_ptr<ExecutionContextTask>,
-      const String& task_name_for_instrumentation = g_empty_string) final;
   bool CanExecuteScripts(ReasonForCallingCanExecuteScripts) final;
 
   virtual ScriptWrappable* GetScriptWrappable() const = 0;
@@ -43,15 +40,20 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   virtual void Dispose();
 
   // Called from UseCounter to record API use in this execution context.
-  void CountFeature(UseCounter::Feature);
+  void CountFeature(WebFeature);
 
   // Called from UseCounter to record deprecated API use in this execution
   // context.
-  void CountDeprecation(UseCounter::Feature);
+  void CountDeprecation(WebFeature);
 
   // May return nullptr if this global scope is not threaded (i.e.,
   // MainThreadWorkletGlobalScope) or after dispose() is called.
   virtual WorkerThread* GetThread() const = 0;
+
+  // Available only when off-main-thread-fetch is enabled.
+  ResourceFetcher* GetResourceFetcher();
+
+  WorkerClients* Clients() const { return worker_clients_.Get(); }
 
   WorkerOrWorkletScriptController* ScriptController() {
     return script_controller_.Get();
@@ -60,12 +62,12 @@ class CORE_EXPORT WorkerOrWorkletGlobalScope : public ExecutionContext {
   DECLARE_VIRTUAL_TRACE();
 
  protected:
-  virtual void ReportFeature(UseCounter::Feature) = 0;
-  virtual void ReportDeprecation(UseCounter::Feature) = 0;
+  virtual void ReportFeature(WebFeature) = 0;
+  virtual void ReportDeprecation(WebFeature) = 0;
 
  private:
-  void RunTask(std::unique_ptr<ExecutionContextTask>, bool is_instrumented);
-
+  CrossThreadPersistent<WorkerClients> worker_clients_;
+  Member<ResourceFetcher> resource_fetcher_;
   Member<WorkerOrWorkletScriptController> script_controller_;
 
   // This is the set of features that this worker has used.

@@ -9,7 +9,6 @@
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/task/cancelable_task_tracker.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
@@ -32,6 +31,9 @@ class GpuMemoryBufferFactory;
 class GpuWatchdogThread;
 class Scheduler;
 class SyncPointManager;
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+class ProprietaryMediaGpuChannelManager;
+#endif
 }
 
 namespace media {
@@ -74,6 +76,9 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   }
 
   gpu::ImageFactory* gpu_image_factory();
+  gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory() {
+    return gpu_memory_buffer_factory_.get();
+  }
 
   gpu::GpuWatchdogThread* watchdog_thread() { return watchdog_thread_.get(); }
 
@@ -132,6 +137,10 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
       bool is_gpu_host,
       const EstablishGpuChannelCallback& callback) override;
   void CloseChannel(int32_t client_id) override;
+  void CreateJpegDecodeAccelerator(
+      media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) override;
+  void CreateVideoEncodeAccelerator(
+      media::mojom::VideoEncodeAcceleratorRequest vea_request) override;
   void CreateGpuMemoryBuffer(
       gfx::GpuMemoryBufferId id,
       const gfx::Size& size,
@@ -147,7 +156,7 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
       const GetVideoMemoryUsageStatsCallback& callback) override;
   void RequestCompleteGpuInfo(
       const RequestCompleteGpuInfoCallback& callback) override;
-  void LoadedShader(const std::string& data) override;
+  void LoadedShader(const std::string& key, const std::string& data) override;
   void DestroyingVideoSurface(
       int32_t surface_id,
       const DestroyingVideoSurfaceCallback& callback) override;
@@ -179,6 +188,11 @@ class GpuService : public gpu::GpuChannelManagerDelegate,
   scoped_refptr<mojom::ThreadSafeGpuHostPtr> gpu_host_;
   std::unique_ptr<gpu::GpuChannelManager> gpu_channel_manager_;
   std::unique_ptr<media::MediaGpuChannelManager> media_gpu_channel_manager_;
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  std::unique_ptr<gpu::ProprietaryMediaGpuChannelManager>
+      proprietary_media_gpu_channel_manager_;
+#endif
 
   // On some platforms (e.g. android webview), the SyncPointManager comes from
   // external sources.

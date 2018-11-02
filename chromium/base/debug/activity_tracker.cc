@@ -49,7 +49,7 @@ const char kProcessPhaseDataKey[] = "process-phase";
 
 // An atomically incrementing number, used to check for recreations of objects
 // in the same memory space.
-StaticAtomicSequenceNumber g_next_id;
+AtomicSequenceNumber g_next_id;
 
 union ThreadRef {
   int64_t as_id;
@@ -1599,6 +1599,12 @@ void GlobalActivityTracker::RecordFieldTrial(const std::string& trial_name,
                                              StringPiece group_name) {
   const std::string key = std::string("FieldTrial.") + trial_name;
   process_data_.SetString(key, group_name);
+}
+
+void GlobalActivityTracker::RecordException(const void* pc,
+                                            const void* origin,
+                                            uint32_t code) {
+  RecordExceptionImpl(pc, origin, code);
 }
 
 void GlobalActivityTracker::MarkDeleted() {

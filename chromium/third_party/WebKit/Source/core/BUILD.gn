@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/chromecast_build.gni")
+import("//build/config/compiler/compiler.gni")
 import("//build/toolchain/toolchain.gni")
 import("//build/config/ui.gni")
 import("//build/split_static_library.gni")
@@ -80,6 +81,7 @@ source_set("generated") {
     ":prerequisites",
     "//gin",
     "//skia",
+    "//third_party/WebKit/Source/bindings/core/v8:bindings_core_conditional_features",
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
     "//third_party/WebKit/Source/core/inspector:generated",
     "//third_party/WebKit/Source/core/probe:generated",
@@ -92,7 +94,7 @@ source_set("generated") {
 
     # FIXME: don't depend on bindings/modules http://crbug.com/358074
     "//third_party/WebKit/Source/bindings/modules:bindings_modules_generated",
-    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_generated",
+    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_v8_generated",
     "//third_party/WebKit/Source/platform:make_platform_generated",
     "//third_party/WebKit/Source/platform/wtf",
     "//url",
@@ -103,10 +105,11 @@ source_set("generated") {
 source_set("prerequisites") {
   public_deps = [
     "//gpu/command_buffer/client:gles2_c_lib",
+    "//services/service_manager/public/cpp",
     "//skia",
     "//third_party/WebKit/Source/core/inspector:generated",
     "//third_party/WebKit/Source/core/probe:generated",
-    "//third_party/WebKit/Source/platform/wtf",
+    "//third_party/WebKit/Source/platform",
     "//third_party/angle:translator",
     "//third_party/iccjpeg",
     "//third_party/icu",
@@ -126,8 +129,7 @@ source_set("prerequisites") {
     "//third_party/WebKit/Source/bindings/core/v8:bindings_core_v8_generated",
 
     # FIXME: don't depend on bindings_modules http://crbug.com/358074
-    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_generated",
-    "//third_party/WebKit/Source/platform",
+    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_v8_generated",
   ]
 
   public_configs = [
@@ -173,6 +175,7 @@ component("core") {
   deps = [
     "//third_party/WebKit/Source/core/animation",
     "//third_party/WebKit/Source/core/clipboard",
+    "//third_party/WebKit/Source/core/context_features",
     "//third_party/WebKit/Source/core/css",
     "//third_party/WebKit/Source/core/dom",
     "//third_party/WebKit/Source/core/editing",
@@ -180,11 +183,13 @@ component("core") {
     "//third_party/WebKit/Source/core/exported",
     "//third_party/WebKit/Source/core/fileapi",
     "//third_party/WebKit/Source/core/frame",
+    "//third_party/WebKit/Source/core/fullscreen",
     "//third_party/WebKit/Source/core/geometry",
     "//third_party/WebKit/Source/core/html",
     "//third_party/WebKit/Source/core/imagebitmap",
     "//third_party/WebKit/Source/core/input",
     "//third_party/WebKit/Source/core/inspector",
+    "//third_party/WebKit/Source/core/intersection_observer",
     "//third_party/WebKit/Source/core/layout",
     "//third_party/WebKit/Source/core/layout/svg:svg_layout",
     "//third_party/WebKit/Source/core/loader",
@@ -195,22 +200,27 @@ component("core") {
     "//third_party/WebKit/Source/core/paint",
     "//third_party/WebKit/Source/core/plugins",
     "//third_party/WebKit/Source/core/probe",
+    "//third_party/WebKit/Source/core/resize_observer",
     "//third_party/WebKit/Source/core/streams",
     "//third_party/WebKit/Source/core/style:rendering",
     "//third_party/WebKit/Source/core/style:svg_style",
     "//third_party/WebKit/Source/core/svg",
     "//third_party/WebKit/Source/core/timing",
+    "//third_party/WebKit/Source/core/typed_arrays",
+    "//third_party/WebKit/Source/core/url",
     "//third_party/WebKit/Source/core/workers",
     "//third_party/WebKit/Source/core/xml",
     "//third_party/WebKit/Source/core/xmlhttprequest",
   ]
 
-  if (is_win && is_debug && is_component_build && current_cpu == "x64") {
-    # Incremental linking doesn't work on this target in debug mode for
-    # 64-bit builds - the .ilk file gets too large and the incremental
-    # link silently fails. Therefore 32-bit builds or 64-bit release builds
-    # (component either way) should be used for fastest incremental build
-    # performance. VC++ bug filed for 64-bit debug incremental link failures:
+  if (is_win && is_debug && is_component_build &&
+      (current_cpu == "x64" || is_clang)) {
+    # Incremental linking fails when the .ilk file gets too large.
+    # 64-bit debug builds and Clang builds with full symbols trigger this
+    # problem, so we turn off incremental linking in those configurations.
+    # For fastest builds, use component release builds without debug
+    # information.
+    # VC++ bug filed for 64-bit debug incremental link failures:
     # https://connect.microsoft.com/VisualStudio/feedback/details/2846790
     configs -= [ "//build/config/win:default_incremental_linking" ]
     configs += [ "//build/config/win:no_incremental_linking" ]
@@ -226,7 +236,7 @@ component("core") {
   }
 }
 
-source_set("testing") {
+jumbo_source_set("testing") {
   configs += [
     ":blink_core_pch",
     "//third_party/WebKit/Source:config",
@@ -322,7 +332,6 @@ generate_event_interfaces("core_event_interfaces") {
     "events/PopStateEvent.idl",
     "events/ProgressEvent.idl",
     "events/PromiseRejectionEvent.idl",
-    "events/RelatedEvent.idl",
     "events/ResourceProgressEvent.idl",
     "events/SecurityPolicyViolationEvent.idl",
     "events/TextEvent.idl",
@@ -331,6 +340,7 @@ generate_event_interfaces("core_event_interfaces") {
     "events/UIEvent.idl",
     "events/WheelEvent.idl",
     "html/track/TrackEvent.idl",
+    "mojo/test/MojoInterfaceRequestEvent.idl",
   ]
   output_file = "core/EventInterfaces.json5"
 }
@@ -424,16 +434,19 @@ css_properties("make_core_generated_computed_style_base") {
     "../build/scripts/templates/fields/storage_only.tmpl",
     "../build/scripts/templates/fields/external.tmpl",
     "../build/scripts/templates/ComputedStyleBase.h.tmpl",
+    "../build/scripts/templates/ComputedStyleBase.cpp.tmpl",
     "../build/scripts/templates/ComputedStyleBaseConstants.h.tmpl",
   ]
   outputs = [
     "$blink_core_output_dir/ComputedStyleBase.h",
+    "$blink_core_output_dir/ComputedStyleBase.cpp",
     "$blink_core_output_dir/ComputedStyleBaseConstants.h",
   ]
 }
 
 css_properties("make_core_generated_css_value_id_mappings") {
   script = "../build/scripts/make_css_value_id_mappings.py"
+  in_files = [ "css/CSSValueKeywords.json5" ]
   other_inputs =
       [ "../build/scripts/templates/CSSValueIDMappingsGenerated.h.tmpl" ]
   outputs = [
@@ -448,25 +461,32 @@ css_properties("make_core_generated_css_property_apis") {
     "../build/scripts/templates/CSSPropertyDescriptor.cpp.tmpl",
     "../build/scripts/templates/CSSPropertyDescriptor.h.tmpl",
     "../build/scripts/templates/CSSPropertyAPIFiles.h.tmpl",
-    "../build/scripts/templates/CSSPropertyAPI.h.tmpl",
   ]
   in_files = [ "css/properties/CSSPropertyAPIMethods.json5" ]
   outputs = [
-    "$blink_core_output_dir/css/properties/CSSPropertyAPI.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIAlignItems.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIAlignOrJustifyContent.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIAlignOrJustifySelf.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAnimationDirection.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAnimationFillMode.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAnimationIterationCount.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAnimationName.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAnimationPlayState.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIAutoOrString.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBaselineShift.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderColor.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderImageOutset.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderImageRepeat.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderImageSlice.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderImageWidth.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderRadius.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIBorderWidth.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIBoxShadow.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPICaretColor.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIClip.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIClipPath.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIColor.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIColorNoQuirks.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIColumnCount.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIColumnGap.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIColumnRuleWidth.h",
@@ -489,6 +509,7 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantLigatures.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariantNumeric.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFontVariationSettings.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIFontWeight.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIFragmentation.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIGridAutoFlow.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIGridAutoLine.h",
@@ -503,6 +524,7 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPILineHeightStep.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIMargin.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIMarker.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIObjectPosition.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetAnchor.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetDistance.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIOffsetPath.h",
@@ -518,11 +540,15 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIPaintOrder.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIPaintStroke.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIPerspective.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIPerspectiveOrigin.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIQuotes.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIRadius.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIRotate.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIScale.h",
-    "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollSnapCoordinate.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollSnapAlign.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollPadding.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollSnapMargin.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIScrollSnapType.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeImageThreshold.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeMargin.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIShapeOutside.h",
@@ -531,16 +557,17 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIStrokeMiterlimit.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIStrokeOrLength.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITabSize.h",
-    "$blink_core_output_dir/css/properties/CSSPropertyAPITextDecoration.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextDecorationColor.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextDecorationLine.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextDecorationSkip.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextIndent.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPITextShadow.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextSizeAdjust.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITextUnderlinePosition.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITouchAction.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITransform.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITransformOrigin.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPITransitionProperty.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPITranslate.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIVerticalAlign.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitBorderImage.h",
@@ -548,6 +575,7 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitBorderWidth.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitBoxFlex.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitBoxFlexGroup.h",
+    "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitBoxReflect.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitFontSizeDelta.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitHighlight.h",
     "$blink_core_output_dir/css/properties/CSSPropertyAPIWebkitLineClamp.h",
@@ -567,11 +595,51 @@ css_properties("make_core_generated_css_property_apis") {
     "$blink_core_output_dir/css/properties/CSSPropertyAPIZoom.h",
     "$blink_core_output_dir/css/properties/CSSPropertyDescriptor.cpp",
     "$blink_core_output_dir/css/properties/CSSPropertyDescriptor.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBackgroundPosition.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderBottom.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderColor.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderImage.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderLeft.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderRadius.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderRight.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderSpacing.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderStyle.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderTop.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIBorderWidth.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIColumnRule.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIColumns.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIFlex.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIFlexFlow.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIFont.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIFontVariant.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIListStyle.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIMargin.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIOutline.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIOverflow.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIOffset.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIPadding.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollPadding.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollPaddingBlock.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollPaddingInline.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollSnapMargin.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollSnapMarginBlock.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIScrollSnapMarginInline.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPITextDecoration.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitBorderAfter.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitBorderBefore.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitBorderEnd.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitBorderStart.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitMarginCollapse.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitMaskBoxImage.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitMaskPosition.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitTextEmphasis.h",
+    "$blink_core_output_dir/css/properties/CSSShorthandPropertyAPIWebkitTextStroke.h",
   ]
 }
 
 css_properties("make_core_generated_css_property_names") {
   script = "../build/scripts/make_css_property_names.py"
+  other_inputs = [ "../build/scripts/templates/CSSPropertyNames.h.tmpl" ]
   outputs = [
     "$blink_core_output_dir/CSSPropertyNames.cpp",
     "$blink_core_output_dir/CSSPropertyNames.h",
@@ -616,11 +684,12 @@ css_properties("make_core_generated_style_builder") {
   ]
 }
 
-css_properties("make_core_generated_cssom_types") {
-  script = "../build/scripts/make_cssom_types.py"
-  other_inputs = [
-    "../build/scripts/templates/CSSOMKeywords.cpp.tmpl",
-    "../build/scripts/templates/CSSOMTypes.cpp.tmpl",
+code_generator("make_core_generated_cssom_types") {
+  script = "../build/scripts/core/css/make_cssom_types.py"
+  json_inputs = [ "css/CSSProperties.json5" ]
+  templates = [
+    "../build/scripts/core/css/templates/CSSOMKeywords.cpp.tmpl",
+    "../build/scripts/core/css/templates/CSSOMTypes.cpp.tmpl",
   ]
   outputs = [
     "$blink_core_output_dir/CSSOMKeywords.cpp",
@@ -1044,7 +1113,7 @@ group("all_generators") {
 }
 
 # Compiles the code generated by the targets above.
-target(core_link_small_target_type, "core_generated") {
+target("jumbo_" + core_link_small_target_type, "core_generated") {
   sources = bindings_core_v8_files
 
   # Add all sources generated by the targets above.
@@ -1074,7 +1143,7 @@ target(core_link_small_target_type, "core_generated") {
 
     # FIXME: don't depend on bindings/modules http://crbug.com/358074
     "//third_party/WebKit/Source/bindings/modules:bindings_modules_generated",
-    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_generated",
+    "//third_party/WebKit/Source/bindings/modules/v8:bindings_modules_v8_generated",
     "//third_party/WebKit/Source/platform:make_platform_generated",
     "//third_party/WebKit/Source/platform/wtf",
     "//url",
@@ -1120,16 +1189,16 @@ fuzzer_test("text_resource_decoder_fuzzer") {
   ]
 }
 
-source_set("unit_tests") {
+jumbo_source_set("unit_tests") {
   testonly = true
   sources = [
     "animation/AnimationClockTest.cpp",
     "animation/AnimationEffectReadOnlyTest.cpp",
     "animation/AnimationInputHelpersTest.cpp",
+    "animation/AnimationSimTest.cpp",
     "animation/AnimationTest.cpp",
     "animation/AnimationTestHelper.cpp",
     "animation/AnimationTestHelper.h",
-    "animation/AnimationTimelineTest.cpp",
     "animation/CompositorAnimationsTest.cpp",
     "animation/DocumentTimelineTest.cpp",
     "animation/EffectInputTest.cpp",
@@ -1142,6 +1211,7 @@ source_set("unit_tests") {
     "animation/TimingCalculationsTest.cpp",
     "animation/TimingInputTest.cpp",
     "clipboard/DataObjectTest.cpp",
+    "clipboard/DataTransferTest.cpp",
     "css/ActiveStyleSheetsTest.cpp",
     "css/AffectedByPseudoTest.cpp",
     "css/CSSCalculationValueTest.cpp",
@@ -1183,15 +1253,20 @@ source_set("unit_tests") {
     "css/resolver/MatchResultTest.cpp",
     "css/resolver/ScopedStyleResolverTest.cpp",
     "css/resolver/SharedStyleFinderTest.cpp",
+    "css/resolver/StyleAdjusterTest.cpp",
+    "css/threaded/CSSParserThreadedTest.cpp",
+    "css/threaded/CSSToLengthConversionDataThreadedTest.cpp",
+    "css/threaded/FilterOperationResolverThreadedTest.cpp",
+    "css/threaded/FontObjectThreadedTest.cpp",
+    "css/threaded/TextRendererThreadedTest.cpp",
     "dom/AttrTest.cpp",
     "dom/CSSSelectorWatchTest.cpp",
     "dom/DOMImplementationTest.cpp",
     "dom/DocumentStatisticsCollectorTest.cpp",
     "dom/DocumentTest.cpp",
-    "dom/DocumentUserGestureTokenTest.cpp",
     "dom/ElementTest.cpp",
     "dom/ElementVisibilityObserverTest.cpp",
-    "dom/ExecutionContextTaskTest.cpp",
+    "dom/FlatTreeTraversalTest.cpp",
     "dom/IdleDeadlineTest.cpp",
     "dom/LayoutTreeBuilderTraversalTest.cpp",
     "dom/MockScriptElementBase.h",
@@ -1206,6 +1281,7 @@ source_set("unit_tests") {
     "dom/ScriptedAnimationControllerTest.cpp",
     "dom/ScriptedIdleTaskControllerTest.cpp",
     "dom/SelectorQueryTest.cpp",
+    "dom/ShadowDOMV0Test.cpp",
     "dom/SpaceSplitStringTest.cpp",
     "dom/StaticRangeTest.cpp",
     "dom/StyleElementTest.cpp",
@@ -1213,36 +1289,56 @@ source_set("unit_tests") {
     "dom/SuspendableObjectTest.cpp",
     "dom/TextTest.cpp",
     "dom/TreeScopeTest.cpp",
-    "dom/URLSearchParamsTest.cpp",
-    "dom/custom/CustomElementDefinitionTest.cpp",
-    "dom/custom/CustomElementDescriptorTest.cpp",
-    "dom/custom/CustomElementReactionQueueTest.cpp",
-    "dom/custom/CustomElementReactionStackTest.cpp",
-    "dom/custom/CustomElementReactionTestHelpers.h",
-    "dom/custom/CustomElementRegistryTest.cpp",
-    "dom/custom/CustomElementTest.cpp",
-    "dom/custom/CustomElementTestHelpers.cpp",
-    "dom/custom/CustomElementTestHelpers.h",
-    "dom/custom/CustomElementUpgradeSorterTest.cpp",
-    "dom/shadow/FlatTreeTraversalTest.cpp",
-    "dom/shadow/SlotScopedTraversalTest.cpp",
+    "dom/UserGestureIndicatorTest.cpp",
+    "dom/WhitespaceAttacherTest.cpp",
     "editing/CaretDisplayItemClientTest.cpp",
+    "editing/KeyboardTest.cpp",
+    "editing/LinkSelectionTest.cpp",
+    "editing/TextFinderTest.cpp",
     "events/EventPathTest.cpp",
     "events/EventTargetTest.cpp",
+    "events/ListenerLeakTest.cpp",
     "events/PointerEventFactoryTest.cpp",
     "events/TouchEventTest.cpp",
+    "events/WebInputEventConversionTest.cpp",
+    "exported/FakeWebPlugin.cpp",
+    "exported/FakeWebPlugin.h",
+    "exported/PrerenderingTest.cpp",
+    "exported/WebAssociatedURLLoaderImplTest.cpp",
+    "exported/WebDocumentSubresourceFilterTest.cpp",
+    "exported/WebDocumentTest.cpp",
+    "exported/WebDragDataTest.cpp",
+    "exported/WebElementTest.cpp",
+    "exported/WebFrameSerializerTest.cpp",
+    "exported/WebHelperPluginTest.cpp",
+    "exported/WebMeaningfulLayoutsTest.cpp",
+    "exported/WebNodeTest.cpp",
+    "exported/WebPluginContainerTest.cpp",
+    "exported/WebRangeTest.cpp",
+    "exported/WebScopedWindowFocusAllowedIndicatorTest.cpp",
+    "exported/WebSearchableFormDataTest.cpp",
+    "exported/WebSelectorTest.cpp",
+    "exported/WebUserGestureTokenTest.cpp",
+    "exported/WebViewTest.cpp",
     "fileapi/FileListTest.cpp",
     "fileapi/FileTest.cpp",
+    "frame/BrowserControlsTest.cpp",
     "frame/DOMTimerTest.cpp",
-    "frame/FrameViewTest.cpp",
+    "frame/DeferredLoadingTest.cpp",
+    "frame/DocumentLoadingRenderingTest.cpp",
+    "frame/FrameSerializerTest.cpp",
+    "frame/FrameTest.cpp",
+    "frame/FrameTestHelpers.cpp",
+    "frame/FrameTestHelpers.h",
     "frame/HistoryTest.cpp",
-    "frame/ImageBitmapTest.cpp",
-    "frame/LocalFrameTest.cpp",
+    "frame/LocalFrameViewTest.cpp",
+    "frame/MHTMLTest.cpp",
     "frame/OriginsUsingFeaturesTest.cpp",
     "frame/PerformanceMonitorTest.cpp",
     "frame/RootFrameViewportTest.cpp",
     "frame/SubresourceIntegrityTest.cpp",
     "frame/UseCounterTest.cpp",
+    "frame/VisualViewportTest.cpp",
     "frame/csp/CSPDirectiveListTest.cpp",
     "frame/csp/CSPSourceTest.cpp",
     "frame/csp/ContentSecurityPolicyTest.cpp",
@@ -1253,6 +1349,7 @@ source_set("unit_tests") {
     "html/HTMLDimensionTest.cpp",
     "html/HTMLEmbedElementTest.cpp",
     "html/HTMLFormControlElementTest.cpp",
+    "html/HTMLFrameElementTest.cpp",
     "html/HTMLIFrameElementAllowTest.cpp",
     "html/HTMLIFrameElementTest.cpp",
     "html/HTMLImageElementTest.cpp",
@@ -1263,17 +1360,31 @@ source_set("unit_tests") {
     "html/HTMLMediaElementTest.cpp",
     "html/HTMLOutputElementTest.cpp",
     "html/HTMLSelectElementTest.cpp",
+    "html/HTMLSlotElementTest.cpp",
     "html/HTMLTableRowElementTest.cpp",
     "html/HTMLTextAreaElementTest.cpp",
     "html/HTMLVideoElementPersistentTest.cpp",
     "html/ImageDataTest.cpp",
     "html/ImageDocumentTest.cpp",
+    "html/LinkElementLoadingTest.cpp",
     "html/LinkRelAttributeTest.cpp",
+    "html/MediaElementFillingViewportTest.cpp",
     "html/TextControlElementTest.cpp",
     "html/TimeRangesTest.cpp",
     "html/canvas/CanvasAsyncBlobCreatorTest.cpp",
     "html/canvas/CanvasFontCacheTest.cpp",
+    "html/custom/CustomElementDefinitionTest.cpp",
+    "html/custom/CustomElementDescriptorTest.cpp",
+    "html/custom/CustomElementReactionQueueTest.cpp",
+    "html/custom/CustomElementReactionStackTest.cpp",
+    "html/custom/CustomElementReactionTestHelpers.h",
+    "html/custom/CustomElementRegistryTest.cpp",
+    "html/custom/CustomElementTest.cpp",
+    "html/custom/CustomElementTestHelpers.cpp",
+    "html/custom/CustomElementTestHelpers.h",
+    "html/custom/CustomElementUpgradeSorterTest.cpp",
     "html/forms/EmailInputTypeTest.cpp",
+    "html/forms/ExternalPopupMenuTest.cpp",
     "html/forms/FileInputTypeTest.cpp",
     "html/forms/OptionListTest.cpp",
     "html/forms/PasswordInputTypeTest.cpp",
@@ -1283,6 +1394,7 @@ source_set("unit_tests") {
     "html/parser/AtomicHTMLTokenTest.cpp",
     "html/parser/CSSPreloadScannerTest.cpp",
     "html/parser/CompactHTMLTokenTest.cpp",
+    "html/parser/HTMLDocumentParserLoadingTest.cpp",
     "html/parser/HTMLDocumentParserTest.cpp",
     "html/parser/HTMLEntityParserTest.cpp",
     "html/parser/HTMLParserIdiomsTest.cpp",
@@ -1296,22 +1408,26 @@ source_set("unit_tests") {
     "html/track/TextTrackListTest.cpp",
     "html/track/vtt/BufferedLineReaderTest.cpp",
     "html/track/vtt/VTTScannerTest.cpp",
+    "imagebitmap/ImageBitmapTest.cpp",
     "input/EventHandlerTest.cpp",
+    "input/ImeOnFocusTest.cpp",
+    "input/TouchActionTest.cpp",
     "inspector/ProtocolParserTest.cpp",
+    "intersection_observer/IntersectionObserverTest.cpp",
     "layout/CollapsedBorderValueTest.cpp",
-    "layout/ImageQualityControllerTest.cpp",
     "layout/LayoutBlockTest.cpp",
     "layout/LayoutBoxModelObjectTest.cpp",
     "layout/LayoutBoxTest.cpp",
+    "layout/LayoutEmbeddedContentTest.cpp",
     "layout/LayoutInlineTest.cpp",
     "layout/LayoutMediaTest.cpp",
     "layout/LayoutMultiColumnFlowThreadTest.cpp",
     "layout/LayoutObjectTest.cpp",
-    "layout/LayoutPartTest.cpp",
     "layout/LayoutProgressTest.cpp",
     "layout/LayoutTableCellTest.cpp",
     "layout/LayoutTableRowTest.cpp",
     "layout/LayoutTableSectionTest.cpp",
+    "layout/LayoutTableTest.cpp",
     "layout/LayoutTestHelper.cpp",
     "layout/LayoutTestHelper.h",
     "layout/LayoutTextTest.cpp",
@@ -1322,20 +1438,25 @@ source_set("unit_tests") {
     "layout/PaginationTest.cpp",
     "layout/PaintContainmentTest.cpp",
     "layout/ScrollAnchorTest.cpp",
+    "layout/ScrollbarsTest.cpp",
     "layout/TextAutosizerTest.cpp",
     "layout/VisualRectMappingTest.cpp",
     "layout/api/SelectionStateTest.cpp",
     "layout/compositing/CompositedLayerMappingTest.cpp",
     "layout/compositing/CompositingReasonFinderTest.cpp",
+    "layout/compositing/CompositorWorkerTest.cpp",
     "layout/compositing/PaintLayerCompositorTest.cpp",
     "layout/line/InlineBoxTest.cpp",
     "layout/line/InlineTextBoxTest.cpp",
+    "layout/ng/NGInlineLayoutTest.cpp",
     "layout/ng/geometry/ng_box_strut_test.cc",
     "layout/ng/geometry/ng_logical_offset_test.cc",
     "layout/ng/geometry/ng_physical_rect_test.cc",
     "layout/ng/inline/ng_inline_items_builder_test.cc",
     "layout/ng/inline/ng_inline_layout_algorithm_test.cc",
+    "layout/ng/inline/ng_inline_node_offset_mapping_test.cc",
     "layout/ng/inline/ng_inline_node_test.cc",
+    "layout/ng/inline/ng_line_breaker_test.cc",
     "layout/ng/ng_absolute_utils_test.cc",
     "layout/ng/ng_base_layout_algorithm_test.cc",
     "layout/ng/ng_base_layout_algorithm_test.h",
@@ -1348,16 +1469,18 @@ source_set("unit_tests") {
     "layout/ng/ng_min_max_content_size_test.cc",
     "layout/ng/ng_out_of_flow_layout_part_test.cc",
     "layout/ng/ng_relative_utils_test.cc",
-    "layout/ng/ng_space_utils_test.cc",
     "layout/shapes/BoxShapeTest.cpp",
     "layout/svg/LayoutSVGForeignObjectTest.cpp",
     "layout/svg/LayoutSVGRootTest.cpp",
     "loader/BaseFetchContextTest.cpp",
     "loader/DocumentLoadTimingTest.cpp",
+    "loader/DocumentLoaderTest.cpp",
     "loader/FrameFetchContextTest.cpp",
     "loader/LinkLoaderTest.cpp",
     "loader/MixedContentCheckerTest.cpp",
+    "loader/NetworkQuietDetectorTest.cpp",
     "loader/PingLoaderTest.cpp",
+    "loader/ProgrammaticScrollTest.cpp",
     "loader/ProgressTrackerTest.cpp",
     "loader/TextResourceDecoderBuilderTest.cpp",
     "loader/ThreadableLoaderTest.cpp",
@@ -1373,18 +1496,25 @@ source_set("unit_tests") {
     "loader/resource/MultipartImageResourceParserTest.cpp",
     "origin_trials/OriginTrialContextTest.cpp",
     "page/ChromeClientTest.cpp",
-    "page/ContextMenuControllerTest.cpp",
+    "page/DragControllerTest.cpp",
+    "page/EffectiveNavigationPolicyTest.cpp",
     "page/FocusControllerTest.cpp",
+    "page/PageOverlayTest.cpp",
     "page/PagePopupClientTest.cpp",
     "page/PrintContextTest.cpp",
+    "page/SlotScopedTraversalTest.cpp",
+    "page/ViewportTest.cpp",
     "page/WindowFeaturesTest.cpp",
+    "page/scrolling/RootScrollerTest.cpp",
     "page/scrolling/ScrollStateTest.cpp",
+    "page/scrolling/ScrollingCoordinatorTest.cpp",
     "page/scrolling/SnapCoordinatorTest.cpp",
     "paint/BoxPaintInvalidatorTest.cpp",
     "paint/FirstMeaningfulPaintDetectorTest.cpp",
     "paint/HTMLCanvasPainterTest.cpp",
     "paint/LayerClipRecorderTest.cpp",
     "paint/LayoutObjectDrawingRecorderTest.cpp",
+    "paint/LinkHighlightImplTest.cpp",
     "paint/NinePieceImageGridTest.cpp",
     "paint/ObjectPaintInvalidatorTest.cpp",
     "paint/PaintControllerPaintTest.cpp",
@@ -1403,27 +1533,52 @@ source_set("unit_tests") {
     "paint/StubChromeClientForSPv2.h",
     "paint/TablePainterTest.cpp",
     "paint/TextPainterTest.cpp",
+    "paint/TextSelectionRepaintTest.cpp",
     "paint/VideoPainterTest.cpp",
+    "resize_observer/ResizeObserverTest.cpp",
+    "scheduler/ActiveConnectionThrottlingTest.cpp",
+    "scheduler/FrameThrottlingTest.cpp",
+    "scheduler/ThrottlingTest.cpp",
     "streams/ReadableStreamOperationsTest.cpp",
     "style/BorderValueTest.cpp",
     "style/ComputedStyleTest.cpp",
     "style/FilterOperationsTest.cpp",
-    "style/OutlineValueTest.cpp",
     "style/SVGComputedStyleTest.cpp",
     "style/StyleDifferenceTest.cpp",
     "svg/SVGPathParserTest.cpp",
     "svg/UnsafeSVGAttributeSanitizationTest.cpp",
     "svg/graphics/SVGImageTest.cpp",
+    "testing/sim/SimCanvas.cpp",
+    "testing/sim/SimCanvas.h",
+    "testing/sim/SimCompositor.cpp",
+    "testing/sim/SimCompositor.h",
+    "testing/sim/SimDisplayItemList.cpp",
+    "testing/sim/SimDisplayItemList.h",
+    "testing/sim/SimNetwork.cpp",
+    "testing/sim/SimNetwork.h",
+    "testing/sim/SimPage.cpp",
+    "testing/sim/SimPage.h",
+    "testing/sim/SimRequest.cpp",
+    "testing/sim/SimRequest.h",
+    "testing/sim/SimTest.cpp",
+    "testing/sim/SimTest.h",
+    "testing/sim/SimWebFrameClient.cpp",
+    "testing/sim/SimWebFrameClient.h",
+    "testing/sim/SimWebViewClient.cpp",
+    "testing/sim/SimWebViewClient.h",
     "timing/MemoryInfoTest.cpp",
     "timing/PerformanceBaseTest.cpp",
     "timing/PerformanceNavigationTimingTest.cpp",
     "timing/PerformanceObserverTest.cpp",
+    "timing/PerformanceResourceTimingTest.cpp",
     "timing/PerformanceTest.cpp",
+    "url/URLSearchParamsTest.cpp",
     "workers/DedicatedWorkerTest.cpp",
     "workers/MainThreadWorkletTest.cpp",
     "workers/ThreadedWorkletTest.cpp",
     "workers/WorkerThreadTest.cpp",
     "workers/WorkerThreadTestHelper.h",
+    "workers/WorkletModuleResponsesMapTest.cpp",
     "xml/XPathFunctionsTest.cpp",
     "xml/parser/SharedBufferReaderTest.cpp",
   ]
@@ -1440,6 +1595,12 @@ source_set("unit_tests") {
     "//testing/gtest",
     "//third_party/WebKit/Source/core/editing:unit_tests",
   ]
+
+  # FIXME: Enable mojo unittests on Android after fixing data dependency.
+  # crbug.com/741925
+  if (!is_android) {
+    deps += [ "//third_party/WebKit/Source/core/mojo:unit_tests" ]
+  }
 }
 
 # Fuzzer for blink::StyleSheetContents

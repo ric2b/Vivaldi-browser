@@ -295,7 +295,30 @@ const char* ProtoEnumToString(sync_pb::TabNavigation::PasswordState state) {
 }
 
 const char* ProtoEnumToString(
+    sync_pb::UserEventSpecifics::Translation::Interaction interaction) {
+  ASSERT_ENUM_BOUNDS(sync_pb::UserEventSpecifics::Translation, Interaction,
+                     UNKNOWN, AUTO_TRANSLATION_BY_LINK);
+  switch (interaction) {
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, UNKNOWN);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, ACCEPT);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, DECLINE);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, IGNORED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, DISMISSED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, MANUAL);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation, TRANSLATION_REVERTED);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation,
+              AUTO_TRANSLATION_BY_PREF);
+    ENUM_CASE(sync_pb::UserEventSpecifics::Translation,
+              AUTO_TRANSLATION_BY_LINK);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardClass wallet_card_class) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardClass,
+                     UNKNOWN_CARD_CLASS, PREPAID);
   switch (wallet_card_class) {
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNKNOWN_CARD_CLASS);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, CREDIT);
@@ -308,6 +331,8 @@ const char* ProtoEnumToString(
 
 const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardStatus wallet_card_status) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardStatus, VALID,
+                     EXPIRED);
   switch (wallet_card_status) {
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, VALID);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, EXPIRED);
@@ -318,6 +343,8 @@ const char* ProtoEnumToString(
 
 const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardType wallet_card_type) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardType, UNKNOWN,
+                     UNIONPAY);
   switch (wallet_card_type) {
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNKNOWN);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, AMEX);
@@ -327,8 +354,8 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, MASTER_CARD);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, SOLO);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, SWITCH);
-    ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNIONPAY);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, VISA);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNIONPAY);
   }
   NOTREACHED();
   return "";

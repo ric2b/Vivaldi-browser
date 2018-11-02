@@ -4,12 +4,6 @@
 
 import("//mojo/public/tools/bindings/mojom.gni")
 
-mojom("mojom") {
-  sources = [
-    "payment_request.mojom",
-  ]
-}
-
 mojom("mojom_parser") {
   sources = [
     "payment_manifest_parser.mojom",
@@ -17,17 +11,6 @@ mojom("mojom_parser") {
 
   public_deps = [
     "//url/mojo:url_mojom_gurl",
-  ]
-}
-
-mojom("mojom_payment_app") {
-  sources = [
-    "payment_app.mojom",
-  ]
-
-  public_deps = [
-    ":mojom",
-    "//mojo/common:common_custom_types",
-    "//url/mojo:url_mojom_gurl",
+    "//url/mojo:url_mojom_origin",
   ]
 }

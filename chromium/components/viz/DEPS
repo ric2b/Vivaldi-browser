@@ -1,4 +1,4 @@
 include_rules = [
-  "+gpu",
-  "+mojo/public",
+  "-components/viz",
+  "+components/viz/common",
 ]

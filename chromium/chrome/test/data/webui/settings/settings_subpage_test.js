@@ -9,31 +9,31 @@ cr.define('settings_subpage', function() {
 
       // Pretend that we initially started on the CERTIFICATES route.
       window.history.replaceState(
-          undefined, '', settings.Route.CERTIFICATES.path);
+          undefined, '', settings.routes.CERTIFICATES.path);
       settings.initializeRouteFromUrl();
-      assertEquals(settings.Route.CERTIFICATES, settings.getCurrentRoute());
+      assertEquals(settings.routes.CERTIFICATES, settings.getCurrentRoute());
 
       var subpage = document.createElement('settings-subpage');
       document.body.appendChild(subpage);
 
-      MockInteractions.tap(subpage.$$('paper-icon-button'));
-      assertEquals(settings.Route.PRIVACY, settings.getCurrentRoute());
+      MockInteractions.tap(subpage.$$('button'));
+      assertEquals(settings.routes.PRIVACY, settings.getCurrentRoute());
     });
 
     test('navigates to any route via window.back()', function(done) {
       PolymerTest.clearBody();
 
-      settings.navigateTo(settings.Route.BASIC);
-      settings.navigateTo(settings.Route.SYNC);
-      assertEquals(settings.Route.SYNC, settings.getCurrentRoute());
+      settings.navigateTo(settings.routes.BASIC);
+      settings.navigateTo(settings.routes.SYNC);
+      assertEquals(settings.routes.SYNC, settings.getCurrentRoute());
 
       var subpage = document.createElement('settings-subpage');
       document.body.appendChild(subpage);
 
-      MockInteractions.tap(subpage.$$('paper-icon-button'));
+      MockInteractions.tap(subpage.$$('button'));
 
       window.addEventListener('popstate', function(event) {
-        assertEquals(settings.Route.BASIC, settings.getCurrentRoute());
+        assertEquals(settings.routes.BASIC, settings.getCurrentRoute());
         done();
       });
     });

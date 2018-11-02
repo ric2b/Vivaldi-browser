@@ -14,6 +14,10 @@
 
 class PrefService;
 
+namespace user_prefs {
+class PrefRegistrySyncable;
+}  // namespace user_prefs
+
 namespace autofill {
 
 class AutofillProfile;
@@ -25,12 +29,14 @@ struct FormFieldData;
 // Common utilities shared amongst Autofill tests.
 namespace test {
 
-// Returns a PrefService that can be used for Autofill-related testing in
-// contexts where the PrefService would otherwise have to be constructed
-// manually (e.g., in unit tests within Autofill core code). The returned
-// PrefService has had Autofill preferences registered on its associated
-// registry.
+// The following methods return a PrefService that can be used for
+// Autofill-related testing in contexts where the PrefService would otherwise
+// have to be constructed manually (e.g., in unit tests within Autofill core
+// code). The returned PrefService has had Autofill preferences registered on
+// its associated registry.
 std::unique_ptr<PrefService> PrefServiceForTesting();
+std::unique_ptr<PrefService> PrefServiceForTesting(
+    user_prefs::PrefRegistrySyncable* registry);
 
 // Provides a quick way to populate a FormField with c-strings.
 void CreateTestFormField(const char* label,
@@ -64,6 +70,12 @@ AutofillProfile GetFullProfile();
 
 // Returns a profile full of dummy info, different to the above.
 AutofillProfile GetFullProfile2();
+
+// Returns an incomplete profile of dummy info.
+AutofillProfile GetIncompleteProfile1();
+
+// Returns an incomplete profile of dummy info, different to the above.
+AutofillProfile GetIncompleteProfile2();
 
 // Returns a verified profile full of dummy info.
 AutofillProfile GetVerifiedProfile();

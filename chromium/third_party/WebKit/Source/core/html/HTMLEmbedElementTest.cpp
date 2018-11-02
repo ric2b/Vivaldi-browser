@@ -4,17 +4,17 @@
 
 #include "core/html/HTMLEmbedElement.h"
 
+#include <memory>
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLObjectElement.h"
 #include "core/style/ComputedStyle.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
-class HTMLEmbedElementTest : public testing::Test {
+class HTMLEmbedElementTest : public ::testing::Test {
  protected:
   HTMLEmbedElementTest() {}
 

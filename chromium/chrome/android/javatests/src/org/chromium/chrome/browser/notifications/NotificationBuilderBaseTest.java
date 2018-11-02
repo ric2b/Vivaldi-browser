@@ -66,8 +66,8 @@ public class NotificationBuilderBaseTest {
 
         String origin = "https://example.com";
 
-        NotificationBuilderBase notificationBuilder = new NotificationBuilderBase(
-                resources, ChannelDefinitions.CHANNEL_ID_SITES) {
+        NotificationBuilderBase notificationBuilder = new NotificationBuilderBase(resources,
+                ChannelDefinitions.CHANNEL_ID_BROWSER) {
             @Override
             public Notification build() {
                 return null;

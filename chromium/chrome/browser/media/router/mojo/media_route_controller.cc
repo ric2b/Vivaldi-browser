@@ -38,7 +38,7 @@ MediaRouteController::MediaRouteController(
       binding_(this) {
   DCHECK(mojo_media_controller_.is_bound());
   DCHECK(media_router);
-  mojo_media_controller_.set_connection_error_handler(base::Bind(
+  mojo_media_controller_.set_connection_error_handler(base::BindOnce(
       &MediaRouteController::OnMojoConnectionError, base::Unretained(this)));
 }
 
@@ -86,12 +86,11 @@ void MediaRouteController::Invalidate() {
 mojom::MediaStatusObserverPtr MediaRouteController::BindObserverPtr() {
   DCHECK(is_valid_);
   DCHECK(!binding_.is_bound());
-  mojom::MediaStatusObserverPtr observer_ptr =
-      binding_.CreateInterfacePtrAndBind();
-  binding_.set_connection_error_handler(base::Bind(
+  mojom::MediaStatusObserverPtr observer;
+  binding_.Bind(mojo::MakeRequest(&observer));
+  binding_.set_connection_error_handler(base::BindOnce(
       &MediaRouteController::OnMojoConnectionError, base::Unretained(this)));
-
-  return observer_ptr;
+  return observer;
 }
 
 MediaRouteController::~MediaRouteController() {

@@ -4,12 +4,12 @@
 
 #include "extensions/common/permissions/permissions_data.h"
 
-#include <algorithm>
 #include <utility>
 
 #include "base/command_line.h"
 #include "base/lazy_instance.h"
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/error_utils.h"
@@ -84,8 +84,7 @@ bool PermissionsData::CanExecuteScriptEverywhere(const Extension* extension) {
   const ExtensionsClient::ScriptingWhitelist& whitelist =
       ExtensionsClient::Get()->GetScriptingWhitelist();
 
-  return std::find(whitelist.begin(), whitelist.end(), extension->id()) !=
-         whitelist.end();
+  return base::ContainsValue(whitelist, extension->id());
 }
 
 // static
@@ -280,7 +279,7 @@ URLPatternSet PermissionsData::GetEffectiveHostPermissions() const {
 bool PermissionsData::HasHostPermission(const GURL& url) const {
   base::AutoLock auto_lock(runtime_lock_);
   return active_permissions_unsafe_->HasExplicitAccessToOrigin(url) &&
-         !IsRuntimeBlockedHost(url);
+         !IsRuntimeBlockedHostUnsafe(url);
 }
 
 bool PermissionsData::HasEffectiveAccessToAllHosts() const {
@@ -412,7 +411,7 @@ bool PermissionsData::HasTabSpecificPermissionToExecuteScript(
   return false;
 }
 
-bool PermissionsData::IsRuntimeBlockedHost(const GURL& url) const {
+bool PermissionsData::IsRuntimeBlockedHostUnsafe(const GURL& url) const {
   runtime_lock_.AssertAcquired();
   return PolicyBlockedHostsUnsafe().MatchesURL(url) &&
          !PolicyAllowedHostsUnsafe().MatchesURL(url);
@@ -431,7 +430,7 @@ PermissionsData::AccessType PermissionsData::CanRunOnPage(
     return ACCESS_DENIED;
 
   if (extension->location() != Manifest::COMPONENT &&
-      extension->permissions_data()->IsRuntimeBlockedHost(document_url)) {
+      extension->permissions_data()->IsRuntimeBlockedHostUnsafe(document_url)) {
     if (error)
       *error = extension_misc::kPolicyBlockedScripting;
     return ACCESS_DENIED;

@@ -26,10 +26,11 @@
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithStyle:(CollectionViewControllerStyle)style
+- (instancetype)initWithLayout:(UICollectionViewLayout*)layout
+                         style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
-@property(nonatomic, assign) id<SigninAccountSelectorViewControllerDelegate>
+@property(nonatomic, weak) id<SigninAccountSelectorViewControllerDelegate>
     delegate;
 
 // Returns the identity that is selected or nil.

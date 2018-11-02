@@ -4,7 +4,7 @@
 
 #include "core/paint/PaintLayerScrollableArea.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/paint/PaintLayer.h"
@@ -14,12 +14,12 @@
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
-using testing::_;
+using ::testing::_;
 
 namespace blink {
 namespace {
 
-class MockChromeClient : public EmptyChromeClient {
+class ScrollableAreaMockChromeClient : public EmptyChromeClient {
  public:
   MOCK_METHOD3(MockSetToolTip, void(LocalFrame*, const String&, TextDirection));
   void SetToolTip(LocalFrame& frame,
@@ -35,13 +35,15 @@ class PaintLayerScrollableAreaTest : public RenderingTest {
  public:
   PaintLayerScrollableAreaTest()
       : RenderingTest(EmptyLocalFrameClient::Create()),
-        chrome_client_(new MockChromeClient) {}
+        chrome_client_(new ScrollableAreaMockChromeClient) {}
 
   ~PaintLayerScrollableAreaTest() {
-    testing::Mock::VerifyAndClearExpectations(&GetChromeClient());
+    ::testing::Mock::VerifyAndClearExpectations(&GetChromeClient());
   }
 
-  MockChromeClient& GetChromeClient() const override { return *chrome_client_; }
+  ScrollableAreaMockChromeClient& GetChromeClient() const override {
+    return *chrome_client_;
+  }
 
   BackgroundPaintLocation GetBackgroundPaintLocation(const char* element_id) {
     PaintLayer* paint_layer =
@@ -55,7 +57,7 @@ class PaintLayerScrollableAreaTest : public RenderingTest {
     EnableCompositing();
   }
 
-  Persistent<MockChromeClient> chrome_client_;
+  Persistent<ScrollableAreaMockChromeClient> chrome_client_;
 };
 
 TEST_F(PaintLayerScrollableAreaTest,
@@ -210,7 +212,7 @@ TEST_F(PaintLayerScrollableAreaTest,
 }
 
 TEST_F(PaintLayerScrollableAreaTest, OpaqueContainedLayersPromoted) {
-  RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled(true);
+  RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled(true);
 
   SetBodyInnerHTML(
       "<style>"
@@ -222,13 +224,12 @@ TEST_F(PaintLayerScrollableAreaTest, OpaqueContainedLayersPromoted) {
       "<div id=\"scroller\"><div id=\"scrolled\"></div></div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(scroller->GetLayoutObject())->Layer();
   ASSERT_TRUE(paint_layer);
   EXPECT_TRUE(paint_layer->NeedsCompositedScrolling());
-  EXPECT_TRUE(paint_layer->GraphicsLayerBacking());
   ASSERT_TRUE(paint_layer->GraphicsLayerBacking());
   EXPECT_TRUE(paint_layer->GraphicsLayerBacking()->ContentsOpaque());
 }
@@ -237,7 +238,7 @@ TEST_F(PaintLayerScrollableAreaTest, OpaqueContainedLayersPromoted) {
 // Promoting the scroller would also require promoting the positioned div
 // which would lose subpixel anti-aliasing due to its transparent background.
 TEST_F(PaintLayerScrollableAreaTest, NonContainedLayersNotPromoted) {
-  RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled(true);
+  RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled(true);
 
   SetBodyInnerHTML(
       "<style>"
@@ -253,18 +254,17 @@ TEST_F(PaintLayerScrollableAreaTest, NonContainedLayersNotPromoted) {
       "</div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(scroller->GetLayoutObject())->Layer();
   ASSERT_TRUE(paint_layer);
   EXPECT_FALSE(paint_layer->NeedsCompositedScrolling());
   EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
-  EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
 }
 
 TEST_F(PaintLayerScrollableAreaTest, TransparentLayersNotPromoted) {
-  RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled(true);
+  RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled(true);
 
   SetBodyInnerHTML(
       "<style>"
@@ -276,18 +276,17 @@ TEST_F(PaintLayerScrollableAreaTest, TransparentLayersNotPromoted) {
       "<div id=\"scroller\"><div id=\"scrolled\"></div></div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(scroller->GetLayoutObject())->Layer();
   ASSERT_TRUE(paint_layer);
   EXPECT_FALSE(paint_layer->NeedsCompositedScrolling());
   EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
-  EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
 }
 
 TEST_F(PaintLayerScrollableAreaTest, OpaqueLayersDepromotedOnStyleChange) {
-  RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled(true);
+  RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled(true);
 
   SetBodyInnerHTML(
       "<style>"
@@ -298,7 +297,7 @@ TEST_F(PaintLayerScrollableAreaTest, OpaqueLayersDepromotedOnStyleChange) {
       "<div id=\"scroller\"><div id=\"scrolled\"></div></div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(scroller->GetLayoutObject())->Layer();
@@ -314,11 +313,10 @@ TEST_F(PaintLayerScrollableAreaTest, OpaqueLayersDepromotedOnStyleChange) {
   ASSERT_TRUE(paint_layer);
   EXPECT_FALSE(paint_layer->NeedsCompositedScrolling());
   EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
-  EXPECT_FALSE(paint_layer->GraphicsLayerBacking());
 }
 
 TEST_F(PaintLayerScrollableAreaTest, OpaqueLayersPromotedOnStyleChange) {
-  RuntimeEnabledFeatures::setCompositeOpaqueScrollersEnabled(true);
+  RuntimeEnabledFeatures::SetCompositeOpaqueScrollersEnabled(true);
 
   SetBodyInnerHTML(
       "<style>"
@@ -329,7 +327,7 @@ TEST_F(PaintLayerScrollableAreaTest, OpaqueLayersPromotedOnStyleChange) {
       "<div id=\"scroller\"><div id=\"scrolled\"></div></div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
       ToLayoutBoxModelObject(scroller->GetLayoutObject())->Layer();
@@ -365,7 +363,7 @@ TEST_F(PaintLayerScrollableAreaTest, OnlyNonTransformedOpaqueLayersPromoted) {
       "</div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* parent = GetDocument().getElementById("parent");
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
@@ -419,7 +417,7 @@ TEST_F(PaintLayerScrollableAreaTest, OnlyOpaqueLayersPromoted) {
       "</div>");
   GetDocument().View()->UpdateAllLifecyclePhases();
 
-  EXPECT_TRUE(RuntimeEnabledFeatures::compositeOpaqueScrollersEnabled());
+  EXPECT_TRUE(RuntimeEnabledFeatures::CompositeOpaqueScrollersEnabled());
   Element* parent = GetDocument().getElementById("parent");
   Element* scroller = GetDocument().getElementById("scroller");
   PaintLayer* paint_layer =
@@ -557,7 +555,7 @@ TEST_F(PaintLayerScrollableAreaTest, HideTooltipWhenScrollPositionChanges) {
 }
 
 TEST_F(PaintLayerScrollableAreaTest, IncludeOverlayScrollbarsInVisibleWidth) {
-  RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(false);
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
   SetBodyInnerHTML(
       "<style>"
       "#scroller { overflow: overlay; height: 100px; width: 100px; }"
@@ -575,7 +573,7 @@ TEST_F(PaintLayerScrollableAreaTest, IncludeOverlayScrollbarsInVisibleWidth) {
 }
 
 TEST_F(PaintLayerScrollableAreaTest, ShowAutoScrollbarsForVisibleContent) {
-  RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(false);
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
   SetBodyInnerHTML(
       "<style>"
       "#outerDiv {"
@@ -604,7 +602,7 @@ TEST_F(PaintLayerScrollableAreaTest, ShowAutoScrollbarsForVisibleContent) {
 }
 
 TEST_F(PaintLayerScrollableAreaTest, FloatOverflowInRtlContainer) {
-  RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(false);
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
   SetBodyInnerHTML(
       "<!DOCTYPE html>"
       "<style>"

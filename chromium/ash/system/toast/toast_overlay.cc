@@ -17,6 +17,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
@@ -53,8 +54,6 @@ gfx::Rect GetUserWorkAreaBounds() {
       ->GetUserWorkAreaBounds();
 }
 
-}  // anonymous namespace
-
 ///////////////////////////////////////////////////////////////////////////////
 //  ToastOverlayLabel
 class ToastOverlayLabel : public views::Label {
@@ -72,7 +71,6 @@ ToastOverlayLabel::ToastOverlayLabel(const base::string16& label)
   SetAutoColorReadabilityEnabled(false);
   SetMultiLine(true);
   SetEnabledColor(SK_ColorWHITE);
-  SetDisabledColor(SK_ColorWHITE);
   SetSubpixelRenderingEnabled(false);
 
   int verticalSpacing =
@@ -82,6 +80,8 @@ ToastOverlayLabel::ToastOverlayLabel(const base::string16& label)
 }
 
 ToastOverlayLabel::~ToastOverlayLabel() {}
+
+}  // namespace
 
 ///////////////////////////////////////////////////////////////////////////////
 //  ToastOverlayButton
@@ -147,7 +147,7 @@ ToastOverlayView::ToastOverlayView(
     const base::string16& text,
     const base::Optional<base::string16>& dismiss_text)
     : overlay_(overlay) {
-  auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+  auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal);
   SetLayoutManager(layout);
 
   if (dismiss_text.has_value()) {
@@ -215,9 +215,8 @@ ToastOverlay::ToastOverlay(Delegate* delegate,
   params.remove_standard_frame = true;
   params.bounds = CalculateOverlayBounds();
   // Show toasts above the app list and below the lock screen.
-  GetRootWindowController(Shell::GetRootWindowForNewWindows())
-      ->ConfigureWidgetInitParamsForContainer(
-          overlay_widget_.get(), kShellWindowId_SystemModalContainer, &params);
+  params.parent = Shell::GetRootWindowForNewWindows()->GetChildById(
+      kShellWindowId_SystemModalContainer);
   overlay_widget_->Init(params);
   overlay_widget_->SetVisibilityChangedAnimationsEnabled(true);
   overlay_widget_->SetContentsView(overlay_view_.get());

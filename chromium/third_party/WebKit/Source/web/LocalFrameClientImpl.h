@@ -33,6 +33,7 @@
 #define LocalFrameClientImpl_h
 
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "platform/heap/Handle.h"
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/RefPtr.h"
@@ -44,6 +45,7 @@ namespace blink {
 
 class WebDevToolsAgentImpl;
 class WebLocalFrameBase;
+class WebSpellCheckPanelHostClient;
 
 class LocalFrameClientImpl final : public LocalFrameClient {
  public:
@@ -53,7 +55,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   DECLARE_VIRTUAL_TRACE();
 
-  WebLocalFrameBase* GetWebFrame() const { return web_frame_.Get(); }
+  WebLocalFrameBase* GetWebFrame() const override;
 
   // LocalFrameClient ----------------------------------------------
 
@@ -113,6 +115,7 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       NavigationPolicy,
       bool should_replace_current_entry,
       bool is_client_redirect,
+      WebTriggeringEventInfo,
       HTMLFormElement*,
       ContentSecurityPolicyDisposition should_bypass_main_world_csp) override;
   void DispatchWillSendSubmitEvent(HTMLFormElement*) override;
@@ -120,9 +123,11 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidStartLoading(LoadStartType) override;
   void DidStopLoading() override;
   void ProgressEstimateChanged(double progress_estimate) override;
+  void DownloadURL(const ResourceRequest&,
+                   const String& suggested_name) override;
   void LoadURLExternally(const ResourceRequest&,
                          NavigationPolicy,
-                         const String& suggested_name,
+                         WebTriggeringEventInfo,
                          bool should_replace_current_entry) override;
   void LoadErrorPage(int reason) override;
   bool NavigateBackForward(int offset) const override;
@@ -139,6 +144,11 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   void DidObserveLoadingBehavior(WebLoadingBehaviorFlag) override;
   void SelectorMatchChanged(const Vector<String>& added_selectors,
                             const Vector<String>& removed_selectors) override;
+
+  // Creates a WebDataSourceImpl that is a DocumentLoader but also has:
+  // - storage to store an extra data that can be used by the content layer
+  // - wrapper methods to expose DocumentLoader's variables to the content
+  //   layer
   DocumentLoader* CreateDocumentLoader(LocalFrame*,
                                        const ResourceRequest&,
                                        const SubstituteData&,
@@ -146,11 +156,10 @@ class LocalFrameClientImpl final : public LocalFrameClient {
   WTF::String UserAgent() override;
   WTF::String DoNotTrackValue() override;
   void TransitionToCommittedForNewPage() override;
-  LocalFrame* CreateFrame(const FrameLoadRequest&,
-                          const WTF::AtomicString& name,
+  LocalFrame* CreateFrame(const WTF::AtomicString& name,
                           HTMLFrameOwnerElement*) override;
   virtual bool CanCreatePluginWithoutRenderer(const String& mime_type) const;
-  PluginView* CreatePlugin(HTMLPlugInElement*,
+  PluginView* CreatePlugin(HTMLPlugInElement&,
                            const KURL&,
                            const Vector<WTF::String>&,
                            const Vector<WTF::String>&,
@@ -163,10 +172,6 @@ class LocalFrameClientImpl final : public LocalFrameClient {
       WebMediaPlayerClient*) override;
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) override;
-  ObjectContentType GetObjectContentType(
-      const KURL&,
-      const WTF::String& mime_type,
-      bool should_prefer_plug_ins_for_images) override;
   void DidChangeScrollOffset() override;
   void DidUpdateCurrentHistoryItem() override;
 
@@ -206,14 +211,17 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   unsigned BackForwardLength() override;
 
-  void SuddenTerminationDisablerChanged(bool present,
-                                        SuddenTerminationDisablerType) override;
+  void SuddenTerminationDisablerChanged(
+      bool present,
+      WebSuddenTerminationDisablerType) override;
 
   BlameContext* GetFrameBlameContext() override;
 
   LinkResource* CreateServiceWorkerLinkResource(HTMLLinkElement*) override;
 
   WebEffectiveConnectionType GetEffectiveConnectionType() override;
+
+  bool IsClientLoFiActiveForFrame() override;
 
   bool ShouldUseClientLoFiForRequest(const ResourceRequest&) override;
 
@@ -225,9 +233,16 @@ class LocalFrameClientImpl final : public LocalFrameClient {
 
   void AbortClientNavigation() override;
 
+  WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const override;
+
   TextCheckerClient& GetTextCheckerClient() const override;
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
+  std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
+                                                WebTaskRunner*) override;
+
+  service_manager::InterfaceProvider* GetInterfaceProvider() override;
+
+  void AnnotatedRegionsChanged() override;
 
   // VB-6063:
   void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) override;

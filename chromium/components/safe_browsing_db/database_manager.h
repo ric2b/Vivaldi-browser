@@ -15,9 +15,10 @@
 
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/ref_counted_delete_on_sequence.h"
 #include "components/safe_browsing_db/hit_report.h"
 #include "components/safe_browsing_db/util.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/common/resource_type.h"
 #include "url/gurl.h"
 
@@ -27,12 +28,20 @@ class URLRequestContextGetter;
 
 namespace safe_browsing {
 
+// Value returned by some Check*Whitelist() calls that may or may not have an
+// immediate answer.
+enum class AsyncMatch {
+  ASYNC,     // No answer yet -- Client will get a callback
+  MATCH,     // URL matches the list.  No callback.
+  NO_MATCH,  // URL doesn't match. No callback.
+};
+
 struct V4ProtocolConfig;
 class V4GetHashProtocolManager;
 
 // Base class to either the locally-managed or a remotely-managed database.
 class SafeBrowsingDatabaseManager
-    : public base::RefCountedThreadSafe<SafeBrowsingDatabaseManager> {
+    : public base::RefCountedDeleteOnSequence<SafeBrowsingDatabaseManager> {
  public:
   // Callers requesting a result should derive from this class.
   // The destructor should call db_manager->CancelCheck(client) if a
@@ -64,6 +73,10 @@ class SafeBrowsingDatabaseManager
     virtual void OnCheckResourceUrlResult(const GURL& url,
                                           SBThreatType threat_type,
                                           const std::string& threat_hash) {}
+
+    // Called when the result of checking a whitelist is known.
+    // Currently only used for CSD whitelist.
+    virtual void OnCheckWhitelistUrlResult(bool is_whitelisted) {}
   };
 
   //
@@ -87,6 +100,8 @@ class SafeBrowsingDatabaseManager
   // Returns true if this resource type should be checked.
   virtual bool CanCheckResourceType(
       content::ResourceType resource_type) const = 0;
+
+  virtual bool CanCheckSubresourceFilter() const = 0;
 
   // Returns true if the url's scheme can be checked.
   virtual bool CanCheckUrl(const GURL& url) const = 0;
@@ -112,20 +127,19 @@ class SafeBrowsingDatabaseManager
   // and "client" is called asynchronously with the result when it is ready.
   virtual bool CheckApiBlacklistUrl(const GURL& url, Client* client);
 
+  // Check if the |url| matches any of the full-length hashes from the client-
+  // side phishing detection whitelist. The 3-state return value indicates
+  // the result or that the Client will get a callback later with the result.
+  virtual AsyncMatch CheckCsdWhitelistUrl(const GURL& url, Client* client) = 0;
+
   // Called on the IO thread to check if the given url is safe or not.  If we
   // can synchronously determine that the url is safe, CheckUrl returns true.
   // Otherwise it returns false, and "client" is called asynchronously with the
-  // result when it is ready.
-  virtual bool CheckBrowseUrl(const GURL& url, Client* client) = 0;
-
-  // Called on the IO thread to check if the given url belongs to the
-  // subresource filter list. If the url doesn't belong to the list, the check
-  // happens synchronously, otherwise it returns false, and "client" is called
-  // asynchronously with the result when it is ready.
-  // Currently supported only on desktop. Returns TRUE if the list is not yet
-  // available.
-  virtual bool CheckUrlForSubresourceFilter(const GURL& url,
-                                            Client* client) = 0;
+  // result when it is ready. The URL will only be checked for the threat types
+  // in |threat_types|.
+  virtual bool CheckBrowseUrl(const GURL& url,
+                              const SBThreatTypeSet& threat_types,
+                              Client* client) = 0;
 
   // Check if the prefix for |url| is in safebrowsing download add lists.
   // Result will be passed to callback in |client|.
@@ -143,15 +157,24 @@ class SafeBrowsingDatabaseManager
   // to callback in |client|.
   virtual bool CheckResourceUrl(const GURL& url, Client* client) = 0;
 
+  // Called on the IO thread to check if the given url belongs to a list the
+  // subresource cares about. If the url doesn't belong to any such list and the
+  // check can happen synchronously, returns true. Otherwise it returns false,
+  // and "client" is called asynchronously with the result when it is ready.
+  // Returns true if the list is not yet available.
+  virtual bool CheckUrlForSubresourceFilter(const GURL& url,
+                                            Client* client) = 0;
+
   //
-  // Methods to synchronously check whether a URL, or full hash, or IP address
-  // or a DLL file is safe.
+  // Match*(): Methods to synchronously check if various types are safe.
   //
 
   // Check if the |url| matches any of the full-length hashes from the client-
   // side phishing detection whitelist.  Returns true if there was a match and
   // false otherwise.  To make sure we are conservative we will return true if
   // an error occurs.  This method must be called on the IO thread.
+  //
+  // DEPRECATED. ref: http://crbug.com/714300
   virtual bool MatchCsdWhitelistUrl(const GURL& url) = 0;
 
   // Check if |str| matches any of the full-length hashes from the download
@@ -241,7 +264,8 @@ class SafeBrowsingDatabaseManager
 
   virtual ~SafeBrowsingDatabaseManager();
 
-  friend class base::RefCountedThreadSafe<SafeBrowsingDatabaseManager>;
+  friend class base::RefCountedDeleteOnSequence<SafeBrowsingDatabaseManager>;
+  friend class base::DeleteHelper<SafeBrowsingDatabaseManager>;
 
   FRIEND_TEST_ALL_PREFIXES(SafeBrowsingDatabaseManagerTest,
                            CheckApiBlacklistUrlPrefixes);

@@ -48,7 +48,29 @@ A group of tasks can be executed in one of the following ways:
    * [COM Single Threaded](#Posting-Tasks-to-a-COM-Single-Thread-Apartment-STA_Thread-Windows_):
      A variant of single threaded with COM initialized.
 
-The discussion below covers all of these ways to execute tasks.
+### Prefer Sequences to Threads
+
+**Sequenced execution mode is far preferred to Single Threaded** in scenarios
+that require mere thread-safety as it opens up scheduling paradigms that
+wouldn't be possible otherwise (sequences can hop threads instead of being stuck
+behind unrelated work on a dedicated thread). Ability to hop threads also means
+the thread count can dynamically adapt to the machine's true resource
+availability (faster on bigger machines, avoids trashing on slower machines).
+
+Many core APIs were recently made sequence-friendly (classes are rarely
+thread-affine -- i.e. only when using thread-local-storage or third-party APIs
+that do). But the codebase has long evolved assuming single-threaded contexts...
+If your class could run on a sequence but is blocked by an overzealous use of
+ThreadChecker/ThreadTaskRunnerHandle/SingleThreadTaskRunner in a leaf
+dependency, consider fixing that dependency for everyone's benefit (or at the
+very least file a blocking bug against https://crbug.com/675631 and flag your
+use of base::CreateSingleThreadTaskRunnerWithTraits() with a TODO against your
+bug to use base::CreateSequencedTaskRunnerWithTraits() when fixed).
+
+Detailed documentation on how to migrate from single-threaded contexts to
+sequenced contexts can be found [here](task_scheduler_migration.md).
+
+The discussion below covers all of these ways to execute tasks in details.
 
 ## Posting a Parallel Task
 
@@ -167,17 +189,17 @@ class A {
  public:
   A() {
     // Do not require accesses to be on the creation sequence.
-    sequence_checker_.DetachFromSequence();
+    DETACH_FROM_SEQUENCE(sequence_checker_);
   }
 
   void AddValue(int v) {
     // Check that all accesses are on the same sequence.
-    DCHECK(sequence_checker_.CalledOnValidSequence());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     values_.push_back(v);
 }
 
  private:
-  base::SequenceChecker sequence_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // No lock required, because all accesses are on the
   // same sequence.
@@ -614,7 +636,7 @@ base::TaskScheduler::GetInstance()->Shutdown();
 // TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN may still be
 // running.
 ```
-## TaskRunner ownership
+## TaskRunner ownership (encourage no dependency injection)
 
 TaskRunners shouldn't be passed through several components. Instead, the
 components that uses a TaskRunner should be the one that creates it.
@@ -624,3 +646,24 @@ refactoring where a TaskRunner was passed through a lot of components only to be
 used in an eventual leaf. The leaf can and should now obtain its TaskRunner
 directly from
 [`base/task_scheduler/post_task.h`](https://cs.chromium.org/chromium/src/base/task_scheduler/post_task.h).
+
+Dependency injection of TaskRunners can still seldomly be useful to unit test a
+component when triggering a specific race in a specific way is essential to the
+test. For such cases the preferred approach is the following:
+
+```cpp
+class FooWithCustomizableTaskRunnerForTesting {
+ public:
+
+  void SetBackgroundTaskRunnerForTesting(
+      scoped_refptr<base::SequencedTaskRunner> background_task_runner);
+
+ private:
+  scoped_refptr<base::SequencedTaskRunner> background_task_runner_ =
+      base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskPriority::BACKGROUND});
+}
+```
+
+Note that this still allows removing all layers of plumbing between //chrome and
+that component since unit tests will use the leaf layer directly.

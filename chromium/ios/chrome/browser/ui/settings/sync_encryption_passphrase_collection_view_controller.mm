@@ -39,7 +39,6 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/public/provider/chrome/browser/signin/chrome_identity.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "url/gurl.h"
@@ -107,7 +106,9 @@ const CGFloat kSpinnerButtonPadding = 18;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
   DCHECK(browserState);
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     self.title = l10n_util::GetNSString(IDS_IOS_SYNC_ENTER_PASSPHRASE_TITLE);
     self.shouldHideDoneButton = YES;
@@ -320,7 +321,7 @@ const CGFloat kSpinnerButtonPadding = 18;
     CardMultilineCell* messageCell =
         base::mac::ObjCCastStrict<CardMultilineCell>(cell);
     messageCell.textLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:14];
+        [[MDCTypography fontLoader] mediumFontOfSize:14];
   }
   return cell;
 }
@@ -482,7 +483,7 @@ const CGFloat kSpinnerButtonPadding = 18;
   [spinner setHidesWhenStopped:NO];
   [spinner startAnimating];
 
-  return leftBarButtonItem = nil;
+  return leftBarButtonItem;
 }
 
 - (void)stopObserving {

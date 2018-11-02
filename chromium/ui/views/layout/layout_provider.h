@@ -24,6 +24,8 @@ enum InsetsMetric {
   // The margins around the title of a bubble (popover)-style dialog. The bottom
   // margin is implied by the content insets.
   INSETS_BUBBLE_TITLE,
+  // Internal border around checkboxes and radio buttons.
+  INSETS_CHECKBOX_RADIO_BUTTON,
   // The margins around the button row of a dialog. The top margin is implied
   // by the content insets.
   INSETS_DIALOG_BUTTON_ROW,
@@ -49,10 +51,9 @@ enum DistanceMetric {
   // two types have not been interchanged.
   VIEWS_DISTANCE_START = VIEWS_INSETS_MAX,
 
-  // Margin on the left and right of the contents of a bubble.
-  DISTANCE_BUBBLE_CONTENTS_HORIZONTAL_MARGIN = VIEWS_DISTANCE_START,
-  // Margin on the top and bottom of the contents of a bubble.
-  DISTANCE_BUBBLE_CONTENTS_VERTICAL_MARGIN,
+  // If a bubble has buttons, this is the margin between them and the rest of
+  // the content.
+  DISTANCE_BUBBLE_BUTTON_TOP_MARGIN = VIEWS_DISTANCE_START,
   // The default padding to add on each side of a button's label.
   DISTANCE_BUTTON_HORIZONTAL_PADDING,
   // The maximum width a button can have and still influence the sizes of
@@ -66,10 +67,6 @@ enum DistanceMetric {
   DISTANCE_DIALOG_BUTTON_BOTTOM_MARGIN,
   // The default minimum width of a dialog button.
   DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH,
-  // Margin on the left and right of the contents of a dialog.
-  DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN,
-  // Margin on the top and bottom of the contents of a dialog.
-  DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN,
   // The spacing between a pair of related horizontal buttons, used for
   // dialog layout.
   DISTANCE_RELATED_BUTTON_HORIZONTAL,
@@ -78,6 +75,8 @@ enum DistanceMetric {
   // The spacing between a pair of related vertical controls, used for
   // dialog layout.
   DISTANCE_RELATED_CONTROL_VERTICAL,
+  // Vertical spacing between controls that are logically unrelated.
+  DISTANCE_UNRELATED_CONTROL_VERTICAL,
 
   // Embedders must start DistanceMetric enum values from here.
   VIEWS_DISTANCE_END

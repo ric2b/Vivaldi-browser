@@ -282,7 +282,7 @@ CSSSelectorList CSSParserImpl::ParsePageSelector(
     selector = CSSParserSelector::Create();
     if (!pseudo.IsNull()) {
       selector->SetMatch(CSSSelector::kPagePseudoClass);
-      selector->UpdatePseudoType(pseudo.DeprecatedLower());
+      selector->UpdatePseudoPage(pseudo.LowerASCII());
       if (selector->GetPseudoType() == CSSSelector::kPseudoUnknown)
         return CSSSelectorList();
     }
@@ -614,7 +614,8 @@ StyleRuleSupports* CSSParserImpl::ConsumeSupportsRule(
     CSSParserTokenRange prelude,
     CSSParserTokenRange block) {
   CSSSupportsParser::SupportsResult supported =
-      CSSSupportsParser::SupportsCondition(prelude, *this);
+      CSSSupportsParser::SupportsCondition(prelude, *this,
+                                           CSSSupportsParser::kForAtRule);
   if (supported == CSSSupportsParser::kInvalid)
     return nullptr;  // Parse error, invalid @supports condition
 
@@ -643,7 +644,7 @@ StyleRuleViewport* CSSParserImpl::ConsumeViewportRule(
     CSSParserTokenRange prelude,
     CSSParserTokenRange block) {
   // Allow @viewport rules from UA stylesheets even if the feature is disabled.
-  if (!RuntimeEnabledFeatures::cssViewportEnabled() &&
+  if (!RuntimeEnabledFeatures::CSSViewportEnabled() &&
       !IsUASheetBehavior(context_->Mode()))
     return nullptr;
 
@@ -704,7 +705,7 @@ StyleRuleKeyframes* CSSParserImpl::ConsumeKeyframesRule(
   if (name_token.GetType() == kIdentToken) {
     name = name_token.Value().ToString();
   } else if (name_token.GetType() == kStringToken && webkit_prefixed) {
-    context_->Count(UseCounter::kQuotedKeyframesRule);
+    context_->Count(WebFeature::kQuotedKeyframesRule);
     name = name_token.Value().ToString();
   } else {
     return nullptr;  // Parse error; expected ident token in @keyframes header
@@ -752,7 +753,7 @@ StyleRulePage* CSSParserImpl::ConsumePageRule(CSSParserTokenRange prelude,
 }
 
 void CSSParserImpl::ConsumeApplyRule(CSSParserTokenRange prelude) {
-  DCHECK(RuntimeEnabledFeatures::cssApplyAtRulesEnabled());
+  DCHECK(RuntimeEnabledFeatures::CSSApplyAtRulesEnabled());
 
   const CSSParserToken& ident = prelude.ConsumeIncludingWhitespace();
   if (!prelude.AtEnd() || !CSSVariableParser::IsValidVariableName(ident))
@@ -865,7 +866,7 @@ void CSSParserImpl::ConsumeDeclarationList(CSSParserTokenRange range,
       case kAtKeywordToken: {
         AllowedRulesType allowed_rules =
             rule_type == StyleRule::kStyle &&
-                    RuntimeEnabledFeatures::cssApplyAtRulesEnabled()
+                    RuntimeEnabledFeatures::CSSApplyAtRulesEnabled()
                 ? kApplyRules
                 : kNoRules;
         StyleRuleBase* rule = ConsumeAtRule(range, allowed_rules);

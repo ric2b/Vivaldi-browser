@@ -5,20 +5,34 @@
 #ifndef CSSInterpolationType_h
 #define CSSInterpolationType_h
 
-#include "core/animation/InterpolationEnvironment.h"
+#include "core/animation/CSSInterpolationEnvironment.h"
 #include "core/animation/InterpolationType.h"
 
 namespace blink {
 
 class CSSCustomPropertyDeclaration;
+class CSSVariableResolver;
+class ComputedStyle;
 class PropertyRegistration;
+class StyleResolverState;
 
 class CSSInterpolationType : public InterpolationType {
  public:
-  void SetCustomPropertyRegistration(const PropertyRegistration&);
+  class CSSConversionChecker : public ConversionChecker {
+   public:
+    bool IsValid(const InterpolationEnvironment& environment,
+                 const InterpolationValue& underlying) const final {
+      return IsValid(ToCSSInterpolationEnvironment(environment).GetState(),
+                     underlying);
+    }
+
+   protected:
+    virtual bool IsValid(const StyleResolverState&,
+                         const InterpolationValue& underlying) const = 0;
+  };
 
  protected:
-  CSSInterpolationType(PropertyHandle);
+  CSSInterpolationType(PropertyHandle, const PropertyRegistration* = nullptr);
 
   CSSPropertyID CssProperty() const { return GetProperty().CssProperty(); }
 
@@ -60,10 +74,7 @@ class CSSInterpolationType : public InterpolationType {
   InterpolationValue MaybeConvertCustomPropertyDeclaration(
       const CSSCustomPropertyDeclaration&,
       const StyleResolverState&,
-      ConversionCheckers&) const;
-  InterpolationValue MaybeConvertCustomPropertyDeclarationInternal(
-      const CSSCustomPropertyDeclaration&,
-      const StyleResolverState&,
+      CSSVariableResolver&,
       ConversionCheckers&) const;
 
   virtual const CSSValue* CreateCSSValue(const InterpolableValue&,
@@ -74,6 +85,11 @@ class CSSInterpolationType : public InterpolationType {
     // const CSSValue&.
     NOTREACHED();
     return nullptr;
+  }
+
+  const PropertyRegistration& Registration() const {
+    DCHECK(GetProperty().IsCSSCustomProperty());
+    return *registration_;
   }
 
   void ApplyCustomPropertyValue(const InterpolableValue&,

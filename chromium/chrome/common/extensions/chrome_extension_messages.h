@@ -15,8 +15,6 @@
 #include "base/strings/string16.h"
 #include "base/values.h"
 #include "chrome/common/extensions/api/automation_internal.h"
-#include "chrome/common/extensions/api/webstore/webstore_api_constants.h"
-#include "chrome/common/extensions/webstore_install_result.h"
 #include "extensions/common/stack_frame.h"
 #include "ipc/ipc_message_macros.h"
 #include "ui/accessibility/ax_enums.h"
@@ -29,30 +27,7 @@
 
 #define IPC_MESSAGE_START ChromeExtensionMsgStart
 
-IPC_ENUM_TRAITS_MAX_VALUE(extensions::api::webstore::InstallStage,
-                          extensions::api::webstore::INSTALL_STAGE_INSTALLING)
-IPC_ENUM_TRAITS_MAX_VALUE(extensions::webstore_install::Result,
-                          extensions::webstore_install::RESULT_LAST)
-
 // Messages sent from the browser to the renderer.
-
-// Sent to the renderer if install stage updates were requested for an inline
-// install.
-IPC_MESSAGE_ROUTED1(ExtensionMsg_InlineInstallStageChanged,
-                    extensions::api::webstore::InstallStage /* stage */)
-
-// Sent to the renderer if download progress updates were requested for an
-// inline install.
-IPC_MESSAGE_ROUTED1(ExtensionMsg_InlineInstallDownloadProgress,
-                    int /* percent_downloaded */)
-
-// Send to renderer once the installation mentioned on
-// ExtensionHostMsg_InlineWebstoreInstall is complete.
-IPC_MESSAGE_ROUTED4(ExtensionMsg_InlineWebstoreInstallResponse,
-                    int32_t /* install id */,
-                    bool /* whether the install was successful */,
-                    std::string /* error */,
-                    extensions::webstore_install::Result /* result */)
 
 IPC_STRUCT_TRAITS_BEGIN(ui::AXNodeData)
   IPC_STRUCT_TRAITS_MEMBER(id)
@@ -66,6 +41,7 @@ IPC_STRUCT_TRAITS_BEGIN(ui::AXNodeData)
   IPC_STRUCT_TRAITS_MEMBER(float_attributes)
   IPC_STRUCT_TRAITS_MEMBER(bool_attributes)
   IPC_STRUCT_TRAITS_MEMBER(intlist_attributes)
+  IPC_STRUCT_TRAITS_MEMBER(stringlist_attributes)
   IPC_STRUCT_TRAITS_MEMBER(html_attributes)
   IPC_STRUCT_TRAITS_MEMBER(child_ids)
   IPC_STRUCT_TRAITS_MEMBER(offset_container_id)
@@ -141,12 +117,3 @@ IPC_MESSAGE_ROUTED2(ExtensionMsg_AccessibilityEvent,
 IPC_MESSAGE_ROUTED1(ExtensionMsg_AccessibilityLocationChange,
                     ExtensionMsg_AccessibilityLocationChangeParams)
 
-// Messages sent from the renderer to the browser.
-
-
-// Sent by the renderer to implement chrome.webstore.install().
-IPC_MESSAGE_ROUTED4(ExtensionHostMsg_InlineWebstoreInstall,
-                    int32_t /* install id */,
-                    int32_t /* return route id */,
-                    std::string /* Web Store item ID */,
-                    int /* listeners_mask */)

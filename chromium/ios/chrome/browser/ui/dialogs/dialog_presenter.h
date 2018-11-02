@@ -77,17 +77,14 @@ class WebState;
 // view controller.
 - (void)tryToPresent;
 
-// Create an title for the alert base on the URL.
-+ (NSString*)localizedTitleForJavaScriptAlertFromPage:(const GURL&)pageURL;
-
 @end
 
 @interface DialogPresenter (ExposedForTesting)
 // The dialog currently being shown.
 @property(nonatomic, readonly) AlertCoordinator* presentedDialogCoordinator;
 
-// Called when a button in |dialog| is tapped.
-- (void)buttonWasTappedForCoordinator:(AlertCoordinator*)coordinator;
+// Called when |coordinator| is stopped.
+- (void)dialogCoordinatorWasStopped:(AlertCoordinator*)coordinator;
 
 @end
 

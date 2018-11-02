@@ -254,6 +254,12 @@ namespace bluetoothLowEnergy {
 
     // Get all the GATT services that were discovered on the remote device with
     // the given device address.
+    //
+    // <em>Note:</em> If service discovery is not yet complete on the device,
+    // this API will return a subset (possibly empty) of services. A work around
+    // is to add a time based delay and/or call repeatedly until the expected
+    // number of services is returned.
+    //
     // |deviceAddress|: The Bluetooth address of the remote device whose GATT
     // services should be returned.
     // |callback|: Called with the list of requested Service objects.
@@ -463,6 +469,11 @@ namespace bluetoothLowEnergy {
     // longer being advertised.
     static void unregisterAdvertisement(long advertisementId,
         ResultCallback callback);
+
+    // Resets advertising on the current device. It will unregister and
+    // stop all existing advertisements.
+    // |callback|: Called once the advertisements are reset.
+    static void resetAdvertising(ResultCallback callback);
 
     // Set's the interval betweeen two consecutive advertisements. Note:
     // This is a best effort. The actual interval may vary non-trivially

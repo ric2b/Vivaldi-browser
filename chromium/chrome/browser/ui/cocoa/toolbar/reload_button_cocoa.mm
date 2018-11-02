@@ -14,7 +14,6 @@
 #import "chrome/browser/ui/cocoa/themed_window.h"
 #import "chrome/browser/ui/cocoa/view_id_util.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "ui/base/accelerators/platform_accelerator_cocoa.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -77,6 +76,7 @@ const int kReloadMenuCommands[]  = {
 
   menu_.reset([[NSMenu alloc] initWithTitle:@""]);
   [self populateMenu];
+  [self setAttachedMenu:menu_];
 }
 
 - (void)invalidatePendingReloadTimer {
@@ -153,7 +153,8 @@ const int kReloadMenuCommands[]  = {
 }
 
 - (void)setMenuEnabled:(BOOL)enabled {
-  [self setAttachedMenu:(enabled ? menu_ : nil)];
+  [self setOpenMenuOnRightClick:enabled];
+  [self setOpenMenuOnClickHold:enabled];
 }
 
 - (void)setCommandUpdater:(CommandUpdater*)commandUpdater {

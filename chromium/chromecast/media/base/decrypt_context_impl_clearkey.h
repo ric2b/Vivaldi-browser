@@ -22,14 +22,14 @@ namespace media {
 class DecryptContextImplClearKey : public DecryptContextImpl {
  public:
   // Note: DecryptContextClearKey does not take ownership of |key|.
-  explicit DecryptContextImplClearKey(crypto::SymmetricKey* key);
+  explicit DecryptContextImplClearKey(const crypto::SymmetricKey* key);
   ~DecryptContextImplClearKey() override;
 
   // DecryptContextImpl implementation.
   void DecryptAsync(CastDecoderBuffer* buffer,
                     uint8_t* output,
                     size_t data_offset,
-                    const DecryptCB& decrypt_cb) override;
+                    DecryptCB decrypt_cb) override;
 
   bool CanDecryptToBuffer() const override;
 
@@ -37,7 +37,7 @@ class DecryptContextImplClearKey : public DecryptContextImpl {
   bool DoDecrypt(CastDecoderBuffer* buffer,
                  uint8_t* output,
                  size_t data_offset);
-  crypto::SymmetricKey* const key_;
+  const crypto::SymmetricKey* const key_;
 
   DISALLOW_COPY_AND_ASSIGN(DecryptContextImplClearKey);
 };

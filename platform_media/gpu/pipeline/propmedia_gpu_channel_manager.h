@@ -4,42 +4,40 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_COMMON_GPU_MEDIA_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
-#define CONTENT_COMMON_GPU_MEDIA_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
+#ifndef PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
+#define PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include <map>
+#include <memory>
+#include <unordered_map>
 
-#include "gpu/ipc/service/gpu_channel_manager.h"
+#include "base/unguessable_token.h"
 
 namespace gpu {
 
-class ProprietaryMediaGpuChannelManager : public GpuChannelManager {
+class GpuChannelManager;
+class ProprietaryMediaGpuChannel;
+
+class ProprietaryMediaGpuChannelManager
+{
  public:
-  ProprietaryMediaGpuChannelManager(
-                    const GpuPreferences& gpu_preferences,
-                    const GpuDriverBugWorkarounds& workarounds,
-                    GpuChannelManagerDelegate* delegate,
-                    GpuWatchdogThread* watchdog,
-                    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-                    scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-                    Scheduler* scheduler,
-                    SyncPointManager* sync_point_manager,
-                    GpuMemoryBufferFactory* gpu_memory_buffer_factory,
-                    const GpuFeatureInfo& gpu_feature_info,
-                    GpuProcessActivityFlags activity_flags);
 
-  ~ProprietaryMediaGpuChannelManager() override;
+  explicit ProprietaryMediaGpuChannelManager(gpu::GpuChannelManager* manager);
+  ~ProprietaryMediaGpuChannelManager();
+  void AddChannel(int32_t client_id);
+  void RemoveChannel(int32_t client_id);
 
- protected:
-  GpuChannel* EstablishChannel(
-      int client_id,
-      uint64_t client_tracing_id,
-      bool is_gpu_host) override;
+ private:
+
+  gpu::GpuChannelManager* const channel_manager_;
+  std::unordered_map<int32_t, std::unique_ptr<ProprietaryMediaGpuChannel>>
+      media_gpu_channels_;
+  std::map<base::UnguessableToken, int32_t> token_to_channel_;
+  std::map<int32_t, base::UnguessableToken> channel_to_token_;
 
   DISALLOW_COPY_AND_ASSIGN(ProprietaryMediaGpuChannelManager);
 };
 
 }  // namespace gpu
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
-#endif  // CONTENT_COMMON_GPU_MEDIA_PROPMEDIA_GPU_CHANNEL_MANAGER_H_
+#endif  // PLATFORM_MEDIA_GPU_PIPELINE_PROPMEDIA_GPU_CHANNEL_MANAGER_H_

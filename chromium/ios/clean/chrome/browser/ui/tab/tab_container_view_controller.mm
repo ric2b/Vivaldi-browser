@@ -4,7 +4,9 @@
 
 #import "ios/clean/chrome/browser/ui/tab/tab_container_view_controller.h"
 
-#import "ios/clean/chrome/browser/ui/tab_strip/tab_strip_events.h"
+#import "ios/clean/chrome/browser/ui/transitions/animators/swap_from_above_animator.h"
+#import "ios/clean/chrome/browser/ui/transitions/containment_transition_context.h"
+#import "ios/clean/chrome/browser/ui/transitions/containment_transitioning_delegate.h"
 #import "ios/clean/chrome/browser/ui/ui_types.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -16,7 +18,7 @@ CGFloat kToolbarHeight = 56.0f;
 CGFloat kTabStripHeight = 120.0f;
 }
 
-@interface TabContainerViewController ()
+@interface TabContainerViewController ()<ContainmentTransitioningDelegate>
 
 // Container views for child view controllers. The child view controller's
 // view is added as a subview that fills its container view via autoresizing.
@@ -46,6 +48,7 @@ CGFloat kTabStripHeight = 120.0f;
 @synthesize findBarViewController = _findBarViewController;
 @synthesize toolbarViewController = _toolbarViewController;
 @synthesize tabStripViewController = _tabStripViewController;
+@synthesize tabStripVisible = _tabStripVisible;
 @synthesize tabStripView = _tabStripView;
 @synthesize toolbarView = _toolbarView;
 @synthesize contentView = _contentView;
@@ -53,11 +56,14 @@ CGFloat kTabStripHeight = 120.0f;
 @synthesize toolbarHeightConstraint = _toolbarHeightConstraint;
 @synthesize actionToForward = _actionToForward;
 @synthesize forwardingTarget = _forwardingTarget;
+@synthesize containmentTransitioningDelegate =
+    _containmentTransitioningDelegate;
 
 #pragma mark - UIViewController
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+  self.containmentTransitioningDelegate = self;
   self.findBarView = [[UIView alloc] init];
   self.tabStripView = [[UIView alloc] init];
   self.toolbarView = [[UIView alloc] init];
@@ -67,10 +73,11 @@ CGFloat kTabStripHeight = 120.0f;
   self.toolbarView.translatesAutoresizingMaskIntoConstraints = NO;
   self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
   self.view.backgroundColor = [UIColor blackColor];
-  self.findBarView.backgroundColor = [UIColor greenColor];
+  self.findBarView.backgroundColor = [UIColor clearColor];
   self.tabStripView.backgroundColor = [UIColor blackColor];
   self.toolbarView.backgroundColor = [UIColor blackColor];
   self.contentView.backgroundColor = [UIColor blackColor];
+  self.findBarView.clipsToBounds = YES;
 
   // Views that are added last have the highest z-order.
   [self.view addSubview:self.tabStripView];
@@ -90,6 +97,7 @@ CGFloat kTabStripHeight = 120.0f;
       [self.tabStripView.heightAnchor constraintEqualToConstant:0.0f];
   self.toolbarHeightConstraint =
       [self.toolbarView.heightAnchor constraintEqualToConstant:0.0f];
+  self.toolbarHeightConstraint.priority = UILayoutPriorityDefaultHigh;
   if (self.toolbarViewController) {
     self.toolbarHeightConstraint.constant = kToolbarHeight;
   }
@@ -114,12 +122,31 @@ CGFloat kTabStripHeight = 120.0f;
   if (self.findBarViewController == findBarViewController)
     return;
   if ([self isViewLoaded]) {
-    [self detachChildViewController:self.findBarViewController];
-    [self addChildViewController:findBarViewController
-                       toSubview:self.findBarView];
+    self.findBarView.hidden = NO;
+    findBarViewController.view.translatesAutoresizingMaskIntoConstraints = YES;
+    findBarViewController.view.autoresizingMask =
+        UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+
+    ContainmentTransitionContext* context =
+        [[ContainmentTransitionContext alloc]
+            initWithFromViewController:self.findBarViewController
+                      toViewController:findBarViewController
+                  parentViewController:self
+                                inView:self.findBarView
+                            completion:^(BOOL finished) {
+                              self.findBarView.hidden =
+                                  (findBarViewController == nil);
+                            }];
+    id<UIViewControllerAnimatedTransitioning> animator =
+        [self.containmentTransitioningDelegate
+            animationControllerForAddingChildController:findBarViewController
+                                removingChildController:
+                                    self.findBarViewController
+                                           toController:self];
+    [context prepareTransitionWithAnimator:animator];
+    [animator animateTransition:context];
   }
   _findBarViewController = findBarViewController;
-  self.findBarView.hidden = (_findBarViewController == nil);
 }
 
 - (void)setToolbarViewController:(UIViewController*)toolbarViewController {
@@ -131,6 +158,15 @@ CGFloat kTabStripHeight = 120.0f;
                        toSubview:self.toolbarView];
   }
   _toolbarViewController = toolbarViewController;
+}
+
+- (void)setTabStripVisible:(BOOL)tabStripVisible {
+  if (tabStripVisible) {
+    self.tabStripHeightConstraint.constant = kTabStripHeight;
+  } else {
+    self.tabStripHeightConstraint.constant = 0.0f;
+  }
+  _tabStripVisible = tabStripVisible;
 }
 
 - (void)setTabStripViewController:(UIViewController*)tabStripViewController {
@@ -170,37 +206,11 @@ CGFloat kTabStripHeight = 120.0f;
 
 #pragma mark - MenuPresentationDelegate
 
-- (CGRect)frameForMenuPresentation:(UIPresentationController*)presentation {
-  CGSize menuSize = presentation.presentedView.frame.size;
-  CGRect menuRect;
-  menuRect.size = menuSize;
-
-  CGRect menuOriginRect = [self rectForZoomWithKey:@"" inView:self.view];
-  if (CGRectIsNull(menuOriginRect)) {
-    menuRect.origin = CGPointMake(50, 50);
-    return menuRect;
-  }
-  // Calculate which corner of the menu the origin rect is in. This is
-  // determined by comparing frames, and thus is RTL-independent.
-  if (CGRectGetMinX(menuOriginRect) - CGRectGetMinX(self.view.bounds) <
-      CGRectGetMaxX(self.view.bounds) - CGRectGetMaxX(menuOriginRect)) {
-    // Origin rect is closer to the left edge of |self.view| than to the right.
-    menuRect.origin.x = CGRectGetMinX(menuOriginRect);
-  } else {
-    // Origin rect is closer to the right edge of |self.view| than to the left.
-    menuRect.origin.x = CGRectGetMaxX(menuOriginRect) - menuSize.width;
-  }
-
-  if (CGRectGetMinY(menuOriginRect) - CGRectGetMinY(self.view.bounds) <
-      CGRectGetMaxY(self.view.bounds) - CGRectGetMaxY(menuOriginRect)) {
-    // Origin rect is closer to the top edge of |self.view| than to the bottom.
-    menuRect.origin.y = CGRectGetMinY(menuOriginRect);
-  } else {
-    // Origin rect is closer to the bottom edge of |self.view| than to the top.
-    menuRect.origin.y = CGRectGetMaxY(menuOriginRect) - menuSize.height;
-  }
-
-  return menuRect;
+- (CGRect)boundsForMenuPresentation {
+  return self.view.bounds;
+}
+- (CGRect)originForMenuPresentation {
+  return [self rectForZoomWithKey:nil inView:self.view];
 }
 
 #pragma mark - ZoomTransitionDelegate
@@ -242,24 +252,10 @@ CGFloat kTabStripHeight = 120.0f;
   return nil;
 }
 
-#pragma mark - Action handling
-
-- (void)showTabStrip:(id)sender {
-  self.tabStripHeightConstraint.constant = kTabStripHeight;
-  // HACK: Remove fake action.
-  [[UIApplication sharedApplication] sendAction:@selector(tabStripDidShow:)
-                                             to:nil
-                                           from:sender
-                                       forEvent:nil];
-}
+#pragma mark - Tab Strip actions.
 
 - (void)hideTabStrip:(id)sender {
-  self.tabStripHeightConstraint.constant = 0.0f;
-  // HACK: Remove fake action.
-  [[UIApplication sharedApplication] sendAction:@selector(tabStripDidHide:)
-                                             to:nil
-                                           from:sender
-                                       forEvent:nil];
+  self.tabStripVisible = NO;
 }
 
 #pragma mark - Abstract methods to be overriden by subclass
@@ -269,6 +265,15 @@ CGFloat kTabStripHeight = 120.0f;
        raise:NSInternalInconsistencyException
       format:@"You must override %@ in a subclass", NSStringFromSelector(_cmd)];
   return nil;
+}
+
+#pragma mark - ContainmentTransitioningDelegate
+
+- (id<UIViewControllerAnimatedTransitioning>)
+animationControllerForAddingChildController:(UIViewController*)addedChild
+                    removingChildController:(UIViewController*)removedChild
+                               toController:(UIViewController*)parent {
+  return [[SwapFromAboveAnimator alloc] init];
 }
 
 @end

@@ -22,9 +22,10 @@ _PAGE_TAGS_LIST = [
     # Other filter tags:
     'is_50fps',
     'is_4k',
-    # Play action
+    # Play action:
     'seek',
     'normal_play',
+    'background',
 ]
 
 
@@ -35,7 +36,7 @@ class ToughVideoCasesPage(page_module.Page):
       for t in tags:
         assert t in _PAGE_TAGS_LIST
     super(ToughVideoCasesPage, self).__init__(
-        url=url, page_set=page_set, tags=tags)
+        url=url, page_set=page_set, tags=tags, name=url.split('/')[-1])
 
   def PlayAction(self, action_runner):
     # Play the media until it has finished or it times out.
@@ -59,6 +60,31 @@ class ToughVideoCasesPage(page_module.Page):
     # Seek to after the play-head location.
     action_runner.SeekMedia(seconds=9, timeout_in_seconds=timeout,
                             label='seek_cold')
+    # Generate memory dump for memoryMetric.
+    if self.page_set.measure_memory:
+      action_runner.MeasureMemory()
+
+  def PlayInBackgroundTab(self, action_runner, background_time=10):
+    # Steps:
+    # 1. Play a video
+    # 2. Open new tab overtop to obscure the video
+    # 3. Close the tab to go back to the tab that is playing the video.
+    # This test case will work differently depending on whether the platform is
+    # desktop or Android and whether the video has sound or not. For example,
+    # the current Chrome video implementation (as of July 2017) pauses video on
+    # Android when the tab is backgrounded, but on desktop the video is not
+    # paused.
+    # TODO(crouleau): Use --disable-media-suspend flag to enable Android to
+    # play video in the background.
+    # The motivation for this test case is crbug.com/678663.
+    action_runner.PlayMedia(
+        playing_event_timeout_in_seconds=60)
+    action_runner.Wait(.5)
+    new_tab = action_runner.tab.browser.tabs.New()
+    new_tab.Activate()
+    action_runner.Wait(background_time)
+    new_tab.Close()
+    action_runner.Wait(.5)
     # Generate memory dump for memoryMetric.
     if self.page_set.measure_memory:
       action_runner.MeasureMemory()
@@ -372,20 +398,6 @@ class Page34(ToughVideoCasesPage):
     self.PlayAction(action_runner)
 
 
-class Page35(ToughVideoCasesPage):
-
-  def __init__(self, page_set):
-    super(Page35, self).__init__(
-      url='file://tough_video_cases/video.html?src=crowd720_vp9.webm&seek',
-      page_set=page_set,
-      tags=['vp9', 'video_only', 'seek'])
-
-    self.skip_basic_metrics = True
-
-  def RunPageInteractions(self, action_runner):
-    self.SeekBeforeAndAfterPlayhead(action_runner)
-
-
 class Page36(ToughVideoCasesPage):
 
   def __init__(self, page_set):
@@ -400,6 +412,19 @@ class Page36(ToughVideoCasesPage):
   def RunPageInteractions(self, action_runner):
     self.SeekBeforeAndAfterPlayhead(action_runner,
                                     action_timeout_in_seconds=120)
+
+class Page37(ToughVideoCasesPage):
+
+  def __init__(self, page_set):
+    super(Page37, self).__init__(
+      url='file://tough_video_cases/video.html?src=tulip2.vp9.webm&background',
+      page_set=page_set,
+      tags=['vp9', 'opus', 'audio_video', 'background'])
+
+    self.skip_basic_metrics = True
+
+  def RunPageInteractions(self, action_runner):
+    self.PlayInBackgroundTab(action_runner)
 
 
 class ToughVideoCasesPageSet(story.StorySet):
@@ -438,5 +463,22 @@ class ToughVideoCasesPageSet(story.StorySet):
     self.AddStory(Page26(self))
     self.AddStory(Page31(self))
     self.AddStory(Page33(self))
-    self.AddStory(Page35(self))
     self.AddStory(Page36(self))
+
+    # Background playback tests:
+    self.AddStory(Page37(self))
+
+
+class ToughVideoCasesDesktopStoryExpectations(
+    story.expectations.StoryExpectations):
+
+  def SetExpectations(self):
+    self.PermanentlyDisableBenchmark(
+        [story.expectations.ALL_MOBILE], 'Desktop Benchmark')
+
+class ToughVideoCasesAndroidStoryExpectations(
+    story.expectations.StoryExpectations):
+
+  def SetExpectations(self):
+    self.PermanentlyDisableBenchmark(
+        [story.expectations.ALL_DESKTOP], 'Android Benchmark')

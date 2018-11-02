@@ -14,7 +14,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "content/public/browser/browser_context.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/resource_dispatcher_host.h"
@@ -27,6 +26,7 @@
 #include "headless/lib/browser/headless_browser_impl.h"
 #include "headless/lib/browser/headless_browser_main_parts.h"
 #include "headless/lib/browser/headless_devtools_manager_delegate.h"
+#include "headless/lib/browser/headless_quota_permission_context.h"
 #include "headless/lib/headless_macros.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -138,8 +138,17 @@ HeadlessContentBrowserClient::GetDevToolsManagerDelegate() {
 std::unique_ptr<base::Value>
 HeadlessContentBrowserClient::GetServiceManifestOverlay(
     base::StringPiece name) {
-  if (name != content::mojom::kBrowserServiceName ||
-      browser_->options()->mojo_service_names.empty())
+  if (name == content::mojom::kBrowserServiceName)
+    return GetBrowserServiceManifestOverlay();
+  else if (name == content::mojom::kRendererServiceName)
+    return GetRendererServiceManifestOverlay();
+
+  return nullptr;
+}
+
+std::unique_ptr<base::Value>
+HeadlessContentBrowserClient::GetBrowserServiceManifestOverlay() {
+  if (browser_->options()->mojo_service_names.empty())
     return nullptr;
 
   base::StringPiece manifest_template =
@@ -162,15 +171,25 @@ HeadlessContentBrowserClient::GetServiceManifestOverlay(
   return manifest;
 }
 
+std::unique_ptr<base::Value>
+HeadlessContentBrowserClient::GetRendererServiceManifestOverlay() {
+  base::StringPiece manifest_template =
+      ui::ResourceBundle::GetSharedInstance().GetRawDataResource(
+          IDR_HEADLESS_RENDERER_MANIFEST_OVERLAY);
+  return base::JSONReader::Read(manifest_template);
+}
+
+content::QuotaPermissionContext*
+HeadlessContentBrowserClient::CreateQuotaPermissionContext() {
+  return new HeadlessQuotaPermissionContext();
+}
+
 void HeadlessContentBrowserClient::GetQuotaSettings(
     content::BrowserContext* context,
     content::StoragePartition* partition,
-    const storage::OptionalQuotaSettingsCallback& callback) {
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&storage::CalculateNominalDynamicSettings,
-                 partition->GetPath(), context->IsOffTheRecord()),
-      callback);
+    storage::OptionalQuotaSettingsCallback callback) {
+  storage::GetNominalDynamicSettings(
+      partition->GetPath(), context->IsOffTheRecord(), std::move(callback));
 }
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
@@ -224,6 +243,10 @@ void HeadlessContentBrowserClient::ResourceDispatcherHostCreated() {
       new HeadlessResourceDispatcherHostDelegate);
   content::ResourceDispatcherHost::Get()->SetDelegate(
       resource_dispatcher_host_delegate_.get());
+}
+
+net::NetLog* HeadlessContentBrowserClient::GetNetLog() {
+  return browser_->browser_main_parts()->net_log();
 }
 
 }  // namespace headless

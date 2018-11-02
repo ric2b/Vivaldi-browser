@@ -27,6 +27,9 @@ class CORE_EXPORT TextMatchMarkerListImpl final : public DocumentMarkerList {
   void Clear() final;
 
   const HeapVector<Member<DocumentMarker>>& GetMarkers() const final;
+  HeapVector<Member<DocumentMarker>> MarkersIntersectingRange(
+      unsigned start_offset,
+      unsigned end_offset) const final;
 
   bool MoveMarkers(int length, DocumentMarkerList* dst_list) final;
   bool RemoveMarkers(unsigned start_offset, int length) final;
@@ -36,7 +39,12 @@ class CORE_EXPORT TextMatchMarkerListImpl final : public DocumentMarkerList {
   DECLARE_VIRTUAL_TRACE();
 
   // TextMatchMarkerListImpl-specific
-  Vector<IntRect> RenderedRects(const Node&) const;
+  Vector<IntRect> LayoutRects(const Node&) const;
+  // Returns true if markers within a range defined by |startOffset| and
+  // |endOffset| are found.
+  bool SetTextMatchMarkersActive(unsigned start_offset,
+                                 unsigned end_offset,
+                                 bool);
 
  private:
   HeapVector<Member<DocumentMarker>> markers_;

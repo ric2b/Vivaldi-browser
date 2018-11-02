@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "remoting/protocol/message_pipe.h"
 #include "third_party/webrtc/api/peerconnectioninterface.h"
-#include "third_party/webrtc/base/refcount.h"
+#include "third_party/webrtc/rtc_base/refcount.h"
 
 namespace remoting {
 namespace protocol {
@@ -38,10 +38,6 @@ class WebrtcDataStreamAdapter : public MessagePipe,
   // webrtc::DataChannelObserver interface.
   void OnStateChange() override;
   void OnMessage(const webrtc::DataBuffer& buffer) override;
-
-  void OnConnected();
-
-  void OnClosed();
 
   rtc::scoped_refptr<webrtc::DataChannelInterface> channel_;
 

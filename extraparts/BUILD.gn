@@ -14,11 +14,12 @@ source_set("extraparts") {
   }
   deps = [
     "//base:base",
-    "//chrome/browser",
+    #"//chrome/browser",
     "//chrome/common:constants",
     "//skia",
     "//third_party/WebKit/public:blink_headers",
     "//vivaldi/extensions/schema:api",
+    "//vivaldi/calendar",
   ]
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 }

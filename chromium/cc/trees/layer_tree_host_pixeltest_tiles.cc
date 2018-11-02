@@ -8,12 +8,10 @@
 #include "cc/layers/picture_layer.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/paint/display_item_list.h"
-#include "cc/paint/drawing_display_item.h"
-#include "cc/paint/paint_canvas.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/paint/paint_recorder.h"
+#include "cc/paint/paint_op_buffer.h"
 #include "cc/test/layer_tree_pixel_test.h"
-#include "cc/test/test_compositor_frame_sink.h"
+#include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 
 #if !defined(OS_ANDROID)
@@ -111,9 +109,8 @@ class BlueYellowClient : public ContentLayerClient {
       PaintingControlSetting painting_status) override {
     auto display_list = make_scoped_refptr(new DisplayItemList);
 
-    PaintRecorder recorder;
-    PaintCanvas* canvas =
-        recorder.beginRecording(gfx::RectToSkRect(PaintableRegion()));
+    PaintOpBuffer* buffer = display_list->StartPaint();
+
     gfx::Rect top(0, 0, size_.width(), size_.height() / 2);
     gfx::Rect bottom(0, size_.height() / 2, size_.width(), size_.height() / 2);
 
@@ -124,13 +121,11 @@ class BlueYellowClient : public ContentLayerClient {
     flags.setStyle(PaintFlags::kFill_Style);
 
     flags.setColor(SK_ColorBLUE);
-    canvas->drawRect(gfx::RectToSkRect(blue_rect), flags);
+    buffer->push<DrawRectOp>(gfx::RectToSkRect(blue_rect), flags);
     flags.setColor(SK_ColorYELLOW);
-    canvas->drawRect(gfx::RectToSkRect(yellow_rect), flags);
+    buffer->push<DrawRectOp>(gfx::RectToSkRect(yellow_rect), flags);
 
-    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        PaintableRegion(), recorder.finishRecordingAsPicture(),
-        gfx::RectToSkRect(PaintableRegion()));
+    display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
   }
@@ -182,12 +177,12 @@ class LayerTreeHostTilesTestPartialInvalidation
   void WillPrepareTilesOnThread(LayerTreeHostImpl* host_impl) override {
     // Issue a GL finish before preparing tiles to ensure resources become
     // available for use in a timely manner. Needed for the one-copy path.
-    ContextProvider* context_provider =
-        host_impl->compositor_frame_sink()->worker_context_provider();
+    viz::ContextProvider* context_provider =
+        host_impl->layer_tree_frame_sink()->worker_context_provider();
     if (!context_provider)
       return;
 
-    ContextProvider::ScopedContextLock lock(context_provider);
+    viz::ContextProvider::ScopedContextLock lock(context_provider);
     lock.ContextGL()->Finish();
   }
 

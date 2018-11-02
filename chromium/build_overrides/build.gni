@@ -2,12 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# Several dependencies of Chrome require a different min sdk when built
-# as stand-alone projects. If this is ever not the case, these variables
-# can be removed.
-# See https://bugs.chromium.org/p/webrtc/issues/detail?id=5453.
-mac_sdk_min_build_override = "10.10"
-
 # Variable that can be used to support multiple build scenarios, like having
 # Chromium specific targets in a client project's GN file etc.
 build_with_chromium = true
@@ -58,5 +52,8 @@ if (use_system_xcode == "") {
   _result = exec_script("//build/mac/should_use_hermetic_xcode.py",
                         [ target_os ],
                         "value")
+  assert(_result != 2,
+         "Do not allow building targets with the default" +
+             "hermetic toolchain if the minimum OS version is not met.")
   use_system_xcode = _result == 0
 }

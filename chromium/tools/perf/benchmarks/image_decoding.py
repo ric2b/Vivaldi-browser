@@ -23,3 +23,14 @@ class ImageDecodingToughImageCases(perf_benchmark.PerfBenchmark):
   def ShouldDisable(cls, possible_browser):
     # crbug.com/667501
     return possible_browser.platform.GetDeviceTypeName() == 'Nexus 7'
+
+  def GetExpectations(self):
+    return page_sets.ImageDecodingMeasurementStoryExpectations()
+
+  def SetExtraBrowserOptions(self, options):
+    options.AppendExtraBrowserArgs([
+        # Disable asynchronous decodes in the renderer since these test
+        # rely on images have been decoded between consecutive
+        # requestAnimationFrames.
+        '--disable-checker-imaging'
+    ])

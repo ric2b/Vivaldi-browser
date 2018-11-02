@@ -13,7 +13,8 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/debug/dump_without_crashing.h"
+#include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -34,13 +35,15 @@
 #include "content/child/web_url_request_util.h"
 #include "content/child/weburlresponse_extradata_impl.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
-#include "content/common/url_loader.mojom.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_body.h"
+#include "content/public/common/service_worker_modes.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "net/base/data_url.h"
 #include "net/base/filename_util.h"
 #include "net/base/net_errors.h"
@@ -187,6 +190,10 @@ blink::WebReferrerPolicy NetReferrerPolicyToBlinkReferrerPolicy(
       return blink::kWebReferrerPolicyAlways;
     case net::URLRequest::ORIGIN:
       return blink::kWebReferrerPolicyOrigin;
+    case net::URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN:
+      return blink::kWebReferrerPolicySameOrigin;
+    case net::URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
+      return blink::kWebReferrerPolicyStrictOrigin;
     case net::URLRequest::NO_REFERRER:
       return blink::kWebReferrerPolicyNever;
     case net::URLRequest::MAX_REFERRER_POLICY:
@@ -348,7 +355,10 @@ void SetSecurityStyleAndDetails(const GURL& url,
 }  // namespace
 
 StreamOverrideParameters::StreamOverrideParameters() {}
-StreamOverrideParameters::~StreamOverrideParameters() {}
+StreamOverrideParameters::~StreamOverrideParameters() {
+  if (on_delete)
+    std::move(on_delete).Run(stream_url);
+}
 
 // This inner class exists since the WebURLLoader may be deleted while inside a
 // call to WebURLLoaderClient.  Refcounting is to keep the context from being
@@ -359,6 +369,7 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
 
   Context(WebURLLoaderImpl* loader,
           ResourceDispatcher* resource_dispatcher,
+          scoped_refptr<base::SingleThreadTaskRunner> task_runner,
           mojom::URLLoaderFactory* factory);
 
   WebURLLoaderClient* client() const { return client_; }
@@ -370,8 +381,6 @@ class WebURLLoaderImpl::Context : public base::RefCounted<Context> {
                          int intra_priority_value);
   void Start(const WebURLRequest& request,
              SyncLoadResponse* sync_load_response);
-  void SetTaskRunner(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
 
   void OnUploadProgress(uint64_t position, uint64_t size);
   bool OnReceivedRedirect(const net::RedirectInfo& redirect_info,
@@ -446,16 +455,24 @@ class WebURLLoaderImpl::RequestPeerImpl : public RequestPeer {
 
 // WebURLLoaderImpl::Context --------------------------------------------------
 
-WebURLLoaderImpl::Context::Context(WebURLLoaderImpl* loader,
-                                   ResourceDispatcher* resource_dispatcher,
-                                   mojom::URLLoaderFactory* url_loader_factory)
+WebURLLoaderImpl::Context::Context(
+    WebURLLoaderImpl* loader,
+    ResourceDispatcher* resource_dispatcher,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    mojom::URLLoaderFactory* url_loader_factory)
     : loader_(loader),
       client_(NULL),
       resource_dispatcher_(resource_dispatcher),
-      task_runner_(base::ThreadTaskRunnerHandle::Get()),
+      task_runner_(std::move(task_runner)),
       defers_loading_(NOT_DEFERRING),
       request_id_(-1),
-      url_loader_factory_(url_loader_factory) {}
+      url_loader_factory_(url_loader_factory) {
+#if DCHECK_IS_ON()
+  const bool mojo_loading_enabled =
+      base::FeatureList::IsEnabled(features::kLoadingWithMojo);
+  DCHECK(url_loader_factory_ || !mojo_loading_enabled);
+#endif
+}
 
 void WebURLLoaderImpl::Context::Cancel() {
   TRACE_EVENT_WITH_FLOW0("loading", "WebURLLoaderImpl::Context::Cancel", this,
@@ -579,6 +596,8 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
       GetFetchCredentialsModeForWebURLRequest(request);
   resource_request->fetch_redirect_mode =
       GetFetchRedirectModeForWebURLRequest(request);
+  resource_request->fetch_integrity =
+      GetFetchIntegrityForWebURLRequest(request);
   resource_request->fetch_request_context_type =
       GetRequestContextTypeForWebURLRequest(request);
   resource_request->fetch_mixed_content_context_type =
@@ -616,32 +635,20 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
     }
   }
 
-  // PlzNavigate: Invalid renderer main resource requests are rejected by the
-  // browser. This should not happen.
-  // TODO(arthursonzogni): Remove this when the root cause for
-  // https://crbug.com/705508 is found.
-  if (IsBrowserSideNavigationEnabled() &&
-      IsResourceTypeFrame(resource_request->resource_type) &&
-      !resource_request->resource_body_stream_url.SchemeIs(url::kBlobScheme) &&
-      !consumer_handle.is_valid()) {
-    base::debug::DumpWithoutCrashing();
-  }
-
-  const RequestExtraData empty_extra_data;
-  const RequestExtraData* extra_data;
+  RequestExtraData empty_extra_data;
+  RequestExtraData* extra_data;
   if (request.GetExtraData())
     extra_data = static_cast<RequestExtraData*>(request.GetExtraData());
   else
     extra_data = &empty_extra_data;
   extra_data->CopyToResourceRequest(resource_request.get());
-  if (extra_data->url_loader_factory_override())
-    url_loader_factory_ = extra_data->url_loader_factory_override();
 
   if (sync_load_response) {
     DCHECK(defers_loading_ == NOT_DEFERRING);
     resource_dispatcher_->StartSync(
         std::move(resource_request), request.RequestorID(), sync_load_response,
-        request.GetLoadingIPCType(), url_loader_factory_);
+        request.GetLoadingIPCType(), url_loader_factory_,
+        extra_data->TakeURLLoaderThrottles());
     return;
   }
 
@@ -652,15 +659,10 @@ void WebURLLoaderImpl::Context::Start(const WebURLRequest& request,
       extra_data->frame_origin(),
       base::MakeUnique<WebURLLoaderImpl::RequestPeerImpl>(this),
       request.GetLoadingIPCType(), url_loader_factory_,
-      std::move(consumer_handle));
+      extra_data->TakeURLLoaderThrottles(), std::move(consumer_handle));
 
   if (defers_loading_ != NOT_DEFERRING)
     resource_dispatcher_->SetDefersLoading(request_id_, true);
-}
-
-void WebURLLoaderImpl::Context::SetTaskRunner(
-    const scoped_refptr<base::SingleThreadTaskRunner>& task_runner) {
-  task_runner_ = task_runner;
 }
 
 void WebURLLoaderImpl::Context::OnUploadProgress(uint64_t position,
@@ -892,9 +894,9 @@ void WebURLLoaderImpl::Context::OnCompletedRequest(
         this, TRACE_EVENT_FLAG_FLOW_IN);
 
     if (error_code != net::OK) {
-      client_->DidFail(CreateWebURLError(request_.Url(), stale_copy_in_cache,
-                                         error_code, was_ignored_by_handler),
-                       total_transfer_size, encoded_body_size,
+      WebURLError error(request_.Url(), stale_copy_in_cache, error_code);
+      error.was_ignored_by_handler = was_ignored_by_handler;
+      client_->DidFail(error, total_transfer_size, encoded_body_size,
                        decoded_body_size);
     } else {
       // PlzNavigate: compute the accurate transfer size for navigations.
@@ -930,7 +932,7 @@ void WebURLLoaderImpl::Context::CancelBodyStreaming() {
   }
   if (client_) {
     // TODO(yhirano): Set |stale_copy_in_cache| appropriately if possible.
-    client_->DidFail(CreateWebURLError(request_.Url(), false, net::ERR_ABORTED),
+    client_->DidFail(WebURLError(request_.Url(), false, net::ERR_ABORTED),
                      WebURLLoaderClient::kUnknownEncodedDataLength, 0, 0);
   }
 
@@ -1064,9 +1066,14 @@ void WebURLLoaderImpl::RequestPeerImpl::OnCompletedRequest(
 
 // WebURLLoaderImpl -----------------------------------------------------------
 
-WebURLLoaderImpl::WebURLLoaderImpl(ResourceDispatcher* resource_dispatcher,
-                                   mojom::URLLoaderFactory* url_loader_factory)
-    : context_(new Context(this, resource_dispatcher, url_loader_factory)) {}
+WebURLLoaderImpl::WebURLLoaderImpl(
+    ResourceDispatcher* resource_dispatcher,
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+    mojom::URLLoaderFactory* url_loader_factory)
+    : context_(new Context(this,
+                           resource_dispatcher,
+                           std::move(task_runner),
+                           url_loader_factory)) {}
 
 WebURLLoaderImpl::~WebURLLoaderImpl() {
   Cancel();
@@ -1077,7 +1084,7 @@ void WebURLLoaderImpl::PopulateURLResponse(const GURL& url,
                                            WebURLResponse* response,
                                            bool report_security_info) {
   response->SetURL(url);
-  response->SetResponseTime(info.response_time.ToInternalValue());
+  response->SetResponseTime(info.response_time);
   response->SetMIMEType(WebString::FromUTF8(info.mime_type));
   response->SetTextEncodingName(WebString::FromUTF8(info.charset));
   response->SetExpectedContentLength(info.content_length);
@@ -1115,17 +1122,18 @@ void WebURLLoaderImpl::PopulateURLResponse(const GURL& url,
   response->SetDidServiceWorkerNavigationPreload(
       info.did_service_worker_navigation_preload);
   response->SetEncodedDataLength(info.encoded_data_length);
+  response->SetAlpnNegotiatedProtocol(
+      WebString::FromUTF8(info.alpn_negotiated_protocol));
+  response->SetConnectionInfo(info.connection_info);
 
   SetSecurityStyleAndDetails(url, info, response, report_security_info);
 
-  WebURLResponseExtraDataImpl* extra_data =
-      new WebURLResponseExtraDataImpl(info.alpn_negotiated_protocol);
+  WebURLResponseExtraDataImpl* extra_data = new WebURLResponseExtraDataImpl();
   response->SetExtraData(extra_data);
   extra_data->set_was_fetched_via_spdy(info.was_fetched_via_spdy);
   extra_data->set_was_alpn_negotiated(info.was_alpn_negotiated);
   extra_data->set_was_alternate_protocol_available(
       info.was_alternate_protocol_available);
-  extra_data->set_connection_info(info.connection_info);
   extra_data->set_previews_state(info.previews_state);
   extra_data->set_effective_connection_type(info.effective_connection_type);
 
@@ -1216,6 +1224,7 @@ WebURLRequest WebURLLoaderImpl::PopulateURLRequestForRedirect(
   new_request.SetShouldResetAppCache(request.ShouldResetAppCache());
   new_request.SetFetchRequestMode(request.GetFetchRequestMode());
   new_request.SetFetchCredentialsMode(request.GetFetchCredentialsMode());
+  new_request.SetKeepalive(request.GetKeepalive());
 
   new_request.SetHTTPReferrer(WebString::FromUTF8(redirect_info.new_referrer),
                               NetReferrerPolicyToBlinkReferrerPolicy(
@@ -1249,10 +1258,12 @@ void WebURLLoaderImpl::LoadSynchronously(const WebURLRequest& request,
   // status code or status text.
   int error_code = sync_load_response.error_code;
   if (error_code != net::OK) {
-    response.SetURL(final_url);
-    error.domain = WebString::FromASCII(net::kErrorDomain);
-    error.reason = error_code;
-    error.unreachable_url = final_url;
+    error = WebURLError(final_url, false, error_code);
+    if (error_code == net::ERR_ABORTED) {
+      // SyncResourceHandler returns ERR_ABORTED for CORS redirect errors,
+      // so we treat the error as a web security violation.
+      error.is_web_security_violation = true;
+    }
     return;
   }
 
@@ -1285,11 +1296,6 @@ void WebURLLoaderImpl::SetDefersLoading(bool value) {
 void WebURLLoaderImpl::DidChangePriority(WebURLRequest::Priority new_priority,
                                          int intra_priority_value) {
   context_->DidChangePriority(new_priority, intra_priority_value);
-}
-
-void WebURLLoaderImpl::SetLoadingTaskRunner(
-    base::SingleThreadTaskRunner* loading_task_runner) {
-  context_->SetTaskRunner(loading_task_runner);
 }
 
 }  // namespace content

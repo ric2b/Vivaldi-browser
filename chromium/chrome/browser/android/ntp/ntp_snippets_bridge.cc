@@ -68,7 +68,8 @@ ScopedJavaLocalRef<jobject> ToJavaSuggestionList(
             ConvertUTF16ToJavaString(env, suggestion.snippet_text()),
             ConvertUTF8ToJavaString(env, suggestion.url().spec()),
             suggestion.publish_date().ToJavaTime(), suggestion.score(),
-            suggestion.fetch_date().ToJavaTime());
+            suggestion.fetch_date().ToJavaTime(),
+            suggestion.is_video_suggestion());
     if (suggestion.id().category().IsKnownCategory(
             KnownCategories::DOWNLOADS) &&
         suggestion.download_suggestion_extra() != nullptr) {
@@ -121,8 +122,7 @@ static jlong Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(snippets_bridge);
 }
 
-// Initiates a background fetch for remote suggestions.
-static void RemoteSuggestionsSchedulerOnFetchDue(
+static void RemoteSuggestionsSchedulerOnPersistentSchedulerWakeUp(
     JNIEnv* env,
     const JavaParamRef<jclass>& caller) {
   ntp_snippets::RemoteSuggestionsScheduler* scheduler =
@@ -134,9 +134,7 @@ static void RemoteSuggestionsSchedulerOnFetchDue(
   scheduler->OnPersistentSchedulerWakeUp();
 }
 
-// Reschedules the fetching of snippets. If tasks are already scheduled, they
-// will be rescheduled anyway, so all running intervals will be reset.
-static void RemoteSuggestionsSchedulerRescheduleFetching(
+static void RemoteSuggestionsSchedulerOnBrowserUpgraded(
     JNIEnv* env,
     const JavaParamRef<jclass>& caller) {
   ntp_snippets::RemoteSuggestionsScheduler* scheduler =
@@ -147,7 +145,7 @@ static void RemoteSuggestionsSchedulerRescheduleFetching(
     return;
   }
 
-  scheduler->RescheduleFetching();
+  scheduler->OnBrowserUpgraded();
 }
 
 static void SetRemoteSuggestionsEnabled(JNIEnv* env,
@@ -160,18 +158,6 @@ static void SetRemoteSuggestionsEnabled(JNIEnv* env,
     return;
 
   content_suggestions_service->SetRemoteSuggestionsEnabled(enabled);
-}
-
-static jboolean AreRemoteSuggestionsEnabled(
-    JNIEnv* env,
-    const JavaParamRef<jclass>& caller) {
-  ntp_snippets::ContentSuggestionsService* content_suggestions_service =
-      ContentSuggestionsServiceFactory::GetForProfile(
-          ProfileManager::GetLastUsedProfile());
-  if (!content_suggestions_service)
-    return false;
-
-  return content_suggestions_service->AreRemoteSuggestionsEnabled();
 }
 
 // Returns true if the remote provider is managed by an adminstrator's policy.
@@ -287,6 +273,12 @@ ScopedJavaLocalRef<jobject> NTPSnippetsBridge::GetSuggestionsForCategory(
       content_suggestions_service_->GetSuggestionsForCategory(category));
 }
 
+jboolean NTPSnippetsBridge::AreRemoteSuggestionsEnabled(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return content_suggestions_service_->AreRemoteSuggestionsEnabled();
+}
+
 void NTPSnippetsBridge::FetchSuggestionImage(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
@@ -322,7 +314,9 @@ void NTPSnippetsBridge::Fetch(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj,
     jint j_category_id,
-    const JavaParamRef<jobjectArray>& j_displayed_suggestions) {
+    const JavaParamRef<jobjectArray>& j_displayed_suggestions,
+    const JavaParamRef<jobject>& j_callback) {
+  ScopedJavaGlobalRef<jobject> callback(j_callback);
   std::vector<std::string> known_suggestion_ids;
   AppendJavaStringArrayToStringVector(env, j_displayed_suggestions,
                                       &known_suggestion_ids);
@@ -333,7 +327,7 @@ void NTPSnippetsBridge::Fetch(
       std::set<std::string>(known_suggestion_ids.begin(),
                             known_suggestion_ids.end()),
       base::Bind(&NTPSnippetsBridge::OnSuggestionsFetched,
-                 weak_ptr_factory_.GetWeakPtr(), category));
+                 weak_ptr_factory_.GetWeakPtr(), callback, category));
 }
 
 void NTPSnippetsBridge::FetchContextualSuggestions(
@@ -455,17 +449,12 @@ void NTPSnippetsBridge::OnImageFetched(ScopedJavaGlobalRef<jobject> callback,
 }
 
 void NTPSnippetsBridge::OnSuggestionsFetched(
+    const ScopedJavaGlobalRef<jobject>& callback,
     Category category,
     ntp_snippets::Status status,
     std::vector<ContentSuggestion> suggestions) {
   // TODO(fhorschig, dgn): Allow refetch or show notification acc. to status.
   JNIEnv* env = AttachCurrentThread();
-  Java_SnippetsBridge_onMoreSuggestions(
-      env, bridge_, category.id(),
-      ToJavaSuggestionList(env, category, suggestions));
-}
-
-// static
-bool NTPSnippetsBridge::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
+  RunCallbackAndroid(callback,
+                     ToJavaSuggestionList(env, category, suggestions));
 }

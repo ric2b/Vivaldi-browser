@@ -33,8 +33,7 @@ class FolderBackgroundView;
 // active folder. Only one if them is visible to user at any time.
 class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
  public:
-  AppsContainerView(AppListMainView* app_list_main_view,
-                    AppListModel* model);
+  AppsContainerView(AppListMainView* app_list_main_view, AppListModel* model);
   ~AppsContainerView() override;
 
   // Shows the active folder content specified by |folder_item|.
@@ -72,14 +71,20 @@ class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
 
   // AppListPage overrides:
   void OnWillBeShown() override;
+  gfx::Rect GetSearchBoxBounds() const override;
+  gfx::Rect GetSearchBoxBoundsForState(
+      AppListModel::State state) const override;
   gfx::Rect GetPageBoundsForState(AppListModel::State state) const override;
+  gfx::Rect GetPageBoundsDuringDragging(
+      AppListModel::State state) const override;
+  views::View* GetSelectedView() const override;
 
   // TopIconAnimationObserver overrides:
   void OnTopIconAnimationsComplete() override;
 
   AppsGridView* apps_grid_view() { return apps_grid_view_; }
   FolderBackgroundView* folder_background_view() {
-     return folder_background_view_;
+    return folder_background_view_;
   }
   AppListFolderView* app_list_folder_view() { return app_list_folder_view_; }
 
@@ -101,26 +106,35 @@ class AppsContainerView : public AppListPage, public TopIconAnimationObserver {
 
   // Creates the transitional views for animating the top items in the folder
   // when opening or closing a folder.
-  void CreateViewsForFolderTopItemsAnimation(
-      AppListFolderItem* active_folder, bool open_folder);
+  void CreateViewsForFolderTopItemsAnimation(AppListFolderItem* active_folder,
+                                             bool open_folder);
 
   void PrepareToShowApps(AppListFolderItem* folder_item);
 
-  AppsGridView* apps_grid_view_;  // Owned by views hierarchy.
-  AppListFolderView* app_list_folder_view_;  // Owned by views hierarchy.
-  FolderBackgroundView* folder_background_view_;  // Owned by views hierarchy.
-  ShowState show_state_;
+  // Gets the final top padding of search box.
+  int GetSearchBoxFinalTopPadding() const;
+
+  // Gets the top padding of search box during dragging.
+  int GetSearchBoxTopPaddingDuringDragging() const;
+
+  // The views below are owned by views hierarchy.
+  AppsGridView* apps_grid_view_ = nullptr;
+  AppListFolderView* app_list_folder_view_ = nullptr;
+  FolderBackgroundView* folder_background_view_ = nullptr;
+
+  ShowState show_state_ = SHOW_NONE;
 
   // The transitional views for animating the top items in folder
   // when opening or closing a folder.
   std::vector<views::View*> top_icon_views_;
 
-  size_t top_icon_animation_pending_count_;
+  size_t top_icon_animation_pending_count_ = 0u;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(AppsContainerView);
 };
 
 }  // namespace app_list
-
 
 #endif  // UI_APP_LIST_VIEWS_APPS_CONTAINER_VIEW_H_

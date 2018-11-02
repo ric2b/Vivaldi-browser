@@ -7,8 +7,8 @@
 #include "base/macros.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/base/lap_timer.h"
-#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
+#include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
 #include "cc/test/fake_picture_layer_impl.h"
 #include "cc/test/fake_raster_source.h"
@@ -42,7 +42,7 @@ class PictureLayerImplPerfTest : public testing::Test {
  public:
   PictureLayerImplPerfTest()
       : task_runner_provider_(base::ThreadTaskRunnerHandle::Get()),
-        compositor_frame_sink_(FakeCompositorFrameSink::Create3d()),
+        layer_tree_frame_sink_(FakeLayerTreeFrameSink::Create3d()),
         host_impl_(LayerTreeSettings(),
                    &task_runner_provider_,
                    &task_graph_runner_),
@@ -52,7 +52,7 @@ class PictureLayerImplPerfTest : public testing::Test {
 
   void SetUp() override {
     host_impl_.SetVisible(true);
-    host_impl_.InitializeRenderer(compositor_frame_sink_.get());
+    host_impl_.InitializeRenderer(layer_tree_frame_sink_.get());
   }
 
   void SetupPendingTree(const gfx::Size& layer_bounds) {
@@ -78,15 +78,14 @@ class PictureLayerImplPerfTest : public testing::Test {
                                              int num_tiles,
                                              const gfx::Size& viewport_size) {
     host_impl_.SetViewportSize(viewport_size);
-    bool update_lcd_text = false;
-    host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
+    host_impl_.pending_tree()->UpdateDrawProperties();
 
     timer_.Reset();
     do {
       int count = num_tiles;
       std::unique_ptr<TilingSetRasterQueueAll> queue(
           new TilingSetRasterQueueAll(
-              pending_layer_->picture_layer_tiling_set(), false));
+              pending_layer_->picture_layer_tiling_set(), false, true));
       while (count--) {
         ASSERT_TRUE(!queue->IsEmpty()) << "count: " << count;
         ASSERT_TRUE(queue->Top().tile()) << "count: " << count;
@@ -105,16 +104,15 @@ class PictureLayerImplPerfTest : public testing::Test {
     host_impl_.pending_tree()
         ->property_trees()
         ->scroll_tree.UpdateScrollOffsetBaseForTesting(
-            pending_layer_->id(),
+            pending_layer_->element_id(),
             gfx::ScrollOffset(viewport.x(), viewport.y()));
-    bool update_lcd_text = false;
-    host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
+    host_impl_.pending_tree()->UpdateDrawProperties();
 
     timer_.Reset();
     do {
       std::unique_ptr<TilingSetRasterQueueAll> queue(
           new TilingSetRasterQueueAll(
-              pending_layer_->picture_layer_tiling_set(), false));
+              pending_layer_->picture_layer_tiling_set(), false, true));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
@@ -127,14 +125,14 @@ class PictureLayerImplPerfTest : public testing::Test {
       int num_tiles,
       const gfx::Size& viewport_size) {
     host_impl_.SetViewportSize(viewport_size);
-    bool update_lcd_text = false;
-    host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
+    host_impl_.pending_tree()->UpdateDrawProperties();
 
     timer_.Reset();
     do {
       int count = num_tiles;
       std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
-          pending_layer_->picture_layer_tiling_set()));
+          pending_layer_->picture_layer_tiling_set(),
+          pending_layer_->contributes_to_drawn_render_surface()));
       while (count--) {
         ASSERT_TRUE(!queue->IsEmpty()) << "count: " << count;
         ASSERT_TRUE(queue->Top().tile()) << "count: " << count;
@@ -154,15 +152,15 @@ class PictureLayerImplPerfTest : public testing::Test {
     host_impl_.pending_tree()
         ->property_trees()
         ->scroll_tree.UpdateScrollOffsetBaseForTesting(
-            pending_layer_->id(),
+            pending_layer_->element_id(),
             gfx::ScrollOffset(viewport.x(), viewport.y()));
-    bool update_lcd_text = false;
-    host_impl_.pending_tree()->UpdateDrawProperties(update_lcd_text);
+    host_impl_.pending_tree()->UpdateDrawProperties();
 
     timer_.Reset();
     do {
       std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
-          pending_layer_->picture_layer_tiling_set()));
+          pending_layer_->picture_layer_tiling_set(),
+          pending_layer_->contributes_to_drawn_render_surface()));
       timer_.NextLap();
     } while (!timer_.HasTimeLimitExpired());
 
@@ -173,7 +171,7 @@ class PictureLayerImplPerfTest : public testing::Test {
  protected:
   TestTaskGraphRunner task_graph_runner_;
   FakeImplTaskRunnerProvider task_runner_provider_;
-  std::unique_ptr<CompositorFrameSink> compositor_frame_sink_;
+  std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink_;
   FakeLayerTreeHostImpl host_impl_;
   FakePictureLayerImpl* pending_layer_;
   LapTimer timer_;

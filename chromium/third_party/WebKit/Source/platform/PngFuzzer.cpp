@@ -24,7 +24,7 @@
 // For more details, see
 // https://chromium.googlesource.com/chromium/src/+/master/testing/libfuzzer/README.md
 
-#include "platform/image-decoders/png/PNGImageDecoder.cpp"
+#include "platform/image-decoders/png/PNGImageDecoder.h"
 #include "platform/testing/BlinkFuzzerTestSupport.h"
 
 namespace blink {
@@ -37,6 +37,7 @@ std::unique_ptr<ImageDecoder> CreateDecoder(
 }
 
 int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
+  static BlinkFuzzerTestSupport test_support = BlinkFuzzerTestSupport();
   auto buffer = SharedBuffer::Create(data, size);
   // TODO (scroggo): Also test ImageDecoder::AlphaNotPremultiplied?
   auto decoder = CreateDecoder(ImageDecoder::kAlphaPremultiplied);
@@ -57,9 +58,4 @@ int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
   return blink::LLVMFuzzerTestOneInput(data, size);
-}
-
-extern "C" int LLVMFuzzerInitialize(int* argc, char*** argv) {
-  blink::InitializeBlinkFuzzTest(argc, argv);
-  return 0;
 }

@@ -21,6 +21,7 @@
 #include "chrome/service/cloud_print/print_system.h"
 #include "net/http/http_response_headers.h"
 #include "net/http/http_status_code.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/test_url_fetcher_factory.h"
 #include "net/url_request/url_request_status.h"
 #include "net/url_request/url_request_test_util.h"
@@ -253,7 +254,8 @@ class CloudPrintURLFetcherNoServiceProcess
     : public CloudPrintURLFetcher {
  public:
   CloudPrintURLFetcherNoServiceProcess()
-      : context_getter_(new net::TestURLRequestContextGetter(
+      : CloudPrintURLFetcher(PARTIAL_TRAFFIC_ANNOTATION_FOR_TESTS),
+        context_getter_(new net::TestURLRequestContextGetter(
             base::ThreadTaskRunnerHandle::Get())) {}
 
  protected:
@@ -529,7 +531,7 @@ void PrinterJobHandlerTest::MessageLoopQuitNowHelper(
 void PrinterJobHandlerTest::MessageLoopQuitSoonHelper(
     base::MessageLoop* message_loop) {
   message_loop->task_runner()->PostTask(
-      FROM_HERE, base::Bind(&MessageLoopQuitNowHelper, message_loop));
+      FROM_HERE, base::BindOnce(&MessageLoopQuitNowHelper, message_loop));
 }
 
 PrinterJobHandlerTest::PrinterJobHandlerTest()
@@ -540,13 +542,13 @@ PrinterJobHandlerTest::PrinterJobHandlerTest()
 bool PrinterJobHandlerTest::PostSpoolSuccess() {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&PrinterJobHandler::OnJobSpoolSucceeded, job_handler_, 0));
+      base::BindOnce(&PrinterJobHandler::OnJobSpoolSucceeded, job_handler_, 0));
 
   // Everything that would be posted on the printer thread queue
   // has been posted, we can tell the main message loop to quit when idle
   // and not worry about it idling while the print thread does work
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&MessageLoopQuitSoonHelper, &loop_));
+      FROM_HERE, base::BindOnce(&MessageLoopQuitSoonHelper, &loop_));
   return true;
 }
 
@@ -615,8 +617,9 @@ void PrinterJobHandlerTest::BeginTest(int timeout_seconds) {
   job_handler_->Initialize();
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&PrinterJobHandlerTest::MessageLoopQuitSoonHelper,
-                            base::MessageLoop::current()),
+      FROM_HERE,
+      base::BindOnce(&PrinterJobHandlerTest::MessageLoopQuitSoonHelper,
+                     base::MessageLoop::current()),
       base::TimeDelta::FromSeconds(timeout_seconds));
 
   base::RunLoop().Run();
@@ -776,9 +779,10 @@ TEST_F(PrinterJobHandlerTest, DISABLED_ManyFailureTest) {
 
   loop_.task_runner()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&net::FakeURLFetcherFactory::SetFakeResponse,
-                 base::Unretained(&factory_), TicketURI(1), kExamplePrintTicket,
-                 net::HTTP_OK, net::URLRequestStatus::SUCCESS),
+      base::BindOnce(&net::FakeURLFetcherFactory::SetFakeResponse,
+                     base::Unretained(&factory_), TicketURI(1),
+                     kExamplePrintTicket, net::HTTP_OK,
+                     net::URLRequestStatus::SUCCESS),
       base::TimeDelta::FromSeconds(1));
 
   BeginTest(5);

@@ -72,12 +72,11 @@ RenderFrameHost* RenderFrameHostDelegate::GetGuestByInstanceID(
   return NULL;
 }
 
-device::GeolocationServiceContext*
-RenderFrameHostDelegate::GetGeolocationServiceContext() {
+device::GeolocationContext* RenderFrameHostDelegate::GetGeolocationContext() {
   return nullptr;
 }
 
-device::mojom::WakeLockService* RenderFrameHostDelegate::GetRendererWakeLock() {
+device::mojom::WakeLock* RenderFrameHostDelegate::GetRendererWakeLock() {
   return nullptr;
 }
 
@@ -89,6 +88,11 @@ bool RenderFrameHostDelegate::ShouldRouteMessageEvent(
     RenderFrameHost* target_rfh,
     SiteInstance* source_site_instance) const {
   return false;
+}
+
+RenderFrameHost*
+RenderFrameHostDelegate::GetFocusedFrameIncludingInnerWebContents() {
+  return nullptr;
 }
 
 std::unique_ptr<WebUIImpl>

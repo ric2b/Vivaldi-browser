@@ -11,6 +11,7 @@
 #include "content/browser/frame_host/navigator_delegate.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/navigation_controller.h"
+#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
 #include "ui/base/window_open_disposition.h"
 
 class GURL;
@@ -27,7 +28,7 @@ class FrameNavigationEntry;
 class FrameTreeNode;
 class NavigationRequest;
 class RenderFrameHostImpl;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 struct BeginNavigationParams;
 struct CommonNavigationParams;
 
@@ -117,13 +118,14 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       RenderFrameHostImpl* render_frame_host,
       const GURL& url,
       bool uses_post,
-      const scoped_refptr<ResourceRequestBodyImpl>& body,
+      const scoped_refptr<ResourceRequestBody>& body,
       const std::string& extra_headers,
       const Referrer& referrer,
       WindowOpenDisposition disposition,
       bool force_new_process_for_new_contents,
       bool should_replace_current_entry,
-      bool user_gesture) {}
+      bool user_gesture,
+      blink::WebTriggeringEventInfo triggering_event_info) {}
 
   // The RenderFrameHostImpl wants to transfer the request to a new renderer.
   // |redirect_chain| contains any redirect URLs (excluding |url|) that happened
@@ -139,7 +141,7 @@ class CONTENT_EXPORT Navigator : public base::RefCounted<Navigator> {
       const GlobalRequestID& transferred_global_request_id,
       bool should_replace_current_entry,
       const std::string& method,
-      scoped_refptr<ResourceRequestBodyImpl> post_body,
+      scoped_refptr<ResourceRequestBody> post_body,
       const std::string& extra_headers) {}
 
   // PlzNavigate

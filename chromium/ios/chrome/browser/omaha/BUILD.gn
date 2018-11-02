@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("omaha") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "omaha_service.h",
     "omaha_service.mm",
@@ -48,7 +49,7 @@ source_set("unit_tests") {
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/omaha",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//net:test_support",
     "//testing/gtest",
   ]

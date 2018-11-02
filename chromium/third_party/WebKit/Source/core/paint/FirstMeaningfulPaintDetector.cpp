@@ -10,6 +10,7 @@
 #include "platform/Histogram.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/wtf/Functional.h"
 
 namespace blink {
 
@@ -93,10 +94,14 @@ void FirstMeaningfulPaintDetector::NotifyPaint() {
     return;
 
   provisional_first_meaningful_paint_ = MonotonicallyIncreasingTime();
+  had_user_input_before_provisional_first_meaningful_paint_ = had_user_input_;
   next_paint_is_meaningful_ = false;
 
   if (network2_quiet_reached_)
     return;
+
+  provisional_first_meaningful_paint_swap_ = 0.0;
+  RegisterNotifySwapTime(PaintEvent::kProvisionalFirstMeaningfulPaint);
 
   TRACE_EVENT_MARK_WITH_TIMESTAMP1(
       "loading,devtools.timeline", "firstMeaningfulPaintCandidate",
@@ -110,6 +115,14 @@ void FirstMeaningfulPaintDetector::NotifyPaint() {
   }
   paint_timing_->SetFirstMeaningfulPaintCandidate(
       provisional_first_meaningful_paint_);
+}
+
+// This is called only on FirstMeaningfulPaintDetector for main frame.
+void FirstMeaningfulPaintDetector::NotifyInputEvent() {
+  // Ignore user inputs before first paint.
+  if (paint_timing_->FirstPaint() == 0.0)
+    return;
+  had_user_input_ = kHadUserInput;
 }
 
 int FirstMeaningfulPaintDetector::ActiveConnections() {
@@ -172,11 +185,20 @@ void FirstMeaningfulPaintDetector::Network2QuietTimerFired(TimerBase*) {
     paint_timing_->SetFirstMeaningfulPaintCandidate(
         provisional_first_meaningful_paint_);
     // Enforce FirstContentfulPaint <= FirstMeaningfulPaint.
-    first_meaningful_paint2_quiet_ =
-        std::max(provisional_first_meaningful_paint_,
-                 paint_timing_->FirstContentfulPaint());
+    if (provisional_first_meaningful_paint_ <
+        paint_timing_->FirstContentfulPaint()) {
+      first_meaningful_paint2_quiet_ = paint_timing_->FirstContentfulPaint();
+      first_meaningful_paint2_quiet_swap_ =
+          paint_timing_->FirstContentfulPaintSwap();
+    } else {
+      first_meaningful_paint2_quiet_ = provisional_first_meaningful_paint_;
+      first_meaningful_paint2_quiet_swap_ =
+          provisional_first_meaningful_paint_swap_;
+    }
     // Report FirstMeaningfulPaint when the page reached network 2-quiet.
-    paint_timing_->SetFirstMeaningfulPaint(first_meaningful_paint2_quiet_);
+    paint_timing_->SetFirstMeaningfulPaint(
+        first_meaningful_paint2_quiet_, first_meaningful_paint2_quiet_swap_,
+        had_user_input_before_provisional_first_meaningful_paint_);
   }
   ReportHistograms();
 }
@@ -221,6 +243,33 @@ void FirstMeaningfulPaintDetector::ReportHistograms() {
     had_network_quiet_histogram.Count(kHadNetwork0Quiet);
   } else if (first_meaningful_paint2_quiet_) {
     had_network_quiet_histogram.Count(kHadNetwork2Quiet);
+  }
+}
+
+void FirstMeaningfulPaintDetector::RegisterNotifySwapTime(PaintEvent event) {
+  paint_timing_->RegisterNotifySwapTime(
+      event, WTF::Bind(&FirstMeaningfulPaintDetector::ReportSwapTime,
+                       WrapCrossThreadWeakPersistent(this), event));
+}
+
+void FirstMeaningfulPaintDetector::ReportSwapTime(PaintEvent event,
+                                                  bool did_swap,
+                                                  double timestamp) {
+  // TODO(shaseley): Add UMAs here to see how often either of the following
+  // happen. In the first case, the FMP will be 0.0 if this is the provisional
+  // timestamp we end up using. In the second case, a swap timestamp of 0.0 is
+  // reported to PaintTiming because the |network2_quiet_timer_| already fired.
+  if (!did_swap)
+    return;
+  if (network2_quiet_reached_)
+    return;
+
+  switch (event) {
+    case PaintEvent::kProvisionalFirstMeaningfulPaint:
+      provisional_first_meaningful_paint_swap_ = timestamp;
+      return;
+    default:
+      NOTREACHED();
   }
 }
 

@@ -12,8 +12,6 @@
 #include "base/run_loop.h"
 #include "ui/aura/client/aura_constants.h"
 
-typedef ash::test::AshTestBase SessionStateAnimatiorImplContainersTest;
-
 namespace ash {
 namespace {
 
@@ -30,6 +28,8 @@ bool ContainersHaveWindowWithId(const aura::Window::Windows windows, int id) {
 }
 
 }  // namespace
+
+using SessionStateAnimatiorImplContainersTest = AshTestBase;
 
 TEST_F(SessionStateAnimatiorImplContainersTest, ContainersHaveIdTest) {
   aura::Window::Windows containers;
@@ -49,8 +49,8 @@ TEST_F(SessionStateAnimatiorImplContainersTest, ContainersHaveIdTest) {
 
   containers.clear();
 
-  // Check for shelf in launcher.
-  SessionStateAnimatorImpl::GetContainers(SessionStateAnimator::LAUNCHER,
+  // Check for shelf.
+  SessionStateAnimatorImpl::GetContainers(SessionStateAnimator::SHELF,
                                           &containers);
   EXPECT_TRUE(
       ContainersHaveWindowWithId(containers, kShellWindowId_ShelfContainer));

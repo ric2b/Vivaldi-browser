@@ -4,10 +4,10 @@
 about:version template page
 -->
 
-<html id="t" i18n-values="dir:textdirection;lang:language">
+<html id="t" dir="$i18n{textdirection}" lang="$i18n{language}">
   <head>
     <meta charset="utf-8">
-    <title i18n-content="title"></title>
+    <title>$i18n{title}</title>
     <link rel="stylesheet" href="chrome://resources/css/text_defaults.css">
     <link rel="stylesheet" href="chrome://version/about_version.css">
 
@@ -25,61 +25,62 @@ about:version template page
       <div id="logo">
         <!-- Version for themes. -->
         <img src="chrome://theme/IDR_PRODUCT_LOGO">
-        <div id="company" i18n-content="company"></div>
+        <div id="company">$i18n{company}</div>
         <div id="slogan">A Browser For Our Friends</div>
-        <div id="copyright" i18n-content="copyright"></div>
+        <div id="copyright">$i18n{copyright}</div>
         <div id="product-license"></div>
         <div id="product-tos"></div>
       </div>
       <table id="inner" cellpadding="0" cellspacing="0" border="0">
-        <tr><td class="label" i18n-content="application_label"></td>
+        <tr><td class="label">$i18n{application_label}</td>
           <td class="version" id="version">
-            <span i18n-content="version"></span>
-            (<span i18n-content="official"></span>)
-            <span i18n-content="version_modifier"></span>
-            <span i18n-content="version_bitsize"></span>
+            <span>$i18n{version}</span>
+            (<span>$i18n{official}</span>)
+            <span>$i18n{version_modifier}</span>
+            <span>$i18n{version_bitsize}</span>
           </td>
         </tr>
         <tr>
-          <td class="label" i18n-content="revision"></td>
+          <td class="label">$i18n{revision}</td>
           <td class="version">
-            <span i18n-content="cl"></span>
+            <span>$i18n{cl}</span>
           </td>
         </tr>
-        <tr><td class="label" i18n-content="os_name"></td>
+        <tr>
+          <td class="label">$i18n{os_name}</td>
           <td class="version" id="os_type">
-            <span i18n-content="os_type"></span>
+            <span>$i18n{os_type}</span>
           </td>
         </tr>
         <tr><td class="label">JavaScript</td>
           <td class="version" id="js_engine">
-            <span i18n-content="js_engine"></span>
-            <span i18n-content="js_version"></span>
+            <span>$i18n{js_engine}</span>
+            <span>$i18n{js_version}</span>
           </td>
         </tr>
         <tr><td class="label" i18n-content="flash_plugin"></td>
-          <td class="version" id="flash_version" i18n-content="flash_version"></td>
+          <td class="version" id="flash_version">$i18n{flash_version}</td>
         </tr>
-        <tr><td class="label" i18n-content="user_agent_name"></td>
-          <td class="version" id="useragent" i18n-content="useragent"></td>
+        <tr><td class="label">$i18n{user_agent_name}</td>
+          <td class="version" id="useragent">$i18n{useragent}</td>
         </tr>
-        <tr><td class="label" i18n-content="command_line_name"></td>
-          <td class="version" id="command_line" i18n-content="command_line"></td>
+        <tr><td class="label">$i18n{command_line_name}</td>
+          <td class="version" id="command_line">$i18n{command_line}</td>
         </tr>
-        <tr><td class="label" i18n-content="executable_path_name"></td>
-          <td class="version" id="executable_path" i18n-content="executable_path"></td>
+        <tr><td class="label">$i18n{executable_path_name}</td>
+          <td class="version" id="executable_path">$i18n{executable_path}</td>
         </tr>
-        <tr><td class="label" i18n-content="profile_path_name"></td>
-          <td class="version" id="profile_path" i18n-content="profile_path"></td>
+        <tr><td class="label">$i18n{profile_path_name}</td>
+          <td class="version" id="profile_path">$i18n{profile_path}</td>
         </tr>
         <tr id="variations-section">
-          <td class="label" i18n-content="variations_name"></td>
+          <td class="label">$i18n{variations_name}</td>
           <td class="version" id="variations-list"></td>
         </tr>
 <if expr="is_win">
         <tr id="compiler-section">
           <td class="label">Compiler</td>
-          <td class="version" id="compiler" i18n-content="compiler"></td>
+          <td class="version" id="compiler">$i18n{compiler}</td>
         </tr>
 </if>
       </table>

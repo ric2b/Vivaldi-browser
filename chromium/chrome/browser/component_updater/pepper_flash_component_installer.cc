@@ -24,7 +24,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/version.h"
 #include "build/build_config.h"
 #include "chrome/browser/component_updater/component_installer_errors.h"
@@ -52,7 +52,6 @@
 #include "chromeos/dbus/dbus_method_call_status.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/image_loader_client.h"
-#include "content/public/browser/browser_thread.h"
 #elif defined(OS_LINUX)
 #include "chrome/common/component_flash_hint_file_linux.h"
 #endif  // defined(OS_CHROMEOS)
@@ -114,39 +113,39 @@ void ImageLoaderRegistration(const std::string& version,
 
 // Determine whether or not to skip registering flash component updates.
 bool SkipFlashRegistration(ComponentUpdateService* cus) {
-   if (!base::FeatureList::IsEnabled(features::kCrosCompUpdates))
-     return true;
+  if (!base::FeatureList::IsEnabled(features::kCrosCompUpdates))
+    return true;
 
-   // If the version of Chrome is pinned on the device (probably via enterprise
-   // policy), do not component update Flash player.
-   chromeos::CrosSettingsProvider::TrustedStatus status =
-       chromeos::CrosSettings::Get()->PrepareTrustedValues(
-           base::Bind(&RegisterPepperFlashComponent, cus));
+  // If the version of Chrome is pinned on the device (probably via enterprise
+  // policy), do not component update Flash player.
+  chromeos::CrosSettingsProvider::TrustedStatus status =
+      chromeos::CrosSettings::Get()->PrepareTrustedValues(
+          base::Bind(&RegisterPepperFlashComponent, cus));
 
-   // Only if the settings are trusted, read the update settings and allow them
-   // to disable Flash component updates. If the settings are untrusted, then we
-   // fail-safe and allow the security updates.
-   std::string version_prefix;
-   bool update_disabled = false;
-   switch (status) {
-     case chromeos::CrosSettingsProvider::TEMPORARILY_UNTRUSTED:
-       // Return and allow flash registration to occur once the settings are
-       // trusted.
-       return true;
-     case chromeos::CrosSettingsProvider::TRUSTED:
-       chromeos::CrosSettings::Get()->GetBoolean(chromeos::kUpdateDisabled,
-                                                 &update_disabled);
-       chromeos::CrosSettings::Get()->GetString(chromeos::kTargetVersionPrefix,
-                                                &version_prefix);
+  // Only if the settings are trusted, read the update settings and allow them
+  // to disable Flash component updates. If the settings are untrusted, then we
+  // fail-safe and allow the security updates.
+  std::string version_prefix;
+  bool update_disabled = false;
+  switch (status) {
+    case chromeos::CrosSettingsProvider::TEMPORARILY_UNTRUSTED:
+      // Return and allow flash registration to occur once the settings are
+      // trusted.
+      return true;
+    case chromeos::CrosSettingsProvider::TRUSTED:
+      chromeos::CrosSettings::Get()->GetBoolean(chromeos::kUpdateDisabled,
+                                                &update_disabled);
+      chromeos::CrosSettings::Get()->GetString(chromeos::kTargetVersionPrefix,
+                                               &version_prefix);
 
-       return update_disabled || !version_prefix.empty();
-     case chromeos::CrosSettingsProvider::PERMANENTLY_UNTRUSTED:
-       return false;
-   }
+      return update_disabled || !version_prefix.empty();
+    case chromeos::CrosSettingsProvider::PERMANENTLY_UNTRUSTED:
+      return false;
+  }
 
-   // Default to not skipping component flash registration since updates are
-   // security critical.
-   return false;
+  // Default to not skipping component flash registration since updates are
+  // security critical.
+  return false;
 }
 #endif  // defined(OS_CHROMEOS)
 #endif  // defined(GOOGLE_CHROME_BUILD)
@@ -287,9 +286,9 @@ FlashComponentInstallerTraits::OnCustomInstall(
   }
 
 #if defined(OS_CHROMEOS)
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&ImageLoaderRegistration, version, install_dir));
+  content::BrowserThread::GetTaskRunnerForThread(content::BrowserThread::UI)
+      ->PostTask(FROM_HERE, base::BindOnce(&ImageLoaderRegistration, version,
+                                           install_dir));
 #elif defined(OS_LINUX)
   const base::FilePath flash_path =
       install_dir.Append(chrome::kPepperFlashPluginFilename);
@@ -313,8 +312,9 @@ void FlashComponentInstallerTraits::ComponentReady(
   // Flash version, so we do not do this.
   RegisterPepperFlashWithChrome(path.Append(chrome::kPepperFlashPluginFilename),
                                 version);
-  BrowserThread::GetBlockingPool()->PostTask(
-      FROM_HERE, base::Bind(&UpdatePathService, path));
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                           base::BindOnce(&UpdatePathService, path));
 #endif  // !defined(OS_LINUX)
 }
 

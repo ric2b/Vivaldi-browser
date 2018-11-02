@@ -8,9 +8,8 @@
 // Spec: https://drafts.css-houdini.org/css-typed-om/#csstransformcomponent
 [
     Exposed=(Window,PaintWorklet),
-    RuntimeEnabled=CSSTypedOM,
+    RuntimeEnabled=CSSTypedOM
 ] interface CSSTransformComponent {
     stringifier;
-    boolean is2D();
-    CSSMatrixComponent asMatrix();
+    attribute boolean is2D;
 };

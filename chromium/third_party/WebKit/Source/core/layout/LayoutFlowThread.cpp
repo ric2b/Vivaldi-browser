@@ -157,6 +157,28 @@ void LayoutFlowThread::AbsoluteQuadsForDescendant(const LayoutBox& descendant,
   }
 }
 
+void LayoutFlowThread::AddOutlineRects(
+    Vector<LayoutRect>& rects,
+    const LayoutPoint& additional_offset,
+    IncludeBlockVisualOverflowOrNot include_block_overflows) const {
+  Vector<LayoutRect> rects_in_flowthread;
+  LayoutBlockFlow::AddOutlineRects(rects_in_flowthread, additional_offset,
+                                   include_block_overflows);
+  // Convert the rectangles from the flow thread coordinate space to the visual
+  // space. The approach here is very simplistic; just calculate a bounding box
+  // in flow thread coordinates and convert it to one in visual
+  // coordinates. While the solution can be made more sophisticated by
+  // e.g. using FragmentainerIterator, the usefulness isn't obvious: our
+  // multicol implementation has practically no support for overflow in the
+  // block direction anyway. As far as the inline direction (the column
+  // progression direction) is concerned, we'll just include the full height of
+  // each column involved. Should be good enough.
+  LayoutRect union_rect;
+  for (const auto& rect : rects_in_flowthread)
+    union_rect.Unite(rect);
+  rects.push_back(FragmentsBoundingBox(union_rect));
+}
+
 bool LayoutFlowThread::NodeAtPoint(HitTestResult& result,
                                    const HitTestLocation& location_in_container,
                                    const LayoutPoint& accumulated_offset,
@@ -168,10 +190,11 @@ bool LayoutFlowThread::NodeAtPoint(HitTestResult& result,
 }
 
 LayoutUnit LayoutFlowThread::PageLogicalHeightForOffset(LayoutUnit offset) {
+  DCHECK(IsPageLogicalHeightKnown());
   LayoutMultiColumnSet* column_set =
       ColumnSetAtBlockOffset(offset, kAssociateWithLatterPage);
   if (!column_set)
-    return LayoutUnit();
+    return LayoutUnit(1);
 
   return column_set->PageLogicalHeightForOffset(offset);
 }
@@ -179,10 +202,11 @@ LayoutUnit LayoutFlowThread::PageLogicalHeightForOffset(LayoutUnit offset) {
 LayoutUnit LayoutFlowThread::PageRemainingLogicalHeightForOffset(
     LayoutUnit offset,
     PageBoundaryRule page_boundary_rule) {
+  DCHECK(IsPageLogicalHeightKnown());
   LayoutMultiColumnSet* column_set =
       ColumnSetAtBlockOffset(offset, page_boundary_rule);
   if (!column_set)
-    return LayoutUnit();
+    return LayoutUnit(1);
 
   return column_set->PageRemainingLogicalHeightForOffset(offset,
                                                          page_boundary_rule);
@@ -213,7 +237,7 @@ LayoutUnit LayoutFlowThread::NextLogicalTopForUnbreakableContent(
 
 LayoutRect LayoutFlowThread::FragmentsBoundingBox(
     const LayoutRect& layer_bounding_box) const {
-  DCHECK(!RuntimeEnabledFeatures::slimmingPaintV2Enabled() ||
+  DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
          !column_sets_invalidated_);
 
   LayoutRect result;

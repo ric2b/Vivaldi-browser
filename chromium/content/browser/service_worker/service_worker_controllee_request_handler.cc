@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/trace_event/trace_event.h"
+#include "components/offline_pages/features/features.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_metrics.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
@@ -16,8 +17,6 @@
 #include "content/browser/service_worker/service_worker_response_info.h"
 #include "content/browser/service_worker/service_worker_url_job_wrapper.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/common/resource_request_body_impl.h"
-#include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/render_frame_host.h"
@@ -25,11 +24,16 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_client.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/resource_response_info.h"
 #include "net/base/load_flags.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
 #include "ui/base/page_transition_types.h"
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "components/offline_pages/core/request_header/offline_page_header.h"
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 
 namespace content {
 
@@ -51,6 +55,26 @@ bool MaybeForwardToServiceWorker(ServiceWorkerURLJobWrapper* job,
   return false;
 }
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+// A web page, regardless of whether the service worker is used or not, could
+// be downloaded with the offline snapshot captured. The user can then open
+// the downloaded page which is identified by the presence of a specific
+// offline header in the network request. In this case, we want to fall back
+// in order for the subsequent offline page interceptor to bring up the
+// offline snapshot of the page.
+bool ShouldFallbackToLoadOfflinePage(
+    const net::HttpRequestHeaders& extra_request_headers) {
+  std::string offline_header_value;
+  if (!extra_request_headers.GetHeader(offline_pages::kOfflinePageHeader,
+                                       &offline_header_value)) {
+    return false;
+  }
+  offline_pages::OfflinePageHeader offline_header(offline_header_value);
+  return offline_header.reason ==
+         offline_pages::OfflinePageHeader::Reason::DOWNLOAD;
+}
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
+
 }  // namespace
 
 ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
@@ -60,10 +84,11 @@ ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
     FetchRequestMode request_mode,
     FetchCredentialsMode credentials_mode,
     FetchRedirectMode redirect_mode,
+    const std::string& integrity,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBodyImpl> body)
+    scoped_refptr<ResourceRequestBody> body)
     : ServiceWorkerRequestHandler(context,
                                   provider_host,
                                   blob_storage_context,
@@ -74,6 +99,7 @@ ServiceWorkerControlleeRequestHandler::ServiceWorkerControlleeRequestHandler(
       request_mode_(request_mode),
       credentials_mode_(credentials_mode),
       redirect_mode_(redirect_mode),
+      integrity_(integrity),
       request_context_type_(request_context_type),
       frame_type_(frame_type),
       body_(body),
@@ -125,12 +151,19 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
     return NULL;
   }
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  // Fall back for the subsequent offline page interceptor to load the offline
+  // snapshot of the page if required.
+  if (ShouldFallbackToLoadOfflinePage(request->extra_request_headers()))
+    return nullptr;
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
+
   // It's for original request (A) or redirect case (B-a or B-b).
   std::unique_ptr<ServiceWorkerURLRequestJob> job(
       new ServiceWorkerURLRequestJob(
           request, network_delegate, provider_host_->client_uuid(),
           blob_storage_context_, resource_context, request_mode_,
-          credentials_mode_, redirect_mode_, resource_type_,
+          credentials_mode_, redirect_mode_, integrity_, resource_type_,
           request_context_type_, frame_type_, body_,
           ServiceWorkerFetchType::FETCH, base::nullopt, this));
   url_job_ = base::MakeUnique<ServiceWorkerURLJobWrapper>(job->GetWeakPtr());
@@ -157,6 +190,55 @@ net::URLRequestJob* ServiceWorkerControlleeRequestHandler::MaybeCreateJob(
   }
 
   return job.release();
+}
+
+void ServiceWorkerControlleeRequestHandler::MaybeCreateLoader(
+    const ResourceRequest& resource_request,
+    ResourceContext* resource_context,
+    LoaderCallback callback) {
+  DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
+  DCHECK(is_main_resource_load_);
+  ClearJob();
+
+  if (!context_ || !provider_host_) {
+    // We can't do anything other than to fall back to network.
+    std::move(callback).Run(StartLoaderCallback());
+    return;
+  }
+
+  // In fallback cases we basically 'forward' the request, so we should
+  // never see use_network_ gets true.
+  DCHECK(!use_network_);
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  // Fall back for the subsequent offline page interceptor to load the offline
+  // snapshot of the page if required.
+  net::HttpRequestHeaders extra_request_headers;
+  extra_request_headers.AddHeadersFromString(resource_request.headers);
+  if (ShouldFallbackToLoadOfflinePage(extra_request_headers)) {
+    std::move(callback).Run(StartLoaderCallback());
+    return;
+  }
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
+
+  url_job_ = base::MakeUnique<ServiceWorkerURLJobWrapper>(
+      base::MakeUnique<ServiceWorkerURLLoaderJob>(
+          std::move(callback), this, resource_request, blob_storage_context_));
+
+  resource_context_ = resource_context;
+
+  PrepareForMainResource(resource_request.url,
+                         resource_request.first_party_for_cookies);
+
+  if (url_job_->ShouldFallbackToNetwork()) {
+    // We're falling back to the next URLLoaderRequestHandler, forward
+    // the request and clear job now.
+    url_job_->FallbackToNetwork();
+    ClearJob();
+    return;
+  }
+
+  // We will asynchronously continue on DidLookupRegistrationForMainResource.
 }
 
 void ServiceWorkerControlleeRequestHandler::PrepareForMainResource(

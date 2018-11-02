@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">Потребна је потврда идентитета</translation>
 <translation id="2166378884831602661">Овај сајт не може да пружи безбедну везу</translation>
 <translation id="2230458221926704099">Поправите везу помоћу <ph name="BEGIN_LINK" />апликације за дијагностику<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Потражите <ph name="LINK" /> у Vivaldi-у</translation>
 <translation id="2292556288342944218">Приступ интернету је блокиран</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />да покренете дијагностику мреже<ph name="END_LINK" /></translation>
@@ -51,7 +50,6 @@
 <translation id="3586931643579894722">Сакриј детаље</translation>
 <translation id="3630155396527302611">Ако је већ наведен као програм коме је дозвољен приступ мрежи, покушајте да га уклоните са листе и поново га додате.</translation>
 <translation id="3658742229777143148">Ревизија</translation>
-<translation id="3693415264595406141">Лозинка:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />да проверите конфигурацију проксија, заштитног зида и DNS-а<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Ако користите прокси сервер...</translation>
 <translation id="3973234410852337861">Хост <ph name="HOST_NAME" /> је блокиран</translation>
@@ -62,17 +60,18 @@
 <translation id="4165986682804962316">Подешавања сајта</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />да проверите конфигурацију заштитног зида и антивируса<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Покушајте да покренете дијагностику мреже<ph name="END_LINK" />.</translation>
-<translation id="4304224509867189079">Пријављивање</translation>
-<translation id="4381091992796011497">Корисничко име:</translation>
+<translation id="4304224509867189079">Пријави се</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> није прихватио сертификат за пријављивање или сертификат за пријављивање није приложен.</translation>
 <translation id="4506599922270137252">да контактирате администратора система</translation>
 <translation id="4522570452068850558">Детаљи</translation>
 <translation id="4558551763791394412">Покушајте да онемогућите проширења.</translation>
+<translation id="4611292653554630842">Пријави се</translation>
 <translation id="4708268264240856090">Веза је прекинута</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />да покренете Windows дијагностику мреже<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Путања извршне датотеке</translation>
 <translation id="4764776831041365478">Могуће је да веб-страница на адреси <ph name="URL" /> привремено не функционише или да је трајно премештена на нову веб адресу.</translation>
 <translation id="4807049035289105102">Не можете посетити сада <ph name="SITE" /> јер је веб сајт послао кодиране акредитиве које прегледач не може да обради. Грешке и напади на мрежи су обично привремени, па ће ова страница вероватно функционисати касније.</translation>
+<translation id="4913131542719409934">Потребна је потврда идентитета</translation>
 <translation id="5023310440958281426">Проверите смернице администратора</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />да проверите адресу проксија<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бита)</translation>
@@ -101,10 +100,12 @@
 <translation id="6328639280570009161">Покушајте да онемогућите предвиђање мреже</translation>
 <translation id="6433595998831338502">Хост <ph name="HOST_NAME" /> је одбио повезивање.</translation>
 <translation id="6569060085658103619">Прегледате страницу проширења</translation>
+<translation id="6657585470893396449">Лозинка</translation>
 <translation id="6685834062052613830">Одјавите се и довршите подешавање</translation>
 <translation id="6711464428925977395">Нешто није у реду са прокси сервером или је адреса нетачна.</translation>
 <translation id="6757797048963528358">Ваш уређај је прешао у стање мировања.</translation>
 <translation id="6897140037006041989">Кориснички агент</translation>
+<translation id="7090678807593890770">Тражи <ph name="LINK" /> помоћу Google</translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не поштује безбедносне стандарде.</translation>
 <translation id="7353601530677266744">Командна линија</translation>
 <translation id="7419106976560586862">Путања профила</translation>
@@ -123,6 +124,7 @@
 <translation id="8289355894181816810">Контактирајте администратора мреже ако нисте сигурни шта то значи.</translation>
 <translation id="8332188693563227489">Приступ хосту <ph name="HOST_NAME" /> је одбијен</translation>
 <translation id="8498891568109133222">Одговор хоста <ph name="HOST_NAME" /> је трајао предуго.</translation>
+<translation id="8503813439785031346">Корисничко име</translation>
 <translation id="8740359287975076522">Нисмо успели да пронађемо &lt;abbr id="dnsDefinition"&gt;DNS адресу&lt;/abbr&gt; хоста <ph name="HOST_NAME" />. Покушавамо да утврдимо у чему је проблем.</translation>
 <translation id="9001074447101275817">Прокси <ph name="DOMAIN" /> захтева корисничко име и лозинку.</translation>
 <translation id="9183425211371246419">Хост <ph name="HOST_NAME" /> користи неподржани протокол.</translation>

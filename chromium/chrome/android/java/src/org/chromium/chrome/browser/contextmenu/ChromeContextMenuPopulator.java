@@ -14,6 +14,7 @@ import android.view.ContextMenu;
 import android.webkit.MimeTypeMap;
 
 import org.chromium.base.CollectionUtil;
+import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeFeatureList;
@@ -22,7 +23,10 @@ import org.chromium.chrome.browser.locale.LocaleManager;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.preferences.datareduction.DataReductionProxyUma;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService;
+import org.chromium.chrome.browser.share.ShareHelper;
+import org.chromium.chrome.browser.share.ShareParams;
 import org.chromium.chrome.browser.util.UrlUtilities;
+import org.chromium.content.browser.BrowserStartupController;
 import org.chromium.content_public.common.ContentUrlConstants;
 
 import java.lang.annotation.Retention;
@@ -40,6 +44,12 @@ import java.util.Set;
  */
 public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     private static final String TAG = "CCMenuPopulator";
+    private static final ShareContextMenuItem SHARE_IMAGE =
+            new ShareContextMenuItem(R.drawable.ic_share_white_24dp,
+                    R.string.contextmenu_share_image, R.id.contextmenu_share_image, false);
+    private static final ShareContextMenuItem SHARE_LINK =
+            new ShareContextMenuItem(R.drawable.ic_share_white_24dp,
+                    R.string.contextmenu_share_link, R.id.contextmenu_share_link, true);
 
     /**
      * Defines the Groups of each Context Menu Item
@@ -59,13 +69,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     @IntDef({
             NORMAL_MODE, /* Default mode */
             CUSTOM_TAB_MODE, /* Custom tab mode */
-            FULLSCREEN_TAB_MODE /* Full screen mode */
+            WEB_APP_MODE /* Full screen mode */
     })
     public @interface ContextMenuMode {}
 
     public static final int NORMAL_MODE = 0;
     public static final int CUSTOM_TAB_MODE = 1;
-    public static final int FULLSCREEN_TAB_MODE = 2;
+    public static final int WEB_APP_MODE = 2;
 
     // Items that are included in all context menus.
     private static final Set<? extends ContextMenuItem> BASE_WHITELIST =
@@ -74,8 +84,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                     ChromeContextMenuItem.SEND_MESSAGE, ChromeContextMenuItem.ADD_TO_CONTACTS,
                     ChromeContextMenuItem.COPY, ChromeContextMenuItem.COPY_LINK_TEXT,
                     ChromeContextMenuItem.LOAD_ORIGINAL_IMAGE, ChromeContextMenuItem.SAVE_LINK_AS,
-                    ChromeContextMenuItem.SAVE_IMAGE, ChromeContextMenuItem.SHARE_IMAGE,
-                    ChromeContextMenuItem.SAVE_VIDEO));
+                    ChromeContextMenuItem.SAVE_IMAGE, SHARE_IMAGE, ChromeContextMenuItem.SAVE_VIDEO,
+                    SHARE_LINK));
 
     // Items that are included for normal Chrome browser mode.
     private static final Set<? extends ContextMenuItem> NORMAL_MODE_WHITELIST =
@@ -95,7 +105,7 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                     ChromeContextMenuItem.OPEN_IN_BROWSER_ID));
 
     // Additional items for fullscreen tabs mode.
-    private static final Set<? extends ContextMenuItem> FULLSCREEN_TAB_MODE_WHITELIST =
+    private static final Set<? extends ContextMenuItem> WEB_APP_MODE_WHITELIST =
             Collections.unmodifiableSet(
                     CollectionUtil.newHashSet(ChromeContextMenuItem.OPEN_IN_CHROME));
 
@@ -111,13 +121,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                     ChromeContextMenuItem.OPEN_IN_NEW_TAB,
                     ChromeContextMenuItem.OPEN_IN_INCOGNITO_TAB,
                     ChromeContextMenuItem.COPY_LINK_ADDRESS, ChromeContextMenuItem.COPY_LINK_TEXT,
-                    ChromeContextMenuItem.SAVE_LINK_AS));
+                    ChromeContextMenuItem.SAVE_LINK_AS, SHARE_LINK));
 
     private static final List<? extends ContextMenuItem> IMAGE_GROUP =
             Collections.unmodifiableList(CollectionUtil.newArrayList(
-                    ChromeContextMenuItem.LOAD_ORIGINAL_IMAGE, ChromeContextMenuItem.SAVE_IMAGE,
-                    ChromeContextMenuItem.OPEN_IMAGE, ChromeContextMenuItem.OPEN_IMAGE_IN_NEW_TAB,
-                    ChromeContextMenuItem.SEARCH_BY_IMAGE, ChromeContextMenuItem.SHARE_IMAGE));
+                    ChromeContextMenuItem.LOAD_ORIGINAL_IMAGE, ChromeContextMenuItem.OPEN_IMAGE,
+                    ChromeContextMenuItem.OPEN_IMAGE_IN_NEW_TAB, ChromeContextMenuItem.SAVE_IMAGE,
+                    ChromeContextMenuItem.SEARCH_BY_IMAGE, SHARE_IMAGE));
 
     private static final List<? extends ContextMenuItem> MESSAGE_GROUP =
             Collections.unmodifiableList(CollectionUtil.newArrayList(ChromeContextMenuItem.CALL,
@@ -158,7 +168,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         static final int ACTION_OPEN_IN_CHROME_INCOGNITO_TAB = 34;
         static final int ACTION_OPEN_IN_BROWSER = 35;
         static final int ACTION_OPEN_IN_CHROME = 36;
-        static final int NUM_ACTIONS = 37;
+        static final int ACTION_SHARE_LINK = 37;
+        static final int NUM_ACTIONS = 38;
 
         // Note: these values must match the ContextMenuSaveLinkType enum in histograms.xml.
         // Only add new values at the end, right before NUM_TYPES. We depend on these specific
@@ -170,6 +181,16 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         static final int TYPE_VIDEO = 4;
         static final int TYPE_PDF = 5;
         static final int NUM_TYPES = 6;
+
+        // Note: these values must match the ContextMenuSaveImage enum in histograms.xml.
+        // Only add new values at the end, right before NUM_SAVE_IMAGE_TYPES.
+        static final int TYPE_SAVE_IMAGE_LOADED = 0;
+        static final int TYPE_SAVE_IMAGE_FETCHED_LOFI = 1;
+        static final int TYPE_SAVE_IMAGE_NOT_DOWNLOADABLE = 2;
+        static final int TYPE_SAVE_IMAGE_DISABLED_AND_IS_NOT_IMAGE_PARAM = 3;
+        static final int TYPE_SAVE_IMAGE_DISABLED_AND_IS_IMAGE_PARAM = 4;
+        static final int TYPE_SAVE_IMAGE_SHOWN = 5;
+        static final int NUM_SAVE_IMAGE_TYPES = 6;
 
         /**
          * Records a histogram entry when the user selects an item from a context menu.
@@ -219,6 +240,15 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             RecordHistogram.recordEnumeratedHistogram(
                     "ContextMenu.SaveLinkType", mimeType, NUM_TYPES);
         }
+
+        /**
+         * Helper method to record MobileDownload.ContextMenu.SaveImage UMA
+         * @param type Type to record
+         */
+        static void recordSaveImageUma(int type) {
+            RecordHistogram.recordEnumeratedHistogram(
+                    "MobileDownload.ContextMenu.SaveImage", type, NUM_SAVE_IMAGE_TYPES);
+        }
     }
 
     /**
@@ -259,8 +289,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         Set<ContextMenuItem> supportedOptions = new HashSet<>();
         if (FirstRunStatus.getFirstRunFlowComplete()) {
             supportedOptions.addAll(BASE_WHITELIST);
-            if (mMode == FULLSCREEN_TAB_MODE) {
-                supportedOptions.addAll(FULLSCREEN_TAB_MODE_WHITELIST);
+            if (mMode == WEB_APP_MODE) {
+                supportedOptions.addAll(WEB_APP_MODE_WHITELIST);
             } else if (mMode == CUSTOM_TAB_MODE) {
                 supportedOptions.addAll(CUSTOM_TAB_MODE_WHITELIST);
             } else {
@@ -324,6 +354,30 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
         // it's removed since there is nothing to show at all.
         if (groupedItems.get(index).second.isEmpty()) {
             groupedItems.remove(index);
+        }
+
+        if (!groupedItems.isEmpty()) {
+            boolean hasSaveImage = false;
+            for (int i = 0; i < groupedItems.size(); ++i) {
+                Pair<Integer, List<ContextMenuItem>> menuList = groupedItems.get(i);
+                if (menuList.second != null
+                        && menuList.second.contains(ChromeContextMenuItem.SAVE_IMAGE)) {
+                    hasSaveImage = true;
+                    break;
+                }
+            }
+
+            if (BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                            .isStartupSuccessfullyCompleted()) {
+                if (!hasSaveImage) {
+                    ContextMenuUma.recordSaveImageUma(params.isImage()
+                                    ? ContextMenuUma.TYPE_SAVE_IMAGE_DISABLED_AND_IS_IMAGE_PARAM
+                                    : ContextMenuUma
+                                              .TYPE_SAVE_IMAGE_DISABLED_AND_IS_NOT_IMAGE_PARAM);
+                } else {
+                    ContextMenuUma.recordSaveImageUma(ContextMenuUma.TYPE_SAVE_IMAGE_SHOWN);
+                }
+            }
         }
 
         return groupedItems;
@@ -470,14 +524,15 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             disabledOptions.add(ChromeContextMenuItem.SAVE_IMAGE);
             disabledOptions.add(ChromeContextMenuItem.OPEN_IMAGE);
             disabledOptions.add(ChromeContextMenuItem.SEARCH_BY_IMAGE);
-            disabledOptions.add(ChromeContextMenuItem.SHARE_IMAGE);
+            disabledOptions.add(SHARE_IMAGE);
+            recordSaveImageContextMenuResult(true, isSrcDownloadableScheme);
         } else if (params.isImage() && !params.imageWasFetchedLoFi()) {
             disabledOptions.add(ChromeContextMenuItem.LOAD_ORIGINAL_IMAGE);
 
             if (!isSrcDownloadableScheme) {
                 disabledOptions.add(ChromeContextMenuItem.SAVE_IMAGE);
             }
-
+            recordSaveImageContextMenuResult(false, isSrcDownloadableScheme);
             // Avoid showing open image option for same image which is already opened.
             if (mDelegate.getPageUrl().equals(params.getSrcUrl())) {
                 disabledOptions.add(ChromeContextMenuItem.OPEN_IMAGE);
@@ -496,8 +551,8 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
 
         if (mMode == CUSTOM_TAB_MODE) {
             try {
-                URI uri = new URI(getUrl(params));
-                if (UrlUtilities.isInternalScheme(uri) || isEmptyUrl(getUrl(params))) {
+                URI uri = new URI(params.getUrl());
+                if (UrlUtilities.isInternalScheme(uri) || isEmptyUrl(params.getUrl())) {
                     disabledOptions.add(ChromeContextMenuItem.OPEN_IN_NEW_CHROME_TAB);
                     disabledOptions.add(ChromeContextMenuItem.OPEN_IN_CHROME_INCOGNITO_TAB);
                     disabledOptions.add(ChromeContextMenuItem.OPEN_IN_BROWSER_ID);
@@ -513,6 +568,10 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             } catch (URISyntaxException e) {
                 return disabledOptions;
             }
+        }
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.CUSTOM_CONTEXT_MENU)) {
+            disabledOptions.add(ChromeContextMenuItem.COPY_LINK_TEXT);
         }
 
         return disabledOptions;
@@ -594,6 +653,14 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
                 ContextMenuUma.recordSaveLinkTypes(url);
                 helper.startContextMenuDownload(true, false);
             }
+        } else if (itemId == R.id.contextmenu_share_link) {
+            ContextMenuUma.record(params, ContextMenuUma.ACTION_SHARE_LINK);
+            ShareParams linkShareParams =
+                    new ShareParams.Builder(helper.getActivity(), params.getUrl(), params.getUrl())
+                            .setShareDirectly(false)
+                            .setSaveLastUsed(true)
+                            .build();
+            ShareHelper.share(linkShareParams);
         } else if (itemId == R.id.contextmenu_search_by_image) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_SEARCH_BY_IMAGE);
             helper.searchForImage();
@@ -605,13 +672,13 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
             mDelegate.onOpenInChrome(params.getLinkUrl(), params.getPageUrl());
         } else if (itemId == R.id.contextmenu_open_in_new_chrome_tab) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IN_NEW_CHROME_TAB);
-            mDelegate.onOpenInNewChromeTabFromCCT(getUrl(params), false);
+            mDelegate.onOpenInNewChromeTabFromCCT(params.getUrl(), false);
         } else if (itemId == R.id.contextmenu_open_in_chrome_incognito_tab) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IN_CHROME_INCOGNITO_TAB);
-            mDelegate.onOpenInNewChromeTabFromCCT(getUrl(params), true);
+            mDelegate.onOpenInNewChromeTabFromCCT(params.getUrl(), true);
         } else if (itemId == R.id.contextmenu_open_in_browser_id) {
             ContextMenuUma.record(params, ContextMenuUma.ACTION_OPEN_IN_BROWSER);
-            mDelegate.onOpenInDefaultBrowser(getUrl(params));
+            mDelegate.onOpenInDefaultBrowser(params.getUrl());
         } else {
             assert false;
         }
@@ -653,16 +720,26 @@ public class ChromeContextMenuPopulator implements ContextMenuPopulator {
     }
 
     /**
-     * Return the valid url of a ContextMenuParams.
-     * If the ContextMenuParams is an anchor and its linkUrl is not empty, returns the linkUrl.
-     * Otherwise returns the srcUrl.
-     * @param params The {@link ContextMenuParams} to check.
+     * Record the UMA related to save image context menu option.
+     * @param wasFetchedLoFi The image was fectched LoFi.
+     * @param isDownloadableScheme The image is downloadable.
      */
-    private String getUrl(ContextMenuParams params) {
-        if (params.isAnchor()) {
-            return params.getLinkUrl();
-        } else {
-            return params.getSrcUrl();
+    private void recordSaveImageContextMenuResult(
+            boolean wasFetchedLoFi, boolean isDownloadableScheme) {
+        if (!BrowserStartupController.get(LibraryProcessType.PROCESS_BROWSER)
+                        .isStartupSuccessfullyCompleted()) {
+            return;
+        }
+
+        ContextMenuUma.recordSaveImageUma(ContextMenuUma.TYPE_SAVE_IMAGE_LOADED);
+
+        if (wasFetchedLoFi) {
+            ContextMenuUma.recordSaveImageUma(ContextMenuUma.TYPE_SAVE_IMAGE_FETCHED_LOFI);
+            return;
+        }
+
+        if (!isDownloadableScheme) {
+            ContextMenuUma.recordSaveImageUma(ContextMenuUma.TYPE_SAVE_IMAGE_NOT_DOWNLOADABLE);
         }
     }
 }

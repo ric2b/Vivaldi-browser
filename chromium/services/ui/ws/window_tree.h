@@ -231,7 +231,11 @@ class WindowTree : public mojom::WindowTree,
       const gfx::Rect& old_bounds,
       const gfx::Rect& new_bounds,
       bool originated_change,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id);
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id);
+  void ProcessWindowTransformChanged(const ServerWindow* window,
+                                     const gfx::Transform& old_transform,
+                                     const gfx::Transform& new_transform,
+                                     bool originated_change);
   void ProcessClientAreaChanged(
       const ServerWindow* window,
       const gfx::Insets& new_client_area,
@@ -275,7 +279,7 @@ class WindowTree : public mojom::WindowTree,
                                      const ServerWindow* transient_window,
                                      bool originated_change);
   void ProcessWindowSurfaceChanged(ServerWindow* window,
-                                   const cc::SurfaceInfo& surface_info);
+                                   const viz::SurfaceInfo& surface_info);
 
   // Sends this event to the client if it matches an active pointer watcher.
   // |target_window| is the target of the event, and may be null or not known
@@ -402,6 +406,8 @@ class WindowTree : public mojom::WindowTree,
       bool is_primary_display,
       const ClientWindowId& client_window_id);
 
+  bool ProcessSwapDisplayRoots(int64_t display_id1, int64_t display_id2);
+
   // WindowTree:
   void NewWindow(uint32_t change_id,
                  Id transport_window_id,
@@ -438,7 +444,10 @@ class WindowTree : public mojom::WindowTree,
       uint32_t change_id,
       Id window_id,
       const gfx::Rect& bounds,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
+  void SetWindowTransform(uint32_t change_id,
+                          Id window_id,
+                          const gfx::Transform& transform) override;
   void SetWindowVisibility(uint32_t change_id,
                            Id window_id,
                            bool visible) override;
@@ -452,8 +461,8 @@ class WindowTree : public mojom::WindowTree,
                         float opacity) override;
   void AttachCompositorFrameSink(
       Id transport_window_id,
-      cc::mojom::MojoCompositorFrameSinkRequest compositor_frame_sink,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client) override;
+      cc::mojom::CompositorFrameSinkRequest compositor_frame_sink,
+      cc::mojom::CompositorFrameSinkClientPtr client) override;
   void Embed(Id transport_window_id,
              mojom::WindowTreeClientPtr client,
              uint32_t flags,
@@ -510,12 +519,26 @@ class WindowTree : public mojom::WindowTree,
   void AddActivationParent(Id transport_window_id) override;
   void RemoveActivationParent(Id transport_window_id) override;
   void ActivateNextWindow() override;
-  void SetExtendedHitArea(Id window_id, const gfx::Insets& hit_area) override;
+  void SetExtendedHitRegionForChildren(
+      Id window_id,
+      const gfx::Insets& mouse_insets,
+      const gfx::Insets& touch_insets) override;
+  void SetKeyEventsThatDontHideCursor(
+      std::vector<::ui::mojom::EventMatcherPtr> dont_hide_cursor_list) override;
   void SetDisplayRoot(const display::Display& display,
                       mojom::WmViewportMetricsPtr viewport_metrics,
                       bool is_primary_display,
                       Id window_id,
                       const SetDisplayRootCallback& callback) override;
+  void SetDisplayConfiguration(
+      const std::vector<display::Display>& displays,
+      std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
+      int64_t primary_display_id,
+      int64_t internal_display_id,
+      const SetDisplayConfigurationCallback& callback) override;
+  void SwapDisplayRoots(int64_t display_id1,
+                        int64_t display_id2,
+                        const SwapDisplayRootsCallback& callback) override;
   void WmResponse(uint32_t change_id, bool response) override;
   void WmSetBoundsResponse(uint32_t change_id) override;
   void WmRequestClose(Id transport_window_id) override;
@@ -525,8 +548,11 @@ class WindowTree : public mojom::WindowTree,
   void WmLockCursor() override;
   void WmUnlockCursor() override;
   void WmSetCursorVisible(bool visible) override;
+  void WmSetCursorSize(ui::CursorSize cursor_size) override;
   void WmSetGlobalOverrideCursor(
       base::Optional<ui::CursorData> cursor) override;
+  void WmMoveCursorToDisplayLocation(const gfx::Point& display_pixels,
+                                     int64_t display_id) override;
   void OnWmCreatedTopLevelWindow(uint32_t change_id,
                                  Id transport_window_id) override;
   void OnAcceleratorAck(

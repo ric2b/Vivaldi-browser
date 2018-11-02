@@ -7,6 +7,7 @@
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -30,10 +31,10 @@
 #include "ui/views/controls/menu/menu_scroll_view_container.h"
 #include "ui/views/controls/menu/submenu_view.h"
 #include "ui/views/drag_utils.h"
-#include "ui/views/focus/view_storage.h"
 #include "ui/views/mouse_constants.h"
 #include "ui/views/view.h"
 #include "ui/views/view_constants.h"
+#include "ui/views/view_tracker.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/tooltip_manager.h"
@@ -630,7 +631,17 @@ bool MenuController::OnMouseDragged(SubmenuView* source,
       SetSelection(part.menu ? part.menu : state_.item, SELECTION_OPEN_SUBMENU);
     }
   } else if (part.type == MenuPart::NONE) {
-    ShowSiblingMenu(source, event.location());
+    // If there is a sibling menu, show it. Otherwise, if the user has selected
+    // a menu item with no accompanying sibling menu or submenu, move selection
+    // back to the parent menu item.
+    if (!ShowSiblingMenu(source, event.location())) {
+      if (!part.is_scroll() && pending_state_.item &&
+          pending_state_.item->GetParentMenuItem() &&
+          !pending_state_.item->SubmenuIsShowing()) {
+        SetSelection(pending_state_.item->GetParentMenuItem(),
+                     SELECTION_OPEN_SUBMENU);
+      }
+    }
   }
   UpdateActiveMouseView(source, event, mouse_menu);
 
@@ -688,7 +699,7 @@ void MenuController::OnMouseReleased(SubmenuView* source,
   if (!part.is_scroll() && part.menu &&
       !(part.menu->HasSubmenu() &&
         (event.flags() & ui::EF_LEFT_MOUSE_BUTTON))) {
-    if (GetActiveMouseView()) {
+    if (active_mouse_view_tracker_->view()) {
       SendMouseReleaseToActiveView(source, event);
       return;
     }
@@ -1190,7 +1201,7 @@ void MenuController::SetSelectionOnPointerDown(SubmenuView* source,
   if (!blocking_run_)
     return;
 
-  DCHECK(!GetActiveMouseView());
+  DCHECK(!active_mouse_view_tracker_->view());
 
   MenuPart part = GetMenuPart(source, event->location());
   if (part.is_scroll())
@@ -1332,8 +1343,7 @@ void MenuController::OnKeyDown(ui::KeyboardCode key_code) {
     case ui::VKEY_ESCAPE:
       if (!state_.item->GetParentMenuItem() ||
           (!state_.item->GetParentMenuItem()->GetParentMenuItem() &&
-           (!state_.item->HasSubmenu() ||
-            !state_.item->GetSubmenu()->IsShowing()))) {
+           (!state_.item->SubmenuIsShowing()))) {
         // User pressed escape and current menu has no submenus. If we are
         // nested, close the current menu on the stack. Otherwise fully exit the
         // menu.
@@ -1394,7 +1404,7 @@ MenuController::MenuController(bool blocking,
       valid_drop_coordinates_(false),
       last_drop_operation_(MenuDelegate::DROP_UNKNOWN),
       showing_submenu_(false),
-      active_mouse_view_id_(ViewStorage::GetInstance()->CreateStorageID()),
+      active_mouse_view_tracker_(base::MakeUnique<ViewTracker>()),
       hot_button_(nullptr),
       delegate_(delegate),
       is_combobox_(false),
@@ -1636,7 +1646,7 @@ MenuController::MenuPart MenuController::GetMenuPartByScreenCoordinateUsingMenu(
     const gfx::Point& screen_loc) {
   MenuPart part;
   for (; item; item = item->GetParentMenuItem()) {
-    if (item->HasSubmenu() && item->GetSubmenu()->IsShowing() &&
+    if (item->SubmenuIsShowing() &&
         GetMenuPartByScreenCoordinateImpl(item->GetSubmenu(), screen_loc,
                                           &part)) {
       return part;
@@ -1767,8 +1777,7 @@ void MenuController::CommitPendingSelection() {
     } else {
       state_.submenu_open = false;
     }
-  } else if (state_.item->HasSubmenu() &&
-             state_.item->GetSubmenu()->IsShowing()) {
+  } else if (state_.item->SubmenuIsShowing()) {
     state_.item->GetSubmenu()->Hide();
   }
 
@@ -1778,7 +1787,7 @@ void MenuController::CommitPendingSelection() {
     bool found = false;
     for (MenuItemView* item = state_.item; item && !found;
          item = item->GetParentMenuItem()) {
-      found = (item->HasSubmenu() && item->GetSubmenu()->IsShowing() &&
+      found = (item->SubmenuIsShowing() &&
                item->GetSubmenu() == scroll_task_->submenu());
     }
     if (!found)
@@ -1841,7 +1850,7 @@ void MenuController::OpenMenuImpl(MenuItemView* item, bool show) {
 void MenuController::MenuChildrenChanged(MenuItemView* item) {
   DCHECK(item);
   // Menu shouldn't be updated during drag operation.
-  DCHECK(!GetActiveMouseView());
+  DCHECK(!active_mouse_view_tracker_->view());
 
   // If the current item or pending item is a descendant of the item
   // that changed, move the selection back to the changed item.
@@ -2187,8 +2196,7 @@ void MenuController::IncrementSelection(
     SelectionIncrementDirectionType direction) {
   MenuItemView* item = pending_state_.item;
   DCHECK(item);
-  if (pending_state_.submenu_open && item->HasSubmenu() &&
-      item->GetSubmenu()->IsShowing()) {
+  if (pending_state_.submenu_open && item->SubmenuIsShowing()) {
     // A menu is selected and open, but none of its children are selected,
     // select the first menu item that is visible and enabled.
     if (item->GetSubmenu()->GetMenuItemCount()) {
@@ -2281,7 +2289,7 @@ void MenuController::CloseSubmenu() {
   DCHECK(item);
   if (!item->GetParentMenuItem())
     return;
-  if (item->HasSubmenu() && item->GetSubmenu()->IsShowing())
+  if (item->SubmenuIsShowing())
     SetSelection(item, SELECTION_UPDATE_IMMEDIATELY);
   else if (item->GetParentMenuItem()->GetParentMenuItem())
     SetSelection(item->GetParentMenuItem(), SELECTION_UPDATE_IMMEDIATELY);
@@ -2349,7 +2357,7 @@ void MenuController::SelectByChar(base::char16 character) {
   base::char16 char_array[] = { character, 0 };
   base::char16 key = base::i18n::ToLower(char_array)[0];
   MenuItemView* item = pending_state_.item;
-  if (!item->HasSubmenu() || !item->GetSubmenu()->IsShowing())
+  if (!item->SubmenuIsShowing())
     item = item->GetParentMenuItem();
   DCHECK(item);
   DCHECK(item->HasSubmenu());
@@ -2483,11 +2491,11 @@ void MenuController::UpdateActiveMouseView(SubmenuView* event_source,
     if (target == target_menu || !target->enabled())
       target = NULL;
   }
-  View* active_mouse_view = GetActiveMouseView();
+  View* active_mouse_view = active_mouse_view_tracker_->view();
   if (target != active_mouse_view) {
     SendMouseCaptureLostToActiveView();
     active_mouse_view = target;
-    SetActiveMouseView(active_mouse_view);
+    active_mouse_view_tracker_->SetView(active_mouse_view);
     if (active_mouse_view) {
       gfx::Point target_point(target_menu_loc);
       View::ConvertPointToTarget(
@@ -2516,7 +2524,7 @@ void MenuController::UpdateActiveMouseView(SubmenuView* event_source,
 
 void MenuController::SendMouseReleaseToActiveView(SubmenuView* event_source,
                                                   const ui::MouseEvent& event) {
-  View* active_mouse_view = GetActiveMouseView();
+  View* active_mouse_view = active_mouse_view_tracker_->view();
   if (!active_mouse_view)
     return;
 
@@ -2527,32 +2535,21 @@ void MenuController::SendMouseReleaseToActiveView(SubmenuView* event_source,
   ui::MouseEvent release_event(ui::ET_MOUSE_RELEASED, target_loc, target_loc,
                                ui::EventTimeForNow(), event.flags(),
                                event.changed_button_flags());
-  // Reset active mouse view before sending mouse released. That way if it calls
-  // back to us, we aren't in a weird state.
-  SetActiveMouseView(NULL);
+  // Reset the active mouse view before sending mouse released. That way if it
+  // calls back to us, we aren't in a weird state.
+  active_mouse_view_tracker_->Clear();
   active_mouse_view->OnMouseReleased(release_event);
 }
 
 void MenuController::SendMouseCaptureLostToActiveView() {
-  View* active_mouse_view = GetActiveMouseView();
+  View* active_mouse_view = active_mouse_view_tracker_->view();
   if (!active_mouse_view)
     return;
 
-  // Reset the active_mouse_view_ before sending mouse capture lost. That way if
+  // Reset the active mouse view before sending mouse capture lost. That way if
   // it calls back to us, we aren't in a weird state.
-  SetActiveMouseView(NULL);
+  active_mouse_view_tracker_->Clear();
   active_mouse_view->OnMouseCaptureLost();
-}
-
-void MenuController::SetActiveMouseView(View* view) {
-  if (view)
-    ViewStorage::GetInstance()->StoreView(active_mouse_view_id_, view);
-  else
-    ViewStorage::GetInstance()->RemoveView(active_mouse_view_id_);
-}
-
-View* MenuController::GetActiveMouseView() {
-  return ViewStorage::GetInstance()->RetrieveView(active_mouse_view_id_);
 }
 
 void MenuController::SetExitType(ExitType type) {
@@ -2686,8 +2683,7 @@ void MenuController::HandleMouseLocation(SubmenuView* source,
     SetSelection(part.menu, SELECTION_OPEN_SUBMENU);
   } else if (!part.is_scroll() && pending_state_.item &&
              pending_state_.item->GetParentMenuItem() &&
-             (!pending_state_.item->HasSubmenu() ||
-              !pending_state_.item->GetSubmenu()->IsShowing())) {
+             !pending_state_.item->SubmenuIsShowing()) {
     // On exit if the user hasn't selected an item with a submenu, move the
     // selection back to the parent menu item.
     SetSelection(pending_state_.item->GetParentMenuItem(),

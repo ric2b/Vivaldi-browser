@@ -89,7 +89,7 @@ class OmniboxResultTest : public AppListTestBase {
   DISALLOW_COPY_AND_ASSIGN(OmniboxResultTest);
 };
 
-TEST_F(OmniboxResultTest, Basic) {
+TEST_F(OmniboxResultTest, DISABLED_Basic) {
   std::unique_ptr<OmniboxResult> result = CreateOmniboxResult(
       kFullQuery, kRelevance, kExampleUrl, kFullQuery, kExampleDescription,
       AutocompleteMatchType::HISTORY_URL, kExampleKeyword, false);

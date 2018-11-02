@@ -52,8 +52,12 @@ AURA_EXPORT extern const WindowProperty<bool>* const kAnimationsDisabledKey;
 AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kAppIconKey;
 
 // A property key to store the type of window that will be used to record
-// pointer metrics. See AppType in ash/shared/app_types.h for more details.
+// pointer metrics. See AppType in ash/public/cpp/app_types.h for more details.
 AURA_EXPORT extern const WindowProperty<int>* const kAppType;
+
+// A property key to store the avatar icon that will be displayed on the window
+// frame to indicate the owner of the window when needed.
+AURA_EXPORT extern const WindowProperty<gfx::ImageSkia*>* const kAvatarIconKey;
 
 // A property key to store if a window is a constrained window or not.
 AURA_EXPORT extern const WindowProperty<bool>* const kConstrainedWindowKey;
@@ -81,6 +85,9 @@ AURA_EXPORT extern const WindowProperty<Window*>* const kHostWindowKey;
 // different from the normal fullscreen mode by allowing the user to reveal the
 // top portion of the window through a touch / mouse gesture.
 AURA_EXPORT extern const WindowProperty<bool>* const kImmersiveFullscreenKey;
+
+// A property key to store the minimum size of the window.
+AURA_EXPORT extern const WindowProperty<gfx::Size*>* const kMinimumSize;
 
 // A property key to indicate that a window is being "mirrored" and its contents
 // should render regardless of its actual visibility state.

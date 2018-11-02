@@ -66,6 +66,8 @@
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
 #include "third_party/WebKit/public/web/WebKit.h"
 #include "third_party/WebKit/public/web/WebSelection.h"
+#include "third_party/skia/include/core/SkImage.h"
+#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/native_theme/native_theme_features.h"
@@ -224,6 +226,11 @@ gfx::Size CalculateDefaultTileSize(float initial_device_scale_factor,
   return gfx::Size(default_tile_size, default_tile_size);
 }
 
+bool IsRunningInMash() {
+  const base::CommandLine* cmdline = base::CommandLine::ForCurrentProcess();
+  return cmdline->HasSwitch(switches::kIsRunningInMash);
+}
+
 // Check cc::BrowserControlsState, and blink::WebBrowserControlsState
 // are kept in sync.
 static_assert(int(blink::kWebBrowserControlsBoth) == int(cc::BOTH),
@@ -252,8 +259,7 @@ std::unique_ptr<RenderWidgetCompositor> RenderWidgetCompositor::Create(
 RenderWidgetCompositor::RenderWidgetCompositor(
     RenderWidgetCompositorDelegate* delegate,
     CompositorDependencies* compositor_deps)
-    : num_failed_recreate_attempts_(0),
-      delegate_(delegate),
+    : delegate_(delegate),
       compositor_deps_(compositor_deps),
       threaded_(!!compositor_deps_->GetCompositorImplThreadTaskRunner()),
       never_visible_(false),
@@ -382,13 +388,11 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.use_partial_raster = compositor_deps->IsPartialRasterEnabled();
   settings.enable_elastic_overscroll =
       compositor_deps->IsElasticOverscrollEnabled();
-  settings.renderer_settings.use_gpu_memory_buffer_resources =
+  settings.resource_settings.use_gpu_memory_buffer_resources =
       compositor_deps->IsGpuMemoryBufferCompositorResourcesEnabled();
   settings.enable_color_correct_rasterization =
-      cmd.HasSwitch(switches::kEnableColorCorrectRendering);
-  settings.renderer_settings.enable_color_correct_rendering =
-      cmd.HasSwitch(switches::kEnableColorCorrectRendering);
-  settings.renderer_settings.buffer_to_texture_target_map =
+      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
+  settings.resource_settings.buffer_to_texture_target_map =
       compositor_deps->GetBufferToTextureTargetMap();
 
   // Build LayerTreeSettings from command line args.
@@ -396,8 +400,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   settings.use_layer_lists = cmd.HasSwitch(cc::switches::kEnableLayerLists);
 
-  settings.renderer_settings.allow_antialiasing &=
-      !cmd.HasSwitch(cc::switches::kDisableCompositedAntialiasing);
   // The means the renderer compositor has 2 possible modes:
   // - Threaded compositing with a scheduler.
   // - Single threaded compositing without a scheduler (for layout tests only).
@@ -422,6 +424,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   settings.initial_debug_state.SetRecordRenderingStats(
       cmd.HasSwitch(cc::switches::kEnableGpuBenchmarking));
   settings.enable_surface_synchronization =
+      IsRunningInMash() ||
       cmd.HasSwitch(cc::switches::kEnableSurfaceSynchronization);
 
   if (cmd.HasSwitch(cc::switches::kSlowDownRasterScaleFactor)) {
@@ -444,6 +447,7 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
   bool using_synchronous_compositor =
       GetContentClient()->UsingSynchronousCompositing();
 
+  settings.use_stream_video_draw_quad = true;
   settings.using_synchronous_renderer_compositor = using_synchronous_compositor;
   if (using_synchronous_compositor) {
     // Android WebView uses system scrollbars, so make ours invisible.
@@ -453,7 +457,6 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     settings.scrollbar_animator = cc::LayerTreeSettings::NO_ANIMATOR;
     settings.solid_color_scrollbar_color = SK_ColorTRANSPARENT;
   }
-  settings.renderer_settings.highp_threshold_min = 2048;
   // Android WebView handles root layer flings itself.
   settings.ignore_root_layer_flings = using_synchronous_compositor;
   // Memory policy on Android WebView does not depend on whether device is
@@ -470,22 +473,19 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     // and are disabled for Android WebView as it doesn't support the format.
     if (!cmd.HasSwitch(switches::kDisableRGBA4444Textures) &&
         base::SysInfo::AmountOfPhysicalMemoryMB() <= 512)
-      settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
+      settings.preferred_tile_format = viz::RGBA_4444;
   } else {
     // On other devices we have increased memory excessively to avoid
     // raster-on-demand already, so now we reserve 50% _only_ to avoid
     // raster-on-demand, and use 50% of the memory otherwise.
     settings.max_memory_for_prepaint_percentage = 50;
   }
-  // Webview does not own the surface so should not clear it.
-  settings.renderer_settings.should_clear_root_render_pass =
-      !using_synchronous_compositor;
 
   if (base::SysInfo::IsLowEndDevice()) {
-    // When running on a low end device, we limit cached bytes to 2MB.
-    // This allows a typical page to fit its images in cache, but prevents
-    // most long-term caching.
-    settings.decoded_image_cache_budget_bytes = 2 * 1024 * 1024;
+    // When running on a low end device, we limit cached bytes to 512KB.
+    // This allows pages which are light on images to stay in cache, but
+    // prevents most long-term caching.
+    settings.decoded_image_cache_budget_bytes = 512 * 1024;
   }
 
   // TODO(danakj): Only do this on low end devices.
@@ -521,11 +521,11 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
 
   if (cmd.HasSwitch(switches::kEnableRGBA4444Textures) &&
       !cmd.HasSwitch(switches::kDisableRGBA4444Textures)) {
-    settings.renderer_settings.preferred_tile_format = cc::RGBA_4444;
+    settings.preferred_tile_format = viz::RGBA_4444;
   }
 
   if (cmd.HasSwitch(cc::switches::kEnableTileCompression)) {
-    settings.renderer_settings.preferred_tile_format = cc::ETC1;
+    settings.preferred_tile_format = viz::ETC1;
   }
 
   settings.max_staging_buffer_usage_in_bytes = 32 * 1024 * 1024;  // 32MB
@@ -534,21 +534,20 @@ cc::LayerTreeSettings RenderWidgetCompositor::GenerateLayerTreeSettings(
     settings.max_staging_buffer_usage_in_bytes /= 4;
 
   cc::ManagedMemoryPolicy defaults = settings.gpu_memory_policy;
-  settings.gpu_memory_policy = GetGpuMemoryPolicy(defaults);
+  settings.gpu_memory_policy = GetGpuMemoryPolicy(defaults, screen_info);
   settings.software_memory_policy.num_resources_limit =
       base::SharedMemory::GetHandleLimit() / 3;
 
   settings.disallow_non_exact_resource_reuse =
       cmd.HasSwitch(cc::switches::kDisallowNonExactResourceReuse);
-  settings.renderer_settings.disallow_non_exact_resource_reuse =
-      settings.disallow_non_exact_resource_reuse;
 
   return settings;
 }
 
 // static
 cc::ManagedMemoryPolicy RenderWidgetCompositor::GetGpuMemoryPolicy(
-    const cc::ManagedMemoryPolicy& default_policy) {
+    const cc::ManagedMemoryPolicy& default_policy,
+    const ScreenInfo& screen_info) {
   cc::ManagedMemoryPolicy actual = default_policy;
   actual.bytes_limit_when_visible = 0;
 
@@ -573,10 +572,18 @@ cc::ManagedMemoryPolicy RenderWidgetCompositor::GetGpuMemoryPolicy(
   size_t dalvik_mb = base::SysInfo::DalvikHeapSizeMB();
   size_t physical_mb = base::SysInfo::AmountOfPhysicalMemoryMB();
   size_t physical_memory_mb = 0;
-  if (dalvik_mb >= 256)
+  if (base::SysInfo::IsLowEndDevice()) {
+    // TODO(crbug.com/742534): The code below appears to no longer work.
+    // |dalvik_mb| no longer follows the expected heuristic pattern, causing us
+    // to over-estimate memory on low-end devices. This entire section probably
+    // needs to be re-written, but for now we can address the low-end Android
+    // issues by ignoring |dalvik_mb|.
+    physical_memory_mb = physical_mb;
+  } else if (dalvik_mb >= 256) {
     physical_memory_mb = dalvik_mb * 4;
-  else
+  } else {
     physical_memory_mb = std::max(dalvik_mb * 4, (physical_mb * 4) / 3);
+  }
 
   // Now we take a default of 1/8th of memory on high-memory devices,
   // and gradually scale that back for low-memory devices (to be nicer
@@ -622,6 +629,16 @@ cc::ManagedMemoryPolicy RenderWidgetCompositor::GetGpuMemoryPolicy(
   actual.bytes_limit_when_visible = 512 * 1024 * 1024;
   actual.priority_cutoff_when_visible =
       gpu::MemoryAllocation::CUTOFF_ALLOW_NICE_TO_HAVE;
+
+  // For large monitors (4k), double the tile memory to avoid frequent out of
+  // memory problems. 4k could mean a screen width of anywhere from 3840 to 4096
+  // (see https://en.wikipedia.org/wiki/4K_resolution). We use 3500 as a proxy
+  // for "large enough".
+  static const int kLargeDisplayThreshold = 3500;
+  int display_width =
+      std::round(screen_info.rect.width() * screen_info.device_scale_factor);
+  if (display_width >= kLargeDisplayThreshold)
+    actual.bytes_limit_when_visible *= 2;
 #endif
   return actual;
 }
@@ -692,7 +709,7 @@ bool RenderWidgetCompositor::SendMessageToMicroBenchmark(
   return layer_tree_host_->SendMessageToMicroBenchmark(id, std::move(value));
 }
 
-cc::FrameSinkId RenderWidgetCompositor::GetFrameSinkId() {
+viz::FrameSinkId RenderWidgetCompositor::GetFrameSinkId() {
   return frame_sink_id_;
 }
 
@@ -778,44 +795,39 @@ void RenderWidgetCompositor::DidStopFlinging() {
 }
 
 void RenderWidgetCompositor::RegisterViewportLayers(
-    const blink::WebLayer* overscroll_elasticity_layer,
-    const blink::WebLayer* page_scale_layer,
-    const blink::WebLayer* inner_viewport_container_layer,
-    const blink::WebLayer* outer_viewport_container_layer,
-    const blink::WebLayer* inner_viewport_scroll_layer,
-    const blink::WebLayer* outer_viewport_scroll_layer) {
+    const blink::WebLayerTreeView::ViewportLayers& layers) {
   cc::LayerTreeHost::ViewportLayers viewport_layers;
   // TODO(bokan): This check can probably be removed now, but it looks
   // like overscroll elasticity may still be nullptr until VisualViewport
   // registers its layers.
-  if (overscroll_elasticity_layer) {
+  if (layers.overscroll_elasticity) {
     viewport_layers.overscroll_elasticity =
-        static_cast<const cc_blink::WebLayerImpl*>(overscroll_elasticity_layer)
+        static_cast<const cc_blink::WebLayerImpl*>(layers.overscroll_elasticity)
             ->layer();
   }
   viewport_layers.page_scale =
-      static_cast<const cc_blink::WebLayerImpl*>(page_scale_layer)->layer();
-  if (inner_viewport_container_layer) {
+      static_cast<const cc_blink::WebLayerImpl*>(layers.page_scale)->layer();
+  if (layers.inner_viewport_container) {
     viewport_layers.inner_viewport_container =
         static_cast<const cc_blink::WebLayerImpl*>(
-            inner_viewport_container_layer)
+            layers.inner_viewport_container)
             ->layer();
   }
-  if (outer_viewport_container_layer) {
+  if (layers.outer_viewport_container) {
     viewport_layers.outer_viewport_container =
         static_cast<const cc_blink::WebLayerImpl*>(
-            outer_viewport_container_layer)
+            layers.outer_viewport_container)
             ->layer();
   }
   viewport_layers.inner_viewport_scroll =
-      static_cast<const cc_blink::WebLayerImpl*>(inner_viewport_scroll_layer)
+      static_cast<const cc_blink::WebLayerImpl*>(layers.inner_viewport_scroll)
           ->layer();
   // TODO(bokan): This check can probably be removed now, but it looks
   // like overscroll elasticity may still be nullptr until VisualViewport
   // registers its layers.
-  if (outer_viewport_scroll_layer) {
+  if (layers.outer_viewport_scroll) {
     viewport_layers.outer_viewport_scroll =
-        static_cast<const cc_blink::WebLayerImpl*>(outer_viewport_scroll_layer)
+        static_cast<const cc_blink::WebLayerImpl*>(layers.outer_viewport_scroll)
             ->layer();
   }
   layer_tree_host_->RegisterViewportLayers(viewport_layers);
@@ -910,10 +922,13 @@ void RenderWidgetCompositor::UpdateEventRectsForSubframeIfNecessary() {
       wheel_event_properties == WebEventListenerProperties::kBlockingAndPassive;
 
   cc::Layer* root_layer = layer_tree_host_->root_layer();
-  cc::Region touch_handler_region;
-  if (has_touch_handlers)
-    touch_handler_region = gfx::Rect(gfx::Point(), root_layer->bounds());
-  root_layer->SetTouchEventHandlerRegion(touch_handler_region);
+
+  cc::TouchActionRegion touch_event_handler;
+  if (has_touch_handlers) {
+    touch_event_handler.Union(cc::kTouchActionNone,
+                              gfx::Rect(gfx::Point(), root_layer->bounds()));
+  }
+  root_layer->SetTouchActionRegion(std::move(touch_event_handler));
 
   cc::Region wheel_handler_region;
   if (has_wheel_handlers)
@@ -970,13 +985,13 @@ void RenderWidgetCompositor::LayoutAndPaintAsync(
   }
 }
 
-void RenderWidgetCompositor::SetCompositorFrameSink(
-    std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink) {
-  if (!compositor_frame_sink) {
-    DidFailToInitializeCompositorFrameSink();
+void RenderWidgetCompositor::SetLayerTreeFrameSink(
+    std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink) {
+  if (!layer_tree_frame_sink) {
+    DidFailToInitializeLayerTreeFrameSink();
     return;
   }
-  layer_tree_host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
+  layer_tree_host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 }
 
 void RenderWidgetCompositor::LayoutAndUpdateLayers() {
@@ -998,7 +1013,7 @@ void RenderWidgetCompositor::CompositeAndReadbackAsync(
   scoped_refptr<base::SingleThreadTaskRunner> main_thread_task_runner =
       layer_tree_host_->GetTaskRunnerProvider()->MainThreadTaskRunner();
   std::unique_ptr<cc::CopyOutputRequest> request =
-      cc::CopyOutputRequest::CreateBitmapRequest(base::Bind(
+      cc::CopyOutputRequest::CreateBitmapRequest(base::BindOnce(
           [](blink::WebCompositeAndReadbackAsyncCallback* callback,
              scoped_refptr<base::SingleThreadTaskRunner> task_runner,
              std::unique_ptr<cc::CopyOutputResult> result) {
@@ -1089,6 +1104,23 @@ void RenderWidgetCompositor::setBottomControlsHeight(float height) {
   layer_tree_host_->SetBottomControlsHeight(height);
 }
 
+void RenderWidgetCompositor::RequestDecode(
+    const PaintImage& image,
+    const base::Callback<void(bool)>& callback) {
+  layer_tree_host_->QueueImageDecode(image, callback);
+
+  // If we're compositing synchronously, the SetNeedsCommit call which will be
+  // issued by |layer_tree_host_| is not going to cause a commit, due to the
+  // fact that this would make layout tests slow and cause flakiness. However,
+  // in this case we actually need a commit to transfer the decode requests to
+  // the impl side. So, force a commit to happen.
+  if (CompositeIsSynchronous()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::Bind(&RenderWidgetCompositor::SynchronouslyComposite,
+                              weak_factory_.GetWeakPtr()));
+  }
+}
+
 void RenderWidgetCompositor::WillBeginMainFrame() {
   delegate_->WillBeginCompositorFrame();
 }
@@ -1133,40 +1165,36 @@ void RenderWidgetCompositor::RecordWheelAndTouchScrollingCount(
                                                has_scrolled_by_touch);
 }
 
-void RenderWidgetCompositor::RequestNewCompositorFrameSink() {
+void RenderWidgetCompositor::RequestNewLayerTreeFrameSink() {
   // If the host is closing, then no more compositing is possible.  This
   // prevents shutdown races between handling the close message and
-  // the CreateCompositorFrameSink task.
+  // the CreateLayerTreeFrameSink task.
   if (delegate_->IsClosing())
     return;
 
-  bool fallback = num_failed_recreate_attempts_ >=
-                  COMPOSITOR_FRAME_SINK_RETRIES_BEFORE_FALLBACK;
-
 #ifdef OS_ANDROID
-  LOG_IF(FATAL, fallback) << "Android does not support fallback frame sinks.";
+  LOG_IF(FATAL, attempt_software_fallback_)
+      << "Android does not support fallback frame sinks.";
 #endif
 
-  delegate_->RequestNewCompositorFrameSink(
-      fallback, base::Bind(&RenderWidgetCompositor::SetCompositorFrameSink,
-                           weak_factory_.GetWeakPtr()));
+  delegate_->RequestNewLayerTreeFrameSink(
+      attempt_software_fallback_,
+      base::Bind(&RenderWidgetCompositor::SetLayerTreeFrameSink,
+                 weak_factory_.GetWeakPtr()));
 }
 
-void RenderWidgetCompositor::DidInitializeCompositorFrameSink() {
-  num_failed_recreate_attempts_ = 0;
+void RenderWidgetCompositor::DidInitializeLayerTreeFrameSink() {
+  attempt_software_fallback_ = false;
 }
 
-void RenderWidgetCompositor::DidFailToInitializeCompositorFrameSink() {
-  ++num_failed_recreate_attempts_;
-  // Tolerate a certain number of recreation failures to work around races
-  // in the output-surface-lost machinery.
-  LOG_IF(FATAL,
-         (num_failed_recreate_attempts_ >= MAX_COMPOSITOR_FRAME_SINK_RETRIES))
-      << "Failed to create a fallback CompositorFrameSink.";
+void RenderWidgetCompositor::DidFailToInitializeLayerTreeFrameSink() {
+  LOG_IF(FATAL, attempt_software_fallback_)
+      << "Failed to create a fallback LayerTreeFrameSink.";
 
+  attempt_software_fallback_ = true;
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
-      base::Bind(&RenderWidgetCompositor::RequestNewCompositorFrameSink,
+      base::Bind(&RenderWidgetCompositor::RequestNewLayerTreeFrameSink,
                  weak_factory_.GetWeakPtr()));
 }
 
@@ -1201,10 +1229,10 @@ void RenderWidgetCompositor::RequestScheduleAnimation() {
 
 void RenderWidgetCompositor::DidSubmitCompositorFrame() {}
 
-void RenderWidgetCompositor::DidLoseCompositorFrameSink() {}
+void RenderWidgetCompositor::DidLoseLayerTreeFrameSink() {}
 
 void RenderWidgetCompositor::SetFrameSinkId(
-    const cc::FrameSinkId& frame_sink_id) {
+    const viz::FrameSinkId& frame_sink_id) {
   frame_sink_id_ = frame_sink_id;
   layer_tree_host_->SetFrameSinkId(frame_sink_id);
 }
@@ -1227,13 +1255,17 @@ void RenderWidgetCompositor::SetContentSourceId(uint32_t id) {
 }
 
 void RenderWidgetCompositor::SetLocalSurfaceId(
-    const cc::LocalSurfaceId& local_surface_id) {
+    const viz::LocalSurfaceId& local_surface_id) {
   layer_tree_host_->SetLocalSurfaceId(local_surface_id);
 }
 
 void RenderWidgetCompositor::NotifySwapTime(ReportTimeCallback callback) {
   QueueSwapPromise(base::MakeUnique<ReportTimeSwapPromise>(
       std::move(callback), base::ThreadTaskRunnerHandle::Get()));
+}
+
+void RenderWidgetCompositor::RequestBeginMainFrameNotExpected(bool new_state) {
+  layer_tree_host_->RequestBeginMainFrameNotExpected(new_state);
 }
 
 }  // namespace content

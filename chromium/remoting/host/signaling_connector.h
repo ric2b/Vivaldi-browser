@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "net/base/network_change_notifier.h"
 #include "remoting/base/oauth_token_getter.h"
@@ -24,9 +24,7 @@ class DnsBlackholeChecker;
 // backoff. It also monitors network state and reconnects signalling
 // whenever connection type changes or IP address changes.
 class SignalingConnector
-    : public base::SupportsWeakPtr<SignalingConnector>,
-      public base::NonThreadSafe,
-      public SignalStrategy::Listener,
+    : public SignalStrategy::Listener,
       public net::NetworkChangeNotifier::ConnectionTypeObserver,
       public net::NetworkChangeNotifier::IPAddressObserver {
  public:
@@ -70,6 +68,10 @@ class SignalingConnector
   int reconnect_attempts_;
 
   base::OneShotTimer timer_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<SignalingConnector> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(SignalingConnector);
 };

@@ -17,29 +17,21 @@ namespace shape_detection {
 
 namespace {
 
-void RunCallbackWithBarcodes(
-    const shape_detection::mojom::BarcodeDetection::DetectCallback& callback,
-    std::vector<shape_detection::mojom::BarcodeDetectionResultPtr> results) {
-  callback.Run(std::move(results));
-}
-
 void RunCallbackWithNoBarcodes(
-    const shape_detection::mojom::BarcodeDetection::DetectCallback& callback) {
-  callback.Run(
-      std::vector<shape_detection::mojom::BarcodeDetectionResultPtr>());
+    shape_detection::mojom::BarcodeDetection::DetectCallback callback) {
+  std::move(callback).Run({});
 }
 
 }  // anonymous namespace
 
 // static
 void BarcodeDetectionImpl::Create(
-    const service_manager::BindSourceInfo& source_info,
     shape_detection::mojom::BarcodeDetectionRequest request) {
   // Barcode detection needs at least MAC OS X 10.10.
-  if (!base::mac::IsAtLeastOS10_10())
-    return;
-  mojo::MakeStrongBinding(base::MakeUnique<BarcodeDetectionImplMac>(),
-                          std::move(request));
+  if (@available(macOS 10.10, *)) {
+    mojo::MakeStrongBinding(base::MakeUnique<BarcodeDetectionImplMac>(),
+                            std::move(request));
+  }
 }
 
 BarcodeDetectionImplMac::BarcodeDetectionImplMac() {
@@ -51,22 +43,19 @@ BarcodeDetectionImplMac::BarcodeDetectionImplMac() {
 
 BarcodeDetectionImplMac::~BarcodeDetectionImplMac() {}
 
-void BarcodeDetectionImplMac::Detect(mojo::ScopedSharedBufferHandle frame_data,
-                                     uint32_t width,
-                                     uint32_t height,
-                                     const DetectCallback& callback) {
+void BarcodeDetectionImplMac::Detect(const SkBitmap& bitmap,
+                                     DetectCallback callback) {
   media::ScopedResultCallback<DetectCallback> scoped_callback(
-      base::Bind(&RunCallbackWithBarcodes, callback),
-      base::Bind(&RunCallbackWithNoBarcodes));
+      std::move(callback), base::Bind(&RunCallbackWithNoBarcodes));
 
-  base::scoped_nsobject<CIImage> ci_image =
-      CreateCIImageFromSharedMemory(std::move(frame_data), width, height);
+  base::scoped_nsobject<CIImage> ci_image = CreateCIImageFromSkBitmap(bitmap);
   if (!ci_image)
     return;
 
   NSArray* const features = [detector_ featuresInImage:ci_image];
 
   std::vector<mojom::BarcodeDetectionResultPtr> results;
+  const int height = bitmap.height();
   for (CIQRCodeFeature* const f in features) {
     shape_detection::mojom::BarcodeDetectionResultPtr result =
         shape_detection::mojom::BarcodeDetectionResult::New();

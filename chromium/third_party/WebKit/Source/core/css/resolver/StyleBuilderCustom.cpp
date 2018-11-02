@@ -119,8 +119,8 @@ void StyleBuilder::ApplyProperty(CSSPropertyID id,
     bool omit_animation_tainted =
         CSSAnimations::IsAnimationAffectingProperty(id);
     const CSSValue* resolved_value =
-        CSSVariableResolver::ResolveVariableReferences(state, id, value,
-                                                       omit_animation_tainted);
+        CSSVariableResolver(state).ResolveVariableReferences(
+            id, value, omit_animation_tainted);
     ApplyProperty(id, state, *resolved_value);
 
     if (!state.Style()->HasVariableReferenceFromNonInheritedProperty() &&
@@ -244,9 +244,9 @@ void StyleBuilderFunctions::applyInitialCSSPropertyGridTemplateAreas(
     StyleResolverState& state) {
   state.Style()->SetNamedGridArea(ComputedStyle::InitialNamedGridArea());
   state.Style()->SetNamedGridAreaRowCount(
-      ComputedStyle::InitialNamedGridAreaCount());
+      ComputedStyle::InitialNamedGridAreaRowCount());
   state.Style()->SetNamedGridAreaColumnCount(
-      ComputedStyle::InitialNamedGridAreaCount());
+      ComputedStyle::InitialNamedGridAreaColumnCount());
 }
 
 void StyleBuilderFunctions::applyInheritCSSPropertyGridTemplateAreas(
@@ -326,10 +326,12 @@ void StyleBuilderFunctions::applyValueCSSPropertyResize(
     const CSSValue& value) {
   const CSSIdentifierValue& identifier_value = ToCSSIdentifierValue(value);
 
-  EResize r = RESIZE_NONE;
+  EResize r = EResize::kNone;
   if (identifier_value.GetValueID() == CSSValueAuto) {
-    if (Settings* settings = state.GetDocument().GetSettings())
-      r = settings->GetTextAreasAreResizable() ? RESIZE_BOTH : RESIZE_NONE;
+    if (Settings* settings = state.GetDocument().GetSettings()) {
+      r = settings->GetTextAreasAreResizable() ? EResize::kBoth
+                                               : EResize::kNone;
+    }
   } else {
     r = identifier_value.ConvertTo<EResize>();
   }
@@ -372,7 +374,7 @@ void StyleBuilderFunctions::applyValueCSSPropertySize(StyleResolverState& state,
                                                       const CSSValue& value) {
   state.Style()->ResetPageSizeType();
   FloatSize size;
-  PageSizeType page_size_type = PAGE_SIZE_AUTO;
+  EPageSizeType page_size_type = EPageSizeType::kAuto;
   const CSSValueList& list = ToCSSValueList(value);
   if (list.length() == 2) {
     // <length>{2} | <page-size> <orientation>
@@ -394,14 +396,14 @@ void StyleBuilderFunctions::applyValueCSSPropertySize(StyleResolverState& state,
       if (ToCSSIdentifierValue(second).GetValueID() == CSSValueLandscape)
         size = size.TransposedSize();
     }
-    page_size_type = PAGE_SIZE_RESOLVED;
+    page_size_type = EPageSizeType::kResolved;
   } else {
     DCHECK_EQ(list.length(), 1U);
     // <length> | auto | <page-size> | [ portrait | landscape]
     const CSSValue& first = list.Item(0);
     if (first.IsPrimitiveValue() && ToCSSPrimitiveValue(first).IsLength()) {
       // <length>
-      page_size_type = PAGE_SIZE_RESOLVED;
+      page_size_type = EPageSizeType::kResolved;
       float width = ToCSSPrimitiveValue(first).ComputeLength<float>(
           state.CssToLengthConversionData().CopyWithAdjustedZoom(1.0));
       size = FloatSize(width, width);
@@ -409,17 +411,17 @@ void StyleBuilderFunctions::applyValueCSSPropertySize(StyleResolverState& state,
       const CSSIdentifierValue& ident = ToCSSIdentifierValue(first);
       switch (ident.GetValueID()) {
         case CSSValueAuto:
-          page_size_type = PAGE_SIZE_AUTO;
+          page_size_type = EPageSizeType::kAuto;
           break;
         case CSSValuePortrait:
-          page_size_type = PAGE_SIZE_AUTO_PORTRAIT;
+          page_size_type = EPageSizeType::kPortrait;
           break;
         case CSSValueLandscape:
-          page_size_type = PAGE_SIZE_AUTO_LANDSCAPE;
+          page_size_type = EPageSizeType::kLandscape;
           break;
         default:
           // <page-size>
-          page_size_type = PAGE_SIZE_RESOLVED;
+          page_size_type = EPageSizeType::kResolved;
           size = GetPageSizeFromName(ident);
       }
     }
@@ -486,10 +488,10 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextIndent(
               .ConvertToLength(state.CssToLengthConversionData());
     } else if (ToCSSIdentifierValue(*list_value).GetValueID() ==
                CSSValueEachLine) {
-      text_indent_line_value = kTextIndentEachLine;
+      text_indent_line_value = TextIndentLine::kEachLine;
     } else if (ToCSSIdentifierValue(*list_value).GetValueID() ==
                CSSValueHanging) {
-      text_indent_type_value = kTextIndentHanging;
+      text_indent_type_value = TextIndentType::kHanging;
     } else {
       NOTREACHED();
     }
@@ -613,7 +615,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextEmphasisStyle(
 
   if (value.IsStringValue()) {
     state.Style()->SetTextEmphasisFill(TextEmphasisFill::kFilled);
-    state.Style()->SetTextEmphasisMark(kTextEmphasisMarkCustom);
+    state.Style()->SetTextEmphasisMark(TextEmphasisMark::kCustom);
     state.Style()->SetTextEmphasisCustomMark(
         AtomicString(ToCSSStringValue(value).Value()));
     return;
@@ -627,7 +629,7 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextEmphasisStyle(
       identifier_value.GetValueID() == CSSValueOpen) {
     state.Style()->SetTextEmphasisFill(
         identifier_value.ConvertTo<TextEmphasisFill>());
-    state.Style()->SetTextEmphasisMark(kTextEmphasisMarkAuto);
+    state.Style()->SetTextEmphasisMark(TextEmphasisMark::kAuto);
   } else {
     state.Style()->SetTextEmphasisFill(TextEmphasisFill::kFilled);
     state.Style()->SetTextEmphasisMark(
@@ -805,9 +807,10 @@ void StyleBuilderFunctions::applyValueCSSPropertyWebkitAppRegion(
     StyleResolverState& state,
     const CSSValue& value) {
   const CSSIdentifierValue& identifier_value = ToCSSIdentifierValue(value);
-  state.Style()->SetDraggableRegionMode(
-      identifier_value.GetValueID() == CSSValueDrag ? kDraggableRegionDrag
-                                                    : kDraggableRegionNoDrag);
+  state.Style()->SetDraggableRegionMode(identifier_value.GetValueID() ==
+                                                CSSValueDrag
+                                            ? EDraggableRegionMode::kDrag
+                                            : EDraggableRegionMode::kNoDrag);
   state.GetDocument().SetHasAnnotatedRegions(true);
 }
 
@@ -827,14 +830,14 @@ void StyleBuilderFunctions::applyValueCSSPropertyTextOrientation(
     StyleResolverState& state,
     const CSSValue& value) {
   state.SetTextOrientation(
-      ToCSSIdentifierValue(value).ConvertTo<TextOrientation>());
+      ToCSSIdentifierValue(value).ConvertTo<ETextOrientation>());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyWebkitTextOrientation(
     StyleResolverState& state,
     const CSSValue& value) {
   state.SetTextOrientation(
-      ToCSSIdentifierValue(value).ConvertTo<TextOrientation>());
+      ToCSSIdentifierValue(value).ConvertTo<ETextOrientation>());
 }
 
 void StyleBuilderFunctions::applyValueCSSPropertyVariable(

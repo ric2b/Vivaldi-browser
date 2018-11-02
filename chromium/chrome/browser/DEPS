@@ -1,6 +1,5 @@
 include_rules = [
   "+apps",
-  "+ash",
   "+cc/paint",
   "+chrome/app",
   "+chrome/chrome_watcher",
@@ -19,7 +18,6 @@ include_rules = [
   "+device/geolocation",
   "+device/hid",
   "+device/media_transfer_protocol",
-  "+device/power_save_blocker",
   "+device/usb",
   "+device/vr/features/features.h",
   "+extensions/browser",
@@ -28,7 +26,6 @@ include_rules = [
   "+extensions/features",
   "+extensions/grit",
   "+extensions/test",
-  "+gin/public/gin_features.h",
   "+google/cacheinvalidation",  # Sync invalidation API protobuf files.
   "+google_apis",
   "+google_update",
@@ -48,18 +45,28 @@ include_rules = [
   "+sandbox/win/src",  # The path doesn't say it, but this is the Windows sandbox.
   "+services/data_decoder/public/cpp",
   "+services/device/public/cpp/device_features.h",
-  "+services/identity/public/interfaces",
+  "+services/identity/public",
+  "+services/metrics/public",
   "+services/preferences/public/cpp",
   "+services/preferences/public/interfaces",
   "+services/resource_coordinator/public/cpp",
   "+services/resource_coordinator/public/interfaces/memory_instrumentation",
   "+services/service_manager",
   "+services/shape_detection/public/interfaces",
+  "+services/ui/common",
   "+services/ui/public",
+  "+services/ui/service.h",
   "+skia/ext",
   "+third_party/boringssl/src/include",
   "+third_party/crashpad",
   "+third_party/cros_system_api",
+
+  # Code under //ash runs out-of-process under mustash (chrome --mash) so it
+  # must be accessed via mojo interfaces in //ash/public/interfaces. See
+  # //ash/README.md.
+  "-ash",
+  "+ash/public",
+  "+ash/ash_switches.h",
 
   # chrome only needs switches from cc. All usage of the compositor is from
   # content. Definitely don't include generic stuff from cc/base here, if this
@@ -79,14 +86,13 @@ include_rules = [
   "+chrome/browser/ui/views/try_chrome_dialog_view.h",
   "+chrome/browser/ui/views/ash/chrome_browser_main_extra_parts_ash.h",
 
-  # Code in chrome should not use ash::SessionStateDelegate and friends.
-  # Instead, use SessionManager/UserManager/SessionControllerClient directly
-  # since they are part of chrome.
-  "-ash/session",
-
   # Explicitly disallow using SyncMessageFilter to prevent browser from
   # sending synchronous IPC messages on non-UI threads.
   "-ipc/ipc_sync_message_filter.h",
+
+  # Allows in-process use of NetworkService for URLRequestContext configuration.
+  # Should be removed once the actual network service ships.
+  "+content/public/network",
 
   # Other libraries.
   "+libxml",
@@ -121,10 +127,14 @@ include_rules = [
   "+third_party/WebKit/public/platform/modules/installation/installation.mojom.h",
   "+third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h",
   "+third_party/WebKit/public/platform/modules/notifications/WebNotificationConstants.h",
+  "+third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h",
+  "+third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h",
   "+third_party/WebKit/public/platform/modules/permissions/permission_status.mojom.h",
+  "+third_party/WebKit/public/platform/modules/presentation/presentation.mojom.h",
   "+third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h",
   "+third_party/WebKit/public/platform/modules/remoteplayback/WebRemotePlaybackAvailability.h",
   "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
+  "+third_party/WebKit/public/platform/modules/sensitive_input_visibility/sensitive_input_visibility_service.mojom.h",
   "+third_party/WebKit/public/platform/modules/webshare/webshare.mojom.h",
   "+third_party/WebKit/public/platform/site_engagement.mojom.h",
   "+third_party/WebKit/public/public_features.h",
@@ -135,3 +145,10 @@ include_rules = [
   "+third_party/WebKit/public/web/WebTextDirection.h",
   "+third_party/WebKit/public/web/window_features.mojom.h",
 ]
+specific_include_rules = {
+  # TODO(mash): Remove. http://crbug.com/678705
+  "fullscreen_chromeos\.cc": [
+    "+ash/root_window_controller.h",
+    "+ash/shell.h",
+  ]
+}

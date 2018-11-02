@@ -20,6 +20,7 @@
 using chrome_test_util::ButtonWithAccessibilityLabel;
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::NavigationBarDoneButton;
+using chrome_test_util::SettingsMenuPrivacyButton;
 
 @interface ClearBrowsingDataSettingsTestCase : ChromeTestCase
 @end
@@ -28,24 +29,13 @@ using chrome_test_util::NavigationBarDoneButton;
 
 - (void)openClearBrowsingDataDialog {
   [ChromeEarlGreyUI openSettingsMenu];
-  NSString* settingsLabel =
-      l10n_util::GetNSString(IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY);
-  [[EarlGrey
-      selectElementWithMatcher:ButtonWithAccessibilityLabel(settingsLabel)]
-      performAction:grey_tap()];
+  [ChromeEarlGreyUI tapSettingsMenuButton:SettingsMenuPrivacyButton()];
 
   NSString* clearBrowsingDataDialogLabel =
       l10n_util::GetNSString(IDS_IOS_CLEAR_BROWSING_DATA_TITLE);
   [[EarlGrey selectElementWithMatcher:ButtonWithAccessibilityLabel(
                                           clearBrowsingDataDialogLabel)]
       performAction:grey_tap()];
-}
-
-- (void)exitSettingsMenu {
-  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
-      performAction:grey_tap()];
-  // Wait for UI components to finish loading.
-  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
 }
 
 // Test that opening the clear browsing data dialog does not cause a crash.
@@ -56,7 +46,8 @@ using chrome_test_util::NavigationBarDoneButton;
   [defaults setObject:@"Enabled" forKey:@"EnableNewClearBrowsingDataUI"];
 
   [self openClearBrowsingDataDialog];
-  [self exitSettingsMenu];
+  [[EarlGrey selectElementWithMatcher:NavigationBarDoneButton()]
+      performAction:grey_tap()];
 
   [defaults setObject:oldSetting forKey:@"EnableNewClearBrowsingDataUI"];
 }

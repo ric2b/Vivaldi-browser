@@ -244,15 +244,14 @@ class HandleSendingHelper {
     mojo::ScopedMessagePipeHandle pipe;
     EXPECT_TRUE(
         IPC::MojoMessageHelper::ReadMessagePipeFrom(&message, iter, &pipe));
-    std::string content(GetSendingFileContent().size(), ' ');
+    std::vector<uint8_t> content;
 
-    uint32_t num_bytes = static_cast<uint32_t>(content.size());
     ASSERT_EQ(MOJO_RESULT_OK,
               mojo::Wait(pipe.get(), MOJO_HANDLE_SIGNAL_READABLE));
     EXPECT_EQ(MOJO_RESULT_OK,
-              mojo::ReadMessageRaw(pipe.get(), &content[0], &num_bytes, nullptr,
-                                   nullptr, 0));
-    EXPECT_EQ(content, GetSendingFileContent());
+              mojo::ReadMessageRaw(pipe.get(), &content, nullptr, 0));
+    EXPECT_EQ(std::string(content.begin(), content.end()),
+              GetSendingFileContent());
   }
 
 #if defined(OS_POSIX)
@@ -354,13 +353,11 @@ DEFINE_IPC_CHANNEL_MOJO_TEST_CLIENT(IPCChannelMojoTestSendMessagePipeClient) {
 }
 
 void ReadOK(mojo::MessagePipeHandle pipe) {
-  std::string should_be_ok("xx");
-  uint32_t num_bytes = static_cast<uint32_t>(should_be_ok.size());
+  std::vector<uint8_t> should_be_ok;
   CHECK_EQ(MOJO_RESULT_OK, mojo::Wait(pipe, MOJO_HANDLE_SIGNAL_READABLE));
   CHECK_EQ(MOJO_RESULT_OK,
-           mojo::ReadMessageRaw(pipe, &should_be_ok[0], &num_bytes, nullptr,
-                                nullptr, 0));
-  EXPECT_EQ(should_be_ok, std::string("OK"));
+           mojo::ReadMessageRaw(pipe, &should_be_ok, nullptr, 0));
+  EXPECT_EQ("OK", std::string(should_be_ok.begin(), should_be_ok.end()));
 }
 
 void WriteOK(mojo::MessagePipeHandle pipe) {
@@ -548,18 +545,16 @@ class ListenerWithSimpleAssociatedInterface
     next_expected_value_ = value;
   }
 
-  void GetExpectedValue(const GetExpectedValueCallback& callback) override {
+  void GetExpectedValue(GetExpectedValueCallback callback) override {
     NOTREACHED();
   }
 
-  void RequestValue(const RequestValueCallback& callback) override {
-    NOTREACHED();
-  }
+  void RequestValue(RequestValueCallback callback) override { NOTREACHED(); }
 
-  void RequestQuit(const RequestQuitCallback& callback) override {
+  void RequestQuit(RequestQuitCallback callback) override {
     EXPECT_EQ(kNumMessages, num_messages_received_);
     received_quit_ = true;
-    callback.Run();
+    std::move(callback).Run();
     base::MessageLoop::current()->QuitWhenIdle();
   }
 
@@ -738,17 +733,15 @@ class ListenerWithSimpleProxyAssociatedInterface
     next_expected_value_ = value;
   }
 
-  void GetExpectedValue(const GetExpectedValueCallback& callback) override {
-    callback.Run(next_expected_value_);
+  void GetExpectedValue(GetExpectedValueCallback callback) override {
+    std::move(callback).Run(next_expected_value_);
   }
 
-  void RequestValue(const RequestValueCallback& callback) override {
-    NOTREACHED();
-  }
+  void RequestValue(RequestValueCallback callback) override { NOTREACHED(); }
 
-  void RequestQuit(const RequestQuitCallback& callback) override {
+  void RequestQuit(RequestQuitCallback callback) override {
     received_quit_ = true;
-    callback.Run();
+    std::move(callback).Run();
     binding_.Close();
     base::MessageLoop::current()->QuitWhenIdle();
   }
@@ -871,8 +864,8 @@ class ListenerWithIndirectProxyAssociatedInterface
   }
 
   // IPC::mojom::PingReceiver:
-  void Ping(const PingCallback& callback) override {
-    callback.Run();
+  void Ping(PingCallback callback) override {
+    std::move(callback).Run();
     ping_handler_.Run();
   }
 
@@ -953,17 +946,17 @@ class ListenerWithSyncAssociatedInterface
     next_expected_value_ = value;
   }
 
-  void GetExpectedValue(const GetExpectedValueCallback& callback) override {
-    callback.Run(next_expected_value_);
+  void GetExpectedValue(GetExpectedValueCallback callback) override {
+    std::move(callback).Run(next_expected_value_);
   }
 
-  void RequestValue(const RequestValueCallback& callback) override {
-    callback.Run(response_value_);
+  void RequestValue(RequestValueCallback callback) override {
+    std::move(callback).Run(response_value_);
   }
 
-  void RequestQuit(const RequestQuitCallback& callback) override {
+  void RequestQuit(RequestQuitCallback callback) override {
     quit_closure_.Run();
-    callback.Run();
+    std::move(callback).Run();
   }
 
   // IPC::Listener:
@@ -1080,7 +1073,7 @@ class SimpleTestClientImpl : public IPC::mojom::SimpleTestClient,
 
  private:
   // IPC::mojom::SimpleTestClient:
-  void RequestValue(const RequestValueCallback& callback) override {
+  void RequestValue(RequestValueCallback callback) override {
     int32_t response = 0;
     if (use_sync_sender_) {
       std::unique_ptr<IPC::SyncMessage> reply(new IPC::SyncMessage(
@@ -1091,7 +1084,7 @@ class SimpleTestClientImpl : public IPC::mojom::SimpleTestClient,
       EXPECT_TRUE(driver_->RequestValue(&response));
     }
 
-    callback.Run(response);
+    std::move(callback).Run(response);
 
     DCHECK(run_loop_);
     run_loop_->Quit();

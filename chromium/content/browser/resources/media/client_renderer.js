@@ -5,11 +5,15 @@
 var ClientRenderer = (function() {
   var ClientRenderer = function() {
     this.playerListElement = document.getElementById('player-list');
-    this.audioPropertiesTable =
-        document.getElementById('audio-property-table').querySelector('tbody');
-    this.playerPropertiesTable =
-        document.getElementById('player-property-table').querySelector('tbody');
-    this.logTable = document.getElementById('log').querySelector('tbody');
+    var audioTableElement = document.getElementById('audio-property-table');
+    if (audioTableElement)
+      this.audioPropertiesTable = audioTableElement.querySelector('tbody');
+    var playerTableElement = document.getElementById('player-property-table');
+    if (playerTableElement)
+      this.playerPropertiesTable = playerTableElement.querySelector('tbody');
+    var logElement = document.getElementById('log');
+    if (logElement)
+      this.logTable = logElement.querySelector('tbody');
     this.graphElement = document.getElementById('graphs');
     this.audioPropertyName = document.getElementById('audio-property-name');
 
@@ -23,20 +27,23 @@ var ClientRenderer = (function() {
 
     this.filterFunction = function() { return true; };
     this.filterText = document.getElementById('filter-text');
-    this.filterText.onkeyup = this.onTextChange_.bind(this);
-
-    this.bufferCanvas = document.createElement('canvas');
-    this.bufferCanvas.width = media.BAR_WIDTH;
-    this.bufferCanvas.height = media.BAR_HEIGHT;
+    if (this.filterText)
+      this.filterText.onkeyup = this.onTextChange_.bind(this);
+    this.clipboardDialog = document.getElementById('clipboard-dialog');
 
     this.clipboardTextarea = document.getElementById('clipboard-textarea');
+    if (this.clipboardTextarea)
+      this.clipboardTextarea.onblur = this.hideClipboard_.bind(this);
     var clipboardButtons = document.getElementsByClassName('copy-button');
-    for (var i = 0; i < clipboardButtons.length; i++) {
-      clipboardButtons[i].onclick = this.copyToClipboard_.bind(this);
+    if (clipboardButtons) {
+      for (var i = 0; i < clipboardButtons.length; i++) {
+        clipboardButtons[i].onclick = this.copyToClipboard_.bind(this);
+      }
     }
 
     this.saveLogButton = document.getElementById('save-log-button');
-    this.saveLogButton.onclick = this.saveLog_.bind(this);
+    if (this.saveLogButton)
+      this.saveLogButton.onclick = this.saveLog_.bind(this);
 
     this.hiddenKeys = ['component_id', 'component_type', 'owner_id'];
 
@@ -52,7 +59,8 @@ var ClientRenderer = (function() {
   ClientRenderer.Css_ = {
     NO_PLAYERS_SELECTED: 'no-players-selected',
     NO_COMPONENTS_SELECTED: 'no-components-selected',
-    SELECTABLE_BUTTON: 'selectable-button'
+    SELECTABLE_BUTTON: 'selectable-button',
+    DESTRUCTED_PLAYER: 'destructed-player',
   };
 
   function removeChildren(element) {
@@ -61,7 +69,8 @@ var ClientRenderer = (function() {
     }
   };
 
-  function createSelectableButton(id, groupName, text, select_cb) {
+  function createSelectableButton(id, groupName, buttonLabel, select_cb,
+                                  isDestructed) {
     // For CSS styling.
     var radioButton = document.createElement('input');
     radioButton.classList.add(ClientRenderer.Css_.SELECTABLE_BUTTON);
@@ -69,10 +78,10 @@ var ClientRenderer = (function() {
     radioButton.id = id;
     radioButton.name = groupName;
 
-    var buttonLabel = document.createElement('label');
     buttonLabel.classList.add(ClientRenderer.Css_.SELECTABLE_BUTTON);
+    if (isDestructed)
+      buttonLabel.classList.add(ClientRenderer.Css_.DESTRUCTED_PLAYER);
     buttonLabel.setAttribute('for', radioButton.id);
-    buttonLabel.appendChild(document.createTextNode(text));
 
     var fragment = document.createDocumentFragment();
     fragment.appendChild(radioButton);
@@ -174,9 +183,11 @@ var ClientRenderer = (function() {
       if (player === this.selectedPlayer) {
         this.drawProperties_(player.properties, this.playerPropertiesTable);
         this.drawLog_();
-        this.drawGraphs_();
       }
-      if (key === 'name' || key === 'url') {
+      if (key === 'event' && value === 'WEBMEDIAPLAYER_DESTROYED')
+        player.destructed = true;
+      if (['url', 'frame_url', 'frame_title', 'audio_codec_name',
+           'video_codec_name', 'width', 'height', 'event'].includes(key)) {
         this.redrawPlayerList_(players);
       }
     },
@@ -214,9 +225,8 @@ var ClientRenderer = (function() {
       var copyButtonElement =
           document.getElementById('video-capture-capabilities-copy-button');
       copyButtonElement.onclick = function() {
-        window.prompt('Copy to clipboard: Ctrl+C, Enter',
-                      JSON.stringify(videoCaptureCapabilities))
-      }
+        this.showClipboard(JSON.stringify(videoCaptureCapabilities, null, 2));
+      }.bind(this);
 
       var videoTableBodyElement  =
           document.getElementById('video-capture-capabilities-tbody');
@@ -296,13 +306,15 @@ var ClientRenderer = (function() {
       }
 
       var fragment = document.createDocumentFragment();
-      for (id in components) {
+      for (var id in components) {
         var li = document.createElement('li');
         var button_cb = this.selectAudioComponent_.bind(
                 this, componentType, id, components[id]);
         var friendlyName = this.getAudioComponentName_(componentType, id);
+        var label = document.createElement('label');
+        label.appendChild(document.createTextNode(friendlyName));
         li.appendChild(createSelectableButton(
-            id, buttonGroupName, friendlyName, button_cb));
+            id, buttonGroupName, label, button_cb));
         fragment.appendChild(li);
       }
       removeChildren(listElement);
@@ -339,17 +351,56 @@ var ClientRenderer = (function() {
 
       var hasPlayers = false;
       var fragment = document.createDocumentFragment();
-      for (id in players) {
+      for (var id in players) {
         hasPlayers = true;
         var player = players[id];
-        var usableName = player.properties.name ||
-            player.properties.url ||
-            'Player ' + player.id;
+        var p = player.properties;
+        var label = document.createElement('label');
+
+        var name_text = p.url || 'Player ' + player.id;
+        var name_node = document.createElement('span');
+        name_node.appendChild(document.createTextNode(name_text));
+        name_node.className = 'player-name';
+        label.appendChild(name_node);
+
+        var frame = [];
+        if (p.frame_title)
+          frame.push(p.frame_title);
+        if (p.frame_url)
+          frame.push(p.frame_url);
+        var frame_text = frame.join(' - ');
+        if (frame_text) {
+          label.appendChild(document.createElement('br'));
+          var frame_node = document.createElement('span');
+          frame_node.className = 'player-frame';
+          frame_node.appendChild(document.createTextNode(frame_text));
+          label.appendChild(frame_node);
+        }
+
+        var desc = []
+        if (p.width && p.height)
+          desc.push(p.width + 'x' + p.height);
+        if (p.video_codec_name)
+          desc.push(p.video_codec_name);
+        if (p.video_codec_name && p.audio_codec_name)
+          desc.push('+');
+        if (p.audio_codec_name)
+          desc.push(p.audio_codec_name);
+        if (p.event)
+          desc.push('(' + p.event + ')');
+        var desc_text = desc.join(' ');
+        if (desc_text) {
+          label.appendChild(document.createElement('br'));
+          var desc_node = document.createElement('span');
+          desc_node.className = 'player-desc';
+          desc_node.appendChild(document.createTextNode(desc_text));
+          label.appendChild(desc_node);
+        }
 
         var li = document.createElement('li');
         var button_cb = this.selectPlayer_.bind(this, player);
         li.appendChild(createSelectableButton(
-            id, buttonGroupName, usableName, button_cb));
+            id, buttonGroupName, label, button_cb, player.destructed));
         fragment.appendChild(li);
       }
       removeChildren(this.playerListElement);
@@ -376,7 +427,6 @@ var ClientRenderer = (function() {
       removeChildren(this.logTable);
       removeChildren(this.graphElement);
       this.drawLog_();
-      this.drawGraphs_();
     },
 
     drawProperties_: function(propertyMap, propertiesTable) {
@@ -419,81 +469,23 @@ var ClientRenderer = (function() {
 
     saveLog_: function() {
       var strippedPlayers = []
-      for (id in this.players) {
+      for (var id in this.players) {
         var p = this.players[id];
         strippedPlayers.push({properties: p.properties, events: p.allEvents});
       }
       downloadLog(JSON.stringify(strippedPlayers, null, 2));
     },
 
-    drawGraphs_: function() {
-      function addToGraphs(name, graph, graphElement) {
-        var li = document.createElement('li');
-        li.appendChild(graph);
-        li.appendChild(document.createTextNode(name));
-        graphElement.appendChild(li);
-      }
-
-      var url = this.selectedPlayer.properties.url;
-      if (!url) {
-        return;
-      }
-
-      var cache = media.cacheForUrl(url);
-
-      var player = this.selectedPlayer;
-      var props = player.properties;
-
-      var cacheExists = false;
-      var bufferExists = false;
-
-      if (props['buffer_start'] !== undefined &&
-          props['buffer_current'] !== undefined &&
-          props['buffer_end'] !== undefined &&
-          props['total_bytes'] !== undefined) {
-        this.drawBufferGraph_(props['buffer_start'],
-                              props['buffer_current'],
-                              props['buffer_end'],
-                              props['total_bytes']);
-        bufferExists = true;
-      }
-
-      if (cache) {
-        if (player.properties['total_bytes']) {
-          cache.size = Number(player.properties['total_bytes']);
-        }
-        cache.generateDetails();
-        cacheExists = true;
-
-      }
-
-      if (!this.graphElement.hasChildNodes()) {
-        if (bufferExists) {
-          addToGraphs('buffer', this.bufferCanvas, this.graphElement);
-        }
-        if (cacheExists) {
-          addToGraphs('cache read', cache.readCanvas, this.graphElement);
-          addToGraphs('cache write', cache.writeCanvas, this.graphElement);
-        }
-      }
+    showClipboard: function(string) {
+      this.clipboardTextarea.value = string;
+      this.clipboardDialog.showModal();
+      this.clipboardTextarea.focus();
+      this.clipboardTextarea.select();
     },
 
-    drawBufferGraph_: function(start, current, end, size) {
-      var ctx = this.bufferCanvas.getContext('2d');
-      var width = this.bufferCanvas.width;
-      var height = this.bufferCanvas.height;
-      ctx.fillStyle = '#aaa';
-      ctx.fillRect(0, 0, width, height);
-
-      var scale_factor = width / size;
-      var left = start * scale_factor;
-      var middle = current * scale_factor;
-      var right = end * scale_factor;
-
-      ctx.fillStyle = '#a0a';
-      ctx.fillRect(left, 0, middle - left, height);
-      ctx.fillStyle = '#aa0';
-      ctx.fillRect(middle, 0, right - middle, height);
+    hideClipboard_: function() {
+      if (this.clipboardDialog.open)
+        this.clipboardDialog.close();
     },
 
     copyToClipboard_: function() {
@@ -512,17 +504,7 @@ var ClientRenderer = (function() {
         stringBuffer.push('\n');
       }
 
-      this.clipboardTextarea.value = stringBuffer.join('');
-      this.clipboardTextarea.classList.remove('hiddenClipboard');
-      this.clipboardTextarea.focus();
-      this.clipboardTextarea.select();
-
-      // Hide the clipboard element when it loses focus.
-      this.clipboardTextarea.onblur = function(event) {
-        setTimeout(function(element) {
-          event.target.classList.add('hiddenClipboard');
-        }, 0);
-      };
+      this.showClipboard(stringBuffer.join(''));
     },
 
     onTextChange_: function(event) {

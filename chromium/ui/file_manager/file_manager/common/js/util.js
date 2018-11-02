@@ -670,6 +670,31 @@ util.isTeamDriveEntry = function(entry) {
 };
 
 /**
+ * Extracts Team Drive name from entry path.
+ * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
+ * @return {string} The name of Team Drive. Empty string if |entry| is not
+ *     under Team Drives.
+ */
+util.getTeamDriveName = function(entry) {
+  if (!entry.fullPath || !util.isTeamDriveEntry(entry))
+    return '';
+  var tree = entry.fullPath.split('/');
+  if (tree.length < 3)
+    return '';
+  return tree[2];
+};
+
+/**
+ * Returns true if the given entry is the root folder of recent files.
+ * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
+ * @returns {boolean}
+ */
+util.isRecentRoot = function(entry) {
+  return util.isFakeEntry(entry) &&
+      entry.rootType == VolumeManagerCommon.RootType.RECENT;
+};
+
+/**
  * Creates an instance of UserDOMError with given error name that looks like a
  * FileError except that it does not have the deprecated FileError.code member.
  *
@@ -754,6 +779,24 @@ util.isSameFileSystem = function(fileSystem1, fileSystem2) {
   if (!fileSystem1 || !fileSystem2)
     return false;
   return util.isSameEntry(fileSystem1.root, fileSystem2.root);
+};
+
+/**
+ * Checks if given two entries are in the same directory.
+ * @param {!Entry} entry1
+ * @param {!Entry} entry2
+ * @return {boolean} True if given entries are in the same directory.
+ */
+util.isSiblingEntry = function(entry1, entry2) {
+  var path1 = entry1.fullPath.split('/');
+  var path2 = entry2.fullPath.split('/');
+  if (path1.length != path2.length)
+    return false;
+  for (var i = 0; i < path1.length - 1; i++) {
+    if (path1[i] != path2[i])
+      return false;
+  }
+  return true;
 };
 
 /**
@@ -1011,6 +1054,8 @@ util.getRootTypeLabel = function(locationInfo) {
       return str('DRIVE_SHARED_WITH_ME_COLLECTION_LABEL');
     case VolumeManagerCommon.RootType.DRIVE_RECENT:
       return str('DRIVE_RECENT_COLLECTION_LABEL');
+    case VolumeManagerCommon.RootType.RECENT:
+      return str('RECENT_ROOT_LABEL');
     case VolumeManagerCommon.RootType.MEDIA_VIEW:
       var mediaViewRootType =
           VolumeManagerCommon.getMediaViewRootTypeFromVolumeId(
@@ -1156,4 +1201,19 @@ util.timeoutPromise = function(promise, ms, opt_message) {
       throw new Error(opt_message || 'Operation timed out.');
     })
   ]);
+};
+
+/**
+ * Examines whether the touch-specific UI mode is enabled.
+ * @return {Promise} Promise fulfilled with a boolean that indicate whether
+      the touch-specific UI mode is enabled. The promise is never rejected.
+ */
+util.isTouchModeEnabled = function() {
+  return new Promise(function(resolve) {
+    chrome.commandLinePrivate.hasSwitch(
+        'disable-file-manager-touch-mode', function(isDisabled) {
+          // Enabled by default.
+          resolve(!isDisabled);
+        });
+  });
 };

@@ -8,6 +8,8 @@
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/bookmarks/bookmark_utils.h"
+#import "chrome/browser/ui/cocoa/dialog_text_field_editor.h"
+#include "chrome/common/chrome_features.h"
 #include "components/bookmarks/browser/bookmark_expanded_state_tracker.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/url_formatter/url_fixer.h"
@@ -48,6 +50,7 @@ using bookmarks::BookmarkNode;
                             configuration:configuration])) {
     // "Add Page..." has no "node" so this may be NULL.
     node_ = node;
+    touchBarFieldEditor_.reset([[DialogTextFieldEditor alloc] init]);
   }
   return self;
 }
@@ -79,6 +82,22 @@ using bookmarks::BookmarkNode;
   [super awakeFromNib];
   [self expandNodes:
       [self bookmarkModel]->expanded_state_tracker()->GetExpandedNodes()];
+}
+
+- (void)windowWillClose:(NSNotification*)notification {
+  [touchBarFieldEditor_ setFieldEditor:NO];
+  touchBarFieldEditor_.reset();
+  [super windowWillClose:notification];
+}
+
+- (id)windowWillReturnFieldEditor:(NSWindow*)sender toObject:(id)obj {
+  if (!base::FeatureList::IsEnabled(features::kDialogTouchBar))
+    return nil;
+
+  if (obj == urlField_ || obj == nameTextField_)
+    return touchBarFieldEditor_.get();
+
+  return nil;
 }
 
 - (void)nodeRemoved:(const BookmarkNode*)node

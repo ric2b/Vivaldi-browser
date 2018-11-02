@@ -18,6 +18,7 @@
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "net/base/ip_address.h"
 #include "net/base/ip_endpoint.h"
 #include "net/dns/dns_hosts.h"
@@ -120,7 +121,8 @@ class DnsConfigWatcher {
 ConfigParsePosixResult ReadDnsConfig(DnsConfig* config) {
   ConfigParsePosixResult result;
   config->unhandled_options = false;
-#if defined(OS_OPENBSD)
+// TODO(fuchsia): Use res_ninit() when it's implemented on Fuchsia.
+#if defined(OS_OPENBSD) || defined(OS_FUCHSIA)
   // Note: res_ninit in glibc always returns 0 and sets RES_INIT.
   // res_init behaves the same way.
   memset(&_res, 0, sizeof(_res));
@@ -441,7 +443,7 @@ void DnsConfigServicePosix::OnHostsChanged(bool succeeded) {
 
 void DnsConfigServicePosix::SetDnsConfigForTesting(
     const DnsConfig* dns_config) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   dns_config_for_testing_ = dns_config;
   // Reset ConfigReader to bind new DnsConfig for testing.
   config_reader_->Cancel();
@@ -450,7 +452,7 @@ void DnsConfigServicePosix::SetDnsConfigForTesting(
 
 void DnsConfigServicePosix::SetHostsFilePathForTesting(
     const base::FilePath::CharType* file_path) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   file_path_hosts_ = file_path;
   // Reset HostsReader to bind new hosts file path.
   hosts_reader_->Cancel();
@@ -574,13 +576,13 @@ ConfigParsePosixResult ConvertResStateToDnsConfig(const struct __res_state& res,
 
 bool DnsConfigServicePosix::SeenChangeSince(
     const base::Time& since_time) const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return seen_config_change_;
 }
 
 void DnsConfigServicePosix::OnNetworkChanged(
     NetworkChangeNotifier::ConnectionType type) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(watcher_);
   watcher_->OnNetworkChanged(type);
 }

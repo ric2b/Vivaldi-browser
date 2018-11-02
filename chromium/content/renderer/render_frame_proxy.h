@@ -21,7 +21,7 @@ namespace blink {
 struct WebRect;
 }
 
-namespace cc {
+namespace viz {
 class SurfaceInfo;
 struct SurfaceSequence;
 }
@@ -94,8 +94,9 @@ class CONTENT_EXPORT RenderFrameProxy
   // Returns the RenderFrameProxy for the given routing ID.
   static RenderFrameProxy* FromRoutingID(int routing_id);
 
-  // Returns the RenderFrameProxy given a WebFrame.
-  static RenderFrameProxy* FromWebFrame(blink::WebFrame* web_frame);
+  // Returns the RenderFrameProxy given a WebRemoteFrame. |web_frame| must not
+  // be null, nor will this method return null.
+  static RenderFrameProxy* FromWebFrame(blink::WebRemoteFrame* web_frame);
 
   ~RenderFrameProxy() override;
 
@@ -140,6 +141,7 @@ class CONTENT_EXPORT RenderFrameProxy
   void UpdateRemoteViewportIntersection(
       const blink::WebRect& viewportIntersection) override;
   void VisibilityChanged(bool visible) override;
+  void SetIsInert(bool) override;
   void DidChangeOpener(blink::WebFrame* opener) override;
   void AdvanceFocus(blink::WebFocusType type,
                     blink::WebLocalFrame* source) override;
@@ -162,8 +164,8 @@ class CONTENT_EXPORT RenderFrameProxy
   void OnDeleteProxy();
   void OnChildFrameProcessGone();
   void OnCompositorFrameSwapped(const IPC::Message& message);
-  void OnSetChildFrameSurface(const cc::SurfaceInfo& surface_info,
-                              const cc::SurfaceSequence& sequence);
+  void OnSetChildFrameSurface(const viz::SurfaceInfo& surface_info,
+                              const viz::SurfaceSequence& sequence);
   void OnUpdateOpener(int opener_routing_id);
   void OnDidStopLoading();
   void OnDidUpdateFramePolicy(

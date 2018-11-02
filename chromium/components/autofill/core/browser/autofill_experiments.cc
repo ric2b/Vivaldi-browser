@@ -29,6 +29,8 @@ const base::Feature kAutofillCreditCardAssist{
     "AutofillCreditCardAssist", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillScanCardholderName{
     "AutofillScanCardholderName", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillCreditCardBankNameDisplay{
+    "AutofillCreditCardBankNameDisplay", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillCreditCardPopupLayout{
     "AutofillCreditCardPopupLayout", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillCreditCardLastUsedDateDisplay{
@@ -36,6 +38,8 @@ const base::Feature kAutofillCreditCardLastUsedDateDisplay{
 const base::Feature kAutofillOfferLocalSaveIfServerCardManuallyEntered{
     "AutofillOfferLocalSaveIfServerCardManuallyEntered",
     base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kAutofillSuppressDisusedAddresses{
+    "AutofillSuppressDisusedAddresses", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamRequestCvcIfMissing{
     "AutofillUpstreamRequestCvcIfMissing", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kAutofillUpstreamUseAutofillProfileComparator{
@@ -58,6 +62,11 @@ const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[] =
     "show_expiration_date";
 const char kAutofillUpstreamMaxMinutesSinceAutofillProfileUseKey[] =
     "max_minutes_since_autofill_profile_use";
+
+#if defined(OS_MACOSX)
+const base::Feature kCreditCardAutofillTouchBar{
+    "CreditCardAutofillTouchBar", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(OS_MACOSX)
 
 namespace {
 
@@ -99,6 +108,10 @@ bool IsAutofillCreditCardPopupLayoutExperimentEnabled() {
 
 bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled() {
   return base::FeatureList::IsEnabled(kAutofillCreditCardLastUsedDateDisplay);
+}
+
+bool IsAutofillCreditCardBankNameDisplayExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kAutofillCreditCardBankNameDisplay);
 }
 
 // |GetCreditCardPopupParameterUintValue| returns 0 if experiment parameter is
@@ -259,5 +272,11 @@ base::TimeDelta GetMaxTimeSinceAutofillProfileUseForCardUpload() {
     return base::TimeDelta::FromMinutes(value);
   return base::TimeDelta();
 }
+
+#if defined(OS_MACOSX)
+bool IsCreditCardAutofillTouchBarExperimentEnabled() {
+  return base::FeatureList::IsEnabled(kCreditCardAutofillTouchBar);
+}
+#endif  // defined(OS_MACOSX)
 
 }  // namespace autofill

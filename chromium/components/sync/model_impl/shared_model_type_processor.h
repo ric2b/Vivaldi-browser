@@ -12,7 +12,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/engine/cycle/status_counters.h"
 #include "components/sync/engine/model_type_processor.h"
@@ -36,12 +36,12 @@ class ProcessorEntityTracker;
 // model type threads. See //docs/sync/uss/shared_model_type_processor.md for a
 // more thorough description.
 class SharedModelTypeProcessor : public ModelTypeProcessor,
-                                 public ModelTypeChangeProcessor,
-                                 base::NonThreadSafe {
+                                 public ModelTypeChangeProcessor {
  public:
   SharedModelTypeProcessor(ModelType type,
                            ModelTypeSyncBridge* bridge,
-                           const base::RepeatingClosure& dump_stack);
+                           const base::RepeatingClosure& dump_stack,
+                           bool commit_only);
   ~SharedModelTypeProcessor() override;
 
   // Whether the processor is allowing changes to its model type. If this is
@@ -57,9 +57,10 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
            MetadataChangeList* metadata_change_list) override;
   void Delete(const std::string& storage_key,
               MetadataChangeList* metadata_change_list) override;
-  void UpdateStorageKey(const std::string& old_storage_key,
-                        const std::string& new_storage_key,
+  void UpdateStorageKey(const EntityData& entity_data,
+                        const std::string& storage_key,
                         MetadataChangeList* metadata_change_list) override;
+  void UntrackEntity(const EntityData& entity_data) override;
   void ModelReadyToSync(std::unique_ptr<MetadataBatch> batch) override;
   void OnSyncStarting(const ModelErrorHandler& error_handler,
                       const StartCallback& callback) override;
@@ -146,6 +147,9 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
   // Version of the above that generates a tag for |data|.
   ProcessorEntityTracker* CreateEntity(const EntityData& data);
 
+  // Returns true if all processor entity trackers have non-empty storage keys.
+  bool AllStorageKeysPopulated() const;
+
   /////////////////////
   // Processor state //
   /////////////////////
@@ -205,11 +209,24 @@ class SharedModelTypeProcessor : public ModelTypeProcessor,
   // entities may not always contain model type data/specifics.
   std::map<std::string, std::unique_ptr<ProcessorEntityTracker>> entities_;
 
-  // The bridge wants to communicate entirely via storage keys that is free to
-  // define and can understand more easily. All of the sync machinery wants to
-  // use client tag hash. This mapping allows us to convert from storage key to
-  // client tag hash. The other direction can use |entities_|.
+  // The bridge wants to communicate entirely via storage keys that it is free
+  // to define and can understand more easily. All of the sync machinery wants
+  // to use client tag hash. This mapping allows us to convert from storage key
+  // to client tag hash. The other direction can use |entities_|.
+  // Entity is temporarily not included in this map for the duration of
+  // MergeSyncData/ApplySyncChanges call when the bridge doesn't support
+  // GetStorageKey(). In this case the bridge is responsible for updating
+  // storage key with UpdateStorageKey() call from within
+  // MergeSyncData/ApplySyncChanges.
   std::map<std::string, std::string> storage_key_to_tag_hash_;
+
+  // If the processor should behave as if |type_| is one of the commit only
+  // model types. For this processor, being commit only means that on commit
+  // confirmation, we should delete local data, because the model side never
+  // intends to read it. This includes both data and metadata.
+  bool commit_only_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // WeakPtrFactory for this processor which will be sent to sync thread.
   base::WeakPtrFactory<SharedModelTypeProcessor> weak_ptr_factory_;

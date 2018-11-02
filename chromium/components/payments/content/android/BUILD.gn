@@ -8,16 +8,11 @@ import("//mojo/public/tools/bindings/mojom.gni")
 
 static_library("android") {
   sources = [
-    "component_jni_registrar.cc",
-    "component_jni_registrar.h",
     "currency_formatter_android.cc",
     "currency_formatter_android.h",
     "origin_security_checker_android.cc",
-    "origin_security_checker_android.h",
     "payment_details_validation_android.cc",
-    "payment_details_validation_android.h",
     "payment_manifest_downloader_android.cc",
-    "payment_manifest_downloader_android.h",
     "payment_manifest_parser_android.cc",
     "payment_manifest_parser_android.h",
   ]
@@ -26,7 +21,6 @@ static_library("android") {
     "//base",
     "//components/payments/content:utils",
     "//components/payments/core",
-    "//components/payments/mojom",
     "//content/public/browser",
     "//net",
   ]
@@ -53,9 +47,9 @@ android_library("java") {
   ]
   deps = [
     "//base:base_java",
-    "//components/payments/mojom:mojom_java",
     "//components/payments/mojom:mojom_parser_java",
     "//content/public/android:content_java",
     "//mojo/public/java:bindings_java",
+    "//third_party/WebKit/public:android_mojo_bindings_java",
   ]
 }

@@ -4,10 +4,13 @@
 
 #include "components/safe_browsing/base_resource_throttle.h"
 
+#include <utility>
+
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "base/values.h"
 #include "components/safe_browsing/base_ui_manager.h"
+#include "components/safe_browsing/web_ui/constants.h"
 #include "components/safe_browsing_db/util.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/browser_thread.h"
@@ -69,10 +72,12 @@ std::unique_ptr<base::Value> NetLogStringCallback(const char* name,
 BaseResourceThrottle::BaseResourceThrottle(
     const net::URLRequest* request,
     content::ResourceType resource_type,
+    SBThreatTypeSet threat_types,
     scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
     scoped_refptr<BaseUIManager> ui_manager)
     : ui_manager_(ui_manager),
       threat_type_(SB_THREAT_TYPE_SAFE),
+      threat_types_(std::move(threat_types)),
       database_manager_(database_manager),
       request_(request),
       state_(STATE_NONE),
@@ -81,19 +86,6 @@ BaseResourceThrottle::BaseResourceThrottle(
       net_log_with_source_(
           net::NetLogWithSource::Make(request->net_log().net_log(),
                                       NetLogSourceType::SAFE_BROWSING)) {}
-
-// static
-BaseResourceThrottle* BaseResourceThrottle::MaybeCreate(
-    net::URLRequest* request,
-    content::ResourceType resource_type,
-    scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
-    scoped_refptr<BaseUIManager> ui_manager) {
-  if (database_manager->IsSupported()) {
-    return new BaseResourceThrottle(request, resource_type,
-                                    database_manager, ui_manager);
-  }
-  return nullptr;
-}
 
 BaseResourceThrottle::~BaseResourceThrottle() {
   if (defer_state_ != DEFERRED_NONE) {
@@ -358,7 +350,11 @@ bool BaseResourceThrottle::CheckUrl(const GURL& url) {
   UMA_HISTOGRAM_ENUMERATION("SB2.ResourceTypes2.Checked", resource_type_,
                             content::RESOURCE_TYPE_LAST_TYPE);
 
-  if (database_manager_->CheckBrowseUrl(url, this)) {
+  if (CheckWebUIUrls(url)) {
+    return false;
+  }
+
+  if (database_manager_->CheckBrowseUrl(url, threat_types_, this)) {
     threat_type_ = SB_THREAT_TYPE_SAFE;
     ui_manager_->LogPauseDelay(base::TimeDelta());  // No delay.
     return true;
@@ -375,6 +371,28 @@ bool BaseResourceThrottle::CheckUrl(const GURL& url) {
   timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(kCheckUrlTimeoutMs),
                this, &BaseResourceThrottle::OnCheckUrlTimeout);
 
+  return false;
+}
+
+bool BaseResourceThrottle::CheckWebUIUrls(const GURL& url) {
+  DCHECK(threat_type_ == safe_browsing::SB_THREAT_TYPE_SAFE);
+  if (url == kChromeUISafeBrowsingMatchMalwareUrl) {
+    threat_type_ = safe_browsing::SB_THREAT_TYPE_URL_MALWARE;
+  } else if (url == kChromeUISafeBrowsingMatchPhishingUrl) {
+    threat_type_ = safe_browsing::SB_THREAT_TYPE_URL_PHISHING;
+  } else if (url == kChromeUISafeBrowsingMatchUnwantedUrl) {
+    threat_type_ = safe_browsing::SB_THREAT_TYPE_URL_UNWANTED;
+  }
+
+  if (threat_type_ != safe_browsing::SB_THREAT_TYPE_SAFE) {
+    state_ = STATE_CHECKING_URL;
+    url_being_checked_ = url;
+    content::BrowserThread::PostTask(
+        content::BrowserThread::IO, FROM_HERE,
+        base::Bind(&BaseResourceThrottle::OnCheckBrowseUrlResult, AsWeakPtr(),
+                   url, threat_type_, ThreatMetadata()));
+    return true;
+  }
   return false;
 }
 

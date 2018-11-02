@@ -23,6 +23,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -133,8 +134,8 @@ void SendResponseOnCmdThread(
     const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
     const HttpResponseSenderFunc& send_response_on_io_func,
     std::unique_ptr<net::HttpServerResponseInfo> response) {
-  io_task_runner->PostTask(
-      FROM_HERE, base::Bind(send_response_on_io_func, base::Passed(&response)));
+  io_task_runner->PostTask(FROM_HERE, base::BindOnce(send_response_on_io_func,
+                                                     base::Passed(&response)));
 }
 
 void HandleRequestOnCmdThread(
@@ -145,8 +146,7 @@ void HandleRequestOnCmdThread(
   if (!whitelisted_ips.empty()) {
     std::string peer_address = request.peer.ToStringWithoutPort();
     if (peer_address != net::IPAddress::IPv4Localhost().ToString() &&
-        std::find(whitelisted_ips.begin(), whitelisted_ips.end(),
-                  peer_address) == whitelisted_ips.end()) {
+        !base::ContainsValue(whitelisted_ips, peer_address)) {
       LOG(WARNING) << "unauthorized access from " << request.peer.ToString();
       std::unique_ptr<net::HttpServerResponseInfo> response(
           new net::HttpServerResponseInfo(net::HTTP_UNAUTHORIZED));
@@ -165,10 +165,10 @@ void HandleRequestOnIOThread(
     const net::HttpServerRequestInfo& request,
     const HttpResponseSenderFunc& send_response_func) {
   cmd_task_runner->PostTask(
-      FROM_HERE, base::Bind(handle_request_on_cmd_func, request,
-                            base::Bind(&SendResponseOnCmdThread,
-                                       base::ThreadTaskRunnerHandle::Get(),
-                                       send_response_func)));
+      FROM_HERE, base::BindOnce(handle_request_on_cmd_func, request,
+                                base::Bind(&SendResponseOnCmdThread,
+                                           base::ThreadTaskRunnerHandle::Get(),
+                                           send_response_func)));
 }
 
 base::LazyInstance<base::ThreadLocalPointer<HttpServer>>::DestructorAtExit
@@ -211,9 +211,9 @@ void RunServer(uint16_t port,
 
   io_thread.task_runner()->PostTask(
       FROM_HERE,
-      base::Bind(&StartServerOnIOThread, port, allow_remote,
-                 base::Bind(&HandleRequestOnIOThread, cmd_loop.task_runner(),
-                            handle_request_func)));
+      base::BindOnce(&StartServerOnIOThread, port, allow_remote,
+                     base::Bind(&HandleRequestOnIOThread,
+                                cmd_loop.task_runner(), handle_request_func)));
   // Run the command loop. This loop is quit after the response for a shutdown
   // request is posted to the IO loop. After the command loop quits, a task
   // is posted to the IO loop to stop the server. Lastly, the IO thread is
@@ -221,7 +221,7 @@ void RunServer(uint16_t port,
   // This assumes the response is sent synchronously as part of the IO task.
   cmd_run_loop.Run();
   io_thread.task_runner()->PostTask(FROM_HERE,
-                                    base::Bind(&StopServerOnIOThread));
+                                    base::BindOnce(&StopServerOnIOThread));
 }
 
 }  // namespace

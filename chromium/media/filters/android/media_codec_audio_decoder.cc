@@ -140,7 +140,8 @@ bool MediaCodecAudioDecoder::CreateMediaCodecLoop() {
 
   codec_loop_.reset(
       new MediaCodecLoop(base::android::BuildInfo::GetInstance()->sdk_int(),
-                         this, std::move(audio_codec_bridge)));
+                         this, std::move(audio_codec_bridge),
+                         scoped_refptr<base::SingleThreadTaskRunner>()));
 
   return true;
 }
@@ -244,7 +245,7 @@ void MediaCodecAudioDecoder::OnKeyAdded() {
 void MediaCodecAudioDecoder::OnMediaCryptoReady(
     const InitCB& init_cb,
     MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
-    bool /*needs_protected_surface*/) {
+    bool /*requires_secure_video_codec*/) {
   DVLOG(1) << __func__;
 
   DCHECK(state_ == STATE_WAITING_FOR_MEDIA_CRYPTO);

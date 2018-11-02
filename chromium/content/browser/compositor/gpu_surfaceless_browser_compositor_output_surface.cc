@@ -8,9 +8,9 @@
 
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
-#include "components/viz/display_compositor/buffer_queue.h"
-#include "components/viz/display_compositor/compositor_overlay_candidate_validator.h"
-#include "components/viz/display_compositor/gl_helper.h"
+#include "components/viz/common/gl_helper.h"
+#include "components/viz/service/display_embedder/buffer_queue.h"
+#include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -66,6 +66,12 @@ unsigned GpuSurfacelessBrowserCompositorOutputSurface::GetOverlayTextureId()
   return buffer_queue_->GetCurrentTextureId();
 }
 
+gfx::BufferFormat
+GpuSurfacelessBrowserCompositorOutputSurface::GetOverlayBufferFormat() const {
+  DCHECK(buffer_queue_);
+  return buffer_queue_->buffer_format();
+}
+
 void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
     cc::OutputSurfaceFrame frame) {
   DCHECK(buffer_queue_);
@@ -76,11 +82,7 @@ void GpuSurfacelessBrowserCompositorOutputSurface::SwapBuffers(
 
   gfx::Rect damage_rect =
       frame.sub_buffer_rect ? *frame.sub_buffer_rect : gfx::Rect(swap_size_);
-  // Use previous buffer when damage rect is empty. This avoids unnecessary
-  // partial swap work and makes it possible to support empty swaps on devices
-  // where partial swaps are disabled.
-  if (!damage_rect.IsEmpty())
-    buffer_queue_->SwapBuffers(damage_rect);
+  buffer_queue_->SwapBuffers(damage_rect);
 
   GpuBrowserCompositorOutputSurface::SwapBuffers(std::move(frame));
 }

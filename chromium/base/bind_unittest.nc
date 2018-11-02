@@ -70,7 +70,7 @@ template <typename T>
 void VoidPolymorphic1(T t) {
 }
 
-#if defined(NCTEST_METHOD_ON_CONST_OBJECT)  // [r"fatal error: binding value of type 'const base::HasRef' to reference to type 'base::NoRef' drops 'const' qualifier"]
+#if defined(NCTEST_METHOD_ON_CONST_OBJECT)  // [r"fatal error: call to pointer to member function of type 'void \(\)' drops 'const' qualifier"]
 
 // Method bound to const-object.
 //
@@ -173,7 +173,7 @@ void WontCompile() {
   method_bound_to_array_cb.Run();
 }
 
-#elif defined(NCTEST_NO_RAW_PTR_FOR_REFCOUNTED_TYPES)  // [r"fatal error: static_assert failed \"A parameter is a refcounted type and needs scoped_refptr.\""]
+#elif defined(NCTEST_NO_RVALUE_RAW_PTR_FOR_REFCOUNTED_TYPES)  // [r"fatal error: static_assert failed \"A parameter is a refcounted type and needs scoped_refptr.\""]
 
 // Refcounted types should not be bound as a raw pointer.
 void WontCompile() {
@@ -183,6 +183,33 @@ void WontCompile() {
       Bind(&VoidPolymorphic1<int*>, &a);
   Callback<void()> ref_count_as_raw_ptr =
       Bind(&VoidPolymorphic1<HasRef*>, &for_raw_ptr);
+}
+
+#elif defined(NCTEST_NO_LVALUE_RAW_PTR_FOR_REFCOUNTED_TYPES)  // [r"fatal error: static_assert failed \"A parameter is a refcounted type and needs scoped_refptr.\""]
+
+// Refcounted types should not be bound as a raw pointer.
+void WontCompile() {
+  HasRef* for_raw_ptr = nullptr;
+  Callback<void()> ref_count_as_raw_ptr =
+      Bind(&VoidPolymorphic1<HasRef*>, for_raw_ptr);
+}
+
+#elif defined(NCTEST_NO_RVALUE_CONST_RAW_PTR_FOR_REFCOUNTED_TYPES)  // [r"fatal error: static_assert failed \"A parameter is a refcounted type and needs scoped_refptr.\""]
+
+// Refcounted types should not be bound as a raw pointer.
+void WontCompile() {
+  const HasRef for_raw_ptr;
+  Callback<void()> ref_count_as_raw_ptr =
+      Bind(&VoidPolymorphic1<const HasRef*>, &for_raw_ptr);
+}
+
+#elif defined(NCTEST_NO_LVALUE_CONST_RAW_PTR_FOR_REFCOUNTED_TYPES)  // [r"fatal error: static_assert failed \"A parameter is a refcounted type and needs scoped_refptr.\""]
+
+// Refcounted types should not be bound as a raw pointer.
+void WontCompile() {
+  const HasRef* for_raw_ptr = nullptr;
+  Callback<void()> ref_count_as_raw_ptr =
+      Bind(&VoidPolymorphic1<const HasRef*>, for_raw_ptr);
 }
 
 #elif defined(NCTEST_WEAKPTR_BIND_MUST_RETURN_VOID)  // [r"fatal error: static_assert failed \"weak_ptrs can only bind to methods without return values\""]

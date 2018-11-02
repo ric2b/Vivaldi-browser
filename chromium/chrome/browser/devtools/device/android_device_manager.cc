@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
@@ -457,6 +458,7 @@ AndroidDeviceManager::Device::Device(
 }
 
 AndroidDeviceManager::Device::~Device() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   provider_->AddRef();
   DeviceProvider* raw_ptr = provider_.get();
   provider_ = nullptr;
@@ -497,7 +499,6 @@ AndroidDeviceManager::HandlerThread::message_loop() {
 // static
 void AndroidDeviceManager::HandlerThread::StopThread(
     base::Thread* thread) {
-  thread->Stop();
   delete thread;
 }
 
@@ -506,10 +507,10 @@ AndroidDeviceManager::HandlerThread::~HandlerThread() {
   instance_ = nullptr;
   if (!thread_)
     return;
-  // Shut down thread on FILE thread to join into IO.
-  content::BrowserThread::PostTask(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::BindOnce(&HandlerThread::StopThread, thread_));
+  // Shut down thread on a thread other than UI so it can join a thread.
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::MayBlock(), base::TaskPriority::BACKGROUND},
+                           base::BindOnce(&HandlerThread::StopThread, thread_));
 }
 
 // static
@@ -541,6 +542,7 @@ AndroidDeviceManager::AndroidDeviceManager()
 }
 
 AndroidDeviceManager::~AndroidDeviceManager() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   SetDeviceProviders(DeviceProviders());
 }
 

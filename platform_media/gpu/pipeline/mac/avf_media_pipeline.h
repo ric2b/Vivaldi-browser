@@ -11,6 +11,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
+#include "media/base/data_source.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
 
 namespace content {
@@ -54,7 +55,7 @@ class AVFMediaPipeline : public PlatformMediaPipeline {
   std::unique_ptr<AVFDataBufferQueue> audio_queue_;
   std::unique_ptr<AVFDataBufferQueue> video_queue_;
 
-  IPCDataSource* data_source_;
+  media::DataSource* data_source_;
 
   base::ThreadChecker thread_checker_;
   base::WeakPtrFactory<AVFMediaPipeline> weak_ptr_factory_;

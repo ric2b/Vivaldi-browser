@@ -82,8 +82,7 @@ using blink::WebLocalizedString;
 using namespace HTMLNames;
 
 using InputTypeFactoryFunction = InputType* (*)(HTMLInputElement&);
-using InputTypeFactoryMap =
-    HashMap<AtomicString, InputTypeFactoryFunction, CaseFoldingHash>;
+using InputTypeFactoryMap = HashMap<AtomicString, InputTypeFactoryFunction>;
 
 static std::unique_ptr<InputTypeFactoryMap> CreateInputTypeFactoryMap() {
   std::unique_ptr<InputTypeFactoryMap> map =
@@ -136,7 +135,8 @@ const AtomicString& InputType::NormalizeTypeName(
     const AtomicString& type_name) {
   if (type_name.IsEmpty())
     return InputTypeNames::text;
-  InputTypeFactoryMap::const_iterator it = FactoryMap()->find(type_name);
+  InputTypeFactoryMap::const_iterator it =
+      FactoryMap()->find(type_name.LowerASCII());
   return it == FactoryMap()->end() ? InputTypeNames::text : it->key;
 }
 
@@ -872,7 +872,7 @@ void InputType::StepUpFromLayoutObject(int n) {
             IGNORE_EXCEPTION_FOR_TESTING);
 }
 
-void InputType::CountUsageIfVisible(UseCounter::Feature feature) const {
+void InputType::CountUsageIfVisible(WebFeature feature) const {
   if (const ComputedStyle* style = GetElement().GetComputedStyle()) {
     if (style->Visibility() != EVisibility::kHidden)
       UseCounter::Count(GetElement().GetDocument(), feature);

@@ -24,6 +24,8 @@
 #include "chrome/browser/signin/fake_profile_oauth2_token_service_builder.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/sync/profile_sync_service_factory.h"
+#include "chrome/browser/sync/profile_sync_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
@@ -38,6 +40,8 @@
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/sync_preferences/pref_service_syncable.h"
+
+using ::testing::Return;
 
 const std::string kGaiaId = "gaiaid-user@gmail.com";
 const std::string kEmail = "user@gmail.com";
@@ -55,6 +59,8 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
     factories.push_back(
         std::make_pair(AccountFetcherServiceFactory::GetInstance(),
                        FakeAccountFetcherServiceBuilder::BuildForTests));
+    factories.push_back(std::make_pair(ProfileSyncServiceFactory::GetInstance(),
+                                       BuildMockProfileSyncService));
     AddTestingFactories(factories);
   }
 
@@ -74,6 +80,10 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
         base::ASCIIToUTF16("Test 2"), 1, std::string(),
         TestingProfile::TestingFactories());
 
+    mock_sync_service_ = static_cast<browser_sync::ProfileSyncServiceMock*>(
+        ProfileSyncServiceFactory::GetInstance()->GetForProfile(
+            browser()->profile()));
+
     menu_ = new AvatarMenu(
         testing_profile_manager()->profile_attributes_storage(), NULL, NULL);
     menu_->RebuildMenu();
@@ -89,18 +99,12 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
   }
 
   void StartProfileChooserController() {
-    StartProfileChooserControllerWithTutorialMode(profiles::TUTORIAL_MODE_NONE);
-  }
-
-  void StartProfileChooserControllerWithTutorialMode(
-      profiles::TutorialMode mode) {
     NSRect frame = [test_window() frame];
     NSPoint point = NSMakePoint(NSMidX(frame), NSMidY(frame));
     controller_.reset([[ProfileChooserController alloc]
         initWithBrowser:browser()
              anchoredAt:point
                viewMode:profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER
-           tutorialMode:mode
             serviceType:signin::GAIA_SERVICE_TYPE_NONE
             accessPoint:signin_metrics::AccessPoint::
                             ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN]);
@@ -113,6 +117,15 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
     ASSERT_LE(1U, entries.size());
     ProfileAttributesEntry* entry = entries.front();
     entry->SetAuthInfo(kGaiaId, base::ASCIIToUTF16(kEmail));
+  }
+
+  void SuppressSyncConfirmationError() {
+    EXPECT_CALL(*mock_sync_service_, IsFirstSetupComplete())
+        .WillRepeatedly(Return(false));
+    EXPECT_CALL(*mock_sync_service_, IsFirstSetupInProgress())
+        .WillRepeatedly(Return(true));
+    EXPECT_CALL(*mock_sync_service_, IsSyncConfirmationNeeded())
+        .WillRepeatedly(Return(false));
   }
 
   ProfileChooserController* controller() { return controller_; }
@@ -134,6 +147,7 @@ class ProfileChooserControllerTest : public CocoaProfileTest {
 
  private:
   base::scoped_nsobject<ProfileChooserController> controller_;
+  browser_sync::ProfileSyncServiceMock* mock_sync_service_ = nullptr;
 
   // Weak; owned by |controller_|.
   AvatarMenu* menu_;
@@ -208,29 +222,6 @@ TEST_F(ProfileChooserControllerTest, BubbleAlignment) {
   [controller() close];
 }
 
-TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterWelcome) {
-  // The welcome upgrade tutorial takes precedence so show it then dismiss it.
-  // The right click tutorial should be shown right away.
-  StartProfileChooserControllerWithTutorialMode(
-      profiles::TUTORIAL_MODE_WELCOME_UPGRADE);
-
-  [controller() dismissTutorial:nil];
-}
-
-TEST_F(ProfileChooserControllerTest, RightClickTutorialShownAfterReopen) {
-  // The welcome upgrade tutorial takes precedence so show it then close the
-  // menu. Reopening the menu should show the tutorial.
-  StartProfileChooserController();
-
-  [controller() close];
-  StartProfileChooserController();
-
-  // The tutorial must be manually dismissed so it should still be shown after
-  // closing and reopening the menu,
-  [controller() close];
-  StartProfileChooserController();
-}
-
 TEST_F(ProfileChooserControllerTest,
     LocalProfileActiveCardLinksWithNewMenu) {
   StartProfileChooserController();
@@ -260,7 +251,7 @@ TEST_F(ProfileChooserControllerTest,
 
 TEST_F(ProfileChooserControllerTest,
        SignedInProfileActiveCardLinksWithAccountConsistency) {
-  switches::EnableAccountConsistencyForTesting(
+  switches::EnableAccountConsistencyMirrorForTesting(
       base::CommandLine::ForCurrentProcess());
 
   SignInFirstProfile();
@@ -304,7 +295,7 @@ TEST_F(ProfileChooserControllerTest,
 }
 
 TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
-  switches::EnableAccountConsistencyForTesting(
+  switches::EnableAccountConsistencyMirrorForTesting(
       base::CommandLine::ForCurrentProcess());
 
   SignInFirstProfile();
@@ -332,6 +323,8 @@ TEST_F(ProfileChooserControllerTest, AccountManagementLayout) {
                    ->PickAccountIdForAccount(kSecondaryGaiaId, kSecondaryEmail);
   ProfileOAuth2TokenServiceFactory::GetForProfile(profile)
       ->UpdateCredentials(account_id, kLoginToken);
+
+  SuppressSyncConfirmationError();
 
   StartProfileChooserController();
   [controller() initMenuContentsWithView:

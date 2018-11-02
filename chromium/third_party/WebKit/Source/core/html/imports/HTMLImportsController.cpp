@@ -42,19 +42,19 @@
 namespace blink {
 
 HTMLImportsController::HTMLImportsController(Document& master)
-    : root_(HTMLImportTreeRoot::Create(&master)) {
-  UseCounter::Count(master, UseCounter::kHTMLImports);
+    : root_(this, HTMLImportTreeRoot::Create(&master)) {
+  UseCounter::Count(master, WebFeature::kHTMLImports);
 }
 
 void HTMLImportsController::Dispose() {
+  for (const auto& loader : loaders_)
+    loader->Dispose();
+  loaders_.clear();
+
   if (root_) {
     root_->Dispose();
     root_.Clear();
   }
-
-  for (const auto& loader : loaders_)
-    loader->Dispose();
-  loaders_.clear();
 }
 
 static bool MakesCycle(HTMLImport* parent, const KURL& url) {
@@ -75,9 +75,10 @@ HTMLImportChild* HTMLImportsController::CreateChild(
   HTMLImport::SyncMode mode = client->IsSync() && !MakesCycle(parent, url)
                                   ? HTMLImport::kSync
                                   : HTMLImport::kAsync;
-  if (mode == HTMLImport::kAsync)
+  if (mode == HTMLImport::kAsync) {
     UseCounter::Count(Root()->GetDocument(),
-                      UseCounter::kHTMLImportsAsyncAttribute);
+                      WebFeature::kHTMLImportsAsyncAttribute);
+  }
 
   HTMLImportChild* child = new HTMLImportChild(url, loader, mode);
   child->SetClient(client);
@@ -152,7 +153,7 @@ DEFINE_TRACE(HTMLImportsController) {
 }
 
 DEFINE_TRACE_WRAPPERS(HTMLImportsController) {
-  visitor->TraceWrappers(Master());
+  visitor->TraceWrappers(root_);
 }
 
 }  // namespace blink

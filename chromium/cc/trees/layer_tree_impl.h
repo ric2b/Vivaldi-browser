@@ -31,9 +31,12 @@ class TracedValue;
 }
 }
 
+namespace viz {
+class ContextProvider;
+}
+
 namespace cc {
 
-class ContextProvider;
 class DebugRectHistory;
 class FrameRateCounter;
 class HeadsUpDisplayLayerImpl;
@@ -103,7 +106,7 @@ class CC_EXPORT LayerTreeImpl {
   // ---------------------------------------------------------------------------
   const LayerTreeSettings& settings() const;
   const LayerTreeDebugState& debug_state() const;
-  ContextProvider* context_provider() const;
+  viz::ContextProvider* context_provider() const;
   ResourceProvider* resource_provider() const;
   TileManager* tile_manager() const;
   ImageDecodeCache* image_decode_cache() const;
@@ -168,6 +171,7 @@ class CC_EXPORT LayerTreeImpl {
 
   void PushPropertyTreesTo(LayerTreeImpl* tree_impl);
   void PushPropertiesTo(LayerTreeImpl* tree_impl);
+  void PushSurfaceIdsTo(LayerTreeImpl* tree_impl);
 
   void MoveChangeTrackingToLayers();
 
@@ -218,6 +222,15 @@ class CC_EXPORT LayerTreeImpl {
     int outer_viewport_container = Layer::INVALID_ID;
     int inner_viewport_scroll = Layer::INVALID_ID;
     int outer_viewport_scroll = Layer::INVALID_ID;
+
+    bool operator==(const ViewportLayerIds& other) {
+      return overscroll_elasticity == other.overscroll_elasticity &&
+             page_scale == other.page_scale &&
+             inner_viewport_container == other.inner_viewport_container &&
+             outer_viewport_container == other.outer_viewport_container &&
+             inner_viewport_scroll == other.inner_viewport_scroll &&
+             outer_viewport_scroll == other.outer_viewport_scroll;
+    }
   };
   void SetViewportLayersFromIds(const ViewportLayerIds& viewport_layer_ids);
   void ClearViewportLayers();
@@ -252,8 +265,7 @@ class CC_EXPORT LayerTreeImpl {
     has_transparent_background_ = transparent;
   }
 
-  void UpdatePropertyTreeScrollingAndAnimationFromMainThread(
-      bool is_impl_side_update);
+  void UpdatePropertyTreeAnimationFromMainThread();
   void SetPageScaleOnActiveTree(float active_page_scale);
   void PushPageScaleFromMainThread(float page_scale_factor,
                                    float min_page_scale_factor,
@@ -282,10 +294,12 @@ class CC_EXPORT LayerTreeImpl {
   void set_content_source_id(uint32_t id) { content_source_id_ = id; }
   uint32_t content_source_id() { return content_source_id_; }
 
-  void set_local_surface_id(const LocalSurfaceId& id) {
+  void set_local_surface_id(const viz::LocalSurfaceId& id) {
     local_surface_id_ = id;
   }
-  const LocalSurfaceId& local_surface_id() const { return local_surface_id_; }
+  const viz::LocalSurfaceId& local_surface_id() const {
+    return local_surface_id_;
+  }
 
   void SetRasterColorSpace(const gfx::ColorSpace& raster_color_space);
   const gfx::ColorSpace& raster_color_space() const {
@@ -311,7 +325,8 @@ class CC_EXPORT LayerTreeImpl {
   // Updates draw properties and render surface layer list, as well as tile
   // priorities. Returns false if it was unable to update.  Updating lcd
   // text may cause invalidations, so should only be done after a commit.
-  bool UpdateDrawProperties(bool update_lcd_text);
+  bool UpdateDrawProperties();
+  void UpdateCanUseLCDText();
   void BuildPropertyTreesForTesting();
   void BuildLayerListAndPropertyTreesForTesting();
 
@@ -329,6 +344,11 @@ class CC_EXPORT LayerTreeImpl {
 
   void set_needs_full_tree_sync(bool needs) { needs_full_tree_sync_ = needs; }
   bool needs_full_tree_sync() const { return needs_full_tree_sync_; }
+
+  bool needs_surface_ids_sync() const { return needs_surface_ids_sync_; }
+  void set_needs_surface_ids_sync(bool needs_surface_ids_sync) {
+    needs_surface_ids_sync_ = needs_surface_ids_sync;
+  }
 
   void ForceRedrawNextActivation() { next_activation_forces_redraw_ = true; }
 
@@ -358,6 +378,11 @@ class CC_EXPORT LayerTreeImpl {
   LayerImpl* LayerByElementId(ElementId element_id) const;
   void AddToElementMap(LayerImpl* layer);
   void RemoveFromElementMap(LayerImpl* layer);
+
+  void SetSurfaceLayerIds(
+      const base::flat_set<viz::SurfaceId>& surface_layer_ids);
+  const base::flat_set<viz::SurfaceId>& SurfaceLayerIds() const;
+  void ClearSurfaceLayerIds();
 
   void AddLayerShouldPushProperties(LayerImpl* layer);
   void RemoveLayerShouldPushProperties(LayerImpl* layer);
@@ -442,13 +467,6 @@ class CC_EXPORT LayerTreeImpl {
   void UnregisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer);
   ScrollbarSet ScrollbarsFor(ElementId scroll_element_id) const;
 
-  void RegisterScrollLayer(LayerImpl* layer);
-  void UnregisterScrollLayer(LayerImpl* layer);
-
-  void AddSurfaceLayer(LayerImpl* layer);
-  void RemoveSurfaceLayer(LayerImpl* layer);
-  const LayerImplList& SurfaceLayers() const { return surface_layers_; }
-
   LayerImpl* FindFirstScrollingLayerOrDrawnScrollbarThatIsHitByPoint(
       const gfx::PointF& screen_space_point);
 
@@ -483,8 +501,24 @@ class CC_EXPORT LayerTreeImpl {
       std::unique_ptr<PendingPageScaleAnimation> pending_animation);
   std::unique_ptr<PendingPageScaleAnimation> TakePendingPageScaleAnimation();
 
-  void DidUpdateScrollOffset(int layer_id);
-  void DidUpdateScrollState(int layer_id);
+  void DidUpdateScrollOffset(ElementId id);
+
+  // Mark the scrollbar geometries (e.g., thumb size and position) as needing an
+  // update.
+  void SetScrollbarGeometriesNeedUpdate() {
+    if (IsActiveTree()) {
+      scrollbar_geometries_need_update_ = true;
+      // Scrollbar geometries are updated in |UpdateDrawProperties|.
+      set_needs_update_draw_properties();
+    }
+  }
+  bool ScrollbarGeometriesNeedUpdate() const {
+    return scrollbar_geometries_need_update_;
+  }
+  // Update the geometries of all scrollbars (e.g., thumb size and position). An
+  // update only occurs if a scroll-related layer has changed (see:
+  // SetScrollbarGeometriesNeedUpdate).
+  void UpdateScrollbarGeometries();
 
   bool have_scroll_event_handlers() const {
     return have_scroll_event_handlers_;
@@ -524,8 +558,6 @@ class CC_EXPORT LayerTreeImpl {
                                     float max_page_scale_factor);
   bool SetPageScaleFactorLimits(float min_page_scale_factor,
                                 float max_page_scale_factor);
-  bool IsViewportLayerId(int id) const;
-  void UpdateScrollbars(int scroll_layer_id, int clip_layer_id);
   void DidUpdatePageScale();
   void PushBrowserControls(const float* top_controls_shown_ratio);
   bool ClampBrowserControlsShownRatio();
@@ -554,7 +586,7 @@ class CC_EXPORT LayerTreeImpl {
   gfx::ColorSpace raster_color_space_;
 
   uint32_t content_source_id_;
-  LocalSurfaceId local_surface_id_;
+  viz::LocalSurfaceId local_surface_id_;
 
   scoped_refptr<SyncedElasticOverscroll> elastic_overscroll_;
 
@@ -573,11 +605,6 @@ class CC_EXPORT LayerTreeImpl {
   std::unordered_map<ElementId, FilterOperations, ElementIdHash>
       element_id_to_filter_animations_;
 
-  // Maps from clip layer ids to scroll layer ids.  Note that this only includes
-  // the subset of clip layers that act as scrolling containers.  (This is
-  // derived from LayerImpl::scroll_clip_layer_ and exists to avoid O(n) walks.)
-  std::unordered_map<int, int> clip_scroll_map_;
-
   struct ScrollbarLayerIds {
     int horizontal = Layer::INVALID_ID;
     int vertical = Layer::INVALID_ID;
@@ -588,7 +615,8 @@ class CC_EXPORT LayerTreeImpl {
       element_id_to_scrollbar_layer_ids_;
 
   std::vector<PictureLayerImpl*> picture_layers_;
-  LayerImplList surface_layers_;
+
+  base::flat_set<viz::SurfaceId> surface_layer_ids_;
 
   // List of render surfaces for the most recently prepared frame.
   RenderSurfaceList render_surface_list_;
@@ -599,9 +627,15 @@ class CC_EXPORT LayerTreeImpl {
   bool viewport_size_invalid_;
   bool needs_update_draw_properties_;
 
+  // True if a scrollbar geometry value has changed. For example, if the scroll
+  // offset changes, scrollbar thumb positions need to be updated.
+  bool scrollbar_geometries_need_update_;
+
   // In impl-side painting mode, this is true when the tree may contain
   // structural differences relative to the active tree.
   bool needs_full_tree_sync_;
+
+  bool needs_surface_ids_sync_;
 
   bool next_activation_forces_redraw_;
 

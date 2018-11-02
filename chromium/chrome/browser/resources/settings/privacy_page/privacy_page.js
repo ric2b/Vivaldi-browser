@@ -13,12 +13,7 @@
  * Must be kept in sync with the C++ enum of the same name.
  * @enum {number}
  */
-var NetworkPredictionOptions = {
-  ALWAYS: 0,
-  WIFI_ONLY: 1,
-  NEVER: 2,
-  DEFAULT: 1
-};
+var NetworkPredictionOptions = {ALWAYS: 0, WIFI_ONLY: 1, NEVER: 2, DEFAULT: 1};
 
 Polymer({
   is: 'settings-privacy-page',
@@ -52,7 +47,7 @@ Polymer({
       }
     },
 
-// <if expr="_google_chrome and not chromeos">
+    // <if expr="_google_chrome and not chromeos">
     // TODO(dbeam): make a virtual.* pref namespace and set/get this normally
     // (but handled differently in C++).
     /** @private {chrome.settingsPrivate.PrefObject} */
@@ -61,18 +56,18 @@ Polymer({
       value: function() {
         // TODO(dbeam): this is basically only to appease PrefControlBehavior.
         // Maybe add a no-validate attribute instead? This makes little sense.
-        return /** @type {chrome.settingsPrivate.PrefObject} */({});
+        return /** @type {chrome.settingsPrivate.PrefObject} */ ({});
       },
     },
 
     showRestart_: Boolean,
-// </if>
+    // </if>
 
     /** @private {chrome.settingsPrivate.PrefObject} */
     safeBrowsingExtendedReportingPref_: {
       type: Object,
       value: function() {
-        return /** @type {chrome.settingsPrivate.PrefObject} */({});
+        return /** @type {chrome.settingsPrivate.PrefObject} */ ({});
       },
     },
 
@@ -109,14 +104,18 @@ Polymer({
       type: Object,
       value: function() {
         var map = new Map();
-// <if expr="use_nss_certs">
-        map.set(
-            settings.Route.CERTIFICATES.path,
-            '#manageCertificates .subpage-arrow');
-// </if>
-        map.set(
-            settings.Route.SITE_SETTINGS.path,
-            '#site-settings-subpage-trigger .subpage-arrow');
+        // <if expr="use_nss_certs">
+        if (settings.routes.CERTIFICATES) {
+          map.set(
+              settings.routes.CERTIFICATES.path,
+              '#manageCertificates .subpage-arrow');
+        }
+        // </if>
+        if (settings.routes.SITE_SETTINGS) {
+          map.set(
+              settings.routes.SITE_SETTINGS.path,
+              '#site-settings-subpage-trigger .subpage-arrow');
+        }
         return map;
       },
     },
@@ -132,11 +131,11 @@ Polymer({
 
     this.browserProxy_ = settings.PrivacyPageBrowserProxyImpl.getInstance();
 
-// <if expr="_google_chrome and not chromeos">
+    // <if expr="_google_chrome and not chromeos">
     var setMetricsReportingPref = this.setMetricsReportingPref_.bind(this);
     this.addWebUIListener('metrics-reporting-change', setMetricsReportingPref);
     this.browserProxy_.getMetricsReporting().then(setMetricsReportingPref);
-// </if>
+    // </if>
 
     var setSber = this.setSafeBrowsingExtendedReporting_.bind(this);
     this.addWebUIListener('safe-browsing-extended-reporting-change', setSber);
@@ -146,11 +145,11 @@ Polymer({
   /** @protected */
   currentRouteChanged: function() {
     this.showClearBrowsingDataDialog_ =
-        settings.getCurrentRoute() == settings.Route.CLEAR_BROWSER_DATA;
+        settings.getCurrentRoute() == settings.routes.CLEAR_BROWSER_DATA;
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onDoNotTrackDomChange_: function(event) {
@@ -161,11 +160,11 @@ Polymer({
   /**
    * Handles the change event for the do-not-track toggle. Shows a
    * confirmation dialog when enabling the setting.
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onDoNotTrackChange_: function(event) {
-    var target = /** @type {!SettingsToggleButtonElement} */(event.target);
+    var target = /** @type {!SettingsToggleButtonElement} */ (event.target);
     if (!target.checked) {
       // Always allow disabling the pref.
       target.sendPrefChange();
@@ -218,12 +217,12 @@ Polymer({
 
   /** @private */
   onManageCertificatesTap_: function() {
-// <if expr="use_nss_certs">
-    settings.navigateTo(settings.Route.CERTIFICATES);
-// </if>
-// <if expr="is_win or is_macosx">
+    // <if expr="use_nss_certs">
+    settings.navigateTo(settings.routes.CERTIFICATES);
+    // </if>
+    // <if expr="is_win or is_macosx">
     this.browserProxy_.showManageSSLCertificates();
-// </if>
+    // </if>
   },
 
   /**
@@ -231,20 +230,20 @@ Polymer({
    * @private
    */
   onRemoveAllCookiesFromSite_: function() {
-    var node = /** @type {?SiteDataDetailsSubpageElement} */(this.$$(
-        'site-data-details-subpage'));
+    var node = /** @type {?SiteDataDetailsSubpageElement} */ (
+        this.$$('site-data-details-subpage'));
     if (node)
       node.removeAll();
   },
 
   /** @private */
   onSiteSettingsTap_: function() {
-    settings.navigateTo(settings.Route.SITE_SETTINGS);
+    settings.navigateTo(settings.routes.SITE_SETTINGS);
   },
 
   /** @private */
   onClearBrowsingDataTap_: function() {
-    settings.navigateTo(settings.Route.CLEAR_BROWSER_DATA);
+    settings.navigateTo(settings.routes.CLEAR_BROWSER_DATA);
   },
 
   /** @private */
@@ -259,7 +258,7 @@ Polymer({
     this.browserProxy_.setSafeBrowsingExtendedReportingEnabled(enabled);
   },
 
-// <if expr="_google_chrome and not chromeos">
+  // <if expr="_google_chrome and not chromeos">
   /** @private */
   onMetricsReportingChange_: function() {
     var enabled = this.$.metricsReportingControl.checked;
@@ -294,14 +293,14 @@ Polymer({
   },
 
   /**
-   * @param {Event} e
+   * @param {!Event} e
    * @private
    */
   onRestartTap_: function(e) {
     e.stopPropagation();
     settings.LifetimeBrowserProxyImpl.getInstance().restart();
   },
-// </if>
+  // </if>
 
   /**
    * @param {boolean} enabled Whether reporting is enabled or not.
@@ -329,14 +328,14 @@ Polymer({
 
   /** @private */
   getProtectedContentLabel_: function(value) {
-    return value ? this.i18n('siteSettingsProtectedContentEnable')
-                 : this.i18n('siteSettingsBlocked');
+    return value ? this.i18n('siteSettingsProtectedContentEnable') :
+                   this.i18n('siteSettingsBlocked');
   },
 
   /** @private */
   getProtectedContentIdentifiersLabel_: function(value) {
-    return value ? this.i18n('siteSettingsProtectedContentEnableIdentifiers')
-                 : this.i18n('siteSettingsBlocked');
+    return value ? this.i18n('siteSettingsProtectedContentEnableIdentifiers') :
+                   this.i18n('siteSettingsBlocked');
   },
 });
 })();

@@ -12,7 +12,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "cc/base/switches.h"
-#include "cc/surfaces/surface_info.h"
+#include "components/viz/common/surfaces/surface_info.h"
 #include "mojo/public/cpp/bindings/map.h"
 #include "services/ui/public/cpp/property_type_converters.h"
 #include "services/ui/public/interfaces/window_manager.mojom.h"
@@ -104,16 +104,19 @@ std::vector<uint8_t> ConvertToPropertyTransportValue(int64_t value) {
 using WindowTreeClientWmTest = test::AuraMusWmTestBase;
 using WindowTreeClientClientTest = test::AuraMusClientTestBase;
 
-// WindowTreeClientWmTest with --enable-surface-synchronization.
-class WindowTreeClientWmTestSurfaceSync : public WindowTreeClientWmTest {
+class WindowTreeClientWmTestSurfaceSync
+    : public WindowTreeClientWmTest,
+      public ::testing::WithParamInterface<bool> {
  public:
   WindowTreeClientWmTestSurfaceSync() {}
   ~WindowTreeClientWmTestSurfaceSync() override {}
 
   // WindowTreeClientWmTest:
   void SetUp() override {
-    base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        cc::switches::kEnableSurfaceSynchronization);
+    if (GetParam()) {
+      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+          switches::kForceDeviceScaleFactor, "2");
+    }
     WindowTreeClientWmTest::SetUp();
   }
 
@@ -178,11 +181,11 @@ TEST_F(WindowTreeClientWmTest, SetBoundsFailed) {
   EXPECT_EQ(original_bounds, window.bounds());
 }
 
-// Verifies bounds and the cc::LocalSurfaceId associated with the bounds are
+// Verifies bounds and the viz::LocalSurfaceId associated with the bounds are
 // reverted if the server replied that the change failed.
 TEST_F(WindowTreeClientWmTest, SetBoundsFailedLocalSurfaceId) {
   Window window(nullptr);
-  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate cc::LocalSurfaceIds
+  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate viz::LocalSurfaceIds
   // when their sizes change.
   window.SetProperty(aura::client::kEmbedType,
                      aura::client::WindowEmbedType::EMBED_IN_OWNER);
@@ -197,29 +200,33 @@ TEST_F(WindowTreeClientWmTest, SetBoundsFailedLocalSurfaceId) {
   ASSERT_NE(nullptr, window_mus);
   EXPECT_TRUE(window_mus->GetLocalSurfaceId().is_valid());
 
-  // Reverting the change should also revert the cc::LocalSurfaceId.
+  // Reverting the change should also revert the viz::LocalSurfaceId.
   ASSERT_TRUE(window_tree()->AckSingleChangeOfType(WindowTreeChangeType::BOUNDS,
                                                    false));
   EXPECT_EQ(original_bounds, window.bounds());
   EXPECT_FALSE(window_mus->GetLocalSurfaceId().is_valid());
 }
 
+INSTANTIATE_TEST_CASE_P(/* no prefix */,
+                        WindowTreeClientWmTestSurfaceSync,
+                        ::testing::Bool());
+
 // Verifies that a ClientSurfaceEmbedder is created for a window once it has
 // a bounds, and a valid FrameSinkId.
-TEST_F(WindowTreeClientWmTestSurfaceSync,
+TEST_P(WindowTreeClientWmTestSurfaceSync,
        ClientSurfaceEmbedderOnValidEmbedding) {
   Window window(nullptr);
-  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate cc::LocalSurfaceIds
+  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate viz::LocalSurfaceIds
   // when their sizes change.
   window.SetProperty(aura::client::kEmbedType,
                      aura::client::WindowEmbedType::EMBED_IN_OWNER);
   window.Init(ui::LAYER_NOT_DRAWN);
 
-  // The window will allocate a cc::LocalSurfaceId once it has a bounds.
+  // The window will allocate a viz::LocalSurfaceId once it has a bounds.
   WindowMus* window_mus = WindowMus::Get(&window);
   ASSERT_NE(nullptr, window_mus);
   EXPECT_FALSE(window_mus->GetLocalSurfaceId().is_valid());
-  const gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
+  gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
   ASSERT_NE(new_bounds, window.bounds());
   window.SetBounds(new_bounds);
   EXPECT_EQ(new_bounds, window.bounds());
@@ -234,18 +241,20 @@ TEST_F(WindowTreeClientWmTestSurfaceSync,
   // Now that the window has a valid FrameSinkId, it can embed the client in a
   // CompositorFrame.
   window_tree_client()->OnFrameSinkIdAllocated(server_id(&window),
-                                               cc::FrameSinkId(1, 1));
+                                               viz::FrameSinkId(1, 1));
   ClientSurfaceEmbedder* client_surface_embedder =
       window_port_mus->client_surface_embedder();
   ASSERT_NE(nullptr, client_surface_embedder);
 
   // Until the fallback surface fills the window, we will have gutter.
-  ui::Layer* right_gutter = client_surface_embedder->RightGutterForTesting();
-  ASSERT_NE(nullptr, right_gutter);
-  EXPECT_EQ(gfx::Rect(100, 100), right_gutter->bounds());
-  // We don't have a bottom gutter if the fallback surface size is (0, 0) as the
-  // right gutter will fill the whole area.
-  ASSERT_EQ(nullptr, client_surface_embedder->BottomGutterForTesting());
+  {
+    ui::Layer* right_gutter = client_surface_embedder->RightGutterForTesting();
+    ASSERT_NE(nullptr, right_gutter);
+    EXPECT_EQ(gfx::Rect(100, 100), right_gutter->bounds());
+    // We don't have a bottom gutter if the fallback surface size is (0, 0) as
+    // the right gutter will fill the whole area.
+    ASSERT_EQ(nullptr, client_surface_embedder->BottomGutterForTesting());
+  }
 
   // When a SurfaceInfo arrives from the window server, we use it as the
   // fallback SurfaceInfo. Here we issue the PrimarySurfaceInfo back to the
@@ -256,45 +265,65 @@ TEST_F(WindowTreeClientWmTestSurfaceSync,
   // The gutter is gone.
   ASSERT_EQ(nullptr, client_surface_embedder->BottomGutterForTesting());
   ASSERT_EQ(nullptr, client_surface_embedder->RightGutterForTesting());
+
+  // Resize again: we should have gutter.
+  new_bounds.SetRect(0, 0, 150, 150);
+  ASSERT_NE(new_bounds, window.bounds());
+  window.SetBounds(new_bounds);
+  ASSERT_NE(nullptr, client_surface_embedder->BottomGutterForTesting());
+  ASSERT_NE(nullptr, client_surface_embedder->RightGutterForTesting());
+
+  // Until the fallback surface fills the window, we will have gutter.
+  {
+    ui::Layer* right_gutter = client_surface_embedder->RightGutterForTesting();
+    ASSERT_NE(nullptr, right_gutter);
+    EXPECT_EQ(gfx::Rect(100, 0, 50, 150), right_gutter->bounds());
+
+    ui::Layer* bottom_gutter =
+        client_surface_embedder->BottomGutterForTesting();
+    ASSERT_NE(nullptr, bottom_gutter);
+    EXPECT_EQ(gfx::Rect(0, 100, 100, 50), bottom_gutter->bounds());
+  }
 }
 
-// Verifies that the cc::LocalSurfaceId generated by an embedder changes when
+// Verifies that the viz::LocalSurfaceId generated by an embedder changes when
 // the size changes, but not when the position changes.
-TEST_F(WindowTreeClientWmTest, SetBoundsLocalSurfaceIdChanges) {
+TEST_P(WindowTreeClientWmTestSurfaceSync, SetBoundsLocalSurfaceIdChanges) {
   ASSERT_EQ(base::nullopt, window_tree()->last_local_surface_id());
   Window window(nullptr);
-  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate cc::LocalSurfaceIds
+  // TOP_LEVEL_IN_WM and EMBED_IN_OWNER windows allocate viz::LocalSurfaceIds
   // when their sizes change.
   window.SetProperty(aura::client::kEmbedType,
                      aura::client::WindowEmbedType::EMBED_IN_OWNER);
   window.Init(ui::LAYER_NOT_DRAWN);
 
-  // Resize the window and verify that we've allocated a cc::LocalSurfaceId.
+  // Resize the window and verify that we've allocated a viz::LocalSurfaceId.
   const gfx::Rect new_bounds(0, 0, 100, 100);
   ASSERT_NE(new_bounds, window.bounds());
   window.SetBounds(new_bounds);
   EXPECT_EQ(new_bounds, window.bounds());
-  base::Optional<cc::LocalSurfaceId> last_local_surface_id =
+  base::Optional<viz::LocalSurfaceId> last_local_surface_id =
       window_tree()->last_local_surface_id();
   ASSERT_NE(base::nullopt, last_local_surface_id);
 
-  // Resize the window again and verify that the cc::LocalSurfaceId has changed.
+  // Resize the window again and verify that the viz::LocalSurfaceId has
+  // changed.
   const gfx::Rect new_bounds2(0, 0, 100, 102);
   ASSERT_NE(new_bounds2, window.bounds());
   window.SetBounds(new_bounds2);
   EXPECT_EQ(new_bounds2, window.bounds());
-  base::Optional<cc::LocalSurfaceId> last_local_surface_id2 =
+  base::Optional<viz::LocalSurfaceId> last_local_surface_id2 =
       window_tree()->last_local_surface_id();
   ASSERT_NE(base::nullopt, last_local_surface_id2);
   EXPECT_NE(last_local_surface_id2, last_local_surface_id);
 
   // Moving the window but not changing the size should not allocate a new
-  // cc::LocalSurfaceId.
+  // viz::LocalSurfaceId.
   const gfx::Rect new_bounds3(1337, 7331, 100, 102);
   ASSERT_NE(new_bounds3, window.bounds());
   window.SetBounds(new_bounds3);
   EXPECT_EQ(new_bounds3, window.bounds());
-  base::Optional<cc::LocalSurfaceId> last_local_surface_id3 =
+  base::Optional<viz::LocalSurfaceId> last_local_surface_id3 =
       window_tree()->last_local_surface_id();
   ASSERT_NE(base::nullopt, last_local_surface_id3);
   EXPECT_EQ(last_local_surface_id2, last_local_surface_id3);
@@ -412,7 +441,7 @@ TEST_F(WindowTreeClientWmTest, FocusFromServer) {
 // Simulates a bounds change, and while the bounds change is in flight the
 // server replies with a new bounds and the original bounds change fails.
 // The server bounds change takes hold along with the associated
-// cc::LocalSurfaceId.
+// viz::LocalSurfaceId.
 TEST_F(WindowTreeClientWmTest, SetBoundsFailedWithPendingChange) {
   const gfx::Rect original_bounds(root_window()->bounds());
   const gfx::Rect new_bounds(gfx::Rect(0, 0, 100, 100));
@@ -422,7 +451,7 @@ TEST_F(WindowTreeClientWmTest, SetBoundsFailedWithPendingChange) {
 
   // Simulate the server responding with a bounds change.
   const gfx::Rect server_changed_bounds(gfx::Rect(0, 0, 101, 102));
-  const cc::LocalSurfaceId server_changed_local_surface_id(
+  const viz::LocalSurfaceId server_changed_local_surface_id(
       1, base::UnguessableToken::Create());
   window_tree_client()->OnWindowBoundsChanged(
       server_id(root_window()), original_bounds, server_changed_bounds,
@@ -472,6 +501,31 @@ TEST_F(WindowTreeClientWmTest, TwoInFlightBoundsChangesBothCanceled) {
   ASSERT_TRUE(window_tree()->AckSingleChangeOfType(WindowTreeChangeType::BOUNDS,
                                                    false));
   EXPECT_EQ(original_bounds, root_window()->bounds());
+}
+
+TEST_F(WindowTreeClientWmTest, TwoInFlightTransformsChangesBothCanceled) {
+  const gfx::Transform original_transform(root_window()->layer()->transform());
+  gfx::Transform transform1;
+  transform1.Scale(SkIntToMScalar(2), SkIntToMScalar(2));
+  gfx::Transform transform2;
+  transform2.Scale(SkIntToMScalar(3), SkIntToMScalar(3));
+  root_window()->SetTransform(transform1);
+  EXPECT_EQ(transform1, root_window()->layer()->transform());
+
+  root_window()->SetTransform(transform2);
+  EXPECT_EQ(transform2, root_window()->layer()->transform());
+
+  // Tell the client the first transform failed. As there is a still a change in
+  // flight nothing should happen.
+  ASSERT_TRUE(window_tree()->AckFirstChangeOfType(
+      WindowTreeChangeType::TRANSFORM, false));
+  EXPECT_EQ(transform2, root_window()->layer()->transform());
+
+  // Tell the client the seconds transform failed. Should now fallback to
+  // original value.
+  ASSERT_TRUE(window_tree()->AckSingleChangeOfType(
+      WindowTreeChangeType::TRANSFORM, false));
+  EXPECT_EQ(original_transform, root_window()->layer()->transform());
 }
 
 // Verifies properties are set if the server replied that the change succeeded.

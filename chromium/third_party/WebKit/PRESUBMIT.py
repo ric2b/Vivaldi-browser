@@ -32,7 +32,9 @@ def _CheckForNonBlinkVariantMojomIncludes(input_api, output_api):
     results = []
     if errors:
         results.append(output_api.PresubmitError(
-            'Files that include non-Blink variant mojoms found:', errors))
+            'Files that include non-Blink variant mojoms found. '
+            'You must include .mojom-blink.h or .mojom-shared.h instead:',
+            errors))
     return results
 
 
@@ -77,7 +79,6 @@ def _CommonChecks(input_api, output_api):
         maxlen=800, license_header=license_header))
     results.extend(_CheckForNonBlinkVariantMojomIncludes(input_api, output_api))
     results.extend(_CheckTestExpectations(input_api, output_api))
-    results.extend(_CheckChromiumPlatformMacros(input_api, output_api))
     results.extend(_CheckWatchlist(input_api, output_api))
     return results
 
@@ -129,21 +130,6 @@ def _CheckStyle(input_api, output_api):
             'Could not run check-webkit-style', [str(e)]))
 
     return results
-
-
-def _CheckChromiumPlatformMacros(input_api, output_api, source_file_filter=None):
-    """Ensures that Blink code uses WTF's platform macros instead of
-    Chromium's. Using the latter has resulted in at least one subtle
-    build breakage."""
-    os_macro_re = input_api.re.compile(r'^\s*#(el)?if.*\bOS_')
-    errors = input_api.canned_checks._FindNewViolationsOfRule(
-        lambda _, x: not os_macro_re.search(x),
-        input_api, source_file_filter)
-    errors = ['Found use of Chromium OS_* macro in %s. '
-        'Use WTF platform macros instead.' % violation for violation in errors]
-    if errors:
-        return [output_api.PresubmitPromptWarning('\n'.join(errors))]
-    return []
 
 
 def _CheckForPrintfDebugging(input_api, output_api):
@@ -286,6 +272,10 @@ def _ArePaintOrCompositingDirectoriesModified(change):  # pylint: disable=C0103
         os.path.join('third_party', 'WebKit', 'Source', 'core', 'layout',
                      'compositing'),
         os.path.join('third_party', 'WebKit', 'Source', 'core', 'paint'),
+        os.path.join('third_party', 'WebKit', 'LayoutTests', 'FlagExpectations',
+                     'enable-slimming-paint-v2'),
+        os.path.join('third_party', 'WebKit', 'LayoutTests', 'flag-specific',
+                     'enable-slimming-paint-v2'),
     ]
     for affected_file in change.AffectedFiles():
         file_path = affected_file.LocalPath()

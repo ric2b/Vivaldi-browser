@@ -5,6 +5,8 @@
 #include "components/exo/wm_helper.h"
 
 #include "base/memory/ptr_util.h"
+#include "ui/aura/client/drag_drop_delegate.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
 
 namespace exo {
 namespace {
@@ -28,6 +30,11 @@ void WMHelper::SetInstance(WMHelper* helper) {
 WMHelper* WMHelper::GetInstance() {
   DCHECK(g_instance);
   return g_instance;
+}
+
+// static
+bool WMHelper::HasInstance() {
+  return !!g_instance;
 }
 
 void WMHelper::AddActivationObserver(ActivationObserver* observer) {
@@ -54,12 +61,12 @@ void WMHelper::RemoveCursorObserver(CursorObserver* observer) {
   cursor_observers_.RemoveObserver(observer);
 }
 
-void WMHelper::AddMaximizeModeObserver(MaximizeModeObserver* observer) {
-  maximize_mode_observers_.AddObserver(observer);
+void WMHelper::AddTabletModeObserver(TabletModeObserver* observer) {
+  tablet_mode_observers_.AddObserver(observer);
 }
 
-void WMHelper::RemoveMaximizeModeObserver(MaximizeModeObserver* observer) {
-  maximize_mode_observers_.RemoveObserver(observer);
+void WMHelper::RemoveTabletModeObserver(TabletModeObserver* observer) {
+  tablet_mode_observers_.RemoveObserver(observer);
 }
 
 void WMHelper::AddInputDeviceEventObserver(InputDeviceEventObserver* observer) {
@@ -81,6 +88,22 @@ void WMHelper::RemoveDisplayConfigurationObserver(
   display_config_observers_.RemoveObserver(observer);
 }
 
+void WMHelper::AddDragDropObserver(DragDropObserver* observer) {
+  drag_drop_observers_.AddObserver(observer);
+}
+
+void WMHelper::RemoveDragDropObserver(DragDropObserver* observer) {
+  drag_drop_observers_.RemoveObserver(observer);
+}
+
+void WMHelper::SetDragDropDelegate(aura::Window* window) {
+  aura::client::SetDragDropDelegate(window, this);
+}
+
+void WMHelper::ResetDragDropDelegate(aura::Window* window) {
+  aura::client::SetDragDropDelegate(window, nullptr);
+}
+
 void WMHelper::NotifyWindowActivated(aura::Window* gained_active,
                                      aura::Window* lost_active) {
   for (ActivationObserver& observer : activation_observers_)
@@ -98,9 +121,9 @@ void WMHelper::NotifyCursorVisibilityChanged(bool is_visible) {
     observer.OnCursorVisibilityChanged(is_visible);
 }
 
-void WMHelper::NotifyCursorSetChanged(ui::CursorSetType cursor_set) {
+void WMHelper::NotifyCursorSizeChanged(ui::CursorSize cursor_size) {
   for (CursorObserver& observer : cursor_observers_)
-    observer.OnCursorSetChanged(cursor_set);
+    observer.OnCursorSizeChanged(cursor_size);
 }
 
 void WMHelper::NotifyCursorDisplayChanged(const display::Display& display) {
@@ -108,19 +131,19 @@ void WMHelper::NotifyCursorDisplayChanged(const display::Display& display) {
     observer.OnCursorDisplayChanged(display);
 }
 
-void WMHelper::NotifyMaximizeModeStarted() {
-  for (MaximizeModeObserver& observer : maximize_mode_observers_)
-    observer.OnMaximizeModeStarted();
+void WMHelper::NotifyTabletModeStarted() {
+  for (TabletModeObserver& observer : tablet_mode_observers_)
+    observer.OnTabletModeStarted();
 }
 
-void WMHelper::NotifyMaximizeModeEnding() {
-  for (MaximizeModeObserver& observer : maximize_mode_observers_)
-    observer.OnMaximizeModeEnding();
+void WMHelper::NotifyTabletModeEnding() {
+  for (TabletModeObserver& observer : tablet_mode_observers_)
+    observer.OnTabletModeEnding();
 }
 
-void WMHelper::NotifyMaximizeModeEnded() {
-  for (MaximizeModeObserver& observer : maximize_mode_observers_)
-    observer.OnMaximizeModeEnded();
+void WMHelper::NotifyTabletModeEnded() {
+  for (TabletModeObserver& observer : tablet_mode_observers_)
+    observer.OnTabletModeEnded();
 }
 
 void WMHelper::NotifyKeyboardDeviceConfigurationChanged() {
@@ -133,4 +156,28 @@ void WMHelper::NotifyDisplayConfigurationChanged() {
     observer.OnDisplayConfigurationChanged();
 }
 
+void WMHelper::OnDragEntered(const ui::DropTargetEvent& event) {
+  for (DragDropObserver& observer : drag_drop_observers_)
+    observer.OnDragEntered(event);
+}
+
+int WMHelper::OnDragUpdated(const ui::DropTargetEvent& event) {
+  int valid_operation = ui::DragDropTypes::DRAG_NONE;
+  for (DragDropObserver& observer : drag_drop_observers_)
+    valid_operation = valid_operation | observer.OnDragUpdated(event);
+  return valid_operation;
+}
+
+void WMHelper::OnDragExited() {
+  for (DragDropObserver& observer : drag_drop_observers_)
+    observer.OnDragExited();
+}
+
+int WMHelper::OnPerformDrop(const ui::DropTargetEvent& event) {
+  for (DragDropObserver& observer : drag_drop_observers_)
+    observer.OnPerformDrop(event);
+  // TODO(hirono): Return the correct result instead of always returning
+  // DRAG_MOVE.
+  return ui::DragDropTypes::DRAG_MOVE;
+}
 }  // namespace exo

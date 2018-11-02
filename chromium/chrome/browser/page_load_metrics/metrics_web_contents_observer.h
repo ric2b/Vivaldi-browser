@@ -29,10 +29,6 @@ class NavigationHandle;
 class RenderFrameHost;
 }  // namespace content
 
-namespace IPC {
-class Message;
-}  // namespace IPC
-
 namespace page_load_metrics {
 
 class PageLoadMetricsEmbedderInterface;
@@ -53,15 +49,12 @@ class MetricsWebContentsObserver
   // have been observed.
   class TestingObserver {
    public:
-    enum class IPCType { LEGACY, MOJO };
-
     explicit TestingObserver(content::WebContents* web_contents);
     virtual ~TestingObserver();
 
     void OnGoingAway();
 
     virtual void OnCommit(PageLoadTracker* tracker) {}
-    virtual void DidReceiveTimingUpdate(IPCType type) {}
 
    private:
     page_load_metrics::MetricsWebContentsObserver* observer_;
@@ -72,17 +65,13 @@ class MetricsWebContentsObserver
   // Note that the returned metrics is owned by the web contents.
   static MetricsWebContentsObserver* CreateForWebContents(
       content::WebContents* web_contents,
-      const base::Optional<content::WebContents::CreateParams>& create_params,
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   MetricsWebContentsObserver(
       content::WebContents* web_contents,
-      const base::Optional<content::WebContents::CreateParams>& create_params,
       std::unique_ptr<PageLoadMetricsEmbedderInterface> embedder_interface);
   ~MetricsWebContentsObserver() override;
 
   // content::WebContentsObserver implementation:
-  bool OnMessageReceived(const IPC::Message& message,
-                         content::RenderFrameHost* render_frame_host) override;
   void DidFinishNavigation(
       content::NavigationHandle* navigation_handle) override;
   void DidRedirectNavigation(
@@ -104,25 +93,23 @@ class MetricsWebContentsObserver
   void WillProcessNavigationResponse(
       content::NavigationHandle* navigation_handle);
 
-  // A resource request started on the IO thread. This method is invoked on
-  // the UI thread.
-  void OnRequestStarted(const content::GlobalRequestID& request_id,
-                        content::ResourceType resource_type,
-                        base::TimeTicks creation_time);
-
   // A resource request completed on the IO thread. This method is invoked on
-  // the UI thread.
+  // the UI thread. |render_frame_host_or_null will| be null for main or sub
+  // frame requests when browser-side navigation is enabled.
   void OnRequestComplete(
       const GURL& url,
+      const net::HostPortPair& host_port_pair,
       int frame_tree_node_id,
       const content::GlobalRequestID& request_id,
+      content::RenderFrameHost* render_frame_host_or_null,
       content::ResourceType resource_type,
       bool was_cached,
       std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
           data_reduction_proxy_data,
       int64_t raw_body_bytes,
       int64_t original_content_length,
-      base::TimeTicks creation_time);
+      base::TimeTicks creation_time,
+      int net_error);
 
   // Invoked on navigations where a navigation delay was added by the
   // DelayNavigationThrottle. This is a temporary method that will be removed
@@ -149,17 +136,18 @@ class MetricsWebContentsObserver
                        const mojom::PageLoadTiming& timing,
                        const mojom::PageLoadMetadata& metadata);
 
+  // Informs the observers of the currently committed load that the event
+  // corresponding to |event_key| has occurred. This should not be called within
+  // WebContentsObserver::DidFinishNavigation methods.
+  // This method is subject to change and may be removed in the future.
+  void BroadcastEventToObservers(const void* const event_key);
+
  private:
   friend class content::WebContentsUserData<MetricsWebContentsObserver>;
 
   // page_load_metrics::mojom::PageLoadMetrics implementation.
   void UpdateTiming(mojom::PageLoadTimingPtr timing,
                     mojom::PageLoadMetadataPtr metadata) override;
-
-  // Called from legacy IPC.
-  void OnUpdateTimingOverIPC(content::RenderFrameHost* render_frame_host,
-                             const mojom::PageLoadTiming& timing,
-                             const mojom::PageLoadMetadata& metadata);
 
   void HandleFailedNavigationForTrackedLoad(
       content::NavigationHandle* navigation_handle,
@@ -174,6 +162,7 @@ class MetricsWebContentsObserver
   // PageLoadTrackers.
   PageLoadTracker* GetTrackerOrNullForRequest(
       const content::GlobalRequestID& request_id,
+      content::RenderFrameHost* render_frame_host_or_null,
       content::ResourceType resource_type,
       base::TimeTicks creation_time);
 

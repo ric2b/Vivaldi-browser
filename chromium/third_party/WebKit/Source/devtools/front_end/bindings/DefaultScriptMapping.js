@@ -40,11 +40,17 @@ Bindings.DefaultScriptMapping = class {
   constructor(debuggerModel, workspace, debuggerWorkspaceBinding) {
     this._debuggerModel = debuggerModel;
     this._debuggerWorkspaceBinding = debuggerWorkspaceBinding;
-    var projectId = Bindings.DefaultScriptMapping.projectIdForTarget(debuggerModel.target());
     this._project = new Bindings.ContentProviderBasedProject(
-        workspace, projectId, Workspace.projectTypes.Debugger, '', true /* isServiceProject */);
-    this._eventListeners =
-        [debuggerModel.addEventListener(SDK.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this)];
+        workspace, 'debugger:' + debuggerModel.target().id(), Workspace.projectTypes.Debugger, '',
+        true /* isServiceProject */);
+    this._eventListeners = [
+      debuggerModel.addEventListener(SDK.DebuggerModel.Events.GlobalObjectCleared, this._debuggerReset, this),
+      debuggerModel.addEventListener(SDK.DebuggerModel.Events.ParsedScriptSource, this._parsedScriptSource, this),
+      debuggerModel.addEventListener(
+          SDK.DebuggerModel.Events.FailedToParseScriptSource, this._parsedScriptSource, this),
+      debuggerModel.addEventListener(
+          SDK.DebuggerModel.Events.DiscardedAnonymousScriptSource, this._discardedScriptSource, this)
+    ];
   }
 
   /**
@@ -56,24 +62,17 @@ Bindings.DefaultScriptMapping = class {
   }
 
   /**
-   * @param {!SDK.Target} target
-   * @return {string}
-   */
-  static projectIdForTarget(target) {
-    return 'debugger:' + target.id();
-  }
-
-  /**
    * @override
    * @param {!SDK.DebuggerModel.Location} rawLocation
-   * @return {!Workspace.UILocation}
+   * @return {?Workspace.UILocation}
    */
   rawLocationToUILocation(rawLocation) {
-    var debuggerModelLocation = /** @type {!SDK.DebuggerModel.Location} */ (rawLocation);
-    var script = debuggerModelLocation.script();
+    var script = rawLocation.script();
+    if (!script)
+      return null;
     var uiSourceCode = script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
-    var lineNumber = debuggerModelLocation.lineNumber - (script.isInlineScriptWithSourceURL() ? script.lineOffset : 0);
-    var columnNumber = debuggerModelLocation.columnNumber || 0;
+    var lineNumber = rawLocation.lineNumber - (script.isInlineScriptWithSourceURL() ? script.lineOffset : 0);
+    var columnNumber = rawLocation.columnNumber || 0;
     if (script.isInlineScriptWithSourceURL() && !lineNumber && columnNumber)
       columnNumber -= script.columnOffset;
     return uiSourceCode.uiLocation(lineNumber, columnNumber);
@@ -88,6 +87,8 @@ Bindings.DefaultScriptMapping = class {
    */
   uiLocationToRawLocation(uiSourceCode, lineNumber, columnNumber) {
     var script = uiSourceCode[Bindings.DefaultScriptMapping._scriptSymbol];
+    if (!script)
+      return null;
     if (script.isInlineScriptWithSourceURL()) {
       return this._debuggerModel.createRawLocation(
           script, lineNumber + script.lineOffset, lineNumber ? columnNumber : columnNumber + script.columnOffset);
@@ -96,9 +97,10 @@ Bindings.DefaultScriptMapping = class {
   }
 
   /**
-   * @param {!SDK.Script} script
+   * @param {!Common.Event} event
    */
-  addScript(script) {
+  _parsedScriptSource(event) {
+    var script = /** @type {!SDK.Script} */ (event.data);
     var name = Common.ParsedURL.extractName(script.sourceURL);
     var url = 'debugger:///VM' + script.scriptId + (name ? ' ' + name : '');
 
@@ -106,39 +108,20 @@ Bindings.DefaultScriptMapping = class {
     uiSourceCode[Bindings.DefaultScriptMapping._scriptSymbol] = script;
     script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol] = uiSourceCode;
     this._project.addUISourceCodeWithProvider(uiSourceCode, script, null, 'text/javascript');
-
-    this._debuggerWorkspaceBinding.setSourceMapping(this._debuggerModel, uiSourceCode, this);
-    this._debuggerWorkspaceBinding.pushSourceMapping(script, this);
+    this._debuggerWorkspaceBinding.updateLocations(script);
   }
 
   /**
-   * @param {!SDK.Script} script
+   * @param {!Common.Event} event
    */
-  removeScript(script) {
+  _discardedScriptSource(event) {
+    var script = /** @type {!SDK.Script} */ (event.data);
     var uiSourceCode = script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
     if (!uiSourceCode)
       return;
     delete script[Bindings.DefaultScriptMapping._uiSourceCodeSymbol];
     delete uiSourceCode[Bindings.DefaultScriptMapping._scriptSymbol];
     this._project.removeUISourceCode(uiSourceCode.url());
-  }
-
-  /**
-   * @override
-   * @return {boolean}
-   */
-  isIdentity() {
-    return true;
-  }
-
-  /**
-   * @override
-   * @param {!Workspace.UISourceCode} uiSourceCode
-   * @param {number} lineNumber
-   * @return {boolean}
-   */
-  uiLineHasMapping(uiSourceCode, lineNumber) {
-    return true;
   }
 
   _debuggerReset() {

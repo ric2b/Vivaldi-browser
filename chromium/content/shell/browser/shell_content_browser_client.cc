@@ -13,6 +13,7 @@
 #include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/path_service.h"
 #include "base/strings/pattern.h"
 #include "base/strings/utf_string_conversions.h"
@@ -38,7 +39,10 @@
 #include "content/shell/common/shell_messages.h"
 #include "content/shell/common/shell_switches.h"
 #include "content/shell/grit/shell_resources.h"
+#include "content/test/data/mojo_layouttest_test.mojom.h"
 #include "media/mojo/features.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
+#include "net/ssl/client_cert_identity.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "storage/browser/quota/quota_settings.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -65,6 +69,7 @@
 #endif
 
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
+#include "media/mojo/interfaces/constants.mojom.h"      // nogncheck
 #include "media/mojo/services/media_service_factory.h"  // nogncheck
 #endif
 
@@ -123,6 +128,26 @@ int GetCrashSignalFD(const base::CommandLine& command_line) {
 }
 #endif  // defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 
+class MojoLayoutTestHelper : public mojom::MojoLayoutTestHelper {
+ public:
+  MojoLayoutTestHelper() {}
+  ~MojoLayoutTestHelper() override {}
+
+  // mojom::MojoLayoutTestHelper:
+  void Reverse(const std::string& message, ReverseCallback callback) override {
+    std::move(callback).Run(std::string(message.rbegin(), message.rend()));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(MojoLayoutTestHelper);
+};
+
+void BindLayoutTestHelper(mojom::MojoLayoutTestHelperRequest request,
+                          RenderFrameHost* render_frame_host) {
+  mojo::MakeStrongBinding(base::MakeUnique<MojoLayoutTestHelper>(),
+                          std::move(request));
+}
+
 }  // namespace
 
 ShellContentBrowserClient* ShellContentBrowserClient::Get() {
@@ -137,6 +162,7 @@ ShellContentBrowserClient::ShellContentBrowserClient()
     : shell_browser_main_parts_(NULL) {
   DCHECK(!g_browser_client);
   g_browser_client = this;
+  frame_interfaces_.AddInterface(base::Bind(&BindLayoutTestHelper));
 }
 
 ShellContentBrowserClient::~ShellContentBrowserClient() {
@@ -153,7 +179,8 @@ bool ShellContentBrowserClient::DoesSiteRequireDedicatedProcess(
     BrowserContext* browser_context,
     const GURL& effective_site_url) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  DCHECK(command_line->HasSwitch(switches::kIsolateSitesForTesting));
+  if (!command_line->HasSwitch(switches::kIsolateSitesForTesting))
+    return false;
   std::string pattern =
       command_line->GetSwitchValueASCII(switches::kIsolateSitesForTesting);
 
@@ -192,21 +219,29 @@ bool ShellContentBrowserClient::IsHandledURL(const GURL& url) {
   return false;
 }
 
+void ShellContentBrowserClient::BindInterfaceRequestFromFrame(
+    RenderFrameHost* render_frame_host,
+    const std::string& interface_name,
+    mojo::ScopedMessagePipeHandle interface_pipe) {
+  frame_interfaces_.TryBindInterface(interface_name, &interface_pipe,
+                                     render_frame_host);
+}
+
 void ShellContentBrowserClient::RegisterInProcessServices(
     StaticServiceMap* services) {
 #if BUILDFLAG(ENABLE_MOJO_MEDIA_IN_BROWSER_PROCESS)
   {
-    content::ServiceInfo info;
+    service_manager::EmbeddedServiceInfo info;
     info.factory = base::Bind(&media::CreateMediaServiceForTesting);
-    services->insert(std::make_pair("media", info));
+    services->insert(std::make_pair(media::mojom::kMediaServiceName, info));
   }
 #endif
 }
 
 void ShellContentBrowserClient::RegisterOutOfProcessServices(
       OutOfProcessServiceMap* services) {
-  services->insert(std::make_pair(kTestServiceUrl,
-                                  base::UTF8ToUTF16("Test Service")));
+  (*services)[kTestServiceUrl] = {base::UTF8ToUTF16("Test Service"),
+                                  SANDBOX_TYPE_UTILITY};
 }
 
 std::unique_ptr<base::Value>
@@ -214,6 +249,8 @@ ShellContentBrowserClient::GetServiceManifestOverlay(base::StringPiece name) {
   int id = -1;
   if (name == content::mojom::kBrowserServiceName)
     id = IDR_CONTENT_SHELL_BROWSER_MANIFEST_OVERLAY;
+  else if (name == content::mojom::kGpuServiceName)
+    id = IDR_CONTENT_SHELL_GPU_MANIFEST_OVERLAY;
   else if (name == content::mojom::kRendererServiceName)
     id = IDR_CONTENT_SHELL_RENDERER_MANIFEST_OVERLAY;
   else if (name == content::mojom::kUtilityServiceName)
@@ -285,14 +322,14 @@ ShellContentBrowserClient::CreateQuotaPermissionContext() {
 void ShellContentBrowserClient::GetQuotaSettings(
     BrowserContext* context,
     StoragePartition* partition,
-    const storage::OptionalQuotaSettingsCallback& callback) {
-  callback.Run(storage::GetHardCodedSettings(100 * 1024 * 1024));
+    storage::OptionalQuotaSettingsCallback callback) {
+  std::move(callback).Run(storage::GetHardCodedSettings(100 * 1024 * 1024));
 }
 
 void ShellContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    net::CertificateList client_certs,
+    net::ClientCertIdentityList client_certs,
     std::unique_ptr<ClientCertificateDelegate> delegate) {
   if (!select_client_certificate_callback_.is_null())
     select_client_certificate_callback_.Run();

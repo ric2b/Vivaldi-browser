@@ -6,95 +6,99 @@
 
 #include "platform_media/gpu/pipeline/propmedia_gpu_channel.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
 #include "platform_media/common/media_pipeline_messages.h"
 #include "platform_media/gpu/pipeline/ipc_media_pipeline.h"
 
-#include "gpu/command_buffer/service/gpu_preferences.h"
-#include "gpu/command_buffer/service/preemption_flag.h"
-#include "gpu/command_buffer/service/mailbox_manager.h"
-#include "gpu/config/gpu_switches.h"
-#include "gpu/ipc/common/gpu_messages.h"
-#include "gpu/ipc/service/gpu_channel_manager.h"
-#include "ipc/ipc_channel.h"
-#include "ipc/message_filter.h"
 #include "base/command_line.h"
-#include "build/build_config.h"
+#include "gpu/command_buffer/common/scheduling_priority.h"
+#include "gpu/command_buffer/service/scheduler.h"
+#include "gpu/config/gpu_switches.h"
+#include "gpu/ipc/service/gpu_channel.h"
+#include "gpu/ipc/service/gpu_channel_manager.h"
 
 namespace gpu {
 
-ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(
-             GpuChannelManager* gpu_channel_manager,
-             Scheduler* scheduler,
-             SyncPointManager* sync_point_manager,
-             GpuWatchdogThread* watchdog,
-             scoped_refptr<gl::GLShareGroup> share_group,
-             scoped_refptr<gles2::MailboxManager> mailbox_manager,
-             ServiceDiscardableManager* discardable_manager,
-             scoped_refptr<PreemptionFlag> preempting_flag,
-             scoped_refptr<PreemptionFlag> preempted_flag,
-             scoped_refptr<base::SingleThreadTaskRunner> task_runner,
-             scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-             int32_t client_id,
-             uint64_t client_tracing_id,
-             bool is_gpu_host)
-  : GpuChannel(
-             gpu_channel_manager,
-             scheduler,
-             sync_point_manager,
-             watchdog,
-             share_group,
-             mailbox_manager,
-             discardable_manager,
-             preempting_flag,
-             preempted_flag,
-             task_runner,
-             io_task_runner,
-             client_id,
-             client_tracing_id,
-             is_gpu_host) {}
+ProprietaryMediaGpuChannel::ProprietaryMediaGpuChannel(gpu::GpuChannel* channel)
+    : channel_(channel) {}
 
 ProprietaryMediaGpuChannel::~ProprietaryMediaGpuChannel() {}
 
-bool ProprietaryMediaGpuChannel::OnControlMessageReceived(
-      const IPC::Message& msg
-    ) {
+bool ProprietaryMediaGpuChannel::Send(IPC::Message* msg) {
+  return channel_->Send(msg);
+}
+
+bool ProprietaryMediaGpuChannel::OnMessageReceived(const IPC::Message& msg) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(ProprietaryMediaGpuChannel, msg)
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     IPC_MESSAGE_HANDLER(MediaPipelineMsg_New, OnNewMediaPipeline)
     IPC_MESSAGE_HANDLER(MediaPipelineMsg_Destroy, OnDestroyMediaPipeline)
-#endif
-    IPC_MESSAGE_UNHANDLED(handled = GpuChannel::OnControlMessageReceived(msg))
+    IPC_MESSAGE_UNHANDLED(handled = OnPipelineMessageReceived(msg))
   IPC_END_MESSAGE_MAP()
   return handled;
 }
 
+bool ProprietaryMediaGpuChannel::OnPipelineMessageReceived(
+    const IPC::Message& msg) {
+
+  if (channel_->scheduler())
+    return false;
+
+  content::IPCMediaPipeline* pipeline = media_pipelines_.Lookup(msg.routing_id());
+
+  if (pipeline)
+      return pipeline->OnMessageReceived(msg);
+
+  return false;
+}
+
 void ProprietaryMediaGpuChannel::OnNewMediaPipeline(
     int32_t route_id,
-    int32_t gpu_video_accelerator_factories_route_id) {
+    int32_t command_buffer_route_id) {
+
   GpuCommandBufferStub* command_buffer = nullptr;
 
-  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
-  if (!gpu_channel_manager()->gpu_preferences().disable_accelerated_video_decode &&
-      cmd_line->HasSwitch(switches::kEnablePlatformAcceleratedVideoDecoding)) {
-    command_buffer =
-        LookupCommandBuffer(gpu_video_accelerator_factories_route_id);
-  }
+  if (AllowHardwareDecode())
+    command_buffer = channel_->LookupCommandBuffer(command_buffer_route_id);
 
   std::unique_ptr<content::IPCMediaPipeline> ipc_media_pipeline(
       new content::IPCMediaPipeline(this, route_id, command_buffer));
-  AddRoute(route_id, GetSequenceId(),
-           ipc_media_pipeline.get());
+
+  if (channel_->scheduler()) {
+    SequenceId sequence_id = channel_->scheduler()->CreateSequence(SchedulingPriority::kNormal);
+    channel_->AddRoute(route_id, sequence_id, ipc_media_pipeline.get());
+  }
+
   media_pipelines_.AddWithID(std::move(ipc_media_pipeline), route_id);
 }
 
 void ProprietaryMediaGpuChannel::OnDestroyMediaPipeline(int32_t route_id) {
-  RemoveRoute(route_id);
   media_pipelines_.Remove(route_id);
+
+  if (channel_->scheduler()) {
+    channel_->RemoveRoute(route_id);
+  }
+}
+
+bool ProprietaryMediaGpuChannel::AllowHardwareDecode() {
+  const GpuPreferences& gpu_prefs =
+          channel_->gpu_channel_manager()->gpu_preferences();
+
+  if(gpu_prefs.disable_accelerated_video_decode) {
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " : Hardware Decode Not Allowed";
+      return false;
+  }
+
+  const base::CommandLine* cmd_line = base::CommandLine::ForCurrentProcess();
+  if (cmd_line->HasSwitch(switches::kEnablePlatformAcceleratedVideoDecoding)) {
+      LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                << " : Hardware Decode Enabled";
+      return true;
+  }
+
+  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " : Hardware Decode Not Enabled";
+  return false;
 }
 
 }  // namespace gpu
-
-#endif

@@ -88,8 +88,8 @@ bool ServerWindow::HasObserver(ServerWindowObserver* observer) {
 
 void ServerWindow::CreateRootCompositorFrameSink(
     gfx::AcceleratedWidget widget,
-    cc::mojom::MojoCompositorFrameSinkAssociatedRequest sink_request,
-    cc::mojom::MojoCompositorFrameSinkClientPtr client,
+    cc::mojom::CompositorFrameSinkAssociatedRequest sink_request,
+    cc::mojom::CompositorFrameSinkClientPtr client,
     cc::mojom::DisplayPrivateAssociatedRequest display_request) {
   GetOrCreateCompositorFrameSinkManager()->CreateRootCompositorFrameSink(
       widget, std::move(sink_request), std::move(client),
@@ -97,8 +97,8 @@ void ServerWindow::CreateRootCompositorFrameSink(
 }
 
 void ServerWindow::CreateCompositorFrameSink(
-    cc::mojom::MojoCompositorFrameSinkRequest request,
-    cc::mojom::MojoCompositorFrameSinkClientPtr client) {
+    cc::mojom::CompositorFrameSinkRequest request,
+    cc::mojom::CompositorFrameSinkClientPtr client) {
   GetOrCreateCompositorFrameSinkManager()->CreateCompositorFrameSink(
       std::move(request), std::move(client));
 }
@@ -175,7 +175,7 @@ void ServerWindow::StackChildAtTop(ServerWindow* child) {
 
 void ServerWindow::SetBounds(
     const gfx::Rect& bounds,
-    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   if (bounds_ == bounds && current_local_surface_id_ == local_surface_id)
     return;
 
@@ -320,7 +320,10 @@ void ServerWindow::SetTransform(const gfx::Transform& transform) {
   if (transform_ == transform)
     return;
 
+  const gfx::Transform old_transform = transform_;
   transform_ = transform;
+  for (auto& observer : observers_)
+    observer.OnWindowTransformChanged(this, old_transform, transform);
 }
 
 void ServerWindow::SetProperty(const std::string& name,
@@ -372,6 +375,14 @@ bool ServerWindow::IsDrawn() const {
   while (window && window != root && window->visible())
     window = window->parent();
   return root == window;
+}
+
+mojom::ShowState ServerWindow::GetShowState() const {
+  auto iter = properties_.find(mojom::WindowManager::kShowState_Property);
+  if (iter == properties_.end() || iter->second.empty())
+    return mojom::ShowState::DEFAULT;
+
+  return static_cast<mojom::ShowState>(iter->second[0]);
 }
 
 ServerWindowCompositorFrameSinkManager*

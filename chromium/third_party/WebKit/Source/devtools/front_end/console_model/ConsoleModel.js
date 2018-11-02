@@ -84,8 +84,6 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
     var resourceTreeModel = target.model(SDK.ResourceTreeModel);
     if (resourceTreeModel) {
       eventListeners.push(resourceTreeModel.addEventListener(
-          SDK.ResourceTreeModel.Events.MainFrameStartedLoading, this._mainFrameStartedLoading, this));
-      eventListeners.push(resourceTreeModel.addEventListener(
           SDK.ResourceTreeModel.Events.MainFrameNavigated, this._mainFrameNavigated, this));
     }
 
@@ -97,6 +95,8 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
           SDK.RuntimeModel.Events.ExceptionRevoked, this._exceptionRevoked.bind(this, runtimeModel)));
       eventListeners.push(runtimeModel.addEventListener(
           SDK.RuntimeModel.Events.ConsoleAPICalled, this._consoleAPICalled.bind(this, runtimeModel)));
+      eventListeners.push(runtimeModel.debuggerModel().addEventListener(
+          SDK.DebuggerModel.Events.GlobalObjectCleared, this._clearIfNecessary, this));
     }
 
     var networkManager = target.model(SDK.NetworkManager);
@@ -162,7 +162,7 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
 
     if (msg.source === ConsoleModel.ConsoleMessage.MessageSource.ConsoleAPI &&
         msg.type === ConsoleModel.ConsoleMessage.MessageType.Clear)
-      this._clear();
+      this._clearIfNecessary();
 
     this._messages.push(msg);
     var runtimeModel = msg.runtimeModel();
@@ -250,10 +250,7 @@ ConsoleModel.ConsoleModel = class extends Common.Object {
     this.addMessage(consoleMessage);
   }
 
-  /**
-   * @param {!Common.Event} event
-   */
-  _mainFrameStartedLoading(event) {
+  _clearIfNecessary() {
     if (!Common.moduleSetting('preserveConsoleLog').get())
       this._clear();
   }
@@ -427,8 +424,8 @@ ConsoleModel.ConsoleMessage = class {
     this.scriptId = scriptId || null;
     this.workerId = workerId || null;
 
-    var networkManager = (runtimeModel && requestId) ? runtimeModel.target().model(SDK.NetworkManager) : null;
-    this.request = (networkManager && requestId) ? NetworkLog.networkLog.requestForId(networkManager, requestId) : null;
+    var manager = runtimeModel ? runtimeModel.target().model(SDK.NetworkManager) : null;
+    this.request = (manager && requestId) ? NetworkLog.networkLog.requestByManagerAndId(manager, requestId) : null;
 
     if (this.request) {
       var initiator = this.request.initiator();

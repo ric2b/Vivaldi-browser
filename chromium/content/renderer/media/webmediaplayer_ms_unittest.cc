@@ -64,11 +64,19 @@ class FakeWebMediaPlayerDelegate
     is_gone_ = false;
   }
 
+  void DidPlayerMutedStatusChange(int delegate_id, bool muted) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
+  }
+
   void DidPause(int delegate_id) override {
     EXPECT_EQ(delegate_id_, delegate_id);
     EXPECT_TRUE(playing_);
     EXPECT_FALSE(is_gone_);
     playing_ = false;
+  }
+
+  void DidPlayerSizeChange(int delegate_id, const gfx::Size& size) override {
+    EXPECT_EQ(delegate_id_, delegate_id);
   }
 
   void PlayerGone(int delegate_id) override {
@@ -465,6 +473,9 @@ class WebMediaPlayerMSTest
     return blink::WebMediaPlayer::TrackId();
   }
   bool HasNativeControls() override { return false; }
+  blink::WebMediaPlayer::DisplayType DisplayType() const override {
+    return blink::WebMediaPlayer::DisplayType::kInline;
+  }
 
   // Implementation of cc::VideoFrameProvider::Client
   void StopUsingProvider() override;

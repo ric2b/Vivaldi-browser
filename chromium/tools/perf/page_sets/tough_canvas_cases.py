@@ -8,7 +8,11 @@ from telemetry import story
 class ToughCanvasCasesPage(page_module.Page):
 
   def __init__(self, url, page_set):
-    super(ToughCanvasCasesPage, self).__init__(url=url, page_set=page_set)
+    name = url
+    if not url.startswith('http'):
+      name = url[7:]
+    super(ToughCanvasCasesPage, self).__init__(url=url, page_set=page_set,
+                                               name=name)
     self.archive_data_file = 'data/tough_canvas_cases.json'
 
   def RunNavigateSteps(self, action_runner):
@@ -42,12 +46,11 @@ class ToughCanvasCasesPageSet(story.StorySet):
       cloud_storage_bucket=story.PARTNER_BUCKET)
 
     # Crashes on Galaxy Nexus. crbug.com/314131
+    # TODO(rnephew): Rerecord this story.
     # self.AddStory(MicrosofFirefliesPage(self))
 
-    # Failing on Nexus 5 (http://crbug.com/364248):
-    # 'http://geoapis.appspot.com/agdnZW9hcGlzchMLEgtFeGFtcGxlQ29kZRjh1wIM',
-
     urls_list = [
+      'http://geoapis.appspot.com/agdnZW9hcGlzchMLEgtFeGFtcGxlQ29kZRjh1wIM',
       'http://runway.countlessprojects.com/prototype/performance_test.html',
       # pylint: disable=line-too-long
       'http://ie.microsoft.com/testdrive/Performance/FishIETank/Default.html',

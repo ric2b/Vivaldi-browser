@@ -16,6 +16,7 @@
 #include "ui/gl/gl_export.h"
 #include "ui/gl/gl_share_group.h"
 #include "ui/gl/gl_state_restorer.h"
+#include "ui/gl/gl_workarounds.h"
 #include "ui/gl/gpu_preference.h"
 
 namespace gl {
@@ -39,6 +40,19 @@ struct GLVersionInfo;
 class RealGLApi;
 class TraceGLApi;
 
+// Where available, choose a GL context priority for devices that support it.
+// Currently this requires the EGL_IMG_context_priority extension that is
+// present on Daydream ready Android devices. Default is Medium, and the
+// attribute is ignored if the extension is missing.
+//
+// "High" priority must only be used for special cases with strong realtime
+// requirements, it is incompatible with other critical system GL work such as
+// the GVR library's asynchronous reprojection for VR viewing. Please avoid
+// using it for any GL contexts that may be used during VR presentation,
+// see crbug.com/727800.
+//
+// Instead, consider using "Low" priority for possibly-slow GL work such as
+// user WebGL content.
 enum ContextPriority {
   ContextPriorityLow,
   ContextPriorityMedium,
@@ -82,6 +96,9 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
 
   // Creates a GPUTimingClient class which abstracts various GPU Timing exts.
   virtual scoped_refptr<GPUTimingClient> CreateGPUTimingClient() = 0;
+
+  // Set the GL workarounds.
+  void SetGLWorkarounds(const GLWorkarounds& workarounds);
 
   // Gets the GLStateRestorer for the context.
   GLStateRestorer* GetGLStateRestorer();
@@ -163,6 +180,11 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   // extension entry points.
   void ReinitializeDynamicBindings();
 
+  // Forces this context, which must be a virtual context, to be no
+  // longer considered virtually current. The real context remains
+  // current.
+  virtual void ForceReleaseVirtuallyCurrent();
+
  protected:
   virtual ~GLContext();
 
@@ -203,6 +225,8 @@ class GL_EXPORT GLContext : public base::RefCounted<GLContext> {
   friend class gpu::GLContextVirtual;
 
   std::unique_ptr<GLVersionInfo> GenerateGLVersionInfo();
+
+  GLWorkarounds gl_workarounds_;
 
   bool static_bindings_initialized_ = false;
   bool dynamic_bindings_initialized_ = false;

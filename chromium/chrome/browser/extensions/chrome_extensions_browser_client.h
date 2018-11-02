@@ -124,6 +124,9 @@ class ChromeExtensionsBrowserClient : public ExtensionsBrowserClient {
   extensions::ExtensionNavigationUIData* GetExtensionNavigationUIData(
       net::URLRequest* request) override;
   KioskDelegate* GetKioskDelegate() override;
+  bool IsLockScreenContext(content::BrowserContext* context) override;
+
+  static void set_did_chrome_update_for_testing(bool did_update);
 
  private:
   friend struct base::LazyInstanceTraitsBase<ChromeExtensionsBrowserClient>;

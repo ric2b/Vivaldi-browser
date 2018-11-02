@@ -20,10 +20,30 @@
 #include "net/quic/core/spdy_utils.h"
 
 namespace net {
+namespace {
+// Sets a boolean to a value, and restores it to the previous value once
+// the saver goes out of scope.
+class ScopedBoolSaver {
+ public:
+  ScopedBoolSaver(bool* var, bool new_val) : var_(var), old_val_(*var) {
+    *var_ = new_val;
+  }
 
-QuicChromiumClientStream::Handle::Handle(QuicChromiumClientStream* stream,
-                                         Delegate* delegate)
-    : stream_(stream), delegate_(delegate), read_headers_buffer_(nullptr) {
+  ~ScopedBoolSaver() { *var_ = old_val_; }
+
+ private:
+  bool* var_;
+  bool old_val_;
+};
+}  // namespace
+
+QuicChromiumClientStream::Handle::Handle(QuicChromiumClientStream* stream)
+    : stream_(stream),
+      may_invoke_callbacks_(true),
+      read_headers_buffer_(nullptr),
+      read_body_buffer_len_(0),
+      net_error_(ERR_UNEXPECTED),
+      weak_factory_(this) {
   SaveState();
 }
 
@@ -36,10 +56,6 @@ QuicChromiumClientStream::Handle::~Handle() {
   }
 }
 
-void QuicChromiumClientStream::Handle::ClearDelegate() {
-  delegate_ = nullptr;
-}
-
 void QuicChromiumClientStream::Handle::OnInitialHeadersAvailable() {
   if (!read_headers_callback_)
     return;  // Wait for ReadInitialHeaders to be called.
@@ -48,74 +64,158 @@ void QuicChromiumClientStream::Handle::OnInitialHeadersAvailable() {
   if (!stream_->DeliverInitialHeaders(read_headers_buffer_, &rv))
     rv = ERR_QUIC_PROTOCOL_ERROR;
 
-  ResetAndReturn(&read_headers_callback_).Run(rv);
+  ResetAndRun(&read_headers_callback_, rv);
 }
 
-void QuicChromiumClientStream::Handle::OnTrailingHeadersAvailable(
-    const SpdyHeaderBlock& headers,
-    size_t frame_len) {
-  delegate_->OnTrailingHeadersAvailable(headers, frame_len);
+void QuicChromiumClientStream::Handle::OnTrailingHeadersAvailable() {
+  if (!read_headers_callback_)
+    return;  // Wait for ReadInitialHeaders to be called.
+
+  int rv = ERR_QUIC_PROTOCOL_ERROR;
+  if (!stream_->DeliverTrailingHeaders(read_headers_buffer_, &rv))
+    rv = ERR_QUIC_PROTOCOL_ERROR;
+
+  ResetAndRun(&read_headers_callback_, rv);
 }
 
 void QuicChromiumClientStream::Handle::OnDataAvailable() {
-  delegate_->OnDataAvailable();
+  if (!read_body_callback_)
+    return;  // Wait for ReadBody to be called.
+
+  int rv = stream_->Read(read_body_buffer_, read_body_buffer_len_);
+  if (rv == ERR_IO_PENDING)
+    return;  // Spurrious, likely because of trailers?
+
+  read_body_buffer_ = nullptr;
+  read_body_buffer_len_ = 0;
+  ResetAndRun(&read_body_callback_, rv);
+}
+
+void QuicChromiumClientStream::Handle::OnCanWrite() {
+  if (!write_callback_)
+    return;
+
+  ResetAndRun(&write_callback_, OK);
 }
 
 void QuicChromiumClientStream::Handle::OnClose() {
-  if (stream_)
-    SaveState();
-  stream_ = nullptr;
-  if (delegate_) {
-    auto* delegate = delegate_;
-    delegate_ = nullptr;
-    delegate->OnClose();
+  if (net_error_ == ERR_UNEXPECTED) {
+    if (stream_error() == QUIC_STREAM_NO_ERROR &&
+        connection_error() == QUIC_NO_ERROR && fin_sent() && fin_received()) {
+      net_error_ = ERR_CONNECTION_CLOSED;
+    } else {
+      net_error_ = ERR_QUIC_PROTOCOL_ERROR;
+    }
   }
+  OnError(net_error_);
 }
 
 void QuicChromiumClientStream::Handle::OnError(int error) {
+  net_error_ = error;
   if (stream_)
     SaveState();
   stream_ = nullptr;
-  if (delegate_) {
-    auto* delegate = delegate_;
-    delegate_ = nullptr;
-    delegate->OnError(error);
+
+  // Post a task to invoke the callbacks to ensure that there is no reentrancy.
+  // A ScopedPacketBundler might cause an error which closes the stream under
+  // the call stack of the owner of the handle.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(&QuicChromiumClientStream::Handle::InvokeCallbacksOnClose,
+                 weak_factory_.GetWeakPtr(), error));
+}
+
+void QuicChromiumClientStream::Handle::InvokeCallbacksOnClose(int error) {
+  // Invoking a callback may cause |this| to be deleted. If this happens, no
+  // more callbacks should be invoked. Guard against this by holding a WeakPtr
+  // to |this| and ensuring it's still valid.
+  auto guard(weak_factory_.GetWeakPtr());
+  for (auto* callback :
+       {&read_headers_callback_, &read_body_callback_, &write_callback_}) {
+    if (*callback)
+      ResetAndRun(callback, error);
+    if (!guard.get())
+      return;
   }
 }
 
 int QuicChromiumClientStream::Handle::ReadInitialHeaders(
     SpdyHeaderBlock* header_block,
     const CompletionCallback& callback) {
+  ScopedBoolSaver saver(&may_invoke_callbacks_, false);
   if (!stream_)
-    return ERR_CONNECTION_CLOSED;
+    return net_error_;
 
   int frame_len = 0;
   if (stream_->DeliverInitialHeaders(header_block, &frame_len))
     return frame_len;
 
   read_headers_buffer_ = header_block;
-  read_headers_callback_ = callback;
+  SetCallback(callback, &read_headers_callback_);
   return ERR_IO_PENDING;
 }
 
-size_t QuicChromiumClientStream::Handle::WriteHeaders(
+int QuicChromiumClientStream::Handle::ReadBody(
+    IOBuffer* buffer,
+    int buffer_len,
+    const CompletionCallback& callback) {
+  ScopedBoolSaver saver(&may_invoke_callbacks_, false);
+  if (IsDoneReading())
+    return OK;
+
+  if (!stream_)
+    return net_error_;
+
+  int rv = stream_->Read(buffer, buffer_len);
+  if (rv != ERR_IO_PENDING)
+    return rv;
+
+  SetCallback(callback, &read_body_callback_);
+  read_body_buffer_ = buffer;
+  read_body_buffer_len_ = buffer_len;
+  return ERR_IO_PENDING;
+}
+
+int QuicChromiumClientStream::Handle::ReadTrailingHeaders(
+    SpdyHeaderBlock* header_block,
+    const CompletionCallback& callback) {
+  ScopedBoolSaver saver(&may_invoke_callbacks_, false);
+  if (!stream_)
+    return net_error_;
+
+  int frame_len = 0;
+  if (stream_->DeliverTrailingHeaders(header_block, &frame_len))
+    return frame_len;
+
+  read_headers_buffer_ = header_block;
+  SetCallback(callback, &read_headers_callback_);
+  return ERR_IO_PENDING;
+}
+
+int QuicChromiumClientStream::Handle::WriteHeaders(
     SpdyHeaderBlock header_block,
     bool fin,
     QuicReferenceCountedPointer<QuicAckListenerInterface>
         ack_notifier_delegate) {
   if (!stream_)
     return 0;
-  return stream_->WriteHeaders(std::move(header_block), fin,
-                               ack_notifier_delegate);
+  return HandleIOComplete(stream_->WriteHeaders(std::move(header_block), fin,
+                                                ack_notifier_delegate));
 }
 
 int QuicChromiumClientStream::Handle::WriteStreamData(
     base::StringPiece data,
     bool fin,
     const CompletionCallback& callback) {
+  ScopedBoolSaver saver(&may_invoke_callbacks_, false);
   if (!stream_)
-    return ERR_CONNECTION_CLOSED;
-  return stream_->WriteStreamData(data, fin, callback);
+    return net_error_;
+
+  if (stream_->WriteStreamData(data, fin))
+    return HandleIOComplete(OK);
+
+  SetCallback(callback, &write_callback_);
+  return ERR_IO_PENDING;
 }
 
 int QuicChromiumClientStream::Handle::WritevStreamData(
@@ -123,18 +223,25 @@ int QuicChromiumClientStream::Handle::WritevStreamData(
     const std::vector<int>& lengths,
     bool fin,
     const CompletionCallback& callback) {
+  ScopedBoolSaver saver(&may_invoke_callbacks_, false);
   if (!stream_)
-    return ERR_CONNECTION_CLOSED;
-  return stream_->WritevStreamData(buffers, lengths, fin, callback);
+    return net_error_;
+
+  if (stream_->WritevStreamData(buffers, lengths, fin))
+    return HandleIOComplete(OK);
+
+  SetCallback(callback, &write_callback_);
+  return ERR_IO_PENDING;
 }
 
 int QuicChromiumClientStream::Handle::Read(IOBuffer* buf, int buf_len) {
   if (!stream_)
-    return ERR_CONNECTION_CLOSED;
+    return net_error_;
   return stream_->Read(buf, buf_len);
 }
 
 void QuicChromiumClientStream::Handle::OnFinRead() {
+  read_headers_callback_.Reset();
   if (stream_)
     stream_->OnFinRead();
 }
@@ -234,11 +341,6 @@ bool QuicChromiumClientStream::Handle::can_migrate() {
   return stream_->can_migrate();
 }
 
-QuicChromiumClientStream::Delegate*
-QuicChromiumClientStream::Handle::GetDelegate() {
-  return delegate_;
-}
-
 void QuicChromiumClientStream::Handle::SaveState() {
   DCHECK(stream_);
   fin_sent_ = stream_->fin_sent();
@@ -254,6 +356,37 @@ void QuicChromiumClientStream::Handle::SaveState() {
   priority_ = stream_->priority();
 }
 
+void QuicChromiumClientStream::Handle::SetCallback(
+    const CompletionCallback& new_callback,
+    CompletionCallback* callback) {
+  // TODO(rch): Convert this to a DCHECK once we ensure the API is stable and
+  // bug free.
+  CHECK(!may_invoke_callbacks_);
+  *callback = new_callback;
+}
+
+void QuicChromiumClientStream::Handle::ResetAndRun(CompletionCallback* callback,
+                                                   int rv) {
+  // TODO(rch): Convert this to a DCHECK once we ensure the API is stable and
+  // bug free.
+  CHECK(may_invoke_callbacks_);
+  ResetAndReturn(callback).Run(rv);
+}
+
+int QuicChromiumClientStream::Handle::HandleIOComplete(int rv) {
+  // If |stream_| is still valid the stream has not been closed. If the stream
+  // has not been closed, then just return |rv|.
+  if (rv < 0 || stream_)
+    return rv;
+
+  if (stream_error_ == QUIC_STREAM_NO_ERROR &&
+      connection_error_ == QUIC_NO_ERROR && fin_sent_ && fin_received_) {
+    return rv;
+  }
+
+  return net_error_;
+}
+
 QuicChromiumClientStream::QuicChromiumClientStream(
     QuicStreamId id,
     QuicClientSessionBase* session,
@@ -266,6 +399,7 @@ QuicChromiumClientStream::QuicChromiumClientStream(
       session_(session),
       can_migrate_(true),
       initial_headers_frame_len_(0),
+      trailing_headers_frame_len_(0),
       weak_factory_(this) {}
 
 QuicChromiumClientStream::~QuicChromiumClientStream() {
@@ -306,8 +440,11 @@ void QuicChromiumClientStream::OnTrailingHeadersComplete(
     size_t frame_len,
     const QuicHeaderList& header_list) {
   QuicSpdyStream::OnTrailingHeadersComplete(fin, frame_len, header_list);
-  NotifyHandleOfTrailingHeadersAvailableLater(received_trailers().Clone(),
-                                              frame_len);
+  trailing_headers_frame_len_ = frame_len;
+  if (handle_) {
+    // The handle will be notified of the headers via a posted task.
+    NotifyHandleOfTrailingHeadersAvailableLater();
+  }
 }
 
 void QuicChromiumClientStream::OnPromiseHeaderList(
@@ -357,9 +494,8 @@ void QuicChromiumClientStream::OnClose() {
 void QuicChromiumClientStream::OnCanWrite() {
   QuicStream::OnCanWrite();
 
-  if (!HasBufferedData() && !write_callback_.is_null()) {
-    base::ResetAndReturn(&write_callback_).Run(OK);
-  }
+  if (!HasBufferedData() && handle_)
+    handle_->OnCanWrite();
 }
 
 size_t QuicChromiumClientStream::WriteHeaders(
@@ -386,27 +522,18 @@ SpdyPriority QuicChromiumClientStream::priority() const {
                                : kV3HighestPriority;
 }
 
-int QuicChromiumClientStream::WriteStreamData(
-    QuicStringPiece data,
-    bool fin,
-    const CompletionCallback& callback) {
-  // We should not have data buffered.
+bool QuicChromiumClientStream::WriteStreamData(QuicStringPiece data, bool fin) {
+  // Must not be called when data is buffered.
   DCHECK(!HasBufferedData());
   // Writes the data, or buffers it.
   WriteOrBufferData(data, fin, nullptr);
-  if (!HasBufferedData()) {
-    return OK;
-  }
-
-  write_callback_ = callback;
-  return ERR_IO_PENDING;
+  return !HasBufferedData();  // Was all data written?
 }
 
-int QuicChromiumClientStream::WritevStreamData(
+bool QuicChromiumClientStream::WritevStreamData(
     const std::vector<scoped_refptr<IOBuffer>>& buffers,
     const std::vector<int>& lengths,
-    bool fin,
-    const CompletionCallback& callback) {
+    bool fin) {
   // Must not be called when data is buffered.
   DCHECK(!HasBufferedData());
   // Writes the data, or buffers it.
@@ -415,20 +542,14 @@ int QuicChromiumClientStream::WritevStreamData(
     QuicStringPiece string_data(buffers[i]->data(), lengths[i]);
     WriteOrBufferData(string_data, is_fin, nullptr);
   }
-  if (!HasBufferedData()) {
-    return OK;
-  }
-
-  write_callback_ = callback;
-  return ERR_IO_PENDING;
+  return !HasBufferedData();  // Was all data written?
 }
 
 std::unique_ptr<QuicChromiumClientStream::Handle>
-QuicChromiumClientStream::CreateHandle(
-    QuicChromiumClientStream::Delegate* delegate) {
+QuicChromiumClientStream::CreateHandle() {
   DCHECK(!handle_);
   auto handle = std::unique_ptr<QuicChromiumClientStream::Handle>(
-      new QuicChromiumClientStream::Handle(this, delegate));
+      new QuicChromiumClientStream::Handle(this));
   handle_ = handle.get();
 
   // Should this perhaps be via PostTask to make reasoning simpler?
@@ -483,33 +604,23 @@ void QuicChromiumClientStream::NotifyHandleOfInitialHeadersAvailable() {
     handle_->OnInitialHeadersAvailable();
 }
 
-void QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailableLater(
-    SpdyHeaderBlock headers,
-    size_t frame_len) {
+void QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailableLater() {
   DCHECK(handle_);
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(
           &QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailable,
-          weak_factory_.GetWeakPtr(), base::Passed(std::move(headers)),
-          frame_len));
+          weak_factory_.GetWeakPtr()));
 }
 
-void QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailable(
-    SpdyHeaderBlock headers,
-    size_t frame_len) {
+void QuicChromiumClientStream::NotifyHandleOfTrailingHeadersAvailable() {
   if (!handle_)
     return;
 
   DCHECK(headers_delivered_);
-  // Only mark trailers consumed when we are about to notify delegate.
-  MarkTrailersConsumed();
-  // Post an async task to notify delegate of the FIN flag.
+  // Post an async task to notify handle of the FIN flag.
   NotifyHandleOfDataAvailableLater();
-  net_log_.AddEvent(
-      NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS,
-      base::Bind(&SpdyHeaderBlockNetLogCallback, &headers));
-  handle_->OnTrailingHeadersAvailable(headers, frame_len);
+  handle_->OnTrailingHeadersAvailable();
 }
 
 bool QuicChromiumClientStream::DeliverInitialHeaders(SpdyHeaderBlock* headers,
@@ -524,6 +635,22 @@ bool QuicChromiumClientStream::DeliverInitialHeaders(SpdyHeaderBlock* headers,
 
   *headers = std::move(initial_headers_);
   *frame_len = initial_headers_frame_len_;
+  return true;
+}
+
+bool QuicChromiumClientStream::DeliverTrailingHeaders(SpdyHeaderBlock* headers,
+                                                      int* frame_len) {
+  if (received_trailers().empty())
+    return false;
+
+  net_log_.AddEvent(
+      NetLogEventType::QUIC_CHROMIUM_CLIENT_STREAM_READ_RESPONSE_TRAILERS,
+      base::Bind(&SpdyHeaderBlockNetLogCallback, &received_trailers()));
+
+  *headers = received_trailers().Clone();
+  *frame_len = trailing_headers_frame_len_;
+
+  MarkTrailersConsumed();
   return true;
 }
 

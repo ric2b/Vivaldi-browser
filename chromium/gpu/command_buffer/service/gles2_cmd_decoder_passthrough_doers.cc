@@ -5,6 +5,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "gpu/command_buffer/service/gpu_tracer.h"
 #include "ui/gl/gl_version_info.h"
 
 namespace gpu {
@@ -247,6 +248,27 @@ class ScopedUnpackStateButAlignmentReset {
   GLint skip_images_ = 0;
   GLint row_length_ = 0;
   GLint image_height_ = 0;
+};
+
+class ScopedPackStateRowLengthReset {
+ public:
+  ScopedPackStateRowLengthReset(bool enable) {
+    if (!enable) {
+      return;
+    }
+
+    glGetIntegerv(GL_PACK_ROW_LENGTH, &row_length_);
+    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+  }
+
+  ~ScopedPackStateRowLengthReset() {
+    if (row_length_ != 0) {
+      glPixelStorei(GL_PACK_ROW_LENGTH, row_length_);
+    }
+  }
+
+ private:
+  GLint row_length_ = 0;
 };
 
 }  // anonymous namespace
@@ -1756,6 +1778,8 @@ error::Error GLES2DecoderPassthroughImpl::DoReadPixels(GLint x,
                                                        void* pixels,
                                                        int32_t* success) {
   FlushErrors();
+  ScopedPackStateRowLengthReset reset_row_length(
+      bufsize != 0 && feature_info_->gl_version_info().is_es3);
   glReadPixelsRobustANGLE(x, y, width, height, format, type, bufsize, length,
                           columns, rows, pixels);
   *success = FlushErrors() ? 0 : 1;
@@ -2578,6 +2602,14 @@ error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
     return error::kUnknownCommand;
   }
 
+  scoped_refptr<gpu::Buffer> buffer = GetSharedMemoryBuffer(sync_shm_id);
+  if (!buffer)
+    return error::kInvalidArguments;
+  QuerySync* sync = static_cast<QuerySync*>(
+      buffer->GetDataAddress(sync_shm_offset, sizeof(QuerySync)));
+  if (!sync)
+    return error::kOutOfBounds;
+
   GLuint service_id = GetQueryServiceID(id, &query_id_map_);
 
   // Flush all previous errors
@@ -2600,8 +2632,8 @@ error::Error GLES2DecoderPassthroughImpl::DoQueryCounterEXT(
   PendingQuery pending_query;
   pending_query.target = target;
   pending_query.service_id = service_id;
-  pending_query.shm_id = sync_shm_id;
-  pending_query.shm_offset = sync_shm_offset;
+  pending_query.shm = std::move(buffer);
+  pending_query.sync = sync;
   pending_query.submit_count = submit_count;
   pending_queries_.push_back(pending_query);
 
@@ -2615,6 +2647,14 @@ error::Error GLES2DecoderPassthroughImpl::DoBeginQueryEXT(
     uint32_t sync_shm_offset) {
   GLuint service_id = GetQueryServiceID(id, &query_id_map_);
   QueryInfo* query_info = &query_info_map_[service_id];
+
+  scoped_refptr<gpu::Buffer> buffer = GetSharedMemoryBuffer(sync_shm_id);
+  if (!buffer)
+    return error::kInvalidArguments;
+  QuerySync* sync = static_cast<QuerySync*>(
+      buffer->GetDataAddress(sync_shm_offset, sizeof(QuerySync)));
+  if (!sync)
+    return error::kOutOfBounds;
 
   if (IsEmulatedQueryTarget(target)) {
     if (active_queries_.find(target) != active_queries_.end()) {
@@ -2652,8 +2692,8 @@ error::Error GLES2DecoderPassthroughImpl::DoBeginQueryEXT(
 
   ActiveQuery query;
   query.service_id = service_id;
-  query.shm_id = sync_shm_id;
-  query.shm_offset = sync_shm_offset;
+  query.shm = std::move(buffer);
+  query.sync = sync;
   active_queries_[target] = query;
 
   return error::kNoError;
@@ -2685,14 +2725,14 @@ error::Error GLES2DecoderPassthroughImpl::DoEndQueryEXT(GLenum target,
   }
 
   DCHECK(active_queries_.find(target) != active_queries_.end());
-  ActiveQuery active_query = active_queries_[target];
+  ActiveQuery active_query = std::move(active_queries_[target]);
   active_queries_.erase(target);
 
   PendingQuery pending_query;
   pending_query.target = target;
   pending_query.service_id = active_query.service_id;
-  pending_query.shm_id = active_query.shm_id;
-  pending_query.shm_offset = active_query.shm_offset;
+  pending_query.shm = std::move(active_query.shm);
+  pending_query.sync = active_query.sync;
   pending_query.submit_count = submit_count;
   pending_queries_.push_back(pending_query);
 
@@ -2778,8 +2818,13 @@ error::Error GLES2DecoderPassthroughImpl::DoSwapBuffers() {
   gfx::SwapResult result = surface_->SwapBuffers();
   if (result == gfx::SwapResult::SWAP_FAILED) {
     LOG(ERROR) << "Context lost because SwapBuffers failed.";
+    if (!CheckResetStatus()) {
+      MarkContextLost(error::kUnknown);
+      group_->LoseContexts(error::kUnknown);
+      return error::kLostContext;
+    }
   }
-  // TODO(geofflang): force the context loss?
+
   return error::kNoError;
 }
 
@@ -3331,8 +3376,12 @@ error::Error GLES2DecoderPassthroughImpl::DoPostSubBufferCHROMIUM(
   gfx::SwapResult result = surface_->PostSubBuffer(x, y, width, height);
   if (result == gfx::SwapResult::SWAP_FAILED) {
     LOG(ERROR) << "Context lost because PostSubBuffer failed.";
+    if (!CheckResetStatus()) {
+      MarkContextLost(error::kUnknown);
+      group_->LoseContexts(error::kUnknown);
+      return error::kLostContext;
+    }
   }
-  // TODO(geofflang): force the context loss?
   return error::kNoError;
 }
 
@@ -3516,7 +3565,8 @@ error::Error GLES2DecoderPassthroughImpl::DoCreateAndConsumeTextureINTERNAL(
     GLenum target,
     GLuint texture_client_id,
     const volatile GLbyte* mailbox) {
-  if (resources_->texture_id_map.GetServiceID(texture_client_id, nullptr)) {
+  if (!texture_client_id ||
+      resources_->texture_id_map.GetServiceID(texture_client_id, nullptr)) {
     return error::kInvalidArguments;
   }
 
@@ -3579,7 +3629,7 @@ error::Error GLES2DecoderPassthroughImpl::DoReleaseTexImage2DCHROMIUM(
     return error::kNoError;
   }
 
-  gl::GLImage* image = image_manager_->LookupImage(imageId);
+  gl::GLImage* image = group_->image_manager()->LookupImage(imageId);
   if (image == nullptr) {
     InsertError(GL_INVALID_OPERATION, "No image found with the given ID");
     return error::kNoError;
@@ -3592,12 +3642,18 @@ error::Error GLES2DecoderPassthroughImpl::DoReleaseTexImage2DCHROMIUM(
 error::Error GLES2DecoderPassthroughImpl::DoTraceBeginCHROMIUM(
     const char* category_name,
     const char* trace_name) {
-  NOTIMPLEMENTED();
+  if (!gpu_tracer_->Begin(category_name, trace_name, kTraceCHROMIUM)) {
+    InsertError(GL_INVALID_OPERATION, "Failed to create begin trace");
+    return error::kNoError;
+  }
   return error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoTraceEndCHROMIUM() {
-  NOTIMPLEMENTED();
+  if (!gpu_tracer_->End(kTraceCHROMIUM)) {
+    InsertError(GL_INVALID_OPERATION, "No trace to end");
+    return error::kNoError;
+  }
   return error::kNoError;
 }
 
@@ -3627,7 +3683,14 @@ error::Error GLES2DecoderPassthroughImpl::DoDiscardFramebufferEXT(
 
 error::Error GLES2DecoderPassthroughImpl::DoLoseContextCHROMIUM(GLenum current,
                                                                 GLenum other) {
-  NOTIMPLEMENTED();
+  if (!ValidContextLostReason(current) || !ValidContextLostReason(other)) {
+    InsertError(GL_INVALID_ENUM, "invalid context loss reason.");
+    return error::kNoError;
+  }
+
+  MarkContextLost(GetContextLostReasonFromResetStatus(current));
+  group_->LoseContexts(GetContextLostReasonFromResetStatus(other));
+  reset_by_robustness_extension_ = true;
   return error::kNoError;
 }
 
@@ -3638,8 +3701,7 @@ error::Error GLES2DecoderPassthroughImpl::DoDescheduleUntilFinishedCHROMIUM() {
 
 error::Error GLES2DecoderPassthroughImpl::DoInsertFenceSyncCHROMIUM(
     GLuint64 release_count) {
-  if (!fence_sync_release_callback_.is_null())
-    fence_sync_release_callback_.Run(release_count);
+  client_->OnFenceSyncRelease(release_count);
   return error::kNoError;
 }
 
@@ -3647,13 +3709,9 @@ error::Error GLES2DecoderPassthroughImpl::DoWaitSyncTokenCHROMIUM(
     CommandBufferNamespace namespace_id,
     CommandBufferId command_buffer_id,
     GLuint64 release_count) {
-  if (wait_sync_token_callback_.is_null()) {
-    return error::kNoError;
-  }
   SyncToken sync_token(namespace_id, 0, command_buffer_id, release_count);
-  return wait_sync_token_callback_.Run(sync_token)
-             ? error::kDeferCommandUntilLater
-             : error::kNoError;
+  return client_->OnWaitSyncToken(sync_token) ? error::kDeferCommandUntilLater
+                                              : error::kNoError;
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoDrawBuffersEXT(
@@ -3749,7 +3807,12 @@ error::Error GLES2DecoderPassthroughImpl::DoSwapInterval(GLint interval) {
 }
 
 error::Error GLES2DecoderPassthroughImpl::DoFlushDriverCachesCHROMIUM() {
-  NOTIMPLEMENTED();
+  // On Adreno Android devices we need to use a workaround to force caches to
+  // clear.
+  if (feature_info_->workarounds().unbind_egl_context_to_flush_driver_caches) {
+    context_->ReleaseCurrent(nullptr);
+    context_->MakeCurrent(surface_.get());
+  }
   return error::kNoError;
 }
 

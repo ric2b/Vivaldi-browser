@@ -30,10 +30,7 @@ class CONTENT_EXPORT InProcessVideoCaptureProvider
       std::unique_ptr<media::VideoCaptureSystem> video_capture_system,
       scoped_refptr<base::SingleThreadTaskRunner> device_task_runner);
 
-  void Uninitialize() override;
-
-  void GetDeviceInfosAsync(
-      const GetDeviceInfosCallback& result_callback) override;
+  void GetDeviceInfosAsync(GetDeviceInfosCallback result_callback) override;
 
   std::unique_ptr<VideoCaptureDeviceLauncher> CreateDeviceLauncher() override;
 

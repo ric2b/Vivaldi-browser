@@ -53,15 +53,21 @@ void EncryptionMigrationScreen::SetUserContext(
   view_->SetUserContext(user_context);
 }
 
-void EncryptionMigrationScreen::SetShouldResume(bool should_resume) {
+void EncryptionMigrationScreen::SetMode(EncryptionMigrationMode mode) {
   DCHECK(view_);
-  view_->SetShouldResume(should_resume);
+  view_->SetMode(mode);
 }
 
 void EncryptionMigrationScreen::SetContinueLoginCallback(
     ContinueLoginCallback callback) {
   DCHECK(view_);
   view_->SetContinueLoginCallback(std::move(callback));
+}
+
+void EncryptionMigrationScreen::SetRestartLoginCallback(
+    RestartLoginCallback callback) {
+  DCHECK(view_);
+  view_->SetRestartLoginCallback(std::move(callback));
 }
 
 void EncryptionMigrationScreen::SetupInitialView() {

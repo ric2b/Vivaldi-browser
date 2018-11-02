@@ -18,6 +18,7 @@
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/browser/extension_prefs.h"
@@ -29,11 +30,11 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/models/combobox_model.h"
 #include "ui/base/text/bytes_formatting.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/combobox/combobox.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/view.h"
 
 // A model for a combobox selecting the launch options for a hosted app.
@@ -139,10 +140,10 @@ AppInfoSummaryPanel::AppInfoSummaryPanel(Profile* profile,
       licenses_link_(NULL),
       launch_options_combobox_(NULL),
       weak_ptr_factory_(this) {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical,
-                                        0,
-                                        0,
-                                        views::kRelatedControlVerticalSpacing));
+  SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(),
+                           ChromeLayoutProvider::Get()->GetDistanceMetric(
+                               views::DISTANCE_RELATED_CONTROL_VERTICAL)));
 
   AddSubviews();
 }
@@ -156,10 +157,9 @@ void AppInfoSummaryPanel::AddDescriptionAndLinksControl(
     views::View* vertical_stack) {
   views::View* description_and_labels_stack = new views::View();
   description_and_labels_stack->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical,
-                           0,
-                           0,
-                           views::kRelatedControlSmallVerticalSpacing));
+      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(),
+                           ChromeLayoutProvider::Get()->GetDistanceMetric(
+                               DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   if (!app_->description().empty()) {
     // TODO(sashab): Clip the app's description to 4 lines, and use Label's
@@ -202,7 +202,8 @@ void AppInfoSummaryPanel::AddDetailsControl(views::View* vertical_stack) {
     return;
 
   views::View* details_list =
-      CreateVerticalStack(views::kRelatedControlSmallVerticalSpacing);
+      CreateVerticalStack(ChromeLayoutProvider::Get()->GetDistanceMetric(
+          DISTANCE_RELATED_CONTROL_VERTICAL_SMALL));
 
   // Add the size.
   views::Label* size_title = new views::Label(
@@ -252,7 +253,8 @@ void AppInfoSummaryPanel::AddSubviews() {
       l10n_util::GetStringUTF16(IDS_APPLICATION_INFO_APP_OVERVIEW_TITLE)));
 
   views::View* vertical_stack =
-      CreateVerticalStack(views::kUnrelatedControlVerticalSpacing);
+      CreateVerticalStack(ChromeLayoutProvider::Get()->GetDistanceMetric(
+          views::DISTANCE_UNRELATED_CONTROL_VERTICAL));
   AddChildView(vertical_stack);
 
   AddDescriptionAndLinksControl(vertical_stack);

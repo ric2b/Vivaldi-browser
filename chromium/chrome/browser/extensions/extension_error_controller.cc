@@ -11,6 +11,8 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_set.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace extensions {
 
 namespace {
@@ -30,6 +32,17 @@ ExtensionErrorController::~ExtensionErrorController() {}
 
 void ExtensionErrorController::ShowErrorIfNeeded() {
   IdentifyAlertableExtensions();
+
+  // NOTE(jarle@vivaldi.com): Workaround for crash on startup, VB-34070.
+  if (vivaldi::IsVivaldiRunning()) {
+    for (ExtensionSet::const_iterator iter = blacklisted_extensions_.begin();
+         iter != blacklisted_extensions_.end();
+         ++iter) {
+      LOG(ERROR) << "Blacklisted extension: " << (*iter)->id();
+    }
+    blacklisted_extensions_.Clear();
+    return;
+  }
 
   // Make sure there's something to show, and that there isn't currently a
   // bubble displaying.

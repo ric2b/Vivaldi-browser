@@ -47,7 +47,7 @@ def validate_blink_idl_definitions(idl_filename, idl_file_basename,
     """Validate file contents with filename convention.
 
        The Blink IDL conventions are:
-       - If an IDL file defines an interface, a dictionary, or an exception,
+       - If an IDL file defines an interface or a dictionary,
          the IDL file must contain exactly one definition. The definition
          name must agree with the file's basename, unless it is a partial
          definition. (e.g., 'partial interface Foo' can be in FooBar.idl).
@@ -63,7 +63,10 @@ def validate_blink_idl_definitions(idl_filename, idl_file_basename,
             'Expected exactly 1 definition in file {0}, but found {1}'
             .format(idl_filename, number_of_targets))
     if number_of_targets == 0:
-        if not (definitions.enumerations or definitions.typedefs):
+        number_of_definitions = (
+            len(definitions.enumerations) + len(definitions.typedefs) +
+            len(definitions.callback_functions))
+        if number_of_definitions == 0:
             raise Exception(
                 'No definition found in %s' % idl_filename)
         return

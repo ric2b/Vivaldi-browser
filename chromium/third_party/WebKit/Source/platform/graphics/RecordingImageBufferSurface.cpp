@@ -13,6 +13,7 @@
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/UnacceleratedImageBufferSurface.h"
 #include "platform/graphics/paint/PaintRecorder.h"
+#include "platform/wtf/CheckedNumeric.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 
@@ -92,8 +93,7 @@ void RecordingImageBufferSurface::FallBackToRasterCanvas(
 
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, canvas_fallback_histogram,
-      new EnumerationHistogram("Canvas.DisplayListFallbackReason",
-                               kFallbackReasonCount));
+      ("Canvas.DisplayListFallbackReason", kFallbackReasonCount));
   canvas_fallback_histogram.Count(reason);
 
   fallback_surface_ = WTF::WrapUnique(new UnacceleratedImageBufferSurface(
@@ -220,6 +220,8 @@ DisableDeferralReasonToFallbackReason(DisableDeferralReason reason) {
     case kDisableDeferralDrawImageWithTextureBackedSourceImage:
       return RecordingImageBufferSurface::
           kFallbackReasonDrawImageWithTextureBackedSourceImage;
+    // The LowEndDevice reason should only be used on Canvas2DLayerBridge.
+    case kDisableDeferralReasonLowEndDevice:
     case kDisableDeferralReasonCount:
       NOTREACHED();
       break;
@@ -304,7 +306,11 @@ void RecordingImageBufferSurface::WillOverwriteCanvas() {
 void RecordingImageBufferSurface::DidDraw(const FloatRect& rect) {
   did_record_draw_commands_in_current_frame_ = true;
   IntRect pixel_bounds = EnclosingIntRect(rect);
-  current_frame_pixel_count_ += pixel_bounds.Width() * pixel_bounds.Height();
+  CheckedNumeric<int> pixel_count = pixel_bounds.Width();
+  pixel_count *= pixel_bounds.Height();
+  pixel_count += current_frame_pixel_count_;
+  current_frame_pixel_count_ =
+      pixel_count.ValueOrDefault(std::numeric_limits<int>::max());
 }
 
 bool RecordingImageBufferSurface::FinalizeFrameInternal(
@@ -368,13 +374,18 @@ bool RecordingImageBufferSurface::IsExpensiveToPaint() {
   if (fallback_surface_)
     return fallback_surface_->IsExpensiveToPaint();
 
+  CheckedNumeric<int> overdraw_limit_checked = size().Width();
+  overdraw_limit_checked *= size().Height();
+  overdraw_limit_checked *=
+      CanvasHeuristicParameters::kExpensiveOverdrawThreshold;
+  int overdraw_limit =
+      overdraw_limit_checked.ValueOrDefault(std::numeric_limits<int>::max());
+
   if (did_record_draw_commands_in_current_frame_) {
     if (current_frame_has_expensive_op_)
       return true;
 
-    if (current_frame_pixel_count_ >=
-        (size().Width() * size().Height() *
-         CanvasHeuristicParameters::kExpensiveOverdrawThreshold))
+    if (current_frame_pixel_count_ >= overdraw_limit)
       return true;
 
     if (frame_was_cleared_)
@@ -385,9 +396,7 @@ bool RecordingImageBufferSurface::IsExpensiveToPaint() {
     if (previous_frame_has_expensive_op_)
       return true;
 
-    if (previous_frame_pixel_count_ >=
-        (size().Width() * size().Height() *
-         CanvasHeuristicParameters::kExpensiveOverdrawThreshold))
+    if (previous_frame_pixel_count_ >= overdraw_limit)
       return true;
   }
 

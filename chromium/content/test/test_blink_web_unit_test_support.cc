@@ -52,7 +52,7 @@
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 #include "content/renderer/media/rtc_certificate.h"
-#include "third_party/webrtc/base/rtccertificate.h"  // nogncheck
+#include "third_party/webrtc/rtc_base/rtccertificate.h"  // nogncheck
 #endif
 
 using blink::WebString;
@@ -189,10 +189,13 @@ blink::WebIDBFactory* TestBlinkWebUnitTestSupport::IdbFactory() {
 }
 
 std::unique_ptr<blink::WebURLLoader>
-TestBlinkWebUnitTestSupport::CreateURLLoader() {
+TestBlinkWebUnitTestSupport::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   // This loader should be used only for process-local resources such as
   // data URLs.
-  auto default_loader = base::MakeUnique<WebURLLoaderImpl>(nullptr, nullptr);
+  auto default_loader =
+      base::MakeUnique<WebURLLoaderImpl>(nullptr, task_runner, nullptr);
   return url_loader_factory_->CreateURLLoader(std::move(default_loader));
 }
 
@@ -200,7 +203,7 @@ blink::WebString TestBlinkWebUnitTestSupport::UserAgent() {
   return blink::WebString::FromUTF8("test_runner/0.0.0.0");
 }
 
-std::unique_ptr<cc::SharedBitmap>
+std::unique_ptr<viz::SharedBitmap>
 TestBlinkWebUnitTestSupport::AllocateSharedBitmap(const blink::WebSize& size) {
   return shared_bitmap_manager_
       ->AllocateSharedBitmap(gfx::Size(size.width, size.height));
@@ -214,8 +217,6 @@ blink::WebString TestBlinkWebUnitTestSupport::QueryLocalizedString(
       return WebString::FromASCII("<<OtherDateLabel>>");
     case blink::WebLocalizedString::kOtherMonthLabel:
       return WebString::FromASCII("<<OtherMonthLabel>>");
-    case blink::WebLocalizedString::kOtherTimeLabel:
-      return WebString::FromASCII("<<OtherTimeLabel>>");
     case blink::WebLocalizedString::kOtherWeekLabel:
       return WebString::FromASCII("<<OtherWeekLabel>>");
     case blink::WebLocalizedString::kCalendarClear:

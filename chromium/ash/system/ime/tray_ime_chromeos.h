@@ -7,10 +7,10 @@
 
 #include <stddef.h>
 
+#include "ash/public/interfaces/ime_info.mojom.h"
 #include "ash/system/accessibility_observer.h"
 #include "ash/system/ime/ime_observer.h"
 #include "ash/system/ime_menu/ime_list_view.h"
-#include "ash/system/tray/ime_info.h"
 #include "ash/system/tray/system_tray_item.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_observer.h"
 #include "base/macros.h"
@@ -22,6 +22,7 @@ class IMEDefaultView;
 class IMEDetailedView;
 }
 
+class ImeController;
 class TrayItemView;
 
 // Controller for IME options in the system menu. Note this is separate from
@@ -48,7 +49,7 @@ class ASH_EXPORT TrayIME : public SystemTrayItem,
   // Repopulates the DefaultView and DetailedView.
   void Update();
   // Updates the System Tray label.
-  void UpdateTrayLabel(const IMEInfo& info, size_t count);
+  void UpdateTrayLabel(const mojom::ImeInfo& info, size_t count);
   // Returns whether the virtual keyboard toggle should be shown in the
   // detailed view.
   bool ShouldShowKeyboardToggle();
@@ -59,15 +60,15 @@ class ASH_EXPORT TrayIME : public SystemTrayItem,
   views::View* CreateTrayView(LoginStatus status) override;
   views::View* CreateDefaultView(LoginStatus status) override;
   views::View* CreateDetailedView(LoginStatus status) override;
-  void DestroyTrayView() override;
-  void DestroyDefaultView() override;
-  void DestroyDetailedView() override;
+  void OnTrayViewDestroyed() override;
+  void OnDefaultViewDestroyed() override;
+  void OnDetailedViewDestroyed() override;
 
   // Overridden from IMEObserver.
   void OnIMERefresh() override;
   void OnIMEMenuActivationChanged(bool is_active) override;
 
-  // Returns true input methods are managed by policy.
+  // Returns true if input methods are managed by policy.
   bool IsIMEManaged();
 
   // Whether the default view should be shown.
@@ -79,18 +80,16 @@ class ASH_EXPORT TrayIME : public SystemTrayItem,
   // sub-view.
   ImeListView::SingleImeBehavior GetSingleImeBehavior();
 
+  // Returns the icon used when the IME is managed.
+  views::View* GetControlledSettingIconForTesting();
+
+  ImeController* ime_controller_;
   TrayItemView* tray_label_;
   tray::IMEDefaultView* default_;
   tray::IMEDetailedView* detailed_;
+
   // Whether the virtual keyboard is suppressed.
   bool keyboard_suppressed_;
-  // Cached IME info.
-  IMEInfoList ime_list_;
-  IMEInfo current_ime_;
-  IMEPropertyInfoList property_list_;
-  // If non-empty, a controlled-setting icon should be displayed with a tooltip
-  // text defined by this string.
-  base::string16 ime_managed_message_;
 
   // Whether the IME label and tray items should be visible.
   bool is_visible_;

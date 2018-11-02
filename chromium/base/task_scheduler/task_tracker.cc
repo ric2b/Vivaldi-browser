@@ -15,6 +15,7 @@
 #include "base/sequence_token.h"
 #include "base/synchronization/condition_variable.h"
 #include "base/task_scheduler/scoped_set_task_priority_for_current_thread.h"
+#include "base/threading/sequence_local_storage_map.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -235,10 +236,11 @@ bool TaskTracker::WillPostTask(const Task* task) {
   return true;
 }
 
-bool TaskTracker::RunTask(std::unique_ptr<Task> task,
-                          const SequenceToken& sequence_token) {
+bool TaskTracker::RunNextTask(Sequence* sequence) {
+  DCHECK(sequence);
+
+  std::unique_ptr<Task> task = sequence->TakeTask();
   DCHECK(task);
-  DCHECK(sequence_token.IsValid());
 
   const TaskShutdownBehavior shutdown_behavior =
       task->traits.shutdown_behavior();
@@ -246,14 +248,16 @@ bool TaskTracker::RunTask(std::unique_ptr<Task> task,
   const bool is_delayed = !task->delayed_run_time.is_null();
 
   if (can_run_task) {
-    PerformRunTask(std::move(task), sequence_token);
+    PerformRunTask(std::move(task), sequence);
     AfterRunTask(shutdown_behavior);
   }
 
   if (!is_delayed)
     DecrementNumPendingUndelayedTasks();
 
-  return can_run_task;
+  OnRunNextTaskCompleted();
+
+  return sequence->Pop();
 }
 
 bool TaskTracker::HasShutdownStarted() const {
@@ -278,7 +282,7 @@ void TaskTracker::SetHasShutdownStartedForTesting() {
 }
 
 void TaskTracker::PerformRunTask(std::unique_ptr<Task> task,
-                                 const SequenceToken& sequence_token) {
+                                 Sequence* sequence) {
   RecordTaskLatencyHistogram(task.get());
 
   const bool previous_singleton_allowed =
@@ -291,10 +295,15 @@ void TaskTracker::PerformRunTask(std::unique_ptr<Task> task,
       task->traits.with_base_sync_primitives());
 
   {
+    const SequenceToken& sequence_token = sequence->token();
+    DCHECK(sequence_token.IsValid());
     ScopedSetSequenceTokenForCurrentThread
         scoped_set_sequence_token_for_current_thread(sequence_token);
     ScopedSetTaskPriorityForCurrentThread
         scoped_set_task_priority_for_current_thread(task->traits.priority());
+    ScopedSetSequenceLocalStorageMapForCurrentThread
+        scoped_set_sequence_local_storage_map_for_current_thread(
+            sequence->sequence_local_storage());
 
     // Set up TaskRunnerHandle as expected for the scope of the task.
     std::unique_ptr<SequencedTaskRunnerHandle> sequenced_task_runner_handle;
@@ -388,6 +397,10 @@ bool TaskTracker::IsPostingBlockShutdownTaskAfterShutdownAllowed() {
 }
 #endif
 
+int TaskTracker::GetNumPendingUndelayedTasksForTesting() const {
+  return subtle::NoBarrier_Load(&num_pending_undelayed_tasks_);
+}
+
 bool TaskTracker::BeforePostTask(TaskShutdownBehavior shutdown_behavior) {
   if (shutdown_behavior == TaskShutdownBehavior::BLOCK_SHUTDOWN) {
     // BLOCK_SHUTDOWN tasks block shutdown between the moment they are posted
@@ -401,12 +414,18 @@ bool TaskTracker::BeforePostTask(TaskShutdownBehavior shutdown_behavior) {
       // ordering bug. This aims to catch those early.
       DCHECK(shutdown_event_);
       if (shutdown_event_->IsSignaled()) {
+#if DCHECK_IS_ON()
+// clang-format off
         // TODO(robliao): http://crbug.com/698140. Since the service thread
         // doesn't stop processing its own tasks at shutdown, we may still
         // attempt to post a BLOCK_SHUTDOWN task in response to a
-        // FileDescriptorWatcher.
-#if DCHECK_IS_ON()
-        DCHECK(IsPostingBlockShutdownTaskAfterShutdownAllowed());
+        // FileDescriptorWatcher. Same is true for FilePathWatcher
+        // (http://crbug.com/728235). Until it's possible for such services to
+        // post to non-BLOCK_SHUTDOWN sequences which are themselves funneled to
+        // the main execution sequence (a future plan for the post_task.h API),
+        // this DCHECK will be flaky and must be disabled.
+        // DCHECK(IsPostingBlockShutdownTaskAfterShutdownAllowed());
+// clang-format on
 #endif
         state_->DecrementNumTasksBlockingShutdown();
         return false;

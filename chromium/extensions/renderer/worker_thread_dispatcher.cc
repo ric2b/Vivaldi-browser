@@ -10,9 +10,12 @@
 #include "base/values.h"
 #include "content/public/child/worker_thread.h"
 #include "content/public/renderer/render_thread.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/feature_switch.h"
+#include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/extension_bindings_system.h"
+#include "extensions/renderer/ipc_message_sender.h"
 #include "extensions/renderer/js_extension_bindings_system.h"
 #include "extensions/renderer/native_extension_bindings_system.h"
 #include "extensions/renderer/service_worker_data.h"
@@ -30,24 +33,6 @@ ServiceWorkerData* GetServiceWorkerData() {
   ServiceWorkerData* data = g_data_tls.Pointer()->Get();
   DCHECK(data);
   return data;
-}
-
-// Handler for sending IPCs with native extension bindings.
-void SendRequestIPC(ScriptContext* context,
-                    const ExtensionHostMsg_Request_Params& params,
-                    binding::RequestThread thread) {
-  // TODO(devlin): This won't handle incrementing/decrementing service worker
-  // lifetime.
-  WorkerThreadDispatcher::Get()->Send(
-      new ExtensionHostMsg_RequestWorker(params));
-}
-
-void SendEventListenersIPC(binding::EventListenersChanged changed,
-                           ScriptContext* context,
-                           const std::string& event_name,
-                           const base::DictionaryValue* filter,
-                           bool was_manual) {
-  // TODO(devlin/lazyboy): Wire this up once extension workers support events.
 }
 
 }  // namespace
@@ -73,20 +58,20 @@ ExtensionBindingsSystem* WorkerThreadDispatcher::GetBindingsSystem() {
 }
 
 // static
-ServiceWorkerRequestSender* WorkerThreadDispatcher::GetRequestSender() {
-  return static_cast<ServiceWorkerRequestSender*>(
-      GetBindingsSystem()->GetRequestSender());
-}
-
-// static
 V8SchemaRegistry* WorkerThreadDispatcher::GetV8SchemaRegistry() {
   return GetServiceWorkerData()->v8_schema_registry();
 }
 
 // static
+ScriptContext* WorkerThreadDispatcher::GetScriptContext() {
+  return GetServiceWorkerData()->context();
+}
+
+// static
 bool WorkerThreadDispatcher::HandlesMessageOnWorkerThread(
     const IPC::Message& message) {
-  return message.type() == ExtensionMsg_ResponseWorker::ID;
+  return message.type() == ExtensionMsg_ResponseWorker::ID ||
+         message.type() == ExtensionMsg_DispatchEvent::ID;
 }
 
 // static
@@ -100,8 +85,12 @@ bool WorkerThreadDispatcher::OnControlMessageReceived(
     const IPC::Message& message) {
   if (HandlesMessageOnWorkerThread(message)) {
     int worker_thread_id = base::kInvalidThreadId;
+    // TODO(lazyboy): Route |message| directly to the child thread using routed
+    // IPC. Probably using mojo?
     bool found = base::PickleIterator(message).ReadInt(&worker_thread_id);
-    CHECK(found && worker_thread_id > 0);
+    CHECK(found);
+    if (worker_thread_id == kNonWorkerThreadId)
+      return false;
     base::TaskRunner* runner = GetTaskRunnerFor(worker_thread_id);
     bool task_posted = runner->PostTask(
         FROM_HERE, base::Bind(&WorkerThreadDispatcher::ForwardIPC,
@@ -119,6 +108,7 @@ void WorkerThreadDispatcher::OnMessageReceivedOnWorkerThread(
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(WorkerThreadDispatcher, message)
     IPC_MESSAGE_HANDLER(ExtensionMsg_ResponseWorker, OnResponseWorker)
+    IPC_MESSAGE_HANDLER(ExtensionMsg_DispatchEvent, OnDispatchEvent)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   CHECK(handled);
@@ -139,32 +129,45 @@ void WorkerThreadDispatcher::OnResponseWorker(int worker_thread_id,
                                               bool succeeded,
                                               const base::ListValue& response,
                                               const std::string& error) {
-  // TODO(devlin): Using the RequestSender directly here won't work with
-  // NativeExtensionBindingsSystem (since there is no associated RequestSender
-  // in that case). We should instead be going
-  // ExtensionBindingsSystem::HandleResponse().
   ServiceWorkerData* data = g_data_tls.Pointer()->Get();
-  WorkerThreadDispatcher::GetRequestSender()->HandleWorkerResponse(
-      request_id, data->service_worker_version_id(), succeeded, response,
-      error);
+  data->bindings_system()->HandleResponse(request_id, succeeded, response,
+                                          error);
+}
+
+void WorkerThreadDispatcher::OnDispatchEvent(
+    const ExtensionMsg_DispatchEvent_Params& params,
+    const base::ListValue& event_args) {
+  ServiceWorkerData* data = g_data_tls.Pointer()->Get();
+  DCHECK(data);
+  data->bindings_system()->DispatchEventInContext(
+      params.event_name, &event_args, &params.filtering_info, data->context());
 }
 
 void WorkerThreadDispatcher::AddWorkerData(
     int64_t service_worker_version_id,
+    ScriptContext* context,
     ResourceBundleSourceMap* source_map) {
   ServiceWorkerData* data = g_data_tls.Pointer()->Get();
   if (!data) {
     std::unique_ptr<ExtensionBindingsSystem> bindings_system;
+    // QUESTION(lazyboy): Why is passing the WorkerThreadDispatcher to the
+    // IPCMessageSender (previously the ServiceWorkerRequestSender) safe? The
+    // WorkerThreadDispatcher is a process-wide singleton, but the
+    // IPCMessageSender is per-context (thus potentially many per process).
+    std::unique_ptr<IPCMessageSender> ipc_message_sender =
+        IPCMessageSender::CreateWorkerThreadIPCMessageSender(
+            this, service_worker_version_id);
     if (FeatureSwitch::native_crx_bindings()->IsEnabled()) {
+      // The Unretained below is safe since the IPC message sender outlives the
+      // bindings system.
       bindings_system = base::MakeUnique<NativeExtensionBindingsSystem>(
-          base::Bind(&SendRequestIPC), base::Bind(&SendEventListenersIPC));
+          std::move(ipc_message_sender));
     } else {
       bindings_system = base::MakeUnique<JsExtensionBindingsSystem>(
-          source_map, base::MakeUnique<ServiceWorkerRequestSender>(
-                          this, service_worker_version_id));
+          source_map, std::move(ipc_message_sender));
     }
     ServiceWorkerData* new_data = new ServiceWorkerData(
-        service_worker_version_id, std::move(bindings_system));
+        service_worker_version_id, context, std::move(bindings_system));
     g_data_tls.Pointer()->Set(new_data);
   }
 

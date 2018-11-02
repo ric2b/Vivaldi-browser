@@ -92,11 +92,12 @@ Layer::Layer()
       visible_(true),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
-      background_blur_radius_(0),
+      background_blur_sigma_(0.0f),
       layer_saturation_(0.0f),
       layer_brightness_(0.0f),
       layer_grayscale_(0.0f),
       layer_inverted_(false),
+      layer_blur_sigma_(0.0f),
       layer_temperature_(0.0f),
       layer_blue_scale_(1.0f),
       layer_green_scale_(1.0f),
@@ -118,11 +119,12 @@ Layer::Layer(LayerType type)
       visible_(true),
       fills_bounds_opaquely_(true),
       fills_bounds_completely_(false),
-      background_blur_radius_(0),
+      background_blur_sigma_(0.0f),
       layer_saturation_(0.0f),
       layer_brightness_(0.0f),
       layer_grayscale_(0.0f),
       layer_inverted_(false),
+      layer_blur_sigma_(0.0f),
       layer_temperature_(0.0f),
       layer_blue_scale_(1.0f),
       layer_green_scale_(1.0f),
@@ -165,7 +167,7 @@ std::unique_ptr<Layer> Layer::Clone() const {
   auto clone = base::MakeUnique<Layer>(type_);
 
   // Background filters.
-  clone->SetBackgroundBlur(background_blur_radius_);
+  clone->SetBackgroundBlur(background_blur_sigma_);
   clone->SetBackgroundZoom(zoom_, zoom_inset_);
 
   // Filters.
@@ -174,13 +176,18 @@ std::unique_ptr<Layer> Layer::Clone() const {
   clone->SetLayerBrightness(GetTargetBrightness());
   clone->SetLayerGrayscale(GetTargetGrayscale());
   clone->SetLayerInverted(layer_inverted_);
+  clone->SetLayerBlur(layer_blur_sigma_);
   if (alpha_shape_)
     clone->SetAlphaShape(base::MakeUnique<SkRegion>(*alpha_shape_));
 
   // cc::Layer state.
-  if (surface_layer_ && surface_layer_->primary_surface_info().is_valid()) {
-    clone->SetShowPrimarySurface(surface_layer_->primary_surface_info(),
-                                 surface_layer_->surface_reference_factory());
+  if (surface_layer_) {
+    if (surface_layer_->primary_surface_info().is_valid()) {
+      clone->SetShowPrimarySurface(surface_layer_->primary_surface_info(),
+                                   surface_layer_->surface_reference_factory());
+    }
+    if (surface_layer_->fallback_surface_info().is_valid())
+      clone->SetFallbackSurface(surface_layer_->fallback_surface_info());
   } else if (type_ == LAYER_SOLID_COLOR) {
     clone->SetColor(GetTargetColor());
   }
@@ -391,10 +398,16 @@ float Layer::GetTargetTemperature() const {
   return layer_temperature();
 }
 
-void Layer::SetBackgroundBlur(int blur_radius) {
-  background_blur_radius_ = blur_radius;
+void Layer::SetBackgroundBlur(float blur_sigma) {
+  background_blur_sigma_ = blur_sigma;
 
   SetLayerBackgroundFilters();
+}
+
+void Layer::SetLayerBlur(float blur_sigma) {
+  layer_blur_sigma_ = blur_sigma;
+
+  SetLayerFilters();
 }
 
 void Layer::SetLayerSaturation(float saturation) {
@@ -488,6 +501,10 @@ void Layer::SetLayerFilters() {
   }
   if (layer_inverted_)
     filters.Append(cc::FilterOperation::CreateInvertFilter(1.0));
+  if (layer_blur_sigma_) {
+    filters.Append(cc::FilterOperation::CreateBlurFilter(
+        layer_blur_sigma_, SkBlurImageFilter::kClamp_TileMode));
+  }
   // Brightness goes last, because the resulting colors neeed clamping, which
   // cause further color matrix filters to be applied separately. In this order,
   // they all can be combined in a single pass.
@@ -508,9 +525,9 @@ void Layer::SetLayerBackgroundFilters() {
   if (zoom_ != 1)
     filters.Append(cc::FilterOperation::CreateZoomFilter(zoom_, zoom_inset_));
 
-  if (background_blur_radius_) {
+  if (background_blur_sigma_) {
     filters.Append(cc::FilterOperation::CreateBlurFilter(
-        background_blur_radius_));
+        background_blur_sigma_, SkBlurImageFilter::kClamp_TileMode));
   }
 
   cc_layer_->SetBackgroundFilters(filters);
@@ -610,6 +627,7 @@ void Layer::SwitchToLayer(scoped_refptr<cc::Layer> new_layer) {
   new_layer->SetTransform(cc_layer_->transform());
   new_layer->SetPosition(cc_layer_->position());
   new_layer->SetBackgroundColor(cc_layer_->background_color());
+  new_layer->SetCacheRenderSurface(cc_layer_->cache_render_surface());
 
   cc_layer_ = new_layer.get();
   content_layer_ = NULL;
@@ -638,8 +656,17 @@ void Layer::SwitchCCLayerForTest() {
   content_layer_ = new_layer;
 }
 
+// Note: The code that sets this flag would be responsible to unset it on that
+// ui::Layer. We do not want to clone this flag to a cloned layer by accident,
+// which could be a supprise. But we want to preserve it after switching to a
+// new cc::Layer. There could be a whole subtree and the root changed, but does
+// not mean we want to treat the cache all different.
+void Layer::SetCacheRenderSurface(bool cache_render_surface) {
+  cc_layer_->SetCacheRenderSurface(cache_render_surface);
+}
+
 void Layer::SetTextureMailbox(
-    const cc::TextureMailbox& mailbox,
+    const viz::TextureMailbox& mailbox,
     std::unique_ptr<cc::SingleReleaseCallback> release_callback,
     gfx::Size texture_size_in_dip) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
@@ -682,8 +709,8 @@ bool Layer::TextureFlipped() const {
 }
 
 void Layer::SetShowPrimarySurface(
-    const cc::SurfaceInfo& surface_info,
-    scoped_refptr<cc::SurfaceReferenceFactory> ref_factory) {
+    const viz::SurfaceInfo& surface_info,
+    scoped_refptr<viz::SurfaceReferenceFactory> ref_factory) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
 
   if (!surface_layer_) {
@@ -703,7 +730,7 @@ void Layer::SetShowPrimarySurface(
     mirror->dest()->SetShowPrimarySurface(surface_info, ref_factory);
 }
 
-void Layer::SetFallbackSurface(const cc::SurfaceInfo& surface_info) {
+void Layer::SetFallbackSurface(const viz::SurfaceInfo& surface_info) {
   DCHECK(type_ == LAYER_TEXTURED || type_ == LAYER_SOLID_COLOR);
   DCHECK(surface_layer_);
 
@@ -714,7 +741,7 @@ void Layer::SetFallbackSurface(const cc::SurfaceInfo& surface_info) {
     mirror->dest()->SetFallbackSurface(surface_info);
 }
 
-const cc::SurfaceInfo* Layer::GetFallbackSurfaceInfo() const {
+const viz::SurfaceInfo* Layer::GetFallbackSurfaceInfo() const {
   if (surface_layer_)
     return &surface_layer_->fallback_surface_info();
   return nullptr;
@@ -730,7 +757,7 @@ void Layer::SetShowSolidColorContent() {
   SwitchToLayer(new_layer);
   solid_color_layer_ = new_layer;
 
-  mailbox_ = cc::TextureMailbox();
+  mailbox_ = viz::TextureMailbox();
   if (mailbox_release_callback_) {
     mailbox_release_callback_->Run(gpu::SyncToken(), false);
     mailbox_release_callback_.reset();
@@ -868,11 +895,13 @@ void Layer::OnDelegatedFrameDamage(const gfx::Rect& damage_rect_in_dip) {
     delegate_->OnDelegatedFrameDamage(damage_rect_in_dip);
 }
 
-void Layer::SetScrollable(
-    Layer* parent_clip_layer,
-    const base::Callback<void(const gfx::ScrollOffset&)>& on_scroll) {
-  cc_layer_->SetScrollClipLayerId(parent_clip_layer->cc_layer_->id());
-  cc_layer_->set_did_scroll_callback(on_scroll);
+void Layer::SetDidScrollCallback(
+    base::Callback<void(const gfx::ScrollOffset&)> callback) {
+  cc_layer_->set_did_scroll_callback(std::move(callback));
+}
+
+void Layer::SetScrollable(const gfx::Size& container_bounds) {
+  cc_layer_->SetScrollable(container_bounds);
   cc_layer_->SetUserScrollable(true, true);
 }
 
@@ -934,7 +963,7 @@ size_t Layer::GetApproximateUnsharedMemoryUsage() const {
 }
 
 bool Layer::PrepareTextureMailbox(
-    cc::TextureMailbox* mailbox,
+    viz::TextureMailbox* mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* release_callback) {
   if (!mailbox_release_callback_)
     return false;

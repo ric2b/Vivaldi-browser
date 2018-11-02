@@ -4,8 +4,6 @@
 
 #include "chrome/browser/chromeos/arc/arc_play_store_enabled_preference_handler.h"
 
-#include "ash/shelf/shelf_model.h"
-#include "ash/shell.h"
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
@@ -16,6 +14,7 @@
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
+#include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
 #include "components/arc/arc_util.h"
@@ -35,7 +34,6 @@ ArcPlayStoreEnabledPreferenceHandler::ArcPlayStoreEnabledPreferenceHandler(
 }
 
 ArcPlayStoreEnabledPreferenceHandler::~ArcPlayStoreEnabledPreferenceHandler() {
-  ArcAuthNotification::Hide();
   sync_preferences::PrefServiceSyncable* pref_service_syncable =
       PrefServiceSyncableFromProfile(profile_);
   pref_service_syncable->RemoveObserver(this);
@@ -82,7 +80,6 @@ void ArcPlayStoreEnabledPreferenceHandler::Start() {
 
 void ArcPlayStoreEnabledPreferenceHandler::OnPreferenceChanged() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
   const bool is_play_store_enabled = IsArcPlayStoreEnabledForProfile(profile_);
   if (!IsArcPlayStoreEnabledPreferenceManagedForProfile(profile_)) {
     // Update UMA only for non-Managed cases.
@@ -93,18 +90,16 @@ void ArcPlayStoreEnabledPreferenceHandler::OnPreferenceChanged() {
       // Remove the pinned Play Store icon launcher in Shelf.
       // This is only for non-Managed cases. In managed cases, it is expected
       // to be "disabled" rather than "removed", so keep it here.
-      auto* shelf_model = ash::Shell::HasInstance()
-                              ? ash::Shell::Get()->shelf_model()
-                              : nullptr;
-      if (shelf_model)
-        shelf_model->UnpinAppWithID(kPlayStoreAppId);
+      auto* chrome_launcher_controller = ChromeLauncherController::instance();
+      if (chrome_launcher_controller)
+        chrome_launcher_controller->UnpinAppWithID(kPlayStoreAppId);
     }
   }
 
   // Hide auth notification if it was opened before and arc.enabled pref was
   // explicitly set to true or false.
   if (profile_->GetPrefs()->HasPrefPath(prefs::kArcEnabled))
-    ArcAuthNotification::Hide();
+    auth_notification_.reset();
 
   UpdateArcSessionManager();
 
@@ -135,12 +130,15 @@ void ArcPlayStoreEnabledPreferenceHandler::OnIsSyncingChanged() {
   pref_service_syncable->RemoveObserver(this);
 
   // TODO(hidehiko): Extract kEnableArcOOBEOptIn check as a utility method.
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableArcOOBEOptIn) &&
-      profile_->IsNewProfile() &&
-      !profile_->GetPrefs()->HasPrefPath(prefs::kArcEnabled)) {
-    ArcAuthNotification::Show(profile_);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          chromeos::switches::kEnableArcOOBEOptIn) ||
+      !profile_->IsNewProfile() ||
+      profile_->GetPrefs()->HasPrefPath(prefs::kArcEnabled) ||
+      !arc::IsPlayStoreAvailable()) {
+    return;
   }
+
+  auth_notification_ = base::MakeUnique<ArcAuthNotification>(profile_);
 }
 
 }  // namespace arc

@@ -291,6 +291,12 @@ bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::coalesced(
 }
 
 // static
+bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::began(
+    const ui::LatencyInfo& info) {
+  return info.began();
+}
+
+// static
 bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::terminated(
     const ui::LatencyInfo& info) {
   return info.terminated();
@@ -301,6 +307,12 @@ ui::mojom::SourceEventType
 StructTraits<ui::mojom::LatencyInfoDataView,
              ui::LatencyInfo>::source_event_type(const ui::LatencyInfo& info) {
   return UISourceEventTypeToMojo(info.source_event_type());
+}
+
+// static
+base::TimeDelta StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::
+    expected_queueing_time_on_dispatch(const ui::LatencyInfo& info) {
+  return info.expected_queueing_time_on_dispatch();
 }
 
 // static
@@ -325,9 +337,12 @@ bool StructTraits<ui::mojom::LatencyInfoDataView, ui::LatencyInfo>::Read(
 
   out->trace_id_ = data.trace_id();
   out->coalesced_ = data.coalesced();
+  out->began_ = data.began();
   out->terminated_ = data.terminated();
   out->source_event_type_ = MojoSourceEventTypeToUI(data.source_event_type());
-  return true;
+
+  return data.ReadExpectedQueueingTimeOnDispatch(
+      &out->expected_queueing_time_on_dispatch_);
 }
 
 }  // namespace mojo

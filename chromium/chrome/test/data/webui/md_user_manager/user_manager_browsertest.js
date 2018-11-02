@@ -10,6 +10,7 @@ var ROOT_PATH = '../../../../../';
 // Polymer BrowserTest fixture.
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_browser_test_base.js']);
+GEN('#include "base/command_line.h"');
 
 /**
  * @constructor
@@ -24,8 +25,12 @@ UserManagerBrowserTest.prototype = {
   browsePreload: 'chrome://md-user-manager/',
 
   /** @override */
+  commandLineSwitches: [{switchName: 'enable-features',
+                         switchValue: 'SupervisedUserCreation'}],
+
+  /** @override */
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
-    '../settings/test_browser_proxy.js',
+    '../test_browser_proxy.js',
     'control_bar_tests.js',
     'create_profile_tests.js',
     'import_supervised_user_tests.js',
@@ -37,7 +42,12 @@ UserManagerBrowserTest.prototype = {
   runAccessibilityChecks: false,
 };
 
-TEST_F('UserManagerBrowserTest', 'UserManagerTest', function() {
+GEN('#if defined(OS_WIN)');
+GEN('#define MAYBE_UserManagerTest DISABLED_UserManagerTest');
+GEN('#else');
+GEN('#define MAYBE_UserManagerTest UserManagerTest');
+GEN('#endif');
+TEST_F('UserManagerBrowserTest', 'MAYBE_UserManagerTest', function() {
   user_manager.control_bar_tests.registerTests();
   user_manager.create_profile_tests.registerTests();
   user_manager.import_supervised_user_tests.registerTests();

@@ -63,7 +63,7 @@ class SafeBrowsingBlockingPageFactoryImpl
         Profile::FromBrowserContext(web_contents->GetBrowserContext())
             ->GetPrefs();
     bool is_extended_reporting_opt_in_allowed =
-        prefs->GetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed);
+        IsExtendedReportingOptInAllowed(*prefs);
     bool is_proceed_anyway_disabled =
         prefs->GetBoolean(prefs::kSafeBrowsingProceedAnywayDisabled);
 
@@ -78,6 +78,7 @@ class SafeBrowsingBlockingPageFactoryImpl
         web_contents->GetBrowserContext()->IsOffTheRecord(),
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
         is_proceed_anyway_disabled,
+        true,  // should_open_links_in_new_tab
         kHelpCenterLink);
 
     return new SafeBrowsingBlockingPage(ui_manager, web_contents,
@@ -114,35 +115,32 @@ SafeBrowsingBlockingPage::SafeBrowsingBlockingPage(
           main_frame_url,
           unsafe_resources,
           CreateControllerClient(web_contents, unsafe_resources, ui_manager),
-          display_options) {
-  // Start computing threat details. They will be sent only
-  // if the user opts-in on the blocking page later.
-  // If there's more than one malicious resources, it means the user
-  // clicked through the first warning, so we don't prepare additional
-  // reports.
+          display_options),
+      threat_details_in_progress_(false) {
+  // Make sure the safe browsing service is available - it may not be when
+  // shutting down.
+  if (!g_browser_process->safe_browsing_service())
+    return;
+
+  // Start computing threat details. Trigger Manager will decide if it's safe to
+  // begin collecting data at this time. The report will be sent only if the
+  // user opts-in on the blocking page later.
+  // If there's more than one malicious resources, it means the user clicked
+  // through the first warning, so we don't prepare additional reports.
   if (unsafe_resources.size() == 1 &&
-      ShouldReportThreatDetails(unsafe_resources[0].threat_type) &&
-      threat_details_.get() == NULL &&
-      sb_error_ui()->CanShowExtendedReportingOption()) {
+      ShouldReportThreatDetails(unsafe_resources[0].threat_type)) {
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
-    threat_details_ =
+    threat_details_in_progress_ =
         g_browser_process->safe_browsing_service()
             ->trigger_manager()
             ->StartCollectingThreatDetails(
-                web_contents, unsafe_resources[0], profile->GetRequestContext(),
+                TriggerType::SECURITY_INTERSTITIAL, web_contents,
+                unsafe_resources[0], profile->GetRequestContext(),
                 HistoryServiceFactory::GetForProfile(
-                    profile, ServiceAccessType::EXPLICIT_ACCESS));
+                    profile, ServiceAccessType::EXPLICIT_ACCESS),
+                sb_error_ui()->get_error_display_options());
   }
-}
-
-bool SafeBrowsingBlockingPage::ShouldReportThreatDetails(
-    SBThreatType threat_type) {
-  return threat_type == SB_THREAT_TYPE_URL_PHISHING ||
-         threat_type == SB_THREAT_TYPE_URL_MALWARE ||
-         threat_type == SB_THREAT_TYPE_URL_UNWANTED ||
-         threat_type == SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL ||
-         threat_type == SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
 }
 
 SafeBrowsingBlockingPage::~SafeBrowsingBlockingPage() {
@@ -187,22 +185,28 @@ SafeBrowsingBlockingPage::GetTypeForTesting() const {
 void SafeBrowsingBlockingPage::FinishThreatDetails(const base::TimeDelta& delay,
                                                    bool did_proceed,
                                                    int num_visits) {
-  if (threat_details_.get() == NULL)
-    return;  // Not all interstitials have threat details (eg., incognito mode).
-
-  const bool enabled = sb_error_ui()->is_extended_reporting_enabled() &&
-                       sb_error_ui()->is_extended_reporting_opt_in_allowed();
-  if (!enabled)
+  // Not all interstitials collect threat details (eg., incognito mode).
+  if (!threat_details_in_progress_)
     return;
 
-  controller()->metrics_helper()->RecordUserInteraction(
-      security_interstitials::MetricsHelper::EXTENDED_REPORTING_IS_ENABLED);
-  // Finish the malware details collection, send it over.
-  BrowserThread::PostDelayedTask(
-      BrowserThread::IO, FROM_HERE,
-      base::BindOnce(&ThreatDetails::FinishCollection, threat_details_,
-                     did_proceed, num_visits),
-      delay);
+  // Make sure the safe browsing service is available - it may not be when
+  // shutting down.
+  if (!g_browser_process->safe_browsing_service())
+    return;
+
+  // Finish computing threat details. TriggerManager will decide if its safe to
+  // send the report.
+  bool report_sent = g_browser_process->safe_browsing_service()
+                         ->trigger_manager()
+                         ->FinishCollectingThreatDetails(
+                             TriggerType::SECURITY_INTERSTITIAL, web_contents(),
+                             delay, did_proceed, num_visits,
+                             sb_error_ui()->get_error_display_options());
+
+  if (report_sent) {
+    controller()->metrics_helper()->RecordUserInteraction(
+        security_interstitials::MetricsHelper::EXTENDED_REPORTING_IS_ENABLED);
+  }
 }
 
 // static

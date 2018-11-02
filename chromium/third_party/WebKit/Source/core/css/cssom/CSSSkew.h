@@ -5,34 +5,44 @@
 #ifndef CSSSkew_h
 #define CSSSkew_h
 
-#include "core/css/cssom/CSSAngleValue.h"
-#include "core/css/cssom/CSSMatrixComponent.h"
+#include "core/css/cssom/CSSNumericValue.h"
 #include "core/css/cssom/CSSTransformComponent.h"
 
 namespace blink {
 
+class DOMMatrix;
+class ExceptionState;
+
+// Represents a skew value in a CSSTransformValue used for properties like
+// "transform".
+// See CSSSkew.idl for more information about this class.
 class CORE_EXPORT CSSSkew final : public CSSTransformComponent {
   WTF_MAKE_NONCOPYABLE(CSSSkew);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSSkew* Create(const CSSAngleValue* ax, const CSSAngleValue* ay) {
+  // Constructor defined in the IDL.
+  static CSSSkew* Create(CSSNumericValue* ax, CSSNumericValue* ay) {
     return new CSSSkew(ax, ay);
   }
 
+  // Internal ways of creating CSSSkews.
   static CSSSkew* FromCSSValue(const CSSFunctionValue&);
 
-  // Bindings requires returning non-const pointers. This is safe because
-  // CSSAngleValues are immutable.
-  CSSAngleValue* ax() const { return const_cast<CSSAngleValue*>(ax_.Get()); }
-  CSSAngleValue* ay() const { return const_cast<CSSAngleValue*>(ay_.Get()); }
+  // Getters and setters for the ax and ay attributes defined in the IDL.
+  CSSNumericValue* ax() { return ax_.Get(); }
+  CSSNumericValue* ay() { return ay_.Get(); }
+  void setAx(CSSNumericValue*, ExceptionState&);
+  void setAy(CSSNumericValue*, ExceptionState&);
 
+  // From CSSTransformComponent
+  // Setting is2D for CSSSkew does nothing.
+  // https://drafts.css-houdini.org/css-typed-om/#dom-cssskew-is2d
+  void setIs2D(bool is2D) final {}
+
+  // Internal methods - from CSSTransformComponent.
+  const DOMMatrix* AsMatrix() const override;
   TransformComponentType GetType() const override { return kSkewType; }
-
-  CSSMatrixComponent* asMatrix() const override {
-    return CSSMatrixComponent::Skew(ax_->degrees(), ay_->degrees());
-  }
-
   CSSFunctionValue* ToCSSValue() const override;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -42,11 +52,11 @@ class CORE_EXPORT CSSSkew final : public CSSTransformComponent {
   }
 
  private:
-  CSSSkew(const CSSAngleValue* ax, const CSSAngleValue* ay)
-      : CSSTransformComponent(), ax_(ax), ay_(ay) {}
+  CSSSkew(CSSNumericValue* ax, CSSNumericValue* ay)
+      : CSSTransformComponent(true /* is2D */), ax_(ax), ay_(ay) {}
 
-  Member<const CSSAngleValue> ax_;
-  Member<const CSSAngleValue> ay_;
+  Member<CSSNumericValue> ax_;
+  Member<CSSNumericValue> ay_;
 };
 
 }  // namespace blink

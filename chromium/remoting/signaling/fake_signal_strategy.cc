@@ -33,14 +33,11 @@ FakeSignalStrategy::FakeSignalStrategy(const SignalingAddress& address)
       address_(address),
       last_id_(0),
       weak_factory_(this) {
-  DetachFromThread();
+  DETACH_FROM_SEQUENCE(sequence_checker_);
 }
 
 FakeSignalStrategy::~FakeSignalStrategy() {
-  while (!received_messages_.empty()) {
-    delete received_messages_.front();
-    received_messages_.pop_front();
-  }
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void FakeSignalStrategy::ConnectTo(FakeSignalStrategy* peer) {
@@ -52,37 +49,37 @@ void FakeSignalStrategy::ConnectTo(FakeSignalStrategy* peer) {
     peer->SetPeerCallback(peer_callback);
   } else {
     peer->main_thread_->PostTask(
-        FROM_HERE,
-        base::Bind(&FakeSignalStrategy::SetPeerCallback,
-                   base::Unretained(peer),
-                   peer_callback));
+        FROM_HERE, base::Bind(&FakeSignalStrategy::SetPeerCallback,
+                              base::Unretained(peer), peer_callback));
   }
 }
 
 void FakeSignalStrategy::SetLocalAddress(const SignalingAddress& address) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   address_ = address;
 }
 
 void FakeSignalStrategy::SimulateMessageReordering() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   simulate_reorder_ = true;
 }
 
 void FakeSignalStrategy::Connect() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  state_ = CONNECTED;
   for (auto& observer : listeners_)
     observer.OnSignalStrategyStateChange(CONNECTED);
 }
 
 void FakeSignalStrategy::Disconnect() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  state_ = DISCONNECTED;
   for (auto& observer : listeners_)
     observer.OnSignalStrategyStateChange(DISCONNECTED);
 }
 
 SignalStrategy::State FakeSignalStrategy::GetState() const {
-  return CONNECTED;
+  return state_;
 }
 
 SignalStrategy::Error FakeSignalStrategy::GetError() const {
@@ -90,22 +87,22 @@ SignalStrategy::Error FakeSignalStrategy::GetError() const {
 }
 
 const SignalingAddress& FakeSignalStrategy::GetLocalAddress() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return address_;
 }
 
 void FakeSignalStrategy::AddListener(Listener* listener) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   listeners_.AddObserver(listener);
 }
 
 void FakeSignalStrategy::RemoveListener(Listener* listener) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   listeners_.RemoveObserver(listener);
 }
 
 bool FakeSignalStrategy::SendStanza(std::unique_ptr<buzz::XmlElement> stanza) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   address_.SetInMessage(stanza.get(), SignalingAddress::FROM);
 
@@ -139,7 +136,7 @@ void FakeSignalStrategy::DeliverMessageOnThread(
 
 void FakeSignalStrategy::OnIncomingMessage(
     std::unique_ptr<buzz::XmlElement> stanza) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (!simulate_reorder_) {
     NotifyListeners(std::move(stanza));
@@ -159,10 +156,10 @@ void FakeSignalStrategy::OnIncomingMessage(
 
 void FakeSignalStrategy::NotifyListeners(
     std::unique_ptr<buzz::XmlElement> stanza) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   buzz::XmlElement* stanza_ptr = stanza.get();
-  received_messages_.push_back(stanza.release());
+  received_messages_.push_back(std::move(stanza));
 
   std::string to_error;
   SignalingAddress to =

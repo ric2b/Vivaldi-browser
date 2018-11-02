@@ -46,8 +46,7 @@ bool ProfileIdentityProvider::RequestLogin() {
 
 void ProfileIdentityProvider::GoogleSigninSucceeded(
     const std::string& account_id,
-    const std::string& username,
-    const std::string& password) {
+    const std::string& username) {
   FireOnActiveAccountLogin();
 }
 

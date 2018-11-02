@@ -1,0 +1,76 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/process_version_rc_template.gni")
+import("//testing/test.gni")
+
+static_library("zucchini_lib") {
+  sources = [
+    "buffer_sink.cc",
+    "buffer_sink.h",
+    "buffer_source.cc",
+    "buffer_source.h",
+    "buffer_view.h",
+    "crc32.cc",
+    "crc32.h",
+    "disassembler.cc",
+    "disassembler.h",
+    "image_utils.h",
+    "io_utils.cc",
+    "io_utils.h",
+    "main_utils.cc",
+    "main_utils.h",
+    "patch_utils.h",
+    "suffix_array.h",
+    "typed_value.h",
+  ]
+
+  deps = [
+    "//base",
+  ]
+}
+
+executable("zucchini") {
+  sources = [
+    "zucchini_main.cc",
+  ]
+
+  deps = [
+    ":zucchini_lib",
+    "//base",
+    "//build/config:exe_and_shlib_deps",
+  ]
+
+  if (is_win) {
+    deps += [ ":zucchini_exe_version" ]
+  }
+}
+
+if (is_win) {
+  process_version_rc_template("zucchini_exe_version") {
+    template_file = "zucchini_exe_version.rc.version"
+    output = "$target_gen_dir/zucchini_exe_version.rc"
+  }
+}
+
+test("zucchini_unittests") {
+  sources = [
+    "buffer_sink_unittest.cc",
+    "buffer_source_unittest.cc",
+    "buffer_view_unittest.cc",
+    "crc32_unittest.cc",
+    "io_utils_unittest.cc",
+    "patch_utils_unittest.cc",
+    "suffix_array_unittest.cc",
+    "typed_value_unittest.cc",
+  ]
+
+  deps = [
+    ":zucchini_lib",
+    "//base",
+    "//base/test:run_all_unittests",
+    "//base/test:test_support",
+    "//testing/gtest",
+  ]
+}

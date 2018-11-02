@@ -4,6 +4,8 @@
 
 #include "services/resource_coordinator/public/cpp/resource_coordinator_interface.h"
 
+#include <utility>
+
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/resource_coordinator/public/interfaces/coordination_unit_provider.mojom.h"
 #include "services/resource_coordinator/public/interfaces/service_constants.mojom.h"
@@ -33,15 +35,6 @@ ResourceCoordinatorInterface::ResourceCoordinatorInterface(
     const CoordinationUnitType& type)
     : ResourceCoordinatorInterface(connector, type, std::string()) {}
 
-ResourceCoordinatorInterface::ResourceCoordinatorInterface(
-    service_manager::Connector* connector,
-    const CoordinationUnitType& type,
-    uint64_t id)
-    : weak_ptr_factory_(this) {
-  CoordinationUnitID new_cu_id(type, id);
-  ConnectToService(connector, new_cu_id);
-}
-
 ResourceCoordinatorInterface::~ResourceCoordinatorInterface() = default;
 
 void ResourceCoordinatorInterface::ConnectToService(
@@ -49,6 +42,7 @@ void ResourceCoordinatorInterface::ConnectToService(
     const CoordinationUnitID& cu_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(connector);
+  cu_id_ = cu_id;
   mojom::CoordinationUnitProviderPtr provider;
   connector->BindInterface(mojom::kServiceName, mojo::MakeRequest(&provider));
 
@@ -66,6 +60,13 @@ void ResourceCoordinatorInterface::SendEvent(
   service_->SendEvent(std::move(event));
 }
 
+void ResourceCoordinatorInterface::SetProperty(
+    mojom::PropertyType property_type,
+    std::unique_ptr<base::Value> value) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  service_->SetProperty(property_type, std::move(value));
+}
+
 void ResourceCoordinatorInterface::AddChild(
     const ResourceCoordinatorInterface& child) {
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -80,6 +81,23 @@ void ResourceCoordinatorInterface::AddChildByID(
     const CoordinationUnitID& child_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   service_->AddChild(child_id);
+}
+
+void ResourceCoordinatorInterface::RemoveChild(
+    const ResourceCoordinatorInterface& child) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK(service_);
+  // We could keep the ID around ourselves, but this hop ensures that the child
+  // has been created on the service-side.
+  child.service()->GetID(
+      base::Bind(&ResourceCoordinatorInterface::RemoveChildByID,
+                 weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ResourceCoordinatorInterface::RemoveChildByID(
+    const CoordinationUnitID& child_id) {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  service_->RemoveChild(child_id);
 }
 
 }  // namespace resource_coordinator

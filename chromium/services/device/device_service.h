@@ -6,19 +6,19 @@
 #define SERVICES_DEVICE_DEVICE_SERVICE_H_
 
 #include "base/memory/ref_counted.h"
-#include "device/generic_sensor/public/interfaces/sensor_provider.mojom.h"
 #include "device/screen_orientation/public/interfaces/screen_orientation.mojom.h"
 #include "device/sensors/public/interfaces/motion.mojom.h"
 #include "device/sensors/public/interfaces/orientation.mojom.h"
-#include "device/wake_lock/public/interfaces/wake_lock_provider.mojom.h"
-#include "device/wake_lock/wake_lock_service_context.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "services/device/public/interfaces/battery_monitor.mojom.h"
 #include "services/device/public/interfaces/fingerprint.mojom.h"
 #include "services/device/public/interfaces/nfc_provider.mojom.h"
 #include "services/device/public/interfaces/power_monitor.mojom.h"
+#include "services/device/public/interfaces/sensor_provider.mojom.h"
 #include "services/device/public/interfaces/time_zone_monitor.mojom.h"
 #include "services/device/public/interfaces/vibration_manager.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/device/wake_lock/wake_lock_context.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/service_manager/public/cpp/service.h"
@@ -71,53 +71,31 @@ class DeviceService : public service_manager::Service {
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override;
 
-  void BindFingerprintRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::FingerprintRequest request);
+  void BindFingerprintRequest(mojom::FingerprintRequest request);
 
-  void BindMotionSensorRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::MotionSensorRequest request);
+  void BindMotionSensorRequest(mojom::MotionSensorRequest request);
 
-  void BindOrientationSensorRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::OrientationSensorRequest request);
+  void BindOrientationSensorRequest(mojom::OrientationSensorRequest request);
 
   void BindOrientationAbsoluteSensorRequest(
-      const service_manager::BindSourceInfo& source_info,
       mojom::OrientationAbsoluteSensorRequest request);
 
 #if !defined(OS_ANDROID)
-  void BindBatteryMonitorRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::BatteryMonitorRequest request);
-  void BindNFCProviderRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::NFCProviderRequest request);
-  void BindVibrationManagerRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::VibrationManagerRequest request);
+  void BindBatteryMonitorRequest(mojom::BatteryMonitorRequest request);
+  void BindNFCProviderRequest(mojom::NFCProviderRequest request);
+  void BindVibrationManagerRequest(mojom::VibrationManagerRequest request);
 #endif
 
-  void BindPowerMonitorRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::PowerMonitorRequest request);
+  void BindPowerMonitorRequest(mojom::PowerMonitorRequest request);
 
   void BindScreenOrientationListenerRequest(
-      const service_manager::BindSourceInfo& source_info,
       mojom::ScreenOrientationListenerRequest request);
 
-  void BindSensorProviderRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::SensorProviderRequest request);
+  void BindSensorProviderRequest(mojom::SensorProviderRequest request);
 
-  void BindTimeZoneMonitorRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::TimeZoneMonitorRequest request);
+  void BindTimeZoneMonitorRequest(mojom::TimeZoneMonitorRequest request);
 
-  void BindWakeLockProviderRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::WakeLockProviderRequest request);
+  void BindWakeLockProviderRequest(mojom::WakeLockProviderRequest request);
 
   std::unique_ptr<PowerMonitorMessageBroadcaster>
       power_monitor_message_broadcaster_;

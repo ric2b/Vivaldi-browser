@@ -32,6 +32,7 @@
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 
 namespace blink {
 
@@ -62,7 +63,7 @@ XSLStyleSheetResource* XSLStyleSheetResource::FetchSynchronously(
 
 XSLStyleSheetResource* XSLStyleSheetResource::Fetch(FetchParameters& params,
                                                     ResourceFetcher* fetcher) {
-  DCHECK(RuntimeEnabledFeatures::xsltEnabled());
+  DCHECK(RuntimeEnabledFeatures::XSLTEnabled());
   ApplyXSLRequestProperties(params);
   return ToXSLStyleSheetResource(
       fetcher->RequestResource(params, XSLStyleSheetResourceFactory()));
@@ -71,12 +72,11 @@ XSLStyleSheetResource* XSLStyleSheetResource::Fetch(FetchParameters& params,
 XSLStyleSheetResource::XSLStyleSheetResource(
     const ResourceRequest& resource_request,
     const ResourceLoaderOptions& options,
-    const String& charset)
+    const TextResourceDecoderOptions& decoder_options)
     : StyleSheetResource(resource_request,
                          kXSLStyleSheet,
                          options,
-                         "text/xsl",
-                         charset) {}
+                         decoder_options) {}
 
 void XSLStyleSheetResource::DidAddClient(ResourceClient* c) {
   DCHECK(StyleSheetResourceClient::IsExpectedType(c));
@@ -88,6 +88,8 @@ void XSLStyleSheetResource::DidAddClient(ResourceClient* c) {
 }
 
 void XSLStyleSheetResource::CheckNotify() {
+  TriggerNotificationForFinishObservers();
+
   if (Data())
     sheet_ = DecodedText();
 

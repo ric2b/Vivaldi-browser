@@ -17,8 +17,9 @@
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
+#include "base/scoped_observer.h"
+#include "base/sequence_checker.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/values.h"
 #include "build/build_config.h"
 #include "chrome/browser/captive_portal/captive_portal_service.h"
@@ -37,6 +38,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -133,8 +135,7 @@ const char* const kInternetConnectedTitle = "Title Of Awesomeness";
 // A URL request job that hangs until FailJobs() is called.  Started jobs
 // are stored in a static class variable containing a linked list so that
 // FailJobs() can locate them.
-class URLRequestTimeoutOnDemandJob : public net::URLRequestJob,
-                                     public base::NonThreadSafe {
+class URLRequestTimeoutOnDemandJob : public net::URLRequestJob {
  public:
   // net::URLRequestJob:
   void Start() override;
@@ -211,6 +212,8 @@ class URLRequestTimeoutOnDemandJob : public net::URLRequestJob,
   // The next job that had been started but not yet timed out.
   URLRequestTimeoutOnDemandJob* next_job_;
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
   DISALLOW_COPY_AND_ASSIGN(URLRequestTimeoutOnDemandJob);
 };
 
@@ -220,7 +223,7 @@ int URLRequestTimeoutOnDemandJob::num_jobs_started_ = 0;
 URLRequestTimeoutOnDemandJob* URLRequestTimeoutOnDemandJob::job_list_ = NULL;
 
 void URLRequestTimeoutOnDemandJob::Start() {
-  EXPECT_TRUE(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Insert at start of the list.
   next_job_ = job_list_;
@@ -276,6 +279,7 @@ URLRequestTimeoutOnDemandJob::URLRequestTimeoutOnDemandJob(
 }
 
 URLRequestTimeoutOnDemandJob::~URLRequestTimeoutOnDemandJob() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // All hanging jobs should have failed or been abandoned before being
   // destroyed.
   EXPECT_FALSE(RemoveFromList());
@@ -482,8 +486,6 @@ URLRequestMockCaptivePortalJobFactory::Interceptor::MaybeInterceptRequest(
     net::NetworkDelegate* network_delegate) const {
   EXPECT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
 
-  const base::TaskTraits kTraits = {base::MayBlock()};
-
   // The PathService is threadsafe.
   base::FilePath root_http;
   PathService::Get(chrome::DIR_TEST_DATA, &root_http);
@@ -496,8 +498,7 @@ URLRequestMockCaptivePortalJobFactory::Interceptor::MaybeInterceptRequest(
     // actually requested.
     return new URLRequestMockHTTPJob(
         request, network_delegate,
-        root_http.Append(FILE_PATH_LITERAL("title2.html")),
-        base::CreateTaskRunnerWithTraits(kTraits));
+        root_http.Append(FILE_PATH_LITERAL("title2.html")));
   } else if (request->url() == kMockHttpsQuickTimeoutUrl) {
     if (behind_captive_portal_)
       return new URLRequestFailedJob(
@@ -506,8 +507,7 @@ URLRequestMockCaptivePortalJobFactory::Interceptor::MaybeInterceptRequest(
     // actually requested.
     return new URLRequestMockHTTPJob(
         request, network_delegate,
-        root_http.Append(FILE_PATH_LITERAL("title2.html")),
-        base::CreateTaskRunnerWithTraits(kTraits));
+        root_http.Append(FILE_PATH_LITERAL("title2.html")));
   } else {
     // The URL should be the captive portal test URL.
     EXPECT_TRUE(request->url() == kMockCaptivePortalTestUrl ||
@@ -519,20 +519,17 @@ URLRequestMockCaptivePortalJobFactory::Interceptor::MaybeInterceptRequest(
       if (request->url() == kMockCaptivePortal511Url) {
         return new URLRequestMockHTTPJob(
             request, network_delegate,
-            root_http.Append(FILE_PATH_LITERAL("captive_portal/page511.html")),
-            base::CreateTaskRunnerWithTraits(kTraits));
+            root_http.Append(FILE_PATH_LITERAL("captive_portal/page511.html")));
       }
       return new URLRequestMockHTTPJob(
           request, network_delegate,
-          root_http.Append(FILE_PATH_LITERAL("captive_portal/login.html")),
-          base::CreateTaskRunnerWithTraits(kTraits));
+          root_http.Append(FILE_PATH_LITERAL("captive_portal/login.html")));
     }
 
     // After logging in to the portal, the test URLs return a 204 response.
     return new URLRequestMockHTTPJob(
         request, network_delegate,
-        root_http.Append(FILE_PATH_LITERAL("captive_portal/page204.html")),
-        base::CreateTaskRunnerWithTraits(kTraits));
+        root_http.Append(FILE_PATH_LITERAL("captive_portal/page204.html")));
   }
 }
 
@@ -897,6 +894,48 @@ void AddHstsHost(net::URLRequestContextGetter* context_getter,
   bool include_subdomains = false;
   transport_security_state->AddHSTS(host, expiry, include_subdomains);
 }
+
+// Helper for waiting for a change of the active tab.
+// Users can wait for the change via WaitForActiveTabChange method.
+// DCHECKs ensure that only one change happens during the lifetime of a
+// TabActivationWaiter instance.
+class TabActivationWaiter : public TabStripModelObserver {
+ public:
+  explicit TabActivationWaiter(TabStripModel* tab_strip_model)
+      : number_of_unconsumed_active_tab_changes_(0), scoped_observer_(this) {
+    scoped_observer_.Add(tab_strip_model);
+  }
+
+  void WaitForActiveTabChange() {
+    if (number_of_unconsumed_active_tab_changes_ == 0) {
+      // Wait until TabStripModelObserver::ActiveTabChanged will get called.
+      message_loop_runner_ = new content::MessageLoopRunner;
+      message_loop_runner_->Run();
+    }
+
+    // "consume" one tab activation event.
+    DCHECK_EQ(1, number_of_unconsumed_active_tab_changes_);
+    number_of_unconsumed_active_tab_changes_--;
+  }
+
+  // TabStripModelObserver overrides.
+  void ActiveTabChanged(content::WebContents* old_contents,
+                        content::WebContents* new_contents,
+                        int index,
+                        int reason) override {
+    number_of_unconsumed_active_tab_changes_++;
+    DCHECK_EQ(1, number_of_unconsumed_active_tab_changes_);
+    if (message_loop_runner_)
+      message_loop_runner_->Quit();
+  }
+
+ private:
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner_;
+  int number_of_unconsumed_active_tab_changes_;
+  ScopedObserver<TabStripModel, TabActivationWaiter> scoped_observer_;
+
+  DISALLOW_COPY_AND_ASSIGN(TabActivationWaiter);
+};
 
 }  // namespace
 
@@ -1541,8 +1580,8 @@ void CaptivePortalBrowserTest::NavigateLoginTab(Browser* browser,
   ASSERT_TRUE(IsLoginTab(browser->tab_strip_model()->GetActiveWebContents()));
 
   // Do the navigation.
-  EXPECT_TRUE(content::ExecuteScript(tab_strip_model->GetActiveWebContents(),
-                                     "submitForm()"));
+  content::ExecuteScriptAsync(tab_strip_model->GetActiveWebContents(),
+                              "submitForm()");
 
   portal_observer.WaitForResults(1);
   navigation_observer.WaitForNavigations(1);
@@ -1587,8 +1626,8 @@ void CaptivePortalBrowserTest::Login(Browser* browser,
   ASSERT_TRUE(IsLoginTab(tab_strip_model->GetWebContentsAt(login_tab_index)));
 
   // Trigger a navigation.
-  EXPECT_TRUE(content::ExecuteScript(tab_strip_model->GetActiveWebContents(),
-                                     "submitForm()"));
+  content::ExecuteScriptAsync(tab_strip_model->GetActiveWebContents(),
+                              "submitForm()");
 
   portal_observer.WaitForResults(1);
 
@@ -1629,8 +1668,8 @@ void CaptivePortalBrowserTest::LoginCertError(Browser* browser) {
   ASSERT_TRUE(IsLoginTab(tab_strip_model->GetWebContentsAt(login_tab_index)));
 
   // Trigger a navigation.
-  EXPECT_TRUE(content::ExecuteScript(tab_strip_model->GetActiveWebContents(),
-                                     "submitForm()"));
+  content::ExecuteScriptAsync(tab_strip_model->GetActiveWebContents(),
+                              "submitForm()");
 
   // The captive portal tab navigation will trigger a captive portal check,
   // and reloading the original tab will bring up the interstitial page again,
@@ -1982,8 +2021,11 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
   EXPECT_TRUE(WaitForRenderFrameReady(rfh));
   const char kClickConnectButtonJS[] =
       "document.getElementById('primary-button').click();";
-  EXPECT_TRUE(
-      content::ExecuteScript(rfh, kClickConnectButtonJS));
+  {
+    TabActivationWaiter tab_activation_waiter(tab_strip_model);
+    content::ExecuteScriptAsync(rfh, kClickConnectButtonJS);
+    tab_activation_waiter.WaitForActiveTabChange();
+  }
   EXPECT_EQ(login_tab_index, tab_strip_model->active_index());
 
   // For completeness, close the login tab and try clicking |Connect| again.
@@ -1995,8 +2037,7 @@ IN_PROC_BROWSER_TEST_F(CaptivePortalBrowserTest,
       tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(), 0));
   destroyed_watcher.Wait();
   MultiNavigationObserver navigation_observer;
-  EXPECT_TRUE(
-      content::ExecuteScript(rfh, kClickConnectButtonJS));
+  content::ExecuteScriptAsync(rfh, kClickConnectButtonJS);
   navigation_observer.WaitForNavigations(1);
   EXPECT_EQ(login_tab_index, tab_strip_model->active_index());
 
@@ -2294,7 +2335,7 @@ IN_PROC_BROWSER_TEST_F(
   // 1- For stopping the hanging page.
   // 2- For completing the load of the above navigation.
   // 3- For completing the load of the login tab.
-  // NOTE: for PlzNaviate the first one doesn't show up.
+  // NOTE: for PlzNavigate the first one doesn't show up.
   test_navigation_observer.WaitForNavigations(
       content::IsBrowserSideNavigationEnabled() ? 2 : 3);
   // Should end up with a captive portal interstitial and a new login tab.

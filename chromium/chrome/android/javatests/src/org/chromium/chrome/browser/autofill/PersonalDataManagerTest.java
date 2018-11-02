@@ -4,13 +4,13 @@
 
 package org.chromium.chrome.browser.autofill;
 
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.test.BaseJUnit4ClassRunner;
@@ -18,8 +18,8 @@ import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
-import org.chromium.chrome.test.util.ApplicationData;
-import org.chromium.content.browser.test.NativeLibraryTestRule;
+import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
+import org.chromium.chrome.browser.test.ClearAppDataTestRule;
 
 import java.util.LinkedList;
 import java.util.List;
@@ -32,16 +32,13 @@ import java.util.concurrent.TimeoutException;
 @RunWith(BaseJUnit4ClassRunner.class)
 public class PersonalDataManagerTest {
     @Rule
-    public NativeLibraryTestRule mActivityTestRule = new NativeLibraryTestRule();
+    public final RuleChain mChain =
+            RuleChain.outerRule(new ClearAppDataTestRule()).around(new ChromeBrowserTestRule());
 
     private AutofillTestHelper mHelper;
 
     @Before
-    public void setUp() throws Exception {
-        ApplicationData.clearAppData(
-                InstrumentationRegistry.getInstrumentation().getTargetContext());
-        mActivityTestRule.loadNativeLibraryAndInitBrowserProcess();
-
+    public void setUp() {
         mHelper = new AutofillTestHelper();
     }
 
@@ -401,13 +398,13 @@ public class PersonalDataManagerTest {
         // Create a local card and an identical server card.
         CreditCard card1 = new CreditCard("" /* guid */, "https://www.example.com" /* origin */,
                 true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234", "", "5",
-                "2020", "Visa", 0 /* issuerIconDrawableId */, "" /* billingAddressId */,
-                "" /* serverId */);
+                "2020", "Visa", 0 /* issuerIconDrawableId */, CardType.UNKNOWN,
+                "" /* billingAddressId */, "" /* serverId */);
 
         CreditCard card2 = new CreditCard("" /* guid */, "https://www.example.com" /* origin */,
                 false /* isLocal */, false /* isCached */, "John Doe", "1234123412341234", "", "5",
-                "2020", "Visa", 0 /* issuerIconDrawableId */, "" /* billingAddressId */,
-                "" /* serverId */);
+                "2020", "Visa", 0 /* issuerIconDrawableId */, CardType.UNKNOWN,
+                "" /* billingAddressId */, "" /* serverId */);
 
         mHelper.setCreditCard(card1);
         mHelper.addServerCreditCard(card2);
@@ -447,9 +444,9 @@ public class PersonalDataManagerTest {
             throws InterruptedException, ExecutionException, TimeoutException {
         String guid = mHelper.setCreditCard(
                 new CreditCard("" /* guid */, "https://www.example.com" /* origin */,
-                    true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234", "",
-                    "5", "2020", "Visa", 0 /* issuerIconDrawableId */, "" /* billingAddressId */,
-                    "" /* serverId */));
+                        true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234",
+                        "", "5", "2020", "Visa", 0 /* issuerIconDrawableId */, CardType.UNKNOWN,
+                        "" /* billingAddressId */, "" /* serverId */));
 
         // Make sure the credit card does not have the specific use stats form the start.
         Assert.assertTrue(1234 != mHelper.getCreditCardUseCountForTesting(guid));
@@ -496,11 +493,10 @@ public class PersonalDataManagerTest {
     public void testRecordAndLogCreditCardUse()
             throws InterruptedException, ExecutionException, TimeoutException {
         String guid = mHelper.setCreditCard(
-                    new CreditCard("" /* guid */, "https://www.example.com" /* origin */,
-                            true /* isLocal */, false /* isCached */, "John Doe",
-                            "1234123412341234", "", "5", "2020", "Visa",
-                            0 /* issuerIconDrawableId */, "" /* billingAddressId */,
-                            "" /* serverId */));
+                new CreditCard("" /* guid */, "https://www.example.com" /* origin */,
+                        true /* isLocal */, false /* isCached */, "John Doe", "1234123412341234",
+                        "", "5", "2020", "Visa", 0 /* issuerIconDrawableId */, CardType.UNKNOWN,
+                        "" /* billingAddressId */, "" /* serverId */));
 
         // Set specific use stats for the credit card.
         mHelper.setCreditCardUseStatsForTesting(guid, 1234, 1234);

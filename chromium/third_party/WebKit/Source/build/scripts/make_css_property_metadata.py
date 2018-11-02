@@ -18,11 +18,18 @@ class CSSPropertyMetadataWriter(css_properties.CSSProperties):
 
     def __init__(self, json5_file_path):
         super(CSSPropertyMetadataWriter, self).__init__(json5_file_path)
-        self._outputs = {'CSSPropertyMetadata.cpp': self.generate_css_property_metadata_cpp}
+        self._outputs = {
+            'CSSPropertyMetadata.cpp':
+            self.generate_css_property_metadata_cpp
+        }
+        for property_value in self._properties.values():
+            property_value['supports_percentage'] = (
+                'Percent' in property_value['typedom_types'])
 
-    @template_expander.use_jinja('CSSPropertyMetadata.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/CSSPropertyMetadata.cpp.tmpl', filters=filters)
     def generate_css_property_metadata_cpp(self):
         return {
+            'input_files': self._input_files,
             'properties_including_aliases': self._properties_including_aliases,
             'switches': [('is_descriptor', 'IsDescriptor'),
                          ('is_property', 'IsProperty'),

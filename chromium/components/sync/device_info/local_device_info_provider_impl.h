@@ -10,15 +10,14 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "components/sync/device_info/device_info.h"
 #include "components/sync/device_info/local_device_info_provider.h"
 #include "components/version_info/version_info.h"
 
 namespace syncer {
 
-class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider,
-                                    public base::NonThreadSafe {
+class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider {
  public:
   LocalDeviceInfoProviderImpl(version_info::Channel channel,
                               const std::string& version,
@@ -29,10 +28,8 @@ class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider,
   const DeviceInfo* GetLocalDeviceInfo() const override;
   std::string GetSyncUserAgent() const override;
   std::string GetLocalSyncCacheGUID() const override;
-  void Initialize(
-      const std::string& cache_guid,
-      const std::string& signin_scoped_device_id,
-      const scoped_refptr<base::TaskRunner>& blocking_task_runner) override;
+  void Initialize(const std::string& cache_guid,
+                  const std::string& signin_scoped_device_id) override;
   std::unique_ptr<Subscription> RegisterOnInitializedCallback(
       const base::Closure& callback) override;
   void Clear() override;
@@ -55,6 +52,9 @@ class LocalDeviceInfoProviderImpl : public LocalDeviceInfoProvider,
   std::string cache_guid_;
   std::unique_ptr<DeviceInfo> local_device_info_;
   base::CallbackList<void(void)> callback_list_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+
   base::WeakPtrFactory<LocalDeviceInfoProviderImpl> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(LocalDeviceInfoProviderImpl);

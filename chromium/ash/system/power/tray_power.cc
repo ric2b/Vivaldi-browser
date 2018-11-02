@@ -118,39 +118,19 @@ class PowerTrayView : public TrayItemView {
   }
 
  private:
-  class PowerTrayImageSource : public gfx::ImageSkiaSource {
-   public:
-    explicit PowerTrayImageSource(const PowerStatus::BatteryImageInfo& info)
-        : info_(info) {}
-
-    // gfx::ImageSkiaSource implementation.
-    gfx::ImageSkiaRep GetImageForScale(float scale) override {
-      return PowerStatus::Get()->GetBatteryImage(info_, scale);
-    }
-
-    const PowerStatus::BatteryImageInfo& info() const { return info_; }
-
-   private:
-    PowerStatus::BatteryImageInfo info_;
-
-    DISALLOW_COPY_AND_ASSIGN(PowerTrayImageSource);
-  };
-
   void UpdateImage() {
     const PowerStatus::BatteryImageInfo& info =
         PowerStatus::Get()->GetBatteryImageInfo();
     // Only change the image when the info changes. http://crbug.com/589348
-    if (image_source_ && image_source_->info() == info)
+    if (info_ && info_->ApproximatelyEqual(info))
       return;
-    image_source_ = new PowerTrayImageSource(info);
-    // gfx::ImageSkia takes ownership of image_source_. It will stay alive until
-    // we call SetImage() again, which only happens here.
-    image_view()->SetImage(
-        gfx::ImageSkia(image_source_, PowerStatus::GetBatteryImageSizeInDip()));
+    image_view()->SetImage(PowerStatus::GetBatteryImage(
+        info, kTrayIconSize, SkColorSetA(kTrayIconColor, 0x4C),
+        kTrayIconColor));
   }
 
   base::string16 accessible_name_;
-  PowerTrayImageSource* image_source_ = nullptr;
+  base::Optional<PowerStatus::BatteryImageInfo> info_;
 
   DISALLOW_COPY_AND_ASSIGN(PowerTrayView);
 };
@@ -169,7 +149,7 @@ const char TrayPower::kUsbNotificationId[] = "usb-charger";
 TrayPower::TrayPower(SystemTray* system_tray, MessageCenter* message_center)
     : SystemTrayItem(system_tray, UMA_POWER),
       message_center_(message_center),
-      power_tray_(NULL),
+      power_tray_(nullptr),
       notification_state_(NOTIFICATION_NONE),
       usb_charger_was_connected_(false),
       line_power_was_connected_(false),
@@ -186,7 +166,7 @@ views::View* TrayPower::CreateTrayView(LoginStatus status) {
   // There may not be enough information when this is created about whether
   // there is a battery or not. So always create this, and adjust visibility as
   // necessary.
-  CHECK(power_tray_ == NULL);
+  CHECK(power_tray_ == nullptr);
   power_tray_ = new tray::PowerTrayView(this);
   power_tray_->UpdateStatus(false);
   return power_tray_;
@@ -195,11 +175,11 @@ views::View* TrayPower::CreateTrayView(LoginStatus status) {
 views::View* TrayPower::CreateDefaultView(LoginStatus status) {
   // Make sure icon status is up to date. (Also triggers stub activation).
   PowerStatus::Get()->RequestStatusUpdate();
-  return NULL;
+  return nullptr;
 }
 
-void TrayPower::DestroyTrayView() {
-  power_tray_ = NULL;
+void TrayPower::OnTrayViewDestroyed() {
+  power_tray_ = nullptr;
 }
 
 void TrayPower::OnPowerStatusChanged() {

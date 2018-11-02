@@ -116,7 +116,7 @@ void SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::Init(Node* start_node,
     // traversing the children twice.
     if (Node* child_at_offset = Strategy::ChildAt(*end_node, end_offset - 1)) {
       end_node = child_at_offset;
-      end_offset = Position::LastOffsetInNode(end_node);
+      end_offset = Position::LastOffsetInNode(*end_node);
     }
   }
 
@@ -167,7 +167,7 @@ void SimplifiedBackwardsTextIteratorAlgorithm<Strategy>::Advance() {
         if (layout_object->Style()->Visibility() == EVisibility::kVisible &&
             offset_ > 0)
           handled_node_ = HandleTextNode();
-      } else if (layout_object && (layout_object->IsLayoutPart() ||
+      } else if (layout_object && (layout_object->IsLayoutEmbeddedContent() ||
                                    TextIterator::SupportsAltText(node_))) {
         if (layout_object->Style()->Visibility() == EVisibility::kVisible &&
             offset_ > 0)

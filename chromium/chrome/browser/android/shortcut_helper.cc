@@ -19,9 +19,9 @@
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
 #include "chrome/browser/android/webapk/webapk_install_service.h"
 #include "chrome/browser/android/webapk/webapk_metrics.h"
-#include "chrome/browser/manifest/manifest_icon_downloader.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/manifest_icon_downloader.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/ShortcutHelper_jni.h"
 #include "ui/gfx/android/java_bitmap.h"
@@ -93,7 +93,7 @@ void AddWebappWithSkBitmap(const ShortcutInfo& info,
       base::android::ConvertUTF8ToJavaString(env,
                                              info.best_primary_icon_url.spec());
   ScopedJavaLocalRef<jobject> java_bitmap;
-  if (icon_bitmap.getSize())
+  if (!icon_bitmap.drawsNothing())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
 
   // The callback will need to be run after shortcut creation completes in order
@@ -122,7 +122,7 @@ void AddShortcutWithSkBitmap(const ShortcutInfo& info,
   ScopedJavaLocalRef<jstring> java_user_title =
       base::android::ConvertUTF16ToJavaString(env, info.user_title);
   ScopedJavaLocalRef<jobject> java_bitmap;
-  if (icon_bitmap.getSize())
+  if (!icon_bitmap.drawsNothing())
     java_bitmap = gfx::ConvertToJavaBitmap(&icon_bitmap);
 
   Java_ShortcutHelper_addShortcut(env, java_id, java_url, java_user_title,
@@ -144,10 +144,6 @@ void ShortcutHelper::AddToLauncherWithSkBitmap(
         base::Bind(&ShortcutHelper::FetchSplashScreenImage, web_contents,
                    info.splash_image_url, info.ideal_splash_image_size_in_px,
                    info.minimum_splash_image_size_in_px, webapp_id));
-    GooglePlayInstallState state =
-        ChromeWebApkHost::GetGooglePlayInstallState();
-    if (state != GooglePlayInstallState::SUPPORTED)
-      webapk::TrackGooglePlayInstallState(state);
     return;
   }
   AddShortcutWithSkBitmap(info, webapp_id, icon_bitmap);
@@ -162,7 +158,6 @@ void ShortcutHelper::InstallWebApkWithSkBitmap(
     const WebApkInstallService::FinishCallback& callback) {
   WebApkInstallService::Get(web_contents->GetBrowserContext())
       ->InstallAsync(info, primary_icon_bitmap, badge_icon_bitmap, callback);
-  webapk::TrackGooglePlayInstallState(GooglePlayInstallState::SUPPORTED);
 }
 
 void ShortcutHelper::ShowWebApkInstallInProgressToast() {
@@ -209,7 +204,7 @@ void ShortcutHelper::FetchSplashScreenImage(
     const std::string& webapp_id) {
   // This is a fire and forget task. It is not vital for the splash screen image
   // to be downloaded so if the downloader returns false there is no fallback.
-  ManifestIconDownloader::Download(
+  content::ManifestIconDownloader::Download(
       web_contents, image_url, ideal_splash_image_size_in_px,
       minimum_splash_image_size_in_px,
       base::Bind(&ShortcutHelper::StoreWebappSplashImage, webapp_id));
@@ -411,8 +406,4 @@ void OnWebApksRetrieved(JNIEnv* env,
       reinterpret_cast<ShortcutHelper::WebApkInfoCallback*>(jcallback_pointer);
   webapk_list_callback->Run(webapk_list);
   delete webapk_list_callback;
-}
-
-bool ShortcutHelper::RegisterShortcutHelper(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

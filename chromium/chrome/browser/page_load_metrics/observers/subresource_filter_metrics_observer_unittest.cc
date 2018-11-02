@@ -4,24 +4,48 @@
 
 #include "chrome/browser/page_load_metrics/observers/subresource_filter_metrics_observer.h"
 
+#include <memory>
+
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/page_load_metrics/observers/page_load_metrics_observer_test_harness.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
+#include "components/subresource_filter/core/common/activation_level.h"
+#include "components/subresource_filter/core/common/activation_state.h"
+#include "content/public/browser/navigation_handle.h"
+#include "content/public/test/navigation_simulator.h"
+#include "url/gurl.h"
 
 namespace {
 const char kDefaultTestUrl[] = "https://example.com/";
+const char kDefaultTestUrlWithActivation[] = "https://example-activation.com/";
+const char kDefaultTestUrlWithActivationDryRun[] =
+    "https://dryrun.example-activation.com/";
 }  // namespace
 
 class SubresourceFilterMetricsObserverTest
     : public page_load_metrics::PageLoadMetricsObserverTestHarness {
  public:
+  SubresourceFilterMetricsObserverTest() {}
+  ~SubresourceFilterMetricsObserverTest() override {}
+
+  void SetUp() override {
+    page_load_metrics::PageLoadMetricsObserverTestHarness::SetUp();
+    subresource_filter::SubresourceFilterObserverManager::CreateForWebContents(
+        web_contents());
+    observer_manager_ =
+        subresource_filter::SubresourceFilterObserverManager::FromWebContents(
+            web_contents());
+  }
+
   void RegisterObservers(page_load_metrics::PageLoadTracker* tracker) override {
     tracker->AddObserver(base::MakeUnique<SubresourceFilterMetricsObserver>());
   }
 
-  bool AnyMetricsRecorded() {
-    return !histogram_tester()
-                .GetTotalCountsForPrefix("PageLoad.Clients.SubresourceFilter.")
-                .empty();
+  size_t TotalMetricsRecorded() {
+    return histogram_tester()
+        .GetTotalCountsForPrefix("PageLoad.Clients.SubresourceFilter.")
+        .size();
   }
 
   void InitializePageLoadTiming(
@@ -44,11 +68,66 @@ class SubresourceFilterMetricsObserverTest
         base::TimeDelta::FromMilliseconds(1500);
     PopulateRequiredTimingFields(timing);
   }
+
+  void SimulateNavigateAndCommit(const GURL& url) {
+    std::unique_ptr<content::NavigationSimulator> simulator =
+        content::NavigationSimulator::CreateRendererInitiated(url, main_rfh());
+    simulator->Start();
+    // Simulate an activation notification.
+    content::NavigationHandle* handle = simulator->GetNavigationHandle();
+    if (handle->GetURL() == kDefaultTestUrlWithActivation) {
+      observer_manager_->NotifyPageActivationComputed(
+          handle, subresource_filter::ActivationDecision::ACTIVATED,
+          subresource_filter::ActivationState(
+              subresource_filter::ActivationLevel::ENABLED));
+    } else if (handle->GetURL() == kDefaultTestUrlWithActivationDryRun) {
+      observer_manager_->NotifyPageActivationComputed(
+          handle, subresource_filter::ActivationDecision::ACTIVATED,
+          subresource_filter::ActivationState(
+              subresource_filter::ActivationLevel::DRYRUN));
+    } else {
+      observer_manager_->NotifyPageActivationComputed(
+          handle,
+          subresource_filter::ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+          subresource_filter::ActivationState(
+              subresource_filter::ActivationLevel::DISABLED));
+    }
+    simulator->Commit();
+  }
+
+  void ExpectActivationDecision(const char* url,
+                                subresource_filter::ActivationDecision decision,
+                                subresource_filter::ActivationLevel level) {
+    histogram_tester().ExpectBucketCount(
+        internal::kHistogramSubresourceFilterActivationDecision,
+        static_cast<int>(decision), 1);
+
+    ASSERT_EQ(1ul, test_ukm_recorder().entries_count());
+    const ukm::UkmSource* source = test_ukm_recorder().GetSourceForUrl(url);
+    EXPECT_TRUE(test_ukm_recorder().HasEntry(
+        *source, internal::kUkmSubresourceFilterName));
+    test_ukm_recorder().ExpectMetric(
+        *source, internal::kUkmSubresourceFilterName,
+        internal::kUkmSubresourceFilterActivationDecision,
+        static_cast<int64_t>(decision));
+    if (level == subresource_filter::ActivationLevel::DRYRUN) {
+      test_ukm_recorder().ExpectMetric(
+          *source, internal::kUkmSubresourceFilterName,
+          internal::kUkmSubresourceFilterDryRun, true);
+    }
+  }
+
+ private:
+  // Owned by the WebContents.
+  subresource_filter::SubresourceFilterObserverManager* observer_manager_ =
+      nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(SubresourceFilterMetricsObserverTest);
 };
 
 TEST_F(SubresourceFilterMetricsObserverTest,
        NoMetricsForNonSubresourceFilteredNavigation) {
-  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateNavigateAndCommit(GURL(kDefaultTestUrl));
 
   page_load_metrics::mojom::PageLoadTiming timing;
   InitializePageLoadTiming(&timing);
@@ -58,11 +137,15 @@ TEST_F(SubresourceFilterMetricsObserverTest,
   // metrics.
   NavigateToUntrackedUrl();
 
-  ASSERT_FALSE(AnyMetricsRecorded());
+  EXPECT_EQ(1u, TotalMetricsRecorded());
+  ExpectActivationDecision(
+      kDefaultTestUrl,
+      subresource_filter::ActivationDecision::ACTIVATION_CONDITIONS_NOT_MET,
+      subresource_filter::ActivationLevel::DISABLED);
 }
 
 TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
-  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateNavigateAndCommit(GURL(kDefaultTestUrlWithActivation));
 
   page_load_metrics::mojom::PageLoadTiming timing;
   InitializePageLoadTiming(&timing);
@@ -74,7 +157,10 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
   // Navigate away from the current page to force logging of metrics.
   NavigateToUntrackedUrl();
 
-  ASSERT_TRUE(AnyMetricsRecorded());
+  EXPECT_GT(TotalMetricsRecorded(), 0u);
+  ExpectActivationDecision(kDefaultTestUrlWithActivation,
+                           subresource_filter::ActivationDecision::ACTIVATED,
+                           subresource_filter::ActivationLevel::ENABLED);
 
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterCount, 1);
@@ -152,14 +238,34 @@ TEST_F(SubresourceFilterMetricsObserverTest, Basic) {
       internal::kHistogramSubresourceFilterForegroundDuration, 1);
 }
 
-TEST_F(SubresourceFilterMetricsObserverTest, Subresources) {
-  NavigateAndCommit(GURL(kDefaultTestUrl));
+TEST_F(SubresourceFilterMetricsObserverTest, DryRun) {
+  SimulateNavigateAndCommit(GURL(kDefaultTestUrlWithActivationDryRun));
 
-  SimulateLoadedResource(
-      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
-       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
-       nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
+  page_load_metrics::mojom::PageLoadTiming timing;
+  InitializePageLoadTiming(&timing);
+  page_load_metrics::mojom::PageLoadMetadata metadata;
+  metadata.behavior_flags |=
+      blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
+  SimulateTimingAndMetadataUpdate(timing, metadata);
+
+  // Navigate away from the current page to force logging of metrics.
+  NavigateToUntrackedUrl();
+
+  EXPECT_GT(TotalMetricsRecorded(), 0u);
+  ExpectActivationDecision(kDefaultTestUrlWithActivationDryRun,
+                           subresource_filter::ActivationDecision::ACTIVATED,
+                           subresource_filter::ActivationLevel::DRYRUN);
+}
+
+TEST_F(SubresourceFilterMetricsObserverTest, Subresources) {
+  SimulateNavigateAndCommit(GURL(kDefaultTestUrlWithActivation));
+
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, false /* was_cached */,
+                          1024 * 40 /* raw_body_bytes */,
+                          0 /* original_network_content_length */,
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
 
   page_load_metrics::mojom::PageLoadTiming timing;
   page_load_metrics::InitPageLoadTimingForTest(&timing);
@@ -169,18 +275,23 @@ TEST_F(SubresourceFilterMetricsObserverTest, Subresources) {
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
-  SimulateLoadedResource(
-      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
-       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
-       nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
-
-  SimulateLoadedResource({GURL(), -1 /* frame_tree_node_id */,
-                          true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, false /* was_cached */,
+                          1024 * 20 /* raw_body_bytes */,
                           0 /* original_network_content_length */,
                           nullptr /* data_reduction_proxy_data */,
-                          content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
 
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, true /* was_cached */,
+                          1024 * 10 /* raw_body_bytes */,
+                          0 /* original_network_content_length */,
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
+
+  ExpectActivationDecision(kDefaultTestUrlWithActivation,
+                           subresource_filter::ActivationDecision::ACTIVATED,
+                           subresource_filter::ActivationLevel::ENABLED);
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterCount, 1);
 
@@ -251,15 +362,16 @@ TEST_F(SubresourceFilterMetricsObserverTest, Subresources) {
 }
 
 TEST_F(SubresourceFilterMetricsObserverTest, SubresourcesWithMedia) {
-  NavigateAndCommit(GURL(kDefaultTestUrl));
+  SimulateNavigateAndCommit(GURL(kDefaultTestUrlWithActivation));
 
   SimulateMediaPlayed();
 
-  SimulateLoadedResource(
-      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
-       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
-       nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, false /* was_cached */,
+                          1024 * 40 /* raw_body_bytes */,
+                          0 /* original_network_content_length */,
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
 
   page_load_metrics::mojom::PageLoadTiming timing;
   page_load_metrics::InitPageLoadTimingForTest(&timing);
@@ -269,18 +381,23 @@ TEST_F(SubresourceFilterMetricsObserverTest, SubresourcesWithMedia) {
       blink::WebLoadingBehaviorFlag::kWebLoadingBehaviorSubresourceFilterMatch;
   SimulateTimingAndMetadataUpdate(timing, metadata);
 
-  SimulateLoadedResource(
-      {GURL(), -1 /* frame_tree_node_id */, false /* was_cached */,
-       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
-       nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
-
-  SimulateLoadedResource({GURL(), -1 /* frame_tree_node_id */,
-                          true /* was_cached */, 1024 * 10 /* raw_body_bytes */,
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, false /* was_cached */,
+                          1024 * 20 /* raw_body_bytes */,
                           0 /* original_network_content_length */,
                           nullptr /* data_reduction_proxy_data */,
-                          content::ResourceType::RESOURCE_TYPE_MAIN_FRAME});
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
 
+  SimulateLoadedResource({GURL(kResourceUrl), net::HostPortPair(),
+                          -1 /* frame_tree_node_id */, true /* was_cached */,
+                          1024 * 10 /* raw_body_bytes */,
+                          0 /* original_network_content_length */,
+                          nullptr /* data_reduction_proxy_data */,
+                          content::ResourceType::RESOURCE_TYPE_SCRIPT, 0});
+
+  ExpectActivationDecision(kDefaultTestUrlWithActivation,
+                           subresource_filter::ActivationDecision::ACTIVATED,
+                           subresource_filter::ActivationLevel::ENABLED);
   histogram_tester().ExpectTotalCount(
       internal::kHistogramSubresourceFilterCount, 1);
 

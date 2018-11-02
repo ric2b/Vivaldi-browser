@@ -31,8 +31,10 @@ import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
+import org.chromium.base.test.util.parameter.CommandLineParameter;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeActivity;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -51,10 +53,14 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tests for the URL bar UI component.
+ *
+ * TODO(yolandyan): Replace the CommandLineParameter with new JUnit4 parameterized
+ * framework once it supports Test Rule Parameterization
  */
 @RunWith(ChromeJUnit4ClassRunner.class)
 @CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE,
         ChromeActivityTestRule.DISABLE_NETWORK_PREDICTION_FLAG})
+@CommandLineParameter({"", "enable-features=" + ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE})
 public class UrlBarTest {
     // 9000+ chars of goodness
 
@@ -173,6 +179,7 @@ public class UrlBarTest {
             @Override
             public void run() {
                 urlBar.setText(text);
+                urlBar.setSelection(text.length());
             }
         });
 
@@ -231,7 +238,7 @@ public class UrlBarTest {
         setAutocomplete(urlBar, "test", "ing is fun");
         setTextAndVerifyNoAutocomplete(urlBar, "new string");
 
-        // Replace part of the non-autocomplete text and see that the autocomplete is cleared.
+        // Replace part of the non-autocomplete text
         setTextAndVerifyNoAutocomplete(urlBar, "test");
         setAutocomplete(urlBar, "test", "ing is fun");
         AutocompleteState state = getAutocompleteState(urlBar, new Runnable() {
@@ -241,10 +248,18 @@ public class UrlBarTest {
             }
         });
         Assert.assertFalse(state.hasAutocomplete);
-        Assert.assertEquals("tasting is fun", state.textWithoutAutocomplete);
-        Assert.assertEquals("tasting is fun", state.textWithAutocomplete);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: new model clears autocomplete text when non-IME change has been made.
+            // The autocomplete gets removed.
+            Assert.assertEquals("tast", state.textWithoutAutocomplete);
+            Assert.assertEquals("tast", state.textWithAutocomplete);
+        } else {
+            // The autocomplete gets committed.
+            Assert.assertEquals("tasting is fun", state.textWithoutAutocomplete);
+            Assert.assertEquals("tasting is fun", state.textWithAutocomplete);
+        }
 
-        // Replace part of the autocomplete text and see that the autocomplete is cleared.
+        // Replace part of the autocomplete text.
         setTextAndVerifyNoAutocomplete(urlBar, "test");
         setAutocomplete(urlBar, "test", "ing is fun");
         state = getAutocompleteState(urlBar, new Runnable() {
@@ -254,8 +269,16 @@ public class UrlBarTest {
             }
         });
         Assert.assertFalse(state.hasAutocomplete);
-        Assert.assertEquals("testing no fun", state.textWithoutAutocomplete);
-        Assert.assertEquals("testing no fun", state.textWithAutocomplete);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: new model clears autocomplete text when non-IME change has been made.
+            // The autocomplete gets removed.
+            Assert.assertEquals("test", state.textWithoutAutocomplete);
+            Assert.assertEquals("test", state.textWithAutocomplete);
+        } else {
+            // The autocomplete gets committed.
+            Assert.assertEquals("testing no fun", state.textWithoutAutocomplete);
+            Assert.assertEquals("testing no fun", state.textWithAutocomplete);
+        }
     }
 
     private void verifySelectionState(
@@ -276,7 +299,7 @@ public class UrlBarTest {
         final StubAutocompleteController controller = new StubAutocompleteController() {
             @Override
             public void start(Profile profile, String url, String text, int cursorPosition,
-                    boolean preventInlineAutocomplete) {
+                    boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
                 if (autocompleteHelper.getCallCount() != 0) return;
 
                 requestedAutocompleteText.set(text);
@@ -316,8 +339,11 @@ public class UrlBarTest {
         // Verify that setting a selection range before the autocomplete clears it.
         verifySelectionState("test", "ing is fun", 0, 4, false, "test", "test", true, "test");
 
-        // Verify that setting a selection at the start of the autocomplete clears it.
-        verifySelectionState("test", "ing is fun", 4, 4, false, "test", "test", true, "test");
+        // Note: with new model touching the beginning of the autocomplete text is a no-op.
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Verify that setting a selection at the start of the autocomplete clears it.
+            verifySelectionState("test", "ing is fun", 4, 4, false, "test", "test", true, "test");
+        }
 
         // Verify that setting a selection range that covers a portion of the non-autocomplete
         // and autocomplete text does not delete the autocomplete text.
@@ -329,11 +355,18 @@ public class UrlBarTest {
         verifySelectionState("test", "ing is fun", 0, 14,
                 false, "testing is fun", "testing is fun", true, "testing is fun");
 
-        // Verify that setting a selection at the end of the text does not delete the autocomplete
-        // text.
-        verifySelectionState("test", "ing is fun", 14, 14,
-                false, "testing is fun", "testing is fun", false, "testing is fun");
-
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: with new model touching the beginning of the autocomplete text is a no-op.
+            // Verify that setting a selection at the end of the text does not delete the
+            // autocomplete text.
+            verifySelectionState("test", "ing is fun", 14, 14, false, "testing is fun",
+                    "testing is fun", true, "testing is fun");
+        } else {
+            // Verify that setting a selection at the end of the text does not delete the
+            // autocomplete text.
+            verifySelectionState("test", "ing is fun", 14, 14, false, "testing is fun",
+                    "testing is fun", false, "testing is fun");
+        }
         // Verify that setting a selection in the middle of the autocomplete text does not delete
         // the autocomplete text.
         verifySelectionState("test", "ing is fun", 9, 9,
@@ -344,16 +377,27 @@ public class UrlBarTest {
         verifySelectionState("test", "ing is fun", 8, 11,
                 false, "testing is fun", "testing is fun", true, "testing is fun");
 
-        // Verify that setting the same selection does not clear the autocomplete text.
-        // As we do not expect the suggestions to be refreshed, we test this slightly differently
-        // than the other cases.
+        // Select autocomplete text. As we do not expect the suggestions to be refreshed, we test
+        // this slightly differently than the other cases.
         stubLocationBarAutocomplete();
         setTextAndVerifyNoAutocomplete(urlBar, "test");
         setAutocomplete(urlBar, "test", "ing is fun");
         AutocompleteState state = setSelection(urlBar, 4, 14);
-        Assert.assertEquals("Has autocomplete", true, state.hasAutocomplete);
-        Assert.assertEquals("Text w/o Autocomplete", "test", state.textWithoutAutocomplete);
-        Assert.assertEquals("Text w/ Autocomplete", "testing is fun", state.textWithAutocomplete);
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: with new model selecting the autocomplete text will commit autocomplete.
+            Assert.assertEquals("Has autocomplete", false, state.hasAutocomplete);
+            Assert.assertEquals(
+                    "Text w/o Autocomplete", "testing is fun", state.textWithoutAutocomplete);
+            Assert.assertEquals(
+                    "Text w/ Autocomplete", "testing is fun", state.textWithAutocomplete);
+        } else {
+            // Verify that setting the same selection does not clear the autocomplete text.
+            Assert.assertEquals("Has autocomplete", true, state.hasAutocomplete);
+            Assert.assertEquals("Text w/o Autocomplete", "test", state.textWithoutAutocomplete);
+            Assert.assertEquals(
+                    "Text w/ Autocomplete", "testing is fun", state.textWithAutocomplete);
+        }
     }
 
     /**
@@ -380,7 +424,7 @@ public class UrlBarTest {
         final StubAutocompleteController controller = new StubAutocompleteController() {
             @Override
             public void start(Profile profile, String url, String text, int cursorPosition,
-                    boolean preventInlineAutocomplete) {
+                    boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
                 if (!TextUtils.equals(textToBeEntered, text)) return;
                 if (autocompleteHelper.getCallCount() != 0) return;
 
@@ -396,10 +440,7 @@ public class UrlBarTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.beginBatchEdit();
-                urlBar.setText(textToBeEntered);
-                urlBar.setSelection(textToBeEntered.length());
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().commitText(textToBeEntered, 1);
             }
         });
         autocompleteHelper.waitForCallback(0);
@@ -431,7 +472,7 @@ public class UrlBarTest {
         final StubAutocompleteController controller = new StubAutocompleteController() {
             @Override
             public void start(Profile profile, String url, String text, int cursorPosition,
-                    boolean preventInlineAutocomplete) {
+                    boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
                 if (!TextUtils.equals("test", text)) return;
                 if (autocompleteHelper.getCallCount() != 0) return;
 
@@ -469,6 +510,11 @@ public class UrlBarTest {
         mActivityTestRule.startMainActivityOnBlankPage();
         stubLocationBarAutocomplete();
         final UrlBar urlBar = getUrlBar();
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: with the new model, we remove autocomplete text at the beginning of a batch
+            // edit and add it at the end of a batch edit.
+            return;
+        }
         toggleFocusAndIgnoreImeOperations(urlBar, true);
 
         setTextAndVerifyNoAutocomplete(urlBar, "test");
@@ -477,7 +523,7 @@ public class UrlBarTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.beginBatchEdit();
+                urlBar.getInputConnection().beginBatchEdit();
             }
         });
         // Ensure the autocomplete is not modified if in batch mode.
@@ -488,10 +534,9 @@ public class UrlBarTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().endBatchEdit();
             }
         });
-
         // Ensure that after batch mode has ended that the autocomplete is cleared due to the
         // invalid selection range.
         state = getAutocompleteState(urlBar, null);
@@ -511,7 +556,7 @@ public class UrlBarTest {
         final StubAutocompleteController controller = new StubAutocompleteController() {
             @Override
             public void start(Profile profile, String url, String text, int cursorPosition,
-                    boolean preventInlineAutocomplete) {
+                    boolean preventInlineAutocomplete, boolean focusedFromFakebox) {
                 requestedAutocompleteText.set(text);
             }
         };
@@ -527,7 +572,7 @@ public class UrlBarTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.beginBatchEdit();
+                urlBar.getInputConnection().beginBatchEdit();
             }
         });
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -539,7 +584,7 @@ public class UrlBarTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().endBatchEdit();
             }
         });
 
@@ -564,16 +609,14 @@ public class UrlBarTest {
         OmniboxTestUtils.waitForFocusAndKeyboardActive(urlBar, true);
 
         // Valid case (cursor at the end of text, single character, matches previous autocomplete).
+        setTextAndVerifyNoAutocomplete(urlBar, "g");
         setAutocomplete(urlBar, "g", "oogle.com");
         AutocompleteState state = getAutocompleteState(urlBar, new Runnable() {
             @Override
             // TODO(crbug.com/635567): Fix this properly.
             @SuppressLint("SetTextI18n")
             public void run() {
-                urlBar.beginBatchEdit();
-                urlBar.setText("go");
-                urlBar.setSelection(2);
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().commitText("o", 1);
             }
         });
         Assert.assertTrue(state.hasAutocomplete);
@@ -581,49 +624,52 @@ public class UrlBarTest {
         Assert.assertEquals("go", state.textWithoutAutocomplete);
 
         // Invalid case (cursor not at the end of the text)
+        setTextAndVerifyNoAutocomplete(urlBar, "g");
         setAutocomplete(urlBar, "g", "oogle.com");
         state = getAutocompleteState(urlBar, new Runnable() {
             @Override
             // TODO(crbug.com/635567): Fix this properly.
             @SuppressLint("SetTextI18n")
             public void run() {
-                urlBar.beginBatchEdit();
-                urlBar.setText("go");
-                urlBar.setSelection(0);
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().beginBatchEdit();
+                urlBar.getInputConnection().commitText("o", 1);
+                urlBar.getInputConnection().setSelection(0, 0);
+                urlBar.getInputConnection().endBatchEdit();
             }
         });
         Assert.assertFalse(state.hasAutocomplete);
 
         // Invalid case (next character did not match previous autocomplete)
+        setTextAndVerifyNoAutocomplete(urlBar, "g");
         setAutocomplete(urlBar, "g", "oogle.com");
         state = getAutocompleteState(urlBar, new Runnable() {
             @Override
             // TODO(crbug.com/635567): Fix this properly.
             @SuppressLint("SetTextI18n")
             public void run() {
-                urlBar.beginBatchEdit();
-                urlBar.setText("ga");
-                urlBar.setSelection(2);
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().commitText("a", 1);
             }
         });
         Assert.assertFalse(state.hasAutocomplete);
 
-        // Invalid case (multiple characters entered instead of 1)
+        // Multiple characters entered instead of 1.
+        setTextAndVerifyNoAutocomplete(urlBar, "g");
         setAutocomplete(urlBar, "g", "oogle.com");
         state = getAutocompleteState(urlBar, new Runnable() {
             @Override
             // TODO(crbug.com/635567): Fix this properly.
             @SuppressLint("SetTextI18n")
             public void run() {
-                urlBar.beginBatchEdit();
-                urlBar.setText("googl");
-                urlBar.setSelection(5);
-                urlBar.endBatchEdit();
+                urlBar.getInputConnection().commitText("oogl", 1);
             }
         });
-        Assert.assertFalse(state.hasAutocomplete);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: new model allows multiple characters because usually keyboard app's UI and
+            // InputConnection threads are separated and user may type fast enough.
+            Assert.assertTrue(state.hasAutocomplete);
+        } else {
+            Assert.assertFalse(state.hasAutocomplete);
+        }
     }
 
     @Test
@@ -737,12 +783,22 @@ public class UrlBarTest {
                 urlBar.getInputConnection().setComposingText("f", 1);
             }
         });
-        Assert.assertFalse(state.hasAutocomplete);
 
         Editable urlText = getUrlBarText(urlBar);
-        Assert.assertEquals("chrome://f", urlText.toString());
-        Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 9);
-        Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 10);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: the new model hides autocomplete text from IME.
+            // setComposingRegion fails because autocomplete is hidden from IME. In reality, IME
+            // shouldn't do this.
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://ff", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 10);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 11);
+        } else {
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://f", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 9);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 10);
+        }
 
         // Test with > 1 characters in composition.
 
@@ -756,12 +812,22 @@ public class UrlBarTest {
                 urlBar.getInputConnection().setComposingText("fl", 1);
             }
         });
-        Assert.assertFalse(state.hasAutocomplete);
-
         urlText = getUrlBarText(urlBar);
-        Assert.assertEquals("chrome://fl", urlText.toString());
-        Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 9);
-        Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 11);
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: the new model hides autocomplete text from IME.
+            // setComposingRegion fails because autocomplete is hidden from IME. In reality, IME
+            // shouldn't do this.
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://flfl", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 11);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 13);
+        } else {
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://fl", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 9);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 11);
+        }
 
         // Test with non-matching composition.  Should just append to the URL text.
 
@@ -794,12 +860,21 @@ public class UrlBarTest {
                 urlBar.getInputConnection().setComposingText("chrome://f", 1);
             }
         });
-        Assert.assertFalse(state.hasAutocomplete);
-
         urlText = getUrlBarText(urlBar);
-        Assert.assertEquals("chrome://f", urlText.toString());
-        Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 0);
-        Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 10);
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.SPANNABLE_INLINE_AUTOCOMPLETE)) {
+            // Note: the new model hides autocomplete text from IME.
+            // setComposingRegion fails because autocomplete is hidden from IME. In reality, IME
+            // shouldn't do this.
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://fchrome://f", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 10);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 20);
+        } else {
+            Assert.assertFalse(state.hasAutocomplete);
+            Assert.assertEquals("chrome://f", urlText.toString());
+            Assert.assertEquals(BaseInputConnection.getComposingSpanStart(urlText), 0);
+            Assert.assertEquals(BaseInputConnection.getComposingSpanEnd(urlText), 10);
+        }
 
         // Test with composition text longer than the URL text.  Shouldn't crash and should
         // just append text.

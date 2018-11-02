@@ -5,12 +5,9 @@
 #ifndef CHROME_BROWSER_NET_SPDYPROXY_DATA_REDUCTION_PROXY_SETTINGS_ANDROID_H_
 #define CHROME_BROWSER_NET_SPDYPROXY_DATA_REDUCTION_PROXY_SETTINGS_ANDROID_H_
 
-#include <jni.h>
-
 #include <memory>
 #include <vector>
 
-#include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/android/scoped_java_ref.h"
@@ -46,6 +43,9 @@ class DataReductionProxySettingsAndroid {
   jboolean IsDataReductionProxyPromoAllowed(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  jboolean IsDataReductionProxyFREPromoAllowed(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   jboolean IsDataReductionProxyEnabled(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
@@ -69,6 +69,9 @@ class DataReductionProxySettingsAndroid {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
   ScopedJavaLocalRef<jlongArray> GetDailyReceivedContentLengths(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+  ScopedJavaLocalRef<jstring> GetDataReductionProxyPassThroughHeader(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 
@@ -116,9 +119,6 @@ class DataReductionProxySettingsAndroid {
   void OnQueryDataUsageComplete(
       std::unique_ptr<std::vector<data_reduction_proxy::DataUsageBucket>>
           data_usage);
-
-  // Registers the native methods to be call from Java.
-  static bool Register(JNIEnv* env);
 
   JavaObjectWeakGlobalRef j_settings_obj_;
   base::android::ScopedJavaGlobalRef<jobject> j_query_result_obj_;

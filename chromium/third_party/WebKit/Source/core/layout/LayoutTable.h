@@ -29,7 +29,6 @@
 #include <memory>
 #include "core/CSSPropertyNames.h"
 #include "core/CoreExport.h"
-#include "core/layout/CollapsedBorderValue.h"
 #include "core/layout/LayoutBlock.h"
 #include "platform/wtf/Vector.h"
 
@@ -149,8 +148,8 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
     return Style()->BorderCollapse() == EBorderCollapse::kCollapse;
   }
 
-  LayoutUnit BorderStart() const override { return LayoutUnit(border_start_); }
-  LayoutUnit BorderEnd() const override { return LayoutUnit(border_end_); }
+  LayoutUnit BorderStart() const override;
+  LayoutUnit BorderEnd() const override;
   LayoutUnit BorderBefore() const override;
   LayoutUnit BorderAfter() const override;
 
@@ -169,59 +168,20 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   }
 
   LayoutUnit BorderTop() const override {
-    if (Style()->IsHorizontalWritingMode())
+    if (Style()->IsHorizontalWritingMode()) {
       return Style()->IsFlippedBlocksWritingMode() ? BorderAfter()
                                                    : BorderBefore();
+    }
     return Style()->IsLeftToRightDirection() ? BorderStart() : BorderEnd();
   }
 
   LayoutUnit BorderBottom() const override {
-    if (Style()->IsHorizontalWritingMode())
+    if (Style()->IsHorizontalWritingMode()) {
       return Style()->IsFlippedBlocksWritingMode() ? BorderBefore()
                                                    : BorderAfter();
+    }
     return Style()->IsLeftToRightDirection() ? BorderEnd() : BorderStart();
   }
-
-  int OuterBorderBefore() const;
-  int OuterBorderAfter() const;
-  int OuterBorderStart() const;
-  int OuterBorderEnd() const;
-
-  int OuterBorderLeft() const {
-    if (Style()->IsHorizontalWritingMode())
-      return Style()->IsLeftToRightDirection() ? OuterBorderStart()
-                                               : OuterBorderEnd();
-    return Style()->IsFlippedBlocksWritingMode() ? OuterBorderAfter()
-                                                 : OuterBorderBefore();
-  }
-
-  int OuterBorderRight() const {
-    if (Style()->IsHorizontalWritingMode())
-      return Style()->IsLeftToRightDirection() ? OuterBorderEnd()
-                                               : OuterBorderStart();
-    return Style()->IsFlippedBlocksWritingMode() ? OuterBorderBefore()
-                                                 : OuterBorderAfter();
-  }
-
-  int OuterBorderTop() const {
-    if (Style()->IsHorizontalWritingMode())
-      return Style()->IsFlippedBlocksWritingMode() ? OuterBorderAfter()
-                                                   : OuterBorderBefore();
-    return Style()->IsLeftToRightDirection() ? OuterBorderStart()
-                                             : OuterBorderEnd();
-  }
-
-  int OuterBorderBottom() const {
-    if (Style()->IsHorizontalWritingMode())
-      return Style()->IsFlippedBlocksWritingMode() ? OuterBorderBefore()
-                                                   : OuterBorderAfter();
-    return Style()->IsLeftToRightDirection() ? OuterBorderEnd()
-                                             : OuterBorderStart();
-  }
-
-  int CalcBorderStart() const;
-  int CalcBorderEnd() const;
-  void RecalcBordersInRowDirection();
 
   void AddChild(LayoutObject* child,
                 LayoutObject* before_child = nullptr) override;
@@ -274,12 +234,13 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
     return row_offset_from_repeating_header_;
   }
 
-  // This function returns 0 if the table has no section.
+  // These functions return nullptr if the table has no sections.
   LayoutTableSection* TopSection() const;
   LayoutTableSection* BottomSection() const;
 
-  // This function returns 0 if the table has no non-empty sections.
+  // These functions return nullptr if the table has no non-empty sections.
   LayoutTableSection* TopNonEmptySection() const;
+  LayoutTableSection* BottomNonEmptySection() const;
 
   unsigned LastEffectiveColumnIndex() const {
     return NumEffectiveColumns() - 1;
@@ -405,18 +366,40 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
       const LayoutTableSection*,
       SkipEmptySectionsValue = kDoNotSkipEmptySections) const;
 
-  LayoutTableCell* CellAbove(const LayoutTableCell*) const;
-  LayoutTableCell* CellBelow(const LayoutTableCell*) const;
-  LayoutTableCell* CellBefore(const LayoutTableCell*) const;
-  LayoutTableCell* CellAfter(const LayoutTableCell*) const;
+  // Returns the adjacent cell to the logical top, logical bottom, logical left
+  // and logical right, respectively, of the given cell, in the table's
+  // direction. If there are multiple adjacent cells in the direction due to row
+  // or col spans, returns the primary LayoutTableCell of the first (in DOM
+  // order) adjacent TableGridCell in the direction. Returns nullptr if there
+  // are no adjacent cells in the direction.
+  LayoutTableCell* CellAbove(const LayoutTableCell&) const;
+  LayoutTableCell* CellBelow(const LayoutTableCell&) const;
+  LayoutTableCell* CellPreceding(const LayoutTableCell&) const;
+  LayoutTableCell* CellFollowing(const LayoutTableCell&) const;
 
-  using CollapsedBorderValues = Vector<CollapsedBorderValue>;
-  const CollapsedBorderValues& CollapsedBorders() const {
-    DCHECK(collapsed_borders_valid_);
-    return collapsed_borders_;
-  }
   void InvalidateCollapsedBorders();
   void InvalidateCollapsedBordersForAllCellsIfNeeded();
+
+  bool HasCollapsedBorders() const {
+    DCHECK(collapsed_borders_valid_);
+    return has_collapsed_borders_;
+  }
+  bool NeedsAdjustCollapsedBorderJoints() const {
+    DCHECK(collapsed_borders_valid_);
+    return needs_adjust_collapsed_border_joints_;
+  }
+
+  // Returns true if the table has collapsed borders and any row doesn't paint
+  // onto the same compositing layer as the table (which is rare), and the table
+  // will create one display item for all collapsed borders. Otherwise each row
+  // will create one display item for collapsed borders.
+  // It always returns false for SPv2.
+  bool ShouldPaintAllCollapsedBorders() const {
+    DCHECK(collapsed_borders_valid_);
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
+      DCHECK(!should_paint_all_collapsed_borders_);
+    return should_paint_all_collapsed_borders_;
+  }
 
   bool HasSections() const { return Header() || Footer() || FirstBody(); }
 
@@ -430,9 +413,6 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
       const LayoutObject* parent) const override {
     return CreateAnonymousWithParent(parent);
   }
-
-  BorderValue TableStartBorderAdjoiningCell(const LayoutTableCell*) const;
-  BorderValue TableEndBorderAdjoiningCell(const LayoutTableCell*) const;
 
   void AddCaption(const LayoutTableCaption*);
   void RemoveCaption(const LayoutTableCaption*);
@@ -473,10 +453,9 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   void SimplifiedNormalFlowLayout() override;
   bool RecalcChildOverflowAfterStyleChange() override;
   void EnsureIsReadyForPaintInvalidation() override;
-  PaintInvalidationReason DeprecatedInvalidatePaint(
-      const PaintInvalidationState&) override;
   PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
+  bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
 
  private:
   bool IsOfType(LayoutObjectType type) const override {
@@ -522,6 +501,13 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   void AddOverflowFromChildren() override;
 
   void RecalcSections() const;
+
+  void UpdateCollapsedOuterBorders() const;
+  unsigned ComputeCollapsedOuterBorderBefore() const;
+  unsigned ComputeCollapsedOuterBorderAfter() const;
+  unsigned ComputeCollapsedOuterBorderStart() const;
+  unsigned ComputeCollapsedOuterBorderEnd() const;
+
   void LayoutCaption(LayoutTableCaption&, SubtreeLayoutScope&);
   void LayoutSection(LayoutTableSection&,
                      SubtreeLayoutScope&,
@@ -533,8 +519,6 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   LayoutUnit LogicalHeightFromStyle() const;
 
   void DistributeExtraLogicalHeight(int extra_logical_height);
-
-  void RecalcCollapsedBordersIfNeeded();
 
   // TODO(layout-dev): All mutables in this class are lazily updated by
   // recalcSections() which is called by various getter methods (e.g.
@@ -580,15 +564,17 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
   // the first style is applied in styleDidChange().
   std::unique_ptr<TableLayoutAlgorithm> table_layout_;
 
-  // A sorted list of all unique border values that we want to paint.
-  //
   // Collapsed borders are SUPER EXPENSIVE to compute. The reason is that we
   // need to compare a cells border against all the adjoining cells, rows,
-  // row groups, column, column groups and table. Thus we cache them in this
-  // field.
-  CollapsedBorderValues collapsed_borders_;
+  // row groups, column, column groups and table. Thus we cache the values in
+  // LayoutTableCells and some status here.
   bool collapsed_borders_valid_ : 1;
+  bool has_collapsed_borders_ : 1;
+  bool needs_adjust_collapsed_border_joints_ : 1;
   bool needs_invalidate_collapsed_borders_for_all_cells_ : 1;
+  mutable bool collapsed_outer_borders_valid_ : 1;
+
+  bool should_paint_all_collapsed_borders_ : 1;
 
   mutable bool has_col_elements_ : 1;
   mutable bool needs_section_recalc_ : 1;
@@ -606,8 +592,11 @@ class CORE_EXPORT LayoutTable final : public LayoutBlock {
 
   short h_spacing_;
   short v_spacing_;
-  int border_start_;
-  int border_end_;
+
+  mutable unsigned collapsed_outer_border_start_;
+  mutable unsigned collapsed_outer_border_end_;
+  mutable unsigned collapsed_outer_border_before_;
+  mutable unsigned collapsed_outer_border_after_;
 
   LayoutUnit block_offset_to_first_repeatable_header_;
   LayoutUnit row_offset_from_repeating_header_;

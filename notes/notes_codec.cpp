@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "base/json/json_string_value_serializer.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
@@ -51,12 +52,12 @@ void NotesCodec::register_id(int64_t id) {
   ids_.insert(id);
 }
 
-base::Value* NotesCodec::Encode(Notes_Model* model) {
+std::unique_ptr<base::Value> NotesCodec::Encode(Notes_Model* model) {
   return Encode(model->main_node(), model->other_node(), model->trash_node(),
                 model->root_node()->sync_transaction_version());
 }
 
-base::Value* NotesCodec::Encode(const Notes_Node* notes_node,
+std::unique_ptr<base::Value> NotesCodec::Encode(const Notes_Node* notes_node,
                                 const Notes_Node* other_notes_node,
                                 const Notes_Node* trash_notes_node,
                                 int64_t sync_transaction_version) {
@@ -67,22 +68,23 @@ base::Value* NotesCodec::Encode(const Notes_Node* notes_node,
   extra_nodes.push_back(other_notes_node);
   extra_nodes.push_back(trash_notes_node);
 
-  base::Value* roots = notes_node->Encode(this, &extra_nodes);
+  std::unique_ptr<base::Value> roots(notes_node->Encode(this, &extra_nodes));
 
-  base::DictionaryValue* main = nullptr;
-  if (!roots->GetAsDictionary(&main))
-    return nullptr;
-
-  if (sync_transaction_version != Notes_Node::kInvalidSyncTransactionVersion) {
-    main->SetString(kSyncTransactionVersion,
-                    base::Int64ToString(sync_transaction_version));
+  std::unique_ptr<base::DictionaryValue>
+      main(base::DictionaryValue::From(std::move(roots)));
+  if (main) {
+    if (sync_transaction_version != Notes_Node::kInvalidSyncTransactionVersion) {
+      main->SetString(kSyncTransactionVersion,
+                      base::Int64ToString(sync_transaction_version));
+    }
+    main->SetInteger(kVersionKey, kCurrentVersion);
+    FinalizeChecksum();
+    // We are going to store the computed checksum. So set stored checksum to be
+    // the same as computed checksum.
+    stored_checksum_ = computed_checksum_;
+    main->Set(kChecksumKey,
+              base::WrapUnique(new base::Value(computed_checksum_)));
   }
-  main->SetInteger(kVersionKey, kCurrentVersion);
-  FinalizeChecksum();
-  // We are going to store the computed checksum. So set stored checksum to be
-  // the same as computed checksum.
-  stored_checksum_ = computed_checksum_;
-  main->Set(kChecksumKey, new base::Value(computed_checksum_));
   return main;
 }
 

@@ -13,6 +13,8 @@
 #include "chrome/common/page_load_metrics/test/weak_mock_timer.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "components/ukm/test_ukm_recorder.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/test/web_contents_tester.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
 #include "ui/base/page_transition_types.h"
@@ -26,6 +28,9 @@ class PageLoadMetricsObserverTestHarness
     : public ChromeRenderViewHostTestHarness,
       public test::WeakMockTimerProvider {
  public:
+  // Sample URL for resource loads.
+  static const char kResourceUrl[];
+
   PageLoadMetricsObserverTestHarness();
   ~PageLoadMetricsObserverTestHarness() override;
 
@@ -55,11 +60,16 @@ class PageLoadMetricsObserverTestHarness
   void SimulateTimingAndMetadataUpdate(const mojom::PageLoadTiming& timing,
                                        const mojom::PageLoadMetadata& metadata);
 
-  // Simulates a loaded resource.
-  void SimulateStartedResource(const ExtraRequestStartInfo& info);
+  // Simulates a loaded resource. Main frame resources must specify a
+  // GlobalRequestID, using the SimulateLoadedResource() method that takes a
+  // |request_id| parameter.
+  void SimulateLoadedResource(const ExtraRequestCompleteInfo& info) {
+    SimulateLoadedResource(info, content::GlobalRequestID());
+  }
 
-  // Simulates a loaded resource.
-  void SimulateLoadedResource(const ExtraRequestCompleteInfo& info);
+  // Simulates a loaded resource, with the given GlobalRequestID.
+  void SimulateLoadedResource(const ExtraRequestCompleteInfo& info,
+                              const content::GlobalRequestID& request_id);
 
   // Simulates a user input.
   void SimulateInputEvent(const blink::WebInputEvent& event);
@@ -77,8 +87,13 @@ class PageLoadMetricsObserverTestHarness
   // Gets the PageLoadExtraInfo for the committed_load_ in observer_.
   const PageLoadExtraInfo GetPageLoadExtraInfoForCommittedLoad();
 
+  const ukm::TestAutoSetUkmRecorder& test_ukm_recorder() const {
+    return test_ukm_recorder_;
+  }
+
  private:
   base::HistogramTester histogram_tester_;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder_;
   MetricsWebContentsObserver* observer_;
 
   DISALLOW_COPY_AND_ASSIGN(PageLoadMetricsObserverTestHarness);

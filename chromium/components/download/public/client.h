@@ -22,17 +22,55 @@ class Client {
   // Used by OnDownloadStarted to determine whether or not the DownloadService
   // should continue downloading the file or abort the attempt.
   enum class ShouldDownload {
+    // Continue to download the file.
     CONTINUE,
+
+    // Abort the download.
     ABORT,
+
+    // The count of entries for the enum.
+    COUNT,
+  };
+
+  // Used by OnDownloadFailed to determine the reason of the abort.
+  enum class FailureReason {
+    // Used when the download has been aborted after reaching a threshold where
+    // we decide it is not worth attempting to start again.  This could be
+    // either due to a specific number of failed retry attempts or a specific
+    // number of wasted bytes due to the download restarting.
+    NETWORK,
+
+    // Used when the download was not completed before the
+    // DownloadParams::cancel_after timeout.
+    TIMEDOUT,
+
+    // Used when the download was cancelled by the Client.
+    CANCELLED,
+
+    // Used when the download was aborted by the Client in response to the
+    // download starting (see OnDownloadStarted()).
+    ABORTED,
+
+    // Used when the failure reason is unknown.  This generally means that we
+    // detect that the download failed during a restart, but aren't sure exactly
+    // what triggered the failure before shutdown.
+    UNKNOWN,
   };
 
   virtual ~Client() = default;
 
   // Called when the DownloadService is initialized and ready to be interacted
   // with.  |outstanding_download_guids| is a list of all downloads the
-  // DownloadService is aware of that are associated with this Client.
+  // DownloadService is aware of that are associated with this Client.  If
+  // |state_lost| is |true|, the service ran into an error initializing and had
+  // to destroy all internal persisted state.  At this point any saved files
+  // might not be available and any previously scheduled downloads are gone.
   virtual void OnServiceInitialized(
+      bool state_lost,
       const std::vector<std::string>& outstanding_download_guids) = 0;
+
+  // Called when the DownloadService fails to initialize and should not be used.
+  virtual void OnServiceUnavailable() = 0;
 
   // Return whether or not the download should be aborted (potentially in
   // response to |headers|).  The download will be downloading at the time this
@@ -51,18 +89,11 @@ class Client {
   virtual void OnDownloadUpdated(const std::string& guid,
                                  uint64_t bytes_downloaded) = 0;
 
-  // TODO(dtrainor): Expose a useful error message with the failed download.
-  virtual void OnDownloadFailed(const std::string& guid) = 0;
-
-  // Called when the download was not completed before the
-  // DownloadParams::cancel_after timeout.
-  virtual void OnDownloadTimedOut(const std::string& guid) = 0;
-
-  // Called when the download has been aborted after reaching a treshold where
-  // we decide it is not worth attempting to start again.  This could be either
-  // due to a specific number of failed retry attempts or a specific number of
-  // wasted bytes due to the download restarting.
-  virtual void OnDownloadAborted(const std::string& guid) = 0;
+  // Called when a download failed.  Check FailureReason for a list of possible
+  // reasons why this failure occurred.  Note that this will also be called for
+  // cancelled downloads.
+  virtual void OnDownloadFailed(const std::string& guid,
+                                FailureReason reason) = 0;
 
   // Called when a download has been successfully completed.  After this call
   // the download entry will be purged from the database.  The file will be

@@ -1,5 +1,8 @@
 <!doctype html>
 <title>Payment App: Test for invoking payment app</title>
+<head>
+  <link rel="manifest" href="manifest.json">
+</head>
 <script src="./result_queue.js"></script>
 <script>
 
@@ -9,10 +12,23 @@ function registerPaymentApp() {
         return navigator.serviceWorker.ready;
       })
     .then(registration => {
-        return registration.paymentManager.instruments.set('payment-app-id', {
-            name: 'Visa ****',
-            enabledMethods: ['basic-card']
-          });
+      const instrumentPromises = [
+      registration.paymentManager.instruments.set(
+        'basic-card-payment-app-id',
+        {
+          name: 'Visa ****',
+          enabledMethods: ['basic-card']
+        }),
+
+      registration.paymentManager.instruments.set(
+        'bobpay-payment-app-id',
+        {
+          name: "Bob Pay",
+          enabledMethods: ['https://bobpay.com']
+        }),
+      ];
+
+      return Promise.all(instrumentPromises);
       })
     .then(result => {
         sendResultToTest('registered');

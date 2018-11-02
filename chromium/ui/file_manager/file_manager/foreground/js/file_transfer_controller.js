@@ -21,6 +21,9 @@ var FileAsyncData;
  * @param {!ListContainer} listContainer List container.
  * @param {!MultiProfileShareDialog} multiProfileShareDialog Share dialog to be
  *     used to share files from another profile.
+ * @param {function(boolean, !Array<string>): !Promise<boolean>}
+ *     confirmationCallback called when operation requires user's confirmation.
+ *     The opeartion will be executed if the return value resolved to true.
  * @param {!ProgressCenter} progressCenter To notify starting copy operation.
  * @param {!FileOperationManager} fileOperationManager File operation manager
  *     instance.
@@ -34,9 +37,10 @@ var FileAsyncData;
  * @constructor
  */
 function FileTransferController(
-    doc, listContainer, directoryTree, multiProfileShareDialog, progressCenter,
-    fileOperationManager, metadataModel, thumbnailModel, directoryModel,
-    volumeManager, selectionHandler, shouldShowCommandFor) {
+    doc, listContainer, directoryTree, multiProfileShareDialog,
+    confirmationCallback, progressCenter, fileOperationManager, metadataModel,
+    thumbnailModel, directoryModel, volumeManager, selectionHandler,
+    shouldShowCommandFor) {
   /**
    * @private {!Document}
    * @const
@@ -90,6 +94,13 @@ function FileTransferController(
    * @const
    */
   this.multiProfileShareDialog_ = multiProfileShareDialog;
+
+  /**
+   * @private {function(boolean, !Array<string>):
+   *     Promise<boolean>}
+   * @const
+   */
+  this.confirmationCallback_ = confirmationCallback;
 
   /**
    * @private {!ProgressCenter}
@@ -216,6 +227,141 @@ FileTransferController.DRAG_THUMBNAIL_SIZE_ = 64;
 FileTransferController.DRAG_LABEL_Y_OFFSET_ = -32;
 
 /**
+ * Container for defining a copy/move operation.
+ *
+ * @param {!Array<string>} sourceURLs URLs of source entries.
+ * @param {!DirectoryEntry} destinationEntry Destination directory.
+ * @param {!EntryLocation} destinationLocationInfo Location info of the
+ *     destination directory.
+ * @param {boolean} isMove true if move, false if copy.
+ * @constructor
+ * @struct
+ */
+FileTransferController.PastePlan = function(
+    sourceURLs, destinationEntry, destinationLocationInfo, isMove) {
+  /**
+   * @type {!Array<string>}
+   * @const
+   */
+  this.sourceURLs = sourceURLs;
+
+  /**
+   * @type {!DirectoryEntry}
+   */
+  this.destinationEntry = destinationEntry;
+
+  /**
+   * @type {!EntryLocation}
+   */
+  this.destinationLocationInfo = destinationLocationInfo;
+
+  /**
+   * @type {boolean}
+   * @const
+   */
+  this.isMove = isMove;
+};
+
+/**
+ * Confirmation message types.
+ *
+ * @enum {string}
+ */
+FileTransferController.ConfirmationType = {
+  NONE: 'none',
+  MOVE_BETWEEN_TEAM_DRIVES: 'between_team_drives',
+  MOVE_FROM_TEAM_DRIVE_TO_OTHER: 'move_from_team_drive_to_other',
+  MOVE_FROM_OTHER_TO_TEAM_DRIVE: 'move_from_other_to_team_drive',
+  COPY_FROM_OTHER_TO_TEAM_DRIVE: 'copy_from_other_to_team_drive',
+};
+
+/**
+ * Obtains whether the planned operation requires user's confirmation, as well
+ * as its type.
+ *
+ * @param {!Array<!Entry>} sourceEntries
+ * @return {FileTransferController.ConfirmationType} type of the confirmation
+ *     required for the operation. If no confirmation is needed,
+ *     FileTransferController.ConfirmationType.NONE will be returned.
+ */
+FileTransferController.PastePlan.prototype.getConfirmationType = function(
+    sourceEntries) {
+  assert(sourceEntries.length != 0);
+  var source = {
+    isTeamDrive: util.isTeamDriveEntry(sourceEntries[0]),
+    teamDriveName: util.getTeamDriveName(sourceEntries[0])
+  };
+  var destination = {
+    isTeamDrive: util.isTeamDriveEntry(this.destinationEntry),
+    teamDriveName: util.getTeamDriveName(this.destinationEntry)
+  };
+  if (this.isMove) {
+    if (source.isTeamDrive) {
+      if (destination.isTeamDrive) {
+        if (source.teamDriveName == destination.teamDriveName)
+          return FileTransferController.ConfirmationType.NONE;
+        else
+          return FileTransferController.ConfirmationType
+              .MOVE_BETWEEN_TEAM_DRIVES;
+      } else {
+        return FileTransferController.ConfirmationType
+            .MOVE_FROM_TEAM_DRIVE_TO_OTHER;
+      }
+    } else if (destination.isTeamDrive) {
+      return FileTransferController.ConfirmationType
+          .MOVE_FROM_OTHER_TO_TEAM_DRIVE;
+    }
+    return FileTransferController.ConfirmationType.NONE;
+  } else {
+    if (!destination.isTeamDrive)
+      return FileTransferController.ConfirmationType.NONE;
+    // Copying to Team Drive.
+    if (!(source.isTeamDrive &&
+          source.teamDriveName == destination.teamDriveName)) {
+      // This is not a copy within the same Team Drive.
+      return FileTransferController.ConfirmationType
+          .COPY_FROM_OTHER_TO_TEAM_DRIVE;
+    }
+    return FileTransferController.ConfirmationType.NONE;
+  }
+};
+
+/**
+ * Composes a confirmation message for the given type.
+ *
+ * @param {FileTransferController.ConfirmationType} confirmationType
+ * @return {!Array<string>} sentences for a confirmation dialog box.
+ */
+FileTransferController.PastePlan.prototype.getConfirmationMessages = function(
+    confirmationType, sourceEntries) {
+  assert(sourceEntries.length != 0);
+  var sourceName = util.getTeamDriveName(sourceEntries[0]);
+  var destinationName = util.getTeamDriveName(this.destinationEntry);
+  switch (confirmationType) {
+    case FileTransferController.ConfirmationType.MOVE_BETWEEN_TEAM_DRIVES:
+      return [
+        strf('DRIVE_CONFIRM_TD_MEMBERS_LOSE_ACCESS', sourceName),
+        strf('DRIVE_CONFIRM_TD_MEMBERS_GAIN_ACCESS_TO_COPY', destinationName)
+      ];
+    // TODO(yamaguchi): notify ownership transfer if the two Team Drives
+    // belong to different domains.
+    case FileTransferController.ConfirmationType.MOVE_FROM_TEAM_DRIVE_TO_OTHER:
+      return [
+        strf('DRIVE_CONFIRM_TD_MEMBERS_LOSE_ACCESS', sourceName)
+        // TODO(yamaguchi): Warn if the operation moves at least one
+        // directory to My Drive, as it's no undoable.
+      ];
+    case FileTransferController.ConfirmationType.MOVE_FROM_OTHER_TO_TEAM_DRIVE:
+      return [strf('DRIVE_CONFIRM_TD_MEMBERS_GAIN_ACCESS', destinationName)];
+    case FileTransferController.ConfirmationType.COPY_FROM_OTHER_TO_TEAM_DRIVE:
+      return [strf(
+          'DRIVE_CONFIRM_TD_MEMBERS_GAIN_ACCESS_TO_COPY', destinationName)];
+  }
+  assertNotReached('Invalid confirmation type: ' + confirmationType);
+  return [];
+};
+
+/**
  * Converts list of urls to list of Entries with granting R/W permissions to
  * them, which is essential when pasting files from a different profile.
  *
@@ -306,10 +452,15 @@ FileTransferController.prototype.attachCopyPasteHandlers_ = function() {
  *     |clipboardData.effectAllowed| property.
  * @private
  */
-FileTransferController.prototype.cutOrCopy_ =
-    function(clipboardData, effectAllowed) {
+FileTransferController.prototype.cutOrCopy_ = function(
+    clipboardData, effectAllowed) {
+  var currentDirEntry = this.directoryModel_.getCurrentDirEntry();
+  if (!currentDirEntry)
+    return;
   var volumeInfo = this.volumeManager_.getVolumeInfo(
-      this.directoryModel_.getCurrentDirEntry());
+      util.isRecentRoot(currentDirEntry) ?
+          this.selectionHandler_.selection.entries[0] :
+          currentDirEntry);
   if (!volumeInfo)
     return;
 
@@ -390,21 +541,24 @@ FileTransferController.prototype.getDragAndDropGlobalData_ = function() {
 };
 
 /**
- * Extracts source root URL from the |clipboardData| object.
+ * Extracts source root URL from the |clipboardData| or |dragAndDropData|
+ * object.
  *
  * @param {!ClipboardData} clipboardData DataTransfer object from the event.
+ * @param {Object<string>} dragAndDropData The drag and drop data from
+ *     getDragAndDropGlobalData_().
  * @return {string} URL or an empty string (if unknown).
  * @private
  */
-FileTransferController.prototype.getSourceRootURL_ = function(clipboardData) {
+FileTransferController.prototype.getSourceRootURL_ = function(
+    clipboardData, dragAndDropData) {
   var sourceRootURL = clipboardData.getData('fs/sourceRootURL');
   if (sourceRootURL)
     return sourceRootURL;
 
   // |clipboardData| in protected mode.
-  var globalData = this.getDragAndDropGlobalData_();
-  if (globalData)
-    return globalData.sourceRootURL;
+  if (dragAndDropData)
+    return dragAndDropData.sourceRootURL;
 
   // Unknown source.
   return '';
@@ -501,29 +655,86 @@ FileTransferController.prototype.getMultiProfileShareEntries_ =
 };
 
 /**
- * Queue up a file copy operation based on the current system clipboard.
+ * Collects parameters of paste operation by the given command and the current
+ * system clipboard.
  *
- * @param {!ClipboardData} clipboardData System data transfer object.
- * @param {DirectoryEntry=} opt_destinationEntry Paste destination.
- * @param {string=} opt_effect Desired drop/paste effect. Could be
- *     'move'|'copy' (default is copy). Ignored if conflicts with
- *     |clipboardData.effectAllowed|.
- * @return {string} Either "copy" or "move".
+ * @return {!FileTransferController.PastePlan}
  */
-FileTransferController.prototype.paste =
-    function(clipboardData, opt_destinationEntry, opt_effect) {
+FileTransferController.prototype.preparePaste = function(
+    clipboardData, opt_destinationEntry, opt_effect) {
   var sourceURLs = clipboardData.getData('fs/sources') ?
       clipboardData.getData('fs/sources').split('\n') : [];
   // effectAllowed set in copy/paste handlers stay uninitialized. DnD handlers
   // work fine.
   var effectAllowed = clipboardData.effectAllowed !== 'uninitialized' ?
       clipboardData.effectAllowed : clipboardData.getData('fs/effectallowed');
+  var destinationEntry = opt_destinationEntry ||
+      /** @type {DirectoryEntry} */ (this.directoryModel_.getCurrentDirEntry());
   var toMove = util.isDropEffectAllowed(effectAllowed, 'move') &&
       (!util.isDropEffectAllowed(effectAllowed, 'copy') ||
        opt_effect === 'move');
-  var destinationEntry =
-      opt_destinationEntry ||
-      /** @type {DirectoryEntry} */ (this.directoryModel_.getCurrentDirEntry());
+
+  var destinationLocationInfo =
+      this.volumeManager_.getLocationInfo(destinationEntry);
+  if (!destinationLocationInfo)
+    console.log(
+        'Failed to get destination location for ' + destinationEntry.title() +
+        ' while attempting to paste files.');
+  return new FileTransferController.PastePlan(
+      sourceURLs, destinationEntry, assert(destinationLocationInfo), toMove);
+};
+
+/**
+ * Queue up a file copy operation based on the current system clipboard and
+ * drag-and-drop global object.
+ *
+ * @param {!ClipboardData} clipboardData System data transfer object.
+ * @param {DirectoryEntry=} opt_destinationEntry Paste destination.
+ * @param {string=} opt_effect Desired drop/paste effect. Could be
+ *     'move'|'copy' (default is copy). Ignored if conflicts with
+ *     |clipboardData.effectAllowed|.
+ * @return {!Promise<string>} Either "copy" or "move".
+ */
+FileTransferController.prototype.paste = function(
+    clipboardData, opt_destinationEntry, opt_effect) {
+  var pastePlan =
+      this.preparePaste(clipboardData, opt_destinationEntry, opt_effect);
+
+  return util.URLsToEntries(pastePlan.sourceURLs).then(function(entriesResult) {
+    var sourceEntries = entriesResult.entries;
+    if (sourceEntries.length == 0) {
+      // This can happen when copied files were deleted before pasting them.
+      // We execute the plan as-is, so as to share the post-copy logic.
+      // This is basically same as getting empty by filtering same-directory
+      // entries.
+      return Promise.resolve(this.executePaste(pastePlan));
+    }
+    var confirmationType = pastePlan.getConfirmationType(sourceEntries);
+    if (confirmationType == FileTransferController.ConfirmationType.NONE) {
+      return Promise.resolve(this.executePaste(pastePlan));
+    }
+    var messages =
+        pastePlan.getConfirmationMessages(confirmationType, sourceEntries);
+    this.confirmationCallback_(pastePlan.isMove, messages)
+        .then(function(userApproved) {
+          if (userApproved) {
+            this.executePaste(pastePlan);
+          }
+        }.bind(this));
+  }.bind(this));
+};
+
+/**
+ * Queue up a file copy operation.
+ *
+ * @param {FileTransferController.PastePlan} pastePlan
+ * @return {string} Either "copy" or "move".
+ */
+FileTransferController.prototype.executePaste = function(pastePlan) {
+  var sourceURLs = pastePlan.sourceURLs;
+  var toMove = pastePlan.isMove;
+  var destinationEntry = pastePlan.destinationEntry;
+
   var entries = [];
   var failureUrls;
   var shareEntries;
@@ -837,7 +1048,8 @@ FileTransferController.prototype.onDragOver_ =
   var entry = this.destinationEntry_;
   if (!entry && !onlyIntoDirectories)
     entry = this.directoryModel_.getCurrentDirEntry();
-  var effectAndLabel = this.selectDropEffect_(event, entry);
+  var effectAndLabel =
+      this.selectDropEffect_(event, this.getDragAndDropGlobalData_(), entry);
   event.dataTransfer.dropEffect = effectAndLabel.getDropEffect();
   event.preventDefault();
   var label = effectAndLabel.getLabel();
@@ -936,9 +1148,12 @@ FileTransferController.prototype.onDrop_ =
   if (!this.canPasteOrDrop_(event.dataTransfer, destinationEntry))
     return;
   event.preventDefault();
-  this.paste(event.dataTransfer,
-             /** @type {DirectoryEntry} */ (destinationEntry),
-             this.selectDropEffect_(event, destinationEntry).getDropEffect());
+  this.paste(
+      event.dataTransfer,
+      /** @type {DirectoryEntry} */ (destinationEntry),
+      this.selectDropEffect_(
+              event, this.getDragAndDropGlobalData_(), destinationEntry)
+          .getDropEffect());
   this.clearDropTarget_();
 };
 
@@ -1137,7 +1352,15 @@ FileTransferController.prototype.canCopyOrDrag_ = function() {
   if (this.selectionHandler_.selection.entries.length <= 0)
     return false;
   var entries = this.selectionHandler_.selection.entries;
-  return entries.every(entry => !util.isTeamDriveRoot(entry));
+  for (var i = 0; i < entries.length; i++) {
+    if (util.isTeamDriveRoot(entries[i]))
+      return false;
+    // If selected entries are not in the same directory, we can't copy them by
+    // a single operation at this moment.
+    if (i > 0 && !util.isSiblingEntry(entries[0], entries[i]))
+      return false;
+  }
+  return true;
 };
 
 /**
@@ -1165,16 +1388,16 @@ FileTransferController.prototype.onPaste_ = function(event) {
     return;
   }
   event.preventDefault();
-  var effect = this.paste(assert(event.clipboardData), destination);
-
-  // On cut, we clear the clipboard after the file is pasted/moved so we don't
-  // try to move/delete the original file again.
-  if (effect === 'move') {
-    this.simulateCommand_('cut', function(event) {
-      event.preventDefault();
-      event.clipboardData.setData('fs/clear', '');
-    });
-  }
+  this.paste(assert(event.clipboardData), destination).then(function(effect) {
+    // On cut, we clear the clipboard after the file is pasted/moved so we don't
+    // try to move/delete the original file again.
+    if (effect === 'move') {
+      this.simulateCommand_('cut', function(event) {
+        event.preventDefault();
+        event.clipboardData.setData('fs/clear', '');
+      });
+    }
+  }.bind(this));
 };
 
 /**
@@ -1213,8 +1436,9 @@ FileTransferController.prototype.canPasteOrDrop_ =
     return false;  // Unsupported type of content.
 
   // Copying between different sources requires all files to be available.
-  if (this.getSourceRootURL_(clipboardData) !==
-      destinationLocationInfo.volumeInfo.fileSystem.root.toURL() &&
+  if (this.getSourceRootURL_(
+          clipboardData, this.getDragAndDropGlobalData_()) !==
+          destinationLocationInfo.volumeInfo.fileSystem.root.toURL() &&
       this.isMissingFileContents_(clipboardData))
     return false;
 
@@ -1330,6 +1554,8 @@ FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
 
 /**
  * @param {!Event} event Drag event.
+ * @param {Object<string>} dragAndDropData drag & drop data from
+ *     getDragAndDropGlobalData_().
  * @param {DirectoryEntry|FakeEntry} destinationEntry Destination entry.
  * @return {DropEffectAndLabel} Returns the appropriate drop query type
  *     ('none', 'move' or copy') to the current modifiers status and the
@@ -1337,8 +1563,8 @@ FileTransferController.prototype.onFileSelectionChangedThrottled_ = function() {
  *     not allowed.
  * @private
  */
-FileTransferController.prototype.selectDropEffect_ =
-    function(event, destinationEntry) {
+FileTransferController.prototype.selectDropEffect_ = function(
+    event, dragAndDropData, destinationEntry) {
   if (!destinationEntry)
     return new DropEffectAndLabel(DropEffectType.NONE, null);
   var destinationLocationInfo =
@@ -1368,7 +1594,7 @@ FileTransferController.prototype.selectDropEffect_ =
       return new DropEffectAndLabel(DropEffectType.MOVE, null);
     // TODO(mtomasz): Use volumeId instead of comparing roots, as soon as
     // volumeId gets unique.
-    if (this.getSourceRootURL_(event.dataTransfer) ===
+    if (this.getSourceRootURL_(event.dataTransfer, dragAndDropData) ===
             destinationLocationInfo.volumeInfo.fileSystem.root.toURL() &&
         !event.ctrlKey) {
       return new DropEffectAndLabel(DropEffectType.MOVE, null);

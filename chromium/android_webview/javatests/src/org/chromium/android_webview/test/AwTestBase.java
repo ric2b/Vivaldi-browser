@@ -27,11 +27,9 @@ import org.chromium.android_webview.test.util.JSUtils;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseActivityInstrumentationTestCase;
 import org.chromium.base.test.util.CallbackHelper;
-import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.InMemorySharedPreferences;
 import org.chromium.base.test.util.MinAndroidSdkLevel;
-import org.chromium.base.test.util.parameter.Parameter;
-import org.chromium.base.test.util.parameter.ParameterizedTest;
+import org.chromium.base.test.util.parameter.CommandLineParameter;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer.OnPageFinishedHelper;
@@ -56,23 +54,11 @@ import java.util.regex.Pattern;
  * If a test doesn't yet work with sandboxed renderer, an entire class, or an individual test
  * method can be marked for single-process testing only by adding the following annotation:
  *
- * @ParameterizedTest.Set
+ * @SkipCommandLineParameterization
  */
 @MinAndroidSdkLevel(Build.VERSION_CODES.KITKAT)
-@ParameterizedTest.Set(tests = {
-            @ParameterizedTest(parameters = {
-                        @Parameter(
-                                tag = CommandLineFlags.Parameter.PARAMETER_TAG)}),
-            @ParameterizedTest(parameters = {
-                        @Parameter(
-                                tag = CommandLineFlags.Parameter.PARAMETER_TAG,
-                                arguments = {
-                                    @Parameter.Argument(
-                                        name = CommandLineFlags.Parameter.ADD_ARG,
-                                        stringArray = {AwSwitches.WEBVIEW_SANDBOXED_RENDERER})
-            })})})
-public class AwTestBase
-        extends BaseActivityInstrumentationTestCase<AwTestRunnerActivity> {
+@CommandLineParameter({"", AwSwitches.WEBVIEW_SANDBOXED_RENDERER})
+public class AwTestBase extends BaseActivityInstrumentationTestCase<AwTestRunnerActivity> {
     public static final long WAIT_TIMEOUT_MS = scaleTimeout(15000);
     public static final int CHECK_INTERVAL = 100;
     private static final String TAG = "AwTestBase";
@@ -569,6 +555,17 @@ public class AwTestBase
         return JSUtils.executeJavaScriptAndWaitForResult(this, awContents,
                 viewClient.getOnEvaluateJavaScriptResultHelper(),
                 code);
+    }
+
+    /**
+     * Executes JavaScript code within the given ContentView to get the text content in
+     * document body. Returns the result string without double quotes.
+     */
+    protected String getJavaScriptResultBodyTextContent(
+            final AwContents awContents, final TestAwContentsClient viewClient) throws Exception {
+        String raw = executeJavaScriptAndWaitForResult(
+                awContents, viewClient, "document.body.textContent");
+        return maybeStripDoubleQuotes(raw);
     }
 
     /**

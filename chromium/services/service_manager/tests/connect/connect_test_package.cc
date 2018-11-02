@@ -79,13 +79,13 @@ class ProvidedService : public Service,
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info, interface_name,
-                            std::move(interface_pipe));
+    registry_.BindInterface(interface_name, std::move(interface_pipe),
+                            source_info);
   }
 
   void BindConnectTestServiceRequest(
-      const BindSourceInfo& source_info,
-      test::mojom::ConnectTestServiceRequest request) {
+      test::mojom::ConnectTestServiceRequest request,
+      const BindSourceInfo& source_info) {
     bindings_.AddBinding(this, std::move(request));
     test::mojom::ConnectionStatePtr state(test::mojom::ConnectionState::New());
     state->connection_remote_name = source_info.identity.name();
@@ -97,35 +97,34 @@ class ProvidedService : public Service,
     caller_->ConnectionAccepted(std::move(state));
   }
 
-  void BindBlockedInterfaceRequest(
-      const BindSourceInfo& source_info,
-      test::mojom::BlockedInterfaceRequest request) {
+  void BindBlockedInterfaceRequest(test::mojom::BlockedInterfaceRequest request,
+                                   const BindSourceInfo& source_info) {
     blocked_bindings_.AddBinding(this, std::move(request));
   }
 
-  void BindUserIdTestRequest(const BindSourceInfo& source_info,
-                             test::mojom::UserIdTestRequest request) {
+  void BindUserIdTestRequest(test::mojom::UserIdTestRequest request,
+                             const BindSourceInfo& source_info) {
     user_id_test_bindings_.AddBinding(this, std::move(request));
   }
 
   // test::mojom::ConnectTestService:
-  void GetTitle(const GetTitleCallback& callback) override {
-    callback.Run(title_);
+  void GetTitle(GetTitleCallback callback) override {
+    std::move(callback).Run(title_);
   }
 
-  void GetInstance(const GetInstanceCallback& callback) override {
-    callback.Run(context()->identity().instance());
+  void GetInstance(GetInstanceCallback callback) override {
+    std::move(callback).Run(context()->identity().instance());
   }
 
   // test::mojom::BlockedInterface:
-  void GetTitleBlocked(const GetTitleBlockedCallback& callback) override {
-    callback.Run("Called Blocked Interface!");
+  void GetTitleBlocked(GetTitleBlockedCallback callback) override {
+    std::move(callback).Run("Called Blocked Interface!");
   }
 
   // test::mojom::UserIdTest:
   void ConnectToClassAppAsDifferentUser(
       const service_manager::Identity& target,
-      const ConnectToClassAppAsDifferentUserCallback& callback) override {
+      ConnectToClassAppAsDifferentUserCallback callback) override {
     context()->connector()->StartService(target);
     mojom::ConnectResult result;
     Identity resolved_identity;
@@ -138,7 +137,7 @@ class ProvidedService : public Service,
           base::MessageLoop::current());
       loop.Run();
     }
-    callback.Run(static_cast<int32_t>(result), resolved_identity);
+    std::move(callback).Run(static_cast<int32_t>(result), resolved_identity);
   }
 
   // base::SimpleThread:
@@ -159,7 +158,7 @@ class ProvidedService : public Service,
   const std::string title_;
   mojom::ServiceRequest request_;
   test::mojom::ExposedInterfacePtr caller_;
-  BinderRegistry registry_;
+  BinderRegistryWithArgs<const BindSourceInfo&> registry_;
   mojo::BindingSet<test::mojom::ConnectTestService> bindings_;
   mojo::BindingSet<test::mojom::BlockedInterface> blocked_bindings_;
   mojo::BindingSet<test::mojom::UserIdTest> user_id_test_bindings_;
@@ -192,8 +191,7 @@ class ConnectTestService : public Service,
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info, interface_name,
-                            std::move(interface_pipe));
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
   bool OnServiceManagerConnectionLost() override {
@@ -201,13 +199,11 @@ class ConnectTestService : public Service,
     return true;
   }
 
-  void BindServiceFactoryRequest(const BindSourceInfo& source_info,
-                                 mojom::ServiceFactoryRequest request) {
+  void BindServiceFactoryRequest(mojom::ServiceFactoryRequest request) {
     service_factory_bindings_.AddBinding(this, std::move(request));
   }
 
   void BindConnectTestServiceRequest(
-      const BindSourceInfo& source_info,
       test::mojom::ConnectTestServiceRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
@@ -225,12 +221,12 @@ class ConnectTestService : public Service,
   }
 
   // test::mojom::ConnectTestService:
-  void GetTitle(const GetTitleCallback& callback) override {
-    callback.Run("ROOT");
+  void GetTitle(GetTitleCallback callback) override {
+    std::move(callback).Run("ROOT");
   }
 
-  void GetInstance(const GetInstanceCallback& callback) override {
-    callback.Run(context()->identity().instance());
+  void GetInstance(GetInstanceCallback callback) override {
+    std::move(callback).Run(context()->identity().instance());
   }
 
   void OnConnectionError() {

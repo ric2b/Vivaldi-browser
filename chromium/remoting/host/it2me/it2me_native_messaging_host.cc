@@ -13,6 +13,7 @@
 #include "base/callback_helpers.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -30,7 +31,9 @@
 #include "remoting/base/service_urls.h"
 #include "remoting/host/chromoting_host_context.h"
 #include "remoting/host/host_exit_codes.h"
+#include "remoting/host/it2me/it2me_confirmation_dialog.h"
 #include "remoting/host/policy_watcher.h"
+#include "remoting/protocol/ice_config.h"
 #include "remoting/signaling/delegating_signal_strategy.h"
 
 #if defined(OS_WIN)
@@ -42,6 +45,8 @@
 
 namespace remoting {
 
+using protocol::ErrorCode;
+
 namespace {
 
 const NameMapElement<It2MeHostState> kIt2MeHostStates[] = {
@@ -49,10 +54,10 @@ const NameMapElement<It2MeHostState> kIt2MeHostStates[] = {
     {kStarting, "STARTING"},
     {kRequestedAccessCode, "REQUESTED_ACCESS_CODE"},
     {kReceivedAccessCode, "RECEIVED_ACCESS_CODE"},
+    {kConnecting, "CONNECTING"},
     {kConnected, "CONNECTED"},
     {kError, "ERROR"},
     {kInvalidDomainError, "INVALID_DOMAIN_ERROR"},
-    {kConnecting, "CONNECTING"},
 };
 
 #if defined(OS_WIN)
@@ -132,11 +137,12 @@ void It2MeNativeMessagingHost::OnMessage(const std::string& message) {
   // might be a string or a number, so cope with both.
   const base::Value* id;
   if (message_dict->Get("id", &id))
-    response->Set("id", id->CreateDeepCopy());
+    response->Set("id", base::MakeUnique<base::Value>(*id));
 
   std::string type;
   if (!message_dict->GetString("type", &type)) {
-    SendErrorAndExit(std::move(response), "'type' not found in request.");
+    LOG(ERROR) << "'type' not found in request.";
+    SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
     return;
   }
 
@@ -151,7 +157,8 @@ void It2MeNativeMessagingHost::OnMessage(const std::string& message) {
   } else if (type == "incomingIq") {
     ProcessIncomingIq(std::move(message_dict), std::move(response));
   } else {
-    SendErrorAndExit(std::move(response), "Unsupported request type: " + type);
+    LOG(ERROR) << "Unsupported request type: " << type;
+    SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
   }
 }
 
@@ -182,9 +189,7 @@ void It2MeNativeMessagingHost::ProcessHello(
   response->SetString("version", STRINGIZE(VERSION));
 
   // This list will be populated when new features are added.
-  std::unique_ptr<base::ListValue> supported_features_list(
-      new base::ListValue());
-  response->Set("supportedFeatures", supported_features_list.release());
+  response->Set("supportedFeatures", base::MakeUnique<base::ListValue>());
 
   SendMessageToClient(std::move(response));
 }
@@ -209,21 +214,22 @@ void It2MeNativeMessagingHost::ProcessConnect(
     // If the process cannot be started or message passing fails, then return an
     // error to the message sender.
     if (!DelegateToElevatedHost(std::move(message))) {
-      SendErrorAndExit(std::move(response),
-                       "Failed to send message to elevated host.");
+      LOG(ERROR) << "Failed to send message to elevated host.";
+      SendErrorAndExit(std::move(response), ErrorCode::ELEVATION_ERROR);
     }
     return;
   }
 
   if (it2me_host_.get()) {
-    SendErrorAndExit(std::move(response),
-                     "Connect can be called only when disconnected.");
+    LOG(ERROR) << "Connect can be called only when disconnected.";
+    SendErrorAndExit(std::move(response), ErrorCode::UNKNOWN_ERROR);
     return;
   }
 
   std::string username;
   if (!message->GetString("userName", &username)) {
-    SendErrorAndExit(std::move(response), "'userName' not found in request.");
+    LOG(ERROR) << "'userName' not found in request.";
+    SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
     return;
   }
 
@@ -245,8 +251,8 @@ void It2MeNativeMessagingHost::ProcessConnect(
 
     std::string auth_service_with_token;
     if (!message->GetString("authServiceWithToken", &auth_service_with_token)) {
-      SendErrorAndExit(std::move(response),
-                       "'authServiceWithToken' not found in request.");
+      LOG(ERROR) << "'authServiceWithToken' not found in request.";
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 
@@ -256,8 +262,9 @@ void It2MeNativeMessagingHost::ProcessConnect(
     const char kOAuth2ServicePrefix[] = "oauth2:";
     if (!base::StartsWith(auth_service_with_token, kOAuth2ServicePrefix,
                           base::CompareCase::SENSITIVE)) {
-      SendErrorAndExit(std::move(response), "Invalid 'authServiceWithToken': " +
-                                                auth_service_with_token);
+      LOG(ERROR) << "Invalid 'authServiceWithToken': "
+                 << auth_service_with_token;
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 
@@ -267,20 +274,20 @@ void It2MeNativeMessagingHost::ProcessConnect(
 #if !defined(NDEBUG)
     std::string address;
     if (!message->GetString("xmppServerAddress", &address)) {
-      SendErrorAndExit(std::move(response),
-                       "'xmppServerAddress' not found in request.");
+      LOG(ERROR) << "'xmppServerAddress' not found in request.";
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 
     if (!net::ParseHostAndPort(address, &xmpp_config.host, &xmpp_config.port)) {
-      SendErrorAndExit(std::move(response),
-                       "Invalid 'xmppServerAddress': " + address);
+      LOG(ERROR) << "Invalid 'xmppServerAddress': " << address;
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 
     if (!message->GetBoolean("xmppServerUseTls", &xmpp_config.use_tls)) {
-      SendErrorAndExit(std::move(response),
-                       "'xmppServerUseTls' not found in request.");
+      LOG(ERROR) << "'xmppServerUseTls' not found in request.";
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 #endif  // !defined(NDEBUG)
@@ -292,7 +299,8 @@ void It2MeNativeMessagingHost::ProcessConnect(
     std::string local_jid;
 
     if (!message->GetString("localJid", &local_jid)) {
-      SendErrorAndExit(std::move(response), "'localJid' not found in request.");
+      LOG(ERROR) << "'localJid' not found in request.";
+      SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
       return;
     }
 
@@ -310,11 +318,17 @@ void It2MeNativeMessagingHost::ProcessConnect(
 
 #if !defined(NDEBUG)
   if (!message->GetString("directoryBotJid", &directory_bot_jid)) {
-    SendErrorAndExit(std::move(response),
-                     "'directoryBotJid' not found in request.");
+    LOG(ERROR) << "'directoryBotJid' not found in request.";
+    SendErrorAndExit(std::move(response), ErrorCode::INCOMPATIBLE_PROTOCOL);
     return;
   }
 #endif  // !defined(NDEBUG)
+
+  base::DictionaryValue* ice_config_dict;
+  protocol::IceConfig ice_config;
+  if (message->GetDictionary("iceConfig", &ice_config_dict)) {
+    ice_config = protocol::IceConfig::Parse(*ice_config_dict);
+  }
 
   std::unique_ptr<base::DictionaryValue> policies =
       policy_watcher_->GetCurrentPolicies();
@@ -328,11 +342,11 @@ void It2MeNativeMessagingHost::ProcessConnect(
   }
 
   // Create the It2Me host and start connecting.
-  it2me_host_ = factory_->CreateIt2MeHost(host_context_->Copy(), weak_ptr_,
-                                          std::move(signal_strategy), username,
-                                          directory_bot_jid);
-  it2me_host_->OnPolicyUpdate(std::move(policies));
-  it2me_host_->Connect();
+  it2me_host_ = factory_->CreateIt2MeHost();
+  it2me_host_->Connect(host_context_->Copy(), std::move(policies),
+                       base::MakeUnique<It2MeConfirmationDialogFactory>(),
+                       weak_ptr_, std::move(signal_strategy), username,
+                       directory_bot_jid, ice_config);
 
   SendMessageToClient(std::move(response));
 }
@@ -350,8 +364,8 @@ void It2MeNativeMessagingHost::ProcessDisconnect(
     // If the process cannot be started or message passing fails, then return an
     // error to the message sender.
     if (!DelegateToElevatedHost(std::move(message))) {
-      SendErrorAndExit(std::move(response),
-                       "Failed to send message to elevated host.");
+      LOG(ERROR) << "Failed to send message to elevated host.";
+      SendErrorAndExit(std::move(response), ErrorCode::ELEVATION_ERROR);
     }
     return;
   }
@@ -385,13 +399,12 @@ void It2MeNativeMessagingHost::SendOutgoingIq(const std::string& iq) {
 
 void It2MeNativeMessagingHost::SendErrorAndExit(
     std::unique_ptr<base::DictionaryValue> response,
-    const std::string& description) const {
+    protocol::ErrorCode error_code) const {
   DCHECK(task_runner()->BelongsToCurrentThread());
-
-  LOG(ERROR) << description;
-
   response->SetString("type", "error");
-  response->SetString("description", description);
+  response->SetString("error_code", ErrorCodeToString(error_code));
+  // TODO(kelvinp): Remove this after M61 Webapp is pushed to 100%.
+  response->SetString("description", ErrorCodeToString(error_code));
   SendMessageToClient(std::move(response));
 
   // Trigger a host shutdown by sending an empty message.
@@ -407,9 +420,8 @@ void It2MeNativeMessagingHost::SendPolicyErrorAndExit() const {
   client_->CloseChannel(std::string());
 }
 
-void It2MeNativeMessagingHost::OnStateChanged(
-    It2MeHostState state,
-    const std::string& error_message) {
+void It2MeNativeMessagingHost::OnStateChanged(It2MeHostState state,
+                                              protocol::ErrorCode error_code) {
   DCHECK(task_runner()->BelongsToCurrentThread());
 
   state_ = state;
@@ -439,7 +451,9 @@ void It2MeNativeMessagingHost::OnStateChanged(
       // "error" message so that errors that occur before the "connect" message
       // is sent can be communicated.
       message->SetString("type", "error");
-      message->SetString("description", error_message);
+      message->SetString("error_code", ErrorCodeToString(error_code));
+      // TODO(kelvinp): Remove this after M61 Webapp is pushed to 100%.
+      message->SetString("description", ErrorCodeToString(error_code));
       break;
 
     default:
@@ -520,7 +534,7 @@ void It2MeNativeMessagingHost::OnPolicyUpdate(
     }
   }
 
-  if (it2me_host_.get()) {
+  if (it2me_host_) {
     it2me_host_->OnPolicyUpdate(std::move(policies));
   }
 }

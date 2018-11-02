@@ -31,7 +31,6 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/NotFound.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -47,7 +46,7 @@ class CORE_EXPORT PlainTextRange {
   explicit PlainTextRange(int location);
   PlainTextRange(int start, int end);
 
-  size_t end() const {
+  size_t End() const {
     DCHECK(IsNotNull());
     return end_;
   }

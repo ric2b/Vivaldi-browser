@@ -36,14 +36,13 @@
 namespace blink {
 
 class InProcessWorkerObjectProxy;
-class WorkerThreadStartupData;
+struct GlobalScopeCreationParams;
 
 class CORE_EXPORT DedicatedWorkerThread : public WorkerThread {
  public:
   static std::unique_ptr<DedicatedWorkerThread> Create(
-      PassRefPtr<WorkerLoaderProxy>,
-      InProcessWorkerObjectProxy&,
-      double time_origin);
+      ThreadableLoadingContext*,
+      InProcessWorkerObjectProxy&);
   ~DedicatedWorkerThread() override;
 
   WorkerBackingThread& GetWorkerBackingThread() override {
@@ -55,18 +54,15 @@ class CORE_EXPORT DedicatedWorkerThread : public WorkerThread {
   }
 
  protected:
-  DedicatedWorkerThread(PassRefPtr<WorkerLoaderProxy>,
-                        InProcessWorkerObjectProxy&,
-                        double time_origin);
+  DedicatedWorkerThread(ThreadableLoadingContext*, InProcessWorkerObjectProxy&);
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
-      std::unique_ptr<WorkerThreadStartupData>) override;
+      std::unique_ptr<GlobalScopeCreationParams>) override;
 
  private:
   friend class DedicatedWorkerThreadForTest;
 
   std::unique_ptr<WorkerBackingThread> worker_backing_thread_;
   InProcessWorkerObjectProxy& worker_object_proxy_;
-  double time_origin_;
 };
 
 }  // namespace blink

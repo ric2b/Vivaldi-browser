@@ -10,6 +10,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_checker.h"
@@ -42,6 +43,9 @@ class ModuleInspector {
   // Removes the throttling.
   void IncreaseInspectionPriority();
 
+  // Returns true if ModuleInspector is not doing anything right now.
+  bool IsIdle();
+
  private:
   // Starts inspecting the module at the front of the queue.
   void StartInspectingModule();
@@ -67,7 +71,7 @@ class ModuleInspector {
   // The vector of paths to %env_var%, used to account for differences in
   // localization and where people keep their files.
   // e.g. c:\windows vs d:\windows
-  StringMapping path_mapping_;
+  scoped_refptr<base::RefCountedData<StringMapping>> path_mapping_;
 
   base::ThreadChecker thread_checker_;
 

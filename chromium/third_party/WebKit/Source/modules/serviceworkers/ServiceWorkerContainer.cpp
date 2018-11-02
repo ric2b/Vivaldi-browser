@@ -140,6 +140,7 @@ void ServiceWorkerContainer::ContextDestroyed(ExecutionContext*) {
     provider_->SetClient(0);
     provider_ = nullptr;
   }
+  controller_ = nullptr;
   navigator_->ClearServiceWorker();
 }
 
@@ -175,7 +176,7 @@ void ServiceWorkerContainer::RegisterServiceWorkerImpl(
     return;
   }
 
-  KURL page_url = KURL(KURL(), document_origin->ToString());
+  KURL page_url = KURL(NullURL(), document_origin->ToString());
   if (!SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
           page_url.Protocol())) {
     callbacks->OnError(WebServiceWorkerError(
@@ -329,7 +330,7 @@ ScriptPromise ServiceWorkerContainer::getRegistration(
     return promise;
   }
 
-  KURL page_url = KURL(KURL(), document_origin->ToString());
+  KURL page_url = KURL(NullURL(), document_origin->ToString());
   if (!SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
           page_url.Protocol())) {
     resolver->Reject(DOMException::Create(
@@ -382,7 +383,7 @@ ScriptPromise ServiceWorkerContainer::getRegistrations(
     return promise;
   }
 
-  KURL page_url = KURL(KURL(), document_origin->ToString());
+  KURL page_url = KURL(NullURL(), document_origin->ToString());
   if (!SchemeRegistry::ShouldTreatURLSchemeAsAllowingServiceWorkers(
           page_url.Protocol())) {
     resolver->Reject(DOMException::Create(
@@ -436,9 +437,10 @@ void ServiceWorkerContainer::SetController(
     return;
   controller_ = ServiceWorker::From(GetExecutionContext(),
                                     WTF::WrapUnique(handle.release()));
-  if (controller_)
+  if (controller_) {
     UseCounter::Count(GetExecutionContext(),
-                      UseCounter::kServiceWorkerControlledPage);
+                      WebFeature::kServiceWorkerControlledPage);
+  }
   if (should_notify_controller_change)
     DispatchEvent(Event::Create(EventTypeNames::controllerchange));
 }
@@ -463,8 +465,7 @@ void ServiceWorkerContainer::DispatchMessageEvent(
 void ServiceWorkerContainer::CountFeature(uint32_t feature) {
   if (!GetExecutionContext())
     return;
-  UseCounter::Feature use_counter_feature =
-      static_cast<UseCounter::Feature>(feature);
+  WebFeature use_counter_feature = static_cast<WebFeature>(feature);
   if (Deprecation::DeprecationMessage(use_counter_feature).IsEmpty())
     UseCounter::Count(GetExecutionContext(), use_counter_feature);
   else

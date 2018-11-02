@@ -19,6 +19,9 @@
  * Boston, MA 02110-1301, USA.
  */
 
+{% from 'templates/macros.tmpl' import source_files_for_generated_file %}
+{{source_files_for_generated_file(template_file, input_files)}}
+
 #ifndef StylePropertyShorthand_h
 #define StylePropertyShorthand_h
 
@@ -30,14 +33,14 @@ namespace blink {
 class StylePropertyShorthand {
     USING_FAST_MALLOC(StylePropertyShorthand);
  public:
-  StylePropertyShorthand()
+  constexpr StylePropertyShorthand()
       : m_properties(0),
         m_length(0),
         m_shorthandID(CSSPropertyInvalid) {}
 
-  StylePropertyShorthand(CSSPropertyID id,
-                         const CSSPropertyID* properties,
-                         unsigned numProperties)
+  constexpr StylePropertyShorthand(CSSPropertyID id,
+                                   const CSSPropertyID* properties,
+                                   unsigned numProperties)
       : m_properties(properties),
         m_length(numProperties),
         m_shorthandID(id) {}
@@ -70,7 +73,7 @@ void getMatchingShorthandsForLonghand(
 unsigned indexOfShorthandForLonghand(CSSPropertyID,
                                      const Vector<StylePropertyShorthand, 4>&);
 
-bool isShorthandProperty(CSSPropertyID);
+bool CORE_EXPORT isShorthandProperty(CSSPropertyID);
 
 } // namespace blink
 

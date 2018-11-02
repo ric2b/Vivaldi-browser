@@ -8,11 +8,11 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/ImageBitmap.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/ImageData.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/loader/EmptyClients.h"
@@ -42,15 +42,6 @@
 using ::testing::Mock;
 
 namespace blink {
-
-namespace {
-
-gfx::ColorSpace AdobeRGBColorSpace() {
-  return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::ADOBE_RGB,
-                         gfx::ColorSpace::TransferID::GAMMA22);
-}
-
-}  // namespace
 
 enum BitmapOpacity { kOpaqueBitmap, kTransparentBitmap };
 
@@ -208,9 +199,8 @@ void CanvasRenderingContext2DTest::CreateContext(
 void CanvasRenderingContext2DTest::SetUp() {
   Page::PageClients page_clients;
   FillWithEmptyClients(page_clients);
-  dummy_page_holder_ =
-      DummyPageHolder::Create(IntSize(800, 600), &page_clients, nullptr,
-                              override_settings_function_, nullptr);
+  dummy_page_holder_ = DummyPageHolder::Create(
+      IntSize(800, 600), &page_clients, nullptr, override_settings_function_);
   document_ = &dummy_page_holder_->GetDocument();
   document_->documentElement()->setInnerHTML(
       "<body><canvas id='c'></canvas></body>");
@@ -921,10 +911,17 @@ TEST_F(CanvasRenderingContext2DTest, ContextDisposedBeforeCanvas) {
   // Passes by not crashing later during teardown
 }
 
-TEST_F(CanvasRenderingContext2DTest, GetImageDataDisablesAcceleration) {
+#if defined(MEMORY_SANITIZER)
+#define MAYBE_GetImageDataDisablesAcceleration \
+  DISABLED_GetImageDataDisablesAcceleration
+#else
+#define MAYBE_GetImageDataDisablesAcceleration GetImageDataDisablesAcceleration
+#endif
+
+TEST_F(CanvasRenderingContext2DTest, MAYBE_GetImageDataDisablesAcceleration) {
   bool saved_fixed_rendering_mode =
-      RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled();
-  RuntimeEnabledFeatures::setCanvas2dFixedRenderingModeEnabled(false);
+      RuntimeEnabledFeatures::Canvas2dFixedRenderingModeEnabled();
+  RuntimeEnabledFeatures::SetCanvas2dFixedRenderingModeEnabled(false);
 
   CreateContext(kNonOpaque);
   FakeGLES2Interface gl;
@@ -970,14 +967,14 @@ TEST_F(CanvasRenderingContext2DTest, GetImageDataDisablesAcceleration) {
   }
 
   // Restore global state to prevent side-effects on other tests
-  RuntimeEnabledFeatures::setCanvas2dFixedRenderingModeEnabled(
+  RuntimeEnabledFeatures::SetCanvas2dFixedRenderingModeEnabled(
       saved_fixed_rendering_mode);
 }
 
 TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
   bool saved_fixed_rendering_mode =
-      RuntimeEnabledFeatures::canvas2dFixedRenderingModeEnabled();
-  RuntimeEnabledFeatures::setCanvas2dFixedRenderingModeEnabled(false);
+      RuntimeEnabledFeatures::Canvas2dFixedRenderingModeEnabled();
+  RuntimeEnabledFeatures::SetCanvas2dFixedRenderingModeEnabled(false);
 
   enum TestVariants {
     kLargeTextureDisablesAcceleration = 0,
@@ -1037,7 +1034,7 @@ TEST_F(CanvasRenderingContext2DTest, TextureUploadHeuristics) {
     }
   }
   // Restore global state to prevent side-effects on other tests
-  RuntimeEnabledFeatures::setCanvas2dFixedRenderingModeEnabled(
+  RuntimeEnabledFeatures::SetCanvas2dFixedRenderingModeEnabled(
       saved_fixed_rendering_mode);
 }
 
@@ -1070,90 +1067,6 @@ TEST_F(CanvasRenderingContext2DTest, DisableAcceleration) {
   EXPECT_EQ(0u, GetGlobalAcceleratedImageBufferCount());
 }
 
-TEST_F(CanvasRenderingContext2DTest,
-       LegacyColorSpaceUsesGlobalTargetColorBehavior) {
-  // Set the global target color space to something distinctly recognizable (not
-  // srgb)
-  gfx::ColorSpace saved_global_target_color_space =
-      ColorBehavior::GlobalTargetColorSpace();
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
-  bool saved_color_correct_rendering_enabled =
-      RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
-
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(false);
-  CreateContext(kNonOpaque, "legacy-srgb");
-  ColorBehavior behavior = Context2d()->DrawImageColorBehavior();
-  EXPECT_TRUE(behavior.IsTransformToTargetColorSpace());
-  EXPECT_TRUE(ColorBehavior::GlobalTargetColorSpace() ==
-              behavior.TargetColorSpace());
-
-  // Restore global state to avoid interfering with other tests
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(
-      saved_global_target_color_space);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(
-      saved_color_correct_rendering_enabled);
-}
-
-TEST_F(CanvasRenderingContext2DTest,
-       LegacyColorSpaceUsesSRGBWhenColorCorrectRenderingEnabled) {
-  // Set the global target color space to something distinctly recognizable (not
-  // srgb)
-  gfx::ColorSpace saved_global_target_color_space =
-      ColorBehavior::GlobalTargetColorSpace();
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
-  bool saved_color_correct_rendering_enabled =
-      RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
-
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(true);
-  CreateContext(kNonOpaque, "legacy-srgb");
-  ColorBehavior behavior = Context2d()->DrawImageColorBehavior();
-  EXPECT_TRUE(behavior.IsTransformToTargetColorSpace());
-  EXPECT_TRUE(gfx::ColorSpace::CreateSRGB() == behavior.TargetColorSpace());
-
-  // Restore global state to avoid interfering with other tests
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(
-      saved_global_target_color_space);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(
-      saved_color_correct_rendering_enabled);
-}
-
-TEST_F(CanvasRenderingContext2DTest,
-       SRGBColorSpaceUsesTransformToSRGBColorBehavior) {
-  // Set the global target color space to something distinctly recognizable (not
-  // srgb)
-  gfx::ColorSpace saved_global_target_color_space =
-      ColorBehavior::GlobalTargetColorSpace();
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
-
-  CreateContext(kNonOpaque, "srgb");
-  ColorBehavior behavior = Context2d()->DrawImageColorBehavior();
-  EXPECT_TRUE(behavior.IsTransformToTargetColorSpace());
-  EXPECT_TRUE(gfx::ColorSpace::CreateSRGB() == behavior.TargetColorSpace());
-
-  // Restore global state to avoid interfering with other tests
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(
-      saved_global_target_color_space);
-}
-
-TEST_F(CanvasRenderingContext2DTest,
-       LinearRGBColorSpaceUsesTransformToLinearSRGBColorBehavior) {
-  // Set the global target color space to something distinctly recognizable (not
-  // srgb)
-  gfx::ColorSpace saved_global_target_color_space =
-      ColorBehavior::GlobalTargetColorSpace();
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(AdobeRGBColorSpace());
-
-  CreateContext(kNonOpaque, "srgb", kLinearPixelMathEnabled);
-  ColorBehavior behavior = Context2d()->DrawImageColorBehavior();
-  EXPECT_TRUE(behavior.IsTransformToTargetColorSpace());
-  EXPECT_TRUE(gfx::ColorSpace::CreateSCRGBLinear() ==
-              behavior.TargetColorSpace());
-
-  // Restore global state to avoid interfering with other tests
-  ColorBehavior::SetGlobalTargetColorSpaceForTesting(
-      saved_global_target_color_space);
-}
-
 enum class ColorSpaceConversion : uint8_t {
   NONE = 0,
   DEFAULT_NOT_COLOR_CORRECTED = 1,
@@ -1176,20 +1089,23 @@ static ImageBitmapOptions PrepareBitmapOptionsAndSetRuntimeFlags(
   // Set the runtime flags
   bool flag = (color_space_conversion !=
                ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED);
-  RuntimeEnabledFeatures::setExperimentalCanvasFeaturesEnabled(true);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(flag);
-  RuntimeEnabledFeatures::setColorCorrectRenderingDefaultModeEnabled(!flag);
-
+  RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(true);
+  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(flag);
+  RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(true);
   return options;
 }
 
 TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
   bool experimental_canvas_features_runtime_flag =
-      RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled();
+      RuntimeEnabledFeatures::ExperimentalCanvasFeaturesEnabled();
   bool color_correct_rendering_runtime_flag =
-      RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
-  bool color_correct_rendering_default_mode_runtime_flag =
-      RuntimeEnabledFeatures::colorCorrectRenderingDefaultModeEnabled();
+      RuntimeEnabledFeatures::ColorCorrectRenderingEnabled();
+  bool color_canvas_extensions_flag =
+      RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled();
+
+  RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(true);
+  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(true);
+  RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(true);
 
   Persistent<HTMLCanvasElement> canvas =
       Persistent<HTMLCanvasElement>(CanvasElement());
@@ -1210,7 +1126,7 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
     std::swap(src_pixel[0], src_pixel[2]);
 
   // Create and test the ImageBitmap objects.
-  Optional<IntRect> crop_rect = IntRect(0, 0, 10, 10);
+  Optional<IntRect> crop_rect = IntRect(0, 0, 300, 150);
   sk_sp<SkColorSpace> color_space = nullptr;
   SkColorType color_type = SkColorType::kN32_SkColorType;
   SkColorSpaceXform::ColorFormat color_format32 =
@@ -1237,7 +1153,12 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
         break;
       case ColorSpaceConversion::DEFAULT_NOT_COLOR_CORRECTED:
         color_space = ColorBehavior::GlobalTargetColorSpace().ToSkColorSpace();
-        color_format = color_format32;
+        if (color_space->gammaIsLinear()) {
+          color_type = SkColorType::kRGBA_F16_SkColorType;
+          color_format = SkColorSpaceXform::ColorFormat::kRGBA_F16_ColorFormat;
+        } else {
+          color_format = color_format32;
+        }
         break;
       case ColorSpaceConversion::DEFAULT_COLOR_CORRECTED:
       case ColorSpaceConversion::SRGB:
@@ -1276,12 +1197,12 @@ TEST_F(CanvasRenderingContext2DTest, ImageBitmapColorSpaceConversion) {
     ASSERT_EQ(compare, 0);
   }
 
-  RuntimeEnabledFeatures::setExperimentalCanvasFeaturesEnabled(
+  RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(
       experimental_canvas_features_runtime_flag);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(
+  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(
       color_correct_rendering_runtime_flag);
-  RuntimeEnabledFeatures::setColorCorrectRenderingDefaultModeEnabled(
-      color_correct_rendering_default_mode_runtime_flag);
+  RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(
+      color_canvas_extensions_flag);
 }
 
 bool ConvertPixelsToColorSpaceAndPixelFormatForTest(
@@ -1334,15 +1255,18 @@ bool ConvertPixelsToColorSpaceAndPixelFormatForTest(
 
   sk_sp<SkColorSpace> src_sk_color_space = nullptr;
   if (u8_array) {
-    src_sk_color_space = ImageData::GetSkColorSpaceForTest(
-        src_color_space, kRGBA8CanvasPixelFormat);
+    src_sk_color_space =
+        CanvasColorParams(src_color_space, kRGBA8CanvasPixelFormat)
+            .GetSkColorSpaceForSkSurfaces();
   } else {
-    src_sk_color_space = ImageData::GetSkColorSpaceForTest(
-        src_color_space, kF16CanvasPixelFormat);
+    src_sk_color_space =
+        CanvasColorParams(src_color_space, kF16CanvasPixelFormat)
+            .GetSkColorSpaceForSkSurfaces();
   }
 
   sk_sp<SkColorSpace> dst_sk_color_space =
-      ImageData::GetSkColorSpaceForTest(dst_color_space, dst_pixel_format);
+      CanvasColorParams(dst_color_space, dst_pixel_format)
+          .GetSkColorSpaceForSkSurfaces();
 
   // When the input dataArray is in Uint16, we normally should convert the
   // values from Little Endian to Big Endian before passing the buffer to
@@ -1379,11 +1303,14 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
     CanvasColorSpaceSettings canvas_colorspace_setting,
     float color_tolerance) {
   bool experimental_canvas_features_runtime_flag =
-      RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled();
+      RuntimeEnabledFeatures::ExperimentalCanvasFeaturesEnabled();
   bool color_correct_rendering_runtime_flag =
-      RuntimeEnabledFeatures::colorCorrectRenderingEnabled();
-  RuntimeEnabledFeatures::setExperimentalCanvasFeaturesEnabled(true);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(true);
+      RuntimeEnabledFeatures::ColorCorrectRenderingEnabled();
+  bool color_canvas_extensions_flag =
+      RuntimeEnabledFeatures::ColorCanvasExtensionsEnabled();
+  RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(true);
+  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(true);
+  RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(true);
 
   bool test_passed = true;
   unsigned num_image_data_color_spaces = 3;
@@ -1528,8 +1455,6 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
         fpixels1 = static_cast<float*>(vpointer);
         fpixels2 = static_cast<float*>(pixels_from_get_image_data);
         for (unsigned m = 0; m < data_length; m++) {
-          if (fpixels1[m] < 0)
-            fpixels1[m] = 0;
           if (fabs(fpixels1[m] - fpixels2[m]) > color_tolerance) {
             test_passed = false;
           }
@@ -1542,10 +1467,12 @@ void TestPutImageDataOnCanvasWithColorSpaceSettings(
   delete[] u16_pixels;
   delete[] f32_pixels;
 
-  RuntimeEnabledFeatures::setExperimentalCanvasFeaturesEnabled(
+  RuntimeEnabledFeatures::SetExperimentalCanvasFeaturesEnabled(
       experimental_canvas_features_runtime_flag);
-  RuntimeEnabledFeatures::setColorCorrectRenderingEnabled(
+  RuntimeEnabledFeatures::SetColorCorrectRenderingEnabled(
       color_correct_rendering_runtime_flag);
+  RuntimeEnabledFeatures::SetColorCanvasExtensionsEnabled(
+      color_canvas_extensions_flag);
 }
 
 TEST_F(CanvasRenderingContext2DTest, ColorManagedPutImageDataOnSRGBCanvas) {
@@ -1556,17 +1483,17 @@ TEST_F(CanvasRenderingContext2DTest, ColorManagedPutImageDataOnSRGBCanvas) {
 TEST_F(CanvasRenderingContext2DTest,
        ColorManagedPutImageDataOnLinearSRGBCanvas) {
   TestPutImageDataOnCanvasWithColorSpaceSettings(
-      CanvasElement(), CanvasColorSpaceSettings::CANVAS_LINEARSRGB, 0.15);
+      CanvasElement(), CanvasColorSpaceSettings::CANVAS_LINEARSRGB, 0.01);
 }
 
 TEST_F(CanvasRenderingContext2DTest, ColorManagedPutImageDataOnRec2020Canvas) {
   TestPutImageDataOnCanvasWithColorSpaceSettings(
-      CanvasElement(), CanvasColorSpaceSettings::CANVAS_REC2020, 0.1);
+      CanvasElement(), CanvasColorSpaceSettings::CANVAS_REC2020, 0.01);
 }
 
 TEST_F(CanvasRenderingContext2DTest, ColorManagedPutImageDataOnP3Canvas) {
   TestPutImageDataOnCanvasWithColorSpaceSettings(
-      CanvasElement(), CanvasColorSpaceSettings::CANVAS_P3, 0.1);
+      CanvasElement(), CanvasColorSpaceSettings::CANVAS_P3, 0.01);
 }
 
 void OverrideScriptEnabled(Settings& settings) {

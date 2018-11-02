@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "base/bind_helpers.h"
-#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
@@ -16,13 +15,11 @@
 #include "base/values.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager.h"
 #include "chrome/browser/chromeos/printing/cups_print_job_manager_factory.h"
+#include "chrome/browser/chromeos/printing/cups_printers_manager.h"
 #include "chrome/browser/chromeos/printing/ppd_provider_factory.h"
 #include "chrome/browser/chromeos/printing/printer_configurer.h"
-#include "chrome/browser/chromeos/printing/printers_manager.h"
-#include "chrome/browser/chromeos/printing/printers_manager_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/webui/print_preview/printer_capabilities.h"
-#include "chrome/common/chrome_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/debug_daemon_client.h"
 #include "chromeos/printing/ppd_provider.h"
@@ -33,6 +30,8 @@
 namespace printing {
 
 namespace {
+
+using chromeos::CupsPrintersManager;
 
 // Store the name used in CUPS, Printer#id in |printer_name|, the description
 // as the system_driverinfo option value, and the Printer#display_name in
@@ -52,11 +51,10 @@ printing::PrinterBasicInfo ToBasicInfo(const chromeos::Printer& printer) {
   return basic_info;
 }
 
-void AddPrintersToList(
-    const std::vector<std::unique_ptr<chromeos::Printer>>& printers,
-    PrinterList* list) {
+void AddPrintersToList(const std::vector<chromeos::Printer>& printers,
+                       PrinterList* list) {
   for (const auto& printer : printers) {
-    list->push_back(ToBasicInfo(*printer));
+    list->push_back(ToBasicInfo(printer));
   }
 }
 
@@ -74,7 +72,7 @@ void FetchCapabilities(std::unique_ptr<chromeos::Printer> printer,
 class PrinterBackendProxyChromeos : public PrinterBackendProxy {
  public:
   explicit PrinterBackendProxyChromeos(Profile* profile)
-      : prefs_(chromeos::PrintersManagerFactory::GetForBrowserContext(profile)),
+      : printers_manager_(CupsPrintersManager::Create(profile)),
         printer_configurer_(chromeos::PrinterConfigurer::Create(profile)),
         weak_factory_(this) {
     // Construct the CupsPrintJobManager to listen for printing events.
@@ -94,17 +92,20 @@ class PrinterBackendProxyChromeos : public PrinterBackendProxy {
   };
 
   void EnumeratePrinters(const EnumeratePrintersCallback& cb) override {
-    // PrintersManager is not thread safe and must be called from the UI
+    // SyncedPrintersManager is not thread safe and must be called from the UI
     // thread.
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     PrinterList printer_list;
-
-    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kDisableNativeCups)) {
-      AddPrintersToList(prefs_->GetPrinters(), &printer_list);
-      AddPrintersToList(prefs_->GetRecommendedPrinters(), &printer_list);
-    }
+    AddPrintersToList(
+        printers_manager_->GetPrinters(CupsPrintersManager::kConfigured),
+        &printer_list);
+    AddPrintersToList(
+        printers_manager_->GetPrinters(CupsPrintersManager::kEnterprise),
+        &printer_list);
+    AddPrintersToList(
+        printers_manager_->GetPrinters(CupsPrintersManager::kAutomatic),
+        &printer_list);
 
     content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
                                      base::Bind(cb, printer_list));
@@ -116,7 +117,7 @@ class PrinterBackendProxyChromeos : public PrinterBackendProxy {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
     std::unique_ptr<chromeos::Printer> printer =
-        prefs_->GetPrinter(printer_name);
+        printers_manager_->GetPrinter(printer_name);
     if (!printer) {
       // If the printer was removed, the lookup will fail.
       content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
@@ -129,7 +130,7 @@ class PrinterBackendProxyChromeos : public PrinterBackendProxy {
                               printer->GetProtocol(),
                               chromeos::Printer::kProtocolMax);
 
-    if (prefs_->IsConfigurationCurrent(*printer)) {
+    if (printers_manager_->IsPrinterInstalled(*printer)) {
       // Skip setup if the printer is already installed.
       HandlePrinterSetup(std::move(printer), cb, chromeos::kSuccess);
       return;
@@ -152,7 +153,7 @@ class PrinterBackendProxyChromeos : public PrinterBackendProxy {
       case chromeos::PrinterSetupResult::kSuccess:
         VLOG(1) << "Printer setup successful for " << printer->id()
                 << " fetching properties";
-        prefs_->PrinterInstalled(*printer);
+        printers_manager_->PrinterInstalled(*printer);
 
         // fetch settings on the blocking pool and invoke callback.
         FetchCapabilities(std::move(printer), cb);
@@ -183,8 +184,8 @@ class PrinterBackendProxyChromeos : public PrinterBackendProxy {
     cb.Run(nullptr);
   }
 
-  chromeos::PrintersManager* prefs_;
-  scoped_refptr<chromeos::printing::PpdProvider> ppd_provider_;
+  std::unique_ptr<CupsPrintersManager> printers_manager_;
+  scoped_refptr<chromeos::PpdProvider> ppd_provider_;
   std::unique_ptr<chromeos::PrinterConfigurer> printer_configurer_;
   base::WeakPtrFactory<PrinterBackendProxyChromeos> weak_factory_;
 

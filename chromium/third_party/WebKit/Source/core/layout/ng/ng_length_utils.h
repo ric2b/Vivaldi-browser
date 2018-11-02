@@ -14,6 +14,7 @@
 
 namespace blink {
 class ComputedStyle;
+class LayoutObject;
 class LayoutUnit;
 class Length;
 struct MinMaxContentSize;
@@ -33,6 +34,8 @@ enum class LengthResolveType {
 // MinMaxContentSize struct to those functions.
 CORE_EXPORT bool NeedMinMaxContentSize(const NGConstraintSpace&,
                                        const ComputedStyle&);
+
+CORE_EXPORT bool NeedMinMaxContentSize(const ComputedStyle&);
 
 // Like NeedMinMaxContentSize, but for use when calling
 // ComputeMinAndMaxContentContribution.
@@ -123,6 +126,9 @@ CORE_EXPORT void ApplyAutoMargins(const NGConstraintSpace&,
 CORE_EXPORT LayoutUnit ConstrainByMinMax(LayoutUnit length,
                                          Optional<LayoutUnit> min,
                                          Optional<LayoutUnit> max);
+
+// Returns scrollbar sizes or this layout object.
+NGBoxStrut GetScrollbarSizes(const LayoutObject*);
 
 }  // namespace blink
 

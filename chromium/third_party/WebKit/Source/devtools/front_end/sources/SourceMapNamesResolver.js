@@ -52,7 +52,8 @@ Sources.SourceMapNamesResolver._scopeIdentifiers = function(scope) {
     var scopeText = text.extract(scopeRange);
     var scopeStart = text.toSourceRange(scopeRange).offset;
     var prefix = 'function fui';
-    return Common.formatterWorkerPool.javaScriptIdentifiers(prefix + scopeText)
+    return Formatter.formatterWorkerPool()
+        .javaScriptIdentifiers(prefix + scopeText)
         .then(onIdentifiers.bind(null, text, scopeStart, prefix));
   }
 
@@ -279,7 +280,7 @@ Sources.SourceMapNamesResolver._resolveExpression = function(
     var originalText = text.extract(textRange);
     if (!originalText)
       return Promise.resolve('');
-    return Common.formatterWorkerPool.evaluatableJavaScriptSubstring(originalText);
+    return Formatter.formatterWorkerPool().evaluatableJavaScriptSubstring(originalText);
   }
 };
 
@@ -476,31 +477,25 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
    * @override
    * @param {string|!Protocol.Runtime.CallArgument} argumentName
    * @param {string} value
-   * @param {function(string=)} callback
+   * @return {!Promise<string|undefined>}
    */
-  setPropertyValue(argumentName, value, callback) {
-    Sources.SourceMapNamesResolver._resolveScope(this._scope).then(resolveName.bind(this));
+  async setPropertyValue(argumentName, value) {
+    var namesMapping = await Sources.SourceMapNamesResolver._resolveScope(this._scope);
 
-    /**
-     * @param {!Map<string, string>} namesMapping
-     * @this {Sources.SourceMapNamesResolver.RemoteObject}
-     */
-    function resolveName(namesMapping) {
-      var name;
-      if (typeof argumentName === 'string')
-        name = argumentName;
-      else
-        name = /** @type {string} */ (argumentName.value);
+    var name;
+    if (typeof argumentName === 'string')
+      name = argumentName;
+    else
+      name = /** @type {string} */ (argumentName.value);
 
-      var actualName = name;
-      for (var compiledName of namesMapping.keys()) {
-        if (namesMapping.get(compiledName) === name) {
-          actualName = compiledName;
-          break;
-        }
+    var actualName = name;
+    for (var compiledName of namesMapping.keys()) {
+      if (namesMapping.get(compiledName) === name) {
+        actualName = compiledName;
+        break;
       }
-      this._object.setPropertyValue(actualName, value, callback);
     }
+    return this._object.setPropertyValue(actualName, value);
   }
 
   /**
@@ -515,10 +510,10 @@ Sources.SourceMapNamesResolver.RemoteObject = class extends SDK.RemoteObject {
   /**
    * @override
    * @param {!Protocol.Runtime.CallArgument} name
-   * @param {function(string=)} callback
+   * @return {!Promise<string|undefined>}
    */
-  deleteProperty(name, callback) {
-    this._object.deleteProperty(name, callback);
+  async deleteProperty(name) {
+    return this._object.deleteProperty(name);
   }
 
   /**

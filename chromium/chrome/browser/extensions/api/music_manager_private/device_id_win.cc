@@ -27,7 +27,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "rlz/features/features.h"
 
-#if BUILDFLAG(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
 #include "rlz/lib/machine_id.h"
 #endif
 
@@ -184,7 +184,7 @@ void GetMacAddress(const IsValidMacAddressCallback& is_valid_mac_address,
 }
 
 std::string GetRlzMachineId() {
-#if BUILDFLAG(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
   std::string machine_id;
   if (!rlz_lib::GetMachineId(&machine_id))
     return std::string();

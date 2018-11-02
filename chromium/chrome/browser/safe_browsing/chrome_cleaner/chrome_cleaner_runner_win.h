@@ -54,22 +54,30 @@ class ChromeCleanerRunner
     kDisabled,
   };
 
-  enum class CleanerLogsStatus {
-    kUploadEnabled,
-    kUploadDisabled,
+  enum class LaunchStatus {
+    // Got an invalid process when attempting to launch the Chrome Cleaner
+    // process. As a result, the Mojo pipe was never set up and the
+    // |on_connection_closed| and |on_prompt_user| callbacks passed to
+    // RunChromeCleanerAndReplyWithExitCode() will never be run.
+    kLaunchFailed,
+    // Waiting for the Chrome Cleaner process to exit failed.
+    kLaunchSucceededFailedToWaitForCompletion,
+    // Successfully waited for the Chrome Cleaner process to exit and received
+    // the process's exit code.
+    kSuccess,
   };
 
-  struct LaunchStatus {
-    // If false, indicates that either the Chrome Cleaner process handle
-    // returned by base::LaunchProcess() was invalid or that something went
-    // wrong while waiting for the process to exit.
-    bool process_ok;
-    // The exit code from the Chrome Cleaner process. Should not be used if
-    // |process_ok| is false.
+  struct ProcessStatus {
+    LaunchStatus launch_status;
+    // The exit code from the Chrome Cleaner process. Should be used only if
+    // |launch_status| is |kSuccess|.
     int exit_code;
+
+    ProcessStatus(LaunchStatus launch_status = LaunchStatus::kLaunchFailed,
+                  int exit_code = std::numeric_limits<int>::max());
   };
 
-  using ProcessDoneCallback = base::OnceCallback<void(LaunchStatus)>;
+  using ProcessDoneCallback = base::OnceCallback<void(ProcessStatus)>;
 
   // Executes the Chrome Cleaner in the background, initializes the Mojo IPC
   // between Chrome and the Chrome Cleaner process, and forwards Mojo callbacks
@@ -81,11 +89,11 @@ class ChromeCleanerRunner
   //
   // This function will pass command line flags to the Chrome Cleaner executable
   // as appropriate based on the flags in |reporter_invocation| and the
-  // |metrics_status| and |cleaner_logs_status| parameters. The Cleaner process
-  // will communicate with Chrome via a Mojo IPC interface and any IPC requests
-  // or notifications are passed to the caller via the |on_prompt_user| and
-  // |on_connection_closed| callbacks. Finally, when the Chrome Cleaner process
-  // terminates, a LaunchStatus is passed along to |on_process_done|.
+  // |metrics_status| parameters The Cleaner process will communicate with
+  // Chrome via a Mojo IPC interface and any IPC requests or notifications are
+  // passed to the caller via the |on_prompt_user| and |on_connection_closed|
+  // callbacks. Finally, when the Chrome Cleaner process terminates, a
+  // ProcessStatus is passed along to |on_process_done|.
   //
   // The details of the mojo interface are documented in
   // "components/chrome_cleaner/public/interfaces/chrome_prompt.mojom.h".
@@ -93,7 +101,6 @@ class ChromeCleanerRunner
       const base::FilePath& cleaner_executable_path,
       const SwReporterInvocation& reporter_invocation,
       ChromeMetricsStatus metrics_status,
-      CleanerLogsStatus cleaner_logs_status,
       ChromePromptImpl::OnPromptUser on_prompt_user,
       base::OnceClosure on_connection_closed,
       ChromeCleanerRunner::ProcessDoneCallback on_process_done,
@@ -107,13 +114,12 @@ class ChromeCleanerRunner
   ChromeCleanerRunner(const base::FilePath& cleaner_executable_path,
                       const SwReporterInvocation& reporter_invocation,
                       ChromeMetricsStatus metrics_status,
-                      CleanerLogsStatus cleaner_logs_status,
                       ChromePromptImpl::OnPromptUser on_prompt_user,
                       base::OnceClosure on_connection_closed,
                       ChromeCleanerRunner::ProcessDoneCallback on_process_done,
                       scoped_refptr<base::SequencedTaskRunner> task_runner);
 
-  LaunchStatus LaunchAndWaitForExitOnBackgroundThread();
+  ProcessStatus LaunchAndWaitForExitOnBackgroundThread();
 
   void CreateChromePromptImpl(
       chrome_cleaner::mojom::ChromePromptRequest chrome_prompt_request);
@@ -123,7 +129,7 @@ class ChromeCleanerRunner
                     chrome_cleaner::mojom::ChromePrompt::PromptUserCallback
                         prompt_user_callback);
   void OnConnectionClosed();
-  void OnProcessDone(LaunchStatus launch_status);
+  void OnProcessDone(ProcessStatus launch_status);
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
@@ -146,6 +152,9 @@ class ChromeCleanerRunnerTestDelegate {
   virtual base::Process LaunchTestProcess(
       const base::CommandLine& command_line,
       const base::LaunchOptions& launch_options) = 0;
+
+  virtual void OnCleanerProcessDone(
+      const ChromeCleanerRunner::ProcessStatus& process_status) = 0;
 };
 
 void SetChromeCleanerRunnerTestDelegateForTesting(

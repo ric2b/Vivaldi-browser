@@ -18,6 +18,7 @@
 #include "components/proximity_auth/messenger.h"
 #include "components/proximity_auth/metrics.h"
 #include "components/proximity_auth/proximity_auth_client.h"
+#include "components/proximity_auth/proximity_auth_pref_manager.h"
 #include "components/proximity_auth/proximity_monitor_impl.h"
 #include "device/bluetooth/bluetooth_adapter_factory.h"
 
@@ -80,12 +81,16 @@ metrics::RemoteSecuritySettingsState GetRemoteSecuritySettingsState(
 
 }  // namespace
 
+class ProximityAuthPrefManager;
+
 UnlockManagerImpl::UnlockManagerImpl(
     ProximityAuthSystem::ScreenlockType screenlock_type,
-    ProximityAuthClient* proximity_auth_client)
+    ProximityAuthClient* proximity_auth_client,
+    ProximityAuthPrefManager* pref_manager)
     : screenlock_type_(screenlock_type),
       life_cycle_(nullptr),
       proximity_auth_client_(proximity_auth_client),
+      pref_manager_(pref_manager),
       is_locked_(false),
       is_attempting_auth_(false),
       is_waking_up_(false),
@@ -158,7 +163,8 @@ void UnlockManagerImpl::OnLifeCycleStateChanged() {
   if (state == RemoteDeviceLifeCycle::State::SECURE_CHANNEL_ESTABLISHED) {
     DCHECK(life_cycle_->GetConnection());
     DCHECK(GetMessenger());
-    proximity_monitor_ = CreateProximityMonitor(life_cycle_->GetConnection());
+    proximity_monitor_ =
+        CreateProximityMonitor(life_cycle_->GetConnection(), pref_manager_);
     GetMessenger()->AddObserver(this);
   }
 
@@ -206,7 +212,8 @@ void UnlockManagerImpl::OnDecryptResponse(const std::string& decrypted_bytes) {
     AcceptAuthAttempt(false);
   } else {
     sign_in_secret_.reset(new std::string(decrypted_bytes));
-    GetMessenger()->DispatchUnlockEvent();
+    if (GetMessenger())
+      GetMessenger()->DispatchUnlockEvent();
   }
 }
 
@@ -219,14 +226,15 @@ void UnlockManagerImpl::OnUnlockResponse(bool success) {
 
   PA_LOG(INFO) << "Unlock response from remote device: "
                << (success ? "success" : "failure");
-  if (success)
+  if (success && GetMessenger())
     GetMessenger()->DispatchUnlockEvent();
   else
     AcceptAuthAttempt(false);
 }
 
 void UnlockManagerImpl::OnDisconnected() {
-  GetMessenger()->RemoveObserver(this);
+  if (GetMessenger())
+    GetMessenger()->RemoveObserver(this);
 }
 
 void UnlockManagerImpl::OnProximityStateChanged() {
@@ -247,9 +255,6 @@ void UnlockManagerImpl::OnScreenDidUnlock(
 void UnlockManagerImpl::OnFocusedUserChanged(const AccountId& account_id) {}
 
 void UnlockManagerImpl::OnScreenLockedOrUnlocked(bool is_locked) {
-  // TODO(tengs): Chrome will only start connecting to the phone when
-  // the screen is locked, for privacy reasons. We should reinvestigate
-  // this behaviour if we want automatic locking.
   if (is_locked && bluetooth_adapter_ && bluetooth_adapter_->IsPowered() &&
       life_cycle_ &&
       life_cycle_->GetState() ==
@@ -283,19 +288,18 @@ void UnlockManagerImpl::SuspendDone(const base::TimeDelta& sleep_duration) {
 }
 #endif  // defined(OS_CHROMEOS)
 
-void UnlockManagerImpl::OnAuthAttempted(
-    ScreenlockBridge::LockHandler::AuthType auth_type) {
+void UnlockManagerImpl::OnAuthAttempted(mojom::AuthType auth_type) {
   if (is_attempting_auth_) {
     PA_LOG(INFO) << "Already attempting auth.";
     return;
   }
 
-  if (auth_type != ScreenlockBridge::LockHandler::USER_CLICK)
+  if (auth_type != mojom::AuthType::USER_CLICK)
     return;
 
   is_attempting_auth_ = true;
 
-  if (!life_cycle_) {
+  if (!life_cycle_ || !GetMessenger()) {
     PA_LOG(ERROR) << "No life_cycle active when auth is attempted";
     AcceptAuthAttempt(false);
     UpdateLockScreen();
@@ -327,9 +331,10 @@ void UnlockManagerImpl::OnAuthAttempted(
 }
 
 std::unique_ptr<ProximityMonitor> UnlockManagerImpl::CreateProximityMonitor(
-    cryptauth::Connection* connection) {
+    cryptauth::Connection* connection,
+    ProximityAuthPrefManager* pref_manager) {
   return base::MakeUnique<ProximityMonitorImpl>(
-      connection, base::WrapUnique(new base::DefaultTickClock()));
+      connection, base::WrapUnique(new base::DefaultTickClock()), pref_manager);
 }
 
 void UnlockManagerImpl::SendSignInChallenge() {
@@ -348,12 +353,16 @@ void UnlockManagerImpl::SendSignInChallenge() {
 
 void UnlockManagerImpl::OnGotSignInChallenge(const std::string& challenge) {
   PA_LOG(INFO) << "Got sign-in challenge, sending for decryption...";
-  GetMessenger()->RequestDecryption(challenge);
+  if (GetMessenger())
+    GetMessenger()->RequestDecryption(challenge);
 }
 
 ScreenlockState UnlockManagerImpl::GetScreenlockState() {
-  if (!life_cycle_ ||
-      life_cycle_->GetState() == RemoteDeviceLifeCycle::State::STOPPED)
+  if (!life_cycle_)
+    return ScreenlockState::INACTIVE;
+
+  RemoteDeviceLifeCycle::State life_cycle_state = life_cycle_->GetState();
+  if (life_cycle_state == RemoteDeviceLifeCycle::State::STOPPED)
     return ScreenlockState::INACTIVE;
 
   if (!bluetooth_adapter_ || !bluetooth_adapter_->IsPowered())
@@ -362,17 +371,19 @@ ScreenlockState UnlockManagerImpl::GetScreenlockState() {
   if (IsUnlockAllowed())
     return ScreenlockState::AUTHENTICATED;
 
-  if (life_cycle_->GetState() ==
-      RemoteDeviceLifeCycle::State::AUTHENTICATION_FAILED)
+  if (life_cycle_state == RemoteDeviceLifeCycle::State::AUTHENTICATION_FAILED)
     return ScreenlockState::PHONE_NOT_AUTHENTICATED;
 
-  if (is_waking_up_ ||
-      life_cycle_->GetState() == RemoteDeviceLifeCycle::State::AUTHENTICATING ||
-      life_cycle_->GetState() ==
-          RemoteDeviceLifeCycle::State::FINDING_CONNECTION)
+  if (is_waking_up_)
     return ScreenlockState::BLUETOOTH_CONNECTING;
 
   Messenger* messenger = GetMessenger();
+
+  // Show a timeout state if we can not connect to the remote device in a
+  // reasonable amount of time.
+  if (!is_waking_up_ && !messenger)
+    return ScreenlockState::NO_PHONE;
+
   if (screenlock_type_ == ProximityAuthSystem::SIGN_IN && messenger &&
       !messenger->SupportsSignIn())
     return ScreenlockState::PHONE_UNSUPPORTED;

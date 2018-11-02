@@ -83,7 +83,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
       PreviewsState previews_state,
       bool is_same_document_history_load,
       bool is_history_navigation_in_new_child,
-      const scoped_refptr<ResourceRequestBodyImpl>& post_body,
+      const scoped_refptr<ResourceRequestBody>& post_body,
       const base::TimeTicks& navigation_start,
       NavigationControllerImpl* controller);
 
@@ -141,7 +141,7 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
 
   bool browser_initiated() const { return browser_initiated_ ; }
 
-  bool may_transfer() const { return may_transfer_; }
+  bool from_begin_navigation() const { return from_begin_navigation_; }
 
   AssociatedSiteInstanceType associated_site_instance_type() const {
     return associated_site_instance_type_;
@@ -176,12 +176,22 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   int nav_entry_id() const { return nav_entry_id_; }
 
  private:
+  // This enum describes the result of a Content Security Policy (CSP) check for
+  // the request.
+  enum ContentSecurityPolicyCheckResult {
+    // The request should be allowed to continue. PASSED could mean that the
+    // request did not violate any CSP, or that it violated a report-only CSP.
+    CONTENT_SECURITY_POLICY_CHECK_PASSED,
+    // The request should be blocked because it violated an enforced CSP.
+    CONTENT_SECURITY_POLICY_CHECK_FAILED,
+  };
+
   NavigationRequest(FrameTreeNode* frame_tree_node,
                     const CommonNavigationParams& common_params,
                     const BeginNavigationParams& begin_params,
                     const RequestNavigationParams& request_params,
                     bool browser_initiated,
-                    bool may_transfer,
+                    bool from_begin_navigation,
                     const FrameNavigationEntry* frame_navigation_entry,
                     const NavigationEntryImpl* navitation_entry);
 
@@ -196,7 +206,9 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
                          std::unique_ptr<NavigationData> navigation_data,
                          const GlobalRequestID& request_id,
                          bool is_download,
-                         bool is_stream) override;
+                         bool is_stream,
+                         mojom::URLLoaderFactoryPtrInfo
+                             subresource_url_loader_factory_info) override;
   void OnRequestFailed(bool has_stale_copy_in_cache, int net_error) override;
   void OnRequestStarted(base::TimeTicks timestamp) override;
 
@@ -210,6 +222,27 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // Have a RenderFrameHost commit the navigation. The NavigationRequest will
   // be destroyed after this call.
   void CommitNavigation();
+
+  // Check whether a request should be allowed to continue or should be blocked
+  // because it violates a CSP. This method can have two side effects:
+  // - If a CSP is configured to send reports and the request violates the CSP,
+  //   a report will be sent.
+  // - The navigation request may be upgraded from HTTP to HTTPS if a CSP is
+  //   configured to upgrade insecure requests.
+  ContentSecurityPolicyCheckResult CheckContentSecurityPolicyFrameSrc(
+      bool is_redirect);
+
+  // This enum describes the result of the credentialed subresource check for
+  // the request.
+  enum class CredentialedSubresourceCheckResult {
+    ALLOW_REQUEST,
+    BLOCK_REQUEST,
+  };
+
+  // Chrome blocks subresource requests whose URLs contain embedded credentials
+  // (e.g. `https://user:pass@example.com/page.html`). Check whether the
+  // request should be allowed to continue or should be blocked.
+  CredentialedSubresourceCheckResult CheckCredentialedSubresource() const;
 
   FrameTreeNode* frame_tree_node_;
 
@@ -248,14 +281,17 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   // The type of SiteInstance associated with this navigation.
   AssociatedSiteInstanceType associated_site_instance_type_;
 
-  // Whether the request may be transferred to a different process upon commit.
-  // True for browser-initiated navigations and renderer-inititated navigations
-  // started via the OpenURL path.
-  // Note: the RenderFrameHostManager may still decide to have the navigation
-  // commit in a different renderer process if it detects that a renderer
-  // transfer is needed. This is the case in particular when --site-per-process
-  // is enabled.
-  bool may_transfer_;
+  // Stores the SiteInstance created on redirects to check if there is an
+  // existing RenderProcessHost that can commit the navigation so that the
+  // renderer process is not deleted while the navigation is ongoing. If the
+  // SiteInstance was a brand new SiteInstance, it is not stored.
+  scoped_refptr<SiteInstance> speculative_site_instance_;
+
+  // Whether the NavigationRequest was created after receiving a BeginNavigation
+  // IPC. When true, main frame navigations should not commit in a different
+  // process (unless asked by the content/ embedder). When true, the renderer
+  // process expects to be notified if the navigation is aborted.
+  bool from_begin_navigation_;
 
   std::unique_ptr<NavigationHandleImpl> navigation_handle_;
 
@@ -267,6 +303,10 @@ class CONTENT_EXPORT NavigationRequest : public NavigationURLLoaderDelegate {
   mojo::ScopedDataPipeConsumerHandle handle_;
 
   base::Closure on_start_checks_complete_closure_;
+
+  // Used in the network service world to pass the subressource loader factory
+  // to the renderer. Currently only used by AppCache.
+  mojom::URLLoaderFactoryPtrInfo subresource_loader_factory_info_;
 
   base::WeakPtrFactory<NavigationRequest> weak_factory_;
 

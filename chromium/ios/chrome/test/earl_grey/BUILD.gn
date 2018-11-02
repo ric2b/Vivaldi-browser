@@ -27,6 +27,15 @@ chrome_ios_eg_test("ios_chrome_integration_egtests") {
     "//ios/chrome/browser/device_sharing:eg_tests",
     "//ios/chrome/browser/metrics:eg_tests",
     "//ios/chrome/browser/net:eg_tests",
+    "//ios/chrome/browser/ntp_tiles:eg_tests",
+  ]
+}
+
+chrome_ios_eg_test("ios_chrome_payments_egtests") {
+  deps = [
+    ":test_support",
+    "//components/payments/core:payments_test_bundle_data",
+    "//ios/chrome/browser/ui/payments:eg_tests",
   ]
 }
 
@@ -46,6 +55,7 @@ chrome_ios_eg_test("ios_chrome_settings_egtests") {
 chrome_ios_eg_test("ios_chrome_ui_egtests") {
   deps = [
     "//ios/chrome/app/safe_mode:eg_tests",
+    "//ios/chrome/browser/content_suggestions:eg_tests",
     "//ios/chrome/browser/ui:eg_tests",
     "//ios/chrome/browser/ui/activity_services:eg_tests",
     "//ios/chrome/browser/ui/alert_coordinator:eg_tests",
@@ -60,6 +70,7 @@ chrome_ios_eg_test("ios_chrome_ui_egtests") {
     "//ios/chrome/browser/ui/ntp/recent_tabs:eg_tests",
     "//ios/chrome/browser/ui/print:eg_tests",
     "//ios/chrome/browser/ui/qr_scanner:eg_tests",
+    "//ios/chrome/browser/ui/sad_tab:eg_tests",
     "//ios/chrome/browser/ui/stack_view:eg_tests",
     "//ios/chrome/browser/ui/sync:eg_tests",
     "//ios/chrome/browser/ui/tab_switcher:eg_tests",
@@ -77,6 +88,7 @@ chrome_ios_eg_test("ios_chrome_web_egtests") {
 }
 
 chrome_ios_eg_test("ios_chrome_multitasking_egtests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "//ios/chrome/app/multitasking_test_application_delegate.h",
     "//ios/chrome/app/multitasking_test_application_delegate.mm",
@@ -153,8 +165,6 @@ source_set("test_support") {
     "accessibility_util.mm",
     "chrome_actions.h",
     "chrome_actions.mm",
-    "chrome_assertions.h",
-    "chrome_assertions.mm",
     "chrome_earl_grey.h",
     "chrome_earl_grey.mm",
     "chrome_earl_grey_ui.h",
@@ -184,7 +194,8 @@ source_set("test_support") {
     "//ios/third_party/material_components_ios",
     "//ios/web",
     "//ios/web:earl_grey_test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//ui/base",
     "//ui/base:test_support",
     "//url",
@@ -193,6 +204,7 @@ source_set("test_support") {
   public_deps = [
     "//build/config/ios:xctest",
     "//ios/third_party/earl_grey",
+    "//ios/web/public/test/fakes",
   ]
 
   libs = [

@@ -45,25 +45,12 @@ class ResourceRequest;
 class ExecutionContext;
 class ThreadableLoaderClient;
 
-enum CrossOriginRequestPolicy {
-  kDenyCrossOriginRequests,
-  kUseAccessControl,
-  kAllowCrossOriginRequests
-};
-
-enum PreflightPolicy { kConsiderPreflight, kForcePreflight, kPreventPreflight };
-
-enum ContentSecurityPolicyEnforcement {
-  kEnforceContentSecurityPolicy,
-  kDoNotEnforceContentSecurityPolicy,
-};
+enum PreflightPolicy { kConsiderPreflight, kPreventPreflight };
 
 struct ThreadableLoaderOptions {
   DISALLOW_NEW();
   ThreadableLoaderOptions()
       : preflight_policy(kConsiderPreflight),
-        cross_origin_request_policy(kDenyCrossOriginRequests),
-        content_security_policy_enforcement(kEnforceContentSecurityPolicy),
         timeout_milliseconds(0) {}
 
   // When adding members, CrossThreadThreadableLoaderOptionsData should
@@ -72,9 +59,6 @@ struct ThreadableLoaderOptions {
   // If AccessControl is used, how to determine if a preflight is needed.
   PreflightPolicy preflight_policy;
 
-  CrossOriginRequestPolicy cross_origin_request_policy;
-  AtomicString initiator;
-  ContentSecurityPolicyEnforcement content_security_policy_enforcement;
   unsigned long timeout_milliseconds;
 };
 
@@ -84,27 +68,16 @@ struct CrossThreadThreadableLoaderOptionsData {
   explicit CrossThreadThreadableLoaderOptionsData(
       const ThreadableLoaderOptions& options)
       : preflight_policy(options.preflight_policy),
-        cross_origin_request_policy(options.cross_origin_request_policy),
-        initiator(options.initiator.GetString().IsolatedCopy()),
-        content_security_policy_enforcement(
-            options.content_security_policy_enforcement),
         timeout_milliseconds(options.timeout_milliseconds) {}
 
   operator ThreadableLoaderOptions() const {
     ThreadableLoaderOptions options;
     options.preflight_policy = preflight_policy;
-    options.cross_origin_request_policy = cross_origin_request_policy;
-    options.initiator = AtomicString(initiator);
-    options.content_security_policy_enforcement =
-        content_security_policy_enforcement;
     options.timeout_milliseconds = timeout_milliseconds;
     return options;
   }
 
   PreflightPolicy preflight_policy;
-  CrossOriginRequestPolicy cross_origin_request_policy;
-  String initiator;
-  ContentSecurityPolicyEnforcement content_security_policy_enforcement;
   unsigned long timeout_milliseconds;
 };
 

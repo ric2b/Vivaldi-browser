@@ -54,7 +54,7 @@ class AutoclickUI : public views::WidgetDelegateView,
   // Overridden from views::PointerWatcher:
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               const gfx::Point& location_in_screen,
-                              views::Widget* target) override {
+                              gfx::NativeView target) override {
     // AutoclickControllerCommon won't work correctly with a target.
     DCHECK(!event.target());
     if (event.IsTouchPointerEvent()) {
@@ -90,9 +90,13 @@ AutoclickApplication::AutoclickApplication()
 AutoclickApplication::~AutoclickApplication() {}
 
 void AutoclickApplication::OnStart() {
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  if (!aura_init_) {
+    context()->QuitNow();
+    return;
+  }
   autoclick_controller_common_.reset(new AutoclickControllerCommon(
       base::TimeDelta::FromMilliseconds(kDefaultAutoclickDelayMs), this));
 }
@@ -101,8 +105,7 @@ void AutoclickApplication::OnBindInterface(
     const service_manager::BindSourceInfo& remote_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(remote_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void AutoclickApplication::Launch(uint32_t what, mash::mojom::LaunchMode how) {
@@ -133,14 +136,12 @@ void AutoclickApplication::SetAutoclickDelay(uint32_t delay_in_milliseconds) {
 }
 
 void AutoclickApplication::BindLaunchableRequest(
-    const service_manager::BindSourceInfo& source_info,
     mash::mojom::LaunchableRequest request) {
   launchable_binding_.Close();
   launchable_binding_.Bind(std::move(request));
 }
 
 void AutoclickApplication::BindAutoclickControllerRequest(
-    const service_manager::BindSourceInfo& source_info,
     mojom::AutoclickControllerRequest request) {
   autoclick_binding_.Close();
   autoclick_binding_.Bind(std::move(request));

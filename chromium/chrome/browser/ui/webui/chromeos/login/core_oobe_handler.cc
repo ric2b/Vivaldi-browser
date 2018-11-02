@@ -50,6 +50,14 @@ namespace {
 
 const char kJsScreenPath[] = "cr.ui.Oobe";
 
+bool IsRemoraRequisition() {
+  policy::DeviceCloudPolicyManagerChromeOS* policy_manager =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->GetDeviceCloudPolicyManager();
+  return policy_manager && policy_manager->IsRemoraRequisition();
+}
+
 }  // namespace
 
 namespace chromeos {
@@ -141,8 +149,6 @@ void CoreOobeHandler::RegisterMessages() {
               &CoreOobeHandler::HandleEnableLargeCursor);
   AddCallback("enableVirtualKeyboard",
               &CoreOobeHandler::HandleEnableVirtualKeyboard);
-  AddCallback("setForceDisableVirtualKeyboard",
-              &CoreOobeHandler::HandleSetForceDisableVirtualKeyboard);
   AddCallback("enableScreenMagnifier",
               &CoreOobeHandler::HandleEnableScreenMagnifier);
   AddCallback("enableSpokenFeedback",
@@ -304,19 +310,6 @@ void CoreOobeHandler::HandleEnableVirtualKeyboard(bool enabled) {
   AccessibilityManager::Get()->EnableVirtualKeyboard(enabled);
 }
 
-void CoreOobeHandler::HandleSetForceDisableVirtualKeyboard(bool disable) {
-  scoped_keyboard_disabler_.SetForceDisableVirtualKeyboard(disable);
-
-  if (disable) {
-    keyboard::KeyboardController* controller =
-        keyboard::KeyboardController::GetInstance();
-    if (controller) {
-      controller->HideKeyboard(
-          keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
-    }
-  }
-}
-
 void CoreOobeHandler::HandleEnableScreenMagnifier(bool enabled) {
   // TODO(nkostylev): Add support for partial screen magnifier.
   DCHECK(MagnificationManager::Get());
@@ -337,6 +330,13 @@ void CoreOobeHandler::HandleSetDeviceRequisition(
   std::string initial_requisition =
       connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition();
   connector->GetDeviceCloudPolicyManager()->SetDeviceRequisition(requisition);
+
+  if (IsRemoraRequisition()) {
+    // CfM devices default to static timezone.
+    g_browser_process->local_state()->SetBoolean(
+        prefs::kResolveDeviceTimezoneByGeolocation, false);
+  }
+
   // Exit Chrome to force the restart as soon as a new requisition is set.
   if (initial_requisition !=
           connector->GetDeviceCloudPolicyManager()->GetDeviceRequisition()) {

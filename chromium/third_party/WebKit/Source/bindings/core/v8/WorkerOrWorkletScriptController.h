@@ -71,7 +71,7 @@ class CORE_EXPORT WorkerOrWorkletScriptController
 
   // Used by WorkerThread. Returns true if the context is successfully
   // initialized or already initialized.
-  bool InitializeContextIfNeeded();
+  bool InitializeContextIfNeeded(const String& human_readable_name);
 
   // Used by WorkerGlobalScope:
   void RethrowExceptionFromImportedScript(ErrorEvent*, ExceptionState&);
@@ -95,6 +95,8 @@ class CORE_EXPORT WorkerOrWorkletScriptController
   bool IsContextInitialized() const {
     return script_state_ && !!script_state_->PerContextData();
   }
+
+  ScriptValue EvaluateAndReturnValueForTest(const ScriptSourceCode&);
 
  private:
   WorkerOrWorkletScriptController(WorkerOrWorkletGlobalScope*, v8::Isolate*);

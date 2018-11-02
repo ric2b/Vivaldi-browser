@@ -7,13 +7,15 @@
 #include <stddef.h>
 
 #include "cc/layers/video_frame_provider_client_impl.h"
-#include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
 #include "cc/quads/draw_quad.h"
+#include "cc/quads/stream_video_draw_quad.h"
+#include "cc/quads/texture_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
 #include "cc/test/fake_video_frame_provider.h"
 #include "cc/test/layer_test_common.h"
 #include "cc/trees/single_thread_proxy.h"
+#include "components/viz/common/gpu/context_provider.h"
 #include "media/base/video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -112,7 +114,7 @@ TEST(VideoLayerImplTest, OccludesOtherLayers) {
 
   active_tree->BuildLayerListAndPropertyTreesForTesting();
 
-  active_tree->UpdateDrawProperties(false);
+  active_tree->UpdateDrawProperties();
 
   // We don't have a frame yet, so the video doesn't occlude the layer below it.
   EXPECT_FALSE(draw_properties.occlusion_in_content_space.IsOccluded(visible));
@@ -122,7 +124,7 @@ TEST(VideoLayerImplTest, OccludesOtherLayers) {
       gfx::Size(10, 10), base::TimeDelta());
   provider.set_frame(video_frame);
   active_tree->set_needs_update_draw_properties();
-  active_tree->UpdateDrawProperties(false);
+  active_tree->UpdateDrawProperties();
 
   // We have a frame now, so the video occludes the layer below it.
   EXPECT_TRUE(draw_properties.occlusion_in_content_space.IsOccluded(visible));
@@ -349,6 +351,8 @@ TEST(VideoLayerImplTest, NativeYUVFrameGeneratesYUVQuad) {
   ASSERT_TRUE(video_frame);
   video_frame->metadata()->SetBoolean(media::VideoFrameMetadata::ALLOW_OVERLAY,
                                       true);
+  video_frame->metadata()->SetBoolean(
+      media::VideoFrameMetadata::REQUIRE_OVERLAY, true);
   FakeVideoFrameProvider provider;
   provider.set_frame(video_frame);
 
@@ -371,6 +375,47 @@ TEST(VideoLayerImplTest, NativeYUVFrameGeneratesYUVQuad) {
             (yuv_draw_quad->ya_tex_size.height() + 1) / 2);
   EXPECT_EQ(yuv_draw_quad->uv_tex_size.width(),
             (yuv_draw_quad->ya_tex_size.width() + 1) / 2);
+  EXPECT_TRUE(yuv_draw_quad->require_overlay);
+}
+
+TEST(VideoLayerImplTest, NativeARGBFrameGeneratesTextureQuad) {
+  gfx::Size layer_size(1000, 1000);
+  gfx::Size viewport_size(1000, 1000);
+
+  LayerTestCommon::LayerImplTest impl;
+  DebugSetImplThreadAndMainThreadBlocked(impl.task_runner_provider());
+
+  gpu::MailboxHolder mailbox_holders[media::VideoFrame::kMaxPlanes];
+  mailbox_holders[0].texture_target = GL_TEXTURE_2D;
+  mailbox_holders[0].mailbox.name[0] = 1;
+
+  gfx::Size resource_size = gfx::Size(10, 10);
+  scoped_refptr<media::VideoFrame> video_frame =
+      media::VideoFrame::WrapNativeTextures(
+          media::PIXEL_FORMAT_ARGB, mailbox_holders, base::Bind(EmptyCallback),
+          resource_size, gfx::Rect(10, 10), resource_size, base::TimeDelta());
+  ASSERT_TRUE(video_frame);
+  video_frame->metadata()->SetBoolean(media::VideoFrameMetadata::ALLOW_OVERLAY,
+                                      true);
+  FakeVideoFrameProvider provider;
+  provider.set_frame(video_frame);
+
+  VideoLayerImpl* video_layer_impl =
+      impl.AddChildToRoot<VideoLayerImpl>(&provider, media::VIDEO_ROTATION_0);
+  video_layer_impl->SetBounds(layer_size);
+  video_layer_impl->SetDrawsContent(true);
+  impl.host_impl()->active_tree()->BuildLayerListAndPropertyTreesForTesting();
+
+  gfx::Rect occluded;
+  impl.AppendQuadsWithOcclusion(video_layer_impl, occluded);
+
+  EXPECT_EQ(1u, impl.quad_list().size());
+  const DrawQuad* draw_quad = impl.quad_list().ElementAt(0);
+  ASSERT_EQ(DrawQuad::TEXTURE_CONTENT, draw_quad->material);
+
+  const TextureDrawQuad* texture_draw_quad =
+      TextureDrawQuad::MaterialCast(draw_quad);
+  EXPECT_EQ(texture_draw_quad->resource_size_in_pixels(), resource_size);
 }
 
 }  // namespace

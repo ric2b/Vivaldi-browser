@@ -17,6 +17,7 @@
 #include "google_apis/drive/base_requests.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "google_apis/drive/drive_api_requests.h"
+#include "google_apis/drive/drive_switches.h"
 #include "google_apis/drive/files_list_request_runner.h"
 #include "google_apis/drive/request_sender.h"
 #include "google_apis/google_api_keys.h"
@@ -39,6 +40,7 @@ using google_apis::FileList;
 using google_apis::FileListCallback;
 using google_apis::FileResource;
 using google_apis::FileResourceCallback;
+using google_apis::FilesListCorpora;
 using google_apis::FilesListRequestRunner;
 using google_apis::GetContentCallback;
 using google_apis::GetShareUrlCallback;
@@ -189,6 +191,7 @@ BatchRequestConfigurator::BatchRequestConfigurator(
 }
 
 BatchRequestConfigurator::~BatchRequestConfigurator() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // The batch requst has not been committed.
   if (batch_request_)
     cancel_callback_.Run();
@@ -203,7 +206,7 @@ google_apis::CancelCallback BatchRequestConfigurator::MultipartUploadNewFile(
     const UploadNewFileOptions& options,
     const google_apis::FileResourceCallback& callback,
     const google_apis::ProgressCallback& progress_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!callback.is_null());
 
   std::unique_ptr<google_apis::BatchableDelegate> delegate(
@@ -230,7 +233,7 @@ BatchRequestConfigurator::MultipartUploadExistingFile(
     const UploadExistingFileOptions& options,
     const google_apis::FileResourceCallback& callback,
     const google_apis::ProgressCallback& progress_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!callback.is_null());
 
   std::unique_ptr<google_apis::BatchableDelegate> delegate(
@@ -250,7 +253,7 @@ BatchRequestConfigurator::MultipartUploadExistingFile(
 }
 
 void BatchRequestConfigurator::Commit() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!batch_request_)
     return;
   batch_request_->Commit();
@@ -346,6 +349,10 @@ CancelCallback DriveAPIService::GetAllFileList(
   request->set_max_results(kMaxNumFilesResourcePerRequest);
   request->set_q("trashed = false");  // Exclude trashed files.
   request->set_fields(kFileListFields);
+  if (google_apis::GetTeamDrivesIntegrationSwitch() ==
+      google_apis::TEAM_DRIVES_INTEGRATION_ENABLED) {
+    request->set_corpora(google_apis::FilesListCorpora::ALL_TEAM_DRIVES);
+  }
   return sender_->StartRequestWithAuthRetry(std::move(request));
 }
 
@@ -356,6 +363,15 @@ CancelCallback DriveAPIService::GetFileListInDirectory(
   DCHECK(!directory_resource_id.empty());
   DCHECK(!callback.is_null());
 
+  // TODO(yamaguchi): Use FileListScope::CreateForTeamDrive instead of
+  // kAllTeamDrives for efficiency. It'll require to add a new parameter to tell
+  // which team drive the directory resource belongs to.
+  FilesListCorpora corpora =
+      (google_apis::GetTeamDrivesIntegrationSwitch() ==
+       google_apis::TEAM_DRIVES_INTEGRATION_ENABLED)
+          ? google_apis::FilesListCorpora::ALL_TEAM_DRIVES
+          : google_apis::FilesListCorpora::DEFAULT;
+
   // Because children.list method on Drive API v2 returns only the list of
   // children's references, but we need all file resource list.
   // So, here we use files.list method instead, with setting parents query.
@@ -364,7 +380,7 @@ CancelCallback DriveAPIService::GetFileListInDirectory(
   // to client side.
   // We aren't interested in files in trash in this context, neither.
   return files_list_request_runner_->CreateAndStartWithSizeBackoff(
-      kMaxNumFilesResourcePerRequest,
+      kMaxNumFilesResourcePerRequest, corpora, std::string(),
       base::StringPrintf(
           "'%s' in parents and trashed = false",
           util::EscapeQueryStringValue(directory_resource_id).c_str()),
@@ -378,8 +394,14 @@ CancelCallback DriveAPIService::Search(
   DCHECK(!search_query.empty());
   DCHECK(!callback.is_null());
 
+  FilesListCorpora corpora =
+      (google_apis::GetTeamDrivesIntegrationSwitch() ==
+       google_apis::TEAM_DRIVES_INTEGRATION_ENABLED)
+          ? google_apis::FilesListCorpora::ALL_TEAM_DRIVES
+          : google_apis::FilesListCorpora::DEFAULT;
+
   return files_list_request_runner_->CreateAndStartWithSizeBackoff(
-      kMaxNumFilesResourcePerRequestForSearch,
+      kMaxNumFilesResourcePerRequestForSearch, corpora, std::string(),
       util::TranslateQuery(search_query), kFileListFields, callback);
 }
 

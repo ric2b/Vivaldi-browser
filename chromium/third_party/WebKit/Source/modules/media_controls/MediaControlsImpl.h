@@ -27,6 +27,7 @@
 #ifndef MediaControlsImpl_h
 #define MediaControlsImpl_h
 
+#include "core/geometry/DOMRectReadOnly.h"
 #include "core/html/HTMLDivElement.h"
 #include "core/html/media/MediaControls.h"
 #include "modules/ModulesExport.h"
@@ -98,7 +99,6 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
     // There is no update because only the overlay is expected to change.
     RefreshCastButtonVisibilityWithoutUpdate();
   }
-  Document& OwnerDocument() { return GetDocument(); }
 
   // Called by the fullscreen buttons to toggle fulllscreen on/off.
   void EnterFullscreen();
@@ -135,12 +135,13 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
 
   // For tests.
   friend class MediaControlsOrientationLockDelegateTest;
+  friend class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest;
   friend class MediaControlsRotateToFullscreenDelegateTest;
   friend class MediaControlsImplTest;
 
   // Need to be members of MediaControls for private member access.
   class BatchedControlUpdate;
-  class MediaControlsResizeObserverCallback;
+  class MediaControlsResizeObserverDelegate;
   class MediaElementMutationCallback;
 
   static MediaControlsImpl* Create(HTMLMediaElement&, ShadowRoot&);
@@ -148,7 +149,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void Invalidate(Element*);
 
   // Notify us that our controls enclosure has changed size.
-  void NotifyElementSizeChanged(ClientRect* new_size);
+  void NotifyElementSizeChanged(DOMRectReadOnly* new_size);
 
   explicit MediaControlsImpl(HTMLMediaElement&);
 
@@ -209,6 +210,7 @@ class MODULES_EXPORT MediaControlsImpl final : public HTMLDivElement,
   void OnEnteredFullscreen();
   void OnExitedFullscreen();
   void OnPanelKeypress();
+  void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(event); }
 
   // Media control elements.
   Member<MediaControlOverlayEnclosureElement> overlay_enclosure_;

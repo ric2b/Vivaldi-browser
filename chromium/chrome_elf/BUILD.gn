@@ -152,6 +152,7 @@ static_library("crash") {
     "//components/crash/core/common",  # crash_keys
     "//components/version_info:channel",
     "//content/public/common:result_codes",
+    "//gpu/config:crash_keys",
     "//third_party/crashpad/crashpad/client:client",  # DumpWithoutCrash
   ]
 }
@@ -242,6 +243,7 @@ test("chrome_elf_unittests") {
     "/DELAYLOAD:advapi32.dll",
     "/DELAYLOAD:ole32.dll",
     "/DELAYLOAD:shell32.dll",
+    "/DELAYLOAD:shlwapi.dll",
     "/DELAYLOAD:user32.dll",
     "/DELAYLOAD:winmm.dll",
   ]

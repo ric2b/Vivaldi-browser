@@ -31,11 +31,11 @@
 #include "core/fileapi/FileReaderSync.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileError.h"
 #include "core/fileapi/FileReaderLoader.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/Histogram.h"
 #include "platform/bindings/ScriptState.h"
 
@@ -63,8 +63,7 @@ FileReaderSync::FileReaderSync(ExecutionContext* context) {
     type = WorkerType::SERVICE_WORKER;
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, worker_type_histogram,
-      new EnumerationHistogram("FileReaderSync.WorkerType",
-                               static_cast<int>(WorkerType::MAX)));
+      ("FileReaderSync.WorkerType", static_cast<int>(WorkerType::MAX)));
   worker_type_histogram.Count(static_cast<int>(type));
 }
 

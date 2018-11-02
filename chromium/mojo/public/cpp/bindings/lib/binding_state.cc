@@ -4,10 +4,12 @@
 
 #include "mojo/public/cpp/bindings/lib/binding_state.h"
 
+#include "mojo/public/cpp/bindings/lib/task_runner_helper.h"
+
 namespace mojo {
 namespace internal {
 
-BindingStateBase::BindingStateBase() = default;
+BindingStateBase::BindingStateBase() : weak_ptr_factory_(this) {}
 
 BindingStateBase::~BindingStateBase() = default;
 
@@ -24,6 +26,7 @@ void BindingStateBase::PauseIncomingMethodCallProcessing() {
   DCHECK(router_);
   router_->PauseIncomingMethodCallProcessing();
 }
+
 void BindingStateBase::ResumeIncomingMethodCallProcessing() {
   DCHECK(router_);
   router_->ResumeIncomingMethodCallProcessing();
@@ -51,6 +54,17 @@ void BindingStateBase::CloseWithReason(uint32_t custom_reason,
   Close();
 }
 
+ReportBadMessageCallback BindingStateBase::GetBadMessageCallback() {
+  return base::Bind(
+      [](const ReportBadMessageCallback& inner_callback,
+         base::WeakPtr<BindingStateBase> binding, const std::string& error) {
+        inner_callback.Run(error);
+        if (binding)
+          binding->Close();
+      },
+      mojo::GetBadMessageCallback(), weak_ptr_factory_.GetWeakPtr());
+}
+
 void BindingStateBase::FlushForTesting() {
   endpoint_client_->FlushForTesting();
 }
@@ -71,19 +85,22 @@ void BindingStateBase::BindInternal(
     uint32_t interface_version) {
   DCHECK(!router_);
 
+  auto sequenced_runner =
+      GetTaskRunnerToUseFromUserProvidedTaskRunner(std::move(runner));
   MultiplexRouter::Config config =
       passes_associated_kinds
           ? MultiplexRouter::MULTI_INTERFACE
           : (has_sync_methods
                  ? MultiplexRouter::SINGLE_INTERFACE_WITH_SYNC_METHODS
                  : MultiplexRouter::SINGLE_INTERFACE);
-  router_ = new MultiplexRouter(std::move(handle), config, false, runner);
+  router_ =
+      new MultiplexRouter(std::move(handle), config, false, sequenced_runner);
   router_->SetMasterInterfaceName(interface_name);
 
   endpoint_client_.reset(new InterfaceEndpointClient(
       router_->CreateLocalEndpointHandle(kMasterInterfaceId), stub,
-      std::move(request_validator), has_sync_methods, std::move(runner),
-      interface_version));
+      std::move(request_validator), has_sync_methods,
+      std::move(sequenced_runner), interface_version));
 }
 
 }  // namesapce internal

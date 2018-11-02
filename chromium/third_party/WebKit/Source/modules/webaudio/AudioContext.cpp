@@ -13,7 +13,6 @@
 #include "core/frame/UseCounter.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
-#include "modules/webaudio/AudioBufferCallback.h"
 #include "modules/webaudio/AudioContextOptions.h"
 #include "modules/webaudio/AudioTimestamp.h"
 #include "modules/webaudio/DefaultAudioDestinationNode.h"
@@ -39,7 +38,7 @@ AudioContext* AudioContext::Create(Document& document,
   DCHECK(IsMainThread());
 
   UseCounter::CountCrossOriginIframe(
-      document, UseCounter::kAudioContextCrossOriginIframe);
+      document, WebFeature::kAudioContextCrossOriginIframe);
 
   if (g_hardware_context_count >= kMaxHardwareContexts) {
     exception_state.ThrowDOMException(

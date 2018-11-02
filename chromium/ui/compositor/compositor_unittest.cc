@@ -10,9 +10,9 @@
 #include "base/test/test_mock_time_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
 #include "cc/test/begin_frame_args_test.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/compositor/compositor.h"
@@ -39,7 +39,8 @@ class CompositorTest : public testing::Test {
 
     compositor_.reset(new ui::Compositor(
         context_factory_private->AllocateFrameSinkId(), context_factory,
-        context_factory_private, CreateTaskRunner()));
+        context_factory_private, CreateTaskRunner(),
+        false /* enable_surface_synchronization */));
     compositor_->SetAcceleratedWidget(gfx::kNullAcceleratedWidget);
   }
 

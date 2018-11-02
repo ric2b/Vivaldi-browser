@@ -177,7 +177,7 @@ static Position ComputePositionForChildrenRemoval(const Position& position,
                                                   ContainerNode& container) {
   Node* node = position.ComputeContainerNode();
   if (container.ContainsIncludingHostElements(*node))
-    return Position::FirstPositionInNode(&container);
+    return Position::FirstPositionInNode(container);
   return position;
 }
 
@@ -194,6 +194,7 @@ void SelectionEditor::NodeChildrenWillBeRemoved(ContainerNode& container) {
     return;
   selection_ = SelectionInDOMTree::Builder()
                    .SetBaseAndExtent(new_base, new_extent)
+                   .SetIsHandleVisible(selection_.IsHandleVisible())
                    .Build();
   MarkCacheDirty();
 }
@@ -211,6 +212,7 @@ void SelectionEditor::NodeWillBeRemoved(Node& node_to_be_removed) {
     return;
   selection_ = SelectionInDOMTree::Builder()
                    .SetBaseAndExtent(new_base, new_extent)
+                   .SetIsHandleVisible(selection_.IsHandleVisible())
                    .Build();
   MarkCacheDirty();
 }
@@ -275,8 +277,6 @@ void SelectionEditor::DidUpdateCharacterData(CharacterData* node,
   DidFinishTextChange(new_base, new_extent);
 }
 
-// TODO(yosin): We should introduce |Position(const Text&, int)| to avoid
-// |const_cast<Text*>|.
 static Position UpdatePostionAfterAdoptingTextNodesMerged(
     const Position& position,
     const Text& merged_node,
@@ -290,21 +290,21 @@ static Position UpdatePostionAfterAdoptingTextNodesMerged(
       return position;
     case PositionAnchorType::kBeforeAnchor:
       if (anchor_node == node_to_be_removed)
-        return Position(const_cast<Text*>(&merged_node), merged_node.length());
+        return Position(merged_node, merged_node.length());
       return position;
     case PositionAnchorType::kAfterAnchor:
       if (anchor_node == node_to_be_removed)
-        return Position(const_cast<Text*>(&merged_node), merged_node.length());
+        return Position(merged_node, merged_node.length());
       if (anchor_node == merged_node)
-        return Position(const_cast<Text*>(&merged_node), old_length);
+        return Position(merged_node, old_length);
       return position;
     case PositionAnchorType::kOffsetInAnchor: {
       const int offset = position.OffsetInContainerNode();
       if (anchor_node == node_to_be_removed)
-        return Position(const_cast<Text*>(&merged_node), old_length + offset);
+        return Position(merged_node, old_length + offset);
       if (anchor_node == node_to_be_removed.parentNode() &&
           offset == node_to_be_removed_with_index.Index()) {
-        return Position(const_cast<Text*>(&merged_node), old_length);
+        return Position(merged_node, old_length);
       }
       return position;
     }
@@ -415,8 +415,6 @@ void SelectionEditor::UpdateCachedVisibleSelectionInFlatTreeIfNeeded() const {
   else if (extent.IsNotNull())
     builder.Collapse(extent);
   builder.SetAffinity(selection_.Affinity())
-      .SetHasTrailingWhitespace(selection_.HasTrailingWhitespace())
-      .SetGranularity(selection_.Granularity())
       .SetIsDirectional(selection_.IsDirectional());
   cached_visible_selection_in_flat_tree_ =
       CreateVisibleSelection(builder.Build());

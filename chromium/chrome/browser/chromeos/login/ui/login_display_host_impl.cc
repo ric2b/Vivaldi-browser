@@ -9,7 +9,6 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "base/bind.h"
@@ -34,7 +33,6 @@
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/first_run/drive_first_run_controller.h"
 #include "chrome/browser/chromeos/first_run/first_run.h"
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
 #include "chrome/browser/chromeos/login/demo_mode/demo_app_launcher.h"
@@ -93,6 +91,7 @@
 #include "ui/aura/window.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -324,7 +323,7 @@ class LoginDisplayHostImpl::KeyboardDrivenOobeKeyHandler
   // ui::EventHandler
   void OnKeyEvent(ui::KeyEvent* event) override {
     if (event->key_code() == ui::VKEY_F6) {
-      ash::Shell::Get()->GetPrimarySystemTray()->CloseSystemBubble();
+      ash::Shell::Get()->GetPrimarySystemTray()->CloseBubble();
       event->StopPropagation();
     }
   }
@@ -490,8 +489,8 @@ LoginDisplayHostImpl::LoginDisplayHostImpl(const gfx::Rect& wallpaper_bounds)
 
   // Disable Drag'n'Drop for the login session.
   if (!ash_util::IsRunningInMash()) {
-    scoped_drag_drop_disabler_.reset(new aura::client::ScopedDragDropDisabler(
-        ash::Shell::GetPrimaryRootWindow()));
+    scoped_drag_drop_disabler_.reset(
+        new wm::ScopedDragDropDisabler(ash::Shell::GetPrimaryRootWindow()));
   } else {
     NOTIMPLEMENTED();
   }
@@ -872,6 +871,10 @@ void LoginDisplayHostImpl::StartArcKiosk(const AccountId& account_id) {
   arc_kiosk_controller_->StartArcKiosk(account_id);
 }
 
+bool LoginDisplayHostImpl::IsVoiceInteractionOobe() {
+  return is_voice_interaction_oobe_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // LoginDisplayHostImpl, public
 
@@ -1165,18 +1168,25 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   views::Widget::InitParams params(
       views::Widget::InitParams::TYPE_WINDOW_FRAMELESS);
   params.bounds = wallpaper_bounds();
-  params.show_state = ui::SHOW_STATE_FULLSCREEN;
+  // Disable fullscreen state for voice interaction OOBE since the shelf should
+  // be visible.
+  if (!is_voice_interaction_oobe_)
+    params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
+
+  // Put the voice interaction oobe inside AlwaysOnTop container instead of
+  // LockScreenContainer.
+  ash::ShellWindowId container = is_voice_interaction_oobe_
+                                     ? ash::kShellWindowId_AlwaysOnTopContainer
+                                     : ash::kShellWindowId_LockScreenContainer;
   // The ash::Shell containers are not available in Mash
   if (!ash_util::IsRunningInMash()) {
     params.parent =
-        ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(),
-                                 ash::kShellWindowId_LockScreenContainer);
+        ash::Shell::GetContainer(ash::Shell::GetPrimaryRootWindow(), container);
   } else {
     using ui::mojom::WindowManager;
     params.mus_properties[WindowManager::kContainerId_InitProperty] =
-        mojo::ConvertTo<std::vector<uint8_t>>(
-            static_cast<int32_t>(ash::kShellWindowId_LockScreenContainer));
+        mojo::ConvertTo<std::vector<uint8_t>>(static_cast<int32_t>(container));
   }
   login_window_ = new views::Widget;
   params.delegate = login_window_delegate_ =
@@ -1188,8 +1198,9 @@ void LoginDisplayHostImpl::InitLoginWindowAndView() {
   if (login_view_->webui_visible())
     OnLoginPromptVisible();
 
-  // Animations are not available in Mash
-  if (!ash_util::IsRunningInMash()) {
+  // Animations are not available in Mash.
+  // For voice interaction OOBE, we do not want the animation here.
+  if (!ash_util::IsRunningInMash() && !is_voice_interaction_oobe_) {
     login_window_->SetVisibilityAnimationDuration(
         base::TimeDelta::FromMilliseconds(kLoginFadeoutTransitionDurationMs));
     login_window_->SetVisibilityAnimationTransition(
@@ -1238,6 +1249,9 @@ void LoginDisplayHostImpl::SetOobeProgressBarVisible(bool visible) {
 }
 
 void LoginDisplayHostImpl::TryToPlayStartupSound() {
+  if (is_voice_interaction_oobe_)
+    return;
+
   if (startup_sound_played_ || login_prompt_visible_time_.is_null() ||
       !CrasAudioHandler::Get()->GetPrimaryActiveOutputNode()) {
     return;
@@ -1268,7 +1282,7 @@ void LoginDisplayHostImpl::TryToPlayStartupSound() {
   }
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&EnableSystemSoundsForAccessibility),
+      FROM_HERE, base::BindOnce(&EnableSystemSoundsForAccessibility),
       media::SoundsManager::Get()->GetDuration(SOUND_STARTUP));
 }
 
@@ -1285,6 +1299,14 @@ void LoginDisplayHostImpl::DisableRestrictiveProxyCheckForTest() {
       ->GetOobeUI()
       ->GetGaiaScreenView()
       ->DisableRestrictiveProxyCheckForTest();
+}
+
+void LoginDisplayHostImpl::StartVoiceInteractionOobe() {
+  is_voice_interaction_oobe_ = true;
+  finalize_animation_type_ = ANIMATION_NONE;
+  StartWizard(chromeos::OobeScreen::SCREEN_VOICE_INTERACTION_VALUE_PROP);
+  // We should emit this signal only at login screen (after reboot or sign out).
+  login_view_->set_should_emit_login_prompt_visible(false);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "chromeos/components/tether/active_host.h"
@@ -43,7 +44,11 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
                                     const std::string& tether_network_guid,
                                     const WifiConnectionCallback& callback);
 
+  void OnEnableWifiError(const std::string& error_name,
+                         std::unique_ptr<base::DictionaryValue> error_data);
+
   // NetworkStateHandlerObserver:
+  void DeviceListChanged() override;
   void NetworkPropertiesUpdated(const NetworkState* network) override;
 
  private:
@@ -51,25 +56,29 @@ class WifiHotspotConnector : public NetworkStateHandlerObserver {
 
   static const int64_t kConnectionTimeoutSeconds = 20;
 
-  // Passes an empty string as |wifi_guid| to signal that the connection did not
-  // succeed.
-  void InvokeWifiConnectionCallback(const std::string& wifi_guid);
+  void CompleteActiveConnectionAttempt(bool success);
+  void CreateWifiConfiguration();
   base::DictionaryValue CreateWifiPropertyDictionary(
       const std::string& ssid,
       const std::string& password);
   void OnConnectionTimeout();
 
   void SetTimerForTest(std::unique_ptr<base::Timer> timer);
+  void SetClockForTest(std::unique_ptr<base::Clock> clock_for_test);
 
   NetworkStateHandler* network_state_handler_;
   NetworkConnect* network_connect_;
   std::unique_ptr<base::Timer> timer_;
+  std::unique_ptr<base::Clock> clock_;
 
   std::string ssid_;
   std::string password_;
   std::string tether_network_guid_;
   std::string wifi_network_guid_;
   WifiConnectionCallback callback_;
+  bool is_waiting_for_wifi_to_enable_ = false;
+  bool has_initiated_connection_to_current_network_ = false;
+  base::Time connection_attempt_start_time_;
 
   base::WeakPtrFactory<WifiHotspotConnector> weak_ptr_factory_;
 

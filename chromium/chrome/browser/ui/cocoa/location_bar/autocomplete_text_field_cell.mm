@@ -9,19 +9,19 @@
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/mac_logging.h"
+#include "base/stl_util.h"
 #include "chrome/browser/search/search.h"
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
 #import "chrome/browser/ui/cocoa/themed_window.h"
-#include "chrome/grit/theme_resources.h"
 #import "extensions/common/feature_switch.h"
 #import "third_party/mozilla/NSPasteboard+Utils.h"
 #import "ui/base/cocoa/appkit_utils.h"
-#import "ui/base/cocoa/tracking_area.h"
 #import "ui/base/cocoa/nsview_additions.h"
 #include "ui/base/cocoa/scoped_cg_context_smooth_fonts.h"
+#import "ui/base/cocoa/tracking_area.h"
 #include "ui/base/material_design/material_design_controller.h"
 
 using extensions::FeatureSwitch;
@@ -204,6 +204,16 @@ size_t CalculatePositionsInFrame(
   return 17;
 }
 
+- (NSText*)setUpFieldEditorAttributes:(NSText*)textObj {
+  NSText* fieldEditor = [super setUpFieldEditorAttributes:textObj];
+
+  // -[NSTextFieldCell setUpFieldEditorAttributes:] matches the field editor's
+  // background to its own background, which can cover our decorations in their
+  // hover state. See https://crbug.com/669870.
+  [fieldEditor setDrawsBackground:NO];
+  return fieldEditor;
+}
+
 - (void)clearTrackingArea {
   for (auto* decoration : mouseTrackingDecorations_)
     decoration->RemoveTrackingArea();
@@ -259,23 +269,16 @@ size_t CalculatePositionsInFrame(
 
   // Decorations which are not visible should have been filtered out
   // at the top, but return |NSZeroRect| rather than a 0-width rect
-  // for consistency.
-  NOTREACHED();
+  // for consistency. This can happen while a window is being resized, if it
+  // becomes too small to contain a decoration in the process of shrinking.
   return NSZeroRect;
 }
 
-- (NSRect)backgroundFrameForDecoration:(LocationBarDecoration*)decoration
-                               inFrame:(NSRect)cellFrame
-                      isLeftDecoration:(BOOL*)isLeftDecoration {
-  NSRect decorationFrame =
-      [self frameForDecoration:decoration inFrame:cellFrame];
+- (BOOL)isLeftDecoration:(LocationBarDecoration*)decoration {
   std::vector<LocationBarDecoration*>& left_decorations =
       cocoa_l10n_util::ShouldDoExperimentalRTLLayout() ? trailingDecorations_
                                                        : leadingDecorations_;
-  *isLeftDecoration =
-      std::find(left_decorations.begin(), left_decorations.end(), decoration) !=
-      left_decorations.end();
-  return decoration->GetBackgroundFrame(decorationFrame);
+  return base::ContainsValue(left_decorations, decoration);
 }
 
 // Overriden to account for the decorations.

@@ -24,6 +24,7 @@ source_set("prefs") {
 }
 
 source_set("browser_prefs") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "browser_prefs.h",
     "browser_prefs.mm",
@@ -36,12 +37,14 @@ source_set("browser_prefs") {
     "//components/flags_ui",
     "//components/gcm_driver",
     "//components/handoff",
+    "//components/language/core/browser",
     "//components/metrics",
     "//components/network_time",
     "//components/ntp_snippets",
     "//components/ntp_tiles",
     "//components/omnibox/browser",
     "//components/password_manager/core/browser",
+    "//components/payments/core",
     "//components/pref_registry",
     "//components/prefs",
     "//components/proxy_config",

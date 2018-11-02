@@ -38,12 +38,13 @@ interface Element : Node {
 
     // Pointer Events
     // https://w3c.github.io/pointerevents/#extensions-to-the-element-interface
-    [RuntimeEnabled=PointerEvent, RaisesException] void setPointerCapture (long pointerId);
-    [RuntimeEnabled=PointerEvent, RaisesException] void releasePointerCapture (long pointerId);
-    [RuntimeEnabled=PointerEvent] boolean hasPointerCapture (long pointerId);
+    [RaisesException] void setPointerCapture (long pointerId);
+    [RaisesException] void releasePointerCapture (long pointerId);
+    boolean hasPointerCapture (long pointerId);
 
     boolean hasAttributes();
     [SameObject, PerWorldBindings, ImplementedAs=attributesForBindings] readonly attribute NamedNodeMap attributes;
+    sequence<DOMString> getAttributeNames();
     DOMString? getAttribute(DOMString name);
     DOMString? getAttributeNS(DOMString? namespaceURI, DOMString localName);
     [RaisesException, CEReactions, CustomElementCallbacks] void setAttribute(DOMString name, DOMString value);
@@ -79,7 +80,7 @@ interface Element : Node {
 
     // DOM Parsing and Serialization
     // https://w3c.github.io/DOM-Parsing/#extensions-to-the-element-interface
-    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute DOMString innerHTML;
+    [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter, RuntimeCallStatsCounter=ElementInnerHTML] attribute DOMString innerHTML;
     [TreatNullAs=NullString, CEReactions, CustomElementCallbacks, RaisesException=Setter] attribute DOMString outerHTML;
     [CEReactions, CustomElementCallbacks, RaisesException] void insertAdjacentHTML(DOMString position, DOMString text);
 
@@ -89,12 +90,12 @@ interface Element : Node {
 
     // CSSOM View Module
     // https://dev.w3.org/csswg/cssom-view/#extension-to-the-element-interface
-    // FIXME: getClientRect() and getBoundingClientRect() should
-    // return DOMRectList and DOMRect respectively.
-    ClientRectList getClientRects();
-    ClientRect getBoundingClientRect();
-    // FIXME: scrollIntoView() should have a ScrollIntoViewOptions dictionary argument.
-    void scrollIntoView(optional boolean alignWithTop);
+    DOMRectList getClientRects();
+    [RuntimeCallStatsCounter=ElementGetBoundingClientRect] DOMRect getBoundingClientRect();
+
+    // TODO(sunyunjia): Add default value for scrollIntoView() once
+    // crbug.com/734599 is fixed.
+    void scrollIntoView(optional (ScrollIntoViewOptions or boolean) arg);
     [RuntimeEnabled=CSSOMSmoothScroll, ImplementedAs=scrollTo] void scroll(optional ScrollToOptions options);
     [RuntimeEnabled=CSSOMSmoothScroll, ImplementedAs=scrollTo] void scroll(unrestricted double x, unrestricted double y);
     [RuntimeEnabled=CSSOMSmoothScroll] void scrollTo(optional ScrollToOptions options);
@@ -139,7 +140,6 @@ interface Element : Node {
     attribute EventHandler onpaste;
     attribute EventHandler onsearch;
     attribute EventHandler onselectstart;
-    attribute EventHandler onwheel;
 };
 
 Element implements ParentNode;

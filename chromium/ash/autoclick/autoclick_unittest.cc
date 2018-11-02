@@ -5,7 +5,6 @@
 #include "ash/autoclick/autoclick_controller.h"
 #include "ash/public/cpp/config.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
@@ -57,13 +56,13 @@ class MouseEventCapturer : public ui::EventHandler {
   DISALLOW_COPY_AND_ASSIGN(MouseEventCapturer);
 };
 
-class AutoclickTest : public test::AshTestBase {
+class AutoclickTest : public AshTestBase {
  public:
   AutoclickTest() {}
   ~AutoclickTest() override {}
 
   void SetUp() override {
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
     Shell::Get()->AddPreTargetHandler(&mouse_event_capturer_);
     GetAutoclickController()->SetAutoclickDelay(base::TimeDelta());
 
@@ -79,7 +78,7 @@ class AutoclickTest : public test::AshTestBase {
 
   void TearDown() override {
     Shell::Get()->RemovePreTargetHandler(&mouse_event_capturer_);
-    test::AshTestBase::TearDown();
+    AshTestBase::TearDown();
   }
 
   void MoveMouseWithFlagsTo(int x, int y, ui::EventFlags flags) {

@@ -79,8 +79,7 @@
   },
   "accessibility_unittests":  {
     "label": "//ui/accessibility:accessibility_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "android_webview_unittests": {
     "label": "//android_webview/test:android_webview_unittests",
@@ -118,8 +117,7 @@
   },
   "angle_unittests": {
     "label": "//third_party/angle/src/tests:angle_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "app_list_unittests": {
     "label": "//ui/app_list:app_list_unittests",
@@ -146,10 +144,6 @@
     "type": "raw",
     "args": [],
   },
-  "aura_builder": {
-    "label": "//:aura_builder",
-    "type": "additional_compile_target",
-  },
   "aura_unittests": {
     "label": "//ui/aura:aura_unittests",
     "type": "windowed_test_launcher",
@@ -158,6 +152,15 @@
     "label": "//chrome/test/vr/perf:motopho_latency_test",
     "type": "script",
     "script": "//chrome/test/vr/perf/latency/run_latency_test.py",
+    "args": [
+      "--output-dir=${ISOLATED_OUTDIR}",
+      "-v",
+    ],
+  },
+  "vrcore_fps_test": {
+    "label": "//chrome/test/vr/perf:vrcore_fps_test",
+    "type": "script",
+    "script": "//chrome/test/vr/perf/vrcore_fps/run_vrcore_fps_test.py",
     "args": [
       "--output-dir=${ISOLATED_OUTDIR}",
       "-v",
@@ -205,10 +208,7 @@
   },
   "cacheinvalidation_unittests": {
     "label": "//third_party/cacheinvalidation:cacheinvalidation_unittests",
-    "type": "raw",
-    "args": [
-      "--test-launcher-bot-mode",
-    ],
+    "type": "console_test_launcher",
   },
   "capture_unittests": {
     "label": "//media/capture:capture_unittests",
@@ -302,6 +302,10 @@
     "label": "//chromeos:chromeos_unittests",
     "type": "console_test_launcher",
   },
+  "chromeos_components_unittests": {
+    "label": "//chromeos/components:chromeos_components_unittests",
+    "type": "console_test_launcher",
+  },
   "chromevox_tests": {
     "label": "//chrome/browser/resources/chromeos/chromevox:chromevox_tests",
     "type": "windowed_test_launcher",
@@ -312,10 +316,6 @@
   },
   "chromium_builder_perf": {
     "label": "//:chromium_builder_perf",
-    "type": "additional_compile_target",
-  },
-  "chromium_builder_tests": {
-    "label": "//:chromium_builder_tests",
     "type": "additional_compile_target",
   },
   "chromium_swarm_tests": {
@@ -465,8 +465,7 @@
   },
   "gfx_unittests": {
     "label": "//ui/gfx:gfx_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "gin_unittests": {
     "label": "//gin:gin_unittests",
@@ -483,8 +482,7 @@
   },
   "gl_unittests": {
     "label": "//ui/gl:gl_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "gl_unittests_ozone": {
     "label": "//ui/gl:gl_unittests_ozone",
@@ -494,8 +492,7 @@
   },
   "gn_unittests": {
     "label": "//tools/gn:gn_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "google_apis_unittests": {
     "label": "//google_apis:google_apis_unittests",
@@ -546,6 +543,13 @@
     "type": "raw",
     "args": [],
   },
+  "ios_chrome_payments_egtests": {
+    "label": "//ios/chrome/test/earl_grey:ios_chrome_payments_egtests",
+    "type": "raw",
+    "args": [
+      "--enable-features=WebPayments",
+    ],
+  },
   "ios_chrome_reading_list_egtests": {
     "label": "//ios/chrome/test/earl_grey:ios_chrome_reading_list_egtests",
     "type": "raw",
@@ -576,6 +580,11 @@
     "type": "raw",
     "args": [],
   },
+  "ios_components_unittests": {
+    "label": "//ios/components:ios_components_unittests",
+    "type": "raw",
+    "args": [],
+  },
   "ios_net_unittests": {
     "label": "//ios/net:ios_net_unittests",
     "type": "raw",
@@ -601,6 +610,11 @@
     "type": "raw",
     "args": [],
   },
+  "ios_web_view_inttests": {
+    "label": "//ios/web_view/test:ios_web_view_inttests",
+    "type": "raw",
+    "args": [],
+  },
   "ipc_tests": {
     "label": "//ipc:ipc_tests",
     "type": "console_test_launcher",
@@ -615,7 +629,7 @@
   },
   "keyboard_unittests": {
     "label": "//ui/keyboard:keyboard_unittests",
-    "type": "console_test_launcher",
+    "type": "windowed_test_launcher",
   },
   "latency_unittests": {
     "label": "//ui/latency:latency_unittests",
@@ -625,18 +639,8 @@
     "label": "//components/leveldb:leveldb_service_unittests",
     "type": "console_test_launcher",
   },
-  # See http://crbug.com/585151
-  "libaddressinput_unittests": {
-    "label": "//third_party/libaddressinput:libaddressinput_unittests",
-    "type": "console_test_launcher",
-  },
   "libjingle_xmpp_unittests": {
     "label": "//third_party/libjingle_xmpp:libjingle_xmpp_unittests",
-    "type": "console_test_launcher",
-  },
-  # See http://crbug.com/585151
-  "libphonenumber_unittests": {
-    "label": "//third_party/libphonenumber:libphonenumber_unittests",
     "type": "console_test_launcher",
   },
   "mac_installer_unittests": {
@@ -708,10 +712,6 @@
     "label": "//mojo/common:mojo_common_unittests",
     "type": "console_test_launcher",
   },
-  "mojo_js_integration_tests": {
-    "label": "//mojo/edk/js/tests:mojo_js_integration_tests",
-    "type": "console_test_launcher",
-  },
   "mojo_js_unittests": {
     "label": "//mojo/edk/js/tests:mojo_js_unittests",
     "type": "console_test_launcher",
@@ -757,12 +757,19 @@
   },
   "nacl_loader_unittests": {
     "label": "//components/nacl/loader:nacl_loader_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "net_junit_tests": {
     "label": "//net/android:net_junit_tests",
     "type": "junit_test",
+  },
+  "net_perftests": {
+    "label": "//net:net_perftests",
+    "type": "script",
+    "script": "//testing/scripts/run_gtest_perf_test.py",
+    "args": [
+      "net_perftests",
+    ],
   },
   "net_unittests": {
     "label": "//net:net_unittests",
@@ -806,8 +813,7 @@
   },
   "sandbox_linux_unittests": {
     "label": "//sandbox/linux:sandbox_linux_unittests",
-    "type": "raw",
-    "args": [],
+    "type": "console_test_launcher",
   },
   "sandbox_mac_unittests": {
     "label": "//sandbox/mac:sandbox_mac_unittests",
@@ -833,8 +839,8 @@
     "label": "//services:service_junit_tests",
     "type": "junit_test",
   },
-  "service_unittests": {
-    "label": "//services:service_unittests",
+  "services_unittests": {
+    "label": "//services:services_unittests",
     "type": "windowed_test_launcher",
   },
   "setup_unittests": {
@@ -870,6 +876,10 @@
     "label": "//android_webview:system_webview_apk",
     "type": "additional_compile_target",
   },
+  "system_webview_shell_layout_test_apk": {
+    "label": "//android_webview/tools/system_webview_shell:system_webview_shell_layout_test_apk",
+    "type": "console_test_launcher",
+  },
   "telemetry_gpu_integration_test": {
     "label": "//chrome/test:telemetry_gpu_integration_test",
     "type": "script",
@@ -904,6 +914,21 @@
       "../../tools/perf/run_benchmark",
     ],
   },
+  "telemetry_perf_webview_tests": {
+    "label": "//chrome/test:telemetry_perf_webview_tests",
+    "type": "script",
+    "script": "//third_party/catapult/devil/devil/android/tools/system_app.py",
+    "args": [
+      "remove",
+      "--package",
+      "com.android.webview",
+      "com.google.android.webview",
+      "-v",
+      "--",
+      "../../testing/scripts/run_telemetry_benchmark_as_googletest.py",
+      "../../tools/perf/run_benchmark",
+    ],
+  },
   "telemetry_unittests": {
     "label": "//chrome/test:telemetry_unittests",
     "type": "script",
@@ -918,6 +943,11 @@
       "--chrome-root",
       "../../",
     ],
+  },
+  "traffic_annotation_auditor_unittests": {
+    "label":
+      "//tools/traffic_annotation/auditor:traffic_annotation_auditor_unittests",
+    "type": "console_test_launcher",
   },
   "cc_perftests": {
     "label": "//cc:cc_perftests",
@@ -1013,10 +1043,6 @@
     "label": "//ui/android:ui_junit_tests",
     "type": "junit_test",
   },
-  "ui_service_unittests": {
-    "label": "//services/ui/ws:ui_service_unittests",
-    "type": "windowed_test_launcher",
-  },
   "ui_touch_selection_unittests": {
     "label": "//ui/touch_selection:ui_touch_selection_unittests",
     "type": "windowed_test_launcher",
@@ -1046,8 +1072,12 @@
     "label": "//ui/views:views_unittests",
     "type": "windowed_test_launcher",
   },
-  "vr_shell_unittests": {
-    "label": "//chrome/browser/android/vr_shell:vr_shell_unittests",
+  "viz_unittests": {
+    "label": "//components/viz:viz_unittests",
+    "type": "windowed_test_launcher",
+  },
+  "vr_common_unittests": {
+    "label": "//chrome/browser/vr:vr_common_unittests",
     "type": "console_test_launcher",
   },
   "webapk_client_junit_tests": {
@@ -1096,12 +1126,20 @@
     "label": "//android_webview/test:webview_instrumentation_test_apk",
     "type": "console_test_launcher",
   },
+  "webview_ui_test_app_test_apk": {
+    "label": "//android_webview/tools/automated_ui_tests:webview_ui_test_app_test_apk",
+    "type": "console_test_launcher",
+  },
   "wm_unittests": {
     "label": "//ui/wm:wm_unittests",
     "type": "windowed_test_launcher",
   },
   "wtf_unittests": {
     "label": "//third_party/WebKit/Source/platform/wtf:wtf_unittests",
+    "type": "console_test_launcher",
+  },
+  "zucchini_unittests": {
+    "label": "//chrome/installer/zucchini:zucchini_unittests",
     "type": "console_test_launcher",
   },
 }

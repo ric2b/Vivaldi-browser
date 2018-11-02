@@ -123,7 +123,11 @@ class TextInputManagerTester::InternalObserver
   }
 
   // WebContentsObserver implementation.
-  void WebContentsDestroyed() override { text_input_manager_ = nullptr; }
+  void WebContentsDestroyed() override {
+    DCHECK(text_input_manager_);
+    text_input_manager_->RemoveObserver(this);
+    text_input_manager_ = nullptr;
+  }
 
  private:
   TextInputManager* text_input_manager_;
@@ -201,22 +205,11 @@ class InputMethodObserverAura : public TestInputMethodObserver,
     return ui::TEXT_INPUT_TYPE_NONE;
   }
 
-  void SetOnTextInputTypeChangedCallback(
-      const base::Closure& callback) override {
-    on_text_input_type_changed_callback_ = callback;
-  }
-
   void SetOnShowImeIfNeededCallback(const base::Closure& callback) override {
     on_show_ime_if_needed_callback_ = callback;
   }
 
  private:
-  // ui::InputMethodObserver implementations.
-  void OnTextInputTypeChanged(const ui::TextInputClient* client) override {
-    text_input_client_ = client;
-    on_text_input_type_changed_callback_.Run();
-  }
-
   void OnFocus() override {}
   void OnBlur() override {}
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
@@ -227,7 +220,6 @@ class InputMethodObserverAura : public TestInputMethodObserver,
 
   ui::InputMethod* input_method_;
   const ui::TextInputClient* text_input_client_;
-  base::Closure on_text_input_type_changed_callback_;
   base::Closure on_show_ime_if_needed_callback_;
 
   DISALLOW_COPY_AND_ASSIGN(InputMethodObserverAura);
@@ -279,15 +271,8 @@ void SendImeCommitTextToWidget(
     const std::vector<ui::CompositionUnderline>& underlines,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
-  std::vector<blink::WebCompositionUnderline> web_composition_underlines;
-  for (auto underline : underlines) {
-    web_composition_underlines.emplace_back(
-        static_cast<int>(underline.start_offset),
-        static_cast<int>(underline.end_offset), underline.color,
-        underline.thick, underline.background_color);
-  }
   RenderWidgetHostImpl::From(rwh)->ImeCommitText(
-      text, web_composition_underlines, replacement_range, relative_cursor_pos);
+      text, underlines, replacement_range, relative_cursor_pos);
 }
 
 void SendImeSetCompositionTextToWidget(
@@ -297,16 +282,8 @@ void SendImeSetCompositionTextToWidget(
     const gfx::Range& replacement_range,
     int selection_start,
     int selection_end) {
-  std::vector<blink::WebCompositionUnderline> web_composition_underlines;
-  for (auto underline : underlines) {
-    web_composition_underlines.emplace_back(
-        static_cast<int>(underline.start_offset),
-        static_cast<int>(underline.end_offset), underline.color,
-        underline.thick, underline.background_color);
-  }
   RenderWidgetHostImpl::From(rwh)->ImeSetComposition(
-      text, web_composition_underlines, replacement_range, selection_start,
-      selection_end);
+      text, underlines, replacement_range, selection_start, selection_end);
 }
 
 bool DestroyRenderWidgetHost(int32_t process_id,

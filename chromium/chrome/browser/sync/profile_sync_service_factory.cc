@@ -68,7 +68,7 @@
 #endif  // !defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/printing/printers_manager_factory.h"
+#include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "components/sync_wifi/wifi_credential_syncable_service_factory.h"
 #endif  // defined(OS_CHROMEOS)
 
@@ -117,17 +117,19 @@ ProfileSyncService* ProfileSyncServiceFactory::GetForProfile(
               ->GetForProfile(profile);
 #endif
 
-  if (!ProfileSyncService::IsSyncAllowedByFlag())
-    return nullptr;
-
   return static_cast<ProfileSyncService*>(
-      GetInstance()->GetServiceForBrowserContext(profile, true));
+      GetSyncServiceForBrowserContext(profile));
 }
 
 // static
 syncer::SyncService* ProfileSyncServiceFactory::GetSyncServiceForBrowserContext(
     content::BrowserContext* context) {
-  return GetForProfile(Profile::FromBrowserContext(context));
+  if (!ProfileSyncService::IsSyncAllowedByFlag()) {
+    return nullptr;
+  }
+
+  return static_cast<syncer::SyncService*>(
+      GetInstance()->GetServiceForBrowserContext(context, true));
 }
 
 ProfileSyncServiceFactory::ProfileSyncServiceFactory()
@@ -171,7 +173,7 @@ ProfileSyncServiceFactory::ProfileSyncServiceFactory()
       extensions::ExtensionsBrowserClient::Get()->GetExtensionSystemFactory());
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 #if defined(OS_CHROMEOS)
-  DependsOn(chromeos::PrintersManagerFactory::GetInstance());
+  DependsOn(chromeos::SyncedPrintersManagerFactory::GetInstance());
   DependsOn(sync_wifi::WifiCredentialSyncableServiceFactory::GetInstance());
 #endif  // defined(OS_CHROMEOS)
 

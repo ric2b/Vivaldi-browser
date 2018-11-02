@@ -11,6 +11,7 @@
 
 #include "build/build_config.h"
 #include "chrome/common/features.h"
+#include "components/offline_pages/features/features.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
@@ -29,25 +30,35 @@ extern const char kArcPolicyComplianceReported[];
 extern const char kArcTermsAccepted[];
 extern const char kArcLocationServiceEnabled[];
 extern const char kArcPackages[];
+extern const char kArcPaiStarted[];
 extern const char kArcSetNotificationsEnabledDeferred[];
 extern const char kArcSignedIn[];
 extern const char kArcCompatibleFilesystemChosen[];
+extern const char kArcVoiceInteractionValuePropAccepted[];
+extern const char kVoiceInteractionEnabled[];
+extern const char kVoiceInteractionContextEnabled[];
+extern const char kVoiceInteractionPrefSynced[];
 #endif
 extern const char kChildAccountStatusKnown[];
 extern const char kDefaultApps[];
+extern const char kSafeBrowsingForTrustedSourcesEnabled[];
 extern const char kDisableScreenshots[];
+extern const char kDownloadRestrictions[];
 extern const char kForceEphemeralProfiles[];
 extern const char kHomePageIsNewTabPage[];
 extern const char kHomePage[];
 extern const char kImportantSitesDialogHistory[];
 #if defined(OS_WIN)
 extern const char kLastProfileResetTimestamp[];
+extern const char kChromeCleanerResetPending[];
 #endif
+extern const char kNewTabInProductHelp[];
 extern const char kNewTabPageLocationOverride[];
 extern const char kProfileIconVersion[];
 extern const char kRestoreOnStartup[];
 extern const char kSessionExitedCleanly[];
 extern const char kSessionExitType[];
+extern const char kSessionTimeTotal[];
 extern const char kSiteEngagementLastUpdateTime[];
 extern const char kSupervisedUserApprovedExtensions[];
 extern const char kSupervisedUserCustodianEmail[];
@@ -166,10 +177,6 @@ extern const char kWebKitForceEnableZoom[];
 extern const char kWebKitPasswordEchoEnabled[];
 #endif
 extern const char kDataSaverEnabled[];
-extern const char kSafeBrowsingEnabled[];
-extern const char kSafeBrowsingProceedAnywayDisabled[];
-extern const char kSafeBrowsingIncidentsSent[];
-extern const char kSafeBrowsingExtendedReportingOptInAllowed[];
 extern const char kSSLErrorOverrideAllowed[];
 extern const char kIncognitoModeAvailability[];
 extern const char kSearchSuggestEnabled[];
@@ -258,6 +265,8 @@ extern const char kEnableStylusTools[];
 extern const char kLaunchPaletteOnEjectEvent[];
 extern const char kNoteTakingAppId[];
 extern const char kNoteTakingAppEnabledOnLockScreen[];
+extern const char kNoteTakingAppsLockScreenWhitelist[];
+extern const char kRestoreLastLockScreenNote[];
 extern const char kSessionUserActivitySeen[];
 extern const char kSessionStartTime[];
 extern const char kSessionLengthLimit[];
@@ -287,7 +296,6 @@ extern const char kPowerUserActivityScreenDimDelayFactor[];
 extern const char kPowerWaitForInitialUserActivity[];
 extern const char kPowerForceNonzeroBrightnessForUserActivity[];
 extern const char kTermsOfServiceURL[];
-extern const char kUsedPolicyCertificatesOnce[];
 extern const char kAttestationEnabled[];
 extern const char kAttestationExtensionWhitelist[];
 extern const char kTouchHudProjectionEnabled[];
@@ -327,12 +335,14 @@ extern const char kPinUnlockWeakPinsAllowed[];
 extern const char kEnableQuickUnlockFingerprint[];
 extern const char kInstantTetheringAllowed[];
 extern const char kInstantTetheringEnabled[];
+extern const char kInstantTetheringBleAdvertisingSupported[];
+extern const char kEcryptfsMigrationStrategy[];
 #endif  // defined(OS_CHROMEOS)
 extern const char kShowHomeButton[];
 extern const char kSpeechRecognitionFilterProfanities[];
 extern const char kSavingBrowserHistoryDisabled[];
 extern const char kAllowDeletingBrowserHistory[];
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 extern const char kMdHistoryMenuPromoShown[];
 #endif
 extern const char kForceGoogleSafeSearch[];
@@ -423,6 +433,10 @@ extern const char kPrintingEnabled[];
 extern const char kPrintPreviewDisabled[];
 extern const char kPrintPreviewDefaultDestinationSelectionRules[];
 
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+extern const char kPrintPreviewUseSystemDefaultPrinter[];
+#endif
+
 #if defined(OS_CHROMEOS)
 extern const char kPrintingDevices[];
 extern const char kRecommendedNativePrinters[];
@@ -453,9 +467,7 @@ extern const char kPushMessagingAppIdentifierMap[];
 extern const char kGCMProductCategoryForSubtypes[];
 
 extern const char kEasyUnlockAllowed[];
-extern const char kEasyUnlockEnabled[];
 extern const char kEasyUnlockPairing[];
-extern const char kEasyUnlockProximityRequired[];
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 extern const char kToolbarIconSurfacingBubbleAcknowledged[];
@@ -537,6 +549,7 @@ extern const char kOpenPdfDownloadInSystemReader[];
 
 extern const char kSaveFileDefaultDirectory[];
 extern const char kSaveFileType[];
+extern const char kTrustedDownloadSources[];
 
 extern const char kAllowFileSelectionDialogs[];
 extern const char kDefaultTasksByMimeType[];
@@ -679,7 +692,6 @@ extern const char kOobeComplete[];
 extern const char kOobeScreenPending[];
 extern const char kOobeMdMode[];
 extern const char kOobeControllerDetected[];
-extern const char kOobeTimeOfLastUpdateCheckWithoutUpdate[];
 extern const char kCanShowOobeGoodiesPage[];
 extern const char kDeviceRegistered[];
 extern const char kEnrollmentRecoveryRequired[];
@@ -919,6 +931,19 @@ extern const char kSettingsResetPromptLastTriggeredForHomepage[];
 
 #if defined(OS_ANDROID)
 extern const char kClipboardLastModifiedTime[];
+#endif
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+extern const char kOfflinePrefetchBackoff[];
+extern const char kOfflineUsageStartObserved[];
+extern const char kOfflineUsageOnlineObserved[];
+extern const char kOfflineUsageOfflineObserved[];
+extern const char kOfflineUsageTrackingDay[];
+extern const char kOfflineUsageUnusedCount[];
+extern const char kOfflineUsageStartedCount[];
+extern const char kOfflineUsageOfflineCount[];
+extern const char kOfflineUsageOnlineCount[];
+extern const char kOfflineUsageMixedCount[];
 #endif
 
 }  // namespace prefs

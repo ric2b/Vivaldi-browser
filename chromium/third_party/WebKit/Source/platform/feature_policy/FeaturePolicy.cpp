@@ -12,19 +12,6 @@
 
 namespace blink {
 
-namespace {
-
-void AddAllowFeatureToList(
-    WebFeaturePolicyFeature feature,
-    Vector<WebParsedFeaturePolicyDeclaration>& whitelists) {
-  WebParsedFeaturePolicyDeclaration whitelist;
-  whitelist.feature = feature;
-  whitelist.matches_all_origins = true;
-  whitelists.push_back(whitelist);
-}
-
-}  // namespace
-
 WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
                                           RefPtr<SecurityOrigin> origin,
                                           Vector<String>* messages) {
@@ -97,48 +84,21 @@ WebParsedFeaturePolicy ParseFeaturePolicy(const String& policy,
   return whitelists;
 }
 
-WebParsedFeaturePolicy GetContainerPolicyFromAllowedFeatures(
-    const WebVector<WebFeaturePolicyFeature>& features,
-    bool allowfullscreen,
-    bool allowpayment,
-    RefPtr<SecurityOrigin> origin) {
-  Vector<WebParsedFeaturePolicyDeclaration> whitelists;
-  bool override_payment = false;
-  bool override_fullscreen = false;
-  for (const WebFeaturePolicyFeature feature : features) {
-    // Container policy should override "allowfullscreen" and
-    // "allowpaymentrequest" policies.
-    if (feature == WebFeaturePolicyFeature::kPayment)
-      override_payment = true;
-    if (feature == WebFeaturePolicyFeature::kFullscreen)
-      override_fullscreen = true;
-
-    WebParsedFeaturePolicyDeclaration whitelist;
-    whitelist.feature = feature;
-    whitelist.origins = Vector<WebSecurityOrigin>(1UL, {origin});
-    whitelists.push_back(whitelist);
-  }
-  // If allowfullscreen attribute is present and no fullscreen policy is set,
-  // enable the feature for all origins; similarly for allowpaymentrequest.
-  if (allowpayment && !override_payment)
-    AddAllowFeatureToList(WebFeaturePolicyFeature::kPayment, whitelists);
-  if (allowfullscreen && !override_fullscreen)
-    AddAllowFeatureToList(WebFeaturePolicyFeature::kFullscreen, whitelists);
-
-  return whitelists;
-}
-
 bool IsSupportedInFeaturePolicy(WebFeaturePolicyFeature feature) {
+  if (!RuntimeEnabledFeatures::FeaturePolicyEnabled())
+    return false;
+
   switch (feature) {
-    // TODO(lunalu): Re-enabled fullscreen in feature policy once tests have
+    // TODO(loonybear): Re-enabled fullscreen in feature policy once tests have
     // been updated.
     // crbug.com/666761
     case WebFeaturePolicyFeature::kFullscreen:
       return false;
     case WebFeaturePolicyFeature::kPayment:
+    case WebFeaturePolicyFeature::kUsb:
       return true;
     case WebFeaturePolicyFeature::kVibrate:
-      return RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled();
+      return RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled();
     default:
       return false;
   }
@@ -151,34 +111,28 @@ const FeatureNameMap& GetDefaultFeatureNameMap() {
                                  WebFeaturePolicyFeature::kFullscreen);
     default_feature_name_map.Set("payment", WebFeaturePolicyFeature::kPayment);
     default_feature_name_map.Set("usb", WebFeaturePolicyFeature::kUsb);
-    if (RuntimeEnabledFeatures::featurePolicyExperimentalFeaturesEnabled()) {
+    default_feature_name_map.Set("camera", WebFeaturePolicyFeature::kCamera);
+    default_feature_name_map.Set("encrypted-media",
+                                 WebFeaturePolicyFeature::kEme);
+    default_feature_name_map.Set("microphone",
+                                 WebFeaturePolicyFeature::kMicrophone);
+    default_feature_name_map.Set("speaker", WebFeaturePolicyFeature::kSpeaker);
+    default_feature_name_map.Set("geolocation",
+                                 WebFeaturePolicyFeature::kGeolocation);
+    default_feature_name_map.Set("midi", WebFeaturePolicyFeature::kMidiFeature);
+    if (RuntimeEnabledFeatures::FeaturePolicyExperimentalFeaturesEnabled()) {
       default_feature_name_map.Set("vibrate",
                                    WebFeaturePolicyFeature::kVibrate);
-      default_feature_name_map.Set("camera", WebFeaturePolicyFeature::kCamera);
-      default_feature_name_map.Set("encrypted-media",
-                                   WebFeaturePolicyFeature::kEme);
-      default_feature_name_map.Set("microphone",
-                                   WebFeaturePolicyFeature::kMicrophone);
-      default_feature_name_map.Set("speaker",
-                                   WebFeaturePolicyFeature::kSpeaker);
       default_feature_name_map.Set("cookie",
                                    WebFeaturePolicyFeature::kDocumentCookie);
       default_feature_name_map.Set("domain",
                                    WebFeaturePolicyFeature::kDocumentDomain);
       default_feature_name_map.Set("docwrite",
                                    WebFeaturePolicyFeature::kDocumentWrite);
-      default_feature_name_map.Set("geolocation",
-                                   WebFeaturePolicyFeature::kGeolocation);
-      default_feature_name_map.Set("midi",
-                                   WebFeaturePolicyFeature::kMidiFeature);
-      default_feature_name_map.Set("notifications",
-                                   WebFeaturePolicyFeature::kNotifications);
-      default_feature_name_map.Set("push", WebFeaturePolicyFeature::kPush);
       default_feature_name_map.Set("sync-script",
                                    WebFeaturePolicyFeature::kSyncScript);
       default_feature_name_map.Set("sync-xhr",
                                    WebFeaturePolicyFeature::kSyncXHR);
-      default_feature_name_map.Set("webrtc", WebFeaturePolicyFeature::kWebRTC);
     }
   }
   return default_feature_name_map;

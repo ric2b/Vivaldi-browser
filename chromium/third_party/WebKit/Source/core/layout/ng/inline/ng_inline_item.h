@@ -75,12 +75,10 @@ class NGInlineItem {
   unsigned StartOffset() const { return start_offset_; }
   unsigned EndOffset() const { return end_offset_; }
   unsigned Length() const { return end_offset_ - start_offset_; }
-  TextDirection Direction() const {
-    return BidiLevel() & 1 ? TextDirection::kRtl : TextDirection::kLtr;
-  }
+  TextDirection Direction() const { return DirectionFromLevel(BidiLevel()); }
   UBiDiLevel BidiLevel() const { return static_cast<UBiDiLevel>(bidi_level_); }
   UScriptCode GetScript() const { return script_; }
-  const ComputedStyle* Style() const { return style_; }
+  const ComputedStyle* Style() const { return style_.Get(); }
   LayoutObject* GetLayoutObject() const { return layout_object_; }
 
   void SetOffset(unsigned start, unsigned end);
@@ -89,9 +87,8 @@ class NGInlineItem {
   LayoutUnit InlineSize() const;
   LayoutUnit InlineSize(unsigned start, unsigned end) const;
 
-  void GetFallbackFonts(HashSet<const SimpleFontData*>*,
-                        unsigned start,
-                        unsigned end) const;
+  bool HasStartEdge() const;
+  bool HasEndEdge() const;
 
   static void Split(Vector<NGInlineItem>&, unsigned index, unsigned offset);
   static unsigned SetBidiLevel(Vector<NGInlineItem>&,
@@ -109,7 +106,7 @@ class NGInlineItem {
   unsigned end_offset_;
   UScriptCode script_;
   RefPtr<const ShapeResult> shape_result_;
-  const ComputedStyle* style_;
+  RefPtr<const ComputedStyle> style_;
   LayoutObject* layout_object_;
 
   unsigned type_ : 3;

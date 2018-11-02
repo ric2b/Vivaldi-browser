@@ -15,13 +15,15 @@
 #include "base/synchronization/lock.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/cc_export.h"
-#include "cc/resources/resource_format.h"
 #include "cc/tiles/image_decode_cache.h"
+#include "components/viz/common/quads/resource_format.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
-namespace cc {
-
+namespace viz {
 class ContextProvider;
+}
+
+namespace cc {
 
 // OVERVIEW:
 //
@@ -101,8 +103,8 @@ class CC_EXPORT GpuImageDecodeCache
  public:
   enum class DecodeTaskType { PART_OF_UPLOAD_TASK, STAND_ALONE_DECODE_TASK };
 
-  explicit GpuImageDecodeCache(ContextProvider* context,
-                               ResourceFormat decode_format,
+  explicit GpuImageDecodeCache(viz::ContextProvider* context,
+                               viz::ResourceFormat decode_format,
                                size_t max_working_set_bytes,
                                size_t max_cache_bytes);
   ~GpuImageDecodeCache() override;
@@ -126,6 +128,7 @@ class CC_EXPORT GpuImageDecodeCache
       bool aggressively_free_resources) override;
   void ClearCache() override;
   size_t GetMaximumMemoryLimitBytes() const override;
+  void NotifyImageUnused(uint32_t skimage_id) override;
 
   // MemoryDumpProvider overrides.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -136,7 +139,7 @@ class CC_EXPORT GpuImageDecodeCache
   void OnPurgeMemory() override;
 
   // Called by Decode / Upload tasks.
-  void DecodeImage(const DrawImage& image);
+  void DecodeImage(const DrawImage& image, TaskType task_type);
   void UploadImage(const DrawImage& image);
 
   // Called by Decode / Upload tasks when tasks are finished.
@@ -169,7 +172,8 @@ class CC_EXPORT GpuImageDecodeCache
     bool is_locked() const { return is_locked_; }
     bool Lock();
     void Unlock();
-    void SetLockedData(std::unique_ptr<base::DiscardableMemory> data);
+    void SetLockedData(std::unique_ptr<base::DiscardableMemory> data,
+                       bool out_of_raster);
     void ResetData();
     base::DiscardableMemory* data() const { return data_.get(); }
     void mark_used() { usage_stats_.used = true; }
@@ -187,6 +191,7 @@ class CC_EXPORT GpuImageDecodeCache
     struct UsageStats {
       int lock_count = 1;
       bool used = false;
+      bool first_lock_out_of_raster = false;
       bool first_lock_wasted = false;
     };
 
@@ -322,7 +327,8 @@ class CC_EXPORT GpuImageDecodeCache
   bool ExceedsPreferredCount() const;
 
   void DecodeImageIfNecessary(const DrawImage& draw_image,
-                              ImageData* image_data);
+                              ImageData* image_data,
+                              TaskType task_type);
 
   scoped_refptr<GpuImageDecodeCache::ImageData> CreateImageData(
       const DrawImage& image);
@@ -343,8 +349,8 @@ class CC_EXPORT GpuImageDecodeCache
                               ImageData* image_data);
   void DeletePendingImages();
 
-  const ResourceFormat format_;
-  ContextProvider* context_;
+  const viz::ResourceFormat format_;
+  viz::ContextProvider* context_;
   sk_sp<GrContextThreadSafeProxy> context_threadsafe_proxy_;
 
   // All members below this point must only be accessed while holding |lock_|.

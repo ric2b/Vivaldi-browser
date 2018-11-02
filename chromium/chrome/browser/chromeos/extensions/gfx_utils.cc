@@ -67,12 +67,12 @@ const struct {
     {"com.google.android.youtube", extension_misc::kYoutubeAppId},
     {"com.google.android.youtube", "pbdihpaifchmclcmkfdgffnnpfbobefh"},
     // Google Play Books
-    {"com.google.android.apps.books", "mmimngoggfoobjdlefbcabngfnmieonb"},
+    {"com.google.android.apps.books", extension_misc::kGooglePlayBooksAppId},
     // Google+
     {"com.google.android.apps.plus", "dlppkpafhbajpcmmoheippocdidnckmm"},
     {"com.google.android.apps.plus", "fgjnkhlabjcaajddbaenilcmpcidahll"},
     // Google Play Movies & TV
-    {"com.google.android.videos", "gdijeikdkaembjbdobgfkoidjkpbmlkd"},
+    {"com.google.android.videos", extension_misc::kGooglePlayMoviesAppId},
     {"com.google.android.videos", "amfoiggnkefambnaaphodjdmdooiinna"},
     // Google Play Music
     {"com.google.android.music", extension_misc::kGooglePlayMusicAppId},
@@ -146,6 +146,13 @@ namespace util {
 
 bool HasEquivalentInstalledArcApp(content::BrowserContext* context,
                                   const std::string& extension_id) {
+  std::unordered_set<std::string> arc_apps;
+  return GetEquivalentInstalledArcApps(context, extension_id, &arc_apps);
+}
+
+bool GetEquivalentInstalledArcApps(content::BrowserContext* context,
+                                   const std::string& extension_id,
+                                   std::unordered_set<std::string>* arc_apps) {
   const std::string arc_package_name =
       g_dual_badge_map.Get().GetArcPackageNameFromExtensionId(extension_id);
   if (arc_package_name.empty())
@@ -157,7 +164,9 @@ bool HasEquivalentInstalledArcApp(content::BrowserContext* context,
 
   // TODO(hidehiko): The icon is per launcher, so we should have more precise
   // check here.
-  return !prefs->GetAppsForPackage(arc_package_name).empty();
+  DCHECK(arc_apps);
+  prefs->GetAppsForPackage(arc_package_name).swap(*arc_apps);
+  return !arc_apps->empty();
 }
 
 const std::vector<std::string> GetEquivalentInstalledExtensions(

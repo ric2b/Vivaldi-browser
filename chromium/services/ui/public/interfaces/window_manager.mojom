@@ -44,6 +44,9 @@ interface WindowManager {
   // Whether the window should be initially focusable or not. Type: bool.
   const string kFocusable_InitProperty = "init:focusable";
 
+  // Whether the window should be opaque.
+  const string kTranslucent_InitProperty = "init:translucent";
+
   // Initial bounds to create the window at. If empty the WindowManager decides
   // the initial bounds. Type: gfx::Rect.
   const string kBounds_InitProperty = "init:bounds";
@@ -98,6 +101,10 @@ interface WindowManager {
   // the top portion of the window through a touch / mouse gesture.
   // Type: bool.
   const string kImmersiveFullscreen_Property = "prop:immersive-fullscreen";
+
+  // The window's minimum size as defined by its content. Maps to
+  // aura::client::kMinimumSize_Property. Type: gfx::Size.
+  const string kMinimumSize_Property = "prop:minimum-size";
 
   // Internal window name. Useful for debugging. Maps to aura::client::kNameKey.
   // Type: mojom::String
@@ -251,10 +258,13 @@ interface WindowManagerClient {
 
   ActivateNextWindow();
 
-  // Sets the additional hit area. The hit area is extended from the bounds of
-  // the window by |hit_area|. This is used to allow for resizes to start
-  // outside the bounds of the window.
-  SetExtendedHitArea(uint32 window_id, gfx.mojom.Insets hit_area);
+  // Extends the hit area for children of |window_id| by the specified amount.
+  // |mouse_insets| is used for mouse events, and |touch_insets| for touch
+  // events. NOTE: the insets are expected to be negative (or zero). If one
+  // of the sizes of an inset is a positive value the call is ignored.
+  SetExtendedHitRegionForChildren(uint32 window_id,
+                                  gfx.mojom.Insets mouse_insets,
+                                  gfx.mojom.Insets touch_insets);
 
   // Add and remove accelerators. When accelerators are registered the
   // WindowManager receives the event via OnAccelerator() rather than the
@@ -268,17 +278,41 @@ interface WindowManagerClient {
   AddAccelerators(array<WmAccelerator> accelerators) => (bool success);
   RemoveAccelerator(uint32 id);
 
+  // Some platforms want to hide the cursor when the user presses a key, but
+  // only on certain keys. When |dont_hide_cursor_list| is non-empty, the window
+  // server will attempt to match all keys being dispatched to windows to this
+  // list. If there is no match, the window server will hide the cursor. (The
+  // list of keys to *not* hide on is much shorter than the list of all keys.)
+  // The cursor will automatically be unhidden on the next mouse event.
+  SetKeyEventsThatDontHideCursor(array<EventMatcher> dont_hide_cursor_list);
+
   // Sets the root of a particular display. This is only applicable when the
   // WindowTree was created with a value of false for
   // |automatically_create_display_roots| (see
   // WindowManagerWindowTreeFactory::CreateWindowTree() for details).
   // |local_surface_id| identifies the ID to use to submit CompositorFrames.
   // base::nullopt indicates failure.
+  // This function may also be used to move an existing display root to a new
+  // display.
   SetDisplayRoot(display.mojom.Display display,
                  WmViewportMetrics viewport_metrics,
                  bool is_primary_display,
                  uint32 window_id) =>
       (cc.mojom.LocalSurfaceId? local_surface_id);
+
+  // Configures the metrics for the displays and notifies observers. This is
+  // only applicable when WindowTree was created with a value of false for
+  // |automatically_create_display_roots|. This *must* be called after any
+  // display related changes to inform observers, for example, after calling
+  // SetDisplayRoot() this must be called to inform observers of the display
+  // changes.
+  SetDisplayConfiguration(array<display.mojom.Display> displays,
+                          array<WmViewportMetrics> viewport_metrics,
+                          int64 primary_display_id,
+                          int64 internal_display_id) => (bool success);
+
+  // Swaps the display roots of the two displays.
+  SwapDisplayRoots(int64 display_id1, int64 display_id2) => (bool success);
 
   // The window manager has completed a request with the specific change id.
   WmResponse(uint32 change_id, bool response);
@@ -306,9 +340,16 @@ interface WindowManagerClient {
   // Shows and hides the cursor globally. Used during window management tasks.
   WmSetCursorVisible(bool visible);
 
+  // Sets whether we're using normal or large cursors.
+  WmSetCursorSize(CursorSize cursor_size);
+
   // Sets a global cursor which overrides per-window cursors. Pass null to
   // clear.
   WmSetGlobalOverrideCursor(CursorData? cursor);
+
+  // Moves the cursor to the given location on the given display.
+  WmMoveCursorToDisplayLocation(gfx.mojom.Point display_pixels,
+                                int64 display_id);
 
   // Response from WmCreateTopLevelWindow() informing the client of the id for
   // the new window.

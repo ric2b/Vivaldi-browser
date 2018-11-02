@@ -99,7 +99,7 @@ gin::Dictionary CreateMessagePipe(const gin::Arguments& args) {
 
     result = MojoCreateMessagePipe(&options, &handle0, &handle1);
   } else {
-      return dictionary;
+    return dictionary;
   }
 
   CHECK_EQ(MOJO_RESULT_OK, result);
@@ -110,21 +110,19 @@ gin::Dictionary CreateMessagePipe(const gin::Arguments& args) {
   return dictionary;
 }
 
-MojoResult WriteMessage(
-    mojo::Handle handle,
-    const gin::ArrayBufferView& buffer,
-    const std::vector<gin::Handle<HandleWrapper> >& handles,
-    MojoWriteMessageFlags flags) {
+MojoResult WriteMessage(mojo::Handle handle,
+                        const gin::ArrayBufferView& buffer,
+                        const std::vector<gin::Handle<HandleWrapper>>& handles,
+                        MojoWriteMessageFlags flags) {
   std::vector<MojoHandle> raw_handles(handles.size());
   for (size_t i = 0; i < handles.size(); ++i)
     raw_handles[i] = handles[i]->get().value();
-  MojoResult rv = MojoWriteMessage(handle.value(),
-                          buffer.bytes(),
-                          static_cast<uint32_t>(buffer.num_bytes()),
-                          raw_handles.empty() ? NULL : &raw_handles[0],
-                          static_cast<uint32_t>(raw_handles.size()),
-                          flags);
-  // MojoWriteMessage takes ownership of the handles, so release them here.
+  MojoResult rv =
+      WriteMessageRaw(MessagePipeHandle(handle.value()), buffer.bytes(),
+                      static_cast<uint32_t>(buffer.num_bytes()),
+                      raw_handles.empty() ? NULL : &raw_handles[0],
+                      static_cast<uint32_t>(raw_handles.size()), flags);
+  // WriteMessageRaw takes ownership of the handles, so release them here.
   for (size_t i = 0; i < handles.size(); ++i)
     ignore_result(handles[i]->release());
 
@@ -134,34 +132,55 @@ MojoResult WriteMessage(
 gin::Dictionary ReadMessage(const gin::Arguments& args,
                             mojo::Handle handle,
                             MojoReadMessageFlags flags) {
-  uint32_t num_bytes = 0;
-  uint32_t num_handles = 0;
-  MojoResult result = MojoReadMessage(
-      handle.value(), NULL, &num_bytes, NULL, &num_handles, flags);
-  if (result != MOJO_RESULT_RESOURCE_EXHAUSTED) {
+  MojoMessageHandle message;
+  MojoResult result =
+      MojoReadMessage(handle.value(), &message, MOJO_READ_MESSAGE_FLAG_NONE);
+  if (result != MOJO_RESULT_OK) {
     gin::Dictionary dictionary = gin::Dictionary::CreateEmpty(args.isolate());
     dictionary.Set("result", result);
     return dictionary;
   }
 
+  result = MojoSerializeMessage(message);
+  if (result != MOJO_RESULT_OK && result != MOJO_RESULT_FAILED_PRECONDITION) {
+    MojoDestroyMessage(message);
+    gin::Dictionary dictionary = gin::Dictionary::CreateEmpty(args.isolate());
+    dictionary.Set("result", MOJO_RESULT_ABORTED);
+    return dictionary;
+  }
+
+  uint32_t num_bytes = 0;
+  void* bytes;
+  uint32_t num_handles = 0;
+  std::vector<mojo::Handle> handles;
+  result = MojoGetSerializedMessageContents(
+      message, &bytes, &num_bytes, nullptr, &num_handles,
+      MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+  if (result == MOJO_RESULT_RESOURCE_EXHAUSTED) {
+    handles.resize(num_handles);
+    result = MojoGetSerializedMessageContents(
+        message, &bytes, &num_bytes,
+        reinterpret_cast<MojoHandle*>(handles.data()), &num_handles,
+        MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+  }
+
+  if (result != MOJO_RESULT_OK) {
+    MojoDestroyMessage(message);
+    gin::Dictionary dictionary = gin::Dictionary::CreateEmpty(args.isolate());
+    dictionary.Set("result", MOJO_RESULT_ABORTED);
+    return dictionary;
+  }
+
   v8::Local<v8::ArrayBuffer> array_buffer =
       v8::ArrayBuffer::New(args.isolate(), num_bytes);
-  std::vector<mojo::Handle> handles(num_handles);
+  if (num_bytes) {
+    gin::ArrayBuffer buffer;
+    ConvertFromV8(args.isolate(), array_buffer, &buffer);
+    DCHECK_EQ(buffer.num_bytes(), num_bytes);
+    memcpy(buffer.bytes(), bytes, num_bytes);
+  }
 
-  gin::ArrayBuffer buffer;
-  ConvertFromV8(args.isolate(), array_buffer, &buffer);
-  CHECK(buffer.num_bytes() == num_bytes);
-
-  result = MojoReadMessage(handle.value(),
-                           buffer.bytes(),
-                           &num_bytes,
-                           handles.empty() ? NULL :
-                               reinterpret_cast<MojoHandle*>(&handles[0]),
-                           &num_handles,
-                           flags);
-
-  CHECK(buffer.num_bytes() == num_bytes);
-  CHECK(handles.size() == num_handles);
+  MojoDestroyMessage(message);
 
   gin::Dictionary dictionary = gin::Dictionary::CreateEmpty(args.isolate());
   dictionary.Set("result", result);
@@ -226,8 +245,8 @@ gin::Dictionary ReadData(const gin::Arguments& args,
                          mojo::Handle handle,
                          MojoReadDataFlags flags) {
   uint32_t num_bytes = 0;
-  MojoResult result = MojoReadData(
-      handle.value(), NULL, &num_bytes, MOJO_READ_DATA_FLAG_QUERY);
+  MojoResult result =
+      MojoReadData(handle.value(), NULL, &num_bytes, MOJO_READ_DATA_FLAG_QUERY);
   if (result != MOJO_RESULT_OK) {
     gin::Dictionary dictionary = gin::Dictionary::CreateEmpty(args.isolate());
     dictionary.Set("result", result);
@@ -350,7 +369,7 @@ MojoResult UnmapBuffer(const gin::Arguments& args,
   return MojoUnmapBuffer(buffer->GetContents().Data());
 }
 
-gin::WrapperInfo g_wrapper_info = { gin::kEmbedderNativeGin };
+gin::WrapperInfo g_wrapper_info = {gin::kEmbedderNativeGin};
 
 }  // namespace
 
@@ -358,8 +377,8 @@ const char Core::kModuleName[] = "mojo/public/js/core";
 
 v8::Local<v8::Value> Core::GetModule(v8::Isolate* isolate) {
   gin::PerIsolateData* data = gin::PerIsolateData::From(isolate);
-  v8::Local<v8::ObjectTemplate> templ = data->GetObjectTemplate(
-      &g_wrapper_info);
+  v8::Local<v8::ObjectTemplate> templ =
+      data->GetObjectTemplate(&g_wrapper_info);
 
   if (templ.IsEmpty()) {
     templ =
@@ -408,6 +427,8 @@ v8::Local<v8::Value> Core::GetModule(v8::Isolate* isolate) {
             .SetValue("HANDLE_SIGNAL_WRITABLE", MOJO_HANDLE_SIGNAL_WRITABLE)
             .SetValue("HANDLE_SIGNAL_PEER_CLOSED",
                       MOJO_HANDLE_SIGNAL_PEER_CLOSED)
+            .SetValue("HANDLE_SIGNAL_PEER_REMOTE",
+                      MOJO_HANDLE_SIGNAL_PEER_REMOTE)
 
             .SetValue("CREATE_MESSAGE_PIPE_OPTIONS_FLAG_NONE",
                       MOJO_CREATE_MESSAGE_PIPE_OPTIONS_FLAG_NONE)
@@ -415,8 +436,6 @@ v8::Local<v8::Value> Core::GetModule(v8::Isolate* isolate) {
             .SetValue("WRITE_MESSAGE_FLAG_NONE", MOJO_WRITE_MESSAGE_FLAG_NONE)
 
             .SetValue("READ_MESSAGE_FLAG_NONE", MOJO_READ_MESSAGE_FLAG_NONE)
-            .SetValue("READ_MESSAGE_FLAG_MAY_DISCARD",
-                      MOJO_READ_MESSAGE_FLAG_MAY_DISCARD)
 
             .SetValue("CREATE_DATA_PIPE_OPTIONS_FLAG_NONE",
                       MOJO_CREATE_DATA_PIPE_OPTIONS_FLAG_NONE)

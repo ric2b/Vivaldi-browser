@@ -106,16 +106,16 @@ suite('selection state', function() {
   });
 
   test('deselects items when they are deleted', function() {
-    var nodeMap = testTree(createFolder('0', [
-      createFolder(
-          '1',
-          [
-            createItem('2'),
-            createItem('3'),
-            createItem('4'),
-          ]),
-      createItem('5'),
-    ]));
+    var nodeMap = testTree(
+        createFolder(
+            '1',
+            [
+              createItem('2'),
+              createItem('3'),
+              createItem('4'),
+            ]),
+        createItem('5'),
+    );
 
     action = select(['2', '4', '5'], '4', true, false);
     selection = bookmarks.SelectionState.updateSelection(selection, action);
@@ -124,6 +124,24 @@ suite('selection state', function() {
     selection = bookmarks.SelectionState.updateSelection(selection, action);
 
     assertDeepEquals(['5'], normalizeSet(selection.items));
+    assertEquals(null, selection.anchor);
+  });
+
+  test('deselects items when they are moved to a different folder', function() {
+    var nodeMap = testTree(
+        createFolder('1', []),
+        createItem('2'),
+        createItem('3'),
+    );
+
+    action = select(['2', '3'], '2', true, false);
+    selection = bookmarks.SelectionState.updateSelection(selection, action);
+
+    // Move item '2' from the 1st item in '0' to the 0th item in '1'.
+    action = bookmarks.actions.moveBookmark('2', '1', 0, '0', 1);
+    selection = bookmarks.SelectionState.updateSelection(selection, action);
+
+    assertDeepEquals(['3'], normalizeSet(selection.items));
     assertEquals(null, selection.anchor);
   });
 });
@@ -418,7 +436,7 @@ suite('search state', function() {
     assertFalse(bookmarks.util.isShowingSearch(clearedState));
     assertDeepEquals(['3'], bookmarks.util.getDisplayedList(clearedState));
     assertEquals('', clearedState.search.term);
-    assertDeepEquals([], clearedState.search.results);
+    assertDeepEquals(null, clearedState.search.results);
 
     // Case 2: Clear search by selecting a new folder.
     action = bookmarks.actions.selectFolder('1');
@@ -428,7 +446,36 @@ suite('search state', function() {
     assertFalse(bookmarks.util.isShowingSearch(selectedState));
     assertDeepEquals(['2'], bookmarks.util.getDisplayedList(selectedState));
     assertEquals('', selectedState.search.term);
-    assertDeepEquals([], selectedState.search.results);
+    assertDeepEquals(null, selectedState.search.results);
+  });
+
+  test('results do not clear while performing a second search', function() {
+    action = bookmarks.actions.setSearchTerm('te');
+    state = bookmarks.reduceAction(state, action);
+
+    assertFalse(bookmarks.util.isShowingSearch(state));
+
+    action = bookmarks.actions.setSearchResults(['2', '3']);
+    state = bookmarks.reduceAction(state, action);
+
+    assertFalse(state.search.inProgress);
+    assertTrue(bookmarks.util.isShowingSearch(state));
+
+    // Continuing the search should not clear the previous results, which should
+    // continue to show until the new results arrive.
+    action = bookmarks.actions.setSearchTerm('test');
+    state = bookmarks.reduceAction(state, action);
+
+    assertTrue(state.search.inProgress);
+    assertTrue(bookmarks.util.isShowingSearch(state));
+    assertDeepEquals(['2', '3'], bookmarks.util.getDisplayedList(state));
+
+    action = bookmarks.actions.setSearchResults(['3']);
+    state = bookmarks.reduceAction(state, action);
+
+    assertFalse(state.search.inProgress);
+    assertTrue(bookmarks.util.isShowingSearch(state));
+    assertDeepEquals(['3'], bookmarks.util.getDisplayedList(state));
   });
 
   test('removes deleted nodes', function() {

@@ -101,9 +101,12 @@ def main():
 
   gn_args += 'target_os="' + target_os + '" enable_websockets=false '+ \
       'disable_file_support=true disable_ftp_support=true '+ \
+      'disable_brotli_filter=false ' + \
       'use_platform_icu_alternatives=true '+ \
+      'enable_reporting=false '+ \
       'is_component_build=false ' + \
-      'ignore_elf32_limitations=true use_partition_alloc=false'
+      'ignore_elf32_limitations=true use_partition_alloc=false ' + \
+      'include_transport_security_state_preload_list=false'
 
   extra_options = ' '.join(extra_options_list)
   if options.gn:

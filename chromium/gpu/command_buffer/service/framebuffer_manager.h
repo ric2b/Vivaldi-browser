@@ -60,7 +60,8 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
     virtual bool IsLayerValid() const = 0;
 
     virtual bool CanRenderTo(const FeatureInfo* feature_info) const = 0;
-    virtual void DetachFromFramebuffer(Framebuffer* framebuffer) const = 0;
+    virtual void DetachFromFramebuffer(Framebuffer* framebuffer,
+                                       GLenum attachment) const = 0;
     virtual bool ValidForAttachmentType(GLenum attachment_type,
                                         uint32_t max_color_attachments) = 0;
     virtual size_t GetSignatureSize(TextureManager* texture_manager) const = 0;
@@ -225,6 +226,8 @@ class GPU_EXPORT Framebuffer : public base::RefCounted<Framebuffer> {
     return draw_buffer_bound_mask_;
   }
 
+  void UnmarkAsComplete() { framebuffer_complete_state_count_id_ = 0; }
+
  private:
   friend class FramebufferManager;
   friend class base::RefCounted<Framebuffer>;
@@ -314,10 +317,10 @@ struct DecoderFramebufferState {
 // so we can correctly clear them.
 class GPU_EXPORT FramebufferManager {
  public:
-  FramebufferManager(uint32_t max_draw_buffers,
-                     uint32_t max_color_attachments,
-                     const scoped_refptr<FramebufferCompletenessCache>&
-                         framebuffer_combo_complete_cache);
+  FramebufferManager(
+      uint32_t max_draw_buffers,
+      uint32_t max_color_attachments,
+      FramebufferCompletenessCache* framebuffer_combo_complete_cache);
   ~FramebufferManager();
 
   // Must call before destruction.
@@ -357,7 +360,7 @@ class GPU_EXPORT FramebufferManager {
   void StopTracking(Framebuffer* framebuffer);
 
   FramebufferCompletenessCache* GetFramebufferComboCompleteCache() {
-    return framebuffer_combo_complete_cache_.get();
+    return framebuffer_combo_complete_cache_;
   }
 
   // Info for each framebuffer in the system.
@@ -378,7 +381,7 @@ class GPU_EXPORT FramebufferManager {
   uint32_t max_draw_buffers_;
   uint32_t max_color_attachments_;
 
-  scoped_refptr<FramebufferCompletenessCache> framebuffer_combo_complete_cache_;
+  FramebufferCompletenessCache* framebuffer_combo_complete_cache_;
 
   DISALLOW_COPY_AND_ASSIGN(FramebufferManager);
 };

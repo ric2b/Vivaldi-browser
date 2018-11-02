@@ -26,7 +26,7 @@
 
 #include "calendar/calendar_backend_notifier.h"
 #include "calendar/calendar_database.h"
-#include "calendar/calendar_types.h"
+#include "calendar/event_type.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -34,7 +34,6 @@ class SingleThreadTaskRunner;
 
 namespace calendar {
 
-class CalendarBackendObserver;
 class CalendarDatabase;
 struct CalendarDatabaseParams;
 class CalendarBackendHelper;
@@ -60,9 +59,13 @@ class CalendarBackend
    public:
     virtual ~CalendarDelegate() {}
 
-    virtual void NotifyEventCreated() = 0;
-    virtual void NotifyEventModified() = 0;
-    virtual void NotifyEventDeleted() = 0;
+    virtual void NotifyEventCreated(const EventRow& row) = 0;
+    virtual void NotifyEventModified(const EventRow& row) = 0;
+    virtual void NotifyEventDeleted(const EventRow& row) = 0;
+
+    virtual void NotifyCalendarCreated(const CalendarRow& row) = 0;
+    virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
+    virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
 
     // Invoked when the backend has finished loading the db.
     virtual void DBLoaded() = 0;
@@ -92,21 +95,32 @@ class CalendarBackend
   void Commit();
 
   // Creates an Event
-  void CreateCalendarEvent(EventRow ev);
+  void CreateCalendarEvent(EventRow ev,
+                           std::shared_ptr<CreateEventResult> result);
   void GetAllEvents(std::shared_ptr<EventQueryResults> results);
   // Updates an event
   void UpdateEvent(EventID event_id,
                    const CalendarEvent& event,
                    std::shared_ptr<UpdateEventResult> result);
+  void DeleteEvent(EventID event_id, std::shared_ptr<DeleteEventResult> result);
 
-  void NotifyEventCreated() override;
-  void NotifyEventModified() override;
-  void NotifyEventDeleted() override;
+  // Creates an Calendar
+  void CreateCalendar(CalendarRow ev,
+                      std::shared_ptr<CreateCalendarResult> result);
+  void GetAllCalendars(std::shared_ptr<CalendarQueryResults> results);
+  void UpdateCalendar(CalendarID calendar_id,
+                      const Calendar& calendar,
+                      std::shared_ptr<UpdateCalendarResult> result);
+  void DeleteCalendar(CalendarID calendar_id,
+                      std::shared_ptr<DeleteCalendarResult> result);
 
-  // Observers -----------------------------------------------------------------
+  void NotifyEventCreated(const EventRow& row) override;
+  void NotifyEventModified(const EventRow& row) override;
+  void NotifyEventDeleted(const EventRow& row) override;
 
-  void AddObserver(CalendarBackendObserver* observer);
-  void RemoveObserver(CalendarBackendObserver* observer);
+  void NotifyCalendarCreated(const CalendarRow& row) override;
+  void NotifyCalendarModified(const CalendarRow& row) override;
+  void NotifyCalendarDeleted(const CalendarRow& row) override;
 
  protected:
   ~CalendarBackend() override;
@@ -144,9 +158,6 @@ class CalendarBackend
   // not be opened, all users must first check for null and return immediately
   // if it is.
   std::unique_ptr<calendar::CalendarDatabase> db_;
-
-  // List of observers
-  base::ObserverList<CalendarBackendObserver> observers_;
 
   DISALLOW_COPY_AND_ASSIGN(CalendarBackend);
 };

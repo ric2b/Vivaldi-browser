@@ -23,6 +23,7 @@
 #ifndef LayoutText_h
 #define LayoutText_h
 
+#include <iterator>
 #include "core/CoreExport.h"
 #include "core/dom/Text.h"
 #include "core/layout/LayoutObject.h"
@@ -83,7 +84,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
   virtual bool IsTextFragment() const;
   virtual bool IsWordBreak() const;
 
-  virtual PassRefPtr<StringImpl> OriginalText() const;
+  virtual RefPtr<StringImpl> OriginalText() const;
 
   void ExtractTextBox(InlineTextBox*);
   void AttachTextBox(InlineTextBox*);
@@ -136,14 +137,16 @@ class CORE_EXPORT LayoutText : public LayoutObject {
                       LayoutUnit x_pos,
                       TextDirection,
                       HashSet<const SimpleFontData*>* fallback_fonts = nullptr,
-                      FloatRect* glyph_bounds = nullptr) const;
+                      FloatRect* glyph_bounds = nullptr,
+                      float expansion = 0) const;
   virtual float Width(unsigned from,
                       unsigned len,
                       LayoutUnit x_pos,
                       TextDirection,
                       bool first_line = false,
                       HashSet<const SimpleFontData*>* fallback_fonts = nullptr,
-                      FloatRect* glyph_bounds = nullptr) const;
+                      FloatRect* glyph_bounds = nullptr,
+                      float expansion = 0) const;
 
   float MinLogicalWidth() const;
   float MaxLogicalWidth() const;
@@ -179,7 +182,7 @@ class CORE_EXPORT LayoutText : public LayoutObject {
 
   // TODO(kojii): setTextInternal() is temporarily public for NGInlineNode.
   // This will be back to protected when NGInlineNode can paint directly.
-  virtual void SetTextInternal(PassRefPtr<StringImpl>);
+  virtual void SetTextInternal(RefPtr<StringImpl>);
 
   virtual void TransformText();
 
@@ -275,7 +278,8 @@ class CORE_EXPORT LayoutText : public LayoutObject {
                       float text_width_so_far,
                       TextDirection,
                       HashSet<const SimpleFontData*>* fallback_fonts,
-                      FloatRect* glyph_bounds_accumulation) const;
+                      FloatRect* glyph_bounds_accumulation,
+                      float expansion = 0) const;
 
   void SecureText(UChar mask);
 
@@ -351,6 +355,39 @@ DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutText, IsText());
 inline LayoutText* Text::GetLayoutObject() const {
   return ToLayoutText(CharacterData::GetLayoutObject());
 }
+
+// Represents list of |InlineTextBox| objects associated to |LayoutText| in
+// layout order.
+class InlineTextBoxRange {
+ public:
+  class Iterator
+      : public std::iterator<std::input_iterator_tag, InlineTextBox*> {
+   public:
+    explicit Iterator(InlineTextBox*);
+    Iterator(const Iterator&) = default;
+
+    Iterator& operator++();
+    InlineTextBox* operator*() const;
+
+    bool operator==(const Iterator& other) const {
+      return current_ == other.current_;
+    }
+    bool operator!=(const Iterator& other) const { return !operator==(other); }
+
+   private:
+    InlineTextBox* current_;
+  };
+
+  explicit InlineTextBoxRange(const LayoutText&);
+
+  Iterator begin() const { return Iterator(layout_text_->FirstTextBox()); }
+  Iterator end() const { return Iterator(nullptr); }
+
+ private:
+  const LayoutText* layout_text_;
+};
+
+InlineTextBoxRange InlineTextBoxesOf(const LayoutText&);
 
 void ApplyTextTransform(const ComputedStyle*, String&, UChar);
 

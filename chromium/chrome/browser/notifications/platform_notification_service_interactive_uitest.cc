@@ -20,6 +20,7 @@
 #include "chrome/browser/notifications/desktop_notification_profile_util.h"
 #include "chrome/browser/notifications/message_center_display_service.h"
 #include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_test_util.h"
 #include "chrome/browser/notifications/platform_notification_service_impl.h"
 #include "chrome/browser/notifications/web_notification_delegate.h"
@@ -68,7 +69,8 @@ class PlatformNotificationServiceBrowserTest : public InProcessBrowserTest {
   ~PlatformNotificationServiceBrowserTest() override {}
 
   // InProcessBrowserTest overrides.
-  void SetUpCommandLine(base::CommandLine* command_line) override;
+  void SetUpDefaultCommandLine(base::CommandLine* command_line) override;
+
   void SetUp() override;
   void SetUpOnMainThread() override;
   void TearDown() override;
@@ -136,11 +138,19 @@ PlatformNotificationServiceBrowserTest::PlatformNotificationServiceBrowserTest()
       // filesystem.
       test_page_url_(std::string("/") + kTestFileName) {}
 
-void PlatformNotificationServiceBrowserTest::SetUpCommandLine(
+void PlatformNotificationServiceBrowserTest::SetUpDefaultCommandLine(
     base::CommandLine* command_line) {
+  InProcessBrowserTest::SetUpDefaultCommandLine(command_line);
+
+  // Needed for the Reply button tests
   command_line->AppendSwitch(switches::kEnableExperimentalWebPlatformFeatures);
 
-  InProcessBrowserTest::SetUpCommandLine(command_line);
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
+  // TODO(crbug.com/714679): Temporary change while tests are upgraded to deal
+  // with native notifications.
+  command_line->AppendSwitchASCII(switches::kDisableFeatures,
+                                  features::kNativeNotifications.name);
+#endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
 }
 
 void PlatformNotificationServiceBrowserTest::SetUp() {
@@ -159,7 +169,6 @@ void PlatformNotificationServiceBrowserTest::SetUpOnMainThread() {
   display_service_.reset(
       new MessageCenterDisplayService(browser()->profile(), ui_manager_.get()));
   service()->SetNotificationDisplayServiceForTesting(display_service_.get());
-  InProcessBrowserTest::SetUpOnMainThread();
 }
 
 void PlatformNotificationServiceBrowserTest::TearDown() {
@@ -404,10 +413,7 @@ IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
   EXPECT_DOUBLE_EQ(5.5, GetEngagementScore(origin));
 
   std::string url = web_contents->GetLastCommittedURL().spec();
-  if (base::FeatureList::IsEnabled(features::kMaterialDesignSettings))
-    ASSERT_EQ("chrome://settings/content/notifications", url);
-  else
-    ASSERT_EQ("chrome://settings/contentExceptions#notifications", url);
+  ASSERT_EQ("chrome://settings/content/notifications", url);
 }
 
 IN_PROC_BROWSER_TEST_F(PlatformNotificationServiceBrowserTest,
@@ -824,9 +830,14 @@ class PlatformNotificationServiceWithoutContentImageBrowserTest
  public:
   // InProcessBrowserTest overrides.
   void SetUpInProcessBrowserTestFixture() override {
-    scoped_feature_list_.InitAndDisableFeature(
-        features::kNotificationContentImage);
-    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
+#if BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
+    scoped_feature_list_.InitWithFeatures(
+        {},
+        {features::kNotificationContentImage, features::kNativeNotifications});
+#else
+    scoped_feature_list_.InitWithFeatures(
+        {}, {features::kNotificationContentImage});
+#endif  // BUILDFLAG(ENABLE_NATIVE_NOTIFICATIONS)
   }
 
  private:

@@ -227,10 +227,10 @@ TEST_F('BackgroundTest', 'SelectSingleBasic', function() {
         .expectBraille('apple btn +popup +')
         .call(incrementSelectedIndex)
         .expectSpeech('grape', /2 of 3/)
-        .expectBraille('grape mnuitm 2/3')
+        .expectBraille('grape mnuitm 2/3 (x)')
         .call(incrementSelectedIndex)
         .expectSpeech('banana', /3 of 3/)
-        .expectBraille('banana mnuitm 3/3');
+        .expectBraille('banana mnuitm 3/3 (x)');
     mockFeedback.replay();
   });
 });
@@ -802,6 +802,7 @@ TEST_F('BackgroundTest', 'SelectOptionSelected', function() {
 TEST_F('BackgroundTest', 'ToggleButton', function() {
   var mockFeedback = this.createMockFeedback();
   this.runWithLoadedTree(function() {/*!
+    <div aria-pressed="mixed" role="button">boldface</div>
     <div aria-pressed="true" role="button">ok</div>
     <div aria-pressed="false" role="button">cancel</div>
     <div aria-pressed role="button">close</div>
@@ -809,6 +810,11 @@ TEST_F('BackgroundTest', 'ToggleButton', function() {
     var b = ChromeVoxState.instance;
     var move = doCmd('nextObject');
     mockFeedback.call(move)
+        .expectSpeech('boldface')
+        .expectSpeech('Button')
+        .expectSpeech('Partially pressed')
+
+        .call(move)
         .expectSpeech('ok')
         .expectSpeech('Button')
         .expectSpeech('Pressed')

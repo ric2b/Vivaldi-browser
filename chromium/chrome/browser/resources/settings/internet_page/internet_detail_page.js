@@ -143,13 +143,7 @@ Polymer({
    * network properties have been fetched in networkPropertiesChanged_().
    * @private {boolean}
    */
-  shoudlShowConfigureWhenNetworkLoaded_: false,
-
-  /**
-   * Whether the previous route was also the network detail page.
-   * @private {boolean}
-   */
-  wasPreviousRouteNetworkDetailPage_: false,
+  shouldShowConfigureWhenNetworkLoaded_: false,
 
   /**
    * settings.RouteObserverBehavior
@@ -158,7 +152,7 @@ Polymer({
    * @protected
    */
   currentRouteChanged: function(route, oldRoute) {
-    if (route != settings.Route.NETWORK_DETAIL) {
+    if (route != settings.routes.NETWORK_DETAIL) {
       if (this.networksChangedListener_) {
         this.networkingPrivate.onNetworksChanged.removeListener(
             this.networksChangedListener_);
@@ -177,15 +171,15 @@ Polymer({
       console.error('No guid specified for page:' + route);
       this.close_();
     }
+
     // Set basic networkProperties until they are loaded.
     this.networkPropertiesReceived_ = false;
+    this.shouldShowConfigureWhenNetworkLoaded_ =
+        queryParams.get('showConfigure') == 'true';
+
     var type = /** @type {!chrome.networkingPrivate.NetworkType} */ (
                    queryParams.get('type')) ||
         CrOnc.Type.WI_FI;
-    this.shoudlShowConfigureWhenNetworkLoaded_ =
-        queryParams.get('showConfigure') == 'true';
-    this.wasPreviousRouteNetworkDetailPage_ =
-        oldRoute == settings.Route.NETWORK_DETAIL;
     var name = queryParams.get('name') || type;
     this.networkProperties = {
       GUID: this.guid,
@@ -242,8 +236,11 @@ Polymer({
       button.focus();
     }
 
-    if (this.shoudlShowConfigureWhenNetworkLoaded_
-        && this.networkProperties.Tether) {
+    if (this.shouldShowConfigureWhenNetworkLoaded_ &&
+        this.networkProperties.Tether) {
+      // Set |this.shouldShowConfigureWhenNetworkLoaded_| back to false to
+      // ensure that the Tether dialog is only shown once.
+      this.shouldShowConfigureWhenNetworkLoaded_ = false;
       this.showTetherDialog_();
     }
   },
@@ -462,7 +459,8 @@ Polymer({
     var type = networkProperties.Type;
     if (type != CrOnc.Type.WI_FI && type != CrOnc.Type.VPN)
       return false;
-    return this.isRemembered_(networkProperties);
+    return !this.isPolicySource(networkProperties.Source) &&
+        this.isRemembered_(networkProperties);
   },
 
   /**
@@ -561,26 +559,21 @@ Polymer({
 
   /** @private */
   onConnectTap_: function() {
+    if (CrOnc.shouldShowTetherDialogBeforeConnection(this.networkProperties)) {
+      this.showTetherDialog_();
+      return;
+    }
+
     this.fire('network-connect', {networkProperties: this.networkProperties});
   },
 
   /** @private */
   onTetherConnect_: function() {
     this.getTetherDialog_().close();
-    this.fire('network-connect',
-        {networkProperties: this.networkProperties,
-         bypassConnectionDialog: true});
-  },
-
-  /** @private */
-  onTetherDialogClose_: function() {
-    // The tether dialog is opened by specifying "showConfigure=true"
-    // in the query params. This may lead to the previous route also
-    // being the detail page, in which case we should navigate back to
-    // the previous route here so that when the user navigates back
-    // they will navigate to the previous non-detail page.
-    if (this.wasPreviousRouteNetworkDetailPage_)
-      settings.navigateToPreviousRoute();
+    this.fire('network-connect', {
+      networkProperties: this.networkProperties,
+      bypassConnectionDialog: true
+    });
   },
 
   /** @private */
@@ -614,6 +607,12 @@ Polymer({
     this.networkingPrivate.startActivate(this.guid);
   },
 
+  /** @private */
+  onChooseMobileTap_: function() {
+    // TODO(stevenjb): Integrate ChooseMobileNetworkDialog with WebUI.
+    chrome.send('addNetwork', [this.networkProperties.Type]);
+  },
+
   /** @const {string} */
   CR_EXPAND_BUTTON_TAG: 'CR-EXPAND-BUTTON',
 
@@ -623,7 +622,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleAdvancedExpanded_: function(event) {
@@ -633,7 +632,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleNetworkExpanded_: function(event) {
@@ -643,7 +642,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   toggleProxyExpanded_: function(event) {
@@ -726,8 +725,13 @@ Polymer({
         onc.StaticIPConfig =
             /** @type {!chrome.networkingPrivate.IPConfigProperties} */ ({});
       }
-      for (var key in value)
-        onc.StaticIPConfig[key] = value[key];
+      // Only copy Static IP properties.
+      var keysToCopy = ['Type', 'IPAddress', 'RoutingPrefix', 'Gateway'];
+      for (var i = 0; i < keysToCopy.length; ++i) {
+        var key = keysToCopy[i];
+        if (key in value)
+          onc.StaticIPConfig[key] = value[key];
+      }
     } else if (field == 'NameServers') {
       // If a StaticIPConfig property is specified and its NameServers value
       // matches the new value, no need to set anything.
@@ -904,8 +908,9 @@ Polymer({
    */
   getAdvancedFields_: function() {
     /** @type {!Array<string>} */ var fields = [];
-    fields.push('MacAddress');
     var type = this.networkProperties.Type;
+    if (type != CrOnc.Type.TETHER)
+      fields.push('MacAddress');
     if (type == CrOnc.Type.CELLULAR && !!this.networkProperties.Cellular) {
       fields.push(
           'Cellular.Carrier', 'Cellular.Family', 'Cellular.NetworkTechnology',
@@ -945,6 +950,11 @@ Polymer({
    * @private
    */
   showAdvanced_: function(networkProperties) {
+    if (networkProperties.Type == CrOnc.Type.TETHER) {
+      // These settings apply to the underlying WiFi network, not the Tether
+      // network.
+      return false;
+    }
     return this.hasAdvancedFields_() || this.hasDeviceFields_() ||
         this.isRememberedOrConnected_(networkProperties);
   },
@@ -979,6 +989,11 @@ Polymer({
    * @private
    */
   hasNetworkSection_: function(networkProperties) {
+    if (networkProperties.Type == CrOnc.Type.TETHER) {
+      // These settings apply to the underlying WiFi network, not the Tether
+      // network.
+      return false;
+    }
     if (networkProperties.Type == CrOnc.Type.VPN)
       return false;
     if (networkProperties.Type == CrOnc.Type.CELLULAR)
@@ -991,12 +1006,20 @@ Polymer({
    * @return {boolean}
    * @private
    */
+  showCellularChooseNetwork_: function(networkProperties) {
+    return networkProperties.Type == CrOnc.Type.CELLULAR &&
+        !!this.get('Cellular.SupportNetworkScan', this.networkProperties);
+  },
+
+  /**
+   * @param {!CrOnc.NetworkProperties} networkProperties
+   * @return {boolean}
+   * @private
+   */
   showCellularSim_: function(networkProperties) {
-    if (networkProperties.Type != 'Cellular' ||
-        !networkProperties.Cellular) {
-      return false;
-    }
-    return networkProperties.Cellular.Family == 'GSM';
+    return networkProperties.Type == CrOnc.Type.CELLULAR &&
+        this.get('Cellular.Family', this.networkProperties) ==
+        CrOnc.NetworkTechnology.GSM;
   },
 
   /**

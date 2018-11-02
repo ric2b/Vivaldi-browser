@@ -83,9 +83,9 @@ BackgroundSyncServiceImpl::BackgroundSyncServiceImpl(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(background_sync_context);
 
-  binding_.set_connection_error_handler(
-      base::Bind(&BackgroundSyncServiceImpl::OnConnectionError,
-                 base::Unretained(this) /* the channel is owned by this */));
+  binding_.set_connection_error_handler(base::BindOnce(
+      &BackgroundSyncServiceImpl::OnConnectionError,
+      base::Unretained(this) /* the channel is owned by this */));
 }
 
 void BackgroundSyncServiceImpl::OnConnectionError() {
@@ -96,7 +96,7 @@ void BackgroundSyncServiceImpl::OnConnectionError() {
 void BackgroundSyncServiceImpl::Register(
     blink::mojom::SyncRegistrationPtr options,
     int64_t sw_registration_id,
-    const RegisterCallback& callback) {
+    RegisterCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   BackgroundSyncRegistrationOptions manager_options =
@@ -107,44 +107,46 @@ void BackgroundSyncServiceImpl::Register(
   DCHECK(background_sync_manager);
   background_sync_manager->Register(
       sw_registration_id, manager_options,
-      base::Bind(&BackgroundSyncServiceImpl::OnRegisterResult,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&BackgroundSyncServiceImpl::OnRegisterResult,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void BackgroundSyncServiceImpl::GetRegistrations(
     int64_t sw_registration_id,
-    const GetRegistrationsCallback& callback) {
+    GetRegistrationsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   BackgroundSyncManager* background_sync_manager =
       background_sync_context_->background_sync_manager();
   DCHECK(background_sync_manager);
   background_sync_manager->GetRegistrations(
       sw_registration_id,
-      base::Bind(&BackgroundSyncServiceImpl::OnGetRegistrationsResult,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&BackgroundSyncServiceImpl::OnGetRegistrationsResult,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
 
 void BackgroundSyncServiceImpl::OnRegisterResult(
-    const RegisterCallback& callback,
+    RegisterCallback callback,
     BackgroundSyncStatus status,
     std::unique_ptr<BackgroundSyncRegistration> result) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   if (status != BACKGROUND_SYNC_STATUS_OK) {
-    callback.Run(static_cast<blink::mojom::BackgroundSyncError>(status),
-                 blink::mojom::SyncRegistrationPtr(
-                     blink::mojom::SyncRegistration::New()));
+    std::move(callback).Run(
+        static_cast<blink::mojom::BackgroundSyncError>(status),
+        blink::mojom::SyncRegistrationPtr(
+            blink::mojom::SyncRegistration::New()));
     return;
   }
 
   DCHECK(result);
   blink::mojom::SyncRegistrationPtr mojoResult = ToMojoRegistration(*result);
-  callback.Run(static_cast<blink::mojom::BackgroundSyncError>(status),
-               std::move(mojoResult));
+  std::move(callback).Run(
+      static_cast<blink::mojom::BackgroundSyncError>(status),
+      std::move(mojoResult));
 }
 
 void BackgroundSyncServiceImpl::OnGetRegistrationsResult(
-    const GetRegistrationsCallback& callback,
+    GetRegistrationsCallback callback,
     BackgroundSyncStatus status,
     std::vector<std::unique_ptr<BackgroundSyncRegistration>>
         result_registrations) {
@@ -154,8 +156,9 @@ void BackgroundSyncServiceImpl::OnGetRegistrationsResult(
   for (const auto& registration : result_registrations)
     mojo_registrations.push_back(ToMojoRegistration(*registration));
 
-  callback.Run(static_cast<blink::mojom::BackgroundSyncError>(status),
-               std::move(mojo_registrations));
+  std::move(callback).Run(
+      static_cast<blink::mojom::BackgroundSyncError>(status),
+      std::move(mojo_registrations));
 }
 
 }  // namespace content

@@ -3,9 +3,9 @@
 // found in the LICENSE file.
 
 #include <stdint.h>
-#include <algorithm>
 
 #include "base/base64.h"
+#include "base/stl_util.h"
 #include "base/strings/string_piece.h"
 #include "crypto/sha2.h"
 #include "net/base/host_port_pair.h"
@@ -652,7 +652,13 @@ TEST_F(HttpSecurityHeadersTest, ValidPKPHeadersSHA256) {
   TestValidPKPHeaders(HASH_VALUE_SHA256);
 }
 
-TEST_F(HttpSecurityHeadersTest, UpdateDynamicPKPOnly) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+#define MAYBE_UpdateDynamicPKPOnly DISABLED_UpdateDynamicPKPOnly
+#else
+#define MAYBE_UpdateDynamicPKPOnly UpdateDynamicPKPOnly
+#endif
+
+TEST_F(HttpSecurityHeadersTest, MAYBE_UpdateDynamicPKPOnly) {
   TransportSecurityState state;
   TransportSecurityState::STSState static_sts_state;
   TransportSecurityState::PKPState static_pkp_state;
@@ -693,14 +699,9 @@ TEST_F(HttpSecurityHeadersTest, UpdateDynamicPKPOnly) {
   EXPECT_EQ(2UL, dynamic_pkp_state.spki_hashes.size());
   EXPECT_EQ(report_uri, dynamic_pkp_state.report_uri);
 
-  HashValueVector::const_iterator hash =
-      std::find(dynamic_pkp_state.spki_hashes.begin(),
-                dynamic_pkp_state.spki_hashes.end(), good_hash);
-  EXPECT_NE(dynamic_pkp_state.spki_hashes.end(), hash);
+  EXPECT_TRUE(base::ContainsValue(dynamic_pkp_state.spki_hashes, good_hash));
 
-  hash = std::find(dynamic_pkp_state.spki_hashes.begin(),
-                   dynamic_pkp_state.spki_hashes.end(), backup_hash);
-  EXPECT_NE(dynamic_pkp_state.spki_hashes.end(), hash);
+  EXPECT_TRUE(base::ContainsValue(dynamic_pkp_state.spki_hashes, backup_hash));
 
   // Expect the overall state to reflect the header, too.
   EXPECT_TRUE(state.HasPublicKeyPins(domain));
@@ -719,16 +720,20 @@ TEST_F(HttpSecurityHeadersTest, UpdateDynamicPKPOnly) {
   EXPECT_EQ(2UL, new_dynamic_pkp_state.spki_hashes.size());
   EXPECT_EQ(report_uri, new_dynamic_pkp_state.report_uri);
 
-  hash = std::find(new_dynamic_pkp_state.spki_hashes.begin(),
-                   new_dynamic_pkp_state.spki_hashes.end(), good_hash);
-  EXPECT_NE(new_dynamic_pkp_state.spki_hashes.end(), hash);
+  EXPECT_TRUE(
+      base::ContainsValue(new_dynamic_pkp_state.spki_hashes, good_hash));
 
-  hash = std::find(new_dynamic_pkp_state.spki_hashes.begin(),
-                   new_dynamic_pkp_state.spki_hashes.end(), backup_hash);
-  EXPECT_NE(new_dynamic_pkp_state.spki_hashes.end(), hash);
+  EXPECT_TRUE(
+      base::ContainsValue(new_dynamic_pkp_state.spki_hashes, backup_hash));
 }
 
-TEST_F(HttpSecurityHeadersTest, UpdateDynamicPKPMaxAge0) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+#define MAYBE_UpdateDynamicPKPMaxAge0 DISABLED_UpdateDynamicPKPMaxAge0
+#else
+#define MAYBE_UpdateDynamicPKPMaxAge0 UpdateDynamicPKPMaxAge0
+#endif
+
+TEST_F(HttpSecurityHeadersTest, MAYBE_UpdateDynamicPKPMaxAge0) {
   TransportSecurityState state;
   TransportSecurityState::STSState static_sts_state;
   TransportSecurityState::PKPState static_pkp_state;
@@ -806,7 +811,13 @@ TEST_F(HttpSecurityHeadersTest, UpdateDynamicPKPMaxAge0) {
 // Tests that when a static HSTS and a static HPKP entry are present, adding a
 // dynamic HSTS header does not clobber the static HPKP entry. Further, adding a
 // dynamic HPKP entry could not affect the HSTS entry for the site.
-TEST_F(HttpSecurityHeadersTest, NoClobberPins) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+#define MAYBE_NoClobberPins DISABLED_NoClobberPins
+#else
+#define MAYBE_NoClobberPins NoClobberPins
+#endif
+
+TEST_F(HttpSecurityHeadersTest, MAYBE_NoClobberPins) {
   TransportSecurityState state;
   TransportSecurityState::STSState sts_state;
   TransportSecurityState::PKPState pkp_state;

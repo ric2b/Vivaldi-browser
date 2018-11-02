@@ -45,9 +45,6 @@ bool IsAlertOnBackgroundUploadEnabled();
 // Whether auto-reload is enabled.
 bool IsAutoReloadEnabled();
 
-// Whether contextual search must be reset to undecided state.
-bool IsForceResetContextualSearchEnabled();
-
 // Whether the lru snapshot cache experiment is enabled.
 bool IsLRUSnapshotCacheEnabled();
 
@@ -65,9 +62,6 @@ bool IsPageIconForDowngradedHTTPSEnabled();
 
 // Whether password generation is enabled.
 bool IsPasswordGenerationEnabled();
-
-// Whether the Payment Request API is enabled or not.
-bool IsPaymentRequestEnabled();
 
 // Whether the Physical Web feature is enabled.
 bool IsPhysicalWebEnabled();
@@ -100,8 +94,20 @@ bool IsSuggestionsUIEnabled();
 // Whether Sign-in promo is enabled.
 bool IsSigninPromoEnabled();
 
-// Whether Google Native App Launcher is enabled.
-bool IsNativeAppLauncherEnabled();
+// Whether Bookmark reordering is enabled.
+bool IsBookmarkReorderingEnabled();
+
+// Whether a new version of FeedbackKit is the preferred feedback UI provider.
+bool IsNewFeedbackKitEnabled();
+
+// Whether the keyboard accessory view with camera search is enabled.
+bool IsKeyboardAccessoryViewWithCameraSearchEnabled();
+
+// Whether the WKBackForwardList based navigation manager is enabled.
+bool IsSlimNavigationManagerEnabled();
+
+// Whether the 3rd party keyboard omnibox workaround is enabled.
+bool IsThirdPartyKeyboardWorkaroundEnabled();
 
 }  // namespace experimental_flags
 

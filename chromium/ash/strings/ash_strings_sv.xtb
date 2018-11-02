@@ -3,8 +3,8 @@
 <translationbundle lang="sv">
 <translation id="1012876632442809908">USB-C-enhet (främre port)</translation>
 <translation id="1013923882670373915">Bluetooth-enheten <ph name="DEVICE_NAME" /> har begärt tillstånd för koppling. Ange den här pinkoden på den enheten: <ph name="PINCODE" /></translation>
+<translation id="1032891413405719768">Batteriet håller på att ta slut i e-pennan</translation>
 <translation id="112308213915226829">Dölj hyllan automatiskt</translation>
-<translation id="1127238861555034875">Läge för förstoringsglas</translation>
 <translation id="1153356358378277386">Kopplade enheter</translation>
 <translation id="1195412055398077112">överskanning</translation>
 <translation id="1247372569136754018">Mikrofon (inbyggd)</translation>
@@ -26,8 +26,10 @@
 <translation id="1677472565718498478"><ph name="TIME" /> kvar</translation>
 <translation id="1698760176351776263">IPv6-adress: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Enheten är företagshanterad</translation>
+<translation id="1746730358044914197">Inmatningsmetoderna konfigureras av administratören.</translation>
 <translation id="1747827819627189109">Skärmen på tangentbordet har aktiverats</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
+<translation id="1836215606488044471">Assistent (läses in …)</translation>
 <translation id="1850504506766569011">Wi-Fi är inaktiverat.</translation>
 <translation id="1856813161013948396">Hoppa över låsskärmen genom att trycka på fingeravtryckssensorn. Klicka för att konfigurera.</translation>
 <translation id="1864454756846565995">USB-C-enhet (bakre port)</translation>
@@ -35,10 +37,13 @@
 <translation id="1919743966458266018">Kortkommandot för att öppna aktivitetshanteraren har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="1923539912171292317">Automatiska klick</translation>
 <translation id="1942830294380034169">Spillknapp</translation>
+<translation id="1951012854035635156">Assistent</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2012624427112548395">Ctrl+Sök+H</translation>
 <translation id="2049639323467105390">Den här enheten hanteras av <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Stående</translation>
+<translation id="2067602449040652523">Ljusstyrka för tangentbordet</translation>
 <translation id="207439088875642105">Det här är ett konto för barn som hanteras av <ph name="FIRST_PARENT_EMAIL" /> och <ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">Sluta casta <ph name="TAB_NAME" /> till <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">Laddning med låg effekt</translation>
@@ -49,14 +54,17 @@
 <translation id="2268813581635650749">Logga ut alla</translation>
 <translation id="2292698582925480719">Skala på skärmen</translation>
 <translation id="2303600792989757991">Växla fönsteröversikt</translation>
+<translation id="2338501278241028356">Aktivera Bluetooth så att det går att upptäcka enheter i närheten</translation>
 <translation id="2352467521400612932">Inställningar för e-penna</translation>
 <translation id="2354174487190027830">Aktiverar <ph name="NAME" /></translation>
+<translation id="2365393535144473978">Om du aktiverar mobildata aktiveras Bluetooth.</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Bluetooth-enheten <ph name="DEVICE_NAME" /> har begärt tillstånd för koppling. Innan du godkänner bekräftar du att den här lösenordsnyckeln visas på den enheten: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">Det uppstod ett fel</translation>
 <translation id="2501920221385095727">Tröga tangenter</translation>
 <translation id="2509468283778169019">CAPS LOCK är på</translation>
 <translation id="2532589005999780174">Högkontrastläge</translation>
+<translation id="2597972630681408282">Nattljus: <ph name="NIGHT_LIGHT_STATUS" /></translation>
 <translation id="2700058918926273959">Sessionen upphör om <ph name="SESSION_TIME_REMAINING" />. Du kommer att loggas ut.</translation>
 <translation id="2727977024730340865">Ansluten till en laddare med låg effekt. Batteriet kanske inte laddas ordentligt.</translation>
 <translation id="2761704814324807722">Statusfältet, tid <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -76,7 +84,6 @@
 <translation id="3009178788565917040">Utgång</translation>
 <translation id="3019353588588144572">Tid som återstår tills batteriet är fulladdat: <ph name="TIME_REMAINING" /></translation>
 <translation id="3047477924825107454">Det här är ett konto för barn som hanteras av <ph name="MANAGER_EMAIL" /></translation>
-<translation id="3050422059534974565">CAPS LOCK är på. Avbryt genom att trycka på Sök eller Shift.</translation>
 <translation id="3077734595579995578">skift</translation>
 <translation id="3087734570205094154">Nederst</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -85,7 +92,6 @@
 <translation id="315116470104423982">Mobildata</translation>
 <translation id="3236488194889173876">Det finns inget tillgängligt mobilnätverk</translation>
 <translation id="3294437725009624529">Gäst</translation>
-<translation id="3335772982573114336">Ny anteckning</translation>
 <translation id="3364721542077212959">Verktyg för e-penna</translation>
 <translation id="3368922792935385530">Ansluten</translation>
 <translation id="3371140690572404006">USB-C-enhet (främre porten på högra sidan)</translation>
@@ -117,8 +123,11 @@
 <translation id="3967919079500697218">Möjligheten att ta skärmdumpar har inaktiverats av administratören.</translation>
 <translation id="397105322502079400">Beräknar ...</translation>
 <translation id="3995138139523574647">USB-C-enhet (bakre porten på högra sidan)</translation>
+<translation id="4017989525502048489">Laserpekare</translation>
 <translation id="4279490309300973883">Spegling</translation>
 <translation id="4321179778687042513">ctrl</translation>
+<translation id="4338109981321384717">Förstoringsglas</translation>
+<translation id="4351433414020964307">Assistenten läses in …</translation>
 <translation id="4378551569595875038">Ansluter ...</translation>
 <translation id="4421231901400348175">Dela kontroll över skärmen med <ph name="HELPER_NAME" /> via Fjärrhjälp.</translation>
 <translation id="4430019312045809116">Volym</translation>
@@ -130,11 +139,14 @@
 <translation id="453661520163887813"><ph name="TIME" /> tills batteriet är fullt</translation>
 <translation id="4544944664594876241">Kortkommandot för att låsa skärmen har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4659419629803378708">ChromeVox har aktiverats</translation>
+<translation id="4729904664295161097">Assistenten är bara tillgänglig för den primära profilen.</translation>
 <translation id="479989351350248267">sök</translation>
 <translation id="4804818685124855865">Koppla från</translation>
+<translation id="4821830640883629383">Ladda eller byt batterierna.</translation>
 <translation id="4849058404725798627">Markera objekt med tangentbordsfokus</translation>
 <translation id="4872237917498892622">Alt + Sök eller Skift</translation>
 <translation id="4895488851634969361">Batteriet är fullt.</translation>
+<translation id="4905614135390995787">Kortkommandot för att aktivera och inaktivera högkontrastläget har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Acceptera</translation>
 <translation id="4961318399572185831">Casta skärmen</translation>
 <translation id="5011233892417813670">Chromebook</translation>
@@ -158,18 +170,21 @@
 <translation id="5744083938413354016">Tryck snabbt två gånger och dra</translation>
 <translation id="5777841717266010279">Vill du avbryta skärmdelningen?</translation>
 <translation id="57838592816432529">Stäng av ljudet</translation>
+<translation id="5860033963881614850">Av</translation>
 <translation id="5895138241574237353">Starta om</translation>
 <translation id="5901316534475909376">Skift+Escape</translation>
+<translation id="5916664084637901428">På</translation>
 <translation id="5927132638760172455">Castar till en okänd mottagare</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Återgå</translation>
 <translation id="595202126637698455">Resultatspårning aktiverat</translation>
+<translation id="5957083217255311415">Mobildata har inaktiverats.</translation>
 <translation id="5958529069007801266">Övervakad användare</translation>
 <translation id="5977415296283489383">Hörlurar</translation>
 <translation id="5978382165065462689">Dela kontroll över skärmen via Fjärrhjälp.</translation>
 <translation id="5980301590375426705">Avsluta gästsession</translation>
+<translation id="5992218262414051481">Högkontrastläget har aktiverats. Tryck på Ctrl+Sök+H igen om du vill inaktivera det.</translation>
 <translation id="6018164090099858612">Spegelläge avslutas</translation>
-<translation id="6041154455840261787">Högkontrastläget har aktiverats. Tryck på söktangenten + Skift + H igen om du vill inaktivera det.</translation>
 <translation id="6043212731627905357">Skärmen kan inte användas med <ph name="DEVICE_TYPE" /> (det finns inte stöd för skärmen).</translation>
 <translation id="6043994281159824495">Logga ut nu</translation>
 <translation id="6047696787498798094">Skärmdelningen avbryts när du byter till en annan användare. Vill du fortsätta?</translation>
@@ -183,7 +198,6 @@
 <translation id="6297287540776456956">Markera ett område med e-pennan</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" /> byttes till <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Tangentbordsöverlägg</translation>
-<translation id="6395038768903208085">Metalagerläge</translation>
 <translation id="639644700271529076">CAPS LOCK är av</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">Avvisa</translation>
@@ -195,8 +209,10 @@
 <translation id="6585808820553845416">Sessionen upphör om <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Söktangenten + Skift + K</translation>
 <translation id="6650933572246256093">Bluetooth-enheten <ph name="DEVICE_NAME" /> har begärt tillstånd för koppling. Ange denna lösenordsnyckel på den enheten: <ph name="PASSKEY" /></translation>
+<translation id="6691659475504239918">Sök+Skift+H</translation>
 <translation id="6700713906295497288">IME-menyknapp</translation>
 <translation id="6713285437468012787">Bluetooth-enheten <ph name="DEVICE_NAME" /> har kopplats och är nu tillgänglig för alla användare. Du kan ta bort kopplingen i Inställningar.</translation>
+<translation id="6715542151869432661">Inga mobila enheter hittades.</translation>
 <translation id="6785414152754474415">Batteriet är fullt till <ph name="PERCENTAGE" /> % och laddas.</translation>
 <translation id="6803622936009808957">Det gick inte att spegla visningar eftersom inga upplösningar som stöds hittades. Utökat skrivbordsläge används i stället.</translation>
 <translation id="683971173229319003">Sök+L</translation>
@@ -210,11 +226,9 @@
 <translation id="7066646422045619941">Det här nätverket har inaktiverats av administratören.</translation>
 <translation id="7067196344162293536">Rotera automatiskt</translation>
 <translation id="7098389117866926363">USB-C-enhet (vänstra porten på baksidan)</translation>
-<translation id="7129360219436193655">Laserpekarläge</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Skift + K</translation>
 <translation id="7168224885072002358">Återgår till den gamla upplösningen om <ph name="TIMEOUT_SECONDS" /></translation>
-<translation id="7209101170223508707">CAPS LOCK är på. Avbryt genom att trycka på Alt + Sök eller Skift.</translation>
 <translation id="7246339268451149667">Vill du aktivera upplåsning med fingeravtryck?</translation>
 <translation id="7256634071279256947">Mikrofonen på baksidan</translation>
 <translation id="7348093485538360975">Skärmtangentbord</translation>
@@ -232,10 +246,10 @@
 <translation id="7649070708921625228">Hjälp</translation>
 <translation id="7692480393933218409">Laddar anslutna USB-C-enheter</translation>
 <translation id="776344839111254542">Klicka här om du vill se mer information om uppdateringen</translation>
+<translation id="7798302898096527229">Avbryt genom att trycka på söktangenten eller Skift.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> och <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">Chromes språk har ändrats från <ph name="FROM_LOCALE" /> till <ph name="TO_LOCALE" /> efter synkronisering av dina inställningar.</translation>
 <translation id="7904094684485781019">Administratören för kontot tillåter inte multiinloggning.</translation>
-<translation id="7951523953736115461">Nattljus</translation>
 <translation id="7977927628060636163">Söker efter mobilnätverk …</translation>
 <translation id="7982789257301363584">Nätverk</translation>
 <translation id="8000066093800657092">Inget nätverk</translation>
@@ -249,11 +263,13 @@
 <translation id="8185286464235484130">Berätta hur vi sköter oss genom att besvara några frågor.</translation>
 <translation id="8190698733819146287">Anpassa språk och inmatning...</translation>
 <translation id="8308637677604853869">Föregående meny</translation>
+<translation id="8351131234907093545">Skapa anteckning</translation>
 <translation id="8428213095426709021">Inställningar</translation>
 <translation id="8433186206711564395">Nätverksinställningar</translation>
 <translation id="8433977262951327081">Kortkommandot för att visa menybubblan för inmatningsalternativ i hyllan har ändrats. Använd <ph name="NEW_SHORTCUT" /> i stället för <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="8454013096329229812">Wi-Fi är aktiverat.</translation>
 <translation id="847056008324733326">Inställningar för skala på skärmen</translation>
+<translation id="8477270416194247200">Avbryt genom att trycka på Alt + söktangenten eller Skift.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: återansluter …</translation>
 <translation id="8517041960877371778">Din <ph name="DEVICE_TYPE" /> laddas eventuellt inte så länge den är på.</translation>
 <translation id="8639760480004882931"><ph name="PERCENTAGE" /> återstår</translation>
@@ -264,6 +280,7 @@
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Sök+Escape</translation>
 <translation id="8878886163241303700">Utökad skärm</translation>
+<translation id="8921624153894383499">Google Assistent talar inte det här språket.</translation>
 <translation id="8938800817013097409">USB-C-enhet (högra porten på baksidan)</translation>
 <translation id="8940956008527784070">Låg batterinivå (<ph name="PERCENTAGE" /> %)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>

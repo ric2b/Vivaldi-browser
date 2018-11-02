@@ -5,7 +5,7 @@
 #include "services/ui/ws/frame_generator.h"
 
 #include "base/macros.h"
-#include "cc/output/compositor_frame_sink.h"
+#include "cc/quads/render_pass.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_external_begin_frame_source.h"
@@ -23,26 +23,25 @@ constexpr float kDefaultScaleFactor = 1.0f;
 constexpr float kArbitraryScaleFactor = 0.5f;
 constexpr gfx::Size kArbitrarySize(3, 4);
 constexpr gfx::Size kAnotherArbitrarySize(5, 6);
-const cc::SurfaceId kArbitrarySurfaceId(
-    cc::FrameSinkId(1, 1),
-    cc::LocalSurfaceId(1, base::UnguessableToken::Create()));
-const cc::SurfaceInfo kArbitrarySurfaceInfo(kArbitrarySurfaceId,
-                                            1.0f,
-                                            gfx::Size(100, 100));
+const viz::SurfaceId kArbitrarySurfaceId(
+    viz::FrameSinkId(1, 1),
+    viz::LocalSurfaceId(1, base::UnguessableToken::Create()));
+const viz::SurfaceInfo kArbitrarySurfaceInfo(kArbitrarySurfaceId,
+                                             1.0f,
+                                             gfx::Size(100, 100));
 }
 
 // TestClientBinding Observes a BeginFrame and accepts CompositorFrame submitted
 // from FrameGenerator. It provides a way to inspect CompositorFrames.
-class TestClientBinding : public cc::mojom::MojoCompositorFrameSink,
+class TestClientBinding : public cc::mojom::CompositorFrameSink,
                           public cc::BeginFrameObserver {
  public:
-  explicit TestClientBinding(
-      cc::mojom::MojoCompositorFrameSinkClient* sink_client)
+  explicit TestClientBinding(cc::mojom::CompositorFrameSinkClient* sink_client)
       : sink_client_(sink_client) {}
   ~TestClientBinding() override = default;
 
-  // cc::mojom::MojoCompositorFrameSink implementation:
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  // cc::mojom::CompositorFrameSink implementation:
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override {
     ++frames_submitted_;
     last_frame_ = std::move(frame);
@@ -63,8 +62,6 @@ class TestClientBinding : public cc::mojom::MojoCompositorFrameSink,
     } else
       begin_frame_source_->RemoveObserver(this);
   }
-
-  void EvictCurrentSurface() override {}
 
   // cc::BeginFrameObserver implementation.
   void OnBeginFrame(const cc::BeginFrameArgs& args) override {
@@ -97,7 +94,7 @@ class TestClientBinding : public cc::mojom::MojoCompositorFrameSink,
   }
 
  private:
-  cc::mojom::MojoCompositorFrameSinkClient* sink_client_;
+  cc::mojom::CompositorFrameSinkClient* sink_client_;
   cc::BeginFrameArgs last_begin_frame_args_;
   cc::CompositorFrame last_frame_;
   cc::BeginFrameSource* begin_frame_source_ = nullptr;
@@ -194,12 +191,12 @@ TEST_F(FrameGeneratorTest, OnSurfaceCreated) {
   // Verify that the CompositorFrame refers to the window manager's surface via
   // referenced_surfaces.
   const cc::CompositorFrameMetadata& last_metadata = LastMetadata();
-  const std::vector<cc::SurfaceId>& referenced_surfaces =
+  const std::vector<viz::SurfaceId>& referenced_surfaces =
       last_metadata.referenced_surfaces;
   EXPECT_EQ(1lu, referenced_surfaces.size());
   EXPECT_EQ(kArbitrarySurfaceId, referenced_surfaces.front());
 
-  cc::BeginFrameAck expected_ack(0, 2, 2, true);
+  cc::BeginFrameAck expected_ack(0, 2, true);
   EXPECT_EQ(expected_ack, LastBeginFrameAck());
   EXPECT_EQ(expected_ack, last_metadata.begin_frame_ack);
 
@@ -246,7 +243,7 @@ TEST_F(FrameGeneratorTest, WindowBoundsChanged) {
   InitWithSurfaceInfo();
 
   // Window bounds change triggers a BeginFrame.
-  constexpr int expected_render_pass_id = 1;
+  constexpr cc::RenderPassId expected_render_pass_id = 1u;
   frame_generator()->OnWindowSizeChanged(kArbitrarySize);
   IssueBeginFrame();
   EXPECT_EQ(2, NumberOfFramesReceived());

@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string16.h"
@@ -64,6 +65,9 @@ class TranslateHelper : public content::RenderFrameObserver,
   // translation.
   virtual bool HasTranslationFailed();
 
+  // Returns the error code generated in translate library.
+  virtual int64_t GetErrorCode();
+
   // Starts the translation by calling the translate library.  This method
   // should only be called when the translate script has been injected in the
   // page.  Returns false if the call failed immediately.
@@ -98,9 +102,21 @@ class TranslateHelper : public content::RenderFrameObserver,
   // run successfully. Otherwise, returns 0.0.
   virtual double ExecuteScriptAndGetDoubleResult(const std::string& script);
 
+  // Executes the JavaScript code in |script| in the main frame of RenderView.
+  // and returns the integer value returned by the script evaluation if the
+  // script was run successfully. Otherwise, returns 0.
+  virtual int64_t ExecuteScriptAndGetIntegerResult(const std::string& script);
+
  private:
+  FRIEND_TEST_ALL_PREFIXES(TranslateHelperTest, TestBuildTranslationScript);
+
   // Converts language code to the one used in server supporting list.
   static void ConvertLanguageCodeSynonym(std::string* code);
+
+  // Builds the translation JS used to translate from source_lang to
+  // target_lang.
+  static std::string BuildTranslationScript(const std::string& source_lang,
+                                            const std::string& target_lang);
 
   const mojom::ContentTranslateDriverPtr& GetTranslateDriver();
 

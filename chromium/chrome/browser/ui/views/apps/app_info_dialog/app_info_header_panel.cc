@@ -11,6 +11,7 @@
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "extensions/browser/extension_system.h"
@@ -24,6 +25,7 @@
 #include "net/base/url_util.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia.h"
@@ -35,7 +37,6 @@
 #include "ui/views/controls/link.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/view.h"
 
 namespace {
@@ -49,11 +50,12 @@ AppInfoHeaderPanel::AppInfoHeaderPanel(Profile* profile,
                                        const extensions::Extension* app)
     : AppInfoPanel(profile, app),
       weak_ptr_factory_(this) {
-  SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal,
-                           views::kButtonHEdgeMargin,
-                           views::kButtonVEdgeMargin,
-                           views::kRelatedControlHorizontalSpacing));
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+
+  SetLayoutManager(new views::BoxLayout(
+      views::BoxLayout::kHorizontal,
+      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS),
+      provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
 
   CreateControls();
 }
@@ -72,7 +74,7 @@ void AppInfoHeaderPanel::CreateControls() {
   // Create a vertical container to store the app's name and link.
   views::View* vertical_info_container = new views::View();
   views::BoxLayout* vertical_container_layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0);
+      new views::BoxLayout(views::BoxLayout::kVertical);
   vertical_container_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   vertical_info_container->SetLayoutManager(vertical_container_layout);

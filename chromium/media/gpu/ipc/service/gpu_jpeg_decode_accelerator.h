@@ -12,10 +12,12 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/threading/non_thread_safe.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "media/gpu/ipc/service/gpu_jpeg_decode_accelerator_factory_provider.h"
+#include "media/gpu/mojo/jpeg_decoder.mojom.h"
 #include "media/video/jpeg_decode_accelerator.h"
 
 namespace base {
@@ -28,22 +30,11 @@ class FilteredSender;
 
 namespace media {
 
-class GpuJpegDecodeAcceleratorFactoryProvider {
- public:
-  using CreateAcceleratorCB =
-      base::Callback<std::unique_ptr<JpegDecodeAccelerator>(
-          scoped_refptr<base::SingleThreadTaskRunner>)>;
-
-  // Static query for JPEG supported. This query calls the appropriate
-  // platform-specific version.
-  static bool IsAcceleratedJpegDecodeSupported();
-
-  static std::vector<CreateAcceleratorCB> GetAcceleratorFactories();
-};
-
+// TODO(c.padhi): Move GpuJpegDecodeAccelerator to media/gpu/mojo, see
+// http://crbug.com/699255.
 class GpuJpegDecodeAccelerator
     : public IPC::Sender,
-      public base::NonThreadSafe,
+      public mojom::GpuJpegDecodeAccelerator,
       public base::SupportsWeakPtr<GpuJpegDecodeAccelerator> {
  public:
   // |channel| must outlive this object.
@@ -67,6 +58,15 @@ class GpuJpegDecodeAccelerator
   void NotifyDecodeStatus(int32_t route_id,
                           int32_t bitstream_buffer_id,
                           JpegDecodeAccelerator::Error error);
+
+  // mojom::GpuJpegDecodeAccelerator implementation.
+  void Initialize(InitializeCallback callback) override;
+  void Decode(const BitstreamBuffer& input_buffer,
+              const gfx::Size& coded_size,
+              mojo::ScopedSharedBufferHandle output_handle,
+              uint32_t output_buffer_size,
+              DecodeCallback callback) override;
+  void Uninitialize() override;
 
   // Function to delegate sending to actual sender.
   bool Send(IPC::Message* message) override;
@@ -93,6 +93,8 @@ class GpuJpegDecodeAccelerator
 
   // Number of clients added to |filter_|.
   int client_number_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_IMPLICIT_CONSTRUCTORS(GpuJpegDecodeAccelerator);
 };

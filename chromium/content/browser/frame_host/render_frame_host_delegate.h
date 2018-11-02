@@ -18,9 +18,9 @@
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/media_stream_request.h"
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 #include "net/http/http_response_headers.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/base/window_open_disposition.h"
 
 #if defined(OS_WIN)
@@ -39,7 +39,7 @@ class Message;
 }
 
 namespace device {
-class GeolocationServiceContext;
+class GeolocationContext;
 }
 
 namespace gfx {
@@ -189,11 +189,11 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
       RenderFrameHost* render_frame_host,
       int browser_plugin_instance_id);
 
-  // Gets the GeolocationServiceContext associated with this delegate.
-  virtual device::GeolocationServiceContext* GetGeolocationServiceContext();
+  // Gets the GeolocationContext associated with this delegate.
+  virtual device::GeolocationContext* GetGeolocationContext();
 
-  // Gets the WakeLockService that serves wake lock requests from the renderer.
-  virtual device::mojom::WakeLockService* GetRendererWakeLock();
+  // Gets the WakeLock that serves wake lock requests from the renderer.
+  virtual device::mojom::WakeLock* GetRendererWakeLock();
 
 #if defined(OS_ANDROID)
   // Gets an NFC implementation within the context of this delegate.
@@ -233,6 +233,18 @@ class CONTENT_EXPORT RenderFrameHostDelegate {
   // Set the |node| frame as focused in the current FrameTree as well as
   // possibly changing focus in distinct but related inner/outer WebContents.
   virtual void SetFocusedFrame(FrameTreeNode* node, SiteInstance* source) {}
+
+  // Searches the WebContents for a focused frame, potentially in an inner
+  // WebContents. If this WebContents has no focused frame, returns |nullptr|.
+  // If there is no inner WebContents at the focused tree node, returns its
+  // RenderFrameHost. If there is an inner WebContents, search it for focused
+  // frames and inner contents. If an inner WebContents does not have a focused
+  // frame, return its main frame, since the attachment frame in its outer
+  // WebContents is not live.
+  virtual RenderFrameHost* GetFocusedFrameIncludingInnerWebContents();
+
+  // Called by when |source_rfh| advances focus to a RenderFrameProxyHost.
+  virtual void OnAdvanceFocus(RenderFrameHostImpl* source_rfh) {}
 
   // Creates a WebUI object for a frame navigating to |url|. If no WebUI
   // applies, returns null.

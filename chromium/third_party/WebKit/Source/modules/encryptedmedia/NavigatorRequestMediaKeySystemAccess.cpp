@@ -30,6 +30,7 @@
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebEncryptedMediaClient.h"
 #include "public/platform/WebEncryptedMediaRequest.h"
+#include "public/platform/WebFeaturePolicyFeature.h"
 #include "public/platform/WebMediaKeySystemConfiguration.h"
 #include "public/platform/WebMediaKeySystemMediaCapability.h"
 #include "public/platform/WebVector.h"
@@ -244,8 +245,7 @@ void MediaKeySystemAccessInitializer::CheckVideoCapabilityRobustness() const {
   if (has_video_capabilities) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         EnumerationHistogram, empty_robustness_histogram,
-        new EnumerationHistogram(
-            "Media.EME.Widevine.VideoCapability.HasEmptyRobustness", 2));
+        ("Media.EME.Widevine.VideoCapability.HasEmptyRobustness", 2));
     empty_robustness_histogram.Count(has_empty_robustness);
   }
 
@@ -327,6 +327,12 @@ ScriptPromise NavigatorRequestMediaKeySystemAccess::requestMediaKeySystemAccess(
             kInvalidStateError,
             "The context provided is not associated with a page."));
   }
+
+  UseCounter::Count(*document, WebFeature::kEncryptedMediaSecureOrigin);
+  UseCounter::CountCrossOriginIframe(
+      *document, WebFeature::kEncryptedMediaCrossOriginIframe);
+  Deprecation::CountDeprecationFeaturePolicy(*document,
+                                             WebFeaturePolicyFeature::kEme);
 
   // 4. Let origin be the origin of document.
   //    (Passed with the execution context.)

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "build/build_config.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/default_style.h"
 #include "ui/base/hit_test.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -23,14 +24,12 @@
 #include "ui/native_theme/native_theme.h"
 #include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/bubble/bubble_dialog_delegate.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/widget/widget.h"
@@ -82,18 +81,15 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
       title_margins_(title_margins),
       content_margins_(content_margins),
       title_icon_(new views::ImageView()),
-      title_(nullptr),
+      default_title_(CreateDefaultTitleLabel(base::string16()).release()),
+      custom_title_(nullptr),
       close_(nullptr),
       footnote_container_(nullptr),
       close_button_clicked_(false) {
   AddChildView(title_icon_);
 
-  title_ = new Label(base::string16(), style::CONTEXT_DIALOG_TITLE);
-  title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  title_->set_collapse_when_hidden(true);
-  title_->SetVisible(false);
-  title_->SetMultiLine(true);
-  AddChildView(title_);
+  default_title_->SetVisible(false);
+  AddChildView(default_title_);
 
   close_ = CreateCloseButton(this);
   close_->SetVisible(false);
@@ -108,11 +104,21 @@ BubbleFrameView::BubbleFrameView(const gfx::Insets& title_margins,
 BubbleFrameView::~BubbleFrameView() {}
 
 // static
+std::unique_ptr<Label> BubbleFrameView::CreateDefaultTitleLabel(
+    const base::string16& title_text) {
+  auto title = base::MakeUnique<Label>(title_text, style::CONTEXT_DIALOG_TITLE);
+  title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title->set_collapse_when_hidden(true);
+  title->SetMultiLine(true);
+  return title;
+}
+
+// static
 Button* BubbleFrameView::CreateCloseButton(ButtonListener* listener) {
   ImageButton* close_button = nullptr;
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
     close_button = CreateVectorImageButton(listener);
-    SetImageFromVectorIcon(close_button, ui::kCloseIcon);
+    SetImageFromVectorIcon(close_button, vector_icons::kCloseIcon);
   } else {
     ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
     close_button = new ImageButton(listener);
@@ -127,12 +133,20 @@ Button* BubbleFrameView::CreateCloseButton(ButtonListener* listener) {
   }
   close_button->SetTooltipText(l10n_util::GetStringUTF16(IDS_APP_CLOSE));
   close_button->SizeToPreferredSize();
+
+  // Remove the close button from tab traversal on all platforms. Note this does
+  // not affect screen readers' ability to focus the close button. Keyboard
+  // access to the close button when not using a screen reader is done via the
+  // ESC key handler in DialogClientView.
+  close_button->SetFocusBehavior(View::FocusBehavior::NEVER);
   return close_button;
 }
 
 gfx::Rect BubbleFrameView::GetBoundsForClientView() const {
+  // When NonClientView asks for this, the size of the frame view has been set
+  // (i.e. |this|), but not the client view bounds.
   gfx::Rect client_bounds = GetContentsBounds();
-  client_bounds.Inset(GetInsets());
+  client_bounds.Inset(GetClientInsetsForFrameWidth(client_bounds.width()));
   if (footnote_container_) {
     client_bounds.set_height(client_bounds.height() -
                              footnote_container_->height());
@@ -142,12 +156,17 @@ gfx::Rect BubbleFrameView::GetBoundsForClientView() const {
 
 gfx::Rect BubbleFrameView::GetWindowBoundsForClientBounds(
     const gfx::Rect& client_bounds) const {
-  gfx::Size size(GetSizeForClientSize(client_bounds.size()));
+  gfx::Size size(GetFrameSizeForClientSize(client_bounds.size()));
   return bubble_border_->GetBounds(gfx::Rect(), size);
 }
 
 bool BubbleFrameView::GetClientMask(const gfx::Size& size,
                                     gfx::Path* path) const {
+  // NonClientView calls this after setting the client view size from the return
+  // of GetBoundsForClientView(); feeding it back in |size|.
+  DCHECK(GetBoundsForClientView().size() == size);
+  DCHECK(GetWidget()->client_view()->size() == size);
+
   const int radius = bubble_border_->GetBorderCornerRadius();
   gfx::Insets content_insets = GetInsets();
   // If the client bounds don't touch the edges, no need to mask.
@@ -175,7 +194,7 @@ int BubbleFrameView::NonClientHitTest(const gfx::Point& point) {
     sys_rect.set_origin(gfx::Point(GetMirroredXForRect(sys_rect), 0));
     if (sys_rect.Contains(point))
       return HTSYSMENU;
-    if (point.y() < title_->bounds().bottom())
+    if (point.y() < title()->bounds().bottom())
       return HTCAPTION;
   }
 
@@ -234,14 +253,23 @@ void BubbleFrameView::UpdateWindowIcon() {
 }
 
 void BubbleFrameView::UpdateWindowTitle() {
-  title_->SetText(GetWidget()->widget_delegate()->GetWindowTitle());
-  title_->SetVisible(GetWidget()->widget_delegate()->ShouldShowWindowTitle());
+  if (default_title_) {
+    const WidgetDelegate* delegate = GetWidget()->widget_delegate();
+    default_title_->SetVisible(delegate->ShouldShowWindowTitle());
+    default_title_->SetText(delegate->GetWindowTitle());
+  }  // custom_title_'s updates are handled by its creator.
 }
 
 void BubbleFrameView::SizeConstraintsChanged() {}
 
-void BubbleFrameView::SetTitleFontList(const gfx::FontList& font_list) {
-  title_->SetFontList(font_list);
+void BubbleFrameView::SetTitleView(std::unique_ptr<View> title_view) {
+  DCHECK(title_view);
+  delete default_title_;
+  default_title_ = nullptr;
+  delete custom_title_;
+  custom_title_ = title_view.get();
+  // Keep the title after the icon for focus order.
+  AddChildViewAt(title_view.release(), 1);
 }
 
 const char* BubbleFrameView::GetClassName() const {
@@ -249,20 +277,7 @@ const char* BubbleFrameView::GetClassName() const {
 }
 
 gfx::Insets BubbleFrameView::GetInsets() const {
-  gfx::Insets insets = content_margins_;
-
-  const int icon_height = title_icon_->GetPreferredSize().height();
-  const int label_height = title_->GetPreferredSize().height();
-  const bool has_title = icon_height > 0 || label_height > 0;
-  const int title_padding = has_title ? title_margins_.height() : 0;
-  const int title_height = std::max(icon_height, label_height) + title_padding;
-  const int close_height =
-      GetWidget()->widget_delegate()->ShouldShowCloseButton()
-          ? close_->height() + LayoutProvider::Get()->GetDistanceMetric(
-                                   DISTANCE_CLOSE_BUTTON_MARGIN)
-          : 0;
-  insets += gfx::Insets(std::max(title_height, close_height), 0, 0, 0);
-  return insets;
+  return GetClientInsetsForFrameWidth(GetContentsBounds().width());
 }
 
 gfx::Size BubbleFrameView::CalculatePreferredSize() const {
@@ -305,7 +320,8 @@ gfx::Size BubbleFrameView::GetMaximumSize() const {
 void BubbleFrameView::Layout() {
   // The title margins may not be set, but make sure that's only the case when
   // there's no title.
-  DCHECK(!title_margins_.IsEmpty() || !title_->visible());
+  DCHECK(!title_margins_.IsEmpty() ||
+         (!custom_title_ && !default_title_->visible()));
 
   const gfx::Rect contents_bounds = GetContentsBounds();
   gfx::Rect bounds = contents_bounds;
@@ -313,33 +329,45 @@ void BubbleFrameView::Layout() {
   if (bounds.IsEmpty())
     return;
 
-  // The close button is positioned somewhat closer to the edge of the bubble.
-  const int close_margin =
-      LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
-  close_->SetPosition(
-      gfx::Point(contents_bounds.right() - close_margin - close_->width(),
-                 contents_bounds.y() + close_margin));
+  int title_label_right = bounds.right();
+  if (close_->visible()) {
+    // The close button is positioned somewhat closer to the edge of the bubble.
+    const int close_margin =
+        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+    close_->SetPosition(
+        gfx::Point(contents_bounds.right() - close_margin - close_->width(),
+                   contents_bounds.y() + close_margin));
+    title_label_right = std::min(title_label_right, close_->x() - close_margin);
+  }
 
   gfx::Size title_icon_pref_size(title_icon_->GetPreferredSize());
-  int padding = 0;
-  int title_height = title_icon_pref_size.height();
+  const int title_icon_padding =
+      title_icon_pref_size.width() > 0 ? title_margins_.left() : 0;
+  const int title_label_x =
+      bounds.x() + title_icon_pref_size.width() + title_icon_padding;
 
-  if (title_->visible() && !title_->text().empty()) {
-    if (title_icon_pref_size.width() > 0)
-      padding = title_margins_.left();
-
-    const int title_label_x =
-        bounds.x() + title_icon_pref_size.width() + padding;
-    title_->SizeToFit(std::max(1, close_->x() - title_label_x));
-    title_height = std::max(title_height, title_->height());
-    title_->SetPosition(gfx::Point(
-        title_label_x, bounds.y() + (title_height - title_->height()) / 2));
+  // TODO(tapted): Layout() should skip more surrounding code when !HasTitle().
+  // Currently DCHECKs fail since title_insets is 0 when there is no title.
+  if (DCHECK_IS_ON() && HasTitle()) {
+    gfx::Insets title_insets = GetTitleLabelInsetsFromFrame();
+    if (border())
+      title_insets += border()->GetInsets();
+    DCHECK_EQ(title_insets.left(), title_label_x);
+    DCHECK_EQ(title_insets.right(), width() - title_label_right);
   }
+
+  const int title_available_width =
+      std::max(1, title_label_right - title_label_x);
+  const int title_preferred_height =
+      title()->GetHeightForWidth(title_available_width);
+  const int title_height =
+      std::max(title_icon_pref_size.height(), title_preferred_height);
+  title()->SetBounds(title_label_x,
+                     bounds.y() + (title_height - title_preferred_height) / 2,
+                     title_available_width, title_height);
 
   title_icon_->SetBounds(bounds.x(), bounds.y(), title_icon_pref_size.width(),
                          title_height);
-  bounds.set_width(title_->bounds().right() - bounds.x());
-  bounds.set_height(title_height);
 
   if (footnote_container_) {
     const int width = contents_bounds.width();
@@ -401,7 +429,7 @@ void BubbleFrameView::SetBubbleBorder(std::unique_ptr<BubbleBorder> border) {
   SetBorder(std::move(border));
 
   // Update the background, which relies on the border.
-  set_background(new views::BubbleBackground(bubble_border_));
+  SetBackground(base::MakeUnique<views::BubbleBackground>(bubble_border_));
 }
 
 void BubbleFrameView::SetFootnoteView(View* view) {
@@ -411,10 +439,9 @@ void BubbleFrameView::SetFootnoteView(View* view) {
   DCHECK(!footnote_container_);
   footnote_container_ = new views::View();
   footnote_container_->SetLayoutManager(
-      new BoxLayout(BoxLayout::kVertical, content_margins_.left(),
-                    content_margins_.top(), 0));
-  footnote_container_->set_background(
-      Background::CreateSolidBackground(kFootnoteBackgroundColor));
+      new BoxLayout(BoxLayout::kVertical, content_margins_, 0));
+  footnote_container_->SetBackground(
+      CreateSolidBackground(kFootnoteBackgroundColor));
   footnote_container_->SetBorder(
       CreateSolidSidedBorder(1, 0, 0, 0, kFootnoteBorderColor));
   footnote_container_->AddChildView(view);
@@ -424,7 +451,7 @@ void BubbleFrameView::SetFootnoteView(View* view) {
 gfx::Rect BubbleFrameView::GetUpdatedWindowBounds(const gfx::Rect& anchor_rect,
                                                   const gfx::Size& client_size,
                                                   bool adjust_if_offscreen) {
-  gfx::Size size(GetSizeForClientSize(client_size));
+  gfx::Size size(GetFrameSizeForClientSize(client_size));
 
   const BubbleBorder::Arrow arrow = bubble_border_->arrow();
   if (adjust_if_offscreen && BubbleBorder::has_arrow(arrow)) {
@@ -526,32 +553,77 @@ void BubbleFrameView::OffsetArrowIfOffScreen(const gfx::Rect& anchor_rect,
     SchedulePaint();
 }
 
-gfx::Size BubbleFrameView::GetSizeForClientSize(
-    const gfx::Size& client_size) const {
-  // Accommodate the width of the title bar elements.
-  int title_bar_width = title_margins_.width() + border()->GetInsets().width();
-  gfx::Size title_icon_size = title_icon_->GetPreferredSize();
-  gfx::Size title_label_size = title_->GetPreferredSize();
-  if (title_icon_size.width() > 0 && title_label_size.width() > 0)
-    title_bar_width += title_margins_.left();
-  title_bar_width += title_icon_size.width();
-  if (close_->visible())
-    title_bar_width += close_->width() + 1;
+int BubbleFrameView::GetFrameWidthForClientWidth(int client_width) const {
+  // Note that GetMinimumSize() for multiline Labels is typically 0.
+  const int title_bar_width = title()->GetMinimumSize().width() +
+                              GetTitleLabelInsetsFromFrame().width();
+  const int client_area_width = client_width + content_margins_.width();
+  const int frame_width = std::max(title_bar_width, client_area_width);
+  DialogDelegate* dialog_delegate =
+      GetWidget()->widget_delegate()->AsDialogDelegate();
+  return dialog_delegate && dialog_delegate->ShouldSnapFrameWidth()
+             ? LayoutProvider::Get()->GetSnappedDialogWidth(frame_width)
+             : frame_width;
+}
 
-  gfx::Size size(client_size);
-  gfx::Insets client_insets = GetInsets();
-  size.Enlarge(client_insets.width(), client_insets.height());
-  size.SetToMax(gfx::Size(title_bar_width, 0));
+gfx::Size BubbleFrameView::GetFrameSizeForClientSize(
+    const gfx::Size& client_size) const {
+  const int frame_width = GetFrameWidthForClientWidth(client_size.width());
+  const gfx::Insets client_insets = GetClientInsetsForFrameWidth(frame_width);
+  DCHECK_GE(frame_width, client_size.width());
+  gfx::Size size(frame_width, client_size.height() + client_insets.height());
 
   if (footnote_container_)
     size.Enlarge(0, footnote_container_->GetHeightForWidth(size.width()));
 
-  DialogDelegate* dialog_delegate =
-      GetWidget()->widget_delegate()->AsDialogDelegate();
-  if (dialog_delegate && dialog_delegate->ShouldSnapFrameWidth())
-    size.set_width(LayoutProvider::Get()->GetSnappedDialogWidth(size.width()));
-
   return size;
+}
+
+bool BubbleFrameView::HasTitle() const {
+  return custom_title_ != nullptr ||
+         default_title_->GetPreferredSize().height() > 0 ||
+         title_icon_->GetPreferredSize().height() > 0;
+}
+
+gfx::Insets BubbleFrameView::GetTitleLabelInsetsFromFrame() const {
+  int insets_right = 0;
+  if (GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
+    const int close_margin =
+        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+    insets_right = 2 * close_margin + close_->width();
+  }
+  if (!HasTitle())
+    return gfx::Insets(0, 0, 0, insets_right);
+
+  insets_right = std::max(insets_right, title_margins_.right());
+  const gfx::Size title_icon_pref_size = title_icon_->GetPreferredSize();
+  const int title_icon_padding =
+      title_icon_pref_size.width() > 0 ? title_margins_.left() : 0;
+  const int insets_left =
+      title_margins_.left() + title_icon_pref_size.width() + title_icon_padding;
+  return gfx::Insets(title_margins_.top(), insets_left, title_margins_.bottom(),
+                     insets_right);
+}
+
+gfx::Insets BubbleFrameView::GetClientInsetsForFrameWidth(
+    int frame_width) const {
+  int close_height = 0;
+  if (GetWidget()->widget_delegate()->ShouldShowCloseButton()) {
+    const int close_margin =
+        LayoutProvider::Get()->GetDistanceMetric(DISTANCE_CLOSE_BUTTON_MARGIN);
+    // Note: |close_margin| is not applied on the bottom of the icon.
+    close_height = close_margin + close_->height();
+  }
+  if (!HasTitle())
+    return content_margins_ + gfx::Insets(close_height, 0, 0, 0);
+
+  const int icon_height = title_icon_->GetPreferredSize().height();
+  const int label_height = title()->GetHeightForWidth(
+      frame_width - GetTitleLabelInsetsFromFrame().width());
+  const int title_height =
+      std::max(icon_height, label_height) + title_margins_.height();
+  return content_margins_ +
+         gfx::Insets(std::max(title_height, close_height), 0, 0, 0);
 }
 
 }  // namespace views

@@ -68,17 +68,39 @@ PlayerUtils.registerEMEEventListeners = function(player) {
 
     try {
       if (player.testConfig.sessionToLoad) {
-        Utils.timeLog('Loading session: ' + player.testConfig.sessionToLoad);
-        player.session =
-            message.target.mediaKeys.createSession('persistent-license');
-        addMediaKeySessionListeners(player.session);
-        player.session.load(player.testConfig.sessionToLoad)
+        // Create a session to load using a new MediaKeys.
+        // TODO(jrummell): Add a test that covers remove().
+        player.access.createMediaKeys()
+            .then(function(mediaKeys) {
+              // As the tests run with a different origin every time, there is
+              // no way currently to create a session in one test and then load
+              // it in a subsequent test (https://crbug.com/715349).
+              // So if |sessionToLoad| is 'LoadableSession', create a session
+              // that can be loaded and use that session to load. Otherwise
+              // use the name provided (which allows for testing load() on a
+              // session which doesn't exist).
+              if (player.testConfig.sessionToLoad == 'LoadableSession') {
+                return Utils.createSessionToLoad(
+                    mediaKeys, player.testConfig.sessionToLoad);
+              } else {
+                return player.testConfig.sessionToLoad;
+              }
+            })
+            .then(function(sessionId) {
+              Utils.timeLog('Loading session: ' + sessionId);
+              player.session =
+                  message.target.mediaKeys.createSession('persistent-license');
+              addMediaKeySessionListeners(player.session);
+              return player.session.load(sessionId);
+            })
             .then(
                 function(result) {
                   if (!result)
                     Utils.failTest('Session not found.', EME_SESSION_NOT_FOUND);
                 },
-                function(error) { Utils.failTest(error, EME_LOAD_FAILED); });
+                function(error) {
+                  Utils.failTest(error, EME_LOAD_FAILED);
+                });
       } else {
         Utils.timeLog('Creating new media key session for initDataType: ' +
                       message.initDataType + ', initData: ' +
@@ -101,6 +123,7 @@ PlayerUtils.registerEMEEventListeners = function(player) {
 
   this.registerDefaultEventListeners(player);
   player.video.receivedKeyMessage = false;
+  player.video.receivedRenewalMessage = false;
   Utils.timeLog('Setting video media keys: ' + player.testConfig.keySystem);
 
   var config = {
@@ -163,12 +186,19 @@ PlayerUtils.registerEMEEventListeners = function(player) {
 
   return navigator
       .requestMediaKeySystemAccess(player.testConfig.keySystem, [config])
-      .then(function(access) { return access.createMediaKeys(); })
+      .then(function(access) {
+        player.access = access;
+        return access.createMediaKeys();
+      })
       .then(function(mediaKeys) {
         return player.video.setMediaKeys(mediaKeys);
       })
-      .then(function(result) { return player; })
-      .catch(function(error) { Utils.failTest(error, NOTSUPPORTEDERROR); });
+      .then(function(result) {
+        return player;
+      })
+      .catch(function(error) {
+        Utils.failTest(error, NOTSUPPORTEDERROR);
+      });
 };
 
 PlayerUtils.setVideoSource = function(player) {
@@ -209,6 +239,7 @@ PlayerUtils.createPlayer = function(video, testConfig) {
       case OUTPUT_PROTECTION_TEST_KEYSYSTEM:
       case PLATFORM_VERIFICATION_TEST_KEYSYSTEM:
       case VERIFY_HOST_FILES_TEST_KEYSYSTEM:
+      case STORAGE_ID_TEST_KEYSYSTEM:
         return UnitTestPlayer;
       default:
         Utils.timeLog(keySystem + ' is not a known key system');

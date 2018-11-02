@@ -40,16 +40,17 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
   // Returns whether MD is enabled; exists for the sake of brevity.
   static bool UseMd();
 
-  // Overridden from LabelButton:
+  // LabelButton:
   const char* GetClassName() const override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
-  void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
+  std::unique_ptr<InkDrop> CreateInkDrop() override;
   std::unique_ptr<InkDropRipple> CreateInkDropRipple() const override;
   SkColor GetInkDropBaseColor() const override;
   gfx::ImageSkia GetImage(ButtonState for_state) const override;
+  std::unique_ptr<LabelButtonBorder> CreateDefaultBorder() const override;
 
   // Set the image shown for each button state depending on whether it is
   // [checked] or [focused].
@@ -58,14 +59,18 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
                       ButtonState for_state,
                       const gfx::ImageSkia& image);
 
-  // Paints a focus indicator for the view.
-  virtual void PaintFocusRing(gfx::Canvas* canvas, const cc::PaintFlags& flags);
+  // Paints a focus indicator for the view. Overridden in RadioButton.
+  virtual void PaintFocusRing(View* view,
+                              gfx::Canvas* canvas,
+                              const cc::PaintFlags& flags);
 
   // Gets the vector icon to use based on the current state of |checked_|.
   virtual const gfx::VectorIcon& GetVectorIcon() const;
 
  private:
-  // Overridden from Button:
+  friend class IconFocusRing;
+
+  // Button:
   void NotifyClick(const ui::Event& event) override;
 
   ui::NativeTheme::Part GetThemePart() const override;
@@ -73,6 +78,9 @@ class VIEWS_EXPORT Checkbox : public LabelButton {
 
   // True if the checkbox is checked.
   bool checked_;
+
+  // FocusRing used in MD mode
+  View* focus_ring_ = nullptr;
 
   // The images for each button node_data.
   gfx::ImageSkia images_[2][2][STATE_COUNT];

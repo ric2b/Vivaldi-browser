@@ -5,6 +5,7 @@
 module media.mojom;
 
 import "gpu/ipc/common/sync_token.mojom";
+import "media/mojo/interfaces/media_log.mojom";
 import "media/mojo/interfaces/media_types.mojom";
 import "mojo/common/unguessable_token.mojom";
 
@@ -28,6 +29,7 @@ interface VideoDecoder {
   // TODO(sandersd): Rename to Initialize() if/when
   // media::VideoDecoder::Initialize() is renamed to Configure().
   Construct(associated VideoDecoderClient client,
+            associated MediaLog media_log,
             handle<data_pipe_consumer> decoder_buffer_pipe,
             CommandBufferId? command_buffer_id);
 
@@ -75,9 +77,16 @@ interface VideoDecoder {
 };
 
 interface VideoDecoderClient {
-  // Output a decoded frame. Frames must be output in presentation order. If
-  // |release_token| is provided, the client should call OnReleaseMailbox() when
-  // it is finished with the frame.
+  // Output a decoded frame. Frames must be output in presentation order.
+  //
+  // When |can_read_without_stalling| is false, preroll is disabled. This is
+  // necessary if the decoder cannot guarantee that it can output another frame,
+  // for example if output buffers are limited or configuration changes require
+  // the return of all outstanding frames.
+  //
+  // If |release_token| is provided, the client shall call OnReleaseMailbox()
+  // when it is finished using the frame.
   OnVideoFrameDecoded(VideoFrame frame,
+                      bool can_read_without_stalling,
                       mojo.common.mojom.UnguessableToken? release_token);
 };

@@ -5,6 +5,8 @@
 #ifndef MEDIA_TEST_MOCK_MEDIA_SOURCE_H_
 #define MEDIA_TEST_MOCK_MEDIA_SOURCE_H_
 
+#include <limits>
+
 #include "base/files/file_path.h"
 #include "base/time/time.h"
 #include "media/base/demuxer.h"
@@ -15,7 +17,7 @@
 namespace media {
 
 // Indicates that the whole file should be appended.
-extern const size_t kAppendWholeFile;
+constexpr size_t kAppendWholeFile = std::numeric_limits<size_t>::max();
 
 // Helper class that emulates calls made on the ChunkDemuxer by the
 // Media Source API.
@@ -65,10 +67,12 @@ class MockMediaSource {
     return last_timestamp_offset_;
   }
 
+  const base::FilePath file_path() { return file_path_; }
+
   void InitSegmentReceived(std::unique_ptr<MediaTracks> tracks);
   MOCK_METHOD1(InitSegmentReceivedMock, void(std::unique_ptr<MediaTracks>&));
 
-  const base::FilePath file_path() { return file_path_; }
+  MOCK_METHOD1(OnParseWarningMock, void(const SourceBufferParseWarning));
 
  private:
   MediaLog media_log_;

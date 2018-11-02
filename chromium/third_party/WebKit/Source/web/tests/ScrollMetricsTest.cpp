@@ -2,20 +2,20 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/dom/ClientRect.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
+#include "core/frame/WebLocalFrameBase.h"
+#include "core/geometry/DOMRect.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayerScrollableArea.h"
+#include "core/testing/sim/SimDisplayItemList.h"
+#include "core/testing/sim/SimRequest.h"
+#include "core/testing/sim/SimTest.h"
 #include "platform/scroll/MainThreadScrollingReason.h"
 #include "platform/scroll/ScrollerSizeMetrics.h"
 #include "platform/testing/HistogramTester.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/UnitTestHelpers.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/tests/sim/SimDisplayItemList.h"
-#include "web/tests/sim/SimRequest.h"
-#include "web/tests/sim/SimTest.h"
 
 #define EXPECT_WHEEL_BUCKET(reason, count)     \
   histogram_tester.ExpectBucketCount(          \
@@ -101,7 +101,7 @@ void ScrollMetricsTest::Scroll(Element* element,
                                const WebGestureDevice device) {
   DCHECK(element);
   DCHECK(element->getBoundingClientRect());
-  ClientRect* rect = element->getBoundingClientRect();
+  DOMRect* rect = element->getBoundingClientRect();
   ScrollBeginEventBuilder scroll_begin(
       IntPoint(rect->left() + rect->width() / 2,
                rect->top() + rect->height() / 2),

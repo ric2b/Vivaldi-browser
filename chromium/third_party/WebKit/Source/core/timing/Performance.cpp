@@ -46,7 +46,7 @@
 #include "platform/loader/fetch/ResourceTimingInfo.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
-static const double kLongTaskThreshold = 0.05;
+static const double kLongTaskObserverThreshold = 0.05;
 
 static const char kUnknownAttribution[] = "unknown";
 static const char kAmbiguousAttribution[] = "multiple-contexts";
@@ -136,7 +136,7 @@ PerformanceTiming* Performance::timing() const {
 }
 
 PerformanceNavigationTiming* Performance::CreateNavigationTimingInstance() {
-  if (!RuntimeEnabledFeatures::performanceNavigationTiming2Enabled())
+  if (!RuntimeEnabledFeatures::PerformanceNavigationTiming2Enabled())
     return nullptr;
   if (!GetFrame())
     return nullptr;
@@ -146,7 +146,11 @@ PerformanceNavigationTiming* Performance::CreateNavigationTimingInstance() {
   ResourceTimingInfo* info = document_loader->GetNavigationTimingInfo();
   if (!info)
     return nullptr;
-  return new PerformanceNavigationTiming(GetFrame(), info, TimeOrigin());
+  PerformanceServerTimingVector serverTiming =
+      PerformanceServerTiming::ParseServerTiming(
+          *info, PerformanceServerTiming::ShouldAllowTimingDetails::Yes);
+  return new PerformanceNavigationTiming(GetFrame(), info, TimeOrigin(),
+                                         serverTiming);
 }
 
 void Performance::UpdateLongTaskInstrumentation() {
@@ -156,9 +160,9 @@ void Performance::UpdateLongTaskInstrumentation() {
 
   if (HasObserverFor(PerformanceEntry::kLongTask)) {
     UseCounter::Count(&GetFrame()->LocalFrameRoot(),
-                      UseCounter::kLongTaskObserver);
+                      WebFeature::kLongTaskObserver);
     GetFrame()->GetPerformanceMonitor()->Subscribe(
-        PerformanceMonitor::kLongTask, kLongTaskThreshold, this);
+        PerformanceMonitor::kLongTask, kLongTaskObserverThreshold, this);
   } else {
     GetFrame()->GetPerformanceMonitor()->UnsubscribeAll(this);
   }

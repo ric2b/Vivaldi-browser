@@ -26,18 +26,17 @@ class ShellDelegateMus : public ShellDelegate {
   bool IsIncognitoAllowed() const override;
   bool IsMultiProfilesEnabled() const override;
   bool IsRunningInForcedAppMode() const override;
-  bool CanShowWindowForUser(WmWindow* window) const override;
+  bool CanShowWindowForUser(aura::Window* window) const override;
   bool IsForceMaximizeOnFirstRun() const override;
   void PreInit() override;
   void PreShutdown() override;
   void Exit() override;
-  keyboard::KeyboardUI* CreateKeyboardUI() override;
+  std::unique_ptr<keyboard::KeyboardUI> CreateKeyboardUI() override;
   void OpenUrlFromArc(const GURL& url) override;
   void ShelfInit() override;
   void ShelfShutdown() override;
   SystemTrayDelegate* CreateSystemTrayDelegate() override;
   std::unique_ptr<WallpaperDelegate> CreateWallpaperDelegate() override;
-  SessionStateDelegate* CreateSessionStateDelegate() override;
   AccessibilityDelegate* CreateAccessibilityDelegate() override;
   std::unique_ptr<PaletteDelegate> CreatePaletteDelegate() override;
   ui::MenuModel* CreateContextMenu(Shelf* shelf,
@@ -46,14 +45,23 @@ class ShellDelegateMus : public ShellDelegate {
   base::string16 GetProductName() const override;
   gfx::Image GetDeprecatedAcceleratorImage() const override;
   PrefService* GetActiveUserPrefService() const override;
+  PrefService* GetLocalStatePrefService() const override;
   bool IsTouchscreenEnabledInPrefs(bool use_local_state) const override;
   void SetTouchscreenEnabledInPrefs(bool enabled,
                                     bool use_local_state) override;
   void UpdateTouchscreenStatusFromPrefs() override;
+#if defined(USE_OZONE)
+  ui::InputDeviceControllerClient* GetInputDeviceControllerClient() override;
+#endif
 
  private:
   // |connector_| may be null in tests.
   service_manager::Connector* connector_;
+
+#if defined(USE_OZONE)
+  std::unique_ptr<ui::InputDeviceControllerClient>
+      input_device_controller_client_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ShellDelegateMus);
 };

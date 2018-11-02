@@ -10,7 +10,7 @@
 #include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/download/all_download_item_notifier.h"
+#include "components/download/content/public/all_download_item_notifier.h"
 #include "components/drive/file_errors.h"
 #include "content/public/browser/download_manager_delegate.h"
 
@@ -27,7 +27,7 @@ class FileSystemInterface;
 
 // Observes downloads to temporary local drive folder. Schedules these
 // downloads for upload to drive service.
-class DownloadHandler : public AllDownloadItemNotifier::Observer {
+class DownloadHandler : public download::AllDownloadItemNotifier::Observer {
  public:
   explicit DownloadHandler(FileSystemInterface* file_system);
   ~DownloadHandler() override;
@@ -122,8 +122,8 @@ class DownloadHandler : public AllDownloadItemNotifier::Observer {
   FileSystemInterface* file_system_;  // Owned by DriveIntegrationService.
 
   // Observe the DownloadManager for new downloads.
-  std::unique_ptr<AllDownloadItemNotifier> notifier_;
-  std::unique_ptr<AllDownloadItemNotifier> notifier_incognito_;
+  std::unique_ptr<download::AllDownloadItemNotifier> notifier_;
+  std::unique_ptr<download::AllDownloadItemNotifier> notifier_incognito_;
 
   // Temporary download location directory.
   base::FilePath drive_tmp_download_path_;

@@ -15,7 +15,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/trace_event/trace_event.h"
 #include "ui/gfx/buffer_format_util.h"
-#include "ui/gfx/switches.h"
+#include "ui/gfx/color_space_switches.h"
 
 namespace gfx {
 
@@ -46,6 +46,7 @@ int32_t BytesPerElement(gfx::BufferFormat format, int plane) {
       static int32_t bytes_per_element[] = {1, 2};
       DCHECK_LT(static_cast<size_t>(plane), arraysize(bytes_per_element));
       return bytes_per_element[plane];
+    case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
     case gfx::BufferFormat::UYVY_422:
       DCHECK_EQ(plane, 0);
@@ -81,6 +82,7 @@ int32_t PixelFormat(gfx::BufferFormat format) {
       return '420v';
     case gfx::BufferFormat::UYVY_422:
       return '2vuy';
+    case gfx::BufferFormat::R_16:
     case gfx::BufferFormat::RG_88:
     case gfx::BufferFormat::ATC:
     case gfx::BufferFormat::ATCIA:
@@ -210,8 +212,7 @@ IOSurfaceRef CreateIOSurface(const gfx::Size& size, gfx::BufferFormat format) {
   // Ensure that all IOSurfaces start as sRGB when color correct rendering
   // is enabled.
   static bool color_correct_rendering_enabled =
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableColorCorrectRendering);
+      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
   if (color_correct_rendering_enabled)
     force_color_space = true;
 

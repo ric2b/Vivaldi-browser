@@ -13,6 +13,7 @@
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/waitable_event.h"
+#include "media/base/data_source.h"
 #include "media/base/media_export.h"
 
 #import <AVFoundation/AVFoundation.h>
@@ -58,7 +59,7 @@ class MEDIA_EXPORT DataRequestHandler
 
   enum { kBufferSize = 64 * 1024 };
 
-  DataRequestHandler(IPCDataSource* data_source,
+  DataRequestHandler(media::DataSource* data_source,
                      const RespondWithDataCB& respond_with_data_cb,
                      const FinishLoadingCB& finish_loading_cb,
                      dispatch_queue_t queue);
@@ -94,7 +95,7 @@ class MEDIA_EXPORT DataRequestHandler
   void ProcessChunk();
   void FinishLoading(id request_handle, Status status);
 
-  IPCDataSource* const data_source_;
+  media::DataSource* const data_source_;
   const dispatch_queue_t queue_;
 
   std::unique_ptr<OrderedRequests> requests_;

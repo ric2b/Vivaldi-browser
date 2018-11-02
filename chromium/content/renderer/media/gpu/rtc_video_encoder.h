@@ -59,13 +59,11 @@ class CONTENT_EXPORT RTCVideoEncoder
   int32_t Release() override;
   int32_t SetChannelParameters(uint32_t packet_loss, int64_t rtt) override;
   int32_t SetRates(uint32_t new_bit_rate, uint32_t frame_rate) override;
+  bool SupportsNativeHandle() const override;
 
  private:
   class Impl;
   friend class RTCVideoEncoder::Impl;
-
-  void RecordInitEncodeUMA(int32_t init_retval,
-                           media::VideoCodecProfile profile);
 
   // The video codec type, as reported to WebRTC.
   const webrtc::VideoCodecType video_codec_type_;

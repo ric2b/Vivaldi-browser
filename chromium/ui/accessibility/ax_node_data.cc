@@ -62,6 +62,16 @@ std::string IntVectorToString(const std::vector<int>& items) {
   return str;
 }
 
+std::string StringVectorToString(const std::vector<std::string>& items) {
+  std::string str;
+  for (size_t i = 0; i < items.size(); ++i) {
+    if (i > 0)
+      str += ",";
+    str += items[i];
+  }
+  return str;
+}
+
 // Predicate that returns true if the first value of a pair is |first|.
 template<typename FirstType, typename SecondType>
 struct FirstIs {
@@ -92,6 +102,7 @@ typename std::vector<std::pair<FirstType, SecondType>>::const_iterator
 bool IsNodeIdIntAttribute(AXIntAttribute attr) {
   switch (attr) {
     case AX_ATTR_ACTIVEDESCENDANT_ID:
+    case AX_ATTR_DETAILS_ID:
     case AX_ATTR_ERRORMESSAGE_ID:
     case AX_ATTR_IN_PAGE_LINK_TARGET_ID:
     case AX_ATTR_MEMBER_OF_ID:
@@ -137,6 +148,7 @@ bool IsNodeIdIntAttribute(AXIntAttribute attr) {
     case AX_ATTR_COLOR:
     case AX_ATTR_INVALID_STATE:
     case AX_ATTR_CHECKED_STATE:
+    case AX_ATTR_RESTRICTION:
     case AX_ATTR_TEXT_DIRECTION:
     case AX_ATTR_TEXT_STYLE:
     case AX_ATTR_ARIA_COLUMN_COUNT:
@@ -157,7 +169,6 @@ bool IsNodeIdIntListAttribute(AXIntListAttribute attr) {
     case AX_ATTR_CELL_IDS:
     case AX_ATTR_CONTROLS_IDS:
     case AX_ATTR_DESCRIBEDBY_IDS:
-    case AX_ATTR_DETAILS_IDS:
     case AX_ATTR_FLOWTO_IDS:
     case AX_ATTR_INDIRECT_CHILD_IDS:
     case AX_ATTR_LABELLEDBY_IDS:
@@ -178,6 +189,7 @@ bool IsNodeIdIntListAttribute(AXIntListAttribute attr) {
     case AX_ATTR_CACHED_LINE_STARTS:
     case AX_ATTR_WORD_STARTS:
     case AX_ATTR_WORD_ENDS:
+    case AX_ATTR_CUSTOM_ACTION_IDS:
       return false;
   }
 
@@ -205,6 +217,7 @@ AXNodeData::AXNodeData(const AXNodeData& other) {
   float_attributes = other.float_attributes;
   bool_attributes = other.bool_attributes;
   intlist_attributes = other.intlist_attributes;
+  stringlist_attributes = other.stringlist_attributes;
   html_attributes = other.html_attributes;
   child_ids = other.child_ids;
   location = other.location;
@@ -223,6 +236,7 @@ AXNodeData& AXNodeData::operator=(AXNodeData other) {
   float_attributes = other.float_attributes;
   bool_attributes = other.bool_attributes;
   intlist_attributes = other.intlist_attributes;
+  stringlist_attributes = other.stringlist_attributes;
   html_attributes = other.html_attributes;
   child_ids = other.child_ids;
   location = other.location;
@@ -369,6 +383,31 @@ bool AXNodeData::GetIntListAttribute(AXIntListAttribute attribute,
   return false;
 }
 
+bool AXNodeData::HasStringListAttribute(AXStringListAttribute attribute) const {
+  auto iter = FindInVectorOfPairs(attribute, stringlist_attributes);
+  return iter != stringlist_attributes.end();
+}
+
+const std::vector<std::string>& AXNodeData::GetStringListAttribute(
+    AXStringListAttribute attribute) const {
+  CR_DEFINE_STATIC_LOCAL(std::vector<std::string>, empty_vector, ());
+  auto iter = FindInVectorOfPairs(attribute, stringlist_attributes);
+  if (iter != stringlist_attributes.end())
+    return iter->second;
+  return empty_vector;
+}
+
+bool AXNodeData::GetStringListAttribute(AXStringListAttribute attribute,
+                                        std::vector<std::string>* value) const {
+  auto iter = FindInVectorOfPairs(attribute, stringlist_attributes);
+  if (iter != stringlist_attributes.end()) {
+    *value = iter->second;
+    return true;
+  }
+
+  return false;
+}
+
 bool AXNodeData::GetHtmlAttribute(
     const char* html_attr, std::string* value) const {
   for (size_t i = 0; i < html_attributes.size(); ++i) {
@@ -414,6 +453,11 @@ void AXNodeData::AddBoolAttribute(
 void AXNodeData::AddIntListAttribute(AXIntListAttribute attribute,
                                      const std::vector<int32_t>& value) {
   intlist_attributes.push_back(std::make_pair(attribute, value));
+}
+
+void AXNodeData::AddStringListAttribute(AXStringListAttribute attribute,
+                                        const std::vector<std::string>& value) {
+  stringlist_attributes.push_back(std::make_pair(attribute, value));
 }
 
 void AXNodeData::SetName(const std::string& name) {
@@ -475,6 +519,7 @@ void AXNodeData::AddAction(AXAction action_enum) {
           (action_enum == AX_ACTION_BLUR) ? AX_ACTION_FOCUS : AX_ACTION_BLUR;
       DCHECK(HasAction(excluded_action));
     } break;
+    case AX_ACTION_CUSTOM_ACTION:
     case AX_ACTION_DECREMENT:
     case AX_ACTION_DO_DEFAULT:
     case AX_ACTION_GET_IMAGE_DATA:
@@ -624,6 +669,9 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_ACTIVEDESCENDANT_ID:
         result += " activedescendant=" + value;
         break;
+      case AX_ATTR_DETAILS_ID:
+        result += " details=" + value;
+        break;
       case AX_ATTR_ERRORMESSAGE_ID:
         result += " errormessage=" + value;
         break;
@@ -748,6 +796,16 @@ std::string AXNodeData::ToString() const {
             break;
         }
         break;
+      case AX_ATTR_RESTRICTION:
+        switch (int_attributes[i].second) {
+          case AX_RESTRICTION_READ_ONLY:
+            result += " restriction=readonly";
+            break;
+          case AX_RESTRICTION_DISABLED:
+            result += " restriction=disabled";
+            break;
+        }
+        break;
       case AX_INT_ATTRIBUTE_NONE:
         break;
     }
@@ -814,9 +872,6 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_ROLE_DESCRIPTION:
         result += " role_description=" + value;
         break;
-      case AX_ATTR_SHORTCUT:
-        result += " shortcut=" + value;
-        break;
       case AX_ATTR_URL:
         result += " url=" + value;
         break;
@@ -866,9 +921,6 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_CONTAINER_LIVE_BUSY:
         result += " container_busy=" + value;
         break;
-      case AX_ATTR_ARIA_READONLY:
-        result += " aria_readonly=" + value;
-        break;
       case AX_ATTR_UPDATE_LOCATION_ONLY:
         result += " update_location_only=" + value;
         break;
@@ -894,9 +946,6 @@ std::string AXNodeData::ToString() const {
         break;
       case AX_ATTR_DESCRIBEDBY_IDS:
         result += " describedby_ids=" + IntVectorToString(values);
-        break;
-      case AX_ATTR_DETAILS_IDS:
-        result += " details_ids=" + IntVectorToString(values);
         break;
       case AX_ATTR_FLOWTO_IDS:
         result += " flowto_ids=" + IntVectorToString(values);
@@ -926,6 +975,8 @@ std::string AXNodeData::ToString() const {
             types_str += "grammar&";
           if (type & AX_MARKER_TYPE_TEXT_MATCH)
             types_str += "text_match&";
+          if (type & AX_MARKER_TYPE_ACTIVE_SUGGESTION)
+            types_str += "active_suggestion&";
 
           if (!types_str.empty())
             types_str = types_str.substr(0, types_str.size() - 1);
@@ -959,7 +1010,22 @@ std::string AXNodeData::ToString() const {
       case AX_ATTR_WORD_ENDS:
         result += " word_ends=" + IntVectorToString(values);
         break;
+      case AX_ATTR_CUSTOM_ACTION_IDS:
+        result += " custom_action_ids=" + IntVectorToString(values);
+        break;
       case AX_INT_LIST_ATTRIBUTE_NONE:
+        break;
+    }
+  }
+
+  for (size_t i = 0; i < stringlist_attributes.size(); ++i) {
+    const std::vector<std::string>& values = stringlist_attributes[i].second;
+    switch (stringlist_attributes[i].first) {
+      case AX_ATTR_CUSTOM_ACTION_DESCRIPTIONS:
+        result +=
+            " custom_action_descriptions: " + StringVectorToString(values);
+        break;
+      case AX_STRING_LIST_ATTRIBUTE_NONE:
         break;
     }
   }

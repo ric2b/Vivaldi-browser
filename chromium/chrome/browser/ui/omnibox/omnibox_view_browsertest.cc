@@ -833,13 +833,11 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
   EXPECT_EQ(old_text.size(), start);
   EXPECT_EQ(old_text.size(), end);
 
-  // Insert one character at the end. Make sure we won't insert
-  // anything after the special ZWS mark used in gtk implementation.
+  // Insert one character at the end.
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
   EXPECT_EQ(old_text + base::char16('a'), omnibox_view->GetText());
 
-  // Delete one character from the end. Make sure we won't delete the special
-  // ZWS mark used in gtk implementation.
+  // Delete one character from the end.
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_BACK, 0));
   EXPECT_EQ(old_text, omnibox_view->GetText());
 
@@ -855,19 +853,41 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BasicTextOperations) {
 
   // Delete the content
   ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_DELETE, 0));
-  EXPECT_TRUE(omnibox_view->IsSelectAll());
+  EXPECT_FALSE(omnibox_view->IsSelectAll());
   omnibox_view->GetSelectionBounds(&start, &end);
   EXPECT_EQ(0U, start);
   EXPECT_EQ(0U, end);
   EXPECT_TRUE(omnibox_view->GetText().empty());
 
-  // Check if RevertAll() can set text and cursor correctly.
+  // Add a small amount of text to move the cursor past offset 0.
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_B, 0));
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_C, 0));
+
+  // Check if RevertAll() resets the text and preserves the cursor position.
   omnibox_view->RevertAll();
   EXPECT_FALSE(omnibox_view->IsSelectAll());
   EXPECT_EQ(old_text, omnibox_view->GetText());
   omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_EQ(0U, start);
-  EXPECT_EQ(0U, end);
+  EXPECT_EQ(3U, start);
+  EXPECT_EQ(3U, end);
+
+  // Check that reverting clamps the cursor to the bounds of the new text.
+  // Move the cursor to the end.
+#if defined(OS_MACOSX)
+  // End doesn't work on Mac trybot.
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_E, ui::EF_CONTROL_DOWN));
+#else
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_END, 0));
+#endif
+  // Add a small amount of text to push the cursor past where the text end
+  // will be once we revert.
+  ASSERT_NO_FATAL_FAILURE(SendKey(ui::VKEY_A, 0));
+  omnibox_view->RevertAll();
+  // Cursor should be no further than original text.
+  omnibox_view->GetSelectionBounds(&start, &end);
+  EXPECT_EQ(11U, start);
+  EXPECT_EQ(11U, end);
 }
 
 // Make sure the cursor position doesn't get set past the last character of
@@ -1640,9 +1660,7 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest, BackspaceDeleteHalfWidthKatakana) {
 #endif
 }
 
-// Flaky test. crbug.com/356850
-IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
-                       DISABLED_DoesNotUpdateAutocompleteOnBlur) {
+IN_PROC_BROWSER_TEST_F(OmniboxViewTest, DoesNotUpdateAutocompleteOnBlur) {
   OmniboxView* omnibox_view = NULL;
   ASSERT_NO_FATAL_FAILURE(GetOmniboxView(&omnibox_view));
   OmniboxPopupModel* popup_model = omnibox_view->model()->popup_model();
@@ -1658,14 +1676,10 @@ IN_PROC_BROWSER_TEST_F(OmniboxViewTest,
   base::string16 old_autocomplete_text =
       omnibox_view->model()->autocomplete_controller()->input_.text();
 
-  // Unfocus the omnibox. This should clear the text field selection and
-  // close the popup, but should not run autocomplete.
-  // Note: GTK preserves the selection when the omnibox is unfocused.
+  // Unfocus the omnibox. This should close the popup but should not run
+  // autocomplete.
   ui_test_utils::ClickOnView(browser(), VIEW_ID_TAB_CONTAINER);
   ASSERT_FALSE(popup_model->IsOpen());
-  omnibox_view->GetSelectionBounds(&start, &end);
-  EXPECT_TRUE(start == end);
-
   EXPECT_EQ(old_autocomplete_text,
       omnibox_view->model()->autocomplete_controller()->input_.text());
 }

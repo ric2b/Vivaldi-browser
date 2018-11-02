@@ -8,8 +8,15 @@
 namespace proximity_auth {
 namespace prefs {
 
+extern const char kEasyUnlockAllowed[];
+extern const char kEasyUnlockEnabled[];
+extern const char kEasyUnlockProximityThreshold[];
+extern const char kEasyUnlockLocalStateUserPrefs[];
 extern const char kProximityAuthLastPasswordEntryTimestampMs[];
+extern const char kProximityAuthLastPromotionCheckTimestampMs[];
+extern const char kProximityAuthPromotionShownCount[];
 extern const char kProximityAuthRemoteBleDevices[];
+extern const char kProximityAuthIsChromeOSLoginEnabled[];
 
 }  // namespace prefs
 }  // proximity_auth

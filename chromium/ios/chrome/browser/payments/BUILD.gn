@@ -7,20 +7,35 @@ import("//ios/web/js_compile.gni")
 source_set("payments") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
+    "ios_can_make_payment_query_factory.cc",
+    "ios_can_make_payment_query_factory.h",
+    "ios_payment_request_cache_factory.h",
+    "ios_payment_request_cache_factory.mm",
+    "itunes_json_request.cc",
+    "itunes_json_request.h",
     "payment_request.h",
     "payment_request.mm",
+    "payment_request_cache.h",
+    "payment_request_cache.mm",
     "payment_request_util.h",
     "payment_request_util.mm",
   ]
   deps = [
     "//base",
     "//components/autofill/core/browser",
+    "//components/keyed_service/ios",
     "//components/payments/core",
+    "//components/prefs",
+    "//components/signin/core/browser",
     "//components/strings:components_strings_grit",
     "//ios/chrome/browser",
     "//ios/chrome/browser/autofill",
+    "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/signin",
     "//ios/web",
+    "//net",
     "//ui/base",
+    "//url",
   ]
   libs = [ "UIKit.framework" ]
 }
@@ -35,11 +50,15 @@ source_set("unit_tests") {
     ":payments",
     ":test_support",
     "//base",
+    "//base/test:test_support",
     "//components/autofill/core/browser",
     "//components/autofill/core/browser:test_support",
     "//components/payments/core",
     "//ios/chrome/browser",
+    "//ios/chrome/browser/browser_state:test_support",
     "//ios/web",
+    "//ios/web/public/test/fakes",
+    "//testing/gmock",
     "//testing/gtest",
   ]
 }
@@ -57,7 +76,9 @@ source_set("test_support") {
     ":payments",
     "//base",
     "//components/autofill/core/browser",
+    "//components/autofill/core/browser:test_support",
     "//components/payments/core",
+    "//components/prefs",
     "//ios/web",
   ]
 }

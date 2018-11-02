@@ -13,6 +13,7 @@
 #include "base/macros.h"
 #include "base/timer/timer.h"
 #include "content/public/renderer/associated_resource_fetcher.h"
+#include "third_party/WebKit/public/platform/WebCachePolicy.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebAssociatedURLLoaderOptions.h"
 
@@ -20,8 +21,7 @@ class GURL;
 
 namespace blink {
 class WebAssociatedURLLoader;
-class WebFrame;
-enum class WebCachePolicy;
+class WebLocalFrame;
 }
 
 namespace content {
@@ -34,8 +34,10 @@ class AssociatedResourceFetcherImpl : public AssociatedResourceFetcher {
   void SetCachePolicy(blink::WebCachePolicy policy) override;
   void SetLoaderOptions(
       const blink::WebAssociatedURLLoaderOptions& options) override;
-  void Start(blink::WebFrame* frame,
+  void Start(blink::WebLocalFrame* frame,
              blink::WebURLRequest::RequestContext request_context,
+             blink::WebURLRequest::FetchRequestMode request_mode,
+             blink::WebURLRequest::FetchCredentialsMode fetch_credentials_mode,
              blink::WebURLRequest::FrameType frame_type,
              const Callback& callback) override;
 

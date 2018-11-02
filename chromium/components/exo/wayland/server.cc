@@ -9,6 +9,7 @@
 #include <gaming-input-unstable-v2-server-protocol.h>
 #include <grp.h>
 #include <keyboard-configuration-unstable-v1-server-protocol.h>
+#include <keyboard-extension-unstable-v1-server-protocol.h>
 #include <linux/input.h>
 #include <presentation-time-server-protocol.h>
 #include <remote-shell-unstable-v1-server-protocol.h>
@@ -32,6 +33,7 @@
 #include <utility>
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/public/interfaces/window_pin_type.mojom.h"
 #include "ash/shell.h"
 #include "base/bind.h"
@@ -47,6 +49,12 @@
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "components/exo/buffer.h"
+#include "components/exo/data_device.h"
+#include "components/exo/data_device_delegate.h"
+#include "components/exo/data_offer.h"
+#include "components/exo/data_offer_delegate.h"
+#include "components/exo/data_source.h"
+#include "components/exo/data_source_delegate.h"
 #include "components/exo/display.h"
 #include "components/exo/gamepad_delegate.h"
 #include "components/exo/gaming_seat.h"
@@ -54,6 +62,7 @@
 #include "components/exo/keyboard.h"
 #include "components/exo/keyboard_delegate.h"
 #include "components/exo/keyboard_device_configuration_delegate.h"
+#include "components/exo/keyboard_observer.h"
 #include "components/exo/notification_surface.h"
 #include "components/exo/notification_surface_manager.h"
 #include "components/exo/pointer.h"
@@ -85,6 +94,11 @@
 #include <drm_fourcc.h>
 #include <linux-dmabuf-unstable-v1-server-protocol.h>
 #include <wayland-drm-server-protocol.h>
+#if defined(OS_CHROMEOS)
+#include "ui/base/ime/chromeos/ime_keyboard.h"
+#include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/events/ozone/layout/xkb/xkb_keyboard_layout_engine.h"
+#endif
 #endif
 
 #if BUILDFLAG(USE_XKBCOMMON)
@@ -144,6 +158,55 @@ uint32_t NowInMilliseconds() {
   return TimeTicksToMilliseconds(base::TimeTicks::Now());
 }
 
+uint32_t WaylandDataDeviceManagerDndAction(DndAction action) {
+  switch (action) {
+    case DndAction::kNone:
+      return WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE;
+    case DndAction::kCopy:
+      return WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY;
+    case DndAction::kMove:
+      return WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE;
+    case DndAction::kAsk:
+      return WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK;
+  }
+  NOTREACHED();
+}
+
+uint32_t WaylandDataDeviceManagerDndActions(
+    const base::flat_set<DndAction>& dnd_actions) {
+  uint32_t actions = 0;
+  for (DndAction action : dnd_actions)
+    actions |= WaylandDataDeviceManagerDndAction(action);
+  return actions;
+}
+
+DndAction DataDeviceManagerDndAction(uint32_t value) {
+  switch (value) {
+    case WL_DATA_DEVICE_MANAGER_DND_ACTION_NONE:
+      return DndAction::kNone;
+    case WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY:
+      return DndAction::kCopy;
+    case WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE:
+      return DndAction::kMove;
+    case WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK:
+      return DndAction::kAsk;
+    default:
+      NOTREACHED();
+      return DndAction::kNone;
+  }
+}
+
+base::flat_set<DndAction> DataDeviceManagerDndActions(uint32_t value) {
+  base::flat_set<DndAction> actions;
+  if (value & WL_DATA_DEVICE_MANAGER_DND_ACTION_COPY)
+    actions.insert(DndAction::kCopy);
+  if (value & WL_DATA_DEVICE_MANAGER_DND_ACTION_MOVE)
+    actions.insert(DndAction::kMove);
+  if (value & WL_DATA_DEVICE_MANAGER_DND_ACTION_ASK)
+    actions.insert(DndAction::kAsk);
+  return actions;
+}
+
 // A property key containing the surface resource that is associated with
 // window. If unset, no surface resource is associated with window.
 DEFINE_UI_CLASS_PROPERTY_KEY(wl_resource*, kSurfaceResourceKey, nullptr);
@@ -160,17 +223,20 @@ DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasSecurityKey, false);
 // associated with window.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasBlendingKey, false);
 
-// A property key containing a boolean set to true whether the current
-// OnWindowActivated invocation should be ignored. The defualt is true
-// to ignore the activation event originated by creation.
-DEFINE_UI_CLASS_PROPERTY_KEY(bool, kIgnoreWindowActivated, true);
-
 // A property key containing a boolean set to true if the stylus_tool
 // object is associated with a window.
 DEFINE_UI_CLASS_PROPERTY_KEY(bool, kSurfaceHasStylusToolKey, false);
 
+// A property key containing the data offer resource that is associated with
+// data offer object.
+DEFINE_UI_CLASS_PROPERTY_KEY(wl_resource*, kDataOfferResourceKey, nullptr);
+
 wl_resource* GetSurfaceResource(Surface* surface) {
   return surface->GetProperty(kSurfaceResourceKey);
+}
+
+wl_resource* GetDataOfferResource(const DataOffer* data_offer) {
+  return data_offer->GetProperty(kDataOfferResourceKey);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -653,19 +719,55 @@ void linux_buffer_params_add(wl_client* client,
   }
 }
 
+bool ValidateLinuxBufferParams(wl_resource* resource,
+                               int32_t width,
+                               int32_t height,
+                               gfx::BufferFormat format,
+                               uint32_t flags) {
+  if (width <= 0 || height <= 0) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS,
+                           "invalid width or height");
+    return false;
+  }
+
+  if (flags & (ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT |
+               ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_INTERLACED)) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                           "flags not supported");
+    return false;
+  }
+
+  LinuxBufferParams* linux_buffer_params =
+      GetUserDataAs<LinuxBufferParams>(resource);
+  size_t num_planes = gfx::NumberOfPlanesForBufferFormat(format);
+
+  for (uint32_t i = 0; i < num_planes; ++i) {
+    auto plane_it = linux_buffer_params->planes.find(i);
+    if (plane_it == linux_buffer_params->planes.end()) {
+      wl_resource_post_error(resource,
+                             ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
+                             "missing a plane");
+      return false;
+    }
+  }
+
+  if (linux_buffer_params->planes.size() != num_planes) {
+    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
+                           "plane idx out of bounds");
+    return false;
+  }
+
+  return true;
+}
+
 void linux_buffer_params_create(wl_client* client,
                                 wl_resource* resource,
                                 int32_t width,
                                 int32_t height,
                                 uint32_t format,
                                 uint32_t flags) {
-  if (width <= 0 || height <= 0) {
-    wl_resource_post_error(resource,
-                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_DIMENSIONS,
-                           "invalid width or height");
-    return;
-  }
-
   const auto* supported_format = std::find_if(
       std::begin(dmabuf_supported_formats), std::end(dmabuf_supported_formats),
       [format](const dmabuf_supported_format& supported_format) {
@@ -678,13 +780,9 @@ void linux_buffer_params_create(wl_client* client,
     return;
   }
 
-  if (flags & (ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_Y_INVERT |
-               ZWP_LINUX_BUFFER_PARAMS_V1_FLAGS_INTERLACED)) {
-    wl_resource_post_error(resource,
-                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
-                           "flags not supported");
+  if (!ValidateLinuxBufferParams(resource, width, height,
+                                 supported_format->buffer_format, flags))
     return;
-  }
 
   LinuxBufferParams* linux_buffer_params =
       GetUserDataAs<LinuxBufferParams>(resource);
@@ -692,23 +790,11 @@ void linux_buffer_params_create(wl_client* client,
   size_t num_planes =
       gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
 
-  if (linux_buffer_params->planes.size() != num_planes) {
-    wl_resource_post_error(resource, ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_PLANE_IDX,
-                           "plane idx out of bounds");
-    return;
-  }
-
   std::vector<gfx::NativePixmapPlane> planes;
   std::vector<base::ScopedFD> fds;
 
   for (uint32_t i = 0; i < num_planes; ++i) {
     auto plane_it = linux_buffer_params->planes.find(i);
-    if (plane_it == linux_buffer_params->planes.end()) {
-      wl_resource_post_error(resource,
-                             ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INCOMPLETE,
-                             "missing a plane");
-      return;
-    }
     LinuxBufferParams::Plane& plane = plane_it->second;
     planes.emplace_back(plane.stride, plane.offset, 0, 0);
     fds.push_back(std::move(plane.fd));
@@ -734,10 +820,71 @@ void linux_buffer_params_create(wl_client* client,
   zwp_linux_buffer_params_v1_send_created(resource, buffer_resource);
 }
 
+void linux_buffer_params_create_immed(wl_client* client,
+                                      wl_resource* resource,
+                                      uint32_t buffer_id,
+                                      int32_t width,
+                                      int32_t height,
+                                      uint32_t format,
+                                      uint32_t flags) {
+  const auto* supported_format = std::find_if(
+      std::begin(dmabuf_supported_formats), std::end(dmabuf_supported_formats),
+      [format](const dmabuf_supported_format& supported_format) {
+        return supported_format.dmabuf_format == format;
+      });
+  if (supported_format == std::end(dmabuf_supported_formats)) {
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_FORMAT,
+                           "format not supported");
+    return;
+  }
+
+  if (!ValidateLinuxBufferParams(resource, width, height,
+                                 supported_format->buffer_format, flags))
+    return;
+
+  LinuxBufferParams* linux_buffer_params =
+      GetUserDataAs<LinuxBufferParams>(resource);
+
+  size_t num_planes =
+      gfx::NumberOfPlanesForBufferFormat(supported_format->buffer_format);
+
+  std::vector<gfx::NativePixmapPlane> planes;
+  std::vector<base::ScopedFD> fds;
+
+  for (uint32_t i = 0; i < num_planes; ++i) {
+    auto plane_it = linux_buffer_params->planes.find(i);
+    LinuxBufferParams::Plane& plane = plane_it->second;
+    planes.emplace_back(plane.stride, plane.offset, 0, 0);
+    fds.push_back(std::move(plane.fd));
+  }
+
+  std::unique_ptr<Buffer> buffer =
+      linux_buffer_params->display->CreateLinuxDMABufBuffer(
+          gfx::Size(width, height), supported_format->buffer_format, planes,
+          std::move(fds));
+  if (!buffer) {
+    // On import failure in case of a create_immed request, the protocol
+    // allows us to raise a fatal error from zwp_linux_dmabuf_v1 version 2+.
+    wl_resource_post_error(resource,
+                           ZWP_LINUX_BUFFER_PARAMS_V1_ERROR_INVALID_WL_BUFFER,
+                           "dmabuf import failed");
+    return;
+  }
+
+  wl_resource* buffer_resource =
+      wl_resource_create(client, &wl_buffer_interface, 1, buffer_id);
+
+  buffer->set_release_callback(base::Bind(&HandleBufferReleaseCallback,
+                                          base::Unretained(buffer_resource)));
+
+  SetImplementation(buffer_resource, &buffer_implementation, std::move(buffer));
+}
+
 const struct zwp_linux_buffer_params_v1_interface
-    linux_buffer_params_implementation = {linux_buffer_params_destroy,
-                                          linux_buffer_params_add,
-                                          linux_buffer_params_create};
+    linux_buffer_params_implementation = {
+        linux_buffer_params_destroy, linux_buffer_params_add,
+        linux_buffer_params_create, linux_buffer_params_create_immed};
 
 ////////////////////////////////////////////////////////////////////////////////
 // linux_dmabuf_interface:
@@ -753,7 +900,7 @@ void linux_dmabuf_create_params(wl_client* client,
       base::MakeUnique<LinuxBufferParams>(GetUserDataAs<Display>(resource));
 
   wl_resource* linux_buffer_params_resource =
-      wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 1, id);
+      wl_resource_create(client, &zwp_linux_buffer_params_v1_interface, 2, id);
 
   SetImplementation(linux_buffer_params_resource,
                     &linux_buffer_params_implementation,
@@ -768,7 +915,7 @@ void bind_linux_dmabuf(wl_client* client,
                        uint32_t version,
                        uint32_t id) {
   wl_resource* resource =
-      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, 1, id);
+      wl_resource_create(client, &zwp_linux_dmabuf_v1_interface, version, id);
 
   wl_resource_set_implementation(resource, &linux_dmabuf_implementation, data,
                                  nullptr);
@@ -1896,6 +2043,15 @@ void remote_surface_set_window_geometry(wl_client* client,
       gfx::Rect(x, y, width, height));
 }
 
+void remote_surface_set_orientation(wl_client* client,
+                                    wl_resource* resource,
+                                    int32_t orientation) {
+  GetUserDataAs<ShellSurface>(resource)->SetOrientation(
+      orientation == ZCR_REMOTE_SURFACE_V1_ORIENTATION_PORTRAIT
+          ? Orientation::PORTRAIT
+          : Orientation::LANDSCAPE);
+}
+
 void remote_surface_set_scale(wl_client* client,
                               wl_resource* resource,
                               wl_fixed_t scale) {
@@ -1938,13 +2094,7 @@ void remote_surface_activate(wl_client* client,
                              wl_resource* resource,
                              uint32_t serial) {
   ShellSurface* shell_surface = GetUserDataAs<ShellSurface>(resource);
-  aura::Window* window = shell_surface->GetWidget()->GetNativeWindow();
-
-  // Activation on Aura is synchronous, so activation callbacks will be called
-  // before the flag is reset.
-  window->SetProperty(kIgnoreWindowActivated, true);
   shell_surface->Activate();
-  window->SetProperty(kIgnoreWindowActivated, false);
 }
 
 void remote_surface_maximize(wl_client* client, wl_resource* resource) {
@@ -2027,6 +2177,16 @@ void remote_surface_move(wl_client* client, wl_resource* resource) {
   GetUserDataAs<ShellSurface>(resource)->Move();
 }
 
+void remote_surface_set_window_type(wl_client* client,
+                                    wl_resource* resource,
+                                    uint32_t type) {
+  if (type == ZCR_REMOTE_SURFACE_V1_WINDOW_TYPE_SYSTEM_UI) {
+    auto* widget = GetUserDataAs<ShellSurface>(resource)->GetWidget();
+    if (widget)
+      widget->GetNativeWindow()->SetProperty(ash::kShowInOverviewKey, false);
+  }
+}
+
 const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_destroy,
     remote_surface_set_app_id,
@@ -2051,7 +2211,9 @@ const struct zcr_remote_surface_v1_interface remote_surface_implementation = {
     remote_surface_set_always_on_top,
     remote_surface_unset_always_on_top,
     remote_surface_ack_configure,
-    remote_surface_move};
+    remote_surface_move,
+    remote_surface_set_orientation,
+    remote_surface_set_window_type};
 
 ////////////////////////////////////////////////////////////////////////////////
 // notification_surface_interface:
@@ -2068,7 +2230,7 @@ const struct zcr_notification_surface_v1_interface
 
 // Implements remote shell interface and monitors workspace state needed
 // for the remote shell interface.
-class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
+class WaylandRemoteShell : public WMHelper::TabletModeObserver,
                            public WMHelper::ActivationObserver,
                            public display::DisplayObserver {
  public:
@@ -2077,11 +2239,11 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
         remote_shell_resource_(remote_shell_resource),
         weak_ptr_factory_(this) {
     auto* helper = WMHelper::GetInstance();
-    helper->AddMaximizeModeObserver(this);
+    helper->AddTabletModeObserver(this);
     helper->AddActivationObserver(this);
     display::Screen::GetScreen()->AddObserver(this);
 
-    layout_mode_ = helper->IsMaximizeModeWindowManagerEnabled()
+    layout_mode_ = helper->IsTabletModeWindowManagerEnabled()
                        ? ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET
                        : ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
 
@@ -2090,7 +2252,7 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
   }
   ~WaylandRemoteShell() override {
     auto* helper = WMHelper::GetInstance();
-    helper->RemoveMaximizeModeObserver(this);
+    helper->RemoveTabletModeObserver(this);
     helper->RemoveActivationObserver(this);
     display::Screen::GetScreen()->RemoveObserver(this);
   }
@@ -2106,8 +2268,8 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
 
   std::unique_ptr<NotificationSurface> CreateNotificationSurface(
       Surface* surface,
-      const std::string& notification_id) {
-    return display_->CreateNotificationSurface(surface, notification_id);
+      const std::string& notification_key) {
+    return display_->CreateNotificationSurface(surface, notification_key);
   }
 
   // Overridden from display::DisplayObserver:
@@ -2137,30 +2299,20 @@ class WaylandRemoteShell : public WMHelper::MaximizeModeObserver,
     }
   }
 
-  // Overridden from WMHelper::MaximizeModeObserver:
-  void OnMaximizeModeStarted() override {
+  // Overridden from WMHelper::TabletModeObserver:
+  void OnTabletModeStarted() override {
     layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_TABLET;
     ScheduleSendDisplayMetrics(kConfigureDelayAfterLayoutSwitchMs);
   }
-  void OnMaximizeModeEnding() override {
+  void OnTabletModeEnding() override {
     layout_mode_ = ZCR_REMOTE_SHELL_V1_LAYOUT_MODE_WINDOWED;
     ScheduleSendDisplayMetrics(kConfigureDelayAfterLayoutSwitchMs);
   }
-  void OnMaximizeModeEnded() override {}
+  void OnTabletModeEnded() override {}
 
   // Overridden from WMHelper::ActivationObserver:
   void OnWindowActivated(aura::Window* gained_active,
                          aura::Window* lost_active) override {
-    // If the origin of activation is Wayland client, then assume it's been
-    // already activated on the client side, so do not notify about the
-    // activation. It means that zcr_remote_shell_v1_send_activated is used
-    // only to notify about activations originating in Aura.
-    if (gained_active && ShellSurface::GetMainSurface(gained_active) &&
-        gained_active->GetProperty(kIgnoreWindowActivated)) {
-      gained_active->SetProperty(kIgnoreWindowActivated, false);
-      return;
-    }
-
     SendActivated(gained_active, lost_active);
   }
 
@@ -2375,7 +2527,7 @@ void remote_shell_get_notification_surface(wl_client* client,
                                            wl_resource* resource,
                                            uint32_t id,
                                            wl_resource* surface,
-                                           const char* notification_id) {
+                                           const char* notification_key) {
   if (GetUserDataAs<Surface>(surface)->HasSurfaceDelegate()) {
     wl_resource_post_error(resource, ZCR_REMOTE_SHELL_V1_ERROR_ROLE,
                            "surface has already been assigned a role");
@@ -2384,11 +2536,11 @@ void remote_shell_get_notification_surface(wl_client* client,
 
   std::unique_ptr<NotificationSurface> notification_surface =
       GetUserDataAs<WaylandRemoteShell>(resource)->CreateNotificationSurface(
-          GetUserDataAs<Surface>(surface), std::string(notification_id));
+          GetUserDataAs<Surface>(surface), std::string(notification_key));
   if (!notification_surface) {
     wl_resource_post_error(resource,
-                           ZCR_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_ID,
-                           "invalid notification id");
+                           ZCR_REMOTE_SHELL_V1_ERROR_INVALID_NOTIFICATION_KEY,
+                           "invalid notification key");
     return;
   }
 
@@ -2404,7 +2556,7 @@ const struct zcr_remote_shell_v1_interface remote_shell_implementation = {
     remote_shell_destroy, remote_shell_get_remote_surface,
     remote_shell_get_notification_surface};
 
-const uint32_t remote_shell_version = 5;
+const uint32_t remote_shell_version = 7;
 
 void bind_remote_shell(wl_client* client,
                        void* data,
@@ -2532,7 +2684,181 @@ void bind_vsync_feedback(wl_client* client,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// wl_data_source_interface:
+
+class WaylandDataSourceDelegate : public DataSourceDelegate {
+ public:
+  explicit WaylandDataSourceDelegate(wl_resource* source)
+      : data_source_resource_(source) {}
+
+  // Overridden from DataSourceDelegate:
+  void OnDataSourceDestroying(DataSource* device) override { delete this; }
+  void OnTarget(const std::string& mime_type) override {
+    wl_data_source_send_target(data_source_resource_, mime_type.c_str());
+  }
+  void OnSend(const std::string& mime_type, base::ScopedFD fd) override {
+    wl_data_source_send_send(data_source_resource_, mime_type.c_str(),
+                             fd.get());
+  }
+  void OnCancelled() override {
+    wl_data_source_send_cancelled(data_source_resource_);
+  }
+  void OnDndDropPerformed() override {
+    wl_data_source_send_dnd_drop_performed(data_source_resource_);
+  }
+  void OnDndFinished() override {
+    wl_data_source_send_dnd_finished(data_source_resource_);
+  }
+  void OnAction(DndAction dnd_action) override {
+    wl_data_source_send_action(data_source_resource_,
+                               WaylandDataDeviceManagerDndAction(dnd_action));
+  }
+
+ private:
+  wl_resource* const data_source_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandDataSourceDelegate);
+};
+
+void data_source_offer(wl_client* client,
+                       wl_resource* resource,
+                       const char* mime_type) {
+  GetUserDataAs<DataSource>(resource)->Offer(mime_type);
+}
+
+void data_source_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void data_source_set_actions(wl_client* client,
+                             wl_resource* resource,
+                             uint32_t dnd_actions) {
+  GetUserDataAs<DataSource>(resource)->SetActions(
+      DataDeviceManagerDndActions(dnd_actions));
+}
+
+const struct wl_data_source_interface data_source_implementation = {
+    data_source_offer, data_source_destroy, data_source_set_actions};
+
+////////////////////////////////////////////////////////////////////////////////
+// wl_data_offer_interface:
+
+class WaylandDataOfferDelegate : public DataOfferDelegate {
+ public:
+  explicit WaylandDataOfferDelegate(wl_resource* offer)
+      : data_offer_resource_(offer) {}
+
+  // Overridden from DataOfferDelegate:
+  void OnDataOfferDestroying(DataOffer* device) override { delete this; }
+  void OnOffer(const std::string& mime_type) override {
+    wl_data_offer_send_offer(data_offer_resource_, mime_type.c_str());
+  }
+  void OnSourceActions(
+      const base::flat_set<DndAction>& source_actions) override {
+    wl_data_offer_send_source_actions(
+        data_offer_resource_,
+        WaylandDataDeviceManagerDndActions(source_actions));
+  }
+  void OnAction(DndAction action) override {
+    wl_data_offer_send_action(data_offer_resource_,
+                              WaylandDataDeviceManagerDndAction(action));
+  }
+
+ private:
+  wl_resource* const data_offer_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandDataOfferDelegate);
+};
+
+void data_offer_accept(wl_client* client,
+                       wl_resource* resource,
+                       uint32_t serial,
+                       const char* mime_type) {
+  GetUserDataAs<DataOffer>(resource)->Accept(mime_type);
+}
+
+void data_offer_receive(wl_client* client,
+                        wl_resource* resource,
+                        const char* mime_type,
+                        int fd) {
+  GetUserDataAs<DataOffer>(resource)->Receive(mime_type, base::ScopedFD(fd));
+}
+
+void data_offer_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void data_offer_finish(wl_client* client, wl_resource* resource) {
+  GetUserDataAs<DataOffer>(resource)->Finish();
+}
+
+void data_offer_set_actions(wl_client* client,
+                            wl_resource* resource,
+                            uint32_t dnd_actions,
+                            uint32_t preferred_action) {
+  GetUserDataAs<DataOffer>(resource)->SetActions(
+      DataDeviceManagerDndActions(dnd_actions),
+      DataDeviceManagerDndAction(preferred_action));
+}
+
+const struct wl_data_offer_interface data_offer_implementation = {
+    data_offer_accept, data_offer_receive, data_offer_finish,
+    data_offer_destroy, data_offer_set_actions};
+
+////////////////////////////////////////////////////////////////////////////////
 // wl_data_device_interface:
+
+class WaylandDataDeviceDelegate : public DataDeviceDelegate {
+ public:
+  WaylandDataDeviceDelegate(wl_client* client, wl_resource* device_resource)
+      : client_(client), data_device_resource_(device_resource) {}
+
+  // Overridden from DataDeviceDelegate:
+  void OnDataDeviceDestroying(DataDevice* device) override { delete this; }
+  bool CanAcceptDataEventsForSurface(Surface* surface) override {
+    return surface &&
+           wl_resource_get_client(GetSurfaceResource(surface)) == client_;
+  }
+  DataOffer* OnDataOffer() override {
+    wl_resource* data_offer_resource =
+        wl_resource_create(client_, &wl_data_offer_interface, 1, 0);
+    std::unique_ptr<DataOffer> data_offer = base::MakeUnique<DataOffer>(
+        new WaylandDataOfferDelegate(data_offer_resource));
+    data_offer->SetProperty(kDataOfferResourceKey, data_offer_resource);
+    SetImplementation(data_offer_resource, &data_offer_implementation,
+                      std::move(data_offer));
+
+    wl_data_device_send_data_offer(data_device_resource_, data_offer_resource);
+
+    return GetUserDataAs<DataOffer>(data_offer_resource);
+  }
+  void OnEnter(Surface* surface,
+               const gfx::PointF& point,
+               const DataOffer& data_offer) override {
+    wl_data_device_send_enter(
+        data_device_resource_,
+        wl_display_next_serial(wl_client_get_display(client_)),
+        GetSurfaceResource(surface), wl_fixed_from_double(point.x()),
+        wl_fixed_from_double(point.y()), GetDataOfferResource(&data_offer));
+  }
+  void OnLeave() override { wl_data_device_send_leave(data_device_resource_); }
+  void OnMotion(base::TimeTicks time_stamp, const gfx::PointF& point) override {
+    wl_data_device_send_motion(
+        data_device_resource_, TimeTicksToMilliseconds(time_stamp),
+        wl_fixed_from_double(point.x()), wl_fixed_from_double(point.y()));
+  }
+  void OnDrop() override { wl_data_device_send_drop(data_device_resource_); }
+  void OnSelection(const DataOffer& data_offer) override {
+    wl_data_device_send_selection(data_device_resource_,
+                                  GetDataOfferResource(&data_offer));
+  }
+
+ private:
+  wl_client* const client_;
+  wl_resource* const data_device_resource_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandDataDeviceDelegate);
+};
 
 void data_device_start_drag(wl_client* client,
                             wl_resource* resource,
@@ -2540,18 +2866,26 @@ void data_device_start_drag(wl_client* client,
                             wl_resource* origin_resource,
                             wl_resource* icon_resource,
                             uint32_t serial) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<DataDevice>(resource)->StartDrag(
+      source_resource ? GetUserDataAs<DataSource>(source_resource) : nullptr,
+      GetUserDataAs<Surface>(origin_resource),
+      icon_resource ? GetUserDataAs<Surface>(icon_resource) : nullptr, serial);
 }
 
 void data_device_set_selection(wl_client* client,
                                wl_resource* resource,
                                wl_resource* data_source,
                                uint32_t serial) {
-  NOTIMPLEMENTED();
+  GetUserDataAs<DataDevice>(resource)->SetSelection(
+      GetUserDataAs<DataSource>(data_source), serial);
+}
+
+void data_device_release(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
 }
 
 const struct wl_data_device_interface data_device_implementation = {
-    data_device_start_drag, data_device_set_selection};
+    data_device_start_drag, data_device_set_selection, data_device_release};
 
 ////////////////////////////////////////////////////////////////////////////////
 // wl_data_device_manager_interface:
@@ -2559,18 +2893,23 @@ const struct wl_data_device_interface data_device_implementation = {
 void data_device_manager_create_data_source(wl_client* client,
                                             wl_resource* resource,
                                             uint32_t id) {
-  NOTIMPLEMENTED();
+  wl_resource* data_source_resource =
+      wl_resource_create(client, &wl_data_device_interface, 1, id);
+  SetImplementation(data_source_resource, &data_source_implementation,
+                    base::MakeUnique<DataSource>(
+                        new WaylandDataSourceDelegate(data_source_resource)));
 }
 
 void data_device_manager_get_data_device(wl_client* client,
                                          wl_resource* resource,
                                          uint32_t id,
                                          wl_resource* seat_resource) {
+  Display* display = GetUserDataAs<Display>(resource);
   wl_resource* data_device_resource =
       wl_resource_create(client, &wl_data_device_interface, 1, id);
-
-  wl_resource_set_implementation(data_device_resource,
-                                 &data_device_implementation, nullptr, nullptr);
+  SetImplementation(data_device_resource, &data_device_implementation,
+                    display->CreateDataDevice(new WaylandDataDeviceDelegate(
+                        client, data_device_resource)));
 }
 
 const struct wl_data_device_manager_interface
@@ -2584,7 +2923,6 @@ void bind_data_device_manager(wl_client* client,
                               uint32_t id) {
   wl_resource* resource =
       wl_resource_create(client, &wl_data_device_manager_interface, 1, id);
-
   wl_resource_set_implementation(resource, &data_device_manager_implementation,
                                  data, nullptr);
 }
@@ -2737,29 +3075,37 @@ const struct wl_pointer_interface pointer_implementation = {pointer_set_cursor,
 
 // Keyboard delegate class that accepts events for surfaces owned by the same
 // client as a keyboard resource.
-class WaylandKeyboardDelegate : public KeyboardDelegate {
+class WaylandKeyboardDelegate
+    : public KeyboardDelegate,
+      public KeyboardObserver
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+    ,
+      public chromeos::input_method::ImeKeyboard::Observer
+#endif
+{
  public:
   explicit WaylandKeyboardDelegate(wl_resource* keyboard_resource)
       : keyboard_resource_(keyboard_resource),
-        xkb_context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)),
-        // TODO(reveman): Keep keymap synchronized with the keymap used by
-        // chromium and the host OS.
-        xkb_keymap_(xkb_keymap_new_from_names(xkb_context_.get(),
-                                              nullptr,
-                                              XKB_KEYMAP_COMPILE_NO_FLAGS)),
-        xkb_state_(xkb_state_new(xkb_keymap_.get())) {
-    std::unique_ptr<char, base::FreeDeleter> keymap_string(
-        xkb_keymap_get_as_string(xkb_keymap_.get(), XKB_KEYMAP_FORMAT_TEXT_V1));
-    DCHECK(keymap_string.get());
-    size_t keymap_size = strlen(keymap_string.get()) + 1;
-    base::SharedMemory shared_keymap;
-    bool rv = shared_keymap.CreateAndMapAnonymous(keymap_size);
-    DCHECK(rv);
-    memcpy(shared_keymap.memory(), keymap_string.get(), keymap_size);
-    wl_keyboard_send_keymap(keyboard_resource_,
-                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
-                            shared_keymap.handle().GetHandle(), keymap_size);
+        xkb_context_(xkb_context_new(XKB_CONTEXT_NO_FLAGS)) {
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+    chromeos::input_method::ImeKeyboard* keyboard =
+        chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
+    if (keyboard) {
+      keyboard->AddObserver(this);
+      SendNamedLayout(keyboard->GetCurrentKeyboardLayoutName());
+    }
+#else
+    SendLayout(nullptr);
+#endif
   }
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  ~WaylandKeyboardDelegate() override {
+    chromeos::input_method::ImeKeyboard* keyboard =
+        chromeos::input_method::InputMethodManager::Get()->GetImeKeyboard();
+    if (keyboard)
+      keyboard->RemoveObserver(this);
+  }
+#endif
 
   // Overridden from KeyboardDelegate:
   void OnKeyboardDestroying(Keyboard* keyboard) override { delete this; }
@@ -2793,14 +3139,16 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
     wl_keyboard_send_leave(keyboard_resource_, next_serial(), surface_resource);
     wl_client_flush(client());
   }
-  void OnKeyboardKey(base::TimeTicks time_stamp,
-                     ui::DomCode key,
-                     bool pressed) override {
-    wl_keyboard_send_key(keyboard_resource_, next_serial(),
+  uint32_t OnKeyboardKey(base::TimeTicks time_stamp,
+                         ui::DomCode key,
+                         bool pressed) override {
+    uint32_t serial = next_serial();
+    wl_keyboard_send_key(keyboard_resource_, serial,
                          TimeTicksToMilliseconds(time_stamp), DomCodeToKey(key),
                          pressed ? WL_KEYBOARD_KEY_STATE_PRESSED
                                  : WL_KEYBOARD_KEY_STATE_RELEASED);
     wl_client_flush(client());
+    return serial;
   }
   void OnKeyboardModifiers(int modifier_flags) override {
     xkb_state_update_mask(xkb_state_.get(),
@@ -2815,6 +3163,14 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
                                    XKB_STATE_LAYOUT_EFFECTIVE));
     wl_client_flush(client());
   }
+
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  // Overridden from input_method::ImeKeyboard::Observer:
+  void OnCapsLockChanged(bool enabled) override {}
+  void OnLayoutChanging(const std::string& layout_name) override {
+    SendNamedLayout(layout_name);
+  }
+#endif
 
  private:
   // Returns the corresponding key given a dom code.
@@ -2851,6 +3207,40 @@ class WaylandKeyboardDelegate : public KeyboardDelegate {
       }
     }
     return xkb_modifiers;
+  }
+
+
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  // Send the named keyboard layout to the client.
+  void SendNamedLayout(const std::string& layout_name) {
+    std::string layout_id, layout_variant;
+    ui::XkbKeyboardLayoutEngine::ParseLayoutName(layout_name, &layout_id,
+                                                 &layout_variant);
+    xkb_rule_names names = {.rules = nullptr,
+                            .model = "pc101",
+                            .layout = layout_id.c_str(),
+                            .variant = layout_variant.c_str(),
+                            .options = ""};
+    SendLayout(&names);
+  }
+#endif
+
+  // Send the keyboard layout named by XKB rules to the client.
+  void SendLayout(const xkb_rule_names* names) {
+    xkb_keymap_.reset(xkb_keymap_new_from_names(xkb_context_.get(), names,
+                                                XKB_KEYMAP_COMPILE_NO_FLAGS));
+    xkb_state_.reset(xkb_state_new(xkb_keymap_.get()));
+    std::unique_ptr<char, base::FreeDeleter> keymap_string(
+        xkb_keymap_get_as_string(xkb_keymap_.get(), XKB_KEYMAP_FORMAT_TEXT_V1));
+    DCHECK(keymap_string.get());
+    size_t keymap_size = strlen(keymap_string.get()) + 1;
+    base::SharedMemory shared_keymap;
+    bool rv = shared_keymap.CreateAndMapAnonymous(keymap_size);
+    DCHECK(rv);
+    memcpy(shared_keymap.memory(), keymap_string.get(), keymap_size);
+    wl_keyboard_send_keymap(keyboard_resource_,
+                            WL_KEYBOARD_KEYMAP_FORMAT_XKB_V1,
+                            shared_keymap.handle().GetHandle(), keymap_size);
   }
 
   // The client who own this keyboard instance.
@@ -2980,9 +3370,12 @@ void seat_get_keyboard(wl_client* client, wl_resource* resource, uint32_t id) {
   wl_resource* keyboard_resource =
       wl_resource_create(client, &wl_keyboard_interface, version, id);
 
+  WaylandKeyboardDelegate* delegate =
+      new WaylandKeyboardDelegate(keyboard_resource);
+  std::unique_ptr<Keyboard> keyboard = base::MakeUnique<Keyboard>(delegate);
+  keyboard->AddObserver(delegate);
   SetImplementation(keyboard_resource, &keyboard_implementation,
-                    base::MakeUnique<Keyboard>(
-                        new WaylandKeyboardDelegate(keyboard_resource)));
+                    std::move(keyboard));
 
   // TODO(reveman): Keep repeat info synchronized with chromium and the host OS.
   if (version >= WL_KEYBOARD_REPEAT_INFO_SINCE_VERSION)
@@ -3768,16 +4161,20 @@ void bind_stylus_v1_DEPRECATED(wl_client* client,
 // keyboard_device_configuration interface:
 
 class WaylandKeyboardDeviceConfigurationDelegate
-    : public KeyboardDeviceConfigurationDelegate {
+    : public KeyboardDeviceConfigurationDelegate,
+      public KeyboardObserver {
  public:
   WaylandKeyboardDeviceConfigurationDelegate(wl_resource* resource,
                                              Keyboard* keyboard)
       : resource_(resource), keyboard_(keyboard) {
     keyboard_->SetDeviceConfigurationDelegate(this);
+    keyboard_->AddObserver(this);
   }
   ~WaylandKeyboardDeviceConfigurationDelegate() override {
-    if (keyboard_)
+    if (keyboard_) {
       keyboard_->SetDeviceConfigurationDelegate(nullptr);
+      keyboard_->RemoveObserver(this);
+    }
   }
 
   void OnKeyboardDestroying(Keyboard* keyboard) override {
@@ -3930,6 +4327,93 @@ void bind_stylus_tools(wl_client* client,
                                  nullptr);
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// extended_keyboard interface:
+
+class WaylandExtendedKeyboardImpl : public KeyboardObserver {
+ public:
+  WaylandExtendedKeyboardImpl(Keyboard* keyboard) : keyboard_(keyboard) {
+    keyboard_->AddObserver(this);
+    keyboard_->SetNeedKeyboardKeyAcks(true);
+  }
+  ~WaylandExtendedKeyboardImpl() override {
+    if (keyboard_) {
+      keyboard_->RemoveObserver(this);
+      keyboard_->SetNeedKeyboardKeyAcks(false);
+    }
+  }
+
+  // Overridden from KeyboardObserver:
+  void OnKeyboardDestroying(Keyboard* keyboard) override {
+    DCHECK(keyboard_ == keyboard);
+    keyboard_ = nullptr;
+  }
+
+  void AckKeyboardKey(uint32_t serial, bool handled) {
+    if (keyboard_)
+      keyboard_->AckKeyboardKey(serial, handled);
+  }
+
+ private:
+  Keyboard* keyboard_;
+
+  DISALLOW_COPY_AND_ASSIGN(WaylandExtendedKeyboardImpl);
+};
+
+void extended_keyboard_destroy(wl_client* client, wl_resource* resource) {
+  wl_resource_destroy(resource);
+}
+
+void extended_keyboard_ack_key(wl_client* client,
+                               wl_resource* resource,
+                               uint32_t serial,
+                               uint32_t handled_state) {
+  GetUserDataAs<WaylandExtendedKeyboardImpl>(resource)->AckKeyboardKey(
+      serial, handled_state == ZCR_EXTENDED_KEYBOARD_V1_HANDLED_STATE_HANDLED);
+}
+
+const struct zcr_extended_keyboard_v1_interface
+    extended_keyboard_implementation = {extended_keyboard_destroy,
+                                        extended_keyboard_ack_key};
+
+////////////////////////////////////////////////////////////////////////////////
+// keyboard_extension interface:
+
+void keyboard_extension_get_extended_keyboard(wl_client* client,
+                                              wl_resource* resource,
+                                              uint32_t id,
+                                              wl_resource* keyboard_resource) {
+  Keyboard* keyboard = GetUserDataAs<Keyboard>(keyboard_resource);
+  if (keyboard->AreKeyboardKeyAcksNeeded()) {
+    wl_resource_post_error(
+        resource, ZCR_KEYBOARD_EXTENSION_V1_ERROR_EXTENDED_KEYBOARD_EXISTS,
+        "keyboard has already been associated with a extended_keyboard object");
+    return;
+  }
+
+  wl_resource* extended_keyboard_resource =
+      wl_resource_create(client, &zcr_extended_keyboard_v1_interface, 1, id);
+
+  SetImplementation(extended_keyboard_resource,
+                    &extended_keyboard_implementation,
+                    base::MakeUnique<WaylandExtendedKeyboardImpl>(keyboard));
+}
+
+const struct zcr_keyboard_extension_v1_interface
+    keyboard_extension_implementation = {
+        keyboard_extension_get_extended_keyboard};
+
+void bind_keyboard_extension(wl_client* client,
+                             void* data,
+                             uint32_t version,
+                             uint32_t id) {
+  wl_resource* resource = wl_resource_create(
+      client, &zcr_keyboard_extension_v1_interface, version, id);
+
+  wl_resource_set_implementation(resource, &keyboard_extension_implementation,
+                                 data, nullptr);
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -3943,7 +4427,7 @@ Server::Server(Display* display)
 #if defined(USE_OZONE)
   wl_global_create(wl_display_.get(), &wl_drm_interface, drm_version, display_,
                    bind_drm);
-  wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zwp_linux_dmabuf_v1_interface, 2,
                    display_, bind_linux_dmabuf);
 #endif
   wl_global_create(wl_display_.get(), &wl_subcompositor_interface, 1, display_,
@@ -3984,6 +4468,8 @@ Server::Server(Display* display)
                    2, display_, bind_keyboard_configuration);
   wl_global_create(wl_display_.get(), &zcr_stylus_tools_v1_interface, 1,
                    display_, bind_stylus_tools);
+  wl_global_create(wl_display_.get(), &zcr_keyboard_extension_v1_interface, 1,
+                   display_, bind_keyboard_extension);
 }
 
 Server::~Server() {}

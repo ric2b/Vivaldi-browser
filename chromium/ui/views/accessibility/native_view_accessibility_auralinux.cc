@@ -72,6 +72,11 @@ class AuraLinuxApplication
 
   const ui::AXNodeData& GetData() const override { return data_; }
 
+  const ui::AXTreeData& GetTreeData() const override {
+    CR_DEFINE_STATIC_LOCAL(ui::AXTreeData, empty_data, ());
+    return empty_data;
+  }
+
   gfx::NativeWindow GetTopLevelWidget() override { return nullptr; }
 
   gfx::NativeViewAccessible GetParent() override {
@@ -101,6 +106,8 @@ class AuraLinuxApplication
     return nullptr;
   }
 
+  ui::AXPlatformNode* GetFromNodeID(int32_t id) override { return nullptr; }
+
   gfx::AcceleratedWidget GetTargetForNativeAccessibilityEvent() override {
     return gfx::kNullAcceleratedWidget;
   }
@@ -108,6 +115,8 @@ class AuraLinuxApplication
   bool AccessibilityPerformAction(const ui::AXActionData& data) override {
     return false;
   }
+
+  bool ShouldIgnoreHoveredStateForTesting() override { return false; }
 
  private:
   friend struct base::DefaultSingletonTraits<AuraLinuxApplication>;

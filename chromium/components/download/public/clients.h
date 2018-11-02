@@ -5,6 +5,11 @@
 #ifndef COMPONENTS_DOWNLOAD_PUBLIC_CLIENTS_H_
 #define COMPONENTS_DOWNLOAD_PUBLIC_CLIENTS_H_
 
+#include <map>
+#include <memory>
+
+#include "components/download/public/client.h"
+
 namespace download {
 
 // A list of all clients that are able to make download requests through the
@@ -15,18 +20,22 @@ namespace download {
 // but also to make sure the underlying database properly associates each
 // download with the right client.
 enum class DownloadClient {
-  // Represents an uninitialized DownloadClient variable.
-  INVALID = 0,
-
   // Test client values.  Meant to be used by the testing framework and not
   // production code.  Callers will be unable to access the DownloadService with
   // these test APIs.
-  TEST = 1,
+  TEST = -1,
+  TEST_2 = -2,
+  TEST_3 = -3,
 
-  OFFLINE_PAGE_PREFETCH = 2,
+  // Represents an uninitialized DownloadClient variable.
+  INVALID = 0,
 
-  BOUNDARY = 3,
+  OFFLINE_PAGE_PREFETCH = 1,
+
+  BOUNDARY = 2,
 };
+
+using DownloadClientMap = std::map<DownloadClient, std::unique_ptr<Client>>;
 
 }  // namespace download
 

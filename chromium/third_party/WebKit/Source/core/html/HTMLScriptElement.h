@@ -51,12 +51,13 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   void setAsync(bool);
   bool async() const;
 
-  ScriptLoader* Loader() const { return loader_.Get(); }
+  ScriptLoader* Loader() const final { return loader_.Get(); }
 
   bool IsScriptElement() const override { return true; }
   Document& GetDocument() const override;
 
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
  private:
   HTMLScriptElement(Document&,
@@ -85,7 +86,6 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   String CrossOriginAttributeValue() const override;
   String IntegrityAttributeValue() const override;
   String TextFromChildren() override;
-  String TextContent() const override;
   bool AsyncAttributeValue() const override;
   bool DeferAttributeValue() const override;
   bool HasSourceAttribute() const override;
@@ -94,7 +94,8 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
   const AtomicString& GetNonceForElement() const override;
   bool AllowInlineScriptForCSP(const AtomicString& nonce,
                                const WTF::OrdinalNumber&,
-                               const String& script_content) override;
+                               const String& script_content,
+                               ContentSecurityPolicy::InlineType) override;
   AtomicString InitiatorName() const override;
   void DispatchLoadEvent() override;
   void DispatchErrorEvent() override;
@@ -102,6 +103,8 @@ class CORE_EXPORT HTMLScriptElement final : public HTMLElement,
       HTMLScriptElementOrSVGScriptElement&) override;
 
   Element* CloneElementWithoutAttributesAndChildren() override;
+
+  TraceWrapperMember<ScriptLoader> loader_;
 };
 
 }  // namespace blink

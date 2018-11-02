@@ -9,7 +9,7 @@
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/layers/layer.h"
-#include "cc/test/fake_compositor_frame_sink.h"
+#include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/geometry_test_utils.h"
 #include "cc/trees/clip_node.h"
 #include "cc/trees/effect_node.h"
@@ -20,6 +20,7 @@
 #include "platform/graphics/paint/EffectPaintPropertyNode.h"
 #include "platform/graphics/paint/PaintArtifact.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
+#include "platform/testing/FakeDisplayItemClient.h"
 #include "platform/testing/PaintPropertyTestHelpers.h"
 #include "platform/testing/PictureMatchers.h"
 #include "platform/testing/RuntimeEnabledFeaturesTestHelpers.h"
@@ -31,16 +32,13 @@
 
 namespace blink {
 
-#define EXPECT_BLINK_FLOAT_RECT_EQ(expected, actual)         \
-  do {                                                       \
-    EXPECT_FLOAT_EQ((expected).X(), (actual).X());           \
-    EXPECT_FLOAT_EQ((expected).Y(), (actual).Y());           \
-    EXPECT_FLOAT_EQ((expected).Width(), (actual).Width());   \
-    EXPECT_FLOAT_EQ((expected).Height(), (actual).Height()); \
-  } while (false)
-
 using ::blink::testing::CreateOpacityOnlyEffect;
 using ::testing::Pointee;
+
+PaintChunk::Id DefaultId() {
+  DEFINE_STATIC_LOCAL(FakeDisplayItemClient, fake_client, ());
+  return PaintChunk::Id(fake_client, DisplayItem::kDrawingFirst);
+}
 
 PaintChunkProperties DefaultPaintChunkProperties() {
   PropertyTreeState property_tree_state(TransformPaintPropertyNode::Root(),
@@ -49,22 +47,26 @@ PaintChunkProperties DefaultPaintChunkProperties() {
   return PaintChunkProperties(property_tree_state);
 }
 
+PaintChunk DefaultChunk() {
+  return PaintChunk(0, 1, DefaultId(), DefaultPaintChunkProperties());
+}
+
 gfx::Transform Translation(SkMScalar x, SkMScalar y) {
   gfx::Transform transform;
   transform.Translate(x, y);
   return transform;
 }
 
-class WebLayerTreeViewWithCompositorFrameSink
+class WebLayerTreeViewWithLayerTreeFrameSink
     : public WebLayerTreeViewImplForTesting {
  public:
-  WebLayerTreeViewWithCompositorFrameSink(const cc::LayerTreeSettings& settings)
+  WebLayerTreeViewWithLayerTreeFrameSink(const cc::LayerTreeSettings& settings)
       : WebLayerTreeViewImplForTesting(settings) {}
 
   // cc::LayerTreeHostClient
-  void RequestNewCompositorFrameSink() override {
-    GetLayerTreeHost()->SetCompositorFrameSink(
-        cc::FakeCompositorFrameSink::Create3d());
+  void RequestNewLayerTreeFrameSink() override {
+    GetLayerTreeHost()->SetLayerTreeFrameSink(
+        cc::FakeLayerTreeFrameSink::Create3d());
   }
 };
 
@@ -87,7 +89,7 @@ class PaintArtifactCompositorTestWithPropertyTrees
     settings.single_thread_proxy_scheduler = false;
     settings.use_layer_lists = true;
     web_layer_tree_view_ =
-        WTF::MakeUnique<WebLayerTreeViewWithCompositorFrameSink>(settings);
+        WTF::MakeUnique<WebLayerTreeViewWithLayerTreeFrameSink>(settings);
     web_layer_tree_view_->SetRootLayer(
         *paint_artifact_compositor_->GetWebLayer());
   }
@@ -130,7 +132,7 @@ class PaintArtifactCompositorTestWithPropertyTrees
 
   void Update(const PaintArtifact& artifact,
               CompositorElementIdSet& element_ids) {
-    paint_artifact_compositor_->Update(artifact, nullptr, false, element_ids);
+    paint_artifact_compositor_->Update(artifact, element_ids);
     web_layer_tree_view_->GetLayerTreeHost()->LayoutAndUpdateLayers();
   }
 
@@ -171,11 +173,17 @@ class PaintArtifactCompositorTestWithPropertyTrees
     Update(artifact.Build());
   }
 
+  using PendingLayer = PaintArtifactCompositor::PendingLayer;
+
+  bool MightOverlap(const PendingLayer& a, const PendingLayer& b) {
+    return PaintArtifactCompositor::MightOverlap(a, b);
+  }
+
  private:
   std::unique_ptr<PaintArtifactCompositor> paint_artifact_compositor_;
   scoped_refptr<base::TestSimpleTaskRunner> task_runner_;
   base::ThreadTaskRunnerHandle task_runner_handle_;
-  std::unique_ptr<WebLayerTreeViewWithCompositorFrameSink> web_layer_tree_view_;
+  std::unique_ptr<WebLayerTreeViewWithLayerTreeFrameSink> web_layer_tree_view_;
 };
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EmptyPaintArtifact) {
@@ -647,7 +655,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
       EffectPaintPropertyNode::Root(), TransformPaintPropertyNode::Root(),
       ClipPaintPropertyNode::Root(), kColorFilterNone,
       CompositorFilterOperations(), 0.5, SkBlendMode::kSrcOver,
-      kCompositingReasonAll);
+      kCompositingReasonAll, CompositorElementId(2));
   RefPtr<EffectPaintPropertyNode> effect2 = EffectPaintPropertyNode::Create(
       effect1, TransformPaintPropertyNode::Root(),
       ClipPaintPropertyNode::Root(), kColorFilterNone,
@@ -684,10 +692,13 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, EffectTreeConversion) {
 
   const cc::EffectNode& converted_root_effect = *effect_tree.Node(1);
   EXPECT_EQ(-1, converted_root_effect.parent_id);
+  EXPECT_EQ(CompositorElementIdFromRootEffectId(1).id_,
+            converted_root_effect.stable_id);
 
   const cc::EffectNode& converted_effect1 = *effect_tree.Node(2);
   EXPECT_EQ(converted_root_effect.id, converted_effect1.parent_id);
   EXPECT_FLOAT_EQ(0.5, converted_effect1.opacity);
+  EXPECT_EQ(2u, converted_effect1.stable_id);
 
   const cc::EffectNode& converted_effect2 = *effect_tree.Node(3);
   EXPECT_EQ(converted_effect1.id, converted_effect2.parent_id);
@@ -738,7 +749,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
   // Node #0 reserved for null; #1 for root render surface.
   ASSERT_EQ(3u, scroll_tree.size());
   const cc::ScrollNode& scroll_node = *scroll_tree.Node(2);
-  EXPECT_EQ(gfx::Size(11, 13), scroll_node.scroll_clip_layer_bounds);
+  EXPECT_EQ(gfx::Size(11, 13), scroll_node.container_bounds);
   EXPECT_EQ(gfx::Size(27, 31), scroll_node.bounds);
   EXPECT_TRUE(scroll_node.user_scrollable_horizontal);
   EXPECT_FALSE(scroll_node.user_scrollable_vertical);
@@ -758,25 +769,19 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OneScrollNode) {
             scroll_node.main_thread_scrolling_reasons);
 
   auto* layer = ContentLayerAt(0);
-  EXPECT_EQ(layer->id(), scroll_node.owning_layer_id);
-  auto scroll_node_index =
-      GetPropertyTrees().scroll_tree.FindNodeIndexFromOwningLayerId(
-          layer->id());
+  auto scroll_node_index = layer->scroll_tree_index();
   EXPECT_EQ(scroll_node_index, scroll_node.id);
 
   // Only one content layer, and the first child layer is the dummy layer for
   // the transform node.
   const cc::Layer* transform_node_layer = RootLayer()->children()[0].get();
-  EXPECT_EQ(transform_node_layer->id(), transform_node.owning_layer_id);
-  auto transform_node_index =
-      GetPropertyTrees().transform_tree.FindNodeIndexFromOwningLayerId(
-          transform_node_layer->id());
+  auto transform_node_index = transform_node_layer->transform_tree_index();
   EXPECT_EQ(transform_node_index, transform_node.id);
 
   EXPECT_EQ(0u, scroll_client.did_scroll_count);
-  // TODO(pdr): The PaintArtifactCompositor should set the scroll clip layer id
-  // so the Layer is scrollable. This call should be removed.
-  layer->SetScrollClipLayerId(layer->id());
+  // TODO(pdr): The PaintArtifactCompositor should set the scrolling content
+  // bounds so the Layer is scrollable. This call should be removed.
+  layer->SetScrollable(gfx::Size(1, 1));
   layer->SetScrollOffsetFromImplSide(gfx::ScrollOffset(1, 2));
   EXPECT_EQ(1u, scroll_client.did_scroll_count);
   EXPECT_EQ(gfx::ScrollOffset(1, 2), scroll_client.last_scroll_offset);
@@ -859,7 +864,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, NestedScrollNodes) {
   // Node #0 reserved for null; #1 for root render surface.
   ASSERT_EQ(3u, scroll_tree.size());
   const cc::ScrollNode& scroll_node = *scroll_tree.Node(2);
-  EXPECT_EQ(gfx::Size(2, 3), scroll_node.scroll_clip_layer_bounds);
+  EXPECT_EQ(gfx::Size(2, 3), scroll_node.container_bounds);
   EXPECT_EQ(gfx::Size(5, 7), scroll_node.bounds);
   EXPECT_FALSE(scroll_node.user_scrollable_horizontal);
   EXPECT_TRUE(scroll_node.user_scrollable_vertical);
@@ -1473,7 +1478,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, TwoTransformsClipBetween) {
     rects_with_color.push_back(
         RectWithColor(FloatRect(0, 0, 100, 100), Color::kWhite));
     rects_with_color.push_back(
-        RectWithColor(FloatRect(40, 50, 50, 60), Color(Color::kBlack)));
+        RectWithColor(FloatRect(40, 50, 10, 10), Color(Color::kBlack)));
     rects_with_color.push_back(
         RectWithColor(FloatRect(0, 0, 200, 300), Color::kGray));
     const cc::Layer* layer = ContentLayerAt(0);
@@ -1509,19 +1514,16 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, OverlapTransform) {
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MightOverlap) {
-  PaintChunk paint_chunk;
-  paint_chunk.properties = DefaultPaintChunkProperties();
+  PaintChunk paint_chunk = DefaultChunk();
   paint_chunk.bounds = FloatRect(0, 0, 100, 100);
-  PaintArtifactCompositor::PendingLayer pending_layer(paint_chunk, false);
+  PendingLayer pending_layer(paint_chunk, false);
 
-  PaintChunk paint_chunk2;
-  paint_chunk2.properties = DefaultPaintChunkProperties();
+  PaintChunk paint_chunk2 = DefaultChunk();
   paint_chunk2.bounds = FloatRect(0, 0, 100, 100);
 
   {
-    PaintArtifactCompositor::PendingLayer pending_layer2(paint_chunk2, false);
-    EXPECT_TRUE(
-        PaintArtifactCompositor::MightOverlap(pending_layer, pending_layer2));
+    PendingLayer pending_layer2(paint_chunk2, false);
+    EXPECT_TRUE(MightOverlap(pending_layer, pending_layer2));
   }
 
   RefPtr<TransformPaintPropertyNode> transform =
@@ -1531,9 +1533,8 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MightOverlap) {
           false);
   {
     paint_chunk2.properties.property_tree_state.SetTransform(transform.Get());
-    PaintArtifactCompositor::PendingLayer pending_layer2(paint_chunk2, false);
-    EXPECT_TRUE(
-        PaintArtifactCompositor::MightOverlap(pending_layer, pending_layer2));
+    PendingLayer pending_layer2(paint_chunk2, false);
+    EXPECT_TRUE(MightOverlap(pending_layer, pending_layer2));
   }
 
   RefPtr<TransformPaintPropertyNode> transform2 =
@@ -1543,14 +1544,13 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, MightOverlap) {
           false);
   {
     paint_chunk2.properties.property_tree_state.SetTransform(transform2.Get());
-    PaintArtifactCompositor::PendingLayer pending_layer2(paint_chunk2, false);
-    EXPECT_FALSE(
-        PaintArtifactCompositor::MightOverlap(pending_layer, pending_layer2));
+    PendingLayer pending_layer2(paint_chunk2, false);
+    EXPECT_FALSE(MightOverlap(pending_layer, pending_layer2));
   }
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayer) {
-  PaintChunk chunk1;
+  PaintChunk chunk1 = DefaultChunk();
   chunk1.properties.property_tree_state = PropertyTreeState(
       TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
       EffectPaintPropertyNode::Root());
@@ -1558,34 +1558,34 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayer) {
   chunk1.known_to_be_opaque = true;
   chunk1.bounds = FloatRect(0, 0, 30, 40);
 
-  PaintArtifactCompositor::PendingLayer pending_layer(chunk1, false);
+  PendingLayer pending_layer(chunk1, false);
 
   EXPECT_TRUE(pending_layer.backface_hidden);
   EXPECT_TRUE(pending_layer.known_to_be_opaque);
-  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
 
-  PaintChunk chunk2;
+  PaintChunk chunk2 = DefaultChunk();
   chunk2.properties.property_tree_state = chunk1.properties.property_tree_state;
   chunk2.properties.backface_hidden = true;
   chunk2.known_to_be_opaque = true;
   chunk2.bounds = FloatRect(10, 20, 30, 40);
-  pending_layer.Merge(PaintArtifactCompositor::PendingLayer(chunk2, false));
+  pending_layer.Merge(PendingLayer(chunk2, false));
 
   EXPECT_TRUE(pending_layer.backface_hidden);
   // Bounds not equal to one PaintChunk.
   EXPECT_FALSE(pending_layer.known_to_be_opaque);
-  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 40, 60), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(0, 0, 40, 60), pending_layer.bounds);
 
-  PaintChunk chunk3;
+  PaintChunk chunk3 = DefaultChunk();
   chunk3.properties.property_tree_state = chunk1.properties.property_tree_state;
   chunk3.properties.backface_hidden = true;
   chunk3.known_to_be_opaque = true;
   chunk3.bounds = FloatRect(-5, -25, 20, 20);
-  pending_layer.Merge(PaintArtifactCompositor::PendingLayer(chunk3, false));
+  pending_layer.Merge(PendingLayer(chunk3, false));
 
   EXPECT_TRUE(pending_layer.backface_hidden);
   EXPECT_FALSE(pending_layer.known_to_be_opaque);
-  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(-5, -25, 45, 85), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(-5, -25, 45, 85), pending_layer.bounds);
 }
 
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayerWithGeometry) {
@@ -1595,53 +1595,53 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees, PendingLayerWithGeometry) {
           TransformationMatrix().Translate(20, 25), FloatPoint3D(100, 100, 0),
           false, 0);
 
-  PaintChunk chunk1;
+  PaintChunk chunk1 = DefaultChunk();
   chunk1.properties.property_tree_state = PropertyTreeState(
       TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
       EffectPaintPropertyNode::Root());
   chunk1.bounds = FloatRect(0, 0, 30, 40);
 
-  PaintArtifactCompositor::PendingLayer pending_layer(chunk1, false);
+  PendingLayer pending_layer(chunk1, false);
 
-  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(0, 0, 30, 40), pending_layer.bounds);
 
-  PaintChunk chunk2;
+  PaintChunk chunk2 = DefaultChunk();
   chunk2.properties.property_tree_state = chunk1.properties.property_tree_state;
   chunk2.properties.property_tree_state.SetTransform(transform);
   chunk2.bounds = FloatRect(0, 0, 50, 60);
-  pending_layer.Merge(PaintArtifactCompositor::PendingLayer(chunk2, false));
+  pending_layer.Merge(PendingLayer(chunk2, false));
 
-  EXPECT_BLINK_FLOAT_RECT_EQ(FloatRect(0, 0, 70, 85), pending_layer.bounds);
+  EXPECT_EQ(FloatRect(0, 0, 70, 85), pending_layer.bounds);
 }
 
 // TODO(crbug.com/701991):
 // The test is disabled because opaque rect mapping is not implemented yet.
 TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
        PendingLayerKnownOpaque_DISABLED) {
-  PaintChunk chunk1;
+  PaintChunk chunk1 = DefaultChunk();
   chunk1.properties.property_tree_state = PropertyTreeState(
       TransformPaintPropertyNode::Root(), ClipPaintPropertyNode::Root(),
       EffectPaintPropertyNode::Root());
   chunk1.bounds = FloatRect(0, 0, 30, 40);
   chunk1.known_to_be_opaque = false;
-  PaintArtifactCompositor::PendingLayer pending_layer(chunk1, false);
+  PendingLayer pending_layer(chunk1, false);
 
   EXPECT_FALSE(pending_layer.known_to_be_opaque);
 
-  PaintChunk chunk2;
+  PaintChunk chunk2 = DefaultChunk();
   chunk2.properties.property_tree_state = chunk1.properties.property_tree_state;
   chunk2.bounds = FloatRect(0, 0, 25, 35);
   chunk2.known_to_be_opaque = true;
-  pending_layer.Merge(PaintArtifactCompositor::PendingLayer(chunk2, false));
+  pending_layer.Merge(PendingLayer(chunk2, false));
 
   // Chunk 2 doesn't cover the entire layer, so not opaque.
   EXPECT_FALSE(pending_layer.known_to_be_opaque);
 
-  PaintChunk chunk3;
+  PaintChunk chunk3 = DefaultChunk();
   chunk3.properties.property_tree_state = chunk1.properties.property_tree_state;
   chunk3.bounds = FloatRect(0, 0, 50, 60);
   chunk3.known_to_be_opaque = true;
-  pending_layer.Merge(PaintArtifactCompositor::PendingLayer(chunk3, false));
+  pending_layer.Merge(PendingLayer(chunk3, false));
 
   // Chunk 3 covers the entire layer, so now it's opaque.
   EXPECT_TRUE(pending_layer.known_to_be_opaque);
@@ -1701,10 +1701,7 @@ TEST_F(PaintArtifactCompositorTestWithPropertyTrees,
   const cc::TransformNode* cc_transform_node =
       GetPropertyTrees().transform_tree.Node(
           transform_node_layer->transform_tree_index());
-  EXPECT_EQ(transform_node_layer->id(), cc_transform_node->owning_layer_id);
-  auto transform_node_index =
-      GetPropertyTrees().transform_tree.FindNodeIndexFromOwningLayerId(
-          transform_node_layer->id());
+  auto transform_node_index = transform_node_layer->transform_tree_index();
   EXPECT_EQ(transform_node_index, cc_transform_node->id);
 }
 

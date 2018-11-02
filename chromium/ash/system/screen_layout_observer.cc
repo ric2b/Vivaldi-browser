@@ -10,16 +10,16 @@
 
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/metrics/user_metrics_action.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/grit/ash_resources.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/devicetype_utils.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/system_tray_controller.h"
 #include "ash/system/tray/tray_constants.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/bind.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -66,12 +66,12 @@ base::string16 GetDisplaySize(int64_t display_id) {
 
 // Callback to handle a user selecting the notification view.
 void OpenSettingsFromNotification() {
-  ShellPort::Get()->RecordUserMetricsAction(
+  Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SELECTED);
   // Settings may be blocked, e.g. at the lock screen.
   if (Shell::Get()->session_controller()->ShouldEnableSettings()) {
     Shell::Get()->system_tray_controller()->ShowDisplaySettings();
-    ShellPort::Get()->RecordUserMetricsAction(
+    Shell::Get()->metrics()->RecordUserMetricsAction(
         UMA_STATUS_AREA_DISPLAY_NOTIFICATION_SHOW_SETTINGS);
   }
 }
@@ -177,12 +177,12 @@ const char ScreenLayoutObserver::kNotificationId[] =
     "chrome://settings/display";
 
 ScreenLayoutObserver::ScreenLayoutObserver() {
-  ShellPort::Get()->AddDisplayObserver(this);
-  UpdateDisplayInfo(NULL);
+  Shell::Get()->window_tree_host_manager()->AddObserver(this);
+  UpdateDisplayInfo(nullptr);
 }
 
 ScreenLayoutObserver::~ScreenLayoutObserver() {
-  ShellPort::Get()->RemoveDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 void ScreenLayoutObserver::UpdateDisplayInfo(
@@ -282,8 +282,8 @@ bool ScreenLayoutObserver::GetDisplayMessageForNotification(
     }
     // c) if the device is in tablet mode, and source is not user.
     if (Shell::Get()
-            ->maximize_mode_controller()
-            ->IsMaximizeModeWindowManagerEnabled() &&
+            ->tablet_mode_controller()
+            ->IsTabletModeWindowManagerEnabled() &&
         iter.second.active_rotation_source() !=
             display::Display::ROTATION_SOURCE_USER) {
       continue;
@@ -345,7 +345,7 @@ void ScreenLayoutObserver::CreateOrUpdateNotification(
       new message_center::HandleNotificationClickedDelegate(
           base::Bind(&OpenSettingsFromNotification))));
 
-  ShellPort::Get()->RecordUserMetricsAction(
+  Shell::Get()->metrics()->RecordUserMetricsAction(
       UMA_STATUS_AREA_DISPLAY_NOTIFICATION_CREATED);
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));

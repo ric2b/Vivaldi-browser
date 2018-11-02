@@ -31,7 +31,7 @@
 #endif  // defined(OS_POSIX)
 
 #if defined(OS_WIN)
-#include "remoting/host/win/elevation_helpers.h"
+#include "base/process/process_info.h"
 #endif  // defined(OS_WIN)
 
 namespace remoting {
@@ -151,20 +151,25 @@ int StartHostMain(int argc, char** argv) {
 #if defined(OS_WIN)
   // The tool must be run elevated on Windows so the host has access to the
   // directories used to store the configuration JSON files.
-  if (!remoting::IsProcessElevated()) {
+  if (!base::IsCurrentProcessElevated()) {
     fprintf(stderr, "Error: %s must be run as an elevated process.", argv[0]);
     return 1;
   }
 #endif  // defined(OS_WIN)
 
-  if (host_name.empty()) {
+  if (command_line->HasSwitch("help") || command_line->HasSwitch("h") ||
+      command_line->HasSwitch("?") || !command_line->GetArgs().empty()) {
     fprintf(stderr,
-            "Usage: %s --name=<hostname> [--code=<auth-code>] [--pin=<PIN>] "
+            "Usage: %s [--name=<hostname>] [--code=<auth-code>] [--pin=<PIN>] "
             "[--redirect-url=<redirectURL>]\n",
             argv[0]);
-    fprintf(stderr, "\nAuthorization URL for Production services:\n");
-    fprintf(stderr, "%s\n", GetAuthorizationCodeUri().c_str());
     return 1;
+  }
+
+  if (host_name.empty()) {
+    fprintf(stdout, "Enter a name for this computer: ");
+    fflush(stdout);
+    host_name = ReadString(false);
   }
 
   if (host_pin.empty()) {
@@ -197,6 +202,8 @@ int StartHostMain(int argc, char** argv) {
   }
 
   if (auth_code.empty()) {
+    fprintf(stdout, "\nAuthorization URL for Production services:\n");
+    fprintf(stdout, "%s\n\n", GetAuthorizationCodeUri().c_str());
     fprintf(stdout, "Enter an authorization code: ");
     fflush(stdout);
     auth_code = ReadString(true);

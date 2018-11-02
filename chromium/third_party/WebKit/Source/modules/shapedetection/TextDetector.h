@@ -15,23 +15,23 @@
 
 namespace blink {
 
+class ExecutionContext;
+
 class MODULES_EXPORT TextDetector final : public ShapeDetector,
                                           public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static TextDetector* Create();
+  static TextDetector* Create(ExecutionContext*);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  TextDetector();
+  explicit TextDetector(ExecutionContext*);
   ~TextDetector() override = default;
 
   ScriptPromise DoDetect(ScriptPromiseResolver*,
-                         mojo::ScopedSharedBufferHandle,
-                         int image_width,
-                         int image_height) override;
+                         skia::mojom::blink::BitmapPtr) override;
   void OnDetectText(
       ScriptPromiseResolver*,
       Vector<shape_detection::mojom::blink::TextDetectionResultPtr>);

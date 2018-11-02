@@ -9,12 +9,26 @@ cr.exportPath('settings');
  * @enum {number}
  */
 settings.FingerprintSetupStep = {
-  LOCATE_SCANNER: 1,      // The user needs to locate the scanner.
-  MOVE_FINGER: 2,         // The user needs to move finger around the scanner.
-  READY: 3                // The scanner has read the fingerprint successfully.
+  LOCATE_SCANNER: 1,  // The user needs to locate the scanner.
+  MOVE_FINGER: 2,     // The user needs to move finger around the scanner.
+  READY: 3            // The scanner has read the fingerprint successfully.
 };
 
 (function() {
+
+/**
+ * The duration in ms of a fingerprint icon flash when a user touches the
+ * fingerprint sensor during an enroll session.
+ * @const {number}
+ */
+var FLASH_DURATION_MS = 300;
+
+/**
+ * The amount of millseconds after a successful but not completed scan before a
+ * message shows up telling the user to scan their finger again.
+ * @const {number}
+ */
+var SHOW_TAP_SENSOR_MESSAGE_DELAY_MS = 2000;
 
 /**
  * The estimated amount of complete scans needed to enroll a fingerprint. Used
@@ -24,13 +38,6 @@ settings.FingerprintSetupStep = {
  * @const {number}
  */
 var SUCCESSFUL_SCANS_TO_COMPLETE = 15;
-
-/**
- * The amount of millseconds after a successful but not completed scan before a
- * message shows up telling the user to scan their finger again.
- * @const {number}
- */
-var SHOW_TAP_SENSOR_MESSAGE_DELAY_MS = 2000;
 
 Polymer({
   is: 'settings-setup-fingerprint-dialog',
@@ -79,12 +86,7 @@ Polymer({
     this.addWebUIListener(
         'on-fingerprint-scan-received', this.onScanReceived_.bind(this));
     this.browserProxy_ = settings.FingerprintBrowserProxyImpl.getInstance();
-  },
 
-  /**
-   * Opens the dialog.
-   */
-  open: function() {
     this.$.arc.clearCanvas();
     this.$.arc.drawBackgroundCircle();
     this.$.arc.drawShadow(10, 0, 0);
@@ -101,7 +103,7 @@ Polymer({
 
     // Note: Reset resets |step_| back to the default, so handle anything that
     // checks |step_| before resetting.
-    if(this.step_ == settings.FingerprintSetupStep.READY)
+    if (this.step_ == settings.FingerprintSetupStep.READY)
       this.fire('add-fingerprint');
     else
       this.browserProxy_.cancelCurrentEnroll();
@@ -166,7 +168,16 @@ Polymer({
           this.setProblem_(scan.result);
           if (scan.result == settings.FingerprintResultType.SUCCESS) {
             this.problemMessage_ = '';
-            this.$.arc.animate(this.receivedScanCount_ * slice,
+            // Flash the fingerprint icon blue so that users get some feedback
+            // when a successful scan has been registered.
+            this.$.image.animate(
+                {
+                  fill: ['var(--google-blue-700)', 'var(--google-grey-500)'],
+                  opacity: [0.7, 1.0],
+                },
+                FLASH_DURATION_MS);
+            this.$.arc.animate(
+                this.receivedScanCount_ * slice,
                 (this.receivedScanCount_ + 1) * slice);
             this.receivedScanCount_++;
           }

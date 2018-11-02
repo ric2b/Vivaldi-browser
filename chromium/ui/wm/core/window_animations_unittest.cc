@@ -7,6 +7,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/time/time.h"
 #include "ui/aura/test/aura_test_base.h"
 #include "ui/aura/test/test_windows.h"
@@ -158,15 +159,9 @@ TEST_F(WindowAnimationsTest, HideAnimationDetachLayers) {
     // the parent layer.
     EXPECT_NE(animating_window->layer(), animating_layer);
     EXPECT_TRUE(
-        std::find(parent->layer()->children().begin(),
-                  parent->layer()->children().end(),
-                  animating_layer) !=
-        parent->layer()->children().end());
-    EXPECT_TRUE(
-        std::find(parent->layer()->children().begin(),
-                  parent->layer()->children().end(),
-                  animating_window->layer()) !=
-        parent->layer()->children().end());
+        base::ContainsValue(parent->layer()->children(), animating_layer));
+    EXPECT_TRUE(base::ContainsValue(parent->layer()->children(),
+                                    animating_window->layer()));
     // Current layer must be already hidden.
     EXPECT_FALSE(animating_window->layer()->visible());
 
@@ -185,11 +180,8 @@ TEST_F(WindowAnimationsTest, HideAnimationDetachLayers) {
 
     // Animating layer must be gone
     animating_layer->GetAnimator()->StopAnimating();
-    EXPECT_TRUE(
-        std::find(parent->layer()->children().begin(),
-                  parent->layer()->children().end(),
-                  animating_layer) ==
-        parent->layer()->children().end());
+    EXPECT_FALSE(
+        base::ContainsValue(parent->layer()->children(), animating_layer));
   }
 }
 
@@ -257,12 +249,12 @@ TEST_F(WindowAnimationsTest, HideAnimationDetachLayersWithTransientChildren) {
 }
 
 // A simple AnimationHost implementation for the NotifyHideCompleted test.
-class NotifyHideCompletedAnimationHost : public aura::client::AnimationHost {
+class NotifyHideCompletedAnimationHost : public AnimationHost {
  public:
   NotifyHideCompletedAnimationHost() : hide_completed_(false) {}
   ~NotifyHideCompletedAnimationHost() override {}
 
-  // Overridden from TestWindowDelegate:
+  // Overridden from AnimationHost:
   void OnWindowHidingAnimationCompleted() override { hide_completed_ = true; }
 
   void SetHostTransitionOffsets(const gfx::Vector2d& top_left,
@@ -280,7 +272,7 @@ TEST_F(WindowAnimationsTest, NotifyHideCompleted) {
   NotifyHideCompletedAnimationHost animation_host;
   std::unique_ptr<aura::Window> window(
       aura::test::CreateTestWindowWithId(0, NULL));
-  aura::client::SetAnimationHost(window.get(), &animation_host);
+  SetAnimationHost(window.get(), &animation_host);
   wm::SetWindowVisibilityAnimationType(
       window.get(), WINDOW_VISIBILITY_ANIMATION_TYPE_FADE);
   AnimateOnChildWindowVisibilityChanged(window.get(), true);

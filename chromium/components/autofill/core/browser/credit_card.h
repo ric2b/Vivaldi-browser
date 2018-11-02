@@ -46,6 +46,17 @@ class CreditCard : public AutofillDataModel {
     OK,
   };
 
+  // The type of the card. Local cards are all CARD_TYPE_UNKNOWN. Server cards
+  // may have a more specific type.
+  // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.autofill
+  // GENERATED_JAVA_CLASS_NAME_OVERRIDE: CardType
+  enum CardType : int {
+    CARD_TYPE_UNKNOWN,
+    CARD_TYPE_CREDIT,
+    CARD_TYPE_DEBIT,
+    CARD_TYPE_PREPAID,
+  };
+
   CreditCard(const std::string& guid, const std::string& origin);
 
   // Creates a server card.  The type must be MASKED_SERVER_CARD or
@@ -101,6 +112,9 @@ class CreditCard : public AutofillDataModel {
 
   const std::string& network() const { return network_; }
 
+  const std::string& bank_name() const { return bank_name_; }
+  void set_bank_name(const std::string& bank_name) { bank_name_ = bank_name; }
+
   int expiration_month() const { return expiration_month_; }
   int expiration_year() const { return expiration_year_; }
 
@@ -146,6 +160,11 @@ class CreditCard : public AutofillDataModel {
   // How this card is stored.
   RecordType record_type() const { return record_type_; }
   void set_record_type(RecordType rt) { record_type_ = rt; }
+
+  // Whether this is a credit, debit, or prepaid card. Known only for server
+  // cards. All local cards are CARD_TYPE_UNKNOWN.
+  CardType card_type() const { return card_type_; }
+  void set_card_type(CardType card_type) { card_type_ = card_type; }
 
   // Returns true if there are no values (field types) set.
   bool IsEmpty(const std::string& app_locale) const;
@@ -209,6 +228,8 @@ class CreditCard : public AutofillDataModel {
   base::string16 NetworkForDisplay() const;
   // A label for this card formatted as 'IssuerNetwork - 2345'.
   base::string16 NetworkAndLastFourDigits() const;
+  // A label for this card formatted as 'BankName - 2345'.
+  base::string16 BankNameAndLastFourDigits() const;
   // Localized expiration for this card formatted as 'Exp: 06/17'.
   base::string16 AbbreviatedExpirationDateForDisplay() const;
   // Returns the date when the card was last used in autofill.
@@ -237,6 +258,7 @@ class CreditCard : public AutofillDataModel {
 
   // See enum definition above.
   RecordType record_type_;
+  CardType card_type_;
 
   // The card number. For MASKED_SERVER_CARDs, this number will just contain the
   // last four digits of the card number.
@@ -248,6 +270,9 @@ class CreditCard : public AutofillDataModel {
   // The network issuer of the card. This is one of the k...Card constants
   // below.
   std::string network_;
+
+  // The issuer bank name of the card.
+  std::string bank_name_;
 
   // These members are zero if not present.
   int expiration_month_;

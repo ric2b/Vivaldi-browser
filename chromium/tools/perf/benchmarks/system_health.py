@@ -33,15 +33,16 @@ class _CommonSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   https://goo.gl/Jek2NL.
   """
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options(
-        chrome_trace_category_filter.ChromeTraceCategoryFilter())
-    options.config.chrome_trace_config.category_filter.AddFilterString('rail')
+        chrome_trace_category_filter.ChromeTraceCategoryFilter(
+            filter_string='rail,toplevel'))
     options.config.enable_battor_trace = True
     options.config.enable_chrome_trace = True
     options.config.enable_cpu_trace = True
     options.SetTimelineBasedMetrics([
         'clockSyncLatencyMetric',
+        'cpuTimeMetric',
         'powerMetric',
         'tracingMetric'
     ])
@@ -58,18 +59,18 @@ class _CommonSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
     return True
 
 
+@benchmark.Disabled('android')
 @benchmark.Owner(emails=['charliea@chromium.org', 'nednguyen@chromium.org'])
 class DesktopCommonSystemHealth(_CommonSystemHealthBenchmark):
   """Desktop Chrome Energy System Health Benchmark."""
   PLATFORM = 'desktop'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return possible_browser.platform.GetDeviceTypeName() != 'Desktop'
-
-  @classmethod
   def Name(cls):
     return 'system_health.common_desktop'
+
+  def GetExpectations(self):
+    return page_sets.SystemHealthDesktopCommonExpectations()
 
 
 @benchmark.Enabled('android')
@@ -82,6 +83,9 @@ class MobileCommonSystemHealth(_CommonSystemHealthBenchmark):
   def Name(cls):
     return 'system_health.common_mobile'
 
+  def GetExpectations(self):
+    return page_sets.SystemHealthMobileCommonExpectations()
+
 
 class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """Chrome Memory System Health Benchmark.
@@ -93,7 +97,7 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   """
   options = {'pageset_repeat': 3}
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options(
         chrome_trace_category_filter.ChromeTraceCategoryFilter(
             '-*,disabled-by-default-memory-infra'))
@@ -120,17 +124,17 @@ class _MemorySystemHealthBenchmark(perf_benchmark.PerfBenchmark):
 
 
 @benchmark.Owner(emails=['perezju@chromium.org'])
+@benchmark.Disabled('android')
 class DesktopMemorySystemHealth(_MemorySystemHealthBenchmark):
   """Desktop Chrome Memory System Health Benchmark."""
   PLATFORM = 'desktop'
 
   @classmethod
-  def ShouldDisable(cls, possible_browser):
-    return possible_browser.platform.GetDeviceTypeName() != 'Desktop'
-
-  @classmethod
   def Name(cls):
     return 'system_health.memory_desktop'
+
+  def GetExpectations(self):
+    return page_sets.SystemHealthDesktopMemoryExpectations()
 
 
 @benchmark.Enabled('android')
@@ -152,6 +156,9 @@ class MobileMemorySystemHealth(_MemorySystemHealthBenchmark):
   def Name(cls):
     return 'system_health.memory_mobile'
 
+  def GetExpectations(self):
+    return page_sets.SystemHealthMobileMemoryExpectations()
+
 
 @benchmark.Enabled('android-webview')
 @benchmark.Owner(emails=['perezju@chromium.org', 'torne@chromium.org'])
@@ -166,9 +173,12 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   options = {'pageset_repeat': 20}
 
   def CreateStorySet(self, options):
-    return page_sets.SystemHealthStorySet(platform='mobile', case='blank')
+    return page_sets.SystemHealthBlankStorySet()
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def GetExpectations(self):
+    return page_sets.SystemHealthWebviewStartupExpectations()
+
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options()
     options.SetTimelineBasedMetrics(['webviewStartupMetric'])
     options.config.enable_atrace_trace = True
@@ -183,21 +193,3 @@ class WebviewStartupSystemHealthBenchmark(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'system_health.webview_startup'
-
-
-@benchmark.Enabled('android-webview')
-class WebviewMultiprocessStartupSystemHealthBenchmark(
-    WebviewStartupSystemHealthBenchmark):
-  """Webview multiprocess startup time benchmark
-
-  Benchmark that measures how long WebView takes to start up
-  and load a blank page with multiprocess enabled.
-  """
-
-  def SetExtraBrowserOptions(self, options):
-    options.AppendExtraBrowserArgs(
-        ['--webview-sandboxed-renderer'])
-
-  @classmethod
-  def Name(cls):
-    return 'system_health.webview_startup_multiprocess'

@@ -8,11 +8,12 @@ import unittest
 from webkitpy.common.host_mock import MockHost
 from webkitpy.common.system.executive_mock import MockExecutive, mock_git_commands
 from webkitpy.w3c.chromium_commit import ChromiumCommit
+from webkitpy.w3c.chromium_commit_mock import MockChromiumCommit
+from webkitpy.w3c.gerrit import GerritCL
+from webkitpy.w3c.gerrit_mock import MockGerritAPI
 from webkitpy.w3c.test_exporter import TestExporter
 from webkitpy.w3c.wpt_github import PullRequest
 from webkitpy.w3c.wpt_github_mock import MockWPTGitHub
-from webkitpy.w3c.gerrit import GerritCL
-from webkitpy.w3c.gerrit_mock import MockGerritAPI
 
 
 class TestExporterTest(unittest.TestCase):
@@ -28,10 +29,10 @@ class TestExporterTest(unittest.TestCase):
         test_exporter = TestExporter(host, 'gh-username', 'gh-token', gerrit_user=None,
                                      gerrit_token=None, dry_run=True)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[
-            PullRequest(title='title1', number=1234, body='', state='open'),
+            PullRequest(title='title1', number=1234, body='', state='open', labels=[]),
         ])
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
-        test_exporter.get_exportable_commits = lambda limit: [
+        test_exporter.get_exportable_commits = lambda: [
             ChromiumCommit(host, position='refs/heads/master@{#458475}'),
             ChromiumCommit(host, position='refs/heads/master@{#458476}'),
             ChromiumCommit(host, position='refs/heads/master@{#458477}'),
@@ -39,9 +40,9 @@ class TestExporterTest(unittest.TestCase):
         test_exporter.run()
 
         self.assertEqual(test_exporter.wpt_github.calls, [
-            'pr_with_position',
-            'pr_with_position',
-            'pr_with_position',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
         ])
 
     def test_creates_pull_request_for_all_exportable_commits(self):
@@ -77,18 +78,18 @@ class TestExporterTest(unittest.TestCase):
         test_exporter.run()
 
         self.assertEqual(test_exporter.wpt_github.calls, [
-            'pr_with_position',
-            'pr_with_change_id',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
             'create_pr',
-            'add_label',
-            'pr_with_position',
-            'pr_with_change_id',
+            'add_label "chromium-export"',
+            'pr_for_chromium_commit',
             'create_pr',
-            'add_label',
-            'pr_with_position',
-            'pr_with_change_id',
+            'add_label "chromium-export"',
+            'pr_for_chromium_commit',
             'create_pr',
-            'add_label',
+            'add_label "chromium-export"',
         ])
         self.assertEqual(test_exporter.wpt_github.pull_requests_created, [
             ('chromium-export-c881563d73', 'older fake text', 'older fake text'),
@@ -103,55 +104,61 @@ class TestExporterTest(unittest.TestCase):
         # 4. #458478 has an in-flight PR associated with it and should be merged successfully.
         host = MockHost()
         host.executive = mock_git_commands({
-            'show': 'git show text\nCr-Commit-Position: refs/heads/master@{#458476}',
+            'show': 'git show text\nCr-Commit-Position: refs/heads/master@{#458476}\nChange-Id: I0476',
             'crrev-parse': 'c2087acb00eee7960339a0be34ea27d6b20e1131',
+
         })
         test_exporter = TestExporter(host, 'gh-username', 'gh-token', gerrit_user=None, gerrit_token=None)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[
             PullRequest(
                 title='Open PR',
                 number=1234,
-                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458475}',
-                state='open'
+                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458475}\nChange-Id: I0005',
+                state='open',
+                labels=['do not merge yet']
             ),
             PullRequest(
                 title='Merged PR',
                 number=2345,
-                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458477}',
-                state='closed'
+                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458477}\nChange-Id: Idead',
+                state='closed',
+                labels=[]
             ),
             PullRequest(
                 title='Open PR',
                 number=3456,
-                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458478}',
-                state='open'
+                body='rutabaga\nCr-Commit-Position: refs/heads/master@{#458478}\nChange-Id: I0118',
+                state='open',
+                labels=[]  # It's important that this is empty.
             ),
         ], unsuccessful_merge_index=0)
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
-        test_exporter.get_exportable_commits = lambda limit: [
-            ChromiumCommit(host, position='refs/heads/master@{#458475}'),
-            ChromiumCommit(host, position='refs/heads/master@{#458476}'),
-            ChromiumCommit(host, position='refs/heads/master@{#458477}'),
-            ChromiumCommit(host, position='refs/heads/master@{#458478}'),
+        test_exporter.get_exportable_commits = lambda: [
+            MockChromiumCommit(host, position='refs/heads/master@{#458475}', change_id='I0005'),
+            MockChromiumCommit(host, position='refs/heads/master@{#458476}', change_id='I0476'),
+            MockChromiumCommit(host, position='refs/heads/master@{#458477}', change_id='Idead'),
+            MockChromiumCommit(host, position='refs/heads/master@{#458478}', change_id='I0118'),
         ]
         test_exporter.run()
         self.assertEqual(test_exporter.wpt_github.calls, [
-            'pr_with_position',
+            'pr_for_chromium_commit',
+            'remove_label "do not merge yet"',
             'get_pr_branch',
             'merge_pull_request',
-            'pr_with_position',
+            'pr_for_chromium_commit',
             'create_pr',
-            'add_label',
-            'pr_with_position',
-            'pr_with_position',
+            'add_label "chromium-export"',
+            'pr_for_chromium_commit',
+            'pr_for_chromium_commit',
+            # Testing the lack of remove_label here. The exporter should not
+            # try to remove the provisional label from PRs it has already
+            # removed it from.
             'get_pr_branch',
             'merge_pull_request',
             'delete_remote_branch',
         ])
         self.assertEqual(test_exporter.wpt_github.pull_requests_created, [
-            ('chromium-export-c2087acb00',
-             'git show text\nCr-Commit-Position: refs/heads/master@{#458476}',
-             'git show text\nCr-Commit-Position: refs/heads/master@{#458476}'),
+            ('chromium-export-52c3178508', 'Fake subject', 'Fake body\n\nChange-Id: I0476'),
         ])
 
     def test_new_gerrit_cl(self):
@@ -159,7 +166,7 @@ class TestExporterTest(unittest.TestCase):
         test_exporter = TestExporter(host, 'gh-username', 'gh-token', gerrit_user=None,
                                      gerrit_token=None, dry_run=False)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[])
-        test_exporter.get_exportable_commits = lambda limit: []
+        test_exporter.get_exportable_commits = lambda: []
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
         test_exporter.gerrit.get = lambda path, raw: base64.b64encode('sample diff')  # pylint: disable=unused-argument
         test_exporter.gerrit.query_exportable_open_cls = lambda: [
@@ -168,6 +175,7 @@ class TestExporterTest(unittest.TestCase):
                 'subject': 'subject',
                 '_number': '1',
                 'current_revision': '1',
+                'has_review_started': True,
                 'revisions': {
                     '1': {'commit_with_footers': 'a commit with footers'}
                 },
@@ -178,7 +186,8 @@ class TestExporterTest(unittest.TestCase):
         self.assertEqual(test_exporter.wpt_github.calls, [
             'pr_with_change_id',
             'create_pr',
-            'add_label',
+            'add_label "chromium-export"',
+            'add_label "do not merge yet"',
         ])
         self.assertEqual(test_exporter.wpt_github.pull_requests_created, [
             ('chromium-export-cl-1',
@@ -192,9 +201,10 @@ class TestExporterTest(unittest.TestCase):
                                      gerrit_token=None, dry_run=False)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[
             PullRequest(title='title1', number=1234,
-                        body='description\nWPT-Export-Revision: 1', state='open'),
+                        body='description\nWPT-Export-Revision: 1',
+                        state='open', labels=[]),
         ])
-        test_exporter.get_exportable_commits = lambda limit: []
+        test_exporter.get_exportable_commits = lambda: []
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
         test_exporter.gerrit.query_exportable_open_cls = lambda: [
             GerritCL(data={
@@ -202,6 +212,7 @@ class TestExporterTest(unittest.TestCase):
                 'subject': 'subject',
                 '_number': '1',
                 'current_revision': '1',
+                'has_review_started': True,
                 'revisions': {
                     '1': {'commit_with_footers': 'a commit with footers'}
                 },
@@ -220,9 +231,10 @@ class TestExporterTest(unittest.TestCase):
                                      gerrit_token=None, dry_run=False)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[
             PullRequest(title='title1', number=1234,
-                        body='description\nWPT-Export-Revision: 1', state='open'),
+                        body='description\nWPT-Export-Revision: 1',
+                        state='open', labels=[]),
         ])
-        test_exporter.get_exportable_commits = lambda limit: []
+        test_exporter.get_exportable_commits = lambda: []
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
         test_exporter.gerrit.get = lambda path, raw: base64.b64encode('sample diff')  # pylint: disable=unused-argument
         test_exporter.gerrit.query_exportable_open_cls = lambda: [
@@ -231,6 +243,7 @@ class TestExporterTest(unittest.TestCase):
                 'subject': 'subject',
                 '_number': '1',
                 'current_revision': '2',
+                'has_review_started': True,
                 'revisions': {
                     '1': {
                         'commit_with_footers': 'a commit with footers 1',
@@ -253,17 +266,24 @@ class TestExporterTest(unittest.TestCase):
 
     def test_attempts_to_merge_landed_gerrit_cl(self):
         host = MockHost()
-        host.executive = mock_git_commands({
-            'footers': 'decafbad',
-        })
+
+        def mock_command(args):
+            if args[1] != 'footers':
+                return ''
+            if args[2] == '--key':
+                return 'decafbad\n'
+            elif args[2] == '--position':
+                return 'refs/heads/master@{#475994}'
+
+        host.executive = MockExecutive(run_command_fn=mock_command)
         test_exporter = TestExporter(host, 'gh-username', 'gh-token', gerrit_user=None,
                                      gerrit_token=None, dry_run=False)
         test_exporter.wpt_github = MockWPTGitHub(pull_requests=[
             PullRequest(title='title1', number=1234,
                         body='description\nWPT-Export-Revision: 9\nChange-Id: decafbad',
-                        state='open'),
+                        state='open', labels=['do not merge yet']),
         ])
-        test_exporter.get_exportable_commits = lambda limit: [
+        test_exporter.get_exportable_commits = lambda: [
             ChromiumCommit(host, sha='c881563d734a86f7d9cd57ac509653a61c45c240'),
         ]
         test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
@@ -271,10 +291,43 @@ class TestExporterTest(unittest.TestCase):
         test_exporter.run()
 
         self.assertEqual(test_exporter.wpt_github.calls, [
-            'pr_with_position',
+            'pr_for_chromium_commit',
+            'remove_label "do not merge yet"',
             'get_pr_branch',
             'merge_pull_request',
             'delete_remote_branch',
         ])
         self.assertEqual(test_exporter.wpt_github.pull_requests_created, [])
         self.assertEqual(test_exporter.wpt_github.pull_requests_merged, [1234])
+
+    def test_does_not_create_pr_if_cl_review_has_not_started(self):
+        host = MockHost()
+        test_exporter = TestExporter(host, 'gh-username', 'gh-token', gerrit_user=None,
+                                     gerrit_token=None, dry_run=False)
+        test_exporter.wpt_github = MockWPTGitHub(pull_requests=[])
+        test_exporter.get_exportable_commits = lambda: []
+        test_exporter.gerrit = MockGerritAPI(host, 'gerrit-username', 'gerrit-token')
+        test_exporter.gerrit.get = lambda path, raw: base64.b64encode('sample diff')  # pylint: disable=unused-argument
+        test_exporter.gerrit.query_exportable_open_cls = lambda: [
+            GerritCL(data={
+                'change_id': '1',
+                'subject': 'subject',
+                '_number': '1',
+                'current_revision': '2',
+                'has_review_started': False,
+                'revisions': {
+                    '1': {
+                        'commit_with_footers': 'a commit with footers 1',
+                        'description': 'subject 1',
+                    },
+                    '2': {
+                        'commit_with_footers': 'a commit with footers 2',
+                        'description': 'subject 2',
+                    },
+                },
+                'owner': {'email': 'test@chromium.org'},
+            }, api=test_exporter.gerrit),
+        ]
+        test_exporter.run()
+        self.assertEqual(test_exporter.wpt_github.calls, [])
+        self.assertEqual(test_exporter.wpt_github.pull_requests_created, [])

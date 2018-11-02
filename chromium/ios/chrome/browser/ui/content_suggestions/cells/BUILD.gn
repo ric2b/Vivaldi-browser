@@ -12,9 +12,12 @@ source_set("cells") {
   deps = [
     ":cells_ui",
     "//base",
+    "//components/ntp_tiles",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
+    "//ui/base",
     "//url",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -26,10 +29,14 @@ source_set("cells_ui") {
     "content_suggestions_cell.mm",
     "content_suggestions_footer_item.h",
     "content_suggestions_footer_item.mm",
+    "content_suggestions_header_item.h",
+    "content_suggestions_header_item.mm",
     "content_suggestions_most_visited_cell.h",
     "content_suggestions_most_visited_cell.mm",
     "content_suggestions_text_item.h",
     "content_suggestions_text_item.mm",
+    "content_suggestions_whats_new_item.h",
+    "content_suggestions_whats_new_item.mm",
     "suggested_content.h",
   ]
   deps = [
@@ -40,6 +47,7 @@ source_set("cells_ui") {
     "//ios/chrome/browser/ui/content_suggestions/identifier",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//ios/chrome/browser/ui/util",
+    "//ios/chrome/common",
     "//ui/base",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -49,18 +57,22 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "content_suggestions_footer_item_unittest.mm",
+    "content_suggestions_header_item_unittest.mm",
     "content_suggestions_item_unittest.mm",
     "content_suggestions_most_visited_item_unittest.mm",
+    "content_suggestions_whats_new_item_unittest.mm",
   ]
   deps = [
     ":cells",
     ":cells_ui",
     "//base",
+    "//ios/chrome/app/strings",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/collection_view",
     "//ios/chrome/browser/ui/favicon:favicon_ui",
     "//testing/gtest",
     "//third_party/ocmock",
+    "//ui/base",
     "//url",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]

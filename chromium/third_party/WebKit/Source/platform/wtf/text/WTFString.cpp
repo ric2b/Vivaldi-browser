@@ -110,7 +110,7 @@ void String::append(const StringView& string) {
     memcpy(data, impl_->Characters8(), impl_->length() * sizeof(LChar));
     memcpy(data + impl_->length(), string.Characters8(),
            string.length() * sizeof(LChar));
-    impl_ = new_impl.Release();
+    impl_ = std::move(new_impl);
     return;
   }
 
@@ -132,7 +132,7 @@ void String::append(const StringView& string) {
     StringImpl::CopyChars(data + impl_->length(), string.Characters16(),
                           string.length());
 
-  impl_ = new_impl.Release();
+  impl_ = std::move(new_impl);
 }
 
 template <typename CharacterType>
@@ -156,7 +156,7 @@ inline void String::AppendInternal(CharacterType c) {
   else
     StringImpl::CopyChars(data, impl_->Characters16(), impl_->length());
   data[impl_->length()] = c;
-  impl_ = new_impl.Release();
+  impl_ = std::move(new_impl);
 }
 
 void String::append(LChar c) {
@@ -177,10 +177,10 @@ int CodePointCompareIgnoringASCIICase(const String& a, const char* b) {
 }
 
 template <typename CharType>
-PassRefPtr<StringImpl> InsertInternal(PassRefPtr<StringImpl> impl,
-                                      const CharType* characters_to_insert,
-                                      unsigned length_to_insert,
-                                      unsigned position) {
+RefPtr<StringImpl> InsertInternal(RefPtr<StringImpl> impl,
+                                  const CharType* characters_to_insert,
+                                  unsigned length_to_insert,
+                                  unsigned position) {
   if (!length_to_insert)
     return impl;
 
@@ -208,7 +208,7 @@ PassRefPtr<StringImpl> InsertInternal(PassRefPtr<StringImpl> impl,
                           impl->Characters16() + position,
                           impl->length() - position);
 
-  return new_impl.Release();
+  return new_impl;
 }
 
 void String::insert(const StringView& string, unsigned position) {
@@ -230,10 +230,10 @@ void String::insert(const StringView& string, unsigned position) {
 
   DCHECK(impl_);
   if (string.Is8Bit())
-    impl_ = InsertInternal(impl_.Release(), string.Characters8(),
+    impl_ = InsertInternal(std::move(impl_), string.Characters8(),
                            string.length(), position);
   else
-    impl_ = InsertInternal(impl_.Release(), string.Characters16(),
+    impl_ = InsertInternal(std::move(impl_), string.Characters16(),
                            string.length(), position);
 }
 
@@ -420,40 +420,49 @@ String String::NumberToStringFixedWidth(double number,
   return String(NumberToFixedWidthString(number, decimal_places, buffer));
 }
 
-int String::ToIntStrict(bool* ok, int base) const {
+int String::ToIntStrict(bool* ok) const {
   if (!impl_) {
     if (ok)
       *ok = false;
     return 0;
   }
-  return impl_->ToIntStrict(ok, base);
+  return impl_->ToIntStrict(ok);
 }
 
-unsigned String::ToUIntStrict(bool* ok, int base) const {
+unsigned String::ToUIntStrict(bool* ok) const {
   if (!impl_) {
     if (ok)
       *ok = false;
     return 0;
   }
-  return impl_->ToUIntStrict(ok, base);
+  return impl_->ToUIntStrict(ok);
 }
 
-int64_t String::ToInt64Strict(bool* ok, int base) const {
+unsigned String::HexToUIntStrict(bool* ok) const {
   if (!impl_) {
     if (ok)
       *ok = false;
     return 0;
   }
-  return impl_->ToInt64Strict(ok, base);
+  return impl_->HexToUIntStrict(ok);
 }
 
-uint64_t String::ToUInt64Strict(bool* ok, int base) const {
+int64_t String::ToInt64Strict(bool* ok) const {
   if (!impl_) {
     if (ok)
       *ok = false;
     return 0;
   }
-  return impl_->ToUInt64Strict(ok, base);
+  return impl_->ToInt64Strict(ok);
+}
+
+uint64_t String::ToUInt64Strict(bool* ok) const {
+  if (!impl_) {
+    if (ok)
+      *ok = false;
+    return 0;
+  }
+  return impl_->ToUInt64Strict(ok);
 }
 
 int String::ToInt(bool* ok) const {

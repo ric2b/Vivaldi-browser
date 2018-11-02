@@ -159,12 +159,8 @@ void WebURLLoaderMock::SetDefersLoading(bool deferred) {
   NOTIMPLEMENTED();
 }
 
-void WebURLLoaderMock::SetLoadingTaskRunner(
-    base::SingleThreadTaskRunner* runner) {
-  // In principle this is NOTIMPLEMENTED(), but if we put that here it floods
-  // the console during webkit unit tests, so we leave the function empty.
-  DCHECK(runner);
-}
+void WebURLLoaderMock::DidChangePriority(WebURLRequest::Priority new_priority,
+                                         int intra_priority_value) {}
 
 WeakPtr<WebURLLoaderMock> WebURLLoaderMock::GetWeakPtr() {
   return weak_factory_.CreateWeakPtr();

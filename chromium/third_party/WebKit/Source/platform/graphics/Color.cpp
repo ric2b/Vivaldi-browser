@@ -25,6 +25,7 @@
 
 #include "platform/graphics/Color.h"
 
+#include "build/build_config.h"
 #include "platform/Decimal.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/Assertions.h"
@@ -32,11 +33,12 @@
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/dtoa.h"
 #include "platform/wtf/text/StringBuilder.h"
+#include "platform/wtf/text/StringView.h"
 
 namespace blink {
 
 // VS 2015 and above allow these definitions and in this case require them
-#if !COMPILER(MSVC) || _MSC_VER >= 1900
+#if !defined(COMPILER_MSVC) || _MSC_VER >= 1900
 // FIXME: Use C++11 enum classes to avoid static data member initializer
 // definition problems.
 const RGBA32 Color::kBlack;
@@ -128,7 +130,7 @@ static inline bool ParseHexColorInternal(const CharacterType* name,
   if (length != 3 && length != 4 && length != 6 && length != 8)
     return false;
   if ((length == 8 || length == 4) &&
-      !RuntimeEnabledFeatures::cssHexAlphaColorEnabled())
+      !RuntimeEnabledFeatures::CSSHexAlphaColorEnabled())
     return false;
   unsigned value = 0;
   for (unsigned i = 0; i < length; ++i) {

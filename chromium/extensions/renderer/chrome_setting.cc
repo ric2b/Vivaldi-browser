@@ -7,10 +7,11 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
-#include "extensions/renderer/api_event_handler.h"
-#include "extensions/renderer/api_request_handler.h"
-#include "extensions/renderer/api_signature.h"
-#include "extensions/renderer/api_type_reference_map.h"
+#include "extensions/renderer/bindings/api_event_handler.h"
+#include "extensions/renderer/bindings/api_request_handler.h"
+#include "extensions/renderer/bindings/api_signature.h"
+#include "extensions/renderer/bindings/api_type_reference_map.h"
+#include "extensions/renderer/bindings/binding_access_checker.h"
 #include "gin/arguments.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
@@ -23,7 +24,8 @@ v8::Local<v8::Object> ChromeSetting::Create(
     const base::ListValue* property_values,
     APIRequestHandler* request_handler,
     APIEventHandler* event_handler,
-    APITypeReferenceMap* type_refs) {
+    APITypeReferenceMap* type_refs,
+    const BindingAccessChecker* access_checker) {
   std::string pref_name;
   CHECK(property_values->GetString(0u, &pref_name));
   const base::DictionaryValue* value_spec = nullptr;
@@ -31,18 +33,20 @@ v8::Local<v8::Object> ChromeSetting::Create(
 
   gin::Handle<ChromeSetting> handle = gin::CreateHandle(
       isolate, new ChromeSetting(request_handler, event_handler, type_refs,
-                                 pref_name, *value_spec));
+                                 access_checker, pref_name, *value_spec));
   return handle.ToV8().As<v8::Object>();
 }
 
 ChromeSetting::ChromeSetting(APIRequestHandler* request_handler,
                              APIEventHandler* event_handler,
                              const APITypeReferenceMap* type_refs,
+                             const BindingAccessChecker* access_checker,
                              const std::string& pref_name,
                              const base::DictionaryValue& set_value_spec)
     : request_handler_(request_handler),
       event_handler_(event_handler),
       type_refs_(type_refs),
+      access_checker_(access_checker),
       pref_name_(pref_name),
       argument_spec_(ArgumentType::OBJECT) {
   // The set() call takes an object { value: { type: <t> }, ... }, where <t>
@@ -113,10 +117,12 @@ v8::Local<v8::Value> ChromeSetting::GetOnChangeEvent(
   DCHECK(!event.IsEmpty());
   if (event->IsUndefined()) {
     bool supports_filters = false;
+    bool supports_lazy_listeners = true;
     event = event_handler_->CreateEventInstance(
         base::StringPrintf("types.ChromeSetting.%s.onChange",
                            pref_name_.c_str()),
-        supports_filters, binding::kNoListenerMax, context);
+        supports_filters, supports_lazy_listeners, binding::kNoListenerMax,
+        true, context);
     v8::Maybe<bool> set_result = wrapper->SetPrivate(context, key, event);
     if (!set_result.IsJust() || !set_result.FromJust()) {
       NOTREACHED();
@@ -135,6 +141,10 @@ void ChromeSetting::HandleFunction(const std::string& method_name,
   std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   std::string full_name = "types.ChromeSetting." + method_name;
+
+  if (!access_checker_->HasAccessOrThrowError(context, full_name))
+    return;
+
   std::unique_ptr<base::ListValue> converted_arguments;
   v8::Local<v8::Function> callback;
   std::string error;

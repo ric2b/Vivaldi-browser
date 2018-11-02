@@ -18,12 +18,11 @@ if (params.get('__is_android__') == 'true') {
   // TODO(zqzhang): this requirement may be removed in the future.
   presentationUrl = "https://google.com/cast#__castAppId__=CCCCCCCC/";
 } else if (params.get('__oneUA__') == 'true') {
-  presentationUrl =
-      "presentation_receiver.html#__testprovider__=true&__oneUA__=true";
+  presentationUrl = "presentation_receiver.html";
 } else if (params.get('__oneUANoReceiver__') == 'true') {
-  presentationUrl = "https://www.google.com#__testprovider__=true&__oneUA__=true";
+  presentationUrl = "https://www.google.com";
 } else {
-  presentationUrl = "http://www.google.com/#__testprovider__=true";
+  presentationUrl = "test://test";
 }
 
 var startSessionRequest = new PresentationRequest([presentationUrl]);
@@ -123,13 +122,13 @@ function checkStartFailed(expectedErrorName, expectedErrorMessageSubstring) {
     }).catch(function(e) {
       if (expectedErrorName != e.name) {
         sendResult(false, 'Got unexpected error: ' + e.name);
-      }
-      if (e.message.indexOf(expectedErrorMessageSubstring) == -1) {
+      } else if (e.message.indexOf(expectedErrorMessageSubstring) == -1) {
         sendResult(false,
-          'Error message is not correct, it should contain "' +
-          expectedErrorMessageSubstring + '"');
+            'Error message is not correct, it should contain "' +
+            expectedErrorMessageSubstring + '"');
+      } else {
+        sendResult(true, '');
       }
-      sendResult(true, '');
     })
   }
 }
@@ -155,6 +154,7 @@ function closeConnectionAndWaitForStateChange() {
   if (startedConnection) {
     if (startedConnection.state == 'closed') {
       sendResult(false, 'startedConnection is unexpectedly closed.');
+      return;
     }
     startedConnection.onclose = function() {
       sendResult(true, '');

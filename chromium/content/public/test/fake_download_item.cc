@@ -294,7 +294,6 @@ bool FakeDownloadItem::IsSavePackageDownload() const {
 }
 
 const base::FilePath& FakeDownloadItem::GetFullPath() const {
-  NOTREACHED();
   return dummy_file_path;
 }
 
@@ -409,7 +408,8 @@ WebContents* FakeDownloadItem::GetWebContents() const {
   return nullptr;
 }
 
-void FakeDownloadItem::OnContentCheckCompleted(DownloadDangerType danger_type) {
+void FakeDownloadItem::OnContentCheckCompleted(DownloadDangerType danger_type,
+                                               DownloadInterruptReason reason) {
   NOTREACHED();
 }
 

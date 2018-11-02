@@ -73,6 +73,10 @@ class VIEWS_EXPORT Label : public View,
   const base::string16& text() const { return render_text_->text(); }
   virtual void SetText(const base::string16& text);
 
+  // Where the label appears in the UI. Passed in from the constructor. This is
+  // a value from views::style::TextContext or an enum that extends it.
+  int text_context() const { return text_context_; }
+
   // Enables or disables auto-color-readability (enabled by default).  If this
   // is enabled, then calls to set any foreground or background color will
   // trigger an automatic mapper that uses color_utils::GetReadableColor() to
@@ -82,10 +86,8 @@ class VIEWS_EXPORT Label : public View,
   // Sets the color.  This will automatically force the color to be readable
   // over the current background color, if auto color readability is enabled.
   virtual void SetEnabledColor(SkColor color);
-  void SetDisabledColor(SkColor color);
 
   SkColor enabled_color() const { return actual_enabled_color_; }
-  SkColor disabled_color() const { return actual_disabled_color_; }
 
   // Sets the background color. This won't be explicitly drawn, but the label
   // will force the text color to be readable over it.
@@ -215,7 +217,6 @@ class VIEWS_EXPORT Label : public View,
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool GetTooltipText(const gfx::Point& p,
                       base::string16* tooltip) const override;
-  void OnEnabledChanged() override;
 
  protected:
   // Create a single RenderText instance to actually be painted.
@@ -303,10 +304,10 @@ class VIEWS_EXPORT Label : public View,
   // Get the text size for the current layout.
   gfx::Size GetTextSize() const;
 
-  // Updates |actual_{enabled,disabled}_color_| from requested colors.
+  // Updates text and selection colors from requested colors.
   void RecalculateColors();
 
-  // Applies |actual_{enabled,disabled}_color_| to |lines_|.
+  // Applies the foreground color to |lines_|.
   void ApplyTextColors() const;
 
   // Updates any colors that have not been explicitly set from the theme.
@@ -326,6 +327,8 @@ class VIEWS_EXPORT Label : public View,
   // Builds |context_menu_contents_|.
   void BuildContextMenuContents();
 
+  const int text_context_;
+
   // An un-elided and single-line RenderText object used for preferred sizing.
   std::unique_ptr<gfx::RenderText> render_text_;
 
@@ -339,8 +342,6 @@ class VIEWS_EXPORT Label : public View,
 
   SkColor requested_enabled_color_ = SK_ColorRED;
   SkColor actual_enabled_color_ = SK_ColorRED;
-  SkColor requested_disabled_color_ = SK_ColorRED;
-  SkColor actual_disabled_color_ = SK_ColorRED;
   SkColor background_color_ = SK_ColorRED;
   SkColor requested_selection_text_color_ = SK_ColorRED;
   SkColor actual_selection_text_color_ = SK_ColorRED;
@@ -348,7 +349,6 @@ class VIEWS_EXPORT Label : public View,
 
   // Set to true once the corresponding setter is invoked.
   bool enabled_color_set_;
-  bool disabled_color_set_;
   bool background_color_set_;
   bool selection_text_color_set_;
   bool selection_background_color_set_;

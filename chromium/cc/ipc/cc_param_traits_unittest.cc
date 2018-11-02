@@ -44,7 +44,7 @@ using gfx::Transform;
 namespace content {
 namespace {
 
-static constexpr cc::FrameSinkId kArbitraryFrameSinkId(1, 1);
+static constexpr viz::FrameSinkId kArbitraryFrameSinkId(1, 1);
 
 class CCParamTraitsTest : public testing::Test {
  protected:
@@ -206,6 +206,7 @@ class CCParamTraitsTest : public testing::Test {
     EXPECT_EQ(a->a_plane_resource_id(), b->a_plane_resource_id());
     EXPECT_EQ(a->color_space, b->color_space);
     EXPECT_EQ(a->bits_per_channel, b->bits_per_channel);
+    EXPECT_EQ(a->require_overlay, b->require_overlay);
   }
 
   void Compare(const TransferableResource& a, const TransferableResource& b) {
@@ -290,6 +291,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   FilterOperations arbitrary_filters1;
   arbitrary_filters1.Append(
       FilterOperation::CreateGrayscaleFilter(arbitrary_float1));
+  arbitrary_filters1.Append(
+      FilterOperation::CreateBlurFilter(arbitrary_float2));
   arbitrary_filters1.Append(cc::FilterOperation::CreateReferenceFilter(
       SkBlurImageFilter::Make(arbitrary_sigma, arbitrary_sigma, nullptr)));
 
@@ -301,18 +304,18 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   child_pass_in->SetAll(child_id, arbitrary_rect2, arbitrary_rect3,
                         arbitrary_matrix2, arbitrary_filters1,
                         arbitrary_filters2, arbitrary_color_space,
-                        arbitrary_bool2);
+                        arbitrary_bool2, arbitrary_bool3, arbitrary_bool4);
 
   std::unique_ptr<RenderPass> child_pass_cmp = RenderPass::Create();
   child_pass_cmp->SetAll(child_id, arbitrary_rect2, arbitrary_rect3,
                          arbitrary_matrix2, arbitrary_filters1,
                          arbitrary_filters2, arbitrary_color_space,
-                         arbitrary_bool2);
+                         arbitrary_bool2, arbitrary_bool3, arbitrary_bool4);
 
   std::unique_ptr<RenderPass> pass_in = RenderPass::Create();
   pass_in->SetAll(root_id, arbitrary_rect1, arbitrary_rect2, arbitrary_matrix1,
                   arbitrary_filters2, arbitrary_filters1, arbitrary_color_space,
-                  arbitrary_bool1);
+                  arbitrary_bool1, arbitrary_bool2, arbitrary_bool3);
 
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
   shared_state1_in->SetAll(arbitrary_matrix1, arbitrary_rect1, arbitrary_rect1,
@@ -322,7 +325,8 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   std::unique_ptr<RenderPass> pass_cmp = RenderPass::Create();
   pass_cmp->SetAll(root_id, arbitrary_rect1, arbitrary_rect2, arbitrary_matrix1,
                    arbitrary_filters2, arbitrary_filters1,
-                   arbitrary_color_space, arbitrary_bool1);
+                   arbitrary_color_space, arbitrary_bool1, arbitrary_bool2,
+                   arbitrary_bool3);
 
   SharedQuadState* shared_state1_cmp =
       pass_cmp->CreateAndAppendSharedQuadState();
@@ -382,9 +386,9 @@ TEST_F(CCParamTraitsTest, AllQuads) {
   pass_cmp->CopyFromAndAppendDrawQuad(streamvideo_in,
                                       streamvideo_in->shared_quad_state);
 
-  cc::SurfaceId arbitrary_surface_id(
+  viz::SurfaceId arbitrary_surface_id(
       kArbitraryFrameSinkId,
-      cc::LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
   SurfaceDrawQuad* surface_in =
       pass_in->CreateAndAppendDrawQuad<SurfaceDrawQuad>();
   surface_in->SetAll(shared_state3_in, arbitrary_rect2,
@@ -420,7 +424,7 @@ TEST_F(CCParamTraitsTest, AllQuads) {
       arbitrary_rectf2, arbitrary_size1, arbitrary_size2, arbitrary_resourceid1,
       arbitrary_resourceid2, arbitrary_resourceid3, arbitrary_resourceid4,
       arbitrary_video_color_space, arbitrary_color_space, arbitrary_float1,
-      arbitrary_float2, arbitrary_int);
+      arbitrary_float2, arbitrary_int, arbitrary_bool2);
   pass_cmp->CopyFromAndAppendDrawQuad(yuvvideo_in,
                                       yuvvideo_in->shared_quad_state);
 
@@ -503,7 +507,7 @@ TEST_F(CCParamTraitsTest, UnusedSharedQuadStates) {
   std::unique_ptr<RenderPass> pass_in = RenderPass::Create();
   pass_in->SetAll(1, gfx::Rect(100, 100), gfx::Rect(), gfx::Transform(),
                   FilterOperations(), FilterOperations(),
-                  gfx::ColorSpace::CreateSRGB(), false);
+                  gfx::ColorSpace::CreateSRGB(), false, false, false);
 
   // The first SharedQuadState is used.
   SharedQuadState* shared_state1_in = pass_in->CreateAndAppendSharedQuadState();
@@ -591,7 +595,7 @@ TEST_F(CCParamTraitsTest, Resources) {
 
   TransferableResource arbitrary_resource1;
   arbitrary_resource1.id = 2178312;
-  arbitrary_resource1.format = cc::RGBA_8888;
+  arbitrary_resource1.format = viz::RGBA_8888;
   arbitrary_resource1.filter = 53;
   arbitrary_resource1.size = gfx::Size(37189, 123123);
   arbitrary_resource1.mailbox_holder.mailbox.SetName(arbitrary_mailbox1);
@@ -605,7 +609,7 @@ TEST_F(CCParamTraitsTest, Resources) {
 
   TransferableResource arbitrary_resource2;
   arbitrary_resource2.id = 789132;
-  arbitrary_resource2.format = cc::RGBA_4444;
+  arbitrary_resource2.format = viz::RGBA_4444;
   arbitrary_resource2.filter = 47;
   arbitrary_resource2.size = gfx::Size(89123, 23789);
   arbitrary_resource2.mailbox_holder.mailbox.SetName(arbitrary_mailbox2);
@@ -618,7 +622,7 @@ TEST_F(CCParamTraitsTest, Resources) {
 #endif
 
   std::unique_ptr<RenderPass> renderpass_in = RenderPass::Create();
-  renderpass_in->SetNew(1, gfx::Rect(), gfx::Rect(), gfx::Transform());
+  renderpass_in->SetNew(1u, gfx::Rect(), gfx::Rect(), gfx::Transform());
 
   CompositorFrame frame_in;
   frame_in.resource_list.push_back(arbitrary_resource1);
@@ -640,19 +644,19 @@ TEST_F(CCParamTraitsTest, Resources) {
 
 TEST_F(CCParamTraitsTest, SurfaceInfo) {
   IPC::Message msg(1, 2, IPC::Message::PRIORITY_NORMAL);
-  const cc::SurfaceId kArbitrarySurfaceId(
+  const viz::SurfaceId kArbitrarySurfaceId(
       kArbitraryFrameSinkId,
-      cc::LocalSurfaceId(3, base::UnguessableToken::Create()));
+      viz::LocalSurfaceId(3, base::UnguessableToken::Create()));
   constexpr float kArbitraryDeviceScaleFactor = 0.9f;
   const gfx::Size kArbitrarySize(65, 321);
-  const cc::SurfaceInfo surface_info_in(
+  const viz::SurfaceInfo surface_info_in(
       kArbitrarySurfaceId, kArbitraryDeviceScaleFactor, kArbitrarySize);
-  IPC::ParamTraits<cc::SurfaceInfo>::Write(&msg, surface_info_in);
+  IPC::ParamTraits<viz::SurfaceInfo>::Write(&msg, surface_info_in);
 
-  cc::SurfaceInfo surface_info_out;
+  viz::SurfaceInfo surface_info_out;
   base::PickleIterator iter(msg);
   EXPECT_TRUE(
-      IPC::ParamTraits<cc::SurfaceInfo>::Read(&msg, &iter, &surface_info_out));
+      IPC::ParamTraits<viz::SurfaceInfo>::Read(&msg, &iter, &surface_info_out));
 
   ASSERT_EQ(surface_info_in, surface_info_out);
 }

@@ -66,15 +66,19 @@ void FakeRendererScheduler::DidHandleInputEventOnMainThread(
     const blink::WebInputEvent& web_input_event,
     WebInputEventResult result) {}
 
+base::TimeDelta FakeRendererScheduler::MostRecentExpectedQueueingTime() {
+  return base::TimeDelta();
+}
+
 void FakeRendererScheduler::DidAnimateForInputOnCompositorThread() {}
 
 bool FakeRendererScheduler::IsHighPriorityWorkAnticipated() {
   return false;
 }
 
-void FakeRendererScheduler::OnRendererBackgrounded() {}
+void FakeRendererScheduler::SetRendererHidden(bool hidden) {}
 
-void FakeRendererScheduler::OnRendererForegrounded() {}
+void FakeRendererScheduler::SetRendererBackgrounded(bool backgrounded) {}
 
 void FakeRendererScheduler::SuspendRenderer() {}
 
@@ -84,7 +88,7 @@ void FakeRendererScheduler::AddPendingNavigation(NavigatingFrameType type) {}
 
 void FakeRendererScheduler::RemovePendingNavigation(NavigatingFrameType type) {}
 
-void FakeRendererScheduler::OnNavigationStarted() {}
+void FakeRendererScheduler::OnNavigate() {}
 
 bool FakeRendererScheduler::ShouldYieldForHighPriorityWork() {
   return false;
@@ -105,6 +109,10 @@ void FakeRendererScheduler::Shutdown() {}
 void FakeRendererScheduler::SuspendTimerQueue() {}
 
 void FakeRendererScheduler::ResumeTimerQueue() {}
+
+void FakeRendererScheduler::VirtualTimePaused() {}
+
+void FakeRendererScheduler::VirtualTimeResumed() {}
 
 void FakeRendererScheduler::SetTimerQueueSuspensionWhenBackgroundedEnabled(
     bool enabled) {}

@@ -22,6 +22,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/skia/include/core/SkPath.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/client/focus_client.h"
 #include "ui/aura/window.h"
@@ -48,6 +49,7 @@
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/path.h"
 #include "ui/gfx/path_x11.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/views/corewm/tooltip_aura.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/views_delegate.h"
@@ -89,53 +91,6 @@ const int k_NET_WM_STATE_REMOVE = 0;
 // Special value of the _NET_WM_DESKTOP property which indicates that the window
 // should appear on all desktops.
 const int kAllDesktops = 0xFFFFFFFF;
-
-const char* kAtomsToCache[] = {
-  "UTF8_STRING",
-  "WM_DELETE_WINDOW",
-  "WM_PROTOCOLS",
-  "_NET_ACTIVE_WINDOW",
-  "_NET_FRAME_EXTENTS",
-  "_NET_WM_CM_S0",
-  "_NET_WM_DESKTOP",
-  "_NET_WM_ICON",
-  "_NET_WM_NAME",
-  "_NET_WM_PID",
-  "_NET_WM_PING",
-  "_NET_WM_STATE",
-  "_NET_WM_STATE_ABOVE",
-  "_NET_WM_STATE_FULLSCREEN",
-  "_NET_WM_STATE_HIDDEN",
-  "_NET_WM_STATE_MAXIMIZED_HORZ",
-  "_NET_WM_STATE_MAXIMIZED_VERT",
-  "_NET_WM_STATE_SKIP_TASKBAR",
-  "_NET_WM_STATE_STICKY",
-  "_NET_WM_USER_TIME",
-  "_NET_WM_WINDOW_OPACITY",
-  "_NET_WM_WINDOW_TYPE",
-  "_NET_WM_WINDOW_TYPE_DND",
-  "_NET_WM_WINDOW_TYPE_MENU",
-  "_NET_WM_WINDOW_TYPE_NORMAL",
-  "_NET_WM_WINDOW_TYPE_NOTIFICATION",
-  "_NET_WM_WINDOW_TYPE_TOOLTIP",
-  "XdndActionAsk",
-  "XdndActionCopy",
-  "XdndActionLink",
-  "XdndActionList",
-  "XdndActionMove",
-  "XdndActionPrivate",
-  "XdndAware",
-  "XdndDrop",
-  "XdndEnter",
-  "XdndFinished",
-  "XdndLeave",
-  "XdndPosition",
-  "XdndProxy",  // Proxy windows?
-  "XdndSelection",
-  "XdndStatus",
-  "XdndTypeList",
-  NULL
-};
 
 const char kX11WindowRolePopup[] = "popup";
 const char kX11WindowRoleBubble[] = "bubble";
@@ -192,7 +147,6 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
     : xdisplay_(gfx::GetXDisplay()),
       xwindow_(0),
       x_root_window_(DefaultRootWindow(xdisplay_)),
-      atom_cache_(xdisplay_, kAtomsToCache),
       window_mapped_in_server_(false),
       window_mapped_in_client_(false),
       is_fullscreen_(false),
@@ -214,11 +168,12 @@ DesktopWindowTreeHostX11::DesktopWindowTreeHostX11(
       has_pointer_focus_(false),
       modal_dialog_counter_(0),
       close_widget_factory_(this),
-      weak_factory_(this) {}
+      weak_factory_(this) {
+}
 
 DesktopWindowTreeHostX11::~DesktopWindowTreeHostX11() {
   window()->ClearProperty(kHostForRootWindow);
-  aura::client::SetWindowMoveClient(window(), NULL);
+  wm::SetWindowMoveClient(window(), NULL);
   desktop_native_widget_aura_->OnDesktopWindowTreeHostDestroyed(this);
   DestroyDispatcher();
 }
@@ -447,6 +402,9 @@ void DesktopWindowTreeHostX11::Init(aura::Window* content_window,
   content_window_ = content_window;
   activatable_ = (params.activatable == Widget::InitParams::ACTIVATABLE_YES);
 
+  if (params.type == Widget::InitParams::TYPE_WINDOW)
+    content_window_->SetProperty(aura::client::kAnimationsDisabledKey, true);
+
   // TODO(erg): Check whether we *should* be building a WindowTreeHost here, or
   // whether we should be proxying requests to another DRWHL.
 
@@ -479,7 +437,7 @@ void DesktopWindowTreeHostX11::OnNativeWidgetCreated(
                     !params.remove_standard_frame);
 
   x11_window_move_client_.reset(new X11DesktopWindowMoveClient);
-  aura::client::SetWindowMoveClient(window(), x11_window_move_client_.get());
+  wm::SetWindowMoveClient(window(), x11_window_move_client_.get());
 
   SetWindowTransparency();
 
@@ -781,7 +739,7 @@ void DesktopWindowTreeHostX11::Activate() {
   // https://code.google.com/p/wmii/issues/detail?id=266
   static bool wm_supports_active_window =
       ui::GuessWindowManager() != ui::WM_WMII &&
-      ui::WmSupportsHint(atom_cache_.GetAtom("_NET_ACTIVE_WINDOW"));
+      ui::WmSupportsHint(gfx::GetAtom("_NET_ACTIVE_WINDOW"));
 
   Time timestamp = ui::X11EventSource::GetInstance()->GetTimestamp();
 
@@ -790,7 +748,7 @@ void DesktopWindowTreeHostX11::Activate() {
     memset(&xclient, 0, sizeof(xclient));
     xclient.type = ClientMessage;
     xclient.xclient.window = xwindow_;
-    xclient.xclient.message_type = atom_cache_.GetAtom("_NET_ACTIVE_WINDOW");
+    xclient.xclient.message_type = gfx::GetAtom("_NET_ACTIVE_WINDOW");
     xclient.xclient.format = 32;
     xclient.xclient.data.l[0] = 1;  // Specified we are an app.
     xclient.xclient.data.l[1] = timestamp;
@@ -854,9 +812,7 @@ bool DesktopWindowTreeHostX11::IsActive() const {
 void DesktopWindowTreeHostX11::Maximize() {
   if (HasWMSpecProperty("_NET_WM_STATE_FULLSCREEN")) {
     // Unfullscreen the window if it is fullscreen.
-    SetWMSpecState(false,
-                   atom_cache_.GetAtom("_NET_WM_STATE_FULLSCREEN"),
-                   None);
+    SetWMSpecState(false, gfx::GetAtom("_NET_WM_STATE_FULLSCREEN"), None);
 
     // Resize the window so that it does not have the same size as a monitor.
     // (Otherwise, some window managers immediately put the window back in
@@ -876,9 +832,8 @@ void DesktopWindowTreeHostX11::Maximize() {
   // heuristics that are in the PropertyNotify and ConfigureNotify handlers.
   restored_bounds_in_pixels_ = bounds_in_pixels_;
 
-  SetWMSpecState(true,
-                 atom_cache_.GetAtom("_NET_WM_STATE_MAXIMIZED_VERT"),
-                 atom_cache_.GetAtom("_NET_WM_STATE_MAXIMIZED_HORZ"));
+  SetWMSpecState(true, gfx::GetAtom("_NET_WM_STATE_MAXIMIZED_VERT"),
+                 gfx::GetAtom("_NET_WM_STATE_MAXIMIZED_HORZ"));
   if (IsMinimized())
     ShowWindowWithState(ui::SHOW_STATE_NORMAL);
 }
@@ -890,9 +845,8 @@ void DesktopWindowTreeHostX11::Minimize() {
 
 void DesktopWindowTreeHostX11::Restore() {
   should_maximize_after_map_ = false;
-  SetWMSpecState(false,
-                 atom_cache_.GetAtom("_NET_WM_STATE_MAXIMIZED_VERT"),
-                 atom_cache_.GetAtom("_NET_WM_STATE_MAXIMIZED_HORZ"));
+  SetWMSpecState(false, gfx::GetAtom("_NET_WM_STATE_MAXIMIZED_VERT"),
+                 gfx::GetAtom("_NET_WM_STATE_MAXIMIZED_HORZ"));
   if (IsMinimized())
     ShowWindowWithState(ui::SHOW_STATE_NORMAL);
 }
@@ -912,9 +866,7 @@ bool DesktopWindowTreeHostX11::HasCapture() const {
 
 void DesktopWindowTreeHostX11::SetAlwaysOnTop(bool always_on_top) {
   is_always_on_top_ = always_on_top;
-  SetWMSpecState(always_on_top,
-                 atom_cache_.GetAtom("_NET_WM_STATE_ABOVE"),
-                 None);
+  SetWMSpecState(always_on_top, gfx::GetAtom("_NET_WM_STATE_ABOVE"), None);
 }
 
 bool DesktopWindowTreeHostX11::IsAlwaysOnTop() const {
@@ -922,9 +874,7 @@ bool DesktopWindowTreeHostX11::IsAlwaysOnTop() const {
 }
 
 void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
-  SetWMSpecState(always_visible,
-                 atom_cache_.GetAtom("_NET_WM_STATE_STICKY"),
-                 None);
+  SetWMSpecState(always_visible, gfx::GetAtom("_NET_WM_STATE_STICKY"), None);
 
   int new_desktop = 0;
   if (always_visible) {
@@ -939,7 +889,7 @@ void DesktopWindowTreeHostX11::SetVisibleOnAllWorkspaces(bool always_visible) {
   memset (&xevent, 0, sizeof (xevent));
   xevent.type = ClientMessage;
   xevent.xclient.window = xwindow_;
-  xevent.xclient.message_type = atom_cache_.GetAtom("_NET_WM_DESKTOP");
+  xevent.xclient.message_type = gfx::GetAtom("_NET_WM_DESKTOP");
   xevent.xclient.format = 32;
   xevent.xclient.data.l[0] = new_desktop;
   xevent.xclient.data.l[1] = 0;
@@ -964,12 +914,8 @@ bool DesktopWindowTreeHostX11::SetWindowTitle(const base::string16& title) {
     return false;
   window_title_ = title;
   std::string utf8str = base::UTF16ToUTF8(title);
-  XChangeProperty(xdisplay_,
-                  xwindow_,
-                  atom_cache_.GetAtom("_NET_WM_NAME"),
-                  atom_cache_.GetAtom("UTF8_STRING"),
-                  8,
-                  PropModeReplace,
+  XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_NAME"),
+                  gfx::GetAtom("UTF8_STRING"), 8, PropModeReplace,
                   reinterpret_cast<const unsigned char*>(utf8str.c_str()),
                   utf8str.size());
   XTextProperty xtp;
@@ -997,12 +943,12 @@ Widget::MoveLoopResult DesktopWindowTreeHostX11::RunMoveLoop(
     const gfx::Vector2d& drag_offset,
     Widget::MoveLoopSource source,
     Widget::MoveLoopEscapeBehavior escape_behavior) {
-  aura::client::WindowMoveSource window_move_source =
-      source == Widget::MOVE_LOOP_SOURCE_MOUSE ?
-      aura::client::WINDOW_MOVE_SOURCE_MOUSE :
-      aura::client::WINDOW_MOVE_SOURCE_TOUCH;
+  wm::WindowMoveSource window_move_source =
+      source == Widget::MOVE_LOOP_SOURCE_MOUSE ? wm::WINDOW_MOVE_SOURCE_MOUSE
+                                               : wm::WINDOW_MOVE_SOURCE_TOUCH;
   if (x11_window_move_client_->RunMoveLoop(content_window_, drag_offset,
-      window_move_source) == aura::client::MOVE_SUCCESSFUL)
+                                           window_move_source) ==
+      wm::MOVE_SUCCESSFUL)
     return Widget::MOVE_LOOP_SUCCESSFUL;
 
   return Widget::MOVE_LOOP_CANCELED;
@@ -1066,9 +1012,7 @@ void DesktopWindowTreeHostX11::SetFullscreen(bool fullscreen) {
 
   if (unmaximize_and_remaximize)
     Restore();
-  SetWMSpecState(fullscreen,
-                 atom_cache_.GetAtom("_NET_WM_STATE_FULLSCREEN"),
-                 None);
+  SetWMSpecState(fullscreen, gfx::GetAtom("_NET_WM_STATE_FULLSCREEN"), None);
   if (unmaximize_and_remaximize)
     Maximize();
 
@@ -1114,12 +1058,10 @@ void DesktopWindowTreeHostX11::SetOpacity(float opacity) {
 
   if (cardinality == 0xffffffff) {
     XDeleteProperty(xdisplay_, xwindow_,
-                    atom_cache_.GetAtom("_NET_WM_WINDOW_OPACITY"));
+                    gfx::GetAtom("_NET_WM_WINDOW_OPACITY"));
   } else {
-    XChangeProperty(xdisplay_, xwindow_,
-                    atom_cache_.GetAtom("_NET_WM_WINDOW_OPACITY"),
-                    XA_CARDINAL, 32,
-                    PropModeReplace,
+    XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_WINDOW_OPACITY"),
+                    XA_CARDINAL, 32, PropModeReplace,
                     reinterpret_cast<unsigned char*>(&cardinality), 1);
   }
 }
@@ -1362,6 +1304,26 @@ void DesktopWindowTreeHostX11::OnCursorVisibilityChangedNative(bool show) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// DesktopWindowTreeHostX11, display::DisplayObserver implementation:
+
+void DesktopWindowTreeHostX11::OnDisplayMetricsChanged(
+    const display::Display& display,
+    uint32_t changed_metrics) {
+  aura::WindowTreeHost::OnDisplayMetricsChanged(display, changed_metrics);
+
+  if ((changed_metrics & DISPLAY_METRIC_DEVICE_SCALE_FACTOR) &&
+      display::Screen::GetScreen()->GetDisplayNearestWindow(window()).id() ==
+          display.id()) {
+    // When the scale factor changes, also pretend that a resize
+    // occured so that the window layout will be refreshed and a
+    // compositor redraw will be scheduled.  This is weird, but works.
+    // TODO(thomasanderson): Figure out a more direct way of doing
+    // this.
+    RestartDelayedResizeTask();
+  }
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostX11, private:
 
 void DesktopWindowTreeHostX11::InitX11Window(
@@ -1385,22 +1347,22 @@ void DesktopWindowTreeHostX11::InitX11Window(
   switch (params.type) {
     case Widget::InitParams::TYPE_MENU:
       swa.override_redirect = True;
-      window_type = atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE_MENU");
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_MENU");
       break;
     case Widget::InitParams::TYPE_TOOLTIP:
       swa.override_redirect = True;
-      window_type = atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE_TOOLTIP");
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_TOOLTIP");
       break;
     case Widget::InitParams::TYPE_POPUP:
       swa.override_redirect = True;
-      window_type = atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE_NOTIFICATION");
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_NOTIFICATION");
       break;
     case Widget::InitParams::TYPE_DRAG:
       swa.override_redirect = True;
-      window_type = atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE_DND");
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_DND");
       break;
     default:
-      window_type = atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE_NORMAL");
+      window_type = gfx::GetAtom("_NET_WM_WINDOW_TYPE_NORMAL");
       break;
   }
   // An in-activatable window should not interact with the system wm.
@@ -1469,8 +1431,8 @@ void DesktopWindowTreeHostX11::InitX11Window(
   // should listen for activation events and anything else that GTK+ listens
   // for, and do something useful.
   ::Atom protocols[2];
-  protocols[0] = atom_cache_.GetAtom("WM_DELETE_WINDOW");
-  protocols[1] = atom_cache_.GetAtom("_NET_WM_PING");
+  protocols[0] = gfx::GetAtom("WM_DELETE_WINDOW");
+  protocols[1] = gfx::GetAtom("_NET_WM_PING");
   XSetWMProtocols(xdisplay_, xwindow_, protocols, 2);
 
   // We need a WM_CLIENT_MACHINE and WM_LOCALE_NAME value so we integrate with
@@ -1483,20 +1445,12 @@ void DesktopWindowTreeHostX11::InitX11Window(
   static_assert(sizeof(long) >= sizeof(pid_t),
                 "pid_t should not be larger than long");
   long pid = getpid();
-  XChangeProperty(xdisplay_,
-                  xwindow_,
-                  atom_cache_.GetAtom("_NET_WM_PID"),
-                  XA_CARDINAL,
-                  32,
-                  PropModeReplace,
-                  reinterpret_cast<unsigned char*>(&pid), 1);
+  XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_PID"), XA_CARDINAL,
+                  32, PropModeReplace, reinterpret_cast<unsigned char*>(&pid),
+                  1);
 
-  XChangeProperty(xdisplay_,
-                  xwindow_,
-                  atom_cache_.GetAtom("_NET_WM_WINDOW_TYPE"),
-                  XA_ATOM,
-                  32,
-                  PropModeReplace,
+  XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_WINDOW_TYPE"),
+                  XA_ATOM, 32, PropModeReplace,
                   reinterpret_cast<unsigned char*>(&window_type), 1);
 
   // List of window state properties (_NET_WM_STATE) to set, if any.
@@ -1506,19 +1460,18 @@ void DesktopWindowTreeHostX11::InitX11Window(
   if ((params.type == Widget::InitParams::TYPE_POPUP ||
        params.type == Widget::InitParams::TYPE_BUBBLE) &&
       !params.force_show_in_taskbar) {
-    state_atom_list.push_back(
-        atom_cache_.GetAtom("_NET_WM_STATE_SKIP_TASKBAR"));
+    state_atom_list.push_back(gfx::GetAtom("_NET_WM_STATE_SKIP_TASKBAR"));
   }
 
   // If the window should stay on top of other windows, add the
   // _NET_WM_STATE_ABOVE property.
   is_always_on_top_ = params.keep_on_top;
   if (is_always_on_top_)
-    state_atom_list.push_back(atom_cache_.GetAtom("_NET_WM_STATE_ABOVE"));
+    state_atom_list.push_back(gfx::GetAtom("_NET_WM_STATE_ABOVE"));
 
   workspace_.clear();
   if (params.visible_on_all_workspaces) {
-    state_atom_list.push_back(atom_cache_.GetAtom("_NET_WM_STATE_STICKY"));
+    state_atom_list.push_back(gfx::GetAtom("_NET_WM_STATE_STICKY"));
     ui::SetIntProperty(xwindow_, "_NET_WM_DESKTOP", "CARDINAL", kAllDesktops);
   } else if (!params.workspace.empty()) {
     int workspace;
@@ -1613,7 +1566,7 @@ gfx::Size DesktopWindowTreeHostX11::AdjustSize(
 
 void DesktopWindowTreeHostX11::OnWMStateUpdated() {
   std::vector< ::Atom> atom_list;
-  // Ignore the return value of ui::GetAtomArrayProperty(). Fluxbox removes the
+  // Ignore the return value of gfx::GetAtomArrayProperty(). Fluxbox removes the
   // _NET_WM_STATE property when no _NET_WM_STATE atoms are set.
   ui::GetAtomArrayProperty(xwindow_, "_NET_WM_STATE", &atom_list);
 
@@ -1735,13 +1688,9 @@ void DesktopWindowTreeHostX11::UpdateWMUserTime(
       type == ui::ET_TOUCH_PRESSED) {
     unsigned long wm_user_time_ms = static_cast<unsigned long>(
         (ui::EventTimeFromNative(event) - base::TimeTicks()).InMilliseconds());
-    XChangeProperty(xdisplay_,
-                    xwindow_,
-                    atom_cache_.GetAtom("_NET_WM_USER_TIME"),
-                    XA_CARDINAL,
-                    32,
-                    PropModeReplace,
-                    reinterpret_cast<const unsigned char *>(&wm_user_time_ms),
+    XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_USER_TIME"),
+                    XA_CARDINAL, 32, PropModeReplace,
+                    reinterpret_cast<const unsigned char*>(&wm_user_time_ms),
                     1);
   }
 }
@@ -1753,7 +1702,7 @@ void DesktopWindowTreeHostX11::SetWMSpecState(bool enabled,
   memset(&xclient, 0, sizeof(xclient));
   xclient.type = ClientMessage;
   xclient.xclient.window = xwindow_;
-  xclient.xclient.message_type = atom_cache_.GetAtom("_NET_WM_STATE");
+  xclient.xclient.message_type = gfx::GetAtom("_NET_WM_STATE");
   xclient.xclient.format = 32;
   xclient.xclient.data.l[0] =
       enabled ? k_NET_WM_STATE_ADD : k_NET_WM_STATE_REMOVE;
@@ -1768,8 +1717,8 @@ void DesktopWindowTreeHostX11::SetWMSpecState(bool enabled,
 }
 
 bool DesktopWindowTreeHostX11::HasWMSpecProperty(const char* property) const {
-  return window_properties_.find(atom_cache_.GetAtom(property)) !=
-      window_properties_.end();
+  return window_properties_.find(gfx::GetAtom(property)) !=
+         window_properties_.end();
 }
 
 void DesktopWindowTreeHostX11::SetUseNativeFrame(bool use_native_frame) {
@@ -1965,10 +1914,10 @@ void DesktopWindowTreeHostX11::MapWindow(ui::WindowShowState show_state) {
           ? 0
           : ui::X11EventSource::GetInstance()->GetTimestamp();
   if (show_state == ui::SHOW_STATE_INACTIVE || wm_user_time_ms != 0) {
-    XChangeProperty(
-        xdisplay_, xwindow_, atom_cache_.GetAtom("_NET_WM_USER_TIME"),
-        XA_CARDINAL, 32, PropModeReplace,
-        reinterpret_cast<const unsigned char*>(&wm_user_time_ms), 1);
+    XChangeProperty(xdisplay_, xwindow_, gfx::GetAtom("_NET_WM_USER_TIME"),
+                    XA_CARDINAL, 32, PropModeReplace,
+                    reinterpret_cast<const unsigned char*>(&wm_user_time_ms),
+                    1);
   }
 
   ui::X11EventSource* event_source = ui::X11EventSource::GetInstance();
@@ -2106,13 +2055,8 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
       if (origin_changed)
         OnHostMovedInPixels(bounds_in_pixels_.origin());
 
-      if (size_changed) {
-        delayed_resize_task_.Reset(base::Bind(
-            &DesktopWindowTreeHostX11::DelayedResize,
-            close_widget_factory_.GetWeakPtr(), bounds_in_pixels.size()));
-        base::ThreadTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, delayed_resize_task_.callback());
-      }
+      if (size_changed)
+        RestartDelayedResizeTask();
       break;
     }
     case GenericEvent: {
@@ -2226,12 +2170,12 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
     }
     case ClientMessage: {
       Atom message_type = xev->xclient.message_type;
-      if (message_type == atom_cache_.GetAtom("WM_PROTOCOLS")) {
+      if (message_type == gfx::GetAtom("WM_PROTOCOLS")) {
         Atom protocol = static_cast<Atom>(xev->xclient.data.l[0]);
-        if (protocol == atom_cache_.GetAtom("WM_DELETE_WINDOW")) {
+        if (protocol == gfx::GetAtom("WM_DELETE_WINDOW")) {
           // We have received a close message from the window manager.
           OnHostCloseRequested();
-        } else if (protocol == atom_cache_.GetAtom("_NET_WM_PING")) {
+        } else if (protocol == gfx::GetAtom("_NET_WM_PING")) {
           XEvent reply_event = *xev;
           reply_event.xclient.window = x_root_window_;
 
@@ -2241,17 +2185,17 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
                      SubstructureRedirectMask | SubstructureNotifyMask,
                      &reply_event);
         }
-      } else if (message_type == atom_cache_.GetAtom("XdndEnter")) {
+      } else if (message_type == gfx::GetAtom("XdndEnter")) {
         drag_drop_client_->OnXdndEnter(xev->xclient);
-      } else if (message_type == atom_cache_.GetAtom("XdndLeave")) {
+      } else if (message_type == gfx::GetAtom("XdndLeave")) {
         drag_drop_client_->OnXdndLeave(xev->xclient);
-      } else if (message_type == atom_cache_.GetAtom("XdndPosition")) {
+      } else if (message_type == gfx::GetAtom("XdndPosition")) {
         drag_drop_client_->OnXdndPosition(xev->xclient);
-      } else if (message_type == atom_cache_.GetAtom("XdndStatus")) {
+      } else if (message_type == gfx::GetAtom("XdndStatus")) {
         drag_drop_client_->OnXdndStatus(xev->xclient);
-      } else if (message_type == atom_cache_.GetAtom("XdndFinished")) {
+      } else if (message_type == gfx::GetAtom("XdndFinished")) {
         drag_drop_client_->OnXdndFinished(xev->xclient);
-      } else if (message_type == atom_cache_.GetAtom("XdndDrop")) {
+      } else if (message_type == gfx::GetAtom("XdndDrop")) {
         drag_drop_client_->OnXdndDrop(xev->xclient);
       }
       break;
@@ -2295,11 +2239,11 @@ uint32_t DesktopWindowTreeHostX11::DispatchEvent(
     }
     case PropertyNotify: {
       ::Atom changed_atom = xev->xproperty.atom;
-      if (changed_atom == atom_cache_.GetAtom("_NET_WM_STATE")) {
+      if (changed_atom == gfx::GetAtom("_NET_WM_STATE")) {
         OnWMStateUpdated();
-      } else if (changed_atom == atom_cache_.GetAtom("_NET_FRAME_EXTENTS")) {
+      } else if (changed_atom == gfx::GetAtom("_NET_FRAME_EXTENTS")) {
         OnFrameExtentsUpdated();
-      } else if (changed_atom == atom_cache_.GetAtom("_NET_WM_DESKTOP")) {
+      } else if (changed_atom == gfx::GetAtom("_NET_WM_DESKTOP")) {
         if (UpdateWorkspace())
           OnHostWorkspaceChanged();
       }
@@ -2383,6 +2327,14 @@ void DesktopWindowTreeHostX11::EnableEventListening() {
   DCHECK_GT(modal_dialog_counter_, 0UL);
   if (!--modal_dialog_counter_)
     targeter_for_modal_.reset();
+}
+
+void DesktopWindowTreeHostX11::RestartDelayedResizeTask() {
+  delayed_resize_task_.Reset(
+      base::Bind(&DesktopWindowTreeHostX11::DelayedResize,
+                 close_widget_factory_.GetWeakPtr(), bounds_in_pixels_.size()));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, delayed_resize_task_.callback());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

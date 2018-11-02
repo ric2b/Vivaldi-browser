@@ -38,6 +38,7 @@
 #include "core/layout/LayoutObject.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "platform/geometry/IntSize.h"
+#include "platform/graphics/ColorBlend.h"
 #include "platform/graphics/Gradient.h"
 #include "platform/graphics/GradientGeneratedImage.h"
 #include "platform/graphics/Image.h"
@@ -101,19 +102,22 @@ DEFINE_TRACE(CSSGradientColorStop) {
   visitor->Trace(color_);
 }
 
-PassRefPtr<Image> CSSGradientValue::GetImage(const LayoutObject& layout_object,
-                                             const IntSize& size) {
+PassRefPtr<Image> CSSGradientValue::GetImage(
+    const ImageResourceObserver& client,
+    const Document& document,
+    const ComputedStyle& style,
+    const IntSize& size) {
   if (size.IsEmpty())
     return nullptr;
 
   if (is_cacheable_) {
-    if (!Clients().Contains(&layout_object))
+    if (!Clients().Contains(&client))
       return nullptr;
 
     // Need to look up our size.  Create a string of width*height to use as a
     // hash key.
     Image* result =
-        this->CSSImageGeneratorValue::GetImage(&layout_object, size);
+        this->CSSImageGeneratorValue::GetImage(&client, document, style, size);
     if (result)
       return result;
   }
@@ -122,10 +126,12 @@ PassRefPtr<Image> CSSGradientValue::GetImage(const LayoutObject& layout_object,
   RefPtr<Gradient> gradient;
 
   const ComputedStyle* root_style =
-      layout_object.GetDocument().documentElement()->GetComputedStyle();
+      document.documentElement()->GetComputedStyle();
+  // TODO: Break dependency on LayoutObject.
+  const LayoutObject& layout_object = static_cast<const LayoutObject&>(client);
   CSSToLengthConversionData conversion_data(
-      layout_object.Style(), root_style, LayoutViewItem(layout_object.View()),
-      layout_object.Style()->EffectiveZoom());
+      &style, root_style, LayoutViewItem(layout_object.View()),
+      style.EffectiveZoom());
 
   switch (GetClassType()) {
     case kLinearGradientClass:
@@ -148,7 +154,7 @@ PassRefPtr<Image> CSSGradientValue::GetImage(const LayoutObject& layout_object,
   if (is_cacheable_)
     PutImage(size, new_image);
 
-  return new_image.Release();
+  return new_image;
 }
 
 // Should only ever be called for deprecated gradients.
@@ -1037,7 +1043,7 @@ PassRefPtr<Gradient> CSSLinearGradientValue::CreateGradient(
   // Now add the stops.
   gradient->AddColorStops(desc.stops);
 
-  return gradient.Release();
+  return gradient;
 }
 
 bool CSSLinearGradientValue::Equals(const CSSLinearGradientValue& other) const {
@@ -1088,7 +1094,7 @@ void CSSGradientValue::AppendCSSTextForColorStops(
 
   for (const auto& stop : stops_) {
     bool is_color_repeat = false;
-    if (RuntimeEnabledFeatures::multipleColorStopPositionsEnabled()) {
+    if (RuntimeEnabledFeatures::MultipleColorStopPositionsEnabled()) {
       is_color_repeat = stop.color_ && stop.offset_ &&
                         DataEquivalent(stop.color_.Get(), prev_color);
     }
@@ -1411,7 +1417,7 @@ PassRefPtr<Gradient> CSSRadialGradientValue::CreateGradient(
   // Now add the stops.
   gradient->AddColorStops(desc.stops);
 
-  return gradient.Release();
+  return gradient;
 }
 
 bool CSSRadialGradientValue::Equals(const CSSRadialGradientValue& other) const {
@@ -1525,7 +1531,7 @@ PassRefPtr<Gradient> CSSConicGradientValue::CreateGradient(
       position, angle, Gradient::ColorInterpolation::kPremultiplied);
   gradient->AddColorStops(desc.stops);
 
-  return gradient.Release();
+  return gradient;
 }
 
 bool CSSConicGradientValue::Equals(const CSSConicGradientValue& other) const {

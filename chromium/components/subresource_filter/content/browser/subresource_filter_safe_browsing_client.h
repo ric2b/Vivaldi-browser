@@ -15,13 +15,19 @@
 #include "base/memory/weak_ptr.h"
 #include "base/time/time.h"
 #include "components/safe_browsing_db/util.h"
-#include "components/safe_browsing_db/v4_local_database_manager.h"
 
 class GURL;
 
 namespace base {
 class SingleThreadTaskRunner;
+namespace trace_event {
+class TracedValue;
+}  // namespace trace_event
 }  // namespace base
+
+namespace safe_browsing {
+class SafeBrowsingDatabaseManager;
+}  // namespace safe_browsing
 
 namespace subresource_filter {
 
@@ -43,6 +49,8 @@ class SubresourceFilterSafeBrowsingClient {
         safe_browsing::ThreatPatternType::NONE;
     base::TimeDelta check_time;
     bool finished = false;
+
+    std::unique_ptr<base::trace_event::TracedValue> ToTracedValue() const;
   };
 
   SubresourceFilterSafeBrowsingClient(

@@ -10,36 +10,60 @@
 
 namespace blink {
 
+// Represents numeric values that can be expressed as a single number plus a
+// unit (or a naked number or percentage).
+// See CSSUnitValue.idl for more information about this class.
 class CORE_EXPORT CSSUnitValue final : public CSSNumericValue {
   WTF_MAKE_NONCOPYABLE(CSSUnitValue);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSPrimitiveValue::UnitType UnitFromName(const String& name);
+  // The constructor defined in the IDL.
   static CSSUnitValue* Create(double value,
                               const String& unit,
                               ExceptionState&);
+  // Blink-internal ways of creating CSSUnitValues.
   static CSSUnitValue* Create(double value, CSSPrimitiveValue::UnitType);
   static CSSUnitValue* FromCSSValue(const CSSPrimitiveValue&);
 
+  // Setters and getters for attributes defined in the IDL.
   void setValue(double new_value) { value_ = new_value; }
   double value() const { return value_; }
   void setUnit(const String& new_unit, ExceptionState&);
   String unit() const;
+  String type() const;
 
-  String cssType() const;
+  // Internal methods.
+  CSSPrimitiveValue::UnitType GetInternalUnit() const { return unit_; }
 
-  StyleValueType GetType() const override { return StyleValueType::kUnitType; }
+  // From CSSNumericValue.
+  CSSUnitValue* to(CSSPrimitiveValue::UnitType) const final;
+  bool IsCalculated() const final { return false; }
 
-  const CSSValue* ToCSSValue() const override;
+  // From CSSStyleValue.
+  StyleValueType GetType() const final;
+  bool ContainsPercent() const final {
+    return unit_ == CSSPrimitiveValue::UnitType::kPercentage;
+  }
+  const CSSValue* ToCSSValue() const final;
 
  private:
+
   CSSUnitValue(double value, CSSPrimitiveValue::UnitType unit)
       : CSSNumericValue(), value_(value), unit_(unit) {}
+
+  double ConvertFixedLength(CSSPrimitiveValue::UnitType) const;
+  double ConvertAngle(CSSPrimitiveValue::UnitType) const;
 
   double value_;
   CSSPrimitiveValue::UnitType unit_;
 };
+
+DEFINE_TYPE_CASTS(CSSUnitValue,
+                  CSSNumericValue,
+                  value,
+                  !value->IsCalculated(),
+                  !value.IsCalculated());
 
 }  // namespace blink
 

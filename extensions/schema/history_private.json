@@ -24,6 +24,29 @@
         "description": "The transition type for this visit from its referrer."
       },
       {
+        "id": "TypedHistoryItem",
+        "type": "object",
+        "description": "An object containing informations of one typed history entry",
+        "properties": {
+          "url": {
+            "type": "string",
+            "description": "The URL navigated to by a user."
+          },
+          "title": {
+            "type": "string",
+            "description": "The title of the page when it was last loaded."
+          },
+          "keywordId": {
+            "type": "integer",
+            "description": "The database identifier of the used keyword for a search or -1 if this wasn't a search."
+          },
+          "terms": {
+            "type": "string",
+            "description": "If keyWordID is not -1, the terms that the user searched for."
+          }
+        }
+      },
+      {
         "id": "HistoryPrivateItem",
         "type": "object",
         "description": "An object encapsulating one result of a history query.",
@@ -257,6 +280,95 @@
                 "items": { "$ref": "HistoryPrivateItem" }
               }
             ]
+          }
+        ]
+      },
+      {
+        "name": "setKeywordSearchTermsForURL",
+        "type": "function",
+        "description":"Stores the search terms and keyword used for a search of which the URL is present in history",
+        "parameters": [
+          {
+            "name": "url",
+            "type": "string",
+            "description": "The URL for which to add search terms"
+          },
+          {
+            "name": "keywordId",
+            "type": "integer",
+            "description": "A number identifying the keyword that was used"
+          },
+          {
+            "name": "searchTerms",
+            "type": "string",
+            "description": "The search terms to store"
+          }
+        ]
+      },
+      {
+        "name": "deleteAllSearchTermsForKeyword",
+        "type": "function",
+        "description": "Removes all search terms stored in history for a given keyword",
+        "parameters": [
+          {
+            "name": "keywordId",
+            "type": "integer",
+            "description": "A number identifying the keyword that was used"
+          }
+        ]
+      },
+      {
+        "name": "getTypedHistory",
+        "type": "function",
+        "description": "Retrieves a list of items used to populate the typed URL results of the address bar",
+        "parameters": [
+          {
+            "name": "query",
+            "type": "string",
+            "description": "A piece of text that the results should contain"
+          },
+          {
+            "name": "prefixKeywordId",
+            "type": "integer",
+            "description": "A number identifying a possible keyword prefixing the query or -1 if none."
+          },
+          {
+            "name": "max_results",
+            "type": "integer",
+            "description": "The number of items to return"
+          },
+          {
+            "name": "callback",
+            "type": "function",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": { "$ref": "TypedHistoryItem" }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "migrateOldTypedUrl",
+        "type": "function",
+        "description": "Add an old typed URL to history",
+        "parameters":[
+          {
+            "name": "url",
+            "type": "string",
+            "description": "The URL that was visited"
+          },
+          {
+            "name": "time",
+            "type": "number",
+            "description": "The time at which the visit took place as a UNIX timestamp"
+          },
+          {
+            "name": "transitionType",
+            "$ref": "TransitionType",
+            "description": "Expected to be typed, keyword or generated. In the last two cases, remember to call setKeywordSearchTermsForURL."
           }
         ]
       }

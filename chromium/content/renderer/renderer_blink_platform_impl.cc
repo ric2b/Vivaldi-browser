@@ -22,6 +22,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/url_formatter/url_formatter.h"
 #include "content/child/blob_storage/webblobregistry_impl.h"
@@ -41,6 +42,7 @@
 #include "content/common/frame_messages.h"
 #include "content/common/gpu_stream_constants.h"
 #include "content/common/render_process_messages.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/webplugininfo.h"
@@ -77,6 +79,8 @@
 #include "media/audio/audio_output_device.h"
 #include "media/blink/webcontentdecryptionmodule_impl.h"
 #include "media/filters/stream_parser_factory.h"
+#include "mojo/public/cpp/bindings/strong_associated_binding.h"
+#include "mojo/public/cpp/bindings/strong_binding.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
@@ -96,8 +100,10 @@
 #include "third_party/WebKit/public/platform/WebRTCCertificateGenerator.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
+#include "third_party/WebKit/public/platform/WebSocketHandshakeThrottle.h"
 #include "third_party/WebKit/public/platform/WebThread.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
+#include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/platform/WebVector.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceMotionListener.h"
 #include "third_party/WebKit/public/platform/modules/device_orientation/WebDeviceOrientationListener.h"
@@ -189,6 +195,131 @@ media::AudioParameters GetAudioHardwareParams() {
                                                  web_frame->GetSecurityOrigin())
       .output_params();
 }
+
+// TODO(hintzed): Implement this.
+class CORSURLLoader : public mojom::URLLoader, public mojom::URLLoaderClient {
+ public:
+  // Assumes network_loader_factory outlives this loader.
+  CORSURLLoader(
+      int32_t routing_id,
+      int32_t request_id,
+      uint32_t options,
+      const ResourceRequest& resource_request,
+      mojom::URLLoaderClientPtr client,
+      const net::MutableNetworkTrafficAnnotationTag& traffic_annotation,
+      mojom::URLLoaderFactory* network_loader_factory)
+      : network_loader_factory_(network_loader_factory),
+        network_client_binding_(this),
+        forwarding_client_(std::move(client)) {
+    mojom::URLLoaderClientPtr network_client;
+    network_client_binding_.Bind(mojo::MakeRequest(&network_client));
+    network_loader_factory_->CreateLoaderAndStart(
+        mojo::MakeRequest(&network_loader_), routing_id, request_id, options,
+        resource_request, std::move(network_client), traffic_annotation);
+  }
+  ~CORSURLLoader() override = default;
+
+  // mojom::URLLoader:
+  void FollowRedirect() override { network_loader_->FollowRedirect(); }
+  void SetPriority(net::RequestPriority priority,
+                   int32_t intra_priority_value) override {
+    network_loader_->SetPriority(priority, intra_priority_value);
+  }
+
+  // mojom::URLLoaderClient for simply proxying network for now:
+  void OnReceiveResponse(
+      const ResourceResponseHead& response_head,
+      const base::Optional<net::SSLInfo>& ssl_info,
+      mojom::DownloadedTempFilePtr downloaded_file) override {
+    forwarding_client_->OnReceiveResponse(response_head, ssl_info,
+                                          std::move(downloaded_file));
+  }
+  void OnReceiveRedirect(const net::RedirectInfo& redirect_info,
+                         const ResourceResponseHead& response_head) override {
+    forwarding_client_->OnReceiveRedirect(redirect_info, response_head);
+  }
+  void OnDataDownloaded(int64_t data_len, int64_t encoded_data_len) override {
+    forwarding_client_->OnDataDownloaded(data_len, encoded_data_len);
+  }
+  void OnUploadProgress(int64_t current_position,
+                        int64_t total_size,
+                        OnUploadProgressCallback ack_callback) override {
+    forwarding_client_->OnUploadProgress(current_position, total_size,
+                                         std::move(ack_callback));
+  }
+  void OnReceiveCachedMetadata(const std::vector<uint8_t>& data) override {
+    forwarding_client_->OnReceiveCachedMetadata(data);
+  }
+  void OnTransferSizeUpdated(int32_t transfer_size_diff) override {
+    forwarding_client_->OnTransferSizeUpdated(transfer_size_diff);
+  }
+  void OnStartLoadingResponseBody(
+      mojo::ScopedDataPipeConsumerHandle body) override {
+    forwarding_client_->OnStartLoadingResponseBody(std::move(body));
+  }
+  void OnComplete(const ResourceRequestCompletionStatus& status) override {
+    forwarding_client_->OnComplete(status);
+  }
+
+ private:
+  // Used to initiate the actual request (or any preflight requests)
+  // with the default network loader factory.
+  mojom::URLLoaderFactory* network_loader_factory_;
+
+  // For the actual request.
+  mojom::URLLoaderAssociatedPtr network_loader_;
+  mojo::Binding<mojom::URLLoaderClient> network_client_binding_;
+
+  // To be a URLLoader for the client.
+  mojom::URLLoaderClientPtr forwarding_client_;
+
+  DISALLOW_COPY_AND_ASSIGN(CORSURLLoader);
+};
+
+class CORSURLLoaderFactory : public mojom::URLLoaderFactory {
+ public:
+  static void CreateAndBind(PossiblyAssociatedInterfacePtr<
+                                mojom::URLLoaderFactory> network_loader_factory,
+                            mojom::URLLoaderFactoryRequest request) {
+    mojo::MakeStrongBinding(base::MakeUnique<CORSURLLoaderFactory>(
+                                std::move(network_loader_factory)),
+                            std::move(request));
+  }
+
+  explicit CORSURLLoaderFactory(
+      PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+          network_loader_factory)
+      : network_loader_factory_(std::move(network_loader_factory)) {}
+  ~CORSURLLoaderFactory() override = default;
+
+  void CreateLoaderAndStart(mojom::URLLoaderAssociatedRequest request,
+                            int32_t routing_id,
+                            int32_t request_id,
+                            uint32_t options,
+                            const ResourceRequest& resource_request,
+                            mojom::URLLoaderClientPtr client,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
+    mojo::MakeStrongAssociatedBinding(
+        base::MakeUnique<CORSURLLoader>(routing_id, request_id, options,
+                                        resource_request, std::move(client),
+                                        traffic_annotation,
+                                        network_loader_factory_.get()),
+        std::move(request));
+  }
+
+  void SyncLoad(int32_t routing_id,
+                int32_t request_id,
+                const ResourceRequest& resource_request,
+                SyncLoadCallback callback) override {
+    network_loader_factory_->SyncLoad(routing_id, request_id, resource_request,
+                                      std::move(callback));
+  }
+
+ private:
+  PossiblyAssociatedInterfacePtr<mojom::URLLoaderFactory>
+      network_loader_factory_;
+};
 
 }  // namespace
 
@@ -303,15 +434,13 @@ void RendererBlinkPlatformImpl::Shutdown() {
 
 //------------------------------------------------------------------------------
 
-std::unique_ptr<blink::WebURLLoader>
-RendererBlinkPlatformImpl::CreateURLLoader() {
+std::unique_ptr<blink::WebURLLoader> RendererBlinkPlatformImpl::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   ChildThreadImpl* child_thread = ChildThreadImpl::current();
 
   if (!url_loader_factory_ && child_thread) {
-    bool network_service_enabled =
-        base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableNetworkService);
-    if (network_service_enabled) {
+    if (base::FeatureList::IsEnabled(features::kNetworkService)) {
       mojom::URLLoaderFactoryPtr factory_ptr;
       connector_->BindInterface(mojom::kBrowserServiceName, &factory_ptr);
       url_loader_factory_ = std::move(factory_ptr);
@@ -320,12 +449,21 @@ RendererBlinkPlatformImpl::CreateURLLoader() {
       child_thread->channel()->GetRemoteAssociatedInterface(&factory_ptr);
       url_loader_factory_ = std::move(factory_ptr);
     }
+
+    // Attach the CORS-enabled URLLoader if we use the default (non-custom)
+    // network URLLoader.
+    if (request.ShouldProcessCORSOutOfBlink()) {
+      mojom::URLLoaderFactoryPtr factory_ptr;
+      CORSURLLoaderFactory::CreateAndBind(std::move(url_loader_factory_),
+                                          mojo::MakeRequest(&factory_ptr));
+      url_loader_factory_ = std::move(factory_ptr);
+    }
   }
 
   // There may be no child thread in RenderViewTests.  These tests can still use
   // data URLs to bypass the ResourceDispatcher.
   return base::MakeUnique<WebURLLoaderImpl>(
-      child_thread ? child_thread->resource_dispatcher() : nullptr,
+      child_thread ? child_thread->resource_dispatcher() : nullptr, task_runner,
       url_loader_factory_.get());
 }
 
@@ -411,7 +549,7 @@ RendererBlinkPlatformImpl::PrescientNetworking() {
 }
 
 void RendererBlinkPlatformImpl::CacheMetadata(const blink::WebURL& url,
-                                              int64_t response_time,
+                                              base::Time response_time,
                                               const char* data,
                                               size_t size) {
   // Let the browser know we generated cacheable metadata for this resource. The
@@ -419,13 +557,13 @@ void RendererBlinkPlatformImpl::CacheMetadata(const blink::WebURL& url,
   // the processing of this resource.
   std::vector<char> copy(data, data + size);
   RenderThread::Get()->Send(
-      new RenderProcessHostMsg_DidGenerateCacheableMetadata(
-          url, base::Time::FromInternalValue(response_time), copy));
+      new RenderProcessHostMsg_DidGenerateCacheableMetadata(url, response_time,
+                                                            copy));
 }
 
 void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
     const blink::WebURL& url,
-    int64_t response_time,
+    base::Time response_time,
     const char* data,
     size_t size,
     const blink::WebSecurityOrigin& cacheStorageOrigin,
@@ -436,8 +574,8 @@ void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
   std::vector<char> copy(data, data + size);
   RenderThread::Get()->Send(
       new RenderProcessHostMsg_DidGenerateCacheableMetadataInCacheStorage(
-          url, base::Time::FromInternalValue(response_time), copy,
-          cacheStorageOrigin, cacheStorageCacheName.Utf8()));
+          url, response_time, copy, cacheStorageOrigin,
+          cacheStorageCacheName.Utf8()));
 }
 
 WebString RendererBlinkPlatformImpl::DefaultLocale() {
@@ -466,8 +604,8 @@ void RendererBlinkPlatformImpl::SuddenTerminationChanged(bool enabled) {
 
 std::unique_ptr<WebStorageNamespace>
 RendererBlinkPlatformImpl::CreateLocalStorageNamespace() {
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kMojoLocalStorage)) {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kDisableMojoLocalStorage)) {
     if (!local_storage_cached_areas_) {
       local_storage_cached_areas_.reset(new LocalStorageCachedAreas(
           RenderThreadImpl::current()->GetStoragePartitionService()));
@@ -646,9 +784,9 @@ WebString RendererBlinkPlatformImpl::DatabaseCreateOriginIdentifier(
       storage::GetIdentifierFromOrigin(WebSecurityOriginToGURL(origin)));
 }
 
-cc::FrameSinkId RendererBlinkPlatformImpl::GenerateFrameSinkId() {
-  return cc::FrameSinkId(RenderThread::Get()->GetClientId(),
-                         RenderThread::Get()->GenerateRoutingID());
+viz::FrameSinkId RendererBlinkPlatformImpl::GenerateFrameSinkId() {
+  return viz::FrameSinkId(RenderThread::Get()->GetClientId(),
+                          RenderThread::Get()->GenerateRoutingID());
 }
 
 bool RendererBlinkPlatformImpl::IsThreadedCompositingEnabled() {
@@ -715,12 +853,12 @@ std::unique_ptr<WebAudioDevice> RendererBlinkPlatformImpl::CreateAudioDevice(
       static_cast<url::Origin>(security_origin));
 }
 
-bool RendererBlinkPlatformImpl::LoadAudioResource(
+bool RendererBlinkPlatformImpl::DecodeAudioFileData(
     blink::WebAudioBus* destination_bus,
     const char* audio_file_data,
     size_t data_size) {
-  return DecodeAudioFileData(
-      destination_bus, audio_file_data, data_size);
+  return content::DecodeAudioFileData(destination_bus, audio_file_data,
+                                      data_size);
 }
 
 //------------------------------------------------------------------------------
@@ -932,6 +1070,13 @@ RendererBlinkPlatformImpl::CreateImageCaptureFrameGrabber() {
 
 //------------------------------------------------------------------------------
 
+std::unique_ptr<blink::WebSocketHandshakeThrottle>
+RendererBlinkPlatformImpl::CreateWebSocketHandshakeThrottle() {
+  return GetContentClient()->renderer()->CreateWebSocketHandshakeThrottle();
+}
+
+//------------------------------------------------------------------------------
+
 std::unique_ptr<blink::WebSpeechSynthesizer>
 RendererBlinkPlatformImpl::CreateSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
@@ -1087,7 +1232,7 @@ RendererBlinkPlatformImpl::GetGpuMemoryBufferManager() {
 
 //------------------------------------------------------------------------------
 
-std::unique_ptr<cc::SharedBitmap>
+std::unique_ptr<viz::SharedBitmap>
 RendererBlinkPlatformImpl::AllocateSharedBitmap(const blink::WebSize& size) {
   return shared_bitmap_manager_
       ->AllocateSharedBitmap(gfx::Size(size.width, size.height));

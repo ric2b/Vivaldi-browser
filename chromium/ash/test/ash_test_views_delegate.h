@@ -9,7 +9,6 @@
 #include "ui/views/test/test_views_delegate.h"
 
 namespace ash {
-namespace test {
 
 class TestAccessibilityEventDelegate {
  public:
@@ -39,15 +38,25 @@ class AshTestViewsDelegate : public views::TestViewsDelegate {
       views::internal::NativeWidgetDelegate* delegate) override;
   void NotifyAccessibilityEvent(views::View* view,
                                 ui::AXEvent event_type) override;
+  views::TestViewsDelegate::ProcessMenuAcceleratorResult
+  ProcessAcceleratorWhileMenuShowing(
+      const ui::Accelerator& accelerator) override;
+
+  void set_close_menu_accelerator(const ui::Accelerator& accelerator) {
+    close_menu_accelerator_ = accelerator;
+  }
 
  private:
+  // ProcessAcceleratorWhileMenuShowing returns CLOSE_MENU if passed accelerator
+  // matches with this.
+  ui::Accelerator close_menu_accelerator_;
+
   // Not owned.
   TestAccessibilityEventDelegate* test_accessibility_event_delegate_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(AshTestViewsDelegate);
 };
 
-}  // namespace test
 }  // namespace ash
 
 #endif  // ASH_TEST_ASH_TEST_VIEWS_DELEGATE_H_

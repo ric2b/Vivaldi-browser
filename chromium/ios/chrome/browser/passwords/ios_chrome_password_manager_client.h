@@ -7,6 +7,7 @@
 
 #include "base/macros.h"
 #import "components/password_manager/core/browser/password_manager_client.h"
+#include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/sync/browser/sync_credentials_filter.h"
 #include "components/prefs/pref_member.h"
 
@@ -71,15 +72,33 @@ class IOSChromePasswordManagerClient
   const GURL& GetLastCommittedEntryURL() const override;
   const password_manager::CredentialsFilter* GetStoreResultFilter()
       const override;
+  ukm::UkmRecorder* GetUkmRecorder() override;
+  ukm::SourceId GetUkmSourceId() override;
+  password_manager::PasswordManagerMetricsRecorder& GetMetricsRecorder()
+      override;
 
  private:
   id<PasswordManagerClientDelegate> delegate_;  // (weak)
 
   // The preference associated with
-  // password_manager::prefs::kPasswordManagerSavingEnabled.
+  // password_manager::prefs::kCredentialsEnableService.
   BooleanPrefMember saving_passwords_enabled_;
 
   const password_manager::SyncCredentialsFilter credentials_filter_;
+
+  // The URL to which the ukm_source_id_ was bound.
+  GURL ukm_source_url_;
+
+  // If ukm_source_url_ == delegate_.lastCommittedURL, this stores a
+  // ukm::SourceId that is bound to the last committed navigation of the tab
+  // owning this ChromePasswordManagerClient.
+  ukm::SourceId ukm_source_id_;
+
+  // Recorder of metrics that is associated with the last committed navigation
+  // of the tab owning this ChromePasswordManagerClient. May be unset at
+  // times. Sends statistics on destruction.
+  base::Optional<password_manager::PasswordManagerMetricsRecorder>
+      metrics_recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(IOSChromePasswordManagerClient);
 };

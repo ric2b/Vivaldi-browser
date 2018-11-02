@@ -11,18 +11,22 @@
 #include "core/dom/SecurityContext.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperMember.h"
 #include "platform/heap/Handle.h"
 
 namespace blink {
 
 class EventQueue;
+class Modulator;
 
 class CORE_EXPORT WorkletGlobalScope
     : public GarbageCollectedFinalized<WorkletGlobalScope>,
       public SecurityContext,
       public WorkerOrWorkletGlobalScope,
-      public ScriptWrappable {
+      public ScriptWrappable,
+      public ActiveScriptWrappable<WorkletGlobalScope> {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(WorkletGlobalScope);
 
@@ -47,6 +51,9 @@ class CORE_EXPORT WorkletGlobalScope
       v8::Isolate*,
       const WrapperTypeInfo*,
       v8::Local<v8::Object> wrapper) final;
+  bool HasPendingActivity() const override;
+
+  ExecutionContext* GetExecutionContext() const;
 
   // ExecutionContext
   String UserAgent() const final { return user_agent_; }
@@ -65,7 +72,10 @@ class CORE_EXPORT WorkletGlobalScope
     return nullptr;
   }  // WorkletGlobalScopes don't have timers.
 
+  void SetModulator(Modulator*);
+
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
  protected:
   // The url, userAgent and securityOrigin arguments are inherited from the
@@ -73,7 +83,8 @@ class CORE_EXPORT WorkletGlobalScope
   WorkletGlobalScope(const KURL&,
                      const String& user_agent,
                      PassRefPtr<SecurityOrigin>,
-                     v8::Isolate*);
+                     v8::Isolate*,
+                     WorkerClients*);
 
  private:
   const KURL& VirtualURL() const final { return url_; }
@@ -84,6 +95,9 @@ class CORE_EXPORT WorkletGlobalScope
 
   KURL url_;
   String user_agent_;
+  // LocalDOMWindow::modulator_ workaround equivalent.
+  // TODO(kouhei): Remove this.
+  TraceWrapperMember<Modulator> modulator_;
 };
 
 DEFINE_TYPE_CASTS(WorkletGlobalScope,

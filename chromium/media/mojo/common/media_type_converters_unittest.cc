@@ -18,39 +18,15 @@
 #include "media/base/media_util.h"
 #include "media/base/sample_format.h"
 #include "media/base/test_helpers.h"
-#include "media/base/video_frame.h"
-#include "media/mojo/common/mojo_shared_buffer_video_frame.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace media {
 
 namespace {
 
-static const gfx::Size kCodedSize(320, 240);
-static const gfx::Rect kVisibleRect(320, 240);
-static const gfx::Size kNaturalSize(320, 240);
-
 void CompareBytes(uint8_t* original_data, uint8_t* result_data, size_t length) {
   EXPECT_GT(length, 0u);
   EXPECT_EQ(memcmp(original_data, result_data, length), 0);
-}
-
-// Compare the actual video frame bytes (|rows| rows of |row|bytes| data),
-// skipping any padding that may be in either frame.
-void CompareRowBytes(uint8_t* original_data,
-                     uint8_t* result_data,
-                     size_t rows,
-                     size_t row_bytes,
-                     size_t original_stride,
-                     size_t result_stride) {
-  DCHECK_GE(original_stride, row_bytes);
-  DCHECK_GE(result_stride, row_bytes);
-
-  for (size_t i = 0; i < rows; ++i) {
-    CompareBytes(original_data, result_data, row_bytes);
-    original_data += original_stride;
-    result_data += result_stride;
-  }
 }
 
 void CompareAudioBuffers(SampleFormat sample_format,
@@ -78,96 +54,6 @@ void CompareAudioBuffers(SampleFormat sample_format,
   DCHECK(IsInterleaved(sample_format)) << sample_format;
   CompareBytes(original->channel_data()[0], result->channel_data()[0],
                bytes_per_channel * original->channel_count());
-}
-
-void CompareVideoPlane(size_t plane,
-                       const scoped_refptr<VideoFrame>& original,
-                       const scoped_refptr<VideoFrame>& result) {
-  EXPECT_EQ(original->stride(plane), result->stride(plane));
-  EXPECT_EQ(original->row_bytes(plane), result->row_bytes(plane));
-  EXPECT_EQ(original->rows(plane), result->rows(plane));
-  CompareRowBytes(original->data(plane), result->data(plane),
-                  original->rows(plane), original->row_bytes(plane),
-                  original->stride(plane), result->stride(plane));
-}
-
-void CompareVideoFrames(const scoped_refptr<VideoFrame>& original,
-                        const scoped_refptr<VideoFrame>& result) {
-  if (original->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM)) {
-    EXPECT_TRUE(result->metadata()->IsTrue(VideoFrameMetadata::END_OF_STREAM));
-    return;
-  }
-
-  EXPECT_EQ(original->format(), result->format());
-  EXPECT_EQ(original->coded_size().height(), result->coded_size().height());
-  EXPECT_EQ(original->coded_size().width(), result->coded_size().width());
-  EXPECT_EQ(original->visible_rect().height(), result->visible_rect().height());
-  EXPECT_EQ(original->visible_rect().width(), result->visible_rect().width());
-  EXPECT_EQ(original->natural_size().height(), result->natural_size().height());
-  EXPECT_EQ(original->natural_size().width(), result->natural_size().width());
-
-  CompareVideoPlane(VideoFrame::kYPlane, original, result);
-  CompareVideoPlane(VideoFrame::kUPlane, original, result);
-  CompareVideoPlane(VideoFrame::kVPlane, original, result);
-}
-
-// Returns a color VideoFrame that stores the data in a
-// mojo::SharedBufferHandle.
-scoped_refptr<VideoFrame> CreateMojoSharedBufferColorFrame() {
-  // Create a color VideoFrame to use as reference (data will need to be copied
-  // to a mojo::SharedBufferHandle).
-  const int kWidth = 16;
-  const int kHeight = 9;
-  const base::TimeDelta kTimestamp = base::TimeDelta::FromSeconds(26);
-  scoped_refptr<VideoFrame> color_frame(VideoFrame::CreateColorFrame(
-      gfx::Size(kWidth, kHeight), 255, 128, 24, kTimestamp));
-
-  // Allocate a mojo::SharedBufferHandle big enough to contain
-  // |color_frame|'s data.
-  const size_t allocation_size = VideoFrame::AllocationSize(
-      color_frame->format(), color_frame->coded_size());
-  mojo::ScopedSharedBufferHandle handle =
-      mojo::SharedBufferHandle::Create(allocation_size);
-  EXPECT_TRUE(handle.is_valid());
-
-  // Create a MojoSharedBufferVideoFrame whose dimensions match |color_frame|.
-  const size_t y_plane_size = color_frame->rows(VideoFrame::kYPlane) *
-                              color_frame->stride(VideoFrame::kYPlane);
-  const size_t u_plane_size = color_frame->rows(VideoFrame::kUPlane) *
-                              color_frame->stride(VideoFrame::kUPlane);
-  const size_t v_plane_size = color_frame->rows(VideoFrame::kVPlane) *
-                              color_frame->stride(VideoFrame::kVPlane);
-  scoped_refptr<VideoFrame> frame(MojoSharedBufferVideoFrame::Create(
-      color_frame->format(), color_frame->coded_size(),
-      color_frame->visible_rect(), color_frame->natural_size(),
-      std::move(handle), allocation_size, 0, y_plane_size,
-      y_plane_size + u_plane_size, color_frame->stride(VideoFrame::kYPlane),
-      color_frame->stride(VideoFrame::kUPlane),
-      color_frame->stride(VideoFrame::kVPlane), color_frame->timestamp()));
-  EXPECT_EQ(color_frame->coded_size(), frame->coded_size());
-  EXPECT_EQ(color_frame->visible_rect(), frame->visible_rect());
-  EXPECT_EQ(color_frame->natural_size(), frame->natural_size());
-  EXPECT_EQ(color_frame->rows(VideoFrame::kYPlane),
-            frame->rows(VideoFrame::kYPlane));
-  EXPECT_EQ(color_frame->rows(VideoFrame::kUPlane),
-            frame->rows(VideoFrame::kUPlane));
-  EXPECT_EQ(color_frame->rows(VideoFrame::kVPlane),
-            frame->rows(VideoFrame::kVPlane));
-  EXPECT_EQ(color_frame->stride(VideoFrame::kYPlane),
-            frame->stride(VideoFrame::kYPlane));
-  EXPECT_EQ(color_frame->stride(VideoFrame::kUPlane),
-            frame->stride(VideoFrame::kUPlane));
-  EXPECT_EQ(color_frame->stride(VideoFrame::kVPlane),
-            frame->stride(VideoFrame::kVPlane));
-
-  // Copy all the data from |color_frame| into |frame|.
-  memcpy(frame->data(VideoFrame::kYPlane),
-         color_frame->data(VideoFrame::kYPlane), y_plane_size);
-  memcpy(frame->data(VideoFrame::kUPlane),
-         color_frame->data(VideoFrame::kUPlane), u_plane_size);
-  memcpy(frame->data(VideoFrame::kVPlane),
-         color_frame->data(VideoFrame::kVPlane), v_plane_size);
-  return frame;
 }
 
 }  // namespace
@@ -277,112 +163,6 @@ TEST(MediaTypeConvertersTest, ConvertDecoderBuffer_EncryptedBuffer) {
   EXPECT_TRUE(buffer->decrypt_config()->iv().empty());
 }
 
-// TODO(tim): Check other properties.
-
-TEST(MediaTypeConvertersTest, ConvertAudioDecoderConfig_Normal) {
-  const uint8_t kExtraData[] = "config extra data";
-  const std::vector<uint8_t> kExtraDataVector(
-      &kExtraData[0], &kExtraData[0] + arraysize(kExtraData));
-
-  AudioDecoderConfig config;
-  config.Initialize(kCodecAAC, kSampleFormatU8, CHANNEL_LAYOUT_SURROUND, 48000,
-                    kExtraDataVector, Unencrypted(), base::TimeDelta(), 0);
-  mojom::AudioDecoderConfigPtr ptr(mojom::AudioDecoderConfig::From(config));
-  EXPECT_FALSE(ptr->extra_data.empty());
-  AudioDecoderConfig result(ptr.To<AudioDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertAudioDecoderConfig_EmptyExtraData) {
-  AudioDecoderConfig config;
-  config.Initialize(kCodecAAC, kSampleFormatU8, CHANNEL_LAYOUT_SURROUND, 48000,
-                    EmptyExtraData(), Unencrypted(), base::TimeDelta(), 0);
-  mojom::AudioDecoderConfigPtr ptr(mojom::AudioDecoderConfig::From(config));
-  EXPECT_TRUE(ptr->extra_data.empty());
-  AudioDecoderConfig result(ptr.To<AudioDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertAudioDecoderConfig_Encrypted) {
-  AudioDecoderConfig config;
-  config.Initialize(kCodecAAC, kSampleFormatU8, CHANNEL_LAYOUT_SURROUND, 48000,
-                    EmptyExtraData(), AesCtrEncryptionScheme(),
-                    base::TimeDelta(), 0);
-  mojom::AudioDecoderConfigPtr ptr(mojom::AudioDecoderConfig::From(config));
-  AudioDecoderConfig result(ptr.To<AudioDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_Normal) {
-  const uint8_t kExtraData[] = "config extra data";
-  const std::vector<uint8_t> kExtraDataVector(
-      &kExtraData[0], &kExtraData[0] + arraysize(kExtraData));
-
-  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
-                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
-                            kNaturalSize, kExtraDataVector, Unencrypted());
-  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
-  EXPECT_FALSE(ptr->extra_data.empty());
-  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_EmptyExtraData) {
-  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
-                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
-                            kNaturalSize, EmptyExtraData(), Unencrypted());
-  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
-  EXPECT_TRUE(ptr->extra_data.empty());
-  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_Encrypted) {
-  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
-                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
-                            kNaturalSize, EmptyExtraData(),
-                            AesCtrEncryptionScheme());
-  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
-  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_ColorSpaceInfo) {
-  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
-                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
-                            kNaturalSize, EmptyExtraData(), Unencrypted());
-  config.set_color_space_info(VideoColorSpace(
-      VideoColorSpace::PrimaryID::BT2020,
-      VideoColorSpace::TransferID::SMPTEST2084,
-      VideoColorSpace::MatrixID::BT2020_CL, gfx::ColorSpace::RangeID::LIMITED));
-  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
-  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoDecoderConfig_HDRMetadata) {
-  VideoDecoderConfig config(kCodecVP8, VP8PROFILE_ANY, PIXEL_FORMAT_YV12,
-                            COLOR_SPACE_UNSPECIFIED, kCodedSize, kVisibleRect,
-                            kNaturalSize, EmptyExtraData(), Unencrypted());
-  HDRMetadata hdr_metadata;
-  hdr_metadata.max_frame_average_light_level = 123;
-  hdr_metadata.max_content_light_level = 456;
-  hdr_metadata.mastering_metadata.primary_r.set_x(0.1f);
-  hdr_metadata.mastering_metadata.primary_r.set_y(0.2f);
-  hdr_metadata.mastering_metadata.primary_g.set_x(0.3f);
-  hdr_metadata.mastering_metadata.primary_g.set_y(0.4f);
-  hdr_metadata.mastering_metadata.primary_b.set_x(0.5f);
-  hdr_metadata.mastering_metadata.primary_b.set_y(0.6f);
-  hdr_metadata.mastering_metadata.white_point.set_x(0.7f);
-  hdr_metadata.mastering_metadata.white_point.set_y(0.8f);
-  hdr_metadata.mastering_metadata.luminance_max = 1000;
-  hdr_metadata.mastering_metadata.luminance_min = 0;
-  config.set_hdr_metadata(hdr_metadata);
-  mojom::VideoDecoderConfigPtr ptr(mojom::VideoDecoderConfig::From(config));
-  VideoDecoderConfig result(ptr.To<VideoDecoderConfig>());
-  EXPECT_TRUE(result.Matches(config));
-}
-
 TEST(MediaTypeConvertersTest, ConvertCdmConfig) {
   CdmConfig config;
   config.allow_distinctive_identifier = true;
@@ -442,60 +222,6 @@ TEST(MediaTypeConvertersTest, ConvertAudioBuffer_FLOAT) {
 
   // Compare.
   CompareAudioBuffers(kSampleFormatPlanarF32, buffer, result);
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoFrame_EOS) {
-  // Original.
-  scoped_refptr<VideoFrame> buffer(VideoFrame::CreateEOSFrame());
-
-  // Convert to and back.
-  mojom::VideoFramePtr ptr(mojom::VideoFrame::From(buffer));
-  scoped_refptr<VideoFrame> result(ptr.To<scoped_refptr<VideoFrame>>());
-
-  // Compare.
-  CompareVideoFrames(buffer, result);
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoFrame_EmptyFrame) {
-  // Original.
-  scoped_refptr<VideoFrame> frame(MojoSharedBufferVideoFrame::CreateDefaultI420(
-      gfx::Size(100, 100), base::TimeDelta::FromSeconds(100)));
-
-  // Convert to and back.
-  mojom::VideoFramePtr ptr(mojom::VideoFrame::From(frame));
-  scoped_refptr<VideoFrame> result(ptr.To<scoped_refptr<VideoFrame>>());
-  EXPECT_NE(result.get(), nullptr);
-
-  // Compare.
-  CompareVideoFrames(frame, result);
-}
-
-TEST(MediaTypeConvertersTest, ConvertVideoFrame_ColorFrame) {
-  scoped_refptr<VideoFrame> frame(CreateMojoSharedBufferColorFrame());
-
-  // Convert to and back.
-  mojom::VideoFramePtr ptr(mojom::VideoFrame::From(frame));
-  scoped_refptr<VideoFrame> result(ptr.To<scoped_refptr<VideoFrame>>());
-  EXPECT_NE(result.get(), nullptr);
-
-  // Compare.
-  CompareVideoFrames(frame, result);
-}
-
-TEST(MediaTypeConvertersTest, ConvertEncryptionSchemeAesCbcWithPattern) {
-  // Original.
-  EncryptionScheme scheme(EncryptionScheme::CIPHER_MODE_AES_CBC,
-                          EncryptionScheme::Pattern(1, 9));
-
-  // Convert to and back.
-  mojom::EncryptionSchemePtr ptr(mojom::EncryptionScheme::From(scheme));
-  EncryptionScheme result(ptr.To<EncryptionScheme>());
-
-  EXPECT_TRUE(result.Matches(scheme));
-
-  // Verify a couple of negative cases.
-  EXPECT_FALSE(result.Matches(Unencrypted()));
-  EXPECT_FALSE(result.Matches(AesCtrEncryptionScheme()));
 }
 
 }  // namespace media

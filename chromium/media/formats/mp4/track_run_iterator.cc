@@ -18,8 +18,8 @@ namespace media {
 namespace mp4 {
 
 struct SampleInfo {
-  int size;
-  int duration;
+  uint32_t size;
+  uint32_t duration;
   int cts_offset;
   bool is_keyframe;
   uint32_t cenc_group_description_index;
@@ -326,13 +326,13 @@ bool TrackRunIterator::Init(const MovieFragment& moof) {
       tri.is_audio = (stsd.type == kAudio);
       if (tri.is_audio) {
         RCHECK(!stsd.audio_entries.empty());
-        if (desc_idx > stsd.audio_entries.size())
+        if (desc_idx >= stsd.audio_entries.size())
           desc_idx = 0;
         tri.audio_description = &stsd.audio_entries[desc_idx];
         track_encryption = &tri.audio_description->sinf.info.track_encryption;
       } else {
         RCHECK(!stsd.video_entries.empty());
-        if (desc_idx > stsd.video_entries.size())
+        if (desc_idx >= stsd.video_entries.size())
           desc_idx = 0;
         tri.video_description = &stsd.video_entries[desc_idx];
         track_encryption = &tri.video_description->sinf.info.track_encryption;
@@ -505,7 +505,9 @@ bool TrackRunIterator::CacheAuxInfo(const uint8_t* buf, int buf_size) {
       const uint8_t iv_size = GetIvSize(i);
       const bool has_subsamples = info_size > iv_size;
       SampleEncryptionEntry& entry = sample_encryption_entries[i];
-      RCHECK(entry.Parse(&reader, iv_size, has_subsamples));
+      RCHECK_MEDIA_LOGGED(
+          entry.Parse(&reader, iv_size, has_subsamples), media_log_,
+          "SampleEncryptionEntry parse failed when caching aux info");
 #if BUILDFLAG(ENABLE_CBCS_ENCRYPTION_SCHEME)
       // if we don't have a per-sample IV, get the constant IV.
       if (!iv_size) {
@@ -594,7 +596,7 @@ int64_t TrackRunIterator::sample_offset() const {
   return sample_offset_;
 }
 
-int TrackRunIterator::sample_size() const {
+uint32_t TrackRunIterator::sample_size() const {
   DCHECK(IsSampleValid());
   return sample_itr_->size;
 }

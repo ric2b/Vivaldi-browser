@@ -15,6 +15,10 @@
 #include "content/public/test/test_browser_thread.h"
 #include "content/public/test/test_utils.h"
 
+#if defined(OS_WIN)
+#include "base/win/scoped_com_initializer.h"
+#endif
+
 namespace content {
 
 TestBrowserThreadBundle::TestBrowserThreadBundle()
@@ -59,25 +63,37 @@ TestBrowserThreadBundle::~TestBrowserThreadBundle() {
   ui_thread_->Stop();
   base::RunLoop().RunUntilIdle();
 
-  // This is required to ensure we run all remaining tasks in an atomic step
-  // (instead of ~ScopedAsyncTaskScheduler() followed by another
-  // RunLoop().RunUntilIdle()). Otherwise If a pending task in
-  // |scoped_async_task_scheduler_| posts to |message_loop_|, that task can then
-  // post back to |scoped_async_task_scheduler_| after the former was destroyed.
-  // This is a bit different than production where the main thread is not
-  // flushed after it's done running but this approach is preferred in unit
-  // tests as running more tasks can merely uncover more issues (e.g. if a bad
-  // tasks is posted but never blocked upon it could make a test flaky whereas
-  // by flushing we guarantee it will blow up).
-  RunAllBlockingPoolTasksUntilIdle();
+  // Skip the following step when TaskScheduler isn't managed by this
+  // TestBrowserThreadBundle, otherwise it can hang (e.g.
+  // RunAllBlockingPoolTasksUntilIdle() hangs when the TaskScheduler is managed
+  // by a ScopedTaskEnvironment with ExecutionMode::QUEUED). This is fine as (1)
+  // it's rare and (2) it mimics production where BrowserThreads are shutdown
+  // before TaskScheduler.
+  if (scoped_async_task_scheduler_) {
+    // This is required to ensure we run all remaining tasks in an atomic step
+    // (instead of ~ScopedAsyncTaskScheduler() followed by another
+    // RunLoop().RunUntilIdle()). Otherwise If a pending task in
+    // |scoped_async_task_scheduler_| posts to |message_loop_|, that task can
+    // then post back to |scoped_async_task_scheduler_| after the former was
+    // destroyed. This is a bit different than production where the main thread
+    // is not flushed after it's done running but this approach is preferred in
+    // unit tests as running more tasks can merely uncover more issues (e.g. if
+    // a bad tasks is posted but never blocked upon it could make a test flaky
+    // whereas by flushing we guarantee it will blow up).
+    RunAllBlockingPoolTasksUntilIdle();
 
-  scoped_async_task_scheduler_.reset();
-  CHECK(base::MessageLoop::current()->IsIdleForTesting());
+    scoped_async_task_scheduler_.reset();
+    CHECK(base::MessageLoop::current()->IsIdleForTesting());
+  }
 
   // |message_loop_| needs to explicitly go away before fake threads in order
   // for DestructionObservers hooked to |message_loop_| to be able to invoke
   // BrowserThread::CurrentlyOn() -- ref. ~TestBrowserThread().
   message_loop_.reset();
+
+#if defined(OS_WIN)
+  com_initializer_.reset();
+#endif
 }
 
 void TestBrowserThreadBundle::Init() {
@@ -89,6 +105,14 @@ void TestBrowserThreadBundle::Init() {
   CHECK(!(options_ & IO_MAINLOOP) || !(options_ & REAL_IO_THREAD));
   // There must be a thread to start to use DONT_CREATE_THREADS
   CHECK((options_ & ~IO_MAINLOOP) != DONT_CREATE_THREADS);
+
+#if defined(OS_WIN)
+  // Similar to Chrome's UI thread, we need to initialize COM separately for
+  // this thread as we don't call Start() for the UI TestBrowserThread; it's
+  // already started!
+  com_initializer_ = base::MakeUnique<base::win::ScopedCOMInitializer>();
+  CHECK(com_initializer_->succeeded());
+#endif
 
   // Create the main MessageLoop, if it doesn't already exist, and set the
   // current thread as the UI thread. In production, this work is done in

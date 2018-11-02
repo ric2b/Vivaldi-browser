@@ -5,13 +5,12 @@
 #ifndef IDBRequestLoader_h
 #define IDBRequestLoader_h
 
+#include <memory>
+
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
-
-#include <memory>
 
 namespace blink {
 
@@ -84,6 +83,18 @@ class IDBRequestLoader : public FileReaderLoaderClient {
 
   // The value being currently unwrapped.
   Vector<RefPtr<IDBValue>>::iterator current_value_;
+
+#if DCHECK_IS_ON()
+  // True after Start() is called.
+  bool started_ = false;
+
+  // True after Cancel() is called.
+  bool canceled_ = false;
+
+  // True between a call to FileReaderLoader::Start() and the FileReaderLoader's
+  // call to DidFinishLoading() or to DidFail().
+  bool file_reader_loading_ = false;
+#endif  // DCHECK_IS_ON()
 };
 
 }  // namespace blink

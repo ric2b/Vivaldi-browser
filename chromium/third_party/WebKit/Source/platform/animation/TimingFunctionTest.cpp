@@ -53,7 +53,7 @@ namespace {
 class TimingFunctionTest : public ::testing::Test {
  public:
   TimingFunctionTest() {
-    RuntimeEnabledFeatures::setFramesTimingFunctionEnabled(true);
+    RuntimeEnabledFeatures::SetFramesTimingFunctionEnabled(true);
   }
 
   void NotEqualHelperLoop(

@@ -128,7 +128,7 @@ void OobeBaseTest::TearDownOnMainThread() {
   // If the login display is still showing, exit gracefully.
   if (LoginDisplayHost::default_host()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&chrome::AttemptExit));
+        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
     content::RunMessageLoop();
   }
   EXPECT_TRUE(embedded_test_server()->ShutdownAndWaitUntilComplete());
@@ -237,7 +237,6 @@ void OobeBaseTest::WaitForGaiaPageReload() {
       "  var authenticator = $('gaia-signin').gaiaAuthHost_;"
       "  var f = function() {"
       "    authenticator.removeEventListener('ready', f);"
-      "    window.domAutomationController.setAutomationId(0);"
       "    window.domAutomationController.send('GaiaReady');"
       "  };"
       "  authenticator.addEventListener('ready', f);"

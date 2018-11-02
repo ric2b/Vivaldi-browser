@@ -48,8 +48,7 @@ OfflineAudioDestinationHandler::OfflineAudioDestinationHandler(
       render_target_(render_target),
       frames_processed_(0),
       frames_to_process_(0),
-      is_rendering_started_(false),
-      should_suspend_(false) {
+      is_rendering_started_(false) {
   render_bus_ = AudioBus::Create(render_target->numberOfChannels(),
                                  AudioUtilities::kRenderQuantumFrames);
   frames_to_process_ = render_target_->length();
@@ -173,22 +172,38 @@ void OfflineAudioDestinationHandler::StartOfflineRendering() {
 void OfflineAudioDestinationHandler::DoOfflineRendering() {
   DCHECK(!IsMainThread());
 
-  unsigned number_of_channels = render_target_->numberOfChannels();
+  unsigned number_of_channels;
+  Vector<float*> destinations;
+  {
+    // Main thread GCs cannot happen while we're reading out channel
+    // data. Detect that condition by trying to take the cross-thread
+    // persistent lock which is held while a GC runs. If the lock is
+    // already held, simply delay rendering until the next quantum.
+    CrossThreadPersistentRegion::LockScope gc_lock(
+        ProcessHeap::GetCrossThreadPersistentRegion(), true);
+    if (!gc_lock.HasLock()) {
+      // To ensure that the rendering step eventually happens, repost.
+      render_thread_->GetWebTaskRunner()->PostTask(
+          BLINK_FROM_HERE,
+          Bind(&OfflineAudioDestinationHandler::DoOfflineRendering,
+               WrapPassRefPtr(this)));
+      return;
+    }
 
-  // Reset the suspend flag.
-  should_suspend_ = false;
+    number_of_channels = render_target_->numberOfChannels();
+    destinations.ReserveInitialCapacity(number_of_channels);
+    for (unsigned i = 0; i < number_of_channels; ++i)
+      destinations.push_back(render_target_->getChannelData(i).View()->Data());
+  }
 
   // If there is more to process and there is no suspension at the moment,
   // do continue to render quanta. Then calling OfflineAudioContext.resume()
   // will pick up the render loop again from where it was suspended.
-  while (frames_to_process_ > 0 && !should_suspend_) {
-    // Suspend the rendering and update m_shouldSuspend if a scheduled
-    // suspend found at the current sample frame. Otherwise render one
-    // quantum and return false.
-    should_suspend_ = RenderIfNotSuspended(
-        0, render_bus_.Get(), AudioUtilities::kRenderQuantumFrames);
-
-    if (should_suspend_)
+  while (frames_to_process_ > 0) {
+    // Suspend the rendering if a scheduled suspend found at the current
+    // sample frame. Otherwise render one quantum.
+    if (RenderIfNotSuspended(0, render_bus_.Get(),
+                             AudioUtilities::kRenderQuantumFrames))
       return;
 
     size_t frames_available_to_copy =
@@ -198,9 +213,7 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
     for (unsigned channel_index = 0; channel_index < number_of_channels;
          ++channel_index) {
       const float* source = render_bus_->Channel(channel_index)->Data();
-      float* destination =
-          render_target_->getChannelData(channel_index).View()->Data();
-      memcpy(destination + frames_processed_, source,
+      memcpy(destinations[channel_index] + frames_processed_, source,
              sizeof(float) * frames_available_to_copy);
     }
 
@@ -210,9 +223,8 @@ void OfflineAudioDestinationHandler::DoOfflineRendering() {
     frames_to_process_ -= frames_available_to_copy;
   }
 
-  // Finish up the rendering loop if there is no more to process.
-  if (!frames_to_process_)
-    FinishOfflineRendering();
+  DCHECK_EQ(frames_to_process_, 0u);
+  FinishOfflineRendering();
 }
 
 void OfflineAudioDestinationHandler::SuspendOfflineRendering() {

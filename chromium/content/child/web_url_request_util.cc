@@ -20,8 +20,6 @@
 #include "third_party/WebKit/public/platform/WebHTTPHeaderVisitor.h"
 #include "third_party/WebKit/public/platform/WebMixedContent.h"
 #include "third_party/WebKit/public/platform/WebString.h"
-#include "third_party/WebKit/public/platform/WebURL.h"
-#include "third_party/WebKit/public/platform/WebURLError.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 
 using blink::WebCachePolicy;
@@ -33,10 +31,6 @@ using blink::WebURLRequest;
 namespace content {
 
 namespace {
-
-const char kThrottledErrorDescription[] =
-    "Request throttled. Visit http://dev.chromium.org/throttling for more "
-    "information.";
 
 class HeaderFlattener : public blink::WebHTTPHeaderVisitor {
  public:
@@ -218,10 +212,8 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
   if (!request.AllowStoredCredentials()) {
     load_flags |= net::LOAD_DO_NOT_SAVE_COOKIES;
     load_flags |= net::LOAD_DO_NOT_SEND_COOKIES;
-  }
-
-  if (!request.AllowStoredCredentials())
     load_flags |= net::LOAD_DO_NOT_SEND_AUTH_DATA;
+  }
 
   if (request.GetExtraData()) {
     RequestExtraData* extra_data =
@@ -234,17 +226,17 @@ int GetLoadFlagsForWebURLRequest(const blink::WebURLRequest& request) {
 }
 
 WebHTTPBody GetWebHTTPBodyForRequestBody(
-    const scoped_refptr<ResourceRequestBodyImpl>& input) {
+    const scoped_refptr<ResourceRequestBody>& input) {
   WebHTTPBody http_body;
   http_body.Initialize();
   http_body.SetIdentifier(input->identifier());
   http_body.SetContainsPasswordData(input->contains_sensitive_info());
   for (const auto& element : *input->elements()) {
     switch (element.type()) {
-      case ResourceRequestBodyImpl::Element::TYPE_BYTES:
+      case ResourceRequestBody::Element::TYPE_BYTES:
         http_body.AppendData(WebData(element.bytes(), element.length()));
         break;
-      case ResourceRequestBodyImpl::Element::TYPE_FILE:
+      case ResourceRequestBody::Element::TYPE_FILE:
         http_body.AppendFileRange(
             blink::FilePathToWebString(element.path()), element.offset(),
             (element.length() != std::numeric_limits<uint64_t>::max())
@@ -252,7 +244,7 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
                 : -1,
             element.expected_modification_time().ToDoubleT());
         break;
-      case ResourceRequestBodyImpl::Element::TYPE_FILE_FILESYSTEM:
+      case ResourceRequestBody::Element::TYPE_FILE_FILESYSTEM:
         http_body.AppendFileSystemURLRange(
             element.filesystem_url(), element.offset(),
             (element.length() != std::numeric_limits<uint64_t>::max())
@@ -260,11 +252,11 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
                 : -1,
             element.expected_modification_time().ToDoubleT());
         break;
-      case ResourceRequestBodyImpl::Element::TYPE_BLOB:
+      case ResourceRequestBody::Element::TYPE_BLOB:
         http_body.AppendBlob(WebString::FromASCII(element.blob_uuid()));
         break;
-      case ResourceRequestBodyImpl::Element::TYPE_BYTES_DESCRIPTION:
-      case ResourceRequestBodyImpl::Element::TYPE_DISK_CACHE_ENTRY:
+      case ResourceRequestBody::Element::TYPE_BYTES_DESCRIPTION:
+      case ResourceRequestBody::Element::TYPE_DISK_CACHE_ENTRY:
       default:
         NOTREACHED();
         break;
@@ -273,9 +265,9 @@ WebHTTPBody GetWebHTTPBodyForRequestBody(
   return http_body;
 }
 
-scoped_refptr<ResourceRequestBodyImpl> GetRequestBodyForWebURLRequest(
+scoped_refptr<ResourceRequestBody> GetRequestBodyForWebURLRequest(
     const blink::WebURLRequest& request) {
-  scoped_refptr<ResourceRequestBodyImpl> request_body;
+  scoped_refptr<ResourceRequestBody> request_body;
 
   if (request.HttpBody().IsNull()) {
     return request_body;
@@ -288,10 +280,9 @@ scoped_refptr<ResourceRequestBodyImpl> GetRequestBodyForWebURLRequest(
   return GetRequestBodyForWebHTTPBody(request.HttpBody());
 }
 
-scoped_refptr<ResourceRequestBodyImpl> GetRequestBodyForWebHTTPBody(
+scoped_refptr<ResourceRequestBody> GetRequestBodyForWebHTTPBody(
     const blink::WebHTTPBody& httpBody) {
-  scoped_refptr<ResourceRequestBodyImpl> request_body =
-      new ResourceRequestBodyImpl();
+  scoped_refptr<ResourceRequestBody> request_body = new ResourceRequestBody();
   size_t i = 0;
   WebHTTPBody::Element element;
   while (httpBody.ElementAt(i++, element)) {
@@ -382,6 +373,11 @@ STATIC_ASSERT_ENUM(FetchRedirectMode::MANUAL_MODE,
 FetchRedirectMode GetFetchRedirectModeForWebURLRequest(
     const blink::WebURLRequest& request) {
   return static_cast<FetchRedirectMode>(request.GetFetchRedirectMode());
+}
+
+std::string GetFetchIntegrityForWebURLRequest(
+    const blink::WebURLRequest& request) {
+  return request.GetFetchIntegrity().Utf8();
 }
 
 STATIC_ASSERT_ENUM(REQUEST_CONTEXT_FRAME_TYPE_AUXILIARY,
@@ -495,38 +491,6 @@ STATIC_ASSERT_ENUM(ServiceWorkerMode::ALL,
 ServiceWorkerMode GetServiceWorkerModeForWebURLRequest(
     const blink::WebURLRequest& request) {
   return static_cast<ServiceWorkerMode>(request.GetServiceWorkerMode());
-}
-
-blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,
-                                     bool stale_copy_in_cache,
-                                     int reason) {
-  blink::WebURLError error;
-  error.domain = WebString::FromASCII(net::kErrorDomain);
-  error.reason = reason;
-  error.unreachable_url = unreachable_url;
-  error.stale_copy_in_cache = stale_copy_in_cache;
-  if (reason == net::ERR_ABORTED) {
-    error.is_cancellation = true;
-  } else if (reason == net::ERR_CACHE_MISS) {
-    error.is_cache_miss = true;
-  } else if (reason == net::ERR_TEMPORARILY_THROTTLED) {
-    error.localized_description =
-        WebString::FromASCII(kThrottledErrorDescription);
-  } else {
-    error.localized_description =
-        WebString::FromASCII(net::ErrorToString(reason));
-  }
-  return error;
-}
-
-blink::WebURLError CreateWebURLError(const blink::WebURL& unreachable_url,
-                                     bool stale_copy_in_cache,
-                                     int reason,
-                                     bool was_ignored_by_handler) {
-  blink::WebURLError error =
-      CreateWebURLError(unreachable_url, stale_copy_in_cache, reason);
-  error.was_ignored_by_handler = was_ignored_by_handler;
-  return error;
 }
 
 }  // namespace content

@@ -14,13 +14,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/base/contiguous_container.h"
 #include "cc/base/rtree.h"
 #include "cc/paint/discardable_image_map.h"
-#include "cc/paint/display_item.h"
-#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/image_id.h"
 #include "cc/paint/paint_export.h"
+#include "cc/paint/paint_op_buffer.h"
 #include "third_party/skia/include/core/SkPicture.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
@@ -35,7 +33,6 @@ class TracedValue;
 }
 
 namespace cc {
-class DisplayItem;
 
 class CC_PAINT_EXPORT DisplayItemList
     : public base::RefCountedThreadSafe<DisplayItemList> {
@@ -45,132 +42,105 @@ class CC_PAINT_EXPORT DisplayItemList
   void Raster(SkCanvas* canvas,
               SkPicture::AbortCallback* callback = nullptr) const;
 
-  // Because processing happens in these CreateAndAppend functions, all the set
-  // up for the item should be done via the args, which is why the return type
-  // needs to be const, to prevent set-after-processing mistakes.
-
-  // Most paired begin item types default to an empty visual rect, which will
-  // subsequently be grown as needed to encompass any contained items that draw
-  // content, such as drawing or filter items.
-  template <typename DisplayItemType, typename... Args>
-  const DisplayItemType& CreateAndAppendPairedBeginItem(Args&&... args) {
-    return CreateAndAppendPairedBeginItemWithVisualRect<DisplayItemType>(
-        gfx::Rect(), std::forward<Args>(args)...);
+  PaintOpBuffer* StartPaint() {
+    DCHECK(!in_painting_);
+    in_painting_ = true;
+    return &paint_op_buffer_;
   }
 
-  // This method variant is exposed to allow filters to specify their visual
-  // rect since they may draw content despite containing no drawing items.
-  template <typename DisplayItemType, typename... Args>
-  const DisplayItemType& CreateAndAppendPairedBeginItemWithVisualRect(
-      const gfx::Rect& visual_rect,
-      Args&&... args) {
-    size_t item_index = visual_rects_.size();
-    visual_rects_.push_back(visual_rect);
-    begin_item_indices_.push_back(item_index);
+  void EndPaintOfUnpaired(const gfx::Rect& visual_rect) {
+    in_painting_ = false;
 
-    return AllocateAndConstruct<DisplayItemType>(std::forward<Args>(args)...);
+    // Empty paint item.
+    if (visual_rects_.size() == paint_op_buffer_.size())
+      return;
+
+    while (visual_rects_.size() < paint_op_buffer_.size())
+      visual_rects_.push_back(visual_rect);
+    GrowCurrentBeginItemVisualRect(visual_rect);
   }
 
-  template <typename DisplayItemType, typename... Args>
-  const DisplayItemType& CreateAndAppendPairedEndItem(Args&&... args) {
-    DCHECK(!begin_item_indices_.empty());
-    size_t last_begin_index = begin_item_indices_.back();
-    begin_item_indices_.pop_back();
+  void EndPaintOfPairedBegin(const gfx::Rect& visual_rect = gfx::Rect()) {
+    DCHECK_NE(visual_rects_.size(), paint_op_buffer_.size());
+    size_t count = paint_op_buffer_.size() - visual_rects_.size();
+    for (size_t i = 0; i < count; ++i)
+      visual_rects_.push_back(visual_rect);
+    begin_paired_indices_.push_back(
+        std::make_pair(visual_rects_.size() - 1, count));
 
-    // Note that we are doing two separate things below:
-    //
-    // 1. Appending a new rect to the |visual_rects| list associated with
-    //    the newly-being-added paired end item, with that visual rect
-    //    having same bounds as its paired begin item, referenced via
-    //    |last_begin_index|. The paired begin item may or may not be the
-    //    current last visual rect in |visual_rects|, and its bounds has
-    //    potentially been grown via calls to CreateAndAppendDrawingItem().
-    //
-    // 2. If there is still a containing paired begin item after closing the
-    //    pair ended in this method call, growing that item's visual rect to
-    //    incorporate the bounds of the now-finished pair.
-    //
-    // Thus we're carefully pushing and growing by the visual rect of the
-    // paired begin item we're closing in this method call, which is not
-    // necessarily the same as |visual_rects.back()|, and given that the
-    // |visual_rects| list is mutated in step 1 before step 2, we also can't
-    // shorten the reference via a |const auto| reference. We could make a
-    // copy of the rect before list mutation, but that would incur copy
-    // overhead.
+    in_painting_ = false;
+    in_paired_begin_count_++;
+  }
 
-    // Ending bounds match the starting bounds.
-    visual_rects_.push_back(visual_rects_[last_begin_index]);
+  void EndPaintOfPairedEnd() {
+    DCHECK_NE(current_range_start_, paint_op_buffer_.size());
+    DCHECK(in_paired_begin_count_);
+
+    size_t last_begin_index = begin_paired_indices_.back().first;
+    size_t last_begin_count = begin_paired_indices_.back().second;
+    DCHECK_GT(last_begin_count, 0u);
+    DCHECK_GE(last_begin_index, last_begin_count - 1);
+
+    // Copy the visual rect at |last_begin_index| to all indices that constitute
+    // the begin item. Note that because we possibly reallocate the
+    // |visual_rects_| buffer below, we need an actual copy instead of a const
+    // reference which can become dangling.
+    auto visual_rect = visual_rects_[last_begin_index];
+    for (size_t i = last_begin_index - last_begin_count + 1;
+         i < last_begin_index; ++i) {
+      visual_rects_[i] = visual_rect;
+    }
+    begin_paired_indices_.pop_back();
+
+    // Copy the visual rect of the matching begin item to the end item(s).
+    while (visual_rects_.size() < paint_op_buffer_.size())
+      visual_rects_.push_back(visual_rect);
 
     // The block that ended needs to be included in the bounds of the enclosing
     // block.
-    GrowCurrentBeginItemVisualRect(visual_rects_[last_begin_index]);
-
-    return AllocateAndConstruct<DisplayItemType>(std::forward<Args>(args)...);
-  }
-
-  template <typename DisplayItemType, typename... Args>
-  const DisplayItemType& CreateAndAppendDrawingItem(
-      const gfx::Rect& visual_rect,
-      Args&&... args) {
-    visual_rects_.push_back(visual_rect);
     GrowCurrentBeginItemVisualRect(visual_rect);
 
-    const auto& item =
-        AllocateAndConstruct<DisplayItemType>(std::forward<Args>(args)...);
-    has_discardable_images_ |= item.picture->HasDiscardableImages();
-    return item;
+    in_painting_ = false;
+    in_paired_begin_count_--;
   }
 
-  // Called after all items are appended, to process the items and, if
-  // applicable, create an internally cached SkPicture.
+  // Called after all items are appended, to process the items.
   void Finalize();
 
-  void SetIsSuitableForGpuRasterization(bool is_suitable) {
-    all_items_are_suitable_for_gpu_rasterization_ = is_suitable;
-  }
-  bool IsSuitableForGpuRasterization() const;
+  int NumSlowPaths() const { return paint_op_buffer_.numSlowPaths(); }
+  bool HasNonAAPaint() const { return paint_op_buffer_.HasNonAAPaint(); }
 
-  size_t OpCount() const;
-  size_t ApproximateMemoryUsage() const;
-  bool ShouldBeAnalyzedForSolidColor() const;
+  // This gives the total number of PaintOps.
+  size_t op_count() const { return paint_op_buffer_.size(); }
+  size_t BytesUsed() const;
 
-  void EmitTraceSnapshot() const;
-
-  void GenerateDiscardableImagesMetadata();
-  void GetDiscardableImagesInRect(const gfx::Rect& rect,
-                                  float contents_scale,
-                                  const gfx::ColorSpace& target_color_space,
-                                  std::vector<DrawImage>* images);
-  gfx::Rect GetRectForImage(PaintImage::Id image_id) const;
-
-  void SetRetainVisualRectsForTesting(bool retain) {
-    retain_visual_rects_ = retain;
-  }
-
-  size_t size() const { return items_.size(); }
-
-  gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
-
-  ContiguousContainer<DisplayItem>::const_iterator begin() const {
-    return items_.begin();
-  }
-
-  ContiguousContainer<DisplayItem>::const_iterator end() const {
-    return items_.end();
-  }
-
-  void GatherDiscardableImages(DiscardableImageStore* image_store) const;
-  const DiscardableImageMap& discardable_image_map_for_testing() const {
+  const DiscardableImageMap& discardable_image_map() const {
     return image_map_;
   }
 
-  bool has_discardable_images() const { return has_discardable_images_; }
+  void EmitTraceSnapshot() const;
+  void GenerateDiscardableImagesMetadata();
+
+  gfx::Rect VisualRectForTesting(int index) { return visual_rects_[index]; }
+
+  // Generate a PaintRecord from this DisplayItemList, leaving |this| in
+  // an empty state.
+  sk_sp<PaintRecord> ReleaseAsRecord();
+
+  // If a rectangle is solid color, returns that color. |max_ops_to_analyze|
+  // indicates the maximum number of draw ops we consider when determining if a
+  // rectangle is solid color.
+  bool GetColorIfSolidInRect(const gfx::Rect& rect,
+                             SkColor* color,
+                             int max_ops_to_analyze = 1);
 
  private:
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithNoItems);
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithItems);
+  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithNoOps);
+  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, AsValueWithOps);
 
   ~DisplayItemList();
+
+  void Reset();
 
   std::unique_ptr<base::trace_event::TracedValue> CreateTracedValue(
       bool include_items) const;
@@ -179,35 +149,33 @@ class CC_PAINT_EXPORT DisplayItemList
   // given visual rect with the begin display item's visual rect.
   void GrowCurrentBeginItemVisualRect(const gfx::Rect& visual_rect);
 
-  template <typename DisplayItemType, typename... Args>
-  const DisplayItemType& AllocateAndConstruct(Args&&... args) {
-    auto* item = &items_.AllocateAndConstruct<DisplayItemType>(
-        std::forward<Args>(args)...);
-    op_count_ += item->OpCount();
-    return *item;
-  }
-
-  RTree rtree_;
+  // RTree stores indices into the paint op buffer.
+  // TODO(vmpstr): Update the rtree to store offsets instead.
+  RTree<size_t> rtree_;
   DiscardableImageMap image_map_;
-  ContiguousContainer<DisplayItem> items_;
+  PaintOpBuffer paint_op_buffer_;
 
   // The visual rects associated with each of the display items in the
-  // display item list. There is one rect per display item, and the
-  // position in |visual_rects| matches the position of the item in
-  // |items| . These rects are intentionally kept separate
-  // because they are not needed while walking the |items| for raster.
+  // display item list. These rects are intentionally kept separate because they
+  // are used to decide which ops to walk for raster.
   std::vector<gfx::Rect> visual_rects_;
-  std::vector<size_t> begin_item_indices_;
-
-  size_t op_count_ = 0u;
-  bool all_items_are_suitable_for_gpu_rasterization_ = true;
-  // For testing purposes only. Whether to keep visual rects across calls to
-  // Finalize().
-  bool retain_visual_rects_ = false;
-  bool has_discardable_images_ = false;
+  // A stack of pairs of indices and counts. The indices are into the
+  // |visual_rects_| for each paired begin range that hasn't been closed. The
+  // counts refer to the number of visual rects in that begin sequence that end
+  // with the index.
+  std::vector<std::pair<size_t, size_t>> begin_paired_indices_;
+  // While recording a range of ops, this is the position in the PaintOpBuffer
+  // where the recording started.
+  size_t current_range_start_ = 0;
+  // For debugging, tracks the number of currently nested visual rects being
+  // added.
+  int in_paired_begin_count_ = 0;
+  // For debugging, tracks if we're painting a visual rect range, to prevent
+  // nesting.
+  bool in_painting_ = false;
 
   friend class base::RefCountedThreadSafe<DisplayItemList>;
-  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, ApproximateMemoryUsage);
+  FRIEND_TEST_ALL_PREFIXES(DisplayItemListTest, BytesUsed);
   DISALLOW_COPY_AND_ASSIGN(DisplayItemList);
 };
 

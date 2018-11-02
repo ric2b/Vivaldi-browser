@@ -4,12 +4,14 @@
 
 #include "components/arc/ime/arc_ime_bridge_impl.h"
 
+#include <string>
 #include <utility>
 #include <vector>
 
 #include "base/logging.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_service_manager.h"
 #include "ui/base/ime/composition_text.h"
 #include "ui/base/ime/text_input_type.h"
 #include "ui/gfx/geometry/rect.h"
@@ -79,13 +81,20 @@ ArcImeBridgeImpl::ArcImeBridgeImpl(Delegate* delegate,
 }
 
 ArcImeBridgeImpl::~ArcImeBridgeImpl() {
-  bridge_service_->ime()->RemoveObserver(this);
+  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
+  // BrowserContextKeyedService is not nested.
+  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
+  // so do not touch it.
+  if (ArcServiceManager::Get())
+    bridge_service_->ime()->RemoveObserver(this);
 }
 
 void ArcImeBridgeImpl::OnInstanceReady() {
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(bridge_service_->ime(), Init);
   DCHECK(instance);
-  instance->Init(binding_.CreateInterfacePtrAndBind());
+  mojom::ImeHostPtr host_proxy;
+  binding_.Bind(mojo::MakeRequest(&host_proxy));
+  instance->Init(std::move(host_proxy));
 }
 
 void ArcImeBridgeImpl::SendSetCompositionText(

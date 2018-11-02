@@ -54,7 +54,6 @@
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
 #include "content/public/common/sandbox_init.h"
-#include "ipc/ipc_descriptors.h"
 #include "media/base/media.h"
 #include "ppapi/features/features.h"
 #include "services/service_manager/embedder/switches.h"
@@ -95,10 +94,6 @@
 #endif
 
 #endif  // OS_POSIX
-
-#if defined(USE_NSS_CERTS)
-#include "crypto/nss_util.h"
-#endif
 
 #if !defined(CHROME_MULTIPLE_DLL_BROWSER)
 #include "content/public/gpu/content_gpu_client.h"
@@ -600,10 +595,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
     }
 #endif
 
-#if defined(USE_NSS_CERTS)
-    crypto::EarlySetupForNSSInit();
-#endif
-
     RegisterPathProvider();
     RegisterContentSchemes(true);
 
@@ -672,16 +663,6 @@ class ContentMainRunnerImpl : public ContentMainRunner {
         *base::CommandLine::ForCurrentProcess();
     std::string process_type =
         command_line.GetSwitchValueASCII(switches::kProcessType);
-
-    // --enable-network-service requires both --enable-browser-side-navigation
-    // (PlzNavigate) and the LoadingWithMojo feature.
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kEnableNetworkService)) {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          switches::kEnableBrowserSideNavigation);
-      base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
-          switches::kEnableFeatures, features::kLoadingWithMojo.name);
-    }
 
     // Run this logic on all child processes. Zygotes will run this at a later
     // point in time when the command line has been updated.

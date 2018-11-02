@@ -33,15 +33,12 @@
 [
     Constructor(optional DOMString message = "", optional DOMString name = "Error"),
     Exposed=(Window,Worker),
-    DoNotCheckConstants,
-] exception DOMException {
+    DoNotCheckConstants
+] interface DOMException {
 
     readonly attribute unsigned short   code;
     readonly attribute DOMString        name;
     readonly attribute DOMString        message;
-
-    // Override in a Mozilla compatible format
-    [NotEnumerable] DOMString toString();
 
     // ExceptionCode
     const unsigned short      INDEX_SIZE_ERR                 = 1;

@@ -18,8 +18,8 @@
 #include "base/time/time.h"
 #include "cc/cc_export.h"
 #include "cc/resources/release_callback_impl.h"
-#include "cc/resources/resource_format.h"
-#include "cc/resources/texture_mailbox.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/quads/texture_mailbox.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace media {
@@ -27,8 +27,11 @@ class SkCanvasVideoRenderer;
 class VideoFrame;
 }
 
-namespace cc {
+namespace viz {
 class ContextProvider;
+}
+
+namespace cc {
 class ResourceProvider;
 
 class CC_EXPORT VideoFrameExternalResources {
@@ -49,7 +52,7 @@ class CC_EXPORT VideoFrameExternalResources {
   };
 
   ResourceType type;
-  std::vector<TextureMailbox> mailboxes;
+  std::vector<viz::TextureMailbox> mailboxes;
   std::vector<ReleaseCallbackImpl> release_callbacks;
   bool read_lock_fences_enabled;
 
@@ -72,20 +75,20 @@ class CC_EXPORT VideoFrameExternalResources {
 // resources consumable by the compositor.
 class CC_EXPORT VideoResourceUpdater {
  public:
-  VideoResourceUpdater(ContextProvider* context_provider,
-                       ResourceProvider* resource_provider);
+  VideoResourceUpdater(viz::ContextProvider* context_provider,
+                       ResourceProvider* resource_provider,
+                       bool use_stream_video_draw_quad);
   ~VideoResourceUpdater();
 
   VideoFrameExternalResources CreateExternalResourcesFromVideoFrame(
       scoped_refptr<media::VideoFrame> video_frame);
-
 
  private:
   class PlaneResource {
    public:
     PlaneResource(unsigned resource_id,
                   const gfx::Size& resource_size,
-                  ResourceFormat resource_format,
+                  viz::ResourceFormat resource_format,
                   gpu::Mailbox mailbox);
     PlaneResource(const PlaneResource& other);
 
@@ -100,7 +103,7 @@ class CC_EXPORT VideoResourceUpdater {
     // Accessors for resource identifiers provided at construction time.
     unsigned resource_id() const { return resource_id_; }
     const gfx::Size& resource_size() const { return resource_size_; }
-    ResourceFormat resource_format() const { return resource_format_; }
+    viz::ResourceFormat resource_format() const { return resource_format_; }
     const gpu::Mailbox& mailbox() const { return mailbox_; }
 
     // Various methods for managing references. See |ref_count_| for details.
@@ -123,7 +126,7 @@ class CC_EXPORT VideoResourceUpdater {
 
     const unsigned resource_id_;
     const gfx::Size resource_size_;
-    const ResourceFormat resource_format_;
+    const viz::ResourceFormat resource_format_;
     const gpu::Mailbox mailbox_;
   };
 
@@ -141,14 +144,14 @@ class CC_EXPORT VideoResourceUpdater {
   // resources.
   ResourceList::iterator RecycleOrAllocateResource(
       const gfx::Size& resource_size,
-      ResourceFormat resource_format,
+      viz::ResourceFormat resource_format,
       const gfx::ColorSpace& color_space,
       bool software_resource,
       bool immutable_hint,
       int unique_id,
       int plane_index);
   ResourceList::iterator AllocateResource(const gfx::Size& plane_size,
-                                          ResourceFormat format,
+                                          viz::ResourceFormat format,
                                           const gfx::ColorSpace& color_space,
                                           bool has_mailbox,
                                           bool immutable_hint);
@@ -173,8 +176,9 @@ class CC_EXPORT VideoResourceUpdater {
                             bool lost_resource,
                             BlockingTaskRunner* main_thread_task_runner);
 
-  ContextProvider* context_provider_;
+  viz::ContextProvider* context_provider_;
   ResourceProvider* resource_provider_;
+  const bool use_stream_video_draw_quad_;
   std::unique_ptr<media::SkCanvasVideoRenderer> video_renderer_;
   std::vector<uint8_t> upload_pixels_;
 

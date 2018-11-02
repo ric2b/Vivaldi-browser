@@ -159,14 +159,12 @@ class ModuleEnumerator {
   // entries in |enumerated_modules_| with a populated |location| field.
   void EnumerateShellExtensions();
 
+  // Callback for ShellExtensionEnumerator::EnumerateShellExtensionPaths().
+  void OnShellExtensionEnumerated(const base::FilePath& shell_extension);
+
   // Enumerate all registered Winsock LSP modules. Creates empty
   // entries in |enumerated_modules_| with a populated |location| field.
   void EnumerateWinsockModules();
-
-  // Reads the registered shell extensions found under |parent| key in the
-  // registry. Creates empty entries in |enumerated_modules_| with a populated
-  // |location| field.
-  void ReadShellExtensions(HKEY parent);
 
   // Given a |module|, initializes the structure and loads additional
   // information using the location field of the module.
@@ -302,13 +300,7 @@ class EnumerateModulesModel {
   void ScanNow(bool background_mode);
 
   // Gets the whole module list as a ListValue.
-  base::ListValue* GetModuleList();
-
-  // Returns the site to which the user should be taken when the conflict bubble
-  // or app menu item is clicked. For now this is simply chrome://conflicts,
-  // which contains detailed information about conflicts. Returns an empty URL
-  // if there are no conficts. May only be called on UI thread.
-  GURL GetConflictUrl();
+  std::unique_ptr<base::ListValue> GetModuleList();
 
  private:
   friend class ModuleEnumerator;

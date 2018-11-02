@@ -8,6 +8,8 @@
 #include "core/dom/Modulator.h"
 #include "core/dom/ModuleScript.h"
 #include "core/dom/PendingScript.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperMember.h"
 
 namespace blink {
 
@@ -19,11 +21,7 @@ class ModulePendingScript;
 // registered as ModuleTreeClient to FetchTree() first, and later
 // ModulePendingScript is supplied to ModulePendingScriptTreeClient via
 // SetPendingScript() and is notified of module tree load finish.
-class ModulePendingScriptTreeClient final
-    : public GarbageCollectedFinalized<ModulePendingScriptTreeClient>,
-      public ModuleTreeClient {
-  USING_GARBAGE_COLLECTED_MIXIN(ModulePendingScriptTreeClient);
-
+class ModulePendingScriptTreeClient final : public ModuleTreeClient {
  public:
   static ModulePendingScriptTreeClient* Create() {
     return new ModulePendingScriptTreeClient();
@@ -35,6 +33,7 @@ class ModulePendingScriptTreeClient final
   ModuleScript* GetModuleScript() const { return module_script_; }
 
   DECLARE_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
  private:
   ModulePendingScriptTreeClient();
@@ -43,8 +42,8 @@ class ModulePendingScriptTreeClient final
   void NotifyModuleTreeLoadFinished(ModuleScript*) override;
 
   bool finished_ = false;
-  Member<ModuleScript> module_script_;
-  Member<ModulePendingScript> pending_script_;
+  TraceWrapperMember<ModuleScript> module_script_;
+  TraceWrapperMember<ModulePendingScript> pending_script_;
 };
 
 // PendingScript for a module script
@@ -52,8 +51,9 @@ class ModulePendingScriptTreeClient final
 class CORE_EXPORT ModulePendingScript : public PendingScript {
  public:
   static ModulePendingScript* Create(ScriptElementBase* element,
-                                     ModulePendingScriptTreeClient* client) {
-    return new ModulePendingScript(element, client);
+                                     ModulePendingScriptTreeClient* client,
+                                     bool is_external) {
+    return new ModulePendingScript(element, client, is_external);
   }
 
   ~ModulePendingScript() override;
@@ -65,16 +65,19 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
   }
 
   DECLARE_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
  private:
-  ModulePendingScript(ScriptElementBase*, ModulePendingScriptTreeClient*);
+  ModulePendingScript(ScriptElementBase*,
+                      ModulePendingScriptTreeClient*,
+                      bool is_external);
 
   // PendingScript
   ScriptType GetScriptType() const override { return ScriptType::kModule; }
   Script* GetSource(const KURL& document_url,
                     bool& error_occurred) const override;
   bool IsReady() const override { return ready_; }
-  bool IsExternal() const override { return true; }
+  bool IsExternal() const override { return is_external_; }
   bool ErrorOccurred() const override;
   bool WasCanceled() const override { return false; }
 
@@ -89,8 +92,9 @@ class CORE_EXPORT ModulePendingScript : public PendingScript {
 
   void CheckState() const override {}
 
-  Member<ModulePendingScriptTreeClient> module_tree_client_;
+  TraceWrapperMember<ModulePendingScriptTreeClient> module_tree_client_;
   bool ready_ = false;
+  const bool is_external_;
 };
 
 }  // namespace blink

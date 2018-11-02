@@ -15,8 +15,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "chrome/browser/loader/chrome_resource_dispatcher_host_delegate.h"
 #include "chrome/browser/prerender/prerender_manager.h"
 #include "chrome/browser/prerender/prerender_manager_factory.h"
@@ -28,6 +26,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/prefs/pref_service.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_source.h"
 #include "content/public/browser/notification_types.h"
@@ -57,13 +56,7 @@ class MockHTTPJob : public net::URLRequestMockHTTPJob {
   MockHTTPJob(net::URLRequest* request,
               net::NetworkDelegate* delegate,
               const base::FilePath& file)
-      : net::URLRequestMockHTTPJob(
-            request,
-            delegate,
-            file,
-            base::CreateTaskRunnerWithTraits(
-                {base::MayBlock(), base::TaskPriority::BACKGROUND,
-                 base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})) {}
+      : net::URLRequestMockHTTPJob(request, delegate, file) {}
 
   void set_start_callback(const base::Closure& start_callback) {
     start_callback_ = start_callback;
@@ -194,11 +187,7 @@ class HangingFirstRequestInterceptor : public net::URLRequestInterceptor {
         callback_.Run(request);
       return new HangingURLRequestJob(request, network_delegate);
     }
-    return new net::URLRequestMockHTTPJob(
-        request, network_delegate, file_,
-        base::CreateTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
-             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
+    return new net::URLRequestMockHTTPJob(request, network_delegate, file_);
   }
 
  private:
@@ -287,8 +276,10 @@ void RequestCounter::WaitForCount(int expected_count) {
 
 FakeSafeBrowsingDatabaseManager::FakeSafeBrowsingDatabaseManager() {}
 
-bool FakeSafeBrowsingDatabaseManager::CheckBrowseUrl(const GURL& gurl,
-                                                     Client* client) {
+bool FakeSafeBrowsingDatabaseManager::CheckBrowseUrl(
+    const GURL& gurl,
+    const safe_browsing::SBThreatTypeSet& threat_types,
+    Client* client) {
   if (bad_urls_.find(gurl.spec()) == bad_urls_.end() ||
       bad_urls_[gurl.spec()] == safe_browsing::SB_THREAT_TYPE_SAFE) {
     return true;
@@ -324,9 +315,11 @@ FakeSafeBrowsingDatabaseManager::~FakeSafeBrowsingDatabaseManager() {}
 
 void FakeSafeBrowsingDatabaseManager::OnCheckBrowseURLDone(const GURL& gurl,
                                                            Client* client) {
-  std::vector<safe_browsing::SBThreatType> expected_threats;
-  expected_threats.push_back(safe_browsing::SB_THREAT_TYPE_URL_MALWARE);
-  expected_threats.push_back(safe_browsing::SB_THREAT_TYPE_URL_PHISHING);
+  safe_browsing::SBThreatTypeSet expected_threats =
+      safe_browsing::CreateSBThreatTypeSet(
+          {safe_browsing::SB_THREAT_TYPE_URL_MALWARE,
+           safe_browsing::SB_THREAT_TYPE_URL_PHISHING});
+
   // TODO(nparker): Replace SafeBrowsingCheck w/ a call to
   // client->OnCheckBrowseUrlResult()
   safe_browsing::LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck sb_check(
@@ -817,8 +810,7 @@ void InterceptRequestAndCount(
 void CreateMockInterceptorOnIO(const GURL& url, const base::FilePath& file) {
   CHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
   net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
-      url, net::URLRequestMockHTTPJob::CreateInterceptorForSingleFile(
-               file, content::BrowserThread::GetBlockingPool()));
+      url, net::URLRequestMockHTTPJob::CreateInterceptorForSingleFile(file));
 }
 
 void CreateHangingFirstRequestInterceptor(

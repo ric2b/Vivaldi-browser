@@ -6,7 +6,10 @@
     {
       'target_name': 'route_details',
       'dependencies': [
+        'extension_view_wrapper/compiled_resources2.gyp:extension_view_wrapper',
         '../../compiled_resources2.gyp:media_router_data',
+        '../../compiled_resources2.gyp:media_router_ui_interface',
+        '../route_controls/compiled_resources2.gyp:route_controls',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:i18n_behavior',
         '<(DEPTH)/ui/webui/resources/js/compiled_resources2.gyp:load_time_data',
       ],

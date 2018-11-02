@@ -4,16 +4,17 @@
 
 #include "ash/system/audio/tray_audio.h"
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/system/audio/audio_detailed_view.h"
 #include "ash/system/audio/volume_view.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/display/screen.h"
 #include "ui/views/view.h"
@@ -68,18 +69,18 @@ views::View* TrayAudio::CreateDetailedView(LoginStatus status) {
     volume_view_ = new tray::VolumeView(this, false);
     return volume_view_;
   } else {
-    ShellPort::Get()->RecordUserMetricsAction(
+    Shell::Get()->metrics()->RecordUserMetricsAction(
         UMA_STATUS_AREA_DETAILED_AUDIO_VIEW);
     audio_detail_view_ = new tray::AudioDetailedView(this);
     return audio_detail_view_;
   }
 }
 
-void TrayAudio::DestroyDefaultView() {
-  volume_view_ = NULL;
+void TrayAudio::OnDefaultViewDestroyed() {
+  volume_view_ = nullptr;
 }
 
-void TrayAudio::DestroyDetailedView() {
+void TrayAudio::OnDetailedViewDestroyed() {
   if (audio_detail_view_) {
     audio_detail_view_ = nullptr;
   } else if (volume_view_) {
@@ -137,7 +138,8 @@ void TrayAudio::ChangeInternalSpeakerChannelMode() {
   bool swap = false;
   if (display::Display::HasInternalDisplay()) {
     const display::ManagedDisplayInfo& display_info =
-        ShellPort::Get()->GetDisplayInfo(display::Display::InternalDisplayId());
+        Shell::Get()->display_manager()->GetDisplayInfo(
+            display::Display::InternalDisplayId());
     if (display_info.GetActiveRotation() == display::Display::ROTATE_180)
       swap = true;
   }

@@ -47,10 +47,6 @@
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/color_space.h"
 
-namespace cc {
-class SharedBitmap;
-}
-
 namespace gfx {
 class GpuMemoryBuffer;
 }
@@ -59,6 +55,10 @@ namespace gpu {
 namespace gles2 {
 class GLES2Interface;
 }
+}
+
+namespace viz {
+class SharedBitmap;
 }
 
 namespace WTF {
@@ -89,12 +89,15 @@ class PLATFORM_EXPORT DrawingBuffer
     virtual void DrawingBufferClientRestoreScissorTest() = 0;
     // Restores the mask and clear value for color, depth, and stencil buffers.
     virtual void DrawingBufferClientRestoreMaskAndClearValues() = 0;
-    virtual void DrawingBufferClientRestorePixelPackAlignment() = 0;
+    // Assume client knows the GL/WebGL version and restore necessary params
+    // accordingly.
+    virtual void DrawingBufferClientRestorePixelPackParameters() = 0;
     // Restores the GL_TEXTURE_2D binding for the active texture unit only.
     virtual void DrawingBufferClientRestoreTexture2DBinding() = 0;
     virtual void DrawingBufferClientRestoreRenderbufferBinding() = 0;
     virtual void DrawingBufferClientRestoreFramebufferBinding() = 0;
     virtual void DrawingBufferClientRestorePixelUnpackBufferBinding() = 0;
+    virtual void DrawingBufferClientRestorePixelPackBufferBinding() = 0;
   };
 
   enum PreserveDrawingBuffer {
@@ -193,7 +196,7 @@ class PLATFORM_EXPORT DrawingBuffer
   WebGraphicsContext3DProvider* ContextProvider();
 
   // cc::TextureLayerClient implementation.
-  bool PrepareTextureMailbox(cc::TextureMailbox* out_mailbox,
+  bool PrepareTextureMailbox(viz::TextureMailbox* out_mailbox,
                              std::unique_ptr<cc::SingleReleaseCallback>*
                                  out_release_callback) override;
 
@@ -228,16 +231,13 @@ class PLATFORM_EXPORT DrawingBuffer
   // Restore all state that may have been dirtied by any call.
   void RestoreAllState();
 
-  void AddNewMailboxCallback(std::unique_ptr<WTF::Closure> closure) {
-    new_mailbox_callback_ = std::move(closure);
-  }
-
   // This class helps implement correct semantics for BlitFramebuffer
   // when the DrawingBuffer is using a CHROMIUM image for its backing
   // store and RGB emulation is in use (basically, macOS only).
   class PLATFORM_EXPORT ScopedRGBEmulationForBlitFramebuffer {
    public:
-    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer*);
+    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer*,
+                                         bool is_user_draw_framebuffer_bound);
     ~ScopedRGBEmulationForBlitFramebuffer();
 
    private:
@@ -264,7 +264,7 @@ class PLATFORM_EXPORT DrawingBuffer
   // Shared memory bitmaps that were released by the compositor and can be used
   // again by this DrawingBuffer.
   struct RecycledBitmap {
-    std::unique_ptr<cc::SharedBitmap> bitmap;
+    std::unique_ptr<viz::SharedBitmap> bitmap;
     IntSize size;
   };
   Vector<RecycledBitmap> recycled_bitmaps_;
@@ -283,12 +283,15 @@ class PLATFORM_EXPORT DrawingBuffer
 
     // Mark parts of the state that are dirty and need to be restored.
     void SetClearStateDirty() { clear_state_dirty_ = true; }
-    void SetPixelPackAlignmentDirty() { pixel_pack_alignment_dirty_ = true; }
+    void SetPixelPackParametersDirty() { pixel_pack_parameters_dirty_ = true; }
     void SetTextureBindingDirty() { texture_binding_dirty_ = true; }
     void SetRenderbufferBindingDirty() { renderbuffer_binding_dirty_ = true; }
     void SetFramebufferBindingDirty() { framebuffer_binding_dirty_ = true; }
     void SetPixelUnpackBufferBindingDirty() {
       pixel_unpack_buffer_binding_dirty_ = true;
+    }
+    void SetPixelPackBufferBindingDirty() {
+      pixel_pack_buffer_binding_dirty_ = true;
     }
 
    private:
@@ -296,11 +299,12 @@ class PLATFORM_EXPORT DrawingBuffer
     // The previous state restorer, in case restorers are nested.
     ScopedStateRestorer* previous_state_restorer_ = nullptr;
     bool clear_state_dirty_ = false;
-    bool pixel_pack_alignment_dirty_ = false;
+    bool pixel_pack_parameters_dirty_ = false;
     bool texture_binding_dirty_ = false;
     bool renderbuffer_binding_dirty_ = false;
     bool framebuffer_binding_dirty_ = false;
     bool pixel_unpack_buffer_binding_dirty_ = false;
+    bool pixel_pack_buffer_binding_dirty_ = false;
   };
 
   // All parameters necessary to generate the texture for the ColorBuffer.
@@ -368,16 +372,16 @@ class PLATFORM_EXPORT DrawingBuffer
   void ResolveIfNeeded();
 
   bool PrepareTextureMailboxInternal(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
       bool force_gpu_result);
 
   // Helper functions to be called only by prepareTextureMailboxInternal.
   bool FinishPrepareTextureMailboxGpu(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
   bool FinishPrepareTextureMailboxSoftware(
-      cc::TextureMailbox* out_mailbox,
+      viz::TextureMailbox* out_mailbox,
       std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback);
 
   // Callbacks for mailboxes given to the compositor from
@@ -385,7 +389,7 @@ class PLATFORM_EXPORT DrawingBuffer
   void MailboxReleasedGpu(RefPtr<ColorBuffer>,
                           const gpu::SyncToken&,
                           bool lost_resource);
-  void MailboxReleasedSoftware(std::unique_ptr<cc::SharedBitmap>,
+  void MailboxReleasedSoftware(std::unique_ptr<viz::SharedBitmap>,
                                const IntSize&,
                                const gpu::SyncToken&,
                                bool lost_resource);
@@ -403,7 +407,7 @@ class PLATFORM_EXPORT DrawingBuffer
 
   void ClearPlatformLayer();
 
-  std::unique_ptr<cc::SharedBitmap> CreateOrRecycleBitmap();
+  std::unique_ptr<viz::SharedBitmap> CreateOrRecycleBitmap();
 
   // Updates the current size of the buffer, ensuring that
   // s_currentResourceUsePixels is updated.
@@ -429,7 +433,7 @@ class PLATFORM_EXPORT DrawingBuffer
   void ClearChromiumImageAlpha(const ColorBuffer&);
 
   // Tries to create a CHROMIUM_image backed texture if
-  // RuntimeEnabledFeatures::webGLImageChromiumEnabled() is true. On failure,
+  // RuntimeEnabledFeatures::WebGLImageChromiumEnabled() is true. On failure,
   // or if the flag is false, creates a default texture. Always returns a valid
   // ColorBuffer.
   RefPtr<ColorBuffer> CreateColorBuffer(const IntSize&);
@@ -454,14 +458,14 @@ class PLATFORM_EXPORT DrawingBuffer
 
   // Helpers to ensure correct behavior of BlitFramebuffer when using
   // an emulated RGB CHROMIUM_image back buffer.
-  bool SetupRGBEmulationForBlitFramebuffer();
+  bool SetupRGBEmulationForBlitFramebuffer(bool is_user_draw_framebuffer_bound);
   void CleanupRGBEmulationForBlitFramebuffer();
 
   // Weak, reset by beginDestruction.
   Client* client_ = nullptr;
 
   const PreserveDrawingBuffer preserve_drawing_buffer_;
-  const WebGLVersion web_gl_version_;
+  const WebGLVersion webgl_version_;
 
   std::unique_ptr<WebGraphicsContext3DProviderWrapper> context_provider_;
   // Lifetime is tied to the m_contextProvider.
@@ -474,8 +478,6 @@ class PLATFORM_EXPORT DrawingBuffer
   const bool software_rendering_;
   bool has_implicit_stencil_buffer_ = false;
   bool storage_texture_supported_ = false;
-
-  std::unique_ptr<WTF::Closure> new_mailbox_callback_;
 
   // The current state restorer, which is used to track state dirtying. It is an
   // error to dirty state shared with WebGL while there is no existing state
@@ -551,7 +553,7 @@ class PLATFORM_EXPORT DrawingBuffer
 
   // In the case of OffscreenCanvas, we do not want to enable the
   // WebGLImageChromium flag, so we replace all the
-  // RuntimeEnabledFeatures::webGLImageChromiumEnabled() call with
+  // RuntimeEnabledFeatures::WebGLImageChromiumEnabled() call with
   // shouldUseChromiumImage() calls, and set m_chromiumImageUsage to
   // DisallowChromiumImage in the case of OffscreenCanvas.
   ChromiumImageUsage chromium_image_usage_;

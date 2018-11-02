@@ -131,9 +131,9 @@ String NetworkInformation::effectiveType() const {
 
 unsigned long NetworkInformation::rtt() const {
   if (!observing_)
-    return RoundRtt(GetNetworkStateNotifier().TransportRtt());
+    return RoundRtt(GetNetworkStateNotifier().HttpRtt());
 
-  return transport_rtt_msec_;
+  return http_rtt_msec_;
 }
 
 double NetworkInformation::downlink() const {
@@ -152,16 +152,22 @@ void NetworkInformation::ConnectionChange(
     const Optional<double>& downlink_mbps) {
   DCHECK(GetExecutionContext()->IsContextThread());
 
-  unsigned long new_transport_rtt_msec = RoundRtt(transport_rtt);
+  unsigned long new_http_rtt_msec = RoundRtt(http_rtt);
   double new_downlink_mbps = RoundMbps(downlink_mbps);
-  // TODO(tbansal): https://crbug.com/719108. Dispatch |change| event if the
-  // expected network quality has changed.
 
   // This can happen if the observer removes and then adds itself again
-  // during notification, or if |http_rtt| was the only metric that changed.
+  // during notification, or if |transport_rtt| was the only metric that
+  // changed.
   if (type_ == type && downlink_max_mbps_ == downlink_max_mbps &&
       effective_type_ == effective_type &&
-      transport_rtt_msec_ == new_transport_rtt_msec &&
+      http_rtt_msec_ == new_http_rtt_msec &&
+      downlink_mbps_ == new_downlink_mbps) {
+    return;
+  }
+
+  if (!RuntimeEnabledFeatures::NetInfoDownlinkMaxEnabled() &&
+      effective_type_ == effective_type &&
+      http_rtt_msec_ == new_http_rtt_msec &&
       downlink_mbps_ == new_downlink_mbps) {
     return;
   }
@@ -169,11 +175,11 @@ void NetworkInformation::ConnectionChange(
   type_ = type;
   downlink_max_mbps_ = downlink_max_mbps;
   effective_type_ = effective_type;
-  transport_rtt_msec_ = new_transport_rtt_msec;
+  http_rtt_msec_ = new_http_rtt_msec;
   downlink_mbps_ = new_downlink_mbps;
   DispatchEvent(Event::Create(EventTypeNames::typechange));
 
-  if (RuntimeEnabledFeatures::netInfoDownlinkMaxEnabled())
+  if (RuntimeEnabledFeatures::NetInfoDownlinkMaxEnabled())
     DispatchEvent(Event::Create(EventTypeNames::change));
 }
 
@@ -244,7 +250,7 @@ NetworkInformation::NetworkInformation(ExecutionContext* context)
       type_(GetNetworkStateNotifier().ConnectionType()),
       downlink_max_mbps_(GetNetworkStateNotifier().MaxBandwidth()),
       effective_type_(GetNetworkStateNotifier().EffectiveType()),
-      transport_rtt_msec_(RoundRtt(GetNetworkStateNotifier().TransportRtt())),
+      http_rtt_msec_(RoundRtt(GetNetworkStateNotifier().HttpRtt())),
       downlink_mbps_(
           RoundMbps(GetNetworkStateNotifier().DownlinkThroughputMbps())),
       observing_(false),

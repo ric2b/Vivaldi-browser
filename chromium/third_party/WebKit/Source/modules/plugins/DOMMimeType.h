@@ -32,19 +32,17 @@ namespace blink {
 class DOMPlugin;
 class LocalFrame;
 
-class DOMMimeType final : public GarbageCollectedFinalized<DOMMimeType>,
+class DOMMimeType final : public GarbageCollected<DOMMimeType>,
                           public ScriptWrappable,
                           public ContextClient {
   USING_GARBAGE_COLLECTED_MIXIN(DOMMimeType);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static DOMMimeType* Create(PassRefPtr<PluginData> plugin_data,
-                             LocalFrame* frame,
-                             unsigned index) {
-    return new DOMMimeType(std::move(plugin_data), frame, index);
+  static DOMMimeType* Create(LocalFrame* frame,
+                             const MimeClassInfo& mime_class_info) {
+    return new DOMMimeType(frame, mime_class_info);
   }
-  virtual ~DOMMimeType();
 
   const String& type() const;
   String suffixes() const;
@@ -54,14 +52,9 @@ class DOMMimeType final : public GarbageCollectedFinalized<DOMMimeType>,
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  DOMMimeType(PassRefPtr<PluginData>, LocalFrame*, unsigned index);
+  DOMMimeType(LocalFrame*, const MimeClassInfo&);
 
-  const MimeClassInfo& GetMimeClassInfo() const {
-    return plugin_data_->Mimes()[index_];
-  }
-
-  RefPtr<PluginData> plugin_data_;
-  unsigned index_;
+  Member<const MimeClassInfo> mime_class_info_;
 };
 
 }  // namespace blink

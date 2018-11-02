@@ -12,6 +12,7 @@
 #include "base/callback.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/strings/string_piece.h"
 #include "base/synchronization/atomic_flag.h"
@@ -29,6 +30,10 @@
 #include "base/task_scheduler/task_tracker_posix.h"
 #endif
 
+#if defined(OS_WIN)
+#include "base/win/com_init_check_hook.h"
+#endif
+
 namespace base {
 
 class HistogramBase;
@@ -38,8 +43,19 @@ namespace internal {
 // Default TaskScheduler implementation. This class is thread-safe.
 class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
  public:
-  // |name| is used to label threads and histograms.
-  explicit TaskSchedulerImpl(StringPiece name);
+  using TaskTrackerImpl =
+#if defined(OS_POSIX) && !defined(OS_NACL_SFI)
+      TaskTrackerPosix;
+#else
+      TaskTracker;
+#endif
+
+  // |name| is used to label threads and histograms. |task_tracker| can be used
+  // for tests that need more execution control. By default, the production
+  // TaskTracker is used.
+  explicit TaskSchedulerImpl(StringPiece name,
+                             std::unique_ptr<TaskTrackerImpl> task_tracker =
+                                 MakeUnique<TaskTrackerImpl>());
   ~TaskSchedulerImpl() override;
 
   // TaskScheduler:
@@ -74,11 +90,7 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
 
   const std::string name_;
   Thread service_thread_;
-#if defined(OS_POSIX) && !defined(OS_NACL_SFI)
-  TaskTrackerPosix task_tracker_;
-#else
-  TaskTracker task_tracker_;
-#endif
+  const std::unique_ptr<TaskTrackerImpl> task_tracker_;
   DelayedTaskManager delayed_task_manager_;
   SchedulerSingleThreadTaskRunnerManager single_thread_task_runner_manager_;
 
@@ -89,6 +101,11 @@ class BASE_EXPORT TaskSchedulerImpl : public TaskScheduler {
 #if DCHECK_IS_ON()
   // Set once JoinForTesting() has returned.
   AtomicFlag join_for_testing_returned_;
+#endif
+
+#if defined(OS_WIN) && defined(COM_INIT_CHECK_HOOK_ENABLED)
+  // Provides COM initialization verification for supported builds.
+  base::win::ComInitCheckHook com_init_check_hook_;
 #endif
 
   DISALLOW_COPY_AND_ASSIGN(TaskSchedulerImpl);

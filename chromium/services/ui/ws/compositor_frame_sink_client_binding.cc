@@ -8,9 +8,9 @@ namespace ui {
 namespace ws {
 
 CompositorFrameSinkClientBinding::CompositorFrameSinkClientBinding(
-    cc::mojom::MojoCompositorFrameSinkClient* sink_client,
-    cc::mojom::MojoCompositorFrameSinkClientRequest sink_client_request,
-    cc::mojom::MojoCompositorFrameSinkAssociatedPtr compositor_frame_sink,
+    cc::mojom::CompositorFrameSinkClient* sink_client,
+    cc::mojom::CompositorFrameSinkClientRequest sink_client_request,
+    cc::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink,
     cc::mojom::DisplayPrivateAssociatedPtr display_private)
     : binding_(sink_client, std::move(sink_client_request)),
       display_private_(std::move(display_private)),
@@ -24,7 +24,7 @@ void CompositorFrameSinkClientBinding::SetNeedsBeginFrame(
 }
 
 void CompositorFrameSinkClientBinding::SubmitCompositorFrame(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
   if (local_surface_id != local_surface_id_) {
     local_surface_id_ = local_surface_id;
@@ -40,10 +40,6 @@ void CompositorFrameSinkClientBinding::SubmitCompositorFrame(
 void CompositorFrameSinkClientBinding::DidNotProduceFrame(
     const cc::BeginFrameAck& ack) {
   compositor_frame_sink_->DidNotProduceFrame(ack);
-}
-
-void CompositorFrameSinkClientBinding::EvictCurrentSurface() {
-  compositor_frame_sink_->EvictCurrentSurface();
 }
 
 }  // namespace ws

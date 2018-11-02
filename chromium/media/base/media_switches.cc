@@ -157,6 +157,10 @@ const char kEnableInternalMediaSession[] = "enable-internal-media-session";
 
 namespace autoplay {
 
+// Autoplay policy that requires a document user activation.
+const char kDocumentUserActivationRequiredPolicy[] =
+    "document-user-activation-required";
+
 // Autoplay policy that does not require any user gesture.
 const char kNoUserGestureRequiredPolicy[] = "no-user-gesture-required";
 
@@ -193,6 +197,10 @@ const base::Feature kResumeBackgroundVideo {
 #endif
 };
 
+// Display the Cast overlay button on the media controls.
+const base::Feature kMediaCastOverlayButton{"MediaCastOverlayButton",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use AndroidOverlay rather than ContentVideoView in clank?
 const base::Feature kUseAndroidOverlay{"use-android_overlay",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
@@ -204,6 +212,9 @@ const base::Feature kBackgroundVideoTrackOptimization{
 // Let video without audio be paused when it is playing in the background.
 const base::Feature kBackgroundVideoPauseOptimization{
     "BackgroundVideoPauseOptimization", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kComplexityBasedVideoBuffering{
+    "ComplexityBasedVideoBuffering", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Make MSE garbage collection algorithm more aggressive when we are under
 // moderate or critical memory pressure. This will relieve memory pressure by
@@ -220,6 +231,10 @@ const base::Feature kMojoCdm{"MojoCdm", base::FEATURE_DISABLED_BY_DEFAULT};
 const base::Feature kNewRemotePlaybackPipeline{
     "NewRemotePlaybackPipeline", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// CanPlayThrough issued according to standard.
+const base::Feature kSpecCompliantCanPlayThrough{
+    "SpecCompliantCanPlayThrough", base::FEATURE_ENABLED_BY_DEFAULT};
+
 // Use shared block-based buffering for media.
 const base::Feature kUseNewMediaCache{"use-new-media-cache",
                                       base::FEATURE_ENABLED_BY_DEFAULT};
@@ -227,6 +242,10 @@ const base::Feature kUseNewMediaCache{"use-new-media-cache",
 // Correct video colors based on output display?
 const base::Feature kVideoColorManagement{"video-color-management",
                                           base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Use SurfaceLayer instead of VideoLayer.
+const base::Feature kUseSurfaceLayerForVideo{"UseSurfaceLayerForVideo",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Inform video blitter of video color space.
 const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
@@ -238,15 +257,18 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 const base::Feature kExternalClearKeyForTesting{
     "external-clear-key-for-testing", base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kSupportExperimentalCdmInterface{
+    "SupportExperimentalCdmInterface", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables low-delay video rendering in media pipeline on "live" stream.
 const base::Feature kLowDelayVideoRenderingOnLiveStream{
     "low-delay-video-rendering-on-live-stream",
     base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables Media Engagement Index recording in order to bypass autoplay
-// policies.
-const base::Feature kMediaEngagement{"media-engagement",
-                                     base::FEATURE_DISABLED_BY_DEFAULT};
+// Enables Media Engagement Index recording. The data from which will
+// be used to bypass autoplay policies.
+const base::Feature kRecordMediaEngagementScores{
+    "RecordMediaEngagementScores", base::FEATURE_DISABLED_BY_DEFAULT};
 
 #if defined(OS_ANDROID)
 // Lock the screen orientation when a video goes fullscreen.
@@ -255,7 +277,7 @@ const base::Feature kVideoFullscreenOrientationLock{
 
 // Enter/exit fullscreen when device is rotated to/from the video orientation.
 const base::Feature kVideoRotateToFullscreen{"VideoRotateToFullscreen",
-                                             base::FEATURE_DISABLED_BY_DEFAULT};
+                                             base::FEATURE_ENABLED_BY_DEFAULT};
 
 // An experimental feature to enable persistent-license type support in MediaDrm
 // when using Encrypted Media Extensions (EME) API.
@@ -270,6 +292,11 @@ const base::Feature kMediaDrmPersistentLicense{
 // This is completely insecure - DO NOT USE except for testing.
 const base::Feature kD3D11VideoDecoding{"D3D11VideoDecoding",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Does NV12->NV12 video copy on the main thread right before the texture's
+// used by GL.
+const base::Feature kDelayCopyNV12Textures{"DelayCopyNV12Textures",
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables H264 HW encode acceleration using Media Foundation for Windows.
 const base::Feature kMediaFoundationH264Encoding{

@@ -26,7 +26,11 @@
 #include "core/dom/Script.h"
 #include "core/dom/ScriptRunner.h"
 #include "core/html/CrossOriginAttribute.h"
+#include "platform/bindings/ScriptWrappable.h"
+#include "platform/bindings/TraceWrapperMember.h"
+#include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/wtf/text/TextEncoding.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebURLRequest.h"
@@ -43,7 +47,8 @@ class Modulator;
 class ModulePendingScriptTreeClient;
 
 class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
-                                 public PendingScriptClient {
+                                 public PendingScriptClient,
+                                 public TraceWrapperBase {
   USING_GARBAGE_COLLECTED_MIXIN(ScriptLoader);
 
  public:
@@ -57,6 +62,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
 
   ~ScriptLoader() override;
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
   enum LegacyTypeSupport {
     kDisallowLegacyTypeInTypeAttribute,
@@ -75,19 +81,23 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
                          TextPosition::MinimumPosition(),
                      LegacyTypeSupport = kDisallowLegacyTypeInTypeAttribute);
 
-  String ScriptContent() const;
+  // https://html.spec.whatwg.org/#execute-the-script-block
+  // The single entry point of script execution.
+  // PendingScript::Dispose() is called in ExecuteScriptBlock().
+  //
+  // TODO(hiroshige): Replace ExecuteScript() calls with ExecuteScriptBlock().
+  //
+  // TODO(hiroshige): Currently this returns bool (true if success) only to
+  // preserve existing code structure around PrepareScript(). Clean up this.
+  bool ExecuteScriptBlock(PendingScript*, const KURL&);
 
   // Creates a PendingScript for external script whose fetch is started in
   // FetchClassicScript()/FetchModuleScriptTree().
   PendingScript* CreatePendingScript();
 
-  // Returns false if and only if execution was blocked.
-  bool ExecuteScript(const Script*);
+  // The entry point only for ScriptRunner that wraps ExecuteScriptBlock().
   virtual void Execute();
 
-  // XML parser calls these
-  void DispatchLoadEvent();
-  void DispatchErrorEvent();
   bool IsScriptTypeSupported(LegacyTypeSupport,
                              ScriptType& out_script_type) const;
 
@@ -152,7 +162,7 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
                           ParserDisposition,
                           CrossOriginAttributeValue,
                           SecurityOrigin*,
-                          const String& encoding);
+                          const WTF::TextEncoding&);
   // https://html.spec.whatwg.org/#fetch-a-module-script-tree
   void FetchModuleScriptTree(const KURL&,
                              Modulator*,
@@ -160,7 +170,15 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
                              ParserDisposition,
                              WebURLRequest::FetchCredentialsMode);
 
-  bool DoExecuteScript(const Script*);
+  enum class ExecuteScriptResult {
+    kShouldFireErrorEvent,
+    kShouldFireLoadEvent,
+    kShouldFireNone
+  };
+  WARN_UNUSED_RESULT ExecuteScriptResult ExecuteScript(const Script*);
+  ExecuteScriptResult DoExecuteScript(const Script*);
+  void DispatchLoadEvent();
+  void DispatchErrorEvent();
 
   // Clears the connection to the PendingScript.
   void DetachPendingScript();
@@ -224,8 +242,13 @@ class CORE_EXPORT ScriptLoader : public GarbageCollectedFinalized<ScriptLoader>,
 
   DocumentWriteIntervention document_write_intervention_;
 
-  Member<PendingScript> pending_script_;
-  Member<ModulePendingScriptTreeClient> module_tree_client_;
+  TraceWrapperMember<PendingScript> pending_script_;
+  TraceWrapperMember<ModulePendingScriptTreeClient> module_tree_client_;
+
+  // The context document at the time when PrepareScript() is executed.
+  // This is only used to check whether the script element is moved between
+  // documents and thus doesn't retain a strong reference.
+  WeakMember<Document> original_document_;
 };
 
 }  // namespace blink

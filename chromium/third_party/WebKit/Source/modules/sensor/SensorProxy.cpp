@@ -6,18 +6,20 @@
 
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/frame/LocalFrame.h"
+#include "core/page/FocusController.h"
 #include "modules/sensor/SensorProviderProxy.h"
 #include "platform/mojo/MojoHelper.h"
 #include "public/platform/Platform.h"
 
-using namespace device::mojom::blink;
-
 namespace blink {
+
+using namespace device::mojom::blink;
 
 SensorProxy::SensorProxy(SensorType sensor_type,
                          SensorProviderProxy* provider,
                          Page* page)
     : PageVisibilityObserver(page),
+      FocusChangedObserver(page),
       type_(sensor_type),
       mode_(ReportingMode::CONTINUOUS),
       provider_(provider),
@@ -111,15 +113,12 @@ const SensorConfiguration* SensorProxy::DefaultConfig() const {
 }
 
 void SensorProxy::UpdateSensorReading() {
-  DCHECK(IsInitialized());
-  int read_attempts = 0;
-  const int kMaxReadAttemptsCount = 10;
+  DCHECK(ShouldProcessReadings());
   device::SensorReading reading_data;
-  while (!TryReadFromBuffer(reading_data)) {
-    if (++read_attempts == kMaxReadAttemptsCount) {
-      HandleSensorError();
-      return;
-    }
+  if (!shared_buffer_handle_->is_valid() ||
+      !shared_buffer_reader_->GetReading(&reading_data)) {
+    HandleSensorError();
+    return;
   }
 
   if (reading_.timestamp != reading_data.timestamp) {
@@ -137,18 +136,16 @@ void SensorProxy::RaiseError() {
 
 void SensorProxy::SensorReadingChanged() {
   DCHECK_EQ(ReportingMode::ON_CHANGE, mode_);
-  UpdateSensorReading();
+  if (ShouldProcessReadings())
+    UpdateSensorReading();
 }
 
 void SensorProxy::PageVisibilityChanged() {
-  if (!IsInitialized())
-    return;
+  UpdateSuspendedStatus();
+}
 
-  if (GetPage()->VisibilityState() != kPageVisibilityStateVisible) {
-    Suspend();
-  } else {
-    Resume();
-  }
+void SensorProxy::FocusedFrameChanged() {
+  UpdateSuspendedStatus();
 }
 
 void SensorProxy::HandleSensorError() {
@@ -202,6 +199,11 @@ void SensorProxy::OnSensorCreated(SensorInitParamsPtr params,
     HandleSensorError();
     return;
   }
+
+  const auto* buffer = static_cast<const device::SensorReadingSharedBuffer*>(
+      shared_buffer_.get());
+  shared_buffer_reader_.reset(
+      new device::SensorReadingSharedBufferReader(buffer));
   frequency_limits_.first = params->minimum_frequency;
   frequency_limits_.second = params->maximum_frequency;
 
@@ -217,6 +219,8 @@ void SensorProxy::OnSensorCreated(SensorInitParamsPtr params,
       ConvertToBaseCallback(std::move(error_callback)));
 
   state_ = kInitialized;
+
+  UpdateSuspendedStatus();
 
   for (Observer* observer : observers_)
     observer->OnSensorInitialized();
@@ -237,8 +241,10 @@ void SensorProxy::OnAddConfigurationCompleted(
 
 void SensorProxy::OnRemoveConfigurationCompleted(double frequency,
                                                  bool result) {
-  if (!result)
+  if (!result) {
     DVLOG(1) << "Failure at sensor configuration removal";
+    return;
+  }
 
   size_t index = frequencies_used_.Find(frequency);
   if (index == kNotFound) {
@@ -247,30 +253,22 @@ void SensorProxy::OnRemoveConfigurationCompleted(double frequency,
   }
 
   frequencies_used_.erase(index);
-}
-
-bool SensorProxy::TryReadFromBuffer(device::SensorReading& result) {
-  DCHECK(IsInitialized());
-  const ReadingBuffer* buffer =
-      static_cast<const ReadingBuffer*>(shared_buffer_.get());
-  const device::OneWriterSeqLock& seqlock = buffer->seqlock.value();
-  auto version = seqlock.ReadBegin();
-  auto reading_data = buffer->reading;
-  if (seqlock.ReadRetry(version))
-    return false;
-  result = reading_data;
-  return true;
+  UpdatePollingStatus();
 }
 
 void SensorProxy::OnPollingTimer(TimerBase*) {
   UpdateSensorReading();
 }
 
+bool SensorProxy::ShouldProcessReadings() const {
+  return IsInitialized() && !suspended_ && !frequencies_used_.IsEmpty();
+}
+
 void SensorProxy::UpdatePollingStatus() {
-  bool start_polling = (mode_ == ReportingMode::CONTINUOUS) &&
-                       IsInitialized() && !suspended_ &&
-                       !frequencies_used_.IsEmpty();
-  if (start_polling) {
+  if (mode_ != ReportingMode::CONTINUOUS)
+    return;
+
+  if (ShouldProcessReadings()) {
     // TODO(crbug/721297) : We need to find out an algorithm for resulting
     // polling frequency.
     polling_timer_.StartRepeating(1 / frequencies_used_.back(),
@@ -278,6 +276,23 @@ void SensorProxy::UpdatePollingStatus() {
   } else {
     polling_timer_.Stop();
   }
+}
+
+void SensorProxy::UpdateSuspendedStatus() {
+  if (!IsInitialized())
+    return;
+
+  bool page_visible =
+      GetPage()->VisibilityState() == kPageVisibilityStateVisible;
+
+  LocalFrame* focused_frame = GetPage()->GetFocusController().FocusedFrame();
+  bool main_frame_focused =
+      focused_frame && !focused_frame->IsCrossOriginSubframe();
+
+  if (page_visible && main_frame_focused)
+    Resume();
+  else
+    Suspend();
 }
 
 }  // namespace blink

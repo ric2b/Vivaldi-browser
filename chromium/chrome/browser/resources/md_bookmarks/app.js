@@ -6,6 +6,7 @@ Polymer({
   is: 'bookmarks-app',
 
   behaviors: [
+    bookmarks.MouseFocusBehavior,
     bookmarks.StoreClient,
   ],
 
@@ -56,6 +57,12 @@ Polymer({
 
       bookmarks.Store.getInstance().init(initialState);
       bookmarks.ApiListener.init();
+
+      setTimeout(function() {
+        chrome.metricsPrivate.recordTime(
+            'BookmarkManager.ResultsRenderedTime',
+            Math.floor(window.performance.now()));
+      });
 
     }.bind(this));
 
@@ -115,6 +122,11 @@ Polymer({
         return node.id;
       });
       this.dispatch(bookmarks.actions.setSearchResults(ids));
+      this.fire('iron-announce', {
+        text: ids.length > 0 ?
+            loadTimeData.getStringF('searchResults', this.searchTerm_) :
+            loadTimeData.getString('noSearchResults')
+      });
     }.bind(this));
   },
 

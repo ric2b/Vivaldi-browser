@@ -82,13 +82,10 @@ class ArcKioskAppManagerTest : public InProcessBrowserTest {
   ~ArcKioskAppManagerTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
     arc::SetArcAvailableCommandLineForTesting(command_line);
   }
 
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-
     settings_helper_.ReplaceProvider(kAccountsPrefDeviceLocalAccounts);
     owner_settings_service_ =
         settings_helper_.CreateOwnerSettingsService(browser()->profile());

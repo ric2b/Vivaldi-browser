@@ -34,16 +34,16 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/Fullscreen.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NthIndexCache.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/FlatTreeTraversal.h"
-#include "core/dom/shadow/InsertionPoint.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/V0InsertionPoint.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/LocalFrame.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLInputElement.h"
@@ -417,9 +417,10 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
 
     case CSSSelector::kShadowPseudo: {
       if (!is_ua_rule_ && mode_ != kQueryingRules &&
-          context.selector->GetPseudoType() == CSSSelector::kPseudoShadow)
+          context.selector->GetPseudoType() == CSSSelector::kPseudoShadow) {
         Deprecation::CountDeprecation(context.element->GetDocument(),
-                                      UseCounter::kCSSSelectorPseudoShadow);
+                                      WebFeature::kCSSSelectorPseudoShadow);
+      }
       // If we're in the same tree-scope as the scoping element, then following
       // a shadow descendant combinator would escape that and thus the scope.
       if (context.scope && context.scope->OwnerShadowHost() &&
@@ -435,9 +436,10 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
     }
 
     case CSSSelector::kShadowDeep: {
-      if (!is_ua_rule_ && mode_ != kQueryingRules)
+      if (!is_ua_rule_ && mode_ != kQueryingRules) {
         Deprecation::CountDeprecation(context.element->GetDocument(),
-                                      UseCounter::kCSSDeepCombinator);
+                                      WebFeature::kCSSDeepCombinator);
+      }
       if (ShadowRoot* root = context.element->ContainingShadowRoot()) {
         if (root->GetType() == ShadowRootType::kUserAgent)
           return kSelectorFailsCompletely;
@@ -450,9 +452,10 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
              element = element->ParentOrShadowHostElement()) {
           if (MatchForPseudoContent(next_context, *element, result) ==
               kSelectorMatches) {
-            if (context.element->IsInShadowTree())
+            if (context.element->IsInShadowTree()) {
               UseCounter::Count(context.element->GetDocument(),
-                                UseCounter::kCSSDeepCombinatorAndShadow);
+                                WebFeature::kCSSDeepCombinatorAndShadow);
+            }
             return kSelectorMatches;
           }
         }
@@ -464,9 +467,10 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
            next_context.element =
                ParentOrV0ShadowHostElement(*next_context.element)) {
         MatchStatus match = MatchSelector(next_context, result);
-        if (match == kSelectorMatches && context.element->IsInShadowTree())
+        if (match == kSelectorMatches && context.element->IsInShadowTree()) {
           UseCounter::Count(context.element->GetDocument(),
-                            UseCounter::kCSSDeepCombinatorAndShadow);
+                            WebFeature::kCSSDeepCombinatorAndShadow);
+        }
         if (match == kSelectorMatches || match == kSelectorFailsCompletely)
           return match;
         if (NextSelectorExceedsScope(next_context))
@@ -478,7 +482,7 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForRelation(
     case CSSSelector::kShadowPiercingDescendant: {
       DCHECK_EQ(mode_, kQueryingRules);
       UseCounter::Count(context.element->GetDocument(),
-                        UseCounter::kCSSShadowPiercingDescendantCombinator);
+                        WebFeature::kCSSShadowPiercingDescendantCombinator);
       // TODO(kochi): parentOrOpenShadowHostElement() is necessary because
       // SelectorQuery can pass V0 shadow roots. All closed shadow roots are
       // already filtered out, thus once V0 is removed this logic can use
@@ -517,7 +521,7 @@ SelectorChecker::MatchStatus SelectorChecker::MatchForPseudoContent(
     const SelectorCheckingContext& context,
     const Element& element,
     MatchResult& result) const {
-  HeapVector<Member<InsertionPoint>, 8> insertion_points;
+  HeapVector<Member<V0InsertionPoint>, 8> insertion_points;
   CollectDestinationInsertionPoints(element, insertion_points);
   SelectorCheckingContext next_context(context);
   for (const auto& insertion_point : insertion_points) {
@@ -653,7 +657,7 @@ static bool AnyAttributeMatches(Element& element,
         AttributeValueMatches(attribute_item, match, selector_value,
                               kTextCaseASCIIInsensitive)) {
       UseCounter::Count(element.GetDocument(),
-                        UseCounter::kCaseInsensitiveAttrSelectorMatch);
+                        WebFeature::kCaseInsensitiveAttrSelectorMatch);
       return true;
     }
     if (selector_attr.NamespaceURI() != g_star_atom)
@@ -928,13 +932,9 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoFocus:
       if (mode_ == kSharingRules)
         return true;
-      if (mode_ == kResolvingStyle) {
-        if (context.in_rightmost_compound) {
-          element_style_->SetAffectedByFocus();
-        } else {
-          element_style_->SetUnique();
-          element.SetChildrenOrSiblingsAffectedByFocus();
-        }
+      if (mode_ == kResolvingStyle && !context.in_rightmost_compound) {
+        element_style_->SetUnique();
+        element.SetChildrenOrSiblingsAffectedByFocus();
       }
       return MatchesFocusPseudoClass(element);
     case CSSSelector::kPseudoFocusWithin:
@@ -1059,15 +1059,16 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
       if (IsHTMLFrameElementBase(element) &&
           element.ContainsFullScreenElement())
         return true;
-      return Fullscreen::IsCurrentFullScreenElement(element);
+      return Fullscreen::IsFullscreenElement(element);
     case CSSSelector::kPseudoFullScreenAncestor:
       return element.ContainsFullScreenElement();
     case CSSSelector::kPseudoVideoPersistent:
-      if (!is_ua_rule_ || !isHTMLVideoElement(element))
-        return false;
-      return toHTMLVideoElement(element).IsPersistent();
+      DCHECK(is_ua_rule_);
+      return isHTMLVideoElement(element) &&
+             toHTMLVideoElement(element).IsPersistent();
     case CSSSelector::kPseudoVideoPersistentAncestor:
-      return is_ua_rule_ && element.ContainsPersistentVideo();
+      DCHECK(is_ua_rule_);
+      return element.ContainsPersistentVideo();
     case CSSSelector::kPseudoInRange:
       if (mode_ == kResolvingStyle)
         element.GetDocument().SetContainsValidityStyleRules();
@@ -1089,18 +1090,18 @@ bool SelectorChecker::CheckPseudoClass(const SelectorCheckingContext& context,
     case CSSSelector::kPseudoUnresolved:
       return element.IsUnresolvedV0CustomElement();
     case CSSSelector::kPseudoDefined:
-      DCHECK(RuntimeEnabledFeatures::customElementsV1Enabled());
       return element.IsDefined();
     case CSSSelector::kPseudoHost:
     case CSSSelector::kPseudoHostContext:
       return CheckPseudoHost(context, result);
     case CSSSelector::kPseudoSpatialNavigationFocus:
-      return is_ua_rule_ && MatchesSpatialNavigationFocusPseudoClass(element);
+      DCHECK(is_ua_rule_);
+      return MatchesSpatialNavigationFocusPseudoClass(element);
     case CSSSelector::kPseudoListBox:
-      return is_ua_rule_ && MatchesListBoxPseudoClass(element);
+      DCHECK(is_ua_rule_);
+      return MatchesListBoxPseudoClass(element);
     case CSSSelector::kPseudoHostHasAppearance:
-      if (!is_ua_rule_)
-        return false;
+      DCHECK(is_ua_rule_);
       if (ShadowRoot* root = element.ContainingShadowRoot()) {
         if (root->GetType() != ShadowRootType::kUserAgent)
           return false;
@@ -1164,8 +1165,7 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
       return false;
     }
     case CSSSelector::kPseudoBlinkInternalElement:
-      if (!is_ua_rule_)
-        return false;
+      DCHECK(is_ua_rule_);
       if (ShadowRoot* root = element.ContainingShadowRoot())
         return root->GetType() == ShadowRootType::kUserAgent &&
                element.ShadowPseudoId() == selector.Value();
@@ -1183,7 +1183,7 @@ bool SelectorChecker::CheckPseudoElement(const SelectorCheckingContext& context,
       return Match(sub_context);
     }
     case CSSSelector::kPseudoContent:
-      return element.IsInShadowTree() && element.IsInsertionPoint();
+      return element.IsInShadowTree() && element.IsV0InsertionPoint();
     case CSSSelector::kPseudoShadow:
       return element.IsInShadowTree() && context.previous_element;
     default:

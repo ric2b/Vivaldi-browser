@@ -5,13 +5,12 @@
 package org.chromium.chrome.browser.search_engines;
 
 import android.net.Uri;
-import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
 
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.RuleChain;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
@@ -21,9 +20,9 @@ import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.LoadListener;
 import org.chromium.chrome.browser.search_engines.TemplateUrlService.TemplateUrl;
-import org.chromium.chrome.test.util.ApplicationData;
+import org.chromium.chrome.browser.test.ChromeBrowserTestRule;
+import org.chromium.chrome.browser.test.ClearAppDataTestRule;
 import org.chromium.chrome.test.util.ChromeRestriction;
-import org.chromium.content.browser.test.NativeLibraryTestRule;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 
@@ -38,7 +37,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 @RunWith(BaseJUnit4ClassRunner.class)
 public class TemplateUrlServiceTest {
     @Rule
-    public NativeLibraryTestRule mActivityTestRule = new NativeLibraryTestRule();
+    public final RuleChain mChain =
+            RuleChain.outerRule(new ClearAppDataTestRule()).around(new ChromeBrowserTestRule());
 
     private static final String QUERY_PARAMETER = "q";
     private static final String QUERY_VALUE = "cat";
@@ -52,13 +52,6 @@ public class TemplateUrlServiceTest {
 
     private static final String PREFETCH_PARAMETER = "pf";
     private static final String PREFETCH_VALUE = "c";
-
-    @Before
-    public void setUp() throws Exception {
-        ApplicationData.clearAppData(
-                InstrumentationRegistry.getInstrumentation().getTargetContext());
-        mActivityTestRule.loadNativeLibraryAndInitBrowserProcess();
-    }
 
     @Test
     @SmallTest
@@ -192,13 +185,7 @@ public class TemplateUrlServiceTest {
         final TemplateUrlService templateUrlService = waitForTemplateUrlServiceToLoad();
 
         // Get the number of prepopulated search engine.
-        final int prepopulatedEngineNum =
-                ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
-                    @Override
-                    public Integer call() throws Exception {
-                        return templateUrlService.getSearchEngines().size();
-                    }
-                });
+        final int prepopulatedEngineNum = getSearchEngineCount(templateUrlService);
 
         // Add custom search engines and verified only engines visited within 2 days are added.
         // Also verified custom engines are sorted correctly.
@@ -265,6 +252,40 @@ public class TemplateUrlServiceTest {
         Assert.assertEquals("keyword3", customSearchEngines.get(1).getKeyword());
         Assert.assertEquals("keyword5", customSearchEngines.get(2).getKeyword());
         Assert.assertEquals("keyword2", customSearchEngines.get(3).getKeyword());
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"SearchEngines"})
+    public void testDisableFiltering() {
+        final TemplateUrlService templateUrlService = waitForTemplateUrlServiceToLoad();
+
+        // Get the number of prepopulated search engine.
+        final int prepopulatedEngineNum = getSearchEngineCount(templateUrlService);
+
+        ThreadUtils.runOnUiThreadBlocking(new Runnable() {
+            @Override
+            public void run() {
+                for (int i = 0; i < 10; i++) {
+                    templateUrlService.addSearchEngineForTesting("keyword" + i, 0);
+                }
+            }
+        });
+
+        Assert.assertEquals(prepopulatedEngineNum + 3, getSearchEngineCount(templateUrlService));
+        templateUrlService.setFilteringDisabled(true);
+        Assert.assertEquals(prepopulatedEngineNum + 10, getSearchEngineCount(templateUrlService));
+        templateUrlService.setFilteringDisabled(false);
+        Assert.assertEquals(prepopulatedEngineNum + 3, getSearchEngineCount(templateUrlService));
+    }
+
+    private int getSearchEngineCount(final TemplateUrlService templateUrlService) {
+        return ThreadUtils.runOnUiThreadBlockingNoException(new Callable<Integer>() {
+            @Override
+            public Integer call() throws Exception {
+                return templateUrlService.getSearchEngines().size();
+            }
+        });
     }
 
     private TemplateUrlService waitForTemplateUrlServiceToLoad() {

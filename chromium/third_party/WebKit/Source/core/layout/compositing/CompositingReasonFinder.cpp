@@ -6,10 +6,11 @@
 
 #include "core/CSSPropertyNames.h"
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutView.h"
 #include "core/page/Page.h"
+#include "core/page/scrolling/RootScrollerUtil.h"
 #include "core/paint/PaintLayer.h"
 
 namespace blink {
@@ -39,7 +40,7 @@ bool CompositingReasonFinder::IsMainFrame() const {
 CompositingReasons CompositingReasonFinder::DirectReasons(
     const PaintLayer* layer,
     bool ignore_lcd_text) const {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return kCompositingReasonNone;
 
   DCHECK_EQ(PotentialCompositingReasonsFromStyle(layer->GetLayoutObject()),
@@ -68,7 +69,7 @@ bool CompositingReasonFinder::RequiresCompositingForScrollableFrame() const {
 CompositingReasons
 CompositingReasonFinder::PotentialCompositingReasonsFromStyle(
     LayoutObject& layout_object) const {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return kCompositingReasonNone;
 
   CompositingReasons reasons = kCompositingReasonNone;
@@ -78,7 +79,7 @@ CompositingReasonFinder::PotentialCompositingReasonsFromStyle(
   if (RequiresCompositingForTransform(layout_object))
     reasons |= kCompositingReason3DTransform;
 
-  if (style.BackfaceVisibility() == kBackfaceVisibilityHidden)
+  if (style.BackfaceVisibility() == EBackfaceVisibility::kHidden)
     reasons |= kCompositingReasonBackfaceVisibilityHidden;
 
   if (RequiresCompositingForAnimation(style))
@@ -91,14 +92,11 @@ CompositingReasonFinder::PotentialCompositingReasonsFromStyle(
   if (style.HasInlineTransform())
     reasons |= kCompositingReasonInlineTransform;
 
-  if (style.UsedTransformStyle3D() == kTransformStyle3DPreserve3D)
+  if (style.UsedTransformStyle3D() == ETransformStyle3D::kPreserve3d)
     reasons |= kCompositingReasonPreserve3DWith3DDescendants;
 
   if (style.HasPerspective())
     reasons |= kCompositingReasonPerspectiveWith3DDescendants;
-
-  if (style.HasCompositorProxy())
-    reasons |= kCompositingReasonCompositorProxy;
 
   // If the implementation of createsGroup changes, we need to be aware of that
   // in this part of code.
@@ -152,6 +150,12 @@ CompositingReasons CompositingReasonFinder::NonStyleDeterminedDirectReasons(
 
   if (layer->NeedsCompositedScrolling())
     direct_reasons |= kCompositingReasonOverflowScrollingTouch;
+
+  // When RLS is disabled, the root layer may be the root scroller but
+  // the FrameView/Compositor handles its scrolling so there's no need to
+  // composite it.
+  if (RootScrollerUtil::IsGlobal(*layer) && !layer->IsScrolledByFrameView())
+    direct_reasons |= kCompositingReasonRootScroller;
 
   // Composite |layer| if it is inside of an ancestor scrolling layer, but that
   // scrolling layer is not on the stacking context ancestor chain of |layer|.
@@ -216,13 +220,13 @@ bool CompositingReasonFinder::RequiresCompositingForTransformAnimation(
 bool CompositingReasonFinder::RequiresCompositingForScrollDependentPosition(
     const PaintLayer* layer,
     bool ignore_lcd_text) const {
-  if (layer->GetLayoutObject().Style()->GetPosition() != EPosition::kFixed &&
-      layer->GetLayoutObject().Style()->GetPosition() != EPosition::kSticky)
+  if (!layer->GetLayoutObject().Style()->HasViewportConstrainedPosition() &&
+      !layer->GetLayoutObject().Style()->HasStickyConstrainedPosition())
     return false;
 
   if (!(ignore_lcd_text ||
         (compositing_triggers_ & kViewportConstrainedPositionedTrigger)) &&
-      (!RuntimeEnabledFeatures::compositeOpaqueFixedPositionEnabled() ||
+      (!RuntimeEnabledFeatures::CompositeOpaqueFixedPositionEnabled() ||
        !layer->BackgroundIsKnownToBeOpaqueInRect(
            LayoutRect(layer->BoundingBoxForCompositing())) ||
        layer->CompositesWithTransform() || layer->CompositesWithOpacity())) {

@@ -42,11 +42,8 @@
 #include "core/inspector/ConsoleMessageStorage.h"
 #include "core/inspector/WorkerInspectorController.h"
 #include "core/inspector/WorkerThreadDebugger.h"
-#include "core/loader/WorkerFetchContext.h"
 #include "core/loader/WorkerThreadableLoader.h"
 #include "core/probe/CoreProbes.h"
-#include "core/workers/WorkerClients.h"
-#include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerLocation.h"
 #include "core/workers/WorkerNavigator.h"
 #include "core/workers/WorkerReportingProxy.h"
@@ -54,7 +51,6 @@
 #include "core/workers/WorkerThread.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/InstanceCounters.h"
-#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/network/ContentSecurityPolicyParsers.h"
 #include "platform/scheduler/child/web_scheduler.h"
@@ -111,13 +107,13 @@ void WorkerGlobalScope::Dispose() {
   WorkerOrWorkletGlobalScope::Dispose();
 }
 
-void WorkerGlobalScope::ReportFeature(UseCounter::Feature feature) {
+void WorkerGlobalScope::ReportFeature(WebFeature feature) {
   DCHECK(IsContextThread());
   DCHECK(thread_);
   thread_->GetWorkerReportingProxy().CountFeature(feature);
 }
 
-void WorkerGlobalScope::ReportDeprecation(UseCounter::Feature feature) {
+void WorkerGlobalScope::ReportDeprecation(WebFeature feature) {
   DCHECK(IsContextThread());
   DCHECK(thread_);
   thread_->GetWorkerReportingProxy().CountDeprecation(feature);
@@ -196,9 +192,8 @@ void WorkerGlobalScope::importScripts(const Vector<String>& urls,
 
   for (const KURL& complete_url : completed_urls) {
     RefPtr<WorkerScriptLoader> script_loader(WorkerScriptLoader::Create());
-    script_loader->SetRequestContext(WebURLRequest::kRequestContextScript);
     script_loader->LoadSynchronously(
-        execution_context, complete_url, kAllowCrossOriginRequests,
+        execution_context, complete_url, WebURLRequest::kRequestContextScript,
         execution_context.GetSecurityContext().AddressSpace());
 
     // If the fetching attempt failed, throw a NetworkError exception and
@@ -275,6 +270,8 @@ WorkerEventQueue* WorkerGlobalScope::GetEventQueue() const {
 }
 
 CoreProbeSink* WorkerGlobalScope::GetProbeSink() {
+  if (IsClosing())
+    return nullptr;
   if (WorkerInspectorController* controller =
           GetThread()->GetWorkerInspectorController())
     return controller->GetProbeSink();
@@ -298,14 +295,6 @@ ExecutionContext* WorkerGlobalScope::GetExecutionContext() const {
   return const_cast<WorkerGlobalScope*>(this);
 }
 
-WorkerFetchContext* WorkerGlobalScope::GetFetchContext() {
-  DCHECK(RuntimeEnabledFeatures::offMainThreadFetchEnabled());
-  if (fetch_context_)
-    return fetch_context_;
-  fetch_context_ = WorkerFetchContext::Create(*this);
-  return fetch_context_;
-}
-
 WorkerGlobalScope::WorkerGlobalScope(
     const KURL& url,
     const String& user_agent,
@@ -314,13 +303,12 @@ WorkerGlobalScope::WorkerGlobalScope(
     std::unique_ptr<SecurityOrigin::PrivilegeData>
         starter_origin_privilage_data,
     WorkerClients* worker_clients)
-    : WorkerOrWorkletGlobalScope(thread->GetIsolate()),
+    : WorkerOrWorkletGlobalScope(thread->GetIsolate(), worker_clients),
       url_(url),
       user_agent_(user_agent),
       v8_cache_options_(kV8CacheOptionsDefault),
       thread_(thread),
       event_queue_(WorkerEventQueue::Create(this)),
-      worker_clients_(worker_clients),
       timers_(TaskRunnerHelper::Get(TaskType::kTimer, this)),
       time_origin_(time_origin) {
   InstanceCounters::IncrementCounter(
@@ -329,9 +317,6 @@ WorkerGlobalScope::WorkerGlobalScope(
   if (starter_origin_privilage_data)
     GetSecurityOrigin()->TransferPrivilegesFrom(
         std::move(starter_origin_privilage_data));
-
-  if (worker_clients_)
-    worker_clients_->ReattachThread();
 }
 
 void WorkerGlobalScope::ApplyContentSecurityPolicyFromVector(
@@ -377,7 +362,6 @@ DEFINE_TRACE(WorkerGlobalScope) {
   visitor->Trace(timers_);
   visitor->Trace(event_listeners_);
   visitor->Trace(pending_error_events_);
-  visitor->Trace(fetch_context_);
   EventTargetWithInlineData::Trace(visitor);
   SecurityContext::Trace(visitor);
   WorkerOrWorkletGlobalScope::Trace(visitor);

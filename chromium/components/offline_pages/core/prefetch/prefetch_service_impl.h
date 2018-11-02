@@ -8,23 +8,53 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "components/offline_pages/core/offline_event_logger.h"
 #include "components/offline_pages/core/prefetch/prefetch_service.h"
+#include "components/offline_pages/core/prefetch/prefetch_types.h"
 
 namespace offline_pages {
 
 class PrefetchServiceImpl : public PrefetchService {
  public:
-  PrefetchServiceImpl();
+  PrefetchServiceImpl(
+      std::unique_ptr<OfflineMetricsCollector> offline_metrics_collector,
+      std::unique_ptr<PrefetchDispatcher> dispatcher,
+      std::unique_ptr<PrefetchGCMHandler> gcm_handler,
+      std::unique_ptr<PrefetchNetworkRequestFactory> network_request_factory,
+      std::unique_ptr<PrefetchStore> prefetch_store,
+      std::unique_ptr<SuggestedArticlesObserver> suggested_articles_observer,
+      std::unique_ptr<PrefetchDownloader> prefetch_downloader,
+      std::unique_ptr<PrefetchImporter> prefetch_importer);
   ~PrefetchServiceImpl() override;
 
   // PrefetchService implementation:
-  PrefetchDispatcher* GetDispatcher() override;
+  OfflineMetricsCollector* GetOfflineMetricsCollector() override;
+  PrefetchDispatcher* GetPrefetchDispatcher() override;
+  PrefetchGCMHandler* GetPrefetchGCMHandler() override;
+  PrefetchNetworkRequestFactory* GetPrefetchNetworkRequestFactory() override;
+  PrefetchStore* GetPrefetchStore() override;
+  SuggestedArticlesObserver* GetSuggestedArticlesObserver() override;
+  OfflineEventLogger* GetLogger() override;
+  PrefetchDownloader* GetPrefetchDownloader() override;
+  PrefetchImporter* GetPrefetchImporter() override;
 
   // KeyedService implementation:
   void Shutdown() override;
 
  private:
-  std::unique_ptr<PrefetchDispatcher> dispatcher_;
+  // Called when a download completes.
+  void OnDownloadCompleted(const PrefetchDownloadResult& result);
+
+  OfflineEventLogger logger_;
+
+  std::unique_ptr<OfflineMetricsCollector> offline_metrics_collector_;
+  std::unique_ptr<PrefetchDispatcher> prefetch_dispatcher_;
+  std::unique_ptr<PrefetchGCMHandler> prefetch_gcm_handler_;
+  std::unique_ptr<PrefetchNetworkRequestFactory> network_request_factory_;
+  std::unique_ptr<PrefetchStore> prefetch_store_;
+  std::unique_ptr<SuggestedArticlesObserver> suggested_articles_observer_;
+  std::unique_ptr<PrefetchDownloader> prefetch_downloader_;
+  std::unique_ptr<PrefetchImporter> prefetch_importer_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchServiceImpl);
 };

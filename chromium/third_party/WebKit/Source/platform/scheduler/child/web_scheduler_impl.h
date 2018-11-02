@@ -43,7 +43,7 @@ class PLATFORM_EXPORT WebSchedulerImpl : public WebScheduler {
   WebTaskRunner* CompositorTaskRunner() override;
   std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
-      WebViewScheduler::WebViewSchedulerSettings*) override;
+      WebViewScheduler::WebViewSchedulerDelegate*) override;
   void SuspendTimerQueue() override {}
   void ResumeTimerQueue() override {}
   void AddPendingNavigation(

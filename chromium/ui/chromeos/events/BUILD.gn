@@ -12,12 +12,15 @@ source_set("events") {
   sources = [
     "event_rewriter_chromeos.cc",
     "event_rewriter_chromeos.h",
+    "keyboard_layout_util.cc",
+    "keyboard_layout_util.h",
     "pref_names.cc",
     "pref_names.h",
   ]
   deps = [
     "//base",
     "//chromeos",
+    "//device/udev_linux",
     "//ui/base/ime",
     "//ui/events",
     "//ui/events:dom_keycode_converter",

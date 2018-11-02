@@ -170,7 +170,8 @@ void DownloadHandler::Initialize(
   drive_tmp_download_path_ = drive_tmp_download_path;
 
   if (download_manager) {
-    notifier_.reset(new AllDownloadItemNotifier(download_manager, this));
+    notifier_.reset(
+        new download::AllDownloadItemNotifier(download_manager, this));
     // Remove any persisted Drive DownloadItem. crbug.com/171384
     DownloadManager::DownloadVector downloads;
     download_manager->GetAllDownloads(&downloads);
@@ -183,8 +184,8 @@ void DownloadHandler::Initialize(
 
 void DownloadHandler::ObserveIncognitoDownloadManager(
     DownloadManager* download_manager) {
-  notifier_incognito_.reset(new AllDownloadItemNotifier(download_manager,
-                                                        this));
+  notifier_incognito_.reset(
+      new download::AllDownloadItemNotifier(download_manager, this));
 }
 
 void DownloadHandler::SubstituteDriveDownloadPath(
@@ -287,8 +288,9 @@ void DownloadHandler::FreeDiskSpaceIfNeeded() {
     return;
 
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&DownloadHandler::FreeDiskSpaceIfNeededImmediately,
-                            weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&DownloadHandler::FreeDiskSpaceIfNeededImmediately,
+                     weak_ptr_factory_.GetWeakPtr()),
       free_disk_space_delay_);
 
   has_pending_free_disk_space_ = true;
@@ -322,12 +324,11 @@ void DownloadHandler::OnDownloadCreated(DownloadManager* manager,
   // Remove any persisted Drive DownloadItem. crbug.com/171384
   if (IsPersistedDriveDownload(drive_tmp_download_path_, download)) {
     // Remove download later, since doing it here results in a crash.
-    BrowserThread::PostTask(BrowserThread::UI,
-                            FROM_HERE,
-                            base::Bind(&DownloadHandler::RemoveDownload,
-                                       weak_ptr_factory_.GetWeakPtr(),
-                                       static_cast<void*>(manager),
-                                       download->GetId()));
+    BrowserThread::PostTask(
+        BrowserThread::UI, FROM_HERE,
+        base::BindOnce(&DownloadHandler::RemoveDownload,
+                       weak_ptr_factory_.GetWeakPtr(),
+                       static_cast<void*>(manager), download->GetId()));
   }
 }
 

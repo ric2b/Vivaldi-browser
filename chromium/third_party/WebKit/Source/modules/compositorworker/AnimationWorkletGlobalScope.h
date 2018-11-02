@@ -7,14 +7,18 @@
 
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/workers/ThreadedWorkletGlobalScope.h"
+#include "modules/ModulesExport.h"
 #include "modules/compositorworker/Animator.h"
 #include "modules/compositorworker/AnimatorDefinition.h"
+#include "platform/bindings/ScriptWrappable.h"
 
 namespace blink {
 
 class ExceptionState;
+class WorkerClients;
 
-class AnimationWorkletGlobalScope : public ThreadedWorkletGlobalScope {
+class MODULES_EXPORT AnimationWorkletGlobalScope
+    : public ThreadedWorkletGlobalScope {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -22,30 +26,37 @@ class AnimationWorkletGlobalScope : public ThreadedWorkletGlobalScope {
                                              const String& user_agent,
                                              PassRefPtr<SecurityOrigin>,
                                              v8::Isolate*,
-                                             WorkerThread*);
+                                             WorkerThread*,
+                                             WorkerClients*);
   ~AnimationWorkletGlobalScope() override;
   DECLARE_TRACE();
+  DECLARE_TRACE_WRAPPERS();
+  void Dispose() override;
+  bool IsAnimationWorkletGlobalScope() const final { return true; }
 
-  void Dispose() final;
+  Animator* CreateInstance(const String& name);
+  void Mutate();
 
   void registerAnimator(const String& name,
                         const ScriptValue& ctorValue,
                         ExceptionState&);
 
-  Animator* CreateInstance(const String& name);
+  AnimatorDefinition* FindDefinitionForTest(const String& name);
 
  private:
   AnimationWorkletGlobalScope(const KURL&,
                               const String& user_agent,
                               PassRefPtr<SecurityOrigin>,
                               v8::Isolate*,
-                              WorkerThread*);
+                              WorkerThread*,
+                              WorkerClients*);
 
-  typedef HeapHashMap<String, Member<AnimatorDefinition>> DefinitionMap;
-  DefinitionMap m_animatorDefinitions;
+  typedef HeapHashMap<String, TraceWrapperMember<AnimatorDefinition>>
+      DefinitionMap;
+  DefinitionMap animator_definitions_;
 
-  typedef HeapVector<Member<Animator>> AnimatorList;
-  AnimatorList m_animators;
+  typedef HeapVector<TraceWrapperMember<Animator>> AnimatorList;
+  AnimatorList animators_;
 };
 
 }  // namespace blink

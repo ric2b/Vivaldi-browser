@@ -5,18 +5,14 @@
 #ifndef IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_DETAILS_COLLECTION_VIEW_CONTROLLER_H_
 #define IOS_CHROME_BROWSER_UI_SETTINGS_PASSWORD_DETAILS_COLLECTION_VIEW_CONTROLLER_H_
 
+#import "ios/chrome/browser/ui/settings/password_details_collection_view_controller_delegate.h"
 #import "ios/chrome/browser/ui/settings/settings_root_collection_view_controller.h"
 
 namespace autofill {
 struct PasswordForm;
 }  // namespace autofill
+
 @protocol ReauthenticationProtocol;
-
-@protocol PasswordDetailsCollectionViewControllerDelegate<NSObject>
-
-- (void)deletePassword:(const autofill::PasswordForm&)passwordForm;
-
-@end
 
 @interface PasswordDetailsCollectionViewController
     : SettingsRootCollectionViewController
@@ -24,15 +20,14 @@ struct PasswordForm;
 // The designated initializer. |delegate| and |reauthenticaionModule| must not
 // be nil.
 - (instancetype)
-  initWithPasswordForm:(autofill::PasswordForm)passwordForm
+  initWithPasswordForm:(const autofill::PasswordForm&)passwordForm
               delegate:
                   (id<PasswordDetailsCollectionViewControllerDelegate>)delegate
 reauthenticationModule:(id<ReauthenticationProtocol>)reauthenticationModule
-              username:(NSString*)username
-              password:(NSString*)password
-                origin:(NSString*)origin NS_DESIGNATED_INITIALIZER;
+    NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithStyle:(CollectionViewControllerStyle)style
+- (instancetype)initWithLayout:(UICollectionViewLayout*)layout
+                         style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
 @end

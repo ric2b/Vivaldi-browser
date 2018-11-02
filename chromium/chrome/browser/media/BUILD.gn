@@ -2,22 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-# TODO(miu): Decentralize build configuration: Move source files and deps
-# specific to chrome/browser/media sources from chrome/browser/BULID.gn and
-# chrome/test/BUILD.gn into this BUILD.gn file. Also, remove the root BUILD.gn
-# dependency on the cast_remoting_connector_fuzzer target after this is done.
+import("//mojo/public/tools/bindings/mojom.gni")
 
-import("//testing/libfuzzer/fuzzer_test.gni")
-
-fuzzer_test("cast_remoting_connector_fuzzer") {
+mojom("mojo_bindings") {
   sources = [
-    "cast_remoting_connector_fuzzertest.cc",
-    "cast_remoting_connector_messaging.cc",
-    "cast_remoting_connector_messaging.h",
+    "media_engagement_score_details.mojom",
   ]
-  deps = [
-    "//base",
+
+  public_deps = [
+    "//mojo/common:common_custom_types",
+    "//url/mojo:url_mojom_gurl",
   ]
-  libfuzzer_options = [ "max_len = 128" ]
-  seed_corpus = "../../test/data/cast/cast_remoting_connector_fuzz_corpus"
 }

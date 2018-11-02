@@ -36,6 +36,7 @@
 #include "ios/chrome/browser/ui/history/history_entry.h"
 #include "ios/chrome/browser/ui/history/history_service_facade_delegate.h"
 #include "ios/chrome/browser/ui/history/history_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -154,7 +155,8 @@ void HistoryServiceFacade::QueryHistory(const base::string16& search_text,
         search_text, options,
         base::Bind(&HistoryServiceFacade::WebHistoryQueryComplete,
                    base::Unretained(this), search_text, options,
-                   base::TimeTicks::Now()));
+                   base::TimeTicks::Now()),
+        NO_PARTIAL_TRAFFIC_ANNOTATION_YET);
     // Start a timer so we know when to give up.
     web_history_timer_.Start(
         FROM_HERE, base::TimeDelta::FromSeconds(kWebHistoryTimeoutSeconds),
@@ -239,8 +241,10 @@ void HistoryServiceFacade::RemoveHistoryEntries(
   if (web_history) {
     has_pending_delete_request_ = true;
     web_history->ExpireHistory(
-        expire_list, base::Bind(&HistoryServiceFacade::RemoveWebHistoryComplete,
-                                weak_factory_.GetWeakPtr()));
+        expire_list,
+        base::Bind(&HistoryServiceFacade::RemoveWebHistoryComplete,
+                   weak_factory_.GetWeakPtr()),
+        NO_PARTIAL_TRAFFIC_ANNOTATION_YET);
   }
 }
 
@@ -275,11 +279,11 @@ void HistoryServiceFacade::QueryComplete(const base::string16& search_text,
   DCHECK_EQ(0U, query_results_.size());
   query_results_.reserve(results->size());
 
-  for (history::URLResult* result : *results) {
+  for (const auto& result : *results) {
     query_results_.push_back(history::HistoryEntry(
-        history::HistoryEntry::LOCAL_ENTRY, result->url(), result->title(),
-        result->visit_time(), std::string(), !search_text.empty(),
-        result->snippet().text(), result->blocked_visit()));
+        history::HistoryEntry::LOCAL_ENTRY, result.url(), result.title(),
+        result.visit_time(), std::string(), !search_text.empty(),
+        result.snippet().text(), result.blocked_visit()));
   }
 
   results_info_value_.query = search_text;

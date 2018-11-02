@@ -167,6 +167,9 @@ void BlockPainter::PaintInlineBox(const InlineBox& inline_box,
 DISABLE_CFI_PERF
 void BlockPainter::PaintObject(const PaintInfo& paint_info,
                                const LayoutPoint& paint_offset) {
+  if (layout_block_.IsTruncated())
+    return;
+
   const PaintPhase paint_phase = paint_info.phase;
 
   if (ShouldPaintSelfBlockBackground(paint_phase)) {
@@ -201,7 +204,7 @@ void BlockPainter::PaintObject(const PaintInfo& paint_info,
     Optional<ScopedPaintChunkProperties> scoped_scroll_property;
     Optional<ScrollRecorder> scroll_recorder;
     Optional<PaintInfo> scrolled_paint_info;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
       const auto* object_properties = layout_block_.PaintProperties();
       auto* scroll_translation =
           object_properties ? object_properties->ScrollTranslation() : nullptr;

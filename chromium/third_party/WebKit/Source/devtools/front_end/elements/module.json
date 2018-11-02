@@ -271,10 +271,16 @@
     ],
     "resources": [
         "breadcrumbs.css",
+        "classesPaneWidget.css",
         "computedStyleSidebarPane.css",
+        "computedStyleWidgetTree.css",
         "elementsPanel.css",
+        "elementStatePaneWidget.css",
         "elementsTreeOutline.css",
+        "metricsSidebarPane.css",
         "platformFontsWidget.css",
-        "stylesSectionTree.css"
+        "propertiesWidget.css",
+        "stylesSectionTree.css",
+        "stylesSidebarPane.css"
     ]
 }

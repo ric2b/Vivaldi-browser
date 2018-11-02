@@ -35,7 +35,6 @@
 #include "content/browser/devtools/protocol/tracing_handler.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/render_frame_host_impl.h"
-#include "content/browser/renderer_host/input/input_router_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
@@ -50,7 +49,7 @@
 
 #if defined(OS_ANDROID)
 #include "content/public/browser/render_widget_host_view.h"
-#include "device/wake_lock/public/interfaces/wake_lock_context.mojom.h"
+#include "services/device/public/interfaces/wake_lock_context.mojom.h"
 #endif
 
 namespace content {
@@ -86,6 +85,8 @@ FrameTreeNode* GetFrameTreeNodeAncestor(FrameTreeNode* frame_tree_node) {
   return frame_tree_node;
 }
 
+const char* kPageNavigateCommand = "Page.navigate";
+
 }  // namespace
 
 // RenderFrameDevToolsAgentHost::FrameHostHolder -------------------------------
@@ -109,10 +110,10 @@ class RenderFrameDevToolsAgentHost::FrameHostHolder {
   bool ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
   void Suspend();
   void Resume();
+  std::string StateCookie() const { return chunk_processor_.state_cookie(); }
+  void ReattachWithCookie(std::string cookie);
 
  private:
-  void GrantPolicy();
-  void RevokePolicy();
   void SendMessageToClient(int session_id, const std::string& message);
 
   RenderFrameDevToolsAgentHost* agent_;
@@ -120,6 +121,11 @@ class RenderFrameDevToolsAgentHost::FrameHostHolder {
   bool attached_;
   bool suspended_;
   DevToolsMessageChunkProcessor chunk_processor_;
+  struct PendingMessage {
+    int session_id;
+    std::string method;
+    std::string message;
+  };
   // <session_id, message>
   std::vector<std::pair<int, std::string>> pending_messages_;
   // <call_id> -> PendingMessage
@@ -143,74 +149,52 @@ RenderFrameDevToolsAgentHost::FrameHostHolder::FrameHostHolder(
 
 RenderFrameDevToolsAgentHost::FrameHostHolder::~FrameHostHolder() {
   if (attached_)
-    RevokePolicy();
+    agent_->RevokePolicy(host_);
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Attach(
     DevToolsSession* session) {
   host_->Send(new DevToolsAgentMsg_Attach(
       host_->GetRoutingID(), agent_->GetId(), session->session_id()));
-  GrantPolicy();
+  agent_->GrantPolicy(host_);
   attached_ = true;
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Reattach(
     FrameHostHolder* old) {
-  if (old)
-    chunk_processor_.set_state_cookie(old->chunk_processor_.state_cookie());
-  host_->Send(new DevToolsAgentMsg_Reattach(
-      host_->GetRoutingID(), agent_->GetId(), agent_->session()->session_id(),
-      chunk_processor_.state_cookie()));
-  if (old) {
-    if (IsBrowserSideNavigationEnabled()) {
-      for (const auto& pair :
-               old->sent_messages_whose_reply_came_while_suspended_) {
-        DispatchProtocolMessage(pair.second.session_id, pair.first,
-                                pair.second.method, pair.second.message);
-      }
-    }
-    for (const auto& pair : old->sent_messages_) {
+  std::string cookie = old ? old->chunk_processor_.state_cookie() : "";
+  ReattachWithCookie(std::move(cookie));
+  if (!old)
+    return;
+  if (IsBrowserSideNavigationEnabled()) {
+    for (const auto& pair :
+         old->sent_messages_whose_reply_came_while_suspended_) {
       DispatchProtocolMessage(pair.second.session_id, pair.first,
                               pair.second.method, pair.second.message);
     }
   }
-  GrantPolicy();
+  for (const auto& pair : old->sent_messages_) {
+    DispatchProtocolMessage(pair.second.session_id, pair.first,
+                            pair.second.method, pair.second.message);
+  }
+}
+
+void RenderFrameDevToolsAgentHost::FrameHostHolder::ReattachWithCookie(
+    std::string cookie) {
+  chunk_processor_.set_state_cookie(cookie);
+  host_->Send(new DevToolsAgentMsg_Reattach(
+      host_->GetRoutingID(), agent_->GetId(),
+      agent_->SingleSession()->session_id(), cookie));
+  agent_->GrantPolicy(host_);
   attached_ = true;
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Detach(int session_id) {
   host_->Send(new DevToolsAgentMsg_Detach(host_->GetRoutingID(), session_id));
-  RevokePolicy();
+  agent_->RevokePolicy(host_);
   attached_ = false;
 }
 
-void RenderFrameDevToolsAgentHost::FrameHostHolder::GrantPolicy() {
-  ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadRawCookies(
-      host_->GetProcess()->GetID());
-}
-
-void RenderFrameDevToolsAgentHost::FrameHostHolder::RevokePolicy() {
-  bool process_has_agents = false;
-  RenderProcessHost* process_host = host_->GetProcess();
-  for (RenderFrameDevToolsAgentHost* agent : g_instances.Get()) {
-    if (!agent->IsAttached())
-      continue;
-    if (agent->current_ && agent->current_->host() != host_ &&
-        agent->current_->host()->GetProcess() == process_host) {
-      process_has_agents = true;
-    }
-    if (agent->pending_ && agent->pending_->host() != host_ &&
-        agent->pending_->host()->GetProcess() == process_host) {
-      process_has_agents = true;
-    }
-  }
-
-  // We are the last to disconnect from the renderer -> revoke permissions.
-  if (!process_has_agents) {
-    ChildProcessSecurityPolicyImpl::GetInstance()->RevokeReadRawCookies(
-        process_host->GetID());
-  }
-}
 void RenderFrameDevToolsAgentHost::FrameHostHolder::DispatchProtocolMessage(
     int session_id,
     int call_id,
@@ -218,7 +202,7 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::DispatchProtocolMessage(
     const std::string& message) {
   host_->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
       host_->GetRoutingID(), session_id, call_id, method, message));
-  sent_messages_[call_id] = { session_id, method, message };
+  sent_messages_[call_id] = {session_id, method, message};
 }
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::InspectElement(
@@ -244,7 +228,9 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::SendMessageToClient(
     sent_messages_whose_reply_came_while_suspended_[id] = sent_message;
     pending_messages_.push_back(std::make_pair(session_id, message));
   } else {
-    agent_->SendMessageToClient(session_id, message);
+    DevToolsSession* session = agent_->SingleSession();
+    if (session && session->session_id() == session_id)
+      session->SendMessageToClient(message);
     // |this| may be deleted at this point.
   }
 }
@@ -255,8 +241,11 @@ void RenderFrameDevToolsAgentHost::FrameHostHolder::Suspend() {
 
 void RenderFrameDevToolsAgentHost::FrameHostHolder::Resume() {
   suspended_ = false;
-  for (const auto& pair : pending_messages_)
-    agent_->SendMessageToClient(pair.first, pair.second);
+  for (const auto& pair : pending_messages_) {
+    DevToolsSession* session = agent_->SingleSession();
+    if (session && session->session_id() == pair.first)
+      session->SendMessageToClient(pair.second);
+  }
   std::vector<std::pair<int, std::string>> empty;
   pending_messages_.swap(empty);
   sent_messages_whose_reply_came_while_suspended_.clear();
@@ -343,16 +332,6 @@ void RenderFrameDevToolsAgentHost::OnBeforeNavigation(
 }
 
 // static
-void RenderFrameDevToolsAgentHost::OnBeforeNavigation(
-    NavigationHandle* navigation_handle) {
-  FrameTreeNode* frame_tree_node =
-      static_cast<NavigationHandleImpl*>(navigation_handle)->frame_tree_node();
-  RenderFrameDevToolsAgentHost* agent_host = FindAgentHost(frame_tree_node);
-  if (agent_host)
-    agent_host->AboutToNavigate(navigation_handle);
-}
-
-// static
 void RenderFrameDevToolsAgentHost::OnFailedNavigation(
     RenderFrameHost* host,
     const CommonNavigationParams& common_params,
@@ -360,8 +339,10 @@ void RenderFrameDevToolsAgentHost::OnFailedNavigation(
     net::Error error_code) {
   RenderFrameDevToolsAgentHost* agent_host =
       FindAgentHost(static_cast<RenderFrameHostImpl*>(host)->frame_tree_node());
-  if (agent_host)
-    agent_host->OnFailedNavigation(common_params, begin_params, error_code);
+  if (!agent_host)
+    return;
+  for (auto* network : protocol::NetworkHandler::ForAgentHost(agent_host))
+    network->NavigationFailed(common_params, begin_params, error_code);
 }
 
 // static
@@ -432,11 +413,15 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
       frame_trace_recorder_(nullptr),
       handlers_frame_host_(nullptr),
       current_frame_crashed_(false),
-      pending_handle_(nullptr),
       frame_tree_node_(frame_tree_node) {
-  if (frame_tree_node->current_frame_host()) {
-    SetPending(frame_tree_node->current_frame_host());
-    CommitPending();
+  if (IsBrowserSideNavigationEnabled()) {
+    frame_host_ = frame_tree_node->current_frame_host();
+    render_frame_alive_ = frame_host_ && frame_host_->IsRenderFrameLive();
+  } else {
+    if (frame_tree_node->current_frame_host()) {
+      SetPending(frame_tree_node->current_frame_host());
+      CommitPending();
+    }
   }
   WebContentsObserver::Observe(
       WebContentsImpl::FromFrameTreeNode(frame_tree_node));
@@ -453,13 +438,13 @@ RenderFrameDevToolsAgentHost::RenderFrameDevToolsAgentHost(
 }
 
 void RenderFrameDevToolsAgentHost::SetPending(RenderFrameHostImpl* host) {
+  DCHECK(!IsBrowserSideNavigationEnabled());
   DCHECK(!pending_);
   current_frame_crashed_ = false;
   pending_.reset(new FrameHostHolder(this, host));
   if (IsAttached())
     pending_->Reattach(current_.get());
 
-  // Can only be null in constructor.
   if (current_)
     current_->Suspend();
   pending_->Suspend();
@@ -468,6 +453,7 @@ void RenderFrameDevToolsAgentHost::SetPending(RenderFrameHostImpl* host) {
 }
 
 void RenderFrameDevToolsAgentHost::CommitPending() {
+  DCHECK(!IsBrowserSideNavigationEnabled());
   DCHECK(pending_);
   current_frame_crashed_ = false;
 
@@ -483,6 +469,7 @@ void RenderFrameDevToolsAgentHost::CommitPending() {
 }
 
 void RenderFrameDevToolsAgentHost::DiscardPending() {
+  DCHECK(!IsBrowserSideNavigationEnabled());
   DCHECK(pending_);
   DCHECK(current_);
   pending_.reset();
@@ -501,13 +488,15 @@ WebContents* RenderFrameDevToolsAgentHost::GetWebContents() {
 
 void RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
   session->SetFallThroughForNotFound(true);
-  session->SetRenderFrameHost(handlers_frame_host_);
-  if (frame_tree_node_ && !frame_tree_node_->parent()) {
-    session->AddHandler(base::WrapUnique(new protocol::PageHandler()));
-    session->AddHandler(base::WrapUnique(new protocol::SecurityHandler()));
-  }
+  if (IsBrowserSideNavigationEnabled())
+    session->SetRenderFrameHost(frame_host_);
+  else
+    session->SetRenderFrameHost(handlers_frame_host_);
+
+  protocol::EmulationHandler* emulation_handler =
+      new protocol::EmulationHandler();
   session->AddHandler(base::WrapUnique(new protocol::DOMHandler()));
-  session->AddHandler(base::WrapUnique(new protocol::EmulationHandler()));
+  session->AddHandler(base::WrapUnique(emulation_handler));
   session->AddHandler(base::WrapUnique(new protocol::InputHandler()));
   session->AddHandler(base::WrapUnique(new protocol::InspectorHandler()));
   session->AddHandler(base::WrapUnique(new protocol::IOHandler(
@@ -521,20 +510,42 @@ void RenderFrameDevToolsAgentHost::AttachSession(DevToolsSession* session) {
       protocol::TracingHandler::Renderer,
       frame_tree_node_ ? frame_tree_node_->frame_tree_node_id() : 0,
       GetIOContext())));
+  if (frame_tree_node_ && !frame_tree_node_->parent()) {
+    session->AddHandler(
+        base::WrapUnique(new protocol::PageHandler(emulation_handler)));
+    session->AddHandler(base::WrapUnique(new protocol::SecurityHandler()));
+  }
 
-  if (current_)
-    current_->Attach(session);
-  if (pending_)
-    pending_->Attach(session);
-  OnClientAttached();
+  if (IsBrowserSideNavigationEnabled()) {
+    if (frame_host_) {
+      frame_host_->Send(new DevToolsAgentMsg_Attach(
+          frame_host_->GetRoutingID(), GetId(), session->session_id()));
+    }
+  } else {
+    if (current_)
+      current_->Attach(session);
+    if (pending_)
+      pending_->Attach(session);
+  }
+  if (sessions().size() == 1)
+    OnClientsAttached();
 }
 
 void RenderFrameDevToolsAgentHost::DetachSession(int session_id) {
-  if (current_)
-    current_->Detach(session_id);
-  if (pending_)
-    pending_->Detach(session_id);
-  OnClientDetached();
+  if (IsBrowserSideNavigationEnabled()) {
+    if (frame_host_) {
+      frame_host_->Send(
+          new DevToolsAgentMsg_Detach(frame_host_->GetRoutingID(), session_id));
+    }
+    suspended_messages_by_session_id_.erase(session_id);
+  } else {
+    if (current_)
+      current_->Detach(session_id);
+    if (pending_)
+      pending_->Detach(session_id);
+  }
+  if (sessions().empty())
+    OnClientsDetached();
 }
 
 bool RenderFrameDevToolsAgentHost::DispatchProtocolMessage(
@@ -542,25 +553,28 @@ bool RenderFrameDevToolsAgentHost::DispatchProtocolMessage(
     const std::string& message) {
   int call_id = 0;
   std::string method;
+  int session_id = session->session_id();
   if (session->Dispatch(message, &call_id, &method) !=
       protocol::Response::kFallThrough) {
     return true;
   }
 
-  if (!navigating_handles_.empty()) {
-    DCHECK(IsBrowserSideNavigationEnabled());
-    in_navigation_protocol_message_buffer_[call_id] =
-        { session->session_id(), method, message };
-    return true;
-  }
-
-  if (current_) {
-    current_->DispatchProtocolMessage(
-        session->session_id(), call_id, method, message);
-  }
-  if (pending_) {
-    pending_->DispatchProtocolMessage(
-        session->session_id(), call_id, method, message);
+  if (IsBrowserSideNavigationEnabled()) {
+    if (!navigation_handles_.empty() || method == kPageNavigateCommand) {
+      suspended_messages_by_session_id_[session_id].push_back(
+          {call_id, method, message});
+      return true;
+    }
+    if (frame_host_) {
+      frame_host_->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
+          frame_host_->GetRoutingID(), session_id, call_id, method, message));
+    }
+    session->waiting_messages()[call_id] = {method, message};
+  } else {
+    if (current_)
+      current_->DispatchProtocolMessage(session_id, call_id, method, message);
+    if (pending_)
+      pending_->DispatchProtocolMessage(session_id, call_id, method, message);
   }
   return true;
 }
@@ -569,28 +583,35 @@ void RenderFrameDevToolsAgentHost::InspectElement(
     DevToolsSession* session,
     int x,
     int y) {
-  if (current_)
-    current_->InspectElement(session->session_id(), x, y);
-  if (pending_)
-    pending_->InspectElement(session->session_id(), x, y);
+  if (IsBrowserSideNavigationEnabled()) {
+    if (frame_host_) {
+      frame_host_->Send(new DevToolsAgentMsg_InspectElement(
+          frame_host_->GetRoutingID(), session->session_id(), x, y));
+    }
+  } else {
+    if (current_)
+      current_->InspectElement(session->session_id(), x, y);
+    if (pending_)
+      pending_->InspectElement(session->session_id(), x, y);
+  }
 }
 
-void RenderFrameDevToolsAgentHost::OnClientAttached() {
-  if (!web_contents())
-    return;
-
+void RenderFrameDevToolsAgentHost::OnClientsAttached() {
   frame_trace_recorder_.reset(new DevToolsFrameTraceRecorder());
 #if defined(OS_ANDROID)
-  GetWakeLockService()->RequestWakeLock();
+  GetWakeLock()->RequestWakeLock();
 #endif
+  if (IsBrowserSideNavigationEnabled())
+    GrantPolicy(frame_host_);
 }
 
-void RenderFrameDevToolsAgentHost::OnClientDetached() {
+void RenderFrameDevToolsAgentHost::OnClientsDetached() {
 #if defined(OS_ANDROID)
-  GetWakeLockService()->CancelWakeLock();
+  GetWakeLock()->CancelWakeLock();
 #endif
   frame_trace_recorder_.reset();
-  in_navigation_protocol_message_buffer_.clear();
+  if (IsBrowserSideNavigationEnabled())
+    RevokePolicy(frame_host_);
 }
 
 RenderFrameDevToolsAgentHost::~RenderFrameDevToolsAgentHost() {
@@ -603,41 +624,24 @@ RenderFrameDevToolsAgentHost::~RenderFrameDevToolsAgentHost() {
 
 void RenderFrameDevToolsAgentHost::ReadyToCommitNavigation(
     NavigationHandle* navigation_handle) {
-  // CommitPending may destruct |this|.
-  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-
-  // TODO(clamy): Switch RenderFrameDevToolsAgentHost to always buffer messages
-  // until ReadyToCommitNavigation is called, now that it is also called in
-  // non-PlzNavigate mode.
   if (!IsBrowserSideNavigationEnabled())
     return;
-
-  // If the navigation is not tracked, return;
-  if (navigating_handles_.count(navigation_handle) == 0)
+  NavigationHandleImpl* handle =
+      static_cast<NavigationHandleImpl*>(navigation_handle);
+  if (handle->frame_tree_node() != frame_tree_node_)
     return;
 
-  RenderFrameHostImpl* render_frame_host_impl =
-      static_cast<RenderFrameHostImpl*>(
-          navigation_handle->GetRenderFrameHost());
-  if (current_->host() != render_frame_host_impl || current_frame_crashed_) {
-    SetPending(render_frame_host_impl);
-    pending_handle_ = navigation_handle;
-    // Commit when navigating the same frame after crash, avoiding the same
-    // host in current_ and pending_.
-    if (current_->host() == render_frame_host_impl) {
-      pending_handle_ = nullptr;
-      CommitPending();
-    }
-  }
+  // UpdateFrameHost may destruct |this|.
+  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
+  UpdateFrameHost(handle->GetRenderFrameHost());
   DCHECK(CheckConsistency());
 }
 
 void RenderFrameDevToolsAgentHost::DidFinishNavigation(
     NavigationHandle* navigation_handle) {
-  // CommitPending may destruct |this|.
-  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-
   if (!IsBrowserSideNavigationEnabled()) {
+    // CommitPending may destruct |this|.
+    scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
     if (navigation_handle->HasCommitted() &&
         !navigation_handle->IsErrorPage()) {
       if (pending_ &&
@@ -645,7 +649,7 @@ void RenderFrameDevToolsAgentHost::DidFinishNavigation(
         CommitPending();
       }
       for (auto* target : protocol::TargetHandler::ForAgentHost(this))
-        target->UpdateServiceWorkers();
+        target->DidCommitNavigation();
     } else if (pending_ && pending_->host()->GetFrameTreeNodeId() ==
                                navigation_handle->GetFrameTreeNodeId()) {
       DiscardPending();
@@ -654,44 +658,134 @@ void RenderFrameDevToolsAgentHost::DidFinishNavigation(
     return;
   }
 
-  // If the navigation is not tracked, return;
-  if (navigating_handles_.count(navigation_handle) == 0)
+  NavigationHandleImpl* handle =
+      static_cast<NavigationHandleImpl*>(navigation_handle);
+  if (handle->frame_tree_node() != frame_tree_node_)
+    return;
+  navigation_handles_.erase(handle);
+
+  // UpdateFrameHost may destruct |this|.
+  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
+  if (handle->HasCommitted() && !handle->IsErrorPage())
+    UpdateFrameHost(handle->GetRenderFrameHost());
+  DCHECK(CheckConsistency());
+  if (navigation_handles_.empty()) {
+    for (auto& pair : suspended_messages_by_session_id_) {
+      int session_id = pair.first;
+      DevToolsSession* session = SessionById(session_id);
+      for (const Message& message : pair.second) {
+        if (frame_host_) {
+          frame_host_->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
+              frame_host_->GetRoutingID(), session_id, message.call_id,
+              message.method, message.message));
+        }
+        session->waiting_messages()[message.call_id] = {message.method,
+                                                        message.message};
+      }
+    }
+    suspended_messages_by_session_id_.clear();
+  }
+  if (handle->HasCommitted()) {
+    for (auto* target : protocol::TargetHandler::ForAgentHost(this))
+      target->DidCommitNavigation();
+  }
+}
+
+void RenderFrameDevToolsAgentHost::UpdateFrameHost(
+    RenderFrameHostImpl* frame_host) {
+  if (frame_host == frame_host_) {
+    if (frame_host && !render_frame_alive_) {
+      render_frame_alive_ = true;
+      MaybeReattachToRenderFrame();
+    }
+    return;
+  }
+
+  if (IsAttached())
+    RevokePolicy(frame_host_);
+
+  if (frame_host && !ShouldCreateDevToolsForHost(frame_host)) {
+    DestroyOnRenderFrameGone();
+    // |this| may be deleted at this point.
+    return;
+  }
+
+  frame_host_ = frame_host;
+  render_frame_alive_ = true;
+  if (IsAttached()) {
+    GrantPolicy(frame_host_);
+    for (DevToolsSession* session : sessions())
+      session->SetRenderFrameHost(frame_host);
+    MaybeReattachToRenderFrame();
+  }
+}
+
+void RenderFrameDevToolsAgentHost::MaybeReattachToRenderFrame() {
+  DCHECK(IsBrowserSideNavigationEnabled());
+  if (!frame_host_)
+    return;
+  for (DevToolsSession* session : sessions()) {
+    frame_host_->Send(new DevToolsAgentMsg_Reattach(
+        frame_host_->GetRoutingID(), GetId(), session->session_id(),
+        session->state_cookie()));
+    for (const auto& pair : session->waiting_messages()) {
+      int call_id = pair.first;
+      const DevToolsSession::Message& message = pair.second;
+      frame_host_->Send(new DevToolsAgentMsg_DispatchOnInspectorBackend(
+          frame_host_->GetRoutingID(), session->session_id(), call_id,
+          message.method, message.message));
+    }
+  }
+}
+
+void RenderFrameDevToolsAgentHost::GrantPolicy(RenderFrameHostImpl* host) {
+  if (!host)
+    return;
+  ChildProcessSecurityPolicyImpl::GetInstance()->GrantReadRawCookies(
+      host->GetProcess()->GetID());
+}
+
+void RenderFrameDevToolsAgentHost::RevokePolicy(RenderFrameHostImpl* host) {
+  if (!host)
     return;
 
-  // Now that the navigation is finished, remove the handle from the list of
-  // navigating handles.
-  navigating_handles_.erase(navigation_handle);
-
-  if (pending_handle_ == navigation_handle) {
-    // This navigation handle did set the pending FrameHostHolder.
-    DCHECK(pending_);
-    if (navigation_handle->HasCommitted()) {
-      DCHECK(pending_->host() == navigation_handle->GetRenderFrameHost());
-      CommitPending();
-    } else {
-      DiscardPending();
+  bool process_has_agents = false;
+  RenderProcessHost* process_host = host->GetProcess();
+  for (RenderFrameDevToolsAgentHost* agent : g_instances.Get()) {
+    if (!agent->IsAttached())
+      continue;
+    if (IsBrowserSideNavigationEnabled()) {
+      if (agent->frame_host_ && agent->frame_host_ != host &&
+          agent->frame_host_->GetProcess() == process_host) {
+        process_has_agents = true;
+      }
+      continue;
     }
-    pending_handle_ = nullptr;
-  } else if (navigating_handles_.empty()) {
-    current_->Resume();
+    if (agent->current_ && agent->current_->host() != host &&
+        agent->current_->host()->GetProcess() == process_host) {
+      process_has_agents = true;
+    }
+    if (agent->pending_ && agent->pending_->host() != host &&
+        agent->pending_->host()->GetProcess() == process_host) {
+      process_has_agents = true;
+    }
   }
-  DispatchBufferedProtocolMessagesIfNecessary();
 
-  DCHECK(CheckConsistency());
-  if (navigation_handle->HasCommitted()) {
-    for (auto* target : protocol::TargetHandler::ForAgentHost(this))
-      target->UpdateServiceWorkers();
+  // We are the last to disconnect from the renderer -> revoke permissions.
+  if (!process_has_agents) {
+    ChildProcessSecurityPolicyImpl::GetInstance()->RevokeReadRawCookies(
+        process_host->GetID());
   }
 }
 
 void RenderFrameDevToolsAgentHost::AboutToNavigateRenderFrame(
     RenderFrameHost* old_host,
     RenderFrameHost* new_host) {
-  // CommitPending may destruct |this|.
-  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-
   if (IsBrowserSideNavigationEnabled())
     return;
+
+  // CommitPending may destruct |this|.
+  scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
 
   DCHECK(!pending_ || pending_->host() != old_host);
   if (!current_ || current_->host() != old_host) {
@@ -711,33 +805,37 @@ void RenderFrameDevToolsAgentHost::AboutToNavigateRenderFrame(
   DCHECK(CheckConsistency());
 }
 
-void RenderFrameDevToolsAgentHost::AboutToNavigate(
+void RenderFrameDevToolsAgentHost::DidStartNavigation(
     NavigationHandle* navigation_handle) {
   if (!IsBrowserSideNavigationEnabled())
     return;
-  DCHECK(current_);
-  navigating_handles_.insert(navigation_handle);
-  current_->Suspend();
+  NavigationHandleImpl* handle =
+      static_cast<NavigationHandleImpl*>(navigation_handle);
+  if (handle->frame_tree_node() != frame_tree_node_)
+    return;
+  navigation_handles_.insert(handle);
   DCHECK(CheckConsistency());
-}
-
-void RenderFrameDevToolsAgentHost::OnFailedNavigation(
-    const CommonNavigationParams& common_params,
-    const BeginNavigationParams& begin_params,
-    net::Error error_code) {
-  DCHECK(IsBrowserSideNavigationEnabled());
-  for (auto* network : protocol::NetworkHandler::ForAgentHost(this))
-    network->NavigationFailed(common_params, begin_params, error_code);
 }
 
 void RenderFrameDevToolsAgentHost::RenderFrameHostChanged(
     RenderFrameHost* old_host,
     RenderFrameHost* new_host) {
+  for (auto* target : protocol::TargetHandler::ForAgentHost(this))
+    target->RenderFrameHostChanged();
+
+  if (IsBrowserSideNavigationEnabled()) {
+    if (old_host != frame_host_)
+      return;
+
+    // UpdateFrameHost may destruct |this|.
+    scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
+    UpdateFrameHost(nullptr);
+    DCHECK(CheckConsistency());
+    return;
+  }
+
   // CommitPending may destruct |this|.
   scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
-
-  for (auto* target : protocol::TargetHandler::ForAgentHost(this))
-    target->UpdateFrames();
 
   DCHECK(!pending_ || pending_->host() != old_host);
   if (!current_ || current_->host() != old_host) {
@@ -749,12 +847,20 @@ void RenderFrameDevToolsAgentHost::RenderFrameHostChanged(
   // navigation.
   if (!pending_)
     SetPending(static_cast<RenderFrameHostImpl*>(new_host));
-  pending_handle_ = nullptr;
   CommitPending();
   DCHECK(CheckConsistency());
 }
 
 void RenderFrameDevToolsAgentHost::FrameDeleted(RenderFrameHost* rfh) {
+  if (IsBrowserSideNavigationEnabled()) {
+    if (static_cast<RenderFrameHostImpl*>(rfh)->frame_tree_node() ==
+        frame_tree_node_)
+      DestroyOnRenderFrameGone();  // |this| may be deleted at this point.
+    else
+      DCHECK(CheckConsistency());
+    return;
+  }
+
   if (pending_ && pending_->host() == rfh) {
     if (!IsBrowserSideNavigationEnabled())
       DiscardPending();
@@ -767,6 +873,13 @@ void RenderFrameDevToolsAgentHost::FrameDeleted(RenderFrameHost* rfh) {
 }
 
 void RenderFrameDevToolsAgentHost::RenderFrameDeleted(RenderFrameHost* rfh) {
+  if (IsBrowserSideNavigationEnabled()) {
+    if (rfh == frame_host_)
+      render_frame_alive_ = false;
+    DCHECK(CheckConsistency());
+    return;
+  }
+
   if (!current_frame_crashed_)
     FrameDeleted(rfh);
   else
@@ -774,44 +887,50 @@ void RenderFrameDevToolsAgentHost::RenderFrameDeleted(RenderFrameHost* rfh) {
 }
 
 void RenderFrameDevToolsAgentHost::DestroyOnRenderFrameGone() {
-  DCHECK(current_);
   scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
   UpdateProtocolHandlers(nullptr);
   if (IsAttached())
-    OnClientDetached();
-  ForceDetach(false);
+    OnClientsDetached();
+  ForceDetachAllClients(false);
+  frame_host_ = nullptr;
   pending_.reset();
   current_.reset();
   frame_tree_node_ = nullptr;
-  pending_handle_ = nullptr;
   WebContentsObserver::Observe(nullptr);
   Release();
 }
 
 bool RenderFrameDevToolsAgentHost::CheckConsistency() {
-  if (current_ && pending_ && current_->host() == pending_->host())
-    return false;
-  if (IsBrowserSideNavigationEnabled())
-    return true;
+  if (!IsBrowserSideNavigationEnabled()) {
+    if (current_ && pending_ && current_->host() == pending_->host())
+      return false;
+  } else {
+    if (current_ || pending_)
+      return false;
+  }
+
   if (!frame_tree_node_)
-    return !handlers_frame_host_;
+    return !frame_host_;
+
   RenderFrameHostManager* manager = frame_tree_node_->render_manager();
-  return handlers_frame_host_ == manager->current_frame_host() ||
-      handlers_frame_host_ == manager->pending_frame_host();
+  RenderFrameHostImpl* current = manager->current_frame_host();
+  RenderFrameHostImpl* pending = manager->pending_frame_host();
+  RenderFrameHostImpl* speculative = manager->speculative_frame_host();
+  RenderFrameHostImpl* host =
+      IsBrowserSideNavigationEnabled() ? frame_host_ : handlers_frame_host_;
+  return host == current || host == pending || host == speculative;
 }
 
 #if defined(OS_ANDROID)
-device::mojom::WakeLockService*
-RenderFrameDevToolsAgentHost::GetWakeLockService() {
+device::mojom::WakeLock* RenderFrameDevToolsAgentHost::GetWakeLock() {
   // Here is a lazy binding, and will not reconnect after connection error.
   if (!wake_lock_) {
-    device::mojom::WakeLockServiceRequest request =
-        mojo::MakeRequest(&wake_lock_);
+    device::mojom::WakeLockRequest request = mojo::MakeRequest(&wake_lock_);
     device::mojom::WakeLockContext* wake_lock_context =
         web_contents()->GetWakeLockContext();
     if (wake_lock_context) {
       wake_lock_context->GetWakeLock(
-          device::mojom::WakeLockType::PreventAppSuspension,
+          device::mojom::WakeLockType::PreventDisplaySleep,
           device::mojom::WakeLockReason::ReasonOther, "DevTools",
           std::move(request));
     }
@@ -848,10 +967,15 @@ void RenderFrameDevToolsAgentHost::RenderProcessGone(
 bool RenderFrameDevToolsAgentHost::OnMessageReceived(
     const IPC::Message& message,
     RenderFrameHost* render_frame_host) {
-  bool is_current = current_ && current_->host() == render_frame_host;
-  bool is_pending = pending_ && pending_->host() == render_frame_host;
-  if (!is_current && !is_pending)
-    return false;
+  if (IsBrowserSideNavigationEnabled()) {
+    if (render_frame_host != frame_host_)
+      return false;
+  } else {
+    bool is_current = current_ && current_->host() == render_frame_host;
+    bool is_pending = pending_ && pending_->host() == render_frame_host;
+    if (!is_current && !is_pending)
+      return false;
+  }
   if (!IsAttached())
     return false;
   bool handled = true;
@@ -870,6 +994,9 @@ void RenderFrameDevToolsAgentHost::DidAttachInterstitialPage() {
   for (auto* page : protocol::PageHandler::ForAgentHost(this))
     page->DidAttachInterstitialPage();
 
+  if (IsBrowserSideNavigationEnabled())
+    return;
+
   // TODO(dgozman): this may break for cross-process subframes.
   if (!pending_) {
     DCHECK(CheckConsistency());
@@ -878,7 +1005,6 @@ void RenderFrameDevToolsAgentHost::DidAttachInterstitialPage() {
   // Pending set in AboutToNavigateRenderFrame turned out to be interstitial.
   // Connect back to the real one.
   DiscardPending();
-  pending_handle_ = nullptr;
   DCHECK(CheckConsistency());
 }
 
@@ -889,13 +1015,13 @@ void RenderFrameDevToolsAgentHost::DidDetachInterstitialPage() {
 
 void RenderFrameDevToolsAgentHost::WasShown() {
 #if defined(OS_ANDROID)
-  GetWakeLockService()->RequestWakeLock();
+  GetWakeLock()->RequestWakeLock();
 #endif
 }
 
 void RenderFrameDevToolsAgentHost::WasHidden() {
 #if defined(OS_ANDROID)
-  GetWakeLockService()->CancelWakeLock();
+  GetWakeLock()->CancelWakeLock();
 #endif
 }
 
@@ -915,56 +1041,61 @@ void RenderFrameDevToolsAgentHost::DidReceiveCompositorFrame() {
   for (auto* tracing : protocol::TracingHandler::ForAgentHost(this))
     did_initiate_recording |= tracing->did_initiate_recording();
   if (did_initiate_recording) {
-    frame_trace_recorder_->OnSwapCompositorFrame(
-        current_ ? current_->host() : nullptr, metadata);
-  }
-}
-
-void RenderFrameDevToolsAgentHost::
-    DispatchBufferedProtocolMessagesIfNecessary() {
-  if (navigating_handles_.empty() &&
-      in_navigation_protocol_message_buffer_.size()) {
-    DCHECK(current_);
-    for (const auto& pair : in_navigation_protocol_message_buffer_) {
-      current_->DispatchProtocolMessage(
-          pair.second.session_id, pair.first, pair.second.method,
-          pair.second.message);
+    if (IsBrowserSideNavigationEnabled()) {
+      frame_trace_recorder_->OnSwapCompositorFrame(frame_host_, metadata);
+    } else {
+      frame_trace_recorder_->OnSwapCompositorFrame(
+          current_ ? current_->host() : nullptr, metadata);
     }
-    in_navigation_protocol_message_buffer_.clear();
   }
 }
 
 void RenderFrameDevToolsAgentHost::UpdateProtocolHandlers(
     RenderFrameHostImpl* host) {
+  if (IsBrowserSideNavigationEnabled())
+    return;
 #if DCHECK_IS_ON()
-  // TODO(dgozman): fix this for browser side navigation.
-  if (!IsBrowserSideNavigationEnabled()) {
-    // Check that we don't have stale host object here by accessing some random
-    // properties inside.
-    if (handlers_frame_host_ && handlers_frame_host_->GetRenderWidgetHost())
-      handlers_frame_host_->GetRenderWidgetHost()->GetRoutingID();
-  }
+  // Check that we don't have stale host object here by accessing some random
+  // properties inside.
+  if (handlers_frame_host_ && handlers_frame_host_->GetRenderWidgetHost())
+    handlers_frame_host_->GetRenderWidgetHost()->GetRoutingID();
 #endif
   handlers_frame_host_ = host;
-  if (session())
-    session()->SetRenderFrameHost(host);
+  if (DevToolsSession* session = SingleSession())
+    session->SetRenderFrameHost(host);
 }
 
 void RenderFrameDevToolsAgentHost::DisconnectWebContents() {
+  if (IsBrowserSideNavigationEnabled()) {
+    UpdateFrameHost(nullptr);
+    frame_tree_node_ = nullptr;
+    navigation_handles_.clear();
+    WebContentsObserver::Observe(nullptr);
+    return;
+  }
   if (pending_)
     DiscardPending();
   UpdateProtocolHandlers(nullptr);
-  disconnected_ = std::move(current_);
-  if (session())
-    disconnected_->Detach(session()->session_id());
+  if (DevToolsSession* session = SingleSession()) {
+    disconnected_cookie_ = current_->StateCookie();
+    current_->Detach(session->session_id());
+  }
+  current_.reset();
   frame_tree_node_ = nullptr;
-  in_navigation_protocol_message_buffer_.clear();
-  navigating_handles_.clear();
-  pending_handle_ = nullptr;
   WebContentsObserver::Observe(nullptr);
 }
 
 void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
+  if (IsBrowserSideNavigationEnabled()) {
+    RenderFrameHostImpl* host =
+        static_cast<RenderFrameHostImpl*>(wc->GetMainFrame());
+    DCHECK(host);
+    frame_tree_node_ = host->frame_tree_node();
+    WebContentsObserver::Observe(wc);
+    UpdateFrameHost(host);
+    return;
+  }
+
   // CommitPending may destruct |this|.
   scoped_refptr<RenderFrameDevToolsAgentHost> protect(this);
 
@@ -973,10 +1104,14 @@ void RenderFrameDevToolsAgentHost::ConnectWebContents(WebContents* wc) {
   RenderFrameHostImpl* host =
       static_cast<RenderFrameHostImpl*>(wc->GetMainFrame());
   DCHECK(host);
+  current_frame_crashed_ = false;
+  current_.reset(new FrameHostHolder(this, host));
+  std::string cookie = std::move(disconnected_cookie_);
+  if (IsAttached())
+    current_->ReattachWithCookie(std::move(cookie));
+
+  UpdateProtocolHandlers(host);
   frame_tree_node_ = host->frame_tree_node();
-  current_ = std::move(disconnected_);
-  SetPending(host);
-  CommitPending();
   WebContentsObserver::Observe(WebContents::FromRenderFrameHost(host));
 }
 
@@ -1020,8 +1155,13 @@ std::string RenderFrameDevToolsAgentHost::GetTitle() {
     if (!title.empty())
       return title;
   }
-  if (current_ && current_->host()->GetParent())
-    return current_->host()->GetLastCommittedURL().spec();
+  if (IsBrowserSideNavigationEnabled()) {
+    if (IsChildFrame() && frame_host_)
+      return frame_host_->GetLastCommittedURL().spec();
+  } else {
+    if (current_ && current_->host()->GetParent())
+      return current_->host()->GetLastCommittedURL().spec();
+  }
   if (web_contents())
     return base::UTF16ToUTF8(web_contents()->GetTitle());
   return GetURL().spec();
@@ -1039,10 +1179,15 @@ GURL RenderFrameDevToolsAgentHost::GetURL() {
   WebContents* web_contents = GetWebContents();
   if (web_contents && !IsChildFrame())
     return web_contents->GetVisibleURL();
-  if (pending_)
-    return pending_->host()->GetLastCommittedURL();
-  if (current_)
-    return current_->host()->GetLastCommittedURL();
+  if (IsBrowserSideNavigationEnabled()) {
+    if (frame_host_)
+      return frame_host_->GetLastCommittedURL();
+  } else {
+    if (pending_)
+      return pending_->host()->GetLastCommittedURL();
+    if (current_)
+      return current_->host()->GetLastCommittedURL();
+  }
   return GURL();
 }
 
@@ -1114,8 +1259,13 @@ void RenderFrameDevToolsAgentHost::SynchronousSwapCompositorFrame(
   for (auto* tracing : protocol::TracingHandler::ForAgentHost(this))
     did_initiate_recording |= tracing->did_initiate_recording();
   if (did_initiate_recording) {
-    frame_trace_recorder_->OnSynchronousSwapCompositorFrame(
-        current_ ? current_->host() : nullptr, frame_metadata);
+    if (IsBrowserSideNavigationEnabled()) {
+      frame_trace_recorder_->OnSynchronousSwapCompositorFrame(frame_host_,
+                                                              frame_metadata);
+    } else {
+      frame_trace_recorder_->OnSynchronousSwapCompositorFrame(
+          current_ ? current_->host() : nullptr, frame_metadata);
+    }
   }
 }
 
@@ -1123,10 +1273,18 @@ void RenderFrameDevToolsAgentHost::OnDispatchOnInspectorFrontend(
     RenderFrameHost* sender,
     const DevToolsMessageChunk& message) {
   bool success = true;
-  if (current_ && current_->host() == sender)
-    success = current_->ProcessChunkedMessageFromAgent(message);
-  else if (pending_ && pending_->host() == sender)
-    success = pending_->ProcessChunkedMessageFromAgent(message);
+  if (IsBrowserSideNavigationEnabled()) {
+    if (sender == frame_host_) {
+      DevToolsSession* session = SessionById(message.session_id);
+      if (session)
+        success = session->ReceiveMessageChunk(message);
+    }
+  } else {
+    if (current_ && current_->host() == sender)
+      success = current_->ProcessChunkedMessageFromAgent(message);
+    else if (pending_ && pending_->host() == sender)
+      success = pending_->ProcessChunkedMessageFromAgent(message);
+  }
   if (!success) {
     bad_message::ReceivedBadMessage(
         sender->GetProcess(),
@@ -1154,6 +1312,11 @@ void RenderFrameDevToolsAgentHost::OnRequestNewWindow(
 
 bool RenderFrameDevToolsAgentHost::IsChildFrame() {
   return frame_tree_node_ && frame_tree_node_->parent();
+}
+
+DevToolsSession* RenderFrameDevToolsAgentHost::SingleSession() {
+  DCHECK(!IsBrowserSideNavigationEnabled());
+  return sessions().empty() ? nullptr : *sessions().begin();
 }
 
 }  // namespace content

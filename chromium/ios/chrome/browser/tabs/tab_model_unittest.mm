@@ -25,7 +25,6 @@
 #import "ios/chrome/browser/web/chrome_web_client.h"
 #import "ios/chrome/browser/web_state_list/web_state_list.h"
 #include "ios/chrome/test/ios_chrome_scoped_testing_chrome_browser_state_manager.h"
-#import "ios/web/navigation/crw_session_controller.h"
 #import "ios/web/navigation/navigation_manager_impl.h"
 #import "ios/web/public/crw_session_storage.h"
 #import "ios/web/public/navigation_manager.h"
@@ -349,6 +348,8 @@ TEST_F(TabModelTest, RestoreSessionOnNTPTest) {
                               openedByDOM:NO
                                   atIndex:0
                              inBackground:NO];
+  web::WebStateImpl* web_state = static_cast<web::WebStateImpl*>(tab.webState);
+  web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
   [tab_model_ restoreSessionWindow:window];
@@ -368,6 +369,8 @@ TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
                                openedByDOM:NO
                                    atIndex:0
                               inBackground:NO];
+  web::WebStateImpl* web_state = static_cast<web::WebStateImpl*>(tab0.webState);
+  web_state->GetNavigationManagerImpl().CommitPendingItem();
   Tab* tab1 = [tab_model_ insertTabWithURL:GURL(kChromeUINewTabURL)
                                   referrer:web::Referrer()
                                 transition:ui::PAGE_TRANSITION_TYPED
@@ -375,6 +378,8 @@ TEST_F(TabModelTest, RestoreSessionOn2NtpTest) {
                                openedByDOM:NO
                                    atIndex:1
                               inBackground:NO];
+  web_state = static_cast<web::WebStateImpl*>(tab1.webState);
+  web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
   [tab_model_ restoreSessionWindow:window];
@@ -399,6 +404,8 @@ TEST_F(TabModelTest, RestoreSessionOnAnyTest) {
                               openedByDOM:NO
                                   atIndex:0
                              inBackground:NO];
+  web::WebStateImpl* web_state = static_cast<web::WebStateImpl*>(tab.webState);
+  web_state->GetNavigationManagerImpl().CommitPendingItem();
 
   SessionWindowIOS* window(CreateSessionWindow());
   [tab_model_ restoreSessionWindow:window];
@@ -838,7 +845,7 @@ TEST_F(TabModelTest, AddWithOrderControllerAndGrouping) {
                                 inBackground:NO];
   // Force the history to update, as it is used to determine grouping.
   ASSERT_TRUE([parent navigationManagerImpl]);
-  [[parent navigationManagerImpl]->GetSessionController() commitPendingItem];
+  [parent navigationManagerImpl]->CommitPendingItem();
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
                     transition:ui::PAGE_TRANSITION_TYPED
@@ -886,7 +893,7 @@ TEST_F(TabModelTest, AddWithOrderControllerAndGrouping) {
   parent_params.transition_type = ui::PAGE_TRANSITION_TYPED;
   [parent navigationManager]->LoadURLWithParams(parent_params);
   ASSERT_TRUE([parent navigationManagerImpl]);
-  [[parent navigationManagerImpl]->GetSessionController() commitPendingItem];
+  [parent navigationManagerImpl]->CommitPendingItem();
   EXPECT_EQ([tab_model_ indexOfTab:parent], 0U);
 
   // Add a new tab. It should be added behind the parent. It should not be added
@@ -939,7 +946,7 @@ TEST_F(TabModelTest, AddWithLinkTransitionAndIndex) {
                                 inBackground:NO];
   // Force the history to update, as it is used to determine grouping.
   ASSERT_TRUE([parent navigationManagerImpl]);
-  [[parent navigationManagerImpl]->GetSessionController() commitPendingItem];
+  [parent navigationManagerImpl]->CommitPendingItem();
   [tab_model_ insertTabWithURL:GURL(kURL1)
                       referrer:web::Referrer()
                     transition:ui::PAGE_TRANSITION_TYPED

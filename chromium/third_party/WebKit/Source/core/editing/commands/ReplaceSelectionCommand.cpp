@@ -35,7 +35,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/Element.h"
-#include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingUtilities.h"
@@ -116,7 +115,7 @@ static bool IsInterchangeHTMLBRElement(const Node* node) {
           interchange_newline_class_string)
     return false;
   UseCounter::Count(node->GetDocument(),
-                    UseCounter::kEditingAppleInterchangeNewline);
+                    WebFeature::kEditingAppleInterchangeNewline);
   return true;
 }
 
@@ -592,7 +591,7 @@ void ReplaceSelectionCommand::RemoveRedundantStylesAndKeepStyleSpanInline(
           !context
               ? ToHTMLQuoteElement(context)
               : ToHTMLQuoteElement(EnclosingNodeOfType(
-                    Position::FirstPositionInNode(context),
+                    Position::FirstPositionInNode(*context),
                     IsMailHTMLBlockquoteElement, kCanCrossEditingBoundary));
 
       // EditingStyle::removeStyleFromRulesAndContext() uses StyleResolver,
@@ -630,12 +629,12 @@ void ReplaceSelectionCommand::RemoveRedundantStylesAndKeepStyleSpanInline(
     // FIXME: Tolerate differences in id, class, and style attributes.
     if (element->parentNode() && IsNonTableCellHTMLBlockElement(element) &&
         AreIdenticalElements(*element, *element->parentNode()) &&
-        VisiblePosition::FirstPositionInNode(element->parentNode())
+        VisiblePosition::FirstPositionInNode(*element->parentNode())
                 .DeepEquivalent() ==
-            VisiblePosition::FirstPositionInNode(element).DeepEquivalent() &&
-        VisiblePosition::LastPositionInNode(element->parentNode())
+            VisiblePosition::FirstPositionInNode(*element).DeepEquivalent() &&
+        VisiblePosition::LastPositionInNode(*element->parentNode())
                 .DeepEquivalent() ==
-            VisiblePosition::LastPositionInNode(element).DeepEquivalent()) {
+            VisiblePosition::LastPositionInNode(*element).DeepEquivalent()) {
       inserted_nodes.WillRemoveNodePreservingChildren(*element);
       RemoveNodePreservingChildren(element, editing_state);
       if (editing_state->IsAborted())
@@ -735,7 +734,7 @@ void ReplaceSelectionCommand::MoveElementOutOfAncestor(
   VisiblePosition position_at_end_of_node =
       CreateVisiblePosition(LastPositionInOrAfterNode(element));
   VisiblePosition last_position_in_paragraph =
-      VisiblePosition::LastPositionInNode(ancestor);
+      VisiblePosition::LastPositionInNode(*ancestor);
   if (position_at_end_of_node.DeepEquivalent() ==
       last_position_in_paragraph.DeepEquivalent()) {
     RemoveNode(element, editing_state);
@@ -934,7 +933,7 @@ void ReplaceSelectionCommand::MergeEndIfNeeded(EditingState* editing_state) {
     // needs to be audited.  See http://crbug.com/590369 for more details.
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-    destination = VisiblePosition::BeforeNode(placeholder);
+    destination = VisiblePosition::BeforeNode(*placeholder);
     start_of_paragraph_to_move = CreateVisiblePosition(
         start_of_paragraph_to_move.ToPositionWithAffinity());
   }
@@ -1028,8 +1027,8 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
                ->GetLayoutObject()
                ->Style()
                ->UserModify() == EUserModify::kReadWritePlaintextOnly) &&
-      (selection.end().AnchorNode()->GetLayoutObject() &&
-       selection.end().AnchorNode()->GetLayoutObject()->Style()->UserModify() ==
+      (selection.End().AnchorNode()->GetLayoutObject() &&
+       selection.End().AnchorNode()->GetLayoutObject()->Style()->UserModify() ==
            EUserModify::kReadWritePlaintextOnly))
     match_style_ = false;
 
@@ -1184,9 +1183,10 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
                 MostForwardCaretPosition(insertion_pos).AnchorNode())
           : 0;
   VisiblePosition original_vis_pos_before_end_br;
-  if (end_br)
+  if (end_br) {
     original_vis_pos_before_end_br =
-        PreviousPositionOf(VisiblePosition::BeforeNode(end_br));
+        PreviousPositionOf(VisiblePosition::BeforeNode(*end_br));
+  }
 
   Element* enclosing_block_of_insertion_pos =
       EnclosingBlock(insertion_pos.AnchorNode());
@@ -1254,7 +1254,7 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
       SplitTextNode(ToText(insertion_pos.ComputeContainerNode()),
                     insertion_pos.OffsetInContainerNode());
       insertion_pos =
-          Position::FirstPositionInNode(insertion_pos.ComputeContainerNode());
+          Position::FirstPositionInNode(*insertion_pos.ComputeContainerNode());
     }
 
     if (HTMLElement* element_to_split_to =
@@ -1523,7 +1523,7 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
         }
         SetEndingSelection(SelectionInDOMTree::Builder()
                                .Collapse(Position::AfterNode(
-                                   inserted_nodes.LastLeafInserted()))
+                                   *inserted_nodes.LastLeafInserted()))
                                .Build());
         // Select up to the paragraph separator that was added.
         last_position_to_select =
@@ -1543,7 +1543,7 @@ void ReplaceSelectionCommand::DoApply(EditingState* editing_state) {
             return;
           SetEndingSelection(
               SelectionInDOMTree::Builder()
-                  .Collapse(Position::FirstPositionInNode(new_list_item))
+                  .Collapse(Position::FirstPositionInNode(*new_list_item))
                   .Build());
         } else {
           // Use a default paragraph element (a plain div) for the empty
@@ -1597,7 +1597,7 @@ bool ReplaceSelectionCommand::ShouldRemoveEndBR(
   if (!end_br || !end_br->isConnected())
     return false;
 
-  VisiblePosition visible_pos = VisiblePosition::BeforeNode(end_br);
+  VisiblePosition visible_pos = VisiblePosition::BeforeNode(*end_br);
 
   // Don't remove the br if nothing was inserted.
   if (PreviousPositionOf(visible_pos).DeepEquivalent() ==
@@ -1714,7 +1714,7 @@ void ReplaceSelectionCommand::AddSpacesForSmartReplace(
       InsertNodeBefore(node, start_node, editing_state);
       if (editing_state->IsAborted())
         return;
-      start_of_inserted_content_ = Position::FirstPositionInNode(node);
+      start_of_inserted_content_ = Position::FirstPositionInNode(*node);
     }
   }
 }
@@ -1964,7 +1964,7 @@ bool ReplaceSelectionCommand::PerformTrivialReplace(
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   Node* node_after_insertion_pos =
-      MostForwardCaretPosition(EndingSelection().end()).AnchorNode();
+      MostForwardCaretPosition(EndingSelection().End()).AnchorNode();
   Text* text_node = ToText(fragment.FirstChild());
   // Our fragment creation code handles tabs, spaces, and newlines, so we don't
   // have to worry about those here.
@@ -1980,7 +1980,7 @@ bool ReplaceSelectionCommand::PerformTrivialReplace(
       isHTMLBRElement(*node_after_insertion_pos) &&
       ShouldRemoveEndBR(
           toHTMLBRElement(node_after_insertion_pos),
-          VisiblePosition::BeforeNode(node_after_insertion_pos))) {
+          VisiblePosition::BeforeNode(*node_after_insertion_pos))) {
     RemoveNodeAndPruneAncestors(node_after_insertion_pos, editing_state);
     if (editing_state->IsAborted())
       return false;

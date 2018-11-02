@@ -58,14 +58,7 @@ class WebLayerTreeViewImplForTesting
   void SetNeedsBeginFrame() override;
   void DidStopFlinging() override;
   void SetDeferCommits(bool) override;
-  // TODO(pdr): Refactor to use a struct like LayerTreeHost::ViewportLayers.
-  void RegisterViewportLayers(
-      const blink::WebLayer* overscroll_elasticity_layer,
-      const blink::WebLayer* page_scale_layer_layer,
-      const blink::WebLayer* inner_viewport_container_layer,
-      const blink::WebLayer* outer_viewport_container_layer,
-      const blink::WebLayer* inner_viewport_scroll_layer,
-      const blink::WebLayer* outer_viewport_scroll_layer) override;
+  void RegisterViewportLayers(const WebLayerTreeView::ViewportLayers&) override;
   void ClearViewportLayers() override;
   void RegisterSelection(const blink::WebSelection&) override;
   void ClearSelection() override;
@@ -90,9 +83,9 @@ class WebLayerTreeViewImplForTesting
                            float browser_controls_delta) override;
   void RecordWheelAndTouchScrollingCount(bool has_scrolled_by_wheel,
                                          bool has_scrolled_by_touch) override;
-  void RequestNewCompositorFrameSink() override;
-  void DidInitializeCompositorFrameSink() override {}
-  void DidFailToInitializeCompositorFrameSink() override;
+  void RequestNewLayerTreeFrameSink() override;
+  void DidInitializeLayerTreeFrameSink() override {}
+  void DidFailToInitializeLayerTreeFrameSink() override;
   void WillCommit() override {}
   void DidCommit() override {}
   void DidCommitAndDrawFrame() override {}
@@ -103,7 +96,7 @@ class WebLayerTreeViewImplForTesting
 
   // cc::LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override {}
-  void DidLoseCompositorFrameSink() override {}
+  void DidLoseLayerTreeFrameSink() override {}
 
  private:
   cc::TestTaskGraphRunner task_graph_runner_;

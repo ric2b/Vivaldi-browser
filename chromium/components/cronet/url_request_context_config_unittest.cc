@@ -5,7 +5,7 @@
 #include "components/cronet/url_request_context_config.h"
 
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "net/cert/cert_verifier.h"
 #include "net/http/http_network_session.h"
@@ -20,6 +20,9 @@
 namespace cronet {
 
 TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
@@ -64,7 +67,6 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       // Certificate verifier cache data.
       "");
 
-  base::MessageLoop message_loop;
   net::URLRequestContextBuilder builder;
   net::NetLog net_log;
   config.ConfigureURLRequestContextBuilder(&builder, &net_log, nullptr);
@@ -111,6 +113,9 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
 }
 
 TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
+  base::test::ScopedTaskEnvironment scoped_task_environment_(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
+
   URLRequestContextConfig config(
       // Enable QUIC.
       true,
@@ -145,7 +150,6 @@ TEST(URLRequestContextConfigTest, SetQuicConnectionMigrationOptions) {
       // Certificate verifier cache data.
       "");
 
-  base::MessageLoop message_loop;
   net::URLRequestContextBuilder builder;
   net::NetLog net_log;
   config.ConfigureURLRequestContextBuilder(&builder, &net_log, nullptr);

@@ -16,6 +16,7 @@
 #include "components/metrics/proto/translate_event.pb.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
+#include "components/translate/core/browser/mock_translate_client.h"
 #include "components/translate/core/browser/mock_translate_driver.h"
 #include "components/translate/core/browser/mock_translate_ranker.h"
 #include "components/translate/core/browser/translate_browser_metrics.h"
@@ -38,14 +39,7 @@ namespace translate {
 namespace {
 
 const char kTrialName[] = "MyTrial";
-
-#if defined(OS_CHROMEOS)
-const char kLanguagePreferredLanguages[] =
-    "settings.language.preferred_languages";
-#else
-const char* kLanguagePreferredLanguages = nullptr;
-#endif
-const char kAcceptLanguages[] = "intl.accept_languages";
+const char kInitiationStatusName[] = "Translate.InitiationStatus.v2";
 
 // Overrides NetworkChangeNotifier, simulating connection type changes
 // for tests.
@@ -87,50 +81,6 @@ class TestNetworkChangeNotifier : public net::NetworkChangeNotifier {
   DISALLOW_COPY_AND_ASSIGN(TestNetworkChangeNotifier);
 };
 
-// TODO(groby): Combine with MockTranslateClient in TranslateUiDelegateTest.
-class MockTranslateClient : public TranslateClient {
- public:
-  MockTranslateClient(TranslateDriver* driver, PrefService* prefs)
-      : driver_(driver), prefs_(prefs) {}
-
-  // TODO(groby): Does TranslateClient need a virtual dtor?
-  virtual ~MockTranslateClient() {}
-
-  TranslateDriver* GetTranslateDriver() { return driver_; }
-  PrefService* GetPrefs() { return prefs_; }
-
-  std::unique_ptr<TranslatePrefs> GetTranslatePrefs() {
-    return base::MakeUnique<TranslatePrefs>(prefs_, kAcceptLanguages,
-                                            kLanguagePreferredLanguages);
-  }
-  MOCK_METHOD0(GetTranslateAcceptLanguages, TranslateAcceptLanguages*());
-  MOCK_CONST_METHOD0(GetInfobarIconID, int());
-
-#if !defined(USE_AURA)
-  MOCK_CONST_METHOD1(CreateInfoBarMock,
-                     infobars::InfoBar*(TranslateInfoBarDelegate*));
-  std::unique_ptr<infobars::InfoBar> CreateInfoBar(
-      std::unique_ptr<TranslateInfoBarDelegate> delegate) const {
-    return base::WrapUnique(CreateInfoBarMock(std::move(delegate).get()));
-  }
-#endif
-
-  MOCK_METHOD5(ShowTranslateUI,
-               void(translate::TranslateStep,
-                    const std::string&,
-                    const std::string&,
-                    TranslateErrors::Type,
-                    bool));
-
-  MOCK_METHOD1(IsTranslatableURL, bool(const GURL&));
-  MOCK_METHOD1(ShowReportLanguageDetectionErrorUI,
-               void(const GURL& report_url));
-
- private:
-  TranslateDriver* driver_;
-  PrefService* prefs_;
-};
-
 // Compares TranslateEventProto on a restricted set of fields.
 MATCHER_P(EqualsTranslateEventProto, translate_event, "") {
   const metrics::TranslateEventProto& tep(translate_event);
@@ -147,8 +97,8 @@ class TranslateManagerTest : public ::testing::Test {
  protected:
   TranslateManagerTest()
       : translate_prefs_(&prefs_,
-                         kAcceptLanguages,
-                         kLanguagePreferredLanguages),
+                         accept_languages_prefs,
+                         preferred_languages_prefs),
         manager_(TranslateDownloadManager::GetInstance()),
         mock_translate_client_(&driver_, &prefs_),
         field_trial_list_(new base::FieldTrialList(nullptr)) {}
@@ -156,9 +106,10 @@ class TranslateManagerTest : public ::testing::Test {
   void SetUp() override {
     // Ensure we're not requesting a server-side translate language list.
     TranslateLanguageList::DisableUpdate();
-    prefs_.registry()->RegisterStringPref(kAcceptLanguages, std::string());
+    prefs_.registry()->RegisterStringPref(accept_languages_prefs,
+                                          std::string());
 #if defined(OS_CHROMEOS)
-    prefs_.registry()->RegisterStringPref(kLanguagePreferredLanguages,
+    prefs_.registry()->RegisterStringPref(preferred_languages_prefs,
                                           std::string());
 #endif
     TranslatePrefs::RegisterProfilePrefs(prefs_.registry());
@@ -178,7 +129,8 @@ class TranslateManagerTest : public ::testing::Test {
   void PrepareTranslateManager() {
     TranslateManager::SetIgnoreMissingKeyForTesting(true);
     translate_manager_.reset(new translate::TranslateManager(
-        &mock_translate_client_, &mock_translate_ranker_, kAcceptLanguages));
+        &mock_translate_client_, &mock_translate_ranker_,
+        accept_languages_prefs));
   }
 
   // Prepare the test for ULP related tests.
@@ -275,7 +227,8 @@ class TranslateManagerTest : public ::testing::Test {
   TestNetworkChangeNotifier network_notifier_;
   translate::testing::MockTranslateDriver driver_;
   translate::testing::MockTranslateRanker mock_translate_ranker_;
-  ::testing::NiceMock<MockTranslateClient> mock_translate_client_;
+  ::testing::NiceMock<translate::testing::MockTranslateClient>
+      mock_translate_client_;
   std::unique_ptr<TranslateManager> translate_manager_;
   std::unique_ptr<base::FieldTrialList> field_trial_list_;
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -342,11 +295,11 @@ TEST_F(TranslateManagerTest, GetTargetLanguageAcceptLangFallback) {
 TEST_F(TranslateManagerTest, DontTranslateOffline) {
   TranslateManager::SetIgnoreMissingKeyForTesting(true);
   translate_manager_.reset(new translate::TranslateManager(
-      &mock_translate_client_, &mock_translate_ranker_, kAcceptLanguages));
+      &mock_translate_client_, &mock_translate_ranker_,
+      accept_languages_prefs));
 
   // The test measures that the "Translate was disabled" exit can only be
   // reached after the early-out tests including IsOffline() passed.
-  const char kMetricName[] = "Translate.InitiationStatus.v2";
   base::HistogramTester histogram_tester;
 
   prefs_.SetBoolean(prefs::kEnableTranslate, false);
@@ -357,13 +310,13 @@ TEST_F(TranslateManagerTest, DontTranslateOffline) {
   // key test.
   network_notifier_.SimulateOffline();
   translate_manager_->InitiateTranslation("de");
-  histogram_tester.ExpectTotalCount(kMetricName, 0);
+  histogram_tester.ExpectTotalCount(kInitiationStatusName, 0);
 
   // In the online case, InitiateTranslation will proceed past early out tests.
   network_notifier_.SimulateOnline();
   translate_manager_->InitiateTranslation("de");
   histogram_tester.ExpectUniqueSample(
-      kMetricName,
+      kInitiationStatusName,
       translate::TranslateBrowserMetrics::INITIATION_STATUS_DISABLED_BY_PREFS,
       1);
 }
@@ -552,8 +505,10 @@ TEST_F(TranslateManagerTest, TestShouldOverrideDecision) {
 TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_Default) {
   PrepareTranslateManager();
   SetHasLanguageChanged(true);
+  base::HistogramTester histogram_tester;
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(false, "en"));
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(true, "en"));
+  histogram_tester.ExpectTotalCount(kInitiationStatusName, 0);
 }
 
 TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_HasLanguageChangedFalse) {
@@ -564,20 +519,33 @@ TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_HasLanguageChangedFalse) {
       ShouldOverrideDecision(
           metrics::TranslateEventProto::MATCHES_PREVIOUS_LANGUAGE, _, _))
       .WillOnce(Return(false));
+  base::HistogramTester histogram_tester;
   EXPECT_TRUE(translate_manager_->ShouldSuppressBubbleUI(false, "en"));
+  histogram_tester.ExpectUniqueSample(
+      kInitiationStatusName,
+      translate::TranslateBrowserMetrics::
+          INITIATION_STATUS_ABORTED_BY_MATCHES_PREVIOUS_LANGUAGE,
+      1);
 
   EXPECT_CALL(mock_translate_ranker_, ShouldOverrideDecision(_, _, _))
       .WillOnce(Return(false));
 
   EXPECT_TRUE(translate_manager_->ShouldSuppressBubbleUI(true, "en"));
+  histogram_tester.ExpectUniqueSample(
+      kInitiationStatusName,
+      translate::TranslateBrowserMetrics::
+          INITIATION_STATUS_ABORTED_BY_MATCHES_PREVIOUS_LANGUAGE,
+      2);
 }
 
 TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_NewUI) {
   PrepareTranslateManager();
   base::test::ScopedFeatureList scoped_feature_list;
+  base::HistogramTester histogram_tester;
   scoped_feature_list.InitAndEnableFeature(translate::kTranslateUI2016Q2);
   SetHasLanguageChanged(false);
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(false, "en"));
+  histogram_tester.ExpectTotalCount(kInitiationStatusName, 0);
 }
 
 TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_IsTooOftenDenied) {
@@ -590,13 +558,20 @@ TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_IsTooOftenDenied) {
           metrics::TranslateEventProto::LANGUAGE_DISABLED_BY_AUTO_BLACKLIST, _,
           _))
       .WillOnce(Return(false));
+  base::HistogramTester histogram_tester;
   EXPECT_TRUE(translate_manager_->ShouldSuppressBubbleUI(false, "en"));
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(false, "de"));
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(true, "en"));
+  histogram_tester.ExpectUniqueSample(
+      kInitiationStatusName,
+      translate::TranslateBrowserMetrics::
+          INITIATION_STATUS_ABORTED_BY_TOO_OFTEN_DENIED,
+      1);
 }
 
 TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_Override) {
   PrepareTranslateManager();
+  base::HistogramTester histogram_tester;
   EXPECT_CALL(
       mock_translate_ranker_,
       ShouldOverrideDecision(
@@ -611,6 +586,7 @@ TEST_F(TranslateManagerTest, ShouldSuppressBubbleUI_Override) {
   SetHasLanguageChanged(false);
   SetLanguageTooOftenDenied("en");
   EXPECT_FALSE(translate_manager_->ShouldSuppressBubbleUI(false, "en"));
+  histogram_tester.ExpectTotalCount(kInitiationStatusName, 0);
 }
 
 }  // namespace testing

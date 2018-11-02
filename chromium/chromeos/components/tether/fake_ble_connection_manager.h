@@ -31,15 +31,21 @@ class FakeBleConnectionManager : public BleConnectionManager {
                        const cryptauth::SecureChannel::Status& status);
   void ReceiveMessage(const cryptauth::RemoteDevice& remote_device,
                       const std::string& payload);
+  void SetMessageSent(int sequence_number);
+
   std::vector<SentMessage>& sent_messages() { return sent_messages_; }
+  // Returns -1 if no sequence numbers have been used yet.
+  int last_sequence_number() { return next_sequence_number_ - 1; }
+
+  bool IsRegistered(const cryptauth::RemoteDevice& remote_device);
 
   // BleConnectionManager:
   void RegisterRemoteDevice(const cryptauth::RemoteDevice& remote_device,
                             const MessageType& connection_reason) override;
   void UnregisterRemoteDevice(const cryptauth::RemoteDevice& remote_device,
                               const MessageType& connection_reason) override;
-  void SendMessage(const cryptauth::RemoteDevice& remote_device,
-                   const std::string& message) override;
+  int SendMessage(const cryptauth::RemoteDevice& remote_device,
+                  const std::string& message) override;
   bool GetStatusForDevice(
       const cryptauth::RemoteDevice& remote_device,
       cryptauth::SecureChannel::Status* status) const override;
@@ -55,6 +61,7 @@ class FakeBleConnectionManager : public BleConnectionManager {
     std::set<MessageType> registered_message_types;
   };
 
+  int next_sequence_number_ = 0;
   std::map<cryptauth::RemoteDevice, StatusAndRegisteredMessageTypes>
       device_map_;
   std::vector<SentMessage> sent_messages_;

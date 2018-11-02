@@ -7,8 +7,10 @@
 
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/worker_url_loader_factory_provider.mojom.h"
+#include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_message.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "third_party/WebKit/public/platform/WebApplicationCacheHost.h"
 #include "third_party/WebKit/public/platform/WebWorkerFetchContext.h"
 #include "url/gurl.h"
 
@@ -39,7 +41,9 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
 
   // blink::WebWorkerFetchContext implementation:
   void InitializeOnWorkerThread(base::SingleThreadTaskRunner*) override;
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override;
   void WillSendRequest(blink::WebURLRequest&) override;
   bool IsControlledByServiceWorker() const override;
   void SetDataSaverEnabled(bool) override;
@@ -48,6 +52,12 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   void DidRunContentWithCertificateErrors(const blink::WebURL& url) override;
   void DidDisplayContentWithCertificateErrors(
       const blink::WebURL& url) override;
+  void SetApplicationCacheHostID(int id) override;
+  int ApplicationCacheHostID() const override;
+  void SetSubresourceFilterBuilder(
+      std::unique_ptr<blink::WebDocumentSubresourceFilter::Builder>) override;
+  std::unique_ptr<blink::WebDocumentSubresourceFilter> TakeSubresourceFilter()
+      override;
 
   // mojom::ServiceWorkerWorkerClient implementation:
   void SetControllerServiceWorker(int64_t controller_version_id) override;
@@ -82,10 +92,13 @@ class WorkerFetchContextImpl : public blink::WebWorkerFetchContext,
   int controller_version_id_ = kInvalidServiceWorkerVersionId;
 
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
+  std::unique_ptr<blink::WebDocumentSubresourceFilter::Builder>
+      subresource_filter_builder_;
   bool is_data_saver_enabled_ = false;
   int parent_frame_id_ = MSG_ROUTING_NONE;
   GURL first_party_for_cookies_;
   bool is_secure_context_ = false;
+  int appcache_host_id_ = blink::WebApplicationCacheHost::kAppCacheNoHostId;
 };
 
 }  // namespace content

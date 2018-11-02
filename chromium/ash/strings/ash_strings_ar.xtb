@@ -2,9 +2,9 @@
 <!DOCTYPE translationbundle>
 <translationbundle lang="ar">
 <translation id="1012876632442809908">‏جهاز USB-C (المنفذ الأمامي)</translation>
-<translation id="1013923882670373915">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. الرجاء إدخال رقم التعريف الشخصي هذا في هذا الجهاز: <ph name="PINCODE" /></translation>
+<translation id="1013923882670373915">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. يُرجى إدخال رقم التعريف الشخصي هذا في هذا الجهاز: <ph name="PINCODE" /></translation>
+<translation id="1032891413405719768">بطارية قلم الشاشة منخفضة</translation>
 <translation id="112308213915226829">الإخفاء التلقائي للرف</translation>
-<translation id="1127238861555034875">وضع العدسة المكبرة</translation>
 <translation id="1153356358378277386">الأجهزة المقترنة</translation>
 <translation id="1195412055398077112">الخروج عن إطار الشاشة</translation>
 <translation id="1247372569136754018">ميكروفون (داخلي)</translation>
@@ -26,8 +26,10 @@
 <translation id="1677472565718498478">الوقت المتبقي <ph name="TIME" /></translation>
 <translation id="1698760176351776263">‏عنوان IPv6:‏ <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">يخضع هذا الجهاز لإدارة المؤسسة</translation>
+<translation id="1746730358044914197">تتم تهيئة طرق الإدخال بواسطة المشرف.</translation>
 <translation id="1747827819627189109">تم تمكين لوحة المفاتيح على الشاشة</translation>
 <translation id="1823873187264960516">الإيثرنت: <ph name="ADDRESS" /></translation>
+<translation id="1836215606488044471">المساعد (جارٍ التحميل...)</translation>
 <translation id="1850504506766569011">‏تم إيقاف تشغيل Wi-Fi.</translation>
 <translation id="1856813161013948396">يمكنك تخطي شاشة التأمين بمجرد النقر على مستشعر بصمات الإصبع. انقر للتهيئة.</translation>
 <translation id="1864454756846565995">‏جهاز USB-C (المنفذ الخلفي)</translation>
@@ -35,10 +37,13 @@
 <translation id="1919743966458266018">لقد تغيّر اختصار فتح إدارة المهام. يُرجى استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="1923539912171292317">النقرات التلقائية</translation>
 <translation id="1942830294380034169">زر تجاوز السعة</translation>
+<translation id="1951012854035635156">المساعد</translation>
 <translation id="1957803754585243749">0 درجة</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2012624427112548395">Ctrl+Search+H</translation>
 <translation id="2049639323467105390">تتم إدارة هذا الجهاز بواسطة <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">رأسي</translation>
+<translation id="2067602449040652523">سطوع لوحة المفاتيح</translation>
 <translation id="207439088875642105">هذا حساب للأطفال يتم إدارته من خلال <ph name="FIRST_PARENT_EMAIL" /> و<ph name="SECOND_PARENT_EMAIL" /></translation>
 <translation id="2122028596993374965">إيقاف إرسال <ph name="TAB_NAME" /> إلى <ph name="RECEIVER_NAME" /></translation>
 <translation id="2127372758936585790">شاحن منخفض الطاقة</translation>
@@ -49,14 +54,17 @@
 <translation id="2268813581635650749">خروج الجميع</translation>
 <translation id="2292698582925480719">مقياس العرض</translation>
 <translation id="2303600792989757991">نظرة عامة لنافذة التبديل</translation>
+<translation id="2338501278241028356">تشغيل البلوتوث لاكتشاف الأجهزة القريبة</translation>
 <translation id="2352467521400612932">إعدادات قلم الشاشة</translation>
 <translation id="2354174487190027830">تنشيط <ph name="NAME" /></translation>
+<translation id="2365393535144473978">سيؤدي تمكين ميزة بيانات الجوّال إلى تمكين البلوتوث.</translation>
 <translation id="2391579633712104609">180 درجة</translation>
-<translation id="2429753432712299108">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. قبل القبول، الرجاء التأكد أن مفتاح المرور هذا يظهر في هذا الجهاز: <ph name="PASSKEY" /></translation>
+<translation id="2429753432712299108">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. قبل القبول، يُرجى التأكد أن مفتاح المرور هذا يظهر في هذا الجهاز: <ph name="PASSKEY" /></translation>
 <translation id="2475982808118771221">حدث خطأ</translation>
 <translation id="2501920221385095727">مفاتيح الثبات</translation>
 <translation id="2509468283778169019">‏مفتاح CAPS LOCK قيد التشغيل</translation>
 <translation id="2532589005999780174">وضع التباين العالي</translation>
+<translation id="2597972630681408282">إضاءة ليلية: <ph name="NIGHT_LIGHT_STATUS" /></translation>
 <translation id="2700058918926273959">تنتهي الجلسة في <ph name="SESSION_TIME_REMAINING" />. وسيتم إخراجك.</translation>
 <translation id="2727977024730340865">تمّ توصيل شاحن منخفض الطاقة. لذا قد لا تكون عملية شحن البطارية جديرة بالثقة.</translation>
 <translation id="2761704814324807722">علبة الحالة، والوقت <ph name="TIME" />، و<ph name="BATTERY" /></translation>
@@ -76,7 +84,6 @@
 <translation id="3009178788565917040">الإخراج</translation>
 <translation id="3019353588588144572">الوقت المتبقي حتى يتم شحن البطارية بالكامل <ph name="TIME_REMAINING" /></translation>
 <translation id="3047477924825107454">هذا هو حساب للأطفال يديره <ph name="MANAGER_EMAIL" /></translation>
-<translation id="3050422059534974565">‏المفتاح CAPS LOCK في وضع التشغيل، اضغط على مفتاح البحث أو المفتاح Shift لإلغاء التشغيل.</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">أسفل</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (بلوتوث)</translation>
@@ -85,7 +92,6 @@
 <translation id="315116470104423982">بيانات الجوال</translation>
 <translation id="3236488194889173876">ليست هناك شبكة جوّال متاحة</translation>
 <translation id="3294437725009624529">ضيف</translation>
-<translation id="3335772982573114336">ملاحظة جديدة</translation>
 <translation id="3364721542077212959">أدوات قلم الشاشة</translation>
 <translation id="3368922792935385530">متصل</translation>
 <translation id="3371140690572404006">‏جهاز USB-C (المنفذ الأمامي الأيمن)</translation>
@@ -117,8 +123,11 @@
 <translation id="3967919079500697218">تم تعطيل إمكانية التقاط لقطات شاشة من قِبل المشرف..</translation>
 <translation id="397105322502079400">جارٍ الحساب...</translation>
 <translation id="3995138139523574647">‏جهاز USB-C (المنفذ الخلفي الأيمن)</translation>
+<translation id="4017989525502048489">مؤشر الليزر</translation>
 <translation id="4279490309300973883">النسخ المطابق</translation>
 <translation id="4321179778687042513">ctrl</translation>
+<translation id="4338109981321384717">العدسة المكبرة</translation>
+<translation id="4351433414020964307">جارٍ تحميل المساعد...</translation>
 <translation id="4378551569595875038">جارٍ الاتصال...</translation>
 <translation id="4421231901400348175">مشاركة التحكم في شاشتك مع <ph name="HELPER_NAME" /> عن طريق المساعدة عن بُعد.</translation>
 <translation id="4430019312045809116">مستوى الصوت</translation>
@@ -130,11 +139,14 @@
 <translation id="453661520163887813">يتبقى <ph name="TIME" /> حتى الاكتمال</translation>
 <translation id="4544944664594876241">لقد تغير اختصار قفل الشاشة. يُرجى استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4659419629803378708">‏تم تمكين ChromeVox</translation>
+<translation id="4729904664295161097">لا يتوفر المساعد إلا للملفات الشخصية الأساسية.</translation>
 <translation id="479989351350248267">بحث</translation>
 <translation id="4804818685124855865">قطع الاتصال</translation>
+<translation id="4821830640883629383">يُرجى شحن البطاريات أو استبدالها.</translation>
 <translation id="4849058404725798627">تمييز الكائن باستخدام تركيز لوحة المفاتيح</translation>
 <translation id="4872237917498892622">‏Alt+مفتاح البحث أو Shift</translation>
 <translation id="4895488851634969361">البطارية مملوءة.</translation>
+<translation id="4905614135390995787">تم تغيير اختصار تشغيل وضع التباين العالي. يُرجى استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">قبول</translation>
 <translation id="4961318399572185831">إرسال الشاشة</translation>
 <translation id="5011233892417813670">Chromebook</translation>
@@ -158,18 +170,21 @@
 <translation id="5744083938413354016">السحب بعد النقر</translation>
 <translation id="5777841717266010279">هل ترغب في إيقاف مشاركة الشاشة؟</translation>
 <translation id="57838592816432529">كتم الصوت</translation>
+<translation id="5860033963881614850">إيقاف</translation>
 <translation id="5895138241574237353">إعادة التشغيل</translation>
 <translation id="5901316534475909376">Shift+Esc</translation>
+<translation id="5916664084637901428">تشغيل</translation>
 <translation id="5927132638760172455">إرسال إلى مستلم غير معروف</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">التراجع عن الإجراء</translation>
 <translation id="595202126637698455">تم تمكين تتبع مستوى الأداء</translation>
+<translation id="5957083217255311415">تم إيقاف ميزة بيانات الجوّال.</translation>
 <translation id="5958529069007801266">مستخدم يخضع للإدارة</translation>
 <translation id="5977415296283489383">سماعة رأس</translation>
 <translation id="5978382165065462689">مشاركة التحكم في شاشتك عن طريق المساعدة عن بُعد.</translation>
 <translation id="5980301590375426705">إنهاء جلسة الضيف</translation>
+<translation id="5992218262414051481">‏تم تمكين وضع التباين العالي. اضغط على "Ctrl+Search+H" مرة أخرى لإيقافه.</translation>
 <translation id="6018164090099858612">جارٍ الخروج من وضع المرآة</translation>
-<translation id="6041154455840261787">‏تم تمكين وضع التباين العالي. اضغط على "Search+Shift+H" مرة أخرى لإيقافه.</translation>
 <translation id="6043212731627905357">لا تتوافق هذه الشاشة مع <ph name="DEVICE_TYPE" /> (هذه الشاشة غير مدعومة).</translation>
 <translation id="6043994281159824495">الخروج الآن</translation>
 <translation id="6047696787498798094">سيتم إيقاف مشاركة الشاشة عند التبديل إلى مستخدم آخر. هل تريد المتابعة؟</translation>
@@ -183,7 +198,6 @@
 <translation id="6297287540776456956">استخدام قلم الشاشة لتحديد منطقة</translation>
 <translation id="6310121235600822547">تم تدوير <ph name="DISPLAY_NAME" /> إلى <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">تراكب لوحة المفاتيح</translation>
-<translation id="6395038768903208085">وضع الطبقة الوصفية</translation>
 <translation id="639644700271529076">‏مفتاح CAPS LOCK قيد الإيقاف</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">رفض</translation>
@@ -194,9 +208,11 @@
 <translation id="6537270692134705506">التقاط الشاشة</translation>
 <translation id="6585808820553845416">تنتهي الجلسة في <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Search+Shift+K</translation>
-<translation id="6650933572246256093">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. الرجاء إدخال مفتاح المرور هذا في هذا الجهاز: <ph name="PASSKEY" /></translation>
+<translation id="6650933572246256093">يريد جهاز بلوتوث "<ph name="DEVICE_NAME" />" الحصول على إذن للإقران. يُرجى إدخال مفتاح المرور هذا في هذا الجهاز: <ph name="PASSKEY" /></translation>
+<translation id="6691659475504239918">Search+Shift+H</translation>
 <translation id="6700713906295497288">‏زر قائمة أداة تحرير أسلوب الإدخال (IME)</translation>
 <translation id="6713285437468012787">تم إقران جهاز بلوتوث "<ph name="DEVICE_NAME" />" وهو الآن متاح لجميع المستخدمين. يمكنك إزالة هذا الإقران باستخدام الإعدادات.</translation>
+<translation id="6715542151869432661">لم يتم العثور على أي أجهزة جوّال.</translation>
 <translation id="6785414152754474415">اكتمل شحن <ph name="PERCENTAGE" />% من البطارية ويجري شحنها.</translation>
 <translation id="6803622936009808957">تعذر إجراء النسخ المطابق للعروض نظرًا لعدم العثور على درجات دقة متوافقة. تم الدخول إلى سطح المكتب الممتد بدلاً من ذلك.</translation>
 <translation id="683971173229319003">Search+L</translation>
@@ -210,11 +226,9 @@
 <translation id="7066646422045619941">تم تعطيل هذه الشبكة من قِبل مشرفك.</translation>
 <translation id="7067196344162293536">تدوير تلقائي</translation>
 <translation id="7098389117866926363">‏جهاز USB-C (المنفذ الأيسر في الخلف)</translation>
-<translation id="7129360219436193655">وضع مؤشر الليزر</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt+Shift+K</translation>
 <translation id="7168224885072002358">سيتم الرجوع إلى درجة الدقة القديمة في غضون <ph name="TIMEOUT_SECONDS" /></translation>
-<translation id="7209101170223508707">‏المفتاح CAPS LOCK في وضع التشغيل. اضغط على Alt+مفتاح البحث، أو اضغط على المفتاح Shift لإلغاء التشغيل.</translation>
 <translation id="7246339268451149667">هل ترغب في تمكين إلغاء القفل باستخدام بصمة الإصبع؟</translation>
 <translation id="7256634071279256947">الميكروفون الخلفي</translation>
 <translation id="7348093485538360975">لوحة المفاتيح على الشاشة</translation>
@@ -232,10 +246,10 @@
 <translation id="7649070708921625228">مساعدة</translation>
 <translation id="7692480393933218409">‏جارٍ شحن أجهزة USB-C المتصلة</translation>
 <translation id="776344839111254542">النقر لعرض تفاصيل التحديث</translation>
+<translation id="7798302898096527229">‏اضغط على مفتاح البحث أو المفتاح Shift للإلغاء.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> و<ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">تم تغيير اللغة من "<ph name="FROM_LOCALE" />" إلى "<ph name="TO_LOCALE" />" بعد مزامنة إعداداتك.</translation>
 <translation id="7904094684485781019">لقد حظر مشرف هذا الحساب إمكانية الدخول المتعدد.</translation>
-<translation id="7951523953736115461">إضاءة ليلية</translation>
 <translation id="7977927628060636163">جارٍ البحث عن شبكات الجوّال...</translation>
 <translation id="7982789257301363584">الشبكة</translation>
 <translation id="8000066093800657092">لا شبكة</translation>
@@ -249,11 +263,13 @@
 <translation id="8185286464235484130">يُرجى تقييم أدائنا من خلال الإجابة عن بعض الأسئلة.</translation>
 <translation id="8190698733819146287">تخصيص اللغات والإدخال...</translation>
 <translation id="8308637677604853869">القائمة السابقة</translation>
+<translation id="8351131234907093545">إنشاء ملاحظة</translation>
 <translation id="8428213095426709021">إعدادات</translation>
 <translation id="8433186206711564395">إعدادات الشبكة</translation>
-<translation id="8433977262951327081">تم تغيير اختصار عرض الفقاعة التفسيرية لقائمة خيارات الإدخال في الرف. الرجاء استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
+<translation id="8433977262951327081">تم تغيير اختصار عرض الفقاعة التفسيرية لقائمة خيارات الإدخال في الرف. يُرجى استخدام <ph name="NEW_SHORTCUT" /> بدلاً من <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="8454013096329229812">‏تم تشغيل Wi-Fi.</translation>
 <translation id="847056008324733326">عرض إعدادات المقياس</translation>
+<translation id="8477270416194247200">‏اضغط على Alt+مفتاح البحث، أو اضغط على المفتاح Shift للإلغاء.</translation>
 <translation id="8484916590211895857"><ph name="NAME" /> : جارٍ إعادة الاتصال ...</translation>
 <translation id="8517041960877371778">قد يتعذر شحن <ph name="DEVICE_TYPE" /> أثناء التشغيل.</translation>
 <translation id="8639760480004882931">يتبقى <ph name="PERCENTAGE" /></translation>
@@ -264,6 +280,7 @@
 <translation id="8828714802988429505">90 درجة</translation>
 <translation id="8850991929411075241">Search+Esc</translation>
 <translation id="8878886163241303700">توسيع الشاشة</translation>
+<translation id="8921624153894383499">‏لا يتحدث مساعد Google هذه اللغة.</translation>
 <translation id="8938800817013097409">‏جهاز USB-C (المنفذ الأيمن في الخلف)</translation>
 <translation id="8940956008527784070">طاقة البطارية منخفضة (<ph name="PERCENTAGE" />%)</translation>
 <translation id="9074739597929991885">بلوتوث</translation>

@@ -71,6 +71,13 @@
 
 #include "platform/wtf/DateMath.h"
 
+#include <limits.h>
+#include <math.h>
+#include <stdlib.h>
+#include <time.h>
+#include <algorithm>
+#include <limits>
+#include "build/build_config.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CurrentTime.h"
@@ -78,14 +85,8 @@
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/StringExtras.h"
 #include "platform/wtf/text/StringBuilder.h"
-#include <algorithm>
-#include <limits.h>
-#include <limits>
-#include <math.h>
-#include <stdlib.h>
-#include <time.h>
 
-#if OS(WIN)
+#if defined(OS_WIN)
 #include <windows.h>
 #else
 #include <sys/time.h>
@@ -109,7 +110,7 @@ static const int kFirstDayOfMonth[2][12] = {
     {0, 31, 60, 91, 121, 152, 182, 213, 244, 274, 305, 335}};
 
 static inline void GetLocalTime(const time_t* local_time, struct tm* local_tm) {
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
   localtime_s(local_tm, local_time);
 #else
   localtime_r(local_time, local_tm);
@@ -333,7 +334,7 @@ static int EquivalentYearForDST(int year) {
 }
 
 static double CalculateUTCOffset() {
-#if OS(WIN)
+#if defined(OS_WIN)
   TIME_ZONE_INFORMATION time_zone_information;
   GetTimeZoneInformation(&time_zone_information);
   int32_t bias =
@@ -421,7 +422,7 @@ static inline double YmdhmsToSeconds(int year,
 // We follow the recommendation of RFC 2822 to consider all
 // obsolete time zones not listed here equivalent to "-0000".
 static const struct KnownZone {
-#if !OS(WIN)
+#if !defined(OS_WIN)
   const
 #endif
       char tz_name[4];

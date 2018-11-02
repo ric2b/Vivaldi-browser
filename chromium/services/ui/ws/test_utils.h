@@ -14,6 +14,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/single_thread_task_runner.h"
+#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/ui/display/screen_manager.h"
 #include "services/ui/display/viewport_metrics.h"
 #include "services/ui/public/interfaces/display_manager.mojom.h"
@@ -66,7 +67,9 @@ class TestScreenManager : public display::ScreenManager {
   void RemoveDisplay(int64_t id);
 
   // display::ScreenManager:
-  void AddInterfaces(service_manager::BinderRegistry* registry) override {}
+  void AddInterfaces(
+      service_manager::BinderRegistryWithArgs<
+          const service_manager::BindSourceInfo&>* registry) override {}
   void Init(display::ScreenManagerDelegate* delegate) override;
   void RequestCloseDisplay(int64_t display_id) override {}
   display::ScreenBase* GetScreen() override;
@@ -135,6 +138,10 @@ class WindowTreeTestApi {
                              const ClientWindowId& client_window_id) {
     return tree_->ProcessSetDisplayRoot(display_to_create, viewport_metrics,
                                         is_primary_display, client_window_id);
+  }
+
+  bool ProcessSwapDisplayRoots(int64_t display_id1, int64_t display_id2) {
+    return tree_->ProcessSwapDisplayRoots(display_id1, display_id2);
   }
 
  private:
@@ -207,9 +214,11 @@ class WindowManagerStateTestApi {
 
   void DispatchInputEventToWindow(ServerWindow* target,
                                   ClientSpecificId client_id,
+                                  int64_t display_id,
                                   const ui::Event& event,
                                   Accelerator* accelerator) {
-    wms_->DispatchInputEventToWindow(target, client_id, event, accelerator);
+    wms_->DispatchInputEventToWindow(target, client_id, display_id, event,
+                                     accelerator);
   }
 
   ClientSpecificId GetEventTargetClientId(ServerWindow* window,
@@ -231,9 +240,12 @@ class WindowManagerStateTestApi {
   }
 
   WindowTree* tree_awaiting_input_ack() {
-    return wms_->in_flight_event_details_ ? wms_->in_flight_event_details_->tree
-                                          : nullptr;
+    return wms_->in_flight_event_dispatch_details_
+               ? wms_->in_flight_event_dispatch_details_->tree
+               : nullptr;
   }
+
+  bool is_event_queue_empty() const { return wms_->event_queue_.empty(); }
 
   const std::vector<std::unique_ptr<WindowManagerDisplayRoot>>&
   window_manager_display_roots() const {
@@ -241,9 +253,9 @@ class WindowManagerStateTestApi {
   }
 
   bool AckInFlightEvent(mojom::EventResult result) {
-    if (!wms_->in_flight_event_details_)
+    if (!wms_->in_flight_event_dispatch_details_)
       return false;
-    wms_->OnEventAck(wms_->in_flight_event_details_->tree, result);
+    wms_->OnEventAck(wms_->in_flight_event_dispatch_details_->tree, result);
     return true;
   }
 
@@ -350,7 +362,7 @@ class TestWindowManager : public mojom::WindowManager {
       const display::Display& display,
       ui::mojom::WindowDataPtr root,
       bool drawn,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void WmDisplayRemoved(int64_t display_id) override;
   void WmDisplayModified(const display::Display& display) override {}
   void WmSetBounds(uint32_t change_id,
@@ -433,24 +445,27 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
       int64_t display_id,
       Id focused_window_id,
       bool drawn,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void OnEmbeddedAppDisconnected(uint32_t window) override;
   void OnUnembed(Id window_id) override;
   void OnCaptureChanged(Id new_capture_window_id,
                         Id old_capture_window_id) override;
   void OnFrameSinkIdAllocated(Id window_id,
-                              const cc::FrameSinkId& frame_sink_id) override;
+                              const viz::FrameSinkId& frame_sink_id) override;
   void OnTopLevelCreated(
       uint32_t change_id,
       mojom::WindowDataPtr data,
       int64_t display_id,
       bool drawn,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void OnWindowBoundsChanged(
       uint32_t window,
       const gfx::Rect& old_bounds,
       const gfx::Rect& new_bounds,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
+  void OnWindowTransformChanged(uint32_t window,
+                                const gfx::Transform& old_transform,
+                                const gfx::Transform& new_transform) override;
   void OnClientAreaChanged(
       uint32_t window_id,
       const gfx::Insets& new_client_area,
@@ -489,7 +504,7 @@ class TestWindowTreeClient : public ui::mojom::WindowTreeClient {
   void OnWindowCursorChanged(uint32_t window_id,
                              ui::CursorData cursor) override;
   void OnWindowSurfaceChanged(Id window_id,
-                              const cc::SurfaceInfo& surface_info) override;
+                              const viz::SurfaceInfo& surface_info) override;
   void OnDragDropStart(
       const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
       override;
@@ -597,6 +612,9 @@ class TestWindowServerDelegate : public WindowServerDelegate {
       mojom::WindowTreeRequest* tree_request,
       mojom::WindowTreeClientPtr* client) override;
   bool IsTestConfig() const override;
+  void OnWillCreateTreeForWindowManager(
+      bool automatically_create_display_roots) override;
+  ThreadedImageCursorsFactory* GetThreadedImageCursorsFactory() override;
 
  private:
   WindowServer* window_server_ = nullptr;
@@ -604,6 +622,7 @@ class TestWindowServerDelegate : public WindowServerDelegate {
   // All TestWindowTreeBinding objects created via CreateWindowTreeBinding.
   // These are owned by the corresponding WindowTree.
   std::vector<TestWindowTreeBinding*> bindings_;
+  std::unique_ptr<ThreadedImageCursorsFactory> threaded_image_cursors_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowServerDelegate);
 };
@@ -686,6 +705,73 @@ class WindowEventTargetingHelper {
   ClientSpecificId next_primary_tree_window_id_ = 1;
 
   DISALLOW_COPY_AND_ASSIGN(WindowEventTargetingHelper);
+};
+
+// -----------------------------------------------------------------------------
+
+class TestDisplayManagerObserver : public mojom::DisplayManagerObserver {
+ public:
+  TestDisplayManagerObserver();
+  ~TestDisplayManagerObserver() override;
+
+  mojom::DisplayManagerObserverPtr GetPtr();
+
+  std::string GetAndClearObserverCalls();
+
+ private:
+  std::string DisplayIdsToString(
+      const std::vector<mojom::WsDisplayPtr>& wm_displays);
+
+  // mojom::DisplayManagerObserver:
+  void OnDisplaysChanged(std::vector<mojom::WsDisplayPtr> displays,
+                         int64_t primary_display_id,
+                         int64_t internal_display_id) override;
+
+  mojo::Binding<mojom::DisplayManagerObserver> binding_;
+  std::string observer_calls_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestDisplayManagerObserver);
+};
+
+// -----------------------------------------------------------------------------
+// Empty implementation of PlatformDisplay.
+class TestPlatformDisplay : public PlatformDisplay {
+ public:
+  TestPlatformDisplay(const display::ViewportMetrics& metrics,
+                      ui::CursorData* cursor_storage);
+  ~TestPlatformDisplay() override;
+
+  display::Display::Rotation cursor_rotation() const {
+    return cursor_rotation_;
+  }
+  float cursor_scale() const { return cursor_scale_; }
+
+  // PlatformDisplay:
+  void Init(PlatformDisplayDelegate* delegate) override;
+  void SetViewportSize(const gfx::Size& size) override;
+  void SetTitle(const base::string16& title) override;
+  void SetCapture() override;
+  void ReleaseCapture() override;
+  void SetCursor(const ui::CursorData& cursor) override;
+  void SetCursorSize(const ui::CursorSize& cursor_size) override;
+  void MoveCursorTo(const gfx::Point& window_pixel_location) override;
+  void UpdateTextInputState(const ui::TextInputState& state) override;
+  void SetImeVisibility(bool visible) override;
+  void UpdateViewportMetrics(const display::ViewportMetrics& metrics) override;
+  gfx::AcceleratedWidget GetAcceleratedWidget() const override;
+  FrameGenerator* GetFrameGenerator() override;
+  EventSink* GetEventSink() override;
+  void SetCursorConfig(display::Display::Rotation rotation,
+                       float scale) override;
+
+ private:
+  display::ViewportMetrics metrics_;
+  ui::CursorData* cursor_storage_;
+  display::Display::Rotation cursor_rotation_ =
+      display::Display::Rotation::ROTATE_0;
+  float cursor_scale_ = 1.0f;
+
+  DISALLOW_COPY_AND_ASSIGN(TestPlatformDisplay);
 };
 
 // -----------------------------------------------------------------------------

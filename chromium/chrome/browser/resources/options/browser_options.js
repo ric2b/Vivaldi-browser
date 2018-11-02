@@ -661,8 +661,6 @@ cr.define('options', function() {
           PageManager.showPageByName('easyUnlockTurnOffOverlay');
         };
       }
-      $('easy-unlock-enable-proximity-detection').hidden =
-          !loadTimeData.getBoolean('easyUnlockProximityDetectionAllowed');
 
       // Web Content section.
       $('fontSettingsCustomizeFontsButton').onclick = function(event) {
@@ -724,12 +722,10 @@ cr.define('options', function() {
 
       // CUPS Print section (CrOS only).
       if (cr.isChromeOS) {
-        if (!loadTimeData.getBoolean('cupsPrintDisabled')) {
-          $('cups-printers-section').hidden = false;
-          $('cupsPrintersManageButton').onclick = function() {
-            chrome.send('showCupsPrintDevicesPage');
-          };
-        }
+        $('cups-printers-section').hidden = false;
+        $('cupsPrintersManageButton').onclick = function() {
+          chrome.send('showCupsPrintDevicesPage');
+        };
       }
 
       if (loadTimeData.getBoolean('cloudPrintShowMDnsOptions')) {

@@ -161,7 +161,6 @@ message ClientMalwareRequest {
 // is safe for the purposes of entering user credentials for logging in.
 message LoginReputationClientRequest {
   // The top level frame URL of the webpage that hosts the login form.
-  // The client will strip CGI parameters.
   optional string page_url = 1;
 
   // Type for the request.
@@ -217,6 +216,19 @@ message LoginReputationClientRequest {
 
     // Whether the reused password is used for Chrome signin.
     optional bool is_chrome_signin_password = 3;
+
+    // Sync account type. Only set if |is_chrome_signin_password| is true.
+    enum SyncAccountType {
+      // Not a sign-in user.
+      NOT_SIGNED_IN = 0;
+
+      // User signed in with @gmail.com, or @googlemail.com account.
+      GMAIL = 1;
+
+      // User signed in with a G Suite account.
+      GSUITE = 2;
+    }
+    optional SyncAccountType sync_account_type = 4;
   }
 
   optional PasswordReuseEvent password_reuse_event = 4;
@@ -262,6 +274,10 @@ message LoginReputationClientResponse {
 
   // Deprecated.
   optional bool DEPRECATED_cache_expression_exact_match = 4 [deprecated = true];
+
+  // A token unique to each request which correlates response and post-warning
+  // actions.
+  optional bytes verdict_token = 5;
 }
 
 message ClientMalwareResponse {
@@ -467,7 +483,8 @@ message ClientDownloadRequest {
   // Fields 19-21 are reserved for server-side use and are never sent by the
   // client.
 
-  // A binary contained in an archive (e.g., a .zip archive).
+  // A binary or archive contained in an archive (e.g., a .exe in a .zip
+  // archive, or a .zip inside a .zip).
   message ArchivedBinary {
     optional string file_basename = 1;
     optional DownloadType download_type = 2;
@@ -504,8 +521,15 @@ message ClientDownloadRequest {
   // Deprecated.
   optional bool DEPRECATED_download_attribution_finch_enabled = 39
       [deprecated = true];
+
+  // The Mac disk image code signature.
+  // The underlying structure of code signature is defined at
+  // https://opensource.apple.com/source/xnu/xnu-2782.1.97/bsd/sys/codesign.h
+  optional bytes udif_code_signature = 40;
 }
 
+// Please update SafeBrowsingNavigationObserverManager::SanitizeReferrerChain()
+// if you're adding more fields to this message.
 message ReferrerChainEntry {
   enum URLType {
     // URL of safe browsing events that are at the end of the referrer chain.
@@ -899,11 +923,12 @@ message ClientSafeBrowsingReportRequest {
     URL_PHISHING = 1;
     URL_MALWARE = 2;
     URL_UNWANTED = 3;
-    CLIENT_SIDE_PHISHING_URL = 4;
-    CLIENT_SIDE_MALWARE_URL = 5;
+    URL_CLIENT_SIDE_PHISHING = 4;
+    URL_CLIENT_SIDE_MALWARE = 5;
     DANGEROUS_DOWNLOAD_RECOVERY = 6;
     DANGEROUS_DOWNLOAD_WARNING = 7;
     DANGEROUS_DOWNLOAD_BY_API = 10;
+    URL_PASSWORD_PROTECTION_PHISHING = 12;
   }
 
   message HTTPHeader {
@@ -984,10 +1009,34 @@ message ClientSafeBrowsingReportRequest {
   // Whether user visited this origin before.
   optional bool repeat_visit = 9;
 
-  // The same token in ClientDownloadResponse. This field is only set if its
-  // report type is DANGEROUS_DOWNLOAD_RECOVERY, DANGEROUS_DOWNLOAD_WARNING or
-  // DANGEROUS_DOWNLOAD_BY_API.
+  // The same token in ClientDownloadResponse or LoginReputationClientResponse.
+  // This field is only set if its report type is DANGEROUS_DOWNLOAD_RECOVERY,
+  // DANGEROUS_DOWNLOAD_WARNING, DANGEROUS_DOWNLOAD_BY_API or
+  // PASSWORD_PROTECTION_PHISHING_URL.
   optional bytes token = 15;
+
+  enum SafeBrowsingUrlApiType {
+    SAFE_BROWSING_URL_API_TYPE_UNSPECIFIED = 0;
+    // Native implementation of Safe Browsing API v3 protocol.
+    PVER3_NATIVE = 1;
+    // Native implementation of Safe Browsing API v4 protocol.
+    PVER4_NATIVE = 2;
+    // Android SafetyNet API.
+    // https://developer.android.com/training/safetynet/safebrowsing.html
+    ANDROID_SAFETYNET = 3;
+    // Flywheel (data compression service).
+    FLYWHEEL = 4;
+  }
+
+  // The information propagated from the client about various environment
+  // variables including SDK version, Google Play Services version and so on.
+  message SafeBrowsingClientProperties {
+    optional string client_version = 1;
+    optional int64 google_play_services_version = 2;
+    optional bool is_instant_apps = 3;
+    optional SafeBrowsingUrlApiType url_api_type = 4;
+  }
+  optional SafeBrowsingClientProperties client_properties = 17;
 }
 
 // An HTML Element on the page (eg: iframe, div, script, etc).

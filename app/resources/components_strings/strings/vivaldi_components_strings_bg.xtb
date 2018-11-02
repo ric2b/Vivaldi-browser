@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">Задължително удостоверяване</translation>
 <translation id="2166378884831602661">Сайт без защитено свързване</translation>
 <translation id="2230458221926704099">Поправете свързването, ползвайки <ph name="BEGIN_LINK" />приложение за диагностика<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Потърсете <ph name="LINK" /> чрез Google</translation>
 <translation id="2292556288342944218">Блокиран достъп до интернет</translation>
 <translation id="2317259163369394535">Домейнът <ph name="DOMAIN" /> изисква потребител и парола.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Да изпълните Диагностика на мрежата<ph name="END_LINK" /></translation>
@@ -55,7 +54,6 @@
 <translation id="3630155396527302611">Ако вече е в списъка с програми с позволен достъп до мрежата,
 опитайте да го премахнете и да го добавите отново.</translation>
 <translation id="3658742229777143148">Редакция</translation>
-<translation id="3693415264595406141">Парола:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Да проверите конфигурацията на посредника, защитната стена и DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">В случай че ползвате сървър посредник…</translation>
 <translation id="3973234410852337861">Блокиран <ph name="HOST_NAME" /></translation>
@@ -67,7 +65,6 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Да проверите конфигурациите на защитната стена и антивирусния софтуер<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Опитайте да изпълните Диагностика на мрежата<ph name="END_LINK" />.</translation>
 <translation id="4304224509867189079">Впиши ме</translation>
-<translation id="4381091992796011497">Потребител:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> не приема вашето удостоверение за вписване или такова вероятно не е било предоставено.</translation>
 <translation id="4506599922270137252">Да се свържете със системния администратор</translation>
 <translation id="4522570452068850558">Подробности</translation>

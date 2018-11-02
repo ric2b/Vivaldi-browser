@@ -16,6 +16,7 @@
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/password_manager/password_store_factory.h"
@@ -25,6 +26,7 @@
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/autofill/password_generation_popup_controller_impl.h"
 #include "chrome/browser/ui/passwords/passwords_client_ui_delegate.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
@@ -43,7 +45,6 @@
 #include "components/password_manager/core/browser/password_form_manager.h"
 #include "components/password_manager/core/browser/password_manager_internals_service.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
-#include "components/password_manager/core/browser/password_manager_settings_migration_experiment.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/credential_manager_types.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -65,6 +66,7 @@
 #include "extensions/features/features.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "net/base/url_util.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/re2/src/re2/re2.h"
 
 #if defined(SAFE_BROWSING_DB_LOCAL)
@@ -93,6 +95,7 @@
 
 using password_manager::ContentPasswordManagerDriverFactory;
 using password_manager::PasswordManagerInternalsService;
+using password_manager::PasswordManagerMetricsRecorder;
 using sessions::SerializedNavigationEntry;
 
 // Shorten the name to spare line breaks. The code provides enough context
@@ -212,6 +215,12 @@ bool ChromePasswordManagerClient::IsPasswordManagementEnabledForCurrentPage()
     is_enabled =
         entry->GetURL().host_piece() != chrome::kChromeUIChromeSigninHost;
   }
+
+  // The password manager is disabled while VR (virtual reality) is being used,
+  // as the use of conventional UI elements might harm the user experience in
+  // VR.
+  is_enabled = is_enabled && !vr::VrTabHelper::IsInVr(web_contents());
+
   if (log_manager_->IsLoggingActive()) {
     password_manager::BrowserSavePasswordProgressLogger logger(
         log_manager_.get());
@@ -293,10 +302,10 @@ bool ChromePasswordManagerClient::PromptUserToSaveOrUpdatePassword(
   if (update_password) {
     UpdatePasswordInfoBarDelegate::Create(web_contents(),
                                           std::move(form_to_save));
-    return true;
+  } else {
+    SavePasswordInfoBarDelegate::Create(web_contents(),
+                                        std::move(form_to_save));
   }
-  SavePasswordInfoBarDelegate::Create(web_contents(),
-                                      std::move(form_to_save));
 #endif  // !defined(OS_ANDROID)
   }
   return true;
@@ -441,20 +450,49 @@ void ChromePasswordManagerClient::CheckSafeBrowsingReputation(
 }
 
 void ChromePasswordManagerClient::CheckProtectedPasswordEntry(
-    const std::string& password_saved_domain) {
+    const std::string& password_saved_domain,
+    bool password_field_exists) {
   safe_browsing::PasswordProtectionService* pps =
       GetPasswordProtectionService();
   if (pps) {
     pps->MaybeStartProtectedPasswordEntryRequest(
-        web_contents(), GetMainFrameURL(), password_saved_domain);
+        web_contents(), GetMainFrameURL(), password_saved_domain,
+        password_field_exists);
   }
 }
 #endif
+
+ukm::UkmRecorder* ChromePasswordManagerClient::GetUkmRecorder() {
+  return g_browser_process->ukm_recorder();
+}
+
+ukm::SourceId ChromePasswordManagerClient::GetUkmSourceId() {
+  // TODO(crbug.com/732846): The UKM Source should be recycled (e.g. from the
+  // web contents), once the UKM framework provides a mechanism for that.
+  if (!ukm_source_id_)
+    ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
+  return *ukm_source_id_;
+}
+
+PasswordManagerMetricsRecorder&
+ChromePasswordManagerClient::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    metrics_recorder_.emplace(GetUkmRecorder(), GetUkmSourceId(),
+                              GetMainFrameURL());
+  }
+  return metrics_recorder_.value();
+}
 
 void ChromePasswordManagerClient::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   if (!navigation_handle->IsInMainFrame() || !navigation_handle->HasCommitted())
     return;
+
+  if (!navigation_handle->IsSameDocument()) {
+    ukm_source_id_.reset();
+    // Send any collected metrics by destroying the metrics recorder.
+    metrics_recorder_.reset();
+  }
 
   // From this point on, the CredentialManagerImpl will service API calls in the
   // context of the new WebContents::GetLastCommittedURL, which may very well be

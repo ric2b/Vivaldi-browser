@@ -81,8 +81,10 @@ void ImageController::StopWorkerTasks() {
     // The task (if one exists) would have run already, we just need to make
     // sure it was completed. Multiple requests for the same image use the same
     // task so it could have already been completed.
-    if (request.task && !request.task->HasCompleted())
+    if (request.task && !request.task->HasCompleted()) {
+      request.task->OnTaskCompleted();
       request.task->DidComplete();
+    }
 
     if (request.need_unref)
       cache_->UnrefImage(request.draw_image);
@@ -107,8 +109,10 @@ void ImageController::StopWorkerTasks() {
       if (request.task->state().IsNew())
         request.task->state().DidCancel();
 
-      if (!request.task->HasCompleted())
+      if (!request.task->HasCompleted()) {
+        request.task->OnTaskCompleted();
         request.task->DidComplete();
+      }
     }
     cache_->UnrefImage(request.draw_image);
 
@@ -178,7 +182,7 @@ std::vector<scoped_refptr<TileTask>> ImageController::SetPredecodeImages(
 }
 
 ImageController::ImageDecodeRequestId ImageController::QueueImageDecode(
-    sk_sp<const SkImage> image,
+    const DrawImage& draw_image,
     const ImageDecodedCallback& callback) {
   // We must not receive any image requests if we have no worker.
   CHECK(worker_task_runner_);
@@ -186,21 +190,8 @@ ImageController::ImageDecodeRequestId ImageController::QueueImageDecode(
   // Generate the next id.
   ImageDecodeRequestId id = s_next_image_decode_queue_id_++;
 
-  // TODO(ccameron): The target color space specified here should match the
-  // target color space that will be used at rasterization time. Leave this
-  // unspecified now, since that will match the rasterization-time color
-  // space while color correct rendering is disabled.
-  gfx::ColorSpace target_color_space;
-
-  DCHECK(image);
-  bool is_image_lazy = image->isLazyGenerated();
-  auto image_bounds = image->bounds();
-  // TODO(khushalsagar): Eliminate the use of an incorrect id here and have all
-  // call-sites provide PaintImage to the ImageController.
-  DrawImage draw_image(
-      PaintImage(PaintImage::kUnknownStableId,
-                 sk_sp<SkImage>(const_cast<SkImage*>(image.release()))),
-      image_bounds, kNone_SkFilterQuality, SkMatrix::I(), target_color_space);
+  DCHECK(draw_image.image());
+  bool is_image_lazy = draw_image.image()->isLazyGenerated();
 
   // Get the tasks for this decode.
   scoped_refptr<TileTask> task;

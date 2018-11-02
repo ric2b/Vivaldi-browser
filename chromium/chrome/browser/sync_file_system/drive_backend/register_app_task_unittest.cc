@@ -17,7 +17,6 @@
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_util.h"
@@ -32,6 +31,7 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
@@ -58,7 +58,7 @@ class RegisterAppTaskTest : public testing::Test {
         new drive::FakeDriveService);
     std::unique_ptr<drive::DriveUploaderInterface> drive_uploader(
         new drive::DriveUploader(fake_drive_service.get(),
-                                 base::ThreadTaskRunnerHandle::Get()));
+                                 base::ThreadTaskRunnerHandle::Get(), nullptr));
 
     fake_drive_service_helper_.reset(new FakeDriveServiceHelper(
         fake_drive_service.get(), drive_uploader.get(),
@@ -67,7 +67,7 @@ class RegisterAppTaskTest : public testing::Test {
     context_.reset(new SyncEngineContext(
         std::move(fake_drive_service), std::move(drive_uploader),
         nullptr /* task_logger */, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get(), nullptr /* worker_pool */));
+        base::ThreadTaskRunnerHandle::Get()));
 
     ASSERT_EQ(google_apis::HTTP_CREATED,
               fake_drive_service_helper_->AddOrphanedFolder(
@@ -81,14 +81,14 @@ class RegisterAppTaskTest : public testing::Test {
 
  protected:
   std::unique_ptr<LevelDBWrapper> OpenLevelDB() {
-    leveldb::DB* db = nullptr;
+    std::unique_ptr<leveldb::DB> db;
     leveldb::Options options;
     options.create_if_missing = true;
     options.env = in_memory_env_.get();
-    leveldb::Status status =
-        leveldb::DB::Open(options, database_dir_.GetPath().AsUTF8Unsafe(), &db);
+    leveldb::Status status = leveldb_env::OpenDB(
+        options, database_dir_.GetPath().AsUTF8Unsafe(), &db);
     EXPECT_TRUE(status.ok());
-    return base::MakeUnique<LevelDBWrapper>(base::WrapUnique(db));
+    return base::MakeUnique<LevelDBWrapper>(std::move(db));
   }
 
   void SetUpInitialData(LevelDBWrapper* db) {

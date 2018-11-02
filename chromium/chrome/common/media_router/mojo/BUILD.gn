@@ -12,9 +12,6 @@ mojom("dial_utility_interfaces") {
   public_deps = [
     "//mojo/common:common_custom_types",
   ]
-
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
 }
 
 mojom("media_controller") {
@@ -26,6 +23,9 @@ mojom("media_controller") {
   public_deps = [
     "//mojo/common:common_custom_types",
   ]
+
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  use_new_js_bindings = false
 }
 
 mojom("media_router") {
@@ -35,14 +35,15 @@ mojom("media_router") {
 
   public_deps = [
     ":media_controller",
+    "//media/mojo/interfaces:mirror_service_remoting",
     "//mojo/common:common_custom_types",
     "//net/interfaces:interfaces",
     "//url/mojo:url_mojom_gurl",
     "//url/mojo:url_mojom_origin",
   ]
 
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  use_new_js_bindings = false
 }
 
 mojom("media_router_test_interfaces") {
@@ -53,7 +54,4 @@ mojom("media_router_test_interfaces") {
   public_deps = [
     ":media_router",
   ]
-
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
 }

@@ -27,6 +27,7 @@ enum class WindowTreeChangeType {
   PROPERTY,
   REMOVE_TRANSIENT,
   REORDER,
+  TRANSFORM,
   VISIBLE,
 
   // This covers all cases that aren't used in tests.
@@ -94,7 +95,7 @@ class TestWindowTree : public ui::mojom::WindowTree {
     return last_hit_test_mask_;
   }
 
-  const base::Optional<cc::LocalSurfaceId>& last_local_surface_id() const {
+  const base::Optional<viz::LocalSurfaceId>& last_local_surface_id() const {
     return last_local_surface_id_;
   }
 
@@ -124,7 +125,10 @@ class TestWindowTree : public ui::mojom::WindowTree {
       uint32_t change_id,
       uint32_t window_id,
       const gfx::Rect& bounds,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
+  void SetWindowTransform(uint32_t change_id,
+                          uint32_t window_id,
+                          const gfx::Transform& transform) override;
   void SetClientArea(uint32_t window_id,
                      const gfx::Insets& insets,
                      const base::Optional<std::vector<gfx::Rect>>&
@@ -145,8 +149,8 @@ class TestWindowTree : public ui::mojom::WindowTree {
                         float opacity) override;
   void AttachCompositorFrameSink(
       uint32_t window_id,
-      mojo::InterfaceRequest<cc::mojom::MojoCompositorFrameSink> surface,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client) override;
+      mojo::InterfaceRequest<cc::mojom::CompositorFrameSink> surface,
+      cc::mojom::CompositorFrameSinkClientPtr client) override;
   void AddWindow(uint32_t change_id, uint32_t parent, uint32_t child) override;
   void RemoveWindowFromParent(uint32_t change_id, uint32_t window_id) override;
   void AddTransientWindow(uint32_t change_id,
@@ -232,7 +236,7 @@ class TestWindowTree : public ui::mojom::WindowTree {
 
   base::Optional<gfx::Rect> last_hit_test_mask_;
 
-  base::Optional<cc::LocalSurfaceId> last_local_surface_id_;
+  base::Optional<viz::LocalSurfaceId> last_local_surface_id_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowTree);
 };

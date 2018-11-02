@@ -23,6 +23,7 @@ component("chromeos") {
     ":authpolicy_proto",
     ":biod_proto",
     ":cryptohome_proto",
+    ":login_manager_proto",
     ":media_perception_proto",
     ":power_manager_proto",
     "//base",
@@ -320,6 +321,8 @@ component("chromeos") {
     "network/device_state.h",
     "network/dhcp_proxy_script_fetcher_chromeos.cc",
     "network/dhcp_proxy_script_fetcher_chromeos.h",
+    "network/dhcp_proxy_script_fetcher_factory_chromeos.cc",
+    "network/dhcp_proxy_script_fetcher_factory_chromeos.h",
     "network/firewall_hole.cc",
     "network/firewall_hole.h",
     "network/geolocation_handler.cc",
@@ -533,8 +536,6 @@ static_library("test_support") {
     "cryptohome/mock_homedir_methods.h",
     "dbus/biod/test_utils.cc",
     "dbus/biod/test_utils.h",
-    "dbus/mock_cryptohome_client.cc",
-    "dbus/mock_cryptohome_client.h",
     "dbus/mock_lorgnette_manager_client.cc",
     "dbus/mock_lorgnette_manager_client.h",
     "dbus/mock_permission_broker_client.cc",
@@ -692,6 +693,7 @@ test("chromeos_unittests") {
     "network/onc/onc_utils_unittest.cc",
     "network/onc/onc_validator_unittest.cc",
     "network/prohibited_technologies_handler_unittest.cc",
+    "network/proxy/proxy_config_service_impl_unittest.cc",
     "network/shill_property_handler_unittest.cc",
     "printing/ppd_cache_unittest.cc",
     "printing/ppd_provider_unittest.cc",
@@ -747,6 +749,14 @@ proto_library("cryptohome_proto") {
   ]
 
   proto_out_dir = "chromeos/dbus/cryptohome"
+}
+
+proto_library("login_manager_proto") {
+  sources = [
+    "//third_party/cros_system_api/dbus/login_manager/arc.proto",
+  ]
+
+  proto_out_dir = "chromeos/dbus/login_manager"
 }
 
 proto_library("attestation_proto") {

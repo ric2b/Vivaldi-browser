@@ -21,6 +21,7 @@
 #include "core/events/EventQueue.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/FrameOwner.h"
+#include "core/frame/Settings.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/inspector/ConsoleTypes.h"
@@ -44,9 +45,9 @@
 #include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/mojo/MojoHelper.h"
 #include "platform/wtf/HashSet.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 #include "public/platform/WebTraceLocation.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace {
 
@@ -346,6 +347,11 @@ void SetAndroidPayMethodData(const ScriptValue& input,
     }
   }
 
+  // 0 means the merchant did not specify or it was an invalid value
+  output->api_version = 0;
+  if (android_pay.hasApiVersion())
+    output->api_version = android_pay.apiVersion();
+
   if (android_pay.hasAllowedCardNetworks()) {
     using ::payments::mojom::blink::AndroidPayCardNetwork;
 
@@ -430,7 +436,6 @@ void SetAndroidPayMethodData(const ScriptValue& input,
 // Parses basic-card data to avoid parsing JSON in the browser.
 void SetBasicCardMethodData(const ScriptValue& input,
                             PaymentMethodDataPtr& output,
-                            ExecutionContext& execution_context,
                             ExceptionState& exception_state) {
   BasicCardRequest basic_card;
   V8BasicCardRequest::toImpl(input.GetIsolate(), input.V8Value(), basic_card,
@@ -479,12 +484,6 @@ void SetBasicCardMethodData(const ScriptValue& input,
         }
       }
     }
-
-    if (output->supported_types.size() != arraysize(kBasicCardTypes)) {
-      execution_context.AddConsoleMessage(ConsoleMessage::Create(
-          kJSMessageSource, kWarningMessageLevel,
-          "Cannot yet distinguish credit, debit, and prepaid cards."));
-    }
   }
 }
 
@@ -492,7 +491,6 @@ void StringifyAndParseMethodSpecificData(
     const Vector<String>& supported_methods,
     const ScriptValue& input,
     PaymentMethodDataPtr& output,
-    ExecutionContext& execution_context,
     ExceptionState& exception_state) {
   DCHECK(!input.IsEmpty());
   v8::Local<v8::String> value;
@@ -523,18 +521,22 @@ void StringifyAndParseMethodSpecificData(
     if (exception_state.HadException())
       exception_state.ClearException();
   }
-  if (RuntimeEnabledFeatures::paymentRequestBasicCardEnabled() &&
+  if (RuntimeEnabledFeatures::PaymentRequestBasicCardEnabled() &&
       supported_methods.Contains("basic-card")) {
-    SetBasicCardMethodData(input, output, execution_context, exception_state);
+    SetBasicCardMethodData(input, output, exception_state);
     if (exception_state.HadException())
       exception_state.ClearException();
   }
+}
 
+void CountPaymentRequestNetworkNameInSupportedMethods(
+    const Vector<String>& supported_methods,
+    ExecutionContext& execution_context) {
   for (size_t i = 0; i < arraysize(kBasicCardNetworks); ++i) {
     if (supported_methods.Contains(kBasicCardNetworks[i].name)) {
       Deprecation::CountDeprecation(
           &execution_context,
-          UseCounter::kPaymentRequestNetworkNameInSupportedMethods);
+          WebFeature::kPaymentRequestNetworkNameInSupportedMethods);
       break;
     }
   }
@@ -589,6 +591,8 @@ void ValidateAndConvertPaymentDetailsModifiers(
         return;
       }
     }
+    CountPaymentRequestNetworkNameInSupportedMethods(
+        modifier.supportedMethods(), execution_context);
 
     output.back()->method_data =
         payments::mojom::blink::PaymentMethodData::New();
@@ -597,7 +601,7 @@ void ValidateAndConvertPaymentDetailsModifiers(
     if (modifier.hasData() && !modifier.data().IsEmpty()) {
       StringifyAndParseMethodSpecificData(
           modifier.supportedMethods(), modifier.data(),
-          output.back()->method_data, execution_context, exception_state);
+          output.back()->method_data, exception_state);
     } else {
       output.back()->method_data->stringified_data = "";
     }
@@ -718,6 +722,9 @@ void ValidateAndConvertPaymentMethodData(
       }
     }
 
+    CountPaymentRequestNetworkNameInSupportedMethods(
+        payment_method_data.supportedMethods(), execution_context);
+
     output.push_back(payments::mojom::blink::PaymentMethodData::New());
     output.back()->supported_methods = payment_method_data.supportedMethods();
 
@@ -725,7 +732,7 @@ void ValidateAndConvertPaymentMethodData(
         !payment_method_data.data().IsEmpty()) {
       StringifyAndParseMethodSpecificData(
           payment_method_data.supportedMethods(), payment_method_data.data(),
-          output.back(), execution_context, exception_state);
+          output.back(), exception_state);
     } else {
       output.back()->stringified_data = "";
     }
@@ -805,6 +812,14 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(kInvalidStateError,
                                            "Cannot show the payment request"));
+  }
+
+  // VR mode uses popup suppression setting to disable html select element,
+  // date pickers, etc.
+  if (GetFrame()->GetDocument()->GetSettings()->GetPagePopupsSuppressed()) {
+    return ScriptPromise::RejectWithDOMException(
+        script_state,
+        DOMException::Create(kInvalidStateError, "Page popups are suppressed"));
   }
 
   payment_provider_->Show();
@@ -922,6 +937,13 @@ void PaymentRequest::OnUpdatePaymentDetails(
     return;
   }
 
+  if (!details.hasTotal()) {
+    show_resolver_->Reject(
+        DOMException::Create(kSyntaxError, "Total required"));
+    ClearResolversAndCloseMojoConnection();
+    return;
+  }
+
   PaymentDetailsPtr validated_details =
       payments::mojom::blink::PaymentDetails::New();
   ValidateAndConvertPaymentDetailsUpdate(
@@ -1018,14 +1040,17 @@ PaymentRequest::PaymentRequest(ExecutionContext* execution_context,
   DCHECK(shipping_type_.IsNull() || shipping_type_ == "shipping" ||
          shipping_type_ == "delivery" || shipping_type_ == "pickup");
 
-  GetFrame()->GetInterfaceProvider()->GetInterface(
+  GetFrame()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&payment_provider_));
   payment_provider_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&PaymentRequest::OnError, WrapWeakPersistent(this),
                 PaymentErrorReason::UNKNOWN)));
+
+  payments::mojom::blink::PaymentRequestClientPtr client;
+  client_binding_.Bind(mojo::MakeRequest(&client));
   payment_provider_->Init(
-      client_binding_.CreateInterfacePtrAndBind(),
-      std::move(validated_method_data), std::move(validated_details),
+      std::move(client), std::move(validated_method_data),
+      std::move(validated_details),
       payments::mojom::blink::PaymentOptions::From(options_));
 }
 
@@ -1049,7 +1074,8 @@ void PaymentRequest::OnShippingAddressChange(PaymentAddressPtr address) {
       GetExecutionContext(), EventTypeNames::shippingaddresschange);
   event->SetTarget(this);
   event->SetPaymentDetailsUpdater(this);
-  bool success = GetExecutionContext()->GetEventQueue()->EnqueueEvent(event);
+  bool success = GetExecutionContext()->GetEventQueue()->EnqueueEvent(
+      BLINK_FROM_HERE, event);
   DCHECK(success);
   ALLOW_UNUSED_LOCAL(success);
 }
@@ -1062,7 +1088,8 @@ void PaymentRequest::OnShippingOptionChange(const String& shipping_option_id) {
       GetExecutionContext(), EventTypeNames::shippingoptionchange);
   event->SetTarget(this);
   event->SetPaymentDetailsUpdater(this);
-  bool success = GetExecutionContext()->GetEventQueue()->EnqueueEvent(event);
+  bool success = GetExecutionContext()->GetEventQueue()->EnqueueEvent(
+      BLINK_FROM_HERE, event);
   DCHECK(success);
   ALLOW_UNUSED_LOCAL(success);
 }

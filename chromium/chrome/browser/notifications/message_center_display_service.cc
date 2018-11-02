@@ -8,14 +8,18 @@
 #include "chrome/browser/notifications/message_center_display_service.h"
 
 #include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/notifications/notification_handler.h"
 #include "chrome/browser/notifications/notification_ui_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/notification_event_dispatcher.h"
 
 MessageCenterDisplayService::MessageCenterDisplayService(
     Profile* profile,
     NotificationUIManager* ui_manager)
-    : profile_(profile), ui_manager_(ui_manager) {}
+    : NotificationDisplayService(profile),
+      profile_(profile),
+      ui_manager_(ui_manager) {}
 
 MessageCenterDisplayService::~MessageCenterDisplayService() {}
 
@@ -26,6 +30,9 @@ void MessageCenterDisplayService::Display(
   // TODO(miguelg): MCDS should stop relying on the |notification|'s delegate
   // for Close/Click operations once the Notification object becomes a mojom
   // type.
+
+  NotificationHandler* handler = GetNotificationHandler(notification_type);
+  handler->OnShow(profile_, notification_id);
   ui_manager_->Add(notification, profile_);
 }
 

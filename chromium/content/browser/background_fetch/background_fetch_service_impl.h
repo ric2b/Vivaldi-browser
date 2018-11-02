@@ -15,10 +15,6 @@
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/modules/background_fetch/background_fetch.mojom.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace url {
 class Origin;
 }
@@ -40,7 +36,6 @@ class CONTENT_EXPORT BackgroundFetchServiceImpl
   static void Create(
       int render_process_id,
       scoped_refptr<BackgroundFetchContext> background_fetch_context,
-      const service_manager::BindSourceInfo& source_info,
       blink::mojom::BackgroundFetchServiceRequest request);
 
   // blink::mojom::BackgroundFetchService implementation.
@@ -49,23 +44,23 @@ class CONTENT_EXPORT BackgroundFetchServiceImpl
              const std::string& tag,
              const std::vector<ServiceWorkerFetchRequest>& requests,
              const BackgroundFetchOptions& options,
-             const FetchCallback& callback) override;
+             FetchCallback callback) override;
   void UpdateUI(int64_t service_worker_registration_id,
                 const url::Origin& origin,
                 const std::string& tag,
                 const std::string& title,
-                const UpdateUICallback& callback) override;
+                UpdateUICallback callback) override;
   void Abort(int64_t service_worker_registration_id,
              const url::Origin& origin,
              const std::string& tag,
-             const AbortCallback& callback) override;
+             AbortCallback callback) override;
   void GetRegistration(int64_t service_worker_registration_id,
                        const url::Origin& origin,
                        const std::string& tag,
-                       const GetRegistrationCallback& callback) override;
+                       GetRegistrationCallback callback) override;
   void GetTags(int64_t service_worker_registration_id,
                const url::Origin& origin,
-               const GetTagsCallback& callback) override;
+               GetTagsCallback callback) override;
 
  private:
   // Validates and returns whether the |tag| contains a valid value. The

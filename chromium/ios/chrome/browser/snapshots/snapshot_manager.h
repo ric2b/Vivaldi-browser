@@ -7,6 +7,9 @@
 
 #import <UIKit/UIKit.h>
 
+namespace web {
+class WebState;
+}
 
 // Snapshot manager for contents of a tab. A snapshot is a full-screen image
 // of the contents of the page at the current scroll offset and zoom level,
@@ -17,6 +20,12 @@
 // The snapshots are identified by a "session id" which is unique per tab. This
 // allows quick identification and replacement as a tab changes pages.
 @interface SnapshotManager : NSObject
+
+// Designated initializer. The |webState| must not be null.
+- (instancetype)initWithWebState:(web::WebState*)webState
+    NS_DESIGNATED_INITIALIZER;
+
+- (instancetype)init NS_UNAVAILABLE;
 
 // Takes a snapshot for the supplied view (which should correspond to the given
 // type of web view). Returns an autoreleased image cropped and scaled
@@ -42,7 +51,7 @@
                              callback:(void (^)(UIImage*))callback;
 
 // Stores the supplied thumbnail for the specified |sessionID|.
-- (void)setImage:(UIImage*)img withSessionID:(NSString*)sessionID;
+- (void)setImage:(UIImage*)image withSessionID:(NSString*)sessionID;
 
 // Removes the cached thumbnail for the specified |sessionID|.
 - (void)removeImageWithSessionID:(NSString*)sessionID;

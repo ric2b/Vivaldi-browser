@@ -4,14 +4,12 @@
 
 #include "components/ntp_snippets/remote/remote_suggestion.h"
 
-#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "components/ntp_snippets/category.h"
-#include "components/ntp_snippets/features.h"
 #include "components/ntp_snippets/remote/proto/ntp_snippets.pb.h"
 
 namespace {
@@ -89,7 +87,8 @@ RemoteSuggestion::RemoteSuggestion(const std::vector<std::string>& ids,
       score_(0),
       is_dismissed_(false),
       remote_category_id_(remote_category_id),
-      should_notify_(false) {}
+      should_notify_(false),
+      content_type_(ContentType::UNKNOWN) {}
 
 RemoteSuggestion::~RemoteSuggestion() = default;
 
@@ -269,6 +268,21 @@ RemoteSuggestion::CreateFromContentSuggestionsDictionary(
     }
   }
 
+  // In the JSON dictionary contentType is an optional field. The field
+  // content_type_ of the class |RemoteSuggestion| is by default initialized to
+  // ContentType::UNKNOWN.
+  std::string content_type;
+  if (dict.GetString("contentType", &content_type)) {
+    if (content_type == "VIDEO") {
+      snippet->content_type_ = ContentType::VIDEO;
+    } else {
+      // The supported values are: VIDEO, UNKNOWN. Therefore if the field is
+      // present the value has to be "UNKNOWN" here.
+      DCHECK_EQ(content_type, "UNKNOWN");
+      snippet->content_type_ = ContentType::UNKNOWN;
+    }
+  }
+
   return snippet;
 }
 
@@ -328,21 +342,9 @@ std::unique_ptr<RemoteSuggestion> RemoteSuggestion::CreateFromProto(
     snippet->fetch_date_ = base::Time::FromInternalValue(proto.fetch_date());
   }
 
-  return snippet;
-}
-
-// static
-std::unique_ptr<RemoteSuggestion> RemoteSuggestion::CreateForTesting(
-    const std::string& id,
-    int remote_category_id,
-    const GURL& url,
-    const std::string& publisher_name,
-    const GURL& amp_url) {
-  auto snippet =
-      MakeUnique(std::vector<std::string>(1, id), remote_category_id);
-  snippet->url_ = url;
-  snippet->publisher_name_ = publisher_name;
-  snippet->amp_url_ = amp_url;
+  if (proto.content_type() == SnippetProto_ContentType_VIDEO) {
+    snippet->content_type_ = ContentType::VIDEO;
+  }
 
   return snippet;
 }
@@ -383,14 +385,17 @@ SnippetProto RemoteSuggestion::ToProto() const {
   if (!fetch_date_.is_null()) {
     result.set_fetch_date(fetch_date_.ToInternalValue());
   }
+
+  if (content_type_ == ContentType::VIDEO) {
+    result.set_content_type(SnippetProto_ContentType_VIDEO);
+  }
   return result;
 }
 
 ContentSuggestion RemoteSuggestion::ToContentSuggestion(
     Category category) const {
   GURL url = url_;
-  bool use_amp = base::FeatureList::IsEnabled(kPreferAmpUrlsFeature) &&
-                 !amp_url_.is_empty();
+  bool use_amp = !amp_url_.is_empty();
   if (use_amp) {
     url = amp_url_;
   }
@@ -412,6 +417,9 @@ ContentSuggestion RemoteSuggestion::ToContentSuggestion(
         base::MakeUnique<NotificationExtra>(extra));
   }
   suggestion.set_fetch_date(fetch_date_);
+  if (content_type_ == ContentType::VIDEO) {
+    suggestion.set_is_video_suggestion(true);
+  }
   return suggestion;
 }
 

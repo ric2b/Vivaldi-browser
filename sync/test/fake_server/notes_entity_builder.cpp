@@ -16,13 +16,12 @@
 #include "components/sync/base/unique_position.h"
 #include "components/sync/protocol/sync.pb.h"
 #include "components/sync/syncable/syncable_util.h"
-#include "components/sync/test/fake_server/fake_server_entity.h"
 #include "sync/test/fake_server/notes_entity.h"
 #include "url/gurl.h"
 
 using std::string;
-
 using syncer::GenerateSyncableNotesHash;
+using syncer::LoopbackServerEntity;
 
 // A version must be passed when creating a FakeServerEntity, but this value
 // is overrideen immediately when saving the entity in FakeServer.
@@ -48,9 +47,13 @@ NotesEntityBuilder::NotesEntityBuilder(const NotesEntityBuilder& old) = default;
 
 NotesEntityBuilder::~NotesEntityBuilder() {}
 
-std::unique_ptr<FakeServerEntity> NotesEntityBuilder::Build() {
+void NotesEntityBuilder::SetParentId(const std::string& parent_id) {
+  parent_id_ = parent_id;
+}
+
+std::unique_ptr<LoopbackServerEntity> NotesEntityBuilder::Build() {
   if (!url_.is_valid()) {
-    return base::WrapUnique<FakeServerEntity>(NULL);
+    return base::WrapUnique<LoopbackServerEntity>(NULL);
   }
 
   sync_pb::EntitySpecifics entity_specifics;
@@ -59,6 +62,10 @@ std::unique_ptr<FakeServerEntity> NotesEntityBuilder::Build() {
   notes_specifics->set_url(url_.spec());
   notes_specifics->set_content(content_);
 
+  if (parent_id_.empty()) {
+    parent_id_ = LoopbackServerEntity::CreateId(syncer::NOTES, "main_notes");
+  }
+
   sync_pb::UniquePosition unique_position;
   // TODO(pvalenzuela): Allow caller customization of the position integer.
   string suffix = GenerateSyncableNotesHash(originator_cache_guid_,
@@ -66,13 +73,13 @@ std::unique_ptr<FakeServerEntity> NotesEntityBuilder::Build() {
   syncer::UniquePosition::FromInt64(0, suffix).ToProto(&unique_position);
 
   const string id =
-      FakeServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
+    LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
 
-  return base::WrapUnique<FakeServerEntity>(new NotesEntity(
-      id, kUnusedVersion, title_, originator_cache_guid_,
-      originator_client_item_id_, unique_position, entity_specifics, false,
-      FakeServerEntity::CreateId(syncer::NOTES, "main_notes"), kDefaultTime,
-      kDefaultTime));
+  return base::WrapUnique<LoopbackServerEntity>(
+      new syncer::PersistentNotesEntity(
+          id, kUnusedVersion, title_, originator_cache_guid_,
+          originator_client_item_id_, unique_position, entity_specifics, false,
+          parent_id_, kDefaultTime, kDefaultTime));
 }
 
 }  // namespace fake_server

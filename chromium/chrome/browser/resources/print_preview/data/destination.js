@@ -22,7 +22,6 @@ print_preview.DestinationType = {
 print_preview.DestinationOrigin = {
   LOCAL: 'local',
   COOKIES: 'cookies',
-  PROFILE: 'profile',
   DEVICE: 'device',
   PRIVET: 'privet',
   EXTENSION: 'extension',
@@ -122,8 +121,8 @@ cr.define('print_preview', function() {
    *     for the destination.
    * @constructor
    */
-  function Destination(id, type, origin, displayName, isRecent,
-                       connectionStatus, opt_params) {
+  function Destination(
+      id, type, origin, displayName, isRecent, connectionStatus, opt_params) {
     /**
      * ID of the destination.
      * @private {string}
@@ -208,8 +207,8 @@ cr.define('print_preview', function() {
      * accessed.
      * @private {number}
      */
-    this.lastAccessTime_ = (opt_params && opt_params.lastAccessTime) ||
-                           Date.now();
+    this.lastAccessTime_ =
+        (opt_params && opt_params.lastAccessTime) || Date.now();
 
     /**
      * Cloud ID for Privet printers.
@@ -240,12 +239,13 @@ cr.define('print_preview', function() {
      * @private {print_preview.DestinationProvisionalType}
      */
     this.provisionalType_ = (opt_params && opt_params.provisionalType) ||
-                            print_preview.DestinationProvisionalType.NONE;
+        print_preview.DestinationProvisionalType.NONE;
 
-    assert(this.provisionalType_ !=
-               print_preview.DestinationProvisionalType.NEEDS_USB_PERMISSION ||
-           this.isExtension,
-           'Provisional USB destination only supprted with extension origin.');
+    assert(
+        this.provisionalType_ !=
+                print_preview.DestinationProvisionalType.NEEDS_USB_PERMISSION ||
+            this.isExtension,
+        'Provisional USB destination only supprted with extension origin.');
   }
 
   /**
@@ -253,10 +253,8 @@ cr.define('print_preview', function() {
    * @type {!Array<string>}
    * @const
    */
-  Destination.LOCATION_TAG_PREFIXES = [
-    '__cp__location=',
-    '__cp__printer-location='
-  ];
+  Destination.LOCATION_TAG_PREFIXES =
+      ['__cp__location=', '__cp__printer-location='];
 
   /**
    * Enumeration of Google-promoted destination IDs.
@@ -337,11 +335,11 @@ cr.define('print_preview', function() {
     /** @return {boolean} Whether the destination is local or cloud-based. */
     get isLocal() {
       return this.origin_ == print_preview.DestinationOrigin.LOCAL ||
-             this.origin_ == print_preview.DestinationOrigin.EXTENSION ||
-             this.origin_ == print_preview.DestinationOrigin.CROS ||
-             (this.origin_ == print_preview.DestinationOrigin.PRIVET &&
-              this.connectionStatus_ !=
-              print_preview.DestinationConnectionStatus.UNREGISTERED);
+          this.origin_ == print_preview.DestinationOrigin.EXTENSION ||
+          this.origin_ == print_preview.DestinationOrigin.CROS ||
+          (this.origin_ == print_preview.DestinationOrigin.PRIVET &&
+           this.connectionStatus_ !=
+               print_preview.DestinationConnectionStatus.UNREGISTERED);
     },
 
     /** @return {boolean} Whether the destination is a Privet local printer */
@@ -452,9 +450,12 @@ cr.define('print_preview', function() {
 
     /** @return {boolean} Whether the destination is considered offline. */
     get isOffline() {
-      return arrayContains([print_preview.DestinationConnectionStatus.OFFLINE,
-                            print_preview.DestinationConnectionStatus.DORMANT],
-                            this.connectionStatus_);
+      return arrayContains(
+          [
+            print_preview.DestinationConnectionStatus.OFFLINE,
+            print_preview.DestinationConnectionStatus.DORMANT
+          ],
+          this.connectionStatus_);
     },
 
     /** @return {string} Human readable status for offline destination. */
@@ -498,8 +499,7 @@ cr.define('print_preview', function() {
       if (this.isLocal) {
         return Destination.IconUrl_.LOCAL;
       }
-      if (this.type_ == print_preview.DestinationType.MOBILE &&
-          this.isOwned_) {
+      if (this.type_ == print_preview.DestinationType.MOBILE && this.isOwned_) {
         return Destination.IconUrl_.MOBILE;
       }
       if (this.type_ == print_preview.DestinationType.MOBILE) {
@@ -547,7 +547,7 @@ cr.define('print_preview', function() {
      */
     get isProvisional() {
       return this.provisionalType_ !=
-             print_preview.DestinationProvisionalType.NONE;
+          print_preview.DestinationProvisionalType.NONE;
     },
 
     /**

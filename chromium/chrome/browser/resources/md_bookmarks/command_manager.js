@@ -22,7 +22,8 @@ cr.define('bookmarks', function() {
         value: function() {
           return [
             Command.EDIT,
-            Command.COPY,
+            Command.COPY_URL,
+            Command.SHOW_IN_FOLDER,
             Command.DELETE,
             // <hr>
             Command.OPEN_NEW_TAB,
@@ -32,64 +33,131 @@ cr.define('bookmarks', function() {
         },
       },
 
-      /** @type {Set<string>} */
-      menuIds_: Object,
+      /** @private {Set<string>} */
+      menuIds_: {
+        type: Object,
+        observer: 'onMenuIdsChanged_',
+      },
+
+      /** @private */
+      hasAnySublabel_: {
+        type: Boolean,
+        reflectToAttribute: true,
+      },
+
+      /** @private */
+      globalCanEdit_: Boolean,
     },
+
+    /** @private {?Function} */
+    confirmOpenCallback_: null,
 
     attached: function() {
       assert(CommandManager.instance_ == null);
       CommandManager.instance_ = this;
 
+      this.watch('globalCanEdit_', function(state) {
+        return state.prefs.canEdit;
+      });
+      this.updateFromStore();
+
       /** @private {function(!Event)} */
       this.boundOnOpenItemMenu_ = this.onOpenItemMenu_.bind(this);
       document.addEventListener('open-item-menu', this.boundOnOpenItemMenu_);
+
+      /** @private {function()} */
+      this.boundOnCommandUndo_ = function() {
+        this.handle(Command.UNDO, new Set());
+      }.bind(this);
+      document.addEventListener('command-undo', this.boundOnCommandUndo_);
 
       /** @private {function(!Event)} */
       this.boundOnKeydown_ = this.onKeydown_.bind(this);
       document.addEventListener('keydown', this.boundOnKeydown_);
 
-      /** @private {Object<Command, string>} */
+      /**
+       * Indicates where the context menu was opened from. Will be NONE if
+       * menu is not open, indicating that commands are from keyboard shortcuts
+       * or elsewhere in the UI.
+       * @private {MenuSource}
+       */
+      this.menuSource_ = MenuSource.NONE;
+
+      /** @private {Object<Command, cr.ui.KeyboardShortcutList>} */
       this.shortcuts_ = {};
-      this.shortcuts_[Command.EDIT] = cr.isMac ? 'enter' : 'f2';
-      this.shortcuts_[Command.COPY] = cr.isMac ? 'meta+c' : 'ctrl+c';
-      this.shortcuts_[Command.DELETE] =
-          cr.isMac ? 'delete backspace' : 'delete';
-      this.shortcuts_[Command.OPEN_NEW_TAB] =
-          cr.isMac ? 'meta+enter' : 'ctrl+enter';
-      this.shortcuts_[Command.OPEN_NEW_WINDOW] = 'shift+enter';
-      this.shortcuts_[Command.OPEN] = cr.isMac ? 'meta+down' : 'enter';
+
+      this.addShortcut_(Command.EDIT, 'F2', 'Enter');
+      this.addShortcut_(Command.DELETE, 'Delete', 'Delete Backspace');
+
+      this.addShortcut_(Command.OPEN, 'Enter', 'Meta|o');
+      this.addShortcut_(Command.OPEN_NEW_TAB, 'Ctrl|Enter', 'Meta|Enter');
+      this.addShortcut_(Command.OPEN_NEW_WINDOW, 'Shift|Enter');
+
+      this.addShortcut_(Command.UNDO, 'Ctrl|z', 'Meta|z');
+      this.addShortcut_(Command.REDO, 'Ctrl|y Ctrl|Shift|Z', 'Meta|Shift|Z');
+
+      this.addShortcut_(Command.SELECT_ALL, 'Ctrl|a', 'Meta|a');
+      this.addShortcut_(Command.DESELECT_ALL, 'Escape');
+
+      this.addShortcut_(Command.CUT, 'Ctrl|x', 'Meta|x');
+      this.addShortcut_(Command.COPY, 'Ctrl|c', 'Meta|c');
+      this.addShortcut_(Command.PASTE, 'Ctrl|v', 'Meta|v');
     },
 
     detached: function() {
       CommandManager.instance_ = null;
       document.removeEventListener('open-item-menu', this.boundOnOpenItemMenu_);
+      document.removeEventListener('command-undo', this.boundOnCommandUndo_);
       document.removeEventListener('keydown', this.boundOnKeydown_);
     },
 
     /**
      * Display the command context menu at (|x|, |y|) in window co-ordinates.
-     * Commands will execute on the currently selected items.
+     * Commands will execute on |items| if given, or on the currently selected
+     * items.
      * @param {number} x
      * @param {number} y
+     * @param {MenuSource} source
+     * @param {Set<string>=} items
      */
-    openCommandMenuAtPosition: function(x, y) {
-      this.menuIds_ = this.getState().selection.items;
-      /** @type {!CrActionMenuElement} */ (this.$.dropdown)
-          .showAtPosition({top: y, left: x});
+    openCommandMenuAtPosition: function(x, y, source, items) {
+      this.menuSource_ = source;
+      this.menuIds_ = items || this.getState().selection.items;
+
+      var dropdown =
+          /** @type {!CrActionMenuElement} */ (this.$.dropdown.get());
+      // Ensure that the menu is fully rendered before trying to position it.
+      Polymer.dom.flush();
+      bookmarks.DialogFocusManager.getInstance().showDialog(
+          dropdown, function() {
+            dropdown.showAtPosition({top: y, left: x});
+          });
     },
 
     /**
      * Display the command context menu positioned to cover the |target|
      * element. Commands will execute on the currently selected items.
      * @param {!Element} target
+     * @param {MenuSource} source
      */
-    openCommandMenuAtElement: function(target) {
+    openCommandMenuAtElement: function(target, source) {
+      this.menuSource_ = source;
       this.menuIds_ = this.getState().selection.items;
-      /** @type {!CrActionMenuElement} */ (this.$.dropdown).showAt(target);
+
+      var dropdown =
+          /** @type {!CrActionMenuElement} */ (this.$.dropdown.get());
+      // Ensure that the menu is fully rendered before trying to position it.
+      Polymer.dom.flush();
+      bookmarks.DialogFocusManager.getInstance().showDialog(
+          dropdown, function() {
+            dropdown.showAt(target);
+          });
     },
 
     closeCommandMenu: function() {
-      /** @type {!CrActionMenuElement} */ (this.$.dropdown).close();
+      this.menuIds_ = new Set();
+      this.menuSource_ = MenuSource.NONE;
+      /** @type {!CrActionMenuElement} */ (this.$.dropdown.get()).close();
     },
 
     ////////////////////////////////////////////////////////////////////////////
@@ -104,9 +172,26 @@ cr.define('bookmarks', function() {
      * @return {boolean}
      */
     canExecute: function(command, itemIds) {
+      var state = this.getState();
       switch (command) {
         case Command.OPEN:
           return itemIds.size > 0;
+        case Command.UNDO:
+        case Command.REDO:
+          return this.globalCanEdit_;
+        case Command.SELECT_ALL:
+        case Command.DESELECT_ALL:
+          return true;
+        case Command.COPY:
+          return itemIds.size > 0;
+        case Command.CUT:
+          return itemIds.size > 0 &&
+              !this.containsMatchingNode_(itemIds, function(node) {
+                return !bookmarks.util.canEditNode(state, node.id);
+              });
+        case Command.PASTE:
+          return state.search.term == '' &&
+              bookmarks.util.canReorderChildren(state, state.selectedFolder);
         default:
           return this.isCommandVisible_(command, itemIds) &&
               this.isCommandEnabled_(command, itemIds);
@@ -122,13 +207,17 @@ cr.define('bookmarks', function() {
     isCommandVisible_: function(command, itemIds) {
       switch (command) {
         case Command.EDIT:
-          return itemIds.size == 1;
-        case Command.COPY:
-          return itemIds.size == 1 &&
-              this.containsMatchingNode_(itemIds, function(node) {
-                return !!node.url;
-              });
+          return itemIds.size == 1 && this.globalCanEdit_;
+        case Command.COPY_URL:
+          return this.isSingleBookmark_(itemIds);
         case Command.DELETE:
+          return itemIds.size > 0 && this.globalCanEdit_;
+        case Command.SHOW_IN_FOLDER:
+          return this.menuSource_ == MenuSource.LIST && itemIds.size == 1 &&
+              this.getState().search.term != '' &&
+              !this.containsMatchingNode_(itemIds, function(node) {
+                return !node.parentId || node.parentId == ROOT_NODE_ID;
+              });
         case Command.OPEN_NEW_TAB:
         case Command.OPEN_NEW_WINDOW:
         case Command.OPEN_INCOGNITO:
@@ -146,10 +235,19 @@ cr.define('bookmarks', function() {
      */
     isCommandEnabled_: function(command, itemIds) {
       switch (command) {
+        case Command.EDIT:
+        case Command.DELETE:
+          var state = this.getState();
+          return !this.containsMatchingNode_(itemIds, function(node) {
+            return !bookmarks.util.canEditNode(state, node.id);
+          });
         case Command.OPEN_NEW_TAB:
         case Command.OPEN_NEW_WINDOW:
-        case Command.OPEN_INCOGNITO:
           return this.expandUrls_(itemIds).length > 0;
+        case Command.OPEN_INCOGNITO:
+          return this.expandUrls_(itemIds).length > 0 &&
+              this.getState().prefs.incognitoAvailability !=
+              IncognitoAvailability.DISABLED;
         default:
           return true;
       }
@@ -160,23 +258,61 @@ cr.define('bookmarks', function() {
      * @param {!Set<string>} itemIds
      */
     handle: function(command, itemIds) {
+      var state = this.getState();
       switch (command) {
         case Command.EDIT:
           var id = Array.from(itemIds)[0];
           /** @type {!BookmarksEditDialogElement} */ (this.$.editDialog.get())
-              .showEditDialog(this.getState().nodes[id]);
+              .showEditDialog(state.nodes[id]);
           break;
+        case Command.COPY_URL:
         case Command.COPY:
           var idList = Array.from(itemIds);
           chrome.bookmarkManagerPrivate.copy(idList, function() {
-            // TODO(jiaxi): Add toast later.
-          });
+            var labelPromise;
+            if (command == Command.COPY_URL) {
+              labelPromise =
+                  Promise.resolve(loadTimeData.getString('toastUrlCopied'));
+            } else if (idList.length == 1) {
+              labelPromise =
+                  Promise.resolve(loadTimeData.getString('toastItemCopied'));
+            } else {
+              labelPromise = cr.sendWithPromise(
+                  'getPluralString', 'toastItemsCopied', idList.length);
+            }
+
+            this.showTitleToast_(
+                labelPromise, state.nodes[idList[0]].title, false);
+          }.bind(this));
+          break;
+        case Command.SHOW_IN_FOLDER:
+          var id = Array.from(itemIds)[0];
+          this.dispatch(bookmarks.actions.selectFolder(
+              assert(state.nodes[id].parentId), state.nodes));
           break;
         case Command.DELETE:
-          chrome.bookmarkManagerPrivate.removeTrees(
-              Array.from(this.minimizeDeletionSet_(itemIds)), function() {
-                // TODO(jiaxi): Add toast later.
-              });
+          var idList = Array.from(this.minimizeDeletionSet_(itemIds));
+          var title = state.nodes[idList[0]].title;
+          var labelPromise;
+
+          if (idList.length == 1) {
+            labelPromise =
+                Promise.resolve(loadTimeData.getString('toastItemDeleted'));
+          } else {
+            labelPromise = cr.sendWithPromise(
+                'getPluralString', 'toastItemsDeleted', idList.length);
+          }
+
+          chrome.bookmarkManagerPrivate.removeTrees(idList, function() {
+            this.showTitleToast_(labelPromise, title, true);
+          }.bind(this));
+          break;
+        case Command.UNDO:
+          chrome.bookmarkManagerPrivate.undo();
+          bookmarks.ToastManager.getInstance().hide();
+          break;
+        case Command.REDO:
+          chrome.bookmarkManagerPrivate.redo();
           break;
         case Command.OPEN_NEW_TAB:
         case Command.OPEN_NEW_WINDOW:
@@ -190,19 +326,69 @@ cr.define('bookmarks', function() {
               });
           if (isFolder) {
             var folderId = Array.from(itemIds)[0];
-            this.dispatch(bookmarks.actions.selectFolder(
-                folderId, this.getState().nodes));
+            this.dispatch(
+                bookmarks.actions.selectFolder(folderId, state.nodes));
           } else {
             this.openUrls_(this.expandUrls_(itemIds), command);
           }
+          break;
+        case Command.SELECT_ALL:
+          var displayedIds = bookmarks.util.getDisplayedList(state);
+          this.dispatch(bookmarks.actions.selectAll(displayedIds, state));
+          break;
+        case Command.DESELECT_ALL:
+          this.dispatch(bookmarks.actions.deselectItems());
+          break;
+        case Command.CUT:
+          chrome.bookmarkManagerPrivate.cut(Array.from(itemIds));
+          break;
+        case Command.PASTE:
+          var selectedFolder = state.selectedFolder;
+          var selectedItems = state.selection.items;
+          chrome.bookmarkManagerPrivate.paste(
+              selectedFolder, Array.from(selectedItems));
           break;
         default:
           assert(false);
       }
     },
 
+    /**
+     * @param {!Event} e
+     * @param {!Set<string>} itemIds
+     * @return {boolean} True if the event was handled, triggering a keyboard
+     *     shortcut.
+     */
+    handleKeyEvent: function(e, itemIds) {
+      for (var commandName in this.shortcuts_) {
+        var shortcut = this.shortcuts_[commandName];
+        if (shortcut.matchesEvent(e) && this.canExecute(commandName, itemIds)) {
+          this.handle(commandName, itemIds);
+
+          e.stopPropagation();
+          e.preventDefault();
+          return true;
+        }
+      }
+
+      return false;
+    },
+
     ////////////////////////////////////////////////////////////////////////////
     // Private functions:
+
+    /**
+     * Register a keyboard shortcut for a command.
+     * @param {Command} command Command that the shortcut will trigger.
+     * @param {string} shortcut Keyboard shortcut, using the syntax of
+     *     cr/ui/command.js.
+     * @param {string=} macShortcut If set, enables a replacement shortcut for
+     *     Mac.
+     */
+    addShortcut_: function(command, shortcut, macShortcut) {
+      var shortcut = (cr.isMac && macShortcut) ? macShortcut : shortcut;
+      this.shortcuts_[command] = new cr.ui.KeyboardShortcutList(shortcut);
+    },
 
     /**
      * Minimize the set of |itemIds| by removing any node which has an ancestor
@@ -229,6 +415,8 @@ cr.define('bookmarks', function() {
     },
 
     /**
+     * Open the given |urls| in response to a |command|. May show a confirmation
+     * dialog before opening large numbers of URLs.
      * @param {!Array<string>} urls
      * @param {Command} command
      * @private
@@ -242,16 +430,31 @@ cr.define('bookmarks', function() {
       if (urls.length == 0)
         return;
 
-      var incognito = command == Command.OPEN_INCOGNITO;
-      if (command == Command.OPEN_NEW_WINDOW || incognito) {
-        chrome.windows.create({url: urls, incognito: incognito});
-      } else {
-        if (command == Command.OPEN)
-          chrome.tabs.create({url: urls.shift(), active: true});
-        urls.forEach(function(url) {
-          chrome.tabs.create({url: url, active: false});
-        });
+      var openUrlsCallback = function() {
+        var incognito = command == Command.OPEN_INCOGNITO;
+        if (command == Command.OPEN_NEW_WINDOW || incognito) {
+          chrome.windows.create({url: urls, incognito: incognito});
+        } else {
+          if (command == Command.OPEN)
+            chrome.tabs.create({url: urls.shift(), active: true});
+          urls.forEach(function(url) {
+            chrome.tabs.create({url: url, active: false});
+          });
+        }
+      };
+
+      if (urls.length <= OPEN_CONFIRMATION_LIMIT) {
+        openUrlsCallback();
+        return;
       }
+
+      this.confirmOpenCallback_ = openUrlsCallback;
+      var dialog = this.$.openDialog.get();
+      dialog.querySelector('.body').textContent =
+          loadTimeData.getStringF('openDialogBody', urls.length);
+
+      bookmarks.DialogFocusManager.getInstance().showDialog(
+          this.$.openDialog.get());
     },
 
     /**
@@ -298,60 +501,15 @@ cr.define('bookmarks', function() {
     },
 
     /**
-     * @param {Event} e
-     * @private
+     * @param {!Set<string>} itemIds
+     * @return {boolean} True if |itemIds| is a single bookmark (non-folder)
+     *     node.
      */
-    onOpenItemMenu_: function(e) {
-      if (e.detail.targetElement) {
-        this.openCommandMenuAtElement(e.detail.targetElement);
-      } else {
-        this.openCommandMenuAtPosition(e.detail.x, e.detail.y);
-      }
-    },
-
-    /**
-     * @param {Event} e
-     * @private
-     */
-    onCommandClick_: function(e) {
-      this.closeCommandMenu();
-      this.handle(e.target.getAttribute('command'), assert(this.menuIds_));
-    },
-
-    /**
-     * @param {!Event} e
-     * @private
-     */
-    onKeydown_: function(e) {
-      var selection = this.getState().selection.items;
-      // TODO(tsergeant): Prevent keyboard shortcuts when a dialog is open or
-      // text field is focused.
-      for (var commandName in this.shortcuts_) {
-        var shortcut = this.shortcuts_[commandName];
-        if (Polymer.IronA11yKeysBehavior.keyboardEventMatchesKeys(
-                e, shortcut) &&
-            this.canExecute(commandName, selection)) {
-          this.handle(commandName, selection);
-
-          e.stopPropagation();
-          e.preventDefault();
-          return;
-        }
-      }
-    },
-
-    /**
-     * Close the menu on mousedown so clicks can propagate to the underlying UI.
-     * This allows the user to right click the list while a context menu is
-     * showing and get another context menu.
-     * @param {Event} e
-     * @private
-     */
-    onMenuMousedown_: function(e) {
-      if (e.path[0] != this.$.dropdown)
-        return;
-
-      this.$.dropdown.close();
+    isSingleBookmark_: function(itemIds) {
+      return itemIds.size == 1 &&
+          this.containsMatchingNode_(itemIds, function(node) {
+            return !!node.url;
+          });
     },
 
     /**
@@ -367,18 +525,21 @@ cr.define('bookmarks', function() {
       var label;
       switch (command) {
         case Command.EDIT:
-          if (this.menuIds_.size > 1)
+          if (this.menuIds_.size != 1)
             return '';
 
           var id = Array.from(this.menuIds_)[0];
           var itemUrl = this.getState().nodes[id].url;
           label = itemUrl ? 'menuEdit' : 'menuRename';
           break;
-        case Command.COPY:
+        case Command.COPY_URL:
           label = 'menuCopyURL';
           break;
         case Command.DELETE:
           label = 'menuDelete';
+          break;
+        case Command.SHOW_IN_FOLDER:
+          label = 'menuShowInFolder';
           break;
         case Command.OPEN_NEW_TAB:
           label = multipleNodes ? 'menuOpenAllNewTab' : 'menuOpenNewTab';
@@ -396,11 +557,126 @@ cr.define('bookmarks', function() {
 
     /**
      * @param {Command} command
+     * @return {string}
+     * @private
+     */
+    getCommandSublabel_: function(command) {
+      var multipleNodes = this.menuIds_.size > 1 ||
+          this.containsMatchingNode_(this.menuIds_, function(node) {
+            return !node.url;
+          });
+      switch (command) {
+        case Command.OPEN_NEW_TAB:
+          var urls = this.expandUrls_(this.menuIds_);
+          return multipleNodes && urls.length > 0 ? String(urls.length) : '';
+        default:
+          return '';
+      }
+    },
+
+    /** @private */
+    onMenuIdsChanged_: function() {
+      if (!this.menuIds_)
+        return;
+
+      this.hasAnySublabel_ = this.menuCommands_.some(function(command) {
+        return this.getCommandSublabel_(command) != '';
+      }.bind(this));
+    },
+
+    /**
+     * @param {Command} command
      * @return {boolean}
      * @private
      */
-    showDividerAfter_: function(command) {
-      return command == Command.DELETE;
+    showDividerAfter_: function(command, itemIds) {
+      return command == Command.DELETE &&
+          (this.globalCanEdit_ || this.isSingleBookmark_(itemIds));
+    },
+
+    /**
+     * Show a toast with a bookmark |title| inserted into a label, with the
+     * title ellipsised if necessary.
+     * @param {!Promise<string>} labelPromise Promise which resolves with the
+     *    label for the toast.
+     * @param {string} title Bookmark title to insert.
+     * @param {boolean} canUndo If true, shows an undo button in the toast.
+     * @private
+     */
+    showTitleToast_: function(labelPromise, title, canUndo) {
+      labelPromise.then(function(label) {
+        var pieces = loadTimeData.getSubstitutedStringPieces(label, title)
+                         .map(function(p) {
+                           // Make the bookmark name collapsible.
+                           p.collapsible = !!p.arg;
+                           return p;
+                         });
+
+        bookmarks.ToastManager.getInstance().showForStringPieces(
+            pieces, canUndo);
+      });
+    },
+
+    ////////////////////////////////////////////////////////////////////////////
+    // Event handlers:
+
+    /**
+     * @param {Event} e
+     * @private
+     */
+    onOpenItemMenu_: function(e) {
+      if (e.detail.targetElement) {
+        this.openCommandMenuAtElement(e.detail.targetElement, e.detail.source);
+      } else {
+        this.openCommandMenuAtPosition(e.detail.x, e.detail.y, e.detail.source);
+      }
+    },
+
+    /**
+     * @param {Event} e
+     * @private
+     */
+    onCommandClick_: function(e) {
+      this.handle(
+          e.currentTarget.getAttribute('command'), assert(this.menuIds_));
+      this.closeCommandMenu();
+    },
+
+    /**
+     * @param {!Event} e
+     * @private
+     */
+    onKeydown_: function(e) {
+      var selection = this.getState().selection.items;
+      if (e.target == document.body &&
+          !bookmarks.DialogFocusManager.getInstance().hasOpenDialog()) {
+        this.handleKeyEvent(e, selection);
+      }
+    },
+
+    /**
+     * Close the menu on mousedown so clicks can propagate to the underlying UI.
+     * This allows the user to right click the list while a context menu is
+     * showing and get another context menu.
+     * @param {Event} e
+     * @private
+     */
+    onMenuMousedown_: function(e) {
+      if (e.path[0] != this.$.dropdown.getIfExists())
+        return;
+
+      this.closeCommandMenu();
+    },
+
+    /** @private */
+    onOpenCancelTap_: function() {
+      this.$.openDialog.get().cancel();
+    },
+
+    /** @private */
+    onOpenConfirmTap_: function() {
+      this.confirmOpenCallback_();
+      this.$.openDialog.get().close();
     },
   });
 

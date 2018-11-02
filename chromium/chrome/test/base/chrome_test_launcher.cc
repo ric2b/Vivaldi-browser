@@ -39,9 +39,6 @@
 #if defined(USE_AURA)
 #include "ui/aura/test/ui_controls_factory_aura.h"
 #include "ui/base/test/ui_controls_aura.h"
-#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
-#include "ui/views/test/ui_controls_factory_desktop_aurax11.h"
-#endif
 #endif
 
 #if defined(OS_CHROMEOS)
@@ -124,21 +121,19 @@ void ChromeTestLauncherDelegate::PreSharding() {
                                       install_static::GetRegistryPath().c_str(),
                                       KEY_SET_VALUE);
 
-  if (result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND) {
-    LOG(ERROR) << "Failed to open distribution key for cleanup: " << result;
+  if (result != ERROR_SUCCESS) {
+    LOG_IF(ERROR, result != ERROR_FILE_NOT_FOUND)
+        << "Failed to open distribution key for cleanup: " << result;
     return;
   }
 
   result = distrubution_key.DeleteKey(L"PreferenceMACs");
-
-  if (result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND) {
-    LOG(ERROR) << "Failed to cleanup PreferenceMACs: " << result;
-    return;
-  }
+  LOG_IF(ERROR, result != ERROR_SUCCESS && result != ERROR_FILE_NOT_FOUND)
+      << "Failed to cleanup PreferenceMACs: " << result;
 #endif
 }
 
-int LaunchChromeTests(int default_jobs,
+int LaunchChromeTests(size_t parallel_jobs,
                       content::TestLauncherDelegate* delegate,
                       int argc,
                       char** argv) {
@@ -159,5 +154,5 @@ int LaunchChromeTests(int default_jobs,
   crash_reporter::SetCrashReporterClient(crash_client);
 #endif
 
-  return content::LaunchTests(delegate, default_jobs, argc, argv);
+  return content::LaunchTests(delegate, parallel_jobs, argc, argv);
 }

@@ -19,6 +19,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/trace_event/trace_event.h"
+#include "build/build_config.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
@@ -35,6 +36,10 @@
 #include "services/service_manager/public/interfaces/service.mojom.h"
 #include "services/service_manager/public/interfaces/service_control.mojom.h"
 #include "services/service_manager/public/interfaces/service_manager.mojom.h"
+
+#if !defined(OS_IOS)
+#include "services/service_manager/runner/host/service_process_launcher.h"
+#endif
 
 namespace service_manager {
 
@@ -69,6 +74,15 @@ CapabilitySet GetRequestedCapabilities(const InterfaceProviderSpec& source_spec,
               std::inserter(capabilities, capabilities.begin()));
   }
   return capabilities;
+}
+
+base::ProcessId GetCurrentPid() {
+#if defined(OS_IOS)
+  // iOS does not support base::Process.
+  return 0;
+#else
+  return base::Process::Current().Pid();
+#endif
 }
 
 // Generates a single set of interfaces that is the union of all interfaces
@@ -173,7 +187,7 @@ class ServiceManager::Instance
         weak_factory_(this) {
     if (identity_.name() == service_manager::mojom::kServiceName ||
         identity_.name() == catalog::mojom::kServiceName) {
-      pid_ = base::Process::Current().Pid();
+      pid_ = GetCurrentPid();
     }
     DCHECK_NE(mojom::kInvalidInstanceID, id_);
   }
@@ -249,6 +263,11 @@ class ServiceManager::Instance
   }
 
   bool StartWithFilePath(const base::FilePath& path) {
+#if defined(OS_IOS)
+    // iOS does not support launching services in their own processes.
+    NOTREACHED();
+    return false;
+#else
     DCHECK(!service_);
     DCHECK(!path.empty());
     runner_ = service_manager_->service_process_launcher_factory_->Create(path);
@@ -260,6 +279,7 @@ class ServiceManager::Instance
         base::Bind(&Instance::PIDAvailable, weak_factory_.GetWeakPtr()));
     StartWithService(std::move(service));
     return true;
+#endif
   }
 
   void BindPIDReceiver(mojom::PIDReceiverRequest request) {
@@ -394,12 +414,12 @@ class ServiceManager::Instance
   void BindInterface(const service_manager::Identity& in_target,
                      const std::string& interface_name,
                      mojo::ScopedMessagePipeHandle interface_pipe,
-                     const BindInterfaceCallback& callback) override {
+                     BindInterfaceCallback callback) override {
     Identity target = in_target;
     mojom::ConnectResult result =
         ValidateConnectParams(&target, nullptr, nullptr);
     if (!Succeeded(result)) {
-      callback.Run(result, Identity());
+      std::move(callback).Run(result, Identity());
       return;
     }
 
@@ -408,24 +428,24 @@ class ServiceManager::Instance
     params->set_target(target);
     params->set_interface_request_info(interface_name,
                                        std::move(interface_pipe));
-    params->set_start_service_callback(callback);
+    params->set_start_service_callback(std::move(callback));
     service_manager_->Connect(std::move(params));
   }
 
   void StartService(const Identity& in_target,
-                    const StartServiceCallback& callback) override {
+                    StartServiceCallback callback) override {
     Identity target = in_target;
     mojom::ConnectResult result =
         ValidateConnectParams(&target, nullptr, nullptr);
     if (!Succeeded(result)) {
-      callback.Run(result, Identity());
+      std::move(callback).Run(result, Identity());
       return;
     }
 
     std::unique_ptr<ConnectParams> params(new ConnectParams);
     params->set_source(identity_);
     params->set_target(target);
-    params->set_start_service_callback(callback);
+    params->set_start_service_callback(std::move(callback));
     service_manager_->Connect(std::move(params));
   }
 
@@ -433,14 +453,14 @@ class ServiceManager::Instance
       const Identity& in_target,
       mojo::ScopedMessagePipeHandle service_handle,
       mojom::PIDReceiverRequest pid_receiver_request,
-      const StartServiceWithProcessCallback& callback) override {
+      StartServiceWithProcessCallback callback) override {
     Identity target = in_target;
     mojom::ServicePtr service;
     service.Bind(mojom::ServicePtrInfo(std::move(service_handle), 0));
     mojom::ConnectResult result =
         ValidateConnectParams(&target, &service, &pid_receiver_request);
     if (!Succeeded(result)) {
-      callback.Run(result, Identity());
+      std::move(callback).Run(result, Identity());
       return;
     }
 
@@ -450,7 +470,7 @@ class ServiceManager::Instance
 
     params->set_client_process_info(std::move(service),
                                     std::move(pid_receiver_request));
-    params->set_start_service_callback(callback);
+    params->set_start_service_callback(std::move(callback));
     service_manager_->Connect(std::move(params));
   }
 
@@ -583,11 +603,16 @@ class ServiceManager::Instance
   }
 
   void PIDAvailable(base::ProcessId pid) {
+#if !defined(OS_IOS)
+    // iOS does not support base::Process and simply passes 0 here, so elide
+    // this check on that platform.
     if (pid == base::kNullProcessId) {
       service_manager_->OnInstanceError(this);
       return;
     }
+#endif
     pid_ = pid;
+    service_manager_->NotifyServicePIDReceived(identity_, pid_);
   }
 
   void OnServiceLost(
@@ -638,7 +663,9 @@ class ServiceManager::Instance
   Identity identity_;
   const InterfaceProviderSpecMap interface_provider_specs_;
   const bool allow_any_application_;
+#if !defined(OS_IOS)
   std::unique_ptr<ServiceProcessLauncher> runner_;
+#endif
   mojom::ServicePtr service_;
   mojo::Binding<mojom::PIDReceiver> pid_receiver_binding_;
   mojo::BindingSet<mojom::Connector> connectors_;
@@ -899,7 +926,7 @@ void ServiceManager::RegisterService(
   if (!pid_receiver_request.is_pending()) {
     mojom::PIDReceiverPtr pid_receiver;
     pid_receiver_request = mojo::MakeRequest(&pid_receiver);
-    pid_receiver->SetPID(base::Process::Current().Pid());
+    pid_receiver->SetPID(GetCurrentPid());
   }
 
   params->set_source(identity);
@@ -950,7 +977,7 @@ void ServiceManager::OnInstanceUnreachable(Instance* instance) {
 }
 
 void ServiceManager::OnInstanceStopped(const Identity& identity) {
-  listeners_.ForAllPtrs([identity](mojom::ServiceManagerListener* listener) {
+  listeners_.ForAllPtrs([&identity](mojom::ServiceManagerListener* listener) {
     listener->OnServiceStopped(identity);
   });
   if (!instance_quit_callback_.is_null())
@@ -1000,15 +1027,22 @@ void ServiceManager::EraseInstanceIdentity(Instance* instance) {
 void ServiceManager::NotifyServiceStarted(const Identity& identity,
                                           base::ProcessId pid) {
   listeners_.ForAllPtrs(
-      [identity, pid](mojom::ServiceManagerListener* listener) {
+      [&identity, pid](mojom::ServiceManagerListener* listener) {
         listener->OnServiceStarted(identity, pid);
       });
 }
 
 void ServiceManager::NotifyServiceFailedToStart(const Identity& identity) {
+  listeners_.ForAllPtrs([&identity](mojom::ServiceManagerListener* listener) {
+    listener->OnServiceFailedToStart(identity);
+  });
+}
+
+void ServiceManager::NotifyServicePIDReceived(const Identity& identity,
+                                              base::ProcessId pid) {
   listeners_.ForAllPtrs(
-      [identity](mojom::ServiceManagerListener* listener) {
-        listener->OnServiceFailedToStart(identity);
+      [&identity, pid](mojom::ServiceManagerListener* listener) {
+        listener->OnServicePIDReceived(identity, pid);
       });
 }
 

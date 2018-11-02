@@ -121,6 +121,55 @@ class PerfDataGeneratorTest(unittest.TestCase):
       }
     self.assertEquals(test, expected_generated_test)
 
+  def testGenerateTelemetryTestsWebView(self):
+    class RegularBenchmark(benchmark.Benchmark):
+      @classmethod
+      def Name(cls):
+        return 'regular'
+
+    swarming_dimensions = [
+        {'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP', 'device_ids': ['a']}
+    ]
+    test_config = {
+        'platform': 'android',
+        'swarming_dimensions': swarming_dimensions,
+        'replace_system_webview': True,
+    }
+    sharding_map = {'fake': {'regular': 'a'}}
+    benchmarks = [RegularBenchmark]
+    tests = perf_data_generator.generate_telemetry_tests(
+        'fake', test_config, benchmarks, sharding_map, ['blacklisted'])
+
+    self.assertEqual(len(tests), 1)
+    test = tests[0]
+    self.assertEquals(test['args'], [
+        'regular', '-v', '--upload-results', '--output-format=chartjson',
+        '--browser=android-webview',
+        '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk'])
+    self.assertEquals(test['isolate_name'], 'telemetry_perf_webview_tests')
+
+  def testGenerateTelemetryTestsWithUploadToFlakinessDashboard(self):
+    swarming_dimensions = [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}]
+    test = perf_data_generator.generate_telemetry_test(
+        swarming_dimensions, 'system_health.common_desktop', 'release', True)
+    expected_generated_test = {
+        'override_compile_targets': ['telemetry_perf_tests'],
+        'args': ['system_health.common_desktop', '-v', '--upload-results',
+                 '--output-format=chartjson', '--browser=release',
+                 '--output-format=json-test-results'],
+        'swarming': {
+          'ignore_task_failure': False,
+          'dimension_sets': [{'os': 'SkyNet', 'id': 'T-850', 'pool': 'T-RIP'}],
+          'hard_timeout': 10800,
+          'can_use_on_swarming_builders': True,
+          'expiration': 36000,
+          'io_timeout': 3600,
+        },
+        'name': 'system_health.common_desktop',
+        'isolate_name': 'telemetry_perf_tests',
+      }
+    self.assertEquals(test, expected_generated_test)
+
   def testGenerateTelemetryTestsBlacklistedReferenceBuildTest(self):
     class BlacklistedBenchmark(benchmark.Benchmark):
       @classmethod
@@ -199,10 +248,12 @@ class PerfDataGeneratorTest(unittest.TestCase):
             'dimension_sets': [{
                 'id': 'build1-b1',
             }]
-        }
+        },
+        'name': 'test',
     }]
     self.assertEqual(
-        perf_data_generator.RemoveBlacklistedTests(tests, []), tests)
+        perf_data_generator.remove_blacklisted_device_tests(tests, []), (
+            tests, {}))
 
   def testRemoveBlacklistedTestsShouldRemove(self):
     tests = [{
@@ -210,9 +261,66 @@ class PerfDataGeneratorTest(unittest.TestCase):
             'dimension_sets': [{
                 'id': 'build1-b1',
             }]
-        }
+        },
+        'name': 'test',
     }]
     self.assertEqual(
-        perf_data_generator.RemoveBlacklistedTests(tests, ['build1-b1']), [])
+        perf_data_generator.remove_blacklisted_device_tests(
+            tests, ['build1-b1']), ([], {'build1-b1': ['test']}))
 
+  def testRemoveBlacklistedTestsShouldRemoveMultiple(self):
+    tests = [{
+        'swarming': {
+            'dimension_sets': [{
+                'id': 'build1-b1',
+            }]
+        },
+        'name': 'test',
+    }, {
+        'swarming': {
+            'dimension_sets': [{
+                'id': 'build2-b1',
+            }]
+        },
+        'name': 'other_test',
+    }, {
+        'swarming': {
+            'dimension_sets': [{
+                'id': 'build2-b1',
+            }]
+        },
+        'name': 'test',
+    }]
+    self.assertEqual(
+        perf_data_generator.remove_blacklisted_device_tests(
+            tests, ['build1-b1', 'build2-b1']), ([], {
+                'build1-b1': ['test'],
+                'build2-b1': ['other_test', 'test'],
+            }))
 
+  def testExtraTestsAreLoadedFromFile(self):
+    tests = {
+        'Linux Perf': {}
+    }
+
+    mock_extras_json = '''
+        {
+            "comment": [ "This is comment and therefore should be skipped." ],
+            "Mojo Linux Perf": {}
+        }
+    '''
+
+    mock_waterfall_name = 'hello'
+
+    def mockIsFile(path):
+      return path.endswith('%s.extras.json' % mock_waterfall_name)
+
+    with mock.patch('os.path.isfile', side_effect=mockIsFile):
+      with mock.patch('__builtin__.open',
+                      mock.mock_open(read_data=mock_extras_json)):
+        perf_data_generator.append_extra_tests({'name': mock_waterfall_name},
+                                               tests)
+
+    self.assertTrue('Linux Perf' in tests)
+    self.assertTrue('Mojo Linux Perf' in tests)
+    self.assertFalse('comment' in tests)

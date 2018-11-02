@@ -8,10 +8,13 @@
 #include "core/events/EventListener.h"
 #include "device/screen_orientation/public/interfaces/screen_orientation.mojom-blink.h"
 #include "modules/ModulesExport.h"
+#include "platform/WebTaskRunner.h"
+#include "platform/wtf/Optional.h"
 #include "public/platform/modules/screen_orientation/WebScreenOrientationLockType.h"
 
 namespace blink {
 
+class DeviceOrientationData;
 class DeviceOrientationEvent;
 class Document;
 class HTMLVideoElement;
@@ -69,11 +72,20 @@ class MediaControlsOrientationLockDelegate final : public EventListener {
 
  private:
   friend class MediaControlsOrientationLockDelegateTest;
+  friend class MediaControlsOrientationLockAndRotateToFullscreenDelegateTest;
 
   enum class State {
     kPendingFullscreen,
     kPendingMetadata,
     kMaybeLockedFullscreen,
+  };
+
+  enum class DeviceOrientationType {
+    kUnknown,
+    kFlat,
+    kDiagonal,
+    kPortrait,
+    kLandscape
   };
 
   // EventListener implementation.
@@ -91,6 +103,12 @@ class MediaControlsOrientationLockDelegate final : public EventListener {
   // otherwise.
   void MaybeLockOrientation();
 
+  // Changes a previously locked screen orientation to instead be locked to
+  // the "any" orientation that allows accelerometer-based rotation. This is
+  // not the same as unlocking (which returns to the "default" orientation,
+  // which may in fact be more restrictive).
+  void ChangeLockToAnyOrientation();
+
   // Unlocks the screen orientation if the screen orientation was previously
   // locked.
   void MaybeUnlockOrientation();
@@ -98,7 +116,16 @@ class MediaControlsOrientationLockDelegate final : public EventListener {
   void MaybeListenToDeviceOrientation();
   void GotIsAutoRotateEnabledByUser(bool enabled);
 
-  void MaybeUnlockIfDeviceOrientationMatchesVideo(DeviceOrientationEvent*);
+  MODULES_EXPORT DeviceOrientationType
+  ComputeDeviceOrientation(DeviceOrientationData*) const;
+
+  void MaybeLockToAnyIfDeviceOrientationMatchesVideo(DeviceOrientationEvent*);
+
+  // Delay before `MaybeLockToAnyIfDeviceOrientationMatchesVideo` changes lock.
+  // Emprically, 200ms is too short, but 250ms avoids glitches. 500ms gives us
+  // a 2x margin in case the device is running slow, without being noticeable.
+  MODULES_EXPORT static constexpr TimeDelta kLockToAnyDelay =
+      TimeDelta::FromMilliseconds(500);
 
   // Current state of the object. See comment at the top of the file for a
   // detailed description.
@@ -108,7 +135,11 @@ class MediaControlsOrientationLockDelegate final : public EventListener {
   WebScreenOrientationLockType locked_orientation_ =
       kWebScreenOrientationLockDefault /* unlocked */;
 
+  TaskHandle lock_to_any_task_;
+
   device::mojom::blink::ScreenOrientationListenerPtr monitor_;
+
+  WTF::Optional<bool> is_auto_rotate_enabled_by_user_override_for_testing_;
 
   // `video_element_` owns MediaControlsImpl that owns |this|.
   Member<HTMLVideoElement> video_element_;

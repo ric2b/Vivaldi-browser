@@ -12,6 +12,7 @@ namespace device {
 
 class GvrDeviceProvider;
 class GvrDelegate;
+class VRDisplayImpl;
 
 class DEVICE_VR_EXPORT GvrDevice : public VRDevice {
  public:
@@ -23,18 +24,17 @@ class DEVICE_VR_EXPORT GvrDevice : public VRDevice {
       const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) override;
 
   void RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
+                      mojom::VRPresentationProviderRequest request,
                       const base::Callback<void(bool)>& callback) override;
   void SetSecureOrigin(bool secure_origin) override;
   void ExitPresent() override;
+  void GetNextMagicWindowPose(
+      VRDisplayImpl* display,
+      mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) override;
+  void OnDisplayAdded(VRDisplayImpl* display) override;
+  void OnDisplayRemoved(VRDisplayImpl* display) override;
+  void OnListeningForActivateChanged(VRDisplayImpl* display) override;
 
-  void SubmitFrame(int16_t frame_index,
-                   const gpu::MailboxHolder& mailbox) override;
-  void UpdateLayerBounds(int16_t frame_index,
-                         mojom::VRLayerBoundsPtr left_bounds_ptr,
-                         mojom::VRLayerBoundsPtr right_bounds_ptr,
-                         int16_t source_width,
-                         int16_t source_height) override;
-  void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) override;
   void OnDelegateChanged();
 
  private:

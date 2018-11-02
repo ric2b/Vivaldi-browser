@@ -11,7 +11,8 @@
 #include <string>
 #include <vector>
 #include "base/strings/utf_string_conversions.h"
-#include "calendar/calendar_types.h"
+#include "calendar/calendar_type.h"
+#include "calendar/event_type.h"
 #include "sql/statement.h"
 
 namespace calendar {
@@ -40,26 +41,51 @@ bool EventDatabase::CreateEventTable() {
       // timestamps to see if there are any updates need to be synced. And sync
       //  will only see the new Event, but missed the deleted Event.
       "calendar_id INTEGER, "
+      "alarm_id INTEGER, "
       "title LONGVARCHAR,"
       "description LONGVARCHAR,"
       "start INTEGER NOT NULL,"
-      "end INTEGER NOT NULL)");
+      "end INTEGER NOT NULL,"
+      "all_day INTEGER,"
+      "is_recurring INTEGER,"
+      "start_recurring INTEGER,"
+      "end_recurring INTEGER,"
+      "location LONGVARCHAR,"
+      "url LONGVARCHAR,"
+      "parent_event_id INTEGER,"
+      "created INTEGER,"
+      "last_modified INTEGER"
+      ")");
 
   return GetDB().Execute(sql.c_str());
 }
 
-bool EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
-  sql::Statement statement(
-      GetDB().GetCachedStatement(SQL_FROM_HERE,
-                                 "INSERT OR REPLACE INTO events "
-                                 "(title, description, start, end) "
-                                 "VALUES (?, ?, ?,?)"));
+EventID EventDatabase::CreateCalendarEvent(calendar::EventRow row) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE,
+      "INSERT OR REPLACE INTO events "
+      "(calendar_id, alarm_id, title, description, "
+      "start, end, all_day, is_recurring, start_recurring, end_recurring, "
+      "location, url) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"));
 
-  statement.BindString16(0, row.title());
-  statement.BindString16(1, row.description());
-  statement.BindInt64(2, row.start().ToInternalValue());
-  statement.BindInt64(3, row.end().ToInternalValue());
-  return statement.Run();
+  statement.BindInt64(0, row.calendar_id());
+  statement.BindInt64(1, row.alarm_id());
+  statement.BindString16(2, row.title());
+  statement.BindString16(3, row.description());
+  statement.BindInt64(4, row.start().ToInternalValue());
+  statement.BindInt64(5, row.end().ToInternalValue());
+  statement.BindInt(6, row.all_day() ? 1 : 0);
+  statement.BindInt(7, row.is_recurring() ? 1 : 0);
+  statement.BindInt64(8, row.start_recurring().ToInternalValue());
+  statement.BindInt64(9, row.end_recurring().ToInternalValue());
+  statement.BindString16(10, row.location());
+  statement.BindString16(11, row.url());
+
+  if (!statement.Run()) {
+    return 0;
+  }
+  return GetDB().GetLastInsertRowId();
 }
 
 bool EventDatabase::GetAllCalendarEvents(EventRows* events) {
@@ -68,20 +94,9 @@ bool EventDatabase::GetAllCalendarEvents(EventRows* events) {
       SQL_FROM_HERE, "SELECT" CALENDAR_EVENT_ROW_FIELDS " FROM events "));
 
   while (s.Step()) {
-    base::string16 id = s.ColumnString16(0);
-    base::string16 calendar_id = s.ColumnString16(1);
-    base::string16 title = s.ColumnString16(2);
-    base::string16 description = s.ColumnString16(3);
-
-    EventRow eve;
-    eve.set_id(id);
-    eve.set_calendar_id(calendar_id);
-    eve.set_title(title);
-    eve.set_description(description);
-    eve.set_start(base::Time::FromInternalValue(s.ColumnInt64(4)));
-    eve.set_end(base::Time::FromInternalValue(s.ColumnInt64(5)));
-
-    events->push_back(eve);
+    EventRow event;
+    FillEventRow(s, &event);
+    events->push_back(event);
   }
 
   return true;
@@ -103,35 +118,67 @@ bool EventDatabase::GetRowForEvent(calendar::EventID event_id,
 }
 
 bool EventDatabase::UpdateEventRow(const EventRow& event) {
-  sql::Statement statement(GetDB().GetCachedStatement(
-      SQL_FROM_HERE,
-      "UPDATE events SET \
-        calendar_id=?,title=?,description=?,start=?,end=? \
+  sql::Statement statement(GetDB().GetCachedStatement(SQL_FROM_HERE,
+                                                      "UPDATE events SET \
+        calendar_id=?, alarm_id=?, title=?, description=?, start=?, end=?, \
+        all_day=?, is_recurring=?, start_recurring=?, end_recurring=?, \
+        location=?, url=? \
         WHERE id=?"));
-  statement.BindString16(0, event.calendar_id());
-  statement.BindString16(1, event.title());
-  statement.BindString16(2, event.description());
-  statement.BindInt64(3, event.start().ToInternalValue());
-  statement.BindInt64(4, event.end().ToInternalValue());
-  statement.BindString16(5, event.id());
+  statement.BindInt64(0, event.calendar_id());
+  statement.BindInt64(1, event.alarm_id());
+  statement.BindString16(2, event.title());
+  statement.BindString16(3, event.description());
+  statement.BindInt64(4, event.start().ToInternalValue());
+  statement.BindInt64(5, event.end().ToInternalValue());
+  statement.BindInt(6, event.all_day() ? 1 : 0);
+  statement.BindInt(7, event.is_recurring() ? 1 : 0);
+  statement.BindInt64(8, event.start_recurring().ToInternalValue());
+  statement.BindInt64(9, event.end_recurring().ToInternalValue());
+  statement.BindString16(10, event.location());
+  statement.BindString16(11, event.url());
+  statement.BindInt64(12, event.id());
 
   return statement.Run();
 }
 
 // Must be in sync with CALENDAR_EVENT_ROW_FIELDS.
 // static
-void EventDatabase::FillEventRow(sql::Statement& statement, EventRow* event) {
-  base::string16 id = statement.ColumnString16(0);
-  base::string16 calendar_id = statement.ColumnString16(1);
-  base::string16 title = statement.ColumnString16(2);
-  base::string16 description = statement.ColumnString16(3);
+void EventDatabase::FillEventRow(sql::Statement& s, EventRow* event) {
+  EventID id = s.ColumnInt64(0);
+  CalendarID calendar_id = s.ColumnInt64(1);
+  AlarmID alarm_id = s.ColumnInt64(2);
+  base::string16 title = s.ColumnString16(3);
+  base::string16 description = s.ColumnString16(4);
+  base::Time start = base::Time::FromInternalValue(s.ColumnInt64(5));
+  base::Time end = base::Time::FromInternalValue(s.ColumnInt64(6));
+  int all_day = s.ColumnInt(7);
+  int is_recurring = s.ColumnInt(8);
+  base::Time start_recurring = base::Time::FromInternalValue(s.ColumnInt64(9));
+  base::Time end_recurring = base::Time::FromInternalValue(s.ColumnInt64(10));
+  base::string16 location = s.ColumnString16(11);
+  base::string16 url = s.ColumnString16(12);
 
   event->set_id(id);
   event->set_calendar_id(calendar_id);
+  event->set_alarm_id(alarm_id);
   event->set_title(title);
   event->set_description(description);
-  event->set_start(base::Time::FromInternalValue(statement.ColumnInt64(4)));
-  event->set_end(base::Time::FromInternalValue(statement.ColumnInt64(5)));
+  event->set_start(start);
+  event->set_end(end);
+  event->set_all_day(all_day == 1 ? true : false);
+  event->set_is_recurring(is_recurring == 1 ? true : false);
+  event->set_start_recurring(start_recurring);
+  event->set_end_recurring(end_recurring);
+  event->set_location(location);
+  event->set_url(url);
+}
+
+bool EventDatabase::DeleteEvent(calendar::EventID event_id) {
+  sql::Statement statement(GetDB().GetCachedStatement(
+      SQL_FROM_HERE, "DELETE from events WHERE id=?"));
+  statement.BindInt64(0, event_id);
+
+  return statement.Run();
 }
 
 }  // namespace calendar

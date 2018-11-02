@@ -9,7 +9,6 @@
 #include "core/loader/modulescript/ModuleScriptFetchRequest.h"
 #include "core/loader/resource/ScriptResource.h"
 #include "platform/heap/Handle.h"
-#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceOwner.h"
 #include "platform/weborigin/KURL.h"
 #include "public/platform/WebURLRequest.h"
@@ -77,8 +76,6 @@ class CORE_EXPORT ModuleScriptLoader final
   // Implements ScriptResourceClient
   void NotifyFinished(Resource*) override;
   String DebugName() const override { return "ModuleScriptLoader"; }
-
-  static bool WasModuleLoadSuccessful(Resource*);
 
   Member<Modulator> modulator_;
   State state_ = State::kInitial;

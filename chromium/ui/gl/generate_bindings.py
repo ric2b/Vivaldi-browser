@@ -1982,6 +1982,24 @@ EGL_FUNCTIONS = [
   'names': ['eglPostSubBufferNV'],
   'arguments': 'EGLDisplay dpy, EGLSurface surface, '
     'EGLint x, EGLint y, EGLint width, EGLint height', },
+{ 'return_type': 'EGLint',
+  'versions': [{ 'name': 'eglProgramCacheGetAttribANGLE',
+                 'extensions': ['EGL_ANGLE_program_cache_control'] }],
+  'arguments': 'EGLDisplay dpy, EGLenum attrib', },
+{ 'return_type': 'void',
+  'versions': [{ 'name': 'eglProgramCachePopulateANGLE',
+                 'extensions': ['EGL_ANGLE_program_cache_control'] }],
+  'arguments': 'EGLDisplay dpy, const void* key, '
+    'EGLint keysize, const void* binary, EGLint binarysize', },
+{ 'return_type': 'void',
+  'versions': [{ 'name': 'eglProgramCacheQueryANGLE',
+                 'extensions': ['EGL_ANGLE_program_cache_control'] }],
+  'arguments': 'EGLDisplay dpy, EGLint index, '
+    'void* key, EGLint* keysize, void* binary, EGLint* binarysize', },
+{ 'return_type': 'EGLint',
+  'versions': [{ 'name': 'eglProgramCacheResizeANGLE',
+                 'extensions': ['EGL_ANGLE_program_cache_control'] }],
+  'arguments': 'EGLDisplay dpy, EGLint limit, EGLenum mode', },
 { 'return_type': 'EGLenum',
   'names': ['eglQueryAPI'],
   'arguments': 'void', },
@@ -3001,6 +3019,9 @@ void MakeFunctionUnique(const char *func_name) {
   file.write('\n')
   file.write('}  // namespace gl\n')
 
+def SamePrefix(a, b):
+  return a[:a.rfind("_")] == b[:b.rfind("_")]
+
 def GenerateEnumUtils(out_file, input_filenames):
   enum_re = re.compile(r'\#define\s+(GL_[a-zA-Z0-9_]+)\s+([0-9A-Fa-fx]+)')
   dict = {}
@@ -3015,9 +3036,11 @@ def GenerateEnumUtils(out_file, input_filenames):
           if not value in dict:
             dict[value] = name
           # check our own _CHROMIUM macro conflicts with khronos GL headers.
-          elif dict[value] != name and (name.endswith('_CHROMIUM') or
-              dict[value].endswith('_CHROMIUM')):
-            raise RunTimeError("code collision: %s and %s have the same code %s"
+          # we allow for name duplication if they have the same prefix.
+          elif dict[value] != name and ((name.endswith('_CHROMIUM') or
+              dict[value].endswith('_CHROMIUM')) and
+              not SamePrefix(name, dict[value])):
+            raise RuntimeError("code collision: %s and %s have the same code %s"
                                %  (dict[value], name, value))
 
   out_file.write(LICENSE_AND_HEADER)

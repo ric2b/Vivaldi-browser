@@ -5,6 +5,7 @@
 #ifndef Modulator_h
 #define Modulator_h
 
+#include "bindings/core/v8/ScriptModule.h"
 #include "core/CoreExport.h"
 #include "core/dom/AncestorList.h"
 #include "platform/bindings/ScriptWrappable.h"
@@ -18,10 +19,11 @@
 
 namespace blink {
 
+class ExceptionState;
 class ModuleScript;
 class ModuleScriptFetchRequest;
 class ModuleScriptLoaderClient;
-class ScriptModule;
+class ModuleTreeReachedUrlSet;
 class ScriptModuleResolver;
 class ScriptState;
 class ScriptValue;
@@ -31,15 +33,25 @@ class WebTaskRunner;
 // A SingleModuleClient is notified when single module script node (node as in a
 // module tree graph) load is complete and its corresponding entry is created in
 // module map.
-class CORE_EXPORT SingleModuleClient : public GarbageCollectedMixin {
+class CORE_EXPORT SingleModuleClient
+    : public GarbageCollectedFinalized<SingleModuleClient>,
+      public TraceWrapperBase {
  public:
+  virtual ~SingleModuleClient() = default;
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+
   virtual void NotifyModuleLoadFinished(ModuleScript*) = 0;
 };
 
 // A ModuleTreeClient is notified when a module script and its whole descendent
 // tree load is complete.
-class CORE_EXPORT ModuleTreeClient : public GarbageCollectedMixin {
+class CORE_EXPORT ModuleTreeClient
+    : public GarbageCollectedFinalized<ModuleTreeClient>,
+      public TraceWrapperBase {
  public:
+  virtual ~ModuleTreeClient() = default;
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+
   virtual void NotifyModuleTreeLoadFinished(ModuleScript*) = 0;
 };
 
@@ -80,6 +92,7 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   virtual void FetchTreeInternal(const ModuleScriptFetchRequest&,
                                  const AncestorList&,
                                  ModuleGraphLevel,
+                                 ModuleTreeReachedUrlSet*,
                                  ModuleTreeClient*) = 0;
 
   // Asynchronously retrieve a module script from the module map, or fetch it
@@ -94,7 +107,8 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
 
   // Synchronously retrieves a single module script from existing module map
   // entry.
-  // Note: returns nullptr if the module map entry is still "fetching".
+  // Note: returns nullptr if the module map entry doesn't exist, or
+  // is still "fetching".
   virtual ModuleScript* GetFetchedModuleScript(const KURL&) = 0;
 
   // https://html.spec.whatwg.org/#resolve-a-module-specifier
@@ -106,13 +120,24 @@ class CORE_EXPORT Modulator : public GarbageCollectedFinalized<Modulator>,
   virtual ScriptModule CompileModule(const String& script,
                                      const String& url_str,
                                      AccessControlStatus,
-                                     const TextPosition&) = 0;
+                                     const TextPosition&,
+                                     ExceptionState&) = 0;
 
   virtual ScriptValue InstantiateModule(ScriptModule) = 0;
 
-  virtual ScriptValue GetInstantiationError(const ModuleScript*) = 0;
+  virtual ScriptModuleState GetRecordStatus(ScriptModule) = 0;
 
-  virtual Vector<String> ModuleRequestsFromScriptModule(ScriptModule) = 0;
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-error
+  virtual ScriptValue GetError(const ModuleScript*) = 0;
+
+  struct ModuleRequest {
+    String specifier;
+    TextPosition position;
+    ModuleRequest(const String& specifier, const TextPosition& position)
+        : specifier(specifier), position(position) {}
+  };
+  virtual Vector<ModuleRequest> ModuleRequestsFromScriptModule(
+      ScriptModule) = 0;
 
   virtual void ExecuteModule(const ModuleScript*) = 0;
 

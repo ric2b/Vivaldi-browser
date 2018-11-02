@@ -14,18 +14,19 @@
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/test/test_message_loop.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/chromeos_paths.h"
 #include "chromeos/printing/ppd_cache.h"
 #include "chromeos/printing/ppd_provider.h"
+#include "chromeos/printing/printer_configuration.h"
 #include "net/url_request/test_url_request_interceptor.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace chromeos {
-namespace printing {
 
 namespace {
 
@@ -59,9 +60,10 @@ More random contents that we don't care about.
 class PpdProviderTest : public ::testing::Test {
  public:
   PpdProviderTest()
-      : loop_(base::MessageLoop::TYPE_IO),
+      : scoped_task_environment_(
+            base::test::ScopedTaskEnvironment::MainThreadType::IO),
         request_context_getter_(new net::TestURLRequestContextGetter(
-            base::MessageLoop::current()->task_runner())) {}
+            scoped_task_environment_.GetMainThreadTaskRunner())) {}
 
   void SetUp() override {
     ASSERT_TRUE(ppd_cache_temp_dir_.CreateUniqueTempDir());
@@ -74,19 +76,17 @@ class PpdProviderTest : public ::testing::Test {
     auto provider_options = PpdProvider::Options();
     provider_options.ppd_server_root = std::string("https://") + kPpdServer;
 
-    return PpdProvider::Create(
-        locale, request_context_getter_.get(),
-        PpdCache::Create(ppd_cache_temp_dir_.GetPath(),
-                         base::MessageLoop::current()->task_runner()),
-        loop_.task_runner().get(), provider_options);
+    return PpdProvider::Create(locale, request_context_getter_.get(),
+                               PpdCache::Create(ppd_cache_temp_dir_.GetPath()),
+                               provider_options);
   }
 
   // Create an interceptor that serves a small fileset of ppd server files.
   void StartFakePpdServer() {
     ASSERT_TRUE(interceptor_temp_dir_.CreateUniqueTempDir());
     interceptor_ = base::MakeUnique<net::TestURLRequestInterceptor>(
-        "https", kPpdServer, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get());
+        "https", kPpdServer, scoped_task_environment_.GetMainThreadTaskRunner(),
+        scoped_task_environment_.GetMainThreadTaskRunner());
     // Use brace initialization to express the desired server contents as "url",
     // "contents" pairs.
     std::vector<std::pair<std::string, std::string>> server_contents = {
@@ -157,7 +157,7 @@ class PpdProviderTest : public ::testing::Test {
   // Note this is harmless to call if we haven't started a fake ppd server.
   void StopFakePpdServer() {
     interceptor_.reset();
-    base::RunLoop().RunUntilIdle();
+    scoped_task_environment_.RunUntilIdle();
   }
 
   // Capture the result of a ResolveManufacturers() call.
@@ -168,7 +168,7 @@ class PpdProviderTest : public ::testing::Test {
 
   // Capture the result of a ResolvePrinters() call.
   void CaptureResolvePrinters(PpdProvider::CallbackResultCode code,
-                              const std::vector<std::string>& data) {
+                              const PpdProvider::ResolvedPrintersList& data) {
     captured_resolve_printers_.push_back({code, data});
   }
 
@@ -184,9 +184,15 @@ class PpdProviderTest : public ::testing::Test {
   }
 
   // Capture the result of a ResolveUsbIds() call.
-  void CaptureResolveUsbIds(PpdProvider::CallbackResultCode code,
-                            const std::string& contents) {
-    captured_resolve_usb_ids_.push_back({code, contents});
+  void CaptureResolvePpdReference(PpdProvider::CallbackResultCode code,
+                                  const Printer::PpdReference& ref) {
+    captured_resolve_ppd_references_.push_back({code, ref});
+  }
+
+  void CaptureReverseLookup(PpdProvider::CallbackResultCode code,
+                            const std::string& manufacturer,
+                            const std::string& model) {
+    captured_reverse_lookup_.push_back({code, manufacturer, model});
   }
 
   // Discard the result of a ResolvePpd() call.
@@ -202,7 +208,7 @@ class PpdProviderTest : public ::testing::Test {
     auto provider = CreateProvider(browser_locale);
     provider->ResolveManufacturers(base::Bind(
         &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
-    base::RunLoop().RunUntilIdle();
+    scoped_task_environment_.RunUntilIdle();
     provider = nullptr;
     ASSERT_EQ(captured_resolve_manufacturers_.size(), 1UL);
     EXPECT_EQ(captured_resolve_manufacturers_[0].first, PpdProvider::SUCCESS);
@@ -216,27 +222,15 @@ class PpdProviderTest : public ::testing::Test {
                  result_vec.end());
   }
 
-  // Drain tasks both on the loop we use for network/disk activity and the
-  // top-level loop that we're using in the test itself.  Unfortunately, even
-  // thought the TestURLRequestContextGetter tells the url fetcher to run on the
-  // current message loop, some deep backend processes can get put into other
-  // loops, which means we can't just trust RunLoop::RunUntilIdle() to drain
-  // outstanding work.
-  void Drain(const PpdProvider& provider) {
-    do {
-      base::RunLoop().RunUntilIdle();
-    } while (!provider.Idle());
-  }
-
-  // Message loop that runs on the current thread.
-  base::TestMessageLoop loop_;
+  // Environment for task schedulers.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   std::vector<
       std::pair<PpdProvider::CallbackResultCode, std::vector<std::string>>>
       captured_resolve_manufacturers_;
 
-  std::vector<
-      std::pair<PpdProvider::CallbackResultCode, std::vector<std::string>>>
+  std::vector<std::pair<PpdProvider::CallbackResultCode,
+                        PpdProvider::ResolvedPrintersList>>
       captured_resolve_printers_;
 
   struct CapturedResolvePpdResults {
@@ -246,8 +240,15 @@ class PpdProviderTest : public ::testing::Test {
   };
   std::vector<CapturedResolvePpdResults> captured_resolve_ppd_;
 
-  std::vector<std::pair<PpdProvider::CallbackResultCode, std::string>>
-      captured_resolve_usb_ids_;
+  std::vector<std::pair<PpdProvider::CallbackResultCode, Printer::PpdReference>>
+      captured_resolve_ppd_references_;
+
+  struct CapturedReverseLookup {
+    PpdProvider::CallbackResultCode code;
+    std::string manufacturer;
+    std::string model;
+  };
+  std::vector<CapturedReverseLookup> captured_reverse_lookup_;
 
   std::unique_ptr<net::TestURLRequestInterceptor> interceptor_;
 
@@ -271,7 +272,7 @@ TEST_F(PpdProviderTest, ManufacturersFetch) {
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
   provider->ResolveManufacturers(base::Bind(
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
   ASSERT_EQ(2UL, captured_resolve_manufacturers_.size());
   std::vector<std::string> expected_result(
       {"manufacturer_a_en", "manufacturer_b_en"});
@@ -291,7 +292,7 @@ TEST_F(PpdProviderTest, ManufacturersFetchNoServer) {
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
   provider->ResolveManufacturers(base::Bind(
       &PpdProviderTest::CaptureResolveManufacturers, base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
   ASSERT_EQ(2UL, captured_resolve_manufacturers_.size());
   EXPECT_EQ(PpdProvider::SERVER_ERROR,
             captured_resolve_manufacturers_[0].first);
@@ -316,39 +317,49 @@ TEST_F(PpdProviderTest, UsbResolution) {
   StartFakePpdServer();
   auto provider = CreateProvider("en");
 
+  PpdProvider::PrinterSearchData search_data;
+
   // Should get back "Some canonical reference"
-  provider->ResolveUsbIds(0x031f, 1592,
-                          base::Bind(&PpdProviderTest::CaptureResolveUsbIds,
-                                     base::Unretained(this)));
+  search_data.usb_vendor_id = 0x031f;
+  search_data.usb_product_id = 1592;
+  provider->ResolvePpdReference(
+      search_data, base::Bind(&PpdProviderTest::CaptureResolvePpdReference,
+                              base::Unretained(this)));
   // Should get back "Some other canonical reference"
-  provider->ResolveUsbIds(0x031f, 6535,
-                          base::Bind(&PpdProviderTest::CaptureResolveUsbIds,
-                                     base::Unretained(this)));
+  search_data.usb_vendor_id = 0x031f;
+  search_data.usb_product_id = 6535;
+  provider->ResolvePpdReference(
+      search_data, base::Bind(&PpdProviderTest::CaptureResolvePpdReference,
+                              base::Unretained(this)));
 
   // Extant vendor id, nonexistant device id, should get a NOT_FOUND
-  provider->ResolveUsbIds(0x031f, 8162,
-                          base::Bind(&PpdProviderTest::CaptureResolveUsbIds,
-                                     base::Unretained(this)));
+  search_data.usb_vendor_id = 0x031f;
+  search_data.usb_product_id = 8162;
+  provider->ResolvePpdReference(
+      search_data, base::Bind(&PpdProviderTest::CaptureResolvePpdReference,
+                              base::Unretained(this)));
 
   // Nonexistant vendor id, should get a NOT_FOUND in the real world, but
   // the URL interceptor we're using considers all nonexistant files to
   // be effectively CONNECTION REFUSED, so we just check for non-success
   // on this one.
-  provider->ResolveUsbIds(1234, 1782,
-                          base::Bind(&PpdProviderTest::CaptureResolveUsbIds,
-                                     base::Unretained(this)));
-  Drain(*provider);
+  search_data.usb_vendor_id = 1234;
+  search_data.usb_product_id = 1782;
+  provider->ResolvePpdReference(
+      search_data, base::Bind(&PpdProviderTest::CaptureResolvePpdReference,
+                              base::Unretained(this)));
+  scoped_task_environment_.RunUntilIdle();
 
-  ASSERT_EQ(captured_resolve_usb_ids_.size(), static_cast<size_t>(4));
-  EXPECT_EQ(captured_resolve_usb_ids_[0].first, PpdProvider::SUCCESS);
-  EXPECT_EQ(captured_resolve_usb_ids_[0].second, "Some canonical reference");
-  EXPECT_EQ(captured_resolve_usb_ids_[1].first, PpdProvider::SUCCESS);
-  EXPECT_EQ(captured_resolve_usb_ids_[1].second,
+  ASSERT_EQ(captured_resolve_ppd_references_.size(), static_cast<size_t>(4));
+  EXPECT_EQ(captured_resolve_ppd_references_[0].first, PpdProvider::SUCCESS);
+  EXPECT_EQ(captured_resolve_ppd_references_[0].second.effective_make_and_model,
+            "Some canonical reference");
+  EXPECT_EQ(captured_resolve_ppd_references_[1].first, PpdProvider::SUCCESS);
+  EXPECT_EQ(captured_resolve_ppd_references_[1].second.effective_make_and_model,
             "Some other canonical reference");
-  EXPECT_EQ(captured_resolve_usb_ids_[2].first, PpdProvider::NOT_FOUND);
-  EXPECT_EQ(captured_resolve_usb_ids_[2].second, "");
-  EXPECT_FALSE(captured_resolve_usb_ids_[3].first == PpdProvider::SUCCESS);
-  EXPECT_EQ(captured_resolve_usb_ids_[3].second, "");
+  EXPECT_EQ(captured_resolve_ppd_references_[2].first, PpdProvider::NOT_FOUND);
+  EXPECT_FALSE(captured_resolve_ppd_references_[3].first ==
+               PpdProvider::SUCCESS);
 }
 
 // For convenience a null ResolveManufacturers callback target.
@@ -365,7 +376,7 @@ TEST_F(PpdProviderTest, ResolvePrinters) {
   // should be in it and we check that elsewhere.  We just need to run the
   // resolve to populate the internal PpdProvider structures.
   provider->ResolveManufacturers(base::Bind(&ResolveManufacturersNop));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   provider->ResolvePrinters("manufacturer_a_en",
                             base::Bind(&PpdProviderTest::CaptureResolvePrinters,
@@ -373,21 +384,28 @@ TEST_F(PpdProviderTest, ResolvePrinters) {
   provider->ResolvePrinters("manufacturer_b_en",
                             base::Bind(&PpdProviderTest::CaptureResolvePrinters,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
   ASSERT_EQ(2UL, captured_resolve_printers_.size());
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_printers_[0].first);
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_printers_[1].first);
   EXPECT_EQ(2UL, captured_resolve_printers_[0].second.size());
-  EXPECT_EQ(std::vector<std::string>({"printer_a", "printer_b"}),
-            captured_resolve_printers_[0].second);
-  EXPECT_EQ(std::vector<std::string>({"printer_c"}),
-            captured_resolve_printers_[1].second);
 
-  // We have manufacturers and models, we should be able to get a ppd out of
-  // this.
-  Printer::PpdReference ref;
-  ASSERT_TRUE(
-      provider->GetPpdReference("manufacturer_a_en", "printer_b", &ref));
+  // First capture should get back printer_a, and printer_b, with ppd
+  // reference effective make and models of printer_a_ref and printer_b_ref.
+  const auto& capture0 = captured_resolve_printers_[0].second;
+  ASSERT_EQ(2UL, capture0.size());
+  EXPECT_EQ("printer_a", capture0[0].first);
+  EXPECT_EQ("printer_a_ref", capture0[0].second.effective_make_and_model);
+
+  EXPECT_EQ("printer_b", capture0[1].first);
+  EXPECT_EQ("printer_b_ref", capture0[1].second.effective_make_and_model);
+
+  // Second capture should get back printer_c with effective make and model of
+  // printer_c_ref
+  const auto& capture1 = captured_resolve_printers_[1].second;
+  ASSERT_EQ(1UL, capture1.size());
+  EXPECT_EQ("printer_c", capture1[0].first);
+  EXPECT_EQ("printer_c_ref", capture1[0].second.effective_make_and_model);
 }
 
 // Test that if we give a bad reference to ResolvePrinters(), we get an
@@ -396,12 +414,12 @@ TEST_F(PpdProviderTest, ResolvePrintersBadReference) {
   StartFakePpdServer();
   auto provider = CreateProvider("en");
   provider->ResolveManufacturers(base::Bind(&ResolveManufacturersNop));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   provider->ResolvePrinters("bogus_doesnt_exist",
                             base::Bind(&PpdProviderTest::CaptureResolvePrinters,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
   ASSERT_EQ(1UL, captured_resolve_printers_.size());
   EXPECT_EQ(PpdProvider::INTERNAL_ERROR, captured_resolve_printers_[0].first);
 }
@@ -411,7 +429,7 @@ TEST_F(PpdProviderTest, ResolvePrintersNoServer) {
   StartFakePpdServer();
   auto provider = CreateProvider("en");
   provider->ResolveManufacturers(base::Bind(&ResolveManufacturersNop));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   StopFakePpdServer();
 
@@ -421,7 +439,7 @@ TEST_F(PpdProviderTest, ResolvePrintersNoServer) {
   provider->ResolvePrinters("manufacturer_b_en",
                             base::Bind(&PpdProviderTest::CaptureResolvePrinters,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
   ASSERT_EQ(2UL, captured_resolve_printers_.size());
   EXPECT_EQ(PpdProvider::SERVER_ERROR, captured_resolve_printers_[0].first);
   EXPECT_EQ(PpdProvider::SERVER_ERROR, captured_resolve_printers_[1].first);
@@ -438,7 +456,7 @@ TEST_F(PpdProviderTest, ResolveServerKeyPpd) {
   ref.effective_make_and_model = "printer_c_ref";
   provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(2UL, captured_resolve_ppd_.size());
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
@@ -460,7 +478,7 @@ TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromNetworkFails) {
       "https://%s/user_supplied_ppd_directory/user_supplied.ppd", kPpdServer);
   provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(1UL, captured_resolve_ppd_.size());
   EXPECT_EQ(PpdProvider::INTERNAL_ERROR, captured_resolve_ppd_[0].code);
@@ -487,7 +505,7 @@ TEST_F(PpdProviderTest, ResolveUserSuppliedUrlPpdFromFile) {
       base::StringPrintf("file://%s", filename.MaybeAsASCII().c_str());
   provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(1UL, captured_resolve_ppd_.size());
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
@@ -513,7 +531,7 @@ TEST_F(PpdProviderTest, ResolvedPpdsGetCached) {
         base::StringPrintf("file://%s", filename.MaybeAsASCII().c_str());
     provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                          base::Unretained(this)));
-    Drain(*provider);
+    scoped_task_environment_.RunUntilIdle();
 
     ASSERT_EQ(1UL, captured_resolve_ppd_.size());
     EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
@@ -532,7 +550,7 @@ TEST_F(PpdProviderTest, ResolvedPpdsGetCached) {
   // Re-resolve.
   provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(1UL, captured_resolve_ppd_.size());
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
@@ -551,7 +569,7 @@ TEST_F(PpdProviderTest, ExtractPpdFilters) {
   ref.effective_make_and_model = "printer_b_ref";
   provider->ResolvePpd(ref, base::Bind(&PpdProviderTest::CaptureResolvePpd,
                                        base::Unretained(this)));
-  Drain(*provider);
+  scoped_task_environment_.RunUntilIdle();
 
   ASSERT_EQ(2UL, captured_resolve_ppd_.size());
   EXPECT_EQ(PpdProvider::SUCCESS, captured_resolve_ppd_[0].code);
@@ -567,6 +585,34 @@ TEST_F(PpdProviderTest, ExtractPpdFilters) {
       captured_resolve_ppd_[1].ppd_filters);
 }
 
+// Verifies that we can extract the Manufacturer and Model selectison for a
+// given effective make and model.
+TEST_F(PpdProviderTest, ReverseLookup) {
+  StartFakePpdServer();
+  auto provider = CreateProvider("en");
+  std::string ref = "printer_a_ref";
+  provider->ReverseLookup(ref,
+                          base::Bind(&PpdProviderTest::CaptureReverseLookup,
+                                     base::Unretained(this)));
+  // TODO(skau): PpdProvider has a race condition that prevents running these
+  // requests in parallel.
+  scoped_task_environment_.RunUntilIdle();
+
+  std::string ref_fail = "printer_does_not_exist";
+  provider->ReverseLookup(ref_fail,
+                          base::Bind(&PpdProviderTest::CaptureReverseLookup,
+                                     base::Unretained(this)));
+  scoped_task_environment_.RunUntilIdle();
+
+  ASSERT_EQ(2U, captured_reverse_lookup_.size());
+  CapturedReverseLookup success_capture = captured_reverse_lookup_[0];
+  EXPECT_EQ(PpdProvider::SUCCESS, success_capture.code);
+  EXPECT_EQ("manufacturer_a_en", success_capture.manufacturer);
+  EXPECT_EQ("printer_a", success_capture.model);
+
+  CapturedReverseLookup failed_capture = captured_reverse_lookup_[1];
+  EXPECT_EQ(PpdProvider::NOT_FOUND, failed_capture.code);
+}
+
 }  // namespace
-}  // namespace printing
 }  // namespace chromeos

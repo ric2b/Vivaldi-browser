@@ -15,13 +15,10 @@
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
 #include "mojo/edk/system/ports/event.h"
-#include "mojo/edk/system/ports/message.h"
 #include "mojo/edk/system/ports/name.h"
 #include "mojo/edk/system/ports/port.h"
 #include "mojo/edk/system/ports/port_ref.h"
 #include "mojo/edk/system/ports/user_data.h"
-
-#undef SendMessage  // Gah, windows
 
 namespace mojo {
 namespace edk {
@@ -42,6 +39,7 @@ struct PortStatus {
   bool has_messages;
   bool receiving_messages;
   bool peer_closed;
+  bool peer_remote;
 };
 
 class MessageFilter;
@@ -91,8 +89,7 @@ class Node {
 
   // User data associated with the port.
   int SetUserData(const PortRef& port_ref, scoped_refptr<UserData> user_data);
-  int GetUserData(const PortRef& port_ref,
-                  scoped_refptr<UserData>* user_data);
+  int GetUserData(const PortRef& port_ref, scoped_refptr<UserData>* user_data);
 
   // Prevents further messages from being sent from this port or delivered to
   // this port. The port is removed, and the port's peer is notified of the
@@ -114,16 +111,17 @@ class Node {
   // available. Ownership of |filter| is not taken, and it must outlive the
   // extent of this call.
   int GetMessage(const PortRef& port_ref,
-                 ScopedMessage* message,
+                 std::unique_ptr<UserMessageEvent>* message,
                  MessageFilter* filter);
 
   // Sends a message from the specified port to its peer. Note that the message
   // notification may arrive synchronously (via PortStatusChanged() on the
   // delegate) if the peer is local to this Node.
-  int SendMessage(const PortRef& port_ref, ScopedMessage message);
+  int SendUserMessage(const PortRef& port_ref,
+                      std::unique_ptr<UserMessageEvent> message);
 
-  // Corresponding to NodeDelegate::ForwardMessage.
-  int AcceptMessage(ScopedMessage message);
+  // Corresponding to NodeDelegate::ForwardEvent.
+  int AcceptEvent(ScopedEvent event);
 
   // Called to merge two ports with each other. If you have two independent
   // port pairs A <=> B and C <=> D, the net result of merging B and C is a
@@ -151,70 +149,75 @@ class Node {
   int LostConnectionToNode(const NodeName& node_name);
 
  private:
-  class LockedPort;
+  // Helper to ensure that a Node always calls into its delegate safely, i.e.
+  // without holding any internal locks.
+  class DelegateHolder {
+   public:
+    DelegateHolder(Node* node, NodeDelegate* delegate);
+    ~DelegateHolder();
 
-  // Note: Functions that end with _Locked require |ports_lock_| to be held
-  // before calling.
-  int OnUserMessage(ScopedMessage message);
-  int OnPortAccepted(const PortName& port_name);
-  int OnObserveProxy(const PortName& port_name,
-                     const ObserveProxyEventData& event);
-  int OnObserveProxyAck(const PortName& port_name, uint64_t last_sequence_num);
-  int OnObserveClosure(const PortName& port_name, uint64_t last_sequence_num);
-  int OnMergePort(const PortName& port_name, const MergePortEventData& event);
+    NodeDelegate* operator->() const {
+      EnsureSafeDelegateAccess();
+      return delegate_;
+    }
+
+   private:
+#if DCHECK_IS_ON()
+    void EnsureSafeDelegateAccess() const;
+#else
+    void EnsureSafeDelegateAccess() const {}
+#endif
+
+    Node* const node_;
+    NodeDelegate* const delegate_;
+
+    DISALLOW_COPY_AND_ASSIGN(DelegateHolder);
+  };
+
+  int OnUserMessage(std::unique_ptr<UserMessageEvent> message);
+  int OnPortAccepted(std::unique_ptr<PortAcceptedEvent> event);
+  int OnObserveProxy(std::unique_ptr<ObserveProxyEvent> event);
+  int OnObserveProxyAck(std::unique_ptr<ObserveProxyAckEvent> event);
+  int OnObserveClosure(std::unique_ptr<ObserveClosureEvent> event);
+  int OnMergePort(std::unique_ptr<MergePortEvent> event);
 
   int AddPortWithName(const PortName& port_name, scoped_refptr<Port> port);
   void ErasePort(const PortName& port_name);
-  void ErasePort_Locked(const PortName& port_name);
-  scoped_refptr<Port> GetPort(const PortName& port_name);
-  scoped_refptr<Port> GetPort_Locked(const PortName& port_name);
 
-  int SendMessageInternal(const PortRef& port_ref, ScopedMessage* message);
-  int MergePorts_Locked(const PortRef& port0_ref, const PortRef& port1_ref);
-  void WillSendPort(const LockedPort& port,
-                    const NodeName& to_node_name,
-                    PortName* port_name,
-                    PortDescriptor* port_descriptor);
+  int SendUserMessageInternal(const PortRef& port_ref,
+                              std::unique_ptr<UserMessageEvent>* message);
+  int MergePortsInternal(const PortRef& port0_ref,
+                         const PortRef& port1_ref,
+                         bool allow_close_on_bad_state);
+  void ConvertToProxy(Port* port,
+                      const NodeName& to_node_name,
+                      PortName* port_name,
+                      Event::PortDescriptor* port_descriptor);
   int AcceptPort(const PortName& port_name,
-                 const PortDescriptor& port_descriptor);
+                 const Event::PortDescriptor& port_descriptor);
 
-  int WillSendMessage_Locked(const LockedPort& port,
-                             const PortName& port_name,
-                             Message* message);
-  int BeginProxying_Locked(const LockedPort& port, const PortName& port_name);
-  int BeginProxying(PortRef port_ref);
-  int ForwardMessages_Locked(const LockedPort& port, const PortName& port_name);
-  void InitiateProxyRemoval(const LockedPort& port, const PortName& port_name);
-  void MaybeRemoveProxy_Locked(const LockedPort& port,
-                               const PortName& port_name);
-  void TryRemoveProxy(PortRef port_ref);
+  int PrepareToForwardUserMessage(const PortRef& forwarding_port_ref,
+                                  Port::State expected_port_state,
+                                  bool ignore_closed_peer,
+                                  UserMessageEvent* message,
+                                  NodeName* forward_to_node);
+  int BeginProxying(const PortRef& port_ref);
+  int ForwardUserMessagesFromProxy(const PortRef& port_ref);
+  void InitiateProxyRemoval(const PortRef& port_ref);
+  void TryRemoveProxy(const PortRef& port_ref);
   void DestroyAllPortsWithPeer(const NodeName& node_name,
                                const PortName& port_name);
 
-  ScopedMessage NewInternalMessage_Helper(const PortName& port_name,
-                                          const EventType& type,
-                                          const void* data,
-                                          size_t num_data_bytes);
-
-  ScopedMessage NewInternalMessage(const PortName& port_name,
-                                   const EventType& type) {
-    return NewInternalMessage_Helper(port_name, type, nullptr, 0);
-  }
-
-  template <typename EventData>
-  ScopedMessage NewInternalMessage(const PortName& port_name,
-                                   const EventType& type,
-                                   const EventData& data) {
-    return NewInternalMessage_Helper(port_name, type, &data, sizeof(data));
-  }
-
   const NodeName name_;
-  NodeDelegate* const delegate_;
+  const DelegateHolder delegate_;
 
-  // Guards |ports_| as well as any operation which needs to hold multiple port
-  // locks simultaneously. Usage of this is subtle: it must NEVER be acquired
-  // after a Port lock is acquired, and it must ALWAYS be acquired before
-  // calling WillSendMessage_Locked or ForwardMessages_Locked.
+  // Guards |ports_|. This must never be acquired while an individual port's
+  // lock is held on the same thread. Conversely, individual port locks may be
+  // acquired while this one is held.
+  //
+  // Because UserMessage events may execute arbitrary user code during
+  // destruction, it is also important to ensure that such events are never
+  // destroyed while this (or any individual Port) lock is held.
   base::Lock ports_lock_;
   std::unordered_map<PortName, scoped_refptr<Port>> ports_;
 

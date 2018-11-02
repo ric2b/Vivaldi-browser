@@ -15,12 +15,14 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/default_tick_clock.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/net_export.h"
 #include "net/http/http_server_properties.h"
 #include "net/http/http_server_properties_impl.h"
+#include "net/log/net_log_with_source.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -49,7 +51,7 @@ class IPAddress;
 // It must be constructed with correct task runners passed in to set up
 // |pref_task_runner_| and |network_task_runner| as well as the prefs listeners.
 //
-// ShutdownOnPrefThread must be called from pref thread before destruction, to
+// ShutdownOnPrefSequence must be called from pref thread before destruction, to
 // release the prefs listeners on the pref thread.
 //
 // Class requires that update tasks from the Pref thread can post safely to the
@@ -92,17 +94,31 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // cache update to the pref thread;
   // |network_task_runner| should be bound with the network thread and is used
   // to post pref update to the cache thread.
+  //
+  // |clock| is used for setting expiration times and scheduling the
+  // expiration of broken alternative services. If null, the default clock will
+  // be used.
   HttpServerPropertiesManager(
       PrefDelegate* pref_delegate,
       scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner);
+      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner,
+      NetLog* net_log,
+      base::TickClock* clock);
+
+  // Default clock will be used.
+  HttpServerPropertiesManager(
+      PrefDelegate* pref_delegate,
+      scoped_refptr<base::SingleThreadTaskRunner> pref_task_runner,
+      scoped_refptr<base::SingleThreadTaskRunner> network_task_runner,
+      NetLog* net_log);
+
   ~HttpServerPropertiesManager() override;
 
   // Initialize on Network thread.
-  void InitializeOnNetworkThread();
+  void InitializeOnNetworkSequence();
 
   // Prepare for shutdown. Must be called on the Pref thread before destruction.
-  void ShutdownOnPrefThread();
+  void ShutdownOnPrefSequence();
 
   // Helper function for unit tests to set the version in the dictionary.
   static void SetVersion(base::DictionaryValue* http_server_properties_dict,
@@ -127,9 +143,14 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
                         SSLConfig* ssl_config) override;
   AlternativeServiceInfoVector GetAlternativeServiceInfos(
       const url::SchemeHostPort& origin) override;
-  bool SetAlternativeService(const url::SchemeHostPort& origin,
-                             const AlternativeService& alternative_service,
-                             base::Time expiration) override;
+  bool SetHttp2AlternativeService(const url::SchemeHostPort& origin,
+                                  const AlternativeService& alternative_service,
+                                  base::Time expiration) override;
+  bool SetQuicAlternativeService(
+      const url::SchemeHostPort& origin,
+      const AlternativeService& alternative_service,
+      base::Time expiration,
+      const QuicVersionVector& advertised_versions) override;
   bool SetAlternativeServices(const url::SchemeHostPort& origin,
                               const AlternativeServiceInfoVector&
                                   alternative_service_info_vector) override;
@@ -167,7 +188,7 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   static base::TimeDelta GetUpdatePrefsDelayForTesting();
 
  protected:
-  // The location where ScheduleUpdatePrefsOnNetworkThread was called.
+  // The location where ScheduleUpdatePrefsOnNetworkSequence was called.
   // Must be kept up to date with HttpServerPropertiesUpdatePrefsLocation in
   // histograms.xml.
   enum Location {
@@ -201,49 +222,58 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // preferences. It gets the data on pref thread and calls
   // UpdateSpdyServersFromPrefsOnNetworkThread() to perform the update on
   // network thread.
-  virtual void UpdateCacheFromPrefsOnPrefThread();
+  virtual void UpdateCacheFromPrefsOnPrefSequence();
 
   // Starts the update of cached prefs in |http_server_properties_impl_| on the
   // network thread. Protected for testing.
-  void UpdateCacheFromPrefsOnNetworkThread(
-      std::vector<std::string>* spdy_servers,
-      AlternativeServiceMap* alternative_service_map,
-      IPAddress* last_quic_address,
-      ServerNetworkStatsMap* server_network_stats_map,
-      QuicServerInfoMap* quic_server_info_map,
+  void UpdateCacheFromPrefsOnNetworkSequence(
+      std::unique_ptr<SpdyServersMap> spdy_servers_map,
+      std::unique_ptr<AlternativeServiceMap> alternative_service_map,
+      std::unique_ptr<IPAddress> last_quic_address,
+      std::unique_ptr<ServerNetworkStatsMap> server_network_stats_map,
+      std::unique_ptr<QuicServerInfoMap> quic_server_info_map,
+      std::unique_ptr<BrokenAlternativeServiceList>
+          broken_alternative_service_list,
+      std::unique_ptr<RecentlyBrokenAlternativeServices>
+          recently_broken_alternative_services,
       bool detected_corrupted_prefs);
 
   // These are used to delay updating the preferences when cached data in
   // |http_server_properties_impl_| is changing, and execute only one update per
-  // simultaneous spdy_servers or spdy_settings or alternative_service changes.
+  // simultaneous changes.
   // |location| specifies where this method is called from. Virtual for testing.
-  virtual void ScheduleUpdatePrefsOnNetworkThread(Location location);
+  virtual void ScheduleUpdatePrefsOnNetworkSequence(Location location);
 
   // Update prefs::kHttpServerProperties in preferences with the cached data
   // from |http_server_properties_impl_|. This gets the data on network thread
   // and posts a task (UpdatePrefsOnPrefThread) to update preferences on pref
   // thread.
-  void UpdatePrefsFromCacheOnNetworkThread();
+  void UpdatePrefsFromCacheOnNetworkSequence();
 
   // Same as above, but fires an optional |completion| callback on pref thread
   // when finished. Virtual for testing.
-  virtual void UpdatePrefsFromCacheOnNetworkThread(
+  virtual void UpdatePrefsFromCacheOnNetworkSequence(
       const base::Closure& completion);
 
   // Update prefs::kHttpServerProperties preferences on pref thread. Executes an
   // optional |completion| callback when finished. Protected for testing.
-  void UpdatePrefsOnPrefThread(base::ListValue* spdy_server_list,
-                               AlternativeServiceMap* alternative_service_map,
-                               IPAddress* last_quic_address,
-                               ServerNetworkStatsMap* server_network_stats_map,
-                               QuicServerInfoMap* quic_server_info_map,
-                               const base::Closure& completion);
+  void UpdatePrefsOnPrefThread(
+      std::unique_ptr<std::vector<std::string>> spdy_servers,
+      std::unique_ptr<AlternativeServiceMap> alternative_service_map,
+      std::unique_ptr<IPAddress> last_quic_address,
+      std::unique_ptr<ServerNetworkStatsMap> server_network_stats_map,
+      std::unique_ptr<QuicServerInfoMap> quic_server_info_map,
+      std::unique_ptr<BrokenAlternativeServiceList>
+          broken_alternative_service_list,
+      std::unique_ptr<RecentlyBrokenAlternativeServices>
+          recently_broken_alternative_services,
+      const base::Closure& completion);
 
  private:
-  typedef std::vector<std::string> ServerList;
-
   FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
                            AddToAlternativeServiceMap);
+  FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
+                           ReadAdvertisedVersionsFromPref);
   FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
                            DoNotLoadAltSvcForInsecureOrigins);
   FRIEND_TEST_ALL_PREFIXES(HttpServerPropertiesManagerTest,
@@ -251,12 +281,25 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   void OnHttpServerPropertiesChanged();
 
   bool AddServersData(const base::DictionaryValue& server_dict,
-                      ServerList* spdy_servers,
+                      SpdyServersMap* spdy_servers_map,
                       AlternativeServiceMap* alternative_service_map,
                       ServerNetworkStatsMap* network_stats_map,
                       int version);
-  bool ParseAlternativeServiceDict(
-      const base::DictionaryValue& alternative_service_dict,
+  // Helper method used for parsing an alternative service from JSON.
+  // |dict| is the JSON dictionary to be parsed. It should contain fields
+  // corresponding to members of AlternativeService.
+  // |host_optional| determines whether or not the "host" field is optional. If
+  // optional, the default value is empty string.
+  // |parsing_under| is used only for debug log outputs in case of error; it
+  // should describe what section of the JSON prefs is currently being parsed.
+  // |alternative_service| is the output of parsing |dict|.
+  // Return value is true if parsing is successful.
+  bool ParseAlternativeServiceDict(const base::DictionaryValue& dict,
+                                   bool host_optional,
+                                   const std::string& parsing_under,
+                                   AlternativeService* alternative_service);
+  bool ParseAlternativeServiceInfoDictOfServer(
+      const base::DictionaryValue& dict,
       const std::string& server_str,
       AlternativeServiceInfo* alternative_service_info);
   bool AddToAlternativeServiceMap(
@@ -270,20 +313,32 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
                             ServerNetworkStatsMap* network_stats_map);
   bool AddToQuicServerInfoMap(const base::DictionaryValue& server_dict,
                               QuicServerInfoMap* quic_server_info_map);
+  bool AddToBrokenAlternativeServices(
+      const base::DictionaryValue& broken_alt_svc_entry_dict,
+      BrokenAlternativeServiceList* broken_alternative_service_list,
+      RecentlyBrokenAlternativeServices* recently_broken_alternative_services);
 
   void SaveAlternativeServiceToServerPrefs(
-      const AlternativeServiceInfoVector* alternative_service_info_vector,
+      const AlternativeServiceInfoVector& alternative_service_info_vector,
       base::DictionaryValue* server_pref_dict);
   void SaveSupportsQuicToPrefs(
-      const IPAddress* last_quic_address,
+      const IPAddress& last_quic_address,
       base::DictionaryValue* http_server_properties_dict);
   void SaveNetworkStatsToServerPrefs(
-      const ServerNetworkStats* server_network_stats,
+      const ServerNetworkStats& server_network_stats,
       base::DictionaryValue* server_pref_dict);
   void SaveQuicServerInfoMapToServerPrefs(
-      QuicServerInfoMap* quic_server_info_map,
+      const QuicServerInfoMap& quic_server_info_map,
       base::DictionaryValue* http_server_properties_dict);
+  void SaveBrokenAlternativeServicesToPrefs(
+      const BrokenAlternativeServiceList* broken_alternative_service_list,
+      const RecentlyBrokenAlternativeServices*
+          recently_broken_alternative_services,
+      base::DictionaryValue* http_server_properties_dict);
+
   void SetInitialized();
+
+  base::DefaultTickClock default_clock_;
 
   // -----------
   // Pref thread
@@ -299,11 +354,13 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   std::unique_ptr<PrefDelegate> pref_delegate_;
   bool setting_prefs_;
 
+  base::TickClock* clock_;  // Unowned
+
   // --------------
   // Network thread
   // --------------
 
-  // Whether InitializeOnNetworkThread() has completed.
+  // Whether InitializeOnNetworkSequence() has completed.
   bool is_initialized_;
 
   const scoped_refptr<base::SingleThreadTaskRunner> network_task_runner_;
@@ -320,6 +377,8 @@ class NET_EXPORT HttpServerPropertiesManager : public HttpServerProperties {
   // Used to get |weak_ptr_| to self on the network thread.
   std::unique_ptr<base::WeakPtrFactory<HttpServerPropertiesManager>>
       network_weak_ptr_factory_;
+
+  const NetLogWithSource net_log_;
 
   DISALLOW_COPY_AND_ASSIGN(HttpServerPropertiesManager);
 };

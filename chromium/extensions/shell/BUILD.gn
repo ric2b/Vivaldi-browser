@@ -37,6 +37,7 @@ source_set("app_shell_lib") {
     "//components/guest_view/browser",
     "//components/guest_view/common",
     "//components/guest_view/renderer",
+    "//components/network_session_configurator/common",
     "//components/pref_registry",
     "//components/prefs",
     "//components/update_client",
@@ -181,7 +182,17 @@ source_set("app_shell_lib") {
       "browser/shell_screen.cc",
       "browser/shell_screen.h",
     ]
-    deps += [ "//ui/wm" ]
+    deps += [
+      "//ui/wm",
+      "//ui/wm/public",
+    ]
+  }
+
+  if (is_desktop_linux) {
+    sources += [
+      "browser/api/file_system/shell_file_system_delegate.cc",
+      "browser/api/file_system/shell_file_system_delegate.h",
+    ]
   }
 
   if (is_chromeos) {

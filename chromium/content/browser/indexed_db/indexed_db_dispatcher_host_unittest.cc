@@ -25,6 +25,7 @@
 #include "content/common/indexed_db/indexed_db.mojom.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_utils.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/strong_associated_binding.h"
 #include "net/url_request/url_request_test_util.h"
@@ -83,7 +84,6 @@ static const char kDatabaseName[] = "db";
 static const char kOrigin[] = "https://www.example.com";
 static const int kFakeProcessId = 2;
 static const int64_t kTemporaryQuota = 50 * 1024 * 1024;
-static const int64_t kPersistantQuota = 50 * 1024 * 1024;
 
 base::FilePath CreateAndReturnTempDir(base::ScopedTempDir* temp_dir) {
   CHECK(temp_dir->CreateUniqueTempDir());
@@ -125,63 +125,51 @@ struct TestDatabaseConnection {
   DISALLOW_COPY_AND_ASSIGN(TestDatabaseConnection);
 };
 
+void StatusCallback(const base::Closure& callback,
+                    ::indexed_db::mojom::Status* status_out,
+                    ::indexed_db::mojom::Status status) {
+  *status_out = status;
+  callback.Run();
+}
+
 }  // namespace
 
 class IndexedDBDispatcherHostTest : public testing::Test {
  public:
   IndexedDBDispatcherHostTest()
       : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
-        idb_thread_(new base::Thread("IndexedDB")),
-        io_task_runner_(
-            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
-        idb_task_runner_(idb_thread_->Start() ? idb_thread_->task_runner()
-                                              : nullptr),
-        request_context_getter_(
-            new net::TestURLRequestContextGetter(io_task_runner_)),
-        special_storage_policy_(new MockSpecialStoragePolicy()),
-        quota_manager_(new MockQuotaManager(false,
-                                            browser_context_.GetPath(),
-                                            io_task_runner_,
-                                            idb_task_runner_,
-                                            special_storage_policy_)),
-        quota_manager_proxy_(quota_manager_->proxy()),
-        context_impl_(
-            new IndexedDBContextImpl(CreateAndReturnTempDir(&temp_dir_),
-                                     special_storage_policy_.get(),
-                                     quota_manager_proxy_.get(),
-                                     idb_task_runner_.get())),
-        blob_storage_(ChromeBlobStorageContext::GetFor(&browser_context_)),
-        host_(new IndexedDBDispatcherHost(kFakeProcessId,
-                                          request_context_getter_.get(),
-                                          context_impl_.get(),
-                                          blob_storage_.get())) {
-    quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypePersistent,
-                             kTemporaryQuota);
+        special_storage_policy_(
+            base::MakeRefCounted<MockSpecialStoragePolicy>()),
+        quota_manager_(base::MakeRefCounted<MockQuotaManager>(
+            false /*is_incognito*/,
+            browser_context_.GetPath(),
+            BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
+            base::ThreadTaskRunnerHandle::Get().get(),
+            special_storage_policy_)),
+        context_impl_(base::MakeRefCounted<IndexedDBContextImpl>(
+            CreateAndReturnTempDir(&temp_dir_),
+            special_storage_policy_,
+            quota_manager_->proxy())),
+        host_(new IndexedDBDispatcherHost(
+            kFakeProcessId,
+            base::MakeRefCounted<net::TestURLRequestContextGetter>(
+                BrowserThread::GetTaskRunnerForThread(BrowserThread::IO)),
+            context_impl_,
+            ChromeBlobStorageContext::GetFor(&browser_context_))) {
     quota_manager_->SetQuota(GURL(kOrigin), storage::kStorageTypeTemporary,
-                             kPersistantQuota);
+                             kTemporaryQuota);
   }
 
   void TearDown() override {
     host_.reset();
-    // In order for idb_thread_.Stop() to not cause thread/taskrunner checking
-    // errors, the handles must be deref'd before we join threads. This ensures
-    // classes that require destruction on the idb thread can be destructed
-    // correctly before scheduling on the the idb thread task runner turns into
-    // a no-op after thread join.
-    blob_storage_ = nullptr;
     context_impl_ = nullptr;
-    quota_manager_proxy_ = nullptr;
     quota_manager_ = nullptr;
-    special_storage_policy_ = nullptr;
-    request_context_getter_ = nullptr;
-    // This will run the idb task runner until idle, then join the threads.
-    idb_thread_->Stop();
+    RunAllBlockingPoolTasksUntilIdle();
     // File are leaked if this doesn't return true.
     ASSERT_TRUE(temp_dir_.Delete());
   }
 
   void SetUp() override {
-    ASSERT_TRUE(idb_task_runner_);
     FactoryAssociatedRequest request =
         ::mojo::MakeIsolatedRequest(&idb_mojo_factory_);
     host_->AddBinding(std::move(request));
@@ -192,15 +180,9 @@ class IndexedDBDispatcherHostTest : public testing::Test {
   TestBrowserContext browser_context_;
 
   base::ScopedTempDir temp_dir_;
-  std::unique_ptr<base::Thread> idb_thread_;
-  scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> idb_task_runner_;
-  scoped_refptr<net::TestURLRequestContextGetter> request_context_getter_;
   scoped_refptr<MockSpecialStoragePolicy> special_storage_policy_;
   scoped_refptr<MockQuotaManager> quota_manager_;
-  scoped_refptr<QuotaManagerProxy> quota_manager_proxy_;
   scoped_refptr<IndexedDBContextImpl> context_impl_;
-  scoped_refptr<ChromeBlobStorageContext> blob_storage_;
   std::unique_ptr<IndexedDBDispatcherHost, BrowserThread::DeleteOnIOThread>
       host_;
   FactoryAssociatedPtr idb_mojo_factory_;
@@ -440,6 +422,390 @@ TEST_F(IndexedDBDispatcherHostTest, PutWithInvalidBlob) {
     connection.database->Commit(kTransactionId);
     loop.Run();
   }
+}
+
+TEST_F(IndexedDBDispatcherHostTest, CompactDatabaseWithConnection) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(3, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(*connection.connection_callbacks, Complete(kTransactionId))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    connection.database->Commit(kTransactionId);
+    idb_mojo_factory_->AbortTransactionsAndCompactDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
+}
+
+TEST_F(IndexedDBDispatcherHostTest, CompactDatabaseWhileDoingTransaction) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+  const int64_t kObjectStoreId = 10;
+  const char kObjectStoreName[] = "os";
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(4, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(
+        *connection.connection_callbacks,
+        Abort(kTransactionId, blink::kWebIDBDatabaseExceptionUnknownError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.open_callbacks,
+                Error(blink::kWebIDBDatabaseExceptionAbortError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.connection_callbacks, ForcedClose())
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    ASSERT_TRUE(connection.database.is_bound());
+    connection.database->CreateObjectStore(kTransactionId, kObjectStoreId,
+                                           base::UTF8ToUTF16(kObjectStoreName),
+                                           content::IndexedDBKeyPath(), false);
+    idb_mojo_factory_->AbortTransactionsAndCompactDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
+}
+
+TEST_F(IndexedDBDispatcherHostTest, CompactDatabaseWhileUpgrading) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(4, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(
+        *connection.connection_callbacks,
+        Abort(kTransactionId, blink::kWebIDBDatabaseExceptionUnknownError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.open_callbacks,
+                Error(blink::kWebIDBDatabaseExceptionAbortError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.connection_callbacks, ForcedClose())
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    ASSERT_TRUE(connection.database.is_bound());
+    idb_mojo_factory_->AbortTransactionsAndCompactDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
+}
+
+TEST_F(IndexedDBDispatcherHostTest,
+       AbortTransactionsAfterCompletingTransaction) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(4, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(*connection.connection_callbacks, Complete(kTransactionId))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedSuccessDatabase(IsAssociatedInterfacePtrInfoValid(false), _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.connection_callbacks, ForcedClose())
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    connection.database->Commit(kTransactionId);
+    idb_mojo_factory_->AbortTransactionsForDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
+}
+
+TEST_F(IndexedDBDispatcherHostTest, AbortTransactionsWhileDoingTransaction) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+  const int64_t kObjectStoreId = 10;
+  const char kObjectStoreName[] = "os";
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(4, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(
+        *connection.connection_callbacks,
+        Abort(kTransactionId, blink::kWebIDBDatabaseExceptionUnknownError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.open_callbacks,
+                Error(blink::kWebIDBDatabaseExceptionAbortError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.connection_callbacks, ForcedClose())
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    ASSERT_TRUE(connection.database.is_bound());
+    connection.database->CreateObjectStore(kTransactionId, kObjectStoreId,
+                                           base::UTF8ToUTF16(kObjectStoreName),
+                                           content::IndexedDBKeyPath(), false);
+    idb_mojo_factory_->AbortTransactionsForDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
+}
+
+TEST_F(IndexedDBDispatcherHostTest, AbortTransactionsWhileUpgrading) {
+  const int64_t kDBVersion = 1;
+  const int64_t kTransactionId = 1;
+
+  // Open connection.
+  TestDatabaseConnection connection(url::Origin(GURL(kOrigin)),
+                                    base::UTF8ToUTF16(kDatabaseName),
+                                    kDBVersion, kTransactionId);
+  IndexedDBDatabaseMetadata metadata;
+  DatabaseAssociatedPtrInfo database_info;
+  {
+    base::RunLoop loop;
+    EXPECT_CALL(
+        *connection.open_callbacks,
+        MockedUpgradeNeeded(IsAssociatedInterfacePtrInfoValid(true),
+                            IndexedDBDatabaseMetadata::NO_VERSION,
+                            blink::kWebIDBDataLossNone, std::string(), _))
+        .WillOnce(testing::DoAll(MoveArg<0>(&database_info),
+                                 testing::SaveArg<4>(&metadata),
+                                 RunClosure(loop.QuitClosure())));
+
+    // Queue open request message.
+    connection.Open(idb_mojo_factory_.get());
+    loop.Run();
+  }
+
+  EXPECT_TRUE(database_info.is_valid());
+  EXPECT_EQ(connection.version, metadata.version);
+  EXPECT_EQ(connection.db_name, metadata.name);
+
+  connection.database.Bind(std::move(database_info));
+
+  ::indexed_db::mojom::Status callback_result =
+      ::indexed_db::mojom::Status::IOError;
+  {
+    ::testing::InSequence dummy;
+    base::RunLoop loop;
+    base::Closure quit_closure = base::BarrierClosure(4, loop.QuitClosure());
+    const url::Origin origin = url::Origin(GURL(kOrigin));
+
+    EXPECT_CALL(
+        *connection.connection_callbacks,
+        Abort(kTransactionId, blink::kWebIDBDatabaseExceptionUnknownError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.open_callbacks,
+                Error(blink::kWebIDBDatabaseExceptionAbortError, _))
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+    EXPECT_CALL(*connection.connection_callbacks, ForcedClose())
+        .Times(1)
+        .WillOnce(RunClosure(quit_closure));
+
+    ASSERT_TRUE(connection.database.is_bound());
+    idb_mojo_factory_->AbortTransactionsForDatabase(
+        origin, base::BindOnce(&StatusCallback, std::move(quit_closure),
+                               &callback_result));
+
+    loop.Run();
+  }
+  EXPECT_EQ(::indexed_db::mojom::Status::OK, callback_result);
 }
 
 }  // namespace content

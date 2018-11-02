@@ -5,24 +5,20 @@
 #ifndef WebAuthentication_h
 #define WebAuthentication_h
 
-#include "bindings/core/v8/ArrayBufferOrArrayBufferView.h"
-#include "bindings/core/v8/ScriptPromise.h"
-#include "components/webauth/authenticator.mojom-blink.h"
 #include "core/dom/ContextLifecycleObserver.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "modules/webauth/AuthenticationAssertionOptions.h"
-#include "modules/webauth/ScopedCredentialInfo.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/bindings/ScriptWrappable.h"
+#include "platform/heap/Handle.h"
+#include "public/platform/modules/webauth/authenticator.mojom-blink.h"
 
 namespace blink {
 
-class RelyingPartyAccount;
-class AuthenticationAssertionOptions;
-class ScopedCredentialOptions;
-class ScopedCredentialParameters;
+class LocalFrame;
+class MakeCredentialOptions;
+class PublicKeyCredentialRequestOptions;
+class ScriptState;
+class ScriptPromise;
 class ScriptPromiseResolver;
-
-typedef ArrayBufferOrArrayBufferView BufferSource;
 
 class WebAuthentication final
     : public GarbageCollectedFinalized<WebAuthentication>,
@@ -38,36 +34,31 @@ class WebAuthentication final
 
   virtual ~WebAuthentication();
 
-  void Dispose();
-
   // WebAuthentication.idl
-  ScriptPromise makeCredential(ScriptState*,
-                               const RelyingPartyAccount&,
-                               const HeapVector<ScopedCredentialParameters>,
-                               const BufferSource&,
-                               ScopedCredentialOptions&);
-  ScriptPromise getAssertion(ScriptState*,
-                             const BufferSource&,
-                             const AuthenticationAssertionOptions&);
+  ScriptPromise makeCredential(ScriptState*, const MakeCredentialOptions&);
 
-  // ContextLifecycleObserver overrides.
-  void ContextDestroyed(ExecutionContext*) override;
+  ScriptPromise getAssertion(ScriptState*,
+                             const PublicKeyCredentialRequestOptions&);
 
   webauth::mojom::blink::Authenticator* Authenticator() const {
     return authenticator_.get();
   }
 
-  void OnMakeCredential(ScriptPromiseResolver*,
-                        Vector<webauth::mojom::blink::ScopedCredentialInfoPtr>);
-  bool MarkRequestComplete(ScriptPromiseResolver*);
-
-  void OnAuthenticatorConnectionError();
+  // ContextLifecycleObserver override
+  void ContextDestroyed(ExecutionContext*) override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit WebAuthentication(LocalFrame&);
 
+  void OnMakeCredential(ScriptPromiseResolver*,
+                        webauth::mojom::blink::AuthenticatorStatus,
+                        webauth::mojom::blink::PublicKeyCredentialInfoPtr);
+  ScriptPromise RejectIfNotSupported(ScriptState*);
+  void OnAuthenticatorConnectionError();
+  bool MarkRequestComplete(ScriptPromiseResolver*);
+  void Cleanup();
   webauth::mojom::blink::AuthenticatorPtr authenticator_;
   HeapHashSet<Member<ScriptPromiseResolver>> authenticator_requests_;
 };

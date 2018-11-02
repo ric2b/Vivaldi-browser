@@ -26,7 +26,10 @@ class SigninPromoViewMediatorTest : public PlatformTest {
  protected:
   void SetUp() override {
     consumer_ = OCMStrictProtocolMock(@protocol(SigninPromoViewConsumer));
-    mediator_ = [[SigninPromoViewMediator alloc] init];
+    mediator_ = [[SigninPromoViewMediator alloc]
+        initWithBrowserState:nil
+                 accessPoint:signin_metrics::AccessPoint::
+                                 ACCESS_POINT_SETTINGS];
     mediator_.consumer = consumer_;
 
     signin_promo_view_ = OCMStrictClassMock([SigninPromoView class]);
@@ -37,6 +40,7 @@ class SigninPromoViewMediatorTest : public PlatformTest {
   }
 
   void TearDown() override {
+    [mediator_ signinPromoViewRemoved];
     mediator_ = nil;
     EXPECT_OCMOCK_VERIFY((id)consumer_);
     EXPECT_OCMOCK_VERIFY((id)signin_promo_view_);

@@ -65,7 +65,7 @@ class TaskViewerContents
 
     table_view_ = new views::TableView(this, GetColumns(), views::TEXT_ONLY,
                                        false);
-    set_background(views::Background::CreateStandardPanelBackground());
+    SetBackground(views::CreateStandardPanelBackground());
 
     table_view_parent_ = table_view_->CreateParentIfNecessary();
     AddChildView(table_view_parent_);
@@ -203,6 +203,8 @@ class TaskViewerContents
     }
     NOTREACHED();
   }
+  void OnServicePIDReceived(const service_manager::Identity& identity,
+                            uint32_t pid) override {}
 
   bool ContainsIdentity(const service_manager::Identity& identity) const {
     for (auto& it : instances_) {
@@ -294,17 +296,18 @@ void TaskViewer::RemoveWindow(views::Widget* widget) {
 }
 
 void TaskViewer::OnStart() {
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  if (!aura_init_)
+    context()->QuitNow();
 }
 
 void TaskViewer::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void TaskViewer::Launch(uint32_t what, mojom::LaunchMode how) {
@@ -332,8 +335,7 @@ void TaskViewer::Launch(uint32_t what, mojom::LaunchMode how) {
   service_manager->AddListener(std::move(listener));
 }
 
-void TaskViewer::Create(const service_manager::BindSourceInfo& source_info,
-                        ::mash::mojom::LaunchableRequest request) {
+void TaskViewer::Create(::mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

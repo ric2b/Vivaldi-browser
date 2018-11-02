@@ -15,12 +15,12 @@
 <translation id="1165039591588034296">오류</translation>
 <translation id="1175364870820465910">인쇄... (&amp;P)</translation>
 <translation id="1177863135347784049">사용자 지정</translation>
-<translation id="1181037720776840403">삭제</translation>
+<translation id="1181037720776840403">제거</translation>
 <translation id="1187722533808055681">유휴 상태 해제</translation>
 <translation id="119944043368869598">모두 삭제</translation>
 <translation id="1221825588892235038">선택 영역만</translation>
 <translation id="1244303850296295656">확장 프로그램 오류</translation>
-<translation id="1278049586634282054">검사:</translation>
+<translation id="1278049586634282054">뷰 검사:</translation>
 <translation id="1297175357211070620">대상</translation>
 <translation id="1303101771013849280">HTML 파일 북마크하기</translation>
 <translation id="1303319084542230573">프린터 추가</translation>
@@ -247,7 +247,7 @@
 <translation id="4423482519432579560">맞춤법 검사(&amp;S)</translation>
 <translation id="4478664379124702289">다른 이름으로 링크 저장... (&amp;K)</translation>
 <translation id="4481249487722541506">압축 풀린 확장 프로그램 불러오기...</translation>
-<translation id="4522570452068850558">세부정보</translation>
+<translation id="4522570452068850558">세부 정보</translation>
 <translation id="4552089082226364758">플래시</translation>
 <translation id="4552495056028768700">페이지 접근</translation>
 <translation id="4557136421275541763">경고:</translation>
@@ -313,7 +313,7 @@
 <translation id="5483785310822538350">파일 및 기기 액세스 취소</translation>
 <translation id="5485102783864353244">앱 추가</translation>
 <translation id="5486561344817861625">브라우저 다시 시작 시뮬레이션</translation>
-<translation id="5488468185303821006">사생활 보호 모드에서도 허용</translation>
+<translation id="5488468185303821006">사생활 보호 모드에서 허용</translation>
 <translation id="5509693895992845810">다른 이름으로 저장... (&amp;A)</translation>
 <translation id="5521078259930077036">설정한 홈페이지가 맞습니까?</translation>
 <translation id="5532223876348815659">전체</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">SQLite 메모리</translation>
 <translation id="6655190889273724601">개발자 모드</translation>
 <translation id="6691936601825168937">앞으로(F)</translation>
-<translation id="6700480081846086223"><ph name="HOST_NAME" />에 전송</translation>
 <translation id="6706210727756204531">범위</translation>
 <translation id="6786747875388722282">확장 프로그램</translation>
 <translation id="6787839852456839824">단축키</translation>

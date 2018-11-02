@@ -8,7 +8,6 @@
 #include "ash/shell.h"
 
 namespace ash {
-namespace test {
 
 AshTestViewsDelegate::AshTestViewsDelegate() {}
 
@@ -35,5 +34,13 @@ void AshTestViewsDelegate::NotifyAccessibilityEvent(views::View* view,
   }
 }
 
-}  // namespace test
+views::TestViewsDelegate::ProcessMenuAcceleratorResult
+AshTestViewsDelegate::ProcessAcceleratorWhileMenuShowing(
+    const ui::Accelerator& accelerator) {
+  if (accelerator == close_menu_accelerator_)
+    return ProcessMenuAcceleratorResult::CLOSE_MENU;
+
+  return ProcessMenuAcceleratorResult::LEAVE_MENU_OPEN;
+}
+
 }  // namespace ash

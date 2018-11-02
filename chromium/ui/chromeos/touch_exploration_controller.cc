@@ -42,7 +42,7 @@ void SetTouchAccessibilityFlag(ui::Event* event) {
 TouchExplorationController::TouchExplorationController(
     aura::Window* root_window,
     TouchExplorationControllerDelegate* delegate,
-    TouchAccessibilityEnabler* touch_accessibility_enabler)
+    base::WeakPtr<TouchAccessibilityEnabler> touch_accessibility_enabler)
     : root_window_(root_window),
       delegate_(delegate),
       state_(NO_FINGERS_DOWN),
@@ -53,10 +53,14 @@ TouchExplorationController::TouchExplorationController(
       touch_accessibility_enabler_(touch_accessibility_enabler) {
   DCHECK(root_window);
   root_window->GetHost()->GetEventSource()->AddEventRewriter(this);
+  if (touch_accessibility_enabler_)
+    touch_accessibility_enabler_->RemoveEventHandler();
 }
 
 TouchExplorationController::~TouchExplorationController() {
   root_window_->GetHost()->GetEventSource()->RemoveEventRewriter(this);
+  if (touch_accessibility_enabler_)
+    touch_accessibility_enabler_->AddEventHandler();
 }
 
 void TouchExplorationController::SetTouchAccessibilityAnchorPoint(
@@ -96,6 +100,9 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   if (touch_accessibility_enabler_)
     touch_accessibility_enabler_->HandleTouchEvent(touch_event);
 
+  if (event.type() == ui::ET_TOUCH_PRESSED)
+    seen_press_ = true;
+
   if (!exclude_bounds_.IsEmpty()) {
     gfx::Point location = touch_event.location();
     root_window_->GetHost()->ConvertScreenInPixelsToDIP(&location);
@@ -118,7 +125,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   // the timestamps of the events, and not dependent on the granularity of
   // the timer.
   if (tap_timer_.IsRunning() &&
-      touch_event.time_stamp() - initial_press_->time_stamp() >
+      touch_event.time_stamp() - most_recent_press_timestamp_ >
           gesture_detector_config_.double_tap_timeout) {
     tap_timer_.Stop();
     OnTapTimerFired();
@@ -127,7 +134,7 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   }
 
   if (passthrough_timer_.IsRunning() &&
-      event.time_stamp() - initial_press_->time_stamp() >
+      event.time_stamp() - most_recent_press_timestamp_ >
           gesture_detector_config_.longpress_timeout) {
     passthrough_timer_.Stop();
     OnPassthroughTimerFired();
@@ -148,8 +155,25 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
 
     // Can happen if touch exploration is enabled while fingers were down
     // or if an additional press occurred within the exclusion bounds.
-    if (it == current_touch_ids_.end())
+    if (it == current_touch_ids_.end()) {
+      // If we get a RELEASE event and we've never seen a PRESS event
+      // since TouchExplorationController was instantiated, cancel the
+      // event so that touch gestures that enable spoken feedback
+      // don't accidentally trigger other behaviors on release.
+      if (!seen_press_) {
+        std::unique_ptr<ui::TouchEvent> new_event(new ui::TouchEvent(
+            ui::ET_TOUCH_CANCELLED, gfx::Point(), touch_event.time_stamp(),
+            touch_event.pointer_details()));
+        new_event->set_location_f(touch_event.location_f());
+        new_event->set_root_location_f(touch_event.root_location_f());
+        new_event->set_flags(touch_event.flags());
+        *rewritten_event = std::move(new_event);
+        return ui::EVENT_REWRITE_REWRITTEN;
+      }
+
+      // Otherwise just pass it through.
       return ui::EVENT_REWRITE_CONTINUE;
+    }
 
     current_touch_ids_.erase(it);
     touch_locations_.erase(touch_id);
@@ -197,8 +221,9 @@ ui::EventRewriteStatus TouchExplorationController::RewriteEvent(
   if (gesture_provider_.get()) {
     ui::TouchEvent mutable_touch_event = touch_event;
     if (gesture_provider_->OnTouchEvent(&mutable_touch_event)) {
-      gesture_provider_->OnTouchEventAck(mutable_touch_event.unique_event_id(),
-                                         false);
+      gesture_provider_->OnTouchEventAck(
+          mutable_touch_event.unique_event_id(), false /* event_consumed */,
+          false /* is_source_touch_event_set_non_blocking */);
     }
     ProcessGestureEvents();
   }
@@ -288,6 +313,7 @@ ui::EventRewriteStatus TouchExplorationController::InNoFingersDown(
         &TouchExplorationController::OnPassthroughTimerFired);
   }
   initial_press_.reset(new TouchEvent(event));
+  most_recent_press_timestamp_ = initial_press_->time_stamp();
   initial_presses_[event.pointer_details().id] = event.location();
   last_unused_finger_event_.reset(new TouchEvent(event));
   StartTapTimer();
@@ -312,7 +338,7 @@ ui::EventRewriteStatus TouchExplorationController::InSingleTapPressed(
       // Since the long press timer has been running, it is possible that the
       // tap timer has timed out before the long press timer has. If the tap
       // timer timeout has elapsed, then fire the tap timer.
-      if (event.time_stamp() - initial_press_->time_stamp() >
+      if (event.time_stamp() - most_recent_press_timestamp_ >
           gesture_detector_config_.double_tap_timeout) {
         OnTapTimerFired();
       }
@@ -343,7 +369,7 @@ ui::EventRewriteStatus TouchExplorationController::InSingleTapPressed(
       return EVENT_REWRITE_DISCARD;
 
     float delta_time =
-        (event.time_stamp() - initial_press_->time_stamp()).InSecondsF();
+        (event.time_stamp() - most_recent_press_timestamp_).InSecondsF();
     float velocity = distance / delta_time;
     if (VLOG_on_) {
       VLOG(1) << "\n Delta time: " << delta_time << "\n Distance: " << distance
@@ -401,6 +427,7 @@ TouchExplorationController::InSingleTapOrTouchExploreReleased(
     // going, and the new one is set.
     tap_timer_.Stop();
     StartTapTimer();
+    most_recent_press_timestamp_ = event.time_stamp();
     // This will update as the finger moves before a possible passthrough, and
     // will determine the offset.
     last_unused_finger_event_.reset(new ui::TouchEvent(event));
@@ -479,6 +506,7 @@ ui::EventRewriteStatus TouchExplorationController::InTouchExploration(
   } else if (type == ui::ET_TOUCH_RELEASED || type == ui::ET_TOUCH_CANCELLED) {
     initial_press_.reset(new TouchEvent(event));
     StartTapTimer();
+    most_recent_press_timestamp_ = event.time_stamp();
     MaybeSendSimulatedTapInLiftActivationBounds(event);
     SET_STATE(TOUCH_EXPLORE_RELEASED);
   } else if (type != ui::ET_TOUCH_MOVED) {

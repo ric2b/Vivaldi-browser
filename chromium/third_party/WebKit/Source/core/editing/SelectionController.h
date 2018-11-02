@@ -31,7 +31,6 @@
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextGranularity.h"
-#include "core/editing/VisibleSelection.h"
 #include "core/page/EventWithHitTestResults.h"
 #include "platform/heap/Handle.h"
 
@@ -102,7 +101,8 @@ class CORE_EXPORT SelectionController final
                                           SelectInputEventType);
   void SelectClosestMisspellingFromHitTestResult(const HitTestResult&,
                                                  AppendTrailingWhitespace);
-  void SelectClosestWordFromMouseEvent(const MouseEventWithHitTestResults&);
+  // Returns |true| if a word was selected.
+  bool SelectClosestWordFromMouseEvent(const MouseEventWithHitTestResults&);
   void SelectClosestMisspellingFromMouseEvent(
       const MouseEventWithHitTestResults&);
   void SelectClosestWordOrLinkFromMouseEvent(
@@ -114,7 +114,7 @@ class CORE_EXPORT SelectionController final
   void SetCaretAtHitTestResult(const HitTestResult&);
   bool UpdateSelectionForMouseDownDispatchingSelectStart(
       Node*,
-      const VisibleSelectionInFlatTree&,
+      const SelectionInFlatTree&,
       TextGranularity,
       HandleVisibility);
 
@@ -130,10 +130,8 @@ class CORE_EXPORT SelectionController final
   bool HandleTripleClick(const MouseEventWithHitTestResults&);
 
   Member<LocalFrame> const frame_;
-  // TODO(yosin): We should use |PositionWIthAffinityInFlatTree| since we
-  // should reduce usage of |VisibleSelectionInFlatTree|.
   // Used to store base before the adjustment at bidi boundary
-  VisiblePositionInFlatTree original_base_in_flat_tree_;
+  PositionInFlatTreeWithAffinity original_base_in_flat_tree_;
   bool mouse_down_may_start_select_;
   bool mouse_down_was_single_click_in_selection_;
   bool mouse_down_allows_multi_click_;

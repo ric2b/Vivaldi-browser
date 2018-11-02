@@ -13,12 +13,15 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/synchronization/lock.h"
+#include "mojo/edk/system/ports/event.h"
 #include "mojo/edk/system/ports/message_queue.h"
 #include "mojo/edk/system/ports/user_data.h"
 
 namespace mojo {
 namespace edk {
 namespace ports {
+
+class PortLocker;
 
 class Port : public base::RefCountedThreadSafe<Port> {
  public:
@@ -30,14 +33,13 @@ class Port : public base::RefCountedThreadSafe<Port> {
     kClosed
   };
 
-  base::Lock lock;
   State state;
   NodeName peer_node_name;
   PortName peer_port_name;
   uint64_t next_sequence_num_to_send;
   uint64_t last_sequence_num_to_receive;
   MessageQueue message_queue;
-  std::unique_ptr<std::pair<NodeName, ScopedMessage>> send_on_proxy_removal;
+  std::unique_ptr<std::pair<NodeName, ScopedEvent>> send_on_proxy_removal;
   scoped_refptr<UserData> user_data;
   bool remove_proxy_on_last_message;
   bool peer_closed;
@@ -45,10 +47,19 @@ class Port : public base::RefCountedThreadSafe<Port> {
   Port(uint64_t next_sequence_num_to_send,
        uint64_t next_sequence_num_to_receive);
 
+  void AssertLockAcquired() {
+#if DCHECK_IS_ON()
+    lock_.AssertAcquired();
+#endif
+  }
+
  private:
   friend class base::RefCountedThreadSafe<Port>;
+  friend class PortLocker;
 
   ~Port();
+
+  base::Lock lock_;
 
   DISALLOW_COPY_AND_ASSIGN(Port);
 };

@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/policy/device_status_collector.h"
 #include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/mock_cloud_policy_client.h"
@@ -89,6 +90,7 @@ class StatusUploaderTest : public testing::Test {
 #if defined(USE_X11)
     ui::DeviceDataManagerX11::CreateInstance();
 #endif
+    chromeos::DBusThreadManager::Initialize();
     client_.SetDMToken("dm_token");
     collector_.reset(new MockDeviceStatusCollector(&prefs_));
     settings_helper_.ReplaceProvider(chromeos::kReportUploadFrequency);
@@ -100,6 +102,7 @@ class StatusUploaderTest : public testing::Test {
 
   void TearDown() override {
     content::RunAllBlockingPoolTasksUntilIdle();
+    chromeos::DBusThreadManager::Shutdown();
   }
 
   // Given a pending task to upload status, runs the task and returns the

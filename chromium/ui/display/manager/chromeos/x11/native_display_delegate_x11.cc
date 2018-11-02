@@ -24,6 +24,7 @@
 #include "ui/display/util/x11/edid_parser_x11.h"
 #include "ui/events/platform/platform_event_source.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_error_tracker.h"
 #include "ui/gfx/x/x11_types.h"
 
@@ -402,8 +403,7 @@ bool NativeDisplayDelegateX11::GetHDCPState(const DisplaySnapshot& output,
   Atom actual_type = None;
   int success = 0;
   RROutput output_id = static_cast<const DisplaySnapshotX11&>(output).output();
-  // TODO(kcwu): Use X11AtomCache to save round trip time of XInternAtom.
-  Atom prop = XInternAtom(display_, kContentProtectionAtomName, False);
+  Atom prop = gfx::GetAtom(kContentProtectionAtomName);
 
   // TODO(kcwu): Move this to x11_util (similar method calls in this file and
   // output_util.cc)
@@ -430,13 +430,11 @@ bool NativeDisplayDelegateX11::GetHDCPState(const DisplaySnapshot& output,
   if (success == Success && actual_type == XA_ATOM && actual_format == 32 &&
       nitems == 1) {
     Atom value = reinterpret_cast<Atom*>(values)[0];
-    if (value == XInternAtom(display_, kProtectionUndesiredAtomName, False)) {
+    if (value == gfx::GetAtom(kProtectionUndesiredAtomName)) {
       *state = HDCP_STATE_UNDESIRED;
-    } else if (value ==
-               XInternAtom(display_, kProtectionDesiredAtomName, False)) {
+    } else if (value == gfx::GetAtom(kProtectionDesiredAtomName)) {
       *state = HDCP_STATE_DESIRED;
-    } else if (value ==
-               XInternAtom(display_, kProtectionEnabledAtomName, False)) {
+    } else if (value == gfx::GetAtom(kProtectionEnabledAtomName)) {
       *state = HDCP_STATE_ENABLED;
     } else {
       LOG(ERROR) << "Unknown " << kContentProtectionAtomName
@@ -461,14 +459,14 @@ void NativeDisplayDelegateX11::SetHDCPState(
 
 bool NativeDisplayDelegateX11::SetHDCPState(const DisplaySnapshot& output,
                                             HDCPState state) {
-  Atom name = XInternAtom(display_, kContentProtectionAtomName, False);
+  Atom name = gfx::GetAtom(kContentProtectionAtomName);
   Atom value = None;
   switch (state) {
     case HDCP_STATE_UNDESIRED:
-      value = XInternAtom(display_, kProtectionUndesiredAtomName, False);
+      value = gfx::GetAtom(kProtectionUndesiredAtomName);
       break;
     case HDCP_STATE_DESIRED:
-      value = XInternAtom(display_, kProtectionDesiredAtomName, False);
+      value = gfx::GetAtom(kProtectionDesiredAtomName);
       break;
     default:
       NOTREACHED() << "Invalid HDCP state: " << state;
@@ -545,8 +543,8 @@ void NativeDisplayDelegateX11::UpdateCrtcsForNewFramebuffer(
 }
 
 bool NativeDisplayDelegateX11::IsOutputAspectPreservingScaling(RROutput id) {
-  Atom scaling_prop = XInternAtom(display_, "scaling mode", False);
-  Atom full_aspect_atom = XInternAtom(display_, "Full aspect", False);
+  Atom scaling_prop = gfx::GetAtom("scaling mode");
+  Atom full_aspect_atom = gfx::GetAtom("Full aspect");
   if (scaling_prop == None || full_aspect_atom == None)
     return false;
 

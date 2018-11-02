@@ -11,36 +11,26 @@
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/lazy_instance.h"
-#include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
-#include "base/process/process_handle.h"
-#include "base/run_loop.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/synchronization/lock.h"
-#include "base/synchronization/waitable_event.h"
-#include "build/build_config.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_manager/service_manager_context.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/service_manager/child_connection.h"
-#include "content/common/utility_messages.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/utility_process_host_client.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/process_type.h"
 #include "content/public/common/sandbox_type.h"
 #include "content/public/common/sandboxed_process_launcher_delegate.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "media/base/media_switches.h"
-#include "mojo/edk/embedder/embedder.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "ui/base/ui_base_switches.h"
 
@@ -148,7 +138,6 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
     const scoped_refptr<base::SequencedTaskRunner>& client_task_runner)
     : client_(client),
       client_task_runner_(client_task_runner),
-      is_batch_mode_(false),
       no_sandbox_(false),
       run_elevated_(false),
 #if defined(OS_LINUX)
@@ -165,8 +154,6 @@ UtilityProcessHostImpl::UtilityProcessHostImpl(
 
 UtilityProcessHostImpl::~UtilityProcessHostImpl() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  if (is_batch_mode_)
-    EndBatchMode();
 }
 
 base::WeakPtr<UtilityProcessHost> UtilityProcessHostImpl::AsWeakPtr() {
@@ -180,25 +167,15 @@ bool UtilityProcessHostImpl::Send(IPC::Message* message) {
   return process_->Send(message);
 }
 
-bool UtilityProcessHostImpl::StartBatchMode()  {
-  CHECK(!is_batch_mode_);
-  is_batch_mode_ = StartProcess();
-  Send(new UtilityMsg_BatchMode_Started());
-  return is_batch_mode_;
-}
-
-void UtilityProcessHostImpl::EndBatchMode()  {
-  CHECK(is_batch_mode_);
-  is_batch_mode_ = false;
-  Send(new UtilityMsg_BatchMode_Finished());
-}
-
 void UtilityProcessHostImpl::SetExposedDir(const base::FilePath& dir) {
   exposed_dir_ = dir;
 }
 
-void UtilityProcessHostImpl::DisableSandbox() {
-  no_sandbox_ = true;
+void UtilityProcessHostImpl::SetSandboxType(SandboxType sandbox_type) {
+  DCHECK(sandbox_type != SANDBOX_TYPE_INVALID);
+
+  // TODO(tsepez): Store sandbox type itself.
+  no_sandbox_ = IsUnsandboxedSandboxType(sandbox_type);
 }
 
 #if defined(OS_WIN)
@@ -213,12 +190,10 @@ const ChildProcessData& UtilityProcessHostImpl::GetData() {
 }
 
 #if defined(OS_POSIX)
-
 void UtilityProcessHostImpl::SetEnv(const base::EnvironmentMap& env) {
   env_ = env;
 }
-
-#endif  // OS_POSIX
+#endif
 
 bool UtilityProcessHostImpl::Start() {
   return StartProcess();
@@ -238,11 +213,8 @@ void UtilityProcessHostImpl::SetName(const base::string16& name) {
 bool UtilityProcessHostImpl::StartProcess() {
   if (started_)
     return true;
+
   started_ = true;
-
-  if (is_batch_mode_)
-    return true;
-
   process_->SetName(name_);
   process_->GetHost()->CreateChannelMojo();
 
@@ -292,6 +264,7 @@ bool UtilityProcessHostImpl::StartProcess() {
 
     cmd_line->AppendSwitchASCII(switches::kProcessType,
                                 switches::kUtilityProcess);
+    BrowserChildProcessHostImpl::CopyFeatureAndFieldTrialFlags(cmd_line.get());
     std::string locale = GetContentClient()->browser()->GetApplicationLocale();
     cmd_line->AppendSwitchASCII(switches::kLang, locale);
 
@@ -314,15 +287,11 @@ bool UtilityProcessHostImpl::StartProcess() {
 
     // Browser command-line switches to propagate to the utility process.
     static const char* const kSwitchNames[] = {
-      switches::kEnableNetworkService,
       switches::kHostResolverRules,
-      switches::kIgnoreCertificateErrors,
       switches::kLogNetLog,
       switches::kNoSandbox,
       switches::kProfilerTiming,
       switches::kProxyServer,
-      switches::kTestingFixedHttpPort,
-      switches::kTestingFixedHttpsPort,
 #if defined(OS_MACOSX)
       switches::kEnableSandboxLogging,
 #endif
@@ -331,6 +300,9 @@ bool UtilityProcessHostImpl::StartProcess() {
     };
     cmd_line->CopySwitchesFrom(browser_command_line, kSwitchNames,
                                arraysize(kSwitchNames));
+
+    network_session_configurator::CopyNetworkSwitches(browser_command_line,
+                                                      cmd_line.get());
 
     if (has_cmd_prefix) {
       // Launch the utility child process with some prefix

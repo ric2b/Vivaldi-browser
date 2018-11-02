@@ -9,12 +9,10 @@
 
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/window_user_data.h"
 #include "ash/wm/container_finder.h"
 #include "ash/wm/window_dimmer.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/auto_reset.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -153,11 +151,11 @@ ScreenPinningController::ScreenPinningController()
           base::MakeUnique<SystemModalContainerWindowObserver>(this)),
       system_modal_container_child_window_observer_(
           base::MakeUnique<SystemModalContainerChildWindowObserver>(this)) {
-  ShellPort::Get()->AddDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->AddObserver(this);
 }
 
 ScreenPinningController::~ScreenPinningController() {
-  ShellPort::Get()->RemoveDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
 }
 
 bool ScreenPinningController::IsPinned() const {

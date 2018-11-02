@@ -15,24 +15,28 @@ TEST(AssertionsTest, Assertions) {
 #if DCHECK_IS_ON()
   EXPECT_DEATH_IF_SUPPORTED(DCHECK(false), "");
   EXPECT_DEATH_IF_SUPPORTED(NOTREACHED(), "");
+  EXPECT_DEATH_IF_SUPPORTED(DCHECK_AT(false, __FILE__, __LINE__), "");
+#else
+  DCHECK(false);
+  NOTREACHED();
+  DCHECK_AT(false, __FILE__, __LINE__);
 #endif
 
   CHECK(true);
   EXPECT_DEATH_IF_SUPPORTED(CHECK(false), "");
 
   SECURITY_DCHECK(true);
-#if ENABLE(SECURITY_ASSERT)
+#if ENABLE_SECURITY_ASSERT
   EXPECT_DEATH_IF_SUPPORTED(SECURITY_DCHECK(false), "");
+#else
+  SECURITY_DCHECK(false);
 #endif
 
   SECURITY_CHECK(true);
   EXPECT_DEATH_IF_SUPPORTED(SECURITY_CHECK(false), "");
-
-  EXPECT_DEATH_IF_SUPPORTED(CRASH(), "");
-  EXPECT_DEATH_IF_SUPPORTED(IMMEDIATE_CRASH(), "");
 };
 
-#if !LOG_DISABLED
+#if DCHECK_IS_ON()
 static const int kPrinterBufferSize = 256;
 static char g_buffer[kPrinterBufferSize];
 static StringBuilder g_builder;
@@ -67,6 +71,6 @@ TEST(AssertionsTest, ScopedLogger) {
       ")\n",
       g_builder.ToString());
 };
-#endif  // !LOG_DISABLED
+#endif  // DCHECK_IS_ON()
 
 }  // namespace WTF

@@ -1,10 +1,12 @@
 include_rules = [
     # To whitelist base/ stuff Blink is allowed to include, we list up all
     # directories and files instead of writing 'base/'.
+    "+base/allocator/partition_allocator/oom.h",
     "+base/bind.h",
     "+base/bind_helpers.h",
     "+base/callback.h",
     "+base/callback_forward.h",
+    "+base/feature_list.h",
     "+base/files",
     "+base/guid.h",
     "+base/json",
@@ -22,6 +24,7 @@ include_rules = [
     "+base/strings/stringprintf.h",
     "+base/synchronization/waitable_event.h",
     "+base/sys_info.h",
+    "+base/android/sys_utils.h",
     "+base/test",
     "+base/test/fuzzed_data_provider.h",
     "+base/threading/thread_task_runner_handle.h",
@@ -35,7 +38,6 @@ include_rules = [
     "+mozilla",
     "+platform",
     "+public/platform",
-    "+services/service_manager/public/interfaces",
     "+skia/ext",
     "+third_party/ced/src/compact_enc_det/compact_enc_det.h",
     "+third_party/khronos",

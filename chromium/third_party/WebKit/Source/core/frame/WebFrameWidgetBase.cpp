@@ -4,20 +4,23 @@
 
 #include "core/frame/WebFrameWidgetBase.h"
 
-#include "core/dom/DocumentUserGestureToken.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/WebInputEventConversion.h"
 #include "core/exported/WebViewBase.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/frame/WebLocalFrameBase.h"
+#include "core/input/ContextMenuAllowedScope.h"
 #include "core/input/EventHandler.h"
+#include "core/page/ContextMenuController.h"
 #include "core/page/DragActions.h"
 #include "core/page/DragController.h"
 #include "core/page/DragData.h"
 #include "core/page/DragSession.h"
+#include "core/page/FocusController.h"
 #include "core/page/Page.h"
 #include "core/page/PointerLockController.h"
-#include "platform/UserGestureIndicator.h"
+#include "platform/wtf/Assertions.h"
 #include "public/web/WebWidgetClient.h"
 
 namespace blink {
@@ -34,9 +37,6 @@ LocalFrame* ToCoreFrame(WebLocalFrame* frame) {
 
 // Ensure that the WebDragOperation enum values stay in sync with the original
 // DragOperation constants.
-#define STATIC_ASSERT_ENUM(a, b)                            \
-  static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                "mismatching enum : " #a)
 STATIC_ASSERT_ENUM(kDragOperationNone, kWebDragOperationNone);
 STATIC_ASSERT_ENUM(kDragOperationCopy, kWebDragOperationCopy);
 STATIC_ASSERT_ENUM(kDragOperationLink, kWebDragOperationLink);
@@ -235,6 +235,11 @@ Page* WebFrameWidgetBase::GetPage() const {
 
 void WebFrameWidgetBase::DidAcquirePointerLock() {
   GetPage()->GetPointerLockController().DidAcquirePointerLock();
+
+  LocalFrame* focusedFrame = FocusedLocalFrameInWidget();
+  if (focusedFrame) {
+    focusedFrame->GetEventHandler().ReleaseMousePointerCapture();
+  }
 }
 
 void WebFrameWidgetBase::DidNotAcquirePointerLock() {
@@ -246,26 +251,51 @@ void WebFrameWidgetBase::DidLosePointerLock() {
   GetPage()->GetPointerLockController().DidLosePointerLock();
 }
 
-void WebFrameWidgetBase::PointerLockMouseEvent(const WebInputEvent& event) {
+void WebFrameWidgetBase::RequestDecode(
+    const PaintImage& image,
+    std::unique_ptr<WTF::Function<void(bool)>> callback) {
+  View()->RequestDecode(image, std::move(callback));
+}
+
+DEFINE_TRACE(WebFrameWidgetBase) {
+  visitor->Trace(current_drag_data_);
+}
+
+// TODO(665924): Remove direct dispatches of mouse events from
+// PointerLockController, instead passing them through EventHandler.
+void WebFrameWidgetBase::PointerLockMouseEvent(
+    const WebCoalescedInputEvent& coalesced_event) {
+  const WebInputEvent& input_event = coalesced_event.Event();
+  const WebMouseEvent& mouse_event =
+      static_cast<const WebMouseEvent&>(input_event);
+  WebMouseEvent transformed_event = TransformWebMouseEvent(
+      ToWebLocalFrameBase(LocalRoot())->GetFrameView(), mouse_event);
+
+  LocalFrame* focusedFrame = FocusedLocalFrameInWidget();
+  if (focusedFrame) {
+    focusedFrame->GetEventHandler().ProcessPendingPointerCaptureForPointerLock(
+        transformed_event);
+  }
+
   std::unique_ptr<UserGestureIndicator> gesture_indicator;
   AtomicString event_type;
-  switch (event.GetType()) {
+  switch (input_event.GetType()) {
     case WebInputEvent::kMouseDown:
       event_type = EventTypeNames::mousedown;
       if (!GetPage() || !GetPage()->GetPointerLockController().GetElement())
         break;
       gesture_indicator = WTF::WrapUnique(new UserGestureIndicator(
-          DocumentUserGestureToken::Create(&GetPage()
-                                                ->GetPointerLockController()
-                                                .GetElement()
-                                                ->GetDocument(),
-                                           UserGestureToken::kNewGesture)));
+          UserGestureToken::Create(&GetPage()
+                                        ->GetPointerLockController()
+                                        .GetElement()
+                                        ->GetDocument(),
+                                   UserGestureToken::kNewGesture)));
       pointer_lock_gesture_token_ = gesture_indicator->CurrentToken();
       break;
     case WebInputEvent::kMouseUp:
       event_type = EventTypeNames::mouseup;
       gesture_indicator = WTF::WrapUnique(
-          new UserGestureIndicator(pointer_lock_gesture_token_.Release()));
+          new UserGestureIndicator(std::move(pointer_lock_gesture_token_)));
       break;
     case WebInputEvent::kMouseMove:
       event_type = EventTypeNames::mousemove;
@@ -274,14 +304,32 @@ void WebFrameWidgetBase::PointerLockMouseEvent(const WebInputEvent& event) {
       NOTREACHED();
   }
 
-  const WebMouseEvent& mouse_event = static_cast<const WebMouseEvent&>(event);
-
   if (GetPage()) {
-    WebMouseEvent transformed_event = TransformWebMouseEvent(
-        ToWebLocalFrameBase(LocalRoot())->GetFrameView(), mouse_event);
     GetPage()->GetPointerLockController().DispatchLockedMouseEvent(
         transformed_event, event_type);
   }
+}
+
+void WebFrameWidgetBase::ShowContextMenu(WebMenuSourceType source_type) {
+  if (!GetPage())
+    return;
+
+  GetPage()->GetContextMenuController().ClearContextMenu();
+  {
+    ContextMenuAllowedScope scope;
+    if (LocalFrame* focused_frame =
+            GetPage()->GetFocusController().FocusedFrame()) {
+      focused_frame->GetEventHandler().ShowNonLocatedContextMenu(nullptr,
+                                                                 source_type);
+    }
+  }
+}
+
+LocalFrame* WebFrameWidgetBase::FocusedLocalFrameInWidget() const {
+  LocalFrame* frame = GetPage()->GetFocusController().FocusedFrame();
+  return (frame && frame->LocalFrameRoot() == ToCoreFrame(LocalRoot()))
+             ? frame
+             : nullptr;
 }
 
 }  // namespace blink

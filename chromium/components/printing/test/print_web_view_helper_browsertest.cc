@@ -129,7 +129,8 @@ class DidPreviewPageListener : public IPC::Listener {
   bool OnMessageReceived(const IPC::Message& message) override {
     if (message.type() == PrintHostMsg_MetafileReadyForPrinting::ID ||
         message.type() == PrintHostMsg_PrintPreviewFailed::ID ||
-        message.type() == PrintHostMsg_PrintPreviewCancelled::ID)
+        message.type() == PrintHostMsg_PrintPreviewCancelled::ID ||
+        message.type() == PrintHostMsg_PrintPreviewInvalidPrinterSettings::ID)
       run_loop_->Quit();
     return false;
   }
@@ -413,7 +414,9 @@ TEST_F(MAYBE_PrintWebViewHelperTest, PrintWithIframe) {
   // Find the frame and set it as the focused one.  This should mean that that
   // the printout should only contain the contents of that frame.
   auto* web_view = view_->GetWebView();
-  WebFrame* sub1_frame = web_view->FindFrameByName(WebString::FromUTF8("sub1"));
+  WebFrame* sub1_frame =
+      web_view->MainFrame()->ToWebLocalFrame()->FindFrameByName(
+          WebString::FromUTF8("sub1"));
   ASSERT_TRUE(sub1_frame);
   web_view->SetFocusedFrame(sub1_frame);
   ASSERT_NE(web_view->FocusedFrame(), web_view->MainFrame());
@@ -1052,7 +1055,7 @@ TEST_F(MAYBE_PrintWebViewHelperPreviewTest, OnPrintForPrintPreviewWithScaling) {
 
   // Non default scaling value
   dict.SetInteger(kSettingScaleFactor, 80);
-  dict.Set(kSettingMediaSize, media_size.release());
+  dict.Set(kSettingMediaSize, std::move(media_size));
 
   OnPrintForPrintPreview(dict);
 

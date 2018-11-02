@@ -6,14 +6,13 @@
 
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accessibility_delegate.h"
+#include "ash/ime/ime_controller.h"
+#include "ash/public/interfaces/ime_info.mojom.h"
 #include "ash/shell.h"
 #include "ash/system/ime_menu/ime_list_view.h"
 #include "ash/system/status_area_widget.h"
-#include "ash/system/tray/ime_info.h"
-#include "ash/system/tray/system_tray_notifier.h"
+#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/status_area_widget_test_helper.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -25,17 +24,46 @@
 #include "ui/views/controls/label.h"
 
 using base::UTF8ToUTF16;
+using chromeos::input_method::InputMethodManager;
+using chromeos::input_method::MockInputMethodManager;
 
 namespace ash {
+namespace {
+
+const int kEmojiButtonId = 1;
 
 ImeMenuTray* GetTray() {
   return StatusAreaWidgetTestHelper::GetStatusAreaWidget()->ime_menu_tray();
 }
 
-class ImeMenuTrayTest : public test::AshTestBase {
+void SetCurrentIme(const std::string& current_ime_id,
+                   const std::vector<mojom::ImeInfo>& available_imes) {
+  std::vector<mojom::ImeInfoPtr> available_ime_ptrs;
+  for (const auto& ime : available_imes)
+    available_ime_ptrs.push_back(ime.Clone());
+  Shell::Get()->ime_controller()->RefreshIme(
+      current_ime_id, std::move(available_ime_ptrs),
+      std::vector<mojom::ImeMenuItemPtr>());
+}
+
+}  // namespace
+
+class ImeMenuTrayTest : public AshTestBase {
  public:
   ImeMenuTrayTest() {}
   ~ImeMenuTrayTest() override {}
+
+  void SetUp() override {
+    AshTestBase::SetUp();
+    // MockInputMethodManager enables emoji, handwriting and voice input by
+    // default.
+    InputMethodManager::Initialize(new MockInputMethodManager);
+  }
+
+  void TearDown() override {
+    InputMethodManager::Shutdown();
+    AshTestBase::TearDown();
+  }
 
  protected:
   // Returns true if the IME menu tray is visible.
@@ -48,15 +76,28 @@ class ImeMenuTrayTest : public test::AshTestBase {
   bool IsTrayBackgroundActive() { return GetTray()->is_active(); }
 
   // Returns true if the IME menu bubble has been shown.
-  bool IsBubbleShown() { return GetTray()->IsImeMenuBubbleShown(); }
+  bool IsBubbleShown() { return GetTray()->GetBubbleView() != nullptr; }
 
-  // Returns true if the IME menu list has been updated with the right IME list.
-  bool IsTrayImeListValid(const std::vector<IMEInfo>& expected_imes,
-                          const IMEInfo& expected_current_ime) {
+  // Returns true if emoji palatte is enabled for the current keyboard.
+  bool IsEmojiEnabled() { return GetTray()->emoji_enabled_; }
+
+  // Returns true if handwirting input is enabled for the current keyboard.
+  bool IsHandwritingEnabled() { return GetTray()->handwriting_enabled_; }
+
+  // Returns true if voice input is enabled for the current keyboard.
+  bool IsVoiceEnabled() { return GetTray()->voice_enabled_; }
+
+  views::Button* GetEmojiButton() const {
+    return static_cast<views::Button*>(
+        GetTray()->bubble_->bubble_view()->GetViewByID(kEmojiButtonId));
+  }
+
+  // Verifies the IME menu list has been updated with the right IME list.
+  void ExpectValidImeList(const std::vector<mojom::ImeInfo>& expected_imes,
+                          const mojom::ImeInfo& expected_current_ime) {
     const std::map<views::View*, std::string>& ime_map =
         ImeListViewTestApi(GetTray()->ime_list_view_).ime_map();
-    if (ime_map.size() != expected_imes.size())
-      return false;
+    EXPECT_EQ(expected_imes.size(), ime_map.size());
 
     std::vector<std::string> expected_ime_ids;
     for (const auto& ime : expected_imes) {
@@ -64,22 +105,16 @@ class ImeMenuTrayTest : public test::AshTestBase {
     }
     for (const auto& ime : ime_map) {
       // Tests that all the IMEs on the view is in the list of selected IMEs.
-      if (std::find(expected_ime_ids.begin(), expected_ime_ids.end(),
-                    ime.second) == expected_ime_ids.end()) {
-        return false;
-      }
+      EXPECT_TRUE(base::ContainsValue(expected_ime_ids, ime.second));
 
       // Tests that the checked IME is the current IME.
       ui::AXNodeData node_data;
       ime.first->GetAccessibleNodeData(&node_data);
       const auto checked_state = static_cast<ui::AXCheckedState>(
           node_data.GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
-      if (checked_state == ui::AX_CHECKED_STATE_TRUE) {
-        if (ime.second != expected_current_ime.id)
-          return false;
-      }
+      if (checked_state == ui::AX_CHECKED_STATE_TRUE)
+        EXPECT_EQ(expected_current_ime.id, ime.second);
     }
-    return true;
   }
 
   // Focuses in the given type of input context.
@@ -98,40 +133,38 @@ class ImeMenuTrayTest : public test::AshTestBase {
 TEST_F(ImeMenuTrayTest, ImeMenuTrayVisibility) {
   ASSERT_FALSE(IsVisible());
 
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   EXPECT_TRUE(IsVisible());
 
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(false);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(false);
   EXPECT_FALSE(IsVisible());
 }
 
 // Tests that IME menu tray shows the right info of the current IME.
 TEST_F(ImeMenuTrayTest, TrayLabelTest) {
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   ASSERT_TRUE(IsVisible());
 
-  // Changes the input method to "ime1".
-  IMEInfo info1;
+  mojom::ImeInfo info1;
   info1.id = "ime1";
   info1.name = UTF8ToUTF16("English");
   info1.medium_name = UTF8ToUTF16("English");
   info1.short_name = UTF8ToUTF16("US");
   info1.third_party = false;
-  info1.selected = true;
-  GetSystemTrayDelegate()->SetCurrentIME(info1);
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIME();
-  EXPECT_EQ(UTF8ToUTF16("US"), GetTrayText());
 
-  // Changes the input method to a third-party IME extension.
-  IMEInfo info2;
+  mojom::ImeInfo info2;
   info2.id = "ime2";
   info2.name = UTF8ToUTF16("English UK");
   info2.medium_name = UTF8ToUTF16("English UK");
   info2.short_name = UTF8ToUTF16("UK");
   info2.third_party = true;
-  info2.selected = true;
-  GetSystemTrayDelegate()->SetCurrentIME(info2);
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIME();
+
+  // Changes the input method to "ime1".
+  SetCurrentIme("ime1", {info1, info2});
+  EXPECT_EQ(UTF8ToUTF16("US"), GetTrayText());
+
+  // Changes the input method to a third-party IME extension.
+  SetCurrentIme("ime2", {info1, info2});
   EXPECT_EQ(UTF8ToUTF16("UK*"), GetTrayText());
 }
 
@@ -140,7 +173,7 @@ TEST_F(ImeMenuTrayTest, TrayLabelTest) {
 // menu feature. Also makes sure that the shelf won't autohide as long as the
 // IME menu is open.
 TEST_F(ImeMenuTrayTest, PerformAction) {
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   ASSERT_TRUE(IsVisible());
   ASSERT_FALSE(IsTrayBackgroundActive());
   StatusAreaWidget* status = StatusAreaWidgetTestHelper::GetStatusAreaWidget();
@@ -164,7 +197,7 @@ TEST_F(ImeMenuTrayTest, PerformAction) {
   // element will be deactivated.
   GetTray()->PerformAction(tap);
   EXPECT_TRUE(IsTrayBackgroundActive());
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(false);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(false);
   EXPECT_FALSE(IsVisible());
   EXPECT_FALSE(IsBubbleShown());
   EXPECT_FALSE(IsTrayBackgroundActive());
@@ -182,43 +215,36 @@ TEST_F(ImeMenuTrayTest, RefreshImeWithListViewCreated) {
   EXPECT_TRUE(IsTrayBackgroundActive());
   EXPECT_TRUE(IsBubbleShown());
 
-  IMEInfo info1, info2, info3;
+  mojom::ImeInfo info1, info2, info3;
   info1.id = "ime1";
   info1.name = UTF8ToUTF16("English");
   info1.medium_name = UTF8ToUTF16("English");
   info1.short_name = UTF8ToUTF16("US");
   info1.third_party = false;
-  info1.selected = true;
 
   info2.id = "ime2";
   info2.name = UTF8ToUTF16("English UK");
   info2.medium_name = UTF8ToUTF16("English UK");
   info2.short_name = UTF8ToUTF16("UK");
   info2.third_party = true;
-  info2.selected = false;
 
   info3.id = "ime3";
   info3.name = UTF8ToUTF16("Pinyin");
   info3.medium_name = UTF8ToUTF16("Chinese Pinyin");
   info3.short_name = UTF8ToUTF16("拼");
   info3.third_party = false;
-  info3.selected = false;
 
-  std::vector<IMEInfo> ime_info_list{info1, info2, info3};
+  std::vector<mojom::ImeInfo> ime_info_list{info1, info2, info3};
 
-  GetSystemTrayDelegate()->SetAvailableIMEList(ime_info_list);
-  GetSystemTrayDelegate()->SetCurrentIME(info1);
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIME();
+  // Switch to ime1.
+  SetCurrentIme("ime1", ime_info_list);
   EXPECT_EQ(UTF8ToUTF16("US"), GetTrayText());
-  EXPECT_TRUE(IsTrayImeListValid(ime_info_list, info1));
+  ExpectValidImeList(ime_info_list, info1);
 
-  ime_info_list[0].selected = false;
-  ime_info_list[2].selected = true;
-  GetSystemTrayDelegate()->SetAvailableIMEList(ime_info_list);
-  GetSystemTrayDelegate()->SetCurrentIME(info3);
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIME();
+  // Switch to ime3.
+  SetCurrentIme("ime3", ime_info_list);
   EXPECT_EQ(UTF8ToUTF16("拼"), GetTrayText());
-  EXPECT_TRUE(IsTrayImeListValid(ime_info_list, info3));
+  ExpectValidImeList(ime_info_list, info3);
 
   // Closes the menu before quitting.
   GetTray()->PerformAction(tap);
@@ -228,7 +254,7 @@ TEST_F(ImeMenuTrayTest, RefreshImeWithListViewCreated) {
 
 // Tests that quits Chrome with IME menu openned will not crash.
 TEST_F(ImeMenuTrayTest, QuitChromeWithMenuOpen) {
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   ASSERT_TRUE(IsVisible());
   ASSERT_FALSE(IsTrayBackgroundActive());
 
@@ -241,7 +267,7 @@ TEST_F(ImeMenuTrayTest, QuitChromeWithMenuOpen) {
 
 // Tests using 'Alt+Shift+K' to open the menu.
 TEST_F(ImeMenuTrayTest, TestAccelerator) {
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   ASSERT_TRUE(IsVisible());
   ASSERT_FALSE(IsTrayBackgroundActive());
 
@@ -258,7 +284,7 @@ TEST_F(ImeMenuTrayTest, TestAccelerator) {
 }
 
 TEST_F(ImeMenuTrayTest, ShowEmojiKeyset) {
-  Shell::Get()->system_tray_notifier()->NotifyRefreshIMEMenu(true);
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
   ASSERT_TRUE(IsVisible());
   ASSERT_FALSE(IsTrayBackgroundActive());
 
@@ -303,22 +329,81 @@ TEST_F(ImeMenuTrayTest, ForceToShowEmojiKeyset) {
   EXPECT_FALSE(accessibility_delegate->IsVirtualKeyboardEnabled());
 }
 
-TEST_F(ImeMenuTrayTest, ShowEmojiHandwritingVoiceButtons) {
-  FocusInInputContext(ui::TEXT_INPUT_TYPE_TEXT);
-  EXPECT_FALSE(GetTray()->ShouldShowEmojiHandwritingVoiceButtons());
+// Tests that tapping the emoji button does not crash. http://crbug.com/739630
+TEST_F(ImeMenuTrayTest, TapEmojiButton) {
+  Shell::Get()->ime_controller()->ShowImeMenuOnShelf(true);
 
-  chromeos::input_method::InputMethodManager* input_method_manager =
-      chromeos::input_method::InputMethodManager::Get();
-  EXPECT_FALSE(input_method_manager);
-  chromeos::input_method::InputMethodManager::Initialize(
-      new chromeos::input_method::MockInputMethodManager);
-  input_method_manager = chromeos::input_method::InputMethodManager::Get();
+  // Open the menu.
+  ui::GestureEvent tap(0, 0, 0, base::TimeTicks(),
+                       ui::GestureEventDetails(ui::ET_GESTURE_TAP));
+  GetTray()->PerformAction(tap);
+
+  // Tap the emoji button.
+  views::Button* emoji_button = GetEmojiButton();
+  ASSERT_TRUE(emoji_button);
+  emoji_button->OnGestureEvent(&tap);
+
+  // The menu should be hidden.
+  EXPECT_FALSE(IsBubbleShown());
+}
+
+TEST_F(ImeMenuTrayTest, ShouldShowBottomButtons) {
+  InputMethodManager* input_method_manager = InputMethodManager::Get();
   EXPECT_TRUE(input_method_manager &&
               input_method_manager->IsEmojiHandwritingVoiceOnImeMenuEnabled());
-  EXPECT_TRUE(GetTray()->ShouldShowEmojiHandwritingVoiceButtons());
+  EXPECT_TRUE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_EMOJI));
+  EXPECT_TRUE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_HANDWRITING));
+  EXPECT_TRUE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_VOICE));
+
+  FocusInInputContext(ui::TEXT_INPUT_TYPE_TEXT);
+  EXPECT_TRUE(GetTray()->ShouldShowBottomButtons());
+  EXPECT_TRUE(IsEmojiEnabled());
+  EXPECT_TRUE(IsHandwritingEnabled());
+  EXPECT_TRUE(IsVoiceEnabled());
 
   FocusInInputContext(ui::TEXT_INPUT_TYPE_PASSWORD);
-  EXPECT_FALSE(GetTray()->ShouldShowEmojiHandwritingVoiceButtons());
+  EXPECT_FALSE(GetTray()->ShouldShowBottomButtons());
+  EXPECT_FALSE(IsEmojiEnabled());
+  EXPECT_FALSE(IsHandwritingEnabled());
+  EXPECT_FALSE(IsVoiceEnabled());
+}
+
+TEST_F(ImeMenuTrayTest, ShouldShowBottomButtonsSeperate) {
+  FocusInInputContext(ui::TEXT_INPUT_TYPE_TEXT);
+  InputMethodManager* input_method_manager = InputMethodManager::Get();
+  EXPECT_TRUE(input_method_manager &&
+              input_method_manager->IsEmojiHandwritingVoiceOnImeMenuEnabled());
+
+  // Sets emoji disabled.
+  input_method_manager->SetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_EMOJI, false);
+  EXPECT_FALSE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_EMOJI));
+  EXPECT_TRUE(GetTray()->ShouldShowBottomButtons());
+  EXPECT_FALSE(IsEmojiEnabled());
+  EXPECT_TRUE(IsHandwritingEnabled());
+  EXPECT_TRUE(IsVoiceEnabled());
+
+  // Sets emoji enabled, but voice and handwriting disabled.
+  input_method_manager->SetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_EMOJI, true);
+  input_method_manager->SetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_VOICE, false);
+  input_method_manager->SetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_HANDWRITING, false);
+  EXPECT_TRUE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_EMOJI));
+  EXPECT_FALSE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_VOICE));
+  EXPECT_FALSE(input_method_manager->GetImeMenuFeatureEnabled(
+      InputMethodManager::FEATURE_HANDWRITING));
+  EXPECT_TRUE(GetTray()->ShouldShowBottomButtons());
+  EXPECT_TRUE(IsEmojiEnabled());
+  EXPECT_FALSE(IsHandwritingEnabled());
+  EXPECT_FALSE(IsVoiceEnabled());
 }
 
 }  // namespace ash

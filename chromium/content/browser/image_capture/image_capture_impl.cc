@@ -13,6 +13,7 @@
 #include "content/browser/renderer_host/media/video_capture_manager.h"
 #include "content/common/media/media_stream_options.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/capture/video/video_capture_device.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -21,19 +22,11 @@ namespace content {
 
 namespace {
 
-void RunGetCapabilitiesCallbackOnUIThread(
-    const ImageCaptureImpl::GetCapabilitiesCallback& callback,
-    media::mojom::PhotoCapabilitiesPtr capabilities) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, base::Passed(&capabilities)));
-}
-
-void RunFailedGetCapabilitiesCallback(
-    const ImageCaptureImpl::GetCapabilitiesCallback& cb) {
+void RunFailedGetPhotoStateCallback(
+    ImageCaptureImpl::GetPhotoStateCallback cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  media::mojom::PhotoCapabilitiesPtr empty_capabilities =
-      media::mojom::PhotoCapabilities::New();
+  media::mojom::PhotoStatePtr empty_capabilities =
+      media::mojom::PhotoState::New();
   empty_capabilities->iso = media::mojom::Range::New();
   empty_capabilities->width = media::mojom::Range::New();
   empty_capabilities->height = media::mojom::Range::New();
@@ -44,39 +37,23 @@ void RunFailedGetCapabilitiesCallback(
   empty_capabilities->contrast = media::mojom::Range::New();
   empty_capabilities->saturation = media::mojom::Range::New();
   empty_capabilities->sharpness = media::mojom::Range::New();
-  cb.Run(std::move(empty_capabilities));
+  std::move(cb).Run(std::move(empty_capabilities));
 }
 
-void RunSetOptionsCallbackOnUIThread(
-    const ImageCaptureImpl::SetOptionsCallback& callback,
-    bool success) {
-  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
-                          base::Bind(callback, success));
-}
-
-void RunFailedSetOptionsCallback(
-    const ImageCaptureImpl::SetOptionsCallback& cb) {
+void RunFailedSetOptionsCallback(ImageCaptureImpl::SetOptionsCallback cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  cb.Run(false);
+  std::move(cb).Run(false);
 }
 
-void RunTakePhotoCallbackOnUIThread(
-    const ImageCaptureImpl::TakePhotoCallback& callback,
-    media::mojom::BlobPtr blob) {
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(callback, base::Passed(std::move(blob))));
-}
-
-void RunFailedTakePhotoCallback(const ImageCaptureImpl::TakePhotoCallback& cb) {
+void RunFailedTakePhotoCallback(ImageCaptureImpl::TakePhotoCallback cb) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  cb.Run(media::mojom::Blob::New());
+  std::move(cb).Run(media::mojom::Blob::New());
 }
 
-void GetCapabilitiesOnIOThread(
+void GetPhotoStateOnIOThread(
     const std::string& source_id,
     MediaStreamManager* media_stream_manager,
-    media::ScopedResultCallback<ImageCaptureImpl::GetCapabilitiesCallback>
+    media::ScopedResultCallback<ImageCaptureImpl::GetPhotoStateCallback>
         callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
@@ -88,7 +65,7 @@ void GetCapabilitiesOnIOThread(
 
   if (session_id == StreamDeviceInfo::kNoId)
     return;
-  media_stream_manager->video_capture_manager()->GetPhotoCapabilities(
+  media_stream_manager->video_capture_manager()->GetPhotoState(
       session_id, std::move(callback));
 #endif
 }
@@ -133,35 +110,37 @@ ImageCaptureImpl::~ImageCaptureImpl() {}
 
 // static
 void ImageCaptureImpl::Create(
-    const service_manager::BindSourceInfo& source_info,
     media::mojom::ImageCaptureRequest request) {
+  if (!base::FeatureList::IsEnabled(features::kImageCaptureAPI))
+    return;
+
   mojo::MakeStrongBinding(base::MakeUnique<ImageCaptureImpl>(),
                           std::move(request));
 }
 
-void ImageCaptureImpl::GetCapabilities(
-    const std::string& source_id,
-    const GetCapabilitiesCallback& callback) {
+void ImageCaptureImpl::GetPhotoState(const std::string& source_id,
+                                     GetPhotoStateCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  media::ScopedResultCallback<GetCapabilitiesCallback> scoped_callback(
-      base::Bind(&RunGetCapabilitiesCallbackOnUIThread, callback),
-      media::BindToCurrentLoop(base::Bind(&RunFailedGetCapabilitiesCallback)));
+  media::ScopedResultCallback<GetPhotoStateCallback> scoped_callback(
+      media::BindToCurrentLoop(std::move(callback)),
+      media::BindToCurrentLoop(
+          base::BindOnce(&RunFailedGetPhotoStateCallback)));
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&GetCapabilitiesOnIOThread, source_id,
+      base::Bind(&GetPhotoStateOnIOThread, source_id,
                  BrowserMainLoop::GetInstance()->media_stream_manager(),
                  base::Passed(&scoped_callback)));
 }
 
 void ImageCaptureImpl::SetOptions(const std::string& source_id,
                                   media::mojom::PhotoSettingsPtr settings,
-                                  const SetOptionsCallback& callback) {
+                                  SetOptionsCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   media::ScopedResultCallback<SetOptionsCallback> scoped_callback(
-      base::Bind(&RunSetOptionsCallbackOnUIThread, callback),
+      media::BindToCurrentLoop(std::move(callback)),
       media::BindToCurrentLoop(base::Bind(&RunFailedSetOptionsCallback)));
 
   BrowserThread::PostTask(
@@ -172,12 +151,12 @@ void ImageCaptureImpl::SetOptions(const std::string& source_id,
 }
 
 void ImageCaptureImpl::TakePhoto(const std::string& source_id,
-                                 const TakePhotoCallback& callback) {
+                                 TakePhotoCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   media::ScopedResultCallback<TakePhotoCallback> scoped_callback(
-      base::Bind(&RunTakePhotoCallbackOnUIThread, callback),
-      media::BindToCurrentLoop(base::Bind(&RunFailedTakePhotoCallback)));
+      media::BindToCurrentLoop(std::move(callback)),
+      media::BindToCurrentLoop(base::BindOnce(&RunFailedTakePhotoCallback)));
 
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,

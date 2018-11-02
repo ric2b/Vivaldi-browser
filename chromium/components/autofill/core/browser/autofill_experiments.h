@@ -9,6 +9,7 @@
 
 #include "base/strings/string16.h"
 #include "base/time/time.h"
+#include "build/build_config.h"
 #include "third_party/skia/include/core/SkColor.h"
 
 class PrefService;
@@ -27,15 +28,21 @@ struct Suggestion;
 
 extern const base::Feature kAutofillCreditCardAssist;
 extern const base::Feature kAutofillScanCardholderName;
+extern const base::Feature kAutofillCreditCardBankNameDisplay;
 extern const base::Feature kAutofillCreditCardPopupLayout;
 extern const base::Feature kAutofillCreditCardLastUsedDateDisplay;
 extern const base::Feature kAutofillOfferLocalSaveIfServerCardManuallyEntered;
+extern const base::Feature kAutofillSuppressDisusedAddresses;
 extern const base::Feature kAutofillUpstreamRequestCvcIfMissing;
 extern const base::Feature kAutofillUpstreamUseAutofillProfileComparator;
 extern const base::Feature kAutofillUpstreamUseNotRecentlyUsedAutofillProfile;
 extern const char kCreditCardSigninPromoImpressionLimitParamKey[];
 extern const char kAutofillCreditCardLastUsedDateShowExpirationDateKey[];
 extern const char kAutofillUpstreamMaxMinutesSinceAutofillProfileUseKey[];
+
+#if defined(OS_MACOSX)
+extern const base::Feature kCreditCardAutofillTouchBar;
+#endif  // defined(OS_MACOSX)
 
 // Returns true if autofill should be enabled. See also
 // IsInAutofillSuggestionsDisabledExperiment below.
@@ -72,6 +79,9 @@ bool IsAutofillCreditCardLastUsedDateDisplayExperimentEnabled();
 
 // Returns whether Autofill credit card last used date shows expiration date.
 bool ShowExpirationDateInAutofillCreditCardLastUsedDate();
+
+// Returns whether Autofill credit card bank name display experiment is enabled.
+bool IsAutofillCreditCardBankNameDisplayExperimentEnabled();
 
 // Returns the background color for credit card autofill popup, or
 // |SK_ColorTRANSPARENT| if the new credit card autofill popup layout experiment
@@ -119,6 +129,11 @@ bool IsAutofillUpstreamRequestCvcIfMissingExperimentEnabled();
 // most recent use for the adress profile to be included in the candidate set
 // for card upload. Returns 0 if the experiment is not enabled.
 base::TimeDelta GetMaxTimeSinceAutofillProfileUseForCardUpload();
+
+#if defined(OS_MACOSX)
+// Returns whether the Credit Card Autofill Touch Bar experiment is enabled.
+bool IsCreditCardAutofillTouchBarExperimentEnabled();
+#endif  // defined(OS_MACOSX)
 
 }  // namespace autofill
 

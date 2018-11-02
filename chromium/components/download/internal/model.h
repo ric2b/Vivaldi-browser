@@ -9,11 +9,11 @@
 #include <string>
 #include <vector>
 
+#include "components/download/internal/entry.h"
 #include "components/download/public/clients.h"
 
 namespace download {
 
-struct Entry;
 class Store;
 
 // The model that contains a runtime representation of Entry entries. Any
@@ -30,12 +30,12 @@ class Model {
     // |success| is |false|, initialization of the Model and/or the underlying
     // Store failed.  Initialization of the Model is complete after this
     // callback.  If |success| is true it can be accessed now.
-    virtual void OnInitialized(bool success) = 0;
+    virtual void OnModelReady(bool success) = 0;
 
-    // Called asynchronously in response to a Model::Destroy call.  If |success|
-    // is |false|, destruction of the Model and/or the underlying Store failed.
-    // Destruction of the Model is effectively complete after this callback.
-    virtual void OnDestroyed(bool success) = 0;
+    // Called asynchronously in response to a Model::HardRecover call.  If
+    // |success| is |false|, recovery of the Model and/or the underlying Store
+    // failed.  After this call there should be no entries stored in this Model.
+    virtual void OnModelHardRecoverComplete(bool success) = 0;
 
     // Called when an Entry addition is complete.  |success| determines whether
     // or not the entry has been successfully persisted to the Store.
@@ -62,10 +62,11 @@ class Model {
 
   // Initializes the Model.  Client::OnInitialized() will be called in response.
   // The Model can be used after that call.
-  virtual void Initialize() = 0;
+  virtual void Initialize(Client* client) = 0;
 
-  // Destroys the Model.  Client::OnDestroyed() will be called in response.
-  virtual void Destroy() = 0;
+  // Deletes and attempts to re-initialize the Store.
+  // Client::OnHardRecoveryComplete() will be called in response asynchronously.
+  virtual void HardRecover() = 0;
 
   // Adds |entry| to this Model and attempts to write |entry| to the Store.
   // Client::OnItemAdded() will be called in response asynchronously.

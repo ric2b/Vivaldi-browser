@@ -14,14 +14,6 @@ Are you a Google employee? See
 
 * A 64-bit Mac running 10.11+.
 * [Xcode](https://developer.apple.com/xcode) 8.0+.
-* The OS X 10.10 SDK. Run
-
-    ```shell
-    $ ls `xcode-select -p`/Platforms/MacOSX.platform/Developer/SDKs
-    ```
-
-  to check whether you have it.  Building with the 10.11 SDK works too, but
-  the releases currently use the 10.10 SDK.
 * The current version of the JDK (required for the Closure compiler).
 
 ## Install `depot_tools`
@@ -185,9 +177,8 @@ profiles for EarlGrey and OCHamcrest frameworks:
 In addition to that, then you'll need one additional provisioning profile for
 the XCTest module too. This module bundle identifier depends on whether the
 gn variable `ios_automatically_manage_certs` is set to true or false. If set
-to true, then `${prefix}.test.gtest.generic-unit-test.generic-unit-test-module`
-will be used, otherwise it will match the following pattern:
-`${prefix}.test.${test-suite-name}.${test-suite-name}-module`.
+to true, then `${prefix}.gtest.generic-unit-test-module` will be used, otherwise
+it will match the pattern: `${prefix}.gtest.${test-suite-name}-module`.
 
 ### Other applications
 
@@ -233,6 +224,29 @@ command line, you can use `iossim`. For example, to run a debug build of
 
 ```shell
 $ out/Debug-iphonesimulator/iossim out/Debug-iphonesimulator/Chromium.app
+```
+
+### Passing arguments
+
+Arguments needed to be passed to the test application through `iossim`, such as
+`--gtest_filter=SomeTest.FooBar` should be passed through the `-c` flag:
+
+```shell
+$ out/Debug-iphonesimulator/iossim -d "iPhone 6s" -s 10.0 \
+    -c "--gtest_filter=SomeTest.FooBar --gtest_repeat=3" \
+    out/Debug-iphonesimulator/base_unittests.app
+```
+
+### Running EarlGrey tests
+
+EarlGrey tests are run differently than other test targets, as there is an
+XCTest bundle that is injected into the target application. Therefore you must
+also pass in the test bundle:
+
+```shell
+$ out/Debug-iphonesimulator/iossim \
+    out/Debug-iphonesimulator/ios_chrome_ui_egtests.app \
+    out/Debug-iphonesimulator/ios_chrome_ui_egtests.app/PlugIns/ios_chrome_ui_egtests_module.xctest
 ```
 
 ## Update your checkout

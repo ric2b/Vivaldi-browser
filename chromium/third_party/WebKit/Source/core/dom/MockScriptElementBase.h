@@ -2,6 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#ifndef MockScriptElementBase_h
+#define MockScriptElementBase_h
+
 #include "bindings/core/v8/HTMLScriptElementOrSVGScriptElement.h"
 #include "core/dom/Document.h"
 #include "core/dom/ScriptElementBase.h"
@@ -16,8 +19,9 @@ class MockScriptElementBase
 
  public:
   static MockScriptElementBase* Create() {
-    return new testing::StrictMock<MockScriptElementBase>();
+    return new ::testing::StrictMock<MockScriptElementBase>();
   }
+  virtual ~MockScriptElementBase() {}
 
   MOCK_METHOD0(DispatchLoadEvent, void());
   MOCK_METHOD0(DispatchErrorEvent, void());
@@ -34,21 +38,24 @@ class MockScriptElementBase
   MOCK_CONST_METHOD0(TypeAttributeValue, String());
 
   MOCK_METHOD0(TextFromChildren, String());
-  MOCK_CONST_METHOD0(TextContent, String());
   MOCK_CONST_METHOD0(HasSourceAttribute, bool());
   MOCK_CONST_METHOD0(IsConnected, bool());
   MOCK_CONST_METHOD0(HasChildren, bool());
   MOCK_CONST_METHOD0(GetNonceForElement, const AtomicString&());
   MOCK_CONST_METHOD0(InitiatorName, AtomicString());
-  MOCK_METHOD3(AllowInlineScriptForCSP,
+  MOCK_METHOD4(AllowInlineScriptForCSP,
                bool(const AtomicString&,
                     const WTF::OrdinalNumber&,
-                    const String&));
+                    const String&,
+                    ContentSecurityPolicy::InlineType));
   MOCK_CONST_METHOD0(GetDocument, Document&());
   MOCK_METHOD1(SetScriptElementForBinding,
                void(HTMLScriptElementOrSVGScriptElement&));
+  MOCK_CONST_METHOD0(Loader, ScriptLoader*());
 
   DEFINE_INLINE_VIRTUAL_TRACE() { ScriptElementBase::Trace(visitor); }
 };
 
 }  // namespace blink
+
+#endif  // MockScriptElementBase_h

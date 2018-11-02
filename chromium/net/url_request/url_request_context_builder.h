@@ -26,7 +26,9 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/task_scheduler/task_traits.h"
 #include "build/build_config.h"
+#include "build/buildflag.h"
 #include "net/base/net_export.h"
 #include "net/base/network_delegate.h"
 #include "net/base/proxy_delegate.h"
@@ -37,6 +39,7 @@
 #include "net/proxy/proxy_service.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/socket/next_proto.h"
+#include "net/ssl/ssl_config_service.h"
 #include "net/url_request/url_request_job_factory.h"
 
 namespace base {
@@ -48,16 +51,32 @@ namespace net {
 class CertVerifier;
 class ChannelIDService;
 class CookieStore;
+class CTPolicyEnforcer;
 class CTVerifier;
-class HostMappingRules;
 class HttpAuthHandlerFactory;
 class HttpServerProperties;
 class NetworkQualityEstimator;
 class ProxyConfigService;
-class SocketPerformanceWatcherFactory;
+struct ReportingPolicy;
 class URLRequestContext;
 class URLRequestInterceptor;
 
+// A URLRequestContextBuilder creates a single URLRequestContext. It provides
+// methods to manage various URLRequestContext components which should be called
+// before creating the Context. Once configuration is complete, calling Build()
+// will create a URLRequestContext with the specified configuration. Components
+// that are not explicitly configured will use reasonable in-memory defaults.
+//
+// The returned URLRequestContext is self-contained: Deleting it will safely
+// shut down all of the URLRequests owned by its internal components, and then
+// tear down those components. The only exception to this are objects not owned
+// by URLRequestContext. This includes components passed in to the methods that
+// take raw pointers, and objects that components passed in to the Builder have
+// raw pointers to.
+//
+// A Builder should be destroyed after calling Build, and there is no need to
+// keep it around for the lifetime of the created URLRequestContext. Each
+// Builder may be used to create only a single URLRequestContext.
 class NET_EXPORT URLRequestContextBuilder {
  public:
   struct NET_EXPORT HttpCacheParams {
@@ -84,33 +103,6 @@ class NET_EXPORT URLRequestContextBuilder {
     base::FilePath path;
   };
 
-  struct NET_EXPORT HttpNetworkSessionParams {
-    HttpNetworkSessionParams();
-    ~HttpNetworkSessionParams();
-
-    // Configutes |params| to match the settings in |this|.
-    // TODO(mmenke):  Temporary utility function. Once everything is using a
-    // URLRequestContextBuilder, can make this no longer publicly accessible.
-    void ConfigureSessionParams(HttpNetworkSession::Params* params) const;
-
-    // These fields mirror those in HttpNetworkSession::Params;
-    HostMappingRules* host_mapping_rules;
-    bool ignore_certificate_errors;
-    uint16_t testing_fixed_http_port;
-    uint16_t testing_fixed_https_port;
-    bool enable_http2;
-    bool enable_quic;
-    std::string quic_user_agent_id;
-    int quic_max_server_configs_stored_in_properties;
-    QuicTagVector quic_connection_options;
-    bool quic_close_sessions_on_ip_change;
-    int quic_idle_connection_timeout_seconds;
-    bool quic_migrate_sessions_on_network_change;
-    bool quic_migrate_sessions_early;
-    bool quic_disable_bidirectional_streams;
-    bool quic_race_cert_verification;
-  };
-
   URLRequestContextBuilder();
   virtual ~URLRequestContextBuilder();
 
@@ -130,12 +122,12 @@ class NET_EXPORT URLRequestContextBuilder {
   }
 
   // Extracts the component pointers required to construct an HttpNetworkSession
-  // and copies them into the Params used to create the session. This function
-  // should be used to ensure that a context and its associated
-  // HttpNetworkSession are consistent.
+  // and copies them into the HttpNetworkSession::Context used to create the
+  // session. This function should be used to ensure that a context and its
+  // associated HttpNetworkSession are consistent.
   static void SetHttpNetworkSessionComponents(
-      const URLRequestContext* context,
-      HttpNetworkSession::Params* params);
+      const URLRequestContext* request_context,
+      HttpNetworkSession::Context* session_context);
 
   // These functions are mutually exclusive.  The ProxyConfigService, if
   // set, will be used to construct a ProxyService.
@@ -144,12 +136,31 @@ class NET_EXPORT URLRequestContextBuilder {
     proxy_config_service_ = std::move(proxy_config_service);
   }
 
+  // Sets whether quick PAC checks are enabled. Defaults to true. Ignored if
+  // a ProxyService is set directly.
+  void set_pac_quick_check_enabled(bool pac_quick_check_enabled) {
+    pac_quick_check_enabled_ = pac_quick_check_enabled;
+  }
+
+  // Sets policy for sanitizing URLs before passing them to a PAC. Defaults to
+  // ProxyService::SanitizeUrlPolicy::SAFE. Ignored if
+  // a ProxyService is set directly.
+  void set_pac_sanitize_url_policy(
+      net::ProxyService::SanitizeUrlPolicy pac_sanitize_url_policy) {
+    pac_sanitize_url_policy_ = pac_sanitize_url_policy;
+  }
+
   // Sets the proxy service. If one is not provided, by default, uses system
   // libraries to evaluate PAC scripts, if available (And if not, skips PAC
   // resolution). Subclasses may override CreateProxyService for different
   // default behavior.
   void set_proxy_service(std::unique_ptr<ProxyService> proxy_service) {
     proxy_service_ = std::move(proxy_service);
+  }
+
+  void set_ssl_config_service(
+      scoped_refptr<net::SSLConfigService> ssl_config_service) {
+    ssl_config_service_ = std::move(ssl_config_service);
   }
 
   // Call these functions to specify hard-coded Accept-Language
@@ -226,7 +237,7 @@ class NET_EXPORT URLRequestContextBuilder {
 
   // Override default HttpNetworkSession::Params settings.
   void set_http_network_session_params(
-      const HttpNetworkSessionParams& http_network_session_params) {
+      const HttpNetworkSession::Params& http_network_session_params) {
     http_network_session_params_ = http_network_session_params;
   }
 
@@ -238,68 +249,20 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetSpdyAndQuicEnabled(bool spdy_enabled,
                              bool quic_enabled);
 
-  void set_quic_connection_options(
-      const QuicTagVector& quic_connection_options) {
-    http_network_session_params_.quic_connection_options =
-        quic_connection_options;
-  }
-
-  void set_quic_user_agent_id(const std::string& quic_user_agent_id) {
-    http_network_session_params_.quic_user_agent_id = quic_user_agent_id;
-  }
-
-  void set_quic_max_server_configs_stored_in_properties(
-      int quic_max_server_configs_stored_in_properties) {
-    http_network_session_params_.quic_max_server_configs_stored_in_properties =
-        quic_max_server_configs_stored_in_properties;
-  }
-
-  void set_quic_idle_connection_timeout_seconds(
-      int quic_idle_connection_timeout_seconds) {
-    http_network_session_params_.quic_idle_connection_timeout_seconds =
-        quic_idle_connection_timeout_seconds;
-  }
-
-  void set_quic_close_sessions_on_ip_change(
-      bool quic_close_sessions_on_ip_change) {
-    http_network_session_params_.quic_close_sessions_on_ip_change =
-        quic_close_sessions_on_ip_change;
-  }
-
-  void set_quic_migrate_sessions_on_network_change(
-      bool quic_migrate_sessions_on_network_change) {
-    http_network_session_params_.quic_migrate_sessions_on_network_change =
-        quic_migrate_sessions_on_network_change;
-  }
-
-  void set_quic_migrate_sessions_early(bool quic_migrate_sessions_early) {
-    http_network_session_params_.quic_migrate_sessions_early =
-        quic_migrate_sessions_early;
-  }
-
-  void set_quic_disable_bidirectional_streams(
-      bool quic_disable_bidirectional_streams) {
-    http_network_session_params_.quic_disable_bidirectional_streams =
-        quic_disable_bidirectional_streams;
-  }
-
-  void set_quic_race_cert_verification(bool quic_race_cert_verification) {
-    http_network_session_params_.quic_race_cert_verification =
-        quic_race_cert_verification;
-  }
-
   void set_throttling_enabled(bool throttling_enabled) {
     throttling_enabled_ = throttling_enabled;
   }
 
-  void set_socket_performance_watcher_factory(
-      SocketPerformanceWatcherFactory* socket_performance_watcher_factory) {
-    socket_performance_watcher_factory_ = socket_performance_watcher_factory;
-  }
-
   void set_ct_verifier(std::unique_ptr<CTVerifier> ct_verifier);
+  void set_ct_policy_enforcer(
+      std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer);
 
   void SetCertVerifier(std::unique_ptr<CertVerifier> cert_verifier);
+
+#if BUILDFLAG(ENABLE_REPORTING)
+  void set_reporting_policy(
+      std::unique_ptr<net::ReportingPolicy> reporting_policy);
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
   void SetInterceptors(std::vector<std::unique_ptr<URLRequestInterceptor>>
                            url_request_interceptors);
@@ -317,10 +280,12 @@ class NET_EXPORT URLRequestContextBuilder {
       std::unique_ptr<CookieStore> cookie_store,
       std::unique_ptr<ChannelIDService> channel_id_service);
 
-  // Sets the task runner used to perform file operations. If not set, one will
-  // be created.
-  void SetFileTaskRunner(
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner);
+  // Sets the SingleThreadTaskRunner used to perform cache operations. If not
+  // set, one will be created via a TaskScheduler instead. Other file tasks will
+  // use the task scheduler, but the cache needs a SingleThreadTaskRunner, so
+  // best to keep that configurable by the consumer.
+  void SetCacheThreadTaskRunner(
+      scoped_refptr<base::SingleThreadTaskRunner> cache_thread_task_runner);
 
   // Note that if SDCH is enabled without a policy object observing
   // the SDCH manager and handling at least Get-Dictionary events, the
@@ -334,6 +299,9 @@ class NET_EXPORT URLRequestContextBuilder {
   void SetHttpServerProperties(
       std::unique_ptr<HttpServerProperties> http_server_properties);
 
+  // Creates a mostly self-contained URLRequestContext. May only be called once
+  // per URLRequestContextBuilder. After this is called, the Builder can be
+  // safely destroyed.
   std::unique_ptr<URLRequestContext> Build();
 
  protected:
@@ -369,29 +337,32 @@ class NET_EXPORT URLRequestContextBuilder {
   bool sdch_enabled_;
   bool cookie_store_set_by_client_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
+  scoped_refptr<base::SingleThreadTaskRunner> cache_thread_task_runner_;
   HttpCacheParams http_cache_params_;
-  HttpNetworkSessionParams http_network_session_params_;
+  HttpNetworkSession::Params http_network_session_params_;
   base::FilePath transport_security_persister_path_;
   NetLog* net_log_;
   std::unique_ptr<HostResolver> host_resolver_;
   std::unique_ptr<ChannelIDService> channel_id_service_;
   std::unique_ptr<ProxyConfigService> proxy_config_service_;
+  bool pac_quick_check_enabled_;
+  ProxyService::SanitizeUrlPolicy pac_sanitize_url_policy_;
   std::unique_ptr<ProxyService> proxy_service_;
+  scoped_refptr<net::SSLConfigService> ssl_config_service_;
   std::unique_ptr<NetworkDelegate> network_delegate_;
   std::unique_ptr<ProxyDelegate> proxy_delegate_;
   std::unique_ptr<CookieStore> cookie_store_;
   std::unique_ptr<HttpAuthHandlerFactory> http_auth_handler_factory_;
   std::unique_ptr<CertVerifier> cert_verifier_;
   std::unique_ptr<CTVerifier> ct_verifier_;
+  std::unique_ptr<CTPolicyEnforcer> ct_policy_enforcer_;
+#if BUILDFLAG(ENABLE_REPORTING)
+  std::unique_ptr<net::ReportingPolicy> reporting_policy_;
+#endif  // BUILDFLAG(ENABLE_REPORTING)
   std::vector<std::unique_ptr<URLRequestInterceptor>> url_request_interceptors_;
   std::unique_ptr<HttpServerProperties> http_server_properties_;
   std::map<std::string, std::unique_ptr<URLRequestJobFactory::ProtocolHandler>>
       protocol_handlers_;
-  // SocketPerformanceWatcherFactory to be used by this context builder.
-  // Not owned by the context builder. Once it is set to a non-null value, it
-  // is guaranteed to be non-null during the lifetime of |this|.
-  SocketPerformanceWatcherFactory* socket_performance_watcher_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextBuilder);
 };

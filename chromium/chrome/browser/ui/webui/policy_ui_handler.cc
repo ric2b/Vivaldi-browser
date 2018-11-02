@@ -27,8 +27,6 @@
 #include "chrome/browser/policy/schema_registry_service.h"
 #include "chrome/browser/policy/schema_registry_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/grit/policy_resources.h"
-#include "chrome/grit/policy_resources_map.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/browser/cloud/message_util.h"
 #include "components/policy/core/browser/configuration_policy_handler_list.h"
@@ -274,7 +272,8 @@ class DevicePolicyStatusProvider : public CloudPolicyCoreStatusProvider {
   void GetStatus(base::DictionaryValue* dict) override;
 
  private:
-  std::string domain_;
+  std::string enterprise_enrollment_domain_;
+  std::string enterprise_display_domain_;
 
   DISALLOW_COPY_AND_ASSIGN(DevicePolicyStatusProvider);
 };
@@ -386,7 +385,8 @@ DevicePolicyStatusProvider::DevicePolicyStatusProvider(
     policy::BrowserPolicyConnectorChromeOS* connector)
       : CloudPolicyCoreStatusProvider(
             connector->GetDeviceCloudPolicyManager()->core()) {
-  domain_ = connector->GetEnterpriseDomain();
+  enterprise_enrollment_domain_ = connector->GetEnterpriseEnrollmentDomain();
+  enterprise_display_domain_ = connector->GetEnterpriseDisplayDomain();
 }
 
 DevicePolicyStatusProvider::~DevicePolicyStatusProvider() {
@@ -394,7 +394,8 @@ DevicePolicyStatusProvider::~DevicePolicyStatusProvider() {
 
 void DevicePolicyStatusProvider::GetStatus(base::DictionaryValue* dict) {
   GetStatusFromCore(core_, dict);
-  dict->SetString("domain", domain_);
+  dict->SetString("enterpriseEnrollmentDomain", enterprise_enrollment_domain_);
+  dict->SetString("enterpriseDisplayDomain", enterprise_display_domain_);
 }
 
 DeviceLocalAccountPolicyStatusProvider::DeviceLocalAccountPolicyStatusProvider(
@@ -631,7 +632,7 @@ void PolicyUIHandler::OnPolicyUpdated(const policy::PolicyNamespace& ns,
 
 void PolicyUIHandler::AddPolicyName(const std::string& name,
                                     base::DictionaryValue* names) const {
-    names->SetBoolean(name, true);
+  names->SetBooleanWithoutPathExpansion(name, true);
 }
 
 void PolicyUIHandler::SendPolicyNames() const {
@@ -738,7 +739,7 @@ void PolicyUIHandler::GetPolicyValues(const policy::PolicyMap& map,
     base::string16 error = errors->GetErrors(entry.first);
     if (!error.empty())
       value->SetString("error", error);
-    values->Set(entry.first, std::move(value));
+    values->SetWithoutPathExpansion(entry.first, std::move(value));
   }
 }
 

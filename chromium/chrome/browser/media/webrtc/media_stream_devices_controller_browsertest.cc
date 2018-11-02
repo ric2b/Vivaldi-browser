@@ -8,6 +8,7 @@
 #include "base/callback.h"
 #include "base/metrics/field_trial.h"
 #include "base/run_loop.h"
+#include "base/stl_util.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/tab_specific_content_settings.h"
@@ -75,8 +76,7 @@ class MediaStreamDevicesControllerTest
     size_t TotalRequestCount() { return last_requests_.size(); }
 
     bool WasRequested(ContentSettingsType type) {
-      return std::find(last_requests_.begin(), last_requests_.end(), type) !=
-             last_requests_.end();
+      return base::ContainsValue(last_requests_, type);
     }
 
     void Reset() { last_requests_.clear(); }
@@ -261,8 +261,7 @@ class MediaStreamDevicesControllerTest
   void SetUpOnMainThread() override {
     WebRtcTestBase::SetUpOnMainThread();
 
-    if (static_cast<TestType>(GetParam()) ==
-        TestType::TEST_WITH_GROUPED_MEDIA_REQUESTS) {
+    if (GetParam() == TestType::TEST_WITH_GROUPED_MEDIA_REQUESTS) {
       scoped_feature_list_.InitAndEnableFeature(
           features::kUsePermissionManagerForMediaRequests);
       PermissionRequestManager* manager =
@@ -270,6 +269,9 @@ class MediaStreamDevicesControllerTest
               browser()->tab_strip_model()->GetActiveWebContents());
       prompt_factory_.reset(new MockPermissionPromptFactory(manager));
       manager->DisplayPendingRequests();
+    } else {
+      scoped_feature_list_.InitAndDisableFeature(
+          features::kUsePermissionManagerForMediaRequests);
     }
 
     // Cleanup.
@@ -856,14 +858,14 @@ IN_PROC_BROWSER_TEST_P(MediaStreamDevicesControllerTest,
     // disabled that permission will be denied. TODO(raymes): Remove this when
     // crbug.com/526324 is fixed.
     base::test::ScopedFeatureList scoped_feature_list;
-    if (static_cast<TestType>(GetParam()) ==
-        TestType::TEST_WITH_GROUPED_MEDIA_REQUESTS) {
+    if (GetParam() == TestType::TEST_WITH_GROUPED_MEDIA_REQUESTS) {
       scoped_feature_list.InitWithFeatures(
           {features::kUsePermissionManagerForMediaRequests},
           {features::kRequireSecureOriginsForPepperMediaRequests});
     } else {
       scoped_feature_list.InitWithFeatures(
-          {}, {features::kRequireSecureOriginsForPepperMediaRequests});
+          {}, {features::kUsePermissionManagerForMediaRequests,
+               features::kRequireSecureOriginsForPepperMediaRequests});
     }
     RequestPermissions(
         GetWebContents(),

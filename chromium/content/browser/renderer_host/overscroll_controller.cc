@@ -4,6 +4,8 @@
 
 #include "content/browser/renderer_host/overscroll_controller.h"
 
+#include <algorithm>
+
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "content/browser/renderer_host/overscroll_controller_delegate.h"
@@ -12,6 +14,8 @@
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
 
 using blink::WebInputEvent;
+
+namespace content {
 
 namespace {
 
@@ -27,19 +31,16 @@ bool IsGestureEventFromTouchpad(const blink::WebInputEvent& event) {
   return gesture.source_device == blink::kWebGestureDeviceTouchpad;
 }
 
+float ClampAbsoluteValue(float value, float max_abs) {
+  DCHECK_LT(0.f, max_abs);
+  return std::max(-max_abs, std::min(value, max_abs));
+}
+
 }  // namespace
 
-namespace content {
+OverscrollController::OverscrollController() {}
 
-OverscrollController::OverscrollController()
-    : overscroll_mode_(OVERSCROLL_NONE),
-      scroll_state_(STATE_UNKNOWN),
-      overscroll_delta_x_(0.f),
-      overscroll_delta_y_(0.f),
-      delegate_(NULL) {}
-
-OverscrollController::~OverscrollController() {
-}
+OverscrollController::~OverscrollController() {}
 
 bool OverscrollController::ShouldProcessEvent(
     const blink::WebInputEvent& event) {
@@ -51,6 +52,16 @@ bool OverscrollController::ShouldProcessEvent(
     case blink::WebInputEvent::kGestureScrollEnd: {
       const blink::WebGestureEvent& gesture =
           static_cast<const blink::WebGestureEvent&>(event);
+
+      // GestureScrollBegin and GestureScrollEnd events are created to wrap
+      // individual resent GestureScrollUpdates from a plugin. Hence these
+      // should not be used to indicate the beginning/end of the overscroll.
+      // TODO(mcnee): When we remove BrowserPlugin, delete this code.
+      // See crbug.com/533069
+      if (gesture.resending_plugin_id != -1 &&
+          event.GetType() != blink::WebInputEvent::kGestureScrollUpdate)
+        return false;
+
       blink::WebGestureEvent::ScrollUnits scrollUnits;
       switch (event.GetType()) {
         case blink::WebInputEvent::kGestureScrollBegin:
@@ -172,6 +183,7 @@ void OverscrollController::DiscardingGestureEvent(
 
 void OverscrollController::Reset() {
   overscroll_mode_ = OVERSCROLL_NONE;
+  overscroll_source_ = OverscrollSource::NONE;
   overscroll_delta_x_ = overscroll_delta_y_ = 0.f;
   scroll_state_ = STATE_UNKNOWN;
 }
@@ -198,14 +210,11 @@ bool OverscrollController::DispatchEventCompletesAction (
   // from the touchpad since it is sent based on a timeout not
   // when the user has stopped interacting.
   if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd &&
-      IsGestureEventFromTouchpad(event))
+      IsGestureEventFromTouchpad(event)) {
     return false;
+  }
 
   if (!delegate_)
-    return false;
-
-  gfx::Rect bounds = delegate_->GetVisibleBounds();
-  if (bounds.IsEmpty())
     return false;
 
   if (event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
@@ -234,13 +243,19 @@ bool OverscrollController::DispatchEventCompletesAction (
     }
   }
 
+  const gfx::Size size = overscroll_source_ == OverscrollSource::TOUCHPAD
+                             ? delegate_->GetDisplaySize()
+                             : delegate_->GetVisibleSize();
+  if (size.IsEmpty())
+    return false;
+
   float ratio, threshold;
   if (overscroll_mode_ == OVERSCROLL_WEST ||
       overscroll_mode_ == OVERSCROLL_EAST) {
-    ratio = fabs(overscroll_delta_x_) / bounds.width();
+    ratio = fabs(overscroll_delta_x_) / size.width();
     threshold = GetOverscrollConfig(OVERSCROLL_CONFIG_HORIZ_THRESHOLD_COMPLETE);
   } else {
-    ratio = fabs(overscroll_delta_y_) / bounds.height();
+    ratio = fabs(overscroll_delta_y_) / size.height();
     threshold = GetOverscrollConfig(OVERSCROLL_CONFIG_VERT_THRESHOLD_COMPLETE);
   }
 
@@ -340,15 +355,35 @@ bool OverscrollController::ProcessOverscroll(float delta_x,
     overscroll_delta_x_ += delta_x;
   overscroll_delta_y_ += delta_y;
 
-  float horiz_threshold = GetOverscrollConfig(
+  const float horiz_threshold = GetOverscrollConfig(
       is_touchpad ? OVERSCROLL_CONFIG_HORIZ_THRESHOLD_START_TOUCHPAD
                   : OVERSCROLL_CONFIG_HORIZ_THRESHOLD_START_TOUCHSCREEN);
-  float vert_threshold = GetOverscrollConfig(
-      OVERSCROLL_CONFIG_VERT_THRESHOLD_START);
+  const float vert_threshold =
+      GetOverscrollConfig(OVERSCROLL_CONFIG_VERT_THRESHOLD_START);
   if (fabs(overscroll_delta_x_) <= horiz_threshold &&
       fabs(overscroll_delta_y_) <= vert_threshold) {
     SetOverscrollMode(OVERSCROLL_NONE, OverscrollSource::NONE);
     return true;
+  }
+
+  if (delegate_) {
+    base::Optional<float> cap = delegate_->GetMaxOverscrollDelta();
+    if (cap) {
+      switch (overscroll_mode_) {
+        case OVERSCROLL_WEST:
+        case OVERSCROLL_EAST:
+          overscroll_delta_x_ = ClampAbsoluteValue(
+              overscroll_delta_x_, cap.value() + horiz_threshold);
+          break;
+        case OVERSCROLL_NORTH:
+        case OVERSCROLL_SOUTH:
+          overscroll_delta_y_ = ClampAbsoluteValue(
+              overscroll_delta_y_, cap.value() + vert_threshold);
+          break;
+        case OVERSCROLL_NONE:
+          break;
+      }
+    }
   }
 
   // Compute the current overscroll direction. If the direction is different
@@ -412,6 +447,7 @@ void OverscrollController::CompleteAction() {
   if (delegate_)
     delegate_->OnOverscrollComplete(overscroll_mode_);
   overscroll_mode_ = OVERSCROLL_NONE;
+  overscroll_source_ = OverscrollSource::NONE;
   overscroll_delta_x_ = overscroll_delta_y_ = 0.f;
 }
 
@@ -425,6 +461,7 @@ void OverscrollController::SetOverscrollMode(OverscrollMode mode,
 
   OverscrollMode old_mode = overscroll_mode_;
   overscroll_mode_ = mode;
+  overscroll_source_ = source;
   if (overscroll_mode_ == OVERSCROLL_NONE)
     overscroll_delta_x_ = overscroll_delta_y_ = 0.f;
   else

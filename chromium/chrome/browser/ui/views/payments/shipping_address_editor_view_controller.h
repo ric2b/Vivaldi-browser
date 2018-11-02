@@ -46,6 +46,7 @@ class ShippingAddressEditorViewController : public EditorViewController {
   ~ShippingAddressEditorViewController() override;
 
   // EditorViewController:
+  bool IsEditingExistingItem() override;
   std::vector<EditorField> GetFieldDefinitions() override;
   base::string16 GetInitialValueForType(
       autofill::ServerFieldType type) override;
@@ -74,8 +75,10 @@ class ShippingAddressEditorViewController : public EditorViewController {
     // ValidationDelegate:
     bool ShouldFormat() override;
     base::string16 Format(const base::string16& text) override;
-    bool IsValidTextfield(views::Textfield* textfield) override;
-    bool IsValidCombobox(views::Combobox* combobox) override;
+    bool IsValidTextfield(views::Textfield* textfield,
+                          base::string16* error_message) override;
+    bool IsValidCombobox(views::Combobox* combobox,
+                         base::string16* error_message) override;
     bool TextfieldValueChanged(views::Textfield* textfield,
                                bool was_blurred) override;
     bool ComboboxValueChanged(views::Combobox* combobox) override;
@@ -106,7 +109,7 @@ class ShippingAddressEditorViewController : public EditorViewController {
 
   // A temporary profile to keep unsaved data in between relayout (e.g., when
   // the country is changed and fields set may be different).
-  std::unique_ptr<autofill::AutofillProfile> temporary_profile_;
+  autofill::AutofillProfile temporary_profile_;
 
   // List of fields, reset everytime the current country changes.
   std::vector<EditorField> editor_fields_;

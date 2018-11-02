@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="fi">
+<translation id="2392002507524894126">Tekijänoikeudet <ph name="YEAR" /> Vivaldi Technologies AS. Kaikki oikeudet pidätetään.</translation>
+<translation id="5743878272102782872">Tehtävänhallinta – Vivaldi</translation>
 <translation id="6119720677647982841"><ph name="BEGIN_BOLD" />Varoitus:<ph name="END_BOLD" /> Vivaldi ei voi estää laajennuksia tallentamasta selaushistoriaasi. Voit poistaa tämän laajennuksen käytöstä incognito-tilassa poistamalla tämän valinnan.</translation>
 </translationbundle>

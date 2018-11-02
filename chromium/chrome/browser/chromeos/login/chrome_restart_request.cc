@@ -49,7 +49,7 @@
 #include "ui/compositor/compositor_switches.h"
 #include "ui/display/display_switches.h"
 #include "ui/events/event_switches.h"
-#include "ui/gfx/switches.h"
+#include "ui/gfx/color_space_switches.h"
 #include "ui/gl/gl_switches.h"
 #include "ui/ozone/public/ozone_switches.h"
 #include "ui/wm/core/wm_core_switches.h"
@@ -85,7 +85,6 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableCastStreamingHWEncoding,
     ::switches::kDisableDistanceFieldText,
     ::switches::kDisableGpu,
-    ::switches::kDisableGpuAsyncWorkerContext,
     ::switches::kDisableGpuMemoryBufferVideoFrames,
     ::switches::kDisableGpuShaderDiskCache,
     ::switches::kUsePassthroughCmdDecoder,
@@ -104,13 +103,11 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kDisableTouchDragDrop,
     ::switches::kDisableZeroCopy,
     ::switches::kEnableBlinkFeatures,
-    ::switches::kEnableColorCorrectRendering,
     ::switches::kDisableDisplayList2dCanvas,
     ::switches::kEnableDisplayList2dCanvas,
     ::switches::kForceDisplayList2dCanvas,
     ::switches::kDisableGpuSandbox,
     ::switches::kEnableDistanceFieldText,
-    ::switches::kEnableGpuAsyncWorkerContext,
     ::switches::kEnableGpuMemoryBufferVideoFrames,
     ::switches::kEnableGpuRasterization,
     ::switches::kEnableLogging,
@@ -128,6 +125,8 @@ void DeriveCommandLine(const GURL& start_url,
     ::switches::kEnableViewport,
     ::switches::kEnableZeroCopy,
 #if defined(USE_OZONE)
+    ::switches::kEnableDrmAtomic,
+    ::switches::kEnableHardwareOverlays,
     ::switches::kExtraTouchNoiseFiltering,
     ::switches::kEdgeTouchFiltering,
 #endif
@@ -185,6 +184,7 @@ void DeriveCommandLine(const GURL& start_url,
     ash::switches::kAshEnablePaletteOnAllDisplays,
     ash::switches::kAshTouchHud,
     ash::switches::kAuraLegacyPowerButton,
+    ash::switches::kForceClamshellPowerButton,
     chromeos::switches::kDefaultWallpaperLarge,
     chromeos::switches::kDefaultWallpaperSmall,
     chromeos::switches::kGuestWallpaperLarge,
@@ -217,10 +217,11 @@ void DeriveCommandLine(const GURL& start_url,
     chromeos::switches::kEnterpriseDisableArc,
     chromeos::switches::kEnterpriseEnableForcedReEnrollment,
     chromeos::switches::kHasChromeOSDiamondKey,
+    chromeos::switches::kHasChromeOSKeyboard,
     chromeos::switches::kLoginProfile,
     chromeos::switches::kNaturalScrollDefault,
     chromeos::switches::kShowMdLogin,
-    chromeos::switches::kShowNonViewMdLogin,
+    chromeos::switches::kShowNonMdLogin,
     chromeos::switches::kSystemInDevMode,
     policy::switches::kDeviceManagementUrl,
     wm::switches::kWindowAnimationsDisabled,
@@ -311,9 +312,8 @@ void ChromeRestartRequest::Start() {
           base::FilePath(chrome::kLocalStorePoolName),
           BrowserThread::GetBlockingPool());
   local_state_task_runner->PostTaskAndReply(
-      FROM_HERE,
-      base::Bind(&EnsureLocalStateIsWritten),
-      base::Bind(&ChromeRestartRequest::RestartJob, AsWeakPtr()));
+      FROM_HERE, base::BindOnce(&EnsureLocalStateIsWritten),
+      base::BindOnce(&ChromeRestartRequest::RestartJob, AsWeakPtr()));
 }
 
 void ChromeRestartRequest::RestartJob() {

@@ -14,7 +14,7 @@
 
 namespace ash {
 
-LockWindow::LockWindow() {
+LockWindow::LockWindow(Config config) {
   ui::GestureRecognizer::Get()->CancelActiveTouchesExcept(nullptr);
 
   views::Widget::InitParams params(
@@ -23,7 +23,8 @@ LockWindow::LockWindow() {
   params.show_state = ui::SHOW_STATE_FULLSCREEN;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   const int kLockContainer = ash::kShellWindowId_LockScreenContainer;
-  if (Shell::GetAshConfig() == Config::MASH) {
+
+  if (config == Config::MASH) {
     params.mus_properties[ui::mojom::WindowManager::kContainerId_InitProperty] =
         mojo::ConvertTo<std::vector<uint8_t>>(kLockContainer);
   } else {
@@ -34,7 +35,12 @@ LockWindow::LockWindow() {
   SetVisibilityAnimationTransition(views::Widget::ANIMATE_NONE);
 }
 
-LockWindow::~LockWindow() {}
+LockWindow::~LockWindow() {
+  // We need to destroy the root view before destroying |data_dispatcher_|
+  // because lock screen destruction assumes it is alive. We could hand out
+  // base::WeakPtr<LoginDataDispatcher> instances if needed instead.
+  delete views::Widget::GetContentsView();
+}
 
 views::Widget* LockWindow::GetWidget() {
   return this;

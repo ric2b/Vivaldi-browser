@@ -29,26 +29,29 @@ const MessageLoop::Type testing_message_loops[] = {
 #endif
 };
 
-const int kNumTestingMessageLoops = arraysize(testing_message_loops);
-
 void QuitWhenSignaled(WaitableEvent* event) {
   MessageLoop::current()->QuitWhenIdle();
 }
 
 class DecrementCountContainer {
  public:
-  explicit DecrementCountContainer(int* counter) : counter_(counter) {
-  }
+  explicit DecrementCountContainer(int* counter) : counter_(counter) {}
   void OnWaitableEventSignaled(WaitableEvent* object) {
     // NOTE: |object| may be already deleted.
     --(*counter_);
   }
+
  private:
   int* counter_;
 };
 
-void RunTest_BasicSignal(MessageLoop::Type message_loop_type) {
-  MessageLoop message_loop(message_loop_type);
+}  // namespace
+
+class WaitableEventWatcherTest
+    : public testing::TestWithParam<MessageLoop::Type> {};
+
+TEST_P(WaitableEventWatcherTest, BasicSignal) {
+  MessageLoop message_loop(GetParam());
 
   // A manual-reset event that is not yet signaled.
   WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
@@ -62,8 +65,8 @@ void RunTest_BasicSignal(MessageLoop::Type message_loop_type) {
   RunLoop().Run();
 }
 
-void RunTest_BasicCancel(MessageLoop::Type message_loop_type) {
-  MessageLoop message_loop(message_loop_type);
+TEST_P(WaitableEventWatcherTest, BasicCancel) {
+  MessageLoop message_loop(GetParam());
 
   // A manual-reset event that is not yet signaled.
   WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
@@ -76,8 +79,8 @@ void RunTest_BasicCancel(MessageLoop::Type message_loop_type) {
   watcher.StopWatching();
 }
 
-void RunTest_CancelAfterSet(MessageLoop::Type message_loop_type) {
-  MessageLoop message_loop(message_loop_type);
+TEST_P(WaitableEventWatcherTest, CancelAfterSet) {
+  MessageLoop message_loop(GetParam());
 
   // A manual-reset event that is not yet signaled.
   WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
@@ -104,7 +107,7 @@ void RunTest_CancelAfterSet(MessageLoop::Type message_loop_type) {
   EXPECT_EQ(1, counter);
 }
 
-void RunTest_OutlivesMessageLoop(MessageLoop::Type message_loop_type) {
+TEST_P(WaitableEventWatcherTest, OutlivesMessageLoop) {
   // Simulate a MessageLoop that dies before an WaitableEventWatcher.  This
   // ordinarily doesn't happen when people use the Thread class, but it can
   // happen when people use the Singleton pattern or atexit.
@@ -113,15 +116,56 @@ void RunTest_OutlivesMessageLoop(MessageLoop::Type message_loop_type) {
   {
     WaitableEventWatcher watcher;
     {
-      MessageLoop message_loop(message_loop_type);
+      MessageLoop message_loop(GetParam());
 
       watcher.StartWatching(&event, BindOnce(&QuitWhenSignaled));
     }
   }
 }
 
-void RunTest_DeleteUnder(MessageLoop::Type message_loop_type,
-                         bool delay_after_delete) {
+TEST_P(WaitableEventWatcherTest, SignaledAtStart) {
+  MessageLoop message_loop(GetParam());
+
+  WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
+                      WaitableEvent::InitialState::SIGNALED);
+
+  WaitableEventWatcher watcher;
+  watcher.StartWatching(&event, BindOnce(&QuitWhenSignaled));
+
+  RunLoop().Run();
+}
+
+TEST_P(WaitableEventWatcherTest, StartWatchingInCallback) {
+  MessageLoop message_loop(GetParam());
+
+  WaitableEvent event(WaitableEvent::ResetPolicy::MANUAL,
+                      WaitableEvent::InitialState::NOT_SIGNALED);
+
+  WaitableEventWatcher watcher;
+  watcher.StartWatching(
+      &event, BindOnce(
+                  [](WaitableEventWatcher* watcher, WaitableEvent* event) {
+                    // |event| is manual, so the second watcher will run
+                    // immediately.
+                    watcher->StartWatching(event, BindOnce(&QuitWhenSignaled));
+                  },
+                  &watcher));
+
+  event.Signal();
+
+  RunLoop().Run();
+}
+
+// To help detect errors around deleting WaitableEventWatcher, an additional
+// bool parameter is used to test sleeping between watching and deletion.
+class WaitableEventWatcherDeletionTest
+    : public testing::TestWithParam<std::tuple<MessageLoop::Type, bool>> {};
+
+TEST_P(WaitableEventWatcherDeletionTest, DeleteUnder) {
+  MessageLoop::Type message_loop_type;
+  bool delay_after_delete;
+  std::tie(message_loop_type, delay_after_delete) = GetParam();
+
   // Delete the WaitableEvent out from under the Watcher. This is explictly
   // allowed by the interface.
 
@@ -148,8 +192,11 @@ void RunTest_DeleteUnder(MessageLoop::Type message_loop_type,
   }
 }
 
-void RunTest_SignalAndDelete(MessageLoop::Type message_loop_type,
-                             bool delay_after_delete) {
+TEST_P(WaitableEventWatcherDeletionTest, SignalAndDelete) {
+  MessageLoop::Type message_loop_type;
+  bool delay_after_delete;
+  std::tie(message_loop_type, delay_after_delete) = GetParam();
+
   // Signal and immediately delete the WaitableEvent out from under the Watcher.
 
   MessageLoop message_loop(message_loop_type);
@@ -179,46 +226,62 @@ void RunTest_SignalAndDelete(MessageLoop::Type message_loop_type,
   }
 }
 
-}  // namespace
+// Tests deleting the WaitableEventWatcher between signaling the event and
+// when the callback should be run.
+TEST_P(WaitableEventWatcherDeletionTest, DeleteWatcherBeforeCallback) {
+  MessageLoop::Type message_loop_type;
+  bool delay_after_delete;
+  std::tie(message_loop_type, delay_after_delete) = GetParam();
 
-//-----------------------------------------------------------------------------
+  MessageLoop message_loop(message_loop_type);
+  scoped_refptr<SingleThreadTaskRunner> task_runner =
+      message_loop.task_runner();
 
-TEST(WaitableEventWatcherTest, BasicSignal) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_BasicSignal(testing_message_loops[i]);
+  // Flag used to esnure that the |watcher_callback| never runs.
+  bool did_callback = false;
+
+  WaitableEvent event(WaitableEvent::ResetPolicy::AUTOMATIC,
+                      WaitableEvent::InitialState::NOT_SIGNALED);
+  auto watcher = MakeUnique<WaitableEventWatcher>();
+
+  // Queue up a series of tasks:
+  // 1. StartWatching the WaitableEvent
+  // 2. Signal the event (which will result in another task getting posted to
+  //    the |task_runner|)
+  // 3. Delete the WaitableEventWatcher
+  // 4. WaitableEventWatcher callback should run (from #2)
+
+  WaitableEventWatcher::EventCallback watcher_callback = BindOnce(
+      [](bool* did_callback, WaitableEvent*) {
+        *did_callback = true;
+      },
+      Unretained(&did_callback));
+
+  task_runner->PostTask(
+      FROM_HERE, BindOnce(IgnoreResult(&WaitableEventWatcher::StartWatching),
+                          Unretained(watcher.get()), Unretained(&event),
+                          std::move(watcher_callback)));
+  task_runner->PostTask(FROM_HERE,
+                        BindOnce(&WaitableEvent::Signal, Unretained(&event)));
+  task_runner->DeleteSoon(FROM_HERE, std::move(watcher));
+  if (delay_after_delete) {
+    task_runner->PostTask(FROM_HERE, BindOnce(&PlatformThread::Sleep,
+                                              TimeDelta::FromMilliseconds(30)));
   }
+
+  RunLoop().RunUntilIdle();
+
+  EXPECT_FALSE(did_callback);
 }
 
-TEST(WaitableEventWatcherTest, BasicCancel) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_BasicCancel(testing_message_loops[i]);
-  }
-}
+INSTANTIATE_TEST_CASE_P(,
+                        WaitableEventWatcherTest,
+                        testing::ValuesIn(testing_message_loops));
 
-TEST(WaitableEventWatcherTest, CancelAfterSet) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_CancelAfterSet(testing_message_loops[i]);
-  }
-}
-
-TEST(WaitableEventWatcherTest, OutlivesMessageLoop) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_OutlivesMessageLoop(testing_message_loops[i]);
-  }
-}
-
-TEST(WaitableEventWatcherTest, DeleteUnder) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_DeleteUnder(testing_message_loops[i], false);
-    RunTest_DeleteUnder(testing_message_loops[i], true);
-  }
-}
-
-TEST(WaitableEventWatcherTest, SignalAndDelete) {
-  for (int i = 0; i < kNumTestingMessageLoops; i++) {
-    RunTest_SignalAndDelete(testing_message_loops[i], false);
-    RunTest_SignalAndDelete(testing_message_loops[i], true);
-  }
-}
+INSTANTIATE_TEST_CASE_P(
+    ,
+    WaitableEventWatcherDeletionTest,
+    testing::Combine(testing::ValuesIn(testing_message_loops),
+                     testing::Bool()));
 
 }  // namespace base

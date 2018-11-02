@@ -32,20 +32,18 @@
 
 namespace blink {
 
-class DocumentMarkerDetails;
-
 // A range of a node within a document that is "marked", such as the range of a
 // misspelled word. It optionally includes a description that could be displayed
-// in the user interface. It also optionally includes a flag specifying whether
-// the match is active, which is ignored for all types other than type
-// TextMatch.
-class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
+// in the user interface.
+class CORE_EXPORT DocumentMarker
+    : public GarbageCollectedFinalized<DocumentMarker> {
  public:
   enum MarkerTypeIndex {
     kSpellingMarkerIndex = 0,
     kGrammarMarkerIndex,
     kTextMatchMarkerIndex,
     kCompositionMarkerIndex,
+    kActiveSuggestionMarkerIndex,
     kMarkerTypeIndexesCount
   };
 
@@ -54,6 +52,7 @@ class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
     kGrammar = 1 << kGrammarMarkerIndex,
     kTextMatch = 1 << kTextMatchMarkerIndex,
     kComposition = 1 << kCompositionMarkerIndex,
+    kActiveSuggestion = 1 << kActiveSuggestionMarkerIndex,
   };
 
   class MarkerTypesIterator
@@ -130,34 +129,11 @@ class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
     MisspellingMarkers() : MarkerTypes(kSpelling | kGrammar) {}
   };
 
-  enum class MatchStatus { kInactive, kActive };
+  virtual ~DocumentMarker();
 
-  DocumentMarker(MarkerType,
-                 unsigned start_offset,
-                 unsigned end_offset,
-                 const String& description);
-  DocumentMarker(unsigned start_offset, unsigned end_offset, MatchStatus);
-  DocumentMarker(unsigned start_offset,
-                 unsigned end_offset,
-                 Color underline_color,
-                 bool thick,
-                 Color background_color);
-
-  DocumentMarker(const DocumentMarker&);
-
-  MarkerType GetType() const { return type_; }
+  virtual MarkerType GetType() const = 0;
   unsigned StartOffset() const { return start_offset_; }
   unsigned EndOffset() const { return end_offset_; }
-
-  const String& Description() const;
-  bool IsActiveMatch() const;
-  Color UnderlineColor() const;
-  bool Thick() const;
-  Color BackgroundColor() const;
-  DocumentMarkerDetails* Details() const;
-
-  void SetIsActiveMatch(bool);
-  void ClearDetails() { details_.Clear(); }
 
   struct MarkerOffsets {
     unsigned start_offset;
@@ -174,32 +150,19 @@ class CORE_EXPORT DocumentMarker : public GarbageCollected<DocumentMarker> {
   void SetEndOffset(unsigned offset) { end_offset_ = offset; }
   void ShiftOffsets(int delta);
 
-  DECLARE_TRACE();
+  DEFINE_INLINE_VIRTUAL_TRACE() {}
+
+ protected:
+  DocumentMarker(unsigned start_offset, unsigned end_offset);
 
  private:
-  MarkerType type_;
   unsigned start_offset_;
   unsigned end_offset_;
-  Member<DocumentMarkerDetails> details_;
+
+  DISALLOW_COPY_AND_ASSIGN(DocumentMarker);
 };
 
 using DocumentMarkerVector = HeapVector<Member<DocumentMarker>>;
-
-inline DocumentMarkerDetails* DocumentMarker::Details() const {
-  return details_.Get();
-}
-
-class DocumentMarkerDetails
-    : public GarbageCollectedFinalized<DocumentMarkerDetails> {
- public:
-  DocumentMarkerDetails() {}
-  virtual ~DocumentMarkerDetails();
-  virtual bool IsDescription() const { return false; }
-  virtual bool IsTextMatch() const { return false; }
-  virtual bool IsComposition() const { return false; }
-
-  DEFINE_INLINE_VIRTUAL_TRACE() {}
-};
 
 }  // namespace blink
 

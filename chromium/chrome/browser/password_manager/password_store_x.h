@@ -11,7 +11,7 @@
 #include <vector>
 
 #include "base/macros.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "components/password_manager/core/browser/password_store_default.h"
 
@@ -84,12 +84,15 @@ class PasswordStoreX : public password_manager::PasswordStoreDefault {
     virtual bool GetAllLogins(
         std::vector<std::unique_ptr<autofill::PasswordForm>>* forms)
         WARN_UNUSED_RESULT = 0;
+
+    // Returns the background thread in case the backend uses one, or null.
+    virtual scoped_refptr<base::SequencedTaskRunner>
+    GetBackgroundTaskRunner() = 0;
   };
 
   // Takes ownership of |login_db| and |backend|. |backend| may be NULL in which
   // case this PasswordStoreX will act the same as PasswordStoreDefault.
-  PasswordStoreX(scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner,
-                 scoped_refptr<base::SingleThreadTaskRunner> db_thread_runner,
+  PasswordStoreX(scoped_refptr<base::SequencedTaskRunner> main_thread_runner,
                  std::unique_ptr<password_manager::LoginDatabase> login_db,
                  NativeBackend* backend);
 

@@ -40,9 +40,13 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   void CancelCheck(Client* client) override;
   bool CanCheckResourceType(content::ResourceType resource_type) const override;
+  bool CanCheckSubresourceFilter() const override;
   bool CanCheckUrl(const GURL& url) const override;
   bool ChecksAreAlwaysAsync() const override;
-  bool CheckBrowseUrl(const GURL& url, Client* client) override;
+  bool CheckBrowseUrl(const GURL& url,
+                      const SBThreatTypeSet& threat_types,
+                      Client* client) override;
+  AsyncMatch CheckCsdWhitelistUrl(const GURL& url, Client* client) override;
   bool CheckDownloadUrl(const std::vector<GURL>& url_chain,
                         Client* client) override;
   // TODO(vakh): |CheckExtensionIDs| in the base class accepts a set of
@@ -88,28 +92,32 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   enum class ClientCallbackType {
     // This represents the case when we're trying to determine if a URL is
     // unsafe from the following perspectives: Malware, Phishing, UwS.
-    CHECK_BROWSE_URL = 0,
+    CHECK_BROWSE_URL,
 
     // This represents the case when we're trying to determine if any of the
     // URLs in a vector of URLs is unsafe for downloading binaries.
-    CHECK_DOWNLOAD_URLS = 1,
+    CHECK_DOWNLOAD_URLS,
 
     // This represents the case when we're trying to determine if a URL is an
     // unsafe resource.
-    CHECK_RESOURCE_URL = 2,
+    CHECK_RESOURCE_URL,
 
     // This represents the case when we're trying to determine if a Chrome
     // extension is a unsafe.
-    CHECK_EXTENSION_IDS = 3,
+    CHECK_EXTENSION_IDS,
 
     // This respresents the case when we're trying to determine if a URL belongs
     // to the list where subresource filter should be active.
-    CHECK_URL_FOR_SUBRESOURCE_FILTER = 4,
+    CHECK_URL_FOR_SUBRESOURCE_FILTER,
+
+    // This respresents the case when we're trying to determine if a URL is
+    // part of the CSD whitelist.
+    CHECK_CSD_WHITELIST,
 
     // This represents the other cases when a check is being performed
     // synchronously so a client callback isn't required. For instance, when
     // trying to determing if an IP address is unsafe due to hosting Malware.
-    CHECK_OTHER = 5,
+    CHECK_OTHER,
   };
 
   // The information we need to process a URL safety reputation request and
@@ -193,6 +201,9 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // Called when the database has been updated and schedules the next update.
   void DatabaseUpdated();
 
+  // Delete any *.store files from disk that are no longer used.
+  void DeleteUnusedStoreFiles();
+
   // Identifies the prefixes and the store they matched in, for a given |check|.
   // Returns true if one or more hash prefix matches are found; false otherwise.
   bool GetPrefixMatches(
@@ -220,6 +231,15 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
   // returns true immediately if there's no match. If a match is found, it
   // schedules a task to perform full hash check and returns false.
   bool HandleCheck(std::unique_ptr<PendingCheck> check);
+
+  // Like HandleCheck, but for whitelists that have both full-hashes and
+  // partial hashes in the DB. Returns MATCH, NO_MATCH, or ASYNC.
+  AsyncMatch HandleWhitelistCheck(std::unique_ptr<PendingCheck> check);
+
+  // Schedules a full-hash check for a given set of prefixes.
+  void ScheduleFullHashCheck(std::unique_ptr<PendingCheck> check,
+                             const FullHashToStoreAndHashPrefixesMap&
+                                 full_hash_to_store_and_hash_prefixes);
 
   // Checks |stores_to_check| in database synchronously for hash prefixes
   // matching |hash|. Returns true if there's a match; false otherwise. This is
@@ -314,7 +334,6 @@ class V4LocalDatabaseManager : public SafeBrowsingDatabaseManager {
 
   base::WeakPtrFactory<V4LocalDatabaseManager> weak_factory_;
 
-  friend class base::RefCountedThreadSafe<V4LocalDatabaseManager>;
   DISALLOW_COPY_AND_ASSIGN(V4LocalDatabaseManager);
 };  // class V4LocalDatabaseManager
 

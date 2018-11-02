@@ -38,7 +38,8 @@
 
 #include "calendar/calendar_backend.h"
 #include "calendar/calendar_model_observer.h"
-#include "calendar/calendar_types.h"
+#include "calendar/calendar_type.h"
+#include "calendar/event_type.h"
 
 using base::Time;
 
@@ -66,15 +67,41 @@ class CalendarService::CalendarBackendDelegate
         FROM_HERE, base::Bind(&CalendarService::OnDBLoaded, calendar_service_));
   }
 
-  void NotifyEventCreated() override {
-    // TODO(arnar): Implement
+  void NotifyEventCreated(const EventRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&CalendarService::OnEventCreated, calendar_service_, row));
   }
 
-  void NotifyEventModified() override {
-    // TODO(arnar): Implement
+  void NotifyEventModified(const EventRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&CalendarService::OnEventChanged, calendar_service_, row));
   }
 
-  void NotifyEventDeleted() override {}
+  void NotifyEventDeleted(const EventRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE,
+        base::Bind(&CalendarService::OnEventDeleted, calendar_service_, row));
+  }
+
+  void NotifyCalendarCreated(const CalendarRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&CalendarService::OnCalendarCreated,
+                              calendar_service_, row));
+  }
+
+  void NotifyCalendarModified(const CalendarRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&CalendarService::OnCalendarChanged,
+                              calendar_service_, row));
+  }
+
+  void NotifyCalendarDeleted(const CalendarRow& row) override {
+    service_task_runner_->PostTask(
+        FROM_HERE, base::Bind(&CalendarService::OnCalendarDeleted,
+                              calendar_service_, row));
+  }
 
  private:
   const base::WeakPtr<CalendarService> calendar_service_;
@@ -133,11 +160,21 @@ bool CalendarService::Init(
   return true;
 }
 
-void CalendarService::CreateCalendarEvent(EventRow ev) {
+base::CancelableTaskTracker::TaskId CalendarService::CreateCalendarEvent(
+    EventRow ev,
+    const CreateEventCallback& callback,
+    base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
   DCHECK(thread_checker_.CalledOnValidThread());
-  ScheduleTask(
-      base::Bind(&CalendarBackend::CreateCalendarEvent, calendar_backend_, ev));
+
+  std::shared_ptr<CreateEventResult> create_results =
+      std::shared_ptr<CreateEventResult>(new CreateEventResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::CreateCalendarEvent, calendar_backend_, ev,
+                 create_results),
+      base::Bind(callback, create_results));
 }
 
 base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
@@ -159,6 +196,24 @@ base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendarEvent(
       base::Bind(callback, update_results));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendarEvent(
+    EventID event_id,
+    const DeleteEventCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<DeleteEventResult> delete_results =
+      std::shared_ptr<DeleteEventResult>(new DeleteEventResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::DeleteEvent, calendar_backend_, event_id,
+                 delete_results),
+      base::Bind(callback, delete_results));
+}
+
 base::CancelableTaskTracker::TaskId CalendarService::GetAllEvents(
     const QueryCalendarCallback& callback,
     base::CancelableTaskTracker* tracker) {
@@ -174,6 +229,75 @@ base::CancelableTaskTracker::TaskId CalendarService::GetAllEvents(
                                    base::Bind(callback, query_results));
 }
 
+base::CancelableTaskTracker::TaskId CalendarService::CreateCalendar(
+    CalendarRow ev,
+    const CreateCalendarCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<CreateCalendarResult> create_results =
+      std::shared_ptr<CreateCalendarResult>(new CreateCalendarResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::CreateCalendar, calendar_backend_, ev,
+                 create_results),
+      base::Bind(callback, create_results));
+}
+
+base::CancelableTaskTracker::TaskId CalendarService::GetAllCalendars(
+    const GetALLQueryCalendarCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<CalendarQueryResults> query_results =
+      std::shared_ptr<CalendarQueryResults>(new CalendarQueryResults());
+
+  return tracker->PostTaskAndReply(backend_task_runner_.get(), FROM_HERE,
+                                   base::Bind(&CalendarBackend::GetAllCalendars,
+                                              calendar_backend_, query_results),
+                                   base::Bind(callback, query_results));
+}
+
+base::CancelableTaskTracker::TaskId CalendarService::UpdateCalendar(
+    CalendarID calendar_id,
+    Calendar calendar,
+    const UpdateCalendarCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<UpdateCalendarResult> update_results =
+      std::shared_ptr<UpdateCalendarResult>(new UpdateCalendarResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::UpdateCalendar, calendar_backend_,
+                 calendar_id, calendar, update_results),
+      base::Bind(callback, update_results));
+}
+
+base::CancelableTaskTracker::TaskId CalendarService::DeleteCalendar(
+    CalendarID calendar_id,
+    const DeleteCalendarCallback& callback,
+    base::CancelableTaskTracker* tracker) {
+  DCHECK(backend_task_runner_) << "Calendar service being called after cleanup";
+
+  DCHECK(thread_checker_.CalledOnValidThread());
+
+  std::shared_ptr<DeleteCalendarResult> delete_results =
+      std::shared_ptr<DeleteCalendarResult>(new DeleteCalendarResult());
+
+  return tracker->PostTaskAndReply(
+      backend_task_runner_.get(), FROM_HERE,
+      base::Bind(&CalendarBackend::DeleteCalendar, calendar_backend_,
+                 calendar_id, delete_results),
+      base::Bind(callback, delete_results));
+}
+
 void CalendarService::ScheduleTask(base::OnceClosure task) {
   DCHECK(thread_checker_.CalledOnValidThread());
   CHECK(backend_task_runner_);
@@ -182,10 +306,12 @@ void CalendarService::ScheduleTask(base::OnceClosure task) {
 }
 
 void CalendarService::AddObserver(CalendarModelObserver* observer) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   observers_.AddObserver(observer);
 }
 
 void CalendarService::RemoveObserver(CalendarModelObserver* observer) {
+  DCHECK(thread_checker_.CalledOnValidThread());
   observers_.RemoveObserver(observer);
 }
 
@@ -254,6 +380,42 @@ void CalendarService::NotifyCalendarServiceBeingDeleted() {
   /* DCHECK(thread_checker_.CalledOnValidThread());
   for (CalendarServiceObserver& observer : observers_)
     observer.CalendarServiceBeingDeleted(this);*/
+}
+
+void CalendarService::OnEventCreated(const EventRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnEventCreated(this, row);
+  }
+}
+
+void CalendarService::OnEventDeleted(const EventRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnEventDeleted(this, row);
+  }
+}
+
+void CalendarService::OnEventChanged(const EventRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnEventChanged(this, row);
+  }
+}
+
+void CalendarService::OnCalendarCreated(const CalendarRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnCalendarCreated(this, row);
+  }
+}
+
+void CalendarService::OnCalendarDeleted(const CalendarRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnCalendarDeleted(this, row);
+  }
+}
+
+void CalendarService::OnCalendarChanged(const CalendarRow& row) {
+  for (CalendarModelObserver& observer : observers_) {
+    observer.OnCalendarChanged(this, row);
+  }
 }
 
 }  // namespace calendar

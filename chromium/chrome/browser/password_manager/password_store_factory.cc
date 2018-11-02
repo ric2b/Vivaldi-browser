@@ -12,20 +12,23 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/rand_util.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/sequenced_task_runner.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/sync/glue/sync_start_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
+#include "chrome/common/chrome_paths_internal.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/os_crypt/os_crypt_switches.h"
 #include "components/password_manager/core/browser/http_data_cleaner.h"
 #include "components/password_manager/core/browser/login_database.h"
+#include "components/password_manager/core/browser/password_reuse_defines.h"
 #include "components/password_manager/core/browser/password_store.h"
 #include "components/password_manager/core/browser/password_store_default.h"
 #include "components/password_manager/core/browser/password_store_factory_util.h"
@@ -39,9 +42,7 @@
 #include "chrome/browser/password_manager/password_store_win.h"
 #include "components/password_manager/core/browser/webdata/password_web_data_service_win.h"
 #elif defined(OS_MACOSX)
-#include "chrome/browser/password_manager/password_store_proxy_mac.h"
-#include "crypto/apple_keychain.h"
-#include "crypto/mock_apple_keychain.h"
+#include "chrome/browser/password_manager/password_store_mac.h"
 #elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
 // Don't do anything. We're going to use the default store.
 #elif defined(USE_X11)
@@ -54,6 +55,10 @@
 #endif
 #include "chrome/browser/password_manager/native_backend_kwallet_x.h"
 #include "chrome/browser/password_manager/password_store_x.h"
+#endif
+
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+#include "chrome/browser/password_manager/password_store_signin_notifier_impl.h"
 #endif
 
 using password_manager::PasswordStore;
@@ -100,18 +105,7 @@ void PasswordStoreFactory::OnPasswordsSyncedStatePotentiallyChanged(
 
   password_manager::ToggleAffiliationBasedMatchingBasedOnPasswordSyncedState(
       password_store.get(), sync_service, request_context_getter,
-      profile->GetPath(), content::BrowserThread::GetTaskRunnerForThread(
-                              content::BrowserThread::DB));
-}
-
-// static
-void PasswordStoreFactory::TrimOrDeleteAffiliationCache(Profile* profile) {
-  scoped_refptr<PasswordStore> password_store =
-      GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
-  password_manager::TrimOrDeleteAffiliationCacheForStoreAndPath(
-      password_store.get(), profile->GetPath(),
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::DB));
+      profile->GetPath());
 }
 
 PasswordStoreFactory::PasswordStoreFactory()
@@ -119,6 +113,11 @@ PasswordStoreFactory::PasswordStoreFactory()
           "PasswordStore",
           BrowserContextDependencyManager::GetInstance()) {
   DependsOn(WebDataServiceFactory::GetInstance());
+#if defined(SYNC_PASSWORD_REUSE_DETECTION_ENABLED)
+  // TODO(crbug.com/715987). Remove when PasswordReuseDetector is decoupled
+  // from PasswordStore.
+  DependsOn(SigninManagerFactory::GetInstance());
+#endif
 }
 
 PasswordStoreFactory::~PasswordStoreFactory() {}
@@ -156,9 +155,9 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   std::unique_ptr<password_manager::LoginDatabase> login_db(
       password_manager::CreateLoginDatabase(profile->GetPath()));
 
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner(
-      base::ThreadTaskRunnerHandle::Get());
-  scoped_refptr<base::SingleThreadTaskRunner> db_thread_runner(
+  scoped_refptr<base::SequencedTaskRunner> main_thread_runner(
+      base::SequencedTaskRunnerHandle::Get());
+  scoped_refptr<base::SequencedTaskRunner> db_thread_runner(
       content::BrowserThread::GetTaskRunnerForThread(
           content::BrowserThread::DB));
 
@@ -169,13 +168,8 @@ PasswordStoreFactory::BuildServiceInstanceFor(
                             WebDataServiceFactory::GetPasswordWebDataForProfile(
                                 profile, ServiceAccessType::EXPLICIT_ACCESS));
 #elif defined(OS_MACOSX)
-  std::unique_ptr<crypto::AppleKeychain> keychain(
-      base::CommandLine::ForCurrentProcess()->HasSwitch(
-          os_crypt::switches::kUseMockKeychain)
-          ? new crypto::MockAppleKeychain()
-          : new crypto::AppleKeychain());
-  ps = new PasswordStoreProxyMac(main_thread_runner, std::move(keychain),
-                                 std::move(login_db), profile->GetPrefs());
+  ps = new PasswordStoreMac(main_thread_runner, std::move(login_db),
+                            profile->GetPrefs());
 #elif defined(OS_CHROMEOS) || defined(OS_ANDROID)
   // For now, we use PasswordStoreDefault. We might want to make a native
   // backend for PasswordStoreX (see below) in the future though.
@@ -194,8 +188,17 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   PrefService* prefs = profile->GetPrefs();
   LocalProfileId id = GetLocalProfileId(prefs);
 
+  bool use_preference = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kEnableEncryptionSelection);
+  bool use_backend = true;
+  if (use_preference) {
+    base::FilePath user_data_dir;
+    chrome::GetDefaultUserDataDirectory(&user_data_dir);
+    use_backend = os_crypt::GetBackendUse(user_data_dir);
+  }
+
   os_crypt::SelectedLinuxBackend selected_backend =
-      os_crypt::SelectBackend(store_type, desktop_env);
+      os_crypt::SelectBackend(store_type, use_backend, desktop_env);
 
   std::unique_ptr<PasswordStoreX::NativeBackend> backend;
   if (selected_backend == os_crypt::SelectedLinuxBackend::KWALLET ||
@@ -253,8 +256,8 @@ PasswordStoreFactory::BuildServiceInstanceFor(
         " for more information about password storage options.";
   }
 
-  ps = new PasswordStoreX(main_thread_runner, db_thread_runner,
-                          std::move(login_db), backend.release());
+  ps = new PasswordStoreX(main_thread_runner, std::move(login_db),
+                          backend.release());
   RecordBackendStatistics(desktop_env, store_type, used_backend);
 #elif defined(USE_OZONE)
   ps = new password_manager::PasswordStoreDefault(
@@ -274,6 +277,14 @@ PasswordStoreFactory::BuildServiceInstanceFor(
   password_manager::DelayCleanObsoleteHttpDataForPasswordStoreAndPrefs(
       ps.get(), profile->GetPrefs(),
       make_scoped_refptr(profile->GetRequestContext()));
+
+#if defined(OS_WIN) || defined(OS_MACOSX) || \
+    (defined(OS_LINUX) && !defined(OS_CHROMEOS))
+  std::unique_ptr<password_manager::PasswordStoreSigninNotifier> notifier =
+      base::MakeUnique<password_manager::PasswordStoreSigninNotifierImpl>(
+          profile);
+  ps->SetPasswordStoreSigninNotifier(std::move(notifier));
+#endif
 
   return ps;
 }

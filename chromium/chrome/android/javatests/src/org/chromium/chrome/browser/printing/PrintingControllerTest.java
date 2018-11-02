@@ -41,7 +41,6 @@ import org.chromium.printing.PrintingControllerImpl;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
@@ -160,8 +159,8 @@ public class PrintingControllerTest {
             String preamble = new String(b);
             Assert.assertEquals(PDF_PREAMBLE, preamble);
         } finally {
-            callFinishOnUiThread(printingController);
             if (in != null) in.close();
+            callFinishOnUiThread(printingController);
             // Close the descriptor, if not closed already.
             fileDescriptor.close();
             TestFileUtil.deleteFile(tempFile.getAbsolutePath());
@@ -290,13 +289,7 @@ public class PrintingControllerTest {
                     new WriteResultCallbackWrapperMock() {
                         @Override
                         public void onWriteFinished(PageRange[] pages) {
-                            try {
-                                descriptor.close();
-                                // Result is ready, signal to continue.
-                                result.run();
-                            } catch (IOException ex) {
-                                Assert.fail("Failed file operation: " + ex.toString());
-                            }
+                            result.run();
                         }
                     }
             );

@@ -11,7 +11,6 @@
 #include "base/timer/timer.h"
 #include "components/cryptauth/authenticator.h"
 #include "components/cryptauth/connection.h"
-#include "components/cryptauth/device_to_device_initiator_operations.h"
 #include "components/cryptauth/device_to_device_secure_context.h"
 #include "components/cryptauth/secure_context.h"
 #include "components/cryptauth/secure_message_delegate.h"
@@ -69,6 +68,7 @@ DeviceToDeviceAuthenticator::DeviceToDeviceAuthenticator(
     : connection_(connection),
       account_id_(account_id),
       secure_message_delegate_(std::move(secure_message_delegate)),
+      helper_(base::MakeUnique<DeviceToDeviceInitiatorHelper>()),
       state_(State::NOT_STARTED),
       weak_ptr_factory_(this) {
   DCHECK(connection_);
@@ -112,9 +112,9 @@ void DeviceToDeviceAuthenticator::OnKeyPairGenerated(
   }
   local_session_private_key_ = private_key;
 
-  // Create the [Hello] message to send to the remote device.
+  // Create the [Initiator Hello] message to send to the remote device.
   state_ = State::SENDING_HELLO;
-  DeviceToDeviceInitiatorOperations::CreateHelloMessage(
+  helper_->CreateHelloMessage(
       public_key, connection_->remote_device().persistent_symmetric_key,
       secure_message_delegate_.get(),
       base::Bind(&DeviceToDeviceAuthenticator::OnHelloMessageCreated,
@@ -129,9 +129,11 @@ void DeviceToDeviceAuthenticator::OnHelloMessageCreated(
     const std::string& message) {
   DCHECK(state_ == State::SENDING_HELLO);
   if (message.empty()) {
-    Fail("Failed to create [Hello]");
+    Fail("Failed to create [Initiator Hello]");
     return;
   }
+
+  PA_LOG(INFO) << "Sending [Initiator Hello] message.";
 
   // Add a timeout for receiving the [Responder Auth] message as a guard.
   timer_ = CreateTimer();
@@ -140,7 +142,7 @@ void DeviceToDeviceAuthenticator::OnHelloMessageCreated(
       base::Bind(&DeviceToDeviceAuthenticator::OnResponderAuthTimedOut,
                  weak_ptr_factory_.GetWeakPtr()));
 
-  // Send the [Hello] message to the remote device.
+  // Send the [Initiator Hello] message to the remote device.
   state_ = State::SENT_HELLO;
   hello_message_ = message;
   connection_->SendMessage(base::MakeUnique<WireMessage>(
@@ -166,7 +168,7 @@ void DeviceToDeviceAuthenticator::OnResponderAuthValidated(
   session_keys_ = session_keys;
 
   // Create the [Initiator Auth] message to send to the remote device.
-  DeviceToDeviceInitiatorOperations::CreateInitiatorAuthMessage(
+  helper_->CreateInitiatorAuthMessage(
       session_keys_, connection_->remote_device().persistent_symmetric_key,
       responder_auth_message_, secure_message_delegate_.get(),
       base::Bind(&DeviceToDeviceAuthenticator::OnInitiatorAuthCreated,
@@ -241,7 +243,7 @@ void DeviceToDeviceAuthenticator::OnMessageReceived(
     // Attempt to validate the [Responder Auth] message received from the remote
     // device.
     std::string responder_public_key = connection.remote_device().public_key;
-    DeviceToDeviceInitiatorOperations::ValidateResponderAuthMessage(
+    helper_->ValidateResponderAuthMessage(
         responder_auth_message_, responder_public_key,
         connection_->remote_device().persistent_symmetric_key,
         local_session_private_key_, hello_message_,
@@ -264,7 +266,7 @@ void DeviceToDeviceAuthenticator::OnSendCompleted(
       Fail("Failed to send [Initiator Auth]");
   } else if (!success && state_ == State::SENT_HELLO) {
     DCHECK(message.payload() == hello_message_);
-    Fail("Failed to send [Hello]");
+    Fail("Failed to send [Initiator Hello]");
   }
 }
 

@@ -4,6 +4,7 @@
 
 #include "platform/testing/FontTestHelpers.h"
 
+#include "platform/SharedBuffer.h"
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontCustomPlatformData.h"
 #include "platform/fonts/FontDescription.h"
@@ -42,15 +43,17 @@ class TestFontSelector : public FontSelector {
                        const String& text) override {}
   void WillUseRange(const FontDescription&,
                     const AtomicString& family_name,
-                    const FontDataForRangeSet&) override{};
+                    const FontDataForRangeSet&) override {}
 
   unsigned Version() const override { return 0; }
   void FontCacheInvalidated() override {}
-  void ReportNotDefGlyph() const override{};
+  void ReportNotDefGlyph() const override {}
 
  private:
   TestFontSelector(PassRefPtr<FontCustomPlatformData> custom_platform_data)
-      : custom_platform_data_(std::move(custom_platform_data)) {}
+      : custom_platform_data_(std::move(custom_platform_data)) {
+    DCHECK(custom_platform_data_);
+  }
 
   RefPtr<FontCustomPlatformData> custom_platform_data_;
 };

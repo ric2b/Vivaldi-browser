@@ -15,7 +15,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "cc/paint/skia_paint_canvas.h"
-#include "content/renderer/media/renderer_gpu_video_accelerator_factories.h"
+#include "content/renderer/media/gpu/gpu_video_accelerator_factories_impl.h"
 #include "content/renderer/media_recorder/vea_encoder.h"
 #include "content/renderer/media_recorder/vpx_encoder.h"
 #include "content/renderer/render_thread_impl.h"
@@ -74,6 +74,14 @@ static const struct {
 static_assert(arraysize(kPreferredCodecIdAndVEAProfiles) ==
                   static_cast<int>(CodecId::LAST),
               "|kPreferredCodecIdAndVEAProfiles| should consider all CodecIds");
+
+// The maximum number of frames that we keep the reference alive for encode.
+// This guarantees that there is limit on the number of frames in a FIFO queue
+// that are being encoded and frames coming after this limit is reached are
+// dropped.
+// TODO(emircan): Make this a LIFO queue that has different sizes for each
+// encoder implementation.
+const int kMaxNumberOfFramesInEncode = 10;
 
 // Class to encapsulate the enumeration of CodecIds/VideoCodecProfiles supported
 // by the VEA underlying platform. Provides methods to query the preferred
@@ -168,7 +176,8 @@ VideoTrackRecorder::Encoder::Encoder(
       encoding_task_runner_(encoding_task_runner),
       paused_(false),
       on_encoded_video_callback_(on_encoded_video_callback),
-      bits_per_second_(bits_per_second) {
+      bits_per_second_(bits_per_second),
+      num_frames_in_encode_(0) {
   DCHECK(!on_encoded_video_callback_.is_null());
   if (encoding_task_runner_)
     return;
@@ -200,6 +209,11 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
     return;
   }
 
+  if (num_frames_in_encode_ > kMaxNumberOfFramesInEncode) {
+    DLOG(WARNING) << "Too many frames are queued up. Dropping this one.";
+    return;
+  }
+
   if (video_frame->HasTextures()) {
     main_task_runner_->PostTask(
         FROM_HERE, base::Bind(&Encoder::RetrieveFrameOnMainThread, this,
@@ -207,14 +221,23 @@ void VideoTrackRecorder::Encoder::StartFrameEncode(
     return;
   }
 
-  scoped_refptr<media::VideoFrame> frame = video_frame;
+  scoped_refptr<media::VideoFrame> wrapped_frame;
   // Drop alpha channel if the encoder does not support it yet.
-  if (!CanEncodeAlphaChannel() && frame->format() == media::PIXEL_FORMAT_YV12A)
-    frame = media::WrapAsI420VideoFrame(video_frame);
+  if (!CanEncodeAlphaChannel() &&
+      video_frame->format() == media::PIXEL_FORMAT_YV12A) {
+    wrapped_frame = media::WrapAsI420VideoFrame(video_frame);
+  } else {
+    wrapped_frame = media::VideoFrame::WrapVideoFrame(
+        video_frame, video_frame->format(), video_frame->visible_rect(),
+        video_frame->natural_size());
+  }
+  wrapped_frame->AddDestructionObserver(media::BindToCurrentLoop(base::Bind(
+      &VideoTrackRecorder::Encoder::FrameReleased, this, video_frame)));
+  ++num_frames_in_encode_;
 
   encoding_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this, frame,
-                            capture_timestamp));
+      FROM_HERE, base::Bind(&Encoder::EncodeOnEncodingTaskRunner, this,
+                            wrapped_frame, capture_timestamp));
 }
 
 void VideoTrackRecorder::Encoder::RetrieveFrameOnMainThread(
@@ -328,6 +351,12 @@ void VideoTrackRecorder::Encoder::SetPaused(bool paused) {
 
 bool VideoTrackRecorder::Encoder::CanEncodeAlphaChannel() {
   return false;
+}
+
+void VideoTrackRecorder::Encoder::FrameReleased(
+    const scoped_refptr<VideoFrame>& frame) {
+  DCHECK(origin_task_runner_->BelongsToCurrentThread());
+  --num_frames_in_encode_;
 }
 
 // static

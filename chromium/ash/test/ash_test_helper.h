@@ -8,10 +8,11 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
 #include <utility>
 #include <vector>
 
-#include "ash/test/test_session_controller_client.h"
+#include "ash/session/test_session_controller_client.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/test/scoped_command_line.h"
@@ -43,22 +44,18 @@ class WMState;
 
 namespace ash {
 
+class AshTestEnvironment;
+class AshTestViewsDelegate;
 class RootWindowController;
+class TestScreenshotDelegate;
+class TestShellDelegate;
+class TestSessionControllerClient;
 
 enum class Config;
 
 namespace mus {
 class WindowManagerApplication;
 }
-
-namespace test {
-
-class AshTestEnvironment;
-class AshTestViewsDelegate;
-class TestScreenshotDelegate;
-class TestShellDelegate;
-class TestSessionControllerClient;
-class TestSessionStateDelegate;
 
 // A helper class that does common initialization required for Ash. Creates a
 // root window and an ash::Shell instance with a test delegate.
@@ -85,8 +82,6 @@ class AshTestHelper {
 
   void RunAllPendingInMessageLoop();
 
-  static TestSessionStateDelegate* GetTestSessionStateDelegate();
-
   TestShellDelegate* test_shell_delegate() { return test_shell_delegate_; }
   void set_test_shell_delegate(TestShellDelegate* test_shell_delegate) {
     test_shell_delegate_ = test_shell_delegate;
@@ -99,9 +94,6 @@ class AshTestHelper {
   }
 
   AshTestEnvironment* ash_test_environment() { return ash_test_environment_; }
-
-  // Version of DisplayManagerTestApi::UpdateDisplay() for mash.
-  void UpdateDisplayForMash(const std::string& display_spec);
 
   display::Display GetSecondaryDisplay();
 
@@ -140,13 +132,6 @@ class AshTestHelper {
       const std::string& display_spec,
       int* next_x);
 
-  // Updates an existing display based on |display_spec|.
-  void UpdateDisplay(RootWindowController* root_window_controller,
-                     const std::string& display_spec,
-                     int* next_x);
-
-  std::vector<RootWindowController*> GetRootsOrderedByDisplayId();
-
   static Config config_;
 
   AshTestEnvironment* ash_test_environment_;  // Not owned.
@@ -179,7 +164,6 @@ class AshTestHelper {
   DISALLOW_COPY_AND_ASSIGN(AshTestHelper);
 };
 
-}  // namespace test
 }  // namespace ash
 
 #endif  // ASH_TEST_ASH_TEST_HELPER_H_

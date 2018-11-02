@@ -14,6 +14,7 @@
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/harmony/chrome_typography.h"
 #include "chrome/grit/generated_resources.h"
+#include "components/password_manager/core/common/password_manager_ui.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/resources/grit/ui_resources.h"
@@ -22,6 +23,7 @@
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/link.h"
 #include "ui/views/controls/link_listener.h"
+#include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/grid_layout.h"
 
@@ -70,29 +72,6 @@ void BuildColumnSetIfNeeded(views::GridLayout* layout, int column_set_id) {
   }
 }
 
-std::unique_ptr<views::Label> GenerateUsernameLabel(
-    const autofill::PasswordForm& form) {
-  auto label = base::MakeUnique<views::Label>(GetDisplayUsername(form),
-                                              CONTEXT_DEPRECATED_SMALL);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  return label;
-}
-
-std::unique_ptr<views::Label> GeneratePasswordLabel(
-    const autofill::PasswordForm& form) {
-  base::string16 text =
-      form.federation_origin.unique()
-          ? form.password_value
-          : l10n_util::GetStringFUTF16(
-                IDS_PASSWORDS_VIA_FEDERATION,
-                base::UTF8ToUTF16(form.federation_origin.host()));
-  auto label = base::MakeUnique<views::Label>(text, CONTEXT_DEPRECATED_SMALL);
-  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  if (form.federation_origin.unique())
-    label->SetObscured(true);
-  return label;
-}
-
 std::unique_ptr<views::ImageButton> GenerateDeleteButton(
     views::ButtonListener* listener) {
   ui::ResourceBundle* rb = &ui::ResourceBundle::GetSharedInstance();
@@ -129,6 +108,36 @@ std::unique_ptr<views::Link> GenerateUndoLink(views::LinkListener* listener) {
 }
 
 }  // namespace
+
+std::unique_ptr<views::Label> GenerateUsernameLabel(
+    const autofill::PasswordForm& form) {
+  auto label = base::MakeUnique<views::Label>(GetDisplayUsername(form),
+                                              CONTEXT_DEPRECATED_SMALL);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  return label;
+}
+
+std::unique_ptr<views::Textfield> GenerateUsernameEditable(
+    const autofill::PasswordForm& form) {
+  auto editable = base::MakeUnique<views::Textfield>();
+  editable->SetText(form.username_value);
+  return editable;
+}
+
+std::unique_ptr<views::Label> GeneratePasswordLabel(
+    const autofill::PasswordForm& form) {
+  base::string16 text =
+      form.federation_origin.unique()
+          ? form.password_value
+          : l10n_util::GetStringFUTF16(
+                IDS_PASSWORDS_VIA_FEDERATION,
+                base::UTF8ToUTF16(form.federation_origin.host()));
+  auto label = base::MakeUnique<views::Label>(text, CONTEXT_DEPRECATED_SMALL);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  if (form.federation_origin.unique())
+    label->SetObscured(true);
+  return label;
+}
 
 // Manage credentials: stores credentials state and adds proper row to layout
 // based on credential state.
@@ -208,24 +217,17 @@ int ManagePasswordItemsView::PasswordFormRow::GetFixedHeight(
 void ManagePasswordItemsView::PasswordFormRow::AddCredentialsRow(
     views::GridLayout* layout) {
   ResetControls();
-  int column_set_id =
-      host_->model_->state() == password_manager::ui::MANAGE_STATE
-          ? THREE_COLUMN_SET
-          : TWO_COLUMN_SET;
-  BuildColumnSetIfNeeded(layout, column_set_id);
-  layout->StartRow(0, column_set_id);
+  BuildColumnSetIfNeeded(layout, THREE_COLUMN_SET);
+  layout->StartRow(0, THREE_COLUMN_SET);
   layout->AddView(GenerateUsernameLabel(*password_form_).release(), 1, 1,
                   views::GridLayout::FILL, views::GridLayout::FILL,
                   0, fixed_height_);
   layout->AddView(GeneratePasswordLabel(*password_form_).release(), 1, 1,
                   views::GridLayout::FILL, views::GridLayout::FILL,
                   0, fixed_height_);
-  if (column_set_id == THREE_COLUMN_SET) {
-    delete_button_ = GenerateDeleteButton(this).release();
-    layout->AddView(delete_button_, 1, 1,
-                    views::GridLayout::TRAILING, views::GridLayout::FILL,
-                    0, fixed_height_);
-  }
+  delete_button_ = GenerateDeleteButton(this).release();
+  layout->AddView(delete_button_, 1, 1, views::GridLayout::TRAILING,
+                  views::GridLayout::FILL, 0, fixed_height_);
 }
 
 void ManagePasswordItemsView::PasswordFormRow::AddUndoRow(
@@ -268,20 +270,12 @@ ManagePasswordItemsView::ManagePasswordItemsView(
     ManagePasswordsBubbleModel* manage_passwords_bubble_model,
     const std::vector<autofill::PasswordForm>* password_forms)
     : model_(manage_passwords_bubble_model) {
+  DCHECK_EQ(password_manager::ui::MANAGE_STATE, model_->state());
   int fixed_height = PasswordFormRow::GetFixedHeight(model_->state());
   for (const auto& password_form : *password_forms) {
     password_forms_rows_.push_back(base::MakeUnique<PasswordFormRow>(
         this, &password_form, fixed_height));
   }
-  AddRows();
-}
-
-ManagePasswordItemsView::ManagePasswordItemsView(
-    ManagePasswordsBubbleModel* manage_passwords_bubble_model,
-    const autofill::PasswordForm* password_form)
-    : model_(manage_passwords_bubble_model) {
-  password_forms_rows_.push_back(
-      base::MakeUnique<PasswordFormRow>(this, password_form, 0));
   AddRows();
 }
 
@@ -312,7 +306,6 @@ void ManagePasswordItemsView::NotifyPasswordFormStatusChanged(
 }
 
 void ManagePasswordItemsView::Refresh() {
-  DCHECK_NE(password_manager::ui::PENDING_PASSWORD_STATE, model_->state());
   RemoveAllChildViews(true);
   AddRows();
 }

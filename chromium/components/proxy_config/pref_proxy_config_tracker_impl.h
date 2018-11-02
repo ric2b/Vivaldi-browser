@@ -24,10 +24,6 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
-namespace user_prefs {
-class PrefRegistrySyncable;
-}
-
 // A net::ProxyConfigService implementation that applies preference proxy
 // settings (pushed from PrefProxyConfigTrackerImpl) as overrides to the proxy
 // configuration determined by a baseline delegate ProxyConfigService on
@@ -36,10 +32,9 @@ class PrefRegistrySyncable;
 class ProxyConfigServiceImpl : public net::ProxyConfigService,
                                public net::ProxyConfigService::Observer {
  public:
-  // Takes ownership of the passed |base_service|.
-  // GetLatestProxyConfig returns ConfigAvailability::CONFIG_PENDING until
-  // UpdateProxyConfig has been called.
-  explicit ProxyConfigServiceImpl(net::ProxyConfigService* base_service);
+  ProxyConfigServiceImpl(std::unique_ptr<net::ProxyConfigService> base_service,
+                         ProxyPrefs::ConfigState initial_config_state,
+                         const net::ProxyConfig& initial_config);
   ~ProxyConfigServiceImpl() override;
 
   // ProxyConfigService implementation:
@@ -70,10 +65,6 @@ class ProxyConfigServiceImpl : public net::ProxyConfigService,
 
   // Configuration as defined by prefs.
   net::ProxyConfig pref_config_;
-
-  // Flag that indicates that a PrefProxyConfigTracker needs to inform us
-  // about a proxy configuration before we may return any configuration.
-  bool pref_config_read_pending_;
 
   // Indicates whether the base service registration is done.
   bool registered_observer_;
@@ -131,7 +122,7 @@ class PROXY_CONFIG_EXPORT PrefProxyConfigTrackerImpl
   // Registers the proxy preferences. These are actually registered
   // the same way in local state and in user prefs.
   static void RegisterPrefs(PrefRegistrySimple* registry);
-  static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
+  static void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
   // Creates a proxy configuration from proxy-related preferences of
   // |pref_service|. Configuration is stored in |config|, return value indicates
@@ -148,26 +139,33 @@ class PROXY_CONFIG_EXPORT PrefProxyConfigTrackerImpl
 
   // Called when there's a change in prefs proxy config.
   // Subclasses can extend it for changes in other sources of proxy config.
+  // Checks new config against old config, and if there was no change, does
+  // nothing.
   virtual void OnProxyConfigChanged(ProxyPrefs::ConfigState config_state,
                                     const net::ProxyConfig& config);
 
   void OnProxyPrefChanged();
 
   const PrefService* prefs() const { return pref_service_; }
-  bool update_pending() const { return update_pending_; }
 
  private:
   // Tracks configuration state. |pref_config_| is valid only if |config_state_|
   // is not CONFIG_UNSET.
-  ProxyPrefs::ConfigState config_state_;
+  ProxyPrefs::ConfigState pref_config_state_;
 
   // Configuration as defined by prefs.
   net::ProxyConfig pref_config_;
 
   PrefService* pref_service_;
   ProxyConfigServiceImpl* proxy_config_service_impl_;  // Weak ptr.
-  bool update_pending_;  // True if config has not been pushed to network stack.
   PrefChangeRegistrar proxy_prefs_;
+
+  // State of |active_config_|.  |active_config_| is only valid if
+  // |active_config_state_| is not ProxyPrefs::CONFIG_UNSET.
+  ProxyPrefs::ConfigState active_config_state_;
+
+  // Active proxy configuration, last received from OnProxyConfigChanged.
+  net::ProxyConfig active_config_;
 
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 

@@ -8,7 +8,6 @@
 
 #include <memory>
 
-#include "ash/wm/screen_dimmer.h"
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -59,9 +58,10 @@
 #include "chrome/browser/ui/webui/chromeos/login/update_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_board_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/user_image_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/voice_interaction_value_prop_screen_handler.h"
+#include "chrome/browser/ui/webui/chromeos/login/wait_for_container_ready_screen_handler.h"
 #include "chrome/browser/ui/webui/chromeos/login/wrong_hwid_screen_handler.h"
-#include "chrome/browser/ui/webui/chromeos/network_element_localized_strings_provider.h"
-#include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
+#include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "chrome/browser/ui/webui/test_files_request_filter.h"
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/chrome_constants.h"
@@ -93,14 +93,6 @@ const char* kKnownDisplayTypes[] = {OobeUI::kOobeDisplay,
                                     OobeUI::kUserAddingDisplay,
                                     OobeUI::kAppLaunchSplashDisplay,
                                     OobeUI::kArcKioskSplashDisplay};
-
-OobeScreen kDimOverlayScreenIds[] = {
-  OobeScreen::SCREEN_CONFIRM_PASSWORD,
-  OobeScreen::SCREEN_GAIA_SIGNIN,
-  OobeScreen::SCREEN_OOBE_ENROLLMENT,
-  OobeScreen::SCREEN_PASSWORD_CHANGED,
-  OobeScreen::SCREEN_USER_IMAGE_PICKER
-};
 
 const char kStringsJSPath[] = "strings.js";
 const char kLockJSPath[] = "lock.js";
@@ -142,20 +134,20 @@ content::WebUIDataSource* CreateOobeUIDataSource(
                             IDR_CUSTOM_ELEMENTS_OOBE_HTML);
     source->AddResourcePath(kCustomElementsJSPath, IDR_CUSTOM_ELEMENTS_OOBE_JS);
   } else if (display_type == OobeUI::kLockDisplay) {
-    if (command_line->HasSwitch(chromeos::switches::kShowNonViewMdLogin)) {
-      source->SetDefaultResource(IDR_MD_LOCK_HTML);
-      source->AddResourcePath(kLockJSPath, IDR_MD_LOCK_JS);
-      source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
-                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
-      source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
-                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
-    } else {
+    if (command_line->HasSwitch(chromeos::switches::kShowNonMdLogin)) {
       source->SetDefaultResource(IDR_LOCK_HTML);
       source->AddResourcePath(kLockJSPath, IDR_LOCK_JS);
       source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
                               IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
       source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
                               IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
+    } else {
+      source->SetDefaultResource(IDR_MD_LOCK_HTML);
+      source->AddResourcePath(kLockJSPath, IDR_MD_LOCK_JS);
+      source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
+                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
+      source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
+                              IDR_MD_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
     }
     source->AddResourcePath(kCustomElementsHTMLPath,
                             IDR_CUSTOM_ELEMENTS_LOCK_HTML);
@@ -163,18 +155,21 @@ content::WebUIDataSource* CreateOobeUIDataSource(
     source->AddResourcePath(kCustomElementsUserPodHTMLPath,
                             IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   } else {
-    if (command_line->HasSwitch(chromeos::switches::kShowMdLogin) ||
-        command_line->HasSwitch(chromeos::switches::kShowNonViewMdLogin)) {
-      source->SetDefaultResource(IDR_MD_LOGIN_HTML);
-      source->AddResourcePath(kLoginJSPath, IDR_MD_LOGIN_JS);
-    } else {
+    if (command_line->HasSwitch(chromeos::switches::kShowNonMdLogin)) {
       source->SetDefaultResource(IDR_LOGIN_HTML);
       source->AddResourcePath(kLoginJSPath, IDR_LOGIN_JS);
+    } else {
+      source->SetDefaultResource(IDR_MD_LOGIN_HTML);
+      source->AddResourcePath(kLoginJSPath, IDR_MD_LOGIN_JS);
     }
     source->AddResourcePath(kCustomElementsHTMLPath,
                             IDR_CUSTOM_ELEMENTS_LOGIN_HTML);
     source->AddResourcePath(kCustomElementsJSPath,
                             IDR_CUSTOM_ELEMENTS_LOGIN_JS);
+    source->AddResourcePath(kCustomElementsPinKeyboardHTMLPath,
+                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_HTML);
+    source->AddResourcePath(kCustomElementsPinKeyboardJSPath,
+                            IDR_CUSTOM_ELEMENTS_PIN_KEYBOARD_JS);
     source->AddResourcePath(kCustomElementsUserPodHTMLPath,
                             IDR_CUSTOM_ELEMENTS_USER_POD_HTML);
   }
@@ -326,6 +321,10 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 
   AddScreenHandler(base::MakeUnique<EncryptionMigrationScreenHandler>());
 
+  AddScreenHandler(base::MakeUnique<VoiceInteractionValuePropScreenHandler>());
+
+  AddScreenHandler(base::MakeUnique<WaitForContainerReadyScreenHandler>());
+
   // Initialize KioskAppMenuHandler. Note that it is NOT a screen handler.
   auto kiosk_app_menu_handler =
       base::MakeUnique<KioskAppMenuHandler>(network_state_informer_);
@@ -349,11 +348,9 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
   content::WebUIDataSource* html_source =
       CreateOobeUIDataSource(localized_strings, display_type_);
   content::WebUIDataSource::Add(profile, html_source);
-  network_element::AddLocalizedStrings(html_source);
 
   // Set up the chrome://userimage/ source.
-  options::UserImageSource* user_image_source =
-      new options::UserImageSource();
+  UserImageSource* user_image_source = new UserImageSource();
   content::URLDataSource::Add(profile, user_image_source);
 
   // TabHelper is required for OOBE webui to make webview working on it.
@@ -368,11 +365,6 @@ OobeUI::OobeUI(content::WebUI* web_ui, const GURL& url)
 
 OobeUI::~OobeUI() {
   network_dropdown_handler_->RemoveObserver(GetView<ErrorScreenHandler>());
-  if (ash_util::IsRunningInMash()) {
-    // TODO: Ash needs to expose screen dimming api. See
-    // http://crbug.com/646034.
-    NOTIMPLEMENTED();
-  }
 }
 
 CoreOobeView* OobeUI::GetCoreOobeView() {
@@ -447,6 +439,15 @@ EncryptionMigrationScreenView* OobeUI::GetEncryptionMigrationScreenView() {
   return GetView<EncryptionMigrationScreenHandler>();
 }
 
+VoiceInteractionValuePropScreenView*
+OobeUI::GetVoiceInteractionValuePropScreenView() {
+  return GetView<VoiceInteractionValuePropScreenHandler>();
+}
+
+WaitForContainerReadyScreenView* OobeUI::GetWaitForContainerReadyScreenView() {
+  return GetView<WaitForContainerReadyScreenHandler>();
+}
+
 UserImageView* OobeUI::GetUserImageView() {
   return GetView<UserImageScreenHandler>();
 }
@@ -512,6 +513,11 @@ void OobeUI::GetLocalizedStrings(base::DictionaryValue* localized_strings) {
   oobe_ui_md_mode_ =
       g_browser_process->local_state()->GetBoolean(prefs::kOobeMdMode);
   localized_strings->SetString("newOobeUI", oobe_ui_md_mode_ ? "on" : "off");
+  localized_strings->SetString(
+      "errorScreenMDMode", base::CommandLine::ForCurrentProcess()->HasSwitch(
+                               chromeos::switches::kDisableMdErrorScreen)
+                               ? "off"
+                               : "on");
 }
 
 void OobeUI::AddWebUIHandler(std::unique_ptr<BaseWebUIHandler> handler) {
@@ -547,23 +553,6 @@ void OobeUI::InitializeHandlers() {
 
 void OobeUI::CurrentScreenChanged(OobeScreen new_screen) {
   previous_screen_ = current_screen_;
-
-  const bool should_dim =
-      std::find(std::begin(kDimOverlayScreenIds),
-                std::end(kDimOverlayScreenIds),
-                new_screen) != std::end(kDimOverlayScreenIds);
-  if (!ash_util::IsRunningInMash()) {
-    if (!screen_dimmer_) {
-      screen_dimmer_ = base::MakeUnique<ash::ScreenDimmer>(
-          ash::ScreenDimmer::Container::LOCK_SCREEN);
-    }
-    screen_dimmer_->set_at_bottom(true);
-    screen_dimmer_->SetDimming(should_dim);
-  } else {
-    // TODO: Ash needs to expose screen dimming api. See
-    // http://crbug.com/646034.
-    NOTIMPLEMENTED();
-  }
 
   current_screen_ = new_screen;
   for (Observer& observer : observer_list_)

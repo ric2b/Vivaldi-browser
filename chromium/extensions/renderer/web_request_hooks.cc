@@ -7,7 +7,7 @@
 #include "base/values.h"
 #include "content/public/child/v8_value_converter.h"
 #include "extensions/common/extension_api.h"
-#include "extensions/renderer/api_binding_hooks.h"
+#include "extensions/renderer/bindings/api_binding_hooks.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
@@ -59,10 +59,8 @@ bool WebRequestHooks::CreateCustomEvent(
   DCHECK(event_spec);
   const base::ListValue* extra_params = nullptr;
   CHECK(event_spec->GetList("extraParameters", &extra_params));
-  std::unique_ptr<content::V8ValueConverter> converter(
-      content::V8ValueConverter::create());
   v8::Local<v8::Value> extra_parameters_spec =
-      converter->ToV8Value(extra_params, context);
+      content::V8ValueConverter::Create()->ToV8Value(extra_params, context);
 
   v8::Local<v8::Function> get_event = get_event_value.As<v8::Function>();
   v8::Local<v8::Value> args[] = {

@@ -63,23 +63,70 @@ sys.path.insert(0, tool_dir)
 from clang import compile_db
 
 
+def _PruneGitFiles(git_files, paths):
+  """Prunes the list of files from git to include only those that are either in
+  |paths| or start with one item in |paths|.
+
+  Args:
+    git_files: List of all repository files.
+    paths: Prefix filter for the returned paths. May contain multiple entries,
+        and the contents should be absolute paths.
+
+  Returns:
+    Pruned list of files.
+  """
+  pruned_list = []
+  git_index = 0
+  for path in sorted(paths):
+    least = git_index
+    most = len(git_files) - 1
+    while least <= most:
+      middle = (least + most ) / 2
+      if git_files[middle] == path:
+        least = middle
+        break
+      elif git_files[middle] > path:
+        most = middle - 1
+      else:
+        least = middle + 1
+    while git_files[least].startswith(path):
+      pruned_list.append(git_files[least])
+      least += 1
+    git_index = least
+
+  return pruned_list
+
+
 def _GetFilesFromGit(paths=None):
-  """Gets the list of files in the git repository.
+  """Gets the list of files in the git repository if |paths| includes prefix
+  path filters or is empty. All complete filenames in |paths| are also included
+  in the output.
 
   Args:
     paths: Prefix filter for the returned paths. May contain multiple entries.
   """
-  args = []
-  if sys.platform == 'win32':
-    args.append('git.bat')
-  else:
-    args.append('git')
-  args.append('ls-files')
-  if paths:
-    args.extend(paths)
-  command = subprocess.Popen(args, stdout=subprocess.PIPE)
-  output, _ = command.communicate()
-  return [os.path.realpath(p) for p in output.splitlines()]
+  partial_paths = []
+  files = []
+  for p in paths:
+    real_path = os.path.realpath(p)
+    if os.path.isfile(real_path):
+      files.append(real_path)
+    else:
+      partial_paths.append(real_path)
+  if partial_paths or not files:
+    args = []
+    if sys.platform == 'win32':
+      args.append('git.bat')
+    else:
+      args.append('git')
+    args.append('ls-files')
+    command = subprocess.Popen(args, stdout=subprocess.PIPE)
+    output, _ = command.communicate()
+    git_files = [os.path.realpath(p) for p in output.splitlines()]
+    if partial_paths:
+      git_files = _PruneGitFiles(git_files, partial_paths)
+    files.extend(git_files)
+  return files
 
 
 def _GetFilesFromCompileDB(build_directory):
@@ -188,6 +235,13 @@ class _CompilerDispatcher(object):
 
 def main():
   parser = argparse.ArgumentParser()
+  parser.add_argument(
+      '--options-file',
+      help='optional file to read options from')
+  args, argv = parser.parse_known_args()
+  if args.options_file:
+    argv = open(args.options_file).read().split()
+
   parser.add_argument('--tool', required=True, help='clang tool to run')
   parser.add_argument('--all', action='store_true')
   parser.add_argument(
@@ -208,7 +262,7 @@ def main():
   parser.add_argument(
       '--tool-args', nargs='*',
       help='optional arguments passed to the tool')
-  args = parser.parse_args()
+  args = parser.parse_args(argv)
 
   os.environ['PATH'] = '%s%s%s' % (
       os.path.abspath(os.path.join(

@@ -30,7 +30,7 @@
 #include <cstdint>
 #include "core/CoreExport.h"
 #include "core/dom/Element.h"
-#include "core/dom/shadow/InsertionPoint.h"
+#include "core/dom/V0InsertionPoint.h"
 
 namespace blink {
 
@@ -45,16 +45,18 @@ class CORE_EXPORT LayoutTreeBuilderTraversal {
    public:
     ParentDetails() : insertion_point_(nullptr) {}
 
-    const InsertionPoint* GetInsertionPoint() const { return insertion_point_; }
+    const V0InsertionPoint* GetInsertionPoint() const {
+      return insertion_point_;
+    }
 
-    void DidTraverseInsertionPoint(const InsertionPoint*);
+    void DidTraverseInsertionPoint(const V0InsertionPoint*);
 
     bool operator==(const ParentDetails& other) {
       return insertion_point_ == other.insertion_point_;
     }
 
    private:
-    Member<const InsertionPoint> insertion_point_;
+    Member<const V0InsertionPoint> insertion_point_;
   };
 
   static ContainerNode* Parent(const Node&, ParentDetails* = nullptr);
@@ -69,6 +71,8 @@ class CORE_EXPORT LayoutTreeBuilderTraversal {
     int32_t limit = kTraverseAllSiblings;
     return PreviousLayoutSibling(node, limit);
   }
+  static Node* FirstLayoutChild(const Node&);
+
   static Node* PreviousSibling(const Node&);
   static Node* Previous(const Node&, const Node* stay_within);
   static Node* Next(const Node&, const Node* stay_within);

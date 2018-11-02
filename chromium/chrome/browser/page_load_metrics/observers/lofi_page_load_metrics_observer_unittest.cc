@@ -133,23 +133,26 @@ TEST_F(LoFiPageLoadMetricsObserverTest, LoFiNotSeen) {
   // LoFi set.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1, true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
-       0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, true /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 10 /* original_network_content_length */, data->DeepCopy(),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 5 /* original_network_content_length */, std::move(data),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
   };
 
   int network_resources = 0;
@@ -190,23 +193,26 @@ TEST_F(LoFiPageLoadMetricsObserverTest, ClientLoFiSeen) {
   // client LoFi set.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1, true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
-       0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, true /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 10 /* original_network_content_length */, data->DeepCopy(),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 5 /* original_network_content_length */, std::move(data),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
   };
 
   int network_resources = 0;
@@ -248,23 +254,26 @@ TEST_F(LoFiPageLoadMetricsObserverTest, ServerLoFiSeen) {
   // server LoFi set.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1, true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
-       0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, true /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 10 /* original_network_content_length */, data->DeepCopy(),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 5 /* original_network_content_length */, std::move(data),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
   };
 
   int network_resources = 0;
@@ -305,29 +314,32 @@ TEST_F(LoFiPageLoadMetricsObserverTest, BothLoFiSeen) {
   std::unique_ptr<DataReductionProxyData> data2 =
       base::MakeUnique<DataReductionProxyData>();
   data2->set_used_data_reduction_proxy(true);
-  data2->set_lofi_received(true);
+  data2->set_client_lofi_requested(true);
 
   // Prepare 4 resources of varying size and configurations, 1 has Client LoFi,
   // 1 has Server LoFi.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1, true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
-       0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, true /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 10 /* original_network_content_length */, std::move(data1),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1, false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1, false /*was_cached*/,
+       1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 5 /* original_network_content_length */, std::move(data2),
-       content::ResourceType::RESOURCE_TYPE_IMAGE},
+       content::ResourceType::RESOURCE_TYPE_IMAGE, 0},
   };
 
   int network_resources = 0;

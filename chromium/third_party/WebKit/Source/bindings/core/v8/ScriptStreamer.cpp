@@ -420,14 +420,16 @@ void ScriptStreamer::NotifyAppendData(ScriptResource* resource) {
       // understanding of the data encoding.
       constexpr size_t kMaximumLengthOfBOM = 4;
       char maybe_bom[kMaximumLengthOfBOM] = {};
-      if (!resource->ResourceBuffer()->GetPartAsBytes(
-              maybe_bom, static_cast<size_t>(0), kMaximumLengthOfBOM)) {
+      if (!resource->ResourceBuffer()->GetBytes(maybe_bom,
+                                                kMaximumLengthOfBOM)) {
         NOTREACHED();
         return;
       }
 
-      std::unique_ptr<TextResourceDecoder> decoder(TextResourceDecoder::Create(
-          "application/javascript", resource->Encoding()));
+      std::unique_ptr<TextResourceDecoder> decoder(
+          TextResourceDecoder::Create(TextResourceDecoderOptions(
+              TextResourceDecoderOptions::kPlainTextContent,
+              WTF::TextEncoding(resource->Encoding()))));
       decoder->CheckForBOM(maybe_bom, kMaximumLengthOfBOM);
 
       // The encoding may change when we see the BOM. Check for BOM now

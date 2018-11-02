@@ -166,7 +166,9 @@ void ExtensionsGuestViewMessageFilter::MimeHandlerViewGuestCreatedCallback(
   int guest_instance_id = guest_view->guest_instance_id();
   auto* rfh = RenderFrameHost::FromID(embedder_render_process_id,
                                       embedder_render_frame_id);
-  if (!rfh)
+  // NOTE(andre@vivaldi.com) : RenderWidgetHostImpl::Destroy can destroy the
+  // view when the pdf is shown inside a <WebView>
+  if (!rfh || !rfh->GetView())
     return;
 
   guest_view->SetEmbedderFrame(embedder_render_process_id,

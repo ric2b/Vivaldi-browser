@@ -14,7 +14,7 @@
 #include "base/macros.h"
 #include "base/sha1.h"
 #include "gpu/command_buffer/common/gles2_cmd_format.h"
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
+#include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 
 namespace gpu {
@@ -58,7 +58,7 @@ class GPU_EXPORT ProgramCache {
       const LocationMap* bind_attrib_location_map,
       const std::vector<std::string>& transform_feedback_varyings,
       GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& shader_callback) = 0;
+      GLES2DecoderClient* client) = 0;
 
   // Saves the program into the cache.  If successful, the implementation should
   // call LinkedProgramCacheSuccess.
@@ -69,9 +69,10 @@ class GPU_EXPORT ProgramCache {
       const LocationMap* bind_attrib_location_map,
       const std::vector<std::string>& transform_feedback_varyings,
       GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& shader_callback) = 0;
+      GLES2DecoderClient* client) = 0;
 
-  virtual void LoadProgram(const std::string& program) = 0;
+  virtual void LoadProgram(const std::string& key,
+                           const std::string& program) = 0;
 
   // clears the cache
   void Clear();
@@ -82,6 +83,10 @@ class GPU_EXPORT ProgramCache {
        const LocationMap* bind_attrib_location_map,
        const std::vector<std::string>& transform_feedback_varyings,
        GLenum transform_feedback_buffer_mode);
+
+  // Discards excess cache contents to a fixed upper limit.
+  // Returns the number of bytes of memory freed.
+  virtual size_t Trim(size_t limit) = 0;
 
  protected:
   // called by implementing class after a shader was successfully cached

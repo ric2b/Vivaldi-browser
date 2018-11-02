@@ -9,6 +9,7 @@
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
 #import "ios/chrome/browser/ui/autofill/cells/autofill_edit_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_footer_item.h"
+#import "ios/chrome/browser/ui/collection_view/cells/collection_view_switch_item.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller_test.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_selector_edit_item.h"
@@ -20,6 +21,10 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+namespace {
+NSString* const kTestTitle = @"title";
+}  // namespace
 
 @interface TestPaymentRequestEditMediator
     : NSObject<PaymentRequestEditViewControllerDataSource>
@@ -33,12 +38,23 @@
 @synthesize state = _state;
 @synthesize consumer = _consumer;
 
+- (NSString*)title {
+  return kTestTitle;
+}
+
 - (CollectionViewItem*)headerItem {
   return [[CollectionViewTextItem alloc] init];
 }
 
 - (BOOL)shouldHideBackgroundForHeaderItem {
   return NO;
+}
+
+- (void)formatValueForEditorField:(EditorField*)field {
+}
+
+- (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
+  return nil;
 }
 
 - (void)setConsumer:(id<PaymentRequestEditConsumer>)consumer {
@@ -54,6 +70,12 @@
                                           label:@""
                                           value:@""
                                        required:YES],
+    [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardSaveToChrome
+                     fieldType:EditorFieldTypeSwitch
+                         label:@""
+                         value:@"YES"
+                      required:YES],
   ]];
 }
 
@@ -65,7 +87,8 @@ class PaymentRequestEditViewControllerTest
   CollectionViewController* InstantiateController() override {
     PaymentRequestEditViewController* viewController =
         [[PaymentRequestEditViewController alloc]
-            initWithStyle:CollectionViewControllerStyleDefault];
+            initWithLayout:[[MDCCollectionViewFlowLayout alloc] init]
+                     style:CollectionViewControllerStyleDefault];
     mediator_ = [[TestPaymentRequestEditMediator alloc] init];
     [mediator_ setConsumer:viewController];
     [viewController setDataSource:mediator_];
@@ -86,11 +109,12 @@ TEST_F(PaymentRequestEditViewControllerTest, TestModel) {
   CheckController();
 
   [GetPaymentRequestEditViewController() loadModel];
+  CheckTitle(kTestTitle);
 
   // There is one section containing the header item, In addition to that, there
-  // is one section for every form field (there are two fields in total) and one
-  // for the footer.
-  ASSERT_EQ(4, NumberOfSections());
+  // is one section for every form field (there are three fields in total) and
+  // one for the footer.
+  ASSERT_EQ(5, NumberOfSections());
 
   // The header section is the first section and has one item of the type
   // CollectionViewTextItem.
@@ -108,9 +132,14 @@ TEST_F(PaymentRequestEditViewControllerTest, TestModel) {
   item = GetCollectionViewItem(2, 0);
   EXPECT_TRUE([item isMemberOfClass:[PaymentsSelectorEditItem class]]);
 
+  // The next section has one item of the type CollectionViewSwitchItem.
+  ASSERT_EQ(1U, static_cast<unsigned int>(NumberOfItemsInSection(3)));
+  item = GetCollectionViewItem(3, 0);
+  EXPECT_TRUE([item isMemberOfClass:[CollectionViewSwitchItem class]]);
+
   // The footer section contains one item which is of the type
   // CollectionViewFooterItem.
   ASSERT_EQ(1U, static_cast<unsigned int>(NumberOfItemsInSection(3)));
-  item = GetCollectionViewItem(3, 0);
+  item = GetCollectionViewItem(4, 0);
   EXPECT_TRUE([item isMemberOfClass:[CollectionViewFooterItem class]]);
 }

@@ -153,8 +153,7 @@ to see a full list of options. A few of the most useful options are below:
 | `--nocheck-sys-deps`        | Don't check system dependencies; this allows faster iteration. |
 | `--verbose`                 |	Produce more verbose output, including a list of tests that pass. |
 | `--no-pixel-tests`          | Disable the pixel-to-pixel PNG comparisons and image checksums for tests that don't call `testRunner.dumpAsText()` |
-| `--reset-results`           |	Write all generated results directly into the given directory, overwriting what's there. |
-| `--new-baseline`            |	Write all generated results into the most specific platform directory, overwriting what's there. Equivalent to `--reset-results --add-platform-expectations` |
+| `--reset-results`           |	Overwrite the current baselines (`-expected.{png|txt|wav}` files) with actual results, or create new baselines if there are no existing baselines. |
 | `--renderer-startup-dialog` | Bring up a modal dialog before running the test, useful for attaching a debugger. |
 | `--fully-parallel`          | Run tests in parallel using as many child processes as the system has cores. |
 | `--driver-logging`          | Print C++ logs (LOG(WARNING), etc).  |
@@ -427,40 +426,105 @@ machine?
 * In the loaded devtools, set any required breakpoints and execute `test()` in
   the console to actually start the test.
 
+## Bisecting Regressions
+
+You can use [`git bisect`](https://git-scm.com/docs/git-bisect) to find which
+commit broke (or fixed!) a layout test in a fully automated way.  Unlike
+[bisect-builds.py](http://dev.chromium.org/developers/bisect-builds-py), which
+downloads pre-built Chromium binaries, `git bisect` operates on your local
+checkout, so it can run tests with `content_shell`.
+
+Bisecting can take several hours, but since it is fully automated you can leave
+it running overnight and view the results the next day.
+
+To set up an automated bisect of a layout test regression, create a script like
+this:
+
+```
+#!/bin/bash
+
+# Exit code 125 tells git bisect to skip the revision.
+gclient sync || exit 125
+ninja -C out/Debug -j100 blink_tests || exit 125
+
+blink/tools/run_layout_tests.sh -t Debug \
+  --no-show-results --no-retry-failures \
+  path/to/layout/test.html
+```
+
+Modify the `out` directory, ninja args, and test name as appropriate, and save
+the script in `~/checkrev.sh`.  Then run:
+
+```
+chmod u+x ~/checkrev.sh  # mark script as executable
+git bisect start <badrev> <goodrev>
+git bisect run ~/checkrev.sh
+git bisect reset  # quit the bisect session
+```
+
 ## Rebaselining Layout Tests
 
 *** promo
 To automatically re-baseline tests across all Chromium platforms, using the
-buildbot results, see the
-[Rebaselining keywords in TestExpectations](./layout_test_expectations.md)
-and the
-[Rebaselining Tool](https://trac.webkit.org/wiki/Rebaseline).
+buildbot results, see [How to rebaseline](./layout_test_expectations.md#How-to-rebaseline).
 Alternatively, to manually run and test and rebaseline it on your workstation,
 read on.
 ***
 
-By default, text-only tests (ones that call `testRunner.dumpAsText()`) produce
-only text results. Other tests produce both new text results and new image
-results (the image baseline comprises two files, `-expected.png` and
-  `-expected.checksum`). So you'll need either one or three `-expected.\*` files
-in your new baseline, depending on whether you have a text-only test or not. If
-you enable `--no-pixel-tests`, only new text results will be produced, even for
-tests that do image comparisons.
+```bash
+cd src/third_party/WebKit
+Tools/Scripts/run-webkit-tests --reset-results foo/bar/test.html
+```
+
+If there are current expectation files for `LayoutTests/foo/bar/test.html`,
+the above command will overwrite the current baselines at their original
+locations with the actual results. The current baseline means the `-expected.*`
+file used to compare the actual result when the test is run locally, i.e. the
+first file found in the [baseline search path]
+(https://cs.chromium.org/search/?q=port/base.py+baseline_search_path).
+
+If there are no current baselines, the above command will create new baselines
+in the platform-independent directory, e.g.
+`LayoutTests/foo/bar/test-expected.{txt,png}`.
+
+When you rebaseline a test, make sure your commit description explains why the
+test is being re-baselined.
+
+### Rebaselining flag-specific expectations
+
+Though we prefer the Rebaseline Tool to local rebaselining, the Rebaseline Tool
+doesn't support rebaselining flag-specific expectations.
 
 ```bash
 cd src/third_party/WebKit
-Tools/Scripts/run-webkit-tests --new-baseline foo/bar/test.html
+Tools/Script/run-webkit-tests --additional-driver-flag=--enable-flag --new-flag-specific-baseline foo/bar/test.html
 ```
 
-The above command will generate a new baseline for
-`LayoutTests/foo/bar/test.html` and put the output files in the right place,
-e.g.
-`LayoutTests/platform/chromium-win/LayoutTests/foo/bar/test-expected.{txt,png,checksum}`.
+New baselines will be created in the flag-specific baselines directory, e.g.
+`LayoutTests/flag-specific/enable-flag/foo/bar/test-expected.{txt,png}`.
 
-When you rebaseline a test, make sure your commit description explains why the
-test is being re-baselined. If this is a special case (i.e., something we've
-decided to be different with upstream), please put a README file next to the new
-expected output explaining the difference.
+Then you can commit the new baselines and upload the patch for review.
+
+However, it's difficult for reviewers to review the patch containing only new
+files. You can follow the steps below for easier review. The steps require a
+try bot already setup for the flag-specific tests (e.g.
+`linux_layout_tests_slimming_paint_v2` for `--enable-slimming-paint-v2`).
+
+1. Before the rebaseline, upload a patch for which the tests to be rebaselined
+   will fail. If the tests are expected to fail in
+   `LayoutTests/FlagExpectations/<flag>`, remove the failure expectation lines
+   in the patch.
+
+2. Schedule a try job on the try bot for the flag.
+
+3. Rebaseline locally, and upload a new version of patch containing the new
+   baselines to the same CL.
+
+4. After the try job finishes, request review of the CL and tell the reviewer
+   the URL of the `layout_test_result` link under the `archive_webkit_tests_results`
+   step of the try job. The reviewer should review the layout test result
+   assuming that the new baselines in the latest version of the CL are the same
+   as the actual results in the linked page.
 
 ## web-platform-tests
 

@@ -3,7 +3,7 @@
 <translationbundle lang="it">
 <translation id="1017280919048282932">&amp;Aggiungi al dizionario</translation>
 <translation id="1018656279737460067">Operazione annullata</translation>
-<translation id="1026822031284433028">Carica immagine</translation>
+<translation id="1026822031284433028">Carica Immagine</translation>
 <translation id="1031362278801463162">Caricamento anteprima in corso</translation>
 <translation id="1047431265488717055">Copia te&amp;sto del link</translation>
 <translation id="1049795001945932310">&amp;Impostazioni lingua</translation>
@@ -114,7 +114,7 @@
 <translation id="2678063897982469759">Riattiva</translation>
 <translation id="2679385451463308372">Stampa utilizzando la finestra di dialogo di sistema…</translation>
 <translation id="2680208403056680091">La tua connessione Internet è controllata</translation>
-<translation id="2721037002783622288">&amp;Cerca <ph name="SEARCH_ENGINE" /> per immagini</translation>
+<translation id="2721037002783622288">&amp;Cerca immagine con <ph name="SEARCH_ENGINE" /></translation>
 <translation id="2726934403674109201">(<ph name="COUNT" /> totali)</translation>
 <translation id="2785873697295365461">Descrittori di file</translation>
 <translation id="2809586584051668049">e altre <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
@@ -180,7 +180,7 @@
 <translation id="3505030558724226696">Revoca accesso ai dispositivi</translation>
 <translation id="3511307672085573050">Copia indi&amp;rizzo link</translation>
 <translation id="357886715122934472">&lt;strong&gt;<ph name="SENDER" />&lt;/strong&gt; vuole condividere una stampante &lt;strong&gt;<ph name="PRINTER_NAME" />&lt;/strong&gt; con un gruppo gestito da te: &lt;strong&gt;<ph name="GROUP_NAME" />&lt;/strong&gt;. Se accetti, tutti i membri del gruppo potranno utilizzare la stampante.</translation>
-<translation id="3587482841069643663">Tutti</translation>
+<translation id="3587482841069643663">Tutte</translation>
 <translation id="3618849550573277856">Controlla “<ph name="LOOKUP_STRING" />”</translation>
 <translation id="3627588569887975815">Apri link in finestra di navigazione in inco&amp;gnito</translation>
 <translation id="3640006360782160348">Annulla impostazione stampante</translation>
@@ -207,7 +207,7 @@
 <translation id="3927932062596804919">Non consentire</translation>
 <translation id="3936390757709632190">&amp;Apri audio in nuova scheda</translation>
 <translation id="3943582379552582368">&amp;Indietro</translation>
-<translation id="3948116654032448504">&amp;Cerca <ph name="SEARCH_ENGINE" /> per immagini</translation>
+<translation id="3948116654032448504">&amp;Cerca immagine con <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(Interrotto)</translation>
 <translation id="3979395879372752341">Nuova estensione aggiunta (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">-</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">Memoria SQLite</translation>
 <translation id="6655190889273724601">Modalità sviluppatore</translation>
 <translation id="6691936601825168937">&amp;Avanti</translation>
-<translation id="6700480081846086223">Trasmetti <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Campo di applicazione</translation>
 <translation id="6786747875388722282">Estensioni</translation>
 <translation id="6787839852456839824">Scorciatoie da tastiera</translation>

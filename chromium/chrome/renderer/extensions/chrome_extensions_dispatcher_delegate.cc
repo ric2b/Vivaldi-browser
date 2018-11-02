@@ -34,7 +34,7 @@
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/switches.h"
-#include "extensions/renderer/api_bindings_system.h"
+#include "extensions/renderer/bindings/api_bindings_system.h"
 #include "extensions/renderer/css_native_handler.h"
 #include "extensions/renderer/dispatcher.h"
 #include "extensions/renderer/i18n_custom_bindings.h"
@@ -179,13 +179,11 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
   source_map->RegisterSource("downloads", IDR_DOWNLOADS_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("feedbackPrivate",
                              IDR_FEEDBACK_PRIVATE_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("fileSystem", IDR_FILE_SYSTEM_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("gcm", IDR_GCM_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("identity", IDR_IDENTITY_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("imageWriterPrivate",
                              IDR_IMAGE_WRITER_PRIVATE_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("input.ime", IDR_INPUT_IME_CUSTOM_BINDINGS_JS);
-  source_map->RegisterSource("logPrivate", IDR_LOG_PRIVATE_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("mediaGalleries",
                              IDR_MEDIA_GALLERIES_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("notifications",
@@ -253,11 +251,6 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
       IDR_WEBRTC_DESKTOP_CAPTURE_PRIVATE_CUSTOM_BINDINGS_JS);
   source_map->RegisterSource("webstore", IDR_WEBSTORE_CUSTOM_BINDINGS_JS);
 
-  // Custom types sources.
-  source_map->RegisterSource("ChromeSetting", IDR_CHROME_SETTING_JS);
-  source_map->RegisterSource("ContentSetting", IDR_CONTENT_SETTING_JS);
-  source_map->RegisterSource("ChromeDirectSetting",
-                             IDR_CHROME_DIRECT_SETTING_JS);
 
   // Platform app sources that are not API-specific..
   source_map->RegisterSource("chromeWebViewInternal",
@@ -281,10 +274,22 @@ void ChromeExtensionsDispatcherDelegate::PopulateSourceMap(
                              IDR_MOJO_IP_ADDRESS_MOJOM_JS);
   source_map->RegisterSource("url/mojo/origin.mojom", IDR_ORIGIN_MOJOM_JS);
   source_map->RegisterSource("url/mojo/url.mojom", IDR_MOJO_URL_MOJOM_JS);
+  source_map->RegisterSource("media/mojo/interfaces/remoting_common.mojom",
+                             IDR_REMOTING_COMMON_JS);
+  source_map->RegisterSource(
+      "media/mojo/interfaces/mirror_service_remoting.mojom",
+      IDR_MEDIA_REMOTING_JS);
 
   // These bindings are unnecessary with native bindings enabled.
-  if (!extensions::FeatureSwitch::native_crx_bindings()->IsEnabled())
+  if (!extensions::FeatureSwitch::native_crx_bindings()->IsEnabled()) {
     source_map->RegisterSource("app", IDR_APP_CUSTOM_BINDINGS_JS);
+
+    // Custom types sources.
+    source_map->RegisterSource("ChromeSetting", IDR_CHROME_SETTING_JS);
+    source_map->RegisterSource("ContentSetting", IDR_CONTENT_SETTING_JS);
+    source_map->RegisterSource("ChromeDirectSetting",
+                               IDR_CHROME_DIRECT_SETTING_JS);
+  }
 }
 
 void ChromeExtensionsDispatcherDelegate::RequireAdditionalModules(

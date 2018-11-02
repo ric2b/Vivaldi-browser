@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/values.h"
 #include "components/prefs/pref_notifier_impl.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -35,13 +36,15 @@ class PersistentPrefStoreClientTest : public testing::Test,
 
   // testing::Test:
   void SetUp() override {
+    mojom::PersistentPrefStorePtr store_proxy;
+    binding_.Bind(mojo::MakeRequest(&store_proxy));
     auto persistent_pref_store_client = make_scoped_refptr(
         new PersistentPrefStoreClient(mojom::PersistentPrefStoreConnection::New(
             mojom::PrefStoreConnection::New(
                 mojom::PrefStoreObserverRequest(),
                 base::MakeUnique<base::DictionaryValue>(), true),
-            binding_.CreateInterfacePtrAndBind(),
-            ::PersistentPrefStore::PREF_READ_ERROR_NONE, false)));
+            std::move(store_proxy), ::PersistentPrefStore::PREF_READ_ERROR_NONE,
+            false)));
     auto pref_registry = make_scoped_refptr(new PrefRegistrySimple());
     pref_registry->RegisterDictionaryPref(kDictionaryKey);
     pref_registry->RegisterDictionaryPref(kUninitializedDictionaryKey);
@@ -52,11 +55,6 @@ class PersistentPrefStoreClientTest : public testing::Test,
                            nullptr, pref_notifier),
         persistent_pref_store_client.get(), pref_registry.get(),
         base::Bind(&DoNothingWithReadError), false);
-    // The first update to a pref will write the entire dictionary as it would
-    // previously be missing. Do this here to avoid individual tests needing to
-    // deal with those updates.
-    ScopedDictionaryPrefUpdate(pref_service(), kDictionaryKey).Get();
-    auto update = WaitForUpdate();
   }
 
   void TearDown() override {
@@ -79,6 +77,7 @@ class PersistentPrefStoreClientTest : public testing::Test,
   }
 
   void ExpectNoUpdate() {
+    pref_service()->CommitPendingWrite();
     binding_.FlushForTesting();
     EXPECT_TRUE(last_updates_.empty());
   }
@@ -90,7 +89,14 @@ class PersistentPrefStoreClientTest : public testing::Test,
       std::move(on_update_).Run();
   }
 
-  void CommitPendingWrite() override {}
+  void RequestValue(const std::string& key,
+                    const std::vector<std::string>& path) override {}
+
+  void CommitPendingWrite(CommitPendingWriteCallback callback) override {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                     std::move(callback));
+  }
+
   void SchedulePendingLossyWrites() override {}
   void ClearMutableValues() override {}
 
@@ -483,19 +489,6 @@ TEST_F(PersistentPrefStoreClientTest, SubPrefUpdates_ReplaceDictionary) {
   ASSERT_EQ(1u, split_updates.size());
   EXPECT_EQ(base::Value(2), *split_updates[0]->value);
   EXPECT_EQ((std::vector<std::string>{"path"}), split_updates[0]->path);
-}
-
-TEST_F(PersistentPrefStoreClientTest, SubPrefUpdates_Uninitialized) {
-  {
-    ScopedDictionaryPrefUpdate update(pref_service(),
-                                      kUninitializedDictionaryKey);
-    update->SetInteger("path.to.integer", 1);
-  }
-  auto update = WaitForUpdate();
-  ASSERT_TRUE(update->is_atomic_update());
-  base::DictionaryValue expected_value;
-  expected_value.SetInteger("path.to.integer", 1);
-  EXPECT_EQ(expected_value, *update->get_atomic_update());
 }
 
 }  // namespace

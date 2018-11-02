@@ -27,6 +27,7 @@
 #include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
@@ -36,9 +37,9 @@
 #include "sql/error_delegate_util.h"
 
 #include "calendar/calendar_constants.h"
+#include "calendar/calendar_database.h"
 #include "calendar/calendar_database_params.h"
-#include "calendar/calendar_types.h"
-#include "calendar_database.h"
+#include "calendar/event_type.h"
 
 using base::Time;
 using base::TimeDelta;
@@ -56,9 +57,35 @@ CalendarBackend::CalendarBackend(CalendarDelegate* delegate) {}
 
 CalendarBackend::~CalendarBackend() {}
 
-void CalendarBackend::NotifyEventCreated() {}
-void CalendarBackend::NotifyEventModified() {}
-void CalendarBackend::NotifyEventDeleted() {}
+void CalendarBackend::NotifyEventCreated(const EventRow& row) {
+  if (delegate_)
+    delegate_->NotifyEventCreated(row);
+}
+
+void CalendarBackend::NotifyEventModified(const EventRow& row) {
+  if (delegate_)
+    delegate_->NotifyEventModified(row);
+}
+
+void CalendarBackend::NotifyEventDeleted(const EventRow& row) {
+  if (delegate_)
+    delegate_->NotifyEventDeleted(row);
+}
+
+void CalendarBackend::NotifyCalendarCreated(const CalendarRow& row) {
+  if (delegate_)
+    delegate_->NotifyCalendarCreated(row);
+}
+
+void CalendarBackend::NotifyCalendarModified(const CalendarRow& row) {
+  if (delegate_)
+    delegate_->NotifyCalendarModified(row);
+}
+
+void CalendarBackend::NotifyCalendarDeleted(const CalendarRow& row) {
+  if (delegate_)
+    delegate_->NotifyCalendarDeleted(row);
+}
 
 void CalendarBackend::Init(
     bool force_fail,
@@ -116,34 +143,40 @@ void CalendarBackend::InitImpl(
   }
 }
 
-// Observers -------------------------------------------------------------------
-void CalendarBackend::AddObserver(CalendarBackendObserver* observer) {
-  observers_.AddObserver(observer);
-}
-
-void CalendarBackend::RemoveObserver(CalendarBackendObserver* observer) {
-  observers_.RemoveObserver(observer);
-}
-
-void CalendarBackend::CreateCalendarEvent(EventRow ev) {
-  db_->CreateCalendarEvent(ev);
-}
-
 void CalendarBackend::GetAllEvents(std::shared_ptr<EventQueryResults> results) {
   EventRows rows;
   db_->GetAllCalendarEvents(&rows);
   // Now add them and the URL rows to the results.
-  calendar::EventResult ev;
   for (size_t i = 0; i < rows.size(); i++) {
     const EventRow eventRow = rows[i];
-    ev.set_id(eventRow.id());
-    ev.set_calendar_id(eventRow.calendar_id());
-    ev.set_title(eventRow.title());
-    ev.set_description(eventRow.description());
-    ev.set_start(eventRow.start());
-    ev.set_end(eventRow.end());
+    EventResult result(eventRow);
+    results->AppendEventBySwapping(&result);
+  }
+}
 
-    results->AppendEventBySwapping(&ev);
+void CalendarBackend::CreateCalendarEvent(
+    EventRow ev,
+    std::shared_ptr<CreateEventResult> result) {
+  EventID id = db_->CreateCalendarEvent(ev);
+
+  if (id) {
+    ev.set_id(id);
+    result->success = true;
+    result->createdRow = ev;
+    NotifyEventCreated(ev);
+  } else {
+    result->success = false;
+  }
+}
+
+void CalendarBackend::GetAllCalendars(
+    std::shared_ptr<CalendarQueryResults> results) {
+  CalendarRows rows;
+  db_->GetAllCalendars(&rows);
+  for (size_t i = 0; i < rows.size(); i++) {
+    const CalendarRow calendarRow = rows[i];
+    CalendarResult result(calendarRow);
+    results->AppendCalendarBySwapping(&result);
   }
 }
 
@@ -176,11 +209,133 @@ void CalendarBackend::UpdateEvent(EventID event_id,
     if (event.updateFields & calendar::END) {
       event_row.set_end(event.end);
     }
+
+    if (event.updateFields & calendar::ALLDAY) {
+      event_row.set_all_day(event.all_day);
+    }
+
+    if (event.updateFields & calendar::ISRECURRING) {
+      event_row.set_is_recurring(event.is_recurring);
+    }
+
+    if (event.updateFields & calendar::LOCATION) {
+      event_row.set_location(event.location);
+    }
+
+    if (event.updateFields & calendar::URL) {
+      event_row.set_url(event.url);
+    }
+
     result->success = db_->UpdateEventRow(event_row);
+
+    if (result->success) {
+      EventRow changed_row;
+      if (db_->GetRowForEvent(event_id, &changed_row)) {
+        NotifyEventModified(changed_row);
+      }
+    }
   } else {
     result->success = false;
     NOTREACHED() << "Could not find event row in DB";
     return;
+  }
+}
+
+void CalendarBackend::DeleteEvent(EventID event_id,
+                                  std::shared_ptr<DeleteEventResult> result) {
+  if (!db_) {
+    result->success = false;
+    return;
+  }
+
+  EventRow event_row;
+  if (db_->GetRowForEvent(event_id, &event_row)) {
+    result->success = db_->DeleteEvent(event_id);
+    NotifyEventDeleted(event_row);
+  } else {
+    result->success = false;
+  }
+}
+
+void CalendarBackend::CreateCalendar(
+    CalendarRow calendar,
+    std::shared_ptr<CreateCalendarResult> result) {
+  CalendarID id = db_->CreateCalendar(calendar);
+
+  if (id) {
+    calendar.set_id(base::Int64ToString(id));
+    result->success = true;
+    result->createdRow = calendar;
+    NotifyCalendarCreated(calendar);
+  } else {
+    result->success = false;
+  }
+}
+
+void CalendarBackend::UpdateCalendar(
+    CalendarID calendar_id,
+    const Calendar& calendar,
+    std::shared_ptr<UpdateCalendarResult> result) {
+  if (!db_) {
+    result->success = false;
+    return;
+  }
+
+  CalendarRow calendar_row;
+  if (db_->GetRowForCalendar(calendar_id, &calendar_row)) {
+    if (calendar.updateFields & calendar::CALENDAR_NAME) {
+      calendar_row.set_name(calendar.name);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_DESCRIPTION) {
+      calendar_row.set_description(calendar.description);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_URL) {
+      calendar_row.set_url(calendar.url);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_ORDERINDEX) {
+      calendar_row.set_orderindex(calendar.orderindex);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_COLOR) {
+      calendar_row.set_color(calendar.color);
+    }
+
+    if (calendar.updateFields & calendar::CALENDAR_HIDDEN) {
+      calendar_row.set_hidden(calendar.hidden);
+    }
+
+    result->success = db_->UpdateCalendarRow(calendar_row);
+
+    if (result->success) {
+      CalendarRow changed_row;
+      if (db_->GetRowForCalendar(calendar_id, &changed_row)) {
+        NotifyCalendarModified(changed_row);
+      }
+    }
+  } else {
+    result->success = false;
+    NOTREACHED() << "Could not find calendar row in DB";
+    return;
+  }
+}
+
+void CalendarBackend::DeleteCalendar(
+    CalendarID calendar_id,
+    std::shared_ptr<DeleteCalendarResult> result) {
+  if (!db_) {
+    result->success = false;
+    return;
+  }
+
+  CalendarRow calendar_row;
+  if (db_->GetRowForCalendar(calendar_id, &calendar_row)) {
+    result->success = db_->DeleteCalendar(calendar_id);
+    NotifyCalendarDeleted(calendar_row);
+  } else {
+    result->success = false;
   }
 }
 

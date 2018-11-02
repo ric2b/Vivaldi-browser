@@ -47,7 +47,7 @@ var SiteSettingsBehaviorImpl = {
 
   /** @override */
   ready: function() {
-    this.PermissionValues = settings.PermissionValues;
+    this.ContentSetting = settings.ContentSetting;
   },
 
   /**
@@ -72,8 +72,7 @@ var SiteSettingsBehaviorImpl = {
         urlWithScheme.endsWith(':443')) {
       return url.slice(0, -4);
     }
-    if (urlWithScheme.startsWith('http://') &&
-        urlWithScheme.endsWith(':80')) {
+    if (urlWithScheme.startsWith('http://') && urlWithScheme.endsWith(':80')) {
       return url.slice(0, -3);
     }
     return url;
@@ -96,22 +95,6 @@ var SiteSettingsBehaviorImpl = {
   },
 
   /**
-   * Looks up the human-friendly embedder string to show in the UI.
-   * @param {string} embeddingOrigin The embedding origin to show.
-   * @param {string} category The category requesting it.
-   * @return {string} The string to show.
-   */
-  getEmbedderString: function(embeddingOrigin, category) {
-    if (embeddingOrigin == '') {
-      if (category != settings.ContentSettingsTypes.GEOLOCATION)
-        return '';
-      return loadTimeData.getStringF('embeddedOnHost', '*');
-    }
-    return loadTimeData.getStringF(
-        'embeddedOnHost', this.sanitizePort(embeddingOrigin));
-  },
-
-  /**
    * Returns the icon to use for a given site.
    * @param {string} site The url of the site to fetch the icon for.
    * @return {string} The background-image style with the favicon.
@@ -129,7 +112,7 @@ var SiteSettingsBehaviorImpl = {
    * @private
    */
   computeIsSettingEnabled: function(setting) {
-    return setting != settings.PermissionValues.BLOCK;
+    return setting != settings.ContentSetting.BLOCK;
   },
 
   /**
@@ -161,26 +144,22 @@ var SiteSettingsBehaviorImpl = {
   expandSiteException: function(exception) {
     var origin = exception.origin;
     var embeddingOrigin = exception.embeddingOrigin;
-    var embeddingDisplayName = '';
-    if (origin != embeddingOrigin) {
-      embeddingDisplayName =
-          this.getEmbedderString(embeddingOrigin, this.category);
-    }
 
-    var enforcement = '';
+    var enforcement = /** @type {?chrome.settingsPrivate.Enforcement} */ (null);
     if (exception.source == 'extension' || exception.source == 'HostedApp' ||
         exception.source == 'platform_app' || exception.source == 'policy') {
       enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
     }
 
-    var controlledBy = kControlledByLookup[exception.source] || '';
+    var controlledBy = /** @type {!chrome.settingsPrivate.ControlledBy} */ (
+        kControlledByLookup[exception.source] ||
+        chrome.settingsPrivate.ControlledBy.PRIMARY_USER);
 
     return {
       category: this.category,
       origin: origin,
       displayName: exception.displayName,
       embeddingOrigin: embeddingOrigin,
-      embeddingDisplayName: embeddingDisplayName,
       incognito: exception.incognito,
       setting: exception.setting,
       enforcement: enforcement,

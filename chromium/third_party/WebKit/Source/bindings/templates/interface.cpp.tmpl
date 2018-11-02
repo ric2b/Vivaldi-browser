@@ -111,7 +111,7 @@ static void indexedPropertySetter(uint32_t index, v8::Local<v8::Value> v8Value, 
 
 {##############################################################################}
 {% block indexed_property_setter_callback %}
-{% if indexed_property_setter or named_property_setter %}
+{% if indexed_property_getter or named_property_setter %}
 {% set setter = indexed_property_setter or named_property_setter %}
 void {{v8_class_or_partial}}::indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if setter.is_ce_reactions %}
@@ -126,7 +126,7 @@ void {{v8_class_or_partial}}::indexedPropertySetterCallback(uint32_t index, v8::
   {{cpp_class}}V8Internal::indexedPropertySetter(index, v8Value, info);
   {% endif %}
 
-  {% else %}{# otherwise, named property #}
+  {% elif named_property_setter %}
 
   const AtomicString& propertyName = AtomicString::Number(index);
 
@@ -136,7 +136,60 @@ void {{v8_class_or_partial}}::indexedPropertySetterCallback(uint32_t index, v8::
   {{cpp_class}}V8Internal::namedPropertySetter(propertyName, v8Value, info);
   {% endif %}
 
-  {% endif %}{# indexed_property_setter #}
+  {% else %}{# neither of indexed_property_setter nor named_property_setter #}
+
+  // No indexed property setter defined.  Do not fall back to the default
+  // setter.
+  V8SetReturnValue(info, v8::Null(info.GetIsolate()));
+  if (info.ShouldThrowOnError()) {
+    ExceptionState exceptionState(info.GetIsolate(),
+                                  ExceptionState::kIndexedSetterContext,
+                                  "{{interface_name}}");
+    exceptionState.ThrowTypeError("Index property setter is not supported.");
+  }
+
+  {% endif %}{# indexed/named_property_setter #}
+}
+
+{% endif %}
+{% endblock %}
+
+
+{##############################################################################}
+{% block indexed_property_descriptor %}
+{% if indexed_property_getter %}
+static void indexedPropertyDescriptor(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  // https://heycam.github.io/webidl/#LegacyPlatformObjectGetOwnProperty
+  // Steps 1.1 to 1.2.4 are covered here: we rely on indexedPropertyGetter() to
+  // call the getter function and check that |index| is a valid property index,
+  // in which case it will have set info.GetReturnValue() to something other
+  // than undefined.
+  {{v8_class_or_partial}}::indexedPropertyGetterCallback(index, info);
+  v8::Local<v8::Value> getterValue = info.GetReturnValue().Get();
+  if (!getterValue->IsUndefined()) {
+    // 1.2.5. Let |desc| be a newly created Property Descriptor with no fields.
+    // 1.2.6. Set desc.[[Value]] to the result of converting value to an
+    //        ECMAScript value.
+    // 1.2.7. If O implements an interface with an indexed property setter,
+    //        then set desc.[[Writable]] to true, otherwise set it to false.
+    v8::PropertyDescriptor desc(getterValue, {% if indexed_property_setter %}true{% else %}false{% endif %});
+    // 1.2.8. Set desc.[[Enumerable]] and desc.[[Configurable]] to true.
+    desc.set_enumerable(true);
+    desc.set_configurable(true);
+    // 1.2.9. Return |desc|.
+    V8SetReturnValue(info, desc);
+  }
+}
+
+{% endif %}
+{% endblock %}
+
+
+{##############################################################################}
+{% block indexed_property_descriptor_callback %}
+{% if indexed_property_getter %}
+void {{v8_class_or_partial}}::indexedPropertyDescriptorCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>& info) {
+  {{cpp_class}}V8Internal::indexedPropertyDescriptor(index, info);
 }
 
 {% endif %}
@@ -208,6 +261,53 @@ void {{v8_class_or_partial}}::indexedPropertyDeleterCallback(uint32_t index, con
 }
 
 {% endif %}
+{% endblock %}
+
+
+{##############################################################################}
+{% block indexed_property_definer_callback %}
+{% if indexed_property_getter %}
+void {{v8_class_or_partial}}::indexedPropertyDefinerCallback(
+    uint32_t index,
+    const v8::PropertyDescriptor& desc,
+    const v8::PropertyCallbackInfo<v8::Value>& info) {
+{% if indexed_property_setter %}
+  // https://heycam.github.io/webidl/#legacy-platform-object-defineownproperty
+  // 3.9.3. [[DefineOwnProperty]]
+  // step 1.1. If the result of calling IsDataDescriptor(Desc) is false, then
+  //   return false.
+  if (desc.has_get() || desc.has_set()) {
+    V8SetReturnValue(info, v8::Null(info.GetIsolate()));
+    if (info.ShouldThrowOnError()) {
+      ExceptionState exceptionState(info.GetIsolate(),
+                                    ExceptionState::kIndexedSetterContext,
+                                    "{{interface_name}}");
+      exceptionState.ThrowTypeError("Accessor properties are not allowed.");
+    }
+    return;
+  }
+
+  // Return nothing and fall back to indexedPropertySetterCallback.
+{% else %}{# indexed_property_setter #}
+  // https://heycam.github.io/webidl/#legacy-platform-object-defineownproperty
+  // 3.9.3. [[DefineOwnProperty]]
+  // step 1.2. If O does not implement an interface with an indexed property
+  //   setter, then return false.
+  //
+  // https://html.spec.whatwg.org/C/window-object.html#windowproxy-defineownproperty
+  // 7.4.6 [[DefineOwnProperty]] (P, Desc)
+  // step 2.1. If P is an array index property name, return false.
+  V8SetReturnValue(info, v8::Null(info.GetIsolate()));
+  if (info.ShouldThrowOnError()) {
+    ExceptionState exceptionState(info.GetIsolate(),
+                                  ExceptionState::kIndexedSetterContext,
+                                  "{{interface_name}}");
+    exceptionState.ThrowTypeError("Index property setter is not supported.");
+  }
+{% endif %}{# indexed_property_setter #}
+}
+
+{% endif %}{# indexed_property_getter #}
 {% endblock %}
 
 
@@ -415,7 +515,12 @@ static void namedPropertyQuery(const AtomicString& name, const v8::PropertyCallb
   bool result = impl->NamedPropertyQuery({{getter_arguments | join(', ')}});
   if (!result)
     return;
-  V8SetReturnValueInt(info, v8::None);
+  {# TODO(rakuco): [LegacyUnenumerableNamedProperties] makes named properties
+     have [[Enumerable]] set to false. #}
+  // https://heycam.github.io/webidl/#LegacyPlatformObjectGetOwnProperty
+  // 2.7. If |O| implements an interface with a named property setter, then set
+  //      desc.[[Writable]] to true, otherwise set it to false.
+  V8SetReturnValueInt(info, {% if named_property_setter %}v8::None{% else %}v8::ReadOnly{% endif %});
 }
 
 {% endif %}
@@ -528,12 +633,24 @@ void {{v8_class_or_partial}}::{{cpp_class}}OriginSafeMethodSetterCallback(v8::Lo
     'kNotInheritFromActiveScriptWrappable' %}
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = { gin::kEmbedderBlink, {{v8_class}}Constructor::domTemplate, {{v8_class}}::Trace, {{v8_class}}::TraceWrappers, {{prepare_prototype_and_interface_object_func or 'nullptr'}}, "{{interface_name}}", 0, WrapperTypeInfo::kWrapperTypeObjectPrototype, WrapperTypeInfo::{{wrapper_class_id}}, WrapperTypeInfo::{{active_scriptwrappable_inheritance}}, WrapperTypeInfo::{{lifetime}} };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+const WrapperTypeInfo {{v8_class}}Constructor::wrapperTypeInfo = {
+    gin::kEmbedderBlink,
+    {{v8_class}}Constructor::domTemplate,
+    {{v8_class}}::Trace,
+    {{v8_class}}::TraceWrappers,
+    {{prepare_prototype_and_interface_object_func or 'nullptr'}},
+    "{{interface_name}}",
+    nullptr,
+    WrapperTypeInfo::kWrapperTypeObjectPrototype,
+    WrapperTypeInfo::{{wrapper_class_id}},
+    WrapperTypeInfo::{{active_scriptwrappable_inheritance}},
+    WrapperTypeInfo::{{lifetime}},
+};
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -632,7 +749,7 @@ static void constructor(const v8::FunctionCallbackInfo<v8::Value>& info) {
 {% if constructors or has_custom_constructor or has_html_constructor %}
 void {{v8_class}}::constructorCallback(const v8::FunctionCallbackInfo<v8::Value>& info) {
   {% if measure_as %}
-  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{measure_as('Constructor')}});
+  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{measure_as('Constructor')}});
   {% endif %}
   if (!info.IsConstructCall()) {
     V8ThrowException::ThrowTypeError(info.GetIsolate(), ExceptionMessages::ConstructorNotCallableAsFunction("{{interface_name}}"));
@@ -695,17 +812,30 @@ for (const auto& attributeConfig : {{method.name}}OriginSafeAttributeConfigurati
        '%s::indexedPropertyGetterCallback' % v8_class_or_partial %}
 {% set indexed_property_setter_callback =
        '%s::indexedPropertySetterCallback' % v8_class_or_partial
-       if indexed_property_setter or named_property_setter else 'nullptr' %}
-{% set indexed_property_query_callback = 'nullptr' %}{# Unused #}
+       if indexed_property_getter or named_property_setter else 'nullptr' %}
+{% set indexed_property_descriptor_callback =
+       '%s::indexedPropertyDescriptorCallback' % v8_class_or_partial
+       if indexed_property_getter else 'nullptr' %}
 {% set indexed_property_deleter_callback =
        '%s::indexedPropertyDeleterCallback' % v8_class_or_partial
        if indexed_property_deleter or named_property_deleter else 'nullptr' %}
 {% set indexed_property_enumerator_callback =
        'IndexedPropertyEnumerator<%s>' % cpp_class
        if indexed_property_getter.is_enumerable else 'nullptr' %}
+{% set indexed_property_definer_callback =
+       '%s::indexedPropertyDefinerCallback' % v8_class_or_partial
+       if indexed_property_getter else 'nullptr' %}
 {% set property_handler_flags =
        'v8::PropertyHandlerFlags::kNone' %}
-v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig({{indexed_property_getter_callback}}, {{indexed_property_setter_callback}}, {{indexed_property_query_callback}}, {{indexed_property_deleter_callback}}, {{indexed_property_enumerator_callback}}, v8::Local<v8::Value>(), {{property_handler_flags}});
+v8::IndexedPropertyHandlerConfiguration indexedPropertyHandlerConfig(
+    {{indexed_property_getter_callback}},
+    {{indexed_property_setter_callback}},
+    {{indexed_property_descriptor_callback}},
+    {{indexed_property_deleter_callback}},
+    {{indexed_property_enumerator_callback}},
+    {{indexed_property_definer_callback}},
+    v8::Local<v8::Value>(),
+    {{property_handler_flags}});
 {{target}}->SetHandler(indexedPropertyHandlerConfig);
 {%- endmacro %}
 
@@ -808,7 +938,23 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
   // Transfer the ownership of the allocated memory to an {{interface_name}} without
   // copying.
   v8::{{interface_name}}::Contents v8Contents = v8buffer->Externalize();
-  WTF::ArrayBufferContents::DataHandle data(v8Contents.Data(), WTF::ArrayBufferContents::FreeMemory);
+  WTF::ArrayBufferContents::AllocationKind kind = WTF::ArrayBufferContents::AllocationKind::kNormal;
+  switch (v8Contents.AllocationMode()) {
+    case v8::ArrayBuffer::Allocator::AllocationMode::kNormal:
+      kind = WTF::ArrayBufferContents::AllocationKind::kNormal;
+      break;
+    case v8::ArrayBuffer::Allocator::AllocationMode::kReservation:
+      kind = WTF::ArrayBufferContents::AllocationKind::kReservation;
+      break;
+    default:
+      NOTREACHED();
+  };
+  WTF::ArrayBufferContents::DataHandle data(v8Contents.AllocationBase(),
+                                            v8Contents.AllocationLength(),
+                                            v8Contents.Data(),
+                                            v8Contents.ByteLength(),
+                                            kind,
+                                            WTF::ArrayBufferContents::FreeMemory);
   WTF::ArrayBufferContents contents(std::move(data), v8Contents.ByteLength(), WTF::ArrayBufferContents::k{% if interface_name == 'ArrayBuffer' %}Not{% endif %}Shared);
   {{cpp_class}}* buffer = {{cpp_class}}::Create(contents);
   v8::Local<v8::Object> associatedWrapper = buffer->AssociateWithWrapper(v8::Isolate::GetCurrent(), buffer->GetWrapperTypeInfo(), object);
@@ -907,29 +1053,42 @@ v8::Local<v8::Object> {{v8_class}}::findInstanceInPrototypeChain(v8::Local<v8::V
 {% block partial_interface %}
 {% if has_partial_interface %}
 {% if needs_runtime_enabled_installer %}
-InstallRuntimeEnabledFunction {{v8_class}}::install{{v8_class}}RuntimeEnabledFunction =
-    &{{v8_class}}::installRuntimeEnabledFeatures;
+InstallRuntimeEnabledFeaturesFunction
+{{v8_class}}::install_runtime_enabled_features_function_ =
+    &{{v8_class}}::InstallRuntimeEnabledFeatures;
+{% endif %}
+{% if not is_array_buffer_or_view %}
+InstallRuntimeEnabledFeaturesOnTemplateFunction
+{{v8_class}}::install_runtime_enabled_features_on_template_function_ =
+    &{{v8_class}}::InstallRuntimeEnabledFeaturesOnTemplate;
 {% endif %}
 
 InstallTemplateFunction {{v8_class}}::install{{v8_class}}TemplateFunction =
     &{{v8_class}}::install{{v8_class}}Template;
 
-void {{v8_class}}::updateWrapperTypeInfo(
-    InstallTemplateFunction installTemplateFunction,
-    InstallRuntimeEnabledFunction installRuntimeEnabledFunction,
-    PreparePrototypeAndInterfaceObjectFunction preparePrototypeAndInterfaceObjectFunction) {
-  ALLOW_UNUSED_LOCAL(installRuntimeEnabledFunction);
-
+void {{v8_class}}::UpdateWrapperTypeInfo(
+    InstallTemplateFunction install_template_function,
+    InstallRuntimeEnabledFeaturesFunction install_runtime_enabled_features_function,
+    InstallRuntimeEnabledFeaturesOnTemplateFunction install_runtime_enabled_features_on_template_function,
+    PreparePrototypeAndInterfaceObjectFunction prepare_prototype_and_interface_object_function) {
   {{v8_class}}::install{{v8_class}}TemplateFunction =
-      installTemplateFunction;
+      install_template_function;
+
   {% if needs_runtime_enabled_installer %}
-  CHECK(installRuntimeEnabledFunction);
-  {{v8_class}}::install{{v8_class}}RuntimeEnabledFunction =
-      installRuntimeEnabledFunction;
+  CHECK(install_runtime_enabled_features_function);
+  {{v8_class}}::install_runtime_enabled_features_function_ =
+      install_runtime_enabled_features_function;
+
   {% endif %}
-  if (preparePrototypeAndInterfaceObjectFunction) {
+  {% if not is_array_buffer_or_view  %}
+  CHECK(install_runtime_enabled_features_on_template_function);
+  {{v8_class}}::install_runtime_enabled_features_on_template_function_ =
+      install_runtime_enabled_features_on_template_function;
+  {% endif %}
+
+  if (prepare_prototype_and_interface_object_function) {
     {{v8_class}}::wrapperTypeInfo.prepare_prototype_and_interface_object_function =
-        preparePrototypeAndInterfaceObjectFunction;
+        prepare_prototype_and_interface_object_function;
   }
 }
 
@@ -939,5 +1098,5 @@ void {{v8_class}}::register{{method.name | blink_capitalize}}MethodForPartialInt
 }
 
 {% endfor %}
-{% endif %}
+{% endif %}{# has_partial_interface #}
 {% endblock %}

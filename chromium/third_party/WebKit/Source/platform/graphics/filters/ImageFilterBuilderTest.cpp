@@ -31,7 +31,7 @@
 #include "platform/graphics/filters/SourceGraphic.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using testing::Test;
+using ::testing::Test;
 
 namespace blink {
 
@@ -53,7 +53,7 @@ class ImageFilterBuilderTest : public Test {
 
     // Add a blend effect (with inputs : blur, source)
     FilterEffect* blend_effect =
-        FEBlend::Create(reference_filter, kWebBlendModeNormal);
+        FEBlend::Create(reference_filter, WebBlendMode::kNormal);
     blend_effect->SetOperatingInterpolationSpace(kInterpolationSpaceSRGB);
     FilterEffectVector& blend_inputs = blend_effect->InputEffects();
     blend_inputs.ReserveCapacity(2);

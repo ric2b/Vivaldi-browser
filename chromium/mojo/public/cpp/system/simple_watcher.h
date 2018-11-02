@@ -5,26 +5,28 @@
 #ifndef MOJO_PUBLIC_CPP_SYSTEM_SIMPLE_WATCHER_H_
 #define MOJO_PUBLIC_CPP_SYSTEM_SIMPLE_WATCHER_H_
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/sequence_checker.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "mojo/public/c/system/types.h"
+#include "mojo/public/cpp/system/handle_signals_state.h"
 #include "mojo/public/cpp/system/system_export.h"
 #include "mojo/public/cpp/system/watcher.h"
 
 namespace base {
-class SingleThreadTaskRunner;
+class SequencedTaskRunner;
 }
 
 namespace mojo {
 
-// This provides a convenient thread-bound watcher implementation to safely
+// This provides a convenient sequence-bound watcher implementation to safely
 // watch a single handle, dispatching state change notifications to an arbitrary
-// SingleThreadTaskRunner running on the same thread as the SimpleWatcher.
+// SequencedTaskRunner running on the same sequence as the SimpleWatcher.
 //
 // SimpleWatcher exposes the concept of "arming" from the low-level Watcher API.
 // In general, a SimpleWatcher must be "armed" in order to dispatch a single
@@ -49,6 +51,11 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // Note that unlike the first two conditions, this callback may be invoked
   // with |MOJO_RESULT_CANCELLED| even while the SimpleWatcher is disarmed.
   using ReadyCallback = base::Callback<void(MojoResult result)>;
+
+  // Like above but also receives the last known handle signal state at the time
+  // of the notification.
+  using ReadyCallbackWithState =
+      base::Callback<void(MojoResult result, const HandleSignalsState& state)>;
 
   // Selects how this SimpleWatcher is to be armed.
   enum class ArmingPolicy {
@@ -80,8 +87,8 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
 
   SimpleWatcher(const tracked_objects::Location& from_here,
                 ArmingPolicy arming_policy,
-                scoped_refptr<base::SingleThreadTaskRunner> runner =
-                    base::ThreadTaskRunnerHandle::Get());
+                scoped_refptr<base::SequencedTaskRunner> runner =
+                    base::SequencedTaskRunnerHandle::Get());
   ~SimpleWatcher();
 
   // Indicates if the SimpleWatcher is currently watching a handle.
@@ -100,7 +107,7 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // explicitly called.
   //
   // Once the watch is started, |callback| may be called at any time on the
-  // current thread until |Cancel()| is called or the handle is closed. Note
+  // current sequence until |Cancel()| is called or the handle is closed. Note
   // that |callback| can be called for results other than
   // |MOJO_RESULT_CANCELLED| only if the SimpleWatcher is currently armed. Use
   // ArmingPolicy to configure how a SimpleWatcher is armed.
@@ -111,7 +118,20 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // Destroying the SimpleWatcher implicitly calls |Cancel()|.
   MojoResult Watch(Handle handle,
                    MojoHandleSignals signals,
-                   const ReadyCallback& callback);
+                   MojoWatchCondition condition,
+                   const ReadyCallbackWithState& callback);
+
+  // DEPRECATED: Please use the above signature instead.
+  //
+  // This watches a handle for |signals| to be satisfied, provided with a
+  // callback which takes only a MojoResult value corresponding to the result of
+  // a notification.
+  MojoResult Watch(Handle handle,
+                   MojoHandleSignals signals,
+                   const ReadyCallback& callback) {
+    return Watch(handle, signals, MOJO_WATCH_CONDITION_SATISFIED,
+                 base::Bind(&DiscardReadyState, callback));
+  }
 
   // Cancels the current watch. Once this returns, the ReadyCallback previously
   // passed to |Watch()| will never be called again for this SimpleWatcher.
@@ -135,11 +155,14 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // is NOT armed, and this call fails with a return value of
   // |MOJO_RESULT_FAILED_PRECONDITION|. In that case, what would have been the
   // result code for that immediate notification is instead placed in
-  // |*ready_result| if |ready_result| is non-null.
+  // |*ready_result| if |ready_result| is non-null, and the last known signaling
+  // state of the handle is placed in |*ready_state| if |ready_state| is
+  // non-null.
   //
   // If the watcher is successfully armed, this returns |MOJO_RESULT_OK| and
-  // |ready_result| is ignored.
-  MojoResult Arm(MojoResult* ready_result = nullptr);
+  // |ready_result| and |ready_state| are ignored.
+  MojoResult Arm(MojoResult* ready_result = nullptr,
+                 HandleSignalsState* ready_state = nullptr);
 
   // Manually arms the SimpleWatcher OR posts a task to invoke the ReadyCallback
   // with the ready result of the failed arming attempt.
@@ -153,7 +176,7 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   void ArmOrNotify();
 
   Handle handle() const { return handle_; }
-  ReadyCallback ready_callback() const { return callback_; }
+  ReadyCallbackWithState ready_callback() const { return callback_; }
 
   // Sets the tag used by the heap profiler.
   // |tag| must be a const string literal.
@@ -164,19 +187,27 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
  private:
   class Context;
 
-  void OnHandleReady(int watch_id, MojoResult result);
+  static void DiscardReadyState(const ReadyCallback& callback,
+                                MojoResult result,
+                                const HandleSignalsState& state) {
+    callback.Run(result);
+  }
 
-  base::ThreadChecker thread_checker_;
+  void OnHandleReady(int watch_id,
+                     MojoResult result,
+                     const HandleSignalsState& state);
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // The policy used to determine how this SimpleWatcher is armed.
   const ArmingPolicy arming_policy_;
 
-  // The TaskRunner of this SimpleWatcher's owning thread. This field is safe to
-  // access from any thread.
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  // The TaskRunner of this SimpleWatcher's owning sequence. This field is safe
+  // to access from any sequence.
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
-  // Whether |task_runner_| is the same as base::ThreadTaskRunnerHandle::Get()
-  // for the thread.
+  // Whether |task_runner_| is the same as
+  // base::SequencedTaskRunnerHandle::Get() for the thread.
   const bool is_default_task_runner_;
 
   ScopedWatcherHandle watcher_handle_;
@@ -185,7 +216,7 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   // if any.
   scoped_refptr<Context> context_;
 
-  // Fields below must only be accessed on the SimpleWatcher's owning thread.
+  // Fields below must only be accessed on the SimpleWatcher's owning sequence.
 
   // The handle currently under watch. Not owned.
   Handle handle_;
@@ -195,7 +226,7 @@ class MOJO_CPP_SYSTEM_EXPORT SimpleWatcher {
   int watch_id_ = 0;
 
   // The callback to call when the handle is signaled.
-  ReadyCallback callback_;
+  ReadyCallbackWithState callback_;
 
   // Tracks if the SimpleWatcher has already notified of unsatisfiability. This
   // is used to prevent redundant notifications in AUTOMATIC mode.

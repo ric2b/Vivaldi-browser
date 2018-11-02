@@ -10,6 +10,7 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
 #include "chrome/browser/chromeos/login/users/scoped_user_manager_enabler.h"
@@ -97,7 +98,9 @@ class TestSessionController : public ash::mojom::SessionController {
   ~TestSessionController() override {}
 
   ash::mojom::SessionControllerPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+    ash::mojom::SessionControllerPtr ptr;
+    binding_.Bind(mojo::MakeRequest(&ptr));
+    return ptr;
   }
 
   ash::mojom::SessionInfo* last_session_info() {
@@ -121,10 +124,19 @@ class TestSessionController : public ash::mojom::SessionController {
   }
   void SetUserSessionOrder(
       const std::vector<uint32_t>& user_session_order) override {}
+  void PrepareForLock(PrepareForLockCallback callback) override {}
   void StartLock(StartLockCallback callback) override {}
   void NotifyChromeLockAnimationsComplete() override {}
   void RunUnlockAnimation(RunUnlockAnimationCallback callback) override {}
   void NotifyChromeTerminating() override {}
+  void SetSessionLengthLimit(base::TimeDelta length_limit,
+                             base::TimeTicks start_time) override {
+    last_session_length_limit_ = length_limit;
+    last_session_start_time_ = start_time;
+  }
+
+  base::TimeDelta last_session_length_limit_;
+  base::TimeTicks last_session_start_time_;
 
  private:
   mojo::Binding<ash::mojom::SessionController> binding_;
@@ -446,7 +458,7 @@ TEST_F(SessionControllerClientTest, SupervisedUser) {
   // The session controller received session info and user session.
   EXPECT_LT(0u, session_controller.last_user_session()->session_id);
   EXPECT_EQ(user_manager::USER_TYPE_SUPERVISED,
-            session_controller.last_user_session()->type);
+            session_controller.last_user_session()->user_info->type);
 
   // Simulate profile creation after login.
   TestingProfile* user_profile = CreateTestingProfile(user);
@@ -517,4 +529,28 @@ TEST_F(SessionControllerClientTest, UserPrefsChange) {
   SessionControllerClient::FlushForTesting();
   EXPECT_FALSE(
       session_controller.last_session_info()->should_lock_screen_automatically);
+}
+
+TEST_F(SessionControllerClientTest, SessionLengthLimit) {
+  // Create an object to test and connect it to our test interface.
+  SessionControllerClient client;
+  TestSessionController session_controller;
+  client.session_controller_ = session_controller.CreateInterfacePtrAndBind();
+  client.Init();
+  SessionControllerClient::FlushForTesting();
+
+  // By default there is no session length limit.
+  EXPECT_TRUE(session_controller.last_session_length_limit_.is_zero());
+  EXPECT_TRUE(session_controller.last_session_start_time_.is_null());
+
+  // Setting a session length limit in local state sends it to ash.
+  const base::TimeDelta length_limit = base::TimeDelta::FromHours(1);
+  const base::TimeTicks start_time = base::TimeTicks::Now();
+  PrefService* local_state = TestingBrowserProcess::GetGlobal()->local_state();
+  local_state->SetInteger(prefs::kSessionLengthLimit,
+                          length_limit.InMilliseconds());
+  local_state->SetInt64(prefs::kSessionStartTime, start_time.ToInternalValue());
+  SessionControllerClient::FlushForTesting();
+  EXPECT_EQ(length_limit, session_controller.last_session_length_limit_);
+  EXPECT_EQ(start_time, session_controller.last_session_start_time_);
 }

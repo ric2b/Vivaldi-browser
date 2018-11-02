@@ -21,6 +21,7 @@
 
 #include "core/css/CSSPrimitiveValue.h"
 
+#include "build/build_config.h"
 #include "core/css/CSSCalculationValue.h"
 #include "core/css/CSSHelper.h"
 #include "core/css/CSSMarkup.h"
@@ -127,14 +128,6 @@ CSSPrimitiveValue* CSSPrimitiveValue::Create(double value, UnitType type) {
   }
 }
 
-using CSSTextCache =
-    PersistentHeapHashMap<WeakMember<const CSSPrimitiveValue>, String>;
-
-static CSSTextCache& CssTextCache() {
-  DEFINE_STATIC_LOCAL(CSSTextCache, cache, ());
-  return cache;
-}
-
 CSSPrimitiveValue::UnitType CSSPrimitiveValue::TypeWithCalcResolved() const {
   if (GetType() != UnitType::kCalc)
     return GetType();
@@ -224,7 +217,6 @@ void CSSPrimitiveValue::Init(UnitType type) {
 
 void CSSPrimitiveValue::Init(CSSCalcValue* c) {
   Init(UnitType::kCalc);
-  has_cached_css_text_ = false;
   value_.calc = c;
 }
 
@@ -517,15 +509,14 @@ CSSPrimitiveValue::UnitType CSSPrimitiveValue::LengthUnitTypeToUnitType(
   return CSSPrimitiveValue::UnitType::kUnknown;
 }
 
-static String FormatNumber(double number, const StringView& suffix) {
-#if OS(WIN) && _MSC_VER < 1900
+static String FormatNumber(double number, const char* suffix) {
+#if defined(OS_WIN) && _MSC_VER < 1900
   unsigned oldFormat = _set_output_format(_TWO_DIGIT_EXPONENT);
 #endif
-  String result = String::Format("%.6g", number);
-#if OS(WIN) && _MSC_VER < 1900
+  String result = String::Format("%.6g%s", number, suffix);
+#if defined(OS_WIN) && _MSC_VER < 1900
   _set_output_format(oldFormat);
 #endif
-  result.append(suffix);
   return result;
 }
 
@@ -603,11 +594,6 @@ const char* CSSPrimitiveValue::UnitTypeToString(UnitType type) {
 }
 
 String CSSPrimitiveValue::CustomCSSText() const {
-  if (has_cached_css_text_) {
-    DCHECK(CssTextCache().Contains(this));
-    return CssTextCache().at(this);
-  }
-
   String text;
   switch (GetType()) {
     case UnitType::kUnknown:
@@ -659,9 +645,6 @@ String CSSPrimitiveValue::CustomCSSText() const {
       break;
   }
 
-  DCHECK(!CssTextCache().Contains(this));
-  CssTextCache().Set(this, text);
-  has_cached_css_text_ = true;
   return text;
 }
 

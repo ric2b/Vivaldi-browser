@@ -26,39 +26,13 @@ namespace internal {
 
 namespace {
 
-class ChangeListToEntryMapUMAStats {
- public:
-  ChangeListToEntryMapUMAStats()
-    : num_regular_files_(0),
-      num_hosted_documents_(0) {
-  }
-
-  // Increments number of files.
-  void IncrementNumFiles(bool is_hosted_document) {
-    is_hosted_document ? num_hosted_documents_++ : num_regular_files_++;
-  }
-
-  // Updates UMA histograms with file counts.
-  void UpdateFileCountUmaHistograms() {
-    const int num_total_files = num_hosted_documents_ + num_regular_files_;
-    UMA_HISTOGRAM_COUNTS("Drive.NumberOfRegularFiles", num_regular_files_);
-    UMA_HISTOGRAM_COUNTS("Drive.NumberOfHostedDocuments",
-                         num_hosted_documents_);
-    UMA_HISTOGRAM_COUNTS("Drive.NumberOfTotalFiles", num_total_files);
-  }
-
- private:
-  int num_regular_files_;
-  int num_hosted_documents_;
-};
-
 // Returns true if it's OK to overwrite the local entry with the remote one.
 bool ShouldApplyChange(const ResourceEntry& local_entry,
                        const ResourceEntry& remote_entry) {
   if (local_entry.metadata_edit_state() == ResourceEntry::CLEAN)
     return true;
   return base::Time::FromInternalValue(remote_entry.modification_date()) >
-      base::Time::FromInternalValue(local_entry.modification_date());
+         base::Time::FromInternalValue(local_entry.modification_date());
 }
 
 }  // namespace
@@ -122,6 +96,30 @@ ChangeList::ChangeList(const google_apis::FileList& file_list)
 
 ChangeList::~ChangeList() {}
 
+class ChangeListProcessor::ChangeListToEntryMapUMAStats {
+ public:
+  ChangeListToEntryMapUMAStats()
+      : num_regular_files_(0), num_hosted_documents_(0) {}
+
+  // Increments number of files.
+  void IncrementNumFiles(bool is_hosted_document) {
+    is_hosted_document ? num_hosted_documents_++ : num_regular_files_++;
+  }
+
+  // Updates UMA histograms with file counts.
+  void UpdateFileCountUmaHistograms() {
+    const int num_total_files = num_hosted_documents_ + num_regular_files_;
+    UMA_HISTOGRAM_COUNTS("Drive.NumberOfRegularFiles", num_regular_files_);
+    UMA_HISTOGRAM_COUNTS("Drive.NumberOfHostedDocuments",
+                         num_hosted_documents_);
+    UMA_HISTOGRAM_COUNTS("Drive.NumberOfTotalFiles", num_total_files);
+  }
+
+ private:
+  int num_regular_files_;
+  int num_hosted_documents_;
+};
+
 ChangeListProcessor::ChangeListProcessor(ResourceMetadata* resource_metadata,
                                          base::CancellationFlag* in_shutdown)
     : resource_metadata_(resource_metadata),
@@ -132,7 +130,7 @@ ChangeListProcessor::ChangeListProcessor(ResourceMetadata* resource_metadata,
 ChangeListProcessor::~ChangeListProcessor() {
 }
 
-FileError ChangeListProcessor::Apply(
+FileError ChangeListProcessor::ApplyUserChangeList(
     std::unique_ptr<google_apis::AboutResource> about_resource,
     std::vector<std::unique_ptr<ChangeList>> change_lists,
     bool is_delta_update) {
@@ -153,8 +151,102 @@ FileError ChangeListProcessor::Apply(
     DCHECK(!about_resource->root_folder_id().empty());
   }
 
-  // Convert ChangeList to map.
+  ResourceEntry root;
+  // Update the resource ID of the entry for "My Drive" directory.
+  FileError error = resource_metadata_->GetResourceEntryByPath(
+      util::GetDriveMyDriveRootPath(), &root);
+  if (error != FILE_ERROR_OK) {
+    LOG(ERROR) << "Failed to get root entry: " << FileErrorToString(error);
+    return error;
+  }
+  root.set_resource_id(about_resource->root_folder_id());
+  error = resource_metadata_->RefreshEntry(root);
+  if (error != FILE_ERROR_OK) {
+    LOG(ERROR) << "Failed to update root entry: " << FileErrorToString(error);
+    return error;
+  }
+
   ChangeListToEntryMapUMAStats uma_stats;
+  error = ApplyChangeListInternal(std::move(change_lists), largest_changestamp,
+                                  &root, &uma_stats);
+  if (error != FILE_ERROR_OK)
+    return error;
+
+  // Update changestamp in the metadata header.
+  error = resource_metadata_->SetLargestChangestamp(largest_changestamp);
+  if (error != FILE_ERROR_OK) {
+    DLOG(ERROR) << "SetLargestChangeStamp failed: " << FileErrorToString(error);
+    return error;
+  }
+
+  // Shouldn't record histograms when processing delta update.
+  if (!is_delta_update)
+    uma_stats.UpdateFileCountUmaHistograms();
+
+  return FILE_ERROR_OK;
+}
+
+FileError ChangeListProcessor::ApplyTeamDriveChangeList(
+    const std::string& team_drive_id,
+    std::vector<std::unique_ptr<ChangeList>> change_lists) {
+  DCHECK(!change_lists.empty());
+  int64_t largest_changestamp = 0;
+  // The changestamp appears in the first page of the change list.
+  // The changestamp does not appear in the full resource list.
+  largest_changestamp = change_lists[0]->largest_changestamp();
+  if (change_lists[0]->largest_changestamp() < 0) {
+    LOG(ERROR) << "Received changeList with invalid largestChangestamp: "
+               << largest_changestamp << " (team_drive_id=" << team_drive_id
+               << "). Ignored.";
+    return FILE_ERROR_FAILED;
+  }
+
+  std::string local_id;
+  FileError error =
+      resource_metadata_->GetIdByResourceId(team_drive_id, &local_id);
+  if (error != FILE_ERROR_OK) {
+    LOG(ERROR) << "Failed to get local ID of a Team Drive root entry: "
+               << FileErrorToString(error);
+    return error;
+  }
+  ResourceEntry root;
+  error = resource_metadata_->GetResourceEntryById(local_id, &root);
+  if (error != FILE_ERROR_OK) {
+    LOG(ERROR) << "Failed to get Team Drive root entry: "
+               << FileErrorToString(error);
+    return error;
+  }
+
+  ChangeListToEntryMapUMAStats uma_stats;
+  error = ApplyChangeListInternal(std::move(change_lists), largest_changestamp,
+                                  &root, &uma_stats);
+  return error;
+}
+
+FileError ChangeListProcessor::ApplyChangeListInternal(
+    std::vector<std::unique_ptr<ChangeList>> change_lists,
+    int64_t largest_changestamp,
+    ResourceEntry* root,
+    ChangeListToEntryMapUMAStats* uma_stats) {
+  ConvertChangeListsToMap(std::move(change_lists), largest_changestamp,
+                          uma_stats);
+  FileError error = ApplyEntryMap(root->resource_id());
+  if (error != FILE_ERROR_OK) {
+    DLOG(ERROR) << "ApplyEntryMap failed: " << FileErrorToString(error);
+    return error;
+  }
+  // Update changestamp of the root entry.
+  root->mutable_directory_specific_info()->set_changestamp(largest_changestamp);
+  error = resource_metadata_->RefreshEntry(*root);
+  if (error != FILE_ERROR_OK)
+    DLOG(ERROR) << "RefreshEntry failed: " << FileErrorToString(error);
+  return error;
+}
+
+void ChangeListProcessor::ConvertChangeListsToMap(
+    std::vector<std::unique_ptr<ChangeList>> change_lists,
+    int64_t largest_changestamp,
+    ChangeListToEntryMapUMAStats* uma_stats) {
   for (size_t i = 0; i < change_lists.size(); ++i) {
     ChangeList* change_list = change_lists[i].get();
 
@@ -164,7 +256,7 @@ FileError ChangeListProcessor::Apply(
 
       // Count the number of files.
       if (!entry->file_info().is_directory()) {
-        uma_stats.IncrementNumFiles(
+        uma_stats->IncrementNumFiles(
             entry->file_specific_info().is_hosted_document());
       }
       parent_resource_id_map_[entry->resource_id()] =
@@ -183,50 +275,10 @@ FileError ChangeListProcessor::Apply(
           largest_changestamp);
     }
   }
-
-  FileError error =
-      ApplyEntryMap(largest_changestamp, std::move(about_resource));
-  if (error != FILE_ERROR_OK) {
-    DLOG(ERROR) << "ApplyEntryMap failed: " << FileErrorToString(error);
-    return error;
-  }
-
-  // Update changestamp.
-  error = resource_metadata_->SetLargestChangestamp(largest_changestamp);
-  if (error != FILE_ERROR_OK) {
-    DLOG(ERROR) << "SetLargestChangeStamp failed: " << FileErrorToString(error);
-    return error;
-  }
-
-  // Shouldn't record histograms when processing delta update.
-  if (!is_delta_update)
-    uma_stats.UpdateFileCountUmaHistograms();
-
-  return FILE_ERROR_OK;
 }
 
 FileError ChangeListProcessor::ApplyEntryMap(
-    int64_t changestamp,
-    std::unique_ptr<google_apis::AboutResource> about_resource) {
-  DCHECK(about_resource);
-
-  // Create the entry for "My Drive" directory with the latest changestamp.
-  ResourceEntry root;
-  FileError error = resource_metadata_->GetResourceEntryByPath(
-      util::GetDriveMyDriveRootPath(), &root);
-  if (error != FILE_ERROR_OK) {
-    LOG(ERROR) << "Failed to get root entry: " << FileErrorToString(error);
-    return error;
-  }
-
-  root.mutable_directory_specific_info()->set_changestamp(changestamp);
-  root.set_resource_id(about_resource->root_folder_id());
-  error = resource_metadata_->RefreshEntry(root);
-  if (error != FILE_ERROR_OK) {
-    LOG(ERROR) << "Failed to update root entry: " << FileErrorToString(error);
-    return error;
-  }
-
+    const std::string& root_resource_id) {
   // Gather the set of changes in the old path.
   // Note that we want to notify the change in both old and new paths (suppose
   // /a/b/c is moved to /x/y/c. We want to notify both "/a/b" and "/x/y".)
@@ -318,7 +370,7 @@ FileError ChangeListProcessor::ApplyEntryMap(
       // Skip root entry in the change list. We don't expect servers to send
       // root entry, but we should better be defensive (see crbug.com/297259).
       ResourceEntryMap::iterator it = entries[i];
-      if (it->first != root.resource_id()) {
+      if (it->first != root_resource_id) {
         FileError error = ApplyEntry(it->second);
         if (error != FILE_ERROR_OK) {
           LOG(ERROR) << "ApplyEntry failed: " << FileErrorToString(error)

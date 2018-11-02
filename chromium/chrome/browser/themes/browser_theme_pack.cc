@@ -12,6 +12,7 @@
 
 #include "base/files/file.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted_memory.h"
 #include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -37,7 +38,6 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_operations.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/resources/grit/ui_resources.h"
 
 using content::BrowserThread;
 using extensions::Extension;
@@ -547,13 +547,13 @@ BrowserThemePack::~BrowserThemePack() {
 }
 
 // static
-scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromExtension(
-    const Extension* extension) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+void BrowserThemePack::BuildFromExtension(
+    const extensions::Extension* extension,
+    scoped_refptr<BrowserThemePack> pack) {
   DCHECK(extension);
   DCHECK(extension->is_theme());
+  DCHECK(!pack->is_valid());
 
-  scoped_refptr<BrowserThemePack> pack(new BrowserThemePack);
   pack->BuildHeader(extension);
   pack->BuildTintsFromJSON(extensions::ThemeInfo::GetTints(extension));
   pack->BuildColorsFromJSON(extensions::ThemeInfo::GetColors(extension));
@@ -568,14 +568,14 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromExtension(
       &file_paths);
   pack->BuildSourceImagesArray(file_paths);
 
-  if (!pack->LoadRawBitmapsTo(file_paths, &pack->images_on_ui_thread_))
-    return NULL;
+  if (!pack->LoadRawBitmapsTo(file_paths, &pack->images_))
+    return;
 
-  pack->CreateImages(&pack->images_on_ui_thread_);
+  pack->CreateImages(&pack->images_);
 
   // Make sure the |images_on_file_thread_| has bitmaps for supported
   // scale factors before passing to FILE thread.
-  pack->images_on_file_thread_ = pack->images_on_ui_thread_;
+  pack->images_on_file_thread_ = pack->images_;
   for (ImageCache::iterator it = pack->images_on_file_thread_.begin();
        it != pack->images_on_file_thread_.end(); ++it) {
     gfx::ImageSkia* image_skia =
@@ -583,13 +583,13 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromExtension(
     image_skia->MakeThreadSafe();
   }
 
-  // Set ThemeImageSource on |images_on_ui_thread_| to resample the source
+  // Set ThemeImageSource on |images_| to resample the source
   // image if a caller of BrowserThemePack::GetImageNamed() requests an
   // ImageSkiaRep for a scale factor not specified by the theme author.
   // Callers of BrowserThemePack::GetImageNamed() to be able to retrieve
   // ImageSkiaReps for all supported scale factors.
-  for (ImageCache::iterator it = pack->images_on_ui_thread_.begin();
-       it != pack->images_on_ui_thread_.end(); ++it) {
+  for (ImageCache::iterator it = pack->images_.begin();
+       it != pack->images_.end(); ++it) {
     const gfx::ImageSkia source_image_skia = it->second.AsImageSkia();
     ThemeImageSource* source = new ThemeImageSource(source_image_skia);
     // image_skia takes ownership of source.
@@ -604,7 +604,7 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromExtension(
   }
 
   // The BrowserThemePack is now in a consistent state.
-  return pack;
+  pack->is_valid_ = true;
 }
 
 // static
@@ -672,6 +672,7 @@ scoped_refptr<BrowserThemePack> BrowserThemePack::BuildFromDataPack(
                 << "from those supported by platform.";
     return NULL;
   }
+  pack->is_valid_ = true;
   return pack;
 }
 
@@ -682,6 +683,13 @@ bool BrowserThemePack::IsPersistentImageID(int id) {
       return true;
 
   return false;
+}
+
+BrowserThemePack::BrowserThemePack() : CustomThemeSupplier(EXTENSION) {
+  scale_factors_ = ui::GetSupportedScaleFactors();
+  // On Windows HiDPI SCALE_FACTOR_100P may not be supported by default.
+  if (!base::ContainsValue(scale_factors_, ui::SCALE_FACTOR_100P))
+    scale_factors_.push_back(ui::SCALE_FACTOR_100P);
 }
 
 bool BrowserThemePack::WriteToDisk(const base::FilePath& path) const {
@@ -772,8 +780,8 @@ gfx::Image BrowserThemePack::GetImageNamed(int idr_id) {
     return gfx::Image();
 
   // Check if the image is cached.
-  ImageCache::const_iterator image_iter = images_on_ui_thread_.find(prs_id);
-  if (image_iter != images_on_ui_thread_.end())
+  ImageCache::const_iterator image_iter = images_.find(prs_id);
+  if (image_iter != images_.end())
     return image_iter->second;
 
   ThemeImagePngSource::PngMap png_map;
@@ -784,10 +792,10 @@ gfx::Image BrowserThemePack::GetImageNamed(int idr_id) {
       png_map[scale_factors_[i]] = memory;
   }
   if (!png_map.empty()) {
-    gfx::ImageSkia image_skia(new ThemeImagePngSource(png_map), 1.0f);
-    // |image_skia| takes ownership of ThemeImagePngSource.
+    gfx::ImageSkia image_skia(base::MakeUnique<ThemeImagePngSource>(png_map),
+                              1.0f);
     gfx::Image ret = gfx::Image(image_skia);
-    images_on_ui_thread_[prs_id] = ret;
+    images_[prs_id] = ret;
     return ret;
   }
 
@@ -830,19 +838,6 @@ bool BrowserThemePack::HasCustomImage(int idr_id) const {
 }
 
 // private:
-
-BrowserThemePack::BrowserThemePack()
-    : CustomThemeSupplier(EXTENSION),
-      header_(NULL),
-      tints_(NULL),
-      colors_(NULL),
-      display_properties_(NULL),
-      source_images_(NULL) {
-  scale_factors_ = ui::GetSupportedScaleFactors();
-  // On Windows HiDPI SCALE_FACTOR_100P may not be supported by default.
-  if (!base::ContainsValue(scale_factors_, ui::SCALE_FACTOR_100P))
-    scale_factors_.push_back(ui::SCALE_FACTOR_100P);
-}
 
 void BrowserThemePack::BuildHeader(const Extension* extension) {
   header_ = new BrowserThemePackHeader;

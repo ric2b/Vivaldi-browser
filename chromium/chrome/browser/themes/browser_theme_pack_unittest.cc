@@ -34,14 +34,14 @@ typedef std::map<int, TestScaleFactorToFileMap> TestFilePathMap;
 
 class BrowserThemePackTest : public ::testing::Test {
  public:
-  BrowserThemePackTest() {
+  BrowserThemePackTest() : theme_pack_(new BrowserThemePack()) {
     std::vector<ui::ScaleFactor> scale_factors;
     scale_factors.push_back(ui::SCALE_FACTOR_100P);
     scale_factors.push_back(ui::SCALE_FACTOR_200P);
     scoped_set_supported_scale_factors_.reset(
-      new ui::test::ScopedSetSupportedScaleFactors(scale_factors));
-    theme_pack_ = new BrowserThemePack();
+        new ui::test::ScopedSetSupportedScaleFactors(scale_factors));
   }
+  ~BrowserThemePackTest() override {}
 
   // Transformation for link underline colors.
   SkColor BuildThirdOpacity(SkColor color_link) {
@@ -142,33 +142,28 @@ class BrowserThemePackTest : public ::testing::Test {
   }
 
   bool LoadRawBitmapsTo(const TestFilePathMap& out_file_paths) {
-    return theme_pack_->LoadRawBitmapsTo(out_file_paths,
-                                         &theme_pack_->images_on_ui_thread_);
+    return theme_pack_->LoadRawBitmapsTo(out_file_paths, &theme_pack_->images_);
   }
 
   // This function returns void in order to be able use ASSERT_...
   // The BrowserThemePack is returned in |pack|.
   void BuildFromUnpackedExtension(const base::FilePath& extension_path,
-                                  scoped_refptr<BrowserThemePack>& pack) {
-    base::FilePath manifest_path =
-        extension_path.AppendASCII("manifest.json");
+                                  scoped_refptr<BrowserThemePack>* pack) {
+    base::FilePath manifest_path = extension_path.AppendASCII("manifest.json");
     std::string error;
     JSONFileValueDeserializer deserializer(manifest_path);
     std::unique_ptr<base::DictionaryValue> valid_value =
         base::DictionaryValue::From(deserializer.Deserialize(NULL, &error));
     EXPECT_EQ("", error);
     ASSERT_TRUE(valid_value.get());
-    scoped_refptr<Extension> extension(
-        Extension::Create(
-            extension_path,
-            extensions::Manifest::INVALID_LOCATION,
-            *valid_value,
-            Extension::REQUIRE_KEY,
-            &error));
+    scoped_refptr<Extension> extension(Extension::Create(
+        extension_path, extensions::Manifest::INVALID_LOCATION, *valid_value,
+        Extension::REQUIRE_KEY, &error));
     ASSERT_TRUE(extension.get());
     ASSERT_EQ("", error);
-    pack = BrowserThemePack::BuildFromExtension(extension.get());
-    ASSERT_TRUE(pack.get());
+    *pack = new BrowserThemePack;
+    BrowserThemePack::BuildFromExtension(extension.get(), *pack);
+    ASSERT_TRUE((*pack)->is_valid());
   }
 
   base::FilePath GetStarGazingPath() {
@@ -347,11 +342,12 @@ class BrowserThemePackTest : public ::testing::Test {
     }
   }
 
-  content::TestBrowserThreadBundle test_browser_thread_bundle_;
-
+ protected:
   typedef std::unique_ptr<ui::test::ScopedSetSupportedScaleFactors>
       ScopedSetSupportedScaleFactors;
   ScopedSetSupportedScaleFactors scoped_set_supported_scale_factors_;
+
+  content::TestBrowserThreadBundle thread_bundle_;
   scoped_refptr<BrowserThemePack> theme_pack_;
 };
 
@@ -569,7 +565,7 @@ TEST_F(BrowserThemePackTest, CanBuildAndReadPack) {
   {
     base::FilePath star_gazing_path = GetStarGazingPath();
     scoped_refptr<BrowserThemePack> pack;
-    BuildFromUnpackedExtension(star_gazing_path, pack);
+    BuildFromUnpackedExtension(star_gazing_path, &pack);
     ASSERT_TRUE(pack->WriteToDisk(file));
     VerifyStarGazing(pack.get());
   }
@@ -593,7 +589,7 @@ TEST_F(BrowserThemePackTest, HiDpiThemeTest) {
   {
     base::FilePath hidpi_path = GetHiDpiThemePath();
     scoped_refptr<BrowserThemePack> pack;
-    BuildFromUnpackedExtension(hidpi_path, pack);
+    BuildFromUnpackedExtension(hidpi_path, &pack);
     ASSERT_TRUE(pack->WriteToDisk(file));
     VerifyHiDpiTheme(pack.get());
   }

@@ -9,9 +9,9 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -33,7 +33,7 @@ class CONTENT_EXPORT PaymentManager
   friend class PaymentManagerTest;
 
   // payments::mojom::PaymentManager methods:
-  void Init(const std::string& scope) override;
+  void Init(const std::string& context, const std::string& scope) override;
   void DeletePaymentInstrument(
       const std::string& instrument_key,
       DeletePaymentInstrumentCallback callback) override;
@@ -52,9 +52,15 @@ class CONTENT_EXPORT PaymentManager
   // Called when an error is detected on binding_.
   void OnConnectionError();
 
+  void SetPaymentInstrumentIntermediateCallback(
+      PaymentManager::SetPaymentInstrumentCallback callback,
+      payments::mojom::PaymentHandlerStatus status);
+
   // PaymentAppContextImpl owns PaymentManager
   PaymentAppContextImpl* payment_app_context_;
 
+  bool should_set_payment_app_info_;
+  GURL context_;
   GURL scope_;
   mojo::Binding<payments::mojom::PaymentManager> binding_;
   base::WeakPtrFactory<PaymentManager> weak_ptr_factory_;

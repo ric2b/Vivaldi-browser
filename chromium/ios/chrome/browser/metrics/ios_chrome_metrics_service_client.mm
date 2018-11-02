@@ -34,12 +34,12 @@
 #include "components/metrics/net/cellular_logic_helper.h"
 #include "components/metrics/net/net_metrics_log_uploader.h"
 #include "components/metrics/net/network_metrics_provider.h"
-#include "components/metrics/net/version_utils.h"
 #include "components/metrics/profiler/profiler_metrics_provider.h"
 #include "components/metrics/profiler/tracking_synchronizer.h"
 #include "components/metrics/stability_metrics_helper.h"
 #include "components/metrics/ui/screen_info_metrics_provider.h"
 #include "components/metrics/url_constants.h"
+#include "components/metrics/version_utils.h"
 #include "components/omnibox/browser/omnibox_metrics_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -176,10 +176,6 @@ base::TimeDelta IOSChromeMetricsServiceClient::GetStandardUploadInterval() {
   return metrics::GetUploadInterval();
 }
 
-base::string16 IOSChromeMetricsServiceClient::GetRegistryBackupKey() {
-  return base::string16();
-}
-
 void IOSChromeMetricsServiceClient::OnRendererProcessCrash() {
   stability_metrics_provider_->LogRendererCrash();
 }
@@ -204,8 +200,7 @@ void IOSChromeMetricsServiceClient::Initialize() {
 
   // Register metrics providers.
   metrics_service_->RegisterMetricsProvider(
-      base::MakeUnique<metrics::NetworkMetricsProvider>(
-          web::WebThread::GetBlockingPool()));
+      base::MakeUnique<metrics::NetworkMetricsProvider>());
 
   // Currently, we configure OmniboxMetricsProvider to not log events to UMA
   // if there is a single incognito session visible. In the future, it may
@@ -228,9 +223,7 @@ void IOSChromeMetricsServiceClient::Initialize() {
 
   {
     auto drive_metrics_provider =
-        base::MakeUnique<metrics::DriveMetricsProvider>(
-            web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE),
-            ios::FILE_LOCAL_STATE);
+        base::MakeUnique<metrics::DriveMetricsProvider>(ios::FILE_LOCAL_STATE);
     drive_metrics_provider_ = drive_metrics_provider.get();
     metrics_service_->RegisterMetricsProvider(
         std::move(drive_metrics_provider));

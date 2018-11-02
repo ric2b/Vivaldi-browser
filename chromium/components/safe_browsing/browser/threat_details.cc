@@ -18,6 +18,7 @@
 #include "components/safe_browsing/browser/threat_details_cache.h"
 #include "components/safe_browsing/browser/threat_details_history.h"
 #include "components/safe_browsing/common/safebrowsing_messages.h"
+#include "components/safe_browsing_db/hit_report.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
@@ -72,10 +73,12 @@ ClientSafeBrowsingReportRequest::ReportType GetReportTypeFromSBThreatType(
       return ClientSafeBrowsingReportRequest::URL_MALWARE;
     case SB_THREAT_TYPE_URL_UNWANTED:
       return ClientSafeBrowsingReportRequest::URL_UNWANTED;
-    case SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL:
-      return ClientSafeBrowsingReportRequest::CLIENT_SIDE_PHISHING_URL;
-    case SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL:
-      return ClientSafeBrowsingReportRequest::CLIENT_SIDE_MALWARE_URL;
+    case SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING:
+      return ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_PHISHING;
+    case SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE:
+      return ClientSafeBrowsingReportRequest::URL_CLIENT_SIDE_MALWARE;
+    case SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING:
+      return ClientSafeBrowsingReportRequest::URL_PASSWORD_PROTECTION_PHISHING;
     default:  // Gated by SafeBrowsingBlockingPage::ShouldReportThreatDetails.
       NOTREACHED() << "We should not send report for threat type "
                    << threat_type;
@@ -129,6 +132,25 @@ std::string GetElementKey(const int frame_tree_node_id,
   return base::StringPrintf("%d-%d", frame_tree_node_id, element_node_id);
 }
 
+using CSBRR = safe_browsing::ClientSafeBrowsingReportRequest;
+CSBRR::SafeBrowsingUrlApiType GetUrlApiTypeForThreatSource(
+    safe_browsing::ThreatSource source) {
+  switch (source) {
+    case safe_browsing::ThreatSource::DATA_SAVER:
+      return CSBRR::FLYWHEEL;
+    case safe_browsing::ThreatSource::LOCAL_PVER3:
+      return CSBRR::PVER3_NATIVE;
+    case safe_browsing::ThreatSource::LOCAL_PVER4:
+      return CSBRR::PVER4_NATIVE;
+    case safe_browsing::ThreatSource::REMOTE:
+      return CSBRR::ANDROID_SAFETYNET;
+    case safe_browsing::ThreatSource::UNKNOWN:
+    case safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION:
+    case safe_browsing::ThreatSource::PASSWORD_PROTECTION_SERVICE:
+      break;
+  }
+  return CSBRR::SAFE_BROWSING_URL_API_TYPE_UNSPECIFIED;
+}
 }  // namespace
 
 // The default ThreatDetailsFactory.  Global, made a singleton so we
@@ -193,6 +215,12 @@ ThreatDetails::ThreatDetails(
                       : base::WeakPtr<history::HistoryService>());
   StartCollection();
 }
+
+ThreatDetails::ThreatDetails()
+    : cache_result_(false),
+      did_proceed_(false),
+      num_visits_(0),
+      ambiguous_dom_(false) {}
 
 ThreatDetails::~ThreatDetails() {}
 
@@ -358,6 +386,9 @@ void ThreatDetails::StartCollection() {
     report_->set_url(resource_.url.spec());
     report_->set_type(GetReportTypeFromSBThreatType(resource_.threat_type));
   }
+
+  if (resource_.threat_type == SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING)
+    report_->set_token(resource_.token);
 
   GURL referrer_url;
   NavigationEntry* nav_entry = resource_.GetNavigationEntryForResource();
@@ -577,6 +608,9 @@ void ThreatDetails::OnCacheCollectionReady() {
     report_->set_repeat_visit(num_visits_ > 0);
   }
   report_->set_complete(cache_result_);
+
+  report_->mutable_client_properties()->set_url_api_type(
+      GetUrlApiTypeForThreatSource(resource_.threat_source));
 
   // Send the report, using the SafeBrowsingService.
   std::string serialized;

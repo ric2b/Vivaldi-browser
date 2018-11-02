@@ -41,7 +41,6 @@ source_set("sync_integration_testsupport"){
 }
 
 source_set("fake_server"){
-  testonly = true
   sources = [
     "fake_server/notes_entity.cpp",
     "fake_server/notes_entity.h",

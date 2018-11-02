@@ -11,7 +11,9 @@
 #include "base/files/file_util.h"
 #include "base/nix/xdg_util.h"
 #include "base/path_service.h"
+#include "base/strings/string_util.h"
 #include "build/build_config.h"
+#include "chrome/common/channel_info.h"
 #include "chrome/common/chrome_paths_internal.h"
 
 namespace chrome {
@@ -56,20 +58,39 @@ bool GetUserMediaDirectory(const std::string& xdg_name,
 
 }  // namespace
 
+// This returns <config-home>/<product>, where
+//   <config-home> is:
+//     $CHROME_CONFIG_HOME if set
+//     otherwise $XDG_CONFIG_HOME if set
+//     otherwise ~/.config
+//   and <product> is:
+//     "chromium" for Chromium
+//     "google-chrome" for stable channel official build
+//     "google-chrome-beta" for beta channel official build
+//     "google-chrome-unstable" for dev channel official build
+//
+// (Note that ChromeMainDelegate will override the value returned by this
+// function if $CHROME_USER_DATA_DIR or --user-data-dir is set.)
+//
 // See http://standards.freedesktop.org/basedir-spec/basedir-spec-latest.html
-// for a spec on where config files go.  The net effect for most
-// systems is we use ~/.config/chromium/ for Chromium and
-// ~/.config/google-chrome/ for official builds.
-// (This also helps us sidestep issues with other apps grabbing ~/.chromium .)
+// for a spec on where config files go.  Using ~/.config also helps us sidestep
+// issues with other apps grabbing ~/.chromium .
 bool GetDefaultUserDataDirectory(base::FilePath* result) {
   std::unique_ptr<base::Environment> env(base::Environment::Create());
-  base::FilePath config_dir(GetXDGDirectory(env.get(),
-                                            kXdgConfigHomeEnvVar,
-                                            kDotConfigDir));
+  base::FilePath config_dir;
+  std::string chrome_config_home_str;
+  if (env->GetVar("CHROME_CONFIG_HOME", &chrome_config_home_str) &&
+      base::IsStringUTF8(chrome_config_home_str)) {
+    config_dir = base::FilePath::FromUTF8Unsafe(chrome_config_home_str);
+  } else {
+    config_dir =
+        GetXDGDirectory(env.get(), kXdgConfigHomeEnvVar, kDotConfigDir);
+  }
+
 #if defined(GOOGLE_CHROME_BUILD)
-  *result = config_dir.Append("google-chrome");
+  *result = config_dir.Append("google-chrome" + GetChannelSuffixForDataDir());
 #else
-  *result = config_dir.Append("vivaldi");
+  *result = config_dir.Append("vivaldi" + GetChannelSuffixForDataDir());
 #endif
   return true;
 }

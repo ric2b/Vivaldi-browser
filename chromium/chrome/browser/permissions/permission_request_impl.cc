@@ -18,7 +18,7 @@
 #include "chrome/browser/android/android_theme_resources.h"
 #else
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "ui/vector_icons/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #endif
 
 PermissionRequestImpl::PermissionRequestImpl(
@@ -76,29 +76,63 @@ PermissionRequest::IconId PermissionRequestImpl::GetIconId() const {
 #else
   switch (content_settings_type_) {
     case CONTENT_SETTINGS_TYPE_GEOLOCATION:
-      return ui::kLocationOnIcon;
+      return vector_icons::kLocationOnIcon;
     case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
     case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
-      return ui::kNotificationsIcon;
+      return vector_icons::kNotificationsIcon;
 #if defined(OS_CHROMEOS)
     // TODO(xhwang): fix this icon, see crrev.com/863263007
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       return kProductIcon;
 #endif
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
-      return ui::kMidiIcon;
+      return vector_icons::kMidiIcon;
     case CONTENT_SETTINGS_TYPE_PLUGINS:
       return kExtensionIcon;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
-      return ui::kMicrophoneIcon;
+      return vector_icons::kMicrophoneIcon;
     case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
-      return ui::kVideocamIcon;
+      return vector_icons::kVideocamIcon;
     default:
       NOTREACHED();
       return kExtensionIcon;
   }
 #endif
 }
+
+#if defined(OS_ANDROID)
+base::string16 PermissionRequestImpl::GetMessageText() const {
+  int message_id;
+  switch (content_settings_type_) {
+    case CONTENT_SETTINGS_TYPE_GEOLOCATION:
+      message_id = IDS_GEOLOCATION_INFOBAR_QUESTION;
+      break;
+    case CONTENT_SETTINGS_TYPE_NOTIFICATIONS:
+    case CONTENT_SETTINGS_TYPE_PUSH_MESSAGING:
+      message_id = IDS_NOTIFICATION_PERMISSIONS;
+      break;
+    case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
+      message_id = IDS_MIDI_SYSEX_INFOBAR_QUESTION;
+      break;
+    case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
+      message_id = IDS_PROTECTED_MEDIA_IDENTIFIER_INFOBAR_QUESTION;
+      break;
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC:
+      message_id = IDS_MEDIA_CAPTURE_AUDIO_ONLY;
+      break;
+    case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
+      message_id = IDS_MEDIA_CAPTURE_VIDEO_ONLY;
+      break;
+    default:
+      NOTREACHED();
+      return base::string16();
+  }
+  return l10n_util::GetStringFUTF16(
+      message_id,
+      url_formatter::FormatUrlForSecurityDisplay(
+          GetOrigin(), url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
+}
+#endif
 
 base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
   int message_id;
@@ -113,7 +147,7 @@ base::string16 PermissionRequestImpl::GetMessageTextFragment() const {
     case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:
       message_id = IDS_MIDI_SYSEX_PERMISSION_FRAGMENT;
       break;
-#if defined(OS_CHROMEOS)
+#if defined(OS_ANDROID) || defined(OS_CHROMEOS)
     case CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER:
       message_id = IDS_PROTECTED_MEDIA_IDENTIFIER_PERMISSION_FRAGMENT;
       break;
@@ -159,8 +193,7 @@ void PermissionRequestImpl::RequestFinished() {
 }
 
 bool PermissionRequestImpl::ShouldShowPersistenceToggle() const {
-  return (content_settings_type_ == CONTENT_SETTINGS_TYPE_GEOLOCATION) &&
-         PermissionUtil::ShouldShowPersistenceToggle();
+  return PermissionUtil::ShouldShowPersistenceToggle(content_settings_type_);
 }
 
 PermissionRequestType PermissionRequestImpl::GetPermissionRequestType()
@@ -171,4 +204,8 @@ PermissionRequestType PermissionRequestImpl::GetPermissionRequestType()
 PermissionRequestGestureType PermissionRequestImpl::GetGestureType()
     const {
   return PermissionUtil::GetGestureType(has_gesture_);
+}
+
+ContentSettingsType PermissionRequestImpl::GetContentSettingsType() const {
+  return content_settings_type_;
 }

@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <utility>
 
 #include "base/callback.h"
 #include "base/compiler_specific.h"
@@ -17,14 +18,15 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
-#include "base/single_thread_task_runner.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
+#include "base/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/connection_error_callback.h"
 #include "mojo/public/cpp/bindings/disconnect_reason.h"
 #include "mojo/public/cpp/bindings/filter_chain.h"
 #include "mojo/public/cpp/bindings/lib/control_message_handler.h"
 #include "mojo/public/cpp/bindings/lib/control_message_proxy.h"
+#include "mojo/public/cpp/bindings/lib/debug_util.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/scoped_interface_endpoint_handle.h"
 
@@ -35,9 +37,10 @@ class InterfaceEndpointController;
 
 // InterfaceEndpointClient handles message sending and receiving of an interface
 // endpoint, either the implementation side or the client side.
-// It should only be accessed and destructed on the creating thread.
+// It should only be accessed and destructed on the creating sequence.
 class MOJO_CPP_BINDINGS_EXPORT InterfaceEndpointClient
-    : NON_EXPORTED_BASE(public MessageReceiverWithResponder) {
+    : NON_EXPORTED_BASE(public MessageReceiverWithResponder),
+      NON_EXPORTED_BASE(private internal::LifeTimeTrackerForDebugging) {
  public:
   // |receiver| is okay to be null. If it is not null, it must outlive this
   // object.
@@ -45,34 +48,34 @@ class MOJO_CPP_BINDINGS_EXPORT InterfaceEndpointClient
                           MessageReceiverWithResponderStatus* receiver,
                           std::unique_ptr<MessageReceiver> payload_validator,
                           bool expect_sync_requests,
-                          scoped_refptr<base::SingleThreadTaskRunner> runner,
+                          scoped_refptr<base::SequencedTaskRunner> runner,
                           uint32_t interface_version);
   ~InterfaceEndpointClient() override;
 
   // Sets the error handler to receive notifications when an error is
   // encountered.
-  void set_connection_error_handler(const base::Closure& error_handler) {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    error_handler_ = error_handler;
+  void set_connection_error_handler(base::OnceClosure error_handler) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    error_handler_ = std::move(error_handler);
     error_with_reason_handler_.Reset();
   }
 
   void set_connection_error_with_reason_handler(
-      const ConnectionErrorWithReasonCallback& error_handler) {
-    DCHECK(thread_checker_.CalledOnValidThread());
-    error_with_reason_handler_ = error_handler;
+      ConnectionErrorWithReasonCallback error_handler) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    error_with_reason_handler_ = std::move(error_handler);
     error_handler_.Reset();
   }
 
   // Returns true if an error was encountered.
   bool encountered_error() const {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return encountered_error_;
   }
 
   // Returns true if this endpoint has any pending callbacks.
   bool has_pending_responders() const {
-    DCHECK(thread_checker_.CalledOnValidThread());
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
     return !async_responders_.empty() || !sync_responses_.empty();
   }
 
@@ -94,6 +97,7 @@ class MOJO_CPP_BINDINGS_EXPORT InterfaceEndpointClient
   // MessageReceiverWithResponder implementation:
   // They must only be called when the handle is not in pending association
   // state.
+  bool PrefersSerializedMessages() override;
   bool Accept(Message* message) override;
   bool AcceptWithResponder(Message* message,
                            std::unique_ptr<MessageReceiver> responder) override;
@@ -172,16 +176,16 @@ class MOJO_CPP_BINDINGS_EXPORT InterfaceEndpointClient
 
   uint64_t next_request_id_ = 1;
 
-  base::Closure error_handler_;
+  base::OnceClosure error_handler_;
   ConnectionErrorWithReasonCallback error_with_reason_handler_;
   bool encountered_error_ = false;
 
-  scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 
   internal::ControlMessageProxy control_message_proxy_;
   internal::ControlMessageHandler control_message_handler_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<InterfaceEndpointClient> weak_ptr_factory_;
 

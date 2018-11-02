@@ -1,0 +1,4 @@
+rootWebArea
+++tabPanel
+++++tab selectable name='Item'
+++++tab selectable name='Prices'

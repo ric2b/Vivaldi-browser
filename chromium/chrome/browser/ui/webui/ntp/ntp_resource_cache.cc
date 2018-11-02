@@ -32,7 +32,6 @@
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/google/core/browser/google_util.h"
@@ -337,22 +336,32 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
 
   policy::BrowserPolicyConnectorChromeOS* connector =
       g_browser_process->platform_part()->browser_policy_connector_chromeos();
-  std::string enterprise_domain = connector->GetEnterpriseDomain();
 
-  // TODO(jamescook): What about Active Directory managed devices?
-  if (!enterprise_domain.empty()) {
-    // Device is enterprise enrolled.
+  if (connector->IsEnterpriseManaged()) {
     localized_strings.SetString("enterpriseInfoVisible", "true");
-    base::string16 enterprise_info =
-        l10n_util::GetStringFUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
-                                   base::UTF8ToUTF16(enterprise_domain));
-    localized_strings.SetString("enterpriseInfoMessage", enterprise_info);
     localized_strings.SetString("enterpriseLearnMore",
-        l10n_util::GetStringUTF16(IDS_LEARN_MORE));
+                                l10n_util::GetStringUTF16(IDS_LEARN_MORE));
     localized_strings.SetString("enterpriseInfoHintLink",
                                 chrome::kLearnMoreEnterpriseURL);
+    base::string16 enterprise_info;
+    if (connector->IsCloudManaged()) {
+      const std::string enterprise_display_domain =
+          connector->GetEnterpriseDisplayDomain();
+      enterprise_info = l10n_util::GetStringFUTF16(
+          IDS_ASH_ENTERPRISE_DEVICE_MANAGED_BY,
+          base::UTF8ToUTF16(enterprise_display_domain));
+    } else if (connector->IsActiveDirectoryManaged()) {
+      enterprise_info =
+          l10n_util::GetStringUTF16(IDS_ASH_ENTERPRISE_DEVICE_MANAGED);
+    } else {
+      NOTREACHED() << "Unknown management type";
+    }
+    localized_strings.SetString("enterpriseInfoMessage", enterprise_info);
   } else {
     localized_strings.SetString("enterpriseInfoVisible", "false");
+    localized_strings.SetString("enterpriseInfoMessage", "");
+    localized_strings.SetString("enterpriseLearnMore", "");
+    localized_strings.SetString("enterpriseInfoHintLink", "");
   }
 #endif
 
@@ -370,17 +379,10 @@ void NTPResourceCache::CreateNewTabGuestHTML() {
   static const base::StringPiece guest_tab_html(
       ResourceBundle::GetSharedInstance().GetRawDataResource(guest_tab_ids));
 
-#if defined(OS_CHROMEOS)
-  // TODO(dbeam): convert c/b/resources/chromeos/guest_session_tab.html from
-  // i18n-* to $i18n{}.
-  std::string full_html = webui::GetI18nTemplateHtml(
-      guest_tab_html, &localized_strings);
-#else
   ui::TemplateReplacements replacements;
   ui::TemplateReplacementsFromDictionaryValue(localized_strings, &replacements);
   std::string full_html =
       ui::ReplaceTemplateExpressions(guest_tab_html, replacements);
-#endif
 
   new_tab_guest_html_ = base::RefCountedString::TakeString(&full_html);
 }

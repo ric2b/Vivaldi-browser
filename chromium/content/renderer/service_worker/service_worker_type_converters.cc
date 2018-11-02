@@ -29,11 +29,11 @@ TypeConverter<content::ServiceWorkerStatusCode,
   return status_code;
 }
 
-blink::WebPaymentAppRequest
-TypeConverter<blink::WebPaymentAppRequest,
-              payments::mojom::PaymentAppRequestPtr>::
-    Convert(const payments::mojom::PaymentAppRequestPtr& input) {
-  blink::WebPaymentAppRequest output;
+blink::WebPaymentRequestEventData
+TypeConverter<blink::WebPaymentRequestEventData,
+              payments::mojom::PaymentRequestEventDataPtr>::
+    Convert(const payments::mojom::PaymentRequestEventDataPtr& input) {
+  blink::WebPaymentRequestEventData output;
 
   output.top_level_origin =
       blink::WebString::FromUTF8(input->top_level_origin.spec());
@@ -49,7 +49,7 @@ TypeConverter<blink::WebPaymentAppRequest,
         std::move(input->method_data[i]));
   }
 
-  output.total = mojo::ConvertTo<blink::WebPaymentItem>(input->total);
+  output.total = mojo::ConvertTo<blink::WebPaymentCurrencyAmount>(input->total);
 
   output.modifiers = blink::WebVector<blink::WebPaymentDetailsModifier>(
       input->modifiers.size());

@@ -70,13 +70,13 @@ static bool IsSupportedAndroidMimeType(const std::string& mime_type) {
 
 static std::string GetDefaultCodecName(const std::string& mime_type,
                                        MediaCodecDirection direction,
-                                       bool require_software_codec) {
+                                       bool requires_software_codec) {
   DCHECK(MediaCodecUtil::IsMediaCodecAvailable());
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jstring> j_mime = ConvertUTF8ToJavaString(env, mime_type);
   ScopedJavaLocalRef<jstring> j_codec_name =
       Java_MediaCodecUtil_getDefaultCodecName(
-          env, j_mime, static_cast<int>(direction), require_software_codec);
+          env, j_mime, static_cast<int>(direction), requires_software_codec);
   return ConvertJavaStringToUTF8(env, j_codec_name.obj());
 }
 
@@ -195,6 +195,12 @@ bool MediaCodecUtil::IsMediaCodecAvailableFor(int sdk, const char* model) {
 bool MediaCodecUtil::SupportsSetParameters() {
   // MediaCodec.setParameters() is only available starting with K.
   return base::android::BuildInfo::GetInstance()->sdk_int() >= 19;
+}
+
+// static
+bool MediaCodecUtil::PlatformSupportsCbcsEncryption(int sdk) {
+  JNIEnv* env = AttachCurrentThread();
+  return Java_MediaCodecUtil_platformSupportsCbcsEncryption(env, sdk);
 }
 
 // static

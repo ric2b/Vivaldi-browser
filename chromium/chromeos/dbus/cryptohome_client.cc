@@ -7,7 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -343,17 +346,17 @@ class CryptohomeClientImpl : public CryptohomeClient {
   }
 
   // CryptohomeClient override.
-  void TpmCanAttemptOwnership(const VoidDBusMethodCallback& callback) override {
+  void TpmCanAttemptOwnership(VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cryptohome::kCryptohomeInterface,
                                  cryptohome::kCryptohomeTpmCanAttemptOwnership);
-    CallVoidMethod(&method_call, callback);
+    CallVoidMethod(&method_call, std::move(callback));
   }
 
   // CryptohomeClient overrides.
-  void TpmClearStoredPassword(const VoidDBusMethodCallback& callback) override {
+  void TpmClearStoredPassword(VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(cryptohome::kCryptohomeInterface,
                                  cryptohome::kCryptohomeTpmClearStoredPassword);
-    CallVoidMethod(&method_call, callback);
+    CallVoidMethod(&method_call, std::move(callback));
   }
 
   // CryptohomeClient override.
@@ -396,11 +399,9 @@ class CryptohomeClientImpl : public CryptohomeClient {
     dbus::MessageWriter writer(&method_call);
     writer.AppendString(cryptohome_id.id());
     proxy_->CallMethod(
-        &method_call, kTpmDBusTimeoutMs ,
-        base::Bind(
-            &CryptohomeClientImpl::OnPkcs11GetTpmTokenInfoForUser,
-            weak_ptr_factory_.GetWeakPtr(),
-            callback));
+        &method_call, kTpmDBusTimeoutMs,
+        base::Bind(&CryptohomeClientImpl::OnPkcs11GetTpmTokenInfo,
+                   weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
   // CryptohomeClient override.
@@ -755,6 +756,16 @@ class CryptohomeClientImpl : public CryptohomeClient {
     CallBoolMethod(&method_call, callback);
   }
 
+  // CryptohomeClient override.
+  void TpmGetVersion(const StringDBusMethodCallback& callback) override {
+    dbus::MethodCall method_call(cryptohome::kCryptohomeInterface,
+                                 "TpmGetVersion");
+    proxy_->CallMethod(&method_call, kTpmDBusTimeoutMs,
+                       base::Bind(&CryptohomeClientImpl::OnStringMethod,
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  callback));
+  }
+
   void GetKeyDataEx(const cryptohome::Identification& id,
                     const cryptohome::AuthorizationRequest& auth,
                     const cryptohome::GetKeyDataRequest& request,
@@ -922,21 +933,26 @@ class CryptohomeClientImpl : public CryptohomeClient {
   }
 
   void MigrateToDircrypto(const cryptohome::Identification& cryptohome_id,
-                          const VoidDBusMethodCallback& callback) override {
+                          const cryptohome::MigrateToDircryptoRequest& request,
+                          VoidDBusMethodCallback callback) override {
+    // TODO(bug758837,pmarko): Switch back to MigrateToDircrypto when its
+    // signature matches MigrateToDircryptoEx.
     dbus::MethodCall method_call(cryptohome::kCryptohomeInterface,
-                                 cryptohome::kCryptohomeMigrateToDircrypto);
+                                 cryptohome::kCryptohomeMigrateToDircryptoEx);
 
     cryptohome::AccountIdentifier id_proto;
     FillIdentificationProtobuf(cryptohome_id, &id_proto);
 
     dbus::MessageWriter writer(&method_call);
     writer.AppendProtoAsArrayOfBytes(id_proto);
+    writer.AppendProtoAsArrayOfBytes(request);
 
     // The migration progress takes unpredicatable time depending on the
     // user file size and the number. Setting the time limit to infinite.
     proxy_->CallMethod(&method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
                        base::Bind(&CryptohomeClientImpl::OnVoidMethod,
-                                  weak_ptr_factory_.GetWeakPtr(), callback));
+                                  weak_ptr_factory_.GetWeakPtr(),
+                                  base::Passed(std::move(callback))));
   }
 
   void NeedsDircryptoMigration(
@@ -1030,20 +1046,16 @@ class CryptohomeClientImpl : public CryptohomeClient {
 
   // Calls a method without result values.
   void CallVoidMethod(dbus::MethodCall* method_call,
-                      const VoidDBusMethodCallback& callback) {
-    proxy_->CallMethod(method_call, kTpmDBusTimeoutMs ,
+                      VoidDBusMethodCallback callback) {
+    proxy_->CallMethod(method_call, kTpmDBusTimeoutMs,
                        base::Bind(&CryptohomeClientImpl::OnVoidMethod,
                                   weak_ptr_factory_.GetWeakPtr(),
-                                  callback));
+                                  base::Passed(std::move(callback))));
   }
 
-  void OnVoidMethod(const VoidDBusMethodCallback& callback,
-                    dbus::Response* response) {
-    if (!response) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE);
-      return;
-    }
-    callback.Run(DBUS_METHOD_CALL_SUCCESS);
+  void OnVoidMethod(VoidDBusMethodCallback callback, dbus::Response* response) {
+    std::move(callback).Run(response ? DBUS_METHOD_CALL_SUCCESS
+                                     : DBUS_METHOD_CALL_FAILURE);
   }
 
   // Calls a method with a bool value reult and block.
@@ -1136,29 +1148,10 @@ class CryptohomeClientImpl : public CryptohomeClient {
     callback.Run(DBUS_METHOD_CALL_SUCCESS, true, reply);
   }
 
-  // Handles responses for Pkcs11GetTpmTokenInfo.
+  // Handles responses for Pkcs11GetTpmTokenInfo and
+  // Pkcs11GetTpmTokenInfoForUser.
   void OnPkcs11GetTpmTokenInfo(const Pkcs11GetTpmTokenInfoCallback& callback,
                                dbus::Response* response) {
-    if (!response) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, std::string(), std::string(), -1);
-      return;
-    }
-    dbus::MessageReader reader(response);
-    std::string label;
-    std::string user_pin;
-    if (!reader.PopString(&label) || !reader.PopString(&user_pin)) {
-      callback.Run(DBUS_METHOD_CALL_FAILURE, std::string(), std::string(), -1);
-      LOG(ERROR) << "Invalid response: " << response->ToString();
-      return;
-    }
-    const int kDefaultSlot = 0;
-    callback.Run(DBUS_METHOD_CALL_SUCCESS, label, user_pin, kDefaultSlot);
-  }
-
-  // Handles responses for Pkcs11GetTpmTokenInfoForUser.
-  void OnPkcs11GetTpmTokenInfoForUser(
-      const Pkcs11GetTpmTokenInfoCallback& callback,
-      dbus::Response* response) {
     if (!response) {
       callback.Run(DBUS_METHOD_CALL_FAILURE, std::string(), std::string(), -1);
       return;

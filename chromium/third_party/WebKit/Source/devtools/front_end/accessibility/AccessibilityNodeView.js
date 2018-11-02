@@ -8,6 +8,8 @@ Accessibility.AXNodeSubPane = class extends Accessibility.AccessibilitySubPane {
   constructor() {
     super(Common.UIString('Computed Properties'));
 
+    this.contentElement.classList.add('ax-subpane');
+
     this._noNodeInfo = this.createInfo(Common.UIString('No accessibility node'));
     this._ignoredInfo = this.createInfo(Common.UIString('Accessibility node not exposed'), 'ax-ignored-info hidden');
 
@@ -15,6 +17,7 @@ Accessibility.AXNodeSubPane = class extends Accessibility.AccessibilitySubPane {
     this._ignoredReasonsTree = this.createTreeOutline();
 
     this.element.classList.add('accessibility-computed');
+    this.registerRequiredCSS('accessibility/accessibilityNode.css');
   }
 
   /**

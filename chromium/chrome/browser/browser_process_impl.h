@@ -18,7 +18,7 @@
 #include "base/debug/stack_trace.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -65,7 +65,6 @@ class PolicyService;
 
 // Real implementation of BrowserProcess that creates and returns the services.
 class BrowserProcessImpl : public BrowserProcess,
-                           public base::NonThreadSafe,
                            public KeepAliveStateObserver {
  public:
   // |local_state_task_runner| must be a shutdown-blocking task runner.
@@ -155,10 +154,11 @@ class BrowserProcessImpl : public BrowserProcess,
 #endif
   network_time::NetworkTimeTracker* network_time_tracker() override;
   gcm::GCMDriver* gcm_driver() override;
-  memory::TabManager* GetTabManager() override;
+  resource_coordinator::TabManager* GetTabManager() override;
   shell_integration::DefaultWebClientState CachedDefaultWebClientState()
       override;
   physical_web::PhysicalWebDataSource* GetPhysicalWebDataSource() override;
+  prefs::InProcessPrefServiceFactory* pref_service_factory() const override;
 
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
@@ -188,7 +188,9 @@ class BrowserProcessImpl : public BrowserProcess,
 
   void ApplyAllowCrossOriginAuthPromptPolicy();
   void ApplyDefaultBrowserPolicy();
+#if !defined(OS_ANDROID)
   void ApplyMetricsReportingPolicy();
+#endif
 
   void CacheDefaultWebClientState();
 
@@ -345,14 +347,18 @@ class BrowserProcessImpl : public BrowserProcess,
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
   // Any change to this #ifdef must be reflected as well in
-  // chrome/browser/memory/tab_manager_browsertest.cc
-  std::unique_ptr<memory::TabManager> tab_manager_;
+  // chrome/browser/resource_coordinator/tab_manager_browsertest.cc
+  std::unique_ptr<resource_coordinator::TabManager> tab_manager_;
 #endif
 
   shell_integration::DefaultWebClientState cached_default_web_client_state_;
 
   std::unique_ptr<physical_web::PhysicalWebDataSource>
       physical_web_data_source_;
+
+  std::unique_ptr<prefs::InProcessPrefServiceFactory> pref_service_factory_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(BrowserProcessImpl);
 };

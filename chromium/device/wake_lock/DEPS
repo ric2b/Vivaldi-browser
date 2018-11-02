@@ -1,4 +1,0 @@
-include_rules = [
-  "+device/power_save_blocker",
-  "+ui/gfx",
-]

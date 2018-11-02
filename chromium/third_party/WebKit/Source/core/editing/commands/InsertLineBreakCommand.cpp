@@ -127,7 +127,7 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
     }
 
     SetEndingSelection(SelectionInDOMTree::Builder()
-                           .Collapse(Position::BeforeNode(node_to_insert))
+                           .Collapse(Position::BeforeNode(*node_to_insert))
                            .SetIsDirectional(EndingSelection().IsDirectional())
                            .Build());
   } else if (pos.ComputeEditingOffset() <= CaretMinOffset(pos.AnchorNode())) {
@@ -137,7 +137,7 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
     // Insert an extra br or '\n' if the just inserted one collapsed.
-    if (!IsStartOfParagraph(VisiblePosition::BeforeNode(node_to_insert))) {
+    if (!IsStartOfParagraph(VisiblePosition::BeforeNode(*node_to_insert))) {
       InsertNodeBefore(node_to_insert->cloneNode(false), node_to_insert,
                        editing_state);
       if (editing_state->IsAborted())
@@ -169,7 +169,7 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
     InsertNodeBefore(node_to_insert, text_node, editing_state);
     if (editing_state->IsAborted())
       return;
-    Position ending_position = Position::FirstPositionInNode(text_node);
+    Position ending_position = Position::FirstPositionInNode(*text_node);
 
     // Handle whitespace that occurs after the split
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -190,7 +190,7 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
         InsertNodeAt(nbsp_node, position_before_text_node, editing_state);
         if (editing_state->IsAborted())
           return;
-        ending_position = Position::FirstPositionInNode(nbsp_node);
+        ending_position = Position::FirstPositionInNode(*nbsp_node);
       }
     }
 
@@ -225,7 +225,7 @@ void InsertLineBreakCommand::DoApply(EditingState* editing_state) {
     // line break that we inserted, or just before it if it's at the end of a
     // block.
     SetEndingSelection(SelectionInDOMTree::Builder()
-                           .Collapse(EndingSelection().end())
+                           .Collapse(EndingSelection().End())
                            .Build());
   }
 

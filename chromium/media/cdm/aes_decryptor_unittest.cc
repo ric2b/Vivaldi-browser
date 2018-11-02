@@ -6,6 +6,7 @@
 
 #include <stdint.h>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,7 @@
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/values.h"
 #include "media/base/cdm_callback_promise.h"
@@ -22,6 +24,7 @@
 #include "media/base/decoder_buffer.h"
 #include "media/base/decrypt_config.h"
 #include "media/base/decryptor.h"
+#include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
 #include "media/cdm/api/content_decryption_module.h"
 #include "media/cdm/cdm_adapter.h"
@@ -259,6 +262,12 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
     } else if (GetParam() == "CdmAdapter") {
       CdmConfig cdm_config;  // default settings of false are sufficient.
 
+      // Enable use of External Clear Key CDM.
+      scoped_feature_list_.InitWithFeatures(
+          {media::kExternalClearKeyForTesting,
+           media::kSupportExperimentalCdmInterface},
+          {});
+
       helper_.reset(new ExternalClearKeyTestHelper());
       std::unique_ptr<CdmAllocator> allocator(new SimpleCdmAllocator());
       CdmAdapter::Create(
@@ -475,6 +484,7 @@ class AesDecryptorTest : public testing::TestWithParam<std::string> {
   std::unique_ptr<ExternalClearKeyTestHelper> helper_;
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   // Constants for testing.
   const std::vector<uint8_t> original_data_;
@@ -1042,6 +1052,21 @@ TEST_P(AesDecryptorTest, NoKeysChangeForSameKey) {
   // Create a new session. Add key, should indicate key added for this session.
   std::string session_id2 = CreateSession(key_id_);
   UpdateSessionAndExpect(session_id2, kKeyAsJWK, RESOLVED, true);
+}
+
+TEST_P(AesDecryptorTest, RandomSessionIDs) {
+  std::vector<uint8_t> key_id(kKeyId, kKeyId + arraysize(kKeyId));
+  const size_t kNumIterations = 25;
+  std::set<std::string> seen_sessions;
+
+  for (size_t i = 0; i < kNumIterations; ++i) {
+    std::string session_id = CreateSession(key_id_);
+    EXPECT_TRUE(seen_sessions.find(session_id) == seen_sessions.end());
+    EXPECT_EQ(16u, session_id.length());
+    seen_sessions.insert(session_id);
+  }
+
+  EXPECT_EQ(kNumIterations, seen_sessions.size());
 }
 
 INSTANTIATE_TEST_CASE_P(AesDecryptor,

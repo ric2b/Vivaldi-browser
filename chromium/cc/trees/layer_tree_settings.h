@@ -13,9 +13,11 @@
 #include "cc/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/output/managed_memory_policy.h"
-#include "cc/output/renderer_settings.h"
 #include "cc/scheduler/scheduler_settings.h"
 #include "cc/tiles/tile_manager_settings.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_settings.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -30,7 +32,7 @@ class CC_EXPORT LayerTreeSettings {
   SchedulerSettings ToSchedulerSettings() const;
   TileManagerSettings ToTileManagerSettings() const;
 
-  RendererSettings renderer_settings;
+  viz::ResourceSettings resource_settings;
   bool single_thread_proxy_scheduler = true;
   bool main_frame_before_activation_enabled = false;
   bool using_synchronous_renderer_compositor = false;
@@ -42,6 +44,7 @@ class CC_EXPORT LayerTreeSettings {
   int gpu_rasterization_msaa_sample_count = 0;
   float gpu_rasterization_skewport_target_time_in_seconds = 0.2f;
   bool create_low_res_tiling = false;
+  bool use_stream_video_draw_quad = false;
 
   enum ScrollbarAnimator {
     NO_ANIMATOR,
@@ -85,11 +88,10 @@ class CC_EXPORT LayerTreeSettings {
   size_t decoded_image_cache_budget_bytes = 128 * 1024 * 1024;
   size_t decoded_image_working_set_budget_bytes = 128 * 1024 * 1024;
   int max_preraster_distance_in_screen_pixels = 1000;
+  viz::ResourceFormat preferred_tile_format;
 
   bool enable_color_correct_rasterization = false;
 
-  // TODO(sunxd): remove this flag when filter demoting and aa of mask layers
-  // are implemented.
   bool enable_mask_tiling = false;
 
   // If set to true, the compositor may selectively defer image decodes to the
@@ -100,7 +102,7 @@ class CC_EXPORT LayerTreeSettings {
   LayerTreeDebugState initial_debug_state;
 
   // Indicates that the LayerTreeHost should defer commits unless it has a valid
-  // LocalSurfaceId set.
+  // viz::LocalSurfaceId set.
   bool enable_surface_synchronization = false;
 
   // Indicates the case when a sub-frame gets its own LayerTree because it's

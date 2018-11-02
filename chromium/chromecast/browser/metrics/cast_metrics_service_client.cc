@@ -9,6 +9,7 @@
 #include "base/i18n/rtl.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -91,15 +92,6 @@ GetReleaseChannelFromUpdateChannelName(const std::string& channel_name) {
 
 }  // namespace
 
-// static
-std::unique_ptr<CastMetricsServiceClient> CastMetricsServiceClient::Create(
-    base::TaskRunner* io_task_runner,
-    PrefService* pref_service,
-    net::URLRequestContextGetter* request_context) {
-  return base::WrapUnique(new CastMetricsServiceClient(
-      io_task_runner, pref_service, request_context));
-}
-
 void CastMetricsServiceClient::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(kMetricsOldClientID, std::string());
 }
@@ -121,10 +113,9 @@ void CastMetricsServiceClient::SetMetricsClientId(
 
 void CastMetricsServiceClient::StoreClientInfo(
     const ::metrics::ClientInfo& client_info) {
-  const std::string& client_id = client_info.client_id;
-  DCHECK(client_id.empty() || base::IsValidGUID(client_id));
-  // backup client_id or reset to empty.
-  SetMetricsClientId(client_id);
+  // TODO(gfhuang): |force_client_id_| logic is super ugly, we should refactor
+  // to align load/save logic of |force_client_id_| with Load/StoreClientInfo.
+  // Currently it's lumped inside SetMetricsClientId(client_id).
 }
 
 std::unique_ptr<::metrics::ClientInfo>
@@ -243,7 +234,9 @@ std::string CastMetricsServiceClient::GetMetricsServerUrl() {
     return command_line->GetSwitchValueASCII(
         switches::kOverrideMetricsUploadUrl);
   }
-  return ::metrics::MetricsServiceClient::GetMetricsServerUrl();
+  // Note: This uses the old metrics service URL because some server-side
+  // provisioning is needed to support the extra Cast traffic on the new URL.
+  return ::metrics::kOldMetricsServerUrl;
 }
 
 std::unique_ptr<::metrics::MetricsLogUploader>
@@ -282,11 +275,9 @@ void CastMetricsServiceClient::EnableMetricsService(bool enabled) {
 }
 
 CastMetricsServiceClient::CastMetricsServiceClient(
-    base::TaskRunner* io_task_runner,
     PrefService* pref_service,
     net::URLRequestContextGetter* request_context)
-    : io_task_runner_(io_task_runner),
-      pref_service_(pref_service),
+    : pref_service_(pref_service),
       cast_service_(nullptr),
       client_info_loaded_(false),
 #if defined(OS_LINUX)
@@ -332,7 +323,7 @@ void CastMetricsServiceClient::Initialize(CastService* cast_service) {
   cast_service_ = cast_service;
 
   metrics_state_manager_ = ::metrics::MetricsStateManager::Create(
-      pref_service_, this,
+      pref_service_, this, base::string16(),
       base::Bind(&CastMetricsServiceClient::StoreClientInfo,
                  base::Unretained(this)),
       base::Bind(&CastMetricsServiceClient::LoadClientInfo,
@@ -348,6 +339,8 @@ void CastMetricsServiceClient::Initialize(CastService* cast_service) {
   // report the client-id and expect that setup will handle the current opt-in
   // value.
   metrics_state_manager_->ForceClientIdCreation();
+  // Populate |client_id| to other component parts.
+  SetMetricsClientId(metrics_state_manager_->client_id());
 
   CastStabilityMetricsProvider* stability_provider =
       new CastStabilityMetricsProvider(metrics_service_.get());
@@ -367,8 +360,7 @@ void CastMetricsServiceClient::Initialize(CastService* cast_service) {
             new ::metrics::ScreenInfoMetricsProvider));
   }
   metrics_service_->RegisterMetricsProvider(
-      std::unique_ptr<::metrics::MetricsProvider>(
-          new ::metrics::NetworkMetricsProvider(io_task_runner_)));
+      base::MakeUnique<::metrics::NetworkMetricsProvider>());
   metrics_service_->RegisterMetricsProvider(
       std::unique_ptr<::metrics::MetricsProvider>(
           new ::metrics::ProfilerMetricsProvider));

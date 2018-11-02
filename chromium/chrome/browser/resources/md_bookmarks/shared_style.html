@@ -38,7 +38,7 @@
         left: 0;
         position: absolute;
         right: 0;
-        z-index: 10;
+        z-index: 1;
       }
 
       .drag-above::before {
@@ -53,6 +53,29 @@
 
       .drag-on {
         background-color: var(--highlight-color);
+      }
+
+      :host-context([hide-focus-ring]) [tabindex]:focus {
+        outline: none;
+      }
+
+      .folder-icon {
+        background-image: url(chrome://bookmarks/images/folder.svg);
+        background-size: contain;
+        height: 20px;
+        min-width: 20px;
+        width: 20px;
+      }
+
+      .folder-icon[open] {
+        background-image: url(chrome://bookmarks/images/folder_open.svg);
+      }
+
+      .website-icon {
+        background-repeat: no-repeat;
+        height: 16px;
+        margin: 2px;
+        width: 16px;
       }
     </style>
   </template>

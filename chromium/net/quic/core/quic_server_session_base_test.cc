@@ -410,10 +410,6 @@ class MockQuicCryptoServerStream : public QuicCryptoServerStream {
   MOCK_METHOD1(SendServerConfigUpdate,
                void(const CachedNetworkParameters* cached_network_parameters));
 
-  void set_encryption_established(bool has_established) {
-    encryption_established_ = has_established;
-  }
-
  private:
   DISALLOW_COPY_AND_ASSIGN(MockQuicCryptoServerStream);
 };
@@ -618,7 +614,6 @@ INSTANTIATE_TEST_CASE_P(StreamMemberLifetimeTests,
 TEST_P(StreamMemberLifetimeTest, Basic) {
   FLAGS_quic_reloadable_flag_enable_quic_stateless_reject_support = true;
   FLAGS_quic_reloadable_flag_quic_use_cheap_stateless_rejects = true;
-  FLAGS_quic_reloadable_flag_quic_create_session_after_insertion = true;
 
   const QuicClock* clock = helper_.GetClock();
   QuicVersion version = AllSupportedVersions().front();
@@ -650,7 +645,8 @@ TEST_P(StreamMemberLifetimeTest, Basic) {
 
   // Feed the CHLO into the crypto stream, which will trigger a call to
   // ProofSource::GetProof
-  crypto_stream->OnHandshakeMessage(chlo);
+  crypto_test_utils::SendHandshakeMessageToStream(crypto_stream, chlo,
+                                                  Perspective::IS_CLIENT);
   ASSERT_EQ(GetFakeProofSource()->NumPendingCallbacks(), 1);
 
   // Destroy the stream

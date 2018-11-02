@@ -133,6 +133,7 @@ GCMNetworkChannel::GCMNetworkChannel(
 }
 
 GCMNetworkChannel::~GCMNetworkChannel() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   net::NetworkChangeNotifier::RemoveNetworkChangeObserver(this);
 }
 
@@ -144,7 +145,7 @@ void GCMNetworkChannel::Register() {
 void GCMNetworkChannel::OnRegisterComplete(
     const std::string& registration_id,
     gcm::GCMClient::Result result) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (result == gcm::GCMClient::SUCCESS) {
     DCHECK(!registration_id.empty());
     DVLOG(2) << "Got registration_id";
@@ -176,7 +177,7 @@ void GCMNetworkChannel::OnRegisterComplete(
 }
 
 void GCMNetworkChannel::SendMessage(const std::string& message) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!message.empty());
   DVLOG(2) << "SendMessage";
   diagnostic_info_.sent_messages_count_++;
@@ -191,7 +192,7 @@ void GCMNetworkChannel::SendMessage(const std::string& message) {
 }
 
 void GCMNetworkChannel::RequestAccessToken() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   delegate_->RequestToken(base::Bind(&GCMNetworkChannel::OnGetTokenComplete,
                                      weak_factory_.GetWeakPtr()));
 }
@@ -199,7 +200,7 @@ void GCMNetworkChannel::RequestAccessToken() {
 void GCMNetworkChannel::OnGetTokenComplete(
     const GoogleServiceAuthError& error,
     const std::string& token) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (cached_message_.empty() || registration_id_.empty()) {
     // Nothing to do.
     return;
@@ -278,7 +279,7 @@ void GCMNetworkChannel::OnGetTokenComplete(
 }
 
 void GCMNetworkChannel::OnURLFetchComplete(const net::URLFetcher* source) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK_EQ(fetcher_.get(), source);
   // Free fetcher at the end of function.
   std::unique_ptr<net::URLFetcher> fetcher = std::move(fetcher_);

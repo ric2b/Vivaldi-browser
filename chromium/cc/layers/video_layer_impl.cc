@@ -101,9 +101,10 @@ bool VideoLayerImpl::WillDraw(DrawMode draw_mode,
     return false;
 
   if (!updater_) {
-    updater_.reset(
-        new VideoResourceUpdater(layer_tree_impl()->context_provider(),
-                                 layer_tree_impl()->resource_provider()));
+    updater_.reset(new VideoResourceUpdater(
+        layer_tree_impl()->context_provider(),
+        layer_tree_impl()->resource_provider(),
+        layer_tree_impl()->settings().use_stream_video_draw_quad));
   }
 
   VideoFrameExternalResources external_resources =
@@ -190,17 +191,10 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
   if (visible_quad_rect.IsEmpty())
     return;
 
-  // Pixels for macroblocked formats. To prevent sampling outside the visible
-  // rect, stretch the video if needed.
-  gfx::Rect visible_sample_rect = frame_->visible_rect();
-  if (visible_rect.width() < coded_size.width() && visible_rect.width() > 1)
-    visible_sample_rect.set_width(visible_rect.width() - 1);
-  if (visible_rect.height() < coded_size.height() && visible_rect.height() > 1)
-    visible_sample_rect.set_height(visible_rect.height() - 1);
   const float tex_width_scale =
-      static_cast<float>(visible_sample_rect.width()) / coded_size.width();
+      static_cast<float>(visible_rect.width()) / coded_size.width();
   const float tex_height_scale =
-      static_cast<float>(visible_sample_rect.height()) / coded_size.height();
+      static_cast<float>(visible_rect.height()) / coded_size.height();
 
   switch (frame_resource_type_) {
     // TODO(danakj): Remove this, hide it in the hardware path.
@@ -266,12 +260,12 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
           static_cast<float>(ya_tex_size.width()) / uv_tex_size.width();
       float uv_subsampling_factor_y =
           static_cast<float>(ya_tex_size.height()) / uv_tex_size.height();
-      gfx::RectF ya_tex_coord_rect(visible_sample_rect);
+      gfx::RectF ya_tex_coord_rect(visible_rect);
       gfx::RectF uv_tex_coord_rect(
-          visible_sample_rect.x() / uv_subsampling_factor_x,
-          visible_sample_rect.y() / uv_subsampling_factor_y,
-          visible_sample_rect.width() / uv_subsampling_factor_x,
-          visible_sample_rect.height() / uv_subsampling_factor_y);
+          visible_rect.x() / uv_subsampling_factor_x,
+          visible_rect.y() / uv_subsampling_factor_y,
+          visible_rect.width() / uv_subsampling_factor_x,
+          visible_rect.height() / uv_subsampling_factor_y);
 
       YUVVideoDrawQuad* yuv_video_quad =
           render_pass->CreateAndAppendDrawQuad<YUVVideoDrawQuad>();
@@ -284,6 +278,8 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
           frame_resources_.size() > 3 ? frame_resources_[3].id : 0, color_space,
           frame_->ColorSpace(), frame_resource_offset_,
           frame_resource_multiplier_, frame_bits_per_channel_);
+      yuv_video_quad->require_overlay = frame_->metadata()->IsTrue(
+          media::VideoFrameMetadata::REQUIRE_OVERLAY);
       ValidateQuadResources(yuv_video_quad);
       break;
     }
@@ -308,6 +304,7 @@ void VideoLayerImpl::AppendQuads(RenderPass* render_pass,
                            premultiplied_alpha, uv_top_left, uv_bottom_right,
                            SK_ColorTRANSPARENT, opacity, flipped,
                            nearest_neighbor, false);
+      texture_quad->set_resource_size_in_pixels(coded_size);
       ValidateQuadResources(texture_quad);
       break;
     }

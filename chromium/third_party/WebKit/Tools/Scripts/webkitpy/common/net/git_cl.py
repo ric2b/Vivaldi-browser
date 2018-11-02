@@ -82,7 +82,7 @@ class GitCL(object):
             self._host.sleep(poll_delay_seconds)
             try_results = self.try_job_results()
             _log.debug('Fetched try results: %s', try_results)
-            if self.all_jobs_finished(try_results):
+            if self.all_finished(try_results):
                 self._host.print_('All jobs finished.')
                 return try_results
             self._host.print_('Waiting. %d seconds passed.' % (self._host.time() - start))
@@ -91,7 +91,7 @@ class GitCL(object):
         return None
 
     def latest_try_jobs(self, builder_names=None):
-        """Returns a dict of Builds to results for the latest try jobs.
+        """Fetches a dict of Build to TryJobStatus for the latest try jobs.
 
         This includes jobs that are not yet finished and builds with infra
         failures, so if a build is in this list, that doesn't guarantee that
@@ -101,20 +101,26 @@ class GitCL(object):
             builder_names: Optional list of builders used to filter results.
 
         Returns:
-            A dict mapping Build objects to TryJobSTatus objects, with
+            A dict mapping Build objects to TryJobStatus objects, with
             only the latest jobs included.
         """
-        try_results = self.try_job_results()
-        builds = try_results.keys()
-        if builder_names:
-            builds = [b for b in builds if b.builder_name in builder_names]
-        latest_builds = filter_latest_builds(builds)
+        return self.filter_latest(self.try_job_results(builder_names))
+
+    @staticmethod
+    def filter_latest(try_results):
+        """Returns the latest entries from from a Build to TryJobStatus dict."""
+        latest_builds = filter_latest_builds(try_results.keys())
         return {b: s for b, s in try_results.items() if b in latest_builds}
 
-    def try_job_results(self):
+    def try_job_results(self, builder_names=None):
         """Returns a dict mapping Build objects to TryJobStatus objects."""
         raw_results = self.fetch_raw_try_job_results()
-        return {self._build(r): self._try_job_status(r) for r in raw_results}
+        build_to_status = {}
+        for result in raw_results:
+            if builder_names and result['builder_name'] not in builder_names:
+                continue
+            build_to_status[self._build(result)] = self._try_job_status(result)
+        return build_to_status
 
     def fetch_raw_try_job_results(self):
         """Requests results of try jobs for the current CL and the parsed JSON.
@@ -138,10 +144,14 @@ class GitCL(object):
         url = result_dict['url']
         if url is None:
             return Build(builder_name, None)
-        match = re.match(r'.*/builds/(\d+)?$', url)
-        build_number = match.group(1)
-        assert build_number and build_number.isdigit()
-        return Build(builder_name, int(build_number))
+        match = re.match(r'.*/builds/(\d+)/?$', url)
+        if match:
+            build_number = match.group(1)
+            return Build(builder_name, int(build_number))
+        match = re.match(r'.*/task/([0-9a-f]+)/?$', url)
+        assert match, '%s did not match expected format' % url
+        task_id = match.group(1)
+        return Build(builder_name, task_id)
 
     @staticmethod
     def _try_job_status(result_dict):
@@ -149,9 +159,14 @@ class GitCL(object):
         return TryJobStatus(result_dict['status'], result_dict['result'])
 
     @staticmethod
-    def all_jobs_finished(try_results):
+    def all_finished(try_results):
         return all(s.status == 'COMPLETED' for s in try_results.values())
 
     @staticmethod
-    def has_failing_try_results(try_results):
+    def all_success(try_results):
+        return all(s.status == 'COMPLETED' and s.result == 'SUCCESS'
+                   for s in try_results.values())
+
+    @staticmethod
+    def some_failed(try_results):
         return any(s.result == 'FAILURE' for s in try_results.values())

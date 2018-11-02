@@ -13,7 +13,7 @@
 #include "ash/system/toast/toast_manager.h"
 #include "ash/wallpaper/wallpaper_controller.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/widget_finder.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_util.h"
@@ -23,6 +23,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/compositor/debug_utils.h"
 #include "ui/compositor/layer.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
@@ -109,24 +110,26 @@ void HandleToggleWallpaperMode() {
   static int index = 0;
   WallpaperController* wallpaper_controller =
       Shell::Get()->wallpaper_controller();
+  wallpaper::WallpaperInfo info("", wallpaper::WALLPAPER_LAYOUT_STRETCH,
+                                wallpaper::DEFAULT,
+                                base::Time::Now().LocalMidnight());
   switch (++index % 4) {
     case 0:
       Shell::Get()->wallpaper_delegate()->InitializeWallpaper();
       break;
     case 1:
       wallpaper_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorRED, SK_ColorBLUE),
-          wallpaper::WALLPAPER_LAYOUT_STRETCH);
+          CreateWallpaperImage(SK_ColorRED, SK_ColorBLUE), info);
       break;
     case 2:
+      info.layout = wallpaper::WALLPAPER_LAYOUT_CENTER;
       wallpaper_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorBLUE, SK_ColorGREEN),
-          wallpaper::WALLPAPER_LAYOUT_CENTER);
+          CreateWallpaperImage(SK_ColorBLUE, SK_ColorGREEN), info);
       break;
     case 3:
+      info.layout = wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED;
       wallpaper_controller->SetWallpaperImage(
-          CreateWallpaperImage(SK_ColorGREEN, SK_ColorRED),
-          wallpaper::WALLPAPER_LAYOUT_CENTER_CROPPED);
+          CreateWallpaperImage(SK_ColorGREEN, SK_ColorRED), info);
       break;
   }
 }
@@ -146,9 +149,9 @@ void HandleToggleTouchscreen() {
 }
 
 void HandleToggleTouchView() {
-  MaximizeModeController* controller = Shell::Get()->maximize_mode_controller();
-  controller->EnableMaximizeModeWindowManager(
-      !controller->IsMaximizeModeWindowManagerEnabled());
+  TabletModeController* controller = Shell::Get()->tablet_mode_controller();
+  controller->EnableTabletModeWindowManager(
+      !controller->IsTabletModeWindowManagerEnabled());
 }
 
 void HandleTriggerCrash() {
@@ -194,6 +197,9 @@ void PerformDebugActionIfEnabled(AcceleratorAction action) {
       Shell::Get()->toast_manager()->Show(
           ToastData("id", base::ASCIIToUTF16("Toast"), 5000 /* duration_ms */,
                     base::ASCIIToUTF16("Dismiss")));
+      break;
+    case DEBUG_TOGGLE_DEVICE_SCALE_FACTOR:
+      Shell::Get()->display_manager()->ToggleDisplayScaleFactor();
       break;
     case DEBUG_TOGGLE_TOUCH_PAD:
       HandleToggleTouchpad();

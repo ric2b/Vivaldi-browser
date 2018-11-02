@@ -6,8 +6,11 @@
 #define COMPONENTS_DOWNLOAD_INTERNAL_DRIVER_ENTRY_H_
 
 #include <string>
+#include <vector>
 
+#include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
+#include "url/gurl.h"
 
 namespace net {
 class HttpResponseHeaders;
@@ -52,8 +55,22 @@ struct DriverEntry {
   // http header is not presented.
   uint64_t expected_total_size;
 
+  // The physical file path for the download. It can be different from the
+  // target file path requested while the file is downloading, as it may
+  // download to a temporary path. After completion, this would be set to the
+  // target file path.
+  base::FilePath current_file_path;
+
+  // Time the download was marked as complete, base::Time() if the download is
+  // not yet complete.
+  base::Time completion_time;
+
   // The response headers for the most recent download request.
   scoped_refptr<const net::HttpResponseHeaders> response_headers;
+
+  // The url chain of the download. Download may encounter redirects, and
+  // fetches the content from the last url in the chain.
+  std::vector<GURL> url_chain;
 };
 
 }  // namespace download

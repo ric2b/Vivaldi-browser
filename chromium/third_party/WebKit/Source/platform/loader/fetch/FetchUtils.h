@@ -8,6 +8,7 @@
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
@@ -17,26 +18,31 @@ class PLATFORM_EXPORT FetchUtils {
   STATIC_ONLY(FetchUtils);
 
  public:
-  static bool IsSimpleMethod(const String& method);
-  static bool IsSimpleHeader(const AtomicString& name,
-                             const AtomicString& value);
-  static bool IsSimpleContentType(const AtomicString& media_type);
-  static bool IsSimpleRequest(const String& method, const HTTPHeaderMap&);
+  static bool IsCORSSafelistedMethod(const String& method);
+  static bool IsCORSSafelistedHeader(const AtomicString& name,
+                                     const AtomicString& value);
+  static bool IsCORSSafelistedContentType(const AtomicString& media_type);
   static bool IsForbiddenMethod(const String& method);
-  static bool IsUsefulMethod(const String& method) {
-    return !IsForbiddenMethod(method);
-  }
   static bool IsForbiddenHeaderName(const String& name);
   static bool IsForbiddenResponseHeaderName(const String& name);
-  static bool IsSimpleOrForbiddenRequest(const String& method,
-                                         const HTTPHeaderMap&);
   static AtomicString NormalizeMethod(const AtomicString& method);
   static String NormalizeHeaderValue(const String& value);
+  static bool ContainsOnlyCORSSafelistedHeaders(const HTTPHeaderMap&);
+  static bool ContainsOnlyCORSSafelistedOrForbiddenHeaders(
+      const HTTPHeaderMap&);
 
   // https://fetch.spec.whatwg.org/#ok-status aka a successful 2xx status
   // code, https://tools.ietf.org/html/rfc7231#section-6.3 . We opt to use
   // the Fetch term in naming the predicate.
   static bool IsOkStatus(int status) { return status >= 200 && status < 300; }
+
+  // Used by e.g. the CORS check algorithm to check if the FetchCredentialsMode
+  // should be treated as equivalent to "include" in the Fetch spec.
+  static bool ShouldTreatCredentialsModeAsInclude(
+      WebURLRequest::FetchCredentialsMode credentials_mode) {
+    return credentials_mode == WebURLRequest::kFetchCredentialsModeInclude ||
+           credentials_mode == WebURLRequest::kFetchCredentialsModePassword;
+  }
 };
 
 }  // namespace blink

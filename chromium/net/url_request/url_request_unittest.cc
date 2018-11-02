@@ -5,8 +5,7 @@
 #include <memory>
 #include <utility>
 
-#include "base/memory/ptr_util.h"
-#include "base/run_loop.h"
+// This must be before Windows headers
 #include "build/build_config.h"
 
 #if defined(OS_WIN)
@@ -45,8 +44,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
+#include "build/buildflag.h"
 #include "net/base/chunked_upload_data_stream.h"
 #include "net/base/directory_listing.h"
 #include "net/base/elements_upload_data_stream.h"
@@ -93,7 +94,6 @@
 #include "net/proxy/proxy_service.h"
 #include "net/quic/chromium/mock_crypto_client_stream_factory.h"
 #include "net/quic/chromium/quic_server_info.h"
-#include "net/reporting/reporting_service.h"
 #include "net/socket/socket_test_util.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
@@ -141,6 +141,10 @@
 #include "base/win/scoped_comptr.h"
 #endif
 
+#if BUILDFLAG(ENABLE_REPORTING)
+#include "net/reporting/reporting_service.h"
+#endif  // BUILDFLAG(ENABLE_REPORTING)
+
 using net::test::IsError;
 using net::test::IsOk;
 
@@ -151,6 +155,10 @@ using std::string;
 namespace net {
 
 namespace {
+
+namespace test0 {
+#include "net/http/transport_security_state_static_unittest0.h"
+}
 
 const base::string16 kChrome(ASCIIToUTF16("chrome"));
 const base::string16 kSecret(ASCIIToUTF16("secret"));
@@ -835,6 +843,41 @@ class URLRequestTest : public PlatformTest {
   TestURLRequestContext default_context_;
 };
 
+// This NetworkDelegate is picky about what files are accessible. Only
+// whitelisted files are allowed.
+class CookieBlockingNetworkDelegate : public TestNetworkDelegate {
+ public:
+  CookieBlockingNetworkDelegate(){};
+
+  // Adds |directory| to the access white list.
+  void AddToWhitelist(const base::FilePath& directory) {
+    whitelist_.insert(directory);
+  }
+
+ private:
+  // Returns true if |path| matches the white list.
+  bool OnCanAccessFileInternal(const base::FilePath& path) const {
+    for (const auto& directory : whitelist_) {
+      if (directory == path || directory.IsParent(path))
+        return true;
+    }
+    return false;
+  }
+
+  // Returns true only if both |original_path| and |absolute_path| match the
+  // white list.
+  bool OnCanAccessFile(const URLRequest& request,
+                       const base::FilePath& original_path,
+                       const base::FilePath& absolute_path) const override {
+    return (OnCanAccessFileInternal(original_path) &&
+            OnCanAccessFileInternal(absolute_path));
+  }
+
+  std::set<base::FilePath> whitelist_;
+
+  DISALLOW_COPY_AND_ASSIGN(CookieBlockingNetworkDelegate);
+};
+
 TEST_F(URLRequestTest, AboutBlankTest) {
   TestDelegate d;
   {
@@ -1083,39 +1126,176 @@ TEST_F(URLRequestTest, FileTestMultipleRanges) {
 TEST_F(URLRequestTest, AllowFileURLs) {
   base::ScopedTempDir temp_dir;
   ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  // Get an absolute path since |temp_dir| can contain a symbolic link. As of
+  // now, Mac and Android bots return a path with a symbolic link.
+  base::FilePath absolute_temp_dir =
+      base::MakeAbsoluteFilePath(temp_dir.GetPath());
+
   base::FilePath test_file;
-  ASSERT_TRUE(base::CreateTemporaryFileInDir(temp_dir.GetPath(), &test_file));
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(absolute_temp_dir, &test_file));
+  // The directory part of the path returned from CreateTemporaryFileInDir()
+  // can be slightly different from |absolute_temp_dir| on Windows.
+  // Example: C:\\Users\\CHROME~2 -> C:\\Users\\chrome-bot
+  // Hence the test should use the directory name of |test_file|, rather than
+  // |absolute_temp_dir|, for whitelisting.
+  base::FilePath real_temp_dir = test_file.DirName();
   std::string test_data("monkey");
   base::WriteFile(test_file, test_data.data(), test_data.size());
   GURL test_file_url = FilePathToFileURL(test_file);
-
   {
     TestDelegate d;
-    TestNetworkDelegate network_delegate;
-    network_delegate.set_can_access_files(true);
+    CookieBlockingNetworkDelegate network_delegate;
+    network_delegate.AddToWhitelist(real_temp_dir);
     default_context_.set_network_delegate(&network_delegate);
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
         test_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->Start();
     base::RunLoop().Run();
+    // This should be allowed as the file path is whitelisted.
     EXPECT_FALSE(d.request_failed());
     EXPECT_EQ(test_data, d.data_received());
   }
 
   {
     TestDelegate d;
-    TestNetworkDelegate network_delegate;
-    network_delegate.set_can_access_files(false);
+    CookieBlockingNetworkDelegate network_delegate;
     default_context_.set_network_delegate(&network_delegate);
     std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
         test_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->Start();
     base::RunLoop().Run();
+    // This should be rejected as the file path is not whitelisted.
     EXPECT_TRUE(d.request_failed());
     EXPECT_EQ("", d.data_received());
+    EXPECT_EQ(ERR_ACCESS_DENIED, d.request_status());
   }
 }
 
+#if defined(OS_POSIX) && !defined(OS_FUCHSIA)  // Because of symbolic links.
+
+TEST_F(URLRequestTest, SymlinksToFiles) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  // Get an absolute path since temp_dir can contain a symbolic link.
+  base::FilePath absolute_temp_dir =
+      base::MakeAbsoluteFilePath(temp_dir.GetPath());
+
+  // Create a good directory (will be whitelisted) and a good file.
+  base::FilePath good_dir = absolute_temp_dir.AppendASCII("good");
+  ASSERT_TRUE(base::CreateDirectory(good_dir));
+  base::FilePath good_file;
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(good_dir, &good_file));
+  std::string good_data("good");
+  base::WriteFile(good_file, good_data.data(), good_data.size());
+  // See the comment in AllowFileURLs() for why this is done.
+  base::FilePath real_good_dir = good_file.DirName();
+
+  // Create a bad directory (will not be whitelisted) and a bad file.
+  base::FilePath bad_dir = absolute_temp_dir.AppendASCII("bad");
+  ASSERT_TRUE(base::CreateDirectory(bad_dir));
+  base::FilePath bad_file;
+  ASSERT_TRUE(base::CreateTemporaryFileInDir(bad_dir, &bad_file));
+  std::string bad_data("bad");
+  base::WriteFile(bad_file, bad_data.data(), bad_data.size());
+
+  // This symlink will point to the good file. Access to the symlink will be
+  // allowed as both the symlink and the destination file are in the same
+  // good directory.
+  base::FilePath good_symlink = good_dir.AppendASCII("good_symlink");
+  ASSERT_TRUE(base::CreateSymbolicLink(good_file, good_symlink));
+  GURL good_file_url = FilePathToFileURL(good_symlink);
+  // This symlink will point to the bad file. Even though the symlink is in
+  // the good directory, access to the symlink will be rejected since it
+  // points to the bad file.
+  base::FilePath bad_symlink = good_dir.AppendASCII("bad_symlink");
+  ASSERT_TRUE(base::CreateSymbolicLink(bad_file, bad_symlink));
+  GURL bad_file_url = FilePathToFileURL(bad_symlink);
+
+  CookieBlockingNetworkDelegate network_delegate;
+  network_delegate.AddToWhitelist(real_good_dir);
+  {
+    TestDelegate d;
+    default_context_.set_network_delegate(&network_delegate);
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        good_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    base::RunLoop().Run();
+    // good_file_url should be allowed.
+    EXPECT_FALSE(d.request_failed());
+    EXPECT_EQ(good_data, d.data_received());
+  }
+
+  {
+    TestDelegate d;
+    default_context_.set_network_delegate(&network_delegate);
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        bad_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    base::RunLoop().Run();
+    // bad_file_url should be rejected.
+    EXPECT_TRUE(d.request_failed());
+    EXPECT_EQ("", d.data_received());
+    EXPECT_EQ(ERR_ACCESS_DENIED, d.request_status());
+  }
+}
+
+TEST_F(URLRequestTest, SymlinksToDirs) {
+  base::ScopedTempDir temp_dir;
+  ASSERT_TRUE(temp_dir.CreateUniqueTempDir());
+  // Get an absolute path since temp_dir can contain a symbolic link.
+  base::FilePath absolute_temp_dir =
+      base::MakeAbsoluteFilePath(temp_dir.GetPath());
+
+  // Create a good directory (will be whitelisted).
+  base::FilePath good_dir = absolute_temp_dir.AppendASCII("good");
+  ASSERT_TRUE(base::CreateDirectory(good_dir));
+
+  // Create a bad directory (will not be whitelisted).
+  base::FilePath bad_dir = absolute_temp_dir.AppendASCII("bad");
+  ASSERT_TRUE(base::CreateDirectory(bad_dir));
+
+  // This symlink will point to the good directory. Access to the symlink
+  // will be allowed as the symlink is in the good dir that'll be white
+  // listed.
+  base::FilePath good_symlink = good_dir.AppendASCII("good_symlink");
+  ASSERT_TRUE(base::CreateSymbolicLink(good_dir, good_symlink));
+  GURL good_file_url = FilePathToFileURL(good_symlink);
+  // This symlink will point to the bad directory. Even though the symlink is
+  // in the good directory, access to the symlink will be rejected since it
+  // points to the bad directory.
+  base::FilePath bad_symlink = good_dir.AppendASCII("bad_symlink");
+  ASSERT_TRUE(base::CreateSymbolicLink(bad_dir, bad_symlink));
+  GURL bad_file_url = FilePathToFileURL(bad_symlink);
+
+  CookieBlockingNetworkDelegate network_delegate;
+  network_delegate.AddToWhitelist(good_dir);
+  {
+    TestDelegate d;
+    default_context_.set_network_delegate(&network_delegate);
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        good_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    base::RunLoop().Run();
+    // good_file_url should be allowed.
+    EXPECT_FALSE(d.request_failed());
+    ASSERT_NE(d.data_received().find("good_symlink"), std::string::npos);
+  }
+
+  {
+    TestDelegate d;
+    default_context_.set_network_delegate(&network_delegate);
+    std::unique_ptr<URLRequest> r(default_context_.CreateRequest(
+        bad_file_url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+    r->Start();
+    base::RunLoop().Run();
+    // bad_file_url should be rejected.
+    EXPECT_TRUE(d.request_failed());
+    EXPECT_EQ("", d.data_received());
+    EXPECT_EQ(ERR_ACCESS_DENIED, d.request_status());
+  }
+}
+
+#endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
 
 TEST_F(URLRequestTest, FileDirCancelTest) {
   // Put in mock resource provider.
@@ -1167,9 +1347,8 @@ TEST_F(URLRequestTest, FileDirOutputSanity) {
   EXPECT_GT(info.size, 0);
   std::string sentinel_output = GetDirectoryListingEntry(
       base::string16(sentinel_name, sentinel_name + strlen(sentinel_name)),
-      std::string(sentinel_name),
-      false /* is_dir */,
-      info.size,
+      std::string(sentinel_name), false /* is_dir */, info.size,
+
       info.last_modified);
 
   ASSERT_LT(0, d.bytes_received());
@@ -4191,13 +4370,13 @@ TEST_F(URLRequestTestHTTP,
         url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
     r->Start();
 
+    base::RunLoop().Run();
+
     {
       HttpRequestHeaders headers;
       EXPECT_TRUE(r->GetFullRequestHeaders(&headers));
-      EXPECT_FALSE(headers.HasHeader("Authorization"));
+      EXPECT_TRUE(headers.HasHeader("Authorization"));
     }
-
-    base::RunLoop().Run();
 
     EXPECT_EQ(OK, d.request_status());
     EXPECT_EQ(200, r->GetResponseCode());
@@ -6533,6 +6712,7 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
 
   void OnExpectCTFailed(const HostPortPair& host_port_pair,
                         const GURL& report_uri,
+                        base::Time expiration,
                         const X509Certificate* validated_certificate_chain,
                         const X509Certificate* served_certificate_chain,
                         const SignedCertificateTimestampAndStatusList&
@@ -6570,8 +6750,11 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
   ct::CertPolicyCompliance default_result_;
 };
 
-// Tests that Expect CT headers are processed correctly.
-TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
+// Tests that Expect CT headers for the preload list are processed correctly.
+TEST_F(URLRequestTestHTTP, PreloadExpectCTHeader) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
+#endif
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
       net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
@@ -6611,12 +6794,12 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   context.set_network_delegate(&network_delegate);
   context.set_cert_verifier(&cert_verifier);
   context.set_cert_transparency_verifier(&ct_verifier);
-  context.set_ct_policy_enforcer(std::move(&ct_policy_enforcer));
+  context.set_ct_policy_enforcer(&ct_policy_enforcer);
   context.Init();
 
   // Now send a request to trigger the violation.
   TestDelegate d;
-  GURL url = https_test_server.GetURL("/expect-ct-header.html");
+  GURL url = https_test_server.GetURL("/expect-ct-header-preload.html");
   GURL::Replacements replace_host;
   replace_host.SetHostStr(kExpectCTStaticHostname);
   url = url.ReplaceComponents(replace_host);
@@ -6628,6 +6811,132 @@ TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
   EXPECT_EQ(1u, reporter.num_failures());
 }
 
+// Tests that Expect CT HTTP headers are processed correctly.
+TEST_F(URLRequestTestHTTP, ExpectCTHeader) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  MockExpectCTReporter reporter;
+  TransportSecurityState transport_security_state;
+  transport_security_state.SetExpectCTReporter(&reporter);
+
+  // Set up a MockCertVerifier to accept the certificate that the server sends.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+
+  // Set up a DoNothingCTVerifier and MockCTPolicyEnforcer to simulate CT
+  // compliance.
+  DoNothingCTVerifier ct_verifier;
+  MockCTPolicyEnforcer ct_policy_enforcer;
+  ct_policy_enforcer.set_default_result(
+      ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS);
+
+  TestNetworkDelegate network_delegate;
+  // Use a MockHostResolver (which by default maps all hosts to
+  // 127.0.0.1).
+  MockHostResolver host_resolver;
+  TestURLRequestContext context(true);
+  context.set_host_resolver(&host_resolver);
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.set_cert_transparency_verifier(&ct_verifier);
+  context.set_ct_policy_enforcer(&ct_policy_enforcer);
+  context.Init();
+
+  // Now send a request to trigger the header processing.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/expect-ct-header.html");
+  std::unique_ptr<URLRequest> request(context.CreateRequest(
+      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  request->Start();
+  base::RunLoop().Run();
+
+  TransportSecurityState::ExpectCTState state;
+  ASSERT_TRUE(
+      transport_security_state.GetDynamicExpectCTState(url.host(), &state));
+  EXPECT_TRUE(state.enforce);
+  EXPECT_EQ(GURL("https://example.test"), state.report_uri);
+}
+
+// Tests that if multiple Expect CT HTTP headers are sent, they are all
+// processed.
+TEST_F(URLRequestTestHTTP, MultipleExpectCTHeaders) {
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(
+      TransportSecurityState::kDynamicExpectCTFeature);
+
+  EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
+  https_test_server.SetSSLConfig(
+      net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);
+  https_test_server.ServeFilesFromSourceDirectory(
+      base::FilePath(kTestFilePath));
+  ASSERT_TRUE(https_test_server.Start());
+
+  MockExpectCTReporter reporter;
+  TransportSecurityState transport_security_state;
+  transport_security_state.SetExpectCTReporter(&reporter);
+
+  // Set up a MockCertVerifier to accept the certificate that the server sends.
+  scoped_refptr<X509Certificate> cert = https_test_server.GetCertificate();
+  ASSERT_TRUE(cert);
+  MockCertVerifier cert_verifier;
+  CertVerifyResult verify_result;
+  verify_result.verified_cert = cert;
+  verify_result.is_issued_by_known_root = true;
+  cert_verifier.AddResultForCert(cert.get(), verify_result, OK);
+
+  // Set up a DoNothingCTVerifier and MockCTPolicyEnforcer to simulate CT
+  // compliance.
+  DoNothingCTVerifier ct_verifier;
+  MockCTPolicyEnforcer ct_policy_enforcer;
+  ct_policy_enforcer.set_default_result(
+      ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS);
+
+  TestNetworkDelegate network_delegate;
+  // Use a MockHostResolver (which by default maps all hosts to
+  // 127.0.0.1).
+  MockHostResolver host_resolver;
+  TestURLRequestContext context(true);
+  context.set_host_resolver(&host_resolver);
+  context.set_transport_security_state(&transport_security_state);
+  context.set_network_delegate(&network_delegate);
+  context.set_cert_verifier(&cert_verifier);
+  context.set_cert_transparency_verifier(&ct_verifier);
+  context.set_ct_policy_enforcer(&ct_policy_enforcer);
+  context.Init();
+
+  // Now send a request to trigger the header processing.
+  TestDelegate d;
+  GURL url = https_test_server.GetURL("/expect-ct-header-multiple.html");
+  std::unique_ptr<URLRequest> request(context.CreateRequest(
+      url, DEFAULT_PRIORITY, &d, TRAFFIC_ANNOTATION_FOR_TESTS));
+  request->Start();
+  base::RunLoop().Run();
+
+  TransportSecurityState::ExpectCTState state;
+  ASSERT_TRUE(
+      transport_security_state.GetDynamicExpectCTState(url.host(), &state));
+  EXPECT_TRUE(state.enforce);
+  EXPECT_EQ(GURL("https://example.test"), state.report_uri);
+}
+
+#endif  // !defined(OS_IOS)
+
+#if BUILDFLAG(ENABLE_REPORTING)
 namespace {
 
 class TestReportingService : public ReportingService {
@@ -6764,8 +7073,7 @@ TEST_F(URLRequestTestHTTP, DontProcessReportToHeaderInvalidHTTPS) {
   EXPECT_TRUE(IsCertStatusError(request->ssl_info().cert_status));
   EXPECT_TRUE(reporting_service.headers().empty());
 }
-
-#endif  // !defined(OS_IOS)
+#endif  // BUILDFLAG(ENABLE_REPORTING)
 
 TEST_F(URLRequestTestHTTP, ContentTypeNormalizationTest) {
   ASSERT_TRUE(http_test_server()->Start());
@@ -6820,6 +7128,9 @@ TEST_F(URLRequestTestHTTP, RestrictFileRedirects) {
   base::RunLoop().Run();
 
   EXPECT_EQ(ERR_UNSAFE_REDIRECT, d.request_status());
+
+  // The redirect should have been rejected before reporting it to the caller.
+  EXPECT_EQ(0, d.received_redirect_count());
 }
 #endif  // !BUILDFLAG(DISABLE_FILE_SUPPORT)
 
@@ -6834,8 +7145,14 @@ TEST_F(URLRequestTestHTTP, RestrictDataRedirects) {
   base::RunLoop().Run();
 
   EXPECT_EQ(ERR_UNSAFE_REDIRECT, d.request_status());
+
+  // The redirect should have been rejected before reporting it to the
+  // caller. See https://crbug.com/723796
+  EXPECT_EQ(0, d.received_redirect_count());
 }
 
+// Test that redirects to invalid URLs are rejected. See
+// https://crbug.com/462272.
 TEST_F(URLRequestTestHTTP, RedirectToInvalidURL) {
   ASSERT_TRUE(http_test_server()->Start());
 
@@ -6846,7 +7163,11 @@ TEST_F(URLRequestTestHTTP, RedirectToInvalidURL) {
   req->Start();
   base::RunLoop().Run();
 
-  EXPECT_EQ(ERR_INVALID_URL, d.request_status());
+  EXPECT_EQ(1, d.response_started_count());
+  EXPECT_EQ(ERR_INVALID_REDIRECT, d.request_status());
+
+  // The redirect should have been rejected before reporting it to the caller.
+  EXPECT_EQ(0, d.received_redirect_count());
 }
 
 // Make sure redirects are cached, despite not reading their bodies.
@@ -6970,6 +7291,9 @@ TEST_F(URLRequestTestHTTP, UnsafeRedirectToDifferentUnsafeURL) {
     base::RunLoop().Run();
 
     EXPECT_EQ(ERR_UNSAFE_REDIRECT, d.request_status());
+
+    // The redirect should have been rejected before reporting it to the caller.
+    EXPECT_EQ(0, d.received_redirect_count());
   }
 }
 
@@ -8666,141 +8990,244 @@ class URLRequestTestReferrerPolicy : public URLRequestTest {
 TEST_F(URLRequestTestReferrerPolicy, HTTPToSameOriginHTTP) {
   InstantiateSameOriginServers(net::EmbeddedTestServer::TYPE_HTTP);
 
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer, referrer);
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer,
+      referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 TEST_F(URLRequestTestReferrerPolicy, HTTPToCrossOriginHTTP) {
   InstantiateCrossOriginServers(net::EmbeddedTestServer::TYPE_HTTP,
                                 net::EmbeddedTestServer::TYPE_HTTP);
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
 
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/"));
+      referrer, referrer.GetOrigin());
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/"));
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer,
+      referrer.GetOrigin());
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer, GURL());
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 TEST_F(URLRequestTestReferrerPolicy, HTTPSToSameOriginHTTPS) {
   InstantiateSameOriginServers(net::EmbeddedTestServer::TYPE_HTTPS);
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
 
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer, referrer);
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer,
+      referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 TEST_F(URLRequestTestReferrerPolicy, HTTPSToCrossOriginHTTPS) {
   InstantiateCrossOriginServers(net::EmbeddedTestServer::TYPE_HTTPS,
                                 net::EmbeddedTestServer::TYPE_HTTPS);
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
 
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/"));
+      referrer, origin_server()->GetURL("/"));
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer,
       origin_server()->GetURL("/"));
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer, GURL());
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 TEST_F(URLRequestTestReferrerPolicy, HTTPToHTTPS) {
   InstantiateCrossOriginServers(net::EmbeddedTestServer::TYPE_HTTP,
                                 net::EmbeddedTestServer::TYPE_HTTPS);
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
 
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/path/to/file.html"));
+      referrer, referrer);
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
-      origin_server()->GetURL("/"));
+      referrer, origin_server()->GetURL("/"));
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer,
       origin_server()->GetURL("/"));
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer, GURL());
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 TEST_F(URLRequestTestReferrerPolicy, HTTPSToHTTP) {
   InstantiateCrossOriginServers(net::EmbeddedTestServer::TYPE_HTTPS,
                                 net::EmbeddedTestServer::TYPE_HTTP);
+  GURL referrer = origin_server()->GetURL("/path/to/file.html");
 
   VerifyReferrerAfterRedirect(
       URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-      origin_server()->GetURL("/path/to/file.html"), GURL());
+      referrer, GURL());
 
   VerifyReferrerAfterRedirect(
       URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"), GURL());
+      referrer, GURL());
 
   VerifyReferrerAfterRedirect(
-      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
-      origin_server()->GetURL("/path/to/file.html"),
+      URLRequest::ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN, referrer,
       origin_server()->GetURL("/"));
 
-  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER,
-                              origin_server()->GetURL("/path/to/file.html"),
-                              origin_server()->GetURL("/path/to/file.html"));
+  VerifyReferrerAfterRedirect(URLRequest::NEVER_CLEAR_REFERRER, referrer,
+                              referrer);
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin; thus this test case just
+  // checks that this policy doesn't cause the referrer to change when following
+  // a redirect.
+  VerifyReferrerAfterRedirect(URLRequest::ORIGIN, referrer.GetOrigin(),
+                              referrer.GetOrigin());
+
+  VerifyReferrerAfterRedirect(
+      URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN, referrer, GURL());
+
+  // The original referrer set on the request is expected to obey the referrer
+  // policy and already be stripped to the origin, though it should be
+  // subsequently cleared during the downgrading redirect.
+  VerifyReferrerAfterRedirect(
+      URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+      referrer.GetOrigin(), GURL());
+
+  VerifyReferrerAfterRedirect(URLRequest::NO_REFERRER, GURL(), GURL());
 }
 
 class HTTPSRequestTest : public testing::Test {
@@ -8920,6 +9347,9 @@ TEST_F(HTTPSRequestTest, HTTPSExpiredTest) {
 // the |certificate_errors_are_fatal| flag correctly. This flag will cause
 // the interstitial to be fatal.
 TEST_F(HTTPSRequestTest, HTTPSPreloadedHSTSTest) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
+#endif
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   test_server.SetSSLConfig(net::EmbeddedTestServer::CERT_MISMATCHED_NAME);
   test_server.ServeFilesFromSourceDirectory("net/data/ssl");
@@ -8959,6 +9389,9 @@ TEST_F(HTTPSRequestTest, HTTPSPreloadedHSTSTest) {
 // This tests that cached HTTPS page loads do not cause any updates to the
 // TransportSecurityState.
 TEST_F(HTTPSRequestTest, HTTPSErrorsNoClobberTSSTest) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
+#endif
   // The actual problem -- CERT_MISMATCHED_NAME in this case -- doesn't
   // matter. It just has to be any error.
   EmbeddedTestServer test_server(net::EmbeddedTestServer::TYPE_HTTPS);
@@ -9335,20 +9768,23 @@ TEST_F(HTTPSRequestTest, SSLSessionCacheShardTest) {
   }
 
   // Now create a new HttpCache with a different ssl_session_cache_shard value.
-  HttpNetworkSession::Params params;
-  params.host_resolver = default_context_.host_resolver();
-  params.cert_verifier = default_context_.cert_verifier();
-  params.transport_security_state = default_context_.transport_security_state();
-  params.cert_transparency_verifier =
+  HttpNetworkSession::Context session_context;
+  session_context.host_resolver = default_context_.host_resolver();
+  session_context.cert_verifier = default_context_.cert_verifier();
+  session_context.transport_security_state =
+      default_context_.transport_security_state();
+  session_context.cert_transparency_verifier =
       default_context_.cert_transparency_verifier();
-  params.ct_policy_enforcer = default_context_.ct_policy_enforcer();
-  params.proxy_service = default_context_.proxy_service();
-  params.ssl_config_service = default_context_.ssl_config_service();
-  params.http_auth_handler_factory =
+  session_context.ct_policy_enforcer = default_context_.ct_policy_enforcer();
+  session_context.proxy_service = default_context_.proxy_service();
+  session_context.ssl_config_service = default_context_.ssl_config_service();
+  session_context.http_auth_handler_factory =
       default_context_.http_auth_handler_factory();
-  params.http_server_properties = default_context_.http_server_properties();
+  session_context.http_server_properties =
+      default_context_.http_server_properties();
 
-  HttpNetworkSession network_session(params);
+  HttpNetworkSession network_session(HttpNetworkSession::Params(),
+                                     session_context);
   std::unique_ptr<HttpCache> cache(
       new HttpCache(&network_session, HttpCache::DefaultBackend::InMemory(0),
                     false /* is_main_cache */));
@@ -9660,14 +10096,6 @@ class HTTPSOCSPTest : public HTTPSRequestTest {
         const NetLogWithSource& net_log) override {
       return ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS;
     }
-
-    ct::EVPolicyCompliance DoesConformToCTEVPolicy(
-        X509Certificate* cert,
-        const ct::EVCertsWhitelist* ev_whitelist,
-        const SCTList& verified_scts,
-        const NetLogWithSource& net_log) override {
-      return ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS;
-    }
   };
   // SetupContext configures the URLRequestContext that will be used for making
   // connetions to testserver. This can be overridden in test subclasses for
@@ -9867,6 +10295,9 @@ TEST_F(HTTPSOCSPTest, MAYBE_RevokedStapled) {
 }
 
 TEST_F(HTTPSOCSPTest, ExpectStapleReportSentOnMissing) {
+#if !BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+  SetTransportSecurityStateSourceForTesting(&test0::kHSTSSource);
+#endif
   EmbeddedTestServer https_test_server(net::EmbeddedTestServer::TYPE_HTTPS);
   https_test_server.SetSSLConfig(
       net::EmbeddedTestServer::CERT_COMMON_NAME_IS_DOMAIN);

@@ -14,10 +14,30 @@
 
 namespace content {
 
+class ServiceWorkerContextObserver;
+
 enum class ServiceWorkerCapability {
   NO_SERVICE_WORKER,
   SERVICE_WORKER_NO_FETCH_HANDLER,
   SERVICE_WORKER_WITH_FETCH_HANDLER,
+};
+
+// Used for UMA. Append only.
+enum class StartServiceWorkerForNavigationHintResult {
+  // The service worker started successfully.
+  STARTED = 0,
+  // The service worker was already running.
+  ALREADY_RUNNING = 1,
+  // There was no service worker registration for the given URL.
+  NO_SERVICE_WORKER_REGISTRATION = 2,
+  // There was no active service worker for the given URL.
+  NO_ACTIVE_SERVICE_WORKER_VERSION = 3,
+  // The service worker for the given URL had no fetch event handler.
+  NO_FETCH_HANDLER = 4,
+  // Something failed.
+  FAILED = 5,
+  // Add new result to record here.
+  NUM_TYPES
 };
 
 // Represents the per-StoragePartition ServiceWorker data.
@@ -38,6 +58,12 @@ class ServiceWorkerContext {
   using CountExternalRequestsCallback =
       base::Callback<void(size_t external_request_count)>;
 
+  using StartServiceWorkerForNavigationHintCallback =
+      base::Callback<void(StartServiceWorkerForNavigationHintResult result)>;
+
+  using StartActiveWorkerCallback =
+      base::OnceCallback<void(int process_id, int thread_id)>;
+
   // Registers the header name which should not be passed to the ServiceWorker.
   // Must be called from the IO thread.
   CONTENT_EXPORT static void AddExcludedHeadersForFetchEvent(
@@ -46,6 +72,13 @@ class ServiceWorkerContext {
   // Returns true if the header name should not be passed to the ServiceWorker.
   // Must be called from the IO thread.
   static bool IsExcludedHeaderNameForFetchEvent(const std::string& header_name);
+
+  // Returns true if |url| is within the service worker |scope|.
+  CONTENT_EXPORT static bool ScopeMatches(const GURL& scope, const GURL& url);
+
+  // Observer methods are always dispatched on the UI thread.
+  virtual void AddObserver(ServiceWorkerContextObserver* observer) = 0;
+  virtual void RemoveObserver(ServiceWorkerContextObserver* observer) = 0;
 
   // Equivalent to calling navigator.serviceWorker.register(script_url, {scope:
   // pattern}) from a renderer, except that |pattern| is an absolute URL instead
@@ -79,6 +112,15 @@ class ServiceWorkerContext {
                                        const std::string& request_uuid) = 0;
   virtual bool FinishedExternalRequest(int64_t service_worker_version_id,
                                        const std::string& request_uuid) = 0;
+
+  // Starts the active worker of the registration whose scope is |pattern|.
+  // |info_callback| is passed the worker's render process id and thread id.
+  //
+  // Must be called on IO thread.
+  virtual void StartActiveWorkerForPattern(
+      const GURL& pattern,
+      StartActiveWorkerCallback info_callback,
+      base::OnceClosure failure_callback) = 0;
 
   // Equivalent to calling navigator.serviceWorker.unregister(pattern) from a
   // renderer, except that |pattern| is an absolute URL instead of relative to
@@ -138,6 +180,13 @@ class ServiceWorkerContext {
   // This function can be called from any thread, but the callback will always
   // be called on the UI thread.
   virtual void ClearAllServiceWorkersForTest(const base::Closure& callback) = 0;
+
+  // Starts the service worker for |document_url|. Called when a navigation to
+  // that URL is predicted to occur soon. Must be called from the UI thread. The
+  // |callback| will always be called on the UI thread.
+  virtual void StartServiceWorkerForNavigationHint(
+      const GURL& document_url,
+      const StartServiceWorkerForNavigationHintCallback& callback) = 0;
 
  protected:
   ServiceWorkerContext() {}

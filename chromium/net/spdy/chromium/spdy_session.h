@@ -302,6 +302,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   SpdySession(const SpdySessionKey& spdy_session_key,
               HttpServerProperties* http_server_properties,
               TransportSecurityState* transport_security_state,
+              const QuicVersionVector& quic_supported_versions,
               bool enable_sending_initial_data,
               bool enable_ping_based_connection_checking,
               size_t session_max_recv_window_size,
@@ -342,10 +343,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // not claimed and active, sends RST to the server to cancel the stream.
   void CancelPush(const GURL& url);
 
-  // Initialize the session with the given connection. |is_secure|
-  // must indicate whether |connection| uses an SSL socket or not; it
-  // is usually true, but it can be false for testing or when SPDY is
-  // configured to work with non-secure sockets.
+  // Initialize the session with the given connection.
   //
   // |pool| is the SpdySessionPool that owns us.  Its lifetime must
   // strictly be greater than |this|.
@@ -354,8 +352,7 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // iteration, so the SpdySession may close immediately afterwards if the first
   // read of |connection| fails.
   void InitializeWithSocket(std::unique_ptr<ClientSocketHandle> connection,
-                            SpdySessionPool* pool,
-                            bool is_secure);
+                            SpdySessionPool* pool);
 
   // Check to see if this SPDY session can support an additional domain.
   // If the session is un-authenticated, then this call always returns true.
@@ -414,9 +411,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // The LoadState is used for informing the user of the current network
   // status, such as "resolving host", "connecting", etc.
   LoadState GetLoadState() const;
-
-  // Returns server infomation in the form of (scheme/host/port).
-  url::SchemeHostPort GetServer();
 
   // MultiplexedSession methods:
   bool GetRemoteEndpoint(IPEndPoint* endpoint) override;
@@ -763,9 +757,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // |enable_sending_initial_data_| is true.
   void SendInitialData();
 
-  // Helper method to send a SETTINGS frame.
-  void SendSettings(const SettingsMap& settings);
-
   // Handle SETTING.  Either when we send settings, or when we receive a
   // SETTINGS control frame, update our SpdySession accordingly.
   void HandleSetting(uint32_t id, uint32_t value);
@@ -888,7 +879,9 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   void OnStreamEnd(SpdyStreamId stream_id) override;
   void OnStreamPadding(SpdyStreamId stream_id, size_t len) override;
   void OnSettings() override;
+  void OnSettingsAck() override;
   void OnSetting(SpdySettingsIds id, uint32_t value) override;
+  void OnSettingsEnd() override {}
   void OnWindowUpdate(SpdyStreamId stream_id, int delta_window_size) override;
   void OnPushPromise(SpdyStreamId stream_id,
                      SpdyStreamId promised_stream_id,
@@ -1092,9 +1085,6 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   // the socket completely.
   base::WeakPtr<SpdyStream> in_flight_write_stream_;
 
-  // Flag if we're using an SSL connection for this SpdySession.
-  bool is_secure_;
-
   // Spdy Frame state.
   std::unique_ptr<BufferedSpdyFramer> buffered_spdy_framer_;
 
@@ -1187,6 +1177,9 @@ class NET_EXPORT SpdySession : public BufferedSpdyFramerVisitorInterface,
   std::deque<SpdyStreamId> stream_send_unstall_queue_[NUM_PRIORITIES];
 
   NetLogWithSource net_log_;
+
+  // Versions of QUIC which may be used.
+  const QuicVersionVector quic_supported_versions_;
 
   // Outside of tests, these should always be true.
   bool enable_sending_initial_data_;

@@ -187,12 +187,6 @@ void WMFDecoderImpl<StreamType>::Reset(const base::Closure& closure) {
 template <>
 bool WMFDecoderImpl<DemuxerStream::AUDIO>::IsValidConfig(
     const DecoderConfig& config) {
-  if (config.codec() == kCodecMP3 &&
-      !TURN_ON_MSE_VIVALDI) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " Unsupported Audio codec : " << GetCodecName(config.codec());
-    return false;
-  }
 
   if (config.codec() != kCodecMP3 && config.codec() != kCodecAAC) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
@@ -482,6 +476,8 @@ bool WMFDecoderImpl<StreamType>::SetOutputMediaType() {
     if (hr == S_OK) {
       break;
     } else if (hr != S_FALSE) {
+      LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                   << " SetOutputMediaTypeInternal returned an error";
       return false;
     }
 

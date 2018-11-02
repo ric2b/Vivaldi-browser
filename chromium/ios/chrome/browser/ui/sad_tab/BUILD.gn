@@ -12,6 +12,7 @@ source_set("sad_tab") {
     "//base",
     "//components/resources",
     "//components/strings",
+    "//components/ui_metrics",
     "//ios/chrome/browser",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/colors",
@@ -25,4 +26,27 @@ source_set("sad_tab") {
     "//ui/gfx",
   ]
   libs = [ "UIKit.framework" ]
+}
+
+source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
+  testonly = true
+  sources = [
+    "sad_tab_view_egtest.mm",
+  ]
+
+  deps = [
+    ":sad_tab",
+    "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
+    "//ios/chrome/browser/ui/tools_menu",
+    "//ios/chrome/test/app:test_support",
+    "//ios/chrome/test/earl_grey:test_support",
+    "//ios/testing/earl_grey:earl_grey_support",
+    "//ios/third_party/earl_grey",
+    "//ios/web/public/test/http_server",
+    "//ui/base",
+  ]
+  libs = [ "XCTest.framework" ]
 }

@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "ui/base/x/x11_util.h"
 #include "ui/display/fake_display_delegate.h"
+#include "ui/events/devices/x11/touch_factory_x11.h"
 #include "ui/events/platform/x11/x11_event_source_libevent.h"
 #include "ui/ozone/common/stub_overlay_manager.h"
 #include "ui/ozone/platform/x11/x11_cursor_factory_ozone.h"
@@ -31,11 +32,14 @@ namespace ui {
 
 namespace {
 
-// Returns true if Ozone is running inside the mus process.
-bool RunningInsideMus() {
-  bool has_channel_handle = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      "mojo-platform-channel-handle");
-  return has_channel_handle;
+// Returns true if a flag is present that will cause Ozone UI and GPU to run in
+// the same process.
+// TODO(kylechar): Remove --mojo-platform-channel-handle when mus-ws process
+// split happens.
+bool HasSingleProcessFlag() {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  return command_line->HasSwitch("mojo-platform-channel-handle") ||
+         command_line->HasSwitch("single-process");
 }
 
 // Singleton OzonePlatform implementation for X11 platform.
@@ -93,6 +97,8 @@ class OzonePlatformX11 : public OzonePlatform {
     input_controller_ = CreateStubInputController();
     cursor_factory_ozone_ = base::MakeUnique<X11CursorFactoryOzone>();
     gpu_platform_support_host_.reset(CreateStubGpuPlatformSupportHost());
+
+    TouchFactory::SetTouchDeviceListFromCommandLine();
   }
 
   void InitializeGPU(const InitParams& params) override {
@@ -100,7 +106,7 @@ class OzonePlatformX11 : public OzonePlatform {
 
     // In single process mode either the UI thread will create an event source
     // or it's a test and an event source isn't desired.
-    if (!params.single_process && !RunningInsideMus())
+    if (!params.single_process && !HasSingleProcessFlag())
       CreatePlatformEventSource();
 
     surface_factory_ozone_ = base::MakeUnique<X11SurfaceFactory>();
@@ -121,7 +127,7 @@ class OzonePlatformX11 : public OzonePlatform {
       return;
 
     // In single process mode XInitThreads() must be the first Xlib call.
-    if (params.single_process || RunningInsideMus())
+    if (params.single_process || HasSingleProcessFlag())
       XInitThreads();
 
     ui::SetDefaultX11ErrorHandlers();

@@ -29,7 +29,7 @@ using ::testing::Return;
 using ::testing::_;
 using ::testing::SaveArg;
 using Checkpoint = ::testing::StrictMock<::testing::MockFunction<void(int)>>;
-using Command = BytesConsumerTestUtil::Command;
+using BytesConsumerCommand = BytesConsumerTestUtil::Command;
 using ReplayingBytesConsumer = BytesConsumerTestUtil::ReplayingBytesConsumer;
 using MockFetchDataLoaderClient =
     BytesConsumerTestUtil::MockFetchDataLoaderClient;
@@ -85,9 +85,9 @@ TEST_F(BodyStreamBufferTest, Tee) {
 
   ReplayingBytesConsumer* src =
       new ReplayingBytesConsumer(&scope.GetDocument());
-  src->Add(Command(Command::kData, "hello, "));
-  src->Add(Command(Command::kData, "world"));
-  src->Add(Command(Command::kDone));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello, "));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "world"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kDone));
   BodyStreamBuffer* buffer = new BodyStreamBuffer(scope.GetScriptState(), src);
 
   BodyStreamBuffer* new1;
@@ -302,9 +302,9 @@ TEST_F(BodyStreamBufferTest, LoadBodyStreamBufferAsArrayBuffer) {
 
   ReplayingBytesConsumer* src =
       new ReplayingBytesConsumer(&scope.GetDocument());
-  src->Add(Command(Command::kWait));
-  src->Add(Command(Command::kData, "hello"));
-  src->Add(Command(Command::kDone));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kWait));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kDone));
   BodyStreamBuffer* buffer = new BodyStreamBuffer(scope.GetScriptState(), src);
   buffer->StartLoading(FetchDataLoader::CreateLoaderAsArrayBuffer(), client);
 
@@ -338,9 +338,9 @@ TEST_F(BodyStreamBufferTest, LoadBodyStreamBufferAsBlob) {
 
   ReplayingBytesConsumer* src =
       new ReplayingBytesConsumer(&scope.GetDocument());
-  src->Add(Command(Command::kWait));
-  src->Add(Command(Command::kData, "hello"));
-  src->Add(Command(Command::kDone));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kWait));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kDone));
   BodyStreamBuffer* buffer = new BodyStreamBuffer(scope.GetScriptState(), src);
   buffer->StartLoading(FetchDataLoader::CreateLoaderAsBlobHandle("text/plain"),
                        client);
@@ -371,9 +371,9 @@ TEST_F(BodyStreamBufferTest, LoadBodyStreamBufferAsString) {
 
   ReplayingBytesConsumer* src =
       new ReplayingBytesConsumer(&scope.GetDocument());
-  src->Add(Command(Command::kWait));
-  src->Add(Command(Command::kData, "hello"));
-  src->Add(Command(Command::kDone));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kWait));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kDone));
   BodyStreamBuffer* buffer = new BodyStreamBuffer(scope.GetScriptState(), src);
   buffer->StartLoading(FetchDataLoader::CreateLoaderAsString(), client);
 
@@ -459,9 +459,9 @@ TEST_F(BodyStreamBufferTest, LoaderShouldBeKeptAliveByBodyStreamBuffer) {
 
   ReplayingBytesConsumer* src =
       new ReplayingBytesConsumer(&scope.GetDocument());
-  src->Add(Command(Command::kWait));
-  src->Add(Command(Command::kData, "hello"));
-  src->Add(Command(Command::kDone));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kWait));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kDone));
   Persistent<BodyStreamBuffer> buffer =
       new BodyStreamBuffer(scope.GetScriptState(), src);
   buffer->StartLoading(FetchDataLoader::CreateLoaderAsString(), client);
@@ -485,6 +485,35 @@ TEST_F(BodyStreamBufferTest, SourceShouldBeCanceledWhenCanceled) {
   EXPECT_FALSE(consumer->IsCancelled());
   buffer->Cancel(scope.GetScriptState(), reason);
   EXPECT_TRUE(consumer->IsCancelled());
+}
+
+TEST_F(BodyStreamBufferTest, NestedPull) {
+  V8TestingScope scope;
+  ReplayingBytesConsumer* src =
+      new ReplayingBytesConsumer(&scope.GetDocument());
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kWait));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kData, "hello"));
+  src->Add(BytesConsumerCommand(BytesConsumerCommand::kError));
+  Persistent<BodyStreamBuffer> buffer =
+      new BodyStreamBuffer(scope.GetScriptState(), src);
+
+  auto result =
+      scope.GetScriptState()->GetContext()->Global()->CreateDataProperty(
+          scope.GetScriptState()->GetContext(),
+          V8String(scope.GetIsolate(), "stream"), buffer->Stream().V8Value());
+
+  ASSERT_TRUE(result.IsJust());
+  ASSERT_TRUE(result.FromJust());
+
+  ScriptValue stream = EvalWithPrintingError(scope.GetScriptState(),
+                                             "reader = stream.getReader();");
+  ASSERT_FALSE(stream.IsEmpty());
+
+  EvalWithPrintingError(scope.GetScriptState(), "reader.read();");
+  EvalWithPrintingError(scope.GetScriptState(), "reader.read();");
+
+  testing::RunPendingTasks();
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetScriptState()->GetIsolate());
 }
 
 }  // namespace

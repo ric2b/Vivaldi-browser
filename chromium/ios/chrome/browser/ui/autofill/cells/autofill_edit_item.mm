@@ -7,7 +7,7 @@
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -28,16 +28,22 @@ const CGFloat kLabelAndFieldGap = 5;
 
 @synthesize textFieldName = _textFieldName;
 @synthesize textFieldValue = _textFieldValue;
-@synthesize cardTypeIcon = _cardTypeIcon;
+@synthesize identifyingIcon = _identifyingIcon;
 @synthesize inputView = _inputView;
 @synthesize textFieldEnabled = _textFieldEnabled;
 @synthesize autofillUIType = _autofillUIType;
 @synthesize required = _required;
+@synthesize returnKeyType = _returnKeyType;
+@synthesize keyboardType = _keyboardType;
+@synthesize autoCapitalizationType = _autoCapitalizationType;
 
 - (instancetype)initWithType:(NSInteger)type {
   self = [super initWithType:type];
   if (self) {
     self.cellClass = [AutofillEditCell class];
+    _returnKeyType = UIReturnKeyNext;
+    _keyboardType = UIKeyboardTypeDefault;
+    _autoCapitalizationType = UITextAutocapitalizationTypeWords;
   }
   return self;
 }
@@ -62,7 +68,10 @@ const CGFloat kLabelAndFieldGap = 5;
                      action:@selector(textFieldChanged:)
            forControlEvents:UIControlEventEditingChanged];
   cell.textField.inputView = self.inputView;
-  cell.cardTypeIconView.image = self.cardTypeIcon;
+  cell.textField.returnKeyType = self.returnKeyType;
+  cell.textField.keyboardType = self.keyboardType;
+  cell.textField.autocapitalizationType = self.autoCapitalizationType;
+  cell.identifyingIconView.image = self.identifyingIcon;
 }
 
 #pragma mark - Actions
@@ -81,7 +90,7 @@ const CGFloat kLabelAndFieldGap = 5;
 
 @synthesize textField = _textField;
 @synthesize textLabel = _textLabel;
-@synthesize cardTypeIconView = _cardTypeIconView;
+@synthesize identifyingIconView = _identifyingIconView;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -92,21 +101,19 @@ const CGFloat kLabelAndFieldGap = 5;
 
     _textLabel = [[UILabel alloc] init];
     _textLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _textLabel.font = [[MDCTypography fontLoader] mediumFontOfSize:14];
+    _textLabel.textColor = [[MDCPalette greyPalette] tint900];
+    [_textLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh
+                                  forAxis:UILayoutConstraintAxisHorizontal];
     [contentView addSubview:_textLabel];
 
     _textField = [[UITextField alloc] init];
     _textField.translatesAutoresizingMaskIntoConstraints = NO;
     [contentView addSubview:_textField];
 
-    _textLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:14];
-    _textLabel.textColor = [[MDCPalette greyPalette] tint900];
-
-    _textField.font = [[MDFRobotoFontLoader sharedInstance] lightFontOfSize:16];
+    _textField.font = [[MDCTypography fontLoader] lightFontOfSize:16];
     _textField.textColor = [[MDCPalette greyPalette] tint500];
-    _textField.autocapitalizationType = UITextAutocapitalizationTypeWords;
     _textField.autocorrectionType = UITextAutocorrectionTypeNo;
-    _textField.returnKeyType = UIReturnKeyDone;
     _textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     _textField.contentVerticalAlignment =
         UIControlContentVerticalAlignmentCenter;
@@ -114,19 +121,19 @@ const CGFloat kLabelAndFieldGap = 5;
         UseRTLLayout() ? NSTextAlignmentLeft : NSTextAlignmentRight;
 
     // Card type icon.
-    _cardTypeIconView = [[UIImageView alloc] initWithFrame:CGRectZero];
-    _cardTypeIconView.translatesAutoresizingMaskIntoConstraints = NO;
-    [contentView addSubview:_cardTypeIconView];
+    _identifyingIconView = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _identifyingIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    [contentView addSubview:_identifyingIconView];
 
     // Set up the icons size constraints. They are activated here and updated in
     // layoutSubviews.
     _iconHeightConstraint =
-        [_cardTypeIconView.heightAnchor constraintEqualToConstant:0];
+        [_identifyingIconView.heightAnchor constraintEqualToConstant:0];
     _iconWidthConstraint =
-        [_cardTypeIconView.widthAnchor constraintEqualToConstant:0];
+        [_identifyingIconView.widthAnchor constraintEqualToConstant:0];
 
     _textFieldTrailingConstraint = [_textField.trailingAnchor
-        constraintEqualToAnchor:_cardTypeIconView.leadingAnchor];
+        constraintEqualToAnchor:_identifyingIconView.leadingAnchor];
 
     // Set up the constraints.
     [NSLayoutConstraint activateConstraints:@[
@@ -143,16 +150,14 @@ const CGFloat kLabelAndFieldGap = 5;
       [_textField.leadingAnchor
           constraintEqualToAnchor:_textLabel.trailingAnchor
                          constant:kLabelAndFieldGap],
-      [_cardTypeIconView.trailingAnchor
+      [_identifyingIconView.trailingAnchor
           constraintEqualToAnchor:contentView.trailingAnchor
                          constant:-kHorizontalPadding],
-      [_cardTypeIconView.centerYAnchor
+      [_identifyingIconView.centerYAnchor
           constraintEqualToAnchor:contentView.centerYAnchor],
       _iconHeightConstraint,
       _iconWidthConstraint,
     ]];
-    [_textField setContentHuggingPriority:UILayoutPriorityDefaultLow
-                                  forAxis:UILayoutConstraintAxisHorizontal];
   }
   return self;
 }
@@ -160,12 +165,12 @@ const CGFloat kLabelAndFieldGap = 5;
 #pragma mark - UIView
 
 - (void)layoutSubviews {
-  if (self.cardTypeIconView.image) {
+  if (self.identifyingIconView.image) {
     _textFieldTrailingConstraint.constant = -kLabelAndFieldGap;
 
     // Set the size constraints of the icon view to the dimensions of the image.
-    _iconHeightConstraint.constant = self.cardTypeIconView.image.size.height;
-    _iconWidthConstraint.constant = self.cardTypeIconView.image.size.width;
+    _iconHeightConstraint.constant = self.identifyingIconView.image.size.height;
+    _iconWidthConstraint.constant = self.identifyingIconView.image.size.width;
   } else {
     _textFieldTrailingConstraint.constant = 0;
 
@@ -182,16 +187,18 @@ const CGFloat kLabelAndFieldGap = 5;
   [super prepareForReuse];
   self.textLabel.text = nil;
   self.textField.text = nil;
+  self.textField.returnKeyType = UIReturnKeyNext;
+  self.textField.keyboardType = UIKeyboardTypeDefault;
   self.textField.autocapitalizationType = UITextAutocapitalizationTypeWords;
   self.textField.autocorrectionType = UITextAutocorrectionTypeNo;
-  self.textField.returnKeyType = UIReturnKeyDone;
+  self.textField.clearButtonMode = UITextFieldViewModeWhileEditing;
   self.textField.accessibilityIdentifier = nil;
   self.textField.enabled = NO;
   self.textField.delegate = nil;
   [self.textField removeTarget:nil
                         action:nil
               forControlEvents:UIControlEventAllEvents];
-  self.cardTypeIconView.image = nil;
+  self.identifyingIconView.image = nil;
 }
 
 #pragma mark - Accessibility

@@ -14,8 +14,8 @@
 
 namespace gpu {
 
-bool BufferBacking::is_shared() const {
-  return false;
+base::SharedMemoryHandle BufferBacking::shared_memory_handle() const {
+  return base::SharedMemoryHandle();
 }
 
 SharedMemoryBufferBacking::SharedMemoryBufferBacking(
@@ -25,8 +25,9 @@ SharedMemoryBufferBacking::SharedMemoryBufferBacking(
 
 SharedMemoryBufferBacking::~SharedMemoryBufferBacking() {}
 
-bool SharedMemoryBufferBacking::is_shared() const {
-  return true;
+base::SharedMemoryHandle SharedMemoryBufferBacking::shared_memory_handle()
+    const {
+  return shared_memory_->handle();
 }
 
 void* SharedMemoryBufferBacking::GetMemory() const {

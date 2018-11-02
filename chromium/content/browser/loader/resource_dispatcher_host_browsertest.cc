@@ -17,7 +17,6 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "build/build_config.h"
 #include "content/browser/download/download_manager_impl.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
@@ -38,6 +37,7 @@
 #include "content/shell/browser/shell.h"
 #include "content/shell/browser/shell_content_browser_client.h"
 #include "content/shell/browser/shell_network_delegate.h"
+#include "net/base/load_flags.h"
 #include "net/base/net_errors.h"
 #include "net/dns/mock_host_resolver.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
@@ -62,9 +62,7 @@ class ResourceDispatcherHostBrowserTest : public ContentBrowserTest,
     base::FilePath path = GetTestFilePath("", "");
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
-            &net::URLRequestMockHTTPJob::AddUrlHandlers, path,
-            make_scoped_refptr(content::BrowserThread::GetBlockingPool())));
+        base::Bind(&net::URLRequestMockHTTPJob::AddUrlHandlers, path));
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::Bind(&net::URLRequestFailedJob::AddUrlHandler));
@@ -552,8 +550,8 @@ IN_PROC_BROWSER_TEST_F(ResourceDispatcherHostBrowserTest, CookiePolicy) {
 class PageTransitionResourceDispatcherHostDelegate
     : public ResourceDispatcherHostDelegate {
  public:
-  PageTransitionResourceDispatcherHostDelegate(GURL watch_url)
-    : watch_url_(watch_url) {}
+  explicit PageTransitionResourceDispatcherHostDelegate(GURL watch_url)
+      : watch_url_(watch_url) {}
 
   // ResourceDispatcherHostDelegate implementation:
   void RequestBeginning(
@@ -650,7 +648,8 @@ class PreviewsStateResourceDispatcherHostDelegate
 
   PreviewsState GetPreviewsState(
       const net::URLRequest& request,
-      content::ResourceContext* resource_context) override {
+      content::ResourceContext* resource_context,
+      content::PreviewsState previews_to_allow) override {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     EXPECT_FALSE(should_get_previews_state_called_);
     should_get_previews_state_called_ = true;
@@ -815,15 +814,23 @@ struct RequestDataForDelegate {
   const GURL url;
   const GURL first_party;
   const base::Optional<url::Origin> initiator;
+  const int load_flags;
+  const std::string referrer;
 
   RequestDataForDelegate(const GURL& url,
                          const GURL& first_party,
-                         const base::Optional<url::Origin>& initiator)
-      : url(url), first_party(first_party), initiator(initiator) {}
+                         const base::Optional<url::Origin>& initiator,
+                         int load_flags,
+                         const std::string& referrer)
+      : url(url),
+        first_party(first_party),
+        initiator(initiator),
+        load_flags(load_flags),
+        referrer(referrer) {}
 };
 
 // Captures calls to 'RequestBeginning' and records the URL, first-party for
-// cookies, and initiator.
+// cookies, initiator, load flags, and referrer.
 class RequestDataResourceDispatcherHostDelegate
     : public ResourceDispatcherHostDelegate {
  public:
@@ -841,8 +848,8 @@ class RequestDataResourceDispatcherHostDelegate
       ResourceType resource_type,
       std::vector<std::unique_ptr<ResourceThrottle>>* throttles) override {
     requests_.push_back(base::MakeUnique<RequestDataForDelegate>(
-        request->url(), request->first_party_for_cookies(),
-        request->initiator()));
+        request->url(), request->first_party_for_cookies(), request->initiator(),
+        request->load_flags(), request->referrer()));
   }
 
   void SetDelegate() { ResourceDispatcherHost::Get()->SetDelegate(this); }
@@ -909,6 +916,36 @@ IN_PROC_BROWSER_TEST_F(RequestDataResourceDispatcherHostBrowserTest, Basic) {
       EXPECT_EQ(top_origin, request->initiator);
     }
   }
+}
+
+IN_PROC_BROWSER_TEST_F(RequestDataResourceDispatcherHostBrowserTest,
+                       LinkRelPrefetch) {
+  GURL top_url(embedded_test_server()->GetURL("/link_rel_prefetch.html"));
+  url::Origin top_origin(top_url);
+
+  NavigateToURLBlockUntilNavigationsComplete(shell(), top_url, 1);
+
+  EXPECT_EQ(2u, delegate_->data().size());
+  auto* request = delegate_->data()[1].get();
+  EXPECT_EQ(top_origin, request->initiator);
+  EXPECT_EQ(top_url, request->referrer);
+  EXPECT_TRUE(request->load_flags & net::LOAD_PREFETCH);
+}
+
+IN_PROC_BROWSER_TEST_F(RequestDataResourceDispatcherHostBrowserTest,
+                       LinkRelPrefetchReferrerPolicy) {
+  GURL top_url(embedded_test_server()->GetURL(
+      "/link_rel_prefetch_referrer_policy.html"));
+  url::Origin top_origin(top_url);
+
+  NavigateToURLBlockUntilNavigationsComplete(shell(), top_url, 1);
+
+  EXPECT_EQ(2u, delegate_->data().size());
+  auto* request = delegate_->data()[1].get();
+  EXPECT_EQ(top_origin, request->initiator);
+  // Respect the "origin" policy set by the <meta> tag.
+  EXPECT_EQ(top_url.GetOrigin().spec(), request->referrer);
+  EXPECT_TRUE(request->load_flags & net::LOAD_PREFETCH);
 }
 
 IN_PROC_BROWSER_TEST_F(RequestDataResourceDispatcherHostBrowserTest,

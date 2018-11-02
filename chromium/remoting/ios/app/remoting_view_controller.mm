@@ -12,32 +12,37 @@
 #import "ios/third_party/material_components_ios/src/components/AnimationTiming/src/MaterialAnimationTiming.h"
 #import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/Dialogs/src/MaterialDialogs.h"
+#import "ios/third_party/material_components_ios/src/components/ShadowElevations/src/MaterialShadowElevations.h"
+#import "ios/third_party/material_components_ios/src/components/ShadowLayer/src/MaterialShadowLayer.h"
 #import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
+#import "remoting/ios/app/app_delegate.h"
 #import "remoting/ios/app/client_connection_view_controller.h"
 #import "remoting/ios/app/host_collection_view_controller.h"
+#import "remoting/ios/app/host_fetching_view_controller.h"
+#import "remoting/ios/app/host_setup_view_controller.h"
 #import "remoting/ios/app/host_view_controller.h"
-#import "remoting/ios/app/remoting_settings_view_controller.h"
+#import "remoting/ios/app/remoting_menu_view_controller.h"
+#import "remoting/ios/app/remoting_theme.h"
 #import "remoting/ios/domain/client_session_details.h"
-#import "remoting/ios/facade/remoting_authentication.h"
 #import "remoting/ios/facade/remoting_service.h"
-#import "remoting/ios/session/remoting_client.h"
 
 #include "base/strings/sys_string_conversions.h"
 #include "remoting/base/oauth_token_getter.h"
+#include "remoting/base/string_resources.h"
 #include "remoting/client/connect_to_host_info.h"
+#include "ui/base/l10n/l10n_util.h"
 
 static CGFloat kHostInset = 5.f;
 
 @interface RemotingViewController ()<HostCollectionViewControllerDelegate,
-                                     ClientConnectionViewControllerDelegate,
                                      UIViewControllerAnimatedTransitioning,
                                      UIViewControllerTransitioningDelegate> {
-  bool _isAuthenticated;
   MDCDialogTransitionController* _dialogTransitionController;
   MDCAppBar* _appBar;
   HostCollectionViewController* _collectionViewController;
+  HostFetchingViewController* _fetchingViewController;
+  HostSetupViewController* _setupViewController;
   RemotingService* _remotingService;
-  RemotingClient* _client;
 }
 @end
 
@@ -48,49 +53,64 @@ static CGFloat kHostInset = 5.f;
 @implementation RemotingViewController
 
 - (instancetype)init {
-  _isAuthenticated = NO;
   UICollectionViewFlowLayout* layout =
-      [[UICollectionViewFlowLayout alloc] init];
+      [[MDCCollectionViewFlowLayout alloc] init];
   layout.minimumInteritemSpacing = 0;
   CGFloat sectionInset = kHostInset * 2.f;
   [layout setSectionInset:UIEdgeInsetsMake(sectionInset, sectionInset,
                                            sectionInset, sectionInset)];
-  HostCollectionViewController* collectionVC = [
-      [HostCollectionViewController alloc] initWithCollectionViewLayout:layout];
-  self = [super initWithContentViewController:collectionVC];
+  self = [super init];
   if (self) {
-    _remotingService = [RemotingService SharedInstance];
+    _remotingService = RemotingService.instance;
 
-    _collectionViewController = collectionVC;
-    _collectionViewController.flexHeaderContainerViewController = self;
+    _collectionViewController = [[HostCollectionViewController alloc]
+        initWithCollectionViewLayout:layout];
     _collectionViewController.delegate = self;
+    _collectionViewController.scrollViewDelegate = self.headerViewController;
+
+    _fetchingViewController = [[HostFetchingViewController alloc] init];
+
+    _setupViewController = [[HostSetupViewController alloc] init];
+    _setupViewController.scrollViewDelegate = self.headerViewController;
 
     _appBar = [[MDCAppBar alloc] init];
     [self addChildViewController:_appBar.headerViewController];
 
-    _appBar.headerViewController.headerView.backgroundColor =
-        [UIColor clearColor];
-    _appBar.navigationBar.tintColor = [UIColor whiteColor];
+    self.navigationItem.title =
+        l10n_util::GetNSString(IDS_PRODUCT_NAME).lowercaseString;
 
     UIBarButtonItem* menuButton =
-        [[UIBarButtonItem alloc] initWithImage:[UIImage imageNamed:@"Settings"]
+        [[UIBarButtonItem alloc] initWithImage:RemotingTheme.menuIcon
                                          style:UIBarButtonItemStyleDone
                                         target:self
-                                        action:@selector(didSelectSettings)];
+                                        action:@selector(didSelectMenu)];
     self.navigationItem.leftBarButtonItem = menuButton;
 
     UIBarButtonItem* refreshButton =
-        [[UIBarButtonItem alloc] initWithTitle:@"Refresh"
+        [[UIBarButtonItem alloc] initWithImage:RemotingTheme.refreshIcon
                                          style:UIBarButtonItemStyleDone
                                         target:self
                                         action:@selector(didSelectRefresh)];
     self.navigationItem.rightBarButtonItem = refreshButton;
 
-    [[NSNotificationCenter defaultCenter]
-        addObserver:self
-           selector:@selector(hostSessionStatusChanged:)
-               name:kHostSessionStatusChanged
-             object:nil];
+    _appBar.headerViewController.headerView.backgroundColor =
+        RemotingTheme.hostListBackgroundColor;
+    _appBar.navigationBar.backgroundColor =
+        RemotingTheme.hostListBackgroundColor;
+    MDCNavigationBarTextColorAccessibilityMutator* mutator =
+        [[MDCNavigationBarTextColorAccessibilityMutator alloc] init];
+    [mutator mutate:_appBar.navigationBar];
+
+    MDCFlexibleHeaderView* headerView = self.headerViewController.headerView;
+    headerView.backgroundColor = [UIColor clearColor];
+
+    // Use a custom shadow under the flexible header.
+    MDCShadowLayer* shadowLayer = [MDCShadowLayer layer];
+    [headerView setShadowLayer:shadowLayer
+        intensityDidChangeBlock:^(CALayer* layer, CGFloat intensity) {
+          CGFloat elevation = MDCShadowElevationAppBar * intensity;
+          [(MDCShadowLayer*)layer setElevation:elevation];
+        }];
   }
   return self;
 }
@@ -99,130 +119,63 @@ static CGFloat kHostInset = 5.f;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
+
+  UIImage* image = [UIImage imageNamed:@"Background"];
+  UIImageView* imageView = [[UIImageView alloc] initWithImage:image];
+  [self.view addSubview:imageView];
+  [self.view sendSubviewToBack:imageView];
+
+  imageView.translatesAutoresizingMaskIntoConstraints = NO;
+  [NSLayoutConstraint activateConstraints:@[
+    [[imageView widthAnchor]
+        constraintGreaterThanOrEqualToAnchor:[self.view widthAnchor]],
+    [[imageView heightAnchor]
+        constraintGreaterThanOrEqualToAnchor:[self.view heightAnchor]],
+  ]];
+
   [_appBar addSubviewsToParent];
 
   [[NSNotificationCenter defaultCenter]
       addObserver:self
-         selector:@selector(hostsDidUpdateNotification:)
-             name:kHostsDidUpdate
-           object:nil];
-  [[NSNotificationCenter defaultCenter]
-      addObserver:self
-         selector:@selector(userDidUpdateNotification:)
-             name:kUserDidUpdate
+         selector:@selector(hostListStateDidChangeNotification:)
+             name:kHostListStateDidChange
            object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
 
-  [self nowAuthenticated:_remotingService.authentication.user.isAuthenticated];
-  [self presentStatus];
+  // Just in case the view controller misses the host list state event before
+  // the listener is registered.
+  [self refreshContent];
 }
 
-- (void)viewDidAppear:(BOOL)animated {
-  [super viewDidAppear:animated];
-  if (!_isAuthenticated) {
-    // TODO(nicholss): This is used as a demo of the app functionality for the
-    // moment but the real app will force the login flow if unauthenticated.
-    [self didSelectSettings];
-    // [self didSelectRefresh];
-    MDCSnackbarMessage* message = [[MDCSnackbarMessage alloc] init];
-    message.text = @"Please login.";
-    [MDCSnackbarManager showMessage:message];
-  } else {
-    [_remotingService requestHostListFetch];
-  }
-}
-
-- (void)viewDidLayoutSubviews {
-  [super viewDidLayoutSubviews];
-
-  // Adjust the collection view's position and size so that it doesn't get
-  // overlayed by the navigation bar.
-  CGFloat collectionOffsetY =
-      _appBar.headerViewController.headerView.frame.size.height;
-  CGFloat collectionHeight = self.view.bounds.size.height - collectionOffsetY;
-  CGRect oldFrame = _collectionViewController.collectionView.frame;
-  _collectionViewController.collectionView.frame =
-      CGRectMake(oldFrame.origin.x, collectionOffsetY, oldFrame.size.width,
-                 collectionHeight);
+- (UIStatusBarStyle)preferredStatusBarStyle {
+  return UIStatusBarStyleLightContent;
 }
 
 #pragma mark - Remoting Service Notifications
 
-- (void)hostsDidUpdateNotification:(NSNotification*)notification {
-  [_collectionViewController.collectionView reloadData];
-}
-
-- (void)userDidUpdateNotification:(NSNotification*)notification {
-  [self nowAuthenticated:_remotingService.authentication.user.isAuthenticated];
-}
-
-#pragma mark - RemotingAuthenticationDelegate
-
-- (void)nowAuthenticated:(BOOL)authenticated {
-  if (authenticated) {
-    MDCSnackbarMessage* message = [[MDCSnackbarMessage alloc] init];
-    message.text = @"Logged In!";
-    [MDCSnackbarManager showMessage:message];
-  } else {
-    MDCSnackbarMessage* message = [[MDCSnackbarMessage alloc] init];
-    message.text = @"Not logged in.";
-    [MDCSnackbarManager showMessage:message];
-  }
-  _isAuthenticated = authenticated;
-  [_collectionViewController.collectionView reloadData];
-}
-
-#pragma mark - RemotingHostListDelegate
-
-// TODO(nicholss): these need to be a stats change like "none, loading,
-// updated"...
-- (void)hostListUpdated {
-  [_collectionViewController.collectionView reloadData];
-}
-
-#pragma mark - ClientConnectionViewControllerDelegate
-
-- (void)clientConnected {
-  HostViewController* hostViewController =
-      [[HostViewController alloc] initWithClient:_client];
-  _client = nil;
-  [self presentViewController:hostViewController animated:YES completion:nil];
-}
-
-- (NSString*)getConnectingHostName {
-  if (_client) {
-    return _client.hostInfo.hostName;
-  }
-  return nil;
+- (void)hostListStateDidChangeNotification:(NSNotification*)notification {
+  [self refreshContent];
 }
 
 #pragma mark - HostCollectionViewControllerDelegate
 
 - (void)didSelectCell:(HostCollectionViewCell*)cell
            completion:(void (^)())completionBlock {
-  _client = [[RemotingClient alloc] init];
+  if (![cell.hostInfo isOnline]) {
+    MDCSnackbarMessage* message = [[MDCSnackbarMessage alloc] init];
+    message.text = l10n_util::GetNSString(IDS_HOST_OFFLINE_TOOLTIP);
+    [MDCSnackbarManager showMessage:message];
+    return;
+  }
 
-  [_remotingService.authentication
-      callbackWithAccessToken:base::BindBlockArc(^(
-                                  remoting::OAuthTokenGetter::Status status,
-                                  const std::string& user_email,
-                                  const std::string& access_token) {
-        // TODO(nicholss): Check status.
-        HostInfo* hostInfo = cell.hostInfo;
-        [_client connectToHost:hostInfo
-                      username:base::SysUTF8ToNSString(user_email)
-                   accessToken:base::SysUTF8ToNSString(access_token)];
-      })];
-
+  [MDCSnackbarManager dismissAndCallCompletionBlocksWithCategory:nil];
   ClientConnectionViewController* clientConnectionViewController =
-      [[ClientConnectionViewController alloc] init];
-  clientConnectionViewController.delegate = self;
-  [self presentViewController:clientConnectionViewController
-                     animated:YES
-                   completion:nil];
+      [[ClientConnectionViewController alloc] initWithHostInfo:cell.hostInfo];
+  [self.navigationController pushViewController:clientConnectionViewController
+                                       animated:YES];
   completionBlock();
 }
 
@@ -262,36 +215,41 @@ animationControllerForDismissedController:(UIViewController*)dismissed {
 
 #pragma mark - Private
 
-- (void)hostSessionStatusChanged:(NSNotification*)notification {
-  NSLog(@"hostSessionStatusChanged: %@", [notification userInfo]);
-}
-
-- (void)closeViewController {
-  [self dismissViewControllerAnimated:true completion:nil];
-}
-
 - (void)didSelectRefresh {
   // TODO(nicholss): Might want to rate limit this. Maybe remoting service
   // controls that.
   [_remotingService requestHostListFetch];
 }
 
-- (void)didSelectSettings {
-  RemotingSettingsViewController* settingsViewController =
-      [[RemotingSettingsViewController alloc] init];
-  [self presentViewController:settingsViewController
-                     animated:YES
-                   completion:nil];
+- (void)didSelectMenu {
+  [AppDelegate.instance showMenuAnimated:YES];
 }
 
-- (void)presentStatus {
-  MDCSnackbarMessage* message = [[MDCSnackbarMessage alloc] init];
-  if (_isAuthenticated) {
-    message.text = [NSString
-        stringWithFormat:@"Currently signed in as %@.",
-                         _remotingService.authentication.user.userEmail];
-    [MDCSnackbarManager showMessage:message];
+- (void)refreshContent {
+  if (_remotingService.hostListState == HostListStateNotFetched) {
+    self.contentViewController = nil;
+    return;
   }
+
+  if (_remotingService.hostListState == HostListStateFetching) {
+    self.contentViewController = _fetchingViewController;
+    _fetchingViewController.view.frame = self.view.bounds;
+    return;
+  }
+
+  DCHECK(_remotingService.hostListState == HostListStateFetched);
+
+  if (_remotingService.hosts.count > 0) {
+    [_collectionViewController.collectionView reloadData];
+    self.headerViewController.headerView.trackingScrollView =
+        _collectionViewController.collectionView;
+    self.contentViewController = _collectionViewController;
+  } else {
+    self.contentViewController = _setupViewController;
+    self.headerViewController.headerView.trackingScrollView =
+        _setupViewController.collectionView;
+  }
+  self.contentViewController.view.frame = self.view.bounds;
 }
 
 @end

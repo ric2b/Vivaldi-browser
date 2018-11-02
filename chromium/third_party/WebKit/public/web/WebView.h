@@ -31,6 +31,7 @@
 #ifndef WebView_h
 #define WebView_h
 
+#include "WebWidget.h"
 #include "public/platform/WebColor.h"
 #include "public/platform/WebDisplayMode.h"
 #include "public/platform/WebDragOperation.h"
@@ -38,7 +39,6 @@
 #include "public/platform/WebPageVisibilityState.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebVector.h"
-#include "WebWidget.h"
 
 namespace gfx {
 class ICCProfile;
@@ -46,7 +46,6 @@ class ICCProfile;
 
 namespace blink {
 
-class WebAXObject;
 class WebCredentialManagerClient;
 class WebFrame;
 class WebHitTestResult;
@@ -55,7 +54,6 @@ class WebPageImportanceSignals;
 class WebPrerendererClient;
 class WebRemoteFrame;
 class WebSettings;
-class WebSpellCheckClient;
 class WebString;
 class WebViewClient;
 class WebViewScheduler;
@@ -102,7 +100,6 @@ class WebView : protected WebWidget {
   using WebWidget::SelectionBounds;
   using WebWidget::SelectionTextDirection;
   using WebWidget::IsSelectionAnchorFirst;
-  using WebWidget::CaretOrSelectionRange;
   using WebWidget::SetTextDirection;
   using WebWidget::IsAcceleratedCompositingActive;
   using WebWidget::IsWebView;
@@ -117,23 +114,18 @@ class WebView : protected WebWidget {
 
   // Initialization ------------------------------------------------------
 
-  // Creates a WebView that is NOT yet initialized. You will need to
-  // call setMainFrame to finish the initialization. It is valid
-  // to pass a null client pointer. The WebPageVisibilityState defines the
-  // initial visibility of the page.
+  // Creates a WebView that is NOT yet initialized. To complete initialization,
+  // call WebLocalFrame::CreateMainFrame() or WebRemoteFrame::CreateMainFrame()
+  // as appropriate. It is legal to modify settings before completing
+  // initialization.
+  //
+  // client may be null, while WebPageVisibilityState defines the initial
+  // visibility of the page.
   BLINK_EXPORT static WebView* Create(WebViewClient*, WebPageVisibilityState);
-
-  // After creating a WebView, you should immediately call this method.
-  // You can optionally modify the settings before calling this method.
-  // This WebFrame will receive events for the main frame and must not
-  // be null.
-  // TODO(mustaq): The non-null param should be a reference.
-  virtual void SetMainFrame(WebFrame*) = 0;
 
   // Initializes the various client interfaces.
   virtual void SetCredentialManagerClient(WebCredentialManagerClient*) = 0;
   virtual void SetPrerendererClient(WebPrerendererClient*) = 0;
-  virtual void SetSpellCheckClient(WebSpellCheckClient*) = 0;
 
   // Options -------------------------------------------------------------
 
@@ -173,15 +165,6 @@ class WebView : protected WebWidget {
   // Frames --------------------------------------------------------------
 
   virtual WebFrame* MainFrame() = 0;
-
-  // Returns the frame identified by the given name.  This method
-  // supports pseudo-names like _self, _top, and _blank.  It traverses
-  // the entire frame tree containing this tree looking for a frame that
-  // matches the given name.  If the optional relativeToFrame parameter
-  // is specified, then the search begins with the given frame and its
-  // children.
-  virtual WebFrame* FindFrameByName(const WebString& name,
-                                    WebFrame* relative_to_frame = 0) = 0;
 
   // Focus ---------------------------------------------------------------
 
@@ -392,17 +375,10 @@ class WebView : protected WebWidget {
   // Cancel emulation started via |enableDeviceEmulation| call.
   virtual void DisableDeviceEmulation() = 0;
 
-  // Accessibility -------------------------------------------------------
-
-  // Returns the accessibility object for this view.
-  virtual WebAXObject AccessibilityObject() = 0;
 
   // Context menu --------------------------------------------------------
 
   virtual void PerformCustomContextMenuAction(unsigned action) = 0;
-
-  // Shows a context menu for the currently focused element.
-  virtual void ShowContextMenu() = 0;
 
   // Notify that context menu has been closed.
   virtual void DidCloseContextMenu() = 0;

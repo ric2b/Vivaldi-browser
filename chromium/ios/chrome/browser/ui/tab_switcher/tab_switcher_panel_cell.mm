@@ -14,7 +14,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "ios/third_party/material_text_accessibility_ios/src/src/MDFTextAccessibility.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
@@ -23,6 +23,9 @@
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
+
+NSString* const kTabSwicherPanelCellCloseButtonAccessibilityID =
+    @"TabSwicherPanelCellCloseButton";
 
 namespace gfx {
 class ImageSkia;
@@ -102,16 +105,22 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
 
 @end
 
+@interface TabSwitcherLocalSessionCell ()
+@property(nonatomic, strong) UILabel* titleLabel;
+@property(nonatomic, strong) UIImageView* favicon;
+@property(nonatomic, strong) TabSwitcherButton* snapshotButton;
+@end
+
 @implementation TabSwitcherLocalSessionCell {
   UIView* _topBar;
-  UILabel* _titleLabel;
-  UIImageView* _favicon;
   UIButton* _closeButton;
   UIImageView* _shadow;
   UIImageView* _snapshot;
-  TabSwitcherButton* _snapshotButton;
   PendingSnapshotRequest _currentPendingSnapshotRequest;
 }
+@synthesize titleLabel = _titleLabel;
+@synthesize favicon = _favicon;
+@synthesize snapshotButton = _snapshotButton;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -167,8 +176,8 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
     // Title label.
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     [_titleLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
-    [_titleLabel setFont:[[MDFRobotoFontLoader sharedInstance]
-                             regularFontOfSize:kFontSize]];
+    [_titleLabel
+        setFont:[[MDCTypography fontLoader] regularFontOfSize:kFontSize]];
     [_topBar addSubview:_titleLabel];
 
     // Favicon.
@@ -178,6 +187,8 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
 
     // Close button.
     _closeButton = [[UIButton alloc] initWithFrame:CGRectZero];
+    _closeButton.accessibilityIdentifier =
+        kTabSwicherPanelCellCloseButtonAccessibilityID;
     [_closeButton
         setImage:[[UIImage imageNamed:@"card_close_button"]
                      imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]
@@ -208,18 +219,21 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
   return self;
 }
 
+#pragma mark - Public properties
+
+- (UIImage*)snapshot {
+  return _snapshot.image;
+}
+
+- (void)setSnapshot:(UIImage*)snapshot {
+  _snapshot.image = snapshot;
+}
+
 - (UIView*)topBar {
   return _topBar;
 }
 
-- (UIImage*)screenshot {
-  return [_snapshot image];
-}
-
-- (void)setSnapshot:(UIImage*)image {
-  DCHECK(!ImageHasAlphaChannel(image));
-  [_snapshot setImage:image];
-}
+#pragma mark - Public methods
 
 - (void)setAppearanceForTab:(Tab*)tab cellSize:(CGSize)cellSize {
   [_titleLabel setText:tab.title];
@@ -245,22 +259,6 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
                           }];
 }
 
-- (void)setAppearanceForTabTitle:(NSString*)title
-                         favicon:(UIImage*)favicon
-                        cellSize:(CGSize)cellSize {
-  [_titleLabel setText:title];
-  [_snapshotButton setAccessibilityIdentifier:
-                      [NSString stringWithFormat:@"%@_button", title]];
-  [self contentView].accessibilityLabel = title;
-  if (favicon) {
-    [_favicon setImage:favicon];
-  } else {
-    [_favicon setImage:NativeImage(IDR_IOS_OMNIBOX_HTTP)];
-  }
-
-  // PLACEHOLDER: Set snapshot here.
-}
-
 - (void)setSessionType:(TabSwitcherSessionType)type {
   UIColor* topBarBackgroundColor;
   UIColor* closeButtonTintColor;
@@ -283,6 +281,8 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
   [_titleLabel setBackgroundColor:topBarBackgroundColor];
   [_snapshot setBackgroundColor:snapshotBackgroundColor];
 }
+
+#pragma mark -
 
 - (void)snapshotPressed {
   [self.delegate cellPressed:self];
@@ -314,7 +314,7 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
                 target:self
               selector:@selector(closeButtonPressed)];
   [customActions addObject:customAction = nil];
-  return customActions = nil;
+  return customActions;
 }
 
 @end
@@ -354,8 +354,8 @@ CGFloat tabSwitcherLocalSessionCellTopBarHeight() {
     [_titleLabel setTranslatesAutoresizingMaskIntoConstraints:NO];
     [_titleLabel setNumberOfLines:5];
     [_titleLabel setTextAlignment:NSTextAlignmentCenter];
-    [_titleLabel setFont:[[MDFRobotoFontLoader sharedInstance]
-                             regularFontOfSize:kFontSize]];
+    [_titleLabel
+        setFont:[[MDCTypography fontLoader] regularFontOfSize:kFontSize]];
     [_verticallyCenteredView addSubview:_titleLabel];
 
     // Create and add new tab icon to |_verticallyCenteredContent|.

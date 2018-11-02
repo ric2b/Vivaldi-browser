@@ -8,48 +8,56 @@
 #include <memory>
 
 #include "base/containers/flat_map.h"
-#include "cc/surfaces/frame_sink_id.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "content/common/content_export.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "third_party/WebKit/public/platform/modules/offscreencanvas/offscreen_canvas_surface.mojom.h"
+
+namespace viz {
+class HostFrameSinkManager;
+}
 
 namespace content {
 
 class OffscreenCanvasSurfaceImpl;
 
-// Creates OffscreenCanvasSurfaces and MojoCompositorFrameSinks for a renderer.
+// Creates OffscreenCanvasSurfaces and CompositorFrameSinks for a renderer.
 class CONTENT_EXPORT OffscreenCanvasProviderImpl
     : public blink::mojom::OffscreenCanvasProvider {
  public:
-  explicit OffscreenCanvasProviderImpl(uint32_t renderer_client_id);
+  OffscreenCanvasProviderImpl(
+      viz::HostFrameSinkManager* host_frame_sink_manager,
+      uint32_t renderer_client_id);
   ~OffscreenCanvasProviderImpl() override;
 
   void Add(blink::mojom::OffscreenCanvasProviderRequest request);
 
   // blink::mojom::OffscreenCanvasProvider implementation.
   void CreateOffscreenCanvasSurface(
-      const cc::FrameSinkId& parent_frame_sink_id,
-      const cc::FrameSinkId& frame_sink_id,
+      const viz::FrameSinkId& parent_frame_sink_id,
+      const viz::FrameSinkId& frame_sink_id,
       blink::mojom::OffscreenCanvasSurfaceClientPtr client,
       blink::mojom::OffscreenCanvasSurfaceRequest request) override;
   void CreateCompositorFrameSink(
-      const cc::FrameSinkId& frame_sink_id,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client,
-      cc::mojom::MojoCompositorFrameSinkRequest request) override;
+      const viz::FrameSinkId& frame_sink_id,
+      cc::mojom::CompositorFrameSinkClientPtr client,
+      cc::mojom::CompositorFrameSinkRequest request) override;
 
  private:
   friend class OffscreenCanvasProviderImplTest;
 
   // Destroys the |canvas_map_| entry for |frame_sink_id|. Provided as a
   // callback to each OffscreenCanvasSurfaceImpl so they can destroy themselves.
-  void DestroyOffscreenCanvasSurface(cc::FrameSinkId frame_sink_id);
+  void DestroyOffscreenCanvasSurface(viz::FrameSinkId frame_sink_id);
+
+  viz::HostFrameSinkManager* const host_frame_sink_manager_;
 
   // FrameSinkIds for offscreen canvas must use the renderer client id.
   const uint32_t renderer_client_id_;
 
   mojo::BindingSet<blink::mojom::OffscreenCanvasProvider> bindings_;
 
-  base::flat_map<cc::FrameSinkId, std::unique_ptr<OffscreenCanvasSurfaceImpl>>
+  base::flat_map<viz::FrameSinkId, std::unique_ptr<OffscreenCanvasSurfaceImpl>>
       canvas_map_;
 
   DISALLOW_COPY_AND_ASSIGN(OffscreenCanvasProviderImpl);

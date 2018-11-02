@@ -1,0 +1,184 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/ui.gni")
+import("//components/viz/viz.gni")
+
+config("viz_service_implementation") {
+}
+
+viz_component("service") {
+  sources = [
+    "display/display.cc",
+    "display/display.h",
+    "display/display_client.h",
+    "display/display_scheduler.cc",
+    "display/display_scheduler.h",
+    "display/surface_aggregator.cc",
+    "display/surface_aggregator.h",
+    "display_embedder/buffer_queue.cc",
+    "display_embedder/buffer_queue.h",
+    "display_embedder/compositor_overlay_candidate_validator.h",
+    "display_embedder/display_output_surface.cc",
+    "display_embedder/display_output_surface.h",
+    "display_embedder/display_provider.h",
+    "display_embedder/gpu_display_provider.cc",
+    "display_embedder/gpu_display_provider.h",
+    "display_embedder/in_process_gpu_memory_buffer_manager.cc",
+    "display_embedder/in_process_gpu_memory_buffer_manager.h",
+    "display_embedder/server_shared_bitmap_manager.cc",
+    "display_embedder/server_shared_bitmap_manager.h",
+    "display_embedder/shared_bitmap_allocation_notifier_impl.cc",
+    "display_embedder/shared_bitmap_allocation_notifier_impl.h",
+    "frame_sinks/compositor_frame_sink_support.cc",
+    "frame_sinks/compositor_frame_sink_support.h",
+    "frame_sinks/compositor_frame_sink_support_client.h",
+    "frame_sinks/compositor_frame_sink_support_manager.h",
+    "frame_sinks/direct_layer_tree_frame_sink.cc",
+    "frame_sinks/direct_layer_tree_frame_sink.h",
+    "frame_sinks/frame_eviction_manager.cc",
+    "frame_sinks/frame_eviction_manager.h",
+    "frame_sinks/frame_evictor.cc",
+    "frame_sinks/frame_evictor.h",
+    "frame_sinks/frame_sink_manager_client.h",
+    "frame_sinks/frame_sink_manager_impl.cc",
+    "frame_sinks/frame_sink_manager_impl.h",
+    "frame_sinks/gpu_compositor_frame_sink.cc",
+    "frame_sinks/gpu_compositor_frame_sink.h",
+    "frame_sinks/gpu_root_compositor_frame_sink.cc",
+    "frame_sinks/gpu_root_compositor_frame_sink.h",
+    "frame_sinks/primary_begin_frame_source.cc",
+    "frame_sinks/primary_begin_frame_source.h",
+    "frame_sinks/referenced_surface_tracker.cc",
+    "frame_sinks/referenced_surface_tracker.h",
+    "frame_sinks/surface_resource_holder.cc",
+    "frame_sinks/surface_resource_holder.h",
+    "frame_sinks/surface_resource_holder_client.h",
+    "hit_test/hit_test_aggregator.cc",
+    "hit_test/hit_test_aggregator.h",
+    "viz_service_export.h",
+  ]
+
+  defines = [ "VIZ_SERVICE_IMPLEMENTATION" ]
+
+  configs = [ "//build/config/compiler:no_size_t_to_int_warning" ]
+
+  deps = [
+    "//components/viz/common",
+
+    # Note that dependency on //gpu/ipc/client is for GpuMemoryBufferImpl. This
+    # dependency should not be in public_deps.
+    "//gpu/ipc/client",
+    "//gpu/ipc/service",
+    "//gpu/vulkan:features",
+    "//skia",
+    "//ui/display/types",
+  ]
+
+  public_deps = [
+    "//base",
+    "//cc",
+    "//cc/ipc:interfaces",
+    "//cc/surfaces",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc:command_buffer",
+    "//services/viz/hit_test/public/interfaces",
+    "//ui/gfx",
+    "//ui/gfx/geometry",
+    "//ui/latency",
+  ]
+
+  if (is_mac) {
+    sources += [
+      "display_embedder/compositor_overlay_candidate_validator_mac.h",
+      "display_embedder/compositor_overlay_candidate_validator_mac.mm",
+    ]
+  }
+
+  if (is_android) {
+    sources += [
+      "display_embedder/compositor_overlay_candidate_validator_android.cc",
+      "display_embedder/compositor_overlay_candidate_validator_android.h",
+    ]
+  }
+
+  if (use_ozone) {
+    sources += [
+      "display_embedder/compositor_overlay_candidate_validator_ozone.cc",
+      "display_embedder/compositor_overlay_candidate_validator_ozone.h",
+      "display_embedder/display_output_surface_ozone.cc",
+      "display_embedder/display_output_surface_ozone.h",
+    ]
+
+    public_deps += [ "//ui/ozone" ]
+  }
+
+  if (is_win) {
+    sources += [
+      "display_embedder/compositor_overlay_candidate_validator_win.cc",
+      "display_embedder/compositor_overlay_candidate_validator_win.h",
+    ]
+  }
+}
+
+viz_source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "display/display_scheduler_unittest.cc",
+    "display/display_unittest.cc",
+    "display/surface_aggregator_pixeltest.cc",
+    "display/surface_aggregator_unittest.cc",
+    "display_embedder/buffer_queue_unittest.cc",
+    "display_embedder/server_shared_bitmap_manager_unittest.cc",
+    "frame_sinks/compositor_frame_sink_support_unittest.cc",
+    "frame_sinks/direct_layer_tree_frame_sink_unittest.cc",
+    "frame_sinks/frame_sink_manager_unittest.cc",
+    "frame_sinks/referenced_surface_tracker_unittest.cc",
+    "frame_sinks/surface_references_unittest.cc",
+    "frame_sinks/surface_synchronization_unittest.cc",
+    "hit_test/hit_test_aggregator_unittest.cc",
+  ]
+
+  if (!use_aura && !is_mac) {
+    sources -= [ "display_embedder/buffer_queue_unittest.cc" ]
+  }
+
+  configs = [
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/khronos:khronos_headers",
+  ]
+
+  deps = [
+    ":service",
+    "//base",
+    "//base/test:test_support",
+    "//cc:test_support",
+    "//components/viz/common",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/ipc:gl_in_process_context",
+    "//media",
+    "//services/viz/hit_test/public/interfaces",
+    "//skia",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/display/types",
+  ]
+}
+
+viz_source_set("perf_tests") {
+  testonly = true
+  sources = [
+    "display/surface_aggregator_perftest.cc",
+  ]
+
+  deps = [
+    ":service",
+    "//base",
+    "//cc:test_support",
+    "//cc/base",
+    "//testing/gtest",
+    "//testing/perf",
+  ]
+}

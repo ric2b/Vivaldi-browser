@@ -228,6 +228,10 @@ base::string16 TranslateInfoBarDelegate::GetMessageInfoBarText() {
           IDS_TRANSLATE_INFOBAR_ERROR_CANT_CONNECT);
     case TranslateErrors::INITIALIZATION_ERROR:
     case TranslateErrors::TRANSLATION_ERROR:
+    case TranslateErrors::TRANSLATION_TIMEOUT:
+    case TranslateErrors::UNEXPECTED_SCRIPT_ERROR:
+    case TranslateErrors::BAD_ORIGIN:
+    case TranslateErrors::SCRIPT_LOAD_ERROR:
       return l10n_util::GetStringUTF16(
           IDS_TRANSLATE_INFOBAR_ERROR_CANT_TRANSLATE);
     case TranslateErrors::UNKNOWN_LANGUAGE:
@@ -309,6 +313,32 @@ int TranslateInfoBarDelegate::GetTranslationAcceptedCount() {
 int TranslateInfoBarDelegate::GetTranslationDeniedCount() {
   return prefs_->GetTranslationDeniedCount(original_language_code());
 }
+
+void TranslateInfoBarDelegate::ResetTranslationAcceptedCount() {
+  prefs_->ResetTranslationAcceptedCount(original_language_code());
+}
+
+void TranslateInfoBarDelegate::ResetTranslationDeniedCount() {
+  prefs_->ResetTranslationDeniedCount(original_language_code());
+}
+
+#if defined(OS_ANDROID)
+int TranslateInfoBarDelegate::GetTranslationAutoAlwaysCount() {
+  return prefs_->GetTranslationAutoAlwaysCount(original_language_code());
+}
+
+int TranslateInfoBarDelegate::GetTranslationAutoNeverCount() {
+  return prefs_->GetTranslationAutoNeverCount(original_language_code());
+}
+
+void TranslateInfoBarDelegate::IncrementTranslationAutoAlwaysCount() {
+  prefs_->IncrementTranslationAutoAlwaysCount(original_language_code());
+}
+
+void TranslateInfoBarDelegate::IncrementTranslationAutoNeverCount() {
+  prefs_->IncrementTranslationAutoNeverCount(original_language_code());
+}
+#endif
 
 // static
 void TranslateInfoBarDelegate::GetAfterTranslateStrings(

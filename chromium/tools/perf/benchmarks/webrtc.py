@@ -21,13 +21,13 @@ class WebrtcPerfBenchmark(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'webrtc'
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     categories = [
         # Disable all categories by default.
         '-*',
         'toplevel',
         # WebRTC
-        'webrtc',
+        'webmediaplayerms',
     ]
 
     category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(

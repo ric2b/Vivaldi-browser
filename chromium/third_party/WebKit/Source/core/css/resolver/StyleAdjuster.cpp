@@ -35,7 +35,9 @@
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/frame/FrameView.h"
+#include "core/dom/NodeComputedStyle.h"
+#include "core/dom/StyleChangeReason.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLIFrameElement.h"
@@ -44,6 +46,7 @@
 #include "core/html/HTMLPlugInElement.h"
 #include "core/html/HTMLTableCellElement.h"
 #include "core/html/HTMLTextAreaElement.h"
+#include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ComputedStyleConstants.h"
@@ -55,6 +58,21 @@
 namespace blink {
 
 using namespace HTMLNames;
+
+namespace {
+
+TouchAction AdjustTouchActionForElement(TouchAction touch_action,
+                                        const ComputedStyle& style,
+                                        Element* element) {
+  bool is_child_document =
+      element && element == element->GetDocument().documentElement() &&
+      element->GetDocument().LocalOwner();
+  if (style.ScrollsOverflow() || is_child_document)
+    return touch_action | TouchAction::kTouchActionPan;
+  return touch_action;
+}
+
+}  // namespace
 
 static EDisplay EquivalentBlockDisplay(EDisplay display) {
   switch (display) {
@@ -157,38 +175,6 @@ static void AdjustStyleForFirstLetter(ComputedStyle& style) {
 
   // CSS2 says first-letter can't be positioned.
   style.SetPosition(EPosition::kStatic);
-}
-
-void StyleAdjuster::AdjustStyleForAlignment(
-    ComputedStyle& style,
-    const ComputedStyle& layout_parent_style) {
-  // To avoid needing to copy the RareNonInheritedData, we repurpose the 'auto'
-  // flag to not just mean 'auto' prior to running the StyleAdjuster but also
-  // mean 'normal' after running it.
-
-  // If the inherited value of justify-items includes the 'legacy' keyword,
-  // 'auto' computes to the the inherited value.  Otherwise, 'auto' computes to
-  // 'normal'.
-  if (style.JustifyItemsPosition() == kItemPositionAuto) {
-    if (layout_parent_style.JustifyItemsPositionType() == kLegacyPosition)
-      style.SetJustifyItems(layout_parent_style.JustifyItems());
-  }
-
-  // The 'auto' keyword computes the computed value of justify-items on the
-  // parent (minus any legacy keywords), or 'normal' if the box has no parent.
-  if (style.JustifySelfPosition() == kItemPositionAuto) {
-    if (layout_parent_style.JustifyItemsPositionType() == kLegacyPosition)
-      style.SetJustifySelfPosition(layout_parent_style.JustifyItemsPosition());
-    else if (layout_parent_style.JustifyItemsPosition() != kItemPositionAuto)
-      style.SetJustifySelf(layout_parent_style.JustifyItems());
-  }
-
-  // The 'auto' keyword computes the computed value of align-items on the parent
-  // or 'normal' if the box has no parent.
-  if (style.AlignSelfPosition() == kItemPositionAuto &&
-      layout_parent_style.AlignItemsPosition() !=
-          ComputedStyle::InitialDefaultAlignment().GetPosition())
-    style.SetAlignSelf(layout_parent_style.AlignItems());
 }
 
 static void AdjustStyleForHTMLElement(ComputedStyle& style,
@@ -389,12 +375,99 @@ static void AdjustStyleForDisplay(ComputedStyle& style,
     // because our current behavior is different from the spec and we want to
     // gather compatibility data.
     if (style.PaddingBefore().IsPercentOrCalc() ||
-        style.PaddingAfter().IsPercentOrCalc())
+        style.PaddingAfter().IsPercentOrCalc()) {
       UseCounter::Count(document,
-                        UseCounter::kFlexboxPercentagePaddingVertical);
+                        WebFeature::kFlexboxPercentagePaddingVertical);
+    }
     if (style.MarginBefore().IsPercentOrCalc() ||
-        style.MarginAfter().IsPercentOrCalc())
-      UseCounter::Count(document, UseCounter::kFlexboxPercentageMarginVertical);
+        style.MarginAfter().IsPercentOrCalc()) {
+      UseCounter::Count(document, WebFeature::kFlexboxPercentageMarginVertical);
+    }
+  }
+}
+
+static void AdjustEffectiveTouchAction(ComputedStyle& style,
+                                       const ComputedStyle& parent_style,
+                                       Element* element) {
+  TouchAction inherited_action = parent_style.GetEffectiveTouchAction();
+
+  bool is_svg_root = element && element->IsSVGElement() &&
+                     isSVGSVGElement(*element) && element->parentNode() &&
+                     !element->parentNode()->IsSVGElement();
+  bool is_replaced_canvas =
+      element && isHTMLCanvasElement(element) &&
+      element->GetDocument().GetFrame() &&
+      element->GetDocument().CanExecuteScripts(kNotAboutToExecuteScript);
+  bool is_non_replaced_inline_elements =
+      style.IsDisplayInlineType() &&
+      !(style.IsDisplayReplacedType() || is_svg_root ||
+        isHTMLImageElement(element) || is_replaced_canvas);
+  bool is_table_row_or_column = style.IsDisplayTableRowOrColumnType();
+  bool is_layout_object_needed =
+      element && element->LayoutObjectIsNeeded(style);
+
+  TouchAction element_touch_action = TouchAction::kTouchActionAuto;
+  // Touch actions are only supported by elements that support both the CSS
+  // width and height properties.
+  // See https://www.w3.org/TR/pointerevents/#the-touch-action-css-property.
+  if (!is_non_replaced_inline_elements && !is_table_row_or_column &&
+      is_layout_object_needed) {
+    element_touch_action = style.GetTouchAction();
+  }
+
+  bool is_child_document =
+      element && element == element->GetDocument().documentElement() &&
+      element->GetDocument().LocalOwner();
+
+  if (is_child_document) {
+    const ComputedStyle* frame_style =
+        element->GetDocument().LocalOwner()->GetComputedStyle();
+    if (frame_style)
+      inherited_action = frame_style->GetEffectiveTouchAction();
+  }
+
+  // The effective touch action is the intersection of the touch-action values
+  // of the current element and all of its ancestors up to the one that
+  // implements the gesture. Since panning is implemented by the scroller it is
+  // re-enabled for scrolling elements.
+  // The panning-restricted cancellation should also apply to iframes, so we
+  // allow (panning & local touch action) on the first descendant element of a
+  // iframe element.
+  inherited_action =
+      AdjustTouchActionForElement(inherited_action, style, element);
+
+  // Apply the adjusted parent effective touch actions.
+  style.SetEffectiveTouchAction(element_touch_action & inherited_action);
+
+  // Touch action is inherited across frames.
+  if (element && element->IsFrameOwnerElement() &&
+      ToHTMLFrameOwnerElement(element)->contentDocument()) {
+    Element* content_document_element =
+        ToHTMLFrameOwnerElement(element)->contentDocument()->documentElement();
+    if (content_document_element) {
+      // Actively trigger recalc for child document if the document does not
+      // have computed style created, or its effective touch action is out of
+      // date.
+      bool child_document_needs_recalc = true;
+      if (const ComputedStyle* content_document_style =
+              content_document_element->GetComputedStyle()) {
+        TouchAction document_touch_action =
+            content_document_style->GetEffectiveTouchAction();
+        TouchAction expected_document_touch_action =
+            AdjustTouchActionForElement(style.GetEffectiveTouchAction(),
+                                        *content_document_style,
+                                        content_document_element) &
+            content_document_style->GetTouchAction();
+        child_document_needs_recalc =
+            document_touch_action != expected_document_touch_action;
+      }
+      if (child_document_needs_recalc) {
+        content_document_element->SetNeedsStyleRecalc(
+            kSubtreeStyleChange,
+            StyleChangeReasonForTracing::Create(
+                StyleChangeReason::kInheritedStyleChangeFromParentFrame));
+      }
+    }
   }
 }
 
@@ -437,9 +510,6 @@ void StyleAdjuster::AdjustComputedStyle(
   } else {
     AdjustStyleForFirstLetter(style);
   }
-
-  if (element && element->HasCompositorProxy())
-    style.SetHasCompositorProxy(true);
 
   // Make sure our z-index value is only applied if the object is positioned.
   if (style.GetPosition() == EPosition::kStatic &&
@@ -511,7 +581,6 @@ void StyleAdjuster::AdjustComputedStyle(
     if (isSVGTextElement(*element))
       style.ClearMultiCol();
   }
-  AdjustStyleForAlignment(style, layout_parent_style);
 
   // If this node is sticky it marks the creation of a sticky subtree, which we
   // must track to properly handle document lifecycle in some cases.
@@ -521,6 +590,15 @@ void StyleAdjuster::AdjustComputedStyle(
   // inheritance from the ancestor and there is no harm to setting it again.
   if (style.GetPosition() == EPosition::kSticky)
     style.SetSubtreeIsSticky(true);
-}
 
+  // If the inherited value of justify-items includes the 'legacy' keyword,
+  // 'auto' computes to the the inherited value.  Otherwise, 'auto' computes to
+  // 'normal'.
+  if (style.JustifyItemsPosition() == kItemPositionAuto) {
+    if (parent_style.JustifyItemsPositionType() == kLegacyPosition)
+      style.SetJustifyItems(parent_style.JustifyItems());
+  }
+
+  AdjustEffectiveTouchAction(style, parent_style, element);
+}
 }  // namespace blink

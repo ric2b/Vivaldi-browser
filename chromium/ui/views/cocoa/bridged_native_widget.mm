@@ -347,8 +347,7 @@ gfx::Size BridgedNativeWidget::GetWindowSizeForClientSize(
 // TODO(karandeepb): Remove usage of drag event monitor once we stop supporting
 // Mac OS 10.10.
 bool BridgedNativeWidget::ShouldUseDragEventMonitor() {
-  return ![NSWindow
-      instancesRespondToSelector:@selector(performWindowDragWithEvent:)];
+  return base::mac::IsAtMostOS10_10();
 }
 
 BridgedNativeWidget::BridgedNativeWidget(NativeWidgetMac* parent)
@@ -1275,7 +1274,8 @@ void BridgedNativeWidget::CreateCompositor() {
   compositor_widget_.reset(new ui::AcceleratedWidgetMac());
   compositor_.reset(new ui::Compositor(
       context_factory_private->AllocateFrameSinkId(), context_factory,
-      context_factory_private, GetCompositorTaskRunner()));
+      context_factory_private, GetCompositorTaskRunner(),
+      false /* enable_surface_synchronization */));
   compositor_->SetAcceleratedWidget(compositor_widget_->accelerated_widget());
   compositor_widget_->SetNSView(this);
 }

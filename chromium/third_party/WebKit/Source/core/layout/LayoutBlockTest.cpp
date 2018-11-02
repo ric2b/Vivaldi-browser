@@ -22,7 +22,7 @@ TEST_F(LayoutBlockTest, LayoutNameCalledWithNullStyle) {
 }
 
 TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
-  RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(false);
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
   SetBodyInnerHTML(
       "<!DOCTYPE html>"
       "<div id='list' style='overflow-y:auto; width:150px; height:100px'>"
@@ -49,6 +49,18 @@ TEST_F(LayoutBlockTest, WidthAvailableToChildrenChanged) {
   GetDocument().View()->UpdateAllLifecyclePhases();
   ASSERT_EQ(list_box->VerticalScrollbarWidth(), 0);
   ASSERT_EQ(item_element->OffsetWidth(), 150);
+}
+
+TEST_F(LayoutBlockTest, OverflowWithTransformAndPerspective) {
+  SetBodyInnerHTML(
+      "<div id='target' style='width: 100px; height: 100px; overflow: scroll;"
+      "    perspective: 200px;'>"
+      "  <div style='transform: rotateY(-45deg); width: 140px; height: 100px'>"
+      "  </div>"
+      "</div>");
+  LayoutBox* scroller =
+      ToLayoutBox(GetDocument().getElementById("target")->GetLayoutObject());
+  EXPECT_EQ(119.5, scroller->LayoutOverflowRect().Width().ToFloat());
 }
 
 }  // namespace blink

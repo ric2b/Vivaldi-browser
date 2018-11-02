@@ -37,7 +37,6 @@
 
 #if defined(OS_WIN)
 #include "base/win/windows_version.h"
-#include "chrome/browser/win/jumplist.h"
 #include "chrome/browser/win/jumplist_factory.h"
 #include "ui/views/win/scoped_fullscreen_visibility.h"
 #endif
@@ -55,8 +54,7 @@ void VivaldiBrowserWindow::Init(Browser* browser) {
   browser_.reset(browser);
   SetBounds(browser->override_bounds());
 #if defined(OS_WIN)
-  DCHECK(!jumplist_.get());
-  jumplist_ = JumpListFactory::GetForProfile(browser_->profile());
+  JumpListFactory::GetForProfile(browser_->profile());
 #endif
 }
 

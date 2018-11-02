@@ -11,10 +11,10 @@
 
 #include "base/macros.h"
 #include "chromecast/media/cma/backend/alsa/post_processing_pipeline.h"
+#include "chromecast/media/cma/backend/alsa/post_processor_factory.h"
 
 namespace base {
 class ListValue;
-class ScopedNativeLibrary;
 }  // namespace base
 
 namespace chromecast {
@@ -39,7 +39,18 @@ class PostProcessingPipelineImpl : public PostProcessingPipeline {
   bool SetSampleRate(int sample_rate) override;
   bool IsRinging() override;
 
+  // Send string |config| to post processor |name|.
+  void SetPostProcessorConfig(const std::string& name,
+                              const std::string& config) override;
+
  private:
+  // Note: typedef is used to silence chromium-style mandatory constructor in
+  // structs.
+  typedef struct {
+    std::unique_ptr<AudioPostProcessor> ptr;
+    std::string name;
+  } PostProcessorInfo;
+
   int GetRingingTimeInFrames();
   void UpdateCastVolume(float multiplier);
 
@@ -51,12 +62,10 @@ class PostProcessingPipelineImpl : public PostProcessingPipeline {
   float current_multiplier_;
   float cast_volume_;
 
-  // Contains all libraries in use;
-  // Functions in shared objects cannot be used once library is closed.
-  std::vector<std::unique_ptr<base::ScopedNativeLibrary>> libraries_;
+  // factory_ keeps shared libraries open, so it must outlive processors_.
+  PostProcessorFactory factory_;
 
-  // Must be after libraries_
-  std::vector<std::unique_ptr<AudioPostProcessor>> processors_;
+  std::vector<PostProcessorInfo> processors_;
 
   DISALLOW_COPY_AND_ASSIGN(PostProcessingPipelineImpl);
 };

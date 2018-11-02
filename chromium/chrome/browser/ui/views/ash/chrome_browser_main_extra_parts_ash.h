@@ -9,9 +9,18 @@
 
 #include "base/macros.h"
 #include "chrome/browser/chrome_browser_main_extra_parts.h"
+#include "chrome/common/features.h"
 
 namespace ash {
 class ShelfModel;
+}
+
+namespace aura {
+class UserActivityForwarder;
+}
+
+namespace ui {
+class UserActivityDetector;
 }
 
 class AshInit;
@@ -20,6 +29,7 @@ class ChromeLauncherController;
 class ChromeNewWindowClient;
 class ChromeShellContentState;
 class LockScreenClient;
+class ImeControllerClient;
 class ImmersiveContextMus;
 class ImmersiveHandlerFactoryMus;
 class MediaClient;
@@ -27,6 +37,10 @@ class SessionControllerClient;
 class SystemTrayClient;
 class VolumeController;
 class VpnListForwarder;
+
+#if BUILDFLAG(ENABLE_WAYLAND_SERVER)
+class ExoParts;
+#endif
 
 // Browser initialization for Ash. Only runs on Chrome OS.
 // TODO(jamescook): Fold this into ChromeBrowserMainPartsChromeOS.
@@ -50,6 +64,7 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   std::unique_ptr<ImmersiveContextMus> immersive_context_;
   std::unique_ptr<SessionControllerClient> session_controller_client_;
   std::unique_ptr<SystemTrayClient> system_tray_client_;
+  std::unique_ptr<ImeControllerClient> ime_controller_client_;
   std::unique_ptr<ChromeNewWindowClient> new_window_client_;
   std::unique_ptr<VolumeController> volume_controller_;
   std::unique_ptr<VpnListForwarder> vpn_list_forwarder_;
@@ -60,6 +75,14 @@ class ChromeBrowserMainExtraPartsAsh : public ChromeBrowserMainExtraParts {
   // ShelfController and ChromeShellDelegate in classic Ash.
   std::unique_ptr<ash::ShelfModel> chrome_shelf_model_;
   std::unique_ptr<ChromeLauncherController> chrome_launcher_controller_;
+
+  // Used only for mash.
+  std::unique_ptr<ui::UserActivityDetector> user_activity_detector_;
+  std::unique_ptr<aura::UserActivityForwarder> user_activity_forwarder_;
+
+#if BUILDFLAG(ENABLE_WAYLAND_SERVER)
+  std::unique_ptr<ExoParts> exo_parts_;
+#endif
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainExtraPartsAsh);
 };

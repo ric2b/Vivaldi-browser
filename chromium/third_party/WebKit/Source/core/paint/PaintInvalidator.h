@@ -12,7 +12,7 @@
 
 namespace blink {
 
-struct PaintInvalidatorContext {
+struct CORE_EXPORT PaintInvalidatorContext {
   USING_FAST_MALLOC(PaintInvalidatorContext);
 
  public:
@@ -27,14 +27,10 @@ struct PaintInvalidatorContext {
             parent_context.paint_invalidation_container_for_stacked_contents),
         painting_layer(parent_context.painting_layer) {}
 
-  // This method is virtual temporarily to adapt PaintInvalidatorContext and the
-  // legacy PaintInvalidationState for code shared by old code and new code.
-  virtual void MapLocalRectToVisualRectInBacking(const LayoutObject&,
-                                                 LayoutRect&) const;
+  void MapLocalRectToVisualRectInBacking(const LayoutObject&,
+                                         LayoutRect&) const;
 
   bool NeedsVisualRectUpdate(const LayoutObject& object) const {
-    if (!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-      return true;
 #if DCHECK_IS_ON()
     if (force_visual_rect_update_for_checking_)
       return true;
@@ -65,6 +61,10 @@ struct PaintInvalidatorContext {
     // don't need any invalidation. They are used as "painting subroutines"
     // for one or more other locations in SVG.
     kSubtreeNoInvalidation = 1 << 6,
+
+    // Don't skip invalidating because the previous and current visual
+    // rects were empty.
+    kInvalidateEmptyVisualRect = 1 << 7,
   };
   unsigned subtree_flags = 0;
 
@@ -114,7 +114,7 @@ struct PaintInvalidatorContext {
 
 class PaintInvalidator {
  public:
-  void InvalidatePaint(FrameView&,
+  void InvalidatePaint(LocalFrameView&,
                        const PaintPropertyTreeBuilderContext*,
                        PaintInvalidatorContext&);
   void InvalidatePaint(const LayoutObject&,
@@ -142,6 +142,8 @@ class PaintInvalidator {
                                          PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdatePaintInvalidationContainer(const LayoutObject&,
                                                       PaintInvalidatorContext&);
+  ALWAYS_INLINE void UpdateEmptyVisualRectFlag(const LayoutObject&,
+                                               PaintInvalidatorContext&);
   ALWAYS_INLINE void UpdateVisualRectIfNeeded(
       const LayoutObject&,
       const PaintPropertyTreeBuilderContext*,

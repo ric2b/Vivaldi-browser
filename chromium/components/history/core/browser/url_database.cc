@@ -691,4 +691,6 @@ bool RowQualifiesAsSignificant(const URLRow& row,
          (row.last_visit() >= real_threshold);
 }
 
+#include "components/history/url_database.cc.inc"
+
 }  // namespace history

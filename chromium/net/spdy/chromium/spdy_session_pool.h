@@ -7,6 +7,7 @@
 
 #include <stddef.h>
 
+#include <list>
 #include <map>
 #include <memory>
 #include <set>
@@ -21,6 +22,7 @@
 #include "net/base/net_export.h"
 #include "net/base/network_change_notifier.h"
 #include "net/cert/cert_database.h"
+#include "net/http/http_stream_factory_impl_request.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_server.h"
 #include "net/spdy/chromium/server_push_delegate.h"
@@ -57,6 +59,7 @@ class NET_EXPORT SpdySessionPool
                   SSLConfigService* ssl_config_service,
                   HttpServerProperties* http_server_properties,
                   TransportSecurityState* transport_security_state,
+                  const QuicVersionVector& quic_supported_versions,
                   bool enable_ping_based_connection_checking,
                   size_t session_max_recv_window_size,
                   const SettingsMap& initial_settings,
@@ -75,17 +78,13 @@ class NET_EXPORT SpdySessionPool
   // Create a new SPDY session from an existing socket.  There must
   // not already be a session for the given key.
   //
-  // |is_secure| can be false for testing or when SPDY is configured
-  // to work with non-secure sockets.
-  //
   // Returns the new SpdySession. Note that the SpdySession begins reading from
   // |connection| on a subsequent event loop iteration, so it may be closed
   // immediately afterwards if the first read of |connection| fails.
   base::WeakPtr<SpdySession> CreateAvailableSessionFromSocket(
       const SpdySessionKey& key,
       std::unique_ptr<ClientSocketHandle> connection,
-      const NetLogWithSource& net_log,
-      bool is_secure);
+      const NetLogWithSource& net_log);
 
   // If |url| is not empty and there is a session for |key| that has an
   // unclaimed push stream for |url|, return it.
@@ -166,9 +165,43 @@ class NET_EXPORT SpdySessionPool
   void DumpMemoryStats(base::trace_event::ProcessMemoryDump* pmd,
                        const SpdyString& parent_dump_absolute_name) const;
 
+  // Called when a SpdySession is ready. It will find appropriate Requests and
+  // fulfill them. |direct| indicates whether or not |spdy_session| uses a
+  // proxy.
+  void OnNewSpdySessionReady(const base::WeakPtr<SpdySession>& spdy_session,
+                             bool direct,
+                             const SSLConfig& used_ssl_config,
+                             const ProxyInfo& used_proxy_info,
+                             bool was_alpn_negotiated,
+                             NextProto negotiated_protocol,
+                             bool using_spdy,
+                             NetLogSource source_dependency);
+
+  // Called when a HttpStreamRequest is started with |spdy_session_key|.
+  // Returns true if the request should continue. Returns false if the request
+  // should wait until |callback| is invoked before continuing.
+  bool StartRequest(const SpdySessionKey& spdy_session_key,
+                    const base::Closure& callback);
+
+  // Resumes pending requests with |spdy_session_key|.
+  void ResumePendingRequests(const SpdySessionKey& spdy_session_key);
+
+  // Adds |request| to |spdy_session_request_map_| under |spdy_session_key| Key.
+  // Sets |spdy_session_key| as |request|'s SpdySessionKey.
+  void AddRequestToSpdySessionRequestMap(
+      const SpdySessionKey& spdy_session_key,
+      HttpStreamFactoryImpl::Request* request);
+
+  // Removes |request| from |spdy_session_request_map_|. No-op if |request| does
+  // not have a SpdySessionKey.
+  void RemoveRequestFromSpdySessionRequestMap(
+      HttpStreamFactoryImpl::Request* request);
+
  private:
   friend class SpdySessionPoolPeer;  // For testing.
 
+  typedef std::set<HttpStreamFactoryImpl::Request*> RequestSet;
+  typedef std::map<SpdySessionKey, RequestSet> SpdySessionRequestMap;
   typedef std::set<SpdySession*> SessionSet;
   typedef std::vector<base::WeakPtr<SpdySession> > WeakSessionList;
   typedef std::map<SpdySessionKey, base::WeakPtr<SpdySession> >
@@ -233,6 +266,9 @@ class NET_EXPORT SpdySessionPool
   const scoped_refptr<SSLConfigService> ssl_config_service_;
   HostResolver* const resolver_;
 
+  // Versions of QUIC which may be used.
+  const QuicVersionVector quic_supported_versions_;
+
   // Defaults to true. May be controlled via SpdySessionPoolPeer for tests.
   bool enable_sending_initial_data_;
   bool enable_ping_based_connection_checking_;
@@ -244,6 +280,12 @@ class NET_EXPORT SpdySessionPool
   // and also control SpdySession parameters like initial receive window size
   // and maximum HPACK dynamic table size.
   const SettingsMap initial_settings_;
+
+  // TODO(xunjieli): Merge these two.
+  SpdySessionRequestMap spdy_session_request_map_;
+  typedef std::map<SpdySessionKey, std::list<base::Closure>>
+      SpdySessionPendingRequestMap;
+  SpdySessionPendingRequestMap spdy_session_pending_request_map_;
 
   TimeFunc time_func_;
   ServerPushDelegate* push_delegate_;

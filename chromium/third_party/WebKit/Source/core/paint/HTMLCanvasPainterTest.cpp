@@ -4,7 +4,7 @@
 
 #include "core/paint/HTMLCanvasPainter.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
@@ -26,7 +26,7 @@
 namespace blink {
 
 class HTMLCanvasPainterTestForSPv2 : public ::testing::Test,
-                                     public testing::WithParamInterface<bool>,
+                                     public ::testing::WithParamInterface<bool>,
                                      private ScopedSlimmingPaintV2ForTest,
                                      private ScopedRootLayerScrollingForTest {
  public:

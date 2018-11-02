@@ -31,12 +31,12 @@ bool GetAppOutputInternal(const std::vector<std::string>& argv,
   launchpad_create(MX_HANDLE_INVALID, argv_cstr[0], &lp);
   launchpad_load_from_file(lp, argv_cstr[0]);
   launchpad_set_args(lp, argv.size(), argv_cstr.data());
-  launchpad_clone(lp, LP_CLONE_MXIO_ROOT | LP_CLONE_MXIO_CWD |
+  launchpad_clone(lp, LP_CLONE_MXIO_NAMESPACE | LP_CLONE_MXIO_CWD |
                           LP_CLONE_DEFAULT_JOB | LP_CLONE_ENVIRON);
   launchpad_clone_fd(lp, STDIN_FILENO, STDIN_FILENO);
   int pipe_fd;
   mx_status_t status = launchpad_add_pipe(lp, &pipe_fd, STDOUT_FILENO);
-  if (status != NO_ERROR) {
+  if (status != MX_OK) {
     LOG(ERROR) << "launchpad_add_pipe failed: " << status;
     launchpad_destroy(lp);
     return false;
@@ -50,7 +50,7 @@ bool GetAppOutputInternal(const std::vector<std::string>& argv,
   mx_handle_t proc;
   const char* errmsg;
   status = launchpad_go(lp, &proc, &errmsg);
-  if (status != NO_ERROR) {
+  if (status != MX_OK) {
     LOG(ERROR) << "launchpad_go failed: " << errmsg << ", status=" << status;
     return false;
   }
@@ -93,17 +93,25 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   launchpad_load_from_file(lp, argv_cstr[0]);
   launchpad_set_args(lp, argv.size(), argv_cstr.data());
 
-  uint32_t to_clone =
-      LP_CLONE_MXIO_ROOT | LP_CLONE_MXIO_CWD | LP_CLONE_DEFAULT_JOB;
+  uint32_t to_clone = LP_CLONE_MXIO_NAMESPACE | LP_CLONE_DEFAULT_JOB;
 
   std::unique_ptr<char* []> new_environ;
   char* const empty_environ = nullptr;
   char* const* old_environ = environ;
   if (options.clear_environ)
     old_environ = &empty_environ;
-  if (!options.environ.empty())
-    new_environ = AlterEnvironment(old_environ, options.environ);
-  if (!options.environ.empty() || options.clear_environ)
+
+  EnvironmentMap environ_modifications = options.environ;
+  if (!options.current_directory.empty()) {
+    environ_modifications["PWD"] = options.current_directory.value();
+  } else {
+    to_clone |= LP_CLONE_MXIO_CWD;
+  }
+
+  if (!environ_modifications.empty())
+    new_environ = AlterEnvironment(old_environ, environ_modifications);
+
+  if (!environ_modifications.empty() || options.clear_environ)
     launchpad_set_environ(lp, new_environ.get());
   else
     to_clone |= LP_CLONE_ENVIRON;
@@ -121,7 +129,7 @@ Process LaunchProcess(const std::vector<std::string>& argv,
   mx_handle_t proc;
   const char* errmsg;
   mx_status_t status = launchpad_go(lp, &proc, &errmsg);
-  if (status != NO_ERROR) {
+  if (status != MX_OK) {
     LOG(ERROR) << "launchpad_go failed: " << errmsg << ", status=" << status;
     return Process();
   }

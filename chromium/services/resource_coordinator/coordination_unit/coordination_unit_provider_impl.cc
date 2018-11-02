@@ -7,41 +7,50 @@
 #include <memory>
 #include <utility>
 
-#include "base/logging.h"
-#include "mojo/public/cpp/bindings/strong_binding.h"
-#include "services/resource_coordinator/coordination_unit/coordination_unit_factory.h"
+#include "base/macros.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_graph_observer.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 
 namespace resource_coordinator {
 
 CoordinationUnitProviderImpl::CoordinationUnitProviderImpl(
-    service_manager::ServiceContextRefFactory* service_ref_factory)
-    : service_ref_factory_(service_ref_factory) {
+    service_manager::ServiceContextRefFactory* service_ref_factory,
+    CoordinationUnitManager* coordination_unit_manager)
+    : service_ref_factory_(service_ref_factory),
+      coordination_unit_manager_(coordination_unit_manager) {
   DCHECK(service_ref_factory);
   service_ref_ = service_ref_factory->CreateRef();
 }
 
 CoordinationUnitProviderImpl::~CoordinationUnitProviderImpl() = default;
 
+void CoordinationUnitProviderImpl::OnConnectionError(
+    CoordinationUnitImpl* coordination_unit) {
+  coordination_unit_manager_->OnBeforeCoordinationUnitDestroyed(
+      coordination_unit);
+  coordination_unit->Destruct();
+}
+
 void CoordinationUnitProviderImpl::CreateCoordinationUnit(
     mojom::CoordinationUnitRequest request,
     const CoordinationUnitID& id) {
-  std::unique_ptr<CoordinationUnitImpl> coordination_unit =
-      coordination_unit_factory::CreateCoordinationUnit(
+  CoordinationUnitImpl* coordination_unit =
+      CoordinationUnitImpl::CreateCoordinationUnit(
           id, service_ref_factory_->CreateRef());
 
-  mojo::MakeStrongBinding(std::move(coordination_unit), std::move(request));
+  coordination_unit->Bind(std::move(request));
+  coordination_unit_manager_->OnCoordinationUnitCreated(coordination_unit);
+  auto& coordination_unit_binding = coordination_unit->binding();
+
+  coordination_unit_binding.set_connection_error_handler(
+      base::BindOnce(&CoordinationUnitProviderImpl::OnConnectionError,
+                     base::Unretained(this), coordination_unit));
 }
 
-// static
-void CoordinationUnitProviderImpl::Create(
-    service_manager::ServiceContextRefFactory* service_ref_factory,
-    const service_manager::BindSourceInfo& source_info,
+void CoordinationUnitProviderImpl::Bind(
     resource_coordinator::mojom::CoordinationUnitProviderRequest request) {
-  mojo::MakeStrongBinding(
-      base::MakeUnique<CoordinationUnitProviderImpl>(service_ref_factory),
-      std::move(request));
+  bindings_.AddBinding(this, std::move(request));
 }
 
 }  // namespace resource_coordinator

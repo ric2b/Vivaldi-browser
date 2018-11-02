@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "components/gcm_driver/crypto/gcm_decryption_result.h"
 #include "components/gcm_driver/crypto/gcm_encryption_provider.h"
 #include "google_apis/gcm/engine/mcs_client.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -85,9 +86,6 @@ static const char kUnregistrationRetryDelayedDetails[] =
 
 static const char kDataReceivedEvent[] = "Data msg received";
 static const char kDataReceivedDetails[] = "";
-static const char kDataReceivedNotRegisteredEvent[] = "Data msg received";
-static const char kDataReceivedNotRegisteredDetails[] =
-    "No such registered app found";
 static const char kDataDeletedMessageEvent[] = "Data msg received";
 static const char kDataDeletedMessageDetails[] =
     "Message has been deleted on server";
@@ -99,8 +97,8 @@ static const char kNotifySendStatusDetails[] = "Msg size: 99 bytes, TTL: 7";
 static const char kIncomingSendErrorEvent[] = "Received 'send error' msg";
 static const char kIncomingSendErrorDetails[] = "";
 
-static const GCMEncryptionProvider::DecryptionResult kDecryptionResultFailure =
-    GCMEncryptionProvider::DECRYPTION_RESULT_INVALID_PAYLOAD;
+static const GCMDecryptionResult kDecryptionResultFailure =
+    GCMDecryptionResult::INVALID_PAYLOAD;
 
 }  // namespace
 
@@ -269,13 +267,6 @@ class GCMStatsRecorderImplTest : public testing::Test {
                         remark);
   }
 
-  void VerifyDataMessageReceivedNotRegistered(const std::string& remark) {
-    VerifyReceivingData(recorder_.receiving_activities(),
-                        kDataReceivedNotRegisteredEvent,
-                        kDataReceivedNotRegisteredDetails,
-                        remark);
-  }
-
   void VerifyDataSentToWire(const std::string& remark) {
     VerifySendingData(recorder_.sending_activities(),
                       kDataSentToWireEvent,
@@ -301,10 +292,9 @@ class GCMStatsRecorderImplTest : public testing::Test {
     const auto& queue = recorder_.decryption_failure_activities();
 
     EXPECT_EQ(kAppId, queue.front().app_id) << remark;
-    EXPECT_EQ(
-        GCMEncryptionProvider::ToDecryptionResultDetailsString(
-            kDecryptionResultFailure),
-        queue.front().details) << remark;
+    EXPECT_EQ(ToGCMDecryptionResultDetailsString(kDecryptionResultFailure),
+              queue.front().details)
+        << remark;
   }
 
  protected:
@@ -410,12 +400,10 @@ TEST_F(GCMStatsRecorderImplTest, StartStopRecordingTest) {
   recorder_.RecordUnregistrationRetryDelayed(kAppId, source_, kDelay, kRetries);
   VerifyAllActivityQueueEmpty("no unregistration");
 
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, true,
+  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize,
                                       GCMStatsRecorder::DATA_MESSAGE);
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, true,
+  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize,
                                       GCMStatsRecorder::DELETED_MESSAGES);
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, false,
-                                      GCMStatsRecorder::DATA_MESSAGE);
   VerifyAllActivityQueueEmpty("no receiving");
 
   recorder_.RecordDataSentToWire(kAppId, kReceiverId, kMessageId, kQueuedSec);
@@ -511,20 +499,15 @@ TEST_F(GCMStatsRecorderImplTest, RegistrationTest) {
 TEST_F(GCMStatsRecorderImplTest, RecordReceivingTest) {
   recorder_.RecordConnectionInitiated(std::string());
   recorder_.RecordConnectionSuccess();
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, true,
+  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize,
                                       GCMStatsRecorder::DATA_MESSAGE);
   VerifyRecordedReceivingCount(1);
   VerifyDataMessageReceived("1st call");
 
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, true,
+  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize,
                                       GCMStatsRecorder::DELETED_MESSAGES);
   VerifyRecordedReceivingCount(2);
   VerifyDataDeletedMessage("2nd call");
-
-  recorder_.RecordDataMessageReceived(kAppId, kFrom, kByteSize, false,
-                                      GCMStatsRecorder::DATA_MESSAGE);
-  VerifyRecordedReceivingCount(3);
-  VerifyDataMessageReceivedNotRegistered("3rd call");
 }
 
 TEST_F(GCMStatsRecorderImplTest, RecordSendingTest) {

@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -44,6 +45,7 @@
 #include "gpu/ipc/service/switches.h"
 #include "media/media_features.h"
 #include "ui/base/ui_base_switches.h"
+#include "ui/gfx/switches.h"
 #include "ui/gl/gl_features.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
@@ -591,7 +593,8 @@ void GpuDataManagerImplPrivate::Initialize() {
   const bool force_software_gl =
       (command_line->GetSwitchValueASCII(switches::kUseGL) ==
        softwareGLImplementationName) ||
-      command_line->HasSwitch(switches::kOverrideUseSoftwareGLForTests);
+      command_line->HasSwitch(switches::kOverrideUseSoftwareGLForTests) ||
+      command_line->HasSwitch(switches::kHeadless);
   if (force_software_gl) {
     // If using the OSMesa GL implementation, use fake vendor and device ids to
     // make sure it never gets blacklisted. This is better than simply
@@ -666,7 +669,7 @@ void GpuDataManagerImplPrivate::Initialize() {
 
   if (in_process_gpu_) {
     command_line->AppendSwitch(switches::kDisableGpuWatchdog);
-    AppendGpuCommandLine(command_line, nullptr);
+    AppendGpuCommandLine(command_line);
   }
 }
 
@@ -769,8 +772,7 @@ void GpuDataManagerImplPrivate::AppendRendererCommandLine(
 }
 
 void GpuDataManagerImplPrivate::AppendGpuCommandLine(
-    base::CommandLine* command_line,
-    gpu::GpuPreferences* gpu_preferences) const {
+    base::CommandLine* command_line) const {
   DCHECK(command_line);
 
   std::string use_gl =
@@ -815,15 +817,8 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
                                     disabled_extensions_);
   }
 
-  if (gpu_preferences && IsGpuSchedulerEnabled())
-    gpu_preferences->enable_gpu_scheduler = true;
-
   if (ShouldDisableAcceleratedVideoDecode(command_line)) {
-    if (gpu_preferences) {
-      gpu_preferences->disable_accelerated_video_decode = true;
-    } else {
-      command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
-    }
+    command_line->AppendSwitch(switches::kDisableAcceleratedVideoDecode);
   }
 
   if (gpu_driver_bugs_.find(gpu::CREATE_DEFAULT_GL_CONTEXT) !=
@@ -837,15 +832,6 @@ void GpuDataManagerImplPrivate::AppendGpuCommandLine(
     command_line->AppendSwitch(switches::kEnableDrmAtomic);
   }
 #endif
-
-  if (gpu_preferences) { // enable_es3_apis
-    bool blacklisted = IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL2);
-    bool enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kEnableES3APIs);
-    bool disabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
-        switches::kDisableES3APIs);
-    gpu_preferences->enable_es3_apis = (enabled || !blacklisted) && !disabled;
-  }
 
   // Pass GPU and driver information to GPU process. We try to avoid full GPU
   // info collection at GPU process startup, but we need gpu vendor_id,
@@ -934,6 +920,25 @@ void GpuDataManagerImplPrivate::UpdateRendererWebPrefs(
       command_line->HasSwitch(switches::kEnableThreadedTextureMailboxes);
 }
 
+void GpuDataManagerImplPrivate::UpdateGpuPreferences(
+    gpu::GpuPreferences* gpu_preferences) const {
+  DCHECK(gpu_preferences);
+
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+
+  if (IsGpuSchedulerEnabled())
+    gpu_preferences->enable_gpu_scheduler = true;
+
+  if (ShouldDisableAcceleratedVideoDecode(command_line))
+    gpu_preferences->disable_accelerated_video_decode = true;
+
+  gpu_preferences->enable_es3_apis =
+      (command_line->HasSwitch(switches::kEnableES3APIs) ||
+       !IsFeatureBlacklisted(gpu::GPU_FEATURE_TYPE_WEBGL2)) &&
+      !command_line->HasSwitch(switches::kDisableES3APIs);
+}
+
 void GpuDataManagerImplPrivate::DisableHardwareAcceleration() {
   if (!is_initialized_) {
     post_init_tasks_.push_back(
@@ -1015,8 +1020,9 @@ void GpuDataManagerImplPrivate::ProcessCrashed(
   }
 }
 
-base::ListValue* GpuDataManagerImplPrivate::GetLogMessages() const {
-  base::ListValue* value = new base::ListValue;
+std::unique_ptr<base::ListValue> GpuDataManagerImplPrivate::GetLogMessages()
+    const {
+  auto value = base::MakeUnique<base::ListValue>();
   for (size_t ii = 0; ii < log_messages_.size(); ++ii) {
     std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
     dict->SetInteger("level", log_messages_[ii].level);

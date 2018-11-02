@@ -66,11 +66,16 @@ NSString* const kBrowserViewControllerSnackbarCategory =
   return [[PreloadController alloc] initWithBrowserState:browserState_];
 }
 
-- (TabStripController*)newTabStripControllerWithTabModel:(TabModel*)model {
+- (TabStripController*)
+newTabStripControllerWithTabModel:(TabModel*)model
+                       dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                      dispatcher {
   TabStrip::Style style = TabStrip::kStyleDark;
   if (browserState_ && browserState_->IsOffTheRecord())
     style = TabStrip::kStyleIncognito;
-  return [[TabStripController alloc] initWithTabModel:model style:style];
+  return [[TabStripController alloc] initWithTabModel:model
+                                                style:style
+                                           dispatcher:dispatcher];
 }
 
 - (ToolbarModelIOS*)newToolbarModelIOSWithDelegate:
@@ -81,11 +86,14 @@ NSString* const kBrowserViewControllerSnackbarCategory =
 - (WebToolbarController*)
 newWebToolbarControllerWithDelegate:(id<WebToolbarDelegate>)delegate
                           urlLoader:(id<UrlLoader>)urlLoader
-                    preloadProvider:(id<PreloadProvider>)preload {
+                    preloadProvider:(id<PreloadProvider>)preload
+                         dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                        dispatcher {
   return [[WebToolbarController alloc] initWithDelegate:delegate
                                               urlLoader:urlLoader
                                            browserState:browserState_
-                                        preloadProvider:preload];
+                                        preloadProvider:preload
+                                             dispatcher:dispatcher];
 }
 
 - (KeyCommandsProvider*)newKeyCommandsProvider {

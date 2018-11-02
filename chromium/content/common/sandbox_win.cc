@@ -12,6 +12,7 @@
 #include "base/command_line.h"
 #include "base/debug/activity_tracker.h"
 #include "base/debug/profiler.h"
+#include "base/feature_list.h"
 #include "base/files/file_util.h"
 #include "base/hash.h"
 #include "base/logging.h"
@@ -403,27 +404,15 @@ sandbox::ResultCode AddPolicyForSandboxedProcess(
   sandbox::ResultCode result = sandbox::SBOX_ALL_OK;
 
   // Win8+ adds a device DeviceApi that we don't need.
-  if (base::win::GetVersion() > base::win::VERSION_WIN7)
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8)
     result = policy->AddKernelObjectToClose(L"File", L"\\Device\\DeviceApi");
   if (result != sandbox::SBOX_ALL_OK)
     return result;
 
-  // Close the proxy settings on XP.
-  if (base::win::GetVersion() <= base::win::VERSION_SERVER_2003)
-    result = policy->AddKernelObjectToClose(L"Key",
-                 L"HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\" \
-                     L"CurrentVersion\\Internet Settings");
-  if (result != sandbox::SBOX_ALL_OK)
-    return result;
-
-  sandbox::TokenLevel initial_token = sandbox::USER_UNPROTECTED;
-  if (base::win::GetVersion() > base::win::VERSION_XP) {
-    // On 2003/Vista the initial token has to be restricted if the main
-    // token is restricted.
-    initial_token = sandbox::USER_RESTRICTED_SAME_ACCESS;
-  }
-
-  result = policy->SetTokenLevel(initial_token, sandbox::USER_LOCKDOWN);
+  // On 2003/Vista+ the initial token has to be restricted if the main
+  // token is restricted.
+  result = policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
+                                 sandbox::USER_LOCKDOWN);
   if (result != sandbox::SBOX_ALL_OK)
     return result;
   // Prevents the renderers from manipulating low-integrity processes.
@@ -627,9 +616,24 @@ sandbox::ResultCode SetJobLevel(const base::CommandLine& cmd_line,
   return SetJobMemoryLimit(cmd_line, policy);
 }
 
+// This is for finch. See also crbug.com/464430 for details.
+const base::Feature kEnableCsrssLockdownFeature{
+    "EnableCsrssLockdown", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // TODO(jschuh): Need get these restrictions applied to NaCl and Pepper.
 // Just have to figure out what needs to be warmed up first.
 sandbox::ResultCode AddBaseHandleClosePolicy(sandbox::TargetPolicy* policy) {
+  if (base::win::GetVersion() >= base::win::VERSION_WIN10) {
+    if (base::FeatureList::IsEnabled(kEnableCsrssLockdownFeature)) {
+      // Close all ALPC ports.
+      sandbox::ResultCode ret =
+          policy->AddKernelObjectToClose(L"ALPC Port", NULL);
+      if (ret != sandbox::SBOX_ALL_OK) {
+        return ret;
+      }
+    }
+  }
+
   // TODO(cpu): Add back the BaseNamedObjects policy.
   base::string16 object_path = PrependWindowsSessionPath(
       L"\\BaseNamedObjects\\windows_shell_global_counters");

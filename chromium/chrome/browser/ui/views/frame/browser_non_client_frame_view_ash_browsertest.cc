@@ -7,9 +7,9 @@
 #include "ash/ash_constants.h"
 #include "ash/frame/caption_buttons/frame_caption_button_container_view.h"
 #include "ash/frame/header_painter.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/shell.h"
-#include "ash/test/immersive_fullscreen_controller_test_api.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
 #include "chrome/browser/profiles/profile_avatar_icon_util.h"
@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
+#include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
@@ -26,6 +27,7 @@
 #include "chrome/browser/ui/views/tabs/tab.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "components/signin/core/account_id/account_id.h"
+#include "ui/aura/client/aura_constants.h"
 #include "ui/base/hit_test.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/widget/widget.h"
@@ -263,9 +265,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
 }
 
 // Tests that FrameCaptionButtonContainer has been relaid out in response to
-// maximize mode being toggled.
+// tablet mode being toggled.
 IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
-                       ToggleMaximizeModeRelayout) {
+                       ToggleTabletModeRelayout) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
   Widget* widget = browser_view->GetWidget();
   // We know we're using Ash, so static cast.
@@ -274,20 +276,48 @@ IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
           widget->non_client_view()->frame_view());
 
   const gfx::Rect initial = frame_view->caption_button_container_->bounds();
-  ash::Shell::Get()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(true);
+  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
+      true);
   ash::FrameCaptionButtonContainerView::TestApi test(frame_view->
                                                      caption_button_container_);
   test.EndAnimations();
   const gfx::Rect during_maximize = frame_view->caption_button_container_->
       bounds();
   EXPECT_GT(initial.width(), during_maximize.width());
-  ash::Shell::Get()
-      ->maximize_mode_controller()
-      ->EnableMaximizeModeWindowManager(false);
+  ash::Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(
+      false);
   test.EndAnimations();
   const gfx::Rect after_restore = frame_view->caption_button_container_->
       bounds();
   EXPECT_EQ(initial, after_restore);
+}
+
+// Tests that browser frame minimum size constraint is updated in response to
+// browser view layout.
+IN_PROC_BROWSER_TEST_F(BrowserNonClientFrameViewAshTest,
+                       FrameMinSizeIsUpdated) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser());
+  Widget* widget = browser_view->GetWidget();
+  // We know we're using Ash, so static cast.
+  BrowserNonClientFrameViewAsh* frame_view =
+      static_cast<BrowserNonClientFrameViewAsh*>(
+          widget->non_client_view()->frame_view());
+
+  BookmarkBarView* bookmark_bar = browser_view->GetBookmarkBarView();
+  EXPECT_FALSE(bookmark_bar->visible());
+  const int min_height_no_bookmarks = frame_view->GetMinimumSize().height();
+
+  // Setting non-zero bookmark bar preferred size forces it to be visible and
+  // triggers BrowserView layout update.
+  bookmark_bar->SetPreferredSize(gfx::Size(50, 5));
+  EXPECT_TRUE(bookmark_bar->visible());
+
+  // Minimum window size should grow with the bookmark bar shown.
+  // kMinimumSize window property should get updated.
+  aura::Window* window = browser()->window()->GetNativeWindow();
+  const gfx::Size* min_window_size =
+      window->GetProperty(aura::client::kMinimumSize);
+  ASSERT_NE(nullptr, min_window_size);
+  EXPECT_GT(min_window_size->height(), min_height_no_bookmarks);
+  EXPECT_EQ(*min_window_size, frame_view->GetMinimumSize());
 }

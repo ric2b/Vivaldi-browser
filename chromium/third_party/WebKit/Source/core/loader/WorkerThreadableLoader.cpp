@@ -35,7 +35,8 @@
 #include "core/loader/ThreadableLoadingContext.h"
 #include "core/timing/WorkerGlobalScopePerformance.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "core/workers/WorkerLoaderProxy.h"
+#include "core/workers/WorkerThread.h"
+#include "core/workers/WorkerThreadLifecycleContext.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/heap/SafePoint.h"
 #include "platform/loader/fetch/ResourceError.h"
@@ -197,8 +198,6 @@ WorkerThreadableLoader::WorkerThreadableLoader(
     const ResourceLoaderOptions& resource_loader_options,
     BlockingBehavior blocking_behavior)
     : worker_global_scope_(&worker_global_scope),
-      worker_loader_proxy_(
-          worker_global_scope.GetThread()->GetWorkerLoaderProxy()),
       parent_frame_task_runners_(
           worker_global_scope.GetThread()->GetParentFrameTaskRunners()),
       client_(client),
@@ -225,6 +224,7 @@ WorkerThreadableLoader::~WorkerThreadableLoader() {
 }
 
 void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
+  DCHECK(worker_global_scope_->IsContextThread());
   ResourceRequest request(original_request);
   if (!request.DidSetHTTPReferrer()) {
     request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
@@ -232,24 +232,25 @@ void WorkerThreadableLoader::Start(const ResourceRequest& original_request) {
         worker_global_scope_->OutgoingReferrer()));
   }
 
-  DCHECK(!IsMainThread());
   RefPtr<WaitableEventWithTasks> event_with_tasks;
   if (blocking_behavior_ == kLoadSynchronously)
     event_with_tasks = WaitableEventWithTasks::Create();
 
+  WorkerThread* worker_thread = worker_global_scope_->GetThread();
   RefPtr<WebTaskRunner> worker_loading_task_runner = TaskRunnerHelper::Get(
       TaskType::kUnspecedLoading, worker_global_scope_.Get());
   parent_frame_task_runners_->Get(TaskType::kUnspecedLoading)
       ->PostTask(
           BLINK_FROM_HERE,
-          CrossThreadBind(&MainThreadLoaderHolder::CreateAndStart,
-                          WrapCrossThreadPersistent(this), worker_loader_proxy_,
-                          std::move(worker_loading_task_runner),
-                          WrapCrossThreadPersistent(
-                              worker_global_scope_->GetThread()
-                                  ->GetWorkerThreadLifecycleContext()),
-                          request, threadable_loader_options_,
-                          resource_loader_options_, event_with_tasks));
+          CrossThreadBind(
+              &MainThreadLoaderHolder::CreateAndStart,
+              WrapCrossThreadPersistent(this),
+              WrapCrossThreadPersistent(worker_thread->GetLoadingContext()),
+              std::move(worker_loading_task_runner),
+              WrapCrossThreadPersistent(
+                  worker_thread->GetWorkerThreadLifecycleContext()),
+              request, threadable_loader_options_, resource_loader_options_,
+              event_with_tasks));
 
   if (blocking_behavior_ == kLoadAsynchronously)
     return;
@@ -301,9 +302,7 @@ void WorkerThreadableLoader::Cancel() {
   // by sending a cancellation error.
   // Note: no more client callbacks will be done after this method -- the
   // clearClient() call ensures that.
-  ResourceError error(String(), 0, String(), String());
-  error.SetIsCancellation(true);
-  DidFail(error);
+  DidFail(ResourceError::CancelledError(KURL()));
   DCHECK(!client_);
 }
 
@@ -390,17 +389,6 @@ void WorkerThreadableLoader::DidFail(const ResourceError& error) {
   client->DidFail(error);
 }
 
-void WorkerThreadableLoader::DidFailAccessControlCheck(
-    const ResourceError& error) {
-  DCHECK(!IsMainThread());
-  if (!client_)
-    return;
-  auto* client = client_;
-  client_ = nullptr;
-  main_thread_loader_holder_ = nullptr;
-  client->DidFailAccessControlCheck(error);
-}
-
 void WorkerThreadableLoader::DidFailRedirectCheck() {
   DCHECK(!IsMainThread());
   if (!client_)
@@ -437,7 +425,7 @@ DEFINE_TRACE(WorkerThreadableLoader) {
 
 void WorkerThreadableLoader::MainThreadLoaderHolder::CreateAndStart(
     WorkerThreadableLoader* worker_loader,
-    RefPtr<WorkerLoaderProxy> loader_proxy,
+    ThreadableLoadingContext* loading_context,
     RefPtr<WebTaskRunner> worker_loading_task_runner,
     WorkerThreadLifecycleContext* worker_thread_lifecycle_context,
     std::unique_ptr<CrossThreadResourceRequestData> request,
@@ -446,10 +434,6 @@ void WorkerThreadableLoader::MainThreadLoaderHolder::CreateAndStart(
     PassRefPtr<WaitableEventWithTasks> event_with_tasks) {
   DCHECK(IsMainThread());
   TaskForwarder* forwarder;
-  ThreadableLoadingContext* loading_context =
-      loader_proxy->GetThreadableLoadingContext();
-  if (!loading_context)
-    return;
   if (event_with_tasks)
     forwarder = new SyncTaskForwarder(std::move(event_with_tasks));
   else
@@ -605,20 +589,6 @@ void WorkerThreadableLoader::MainThreadLoaderHolder::DidFail(
   forwarder_->ForwardTaskWithDoneSignal(
       BLINK_FROM_HERE,
       CrossThreadBind(&WorkerThreadableLoader::DidFail, worker_loader, error));
-  forwarder_ = nullptr;
-}
-
-void WorkerThreadableLoader::MainThreadLoaderHolder::DidFailAccessControlCheck(
-    const ResourceError& error) {
-  DCHECK(IsMainThread());
-  CrossThreadPersistent<WorkerThreadableLoader> worker_loader =
-      worker_loader_.Release();
-  if (!worker_loader || !forwarder_)
-    return;
-  forwarder_->ForwardTaskWithDoneSignal(
-      BLINK_FROM_HERE,
-      CrossThreadBind(&WorkerThreadableLoader::DidFailAccessControlCheck,
-                      worker_loader, error));
   forwarder_ = nullptr;
 }
 

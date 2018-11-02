@@ -65,7 +65,8 @@ void TouchObserverHUD::Clear() {}
 void TouchObserverHUD::Remove() {
   root_window_->RemovePreTargetHandler(this);
 
-  RootWindowController* controller = GetRootWindowController(root_window_);
+  RootWindowController* controller =
+      RootWindowController::ForWindow(root_window_);
   UnsetHudForRootWindowController(controller);
 
   widget_->CloseNow();
@@ -111,7 +112,8 @@ void TouchObserverHUD::OnDisplayConfigurationChanging() {
 
   root_window_->RemovePreTargetHandler(this);
 
-  RootWindowController* controller = GetRootWindowController(root_window_);
+  RootWindowController* controller =
+      RootWindowController::ForWindow(root_window_);
   UnsetHudForRootWindowController(controller);
 
   views::Widget::ReparentNativeView(
@@ -126,15 +128,14 @@ void TouchObserverHUD::OnDisplayConfigurationChanged() {
   if (root_window_)
     return;
 
-  root_window_ =
-      Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
-          display_id_);
+  root_window_ = Shell::GetRootWindowForDisplayId(display_id_);
 
   views::Widget::ReparentNativeView(
       widget_->GetNativeView(),
       Shell::GetContainer(root_window_, kShellWindowId_OverlayContainer));
 
-  RootWindowController* controller = GetRootWindowController(root_window_);
+  RootWindowController* controller =
+      RootWindowController::ForWindow(root_window_);
   SetHudForRootWindowController(controller);
 
   root_window_->AddPreTargetHandler(this);

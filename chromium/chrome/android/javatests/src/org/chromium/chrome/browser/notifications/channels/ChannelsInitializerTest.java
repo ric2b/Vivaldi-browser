@@ -42,7 +42,7 @@ import java.util.List;
  */
 @RunWith(BaseJUnit4ClassRunner.class)
 public class ChannelsInitializerTest {
-    private static final String MISCELLANEOUS_CHANNEL_ID = "miscellaneous";
+    static final String MISCELLANEOUS_CHANNEL_ID = "miscellaneous";
     private ChannelsInitializer mChannelsInitializer;
     private NotificationManagerProxy mNotificationManagerProxy;
     private Context mContext;
@@ -56,8 +56,10 @@ public class ChannelsInitializerTest {
                 new ChannelsInitializer(mNotificationManagerProxy, mContext.getResources());
         // Delete any channels that may already have been initialized. Cleaning up here rather than
         // in tearDown in case tests running before these ones caused channels to be created.
-        for (String channelId : ChannelDefinitions.getStartupChannelIds()) {
-            mNotificationManagerProxy.deleteNotificationChannel(channelId);
+        for (Channel channel : mNotificationManagerProxy.getNotificationChannels()) {
+            if (!channel.getId().equals(MISCELLANEOUS_CHANNEL_ID)) {
+                mNotificationManagerProxy.deleteNotificationChannel(channel.getId());
+            }
         }
     }
 
@@ -217,6 +219,28 @@ public class ChannelsInitializerTest {
                 is(mContext.getString(org.chromium.chrome.R.string.notification_category_sites)));
         assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
         assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_GENERAL));
+    }
+
+    @Test
+    @SmallTest
+    // TODO(crbug.com/685808) Replace this with VERSION_CODES.O & remove isAtLeastO check below.
+    @MinAndroidSdkLevel(Build.VERSION_CODES.N_MR1)
+    @TargetApi(Build.VERSION_CODES.N_MR1)
+    @Feature({"Browser", "Notifications"})
+    public void testEnsureInitialized_singleOriginSiteChannel() throws Exception {
+        if (!BuildInfo.isAtLeastO()) return;
+        String origin = "https://example.com";
+        long creationTime = 621046800000L;
+        mChannelsInitializer.ensureInitialized(
+                SiteChannelsManager.createChannelId(origin, creationTime));
+
+        assertThat(getChannelsIgnoringMiscellaneous(), hasSize(1));
+
+        Channel channel = getChannelsIgnoringMiscellaneous().get(0);
+        assertThat(channel.getId(), is(SiteChannelsManager.createChannelId(origin, creationTime)));
+        assertThat(channel.getName().toString(), is("https://example.com"));
+        assertThat(channel.getImportance(), is(NotificationManager.IMPORTANCE_DEFAULT));
+        assertThat(channel.getGroupId(), is(ChannelDefinitions.CHANNEL_GROUP_ID_SITES));
     }
 
     @Test

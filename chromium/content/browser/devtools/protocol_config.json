@@ -13,7 +13,7 @@
                 "domain": "DOM",
                 "include": ["setFileInputFiles"],
                 "include_events": [],
-                "include_types": ["NodeId", "RGBA"]
+                "include_types": ["NodeId", "BackendNodeId", "RGBA"]
             },
             {
                 "domain": "Emulation",
@@ -37,10 +37,11 @@
             },
             {
                 "domain": "Network",
-                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookie", "setCookie", "setUserAgentOverride", "canEmulateNetworkConditions"],
-                "include_types": ["CookieSameSite", "Cookie", "Response", "Headers", "Request", "ResourceTiming", "SecurityDetails", "SignedCertificateTimestamp", "Initiator", "ResourcePriority", "RequestWillBeSentNotification", "ResponseReceivedNotification", "LoadingFinishedNotification", "LoadingFailedNotification", "RequestWillBeSentNotification"],
-                "include_events": ["requestWillBeSent", "responseReceived", "loadingFinished", "loadingFailed"],
-                "async": ["clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookie", "setCookie"]
+                "include": ["enable", "disable", "clearBrowserCache", "clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookie", "setCookie", "setUserAgentOverride", "canEmulateNetworkConditions", "setRequestInterceptionEnabled", "continueInterceptedRequest"],
+                "include_types": ["CookieSameSite", "Cookie", "Response", "Headers", "Request", "ResourceTiming", "SecurityDetails", "SignedCertificateTimestamp", "Initiator", "ResourcePriority", "RequestWillBeSentNotification", "ResponseReceivedNotification", "LoadingFinishedNotification", "LoadingFailedNotification", "RequestWillBeSentNotification", 
+                                  "ErrorReason", "RequestInterceptedNotification", "AuthChallenge", "AuthChallengeResponse"],
+                "include_events": ["requestWillBeSent", "responseReceived", "loadingFinished", "loadingFailed", "requestIntercepted"],
+                "async": ["clearBrowserCookies", "getCookies", "getAllCookies", "deleteCookie", "setCookie", "continueInterceptedRequest"]
             },
             {
                 "domain": "Page",
@@ -66,7 +67,8 @@
                 "domain": "ServiceWorker"
             },
             {
-                "domain": "Storage"
+                "domain": "Storage",
+                "async": ["getUsageAndQuota"]
             },
             {
                 "domain": "SystemInfo",

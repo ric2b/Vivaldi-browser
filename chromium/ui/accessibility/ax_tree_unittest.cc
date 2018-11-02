@@ -9,12 +9,15 @@
 
 #include <memory>
 
+#include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/ax_tree_serializer.h"
+#include "ui/gfx/transform.h"
 
 using base::DoubleToString;
 using base::IntToString;
@@ -34,6 +37,13 @@ std::string IntVectorToString(const std::vector<int>& items) {
   return str;
 }
 
+std::string GetBoundsAsString(const AXTree& tree, int32_t id) {
+  AXNode* node = tree.GetFromId(id);
+  gfx::RectF bounds = tree.GetTreeBounds(node);
+  return base::StringPrintf("(%.0f, %.0f) size (%.0f x %.0f)", bounds.x(),
+                            bounds.y(), bounds.width(), bounds.height());
+}
+
 class FakeAXTreeDelegate : public AXTreeDelegate {
  public:
   FakeAXTreeDelegate()
@@ -43,10 +53,11 @@ class FakeAXTreeDelegate : public AXTreeDelegate {
   void OnNodeDataWillChange(AXTree* tree,
                             const AXNodeData& old_node_data,
                             const AXNodeData& new_node_data) override {}
-  void OnTreeDataChanged(AXTree* tree) override {
+  void OnTreeDataChanged(AXTree* tree,
+                         const ui::AXTreeData& old_data,
+                         const ui::AXTreeData& new_data) override {
     tree_data_changed_ = true;
   }
-
   void OnNodeWillBeDeleted(AXTree* tree, AXNode* node) override {
     deleted_ids_.push_back(node->id());
   }
@@ -513,11 +524,9 @@ TEST(AXTreeTest, ReparentingDoesNotTriggerNodeCreated) {
       fake_delegate.subtree_reparented_finished_ids();
   std::vector<int> node_reparented =
       fake_delegate.node_reparented_finished_ids();
-  ASSERT_EQ(std::find(created.begin(), created.end(), 3), created.end());
-  ASSERT_NE(std::find(subtree_reparented.begin(), subtree_reparented.end(), 3),
-            subtree_reparented.end());
-  ASSERT_EQ(std::find(node_reparented.begin(), node_reparented.end(), 3),
-            node_reparented.end());
+  ASSERT_FALSE(base::ContainsValue(created, 3));
+  ASSERT_TRUE(base::ContainsValue(subtree_reparented, 3));
+  ASSERT_FALSE(base::ContainsValue(node_reparented, 3));
 }
 
 TEST(AXTreeTest, TreeDelegateIsNotCalledForReparenting) {
@@ -740,7 +749,7 @@ TEST(AXTreeTest, IntListChangeCallbacks) {
   initial_state.nodes.resize(1);
   initial_state.nodes[0].id = 1;
   initial_state.nodes[0].AddIntListAttribute(AX_ATTR_CONTROLS_IDS, one);
-  initial_state.nodes[0].AddIntListAttribute(AX_ATTR_DETAILS_IDS, two);
+  initial_state.nodes[0].AddIntListAttribute(AX_ATTR_RADIO_GROUP_IDS, two);
   AXTree tree(initial_state);
 
   FakeAXTreeDelegate fake_delegate;
@@ -752,14 +761,14 @@ TEST(AXTreeTest, IntListChangeCallbacks) {
   update0.nodes.resize(1);
   update0.nodes[0].id = 1;
   update0.nodes[0].AddIntListAttribute(AX_ATTR_CONTROLS_IDS, two);
-  update0.nodes[0].AddIntListAttribute(AX_ATTR_DETAILS_IDS, three);
+  update0.nodes[0].AddIntListAttribute(AX_ATTR_RADIO_GROUP_IDS, three);
   EXPECT_TRUE(tree.Unserialize(update0));
 
   const std::vector<std::string>& change_log =
       fake_delegate.attribute_change_log();
   ASSERT_EQ(2U, change_log.size());
   EXPECT_EQ("controlsIds changed from 1 to 2,2", change_log[0]);
-  EXPECT_EQ("detailsIds changed from 2,2 to 3", change_log[1]);
+  EXPECT_EQ("radioGroupIds changed from 2,2 to 3", change_log[1]);
 
   FakeAXTreeDelegate fake_delegate2;
   tree.SetDelegate(&fake_delegate2);
@@ -769,7 +778,7 @@ TEST(AXTreeTest, IntListChangeCallbacks) {
   update1.root_id = 1;
   update1.nodes.resize(1);
   update1.nodes[0].id = 1;
-  update1.nodes[0].AddIntListAttribute(AX_ATTR_DETAILS_IDS, two);
+  update1.nodes[0].AddIntListAttribute(AX_ATTR_RADIO_GROUP_IDS, two);
   update1.nodes[0].AddIntListAttribute(AX_ATTR_FLOWTO_IDS, three);
   EXPECT_TRUE(tree.Unserialize(update1));
 
@@ -777,10 +786,119 @@ TEST(AXTreeTest, IntListChangeCallbacks) {
       fake_delegate2.attribute_change_log();
   ASSERT_EQ(3U, change_log2.size());
   EXPECT_EQ("controlsIds changed from 2,2 to ", change_log2[0]);
-  EXPECT_EQ("detailsIds changed from 3 to 2,2", change_log2[1]);
+  EXPECT_EQ("radioGroupIds changed from 3 to 2,2", change_log2[1]);
   EXPECT_EQ("flowtoIds changed from  to 3", change_log2[2]);
 
   tree.SetDelegate(NULL);
+}
+
+// Create a very simple tree and make sure that we can get the bounds of
+// any node.
+TEST(AXTreeTest, GetBoundsBasic) {
+  AXTreeUpdate tree_update;
+  tree_update.root_id = 1;
+  tree_update.nodes.resize(2);
+  tree_update.nodes[0].id = 1;
+  tree_update.nodes[0].location = gfx::RectF(0, 0, 800, 600);
+  tree_update.nodes[0].child_ids.push_back(2);
+  tree_update.nodes[1].id = 2;
+  tree_update.nodes[1].location = gfx::RectF(100, 10, 400, 300);
+  AXTree tree(tree_update);
+
+  EXPECT_EQ("(0, 0) size (800 x 600)", GetBoundsAsString(tree, 1));
+  EXPECT_EQ("(100, 10) size (400 x 300)", GetBoundsAsString(tree, 2));
+}
+
+// If a node doesn't specify its location but at least one child does have
+// a location, its computed bounds should be the union of all child bounds.
+TEST(AXTreeTest, EmptyNodeBoundsIsUnionOfChildren) {
+  AXTreeUpdate tree_update;
+  tree_update.root_id = 1;
+  tree_update.nodes.resize(4);
+  tree_update.nodes[0].id = 1;
+  tree_update.nodes[0].location = gfx::RectF(0, 0, 800, 600);
+  tree_update.nodes[0].child_ids.push_back(2);
+  tree_update.nodes[1].id = 2;
+  tree_update.nodes[1].location = gfx::RectF();  // Deliberately empty.
+  tree_update.nodes[1].child_ids.push_back(3);
+  tree_update.nodes[1].child_ids.push_back(4);
+  tree_update.nodes[2].id = 3;
+  tree_update.nodes[2].location = gfx::RectF(100, 10, 400, 20);
+  tree_update.nodes[3].id = 4;
+  tree_update.nodes[3].location = gfx::RectF(200, 30, 400, 20);
+
+  AXTree tree(tree_update);
+  EXPECT_EQ("(100, 10) size (500 x 40)", GetBoundsAsString(tree, 2));
+}
+
+// Test that getting the bounds of a node works when there's a transform.
+TEST(AXTreeTest, GetBoundsWithTransform) {
+  AXTreeUpdate tree_update;
+  tree_update.root_id = 1;
+  tree_update.nodes.resize(3);
+  tree_update.nodes[0].id = 1;
+  tree_update.nodes[0].location = gfx::RectF(0, 0, 400, 300);
+  tree_update.nodes[0].transform.reset(new gfx::Transform());
+  tree_update.nodes[0].transform->Scale(2.0, 2.0);
+  tree_update.nodes[0].child_ids.push_back(2);
+  tree_update.nodes[0].child_ids.push_back(3);
+  tree_update.nodes[1].id = 2;
+  tree_update.nodes[1].location = gfx::RectF(20, 10, 50, 5);
+  tree_update.nodes[2].id = 3;
+  tree_update.nodes[2].location = gfx::RectF(20, 30, 50, 5);
+  tree_update.nodes[2].transform.reset(new gfx::Transform());
+  tree_update.nodes[2].transform->Scale(2.0, 2.0);
+
+  AXTree tree(tree_update);
+  EXPECT_EQ("(0, 0) size (800 x 600)", GetBoundsAsString(tree, 1));
+  EXPECT_EQ("(40, 20) size (100 x 10)", GetBoundsAsString(tree, 2));
+  EXPECT_EQ("(80, 120) size (200 x 20)", GetBoundsAsString(tree, 3));
+}
+
+// Test that getting the bounds of a node that's inside a container
+// works correctly.
+TEST(AXTreeTest, GetBoundsWithContainerId) {
+  AXTreeUpdate tree_update;
+  tree_update.root_id = 1;
+  tree_update.nodes.resize(4);
+  tree_update.nodes[0].id = 1;
+  tree_update.nodes[0].location = gfx::RectF(0, 0, 800, 600);
+  tree_update.nodes[0].child_ids.push_back(2);
+  tree_update.nodes[1].id = 2;
+  tree_update.nodes[1].location = gfx::RectF(100, 50, 600, 500);
+  tree_update.nodes[1].child_ids.push_back(3);
+  tree_update.nodes[1].child_ids.push_back(4);
+  tree_update.nodes[2].id = 3;
+  tree_update.nodes[2].offset_container_id = 2;
+  tree_update.nodes[2].location = gfx::RectF(20, 30, 50, 5);
+  tree_update.nodes[3].id = 4;
+  tree_update.nodes[3].location = gfx::RectF(20, 30, 50, 5);
+
+  AXTree tree(tree_update);
+  EXPECT_EQ("(120, 80) size (50 x 5)", GetBoundsAsString(tree, 3));
+  EXPECT_EQ("(20, 30) size (50 x 5)", GetBoundsAsString(tree, 4));
+}
+
+// Test that getting the bounds of a node that's inside a scrolling container
+// works correctly.
+TEST(AXTreeTest, GetBoundsWithScrolling) {
+  AXTreeUpdate tree_update;
+  tree_update.root_id = 1;
+  tree_update.nodes.resize(3);
+  tree_update.nodes[0].id = 1;
+  tree_update.nodes[0].location = gfx::RectF(0, 0, 800, 600);
+  tree_update.nodes[0].child_ids.push_back(2);
+  tree_update.nodes[1].id = 2;
+  tree_update.nodes[1].location = gfx::RectF(100, 50, 600, 500);
+  tree_update.nodes[1].AddIntAttribute(ui::AX_ATTR_SCROLL_X, 5);
+  tree_update.nodes[1].AddIntAttribute(ui::AX_ATTR_SCROLL_Y, 10);
+  tree_update.nodes[1].child_ids.push_back(3);
+  tree_update.nodes[2].id = 3;
+  tree_update.nodes[2].offset_container_id = 2;
+  tree_update.nodes[2].location = gfx::RectF(20, 30, 50, 5);
+
+  AXTree tree(tree_update);
+  EXPECT_EQ("(115, 70) size (50 x 5)", GetBoundsAsString(tree, 3));
 }
 
 }  // namespace ui

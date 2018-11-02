@@ -30,7 +30,10 @@
 
 #include "core/layout/LayoutGeometryMap.h"
 
+#include "build/build_config.h"
 #include "core/dom/Document.h"
+#include "core/frame/FrameTestHelpers.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/layout/LayoutBox.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
@@ -42,7 +45,7 @@
 #include "public/web/WebFrameClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/WebLocalFrameImpl.h"
-#include "web/tests/FrameTestHelpers.h"
+#include "web/WebViewImpl.h"
 
 namespace blink {
 
@@ -66,11 +69,12 @@ class LayoutGeometryMapTest
   static LayoutBox* GetFrameElement(const char* iframe_name,
                                     WebView* web_view,
                                     const WTF::AtomicString& element_id) {
-    WebLocalFrameImpl* iframe = ToWebLocalFrameImpl(
-        web_view->FindFrameByName(WebString::FromUTF8(iframe_name)));
-    if (!iframe)
+    WebFrame* iframe =
+        static_cast<WebViewImpl*>(web_view)->MainFrameImpl()->FindFrameByName(
+            WebString::FromUTF8(iframe_name));
+    if (!iframe || !iframe->IsWebLocalFrame())
       return nullptr;
-    LocalFrame* frame = iframe->GetFrame();
+    LocalFrame* frame = ToWebLocalFrameImpl(iframe)->GetFrame();
     Document* doc = frame->GetDocument();
     Element* element = doc->getElementById(element_id);
     if (!element)
@@ -161,12 +165,11 @@ class LayoutGeometryMapTest
 
   void RegisterMockedHttpURLLoad(const std::string& file_name) {
     URLTestHelpers::RegisterMockedURLLoadFromBase(
-        WebString::FromUTF8(base_url_), testing::WebTestDataPath(),
+        WebString::FromUTF8(base_url_), testing::CoreTestDataPath(),
         WebString::FromUTF8(file_name));
   }
 
   const std::string base_url_;
-  FrameTestHelpers::TestWebFrameClient mock_web_view_client_;
 };
 
 INSTANTIATE_TEST_CASE_P(All, LayoutGeometryMapTest, ::testing::Bool());
@@ -174,8 +177,8 @@ INSTANTIATE_TEST_CASE_P(All, LayoutGeometryMapTest, ::testing::Bool());
 TEST_P(LayoutGeometryMapTest, SimpleGeometryMapTest) {
   RegisterMockedHttpURLLoad("rgm_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_test.html", true, 0, 0);
+  WebView* web_view =
+      web_view_helper.InitializeAndLoad(base_url_ + "rgm_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -210,7 +213,7 @@ TEST_P(LayoutGeometryMapTest, SimpleGeometryMapTest) {
 
 // Fails on Windows due to crbug.com/391457. When run through the transform the
 // position on windows differs by a pixel
-#if OS(WIN)
+#if defined(OS_WIN)
 TEST_P(LayoutGeometryMapTest, DISABLED_TransformedGeometryTest)
 #else
 TEST_P(LayoutGeometryMapTest, TransformedGeometryTest)
@@ -219,7 +222,7 @@ TEST_P(LayoutGeometryMapTest, TransformedGeometryTest)
   RegisterMockedHttpURLLoad("rgm_transformed_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_transformed_test.html", true, 0, 0);
+      base_url_ + "rgm_transformed_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -278,7 +281,7 @@ TEST_P(LayoutGeometryMapTest, FixedGeometryTest) {
   RegisterMockedHttpURLLoad("rgm_fixed_position_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_fixed_position_test.html", true, 0, 0);
+      base_url_ + "rgm_fixed_position_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -316,7 +319,7 @@ TEST_P(LayoutGeometryMapTest, ContainsFixedPositionTest) {
   RegisterMockedHttpURLLoad("rgm_contains_fixed_position_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_contains_fixed_position_test.html", true, 0, 0);
+      base_url_ + "rgm_contains_fixed_position_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -332,6 +335,9 @@ TEST_P(LayoutGeometryMapTest, ContainsFixedPositionTest) {
                              GetLayoutBox(web_view, "simple-container"));
   EXPECT_EQ(FloatRect(8.0f, 50.0f, 100.0f, 100.0f),
             AdjustForFrameScroll(web_view, rgm.AbsoluteRect(rect)));
+  EXPECT_EQ(
+      FloatQuad(FloatRect(0.0f, -50.0f, 100.0f, 100.0f)),
+      rgm.MapToAncestor(rect, GetLayoutBox(web_view, "simple-container")));
   rgm.PopMappingsToAncestor(static_cast<PaintLayer*>(nullptr));
 
   // Transforms contain fixed position descendants.
@@ -359,8 +365,8 @@ TEST_P(LayoutGeometryMapTest, IframeTest) {
   RegisterMockedHttpURLLoad("rgm_iframe_test.html");
   RegisterMockedHttpURLLoad("rgm_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_iframe_test.html", true, 0, 0);
+  WebView* web_view =
+      web_view_helper.InitializeAndLoad(base_url_ + "rgm_iframe_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -455,8 +461,8 @@ TEST_P(LayoutGeometryMapTest, IframeTest) {
 TEST_P(LayoutGeometryMapTest, ColumnTest) {
   RegisterMockedHttpURLLoad("rgm_column_test.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
-  WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_column_test.html", true, 0, 0);
+  WebView* web_view =
+      web_view_helper.InitializeAndLoad(base_url_ + "rgm_column_test.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 
@@ -505,7 +511,7 @@ TEST_P(LayoutGeometryMapTest, FloatUnderInlineLayer) {
   RegisterMockedHttpURLLoad("rgm_float_under_inline.html");
   FrameTestHelpers::WebViewHelper web_view_helper;
   WebView* web_view = web_view_helper.InitializeAndLoad(
-      base_url_ + "rgm_float_under_inline.html", true, 0, 0);
+      base_url_ + "rgm_float_under_inline.html");
   web_view->Resize(WebSize(1000, 1000));
   web_view->UpdateAllLifecyclePhases();
 

@@ -31,8 +31,8 @@
 #import "core/layout/LayoutView.h"
 #import "core/paint/MediaControlsPainter.h"
 #import "core/style/ShadowList.h"
+#import "platform/DataResourceHelper.h"
 #import "platform/LayoutTestSupport.h"
-#import "platform/PlatformResourceLoader.h"
 #import "platform/RuntimeEnabledFeatures.h"
 #import "platform/Theme.h"
 #import "platform/graphics/BitmapImage.h"
@@ -130,7 +130,7 @@ bool FontSizeMatchesToControlSize(const ComputedStyle& style) {
 }
 
 NSColor* ColorInColorSpace(NSColor* color) {
-  if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled()) {
+  if (RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()) {
     return [color colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
   } else {
     return [color colorUsingColorSpaceName:NSDeviceRGBColorSpace];
@@ -190,6 +190,14 @@ Color LayoutThemeMac::PlatformActiveListBoxSelectionForegroundColor() const {
 
 Color LayoutThemeMac::PlatformInactiveListBoxSelectionForegroundColor() const {
   return Color::kBlack;
+}
+
+Color LayoutThemeMac::PlatformSpellingMarkerUnderlineColor() const {
+  return Color(251, 45, 29);
+}
+
+Color LayoutThemeMac::PlatformGrammarMarkerUnderlineColor() const {
+  return Color(107, 107, 107);
 }
 
 Color LayoutThemeMac::PlatformFocusRingColor() const {
@@ -1083,8 +1091,8 @@ String LayoutThemeMac::ExtraFullscreenStyleSheet() {
 
 String LayoutThemeMac::ExtraDefaultStyleSheet() {
   return LayoutTheme::ExtraDefaultStyleSheet() +
-         LoadResourceAsASCIIString("themeInputMultipleFields.css") +
-         LoadResourceAsASCIIString("themeMac.css");
+         GetDataResourceAsASCIIString("themeInputMultipleFields.css") +
+         GetDataResourceAsASCIIString("themeMac.css");
 }
 
 bool LayoutThemeMac::ThemeDrawsFocusRing(const ComputedStyle& style) const {

@@ -22,6 +22,8 @@
 #include "net/base/net_errors.h"
 #include "net/http/http_status_code.h"
 
+#include "sync/test/fake_server/notes_entity.h"
+
 using std::string;
 using std::vector;
 
@@ -46,7 +48,7 @@ LoopbackServerEntity::CreateEntityFromProto(
     const sync_pb::LoopbackServerEntity& entity) {
   switch (entity.type()) {
     case sync_pb::LoopbackServerEntity_Type_TOMBSTONE:
-      return PersistentTombstoneEntity::Create(entity.entity());
+      return PersistentTombstoneEntity::CreateFromEntity(entity.entity());
     case sync_pb::LoopbackServerEntity_Type_PERMANENT:
       return base::MakeUnique<PersistentPermanentEntity>(
           entity.entity().id_string(), entity.entity().version(),
@@ -54,10 +56,12 @@ LoopbackServerEntity::CreateEntityFromProto(
           entity.entity().parent_id_string(),
           entity.entity().server_defined_unique_tag(),
           entity.entity().specifics());
+    case sync_pb::LoopbackServerEntity_Type_NOTES:
+      return PersistentNotesEntity::CreateFromEntity(entity.entity());
     case sync_pb::LoopbackServerEntity_Type_BOOKMARK:
       return PersistentBookmarkEntity::CreateFromEntity(entity.entity());
     case sync_pb::LoopbackServerEntity_Type_UNIQUE:
-      return PersistentUniqueClientEntity::Create(entity.entity());
+      return PersistentUniqueClientEntity::CreateFromEntity(entity.entity());
     case sync_pb::LoopbackServerEntity_Type_UNKNOWN:
       CHECK(false) << "Unknown type encountered";
       return std::unique_ptr<LoopbackServerEntity>(nullptr);

@@ -50,7 +50,7 @@ class CONTENT_EXPORT ServiceWorkerRegistration
     virtual void OnSkippedWaiting(ServiceWorkerRegistration* registation) {}
   };
 
-  ServiceWorkerRegistration(const GURL& pattern,
+  ServiceWorkerRegistration(const ServiceWorkerRegistrationOptions& options,
                             int64_t registration_id,
                             base::WeakPtr<ServiceWorkerContextCore> context);
 
@@ -101,8 +101,8 @@ class CONTENT_EXPORT ServiceWorkerRegistration
 
   ServiceWorkerVersion* GetNewestVersion() const;
 
-  void AddListener(Listener* listener);
-  void RemoveListener(Listener* listener);
+  virtual void AddListener(Listener* listener);
+  virtual void RemoveListener(Listener* listener);
   void NotifyRegistrationFailed();
   void NotifyUpdateFound();
   void NotifyVersionAttributesChanged(ChangedVersionAttributesMask mask);
@@ -121,10 +121,9 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   // listeners via OnVersionAttributesChanged.
   void UnsetVersion(ServiceWorkerVersion* version);
 
-  // Triggers the [[Activate]] algorithm when the currently active version
-  // has no controllees. If there are no controllees at the time the method
-  // is called or when version's skip waiting flag is set, activation is
-  // initiated immediately.
+  // Triggers the [[Activate]] algorithm when the currently active version is
+  // ready to become redundant (see IsReadyToActivate()). The algorithm is
+  // triggered immediately if it's already ready.
   void ActivateWaitingVersionWhenReady();
 
   // Takes over control of provider hosts which are currently not controlled or
@@ -157,10 +156,12 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   void EnableNavigationPreload(bool enable);
   void SetNavigationPreloadHeader(const std::string& value);
 
+ protected:
+  ~ServiceWorkerRegistration() override;
+
  private:
   friend class base::RefCounted<ServiceWorkerRegistration>;
-
-  ~ServiceWorkerRegistration() override;
+  friend class ServiceWorkerActivationTest;
 
   void UnsetVersionInternal(
       ServiceWorkerVersion* version,
@@ -171,6 +172,9 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   void OnNoWork(ServiceWorkerVersion* version) override;
 
   bool IsReadyToActivate() const;
+  bool IsLameDuckActiveVersion() const;
+  void StartLameDuckTimerIfNeeded();
+  void RemoveLameDuckIfNeeded();
 
   // Promotes the waiting version to active version. If |delay| is true, waits
   // a short time before attempting to start and dispatch the activate event
@@ -212,6 +216,14 @@ class CONTENT_EXPORT ServiceWorkerRegistration
   std::vector<base::Closure> registration_finished_callbacks_;
   base::WeakPtr<ServiceWorkerContextCore> context_;
   scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+
+  // |lame_duck_timer_| is started when the active version is considered a lame
+  // duck: the waiting version called skipWaiting() or the active
+  // version has no controllees, but activation is waiting for the active
+  // version to finish its inflight requests.
+  // It is stopped when activation completes or the active version is no
+  // longer considered a lame duck.
+  base::RepeatingTimer lame_duck_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRegistration);
 };

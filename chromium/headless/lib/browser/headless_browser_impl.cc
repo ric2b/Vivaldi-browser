@@ -82,12 +82,6 @@ HeadlessBrowserImpl::CreateBrowserContextBuilder() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-HeadlessBrowserImpl::BrowserFileThread() const {
-  return content::BrowserThread::GetTaskRunnerForThread(
-      content::BrowserThread::FILE);
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
 HeadlessBrowserImpl::BrowserIOThread() const {
   return content::BrowserThread::GetTaskRunnerForThread(
       content::BrowserThread::IO);
@@ -141,7 +135,7 @@ void HeadlessBrowserImpl::RunOnStartCallback() {
   agent_host_ = content::DevToolsAgentHost::CreateForBrowser(
       nullptr, content::DevToolsAgentHost::CreateServerSocketCallback());
 
-  PlatformCreateWindow();
+  PlatformStart();
   on_start_callback_.Run(this);
   on_start_callback_ = base::Callback<void(HeadlessBrowser*)>();
 }

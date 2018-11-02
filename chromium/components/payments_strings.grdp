@@ -16,8 +16,44 @@
   <message name="IDS_PAYMENTS_SAVE_CARD_TO_DEVICE_CHECKBOX" desc="The label for the checkbox that enables the user to save a credit card to their device, for example, on their phone." formatter_data="android_java">
     Save this card to this device
   </message>
-  <message name="IDS_PAYMENTS_ACCEPTED_CARDS_LABEL" desc="The title for the section that displays the credit card types that the merchant accepts. Below the title, we show a row of icons indicating the accepted cards (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+  <message name="IDS_PAYMENTS_ACCEPTED_CARDS_LABEL" desc="The title for the section that displays the card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
     Accepted cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_CREDIT_CARDS_LABEL" desc="The title for the section that displays the credit card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted credit card networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted credit cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_DEBIT_CARDS_LABEL" desc="The title for the section that displays the debit card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted debit card networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted debit cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_PREPAID_CARDS_LABEL" desc="The title for the section that displays the prepaid card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted prepaid card networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted prepaid cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_CREDIT_DEBIT_CARDS_LABEL" desc="The title for the section that displays the credit and debit card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted credit and debit cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_CREDIT_PREPAID_CARDS_LABEL" desc="The title for the section that displays the credit and prepaid card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted credit and prepaid cards
+  </message>
+  <message name="IDS_PAYMENTS_ACCEPTED_DEBIT_PREPAID_CARDS_LABEL" desc="The title for the section that displays the debit and prepaid card networks that the merchant accepts. Below the title, we show a row of icons indicating the accepted networks (Visa icon, Mastercard icon, etc.)." formatter_data="android_java">
+    Accepted debit and prepaid cards
+  </message>
+  <message name="IDS_PAYMENTS_CREDIT_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's credit cards that the merchant accepts." formatter_data="android_java">
+    Credit cards are accepted.
+  </message>
+  <message name="IDS_PAYMENTS_DEBIT_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's debit cards that the merchant accepts." formatter_data="android_java">
+    Debit cards are accepted.
+  </message>
+  <message name="IDS_PAYMENTS_PREPAID_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's prepaid cards that the merchant accepts." formatter_data="android_java">
+    Prepaid cards are accepted.
+  </message>
+  <message name="IDS_PAYMENTS_CREDIT_DEBIT_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's credit and debit cards that the merchant accepts." formatter_data="android_java">
+    Credit and debit cards are accepted.
+  </message>
+  <message name="IDS_PAYMENTS_CREDIT_PREPAID_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's credit and prepaid cards that the merchant accepts." formatter_data="android_java">
+    Credit and prepaid cards are accepted.
+  </message>
+  <message name="IDS_PAYMENTS_DEBIT_PREPAID_CARDS_ARE_ACCEPTED_LABEL" desc="A message for the section that displays user's debit and prepaid cards that the merchant accepts." formatter_data="android_java">
+    Debit and prepaid cards are accepted.
   </message>
   <message name="IDS_PAYMENTS_METHOD_OF_PAYMENT_LABEL" desc="The title for the section that lets the user select the method of payment." formatter_data="android_java">
     Payment method
@@ -134,11 +170,8 @@
     <message name="IDS_PAYMENTS_NAME_ON_CARD" desc="Title of the field representing the full name of a credit card holder.">
       Cardholder Name
     </message>
-      <message name="IDS_PAYMENTS_EXP_MONTH" desc="Title of the field representing the expiration month of a credit card.">
-      Expiration Month
-    </message>
-    <message name="IDS_PAYMENTS_EXP_YEAR" desc="Title of the field representing the expiration year of a credit card.">
-      Expiration Year
+      <message name="IDS_PAYMENTS_EXP_DATE" desc="Title of the field representing the expiration date of a credit card.">
+      Expiration Date
     </message>
     <message name="IDS_PAYMENTS_BILLING_ADDRESS" desc="Title of the field representing the billing address of a credit card.">
       Billing Address
@@ -225,8 +258,8 @@
   </message>
   <message name="IDS_PAYMENT_REQUEST_ORDER_SUMMARY_MORE_ITEMS" desc="The label in the Order Summary section of the Payment Sheet that indicates how many display items are hidden. [ICU Syntax]">
     {MORE_ITEMS, plural,
-      =1 {<ph name="ITEM_COUNT">#<ex>1</ex></ph> item}
-      other {<ph name="ITEM_COUNT">#<ex>2</ex></ph> items}}
+      =1 {<ph name="ITEM_COUNT">#<ex>1</ex></ph> more item}
+      other {<ph name="ITEM_COUNT">#<ex>2</ex></ph> more items}}
   </message>
   <message name="IDS_PAYMENT_REQUEST_SHIPPING_SECTION_NAME" desc="The name of the Shipping Address section in the Payment Sheet of the Payment Request dialog.">
     Shipping address
@@ -314,23 +347,47 @@
   <if expr="not is_android">
     <message name="IDS_PAYMENT_REQUEST_PAYMENT_METHODS_PREVIEW" desc="This is a snippet of a payment method a user has saved to Chrome, plus an indication of the number of additional payment methods the user has saved. Its function is to show the user has payment methods that can be used to complete a payment, and thus doesn't have to type the entire payment method. [ICU Syntax]">
     {PAYMENT_METHOD, plural,
+       =0 {<ph name="PAYMENT_METHOD_PREVIEW">{1}<ex>VISA ....1234</ex></ph>}
        =1 {<ph name="PAYMENT_METHOD_PREVIEW">{1}<ex>VISA ....1234</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS">{2}<ex>1</ex></ph> more}
        other {<ph name="PAYMENT_METHOD_PREVIEW">{1}<ex>VISA ....1234</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_PAYMENT_METHODS">{2}<ex>2</ex></ph> more}}
     </message>
     <message name="IDS_PAYMENT_REQUEST_SHIPPING_ADDRESSES_PREVIEW" desc="This is a snippet of a shipping address a user has saved to Chrome, plus an indication of the number of additional shipping addresses the user has saved. Its function is to show the user has shipping addresses that can be used to complete a purchase, and thus doesn't have to type the entire address. [ICU Syntax]" formatter_data="android_java">
     {SHIPPING_ADDRESS, plural,
+      =0 {<ph name="SHIPPING_ADDRESS_PREVIEW">{1}<ex>Jerry, 1253 Mcgill college</ex></ph>}
       =1 {<ph name="SHIPPING_ADDRESS_PREVIEW">{1}<ex>Jerry, 1253 Mcgill college</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES">{2}<ex>1</ex></ph> more}
       other {<ph name="SHIPPING_ADDRESS_PREVIEW">{1}<ex>Jerry, 1253 Mcgill college</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_ADDRESSES">{2}<ex>2</ex></ph> more}}
     </message>
     <message name="IDS_PAYMENT_REQUEST_SHIPPING_OPTIONS_PREVIEW" desc="This is a snippet of a shipping option a merchant supports, plus an indication of the number of additional shipping options the merchant supports. Its function is to show the user can choose different shipping options to complete a purchase. [ICU Syntax]">
     {SHIPPING_OPTIONS, plural,
+       =0 {<ph name="SHIPPING_OPTION_PREVIEW">{1}<ex>standard shipping</ex></ph>}
        =1 {<ph name="SHIPPING_OPTION_PREVIEW">{1}<ex>standard shipping</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS">{2}<ex>1</ex></ph> more}
        other {<ph name="SHIPPING_OPTION_PREVIEW">{1}<ex>standard shipping</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_SHIPPING_OPTIONS">{2}<ex>2</ex></ph> more}}
     </message>
     <message name="IDS_PAYMENT_REQUEST_CONTACTS_PREVIEW" desc="This is a snippet of a contact a user has saved to Chrome, plus an indication of the number of additional contacts the user has saved. Its function is to show the user has contacts that can be used to complete a purchase, and thus doesn't have to type the entire contact info. [ICU Syntax]">
      {CONTACT, plural,
+       =0 {<ph name="CONTACT_PREVIEW">{1}<ex>Jerry, 438-123-1922</ex></ph>}
        =1 {<ph name="CONTACT_PREVIEW">{1}<ex>Jerry, 438-123-1922</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_CONTACTS">{2}<ex>1</ex></ph> more}
        other {<ph name="CONTACT_PREVIEW">{1}<ex>Jerry, 438-123-1922</ex></ph> and <ph name="NUMBER_OF_ADDITIONAL_CONTACTS">{2}<ex>2</ex></ph> more}}
     </message>
   </if>
+
+  <!-- a11y strings -->
+  <message name="IDS_PAYMENTS_BACK" desc="The screen reader string for the back arrow button in the Desktop Payments dialog">
+    Back
+  </message>
+  <message name="IDS_PAYMENTS_EDIT" desc="The screen reader string for the pencil edit button in the Desktop Payments dialog">
+    Edit
+  </message>
+  <message name="IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_FORMAT" desc="The format to build the screen reader string for Payment Sheet rows">
+    <ph name="ROW_NAME">$1<ex>Payment Method</ex></ph> <ph name="ROW_CONTENT">$2<ex>VISA ****1234</ex></ph>
+  </message>
+  <message name="IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_SELECTED_FORMAT" desc="The format to build the screen reader string for Payment Sheet rows, with an added indication that this row has been selected">
+    <ph name="ROW_NAME">$1<ex>Payment Method</ex></ph>, currently selected. <ph name="ROW_CONTENT">$2<ex>VISA ****1234</ex></ph>
+  </message>
+  <message name="IDS_PAYMENTS_PROFILE_LABELS_ACCESSIBLE_FORMAT" desc="The format to build the screen reader string for profile labels">
+    <ph name="FIRST_LABEL">$1<ex>VISA ****1234</ex></ph> <ph name="SECOND_LABEL">$2<ex>Homer Simpson</ex></ph> <ph name="THIRD_LABEL">$3<ex>123 Fake Street</ex></ph>
+  </message>
+  <message name="IDS_PAYMENTS_ACCESSIBLE_LABEL_WITH_ERROR" desc="The format to append an error message to a screen reader string describing a profile or payment method">
+    <ph name="LABEL">$1<ex>Homer Simpson 123 Fake Street</ex></ph> <ph name="ERROR">$2<ex>Phone number required</ex></ph>
+  </message>
 </grit-part>

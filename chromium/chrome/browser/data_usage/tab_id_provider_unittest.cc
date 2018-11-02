@@ -35,7 +35,7 @@ class TabIdProviderTest : public testing::Test {
   ~TabIdProviderTest() override {}
 
   base::Callback<int32_t(void)> TabIdGetterCallback() {
-    return base::Bind(&TabIdProviderTest::GetTabId, base::Unretained(this));
+    return base::Bind(&TabIdProviderTest::GetTabInfo, base::Unretained(this));
   }
 
   base::TaskRunner* task_runner() { return task_runner_.get(); }
@@ -43,7 +43,7 @@ class TabIdProviderTest : public testing::Test {
   int tab_id_getter_call_count() const { return tab_id_getter_call_count_; }
 
  private:
-  int32_t GetTabId() {
+  int32_t GetTabInfo() {
     ++tab_id_getter_call_count_;
     return kTabId;
   }
@@ -57,8 +57,8 @@ class TabIdProviderTest : public testing::Test {
 };
 
 // Copies |tab_id| into |capture|.
-void CaptureTabId(int32_t* capture, int32_t tab_id) {
-  *capture = tab_id;
+void CaptureTabId(int32_t* capture, int32_t tab_info) {
+  *capture = tab_info;
 }
 
 TEST_F(TabIdProviderTest, ProvideTabId) {

@@ -383,17 +383,6 @@ void DecodeLoginPolicies(const em::ChromeDeviceSettingsProto& policy,
                   POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                   std::move(input_methods), nullptr);
   }
-
-  if (policy.has_device_ecryptfs_migration_strategy()) {
-    const em::DeviceEcryptfsMigrationStrategyProto& container(
-        policy.device_ecryptfs_migration_strategy());
-    if (container.has_migration_strategy()) {
-      policies->Set(
-          key::kDeviceEcryptfsMigrationStrategy, POLICY_LEVEL_MANDATORY,
-          POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-          DecodeIntegerValue(container.migration_strategy()), nullptr);
-    }
-  }
 }
 
 void DecodeNetworkPolicies(const em::ChromeDeviceSettingsProto& policy,
@@ -877,6 +866,15 @@ void DecodeGenericPolicies(const em::ChromeDeviceSettingsProto& policy,
                     POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
                     std::move(dict_val), nullptr);
     }
+  }
+
+  if (policy.has_device_second_factor_authentication()) {
+    const em::DeviceSecondFactorAuthenticationProto& container(
+        policy.device_second_factor_authentication());
+    policies->Set(key::kDeviceSecondFactorAuthentication,
+                  POLICY_LEVEL_MANDATORY, POLICY_SCOPE_MACHINE,
+                  POLICY_SOURCE_CLOUD, DecodeIntegerValue(container.mode()),
+                  nullptr);
   }
 }
 

@@ -6,15 +6,17 @@
 
 #include <utility>
 
+#include "base/base_switches.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/test/scoped_feature_list.h"
+#include "components/variations/field_trial_config/field_trial_util.h"
 #include "components/variations/variations_associated_data.h"
+#include "components/variations/variations_switches.h"
 
 namespace variations {
 namespace testing {
-
 namespace {
 
 // The fixed testing group created in the provided trail when setting up params.
@@ -23,7 +25,7 @@ const char kGroupTesting[] = "Testing";
 base::FieldTrial* CreateFieldTrialWithParams(
     const std::string& trial_name,
     const std::map<std::string, std::string>& param_values) {
-  variations::AssociateVariationParams(trial_name, kGroupTesting, param_values);
+  AssociateVariationParams(trial_name, kGroupTesting, param_values);
   return base::FieldTrialList::CreateFieldTrial(trial_name, kGroupTesting);
 }
 
@@ -79,17 +81,47 @@ void VariationParamsManager::SetVariationParamsWithFeatureAssociations(
 }
 
 void VariationParamsManager::ClearAllVariationIDs() {
-  variations::testing::ClearAllVariationIDs();
+  testing::ClearAllVariationIDs();
 }
 
 void VariationParamsManager::ClearAllVariationParams() {
-  variations::testing::ClearAllVariationParams();
+  testing::ClearAllVariationParams();
   // When the scoped feature list is destroyed, it puts back the original
   // feature list that was there when InitWithFeatureList() was called.
   scoped_feature_list_.reset(new base::test::ScopedFeatureList());
   // Ensure the destructor is called properly, so it can be freshly recreated.
   field_trial_list_.reset();
   field_trial_list_ = base::MakeUnique<base::FieldTrialList>(nullptr);
+}
+
+// static
+void VariationParamsManager::AppendVariationParams(
+    const std::string& trial_name,
+    const std::string& trial_group_name,
+    const std::map<std::string, std::string>& param_values,
+    base::CommandLine* command_line) {
+  // Register the trial group.
+  command_line->AppendSwitchASCII(
+      ::switches::kForceFieldTrials,
+      EscapeValue(trial_name) + "/" + EscapeValue(trial_group_name));
+
+  // Associate |param_values| with the trial group.
+  std::string params_arg =
+      EscapeValue(trial_name) + "." + EscapeValue(trial_group_name) + ":";
+  bool first = true;
+  for (const auto& param : param_values) {
+    // Separate each |param|.
+    if (!first)
+      params_arg += "/";
+    first = false;
+
+    // Append each |param|.
+    const std::string& name = param.first;
+    const std::string& value = param.second;
+    params_arg += EscapeValue(name) + "/" + EscapeValue(value);
+  }
+  command_line->AppendSwitchASCII(variations::switches::kForceFieldTrialParams,
+                                  params_arg);
 }
 
 }  // namespace testing

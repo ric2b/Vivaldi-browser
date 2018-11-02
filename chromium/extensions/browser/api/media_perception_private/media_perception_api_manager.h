@@ -14,24 +14,10 @@ namespace extensions {
 
 class MediaPerceptionAPIManager : public BrowserContextKeyedAPI {
  public:
-  enum class CallbackStatus {
-    // Request to media analytics process was successful.
-    SUCCESS,
-    // Request to media analytics process failed at D-Bus layer.
-    DBUS_ERROR,
-    // The media analytics process is not running.
-    PROCESS_IDLE_ERROR,
-    // The media analytics process is still being launched via Upstart
-    // service.
-    PROCESS_LAUNCHING_ERROR
-  };
-
   using APIStateCallback = base::Callback<void(
-      CallbackStatus status,
       extensions::api::media_perception_private::State state)>;
 
   using APIGetDiagnosticsCallback = base::Callback<void(
-      CallbackStatus status,
       extensions::api::media_perception_private::Diagnostics diagnostics)>;
 
   explicit MediaPerceptionAPIManager(content::BrowserContext* context);
@@ -88,9 +74,12 @@ class MediaPerceptionAPIManager : public BrowserContextKeyedAPI {
                               const mri::Diagnostics& diagnostics);
 
   // Callback for Upstart command to start media analytics process.
-  void UpstartCallback(const APIStateCallback& callback,
-                       const mri::State& state,
-                       bool succeeded);
+  void UpstartStartCallback(const APIStateCallback& callback,
+                            const mri::State& state,
+                            bool succeeded);
+
+  // Callback for Upstart command to restart media analytics process.
+  void UpstartRestartCallback(const APIStateCallback& callback, bool succeeded);
 
   content::BrowserContext* const browser_context_;
 

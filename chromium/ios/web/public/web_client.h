@@ -5,6 +5,8 @@
 #ifndef IOS_WEB_PUBLIC_WEB_CLIENT_H_
 #define IOS_WEB_PUBLIC_WEB_CLIENT_H_
 
+#include <map>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -12,7 +14,9 @@
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/task_scheduler/task_scheduler.h"
+#include "base/values.h"
 #include "ios/web/public/user_agent.h"
+#include "services/service_manager/embedder/embedded_service_info.h"
 #include "ui/base/layout.h"
 #include "url/url_util.h"
 
@@ -50,18 +54,30 @@ class WebClient {
 
   // Allows the embedder to set a custom WebMainParts implementation for the
   // browser startup code.
-  virtual WebMainParts* CreateWebMainParts();
+  virtual std::unique_ptr<WebMainParts> CreateWebMainParts();
 
   // Gives the embedder a chance to perform tasks before a web view is created.
   virtual void PreWebViewCreation() const {}
 
-  // Gives the embedder a chance to register its own standard and saveable url
+  // An embedder may support schemes that are otherwise unknown to lower-level
+  // components. To control how /net/url and other components interpret urls of
+  // such schemes, the embedder overrides |AddAdditionalSchemes| and adds to the
+  // vectors inside the |Schemes| structure.
+  struct Schemes {
+    Schemes();
+    ~Schemes();
+    // "Standard" (RFC3986 syntax) schemes.
+    std::vector<std::string> standard_schemes;
+    // See https://www.w3.org/TR/powerful-features/#is-origin-trustworthy.
+    std::vector<std::string> secure_schemes;
+  };
+
+  // Gives the embedder a chance to register its own standard and secure url
   // schemes early on in the startup sequence.
-  virtual void AddAdditionalSchemes(
-      std::vector<url::SchemeWithType>* additional_standard_schemes) const {}
+  virtual void AddAdditionalSchemes(Schemes* schemes) const {}
 
   // Returns the languages used in the Accept-Languages HTTP header.
-  // Used to decide URL formating.
+  // Used to decide URL formatting.
   virtual std::string GetAcceptLangs(BrowserState* state) const;
 
   // Returns the embedding application locale string.
@@ -112,6 +128,19 @@ class WebClient {
   // improve performance.
   virtual NSString* GetEarlyPageScript(BrowserState* browser_state) const;
 
+  using StaticServiceMap =
+      std::map<std::string, service_manager::EmbeddedServiceInfo>;
+
+  // Registers services to be loaded by the Service Manager.
+  virtual void RegisterServices(StaticServiceMap* services) {}
+
+  // Allows the embedder to provide a dictionary loaded from a JSON file
+  // resembling a service manifest whose capabilities section will be merged
+  // with web's own for |name|. Additional entries will be appended to their
+  // respective sections.
+  virtual std::unique_ptr<base::Value> GetServiceManifestOverlay(
+      base::StringPiece name);
+
   // Informs the embedder that a certificate error has occurred. If
   // |overridable| is true, the user can ignore the error and continue. The
   // embedder can call the |callback| asynchronously (an argument of true means
@@ -124,13 +153,11 @@ class WebClient {
       bool overridable,
       const base::Callback<void(bool)>& callback);
 
-  // Provides parameters for initializing the global task scheduler. Default
-  // params are used if this returns nullptr.
-  virtual std::unique_ptr<base::TaskScheduler::InitParams>
-  GetTaskSchedulerInitParams();
-
-  // Performs any necessary PostTask API redirection to the task scheduler.
-  virtual void PerformExperimentalTaskSchedulerRedirections() {}
+  // Allows upper layers to inject experimental flags to the web layer.
+  // TODO(crbug.com/734150): Clean up this flag after experiment. If need for a
+  // second flag arises before clean up, consider generalizing to an experiment
+  // flags struct instead of adding a bool method for each experiment.
+  virtual bool IsSlimNavigationManagerEnabled() const;
 };
 
 }  // namespace web

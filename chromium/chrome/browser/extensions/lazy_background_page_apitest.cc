@@ -26,7 +26,7 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/test/base/ui_test_utils.h"
-#include "components/app_modal/app_modal_dialog.h"
+#include "components/app_modal/javascript_app_modal_dialog.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/browser/bookmark_utils.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
@@ -239,7 +239,8 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, WaitForDialog) {
   ASSERT_TRUE(extension);
 
   // The test extension opens a dialog on installation.
-  app_modal::AppModalDialog* dialog = ui_test_utils::WaitForAppModalDialog();
+  app_modal::JavaScriptAppModalDialog* dialog =
+      ui_test_utils::WaitForAppModalDialog();
   ASSERT_TRUE(dialog);
 
   // With the dialog open the background page is still alive.
@@ -570,6 +571,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, EventDispatchToTab) {
 // when it is destroyed.
 IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, UpdateExtensionsPage) {
   ui_test_utils::NavigateToURL(browser(), GURL(chrome::kChromeUIExtensionsURL));
+  auto* extensions_page = browser()->tab_strip_model()->GetActiveWebContents();
 
   ResultCatcher catcher;
   base::FilePath extdir = test_data_dir_.AppendASCII("lazy_background_page").
@@ -596,13 +598,6 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, UpdateExtensionsPage) {
   // Lazy Background Page has been shut down.
   EXPECT_FALSE(IsBackgroundPageAlive(last_loaded_extension_id()));
 
-  // Verify that extensions page shows that the lazy background page is
-  // inactive.
-  content::RenderFrameHost* frame = content::FrameMatchingPredicate(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      base::Bind(&content::FrameHasSourceUrl,
-                 GURL(chrome::kChromeUIExtensionsFrameURL)));
-
   // Updating the extensions page is a process that has back-and-forth
   // communication (i.e., backend tells extensions page something changed,
   // extensions page requests updated data, backend responds with updated data,
@@ -615,7 +610,7 @@ IN_PROC_BROWSER_TEST_F(LazyBackgroundPageApiTest, UpdateExtensionsPage) {
   int num_tries = 0;
   while (!is_inactive && num_tries++ < kMaxTries) {
     EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
-        frame,
+        extensions_page,
         "var ele = document.querySelectorAll('div.active-views');"
         "window.domAutomationController.send("
         "    ele[0].innerHTML.search('(Inactive)') > 0);",

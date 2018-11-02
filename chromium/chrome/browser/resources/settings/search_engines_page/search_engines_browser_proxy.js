@@ -51,110 +51,108 @@ var SearchPageHotwordInfo;
 
 cr.define('settings', function() {
   /** @interface */
-  function SearchEnginesBrowserProxy() {}
-
-  SearchEnginesBrowserProxy.prototype = {
+  class SearchEnginesBrowserProxy {
     /** @param {number} modelIndex */
-    setDefaultSearchEngine: function(modelIndex) {},
+    setDefaultSearchEngine(modelIndex) {}
 
     /** @param {number} modelIndex */
-    removeSearchEngine: function(modelIndex) {},
+    removeSearchEngine(modelIndex) {}
 
     /** @param {number} modelIndex */
-    searchEngineEditStarted: function(modelIndex) {},
+    searchEngineEditStarted(modelIndex) {}
 
-    searchEngineEditCancelled: function() {},
+    searchEngineEditCancelled() {}
 
     /**
      * @param {string} searchEngine
      * @param {string} keyword
      * @param {string} queryUrl
      */
-    searchEngineEditCompleted: function(searchEngine, keyword, queryUrl) {},
+    searchEngineEditCompleted(searchEngine, keyword, queryUrl) {}
 
     /** @return {!Promise<!SearchEnginesInfo>} */
-    getSearchEnginesList: function() {},
+    getSearchEnginesList() {}
 
     /**
      * @param {string} fieldName
      * @param {string} fieldValue
      * @return {!Promise<boolean>}
      */
-    validateSearchEngineInput: function(fieldName, fieldValue) {},
+    validateSearchEngineInput(fieldName, fieldValue) {}
 
     /** @return {!Promise<!SearchPageHotwordInfo>} */
-    getHotwordInfo: function() {},
+    getHotwordInfo() {}
 
     /** @param {boolean} enabled */
-    setHotwordSearchEnabled: function(enabled) {},
+    setHotwordSearchEnabled(enabled) {}
 
     /** @return {!Promise<boolean>} */
-    getGoogleNowAvailability: function() {},
-  };
+    getGoogleNowAvailability() {}
+  }
 
   /**
-   * @constructor
    * @implements {settings.SearchEnginesBrowserProxy}
    */
-  function SearchEnginesBrowserProxyImpl() {}
+  class SearchEnginesBrowserProxyImpl {
+    /** @override */
+    setDefaultSearchEngine(modelIndex) {
+      chrome.send('setDefaultSearchEngine', [modelIndex]);
+    }
+
+    /** @override */
+    removeSearchEngine(modelIndex) {
+      chrome.send('removeSearchEngine', [modelIndex]);
+    }
+
+    /** @override */
+    searchEngineEditStarted(modelIndex) {
+      chrome.send('searchEngineEditStarted', [modelIndex]);
+    }
+
+    /** @override */
+    searchEngineEditCancelled() {
+      chrome.send('searchEngineEditCancelled');
+    }
+
+    /** @override */
+    searchEngineEditCompleted(searchEngine, keyword, queryUrl) {
+      chrome.send('searchEngineEditCompleted', [
+        searchEngine,
+        keyword,
+        queryUrl,
+      ]);
+    }
+
+    /** @override */
+    getSearchEnginesList() {
+      return cr.sendWithPromise('getSearchEnginesList');
+    }
+
+    /** @override */
+    validateSearchEngineInput(fieldName, fieldValue) {
+      return cr.sendWithPromise(
+          'validateSearchEngineInput', fieldName, fieldValue);
+    }
+
+    /** @override */
+    getHotwordInfo() {
+      return cr.sendWithPromise('getHotwordInfo');
+    }
+
+    /** @override */
+    setHotwordSearchEnabled(enabled) {
+      chrome.send('setHotwordSearchEnabled', [enabled]);
+    }
+
+    /** @override */
+    getGoogleNowAvailability() {
+      return cr.sendWithPromise('getGoogleNowAvailability');
+    }
+  }
+
   // The singleton instance_ is replaced with a test version of this wrapper
   // during testing.
   cr.addSingletonGetter(SearchEnginesBrowserProxyImpl);
-
-  SearchEnginesBrowserProxyImpl.prototype = {
-    /** @override */
-    setDefaultSearchEngine: function(modelIndex) {
-      chrome.send('setDefaultSearchEngine', [modelIndex]);
-    },
-
-    /** @override */
-    removeSearchEngine: function(modelIndex) {
-      chrome.send('removeSearchEngine', [modelIndex]);
-    },
-
-    /** @override */
-    searchEngineEditStarted: function(modelIndex) {
-      chrome.send('searchEngineEditStarted', [modelIndex]);
-    },
-
-    /** @override */
-    searchEngineEditCancelled: function() {
-      chrome.send('searchEngineEditCancelled');
-    },
-
-    /** @override */
-    searchEngineEditCompleted: function(searchEngine, keyword, queryUrl) {
-      chrome.send('searchEngineEditCompleted', [
-        searchEngine, keyword, queryUrl,
-      ]);
-    },
-
-    /** @override */
-    getSearchEnginesList: function() {
-      return cr.sendWithPromise('getSearchEnginesList');
-    },
-
-    /** @override */
-    validateSearchEngineInput: function(fieldName, fieldValue) {
-      return cr.sendWithPromise(
-          'validateSearchEngineInput', fieldName, fieldValue);
-    },
-
-    /** @override */
-    getHotwordInfo: function() {
-      return cr.sendWithPromise('getHotwordInfo');
-    },
-
-    /** @override */
-    setHotwordSearchEnabled: function(enabled) {
-      chrome.send('setHotwordSearchEnabled', [enabled]);
-    },
-
-    /** @override */
-    getGoogleNowAvailability: function() {
-      return cr.sendWithPromise('getGoogleNowAvailability');
-    },
-  };
 
   return {
     SearchEnginesBrowserProxy: SearchEnginesBrowserProxy,

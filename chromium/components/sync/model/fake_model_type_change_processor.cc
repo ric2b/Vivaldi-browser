@@ -36,9 +36,12 @@ void FakeModelTypeChangeProcessor::Delete(
     MetadataChangeList* metadata_change_list) {}
 
 void FakeModelTypeChangeProcessor::UpdateStorageKey(
-    const std::string& old_storage_key,
-    const std::string& new_storage_key,
+    const EntityData& entity_data,
+    const std::string& storage_key,
     MetadataChangeList* metadata_change_list) {}
+
+void FakeModelTypeChangeProcessor::UntrackEntity(
+    const EntityData& entity_data) {}
 
 void FakeModelTypeChangeProcessor::ModelReadyToSync(
     std::unique_ptr<MetadataBatch> batch) {}

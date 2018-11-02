@@ -1,0 +1,72 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//chrome/common/features.gni")
+
+if (enable_oop_heap_profiling) {
+  static_library("profiling") {
+    sources = [
+      "address.h",
+      "allocation_event.cc",
+      "allocation_event.h",
+      "allocation_tracker.cc",
+      "allocation_tracker.h",
+      "backtrace.cc",
+      "backtrace.h",
+      "backtrace_storage.cc",
+      "backtrace_storage.h",
+      "json_exporter.cc",
+      "json_exporter.h",
+      "memlog_connection_manager.cc",
+      "memlog_connection_manager.h",
+      "memlog_receiver.h",
+      "memlog_receiver_pipe_posix.cc",
+      "memlog_receiver_pipe_posix.h",
+      "memlog_receiver_pipe_server.h",
+      "memlog_receiver_pipe_server_posix.cc",
+      "memlog_receiver_pipe_server_posix.h",
+      "memlog_receiver_pipe_server_win.cc",
+      "memlog_receiver_pipe_server_win.h",
+      "memlog_receiver_pipe_win.cc",
+      "memlog_receiver_pipe_win.h",
+      "memlog_stream_parser.cc",
+      "memlog_stream_parser.h",
+      "memlog_stream_receiver.h",
+      "profiling_globals.cc",
+      "profiling_globals.h",
+      "profiling_main.cc",
+      "profiling_main.h",
+      "profiling_process.cc",
+      "profiling_process.h",
+    ]
+
+    deps = [
+      "//base",
+      "//chrome/common",
+      "//mojo/edk/system",
+    ]
+  }
+
+  source_set("unit_tests") {
+    testonly = true
+    sources = [
+      "json_exporter_unittest.cc",
+    ]
+    deps = [
+      ":profiling",
+      "//base",
+      "//testing/gtest",
+    ]
+  }
+} else {
+  # Dummy target so this can be unconditionally depended on and header checking
+  # will work.
+  source_set("profiling") {
+    sources = [
+      "profiling_main.h",
+    ]
+  }
+  group("unit_tests") {
+  }
+}

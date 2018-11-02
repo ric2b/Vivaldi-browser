@@ -28,7 +28,7 @@
 
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
@@ -57,7 +57,11 @@ LayoutTable::LayoutTable(Element* element)
       foot_(nullptr),
       first_body_(nullptr),
       collapsed_borders_valid_(false),
+      has_collapsed_borders_(false),
+      needs_adjust_collapsed_border_joints_(false),
       needs_invalidate_collapsed_borders_for_all_cells_(false),
+      collapsed_outer_borders_valid_(false),
+      should_paint_all_collapsed_borders_(false),
       has_col_elements_(false),
       needs_section_recalc_(false),
       column_logical_width_changed_(false),
@@ -65,8 +69,10 @@ LayoutTable::LayoutTable(Element* element)
       no_cell_colspan_at_least_(0),
       h_spacing_(0),
       v_spacing_(0),
-      border_start_(0),
-      border_end_(0) {
+      collapsed_outer_border_start_(0),
+      collapsed_outer_border_end_(0),
+      collapsed_outer_border_before_(0),
+      collapsed_outer_border_after_(0) {
   DCHECK(!ChildrenInline());
   effective_column_positions_.Fill(0, 1);
 }
@@ -470,8 +476,10 @@ void LayoutTable::LayoutSection(
   bool needed_layout = section.NeedsLayout();
   if (needed_layout)
     section.UpdateLayout();
-  if (needed_layout || table_height_changing == kTableHeightChanging)
+  if (needed_layout || table_height_changing == kTableHeightChanging) {
     section.SetLogicalHeight(LayoutUnit(section.CalcRowLogicalHeight()));
+    section.DetermineIfHeaderGroupShouldRepeat();
+  }
 
   if (View()->GetLayoutState()->IsPaginated())
     UpdateFragmentationInfoForChild(section);
@@ -580,10 +588,6 @@ void LayoutTable::UpdateLayout() {
   TextAutosizer::LayoutScope text_autosizer_layout_scope(this);
 
   RecalcSectionsIfNeeded();
-  // FIXME: We should do this recalc lazily in borderStart/borderEnd so that we
-  // don't have to make sure to call this before we call borderStart/borderEnd
-  // to avoid getting a stale value.
-  RecalcBordersInRowDirection();
 
   SubtreeLayoutScope layouter(*this);
 
@@ -624,13 +628,6 @@ void LayoutTable::UpdateLayout() {
     LayoutUnit table_box_logical_top = LogicalHeight();
 
     bool collapsing = ShouldCollapseBorders();
-    if (collapsing) {
-      // Need to set up the table borders before we can position the sections.
-      for (LayoutTableSection* section = top_section; section;
-           section = SectionBelow(section))
-        section->RecalcOuterBorder();
-    }
-
     LayoutUnit border_and_padding_before =
         BorderBefore() + (collapsing ? LayoutUnit() : PaddingBefore());
     LayoutUnit border_and_padding_after =
@@ -657,19 +654,19 @@ void LayoutTable::UpdateLayout() {
     if (LayoutTableSection* section = Header()) {
       LayoutSection(*section, layouter, section_logical_left,
                     table_height_changing);
-      if (state.IsPaginated()) {
+      if (state.IsPaginated() && IsPageLogicalHeightKnown()) {
         // If the repeating header group allows at least one row of content,
         // then store the offset for other sections to offset their rows
         // against.
-        LayoutUnit section_logical_height = section->LogicalHeight();
-        if (section_logical_height <
-                section->PageLogicalHeightForOffset(section->LogicalTop()) &&
-            section->GetPaginationBreakability() != kAllowAnyBreaks) {
+        if (section->IsRepeatingHeaderGroup()) {
+          LayoutUnit offset_for_table_headers =
+              state.HeightOffsetForTableHeaders();
+          offset_for_table_headers += section->LogicalHeight();
           // Don't include any strut in the header group - we only want the
           // height from its content.
-          LayoutUnit offset_for_table_headers = section_logical_height;
           if (LayoutTableRow* row = section->FirstRow())
             offset_for_table_headers -= row->PaginationStrut();
+          state.SetHeightOffsetForTableHeaders(offset_for_table_headers);
           SetRowOffsetFromRepeatingHeader(offset_for_table_headers);
         }
       }
@@ -777,9 +774,9 @@ void LayoutTable::UpdateLayout() {
 }
 
 void LayoutTable::InvalidateCollapsedBorders() {
-  collapsed_borders_.clear();
   collapsed_borders_valid_ = false;
   needs_invalidate_collapsed_borders_for_all_cells_ = true;
+  collapsed_outer_borders_valid_ = false;
   SetMayNeedPaintInvalidation();
 }
 
@@ -805,55 +802,7 @@ void LayoutTable::InvalidateCollapsedBordersForAllCellsIfNeeded() {
   }
 }
 
-// Collect all the unique border values that we want to paint in a sorted list.
-// During the collection, each cell saves its recalculated borders into the
-// cache of its containing section, and invalidates itself if any border
-// changes. This method doesn't affect layout.
-void LayoutTable::RecalcCollapsedBordersIfNeeded() {
-  if (collapsed_borders_valid_ || !ShouldCollapseBorders())
-    return;
-  collapsed_borders_valid_ = true;
-  collapsed_borders_.clear();
-  for (LayoutObject* section = FirstChild(); section;
-       section = section->NextSibling()) {
-    if (!section->IsTableSection())
-      continue;
-    for (LayoutTableRow* row = ToLayoutTableSection(section)->FirstRow(); row;
-         row = row->NextRow()) {
-      for (LayoutTableCell* cell = row->FirstCell(); cell;
-           cell = cell->NextCell()) {
-        DCHECK_EQ(cell->Table(), this);
-        cell->CollectCollapsedBorderValues(collapsed_borders_);
-      }
-    }
-  }
-  LayoutTableCell::SortCollapsedBorderValues(collapsed_borders_);
-}
-
 void LayoutTable::AddOverflowFromChildren() {
-  // Add overflow from borders.
-  // Technically it's odd that we are incorporating the borders into layout
-  // overflow, which is only supposed to be about overflow from our
-  // descendant objects, but since tables don't support overflow:auto, this
-  // works out fine.
-  if (ShouldCollapseBorders()) {
-    LayoutUnit right_border_overflow =
-        Size().Width() + OuterBorderRight() - BorderRight();
-    LayoutUnit left_border_overflow = BorderLeft() - OuterBorderLeft();
-    LayoutUnit bottom_border_overflow =
-        Size().Height() + OuterBorderBottom() - BorderBottom();
-    LayoutUnit top_border_overflow = BorderTop() - OuterBorderTop();
-    IntRect border_overflow_rect(
-        left_border_overflow.ToInt(), top_border_overflow.ToInt(),
-        (right_border_overflow - left_border_overflow).ToInt(),
-        (bottom_border_overflow - top_border_overflow).ToInt());
-    if (border_overflow_rect != PixelSnappedBorderBoxRect()) {
-      LayoutRect border_layout_rect(border_overflow_rect);
-      AddLayoutOverflow(border_layout_rect);
-      AddContentsVisualOverflow(border_layout_rect);
-    }
-  }
-
   // Add overflow from our caption.
   for (unsigned i = 0; i < captions_.size(); i++)
     AddOverflowFromChild(*captions_[i]);
@@ -862,6 +811,12 @@ void LayoutTable::AddOverflowFromChildren() {
   for (LayoutTableSection* section = TopSection(); section;
        section = SectionBelow(section))
     AddOverflowFromChild(*section);
+
+  // Technically it's odd that we are incorporating the borders into layout
+  // overflow, which is only supposed to be about overflow from our
+  // descendant objects, but since tables don't support overflow:auto, this
+  // works out fine.
+  AddLayoutOverflow(VisualOverflowRect());
 }
 
 void LayoutTable::PaintObject(const PaintInfo& paint_info,
@@ -914,11 +869,6 @@ void LayoutTable::PaintMask(const PaintInfo& paint_info,
 void LayoutTable::ComputeIntrinsicLogicalWidths(LayoutUnit& min_width,
                                                 LayoutUnit& max_width) const {
   RecalcSectionsIfNeeded();
-  // FIXME: Do the recalc in borderStart/borderEnd and make those const_cast
-  // this call.
-  // Then m_borderStart/m_borderEnd will be transparent a cache and it removes
-  // the possibility of reading out stale values.
-  const_cast<LayoutTable*>(this)->RecalcBordersInRowDirection();
   // FIXME: Restructure the table layout code so that we can make this method
   // const.
   const_cast<LayoutTable*>(this)->table_layout_->ComputeIntrinsicLogicalWidths(
@@ -984,6 +934,13 @@ LayoutTableSection* LayoutTable::TopNonEmptySection() const {
   LayoutTableSection* section = TopSection();
   if (section && !section->NumRows())
     section = SectionBelow(section, kSkipEmptySections);
+  return section;
+}
+
+LayoutTableSection* LayoutTable::BottomNonEmptySection() const {
+  LayoutTableSection* section = BottomSection();
+  if (section && !section->NumRows())
+    section = SectionAbove(section, kSkipEmptySections);
   return section;
 }
 
@@ -1178,258 +1135,36 @@ void LayoutTable::RecalcSections() const {
   needs_section_recalc_ = false;
 }
 
-int LayoutTable::CalcBorderStart() const {
-  if (!ShouldCollapseBorders())
-    return LayoutBlock::BorderStart().ToInt();
-
-  // Determined by the first cell of the first row. See the CSS 2.1 spec,
-  // section 17.6.2.
-  if (!NumEffectiveColumns())
-    return 0;
-
-  int border_width = 0;
-
-  const BorderValue& table_start_border = Style()->BorderStart();
-  if (table_start_border.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(table_start_border.Style()))
-    border_width = table_start_border.Width();
-
-  // TODO(dgrogan): This logic doesn't properly account for the first column in
-  // the first column-group case.
-  if (LayoutTableCol* column =
-          ColElementAtAbsoluteColumn(0).InnermostColOrColGroup()) {
-    // FIXME: We don't account for direction on columns and column groups.
-    const BorderValue& column_adjoining_border = column->Style()->BorderStart();
-    if (column_adjoining_border.Style() == EBorderStyle::kHidden)
-      return 0;
-    if (ComputedStyle::BorderStyleIsVisible(column_adjoining_border.Style()))
-      border_width =
-          std::max<int>(border_width, column_adjoining_border.Width());
-  }
-
-  if (const LayoutTableSection* top_non_empty_section =
-          this->TopNonEmptySection()) {
-    const BorderValue& section_adjoining_border =
-        top_non_empty_section->BorderAdjoiningTableStart();
-    if (section_adjoining_border.Style() == EBorderStyle::kHidden)
-      return 0;
-
-    if (ComputedStyle::BorderStyleIsVisible(section_adjoining_border.Style()))
-      border_width =
-          std::max<int>(border_width, section_adjoining_border.Width());
-
-    if (const LayoutTableCell* adjoining_start_cell =
-            top_non_empty_section->FirstRowCellAdjoiningTableStart()) {
-      // FIXME: Make this work with perpendicular and flipped cells.
-      const BorderValue& start_cell_adjoining_border =
-          adjoining_start_cell->BorderAdjoiningTableStart();
-      if (start_cell_adjoining_border.Style() == EBorderStyle::kHidden)
-        return 0;
-
-      const BorderValue& first_row_adjoining_border =
-          adjoining_start_cell->Row()->BorderAdjoiningTableStart();
-      if (first_row_adjoining_border.Style() == EBorderStyle::kHidden)
-        return 0;
-
-      if (ComputedStyle::BorderStyleIsVisible(
-              start_cell_adjoining_border.Style())) {
-        border_width =
-            std::max<int>(border_width, start_cell_adjoining_border.Width());
-      }
-      if (ComputedStyle::BorderStyleIsVisible(
-              first_row_adjoining_border.Style())) {
-        border_width =
-            std::max<int>(border_width, first_row_adjoining_border.Width());
-      }
-    }
-  }
-  return (border_width + (Style()->IsLeftToRightDirection() ? 0 : 1)) / 2;
-}
-
-int LayoutTable::CalcBorderEnd() const {
-  if (!ShouldCollapseBorders())
-    return LayoutBlock::BorderEnd().ToInt();
-
-  // Determined by the last cell of the first row. See the CSS 2.1 spec, section
-  // 17.6.2.
-  if (!NumEffectiveColumns())
-    return 0;
-
-  int border_width = 0;
-
-  const BorderValue& table_end_border = Style()->BorderEnd();
-  if (table_end_border.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(table_end_border.Style()))
-    border_width = table_end_border.Width();
-
-  unsigned end_column = NumEffectiveColumns() - 1;
-
-  // TODO(dgrogan): This logic doesn't properly account for the last column in
-  // the last column-group case.
-  if (LayoutTableCol* column =
-          ColElementAtAbsoluteColumn(end_column).InnermostColOrColGroup()) {
-    // FIXME: We don't account for direction on columns and column groups.
-    const BorderValue& column_adjoining_border = column->Style()->BorderEnd();
-    if (column_adjoining_border.Style() == EBorderStyle::kHidden)
-      return 0;
-    if (ComputedStyle::BorderStyleIsVisible(column_adjoining_border.Style()))
-      border_width =
-          std::max<int>(border_width, column_adjoining_border.Width());
-  }
-
-  if (const LayoutTableSection* top_non_empty_section =
-          this->TopNonEmptySection()) {
-    const BorderValue& section_adjoining_border =
-        top_non_empty_section->BorderAdjoiningTableEnd();
-    if (section_adjoining_border.Style() == EBorderStyle::kHidden)
-      return 0;
-
-    if (ComputedStyle::BorderStyleIsVisible(section_adjoining_border.Style()))
-      border_width =
-          std::max<int>(border_width, section_adjoining_border.Width());
-
-    if (const LayoutTableCell* adjoining_end_cell =
-            top_non_empty_section->FirstRowCellAdjoiningTableEnd()) {
-      // FIXME: Make this work with perpendicular and flipped cells.
-      const BorderValue& end_cell_adjoining_border =
-          adjoining_end_cell->BorderAdjoiningTableEnd();
-      if (end_cell_adjoining_border.Style() == EBorderStyle::kHidden)
-        return 0;
-
-      const BorderValue& first_row_adjoining_border =
-          adjoining_end_cell->Row()->BorderAdjoiningTableEnd();
-      if (first_row_adjoining_border.Style() == EBorderStyle::kHidden)
-        return 0;
-
-      if (ComputedStyle::BorderStyleIsVisible(
-              end_cell_adjoining_border.Style())) {
-        border_width =
-            std::max<int>(border_width, end_cell_adjoining_border.Width());
-      }
-      if (ComputedStyle::BorderStyleIsVisible(
-              first_row_adjoining_border.Style())) {
-        border_width =
-            std::max<int>(border_width, first_row_adjoining_border.Width());
-      }
-    }
-  }
-  return (border_width + (Style()->IsLeftToRightDirection() ? 1 : 0)) / 2;
-}
-
-void LayoutTable::RecalcBordersInRowDirection() {
-  // FIXME: We need to compute the collapsed before / after borders in the same
-  // fashion.
-  border_start_ = CalcBorderStart();
-  border_end_ = CalcBorderEnd();
-}
-
 LayoutUnit LayoutTable::BorderBefore() const {
   if (ShouldCollapseBorders()) {
-    RecalcSectionsIfNeeded();
-    return LayoutUnit(OuterBorderBefore());
+    UpdateCollapsedOuterBorders();
+    return LayoutUnit(collapsed_outer_border_before_);
   }
-  return LayoutBlock::BorderBefore();
+  return LayoutUnit(LayoutBlock::BorderBefore().ToInt());
 }
 
 LayoutUnit LayoutTable::BorderAfter() const {
   if (ShouldCollapseBorders()) {
-    RecalcSectionsIfNeeded();
-    return LayoutUnit(OuterBorderAfter());
+    UpdateCollapsedOuterBorders();
+    return LayoutUnit(collapsed_outer_border_after_);
   }
-  return LayoutBlock::BorderAfter();
+  return LayoutUnit(LayoutBlock::BorderAfter().ToInt());
 }
 
-int LayoutTable::OuterBorderBefore() const {
-  if (!ShouldCollapseBorders())
-    return 0;
-  int border_width = 0;
-  if (LayoutTableSection* top_section = this->TopSection()) {
-    border_width = top_section->OuterBorderBefore();
-    if (border_width < 0)
-      return 0;  // Overridden by hidden
+LayoutUnit LayoutTable::BorderStart() const {
+  if (ShouldCollapseBorders()) {
+    UpdateCollapsedOuterBorders();
+    return LayoutUnit(collapsed_outer_border_start_);
   }
-  const BorderValue& tb = Style()->BorderBefore();
-  if (tb.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(tb.Style()))
-    border_width = std::max<int>(border_width, tb.Width() / 2);
-  return border_width;
+  return LayoutUnit(LayoutBlock::BorderStart().ToInt());
 }
 
-int LayoutTable::OuterBorderAfter() const {
-  if (!ShouldCollapseBorders())
-    return 0;
-  int border_width = 0;
-
-  if (LayoutTableSection* section = BottomSection()) {
-    border_width = section->OuterBorderAfter();
-    if (border_width < 0)
-      return 0;  // Overridden by hidden
+LayoutUnit LayoutTable::BorderEnd() const {
+  if (ShouldCollapseBorders()) {
+    UpdateCollapsedOuterBorders();
+    return LayoutUnit(collapsed_outer_border_end_);
   }
-  const BorderValue& tb = Style()->BorderAfter();
-  if (tb.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(tb.Style()))
-    border_width = std::max<int>(border_width, (tb.Width() + 1) / 2);
-  return border_width;
-}
-
-int LayoutTable::OuterBorderStart() const {
-  if (!ShouldCollapseBorders())
-    return 0;
-
-  int border_width = 0;
-
-  const BorderValue& tb = Style()->BorderStart();
-  if (tb.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(tb.Style()))
-    border_width =
-        (tb.Width() + (Style()->IsLeftToRightDirection() ? 0 : 1)) / 2;
-
-  bool all_hidden = true;
-  for (LayoutTableSection* section = TopSection(); section;
-       section = SectionBelow(section)) {
-    int sw = section->OuterBorderStart();
-    if (sw < 0)
-      continue;
-    all_hidden = false;
-    border_width = std::max(border_width, sw);
-  }
-  if (all_hidden)
-    return 0;
-
-  return border_width;
-}
-
-int LayoutTable::OuterBorderEnd() const {
-  if (!ShouldCollapseBorders())
-    return 0;
-
-  int border_width = 0;
-
-  const BorderValue& tb = Style()->BorderEnd();
-  if (tb.Style() == EBorderStyle::kHidden)
-    return 0;
-  if (ComputedStyle::BorderStyleIsVisible(tb.Style()))
-    border_width =
-        (tb.Width() + (Style()->IsLeftToRightDirection() ? 1 : 0)) / 2;
-
-  bool all_hidden = true;
-  for (LayoutTableSection* section = TopSection(); section;
-       section = SectionBelow(section)) {
-    int sw = section->OuterBorderEnd();
-    if (sw < 0)
-      continue;
-    all_hidden = false;
-    border_width = std::max(border_width, sw);
-  }
-  if (all_hidden)
-    return 0;
-
-  return border_width;
+  return LayoutUnit(LayoutBlock::BorderEnd().ToInt());
 }
 
 LayoutTableSection* LayoutTable::SectionAbove(
@@ -1495,19 +1230,19 @@ LayoutTableSection* LayoutTable::BottomSection() const {
   return nullptr;
 }
 
-LayoutTableCell* LayoutTable::CellAbove(const LayoutTableCell* cell) const {
+LayoutTableCell* LayoutTable::CellAbove(const LayoutTableCell& cell) const {
   RecalcSectionsIfNeeded();
 
   // Find the section and row to look in
-  unsigned r = cell->RowIndex();
+  unsigned r = cell.RowIndex();
   LayoutTableSection* section = nullptr;
   unsigned r_above = 0;
   if (r > 0) {
     // cell is not in the first row, so use the above row in its own section
-    section = cell->Section();
+    section = cell.Section();
     r_above = r - 1;
   } else {
-    section = SectionAbove(cell->Section(), kSkipEmptySections);
+    section = SectionAbove(cell.Section(), kSkipEmptySections);
     if (section) {
       DCHECK(section->NumRows());
       r_above = section->NumRows() - 1;
@@ -1517,25 +1252,25 @@ LayoutTableCell* LayoutTable::CellAbove(const LayoutTableCell* cell) const {
   // Look up the cell in the section's grid, which requires effective col index
   if (section) {
     unsigned eff_col =
-        AbsoluteColumnToEffectiveColumn(cell->AbsoluteColumnIndex());
+        AbsoluteColumnToEffectiveColumn(cell.AbsoluteColumnIndex());
     return section->PrimaryCellAt(r_above, eff_col);
   }
   return nullptr;
 }
 
-LayoutTableCell* LayoutTable::CellBelow(const LayoutTableCell* cell) const {
+LayoutTableCell* LayoutTable::CellBelow(const LayoutTableCell& cell) const {
   RecalcSectionsIfNeeded();
 
   // Find the section and row to look in
-  unsigned r = cell->RowIndex() + cell->RowSpan() - 1;
+  unsigned r = cell.RowIndex() + cell.RowSpan() - 1;
   LayoutTableSection* section = nullptr;
   unsigned r_below = 0;
-  if (r < cell->Section()->NumRows() - 1) {
+  if (r < cell.Section()->NumRows() - 1) {
     // The cell is not in the last row, so use the next row in the section.
-    section = cell->Section();
+    section = cell.Section();
     r_below = r + 1;
   } else {
-    section = SectionBelow(cell->Section(), kSkipEmptySections);
+    section = SectionBelow(cell.Section(), kSkipEmptySections);
     if (section)
       r_below = 0;
   }
@@ -1543,31 +1278,31 @@ LayoutTableCell* LayoutTable::CellBelow(const LayoutTableCell* cell) const {
   // Look up the cell in the section's grid, which requires effective col index
   if (section) {
     unsigned eff_col =
-        AbsoluteColumnToEffectiveColumn(cell->AbsoluteColumnIndex());
+        AbsoluteColumnToEffectiveColumn(cell.AbsoluteColumnIndex());
     return section->PrimaryCellAt(r_below, eff_col);
   }
   return nullptr;
 }
 
-LayoutTableCell* LayoutTable::CellBefore(const LayoutTableCell* cell) const {
+LayoutTableCell* LayoutTable::CellPreceding(const LayoutTableCell& cell) const {
   RecalcSectionsIfNeeded();
 
-  LayoutTableSection* section = cell->Section();
+  LayoutTableSection* section = cell.Section();
   unsigned eff_col =
-      AbsoluteColumnToEffectiveColumn(cell->AbsoluteColumnIndex());
+      AbsoluteColumnToEffectiveColumn(cell.AbsoluteColumnIndex());
   if (!eff_col)
     return nullptr;
 
   // If we hit a colspan back up to a real cell.
-  return section->PrimaryCellAt(cell->RowIndex(), eff_col - 1);
+  return section->PrimaryCellAt(cell.RowIndex(), eff_col - 1);
 }
 
-LayoutTableCell* LayoutTable::CellAfter(const LayoutTableCell* cell) const {
+LayoutTableCell* LayoutTable::CellFollowing(const LayoutTableCell& cell) const {
   RecalcSectionsIfNeeded();
 
   unsigned eff_col = AbsoluteColumnToEffectiveColumn(
-      cell->AbsoluteColumnIndex() + cell->ColSpan());
-  return cell->Section()->PrimaryCellAt(cell->RowIndex(), eff_col);
+      cell.AbsoluteColumnIndex() + cell.ColSpan());
+  return cell.Section()->PrimaryCellAt(cell.RowIndex(), eff_col);
 }
 
 int LayoutTable::BaselinePosition(FontBaseline baseline_type,
@@ -1701,40 +1436,61 @@ LayoutTable* LayoutTable::CreateAnonymousWithParent(
   return new_table;
 }
 
-BorderValue LayoutTable::TableStartBorderAdjoiningCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  if (HasSameDirectionAs(cell->Row()))
-    return Style()->BorderStart();
-
-  return Style()->BorderEnd();
-}
-
-BorderValue LayoutTable::TableEndBorderAdjoiningCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  if (HasSameDirectionAs(cell->Row()))
-    return Style()->BorderEnd();
-
-  return Style()->BorderStart();
-}
-
 void LayoutTable::EnsureIsReadyForPaintInvalidation() {
   LayoutBlock::EnsureIsReadyForPaintInvalidation();
-  RecalcCollapsedBordersIfNeeded();
-}
 
-PaintInvalidationReason LayoutTable::DeprecatedInvalidatePaint(
-    const PaintInvalidationState& paint_invalidation_state) {
-  if (ShouldCollapseBorders() && !collapsed_borders_.IsEmpty())
-    paint_invalidation_state.PaintingLayer()
-        .SetNeedsPaintPhaseDescendantBlockBackgrounds();
+  if (collapsed_borders_valid_)
+    return;
 
-  return LayoutBlock::DeprecatedInvalidatePaint(paint_invalidation_state);
+  collapsed_borders_valid_ = true;
+  has_collapsed_borders_ = false;
+  needs_adjust_collapsed_border_joints_ = false;
+  should_paint_all_collapsed_borders_ = false;
+  if (!ShouldCollapseBorders())
+    return;
+
+  CollapsedBorderValue first_border;
+  for (auto* section = TopSection(); section; section = SectionBelow(section)) {
+    bool section_may_be_composited = section->IsPaintInvalidationContainer();
+    for (auto* row = section->FirstRow(); row; row = row->NextRow()) {
+      for (auto* cell = row->FirstCell(); cell; cell = cell->NextCell()) {
+        DCHECK_EQ(cell->Table(), this);
+        // Determine if there are any collapsed borders, and if so set
+        // has_collapsed_borders_.
+        const auto* values = cell->GetCollapsedBorderValues();
+        if (!values)
+          continue;
+        has_collapsed_borders_ = true;
+
+        // Determine if there are any differences other than color in any of the
+        // borders of any cells (even if not adjacent), and if so set
+        // needs_adjust_collapsed_border_joints_.
+        if (needs_adjust_collapsed_border_joints_)
+          continue;
+        for (int i = 0; i < 4; ++i) {
+          const auto& border = values->Borders()[i];
+          if (!first_border.Exists()) {
+            first_border = border;
+          } else if (!first_border.IsSameIgnoringColor(border)) {
+            needs_adjust_collapsed_border_joints_ = true;
+            break;
+          }
+        }
+      }
+
+      // Collapsed borders should always be painted on the table's backing.
+      // If any row is not on the same composited layer as the table, the table
+      // should paint all collapsed borders.
+      if (has_collapsed_borders_ &&
+          (section_may_be_composited || row->IsPaintInvalidationContainer())) {
+        // Pass the row's paint invalidation flag to the table in case that the
+        // flag was set for collapsed borders.
+        if (row->ShouldDoFullPaintInvalidation())
+          SetShouldDoFullPaintInvalidation(PaintInvalidationReason::kStyle);
+        should_paint_all_collapsed_borders_ = true;
+      }
+    }
+  }
 }
 
 PaintInvalidationReason LayoutTable::InvalidatePaint(
@@ -1768,6 +1524,91 @@ LayoutUnit LayoutTable::PaddingRight() const {
     return LayoutUnit();
 
   return LayoutBlock::PaddingRight();
+}
+
+unsigned LayoutTable::ComputeCollapsedOuterBorderBefore() const {
+  DCHECK(ShouldCollapseBorders());
+
+  // The table's before outer border width is the maximum before outer border
+  // widths of all cells in the first row. See the CSS 2.1 spec, section 17.6.2.
+  const auto* section = TopNonEmptySection();
+  if (!section)
+    return 0;
+
+  unsigned n_cols = section->NumCols(0);
+  unsigned result = 0;
+  for (unsigned col = 0; col < n_cols; ++col) {
+    if (const auto* cell = section->PrimaryCellAt(0, col))
+      result = std::max(result, cell->CollapsedOuterBorderBefore());
+  }
+  return result;
+}
+
+unsigned LayoutTable::ComputeCollapsedOuterBorderAfter() const {
+  DCHECK(ShouldCollapseBorders());
+
+  const auto* section = BottomNonEmptySection();
+  if (!section)
+    return 0;
+
+  // The table's after outer border width is the maximum after outer border
+  // widths of all cells in the last row. See the CSS 2.1 spec, section 17.6.2.
+  unsigned row = section->NumRows() - 1;
+  unsigned n_cols = section->NumCols(row);
+  unsigned result = 0;
+  for (unsigned col = 0; col < n_cols; ++col) {
+    if (const auto* cell = section->PrimaryCellAt(row, col))
+      result = std::max(result, cell->CollapsedOuterBorderAfter());
+  }
+  return result;
+}
+
+unsigned LayoutTable::ComputeCollapsedOuterBorderStart() const {
+  DCHECK(ShouldCollapseBorders());
+
+  // The table's start and end outer border widths are the border outer widths
+  // of the first and last cells in the first row. See the CSS 2.1 spec,
+  // section 17.6.2.
+  if (const auto* section = TopNonEmptySection()) {
+    if (const auto* row = section->FirstRow()) {
+      if (const auto* cell = row->FirstCell())
+        return cell->CollapsedOuterBorderStart();
+    }
+  }
+  return 0;
+}
+
+unsigned LayoutTable::ComputeCollapsedOuterBorderEnd() const {
+  DCHECK(ShouldCollapseBorders());
+
+  // The table's start and end outer border widths are the border outer widths
+  // of the first and last cells in the first row. See the CSS 2.1 spec,
+  // section 17.6.2.
+  if (const auto* section = TopNonEmptySection()) {
+    if (const auto* row = section->FirstRow()) {
+      if (const auto* cell = row->LastCell())
+        return cell->CollapsedOuterBorderEnd();
+    }
+  }
+  return 0;
+}
+
+void LayoutTable::UpdateCollapsedOuterBorders() const {
+  if (collapsed_outer_borders_valid_)
+    return;
+
+  collapsed_outer_borders_valid_ = true;
+  if (ShouldCollapseBorders()) {
+    collapsed_outer_border_before_ = ComputeCollapsedOuterBorderBefore();
+    collapsed_outer_border_after_ = ComputeCollapsedOuterBorderAfter();
+    collapsed_outer_border_start_ = ComputeCollapsedOuterBorderStart();
+    collapsed_outer_border_end_ = ComputeCollapsedOuterBorderEnd();
+  }
+}
+
+bool LayoutTable::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
+  return LayoutBlock::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() &&
+         !should_paint_all_collapsed_borders_;
 }
 
 }  // namespace blink

@@ -45,10 +45,20 @@ QuicSession::QuicSession(QuicConnection* connection,
                        perspective() == Perspective::IS_SERVER,
                        nullptr),
       currently_writing_stream_id_(0),
-      respect_goaway_(true) {}
+      respect_goaway_(true),
+      use_stream_notifier_(
+          FLAGS_quic_reloadable_flag_quic_use_stream_notifier2),
+      streams_own_data_(use_stream_notifier_ &&
+                        FLAGS_quic_reloadable_flag_quic_stream_owns_data) {}
 
 void QuicSession::Initialize() {
   connection_->set_visitor(this);
+  if (use_stream_notifier_) {
+    connection_->SetStreamNotifier(this);
+  }
+  if (streams_own_data_) {
+    connection_->SetDataProducer(this);
+  }
   connection_->SetFromConfig(config_);
 
   DCHECK_EQ(kCryptoStreamId, GetMutableCryptoStream()->id());
@@ -66,6 +76,7 @@ QuicSession::~QuicSession() {
       << "Surprisingly high number of locally closed self initiated streams"
          "still waiting for final byte offset: "
       << GetNumLocallyClosedOutgoingStreamsHighestOffset();
+  QUIC_LOG_IF(WARNING, !zombie_streams_.empty()) << "Still have zombie streams";
 }
 
 void QuicSession::OnStreamFrame(const QuicStreamFrame& frame) {
@@ -127,6 +138,13 @@ void QuicSession::OnConnectionClosed(QuicErrorCode error,
       QUIC_BUG << ENDPOINT << "Stream failed to close under OnConnectionClosed";
       CloseStream(id);
     }
+  }
+
+  // Cleanup zombie stream map on connection close.
+  while (!zombie_streams_.empty()) {
+    ZombieStreamMap::iterator it = zombie_streams_.begin();
+    closed_streams_.push_back(std::move(it->second));
+    zombie_streams_.erase(it);
   }
 
   if (visitor_) {
@@ -369,7 +387,11 @@ void QuicSession::CloseStreamInner(QuicStreamId stream_id, bool locally_reset) {
     stream->set_rst_sent(true);
   }
 
-  closed_streams_.push_back(std::move(it->second));
+  if (use_stream_notifier_ && stream->IsWaitingForAcks()) {
+    zombie_streams_[stream->id()] = std::move(it->second);
+  } else {
+    closed_streams_.push_back(std::move(it->second));
+  }
 
   // If we haven't received a FIN or RST for this stream, we need to keep track
   // of the how many bytes the stream's flow controller believes it has
@@ -942,6 +964,97 @@ QuicStream* QuicSession::CreateAndActivateStream(QuicStreamId id) {
   QuicStream* stream_ptr = stream.get();
   ActivateStream(std::move(stream));
   return stream_ptr;
+}
+
+void QuicSession::OnStreamDoneWaitingForAcks(QuicStreamId id) {
+  auto it = zombie_streams_.find(id);
+  if (it == zombie_streams_.end()) {
+    return;
+  }
+
+  closed_streams_.push_back(std::move(it->second));
+  zombie_streams_.erase(it);
+}
+
+QuicStream* QuicSession::GetStream(QuicStreamId id) const {
+  auto static_stream = static_stream_map_.find(id);
+  if (static_stream != static_stream_map_.end()) {
+    return static_stream->second;
+  }
+  auto active_stream = dynamic_stream_map_.find(id);
+  if (active_stream != dynamic_stream_map_.end()) {
+    return active_stream->second.get();
+  }
+  auto zombie_stream = zombie_streams_.find(id);
+  if (zombie_stream != zombie_streams_.end()) {
+    return zombie_stream->second.get();
+  }
+  return nullptr;
+}
+
+void QuicSession::OnStreamFrameAcked(const QuicStreamFrame& frame,
+                                     QuicTime::Delta ack_delay_time) {
+  QuicStream* stream = GetStream(frame.stream_id);
+  // Stream can already be reset when sent frame gets acked.
+  if (stream != nullptr) {
+    stream->OnStreamFrameAcked(frame, ack_delay_time);
+  }
+}
+
+void QuicSession::OnStreamFrameRetransmitted(const QuicStreamFrame& frame) {
+  QuicStream* stream = GetStream(frame.stream_id);
+  if (stream == nullptr) {
+    QUIC_BUG << "Stream: " << frame.stream_id << " is closed when " << frame
+             << " is retransmitted.";
+    connection()->CloseConnection(
+        QUIC_INTERNAL_ERROR, "Attempt to retransmit frame of a closed stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+  stream->OnStreamFrameRetransmitted(frame);
+}
+
+void QuicSession::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
+  QuicStream* stream = GetStream(frame.stream_id);
+  if (stream == nullptr) {
+    QUIC_BUG << "Stream: " << frame.stream_id << " is closed when " << frame
+             << " is discarded.";
+    connection()->CloseConnection(
+        QUIC_INTERNAL_ERROR, "Attempt to discard frame of a closed stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+  stream->OnStreamFrameDiscarded(frame);
+}
+
+void QuicSession::SaveStreamData(QuicStreamId id,
+                                 QuicIOVector iov,
+                                 size_t iov_offset,
+                                 QuicStreamOffset offset,
+                                 QuicByteCount data_length) {
+  QuicStream* stream = GetStream(id);
+  if (stream == nullptr) {
+    QUIC_BUG << "Stream " << id << " does not exist when trying to save data.";
+    connection()->CloseConnection(
+        QUIC_INTERNAL_ERROR, "Attempt to save data of a closed stream",
+        ConnectionCloseBehavior::SEND_CONNECTION_CLOSE_PACKET);
+    return;
+  }
+  stream->SaveStreamData(iov, iov_offset, offset, data_length);
+}
+
+bool QuicSession::WriteStreamData(QuicStreamId id,
+                                  QuicStreamOffset offset,
+                                  QuicByteCount data_length,
+                                  QuicDataWriter* writer) {
+  QuicStream* stream = GetStream(id);
+  if (stream == nullptr) {
+    // This causes the connection to be closed because of failed to serialize
+    // packet.
+    QUIC_BUG << "Stream " << id << " does not exist when trying to write data.";
+    return false;
+  }
+  return stream->WriteStreamData(offset, data_length, writer);
 }
 
 }  // namespace net

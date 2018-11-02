@@ -4,41 +4,23 @@
 
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_controller.h"
 
-#include "base/bind.h"
 #include "base/logging.h"
-#import "base/mac/foundation_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "base/strings/sys_string_conversions.h"
-#include "base/time/time.h"
-#include "components/reading_list/core/reading_list_entry.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/url_formatter/url_formatter.h"
-#include "ios/chrome/browser/reading_list/offline_url_utils.h"
 #import "ios/chrome/browser/ui/alert_coordinator/action_sheet_coordinator.h"
+#import "ios/chrome/browser/ui/collection_view/cells/collection_view_item+collection_view_controller.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
-#import "ios/chrome/browser/ui/favicon/favicon_attributes_provider.h"
-#import "ios/chrome/browser/ui/favicon/favicon_view.h"
-#import "ios/chrome/browser/ui/material_components/utils.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_collection_view_item_accessibility_delegate.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_sink.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_data_source.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_empty_collection_background.h"
 #import "ios/chrome/browser/ui/reading_list/reading_list_toolbar.h"
-#import "ios/chrome/browser/ui/reading_list/reading_list_utils.h"
-#import "ios/chrome/browser/ui/uikit_ui_util.h"
-#include "ios/chrome/browser/ui/url_loader.h"
-#import "ios/chrome/browser/ui/util/pasteboard_util.h"
 #include "ios/chrome/grit/ios_strings.h"
-#import "ios/third_party/material_components_ios/src/components/AppBar/src/MaterialAppBar.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#include "ios/web/public/referrer.h"
-#include "ios/web/public/web_state/web_state.h"
 #include "ui/base/l10n/l10n_util_mac.h"
-#include "ui/base/window_open_disposition.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -56,16 +38,12 @@ typedef NS_ENUM(NSInteger, ItemType) {
   ItemTypeItem,
 };
 
-// Typedef for a block taking a GURL as parameter and returning nothing.
-typedef void (^EntryUpdater)(const GURL&);
-
-// Type for map used to sort ReadingListEntry by timestamp. Multiple entries can
-// have the same timestamp.
-using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
+// Typedef for a block taking a CollectionViewItem as parameter and returning
+// nothing.
+typedef void (^EntryUpdater)(CollectionViewItem* item);
 }
 
 @interface ReadingListCollectionViewController ()<
-
     ReadingListCollectionViewItemAccessibilityDelegate,
     ReadingListDataSink> {
   // Toolbar with the actions.
@@ -78,9 +56,6 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   BOOL _dataSourceHasBeenModified;
 }
 
-// Lazily instantiated.
-@property(nonatomic, strong, readonly)
-    FaviconAttributesProvider* attributesProvider;
 // Whether the data source modifications should be taken into account.
 @property(nonatomic, assign) BOOL shouldMonitorDataSource;
 
@@ -88,28 +63,11 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 - (void)donePressed;
 // Loads all the items in all sections.
 - (void)loadItems;
-// Fills section |sectionIdentifier| with the items from |map| in reverse order
-// of the map key.
-- (void)loadItemsFromMap:(const ItemsMapByDate&)map
-               toSection:(SectionIdentifier)sectionIdentifier;
-// Whether the data source has changed.
-- (BOOL)hasDataSourceChanged;
-// Returns whether there is a difference between the elements contained in the
-// |sectionIdentifier| and those in the |map|.
-- (BOOL)section:(SectionIdentifier)sectionIdentifier
-    isDifferentOfMap:(ItemsMapByDate&)map;
+// Fills section |sectionIdentifier| with the items from |array|.
+- (void)loadItemsFromArray:(NSArray<CollectionViewItem*>*)array
+                 toSection:(SectionIdentifier)sectionIdentifier;
 // Reloads the data if a changed occured during editing
 - (void)applyPendingUpdates;
-// Convenience method to create cell items for reading list entries.
-- (ReadingListCollectionViewItem*)cellItemForReadingListEntry:
-    (const ReadingListEntry&)entry;
-// Sets and fetches the |faviconURL| of this |item|, then reconfigures it.
-- (void)setItem:(ReadingListCollectionViewItem*)item
-     faviconURL:(const GURL&)url;
-// Fills the |unread_map| and the |read_map| with the corresponding
-// ReadingListCollectionViewItem from the data source.
-- (void)fillUnreadMap:(ItemsMapByDate&)unread_map
-              readMap:(ItemsMapByDate&)read_map;
 // Returns whether there are elements in the section identified by
 // |sectionIdentifier|.
 - (BOOL)hasItemInSection:(SectionIdentifier)sectionIdentifier;
@@ -117,10 +75,6 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 - (void)collectionIsEmpty;
 // Handles a long press.
 - (void)handleLongPress:(UILongPressGestureRecognizer*)gestureRecognizer;
-// Returns the ReadingListEntry associated with the |item|. If there is not such
-// an entry, returns nullptr.
-- (const ReadingListEntry*)readingListEntryForItem:
-    (ReadingListCollectionViewItem*)item;
 // Updates the toolbar state according to the selected items.
 - (void)updateToolbarState;
 // Displays an action sheet to let the user choose to mark all the elements as
@@ -157,8 +111,6 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 // the data source updates are suspended during this time.
 - (void)updateIndexPaths:(NSArray<NSIndexPath*>*)indexPaths
        usingEntryUpdater:(EntryUpdater)updater;
-// Logs the deletions histograms for the entry with |url|.
-- (void)logDeletionHistogramsForEntry:(const GURL&)url;
 // Move all the items from |sourceSectionIdentifier| to
 // |destinationSectionIdentifier| and removes the empty section from the
 // collection.
@@ -186,21 +138,19 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 @synthesize delegate = _delegate;
 @synthesize dataSource = _dataSource;
 
-@synthesize largeIconService = _largeIconService;
-@synthesize attributesProvider = _attributesProvider;
 @synthesize shouldMonitorDataSource = _shouldMonitorDataSource;
 
 #pragma mark lifecycle
 
 - (instancetype)initWithDataSource:(id<ReadingListDataSource>)dataSource
-                  largeIconService:(favicon::LargeIconService*)largeIconService
                            toolbar:(ReadingListToolbar*)toolbar {
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _toolbar = toolbar;
 
     _dataSource = dataSource;
-    _largeIconService = largeIconService;
     _emptyCollectionBackground =
         [[ReadingListEmptyCollectionBackground alloc] init];
 
@@ -213,21 +163,6 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 }
 
 #pragma mark - properties
-
-- (FaviconAttributesProvider*)attributesProvider {
-  if (_attributesProvider) {
-    return _attributesProvider;
-  }
-
-  // Accept any favicon even the smallest ones (16x16) as it is better than the
-  // fallback icon.
-  // Pass 1 as minimum size to avoid empty favicons.
-  _attributesProvider = [[FaviconAttributesProvider alloc]
-      initWithFaviconSize:kFaviconPreferredSize
-           minFaviconSize:1
-         largeIconService:self.largeIconService];
-  return _attributesProvider;
-}
 
 - (void)setToolbarState:(ReadingListToolbarState)toolbarState {
   [_toolbar setState:toolbarState];
@@ -277,12 +212,10 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   if (self.editor.editing) {
     [self updateToolbarState];
   } else {
-    ReadingListCollectionViewItem* readingListItem =
-        base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(
-            [self.collectionViewModel itemAtIndexPath:indexPath]);
-
-    [self.delegate readingListCollectionViewController:self
-                                              openItem:readingListItem];
+    [self.delegate
+        readingListCollectionViewController:self
+                                   openItem:[self.collectionViewModel
+                                                itemAtIndexPath:indexPath]];
   }
 }
 
@@ -330,34 +263,42 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   }
 }
 
-- (void)readingListModelDidApplyChanges {
-  if (!self.shouldMonitorDataSource) {
-    return;
-  }
-
+- (void)dataSourceChanged {
   // If we are editing and monitoring the model updates, set a flag to reload
   // the data at the end of the editing.
-  if ([self.editor isEditing]) {
+  if (self.editor.editing) {
     _dataSourceHasBeenModified = YES;
-    return;
-  }
-
-  // Ignore single element updates when the data source is doing batch updates.
-  if ([self.dataSource isPerformingBatchUpdates]) {
-    return;
-  }
-
-  if ([self hasDataSourceChanged])
+  } else {
     [self reloadData];
+  }
 }
 
-- (void)readingListModelCompletedBatchUpdates {
-  if (!self.shouldMonitorDataSource) {
-    return;
+- (NSArray<CollectionViewItem*>*)readItems {
+  if (![self.collectionViewModel
+          hasSectionForSectionIdentifier:SectionIdentifierRead]) {
+    return nil;
   }
+  return [self.collectionViewModel
+      itemsInSectionWithIdentifier:SectionIdentifierRead];
+}
 
-  if ([self hasDataSourceChanged])
-    [self reloadData];
+- (NSArray<CollectionViewItem*>*)unreadItems {
+  if (![self.collectionViewModel
+          hasSectionForSectionIdentifier:SectionIdentifierUnread]) {
+    return nil;
+  }
+  return [self.collectionViewModel
+      itemsInSectionWithIdentifier:SectionIdentifierUnread];
+}
+
+- (void)itemHasChangedAfterDelay:(CollectionViewItem*)item {
+  if ([self.collectionViewModel hasItem:item]) {
+    [self reconfigureCellsForItems:@[ item ]];
+  }
+}
+
+- (void)itemsHaveChanged:(NSArray<CollectionViewItem*>*)items {
+  [self reconfigureCellsForItems:items];
 }
 
 #pragma mark - Public methods
@@ -376,90 +317,48 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 
 #pragma mark - ReadingListCollectionViewItemAccessibilityDelegate
 
-- (BOOL)isEntryRead:(ReadingListCollectionViewItem*)entry {
-  const ReadingListEntry* readingListEntry =
-      [self readingListEntryForItem:entry];
-
-  if (!readingListEntry) {
-    return NO;
-  }
-
-  return readingListEntry->IsRead();
+- (BOOL)isEntryRead:(CollectionViewItem*)entry {
+  return [self.dataSource isEntryRead:entry];
 }
 
-- (void)deleteEntry:(ReadingListCollectionViewItem*)entry {
-  const ReadingListEntry* readingListEntry =
-      [self readingListEntryForItem:entry];
-
-  if (!readingListEntry) {
-    return;
+- (void)deleteEntry:(CollectionViewItem*)entry {
+  if ([self.collectionViewModel hasItem:entry]) {
+    [self deleteItemsAtIndexPaths:@[ [self.collectionViewModel
+                                      indexPathForItem:entry] ]];
   }
-
-  SectionIdentifier sectionIdentifier = SectionIdentifierUnread;
-  if (readingListEntry->IsRead()) {
-    sectionIdentifier = SectionIdentifierRead;
-  }
-  if (![self.collectionViewModel hasItem:entry
-                 inSectionWithIdentifier:sectionIdentifier]) {
-    return;
-  }
-
-  [self deleteItemsAtIndexPaths:@[ [self.collectionViewModel
-                                    indexPathForItem:entry] ]];
 }
 
-- (void)openEntryInNewTab:(ReadingListCollectionViewItem*)entry {
+- (void)openEntryInNewTab:(CollectionViewItem*)entry {
   [self.delegate readingListCollectionViewController:self
-                                   openNewTabWithURL:entry.url
+                                    openItemInNewTab:entry
                                            incognito:NO];
 }
 
-- (void)openEntryInNewIncognitoTab:(ReadingListCollectionViewItem*)entry {
+- (void)openEntryInNewIncognitoTab:(CollectionViewItem*)entry {
   [self.delegate readingListCollectionViewController:self
-                                   openNewTabWithURL:entry.url
+                                    openItemInNewTab:entry
                                            incognito:YES];
 }
 
-- (void)copyEntryURL:(ReadingListCollectionViewItem*)entry {
-  StoreURLInPasteboard(entry.url);
+- (void)openEntryOffline:(CollectionViewItem*)entry {
+  [self.delegate readingListCollectionViewController:self
+                             openItemOfflineInNewTab:entry];
 }
 
-- (void)openEntryOffline:(ReadingListCollectionViewItem*)entry {
-  const ReadingListEntry* readingListEntry =
-      [self readingListEntryForItem:entry];
-
-  if (!readingListEntry) {
-    return;
-  }
-
-  if (readingListEntry->DistilledState() == ReadingListEntry::PROCESSED) {
-    const GURL entryURL = readingListEntry->URL();
-    GURL offlineURL = reading_list::OfflineURLForPath(
-        readingListEntry->DistilledPath(), entryURL,
-        readingListEntry->DistilledURL());
-
-    [self.delegate readingListCollectionViewController:self
-                                        openOfflineURL:offlineURL
-                                 correspondingEntryURL:entryURL];
-  }
-}
-
-- (void)markEntryRead:(ReadingListCollectionViewItem*)entry {
-  if (![self.collectionViewModel hasItem:entry
-                 inSectionWithIdentifier:SectionIdentifierUnread]) {
-    return;
-  }
-  [self markItemsReadAtIndexPath:@[ [self.collectionViewModel
-                                     indexPathForItem:entry] ]];
-}
-
-- (void)markEntryUnread:(ReadingListCollectionViewItem*)entry {
-  if (![self.collectionViewModel hasItem:entry
-                 inSectionWithIdentifier:SectionIdentifierRead]) {
-    return;
-  }
-  [self markItemsUnreadAtIndexPath:@[ [self.collectionViewModel
+- (void)markEntryRead:(CollectionViewItem*)entry {
+  if ([self.collectionViewModel hasItem:entry
+                inSectionWithIdentifier:SectionIdentifierUnread]) {
+    [self markItemsReadAtIndexPath:@[ [self.collectionViewModel
                                        indexPathForItem:entry] ]];
+  }
+}
+
+- (void)markEntryUnread:(CollectionViewItem*)entry {
+  if ([self.collectionViewModel hasItem:entry
+                inSectionWithIdentifier:SectionIdentifierRead]) {
+    [self markItemsUnreadAtIndexPath:@[ [self.collectionViewModel
+                                         indexPathForItem:entry] ]];
+  }
 }
 
 #pragma mark - Private methods
@@ -477,6 +376,7 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 
 - (void)loadModel {
   [super loadModel];
+  _dataSourceHasBeenModified = NO;
 
   if (!self.dataSource.hasElements) {
     [self collectionIsEmpty];
@@ -488,162 +388,39 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   }
 }
 
-- (void)loadItemsFromMap:(const ItemsMapByDate&)map
-               toSection:(SectionIdentifier)sectionIdentifier {
-  if (map.size() == 0) {
+- (void)loadItemsFromArray:(NSArray<CollectionViewItem*>*)items
+                 toSection:(SectionIdentifier)sectionIdentifier {
+  if (items.count == 0) {
     return;
   }
   CollectionViewModel* model = self.collectionViewModel;
   [model addSectionWithIdentifier:sectionIdentifier];
   [model setHeader:[self headerForSection:sectionIdentifier]
       forSectionWithIdentifier:sectionIdentifier];
-  // Reverse iterate to add newer entries at the top.
-  ItemsMapByDate::const_reverse_iterator iterator = map.rbegin();
-  for (; iterator != map.rend(); iterator++) {
-    [model addItem:iterator->second toSectionWithIdentifier:sectionIdentifier];
+  for (CollectionViewItem* item in items) {
+    item.type = ItemTypeItem;
+    [self.dataSource fetchFaviconForItem:item];
+    [model addItem:item toSectionWithIdentifier:sectionIdentifier];
   }
 }
 
 - (void)loadItems {
-  ItemsMapByDate read_map;
-  ItemsMapByDate unread_map;
-  [self fillUnreadMap:unread_map readMap:read_map];
-  [self loadItemsFromMap:unread_map toSection:SectionIdentifierUnread];
-  [self loadItemsFromMap:read_map toSection:SectionIdentifierRead];
+  NSMutableArray<CollectionViewItem*>* readArray = [NSMutableArray array];
+  NSMutableArray<CollectionViewItem*>* unreadArray = [NSMutableArray array];
+  [self.dataSource fillReadItems:readArray
+                     unreadItems:unreadArray
+                    withDelegate:self];
+  [self loadItemsFromArray:unreadArray toSection:SectionIdentifierUnread];
+  [self loadItemsFromArray:readArray toSection:SectionIdentifierRead];
 
-  BOOL hasRead = read_map.size() > 0;
+  BOOL hasRead = readArray.count > 0;
   [_toolbar setHasReadItem:hasRead];
-}
-
-- (void)fillUnreadMap:(ItemsMapByDate&)unread_map
-              readMap:(ItemsMapByDate&)read_map {
-  for (const auto& url : [self.dataSource keys]) {
-    const ReadingListEntry* entry = [self.dataSource entryWithURL:url];
-    ReadingListCollectionViewItem* item =
-        [self cellItemForReadingListEntry:*entry];
-    item.accessibilityDelegate = self;
-    if (entry->IsRead()) {
-      read_map.insert(std::make_pair(entry->UpdateTime(), item));
-    } else {
-      unread_map.insert(std::make_pair(entry->UpdateTime(), item));
-    }
-  }
 }
 
 - (void)applyPendingUpdates {
   if (_dataSourceHasBeenModified) {
     [self reloadData];
   }
-}
-
-- (BOOL)hasDataSourceChanged {
-  ItemsMapByDate read_map;
-  ItemsMapByDate unread_map;
-  [self fillUnreadMap:unread_map readMap:read_map];
-
-  if ([self section:SectionIdentifierRead isDifferentOfMap:read_map])
-    return YES;
-  if ([self section:SectionIdentifierUnread isDifferentOfMap:unread_map])
-    return YES;
-
-  return NO;
-}
-
-- (BOOL)section:(SectionIdentifier)sectionIdentifier
-    isDifferentOfMap:(ItemsMapByDate&)map {
-  if (![self.collectionViewModel
-          hasSectionForSectionIdentifier:sectionIdentifier]) {
-    return !map.empty();
-  }
-
-  NSArray* items =
-      [self.collectionViewModel itemsInSectionWithIdentifier:sectionIdentifier];
-  if ([items count] != map.size())
-    return YES;
-
-  NSMutableArray<ReadingListCollectionViewItem*>* itemsToReconfigure =
-      [NSMutableArray array];
-
-  NSInteger index = 0;
-  ItemsMapByDate::const_reverse_iterator iterator = map.rbegin();
-  for (; iterator != map.rend(); iterator++) {
-    ReadingListCollectionViewItem* oldItem =
-        base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(items[index]);
-    ReadingListCollectionViewItem* newItem = iterator->second;
-    if (oldItem.url == newItem.url) {
-      if (![oldItem isEqual:newItem]) {
-        oldItem.title = newItem.title;
-        oldItem.subtitle = newItem.subtitle;
-        oldItem.distillationState = newItem.distillationState;
-        oldItem.distillationDate = newItem.distillationDate;
-        oldItem.distillationSize = newItem.distillationSize;
-        [itemsToReconfigure addObject:oldItem];
-      }
-      if (oldItem.faviconPageURL != newItem.faviconPageURL) {
-        [self setItem:oldItem faviconURL:newItem.faviconPageURL];
-      }
-    }
-    if (![oldItem isEqual:newItem]) {
-      return YES;
-    }
-    index++;
-  }
-  [self reconfigureCellsForItems:itemsToReconfigure];
-  return NO;
-}
-
-- (ReadingListCollectionViewItem*)cellItemForReadingListEntry:
-    (const ReadingListEntry&)entry {
-  GURL url = entry.URL();
-  ReadingListCollectionViewItem* item = [[ReadingListCollectionViewItem alloc]
-           initWithType:ItemTypeItem
-                    url:url
-      distillationState:reading_list::UIStatusFromModelStatus(
-                            entry.DistilledState())];
-
-  [self setItem:item
-      faviconURL:entry.DistilledURL().is_valid() ? entry.DistilledURL() : url];
-
-  BOOL has_distillation_details =
-      entry.DistilledState() == ReadingListEntry::PROCESSED &&
-      entry.DistillationSize() != 0 && entry.DistillationTime() != 0;
-  NSString* fullUrlString =
-      base::SysUTF16ToNSString(url_formatter::FormatUrl(url));
-  NSString* urlString =
-      base::SysUTF16ToNSString(url_formatter::FormatUrl(url.GetOrigin()));
-  NSString* title = base::SysUTF8ToNSString(entry.Title());
-  item.title = [title length] ? title : fullUrlString;
-  item.subtitle = urlString;
-  item.distillationDate =
-      has_distillation_details ? entry.DistillationTime() : 0;
-  item.distillationSize =
-      has_distillation_details ? entry.DistillationSize() : 0;
-  return item;
-}
-
-- (void)setItem:(ReadingListCollectionViewItem*)item
-     faviconURL:(const GURL&)url {
-  item.faviconPageURL = url;
-
-  __weak ReadingListCollectionViewItem* weakItem = item;
-  __weak ReadingListCollectionViewController* weakSelf = self;
-  void (^completionBlock)(FaviconAttributes* attributes) =
-      ^(FaviconAttributes* attributes) {
-        ReadingListCollectionViewItem* strongItem = weakItem;
-        ReadingListCollectionViewController* strongSelf = weakSelf;
-        if (!strongSelf || !strongItem) {
-          return;
-        }
-
-        strongItem.attributes = attributes;
-
-        if ([strongSelf.collectionViewModel hasItem:strongItem]) {
-          [strongSelf reconfigureCellsForItems:@[ strongItem ]];
-        }
-      };
-
-  [self.attributesProvider fetchFaviconAttributesForURL:url
-                                             completion:completionBlock];
 }
 
 - (BOOL)hasItemInSection:(SectionIdentifier)sectionIdentifier {
@@ -689,27 +466,14 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   CollectionViewItem* touchedItem =
       [self.collectionViewModel itemAtIndexPath:touchedItemIndexPath];
 
-  if (touchedItem == [self.collectionViewModel
-                         headerForSection:touchedItemIndexPath.section] ||
-      ![touchedItem isKindOfClass:[ReadingListCollectionViewItem class]]) {
+  if (touchedItem.type != ItemTypeItem) {
     // Do not trigger context menu on headers.
     return;
   }
 
-  ReadingListCollectionViewItem* readingListItem =
-      base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(touchedItem);
-
   [self.delegate readingListCollectionViewController:self
-                           displayContextMenuForItem:readingListItem
+                           displayContextMenuForItem:touchedItem
                                              atPoint:touchLocation];
-}
-
-- (const ReadingListEntry*)readingListEntryForItem:
-    (ReadingListCollectionViewItem*)item {
-  const ReadingListEntry* readingListEntry =
-      [self.dataSource entryWithURL:item.url];
-
-  return readingListEntry;
 }
 
 #pragma mark - ReadingListToolbarDelegate
@@ -873,8 +637,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   }
 
   [self updateItemsInSectionIdentifier:SectionIdentifierUnread
-                     usingEntryUpdater:^(const GURL& url) {
-                       [self.dataSource setReadStatus:YES forURL:url];
+                     usingEntryUpdater:^(CollectionViewItem* item) {
+                       [self.dataSource setReadStatus:YES forItem:item];
                      }];
 
   [self exitEditingModeAnimated:YES];
@@ -889,8 +653,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   }
 
   [self updateItemsInSectionIdentifier:SectionIdentifierRead
-                     usingEntryUpdater:^(const GURL& url) {
-                       [self.dataSource setReadStatus:NO forURL:url];
+                     usingEntryUpdater:^(CollectionViewItem* item) {
+                       [self.dataSource setReadStatus:NO forItem:item];
                      }];
 
   [self exitEditingModeAnimated:YES];
@@ -903,8 +667,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   NSArray* sortedIndexPaths =
       [indexPaths sortedArrayUsingSelector:@selector(compare:)];
   [self updateIndexPaths:sortedIndexPaths
-       usingEntryUpdater:^(const GURL& url) {
-         [self.dataSource setReadStatus:YES forURL:url];
+       usingEntryUpdater:^(CollectionViewItem* item) {
+         [self.dataSource setReadStatus:YES forItem:item];
        }];
 
   [self exitEditingModeAnimated:YES];
@@ -916,8 +680,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   NSArray* sortedIndexPaths =
       [indexPaths sortedArrayUsingSelector:@selector(compare:)];
   [self updateIndexPaths:sortedIndexPaths
-       usingEntryUpdater:^(const GURL& url) {
-         [self.dataSource setReadStatus:NO forURL:url];
+       usingEntryUpdater:^(CollectionViewItem* item) {
+         [self.dataSource setReadStatus:NO forItem:item];
        }];
 
   [self exitEditingModeAnimated:YES];
@@ -932,9 +696,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
   }
 
   [self updateItemsInSectionIdentifier:SectionIdentifierRead
-                     usingEntryUpdater:^(const GURL& url) {
-                       [self logDeletionHistogramsForEntry:url];
-                       [self.dataSource removeEntryWithURL:url];
+                     usingEntryUpdater:^(CollectionViewItem* item) {
+                       [self.dataSource removeEntryFromItem:item];
                      }];
 
   [self exitEditingModeAnimated:YES];
@@ -957,9 +720,8 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 
 - (void)deleteItemsAtIndexPaths:(NSArray*)indexPaths {
   [self updateIndexPaths:indexPaths
-       usingEntryUpdater:^(const GURL& url) {
-         [self logDeletionHistogramsForEntry:url];
-         [self.dataSource removeEntryWithURL:url];
+       usingEntryUpdater:^(CollectionViewItem* item) {
+         [self.dataSource removeEntryFromItem:item];
        }];
 
   [self exitEditingModeAnimated:YES];
@@ -981,62 +743,27 @@ using ItemsMapByDate = std::multimap<int64_t, ReadingListCollectionViewItem*>;
 
 - (void)updateItemsInSectionIdentifier:(SectionIdentifier)identifier
                      usingEntryUpdater:(EntryUpdater)updater {
-  self.shouldMonitorDataSource = NO;
-  auto token = [self.dataSource beginBatchUpdates];
+  [self.dataSource beginBatchUpdates];
   NSArray* readItems =
       [self.collectionViewModel itemsInSectionWithIdentifier:identifier];
   // Read the objects in reverse order to keep the order (last modified first).
   for (id item in [readItems reverseObjectEnumerator]) {
-    ReadingListCollectionViewItem* readingListItem =
-        base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(item);
     if (updater)
-      updater(readingListItem.url);
+      updater(item);
   }
-  token.reset();
-  self.shouldMonitorDataSource = YES;
+  [self.dataSource endBatchUpdates];
 }
 
 - (void)updateIndexPaths:(NSArray<NSIndexPath*>*)indexPaths
        usingEntryUpdater:(EntryUpdater)updater {
-  self.shouldMonitorDataSource = NO;
-  auto token = [self.dataSource beginBatchUpdates];
+  [self.dataSource beginBatchUpdates];
   // Read the objects in reverse order to keep the order (last modified first).
   for (NSIndexPath* index in [indexPaths reverseObjectEnumerator]) {
-    CollectionViewItem* cell = [self.collectionViewModel itemAtIndexPath:index];
-    ReadingListCollectionViewItem* readingListItem =
-        base::mac::ObjCCastStrict<ReadingListCollectionViewItem>(cell);
+    CollectionViewItem* item = [self.collectionViewModel itemAtIndexPath:index];
     if (updater)
-      updater(readingListItem.url);
+      updater(item);
   }
-  // Leave the batch update while it is not monitored.
-  token.reset();
-  self.shouldMonitorDataSource = YES;
-}
-
-- (void)logDeletionHistogramsForEntry:(const GURL&)url {
-  const ReadingListEntry* entry = [self.dataSource entryWithURL:url];
-
-  if (!entry)
-    return;
-
-  int64_t firstRead = entry->FirstReadTime();
-  if (firstRead > 0) {
-    // Log 0 if the entry has never been read.
-    firstRead = (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds() -
-                firstRead;
-    // Convert it to hours.
-    firstRead = firstRead / base::Time::kMicrosecondsPerHour;
-  }
-  UMA_HISTOGRAM_COUNTS_10000("ReadingList.FirstReadAgeOnDeletion", firstRead);
-
-  int64_t age = (base::Time::Now() - base::Time::UnixEpoch()).InMicroseconds() -
-                entry->CreationTime();
-  // Convert it to hours.
-  age = age / base::Time::kMicrosecondsPerHour;
-  if (entry->IsRead())
-    UMA_HISTOGRAM_COUNTS_10000("ReadingList.Read.AgeOnDeletion", age);
-  else
-    UMA_HISTOGRAM_COUNTS_10000("ReadingList.Unread.AgeOnDeletion", age);
+  [self.dataSource endBatchUpdates];
 }
 
 - (void)moveItemsFromSection:(SectionIdentifier)sourceSectionIdentifier

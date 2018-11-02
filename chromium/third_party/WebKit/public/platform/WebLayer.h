@@ -36,6 +36,7 @@
 #include "WebFloatSize.h"
 #include "WebPoint.h"
 #include "WebRect.h"
+#include "WebScrollBoundaryBehavior.h"
 #include "WebSize.h"
 #include "WebString.h"
 #include "WebTouchInfo.h"
@@ -96,6 +97,9 @@ class WebLayer {
 
   virtual void SetIsRootForIsolatedGroup(bool) = 0;
   virtual bool IsRootForIsolatedGroup() = 0;
+
+  virtual void SetShouldHitTest(bool) = 0;
+  virtual bool ShouldHitTest() = 0;
 
   virtual void SetOpaque(bool) = 0;
   virtual bool Opaque() const = 0;
@@ -166,9 +170,9 @@ class WebLayer {
   virtual void SetScrollPosition(WebFloatPoint) = 0;
   virtual WebFloatPoint ScrollPosition() const = 0;
 
-  // To set a WebLayer as scrollable we must specify the corresponding clip
-  // layer.
-  virtual void SetScrollClipLayer(WebLayer*) = 0;
+  // To set a WebLayer as scrollable we must specify the scrolling container
+  // bounds.
+  virtual void SetScrollable(const WebSize& scroll_container_bounds) = 0;
   virtual bool Scrollable() const = 0;
   virtual void SetUserScrollable(bool horizontal, bool vertical) = 0;
   virtual bool UserScrollableHorizontal() const = 0;
@@ -208,6 +212,12 @@ class WebLayer {
   // responsibility of the client to reset the layer's scroll client before
   // deleting the scroll client.
   virtual void SetScrollClient(WebLayerScrollClient*) = 0;
+
+  // The scroll-boundary-behavior allows developers to specify whether the
+  // scroll should be propagated to its ancestors at the beginning of the
+  // scroll, and whether the overscroll should cause UI affordance such as
+  // glow/bounce etc.
+  virtual void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&) = 0;
 
   // Sets the cc-side layer client.
   virtual void SetLayerClient(cc::LayerClient*) = 0;

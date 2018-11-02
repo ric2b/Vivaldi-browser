@@ -93,8 +93,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "automationInternal": {
@@ -412,7 +411,7 @@
     }
   ],
   "extension.getURL": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script", "extension_service_worker"]
   },
   "extension.getViews": [
     {
@@ -463,6 +462,10 @@
     "dependencies": ["permission:feedbackPrivate"],
     "contexts": ["blessed_extension"]
   },
+  "feedbackPrivate.readLogSource": {
+    "platforms": ["chromeos"],
+    "session_types": ["kiosk"]
+  },
   "fileBrowserHandler": {
     "dependencies": ["permission:fileBrowserHandler"],
     "contexts": ["blessed_extension"]
@@ -484,10 +487,6 @@
   "fileManagerPrivateInternal": {
     "internal": true,
     "dependencies": ["permission:fileManagerPrivate"],
-    "contexts": ["blessed_extension"]
-  },
-  "fileSystem": {
-    "dependencies": ["permission:fileSystem"],
     "contexts": ["blessed_extension"]
   },
   "fileSystemProvider": {
@@ -522,7 +521,8 @@
   "i18n": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": ["blessed_extension", "unblessed_extension", "content_script",
+                 "lock_screen_extension"]
   },
   "identity": {
     "dependencies": ["permission:identity"],
@@ -572,8 +572,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "launcherPage": {
@@ -582,10 +581,6 @@
   },
   "launcherSearchProvider": {
     "dependencies": ["permission:launcherSearchProvider"],
-    "contexts": ["blessed_extension"]
-  },
-  "logPrivate": {
-    "dependencies": ["permission:logPrivate"],
     "contexts": ["blessed_extension"]
   },
   "webcamPrivate": {
@@ -650,8 +645,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "permissions": {
@@ -697,8 +691,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ],
     "platforms": ["chromeos"]
   },
@@ -728,8 +721,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "signedInDevices": {
@@ -798,8 +790,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "virtualKeyboardPrivate": {

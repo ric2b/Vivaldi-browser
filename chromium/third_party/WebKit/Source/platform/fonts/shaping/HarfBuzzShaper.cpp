@@ -496,7 +496,7 @@ void SetFontFeatures(const Font* font, FeaturesVector* features) {
 }
 
 class CapsFeatureSettingsScopedOverlay final {
-  STACK_ALLOCATED()
+  STACK_ALLOCATED();
 
  public:
   CapsFeatureSettingsScopedOverlay(FeaturesVector*,
@@ -713,9 +713,16 @@ PassRefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,
     if (start < segment_range.end && end > segment_range.start)
       ShapeSegment(&range_data, segment_range, result.Get());
   }
-  DCHECK(!result->NumCharacters() || (start == result->StartIndexForResult() &&
-                                      end == result->EndIndexForResult()));
-  return result.Release();
+
+#if DCHECK_IS_ON()
+  DCHECK_EQ(length, result->NumCharacters());
+  if (length) {
+    DCHECK_EQ(start, result->StartIndexForResult());
+    DCHECK_EQ(end, result->EndIndexForResult());
+  }
+#endif
+
+  return result;
 }
 
 PassRefPtr<ShapeResult> HarfBuzzShaper::Shape(const Font* font,

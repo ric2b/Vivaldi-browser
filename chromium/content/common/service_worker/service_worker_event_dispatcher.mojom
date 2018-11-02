@@ -4,12 +4,12 @@
 
 module content.mojom;
 
-import "components/payments/mojom/payment_app.mojom";
-import "content/common/url_loader.mojom";
+import "content/public/common/url_loader.mojom";
 import "mojo/common/string16.mojom";
 import "mojo/common/time.mojom";
 import "third_party/WebKit/public/platform/modules/background_sync/background_sync.mojom";
 import "third_party/WebKit/public/platform/modules/fetch/fetch_api_request.mojom";
+import "third_party/WebKit/public/platform/modules/payments/payment_app.mojom";
 import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_event_status.mojom";
 import "third_party/WebKit/public/platform/modules/serviceworker/service_worker_stream_handle.mojom";
 import "url/mojo/origin.mojom";
@@ -132,8 +132,8 @@ interface ServiceWorkerEventDispatcher {
       => (blink.mojom.ServiceWorkerEventStatus status,
           mojo.common.mojom.Time dispatch_event_time);
   DispatchPaymentRequestEvent(int32 payment_request_id,
-                              payments.mojom.PaymentAppRequest app_request,
-                              payments.mojom.PaymentAppResponseCallback response_callback)
+                              payments.mojom.PaymentRequestEventData request_data,
+                              payments.mojom.PaymentHandlerResponseCallback response_callback)
       => (blink.mojom.ServiceWorkerEventStatus status,
           mojo.common.mojom.Time dispatch_event_time);
   DispatchExtendableMessageEvent(ExtendableMessageEvent event)

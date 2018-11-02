@@ -45,6 +45,7 @@ import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.DOMUtils;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.net.test.EmbeddedTestServer;
+import org.chromium.policy.test.annotations.Policies;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -135,33 +136,6 @@ public class ContextMenuTest implements CustomMainActivityStart {
                 R.id.contextmenu_copy_link_address);
 
         assertStringContains("test_link.html", getClipboardText());
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"Browser"})
-    @RetryOnFailure
-    public void testCopyLinkTextSimple() throws Throwable {
-        Tab tab = mDownloadTestRule.getActivity().getActivityTab();
-        ContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
-                mDownloadTestRule.getActivity(), tab, "testLink", R.id.contextmenu_copy_link_text);
-
-        Assert.assertEquals(
-                "Clipboard text was not what was expected", "Test Link", getClipboardText());
-    }
-
-    @Test
-    @MediumTest
-    @Feature({"Browser"})
-    @RetryOnFailure
-    public void testCopyLinkTextComplex() throws Throwable {
-        Tab tab = mDownloadTestRule.getActivity().getActivityTab();
-        ContextMenuUtils.selectContextMenuItem(InstrumentationRegistry.getInstrumentation(),
-                mDownloadTestRule.getActivity(), tab, "copyLinkTextComplex",
-                R.id.contextmenu_copy_link_text);
-
-        Assert.assertEquals("Clipboard text was not what was expected",
-                "This is pretty extreme \n(newline). ", getClipboardText());
     }
 
     @Test
@@ -399,8 +373,8 @@ public class ContextMenuTest implements CustomMainActivityStart {
         ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testLink");
 
         Integer[] expectedItems = {R.id.contextmenu_open_in_new_tab,
-                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_copy_link_address,
-                R.id.contextmenu_copy_link_text, R.id.contextmenu_save_link_as};
+                R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_save_link_as,
+                R.id.contextmenu_copy_link_address, R.id.contextmenu_share_link};
         assertMenuItemsAreEqual(menu, expectedItems);
     }
 
@@ -422,6 +396,21 @@ public class ContextMenuTest implements CustomMainActivityStart {
     @Test
     @SmallTest
     @Feature({"Browser", "ContextMenu"})
+    @Policies.Add({ @Policies.Item(key = "DefaultSearchProviderEnabled", string = "false") })
+    @RetryOnFailure
+    public void testContextMenuRetrievesImageOptions_NoDefaultSearchEngine()
+            throws TimeoutException, InterruptedException {
+        Tab tab = mDownloadTestRule.getActivity().getActivityTab();
+        ContextMenu menu = ContextMenuUtils.openContextMenu(tab, "testImage");
+
+        Integer[] expectedItems = {R.id.contextmenu_save_image,
+                R.id.contextmenu_open_image_in_new_tab, R.id.contextmenu_share_image};
+        assertMenuItemsAreEqual(menu, expectedItems);
+    }
+
+    @Test
+    @SmallTest
+    @Feature({"Browser", "ContextMenu"})
     @RetryOnFailure
     public void testContextMenuRetrievesImageLinkOptions()
             throws TimeoutException, InterruptedException {
@@ -432,7 +421,7 @@ public class ContextMenuTest implements CustomMainActivityStart {
                 R.id.contextmenu_open_in_incognito_tab, R.id.contextmenu_copy_link_address,
                 R.id.contextmenu_save_link_as, R.id.contextmenu_save_image,
                 R.id.contextmenu_open_image_in_new_tab, R.id.contextmenu_search_by_image,
-                R.id.contextmenu_share_image};
+                R.id.contextmenu_share_image, R.id.contextmenu_share_link};
         assertMenuItemsAreEqual(menu, expectedItems);
     }
 

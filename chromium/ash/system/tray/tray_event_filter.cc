@@ -5,11 +5,14 @@
 #include "ash/system/tray/tray_event_filter.h"
 
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/wm/container_finder.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/aura/window.h"
+#include "ui/gfx/native_widget_types.h"
 #include "ui/views/widget/widget.h"
 
 namespace ash {
@@ -38,16 +41,21 @@ void TrayEventFilter::RemoveWrapper(TrayBubbleWrapper* wrapper) {
 void TrayEventFilter::OnPointerEventObserved(
     const ui::PointerEvent& event,
     const gfx::Point& location_in_screen,
-    views::Widget* target) {
+    gfx::NativeView target) {
   if (event.type() == ui::ET_POINTER_DOWN)
     ProcessPressedEvent(location_in_screen, target);
 }
 
 void TrayEventFilter::ProcessPressedEvent(const gfx::Point& location_in_screen,
-                                          views::Widget* target) {
-  if (target) {
-    aura::Window* window = target->GetNativeWindow();
-    int container_id = wm::GetContainerForWindow(window)->id();
+                                          gfx::NativeView target) {
+  // The hit target window for the virtual keyboard isn't the same as its
+  // views::Widget.
+  const views::Widget* target_widget =
+      views::Widget::GetTopLevelWidgetForNativeView(target);
+  const aura::Window* container =
+      target ? wm::GetContainerForWindow(target) : nullptr;
+  if (target && container) {
+    const int container_id = container->id();
     // Don't process events that occurred inside an embedded menu, for example
     // the right-click menu in a popup notification.
     if (container_id == kShellWindowId_MenuContainer)
@@ -55,10 +63,13 @@ void TrayEventFilter::ProcessPressedEvent(const gfx::Point& location_in_screen,
     // Don't process events that occurred inside a popup notification
     // from message center.
     if (container_id == kShellWindowId_StatusContainer &&
-        window->type() == aura::client::WINDOW_TYPE_POPUP &&
-        target->IsAlwaysOnTop()) {
+        target->type() == aura::client::WINDOW_TYPE_POPUP && target_widget &&
+        target_widget->IsAlwaysOnTop()) {
       return;
     }
+    // Don't process events that occurred inside a virtual keyboard.
+    if (container_id == kShellWindowId_VirtualKeyboardContainer)
+      return;
   }
 
   std::set<TrayBackgroundView*> trays;
@@ -73,6 +84,19 @@ void TrayEventFilter::ProcessPressedEvent(const gfx::Point& location_in_screen,
 
     gfx::Rect bounds = bubble_widget->GetWindowBoundsInScreen();
     bounds.Inset(wrapper->bubble_view()->GetBorderInsets());
+    // System tray can be dragged to show the bubble if it is in tablet mode.
+    // During the drag, the bubble's logical bounds can extend outside of the
+    // work area, but its visual bounds are only within the work area. Restrict
+    // |bounds| so that events located outside the bubble's visual bounds are
+    // treated as outside of the bubble.
+    int bubble_container_id =
+        wm::GetContainerForWindow(bubble_widget->GetNativeWindow())->id();
+    if (Shell::Get()
+            ->tablet_mode_controller()
+            ->IsTabletModeWindowManagerEnabled() &&
+        bubble_container_id == kShellWindowId_SettingBubbleContainer) {
+      bounds.Intersect(bubble_widget->GetWorkAreaBoundsInScreen());
+    }
     if (bounds.Contains(location_in_screen))
       continue;
     if (wrapper->tray()) {

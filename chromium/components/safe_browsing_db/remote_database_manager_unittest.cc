@@ -8,10 +8,12 @@
 
 #include "base/logging.h"
 #include "base/metrics/field_trial.h"
+#include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "components/safe_browsing_db/safe_browsing_api_handler.h"
 #include "components/variations/variations_associated_data.h"
+#include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace safe_browsing {
@@ -22,7 +24,7 @@ class TestSafeBrowsingApiHandler : public SafeBrowsingApiHandler {
  public:
   void StartURLCheck(const URLCheckCallbackMeta& callback,
                      const GURL& url,
-                     const std::vector<SBThreatType>& threat_types) override {}
+                     const SBThreatTypeSet& threat_types) override {}
 };
 
 }  // namespace
@@ -35,6 +37,11 @@ class RemoteDatabaseManagerTest : public testing::Test {
   void SetUp() override {
     SafeBrowsingApiHandler::SetInstance(&api_handler_);
     db_ = new RemoteSafeBrowsingDatabaseManager();
+  }
+
+  void TearDown() override {
+    db_ = nullptr;
+    base::RunLoop().RunUntilIdle();
   }
 
   // Setup the two field trial params.  These are read in db_'s ctor.
@@ -59,6 +66,7 @@ class RemoteDatabaseManagerTest : public testing::Test {
                                                      group_name, params));
   }
 
+  content::TestBrowserThreadBundle thread_bundle_;
   std::unique_ptr<base::FieldTrialList> field_trials_;
   TestSafeBrowsingApiHandler api_handler_;
   scoped_refptr<RemoteSafeBrowsingDatabaseManager> db_;

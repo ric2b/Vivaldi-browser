@@ -20,7 +20,7 @@ struct DebugBorderQuadState {
 };
 
 struct RenderPassQuadState {
-  int32 render_pass_id;
+  uint64 render_pass_id;
 
   // If nonzero, resource id of mask to use when drawing this pass.
   uint32 mask_resource_id;
@@ -104,6 +104,7 @@ struct YUVVideoQuadState {
   float resource_multiplier;
   uint32 bits_per_channel;
   gfx.mojom.ColorSpace video_color_space;
+  bool require_overlay;
 };
 
 union DrawQuadState {

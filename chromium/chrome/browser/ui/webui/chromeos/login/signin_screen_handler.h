@@ -11,6 +11,7 @@
 #include <string>
 
 #include "ash/public/interfaces/touch_view.mojom.h"
+#include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/callback.h"
 #include "base/compiler_specific.h"
 #include "base/containers/hash_tables.h"
@@ -109,8 +110,9 @@ class LoginDisplayWebUIHandler {
                                         const std::string& password) = 0;
   virtual void ShowWhitelistCheckFailedError() = 0;
   virtual void ShowUnrecoverableCrypthomeErrorDialog() = 0;
-  virtual void LoadUsers(const base::ListValue& users_list,
-                         bool show_guest) = 0;
+  virtual void LoadUsers(const user_manager::UserList& users,
+                         const base::ListValue& users_list) = 0;
+
  protected:
   virtual ~LoginDisplayWebUIHandler() {}
 };
@@ -238,7 +240,8 @@ class SigninScreenHandler
       public input_method::ImeKeyboard::Observer,
       public ash::mojom::TouchViewObserver,
       public lock_screen_apps::StateObserver,
-      public OobeUI::Observer {
+      public OobeUI::Observer,
+      public ash::WallpaperControllerObserver {
  public:
   SigninScreenHandler(
       const scoped_refptr<NetworkStateInformer>& network_state_informer,
@@ -272,9 +275,13 @@ class SigninScreenHandler
   // Required Local State preferences.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
-  // OobeUI::Observer implemetation.
+  // OobeUI::Observer implementation:
   void OnCurrentScreenChanged(OobeScreen current_screen,
                               OobeScreen new_screen) override;
+
+  // ash::WallpaperControllerObserver implementation:
+  void OnWallpaperColorsChanged() override;
+  void OnWallpaperDataChanged() override;
 
   void SetFocusPODCallbackForTesting(base::Closure callback);
 
@@ -313,6 +320,10 @@ class SigninScreenHandler
                           NetworkError::ErrorReason reason);
   void ReloadGaia(bool force_reload);
 
+  // Updates the color of the scrollable container on account picker screen,
+  // based on wallpaper color extraction results.
+  void UpdateAccountPickerColors();
+
   // BaseScreenHandler implementation:
   void DeclareLocalizedValues(
       ::login::LocalizedValuesBuilder* builder) override;
@@ -342,7 +353,8 @@ class SigninScreenHandler
                                 const std::string& password) override;
   void ShowWhitelistCheckFailedError() override;
   void ShowUnrecoverableCrypthomeErrorDialog() override;
-  void LoadUsers(const base::ListValue& users_list, bool show_guest) override;
+  void LoadUsers(const user_manager::UserList& users,
+                 const base::ListValue& users_list) override;
 
   // content::NotificationObserver implementation:
   void Observe(int type,
@@ -378,7 +390,6 @@ class SigninScreenHandler
                                  const std::string& input_method);
   void HandleOfflineLogin(const base::ListValue* args);
   void HandleShutdownSystem();
-  void HandleLoadWallpaper(const AccountId& account_id);
   void HandleRebootSystem();
   void HandleRemoveUser(const AccountId& account_id);
   void HandleShowAddUser(const base::ListValue* args);
@@ -402,7 +413,7 @@ class SigninScreenHandler
   void HandleLoginScreenUpdate();
   void HandleShowLoadingTimeoutError();
   void HandleShowSupervisedUserCreationScreen();
-  void HandleFocusPod(const AccountId& account_id);
+  void HandleFocusPod(const AccountId& account_id, bool load_wallpaper);
   void HandleNoPodFocused();
   void HandleHardlockPod(const std::string& user_id);
   void HandleLaunchKioskApp(const AccountId& app_account_id,
@@ -415,6 +426,8 @@ class SigninScreenHandler
   void HandleFirstIncorrectPasswordAttempt(const AccountId& account_id);
   void HandleMaxIncorrectPasswordAttempts(const AccountId& account_id);
   void HandleSendFeedbackAndResyncUserData();
+  void HandleRequestNewNoteAction(const std::string& request_type);
+  void HandleRecordLockScreenAppUnlockUIAction(const std::string& action);
   void HandleSetLockScreenAppsState(const std::string& state);
 
   // Sends the list of |keyboard_layouts| available for the |locale| that is
@@ -456,15 +469,13 @@ class SigninScreenHandler
 
   // input_method::ImeKeyboard::Observer implementation:
   void OnCapsLockChanged(bool enabled) override;
+  void OnLayoutChanging(const std::string& layout_name) override {}
 
   // Callback invoked after the feedback is finished.
   void OnFeedbackFinished();
 
   // Called when the cros property controlling allowed input methods changes.
   void OnAllowedInputMethodsChanged();
-
-  // Update the keyboard settings for |account_id|.
-  void SetKeyboardSettings(const AccountId& account_id);
 
   // Current UI state of the signin screen.
   UIState ui_state_ = UI_STATE_UNKNOWN;

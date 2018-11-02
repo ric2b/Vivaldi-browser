@@ -1,3 +1,7 @@
+<!-- PIN keyboard is used outside of OOBE/login/lock so it includes the JS it
+     executes. This causes security errors if textually included here. -->
+<link rel="import" href="chrome://oobe/custom_elements/pin_keyboard.html">
+
 <include src="gaia_buttons.html">
 <include src="gaia_card.html">
 <include src="gaia_header.html">
@@ -16,9 +20,13 @@
 <include src="active_directory_password_change.html">
 <include src="arc_terms_of_service.html">
 <include src="oobe_buttons.html">
+<include src="oobe_change_picture.html">
 <include src="oobe_dialog.html">
 <include src="oobe_reset.html">
 <include src="oobe_reset_confirmation_overlay.html">
+<include src="oobe_voice_interaction_value_prop.html">
+<include src="oobe_wait_for_container_ready.html">
 <include src="encryption_migration.html">
+<include src="enrollment_license_card.html">
 
 <script src="chrome://oobe/custom_elements.js"></script>

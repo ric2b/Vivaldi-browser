@@ -11,8 +11,8 @@
 #include "mojo/public/cpp/bindings/struct_traits.h"
 #include "ui/display/display_export.h"
 #include "ui/display/types/display_constants.h"
+#include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/icc_profile.h"
 
 namespace display {
 
@@ -66,6 +66,13 @@ class DISPLAY_EXPORT Display final {
     TOUCH_SUPPORT_UNAVAILABLE,
   };
 
+  // Accelerometer support for the display.
+  enum AccelerometerSupport {
+    ACCELEROMETER_SUPPORT_UNKNOWN,
+    ACCELEROMETER_SUPPORT_AVAILABLE,
+    ACCELEROMETER_SUPPORT_UNAVAILABLE,
+  };
+
   // Creates a display with kInvalidDisplayId as default.
   Display();
   explicit Display(int64_t id);
@@ -80,6 +87,14 @@ class DISPLAY_EXPORT Display final {
   // Indicates if a device scale factor is being explicitly enforced from the
   // command line via "--force-device-scale-factor".
   static bool HasForceDeviceScaleFactor();
+
+  // Returns the forced display color profile, which is given by
+  // "--force-color-profile".
+  static gfx::ColorSpace GetForcedColorProfile();
+
+  // Indicates if a display color profile is being explicitly enforced from the
+  // command line via "--force-color-profile".
+  static bool HasForceColorProfile();
 
   // Resets the caches used to determine if a device scale factor is being
   // forced from the command line via "--force-device-scale-factor", and thus
@@ -116,6 +131,13 @@ class DISPLAY_EXPORT Display final {
 
   TouchSupport touch_support() const { return touch_support_; }
   void set_touch_support(TouchSupport support) { touch_support_ = support; }
+
+  AccelerometerSupport accelerometer_support() const {
+    return accelerometer_support_;
+  }
+  void set_accelerometer_support(AccelerometerSupport support) {
+    accelerometer_support_ = support;
+  }
 
   // Utility functions that just return the size of display and
   // work area.
@@ -170,10 +192,10 @@ class DISPLAY_EXPORT Display final {
     maximum_cursor_size_ = size;
   }
 
-  // The full ICC profile of the display.
-  gfx::ICCProfile icc_profile() const { return icc_profile_; }
-  void set_icc_profile(const gfx::ICCProfile& icc_profile) {
-    icc_profile_ = icc_profile;
+  // The full color space of the display.
+  gfx::ColorSpace color_space() const { return color_space_; }
+  void set_color_space(const gfx::ColorSpace& color_space) {
+    color_space_ = color_space;
   }
 
   // The number of bits per pixel. Used by media query APIs.
@@ -208,8 +230,11 @@ class DISPLAY_EXPORT Display final {
   float device_scale_factor_;
   Rotation rotation_ = ROTATE_0;
   TouchSupport touch_support_ = TOUCH_SUPPORT_UNKNOWN;
+  AccelerometerSupport accelerometer_support_ = ACCELEROMETER_SUPPORT_UNKNOWN;
   gfx::Size maximum_cursor_size_;
-  gfx::ICCProfile icc_profile_;
+  // NOTE: this is not currently written to the mojom as it is not used in
+  // aura.
+  gfx::ColorSpace color_space_;
   int color_depth_;
   int depth_per_component_;
   bool is_monochrome_ = false;

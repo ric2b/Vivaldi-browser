@@ -10,6 +10,7 @@
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "core/frame/LocalFrame.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/presentation/MockWebPresentationClient.h"
 #include "modules/presentation/PresentationConnection.h"
 #include "modules/presentation/PresentationConnectionList.h"
 #include "platform/testing/URLTestHelpers.h"
@@ -22,89 +23,16 @@
 
 namespace blink {
 
-class MockEventListener : public EventListener {
+class MockEventListenerForPresentationReceiver : public EventListener {
  public:
-  MockEventListener() : EventListener(kCPPEventListenerType) {}
+  MockEventListenerForPresentationReceiver()
+      : EventListener(kCPPEventListenerType) {}
 
   bool operator==(const EventListener& other) const final {
     return this == &other;
   }
 
   MOCK_METHOD2(handleEvent, void(ExecutionContext* executionContext, Event*));
-};
-
-class MockWebPresentationClient : public WebPresentationClient {
-  void StartPresentation(
-      const WebVector<WebURL>& presentation_urls,
-      std::unique_ptr<WebPresentationConnectionCallbacks> callbacks) override {
-    return startPresentation_(presentation_urls, callbacks);
-  }
-  void ReconnectPresentation(
-      const WebVector<WebURL>& presentation_urls,
-      const WebString& presentation_id,
-      std::unique_ptr<WebPresentationConnectionCallbacks> callbacks) override {
-    return reconnectPresentation_(presentation_urls, presentation_id,
-                                  callbacks);
-  }
-
-  void GetAvailability(const WebVector<WebURL>& availability_urls,
-                       std::unique_ptr<WebPresentationAvailabilityCallbacks>
-                           callbacks) override {
-    return getAvailability_(availability_urls, callbacks);
-  }
-
- public:
-  MOCK_METHOD1(SetController, void(WebPresentationController*));
-
-  MOCK_METHOD1(SetReceiver, void(WebPresentationReceiver*));
-
-  MOCK_METHOD2(startPresentation_,
-               void(const WebVector<WebURL>& presentationUrls,
-                    std::unique_ptr<WebPresentationConnectionCallbacks>&));
-
-  MOCK_METHOD3(reconnectPresentation_,
-               void(const WebVector<WebURL>& presentationUrls,
-                    const WebString& presentationId,
-                    std::unique_ptr<WebPresentationConnectionCallbacks>&));
-
-  MOCK_METHOD4(SendString,
-               void(const WebURL& presentationUrl,
-                    const WebString& presentationId,
-                    const WebString& message,
-                    const WebPresentationConnectionProxy* proxy));
-
-  MOCK_METHOD5(SendArrayBuffer,
-               void(const WebURL& presentationUrl,
-                    const WebString& presentationId,
-                    const uint8_t* data,
-                    size_t length,
-                    const WebPresentationConnectionProxy* proxy));
-
-  MOCK_METHOD5(SendBlobData,
-               void(const WebURL& presentationUrl,
-                    const WebString& presentationId,
-                    const uint8_t* data,
-                    size_t length,
-                    const WebPresentationConnectionProxy* proxy));
-
-  MOCK_METHOD3(CloseConnection,
-               void(const WebURL& presentationUrl,
-                    const WebString& presentationId,
-                    const WebPresentationConnectionProxy*));
-
-  MOCK_METHOD2(TerminatePresentation,
-               void(const WebURL& presentationUrl,
-                    const WebString& presentationId));
-
-  MOCK_METHOD2(getAvailability_,
-               void(const WebVector<WebURL>& availabilityUrls,
-                    std::unique_ptr<WebPresentationAvailabilityCallbacks>&));
-
-  MOCK_METHOD1(StartListening, void(WebPresentationAvailabilityObserver*));
-
-  MOCK_METHOD1(StopListening, void(WebPresentationAvailabilityObserver*));
-
-  MOCK_METHOD1(SetDefaultPresentationUrls, void(const WebVector<WebURL>&));
 };
 
 class PresentationReceiverTest : public ::testing::Test {
@@ -142,9 +70,10 @@ TEST_F(PresentationReceiverTest, NoConnectionUnresolvedConnectionList) {
   V8TestingScope scope;
   auto receiver = new PresentationReceiver(&scope.GetFrame(), nullptr);
 
-  auto event_handler = new StrictMock<MockEventListener>();
+  auto event_handler =
+      new StrictMock<MockEventListenerForPresentationReceiver>();
   AddConnectionavailableEventListener(event_handler, receiver);
-  EXPECT_CALL(*event_handler, handleEvent(testing::_, testing::_)).Times(0);
+  EXPECT_CALL(*event_handler, handleEvent(::testing::_, ::testing::_)).Times(0);
 
   receiver->connectionList(scope.GetScriptState());
 
@@ -157,15 +86,16 @@ TEST_F(PresentationReceiverTest, OneConnectionResolvedConnectionListNoEvent) {
   V8TestingScope scope;
   auto receiver = new PresentationReceiver(&scope.GetFrame(), nullptr);
 
-  auto event_handler = new StrictMock<MockEventListener>();
+  auto event_handler =
+      new StrictMock<MockEventListenerForPresentationReceiver>();
   AddConnectionavailableEventListener(event_handler, receiver);
-  EXPECT_CALL(*event_handler, handleEvent(testing::_, testing::_)).Times(0);
+  EXPECT_CALL(*event_handler, handleEvent(::testing::_, ::testing::_)).Times(0);
 
   receiver->connectionList(scope.GetScriptState());
 
   // Receive first connection.
   receiver->OnReceiverConnectionAvailable(
-      WebPresentationInfo(KURL(KURL(), "http://example.com"), "id"));
+      WebPresentationInfo(KURL(NullURL(), "http://example.com"), "id"));
 
   VerifyConnectionListPropertyState(ScriptPromisePropertyBase::kResolved,
                                     receiver);
@@ -176,14 +106,14 @@ TEST_F(PresentationReceiverTest, TwoConnectionsFireOnconnectionavailableEvent) {
   V8TestingScope scope;
   auto receiver = new PresentationReceiver(&scope.GetFrame(), nullptr);
 
-  StrictMock<MockEventListener>* event_handler =
-      new StrictMock<MockEventListener>();
+  StrictMock<MockEventListenerForPresentationReceiver>* event_handler =
+      new StrictMock<MockEventListenerForPresentationReceiver>();
   AddConnectionavailableEventListener(event_handler, receiver);
-  EXPECT_CALL(*event_handler, handleEvent(testing::_, testing::_)).Times(1);
+  EXPECT_CALL(*event_handler, handleEvent(::testing::_, ::testing::_)).Times(1);
 
   receiver->connectionList(scope.GetScriptState());
 
-  WebPresentationInfo presentation_info(KURL(KURL(), "http://example.com"),
+  WebPresentationInfo presentation_info(KURL(NullURL(), "http://example.com"),
                                         "id");
   // Receive first connection.
   receiver->OnReceiverConnectionAvailable(presentation_info);
@@ -197,12 +127,12 @@ TEST_F(PresentationReceiverTest, TwoConnectionsNoEvent) {
   V8TestingScope scope;
   auto receiver = new PresentationReceiver(&scope.GetFrame(), nullptr);
 
-  StrictMock<MockEventListener>* event_handler =
-      new StrictMock<MockEventListener>();
+  StrictMock<MockEventListenerForPresentationReceiver>* event_handler =
+      new StrictMock<MockEventListenerForPresentationReceiver>();
   AddConnectionavailableEventListener(event_handler, receiver);
-  EXPECT_CALL(*event_handler, handleEvent(testing::_, testing::_)).Times(0);
+  EXPECT_CALL(*event_handler, handleEvent(::testing::_, ::testing::_)).Times(0);
 
-  WebPresentationInfo presentation_info(KURL(KURL(), "http://example.com"),
+  WebPresentationInfo presentation_info(KURL(NullURL(), "http://example.com"),
                                         "id");
   // Receive first connection.
   auto* connection1 =
@@ -222,7 +152,7 @@ TEST_F(PresentationReceiverTest, TwoConnectionsNoEvent) {
 
 TEST_F(PresentationReceiverTest, CreateReceiver) {
   MockWebPresentationClient client;
-  EXPECT_CALL(client, SetReceiver(testing::_));
+  EXPECT_CALL(client, SetReceiver(::testing::_));
 
   V8TestingScope scope;
   new PresentationReceiver(&scope.GetFrame(), &client);
@@ -233,14 +163,14 @@ TEST_F(PresentationReceiverTest, TestRemoveConnection) {
   auto receiver = new PresentationReceiver(&scope.GetFrame(), nullptr);
 
   // Receive first connection.
-  WebPresentationInfo presentation_info1(KURL(KURL(), "http://example1.com"),
+  WebPresentationInfo presentation_info1(KURL(NullURL(), "http://example1.com"),
                                          "id1");
   auto* connection1 =
       receiver->OnReceiverConnectionAvailable(presentation_info1);
   EXPECT_TRUE(connection1);
 
   // Receive second connection.
-  WebPresentationInfo presentation_info2(KURL(KURL(), "http://example2.com"),
+  WebPresentationInfo presentation_info2(KURL(NullURL(), "http://example2.com"),
                                          "id2");
   auto* connection2 =
       receiver->OnReceiverConnectionAvailable(presentation_info2);

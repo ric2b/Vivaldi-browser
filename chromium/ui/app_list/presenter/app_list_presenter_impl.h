@@ -57,6 +57,13 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
   // display (in which the |window| exists) the app list should be shown.
   void Show(int64_t display_id);
 
+  // Updates y position and opacity of app list. |is_end_gesture| means it is
+  // the end of the gesture dragging of app list from shelf and should restore
+  // the opacity of the app list.
+  void UpdateYPositionAndOpacity(int y_position_in_screen,
+                                 float background_opacity,
+                                 bool is_end_gesture);
+
   // Invoked to dismiss app list. This may leave the view open but hidden from
   // the user.
   void Dismiss();
@@ -133,6 +140,9 @@ class APP_LIST_PRESENTER_EXPORT AppListPresenterImpl
 
   // Whether should schedule snap back animation.
   bool should_snap_back_ = false;
+
+  // Whether the fullscreen app list feature is enabled;
+  const bool is_fullscreen_app_list_enabled_;
 
   // The app list interface pointer; used for reporting visibility changes.
   mojom::AppListPtr app_list_;

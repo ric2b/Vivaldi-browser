@@ -156,10 +156,6 @@ bool AppViewGuest::CheckMediaAccessPermission(WebContents* web_contents,
       web_contents, security_origin, type, guest_extension);
 }
 
-bool AppViewGuest::CanRunInDetachedState() const {
-  return true;
-}
-
 void AppViewGuest::CreateWebContents(
     const base::DictionaryValue& create_params,
     const WebContentsCreatedCallback& callback) {
@@ -268,7 +264,7 @@ void AppViewGuest::LaunchAppAndFireEvent(
       new base::DictionaryValue());
   embed_request->SetInteger(appview::kGuestInstanceID, guest_instance_id());
   embed_request->SetString(appview::kEmbedderID, owner_host());
-  embed_request->Set(appview::kData, data.release());
+  embed_request->Set(appview::kData, std::move(data));
   AppRuntimeEventRouter::DispatchOnEmbedRequestedEvent(
       browser_context(), std::move(embed_request), extension_host->extension());
 }

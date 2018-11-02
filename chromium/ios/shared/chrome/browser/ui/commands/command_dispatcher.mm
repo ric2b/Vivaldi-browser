@@ -36,6 +36,7 @@
     [self startDispatchingToTarget:target
                        forSelector:requiredInstanceMethods[i].name];
   }
+  free(requiredInstanceMethods);
 }
 
 - (void)stopDispatchingForSelector:(SEL)selector {
@@ -51,6 +52,7 @@
   for (unsigned int i = 0; i < methodCount; i++) {
     [self stopDispatchingForSelector:requiredInstanceMethods[i].name];
   }
+  free(requiredInstanceMethods);
 }
 
 // |-stopDispatchingToTarget| should be called much less often than
@@ -78,6 +80,15 @@
     return target->second;
   }
   return [super forwardingTargetForSelector:selector];
+}
+
+// Overriden to return YES for any registered method.
+- (BOOL)respondsToSelector:(SEL)selector {
+  auto target = _forwardingTargets.find(selector);
+  if (target != _forwardingTargets.end()) {
+    return YES;
+  }
+  return [super respondsToSelector:selector];
 }
 
 @end

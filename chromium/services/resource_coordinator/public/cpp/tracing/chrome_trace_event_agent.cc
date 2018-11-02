@@ -30,13 +30,14 @@ ChromeTraceEventAgent::ChromeTraceEventAgent(
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!g_chrome_trace_event_agent);
   g_chrome_trace_event_agent = this;
-  // agent_registry can be null in tests. The constructor is private and cannot
-  // be directly used in non-test scenarios. GetOrCreateInstance makes sure that
-  // the constructor is called with a non-null agent_registry.
+  // agent_registry can be null in tests.
   if (!agent_registry)
     return;
-  agent_registry->RegisterAgent(binding_.CreateInterfacePtrAndBind(),
-                                "traceEvents", mojom::TraceDataType::ARRAY,
+
+  mojom::AgentPtr agent;
+  binding_.Bind(mojo::MakeRequest(&agent));
+  agent_registry->RegisterAgent(std::move(agent), "traceEvents",
+                                mojom::TraceDataType::ARRAY,
                                 false /* supports_explicit_clock_sync */);
 }
 
@@ -52,10 +53,8 @@ void ChromeTraceEventAgent::AddMetadataGeneratorFunction(
 }
 
 void ChromeTraceEventAgent::StartTracing(const std::string& config,
-                                         mojom::RecorderPtr recorder,
                                          const StartTracingCallback& callback) {
   DCHECK(!recorder_);
-  recorder_ = std::move(recorder);
   if (!base::trace_event::TraceLog::GetInstance()->IsEnabled()) {
     base::trace_event::TraceLog::GetInstance()->SetEnabled(
         base::trace_event::TraceConfig(config),
@@ -64,10 +63,10 @@ void ChromeTraceEventAgent::StartTracing(const std::string& config,
   callback.Run();
 }
 
-void ChromeTraceEventAgent::StopAndFlush() {
+void ChromeTraceEventAgent::StopAndFlush(mojom::RecorderPtr recorder) {
+  DCHECK(!recorder_);
+  recorder_ = std::move(recorder);
   base::trace_event::TraceLog::GetInstance()->SetDisabled();
-  if (!recorder_)
-    return;
   for (const auto& generator : metadata_generator_functions_) {
     auto metadata = generator.Run();
     if (metadata)

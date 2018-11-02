@@ -16,6 +16,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
+#include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_isolated_world_ids.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
@@ -24,6 +25,7 @@
 #include "chrome/common/render_messages.h"
 #include "chrome/renderer/prerender/prerender_helper.h"
 #include "chrome/renderer/safe_browsing/phishing_classifier_delegate.h"
+#include "chrome/renderer/web_apps.h"
 #include "components/translate/content/renderer/translate_helper.h"
 #include "content/public/common/associated_interface_provider.h"
 #include "content/public/renderer/render_frame.h"
@@ -43,6 +45,7 @@
 #include "third_party/WebKit/public/web/WebSecurityPolicy.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/codec/jpeg_codec.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/size_f.h"
 #include "url/gurl.h"
 
@@ -69,6 +72,10 @@ static const char kTranslateCaptureText[] = "Translate.CaptureText";
 // For a page that auto-refreshes, we still show the bubble, if
 // the refresh delay is less than this value (in seconds).
 static const double kLocationChangeIntervalInSeconds = 10;
+
+// For the context menu, we want to keep transparency as is instead of
+// replacing transparent pixels with black ones
+static const bool kDiscardTransparencyForContextMenu = false;
 
 namespace {
 
@@ -149,6 +156,8 @@ bool ChromeRenderFrameObserver::OnMessageReceived(const IPC::Message& message) {
     return false;
 
   IPC_BEGIN_MESSAGE_MAP(ChromeRenderFrameObserver, message)
+    IPC_MESSAGE_HANDLER(ChromeFrameMsg_GetWebApplicationInfo,
+                        OnGetWebApplicationInfo)
     IPC_MESSAGE_HANDLER(ChromeViewMsg_SetClientSidePhishingDetection,
                         OnSetClientSidePhishingDetection)
 #if BUILDFLAG(ENABLE_PRINTING)
@@ -190,6 +199,7 @@ void ChromeRenderFrameObserver::RequestReloadImageForContextNode() {
 void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
     int32_t thumbnail_min_area_pixels,
     const gfx::Size& thumbnail_max_size_pixels,
+    chrome::mojom::ImageFormat image_format,
     const RequestThumbnailForContextNodeCallback& callback) {
   WebNode context_node = render_frame()->GetWebFrame()->ContextMenuNode();
   SkBitmap thumbnail;
@@ -213,15 +223,21 @@ void ChromeRenderFrameObserver::RequestThumbnailForContextNode(
   }
 
   std::vector<uint8_t> thumbnail_data;
-  if (bitmap.getPixels()) {
-    const int kDefaultQuality = 90;
-    std::vector<unsigned char> data;
-    if (gfx::JPEGCodec::Encode(
-            reinterpret_cast<unsigned char*>(bitmap.getAddr32(0, 0)),
-            gfx::JPEGCodec::FORMAT_SkBitmap, bitmap.width(), bitmap.height(),
-            static_cast<int>(bitmap.rowBytes()), kDefaultQuality, &data)) {
-      thumbnail_data.swap(data);
-    }
+  constexpr int kDefaultQuality = 90;
+  std::vector<unsigned char> data;
+
+  switch (image_format) {
+    case chrome::mojom::ImageFormat::PNG:
+      if (gfx::PNGCodec::EncodeBGRASkBitmap(
+              bitmap, kDiscardTransparencyForContextMenu, &data)) {
+        thumbnail_data.swap(data);
+        break;
+      }
+    case chrome::mojom::ImageFormat::JPEG:
+      if (gfx::JPEGCodec::Encode(bitmap, kDefaultQuality, &data)) {
+        thumbnail_data.swap(data);
+        break;
+      }
   }
 
   callback.Run(thumbnail_data, original_size);
@@ -234,6 +250,47 @@ void ChromeRenderFrameObserver::OnPrintNodeUnderContextMenu() {
   if (helper)
     helper->PrintNode(render_frame()->GetWebFrame()->ContextMenuNode());
 #endif
+}
+
+void ChromeRenderFrameObserver::OnGetWebApplicationInfo() {
+  WebLocalFrame* frame = render_frame()->GetWebFrame();
+
+  WebApplicationInfo web_app_info;
+  web_apps::ParseWebAppFromWebDocument(frame, &web_app_info);
+
+  // The warning below is specific to mobile but it doesn't hurt to show it even
+  // if the Chromium build is running on a desktop. It will get more exposition.
+  if (web_app_info.mobile_capable == WebApplicationInfo::MOBILE_CAPABLE_APPLE) {
+    blink::WebConsoleMessage message(
+        blink::WebConsoleMessage::kLevelWarning,
+        "<meta name=\"apple-mobile-web-app-capable\" content=\"yes\"> is "
+        "deprecated. Please include <meta name=\"mobile-web-app-capable\" "
+        "content=\"yes\"> - "
+        "http://developers.google.com/chrome/mobile/docs/installtohomescreen");
+    frame->AddMessageToConsole(message);
+  }
+
+  // Prune out any data URLs in the set of icons.  The browser process expects
+  // any icon with a data URL to have originated from a favicon.  We don't want
+  // to decode arbitrary data URLs in the browser process.  See
+  // http://b/issue?id=1162972
+  for (std::vector<WebApplicationInfo::IconInfo>::iterator it =
+           web_app_info.icons.begin();
+       it != web_app_info.icons.end();) {
+    if (it->url.SchemeIs(url::kDataScheme))
+      it = web_app_info.icons.erase(it);
+    else
+      ++it;
+  }
+
+  // Truncate the strings we send to the browser process.
+  web_app_info.title =
+      web_app_info.title.substr(0, chrome::kMaxMetaTagAttributeLength);
+  web_app_info.description =
+      web_app_info.description.substr(0, chrome::kMaxMetaTagAttributeLength);
+
+  Send(new ChromeFrameHostMsg_DidGetWebApplicationInfo(routing_id(),
+                                                       web_app_info));
 }
 
 void ChromeRenderFrameObserver::OnSetClientSidePhishingDetection(
@@ -362,13 +419,11 @@ void ChromeRenderFrameObserver::OnDestruct() {
 }
 
 void ChromeRenderFrameObserver::OnImageContextMenuRendererRequest(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::ImageContextMenuRendererRequest request) {
   image_context_menu_renderer_bindings_.AddBinding(this, std::move(request));
 }
 
 void ChromeRenderFrameObserver::OnThumbnailCapturerRequest(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::ThumbnailCapturerRequest request) {
   thumbnail_capturer_bindings_.AddBinding(this, std::move(request));
 }

@@ -19,18 +19,22 @@ class CORE_EXPORT LayoutNGBlockFlow final : public LayoutBlockFlow {
   ~LayoutNGBlockFlow() override = default;
 
   void UpdateBlockLayout(bool relayout_children) override;
-  NGBlockNode* BoxForTesting() const { return box_.Get(); }
 
   const char* GetName() const override { return "LayoutNGBlockFlow"; }
 
   NGInlineNodeData& GetNGInlineNodeData() const;
   void ResetNGInlineNodeData();
+  bool HasNGInlineNodeData() const { return ng_inline_node_data_.get(); }
+
+  int FirstLineBoxBaseline() const override;
+  int InlineBlockBaseline(LineDirectionMode) const override;
 
  private:
   bool IsOfType(LayoutObjectType) const override;
 
+  void UpdateMargins(const NGConstraintSpace&);
+
   std::unique_ptr<NGInlineNodeData> ng_inline_node_data_;
-  Persistent<NGBlockNode> box_;
 };
 
 DEFINE_LAYOUT_OBJECT_TYPE_CASTS(LayoutNGBlockFlow, IsLayoutNGBlockFlow());

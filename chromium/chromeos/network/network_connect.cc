@@ -124,8 +124,12 @@ void NetworkConnectImpl::HandleUnconfiguredNetwork(
   }
 
   if (network->type() == shill::kTypeWifi) {
-    // Only show the config view for secure networks, otherwise do nothing.
-    if (network->security_class() != shill::kSecurityNone) {
+    // If the network does not require a password, do not show the dialog since
+    // there is nothing to configure. Likewise, if the network is the underlying
+    // Wi-Fi hotspot for a Tether network, do not show the dialog since the
+    // Tether component handles this case itself.
+    if (network->security_class() != shill::kSecurityNone &&
+        network->tether_guid().empty()) {
       delegate_->ShowNetworkConfigure(network_id);
     }
     return;
@@ -435,31 +439,27 @@ void NetworkConnectImpl::SetTechnologyEnabled(
                                   network_handler::ErrorCallback());
     return;
   }
-  // If we're dealing with a mobile network, then handle SIM lock here.
-  // SIM locking only applies to cellular, so the code below won't execute
-  // if |technology| has been explicitly set to WiMAX.
-  if (technology.MatchesPattern(NetworkTypePattern::Mobile())) {
+  // If we're dealing with a cellular network, then handle SIM lock here.
+  // SIM locking only applies to cellular.
+  if (technology.MatchesPattern(NetworkTypePattern::Cellular())) {
     const DeviceState* mobile = handler->GetDeviceStateByType(technology);
     if (!mobile) {
       NET_LOG_ERROR("SetTechnologyEnabled with no device", log_string);
       return;
     }
-    // The following only applies to cellular.
-    if (mobile->type() == shill::kTypeCellular) {
-      if (mobile->IsSimAbsent()) {
-        // If this is true, then we have a cellular device with no SIM
-        // inserted. TODO(armansito): Chrome should display a notification here,
-        // prompting the user to insert a SIM card and restart the device to
-        // enable cellular. See crbug.com/125171.
-        NET_LOG_USER("Cannot enable cellular device without SIM.", log_string);
-        return;
-      }
-      if (!mobile->sim_lock_type().empty()) {
-        // A SIM has been inserted, but it is locked. Let the user unlock it
-        // via the dialog.
-        delegate_->ShowMobileSimDialog();
-        return;
-      }
+    if (mobile->IsSimAbsent()) {
+      // If this is true, then we have a cellular device with no SIM
+      // inserted. TODO(armansito): Chrome should display a notification here,
+      // prompting the user to insert a SIM card and restart the device to
+      // enable cellular. See crbug.com/125171.
+      NET_LOG_USER("Cannot enable cellular device without SIM.", log_string);
+      return;
+    }
+    if (!mobile->sim_lock_type().empty()) {
+      // A SIM has been inserted, but it is locked. Let the user unlock it
+      // via the dialog.
+      delegate_->ShowMobileSimDialog();
+      return;
     }
   }
   handler->SetTechnologyEnabled(technology, true,

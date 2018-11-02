@@ -10,6 +10,7 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "media/base/android/android_overlay.h"
 #include "media/base/android/media_codec_bridge.h"
+#include "media/gpu/android/promotion_hint_aggregator.h"
 #include "media/gpu/avda_shared_state.h"
 #include "media/gpu/avda_surface_bundle.h"
 #include "ui/gl/gl_bindings.h"
@@ -29,7 +30,7 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   AVDASharedState(scoped_refptr<AVDASurfaceBundle> surface_bundle);
 
   GLuint surface_texture_service_id() const {
-    return surface_texture() ? surface_texture()->texture_id() : 0;
+    return surface_texture() ? surface_texture()->GetTextureId() : 0;
   }
 
   SurfaceTextureGLOwner* surface_texture() const {
@@ -43,11 +44,11 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   // Context and surface that |surface_texture_| is bound to, if
   // |surface_texture_| is not null.
   gl::GLContext* context() const {
-    return surface_texture() ? surface_texture()->context() : nullptr;
+    return surface_texture() ? surface_texture()->GetContext() : nullptr;
   }
 
   gl::GLSurface* surface() const {
-    return surface_texture() ? surface_texture()->surface() : nullptr;
+    return surface_texture() ? surface_texture()->GetSurface() : nullptr;
   }
 
   // Helper method for coordinating the interactions between
@@ -84,18 +85,23 @@ class AVDASharedState : public base::RefCounted<AVDASharedState> {
   // called during codec changes.
   void ClearReleaseTime();
 
+  void ClearOverlay(AndroidOverlay* overlay);
+
+  void SetPromotionHintCB(PromotionHintAggregator::NotifyPromotionHintCB cb);
+  const PromotionHintAggregator::NotifyPromotionHintCB& GetPromotionHintCB();
+
  protected:
   virtual ~AVDASharedState();
 
  private:
   friend class base::RefCounted<AVDASharedState>;
 
-  void OnSurfaceDestroyed(AndroidOverlay* overlay);
-
   // Texture matrix of the front buffer of the surface texture.
   float gl_matrix_[16];
 
   scoped_refptr<AVDASurfaceBundle> surface_bundle_;
+
+  PromotionHintAggregator::NotifyPromotionHintCB promotion_hint_cb_;
 
   base::WeakPtrFactory<AVDASharedState> weak_this_factory_;
 

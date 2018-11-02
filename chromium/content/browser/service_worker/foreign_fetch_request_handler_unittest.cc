@@ -72,8 +72,9 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
 
     // Create a registration for the worker which has foreign fetch event
     // handler.
-    registration_ = new ServiceWorkerRegistration(kScope, kRegistrationId,
-                                                  context()->AsWeakPtr());
+    registration_ =
+        new ServiceWorkerRegistration(ServiceWorkerRegistrationOptions(kScope),
+                                      kRegistrationId, context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(registration_.get(), kResource1,
                                         kVersionId, context()->AsWeakPtr());
     version_->set_foreign_fetch_scopes({kScope});
@@ -146,21 +147,23 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
       request_->set_initiator(url::Origin(GURL(initiator)));
     ForeignFetchRequestHandler::InitializeHandler(
         request_.get(), context_wrapper(), &blob_storage_context_,
-        helper_->mock_render_process_id(), kMockProviderId,
+        helper_->mock_render_process_id(), provider_host()->provider_id(),
         ServiceWorkerMode::ALL, FETCH_REQUEST_MODE_CORS,
         FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        resource_type, REQUEST_CONTEXT_TYPE_FETCH,
-        REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr,
+        std::string() /* integrity */, resource_type,
+        REQUEST_CONTEXT_TYPE_FETCH, REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr,
         true /* initiated_in_secure_context */);
 
     return ForeignFetchRequestHandler::GetHandler(request_.get());
   }
 
   void CreateWindowTypeProviderHost() {
+    remote_endpoints_.emplace_back();
     std::unique_ptr<ServiceWorkerProviderHost> host =
         CreateProviderHostForWindow(
             helper_->mock_render_process_id(), kMockProviderId,
-            true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr());
+            true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr(),
+            &remote_endpoints_.back());
     EXPECT_FALSE(
         context()->GetProviderHost(host->process_id(), host->provider_id()));
     host->SetDocumentUrl(GURL("https://host/scope/"));
@@ -169,10 +172,12 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
   }
 
   void CreateServiceWorkerTypeProviderHost() {
+    remote_endpoints_.emplace_back();
     std::unique_ptr<ServiceWorkerProviderHost> host =
         CreateProviderHostForServiceWorkerContext(
             helper_->mock_render_process_id(), kMockProviderId,
-            true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr());
+            true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr(),
+            &remote_endpoints_.back());
     EXPECT_FALSE(
         context()->GetProviderHost(host->process_id(), host->provider_id()));
     provider_host_ = host->AsWeakPtr();
@@ -181,8 +186,9 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
     // Create another worker whose requests will be intercepted by the foreign
     // fetch event handler.
     scoped_refptr<ServiceWorkerRegistration> registration =
-        new ServiceWorkerRegistration(GURL("https://host/scope"), 1L,
-                                      context()->AsWeakPtr());
+        new ServiceWorkerRegistration(
+            ServiceWorkerRegistrationOptions(GURL("https://host/scope")), 1L,
+            context()->AsWeakPtr());
     scoped_refptr<ServiceWorkerVersion> version = new ServiceWorkerVersion(
         registration.get(), GURL("https://host/script.js"), 1L,
         context()->AsWeakPtr());
@@ -235,6 +241,7 @@ class ForeignFetchRequestHandlerTest : public testing::Test {
   base::WeakPtr<ServiceWorkerProviderHost> provider_host_;
   storage::BlobStorageContext blob_storage_context_;
   std::unique_ptr<net::URLRequest> request_;
+  std::vector<ServiceWorkerRemoteProviderEndpoint> remote_endpoints_;
 
   DISALLOW_COPY_AND_ASSIGN(ForeignFetchRequestHandlerTest);
 };

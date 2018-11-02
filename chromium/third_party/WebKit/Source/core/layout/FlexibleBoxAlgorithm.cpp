@@ -48,48 +48,96 @@ FlexItem::FlexItem(LayoutBox* box,
   DCHECK(!box->IsOutOfFlowPositioned());
 }
 
+void FlexLine::FreezeViolations(Vector<FlexItem*>& violations) {
+  for (size_t i = 0; i < violations.size(); ++i) {
+    DCHECK(!violations[i]->frozen) << i;
+    LayoutBox* child = violations[i]->box;
+    LayoutUnit child_size = violations[i]->flexed_content_size;
+    remaining_free_space -= child_size - violations[i]->flex_base_content_size;
+    total_flex_grow -= child->Style()->FlexGrow();
+    total_flex_shrink -= child->Style()->FlexShrink();
+    total_weighted_flex_shrink -=
+        child->Style()->FlexShrink() * violations[i]->flex_base_content_size;
+    // totalWeightedFlexShrink can be negative when we exceed the precision of
+    // a double when we initially calcuate totalWeightedFlexShrink. We then
+    // subtract each child's weighted flex shrink with full precision, now
+    // leading to a negative result. See
+    // css3/flexbox/large-flex-shrink-assert.html
+    total_weighted_flex_shrink = std::max(total_weighted_flex_shrink, 0.0);
+    violations[i]->frozen = true;
+  }
+}
+
+void FlexLine::FreezeInflexibleItems() {
+  // Per https://drafts.csswg.org/css-flexbox/#resolve-flexible-lengths step 2,
+  // we freeze all items with a flex factor of 0 as well as those with a min/max
+  // size violation.
+  FlexSign flex_sign = Sign();
+  remaining_free_space = container_main_inner_size - sum_flex_base_size;
+
+  Vector<FlexItem*> new_inflexible_items;
+  for (size_t i = 0; i < line_items.size(); ++i) {
+    FlexItem& flex_item = line_items[i];
+    LayoutBox* child = flex_item.box;
+    DCHECK(!flex_item.box->IsOutOfFlowPositioned());
+    DCHECK(!flex_item.frozen) << i;
+    float flex_factor = (flex_sign == kPositiveFlexibility)
+                            ? child->Style()->FlexGrow()
+                            : child->Style()->FlexShrink();
+    if (flex_factor == 0 ||
+        (flex_sign == kPositiveFlexibility &&
+         flex_item.flex_base_content_size >
+             flex_item.hypothetical_main_content_size) ||
+        (flex_sign == kNegativeFlexibility &&
+         flex_item.flex_base_content_size <
+             flex_item.hypothetical_main_content_size)) {
+      flex_item.flexed_content_size = flex_item.hypothetical_main_content_size;
+      new_inflexible_items.push_back(&flex_item);
+    }
+  }
+  FreezeViolations(new_inflexible_items);
+  initial_free_space = remaining_free_space;
+}
+
 FlexLayoutAlgorithm::FlexLayoutAlgorithm(const ComputedStyle* style,
                                          LayoutUnit line_break_length,
                                          const Vector<FlexItem>& all_items)
     : style_(style),
       line_break_length_(line_break_length),
-      all_items_(all_items) {}
+      all_items_(all_items),
+      next_item_index_(0) {}
 
-bool FlexLayoutAlgorithm::ComputeNextFlexLine(
-    size_t& next_index,
-    Vector<FlexItem>& line_items,
-    LayoutUnit& sum_flex_base_size,
-    double& total_flex_grow,
-    double& total_flex_shrink,
-    double& total_weighted_flex_shrink,
-    LayoutUnit& sum_hypothetical_main_size) {
-  line_items.clear();
-  sum_flex_base_size = LayoutUnit();
-  total_flex_grow = total_flex_shrink = total_weighted_flex_shrink = 0;
-  sum_hypothetical_main_size = LayoutUnit();
+FlexLine* FlexLayoutAlgorithm::ComputeNextFlexLine() {
+  FlexLine new_line;
 
   bool line_has_in_flow_item = false;
 
-  for (; next_index < all_items_.size(); ++next_index) {
-    const FlexItem& flex_item = all_items_[next_index];
+  for (; next_item_index_ < all_items_.size(); ++next_item_index_) {
+    const FlexItem& flex_item = all_items_[next_item_index_];
     DCHECK(!flex_item.box->IsOutOfFlowPositioned());
     if (IsMultiline() &&
-        sum_hypothetical_main_size +
+        new_line.sum_hypothetical_main_size +
                 flex_item.HypotheticalMainAxisMarginBoxSize() >
             line_break_length_ &&
         line_has_in_flow_item)
       break;
-    line_items.push_back(flex_item);
+    new_line.line_items.push_back(flex_item);
     line_has_in_flow_item = true;
-    sum_flex_base_size += flex_item.FlexBaseMarginBoxSize();
-    total_flex_grow += flex_item.box->Style()->FlexGrow();
-    total_flex_shrink += flex_item.box->Style()->FlexShrink();
-    total_weighted_flex_shrink +=
+    new_line.sum_flex_base_size += flex_item.FlexBaseMarginBoxSize();
+    new_line.total_flex_grow += flex_item.box->Style()->FlexGrow();
+    new_line.total_flex_shrink += flex_item.box->Style()->FlexShrink();
+    new_line.total_weighted_flex_shrink +=
         flex_item.box->Style()->FlexShrink() * flex_item.flex_base_content_size;
-    sum_hypothetical_main_size += flex_item.HypotheticalMainAxisMarginBoxSize();
+    new_line.sum_hypothetical_main_size +=
+        flex_item.HypotheticalMainAxisMarginBoxSize();
   }
-  DCHECK(line_items.size() > 0 || next_index == all_items_.size());
-  return line_items.size() > 0;
+  DCHECK(new_line.line_items.size() > 0 ||
+         next_item_index_ == all_items_.size());
+  if (new_line.line_items.size() > 0) {
+    flex_lines_.push_back(std::move(new_line));
+    return &flex_lines_.back();
+  }
+  return nullptr;
 }
 
 }  // namespace blink

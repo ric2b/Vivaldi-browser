@@ -12,7 +12,7 @@
 #include "content/renderer/media/mock_data_channel_impl.h"
 #include "content/renderer/media/webrtc/mock_peer_connection_dependency_factory.h"
 #include "third_party/webrtc/api/rtpreceiverinterface.h"
-#include "third_party/webrtc/base/refcountedobject.h"
+#include "third_party/webrtc/rtc_base/refcountedobject.h"
 
 using testing::_;
 using webrtc::AudioTrackInterface;
@@ -340,6 +340,12 @@ bool MockPeerConnectionImpl::AddIceCandidate(
 void MockPeerConnectionImpl::RegisterUMAObserver(
     webrtc::UMAObserver* observer) {
   NOTIMPLEMENTED();
+}
+
+webrtc::RTCError MockPeerConnectionImpl::SetBitrate(
+    const BitrateParameters& bitrate) {
+  NOTIMPLEMENTED();
+  return webrtc::RTCError::OK();
 }
 
 }  // namespace content

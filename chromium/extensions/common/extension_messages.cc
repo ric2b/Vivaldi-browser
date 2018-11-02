@@ -13,7 +13,6 @@
 #include "extensions/common/extension.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/manifest_handler.h"
-#include "extensions/common/manifest_location_param_traits.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/permissions/permissions_info.h"
 
@@ -140,7 +139,10 @@ bool ParamTraits<URLPattern>::Read(const base::Pickle* m,
   // schemes after parsing the pattern. Update these method calls once we can
   // ignore scheme validation with URLPattern parse options. crbug.com/90544
   p->SetValidSchemes(URLPattern::SCHEME_ALL);
-  URLPattern::ParseResult result = p->Parse(spec);
+  // Allow effective TLD wildcarding since this check is only needed on initial
+  // creation of URLPattern and not as part of deserialization.
+  URLPattern::ParseResult result =
+      p->Parse(spec, URLPattern::ALLOW_WILDCARD_FOR_EFFECTIVE_TLD);
   p->SetValidSchemes(valid_schemes);
   return URLPattern::PARSE_SUCCESS == result;
 }

@@ -8,9 +8,10 @@
 #include "base/strings/stringprintf.h"
 #include "base/values.h"
 #include "content/public/common/console_message_level.h"
-#include "extensions/renderer/api_request_handler.h"
-#include "extensions/renderer/api_signature.h"
-#include "extensions/renderer/api_type_reference_map.h"
+#include "extensions/renderer/bindings/api_request_handler.h"
+#include "extensions/renderer/bindings/api_signature.h"
+#include "extensions/renderer/bindings/api_type_reference_map.h"
+#include "extensions/renderer/bindings/binding_access_checker.h"
 #include "extensions/renderer/console.h"
 #include "extensions/renderer/script_context_set.h"
 #include "gin/arguments.h"
@@ -40,26 +41,29 @@ v8::Local<v8::Object> ContentSetting::Create(
     const base::ListValue* property_values,
     APIRequestHandler* request_handler,
     APIEventHandler* event_handler,
-    APITypeReferenceMap* type_refs) {
+    APITypeReferenceMap* type_refs,
+    const BindingAccessChecker* access_checker) {
   std::string pref_name;
   CHECK(property_values->GetString(0u, &pref_name));
   const base::DictionaryValue* value_spec = nullptr;
   CHECK(property_values->GetDictionary(1u, &value_spec));
 
   gin::Handle<ContentSetting> handle = gin::CreateHandle(
-      isolate, new ContentSetting(run_js, request_handler, type_refs, pref_name,
-                                  *value_spec));
+      isolate, new ContentSetting(run_js, request_handler, type_refs,
+                                  access_checker, pref_name, *value_spec));
   return handle.ToV8().As<v8::Object>();
 }
 
 ContentSetting::ContentSetting(const binding::RunJSFunction& run_js,
                                APIRequestHandler* request_handler,
                                const APITypeReferenceMap* type_refs,
+                               const BindingAccessChecker* access_checker,
                                const std::string& pref_name,
                                const base::DictionaryValue& set_value_spec)
     : run_js_(run_js),
       request_handler_(request_handler),
       type_refs_(type_refs),
+      access_checker_(access_checker),
       pref_name_(pref_name),
       argument_spec_(ArgumentType::OBJECT) {
   // The set() call takes an object { setting: { type: <t> }, ... }, where <t>
@@ -109,20 +113,6 @@ void ContentSetting::Get(gin::Arguments* arguments) {
 }
 
 void ContentSetting::Set(gin::Arguments* arguments) {
-  v8::Isolate* isolate = arguments->isolate();
-  v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Context> context = arguments->GetHolderCreationContext();
-
-  v8::Local<v8::Value> value = arguments->PeekNext();
-  // The set schema included in the Schema object is generic, since it varies
-  // per-setting. However, this is only ever for a single setting, so we can
-  // enforce the types more thoroughly.
-  std::string error;
-  if (!value.IsEmpty() && !argument_spec_.ParseArgument(
-                              context, value, *type_refs_, nullptr, &error)) {
-    arguments->ThrowTypeError("Invalid invocation");
-    return;
-  }
   HandleFunction("set", arguments);
 }
 
@@ -143,13 +133,17 @@ void ContentSetting::HandleFunction(const std::string& method_name,
   std::vector<v8::Local<v8::Value>> argument_list = arguments->GetAll();
 
   std::string full_name = "contentSettings.ContentSetting." + method_name;
+
+  if (!access_checker_->HasAccessOrThrowError(context, full_name))
+    return;
+
   std::unique_ptr<base::ListValue> converted_arguments;
   v8::Local<v8::Function> callback;
   std::string error;
   if (!type_refs_->GetTypeMethodSignature(full_name)->ParseArgumentsToJSON(
           context, argument_list, *type_refs_, &converted_arguments, &callback,
           &error)) {
-    arguments->ThrowTypeError("Invalid invocation");
+    arguments->ThrowTypeError("Invalid invocation: " + error);
     return;
   }
 
@@ -176,6 +170,21 @@ void ContentSetting::HandleFunction(const std::string& method_name,
       run_js_.Run(callback, context, args.size(), args.data());
     }
     return;
+  }
+
+  if (method_name == "set") {
+    v8::Local<v8::Value> value = argument_list[0];
+    // The set schema included in the Schema object is generic, since it varies
+    // per-setting. However, this is only ever for a single setting, so we can
+    // enforce the types more thoroughly.
+    // Note: we do this *after* checking if the setting is deprecated, since
+    // this validation will fail for deprecated settings.
+    std::string error;
+    if (!value.IsEmpty() && !argument_spec_.ParseArgument(
+                                context, value, *type_refs_, nullptr, &error)) {
+      arguments->ThrowTypeError("Invalid invocation: " + error);
+      return;
+    }
   }
 
   converted_arguments->Insert(0u, base::MakeUnique<base::Value>(pref_name_));

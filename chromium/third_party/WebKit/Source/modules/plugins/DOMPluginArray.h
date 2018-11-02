@@ -22,9 +22,11 @@
 #define DOMPluginArray_h
 
 #include "core/dom/ContextLifecycleObserver.h"
+#include "core/page/PluginsChangedObserver.h"
 #include "modules/plugins/DOMPlugin.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
+#include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Forward.h"
 
 namespace blink {
@@ -34,7 +36,8 @@ class PluginData;
 
 class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
                              public ScriptWrappable,
-                             public ContextClient {
+                             public ContextLifecycleObserver,
+                             public PluginsChangedObserver {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(DOMPluginArray);
 
@@ -42,6 +45,7 @@ class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
   static DOMPluginArray* Create(LocalFrame* frame) {
     return new DOMPluginArray(frame);
   }
+  void UpdatePluginData();
 
   unsigned length() const;
   DOMPlugin* item(unsigned index);
@@ -49,11 +53,17 @@ class DOMPluginArray final : public GarbageCollected<DOMPluginArray>,
 
   void refresh(bool reload);
 
+  // PluginsChangedObserver implementation.
+  void PluginsChanged();
+
   DECLARE_VIRTUAL_TRACE();
 
  private:
   explicit DOMPluginArray(LocalFrame*);
   PluginData* GetPluginData() const;
+  void ContextDestroyed(ExecutionContext*) override;
+
+  HeapVector<Member<DOMPlugin>> dom_plugins_;
 };
 
 }  // namespace blink

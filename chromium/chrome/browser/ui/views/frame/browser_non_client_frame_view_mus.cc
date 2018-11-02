@@ -35,7 +35,6 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/scoped_canvas.h"
 #include "ui/views/controls/label.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/mus/desktop_window_tree_host_mus.h"
 #include "ui/views/mus/window_manager_frame_values.h"
 #include "ui/views/widget/widget.h"
@@ -224,6 +223,17 @@ void BrowserNonClientFrameViewMus::UpdateClientArea() {
     }
   } else {
     window_tree_host_mus->SetClientArea(gfx::Insets(), additional_client_area);
+  }
+}
+
+void BrowserNonClientFrameViewMus::UpdateMinimumSize() {
+  gfx::Size min_size = GetMinimumSize();
+  aura::Window* frame_window = frame()->GetNativeWindow();
+  const gfx::Size* previous_min_size =
+      frame_window->GetProperty(aura::client::kMinimumSize);
+  if (!previous_min_size || *previous_min_size != min_size) {
+    frame_window->SetProperty(aura::client::kMinimumSize,
+                              new gfx::Size(min_size));
   }
 }
 

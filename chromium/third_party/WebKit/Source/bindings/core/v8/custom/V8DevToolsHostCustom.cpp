@@ -34,6 +34,7 @@
 #include "bindings/core/v8/V8HTMLDocument.h"
 #include "bindings/core/v8/V8MouseEvent.h"
 #include "bindings/core/v8/V8Window.h"
+#include "build/build_config.h"
 #include "core/dom/Document.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/inspector/DevToolsHost.h"
@@ -46,9 +47,9 @@ namespace blink {
 
 void V8DevToolsHost::platformMethodCustom(
     const v8::FunctionCallbackInfo<v8::Value>& info) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   V8SetReturnValue(info, V8AtomicString(info.GetIsolate(), "mac"));
-#elif OS(WIN)
+#elif defined(OS_WIN)
   V8SetReturnValue(info, V8AtomicString(info.GetIsolate(), "windows"));
 #else  // Unix-like systems
   V8SetReturnValue(info, V8AtomicString(info.GetIsolate(), "linux"));
@@ -82,9 +83,8 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
       continue;
     String type_string = ToCoreStringWithNullCheck(type.As<v8::String>());
     if (type_string == "separator") {
-      ContextMenuItem item(ContextMenuItem(kSeparatorType,
-                                           kContextMenuItemCustomTagNoAction,
-                                           String(), String()));
+      ContextMenuItem item(ContextMenuItem(
+          kSeparatorType, kContextMenuItemCustomTagNoAction, String()));
       menu.AppendItem(item);
     } else if (type_string == "subMenu" && sub_items->IsArray()) {
       ContextMenu sub_menu;
@@ -95,7 +95,7 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
       TOSTRING_DEFAULT(V8StringResource<kTreatNullAsNullString>, label_string,
                        label, false);
       ContextMenuItem item(kSubmenuType, kContextMenuItemCustomTagNoAction,
-                           label_string, String(), &sub_menu);
+                           label_string, &sub_menu);
       menu.AppendItem(item);
     } else {
       int32_t int32_id;
@@ -107,7 +107,7 @@ static bool PopulateContextMenuItems(v8::Isolate* isolate,
                        label, false);
       ContextMenuItem menu_item(
           (type_string == "checkbox" ? kCheckableActionType : kActionType),
-          typed_id, label_string, String());
+          typed_id, label_string);
       if (checked->IsBoolean())
         menu_item.SetChecked(checked.As<v8::Boolean>()->Value());
       if (enabled->IsBoolean())

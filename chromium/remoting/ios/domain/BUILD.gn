@@ -12,6 +12,8 @@ source_set("domain") {
     "client_session_details.mm",
     "host_info.h",
     "host_info.mm",
+    "host_settings.h",
+    "host_settings.mm",
     "user_info.h",
     "user_info.mm",
   ]

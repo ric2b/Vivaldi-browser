@@ -126,6 +126,8 @@ class CORE_EXPORT ContentSecurityPolicy
     kCheckReportOnly
   };
 
+  static const size_t kMaxSampleLength = 40;
+
   static ContentSecurityPolicy* Create() { return new ContentSecurityPolicy(); }
   ~ContentSecurityPolicy();
   DECLARE_TRACE();
@@ -172,10 +174,10 @@ class CORE_EXPORT ContentSecurityPolicy
   // exception in the event of a violation. When the caller will throw
   // an exception, ContentSecurityPolicy does not log a violation
   // message to the console because it would be redundant.
-  bool AllowEval(ScriptState* = nullptr,
-                 SecurityViolationReportingPolicy =
-                     SecurityViolationReportingPolicy::kReport,
-                 ExceptionStatus = kWillNotThrowException) const;
+  bool AllowEval(ScriptState*,
+                 SecurityViolationReportingPolicy,
+                 ExceptionStatus,
+                 const String& script_content) const;
   bool AllowPluginType(const String& type,
                        const String& type_attribute,
                        const KURL&,
@@ -268,6 +270,7 @@ class CORE_EXPORT ContentSecurityPolicy
                          const String& nonce,
                          const WTF::OrdinalNumber& context_line,
                          const String& script_content,
+                         InlineType,
                          SecurityViolationReportingPolicy =
                              SecurityViolationReportingPolicy::kReport) const;
   bool AllowInlineStyle(Element*,
@@ -275,6 +278,7 @@ class CORE_EXPORT ContentSecurityPolicy
                         const String& nonce,
                         const WTF::OrdinalNumber& context_line,
                         const String& style_content,
+                        InlineType,
                         SecurityViolationReportingPolicy =
                             SecurityViolationReportingPolicy::kReport) const;
 
@@ -289,18 +293,6 @@ class CORE_EXPORT ContentSecurityPolicy
                       SecurityViolationReportingPolicy =
                           SecurityViolationReportingPolicy::kReport) const;
   bool IsFrameAncestorsEnforced() const;
-
-  // The hash allow functions are guaranteed to not have any side
-  // effects, including reporting.
-  // Hash functions check all policies relating to use of a script/style
-  // with the given hash and return true all CSP policies allow it.
-  // If these return true, callers can then process the content or
-  // issue a load and be safe disabling any further CSP checks.
-  //
-  // TODO(mkwst): Fold hashes into 'allow{Script,Style}' checks above, just
-  // as we've done with nonces. https://crbug.com/617065
-  bool AllowScriptWithHash(const String& source, InlineType) const;
-  bool AllowStyleWithHash(const String& source, InlineType) const;
 
   bool AllowRequestWithoutIntegrity(
       WebURLRequest::RequestContext,
@@ -432,6 +424,8 @@ class CORE_EXPORT ContentSecurityPolicy
 
   bool HasHeaderDeliveredPolicy() const { return header_delivered_; }
 
+  static bool IsValidCSPAttr(const String& attr);
+
  private:
   FRIEND_TEST_ALL_PREFIXES(ContentSecurityPolicyTest, NonceInline);
   FRIEND_TEST_ALL_PREFIXES(ContentSecurityPolicyTest, NonceSinglePolicy);
@@ -462,6 +456,19 @@ class CORE_EXPORT ContentSecurityPolicy
   void PostViolationReport(const SecurityPolicyViolationEventInit&,
                            LocalFrame*,
                            const Vector<String>& report_endpoints);
+
+  static void FillInCSPHashValues(const String& source,
+                                  uint8_t hash_algorithms_used,
+                                  Vector<CSPHashValue>& csp_hash_values);
+
+  // checks a vector of csp hashes against policy, probably a good idea
+  // to use in tandem with FillInCSPHashValues.
+  static bool CheckScriptHashAgainstPolicy(Vector<CSPHashValue>&,
+                                           const Member<CSPDirectiveList>&,
+                                           InlineType);
+  static bool CheckStyleHashAgainstPolicy(Vector<CSPHashValue>&,
+                                          const Member<CSPDirectiveList>&,
+                                          InlineType);
 
   Member<ExecutionContext> execution_context_;
   bool override_inline_style_allowed_;

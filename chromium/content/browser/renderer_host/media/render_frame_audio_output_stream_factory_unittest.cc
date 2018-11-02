@@ -18,7 +18,6 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
-#include "media/audio/audio_output_controller.h"
 #include "media/base/audio_parameters.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "mojo/public/cpp/bindings/binding.h"
@@ -72,8 +71,6 @@ class MockAudioOutputDelegate : public media::AudioOutputDelegate {
       std::move(on_destruction_).Run();
   }
 
-  MOCK_CONST_METHOD0(GetController,
-                     scoped_refptr<media::AudioOutputController>());
   MOCK_CONST_METHOD0(GetStreamId, int());
   MOCK_METHOD0(OnPlayStream, void());
   MOCK_METHOD0(OnPauseStream, void());
@@ -93,18 +90,10 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
 
   int GetRenderProcessId() const override { return kRenderProcessId; }
 
-  std::string GetHMACForDeviceId(
-      const url::Origin& origin,
-      const std::string& raw_device_id) const override {
-    return MediaStreamManager::GetHMACForMediaDeviceID(salt_, origin,
-                                                       raw_device_id);
-  }
-
   void RequestDeviceAuthorization(
       int render_frame_id,
       int session_id,
       const std::string& device_id,
-      const url::Origin& security_origin,
       AuthorizationCompletedCallback cb) const override {
     EXPECT_EQ(render_frame_id, kRenderFrameId);
     EXPECT_EQ(session_id, 0);
@@ -113,7 +102,7 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
           FROM_HERE,
           base::BindOnce(std::move(cb),
                          media::OutputDeviceStatus::OUTPUT_DEVICE_STATUS_OK,
-                         false, GetTestAudioParameters(), "default"));
+                         GetTestAudioParameters(), "default", std::string()));
       return;
     }
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -121,8 +110,8 @@ class MockContext : public RendererAudioOutputStreamFactoryContext {
         base::BindOnce(std::move(cb),
                        media::OutputDeviceStatus::
                            OUTPUT_DEVICE_STATUS_ERROR_NOT_AUTHORIZED,
-                       false, media::AudioParameters::UnavailableDeviceParams(),
-                       ""));
+                       media::AudioParameters::UnavailableDeviceParams(),
+                       std::string(), std::string()));
   }
 
   // The event handler for the delegate will be stored at

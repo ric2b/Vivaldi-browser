@@ -43,6 +43,7 @@
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/json/json_writer.h"
 #include "base/location.h"
 #include "base/memory/memory_pressure_listener.h"
 #include "base/memory/ptr_util.h"
@@ -51,16 +52,17 @@
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/autofill/android/autofill_provider_android.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autofill_manager.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/android/synchronous_compositor.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/favicon_status.h"
+#include "content/public/browser/gpu_data_manager.h"
 #include "content/public/browser/interstitial_page.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/render_frame_host.h"
@@ -72,6 +74,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/mhtml_generation_params.h"
 #include "content/public/common/renderer_preferences.h"
+#include "gpu/config/gpu_info.h"
 #include "jni/AwContents_jni.h"
 #include "net/base/auth.h"
 #include "net/cert/x509_certificate.h"
@@ -95,7 +98,6 @@ using base::android::ScopedJavaGlobalRef;
 using base::android::ScopedJavaLocalRef;
 using navigation_interception::InterceptNavigationDelegate;
 using content::BrowserThread;
-using content::ContentViewCore;
 using content::RenderFrameHost;
 using content::WebContents;
 
@@ -104,8 +106,6 @@ namespace android_webview {
 namespace {
 
 bool g_should_download_favicons = false;
-
-bool g_force_auxiliary_bitmap_rendering = false;
 
 std::string g_locale;
 
@@ -132,6 +132,16 @@ class AwContentsUserData : public base::SupportsUserData::Data {
 };
 
 base::subtle::Atomic32 g_instance_count = 0;
+
+void JavaScriptResultCallbackForTesting(
+    const ScopedJavaGlobalRef<jobject>& callback,
+    const base::Value* result) {
+  JNIEnv* env = base::android::AttachCurrentThread();
+  std::string json;
+  base::JSONWriter::Write(*result, &json);
+  ScopedJavaLocalRef<jstring> j_json = ConvertUTF8ToJavaString(env, json);
+  Java_AwContents_onEvaluateJavaScriptResultForTesting(env, j_json, callback);
+}
 
 }  // namespace
 
@@ -248,7 +258,8 @@ void AwContents::SetJavaPeers(
     const JavaParamRef<jobject>& web_contents_delegate,
     const JavaParamRef<jobject>& contents_client_bridge,
     const JavaParamRef<jobject>& io_thread_client,
-    const JavaParamRef<jobject>& intercept_navigation_delegate) {
+    const JavaParamRef<jobject>& intercept_navigation_delegate,
+    const JavaParamRef<jobject>& autofill_provider) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   // The |aw_content| param is technically spurious as it duplicates |obj| but
   // is passed over anyway to make the binding more explicit.
@@ -268,6 +279,11 @@ void AwContents::SetJavaPeers(
   InterceptNavigationDelegate::Associate(
       web_contents_.get(), base::MakeUnique<InterceptNavigationDelegate>(
                                env, intercept_navigation_delegate));
+
+  if (!autofill_provider.is_null()) {
+    autofill_provider_ = base::MakeUnique<autofill::AutofillProviderAndroid>(
+        autofill_provider, web_contents_.get());
+  }
 
   // Finally, having setup the associations, release any deferred requests
   for (content::RenderFrameHost* rfh : web_contents_->GetAllFrames()) {
@@ -289,20 +305,29 @@ void AwContents::SetSaveFormData(bool enabled) {
   }
 }
 
-void AwContents::InitAutofillIfNecessary(bool enabled) {
-  // Do not initialize if the feature is not enabled.
-  if (!enabled)
-    return;
+void AwContents::InitAutofillIfNecessary(bool autocomplete_enabled) {
   // Check if the autofill driver factory already exists.
   content::WebContents* web_contents = web_contents_.get();
   if (ContentAutofillDriverFactory::FromWebContents(web_contents))
+    return;
+
+  // Check if AutofillProvider is available.
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  JNIEnv* env = AttachCurrentThread();
+  ScopedJavaLocalRef<jobject> obj = java_ref_.get(env);
+  if (obj.is_null())
+    return;
+
+  // Just return, if the app neither runs on O sdk nor enables autocomplete.
+  if (!autofill_provider_ && !autocomplete_enabled)
     return;
 
   AwAutofillClient::CreateForWebContents(web_contents);
   ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       web_contents, AwAutofillClient::FromWebContents(web_contents),
       base::android::GetDefaultLocaleString(),
-      AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER,
+      autofill_provider_.get());
 }
 
 void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
@@ -385,11 +410,11 @@ static jlong Init(JNIEnv* env,
   return reinterpret_cast<intptr_t>(new AwContents(std::move(web_contents)));
 }
 
-static void SetForceAuxiliaryBitmapRendering(
-    JNIEnv* env,
-    const JavaParamRef<jclass>&,
-    jboolean force_auxiliary_bitmap_rendering) {
-  g_force_auxiliary_bitmap_rendering = force_auxiliary_bitmap_rendering;
+static jboolean HasRequiredHardwareExtensions(JNIEnv* env,
+                                              const JavaParamRef<jclass>&) {
+  return content::GpuDataManager::GetInstance()
+      ->GetGPUInfo()
+      .can_support_threaded_texture_mailbox;
 }
 
 static void SetAwDrawSWFunctionTable(JNIEnv* env,
@@ -964,14 +989,15 @@ bool AwContents::OnDraw(JNIEnv* env,
                         jint visible_left,
                         jint visible_top,
                         jint visible_right,
-                        jint visible_bottom) {
+                        jint visible_bottom,
+                        jboolean force_auxiliary_bitmap_rendering) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   gfx::Vector2d scroll(scroll_x, scroll_y);
   browser_view_renderer_.PrepareToDraw(
       scroll, gfx::Rect(visible_left, visible_top, visible_right - visible_left,
                         visible_bottom - visible_top));
   if (is_hardware_accelerated && browser_view_renderer_.attached_to_window() &&
-      !g_force_auxiliary_bitmap_rendering) {
+      !force_auxiliary_bitmap_rendering) {
     return browser_view_renderer_.OnDrawHardware();
   }
 
@@ -989,7 +1015,7 @@ bool AwContents::OnDraw(JNIEnv* env,
   // viewspace.  Use the resulting rect as the auxiliary bitmap.
   std::unique_ptr<SoftwareCanvasHolder> canvas_holder =
       SoftwareCanvasHolder::Create(canvas, scroll, view_size,
-                                   g_force_auxiliary_bitmap_rendering);
+                                   force_auxiliary_bitmap_rendering);
   if (!canvas_holder || !canvas_holder->GetCanvas()) {
     TRACE_EVENT_INSTANT0("android_webview", "EarlyOut_NoSoftwareCanvas",
                          TRACE_EVENT_SCOPE_THREAD);
@@ -1354,6 +1380,12 @@ void AwContents::ResumeLoadingCreatedPopupWebContents(
   web_contents_->ResumeLoadingCreatedWebContents();
 }
 
+jlong AwContents::GetAutofillProvider(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  return reinterpret_cast<jlong>(autofill_provider_.get());
+}
+
 void SetShouldDownloadFavicons(JNIEnv* env,
                                const JavaParamRef<jclass>& jclazz) {
   g_should_download_favicons = true;
@@ -1413,18 +1445,31 @@ int AwContents::GetErrorUiType() {
   return Java_AwContents_getErrorUiType(env, obj);
 }
 
-void AwContents::CallProceedOnInterstitialForTesting(
+void AwContents::EvaluateJavaScriptOnInterstitialForTesting(
     JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
-  DCHECK(web_contents_->GetInterstitialPage());
-  web_contents_->GetInterstitialPage()->Proceed();
-}
+    const base::android::JavaParamRef<jobject>& obj,
+    const base::android::JavaParamRef<jstring>& script,
+    const base::android::JavaParamRef<jobject>& callback) {
+  content::InterstitialPage* interstitial =
+      web_contents_->GetInterstitialPage();
+  DCHECK(interstitial);
 
-void AwContents::CallDontProceedOnInterstitialForTesting(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj) {
-  DCHECK(web_contents_->GetInterstitialPage());
-  web_contents_->GetInterstitialPage()->DontProceed();
+  if (!callback) {
+    // No callback requested.
+    interstitial->GetMainFrame()->ExecuteJavaScriptForTests(
+        ConvertJavaStringToUTF16(env, script));
+    return;
+  }
+
+  // Secure the Java callback in a scoped object and give ownership of it to the
+  // base::Callback.
+  ScopedJavaGlobalRef<jobject> j_callback;
+  j_callback.Reset(env, callback);
+  RenderFrameHost::JavaScriptResultCallback js_callback =
+      base::Bind(&JavaScriptResultCallbackForTesting, j_callback);
+
+  interstitial->GetMainFrame()->ExecuteJavaScriptForTests(
+      ConvertJavaStringToUTF16(env, script), js_callback);
 }
 
 void AwContents::OnRenderProcessGone(int child_process_id) {

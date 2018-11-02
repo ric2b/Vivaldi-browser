@@ -4,6 +4,8 @@
 
 #include "content/shell/test_runner/accessibility_controller.h"
 
+#include <string>
+
 #include "base/macros.h"
 #include "content/shell/test_runner/web_view_test_proxy.h"
 #include "gin/handle.h"
@@ -165,8 +167,9 @@ void AccessibilityController::NotificationReceived(
   blink::WebFrame* frame = web_view()->MainFrame();
   if (!frame || frame->IsWebRemoteFrame())
     return;
+  blink::WebLocalFrame* local_frame = frame->ToWebLocalFrame();
 
-  v8::Local<v8::Context> context = frame->MainWorldScriptContext();
+  v8::Local<v8::Context> context = local_frame->MainWorldScriptContext();
   if (context.IsEmpty())
     return;
 
@@ -180,7 +183,7 @@ void AccessibilityController::NotificationReceived(
   WebAXObjectProxy* element;
   bool result = gin::ConvertFromV8(isolate, element_handle, &element);
   DCHECK(result);
-  element->NotificationReceived(frame, notification_name);
+  element->NotificationReceived(local_frame, notification_name);
 
   if (notification_callback_.IsEmpty())
     return;
@@ -191,7 +194,7 @@ void AccessibilityController::NotificationReceived(
                                               v8::String::kNormalString,
                                               notification_name.size()),
   };
-  frame->CallFunctionEvenIfScriptDisabled(
+  local_frame->CallFunctionEvenIfScriptDisabled(
       v8::Local<v8::Function>::New(isolate, notification_callback_),
       context->Global(), arraysize(argv), argv);
 }
@@ -215,21 +218,25 @@ v8::Local<v8::Object> AccessibilityController::FocusedElement() {
   if (!frame)
     return v8::Local<v8::Object>();
 
+  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  CHECK(frame->IsWebLocalFrame())
+      << "This function cannot be called if the main frame is not a "
+         "local frame.";
   blink::WebAXObject focused_element =
-      frame->GetDocument().FocusedAccessibilityObject();
+      blink::WebAXObject::FromWebDocumentFocused(
+          frame->ToWebLocalFrame()->GetDocument());
   if (focused_element.IsNull())
-    focused_element = web_view()->AccessibilityObject();
+    focused_element = GetAccessibilityObjectForMainFrame();
   return elements_.GetOrCreate(focused_element);
 }
 
 v8::Local<v8::Object> AccessibilityController::RootElement() {
-  blink::WebAXObject root_element = web_view()->AccessibilityObject();
-  return elements_.GetOrCreate(root_element);
+  return elements_.GetOrCreate(GetAccessibilityObjectForMainFrame());
 }
 
 v8::Local<v8::Object> AccessibilityController::AccessibleElementById(
     const std::string& id) {
-  blink::WebAXObject root_element = web_view()->AccessibilityObject();
+  blink::WebAXObject root_element = GetAccessibilityObjectForMainFrame();
 
   if (!root_element.UpdateLayoutAndCheckValidity())
     return v8::Local<v8::Object>();
@@ -266,6 +273,18 @@ AccessibilityController::FindAccessibleElementByIdRecursive(
 
 blink::WebView* AccessibilityController::web_view() {
   return web_view_test_proxy_base_->web_view();
+}
+
+blink::WebAXObject
+AccessibilityController::GetAccessibilityObjectForMainFrame() {
+  blink::WebFrame* frame = web_view()->MainFrame();
+
+  // TODO(lukasza): Finish adding OOPIF support to the layout tests harness.
+  CHECK(frame && frame->IsWebLocalFrame())
+      << "This function cannot be called if the main frame is not a "
+         "local frame.";
+  return blink::WebAXObject::FromWebDocument(
+      web_view()->MainFrame()->ToWebLocalFrame()->GetDocument());
 }
 
 }  // namespace test_runner

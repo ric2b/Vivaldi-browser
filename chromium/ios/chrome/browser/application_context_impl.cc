@@ -31,7 +31,6 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/translate/core/browser/translate_download_manager.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "components/ukm/ukm_service.h"
 #include "components/update_client/configurator.h"
 #include "components/update_client/update_query_params.h"
@@ -56,6 +55,7 @@
 #include "net/log/net_log_capture_mode.h"
 #include "net/socket/client_socket_pool_manager.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 ApplicationContextImpl::ApplicationContextImpl(
     base::SequencedTaskRunner* local_state_task_runner,
@@ -63,13 +63,12 @@ ApplicationContextImpl::ApplicationContextImpl(
     const std::string& locale)
     : local_state_task_runner_(local_state_task_runner),
       was_last_shutdown_clean_(false),
+      is_shutting_down_(false),
       created_local_state_(false) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 
-  net_log_.reset(new net_log::ChromeNetLog(
-      base::FilePath(), net::NetLogCaptureMode::Default(),
-      command_line.GetCommandLineString(), GetChannelString()));
+  net_log_.reset(new net_log::ChromeNetLog());
 
   SetApplicationLocale(locale);
 
@@ -184,6 +183,16 @@ bool ApplicationContextImpl::WasLastShutdownClean() {
   // Make sure the locale state is created as the file is initialized there.
   ignore_result(GetLocalState());
   return was_last_shutdown_clean_;
+}
+
+void ApplicationContextImpl::SetIsShuttingDown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  is_shutting_down_ = true;
+}
+
+bool ApplicationContextImpl::IsShuttingDown() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  return is_shutting_down_;
 }
 
 PrefService* ApplicationContextImpl::GetLocalState() {

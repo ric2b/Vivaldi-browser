@@ -599,7 +599,7 @@ bool SyncChannel::Send(Message* message) {
                "line", IPC_MESSAGE_ID_LINE(message->type()));
 #endif
   if (!message->is_sync()) {
-    ChannelProxy::Send(message);
+    ChannelProxy::SendInternal(message);
     return true;
   }
 
@@ -614,7 +614,7 @@ bool SyncChannel::Send(Message* message) {
     return false;
   }
 
-  ChannelProxy::Send(message);
+  ChannelProxy::SendInternal(message);
 
   // Wait for reply, or for any other incoming synchronous messages.
   // |this| might get deleted, so only call static functions at this point.
@@ -646,15 +646,14 @@ void SyncChannel::WaitForReply(mojo::SyncHandleRegistry* registry,
     bool dispatch = false;
     bool send_done = false;
     bool should_pump_messages = false;
-    bool registered = registry->RegisterEvent(
-        context->GetSendDoneEvent(), base::Bind(&OnEventReady, &send_done));
-    DCHECK(registered);
+    base::Closure on_send_done_callback = base::Bind(&OnEventReady, &send_done);
+    registry->RegisterEvent(context->GetSendDoneEvent(), on_send_done_callback);
 
+    base::Closure on_pump_messages_callback;
     if (pump_messages_event) {
-      registered = registry->RegisterEvent(
-          pump_messages_event,
-          base::Bind(&OnEventReady, &should_pump_messages));
-      DCHECK(registered);
+      on_pump_messages_callback =
+          base::Bind(&OnEventReady, &should_pump_messages);
+      registry->RegisterEvent(pump_messages_event, on_pump_messages_callback);
     }
 
     const bool* stop_flags[] = { &dispatch, &send_done, &should_pump_messages };
@@ -662,9 +661,10 @@ void SyncChannel::WaitForReply(mojo::SyncHandleRegistry* registry,
     registry->Wait(stop_flags, 3);
     context->received_sync_msgs()->UnblockDispatch();
 
-    registry->UnregisterEvent(context->GetSendDoneEvent());
+    registry->UnregisterEvent(context->GetSendDoneEvent(),
+                              on_send_done_callback);
     if (pump_messages_event)
-      registry->UnregisterEvent(pump_messages_event);
+      registry->UnregisterEvent(pump_messages_event, on_pump_messages_callback);
 
     if (dispatch) {
       // We're waiting for a reply, but we received a blocking synchronous call.

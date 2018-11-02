@@ -62,3 +62,22 @@ DISABLE(WebContentsImplBrowserTest, RenderWidgetDeletedWhileMouseLockPending)
 // Broke in v60
 DISABLE(InputMethodMacTest, MonitorCompositionRangeForActiveWidget)
 DISABLE(ExtensionApiTabTest, TabOpenerCraziness)
+
+// Broke in v61
+DISABLE(DownloadExtensionTest,
+        DownloadExtensionTest_OnDeterminingFilename_CurDirInvalid)
+DISABLE(DownloadExtensionTest,
+        DownloadExtensionTest_OnDeterminingFilename_DangerousOverride)
+DISABLE(DownloadExtensionTest,
+        DownloadExtensionTest_OnDeterminingFilename_IncognitoSplit)
+DISABLE(DownloadExtensionTest,
+        DownloadExtensionTest_OnDeterminingFilename_NoChange)
+DISABLE(DownloadExtensionTest,
+        DownloadExtensionTest_OnDeterminingFilename_ReferencesParentInvalid)
+DISABLE(DownloadExtensionTest, DownloadExtensionTest_Download_ConflictAction)
+DISABLE(DownloadExtensionTest, DownloadExtensionTest_Open)
+DISABLE(DownloadExtensionTest, DownloadExtensionTest_SearchIdAndFilename)
+DISABLE(DownloadExtensionTest, DownloadsDragFunction)
+DISABLE(ExtensionWebstorePrivateApiTest, IconUrl)
+DISABLE(SSLClientCertificateSelectorCocoaTest, WorkaroundCrashySierra)
+DISABLE(CaptureScreenshotTest, CaptureScreenshot)

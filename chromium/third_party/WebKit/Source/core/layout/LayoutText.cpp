@@ -27,9 +27,11 @@
 #include <algorithm>
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Text.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/VisiblePosition.h"
 #include "core/editing/iterators/TextIterator.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutTableCell.h"
@@ -109,9 +111,7 @@ static void MakeCapitalized(String* string, UChar previous) {
   unsigned length = string->length();
   const StringImpl& input = *string->Impl();
 
-  if (length >= std::numeric_limits<unsigned>::max())
-    CRASH();
-
+  CHECK_LT(length, std::numeric_limits<unsigned>::max());
   StringBuffer<UChar> string_with_previous(length + 1);
   string_with_previous[0] =
       previous == kNoBreakSpaceCharacter ? kSpaceCharacter : previous;
@@ -231,7 +231,7 @@ void LayoutText::RemoveAndDestroyTextBoxes() {
         if (next)
           next->MarkDirty();
       }
-      for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox())
+      for (InlineTextBox* box : InlineTextBoxesOf(*this))
         box->Remove();
     } else if (Parent()) {
       Parent()->DirtyLinesFromChangedChild(this);
@@ -297,9 +297,9 @@ void LayoutText::DeleteTextBoxes() {
   }
 }
 
-PassRefPtr<StringImpl> LayoutText::OriginalText() const {
+RefPtr<StringImpl> LayoutText::OriginalText() const {
   Node* e = GetNode();
-  return (e && e->IsTextNode()) ? ToText(e)->DataImpl() : 0;
+  return (e && e->IsTextNode()) ? ToText(e)->DataImpl() : nullptr;
 }
 
 String LayoutText::PlainText() const {
@@ -309,8 +309,7 @@ String LayoutText::PlainText() const {
   // FIXME: this is just a stopgap until TextIterator is adapted to support
   // generated text.
   StringBuilder plain_text_builder;
-  for (InlineTextBox* text_box = FirstTextBox(); text_box;
-       text_box = text_box->NextTextBox()) {
+  for (InlineTextBox* text_box : InlineTextBoxesOf(*this)) {
     String text = text_.Substring(text_box->Start(), text_box->Len())
                       .SimplifyWhiteSpace(WTF::kDoNotStripWhiteSpace);
     plain_text_builder.Append(text);
@@ -324,7 +323,7 @@ String LayoutText::PlainText() const {
 
 void LayoutText::AbsoluteRects(Vector<IntRect>& rects,
                                const LayoutPoint& accumulated_offset) const {
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     rects.push_back(EnclosingIntRect(LayoutRect(
         LayoutPoint(accumulated_offset) + box->Location(), box->Size())));
   }
@@ -334,7 +333,9 @@ static FloatRect LocalQuadForTextBox(InlineTextBox* box,
                                      unsigned start,
                                      unsigned end) {
   unsigned real_end = std::min(box->end() + 1, end);
-  LayoutRect r = box->LocalSelectionRect(start, real_end);
+  const bool include_newline_space_width = false;
+  LayoutRect r =
+      box->LocalSelectionRect(start, real_end, include_newline_space_width);
   if (r.Height()) {
     // Change the height and y position (or width and x for vertical text)
     // because selectionRect uses selection-specific values.
@@ -381,7 +382,7 @@ void LayoutText::Quads(Vector<FloatQuad>& quads,
                        ClippingOption option,
                        LocalOrAbsoluteOption local_or_absolute,
                        MapCoordinatesFlags mode) const {
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     FloatRect boundaries(box->FrameRect());
 
     // Shorten the width of this text box if it ends in an ellipsis.
@@ -436,7 +437,7 @@ void LayoutText::AbsoluteQuadsForRange(Vector<FloatQuad>& quads,
   // This function is always called in sequence that this check should work.
   bool has_checked_box_in_range = !quads.IsEmpty();
 
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     // Note: box->end() returns the index of the last character, not the index
     // past it
     if (start <= box->Start() && box->end() < end) {
@@ -650,7 +651,7 @@ PositionWithAffinity LayoutText::PositionForPoint(const LayoutPoint& point) {
   bool blocks_are_flipped = Style()->IsFlippedBlocksWritingMode();
 
   InlineTextBox* last_box = nullptr;
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     if (box->IsLineBreak() && !box->PrevLeafChild() && box->NextLeafChild() &&
         !box->NextLeafChild()->IsLineBreak())
       box = box->NextTextBox();
@@ -797,7 +798,8 @@ ALWAYS_INLINE float LayoutText::WidthFromFont(
     float text_width_so_far,
     TextDirection text_direction,
     HashSet<const SimpleFontData*>* fallback_fonts,
-    FloatRect* glyph_bounds_accumulation) const {
+    FloatRect* glyph_bounds_accumulation,
+    float expansion) const {
   if (Style()->HasTextCombine() && IsCombineText()) {
     const LayoutTextCombine* combine_text = ToLayoutTextCombine(this);
     if (combine_text->IsCombined())
@@ -810,6 +812,7 @@ ALWAYS_INLINE float LayoutText::WidthFromFont(
   DCHECK_GE(run.CharactersLength(), run.length());
   run.SetTabSize(!Style()->CollapseWhiteSpace(), Style()->GetTabSize());
   run.SetXPos(lead_width + text_width_so_far);
+  run.SetExpansion(expansion);
 
   FloatRect new_glyph_bounds;
   float result =
@@ -1400,7 +1403,7 @@ bool LayoutText::IsAllCollapsibleWhitespace() const {
 }
 
 bool LayoutText::IsRenderedCharacter(int offset_in_node) const {
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     if (offset_in_node < static_cast<int>(box->Start()) &&
         !ContainsReversedText()) {
       // The offset we're looking for is before this node this means the offset
@@ -1444,28 +1447,28 @@ void LayoutText::SetSelectionState(SelectionState state) {
   LayoutObject::SetSelectionState(state);
 
   if (CanUpdateSelectionOnRootLineBoxes()) {
-    if (state == SelectionStart || state == SelectionEnd ||
-        state == SelectionBoth) {
+    if (state == SelectionState::kStart || state == SelectionState::kEnd ||
+        state == SelectionState::kStartAndEnd) {
       int start_pos, end_pos;
       std::tie(start_pos, end_pos) = SelectionStartEnd();
-      if (GetSelectionState() == SelectionStart) {
+      if (GetSelectionState() == SelectionState::kStart) {
         end_pos = TextLength();
 
         // to handle selection from end of text to end of line
         if (start_pos && start_pos == end_pos)
           start_pos = end_pos - 1;
-      } else if (GetSelectionState() == SelectionEnd) {
+      } else if (GetSelectionState() == SelectionState::kEnd) {
         start_pos = 0;
       }
 
-      for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+      for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
         if (box->IsSelected(start_pos, end_pos)) {
           box->Root().SetHasSelectedChildren(true);
         }
       }
     } else {
-      for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
-        box->Root().SetHasSelectedChildren(state == SelectionInside);
+      for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
+        box->Root().SetHasSelectedChildren(state == SelectionState::kInside);
       }
     }
   }
@@ -1495,7 +1498,7 @@ void LayoutText::SetTextWithOffset(PassRefPtr<StringImpl> text,
 
   // Dirty all text boxes that include characters in between offset and
   // offset+len.
-  for (InlineTextBox* curr = FirstTextBox(); curr; curr = curr->NextTextBox()) {
+  for (InlineTextBox* curr : InlineTextBoxesOf(*this)) {
     // FIXME: This shouldn't rely on the end of a dirty line box. See
     // https://bugs.webkit.org/show_bug.cgi?id=97264
     // Text run is entirely before the affected range.
@@ -1616,9 +1619,9 @@ void ApplyTextTransform(const ComputedStyle* style,
   }
 }
 
-void LayoutText::SetTextInternal(PassRefPtr<StringImpl> text) {
+void LayoutText::SetTextInternal(RefPtr<StringImpl> text) {
   DCHECK(text);
-  text_ = std::move(text);
+  text_ = String(std::move(text));
 
   if (Style()) {
     ApplyTextTransform(Style(), text_, PreviousCharacter());
@@ -1701,7 +1704,7 @@ void LayoutText::DirtyOrDeleteLineBoxesIfNeeded(bool full_layout) {
 }
 
 void LayoutText::DirtyLineBoxes() {
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox())
+  for (InlineTextBox* box : InlineTextBoxesOf(*this))
     box->DirtyLineBoxes();
   lines_dirty_ = false;
 }
@@ -1751,7 +1754,8 @@ float LayoutText::Width(unsigned from,
                         TextDirection text_direction,
                         bool first_line,
                         HashSet<const SimpleFontData*>* fallback_fonts,
-                        FloatRect* glyph_bounds) const {
+                        FloatRect* glyph_bounds,
+                        float expansion) const {
   if (from >= TextLength())
     return 0;
 
@@ -1759,7 +1763,7 @@ float LayoutText::Width(unsigned from,
     len = TextLength() - from;
 
   return Width(from, len, Style(first_line)->GetFont(), x_pos, text_direction,
-               fallback_fonts, glyph_bounds);
+               fallback_fonts, glyph_bounds, expansion);
 }
 
 float LayoutText::Width(unsigned from,
@@ -1768,7 +1772,8 @@ float LayoutText::Width(unsigned from,
                         LayoutUnit x_pos,
                         TextDirection text_direction,
                         HashSet<const SimpleFontData*>* fallback_fonts,
-                        FloatRect* glyph_bounds) const {
+                        FloatRect* glyph_bounds,
+                        float expansion) const {
   DCHECK_LE(from + len, TextLength());
   if (!TextLength())
     return 0;
@@ -1797,7 +1802,7 @@ float LayoutText::Width(unsigned from,
       }
     } else {
       w = WidthFromFont(f, from, len, x_pos.ToFloat(), 0, text_direction,
-                        fallback_fonts, glyph_bounds);
+                        fallback_fonts, glyph_bounds, expansion);
     }
   } else {
     TextRun run =
@@ -1822,8 +1827,7 @@ LayoutRect LayoutText::LinesBoundingBox() const {
     // Return the width of the minimal left side and the maximal right side.
     float logical_left_side = 0;
     float logical_right_side = 0;
-    for (InlineTextBox* curr = FirstTextBox(); curr;
-         curr = curr->NextTextBox()) {
+    for (InlineTextBox* curr : InlineTextBoxesOf(*this)) {
       if (curr == FirstTextBox() || curr->LogicalLeft() < logical_left_side)
         logical_left_side = curr->LogicalLeft().ToFloat();
       if (curr == FirstTextBox() || curr->LogicalRight() > logical_right_side)
@@ -1851,7 +1855,7 @@ LayoutRect LayoutText::VisualOverflowRect() const {
   // Return the width of the minimal left side and the maximal right side.
   LayoutUnit logical_left_side = LayoutUnit::Max();
   LayoutUnit logical_right_side = LayoutUnit::Min();
-  for (InlineTextBox* curr = FirstTextBox(); curr; curr = curr->NextTextBox()) {
+  for (InlineTextBox* curr : InlineTextBoxesOf(*this)) {
     LayoutRect logical_visual_overflow = curr->LogicalOverflowRect();
     logical_left_side =
         std::min(logical_left_side, logical_visual_overflow.X());
@@ -1899,7 +1903,7 @@ LayoutRect LayoutText::LocalVisualRect() const {
 LayoutRect LayoutText::LocalSelectionRect() const {
   DCHECK(!NeedsLayout());
 
-  if (GetSelectionState() == SelectionNone)
+  if (GetSelectionState() == SelectionState::kNone)
     return LayoutRect();
   LayoutBlock* cb = ContainingBlock();
   if (!cb)
@@ -1908,16 +1912,23 @@ LayoutRect LayoutText::LocalSelectionRect() const {
   // Now calculate startPos and endPos for painting selection.
   // We include a selection while endPos > 0
   int start_pos, end_pos;
-  if (GetSelectionState() == SelectionInside) {
+  if (GetSelectionState() == SelectionState::kInside) {
     // We are fully selected.
     start_pos = 0;
     end_pos = TextLength();
   } else {
-    std::tie(start_pos, end_pos) = SelectionStartEnd();
-    if (GetSelectionState() == SelectionStart)
+    const FrameSelection& frame_selection = GetFrame()->Selection();
+    if (GetSelectionState() == SelectionState::kStart) {
+      start_pos = frame_selection.LayoutSelectionStart().value();
       end_pos = TextLength();
-    else if (GetSelectionState() == SelectionEnd)
+    } else if (GetSelectionState() == SelectionState::kEnd) {
       start_pos = 0;
+      end_pos = frame_selection.LayoutSelectionEnd().value();
+    } else {
+      DCHECK(GetSelectionState() == SelectionState::kStartAndEnd);
+      start_pos = frame_selection.LayoutSelectionStart().value();
+      end_pos = frame_selection.LayoutSelectionEnd().value();
+    }
   }
 
   LayoutRect rect;
@@ -1925,7 +1936,7 @@ LayoutRect LayoutText::LocalSelectionRect() const {
   if (start_pos == end_pos)
     return rect;
 
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     rect.Unite(box->LocalSelectionRect(start_pos, end_pos));
     rect.Unite(LayoutRect(EllipsisRectForBox(box, start_pos, end_pos)));
   }
@@ -1956,7 +1967,7 @@ int LayoutText::CaretMaxOffset() const {
 
 unsigned LayoutText::ResolvedTextLength() const {
   int len = 0;
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox())
+  for (InlineTextBox* box : InlineTextBoxesOf(*this))
     len += box->Len();
   return len;
 }
@@ -1984,7 +1995,7 @@ void LayoutText::InvalidateDisplayItemClients(
   ObjectPaintInvalidator paint_invalidator(*this);
   paint_invalidator.InvalidateDisplayItemClient(*this, invalidation_reason);
 
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     paint_invalidator.InvalidateDisplayItemClient(*box, invalidation_reason);
     if (box->Truncation() != kCNoTruncation) {
       if (EllipsisBox* ellipsis_box = box->Root().GetEllipsisBox())
@@ -1994,7 +2005,7 @@ void LayoutText::InvalidateDisplayItemClients(
   }
 }
 
-// TODO(lunalu): Would be better to dump the bounding box x and y rather than
+// TODO(loonybear): Would be better to dump the bounding box x and y rather than
 // the first run's x and y, but that would involve updating many test results.
 LayoutRect LayoutText::DebugRect() const {
   IntRect lines_box = EnclosingIntRect(LinesBoundingBox());
@@ -2005,6 +2016,27 @@ LayoutRect LayoutText::DebugRect() const {
     block->AdjustChildDebugRect(rect);
 
   return rect;
+}
+
+// -----
+InlineTextBoxRange::Iterator::Iterator(InlineTextBox* current)
+    : current_(current) {}
+
+InlineTextBoxRange::Iterator& InlineTextBoxRange::Iterator::operator++() {
+  current_ = current_->NextTextBox();
+  return *this;
+}
+
+InlineTextBox* InlineTextBoxRange::Iterator::operator*() const {
+  DCHECK(current_);
+  return current_;
+}
+
+InlineTextBoxRange::InlineTextBoxRange(const LayoutText& layout_text)
+    : layout_text_(&layout_text) {}
+
+InlineTextBoxRange InlineTextBoxesOf(const LayoutText& layout_text) {
+  return InlineTextBoxRange(layout_text);
 }
 
 }  // namespace blink

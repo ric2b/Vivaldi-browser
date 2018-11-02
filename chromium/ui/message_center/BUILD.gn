@@ -5,16 +5,20 @@
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
-import("//ui/vector_icons/vector_icons.gni")
+import("//components/vector_icons/vector_icons.gni")
 
 aggregate_vector_icons("message_center_vector_icons") {
   icon_directory = "vector_icons"
 
   icons = [
-    "notification_settings_button.1x.icon",
-    "notification_settings_button.icon",
     "notification_close_button.1x.icon",
     "notification_close_button.icon",
+    "notification_expand_less.icon",
+    "notification_expand_more.icon",
+    "notification_settings_button.1x.icon",
+    "notification_settings_button.icon",
+    "product.1x.icon",
+    "product.icon",
   ]
 }
 
@@ -95,7 +99,10 @@ component("message_center") {
     sources += get_target_outputs(":message_center_vector_icons")
 
     if (is_win) {
-      deps += [ "//ui/aura" ]
+      deps += [
+        "//ui/aura",
+        "//ui/wm/public",
+      ]
     }
 
     if (is_mac) {
@@ -136,8 +143,14 @@ component("message_center") {
         "views/message_view_factory.h",
         "views/notification_button.cc",
         "views/notification_button.h",
+        "views/notification_control_buttons_view.cc",
+        "views/notification_control_buttons_view.h",
+        "views/notification_header_view.cc",
+        "views/notification_header_view.h",
         "views/notification_view.cc",
         "views/notification_view.h",
+        "views/notification_view_md.cc",
+        "views/notification_view_md.h",
         "views/notifier_settings_view.cc",
         "views/notifier_settings_view.h",
         "views/padded_button.cc",
@@ -255,6 +268,7 @@ test("message_center_unittests") {
         "views/message_center_view_unittest.cc",
         "views/message_list_view_unittest.cc",
         "views/message_popup_collection_unittest.cc",
+        "views/notification_view_md_unittest.cc",
         "views/notification_view_unittest.cc",
         "views/notifier_settings_view_unittest.cc",
       ]

@@ -6,6 +6,7 @@ from core import perf_benchmark
 from measurements import startup
 import page_sets
 from telemetry import benchmark
+from telemetry import story
 
 
 class _StartupCold(perf_benchmark.PerfBenchmark):
@@ -36,8 +37,6 @@ class _StartupWarm(perf_benchmark.PerfBenchmark):
     return startup.Startup(cold=False)
 
 
-@benchmark.Disabled('snowleopard')  # crbug.com/336913
-@benchmark.Disabled('android')
 class StartupColdBlankPage(_StartupCold):
   """Measures cold startup time with a clean profile."""
   tag = 'cold'
@@ -47,8 +46,14 @@ class StartupColdBlankPage(_StartupCold):
   def Name(cls):
     return 'startup.cold.blank_page'
 
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.PermanentlyDisableBenchmark(
+            [story.expectations.ALL_ANDROID], 'Non Android benchmark')
+    return StoryExpectations()
 
-@benchmark.Disabled('android')
+
 class StartupWarmBlankPage(_StartupWarm):
   """Measures warm startup time with a clean profile."""
   tag = 'warm'
@@ -58,12 +63,15 @@ class StartupWarmBlankPage(_StartupWarm):
   def Name(cls):
     return 'startup.warm.blank_page'
 
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.PermanentlyDisableBenchmark(
+            [story.expectations.ALL_ANDROID], 'Non Android benchmark')
+    return StoryExpectations()
 
-@benchmark.Disabled('reference',                   # http://crbug.com/476882
-                    'android',                     # http://crbug.com/481919
-                    'yosemite',                    # http://crbug.com/605485
-                    'mac',                         # http://crbug.com/700843
-                    'content-shell')               # No pregenerated profiles.
+
+@benchmark.Disabled('content-shell')  # No pregenerated profiles.
 class StartupLargeProfileColdBlankPage(_StartupCold):
   """Measures cold startup time with a large profile."""
   tag = 'cold'
@@ -80,13 +88,15 @@ class StartupLargeProfileColdBlankPage(_StartupCold):
   def Name(cls):
     return 'startup.large_profile.cold.blank_page'
 
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.PermanentlyDisableBenchmark(
+            [story.expectations.ALL_ANDROID], 'Desktop benchmark')
+    return StoryExpectations()
 
-@benchmark.Disabled('reference',                   # http://crbug.com/476882
-                    'android',                     # http://crbug.com/481919
-                    'yosemite',                    # http://crbug.com/605485
-                    'mac',                         # http://crbug.com/700843
-                    'win',                         # http://crbug.com/704137
-                    'content-shell')               # No pregenerated profiles.
+
+@benchmark.Disabled('content-shell')  # No pregenerated profiles.
 class StartupLargeProfileWarmBlankPage(_StartupWarm):
   """Measures warm startup time with a large profile."""
   tag = 'warm'
@@ -102,3 +112,10 @@ class StartupLargeProfileWarmBlankPage(_StartupWarm):
   @classmethod
   def Name(cls):
     return 'startup.large_profile.warm.blank_page'
+
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.PermanentlyDisableBenchmark(
+            [story.expectations.ALL_ANDROID], 'Desktop benchmark')
+    return StoryExpectations()

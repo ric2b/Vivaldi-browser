@@ -41,7 +41,7 @@ class V8TestInterfaceDocument {
     visitor->Trace(scriptWrappable->ToImpl<TestInterfaceDocument>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestInterfaceDocument>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestInterfaceDocument>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 
@@ -49,6 +49,11 @@ class V8TestInterfaceDocument {
 
   CORE_EXPORT static void locationAttributeGetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void locationAttributeSetterCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+  static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
 };
 
 template <>

@@ -10,37 +10,59 @@
 #include "services/video_capture/public/interfaces/device_factory.mojom.h"
 #include "services/video_capture/public/interfaces/device_factory_provider.mojom.h"
 
-namespace service_manager {
-class Connector;
-}
-
 namespace content {
 
 // Implementation of VideoCaptureProvider that uses the "video_capture" service.
+// Connects to the service lazily on demand and disconnects from the service as
+// soon as all previously handed out VideoCaptureDeviceLauncher instances have
+// been released and no more answers to GetDeviceInfosAsync() calls are pending.
 class CONTENT_EXPORT ServiceVideoCaptureProvider : public VideoCaptureProvider {
  public:
+  class ServiceConnector {
+   public:
+    virtual ~ServiceConnector() {}
+    virtual void BindFactoryProvider(
+        video_capture::mojom::DeviceFactoryProviderPtr* provider) = 0;
+  };
+
+  // The parameterless constructor creates a default ServiceConnector which
+  // uses the ServiceManager associated with the current process to connect
+  // to the video capture service.
   ServiceVideoCaptureProvider();
+  // Lets clients provide a custom ServiceConnector.
+  explicit ServiceVideoCaptureProvider(
+      std::unique_ptr<ServiceConnector> service_connector);
   ~ServiceVideoCaptureProvider() override;
 
-  void Uninitialize() override;
-
-  void GetDeviceInfosAsync(
-      const base::Callback<void(
-          const std::vector<media::VideoCaptureDeviceInfo>&)>& result_callback)
-      override;
-
+  // VideoCaptureProvider implementation.
+  void GetDeviceInfosAsync(GetDeviceInfosCallback result_callback) override;
   std::unique_ptr<VideoCaptureDeviceLauncher> CreateDeviceLauncher() override;
 
  private:
-  void LazyConnectToService();
-  void OnLostConnectionToDeviceFactory();
+  enum class ReasonForUninitialize { kShutdown, kUnused, kConnectionLost };
 
-  std::unique_ptr<service_manager::Connector> connector_;
+  void LazyConnectToService();
+  void OnDeviceInfosReceived(GetDeviceInfosCallback result_callback,
+                             const std::vector<media::VideoCaptureDeviceInfo>&);
+  void OnLostConnectionToDeviceFactory();
+  void IncreaseUsageCount();
+  void DecreaseUsageCount();
+  void UninitializeInternal(ReasonForUninitialize reason);
+
+  std::unique_ptr<ServiceConnector> service_connector_;
   // We must hold on to |device_factory_provider_| because it holds the
   // service-side binding for |device_factory_|.
   video_capture::mojom::DeviceFactoryProviderPtr device_factory_provider_;
   video_capture::mojom::DeviceFactoryPtr device_factory_;
-  base::SequenceChecker sequence_checker_;
+  // Used for automatically uninitializing when no longer in use.
+  int usage_count_;
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  bool has_created_device_launcher_;
+  base::TimeTicks time_of_last_connect_;
+  base::TimeTicks time_of_last_uninitialize_;
+
+  base::WeakPtrFactory<ServiceVideoCaptureProvider> weak_ptr_factory_;
 };
 
 }  // namespace content

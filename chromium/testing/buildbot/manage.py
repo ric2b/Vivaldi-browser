@@ -69,61 +69,6 @@ SKIP = {
   'WebKit Mac10.11 (retina)',
   'Chromium Mac10.10 Tests',
   'Chromium Mac10.11 Tests',
-  'Mac GN',
-  'Mac GN (dbg)',
-
-  # The memory.fyi waterfall is in the process of being converted to recipes,
-  # and swarming doesn't work yet.
-  'Chromium Mac (valgrind)(1)',
-  'Chromium Mac (valgrind)(2)',
-  'Chromium OS (valgrind)(1)',
-  'Chromium OS (valgrind)(2)',
-  'Chromium OS (valgrind)(3)',
-  'Chromium OS (valgrind)(4)',
-  'Chromium OS (valgrind)(5)',
-  'Chromium OS (valgrind)(6)',
-  'Linux Tests (valgrind)(1)',
-  'Linux Tests (valgrind)(2)',
-  'Linux Tests (valgrind)(3)',
-  'Linux Tests (valgrind)(4)',
-  'Linux Tests (valgrind)(5)',
-  'Windows Browser (DrMemory full) (1)',
-  'Windows Browser (DrMemory full) (2)',
-  'Windows Browser (DrMemory full) (3)',
-  'Windows Browser (DrMemory full) (4)',
-  'Windows Browser (DrMemory full) (5)',
-  'Windows Browser (DrMemory full) (6)',
-  'Windows Browser (DrMemory full) (7)',
-  'Windows Browser (DrMemory full) (8)',
-  'Windows Browser (DrMemory full) (9)',
-  'Windows Browser (DrMemory full) (10)',
-  'Windows Browser (DrMemory full) (11)',
-  'Windows Browser (DrMemory full) (12)',
-  'Windows Content Browser (DrMemory)',
-  'Windows Content Browser (DrMemory full) (1)',
-  'Windows Content Browser (DrMemory full) (2)',
-  'Windows Content Browser (DrMemory full) (3)',
-  'Windows Content Browser (DrMemory full) (4)',
-  'Windows Content Browser (DrMemory full) (5)',
-  'Windows Content Browser (DrMemory full) (6)',
-  'Windows Unit (DrMemory full) (1)',
-  'Windows Unit (DrMemory full) (2)',
-  'Windows Unit (DrMemory full) (3)',
-  'Windows Unit (DrMemory full) (4)',
-  'Windows Unit (DrMemory full) (5)',
-  'Windows Unit (DrMemory full) (6)',
-  'Windows Unit (DrMemory full) (7)',
-  'Windows Unit (DrMemory full) (8)',
-  'Windows Unit (DrMemory full) (9)',
-  'Windows Unit (DrMemory full) (10)',
-  'Windows Unit (DrMemory full) (11)',
-  'Windows Unit (DrMemory full) (12)',
-  'Windows Unit (DrMemory x64)',
-  'Windows Unit (DrMemory)',
-
-  # This builder is fine, but win8_chromium_ng uses GN and this configuration,
-  # which breaks everything.
-  'Win8 Aura',
 
   # One off builders. Note that Swarming does support ARM.
   'Linux ARM Cross-Compile',
@@ -139,14 +84,13 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
 
   # These targets are listed only in build-side recipes.
   'All_syzygy',
-  'aura_builder',
   'blink_tests',
   'cast_shell',
   'cast_shell_apk',
+  'chrome_official_builder',
   'chrome_official_builder_no_unittests',
   'chromium_builder_asan',
   'chromium_builder_perf',
-  'chromium_builder_tests',
   'chromium_swarm_tests',
   'chromiumos_preflight',
   'mini_installer',
@@ -155,17 +99,20 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   # iOS tests are listed in //ios/build/bots.
   'cronet_test',
   'ios_chrome_integration_egtests',
+  'ios_chrome_payments_egtests',
   'ios_chrome_reading_list_egtests',
   'ios_chrome_settings_egtests',
   'ios_chrome_smoke_egtests',
   'ios_chrome_ui_egtests',
   'ios_chrome_unittests',
   'ios_chrome_web_egtests',
+  'ios_components_unittests',
   'ios_net_unittests',
   'ios_showcase_egtests',
   'ios_web_inttests',
   'ios_web_shell_egtests',
   'ios_web_unittests',
+  'ios_web_view_inttests',
 
   # These are listed in Builders that are skipped for other reasons.
   'chrome_junit_tests',
@@ -186,6 +133,7 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   'net_junit_tests',
   'service_junit_tests',
   'ui_junit_tests',
+  'vrcore_fps_test',
   'webapk_client_junit_tests',
   'webapk_shell_apk_junit_tests',
 
@@ -216,6 +164,10 @@ SKIP_GN_ISOLATE_MAP_TARGETS = {
   # http://crbug.com/524758
   'webkit_layout_tests',
   'webkit_layout_tests_exparchive',
+
+  # These are only run on V8 CI.
+  'pdfium_test',
+  'postmortem-metadata',
 }
 
 
@@ -285,7 +237,8 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
       raise Error('%s: %s is broken: %s' % (filename, builder, data))
     if ('gtest_tests' not in data and
         'isolated_scripts' not in data and
-        'additional_compile_targets' not in data):
+        'additional_compile_targets' not in data and
+        'instrumentation_tests' not in data):
       continue
 
     for d in data.get('junit_tests', []):
@@ -337,6 +290,15 @@ def process_file(mode, test_name, tests_location, filepath, ninja_targets,
 
     for d in data.get('isolated_scripts', []):
       name = d['isolate_name']
+      if (name not in ninja_targets and
+          name not in SKIP_GN_ISOLATE_MAP_TARGETS):
+        raise Error('%s: %s / %s is not listed in gn_isolate_map.pyl.' %
+                    (filename, builder, name))
+      elif name in ninja_targets:
+        ninja_targets_seen.add(name)
+
+    for d in data.get('instrumentation_tests', []):
+      name = d['test']
       if (name not in ninja_targets and
           name not in SKIP_GN_ISOLATE_MAP_TARGETS):
         raise Error('%s: %s / %s is not listed in gn_isolate_map.pyl.' %

@@ -32,7 +32,7 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
   MOCK_METHOD4(MountEx,
                void(const Identification& id,
                     const Authorization& key,
-                    const MountParameters& request,
+                    const MountRequest& request,
                     const MountCallback& callback));
   MOCK_METHOD5(AddKeyEx,
                void(const Identification& id,
@@ -58,8 +58,9 @@ class CHROMEOS_EXPORT MockHomedirMethods : public HomedirMethods {
   MOCK_METHOD2(GetAccountDiskUsage,
                void(const Identification& id,
                     const GetAccountDiskUsageCallback& callback));
-  MOCK_METHOD2(MigrateToDircrypto,
+  MOCK_METHOD3(MigrateToDircrypto,
                void(const Identification& id,
+                    bool minimal_migration,
                     const DBusResultCallback& callback));
 
   void set_mount_callback(const base::Closure& callback) {

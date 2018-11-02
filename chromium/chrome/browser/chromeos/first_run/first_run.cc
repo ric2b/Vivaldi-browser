@@ -7,19 +7,30 @@
 #include "base/metrics/histogram_macros.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_framework_service.h"
 #include "chrome/browser/chromeos/first_run/first_run_controller.h"
+#include "chrome/browser/chromeos/login/ui/login_display_host.h"
+#include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/extension_service.h"
+#include "chrome/browser/policy/profile_policy_connector.h"
+#include "chrome/browser/policy/profile_policy_connector_factory.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/ui/extensions/app_launch_params.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
+#include "components/arc/arc_service_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/signin/core/browser/account_info.h"
+#include "components/signin/core/browser/account_tracker_service.h"
+#include "components/signin/core/browser/signin_manager.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_observer.h"
@@ -28,6 +39,7 @@
 #include "content/public/common/content_switches.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/constants.h"
+#include "ui/gfx/geometry/rect.h"
 
 namespace chromeos {
 namespace first_run {
@@ -61,6 +73,10 @@ void TryLaunchFirstRunDialog(Profile* profile) {
     LaunchDialogForProfile(profile);
     return;
   }
+
+  if (policy::ProfilePolicyConnectorFactory::GetForBrowserContext(profile)
+          ->IsManaged())
+    return;
 
   if (command_line->HasSwitch(::switches::kTestType))
     return;
@@ -102,7 +118,33 @@ class DialogLauncher : public content::NotificationObserver {
     DCHECK(type == chrome::NOTIFICATION_SESSION_STARTED);
     DCHECK(content::Details<const user_manager::User>(details).ptr() ==
            ProfileHelper::Get()->GetUserByProfile(profile_));
-    TryLaunchFirstRunDialog(profile_);
+
+    // Whether the account is supported for voice interaction.
+    bool account_supported = false;
+    SigninManagerBase* signin_manager =
+        SigninManagerFactory::GetForProfile(profile_);
+    if (signin_manager) {
+      std::string hosted_domain =
+          signin_manager->GetAuthenticatedAccountInfo().hosted_domain;
+      if (hosted_domain == AccountTrackerService::kNoHostedDomainFound ||
+          hosted_domain == "google.com")
+        account_supported = true;
+    }
+
+    // If voice interaction value prop needs to be shown, the tutorial will be
+    // shown after the voice interaction OOBE flow.
+    if (account_supported && arc::IsArcPlayStoreEnabledForProfile(profile_) &&
+        !profile_->GetPrefs()->GetBoolean(
+            prefs::kArcVoiceInteractionValuePropAccepted)) {
+      auto* service =
+          arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(
+              profile_);
+      if (service)
+        service->StartVoiceInteractionOobe();
+    } else {
+      TryLaunchFirstRunDialog(profile_);
+    }
+
     delete this;
   }
 
@@ -116,10 +158,10 @@ class DialogLauncher : public content::NotificationObserver {
 }  // namespace
 
 void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
-  registry->RegisterBooleanPref(
-      prefs::kFirstRunTutorialShown,
-      false,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+  // This preference used to be syncable, change it to non-syncable so new
+  // users will always see the welcome app on a new device.
+  // See crbug.com/752361
+  registry->RegisterBooleanPref(prefs::kFirstRunTutorialShown, false);
 }
 
 void MaybeLaunchDialogAfterSessionStart() {

@@ -21,14 +21,16 @@
 #ifndef AtomicString_h
 #define AtomicString_h
 
+#include <cstring>
+#include <iosfwd>
+
+#include "build/build_config.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashTableDeletedValueType.h"
 #include "platform/wtf/WTFExport.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/StringView.h"
 #include "platform/wtf/text/WTFString.h"
-#include <cstring>
-#include <iosfwd>
 
 namespace WTF {
 
@@ -152,6 +154,12 @@ class WTF_EXPORT AtomicString {
       TextCaseSensitivity case_sensitivity = kTextCaseSensitive) const {
     return string_.StartsWith(prefix, case_sensitivity);
   }
+  bool StartsWithIgnoringCase(const StringView& prefix) const {
+    return string_.StartsWithIgnoringCase(prefix);
+  }
+  bool StartsWithIgnoringASCIICase(const StringView& prefix) const {
+    return string_.StartsWithIgnoringASCIICase(prefix);
+  }
   bool StartsWith(UChar character) const {
     return string_.StartsWith(character);
   }
@@ -224,14 +232,14 @@ class WTF_EXPORT AtomicString {
  private:
   String string_;
 
-  ALWAYS_INLINE static PassRefPtr<StringImpl> Add(StringImpl* r) {
+  ALWAYS_INLINE static RefPtr<StringImpl> Add(StringImpl* r) {
     if (!r || r->IsAtomic())
       return r;
     return AddSlowCase(r);
   }
-  static PassRefPtr<StringImpl> AddSlowCase(StringImpl*);
-#if OS(MACOSX)
-  static PassRefPtr<StringImpl> Add(CFStringRef);
+  static RefPtr<StringImpl> AddSlowCase(StringImpl*);
+#if defined(OS_MACOSX)
+  static RefPtr<StringImpl> Add(CFStringRef);
 #endif
 };
 

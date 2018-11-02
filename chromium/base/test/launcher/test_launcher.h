@@ -148,6 +148,10 @@ class TestLauncher {
 
   void RunTestIteration();
 
+#if defined(OS_POSIX)
+  void OnShutdownPipeReadable();
+#endif
+
   // Saves test results summary as JSON if requested from command line.
   void MaybeSaveSummaryAsJSON(const std::vector<std::string>& additional_tags);
 
@@ -239,6 +243,9 @@ class TestLauncher {
 
   DISALLOW_COPY_AND_ASSIGN(TestLauncher);
 };
+
+// Return the number of parallel jobs to use, or 0U in case of error.
+size_t NumParallelJobs();
 
 // Extract part from |full_output| that applies to |result|.
 std::string GetTestOutputSnippet(const TestResult& result,

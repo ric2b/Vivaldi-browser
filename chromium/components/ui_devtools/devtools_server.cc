@@ -21,8 +21,7 @@
 #include "net/socket/server_socket.h"
 #include "net/socket/tcp_server_socket.h"
 
-namespace ui {
-namespace devtools {
+namespace ui_devtools {
 
 namespace {
 const char kChromeDeveloperToolsPrefix[] =
@@ -34,6 +33,7 @@ bool IsUiDevToolsEnabled() {
 
 int GetUiDevToolsPort() {
   DCHECK(IsUiDevToolsEnabled());
+  // This value is duplicated in the chrome://flags description.
   constexpr int kDefaultPort = 9223;
   int port;
   if (!base::StringToInt(
@@ -65,6 +65,10 @@ UiDevToolsServer::UiDevToolsServer(
 }
 
 UiDevToolsServer::~UiDevToolsServer() {
+  if (io_thread_task_runner_)
+    io_thread_task_runner_->DeleteSoon(FROM_HERE, server_.release());
+  if (thread_ && thread_->IsRunning())
+    thread_->Stop();
   devtools_server_ = nullptr;
 }
 
@@ -181,5 +185,4 @@ void UiDevToolsServer::OnClose(int connection_id) {
   connections_.erase(it);
 }
 
-}  // namespace devtools
-}  // namespace ui
+}  // namespace ui_devtools

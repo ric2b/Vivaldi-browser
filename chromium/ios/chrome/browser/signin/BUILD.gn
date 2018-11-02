@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("signin") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "about_signin_internals_factory.cc",
     "about_signin_internals_factory.h",
@@ -77,6 +78,7 @@ source_set("signin") {
 }
 
 source_set("test_support") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "authentication_service_fake.h",
@@ -99,6 +101,7 @@ source_set("test_support") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "authentication_service_unittest.mm",
@@ -128,7 +131,8 @@ source_set("unit_tests") {
     "//ios/public/provider/chrome/browser",
     "//ios/public/provider/chrome/browser/signin",
     "//ios/public/provider/chrome/browser/signin:test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
     "//net:test_support",
     "//testing/gmock",
     "//testing/gtest",

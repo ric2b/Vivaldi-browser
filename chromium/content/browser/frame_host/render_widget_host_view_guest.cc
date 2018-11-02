@@ -14,7 +14,7 @@
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
-#include "cc/surfaces/surface_sequence.h"
+#include "components/viz/common/surfaces/surface_sequence.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/renderer_host/input/input_router.h"
@@ -44,7 +44,7 @@
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/delegated_frame_host.h"
 #include "content/browser/renderer_host/render_widget_host_view_frame_subscriber.h"
-#include "components/viz/display_compositor/gl_helper.h"
+#include "components/viz/common/gl_helper.h"
 #include "renderer/vivaldi_render_messages.h"
 #include "media/base/video_frame.h"
 #include "media/base/video_util.h"
@@ -228,8 +228,8 @@ void RenderWidgetHostViewGuest::ProcessTouchEvent(
     // touch. Sends a synthetic event for the focusing side effect.
     // TODO(wjmaclean): When we remove BrowserPlugin, delete this code.
     // http://crbug.com/533069
-    MaybeSendSyntheticTapGesture(event.touches[0].position,
-                                 event.touches[0].screen_position);
+    MaybeSendSyntheticTapGesture(event.touches[0].PositionInWidget(),
+                                 event.touches[0].PositionInScreen());
   }
 
   host_->ForwardTouchEventWithLatencyInfo(event, latency);
@@ -305,6 +305,16 @@ void RenderWidgetHostViewGuest::SetNeedsBeginFrames(
    platform_view_->SetNeedsBeginFrames(needs_begin_frames);
 }
 
+TouchSelectionControllerClientManager*
+RenderWidgetHostViewGuest::GetTouchSelectionControllerClientManager() {
+  RenderWidgetHostView* root_view = GetOwnerRenderWidgetHostView();
+  if (!root_view)
+    return nullptr;
+
+  // There is only ever one manager, and it's owned by the root view.
+  return root_view->GetTouchSelectionControllerClientManager();
+}
+
 void RenderWidgetHostViewGuest::SetTooltipText(
     const base::string16& tooltip_text) {
   if (guest_)
@@ -312,14 +322,14 @@ void RenderWidgetHostViewGuest::SetTooltipText(
 }
 
 void RenderWidgetHostViewGuest::SendSurfaceInfoToEmbedderImpl(
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   if (guest_ && !guest_->is_in_destruction())
     guest_->SetChildFrameSurface(surface_info, sequence);
 }
 
 void RenderWidgetHostViewGuest::SubmitCompositorFrame(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
   TRACE_EVENT0("content", "RenderWidgetHostViewGuest::OnSwapCompositorFrame");
 
@@ -485,7 +495,7 @@ void RenderWidgetHostViewGuest::UnlockMouse() {
 }
 
 void RenderWidgetHostViewGuest::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   RenderWidgetHostViewChildFrame::DidCreateNewRendererCompositorFrameSink(
       renderer_compositor_frame_sink);
   platform_view_->DidCreateNewRendererCompositorFrameSink(
@@ -576,10 +586,6 @@ void RenderWidgetHostViewGuest::MaybeSendSyntheticTapGesture(
   }
 }
 
-void RenderWidgetHostViewGuest::OnSetNeedsFlushInput() {
-  NOTIMPLEMENTED();
-}
-
 void RenderWidgetHostViewGuest::WheelEventAck(
     const blink::WebMouseWheelEvent& event,
     InputEventAckState ack_result) {
@@ -596,9 +602,38 @@ void RenderWidgetHostViewGuest::GestureEventAck(
                       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
   // GestureScrollBegin/End are always consumed by the guest, so we only
   // forward GestureScrollUpdate.
+  // Consumed GestureScrollUpdates and GestureScrollBegins must still be
+  // forwarded to the owner RWHV so it may update its state.
   if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
-      not_consumed)
+      not_consumed) {
     guest_->ResendEventToEmbedder(event);
+  } else if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
+             event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+    GetOwnerRenderWidgetHostView()->GestureEventAck(event, ack_result);
+  }
+}
+
+InputEventAckState RenderWidgetHostViewGuest::FilterInputEvent(
+    const blink::WebInputEvent& input_event) {
+  InputEventAckState ack_state =
+      RenderWidgetHostViewChildFrame::FilterInputEvent(input_event);
+  if (ack_state != INPUT_EVENT_ACK_STATE_NOT_CONSUMED)
+    return ack_state;
+
+  // The owner RWHV may want to consume the guest's GestureScrollUpdates.
+  // Also, we don't resend GestureFlingStarts, GestureScrollBegins, or
+  // GestureScrollEnds, so we let the owner RWHV know about them here.
+  if (input_event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
+      input_event.GetType() == blink::WebInputEvent::kGestureFlingStart ||
+      input_event.GetType() == blink::WebInputEvent::kGestureScrollBegin ||
+      input_event.GetType() == blink::WebInputEvent::kGestureScrollEnd) {
+    const blink::WebGestureEvent& gesture_event =
+        static_cast<const blink::WebGestureEvent&>(input_event);
+    return GetOwnerRenderWidgetHostView()->FilterChildGestureEvent(
+        gesture_event);
+  }
+
+  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
 bool RenderWidgetHostViewGuest::IsRenderWidgetHostViewGuest() {
@@ -732,7 +767,6 @@ void RenderWidgetHostViewGuest::CopyFromSurfaceToVideoFrame(
   scoped_refptr<media::VideoFrame> target,
   const base::Callback<void(const gfx::Rect&, bool)>& callback) {
 
-
   std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(base::Bind(
           &RenderWidgetHostViewGuest::DidCopyOutput,
@@ -759,7 +793,7 @@ void RenderWidgetHostViewGuest::DidCopyOutput(
     callback.Run(gfx::Rect(), false);
   }
 
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   if (!texture_mailbox.IsTexture()) {
@@ -831,17 +865,17 @@ void RenderWidgetHostViewGuest::ReadBackDone(
 
 }
 
-// Vivaldi addition
 void RenderWidgetHostViewGuest::BeginFrameSubscription(
     std::unique_ptr<RenderWidgetHostViewFrameSubscriber> subscriber) {
-  // NOTE: This is just to get the subscription going. The surface is now
-  // handled in RenderWidgetHostViewChildFrame.
-  platform_view_->BeginFrameSubscription(std::move(subscriber));
+  // NOTE(andre@vivaldi.com): The surface is now handled in
+  // |RenderWidgetHostViewChildFrame|.
+  // This is a temporary work-around since RenderWidgetHostViewGuest is going
+  // away.
+  // noop
 }
 
-// Vivaldi addition
 void RenderWidgetHostViewGuest::EndFrameSubscription() {
-  platform_view_->EndFrameSubscription();
+  // noop
 }
 
 }  // namespace content

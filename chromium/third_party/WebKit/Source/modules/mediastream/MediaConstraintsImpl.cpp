@@ -313,7 +313,7 @@ static void ParseOldStyleNames(
       result.media_stream_source.SetExact(constraint.value_);
     } else if (constraint.name_.Equals(kDisableLocalEcho) &&
                RuntimeEnabledFeatures::
-                   desktopCaptureDisableLocalEchoControlEnabled()) {
+                   DesktopCaptureDisableLocalEchoControlEnabled()) {
       result.disable_local_echo.SetExact(ToBoolean(constraint.value_));
     } else if (constraint.name_.Equals(kMediaStreamSourceId) ||
                constraint.name_.Equals(kMediaStreamSourceInfoId)) {
@@ -499,7 +499,7 @@ WebMediaConstraints Create(ExecutionContext* context,
     error_state.ThrowTypeError("Malformed constraints object.");
     return WebMediaConstraints();
   }
-  UseCounter::Count(context, UseCounter::kMediaStreamConstraintsFromDictionary);
+  UseCounter::Count(context, WebFeature::kMediaStreamConstraintsFromDictionary);
   return CreateFromNamedConstraints(context, mandatory, optional, error_state);
 }
 
@@ -732,7 +732,7 @@ WebMediaConstraints Create(ExecutionContext* context,
   WebMediaConstraints standard_form = ConvertConstraintsToWeb(constraints_in);
   if (constraints_in.hasOptional() || constraints_in.hasMandatory()) {
     if (!standard_form.IsEmpty()) {
-      UseCounter::Count(context, UseCounter::kMediaStreamConstraintsOldAndNew);
+      UseCounter::Count(context, WebFeature::kMediaStreamConstraintsOldAndNew);
       error_state.ThrowTypeError(
           "Malformed constraint: Cannot use both optional/mandatory and "
           "specific or advanced constraints.");
@@ -744,11 +744,11 @@ WebMediaConstraints Create(ExecutionContext* context,
       error_state.ThrowTypeError("Malformed constraints object.");
       return WebMediaConstraints();
     }
-    UseCounter::Count(context, UseCounter::kMediaStreamConstraintsNameValue);
+    UseCounter::Count(context, WebFeature::kMediaStreamConstraintsNameValue);
     return CreateFromNamedConstraints(context, mandatory, optional,
                                       error_state);
   }
-  UseCounter::Count(context, UseCounter::kMediaStreamConstraintsConformant);
+  UseCounter::Count(context, WebFeature::kMediaStreamConstraintsConformant);
   return standard_form;
 }
 

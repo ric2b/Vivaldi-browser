@@ -26,7 +26,7 @@
 #include "chrome/browser/loader/predictor_resource_throttle.h"
 #include "chrome/browser/loader/safe_browsing_resource_throttle.h"
 #include "chrome/browser/mod_pagespeed/mod_pagespeed_metrics.h"
-#include "chrome/browser/net/resource_prefetch_predictor_observer.h"
+#include "chrome/browser/net/loading_predictor_observer.h"
 #include "chrome/browser/page_load_metrics/metrics_web_contents_observer.h"
 #include "chrome/browser/plugins/plugin_prefs.h"
 #include "chrome/browser/prerender/prerender_manager.h"
@@ -48,8 +48,10 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_config.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_io_data.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_util.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/offline_pages/features/features.h"
 #include "components/policy/core/common/cloud/policy_header_io_helper.h"
 #include "components/previews/core/previews_experiments.h"
 #include "components/previews/core/previews_io_data.h"
@@ -71,8 +73,11 @@
 #include "content/public/browser/service_worker_context.h"
 #include "content/public/browser/stream_info.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/resource_response.h"
 #include "extensions/features/features.h"
+#include "net/base/host_port_pair.h"
+#include "net/base/ip_endpoint.h"
 #include "net/base/load_flags.h"
 #include "net/base/load_timing_info.h"
 #include "net/base/request_priority.h"
@@ -99,11 +104,15 @@
 #include "extensions/common/user_script.h"
 #endif
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/offliner_user_data.h"
+#include "chrome/browser/offline_pages/resource_loading_observer.h"
+#endif
+
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/download/intercept_download_resource_throttle.h"
 #include "chrome/browser/android/offline_pages/downloads/resource_throttle.h"
 #include "chrome/browser/loader/data_reduction_proxy_resource_throttle_android.h"
-#include "chrome/browser/offline_pages/background_loader_offliner.h"
 #include "components/navigation_interception/intercept_navigation_delegate.h"
 #endif
 
@@ -348,33 +357,59 @@ void LogMainFrameMetricsOnUIThread(const GURL& url,
   }
 }
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+// Translate content::ResourceType to a type to use for Offliners.
+offline_pages::ResourceLoadingObserver::ResourceDataType
+ConvertResourceTypeToResourceDataType(content::ResourceType type) {
+  switch (type) {
+    case content::RESOURCE_TYPE_STYLESHEET:
+      return offline_pages::ResourceLoadingObserver::ResourceDataType::TEXT_CSS;
+    case content::RESOURCE_TYPE_IMAGE:
+      return offline_pages::ResourceLoadingObserver::ResourceDataType::IMAGE;
+    case content::RESOURCE_TYPE_XHR:
+      return offline_pages::ResourceLoadingObserver::ResourceDataType::XHR;
+    default:
+      return offline_pages::ResourceLoadingObserver::ResourceDataType::OTHER;
+  }
+}
+
 void NotifyUIThreadOfRequestStarted(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
-    const content::GlobalRequestID& request_id,
-    ResourceType resource_type,
-    base::TimeTicks request_creation_time) {
-  content::WebContents* web_contents = web_contents_getter.Run();
+    ResourceType resource_type) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  // TODO(petewil) We're not sure why yet, but we do sometimes see that
+  // web_contents_getter returning null.  Until we find out why, avoid crashing.
+  // crbug.com/742370
+  if (web_contents_getter.is_null())
+    return;
 
+  content::WebContents* web_contents = web_contents_getter.Run();
   if (!web_contents)
     return;
 
-  page_load_metrics::MetricsWebContentsObserver* metrics_observer =
-      page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+  // If we are producing an offline version of the page, track resource loading.
+  offline_pages::ResourceLoadingObserver* resource_tracker =
+      offline_pages::OfflinerUserData::ResourceLoadingObserverFromWebContents(
           web_contents);
-
-  if (metrics_observer) {
-    metrics_observer->OnRequestStarted(request_id, resource_type,
-                                       request_creation_time);
+  if (resource_tracker) {
+    offline_pages::ResourceLoadingObserver::ResourceDataType data_type =
+        ConvertResourceTypeToResourceDataType(resource_type);
+    resource_tracker->ObserveResourceLoading(data_type, true /* STARTED */);
   }
 }
+#endif
 
 void NotifyUIThreadOfRequestComplete(
     const content::ResourceRequestInfo::WebContentsGetter& web_contents_getter,
     const content::ResourceRequestInfo::FrameTreeNodeIdGetter&
         frame_tree_node_id_getter,
     const GURL& url,
+    const net::HostPortPair& host_port_pair,
     const content::GlobalRequestID& request_id,
+    int render_process_id,
+    int render_frame_id,
     ResourceType resource_type,
+    bool is_download,
     bool was_cached,
     std::unique_ptr<data_reduction_proxy::DataReductionProxyData>
         data_reduction_proxy_data,
@@ -388,28 +423,45 @@ void NotifyUIThreadOfRequestComplete(
   content::WebContents* web_contents = web_contents_getter.Run();
   if (!web_contents)
     return;
+
   if (resource_type == content::RESOURCE_TYPE_MAIN_FRAME) {
     LogMainFrameMetricsOnUIThread(url, net_error, request_loading_time,
                                   web_contents);
   }
+
   if (!was_cached) {
     UpdatePrerenderNetworkBytesCallback(web_contents, total_received_bytes);
-#if defined(OS_ANDROID)
-    offline_pages::BackgroundLoaderOffliner* background_loader =
-        offline_pages::BackgroundLoaderOffliner::FromWebContents(web_contents);
-
-    if (background_loader)
-      background_loader->OnNetworkBytesChanged(total_received_bytes);
-#endif  // OS_ANDROID
   }
-  page_load_metrics::MetricsWebContentsObserver* metrics_observer =
-      page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+  // If we are producing an offline version of the page, track resource loading.
+  offline_pages::ResourceLoadingObserver* resource_tracker =
+      offline_pages::OfflinerUserData::ResourceLoadingObserverFromWebContents(
           web_contents);
-  if (metrics_observer) {
-    metrics_observer->OnRequestComplete(
-        url, frame_tree_node_id_getter.Run(), request_id, resource_type,
-        was_cached, std::move(data_reduction_proxy_data), raw_body_bytes,
-        original_content_length, request_creation_time);
+  if (resource_tracker) {
+    offline_pages::ResourceLoadingObserver::ResourceDataType data_type =
+        ConvertResourceTypeToResourceDataType(resource_type);
+    resource_tracker->ObserveResourceLoading(data_type, false /* COMPLETED */);
+    if (!was_cached)
+      resource_tracker->OnNetworkBytesChanged(total_received_bytes);
+  }
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
+
+  if (!is_download) {
+    page_load_metrics::MetricsWebContentsObserver* metrics_observer =
+        page_load_metrics::MetricsWebContentsObserver::FromWebContents(
+            web_contents);
+    if (metrics_observer) {
+      // Will be null for main or sub frame resources, when browser-side
+      // navigation is enabled.
+      content::RenderFrameHost* render_frame_host_or_null =
+          content::RenderFrameHost::FromID(render_process_id, render_frame_id);
+      metrics_observer->OnRequestComplete(
+          url, host_port_pair, frame_tree_node_id_getter.Run(), request_id,
+          render_frame_host_or_null, resource_type, was_cached,
+          std::move(data_reduction_proxy_data), raw_body_bytes,
+          original_content_length, request_creation_time, net_error);
+    }
   }
 }
 
@@ -472,15 +524,15 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
 
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
   // TODO(petewil): Unify the safe browsing request and the metrics observer
   // request if possible so we only have to cross to the main thread once.
   // http://crbug.com/712312.
-  BrowserThread::PostTask(
-      BrowserThread::UI, FROM_HERE,
-      base::Bind(&NotifyUIThreadOfRequestStarted,
-                 info->GetWebContentsGetterForRequest(),
-                 info->GetGlobalRequestID(), info->GetResourceType(),
-                 request->creation_time()));
+  BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
+                          base::BindOnce(&NotifyUIThreadOfRequestStarted,
+                                         info->GetWebContentsGetterForRequest(),
+                                         info->GetResourceType()));
+#endif  // BUILDFLAG(ENABLE_OFFLINE_PAGES)
 
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(
       resource_context);
@@ -525,9 +577,9 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
   if (io_data->policy_header_helper())
     io_data->policy_header_helper()->AddPolicyHeaders(request->url(), request);
 
-  signin::FixMirrorRequestHeaderHelper(request, GURL() /* redirect_url */,
-                                       io_data, info->GetChildID(),
-                                       info->GetRouteID());
+  signin::FixAccountConsistencyRequestHeader(request, GURL() /* redirect_url */,
+                                             io_data, info->GetChildID(),
+                                             info->GetRouteID());
 
   AppendStandardResourceThrottles(request,
                                   resource_context,
@@ -538,8 +590,8 @@ void ChromeResourceDispatcherHostDelegate::RequestBeginning(
                                   resource_type, throttles);
 #endif  // !defined(DISABLE_NACL)
 
-  if (io_data->resource_prefetch_predictor_observer()) {
-    io_data->resource_prefetch_predictor_observer()->OnRequestStarted(
+  if (io_data->loading_predictor_observer()) {
+    io_data->loading_predictor_observer()->OnRequestStarted(
         request, resource_type, info->GetWebContentsGetterForRequest());
   }
 }
@@ -803,12 +855,8 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
 
-  // See if the response contains the X-Chrome-Manage-Accounts header. If so
-  // show the profile avatar bubble so that user can complete signin/out action
-  // the native UI.
-  signin::ProcessMirrorResponseHeaderIfExists(request, io_data,
-                                              info->GetChildID(),
-                                              info->GetRouteID());
+  signin::ProcessAccountConsistencyResponseHeaders(request, GURL(),
+                                                   io_data->IsOffTheRecord());
 
   // Built-in additional protection for the chrome web store origin.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -825,8 +873,8 @@ void ChromeResourceDispatcherHostDelegate::OnResponseStarted(
   }
 #endif
 
-  if (io_data->resource_prefetch_predictor_observer())
-    io_data->resource_prefetch_predictor_observer()->OnResponseStarted(
+  if (io_data->loading_predictor_observer())
+    io_data->loading_predictor_observer()->OnResponseStarted(
         request, info->GetWebContentsGetterForRequest());
 
   mod_pagespeed::RecordMetrics(info->GetResourceType(), request->url(),
@@ -842,17 +890,22 @@ void ChromeResourceDispatcherHostDelegate::OnRequestRedirected(
 
   const ResourceRequestInfo* info = ResourceRequestInfo::ForRequest(request);
 
-  // In the Mirror world (for users that are signed in to the browser on
-  // Android, the identity is mirrored into the content area), Chrome should
-  // append a X-Chrome-Connected header to all Gaia requests from a connected
-  // profile so Gaia could return a 204 response and let Chrome handle the
-  // action with native UI. The only exception is requests from gaia webview,
-  // since the native profile management UI is built on top of it.
-  signin::FixMirrorRequestHeaderHelper(request, redirect_url, io_data,
-                                       info->GetChildID(), info->GetRouteID());
+  // Chrome tries to ensure that the identity is consistent between Chrome and
+  // the content area.
+  //
+  // For example, on Android, for users that are signed in to Chrome, the
+  // identity is mirrored into the content area. To do so, Chrome appends a
+  // X-Chrome-Connected header to all Gaia requests from a connected profile so
+  // Gaia could return a 204 response and let Chrome handle the action with
+  // native UI. The only exception is requests from gaia webview, since the
+  // native profile management UI is built on top of it.
+  signin::FixAccountConsistencyRequestHeader(
+      request, redirect_url, io_data, info->GetChildID(), info->GetRouteID());
+  signin::ProcessAccountConsistencyResponseHeaders(request, redirect_url,
+                                                   io_data->IsOffTheRecord());
 
-  if (io_data->resource_prefetch_predictor_observer()) {
-    io_data->resource_prefetch_predictor_observer()->OnRequestRedirected(
+  if (io_data->loading_predictor_observer()) {
+    io_data->loading_predictor_observer()->OnRequestRedirected(
         request, redirect_url, info->GetWebContentsGetterForRequest());
   }
 
@@ -882,23 +935,40 @@ void ChromeResourceDispatcherHostDelegate::RequestComplete(
           ? data_reduction_proxy::util::CalculateEffectiveOCL(*url_request)
           : url_request->GetRawBodyBytes();
 
+  net::HostPortPair request_host_port;
+  // We want to get the IP address of the response if it was returned, and the
+  // last endpoint that was checked if it failed.
+  if (url_request->response_headers()) {
+    request_host_port = url_request->GetSocketAddress();
+  }
+  if (request_host_port.IsEmpty()) {
+    net::IPEndPoint request_ip_endpoint;
+    bool was_successful = url_request->GetRemoteEndpoint(&request_ip_endpoint);
+    if (was_successful) {
+      request_host_port =
+          net::HostPortPair::FromIPEndPoint(request_ip_endpoint);
+    }
+  }
+
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::BindOnce(&NotifyUIThreadOfRequestComplete,
-                     info->GetWebContentsGetterForRequest(),
-                     info->GetFrameTreeNodeIdGetterForRequest(),
-                     url_request->url(), info->GetGlobalRequestID(),
-                     info->GetResourceType(), url_request->was_cached(),
-                     base::Passed(&data_reduction_proxy_data), net_error,
-                     url_request->GetTotalReceivedBytes(),
-                     url_request->GetRawBodyBytes(), original_content_length,
-                     url_request->creation_time(),
-                     base::TimeTicks::Now() - url_request->creation_time()));
+      base::BindOnce(
+          &NotifyUIThreadOfRequestComplete,
+          info->GetWebContentsGetterForRequest(),
+          info->GetFrameTreeNodeIdGetterForRequest(), url_request->url(),
+          request_host_port, info->GetGlobalRequestID(), info->GetChildID(),
+          info->GetRenderFrameID(), info->GetResourceType(), info->IsDownload(),
+          url_request->was_cached(), base::Passed(&data_reduction_proxy_data),
+          net_error, url_request->GetTotalReceivedBytes(),
+          url_request->GetRawBodyBytes(), original_content_length,
+          url_request->creation_time(),
+          base::TimeTicks::Now() - url_request->creation_time()));
 }
 
 content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
     const net::URLRequest& url_request,
-    content::ResourceContext* resource_context) {
+    content::ResourceContext* resource_context,
+    content::PreviewsState previews_to_allow) {
   ProfileIOData* io_data = ProfileIOData::FromResourceContext(resource_context);
   data_reduction_proxy::DataReductionProxyIOData* data_reduction_proxy_io_data =
       io_data->data_reduction_proxy_io_data();
@@ -916,21 +986,33 @@ content::PreviewsState ChromeResourceDispatcherHostDelegate::GetPreviewsState(
       previews_state |= content::SERVER_LITE_PAGE_ON;
     }
 
-    // Check that data saver is enabled, the user isn't opted out of LoFi for
-    // the session, and the user is eligible for previews.
+    // Check that data saver is enabled and the user is eligible for Lo-Fi
+    // previews. If the user is not transitioned fully to the blacklist, respect
+    // the old prefs rules.
     if (data_reduction_proxy_io_data->IsEnabled() &&
-        !data_reduction_proxy_io_data->config()->lofi_off() &&
+        (!data_reduction_proxy_io_data->config()->lofi_off() ||
+         data_reduction_proxy::params::IsBlackListEnabledForServerPreviews()) &&
         previews::params::IsClientLoFiEnabled() &&
         previews_io_data->ShouldAllowPreviewAtECT(
             url_request, previews::PreviewsType::LOFI,
-            previews::params::
-                EffectiveConnectionTypeThresholdForClientLoFi())) {
+            previews::params::EffectiveConnectionTypeThresholdForClientLoFi(),
+            previews::params::GetBlackListedHostsForClientLoFiFieldTrial())) {
       previews_state |= content::CLIENT_LOFI_ON;
     }
   }
 
   if (previews_state == content::PREVIEWS_UNSPECIFIED)
     return content::PREVIEWS_OFF;
+
+  // If the allowed previews are limited, ensure we honor those limits.
+  if (previews_to_allow != content::PREVIEWS_UNSPECIFIED &&
+      previews_state != content::PREVIEWS_OFF &&
+      previews_state != content::PREVIEWS_NO_TRANSFORM) {
+    previews_state = previews_state & previews_to_allow;
+    // If no valid previews are left, set the state explictly to PREVIEWS_OFF.
+    if (previews_state == 0)
+      previews_state = content::PREVIEWS_OFF;
+  }
   return previews_state;
 }
 
@@ -948,6 +1030,13 @@ ChromeResourceDispatcherHostDelegate::GetNavigationData(
       ChromeNavigationData::GetDataAndCreateIfNecessary(request);
   if (!request)
     return data;
+
+  // Update the previews state from the navigation data.
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request);
+  if (info) {
+    data->set_previews_state(info->GetPreviewsState());
+  }
 
   data_reduction_proxy::DataReductionProxyData* data_reduction_proxy_data =
       data_reduction_proxy::DataReductionProxyData::GetData(*request);

@@ -7,8 +7,10 @@
 #include <stddef.h>
 
 #include "base/base64.h"
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
@@ -190,7 +192,7 @@ void RetrieveShaderInterfaceBlockInfo(const ShaderInterfaceBlockProto& proto,
   (*map)[proto.mapped_name()] = interface_block;
 }
 
-void RunShaderCallback(const ShaderCacheCallback& callback,
+void RunShaderCallback(GLES2DecoderClient* client,
                        GpuProgramProto* proto,
                        std::string sha_string) {
   std::string shader;
@@ -198,7 +200,7 @@ void RunShaderCallback(const ShaderCacheCallback& callback,
 
   std::string key;
   base::Base64Encode(sha_string, &key);
-  callback.Run(key, shader);
+  client->CacheShader(key, shader);
 }
 
 bool ProgramBinaryExtensionsAvailable() {
@@ -236,7 +238,7 @@ ProgramCache::ProgramLoadResult MemoryProgramCache::LoadLinkedProgram(
     const LocationMap* bind_attrib_location_map,
     const std::vector<std::string>& transform_feedback_varyings,
     GLenum transform_feedback_buffer_mode,
-    const ShaderCacheCallback& shader_callback) {
+    GLES2DecoderClient* client) {
   if (!ProgramBinaryExtensionsAvailable()) {
     // Early exit if this context can't support program binaries
     return PROGRAM_LOAD_FAILURE;
@@ -289,7 +291,7 @@ ProgramCache::ProgramLoadResult MemoryProgramCache::LoadLinkedProgram(
   shader_b->set_output_variable_list(value->output_variable_list_1());
   shader_b->set_interface_block_map(value->interface_block_map_1());
 
-  if (!shader_callback.is_null() && !disable_gpu_shader_disk_cache_) {
+  if (!disable_gpu_shader_disk_cache_) {
     std::unique_ptr<GpuProgramProto> proto(
         GpuProgramProto::default_instance().New());
     proto->set_sha(sha, kHashLength);
@@ -298,7 +300,7 @@ ProgramCache::ProgramLoadResult MemoryProgramCache::LoadLinkedProgram(
 
     FillShaderProto(proto->mutable_vertex_shader(), a_sha, shader_a);
     FillShaderProto(proto->mutable_fragment_shader(), b_sha, shader_b);
-    RunShaderCallback(shader_callback, proto.get(), sha_string);
+    RunShaderCallback(client, proto.get(), sha_string);
   }
 
   return PROGRAM_LOAD_SUCCESS;
@@ -311,7 +313,7 @@ void MemoryProgramCache::SaveLinkedProgram(
     const LocationMap* bind_attrib_location_map,
     const std::vector<std::string>& transform_feedback_varyings,
     GLenum transform_feedback_buffer_mode,
-    const ShaderCacheCallback& shader_callback) {
+    GLES2DecoderClient* client) {
   if (!ProgramBinaryExtensionsAvailable()) {
     // Early exit if this context can't support program binaries
     return;
@@ -366,7 +368,7 @@ void MemoryProgramCache::SaveLinkedProgram(
     store_.Erase(store_.rbegin());
   }
 
-  if (!shader_callback.is_null() && !disable_gpu_shader_disk_cache_) {
+  if (!disable_gpu_shader_disk_cache_) {
     std::unique_ptr<GpuProgramProto> proto(
         GpuProgramProto::default_instance().New());
     proto->set_sha(sha, kHashLength);
@@ -375,7 +377,7 @@ void MemoryProgramCache::SaveLinkedProgram(
 
     FillShaderProto(proto->mutable_vertex_shader(), a_sha, shader_a);
     FillShaderProto(proto->mutable_fragment_shader(), b_sha, shader_b);
-    RunShaderCallback(shader_callback, proto.get(), sha_string);
+    RunShaderCallback(client, proto.get(), sha_string);
   }
 
   store_.Put(
@@ -393,7 +395,8 @@ void MemoryProgramCache::SaveLinkedProgram(
                        curr_size_bytes_ / 1024);
 }
 
-void MemoryProgramCache::LoadProgram(const std::string& program) {
+void MemoryProgramCache::LoadProgram(const std::string& key,
+                                     const std::string& program) {
   std::unique_ptr<GpuProgramProto> proto(
       GpuProgramProto::default_instance().New());
   if (proto->ParseFromString(program)) {
@@ -469,6 +472,15 @@ void MemoryProgramCache::LoadProgram(const std::string& program) {
   } else {
     LOG(ERROR) << "Failed to parse proto file.";
   }
+}
+
+size_t MemoryProgramCache::Trim(size_t limit) {
+  if (curr_size_bytes_ <= limit)
+    return 0;
+  size_t initial_size = curr_size_bytes_;
+  while (curr_size_bytes_ > limit && !store_.empty())
+    store_.Erase(store_.rbegin());
+  return (initial_size - curr_size_bytes_);
 }
 
 MemoryProgramCache::ProgramCacheValue::ProgramCacheValue(

@@ -54,6 +54,8 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   static HTMLVideoElement* Create(Document&);
   DECLARE_VIRTUAL_TRACE();
 
+  bool HasPendingActivity() const final;
+
   enum class MediaRemotingStatus { kNotStarted, kStarted, kDisabled };
 
   // Node override.
@@ -143,6 +145,10 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   }
   void DisableMediaRemoting();
 
+  void MediaRemotingStarted() final;
+  void MediaRemotingStopped() final;
+  WebMediaPlayer::DisplayType DisplayType() const final;
+
  private:
   friend class MediaCustomControlsFullscreenDetectorTest;
   friend class HTMLMediaElementEventListenersTest;
@@ -155,7 +161,7 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
 
   bool LayoutObjectIsNeeded(const ComputedStyle&) override;
   LayoutObject* CreateLayoutObject(const ComputedStyle&) override;
-  void AttachLayoutTree(const AttachContext& = AttachContext()) override;
+  void AttachLayoutTree(AttachContext&) override;
   void ParseAttribute(const AttributeModificationParams&) override;
   bool IsPresentationAttribute(const QualifiedName&) const override;
   void CollectStyleForPresentationAttribute(const QualifiedName&,
@@ -167,8 +173,6 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
   void UpdateDisplayState() override;
   void DidMoveToNewDocument(Document& old_document) override;
   void SetDisplayMode(DisplayMode) override;
-  void MediaRemotingStarted() final;
-  void MediaRemotingStopped() final;
 
   Member<HTMLImageLoader> image_loader_;
   Member<MediaCustomControlsFullscreenDetector>
@@ -180,7 +184,12 @@ class CORE_EXPORT HTMLVideoElement final : public HTMLMediaElement,
 
   AtomicString default_poster_url_;
 
+  // TODO(mlamouri): merge these later. At the moment, the former is used for
+  // CSS rules used to hide the custom controls and the latter is used to report
+  // the display type. It's unclear whether using the CSS rules also when native
+  // controls are used would or would not have side effects.
   bool is_persistent_ = false;
+  bool is_picture_in_picture_ = false;
 };
 
 }  // namespace blink

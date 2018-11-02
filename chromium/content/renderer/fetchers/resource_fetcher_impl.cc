@@ -183,11 +183,12 @@ void ResourceFetcherImpl::Start(
 
   request_.SetRequestContext(request_context);
   request_.SetFirstPartyForCookies(frame->GetDocument().FirstPartyForCookies());
+  request_.SetRequestorOrigin(frame->GetDocument().GetSecurityOrigin());
   request_.AddHTTPOriginIfNeeded(blink::WebSecurityOrigin::CreateUnique());
 
   client_.reset(new ClientImpl(this, callback));
 
-  loader_ = frame->CreateURLLoader();
+  loader_ = frame->CreateURLLoader(request_, frame->LoadingTaskRunner());
   loader_->LoadAsynchronously(request_, client_.get());
 
   // No need to hold on to the request; reset it now.

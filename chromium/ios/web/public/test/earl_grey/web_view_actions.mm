@@ -15,12 +15,17 @@
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/web_state/web_state_impl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using web::test::ExecuteJavaScript;
 
 namespace {
 
-// Long press duration to trigger context menu.
-const NSTimeInterval kContextMenuLongPressDuration = 0.3;
+// Long press duration to trigger context menu.  EarlGrey LongPress action uses
+// 0.7 secs.  Use the same number to be consistent.
+const NSTimeInterval kContextMenuLongPressDuration = 0.7;
 
 // Duration to wait for verification of JavaScript action.
 // TODO(crbug.com/670910): Reduce duration if the time required for verification
@@ -90,12 +95,12 @@ bool AddVerifierToElementWithId(web::WebState* web_state,
 
   // The callback doesn't care about any of the parameters, just whether it is
   // called or not.
-  auto callback = base::BindBlock(^bool(const base::DictionaryValue& /* json */,
-                                        const GURL& /* origin_url */,
-                                        bool /* user_is_interacting */) {
-    *verified = true;
-    return true;
-  });
+  auto callback = base::BindBlockArc(
+      ^bool(const base::DictionaryValue& /* json */,
+            const GURL& /* origin_url */, bool /* user_is_interacting */) {
+        *verified = true;
+        return true;
+      });
 
   static_cast<web::WebStateImpl*>(web_state)->AddScriptCommandCallback(
       callback, kCallbackPrefix);

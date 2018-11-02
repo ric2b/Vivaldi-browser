@@ -113,8 +113,8 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT ServiceContext : public mojom::Service {
   static void SetGlobalBinderForTesting(
       const std::string& service_name,
       const std::string& interface_name,
-      const BinderRegistry::Binder& binder,
-      const scoped_refptr<base::SingleThreadTaskRunner>& task_runner = nullptr);
+      const BinderRegistryWithArgs<const BindSourceInfo&>::Binder& binder,
+      const scoped_refptr<base::SequencedTaskRunner>& task_runner = nullptr);
 
   // Clears all overridden interface binders for service |service_name| set via
   // SetGlobalBinderForTesting().
@@ -124,11 +124,11 @@ class SERVICE_MANAGER_PUBLIC_CPP_EXPORT ServiceContext : public mojom::Service {
   friend class service_manager::Service;
 
   // mojom::Service:
-  void OnStart(const Identity& info, const OnStartCallback& callback) override;
+  void OnStart(const Identity& info, OnStartCallback callback) override;
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe,
-                       const OnBindInterfaceCallback& callback) override;
+                       OnBindInterfaceCallback callback) override;
 
   void OnConnectionError();
 

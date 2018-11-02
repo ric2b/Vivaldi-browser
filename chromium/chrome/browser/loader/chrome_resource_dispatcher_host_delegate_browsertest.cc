@@ -21,7 +21,6 @@
 #include "base/run_loop.h"
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
-#include "base/task_scheduler/post_task.h"
 #include "base/test/scoped_command_line.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/download/download_browsertest.h"
@@ -210,7 +209,6 @@ class ChromeResourceDispatcherHostDelegateBrowserTest :
   ChromeResourceDispatcherHostDelegateBrowserTest() {}
 
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
     // Hook navigations with our delegate.
     dispatcher_host_delegate_.reset(new TestDispatcherHostDelegate);
     content::ResourceDispatcherHost::Get()->SetDelegate(
@@ -302,7 +300,6 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        PolicyHeaderForRedirect) {
-
   // Build up a URL that results in a redirect to the DMServer URL to make
   // sure the policy header is still added.
   std::string redirect_url;
@@ -348,12 +345,8 @@ class MirrorMockURLRequestJob : public net::URLRequestMockHTTPJob {
   MirrorMockURLRequestJob(net::URLRequest* request,
                           net::NetworkDelegate* network_delegate,
                           const base::FilePath& file_path,
-                          const scoped_refptr<base::TaskRunner>& task_runner,
                           ReportResponseHeadersOnUI report_on_ui)
-      : net::URLRequestMockHTTPJob(request,
-                                   network_delegate,
-                                   file_path,
-                                   task_runner),
+      : net::URLRequestMockHTTPJob(request, network_delegate, file_path),
         report_on_ui_(report_on_ui) {}
 
   void Start() override {
@@ -390,9 +383,6 @@ class MirrorMockJobInterceptor : public net::URLRequestInterceptor {
       net::NetworkDelegate* network_delegate) const override {
     return new MirrorMockURLRequestJob(
         request, network_delegate, root_http_,
-        base::CreateTaskRunnerWithTraits(
-            {base::MayBlock(), base::TaskPriority::BACKGROUND,
-             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}),
         report_on_ui_);
   }
 
@@ -404,16 +394,15 @@ class MirrorMockJobInterceptor : public net::URLRequestInterceptor {
     base::FilePath file_path(root_http);
     file_path =
         file_path.AppendASCII(url.scheme() + "." + url.host() + ".html");
-    net::URLRequestFilter::GetInstance()->AddHostnameInterceptor(
-        url.scheme(), url.host(), base::WrapUnique(new MirrorMockJobInterceptor(
-                                      file_path, report_on_ui)));
+    net::URLRequestFilter::GetInstance()->AddUrlInterceptor(
+        url, base::WrapUnique(
+                 new MirrorMockJobInterceptor(file_path, report_on_ui)));
   }
 
   static void Unregister(const GURL& url) {
     EXPECT_TRUE(
         content::BrowserThread::CurrentlyOn(content::BrowserThread::IO));
-    net::URLRequestFilter::GetInstance()->RemoveHostnameHandler(url.scheme(),
-                                                                url.host());
+    net::URLRequestFilter::GetInstance()->RemoveUrlHandler(url);
   }
 
  private:
@@ -482,7 +471,7 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
                        MirrorRequestHeader) {
   // Enable account consistency so that mirror actually sets the
   // X-Chrome-Connected header in requests to Google.
-  switches::EnableAccountConsistencyForTesting(
+  switches::EnableAccountConsistencyMirrorForTesting(
       base::CommandLine::ForCurrentProcess());
 
   browser()->profile()->GetPrefs()->SetString(prefs::kGoogleServicesUsername,
@@ -495,9 +484,14 @@ IN_PROC_BROWSER_TEST_F(ChromeResourceDispatcherHostDelegateBrowserTest,
   root_http = root_http.AppendASCII("mirror_request_header");
 
   struct TestCase {
-    GURL original_url, redirected_to_url;
-    bool inject_header, original_url_expects_header,
-        redirected_to_url_expects_header;
+    GURL original_url;       // The URL from which the request begins.
+    GURL redirected_to_url;  // The URL to which naviagtion is redirected.
+    bool inject_header;  // Should X-Chrome-Connected header be injected to the
+                         // original request.
+    bool original_url_expects_header;       // Expectation: The header should be
+                                            // visible in original URL.
+    bool redirected_to_url_expects_header;  // Expectation: The header should be
+                                            // visible in redirected URL.
   } all_tests[] = {
       // Neither should have the header.
       {GURL("http://www.google.com"), GURL("http://www.redirected.com"), false,

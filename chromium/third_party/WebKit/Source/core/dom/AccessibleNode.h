@@ -6,30 +6,33 @@
 #define AccessibleNode_h
 
 #include "core/CoreExport.h"
+#include "core/dom/QualifiedName.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/wtf/HashMap.h"
+#include "platform/wtf/HashSet.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/AtomicStringHash.h"
 
 namespace blink {
 
+class AccessibleNodeList;
 class AXObjectCache;
 class Element;
 class QualifiedName;
 
 // All of the properties of AccessibleNode that have type "string".
-// TODO(dmazzoni): Add similar enums for all of the properties with
-// type bool, float, reference, and reference list.
 enum class AOMStringProperty {
   kAutocomplete,
   kChecked,
   kCurrent,
+  kHasPopUp,
   kInvalid,
   kKeyShortcuts,
   kLabel,
   kLive,
   kOrientation,
   kPlaceholder,
+  kPressed,
   kRelevant,
   kRole,
   kRoleDescription,
@@ -62,12 +65,41 @@ enum class AOMUIntProperty {
   kRowSpan,
 };
 
+enum class AOMRelationProperty {
+  kActiveDescendant,
+  kDetails,
+  kErrorMessage,
+};
+
+enum class AOMRelationListProperty {
+  kDescribedBy,
+  kControls,
+  kFlowTo,
+  kLabeledBy,
+  kOwns,
+};
+
 // All of the properties of AccessibleNode that have a signed integer type.
 // (These all allow the value -1.)
 enum class AOMIntProperty { kColCount, kRowCount, kSetSize };
 
 // All of the properties of AccessibleNode that have a floating-point type.
 enum class AOMFloatProperty { kValueMax, kValueMin, kValueNow };
+
+class AccessibleNode;
+
+class CORE_EXPORT AOMPropertyClient {
+ public:
+  virtual void AddStringProperty(AOMStringProperty, const String&) = 0;
+  virtual void AddBooleanProperty(AOMBooleanProperty, bool) = 0;
+  virtual void AddIntProperty(AOMIntProperty, int32_t) = 0;
+  virtual void AddUIntProperty(AOMUIntProperty, uint32_t) = 0;
+  virtual void AddFloatProperty(AOMFloatProperty, float) = 0;
+  virtual void AddRelationProperty(AOMRelationProperty,
+                                   const AccessibleNode&) = 0;
+  virtual void AddRelationListProperty(AOMRelationListProperty,
+                                       const AccessibleNodeList&) = 0;
+};
 
 // Accessibility Object Model node
 // Explainer: https://github.com/WICG/aom/blob/master/explainer.md
@@ -81,8 +113,21 @@ class CORE_EXPORT AccessibleNode
   explicit AccessibleNode(Element*);
   virtual ~AccessibleNode();
 
+  // Gets the associated element, if any.
+  Element* element() const { return element_; }
+
   // Returns the given string property if the Element has an AccessibleNode.
   static const AtomicString& GetProperty(Element*, AOMStringProperty);
+
+  // Returns the given relation property if the Element has an AccessibleNode.
+  static AccessibleNode* GetProperty(Element*, AOMRelationProperty);
+
+  // Returns the given relation list property if the Element has an
+  // AccessibleNode.
+  static AccessibleNodeList* GetProperty(Element*, AOMRelationListProperty);
+  static bool GetProperty(Element*,
+                          AOMRelationListProperty,
+                          HeapVector<Member<Element>>&);
 
   // Returns the value of the given property if the
   // Element has an AccessibleNode. Sets |isNull| if the property and
@@ -97,6 +142,18 @@ class CORE_EXPORT AccessibleNode
   // ARIA attribute.
   static const AtomicString& GetPropertyOrARIAAttribute(Element*,
                                                         AOMStringProperty);
+
+  // Returns the given relation property if the Element has an AccessibleNode,
+  // otherwise returns the equivalent ARIA attribute.
+  static AccessibleNode* GetPropertyOrARIAAttribute(Element*,
+                                                    AOMRelationProperty);
+
+  // Returns true and provides the the value of the given relation
+  // list property if the Element has an AccessibleNode, or if it has
+  // the equivalent ARIA attribute. Otherwise returns false.
+  static bool GetPropertyOrARIAAttribute(Element*,
+                                         AOMRelationListProperty,
+                                         HeapVector<Member<Element>>&);
 
   // Returns the value of the given property if the
   // Element has an AccessibleNode, otherwise returns the equivalent
@@ -114,6 +171,18 @@ class CORE_EXPORT AccessibleNode
   static uint32_t GetPropertyOrARIAAttribute(Element*,
                                              AOMUIntProperty,
                                              bool& is_null);
+
+  // Iterates over all AOM properties. For each one, calls AOMPropertyClient
+  // with the value of the AOM property if set. Updates
+  // |shadowed_aria_attributes| to contain a list of the ARIA attributes that
+  // would be shadowed by these AOM properties.
+  static void GetAllAOMProperties(
+      Element*,
+      AOMPropertyClient*,
+      HashSet<QualifiedName>& shadowed_aria_attributes);
+
+  AccessibleNode* activeDescendant() const;
+  void setActiveDescendant(AccessibleNode*);
 
   bool atomic(bool& is_null) const;
   void setAtomic(bool, bool is_null);
@@ -136,14 +205,32 @@ class CORE_EXPORT AccessibleNode
   uint32_t colSpan(bool& is_null) const;
   void setColSpan(uint32_t, bool is_null);
 
+  AccessibleNodeList* controls() const;
+  void setControls(AccessibleNodeList*);
+
   AtomicString current() const;
   void setCurrent(const AtomicString&);
+
+  AccessibleNodeList* describedBy();
+  void setDescribedBy(AccessibleNodeList*);
+
+  AccessibleNode* details() const;
+  void setDetails(AccessibleNode*);
 
   bool disabled(bool& is_null) const;
   void setDisabled(bool, bool is_null);
 
+  AccessibleNode* errorMessage() const;
+  void setErrorMessage(AccessibleNode*);
+
   bool expanded(bool& is_null) const;
   void setExpanded(bool, bool is_null);
+
+  AccessibleNodeList* flowTo() const;
+  void setFlowTo(AccessibleNodeList*);
+
+  AtomicString hasPopUp() const;
+  void setHasPopUp(const AtomicString&);
 
   bool hidden(bool& is_null) const;
   void setHidden(bool, bool is_null);
@@ -156,6 +243,9 @@ class CORE_EXPORT AccessibleNode
 
   AtomicString label() const;
   void setLabel(const AtomicString&);
+
+  AccessibleNodeList* labeledBy();
+  void setLabeledBy(AccessibleNodeList*);
 
   uint32_t level(bool& is_null) const;
   void setLevel(uint32_t, bool is_null);
@@ -175,11 +265,17 @@ class CORE_EXPORT AccessibleNode
   AtomicString orientation() const;
   void setOrientation(const AtomicString&);
 
+  AccessibleNodeList* owns() const;
+  void setOwns(AccessibleNodeList*);
+
   AtomicString placeholder() const;
   void setPlaceholder(const AtomicString&);
 
   uint32_t posInSet(bool& is_null) const;
   void setPosInSet(uint32_t, bool is_null);
+
+  AtomicString pressed() const;
+  void setPressed(const AtomicString&);
 
   bool readOnly(bool& is_null) const;
   void setReadOnly(bool, bool is_null);
@@ -228,8 +324,14 @@ class CORE_EXPORT AccessibleNode
 
   DECLARE_VIRTUAL_TRACE();
 
+ protected:
+  friend class AccessibleNodeList;
+  void OnRelationListChanged(AOMRelationListProperty);
+
  private:
   void SetStringProperty(AOMStringProperty, const AtomicString&);
+  void SetRelationProperty(AOMRelationProperty, AccessibleNode*);
+  void SetRelationListProperty(AOMRelationListProperty, AccessibleNodeList*);
   void SetBooleanProperty(AOMBooleanProperty, bool value, bool is_null);
   void SetFloatProperty(AOMFloatProperty, float value, bool is_null);
   void SetUIntProperty(AOMUIntProperty, uint32_t value, bool is_null);
@@ -242,6 +344,10 @@ class CORE_EXPORT AccessibleNode
   Vector<std::pair<AOMFloatProperty, float>> float_properties_;
   Vector<std::pair<AOMIntProperty, int32_t>> int_properties_;
   Vector<std::pair<AOMUIntProperty, uint32_t>> uint_properties_;
+  HeapVector<std::pair<AOMRelationProperty, Member<AccessibleNode>>>
+      relation_properties_;
+  HeapVector<std::pair<AOMRelationListProperty, Member<AccessibleNodeList>>>
+      relation_list_properties_;
 
   // This object's owner Element.
   Member<Element> element_;

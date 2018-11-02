@@ -13,11 +13,11 @@
 #include "cc/output/output_surface.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "cc/resources/platform_color.h"
 #include "cc/resources/scoped_resource.h"
 #include "cc/resources/single_release_callback_impl.h"
 #include "cc/trees/layer_tree_impl.h"
 #include "cc/trees/occlusion.h"
+#include "components/viz/common/resources/platform_color.h"
 
 namespace cc {
 
@@ -41,7 +41,7 @@ TextureLayerImpl::TextureLayerImpl(LayerTreeImpl* tree_impl, int id)
 TextureLayerImpl::~TextureLayerImpl() { FreeTextureMailbox(); }
 
 void TextureLayerImpl::SetTextureMailbox(
-    const TextureMailbox& mailbox,
+    const viz::TextureMailbox& mailbox,
     std::unique_ptr<SingleReleaseCallbackImpl> release_callback) {
   DCHECK_EQ(mailbox.IsValid(), !!release_callback);
   FreeTextureMailbox();
@@ -122,7 +122,7 @@ bool TextureLayerImpl::WillDraw(DrawMode draw_mode,
       std::vector<uint8_t> swizzled;
       uint8_t* pixels = texture_mailbox_.shared_bitmap()->pixels();
 
-      if (!PlatformColor::SameComponentOrder(texture_copy_->format())) {
+      if (!viz::PlatformColor::SameComponentOrder(texture_copy_->format())) {
         // Swizzle colors. This is slow, but should be really uncommon.
         size_t bytes = texture_mailbox_.SharedMemorySizeInBytes();
         swizzled.resize(bytes);
@@ -258,7 +258,7 @@ void TextureLayerImpl::FreeTextureMailbox() {
                                  ->task_runner_provider()
                                  ->blocking_main_thread_task_runner());
     }
-    texture_mailbox_ = TextureMailbox();
+    texture_mailbox_ = viz::TextureMailbox();
     release_callback_ = nullptr;
   } else if (external_texture_resource_) {
     DCHECK(!own_mailbox_);

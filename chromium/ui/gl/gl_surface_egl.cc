@@ -30,7 +30,7 @@
 #include "ui/gl/gl_image.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface_stub.h"
-#include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/scoped_make_current.h"
 #include "ui/gl/sync_control_vsync_provider.h"
 
@@ -53,6 +53,13 @@ extern "C" {
 #if !defined(EGL_OPENGL_ES3_BIT)
 #define EGL_OPENGL_ES3_BIT 0x00000040
 #endif
+
+// Not present egl/eglext.h yet.
+
+#ifndef EGL_EXT_gl_colorspace_display_p3
+#define EGL_EXT_gl_colorspace_display_p3 1
+#define EGL_GL_COLORSPACE_DISPLAY_P3_EXT 0x3363
+#endif /* EGL_EXT_gl_colorspace_display_p3 */
 
 // From ANGLE's egl/eglext.h.
 
@@ -109,6 +116,11 @@ extern "C" {
 #define EGL_FLEXIBLE_SURFACE_COMPATIBILITY_SUPPORTED_ANGLE 0x33A6
 #endif /* EGL_ANGLE_flexible_surface_compatibility */
 
+#ifndef EGL_ANGLE_display_robust_resource_initialization
+#define EGL_ANGLE_display_robust_resource_initialization 1
+#define EGL_DISPLAY_ROBUST_RESOURCE_INITIALIZATION_ANGLE 0x3453
+#endif /* EGL_ANGLE_display_robust_resource_initialization */
+
 using ui::GetLastEGLErrorString;
 
 namespace gl {
@@ -129,6 +141,8 @@ bool g_egl_window_fixed_size_supported = false;
 bool g_egl_surfaceless_context_supported = false;
 bool g_egl_surface_orientation_supported = false;
 bool g_egl_context_priority_supported = false;
+bool g_egl_khr_colorspace = false;
+bool g_egl_ext_colorspace_display_p3 = false;
 bool g_use_direct_composition = false;
 
 class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
@@ -173,7 +187,8 @@ class EGLSyncControlVSyncProvider : public SyncControlVSyncProvider {
 
 EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
                                    EGLenum platform_type,
-                                   bool warpDevice) {
+                                   bool warpDevice,
+                                   bool robustResourceInit) {
   std::vector<EGLint> display_attribs;
 
   display_attribs.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
@@ -182,6 +197,11 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
   if (warpDevice) {
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE);
     display_attribs.push_back(EGL_PLATFORM_ANGLE_DEVICE_TYPE_WARP_ANGLE);
+  }
+
+  if (robustResourceInit) {
+    display_attribs.push_back(EGL_DISPLAY_ROBUST_RESOURCE_INITIALIZATION_ANGLE);
+    display_attribs.push_back(EGL_TRUE);
   }
 
 #if defined(USE_X11) && !defined(OS_CHROMEOS)
@@ -204,26 +224,32 @@ EGLDisplay GetPlatformANGLEDisplay(EGLNativeDisplayType native_display,
 }
 
 EGLDisplay GetDisplayFromType(DisplayType display_type,
-                              EGLNativeDisplayType native_display) {
+                              EGLNativeDisplayType native_display,
+                              bool robustResourceInit) {
   switch (display_type) {
     case DEFAULT:
     case SWIFT_SHADER:
       return eglGetDisplay(native_display);
     case ANGLE_D3D9:
       return GetPlatformANGLEDisplay(native_display,
-                                     EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, false);
+                                     EGL_PLATFORM_ANGLE_TYPE_D3D9_ANGLE, false,
+                                     robustResourceInit);
     case ANGLE_D3D11:
-      return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, false);
+      return GetPlatformANGLEDisplay(native_display,
+                                     EGL_PLATFORM_ANGLE_TYPE_D3D11_ANGLE, false,
+                                     robustResourceInit);
     case ANGLE_OPENGL:
-      return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE, false);
+      return GetPlatformANGLEDisplay(native_display,
+                                     EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE,
+                                     false, robustResourceInit);
     case ANGLE_OPENGLES:
-      return GetPlatformANGLEDisplay(
-          native_display, EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, false);
+      return GetPlatformANGLEDisplay(native_display,
+                                     EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
+                                     false, robustResourceInit);
     case ANGLE_NULL:
       return GetPlatformANGLEDisplay(native_display,
-                                     EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE, false);
+                                     EGL_PLATFORM_ANGLE_TYPE_NULL_ANGLE, false,
+                                     robustResourceInit);
     default:
       NOTREACHED();
       return EGL_NO_DISPLAY;
@@ -526,6 +552,9 @@ bool GLSurfaceEGL::InitializeOneOff(EGLNativeDisplayType native_display) {
       HasEGLExtension("EGL_ANGLE_window_fixed_size");
   g_egl_surface_orientation_supported =
       HasEGLExtension("EGL_ANGLE_surface_orientation");
+  g_egl_khr_colorspace = HasEGLExtension("EGL_KHR_gl_colorspace");
+  g_egl_ext_colorspace_display_p3 =
+      HasEGLExtension("EGL_EXT_gl_colorspace_display_p3");
   // According to https://source.android.com/compatibility/android-cdd.html the
   // EGL_IMG_context_priority extension is mandatory for Virtual Reality High
   // Performance support, but due to a bug in Android Nougat the extension
@@ -680,6 +709,14 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
         ExtensionsContain(client_extensions, "EGL_ANGLE_platform_angle_null");
   }
 
+  bool supports_robust_resource_init =
+      client_extensions &&
+      ExtensionsContain(client_extensions,
+                        "EGL_ANGLE_display_robust_resource_initialization");
+  bool use_robust_resource_init =
+      supports_robust_resource_init &&
+      UsePassthroughCommandDecoder(base::CommandLine::ForCurrentProcess());
+
   std::vector<DisplayType> init_displays;
   GetEGLInitDisplays(supports_angle_d3d, supports_angle_opengl,
                      supports_angle_null,
@@ -687,8 +724,8 @@ EGLDisplay GLSurfaceEGL::InitializeDisplay(
 
   for (size_t disp_index = 0; disp_index < init_displays.size(); ++disp_index) {
     DisplayType display_type = init_displays[disp_index];
-    EGLDisplay display =
-        GetDisplayFromType(display_type, g_native_display);
+    EGLDisplay display = GetDisplayFromType(display_type, g_native_display,
+                                            use_robust_resource_init);
     if (display == EGL_NO_DISPLAY) {
       LOG(ERROR) << "EGL display query failed with error "
                  << GetLastEGLErrorString();
@@ -723,7 +760,7 @@ NativeViewGLSurfaceEGL::NativeViewGLSurfaceEGL(
     std::unique_ptr<gfx::VSyncProvider> vsync_provider)
     : window_(window),
       size_(1, 1),
-      enable_fixed_size_angle_(false),
+      enable_fixed_size_angle_(true),
       surface_(NULL),
       supports_post_sub_buffer_(false),
       supports_swap_buffer_with_damage_(false),
@@ -791,6 +828,34 @@ bool NativeViewGLSurfaceEGL::Initialize(GLSurfaceFormat format) {
     egl_window_attributes.push_back(EGL_TRUE);
     egl_window_attributes.push_back(EGL_DIRECT_COMPOSITION_ANGLE);
     egl_window_attributes.push_back(EGL_TRUE);
+  }
+
+  switch (format_.GetColorSpace()) {
+    case GLSurfaceFormat::COLOR_SPACE_UNSPECIFIED:
+      break;
+    case GLSurfaceFormat::COLOR_SPACE_SRGB:
+      // Note that COLORSPACE_LINEAR refers to the sRGB color space, but
+      // without opting into sRGB blending. It is equivalent to
+      // COLORSPACE_SRGB with Disable(FRAMEBUFFER_SRGB).
+      if (g_egl_khr_colorspace) {
+        egl_window_attributes.push_back(EGL_GL_COLORSPACE_KHR);
+        egl_window_attributes.push_back(EGL_GL_COLORSPACE_LINEAR_KHR);
+      }
+      break;
+    case GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3:
+      // Note that it is not the case that
+      //   COLORSPACE_SRGB is to COLORSPACE_LINEAR_KHR
+      // as
+      //   COLORSPACE_DISPLAY_P3 is to COLORSPACE_DISPLAY_P3_LINEAR
+      // COLORSPACE_DISPLAY_P3 is equivalent to COLORSPACE_LINEAR, except with
+      // with the P3 gamut instead of the the sRGB gamut.
+      // COLORSPACE_DISPLAY_P3_LINEAR has a linear transfer function, and is
+      // intended for use with 16-bit formats.
+      if (g_egl_khr_colorspace && g_egl_ext_colorspace_display_p3) {
+        egl_window_attributes.push_back(EGL_GL_COLORSPACE_KHR);
+        egl_window_attributes.push_back(EGL_GL_COLORSPACE_DISPLAY_P3_EXT);
+      }
+      break;
   }
 
   egl_window_attributes.push_back(EGL_NONE);

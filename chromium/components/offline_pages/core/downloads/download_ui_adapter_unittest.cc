@@ -60,7 +60,7 @@ class DownloadUIAdapterDelegate : public DownloadUIAdapter::Delegate {
   bool IsTemporarilyHiddenInUI(const ClientId& client_id) override {
     return is_temporarily_hidden;
   }
-  void SetUIAdapter(DownloadUIAdapter* ui_adapter) override{};
+  void SetUIAdapter(DownloadUIAdapter* ui_adapter) override {}
 
   bool is_visible = true;
   bool is_temporarily_hidden = false;
@@ -112,8 +112,9 @@ class MockOfflinePageModel : public StubOfflinePageModel {
   void DeletePageAndNotifyAdapter(const std::string& guid) {
     for (const auto& page : pages) {
       if (page.second.client_id.id == guid) {
-        observer_->OfflinePageDeleted(page.second.offline_id,
-                                      page.second.client_id);
+        DeletedPageInfo info(page.second.offline_id, page.second.client_id,
+                             page.second.request_origin);
+        observer_->OfflinePageDeleted(info);
         pages.erase(page.first);
         return;
       }

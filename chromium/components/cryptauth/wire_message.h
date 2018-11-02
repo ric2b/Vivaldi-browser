@@ -14,8 +14,16 @@ namespace cryptauth {
 
 class WireMessage {
  public:
+  // Creates a WireMessage containing |payload| for feature |feature| and
+  // sequence number |sequence_number|.
+  WireMessage(const std::string& payload,
+              const std::string& feature,
+              int sequence_number);
+
   // Creates a WireMessage containing |payload| for feature |feature|.
-  explicit WireMessage(const std::string& payload, const std::string& feature);
+  WireMessage(const std::string& payload, const std::string& feature);
+
+  WireMessage(const WireMessage& other);
 
   // Creates a WireMessage containing |body| (a serialized JSON) as the message
   // body.
@@ -38,6 +46,8 @@ class WireMessage {
   const std::string& payload() const { return payload_; }
   const std::string& feature() const { return feature_; }
   const std::string& body() const { return body_; }
+  // Will return -1 if no sequence number was passed to the constructor.
+  int sequence_number() const { return sequence_number_; }
 
  private:
   // The message payload.
@@ -51,7 +61,8 @@ class WireMessage {
   // vice-versa.
   const std::string body_;
 
-  DISALLOW_COPY_AND_ASSIGN(WireMessage);
+  // Sequence number for this message; set to -1 if no sequence number if set.
+  const int sequence_number_ = -1;
 };
 
 }  // namespace cryptauth

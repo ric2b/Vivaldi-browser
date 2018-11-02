@@ -72,8 +72,8 @@ class CORE_EXPORT StyleResolverState {
   EInsideLink ElementLinkState() const {
     return element_context_.ElementLinkState();
   }
-  bool DistributedToInsertionPoint() const {
-    return element_context_.DistributedToInsertionPoint();
+  bool DistributedToV0InsertionPoint() const {
+    return element_context_.DistributedToV0InsertionPoint();
   }
 
   const ElementResolveContext& ElementContext() const {
@@ -102,6 +102,9 @@ class CORE_EXPORT StyleResolverState {
   }
 
   CSSAnimationUpdate& AnimationUpdate() { return animation_update_; }
+  const CSSAnimationUpdate& AnimationUpdate() const {
+    return animation_update_;
+  }
 
   bool IsAnimationInterpolationMapReady() const {
     return is_animation_interpolation_map_ready_;
@@ -117,13 +120,20 @@ class CORE_EXPORT StyleResolverState {
     is_animating_custom_properties_ = value;
   }
 
-  void SetParentStyle(PassRefPtr<ComputedStyle> parent_style) {
+  HashSet<PropertyHandle>& AnimationPendingCustomProperties() {
+    return animation_pending_custom_properties_;
+  }
+
+  const HashSet<PropertyHandle>& AnimationPendingCustomProperties() const {
+    return animation_pending_custom_properties_;
+  }
+
+  void SetParentStyle(RefPtr<const ComputedStyle> parent_style) {
     parent_style_ = std::move(parent_style);
   }
   const ComputedStyle* ParentStyle() const { return parent_style_.Get(); }
-  ComputedStyle* ParentStyle() { return parent_style_.Get(); }
 
-  void SetLayoutParentStyle(PassRefPtr<ComputedStyle> parent_style) {
+  void SetLayoutParentStyle(RefPtr<const ComputedStyle> parent_style) {
     layout_parent_style_ = std::move(parent_style);
   }
   const ComputedStyle* LayoutParentStyle() const {
@@ -201,9 +211,11 @@ class CORE_EXPORT StyleResolverState {
     style_->SetWritingMode(new_writing_mode);
     font_builder_.DidChangeWritingMode();
   }
-  void SetTextOrientation(TextOrientation text_orientation) {
-    if (style_->SetTextOrientation(text_orientation))
+  void SetTextOrientation(ETextOrientation text_orientation) {
+    if (style_->GetTextOrientation() != text_orientation) {
+      style_->SetTextOrientation(text_orientation);
       font_builder_.DidChangeTextOrientation();
+    }
   }
 
   void SetHasDirAutoAttribute(bool value) { has_dir_auto_attribute_ = value; }
@@ -227,7 +239,7 @@ class CORE_EXPORT StyleResolverState {
 
   // parent_style_ is not always just ElementResolveContext::ParentStyle(),
   // so we keep it separate.
-  RefPtr<ComputedStyle> parent_style_;
+  RefPtr<const ComputedStyle> parent_style_;
   // This will almost-always be the same that parent_style_, except in the
   // presence of display: contents. This is the style against which we have to
   // do adjustment.
@@ -236,6 +248,7 @@ class CORE_EXPORT StyleResolverState {
   CSSAnimationUpdate animation_update_;
   bool is_animation_interpolation_map_ready_;
   bool is_animating_custom_properties_;
+  HashSet<PropertyHandle> animation_pending_custom_properties_;
 
   bool apply_property_to_regular_style_;
   bool apply_property_to_visited_link_style_;

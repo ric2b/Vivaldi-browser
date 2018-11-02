@@ -49,9 +49,14 @@ namespace {
 
 const SpdyPriority kHighestPriority = kV3HighestPriority;
 
-class TestCryptoStream : public QuicCryptoStream {
+class TestCryptoStream : public QuicCryptoStream, public QuicCryptoHandshaker {
  public:
-  explicit TestCryptoStream(QuicSession* session) : QuicCryptoStream(session) {}
+  explicit TestCryptoStream(QuicSession* session)
+      : QuicCryptoStream(session),
+        QuicCryptoHandshaker(this, session),
+        encryption_established_(false),
+        handshake_confirmed_(false),
+        params_(new QuicCryptoNegotiatedParameters) {}
 
   void OnHandshakeMessage(const CryptoHandshakeMessage& /*message*/) override {
     encryption_established_ = true;
@@ -76,7 +81,27 @@ class TestCryptoStream : public QuicCryptoStream {
     encryption_established_ = value;
   }
 
+  // QuicCryptoStream implementation
+  bool encryption_established() const override {
+    return encryption_established_;
+  }
+  bool handshake_confirmed() const override { return handshake_confirmed_; }
+  const QuicCryptoNegotiatedParameters& crypto_negotiated_params()
+      const override {
+    return *params_;
+  }
+  CryptoMessageParser* crypto_message_parser() override {
+    return QuicCryptoHandshaker::crypto_message_parser();
+  }
+
   MOCK_METHOD0(OnCanWrite, void());
+
+ private:
+  using QuicCryptoStream::session;
+
+  bool encryption_established_;
+  bool handshake_confirmed_;
+  QuicReferenceCountedPointer<QuicCryptoNegotiatedParameters> params_;
 };
 
 class TestHeadersStream : public QuicHeadersStream {
@@ -228,6 +253,8 @@ class TestSession : public QuicSpdySession {
   }
 
   using QuicSession::PostProcessAfterData;
+  using QuicSession::closed_streams;
+  using QuicSession::zombie_streams;
 
  private:
   StrictMock<TestCryptoStream> crypto_stream_;
@@ -1254,7 +1281,7 @@ TEST_P(QuicSessionTestServer, TestMaxIncomingAndOutgoingStreamsAllowed) {
 TEST_P(QuicSessionTestServer, EnableFHOLThroughConfigOption) {
   QuicConfigPeer::SetReceivedForceHolBlocking(session_.config());
   session_.OnConfigNegotiated();
-  if (version() != QUIC_VERSION_36) {
+  if (version() != QUIC_VERSION_36 || session_.use_stream_notifier()) {
     EXPECT_FALSE(session_.force_hol_blocking());
   } else {
     EXPECT_TRUE(session_.force_hol_blocking());
@@ -1339,11 +1366,31 @@ TEST_P(QuicSessionTestClient, EnableDHDTThroughConnectionOption) {
 TEST_P(QuicSessionTestClient, EnableFHOLThroughConfigOption) {
   session_.config()->SetForceHolBlocking();
   session_.OnConfigNegotiated();
-  if (version() != QUIC_VERSION_36) {
+  if (version() != QUIC_VERSION_36 || session_.use_stream_notifier()) {
     EXPECT_FALSE(session_.force_hol_blocking());
   } else {
     EXPECT_TRUE(session_.force_hol_blocking());
   }
+}
+
+TEST_P(QuicSessionTestServer, ZombieStreams) {
+  TestStream* stream2 = session_.CreateOutgoingDynamicStream(kDefaultPriority);
+  QuicStreamPeer::SetStreamBytesWritten(3, stream2);
+  EXPECT_TRUE(stream2->IsWaitingForAcks());
+
+  EXPECT_CALL(*connection_, SendRstStream(2, _, _));
+  session_.CloseStream(2);
+  if (!session_.use_stream_notifier()) {
+    EXPECT_TRUE(session_.zombie_streams().empty());
+    EXPECT_FALSE(session_.closed_streams()->empty());
+    return;
+  }
+  EXPECT_TRUE(QuicContainsKey(session_.zombie_streams(), 2));
+  EXPECT_TRUE(session_.closed_streams()->empty());
+  session_.OnStreamDoneWaitingForAcks(2);
+  EXPECT_FALSE(QuicContainsKey(session_.zombie_streams(), 2));
+  EXPECT_EQ(1u, session_.closed_streams()->size());
+  EXPECT_EQ(2u, session_.closed_streams()->front()->id());
 }
 
 }  // namespace

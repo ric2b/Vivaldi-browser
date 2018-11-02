@@ -205,7 +205,7 @@ void InsertListCommand::DoApply(EditingState* editing_state) {
                          kCanSkipOverEditingBoundary)
             .DeepEquivalent() != start_of_last_paragraph) {
       force_list_creation =
-          !SelectionHasListOfType(selection.Start(), selection.end(), list_tag);
+          !SelectionHasListOfType(selection.Start(), selection.End(), list_tag);
 
       VisiblePosition start_of_current_paragraph = visible_start_of_selection;
       while (InSameTreeAndOrdered(start_of_current_paragraph.DeepEquivalent(),
@@ -384,7 +384,7 @@ bool InsertListCommand::DoApplyForSingleParagraph(
 
       GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
       Node* first_child_in_list =
-          EnclosingListChild(VisiblePosition::FirstPositionInNode(list_element)
+          EnclosingListChild(VisiblePosition::FirstPositionInNode(*list_element)
                                  .DeepEquivalent()
                                  .AnchorNode(),
                              list_element);
@@ -394,8 +394,8 @@ bool InsertListCommand::DoApplyForSingleParagraph(
               : list_element;
 
       MoveParagraphWithClones(
-          VisiblePosition::FirstPositionInNode(list_element),
-          VisiblePosition::LastPositionInNode(list_element), new_list,
+          VisiblePosition::FirstPositionInNode(*list_element),
+          VisiblePosition::LastPositionInNode(*list_element), new_list,
           outer_block, editing_state);
       if (editing_state->IsAborted())
         return false;
@@ -421,12 +421,13 @@ bool InsertListCommand::DoApplyForSingleParagraph(
       if (range_start_is_in_list && new_list)
         current_selection.setStart(new_list, 0, IGNORE_EXCEPTION_FOR_TESTING);
       if (range_end_is_in_list && new_list) {
-        current_selection.setEnd(new_list, Position::LastOffsetInNode(new_list),
+        current_selection.setEnd(new_list,
+                                 Position::LastOffsetInNode(*new_list),
                                  IGNORE_EXCEPTION_FOR_TESTING);
       }
 
       SetEndingSelection(SelectionInDOMTree::Builder()
-                             .Collapse(Position::FirstPositionInNode(new_list))
+                             .Collapse(Position::FirstPositionInNode(*new_list))
                              .Build());
 
       return true;
@@ -459,8 +460,8 @@ void InsertListCommand::UnlistifyParagraph(
   VisiblePosition end;
   DCHECK(list_child_node);
   if (isHTMLLIElement(*list_child_node)) {
-    start = VisiblePosition::FirstPositionInNode(list_child_node);
-    end = VisiblePosition::LastPositionInNode(list_child_node);
+    start = VisiblePosition::FirstPositionInNode(*list_child_node);
+    end = VisiblePosition::LastPositionInNode(*list_child_node);
     next_list_child = list_child_node->nextSibling();
     previous_list_child = list_child_node->previousSibling();
   } else {
@@ -527,7 +528,7 @@ void InsertListCommand::UnlistifyParagraph(
   start = CreateVisiblePosition(start_position);
   end = CreateVisiblePosition(end_position);
 
-  VisiblePosition insertion_point = VisiblePosition::BeforeNode(placeholder);
+  VisiblePosition insertion_point = VisiblePosition::BeforeNode(*placeholder);
   MoveParagraphs(start, end, insertion_point, editing_state, kPreserveSelection,
                  kPreserveStyle, list_child_node);
 }
@@ -576,7 +577,7 @@ void InsertListCommand::ListifyParagraph(const VisiblePosition& original_start,
     if (previous_list)
       AppendNode(list_item_element, previous_list, editing_state);
     else
-      InsertNodeAt(list_item_element, Position::BeforeNode(next_list),
+      InsertNodeAt(list_item_element, Position::BeforeNode(*next_list),
                    editing_state);
     if (editing_state->IsAborted())
       return;
@@ -605,7 +606,7 @@ void InsertListCommand::ListifyParagraph(const VisiblePosition& original_start,
         InsertBlockPlaceholder(start_pos, editing_state);
     if (editing_state->IsAborted())
       return;
-    start_pos = Position::BeforeNode(placeholder);
+    start_pos = Position::BeforeNode(*placeholder);
   }
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
@@ -680,7 +681,7 @@ void InsertListCommand::MoveParagraphOverPositionIntoEmptyListItem(
       StartOfParagraph(valid_pos, kCanSkipOverEditingBoundary);
   const VisiblePosition& end =
       EndOfParagraph(valid_pos, kCanSkipOverEditingBoundary);
-  MoveParagraph(start, end, VisiblePosition::BeforeNode(placeholder),
+  MoveParagraph(start, end, VisiblePosition::BeforeNode(*placeholder),
                 editing_state, kPreserveSelection);
 }
 

@@ -56,7 +56,7 @@ bool FakeCompositorDependencies::IsElasticOverscrollEnabled() {
   return true;
 }
 
-const cc::BufferToTextureTargetMap&
+const viz::BufferToTextureTargetMap&
 FakeCompositorDependencies::GetBufferToTextureTargetMap() {
   return buffer_to_texture_target_map_;
 }
@@ -85,10 +85,6 @@ bool FakeCompositorDependencies::IsThreadedAnimationEnabled() {
 }
 
 bool FakeCompositorDependencies::IsScrollAnimatorEnabled() {
-  return false;
-}
-
-bool FakeCompositorDependencies::IsSurfaceSynchronizationEnabled() {
   return false;
 }
 

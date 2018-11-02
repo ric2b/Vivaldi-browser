@@ -6,9 +6,10 @@
 
 [
     Constructor,
+    ConstructorCallWith=ExecutionContext,
     Exposed=(Window,Worker),
     MeasureAs=ShapeDetection_TextDetectorConstructor,
-    RuntimeEnabled=ShapeDetection,
+    RuntimeEnabled=ShapeDetection
 ] interface TextDetector {
     [CallWith=ScriptState] Promise<sequence<DetectedText>> detect(ImageBitmapSource image);
 };

@@ -61,8 +61,7 @@ class VideoTrackRecorderTest
     : public TestWithParam<
           testing::tuple<VideoTrackRecorder::CodecId, gfx::Size, bool>> {
  public:
-  VideoTrackRecorderTest()
-      : mock_source_(new MockMediaStreamVideoSource(false)) {
+  VideoTrackRecorderTest() : mock_source_(new MockMediaStreamVideoSource()) {
     const blink::WebString webkit_track_id(
         blink::WebString::FromASCII("dummy"));
     blink_source_.Initialize(webkit_track_id,
@@ -127,6 +126,10 @@ class VideoTrackRecorderTest
 
   bool HasEncoderInstance() {
     return video_track_recorder_->encoder_.get() != nullptr;
+  }
+
+  uint32_t NumFramesInEncode() {
+    return video_track_recorder_->encoder_->num_frames_in_encode_;
   }
 
   // A ChildProcess and a MessageLoopForUI are both needed to fool the Tracks
@@ -321,6 +324,26 @@ TEST_F(VideoTrackRecorderTest, HandlesOnError) {
       .WillOnce(RunClosure(quit_closure));
   Encode(video_frame, base::TimeTicks::Now());
   run_loop.Run();
+
+  Mock::VerifyAndClearExpectations(this);
+}
+
+// Inserts a frame for encode and makes sure that it is released properly and
+// NumFramesInEncode() is updated.
+TEST_F(VideoTrackRecorderTest, ReleasesFrame) {
+  InitializeRecorder(VideoTrackRecorder::CodecId::VP8);
+
+  const gfx::Size& frame_size = kTrackRecorderTestSize[0];
+  scoped_refptr<VideoFrame> video_frame =
+      VideoFrame::CreateBlackFrame(frame_size);
+
+  base::RunLoop run_loop;
+  video_frame->AddDestructionObserver(run_loop.QuitClosure());
+  EXPECT_CALL(*this, DoOnEncodedVideo(_, _, _, _, true)).Times(1);
+  Encode(video_frame, base::TimeTicks::Now());
+  video_frame = nullptr;
+  run_loop.Run();
+  EXPECT_EQ(0u, NumFramesInEncode());
 
   Mock::VerifyAndClearExpectations(this);
 }

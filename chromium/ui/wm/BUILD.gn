@@ -54,18 +54,19 @@ component("wm") {
     "core/window_modality_controller.h",
     "core/window_util.cc",
     "core/window_util.h",
+    "core/wm_core_export.h",
     "core/wm_core_switches.cc",
     "core/wm_core_switches.h",
     "core/wm_state.cc",
     "core/wm_state.h",
-    "wm_export.h",
   ]
 
   configs += [ "//build/config:precompiled_headers" ]
-  defines = [ "WM_IMPLEMENTATION" ]
+  defines = [ "WM_CORE_IMPLEMENTATION" ]
 
   deps = [
     "//base",
+    "//services/ui/public/interfaces",
     "//skia",
     "//ui/aura",
     "//ui/base",
@@ -80,6 +81,7 @@ component("wm") {
     "//ui/gfx/animation",
     "//ui/gfx/geometry",
     "//ui/resources",
+    "//ui/wm/public",
   ]
 
   if (use_x11) {
@@ -138,6 +140,7 @@ test("wm_unittests") {
     ":wm",
     "//base",
     "//base/test:test_support",
+    "//mojo/edk/system",
     "//skia",
     "//testing/gtest",
     "//ui/aura:test_support",
@@ -151,6 +154,7 @@ test("wm_unittests") {
     "//ui/gfx/geometry",
     "//ui/gl:test_support",
     "//ui/resources",
+    "//ui/wm/public",
   ]
 
   data_deps = [

@@ -27,13 +27,15 @@
 #include "cc/output/compositor_frame.h"
 #include "cc/output/compositor_frame_metadata.h"
 #include "cc/output/copy_output_request.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_manager.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_external_begin_frame_source.h"
-#include "components/viz/display_compositor/gl_helper.h"
-#include "components/viz/display_compositor/host_shared_bitmap_manager.h"
+#include "cc/test/fake_surface_observer.h"
+#include "components/viz/common/gl_helper.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/service/display_embedder/server_shared_bitmap_manager.h"
+#include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/render_widget_host_view_guest.h"
@@ -89,6 +91,8 @@
 #include "ui/compositor/compositor.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/compositor/test/draw_waiter_for_test.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/blink/blink_event_util.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/events/event.h"
@@ -127,7 +131,7 @@ void InstallDelegatedFrameHostClient(
 
 namespace {
 
-const cc::LocalSurfaceId kArbitraryLocalSurfaceId(
+const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
     1,
     base::UnguessableToken::Deserialize(2, 3));
 
@@ -142,6 +146,8 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
 
   ~TestOverscrollDelegate() override {}
 
+  void set_delta_cap(float delta_cap) { delta_cap_ = delta_cap; }
+
   OverscrollMode current_mode() const { return current_mode_; }
   OverscrollMode completed_mode() const { return completed_mode_; }
   float delta_x() const { return delta_x_; }
@@ -155,8 +161,14 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
 
  private:
   // Overridden from OverscrollControllerDelegate:
-  gfx::Rect GetVisibleBounds() const override {
-    return view_->IsShowing() ? view_->GetViewBounds() : gfx::Rect();
+  gfx::Size GetVisibleSize() const override {
+    return view_->IsShowing() ? view_->GetViewBounds().size() : gfx::Size();
+  }
+
+  gfx::Size GetDisplaySize() const override {
+    return display::Screen::GetScreen()
+        ->GetDisplayNearestView(view_->GetNativeView())
+        .size();
   }
 
   bool OnOverscrollUpdate(float delta_x, float delta_y) override {
@@ -179,7 +191,12 @@ class TestOverscrollDelegate : public OverscrollControllerDelegate {
     delta_x_ = delta_y_ = 0.f;
   }
 
+  base::Optional<float> GetMaxOverscrollDelta() const override {
+    return delta_cap_;
+  }
+
   RenderWidgetHostView* view_;
+  base::Optional<float> delta_cap_;
   OverscrollMode current_mode_;
   OverscrollMode completed_mode_;
   float delta_x_;
@@ -226,6 +243,9 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
     last_event_.reset(new NativeWebKeyboardEvent(event));
     return pre_handle_keyboard_event_result_;
   }
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {}
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -278,17 +298,6 @@ class TestWindowObserver : public aura::WindowObserver {
   bool destroyed_;
 
   DISALLOW_COPY_AND_ASSIGN(TestWindowObserver);
-};
-
-class FakeSurfaceObserver : public cc::SurfaceObserver {
- public:
-  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override {}
-
-  void OnSurfaceDamaged(const cc::SurfaceId& id, bool* changed) override {
-    *changed = true;
-  }
-
-  void OnSurfaceDiscarded(const cc::SurfaceId& id) override {}
 };
 
 class FakeFrameSubscriber : public RenderWidgetHostViewFrameSubscriber {
@@ -344,10 +353,14 @@ class FakeWindowEventDispatcher : public aura::WindowEventDispatcher {
       : WindowEventDispatcher(host),
         processed_touch_event_count_(0) {}
 
-  void ProcessedTouchEvent(uint32_t unique_event_id,
-                           aura::Window* window,
-                           ui::EventResult result) override {
-    WindowEventDispatcher::ProcessedTouchEvent(unique_event_id, window, result);
+  void ProcessedTouchEvent(
+      uint32_t unique_event_id,
+      aura::Window* window,
+      ui::EventResult result,
+      bool is_source_touch_event_set_non_blocking) override {
+    WindowEventDispatcher::ProcessedTouchEvent(
+        unique_event_id, window, result,
+        is_source_touch_event_set_non_blocking);
     processed_touch_event_count_++;
   }
 
@@ -424,10 +437,10 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
   ~FakeRenderWidgetHostViewAura() override {}
 
   void CreateNewRendererCompositorFrameSink() {
-    cc::mojom::MojoCompositorFrameSinkPtr sink;
-    cc::mojom::MojoCompositorFrameSinkRequest sink_request =
+    cc::mojom::CompositorFrameSinkPtr sink;
+    cc::mojom::CompositorFrameSinkRequest sink_request =
         mojo::MakeRequest(&sink);
-    cc::mojom::MojoCompositorFrameSinkClientRequest client_request =
+    cc::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
         base::MakeUnique<FakeRendererCompositorFrameSink>(
@@ -465,7 +478,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     }
   }
 
-  cc::SurfaceId surface_id() const {
+  viz::SurfaceId surface_id() const {
     return GetDelegatedFrameHost()->SurfaceIdForTesting();
   }
 
@@ -477,7 +490,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
     return GetDelegatedFrameHost()->ReleasedFrontLockActiveForTesting();
   }
 
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) {
+  void ReclaimResources(const std::vector<cc::ReturnedResource>& resources) {
     GetDelegatedFrameHost()->ReclaimResources(resources);
   }
 
@@ -502,8 +515,7 @@ class FakeRenderWidgetHostViewAura : public RenderWidgetHostViewAura {
 
  private:
   FakeDelegatedFrameHostClientAura* delegated_frame_host_client_;
-  cc::mojom::MojoCompositorFrameSinkClientPtr
-      renderer_compositor_frame_sink_ptr_;
+  cc::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeRenderWidgetHostViewAura);
 };
@@ -584,6 +596,12 @@ const WebInputEvent* GetInputEventFromMessage(const IPC::Message& message) {
     return nullptr;
   return reinterpret_cast<const WebInputEvent*>(data);
 }
+
+enum WheelScrollingMode {
+  kWheelScrollingModeNone,
+  kWheelScrollLatching,
+  kAsyncWheelEvents,
+};
 
 }  // namespace
 
@@ -752,24 +770,41 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
         "", features::kTouchpadAndWheelScrollLatching.name);
   }
 
-  void SetFeatureList(bool raf_aligned_touch, bool wheel_scroll_latching) {
-    if (raf_aligned_touch && wheel_scroll_latching) {
+  void SetFeatureList(
+      bool raf_aligned_touch,
+      WheelScrollingMode wheel_scrolling_mode = kWheelScrollLatching) {
+    if (raf_aligned_touch && wheel_scrolling_mode == kAsyncWheelEvents) {
+      feature_list_.InitWithFeatures({features::kRafAlignedTouchInputEvents,
+                                      features::kTouchpadAndWheelScrollLatching,
+                                      features::kAsyncWheelEvents},
+                                     {});
+    } else if (raf_aligned_touch &&
+               wheel_scrolling_mode == kWheelScrollLatching) {
       feature_list_.InitWithFeatures(
           {features::kRafAlignedTouchInputEvents,
            features::kTouchpadAndWheelScrollLatching},
-          {});
-    } else if (raf_aligned_touch && !wheel_scroll_latching) {
-      feature_list_.InitWithFeatures(
-          {features::kRafAlignedTouchInputEvents},
-          {features::kTouchpadAndWheelScrollLatching});
-    } else if (!raf_aligned_touch && wheel_scroll_latching) {
+          {features::kAsyncWheelEvents});
+    } else if (raf_aligned_touch &&
+               wheel_scrolling_mode == kWheelScrollingModeNone) {
+      feature_list_.InitWithFeatures({features::kRafAlignedTouchInputEvents},
+                                     {features::kTouchpadAndWheelScrollLatching,
+                                      features::kAsyncWheelEvents});
+    } else if (!raf_aligned_touch &&
+               wheel_scrolling_mode == kAsyncWheelEvents) {
+      feature_list_.InitWithFeatures({features::kTouchpadAndWheelScrollLatching,
+                                      features::kAsyncWheelEvents},
+                                     {features::kRafAlignedTouchInputEvents});
+    } else if (!raf_aligned_touch &&
+               wheel_scrolling_mode == kWheelScrollLatching) {
       feature_list_.InitWithFeatures(
           {features::kTouchpadAndWheelScrollLatching},
-          {features::kRafAlignedTouchInputEvents});
-    } else {  // !raf_aligned_touch && !wheel_scroll_latching
-      feature_list_.InitWithFeatures(
-          {}, {features::kRafAlignedTouchInputEvents,
-               features::kTouchpadAndWheelScrollLatching});
+          {features::kRafAlignedTouchInputEvents, features::kAsyncWheelEvents});
+    } else {  // !raf_aligned_touch && wheel_scroll_latching ==
+              // kWheelScrollingModeNone.
+      feature_list_.InitWithFeatures({},
+                                     {features::kRafAlignedTouchInputEvents,
+                                      features::kTouchpadAndWheelScrollLatching,
+                                      features::kAsyncWheelEvents});
     }
   }
 
@@ -834,7 +869,7 @@ class RenderWidgetHostViewAuraTest : public testing::Test {
   IPC::TestSink* sink_;
   base::test::ScopedFeatureList feature_list_;
 
-  cc::LocalSurfaceIdAllocator local_surface_id_allocator_;
+  viz::LocalSurfaceIdAllocator local_surface_id_allocator_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraTest);
@@ -915,11 +950,20 @@ class RenderWidgetHostViewAuraOverscrollTest
     : public RenderWidgetHostViewAuraTest {
  public:
   RenderWidgetHostViewAuraOverscrollTest(
-      bool wheel_scroll_latching_enabled = true)
-      : wheel_scroll_latching_enabled_(wheel_scroll_latching_enabled) {}
+      WheelScrollingMode wheel_scrolling_mode = kWheelScrollLatching)
+      : wheel_scroll_latching_enabled_(wheel_scrolling_mode !=
+                                       kWheelScrollingModeNone),
+        wheel_scrolling_mode_(wheel_scrolling_mode) {}
 
   // We explicitly invoke SetUp to allow gesture debounce customization.
   void SetUp() override {}
+
+  void SendScrollBeginAckIfNeeded(InputEventAckState ack_result) {
+    if (wheel_scroll_latching_enabled_) {
+      // GSB events are blocking, send the ack.
+      SendInputEventACK(WebInputEvent::kGestureScrollBegin, ack_result);
+    }
+  }
 
  protected:
   void SetUpOverscrollEnvironmentWithDebounce(int debounce_interval_in_ms) {
@@ -929,7 +973,7 @@ class RenderWidgetHostViewAuraOverscrollTest
   void SetUpOverscrollEnvironment() { SetUpOverscrollEnvironmentImpl(0); }
 
   void SetUpOverscrollEnvironmentImpl(int debounce_interval_in_ms) {
-    SetFeatureList(true, wheel_scroll_latching_enabled_);
+    SetFeatureList(true, wheel_scrolling_mode_);
     ui::GestureConfiguration::GetInstance()->set_scroll_debounce_interval_in_ms(
         debounce_interval_in_ms);
 
@@ -974,17 +1018,15 @@ class RenderWidgetHostViewAuraOverscrollTest
   }
 
   void SimulateWheelEventPossiblyIncludingPhase(
-      bool ignore_phase,
       float dX,
       float dY,
       int modifiers,
       bool precise,
       WebMouseWheelEvent::Phase phase) {
-    if (ignore_phase) {
-      SimulateWheelEvent(dX, dY, modifiers, precise);
-    } else {
+    if (wheel_scroll_latching_enabled_)
       SimulateWheelEventWithPhase(dX, dY, modifiers, precise, phase);
-    }
+    else
+      SimulateWheelEvent(dX, dY, modifiers, precise);
   }
 
   void SimulateWheelEventWithLatencyInfo(float dX,
@@ -1086,6 +1128,10 @@ class RenderWidgetHostViewAuraOverscrollTest
     return view_->overscroll_controller()->overscroll_mode_;
   }
 
+  OverscrollSource overscroll_source() const {
+    return view_->overscroll_controller()->overscroll_source_;
+  }
+
   float overscroll_delta_x() const {
     return view_->overscroll_controller()->overscroll_delta_x_;
   }
@@ -1135,13 +1181,29 @@ class RenderWidgetHostViewAuraOverscrollTest
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   }
 
-  void ExpectGestureScrollEventsAfterMouseWheelACK(bool is_first_ack,
-                                                   bool enqueued_mouse_wheel) {
+  void ExpectGestureScrollEventsAfterMouseWheelACK(
+      bool is_first_ack,
+      size_t enqueued_wheel_event_count) {
     InputMsg_HandleInputEvent::Param params;
     const blink::WebInputEvent* event;
     size_t expected_message_count;
     if (is_first_ack) {
-      expected_message_count = enqueued_mouse_wheel ? 3 : 2;
+      if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+        // If the ack for the first sent event is not consumed,
+        // MouseWheelEventQueue(MWEQ) sends the rest of the wheel events in the
+        // current scrolling sequence as non-blocking events. Since MWEQ
+        // receives the ack for non-blocking events asynchronously, it sends the
+        // next queued wheel event immediately and this continues till the queue
+        // is empty.
+        expected_message_count = enqueued_wheel_event_count + 2;
+      } else {
+        // Since the MWEQ must wait for ack of the sent event before sending the
+        // next queued event, when wheel events are blocking only one queued
+        // event will be sent regardless of the number of the queued wheel
+        // events.
+        expected_message_count = enqueued_wheel_event_count ? 3 : 2;
+      }
+
       EXPECT_EQ(expected_message_count, sink_->message_count());
 
       // The first message is GestureScrollBegin.
@@ -1150,21 +1212,40 @@ class RenderWidgetHostViewAuraOverscrollTest
         EXPECT_EQ(WebInputEvent::kGestureScrollBegin, event->GetType());
       }
 
-      // The second message is GestureScrollUpdate.
-      if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(1), &params)) {
+      size_t gesture_scroll_update_index, first_sent_wheel_index,
+          last_sent_wheel_index;
+      if (wheel_scroll_latching_enabled_) {
+        // Blocking GSB event is sent, GSU will be generated but not sent
+        // waiting for GSB's ack. Enqueued wheel events will be sent. Finally
+        // GSU will be sent after GSB's ack.
+        gesture_scroll_update_index = expected_message_count - 1;
+        first_sent_wheel_index = 1;
+        last_sent_wheel_index = expected_message_count - 2;
+      } else {
+        // Non-blocking GSB event is sent, GSU event will be sent after GSB's
+        // immediate ack, then enqueued wheel events will be sent.
+        gesture_scroll_update_index = 1;
+        first_sent_wheel_index = 2;
+        last_sent_wheel_index = expected_message_count - 1;
+      }
+
+      // Check GestureScrollUpdate.
+      if (InputMsg_HandleInputEvent::Read(
+              sink_->GetMessageAt(gesture_scroll_update_index), &params)) {
         event = std::get<0>(params);
         EXPECT_EQ(WebInputEvent::kGestureScrollUpdate, event->GetType());
       }
 
-      if (enqueued_mouse_wheel) {
-        // The last message is the queued MouseWheel.
-        if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(2), &params)) {
+      // Check wheel events.
+      for (size_t i = first_sent_wheel_index; i <= last_sent_wheel_index; i++) {
+        if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(i), &params)) {
           event = std::get<0>(params);
           EXPECT_EQ(WebInputEvent::kMouseWheel, event->GetType());
         }
       }
+
     } else {  // !is_first_ack
-      expected_message_count = enqueued_mouse_wheel ? 2 : 1;
+      expected_message_count = enqueued_wheel_event_count ? 2 : 1;
       size_t scroll_update_index = 0;
 
       if (!wheel_scroll_latching_enabled_) {
@@ -1185,7 +1266,7 @@ class RenderWidgetHostViewAuraOverscrollTest
         EXPECT_EQ(WebInputEvent::kGestureScrollUpdate, event->GetType());
       }
 
-      if (enqueued_mouse_wheel) {
+      if (enqueued_wheel_event_count) {
         // The last message is the queued MouseWheel.
         if (InputMsg_HandleInputEvent::Read(
                 sink_->GetMessageAt(expected_message_count - 1), &params)) {
@@ -1197,6 +1278,45 @@ class RenderWidgetHostViewAuraOverscrollTest
     EXPECT_EQ(expected_message_count, GetSentMessageCountAndResetSink());
   }
 
+  void ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(
+      bool wheel_was_queued) {
+    size_t gesture_scroll_update_index;
+    InputMsg_HandleInputEvent::Param params;
+    if (wheel_was_queued) {
+      // The queued wheel event is already sent.
+      gesture_scroll_update_index = 0;
+    } else {
+      // The first sent must be the wheel event and the second one must be
+      // GestureScrollUpdate since the ack for the wheel event is non-blocking.
+      if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(0), &params)) {
+        EXPECT_EQ(WebInputEvent::kMouseWheel, (std::get<0>(params))->GetType());
+      }
+      gesture_scroll_update_index = 1;
+    }
+    if (InputMsg_HandleInputEvent::Read(
+            sink_->GetMessageAt(gesture_scroll_update_index), &params)) {
+      EXPECT_EQ(WebInputEvent::kGestureScrollUpdate,
+                (std::get<0>(params))->GetType());
+    }
+    EXPECT_EQ(gesture_scroll_update_index + 1,
+              GetSentMessageCountAndResetSink());
+  }
+
+  void ExpectGestureScrollEndAfterNonBlockingMouseWheelACK() {
+    InputMsg_HandleInputEvent::Param params;
+    // The first sent must be the wheel event and the second one must be
+    // GestureScrollEnd since the ack for the wheel event is non-blocking.
+    if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(0), &params)) {
+      EXPECT_EQ(WebInputEvent::kMouseWheel, (std::get<0>(params))->GetType());
+    }
+
+    if (InputMsg_HandleInputEvent::Read(sink_->GetMessageAt(1), &params)) {
+      EXPECT_EQ(WebInputEvent::kGestureScrollEnd,
+                (std::get<0>(params))->GetType());
+    }
+    EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
+  }
+
   void WheelNotPreciseScrollEvent();
   void WheelScrollOverscrollToggle();
   void OverscrollMouseMoveCompletion();
@@ -1205,6 +1325,7 @@ class RenderWidgetHostViewAuraOverscrollTest
   void ScrollEventsOverscrollWithFling();
   void OverscrollDirectionChangeMouseWheel();
   void OverscrollStateResetsAfterScroll();
+  void ScrollDeltasResetOnEnd();
   void ScrollEventsOverscrollWithZeroFling();
 
   SyntheticWebTouchEvent touch_event_;
@@ -1212,6 +1333,7 @@ class RenderWidgetHostViewAuraOverscrollTest
   std::unique_ptr<TestOverscrollDelegate> overscroll_delegate_;
 
   bool wheel_scroll_latching_enabled_;
+  WheelScrollingMode wheel_scrolling_mode_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewAuraOverscrollTest);
@@ -1221,7 +1343,14 @@ class RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest
     : public RenderWidgetHostViewAuraOverscrollTest {
  public:
   RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest()
-      : RenderWidgetHostViewAuraOverscrollTest(false) {}
+      : RenderWidgetHostViewAuraOverscrollTest(kWheelScrollingModeNone) {}
+};
+
+class RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest
+    : public RenderWidgetHostViewAuraOverscrollTest {
+ public:
+  RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest()
+      : RenderWidgetHostViewAuraOverscrollTest(kAsyncWheelEvents) {}
 };
 
 class RenderWidgetHostViewAuraShutdownTest
@@ -1578,15 +1707,49 @@ TEST_F(RenderWidgetHostViewAuraTest, FinishCompositionByMouse) {
 
   EXPECT_FALSE(view_->has_composition_text_);
 
-  EXPECT_EQ(2U, sink_->message_count());
+  ASSERT_EQ(2U, sink_->message_count());
 
-  if (sink_->message_count() == 2) {
-    // Verify mouse event happens after the finish composing text event.
-    EXPECT_EQ(InputMsg_ImeFinishComposingText::ID,
-              sink_->GetMessageAt(0)->type());
-    EXPECT_EQ(InputMsg_HandleInputEvent::ID,
-              sink_->GetMessageAt(1)->type());
+  // Verify mouse event happens after the finish composing text event.
+  EXPECT_EQ(InputMsg_ImeFinishComposingText::ID,
+            sink_->GetMessageAt(0)->type());
+  EXPECT_EQ(InputMsg_HandleInputEvent::ID, sink_->GetMessageAt(1)->type());
+}
+
+// Checks that WasOcculded/WasUnOccluded notifies RenderWidgetHostImpl.
+TEST_F(RenderWidgetHostViewAuraTest, WasOccluded) {
+  view_->InitAsChild(nullptr);
+  view_->Show();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // Verifies WasOccluded sets RenderWidgetHostImpl as hidden and WasUnOccluded
+  // resets the state.
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
+  view_->WasUnOccluded();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // Verifies WasOccluded sets RenderWidgetHostImpl as hidden and Show resets
+  // the state.
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
+  view_->Show();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  // WasOccluded and WasUnOccluded are not in pairs. The last one dictates
+  // the final state.
+  for (int i = 0; i < 2; ++i) {
+    view_->WasOccluded();
+    EXPECT_TRUE(widget_host_->is_hidden());
   }
+  view_->WasUnOccluded();
+  EXPECT_FALSE(widget_host_->is_hidden());
+
+  for (int i = 0; i < 4; ++i) {
+    view_->WasUnOccluded();
+    EXPECT_FALSE(widget_host_->is_hidden());
+  }
+  view_->WasOccluded();
+  EXPECT_TRUE(widget_host_->is_hidden());
 }
 
 // Checks that touch-event state is maintained correctly.
@@ -1787,6 +1950,8 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   const WebGestureEvent* gesture_event =
       static_cast<const WebGestureEvent*>(input_event);
   EXPECT_EQ(WebInputEvent::kGestureScrollBegin, gesture_event->GetType());
+  SendInputEventACK(WebInputEvent::kGestureScrollBegin,
+                    INPUT_EVENT_ACK_STATE_CONSUMED);
 
   input_event = GetInputEventFromMessage(*sink_->GetMessageAt(2));
   gesture_event = static_cast<const WebGestureEvent*>(input_event);
@@ -1817,7 +1982,7 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
   sink_->ClearMessages();
 
-  // Let the RenderWidgetHostViewEventHandler::mouse_wheel_phase_timer_ fire. A
+  // Let the MouseWheelPhaseHandler::mouse_wheel_end_dispatch_timer_ fire. A
   // synthetic wheel event with zero deltas and kPhaseEnded will be sent.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -1859,6 +2024,8 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   const WebGestureEvent* gesture_event =
       static_cast<const WebGestureEvent*>(input_event);
   EXPECT_EQ(WebInputEvent::kGestureScrollBegin, gesture_event->GetType());
+  SendInputEventACK(WebInputEvent::kGestureScrollBegin,
+                    INPUT_EVENT_ACK_STATE_CONSUMED);
 
   input_event = GetInputEventFromMessage(*sink_->GetMessageAt(2));
   gesture_event = static_cast<const WebGestureEvent*>(input_event);
@@ -1879,7 +2046,7 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
   sink_->ClearMessages();
 
-  // Let the RenderWidgetHostViewEventHandler::mouse_wheel_phase_timer_ fire. No
+  // Let the MouseWheelPhaseHandler::mouse_wheel_end_dispatch_timer_ fire. No
   // synthetic wheel event will be sent since the timer has stopped.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE, base::MessageLoop::QuitWhenIdleClosure(),
@@ -1925,6 +2092,8 @@ TEST_F(RenderWidgetHostViewAuraWheelScrollLatchingEnabledTest,
   const WebGestureEvent* gesture_event =
       static_cast<const WebGestureEvent*>(input_event);
   EXPECT_EQ(WebInputEvent::kGestureScrollBegin, gesture_event->GetType());
+  SendInputEventACK(WebInputEvent::kGestureScrollBegin,
+                    INPUT_EVENT_ACK_STATE_CONSUMED);
 
   input_event = GetInputEventFromMessage(*sink_->GetMessageAt(2));
   gesture_event = static_cast<const WebGestureEvent*>(input_event);
@@ -2270,7 +2439,7 @@ cc::CompositorFrame MakeDelegatedFrame(float scale_factor,
                                        gfx::Rect damage) {
   cc::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
-  frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, 1, true);
+  frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, true);
 
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
@@ -2297,7 +2466,7 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
   sink_->ClearMessages();
 
   // Accumulate some returned resources. This should trigger an IPC.
-  cc::ReturnedResourceArray resources;
+  std::vector<cc::ReturnedResource> resources;
   cc::ReturnedResource resource;
   resource.id = 1;
   resources.push_back(resource);
@@ -2313,10 +2482,11 @@ TEST_F(RenderWidgetHostViewAuraTest, ReturnedResources) {
 // This test verifies that when the compositor_frame_sink_id changes, the old
 // resources are not returned.
 TEST_F(RenderWidgetHostViewAuraTest, TwoOutputSurfaces) {
-  FakeSurfaceObserver manager_observer;
+  cc::FakeSurfaceObserver manager_observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  cc::SurfaceManager* manager =
-      factory->GetContextFactoryPrivate()->GetSurfaceManager();
+  cc::SurfaceManager* manager = factory->GetContextFactoryPrivate()
+                                    ->GetFrameSinkManager()
+                                    ->surface_manager();
   manager->AddObserver(&manager_observer);
 
   gfx::Size view_size(100, 100);
@@ -2465,11 +2635,12 @@ TEST_F(RenderWidgetHostViewAuraTest, MirrorLayers) {
   std::unique_ptr<ui::LayerTreeOwner> mirror(wm::MirrorLayers(
       view_->GetNativeView(), false /* sync_bounds */));
 
-  cc::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
+  viz::SurfaceId id = view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
   if (id.is_valid()) {
     ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    cc::SurfaceManager* manager =
-        factory->GetContextFactoryPrivate()->GetSurfaceManager();
+    cc::SurfaceManager* manager = factory->GetContextFactoryPrivate()
+                                      ->GetFrameSinkManager()
+                                      ->surface_manager();
     cc::Surface* surface = manager->GetSurfaceForId(id);
     EXPECT_TRUE(surface);
 
@@ -2489,8 +2660,8 @@ TEST_F(RenderWidgetHostViewAuraTest, DelegatedFrameGutter) {
   gfx::Size large_size(100, 100);
   gfx::Size small_size(40, 45);
   gfx::Size medium_size(40, 95);
-  cc::LocalSurfaceId small_id = local_surface_id_allocator_.GenerateId();
-  cc::LocalSurfaceId medium_id = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId small_id = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId medium_id = local_surface_id_allocator_.GenerateId();
 
   // Prevent the DelegatedFrameHost from skipping frames.
   // XXX
@@ -2542,9 +2713,9 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
   gfx::Size size1(100, 100);
   gfx::Size size2(200, 200);
   gfx::Size size3(300, 300);
-  cc::LocalSurfaceId id1 = local_surface_id_allocator_.GenerateId();
-  cc::LocalSurfaceId id2 = local_surface_id_allocator_.GenerateId();
-  cc::LocalSurfaceId id3 = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id1 = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id2 = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id3 = local_surface_id_allocator_.GenerateId();
 
   aura::Window* root_window = parent_view_->GetNativeView()->GetRootWindow();
   view_->InitAsChild(nullptr);
@@ -2604,7 +2775,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
   view_->SubmitCompositorFrame(
       id2, MakeDelegatedFrame(1.f, size2, gfx::Rect(size2)));
   view_->renderer_compositor_frame_sink_->Flush();
-  cc::SurfaceId surface_id = view_->surface_id();
+  viz::SurfaceId surface_id = view_->surface_id();
   if (!surface_id.is_valid()) {
     // No frame ack yet.
     EXPECT_FALSE(view_->renderer_compositor_frame_sink_->did_receive_ack());
@@ -2659,7 +2830,7 @@ TEST_F(RenderWidgetHostViewAuraTest, Resize) {
 TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
-  cc::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
+  viz::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -2777,7 +2948,7 @@ TEST_F(RenderWidgetHostViewAuraTest, SkippedDelegatedFrames) {
 TEST_F(RenderWidgetHostViewAuraTest, ResizeAfterReceivingFrame) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
-  cc::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
+  viz::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -2967,7 +3138,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
   DCHECK_EQ(0u,
-            viz::HostSharedBitmapManager::current()->AllocatedBitmapCount());
+            viz::ServerSharedBitmapManager::current()->AllocatedBitmapCount());
 
   std::unique_ptr<RenderWidgetHostImpl* []> hosts(
       new RenderWidgetHostImpl*[renderer_count]);
@@ -3088,7 +3259,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   views[1]->Hide();
   EXPECT_TRUE(views[1]->HasFrameData());
   gfx::Size size2(200, 200);
-  cc::LocalSurfaceId id2 = local_surface_id_allocator_.GenerateId();
+  viz::LocalSurfaceId id2 = local_surface_id_allocator_.GenerateId();
   views[1]->SetSize(size2);
   EXPECT_FALSE(views[1]->HasFrameData());
   // Show it, it should block until we give it a frame.
@@ -3106,12 +3277,12 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFrames) {
   int handles_per_frame = 5;
   FrameEvictionManager::GetInstance()->set_max_handles(handles_per_frame * 2);
 
-  viz::HostSharedBitmapManagerClient bitmap_client(
-      viz::HostSharedBitmapManager::current());
+  viz::SharedBitmapAllocationNotifierImpl notifier(
+      viz::ServerSharedBitmapManager::current());
 
   for (size_t i = 0; i < (renderer_count - 1) * handles_per_frame; i++) {
-    bitmap_client.ChildAllocatedSharedBitmap(1, base::SharedMemoryHandle(),
-                                             cc::SharedBitmap::GenerateId());
+    notifier.ChildAllocatedSharedBitmap(1, base::SharedMemoryHandle(),
+                                        viz::SharedBitmap::GenerateId());
   }
 
   // Hiding this last bitmap should evict all but two frames.
@@ -3141,7 +3312,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithLocking) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
   DCHECK_EQ(0u,
-            viz::HostSharedBitmapManager::current()->AllocatedBitmapCount());
+            viz::ServerSharedBitmapManager::current()->AllocatedBitmapCount());
 
   std::unique_ptr<RenderWidgetHostImpl* []> hosts(
       new RenderWidgetHostImpl*[renderer_count]);
@@ -3214,7 +3385,7 @@ TEST_F(RenderWidgetHostViewAuraTest, DiscardDelegatedFramesWithMemoryPressure) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
   DCHECK_EQ(0u,
-            viz::HostSharedBitmapManager::current()->AllocatedBitmapCount());
+            viz::ServerSharedBitmapManager::current()->AllocatedBitmapCount());
 
   std::unique_ptr<RenderWidgetHostImpl* []> hosts(
       new RenderWidgetHostImpl*[renderer_count]);
@@ -3298,25 +3469,13 @@ TEST_F(RenderWidgetHostViewAuraTest, SourceEventTypeExistsInLatencyInfo) {
   view_->OnTouchEvent(&release);
 }
 
-namespace {
-class LastObserverTracker : public cc::FakeExternalBeginFrameSource::Client {
- public:
-  void OnAddObserver(cc::BeginFrameObserver* obs) override {
-    last_observer_ = obs;
-  }
-  void OnRemoveObserver(cc::BeginFrameObserver* obs) override {}
-
-  cc::BeginFrameObserver* last_observer_ = nullptr;
-};
-}  // namespace
-
 // Tests that BeginFrameAcks are forwarded correctly from the
 // SwapCompositorFrame and OnDidNotProduceFrame IPCs through DelegatedFrameHost
 // and its CompositorFrameSinkSupport.
 TEST_F(RenderWidgetHostViewAuraTest, ForwardsBeginFrameAcks) {
   gfx::Rect view_rect(100, 100);
   gfx::Size frame_size = view_rect.size();
-  cc::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
+  viz::LocalSurfaceId local_surface_id = kArbitraryLocalSurfaceId;
 
   view_->InitAsChild(nullptr);
   aura::client::ParentWindowWithContext(
@@ -3324,140 +3483,35 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardsBeginFrameAcks) {
       gfx::Rect());
   view_->SetSize(view_rect.size());
 
-  // Replace BeginFrameSource so that we can observe acknowledgments. Since the
-  // DelegatedFrameHost doesn't directly observe our BeginFrameSource,
-  // |observer_tracker| grabs a pointer to the observer (the
-  // DelegatedFrameHost's CompositorFrameSinkSupport).
-  LastObserverTracker observer_tracker;
-  cc::FakeExternalBeginFrameSource source(0.f, false);
-  uint32_t source_id = source.source_id();
-  source.SetClient(&observer_tracker);
-  cc::FrameSinkId frame_sink_id =
-      view_->GetDelegatedFrameHost()->GetFrameSinkId();
+  cc::FakeSurfaceObserver observer;
   ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-  cc::SurfaceManager* surface_manager =
-      factory->GetContextFactoryPrivate()->GetSurfaceManager();
-  surface_manager->RegisterBeginFrameSource(&source, frame_sink_id);
+  cc::SurfaceManager* surface_manager = factory->GetContextFactoryPrivate()
+                                            ->GetFrameSinkManager()
+                                            ->surface_manager();
+  surface_manager->AddObserver(&observer);
+
   view_->SetNeedsBeginFrames(true);
-  EXPECT_TRUE(observer_tracker.last_observer_);
+  uint32_t source_id = 10;
 
   {
-    cc::BeginFrameArgs args =
-        cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 5u);
-    source.TestOnBeginFrame(args);
-
     // Ack from CompositorFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 5, 4, true);
+    cc::BeginFrameAck ack(source_id, 5, true);
     cc::CompositorFrame frame = MakeDelegatedFrame(1.f, frame_size, view_rect);
     frame.metadata.begin_frame_ack = ack;
     view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
     view_->RunOnCompositingDidCommit();
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
+    EXPECT_EQ(ack, observer.last_ack());
   }
 
   {
-    cc::BeginFrameArgs args =
-        cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 6u);
-    source.TestOnBeginFrame(args);
-
     // Explicit ack through OnDidNotProduceFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 6, 4, false);
+    cc::BeginFrameAck ack(source_id, 6, false);
     view_->OnDidNotProduceFrame(ack);
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
+    EXPECT_EQ(ack, observer.last_ack());
   }
 
-  // Lock the compositor. Now we should drop frames and, thus,
-  // latest_confirmed_sequence_number should not change.
-  view_rect = gfx::Rect(150, 150);
-  view_->SetSize(view_rect.size());
-
-  {
-    cc::BeginFrameArgs args =
-        cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 7u);
-    source.TestOnBeginFrame(args);
-
-    // Ack from CompositorFrame is forwarded with old
-    // latest_confirmed_sequence_number and without damage.
-    cc::BeginFrameAck ack(source_id, 7, 7, true);
-    gfx::Rect dropped_damage_rect(10, 20, 30, 40);
-    cc::CompositorFrame frame =
-        MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect);
-    frame.metadata.begin_frame_ack = ack;
-    view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
-    view_->RunOnCompositingDidCommit();
-    ack.latest_confirmed_sequence_number = 4;
-    ack.has_damage = false;
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
-  }
-
-  // Change source_id known to the view. This should reset the
-  // latest_confirmed_sequence_number tracked by the view.
-  source_id = cc::BeginFrameArgs::kManualSourceId;
-
-  {
-    cc::BeginFrameArgs args = cc::CreateBeginFrameArgsForTesting(
-        BEGINFRAME_FROM_HERE, source_id, 10u);
-    source.TestOnBeginFrame(args);
-
-    // Ack from CompositorFrame is forwarded with invalid
-    // latest_confirmed_sequence_number and without damage.
-    cc::BeginFrameAck ack(source_id, 10, 10, true);
-    gfx::Rect dropped_damage_rect(10, 20, 30, 40);
-    cc::CompositorFrame frame =
-        MakeDelegatedFrame(1.f, frame_size, dropped_damage_rect);
-    frame.metadata.begin_frame_ack = ack;
-    view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
-    view_->RunOnCompositingDidCommit();
-    ack.latest_confirmed_sequence_number =
-        cc::BeginFrameArgs::kInvalidFrameNumber;
-    ack.has_damage = false;
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
-  }
-
-  {
-    cc::BeginFrameArgs args = cc::CreateBeginFrameArgsForTesting(
-        BEGINFRAME_FROM_HERE, source_id, 11u);
-    source.TestOnBeginFrame(args);
-
-    // Explicit ack through OnDidNotProduceFrame is forwarded with invalid
-    // latest_confirmed_sequence_number.
-    cc::BeginFrameAck ack(source_id, 11, 11, false);
-    view_->OnDidNotProduceFrame(ack);
-    ack.latest_confirmed_sequence_number =
-        cc::BeginFrameArgs::kInvalidFrameNumber;
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
-  }
-
-  // Unlock the compositor again with a new CompositorFrame of correct size.
-  frame_size = view_rect.size();
-  local_surface_id = local_surface_id_allocator_.GenerateId();
-
-  {
-    cc::BeginFrameArgs args = cc::CreateBeginFrameArgsForTesting(
-        BEGINFRAME_FROM_HERE, source_id, 12u);
-    source.TestOnBeginFrame(args);
-
-    // Ack from CompositorFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 12, 12, true);
-    cc::CompositorFrame frame = MakeDelegatedFrame(1.f, frame_size, view_rect);
-    frame.metadata.begin_frame_ack = ack;
-    view_->SubmitCompositorFrame(local_surface_id, std::move(frame));
-    view_->RunOnCompositingDidCommit();
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
-  }
-
-  {
-    cc::BeginFrameArgs args = cc::CreateBeginFrameArgsForTesting(
-        BEGINFRAME_FROM_HERE, source_id, 13u);
-    source.TestOnBeginFrame(args);
-
-    // Explicit ack through OnDidNotProduceFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 13, 13, false);
-    view_->OnDidNotProduceFrame(ack);
-    EXPECT_EQ(ack, source.LastAckForObserver(observer_tracker.last_observer_));
-  }
-
-  surface_manager->UnregisterBeginFrameSource(&source);
+  surface_manager->RemoveObserver(&observer);
+  view_->SetNeedsBeginFrames(false);
 }
 
 class RenderWidgetHostViewAuraCopyRequestTest
@@ -3515,7 +3569,7 @@ class RenderWidgetHostViewAuraCopyRequestTest
     view_->SubmitCompositorFrame(
         kArbitraryLocalSurfaceId,
         MakeDelegatedFrame(1.f, view_rect_.size(), view_rect_));
-    cc::SurfaceId surface_id =
+    viz::SurfaceId surface_id =
         view_->GetDelegatedFrameHost()->SurfaceIdForTesting();
     if (surface_id.is_valid())
       view_->GetDelegatedFrameHost()->WillDrawSurface(
@@ -3768,41 +3822,54 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelNotPreciseScrollEvent() {
 
   // Simulate wheel events.
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -5, 0, 0, false,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      -5, 0, 0, false, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -60, 1, 0, false,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -60, 1, 0, false, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Receive ACK the first wheel event as not processed.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 1);
 
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  } else {
+    // Don't send an ack for the first event since the two GSUs are coalesced
+    // while waiting for the blocking ack of GSB to get sent.
+  }
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    ExpectGestureScrollEndForWheelScrolling(false);
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  if (wheel_scroll_latching_enabled_) {
-    SimulateWheelEventWithPhase(0, 0, 0, false,
-                                WebMouseWheelEvent::kPhaseEnded);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
+    ExpectGestureScrollEndAfterNonBlockingMouseWheelACK();
+  } else if (wheel_scroll_latching_enabled_) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
     SendInputEventACK(WebInputEvent::kMouseWheel,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(true);
+  } else {
+    ExpectGestureScrollEndForWheelScrolling(true);
   }
-  ExpectGestureScrollEndForWheelScrolling(true);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, WheelNotPreciseScrollEvent) {
@@ -3812,54 +3879,65 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        WheelNotPreciseScrollEvent) {
   WheelNotPreciseScrollEvent();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       WheelNotPreciseScrollEvent) {
+  WheelNotPreciseScrollEvent();
+}
 
 void RenderWidgetHostViewAuraOverscrollTest::WheelScrollEventOverscrolls() {
   SetUpOverscrollEnvironment();
 
   // Simulate wheel events.
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -5, 0, 0, true,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -1, 1, 0, true,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -1, 1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -10, -3, 0, true,
+      -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -15, -1, 0, true,
+      -15, -1, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -30, -3, 0, true,
+      -30, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -20, 6, 1, true,
+      -20, 6, 1, true,
       WebMouseWheelEvent::kPhaseChanged);  // enqueued, different modifiers
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Receive ACK the first wheel event as not processed.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 2);
 
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  } else {
+    // Don't send an ack for the first event since the two GSUs are coalesced
+    // while waiting for the blocking ack of GSB to get sent.
+  }
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
-
-  // Receive ACK for the second (coalesced) event as not processed. This will
-  // start a back navigation. However, this will also cause the queued next
-  // event to be sent to the renderer. But since overscroll navigation has
-  // started, that event will also be included in the overscroll computation
-  // instead of being sent to the renderer. So the result will be an overscroll
-  // back navigation, and no ScrollUpdate event will be sent to the renderer.
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, true);
-
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    ExpectGestureScrollEndForWheelScrolling(false);
+    // Receive ACK for the second (coalesced) event as not processed. This will
+    // start a back navigation. However, this will also cause the queued next
+    // event to be sent to the renderer. But since overscroll navigation has
+    // started, that event will also be included in the overscroll computation
+    // instead of being sent to the renderer. So the result will be an
+    // overscroll back navigation, and no ScrollUpdate event will be sent to the
+    // renderer.
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 1);
+  }
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
@@ -3874,6 +3952,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollEventOverscrolls() {
   }
 
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
   EXPECT_EQ(-81.f, overscroll_delta_x());
   EXPECT_EQ(-31.f, overscroll_delegate()->delta_x());
@@ -3883,6 +3962,7 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollEventOverscrolls() {
   // Send a mouse-move event. This should cancel the overscroll navigation.
   SimulateMouseMove(5, 10, 0);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, sink_->message_count());
 }
@@ -3890,6 +3970,10 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, WheelScrollEventOverscrolls) {
   WheelScrollEventOverscrolls();
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
+       WheelScrollEventOverscrolls) {
+  WheelScrollEventOverscrolls();
+}
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
        WheelScrollEventOverscrolls) {
   WheelScrollEventOverscrolls();
 }
@@ -3902,73 +3986,91 @@ void RenderWidgetHostViewAuraOverscrollTest::
 
   // Simulate wheel events.
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -5, 0, 0, true,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -1, -1, 0, true,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -1, -1, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -10, -3, 0, true,
+      -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -15, -1, 0, true,
+      -15, -1, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -30, -3, 0, true,
+      -30, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -20, 6, 1, true,
+      -20, 6, 1, true,
       WebMouseWheelEvent::kPhaseChanged);  // enqueued, different modifiers
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Receive ACK the first wheel event as processed.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
-
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 2);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
-  // Receive ACK for the second (coalesced) event as not processed. This should
-  // not initiate overscroll, since the beginning of the scroll has been
-  // consumed. The queued event with different modifiers should be sent to the
-  // renderer.
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(false);
+    // Receive ACK for the second (coalesced) event as not processed. This
+    // should not initiate overscroll, since the beginning of the scroll has
+    // been consumed. The queued event with different modifiers should be sent
+    // to the renderer.
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 1);
+  }
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, true);
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    // The GSU events are coalesced. This is the ack for the coalesced event.
+    // Since it is the first GSU, the ack should be consumed.
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_CONSUMED);
+  } else {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(false);
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
 
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
-
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  if (wheel_scroll_latching_enabled_) {
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
+    ExpectGestureScrollEndAfterNonBlockingMouseWheelACK();
+  } else if (wheel_scroll_latching_enabled_) {
     SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
     SendInputEventACK(WebInputEvent::kMouseWheel,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(true);
+  } else {
+    ExpectGestureScrollEndForWheelScrolling(true);
   }
-
-  ExpectGestureScrollEndForWheelScrolling(true);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        WheelScrollConsumedDoNotHorizOverscroll) {
   WheelScrollConsumedDoNotHorizOverscroll();
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
+       WheelScrollConsumedDoNotHorizOverscroll) {
+  WheelScrollConsumedDoNotHorizOverscroll();
+}
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
        WheelScrollConsumedDoNotHorizOverscroll) {
   WheelScrollConsumedDoNotHorizOverscroll();
 }
@@ -3979,59 +4081,67 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
 
   // Send a wheel event. ACK the event as not processed. This should not
   // initiate an overscroll gesture since it doesn't cross the threshold yet.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 10,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(10, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseBegan);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, false);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 0);
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more so as to not overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 10,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(10, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 40,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(40, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(60.f, overscroll_delta_x());
   EXPECT_EQ(10.f, overscroll_delegate()->delta_x());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_y());
 
   // Scroll in the reverse direction enough to abort the overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, -20,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseWheel,
@@ -4043,46 +4153,60 @@ void RenderWidgetHostViewAuraOverscrollTest::WheelScrollOverscrollToggle() {
     EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
   }
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Continue to scroll in the reverse direction.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, -20,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
 
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Continue to scroll in the reverse direction enough to initiate overscroll
   // in that direction.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, -55,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-55, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  if (wheel_scroll_latching_enabled_) {
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
+    ExpectGestureScrollEndAfterNonBlockingMouseWheelACK();
+  } else if (wheel_scroll_latching_enabled_) {
     SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
     SendInputEventACK(WebInputEvent::kMouseWheel,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(true);
+  } else {
+    ExpectGestureScrollEndForWheelScrolling(true);
   }
-  ExpectGestureScrollEndForWheelScrolling(true);
 
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
   EXPECT_EQ(-75.f, overscroll_delta_x());
   EXPECT_EQ(-25.f, overscroll_delegate()->delta_x());
@@ -4095,54 +4219,67 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        WheelScrollOverscrollToggle) {
   WheelScrollOverscrollToggle();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       WheelScrollOverscrollToggle) {
+  WheelScrollOverscrollToggle();
+}
 
 void RenderWidgetHostViewAuraOverscrollTest::ScrollEventsOverscrollWithFling() {
   SetUpOverscrollEnvironment();
 
   // Send a wheel event. ACK the event as not processed. This should not
   // initiate an overscroll gesture since it doesn't cross the threshold yet.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 10,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(10, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseBegan);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, false);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 0);
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more so as to not overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 20,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, sink_->message_count());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   sink_->ClearMessages();
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 30,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(30, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
-
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
 
   EXPECT_EQ(60.f, overscroll_delta_x());
@@ -4155,8 +4292,10 @@ void RenderWidgetHostViewAuraOverscrollTest::ScrollEventsOverscrollWithFling() {
   // event filter.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(0.f, 0.1f, blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 
   // ScrollBegin and FlingStart will be queued events.
   EXPECT_EQ(2U, sink_->message_count());
@@ -4169,6 +4308,10 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        ScrollEventsOverscrollWithFling) {
   ScrollEventsOverscrollWithFling();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       ScrollEventsOverscrollWithFling) {
+  ScrollEventsOverscrollWithFling();
+}
 
 // Same as ScrollEventsOverscrollWithFling, but with zero velocity. Checks that
 // the zero-velocity fling does not reach the renderer.
@@ -4178,51 +4321,60 @@ void RenderWidgetHostViewAuraOverscrollTest::
 
   // Send a wheel event. ACK the event as not processed. This should not
   // initiate an overscroll gesture since it doesn't cross the threshold yet.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 10,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(10, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseBegan);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, false);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 0);
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more so as to not overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 20,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Scroll some more to initiate an overscroll.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 30,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(30, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
 
   EXPECT_EQ(60.f, overscroll_delta_x());
@@ -4235,17 +4387,23 @@ void RenderWidgetHostViewAuraOverscrollTest::
   // event filter.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(10.f, 0.f, blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 
-    // ScrollBegin and FlingStart will be queued events.
-    EXPECT_EQ(2U, sink_->message_count());
+  // ScrollBegin and FlingStart will be queued events.
+  EXPECT_EQ(2U, sink_->message_count());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
        ScrollEventsOverscrollWithZeroFling) {
   ScrollEventsOverscrollWithZeroFling();
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
+       ScrollEventsOverscrollWithZeroFling) {
+  ScrollEventsOverscrollWithZeroFling();
+}
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
        ScrollEventsOverscrollWithZeroFling) {
   ScrollEventsOverscrollWithZeroFling();
 }
@@ -4261,10 +4419,12 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, ReverseFlingCancelsOverscroll) {
     // overscroll navigation.
     SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                          blink::kWebGestureDeviceTouchscreen);
+    SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
     SimulateGestureScrollUpdateEvent(300, -5, 0);
     SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
     EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+    EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
     EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
     sink_->ClearMessages();
 
@@ -4283,10 +4443,12 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, ReverseFlingCancelsOverscroll) {
     overscroll_delegate()->Reset();
     SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                          blink::kWebGestureDeviceTouchscreen);
+    SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
     SimulateGestureScrollUpdateEvent(-300, -5, 0);
     SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
     EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+    EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
     EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
     sink_->ClearMessages();
 
@@ -4305,7 +4467,9 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
@@ -4315,6 +4479,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
@@ -4327,6 +4492,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
   // should not also receive this event.
   SimulateGestureScrollUpdateEvent(10, -5, 0);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(65.f, overscroll_delta_x());
   EXPECT_EQ(-10.f, overscroll_delta_y());
@@ -4340,6 +4506,67 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, GestureScrollOverscrolls) {
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
                        blink::kWebGestureDeviceTouchscreen);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
+  EXPECT_EQ(1U, sink_->message_count());
+}
+
+// Tests that when a cap is set for overscroll delta, extra overscroll delta is
+// ignored.
+TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDeltaCap) {
+  SetUpOverscrollEnvironment();
+
+  // Set overscroll cap and start scrolling.
+  overscroll_delegate()->set_delta_cap(50);
+  SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
+                       blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
+  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+
+  // Scroll enough to initiate the overscrolling.
+  SimulateGestureScrollUpdateEvent(55, -5, 0);
+  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
+  EXPECT_EQ(55.f, overscroll_delta_x());
+  EXPECT_EQ(-5.f, overscroll_delta_y());
+  EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
+  EXPECT_EQ(-5.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
+
+  // Scroll beyond overscroll cap. Overscroll delta should not surpass the cap.
+  SimulateGestureScrollUpdateEvent(75, -5, 0);
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
+  EXPECT_EQ(100.f, overscroll_delta_x());
+  EXPECT_EQ(-10.f, overscroll_delta_y());
+  EXPECT_EQ(50.f, overscroll_delegate()->delta_x());
+  EXPECT_EQ(-10.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0U, sink_->message_count());
+
+  // Scroll back a bit. Since the extra scroll after cap in previous step is
+  // ignored, scrolling back should immediately reduce overscroll delta.
+  SimulateGestureScrollUpdateEvent(-10, -5, 0);
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
+  EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
+  EXPECT_EQ(90.f, overscroll_delta_x());
+  EXPECT_EQ(-15.f, overscroll_delta_y());
+  EXPECT_EQ(40.f, overscroll_delegate()->delta_x());
+  EXPECT_EQ(-15.f, overscroll_delegate()->delta_y());
+  EXPECT_EQ(0U, sink_->message_count());
+
+  // End overscrolling.
+  SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
+                       blink::kWebGestureDeviceTouchscreen);
+  EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, sink_->message_count());
 }
@@ -4353,12 +4580,14 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureScrollUpdateEvent(10, 0, 0);
 
   // Start scrolling on content. ACK both events as being processed.
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   sink_->ClearMessages();
 
@@ -4371,6 +4600,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 }
 
 // Tests that the overscroll controller plays nice with touch-scrolls and the
@@ -4382,6 +4612,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // Start scrolling. Receive ACK as it being processed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Send update events.
@@ -4409,6 +4640,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
@@ -4423,6 +4655,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(65.f, overscroll_delta_x());
   EXPECT_EQ(15.f, overscroll_delegate()->delta_x());
@@ -4439,6 +4672,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // Start scrolling. Receive ACK as it being processed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Send update events.
@@ -4454,6 +4688,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
@@ -4471,6 +4706,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   base::RunLoop().Run();
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, sink_->message_count());
 }
@@ -4496,16 +4732,19 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SimulateGestureScrollUpdateEvent(20, 0, 0);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Another touch move event should reach the renderer since overscroll hasn't
@@ -4520,6 +4759,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(65.f, overscroll_delta_x());
   EXPECT_EQ(15.f, overscroll_delegate()->delta_x());
@@ -4531,6 +4771,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   MoveTouchPoint(0, 55, 5);
   SendTouchEvent();
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(65.f, overscroll_delta_x());
   EXPECT_EQ(15.f, overscroll_delegate()->delta_x());
@@ -4541,6 +4782,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   SimulateGestureScrollUpdateEvent(-10, 0, 0);
   EXPECT_EQ(0U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
@@ -4554,6 +4796,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   SimulateGestureScrollUpdateEvent(200, 0, 0);
   EXPECT_EQ(0U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(255.f, overscroll_delta_x());
   EXPECT_EQ(205.f, overscroll_delegate()->delta_x());
@@ -4578,6 +4821,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollWithTouchEvents) {
   base::RunLoop().Run();
   EXPECT_EQ(1U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->completed_mode());
 }
@@ -4593,22 +4837,26 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // Start scrolling. Receive ACK as it being processed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   // The scroll begin event will have received a synthetic ack from the input
   // router.
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Send update events.
   SimulateGestureScrollUpdateEvent(55, -5, 0);
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(0U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(55.f, overscroll_delta_x());
   EXPECT_EQ(5.f, overscroll_delegate()->delta_x());
@@ -4623,6 +4871,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
       base::TimeDelta::FromMilliseconds(10));
   base::RunLoop().Run();
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
@@ -4630,20 +4879,24 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
   // Start scrolling. Receive ACK as it being processed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   // Send update events.
   SimulateGestureScrollUpdateEvent(235, -5, 0);
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(0U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(235.f, overscroll_delta_x());
   EXPECT_EQ(185.f, overscroll_delegate()->delta_x());
@@ -4658,6 +4911,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest,
       base::TimeDelta::FromMilliseconds(10));
   base::RunLoop().Run();
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->completed_mode());
   EXPECT_EQ(1U, sink_->message_count());
@@ -4669,6 +4923,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDirectionChange) {
   // Start scrolling. Receive ACK as it being processed.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Send update events and receive ack as not consumed.
@@ -4678,6 +4933,7 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDirectionChange) {
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(0U, sink_->message_count());
 
@@ -4687,12 +4943,14 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollDirectionChange) {
   SimulateGestureScrollUpdateEvent(-260, 0, 0);
   EXPECT_EQ(1U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 
   // Since the overscroll mode has been reset, the next scroll update events
   // should reach the renderer.
   SimulateGestureScrollUpdateEvent(-20, 0, 0);
   EXPECT_EQ(1U, sink_->message_count());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 }
 
 void RenderWidgetHostViewAuraOverscrollTest::
@@ -4700,33 +4958,39 @@ void RenderWidgetHostViewAuraOverscrollTest::
   SetUpOverscrollEnvironment();
 
   // Send wheel event and receive ack as not consumed.
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, 125,
-                                           -5, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(125, -5, 0, true,
                                            WebMouseWheelEvent::kPhaseBegan);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, false);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 0);
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
 
   // Send another wheel event, but in the reverse direction. The overscroll
   // controller will not consume the event, because it is not triggering
   // gesture-nav.
 
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_,
-                                           -260, 0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-260, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
-  EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    ExpectGestureScrollUpdateAfterNonBlockingMouseWheelACK(false);
+  } else {
+    EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
+
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
@@ -4734,14 +4998,16 @@ void RenderWidgetHostViewAuraOverscrollTest::
 
   // Since it was unhandled; the overscroll should now be west
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
 
-  SimulateWheelEventPossiblyIncludingPhase(!wheel_scroll_latching_enabled_, -20,
-                                           0, 0, true,
+  SimulateWheelEventPossiblyIncludingPhase(-20, 0, 0, true,
                                            WebMouseWheelEvent::kPhaseChanged);
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
 
   // wheel event ack generates gesture scroll update; which gets consumed
   // solely by the overflow controller.
@@ -4753,6 +5019,7 @@ void RenderWidgetHostViewAuraOverscrollTest::
   }
 
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
 }
 TEST_F(RenderWidgetHostViewAuraOverscrollTest,
@@ -4763,52 +5030,65 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        OverscrollDirectionChangeMouseWheel) {
   OverscrollDirectionChangeMouseWheel();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       OverscrollDirectionChangeMouseWheel) {
+  OverscrollDirectionChangeMouseWheel();
+}
 
 void RenderWidgetHostViewAuraOverscrollTest::OverscrollMouseMoveCompletion() {
   SetUpOverscrollEnvironment();
 
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, 5, 0, 0, true,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -1, 0, 0, true,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -1, 0, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -10, -3, 0, true,
+      -10, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -15, -1, 0, true,
+      -15, -1, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -30, -3, 0, true,
+      -30, -3, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // Receive ACK the first wheel event as not processed.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 1);
 
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  } else {
+    // Don't send an ack for the first event since the two GSUs are coalesced
+    // while waiting for the blocking ack of GSB to get sent.
+  }
 
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
 
-  // Receive ACK for the second (coalesced) event as not processed. This will
-  // start an overcroll gesture.
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    ExpectGestureScrollEndForWheelScrolling(false);
+    // Receive ACK for the second (coalesced) event as not processed. This will
+    // start an overcroll gesture.
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   ExpectGestureScrollEndForWheelScrolling(false);
 
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
 
   // Send a mouse-move event. This should cancel the overscroll navigation
@@ -4816,6 +5096,7 @@ void RenderWidgetHostViewAuraOverscrollTest::OverscrollMouseMoveCompletion() {
   // mouse-move should reach the renderer.
   SimulateMouseMove(5, 10, 0);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
@@ -4832,10 +5113,12 @@ void RenderWidgetHostViewAuraOverscrollTest::OverscrollMouseMoveCompletion() {
   // Now try with gestures.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureScrollUpdateEvent(300, -5, 0);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   sink_->ClearMessages();
 
@@ -4845,6 +5128,7 @@ void RenderWidgetHostViewAuraOverscrollTest::OverscrollMouseMoveCompletion() {
   SimulateMouseMove(5, 10, 0);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->completed_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
   SendInputEventACK(WebInputEvent::kMouseMove,
@@ -4869,6 +5153,10 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        OverscrollMouseMoveCompletion) {
   OverscrollMouseMoveCompletion();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       OverscrollMouseMoveCompletion) {
+  OverscrollMouseMoveCompletion();
+}
 
 // Tests that if a page scrolled, then the overscroll controller's states are
 // reset after the end of the scroll.
@@ -4877,51 +5165,65 @@ void RenderWidgetHostViewAuraOverscrollTest::
   SetUpOverscrollEnvironment();
 
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, 0, 5, 0, true,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      0, 5, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, 0, 30, 0, true,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      0, 30, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, 0, 40, 0, true,
+      0, 40, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, 0, 10, 0, true,
+      0, 10, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
 
   // The first wheel event is consumed. Dispatches the queued wheel event.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 1);
+
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_CONSUMED);
+    EXPECT_TRUE(ScrollStateIsContentScrolling());
+  } else {
+    // Don't send an ack for the first event since the two GSUs are coalesced
+    // while waiting for the blocking ack of GSB to get sent.
+    EXPECT_TRUE(ScrollStateIsUnknown());
+  }
+
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    ExpectGestureScrollEndForWheelScrolling(false);
+    // The second wheel event is consumed.
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
-  EXPECT_TRUE(ScrollStateIsContentScrolling());
 
-  // The second wheel event is consumed.
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
-
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_CONSUMED);
-
-  if (wheel_scroll_latching_enabled_) {
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
+    ExpectGestureScrollEndAfterNonBlockingMouseWheelACK();
+  } else if (wheel_scroll_latching_enabled_) {
     SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
     SendInputEventACK(WebInputEvent::kMouseWheel,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(true);
+  } else {
+    ExpectGestureScrollEndForWheelScrolling(true);
   }
-  ExpectGestureScrollEndForWheelScrolling(true);
   EXPECT_TRUE(ScrollStateIsContentScrolling());
 
-  // Touchpad scroll can end with a zero-velocity fling. But it is not
-  // dispatched, but it should still reset the overscroll controller state.
+  // Touchpad scroll can end with a zero-velocity fling which is not dispatched,
+  // but it should still reset the overscroll controller state.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(0.f, 0.f, blink::kWebGestureDeviceTouchpad);
   EXPECT_TRUE(ScrollStateIsUnknown());
   // ScrollBegin will be queued events.
@@ -4937,13 +5239,11 @@ void RenderWidgetHostViewAuraOverscrollTest::
   EXPECT_EQ(2U, GetSentMessageCountAndResetSink());
 
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -5, 0, 0, true,
-      WebMouseWheelEvent::kPhaseBegan);  // sent directly
+      -5, 0, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -60, 0, 0, true,
-      WebMouseWheelEvent::kPhaseChanged);  // enqueued
+      -60, 0, 0, true, WebMouseWheelEvent::kPhaseChanged);  // enqueued
   SimulateWheelEventPossiblyIncludingPhase(
-      !wheel_scroll_latching_enabled_, -100, 0, 0, true,
+      -100, 0, 0, true,
       WebMouseWheelEvent::kPhaseChanged);  // coalesced into previous event
 
   EXPECT_TRUE(ScrollStateIsUnknown());
@@ -4953,37 +5253,53 @@ void RenderWidgetHostViewAuraOverscrollTest::
   // yet, since enough hasn't been scrolled.
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(true, true);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
+  ExpectGestureScrollEventsAfterMouseWheelACK(true, 1);
 
-  SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEndForWheelScrolling(false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  } else {
+    // Don't send an ack for the first event since the two GSUs are coalesced
+    // while waiting for the blocking ack of GSB to get sent.
+  }
+
   EXPECT_TRUE(ScrollStateIsUnknown());
 
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  ExpectGestureScrollEventsAfterMouseWheelACK(false, false);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    ExpectGestureScrollEndForWheelScrolling(false);
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEventsAfterMouseWheelACK(false, 0);
+  }
 
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
 
-  if (wheel_scroll_latching_enabled_) {
+  if (wheel_scrolling_mode_ == kAsyncWheelEvents) {
+    SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
+    ExpectGestureScrollEndAfterNonBlockingMouseWheelACK();
+  } else if (wheel_scroll_latching_enabled_) {
     SimulateWheelEventWithPhase(0, 0, 0, true, WebMouseWheelEvent::kPhaseEnded);
     EXPECT_EQ(1U, GetSentMessageCountAndResetSink());
     SendInputEventACK(WebInputEvent::kMouseWheel,
                       INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+    ExpectGestureScrollEndForWheelScrolling(true);
+  } else {
+    ExpectGestureScrollEndForWheelScrolling(true);
   }
-
-  ExpectGestureScrollEndForWheelScrolling(true);
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHPAD, overscroll_source());
   EXPECT_TRUE(ScrollStateIsOverscrolling());
 
   // The GestureScrollBegin will reset the delegate's mode, so check it here.
   EXPECT_EQ(OVERSCROLL_WEST, overscroll_delegate()->current_mode());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(0.f, 0.f, blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_TRUE(ScrollStateIsUnknown());
   // ScrollBegin will be the queued event.
   EXPECT_EQ(1U, sink_->message_count());
@@ -4997,6 +5313,10 @@ TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
        OverscrollStateResetsAfterScroll) {
   OverscrollStateResetsAfterScroll();
 }
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       OverscrollStateResetsAfterScroll) {
+  OverscrollStateResetsAfterScroll();
+}
 
 TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
   SetUpOverscrollEnvironment();
@@ -5005,15 +5325,18 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
   // the host.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureScrollUpdateEvent(300, -5, 0);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(3U, GetSentMessageCountAndResetSink());
 
   view_->OnWindowFocused(nullptr, view_->GetNativeView());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
   EXPECT_EQ(0.f, overscroll_delegate()->delta_x());
@@ -5028,10 +5351,12 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, OverscrollResetsOnBlur) {
   // after the threshold.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureScrollUpdateEvent(300, -5, 0);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::TOUCHSCREEN, overscroll_source());
   EXPECT_EQ(OVERSCROLL_EAST, overscroll_delegate()->current_mode());
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_delegate()->completed_mode());
 
@@ -5242,15 +5567,18 @@ TEST_F(RenderWidgetHostViewAuraTest, CorrectNumberOfAcksAreDispatched) {
 // Tests that the scroll deltas stored within the overscroll controller get
 // reset at the end of the overscroll gesture even if the overscroll threshold
 // isn't surpassed and the overscroll mode stays OVERSCROLL_NONE.
-TEST_F(RenderWidgetHostViewAuraOverscrollTest, ScrollDeltasResetOnEnd) {
+void RenderWidgetHostViewAuraOverscrollTest::ScrollDeltasResetOnEnd() {
   SetUpOverscrollEnvironment();
   // Wheel event scroll ending with mouse move.
-  SimulateWheelEvent(-30, -10, 0, true);  // sent directly
+  SimulateWheelEventPossiblyIncludingPhase(
+      -30, -10, 0, true, WebMouseWheelEvent::kPhaseBegan);  // sent directly
   SendInputEventACK(WebInputEvent::kMouseWheel,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(-30.f, overscroll_delta_x());
   EXPECT_EQ(-10.f, overscroll_delta_y());
   SimulateMouseMove(5, 10, 0);
@@ -5260,10 +5588,12 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, ScrollDeltasResetOnEnd) {
   // Scroll gesture.
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureScrollUpdateEvent(-30, -5, 0);
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(-30.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
   SimulateGestureEvent(WebInputEvent::kGestureScrollEnd,
@@ -5272,24 +5602,43 @@ TEST_F(RenderWidgetHostViewAuraOverscrollTest, ScrollDeltasResetOnEnd) {
   EXPECT_EQ(0.f, overscroll_delta_y());
 
   // Wheel event scroll ending with a fling.
-  SimulateWheelEvent(5, 0, 0, true);
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  SimulateWheelEventPossiblyIncludingPhase(5, 0, 0, true,
+                                           WebMouseWheelEvent::kPhaseChanged);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
-  SimulateWheelEvent(10, -5, 0, true);
-  SendInputEventACK(WebInputEvent::kMouseWheel,
-                    INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  SimulateWheelEventPossiblyIncludingPhase(10, -5, 0, true,
+                                           WebMouseWheelEvent::kPhaseChanged);
+  if (wheel_scrolling_mode_ != kAsyncWheelEvents) {
+    SendInputEventACK(WebInputEvent::kMouseWheel,
+                      INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  }
   SendInputEventACK(WebInputEvent::kGestureScrollUpdate,
                     INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
   EXPECT_EQ(OVERSCROLL_NONE, overscroll_mode());
+  EXPECT_EQ(OverscrollSource::NONE, overscroll_source());
   EXPECT_EQ(15.f, overscroll_delta_x());
   EXPECT_EQ(-5.f, overscroll_delta_y());
   SimulateGestureEvent(WebInputEvent::kGestureScrollBegin,
                        blink::kWebGestureDeviceTouchscreen);
+  SendScrollBeginAckIfNeeded(INPUT_EVENT_ACK_STATE_CONSUMED);
   SimulateGestureFlingStartEvent(0.f, 0.1f, blink::kWebGestureDeviceTouchpad);
   EXPECT_EQ(0.f, overscroll_delta_x());
   EXPECT_EQ(0.f, overscroll_delta_y());
+}
+TEST_F(RenderWidgetHostViewAuraOverscrollTest, ScrollDeltasResetOnEnd) {
+  ScrollDeltasResetOnEnd();
+}
+TEST_F(RenderWidgetHostViewAuraOverscrollWithoutWheelScrollLatchingTest,
+       ScrollDeltasResetOnEnd) {
+  ScrollDeltasResetOnEnd();
+}
+TEST_F(RenderWidgetHostViewAuraOverScrollAsyncWheelEventsEnabledTest,
+       ScrollDeltasResetOnEnd) {
+  ScrollDeltasResetOnEnd();
 }
 
 TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
@@ -5333,6 +5682,36 @@ TEST_F(RenderWidgetHostViewAuraTest, ForwardMouseEvent) {
 
   // view_ will be destroyed when parent is destroyed.
   view_ = nullptr;
+}
+
+TEST_F(RenderWidgetHostViewAuraTest, GestureTapFromStylusHasPointerType) {
+  view_->InitAsFullscreen(parent_view_);
+  view_->Show();
+
+  aura::Window* root = view_->GetNativeView()->GetRootWindow();
+  root->SetTargetHandler(view_);
+
+  ui::test::EventGenerator generator(root, root->bounds().CenterPoint());
+
+  // Simulate touch press and release to generate a GestureTap.
+  sink_->ClearMessages();
+  generator.EnterPenPointerMode();
+  generator.PressTouch();
+  AckLastSentInputEventIfNecessary(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+  generator.ReleaseTouch();
+  AckLastSentInputEventIfNecessary(INPUT_EVENT_ACK_STATE_NOT_CONSUMED);
+
+  // GestureTap event should have correct pointer type.
+  EXPECT_EQ(5U, sink_->message_count());
+  const WebInputEvent* input_event = GetInputEventFromMessage(
+      *sink_->GetMessageAt(sink_->message_count() - 1));
+  EXPECT_EQ(WebInputEvent::kGestureTap, input_event->GetType());
+  const WebGestureEvent* geture_event =
+      static_cast<const WebGestureEvent*>(input_event);
+  EXPECT_EQ(blink::WebPointerProperties::PointerType::kPen,
+            geture_event->primary_pointer_type);
+
+  sink_->ClearMessages();
 }
 
 // This class provides functionality to test a RenderWidgetHostViewAura

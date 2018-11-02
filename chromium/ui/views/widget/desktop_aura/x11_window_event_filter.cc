@@ -19,6 +19,7 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_types.h"
 #include "ui/views/linux_ui/linux_ui.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
@@ -39,143 +40,34 @@ const int k_NET_WM_MOVERESIZE_SIZE_BOTTOMLEFT =  6;
 const int k_NET_WM_MOVERESIZE_SIZE_LEFT =        7;
 const int k_NET_WM_MOVERESIZE_MOVE =             8;
 
-const char* kAtomsToCache[] = {
-  "_NET_WM_MOVERESIZE",
-  NULL
-};
-
 }  // namespace
 
 namespace views {
 
 X11WindowEventFilter::X11WindowEventFilter(
     DesktopWindowTreeHost* window_tree_host)
-    : xdisplay_(gfx::GetXDisplay()),
+    : WindowEventFilter(window_tree_host),
+      xdisplay_(gfx::GetXDisplay()),
       xwindow_(window_tree_host->AsWindowTreeHost()->GetAcceleratedWidget()),
-      x_root_window_(DefaultRootWindow(xdisplay_)),
-      atom_cache_(xdisplay_, kAtomsToCache),
-      window_tree_host_(window_tree_host),
-      click_component_(HTNOWHERE) {
-}
+      x_root_window_(DefaultRootWindow(xdisplay_)) {}
 
 X11WindowEventFilter::~X11WindowEventFilter() {
 }
 
-void X11WindowEventFilter::OnMouseEvent(ui::MouseEvent* event) {
-  if (event->type() != ui::ET_MOUSE_PRESSED)
-    return;
-
-  aura::Window* target = static_cast<aura::Window*>(event->target());
-  if (!target->delegate())
-    return;
-
-  int previous_click_component = HTNOWHERE;
-  int component =
-      target->delegate()->GetNonClientComponent(event->location());
-  if (event->IsLeftMouseButton()) {
-    previous_click_component = click_component_;
-    click_component_ = component;
-  }
-
-  if (component == HTCAPTION) {
-    OnClickedCaption(event, previous_click_component);
-  } else if (component == HTMAXBUTTON) {
-    OnClickedMaximizeButton(event);
-  } else {
-    // Get the |x_root_window_| location out of the native event.
-    if (event->IsLeftMouseButton() && event->native_event()) {
-      const gfx::Point x_root_location =
-          ui::EventSystemLocationFromNative(event->native_event());
-      if ((target->GetProperty(aura::client::kResizeBehaviorKey) &
-           ui::mojom::kResizeBehaviorCanResize) &&
-          DispatchHostWindowDragMovement(component, x_root_location)) {
-        event->StopPropagation();
-      }
-    }
-  }
-}
-
-void X11WindowEventFilter::OnClickedCaption(ui::MouseEvent* event,
-                                            int previous_click_component) {
-  aura::Window* target = static_cast<aura::Window*>(event->target());
-
-  if (event->IsMiddleMouseButton()) {
-    LinuxUI::NonClientMiddleClickAction action =
-        LinuxUI::MIDDLE_CLICK_ACTION_LOWER;
-    LinuxUI* linux_ui = LinuxUI::instance();
-    if (linux_ui)
-      action = linux_ui->GetNonClientMiddleClickAction();
-
-    switch (action) {
-      case LinuxUI::MIDDLE_CLICK_ACTION_NONE:
-        break;
-      case LinuxUI::MIDDLE_CLICK_ACTION_LOWER:
-        XLowerWindow(xdisplay_, xwindow_);
-        break;
-      case LinuxUI::MIDDLE_CLICK_ACTION_MINIMIZE:
-        window_tree_host_->Minimize();
-        break;
-      case LinuxUI::MIDDLE_CLICK_ACTION_TOGGLE_MAXIMIZE:
-        if (target->GetProperty(aura::client::kResizeBehaviorKey) &
-            ui::mojom::kResizeBehaviorCanMaximize)
-          ToggleMaximizedState();
-        break;
-    }
-
-    event->SetHandled();
-    return;
-  }
-
-  if (event->IsLeftMouseButton() && event->flags() & ui::EF_IS_DOUBLE_CLICK) {
-    click_component_ = HTNOWHERE;
-    if ((target->GetProperty(aura::client::kResizeBehaviorKey) &
-         ui::mojom::kResizeBehaviorCanMaximize) &&
-        previous_click_component == HTCAPTION) {
-      // Our event is a double click in the caption area in a window that can be
-      // maximized. We are responsible for dispatching this as a minimize/
-      // maximize on X11 (Windows converts this to min/max events for us).
-      ToggleMaximizedState();
-      event->SetHandled();
-      return;
-    }
-  }
-
-  // Get the |x_root_window_| location out of the native event.
+void X11WindowEventFilter::MaybeDispatchHostWindowDragMovement(
+    int hittest,
+    ui::MouseEvent* event) {
   if (event->IsLeftMouseButton() && event->native_event()) {
+    // Get the |x_root_window_| location out of the native event.
     const gfx::Point x_root_location =
         ui::EventSystemLocationFromNative(event->native_event());
-    if (DispatchHostWindowDragMovement(HTCAPTION, x_root_location))
+    if (DispatchHostWindowDragMovement(hittest, x_root_location))
       event->StopPropagation();
   }
 }
 
-void X11WindowEventFilter::OnClickedMaximizeButton(ui::MouseEvent* event) {
-  aura::Window* target = static_cast<aura::Window*>(event->target());
-  views::Widget* widget = views::Widget::GetWidgetForNativeView(target);
-  if (!widget)
-    return;
-
-  gfx::Rect display_work_area =
-      display::Screen::GetScreen()->GetDisplayNearestWindow(target).work_area();
-  gfx::Rect bounds = widget->GetWindowBoundsInScreen();
-  if (event->IsMiddleMouseButton()) {
-    bounds.set_y(display_work_area.y());
-    bounds.set_height(display_work_area.height());
-    widget->SetBounds(bounds);
-    event->StopPropagation();
-  } else if (event->IsRightMouseButton()) {
-    bounds.set_x(display_work_area.x());
-    bounds.set_width(display_work_area.width());
-    widget->SetBounds(bounds);
-    event->StopPropagation();
-  }
-}
-
-void X11WindowEventFilter::ToggleMaximizedState() {
-  if (window_tree_host_->IsMaximized())
-    window_tree_host_->Restore();
-  else
-    window_tree_host_->Maximize();
+void X11WindowEventFilter::LowerWindow() {
+  XLowerWindow(xdisplay_, xwindow_);
 }
 
 bool X11WindowEventFilter::DispatchHostWindowDragMovement(
@@ -225,7 +117,7 @@ bool X11WindowEventFilter::DispatchHostWindowDragMovement(
   event.xclient.type = ClientMessage;
   event.xclient.display = xdisplay_;
   event.xclient.window = xwindow_;
-  event.xclient.message_type = atom_cache_.GetAtom("_NET_WM_MOVERESIZE");
+  event.xclient.message_type = gfx::GetAtom("_NET_WM_MOVERESIZE");
   event.xclient.format = 32;
   event.xclient.data.l[0] = screen_location.x();
   event.xclient.data.l[1] = screen_location.y();

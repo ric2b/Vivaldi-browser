@@ -46,7 +46,13 @@ SiteEngagementBrowserTest.prototype = {
   },
 };
 
-TEST_F('SiteEngagementBrowserTest', 'All', function() {
+// This test is flaky on Windows. See https://crbug.com/734716.
+GEN('#if defined(OS_WIN)');
+GEN('#define MAYBE_All DISABLED_All');
+GEN('#else');
+GEN('#define MAYBE_All All');
+GEN('#endif');
+TEST_F('SiteEngagementBrowserTest', 'MAYBE_All', function() {
   test('check engagement values are loaded', function() {
     var originCells =
         Array.from(document.getElementsByClassName('origin-cell'));

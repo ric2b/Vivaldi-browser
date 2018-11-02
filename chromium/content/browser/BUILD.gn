@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
 import("//gpu/vulkan/features.gni")
@@ -45,15 +46,17 @@ source_set("browser") {
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
     "//components/mime_util",
-    "//components/payments/mojom:mojom_payment_app",
+    "//components/network_session_configurator/browser",
+    "//components/offline_pages/core/request_header",
+    "//components/offline_pages/features:features",
     "//components/rappor",
     "//components/tracing",
     "//components/tracing:startup_tracing",
-    "//components/ukm/public",
     "//components/url_formatter",
     "//components/variations",
-    "//components/viz/display_compositor",
-    "//components/viz/frame_sinks",
+    "//components/viz/common",
+    "//components/viz/host",
+    "//components/viz/service",
     "//content:resources",
     "//content/app/resources",
     "//content/app/strings",
@@ -75,12 +78,10 @@ source_set("browser") {
     "//device/gamepad",
     "//device/geolocation",
     "//device/geolocation/public/interfaces",
-    "//device/power_save_blocker",
     "//device/screen_orientation/public/interfaces",
     "//device/vr",
     "//device/vr:mojo_bindings",
     "//device/vr/features",
-    "//device/wake_lock/public/interfaces",
     "//google_apis",
     "//gpu",
     "//gpu/command_buffer/client:gles2_implementation",
@@ -95,6 +96,7 @@ source_set("browser") {
     "//media/midi:mojo",
     "//media/mojo:features",
     "//media/mojo/interfaces",
+    "//media/mojo/interfaces:constants",
     "//media/mojo/services",
     "//mojo/common",
     "//mojo/edk/system",
@@ -108,12 +110,15 @@ source_set("browser") {
     "//services/catalog:constants",
     "//services/catalog/public/cpp",
     "//services/catalog/public/interfaces:constants",
+    "//services/data_decoder/public/cpp",
     "//services/data_decoder/public/interfaces",
     "//services/device:lib",
+    "//services/device/public/cpp:device_features",
     "//services/device/public/interfaces",
-    "//services/device/public/interfaces:constants",
+    "//services/device/public/interfaces:generic_sensor",
     "//services/file:lib",
     "//services/file/public/interfaces",
+    "//services/metrics/public/cpp:metrics_cpp",
     "//services/resource_coordinator:lib",
     "//services/resource_coordinator/public/cpp:resource_coordinator_cpp",
     "//services/service_manager",
@@ -128,6 +133,7 @@ source_set("browser") {
     "//services/ui/public/cpp/gpu",
     "//services/video_capture/public/cpp",
     "//services/video_capture/public/interfaces:constants",
+    "//services/video_capture/public/uma",
     "//skia",
     "//sql",
     "//storage/browser",
@@ -171,6 +177,7 @@ source_set("browser") {
   ]
 
   public_deps = [
+    ":accessibility_flags",
     "//ipc",
     "//media/mojo/interfaces:remoting",
     "//third_party/WebKit/public:offscreen_canvas_mojo_bindings",
@@ -260,6 +267,9 @@ source_set("browser") {
     "accessibility/browser_accessibility_win.h",
     "accessibility/one_shot_accessibility_tree_search.cc",
     "accessibility/one_shot_accessibility_tree_search.h",
+    "accessibility/web_contents_accessibility.h",
+    "android/android_overlay_provider_impl.cc",
+    "android/android_overlay_provider_impl.h",
     "android/app_web_message_port.cc",
     "android/app_web_message_port.h",
     "android/background_sync_network_observer_android.cc",
@@ -338,10 +348,10 @@ source_set("browser") {
     "appcache/appcache_storage.h",
     "appcache/appcache_storage_impl.cc",
     "appcache/appcache_storage_impl.h",
+    "appcache/appcache_subresource_url_factory.cc",
+    "appcache/appcache_subresource_url_factory.h",
     "appcache/appcache_update_job.cc",
     "appcache/appcache_update_job.h",
-    "appcache/appcache_url_loader_factory.cc",
-    "appcache/appcache_url_loader_factory.h",
     "appcache/appcache_url_loader_job.cc",
     "appcache/appcache_url_loader_job.h",
     "appcache/appcache_url_loader_request.cc",
@@ -360,6 +370,8 @@ source_set("browser") {
     "background_fetch/background_fetch_cross_origin_filter.h",
     "background_fetch/background_fetch_data_manager.cc",
     "background_fetch/background_fetch_data_manager.h",
+    "background_fetch/background_fetch_delegate_proxy.cc",
+    "background_fetch/background_fetch_delegate_proxy.h",
     "background_fetch/background_fetch_event_dispatcher.cc",
     "background_fetch/background_fetch_event_dispatcher.h",
     "background_fetch/background_fetch_job_controller.cc",
@@ -391,6 +403,10 @@ source_set("browser") {
     "blob_storage/blob_dispatcher_host.h",
     "blob_storage/blob_internals_url_loader.cc",
     "blob_storage/blob_internals_url_loader.h",
+    "blob_storage/blob_registry_wrapper.cc",
+    "blob_storage/blob_registry_wrapper.h",
+    "blob_storage/blob_url_loader_factory.cc",
+    "blob_storage/blob_url_loader_factory.h",
     "blob_storage/chrome_blob_storage_context.cc",
     "blob_storage/chrome_blob_storage_context.h",
     "bluetooth/bluetooth_allowed_devices.cc",
@@ -496,9 +512,6 @@ source_set("browser") {
     # NOTE: These files are here instead of in compositor_browser_sources
     # because the latter is not built on Android, whereas these files are
     # needed on all platforms.
-    "compositor/frame_sink_manager_host.cc",
-    "compositor/frame_sink_manager_host.h",
-    "compositor/frame_sink_observer.h",
     "compositor/surface_utils.cc",
     "compositor/surface_utils.h",
     "devtools/browser_devtools_agent_host.cc",
@@ -515,6 +528,10 @@ source_set("browser") {
     "devtools/devtools_manager.h",
     "devtools/devtools_session.cc",
     "devtools/devtools_session.h",
+    "devtools/devtools_url_interceptor_request_job.cc",
+    "devtools/devtools_url_interceptor_request_job.h",
+    "devtools/devtools_url_request_interceptor.cc",
+    "devtools/devtools_url_request_interceptor.h",
     "devtools/forwarding_agent_host.cc",
     "devtools/forwarding_agent_host.h",
     "devtools/page_navigation_throttle.cc",
@@ -547,6 +564,8 @@ source_set("browser") {
     "devtools/protocol/storage_handler.h",
     "devtools/protocol/system_info_handler.cc",
     "devtools/protocol/system_info_handler.h",
+    "devtools/protocol/target_auto_attacher.cc",
+    "devtools/protocol/target_auto_attacher.h",
     "devtools/protocol/target_handler.cc",
     "devtools/protocol/target_handler.h",
     "devtools/protocol/tethering_handler.cc",
@@ -659,6 +678,8 @@ source_set("browser") {
     "download/save_item.h",
     "download/save_package.cc",
     "download/save_package.h",
+    "download/save_package_download_job.cc",
+    "download/save_package_download_job.h",
     "download/save_types.cc",
     "download/save_types.h",
     "download/url_downloader.cc",
@@ -692,6 +713,8 @@ source_set("browser") {
     "frame_host/frame_tree_node.h",
     "frame_host/frame_tree_node_blame_context.cc",
     "frame_host/frame_tree_node_blame_context.h",
+    "frame_host/input/legacy_ipc_frame_input_handler.cc",
+    "frame_host/input/legacy_ipc_frame_input_handler.h",
     "frame_host/interstitial_page_impl.cc",
     "frame_host/interstitial_page_impl.h",
     "frame_host/interstitial_page_navigator_impl.cc",
@@ -844,6 +867,8 @@ source_set("browser") {
     "indexed_db/list_set.h",
     "installedapp/installed_app_provider_impl_default.cc",
     "installedapp/installed_app_provider_impl_default.h",
+    "isolated_origin_util.cc",
+    "isolated_origin_util.h",
     "keyboard_lock/keyboard_lock_service_impl.cc",
     "keyboard_lock/keyboard_lock_service_impl.h",
     "leveldb_wrapper_impl.cc",
@@ -925,12 +950,16 @@ source_set("browser") {
     "loader/upload_progress_tracker.h",
     "loader/url_loader_factory_impl.cc",
     "loader/url_loader_factory_impl.h",
+    "loader/url_loader_request_handler.cc",
+    "loader/url_loader_request_handler.h",
     "loader/wake_lock_resource_throttle.cc",
     "loader/wake_lock_resource_throttle.h",
     "loader_delegate_impl.cc",
     "loader_delegate_impl.h",
     "mach_broker_mac.h",
     "mach_broker_mac.mm",
+    "manifest/manifest_icon_downloader.cc",
+    "manifest/manifest_icon_selector.cc",
     "manifest/manifest_manager_host.cc",
     "manifest/manifest_manager_host.h",
     "media/android/browser_media_player_manager.cc",
@@ -1030,6 +1059,8 @@ source_set("browser") {
     "net/network_quality_observer_impl.h",
     "net/quota_policy_cookie_store.cc",
     "net/quota_policy_cookie_store.h",
+    "net/reporting_service_proxy.cc",
+    "net/reporting_service_proxy.h",
     "net/view_blob_internals_job_factory.cc",
     "net/view_blob_internals_job_factory.h",
     "net/view_http_cache_job_factory.cc",
@@ -1048,8 +1079,6 @@ source_set("browser") {
     "notifications/notification_id_generator.h",
     "notifications/notification_message_filter.cc",
     "notifications/notification_message_filter.h",
-    "notifications/page_notification_delegate.cc",
-    "notifications/page_notification_delegate.h",
     "notifications/platform_notification_context_impl.cc",
     "notifications/platform_notification_context_impl.h",
     "notifications/type_converters.cc",
@@ -1058,8 +1087,12 @@ source_set("browser") {
     "payments/payment_app_context_impl.h",
     "payments/payment_app_database.cc",
     "payments/payment_app_database.h",
+    "payments/payment_app_info_fetcher.cc",
+    "payments/payment_app_info_fetcher.h",
     "payments/payment_app_provider_impl.cc",
     "payments/payment_app_provider_impl.h",
+    "payments/payment_instrument_icon_fetcher.cc",
+    "payments/payment_instrument_icon_fetcher.h",
     "payments/payment_manager.cc",
     "payments/payment_manager.h",
     "permissions/permission_service_context.cc",
@@ -1083,6 +1116,8 @@ source_set("browser") {
     "renderer_host/clipboard_message_filter.cc",
     "renderer_host/clipboard_message_filter.h",
     "renderer_host/clipboard_message_filter_mac.mm",
+    "renderer_host/cursor_manager.cc",
+    "renderer_host/cursor_manager.h",
     "renderer_host/database_message_filter.cc",
     "renderer_host/database_message_filter.h",
     "renderer_host/dip_util.cc",
@@ -1107,14 +1142,18 @@ source_set("browser") {
     "renderer_host/input/input_router_client.h",
     "renderer_host/input/input_router_config_helper.cc",
     "renderer_host/input/input_router_config_helper.h",
-    "renderer_host/input/input_router_impl.cc",
-    "renderer_host/input/input_router_impl.h",
+    "renderer_host/input/legacy_input_router_impl.cc",
+    "renderer_host/input/legacy_input_router_impl.h",
+    "renderer_host/input/legacy_ipc_widget_input_handler.cc",
+    "renderer_host/input/legacy_ipc_widget_input_handler.h",
     "renderer_host/input/legacy_touch_event_queue.cc",
     "renderer_host/input/legacy_touch_event_queue.h",
     "renderer_host/input/motion_event_web.cc",
     "renderer_host/input/motion_event_web.h",
     "renderer_host/input/mouse_wheel_event_queue.cc",
     "renderer_host/input/mouse_wheel_event_queue.h",
+    "renderer_host/input/mouse_wheel_phase_handler.cc",
+    "renderer_host/input/mouse_wheel_phase_handler.h",
     "renderer_host/input/mouse_wheel_rails_filter_mac.cc",
     "renderer_host/input/mouse_wheel_rails_filter_mac.h",
     "renderer_host/input/passthrough_touch_event_queue.cc",
@@ -1173,7 +1212,6 @@ source_set("browser") {
     "renderer_host/input/touch_selection_controller_client_aura.h",
     "renderer_host/input/touch_selection_controller_client_child_frame.cc",
     "renderer_host/input/touch_selection_controller_client_child_frame.h",
-    "renderer_host/input/touch_selection_controller_client_manager.h",
     "renderer_host/input/touch_timeout_handler.cc",
     "renderer_host/input/touch_timeout_handler.h",
     "renderer_host/input/touchpad_tap_suppression_controller.cc",
@@ -1308,12 +1346,12 @@ source_set("browser") {
     "resolve_proxy_msg_helper.h",
     "resource_context_impl.cc",
     "resource_context_impl.h",
+    "sandbox_parameters_mac.h",
+    "sandbox_parameters_mac.mm",
     "screen_orientation/screen_orientation_provider.cc",
     "screen_orientation/screen_orientation_provider.h",
     "service_manager/common_browser_interfaces.cc",
     "service_manager/common_browser_interfaces.h",
-    "service_manager/merge_dictionary.cc",
-    "service_manager/merge_dictionary.h",
     "service_manager/service_manager_context.cc",
     "service_manager/service_manager_context.h",
     "service_worker/embedded_worker_instance.cc",
@@ -1333,7 +1371,7 @@ source_set("browser") {
     "service_worker/service_worker_client_utils.h",
     "service_worker/service_worker_context_core.cc",
     "service_worker/service_worker_context_core.h",
-    "service_worker/service_worker_context_observer.h",
+    "service_worker/service_worker_context_core_observer.h",
     "service_worker/service_worker_context_request_handler.cc",
     "service_worker/service_worker_context_request_handler.h",
     "service_worker/service_worker_context_watcher.cc",
@@ -1358,6 +1396,8 @@ source_set("browser") {
     "service_worker/service_worker_handle.h",
     "service_worker/service_worker_info.cc",
     "service_worker/service_worker_info.h",
+    "service_worker/service_worker_installed_scripts_sender.cc",
+    "service_worker/service_worker_installed_scripts_sender.h",
     "service_worker/service_worker_internals_ui.cc",
     "service_worker/service_worker_internals_ui.h",
     "service_worker/service_worker_job_coordinator.cc",
@@ -1399,6 +1439,8 @@ source_set("browser") {
     "service_worker/service_worker_unregister_job.h",
     "service_worker/service_worker_url_job_wrapper.cc",
     "service_worker/service_worker_url_job_wrapper.h",
+    "service_worker/service_worker_url_loader_job.cc",
+    "service_worker/service_worker_url_loader_job.h",
     "service_worker/service_worker_url_request_job.cc",
     "service_worker/service_worker_url_request_job.h",
     "service_worker/service_worker_version.cc",
@@ -1426,6 +1468,7 @@ source_set("browser") {
     "speech/speech_recognizer.h",
     "speech/speech_recognizer_impl_android.cc",
     "speech/speech_recognizer_impl_android.h",
+    "ssl/ignore_errors_cert_verifier.cc",
     "ssl/ssl_client_auth_handler.cc",
     "ssl/ssl_client_auth_handler.h",
     "ssl/ssl_error_handler.cc",
@@ -1506,6 +1549,8 @@ source_set("browser") {
     "web_contents/web_drag_source_mac.mm",
     "web_contents/web_drag_utils_win.cc",
     "web_contents/web_drag_utils_win.h",
+    "webauth/authenticator_impl.cc",
+    "webauth/authenticator_impl.h",
     "websockets/websocket_handshake_request_info_impl.cc",
     "websockets/websocket_handshake_request_info_impl.h",
     "websockets/websocket_impl.cc",
@@ -1577,8 +1622,8 @@ source_set("browser") {
   }
   if (!is_android) {
     deps += [
+      "//components/vector_icons",
       "//content/browser/tracing:resources",
-      "//ui/vector_icons",
     ]
   }
   if ((use_udev && is_posix) || is_mac || is_win) {
@@ -1586,12 +1631,6 @@ source_set("browser") {
     sources += [
       "tracing/power_tracing_agent.cc",
       "tracing/power_tracing_agent.h",
-    ]
-  }
-  if (is_chromeos) {
-    sources += [
-      "tracing/arc_tracing_agent.cc",
-      "tracing/arc_tracing_agent.h",
     ]
   }
 
@@ -1624,9 +1663,9 @@ source_set("browser") {
 
     deps += [
       "//jingle:jingle_glue",
-      "//third_party/webrtc/base:rtc_base",
       "//third_party/webrtc/media:rtc_media_base",
       "//third_party/webrtc/modules/desktop_capture:primitives",
+      "//third_party/webrtc/rtc_base:rtc_base",
       "//third_party/webrtc_overrides:init_webrtc",
     ]
   }
@@ -1662,6 +1701,7 @@ source_set("browser") {
         "media/capture/window_activity_tracker_mac.h",
         "media/capture/window_activity_tracker_mac.mm",
       ]
+      deps += [ "//sandbox/mac:seatbelt" ]
     }
     if (enable_webrtc) {
       sources += [
@@ -1681,7 +1721,6 @@ source_set("browser") {
     deps += [
       "//third_party/iaccessible2",
       "//third_party/isimpledom",
-      "//third_party/swiftshader",
     ]
     libs += [
       "comctl32.lib",
@@ -1822,17 +1861,12 @@ source_set("browser") {
   }
 
   if (is_linux && use_aura) {
-    deps += [ "//build/linux:fontconfig" ]
+    deps += [ "//third_party/fontconfig" ]
   }
 
   if (use_x11) {
     configs += [ "//build/config/linux:x11" ]
     deps += [ "//ui/gfx/x" ]
-  }
-
-  if (is_linux && !is_chromeos && use_x11 &&
-      (target_cpu == "x86" || target_cpu == "x64")) {
-    deps += [ "//third_party/swiftshader" ]
   }
 
   if (use_pango) {
@@ -1846,11 +1880,13 @@ source_set("browser") {
       "accessibility/browser_accessibility_android.h",
       "accessibility/browser_accessibility_manager_android.cc",
       "accessibility/browser_accessibility_manager_android.h",
+      "accessibility/web_contents_accessibility_android.cc",
+      "accessibility/web_contents_accessibility_android.h",
       "android/composited_touch_handle_drawable.cc",
       "android/composited_touch_handle_drawable.h",
-      "android/content_view_core_impl.cc",
-      "android/content_view_core_impl.h",
-      "android/content_view_core_impl_observer.h",
+      "android/content_view_core.cc",
+      "android/content_view_core.h",
+      "android/content_view_core_observer.h",
       "android/content_view_render_view.cc",
       "android/content_view_render_view.h",
       "android/content_view_statics.cc",
@@ -1910,6 +1946,8 @@ source_set("browser") {
       "renderer_host/compositor_impl_android.h",
       "renderer_host/input/synthetic_gesture_target_android.cc",
       "renderer_host/input/synthetic_gesture_target_android.h",
+      "renderer_host/input/touch_selection_controller_client_manager_android.cc",
+      "renderer_host/input/touch_selection_controller_client_manager_android.h",
       "renderer_host/native_web_keyboard_event_android.cc",
       "renderer_host/render_widget_host_view_android.cc",
       "renderer_host/render_widget_host_view_android.h",
@@ -2011,6 +2049,7 @@ source_set("browser") {
       "//ui/aura_extra",
       "//ui/strings",
       "//ui/wm",
+      "//ui/wm/public",
     ]
     sources += [
       "renderer_host/delegated_frame_host_client_aura.cc",
@@ -2027,8 +2066,6 @@ source_set("browser") {
       "renderer_host/native_web_keyboard_event_aura.cc",
       "renderer_host/render_widget_host_view_aura.cc",
       "renderer_host/render_widget_host_view_aura.h",
-      "renderer_host/ui_events_helper.cc",
-      "renderer_host/ui_events_helper.h",
       "web_contents/aura/gesture_nav_simple.cc",
       "web_contents/aura/gesture_nav_simple.h",
       "web_contents/aura/overscroll_navigation_overlay.cc",
@@ -2133,6 +2170,12 @@ source_set("browser") {
       "hyphenation/hyphenation_impl.h",
     ]
   }
+}
+
+buildflag_header("accessibility_flags") {
+  header = "accessibility_flags.h"
+  header_dir = "content/browser/accessibility"
+  flags = [ "USE_ATK=$use_atk" ]
 }
 
 # See comment at the top of //content/BUILD.gn for how this works.

@@ -8,6 +8,7 @@ import("//headless/headless.gni")
 import("//mojo/public/tools/bindings/mojom.gni")
 import("//printing/features/features.gni")
 import("//testing/test.gni")
+import("//third_party/closure_compiler/compile_js.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/repack.gni")
 
@@ -84,9 +85,9 @@ action("embed_resources") {
 
   args = [
     "--data_file",
-    rebase_path("$root_out_dir/headless_lib.pak"),
+    rebase_path("$root_out_dir/headless_lib.pak", root_build_dir),
     "--gendir",
-    rebase_path("$root_gen_dir"),
+    rebase_path("$root_gen_dir", root_build_dir),
     "--header_file",
     "headless/embedded_resource_pak.h",
     "--source_file",
@@ -106,9 +107,12 @@ mojom("tab_socket") {
   sources = [
     "lib/tab_socket.mojom",
   ]
+}
 
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
+mojom("headless_render_frame_controller") {
+  sources = [
+    "lib/headless_render_frame_controller.mojom",
+  ]
 }
 
 grit("resources") {
@@ -119,10 +123,11 @@ grit("resources") {
   ]
   grit_flags = [
     "-E",
-    "mojom_root=" + rebase_path(root_gen_dir),
+    "mojom_root=" + rebase_path(root_gen_dir, root_build_dir),
   ]
   deps = [
-    ":tab_socket__generator",
+    ":headless_render_frame_controller_js",
+    ":tab_socket_js",
   ]
 }
 
@@ -139,6 +144,7 @@ devtools_domains = [
   "device_orientation",
   "dom",
   "dom_debugger",
+  "dom_snapshot",
   "dom_storage",
   "emulation",
   "heap_profiler",
@@ -160,7 +166,13 @@ devtools_domains = [
 ]
 
 generated_devtools_api = []
+generated_devtools_api_js = []
+generated_devtools_api_js_externs = []
 foreach(domain, devtools_domains) {
+  generated_devtools_api_js +=
+      [ "$target_gen_dir/public/devtools_js/" + domain + ".js" ]
+  generated_devtools_api_js_externs +=
+      [ "$target_gen_dir/public/devtools_js/externs/externs_" + domain + ".js" ]
   generated_devtools_api += [
     "$target_gen_dir/public/devtools/domains/" + domain + ".cc",
     "$target_gen_dir/public/devtools/domains/" + domain + ".h",
@@ -182,11 +194,14 @@ action("gen_devtools_client_api") {
     "$root_gen_dir/blink/core/inspector/protocol.json",
   ]
 
-  outputs = generated_devtools_api
+  outputs = generated_devtools_api + generated_devtools_api_js +
+            generated_devtools_api_js_externs
 
   sources = [
     "lib/browser/devtools_api/domain_cc.template",
+    "lib/browser/devtools_api/domain_externs_js.template",
     "lib/browser/devtools_api/domain_h.template",
+    "lib/browser/devtools_api/domain_js.template",
     "lib/browser/devtools_api/domain_type_conversions_h.template",
     "lib/browser/devtools_api/domain_types_cc.template",
     "lib/browser/devtools_api/domain_types_forward_declarations_h.template",
@@ -197,8 +212,15 @@ action("gen_devtools_client_api") {
     "--protocol",
     rebase_path(inputs[0], root_build_dir),
     "--output_dir",
-    rebase_path(target_gen_dir) + "/public",
+    rebase_path(target_gen_dir, root_build_dir) + "/public",
   ]
+}
+
+js_library("js_devtools_bindings_lib") {
+  sources = [ "lib/browser/devtools_api/devtools_connection.js" ] +
+            generated_devtools_api_js
+  deps = []
+  extra_deps = [ ":gen_devtools_client_api" ]
 }
 
 if (headless_fontconfig_utils) {
@@ -212,6 +234,8 @@ if (headless_fontconfig_utils) {
       "//third_party/fontconfig",
       "//third_party/freetype",
     ]
+
+    configs += [ ":headless_implementation" ]
   }
 }
 
@@ -243,6 +267,8 @@ component("headless") {
     "lib/browser/headless_permission_manager.h",
     "lib/browser/headless_platform_event_source.cc",
     "lib/browser/headless_platform_event_source.h",
+    "lib/browser/headless_quota_permission_context.cc",
+    "lib/browser/headless_quota_permission_context.h",
     "lib/browser/headless_resource_dispatcher_host_delegate.cc",
     "lib/browser/headless_resource_dispatcher_host_delegate.h",
     "lib/browser/headless_shell_application_mac.h",
@@ -271,14 +297,10 @@ component("headless") {
     "public/util/deterministic_dispatcher.h",
     "public/util/deterministic_http_protocol_handler.cc",
     "public/util/deterministic_http_protocol_handler.h",
-    "public/util/dom_tree_extractor.cc",
-    "public/util/dom_tree_extractor.h",
     "public/util/error_reporter.cc",
     "public/util/error_reporter.h",
     "public/util/expedited_dispatcher.cc",
     "public/util/expedited_dispatcher.h",
-    "public/util/flat_dom_tree_extractor.cc",
-    "public/util/flat_dom_tree_extractor.h",
     "public/util/generic_url_request_job.cc",
     "public/util/generic_url_request_job.h",
     "public/util/http_url_fetcher.cc",
@@ -292,6 +314,8 @@ component("headless") {
     "public/util/navigation_request.h",
     "public/util/testing/generic_url_request_mocks.cc",
     "public/util/testing/generic_url_request_mocks.h",
+    "public/util/throttled_dispatcher.cc",
+    "public/util/throttled_dispatcher.h",
     "public/util/url_fetcher.cc",
     "public/util/url_fetcher.h",
     "public/util/url_request_dispatcher.h",
@@ -336,13 +360,13 @@ component("headless") {
 
   deps = [
     ":gen_devtools_client_api",
+    ":headless_render_frame_controller",
     ":tab_socket",
     ":version_header",
     "//components/security_state/core",
     "//content/public/common",
     "//content/public/common:service_names",
     "//services/service_manager/public/cpp",
-    "//third_party/mesa:osmesa",
     "//ui/base",
     "//ui/compositor",
     "//ui/display",
@@ -360,6 +384,10 @@ component("headless") {
       "lib/headless_content_main_delegate.h",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
+      "lib/renderer/headless_render_frame_controller_impl.cc",
+      "lib/renderer/headless_render_frame_controller_impl.h",
+      "lib/renderer/headless_tab_socket_bindings.cc",
+      "lib/renderer/headless_tab_socket_bindings.h",
     ]
 
     deps += [
@@ -414,12 +442,17 @@ if (!is_component_build) {
       "lib/headless_content_main_delegate.h",
       "lib/renderer/headless_content_renderer_client.cc",
       "lib/renderer/headless_content_renderer_client.h",
+      "lib/renderer/headless_render_frame_controller_impl.cc",
+      "lib/renderer/headless_render_frame_controller_impl.h",
+      "lib/renderer/headless_tab_socket_bindings.cc",
+      "lib/renderer/headless_tab_socket_bindings.h",
     ]
 
     deps = [
       ":headless",
       "//third_party/WebKit/public:blink_headers",
       "//ui/base",
+      "//v8",
     ]
     if (enable_basic_printing) {
       deps += [ "//components/printing/renderer" ]
@@ -456,6 +489,7 @@ test("headless_unittests") {
     "public/util/generic_url_request_job_test.cc",
     "public/util/testing/fake_managed_dispatch_url_request_job.cc",
     "public/util/testing/fake_managed_dispatch_url_request_job.h",
+    "public/util/throttled_dispatcher_test.cc",
   ]
 
   if (!is_component_build) {
@@ -505,6 +539,63 @@ if (is_mac) {
   }
 }
 
+# The js_binary rule doesn't currently work on windows. Apparently there are
+# problems on mac too where java isn't necessarily installed.
+if (is_linux) {
+  js_binary("js_devtools_bindings_test") {
+    sources = [
+      "test/bindings_test.js",
+    ]
+    deps = [
+      ":js_devtools_bindings_lib",
+    ]
+    externs_list = [ "lib/tab_socket_externs.js" ]
+    outputs = [
+      "$target_gen_dir/devtools_bindings_test.js",
+    ]
+    config_files = []
+    closure_flags = [
+      "jscomp_error=checkTypes",
+      "dependency_mode=STRICT",
+
+      # Currently the bindings do not support property renaming so we can't use
+      # ADVANCED_OPTIMIZATIONS here.  We could add support via either moving all
+      # the types to externs, or via applying the same renaming to the json
+      # dictionaries sent between C++ and JS.  The closure compiler can produce
+      # files which contain those mappings with the appropriate flag.
+      "compilation_level=SIMPLE",
+      "language_out=ES5_STRICT",
+      "entry_point=chromium.BindingsTest",
+    ]
+  }
+
+  grit("headless_browsertest_resources_grit") {
+    source = "headless_browsertest_resources.grd"
+    outputs = [
+      "grit/headless_browsertest_resources.h",
+      "$root_gen_dir/headless/headless_browsertest_resources.pak",
+    ]
+    grit_flags = [
+      "-E",
+      "gen_root=" + rebase_path(root_gen_dir),
+    ]
+    deps = [
+      ":js_devtools_bindings_test",
+    ]
+    resource_ids = "lib/headless_browsertest_resource_ids"
+  }
+
+  repack("headless_browser_tests_pak") {
+    sources = [
+      "$root_gen_dir/headless/headless_browsertest_resources.pak",
+    ]
+    output = "$root_out_dir/headless_browser_tests.pak"
+    deps = [
+      ":headless_browsertest_resources_grit",
+    ]
+  }
+}
+
 test("headless_browsertests") {
   sources = [
     "lib/frame_id_browsertest.cc",
@@ -512,11 +603,12 @@ test("headless_browsertests") {
     "lib/headless_browser_context_browsertest.cc",
     "lib/headless_devtools_client_browsertest.cc",
     "lib/headless_web_contents_browsertest.cc",
-    "public/util/dom_tree_extractor_browsertest.cc",
-    "public/util/flat_dom_tree_extractor_browsertest.cc",
+    "lib/virtual_time_browsertest.cc",
     "test/headless_browser_test.cc",
     "test/headless_browser_test.h",
     "test/headless_test_launcher.cc",
+    "test/tab_socket_test.cc",
+    "test/tab_socket_test.h",
     "test/test_protocol_handler.cc",
     "test/test_protocol_handler.h",
     "test/test_url_request_job.cc",
@@ -524,17 +616,20 @@ test("headless_browsertests") {
   ]
 
   data = [
+    "lib/dom_tree_extraction_expected_nodes.txt",
+    "lib/dom_tree_extraction_expected_styles.txt",
     "$root_out_dir/headless_lib.pak",
     "//net/tools/testserver/",
     "//third_party/pyftpdlib/",
     "//third_party/pywebsocket/",
-    "//third_party/skia/",
     "//third_party/tlslite/",
     "test/data/",
   ]
 
   if (is_mac) {
-    data_deps = [ ":mac_helpers" ]
+    data_deps = [
+      ":mac_helpers",
+    ]
   }
 
   defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
@@ -555,6 +650,13 @@ test("headless_browsertests") {
     "//testing/gmock",
     "//testing/gtest",
   ]
+
+  # Only include this if we built the js_binary
+  if (is_linux) {
+    data += [ "$root_out_dir/headless_browser_tests.pak" ]
+    sources += [ "test/headless_js_bindings_browsertest.cc" ]
+    deps += [ ":headless_browser_tests_pak" ]
+  }
 
   if (enable_basic_printing) {
     deps += [
@@ -690,6 +792,7 @@ executable("headless_shell") {
 
   deps = [
     ":headless_shell_lib",
+    "//build/config:exe_and_shlib_deps",
   ]
 
   if (is_win) {
@@ -713,5 +816,6 @@ executable("headless_example") {
 
   deps = [
     ":headless_shell_lib",
+    "//build/config:exe_and_shlib_deps",
   ]
 }

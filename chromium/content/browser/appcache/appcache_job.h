@@ -9,12 +9,15 @@
 
 #include "base/logging.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string16.h"
-#include "base/threading/non_thread_safe.h"
 #include "content/common/content_export.h"
+#include "net/http/http_byte_range.h"
 #include "url/gurl.h"
 
 namespace net {
+class HttpRequestHeaders;
+class HttpResponseInfo;
 class NetworkDelegate;
 class URLRequestJob;
 }
@@ -24,6 +27,8 @@ namespace content {
 class AppCacheEntry;
 class AppCacheHost;
 class AppCacheRequest;
+class AppCacheResponseInfo;
+class AppCacheResponseReader;
 class AppCacheStorage;
 class AppCacheURLLoaderJob;
 class URLRequestJob;
@@ -33,10 +38,15 @@ class URLRequestJob;
 // Subclasses implement this interface to wrap custom job objects like
 // URLRequestJob, URLLoaderJob, etc to ensure that these dependencies stay out
 // of the AppCache code.
-class CONTENT_EXPORT AppCacheJob
-    : NON_EXPORTED_BASE(public base::NonThreadSafe),
-      public base::SupportsWeakPtr<AppCacheJob> {
+class CONTENT_EXPORT AppCacheJob : public base::SupportsWeakPtr<AppCacheJob> {
  public:
+  enum DeliveryType {
+    AWAITING_DELIVERY_ORDERS,
+    APPCACHED_DELIVERY,
+    NETWORK_DELIVERY,
+    ERROR_DELIVERY
+  };
+
   // Callback that will be invoked before the request is restarted. The caller
   // can use this opportunity to grab state from the job to determine how it
   // should behave when the request is restarted.
@@ -65,19 +75,19 @@ class CONTENT_EXPORT AppCacheJob
   virtual bool IsStarted() const = 0;
 
   // Returns true if the job is waiting for instructions.
-  virtual bool IsWaiting() const = 0;
+  virtual bool IsWaiting() const;
 
   // Returns true if the job is delivering a response from the cache.
-  virtual bool IsDeliveringAppCacheResponse() const = 0;
+  virtual bool IsDeliveringAppCacheResponse() const;
 
   // Returns true if the job is delivering a response from the network.
-  virtual bool IsDeliveringNetworkResponse() const = 0;
+  virtual bool IsDeliveringNetworkResponse() const;
 
   // Returns true if the job is delivering an error response.
-  virtual bool IsDeliveringErrorResponse() const = 0;
+  virtual bool IsDeliveringErrorResponse() const;
 
   // Returns true if the cache entry was not found in the cache.
-  virtual bool IsCacheEntryNotFound() const = 0;
+  virtual bool IsCacheEntryNotFound() const;
 
   // Informs the job of what response it should deliver. Only one of these
   // methods should be called, and only once per job. A job will sit idle and
@@ -110,6 +120,30 @@ class CONTENT_EXPORT AppCacheJob
 
  protected:
   AppCacheJob();
+
+  bool is_range_request() const { return range_requested_.IsValid(); }
+
+  void InitializeRangeRequestInfo(const net::HttpRequestHeaders& headers);
+  void SetupRangeResponse();
+
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  // Set to true if the AppCache entry is not found.
+  bool cache_entry_not_found_;
+
+  // The jobs delivery status.
+  DeliveryType delivery_type_;
+
+  // Byte range request if any.
+  net::HttpByteRange range_requested_;
+
+  std::unique_ptr<net::HttpResponseInfo> range_response_info_;
+
+  // The response details.
+  scoped_refptr<AppCacheResponseInfo> info_;
+
+  // Used to read the cache.
+  std::unique_ptr<AppCacheResponseReader> reader_;
 
   base::WeakPtrFactory<AppCacheJob> weak_factory_;
 

@@ -4,12 +4,14 @@
 
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_matrix.h"
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/mac/foundation_util.h"
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_popup_cell.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_popup_view_mac.h"
 #include "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 
 namespace {
 
@@ -106,8 +108,13 @@ const NSInteger kMiddleButtonNumber = 2;
 }
 
 - (CGFloat)tableView:(NSTableView*)tableView heightOfRow:(NSInteger)row {
-  CGFloat height = [OmniboxPopupCell getContentTextHeight];
-  if ([[array_ objectAtIndex:row] isAnswer]) {
+  BOOL isAnswer = [[array_ objectAtIndex:row] isAnswer];
+  BOOL isDoubleLine = !isAnswer && base::FeatureList::IsEnabled(
+                                       omnibox::kUIExperimentVerticalLayout);
+  CGFloat height =
+      [OmniboxPopupCell getContentTextHeightForDoubleLine:isDoubleLine];
+
+  if (isAnswer) {
     OmniboxPopupMatrix* matrix =
         base::mac::ObjCCastStrict<OmniboxPopupMatrix>(tableView);
     NSRect rowRect = [tableView rectOfColumn:0];
@@ -115,8 +122,8 @@ const NSInteger kMiddleButtonNumber = 2;
         base::mac::ObjCCastStrict<OmniboxPopupCellData>(
             [array_ objectAtIndex:row]);
     // Subtract any Material Design padding and/or icon.
-    rowRect.size.width = [OmniboxPopupCell getContentAreaWidth:rowRect] -
-                         [matrix contentLeftPadding];
+    rowRect.size.width =
+        [OmniboxPopupCell getTextContentAreaWidth:[matrix contentMaxWidth]];
     NSAttributedString* text = [cellData description];
     // Provide no more than 3 lines of space.
     rowRect.size.height =
@@ -139,6 +146,7 @@ const NSInteger kMiddleButtonNumber = 2;
 @synthesize separator = separator_;
 @synthesize maxMatchContentsWidth = maxMatchContentsWidth_;
 @synthesize contentLeftPadding = contentLeftPadding_;
+@synthesize contentMaxWidth = contentMaxWidth_;
 @synthesize answerLineHeight = answerLineHeight_;
 @synthesize hasDarkTheme = hasDarkTheme_;
 

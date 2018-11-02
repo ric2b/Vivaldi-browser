@@ -72,11 +72,13 @@ void ListMarkerPainter::Paint(const PaintInfo& paint_info,
   GraphicsContext& context = paint_info.context;
 
   if (layout_list_marker_.IsImage()) {
-    context.DrawImage(layout_list_marker_.GetImage()
-                          ->GetImage(layout_list_marker_, marker.Size())
-                          .Get(),
-                      marker);
-    if (layout_list_marker_.GetSelectionState() != SelectionNone) {
+    context.DrawImage(
+        layout_list_marker_.GetImage()
+            ->GetImage(layout_list_marker_, layout_list_marker_.GetDocument(),
+                       layout_list_marker_.StyleRef(), marker.Size())
+            .Get(),
+        marker);
+    if (layout_list_marker_.GetSelectionState() != SelectionState::kNone) {
       LayoutRect sel_rect = layout_list_marker_.LocalSelectionRect();
       sel_rect.MoveBy(box_origin);
       context.FillRect(

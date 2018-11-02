@@ -12,7 +12,7 @@ source_set("cells") {
     "page_info_item.mm",
     "payment_method_item.h",
     "payment_method_item.mm",
-    "payments_has_accessory_type.h",
+    "payments_is_selectable.h",
     "payments_selector_edit_item.h",
     "payments_selector_edit_item.mm",
     "payments_text_item.h",
@@ -22,12 +22,14 @@ source_set("cells") {
   ]
 
   deps = [
+    "//ios/chrome/app/theme",
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/autofill:autofill_ui",
     "//ios/chrome/browser/ui/collection_view/cells",
     "//ios/chrome/browser/ui/colors",
     "//ios/third_party/material_components_ios",
     "//ios/third_party/material_roboto_font_loader_ios",
+    "//url/",
   ]
 
   configs += [ "//build/config/compiler:enable_arc" ]

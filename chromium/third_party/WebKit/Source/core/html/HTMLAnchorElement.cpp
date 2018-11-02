@@ -171,6 +171,10 @@ void HTMLAnchorElement::DefaultEventHandler(Event* event) {
   HTMLElement::DefaultEventHandler(event);
 }
 
+bool HTMLAnchorElement::HasActivationBehavior() const {
+  return true;
+}
+
 void HTMLAnchorElement::SetActive(bool down) {
   if (HasEditableStyle(*this))
     return;
@@ -310,7 +314,7 @@ void HTMLAnchorElement::SendPings(const KURL& destination_url) const {
   if (GetDocument().Fetcher()->Archive())
     return;
 
-  UseCounter::Count(GetDocument(), UseCounter::kHTMLAnchorElementPingAttribute);
+  UseCounter::Count(GetDocument(), WebFeature::kHTMLAnchorElementPingAttribute);
 
   SpaceSplitString ping_urls(ping_value);
   for (unsigned i = 0; i < ping_urls.size(); i++)
@@ -328,7 +332,7 @@ void HTMLAnchorElement::HandleClick(Event* event) {
 
   if (!isConnected()) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kAnchorClickDispatchForNonConnectedNode);
+                      WebFeature::kAnchorClickDispatchForNonConnectedNode);
   }
 
   StringBuilder url;
@@ -353,7 +357,7 @@ void HTMLAnchorElement::HandleClick(Event* event) {
           kSupportReferrerPolicyLegacyKeywords, &policy) &&
       !HasRel(kRelationNoReferrer)) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLAnchorElementReferrerPolicyAttribute);
+                      WebFeature::kHTMLAnchorElementReferrerPolicyAttribute);
     request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
         policy, completed_url, GetDocument().OutgoingReferrer()));
   }
@@ -361,10 +365,7 @@ void HTMLAnchorElement::HandleClick(Event* event) {
   if (hasAttribute(downloadAttr)) {
     request.SetRequestContext(WebURLRequest::kRequestContextDownload);
     request.SetRequestorOrigin(SecurityOrigin::Create(GetDocument().Url()));
-
-    frame->Loader().Client()->LoadURLExternally(
-        request, kNavigationPolicyDownload, FastGetAttribute(downloadAttr),
-        false);
+    frame->Client()->DownloadURL(request, FastGetAttribute(downloadAttr));
   } else {
     request.SetRequestContext(WebURLRequest::kRequestContextHyperlink);
     FrameLoadRequest frame_request(&GetDocument(), request,

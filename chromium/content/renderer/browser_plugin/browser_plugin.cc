@@ -5,7 +5,11 @@
 #include "content/renderer/browser_plugin/browser_plugin.h"
 
 #include <stddef.h>
+
+#include <map>
+#include <string>
 #include <utility>
+#include <vector>
 
 #include "base/command_line.h"
 #include "base/location.h"
@@ -14,7 +18,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_info.h"
+#include "components/viz/common/surfaces/surface_info.h"
 #include "content/common/browser_plugin/browser_plugin_constants.h"
 #include "content/common/browser_plugin/browser_plugin_messages.h"
 #include "content/common/view_messages.h"
@@ -124,8 +128,8 @@ bool BrowserPlugin::OnMessageReceived(const IPC::Message& message) {
 
 void BrowserPlugin::OnSetChildFrameSurface(
     int browser_plugin_instance_id,
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   if (!attached())
     return;
 
@@ -134,7 +138,7 @@ void BrowserPlugin::OnSetChildFrameSurface(
   compositing_helper_->OnSetSurface(surface_info, sequence);
 }
 
-void BrowserPlugin::SendSatisfySequence(const cc::SurfaceSequence& sequence) {
+void BrowserPlugin::SendSatisfySequence(const viz::SurfaceSequence& sequence) {
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_SatisfySequence(
       render_frame_routing_id_, browser_plugin_instance_id_, sequence));
 }
@@ -161,7 +165,11 @@ void BrowserPlugin::Attach() {
     blink::WebLocalFrame* frame = Container()->GetDocument().GetFrame();
     attach_params.is_full_page_plugin =
         frame->View()->MainFrame()->IsWebLocalFrame() &&
-        frame->View()->MainFrame()->GetDocument().IsPluginDocument();
+        frame->View()
+            ->MainFrame()
+            ->ToWebLocalFrame()
+            ->GetDocument()
+            .IsPluginDocument();
   }
   BrowserPluginManager::Get()->Send(new BrowserPluginHostMsg_Attach(
       render_frame_routing_id_,
@@ -175,7 +183,7 @@ void BrowserPlugin::Attach() {
       RenderFrameImpl::FromRoutingID(render_frame_routing_id());
   if (render_frame && render_frame->render_accessibility() && Container()) {
     blink::WebElement element = Container()->GetElement();
-    blink::WebAXObject ax_element = element.AccessibilityObject();
+    blink::WebAXObject ax_element = blink::WebAXObject::FromWebNode(element);
     if (!ax_element.IsDetached()) {
       render_frame->render_accessibility()->HandleAXEvent(
           ax_element,
@@ -611,7 +619,7 @@ bool BrowserPlugin::CommitText(
 
   std::vector<blink::WebCompositionUnderline> std_underlines;
   for (size_t i = 0; i < underlines.size(); ++i) {
-    std_underlines.push_back(std_underlines[i]);
+    std_underlines.push_back(underlines[i]);
   }
   gfx::Range replacement_range =
       replacementRange.IsNull()

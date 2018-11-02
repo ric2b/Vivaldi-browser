@@ -4,6 +4,8 @@
 
 #include "ash/test/ash_test_suite.h"
 
+#include <set>
+
 #include "ash/public/cpp/config.h"
 #include "ash/test/ash_test_environment.h"
 #include "ash/test/ash_test_helper.h"
@@ -13,6 +15,9 @@
 #include "base/metrics/statistics_recorder.h"
 #include "base/path_service.h"
 #include "build/build_config.h"
+#include "cc/test/fake_output_surface.h"
+#include "cc/test/test_context_provider.h"
+#include "components/viz/test/test_layer_tree_frame_sink.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -21,7 +26,69 @@
 #include "ui/gl/test/gl_surface_test_support.h"
 
 namespace ash {
-namespace test {
+namespace {
+
+class FrameSinkClient : public viz::TestLayerTreeFrameSinkClient {
+ public:
+  explicit FrameSinkClient(
+      scoped_refptr<viz::ContextProvider> display_context_provider)
+      : display_context_provider_(std::move(display_context_provider)) {}
+
+  std::unique_ptr<cc::OutputSurface> CreateDisplayOutputSurface(
+      scoped_refptr<viz::ContextProvider> compositor_context_provider)
+      override {
+    return cc::FakeOutputSurface::Create3d(
+        std::move(display_context_provider_));
+  }
+
+  void DisplayReceivedLocalSurfaceId(
+      const viz::LocalSurfaceId& local_surface_id) override {}
+  void DisplayReceivedCompositorFrame(
+      const cc::CompositorFrame& frame) override {}
+  void DisplayWillDrawAndSwap(
+      bool will_draw_and_swap,
+      const cc::RenderPassList& render_passes) override {}
+  void DisplayDidDrawAndSwap() override {}
+
+ private:
+  scoped_refptr<viz::ContextProvider> display_context_provider_;
+
+  DISALLOW_COPY_AND_ASSIGN(FrameSinkClient);
+};
+
+class AshTestContextFactory : public ui::FakeContextFactory {
+ public:
+  AshTestContextFactory() = default;
+  ~AshTestContextFactory() override = default;
+
+  // ui::FakeContextFactory
+  void CreateLayerTreeFrameSink(
+      base::WeakPtr<ui::Compositor> compositor) override {
+    scoped_refptr<cc::TestContextProvider> context_provider =
+        cc::TestContextProvider::Create();
+    std::unique_ptr<FrameSinkClient> frame_sink_client =
+        base::MakeUnique<FrameSinkClient>(context_provider);
+    constexpr bool synchronous_composite = false;
+    constexpr bool disable_display_vsync = false;
+    const double refresh_rate = GetRefreshRate();
+    auto frame_sink = base::MakeUnique<viz::TestLayerTreeFrameSink>(
+        context_provider, cc::TestContextProvider::CreateWorker(), nullptr,
+        GetGpuMemoryBufferManager(), renderer_settings(),
+        base::ThreadTaskRunnerHandle::Get().get(), synchronous_composite,
+        disable_display_vsync, refresh_rate);
+    frame_sink->SetClient(frame_sink_client.get());
+    compositor->SetLayerTreeFrameSink(std::move(frame_sink));
+    frame_sink_clients_.insert(std::move(frame_sink_client));
+  }
+
+ private:
+  std::set<std::unique_ptr<viz::TestLayerTreeFrameSinkClient>>
+      frame_sink_clients_;
+
+  DISALLOW_COPY_AND_ASSIGN(AshTestContextFactory);
+};
+
+}  // namespace
 
 AshTestSuite::AshTestSuite(int argc, char** argv) : TestSuite(argc, argv) {}
 
@@ -61,14 +128,17 @@ void AshTestSuite::Initialize() {
   }
 
   const bool is_mus = base::CommandLine::ForCurrentProcess()->HasSwitch("mus");
-  ash::test::AshTestHelper::config_ = is_mus ? Config::MUS : Config::CLASSIC;
+  const bool is_mash =
+      base::CommandLine::ForCurrentProcess()->HasSwitch("mash");
+  AshTestHelper::config_ =
+      is_mus ? Config::MUS : is_mash ? Config::MASH : Config::CLASSIC;
 
   base::DiscardableMemoryAllocator::SetInstance(&discardable_memory_allocator_);
-  env_ = aura::Env::CreateInstance(is_mus ? aura::Env::Mode::MUS
-                                          : aura::Env::Mode::LOCAL);
+  env_ = aura::Env::CreateInstance(is_mus || is_mash ? aura::Env::Mode::MUS
+                                                     : aura::Env::Mode::LOCAL);
 
-  if (is_mus) {
-    context_factory_ = base::MakeUnique<ui::FakeContextFactory>();
+  if (is_mus || is_mash) {
+    context_factory_ = base::MakeUnique<AshTestContextFactory>();
     env_->set_context_factory(context_factory_.get());
     env_->set_context_factory_private(nullptr);
   }
@@ -80,5 +150,4 @@ void AshTestSuite::Shutdown() {
   base::TestSuite::Shutdown();
 }
 
-}  // namespace test
 }  // namespace ash

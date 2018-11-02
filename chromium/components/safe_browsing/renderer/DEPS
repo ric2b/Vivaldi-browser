@@ -1,5 +1,8 @@
 include_rules = [
   "+content/public/renderer",
+    "+components/safe_browsing",
   "+third_party/WebKit/public/platform",
   "+third_party/WebKit/public/web",
+  "+ipc",
+  "+mojo/public/cpp",
 ]

@@ -18,8 +18,8 @@
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/core/autofill_payment_instrument.h"
 #include "components/payments/core/test_payment_request_delegate.h"
-#include "components/payments/mojom/payment_request.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
 
@@ -37,8 +37,8 @@ class PaymentResponseHelperTest : public testing::Test,
     visa_card.set_billing_address_id(address_.guid());
     visa_card.set_use_count(5u);
     autofill_instrument_ = base::MakeUnique<AutofillPaymentInstrument>(
-        "visa", visa_card, billing_addresses_, "en-US",
-        &test_payment_request_delegate_);
+        "visa", visa_card, /*matches_merchant_card_type_exactly=*/true,
+        billing_addresses_, "en-US", &test_payment_request_delegate_);
   }
   ~PaymentResponseHelperTest() override {}
 
@@ -120,11 +120,14 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_SupportedMethod) {
       "{\"addressLine\":[\"666 Erebus St.\",\"Apt 8\"],"
       "\"city\":\"Elysium\","
       "\"country\":\"US\","
+      "\"dependentLocality\":\"\","
+      "\"languageCode\":\"\","
       "\"organization\":\"Underworld\","
       "\"phone\":\"16502111111\","
       "\"postalCode\":\"91111\","
       "\"recipient\":\"John H. Doe\","
-      "\"region\":\"CA\"},"
+      "\"region\":\"CA\","
+      "\"sortingCode\":\"\"},"
       "\"cardNumber\":\"4111111111111111\","
       "\"cardSecurityCode\":\"123\","
       "\"cardholderName\":\"Test User\","
@@ -156,11 +159,14 @@ TEST_F(PaymentResponseHelperTest, GeneratePaymentResponse_BasicCard) {
       "{\"addressLine\":[\"666 Erebus St.\",\"Apt 8\"],"
       "\"city\":\"Elysium\","
       "\"country\":\"US\","
+      "\"dependentLocality\":\"\","
+      "\"languageCode\":\"\","
       "\"organization\":\"Underworld\","
       "\"phone\":\"16502111111\","
       "\"postalCode\":\"91111\","
       "\"recipient\":\"John H. Doe\","
-      "\"region\":\"CA\"},"
+      "\"region\":\"CA\","
+      "\"sortingCode\":\"\"},"
       "\"cardNumber\":\"4111111111111111\","
       "\"cardSecurityCode\":\"123\","
       "\"cardholderName\":\"Test User\","

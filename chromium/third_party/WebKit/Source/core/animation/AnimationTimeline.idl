@@ -5,10 +5,7 @@
 // https://w3c.github.io/web-animations/#the-animationtimeline-interface
 
 [
-    RuntimeEnabled=WebAnimationsAPI,
+    RuntimeEnabled=WebAnimationsAPI
 ] interface AnimationTimeline {
-    attribute double? currentTime;
-
-    // TODO(crbug.com/624639): Move getAnimations() to DocumentAnimatable
-    sequence<Animation> getAnimations();
+    readonly attribute double? currentTime;
 };

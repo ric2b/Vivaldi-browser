@@ -9,6 +9,7 @@
 
 #include "base/macros.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "content/common/input/synthetic_web_input_event_builders.h"
 #include "content/common/input_messages.h"
 #include "content/common/resize_params.h"
@@ -50,7 +51,8 @@ enum {
 bool ShouldBlockEventStream(const blink::WebInputEvent& event) {
   return ui::WebInputEventTraits::ShouldBlockEventStream(
       event,
-      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents));
+      base::FeatureList::IsEnabled(features::kRafAlignedTouchInputEvents),
+      base::FeatureList::IsEnabled(features::kTouchpadAndWheelScrollLatching));
 }
 
 class MockWebWidget : public blink::WebWidget {
@@ -153,6 +155,7 @@ class RenderWidgetUnittest : public testing::Test {
     widget_->Release();
     DCHECK(widget_->HasOneRef());
   }
+
   ~RenderWidgetUnittest() override {}
 
   InteractiveRenderWidget* widget() const { return widget_.get(); }
@@ -160,6 +163,9 @@ class RenderWidgetUnittest : public testing::Test {
   const base::HistogramTester& histogram_tester() const {
     return histogram_tester_;
   }
+
+ protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
  private:
   MockRenderProcess render_process_;
@@ -461,6 +467,9 @@ class RenderWidgetPopupUnittest : public testing::Test {
   PopupRenderWidget* widget() const { return widget_.get(); }
   FakeCompositorDependencies compositor_deps_;
 
+ protected:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+
  private:
   MockRenderProcess render_process_;
   MockRenderThread render_thread_;
@@ -487,7 +496,6 @@ TEST_F(RenderWidgetPopupUnittest, EmulatingPopupRect) {
   emulation_params.screen_position = blink::WebDeviceEmulationParams::kMobile;
   emulation_params.view_size = emulated_window_rect.size();
   emulation_params.view_position = blink::WebPoint(150, 160);
-  emulation_params.fit_to_view = true;
 
   gfx::Rect parent_window_rect = gfx::Rect(0, 0, 800, 600);
 
@@ -504,21 +512,10 @@ TEST_F(RenderWidgetPopupUnittest, EmulatingPopupRect) {
 
   widget()->SetPopupOriginAdjustmentsForEmulation(&emulator);
 
-  // Emulation-applied scale factor to fit the emulated device in the window.
-  float scale =
-      (float)parent_window_rect.height() / emulated_window_rect.height();
-
-  // Used to center the emulated device in the window.
-  gfx::Point offset(
-      (parent_window_rect.width() - emulated_window_rect.width() * scale) / 2,
-      (parent_window_rect.height() - emulated_window_rect.height() * scale) /
-          2);
-
   // Position of the popup as seen by the emulated widget.
-  gfx::Point emulated_position(emulation_params.view_position.x +
-                                   (popup_screen_rect.x - offset.x()) / scale,
-                               emulation_params.view_position.y +
-                                   (popup_screen_rect.y - offset.y()) / scale);
+  gfx::Point emulated_position(
+      emulation_params.view_position.x + popup_screen_rect.x,
+      emulation_params.view_position.y + popup_screen_rect.y);
 
   // Both the window and view rects as read from the accessors should have the
   // emulation parameters applied.

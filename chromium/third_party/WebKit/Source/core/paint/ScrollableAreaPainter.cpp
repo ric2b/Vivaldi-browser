@@ -24,11 +24,12 @@ namespace blink {
 void ScrollableAreaPainter::PaintResizer(GraphicsContext& context,
                                          const IntPoint& paint_offset,
                                          const CullRect& cull_rect) {
-  if (GetScrollableArea().Box().Style()->Resize() == RESIZE_NONE)
+  if (GetScrollableArea().Box().Style()->Resize() == EResize::kNone)
     return;
 
   IntRect abs_rect = GetScrollableArea().ResizerCornerRect(
-      GetScrollableArea().Box().PixelSnappedBorderBoxRect(),
+      GetScrollableArea().Box().PixelSnappedBorderBoxRect(
+          GetScrollableArea().Layer()->SubpixelAccumulation()),
       kResizerForPointer);
   if (abs_rect.IsEmpty())
     return;
@@ -106,7 +107,7 @@ void ScrollableAreaPainter::DrawPlatformResizerImage(
   line_path.lineTo(points[1].X(), points[1].Y());
   line_path.moveTo(points[2].X(), points[2].Y());
   line_path.lineTo(points[3].X(), points[3].Y());
-  paint_flags.setARGB(153, 0, 0, 0);
+  paint_flags.setColor(SkColorSetARGB(153, 0, 0, 0));
   context.DrawPath(line_path, paint_flags);
 
   // Draw a light line one pixel below the light line,
@@ -116,7 +117,7 @@ void ScrollableAreaPainter::DrawPlatformResizerImage(
   line_path.lineTo(points[1].X() + (on_left ? -1 : 1), points[1].Y());
   line_path.moveTo(points[2].X(), points[2].Y() + 1);
   line_path.lineTo(points[3].X() + (on_left ? -1 : 1), points[3].Y());
-  paint_flags.setARGB(153, 255, 255, 255);
+  paint_flags.setColor(SkColorSetARGB(153, 255, 255, 255));
   context.DrawPath(line_path, paint_flags);
 }
 
@@ -170,15 +171,16 @@ void ScrollableAreaPainter::PaintOverflowControls(
   if (painting_overlay_controls && !GetScrollableArea().HasOverlayScrollbars())
     return;
 
-  IntRect clip_rect(adjusted_paint_offset,
-                    GetScrollableArea().VisibleContentRect().Size());
+  IntRect clip_rect(
+      adjusted_paint_offset,
+      GetScrollableArea().VisibleContentRect(kIncludeScrollbars).Size());
   ClipRecorder clip_recorder(context, GetScrollableArea().Box(),
                              DisplayItem::kClipLayerOverflowControls,
                              clip_rect);
 
   {
     Optional<ScopedPaintChunkProperties> scoped_transform_property;
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
       const auto* object_properties =
           GetScrollableArea().Box().PaintProperties();
       if (object_properties && object_properties->ScrollbarPaintOffset()) {
@@ -225,7 +227,8 @@ void ScrollableAreaPainter::PaintOverflowControls(
 bool ScrollableAreaPainter::OverflowControlsIntersectRect(
     const CullRect& cull_rect) const {
   const IntRect border_box =
-      GetScrollableArea().Box().PixelSnappedBorderBoxRect();
+      GetScrollableArea().Box().PixelSnappedBorderBoxRect(
+          GetScrollableArea().Layer()->SubpixelAccumulation());
 
   if (cull_rect.IntersectsCullRect(
           GetScrollableArea().RectForHorizontalScrollbar(border_box)))

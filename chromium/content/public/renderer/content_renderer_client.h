@@ -19,6 +19,7 @@
 #include "build/build_config.h"
 #include "content/public/common/content_client.h"
 #include "media/base/decode_capabilities.h"
+#include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
@@ -46,13 +47,13 @@ class WebPlugin;
 class WebPrescientNetworking;
 class WebRTCPeerConnectionHandler;
 class WebRTCPeerConnectionHandlerClient;
+class WebSocketHandshakeThrottle;
 class WebSpeechSynthesizer;
 class WebSpeechSynthesizerClient;
 class WebThemeEngine;
 class WebURL;
-class WebURLResponse;
 class WebURLRequest;
-class WebWorkerContentSettingsClientProxy;
+class WebURLResponse;
 struct WebPluginParams;
 struct WebURLError;
 }  // namespace blink
@@ -66,6 +67,7 @@ class BrowserPluginDelegate;
 class MediaStreamRendererFactory;
 class RenderFrame;
 class RenderView;
+class URLLoaderThrottle;
 
 // Embedder API for participating in renderer logic.
 class CONTENT_EXPORT ContentRendererClient {
@@ -174,6 +176,11 @@ class CONTENT_EXPORT ContentRendererClient {
   // the content layer will provide an engine.
   virtual blink::WebThemeEngine* OverrideThemeEngine();
 
+  // Allows the embedder to provide a WebSocketHandshakeThrottle. If it returns
+  // NULL then none will be used.
+  virtual std::unique_ptr<blink::WebSocketHandshakeThrottle>
+  CreateWebSocketHandshakeThrottle();
+
   // Allows the embedder to override the WebSpeechSynthesizer used.
   // If it returns NULL the content layer will provide an engine.
   virtual std::unique_ptr<blink::WebSpeechSynthesizer>
@@ -223,11 +230,15 @@ class CONTENT_EXPORT ContentRendererClient {
                           bool* send_referrer);
 
   // Notifies the embedder that the given frame is requesting the resource at
-  // |url|.  If the function returns true, the url is changed to |new_url|.
-  virtual bool WillSendRequest(blink::WebLocalFrame* frame,
-                               ui::PageTransition transition_type,
-                               const blink::WebURL& url,
-                               GURL* new_url);
+  // |url|. |throttles| is appended with URLLoaderThrottle instances that should
+  // be applied to the resource loading. It is only used when network service is
+  // enabled. If the function returns true, the url is changed to |new_url|.
+  virtual bool WillSendRequest(
+      blink::WebLocalFrame* frame,
+      ui::PageTransition transition_type,
+      const blink::WebURL& url,
+      std::vector<std::unique_ptr<URLLoaderThrottle>>* throttles,
+      GURL* new_url);
 
   // Returns true if the request is associated with a document that is in
   // ""prefetch only" mode, and will not be rendered.
@@ -270,6 +281,9 @@ class CONTENT_EXPORT ContentRendererClient {
   // Allows embedder to describe customized video capabilities.
   virtual bool IsSupportedVideoConfig(const media::VideoConfig& config);
 
+  // Return true if the bitstream format |codec| is supported by the audio sink.
+  virtual bool IsSupportedBitstreamAudioCodec(media::AudioCodec codec);
+
   // Returns true if we should report a detailed message (including a stack
   // trace) for console [logs|errors|exceptions]. |source| is the WebKit-
   // reported source for the error; this can point to a page or a script,
@@ -282,10 +296,9 @@ class CONTENT_EXPORT ContentRendererClient {
   // any pages.
   virtual bool ShouldGatherSiteIsolationStats() const;
 
-  // Creates a permission client proxy for in-renderer worker.
-  virtual blink::WebWorkerContentSettingsClientProxy*
-      CreateWorkerContentSettingsClientProxy(RenderFrame* render_frame,
-                                             blink::WebFrame* frame);
+  // Creates a permission client for in-renderer worker.
+  virtual std::unique_ptr<blink::WebContentSettingsClient>
+  CreateWorkerContentSettingsClient(RenderFrame* render_frame);
 
   // Returns true if the page at |url| can use Pepper CameraDevice APIs.
   virtual bool IsPluginAllowedToUseCameraDeviceAPI(const GURL& url);
@@ -333,14 +346,16 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual void DidInitializeServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
       int64_t service_worker_version_id,
-      const GURL& url) {}
+      const GURL& service_worker_scope,
+      const GURL& script_url) {}
 
   // Notifies that a service worker context will be destroyed. This function
   // is called from the worker thread.
   virtual void WillDestroyServiceWorkerContextOnWorkerThread(
       v8::Local<v8::Context> context,
       int64_t service_worker_version_id,
-      const GURL& url) {}
+      const GURL& service_worker_scope,
+      const GURL& script_url) {}
 
   // Whether this renderer should enforce preferences related to the WebRTC
   // routing logic, i.e. allowing multiple routes and non-proxied UDP.
@@ -360,8 +375,9 @@ class CONTENT_EXPORT ContentRendererClient {
   virtual std::unique_ptr<base::TaskScheduler::InitParams>
   GetTaskSchedulerInitParams();
 
-  // Returns true if the media pipeline can be suspended, or false otherwise.
-  virtual bool AllowMediaSuspend();
+  // Whether the renderer allows idle media players to be automatically
+  // suspended after a period of inactivity.
+  virtual bool AllowIdleMediaSuspend();
 };
 
 }  // namespace content

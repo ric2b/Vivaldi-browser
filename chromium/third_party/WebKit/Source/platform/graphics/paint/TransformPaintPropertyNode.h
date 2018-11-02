@@ -10,11 +10,9 @@
 #include "platform/graphics/CompositingReasons.h"
 #include "platform/graphics/CompositorElementId.h"
 #include "platform/graphics/paint/GeometryMapperTransformCache.h"
+#include "platform/graphics/paint/PaintPropertyNode.h"
 #include "platform/graphics/paint/ScrollPaintPropertyNode.h"
 #include "platform/transforms/TransformationMatrix.h"
-#include "platform/wtf/PassRefPtr.h"
-#include "platform/wtf/RefCounted.h"
-#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
 #include <iosfwd>
@@ -30,7 +28,7 @@ namespace blink {
 // The transform tree is rooted at a node with no parent. This root node should
 // not be modified.
 class PLATFORM_EXPORT TransformPaintPropertyNode
-    : public RefCounted<TransformPaintPropertyNode> {
+    : public PaintPropertyNode<TransformPaintPropertyNode> {
  public:
   // This node is really a sentinel, and does not represent a real transform
   // space.
@@ -60,7 +58,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       CompositingReasons direct_compositing_reasons,
       const CompositorElementId& compositor_element_id,
       PassRefPtr<const ScrollPaintPropertyNode> parent_scroll,
-      const IntSize& clip,
+      const IntSize& scroll_container_bounds,
       const IntSize& bounds,
       bool user_scrollable_horizontal,
       bool user_scrollable_vertical,
@@ -72,12 +70,12 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
         std::move(parent), matrix, origin, flattens_inherited_transform,
         rendering_context_id, direct_compositing_reasons, compositor_element_id,
         ScrollPaintPropertyNode::Create(
-            std::move(parent_scroll), clip, bounds, user_scrollable_horizontal,
-            user_scrollable_vertical, main_thread_scrolling_reasons,
-            scroll_client)));
+            std::move(parent_scroll), scroll_container_bounds, bounds,
+            user_scrollable_horizontal, user_scrollable_vertical,
+            main_thread_scrolling_reasons, scroll_client)));
   }
 
-  void Update(
+  bool Update(
       PassRefPtr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
@@ -85,18 +83,26 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       unsigned rendering_context_id = 0,
       CompositingReasons direct_compositing_reasons = kCompositingReasonNone,
       CompositorElementId compositor_element_id = CompositorElementId()) {
-    DCHECK(!IsRoot());
-    DCHECK(parent != this);
-    parent_ = std::move(parent);
+    bool parent_changed = PaintPropertyNode::Update(std::move(parent));
+
+    if (matrix == matrix_ && origin == origin_ &&
+        flattens_inherited_transform == flattens_inherited_transform_ &&
+        rendering_context_id == rendering_context_id_ &&
+        direct_compositing_reasons == direct_compositing_reasons_ &&
+        compositor_element_id == compositor_element_id_)
+      return parent_changed;
+
+    SetChanged();
     matrix_ = matrix;
     origin_ = origin;
     flattens_inherited_transform_ = flattens_inherited_transform;
     rendering_context_id_ = rendering_context_id;
     direct_compositing_reasons_ = direct_compositing_reasons;
     compositor_element_id_ = compositor_element_id;
+    return true;
   }
 
-  void UpdateScrollTranslation(
+  bool UpdateScrollTranslation(
       PassRefPtr<const TransformPaintPropertyNode> parent,
       const TransformationMatrix& matrix,
       const FloatPoint3D& origin,
@@ -105,29 +111,26 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       CompositingReasons direct_compositing_reasons,
       CompositorElementId compositor_element_id,
       PassRefPtr<const ScrollPaintPropertyNode> parent_scroll,
-      const IntSize& clip,
+      const IntSize& scroll_container_bounds,
       const IntSize& bounds,
       bool user_scrollable_horizontal,
       bool user_scrollable_vertical,
       MainThreadScrollingReasons main_thread_scrolling_reasons,
       WebLayerScrollClient* scroll_client) {
-    Update(std::move(parent), matrix, origin, flattens_inherited_transform,
-           rendering_context_id, direct_compositing_reasons,
-           compositor_element_id);
+    bool changed = Update(std::move(parent), matrix, origin,
+                          flattens_inherited_transform, rendering_context_id,
+                          direct_compositing_reasons, compositor_element_id);
     DCHECK(scroll_);
     DCHECK(matrix.IsIdentityOr2DTranslation());
-    scroll_->Update(std::move(parent_scroll), clip, bounds,
-                    user_scrollable_horizontal, user_scrollable_vertical,
-                    main_thread_scrolling_reasons, scroll_client);
+    changed |= scroll_->Update(
+        std::move(parent_scroll), scroll_container_bounds, bounds,
+        user_scrollable_horizontal, user_scrollable_vertical,
+        main_thread_scrolling_reasons, scroll_client);
+    return changed;
   }
 
   const TransformationMatrix& Matrix() const { return matrix_; }
   const FloatPoint3D& Origin() const { return origin_; }
-
-  // Parent transform that this transform is relative to, or nullptr if this
-  // is the root transform.
-  const TransformPaintPropertyNode* Parent() const { return parent_.Get(); }
-  bool IsRoot() const { return !parent_; }
 
   // True if this transform is for the scroll offset translation.
   bool IsScrollTranslation() const { return !!scroll_; }
@@ -169,7 +172,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // a transform node before it has been updated, to later detect changes.
   PassRefPtr<TransformPaintPropertyNode> Clone() const {
     return AdoptRef(new TransformPaintPropertyNode(
-        parent_, matrix_, origin_, flattens_inherited_transform_,
+        Parent(), matrix_, origin_, flattens_inherited_transform_,
         rendering_context_id_, direct_compositing_reasons_,
         compositor_element_id_, scroll_ ? scroll_->Clone() : nullptr));
   }
@@ -179,7 +182,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   bool operator==(const TransformPaintPropertyNode& o) const {
     if (scroll_ && o.scroll_ && !(*scroll_ == *o.scroll_))
       return false;
-    return parent_ == o.parent_ && matrix_ == o.matrix_ &&
+    return Parent() == o.Parent() && matrix_ == o.matrix_ &&
            origin_ == o.origin_ &&
            flattens_inherited_transform_ == o.flattens_inherited_transform_ &&
            rendering_context_id_ == o.rendering_context_id_ &&
@@ -203,7 +206,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
       CompositingReasons direct_compositing_reasons,
       CompositorElementId compositor_element_id,
       PassRefPtr<ScrollPaintPropertyNode> scroll = nullptr)
-      : parent_(std::move(parent)),
+      : PaintPropertyNode(std::move(parent)),
         matrix_(matrix),
         origin_(origin),
         flattens_inherited_transform_(flattens_inherited_transform),
@@ -215,19 +218,15 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   // For access to getTransformCache() and setCachedTransform.
   friend class GeometryMapper;
   friend class GeometryMapperTest;
+  friend class GeometryMapperTransformCache;
 
-  GeometryMapperTransformCache& GetTransformCache() const {
-    return const_cast<TransformPaintPropertyNode*>(this)->GetTransformCache();
+  const GeometryMapperTransformCache& GetTransformCache() const {
+    if (!transform_cache_)
+      transform_cache_.reset(new GeometryMapperTransformCache);
+    transform_cache_->UpdateIfNeeded(*this);
+    return *transform_cache_;
   }
 
-  GeometryMapperTransformCache& GetTransformCache() {
-    if (!geometry_mapper_transform_cache_)
-      geometry_mapper_transform_cache_.reset(
-          new GeometryMapperTransformCache());
-    return *geometry_mapper_transform_cache_.get();
-  }
-
-  RefPtr<const TransformPaintPropertyNode> parent_;
   TransformationMatrix matrix_;
   FloatPoint3D origin_;
   bool flattens_inherited_transform_;
@@ -236,8 +235,7 @@ class PLATFORM_EXPORT TransformPaintPropertyNode
   CompositorElementId compositor_element_id_;
   RefPtr<ScrollPaintPropertyNode> scroll_;
 
-  std::unique_ptr<GeometryMapperTransformCache>
-      geometry_mapper_transform_cache_;
+  mutable std::unique_ptr<GeometryMapperTransformCache> transform_cache_;
 };
 
 // Redeclared here to avoid ODR issues.

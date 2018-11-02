@@ -26,6 +26,7 @@
 #include "platform/SharedBuffer.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
@@ -39,10 +40,12 @@ DocumentResource* DocumentResource::FetchSVGDocument(FetchParameters& params,
       fetcher->RequestResource(params, SVGDocumentResourceFactory()));
 }
 
-DocumentResource::DocumentResource(const ResourceRequest& request,
-                                   Type type,
-                                   const ResourceLoaderOptions& options)
-    : TextResource(request, type, options, "application/xml", String()) {
+DocumentResource::DocumentResource(
+    const ResourceRequest& request,
+    Type type,
+    const ResourceLoaderOptions& options,
+    const TextResourceDecoderOptions& decoder_options)
+    : TextResource(request, type, options, decoder_options) {
   // FIXME: We'll support more types to support HTMLImports.
   DCHECK_EQ(type, kSVGDocument);
 }

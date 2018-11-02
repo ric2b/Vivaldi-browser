@@ -4,7 +4,7 @@
 
 #include "ui/arc/notification/arc_notification_delegate.h"
 
-#include "ui/arc/notification/arc_custom_notification_view.h"
+#include "ui/arc/notification/arc_notification_content_view.h"
 #include "ui/arc/notification/arc_notification_item.h"
 #include "ui/arc/notification/arc_notification_view.h"
 #include "ui/message_center/notification.h"
@@ -28,7 +28,7 @@ ArcNotificationDelegate::CreateCustomMessageView(
   DCHECK(item_);
   DCHECK_EQ(item_->GetNotificationId(), notification.id());
 
-  auto view = base::MakeUnique<ArcCustomNotificationView>(item_.get());
+  auto view = base::MakeUnique<ArcNotificationContentView>(item_.get());
   auto content_view_delegate = view->CreateContentViewDelegate();
   return base::MakeUnique<ArcNotificationView>(std::move(view),
                                                std::move(content_view_delegate),
@@ -43,6 +43,17 @@ void ArcNotificationDelegate::Close(bool by_user) {
 void ArcNotificationDelegate::Click() {
   DCHECK(item_);
   item_->Click();
+}
+
+bool ArcNotificationDelegate::SettingsClick() {
+  DCHECK(item_);
+  item_->OpenSettings();
+  return true;
+}
+
+bool ArcNotificationDelegate::ShouldDisplaySettingsButton() {
+  DCHECK(item_);
+  return item_->IsOpeningSettingsSupported();
 }
 
 }  // namespace arc

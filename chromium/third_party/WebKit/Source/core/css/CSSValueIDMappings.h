@@ -34,12 +34,48 @@ inline UnicodeBidi CssValueIDToPlatformEnum(CSSValueID v) {
 }
 
 template <>
+inline EBoxOrient CssValueIDToPlatformEnum(CSSValueID v) {
+  if (v == CSSValueInlineAxis)
+    return EBoxOrient::kHorizontal;
+  if (v == CSSValueBlockAxis)
+    return EBoxOrient::kVertical;
+
+  return detail::cssValueIDToPlatformEnumGenerated<EBoxOrient>(v);
+}
+
+template <>
+inline ETextCombine CssValueIDToPlatformEnum(CSSValueID v) {
+  if (v == CSSValueHorizontal)  // -webkit-text-combine
+    return ETextCombine::kAll;
+  return detail::cssValueIDToPlatformEnumGenerated<ETextCombine>(v);
+}
+
+template <>
 inline ETextAlign CssValueIDToPlatformEnum(CSSValueID v) {
   if (v == CSSValueWebkitAuto)  // Legacy -webkit-auto. Eqiuvalent to start.
     return ETextAlign::kStart;
   if (v == CSSValueInternalCenter)
     return ETextAlign::kCenter;
   return detail::cssValueIDToPlatformEnumGenerated<ETextAlign>(v);
+}
+
+template <>
+inline ETextOrientation CssValueIDToPlatformEnum(CSSValueID v) {
+  if (v == CSSValueSidewaysRight)  // Legacy -webkit-auto. Eqiuvalent to start.
+    return ETextOrientation::kSideways;
+  if (v == CSSValueVerticalRight)
+    return ETextOrientation::kMixed;
+  return detail::cssValueIDToPlatformEnumGenerated<ETextOrientation>(v);
+}
+
+template <>
+inline EResize CssValueIDToPlatformEnum(CSSValueID v) {
+  if (v == CSSValueAuto) {
+    // Depends on settings, thus should be handled by the caller.
+    NOTREACHED();
+    return EResize::kNone;
+  }
+  return detail::cssValueIDToPlatformEnumGenerated<EResize>(v);
 }
 
 template <>
@@ -81,6 +117,13 @@ inline EDisplay CssValueIDToPlatformEnum(CSSValueID v) {
   if (v == CSSValueWebkitInlineFlex)
     return EDisplay::kInlineFlex;
   return detail::cssValueIDToPlatformEnumGenerated<EDisplay>(v);
+}
+
+template <>
+inline EUserSelect CssValueIDToPlatformEnum(CSSValueID v) {
+  if (v == CSSValueAuto)
+    return EUserSelect::kText;
+  return detail::cssValueIDToPlatformEnumGenerated<EUserSelect>(v);
 }
 
 }  // namespace blink

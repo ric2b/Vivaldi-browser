@@ -21,6 +21,7 @@
 #include "base/strings/string_piece.h"
 #include "base/synchronization/cancellation_flag.h"
 #include "base/threading/thread_checker.h"
+#include "media/base/data_source.h"
 #include "ui/gfx/geometry/size.h"
 
 @class DataSourceLoader;
@@ -70,7 +71,7 @@ class AVFMediaDecoder {
   explicit AVFMediaDecoder(AVFMediaDecoderClient* client);
   ~AVFMediaDecoder();
 
-  void Initialize(IPCDataSource* data_source,
+  void Initialize(media::DataSource* data_source,
                   const std::string& mime_type,
                   const ResultCB& result_cb);
   void Seek(const base::TimeDelta& time, const ResultCB& result_cb);

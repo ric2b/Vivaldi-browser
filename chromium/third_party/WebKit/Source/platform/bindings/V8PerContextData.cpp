@@ -51,18 +51,6 @@ V8PerContextData::V8PerContextData(v8::Local<v8::Context> context)
       activity_logger_(nullptr) {
   context_holder_->SetContext(context);
 
-  v8::Context::Scope context_scope(context);
-  DCHECK(error_prototype_.IsEmpty());
-  v8::Local<v8::Value> object_value =
-      context->Global()
-          ->Get(context, V8AtomicString(isolate_, "Error"))
-          .ToLocalChecked();
-  v8::Local<v8::Value> prototype_value =
-      object_value.As<v8::Object>()
-          ->Get(context, V8AtomicString(isolate_, "prototype"))
-          .ToLocalChecked();
-  error_prototype_.Set(isolate_, prototype_value);
-
   if (IsMainThread()) {
     InstanceCounters::IncrementCounter(
         InstanceCounters::kV8PerContextDataCounter);
@@ -87,24 +75,18 @@ V8PerContextData* V8PerContextData::From(v8::Local<v8::Context> context) {
 
 v8::Local<v8::Object> V8PerContextData::CreateWrapperFromCacheSlowCase(
     const WrapperTypeInfo* type) {
-  DCHECK(!error_prototype_.IsEmpty());
-
   v8::Context::Scope scope(GetContext());
   v8::Local<v8::Function> interface_object = ConstructorForType(type);
-  if (interface_object.IsEmpty())
-    return v8::Local<v8::Object>();
-  v8::Local<v8::Object> instance_template;
-  if (!V8ObjectConstructor::NewInstance(isolate_, interface_object)
-           .ToLocal(&instance_template))
-    return v8::Local<v8::Object>();
+  CHECK(!interface_object.IsEmpty());
+  v8::Local<v8::Object> instance_template =
+      V8ObjectConstructor::NewInstance(isolate_, interface_object)
+          .ToLocalChecked();
   wrapper_boilerplates_.Set(type, instance_template);
   return instance_template->Clone();
 }
 
 v8::Local<v8::Function> V8PerContextData::ConstructorForTypeSlowCase(
     const WrapperTypeInfo* type) {
-  DCHECK(!error_prototype_.IsEmpty());
-
   v8::Local<v8::Context> current_context = GetContext();
   v8::Context::Scope scope(current_context);
   const DOMWrapperWorld& world = DOMWrapperWorld::World(current_context);
@@ -149,13 +131,6 @@ v8::Local<v8::Function> V8PerContextData::ConstructorForTypeSlowCase(
     type->PreparePrototypeAndInterfaceObject(current_context, world,
                                              prototype_object, interface_object,
                                              interface_template);
-    if (type->wrapper_type_prototype ==
-        WrapperTypeInfo::kWrapperTypeExceptionPrototype) {
-      if (!V8CallBoolean(prototype_object->SetPrototype(
-              current_context, error_prototype_.NewLocal(isolate_)))) {
-        return v8::Local<v8::Function>();
-      }
-    }
   }
 
   // Origin Trials

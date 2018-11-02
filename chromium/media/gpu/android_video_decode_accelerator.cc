@@ -34,6 +34,8 @@
 #include "media/base/media.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_decoder_config.h"
+#include "media/gpu/android/device_info.h"
+#include "media/gpu/android/promotion_hint_aggregator_impl.h"
 #include "media/gpu/android_video_surface_chooser_impl.h"
 #include "media/gpu/avda_picture_buffer_manager.h"
 #include "media/gpu/content_video_view_overlay.h"
@@ -111,29 +113,17 @@ constexpr base::TimeDelta IdleTimerTimeOut = base::TimeDelta::FromSeconds(1);
 // On low end devices (< KitKat is always low-end due to buggy MediaCodec),
 // defer the surface creation until the codec is actually used if we know no
 // software fallback exists.
-bool ShouldDeferSurfaceCreation(
-    AVDACodecAllocator* codec_allocator,
-    int surface_id,
-    base::Optional<base::UnguessableToken> overlay_routing_token,
-    VideoCodec codec,
-    const AndroidVideoDecodeAccelerator::PlatformConfig& platform_config) {
-  if (platform_config.force_deferred_surface_creation)
-    return true;
-
+bool ShouldDeferSurfaceCreation(AVDACodecAllocator* codec_allocator,
+                                const OverlayInfo& overlay_info,
+                                VideoCodec codec,
+                                DeviceInfo* device_info) {
   // TODO(liberato): We might still want to defer if we've got a routing
   // token.  It depends on whether we want to use it right away or not.
-  if (surface_id != SurfaceManager::kNoSurfaceID || overlay_routing_token)
+  if (overlay_info.HasValidSurfaceId() || overlay_info.HasValidRoutingToken())
     return false;
 
   return codec == kCodecH264 && codec_allocator->IsAnyRegisteredAVDA() &&
-         platform_config.sdk_int <= base::android::SDK_VERSION_JELLY_BEAN_MR2;
-}
-
-std::unique_ptr<AndroidOverlay> CreateContentVideoViewOverlay(
-    int32_t surface_id,
-    AndroidOverlayConfig config) {
-  return base::MakeUnique<ContentVideoViewOverlay>(surface_id,
-                                                   std::move(config));
+         device_info->SdkVersion() <= base::android::SDK_VERSION_JELLY_BEAN_MR2;
 }
 
 }  // namespace
@@ -222,16 +212,6 @@ static AVDAManager* GetManager() {
   return manager;
 }
 
-AndroidVideoDecodeAccelerator::PlatformConfig
-AndroidVideoDecodeAccelerator::PlatformConfig::CreateDefault() {
-  PlatformConfig config;
-
-  config.sdk_int = base::android::BuildInfo::GetInstance()->sdk_int();
-  config.allow_setsurface = MediaCodecUtil::IsSetOutputSurfaceSupported();
-
-  return config;
-}
-
 AndroidVideoDecodeAccelerator::BitstreamRecord::BitstreamRecord(
     const BitstreamBuffer& bitstream_buffer)
     : buffer(bitstream_buffer) {
@@ -251,7 +231,7 @@ AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
     const MakeGLContextCurrentCallback& make_context_current_cb,
     const GetGLES2DecoderCallback& get_gles2_decoder_cb,
     const AndroidOverlayMojoFactoryCB& overlay_factory_cb,
-    const PlatformConfig& platform_config)
+    DeviceInfo* device_info)
     : client_(nullptr),
       codec_allocator_(codec_allocator),
       make_context_current_cb_(make_context_current_cb),
@@ -267,8 +247,11 @@ AndroidVideoDecodeAccelerator::AndroidVideoDecodeAccelerator(
       codec_needs_reset_(false),
       defer_surface_creation_(false),
       surface_chooser_(std::move(surface_chooser)),
-      platform_config_(platform_config),
+      device_info_(device_info),
+      force_defer_surface_creation_for_testing_(false),
       overlay_factory_cb_(overlay_factory_cb),
+      promotion_hint_aggregator_(
+          base::MakeUnique<PromotionHintAggregatorImpl>()),
       weak_this_factory_(this) {}
 
 AndroidVideoDecodeAccelerator::~AndroidVideoDecodeAccelerator() {
@@ -359,12 +342,12 @@ bool AndroidVideoDecodeAccelerator::Initialize(const Config& config,
 
   // If we're low on resources, we may decide to defer creation of the surface
   // until the codec is actually used.
-  if (ShouldDeferSurfaceCreation(codec_allocator_, config_.surface_id,
-                                 config_.overlay_routing_token,
-                                 codec_config_->codec, platform_config_)) {
+  if (force_defer_surface_creation_for_testing_ ||
+      ShouldDeferSurfaceCreation(codec_allocator_, config_.overlay_info,
+                                 codec_config_->codec, device_info_)) {
     // We should never be here if a SurfaceView is required.
     // TODO(liberato): This really isn't true with AndroidOverlay.
-    DCHECK_EQ(config_.surface_id, SurfaceManager::kNoSurfaceID);
+    DCHECK(!config_.overlay_info.HasValidSurfaceId());
     defer_surface_creation_ = true;
   }
 
@@ -401,6 +384,8 @@ void AndroidVideoDecodeAccelerator::StartSurfaceChooser() {
     return;
   }
 
+  chooser_state_.is_fullscreen = config_.overlay_info.is_fullscreen;
+
   // Handle the sync path, which must use SurfaceTexture anyway.  Note that we
   // check both |during_initialize_| and |deferred_initialization_pending_|,
   // since we might get here during deferred surface creation.  In that case,
@@ -416,18 +401,24 @@ void AndroidVideoDecodeAccelerator::StartSurfaceChooser() {
   // surface creation for other reasons, in which case the sync path with just
   // signal success optimistically.
   if (during_initialize_ && !deferred_initialization_pending_) {
-    DCHECK_EQ(config_.surface_id, SurfaceManager::kNoSurfaceID);
-    DCHECK(!config_.overlay_routing_token);
+    DCHECK(!config_.overlay_info.HasValidSurfaceId());
+    DCHECK(!config_.overlay_info.HasValidRoutingToken());
     OnSurfaceTransition(nullptr);
     return;
   }
 
-  // If we have a surface, then notify |surface_chooser_| about it.
+  // If we have a surface, then notify |surface_chooser_| about it.  If we were
+  // told not to use an overlay (kNoSurfaceID or a null routing token), then we
+  // leave the factory blank.
   AndroidOverlayFactoryCB factory;
-  if (config_.surface_id != SurfaceManager::kNoSurfaceID)
-    factory = base::Bind(&CreateContentVideoViewOverlay, config_.surface_id);
-  else if (config_.overlay_routing_token && overlay_factory_cb_)
-    factory = base::Bind(overlay_factory_cb_, *config_.overlay_routing_token);
+  if (config_.overlay_info.HasValidSurfaceId()) {
+    factory = base::Bind(&ContentVideoViewOverlay::Create,
+                         config_.overlay_info.surface_id);
+  } else if (config_.overlay_info.HasValidRoutingToken() &&
+             overlay_factory_cb_) {
+    factory =
+        base::Bind(overlay_factory_cb_, *config_.overlay_info.routing_token);
+  }
 
   // Notify |surface_chooser_| that we've started.  This guarantees that we'll
   // get a callback.  It might not be a synchronous callback, but we're not in
@@ -439,7 +430,7 @@ void AndroidVideoDecodeAccelerator::StartSurfaceChooser() {
                  weak_this_factory_.GetWeakPtr()),
       base::Bind(&AndroidVideoDecodeAccelerator::OnSurfaceTransition,
                  weak_this_factory_.GetWeakPtr(), nullptr),
-      std::move(factory));
+      std::move(factory), chooser_state_);
 }
 
 void AndroidVideoDecodeAccelerator::OnSurfaceTransition(
@@ -464,7 +455,7 @@ void AndroidVideoDecodeAccelerator::OnSurfaceTransition(
   // change our output surface pre-M, ignore it.  For example, if the
   // compositor tells us that it can't use an overlay, well, there's not much
   // that we can do here unless we start falling forward to keyframes.
-  if (!platform_config_.allow_setsurface)
+  if (!device_info_->IsSetOutputSurfaceSupported())
     return;
 
   // If we're using a SurfaceTexture and are told to switch to one, then just
@@ -901,13 +892,23 @@ void AndroidVideoDecodeAccelerator::SendDecodedFrameToClient(
   if (size_changed)
     picture_buffer.set_size(size_);
 
-  // TODO(liberato): request a hint for promotability.  crbug.com/671365 .
+  // Only ask for promotion hints if we can actually switch surfaces.
+  const bool want_promotion_hint = device_info_->IsSetOutputSurfaceSupported();
   const bool allow_overlay = picture_buffer_manager_.ArePicturesOverlayable();
   UMA_HISTOGRAM_BOOLEAN("Media.AVDA.FrameSentAsOverlay", allow_overlay);
+  // We unconditionally mark the picture as overlayable, even if
+  // |!allow_overlay|, if we want to get hints.  It's required, else we won't
+  // get hints.
   // TODO(hubbe): Insert the correct color space. http://crbug.com/647725
   Picture picture(picture_buffer_id, bitstream_id, gfx::Rect(size_),
-                  gfx::ColorSpace(), allow_overlay);
+                  gfx::ColorSpace(),
+                  want_promotion_hint ? true : allow_overlay);
   picture.set_size_changed(size_changed);
+  if (want_promotion_hint) {
+    picture.set_wants_promotion_hint(true);
+    // This will prevent it from actually being promoted if it shouldn't be.
+    picture.set_surface_texture(!allow_overlay);
+  }
 
   // Notify picture ready before calling UseCodecBufferForPictureBuffer() since
   // that process may be slow and shouldn't delay delivery of the frame to the
@@ -1250,30 +1251,52 @@ void AndroidVideoDecodeAccelerator::Reset() {
   StartCodecDrain(DRAIN_FOR_RESET);
 }
 
-void AndroidVideoDecodeAccelerator::SetSurface(
-    int32_t surface_id,
-    const base::Optional<base::UnguessableToken>& routing_token) {
+void AndroidVideoDecodeAccelerator::SetOverlayInfo(
+    const OverlayInfo& overlay_info) {
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  // It's possible that we'll receive a SetSurface before initializing the
-  // surface chooser.  For example, if we defer surface creation, then we'll
-  // signal success to WMPI before initializing it.  WMPI is free to change the
-  // surface.  In this case, just pretend that |surface_id| is the initial one.
-  if (state_ == BEFORE_OVERLAY_INIT) {
-    config_.surface_id = surface_id;
-    config_.overlay_routing_token = routing_token;
+  // Update |config_| to contain the most recent info.  Also save a copy, so
+  // that we can check for duplicate info later.
+  OverlayInfo previous_info = config_.overlay_info;
+  config_.overlay_info = overlay_info;
+
+  // It's possible that we'll receive SetSurface before initializing the surface
+  // chooser.  For example, if we defer surface creation, then we'll signal
+  // success to WMPI before initializing it.  WMPI is then free to change
+  // |surface_id|.  In this case, take no additional action, since |config_| is
+  // up to date.  We'll use it later.
+  if (state_ == BEFORE_OVERLAY_INIT)
     return;
+
+  // Release any overlay immediately when hiding a frame.  Otherwise, it will
+  // stick around as long as the VideoFrame does, which can be a long time.
+  if (overlay_info.is_frame_hidden)
+    picture_buffer_manager_.ImmediatelyForgetOverlay(output_picture_buffers_);
+
+  chooser_state_.is_frame_hidden = overlay_info.is_frame_hidden;
+
+  // Notify the chooser about the fullscreen state.
+  chooser_state_.is_fullscreen = overlay_info.is_fullscreen;
+
+  // Note that these might be kNoSurfaceID / empty.  In that case, we will
+  // revoke the factory.
+  int32_t surface_id = overlay_info.surface_id;
+  OverlayInfo::RoutingToken routing_token = overlay_info.routing_token;
+
+  // We don't want to change the factory unless this info has actually changed.
+  // We'll get the same info many times if some other part of the config is now
+  // different, such as fullscreen state.
+  base::Optional<AndroidOverlayFactoryCB> new_factory;
+  if (surface_id != previous_info.surface_id ||
+      routing_token != previous_info.routing_token) {
+    if (routing_token && overlay_factory_cb_)
+      new_factory = base::Bind(overlay_factory_cb_, *routing_token);
+    else if (surface_id != SurfaceManager::kNoSurfaceID)
+      new_factory = base::Bind(&ContentVideoViewOverlay::Create, surface_id);
   }
 
-  AndroidOverlayFactoryCB factory;
-  if (routing_token && overlay_factory_cb_) {
-    factory = base::Bind(overlay_factory_cb_, *routing_token);
-  } else if (surface_id != SurfaceManager::kNoSurfaceID) {
-    factory = base::Bind(&CreateContentVideoViewOverlay, surface_id);
-  }
-
-  surface_chooser_->ReplaceOverlayFactory(std::move(factory));
+  surface_chooser_->UpdateState(new_factory, chooser_state_);
 }
 
 void AndroidVideoDecodeAccelerator::Destroy() {
@@ -1370,7 +1393,7 @@ void AndroidVideoDecodeAccelerator::OnStopUsingOverlayImmediately(
   // If the API is available avoid having to restart the decoder in order to
   // leave fullscreen. If we don't clear the surface immediately during this
   // callback, the MediaCodec will throw an error as the surface is destroyed.
-  if (platform_config_.allow_setsurface) {
+  if (device_info_->IsSetOutputSurfaceSupported()) {
     // Since we can't wait for a transition, we must invalidate all outstanding
     // picture buffers to avoid putting the GL system in a broken state.
     picture_buffer_manager_.ReleaseCodecBuffers(output_picture_buffers_);
@@ -1442,7 +1465,7 @@ void AndroidVideoDecodeAccelerator::InitializeCdm() {
 
 void AndroidVideoDecodeAccelerator::OnMediaCryptoReady(
     MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
-    bool needs_protected_surface) {
+    bool requires_secure_video_codec) {
   DVLOG(1) << __func__;
 
   if (!media_crypto) {
@@ -1461,7 +1484,8 @@ void AndroidVideoDecodeAccelerator::OnMediaCryptoReady(
   DCHECK(deferred_initialization_pending_);
 
   codec_config_->media_crypto = std::move(media_crypto);
-  codec_config_->needs_protected_surface = needs_protected_surface;
+  codec_config_->requires_secure_codec = requires_secure_video_codec;
+  chooser_state_.is_secure = requires_secure_video_codec;
 
   // After receiving |media_crypto_| we can start with surface creation.
   StartSurfaceChooser();
@@ -1526,6 +1550,23 @@ void AndroidVideoDecodeAccelerator::NotifyError(Error error) {
   // We're after all init.  Just signal an error.
   if (client_)
     client_->NotifyError(error);
+}
+
+PromotionHintAggregator::NotifyPromotionHintCB
+AndroidVideoDecodeAccelerator::GetPromotionHintCB() {
+  return base::Bind(&AndroidVideoDecodeAccelerator::NotifyPromotionHint,
+                    weak_this_factory_.GetWeakPtr());
+}
+
+void AndroidVideoDecodeAccelerator::NotifyPromotionHint(
+    const PromotionHintAggregator::Hint& hint) {
+  promotion_hint_aggregator_->NotifyPromotionHint(hint);
+  bool promotable = promotion_hint_aggregator_->IsSafeToPromote();
+  if (promotable != chooser_state_.is_compositor_promotable) {
+    chooser_state_.is_compositor_promotable = promotable;
+    surface_chooser_->UpdateState(base::Optional<AndroidOverlayFactoryCB>(),
+                                  chooser_state_);
+  }
 }
 
 void AndroidVideoDecodeAccelerator::ManageTimer(bool did_work) {

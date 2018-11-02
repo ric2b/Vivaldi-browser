@@ -29,6 +29,8 @@
  */
 
 #include "core/exported/WebViewBase.h"
+#include "core/frame/FrameTestHelpers.h"
+#include "core/frame/WebLocalFrameBase.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/html/forms/ColorChooserClient.h"
 #include "core/html/forms/DateTimeChooser.h"
@@ -44,8 +46,6 @@
 #include "public/web/WebViewClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "web/ChromeClientImpl.h"
-#include "web/WebLocalFrameImpl.h"
-#include "web/tests/FrameTestHelpers.h"
 
 namespace blink {
 
@@ -64,177 +64,6 @@ class TestWebViewClient : public FrameTestHelpers::TestWebViewClient {
 
 }  // anonymous namespace
 
-class GetNavigationPolicyTest : public testing::Test {
- public:
-  GetNavigationPolicyTest()
-      : result_(kWebNavigationPolicyIgnore), web_view_client_(&result_) {}
-
- protected:
-  void SetUp() override {
-    web_view_ = static_cast<WebViewBase*>(
-        WebViewBase::Create(&web_view_client_, kWebPageVisibilityStateVisible));
-    web_view_->SetMainFrame(WebLocalFrame::Create(
-        WebTreeScopeType::kDocument, &web_frame_client_, nullptr, nullptr));
-    chrome_client_impl_ =
-        ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
-    result_ = kWebNavigationPolicyIgnore;
-  }
-
-  void TearDown() override { web_view_->Close(); }
-
-  WebNavigationPolicy GetNavigationPolicyWithMouseEvent(
-      int modifiers,
-      WebMouseEvent::Button button,
-      bool as_popup) {
-    WebMouseEvent event(WebInputEvent::kMouseUp, modifiers,
-                        WebInputEvent::kTimeStampForTesting);
-    event.button = button;
-    web_view_->SetCurrentInputEventForTest(&event);
-    chrome_client_impl_->SetScrollbarsVisible(!as_popup);
-    chrome_client_impl_->Show(kNavigationPolicyIgnore);
-    web_view_->SetCurrentInputEventForTest(0);
-    return result_;
-  }
-
-  bool IsNavigationPolicyPopup() {
-    chrome_client_impl_->Show(kNavigationPolicyIgnore);
-    return result_ == kWebNavigationPolicyNewPopup;
-  }
-
- protected:
-  WebNavigationPolicy result_;
-  TestWebViewClient web_view_client_;
-  WebViewBase* web_view_;
-  FrameTestHelpers::TestWebFrameClient web_frame_client_;
-  Persistent<ChromeClientImpl> chrome_client_impl_;
-};
-
-TEST_F(GetNavigationPolicyTest, LeftClick) {
-  int modifiers = 0;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = false;
-  EXPECT_EQ(kWebNavigationPolicyNewForegroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, LeftClickPopup) {
-  int modifiers = 0;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = true;
-  EXPECT_EQ(kWebNavigationPolicyNewPopup,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ShiftLeftClick) {
-  int modifiers = WebInputEvent::kShiftKey;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = false;
-  EXPECT_EQ(kWebNavigationPolicyNewWindow,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ShiftLeftClickPopup) {
-  int modifiers = WebInputEvent::kShiftKey;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = true;
-  EXPECT_EQ(kWebNavigationPolicyNewPopup,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClick) {
-#if OS(MACOSX)
-  int modifiers = WebInputEvent::kMetaKey;
-#else
-  int modifiers = WebInputEvent::kControlKey;
-#endif
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = false;
-  EXPECT_EQ(kWebNavigationPolicyNewBackgroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ControlOrMetaLeftClickPopup) {
-#if OS(MACOSX)
-  int modifiers = WebInputEvent::kMetaKey;
-#else
-  int modifiers = WebInputEvent::kControlKey;
-#endif
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = true;
-  EXPECT_EQ(kWebNavigationPolicyNewBackgroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ControlOrMetaAndShiftLeftClick) {
-#if OS(MACOSX)
-  int modifiers = WebInputEvent::kMetaKey;
-#else
-  int modifiers = WebInputEvent::kControlKey;
-#endif
-  modifiers |= WebInputEvent::kShiftKey;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = false;
-  EXPECT_EQ(kWebNavigationPolicyNewForegroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, ControlOrMetaAndShiftLeftClickPopup) {
-#if OS(MACOSX)
-  int modifiers = WebInputEvent::kMetaKey;
-#else
-  int modifiers = WebInputEvent::kControlKey;
-#endif
-  modifiers |= WebInputEvent::kShiftKey;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kLeft;
-  bool as_popup = true;
-  EXPECT_EQ(kWebNavigationPolicyNewForegroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, MiddleClick) {
-  int modifiers = 0;
-  bool as_popup = false;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kMiddle;
-  EXPECT_EQ(kWebNavigationPolicyNewBackgroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, MiddleClickPopup) {
-  int modifiers = 0;
-  bool as_popup = true;
-  WebMouseEvent::Button button = WebMouseEvent::Button::kMiddle;
-  EXPECT_EQ(kWebNavigationPolicyNewBackgroundTab,
-            GetNavigationPolicyWithMouseEvent(modifiers, button, as_popup));
-}
-
-TEST_F(GetNavigationPolicyTest, NoToolbarsForcesPopup) {
-  chrome_client_impl_->SetToolbarsVisible(false);
-  EXPECT_TRUE(IsNavigationPolicyPopup());
-  chrome_client_impl_->SetToolbarsVisible(true);
-  EXPECT_FALSE(IsNavigationPolicyPopup());
-}
-
-TEST_F(GetNavigationPolicyTest, NoStatusbarForcesPopup) {
-  chrome_client_impl_->SetStatusbarVisible(false);
-  EXPECT_TRUE(IsNavigationPolicyPopup());
-  chrome_client_impl_->SetStatusbarVisible(true);
-  EXPECT_FALSE(IsNavigationPolicyPopup());
-}
-
-TEST_F(GetNavigationPolicyTest, NoMenubarForcesPopup) {
-  chrome_client_impl_->SetMenubarVisible(false);
-  EXPECT_TRUE(IsNavigationPolicyPopup());
-  chrome_client_impl_->SetMenubarVisible(true);
-  EXPECT_FALSE(IsNavigationPolicyPopup());
-}
-
-TEST_F(GetNavigationPolicyTest, NotResizableForcesPopup) {
-  chrome_client_impl_->SetResizable(false);
-  EXPECT_TRUE(IsNavigationPolicyPopup());
-  chrome_client_impl_->SetResizable(true);
-  EXPECT_FALSE(IsNavigationPolicyPopup());
-}
-
 class ViewCreatingClient : public FrameTestHelpers::TestWebViewClient {
  public:
   WebView* CreateView(WebLocalFrame* opener,
@@ -242,43 +71,39 @@ class ViewCreatingClient : public FrameTestHelpers::TestWebViewClient {
                       const WebWindowFeatures&,
                       const WebString& name,
                       WebNavigationPolicy,
-                      bool) override {
-    return web_view_helper_.InitializeWithOpener(opener, true);
+                      bool,
+                      WebSandboxFlags) override {
+    return web_view_helper_.InitializeWithOpener(opener);
   }
 
  private:
   FrameTestHelpers::WebViewHelper web_view_helper_;
 };
 
-class CreateWindowTest : public testing::Test {
+class CreateWindowTest : public ::testing::Test {
  protected:
   void SetUp() override {
-    web_view_ = static_cast<WebViewBase*>(
-        WebViewBase::Create(&web_view_client_, kWebPageVisibilityStateVisible));
-    main_frame_ = WebLocalFrame::Create(WebTreeScopeType::kDocument,
-                                        &web_frame_client_, nullptr, nullptr);
-    web_view_->SetMainFrame(main_frame_);
+    web_view_ = helper_.Initialize(nullptr, &web_view_client_);
+    main_frame_ = helper_.LocalMainFrame();
     chrome_client_impl_ =
         ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
   }
 
-  void TearDown() override { web_view_->Close(); }
-
   ViewCreatingClient web_view_client_;
+  FrameTestHelpers::WebViewHelper helper_;
   WebViewBase* web_view_;
   WebLocalFrame* main_frame_;
-  FrameTestHelpers::TestWebFrameClient web_frame_client_;
   Persistent<ChromeClientImpl> chrome_client_impl_;
 };
 
 TEST_F(CreateWindowTest, CreateWindowFromSuspendedPage) {
   ScopedPageSuspender suspender;
-  LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
+  LocalFrame* frame = ToWebLocalFrameBase(main_frame_)->GetFrame();
   FrameLoadRequest request(frame->GetDocument());
-  WindowFeatures features;
-  EXPECT_EQ(nullptr,
-            chrome_client_impl_->CreateWindow(
-                frame, request, features, kNavigationPolicyNewForegroundTab));
+  WebWindowFeatures features;
+  EXPECT_EQ(nullptr, chrome_client_impl_->CreateWindow(
+                         frame, request, features,
+                         kNavigationPolicyNewForegroundTab, kSandboxNone));
 }
 
 class FakeColorChooserClient
@@ -336,12 +161,12 @@ class FakeDateTimeChooserClient
   Member<Element> owner_element_;
 };
 
-class PagePopupSuppressionTest : public testing::Test {
+class PagePopupSuppressionTest : public ::testing::Test {
  public:
   PagePopupSuppressionTest() {}
 
   bool CanOpenColorChooser() {
-    LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
+    LocalFrame* frame = main_frame_->GetFrame();
     Color color;
     return !!chrome_client_impl_->OpenColorChooser(frame, color_chooser_client_,
                                                    color);
@@ -355,25 +180,22 @@ class PagePopupSuppressionTest : public testing::Test {
   }
 
   bool CanOpenPopupMenu() {
-    LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
+    LocalFrame* frame = main_frame_->GetFrame();
     return !!chrome_client_impl_->OpenPopupMenu(*frame, *select_);
   }
 
   Settings* GetSettings() {
-    LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
+    LocalFrame* frame = main_frame_->GetFrame();
     return frame->GetDocument()->GetSettings();
   }
 
  protected:
   void SetUp() override {
-    web_view_ = static_cast<WebViewBase*>(
-        WebViewBase::Create(&web_view_client_, kWebPageVisibilityStateVisible));
-    main_frame_ = WebLocalFrame::Create(WebTreeScopeType::kDocument,
-                                        &web_frame_client_, nullptr, nullptr);
-    web_view_->SetMainFrame(main_frame_);
+    web_view_ = helper_.Initialize();
+    main_frame_ = helper_.LocalMainFrame();
     chrome_client_impl_ =
         ToChromeClientImpl(&web_view_->GetPage()->GetChromeClient());
-    LocalFrame* frame = ToWebLocalFrameImpl(main_frame_)->GetFrame();
+    LocalFrame* frame = helper_.LocalMainFrame()->GetFrame();
     color_chooser_client_ =
         new FakeColorChooserClient(frame->GetDocument()->documentElement());
     date_time_chooser_client_ =
@@ -381,13 +203,10 @@ class PagePopupSuppressionTest : public testing::Test {
     select_ = HTMLSelectElement::Create(*(frame->GetDocument()));
   }
 
-  void TearDown() override { web_view_->Close(); }
-
  protected:
-  FrameTestHelpers::TestWebViewClient web_view_client_;
-  WebViewBase* web_view_ = nullptr;
-  WebLocalFrame* main_frame_ = nullptr;
-  FrameTestHelpers::TestWebFrameClient web_frame_client_;
+  FrameTestHelpers::WebViewHelper helper_;
+  WebViewBase* web_view_;
+  Persistent<WebLocalFrameBase> main_frame_;
   Persistent<ChromeClientImpl> chrome_client_impl_;
   Persistent<FakeColorChooserClient> color_chooser_client_;
   Persistent<FakeDateTimeChooserClient> date_time_chooser_client_;

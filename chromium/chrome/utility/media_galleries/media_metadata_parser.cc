@@ -11,8 +11,8 @@
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread.h"
-#include "media/base/audio_video_metadata_extractor.h"
 #include "media/base/data_source.h"
+#include "media/filters/audio_video_metadata_extractor.h"
 #include "net/base/mime_sniffer.h"
 
 namespace MediaGalleries = extensions::api::media_galleries;
@@ -146,10 +146,11 @@ void MediaMetadataParser::Start(const MetadataCallback& callback) {
   CHECK(media_thread_->Start());
 
   media_thread_->task_runner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&ParseAudioVideoMetadata, source_.get(),
-                            get_attached_images_, metadata, images),
-      base::Bind(&FinishParseAudioVideoMetadata, callback,
-                 base::Owned(metadata), base::Owned(images)));
+      FROM_HERE,
+      base::BindOnce(&ParseAudioVideoMetadata, source_.get(),
+                     get_attached_images_, metadata, images),
+      base::BindOnce(&FinishParseAudioVideoMetadata, callback,
+                     base::Owned(metadata), base::Owned(images)));
 }
 
 }  // namespace metadata

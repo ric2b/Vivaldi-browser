@@ -32,13 +32,10 @@
 
 #include "platform/weborigin/KURL.h"
 #include "platform/weborigin/SecurityOrigin.h"
-#include "platform/wtf/PassRefPtr.h"
 #include "public/platform/WebString.h"
 #include "public/platform/WebURL.h"
 
 namespace blink {
-
-class WebSecurityOriginPrivate : public SecurityOrigin {};
 
 WebSecurityOrigin WebSecurityOrigin::CreateFromString(const WebString& origin) {
   return WebSecurityOrigin(SecurityOrigin::CreateFromString(origin));
@@ -62,15 +59,11 @@ WebSecurityOrigin WebSecurityOrigin::CreateUnique() {
 }
 
 void WebSecurityOrigin::Reset() {
-  Assign(0);
+  private_ = nullptr;
 }
 
 void WebSecurityOrigin::Assign(const WebSecurityOrigin& other) {
-  WebSecurityOriginPrivate* p =
-      const_cast<WebSecurityOriginPrivate*>(other.private_);
-  if (p)
-    p->Ref();
-  Assign(p);
+  private_ = other.private_;
 }
 
 WebString WebSecurityOrigin::Protocol() const {
@@ -108,7 +101,7 @@ bool WebSecurityOrigin::IsUnique() const {
 bool WebSecurityOrigin::CanAccess(const WebSecurityOrigin& other) const {
   DCHECK(private_);
   DCHECK(other.private_);
-  return private_->CanAccess(other.private_);
+  return private_->CanAccess(other.private_.Get());
 }
 
 bool WebSecurityOrigin::CanRequest(const WebURL& url) const {
@@ -131,29 +124,21 @@ bool WebSecurityOrigin::CanAccessPasswordManager() const {
   return private_->CanAccessPasswordManager();
 }
 
-WebSecurityOrigin::WebSecurityOrigin(WTF::PassRefPtr<SecurityOrigin> origin)
-    : private_(static_cast<WebSecurityOriginPrivate*>(origin.LeakRef())) {}
+WebSecurityOrigin::WebSecurityOrigin(WTF::RefPtr<SecurityOrigin> origin)
+    : private_(std::move(origin)) {}
 
 WebSecurityOrigin& WebSecurityOrigin::operator=(
-    WTF::PassRefPtr<SecurityOrigin> origin) {
-  Assign(static_cast<WebSecurityOriginPrivate*>(origin.LeakRef()));
+    WTF::RefPtr<SecurityOrigin> origin) {
+  private_ = std::move(origin);
   return *this;
 }
 
-WebSecurityOrigin::operator WTF::PassRefPtr<SecurityOrigin>() const {
-  return PassRefPtr<SecurityOrigin>(
-      const_cast<WebSecurityOriginPrivate*>(private_));
+WebSecurityOrigin::operator WTF::RefPtr<SecurityOrigin>() const {
+  return private_.Get();
 }
 
 SecurityOrigin* WebSecurityOrigin::Get() const {
-  return private_;
-}
-
-void WebSecurityOrigin::Assign(WebSecurityOriginPrivate* p) {
-  // p is already ref'd for us by the caller
-  if (private_)
-    private_->Deref();
-  private_ = p;
+  return private_.Get();
 }
 
 void WebSecurityOrigin::GrantLoadLocalResources() const {

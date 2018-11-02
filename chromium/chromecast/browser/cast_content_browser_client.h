@@ -10,7 +10,6 @@
 #include <string>
 #include <vector>
 
-#include "base/callback_forward.h"
 #include "base/macros.h"
 #include "base/single_thread_task_runner.h"
 #include "build/build_config.h"
@@ -18,6 +17,7 @@
 #include "chromecast/chromecast_features.h"
 #include "content/public/browser/certificate_request_result_type.h"
 #include "content/public/browser/content_browser_client.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 
 class PrefService;
 
@@ -30,17 +30,15 @@ class MetricsService;
 }
 
 namespace net {
+class SSLPrivateKey;
 class URLRequestContextGetter;
 class X509Certificate;
-}
-
-namespace service_manager {
-class BinderRegistry;
 }
 
 namespace chromecast {
 class CastService;
 class CastWindowManager;
+class MemoryPressureControllerImpl;
 
 namespace media {
 class MediaCapsImpl;
@@ -57,8 +55,6 @@ namespace shell {
 class CastBrowserMainParts;
 class CastResourceDispatcherHostDelegate;
 class URLRequestContextFactory;
-
-using DisableQuicClosure = base::OnceClosure;
 
 class CastContentBrowserClient : public content::ContentBrowserClient {
  public:
@@ -81,7 +77,6 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
       content::BrowserContext* browser_context,
       PrefService* pref_service,
       net::URLRequestContextGetter* request_context_getter,
-      DisableQuicClosure disable_quic_closure,
       media::VideoPlaneController* video_plane_controller,
       CastWindowManager* window_manager);
 
@@ -133,7 +128,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void GetQuotaSettings(
       content::BrowserContext* context,
       content::StoragePartition* partition,
-      const storage::OptionalQuotaSettingsCallback& callback) override;
+      storage::OptionalQuotaSettingsCallback callback) override;
   void AllowCertificateError(
       content::WebContents* web_contents,
       int cert_error,
@@ -148,7 +143,7 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void SelectClientCertificate(
       content::WebContents* web_contents,
       net::SSLCertRequestInfo* cert_request_info,
-      net::CertificateList client_certs,
+      net::ClientCertIdentityList client_certs,
       std::unique_ptr<content::ClientCertificateDelegate> delegate) override;
   bool CanCreateWindow(content::RenderFrameHost* opener,
                        const GURL& opener_url,
@@ -189,10 +184,13 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
   void AddNetworkHintsMessageFilter(int render_process_id,
                                     net::URLRequestContext* context);
 
-  net::X509Certificate* SelectClientCertificateOnIOThread(
+  void SelectClientCertificateOnIOThread(
       GURL requesting_url,
-      int render_process_id);
-
+      int render_process_id,
+      scoped_refptr<base::SequencedTaskRunner> original_runner,
+      const base::Callback<void(scoped_refptr<net::X509Certificate>,
+                                scoped_refptr<net::SSLPrivateKey>)>&
+          continue_callback);
 #if !defined(OS_ANDROID)
   // Returns the crash signal FD corresponding to the current process type.
   int GetCrashSignalFD(const base::CommandLine& command_line);
@@ -203,6 +201,10 @@ class CastContentBrowserClient : public content::ContentBrowserClient {
 
   // A static cache to hold crash_handlers for each process_type
   std::map<std::string, breakpad::CrashHandlerHostLinux*> crash_handlers_;
+
+  // Notify renderers of memory pressure (Android renderers register directly
+  // with OS for this).
+  std::unique_ptr<MemoryPressureControllerImpl> memory_pressure_controller_;
 #endif  // !defined(OS_ANDROID)
 
   // Created by CastContentBrowserClient but owned by BrowserMainLoop.

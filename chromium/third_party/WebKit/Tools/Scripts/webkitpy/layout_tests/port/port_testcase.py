@@ -29,16 +29,13 @@
 """Unit testing base class for Port implementations."""
 
 import collections
-import errno
 import optparse
-import socket
 
 from webkitpy.common import exit_codes
 from webkitpy.common.system.executive_mock import MockExecutive
 from webkitpy.common.system.log_testing import LoggingTestCase
 from webkitpy.common.system.system_host import SystemHost
 from webkitpy.common.system.system_host_mock import MockSystemHost
-from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port.base import Port
 
 
@@ -53,6 +50,10 @@ class FakePrinter(object):
 
 class PortTestCase(LoggingTestCase):
     """Tests that all Port implementations must pass."""
+
+    # Some tests in this class test or override protected methods
+    # pylint: disable=protected-access
+
     HTTP_PORTS = (8000, 8080, 8443)
     WEBSOCKET_PORTS = (8880,)
 
@@ -72,34 +73,29 @@ class PortTestCase(LoggingTestCase):
 
     def test_check_build(self):
         port = self.make_port()
+
+        # Here we override methods to make it appear as though the build
+        # requirements are all met and the driver is found. We get a warning
+        # about PrettyPatch, bu the exit code is still OK.
         port._check_file_exists = lambda path, desc: True
         if port._dump_reader:
             port._dump_reader.check_is_functional = lambda: True
         port._options.build = True
         port._check_driver_build_up_to_date = lambda config: True
         port.check_httpd = lambda: True
-        self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
-                         exit_codes.OK_EXIT_STATUS)
-        # We should get a warning about PrettyPatch being missing,
-        # but not the driver itself.
+        self.assertEqual(
+            port.check_build(needs_http=True, printer=FakePrinter()),
+            exit_codes.OK_EXIT_STATUS)
         logs = ''.join(self.logMessages())
         self.assertIn('pretty patches', logs)
         self.assertNotIn('build requirements', logs)
 
-        self.assertLog([
-            'ERROR: \n',
-            'WARNING: Unable to find /mock-checkout/third_party/WebKit/Tools/Scripts/webkitruby/'
-            'PrettyPatch/prettify.rb; can\'t generate pretty patches.\n',
-            'WARNING: \n'
-        ])
-
+        # And here, after changing it so that the driver binary is not found,
+        # we get an error exit status and message about build requirements.
         port._check_file_exists = lambda path, desc: False
-        port._check_driver_build_up_to_date = lambda config: False
         self.assertEqual(port.check_build(needs_http=True, printer=FakePrinter()),
                          exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
-        # And, here we should get warnings about both.
         logs = ''.join(self.logMessages())
-        self.assertIn('pretty patches', logs)
         self.assertIn('build requirements', logs)
 
     def test_default_batch_size(self):
@@ -223,12 +219,6 @@ class PortTestCase(LoggingTestCase):
                           u'STDOUT: foo\ufffdbar\n'
                           u'STDERR: foo\ufffdbar\n'))
 
-    def assert_build_path(self, options, dirs, expected_path):
-        port = self.make_port(options=options)
-        for directory in dirs:
-            port.host.filesystem.maybe_make_directory(directory)
-        self.assertEqual(port._build_path(), expected_path)
-
     def test_expectations_files(self):
         port = self.make_port()
         self.assertEqual(port.expectations_files(), [
@@ -267,7 +257,8 @@ class PortTestCase(LoggingTestCase):
         port = self.make_port()
 
         port.host.environ['WEBKIT_HTTP_SERVER_CONF_PATH'] = '/path/to/httpd.conf'
-        self.assertRaises(IOError, port.path_to_apache_config_file)
+        with self.assertRaises(IOError):
+            port.path_to_apache_config_file()
         port.host.filesystem.write_text_file('/existing/httpd.conf', 'Hello, world!')
         port.host.environ['WEBKIT_HTTP_SERVER_CONF_PATH'] = '/existing/httpd.conf'
         self.assertEqual(port.path_to_apache_config_file(), '/existing/httpd.conf')

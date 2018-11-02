@@ -9,8 +9,8 @@
 #include "core/css/MediaValuesDynamic.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "core/layout/LayoutObject.h"
@@ -18,7 +18,6 @@
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
-#include "core/style/ComputedStyle.h"
 #include "platform/graphics/ColorSpaceGamut.h"
 #include "public/platform/WebScreenInfo.h"
 

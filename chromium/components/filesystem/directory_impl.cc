@@ -179,6 +179,33 @@ void DirectoryImpl::Rename(const std::string& raw_old_path,
   std::move(callback).Run(mojom::FileError::OK);
 }
 
+void DirectoryImpl::Replace(const std::string& raw_old_path,
+                            const std::string& raw_new_path,
+                            ReplaceCallback callback) {
+  base::FilePath old_path;
+  mojom::FileError error =
+      ValidatePath(raw_old_path, directory_path_, &old_path);
+  if (error != mojom::FileError::OK) {
+    std::move(callback).Run(error);
+    return;
+  }
+
+  base::FilePath new_path;
+  error = ValidatePath(raw_new_path, directory_path_, &new_path);
+  if (error != mojom::FileError::OK) {
+    std::move(callback).Run(error);
+    return;
+  }
+
+  base::File::Error file_error;
+  if (!base::ReplaceFile(old_path, new_path, &file_error)) {
+    std::move(callback).Run(static_cast<mojom::FileError>(file_error));
+    return;
+  }
+
+  std::move(callback).Run(mojom::FileError::OK);
+}
+
 void DirectoryImpl::Delete(const std::string& raw_path,
                            uint32_t delete_flags,
                            DeleteCallback callback) {
@@ -224,6 +251,9 @@ void DirectoryImpl::IsWritable(const std::string& raw_path,
 }
 
 void DirectoryImpl::Flush(FlushCallback callback) {
+// On Windows no need to sync directories. Their metadata will be updated when
+// files are created, without an explicit sync.
+#if !defined(OS_WIN)
   base::File file(directory_path_,
                   base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!file.IsValid()) {
@@ -235,7 +265,7 @@ void DirectoryImpl::Flush(FlushCallback callback) {
     std::move(callback).Run(mojom::FileError::FAILED);
     return;
   }
-
+#endif
   std::move(callback).Run(mojom::FileError::OK);
 }
 

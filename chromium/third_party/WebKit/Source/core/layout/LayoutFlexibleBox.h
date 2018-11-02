@@ -38,6 +38,7 @@
 namespace blink {
 
 class FlexItem;
+class FlexLine;
 
 class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
  public:
@@ -98,11 +99,6 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   void RemoveChild(LayoutObject*) override;
 
  private:
-  enum FlexSign {
-    kPositiveFlexibility,
-    kNegativeFlexibility,
-  };
-
   enum ChildLayoutType { kLayoutIfNeeded, kForceLayout, kNeverLayout };
 
   enum class TransformedWritingMode {
@@ -113,8 +109,6 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   };
 
   enum class SizeDefiniteness { kDefinite, kIndefinite, kUnknown };
-
-  struct LineContext;
 
   bool HasOrthogonalFlow(const LayoutBox& child) const;
   bool IsColumnFlow() const;
@@ -182,7 +176,7 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
   bool HasAutoMarginsInCrossAxis(const LayoutBox& child) const;
   bool UpdateAutoMarginsInCrossAxis(LayoutBox& child,
                                     LayoutUnit available_alignment_space);
-  void RepositionLogicalHeightDependentFlexItems(Vector<LineContext>&);
+  void RepositionLogicalHeightDependentFlexItems(Vector<FlexLine>&);
   LayoutUnit ClientLogicalBottomAfterRepositioning();
 
   LayoutUnit AvailableAlignmentSpaceForChild(LayoutUnit line_cross_axis_extent,
@@ -198,44 +192,28 @@ class CORE_EXPORT LayoutFlexibleBox : public LayoutBlock {
       LayoutUnit child_size);
   FlexItem ConstructFlexItem(LayoutBox& child, ChildLayoutType);
 
-  void FreezeInflexibleItems(FlexSign,
-                             Vector<FlexItem>& children,
-                             LayoutUnit& remaining_free_space,
-                             double& total_flex_grow,
-                             double& total_flex_shrink,
-                             double& total_weighted_flex_shrink);
-  bool ResolveFlexibleLengths(FlexSign,
-                              Vector<FlexItem>&,
+  bool ResolveFlexibleLengths(FlexLine*,
                               LayoutUnit initial_free_space,
-                              LayoutUnit& remaining_free_space,
-                              double& total_flex_grow,
-                              double& total_flex_shrink,
-                              double& total_weighted_flex_shrink);
-  void FreezeViolations(Vector<FlexItem*>&,
-                        LayoutUnit& available_free_space,
-                        double& total_flex_grow,
-                        double& total_flex_shrink,
-                        double& total_weighted_flex_shrink);
+                              LayoutUnit& remaining_free_space);
 
   void ResetAutoMarginsAndLogicalTopInCrossAxis(LayoutBox& child);
   void SetOverrideMainAxisContentSizeForChild(LayoutBox& child,
                                               LayoutUnit child_preferred_size);
   void PrepareChildForPositionedLayout(LayoutBox& child);
   void LayoutAndPlaceChildren(LayoutUnit& cross_axis_offset,
-                              Vector<FlexItem>&,
+                              FlexLine*,
                               LayoutUnit available_free_space,
                               bool relayout_children,
-                              SubtreeLayoutScope&,
-                              Vector<LineContext>&);
+                              SubtreeLayoutScope&);
   void LayoutColumnReverse(const Vector<FlexItem>&,
                            LayoutUnit cross_axis_offset,
                            LayoutUnit available_free_space);
-  void AlignFlexLines(Vector<LineContext>&);
-  void AlignChildren(const Vector<LineContext>&);
+  void AlignFlexLines(Vector<FlexLine>&);
+  void AlignChildren(const Vector<FlexLine>&);
   void ApplyStretchAlignmentToChild(LayoutBox& child,
                                     LayoutUnit line_cross_axis_extent);
-  void FlipForRightToLeftColumn(const Vector<LineContext>& line_contexts);
-  void FlipForWrapReverse(const Vector<LineContext>&,
+  void FlipForRightToLeftColumn(const Vector<FlexLine>& line_contexts);
+  void FlipForWrapReverse(const Vector<FlexLine>&,
                           LayoutUnit cross_axis_start_edge);
 
   float CountIntrinsicSizeForAlgorithmChange(

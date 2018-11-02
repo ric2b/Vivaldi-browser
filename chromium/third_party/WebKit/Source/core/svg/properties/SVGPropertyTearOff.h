@@ -66,20 +66,24 @@ class SVGPropertyTearOffBase
     DCHECK(context_element);
     DCHECK(attribute_name != QualifiedName::Null());
     context_element_ = context_element;
+    // Requires SVGPropertyTearOffBase to be the left-most class in the
+    // inheritance hierarchy.
+    ScriptWrappableVisitor::WriteBarrier(this, context_element_.Get());
     attribute_name_ = attribute_name;
   }
 
-  virtual AnimatedPropertyType GetType() const = 0;
-
   DEFINE_INLINE_VIRTUAL_TRACE() {}
+
+  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+    visitor->TraceWrappersWithManualWriteBarrier(context_element_.Get());
+  }
 
   static void ThrowReadOnly(ExceptionState&);
 
  protected:
-  SVGPropertyTearOffBase(
-      SVGElement* context_element,
-      PropertyIsAnimValType property_is_anim_val,
-      const QualifiedName& attribute_name = QualifiedName::Null())
+  SVGPropertyTearOffBase(SVGElement* context_element,
+                         PropertyIsAnimValType property_is_anim_val,
+                         const QualifiedName& attribute_name)
       : context_element_(context_element),
         property_is_anim_val_(property_is_anim_val),
         attribute_name_(attribute_name) {}
@@ -106,21 +110,20 @@ class SVGPropertyTearOff : public SVGPropertyTearOffBase {
 
   void SetTarget(Property* target) { target_ = target; }
 
-  AnimatedPropertyType GetType() const override {
-    return Property::ClassType();
-  }
-
   DEFINE_INLINE_VIRTUAL_TRACE() {
     visitor->Trace(target_);
     SVGPropertyTearOffBase::Trace(visitor);
   }
 
+  DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
+    SVGPropertyTearOffBase::TraceWrappers(visitor);
+  }
+
  protected:
-  SVGPropertyTearOff(
-      Property* target,
-      SVGElement* context_element,
-      PropertyIsAnimValType property_is_anim_val,
-      const QualifiedName& attribute_name = QualifiedName::Null())
+  SVGPropertyTearOff(Property* target,
+                     SVGElement* context_element,
+                     PropertyIsAnimValType property_is_anim_val,
+                     const QualifiedName& attribute_name)
       : SVGPropertyTearOffBase(context_element,
                                property_is_anim_val,
                                attribute_name),

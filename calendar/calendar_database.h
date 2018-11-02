@@ -19,7 +19,9 @@
 #include "sql/init_status.h"
 #include "sql/meta_table.h"
 
-#include "event_database.h"
+#include "calendar/calendar_table.h"
+#include "calendar/event_database.h"
+#include "calendar/recurrence_table.h"
 
 namespace base {
 class FilePath;
@@ -34,7 +36,9 @@ namespace calendar {
 // We try to keep most logic out of the calendar database; this should be seen
 // as the storage interface. Logic for manipulating this storage layer should
 // be in CalendarBackend.cc.
-class CalendarDatabase : public EventDatabase {
+class CalendarDatabase : public EventDatabase,
+                         public CalendarTable,
+                         public RecurrrenceTable {
  public:
   CalendarDatabase() {}
 

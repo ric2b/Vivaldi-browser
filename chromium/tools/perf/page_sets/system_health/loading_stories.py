@@ -9,8 +9,6 @@ from page_sets.system_health import system_health_story
 from page_sets.login_helpers import dropbox_login
 from page_sets.login_helpers import google_login
 
-from telemetry import decorators
-
 
 class _LoadingStory(system_health_story.SystemHealthStory):
   """Abstract base class for single-page System Health user stories."""
@@ -81,15 +79,13 @@ class LoadEbayStory(_LoadingStory):
 ################################################################################
 
 
-class LoadFacebookStory(_LoadingStory):
-  # Using Facebook login often causes "404 Not Found" with WPR.
-  NAME = 'load:social:facebook'
-  URL = 'https://www.facebook.com/rihanna'
-
-
 class LoadTwitterStory(_LoadingStory):
   NAME = 'load:social:twitter'
   URL = 'https://www.twitter.com/nasa'
+
+  # Desktop version is already covered by
+  # 'browse:social:twitter_infinite_scroll'
+  SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
 
 class LoadVkStory(_LoadingStory):
@@ -113,13 +109,9 @@ class LoadPinterestStory(_LoadingStory):
   NAME = 'load:social:pinterest'
   URL = 'https://uk.pinterest.com/categories/popular/'
   TAGS = [story_tags.JAVASCRIPT_HEAVY]
-
-
-class LoadTumblrStory(_LoadingStory):
-  NAME = 'load:social:tumblr'
-  # Redirects to the "http://" version.
-  URL = 'https://50thousand.tumblr.com/'
-  TAGS = [story_tags.JAVASCRIPT_HEAVY]
+  # Mobile story is already covered by
+  # 'browse:social:pinterest_infinite_scroll'.
+  SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
 ################################################################################
@@ -254,19 +246,6 @@ class Load9GagDesktopStory(_LoadingStory):
   SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
 
 
-class LoadFlickrDesktopStory(_LoadingStory):
-  NAME = 'load:media:flickr'
-  URL = 'https://www.flickr.com/photos/tags/farm'
-  SUPPORTED_PLATFORMS = platforms.DESKTOP_ONLY
-
-  def _DidLoadDocument(self, action_runner):
-    # Wait until the 'Recently tagged' view loads.
-    action_runner.WaitForJavaScriptCondition('''
-        document.querySelector(
-            '.search-photos-everyone-trending-view .photo-list-view')
-                !== null''')
-
-
 class LoadImgurStory(_LoadingStory):
   NAME = 'load:media:imgur'
   URL = 'http://imgur.com/gallery/5UlBN'
@@ -333,7 +312,6 @@ class LoadGmailDesktopStory(_LoadGmailBaseStory):
         'document.getElementById("loading").style.display === "none"')
 
 
-@decorators.Disabled('android')  # crbug.com/657433
 class LoadGmailMobileStory(_LoadGmailBaseStory):
   SUPPORTED_PLATFORMS = platforms.MOBILE_ONLY
 
@@ -409,7 +387,6 @@ class LoadSpyChaseStory(_LoadingStory):
         'document.querySelector("#game canvas").style.background !== ""')
 
 
-@decorators.Disabled('mac') # crbug.com/664661
 class LoadMiniclipStory(_LoadingStory):
   NAME = 'load:games:miniclip'
   # Using "https://" causes "404 Not Found" during WPR recording.

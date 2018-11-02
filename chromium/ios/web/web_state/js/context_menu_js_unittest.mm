@@ -13,8 +13,13 @@
 #import "ios/web/public/web_state/ui/crw_web_view_proxy.h"
 #import "ios/web/public/web_state/ui/crw_web_view_scroll_view_proxy.h"
 #import "ios/web/public/web_state/web_state.h"
+#import "ios/web/web_state/context_menu_constants.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/gtest_mac.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 // Unit tests for ios/web/web_state/js/resources/context_menu.js.
 
@@ -87,8 +92,8 @@ TEST_F(ContextMenuJsTest, GetImageUrlAtPoint) {
   NSString* html =
       @"<img id='foo' style='width:200;height:200;' src='file:///bogus'/>";
   NSDictionary* expected_value = @{
-    @"src" : @"file:///bogus",
-    @"referrerPolicy" : @"default",
+    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementReferrerPolicy : @"default",
   };
   ImageTesterHelper(html, expected_value);
 }
@@ -98,9 +103,9 @@ TEST_F(ContextMenuJsTest, GetImageTitleAtPoint) {
   NSString* html = @"<img id='foo' title='Hello world!'"
                     "style='width:200;height:200;' src='file:///bogus'/>";
   NSDictionary* expected_value = @{
-    @"src" : @"file:///bogus",
-    @"referrerPolicy" : @"default",
-    @"title" : @"Hello world!",
+    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementTitle : @"Hello world!",
   };
   ImageTesterHelper(html, expected_value);
 }
@@ -112,9 +117,9 @@ TEST_F(ContextMenuJsTest, GetLinkImageUrlAtPoint) {
        "<img id='foo' style='width:200;height:200;' src='file:///bogus'/>"
        "</a>";
   NSDictionary* expected_value = @{
-    @"src" : @"file:///bogus",
-    @"referrerPolicy" : @"default",
-    @"href" : @"file:///linky",
+    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementHyperlink : @"file:///linky",
   };
   ImageTesterHelper(html, expected_value);
 }
@@ -132,8 +137,8 @@ TEST_F(ContextMenuJsTest, TextAreaStopsProximity) {
        "</div></body> </html>";
 
   NSDictionary* success = @{
-    @"src" : @"file:///bogus",
-    @"referrerPolicy" : @"default",
+    kContextMenuElementSource : @"file:///bogus",
+    kContextMenuElementReferrerPolicy : @"default",
   };
   NSDictionary* failure = @{};
 
@@ -160,9 +165,10 @@ TEST_F(ContextMenuJsTest, LinkOfImage) {
   LoadHtml(base::StringPrintf(image, "http://destination"));
   id result = ExecuteGetElementFromPointJavaScript(20, 20);
   NSDictionary* expected_result = @{
-    @"src" : [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-    @"referrerPolicy" : @"default",
-    @"href" : @"http://destination/",
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementHyperlink : @"http://destination/",
   };
   EXPECT_NSEQ(expected_result, result);
 
@@ -170,9 +176,10 @@ TEST_F(ContextMenuJsTest, LinkOfImage) {
   LoadHtml(base::StringPrintf(image, "javascript:console.log('whatever')"));
   result = ExecuteGetElementFromPointJavaScript(20, 20);
   expected_result = @{
-    @"src" : [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-    @"referrerPolicy" : @"default",
-    @"href" : @"javascript:console.log(",
+    kContextMenuElementSource :
+        [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementHyperlink : @"javascript:console.log(",
   };
   EXPECT_NSEQ(expected_result, result);
 
@@ -188,12 +195,48 @@ TEST_F(ContextMenuJsTest, LinkOfImage) {
     LoadHtml(base::StringPrintf(image, javascript.c_str()));
     result = ExecuteGetElementFromPointJavaScript(20, 20);
     expected_result = @{
-      @"src" : [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
-      @"referrerPolicy" : @"default",
+      kContextMenuElementSource :
+          [NSString stringWithFormat:@"%sfoo", BaseUrl().c_str()],
+      kContextMenuElementReferrerPolicy : @"default",
     };
     // Make sure the returned JSON does not have an 'href' key.
     EXPECT_NSEQ(expected_result, result);
   }
+}
+
+// Tests context menu invoked on an image with "-webkit-touch-callout:none"
+// style and parent link.
+TEST_F(ContextMenuJsTest, LinkOfImageWithCalloutNone) {
+  // A page with an image surrounded by a link.
+  static const char image_html[] =
+      "<a href='%s'>"
+      "<img style='width:9;height:9;display:block;-webkit-touch-callout:none;'>"
+      "</a>";
+
+  // A page with a link to a destination URL.
+  LoadHtml(base::StringPrintf(image_html, "http://destination"));
+  id result = ExecuteGetElementFromPointJavaScript(5, 5);
+  NSDictionary* expected_result = @{
+    kContextMenuElementInnerText : @"",
+    kContextMenuElementReferrerPolicy : @"default",
+    kContextMenuElementHyperlink : @"http://destination/",
+  };
+  EXPECT_NSEQ(expected_result, result);
+}
+
+// Tests that the GetElementFromPoint script reports "never" as the referrer
+// policy for pages that have an unsupported policy in a meta tag.
+TEST_F(ContextMenuJsTest, UnsupportedReferrerPolicy) {
+  // A page with an unsupported referrer meta tag and a 400x400 image.
+  static const char kInvalidReferrerTag[] =
+      "<meta name=\"referrer\" content=\"unsupported-value\">"
+      "<img width=400 height=400 src='foo'></img>";
+
+  // Load the invalid meta tag
+  LoadHtml(kInvalidReferrerTag);
+  id result = ExecuteGetElementFromPointJavaScript(20, 20);
+  ASSERT_TRUE([result isKindOfClass:[NSDictionary class]]);
+  EXPECT_NSEQ(@"never", result[kContextMenuElementReferrerPolicy]);
 }
 
 }  // namespace web

@@ -24,6 +24,7 @@
 #include "core/CoreExport.h"
 #include "core/dom/Document.h"
 #include "core/frame/DOMWindow.h"
+#include "core/frame/EmbeddedContentView.h"
 #include "core/frame/FrameOwner.h"
 #include "core/html/HTMLElement.h"
 #include "platform/feature_policy/FeaturePolicy.h"
@@ -36,8 +37,8 @@ namespace blink {
 
 class ExceptionState;
 class Frame;
-class FrameOrPlugin;
-class LayoutPart;
+class LayoutEmbeddedContent;
+class PluginView;
 
 class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
                                           public FrameOwner {
@@ -51,10 +52,10 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
 
   virtual void DisconnectContentFrame();
 
-  // Most subclasses use LayoutPart (either LayoutEmbeddedObject or
+  // Most subclasses use LayoutEmbeddedContent (either LayoutEmbeddedObject or
   // LayoutIFrame) except for HTMLObjectElement and HTMLEmbedElement which may
   // return any LayoutObject when using fallback content.
-  LayoutPart* GetLayoutPart() const;
+  LayoutEmbeddedContent* GetLayoutEmbeddedContent() const;
 
   // Whether to collapse the frame owner element in the embedder document. That
   // is, to remove it from the layout as if it did not exist.
@@ -65,19 +66,21 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   virtual bool LoadedNonEmptyDocument() const { return false; }
   virtual void DidLoadNonEmptyDocument() {}
 
-  void SetWidget(FrameOrPlugin*);
-  FrameOrPlugin* ReleaseWidget();
-  FrameOrPlugin* OwnedWidget() const { return widget_; }
+  void SetEmbeddedContentView(EmbeddedContentView*);
+  EmbeddedContentView* ReleaseEmbeddedContentView();
+  EmbeddedContentView* OwnedEmbeddedContentView() const {
+    return embedded_content_view_;
+  }
 
-  class UpdateSuspendScope {
+  class PluginDisposeSuspendScope {
     STACK_ALLOCATED();
 
    public:
-    UpdateSuspendScope();
-    ~UpdateSuspendScope();
+    PluginDisposeSuspendScope();
+    ~PluginDisposeSuspendScope();
 
    private:
-    void PerformDeferredWidgetTreeOperations();
+    void PerformDeferredPluginDispose();
   };
 
   // FrameOwner overrides:
@@ -96,7 +99,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   int MarginHeight() const override { return -1; }
   bool AllowFullscreen() const override { return false; }
   bool AllowPaymentRequest() const override { return false; }
-  bool IsDisplayNone() const override { return !widget_; }
+  bool IsDisplayNone() const override { return !embedded_content_view_; }
   AtomicString Csp() const override { return g_null_atom; }
   const WebVector<WebFeaturePolicyFeature>& AllowedFeatures() const override;
   const WebParsedFeaturePolicy& ContainerPolicy() const override;
@@ -115,7 +118,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
                               bool replace_current_item);
   bool IsKeyboardFocusable() const override;
 
-  void DisposeFrameOrPluginSoon(FrameOrPlugin*);
+  void DisposePluginSoon(PluginView*);
   void FrameOwnerPropertiesChanged();
 
   // Return the origin which is to be used for feature policy container
@@ -126,9 +129,14 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
     return SecurityOrigin::CreateUnique();
   }
 
-  // Construct a new feature policy container policy for this frame, based on
-  // the frame attributes and the effective origin specified in the frame
+  // Return a feature policy container policy for this frame, based on the
+  // frame attributes and the effective origin specified in the frame
   // attributes.
+  virtual Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy()
+      const = 0;
+
+  // Update the container policy and notify the frame loader client of any
+  // changes.
   void UpdateContainerPolicy();
 
  private:
@@ -144,7 +152,7 @@ class CORE_EXPORT HTMLFrameOwnerElement : public HTMLElement,
   }
 
   Member<Frame> content_frame_;
-  Member<FrameOrPlugin> widget_;
+  Member<EmbeddedContentView> embedded_content_view_;
   SandboxFlags sandbox_flags_;
 
   WebParsedFeaturePolicy container_policy_;

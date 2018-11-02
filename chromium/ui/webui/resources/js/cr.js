@@ -310,8 +310,12 @@ var cr = cr || function() {
   function makePublic(ctor, methods, opt_target) {
     methods.forEach(function(method) {
       ctor[method] = function() {
-        var target = opt_target ? document.getElementById(opt_target) :
-                                  ctor.getInstance();
+        var target = opt_target ?
+            // Disable document.getElementById restriction since cr.js should
+            // not depend on util.js.
+            // eslint-disable-next-line no-restricted-properties
+            document.getElementById(opt_target) :
+            ctor.getInstance();
         return target[method + '_'].apply(target, arguments);
       };
     });
@@ -353,7 +357,7 @@ var cr = cr || function() {
    * A variation of chrome.send, suitable for messages that expect a single
    * response from C++.
    * @param {string} methodName The name of the WebUI handler API.
-   * @param {...*} var_args Varibale number of arguments to be forwarded to the
+   * @param {...*} var_args Variable number of arguments to be forwarded to the
    *     C++ call.
    * @return {!Promise}
    */

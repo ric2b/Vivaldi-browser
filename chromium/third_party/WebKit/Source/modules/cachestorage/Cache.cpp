@@ -198,10 +198,9 @@ void RecordResponseTypeForAdd(const Member<Response>& response) {
       type = ResponseType::kOpaqueRedirectType;
       break;
   }
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      EnumerationHistogram, response_type_histogram,
-      new EnumerationHistogram("ServiceWorkerCache.Cache.AddResponseType",
-                               static_cast<int>(ResponseType::kEnumMax)));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(EnumerationHistogram, response_type_histogram,
+                                  ("ServiceWorkerCache.Cache.AddResponseType",
+                                   static_cast<int>(ResponseType::kEnumMax)));
   response_type_histogram.Count(static_cast<int>(type));
 };
 
@@ -626,7 +625,7 @@ ScriptPromise Cache::PutImpl(ScriptState* script_state,
       new BarrierCallbackForPut(requests.size(), this, resolver);
 
   for (size_t i = 0; i < requests.size(); ++i) {
-    KURL url(KURL(), requests[i]->url());
+    KURL url(NullURL(), requests[i]->url());
     if (!url.ProtocolIsInHTTPFamily()) {
       barrier_callback->OnError("Request scheme '" + url.Protocol() +
                                 "' is unsupported");

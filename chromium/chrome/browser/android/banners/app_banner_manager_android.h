@@ -10,6 +10,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "base/strings/string16.h"
 #include "chrome/browser/banners/app_banner_manager.h"
 #include "content/public/browser/web_contents_user_data.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -41,8 +42,8 @@ class AppBannerManagerAndroid
       const;
 
   // Returns true if the banner pipeline is currently running.
-  bool IsActiveForTesting(JNIEnv* env,
-                          const base::android::JavaParamRef<jobject>& jobj);
+  bool IsRunningForTesting(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& jobj);
 
   // Informs the InstallableManager for the WebContents we are attached to that
   // the add to homescreen menu item has been tapped.
@@ -68,9 +69,6 @@ class AppBannerManagerAndroid
   // AppBannerManager overrides.
   void RequestAppBanner(const GURL& validated_url, bool is_debug_mode) override;
 
-  // Registers native methods.
-  static bool Register(JNIEnv* env);
-
  protected:
   // Return the ideal badge icon size.
   int GetIdealBadgeIconSizeInPx();
@@ -88,7 +86,7 @@ class AppBannerManagerAndroid
   void OnDidPerformInstallableCheck(const InstallableData& result) override;
   void OnAppIconFetched(const SkBitmap& bitmap) override;
   void ResetCurrentPageData() override;
-  void ShowBanner() override;
+  void ShowBannerUi() override;
 
  private:
   friend class content::WebContentsUserData<AppBannerManagerAndroid>;
@@ -127,6 +125,9 @@ class AppBannerManagerAndroid
 
   // App package name for a native app banner.
   std::string native_app_package_;
+
+  // Title to display in the banner for native app.
+  base::string16 native_app_title_;
 
   // Whether WebAPKs can be installed.
   bool can_install_webapk_;

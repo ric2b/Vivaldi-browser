@@ -8,7 +8,6 @@
 
 #include "ash/shell.h"
 #include "base/memory/ptr_util.h"
-#include "base/rand_util.h"
 #include "base/values.h"
 #include "chrome/browser/chromeos/camera_detector.h"
 #include "chrome/browser/chromeos/login/error_screens_histogram_helper.h"
@@ -410,9 +409,9 @@ void SupervisedUserCreationScreen::OnCreationError(
     case SupervisedUserCreationController::CRYPTOHOME_NO_MOUNT:
     case SupervisedUserCreationController::CRYPTOHOME_FAILED_MOUNT:
     case SupervisedUserCreationController::CRYPTOHOME_FAILED_TPM:
-      ::login::GetSecureModuleUsed(
-          base::Bind(&SupervisedUserCreationScreen::UpdateSecureModuleMessages,
-                     weak_factory_.GetWeakPtr()));
+      ::login::GetSecureModuleUsed(base::BindOnce(
+          &SupervisedUserCreationScreen::UpdateSecureModuleMessages,
+          weak_factory_.GetWeakPtr()));
       return;
     case SupervisedUserCreationController::CLOUD_SERVER_ERROR:
     case SupervisedUserCreationController::TOKEN_WRITE_FAILED:
@@ -492,8 +491,7 @@ void SupervisedUserCreationScreen::ApplyPicture() {
       NOTREACHED() << "Supervised users have no profile pictures";
       break;
     default:
-      DCHECK(selected_image_ >= 0 &&
-             selected_image_ < default_user_image::kDefaultImagesCount);
+      DCHECK(default_user_image::IsValidIndex(selected_image_));
       image_manager->SaveUserDefaultImageIndex(selected_image_);
       break;
   }
@@ -540,8 +538,7 @@ void SupervisedUserCreationScreen::OnGetSupervisedUsers(
       ui_copy->SetString(kAvatarURLKey,
                          default_user_image::GetDefaultImageUrl(avatar_index));
     } else {
-      int i = base::RandInt(default_user_image::kFirstDefaultImageIndex,
-                            default_user_image::kDefaultImagesCount - 1);
+      int i = default_user_image::GetRandomDefaultImageIndex();
       local_copy->SetString(
           SupervisedUserSyncService::kChromeOsAvatar,
           SupervisedUserSyncService::BuildAvatarString(i));
@@ -636,13 +633,15 @@ void SupervisedUserCreationScreen::OnDecodeImageFailed() {
 void SupervisedUserCreationScreen::OnImageSelected(
     const std::string& image_type,
     const std::string& image_url) {
-  if (image_url.empty())
-    return;
-  int user_image_index = user_manager::User::USER_IMAGE_INVALID;
-  if (image_type == "default" &&
-      default_user_image::IsDefaultImageUrl(image_url, &user_image_index)) {
+  if (image_type == "default") {
+    int user_image_index = user_manager::User::USER_IMAGE_INVALID;
+    if (image_url.empty() ||
+        !default_user_image::IsDefaultImageUrl(image_url, &user_image_index)) {
+      LOG(ERROR) << "Unexpected default image url: " << image_url;
+      return;
+    }
     selected_image_ = user_image_index;
-  } else if (image_type == "camera") {
+  } else if (image_type == "camera" || image_type == "old") {
     selected_image_ = user_manager::User::USER_IMAGE_EXTERNAL;
   } else {
     NOTREACHED() << "Unexpected image type: " << image_type;

@@ -25,7 +25,6 @@
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/content_settings/core/browser/cookie_settings.h"
@@ -39,6 +38,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
@@ -145,12 +145,11 @@ class InfobarView : public views::View {
   // Initialize contents and layout.
   void Init() {
     AddChildView(content_);
-    content_->SetLayoutManager(
-        new views::BoxLayout(views::BoxLayout::kHorizontal,
-                             kInfobarHorizontalPadding,
-                             kInfobarVerticalPadding,
-                             ChromeLayoutProvider::Get()->GetDistanceMetric(
-                                DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL)));
+    content_->SetLayoutManager(new views::BoxLayout(
+        views::BoxLayout::kHorizontal,
+        gfx::Insets(kInfobarVerticalPadding, kInfobarHorizontalPadding),
+        ChromeLayoutProvider::Get()->GetDistanceMetric(
+            DISTANCE_RELATED_CONTROL_HORIZONTAL_SMALL)));
     content_->AddChildView(info_image_);
     content_->AddChildView(label_);
     UpdateVisibility(false, CONTENT_SETTING_BLOCK, base::string16());
@@ -390,7 +389,7 @@ views::View* CollectedCookiesViews::CreateAllowedPane() {
   GridLayout* layout = GridLayout::CreatePanel(pane);
   int unrelated_vertical_distance =
       ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_UNRELATED_CONTROL_VERTICAL);
+          views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
 
   const int single_column_layout_id = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(single_column_layout_id);
@@ -454,7 +453,7 @@ views::View* CollectedCookiesViews::CreateBlockedPane() {
   GridLayout* layout = GridLayout::CreatePanel(pane);
   int unrelated_vertical_distance =
       ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_UNRELATED_CONTROL_VERTICAL);
+          views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
 
   const int single_column_layout_id = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(single_column_layout_id);

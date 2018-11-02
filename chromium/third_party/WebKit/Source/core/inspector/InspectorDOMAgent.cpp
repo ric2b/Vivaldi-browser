@@ -45,13 +45,13 @@
 #include "core/dom/DocumentFragment.h"
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/Node.h"
 #include "core/dom/PseudoElement.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/InsertionPoint.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/V0InsertionPoint.h"
 #include "core/editing/serializers/Serialization.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -349,6 +349,27 @@ Response InspectorDOMAgent::AssertNode(int node_id, Node*& node) {
   return Response::OK();
 }
 
+Response InspectorDOMAgent::AssertNode(
+    const protocol::Maybe<int>& node_id,
+    const protocol::Maybe<int>& backend_node_id,
+    const protocol::Maybe<String>& object_id,
+    Node*& node) {
+  if (node_id.isJust())
+    return AssertNode(node_id.fromJust(), node);
+
+  if (backend_node_id.isJust()) {
+    node = DOMNodeIds::NodeForId(backend_node_id.fromJust());
+    return !node ? Response::Error("No node found for given backend id")
+                 : Response::OK();
+  }
+
+  if (object_id.isJust())
+    return NodeForRemoteObjectId(object_id.fromJust(), node);
+
+  return Response::Error(
+      "Either nodeId, backendNodeId or objectId must be specified");
+}
+
 Response InspectorDOMAgent::AssertElement(int node_id, Element*& element) {
   Node* node = nullptr;
   Response response = AssertNode(node_id, node);
@@ -476,7 +497,7 @@ Response InspectorDOMAgent::getFlattenedDocument(
     Maybe<bool> pierce,
     std::unique_ptr<protocol::Array<protocol::DOM::Node>>* nodes) {
   if (!Enabled())
-    return Response::Error("Document not enabled");
+    return Response::Error("DOM agent hasn't been enabled");
 
   if (!document_)
     return Response::Error("Document is not available");
@@ -996,11 +1017,9 @@ Response InspectorDOMAgent::performSearch(
               (start_tag_found && end_tag_found &&
                DeprecatedEqualIgnoringCase(node->nodeName(), tag_name_query)) ||
               (start_tag_found && !end_tag_found &&
-               node->nodeName().StartsWith(tag_name_query,
-                                           kTextCaseUnicodeInsensitive)) ||
+               node->nodeName().StartsWithIgnoringCase(tag_name_query)) ||
               (!start_tag_found && end_tag_found &&
-               node->nodeName().EndsWith(tag_name_query,
-                                         kTextCaseUnicodeInsensitive))) {
+               node->nodeName().EndsWithIgnoringCase(tag_name_query))) {
             result_collector.insert(node);
             break;
           }
@@ -1214,12 +1233,16 @@ Response InspectorDOMAgent::markUndoableState() {
   return Response::OK();
 }
 
-Response InspectorDOMAgent::focus(int node_id) {
-  Element* element = nullptr;
-  Response response = AssertElement(node_id, element);
+Response InspectorDOMAgent::focus(Maybe<int> node_id,
+                                  Maybe<int> backend_node_id,
+                                  Maybe<String> object_id) {
+  Node* node = nullptr;
+  Response response = AssertNode(node_id, backend_node_id, object_id, node);
   if (!response.isSuccess())
     return response;
-
+  if (!node->IsElementNode())
+    return Response::Error("Node is not an Element");
+  Element* element = ToElement(node);
   element->GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (!element->IsFocusable())
     return Response::Error("Element is not focusable");
@@ -1228,10 +1251,12 @@ Response InspectorDOMAgent::focus(int node_id) {
 }
 
 Response InspectorDOMAgent::setFileInputFiles(
-    int node_id,
-    std::unique_ptr<protocol::Array<String>> files) {
+    std::unique_ptr<protocol::Array<String>> files,
+    Maybe<int> node_id,
+    Maybe<int> backend_node_id,
+    Maybe<String> object_id) {
   Node* node = nullptr;
-  Response response = AssertNode(node_id, node);
+  Response response = AssertNode(node_id, backend_node_id, object_id, node);
   if (!response.isSuccess())
     return response;
   if (!isHTMLInputElement(*node) ||
@@ -1246,10 +1271,12 @@ Response InspectorDOMAgent::setFileInputFiles(
 }
 
 Response InspectorDOMAgent::getBoxModel(
-    int node_id,
+    Maybe<int> node_id,
+    Maybe<int> backend_node_id,
+    Maybe<String> object_id,
     std::unique_ptr<protocol::DOM::BoxModel>* model) {
   Node* node = nullptr;
-  Response response = AssertNode(node_id, node);
+  Response response = AssertNode(node_id, backend_node_id, object_id, node);
   if (!response.isSuccess())
     return response;
 
@@ -1285,12 +1312,22 @@ Response InspectorDOMAgent::getNodeForLocation(
 }
 
 Response InspectorDOMAgent::resolveNode(
-    int node_id,
+    protocol::Maybe<int> node_id,
+    protocol::Maybe<int> backend_node_id,
     Maybe<String> object_group,
     std::unique_ptr<v8_inspector::protocol::Runtime::API::RemoteObject>*
         result) {
   String object_group_name = object_group.fromMaybe("");
-  Node* node = NodeForId(node_id);
+  Node* node = nullptr;
+
+  if (node_id.isJust() == backend_node_id.isJust())
+    return Response::Error("Either nodeId or backendNodeId must be specified.");
+
+  if (node_id.isJust())
+    node = NodeForId(node_id.fromJust());
+  else
+    node = DOMNodeIds::NodeForId(backend_node_id.fromJust());
+
   if (!node)
     return Response::Error("No node with given id found");
   *result = ResolveNode(node, object_group_name);
@@ -1329,7 +1366,8 @@ String InspectorDOMAgent::DocumentURLString(Document* document) {
   return document->Url().GetString();
 }
 
-static String DocumentBaseURLString(Document* document) {
+// static
+String InspectorDOMAgent::DocumentBaseURLString(Document* document) {
   return document->BaseURLForOverride(document->BaseURL()).GetString();
 }
 
@@ -1460,9 +1498,9 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
         value->setXmlVersion(element->ownerDocument()->xmlVersion());
     }
 
-    if (element->IsInsertionPoint()) {
+    if (element->IsV0InsertionPoint()) {
       value->setDistributedNodes(
-          BuildArrayForDistributedNodes(ToInsertionPoint(element)));
+          BuildArrayForDistributedNodes(ToV0InsertionPoint(element)));
       force_push_children = true;
     }
     if (isHTMLSlotElement(*element)) {
@@ -1588,7 +1626,7 @@ InspectorDOMAgent::BuildArrayForPseudoElements(Element* element,
 
 std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
 InspectorDOMAgent::BuildArrayForDistributedNodes(
-    InsertionPoint* insertion_point) {
+    V0InsertionPoint* insertion_point) {
   std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
       distributed_nodes = protocol::Array<protocol::DOM::BackendNode>::create();
   for (size_t i = 0; i < insertion_point->DistributedNodesSize(); ++i) {
@@ -1950,10 +1988,10 @@ void InspectorDOMAgent::DidPerformElementShadowDistribution(
 
   for (ShadowRoot* root = shadow_host->YoungestShadowRoot(); root;
        root = root->OlderShadowRoot()) {
-    const HeapVector<Member<InsertionPoint>>& insertion_points =
+    const HeapVector<Member<V0InsertionPoint>>& insertion_points =
         root->DescendantInsertionPoints();
     for (const auto& it : insertion_points) {
-      InsertionPoint* insertion_point = it.Get();
+      V0InsertionPoint* insertion_point = it.Get();
       int insertion_point_id = document_node_to_id_map_->at(insertion_point);
       if (insertion_point_id)
         GetFrontend()->distributedNodesUpdated(

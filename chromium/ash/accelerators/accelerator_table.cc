@@ -20,8 +20,6 @@ const AcceleratorData kAcceleratorData[] = {
     {true, ui::VKEY_NONCONVERT, ui::EF_NONE, SWITCH_IME},
     {true, ui::VKEY_DBE_SBCSCHAR, ui::EF_NONE, SWITCH_IME},
     {true, ui::VKEY_DBE_DBCSCHAR, ui::EF_NONE, SWITCH_IME},
-    // Shortcut for Koren IME.
-    {true, ui::VKEY_HANGUL, ui::EF_NONE, SWITCH_IME},
 
     {true, ui::VKEY_TAB, ui::EF_ALT_DOWN, CYCLE_FORWARD_MRU},
     {true, ui::VKEY_TAB, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
@@ -71,7 +69,7 @@ const AcceleratorData kAcceleratorData[] = {
      TOUCH_HUD_CLEAR},
     {true, ui::VKEY_P, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOUCH_HUD_PROJECTION_TOGGLE},
-    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
+    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_CONTROL_DOWN,
      TOGGLE_HIGH_CONTRAST},
     {true, ui::VKEY_Z, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
      TOGGLE_SPOKEN_FEEDBACK},
@@ -133,7 +131,10 @@ const AcceleratorData kAcceleratorData[] = {
      SHOW_MESSAGE_CENTER_BUBBLE},
     {true, ui::VKEY_P, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, SHOW_STYLUS_TOOLS},
     {true, ui::VKEY_S, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
-     SHOW_SYSTEM_TRAY_BUBBLE},
+     TOGGLE_SYSTEM_TRAY_BUBBLE},
+    // Until we have unified settings and notifications the "hamburger"
+    // key opens quick settings.
+    {true, ui::VKEY_SETTINGS, ui::EF_NONE, TOGGLE_SYSTEM_TRAY_BUBBLE},
     {true, ui::VKEY_K, ui::EF_SHIFT_DOWN | ui::EF_COMMAND_DOWN,
      SHOW_IME_MENU_BUBBLE},
     {true, ui::VKEY_1, ui::EF_ALT_DOWN, LAUNCH_APP_0},
@@ -163,9 +164,7 @@ const AcceleratorData kAcceleratorData[] = {
 
     // Voice Interaction shortcuts.
     {true, ui::VKEY_A, ui::EF_COMMAND_DOWN, START_VOICE_INTERACTION},
-    // Temporary shortcut added for UX/PM exploration.
-    // TODO(updowndota): Remove the temporary shortcut.
-    {true, ui::VKEY_SPACE, ui::EF_COMMAND_DOWN, START_VOICE_INTERACTION},
+    {true, ui::VKEY_ASSISTANT, ui::EF_NONE, START_VOICE_INTERACTION},
 
     // Debugging shortcuts that need to be available to end-users in
     // release builds.
@@ -205,7 +204,11 @@ const AcceleratorData kDeprecatedAccelerators[] = {
 
     // Deprecated in M59.
     {true, ui::VKEY_K, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN,
-     SHOW_IME_MENU_BUBBLE}};
+     SHOW_IME_MENU_BUBBLE},
+
+    // Deprecated in M61.
+    {true, ui::VKEY_H, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN,
+     TOGGLE_HIGH_CONTRAST}};
 
 const size_t kDeprecatedAcceleratorsLength = arraysize(kDeprecatedAccelerators);
 
@@ -221,7 +224,14 @@ const DeprecatedAcceleratorData kDeprecatedAcceleratorsData[] = {
      IDS_SHORTCUT_TASK_MANAGER_NEW, true},
     {SHOW_IME_MENU_BUBBLE, "Ash.Accelerators.Deprecated.ShowImeMenuBubble",
      IDS_DEPRECATED_SHOW_IME_BUBBLE_MSG, IDS_SHORTCUT_IME_BUBBLE_OLD,
-     IDS_SHORTCUT_IME_BUBBLE_NEW, true}};
+     IDS_SHORTCUT_IME_BUBBLE_NEW, true},
+    {
+        TOGGLE_HIGH_CONTRAST, "Ash.Accelerators.Deprecated.ToggleHighContrast",
+        IDS_DEPRECATED_TOGGLE_HIGH_CONTRAST_MSG,
+        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_OLD,
+        IDS_SHORTCUT_TOGGLE_HIGH_CONTRAST_NEW,
+        false  // Old accelerator was disabled immediately upon deprecation.
+    }};
 
 const size_t kDeprecatedAcceleratorsDataLength =
     arraysize(kDeprecatedAcceleratorsData);
@@ -273,8 +283,6 @@ const AcceleratorData kDeveloperAcceleratorData[] = {
     {true, ui::VKEY_R, kDebugModifier, ROTATE_SCREEN},
     // For testing on systems where Alt-Tab is already mapped.
     {true, ui::VKEY_W, ui::EF_ALT_DOWN, CYCLE_FORWARD_MRU},
-    {true, ui::VKEY_F11, ui::EF_CONTROL_DOWN,
-     DEV_TOGGLE_ROOT_WINDOW_FULL_SCREEN},
     {true, ui::VKEY_W, ui::EF_SHIFT_DOWN | ui::EF_ALT_DOWN, CYCLE_BACKWARD_MRU},
     {true, ui::VKEY_F, ui::EF_SHIFT_DOWN | ui::EF_CONTROL_DOWN,
      TOGGLE_FULLSCREEN},
@@ -320,7 +328,6 @@ const AcceleratorAction kActionsAllowedAtLoginOrLockScreen[] = {
     SCALE_UI_RESET,
     SCALE_UI_UP,
     SHOW_IME_MENU_BUBBLE,
-    SHOW_SYSTEM_TRAY_BUBBLE,
     SWITCH_IME,  // Switch to another IME depending on the accelerator.
     TAKE_PARTIAL_SCREENSHOT,
     TAKE_SCREENSHOT,
@@ -329,6 +336,7 @@ const AcceleratorAction kActionsAllowedAtLoginOrLockScreen[] = {
     TOGGLE_HIGH_CONTRAST,
     TOGGLE_MIRROR_MODE,
     TOGGLE_SPOKEN_FEEDBACK,
+    TOGGLE_SYSTEM_TRAY_BUBBLE,
     TOGGLE_WIFI,
     TOUCH_HUD_CLEAR,
     VOLUME_DOWN,

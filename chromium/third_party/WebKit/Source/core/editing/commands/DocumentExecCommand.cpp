@@ -31,6 +31,7 @@
 
 #include "core/editing/Editor.h"
 #include "core/events/ScopedEventQueue.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/TextControlElement.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "platform/Histogram.h"
@@ -62,7 +63,7 @@ bool Document::execCommand(const String& command_name,
     return false;
   }
   if (FocusedElement() && IsTextControlElement(*FocusedElement()))
-    UseCounter::Count(*this, UseCounter::kExecCommandOnInputOrTextarea);
+    UseCounter::Count(*this, WebFeature::kExecCommandOnInputOrTextarea);
 
   // We don't allow recursive |execCommand()| to protect against attack code.
   // Recursive call of |execCommand()| could be happened by moving iframe

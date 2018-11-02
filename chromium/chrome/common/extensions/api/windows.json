@@ -74,6 +74,14 @@
         "type": "string",
         "description": "Specifies what type of browser window to create. 'panel' is deprecated and only available to existing whitelisted extensions on Chrome OS.",
         "enum": ["normal", "popup", "panel"]
+      },
+      {
+        "id": "Dummy",
+        "description": "This is a hack to have a hard reference to the history.TransitionType type somewhere in this file. We use a soft reference to it below, but no headers get generated for it because of a hack in json_schema_compiler/h_generator.py (see include_soft).",
+        "type": "object",
+        "properties":{
+          "dummy": {"$ref": "history.TransitionType"}
+        }
       }
     ],
     "properties": {
@@ -226,6 +234,11 @@
                 "$ref": "WindowState",
                 "optional": true,
                 "description": "The initial state of the window. The 'minimized', 'maximized' and 'fullscreen' states cannot be combined with 'left', 'top', 'width' or 'height'."
+              },
+              "transition": {
+                "$ref": "history.TransitionType",
+                "optional": true,
+                "description": "The type of page transition to use when opening the tabs. Specific to Vivaldi"
               }
             },
             "optional": true

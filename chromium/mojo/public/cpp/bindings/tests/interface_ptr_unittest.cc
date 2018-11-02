@@ -8,13 +8,17 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/callback_helpers.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "mojo/public/cpp/bindings/tests/bindings_test_base.h"
 #include "mojo/public/cpp/bindings/thread_safe_interface_ptr.h"
 #include "mojo/public/interfaces/bindings/tests/math_calculator.mojom.h"
 #include "mojo/public/interfaces/bindings/tests/sample_interfaces.mojom.h"
@@ -193,15 +197,12 @@ class IntegerAccessorImpl : public sample::IntegerAccessor {
   base::Closure closure_;
 };
 
-class InterfacePtrTest : public testing::Test {
+class InterfacePtrTest : public BindingsTestBase {
  public:
   InterfacePtrTest() {}
   ~InterfacePtrTest() override { base::RunLoop().RunUntilIdle(); }
 
   void PumpMessages() { base::RunLoop().RunUntilIdle(); }
-
- private:
-  base::MessageLoop loop_;
 };
 
 void SetFlagAndRunClosure(bool* flag, const base::Closure& closure) {
@@ -220,54 +221,62 @@ void ExpectValueAndRunClosure(uint32_t expected_value,
   closure.Run();
 }
 
-TEST_F(InterfacePtrTest, IsBound) {
+TEST_P(InterfacePtrTest, IsBound) {
   math::CalculatorPtr calc;
   EXPECT_FALSE(calc.is_bound());
   MathCalculatorImpl calc_impl(MakeRequest(&calc));
   EXPECT_TRUE(calc.is_bound());
 }
 
-TEST_F(InterfacePtrTest, EndToEnd) {
-  math::CalculatorPtr calc;
-  MathCalculatorImpl calc_impl(MakeRequest(&calc));
+class EndToEndInterfacePtrTest : public InterfacePtrTest {
+ public:
+  void RunTest(const scoped_refptr<base::SequencedTaskRunner> runner) {
+    base::RunLoop run_loop;
+    done_closure_ = run_loop.QuitClosure();
+    done_runner_ = base::ThreadTaskRunnerHandle::Get();
+    runner->PostTask(FROM_HERE,
+                     base::Bind(&EndToEndInterfacePtrTest::RunTestImpl,
+                                base::Unretained(this)));
+    run_loop.Run();
+  }
 
-  // Suppose this is instantiated in a process that has pipe1_.
-  MathCalculatorUI calculator_ui(std::move(calc));
+ private:
+  void RunTestImpl() {
+    math::CalculatorPtr calc;
+    calc_impl_ = base::MakeUnique<MathCalculatorImpl>(MakeRequest(&calc));
+    calculator_ui_ = base::MakeUnique<MathCalculatorUI>(std::move(calc));
+    calculator_ui_->Add(2.0, base::Bind(&EndToEndInterfacePtrTest::AddDone,
+                                        base::Unretained(this)));
+    calculator_ui_->Multiply(5.0,
+                             base::Bind(&EndToEndInterfacePtrTest::MultiplyDone,
+                                        base::Unretained(this)));
+    EXPECT_EQ(0.0, calculator_ui_->GetOutput());
+  }
 
-  base::RunLoop run_loop, run_loop2;
-  calculator_ui.Add(2.0, run_loop.QuitClosure());
-  calculator_ui.Multiply(5.0, run_loop2.QuitClosure());
-  run_loop.Run();
-  run_loop2.Run();
+  void AddDone() { EXPECT_EQ(2.0, calculator_ui_->GetOutput()); }
 
-  EXPECT_EQ(10.0, calculator_ui.GetOutput());
+  void MultiplyDone() {
+    EXPECT_EQ(10.0, calculator_ui_->GetOutput());
+    calculator_ui_.reset();
+    calc_impl_.reset();
+    done_runner_->PostTask(FROM_HERE, base::ResetAndReturn(&done_closure_));
+  }
+
+  base::Closure done_closure_;
+  scoped_refptr<base::SingleThreadTaskRunner> done_runner_;
+  std::unique_ptr<MathCalculatorUI> calculator_ui_;
+  std::unique_ptr<MathCalculatorImpl> calc_impl_;
+};
+
+TEST_P(EndToEndInterfacePtrTest, EndToEnd) {
+  RunTest(base::ThreadTaskRunnerHandle::Get());
 }
 
-TEST_F(InterfacePtrTest, EndToEnd_Synchronous) {
-  math::CalculatorPtr calc;
-  MathCalculatorImpl calc_impl(MakeRequest(&calc));
-
-  // Suppose this is instantiated in a process that has pipe1_.
-  MathCalculatorUI calculator_ui(std::move(calc));
-
-  EXPECT_EQ(0.0, calculator_ui.GetOutput());
-
-  base::RunLoop run_loop;
-  calculator_ui.Add(2.0, run_loop.QuitClosure());
-  EXPECT_EQ(0.0, calculator_ui.GetOutput());
-  calc_impl.binding()->WaitForIncomingMethodCall();
-  run_loop.Run();
-  EXPECT_EQ(2.0, calculator_ui.GetOutput());
-
-  base::RunLoop run_loop2;
-  calculator_ui.Multiply(5.0, run_loop2.QuitClosure());
-  EXPECT_EQ(2.0, calculator_ui.GetOutput());
-  calc_impl.binding()->WaitForIncomingMethodCall();
-  run_loop2.Run();
-  EXPECT_EQ(10.0, calculator_ui.GetOutput());
+TEST_P(EndToEndInterfacePtrTest, EndToEndOnSequence) {
+  RunTest(base::CreateSequencedTaskRunnerWithTraits({}));
 }
 
-TEST_F(InterfacePtrTest, Movable) {
+TEST_P(InterfacePtrTest, Movable) {
   math::CalculatorPtr a;
   math::CalculatorPtr b;
   MathCalculatorImpl calc_impl(MakeRequest(&b));
@@ -281,7 +290,7 @@ TEST_F(InterfacePtrTest, Movable) {
   EXPECT_TRUE(!b);
 }
 
-TEST_F(InterfacePtrTest, Resettable) {
+TEST_P(InterfacePtrTest, Resettable) {
   math::CalculatorPtr a;
 
   EXPECT_TRUE(!a);
@@ -305,7 +314,7 @@ TEST_F(InterfacePtrTest, Resettable) {
   EXPECT_EQ(MOJO_RESULT_INVALID_ARGUMENT, CloseRaw(handle));
 }
 
-TEST_F(InterfacePtrTest, BindInvalidHandle) {
+TEST_P(InterfacePtrTest, BindInvalidHandle) {
   math::CalculatorPtr ptr;
   EXPECT_FALSE(ptr.get());
   EXPECT_FALSE(ptr);
@@ -315,7 +324,7 @@ TEST_F(InterfacePtrTest, BindInvalidHandle) {
   EXPECT_FALSE(ptr);
 }
 
-TEST_F(InterfacePtrTest, EncounteredError) {
+TEST_P(InterfacePtrTest, EncounteredError) {
   math::CalculatorPtr proxy;
   MathCalculatorImpl calc_impl(MakeRequest(&proxy));
 
@@ -344,7 +353,7 @@ TEST_F(InterfacePtrTest, EncounteredError) {
   EXPECT_TRUE(calculator_ui.encountered_error());
 }
 
-TEST_F(InterfacePtrTest, EncounteredErrorCallback) {
+TEST_P(InterfacePtrTest, EncounteredErrorCallback) {
   math::CalculatorPtr proxy;
   MathCalculatorImpl calc_impl(MakeRequest(&proxy));
 
@@ -381,7 +390,7 @@ TEST_F(InterfacePtrTest, EncounteredErrorCallback) {
   EXPECT_TRUE(encountered_error);
 }
 
-TEST_F(InterfacePtrTest, DestroyInterfacePtrOnMethodResponse) {
+TEST_P(InterfacePtrTest, DestroyInterfacePtrOnMethodResponse) {
   math::CalculatorPtr proxy;
   MathCalculatorImpl calc_impl(MakeRequest(&proxy));
 
@@ -396,7 +405,7 @@ TEST_F(InterfacePtrTest, DestroyInterfacePtrOnMethodResponse) {
   EXPECT_EQ(0, SelfDestructingMathCalculatorUI::num_instances());
 }
 
-TEST_F(InterfacePtrTest, NestedDestroyInterfacePtrOnMethodResponse) {
+TEST_P(InterfacePtrTest, NestedDestroyInterfacePtrOnMethodResponse) {
   math::CalculatorPtr proxy;
   MathCalculatorImpl calc_impl(MakeRequest(&proxy));
 
@@ -411,7 +420,7 @@ TEST_F(InterfacePtrTest, NestedDestroyInterfacePtrOnMethodResponse) {
   EXPECT_EQ(0, SelfDestructingMathCalculatorUI::num_instances());
 }
 
-TEST_F(InterfacePtrTest, ReentrantWaitForIncomingMethodCall) {
+TEST_P(InterfacePtrTest, ReentrantWaitForIncomingMethodCall) {
   sample::ServicePtr proxy;
   ReentrantServiceImpl impl(MakeRequest(&proxy));
 
@@ -429,7 +438,7 @@ TEST_F(InterfacePtrTest, ReentrantWaitForIncomingMethodCall) {
   EXPECT_EQ(2, impl.max_call_depth());
 }
 
-TEST_F(InterfacePtrTest, QueryVersion) {
+TEST_P(InterfacePtrTest, QueryVersion) {
   IntegerAccessorImpl impl;
   sample::IntegerAccessorPtr ptr;
   Binding<sample::IntegerAccessor> binding(&impl, MakeRequest(&ptr));
@@ -444,7 +453,7 @@ TEST_F(InterfacePtrTest, QueryVersion) {
   EXPECT_EQ(3u, ptr.version());
 }
 
-TEST_F(InterfacePtrTest, RequireVersion) {
+TEST_P(InterfacePtrTest, RequireVersion) {
   IntegerAccessorImpl impl;
   sample::IntegerAccessorPtr ptr;
   Binding<sample::IntegerAccessor> binding(&impl, MakeRequest(&ptr));
@@ -669,7 +678,7 @@ class AImpl : public A {
   base::Closure closure_;
 };
 
-TEST_F(InterfacePtrTest, Scoping) {
+TEST_P(InterfacePtrTest, Scoping) {
   APtr a;
   base::RunLoop run_loop;
   AImpl a_impl(MakeRequest(&a), run_loop.QuitClosure());
@@ -705,7 +714,7 @@ class PingTestImpl : public sample::PingTest {
 };
 
 // Tests that FuseProxy does what it's supposed to do.
-TEST_F(InterfacePtrTest, Fusion) {
+TEST_P(InterfacePtrTest, Fusion) {
   sample::PingTestPtrInfo proxy_info;
   PingTestImpl impl(MakeRequest(&proxy_info));
 
@@ -725,7 +734,7 @@ void Fail() {
   FAIL() << "Unexpected connection error";
 }
 
-TEST_F(InterfacePtrTest, FlushForTesting) {
+TEST_P(InterfacePtrTest, FlushForTesting) {
   math::CalculatorPtr calc;
   MathCalculatorImpl calc_impl(MakeRequest(&calc));
   calc.set_connection_error_handler(base::Bind(&Fail));
@@ -746,7 +755,7 @@ void SetBool(bool* value) {
   *value = true;
 }
 
-TEST_F(InterfacePtrTest, FlushForTestingWithClosedPeer) {
+TEST_P(InterfacePtrTest, FlushForTestingWithClosedPeer) {
   math::CalculatorPtr calc;
   MakeRequest(&calc);
   bool called = false;
@@ -756,7 +765,7 @@ TEST_F(InterfacePtrTest, FlushForTestingWithClosedPeer) {
   calc.FlushForTesting();
 }
 
-TEST_F(InterfacePtrTest, ConnectionErrorWithReason) {
+TEST_P(InterfacePtrTest, ConnectionErrorWithReason) {
   math::CalculatorPtr calc;
   MathCalculatorImpl calc_impl(MakeRequest(&calc));
 
@@ -775,7 +784,7 @@ TEST_F(InterfacePtrTest, ConnectionErrorWithReason) {
   run_loop.Run();
 }
 
-TEST_F(InterfacePtrTest, InterfaceRequestResetWithReason) {
+TEST_P(InterfacePtrTest, InterfaceRequestResetWithReason) {
   math::CalculatorPtr calc;
   auto request = MakeRequest(&calc);
 
@@ -794,7 +803,7 @@ TEST_F(InterfacePtrTest, InterfaceRequestResetWithReason) {
   run_loop.Run();
 }
 
-TEST_F(InterfacePtrTest, CallbackIsPassedInterfacePtr) {
+TEST_P(InterfacePtrTest, CallbackIsPassedInterfacePtr) {
   sample::PingTestPtr ptr;
   auto request = mojo::MakeRequest(&ptr);
 
@@ -813,7 +822,7 @@ TEST_F(InterfacePtrTest, CallbackIsPassedInterfacePtr) {
   run_loop.Run();
 }
 
-TEST_F(InterfacePtrTest, ConnectionErrorHandlerOwnsInterfacePtr) {
+TEST_P(InterfacePtrTest, ConnectionErrorHandlerOwnsInterfacePtr) {
   sample::PingTestPtr* ptr = new sample::PingTestPtr;
   auto request = mojo::MakeRequest(ptr);
 
@@ -835,17 +844,13 @@ TEST_F(InterfacePtrTest, ConnectionErrorHandlerOwnsInterfacePtr) {
   run_loop.Run();
 }
 
-TEST_F(InterfacePtrTest, ThreadSafeInterfacePointer) {
+TEST_P(InterfacePtrTest, ThreadSafeInterfacePointer) {
   math::CalculatorPtr ptr;
   MathCalculatorImpl calc_impl(MakeRequest(&ptr));
   scoped_refptr<math::ThreadSafeCalculatorPtr> thread_safe_ptr =
       math::ThreadSafeCalculatorPtr::Create(std::move(ptr));
 
   base::RunLoop run_loop;
-
-  // Create and start the thread from where we'll call the interface pointer.
-  base::Thread other_thread("service test thread");
-  other_thread.Start();
 
   auto run_method = base::Bind(
       [](const scoped_refptr<base::TaskRunner>& main_task_runner,
@@ -868,18 +873,16 @@ TEST_F(InterfacePtrTest, ThreadSafeInterfacePointer) {
       },
       base::SequencedTaskRunnerHandle::Get(), run_loop.QuitClosure(),
       thread_safe_ptr);
-  other_thread.message_loop()->task_runner()->PostTask(FROM_HERE, run_method);
+  base::CreateSequencedTaskRunnerWithTraits({})->PostTask(FROM_HERE,
+                                                          run_method);
 
   // Block until the method callback is called on the background thread.
   run_loop.Run();
 }
 
-TEST_F(InterfacePtrTest, ThreadSafeInterfacePointerWithTaskRunner) {
-  // Create and start the thread from where we'll bind the interface pointer.
-  base::Thread other_thread("service test thread");
-  other_thread.Start();
-  const scoped_refptr<base::SingleThreadTaskRunner>& other_thread_task_runner =
-      other_thread.message_loop()->task_runner();
+TEST_P(InterfacePtrTest, ThreadSafeInterfacePointerWithTaskRunner) {
+  const scoped_refptr<base::SequencedTaskRunner> other_thread_task_runner =
+      base::CreateSequencedTaskRunnerWithTraits({});
 
   math::CalculatorPtr ptr;
   auto request = mojo::MakeRequest(&ptr);
@@ -906,7 +909,7 @@ TEST_F(InterfacePtrTest, ThreadSafeInterfacePointerWithTaskRunner) {
         },
         base::SequencedTaskRunnerHandle::Get(), run_loop.QuitClosure(),
         thread_safe_ptr, base::Passed(&request), &math_calc_impl);
-    other_thread.message_loop()->task_runner()->PostTask(FROM_HERE, run_method);
+    other_thread_task_runner->PostTask(FROM_HERE, run_method);
     run_loop.Run();
   }
 
@@ -930,6 +933,8 @@ TEST_F(InterfacePtrTest, ThreadSafeInterfacePointerWithTaskRunner) {
   // deleted before the background thread's message loop is invalidated.
   thread_safe_ptr = nullptr;
 }
+
+INSTANTIATE_MOJO_BINDINGS_TEST_CASE_P(InterfacePtrTest);
 
 }  // namespace
 }  // namespace test

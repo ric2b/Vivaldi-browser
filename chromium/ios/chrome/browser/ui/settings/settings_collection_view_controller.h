@@ -8,6 +8,8 @@
 #import "ios/chrome/browser/ui/settings/settings_navigation_controller.h"
 #import "ios/chrome/browser/ui/settings/settings_root_collection_view_controller.h"
 
+@protocol ApplicationCommands;
+@protocol SettingsMainPageCommands;
 @class SigninInteractionController;
 namespace ios {
 class ChromeBrowserState;
@@ -37,16 +39,19 @@ extern NSString* const kSettingsVoiceSearchCellId;
 @property(weak, nonatomic, readonly)
     SigninInteractionController* signinInteractionController;
 
-// Initializes a new SettingsCollectionViewController. |mainBrowserState|,
-// |currentBrowserState| and |dataSource| must not be nil.
-// If |currentBrowserState| is not off the record, then it must be equal to
-// |mainBrowserState|.
-- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)mainBrowserState
-                 currentBrowserState:
-                     (ios::ChromeBrowserState*)currentBrowserState
+// Dispatcher for SettingsMainPageCommands. Defaults to self if not set.
+// TODO(crbug.com/738881): Unify this with the dispatcher passed into the init.
+@property(weak, nonatomic) id<SettingsMainPageCommands>
+    settingsMainPageDispatcher;
+
+// Initializes a new SettingsCollectionViewController. |browserState| must not
+// be nil and must not be an off-the-record browser state.
+- (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
+                          dispatcher:(id<ApplicationCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithStyle:(CollectionViewControllerStyle)style
+- (instancetype)initWithLayout:(UICollectionViewLayout*)layout
+                         style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
 - (instancetype)init NS_UNAVAILABLE;

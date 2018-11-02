@@ -50,6 +50,7 @@ var HANDLE_SIGNAL_NONE;
 var HANDLE_SIGNAL_READABLE;
 var HANDLE_SIGNAL_WRITABLE;
 var HANDLE_SIGNAL_PEER_CLOSED;
+var HANDLE_SIGNAL_PEER_REMOTE;
 
 /**
  * MojoCreateDataMessageOptions: Used to specify creation parameters for a data
@@ -74,7 +75,6 @@ var WRITE_MESSAGE_FLAG_NONE;
  * See core.h for more information.
  */
 var READ_MESSAGE_FLAG_NONE;
-var READ_MESSAGE_FLAG_MAY_DISCARD;
 
 /**
  * MojoCreateDataPipeOptions: Used to specify creation parameters for a data

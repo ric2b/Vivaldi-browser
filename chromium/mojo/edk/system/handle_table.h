@@ -10,17 +10,25 @@
 #include <vector>
 
 #include "base/containers/hash_tables.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
+#include "base/synchronization/lock.h"
+#include "base/trace_event/memory_dump_provider.h"
 #include "mojo/edk/system/dispatcher.h"
+#include "mojo/edk/system/system_impl_export.h"
 #include "mojo/public/c/system/types.h"
 
 namespace mojo {
 namespace edk {
 
-class HandleTable {
+class MOJO_SYSTEM_IMPL_EXPORT HandleTable
+    : public base::trace_event::MemoryDumpProvider {
  public:
   HandleTable();
-  ~HandleTable();
+  ~HandleTable() override;
+
+  // HandleTable is thread-hostile. All access should be gated by GetLock().
+  base::Lock& GetLock();
 
   MojoHandle AddDispatcher(scoped_refptr<Dispatcher> dispatcher);
 
@@ -39,7 +47,7 @@ class HandleTable {
   // if any of the handles are invalid; or MOJO_RESULT_OK if successful.
   MojoResult BeginTransit(
       const MojoHandle* handles,
-      uint32_t num_handles,
+      size_t num_handles,
       std::vector<Dispatcher::DispatcherInTransit>* dispatchers);
 
   void CompleteTransitAndClose(
@@ -50,6 +58,12 @@ class HandleTable {
   void GetActiveHandlesForTest(std::vector<MojoHandle> *handles);
 
  private:
+  FRIEND_TEST_ALL_PREFIXES(HandleTableTest, OnMemoryDump);
+
+  // MemoryDumpProvider implementation.
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override;
+
   struct Entry {
    Entry();
    explicit Entry(scoped_refptr<Dispatcher> dispatcher);
@@ -63,6 +77,7 @@ class HandleTable {
   using HandleMap = base::hash_map<MojoHandle, Entry>;
 
   HandleMap handles_;
+  base::Lock lock_;
 
   uint32_t next_available_handle_ = 1;
 

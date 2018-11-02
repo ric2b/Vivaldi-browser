@@ -43,16 +43,17 @@
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/text/WTFString.h"
+#include "public/web/WebWindowFeatures.h"
 
 namespace blink {
 
 class AutoscrollController;
 class BrowserControls;
 class ChromeClient;
-class ClientRectList;
 class ContextMenuClient;
 class ContextMenuController;
 class Document;
+class DOMRectList;
 class DragCaret;
 class DragController;
 class EditorClient;
@@ -63,9 +64,11 @@ class OverscrollController;
 struct PageScaleConstraints;
 class PageScaleConstraintsSet;
 class PluginData;
+class PluginsChangedObserver;
 class PointerLockController;
 class ScopedPageSuspender;
 class ScrollingCoordinator;
+class SmoothScrollSequencer;
 class Settings;
 class ConsoleMessageStorage;
 class SpellCheckerClient;
@@ -131,8 +134,15 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   ViewportDescription GetViewportDescription() const;
 
+  // Returns the plugin data associated with |main_frame_origin|.
+  PluginData* GetPluginData(SecurityOrigin* main_frame_origin);
+
+  // Refreshes the browser-side plugin cache.
   static void RefreshPlugins();
-  PluginData* GetPluginData(SecurityOrigin* main_frame_origin) const;
+
+  // Resets the plugin data for all pages in the renderer process and notifies
+  // PluginsChangedObservers.
+  static void ResetPluginData();
 
   EditorClient& GetEditorClient() const { return *editor_client_; }
   SpellCheckerClient& GetSpellCheckerClient() const {
@@ -150,7 +160,6 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
     return ToLocalFrame(main_frame_);
   }
 
-  void WillUnloadDocument(const Document&);
   void DocumentDetached(Document*);
 
   bool OpenedByDOM() const;
@@ -177,13 +186,22 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   ScrollingCoordinator* GetScrollingCoordinator();
 
-  ClientRectList* NonFastScrollableRects(const LocalFrame*);
+  SmoothScrollSequencer* GetSmoothScrollSequencer();
+
+  DOMRectList* NonFastScrollableRects(const LocalFrame*);
 
   Settings& GetSettings() const { return *settings_; }
 
   UseCounter& GetUseCounter() { return use_counter_; }
   Deprecation& GetDeprecation() { return deprecation_; }
   HostsUsingFeatures& GetHostsUsingFeatures() { return hosts_using_features_; }
+
+  void SetWindowFeatures(const WebWindowFeatures& features) {
+    window_features_ = features;
+  }
+  const WebWindowFeatures& GetWindowFeatures() const {
+    return window_features_;
+  }
 
   PageScaleConstraintsSet& GetPageScaleConstraintsSet();
   const PageScaleConstraintsSet& GetPageScaleConstraintsSet() const;
@@ -274,10 +292,12 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 
   DECLARE_TRACE();
 
-  void LayerTreeViewInitialized(WebLayerTreeView&, FrameView*);
-  void WillCloseLayerTreeView(WebLayerTreeView&, FrameView*);
+  void LayerTreeViewInitialized(WebLayerTreeView&, LocalFrameView*);
+  void WillCloseLayerTreeView(WebLayerTreeView&, LocalFrameView*);
 
   void WillBeDestroyed();
+
+  void RegisterPluginsChangedObserver(PluginsChangedObserver*);
 
  private:
   friend class ScopedPageSuspender;
@@ -292,6 +312,9 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // ScopedPageSuspender helpers.
   void SetSuspended(bool);
 
+  // Notify |plugins_changed_observers_| that plugins have changed.
+  void NotifyPluginsChanged() const;
+
   Member<PageAnimator> animator_;
   const Member<AutoscrollController> autoscroll_controller_;
   Member<ChromeClient> chrome_client_;
@@ -302,6 +325,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   const std::unique_ptr<PageScaleConstraintsSet> page_scale_constraints_set_;
   const Member<PointerLockController> pointer_lock_controller_;
   Member<ScrollingCoordinator> scrolling_coordinator_;
+  Member<SmoothScrollSequencer> smooth_scroll_sequencer_;
   const Member<BrowserControls> browser_controls_;
   const Member<ConsoleMessageStorage> console_message_storage_;
   const Member<EventHandlerRegistry> event_handler_registry_;
@@ -318,13 +342,13 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   // However, there are several locations (InspectorOverlay, SVGImage, and
   // WebPagePopupImpl) which don't hold a reference to the main frame at all
   // after creating it. These are still safe because they always create a
-  // Frame with a FrameView. FrameView and Frame hold references to each
-  // other, thus keeping each other alive. The call to willBeDestroyed()
+  // Frame with a LocalFrameView. LocalFrameView and Frame hold references to
+  // each other, thus keeping each other alive. The call to willBeDestroyed()
   // breaks this cycle, so the frame is still properly destroyed once no
   // longer needed.
   Member<Frame> main_frame_;
 
-  mutable RefPtr<PluginData> plugin_data_;
+  Member<PluginData> plugin_data_;
 
   EditorClient* const editor_client_;
   SpellCheckerClient* const spell_checker_client_;
@@ -333,6 +357,7 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
   UseCounter use_counter_;
   Deprecation deprecation_;
   HostsUsingFeatures hosts_using_features_;
+  WebWindowFeatures window_features_;
 
   bool opened_by_dom_;
   // Set to true when window.close() has been called and the Page will be
@@ -356,6 +381,8 @@ class CORE_EXPORT Page final : public GarbageCollectedFinalized<Page>,
 #endif
 
   int subframe_count_;
+
+  HeapHashSet<WeakMember<PluginsChangedObserver>> plugins_changed_observers_;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT Supplement<Page>;

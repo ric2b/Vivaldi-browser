@@ -5829,8 +5829,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // Submit the form.
   TestNavigationObserver observer(shell()->web_contents(), 1);
-  EXPECT_TRUE(ExecuteScript(
-      shell(), "window.domAutomationController.send(submitForm('isubmit'))"));
+  ExecuteScriptAsync(shell(), "submitForm('isubmit')");
   observer.Wait();
 
   EXPECT_EQ(2, controller.GetEntryCount());
@@ -5843,10 +5842,7 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
     EXPECT_EQ("GET", root_entry->method());
     EXPECT_EQ(-1, root_entry->post_id());
     EXPECT_EQ("POST", frame_entry->method());
-    // TODO(clamy): Check the post id as well when PlzNavigate handles it
-    // properly.
-    if (!IsBrowserSideNavigationEnabled())
-      EXPECT_NE(-1, frame_entry->post_id());
+    EXPECT_NE(-1, frame_entry->post_id());
     EXPECT_FALSE(entry->GetHasPostData());
     EXPECT_EQ(-1, entry->GetPostID());
   }
@@ -6843,9 +6839,9 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
   // unsafe redirect and will result in a blocked navigation and error page.
   // TODO(nasko): Find a different way to cause a blocked navigation, so
   // we test a bit more generic case.
-  GURL redirect_to_blank_url(
+  GURL redirect_to_unsafe_url(
       embedded_test_server()->GetURL("/server-redirect?data:text/html,Hello!"));
-  EXPECT_FALSE(NavigateToURL(shell(), redirect_to_blank_url));
+  EXPECT_FALSE(NavigateToURL(shell(), redirect_to_unsafe_url));
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_EQ(PAGE_TYPE_ERROR, controller.GetLastCommittedEntry()->GetPageType());
 
@@ -6861,13 +6857,130 @@ IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
 
   // The expectation is that about:blank was loaded and the virtual URL is set
   // to the URL that was blocked.
+  //
+  // TODO(nasko): Now that the error commits on the previous URL, the blocked
+  // navigation logic is no longer needed. https://crbug.com/723796
   EXPECT_EQ(1, controller.GetLastCommittedEntryIndex());
   EXPECT_FALSE(
       controller.GetLastCommittedEntry()->GetURL().SchemeIs(url::kDataScheme));
-  EXPECT_TRUE(controller.GetLastCommittedEntry()->GetVirtualURL().SchemeIs(
-      url::kDataScheme));
+  EXPECT_EQ(redirect_to_unsafe_url,
+            controller.GetLastCommittedEntry()->GetVirtualURL());
   EXPECT_EQ(url::kAboutBlankURL,
             controller.GetLastCommittedEntry()->GetURL().spec());
+}
+
+// If the main frame does a load, it should not be reported as a subframe
+// navigation. This used to occur in the following case:
+// 1. You're on a site with frames.
+// 2. You do a subframe navigation. This was stored with transition type
+//    MANUAL_SUBFRAME.
+// 3. You navigate to some non-frame site.
+// 4. You navigate back to the page from step 2. Since it was initially
+//    MANUAL_SUBFRAME, it will be that same transition type here.
+// We don't want that, because any navigation that changes the toplevel frame
+// should be tracked as a toplevel navigation (this allows us to update the URL
+// bar, etc).
+IN_PROC_BROWSER_TEST_F(NavigationControllerBrowserTest,
+                       GoBackToManualSubFrame) {
+  GURL main_url(embedded_test_server()->GetURL(
+      "/navigation_controller/page_with_iframe.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), main_url));
+
+  FrameTreeNode* root = static_cast<WebContentsImpl*>(shell()->web_contents())
+                            ->GetFrameTree()
+                            ->root();
+
+  ASSERT_EQ(1U, root->child_count());
+  ASSERT_NE(nullptr, root->child_at(0));
+
+  {
+    // Iframe initial load.
+    LoadCommittedCapturer capturer(root->child_at(0));
+    GURL frame_url(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_1.html"));
+    NavigateFrameToURL(root->child_at(0), frame_url);
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition_type(), ui::PAGE_TRANSITION_AUTO_SUBFRAME));
+  }
+
+  {
+    // Iframe manual navigation.
+    FrameNavigateParamsCapturer capturer(root->child_at(0));
+    GURL frame_url(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_2.html"));
+    NavigateFrameToURL(root->child_at(0), frame_url);
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition(), ui::PAGE_TRANSITION_MANUAL_SUBFRAME));
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_SUBFRAME, capturer.navigation_type());
+  }
+
+  {
+    // Main frame navigation.
+    FrameNavigateParamsCapturer capturer(root);
+    GURL main_url_2(embedded_test_server()->GetURL(
+        "/navigation_controller/simple_page_2.html"));
+    NavigateFrameToURL(root, main_url_2);
+    capturer.Wait();
+    EXPECT_EQ(NAVIGATION_TYPE_NEW_PAGE, capturer.navigation_type());
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition(), ui::PAGE_TRANSITION_LINK));
+  }
+
+  {
+    // Check the history before going back.
+    NavigationControllerImpl& controller =
+        static_cast<NavigationControllerImpl&>(
+            shell()->web_contents()->GetController());
+    EXPECT_EQ(3, controller.GetEntryCount());
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(0)->GetTransitionType(),
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+    // TODO(creis, arthursonzogni): The correct PageTransition is still an open
+    // question. Maybe PAGE_TRANSITION_MANUAL_SUBFRAME is more appropriate.
+    // Please see https://crbug.com/740461.
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(1)->GetTransitionType(),
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(2)->GetTransitionType(),
+        ui::PAGE_TRANSITION_LINK));
+  }
+
+  {
+    // Back.
+    FrameNavigateParamsCapturer capturer(root);
+    shell()->web_contents()->GetController().GoBack();
+    capturer.Wait();
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        capturer.transition(),
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FORWARD_BACK |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+  }
+
+  {
+    // Check the history again.
+    NavigationControllerImpl& controller =
+        static_cast<NavigationControllerImpl&>(
+            shell()->web_contents()->GetController());
+    EXPECT_EQ(3, controller.GetEntryCount());
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(0)->GetTransitionType(),
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(1)->GetTransitionType(),
+        ui::PageTransitionFromInt(ui::PAGE_TRANSITION_TYPED |
+                                  ui::PAGE_TRANSITION_FORWARD_BACK |
+                                  ui::PAGE_TRANSITION_FROM_ADDRESS_BAR)));
+    EXPECT_TRUE(ui::PageTransitionTypeIncludingQualifiersIs(
+        controller.GetEntryAtIndex(2)->GetTransitionType(),
+        ui::PAGE_TRANSITION_LINK));
+  }
 }
 
 }  // namespace content

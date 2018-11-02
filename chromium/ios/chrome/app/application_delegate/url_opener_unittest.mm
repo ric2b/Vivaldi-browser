@@ -70,13 +70,18 @@ typedef Tab* (^mock_gurl_nsuinteger_pagetransition)(const GURL&,
 @property(nonatomic, assign) GURL tabURL;
 @property(nonatomic, assign) NSUInteger position;
 @property(nonatomic, assign) ui::PageTransition transition;
+@property(nonatomic, assign)
+    ProceduralBlock foregroundTabWasAddedCompletionBlock;
 
 - (Tab*)addSelectedTabWithURL:(const GURL&)url
                       atIndex:(NSUInteger)position
-                   transition:(ui::PageTransition)transition;
+                   transition:(ui::PageTransition)transition
+           tabAddedCompletion:(ProceduralBlock)completion;
 - (void)expectNewForegroundTab;
 - (void)setActive:(BOOL)active;
 - (TabModel*)tabModel;
+- (void)browserStateDestroyed;
+- (void)shutdown;
 @end
 
 @implementation URLOpenerMockBVC
@@ -84,13 +89,17 @@ typedef Tab* (^mock_gurl_nsuinteger_pagetransition)(const GURL&,
 @synthesize tabURL = _tabURL;
 @synthesize position = _position;
 @synthesize transition = _transition;
+@synthesize foregroundTabWasAddedCompletionBlock =
+    _foregroundTabWasAddedCompletionBlock;
 
 - (Tab*)addSelectedTabWithURL:(const GURL&)url
                       atIndex:(NSUInteger)position
-                   transition:(ui::PageTransition)transition {
+                   transition:(ui::PageTransition)transition
+           tabAddedCompletion:(ProceduralBlock)completion {
   self.tabURL = url;
   self.position = position;
   self.transition = transition;
+  self.foregroundTabWasAddedCompletionBlock = completion;
   return nil;
 }
 
@@ -110,10 +119,23 @@ typedef Tab* (^mock_gurl_nsuinteger_pagetransition)(const GURL&,
   return nil;
 }
 
+- (void)browserStateDestroyed {
+  // no-op
+}
+
+- (void)shutdown {
+  // no-op
+}
+
 @end
 
 class URLOpenerTest : public PlatformTest {
  protected:
+  void TearDown() override {
+    [main_controller_ stopChromeMain];
+    PlatformTest::TearDown();
+  }
+
   MainController* GetMainController() {
     if (!main_controller_) {
       main_controller_ = [[MainController alloc] init];

@@ -12,7 +12,7 @@ import "ui/gfx/mojo/transform.mojom";
 
 // See cc/quads/render_pass.h.
 struct RenderPass {
-  int32 id;
+  uint64 id;
   gfx.mojom.Rect output_rect;
   gfx.mojom.Rect damage_rect;
   gfx.mojom.Transform transform_to_root_target;
@@ -20,5 +20,7 @@ struct RenderPass {
   cc.mojom.FilterOperations background_filters;
   gfx.mojom.ColorSpace color_space;
   bool has_transparent_background;
+  bool cache_render_pass = false;
+  bool has_damage_from_contributing_content = false;
   array<DrawQuad> quad_list;
 };

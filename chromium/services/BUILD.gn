@@ -13,16 +13,23 @@ import("//testing/test.gni")
 # To add tests for a new service, please define a "tests" source_set in the
 # service subdirectory and add it as a dependency here. If your unit tests
 # use the ServiceTest framework, you must also include corresponding catalog
-# entries in the "service_unittests_catalog" target below.
-service_test("service_unittests") {
+# entries in the "services_unittests_catalog" target below.
+service_test("services_unittests") {
+  # If your service does not run on iOS, its tests should go in the !iOS
+  # section below. If you are unsure, contact blundell@chromium.org.
   deps = [
-    "//services/data_decoder:tests",
-    "//services/device:tests",
     "//services/identity:tests",
-    "//services/preferences:tests",
-    "//services/resource_coordinator:tests",
-    "//services/shape_detection:tests",
   ]
+
+  if (!is_ios) {
+    deps += [
+      "//services/data_decoder:tests",
+      "//services/device:tests",
+      "//services/preferences:tests",
+      "//services/resource_coordinator:tests",
+      "//services/shape_detection:tests",
+    ]
+  }
 
   if (use_aura) {
     deps += [
@@ -37,6 +44,10 @@ service_test("service_unittests") {
     if (is_linux && !is_chromeos) {
       deps += [ "//services/ui/demo:tests" ]
     }
+
+    if (use_ozone || (!is_chromeos && !is_mac && !is_ios)) {
+      deps += [ "//services/ui/ws:tests" ]
+    }
   }
 
   if (is_android) {
@@ -46,10 +57,12 @@ service_test("service_unittests") {
       # Some tests need to initialize V8.
       "//v8:v8_external_startup_data_assets",
     ]
-  } else {
-    # NOTE: We do not currently support standalone service binaries on Android,
-    # so any tests which use the ServiceTest framework to connect to standalone
-    # services must be added here.
+  }
+
+  if (!is_android && !is_ios) {
+    # NOTE: We do not currently support standalone service binaries on Android
+    # or iOS, so any tests which use the ServiceTest framework to connect to
+    # standalone services must be added here.
     deps += [ "//services/video_capture:tests" ]
   }
 
@@ -59,18 +72,24 @@ service_test("service_unittests") {
 
   test_runner = "//services/test:run_all_service_tests"
 
-  catalog = ":service_unittests_catalog"
+  catalog = ":services_unittests_catalog"
 }
 
-catalog("service_unittests_catalog") {
+catalog("services_unittests_catalog") {
   testonly = true
-  catalog_deps = [
-    "//services/device:tests_catalog",
-    "//services/identity:tests_catalog",
-    "//services/preferences:tests_catalog",
-    "//services/resource_coordinator:tests_catalog",
-    "//services/video_capture:tests_catalog",
-  ]
+
+  # The division between "all platforms" and "!iOS" here needs to match that
+  # for the main deps list in the services_unittests target above.
+  catalog_deps = [ "//services/identity:tests_catalog" ]
+
+  if (!is_ios) {
+    catalog_deps += [
+      "//services/device:tests_catalog",
+      "//services/preferences:tests_catalog",
+      "//services/resource_coordinator:tests_catalog",
+      "//services/video_capture:tests_catalog",
+    ]
+  }
 
   if (use_aura) {
     catalog_deps += [
@@ -82,6 +101,10 @@ catalog("service_unittests_catalog") {
     if (is_linux && !is_chromeos) {
       catalog_deps += [ "//services/ui/demo:tests_catalog" ]
     }
+
+    if (use_ozone || (!is_chromeos && !is_ios)) {
+      catalog_deps += [ "//services/ui/ws:tests_catalog" ]
+    }
   }
 }
 
@@ -90,7 +113,7 @@ if (is_android) {
     java_files = [
       "device/generic_sensor/android/junit/src/org/chromium/device/sensors/PlatformSensorAndProviderTest.java",
       "device/nfc/android/junit/src/org/chromium/device/nfc/NFCTest.java",
-      "shape_detection/android/junit/src/org/chromium/shape_detection/SharedBufferUtilsTest.java",
+      "shape_detection/android/junit/src/org/chromium/shape_detection/BitmapUtilsTest.java",
     ]
     deps = [
       "$google_play_services_package:google_play_services_base_java",
@@ -99,15 +122,42 @@ if (is_android) {
       "$google_play_services_package:google_play_services_vision_java",
       "//base:base_java",
       "//base:base_java_test_support",
-      "//device/generic_sensor:java",
-      "//device/generic_sensor/public/interfaces:interfaces_java",
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
+      "//services/device/generic_sensor:java",
       "//services/device/nfc/android:java",
+      "//services/device/public/interfaces:generic_sensor_java",
       "//services/device/public/interfaces:interfaces_java",
       "//services/device/public/java:nfc_java",
       "//services/shape_detection:shape_detection_java",
+      "//skia/public/interfaces:interfaces_java",
       "//third_party/android_tools:android_support_annotations_java",
+    ]
+  }
+
+  android_library("service_javatests") {
+    testonly = true
+    java_files = [
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/BarcodeDetectionImplTest.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/FaceDetectionImplTest.java",
+      "shape_detection/android/javatests/src/org/chromium/shape_detection/TestUtils.java",
+    ]
+    deps = [
+      "$google_play_services_package:google_play_services_base_java",
+      "$google_play_services_package:google_play_services_basement_java",
+      "$google_play_services_package:google_play_services_vision_common_java",
+      "$google_play_services_package:google_play_services_vision_java",
+      "//base:base_java",
+      "//base:base_java_test_support",
+      "//mojo/public/java:bindings_java",
+      "//services/shape_detection:shape_detection_java",
+      "//services/shape_detection/public/interfaces:interfaces_java",
+      "//skia/public/interfaces:interfaces_java",
+      "//third_party/android_support_test_runner:runner_java",
+      "//ui/gfx/geometry/mojo:mojo_java",
+    ]
+    data = [
+      "test/data/",
     ]
   }
 }

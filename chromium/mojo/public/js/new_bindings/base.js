@@ -34,17 +34,24 @@ mojo.config = {
   // you merge bar.mojom.js and foo.mojom.js into a single file.
   //
   // Performance tip: Avoid loading the same mojom.js file multiple times.
-  // Assume that |autoLoadMojomDeps| is set to true:
-  // <!-- No duplicate loading; recommended. -->
+  // Assume that |autoLoadMojomDeps| is set to true,
+  //
+  // <!--
+  // (This comment tag is necessary on IOS to avoid interpreting the closing
+  // script tags in the example.)
+  //
+  // No duplicate loading; recommended:
   // <script src="http://example.org/scripts/b/c/foo.mojom.js"></script>
   //
-  // <!-- No duplicate loading, although unnecessary. -->
+  // No duplicate loading, although unnecessary:
   // <script src="http://example.org/scripts/b/d/bar.mojom.js"></script>
   // <script src="http://example.org/scripts/b/c/foo.mojom.js"></script>
   //
-  // <!-- Load bar.mojom.js twice; should be avoided. -->
+  // Load bar.mojom.js twice; should be avoided:
   // <script src="http://example.org/scripts/b/c/foo.mojom.js"></script>
   // <script src="http://example.org/scripts/b/d/bar.mojom.js"></script>
+  //
+  // -->
   autoLoadMojomDeps: true
 };
 
@@ -92,14 +99,22 @@ mojo.config = {
     mojomRegistry.set(id, LoadState.LOADED);
   }
 
-  function loadMojomIfNecessary(id, url) {
+  function loadMojomIfNecessary(id, relativePath) {
     if (mojomRegistry.has(id)) {
       return;
     }
 
+    if (internal.global.document === undefined) {
+      throw new Error(
+          'Mojom dependency autoloading is not implemented in workers. ' +
+          'Please see config variable mojo.config.autoLoadMojomDeps for more ' +
+          'details.');
+    }
+
     markMojomPendingLoad(id);
+    var url = new URL(relativePath, document.currentScript.src).href;
     internal.global.document.write('<script type="text/javascript" src="' +
-                                   url + '"></script>');
+                                   url + '"><' + '/script>');
   }
 
   internal.exposeNamespace = exposeNamespace;

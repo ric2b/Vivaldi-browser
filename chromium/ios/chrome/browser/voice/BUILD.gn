@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("voice") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "speech_input_locale.h",
     "speech_input_locale_config.h",
@@ -74,7 +75,7 @@ source_set("unit_tests") {
     ":tts",
     "//base",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/google_toolbox_for_mac",
   ]

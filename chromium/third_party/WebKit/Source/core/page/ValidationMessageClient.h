@@ -56,10 +56,12 @@ class ValidationMessageClient : public GarbageCollectedMixin {
   // is visible.
   virtual bool IsValidationMessageVisible(const Element& anchor) = 0;
 
-  virtual void WillUnloadDocument(const Document&) = 0;
   virtual void DocumentDetached(const Document&) = 0;
 
   virtual void WillBeDestroyed() = 0;
+
+  virtual void LayoutOverlay() {}
+  virtual void PaintOverlay() {}
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 };

@@ -133,13 +133,13 @@ HRESULT STDMETHODCALLTYPE WMFByteStream::SetCurrentPosition(QWORD position) {
   }
 
   if(read_stream_->IsStreaming()) {
-    LOG(WARNING) << " PROPMEDIA(GPU) : " << __FUNCTION__
-                 << " Cannot SetCurrentPosition to " << position
-                 << " Media is streaming";
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " Cannot SetCurrentPosition to " << position
+            << " Media is streaming";
   }
   else
   {
-    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+    VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__
             << " SetCurrentPosition " << position;
     read_stream_->SetCurrentPosition(position);
   }

@@ -47,6 +47,24 @@ Main.Main = class {
     SDK.ResourceTreeModel.reloadAllPages(hard);
   }
 
+  /**
+   * @param {string} label
+   */
+  static time(label) {
+    if (Host.isUnderTest())
+      return;
+    console.time(label);
+  }
+
+  /**
+   * @param {string} label
+   */
+  static timeEnd(label) {
+    if (Host.isUnderTest())
+      return;
+    console.timeEnd(label);
+  }
+
   _loaded() {
     console.timeStamp('Main._loaded');
     Runtime.setPlatform(Host.platform());
@@ -104,6 +122,7 @@ Main.Main = class {
     Runtime.experiments.register('liveSASS', 'Live SASS');
     Runtime.experiments.register('networkGroupingRequests', 'Network request groups support', true);
     Runtime.experiments.register('objectPreviews', 'Object previews', true);
+    Runtime.experiments.register('networkInWorkers', 'Network in workers', true);
     Runtime.experiments.register('persistence2', 'Persistence 2.0');
     Runtime.experiments.register('sourceDiff', 'Source diff');
     Runtime.experiments.register('terminalInDrawer', 'Terminal in drawer', true);
@@ -113,6 +132,7 @@ Main.Main = class {
     Runtime.experiments.register('timelineEventInitiators', 'Timeline: event initiators');
     Runtime.experiments.register('timelineFlowEvents', 'Timeline: flow events', true);
     Runtime.experiments.register('timelineInvalidationTracking', 'Timeline: invalidation tracking', true);
+    Runtime.experiments.register('timelineKeepHistory', 'Timeline: keep recording history');
     Runtime.experiments.register('timelineMultipleMainViews', 'Timeline: multiple main views');
     Runtime.experiments.register('timelinePaintTimingMarkers', 'Timeline: paint timing markers', true);
     Runtime.experiments.register('timelinePerFrameTrack', 'Timeline: per-frame tracks', true);
@@ -148,7 +168,7 @@ Main.Main = class {
    * @suppressGlobalPropertiesCheck
    */
   _createAppUI() {
-    console.time('Main._createAppUI');
+    Main.Main.time('Main._createAppUI');
 
     UI.viewManager = new UI.ViewManager();
 
@@ -186,10 +206,10 @@ Main.Main = class {
 
     Workspace.fileManager = new Workspace.FileManager();
     Workspace.workspace = new Workspace.Workspace();
-    Common.formatterWorkerPool = new Common.FormatterWorkerPool();
     Persistence.fileSystemMapping = new Persistence.FileSystemMapping(Persistence.isolatedFileSystemManager);
 
     Bindings.networkProjectManager = new Bindings.NetworkProjectManager(SDK.targetManager, Workspace.workspace);
+    Bindings.resourceMapping = new Bindings.ResourceMapping(SDK.targetManager, Workspace.workspace);
     Bindings.presentationConsoleMessageHelper = new Bindings.PresentationConsoleMessageHelper(Workspace.workspace);
     Bindings.cssWorkspaceBinding = new Bindings.CSSWorkspaceBinding(SDK.targetManager, Workspace.workspace);
     Bindings.debuggerWorkspaceBinding = new Bindings.DebuggerWorkspaceBinding(SDK.targetManager, Workspace.workspace);
@@ -217,7 +237,7 @@ Main.Main = class {
     this._registerMessageSinkListener();
 
     self.runtime.extension(Common.AppProvider).instance().then(this._showAppUI.bind(this));
-    console.timeEnd('Main._createAppUI');
+    Main.Main.timeEnd('Main._createAppUI');
   }
 
   /**
@@ -225,7 +245,7 @@ Main.Main = class {
    * @suppressGlobalPropertiesCheck
    */
   _showAppUI(appProvider) {
-    console.time('Main._showAppUI');
+    Main.Main.time('Main._showAppUI');
     var app = /** @type {!Common.AppProvider} */ (appProvider).createApp();
     // It is important to kick controller lifetime after apps are instantiated.
     Components.dockController.initialize();
@@ -264,17 +284,17 @@ Main.Main = class {
 
     // Allow UI cycles to repaint prior to creating connection.
     setTimeout(this._initializeTarget.bind(this), 0);
-    console.timeEnd('Main._showAppUI');
+    Main.Main.timeEnd('Main._showAppUI');
   }
 
   _initializeTarget() {
-    console.time('Main._initializeTarget');
+    Main.Main.time('Main._initializeTarget');
     SDK.targetManager.connectToMainTarget(webSocketConnectionLost);
 
     InspectorFrontendHost.readyForTest();
     // Asynchronously run the extensions.
     setTimeout(this._lateInitialization.bind(this), 100);
-    console.timeEnd('Main._initializeTarget');
+    Main.Main.timeEnd('Main._initializeTarget');
 
     function webSocketConnectionLost() {
       if (!Main._disconnectedScreenWithReasonWasShown)
@@ -291,8 +311,10 @@ Main.Main = class {
   }
 
   _registerForwardedShortcuts() {
-    /** @const */ var forwardedActions =
-        ['main.toggle-dock', 'debugger.toggle-breakpoints-active', 'debugger.toggle-pause', 'commandMenu.show'];
+    /** @const */ var forwardedActions = [
+      'main.toggle-dock', 'debugger.toggle-breakpoints-active', 'debugger.toggle-pause', 'commandMenu.show',
+      'console.show'
+    ];
     var actionKeys =
         UI.shortcutRegistry.keysForActions(forwardedActions).map(UI.KeyboardShortcut.keyCodeAndModifiersFromKey);
     InspectorFrontendHost.setWhitelistedShortcuts(JSON.stringify(actionKeys));

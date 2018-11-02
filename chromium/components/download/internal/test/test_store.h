@@ -8,7 +8,9 @@
 #include <string>
 #include <vector>
 
+#include "base/callback.h"
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/download/internal/store.h"
 
 namespace download {
@@ -25,13 +27,14 @@ class TestStore : public Store {
   // Store implementation.
   bool IsInitialized() override;
   void Initialize(InitCallback callback) override;
-  void Destroy(StoreCallback callback) override;
+  void HardRecover(StoreCallback callback) override;
   void Update(const Entry& entry, StoreCallback callback) override;
   void Remove(const std::string& guid, StoreCallback callback) override;
 
   // Callback trigger methods.
+  void AutomaticallyTriggerAllFutureCallbacks(bool success);
   void TriggerInit(bool success, std::unique_ptr<std::vector<Entry>> entries);
-  void TriggerDestroy(bool success);
+  void TriggerHardRecover(bool success);
   void TriggerUpdate(bool success);
   void TriggerRemove(bool success);
 
@@ -39,7 +42,6 @@ class TestStore : public Store {
   const Entry* LastUpdatedEntry() const;
   std::string LastRemovedEntry() const;
   bool init_called() const { return init_called_; }
-  bool destroy_called() const { return destroy_called_; }
   const std::vector<Entry>& updated_entries() const { return updated_entries_; }
   const std::vector<std::string>& removed_entries() const {
     return removed_entries_;
@@ -49,13 +51,13 @@ class TestStore : public Store {
   bool ready_;
 
   bool init_called_;
-  bool destroy_called_;
 
   std::vector<Entry> updated_entries_;
   std::vector<std::string> removed_entries_;
 
+  base::Optional<bool> automatic_callback_response_;
   InitCallback init_callback_;
-  StoreCallback destroy_callback_;
+  StoreCallback hard_recover_callback_;
   StoreCallback update_callback_;
   StoreCallback remove_callback_;
 

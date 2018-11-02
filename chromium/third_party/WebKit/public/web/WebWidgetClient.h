@@ -84,6 +84,10 @@ class WebWidgetClient {
   // Called when the cursor for the widget changes.
   virtual void DidChangeCursor(const WebCursorInfo&) {}
 
+  virtual void AutoscrollStart(const WebFloatPoint&) {}
+  virtual void AutoscrollFling(const WebFloatSize& velocity) {}
+  virtual void AutoscrollEnd() {}
+
   // Called when the widget should be closed.  WebWidget::close() should
   // be called asynchronously as a result of this notification.
   virtual void CloseWidgetSoon() {}
@@ -136,6 +140,9 @@ class WebWidgetClient {
 
   // Called to update if touch events should be sent.
   virtual void HasTouchEventHandlers(bool) {}
+
+  // Called to update whether low latency input mode is enabled or not.
+  virtual void SetNeedsLowLatencyInput(bool) {}
 
   // Called during WebWidget::HandleInputEvent for a TouchStart event to inform
   // the embedder of the touch actions that are permitted for this touch.

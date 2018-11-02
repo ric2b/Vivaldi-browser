@@ -21,6 +21,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/process/kill.h"
 #include "base/process/launch.h"
 #include "base/run_loop.h"
@@ -33,6 +34,7 @@
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/sys_info.h"
 #include "base/test/gtest_util.h"
 #include "base/test/launcher/test_launcher_tracer.h"
 #include "base/test/launcher/test_results_tracker.h"
@@ -160,18 +162,6 @@ void KillSpawnedTestProcesses() {
 
   fprintf(stdout, "done.\n");
   fflush(stdout);
-}
-
-// I/O watcher for the reading end of the self-pipe above.
-// Terminates any launched child processes and exits the process.
-void OnShutdownPipeReadable() {
-  fprintf(stdout, "\nCaught signal. Killing spawned test processes...\n");
-  fflush(stdout);
-
-  KillSpawnedTestProcesses();
-
-  // The signal would normally kill the process, so exit now.
-  _exit(1);
 }
 #endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
 
@@ -492,8 +482,7 @@ const char kGTestRepeatFlag[] = "gtest_repeat";
 const char kGTestRunDisabledTestsFlag[] = "gtest_also_run_disabled_tests";
 const char kGTestOutputFlag[] = "gtest_output";
 
-TestLauncherDelegate::~TestLauncherDelegate() {
-}
+TestLauncherDelegate::~TestLauncherDelegate() {}
 
 TestLauncher::TestLauncher(TestLauncherDelegate* launcher_delegate,
                            size_t parallel_jobs)
@@ -514,8 +503,7 @@ TestLauncher::TestLauncher(TestLauncherDelegate* launcher_delegate,
                       TimeDelta::FromSeconds(kOutputTimeoutSeconds),
                       this,
                       &TestLauncher::OnOutputTimeout),
-      parallel_jobs_(parallel_jobs) {
-}
+      parallel_jobs_(parallel_jobs) {}
 
 TestLauncher::~TestLauncher() {}
 
@@ -542,7 +530,8 @@ bool TestLauncher::Run() {
   CHECK_EQ(0, sigaction(SIGTERM, &action, NULL));
 
   auto controller = base::FileDescriptorWatcher::WatchReadable(
-      g_shutdown_pipe[0], base::Bind(&OnShutdownPipeReadable));
+      g_shutdown_pipe[0],
+      base::Bind(&TestLauncher::OnShutdownPipeReadable, Unretained(this)));
 #endif  // defined(OS_POSIX) && !defined(OS_FUCHSIA)
 
   // Start the watchdog timer.
@@ -816,22 +805,6 @@ bool TestLauncher::Init() {
   if (command_line->HasSwitch(switches::kTestLauncherForceRunBrokenTests))
     force_run_broken_tests_ = true;
 
-  if (command_line->HasSwitch(switches::kTestLauncherJobs)) {
-    size_t jobs = 0U;
-    if (!StringToSizeT(command_line->GetSwitchValueASCII(
-                         switches::kTestLauncherJobs), &jobs) ||
-        !jobs) {
-      LOG(ERROR) << "Invalid value for " << switches::kTestLauncherJobs;
-      return false;
-    }
-
-    parallel_jobs_ = jobs;
-  } else if (command_line->HasSwitch(kGTestFilterFlag) && !BotModeEnabled()) {
-    // Do not run jobs in parallel by default if we are running a subset of
-    // the tests and if bot mode is off.
-    parallel_jobs_ = 1U;
-  }
-
   fprintf(stdout, "Using %" PRIuS " parallel jobs.\n", parallel_jobs_);
   fflush(stdout);
   if (parallel_jobs_ > 1U) {
@@ -927,6 +900,10 @@ bool TestLauncher::Init() {
   results_tracker_.AddGlobalTag("OS_FREEBSD");
 #endif
 
+#if defined(OS_FUCHSIA)
+  results_tracker_.AddGlobalTag("OS_FUCHSIA");
+#endif
+
 #if defined(OS_IOS)
   results_tracker_.AddGlobalTag("OS_IOS");
 #endif
@@ -1009,7 +986,7 @@ void TestLauncher::RunTests() {
     std::string test_name =
         FormatFullTestName(tests_[i].test_case_name, tests_[i].test_name);
 
-    results_tracker_.AddTest(test_name, tests_[i].file, tests_[i].line);
+    results_tracker_.AddTest(test_name);
 
     const CommandLine* command_line = CommandLine::ForCurrentProcess();
     if (test_name.find("DISABLED") != std::string::npos) {
@@ -1062,6 +1039,10 @@ void TestLauncher::RunTests() {
     if (Hash(test_name) % total_shards_ != static_cast<uint32_t>(shard_index_))
       continue;
 
+    // Report test locations after applying all filters, so that we report test
+    // locations only for those tests that were run as part of this shard.
+    results_tracker_.AddTestLocation(test_name, tests_[i].file, tests_[i].line);
+
     test_names.push_back(test_name);
   }
 
@@ -1104,6 +1085,22 @@ void TestLauncher::RunTestIteration() {
   ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE, BindOnce(&TestLauncher::RunTests, Unretained(this)));
 }
+
+#if defined(OS_POSIX) && !defined(OS_FUCHSIA)
+// I/O watcher for the reading end of the self-pipe above.
+// Terminates any launched child processes and exits the process.
+void TestLauncher::OnShutdownPipeReadable() {
+  fprintf(stdout, "\nCaught signal. Killing spawned test processes...\n");
+  fflush(stdout);
+
+  KillSpawnedTestProcesses();
+
+  MaybeSaveSummaryAsJSON({"CAUGHT_TERMINATION_SIGNAL", kUnreliableResultsTag});
+
+  // The signal would normally kill the process, so exit now.
+  _exit(1);
+}
+#endif  // defined(OS_POSIX)
 
 void TestLauncher::MaybeSaveSummaryAsJSON(
     const std::vector<std::string>& additional_tags) {
@@ -1190,6 +1187,32 @@ scoped_refptr<TaskRunner> TestLauncher::GetTaskRunner() {
     return worker_pool_owner_->pool();
   DCHECK(worker_thread_->IsRunning());
   return worker_thread_->task_runner();
+}
+
+size_t NumParallelJobs() {
+  CommandLine* command_line = CommandLine::ForCurrentProcess();
+  CommandLine::SwitchMap switches = command_line->GetSwitches();
+
+  if (command_line->HasSwitch(switches::kTestLauncherJobs)) {
+    // If the number of test launcher jobs was specified, return that number.
+    size_t jobs = 0U;
+
+    if (!StringToSizeT(
+            command_line->GetSwitchValueASCII(switches::kTestLauncherJobs),
+            &jobs) ||
+        !jobs) {
+      LOG(ERROR) << "Invalid value for " << switches::kTestLauncherJobs;
+      return 0U;
+    }
+    return jobs;
+  } else if (command_line->HasSwitch(kGTestFilterFlag) && !BotModeEnabled()) {
+    // Do not run jobs in parallel by default if we are running a subset of
+    // the tests and if bot mode is off.
+    return 1U;
+  }
+
+  // Default to the number of processor cores.
+  return base::checked_cast<size_t>(SysInfo::NumberOfProcessors());
 }
 
 std::string GetTestOutputSnippet(const TestResult& result,

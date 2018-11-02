@@ -17,6 +17,7 @@
 #include "cc/cc_export.h"
 #include "cc/layers/layer_sticky_position_constraint.h"
 #include "cc/trees/element_id.h"
+#include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/scroll_offset.h"
 #include "ui/gfx/transform.h"
@@ -31,6 +32,7 @@ namespace cc {
 
 class CopyOutputRequest;
 class LayerTreeImpl;
+class MutatorHost;
 class RenderSurfaceImpl;
 class ScrollState;
 struct ClipNode;
@@ -100,45 +102,8 @@ class CC_EXPORT PropertyTree {
 
   void AsValueInto(base::trace_event::TracedValue* value) const;
 
-  const T* FindNodeFromOwningLayerId(int id) const {
-    return Node(FindNodeIndexFromOwningLayerId(id));
-  }
-  T* UpdateNodeFromOwningLayerId(int id) {
-    int index = FindNodeIndexFromOwningLayerId(id);
-    if (index == kInvalidNodeId) {
-      DCHECK(property_trees()->is_main_thread);
-      property_trees()->needs_rebuild = true;
-    }
-
-    return Node(index);
-  }
-
-  int FindNodeIndexFromOwningLayerId(int id) const {
-    auto iter = owning_layer_id_to_node_index_.find(id);
-    if (iter == owning_layer_id_to_node_index_.end())
-      return kInvalidNodeId;
-    else
-      return iter->second;
-  }
-
-  void SetOwningLayerIdForNode(const T* node, int id) {
-    if (!node) {
-      owning_layer_id_to_node_index_[id] = kInvalidNodeId;
-      return;
-    }
-
-    DCHECK(node == Node(node->id));
-    owning_layer_id_to_node_index_[id] = node->id;
-  }
-
- private:
+ protected:
   std::vector<T> nodes_;
-
-  // Maps from layer id to the property tree node index. This container is
-  // typically very small and the memory overhead of unordered_map will
-  // dominate so use a flat_map. See http://crbug.com/709243
-  base::flat_map<int, int> owning_layer_id_to_node_index_;
-
   bool needs_update_;
   PropertyTrees* property_trees_;
 };
@@ -309,11 +274,6 @@ struct StickyPositionNodeData {
   int scroll_ancestor;
   LayerStickyPositionConstraint constraints;
 
-  // This is the offset that blink has already applied to counteract the main
-  // thread scroll offset of the scroll ancestor. We need to account for this
-  // by computing the additional offset necessary to keep the element stuck.
-  gfx::Vector2dF main_thread_offset;
-
   // In order to properly compute the sticky offset, we need to know if we have
   // any sticky ancestors both between ourselves and our containing block and
   // between our containing block and the viewport. These ancestors are then
@@ -436,11 +396,11 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void clear();
 
   gfx::ScrollOffset MaxScrollOffset(int scroll_node_id) const;
-  void OnScrollOffsetAnimated(int layer_id,
+  void OnScrollOffsetAnimated(ElementId id,
                               int scroll_tree_index,
                               const gfx::ScrollOffset& scroll_offset,
                               LayerTreeImpl* layer_tree_impl);
-  gfx::Size scroll_clip_layer_bounds(int scroll_node_id) const;
+  gfx::Size container_bounds(int scroll_node_id) const;
   ScrollNode* CurrentlyScrollingNode();
   const ScrollNode* CurrentlyScrollingNode() const;
 #if DCHECK_IS_ON()
@@ -452,13 +412,13 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   // Returns the current scroll offset. On the main thread this would return the
   // value for the LayerTree while on the impl thread this is the current value
   // on the active tree.
-  const gfx::ScrollOffset current_scroll_offset(int layer_id) const;
+  const gfx::ScrollOffset current_scroll_offset(ElementId id) const;
 
   // Collects deltas for scroll changes on the impl thread that need to be
   // reported to the main thread during the main frame. As such, should only be
   // called on the impl thread side PropertyTrees.
   void CollectScrollDeltas(ScrollAndScaleSet* scroll_info,
-                           int inner_viewport_layer_id);
+                           ElementId inner_viewport_scroll_element_id);
 
   // Applies deltas sent in the previous main frame onto the impl thread state.
   // Should only be called on the impl thread side PropertyTrees.
@@ -474,18 +434,18 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   void PushScrollUpdatesFromPendingTree(PropertyTrees* pending_property_trees,
                                         LayerTreeImpl* active_tree);
 
-  bool SetBaseScrollOffset(int layer_id,
+  bool SetBaseScrollOffset(ElementId id,
                            const gfx::ScrollOffset& scroll_offset);
-  bool SetScrollOffset(int layer_id, const gfx::ScrollOffset& scroll_offset);
-  void SetScrollOffsetClobberActiveValue(int layer_id) {
-    GetOrCreateSyncedScrollOffset(layer_id)->set_clobber_active_value();
+  bool SetScrollOffset(ElementId id, const gfx::ScrollOffset& scroll_offset);
+  void SetScrollOffsetClobberActiveValue(ElementId id) {
+    GetOrCreateSyncedScrollOffset(id)->set_clobber_active_value();
   }
-  bool UpdateScrollOffsetBaseForTesting(int layer_id,
+  bool UpdateScrollOffsetBaseForTesting(ElementId id,
                                         const gfx::ScrollOffset& offset);
-  bool SetScrollOffsetDeltaForTesting(int layer_id,
+  bool SetScrollOffsetDeltaForTesting(ElementId id,
                                       const gfx::Vector2dF& delta);
-  const gfx::ScrollOffset GetScrollOffsetBaseForTesting(int layer_id) const;
-  const gfx::ScrollOffset GetScrollOffsetDeltaForTesting(int layer_id) const;
+  const gfx::ScrollOffset GetScrollOffsetBaseForTesting(ElementId id) const;
+  const gfx::ScrollOffset GetScrollOffsetDeltaForTesting(ElementId id) const;
   void CollectScrollDeltasForTesting();
 
   void DistributeScroll(ScrollNode* scroll_node, ScrollState* scroll_state);
@@ -495,7 +455,7 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   gfx::ScrollOffset ClampScrollOffsetToLimits(gfx::ScrollOffset offset,
                                               ScrollNode* scroll_node) const;
 
-  const SyncedScrollOffset* GetSyncedScrollOffset(int layer_id) const;
+  const SyncedScrollOffset* GetSyncedScrollOffset(ElementId id) const;
 
 #if DCHECK_IS_ON()
   void CopyCompleteTreeState(const ScrollTree& other);
@@ -504,9 +464,9 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   ScrollNode* FindNodeFromElementId(ElementId id);
 
  private:
-  using ScrollOffsetMap = base::flat_map<int, gfx::ScrollOffset>;
+  using ScrollOffsetMap = base::flat_map<ElementId, gfx::ScrollOffset>;
   using SyncedScrollOffsetMap =
-      base::flat_map<int, scoped_refptr<SyncedScrollOffset>>;
+      base::flat_map<ElementId, scoped_refptr<SyncedScrollOffset>>;
 
   int currently_scrolling_node_id_;
 
@@ -515,10 +475,10 @@ class CC_EXPORT ScrollTree final : public PropertyTree<ScrollNode> {
   // thread stores a map of SyncedProperty instances in order to track
   // additional state necessary to synchronize scroll changes between the main
   // and impl threads.
-  ScrollOffsetMap layer_id_to_scroll_offset_map_;
-  SyncedScrollOffsetMap layer_id_to_synced_scroll_offset_map_;
+  ScrollOffsetMap scroll_offset_map_;
+  SyncedScrollOffsetMap synced_scroll_offset_map_;
 
-  SyncedScrollOffset* GetOrCreateSyncedScrollOffset(int layer_id);
+  SyncedScrollOffset* GetOrCreateSyncedScrollOffset(ElementId id);
   gfx::ScrollOffset PullDeltaForMainThread(SyncedScrollOffset* scroll_offset);
 };
 
@@ -670,10 +630,18 @@ class CC_EXPORT PropertyTrees final {
 
   void clear();
 
+  // Applies an animation state change for a particular element in
+  // this property tree. Returns whether a draw property update is
+  // needed.
+  bool ElementIsAnimatingChanged(const MutatorHost* mutator_host,
+                                 ElementId element_id,
+                                 ElementListType list_type,
+                                 const PropertyAnimationState& mask,
+                                 const PropertyAnimationState& state,
+                                 bool check_node_existence);
   void SetInnerViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetOuterViewportContainerBoundsDelta(gfx::Vector2dF bounds_delta);
   void SetInnerViewportScrollBoundsDelta(gfx::Vector2dF bounds_delta);
-  void RemoveIdFromIdToIndexMaps(int id);
   void UpdateChangeTracking();
   void PushChangeTrackingTo(PropertyTrees* tree);
   void ResetAllChangeTracking();

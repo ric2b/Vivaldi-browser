@@ -47,6 +47,10 @@
 #include "ash/shelf/shelf_constants.h"  // nogncheck
 #endif
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#endif
+
 #if BUILDFLAG(ENABLE_PRINTING)
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
 #include "chrome/browser/printing/print_preview_message_handler.h"
@@ -166,6 +170,7 @@ ChromeAppDelegate::NewWindowContentsDelegate::OpenURLFromTab(
 ChromeAppDelegate::ChromeAppDelegate(bool keep_alive)
     : has_been_shown_(false),
       is_hidden_(true),
+      for_lock_screen_app_(false),
       new_window_contents_delegate_(new NewWindowContentsDelegate()),
       weak_factory_(this) {
   if (keep_alive) {
@@ -297,7 +302,7 @@ bool ChromeAppDelegate::CheckMediaAccessPermission(
           web_contents, security_origin, type, extension);
 }
 
-int ChromeAppDelegate::PreferredIconSize() {
+int ChromeAppDelegate::PreferredIconSize() const {
 #if defined(USE_ASH)
   return ash::kShelfSize;
 #else
@@ -349,6 +354,18 @@ void ChromeAppDelegate::OnShow() {
   is_hidden_ = false;
   keep_alive_.reset(new ScopedKeepAlive(KeepAliveOrigin::CHROME_APP_DELEGATE,
                                         KeepAliveRestartOption::DISABLED));
+}
+
+bool ChromeAppDelegate::TakeFocus(content::WebContents* web_contents,
+                                  bool reverse) {
+  if (!for_lock_screen_app_)
+    return false;
+#if defined(OS_CHROMEOS)
+  return lock_screen_apps::StateController::Get()->HandleTakeFocus(web_contents,
+                                                                   reverse);
+#else
+  return false;
+#endif
 }
 
 void ChromeAppDelegate::Observe(int type,

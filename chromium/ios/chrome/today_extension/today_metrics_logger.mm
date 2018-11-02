@@ -22,7 +22,7 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_service_client.h"
-#include "components/metrics/net/version_utils.h"
+#include "components/metrics/version_utils.h"
 #include "components/prefs/json_pref_store.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -45,9 +45,6 @@ NSString* const kTodayExtensionMetricsSessionID = @"MetricsSessionID";
 // User default key to the current log serialized. In case of an extension
 // restart, this log can be written to disk for upload.
 NSString* const kTodayExtensionMetricsCurrentLog = @"MetricsCurrentLog";
-
-// Maximum number of event in a log.
-const int kMaxEventsPerLog = 1000;
 
 // Maximum age of a log.
 const int kMaxLogLifeTimeInSeconds = 86400;
@@ -207,9 +204,9 @@ void TodayMetricsLogger::PersistLogs() {
   [[NSUserDefaults standardUserDefaults]
       setObject:ns_encoded_log
          forKey:kTodayExtensionMetricsCurrentLog];
-  if (log_->num_events() >= kMaxEventsPerLog ||
-      (base::TimeTicks::Now() - log_->creation_time()).InSeconds() >=
-          kMaxLogLifeTimeInSeconds) {
+  log_->TruncateEvents();
+  if ((base::TimeTicks::Now() - log_->creation_time()).InSeconds() >=
+      kMaxLogLifeTimeInSeconds) {
     CreateNewLog();
   }
 }
@@ -253,8 +250,7 @@ bool TodayMetricsLogger::CreateNewLog() {
 
   log_->RecordEnvironment(
       std::vector<std::unique_ptr<metrics::MetricsProvider>>(),
-      std::vector<variations::ActiveGroupId>(), [install_date longLongValue],
-      [enabled_date longLongValue]);
+      [install_date longLongValue], [enabled_date longLongValue]);
 
   return true;
 }

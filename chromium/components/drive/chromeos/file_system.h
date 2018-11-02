@@ -25,7 +25,6 @@ class PrefService;
 
 namespace base {
 class SequencedTaskRunner;
-class SingleThreadTaskRunner;
 }  // namespace base
 
 namespace google_apis {
@@ -75,7 +74,6 @@ class FileSystem : public FileSystemInterface,
              JobScheduler* scheduler,
              internal::ResourceMetadata* resource_metadata,
              base::SequencedTaskRunner* blocking_task_runner,
-             base::SingleThreadTaskRunner* file_task_runner,
              const base::FilePath& temporary_file_directory);
   ~FileSystem() override;
 
@@ -89,6 +87,7 @@ class FileSystem : public FileSystemInterface,
   void SearchMetadata(const std::string& query,
                       int options,
                       int at_most_num_matches,
+                      MetadataSearchOrder order,
                       const SearchMetadataCallback& callback) override;
   void SearchByHashes(const std::set<std::string>& hashes,
                       const SearchByHashesCallback& callback) override;
@@ -282,7 +281,6 @@ class FileSystem : public FileSystemInterface,
   base::ObserverList<FileSystemObserver> observers_;
 
   scoped_refptr<base::SequencedTaskRunner> blocking_task_runner_;
-  scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
 
   base::FilePath temporary_file_directory_;
 

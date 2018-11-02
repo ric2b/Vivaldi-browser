@@ -6,7 +6,9 @@
 #define COMPONENTS_PASSWORD_MANAGER_CORE_BROWSER_STUB_PASSWORD_MANAGER_CLIENT_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
+#include "components/password_manager/core/browser/password_manager_metrics_recorder.h"
 #include "components/password_manager/core/browser/stub_credentials_filter.h"
 #include "components/password_manager/core/browser/stub_log_manager.h"
 
@@ -48,13 +50,18 @@ class StubPasswordManagerClient : public PasswordManagerClient {
       const override;
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override;
-  void CheckProtectedPasswordEntry(
-      const std::string& password_saved_domain) override;
+  void CheckProtectedPasswordEntry(const std::string& password_saved_domain,
+                                   bool password_field_exists) override;
 #endif
+  ukm::UkmRecorder* GetUkmRecorder() override;
+  ukm::SourceId GetUkmSourceId() override;
+  PasswordManagerMetricsRecorder& GetMetricsRecorder() override;
 
  private:
   const StubCredentialsFilter credentials_filter_;
   StubLogManager log_manager_;
+  ukm::SourceId ukm_source_id_;
+  base::Optional<PasswordManagerMetricsRecorder> metrics_recorder_;
 
   DISALLOW_COPY_AND_ASSIGN(StubPasswordManagerClient);
 };

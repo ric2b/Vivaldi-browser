@@ -2,8 +2,21 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//components/signin/features.gni")
+
 if (is_android) {
   import("//build/config/android/rules.gni")
+}
+
+# Split into its own target to allow the Identity Service to depend on it in
+# typemaps without introducing a dependency on all of
+# //components/signin/core/browser, which is undesirable. In the long term
+# this file will move to be part of the Identity Service client library.
+static_library("account_info") {
+  sources = [
+    "account_info.cc",
+    "account_info.h",
+  ]
 }
 
 static_library("browser") {
@@ -14,8 +27,6 @@ static_library("browser") {
     "access_token_fetcher.h",
     "account_fetcher_service.cc",
     "account_fetcher_service.h",
-    "account_info.cc",
-    "account_info.h",
     "account_info_fetcher.cc",
     "account_info_fetcher.h",
     "account_investigator.cc",
@@ -24,14 +35,16 @@ static_library("browser") {
     "account_reconcilor.h",
     "account_tracker_service.cc",
     "account_tracker_service.h",
-    "android/component_jni_registrar.cc",
-    "android/component_jni_registrar.h",
     "child_account_info_fetcher.cc",
     "child_account_info_fetcher.h",
     "child_account_info_fetcher_android.cc",
     "child_account_info_fetcher_android.h",
     "child_account_info_fetcher_impl.cc",
     "child_account_info_fetcher_impl.h",
+    "chrome_connected_header_helper.cc",
+    "chrome_connected_header_helper.h",
+    "dice_header_helper.cc",
+    "dice_header_helper.h",
     "gaia_cookie_manager_service.cc",
     "gaia_cookie_manager_service.h",
     "profile_identity_provider.cc",
@@ -75,26 +88,29 @@ static_library("browser") {
   configs += [ "//build/config/compiler:no_size_t_to_int_warning" ]
 
   public_deps = [
-    "//components/signin/core/account_id",
-    "//components/signin/core/common",
-  ]
-  deps = [
+    ":account_info",
     "//base",
-    "//base:i18n",
     "//components/content_settings/core/browser",
     "//components/content_settings/core/common",
-    "//components/data_use_measurement/core",
-    "//components/google/core/browser",
     "//components/invalidation/public",
     "//components/keyed_service/core",
+    "//components/prefs",
+    "//components/signin/core/account_id",
+    "//components/signin/core/common",
+    "//components/signin/core/common:signin_features",
+    "//google_apis",
+    "//net",
+    "//url",
+  ]
+  deps = [
+    "//base:i18n",
+    "//components/data_use_measurement/core",
+    "//components/google/core/browser",
     "//components/metrics",
     "//components/os_crypt",
     "//components/pref_registry",
-    "//components/prefs",
     "//components/webdata/common",
     "//crypto",
-    "//google_apis",
-    "//net",
     "//sql",
     "//third_party/icu",
   ]
@@ -104,6 +120,13 @@ static_library("browser") {
       "signin_manager.cc",
       "signin_status_metrics_provider.cc",
       "signin_status_metrics_provider_delegate.cc",
+    ]
+  }
+
+  if (!enable_dice_support) {
+    sources -= [
+      "dice_header_helper.cc",
+      "dice_header_helper.h",
     ]
   }
 
@@ -167,6 +190,7 @@ source_set("unit_tests") {
     "//components/os_crypt:test_support",
     "//components/pref_registry:pref_registry",
     "//components/signin/core/common",
+    "//components/signin/core/common:signin_features",
     "//components/sync_preferences:test_support",
     "//testing/gmock",
   ]

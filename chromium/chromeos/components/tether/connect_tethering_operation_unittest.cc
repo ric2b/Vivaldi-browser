@@ -8,11 +8,14 @@
 #include <vector>
 
 #include "base/logging.h"
+#include "base/test/histogram_tester.h"
+#include "base/test/simple_test_clock.h"
 #include "chromeos/components/tether/ble_constants.h"
 #include "chromeos/components/tether/fake_ble_connection_manager.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/mock_tether_host_response_recorder.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
+#include "chromeos/components/tether/proto_test_util.h"
 #include "components/cryptauth/remote_device_test_util.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -28,6 +31,9 @@ namespace {
 
 const char kTestSsid[] = "testSsid";
 const char kTestPassword[] = "testPassword";
+
+constexpr base::TimeDelta kConnectTetheringResponseTime =
+    base::TimeDelta::FromSeconds(15);
 
 class TestObserver : public ConnectTetheringOperation::Observer {
  public:
@@ -63,20 +69,6 @@ std::string CreateConnectTetheringRequestString() {
   return MessageWrapper(request).ToRawMessage();
 }
 
-DeviceStatus CreateFakeDeviceStatus() {
-  WifiStatus wifi_status;
-  wifi_status.set_status_code(
-      WifiStatus_StatusCode::WifiStatus_StatusCode_NOT_CONNECTED);
-
-  DeviceStatus device_status;
-  device_status.set_battery_percentage(75);
-  device_status.set_cell_provider("Google Fi");
-  device_status.set_connection_strength(4);
-  device_status.mutable_wifi_status()->CopyFrom(wifi_status);
-
-  return device_status;
-}
-
 std::string CreateConnectTetheringResponseString(
     ConnectTetheringResponse_ResponseCode response_code,
     bool use_proto_without_ssid_and_password) {
@@ -91,7 +83,8 @@ std::string CreateConnectTetheringResponseString(
     response.set_password(std::string(kTestPassword));
   }
 
-  response.mutable_device_status()->CopyFrom(CreateFakeDeviceStatus());
+  response.mutable_device_status()->CopyFrom(
+      CreateDeviceStatusWithFakeFields());
 
   return MessageWrapper(response).ToRawMessage();
 }
@@ -117,12 +110,19 @@ class ConnectTetheringOperationTest : public testing::Test {
 
     operation_ = base::WrapUnique(new ConnectTetheringOperation(
         test_device_, fake_ble_connection_manager_.get(),
-        mock_tether_host_response_recorder_.get()));
+        mock_tether_host_response_recorder_.get(), false /* setup_required */));
     operation_->AddObserver(test_observer_.get());
+
+    test_clock_ = new base::SimpleTestClock();
+    test_clock_->SetNow(base::Time::UnixEpoch());
+    operation_->SetClockForTest(base::WrapUnique(test_clock_));
+
     operation_->Initialize();
   }
 
   void SimulateDeviceAuthenticationAndVerifyMessageSent() {
+    VerifyResponseTimeoutSeconds(false /* setup_required */);
+
     operation_->OnDeviceAuthenticated(test_device_);
 
     // Verify that the message was sent successfully.
@@ -136,6 +136,8 @@ class ConnectTetheringOperationTest : public testing::Test {
   void SimulateResponseReceivedAndVerifyObserverCallbackInvoked(
       ConnectTetheringResponse_ResponseCode response_code,
       bool use_proto_without_ssid_and_password) {
+    test_clock_->Advance(kConnectTetheringResponseTime);
+
     fake_ble_connection_manager_->ReceiveMessage(
         test_device_, CreateConnectTetheringResponseString(
                           response_code, use_proto_without_ssid_and_password));
@@ -164,6 +166,20 @@ class ConnectTetheringOperationTest : public testing::Test {
       EXPECT_TRUE(test_observer_->has_received_failure);
       EXPECT_EQ(expected_response_code, test_observer_->error_code);
     }
+
+    histogram_tester_.ExpectTimeBucketCount(
+        "InstantTethering.Performance.ConnectTetheringResponseDuration",
+        kConnectTetheringResponseTime, 1);
+  }
+
+  void VerifyResponseTimeoutSeconds(bool setup_required) {
+    uint32_t expected_response_timeout_seconds =
+        setup_required
+            ? ConnectTetheringOperation::kSetupRequiredResponseTimeoutSeconds
+            : MessageTransferOperation::kDefaultTimeoutSeconds;
+
+    EXPECT_EQ(expected_response_timeout_seconds,
+              operation_->GetTimeoutSeconds());
   }
 
   const std::string connect_tethering_request_string_;
@@ -173,7 +189,10 @@ class ConnectTetheringOperationTest : public testing::Test {
   std::unique_ptr<StrictMock<MockTetherHostResponseRecorder>>
       mock_tether_host_response_recorder_;
   std::unique_ptr<TestObserver> test_observer_;
+  base::SimpleTestClock* test_clock_;
   std::unique_ptr<ConnectTetheringOperation> operation_;
+
+  base::HistogramTester histogram_tester_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ConnectTetheringOperationTest);
@@ -250,6 +269,16 @@ TEST_F(ConnectTetheringOperationTest, TestCannotConnect) {
   EXPECT_EQ(ConnectTetheringResponse_ResponseCode::
                 ConnectTetheringResponse_ResponseCode_UNKNOWN_ERROR,
             test_observer_->error_code);
+
+  histogram_tester_.ExpectTotalCount(
+      "InstantTethering.Performance.ConnectTetheringResponseDuration", 0);
+}
+
+TEST_F(ConnectTetheringOperationTest, TestOperation_SetupRequired) {
+  operation_ = base::WrapUnique(new ConnectTetheringOperation(
+      test_device_, fake_ble_connection_manager_.get(),
+      mock_tether_host_response_recorder_.get(), true /* setup_required */));
+  VerifyResponseTimeoutSeconds(true /* setup_required */);
 }
 
 }  // namespace tether

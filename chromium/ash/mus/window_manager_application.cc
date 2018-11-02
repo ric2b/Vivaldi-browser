@@ -10,6 +10,7 @@
 #include "ash/mus/network_connect_delegate_mus.h"
 #include "ash/mus/window_manager.h"
 #include "ash/public/cpp/config.h"
+#include "ash/shell.h"
 #include "ash/shell_delegate.h"
 #include "ash/system/power/power_status.h"
 #include "base/bind.h"
@@ -54,15 +55,6 @@ WindowManagerApplication::~WindowManagerApplication() {
   // OnWillDestroyRootWindowController() is called (if it hasn't been already).
   window_manager_.reset();
 
-  if (blocking_pool_) {
-    // Like BrowserThreadImpl, the goal is to make it impossible for ash to
-    // 'infinite loop' during shutdown, but to reasonably expect that all
-    // BLOCKING_SHUTDOWN tasks queued during shutdown get run. There's nothing
-    // particularly scientific about the number chosen.
-    const int kMaxNewShutdownBlockingTasks = 1000;
-    blocking_pool_->Shutdown(kMaxNewShutdownBlockingTasks);
-  }
-
   statistics_provider_.reset();
   ShutdownComponents();
 }
@@ -73,7 +65,6 @@ service_manager::Connector* WindowManagerApplication::GetConnector() {
 
 void WindowManagerApplication::InitWindowManager(
     std::unique_ptr<aura::WindowTreeClient> window_tree_client,
-    const scoped_refptr<base::SequencedWorkerPool>& blocking_pool,
     bool init_network_handler) {
   // Tests may have already set the WindowTreeClient.
   if (!aura::Env::GetInstance()->HasWindowTreeClient())
@@ -88,7 +79,7 @@ void WindowManagerApplication::InitWindowManager(
   statistics_provider_->SetMachineStatistic("initial_locale", "en-US");
   statistics_provider_->SetMachineStatistic("keyboard_layout", "");
 
-  window_manager_->Init(std::move(window_tree_client), blocking_pool,
+  window_manager_->Init(std::move(window_tree_client),
                         std::move(shell_delegate_));
 }
 
@@ -138,36 +129,33 @@ void WindowManagerApplication::OnStart() {
   mojo_interface_factory::RegisterInterfaces(
       &registry_, base::ThreadTaskRunnerHandle::Get());
 
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "ash_mus_resources.pak",
       "ash_mus_resources_200.pak", nullptr,
       views::AuraInit::Mode::AURA_MUS_WINDOW_MANAGER);
+  if (!aura_init_) {
+    context()->QuitNow();
+    return;
+  }
   window_manager_ = base::MakeUnique<WindowManager>(
       context()->connector(), ash_config_, show_primary_host_on_connect_);
 
   std::unique_ptr<aura::WindowTreeClient> window_tree_client =
       base::MakeUnique<aura::WindowTreeClient>(
           context()->connector(), window_manager_.get(), window_manager_.get());
-  const bool automatically_create_display_roots =
-      window_manager_->config() == Config::MASH;
+  const bool automatically_create_display_roots = false;
   window_tree_client->ConnectAsWindowManager(
       automatically_create_display_roots);
 
-  const size_t kMaxNumberThreads = 3u;  // Matches that of content.
-  const char kThreadNamePrefix[] = "MashBlocking";
-  blocking_pool_ = new base::SequencedWorkerPool(
-      kMaxNumberThreads, kThreadNamePrefix, base::TaskPriority::USER_VISIBLE);
   const bool init_network_handler = true;
-  InitWindowManager(std::move(window_tree_client), blocking_pool_,
-                    init_network_handler);
+  InitWindowManager(std::move(window_tree_client), init_network_handler);
 }
 
 void WindowManagerApplication::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 }  // namespace mus

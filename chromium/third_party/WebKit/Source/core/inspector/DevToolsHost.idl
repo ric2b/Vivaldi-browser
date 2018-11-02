@@ -31,11 +31,9 @@
  */
 
 [
-    NoInterfaceObject,
+    NoInterfaceObject
 ] interface DevToolsHost {
     float zoomFactor();
-
-    void setInjectedScriptForOrigin(DOMString origin, DOMString script);
 
     void copyText(DOMString text);
 

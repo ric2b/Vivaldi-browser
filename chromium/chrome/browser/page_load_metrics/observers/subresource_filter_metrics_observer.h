@@ -6,7 +6,14 @@
 #define CHROME_BROWSER_PAGE_LOAD_METRICS_OBSERVERS_SUBRESOURCE_FILTER_METRICS_OBSERVER_H_
 
 #include "base/macros.h"
+#include "base/optional.h"
+#include "base/scoped_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
+#include "components/subresource_filter/core/common/activation_decision.h"
+#include "components/subresource_filter/core/common/activation_level.h"
+#include "components/ukm/ukm_source.h"
 
 namespace internal {
 
@@ -55,16 +62,25 @@ extern const char kHistogramSubresourceFilterCount[];
 extern const char kHistogramSubresourceFilterActivationDecision[];
 extern const char kHistogramSubresourceFilterActivationDecisionReload[];
 
+extern const char kUkmSubresourceFilterName[];
+extern const char kUkmSubresourceFilterActivationDecision[];
+extern const char kUkmSubresourceFilterDryRun[];
+
 }  // namespace internal
 
 class SubresourceFilterMetricsObserver
-    : public page_load_metrics::PageLoadMetricsObserver {
+    : public page_load_metrics::PageLoadMetricsObserver,
+      public subresource_filter::SubresourceFilterObserver {
  public:
-  SubresourceFilterMetricsObserver() = default;
-  ~SubresourceFilterMetricsObserver() override = default;
+  SubresourceFilterMetricsObserver();
+  ~SubresourceFilterMetricsObserver() override;
 
   // page_load_metrics::PageLoadMetricsObserver:
-  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
+  ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
+                        const GURL& currently_committed_url,
+                        bool started_in_foreground) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
+                         ukm::SourceId source_id) override;
   ObservePolicy FlushMetricsOnAppEnterBackground(
       const page_load_metrics::mojom::PageLoadTiming& timing,
       const page_load_metrics::PageLoadExtraInfo& info) override;
@@ -93,9 +109,23 @@ class SubresourceFilterMetricsObserver
       bool is_in_main_frame) override;
 
  private:
+  // subresource_filter::SubresourceFilterObserver:
+  void OnSubresourceFilterGoingAway() override;
+  void OnPageActivationComputed(
+      content::NavigationHandle* navigation_handle,
+      subresource_filter::ActivationDecision activation_decision,
+      const subresource_filter::ActivationState& activation_state) override;
+
   void OnGoingAway(const page_load_metrics::mojom::PageLoadTiming& timing,
                    const page_load_metrics::PageLoadExtraInfo& info,
                    base::TimeTicks app_background_time);
+
+  base::Optional<subresource_filter::ActivationDecision> activation_decision_;
+  base::Optional<subresource_filter::ActivationLevel> activation_level_;
+
+  ScopedObserver<subresource_filter::SubresourceFilterObserverManager,
+                 subresource_filter::SubresourceFilterObserver>
+      scoped_observer_;
 
   int64_t network_bytes_ = 0;
   int64_t cache_bytes_ = 0;
@@ -103,8 +133,12 @@ class SubresourceFilterMetricsObserver
   int num_network_resources_ = 0;
   int num_cache_resources_ = 0;
 
+  // Used as a unique id for the ongoing navigation. Do not use after OnCommit.
+  content::NavigationHandle* navigation_handle_ = nullptr;
+
   bool subresource_filter_observed_ = false;
   bool played_media_ = false;
+  bool did_commit_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(SubresourceFilterMetricsObserver);
 };

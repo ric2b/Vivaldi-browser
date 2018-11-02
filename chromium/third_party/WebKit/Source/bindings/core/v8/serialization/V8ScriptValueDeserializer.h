@@ -6,6 +6,7 @@
 #define V8ScriptValueDeserializer_h
 
 #include "bindings/core/v8/serialization/SerializationTag.h"
+#include "bindings/core/v8/serialization/SerializedColorParams.h"
 #include "bindings/core/v8/serialization/SerializedScriptValue.h"
 #include "core/CoreExport.h"
 #include "platform/bindings/ScriptState.h"
@@ -17,6 +18,7 @@
 namespace blink {
 
 class File;
+class UnpackedSerializedScriptValue;
 
 // Deserializes V8 values serialized using V8ScriptValueSerializer (or its
 // predecessor, ScriptValueSerializer).
@@ -26,13 +28,16 @@ class File;
 //
 // A deserializer cannot be used multiple times; it is expected that its
 // deserialize method will be invoked exactly once.
-class GC_PLUGIN_IGNORE("https://crbug.com/644725") CORE_EXPORT
-    V8ScriptValueDeserializer : public v8::ValueDeserializer::Delegate {
+class CORE_EXPORT V8ScriptValueDeserializer
+    : public v8::ValueDeserializer::Delegate {
   STACK_ALLOCATED();
   WTF_MAKE_NONCOPYABLE(V8ScriptValueDeserializer);
 
  public:
   using Options = SerializedScriptValue::DeserializeOptions;
+  V8ScriptValueDeserializer(RefPtr<ScriptState>,
+                            UnpackedSerializedScriptValue*,
+                            const Options& = Options());
   V8ScriptValueDeserializer(RefPtr<ScriptState>,
                             RefPtr<SerializedScriptValue>,
                             const Options& = Options());
@@ -61,7 +66,26 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725") CORE_EXPORT
   }
   bool ReadUTF8String(String* string_out);
 
+  template <typename E>
+  bool ReadUint32Enum(E* value) {
+    static_assert(
+        std::is_enum<E>::value &&
+            std::is_same<uint32_t,
+                         typename std::underlying_type<E>::type>::value,
+        "Only enums backed by uint32_t are accepted.");
+    uint32_t tmp;
+    if (ReadUint32(&tmp) && tmp <= static_cast<uint32_t>(E::kLast)) {
+      *value = static_cast<E>(tmp);
+      return true;
+    }
+    return false;
+  }
+
  private:
+  V8ScriptValueDeserializer(RefPtr<ScriptState>,
+                            UnpackedSerializedScriptValue*,
+                            RefPtr<SerializedScriptValue>,
+                            const Options&);
   void Transfer();
 
   File* ReadFile();
@@ -77,6 +101,7 @@ class GC_PLUGIN_IGNORE("https://crbug.com/644725") CORE_EXPORT
                                                              uint32_t) override;
 
   RefPtr<ScriptState> script_state_;
+  Member<UnpackedSerializedScriptValue> unpacked_value_;
   RefPtr<SerializedScriptValue> serialized_script_value_;
   v8::ValueDeserializer deserializer_;
 

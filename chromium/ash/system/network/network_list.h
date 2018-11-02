@@ -14,12 +14,12 @@
 #include "ash/system/network/network_icon_animation_observer.h"
 #include "ash/system/network/network_info.h"
 #include "ash/system/network/network_state_list_detailed_view.h"
+#include "ash/system/tray/tray_info_label.h"
 #include "base/macros.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_type_pattern.h"
 
 namespace views {
-class Label;
 class Separator;
 class View;
 }
@@ -33,7 +33,8 @@ namespace tray {
 // A list of available networks of a given type. This class is used for all
 // network types except VPNs. For VPNs, see the |VPNList| class.
 class NetworkListView : public NetworkStateListDetailedView,
-                        public network_icon::AnimationObserver {
+                        public network_icon::AnimationObserver,
+                        public TrayInfoLabel::Delegate {
  public:
   class SectionHeaderRowView;
 
@@ -67,16 +68,19 @@ class NetworkListView : public NetworkStateListDetailedView,
   // Returns a set of guids for the added network connections.
   std::unique_ptr<std::set<std::string>> UpdateNetworkListEntries();
 
+  bool ShouldMobileDataSectionBeShown();
+
   // Creates the view which displays a warning message, if a VPN or proxy is
   // being used.
   TriView* CreateConnectionWarning();
 
-  // Creates and returns a View with the information in |info|.
-  HoverHighlightView* CreateViewForNetwork(const NetworkInfo& info);
-
-  // Updates |view| with the information in |info|. Note that |view| is
-  // guaranteed to be a View returned from |CreateViewForNetwork()|.
+  // Updates |view| with the information in |info|.
   void UpdateViewForNetwork(HoverHighlightView* view, const NetworkInfo& info);
+
+  // Creates the a battery icon next to the name of Tether networks indicating
+  // the battery percentage of the mobile device that is being used as a
+  // hotspot.
+  views::View* CreatePowerStatusView(const NetworkInfo& info);
 
   // Creates the view of an extra icon appearing next to the network name
   // indicating that the network is controlled by an extension. If no extension
@@ -92,28 +96,33 @@ class NetworkListView : public NetworkStateListDetailedView,
       int child_index);
   void UpdateNetworkChild(int index, const NetworkInfo* info);
 
-  // Reorders children of |container()| as necessary placing |view| at |index|.
+  // Reorders children of |scroll_content()| as necessary placing |view| at
+  // |index|.
   void PlaceViewAtIndex(views::View* view, int index);
 
-  // Creates a Label with text specified by |message_id| and adds it to
-  // |container()| if necessary or updates the text and reorders the
-  // |container()| placing the label at |insertion_index|. When |message_id| is
-  // zero removes the |*label_ptr| from the |container()| and destroys it.
-  // |label_ptr| is an in / out parameter and is only modified if the Label is
-  // created or destroyed.
+  // Creates an info label with text specified by |message_id| and adds it to
+  // |scroll_content()| if necessary or updates the text and reorders the
+  // |scroll_content()| placing the info label at |insertion_index|. When
+  // |message_id| is zero removes the |*info_label_ptr| from the
+  // |scroll_content()| and destroys it. |info_label_ptr| is an in/out parameter
+  // and is only modified if the info label is created or destroyed.
   void UpdateInfoLabel(int message_id,
                        int insertion_index,
-                       views::Label** label_ptr);
+                       TrayInfoLabel** info_label_ptr);
 
-  // Creates a cellular/Wi-Fi header row |view| and adds it to |container()| if
-  // necessary and reorders the |container()| placing the |view| at
-  // |child_index|. Returns the index where the next child should be inserted,
-  // i.e., the index directly after the last inserted child.
+  // Creates a cellular/tether/Wi-Fi header row |view| and adds it to
+  // |scroll_content()| if necessary and reorders the |scroll_content()| placing
+  // the |view| at |child_index|. Returns the index where the next child should
+  // be inserted, i.e., the index directly after the last inserted child.
   int UpdateSectionHeaderRow(chromeos::NetworkTypePattern pattern,
                              bool enabled,
                              int child_index,
                              SectionHeaderRowView** view,
                              views::Separator** separator_view);
+
+  // TrayInfoLabel::Delegate:
+  void OnLabelClicked(int message_id) override;
+  bool IsLabelClickable(int message_id) const override;
 
   // network_icon::AnimationObserver:
   void NetworkIconChanged() override;
@@ -124,13 +133,11 @@ class NetworkListView : public NetworkStateListDetailedView,
 
   bool needs_relayout_;
 
-  views::Label* no_wifi_networks_view_;
-  views::Label* no_cellular_networks_view_;
-  SectionHeaderRowView* cellular_header_view_;
-  SectionHeaderRowView* tether_header_view_;
+  TrayInfoLabel* no_wifi_networks_view_;
+  TrayInfoLabel* no_mobile_networks_view_;
+  SectionHeaderRowView* mobile_header_view_;
   SectionHeaderRowView* wifi_header_view_;
-  views::Separator* cellular_separator_view_;
-  views::Separator* tether_separator_view_;
+  views::Separator* mobile_separator_view_;
   views::Separator* wifi_separator_view_;
   TriView* connection_warning_;
 

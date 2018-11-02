@@ -7,7 +7,7 @@
 
 #include <string>
 
-#include "base/callback.h"
+#include "base/callback_forward.h"
 
 class PrefRegistrySimple;
 
@@ -48,7 +48,7 @@ class StartupUtils {
   static bool IsDeviceRegistered();
 
   // Marks device registered. i.e. second part of OOBE is completed.
-  static void MarkDeviceRegistered(const base::Closure& done_callback);
+  static void MarkDeviceRegistered(base::OnceClosure done_callback);
 
   // Mark a device as requiring enrollment recovery.
   static void MarkEnrollmentRecoveryRequired();
@@ -58,15 +58,6 @@ class StartupUtils {
 
   // Sets initial locale in local settings.
   static void SetInitialLocale(const std::string& locale);
-
-  // Saves the time of the last update check which did not result in any update.
-  static void SaveTimeOfLastUpdateCheckWithoutUpdate(base::Time time);
-
-  // Clears the update check time which was previously saved.
-  static void ClearTimeOfLastUpdateCheckWithoutUpdate();
-
-  // Returns the time of the last update check which did not lead to an update.
-  static base::Time GetTimeOfLastUpdateCheckWithoutUpdate();
 
   // Registers OOBE preferences.
   static void RegisterPrefs(PrefRegistrySimple* registry);

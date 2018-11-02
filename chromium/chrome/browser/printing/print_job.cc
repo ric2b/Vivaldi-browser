@@ -21,7 +21,6 @@
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/printing/print_job_worker.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "printing/printed_document.h"
 #include "printing/printed_page.h"
@@ -78,10 +77,8 @@ void PrintJob::Initialize(PrintJobWorkerOwner* job,
   settings_ = job->settings();
 
   PrintedDocument* new_doc =
-      new PrintedDocument(settings_,
-                          source_,
-                          job->cookie(),
-                          content::BrowserThread::GetBlockingPool());
+      new PrintedDocument(settings_, source_, job->cookie());
+
   new_doc->set_page_count(page_count);
   UpdatePrintedDocument(new_doc);
 
@@ -319,6 +316,21 @@ void PrintJob::OnPdfPageConverted(int page_number,
 
   pdf_conversion_state_->GetMorePages(
       base::Bind(&PrintJob::OnPdfPageConverted, this));
+}
+
+void PrintJob::StartPdfToTextConversion(
+    const scoped_refptr<base::RefCountedMemory>& bytes,
+    const gfx::Size& page_size) {
+  DCHECK(!pdf_conversion_state_);
+  pdf_conversion_state_ =
+      base::MakeUnique<PdfConversionState>(gfx::Size(), gfx::Rect());
+  const int kPrinterDpi = settings().dpi();
+  gfx::Rect page_area = gfx::Rect(0, 0, page_size.width(), page_size.height());
+  PdfRenderSettings settings(page_area, gfx::Point(0, 0), kPrinterDpi,
+                             /*autorotate=*/true,
+                             PdfRenderSettings::Mode::TEXTONLY);
+  pdf_conversion_state_->Start(
+      bytes, settings, base::Bind(&PrintJob::OnPdfConversionStarted, this));
 }
 
 void PrintJob::StartPdfToPostScriptConversion(

@@ -21,6 +21,7 @@
 #include "platform/scheduler/base/test_task_time_observer.h"
 #include "platform/scheduler/base/virtual_time_domain.h"
 #include "platform/scheduler/base/work_queue_sets.h"
+#include "platform/scheduler/test/test_task_queue.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/perf/perf_test.h"
 
@@ -60,7 +61,7 @@ class PerfTestTimeDomain : public VirtualTimeDomain {
   DISALLOW_COPY_AND_ASSIGN(PerfTestTimeDomain);
 };
 
-class TaskQueueManagerPerfTest : public testing::Test {
+class TaskQueueManagerPerfTest : public ::testing::Test {
  public:
   TaskQueueManagerPerfTest()
       : num_queues_(0),
@@ -93,9 +94,8 @@ class TaskQueueManagerPerfTest : public testing::Test {
     manager_->RegisterTimeDomain(virtual_time_domain_.get());
 
     for (size_t i = 0; i < num_queues; i++) {
-      queues_.push_back(manager_->NewTaskQueue(
-          TaskQueue::Spec(TaskQueue::QueueType::TEST)
-              .SetTimeDomain(virtual_time_domain_.get())));
+      queues_.push_back(manager_->CreateTaskQueue<TestTaskQueue>(
+          TaskQueue::Spec("test").SetTimeDomain(virtual_time_domain_.get())));
     }
   }
 

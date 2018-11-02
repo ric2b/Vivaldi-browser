@@ -10,6 +10,7 @@
 
 #include "base/files/file_util.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
+#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_service.h"
 #include "chrome/browser/ui/app_list/arc/arc_app_list_prefs_factory.h"
@@ -276,6 +278,10 @@ ArcAppListPrefs::ArcAppListPrefs(
   DCHECK(content::BrowserThread::CurrentlyOn(content::BrowserThread::UI));
   const base::FilePath& base_path = profile->GetPath();
   base_path_ = base_path.AppendASCII(prefs::kArcApps);
+
+  invalidated_icon_scale_factor_mask_ = 0;
+  for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors())
+    invalidated_icon_scale_factor_mask_ |= (1U << scale_factor);
 
   arc::ArcSessionManager* arc_session_manager = arc::ArcSessionManager::Get();
   if (!arc_session_manager)
@@ -617,8 +623,7 @@ bool ArcAppListPrefs::IsShortcut(const std::string& app_id) const {
   return app_info && app_info->shortcut;
 }
 
-void ArcAppListPrefs::SetLastLaunchTime(const std::string& app_id,
-                                        const base::Time& time) {
+void ArcAppListPrefs::SetLastLaunchTime(const std::string& app_id) {
   if (!IsRegistered(app_id)) {
     NOTREACHED();
     return;
@@ -628,10 +633,29 @@ void ArcAppListPrefs::SetLastLaunchTime(const std::string& app_id,
   if (!arc::ShouldShowInLauncher(app_id))
     return;
 
+  const base::Time time = base::Time::Now();
   ScopedArcPrefUpdate update(prefs_, app_id, prefs::kArcApps);
   base::DictionaryValue* app_dict = update.Get();
   const std::string string_value = base::Int64ToString(time.ToInternalValue());
   app_dict->SetString(kLastLaunchTime, string_value);
+
+  if (first_launch_app_request_) {
+    first_launch_app_request_ = false;
+    // UI Shown time may not be set in unit tests.
+    const user_manager::UserManager* user_manager =
+        user_manager::UserManager::Get();
+    if (arc::ArcSessionManager::Get()->is_directly_started() &&
+        !user_manager->IsLoggedInAsKioskApp() &&
+        !user_manager->IsLoggedInAsArcKioskApp() &&
+        !chromeos::UserSessionManager::GetInstance()
+             ->ui_shown_time()
+             .is_null()) {
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "Arc.FirstAppLaunchRequest.TimeDelta",
+          time - chromeos::UserSessionManager::GetInstance()->ui_shown_time(),
+          base::TimeDelta::FromSeconds(1), base::TimeDelta::FromMinutes(2), 20);
+    }
+  }
 }
 
 void ArcAppListPrefs::DisableAllApps() {
@@ -777,9 +801,8 @@ void ArcAppListPrefs::SimulateDefaultAppAvailabilityTimeoutForTesting() {
 }
 
 void ArcAppListPrefs::OnInstanceReady() {
-  // Init() is also available at version 0.
   arc::mojom::AppInstance* app_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, RefreshAppList);
+      ARC_GET_INSTANCE_FOR_METHOD(app_instance_holder_, Init);
 
   // Note, sync_service_ may be nullptr in testing.
   sync_service_ = arc::ArcPackageSyncableService::Get(profile_);
@@ -790,8 +813,9 @@ void ArcAppListPrefs::OnInstanceReady() {
 
   is_initialized_ = false;
 
-  app_instance->Init(binding_.CreateInterfacePtrAndBind());
-  app_instance->RefreshAppList();
+  arc::mojom::AppHostPtr host_proxy;
+  binding_.Bind(mojo::MakeRequest(&host_proxy));
+  app_instance->Init(std::move(host_proxy));
 }
 
 void ArcAppListPrefs::OnInstanceClosed() {
@@ -817,7 +841,7 @@ void ArcAppListPrefs::HandleTaskCreated(const base::Optional<std::string>& name,
   DCHECK(IsArcAndroidEnabledForProfile(profile_));
   const std::string app_id = GetAppId(package_name, activity);
   if (IsRegistered(app_id)) {
-    SetLastLaunchTime(app_id, base::Time::Now());
+    SetLastLaunchTime(app_id);
   } else {
     // Create runtime app entry that is valid for the current user session. This
     // entry is not shown in App Launcher and only required for shelf
@@ -964,11 +988,15 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
     VLOG(2) << "Package name cannot be empty.";
     return;
   }
+
   ScopedArcPrefUpdate update(prefs, package_name, prefs::kArcPackages);
   base::DictionaryValue* package_dict = update.Get();
   const std::string id_str =
       base::Int64ToString(package.last_backup_android_id);
   const std::string time_str = base::Int64ToString(package.last_backup_time);
+
+  int old_package_version = -1;
+  package_dict->GetInteger(kPackageVersion, &old_package_version);
 
   package_dict->SetBoolean(kShouldSync, package.sync);
   package_dict->SetInteger(kPackageVersion, package.package_version);
@@ -976,6 +1004,13 @@ void ArcAppListPrefs::AddOrUpdatePackagePrefs(
   package_dict->SetString(kLastBackupTime, time_str);
   package_dict->SetBoolean(kSystem, package.system);
   package_dict->SetBoolean(kUninstalled, false);
+
+  if (old_package_version == -1 ||
+      old_package_version == package.package_version) {
+    return;
+  }
+
+  InvalidatePackageIcons(package_name);
 }
 
 void ArcAppListPrefs::RemovePackageFromPrefs(PrefService* prefs,
@@ -1083,6 +1118,30 @@ void ArcAppListPrefs::OnAppAddedDeprecated(arc::mojom::AppInfoPtr app) {
   AddApp(*app);
 }
 
+void ArcAppListPrefs::InvalidateAppIcons(const std::string& app_id) {
+  // Ignore Play Store app since we provide its icon in Chrome resources.
+  if (app_id == arc::kPlayStoreAppId)
+    return;
+
+  // Clean up previous icon records. They may refer to outdated icons.
+  MaybeRemoveIconRequestRecord(app_id);
+
+  {
+    ScopedArcPrefUpdate update(prefs_, app_id, prefs::kArcApps);
+    base::DictionaryValue* app_dict = update.Get();
+    app_dict->SetInteger(kInvalidatedIcons,
+                         invalidated_icon_scale_factor_mask_);
+  }
+
+  for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors())
+    MaybeRequestIcon(app_id, scale_factor);
+}
+
+void ArcAppListPrefs::InvalidatePackageIcons(const std::string& package_name) {
+  for (const std::string& app_id : GetAppsForPackage(package_name))
+    InvalidateAppIcons(app_id);
+}
+
 void ArcAppListPrefs::OnPackageAppListRefreshed(
     const std::string& package_name,
     std::vector<arc::mojom::AppInfoPtr> apps) {
@@ -1095,21 +1154,9 @@ void ArcAppListPrefs::OnPackageAppListRefreshed(
       GetAppsForPackage(package_name);
   default_apps_.MaybeMarkPackageUninstalled(package_name, false);
 
-  int invalidated_icon_mask = 0;
-  for (ui::ScaleFactor scale_factor : ui::GetSupportedScaleFactors())
-    invalidated_icon_mask |= (1 << scale_factor);
-
   for (const auto& app : apps) {
     const std::string app_id = GetAppId(app->package_name, app->activity);
     apps_to_remove.erase(app_id);
-
-    // Mark app icons as invalidated. Ignore Play Store app since we provide its
-    // icon in Chrome resources.
-    if (app_id != arc::kPlayStoreAppId) {
-      ScopedArcPrefUpdate update(prefs_, app_id, prefs::kArcApps);
-      base::DictionaryValue* app_dict = update.Get();
-      app_dict->SetInteger(kInvalidatedIcons, invalidated_icon_mask);
-    }
 
     AddApp(*app);
   }
@@ -1348,8 +1395,8 @@ void ArcAppListPrefs::MaybeShowPackageInAppLauncher(
 }
 
 bool ArcAppListPrefs::IsUnknownPackage(const std::string& package_name) const {
-  return !GetPackage(package_name) &&
-      !sync_service_->IsPackageSyncing(package_name);
+  return !GetPackage(package_name) && sync_service_ &&
+         !sync_service_->IsPackageSyncing(package_name);
 }
 
 void ArcAppListPrefs::OnPackageAdded(
@@ -1357,7 +1404,6 @@ void ArcAppListPrefs::OnPackageAdded(
   DCHECK(IsArcAndroidEnabledForProfile(profile_));
 
   // Ignore packages installed by internal sync.
-  DCHECK(sync_service_);
   const bool unknown_package = IsUnknownPackage(package_info->package_name);
 
   AddOrUpdatePackagePrefs(prefs_, *package_info);
@@ -1394,11 +1440,6 @@ void ArcAppListPrefs::OnPackageListRefreshed(
     if (!current_packages.count(package_name))
       RemovePackageFromPrefs(prefs_, package_name);
   }
-
-  // TODO(lgcheng@) File http://b/31944261. Remove the flag after Android side
-  // cleanup.
-  if (package_list_initial_refreshed_)
-    return;
 
   package_list_initial_refreshed_ = true;
   for (auto& observer : observer_list_)

@@ -10,12 +10,8 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
-#include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/path_service.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -35,7 +31,7 @@
 #include "net/http/http_status_code.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
 #include "base/json/json_reader.h"
 #include "components/grit/components_resources.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -62,10 +58,6 @@ const int kPopularSitesRedownloadIntervalHours = 24;
 const char kPopularSitesLastDownloadPref[] = "popular_sites_last_download";
 const char kPopularSitesURLPref[] = "popular_sites_url";
 const char kPopularSitesJsonPref[] = "suggested_sites_json";
-
-// TODO(crbug.com/683890): This refers to a local cache stored by older
-// versions of Chrome, no longer used. Remove after M61.
-const char kPopularSitesLocalFilenameToCleanup[] = "suggested_sites.json";
 
 GURL GetPopularSitesURL(const std::string& directory,
                         const std::string& country,
@@ -140,7 +132,7 @@ PopularSites::SitesVector ParseSiteList(const base::ListValue& list) {
   return sites;
 }
 
-#if defined(GOOGLE_CHROME_BUILD) && defined(OS_ANDROID)
+#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_ANDROID) || defined(OS_IOS))
 void SetDefaultResourceForSite(int index,
                                int resource_id,
                                base::ListValue* sites) {
@@ -154,7 +146,7 @@ void SetDefaultResourceForSite(int index,
 
 // Creates the list of popular sites based on a snapshot available for mobile.
 std::unique_ptr<base::ListValue> DefaultPopularSites() {
-#if !defined(OS_ANDROID)
+#if !defined(OS_ANDROID) && !defined(OS_IOS)
   return base::MakeUnique<base::ListValue>();
 #else
   if (!base::FeatureList::IsEnabled(kPopularSitesBakedInContentFeature)) {
@@ -198,32 +190,19 @@ PopularSites::Site::Site(const Site& other) = default;
 PopularSites::Site::~Site() {}
 
 PopularSitesImpl::PopularSitesImpl(
-    const scoped_refptr<base::SequencedWorkerPool>& blocking_pool,
     PrefService* prefs,
     const TemplateURLService* template_url_service,
     VariationsService* variations_service,
     net::URLRequestContextGetter* download_context,
-    const base::FilePath& directory,
     ParseJSONCallback parse_json)
-    : blocking_runner_(blocking_pool->GetTaskRunnerWithShutdownBehavior(
-          base::SequencedWorkerPool::CONTINUE_ON_SHUTDOWN)),
-      prefs_(prefs),
+    : prefs_(prefs),
       template_url_service_(template_url_service),
       variations_(variations_service),
       download_context_(download_context),
       parse_json_(std::move(parse_json)),
       is_fallback_(false),
       sites_(ParseSiteList(*prefs->GetList(kPopularSitesJsonPref))),
-      weak_ptr_factory_(this) {
-  // If valid path provided, remove local files created by older versions.
-  if (!directory.empty() && blocking_runner_) {
-    blocking_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(base::IgnoreResult(&base::DeleteFile),
-                   directory.AppendASCII(kPopularSitesLocalFilenameToCleanup),
-                   /*recursive=*/false));
-  }
-}
+      weak_ptr_factory_(this) {}
 
 PopularSitesImpl::~PopularSitesImpl() {}
 

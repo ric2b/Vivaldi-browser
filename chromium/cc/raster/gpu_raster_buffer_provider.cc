@@ -36,7 +36,7 @@ static void RasterizeSource(
     const gfx::Rect& raster_dirty_rect,
     const gfx::AxisTransform2d& transform,
     const RasterSource::PlaybackSettings& playback_settings,
-    ContextProvider* context_provider,
+    viz::ContextProvider* context_provider,
     ResourceProvider::ScopedWriteLockGL* resource_lock,
     bool async_worker_context_enabled,
     bool use_distance_field_text,
@@ -45,7 +45,7 @@ static void RasterizeSource(
 
   ResourceProvider::ScopedSkSurfaceProvider scoped_surface(
       context_provider, resource_lock, async_worker_context_enabled,
-      use_distance_field_text, raster_source->CanUseLCDText(),
+      use_distance_field_text, playback_settings.use_lcd_text,
       msaa_sample_count);
   SkSurface* sk_surface = scoped_surface.sk_surface();
   // Allocating an SkSurface will fail after a lost context.  Pretend we
@@ -115,12 +115,12 @@ void GpuRasterBufferProvider::RasterBufferImpl::Playback(
 }
 
 GpuRasterBufferProvider::GpuRasterBufferProvider(
-    ContextProvider* compositor_context_provider,
-    ContextProvider* worker_context_provider,
+    viz::ContextProvider* compositor_context_provider,
+    viz::ContextProvider* worker_context_provider,
     ResourceProvider* resource_provider,
     bool use_distance_field_text,
     int gpu_rasterization_msaa_sample_count,
-    ResourceFormat preferred_tile_format,
+    viz::ResourceFormat preferred_tile_format,
     bool async_worker_context_enabled)
     : compositor_context_provider_(compositor_context_provider),
       worker_context_provider_(worker_context_provider),
@@ -185,7 +185,7 @@ void GpuRasterBufferProvider::Flush() {
   }
 }
 
-ResourceFormat GpuRasterBufferProvider::GetResourceFormat(
+viz::ResourceFormat GpuRasterBufferProvider::GetResourceFormat(
     bool must_support_alpha) const {
   if (resource_provider_->IsRenderBufferFormatSupported(
           preferred_tile_format_) &&
@@ -264,7 +264,8 @@ void GpuRasterBufferProvider::PlaybackOnWorkerThread(
     uint64_t new_content_id,
     const gfx::AxisTransform2d& transform,
     const RasterSource::PlaybackSettings& playback_settings) {
-  ContextProvider::ScopedContextLock scoped_context(worker_context_provider_);
+  viz::ContextProvider::ScopedContextLock scoped_context(
+      worker_context_provider_);
   gpu::gles2::GLES2Interface* gl = scoped_context.ContextGL();
   DCHECK(gl);
 

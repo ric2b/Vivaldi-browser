@@ -6,7 +6,6 @@
 #define ASH_SYSTEM_TRAY_SYSTEM_TRAY_BUBBLE_H_
 
 #include <map>
-#include <memory>
 #include <vector>
 
 #include "ash/login_status.h"
@@ -37,9 +36,6 @@ class SystemTrayBubble {
   void InitView(views::View* anchor,
                 LoginStatus login_status,
                 views::TrayBubbleView::InitParams* init_params);
-
-  // Focus the default item if no item is focused. Othewise, do nothing.
-  void FocusDefaultIfNeeded();
 
   BubbleType bubble_type() const { return bubble_type_; }
   views::TrayBubbleView* bubble_view() const { return bubble_view_; }

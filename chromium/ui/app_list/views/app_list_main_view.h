@@ -12,7 +12,6 @@
 #include "base/timer/timer.h"
 #include "ui/app_list/app_list_export.h"
 #include "ui/app_list/app_list_model_observer.h"
-#include "ui/app_list/views/apps_grid_view_delegate.h"
 #include "ui/app_list/views/search_box_view_delegate.h"
 #include "ui/app_list/views/search_result_list_view_delegate.h"
 #include "ui/views/view.h"
@@ -21,6 +20,7 @@ namespace app_list {
 
 class AppListItem;
 class AppListModel;
+class AppListView;
 class AppListViewDelegate;
 class ApplicationDragAndDropHost;
 class ContentsView;
@@ -30,12 +30,11 @@ class SearchBoxView;
 // AppListMainView contains the normal view of the app list, which is shown
 // when the user is signed in.
 class APP_LIST_EXPORT AppListMainView : public views::View,
-                                        public AppsGridViewDelegate,
                                         public AppListModelObserver,
                                         public SearchBoxViewDelegate,
                                         public SearchResultListViewDelegate {
  public:
-  explicit AppListMainView(AppListViewDelegate* delegate);
+  AppListMainView(AppListViewDelegate* delegate, AppListView* app_list_view);
   ~AppListMainView() override;
 
   void Init(gfx::NativeView parent,
@@ -74,16 +73,21 @@ class APP_LIST_EXPORT AppListMainView : public views::View,
   void OnCustomLauncherPageEnabledStateChanged(bool enabled) override;
   void OnSearchEngineIsGoogleChanged(bool is_google) override;
 
+  // Invoked when an item is activated on the grid view. |event_flags| contains
+  // the flags of the keyboard/mouse event that triggers the activation request.
+  void ActivateApp(AppListItem* item, int event_flags);
+
+  // Called by the root grid view to cancel a drag that started inside a folder.
+  // This can occur when the root grid is visible for a reparent and its model
+  // changes, necessitating a cancel of the drag operation.
+  void CancelDragInActiveFolder();
+
  private:
   // Adds the ContentsView.
   void AddContentsViews();
 
   // Gets the PaginationModel owned by the AppsGridView.
   PaginationModel* GetAppsPaginationModel();
-
-  // Overridden from AppsGridViewDelegate:
-  void ActivateApp(AppListItem* item, int event_flags) override;
-  void CancelDragInActiveFolder() override;
 
   // Overridden from SearchBoxViewDelegate:
   void QueryChanged(SearchBoxView* sender) override;
@@ -99,6 +103,7 @@ class APP_LIST_EXPORT AppListMainView : public views::View,
   // Created by AppListView. Owned by views hierarchy.
   SearchBoxView* search_box_view_;
   ContentsView* contents_view_;  // Owned by views hierarchy.
+  AppListView* const app_list_view_;  // Owned by views hierarchy.
 
   DISALLOW_COPY_AND_ASSIGN(AppListMainView);
 };

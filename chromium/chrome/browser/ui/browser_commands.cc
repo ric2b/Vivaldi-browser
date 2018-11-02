@@ -14,7 +14,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/dom_distiller/tab_utils.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
@@ -75,7 +74,6 @@
 #include "content/public/browser/devtools_agent_host.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_entry.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host_view.h"
@@ -118,7 +116,7 @@
 
 
 #include "app/vivaldi_constants.h"
-#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 
 namespace {
 
@@ -881,6 +879,8 @@ void Translate(Browser* browser) {
   if (chrome_translate_client) {
     if (chrome_translate_client->GetLanguageState().translation_pending())
       step = translate::TRANSLATE_STEP_TRANSLATING;
+    else if (chrome_translate_client->GetLanguageState().translation_error())
+      step = translate::TRANSLATE_STEP_TRANSLATE_ERROR;
     else if (chrome_translate_client->GetLanguageState().IsPageTranslated())
       step = translate::TRANSLATE_STEP_AFTER_TRANSLATE;
   }
@@ -1133,9 +1133,9 @@ void OpenTaskManager(Browser* browser) {
 
 void OpenFeedbackDialog(Browser* browser, FeedbackSource source) {
   base::RecordAction(UserMetricsAction("Feedback"));
-  chrome::ShowFeedbackPage(browser, source,
-                           std::string() /* description_template */,
-                           std::string() /* category_tag */);
+  chrome::ShowFeedbackPage(
+      browser, source, std::string() /* description_template */,
+      std::string() /* category_tag */, std::string() /* extra_diagnostics */);
 }
 
 void ToggleBookmarkBar(Browser* browser) {
@@ -1156,15 +1156,9 @@ void ShowAvatarMenu(Browser* browser) {
 
 void OpenUpdateChromeDialog(Browser* browser) {
   if (UpgradeDetector::GetInstance()->is_outdated_install()) {
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_OUTDATED_INSTALL,
-        content::NotificationService::AllSources(),
-        content::NotificationService::NoDetails());
+    UpgradeDetector::GetInstance()->NotifyOutdatedInstall();
   } else if (UpgradeDetector::GetInstance()->is_outdated_install_no_au()) {
-    content::NotificationService::current()->Notify(
-        chrome::NOTIFICATION_OUTDATED_INSTALL_NO_AU,
-        content::NotificationService::AllSources(),
-        content::NotificationService::NoDetails());
+    UpgradeDetector::GetInstance()->NotifyOutdatedInstallNoAutoUpdate();
   } else {
     base::RecordAction(UserMetricsAction("UpdateChrome"));
     browser->window()->ShowUpdateChromeDialog();

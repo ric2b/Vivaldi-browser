@@ -11,10 +11,18 @@
 #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
 #include "chrome/common/pref_names.h"
 
+#include "app/vivaldi_apptools.h"
+#include "extensions/api/extension_action_utils/extension_action_utils_api.h"
+
 MediaRouterActionController::MediaRouterActionController(Profile* profile)
     : MediaRouterActionController(
           profile,
           media_router::MediaRouterFactory::GetApiForBrowserContext(profile),
+          vivaldi::IsVivaldiRunning()
+              ? static_cast<ComponentActionDelegate*>(
+                    extensions::ExtensionActionUtilFactory::GetForProfile(
+                        profile))
+              :
           ToolbarActionsModel::Get(profile)) {
   DCHECK(component_action_delegate_);
 }

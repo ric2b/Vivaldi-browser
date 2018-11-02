@@ -32,8 +32,6 @@ class Profile;
 class StatusBubble;
 class ToolbarActionsBar;
 
-struct WebApplicationInfo;
-
 namespace autofill {
 class SaveCardBubbleController;
 class SaveCardBubbleView;
@@ -240,21 +238,6 @@ class BrowserWindow : public ui::BaseWindow {
   // |already_bookmarked| is true if the url is already bookmarked.
   virtual void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) = 0;
 
-  // Callback type used with the ShowBookmarkAppBubble() method. The boolean
-  // parameter is true when the user accepts the dialog. The WebApplicationInfo
-  // parameter contains the WebApplicationInfo as edited by the user.
-  typedef base::Callback<void(bool, const WebApplicationInfo&)>
-      ShowBookmarkAppBubbleCallback;
-
-  // Shows the Bookmark App bubble.
-  // See Extension::InitFromValueFlags::FROM_BOOKMARK for a description of
-  // bookmark apps.
-  //
-  // |web_app_info| is the WebApplicationInfo being converted into an app.
-  virtual void ShowBookmarkAppBubble(
-      const WebApplicationInfo& web_app_info,
-      const ShowBookmarkAppBubbleCallback& callback) = 0;
-
   // Shows the "Save credit card" bubble.
   virtual autofill::SaveCardBubbleView* ShowSaveCreditCardBubble(
       content::WebContents* contents,
@@ -304,10 +287,9 @@ class BrowserWindow : public ui::BaseWindow {
   // that it's time to redraw everything.
   virtual void UserChangedTheme() = 0;
 
-  // Shows Page Info using the specified information. |virtual_url|
-  // is the virtual url of the page/frame the info applies to, |ssl| is the SSL
-  // information for that page/frame. If |show_history| is true, a section
-  // showing how many times that URL has been visited is added to the page info.
+  // Shows Page Info using the specified information. |virtual_url| is the
+  // virtual url of the page/frame the info applies to, and |security_info|
+  // contains the security state for that page/frame.
   virtual void ShowPageInfo(
       Profile* profile,
       content::WebContents* web_contents,

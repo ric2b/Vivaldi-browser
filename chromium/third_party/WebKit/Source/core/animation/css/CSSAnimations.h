@@ -37,7 +37,6 @@
 #include "core/animation/css/CSSAnimationUpdate.h"
 #include "core/css/CSSKeyframesRule.h"
 #include "core/css/StylePropertySet.h"
-#include "core/css/resolver/StyleResolverState.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "platform/wtf/HashMap.h"
@@ -64,12 +63,11 @@ class CSSAnimations final {
   static bool IsAnimationAffectingProperty(CSSPropertyID);
   static bool IsAffectedByKeyframesFromScope(const Element&, const TreeScope&);
   static bool IsAnimatingCustomProperties(const ElementAnimations*);
-  static bool IsCustomPropertyHandle(const PropertyHandle&);
   static void CalculateAnimationUpdate(CSSAnimationUpdate&,
                                        const Element* animating_element,
                                        Element&,
                                        const ComputedStyle&,
-                                       ComputedStyle* parent_style,
+                                       const ComputedStyle* parent_style,
                                        StyleResolver*);
   static void CalculateCompositorAnimationUpdate(
       CSSAnimationUpdate&,
@@ -157,7 +155,9 @@ class CSSAnimations final {
 
   CSSAnimationUpdate pending_update_;
 
-  ActiveInterpolationsMap previous_active_interpolations_for_animations_;
+  ActiveInterpolationsMap previous_active_interpolations_for_custom_animations_;
+  ActiveInterpolationsMap
+      previous_active_interpolations_for_standard_animations_;
 
   struct TransitionUpdateState {
     STACK_ALLOCATED();

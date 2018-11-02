@@ -1,0 +1,26 @@
+rootWebArea
+++grid
+++++row selectable
+++++++columnHeader selectable name='Browser'
+++++++++staticText name='Browser'
+++++++++++inlineTextBox name='Browser'
+++++++columnHeader selectable name='Rendering Engine'
+++++++++staticText name='Rendering Engine'
+++++++++++inlineTextBox name='Rendering Engine'
+++++row selectable
+++++++cell selectable name='Chrome'
+++++++++staticText name='Chrome'
+++++++++++inlineTextBox name='Chrome'
+++++++cell selectable name='Blink'
+++++++++staticText name='Blink'
+++++++++++inlineTextBox name='Blink'
+++++row selectable
+++++++cell selectable name='Safari'
+++++++++staticText name='Safari'
+++++++++++inlineTextBox name='Safari'
+++++++cell selectable name='WebKit'
+++++++++staticText name='WebKit'
+++++++++++inlineTextBox name='WebKit'
+++++column
+++++column
+++++tableHeaderContainer

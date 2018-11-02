@@ -20,33 +20,26 @@ void MixinBasedBrowserTest::SetUpCommandLine(base::CommandLine* command_line) {
   setup_was_launched_ = true;
   for (const auto& mixin : mixins_)
     mixin->SetUpCommandLine(command_line);
-
-  InProcessBrowserTest::SetUpCommandLine(command_line);
 }
 
 void MixinBasedBrowserTest::SetUpInProcessBrowserTestFixture() {
   setup_was_launched_ = true;
   for (const auto& mixin : mixins_)
     mixin->SetUpInProcessBrowserTestFixture();
-
-  InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
 }
 
 void MixinBasedBrowserTest::SetUpOnMainThread() {
   setup_was_launched_ = true;
   for (const auto& mixin : mixins_)
     mixin->SetUpOnMainThread();
-
-  InProcessBrowserTest::SetUpOnMainThread();
 }
 
 void MixinBasedBrowserTest::TearDownOnMainThread() {
-  InProcessBrowserTest::TearDownOnMainThread();
   for (const auto& mixin : base::Reversed(mixins_))
     mixin->TearDownInProcessBrowserTestFixture();
 }
+
 void MixinBasedBrowserTest::TearDownInProcessBrowserTestFixture() {
-  InProcessBrowserTest::TearDownInProcessBrowserTestFixture();
   for (const auto& mixin : base::Reversed(mixins_))
     mixin->TearDownInProcessBrowserTestFixture();
 }

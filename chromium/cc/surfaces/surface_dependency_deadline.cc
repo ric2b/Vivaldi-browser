@@ -4,15 +4,11 @@
 
 #include "cc/surfaces/surface_dependency_deadline.h"
 
-#include "cc/surfaces/surface_dependency_tracker.h"
-
 namespace cc {
 
 SurfaceDependencyDeadline::SurfaceDependencyDeadline(
-    SurfaceDependencyTracker* dependency_tracker,
     BeginFrameSource* begin_frame_source)
-    : dependency_tracker_(dependency_tracker),
-      begin_frame_source_(begin_frame_source) {
+    : begin_frame_source_(begin_frame_source) {
   DCHECK(begin_frame_source_);
 }
 
@@ -35,14 +31,40 @@ void SurfaceDependencyDeadline::Cancel() {
   number_of_frames_to_deadline_.reset();
 }
 
+bool SurfaceDependencyDeadline::InheritFrom(
+    const SurfaceDependencyDeadline& other) {
+  if (*this == other)
+    return false;
+
+  Cancel();
+  last_begin_frame_args_ = other.last_begin_frame_args_;
+  begin_frame_source_ = other.begin_frame_source_;
+  number_of_frames_to_deadline_ = other.number_of_frames_to_deadline_;
+  if (number_of_frames_to_deadline_)
+    begin_frame_source_->AddObserver(this);
+  return true;
+}
+
+bool SurfaceDependencyDeadline::operator==(
+    const SurfaceDependencyDeadline& other) {
+  return begin_frame_source_ == other.begin_frame_source_ &&
+         number_of_frames_to_deadline_ == other.number_of_frames_to_deadline_;
+}
+
 // BeginFrameObserver implementation.
 void SurfaceDependencyDeadline::OnBeginFrame(const BeginFrameArgs& args) {
   last_begin_frame_args_ = args;
+  // OnBeginFrame might get called immediately after cancellation if some other
+  // deadline triggered this deadline to be canceled.
+  if (!number_of_frames_to_deadline_ || args.type == BeginFrameArgs::MISSED)
+    return;
+
   if (--(*number_of_frames_to_deadline_) > 0)
     return;
 
   Cancel();
-  dependency_tracker_->OnDeadline();
+  for (auto& observer : observer_list_)
+    observer.OnDeadline();
 }
 
 const BeginFrameArgs& SurfaceDependencyDeadline::LastUsedBeginFrameArgs()

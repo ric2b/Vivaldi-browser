@@ -9,13 +9,14 @@
 #include <vector>
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
 #include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_request_delegate.h"
-#include "components/payments/mojom/payment_request.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -125,6 +126,8 @@ class PaymentRequest : public mojom::PaymentRequest,
 
   // Whether a completion was already recorded for this Payment Request.
   bool has_recorded_completion_ = false;
+
+  base::WeakPtrFactory<PaymentRequest> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(PaymentRequest);
 };

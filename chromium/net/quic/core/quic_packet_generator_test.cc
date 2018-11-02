@@ -22,6 +22,7 @@
 #include "net/quic/test_tools/quic_packet_creator_peer.h"
 #include "net/quic/test_tools/quic_packet_generator_peer.h"
 #include "net/quic/test_tools/quic_test_utils.h"
+#include "net/quic/test_tools/simple_data_producer.h"
 #include "net/quic/test_tools/simple_quic_framer.h"
 
 using std::string;
@@ -116,6 +117,9 @@ class QuicPacketGeneratorTest : public QuicTest {
     creator_->SetEncrypter(ENCRYPTION_FORWARD_SECURE,
                            new NullEncrypter(Perspective::IS_CLIENT));
     creator_->set_encryption_level(ENCRYPTION_FORWARD_SECURE);
+    if (FLAGS_quic_reloadable_flag_quic_stream_owns_data) {
+      framer_.set_data_producer(&producer_);
+    }
   }
 
   ~QuicPacketGeneratorTest() override {
@@ -228,6 +232,7 @@ class QuicPacketGeneratorTest : public QuicTest {
  private:
   std::unique_ptr<char[]> data_array_;
   struct iovec iov_;
+  SimpleDataProducer producer_;
 };
 
 class MockDebugDelegate : public QuicPacketCreator::DebugDelegate {

@@ -18,6 +18,8 @@
 #include "base/process/launch.h"
 #include "base/run_loop.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/task_scheduler.h"
+#include "base/test/launcher/test_launcher.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "chrome/app/mash/embedded_services.h"
@@ -26,6 +28,7 @@
 #include "chrome/test/base/mojo_test_connector.h"
 #include "content/public/app/content_main.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/test/test_launcher.h"
 #include "mash/session/public/interfaces/constants.mojom.h"
 #include "services/service_manager/public/cpp/connector.h"
@@ -109,17 +112,8 @@ class MashTestLauncherDelegate : public ChromeTestLauncherDelegate {
           base::MakeUnique<MojoTestConnector>(ReadCatalogManifest(), config_);
       mojo_test_connector_->Init();
     }
-    return mojo_test_connector_->PrepareForTest(
-        command_line, test_launch_options,
-        base::BindOnce(&MashTestLauncherDelegate::OnTestProcessLaunched,
-                       base::Unretained(this)));
-  }
-
-  void OnTestProcessLaunched() {
-    // Start default apps after chrome, as they may try to connect to chrome on
-    // startup. Attempt to connect once per test in case a previous test crashed
-    // mash_session.
-    mojo_test_connector_->StartService(mash::session::mojom::kServiceName);
+    return mojo_test_connector_->PrepareForTest(command_line,
+                                                test_launch_options);
   }
 
   void OnDoneRunningTests() override {
@@ -185,6 +179,20 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   if (!command_line->HasSwitch("run-in-mash") &&
       !command_line->HasSwitch("run-in-mus")) {
+    // Currently launching content_package_services via the browser_tests binary
+    // will lead to a nested test suite, trying to run all tests again. However
+    // they will be in a strange mixed mode, of a local-Ash, but non-local Aura.
+    //
+    // This leads to continuous crashes in OzonePlatform.
+    //
+    // For now disable this launch until the requesting site can be identified.
+    //
+    // TODO(jonross): find an appropriate way to launch content_package_services
+    // within the mash_browser_tests (crbug.com/738449)
+    if (command_line->GetSwitchValueASCII("service-name") ==
+        content::mojom::kPackagedServicesServiceName) {
+      return true;
+    }
     return false;
   }
 
@@ -198,13 +206,21 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
     base::debug::EnableInProcessStackDumping();
 #endif
 
+    base::TaskScheduler::CreateAndStartWithDefaultParams("StandaloneService");
+
     command_line->AppendSwitch(ui::switches::kUseTestConfig);
     service_manager::RunStandaloneService(base::Bind(&StartEmbeddedService));
     *exit_code = 0;
+
+    base::TaskScheduler::GetInstance()->Shutdown();
+
     return true;
   }
 
-  int default_jobs = std::max(1, base::SysInfo::NumberOfProcessors() / 2);
+  size_t parallel_jobs = base::NumParallelJobs();
+  if (parallel_jobs > 1U) {
+    parallel_jobs /= 2U;
+  }
   MashTestLauncherDelegate delegate;
   // --single_process and no service pipe token indicate we were run directly
   // from the command line. In this case we have to start up
@@ -217,6 +233,6 @@ bool RunMashBrowserTests(int argc, char** argv, int* exit_code) {
     content::ServiceManagerConnection::SetFactoryForTest(
         &service_manager_connection_factory);
   }
-  *exit_code = LaunchChromeTests(default_jobs, &delegate, argc, argv);
+  *exit_code = LaunchChromeTests(parallel_jobs, &delegate, argc, argv);
   return true;
 }

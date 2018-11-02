@@ -19,7 +19,6 @@
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 #include "chrome/browser/policy/cloud/user_cloud_policy_manager_factory.h"
 #include "chrome/browser/policy/cloud/user_policy_signin_service_factory.h"
@@ -31,6 +30,7 @@
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/common/pref_names.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/google/core/browser/google_util.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
@@ -42,6 +42,7 @@
 #include "components/signin/core/browser/signin_metrics.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/browsing_data_remover.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "google_apis/gaia/gaia_constants.h"
@@ -53,30 +54,75 @@ using bookmarks::BookmarkModel;
 
 namespace {
 
-// A BrowsingDataRemover::Observer that clears all Profile data and then
-// invokes a callback and deletes itself.
+// Clears the information about the last signed-in user from |profile|.
+void ClearLastSignedInUserForProfile(Profile* profile) {
+  profile->GetPrefs()->ClearPref(prefs::kGoogleServicesLastAccountId);
+  profile->GetPrefs()->ClearPref(prefs::kGoogleServicesLastUsername);
+}
+
+// A BrowsingDataRemover::Observer that clears Profile data and then invokes
+// a callback and deletes itself. It can be configured to delete all data
+// (for enterprise users) or only Google's service workers (for all users).
 class ProfileDataRemover : public content::BrowsingDataRemover::Observer {
  public:
-  ProfileDataRemover(Profile* profile, const base::Closure& callback)
-      : callback_(callback),
+  ProfileDataRemover(Profile* profile,
+                     bool all_data,
+                     const base::Closure& callback)
+      : profile_(profile),
+        all_data_(all_data),
+        callback_(callback),
         origin_runner_(base::ThreadTaskRunnerHandle::Get()),
         remover_(content::BrowserContext::GetBrowsingDataRemover(profile)) {
     remover_->AddObserver(this);
-    remover_->RemoveAndReply(
-        base::Time(), base::Time::Max(),
-        ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES,
-        ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES, this);
+
+    if (all_data) {
+      remover_->RemoveAndReply(
+          base::Time(), base::Time::Max(),
+          ChromeBrowsingDataRemoverDelegate::ALL_DATA_TYPES,
+          ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES, this);
+    } else {
+      std::unique_ptr<content::BrowsingDataFilterBuilder> google_tld_filter =
+          content::BrowsingDataFilterBuilder::Create(
+              content::BrowsingDataFilterBuilder::WHITELIST);
+
+      // TODO(msramek): BrowsingDataFilterBuilder was not designed for
+      // large filters. Optimize it.
+      for (const std::string& domain :
+           google_util::GetGoogleRegistrableDomains()) {
+        google_tld_filter->AddRegisterableDomain(domain);
+      }
+
+      remover_->RemoveWithFilterAndReply(
+          base::Time(), base::Time::Max(),
+          content::BrowsingDataRemover::DATA_TYPE_CACHE_STORAGE,
+          ChromeBrowsingDataRemoverDelegate::ALL_ORIGIN_TYPES,
+          std::move(google_tld_filter), this);
+    }
   }
 
   ~ProfileDataRemover() override {}
 
   void OnBrowsingDataRemoverDone() override {
     remover_->RemoveObserver(this);
+
+    if (all_data_) {
+      BookmarkModel* model =
+          BookmarkModelFactory::GetForBrowserContext(profile_);
+      model->RemoveAllUserBookmarks();
+
+      // All the Profile data has been wiped. Clear the last signed in username
+      // as well, so that the next signin doesn't trigger the account
+      // change dialog.
+      ClearLastSignedInUserForProfile(profile_);
+    }
+
     origin_runner_->PostTask(FROM_HERE, callback_);
     origin_runner_->DeleteSoon(FROM_HERE, this);
   }
 
  private:
+  Profile* profile_;
+  bool all_data_;
   base::Closure callback_;
   scoped_refptr<base::SingleThreadTaskRunner> origin_runner_;
   content::BrowsingDataRemover* remover_;
@@ -115,10 +161,11 @@ void SigninManagerAndroid::CheckPolicyBeforeSignIn(
   username_ = base::android::ConvertJavaStringToUTF8(env, username);
   policy::UserPolicySigninService* service =
       policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
-  service->RegisterForPolicy(
-      username_, AccountTrackerServiceFactory::GetForProfile(profile_)
-                     ->FindAccountInfoByEmail(username_)
-                     .account_id,
+  service->RegisterForPolicyWithAccountId(
+      username_,
+      AccountTrackerServiceFactory::GetForProfile(profile_)
+          ->FindAccountInfoByEmail(username_)
+          .account_id,
       base::Bind(&SigninManagerAndroid::OnPolicyRegisterDone,
                  weak_factory_.GetWeakPtr()));
 }
@@ -198,10 +245,21 @@ void SigninManagerAndroid::WipeProfileData(
   base::android::ScopedJavaGlobalRef<jobject> java_callback;
   java_callback.Reset(env, callback);
 
-  // The ProfileDataRemover deletes itself once done.
-  new ProfileDataRemover(
-      profile_, base::Bind(&SigninManagerAndroid::OnBrowsingDataRemoverDone,
-                           weak_factory_.GetWeakPtr(), java_callback));
+  WipeData(profile_, true /* all data */,
+           base::Bind(&SigninManagerAndroid::OnBrowsingDataRemoverDone,
+                      weak_factory_.GetWeakPtr(), java_callback));
+}
+
+void SigninManagerAndroid::WipeGoogleServiceWorkerCaches(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& callback) {
+  base::android::ScopedJavaGlobalRef<jobject> java_callback;
+  java_callback.Reset(env, callback);
+
+  WipeData(profile_, false /* only Google service worker caches */,
+           base::Bind(&SigninManagerAndroid::OnBrowsingDataRemoverDone,
+                      weak_factory_.GetWeakPtr(), java_callback));
 }
 
 void SigninManagerAndroid::OnPolicyRegisterDone(
@@ -232,13 +290,6 @@ void SigninManagerAndroid::OnPolicyFetchDone(bool success) {
 
 void SigninManagerAndroid::OnBrowsingDataRemoverDone(
     const base::android::ScopedJavaGlobalRef<jobject>& callback) {
-  BookmarkModel* model = BookmarkModelFactory::GetForBrowserContext(profile_);
-  model->RemoveAllUserBookmarks();
-
-  // All the Profile data has been wiped. Clear the last signed in username as
-  // well, so that the next signin doesn't trigger the acount change dialog.
-  ClearLastSignedInUser();
-
   Java_SigninManager_onProfileDataWiped(base::android::AttachCurrentThread(),
                                         java_signin_manager_, callback);
 }
@@ -246,12 +297,7 @@ void SigninManagerAndroid::OnBrowsingDataRemoverDone(
 void SigninManagerAndroid::ClearLastSignedInUser(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  ClearLastSignedInUser();
-}
-
-void SigninManagerAndroid::ClearLastSignedInUser() {
-  profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastAccountId);
-  profile_->GetPrefs()->ClearPref(prefs::kGoogleServicesLastUsername);
+  ClearLastSignedInUserForProfile(profile_);
 }
 
 void SigninManagerAndroid::LogInSignedInUser(JNIEnv* env,
@@ -299,8 +345,7 @@ void SigninManagerAndroid::GoogleSigninFailed(
     const GoogleServiceAuthError& error) {}
 
 void SigninManagerAndroid::GoogleSigninSucceeded(const std::string& account_id,
-                                                 const std::string& username,
-                                                 const std::string& password) {}
+                                                 const std::string& username) {}
 
 void SigninManagerAndroid::GoogleSignedOut(const std::string& account_id,
                                            const std::string& username) {
@@ -313,6 +358,14 @@ void SigninManagerAndroid::OnSigninAllowedPrefChanged() {
   Java_SigninManager_onSigninAllowedByPolicyChanged(
       base::android::AttachCurrentThread(), java_signin_manager_,
       SigninManagerFactory::GetForProfile(profile_)->IsSigninAllowed());
+}
+
+// static
+void SigninManagerAndroid::WipeData(Profile* profile,
+                                    bool all_data,
+                                    const base::Closure& callback) {
+  // The ProfileDataRemover deletes itself once done.
+  new ProfileDataRemover(profile, all_data, callback);
 }
 
 static jlong Init(JNIEnv* env, const JavaParamRef<jobject>& obj) {
@@ -342,10 +395,11 @@ static void IsUserManaged(
       base::android::ConvertJavaStringToUTF8(env, j_username);
   policy::UserPolicySigninService* service =
       policy::UserPolicySigninServiceFactory::GetForProfile(profile);
-  service->RegisterForPolicy(
-      username, AccountTrackerServiceFactory::GetForProfile(profile)
-                     ->FindAccountInfoByEmail(username)
-                     .account_id,
+  service->RegisterForPolicyWithAccountId(
+      username,
+      AccountTrackerServiceFactory::GetForProfile(profile)
+          ->FindAccountInfoByEmail(username)
+          .account_id,
       base::Bind(&UserManagementDomainFetched, callback));
 }
 
@@ -357,9 +411,4 @@ ExtractDomainName(
   std::string email = base::android::ConvertJavaStringToUTF8(env, j_email);
   std::string domain = gaia::ExtractDomainName(email);
   return base::android::ConvertUTF8ToJavaString(env, domain);
-}
-
-// static
-bool SigninManagerAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

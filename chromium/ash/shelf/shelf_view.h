@@ -10,11 +10,12 @@
 #include <utility>
 #include <vector>
 
+#include "ash/public/cpp/shelf_model_observer.h"
 #include "ash/public/interfaces/shelf.mojom.h"
 #include "ash/shelf/ink_drop_button_listener.h"
 #include "ash/shelf/shelf_button_pressed_metric_tracker.h"
-#include "ash/shelf/shelf_model_observer.h"
 #include "ash/shelf/shelf_tooltip_manager.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -49,10 +50,6 @@ class ShelfModel;
 struct ShelfItem;
 class ShelfWidget;
 
-namespace test {
-class ShelfViewTestAPI;
-}
-
 enum ShelfAlignmentUmaEnumValue {
   SHELF_ALIGNMENT_UMA_ENUM_VALUE_BOTTOM,
   SHELF_ALIGNMENT_UMA_ENUM_VALUE_LEFT,
@@ -67,7 +64,8 @@ class ASH_EXPORT ShelfView : public views::View,
                              public views::ContextMenuController,
                              public views::FocusTraversable,
                              public views::BoundsAnimatorObserver,
-                             public app_list::ApplicationDragAndDropHost {
+                             public app_list::ApplicationDragAndDropHost,
+                             public TabletModeObserver {
  public:
   ShelfView(ShelfModel* model, Shelf* shelf, ShelfWidget* shelf_widget);
   ~ShelfView() override;
@@ -100,6 +98,10 @@ class ASH_EXPORT ShelfView : public views::View,
   }
 
   AppListButton* GetAppListButton() const;
+
+  // ash::TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
   // Returns true if the mouse cursor exits the area for launcher tooltip.
   // There are thin gaps between launcher buttons but the tooltip shouldn't hide
@@ -171,8 +173,17 @@ class ASH_EXPORT ShelfView : public views::View,
 
   const ShelfButton* drag_view() const { return drag_view_; }
 
+  // Returns the AppListButton's current animation value, or 0.0 if the
+  // animation is not running. Used to synchronize AppListButton and ShelfView's
+  // icons' animations.
+  double GetAppListButtonAnimationCurrentValue();
+
+  bool is_tablet_mode_animation_running() const {
+    return is_tablet_mode_animation_running_;
+  }
+
  private:
-  friend class ash::test::ShelfViewTestAPI;
+  friend class ShelfViewTestAPI;
 
   class FadeOutAnimationDelegate;
   class StartFadeAnimationDelegate;
@@ -296,6 +307,8 @@ class ASH_EXPORT ShelfView : public views::View,
   void ShelfItemRemoved(int model_index, const ShelfItem& old_item) override;
   void ShelfItemChanged(int model_index, const ShelfItem& old_item) override;
   void ShelfItemMoved(int start_index, int target_index) override;
+  void ShelfItemDelegateChanged(const ShelfID& id,
+                                ShelfItemDelegate* delegate) override;
 
   // Handles the result of an item selection, records the |action| taken and
   // optionally shows an application menu with the given |menu_items|.
@@ -470,6 +483,14 @@ class ASH_EXPORT ShelfView : public views::View,
   // check if a repost event occurs on the same shelf item as previous one. If
   // so, the repost event should be ignored.
   int last_pressed_index_ = -1;
+
+  // True while the animation to enter or exit tablet mode is running. Sometimes
+  // this value is true when the shelf movements are not actually animating
+  // (animation value = 0.0). This is because this is set when we enter/exit
+  // tablet mode this is set to true but the animation is not started until a
+  // shelf OnBoundsChanged is called because of tablet mode. Use this value to
+  // sync up the animation for AppListButton.
+  bool is_tablet_mode_animation_running_ = false;
 
   // Tracks UMA metrics based on shelf button press actions.
   ShelfButtonPressedMetricTracker shelf_button_pressed_metric_tracker_;

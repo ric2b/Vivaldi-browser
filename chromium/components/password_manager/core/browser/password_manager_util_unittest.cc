@@ -58,18 +58,24 @@ TEST(PasswordManagerUtil, TrimUsernameOnlyCredentials) {
   EXPECT_THAT(forms, UnorderedPasswordFormElementsAre(&expected_forms));
 }
 
-TEST(PasswordManagerUtil, Calculate37BitsOfSHA256Hash) {
-  const char* kInputData[] = {"", "password", "secret"};
+TEST(PasswordManagerUtil, CalculateSyncPasswordHash) {
+  const char* kPlainText[] = {"", "password", "password", "secret"};
+  const char* kSalt[] = {"", "salt", "123", "456"};
 
-  const uint64_t kExpectedResult[] = {
-      UINT64_C(0x1842c4b0e3), UINT64_C(0x55d0601e2), UINT64_C(0x8b9dea8b3)};
+  constexpr uint64_t kExpectedHash[] = {
+      UINT64_C(0x1c610a7950), UINT64_C(0x1927dc525e), UINT64_C(0xf72f81aa6),
+      UINT64_C(0x3645af77f),
+  };
 
-  ASSERT_EQ(arraysize(kInputData), arraysize(kExpectedResult));
+  static_assert(arraysize(kPlainText) == arraysize(kSalt),
+                "Arrays must have the same size");
+  static_assert(arraysize(kPlainText) == arraysize(kExpectedHash),
+                "Arrays must have the same size");
 
-  for (size_t i = 0; i < arraysize(kInputData); ++i) {
-    base::string16 input = base::UTF8ToUTF16(kInputData[i]);
-
-    EXPECT_EQ(kExpectedResult[i],
-              password_manager_util::Calculate37BitsOfSHA256Hash(input));
+  for (size_t i = 0; i < arraysize(kPlainText); ++i) {
+    SCOPED_TRACE(i);
+    base::string16 text = base::UTF8ToUTF16(kPlainText[i]);
+    EXPECT_EQ(kExpectedHash[i],
+              password_manager_util::CalculateSyncPasswordHash(text, kSalt[i]));
   }
 }

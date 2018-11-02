@@ -5,7 +5,7 @@
 #include "modules/imagebitmap/ImageBitmapRenderingContext.h"
 
 #include "bindings/modules/v8/RenderingContext.h"
-#include "core/frame/ImageBitmap.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/StaticBitmapImage.h"
 #include "platform/graphics/gpu/ImageLayerBridge.h"
@@ -15,10 +15,9 @@
 namespace blink {
 
 ImageBitmapRenderingContext::ImageBitmapRenderingContext(
-    HTMLCanvasElement* canvas,
-    const CanvasContextCreationAttributes& attrs,
-    Document& document)
-    : CanvasRenderingContext(canvas, attrs),
+    CanvasRenderingContextHost* host,
+    const CanvasContextCreationAttributes& attrs)
+    : CanvasRenderingContext(host, attrs),
       image_layer_bridge_(
           new ImageLayerBridge(attrs.alpha() ? kNonOpaque : kOpaque)) {}
 
@@ -48,12 +47,11 @@ void ImageBitmapRenderingContext::transferFromImageBitmap(
 }
 
 CanvasRenderingContext* ImageBitmapRenderingContext::Factory::Create(
-    HTMLCanvasElement* canvas,
-    const CanvasContextCreationAttributes& attrs,
-    Document& document) {
-  if (!RuntimeEnabledFeatures::experimentalCanvasFeaturesEnabled())
+    CanvasRenderingContextHost* host,
+    const CanvasContextCreationAttributes& attrs) {
+  if (!RuntimeEnabledFeatures::ExperimentalCanvasFeaturesEnabled())
     return nullptr;
-  return new ImageBitmapRenderingContext(canvas, attrs, document);
+  return new ImageBitmapRenderingContext(host, attrs);
 }
 
 void ImageBitmapRenderingContext::Stop() {

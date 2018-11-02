@@ -37,11 +37,6 @@ declare_args() {
   # details and the expected format.
   override_build_date = "N/A"
 
-  # Turn on memory profiling in the task profiler when the heap shim is
-  # available. Profiling can then be enabled at runtime by passing the command
-  # line flag --enable-heap-profiling=task-profiler.
-  enable_memory_task_profiler = use_allocator_shim
-
   # Partition alloc is included by default except iOS.
   use_partition_alloc = !is_ios
 }
@@ -126,34 +121,28 @@ component("base") {
     "allocator/malloc_zone_functions_mac.cc",
     "allocator/malloc_zone_functions_mac.h",
     "android/animation_frame_time_histogram.cc",
-    "android/animation_frame_time_histogram.h",
     "android/apk_assets.cc",
     "android/apk_assets.h",
     "android/application_status_listener.cc",
     "android/application_status_listener.h",
     "android/base_jni_onload.cc",
     "android/base_jni_onload.h",
-    "android/base_jni_registrar.cc",
-    "android/base_jni_registrar.h",
     "android/build_info.cc",
     "android/build_info.h",
     "android/callback_android.cc",
     "android/callback_android.h",
+    "android/child_process_service_impl.cc",
     "android/command_line_android.cc",
     "android/command_line_android.h",
     "android/content_uri_utils.cc",
     "android/content_uri_utils.h",
     "android/cpu_features.cc",
-    "android/cpu_features.h",
     "android/cxa_demangle_stub.cc",
     "android/early_trace_event_binding.cc",
-    "android/early_trace_event_binding.h",
     "android/event_log.cc",
     "android/event_log.h",
     "android/field_trial_list.cc",
-    "android/field_trial_list.h",
     "android/important_file_writer_android.cc",
-    "android/important_file_writer_android.h",
     "android/java_exception_reporter.cc",
     "android/java_exception_reporter.h",
     "android/java_handler_thread.cc",
@@ -185,25 +174,21 @@ component("base") {
     "android/memory_pressure_listener_android.cc",
     "android/memory_pressure_listener_android.h",
     "android/path_service_android.cc",
-    "android/path_service_android.h",
     "android/path_utils.cc",
     "android/path_utils.h",
     "android/record_histogram.cc",
-    "android/record_histogram.h",
     "android/record_user_action.cc",
-    "android/record_user_action.h",
     "android/scoped_java_ref.cc",
     "android/scoped_java_ref.h",
     "android/statistics_recorder_android.cc",
-    "android/statistics_recorder_android.h",
     "android/sys_utils.cc",
     "android/sys_utils.h",
     "android/throw_uncaught_exception.cc",
     "android/throw_uncaught_exception.h",
     "android/time_utils.cc",
-    "android/time_utils.h",
+    "android/timezone_utils.cc",
+    "android/timezone_utils.h",
     "android/trace_event_binding.cc",
-    "android/trace_event_binding.h",
     "android/unguessable_token_android.cc",
     "android/unguessable_token_android.h",
     "at_exit.cc",
@@ -354,12 +339,9 @@ component("base") {
     "files/memory_mapped_file.h",
     "files/memory_mapped_file_posix.cc",
     "files/memory_mapped_file_win.cc",
+    "files/platform_file.h",
     "files/scoped_file.cc",
     "files/scoped_file.h",
-    "files/scoped_platform_handle.cc",
-    "files/scoped_platform_handle.h",
-    "files/scoped_platform_handle_posix.cc",
-    "files/scoped_platform_handle_win.cc",
     "files/scoped_temp_dir.cc",
     "files/scoped_temp_dir.h",
     "format_macros.h",
@@ -408,6 +390,7 @@ component("base") {
     "logging_win.h",
     "mac/authorization_util.h",
     "mac/authorization_util.mm",
+    "mac/availability.h",
     "mac/bind_objc_block.h",
     "mac/bundle_locations.h",
     "mac/bundle_locations.mm",
@@ -415,7 +398,6 @@ component("base") {
     "mac/call_with_eh_frame.h",
     "mac/call_with_eh_frame_asm.S",
     "mac/close_nocancel.cc",
-    "mac/cocoa_protocols.h",
     "mac/dispatch_source_mach.cc",
     "mac/dispatch_source_mach.h",
     "mac/foundation_util.h",
@@ -502,7 +484,6 @@ component("base") {
     "memory/ref_counted_memory.cc",
     "memory/ref_counted_memory.h",
     "memory/scoped_policy.h",
-    "memory/scoped_vector.h",
     "memory/shared_memory.h",
     "memory/shared_memory_android.cc",
     "memory/shared_memory_handle.cc",
@@ -514,6 +495,8 @@ component("base") {
     "memory/shared_memory_mac.cc",
     "memory/shared_memory_nacl.cc",
     "memory/shared_memory_posix.cc",
+    "memory/shared_memory_tracker.cc",
+    "memory/shared_memory_tracker.h",
     "memory/shared_memory_win.cc",
     "memory/singleton.cc",
     "memory/singleton.h",
@@ -597,10 +580,17 @@ component("base") {
     "nix/mime_util_xdg.h",
     "nix/xdg_util.cc",
     "nix/xdg_util.h",
+    "numerics/checked_math.h",
+    "numerics/checked_math_impl.h",
+    "numerics/clamped_math.h",
+    "numerics/clamped_math_impl.h",
     "numerics/safe_conversions.h",
+    "numerics/safe_conversions_arm_impl.h",
     "numerics/safe_conversions_impl.h",
     "numerics/safe_math.h",
-    "numerics/safe_math_impl.h",
+    "numerics/safe_math_arm_impl.h",
+    "numerics/safe_math_clang_gcc_impl.h",
+    "numerics/safe_math_shared_impl.h",
     "numerics/saturated_arithmetic.h",
     "numerics/saturated_arithmetic_arm.h",
     "observer_list.h",
@@ -703,8 +693,6 @@ component("base") {
     "profiler/scoped_tracker.h",
     "profiler/stack_sampling_profiler.cc",
     "profiler/stack_sampling_profiler.h",
-    "profiler/tracked_time.cc",
-    "profiler/tracked_time.h",
     "rand_util.cc",
     "rand_util.h",
     "rand_util_nacl.cc",
@@ -822,6 +810,8 @@ component("base") {
     "task_scheduler/environment_config.h",
     "task_scheduler/initialization_util.cc",
     "task_scheduler/initialization_util.h",
+    "task_scheduler/lazy_task_runner.cc",
+    "task_scheduler/lazy_task_runner.h",
     "task_scheduler/post_task.cc",
     "task_scheduler/post_task.h",
     "task_scheduler/priority_queue.cc",
@@ -872,9 +862,6 @@ component("base") {
     "third_party/nspr/prtime.h",
     "third_party/superfasthash/superfasthash.c",
     "third_party/valgrind/memcheck.h",
-    "threading/non_thread_safe.h",
-    "threading/non_thread_safe_impl.cc",
-    "threading/non_thread_safe_impl.h",
     "threading/platform_thread.h",
     "threading/platform_thread_android.cc",
     "threading/platform_thread_internal_posix.cc",
@@ -885,6 +872,10 @@ component("base") {
     "threading/platform_thread_win.cc",
     "threading/post_task_and_reply_impl.cc",
     "threading/post_task_and_reply_impl.h",
+    "threading/sequence_local_storage_map.cc",
+    "threading/sequence_local_storage_map.h",
+    "threading/sequence_local_storage_slot.cc",
+    "threading/sequence_local_storage_slot.h",
     "threading/sequenced_task_runner_handle.cc",
     "threading/sequenced_task_runner_handle.h",
     "threading/sequenced_worker_pool.cc",
@@ -973,6 +964,7 @@ component("base") {
     "trace_event/memory_allocator_dump_guid.h",
     "trace_event/memory_dump_manager.cc",
     "trace_event/memory_dump_manager.h",
+    "trace_event/memory_dump_manager_test_utils.h",
     "trace_event/memory_dump_provider.h",
     "trace_event/memory_dump_provider_info.cc",
     "trace_event/memory_dump_provider_info.h",
@@ -984,8 +976,6 @@ component("base") {
     "trace_event/memory_infra_background_whitelist.h",
     "trace_event/memory_peak_detector.cc",
     "trace_event/memory_peak_detector.h",
-    "trace_event/memory_tracing_observer.cc",
-    "trace_event/memory_tracing_observer.h",
     "trace_event/memory_usage_estimator.cc",
     "trace_event/memory_usage_estimator.h",
     "trace_event/process_memory_dump.cc",
@@ -1015,8 +1005,6 @@ component("base") {
     "trace_event/trace_event_impl.h",
     "trace_event/trace_event_memory_overhead.cc",
     "trace_event/trace_event_memory_overhead.h",
-    "trace_event/trace_event_synthetic_delay.cc",
-    "trace_event/trace_event_synthetic_delay.h",
     "trace_event/trace_event_system_stats_monitor.cc",
     "trace_event/trace_event_system_stats_monitor.h",
     "trace_event/trace_log.cc",
@@ -1033,12 +1021,18 @@ component("base") {
     "unguessable_token.h",
     "value_conversions.cc",
     "value_conversions.h",
+    "value_iterators.cc",
+    "value_iterators.h",
     "values.cc",
     "values.h",
     "version.cc",
     "version.h",
     "vlog.cc",
     "vlog.h",
+    "win/com_init_check_hook.cc",
+    "win/com_init_check_hook.h",
+    "win/com_init_util.cc",
+    "win/com_init_util.h",
     "win/current_module.h",
     "win/enum_variant.cc",
     "win/enum_variant.h",
@@ -1057,6 +1051,8 @@ component("base") {
     "win/message_window.h",
     "win/object_watcher.cc",
     "win/object_watcher.h",
+    "win/patch_util.cc",
+    "win/patch_util.h",
     "win/process_startup_helper.cc",
     "win/process_startup_helper.h",
     "win/registry.cc",
@@ -1122,7 +1118,6 @@ component("base") {
   configs += [
     ":base_flags",
     ":base_implementation",
-    "//base/allocator:allocator_shim_define",  # for allocator_check.cc.
     "//build/config:precompiled_headers",
   ]
 
@@ -1187,7 +1182,7 @@ component("base") {
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
-  if (is_mac || is_ios || is_chromeos || is_chromecast) {
+  if (is_mac || is_ios || is_chromeos || is_chromecast || is_fuchsia) {
     defines += [ "SYSTEM_NATIVE_UTF8" ]
   }
 
@@ -1202,7 +1197,6 @@ component("base") {
       "files/file_path_watcher_linux.cc",
       "posix/unix_domain_socket_linux.cc",
       "power_monitor/power_monitor_device_source_android.cc",
-      "power_monitor/power_monitor_device_source_android.h",
       "process/internal_linux.cc",
       "process/memory_linux.cc",
       "process/process_handle_linux.cc",
@@ -1230,23 +1224,37 @@ component("base") {
   }
 
   if (is_fuchsia) {
+    # These files have Fuchsia-specific implementations in the sources += block
+    # below, rather than using the generic POSIX or Linux-y ones.
     sources -= [
       "debug/stack_trace_posix.cc",
+      "memory/shared_memory_handle_posix.cc",
+      "memory/shared_memory_posix.cc",
       "message_loop/message_pump_libevent.cc",
       "message_loop/message_pump_libevent.h",
       "process/kill_posix.cc",
       "process/launch_posix.cc",
       "process/process_handle_posix.cc",
       "process/process_posix.cc",
+      "rand_util_posix.cc",
     ]
 
     sources += [
       "base_paths_fuchsia.cc",
       "debug/stack_trace_fuchsia.cc",
+      "files/file_path_watcher_fuchsia.cc",
+      "memory/shared_memory_fuchsia.cc",
+      "memory/shared_memory_handle_fuchsia.cc",
+      "message_loop/message_pump_fuchsia.cc",
+      "message_loop/message_pump_fuchsia.h",
       "process/kill_fuchsia.cc",
       "process/launch_fuchsia.cc",
+      "process/memory_fuchsia.cc",
       "process/process_fuchsia.cc",
       "process/process_handle_fuchsia.cc",
+      "process/process_iterator_fuchsia.cc",
+      "process/process_metrics_fuchsia.cc",
+      "rand_util_fuchsia.cc",
       "sys_info_fuchsia.cc",
       "threading/platform_thread_fuchsia.cc",
       "time/time_conversion_posix.cc",
@@ -1387,7 +1395,6 @@ component("base") {
     deps += [
       "//base/trace_event/etw_manifest:chrome_events_win",
       "//base/win:base_win_features",
-      "//base/win:eventlog_messages",
     ]
 
     if (is_component_build) {
@@ -1649,13 +1656,6 @@ component("base") {
     sources += [ "power_monitor/power_monitor_device_source_posix.cc" ]
   }
 
-  if (is_posix && !is_mac && !is_nacl) {
-    sources += [
-      "memory/shared_memory_tracker.cc",
-      "memory/shared_memory_tracker.h",
-    ]
-  }
-
   if (!use_glib) {
     sources -= [
       "message_loop/message_pump_glib.cc",
@@ -1685,7 +1685,6 @@ buildflag_header("debugging_flags") {
   header_dir = "base/debug"
   flags = [
     "ENABLE_PROFILING=$enable_profiling",
-    "ENABLE_MEMORY_TASK_PROFILER=$enable_memory_task_profiler",
     "CAN_UNWIND_WITH_FRAME_POINTERS=$can_unwind_with_frame_pointers",
   ]
 }
@@ -1699,11 +1698,13 @@ static_library("base_static") {
     "base_switches.h",
     "task_scheduler/switches.cc",
     "task_scheduler/switches.h",
-    "win/pe_image.cc",
-    "win/pe_image.h",
   ]
 
   if (is_win) {
+    public_deps = [
+      "//base/win:pe_image",
+    ]
+
     # Disable sanitizer coverage in win/pe_image.cc. It is called by the sandbox
     # before sanitizer coverage can initialize. http://crbug.com/484711
     configs -= [ "//build/config/sanitizers:default_sanitizer_flags" ]
@@ -1793,6 +1794,7 @@ test("base_perftests") {
 
     # "test/run_all_unittests.cc",
     "json/json_perftest.cc",
+    "synchronization/waitable_event_perftest.cc",
     "threading/thread_perftest.cc",
   ]
   deps = [
@@ -2010,6 +2012,7 @@ test("base_unittests") {
     "file_version_info_win_unittest.cc",
     "files/dir_reader_posix_unittest.cc",
     "files/file_descriptor_watcher_posix_unittest.cc",
+    "files/file_enumerator_unittest.cc",
     "files/file_locking_unittest.cc",
     "files/file_path_unittest.cc",
     "files/file_path_watcher_unittest.cc",
@@ -2019,7 +2022,6 @@ test("base_unittests") {
     "files/file_util_unittest.cc",
     "files/important_file_writer_unittest.cc",
     "files/memory_mapped_file_unittest.cc",
-    "files/scoped_platform_handle_unittest.cc",
     "files/scoped_temp_dir_unittest.cc",
     "gmock_unittest.cc",
     "guid_unittest.cc",
@@ -2073,12 +2075,12 @@ test("base_unittests") {
     "memory/ptr_util_unittest.cc",
     "memory/ref_counted_memory_unittest.cc",
     "memory/ref_counted_unittest.cc",
-    "memory/scoped_vector_unittest.cc",
     "memory/shared_memory_mac_unittest.cc",
     "memory/shared_memory_unittest.cc",
     "memory/shared_memory_win_unittest.cc",
     "memory/singleton_unittest.cc",
     "memory/weak_ptr_unittest.cc",
+    "message_loop/message_loop_io_posix_unittest.cc",
     "message_loop/message_loop_task_runner_unittest.cc",
     "message_loop/message_loop_unittest.cc",
     "message_loop/message_pump_glib_unittest.cc",
@@ -2114,6 +2116,7 @@ test("base_unittests") {
     "posix/file_descriptor_shuffle_unittest.cc",
     "posix/unix_domain_socket_linux_unittest.cc",
     "power_monitor/power_monitor_unittest.cc",
+    "process/launch_unittest_win.cc",
     "process/memory_unittest.cc",
     "process/memory_unittest_mac.h",
     "process/memory_unittest_mac.mm",
@@ -2123,7 +2126,6 @@ test("base_unittests") {
     "process/process_unittest.cc",
     "process/process_util_unittest.cc",
     "profiler/stack_sampling_profiler_unittest.cc",
-    "profiler/tracked_time_unittest.cc",
     "rand_util_unittest.cc",
     "run_loop_unittest.cc",
     "scoped_clear_errno_unittest.cc",
@@ -2164,6 +2166,7 @@ test("base_unittests") {
     "task/cancelable_task_tracker_unittest.cc",
     "task_runner_util_unittest.cc",
     "task_scheduler/delayed_task_manager_unittest.cc",
+    "task_scheduler/lazy_task_runner_unittest.cc",
     "task_scheduler/priority_queue_unittest.cc",
     "task_scheduler/scheduler_lock_unittest.cc",
     "task_scheduler/scheduler_single_thread_task_runner_manager_unittest.cc",
@@ -2180,10 +2183,12 @@ test("base_unittests") {
     "task_scheduler/task_unittest.cc",
     "task_scheduler/test_task_factory.cc",
     "task_scheduler/test_task_factory.h",
+    "task_scheduler/test_utils.cc",
     "task_scheduler/test_utils.h",
     "template_util_unittest.cc",
     "test/histogram_tester_unittest.cc",
     "test/mock_callback_unittest.cc",
+    "test/scoped_feature_list_unittest.cc",
     "test/scoped_mock_time_message_loop_task_runner_unittest.cc",
     "test/scoped_task_environment_unittest.cc",
     "test/scoped_task_scheduler_unittest.cc",
@@ -2191,9 +2196,10 @@ test("base_unittests") {
     "test/test_reg_util_win_unittest.cc",
     "test/trace_event_analyzer_unittest.cc",
     "test/user_action_tester_unittest.cc",
-    "threading/non_thread_safe_unittest.cc",
     "threading/platform_thread_unittest.cc",
     "threading/post_task_and_reply_impl_unittest.cc",
+    "threading/sequence_local_storage_map_unittest.cc",
+    "threading/sequence_local_storage_slot_unittest.cc",
     "threading/sequenced_task_runner_handle_unittest.cc",
     "threading/sequenced_worker_pool_unittest.cc",
     "threading/simple_thread_unittest.cc",
@@ -2233,15 +2239,17 @@ test("base_unittests") {
     "trace_event/trace_event_argument_unittest.cc",
     "trace_event/trace_event_filter_test_utils.cc",
     "trace_event/trace_event_filter_test_utils.h",
-    "trace_event/trace_event_synthetic_delay_unittest.cc",
     "trace_event/trace_event_system_stats_monitor_unittest.cc",
     "trace_event/trace_event_unittest.cc",
     "tracked_objects_unittest.cc",
     "tuple_unittest.cc",
     "unguessable_token_unittest.cc",
+    "value_iterators_unittest.cc",
     "values_unittest.cc",
     "version_unittest.cc",
     "vlog_unittest.cc",
+    "win/com_init_check_hook_unittest.cc",
+    "win/com_init_util_unittest.cc",
     "win/dllmain.cc",
     "win/enum_variant_unittest.cc",
     "win/event_trace_consumer_unittest.cc",
@@ -2294,16 +2302,13 @@ test("base_unittests") {
     ":base_unittests_bundle_data",
   ]
 
-  # Some unittests depend on the ALLOCATOR_SHIM macro.
-  configs += [ "//base/allocator:allocator_shim_define" ]
-
   data = [
     "test/data/",
   ]
 
   # Allow more direct string conversions on platforms with native utf8
   # strings
-  if (is_mac || is_ios || is_chromeos || is_chromecast) {
+  if (is_mac || is_ios || is_chromeos || is_chromecast || is_fuchsia) {
     defines += [ "SYSTEM_NATIVE_UTF8" ]
   }
 
@@ -2382,6 +2387,11 @@ test("base_unittests") {
   if (is_posix && !is_ios && !is_fuchsia) {
     sources += [ "message_loop/message_pump_libevent_unittest.cc" ]
     deps += [ "//base/third_party/libevent" ]
+  }
+
+  if (is_fuchsia) {
+    # Fuchsia doesn't support file locking.
+    sources -= [ "files/file_locking_unittest.cc" ]
   }
 
   if (is_android) {
@@ -2498,12 +2508,14 @@ if (is_android) {
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/ThrowUncaughtException.java",
       "android/java/src/org/chromium/base/TimeUtils.java",
+      "android/java/src/org/chromium/base/TimezoneUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
       "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/library_loader/LibraryLoader.java",
       "android/java/src/org/chromium/base/metrics/RecordHistogram.java",
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
       "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceImpl.java",
     ]
 
     public_deps = [
@@ -2565,7 +2577,6 @@ if (is_android) {
       "android/java/src/org/chromium/base/PackageUtils.java",
       "android/java/src/org/chromium/base/PathService.java",
       "android/java/src/org/chromium/base/PathUtils.java",
-      "android/java/src/org/chromium/base/PerfTraceEvent.java",
       "android/java/src/org/chromium/base/PowerMonitor.java",
       "android/java/src/org/chromium/base/Promise.java",
       "android/java/src/org/chromium/base/ResourceExtractor.java",
@@ -2576,6 +2587,7 @@ if (is_android) {
       "android/java/src/org/chromium/base/ThreadUtils.java",
       "android/java/src/org/chromium/base/ThrowUncaughtException.java",
       "android/java/src/org/chromium/base/TimeUtils.java",
+      "android/java/src/org/chromium/base/TimezoneUtils.java",
       "android/java/src/org/chromium/base/TraceEvent.java",
       "android/java/src/org/chromium/base/UnguessableToken.java",
       "android/java/src/org/chromium/base/VisibleForTesting.java",
@@ -2602,7 +2614,13 @@ if (is_android) {
       "android/java/src/org/chromium/base/metrics/RecordUserAction.java",
       "android/java/src/org/chromium/base/metrics/StatisticsRecorderAndroid.java",
       "android/java/src/org/chromium/base/multidex/ChromiumMultiDexInstaller.java",
-      "android/java/src/org/chromium/base/process_launcher/ChildProcessCreationParams.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildConnectionAllocator.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessConnection.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessConstants.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessLauncher.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessService.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceImpl.java",
+      "android/java/src/org/chromium/base/process_launcher/ChildProcessServiceDelegate.java",
       "android/java/src/org/chromium/base/process_launcher/FileDescriptorInfo.java",
     ]
 
@@ -2687,7 +2705,6 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/MetricsUtils.java",
       "test/android/javatests/src/org/chromium/base/test/util/MinAndroidSdkLevel.java",
       "test/android/javatests/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheck.java",
-      "test/android/javatests/src/org/chromium/base/test/util/PerfTest.java",
       "test/android/javatests/src/org/chromium/base/test/util/Restriction.java",
       "test/android/javatests/src/org/chromium/base/test/util/RestrictionSkipCheck.java",
       "test/android/javatests/src/org/chromium/base/test/util/RetryOnFailure.java",
@@ -2697,13 +2714,20 @@ if (is_android) {
       "test/android/javatests/src/org/chromium/base/test/util/TestFileUtil.java",
       "test/android/javatests/src/org/chromium/base/test/util/TestThread.java",
       "test/android/javatests/src/org/chromium/base/test/util/TimeoutScale.java",
+      "test/android/javatests/src/org/chromium/base/test/util/UserActionTester.java",
       "test/android/javatests/src/org/chromium/base/test/util/UrlUtils.java",
-      "test/android/javatests/src/org/chromium/base/test/util/parameter/BaseParameter.java",
-      "test/android/javatests/src/org/chromium/base/test/util/parameter/Parameter.java",
-      "test/android/javatests/src/org/chromium/base/test/util/parameter/Parameterizable.java",
-      "test/android/javatests/src/org/chromium/base/test/util/parameter/ParameterizedTest.java",
-      "test/android/javatests/src/org/chromium/base/test/util/parameter/parameters/MethodParameter.java",
+      "test/android/javatests/src/org/chromium/base/test/util/parameter/CommandLineParameter.java",
+      "test/android/javatests/src/org/chromium/base/test/util/parameter/SkipCommandLineParameterization.java",
     ]
+  }
+
+  android_library("base_java_process_launcher_test_support") {
+    testonly = true
+    deps = [
+      ":base_java",
+      ":base_java_test_support",
+    ]
+    java_files = [ "test/android/javatests/src/org/chromium/base/test/TestChildProcessConnection.java" ]
   }
 
   junit_binary("base_junit_tests") {
@@ -2713,6 +2737,8 @@ if (is_android) {
       "android/junit/src/org/chromium/base/LogTest.java",
       "android/junit/src/org/chromium/base/NonThreadSafeTest.java",
       "android/junit/src/org/chromium/base/PromiseTest.java",
+      "android/junit/src/org/chromium/base/process_launcher/ChildConnectionAllocatorTest.java",
+      "android/junit/src/org/chromium/base/process_launcher/ChildProcessConnectionTest.java",
       "test/android/junit/src/org/chromium/base/test/SetUpStatementTest.java",
       "test/android/junit/src/org/chromium/base/test/util/DisableIfTest.java",
       "test/android/junit/src/org/chromium/base/test/util/MinAndroidSdkLevelSkipCheckTest.java",
@@ -2721,6 +2747,7 @@ if (is_android) {
     ]
     deps = [
       ":base_java",
+      ":base_java_process_launcher_test_support",
       ":base_java_test_support",
     ]
     srcjar_deps = [ ":base_build_config_gen" ]

@@ -15,7 +15,8 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import org.chromium.base.process_launcher.ChildProcessCreationParams;
+import org.chromium.base.process_launcher.ChildConnectionAllocator;
+import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.util.TestCallbackHelperContainer;
@@ -43,12 +44,10 @@ public class ChildProcessLauncherIntegrationTest {
         private final List<TestChildProcessConnection> mConnections = new ArrayList<>();
 
         @Override
-        public ChildProcessConnection createConnection(ChildSpawnData spawnData,
-                ComponentName serviceName, boolean bindAsExternalService,
-                ChildProcessConnection.DeathCallback deathCallback) {
+        public ChildProcessConnection createConnection(Context context, ComponentName serviceName,
+                boolean bindToCaller, boolean bindAsExternalService, Bundle serviceBundle) {
             TestChildProcessConnection connection = new TestChildProcessConnection(
-                    spawnData.getContext(), deathCallback, serviceName, bindAsExternalService,
-                    spawnData.getServiceBundle(), spawnData.getCreationParams());
+                    context, serviceName, bindToCaller, bindAsExternalService, serviceBundle);
             mConnections.add(connection);
             return connection;
         }
@@ -61,12 +60,11 @@ public class ChildProcessLauncherIntegrationTest {
     private static class TestChildProcessConnection extends ChildProcessConnection {
         private RuntimeException mRemovedBothInitialAndStrongBinding;
 
-        public TestChildProcessConnection(Context context,
-                ChildProcessConnection.DeathCallback deathCallback, ComponentName serviceName,
-                boolean bindAsExternalService, Bundle childProcessCommonParameters,
-                ChildProcessCreationParams creationParams) {
-            super(context, deathCallback, serviceName, bindAsExternalService,
-                    childProcessCommonParameters, creationParams);
+        public TestChildProcessConnection(Context context, ComponentName serviceName,
+                boolean bindToCaller, boolean bindAsExternalService,
+                Bundle childProcessCommonParameters) {
+            super(context, serviceName, bindToCaller, bindAsExternalService,
+                    childProcessCommonParameters);
         }
 
         @Override
@@ -113,7 +111,7 @@ public class ChildProcessLauncherIntegrationTest {
     public void testCrossDomainNavigationDoNotLoseImportance() throws Throwable {
         final TestChildProcessConnectionFactory factory = new TestChildProcessConnectionFactory();
         final List<TestChildProcessConnection> connections = factory.getConnections();
-        ChildProcessLauncher.setSandboxServicesSettingsForTesting(factory,
+        ChildProcessLauncherHelper.setSandboxServicesSettingsForTesting(factory,
                 10 /* arbitrary number, only realy need 2 */, null /* use default service name */);
 
         ContentShellActivity activity =

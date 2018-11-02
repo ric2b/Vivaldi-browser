@@ -91,12 +91,12 @@ class PLATFORM_EXPORT ImageSource final {
   size_t FrameCount() const;
 
   // Attempts to create the requested frame.
-  sk_sp<SkImage> CreateFrameAtIndex(size_t, const ColorBehavior&);
+  sk_sp<SkImage> CreateFrameAtIndex(size_t);
 
   float FrameDurationAtIndex(size_t) const;
   bool FrameHasAlphaAtIndex(
       size_t) const;  // Whether or not the frame actually used any alpha.
-  bool FrameIsCompleteAtIndex(
+  bool FrameIsReceivedAtIndex(
       size_t) const;  // Whether or not the frame is fully received.
   ImageOrientation OrientationAtIndex(size_t) const;  // EXIF image orientation
 
@@ -106,7 +106,6 @@ class PLATFORM_EXPORT ImageSource final {
 
  private:
   std::unique_ptr<DeferredImageDecoder> decoder_;
-  ColorBehavior decoder_color_behavior_;
   bool all_data_received_ = false;
 };
 

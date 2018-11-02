@@ -11,7 +11,6 @@
 #include <cstddef>
 #include <memory>
 #include <string>
-#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -21,6 +20,7 @@
 #include "net/quic/core/quic_iovector.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_pending_retransmission.h"
+#include "net/quic/core/quic_stream_frame_data_producer.h"
 #include "net/quic/platform/api/quic_export.h"
 
 namespace net {
@@ -233,14 +233,6 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
                          bool fin,
                          QuicFrame* frame);
 
-  // Copies |length| bytes from iov starting at offset |iov_offset| into buffer.
-  // |iov| must be at least iov_offset+length total length and buffer must be
-  // at least |length| long.
-  static void CopyToBuffer(QuicIOVector iov,
-                           size_t iov_offset,
-                           size_t length,
-                           char* buffer);
-
   void FillPacketHeader(QuicPacketHeader* header);
 
   // Adds a |frame| if there is space and returns false and flushes all pending
@@ -268,6 +260,11 @@ class QUIC_EXPORT_PRIVATE QuicPacketCreator {
   // Returns true if a diversification nonce should be included in the current
   // packet's public header.
   bool IncludeNonceInPublicHeader();
+
+  // Returns true if |frame| starts with CHLO.
+  bool StreamFrameStartsWithChlo(QuicIOVector iov,
+                                 size_t iov_offset,
+                                 const QuicStreamFrame& frame) const;
 
   // Does not own these delegates or the framer.
   DelegateInterface* delegate_;

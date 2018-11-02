@@ -18,9 +18,9 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/surfaces/surface_sequence.h"
 #include "cc/trees/layer_tree_host_client.h"
 #include "cc/trees/layer_tree_host_single_thread_client.h"
+#include "components/viz/common/surfaces/surface_sequence.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/compositor/compositor_animation_observer.h"
 #include "ui/compositor/compositor_export.h"
@@ -40,13 +40,10 @@ class SingleThreadTaskRunner;
 namespace cc {
 class AnimationHost;
 class AnimationTimeline;
-class ContextProvider;
 class Layer;
 class LayerTreeDebugState;
+class LayerTreeFrameSink;
 class LayerTreeHost;
-class LocalSurfaceId;
-class RendererSettings;
-class SurfaceManager;
 class TaskGraphRunner;
 }
 
@@ -58,6 +55,14 @@ class Size;
 
 namespace gpu {
 class GpuMemoryBufferManager;
+}
+
+namespace viz {
+class FrameSinkManagerImpl;
+class ContextProvider;
+class HostFrameSinkManager;
+class LocalSurfaceId;
+class ResourceSettings;
 }
 
 namespace ui {
@@ -75,7 +80,7 @@ class COMPOSITOR_EXPORT ContextFactoryObserver {
  public:
   virtual ~ContextFactoryObserver() {}
 
-  // Notifies that the ContextProvider returned from
+  // Notifies that the viz::ContextProvider returned from
   // ui::ContextFactory::SharedMainThreadContextProvider was lost.  When this
   // is called, the old resources (e.g. shared context, GL helper) still
   // exist, but are about to be destroyed. Getting a reference to those
@@ -98,14 +103,17 @@ class COMPOSITOR_EXPORT ContextFactoryPrivate {
   virtual void RemoveReflector(Reflector* reflector) = 0;
 
   // Allocate a new client ID for the display compositor.
-  virtual cc::FrameSinkId AllocateFrameSinkId() = 0;
+  virtual viz::FrameSinkId AllocateFrameSinkId() = 0;
 
-  // Gets the surface manager.
-  virtual cc::SurfaceManager* GetSurfaceManager() = 0;
+  // Gets the frame sink manager.
+  virtual viz::FrameSinkManagerImpl* GetFrameSinkManager() = 0;
+
+  // Gets the frame sink manager host instance.
+  virtual viz::HostFrameSinkManager* GetHostFrameSinkManager() = 0;
 
   // Inform the display corresponding to this compositor if it is visible. When
   // false it does not need to produce any frames. Visibility is reset for each
-  // call to CreateCompositorFrameSink.
+  // call to CreateLayerTreeFrameSink.
   virtual void SetDisplayVisible(ui::Compositor* compositor, bool visible) = 0;
 
   // Resize the display corresponding to this compositor to a particular size.
@@ -121,7 +129,7 @@ class COMPOSITOR_EXPORT ContextFactoryPrivate {
   virtual void SetAuthoritativeVSyncInterval(ui::Compositor* compositor,
                                              base::TimeDelta interval) = 0;
   // Mac path for transporting vsync parameters to the display.  Other platforms
-  // update it via the BrowserCompositorCompositorFrameSink directly.
+  // update it via the BrowserCompositorLayerTreeFrameSink directly.
   virtual void SetDisplayVSyncParameters(ui::Compositor* compositor,
                                          base::TimeTicks timebase,
                                          base::TimeDelta interval) = 0;
@@ -138,12 +146,12 @@ class COMPOSITOR_EXPORT ContextFactory {
   // Creates an output surface for the given compositor. The factory may keep
   // per-compositor data (e.g. a shared context), that needs to be cleaned up
   // by calling RemoveCompositor when the compositor gets destroyed.
-  virtual void CreateCompositorFrameSink(
+  virtual void CreateLayerTreeFrameSink(
       base::WeakPtr<Compositor> compositor) = 0;
 
   // Return a reference to a shared offscreen context provider usable from the
   // main thread.
-  virtual scoped_refptr<cc::ContextProvider>
+  virtual scoped_refptr<viz::ContextProvider>
   SharedMainThreadContextProvider() = 0;
 
   // Destroys per-compositor data.
@@ -159,7 +167,7 @@ class COMPOSITOR_EXPORT ContextFactory {
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
 
   // Gets the renderer settings.
-  virtual const cc::RendererSettings& GetRendererSettings() const = 0;
+  virtual const viz::ResourceSettings& GetResourceSettings() const = 0;
 
   virtual void AddObserver(ContextFactoryObserver* observer) = 0;
 
@@ -176,10 +184,11 @@ class COMPOSITOR_EXPORT Compositor
       NON_EXPORTED_BASE(public cc::LayerTreeHostSingleThreadClient),
       NON_EXPORTED_BASE(public CompositorLockDelegate) {
  public:
-  Compositor(const cc::FrameSinkId& frame_sink_id,
+  Compositor(const viz::FrameSinkId& frame_sink_id,
              ui::ContextFactory* context_factory,
              ui::ContextFactoryPrivate* context_factory_private,
-             scoped_refptr<base::SingleThreadTaskRunner> task_runner);
+             scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+             bool enable_surface_synchronization);
   ~Compositor() override;
 
   ui::ContextFactory* context_factory() { return context_factory_; }
@@ -188,12 +197,12 @@ class COMPOSITOR_EXPORT Compositor
     return context_factory_private_;
   }
 
-  void AddFrameSink(const cc::FrameSinkId& frame_sink_id);
-  void RemoveFrameSink(const cc::FrameSinkId& frame_sink_id);
+  void AddFrameSink(const viz::FrameSinkId& frame_sink_id);
+  void RemoveFrameSink(const viz::FrameSinkId& frame_sink_id);
 
-  void SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id);
+  void SetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
 
-  void SetCompositorFrameSink(std::unique_ptr<cc::CompositorFrameSink> surface);
+  void SetLayerTreeFrameSink(std::unique_ptr<cc::LayerTreeFrameSink> surface);
 
   // Schedules a redraw of the layer tree associated with this compositor.
   void ScheduleDraw();
@@ -237,7 +246,7 @@ class COMPOSITOR_EXPORT Compositor
   void SetScaleAndSize(float scale, const gfx::Size& size_in_pixel);
 
   // Set the output color profile into which this compositor should render.
-  void SetDisplayColorProfile(const gfx::ICCProfile& icc_profile);
+  void SetDisplayColorSpace(const gfx::ColorSpace& color_space);
 
   // Returns the size of the widget that is being drawn to in pixel coordinates.
   const gfx::Size& size() const { return size_; }
@@ -266,9 +275,8 @@ class COMPOSITOR_EXPORT Compositor
   void SetAuthoritativeVSyncInterval(const base::TimeDelta& interval);
 
   // Most platforms set their vsync info via
-  // BrowerCompositorCompositorFrameSink's
-  // OnUpdateVSyncParametersFromGpu, but Mac routes vsync info via the
-  // browser compositor instead through this path.
+  // BrowerCompositorLayerTreeFrameSink::OnUpdateVSyncParametersFromGpu(), but
+  // Mac routes vsync info via the browser compositor instead through this path.
   void SetDisplayVSyncParameters(base::TimeTicks timebase,
                                  base::TimeDelta interval);
 
@@ -333,9 +341,9 @@ class COMPOSITOR_EXPORT Compositor
                            float top_controls_delta) override {}
   void RecordWheelAndTouchScrollingCount(bool has_scrolled_by_wheel,
                                          bool has_scrolled_by_touch) override {}
-  void RequestNewCompositorFrameSink() override;
-  void DidInitializeCompositorFrameSink() override {}
-  void DidFailToInitializeCompositorFrameSink() override;
+  void RequestNewLayerTreeFrameSink() override;
+  void DidInitializeLayerTreeFrameSink() override {}
+  void DidFailToInitializeLayerTreeFrameSink() override;
   void WillCommit() override {}
   void DidCommit() override;
   void DidCommitAndDrawFrame() override {}
@@ -346,7 +354,7 @@ class COMPOSITOR_EXPORT Compositor
 
   // cc::LayerTreeHostSingleThreadClient implementation.
   void DidSubmitCompositorFrame() override;
-  void DidLoseCompositorFrameSink() override {}
+  void DidLoseLayerTreeFrameSink() override {}
 
   bool IsLocked() { return !active_locks_.empty(); }
 
@@ -359,7 +367,7 @@ class COMPOSITOR_EXPORT Compositor
     return &layer_animator_collection_;
   }
 
-  const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+  const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
   int activated_frame_count() const { return activated_frame_count_; }
   float refresh_rate() const { return refresh_rate_; }
 
@@ -394,11 +402,14 @@ class COMPOSITOR_EXPORT Compositor
   // Current vsync refresh rate per second.
   float refresh_rate_ = 0.f;
 
+  // If nonzero, this is the refresh rate forced from the command-line.
+  double forced_refresh_rate_ = 0.f;
+
   // A map from child id to parent id.
-  std::unordered_set<cc::FrameSinkId, cc::FrameSinkIdHash> child_frame_sinks_;
+  std::unordered_set<viz::FrameSinkId, viz::FrameSinkIdHash> child_frame_sinks_;
   bool widget_valid_ = false;
-  bool compositor_frame_sink_requested_ = false;
-  const cc::FrameSinkId frame_sink_id_;
+  bool layer_tree_frame_sink_requested_ = false;
+  const viz::FrameSinkId frame_sink_id_;
   scoped_refptr<cc::Layer> root_web_layer_;
   std::unique_ptr<cc::AnimationHost> animation_host_;
   std::unique_ptr<cc::LayerTreeHost> host_;

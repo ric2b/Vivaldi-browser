@@ -84,12 +84,13 @@ bool FakeSessionManagerClient::IsScreenLocked() const {
 }
 
 void FakeSessionManagerClient::EmitLoginPromptVisible() {
+  for (auto& observer : observers_)
+    observer.EmitLoginPromptVisibleCalled();
 }
 
-void FakeSessionManagerClient::RestartJob(
-    int socket_fd,
-    const std::vector<std::string>& argv,
-    const VoidDBusMethodCallback& callback) {}
+void FakeSessionManagerClient::RestartJob(int socket_fd,
+                                          const std::vector<std::string>& argv,
+                                          VoidDBusMethodCallback callback) {}
 
 void FakeSessionManagerClient::StartSession(
     const cryptohome::Identification& cryptohome_id) {
@@ -111,6 +112,9 @@ void FakeSessionManagerClient::NotifySupervisedUserCreationFinished() {
 void FakeSessionManagerClient::StartDeviceWipe() {
   start_device_wipe_call_count_++;
 }
+
+void FakeSessionManagerClient::StartTPMFirmwareUpdate(
+    const std::string& update_mode) {}
 
 void FakeSessionManagerClient::RequestLockScreen() {
   request_lock_screen_call_count_++;
@@ -158,6 +162,15 @@ FakeSessionManagerClient::BlockingRetrievePolicyForUser(
     std::string* policy_out) {
   *policy_out = user_policies_[cryptohome_id];
   return RetrievePolicyResponseType::SUCCESS;
+}
+
+void FakeSessionManagerClient::RetrievePolicyForUserWithoutSession(
+    const cryptohome::Identification& cryptohome_id,
+    const RetrievePolicyCallback& callback) {
+  // This is currently not supported in FakeSessionManagerClient.
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::Bind(callback, nullptr, RetrievePolicyResponseType::OTHER_ERROR));
 }
 
 void FakeSessionManagerClient::RetrieveDeviceLocalAccountPolicy(
@@ -241,6 +254,7 @@ void FakeSessionManagerClient::CheckArcAvailability(
 }
 
 void FakeSessionManagerClient::StartArcInstance(
+    ArcStartupMode startup_mode,
     const cryptohome::Identification& cryptohome_id,
     bool disable_boot_completed_broadcast,
     bool enable_vendor_privileged,

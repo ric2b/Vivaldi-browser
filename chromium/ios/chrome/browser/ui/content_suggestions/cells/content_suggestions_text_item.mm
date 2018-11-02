@@ -18,9 +18,6 @@
 @synthesize text = _text;
 @synthesize detailText = _detailText;
 @synthesize suggestionIdentifier = _suggestionIdentifier;
-@synthesize attributes = _attributes;
-@synthesize delegate = _delegate;
-@synthesize image = _image;
 
 - (instancetype)initWithType:(NSInteger)type {
   self = [super initWithType:type];
@@ -33,14 +30,8 @@
 - (void)configureCell:(CollectionViewTextCell*)cell {
   [super configureCell:cell];
 
-  cell.textLabel.text = self.text;
-  cell.textLabel.textColor = [[MDCPalette greyPalette] tint900];
-  cell.textLabel.font = [MDCTypography body2Font];
-  cell.textLabel.numberOfLines = 0;
-  cell.detailTextLabel.text = self.detailText;
-  cell.detailTextLabel.textColor = [[MDCPalette greyPalette] tint500];
-  cell.detailTextLabel.font = [MDCTypography body1Font];
-  cell.detailTextLabel.numberOfLines = 0;
+  [self configureTextLabel:cell.textLabel];
+  [self configureDetailTextLabel:cell.detailTextLabel];
 
   cell.isAccessibilityElement = YES;
   if (self.detailText.length == 0) {
@@ -49,6 +40,35 @@
     cell.accessibilityLabel =
         [NSString stringWithFormat:@"%@, %@", self.text, self.detailText];
   }
+}
+
+- (CGFloat)cellHeightForWidth:(CGFloat)width {
+  UILabel* textLabel = [[UILabel alloc] init];
+  UILabel* detailTextLabel = [[UILabel alloc] init];
+  [self configureTextLabel:textLabel];
+  [self configureDetailTextLabel:detailTextLabel];
+
+  return [self.cellClass heightForTitleLabel:textLabel
+                             detailTextLabel:detailTextLabel
+                                       width:width];
+}
+
+#pragma mark - Private
+
+// Configures the |textLabel|.
+- (void)configureTextLabel:(UILabel*)textLabel {
+  textLabel.text = self.text;
+  textLabel.textColor = [[MDCPalette greyPalette] tint900];
+  textLabel.font = [MDCTypography body2Font];
+  textLabel.numberOfLines = 0;
+}
+
+// Configures the |detailTextLabel|.
+- (void)configureDetailTextLabel:(UILabel*)detailTextLabel {
+  detailTextLabel.text = self.detailText;
+  detailTextLabel.textColor = [[MDCPalette greyPalette] tint500];
+  detailTextLabel.font = [MDCTypography body1Font];
+  detailTextLabel.numberOfLines = 0;
 }
 
 @end

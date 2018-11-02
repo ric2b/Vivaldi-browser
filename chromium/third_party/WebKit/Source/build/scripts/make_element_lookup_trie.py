@@ -64,15 +64,17 @@ class ElementLookupTrieWriter(json5_generator.Writer):
             (self._namespace + 'ElementLookupTrie.cpp'): self.generate_implementation,
         }
 
-    @template_expander.use_jinja('ElementLookupTrie.h.tmpl')
+    @template_expander.use_jinja('templates/ElementLookupTrie.h.tmpl')
     def generate_header(self):
         return {
+            'input_files': self._input_files,
             'namespace': self._namespace,
         }
 
-    @template_expander.use_jinja('ElementLookupTrie.cpp.tmpl')
+    @template_expander.use_jinja('templates/ElementLookupTrie.cpp.tmpl')
     def generate_implementation(self):
         return {
+            'input_files': self._input_files,
             'namespace': self._namespace,
             'length_tries': trie_builder.trie_list_by_str_length(self._tags)
         }

@@ -40,7 +40,6 @@
 #include "core/events/AddEventListenerOptionsResolved.h"
 #include "core/events/EventDispatchResult.h"
 #include "core/events/EventListenerMap.h"
-#include "core/frame/UseCounter.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
@@ -208,13 +207,8 @@ class CORE_EXPORT EventTarget : public GarbageCollectedFinalized<EventTarget>,
  private:
   LocalDOMWindow* ExecutingWindow();
   void SetDefaultAddEventListenerOptions(const AtomicString& event_type,
+                                         EventListener*,
                                          AddEventListenerOptionsResolved&);
-
-  // UseCounts the event if it has the specified type. Returns true iff the
-  // event type matches.
-  bool CheckTypeThenUseCount(const Event*,
-                             const AtomicString&,
-                             const UseCounter::Feature);
 
   bool FireEventListeners(Event*, EventTargetData*, EventListenerVector&);
   void CountLegacyEvents(const AtomicString& legacy_type_name,

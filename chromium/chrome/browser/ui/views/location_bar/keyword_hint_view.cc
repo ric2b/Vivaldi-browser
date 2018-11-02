@@ -11,6 +11,7 @@
 #include "base/macros.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
+#include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/location_bar/background_with_1_px_border.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/grit/generated_resources.h"
@@ -21,22 +22,6 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
-
-#if defined(USE_AURA)
-#include "ui/keyboard/keyboard_util.h"
-#endif
-
-namespace {
-
-bool IsVirtualKeyboardVisible() {
-#if defined(USE_AURA)
-  return keyboard::IsKeyboardVisible();
-#else
-  return false;
-#endif
-}
-
-}  // namespace
 
 KeywordHintView::KeywordHintView(views::ButtonListener* listener,
                                  Profile* profile,
@@ -65,9 +50,9 @@ KeywordHintView::KeywordHintView(views::ButtonListener* listener,
   chip_label_->SetBackgroundColor(tab_bg_color);
 
   chip_container_->SetBorder(views::CreateEmptyBorder(
-      gfx::Insets(LocationBarView::kBubbleVerticalPadding, 0)));
-  chip_container_->set_background(
-      new BackgroundWith1PxBorder(tab_bg_color, tab_border_color));
+      gfx::Insets(GetLayoutConstant(LOCATION_BAR_BUBBLE_VERTICAL_PADDING), 0)));
+  chip_container_->SetBackground(base::MakeUnique<BackgroundWith1PxBorder>(
+      tab_bg_color, tab_border_color));
   chip_container_->AddChildView(chip_label_);
   chip_container_->SetLayoutManager(new views::FillLayout());
   AddChildView(chip_container_);
@@ -79,6 +64,13 @@ KeywordHintView::KeywordHintView(views::ButtonListener* listener,
 KeywordHintView::~KeywordHintView() {}
 
 void KeywordHintView::SetKeyword(const base::string16& keyword) {
+  // When the virtual keyboard is visible, we show a modified touch UI
+  // containing only the chip and no surrounding labels.
+  const bool was_touch_ui = leading_label_->text().empty();
+  const bool is_touch_ui = LocationBarView::IsVirtualKeyboardVisible();
+  if (is_touch_ui == was_touch_ui && keyword_ == keyword)
+    return;
+
   keyword_ = keyword;
   if (keyword_.empty())
     return;
@@ -92,7 +84,7 @@ void KeywordHintView::SetKeyword(const base::string16& keyword) {
   base::string16 short_name(
       url_service->GetKeywordShortName(keyword, &is_extension_keyword));
 
-  if (IsVirtualKeyboardVisible()) {
+  if (is_touch_ui) {
     int message_id = is_extension_keyword
                          ? IDS_OMNIBOX_EXTENSION_KEYWORD_HINT_TOUCH
                          : IDS_OMNIBOX_KEYWORD_HINT_TOUCH;

@@ -6,6 +6,7 @@
 #define COMPONENTS_FEATURE_ENGAGEMENT_TRACKER_INTERNAL_CONFIGURATION_H_
 
 #include <map>
+#include <ostream>
 #include <set>
 #include <string>
 #include <vector>
@@ -47,6 +48,7 @@ struct Comparator {
 
 bool operator==(const Comparator& lhs, const Comparator& rhs);
 bool operator<(const Comparator& lhs, const Comparator& rhs);
+std::ostream& operator<<(std::ostream& os, const Comparator& comparator);
 
 // A EventConfig contains all the information about how many times
 // a particular event should or should not have triggered, for which window
@@ -76,6 +78,7 @@ struct EventConfig {
 bool operator==(const EventConfig& lhs, const EventConfig& rhs);
 bool operator!=(const EventConfig& lhs, const EventConfig& rhs);
 bool operator<(const EventConfig& lhs, const EventConfig& rhs);
+std::ostream& operator<<(std::ostream& os, const EventConfig& event_config);
 
 // A FeatureConfig contains all the configuration for a given feature.
 struct FeatureConfig {
@@ -109,13 +112,15 @@ struct FeatureConfig {
 };
 
 bool operator==(const FeatureConfig& lhs, const FeatureConfig& rhs);
+std::ostream& operator<<(std::ostream& os, const FeatureConfig& feature_config);
+
 // A Configuration contains the current set of runtime configurations.
 // It is up to each implementation of Configuration to provide a way to
 // register features and their configurations.
 class Configuration {
  public:
   // Convenience alias for typical implementations of Configuration.
-  using ConfigMap = std::map<const base::Feature*, FeatureConfig>;
+  using ConfigMap = std::map<std::string, FeatureConfig>;
 
   virtual ~Configuration() = default;
 
@@ -123,6 +128,11 @@ class Configuration {
   // be registered with the Configuration instance.
   virtual const FeatureConfig& GetFeatureConfig(
       const base::Feature& feature) const = 0;
+
+  // Returns the FeatureConfig for the given |feature|. The |feature_name| must
+  // be registered with the Configuration instance.
+  virtual const FeatureConfig& GetFeatureConfigByName(
+      const std::string& feature_name) const = 0;
 
   // Returns the immutable ConfigMap that contains all registered features.
   virtual const ConfigMap& GetRegisteredFeatures() const = 0;

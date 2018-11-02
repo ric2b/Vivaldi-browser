@@ -111,21 +111,20 @@ void ResourceMultiBufferDataProvider::Start() {
   std::unique_ptr<WebAssociatedURLLoader> loader;
   if (test_loader_) {
     loader = std::move(test_loader_);
+    request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeSameOrigin);
+    request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
   } else {
     WebAssociatedURLLoaderOptions options;
-    if (url_data_->cors_mode() == UrlData::CORS_UNSPECIFIED) {
-      options.allow_credentials = true;
-      options.cross_origin_request_policy =
-          WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyAllow;
-    } else {
+    if (url_data_->cors_mode() != UrlData::CORS_UNSPECIFIED) {
       options.expose_all_response_headers = true;
       // The author header set is empty, no preflight should go ahead.
       options.preflight_policy =
           WebAssociatedURLLoaderOptions::kPreventPreflight;
-      options.cross_origin_request_policy = WebAssociatedURLLoaderOptions::
-          kCrossOriginRequestPolicyUseAccessControl;
-      if (url_data_->cors_mode() == UrlData::CORS_USE_CREDENTIALS)
-        options.allow_credentials = true;
+      request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+      if (url_data_->cors_mode() != UrlData::CORS_USE_CREDENTIALS) {
+        request.SetFetchCredentialsMode(
+            WebURLRequest::kFetchCredentialsModeSameOrigin);
+      }
     }
     loader.reset(url_data_->frame()->CreateAssociatedURLLoader(options));
   }
@@ -289,6 +288,7 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
   destination_url_data->set_mime_type(response.MimeType().Latin1());
   bool end_of_file = false;
   bool do_fail = false;
+  bytes_to_discard_ = 0;
 
   // We make a strong assumption that when we reach here we have either
   // received a response from HTTP/HTTPS protocol or the request was
@@ -310,11 +310,12 @@ void ResourceMultiBufferDataProvider::DidReceiveResponse(
     if (partial_response &&
         VerifyPartialResponse(response, destination_url_data)) {
       destination_url_data->set_range_supported();
-    } else if (ok_response && pos_ == 0) {
+    } else if (ok_response) {
       // We accept a 200 response for a Range:0- request, trusting the
       // Accept-Ranges header, because Apache thinks that's a reasonable thing
       // to return.
       destination_url_data->set_length(content_length);
+      bytes_to_discard_ = byte_pos();
     } else if (response.HttpStatusCode() == kHttpRangeNotSatisfiable) {
       // Unsatisfiable range
       // Really, we should never request a range that doesn't exist, but
@@ -388,6 +389,17 @@ void ResourceMultiBufferDataProvider::DidReceiveData(const char* data,
   DCHECK(active_loader_);
   DCHECK_GT(data_length, 0);
 
+  url_data_->AddBytesReadFromNetwork(data_length);
+
+  if (bytes_to_discard_) {
+    uint64_t tmp = std::min<uint64_t>(bytes_to_discard_, data_length);
+    data_length -= tmp;
+    data += tmp;
+    bytes_to_discard_ -= tmp;
+    if (data_length == 0)
+      return;
+  }
+
   // When we receive data, we allow more retries.
   retries_ = 0;
 
@@ -453,6 +465,10 @@ void ResourceMultiBufferDataProvider::DidFinishLoading(double finishTime) {
   url_data_->set_length(size);
   fifo_.push_back(DataBuffer::CreateEOSBuffer());
 
+  if (url_data_->url_index()) {
+    url_data_->url_index()->TryInsert(url_data_);
+  }
+
   DCHECK(Available());
   url_data_->multibuffer()->OnDataProviderEvent(this);
 
@@ -461,7 +477,6 @@ void ResourceMultiBufferDataProvider::DidFinishLoading(double finishTime) {
 
 void ResourceMultiBufferDataProvider::DidFail(const WebURLError& error) {
   DVLOG(1) << "didFail: reason=" << error.reason
-           << ", isCancellation=" << error.is_cancellation
            << ", domain=" << error.domain.Utf8().data()
            << ", localizedDescription="
            << error.localized_description.Utf8().data();
@@ -559,9 +574,13 @@ bool ResourceMultiBufferDataProvider::VerifyPartialResponse(
     url_data->set_length(instance_size);
   }
 
-  if (byte_pos() != first_byte_position) {
+  if (first_byte_position > byte_pos()) {
     return false;
   }
+  if (last_byte_position + 1 < byte_pos()) {
+    return false;
+  }
+  bytes_to_discard_ = byte_pos() - first_byte_position;
 
   return true;
 }

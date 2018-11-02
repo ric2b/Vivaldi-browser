@@ -15,6 +15,7 @@
 #include "chrome/common/pref_names.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_prefs.h"
+#include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
@@ -40,20 +41,65 @@
 #include "extensions/browser/pref_names.h"
 #endif
 
+#if DCHECK_IS_ON()
+
+#include <set>
+#include "base/lazy_instance.h"
+#include "base/logging.h"
+#include "base/synchronization/lock.h"
+
+namespace {
+
+base::LazyInstance<base::Lock>::Leaky g_instances_lock =
+    LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<std::set<content::BrowserContext*>>::Leaky g_instances =
+    LAZY_INSTANCE_INITIALIZER;
+
+}  // namespace
+
+#endif  // DCHECK_IS_ON()
+
 Profile::Profile()
     : restored_last_session_(false),
       sent_destroyed_notification_(false),
       accessibility_pause_level_(0),
       is_guest_profile_(false),
       is_system_profile_(false) {
+#if DCHECK_IS_ON()
+  base::AutoLock lock(g_instances_lock.Get());
+  g_instances.Get().insert(this);
+#endif  // DCHECK_IS_ON()
+
+  BrowserContextDependencyManager::GetInstance()->MarkBrowserContextLive(this);
 }
 
 Profile::~Profile() {
+#if DCHECK_IS_ON()
+  base::AutoLock lock(g_instances_lock.Get());
+  g_instances.Get().erase(this);
+#endif  // DCHECK_IS_ON()
 }
 
 // static
 Profile* Profile::FromBrowserContext(content::BrowserContext* browser_context) {
-  // This is safe; this is the only implementation of the browser context.
+  if (!browser_context)
+    return nullptr;
+
+  // For code running in a chrome/ environment, it is safe to cast to Profile*
+  // because Profile is the only implementation of BrowserContext used. In
+  // testing, however, there are several BrowserContext subclasses that are not
+  // Profile subclasses, and we can catch them. http://crbug.com/725276
+#if DCHECK_IS_ON()
+  base::AutoLock lock(g_instances_lock.Get());
+  if (!g_instances.Get().count(browser_context)) {
+    DCHECK(false)
+        << "Non-Profile BrowserContext passed to Profile::FromBrowserContext! "
+           "If you have a test linked in chrome/ you need a chrome/ based test "
+           "class such as TestingProfile in chrome/test/base/testing_profile.h "
+           "or you need to subclass your test class from Profile, not from "
+           "BrowserContext.";
+  }
+#endif  // DCHECK_IS_ON()
   return static_cast<Profile*>(browser_context);
 }
 
@@ -63,14 +109,18 @@ Profile* Profile::FromWebUI(content::WebUI* web_ui) {
 }
 
 TestingProfile* Profile::AsTestingProfile() {
-  return NULL;
+  return nullptr;
 }
 
 #if !defined(OS_ANDROID)
 ChromeZoomLevelPrefs* Profile::GetZoomLevelPrefs() {
-  return NULL;
+  return nullptr;
 }
 #endif  // !defined(OS_ANDROID)
+
+PrefService* Profile::GetReadOnlyOffTheRecordPrefs() {
+  return GetOffTheRecordPrefs();
+}
 
 Profile::Delegate::~Delegate() {
 }
@@ -96,25 +146,7 @@ void Profile::RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {
   registry->RegisterStringPref(prefs::kSessionExitType, std::string());
   registry->RegisterInt64Pref(prefs::kSiteEngagementLastUpdateTime, 0,
                               PrefRegistry::LOSSY_PREF);
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingEnabled,
-      true,
-      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
-  registry->RegisterBooleanPref(prefs::kSafeBrowsingExtendedReportingEnabled,
-                                false);
-  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutReportingEnabled,
-                                false);
-  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutGroupSelected, false);
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingSawInterstitialExtendedReporting, false);
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingSawInterstitialScoutReporting, false);
-  registry->RegisterBooleanPref(prefs::kSafeBrowsingProceedAnywayDisabled,
-                                false);
   registry->RegisterBooleanPref(prefs::kSSLErrorOverrideAllowed, true);
-  registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
-  registry->RegisterBooleanPref(
-      prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
   // This pref is intentionally outside the above #if. That flag corresponds
   // to the Notifier extension and does not gate the launcher page.
   // TODO(skare): Remove or rename ENABLE_GOOGLE_NOW: http://crbug.com/459827.

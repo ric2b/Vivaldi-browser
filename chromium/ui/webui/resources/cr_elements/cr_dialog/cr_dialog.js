@@ -48,6 +48,10 @@ Polymer({
     },
   },
 
+  listeners: {
+    'pointerdown': 'onPointerdown_',
+  },
+
   /** @private {?IntersectionObserver} */
   intersectionObserver_: null,
 
@@ -110,7 +114,8 @@ Polymer({
     var topMarker = this.$.bodyTopMarker;
 
     var callback = function(entries) {
-      assert(entries.length <= 2);
+      // In some rare cases, there could be more than one entry per observed
+      // element, in which case the last entry's result stands.
       for (var i = 0; i < entries.length; i++) {
         var target = entries[i].target;
         assert(target == bottomMarker || target == topMarker);
@@ -196,5 +201,30 @@ Polymer({
   onCancel_: function(e) {
     if (this.noCancel)
       e.preventDefault();
+  },
+
+  /** @param {!PointerEvent} e */
+  onPointerdown_: function(e) {
+    // Only show pulse animation if user left-clicked outside of the dialog
+    // contents.
+    if (e.button != 0 || e.composedPath()[0].tagName !== 'DIALOG')
+      return;
+
+    this.animate(
+        [
+          {transform: 'scale(1)', offset: 0},
+          {transform: 'scale(1.02)', offset: 0.4},
+          {transform: 'scale(1.02)', offset: 0.6},
+          {transform: 'scale(1)', offset: 1},
+        ],
+        /** @type {!KeyframeEffectOptions} */ ({
+          duration: 180,
+          easing: 'ease-in-out',
+          iterations: 1,
+        }));
+
+    // Prevent any text from being selected within the dialog when clicking in
+    // the backdrop area.
+    e.preventDefault();
   },
 });

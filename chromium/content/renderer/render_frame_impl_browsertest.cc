@@ -25,12 +25,14 @@
 #include "content/test/fake_compositor_dependencies.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebEffectiveConnectionType.h"
+#include "third_party/WebKit/public/platform/WebRuntimeFeatures.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebView.h"
+#include "ui/native_theme/native_theme_features.h"
 
 using blink::WebString;
 using blink::WebURLRequest;
@@ -51,6 +53,8 @@ class RenderFrameImplTest : public RenderViewTest {
   ~RenderFrameImplTest() override {}
 
   void SetUp() override {
+    blink::WebRuntimeFeatures::EnableOverlayScrollbars(
+        ui::IsOverlayScrollbarEnabled());
     RenderViewTest::SetUp();
     EXPECT_TRUE(GetMainRenderFrame()->is_main_frame_);
 
@@ -153,6 +157,7 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   resize_params.screen_info = ScreenInfo();
   resize_params.new_size = size;
   resize_params.physical_backing_size = size;
+  resize_params.visible_viewport_size = size;
   resize_params.top_controls_height = 0.f;
   resize_params.browser_controls_shrink_blink_size = false;
   resize_params.is_fullscreen_granted = false;
@@ -161,6 +166,7 @@ TEST_F(RenderFrameImplTest, FrameResize) {
   frame_widget()->OnMessageReceived(resize_message);
 
   EXPECT_EQ(frame_widget()->GetWebWidget()->Size(), blink::WebSize(size));
+  EXPECT_EQ(view_->GetWebView()->Size(), blink::WebSize(size));
 }
 
 // Verify a subframe RenderWidget properly processes a WasShown message.
@@ -488,6 +494,38 @@ TEST_F(RenderFrameImplTest, PreviewsStateAfterWillSendRequest) {
   }
 }
 
+TEST_F(RenderFrameImplTest, IsClientLoFiActiveForFrame) {
+  const struct {
+    PreviewsState frame_previews_state;
+    bool expected_is_client_lo_fi_active_for_frame;
+  } tests[] = {
+      // With no previews enabled for the frame, no previews should be
+      // activated.
+      {PREVIEWS_UNSPECIFIED, false},
+
+      // Server Lo-Fi should not make Client Lo-Fi active.
+      {SERVER_LOFI_ON, false},
+
+      // PREVIEWS_NO_TRANSFORM and PREVIEWS_OFF should
+      // take precedence over Client Lo-Fi.
+      {CLIENT_LOFI_ON | PREVIEWS_NO_TRANSFORM, false},
+      {CLIENT_LOFI_ON | PREVIEWS_OFF, false},
+
+      // Otherwise, if Client Lo-Fi is enabled on its own or with
+      // SERVER_LOFI_ON, then it is active for the frame.
+      {CLIENT_LOFI_ON, true},
+      {CLIENT_LOFI_ON | SERVER_LOFI_ON, true},
+  };
+
+  for (const auto& test : tests) {
+    SetPreviewsState(frame(), test.frame_previews_state);
+
+    EXPECT_EQ(test.expected_is_client_lo_fi_active_for_frame,
+              frame()->IsClientLoFiActiveForFrame())
+        << (&test - tests);
+  }
+}
+
 TEST_F(RenderFrameImplTest, ShouldUseClientLoFiForRequest) {
   const struct {
     PreviewsState frame_previews_state;
@@ -504,17 +542,17 @@ TEST_F(RenderFrameImplTest, ShouldUseClientLoFiForRequest) {
       {CLIENT_LOFI_ON, false, WebURLRequest::kServerLoFiOn, false},
       {PREVIEWS_UNSPECIFIED, false, WebURLRequest::kClientLoFiOn, true},
       {CLIENT_LOFI_ON, false, WebURLRequest::kClientLoFiOn, true},
+      {CLIENT_LOFI_ON | SERVER_LITE_PAGE_ON, true,
+       WebURLRequest::kPreviewsUnspecified, true},
+      {CLIENT_LOFI_ON | SERVER_LITE_PAGE_ON, false,
+       WebURLRequest::kPreviewsUnspecified, true},
 
       // If Client Lo-Fi isn't enabled for the frame, then it shouldn't be used
       // for any requests.
       {SERVER_LOFI_ON, true, WebURLRequest::kPreviewsUnspecified, false},
 
-      // SERVER_LITE_PAGE_ON, PREVIEWS_NO_TRANSFORM, and PREVIEWS_OFF should
-      // take precedence over Client Lo-Fi.
-      {CLIENT_LOFI_ON | SERVER_LITE_PAGE_ON, false,
-       WebURLRequest::kPreviewsUnspecified, false},
-      {CLIENT_LOFI_ON | SERVER_LITE_PAGE_ON, true,
-       WebURLRequest::kPreviewsUnspecified, false},
+      // PREVIEWS_NO_TRANSFORM and PREVIEWS_OFF should take precedence
+      // over Client Lo-Fi.
       {CLIENT_LOFI_ON | PREVIEWS_NO_TRANSFORM, false,
        WebURLRequest::kPreviewsUnspecified, false},
       {CLIENT_LOFI_ON | PREVIEWS_OFF, false,

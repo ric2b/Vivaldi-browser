@@ -14,22 +14,19 @@
 #include "ios/chrome/test/app/settings_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::AssertMainTabCount;
 using chrome_test_util::OmniboxText;
 using chrome_test_util::TapWebViewElementWithId;
-using chrome_test_util::WebViewContainingText;
 using web::test::HttpServer;
 
 namespace {
@@ -66,16 +63,15 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
   [super setUp];
   // Open the test page. There should only be one tab open.
   [ChromeEarlGrey loadURL:HttpServer::MakeUrl(kTestURL)];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("Expected result")]
-      assertWithMatcher:grey_notNil()];
-  AssertMainTabCount(1);
+  [ChromeEarlGrey waitForWebViewContainingText:"Expected result"];
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests that opening a link with target=_blank which then immediately closes
 // itself works.
 - (void)testLinkWithBlankTargetWithImmediateClose {
   TapWebViewElementWithId("webScenarioWindowOpenBlankTargetWithImmediateClose");
-  AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests that sessionStorage content is available for windows opened by DOM via
@@ -88,9 +84,8 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
   GREYAssert(!error, @"Error during script execution: %@", error);
 
   TapWebViewElementWithId("webScenarioWindowOpenSameURLWithBlankTarget");
-  AssertMainTabCount(2);
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("Expected result")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForMainTabCount:2];
+  [ChromeEarlGrey waitForWebViewContainingText:"Expected result"];
 
   id value = ExecuteJavaScript(@"sessionStorage.getItem('key');", &error);
   GREYAssert(!error, @"Error during script execution: %@", error);
@@ -100,31 +95,31 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
 // Tests a link with target="_blank".
 - (void)testLinkWithBlankTarget {
   TapWebViewElementWithId("webScenarioWindowOpenRegularLink");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests a link with target="_blank" multiple times.
 - (void)testLinkWithBlankTargetMultipleTimes {
   TapWebViewElementWithId("webScenarioWindowOpenRegularLinkMultipleTimes");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   chrome_test_util::OpenNewTab();
-  AssertMainTabCount(3);
+  [ChromeEarlGrey waitForMainTabCount:3];
   chrome_test_util::SelectTabAtIndexInCurrentMode(0);
   TapWebViewElementWithId("webScenarioWindowOpenRegularLinkMultipleTimes");
-  AssertMainTabCount(4);
+  [ChromeEarlGrey waitForMainTabCount:4];
 }
 
 // Tests a window.open by assigning to window.location.
 - (void)testWindowOpenAndAssignToHref {
   TapWebViewElementWithId("webScenarioWindowOpenTabWithAssignmentToHref");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests that opening a window and calling window.location.assign works.
 - (void)testWindowOpenAndCallLocationAssign {
   // Open a child tab.
   TapWebViewElementWithId("webScenarioWindowOpenAndCallLocationAssign");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Ensure that the resulting tab is updated as expected.
   const GURL targetURL =
@@ -138,7 +133,7 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
 - (void)testWindowOpenAndSetLocation {
   // Open a child tab.
   TapWebViewElementWithId("webScenarioWindowOpenAndSetLocation");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Ensure that the resulting tab is updated as expected.
   const GURL targetURL =
@@ -150,40 +145,40 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
 // Tests a button that invokes window.open() with "_blank" target parameter.
 - (void)testWindowOpenWithBlankTarget {
   TapWebViewElementWithId("webScenarioWindowOpenWithBlankTarget");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests that opening a window with target=_blank which closes itself after 1
 // second delay.
 - (void)testLinkWithBlankTargetWithDelayedClose {
   TapWebViewElementWithId("webScenarioWindowOpenWithDelayedClose");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(1));
-  AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests a window.open used in a <button onClick> element.
 - (void)testWindowOpenWithButtonOnClick {
   TapWebViewElementWithId("webScenarioWindowOpenWithButtonOnClick");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests a button that invokes window.open with an empty target parameter.
 - (void)testWindowOpenWithEmptyTarget {
   TapWebViewElementWithId("webScenarioWindowOpenWithEmptyTarget");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests a link with JavaScript in the href.
 + (void)testWindowOpenWithJavaScriptInHref {
   TapWebViewElementWithId("webScenarioWindowOpenWithJavaScriptInHref");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests a window.open by running Meta-Refresh.
 - (void)testWindowOpenWithMetaRefresh {
   TapWebViewElementWithId("webScenarioWindowOpenWithMetaRefresh");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests that a link with an onclick that opens a tab and calls preventDefault
@@ -191,7 +186,7 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
 - (void)testWindowOpenWithPreventDefaultLink {
   // Open a child tab.
   TapWebViewElementWithId("webScenarioWindowOpenWithPreventDefaultLink");
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Ensure that the starting tab hasn't navigated.
   chrome_test_util::CloseCurrentTab();
@@ -200,10 +195,20 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
       assertWithMatcher:grey_notNil()];
 }
 
+// Tests opening a child window using the following link
+// <a href="data:text/html,<script>window.location='about:newtab';</script>"
+//    target="_blank">
+- (void)testWindowOpenWithAboutNewTabScript {
+  TapWebViewElementWithId("webScenarioWindowOpenWithAboutNewTabScript");
+  [ChromeEarlGrey waitForMainTabCount:2];
+  [[EarlGrey selectElementWithMatcher:OmniboxText("about:newtab")]
+      assertWithMatcher:grey_notNil()];
+}
+
 // Tests that closing the current window using DOM fails.
 - (void)testCloseWindowNotOpenByDOM {
   TapWebViewElementWithId("webScenarioWindowClose");
-  AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests that popup blocking works when a popup is injected into a window before
@@ -214,7 +219,7 @@ NSString* GetBlockedPopupInfobarText(size_t blocked_count) {
   NSString* infobarText = GetBlockedPopupInfobarText(1);
   [[EarlGrey selectElementWithMatcher:grey_accessibilityLabel(infobarText)]
       assertWithMatcher:grey_notNil()];
-  AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 @end

@@ -10,7 +10,7 @@ login.createScreen('UpdateScreen', 'update', function() {
   var USER_ACTION_CANCEL_UPDATE_SHORTCUT = 'cancel-update';
   var CONTEXT_KEY_TIME_LEFT_SEC = 'time-left-sec';
   var CONTEXT_KEY_SHOW_TIME_LEFT = 'show-time-left';
-  var CONTEXT_KEY_UPDATE_MESSAGE = 'update-msg';
+  var CONTEXT_KEY_UPDATE_COMPLETED = 'update-completed';
   var CONTEXT_KEY_SHOW_CURTAIN = 'show-curtain';
   var CONTEXT_KEY_SHOW_PROGRESS_MESSAGE = 'show-progress-msg';
   var CONTEXT_KEY_PROGRESS = 'progress';
@@ -24,39 +24,38 @@ login.createScreen('UpdateScreen', 'update', function() {
     decorate: function() {
       var self = this;
 
-      this.context.addObserver(CONTEXT_KEY_TIME_LEFT_SEC,
-                               function(time_left_sec) {
-        self.setEstimatedTimeLeft(time_left_sec);
-      });
-      this.context.addObserver(CONTEXT_KEY_SHOW_TIME_LEFT,
-                               function(show_time_left) {
-        self.showEstimatedTimeLeft(show_time_left);
-      });
-      this.context.addObserver(CONTEXT_KEY_UPDATE_MESSAGE,
-                               function(update_msg) {
-        self.setUpdateMessage(update_msg);
-      });
-      this.context.addObserver(CONTEXT_KEY_SHOW_CURTAIN,
-                               function(show_curtain) {
-        self.showUpdateCurtain(show_curtain);
-      });
-      this.context.addObserver(CONTEXT_KEY_SHOW_PROGRESS_MESSAGE,
-                               function(show_progress_msg) {
-        self.showProgressMessage(show_progress_msg);
-      });
-      this.context.addObserver(CONTEXT_KEY_PROGRESS,
-                               function(progress) {
+      this.context.addObserver(
+          CONTEXT_KEY_TIME_LEFT_SEC, function(time_left_sec) {
+            self.setEstimatedTimeLeft(time_left_sec);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_SHOW_TIME_LEFT, function(show_time_left) {
+            self.showEstimatedTimeLeft(show_time_left);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_UPDATE_COMPLETED, function(is_completed) {
+            self.setUpdateCompleted(is_completed);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_SHOW_CURTAIN, function(show_curtain) {
+            self.showUpdateCurtain(show_curtain);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_SHOW_PROGRESS_MESSAGE, function(show_progress_msg) {
+            self.showProgressMessage(show_progress_msg);
+          });
+      this.context.addObserver(CONTEXT_KEY_PROGRESS, function(progress) {
         self.setUpdateProgress(progress);
       });
-      this.context.addObserver(CONTEXT_KEY_PROGRESS_MESSAGE,
-                               function(progress_msg) {
-        self.setProgressMessage(progress_msg);
-      });
-      this.context.addObserver(CONTEXT_KEY_CANCEL_UPDATE_SHORTCUT_ENABLED,
-                               function(enabled) {
-        $('update-cancel-hint').hidden = !enabled;
-        $('oobe-update-md').cancelAllowed = enabled;
-      });
+      this.context.addObserver(
+          CONTEXT_KEY_PROGRESS_MESSAGE, function(progress_msg) {
+            self.setProgressMessage(progress_msg);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_CANCEL_UPDATE_SHORTCUT_ENABLED, function(enabled) {
+            $('update-cancel-hint').hidden = !enabled;
+            $('oobe-update-md').cancelAllowed = enabled;
+          });
     },
 
     /**
@@ -77,8 +76,8 @@ login.createScreen('UpdateScreen', 'update', function() {
       var message = loadTimeData.getString('cancelledUpdateMessage');
       updateCancelHint.textContent = message;
       $('oobe-update-md').setCancelHint(message);
-      this.send(login.Screen.CALLBACK_USER_ACTED,
-                USER_ACTION_CANCEL_UPDATE_SHORTCUT);
+      this.send(
+          login.Screen.CALLBACK_USER_ACTED, USER_ACTION_CANCEL_UPDATE_SHORTCUT);
     },
 
     /**
@@ -113,16 +112,15 @@ login.createScreen('UpdateScreen', 'update', function() {
       } else if (minutes > 55) {
         message = loadTimeData.getString('downloadingTimeLeftStatusOneHour');
       } else if (minutes > 20) {
-        message = loadTimeData.getStringF('downloadingTimeLeftStatusMinutes',
-                                          Math.ceil(minutes / 5) * 5);
+        message = loadTimeData.getStringF(
+            'downloadingTimeLeftStatusMinutes', Math.ceil(minutes / 5) * 5);
       } else if (minutes > 1) {
-        message = loadTimeData.getStringF('downloadingTimeLeftStatusMinutes',
-                                          minutes);
+        message = loadTimeData.getStringF(
+            'downloadingTimeLeftStatusMinutes', minutes);
       } else {
         message = loadTimeData.getString('downloadingTimeLeftSmall');
       }
-      var formattedMessage =
-          loadTimeData.getStringF('downloading', message);
+      var formattedMessage = loadTimeData.getStringF('downloading', message);
       $('estimated-time-left').textContent = formattedMessage;
       $('oobe-update-md').estimatedTimeLeft = formattedMessage;
     },
@@ -148,12 +146,12 @@ login.createScreen('UpdateScreen', 'update', function() {
     },
 
     /**
-     * Sets update message, which is shown above the progress bar.
-     * @param {text} message Message which is shown by the label.
+     * Marks update completed. Shows "update completed" message.
+     * @param {boolean} is_completed True if update process is completed.
      */
-    setUpdateMessage: function(message) {
-      $('update-upper-label').textContent = message;
-      $('oobe-update-md').updateUpperLabel = message;
+    setUpdateCompleted: function(is_completed) {
+      $('update-upper-label').hidden = is_completed;
+      $('oobe-update-md').updateCompleted = is_completed;
     },
 
     /**

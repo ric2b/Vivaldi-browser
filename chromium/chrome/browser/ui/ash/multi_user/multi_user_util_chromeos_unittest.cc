@@ -16,7 +16,6 @@
 #include "components/user_manager/user.h"
 
 namespace ash {
-namespace test {
 
 namespace {
 
@@ -53,7 +52,7 @@ class MultiUserTestingProfile : public TestingProfile {
 class MultiUserUtilTest : public AshTestBase {
  public:
   MultiUserUtilTest() {}
-  ~MultiUserUtilTest() override{};
+  ~MultiUserUtilTest() override {}
 
   void SetUp() override {
     AshTestBase::SetUp();
@@ -127,5 +126,4 @@ TEST_F(MultiUserUtilTest, ReturnValidAccountIdIfTokenRevoked) {
             multi_user_util::GetAccountIdFromProfile(profile()).GetUserEmail());
 }
 
-}  // namespace test
 }  // namespace ash

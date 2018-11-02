@@ -347,9 +347,12 @@ VolumeManager* VolumeManager::Get(content::BrowserContext* context) {
 }
 
 void VolumeManager::Initialize() {
-  // If in Sign in profile, then skip mounting and listening for mount events.
-  if (chromeos::ProfileHelper::IsSigninProfile(profile_))
+  // If in the Sign in profile pr the lock screen app profile, skip mounting
+  // and listening for mount events.
+  if (chromeos::ProfileHelper::IsSigninProfile(profile_) ||
+      chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
     return;
+  }
 
   // Register 'Downloads' folder for the profile to the file system.
   const base::FilePath downloads =
@@ -855,9 +858,9 @@ void VolumeManager::OnRemovableStorageAttached(
 
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&MTPDeviceMapService::RegisterMTPFileSystem,
-                 base::Unretained(MTPDeviceMapService::GetInstance()),
-                 info.location(), fsid, read_only));
+      base::BindOnce(&MTPDeviceMapService::RegisterMTPFileSystem,
+                     base::Unretained(MTPDeviceMapService::GetInstance()),
+                     info.location(), fsid, read_only));
 
   std::unique_ptr<Volume> volume = Volume::CreateForMTP(path, label, read_only);
   DoMountEvent(chromeos::MOUNT_ERROR_NONE, std::move(volume));
@@ -875,10 +878,10 @@ void VolumeManager::OnRemovableStorageDetached(
       const std::string fsid = GetMountPointNameForMediaStorage(info);
       storage::ExternalMountPoints::GetSystemInstance()->RevokeFileSystem(fsid);
       content::BrowserThread::PostTask(
-          content::BrowserThread::IO, FROM_HERE, base::Bind(
-              &MTPDeviceMapService::RevokeMTPFileSystem,
-              base::Unretained(MTPDeviceMapService::GetInstance()),
-              fsid));
+          content::BrowserThread::IO, FROM_HERE,
+          base::BindOnce(&MTPDeviceMapService::RevokeMTPFileSystem,
+                         base::Unretained(MTPDeviceMapService::GetInstance()),
+                         fsid));
       return;
     }
   }

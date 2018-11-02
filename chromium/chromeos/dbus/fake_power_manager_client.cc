@@ -6,6 +6,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/callback.h"
 #include "base/location.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -15,7 +16,7 @@ namespace chromeos {
 namespace {
 // Minimum power for a USB power source to be classified as AC.
 constexpr double kUsbMinAcWatts = 24;
-}
+}  // namespace
 
 FakePowerManagerClient::FakePowerManagerClient() : weak_ptr_factory_(this) {}
 
@@ -93,6 +94,9 @@ void FakePowerManagerClient::SetPolicy(
     const power_manager::PowerManagementPolicy& policy) {
   policy_ = policy;
   ++num_set_policy_calls_;
+
+  if (power_policy_quit_closure_)
+    std::move(power_policy_quit_closure_).Run();
 }
 
 void FakePowerManagerClient::SetIsProjecting(bool is_projecting) {
@@ -178,6 +182,13 @@ void FakePowerManagerClient::SendBrightnessChanged(int level,
     observer.BrightnessChanged(level, user_initiated);
 }
 
+void FakePowerManagerClient::SendKeyboardBrightnessChanged(
+    int level,
+    bool user_initiated) {
+  for (auto& observer : observers_)
+    observer.KeyboardBrightnessChanged(level, user_initiated);
+}
+
 void FakePowerManagerClient::SendPowerButtonEvent(
     bool down,
     const base::TimeTicks& timestamp) {
@@ -207,6 +218,11 @@ void FakePowerManagerClient::HandleSuspendReadiness() {
   CHECK(num_pending_suspend_readiness_callbacks_ > 0);
 
   --num_pending_suspend_readiness_callbacks_;
+}
+
+void FakePowerManagerClient::SetPowerPolicyQuitClosure(
+    base::OnceClosure quit_closure) {
+  power_policy_quit_closure_ = std::move(quit_closure);
 }
 
 }  // namespace chromeos

@@ -38,7 +38,7 @@
 
 #if defined(OS_WIN)
 
-#if defined(_MSC_VER)
+#if defined(COMPILER_MSVC)
 // ssize_t needed for OutOfMemoryTest.
 #if defined(_WIN64)
 typedef __int64 ssize_t;
@@ -104,8 +104,7 @@ TEST(MemoryTest, AllocatorShimWorking) {
 // OpenBSD does not support these tests. Don't test these on ASan/TSan/MSan
 // configurations: only test the real allocator.
 // Windows only supports these tests with the allocator shim in place.
-#if !defined(OS_OPENBSD) && \
-    BUILDFLAG(ENABLE_WIN_ALLOCATOR_SHIM_TESTS) && \
+#if !defined(OS_OPENBSD) && BUILDFLAG(USE_ALLOCATOR_SHIM) && \
     !defined(MEMORY_TOOL_REPLACES_ALLOCATOR)
 
 namespace {

@@ -6,13 +6,14 @@
 // "transform".
 // Spec: https://drafts.css-houdini.org/css-typed-om/#cssrotation
 [
-    Constructor(CSSAngleValue angleValue),
-    Constructor(double x, double y, double z, CSSAngleValue angle),
+    Constructor(CSSNumericValue angleValue),
+    Constructor(double x, double y, double z, CSSNumericValue angle),
     Exposed=(Window,PaintWorklet),
-    RuntimeEnabled=CSSTypedOM
+    RuntimeEnabled=CSSTypedOM,
+    RaisesException=Constructor
 ] interface CSSRotation : CSSTransformComponent {
-    readonly attribute CSSAngleValue angle;
-    readonly attribute double x;
-    readonly attribute double y;
-    readonly attribute double z;
+    [RaisesException=Setter] attribute CSSNumericValue angle;
+    attribute double x;
+    attribute double y;
+    attribute double z;
 };

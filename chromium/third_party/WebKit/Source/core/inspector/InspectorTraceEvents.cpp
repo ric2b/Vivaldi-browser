@@ -16,14 +16,15 @@
 #include "core/dom/DOMNodeIds.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/events/Event.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "core/inspector/IdentifiersFactory.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutObject.h"
+#include "core/loader/DocumentLoader.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "core/page/Page.h"
 #include "core/paint/PaintLayer.h"
@@ -38,6 +39,7 @@
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/KURL.h"
+#include "platform/wtf/DynamicAnnotations.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/TextPosition.h"
 #include "v8/include/v8-profiler.h"
@@ -107,55 +109,59 @@ DEFINE_TRACE(InspectorTraceEvents) {
 }
 
 void InspectorTraceEvents::WillSendRequest(
-    LocalFrame* frame,
+    ExecutionContext*,
     unsigned long identifier,
-    DocumentLoader*,
+    DocumentLoader* loader,
     ResourceRequest& request,
     const ResourceResponse& redirect_response,
     const FetchInitiatorInfo&) {
+  LocalFrame* frame = loader ? loader->GetFrame() : nullptr;
   TRACE_EVENT_INSTANT1(
       "devtools.timeline", "ResourceSendRequest", TRACE_EVENT_SCOPE_THREAD,
       "data", InspectorSendRequestEvent::Data(identifier, frame, request));
-  probe::AsyncTaskScheduled(frame->GetDocument(), "SendRequest",
-                            AsyncId(identifier));
+  probe::AsyncTaskScheduled(frame ? frame->GetDocument() : nullptr,
+                            "SendRequest", AsyncId(identifier));
 }
 
 void InspectorTraceEvents::DidReceiveResourceResponse(
-    LocalFrame* frame,
     unsigned long identifier,
-    DocumentLoader*,
+    DocumentLoader* loader,
     const ResourceResponse& response,
     Resource*) {
+  LocalFrame* frame = loader ? loader->GetFrame() : nullptr;
   TRACE_EVENT_INSTANT1(
       "devtools.timeline", "ResourceReceiveResponse", TRACE_EVENT_SCOPE_THREAD,
       "data", InspectorReceiveResponseEvent::Data(identifier, frame, response));
-  probe::AsyncTask async_task(frame->GetDocument(), AsyncId(identifier),
-                              "response");
+  probe::AsyncTask async_task(frame ? frame->GetDocument() : nullptr,
+                              AsyncId(identifier), "response");
 }
 
-void InspectorTraceEvents::DidReceiveData(LocalFrame* frame,
-                                          unsigned long identifier,
+void InspectorTraceEvents::DidReceiveData(unsigned long identifier,
+                                          DocumentLoader* loader,
                                           const char* data,
                                           int encoded_data_length) {
+  LocalFrame* frame = loader ? loader->GetFrame() : nullptr;
   TRACE_EVENT_INSTANT1(
       "devtools.timeline", "ResourceReceivedData", TRACE_EVENT_SCOPE_THREAD,
       "data",
       InspectorReceiveDataEvent::Data(identifier, frame, encoded_data_length));
-  probe::AsyncTask async_task(frame->GetDocument(), AsyncId(identifier),
-                              "data");
+  probe::AsyncTask async_task(frame ? frame->GetDocument() : nullptr,
+                              AsyncId(identifier), "data");
 }
 
-void InspectorTraceEvents::DidFinishLoading(LocalFrame* frame,
-                                            unsigned long identifier,
+void InspectorTraceEvents::DidFinishLoading(unsigned long identifier,
+                                            DocumentLoader* loader,
                                             double finish_time,
                                             int64_t encoded_data_length,
                                             int64_t decoded_body_length) {
+  LocalFrame* frame = loader ? loader->GetFrame() : nullptr;
   TRACE_EVENT_INSTANT1("devtools.timeline", "ResourceFinish",
                        TRACE_EVENT_SCOPE_THREAD, "data",
                        InspectorResourceFinishEvent::Data(
                            identifier, finish_time, false, encoded_data_length,
                            decoded_body_length));
-  probe::AsyncTask async_task(frame->GetDocument(), AsyncId(identifier));
+  probe::AsyncTask async_task(frame ? frame->GetDocument() : nullptr,
+                              AsyncId(identifier));
 }
 
 void InspectorTraceEvents::DidFailLoading(unsigned long identifier,
@@ -213,9 +219,9 @@ void SetNodeInfo(TracedValue* value,
                  Node* node,
                  const char* id_field_name,
                  const char* name_field_name = nullptr) {
-  value->SetInteger(id_field_name, DOMNodeIds::IdForNode(node));
+  value->SetIntegerWithCopiedName(id_field_name, DOMNodeIds::IdForNode(node));
   if (name_field_name)
-    value->SetString(name_field_name, node->DebugName());
+    value->SetStringWithCopiedName(name_field_name, node->DebugName());
 }
 
 const char* PseudoTypeToString(CSSSelector::PseudoType pseudo_type) {
@@ -513,7 +519,7 @@ InspectorStyleRecalcInvalidationTrackingEvent::Data(
 }
 
 std::unique_ptr<TracedValue> InspectorLayoutEvent::BeginData(
-    FrameView* frame_view) {
+    LocalFrameView* frame_view) {
   bool is_partial;
   unsigned needs_layout_objects;
   unsigned total_objects;
@@ -885,7 +891,7 @@ static void LocalToPageQuad(const LayoutObject& layout_object,
                             const LayoutRect& rect,
                             FloatQuad* quad) {
   LocalFrame* frame = layout_object.GetFrame();
-  FrameView* view = frame->View();
+  LocalFrameView* view = frame->View();
   FloatQuad absolute =
       layout_object.LocalToAbsoluteQuad(FloatQuad(FloatRect(rect)));
   quad->SetP1(view->ContentsToRootFrame(RoundedIntPoint(absolute.P1())));
@@ -997,7 +1003,7 @@ std::unique_ptr<TracedValue> FillLocation(const String& url,
   value->SetInteger("columnNumber", text_position.column_.OneBasedInt());
   return value;
 }
-}
+}  // namespace
 
 std::unique_ptr<TracedValue> InspectorEvaluateScriptEvent::Data(
     LocalFrame* frame,
@@ -1037,9 +1043,10 @@ std::unique_ptr<TracedValue> InspectorFunctionCallEvent::Data(
 
   v8::Local<v8::Function> original_function = GetBoundFunction(function);
   v8::Local<v8::Value> function_name = original_function->GetDebugName();
-  if (!function_name.IsEmpty() && function_name->IsString())
+  if (!function_name.IsEmpty() && function_name->IsString()) {
     value->SetString("functionName",
                      ToCoreString(function_name.As<v8::String>()));
+  }
   std::unique_ptr<SourceLocation> location =
       SourceLocation::FromFunction(original_function);
   value->SetString("scriptId", String::Number(location->ScriptId()));
@@ -1062,6 +1069,17 @@ std::unique_ptr<TracedValue> InspectorPaintImageEvent::Data(
     const StyleImage& style_image) {
   std::unique_ptr<TracedValue> value = TracedValue::Create();
   SetGeneratingNodeInfo(value.get(), &owning_layout_object, "nodeId");
+  if (const ImageResourceContent* resource = style_image.CachedImage())
+    value->SetString("url", resource->Url().GetString());
+  return value;
+}
+
+std::unique_ptr<TracedValue> InspectorPaintImageEvent::Data(
+    Node* node,
+    const StyleImage& style_image) {
+  std::unique_ptr<TracedValue> value = TracedValue::Create();
+  if (node)
+    SetNodeInfo(value.get(), node, "nodeId", nullptr);
   if (const ImageResourceContent* resource = style_image.CachedImage())
     value->SetString("url", resource->Url().GetString());
   return value;

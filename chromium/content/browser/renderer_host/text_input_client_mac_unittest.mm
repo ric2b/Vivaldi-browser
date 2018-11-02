@@ -34,6 +34,9 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   ~MockRenderWidgetHostDelegate() override {}
 
  private:
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {}
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -53,7 +56,7 @@ class TextInputClientMacTest : public testing::Test {
         delegate_(),
         thread_("TextInputClientMacTestThread") {
     RenderProcessHost* rph =
-        process_factory_.CreateRenderProcessHost(&browser_context_, nullptr);
+        process_factory_.CreateRenderProcessHost(&browser_context_);
     int32_t routing_id = rph->GetNextRoutingID();
     widget_.reset(new RenderWidgetHostImpl(&delegate_, rph, routing_id, false));
   }

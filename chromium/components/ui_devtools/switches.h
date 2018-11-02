@@ -5,12 +5,12 @@
 #ifndef COMPONENTS_UI_DEVTOOLS_SWITCHES_H_
 #define COMPONENTS_UI_DEVTOOLS_SWITCHES_H_
 
-namespace ui {
-namespace devtools {
+#include "components/ui_devtools/devtools_export.h"
 
-extern const char kEnableUiDevTools[];
+namespace ui_devtools {
 
-}  // namespace devtools
-}  // namespace ui
+extern UI_DEVTOOLS_EXPORT const char kEnableUiDevTools[];
+
+}  // namespace ui_devtools
 
 #endif  // COMPONENTS_UI_DEVTOOLS_SWITCHES_H_

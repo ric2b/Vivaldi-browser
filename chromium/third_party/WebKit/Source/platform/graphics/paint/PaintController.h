@@ -31,8 +31,6 @@ namespace blink {
 
 static const size_t kInitialDisplayItemListCapacityBytes = 512;
 
-template class RasterInvalidationTrackingMap<const PaintChunk>;
-
 // FrameFirstPaint stores first-paint, text or image painted for the
 // corresponding frame. They are never reset to false. First-paint is defined in
 // https://github.com/WICG/paint-timing. It excludes default background paint.
@@ -65,14 +63,11 @@ class PLATFORM_EXPORT PaintController {
     // New display items should be committed before PaintController is
     // destructed.
     DCHECK(new_display_item_list_.IsEmpty());
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-    DisplayItemClient::EndShouldKeepAliveAllClients(this);
-#endif
   }
 
   void InvalidateAll();
 
-  // These methods are called during painting.
+  // These methods are called during painting.u
 
   // Provide a new set of paint chunk properties to apply to recorded display
   // items, for Slimming Paint v2.
@@ -107,6 +102,8 @@ class PLATFORM_EXPORT PaintController {
   // item construction is disabled, no list mutations will be performed.
   template <typename DisplayItemClass, typename... Args>
   void EndItem(Args&&... args) {
+    DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
+
     if (DisplayItemConstructionIsDisabled())
       return;
     if (LastDisplayItemIsNoopBegin())
@@ -125,9 +122,10 @@ class PLATFORM_EXPORT PaintController {
   // true. Otherwise returns false.
   bool UseCachedSubsequenceIfPossible(const DisplayItemClient&);
 
-  void AddCachedSubsequence(const DisplayItemClient&,
-                            unsigned start,
-                            unsigned end);
+  size_t BeginSubsequence();
+  // The |start| parameter should be the return value of the corresponding
+  // BeginSubsequence().
+  void EndSubsequence(const DisplayItemClient&, size_t start);
 
   // True if the last display item is a begin that doesn't draw content.
   void RemoveLastDisplayItem();
@@ -140,11 +138,8 @@ class PLATFORM_EXPORT PaintController {
   }
   bool IsSkippingCache() const { return skipping_cache_count_; }
 
-  // Must be called when a painting is finished. |offsetFromLayoutObject| is the
-  // offset between the space of the GraphicsLayer which owns this
-  // PaintController and the coordinate space of the owning LayoutObject.
-  void CommitNewDisplayItems(
-      const LayoutSize& offset_from_layout_object = LayoutSize());
+  // Must be called when a painting is finished.
+  void CommitNewDisplayItems();
 
   // Returns the approximate memory usage, excluding memory likely to be
   // shared with the embedder after copying to WebPaintController.
@@ -181,24 +176,20 @@ class PLATFORM_EXPORT PaintController {
   void SetTextPainted();
   void SetImagePainted();
 
-  // Returns displayItemList added using createAndAppend() since beginning or
-  // the last commitNewDisplayItems(). Use with care.
+  // Returns DisplayItemList added using CreateAndAppend() since beginning or
+  // the last CommitNewDisplayItems(). Use with care.
   DisplayItemList& NewDisplayItemList() { return new_display_item_list_; }
 
-  void AppendDebugDrawingAfterCommit(
-      const DisplayItemClient&,
-      sk_sp<PaintRecord>,
-      const FloatRect& record_bounds,
-      const LayoutSize& offset_from_layout_object);
+  void AppendDebugDrawingAfterCommit(const DisplayItemClient&,
+                                     sk_sp<PaintRecord>,
+                                     const FloatRect& record_bounds);
 
-  void ShowDebugData() const { ShowDebugDataInternal(false); }
+  void ShowDebugData() const;
 #ifndef NDEBUG
-  void ShowDebugDataWithRecords() const { ShowDebugDataInternal(true); }
+  void ShowDebugDataWithRecords() const;
 #endif
 
 #if DCHECK_IS_ON()
-  void AssertDisplayItemClientsAreLive();
-
   enum Usage { kForNormalUsage, kForPaintRecordBuilder };
   void SetUsage(Usage usage) { usage_ = usage; }
   bool IsForPaintRecordBuilder() const {
@@ -206,24 +197,8 @@ class PLATFORM_EXPORT PaintController {
   }
 #endif
 
-  void SetTracksRasterInvalidations(bool value);
-  RasterInvalidationTrackingMap<const PaintChunk>*
-  PaintChunksRasterInvalidationTrackingMap() {
-    return raster_invalidation_tracking_info_
-               ? &raster_invalidation_tracking_info_->map
-               : nullptr;
-  }
-
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-  void BeginShouldKeepAlive(const DisplayItemClient&);
-
-  void BeginSubsequence(const DisplayItemClient& client) {
-    current_subsequence_clients_.push_back(&client);
-    BeginShouldKeepAlive(client);
-  }
-
-  void EndSubsequence() { current_subsequence_clients_.pop_back(); }
-#endif
+  void SetTracksRasterInvalidations(bool);
+  void SetupRasterUnderInvalidationChecking();
 
   bool LastDisplayItemIsSubsequenceEnd() const;
 
@@ -247,9 +222,6 @@ class PLATFORM_EXPORT PaintController {
         under_invalidation_checking_end_(0),
         last_cached_subsequence_end_(0) {
     ResetCurrentListIndices();
-    SetTracksRasterInvalidations(
-        RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled());
-
     // frame_first_paints_ should have one null frame since the beginning, so
     // that PaintController is robust even if it paints outside of BeginFrame
     // and EndFrame cycles. It will also enable us to combine the first paint
@@ -279,10 +251,6 @@ class PLATFORM_EXPORT PaintController {
   void ProcessNewItem(DisplayItem&);
   DisplayItem& MoveItemFromCurrentListToNewList(size_t);
 
-  void ShowDebugDataInternal(bool show_paint_records) const;
-  String DisplayItemListAsDebugString(const DisplayItemList&,
-                                      bool show_paint_records) const;
-
   // Maps clients to indices of display items or chunks of each client.
   using IndicesByClientMap = HashMap<const DisplayItemClient*, Vector<size_t>>;
 
@@ -297,24 +265,36 @@ class PLATFORM_EXPORT PaintController {
   size_t FindOutOfOrderCachedItemForward(const DisplayItem::Id&);
   void CopyCachedSubsequence(size_t begin_index, size_t end_index);
 
-  // Resets the indices (e.g. m_nextItemToMatch) of
-  // m_currentPaintArtifact.getDisplayItemList() to their initial values. This
-  // should be called when the DisplayItemList in m_currentPaintArtifact is
+  // Resets the indices (e.g. next_item_to_match_) of
+  // current_paint_artifact_.GetDisplayItemList() to their initial values. This
+  // should be called when the DisplayItemList in current_paint_artifact_ is
   // newly created, or is changed causing the previous indices to be invalid.
   void ResetCurrentListIndices();
 
   void GenerateRasterInvalidations(PaintChunk& new_chunk);
   void GenerateRasterInvalidationsComparingChunks(PaintChunk& new_chunk,
                                                   const PaintChunk& old_chunk);
+  inline void GenerateRasterInvalidation(const DisplayItemClient&,
+                                         PaintChunk&,
+                                         const DisplayItem* old_item,
+                                         const DisplayItem* new_item);
+  inline void GenerateIncrementalRasterInvalidation(
+      PaintChunk&,
+      const DisplayItem& old_item,
+      const DisplayItem& new_item);
+  inline void GenerateFullRasterInvalidation(PaintChunk&,
+                                             const DisplayItem& old_item,
+                                             const DisplayItem& new_item);
   inline void AddRasterInvalidation(const DisplayItemClient&,
                                     PaintChunk&,
-                                    const FloatRect&);
+                                    const FloatRect&,
+                                    PaintInvalidationReason);
   void TrackRasterInvalidation(const DisplayItemClient&,
                                PaintChunk&,
-                               const FloatRect&);
+                               PaintInvalidationReason);
 
   // The following two methods are for checking under-invalidations
-  // (when RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled).
+  // (when RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled).
   void ShowUnderInvalidationError(const char* reason,
                                   const DisplayItem& new_item,
                                   const DisplayItem* old_item) const;
@@ -335,13 +315,15 @@ class PLATFORM_EXPORT PaintController {
     SubsequenceMarkers() : start(0), end(0) {}
     SubsequenceMarkers(size_t start_arg, size_t end_arg)
         : start(start_arg), end(end_arg) {}
-    // The start and end index within m_currentPaintArtifact of this
-    // subsequence.
+    // The start and end (not included) index within current_paint_artifact_
+    // of this subsequence.
     size_t start;
     size_t end;
   };
 
   SubsequenceMarkers* GetSubsequenceMarkers(const DisplayItemClient&);
+
+  void ShowDebugDataInternal(bool show_paint_records) const;
 
   // The last complete paint artifact.
   // In SPv2, this includes paint chunks as well as display items.
@@ -351,8 +333,8 @@ class PLATFORM_EXPORT PaintController {
   DisplayItemList new_display_item_list_;
   PaintChunker new_paint_chunks_;
 
-  // Stores indices into m_newDisplayItemList for display items that have been
-  // moved from m_currentPaintArtifact.getDisplayItemList(), indexed by the
+  // Stores indices into new_display_item_list_ for display items that have been
+  // moved from current_paint_artifact_.GetDisplayItemList(), indexed by the
   // positions of the display items before the move. The values are undefined
   // for display items that are not moved.
   Vector<size_t> items_moved_into_new_list_;
@@ -373,9 +355,9 @@ class PLATFORM_EXPORT PaintController {
   int num_cached_new_items_;
 
   // Stores indices to valid cacheable display items in
-  // m_currentPaintArtifact.displayItemList() that have not been matched by
-  // requests of cached display items (using useCachedDrawingIfPossible() and
-  // useCachedSubsequenceIfPossible()) during sequential matching. The indexed
+  // current_paint_artifact_.GetDisplayItemList() that have not been matched by
+  // requests of cached display items (using UseCachedDrawingIfPossible() and
+  // UseCachedSubsequenceIfPossible()) during sequential matching. The indexed
   // items will be matched by later out-of-order requests of cached display
   // items. This ensures that when out-of-order cached display items are
   // requested, we only traverse at most once over the current display list
@@ -390,8 +372,8 @@ class PLATFORM_EXPORT PaintController {
   // requests.
   size_t next_item_to_index_;
 
-  // Similar to m_outOfOrderItemIndices but
-  // - the indices are chunk indices in m_currentPaintArtifacts.paintChunks();
+  // Similar to out_of_order_item_indices_ but
+  // - the indices are chunk indices in current_paint_artifacts_.PaintChunks();
   // - chunks are matched not only for requests of cached display items, but
   //   also non-cached display items.
   IndicesByClientMap out_of_order_chunk_indices_;
@@ -409,14 +391,14 @@ class PLATFORM_EXPORT PaintController {
 #endif
 
 #if DCHECK_IS_ON()
-  // This is used to check duplicated ids during createAndAppend().
+  // This is used to check duplicated ids during CreateAndAppend().
   IndicesByClientMap new_display_item_indices_by_client_;
 
   Usage usage_ = kForNormalUsage;
 #endif
 
-  // These are set in useCachedDrawingIfPossible() and
-  // useCachedSubsequenceIfPossible() when we could use cached drawing or
+  // These are set in UseCachedDrawingIfPossible() and
+  // UseCachedSubsequenceIfPossible() when we could use cached drawing or
   // subsequence and under-invalidation checking is on, indicating the begin and
   // end of the cached drawing or subsequence in the current list. The functions
   // return false to let the client do actual painting, and PaintController will
@@ -431,7 +413,6 @@ class PLATFORM_EXPORT PaintController {
   String under_invalidation_message_prefix_;
 
   struct RasterInvalidationTrackingInfo {
-    RasterInvalidationTrackingMap<const PaintChunk> map;
     using ClientDebugNamesMap = HashMap<const DisplayItemClient*, String>;
     ClientDebugNamesMap new_client_debug_names;
     ClientDebugNamesMap old_client_debug_names;
@@ -439,16 +420,13 @@ class PLATFORM_EXPORT PaintController {
   std::unique_ptr<RasterInvalidationTrackingInfo>
       raster_invalidation_tracking_info_;
 
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-  // A stack recording subsequence clients that are currently painting.
-  Vector<const DisplayItemClient*> current_subsequence_clients_;
-#endif
-
-  typedef HashMap<const DisplayItemClient*, SubsequenceMarkers>
-      CachedSubsequenceMap;
+  using CachedSubsequenceMap =
+      HashMap<const DisplayItemClient*, SubsequenceMarkers>;
   CachedSubsequenceMap current_cached_subsequences_;
   CachedSubsequenceMap new_cached_subsequences_;
   size_t last_cached_subsequence_end_;
+
+  class DisplayItemListAsJSON;
 
   FRIEND_TEST_ALL_PREFIXES(PaintControllerTest, CachedSubsequenceSwapOrder);
   FRIEND_TEST_ALL_PREFIXES(PaintControllerTest, CachedNestedSubsequenceUpdate);

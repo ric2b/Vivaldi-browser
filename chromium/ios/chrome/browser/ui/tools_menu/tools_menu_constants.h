@@ -35,9 +35,21 @@ extern NSString* const kToolsMenuRequestDesktopId;
 extern NSString* const kToolsMenuSettingsId;
 // Help item accessibility Identifier.
 extern NSString* const kToolsMenuHelpId;
-// Suggestions item accessibility Identifier.
-extern NSString* const kToolsMenuSuggestionsId;
 // Request mobile item accessibility Identifier.
 extern NSString* const kToolsMenuRequestMobileId;
+
+// Identifiers for tools menu items (for metrics purposes).
+typedef NS_ENUM(int, ToolsMenuItemID) {
+  // All of these values must be < 0.
+  TOOLS_STOP_ITEM = -1,
+  TOOLS_RELOAD_ITEM = -2,
+  TOOLS_BOOKMARK_ITEM = -3,
+  TOOLS_BOOKMARK_EDIT = -4,
+  TOOLS_SHARE_ITEM = -5,
+  TOOLS_MENU_ITEM = -6,
+  TOOLS_SETTINGS_ITEM = -7,
+  TOOLS_NEW_TAB_ITEM = -8,
+  TOOLS_NEW_INCOGNITO_TAB_ITEM = -9,
+};
 
 #endif  // IOS_CHROME_BROWSER_UI_TOOLS_MENU_TOOLS_MENU_CONSTANTS_H_

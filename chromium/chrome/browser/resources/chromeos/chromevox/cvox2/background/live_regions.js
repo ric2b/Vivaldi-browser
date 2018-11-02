@@ -105,8 +105,8 @@ LiveRegions.prototype = {
     var removals = relevant.indexOf('removals') >= 0;
     var all = relevant.indexOf('all') >= 0;
 
-    if (all || (additions &&
-        (type == 'nodeCreated' || type == 'subtreeCreated'))) {
+    if (all ||
+        (additions && (type == 'nodeCreated' || type == 'subtreeCreated'))) {
       this.outputLiveRegionChange_(node, null);
     }
 
@@ -182,9 +182,24 @@ LiveRegions.prototype = {
     else
       output.withQueueMode(cvox.QueueMode.QUEUE);
 
-    this.liveRegionNodeSet_.add(node);
+    // We also have to add recursively the children of this live region node
+    // since all children could potentially get described and we don't want to
+    // describe their tree changes especially during page load within the
+    // LiveRegions.LIVE_REGION_MIN_SAME_NODE_MS to prevent excessive chatter.
+    this.addNodeToNodeSetRecursive_(node);
+    window.prev = output;
     output.go();
     this.lastLiveRegionTime_ = currentTime;
+  },
+
+  /**
+   * @param {AutomationNode} root
+   * @private
+   */
+  addNodeToNodeSetRecursive_: function(root) {
+    this.liveRegionNodeSet_.add(root);
+    for (var child = root.firstChild; child; child = child.nextSibling)
+      this.addNodeToNodeSetRecursive_(child);
   },
 };
 

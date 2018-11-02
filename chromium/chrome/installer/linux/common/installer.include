@@ -76,8 +76,6 @@ process_template() (
     -e "s#@@REPOCONFIGREGEX@@#${REPOCONFIGREGEX}#g" \
     -e "s#@@SHORTDESC@@#${SHORTDESC}#g" \
     -e "s#@@FULLDESC@@#${FULLDESC}#g" \
-    -e "s#@@DEFAULT_FLAGS@@#${DEFAULT_FLAGS:-}#g" \
-    -e "s#@@SXS_USER_DATA_DIR@@#${SXS_USER_DATA_DIR:-}#g" \
     -e "s#@@USR_BIN_SYMLINK_NAME@@#${USR_BIN_SYMLINK_NAME:-}#g" \
     > "$TMPLOUT" <<< "$TMPLINCL"
 )
@@ -269,6 +267,10 @@ stage_install_common() {
     "${STAGEDIR}/${INSTALLDIR}/"
 
   # desktop integration
+  process_template "${BUILDDIR}/installer/common/appdata.xml.template" \
+    "${STAGEDIR}/usr/share/appdata/${PACKAGE}.appdata.xml"
+  chmod 644 "${STAGEDIR}/usr/share/appdata/${PACKAGE}.appdata.xml"
+
   process_template "${BUILDDIR}/installer/common/desktop.template" \
     "${STAGEDIR}/usr/share/applications/${USR_BIN_SYMLINK_NAME}.desktop"
   chmod 644 "${STAGEDIR}/usr/share/applications/${USR_BIN_SYMLINK_NAME}.desktop"

@@ -6,11 +6,16 @@
 #define CHROME_BROWSER_MEDIA_WEBRTC_DESKTOP_MEDIA_LIST_ASH_H_
 
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "chrome/browser/media/webrtc/desktop_media_list_base.h"
 #include "content/public/browser/desktop_media_id.h"
 
 namespace aura {
 class Window;
+}
+
+namespace base {
+class TaskRunner;
 }
 
 namespace gfx {
@@ -21,12 +26,7 @@ class Image;
 // native windows.
 class DesktopMediaListAsh : public DesktopMediaListBase {
  public:
-  enum SourceTypes {
-    SCREENS = 1,
-    WINDOWS = 2,
-  };
-
-  explicit DesktopMediaListAsh(int source_types);
+  explicit DesktopMediaListAsh(content::DesktopMediaID::Type type);
   ~DesktopMediaListAsh() override;
 
  private:
@@ -42,9 +42,12 @@ class DesktopMediaListAsh : public DesktopMediaListBase {
   void OnThumbnailCaptured(content::DesktopMediaID id,
                            const gfx::Image& image);
 
-  int source_types_;
+  int pending_window_capture_requests_ = 0;
 
-  int pending_window_capture_requests_;
+  // Used to scale the thumbnails.
+  scoped_refptr<base::TaskRunner> background_task_runner_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<DesktopMediaListAsh> weak_factory_;
 

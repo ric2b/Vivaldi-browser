@@ -23,6 +23,7 @@ struct PrintHostMsg_RequestPrintPreview_Params;
 struct PrintHostMsg_SetOptionsFromDocument_Params;
 
 namespace base {
+class DictionaryValue;
 class FilePath;
 class RefCountedBytes;
 }
@@ -115,12 +116,12 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
   // closed, which may occur for several reasons, e.g. tab closure or crash.
   void OnPrintPreviewDialogClosed();
 
+  // Notifies the Web UI that the preview request was cancelled.
+  void OnPrintPreviewCancelled();
+
   // Notifies the Web UI that initiator is closed, so we can disable all the
   // controls that need the initiator for generating the preview data.
   void OnInitiatorClosed();
-
-  // Notifies the Web UI renderer that file selection has been cancelled.
-  void OnFileSelectionCancelled();
 
   // Notifies the Web UI that the printer is unavailable or its settings are
   // invalid.
@@ -134,9 +135,6 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
 
   // Closes the print preview dialog.
   void OnClosePrintPreviewDialog();
-
-  // Reload the printers list.
-  void OnReloadPrintersList();
 
   // Notifies the WebUI to set print preset options from source PDF.
   void OnSetOptionsFromDocument(
@@ -157,6 +155,14 @@ class PrintPreviewUI : public ConstrainedWebDialogUI {
 
   // Passes |closure| to PrintPreviewHandler::SetPdfSavedClosureForTesting().
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
+
+  // Tell the handler to send the enable-manipulate-settings-for-test WebUI
+  // event.
+  void SendEnableManipulateSettingsForTest();
+
+  // Tell the handler to send the manipulate-settings-for-test WebUI event
+  // to set the print preview settings contained in |settings|.
+  void SendManipulateSettingsForTest(const base::DictionaryValue& settings);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(PrintPreviewDialogControllerUnitTest,

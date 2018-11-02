@@ -7,11 +7,9 @@
 #include <algorithm>
 
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
-#include "ash/wm_window.h"
 #include "base/i18n/rtl.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
@@ -55,7 +53,7 @@ void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
 
   SetAnchorView(anchor);
   set_arrow(views::BubbleBorder::NONE);
-  set_background(nullptr);
+  SetBackground(nullptr);
   if (shelf_->IsHorizontalAlignment())
     set_margins(gfx::Insets(0, kEndPadding));
   else
@@ -70,7 +68,11 @@ void OverflowBubbleView::InitOverflowBubble(views::View* anchor,
   layer()->SetFillsBoundsOpaquely(false);
   layer()->SetMasksToBounds(true);
 
-  // Calls into OnBeforeBubbleWidgetInit to set the window parent container.
+  // Place the bubble in the same root window as the anchor.
+  set_parent_window(
+      anchor_widget()->GetNativeWindow()->GetRootWindow()->GetChildById(
+          kShellWindowId_ShelfBubbleContainer));
+
   views::BubbleDialogDelegateView::CreateBubble(this);
   AddChildView(shelf_view_);
 }
@@ -157,16 +159,6 @@ void OverflowBubbleView::OnScrollEvent(ui::ScrollEvent* event) {
 
 int OverflowBubbleView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_NONE;
-}
-
-void OverflowBubbleView::OnBeforeBubbleWidgetInit(
-    views::Widget::InitParams* params,
-    views::Widget* bubble_widget) const {
-  // Place the bubble in the same root window as the anchor.
-  WmWindow::Get(anchor_widget()->GetNativeWindow())
-      ->GetRootWindowController()
-      ->ConfigureWidgetInitParamsForContainer(
-          bubble_widget, kShellWindowId_ShelfBubbleContainer, params);
 }
 
 gfx::Rect OverflowBubbleView::GetBubbleBounds() {

@@ -40,7 +40,7 @@ class V8TestInterfaceOriginTrialEnabled {
     visitor->Trace(scriptWrappable->ToImpl<TestInterfaceOriginTrialEnabled>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestInterfaceOriginTrialEnabled>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestInterfaceOriginTrialEnabled>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 
@@ -57,6 +57,11 @@ class V8TestInterfaceOriginTrialEnabled {
 
   CORE_EXPORT static void voidMethodDoubleArgFloatArgMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void voidMethodPartialOverloadMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+  static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
 };
 
 template <>

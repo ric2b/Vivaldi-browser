@@ -12,22 +12,23 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
-#include "cc/output/compositor_frame_sink.h"
+#include "cc/output/layer_tree_frame_sink.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
 #include "cc/resources/single_release_callback.h"
-#include "cc/surfaces/sequence_surface_reference_factory.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
 #include "components/exo/buffer.h"
 #include "components/exo/pointer.h"
 #include "components/exo/surface_delegate.h"
 #include "components/exo/surface_observer.h"
+#include "components/viz/common/surfaces/sequence_surface_reference_factory.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/env.h"
+#include "ui/aura/client/drag_drop_delegate.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/aura/window_targeter.h"
 #include "ui/base/class_property.h"
@@ -145,6 +146,24 @@ class CustomWindowTargeter : public aura::WindowTargeter {
   ~CustomWindowTargeter() override {}
 
   // Overridden from aura::WindowTargeter:
+  bool SubtreeCanAcceptEvent(aura::Window* window,
+                             const ui::LocatedEvent& event) const override {
+    Surface* surface = Surface::AsSurface(window);
+    if (!surface)
+      return false;
+
+    if (surface->IsStylusOnly()) {
+      ui::EventPointerType type = ui::EventPointerType::POINTER_TYPE_UNKNOWN;
+      if (event.IsTouchEvent()) {
+        auto* touch_event = static_cast<const ui::TouchEvent*>(&event);
+        type = touch_event->pointer_details().pointer_type;
+      }
+      if (type != ui::EventPointerType::POINTER_TYPE_PEN)
+        return false;
+    }
+    return aura::WindowTargeter::SubtreeCanAcceptEvent(window, event);
+  }
+
   bool EventLocationInsideBounds(aura::Window* window,
                                  const ui::LocatedEvent& event) const override {
     Surface* surface = Surface::AsSurface(window);
@@ -167,10 +186,6 @@ class CustomWindowTargeter : public aura::WindowTargeter {
 ////////////////////////////////////////////////////////////////////////////////
 // Surface, public:
 
-// TODO(fsamuel): exo should not use context_factory_private. Instead, we should
-// request a CompositorFrameSink from the aura::Window. Setting up the
-// BeginFrame hierarchy should be an internal implementation detail of aura or
-// mus in aura-mus.
 Surface::Surface() : window_(new aura::Window(new CustomWindowDelegate(this))) {
   window_->SetType(aura::client::WINDOW_TYPE_CONTROL);
   window_->SetName("ExoSurface");
@@ -180,10 +195,10 @@ Surface::Surface() : window_(new aura::Window(new CustomWindowDelegate(this))) {
   window_->set_owned_by_parent(false);
   window_->AddObserver(this);
   aura::Env::GetInstance()->context_factory()->AddObserver(this);
-  compositor_frame_sink_holder_ = base::MakeUnique<CompositorFrameSinkHolder>(
-      this, window_->CreateCompositorFrameSink());
+  layer_tree_frame_sink_holder_ = base::MakeUnique<LayerTreeFrameSinkHolder>(
+      this, window_->CreateLayerTreeFrameSink());
+  WMHelper::GetInstance()->SetDragDropDelegate(window_.get());
 }
-
 Surface::~Surface() {
   aura::Env::GetInstance()->context_factory()->RemoveObserver(this);
   for (SurfaceObserver& observer : observers_)
@@ -212,6 +227,8 @@ Surface::~Surface() {
   // that they have been cancelled.
   for (const auto& presentation_callback : swapped_presentation_callbacks_)
     presentation_callback.Run(base::TimeTicks(), base::TimeDelta());
+
+  WMHelper::GetInstance()->ResetDragDropDelegate(window_.get());
 }
 
 // static
@@ -219,7 +236,7 @@ Surface* Surface::AsSurface(const aura::Window* window) {
   return window->GetProperty(kSurfaceKey);
 }
 
-cc::SurfaceId Surface::GetSurfaceId() const {
+viz::SurfaceId Surface::GetSurfaceId() const {
   return window_->GetSurfaceId();
 }
 
@@ -427,20 +444,19 @@ void Surface::Commit() {
   if (delegate_) {
     delegate_->OnSurfaceCommit();
   } else {
-    CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces();
     CommitSurfaceHierarchy();
   }
 
   if (current_begin_frame_ack_.sequence_number !=
       cc::BeginFrameArgs::kInvalidFrameNumber) {
-    if (begin_frame_source_)
-      begin_frame_source_->DidFinishFrame(this, current_begin_frame_ack_);
     if (!current_begin_frame_ack_.has_damage) {
-      compositor_frame_sink_holder_->GetCompositorFrameSink()
-          ->DidNotProduceFrame(current_begin_frame_ack_);
+      layer_tree_frame_sink_holder_->frame_sink()->DidNotProduceFrame(
+          current_begin_frame_ack_);
     }
     current_begin_frame_ack_.sequence_number =
         cc::BeginFrameArgs::kInvalidFrameNumber;
+    if (begin_frame_source_)
+      begin_frame_source_->DidFinishFrame(this);
   }
 }
 
@@ -448,6 +464,18 @@ void Surface::CommitSurfaceHierarchy() {
   DCHECK(needs_commit_surface_hierarchy_);
   needs_commit_surface_hierarchy_ = false;
   has_pending_layer_changes_ = false;
+
+  bool full_damage = false;
+  if (pending_state_.opaque_region != state_.opaque_region ||
+      pending_state_.buffer_scale != state_.buffer_scale ||
+      pending_state_.viewport != state_.viewport ||
+      pending_state_.crop != state_.crop ||
+      pending_state_.only_visible_on_secure_output !=
+          state_.only_visible_on_secure_output ||
+      pending_state_.blend_mode != state_.blend_mode ||
+      pending_state_.alpha != state_.alpha) {
+    full_damage = true;
+  }
 
   state_ = pending_state_;
   pending_state_.only_visible_on_secure_output = false;
@@ -468,21 +496,17 @@ void Surface::CommitSurfaceHierarchy() {
   presentation_callbacks_.splice(presentation_callbacks_.end(),
                                  pending_presentation_callbacks_);
 
-  UpdateSurface(false);
+  UpdateSurface(full_damage);
 
-  if (needs_commit_to_new_surface_) {
-    needs_commit_to_new_surface_ = false;
-    window_->layer()->SetFillsBoundsOpaquely(
-        !current_resource_has_alpha_ ||
-        state_.blend_mode == SkBlendMode::kSrc ||
-        state_.opaque_region.contains(
-            gfx::RectToSkIRect(gfx::Rect(content_size_))));
-  }
+  window_->layer()->SetFillsBoundsOpaquely(
+      !current_resource_has_alpha_ || state_.blend_mode == SkBlendMode::kSrc ||
+      state_.opaque_region.contains(
+          gfx::RectToSkIRect(gfx::Rect(content_size_))));
 
   // Reset damage.
   pending_damage_.setEmpty();
   DCHECK(!current_resource_.id ||
-         compositor_frame_sink_holder_->HasReleaseCallbackForResource(
+         layer_tree_frame_sink_holder_->HasReleaseCallbackForResource(
              current_resource_.id));
 
   // Synchronize window hierarchy. This will position and update the stacking
@@ -511,8 +535,8 @@ void Surface::CommitSurfaceHierarchy() {
     stacking_target = sub_surface->window();
 
     // Update sub-surface position relative to surface origin.
-    sub_surface->window()->SetBounds(gfx::Rect(
-        sub_surface_entry.second, sub_surface->window()->layer()->size()));
+    sub_surface->window()->SetBounds(
+        gfx::Rect(sub_surface_entry.second, sub_surface->content_size_));
   }
 }
 
@@ -522,8 +546,7 @@ bool Surface::IsSynchronized() const {
 
 gfx::Rect Surface::GetHitTestBounds() const {
   SkIRect bounds = state_.input_region.getBounds();
-  if (!bounds.intersect(
-          gfx::RectToSkIRect(gfx::Rect(window_->layer()->size()))))
+  if (!bounds.intersect(gfx::RectToSkIRect(gfx::Rect(content_size_))))
     return gfx::Rect();
   return gfx::SkIRectToRect(bounds);
 }
@@ -532,12 +555,12 @@ bool Surface::HitTestRect(const gfx::Rect& rect) const {
   if (HasHitTestMask())
     return state_.input_region.intersects(gfx::RectToSkIRect(rect));
 
-  return rect.Intersects(gfx::Rect(window_->layer()->size()));
+  return rect.Intersects(gfx::Rect(content_size_));
 }
 
 bool Surface::HasHitTestMask() const {
   return !state_.input_region.contains(
-      gfx::RectToSkIRect(gfx::Rect(window_->layer()->size())));
+      gfx::RectToSkIRect(gfx::Rect(content_size_)));
 }
 
 void Surface::GetHitTestMask(gfx::Path* mask) const {
@@ -625,18 +648,13 @@ void Surface::UpdateNeedsBeginFrame() {
 }
 
 bool Surface::OnBeginFrameDerivedImpl(const cc::BeginFrameArgs& args) {
-  current_begin_frame_ack_ = cc::BeginFrameAck(
-      args.source_id, args.sequence_number, args.sequence_number, false);
+  current_begin_frame_ack_ =
+      cc::BeginFrameAck(args.source_id, args.sequence_number, false);
   while (!active_frame_callbacks_.empty()) {
     active_frame_callbacks_.front().Run(args.frame_time);
     active_frame_callbacks_.pop_front();
   }
   return true;
-}
-
-void Surface::CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces() {
-  if (HasLayerHierarchyChanged())
-    SetSurfaceHierarchyNeedsCommitToNewSurfaces();
 }
 
 bool Surface::IsStylusOnly() {
@@ -738,28 +756,11 @@ void Surface::BufferAttachment::Reset(base::WeakPtr<Buffer> buffer) {
   buffer_ = buffer;
 }
 
-bool Surface::HasLayerHierarchyChanged() const {
-  if (needs_commit_surface_hierarchy_ && has_pending_layer_changes_)
-    return true;
-
-  for (const auto& sub_surface_entry : pending_sub_surfaces_) {
-    if (sub_surface_entry.first->HasLayerHierarchyChanged())
-      return true;
-  }
-  return false;
-}
-
-void Surface::SetSurfaceHierarchyNeedsCommitToNewSurfaces() {
-  needs_commit_to_new_surface_ = true;
-  for (auto& sub_surface_entry : pending_sub_surfaces_) {
-    sub_surface_entry.first->SetSurfaceHierarchyNeedsCommitToNewSurfaces();
-  }
-}
-
 void Surface::UpdateResource(bool client_usage) {
   if (current_buffer_.buffer() &&
       current_buffer_.buffer()->ProduceTransferableResource(
-          compositor_frame_sink_holder_.get(), next_resource_id_++,
+          layer_tree_frame_sink_holder_.get(),
+          layer_tree_frame_sink_holder_->AllocateResourceId(),
           state_.only_visible_on_secure_output, client_usage,
           &current_resource_)) {
     current_resource_has_alpha_ =
@@ -790,6 +791,10 @@ void Surface::UpdateSurface(bool full_damage) {
   }
 
   content_size_ = layer_size;
+  // We need update window_'s bounds with content size, because the
+  // LayerTreeFrameSink may not update the window's size base the size of
+  // the lastest submitted CompositorFrame.
+  window_->SetBounds(gfx::Rect(window_->bounds().origin(), content_size_));
   // TODO(jbauman): Figure out how this interacts with the pixel size of
   // CopyOutputRequests on the layer.
   gfx::Size contents_surface_size = layer_size;
@@ -870,8 +875,8 @@ void Surface::UpdateSurface(bool full_damage) {
   }
 
   frame.render_pass_list.push_back(std::move(render_pass));
-  compositor_frame_sink_holder_->GetCompositorFrameSink()
-      ->SubmitCompositorFrame(std::move(frame));
+  layer_tree_frame_sink_holder_->frame_sink()->SubmitCompositorFrame(
+      std::move(frame));
 }
 
 }  // namespace exo

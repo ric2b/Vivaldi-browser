@@ -7,7 +7,6 @@
 #include <keyhi.h>
 #include <stdint.h>
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -17,10 +16,12 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/login/session/user_session_manager.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
@@ -32,6 +33,7 @@
 #include "components/ownership/owner_key_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
+#include "components/user_manager/user_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_details.h"
 #include "content/public/browser/notification_service.h"
@@ -188,9 +190,6 @@ OwnerSettingsServiceChromeOS::OwnerSettingsServiceChromeOS(
     : ownership::OwnerSettingsService(owner_key_util),
       device_settings_service_(device_settings_service),
       profile_(profile),
-      waiting_for_profile_creation_(true),
-      waiting_for_tpm_token_(true),
-      has_pending_fixups_(false),
       weak_factory_(this),
       store_settings_factory_(this) {
   if (TPMTokenLoader::IsInitialized()) {
@@ -213,6 +212,16 @@ OwnerSettingsServiceChromeOS::OwnerSettingsServiceChromeOS(
   registrar_.Add(this,
                  chrome::NOTIFICATION_PROFILE_CREATED,
                  content::Source<Profile>(profile_));
+
+  if (!user_manager::UserManager::IsInitialized()) {
+    // interactive_ui_tests does not set user manager.
+    waiting_for_easy_unlock_operation_finshed_ = false;
+    return;
+  }
+
+  UserSessionManager::GetInstance()->WaitForEasyUnlockKeyOpsFinished(
+      base::Bind(&OwnerSettingsServiceChromeOS::OnEasyUnlockKeyOpsFinished,
+                 weak_factory_.GetWeakPtr()));
 }
 
 OwnerSettingsServiceChromeOS::~OwnerSettingsServiceChromeOS() {
@@ -244,6 +253,13 @@ void OwnerSettingsServiceChromeOS::OnTPMTokenReady(
 
   // TPMTokenLoader initializes the TPM and NSS database which is necessary to
   // determine ownership. Force a reload once we know these are initialized.
+  ReloadKeypair();
+}
+
+void OwnerSettingsServiceChromeOS::OnEasyUnlockKeyOpsFinished() {
+  DCHECK(thread_checker_.CalledOnValidThread());
+  waiting_for_easy_unlock_operation_finshed_ = false;
+
   ReloadKeypair();
 }
 
@@ -421,11 +437,8 @@ void OwnerSettingsServiceChromeOS::FixupLocalOwnerPolicy(
     settings->mutable_allow_new_users()->set_allow_new_users(true);
 
   em::UserWhitelistProto* whitelist_proto = settings->mutable_user_whitelist();
-  if (whitelist_proto->user_whitelist().end() ==
-      std::find(whitelist_proto->user_whitelist().begin(),
-                whitelist_proto->user_whitelist().end(), user_id)) {
+  if (!base::ContainsValue(whitelist_proto->user_whitelist(), user_id))
     whitelist_proto->add_user_whitelist(user_id);
-  }
 }
 
 // static
@@ -672,8 +685,10 @@ void OwnerSettingsServiceChromeOS::ReloadKeypairImpl(const base::Callback<
          const scoped_refptr<PrivateKey>& private_key)>& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (waiting_for_profile_creation_ || waiting_for_tpm_token_)
+  if (waiting_for_profile_creation_ || waiting_for_tpm_token_ ||
+      waiting_for_easy_unlock_operation_finshed_) {
     return;
+  }
 
   bool rv = BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
@@ -715,8 +730,10 @@ void OwnerSettingsServiceChromeOS::StorePendingChanges() {
                      &settings);
   has_pending_fixups_ = false;
 
+  scoped_refptr<base::TaskRunner> task_runner =
+      base::CreateTaskRunnerWithTraits({base::MayBlock()});
   bool rv = AssembleAndSignPolicyAsync(
-      content::BrowserThread::GetBlockingPool(), std::move(policy),
+      task_runner.get(), std::move(policy),
       base::Bind(&OwnerSettingsServiceChromeOS::OnPolicyAssembledAndSigned,
                  store_settings_factory_.GetWeakPtr()));
   if (!rv)

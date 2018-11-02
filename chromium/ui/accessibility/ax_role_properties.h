@@ -14,6 +14,27 @@ namespace ui {
 // clicks.
 AX_EXPORT bool IsRoleClickable(AXRole role);
 
+// Returns true if this node is a cell or a table header.
+AX_EXPORT bool IsCellOrTableHeaderRole(AXRole role);
+
+// Returns true if this node is a table, a grid or a treegrid.
+AX_EXPORT bool IsTableLikeRole(AXRole role);
+
+// Returns true if this node is a container with selectable children.
+AX_EXPORT bool IsContainerWithSelectableChildrenRole(ui::AXRole role);
+
+// Returns true if this node is a row container.
+AX_EXPORT bool IsRowContainer(ui::AXRole role);
+
+// Returns true if this node is a control.
+AX_EXPORT bool IsControl(ui::AXRole role);
+
+// Returns true if this node is a menu or related role.
+AX_EXPORT bool IsMenuRelated(ui::AXRole role);
+
+// Returns true if this node is a edit field.
+AX_EXPORT bool IsEditField(ui::AXRole role);
+
 }  // namespace ui
 
 #endif  // UI_ACCESSIBILITY_AX_ROLE_PROPERTIES_H_

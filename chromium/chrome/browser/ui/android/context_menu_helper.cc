@@ -13,10 +13,10 @@
 #include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "chrome/browser/android/download/download_controller_base.h"
+#include "chrome/browser/image_decoder.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/common/thumbnail_capturer.mojom.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/common/context_menu_params.h"
@@ -24,6 +24,8 @@
 #include "jni/ContextMenuParams_jni.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/web/WebContextMenuData.h"
+#include "ui/android/view_android.h"
+#include "ui/gfx/android/java_bitmap.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -34,16 +36,54 @@ using base::android::JavaParamRef;
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ContextMenuHelper);
 
-const char kDataReductionProxyPassthroughHeader[] =
-    "Chrome-Proxy-Accept-Transform: identity\r\n";
-
 namespace {
 
-void OnRetrieveImage(chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer,
-                     const base::android::JavaRef<jobject>& jcallback,
-                     const std::vector<uint8_t>& thumbnail_data,
-                     const gfx::Size& original_size) {
+class ContextMenuHelperImageRequest : public ImageDecoder::ImageRequest {
+ public:
+  static void Start(const base::android::JavaRef<jobject>& jcallback,
+                    const std::vector<uint8_t>& thumbnail_data) {
+    ContextMenuHelperImageRequest* request =
+        new ContextMenuHelperImageRequest(jcallback);
+    ImageDecoder::Start(request, thumbnail_data);
+  }
+
+ protected:
+  void OnImageDecoded(const SkBitmap& decoded_image) override {
+    base::android::RunCallbackAndroid(jcallback_,
+                                      gfx::ConvertToJavaBitmap(&decoded_image));
+    delete this;
+  }
+
+  void OnDecodeImageFailed() override {
+    base::android::ScopedJavaLocalRef<jobject> j_bitmap;
+    base::android::RunCallbackAndroid(jcallback_, j_bitmap);
+    delete this;
+  }
+
+ private:
+  ContextMenuHelperImageRequest(
+      const base::android::JavaRef<jobject>& jcallback)
+      : jcallback_(jcallback) {}
+
+  const base::android::ScopedJavaGlobalRef<jobject> jcallback_;
+
+  DISALLOW_IMPLICIT_CONSTRUCTORS(ContextMenuHelperImageRequest);
+};
+
+void OnRetrieveImageForShare(
+    chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer,
+    const base::android::JavaRef<jobject>& jcallback,
+    const std::vector<uint8_t>& thumbnail_data,
+    const gfx::Size& original_size) {
   base::android::RunCallbackAndroid(jcallback, thumbnail_data);
+}
+
+void OnRetrieveImageForContextMenu(
+    chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer,
+    const base::android::JavaRef<jobject>& jcallback,
+    const std::vector<uint8_t>& thumbnail_data,
+    const gfx::Size& original_size) {
+  ContextMenuHelperImageRequest::Start(jcallback, thumbnail_data);
 }
 
 }  // namespace
@@ -52,8 +92,9 @@ ContextMenuHelper::ContextMenuHelper(content::WebContents* web_contents)
     : web_contents_(web_contents) {
   JNIEnv* env = base::android::AttachCurrentThread();
   java_obj_.Reset(
-      env,
-      Java_ContextMenuHelper_create(env, reinterpret_cast<long>(this)).obj());
+      env, Java_ContextMenuHelper_create(env, reinterpret_cast<long>(this),
+                                         web_contents_->GetJavaWebContents())
+               .obj());
   DCHECK(!java_obj_.is_null());
 }
 
@@ -65,26 +106,14 @@ ContextMenuHelper::~ContextMenuHelper() {
 void ContextMenuHelper::ShowContextMenu(
     content::RenderFrameHost* render_frame_host,
     const content::ContextMenuParams& params) {
-  content::ContentViewCore* content_view_core =
-      content::ContentViewCore::FromWebContents(web_contents_);
-
-  if (!content_view_core)
-    return;
-
-  base::android::ScopedJavaLocalRef<jobject> jcontent_view_core(
-      content_view_core->GetJavaObject());
-
-  if (jcontent_view_core.is_null())
-    return;
-
   JNIEnv* env = base::android::AttachCurrentThread();
   context_menu_params_ = params;
   render_frame_id_ = render_frame_host->GetRoutingID();
   render_process_id_ = render_frame_host->GetProcess()->GetID();
-
+  gfx::NativeView view = web_contents_->GetNativeView();
   Java_ContextMenuHelper_showContextMenu(
-      env, java_obj_, jcontent_view_core,
-      ContextMenuHelper::CreateJavaContextMenuParams(params));
+      env, java_obj_, ContextMenuHelper::CreateJavaContextMenuParams(params),
+      view->GetContainerView(), view->content_offset() * view->GetDipScale());
 }
 
 void ContextMenuHelper::OnContextMenuClosed(
@@ -123,7 +152,7 @@ ContextMenuHelper::CreateJavaContextMenuParams(
           ConvertUTF16ToJavaString(env, params.title_text),
           image_was_fetched_lo_fi,
           ConvertUTF8ToJavaString(env, sanitizedReferrer.spec()),
-          params.referrer_policy, can_save);
+          params.referrer_policy, can_save, params.x, params.y);
 
   return jmenu_info;
 }
@@ -141,7 +170,7 @@ void ContextMenuHelper::OnStartDownload(
     jboolean jis_data_reduction_proxy_enabled) {
   std::string headers;
   if (jis_data_reduction_proxy_enabled)
-    headers = kDataReductionProxyPassthroughHeader;
+    headers = data_reduction_proxy::chrome_proxy_pass_through_header();
 
   DownloadControllerBase::Get()->StartContextMenuDownload(
       context_menu_params_,
@@ -161,10 +190,29 @@ void ContextMenuHelper::SearchForImage(JNIEnv* env,
       render_frame_host, context_menu_params_.src_url);
 }
 
-void ContextMenuHelper::RetrieveImage(JNIEnv* env,
-                                      const JavaParamRef<jobject>& obj,
-                                      const JavaParamRef<jobject>& jcallback,
-                                      jint max_dimen_px) {
+void ContextMenuHelper::RetrieveImageForShare(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jcallback,
+    jint max_dimen_px) {
+  RetrieveImageInternal(env, base::Bind(&OnRetrieveImageForShare), jcallback,
+                        max_dimen_px);
+}
+
+void ContextMenuHelper::RetrieveImageForContextMenu(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    const JavaParamRef<jobject>& jcallback,
+    jint max_dimen_px) {
+  RetrieveImageInternal(env, base::Bind(&OnRetrieveImageForContextMenu),
+                        jcallback, max_dimen_px);
+}
+
+void ContextMenuHelper::RetrieveImageInternal(
+    JNIEnv* env,
+    const ImageRetrieveCallback& retrieve_callback,
+    const JavaParamRef<jobject>& jcallback,
+    jint max_dimen_px) {
   content::RenderFrameHost* render_frame_host =
       content::RenderFrameHost::FromID(render_process_id_, render_frame_id_);
   if (!render_frame_host)
@@ -172,15 +220,11 @@ void ContextMenuHelper::RetrieveImage(JNIEnv* env,
 
   chrome::mojom::ThumbnailCapturerPtr thumbnail_capturer;
   render_frame_host->GetRemoteInterfaces()->GetInterface(&thumbnail_capturer);
-  // Bind the InterfacePtr into the callback so that it's kept alive until
-  // there's either a connection error or a response.
+  // Bind the InterfacePtr into the callback so that it's kept alive
+  // until there's either a connection error or a response.
   auto* thumbnail_capturer_proxy = thumbnail_capturer.get();
   thumbnail_capturer_proxy->RequestThumbnailForContextNode(
-      0, gfx::Size(max_dimen_px, max_dimen_px),
-      base::Bind(&OnRetrieveImage, base::Passed(&thumbnail_capturer),
+      0, gfx::Size(max_dimen_px, max_dimen_px), chrome::mojom::ImageFormat::PNG,
+      base::Bind(retrieve_callback, base::Passed(&thumbnail_capturer),
                  base::android::ScopedJavaGlobalRef<jobject>(env, jcallback)));
-}
-
-bool RegisterContextMenuHelper(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

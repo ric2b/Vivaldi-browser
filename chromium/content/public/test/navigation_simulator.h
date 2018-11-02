@@ -9,10 +9,12 @@
 
 #include "base/callback.h"
 #include "base/optional.h"
+#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/referrer.h"
 #include "content/public/test/navigation_simulator.h"
+#include "net/base/host_port_pair.h"
 #include "ui/base/page_transition_types.h"
 
 class GURL;
@@ -128,9 +130,7 @@ class NavigationSimulator : public WebContentsObserver {
   // --------------------------------------------------------------------------
 
   // The following functions are used to specify the parameters of the
-  // navigation. Changes should be  made before calling |Start|, unless they are
-  // meant to apply to a redirect. In that case, they should be made before
-  // calling |Redirect|.
+  // navigation.
 
   // The following parameters are constant during the navigation and may only be
   // specified before calling |Start|.
@@ -142,6 +142,12 @@ class NavigationSimulator : public WebContentsObserver {
   // |Redirect|.
   virtual void SetReferrer(const Referrer& referrer);
 
+  // The following parameters can change at any point until the page fails or
+  // commits. They should be specified before calling |Fail| or |Commit|.
+  virtual void SetSocketAddress(const net::HostPortPair& socket_address);
+
+  // --------------------------------------------------------------------------
+
   // Gets the last throttle check result computed by the navigation throttles.
   // It is an error to call this before Start() is called.
   virtual NavigationThrottle::ThrottleCheckResult GetLastThrottleCheckResult();
@@ -150,6 +156,12 @@ class NavigationSimulator : public WebContentsObserver {
   // simulated. It is an error to call this before Start() or after the
   // navigation has finished (successfully or not).
   virtual NavigationHandle* GetNavigationHandle() const;
+
+  // Returns the GlobalRequestID for the simulated navigation request. Can be
+  // invoked after the navigation has completed. It is an error to call this
+  // before the simulated navigation has completed its WillProcessResponse
+  // callback.
+  content::GlobalRequestID GetGlobalRequestID() const;
 
  private:
   // WebContentsObserver:
@@ -194,6 +206,7 @@ class NavigationSimulator : public WebContentsObserver {
   NavigationHandleImpl* handle_;
 
   GURL navigation_url_;
+  net::HostPortPair socket_address_;
   Referrer referrer_;
   ui::PageTransition transition_ = ui::PAGE_TRANSITION_LINK;
 
@@ -212,6 +225,10 @@ class NavigationSimulator : public WebContentsObserver {
   // while throttles are being run, but before they finish.
   base::Optional<NavigationThrottle::ThrottleCheckResult>
       last_throttle_check_result_;
+
+  // GlobalRequestID for the associated NavigationHandle. Only valid after
+  // WillProcessResponse has been invoked on the NavigationHandle.
+  content::GlobalRequestID request_id_;
 
   // Closure that is set when WaitForThrottleChecksComplete is called.
   base::Closure throttle_checks_wait_closure_;

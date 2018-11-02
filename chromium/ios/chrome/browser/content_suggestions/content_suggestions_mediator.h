@@ -25,7 +25,11 @@ class MostVisitedSites;
 }
 
 @protocol ContentSuggestionsCommands;
+@protocol ContentSuggestionsHeaderProvider;
 @class ContentSuggestionIdentifier;
+class GURL;
+class LargeIconCache;
+class NotificationPromoWhatsNew;
 
 // Mediator for ContentSuggestions. Makes the interface between a
 // ntp_snippets::ContentSuggestionsService and the Objective-C services using
@@ -37,6 +41,7 @@ class MostVisitedSites;
 initWithContentService:
     (nonnull ntp_snippets::ContentSuggestionsService*)contentService
       largeIconService:(nonnull favicon::LargeIconService*)largeIconService
+        largeIconCache:(nullable LargeIconCache*)largeIconCache
        mostVisitedSite:
            (std::unique_ptr<ntp_tiles::MostVisitedSites>)mostVisitedSites
     NS_DESIGNATED_INITIALIZER;
@@ -47,10 +52,17 @@ initWithContentService:
 @property(nonatomic, weak, nullable) id<ContentSuggestionsCommands>
     commandHandler;
 
-// Dismisses the suggestion from the content suggestions service. It doesn't
-// change the UI.
-- (void)dismissSuggestion:
-    (nonnull ContentSuggestionIdentifier*)suggestionIdentifier;
+@property(nonatomic, weak, nullable) id<ContentSuggestionsHeaderProvider>
+    headerProvider;
+
+// The notification promo owned by this mediator.
+- (nonnull NotificationPromoWhatsNew*)notificationPromo;
+
+// Blacklists the URL from the Most Visited sites.
+- (void)blacklistMostVisitedURL:(GURL)URL;
+
+// Whitelists the URL from the Most Visited sites.
+- (void)whitelistMostVisitedURL:(GURL)URL;
 
 @end
 

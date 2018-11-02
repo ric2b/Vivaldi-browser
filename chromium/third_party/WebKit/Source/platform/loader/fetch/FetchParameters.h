@@ -29,12 +29,13 @@
 #include "platform/CrossOriginAttributeValue.h"
 #include "platform/PlatformExport.h"
 #include "platform/loader/fetch/ClientHintsPreferences.h"
-#include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/wtf/Allocator.h"
-#include "platform/wtf/text/AtomicString.h"
+#include "platform/wtf/text/TextEncoding.h"
+#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 class SecurityOrigin;
@@ -74,13 +75,8 @@ class PLATFORM_EXPORT FetchParameters {
     ResourceWidth() : width(0), is_set(false) {}
   };
 
-  FetchParameters(const ResourceRequest&,
-                  const AtomicString& initiator,
-                  const String& charset = String());
-  FetchParameters(const ResourceRequest&,
-                  const AtomicString& initiator,
-                  const ResourceLoaderOptions&);
-  FetchParameters(const ResourceRequest&, const FetchInitiatorInfo&);
+  explicit FetchParameters(const ResourceRequest&);
+  FetchParameters(const ResourceRequest&, const ResourceLoaderOptions&);
   ~FetchParameters();
 
   ResourceRequest& MutableResourceRequest() { return resource_request_; }
@@ -93,9 +89,22 @@ class PLATFORM_EXPORT FetchParameters {
     resource_request_.SetRequestContext(context);
   }
 
-  const String& Charset() const { return charset_; }
-  void SetCharset(const String& charset) { charset_ = charset; }
+  const TextResourceDecoderOptions& DecoderOptions() const {
+    return decoder_options_;
+  }
+  void SetDecoderOptions(const TextResourceDecoderOptions& decoder_options) {
+    decoder_options_ = decoder_options;
+  }
+  void OverrideContentType(
+      TextResourceDecoderOptions::ContentType content_type) {
+    decoder_options_.OverrideContentType(content_type);
+  }
+  void SetCharset(const WTF::TextEncoding& charset) {
+    SetDecoderOptions(TextResourceDecoderOptions(
+        TextResourceDecoderOptions::kPlainTextContent, charset));
+  }
 
+  ResourceLoaderOptions& MutableOptions() { return options_; }
   const ResourceLoaderOptions& Options() const { return options_; }
 
   DeferOption Defer() const { return defer_; }
@@ -128,7 +137,13 @@ class PLATFORM_EXPORT FetchParameters {
       ContentSecurityPolicyDisposition content_security_policy_option) {
     options_.content_security_policy_option = content_security_policy_option;
   }
+  // Configures the request to use the "cors" mode and the credentials mode
+  // specified by the crossOrigin attribute.
   void SetCrossOriginAccessControl(SecurityOrigin*, CrossOriginAttributeValue);
+  // Configures the request to use the "cors" mode and the specified
+  // credentials mode.
+  void SetCrossOriginAccessControl(SecurityOrigin*,
+                                   WebURLRequest::FetchCredentialsMode);
   OriginRestriction GetOriginRestriction() const { return origin_restriction_; }
   void SetOriginRestriction(OriginRestriction restriction) {
     origin_restriction_ = restriction;
@@ -170,7 +185,10 @@ class PLATFORM_EXPORT FetchParameters {
 
  private:
   ResourceRequest resource_request_;
-  String charset_;
+  // |decoder_options_|'s ContentType is set to |kPlainTextContent| in
+  // FetchParameters but is later overridden by ResourceFactory::ContentType()
+  // in ResourceFetcher::PrepareRequest() before actual use.
+  TextResourceDecoderOptions decoder_options_;
   ResourceLoaderOptions options_;
   SpeculativePreloadType speculative_preload_type_;
   double preload_discovery_time_;

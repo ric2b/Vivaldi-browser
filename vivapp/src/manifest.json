@@ -26,6 +26,7 @@
     "<all_urls>",
     "accessibilityFeatures.read",
     "accessibilityFeatures.modify",
+    "alarms",
     "alwaysOnTopWindows",
     "app.window.fullscreen.overrideEsc",
     "audioCapture",
@@ -76,7 +77,7 @@
     "webview",
     "zoom",
     "browsingData",
-    {"fileSystem": ["write"]},
+    {"fileSystem": ["write", "directory"]},
     {"socket": ["tcp-connect:*:*"]}
   ],
   "webview" : {

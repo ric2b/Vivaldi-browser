@@ -6,11 +6,11 @@
 
 #include <memory>
 #include "bindings/modules/v8/WebGLAny.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/WebGLActiveInfo.h"
 #include "modules/webgl/WebGLBuffer.h"
@@ -141,34 +141,10 @@ const GLenum kSupportedInternalFormatsStorage[] = {
 };
 
 WebGL2RenderingContextBase::WebGL2RenderingContextBase(
-    HTMLCanvasElement* passed_canvas,
+    CanvasRenderingContextHost* host,
     std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
     const CanvasContextCreationAttributes& requested_attributes)
-    : WebGLRenderingContextBase(passed_canvas,
-                                std::move(context_provider),
-                                requested_attributes,
-                                2),
-      read_framebuffer_binding_(this, nullptr),
-      transform_feedback_binding_(this, nullptr),
-      bound_copy_read_buffer_(this, nullptr),
-      bound_copy_write_buffer_(this, nullptr),
-      bound_pixel_pack_buffer_(this, nullptr),
-      bound_pixel_unpack_buffer_(this, nullptr),
-      bound_uniform_buffer_(this, nullptr),
-      current_boolean_occlusion_query_(this, nullptr),
-      current_transform_feedback_primitives_written_query_(this, nullptr),
-      current_elapsed_query_(this, nullptr) {
-  supported_internal_formats_storage_.insert(
-      kSupportedInternalFormatsStorage,
-      kSupportedInternalFormatsStorage +
-          WTF_ARRAY_LENGTH(kSupportedInternalFormatsStorage));
-}
-
-WebGL2RenderingContextBase::WebGL2RenderingContextBase(
-    OffscreenCanvas* passed_offscreen_canvas,
-    std::unique_ptr<WebGraphicsContext3DProvider> context_provider,
-    const CanvasContextCreationAttributes& requested_attributes)
-    : WebGLRenderingContextBase(passed_offscreen_canvas,
+    : WebGLRenderingContextBase(host,
                                 std::move(context_provider),
                                 requested_attributes,
                                 2),
@@ -428,7 +404,7 @@ void WebGL2RenderingContextBase::blitFramebuffer(GLint src_x0,
     return;
 
   DrawingBuffer::ScopedRGBEmulationForBlitFramebuffer emulation(
-      GetDrawingBuffer());
+      GetDrawingBuffer(), !!GetFramebufferBinding(GL_DRAW_FRAMEBUFFER));
   ContextGL()->BlitFramebufferCHROMIUM(src_x0, src_y0, src_x1, src_y1, dst_x0,
                                        dst_y0, dst_x1, dst_y1, mask, filter);
 }
@@ -5770,6 +5746,26 @@ void WebGL2RenderingContextBase::
     return;
   ContextGL()->BindBuffer(GL_PIXEL_UNPACK_BUFFER,
                           ObjectOrZero(bound_pixel_unpack_buffer_.Get()));
+}
+
+void WebGL2RenderingContextBase::
+    DrawingBufferClientRestorePixelPackBufferBinding() {
+  if (!ContextGL())
+    return;
+  ContextGL()->BindBuffer(GL_PIXEL_PACK_BUFFER,
+                          ObjectOrZero(bound_pixel_pack_buffer_.Get()));
+}
+
+void WebGL2RenderingContextBase::
+    DrawingBufferClientRestorePixelPackParameters() {
+  if (!ContextGL())
+    return;
+
+  ContextGL()->PixelStorei(GL_PACK_ROW_LENGTH, pack_row_length_);
+  ContextGL()->PixelStorei(GL_PACK_SKIP_ROWS, pack_skip_rows_);
+  ContextGL()->PixelStorei(GL_PACK_SKIP_PIXELS, pack_skip_pixels_);
+
+  WebGLRenderingContextBase::DrawingBufferClientRestorePixelPackParameters();
 }
 
 }  // namespace blink

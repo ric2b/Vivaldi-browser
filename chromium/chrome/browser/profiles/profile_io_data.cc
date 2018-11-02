@@ -38,8 +38,8 @@
 #include "chrome/browser/net/chrome_http_user_agent_settings.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
 #include "chrome/browser/net/chrome_url_request_context_getter.h"
+#include "chrome/browser/net/loading_predictor_observer.h"
 #include "chrome/browser/net/proxy_service_factory.h"
-#include "chrome/browser/net/resource_prefetch_predictor_observer.h"
 #include "chrome/browser/policy/cloud/policy_header_service_factory.h"
 #include "chrome/browser/policy/policy_helpers.h"
 #include "chrome/browser/predictors/loading_predictor.h"
@@ -74,6 +74,7 @@
 #include "components/prefs/pref_service.h"
 #include "components/previews/core/previews_io_data.h"
 #include "components/signin/core/common/signin_pref_names.h"
+#include "components/sync/base/pref_names.h"
 #include "components/url_formatter/url_fixer.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -82,6 +83,7 @@
 #include "extensions/features/features.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_log_verifier.h"
+#include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
 #include "net/cookies/canonical_cookie.h"
 #include "net/http/http_network_session.h"
@@ -393,9 +395,9 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
 
   if (auto* loading_predictor =
           predictors::LoadingPredictorFactory::GetForProfile(profile)) {
-    resource_prefetch_predictor_observer_.reset(
-        new chrome_browser_net::ResourcePrefetchPredictorObserver(
-            loading_predictor->resource_prefetch_predictor()));
+    loading_predictor_observer_ =
+        base::MakeUnique<chrome_browser_net::LoadingPredictorObserver>(
+            loading_predictor);
   }
 
   ProtocolHandlerRegistry* protocol_handler_registry =
@@ -479,6 +481,11 @@ void ProfileIOData::InitializeOnUIThread(Profile* profile) {
     google_services_user_account_id_.Init(
         prefs::kGoogleServicesUserAccountId, pref_service);
     google_services_user_account_id_.MoveToThread(io_task_runner);
+    sync_suppress_start_.Init(syncer::prefs::kSyncSuppressStart, pref_service);
+    sync_suppress_start_.MoveToThread(io_task_runner);
+    sync_first_setup_complete_.Init(syncer::prefs::kSyncFirstSetupComplete,
+                                    pref_service);
+    sync_first_setup_complete_.MoveToThread(io_task_runner);
   }
 
   network_prediction_options_.Init(prefs::kNetworkPredictionOptions,
@@ -654,29 +661,33 @@ ProfileIOData::~ProfileIOData() {
            static_cast<void*>(it->second), sizeof(void*));
   }
 
-  // Destroy certificate_report_sender_ before main_request_context_,
-  // since the former has a reference to the latter.
-  if (transport_security_state_)
-    transport_security_state_->SetReportSender(nullptr);
-  certificate_report_sender_.reset();
+  if (main_request_context_) {
+    // Prevent the TreeStateTracker from getting any more notifications by
+    // severing the link between it and the CTVerifier and unregistering it from
+    // new STH notifications.
+    main_request_context_->cert_transparency_verifier()->SetObserver(nullptr);
+    ct_tree_tracker_unregistration_.Run();
 
-  if (transport_security_state_)
-    transport_security_state_->SetExpectCTReporter(nullptr);
-  expect_ct_reporter_.reset();
+    // Destroy certificate_report_sender_ before main_request_context_,
+    // since the former has a reference to the latter.
+    main_request_context_->transport_security_state()->SetReportSender(nullptr);
+    certificate_report_sender_.reset();
 
-  if (transport_security_state_)
-    transport_security_state_->SetRequireCTDelegate(nullptr);
+    main_request_context_->transport_security_state()->SetExpectCTReporter(
+        nullptr);
+    expect_ct_reporter_.reset();
 
-  // And the same for the ReportingService.
-  if (main_request_context_storage()) {
+    main_request_context_->transport_security_state()->SetRequireCTDelegate(
+        nullptr);
+
+    // And the same for the ReportingService.
     main_request_context_storage()->set_reporting_service(
         std::unique_ptr<net::ReportingService>());
-  }
 
-  // This should be shut down last, as any other requests may initiate more
-  // activity when the ProxyService aborts lookups.
-  if (proxy_service_)
-    proxy_service_->OnShutdown();
+    // This should be shut down last, as any other requests may initiate more
+    // activity when the ProxyService aborts lookups.
+    main_request_context_->proxy_service()->OnShutdown();
+  }
 
   // TODO(ajwong): These AssertNoURLRequests() calls are unnecessary since they
   // are already done in the URLRequestContext destructor.
@@ -874,6 +885,11 @@ HostContentSettingsMap* ProfileIOData::GetHostContentSettingsMap() const {
   return host_content_settings_map_.get();
 }
 
+bool ProfileIOData::IsSyncEnabled() const {
+  return sync_first_setup_complete_.GetValue() &&
+         !sync_suppress_start_.GetValue();
+}
+
 bool ProfileIOData::IsOffTheRecord() const {
   return profile_type() == Profile::INCOGNITO_PROFILE
       || profile_type() == Profile::GUEST_PROFILE;
@@ -986,13 +1002,18 @@ void ProfileIOData::Init(
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
 
-  // Create the common request contexts.
+  // Create extension request context.  Only used for cookies.
+  extensions_request_context_.reset(new net::URLRequestContext());
+  extensions_request_context_->set_name("extensions");
+
+  // Create the main request context.
   main_request_context_.reset(new net::URLRequestContext());
   main_request_context_storage_.reset(
       new net::URLRequestContextStorage(main_request_context_.get()));
-  extensions_request_context_.reset(new net::URLRequestContext());
   main_request_context_->set_name("main");
-  extensions_request_context_->set_name("extensions");
+
+  ApplyProfileParamsToContext(main_request_context_.get());
+  main_request_context_->set_net_log(io_thread->net_log());
 
   main_request_context_->set_enable_brotli(io_thread_globals->enable_brotli);
 
@@ -1033,65 +1054,32 @@ void ProfileIOData::Init(
                                std::move(chrome_network_delegate));
 
   main_request_context_->set_host_resolver(
-      io_thread_globals->host_resolver.get());
+      io_thread_globals->system_request_context->host_resolver());
 
-  // NOTE: Proxy service uses the default io thread network delegate, not the
-  // delegate just created.
-  proxy_service_ = ProxyServiceFactory::CreateProxyService(
-      io_thread->net_log(), main_request_context_.get(), network_delegate.get(),
-      std::move(profile_params_->proxy_config_service), command_line,
-      io_thread->WpadQuickCheckEnabled(),
-      io_thread->PacHttpsUrlStrippingEnabled());
+  main_request_context_->set_http_auth_handler_factory(
+      io_thread_globals->system_request_context->http_auth_handler_factory());
+
+  main_request_context_storage_->set_proxy_service(
+      ProxyServiceFactory::CreateProxyService(
+          io_thread->net_log(), main_request_context_.get(),
+          network_delegate.get(),
+          std::move(profile_params_->proxy_config_service), command_line,
+          io_thread->WpadQuickCheckEnabled(),
+          io_thread->PacHttpsUrlStrippingEnabled()));
 
   main_request_context_storage_->set_network_delegate(
       std::move(network_delegate));
 
-  transport_security_state_.reset(new net::TransportSecurityState());
+  std::unique_ptr<net::TransportSecurityState> transport_security_state(
+      base::MakeUnique<net::TransportSecurityState>());
   transport_security_persister_.reset(new net::TransportSecurityPersister(
-      transport_security_state_.get(), profile_params_->path,
+      transport_security_state.get(), profile_params_->path,
       base::CreateSequencedTaskRunnerWithTraits(
           {base::MayBlock(), base::TaskPriority::BACKGROUND,
            base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
       IsOffTheRecord()));
-
-  net::NetworkTrafficAnnotationTag traffic_annotation =
-      net::DefineNetworkTrafficAnnotation("domain_security_policy", R"(
-        semantics {
-          sender: "Domain Security Policy"
-          description:
-            "Websites can opt in to have Chrome send reports to them when "
-            "Chrome observes connections to that website that do not meet "
-            "stricter security policies, such as with HTTP Public Key Pinning. "
-            "Websites can use this feature to discover misconfigurations that "
-            "prevent them from complying with stricter security policies that "
-            "they've opted in to."
-          trigger:
-            "Chrome observes that a user is loading a resource from a website "
-            "that has opted in for security policy reports, and the connection "
-            "does not meet the required security policies."
-          data:
-            "The time of the request, the hostname and port being requested, "
-            "the certificate chain, and sometimes certificate revocation "
-            "information included on the connection."
-          destination: OTHER
-        }
-        policy {
-          cookies_allowed: false
-          setting: "This feature cannot be disabled by settings."
-          policy_exception_justification:
-            "Not implemented, this is a feature that websites can opt into and "
-            "thus there is no Chrome-wide policy to disable it."
-        })");
-  certificate_report_sender_.reset(
-      new net::ReportSender(main_request_context_.get(), traffic_annotation));
-  transport_security_state_->SetReportSender(certificate_report_sender_.get());
-
-  expect_ct_reporter_.reset(
-      new ChromeExpectCTReporter(main_request_context_.get()));
-  transport_security_state_->SetExpectCTReporter(expect_ct_reporter_.get());
-
-  transport_security_state_->SetRequireCTDelegate(
-      ct_policy_manager_->GetDelegate());
+  main_request_context_storage_->set_transport_security_state(
+      std::move(transport_security_state));
 
   // Take ownership over these parameters.
   cookie_settings_ = profile_params_->cookie_settings;
@@ -1100,12 +1088,13 @@ void ProfileIOData::Init(
   extension_info_map_ = profile_params_->extension_info_map;
 #endif
 
-  resource_context_->host_resolver_ = io_thread_globals->host_resolver.get();
+  resource_context_->host_resolver_ =
+      io_thread_globals->system_request_context->host_resolver();
   resource_context_->request_context_ = main_request_context_.get();
 
-  if (profile_params_->resource_prefetch_predictor_observer_) {
-    resource_prefetch_predictor_observer_.reset(
-        profile_params_->resource_prefetch_predictor_observer_.release());
+  if (profile_params_->loading_predictor_observer_) {
+    loading_predictor_observer_ =
+        std::move(profile_params_->loading_predictor_observer_);
   }
 
 #if defined(OS_CHROMEOS)
@@ -1137,7 +1126,7 @@ void ProfileIOData::Init(
     main_request_context_->set_cert_verifier(cert_verifier_.get());
 #else
     main_request_context_->set_cert_verifier(
-        io_thread_globals->cert_verifier.get());
+        io_thread_globals->system_request_context->cert_verifier());
 #endif
   }
 
@@ -1150,20 +1139,65 @@ void ProfileIOData::Init(
   std::unique_ptr<net::MultiLogCTVerifier> ct_verifier(
       new net::MultiLogCTVerifier());
   ct_verifier->AddLogs(io_thread_globals->ct_logs);
-  main_request_context_->set_cert_transparency_verifier(ct_verifier.get());
 
   ct_tree_tracker_.reset(new certificate_transparency::TreeStateTracker(
       io_thread_globals->ct_logs, io_thread->net_log()));
   ct_verifier->SetObserver(ct_tree_tracker_.get());
 
-  cert_transparency_verifier_ = std::move(ct_verifier);
+  main_request_context_storage_->set_cert_transparency_verifier(
+      std::move(ct_verifier));
+
   io_thread->RegisterSTHObserver(ct_tree_tracker_.get());
   ct_tree_tracker_unregistration_ =
       base::Bind(&IOThread::UnregisterSTHObserver, base::Unretained(io_thread),
                  ct_tree_tracker_.get());
 
+  main_request_context_storage_->set_ct_policy_enforcer(
+      base::MakeUnique<net::CTPolicyEnforcer>());
+
   InitializeInternal(profile_params_.get(), protocol_handlers,
                      std::move(request_interceptors));
+
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("domain_security_policy", R"(
+        semantics {
+          sender: "Domain Security Policy"
+          description:
+            "Websites can opt in to have Chrome send reports to them when "
+            "Chrome observes connections to that website that do not meet "
+            "stricter security policies, such as with HTTP Public Key Pinning. "
+            "Websites can use this feature to discover misconfigurations that "
+            "prevent them from complying with stricter security policies that "
+            "they've opted in to."
+          trigger:
+            "Chrome observes that a user is loading a resource from a website "
+            "that has opted in for security policy reports, and the connection "
+            "does not meet the required security policies."
+          data:
+            "The time of the request, the hostname and port being requested, "
+            "the certificate chain, and sometimes certificate revocation "
+            "information included on the connection."
+          destination: OTHER
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification:
+            "Not implemented, this is a feature that websites can opt into and "
+            "thus there is no Chrome-wide policy to disable it."
+        })");
+  certificate_report_sender_.reset(
+      new net::ReportSender(main_request_context_.get(), traffic_annotation));
+  main_request_context_->transport_security_state()->SetReportSender(
+      certificate_report_sender_.get());
+
+  expect_ct_reporter_.reset(
+      new ChromeExpectCTReporter(main_request_context_.get()));
+  main_request_context_->transport_security_state()->SetExpectCTReporter(
+      expect_ct_reporter_.get());
+
+  main_request_context_->transport_security_state()->SetRequireCTDelegate(
+      ct_policy_manager_->GetDelegate());
 
   profile_params_.reset();
   initialized_ = true;
@@ -1260,6 +1294,8 @@ void ProfileIOData::ShutdownOnUIThread(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   google_services_user_account_id_.Destroy();
+  sync_suppress_start_.Destroy();
+  sync_first_setup_complete_.Destroy();
   enable_referrers_.Destroy();
   enable_do_not_track_.Destroy();
   force_google_safesearch_.Destroy();
@@ -1293,16 +1329,6 @@ void ProfileIOData::ShutdownOnUIThread(
 
 void ProfileIOData::DestroyResourceContext() {
   resource_context_.reset();
-  // Prevent the cert_transparency_observer_ from getting any more
-  // notifications by severing the link between it and the
-  // cert_transparency_verifier_ and unregistering it from new STH
-  // notifications.
-  // Only do this if the profile was initalized and
-  // |cert_transparency_verifier_| is not null.
-  if (cert_transparency_verifier_) {
-    cert_transparency_verifier_->SetObserver(nullptr);
-    ct_tree_tracker_unregistration_.Run();
-  }
 }
 
 std::unique_ptr<net::HttpNetworkSession>
@@ -1312,19 +1338,16 @@ ProfileIOData::CreateHttpNetworkSession(
 
   IOThread* const io_thread = profile_params.io_thread;
 
-  net::HttpNetworkSession::Params params(io_thread->NetworkSessionParams());
-  net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(context,
-                                                                 &params);
-  if (!IsOffTheRecord() && io_thread->globals()->network_quality_estimator) {
-    params.socket_performance_watcher_factory =
-        io_thread->globals()
-            ->network_quality_estimator->GetSocketPerformanceWatcherFactory();
+  net::HttpNetworkSession::Context session_context;
+  net::URLRequestContextBuilder::SetHttpNetworkSessionComponents(
+      context, &session_context);
+  if (data_reduction_proxy_io_data_.get()) {
+    session_context.proxy_delegate =
+        data_reduction_proxy_io_data_->proxy_delegate();
   }
-  if (data_reduction_proxy_io_data_.get())
-    params.proxy_delegate = data_reduction_proxy_io_data_->proxy_delegate();
 
-  return std::unique_ptr<net::HttpNetworkSession>(
-      new net::HttpNetworkSession(params));
+  return std::unique_ptr<net::HttpNetworkSession>(new net::HttpNetworkSession(
+      io_thread->NetworkSessionParams(), session_context));
 }
 
 std::unique_ptr<net::HttpCache> ProfileIOData::CreateMainHttpFactory(

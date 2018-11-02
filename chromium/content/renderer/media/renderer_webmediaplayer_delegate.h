@@ -58,6 +58,8 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   void ClearStaleFlag(int player_id) override;
   bool IsStale(int player_id) override;
   void SetIsEffectivelyFullscreen(int player_id, bool is_fullscreen) override;
+  void DidPlayerSizeChange(int delegate_id, const gfx::Size& size) override;
+  void DidPlayerMutedStatusChange(int delegate_id, bool muted) override;
 
   // content::RenderFrameObserver overrides.
   void WasHidden() override;
@@ -111,6 +113,10 @@ class CONTENT_EXPORT RendererWebMediaPlayerDelegate
   bool pending_update_task_ = false;
 
   IDMap<Observer*> id_map_;
+
+  // Flag for gating if players should ever transition to a stale state after a
+  // period of inactivity.
+  bool allow_idle_cleanup_ = true;
 
   // Tracks which players have entered an idle state. After some period of
   // inactivity these players will be notified and become stale.

@@ -13,9 +13,11 @@
 
 #include "calendar/calendar_model_observer.h"
 #include "calendar/calendar_service.h"
+#include "calendar/calendar_type.h"
+#include "calendar/event_type.h"
 
-using calendar::CalendarService;
 using calendar::CalendarModelObserver;
+using calendar::CalendarService;
 
 namespace extensions {
 
@@ -35,6 +37,14 @@ class CalendarEventRouter : public CalendarModelObserver {
 
   content::BrowserContext* browser_context_;
   CalendarService* model_;
+
+  // CalendarModelObserver
+  void OnEventCreated(CalendarService* service,
+                      const calendar::EventRow& row) override;
+  void OnEventDeleted(CalendarService* service,
+                      const calendar::EventRow& row) override;
+  void OnEventChanged(CalendarService* service,
+                      const calendar::EventRow& row) override;
 
   void ExtensiveCalendarChangesBeginning(CalendarService* model) override;
   void ExtensiveCalendarChangesEnded(CalendarService* model) override;
@@ -101,13 +111,13 @@ class CalendarFunctionWithCallback : public CalendarAsyncFunction {
   DISALLOW_COPY_AND_ASSIGN(CalendarFunctionWithCallback);
 };
 
-class CalendarGetAllFunction : public CalendarFunctionWithCallback {
-  DECLARE_EXTENSION_FUNCTION("calendar.getAll", CALENDAR_GETALL)
+class CalendarGetAllEventsFunction : public CalendarFunctionWithCallback {
+  DECLARE_EXTENSION_FUNCTION("calendar.getAllEvents", CALENDAR_GETALLEVENTS)
  public:
-  CalendarGetAllFunction() = default;
+  CalendarGetAllEventsFunction() = default;
 
  protected:
-  ~CalendarGetAllFunction() override;
+  ~CalendarGetAllEventsFunction() override;
 
   // ExtensionFunction:
   ResponseAction Run() override;
@@ -117,7 +127,65 @@ class CalendarGetAllFunction : public CalendarFunctionWithCallback {
       std::shared_ptr<calendar::EventQueryResults> results);
 
  private:
-  DISALLOW_COPY_AND_ASSIGN(CalendarGetAllFunction);
+  DISALLOW_COPY_AND_ASSIGN(CalendarGetAllEventsFunction);
+};
+
+class CalendarEventCreateFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.eventCreate", CALENDAR_CREATEEVENT)
+  CalendarEventCreateFunction() = default;
+
+ protected:
+  ~CalendarEventCreateFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  // Callback for the calendar function to provide results.
+  void CreateEventComplete(
+      std::shared_ptr<calendar::CreateEventResult> results);
+
+ private:
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+  DISALLOW_COPY_AND_ASSIGN(CalendarEventCreateFunction);
+};
+
+class CalendarUpdateEventFunction : public CalendarFunctionWithCallback {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.updateEvent", CALENDAR_UPDATEEVENT)
+  CalendarUpdateEventFunction() = default;
+
+ protected:
+  ~CalendarUpdateEventFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void UpdateEventComplete(
+      std::shared_ptr<calendar::UpdateEventResult> results);
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CalendarUpdateEventFunction);
+};
+
+class CalendarDeleteEventFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.deleteEvent", CALENDAR_DELETEEVENT)
+  CalendarDeleteEventFunction() = default;
+
+ protected:
+  ~CalendarDeleteEventFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void DeleteEventComplete(
+      std::shared_ptr<calendar::DeleteEventResult> results);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CalendarDeleteEventFunction);
 };
 
 class CalendarCreateFunction : public CalendarAsyncFunction {
@@ -130,22 +198,32 @@ class CalendarCreateFunction : public CalendarAsyncFunction {
   // ExtensionFunction:
   ResponseAction Run() override;
 
+  // Callback for the calendar function to provide results.
+  void CreateComplete(std::shared_ptr<calendar::CreateCalendarResult> results);
+
  private:
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
   DISALLOW_COPY_AND_ASSIGN(CalendarCreateFunction);
 };
 
-class CalendarDeleteFunction : public CalendarAsyncFunction {
+class CalendarGetAllFunction : public CalendarFunctionWithCallback {
+  DECLARE_EXTENSION_FUNCTION("calendar.getAll", CALENDAR_GETALL)
  public:
-  DECLARE_EXTENSION_FUNCTION("calendar.delete", CALENDAR_DELETE)
-  CalendarDeleteFunction() = default;
+  CalendarGetAllFunction() = default;
 
  protected:
-  ~CalendarDeleteFunction() override = default;
+  ~CalendarGetAllFunction() override;
+
   // ExtensionFunction:
   ResponseAction Run() override;
 
+  // Callback for the calendar function to provide results.
+  void GetAllComplete(std::shared_ptr<calendar::CalendarQueryResults> results);
+
  private:
-  DISALLOW_COPY_AND_ASSIGN(CalendarDeleteFunction);
+  DISALLOW_COPY_AND_ASSIGN(CalendarGetAllFunction);
 };
 
 class CalendarUpdateFunction : public CalendarFunctionWithCallback {
@@ -158,11 +236,31 @@ class CalendarUpdateFunction : public CalendarFunctionWithCallback {
   // ExtensionFunction:
   ResponseAction Run() override;
 
-  void UpdateEventComplete(
-      std::shared_ptr<calendar::UpdateEventResult> results);
+  void UpdateCalendarComplete(
+      std::shared_ptr<calendar::UpdateCalendarResult> results);
 
  private:
   DISALLOW_COPY_AND_ASSIGN(CalendarUpdateFunction);
+};
+
+class CalendarDeleteFunction : public CalendarAsyncFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("calendar.delete", CALENDAR_DELETE)
+  CalendarDeleteFunction() = default;
+
+ protected:
+  ~CalendarDeleteFunction() override = default;
+  // ExtensionFunction:
+  ResponseAction Run() override;
+
+  void DeleteCalendarComplete(
+      std::shared_ptr<calendar::DeleteCalendarResult> results);
+
+  // The task tracker for the CalendarService callbacks.
+  base::CancelableTaskTracker task_tracker_;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(CalendarDeleteFunction);
 };
 
 }  // namespace extensions

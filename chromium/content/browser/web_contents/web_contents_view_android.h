@@ -19,7 +19,8 @@
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace content {
-class ContentViewCoreImpl;
+class ContentViewCore;
+class RenderWidgetHostViewAndroid;
 class SynchronousCompositorClient;
 class WebContentsImpl;
 
@@ -32,10 +33,10 @@ class WebContentsViewAndroid : public WebContentsView,
                          WebContentsViewDelegate* delegate);
   ~WebContentsViewAndroid() override;
 
-  // Sets the interface to the view system. ContentViewCoreImpl is owned
+  // Sets the interface to the view system. ContentViewCore is owned
   // by its Java ContentViewCore counterpart, whose lifetime is managed
   // by the UI frontend.
-  void SetContentViewCore(ContentViewCoreImpl* content_view_core);
+  void SetContentViewCore(ContentViewCore* content_view_core);
 
   void set_synchronous_compositor_client(SynchronousCompositorClient* client) {
     synchronous_compositor_client_ = client;
@@ -47,6 +48,8 @@ class WebContentsViewAndroid : public WebContentsView,
 
   void SetOverscrollRefreshHandler(
       std::unique_ptr<ui::OverscrollRefreshHandler> overscroll_refresh_handler);
+
+  RenderWidgetHostViewAndroid* GetRenderWidgetHostViewAndroid();
 
   // WebContentsView implementation --------------------------------------------
   gfx::NativeView GetNativeView() const override;
@@ -93,9 +96,18 @@ class WebContentsViewAndroid : public WebContentsView,
                      const DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override;
   void UpdateDragCursor(blink::WebDragOperation operation) override;
-  void GotFocus() override;
+  void GotFocus(RenderWidgetHostImpl* render_widget_host) override;
+  void LostFocus(RenderWidgetHostImpl* render_widget_host) override;
   void TakeFocus(bool reverse) override;
 
+  // ui::ViewClient implementation.
+  bool OnTouchEvent(const ui::MotionEventAndroid& event,
+                    bool for_touch_handle) override;
+  bool OnMouseEvent(const ui::MotionEventAndroid& event) override;
+  bool OnDragEvent(const ui::DragEventAndroid& event) override;
+  void OnPhysicalBackingSizeChanged() override;
+
+ private:
   void OnDragEntered(const std::vector<DropData::Metadata>& metadata,
                      const gfx::Point& location,
                      const gfx::Point& screen_location);
@@ -107,17 +119,11 @@ class WebContentsViewAndroid : public WebContentsView,
                      const gfx::Point& screen_location);
   void OnDragEnded();
 
-  // ui::ViewClient implementation.
-  bool OnTouchEvent(const ui::MotionEventAndroid& event,
-                    bool for_touch_handle) override;
-  void OnPhysicalBackingSizeChanged() override;
-
- private:
   // The WebContents whose contents we display.
   WebContentsImpl* web_contents_;
 
-  // ContentViewCoreImpl is our interface to the view system.
-  ContentViewCoreImpl* content_view_core_;
+  // ContentViewCore is our interface to the view system.
+  ContentViewCore* content_view_core_;
 
   // Handles "overscroll to refresh" events
   std::unique_ptr<ui::OverscrollRefreshHandler> overscroll_refresh_handler_;

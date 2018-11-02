@@ -16,6 +16,7 @@
 #include "components/guest_view/common/guest_view_messages.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
+#include "content/public/browser/guest_mode.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_process_host.h"
@@ -181,6 +182,7 @@ GuestViewBase::GuestViewBase(WebContents* owner_web_contents)
       guest_instance_id_(GetGuestViewManager()->GetNextInstanceID()),
       view_instance_id_(kInstanceIDNone),
       element_instance_id_(kInstanceIDNone),
+      attach_in_progress_(false),
       initialized_(false),
       is_being_destroyed_(false),
       guest_host_(nullptr),
@@ -253,8 +255,7 @@ void GuestViewBase::InitWithWebContents(
   // Populate the view instance ID if we have it on creation.
   create_params.GetInteger(kParameterInstanceId, &view_instance_id_);
 
-  if (CanRunInDetachedState())
-    SetUpSizing(create_params);
+  SetUpSizing(create_params);
 
   // Observe guest zoom changes.
   auto* zoom_controller = zoom::ZoomController::FromWebContents(web_contents());
@@ -434,6 +435,10 @@ WebContents* GuestViewBase::CreateNewGuestWindow(
 void GuestViewBase::OnRenderFrameHostDeleted(int process_id, int routing_id) {}
 
 void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
+  DCHECK(attach_in_progress_);
+  // Clear this flag here, as functions called below may check attached().
+  attach_in_progress_ = false;
+
   DCHECK(guest_proxy_routing_id_ == MSG_ROUTING_NONE ||
          guest_proxy_routing_id == guest_proxy_routing_id_);
   guest_proxy_routing_id_ = guest_proxy_routing_id;
@@ -455,13 +460,15 @@ void GuestViewBase::DidAttach(int guest_proxy_routing_id) {
   SendQueuedEvents();
 }
 
+// TODO(wjmaclean): Delete this when browser plugin goes away;
+// https://crbug.com/533069 .
 void GuestViewBase::DidDetach() {
   GuestViewManager::FromBrowserContext(browser_context_)->DetachGuest(this);
   StopTrackingEmbedderZoomLevel();
   owner_web_contents()->Send(new GuestViewMsg_GuestDetached(
       element_instance_id_));
   element_instance_id_ = kInstanceIDNone;
-  if (!CanRunInDetachedState())
+  if (ShouldDestroyOnDetach())
     Destroy(true);
 }
 
@@ -475,6 +482,10 @@ void GuestViewBase::GuestSizeChanged(const gfx::Size& new_size) {
 
 const GURL& GuestViewBase::GetOwnerSiteURL() const {
   return owner_web_contents()->GetLastCommittedURL();
+}
+
+bool GuestViewBase::ShouldDestroyOnDetach() const {
+  return false;
 }
 
 void GuestViewBase::Destroy(bool also_delete) {
@@ -569,6 +580,7 @@ void GuestViewBase::WillAttach(WebContents* embedder_web_contents,
 
   // Start tracking the new embedder's zoom level.
   StartTrackingEmbedderZoomLevel();
+  attach_in_progress_ = true;
   element_instance_id_ = element_instance_id;
   is_full_page_plugin_ = is_full_page_plugin;
 
@@ -813,13 +825,13 @@ void GuestViewBase::DispatchEventToGuestProxy(
 }
 
 void GuestViewBase::DispatchEventToView(std::unique_ptr<GuestViewEvent> event) {
-  if (!attached() &&
-      (!CanRunInDetachedState() || !can_owner_receive_events())) {
-    pending_events_.push_back(std::move(event));
+  if ((attached() && pending_events_.empty()) ||
+      (can_owner_receive_events() &&
+       !content::GuestMode::IsCrossProcessFrameGuest(web_contents()))) {
+    event->Dispatch(this, view_instance_id_);
     return;
   }
-
-  event->Dispatch(this, view_instance_id_);
+  pending_events_.push_back(std::move(event));
 }
 
 void GuestViewBase::SendQueuedEvents() {

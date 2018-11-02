@@ -26,14 +26,15 @@
 #ifndef WTF_MathExtras_h
 #define WTF_MathExtras_h
 
-#include "platform/wtf/Allocator.h"
-#include "platform/wtf/Assertions.h"
-#include "platform/wtf/CPU.h"
 #include <cmath>
 #include <cstddef>
 #include <limits>
+#include "build/build_config.h"
+#include "platform/wtf/Allocator.h"
+#include "platform/wtf/Assertions.h"
+#include "platform/wtf/CPU.h"
 
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 // Make math.h behave like other platforms.
 #define _USE_MATH_DEFINES
 // Even if math.h was already included, including math.h again with
@@ -42,7 +43,7 @@
 #include <stdint.h>
 #endif
 
-#if OS(OPENBSD)
+#if defined(OS_OPENBSD)
 #include <machine/ieee.h>
 #include <sys/types.h>
 #endif
@@ -59,7 +60,7 @@ const float piOverFourFloat = static_cast<float>(M_PI_4);
 const double twoPiDouble = piDouble * 2.0;
 const float twoPiFloat = piFloat * 2.0f;
 
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 
 // VS2013 has most of the math functions now, but we still need to work
 // around various differences in behavior of Inf.
@@ -103,7 +104,7 @@ inline double wtf_pow(double x, double y) {
 #define fmod(x, y) wtf_fmod(x, y)
 #define pow(x, y) wtf_pow(x, y)
 
-#endif  // COMPILER(MSVC)
+#endif  // defined(COMPILER_MSVC)
 
 inline double deg2rad(double d) {
   return d * piDouble / 180.0;
@@ -134,6 +135,12 @@ inline double turn2grad(double t) {
 }
 inline double grad2turn(double g) {
   return g / 400;
+}
+inline double rad2turn(double r) {
+  return r / twoPiDouble;
+}
+inline double turn2rad(double t) {
+  return t * twoPiDouble;
 }
 
 inline float deg2rad(float d) {
@@ -377,7 +384,7 @@ inline size_t lowestCommonMultiple(size_t a, size_t b) {
 }
 
 #ifndef UINT64_C
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 #define UINT64_C(c) c##ui64
 #else
 #define UINT64_C(c) c##ull

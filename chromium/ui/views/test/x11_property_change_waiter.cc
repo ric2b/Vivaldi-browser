@@ -17,16 +17,11 @@ namespace views {
 X11PropertyChangeWaiter::X11PropertyChangeWaiter(XID window,
                                                  const char* property)
     : x_window_(window), property_(property), wait_(true) {
-  Display* display = gfx::GetXDisplay();
-
   // Ensure that we are listening to PropertyNotify events for |window|. This
   // is not the case for windows which were not created by
   // DesktopWindowTreeHostX11.
   x_window_events_.reset(
       new ui::XScopedEventSelector(x_window_, PropertyChangeMask));
-
-  const char* kAtomsToCache[] = { property, NULL };
-  atom_cache_.reset(new ui::X11AtomCache(display, kAtomsToCache));
 
   // Override the dispatcher so that we get events before
   // DesktopWindowTreeHostX11 does. We must do this because
@@ -61,10 +56,9 @@ bool X11PropertyChangeWaiter::CanDispatchEvent(const ui::PlatformEvent& event) {
 
 uint32_t X11PropertyChangeWaiter::DispatchEvent(
     const ui::PlatformEvent& event) {
-  if (!wait_ ||
-      event->type != PropertyNotify ||
+  if (!wait_ || event->type != PropertyNotify ||
       event->xproperty.window != x_window_ ||
-      event->xproperty.atom != atom_cache_->GetAtom(property_) ||
+      event->xproperty.atom != gfx::GetAtom(property_) ||
       ShouldKeepOnWaiting(event)) {
     return ui::POST_DISPATCH_PERFORM_DEFAULT;
   }

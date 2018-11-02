@@ -73,6 +73,7 @@ EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::
 void EmbeddedWorkerTestHelper::MockEmbeddedWorkerInstanceClient::StartWorker(
     const EmbeddedWorkerStartParams& params,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host) {
   if (!helper_)
     return;
@@ -255,12 +256,12 @@ class EmbeddedWorkerTestHelper::MockServiceWorkerEventDispatcher
 
   void DispatchPaymentRequestEvent(
       int payment_request_id,
-      payments::mojom::PaymentAppRequestPtr app_request,
-      payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+      payments::mojom::PaymentRequestEventDataPtr event_data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
       DispatchPaymentRequestEventCallback callback) override {
     if (!helper_)
       return;
-    helper_->OnPaymentRequestEventStub(std::move(app_request),
+    helper_->OnPaymentRequestEventStub(std::move(event_data),
                                        std::move(response_callback),
                                        std::move(callback));
   }
@@ -298,7 +299,8 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       new MockServiceWorkerDatabaseTaskManager(
           base::ThreadTaskRunnerHandle::Get()));
   wrapper_->InitInternal(user_data_directory, std::move(database_task_manager),
-                         base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr);
+                         base::ThreadTaskRunnerHandle::Get(), nullptr, nullptr,
+                         nullptr, nullptr);
   wrapper_->process_manager()->SetProcessIdForTest(mock_render_process_id());
   wrapper_->process_manager()->SetNewProcessIdForTest(new_render_process_id());
 
@@ -306,8 +308,7 @@ EmbeddedWorkerTestHelper::EmbeddedWorkerTestHelper(
       new MockServiceWorkerDispatcherHost(
           mock_render_process_id_, browser_context_->GetResourceContext(),
           this));
-  wrapper_->context()->AddDispatcherHost(mock_render_process_id_,
-                                         dispatcher_host.get());
+  dispatcher_host->Init(wrapper_.get());
   dispatcher_hosts_[mock_render_process_id_] = std::move(dispatcher_host);
 
   render_process_host_->OverrideBinderForTesting(
@@ -329,7 +330,7 @@ void EmbeddedWorkerTestHelper::SimulateAddProcessToPattern(const GURL& pattern,
     scoped_refptr<ServiceWorkerDispatcherHost> dispatcher_host(
         new MockServiceWorkerDispatcherHost(
             process_id, browser_context_->GetResourceContext(), this));
-    wrapper_->context()->AddDispatcherHost(process_id, dispatcher_host.get());
+    dispatcher_host->Init(wrapper_.get());
     dispatcher_hosts_[process_id] = std::move(dispatcher_host);
   }
   wrapper_->process_manager()->AddProcessReferenceToPattern(pattern,
@@ -360,6 +361,12 @@ bool EmbeddedWorkerTestHelper::OnMessageReceived(const IPC::Message& message) {
 void EmbeddedWorkerTestHelper::RegisterMockInstanceClient(
     std::unique_ptr<MockEmbeddedWorkerInstanceClient> client) {
   mock_instance_clients_.push_back(std::move(client));
+}
+
+void EmbeddedWorkerTestHelper::RegisterDispatcherHost(
+    int process_id,
+    scoped_refptr<ServiceWorkerDispatcherHost> dispatcher_host) {
+  dispatcher_hosts_[process_id] = std::move(dispatcher_host);
 }
 
 ServiceWorkerContextCore* EmbeddedWorkerTestHelper::context() {
@@ -520,12 +527,12 @@ void EmbeddedWorkerTestHelper::OnNotificationCloseEvent(
 }
 
 void EmbeddedWorkerTestHelper::OnPaymentRequestEvent(
-    payments::mojom::PaymentAppRequestPtr app_request,
-    payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+    payments::mojom::PaymentRequestEventDataPtr event_data,
+    payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
     mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
         callback) {
-  response_callback->OnPaymentAppResponse(
-      payments::mojom::PaymentAppResponse::New(), base::Time::Now());
+  response_callback->OnPaymentHandlerResponse(
+      payments::mojom::PaymentHandlerResponse::New(), base::Time::Now());
   std::move(callback).Run(SERVICE_WORKER_OK, base::Time::Now());
 }
 
@@ -575,14 +582,16 @@ void EmbeddedWorkerTestHelper::SimulateWorkerThreadStarted(
     int provider_id) {
   EmbeddedWorkerInstance* worker = registry()->GetWorker(embedded_worker_id);
   ASSERT_TRUE(worker);
+  ASSERT_TRUE(embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]);
+
   // Prepare a provider host to be used by following OnThreadStarted().
   std::unique_ptr<ServiceWorkerProviderHost> host =
       CreateProviderHostForServiceWorkerContext(
           worker->process_id(), provider_id, true /* is_parent_frame_secure */,
-          context()->AsWeakPtr());
+          context()->AsWeakPtr(),
+          &embedded_worker_id_remote_provider_map_[embedded_worker_id]);
   context()->AddProviderHost(std::move(host));
 
-  ASSERT_TRUE(embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]);
   embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]
       ->OnThreadStarted(thread_id, provider_id);
   base::RunLoop().RunUntilIdle();
@@ -603,7 +612,8 @@ void EmbeddedWorkerTestHelper::SimulateWorkerStarted(int embedded_worker_id) {
   EmbeddedWorkerInstance* worker = registry()->GetWorker(embedded_worker_id);
   ASSERT_TRUE(worker);
   ASSERT_TRUE(embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]);
-  embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]->OnStarted();
+  embedded_worker_id_instance_host_ptr_map_[embedded_worker_id]->OnStarted(
+      mojom::EmbeddedWorkerStartTiming::New());
   base::RunLoop().RunUntilIdle();
 }
 
@@ -781,14 +791,14 @@ void EmbeddedWorkerTestHelper::OnPushEventStub(
 }
 
 void EmbeddedWorkerTestHelper::OnPaymentRequestEventStub(
-    payments::mojom::PaymentAppRequestPtr app_request,
-    payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+    payments::mojom::PaymentRequestEventDataPtr event_data,
+    payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
     mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
         callback) {
   base::ThreadTaskRunnerHandle::Get()->PostTask(
       FROM_HERE,
       base::Bind(&EmbeddedWorkerTestHelper::OnPaymentRequestEvent, AsWeakPtr(),
-                 base::Passed(&app_request), base::Passed(&response_callback),
+                 base::Passed(&event_data), base::Passed(&response_callback),
                  base::Passed(&callback)));
 }
 

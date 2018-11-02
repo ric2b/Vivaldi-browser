@@ -110,9 +110,9 @@ class TestList(object):
 #
 # These numbers may need to be updated whenever we add or delete tests. This includes virtual tests.
 #
-TOTAL_TESTS = 108
+TOTAL_TESTS = 106
 TOTAL_WONTFIX = 3
-TOTAL_SKIPS = 22 + TOTAL_WONTFIX
+TOTAL_SKIPS = 21 + TOTAL_WONTFIX
 TOTAL_CRASHES = 76
 
 UNEXPECTED_PASSES = 1
@@ -126,7 +126,6 @@ def unit_test_list():
     tests.add('failures/expected/device_failure.html', device_failure=True)
     tests.add('failures/expected/timeout.html', timeout=True)
     tests.add('failures/expected/leak.html', leak=True)
-    tests.add('failures/expected/needsrebaseline.html', actual_text='needsrebaseline text')
     tests.add('failures/expected/needsmanualrebaseline.html', actual_text='needsmanualrebaseline text')
     tests.add('failures/expected/image.html',
               actual_image='image_fail-pngtEXtchecksum\x00checksum_fail',
@@ -281,7 +280,6 @@ def add_unit_tests_to_mock_filesystem(filesystem):
 Bug(test) failures/expected/crash.html [ Crash ]
 Bug(test) failures/expected/crash_then_text.html [ Failure ]
 Bug(test) failures/expected/image.html [ Failure ]
-Bug(test) failures/expected/needsrebaseline.html [ NeedsRebaseline ]
 Bug(test) failures/expected/needsmanualrebaseline.html [ NeedsManualRebaseline ]
 Bug(test) failures/expected/audio.html [ Failure ]
 Bug(test) failures/expected/image_checksum.html [ Failure ]
@@ -462,7 +460,7 @@ class TestPort(Port):
     def layout_tests_dir(self):
         return LAYOUT_TEST_DIR
 
-    def perf_tests_dir(self):
+    def _perf_tests_dir(self):
         return PERF_TEST_DIR
 
     def skipped_layout_tests(self, _):
@@ -535,6 +533,8 @@ class TestPort(Port):
             VirtualTestSuite(prefix='skipped', base='failures/expected', args=['--virtual-arg2']),
             VirtualTestSuite(prefix='references_use_default_args', base='passes/reftest.html',
                              args=['--virtual-arg'], references_use_default_args=True),
+            VirtualTestSuite(prefix='virtual_wpt', base='external/wpt', args=['--virtual-arg']),
+            VirtualTestSuite(prefix='virtual_wpt_dom', base='external/wpt/dom', args=['--virtual-arg']),
         ]
 
 

@@ -9,10 +9,10 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8ThrowDOMException.h"
 #include "core/dom/DOMException.h"
-#include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/html/HTMLMediaElement.h"
+#include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaEncryptedEvent.h"
@@ -83,6 +83,12 @@ class SetContentDecryptionModuleResult final
 
   void CompleteWithSession(
       WebContentDecryptionModuleResult::SessionStatus status) override {
+    NOTREACHED();
+    (*failure_callback_)(kInvalidStateError, "Unexpected completion.");
+  }
+
+  void CompleteWithKeyStatus(
+      WebEncryptedMediaKeyInformation::KeyStatus key_status) override {
     NOTREACHED();
     (*failure_callback_)(kInvalidStateError, "Unexpected completion.");
   }
@@ -352,18 +358,18 @@ ScriptPromise HTMLMediaElementEncryptedMedia::setMediaKeys(
 
   // From http://w3c.github.io/encrypted-media/#setMediaKeys
 
-  // 1. If mediaKeys and the mediaKeys attribute are the same object,
-  //    return a resolved promise.
-  if (this_element.media_keys_ == media_keys)
-    return ScriptPromise::CastUndefined(script_state);
-
-  // 2. If this object's attaching media keys value is true, return a
+  // 1. If this object's attaching media keys value is true, return a
   //    promise rejected with an InvalidStateError.
   if (this_element.is_attaching_media_keys_) {
     return ScriptPromise::RejectWithDOMException(
         script_state, DOMException::Create(kInvalidStateError,
                                            "Another request is in progress."));
   }
+
+  // 2. If mediaKeys and the mediaKeys attribute are the same object,
+  //    return a resolved promise.
+  if (this_element.media_keys_ == media_keys)
+    return ScriptPromise::CastUndefined(script_state);
 
   // 3. Let this object's attaching media keys value be true.
   this_element.is_attaching_media_keys_ = true;

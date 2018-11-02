@@ -53,6 +53,7 @@
 #include "modules/eventsource/EventSourceInit.h"
 #include "platform/HTTPNames.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -81,9 +82,9 @@ EventSource* EventSource::Create(ExecutionContext* context,
                                  const EventSourceInit& event_source_init,
                                  ExceptionState& exception_state) {
   if (context->IsDocument())
-    UseCounter::Count(ToDocument(context), UseCounter::kEventSourceDocument);
+    UseCounter::Count(ToDocument(context), WebFeature::kEventSourceDocument);
   else
-    UseCounter::Count(context, UseCounter::kEventSourceWorker);
+    UseCounter::Count(context, WebFeature::kEventSourceWorker);
 
   if (url.IsEmpty()) {
     exception_state.ThrowDOMException(
@@ -132,6 +133,10 @@ void EventSource::Connect() {
   request.SetHTTPHeaderField(HTTPNames::Accept, "text/event-stream");
   request.SetHTTPHeaderField(HTTPNames::Cache_Control, "no-cache");
   request.SetRequestContext(WebURLRequest::kRequestContextEventSource);
+  request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeCORS);
+  request.SetFetchCredentialsMode(
+      with_credentials_ ? WebURLRequest::kFetchCredentialsModeInclude
+                        : WebURLRequest::kFetchCredentialsModeSameOrigin);
   request.SetExternalRequestStateFromRequestorAddressSpace(
       execution_context.GetSecurityContext().AddressSpace());
   if (parser_ && !parser_->LastEventId().IsEmpty()) {
@@ -150,20 +155,8 @@ void EventSource::Connect() {
 
   ThreadableLoaderOptions options;
   options.preflight_policy = kPreventPreflight;
-  options.cross_origin_request_policy = kUseAccessControl;
-  options.content_security_policy_enforcement =
-      ContentSecurityPolicy::ShouldBypassMainWorld(&execution_context)
-          ? kDoNotEnforceContentSecurityPolicy
-          : kEnforceContentSecurityPolicy;
 
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.allow_credentials =
-      (origin->CanRequestNoSuborigin(current_url_) || with_credentials_)
-          ? kAllowStoredCredentials
-          : kDoNotAllowStoredCredentials;
-  resource_loader_options.credentials_requested =
-      with_credentials_ ? kClientRequestedCredentials
-                        : kClientDidNotRequestCredentials;
   resource_loader_options.data_buffering_policy = kDoNotBufferData;
   resource_loader_options.security_origin = origin;
 
@@ -313,24 +306,13 @@ void EventSource::DidFail(const ResourceError& error) {
   DCHECK(loader_);
 
   if (error.IsAccessCheck()) {
-    DidFailAccessControlCheck(error);
+    AbortConnectionAttempt();
     return;
   }
 
   if (error.IsCancellation())
     state_ = kClosed;
   NetworkRequestEnded();
-}
-
-void EventSource::DidFailAccessControlCheck(const ResourceError& error) {
-  DCHECK(loader_);
-
-  String message = "EventSource cannot load " + error.FailingURL() + ". " +
-                   error.LocalizedDescription();
-  GetExecutionContext()->AddConsoleMessage(
-      ConsoleMessage::Create(kJSMessageSource, kErrorMessageLevel, message));
-
-  AbortConnectionAttempt();
 }
 
 void EventSource::DidFailRedirectCheck() {

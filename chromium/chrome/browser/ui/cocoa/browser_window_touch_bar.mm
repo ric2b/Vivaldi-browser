@@ -6,11 +6,10 @@
 
 #include <memory>
 
-#include "base/mac/foundation_util.h"
+#include "base/mac/availability.h"
 #include "base/mac/mac_util.h"
 #import "base/mac/scoped_nsobject.h"
 #import "base/mac/sdk_forward_declarations.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
@@ -33,7 +32,9 @@
 #include "components/strings/grit/components_strings.h"
 #include "components/toolbar/vector_icons.h"
 #include "components/url_formatter/url_formatter.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
+#import "ui/base/cocoa/touch_bar_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 #include "ui/gfx/color_palette.h"
@@ -41,23 +42,9 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/vector_icons/vector_icons.h"
 
 namespace {
 
-// The touch bar actions that are being recorded in a histogram. These values
-// should not be re-ordered or removed.
-enum TouchBarAction {
-  BACK = 0,
-  FORWARD,
-  STOP,
-  RELOAD,
-  HOME,
-  SEARCH,
-  STAR,
-  NEW_TAB,
-  TOUCH_BAR_ACTION_COUNT
-};
 
 // Touch bar identifiers.
 NSString* const kBrowserWindowTouchBarId = @"browser-window";
@@ -110,41 +97,28 @@ NSButton* CreateTouchBarButton(const gfx::VectorIcon& icon,
   return button;
 }
 
-NSString* GetTouchBarId(NSString* touch_bar_id) {
-  NSString* chrome_bundle_id =
-      base::SysUTF8ToNSString(base::mac::BaseBundleID());
-  return [NSString stringWithFormat:@"%@.%@", chrome_bundle_id, touch_bar_id];
-}
-
-TouchBarAction TouchBarActionFromCommand(int command) {
+ui::TouchBarAction TouchBarActionFromCommand(int command) {
   switch (command) {
     case IDC_BACK:
-      return TouchBarAction::BACK;
+      return ui::TouchBarAction::BACK;
     case IDC_FORWARD:
-      return TouchBarAction::FORWARD;
+      return ui::TouchBarAction::FORWARD;
     case IDC_STOP:
-      return TouchBarAction::STOP;
+      return ui::TouchBarAction::STOP;
     case IDC_RELOAD:
-      return TouchBarAction::RELOAD;
+      return ui::TouchBarAction::RELOAD;
     case IDC_HOME:
-      return TouchBarAction::HOME;
+      return ui::TouchBarAction::HOME;
     case IDC_FOCUS_LOCATION:
-      return TouchBarAction::SEARCH;
+      return ui::TouchBarAction::SEARCH;
     case IDC_BOOKMARK_PAGE:
-      return TouchBarAction::STAR;
+      return ui::TouchBarAction::STAR;
     case IDC_NEW_TAB:
-      return TouchBarAction::NEW_TAB;
+      return ui::TouchBarAction::NEW_TAB;
     default:
       NOTREACHED();
-      return TouchBarAction::TOUCH_BAR_ACTION_COUNT;
+      return ui::TouchBarAction::TOUCH_BAR_ACTION_COUNT;
   }
-}
-
-// Logs the sample's UMA metrics into the DefaultTouchBar.Metrics histogram.
-void LogTouchBarUMA(int command) {
-  UMA_HISTOGRAM_ENUMERATION("TouchBar.Default.Metrics",
-                            TouchBarActionFromCommand(command),
-                            TOUCH_BAR_ACTION_COUNT);
 }
 
 // A class registered for C++ notifications. This is used to detect changes in
@@ -180,28 +154,37 @@ class HomePrefNotificationBridge {
 
   // Used to receive and handle notifications for the home button pref.
   std::unique_ptr<HomePrefNotificationBridge> notificationBridge_;
+
+  // The stop/reload button in the touch bar.
+  base::scoped_nsobject<NSButton> reloadStopButton_;
+
+  // The back/forward segmented control in the touch bar.
+  base::scoped_nsobject<NSSegmentedControl> backForwardControl_;
+
+  // The starred button in the touch bar.
+  base::scoped_nsobject<NSButton> starredButton_;
 }
 
 // Creates and returns a touch bar for tab fullscreen mode.
-- (NSTouchBar*)createTabFullscreenTouchBar;
+- (NSTouchBar*)createTabFullscreenTouchBar API_AVAILABLE(macos(10.12.2));
 
-// Creates and returns the back and forward segmented buttons.
-- (NSView*)backOrForwardTouchBarView;
+// Sets up the back and forward segmented control.
+- (void)setupBackForwardControl;
+
+// Methods to update controls on the touch bar. Called when creating the
+// touch bar or the page load state has been updated.
+- (void)updateReloadStopButton;
+- (void)updateBackForwardControl;
+- (void)updateStarredButton;
 
 // Creates and returns the search button.
-- (NSView*)searchTouchBarView;
+- (NSView*)searchTouchBarView API_AVAILABLE(macos(10.12));
 @end
 
 @implementation BrowserWindowTouchBar
 
 @synthesize isPageLoading = isPageLoading_;
 @synthesize isStarred = isStarred_;
-
-+ (NSString*)identifierForTouchBarId:(NSString*)touchBarId
-                              itemId:(NSString*)itemId {
-  return
-      [NSString stringWithFormat:@"%@-%@", GetTouchBarId(touchBarId), itemId];
-}
 
 - (instancetype)initWithBrowser:(Browser*)browser
         browserWindowController:(BrowserWindowController*)bwc {
@@ -232,9 +215,9 @@ class HomePrefNotificationBridge {
   if ([bwc_ isFullscreenForTabContentOrExtension])
     return [self createTabFullscreenTouchBar];
 
-  base::scoped_nsobject<NSTouchBar> touchBar(
-      [[NSClassFromString(@"NSTouchBar") alloc] init]);
-  [touchBar setCustomizationIdentifier:GetTouchBarId(kBrowserWindowTouchBarId)];
+  base::scoped_nsobject<NSTouchBar> touchBar([[ui::NSTouchBar() alloc] init]);
+  [touchBar
+      setCustomizationIdentifier:ui::GetTouchBarId(kBrowserWindowTouchBarId)];
   [touchBar setDelegate:self];
 
   NSMutableArray* customIdentifiers = [NSMutableArray arrayWithCapacity:7];
@@ -247,8 +230,7 @@ class HomePrefNotificationBridge {
 
   for (NSString* item in touchBarItems) {
     NSString* itemIdentifier =
-        [BrowserWindowTouchBar identifierForTouchBarId:kBrowserWindowTouchBarId
-                                                itemId:item];
+        ui::GetTouchBarItemId(kBrowserWindowTouchBarId, item);
     [customIdentifiers addObject:itemIdentifier];
 
     // Don't add the home button if it's not shown in the toolbar.
@@ -265,30 +247,28 @@ class HomePrefNotificationBridge {
 }
 
 - (NSTouchBarItem*)touchBar:(NSTouchBar*)touchBar
-      makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier {
+      makeItemForIdentifier:(NSTouchBarItemIdentifier)identifier
+    API_AVAILABLE(macos(10.12.2)) {
   if (!touchBar)
     return nil;
 
-  base::scoped_nsobject<NSCustomTouchBarItem> touchBarItem([[NSClassFromString(
-      @"NSCustomTouchBarItem") alloc] initWithIdentifier:identifier]);
+  base::scoped_nsobject<NSCustomTouchBarItem> touchBarItem(
+      [[ui::NSCustomTouchBarItem() alloc] initWithIdentifier:identifier]);
   if ([identifier hasSuffix:kBackForwardTouchId]) {
-    [touchBarItem setView:[self backOrForwardTouchBarView]];
+    [self updateBackForwardControl];
+    [touchBarItem setView:backForwardControl_.get()];
     [touchBarItem setCustomizationLabel:
                       l10n_util::GetNSString(
                           IDS_TOUCH_BAR_BACK_FORWARD_CUSTOMIZATION_LABEL)];
   } else if ([identifier hasSuffix:kReloadOrStopTouchId]) {
-    const gfx::VectorIcon& icon =
-        isPageLoading_ ? kNavigateStopIcon : kNavigateReloadIcon;
-    int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
-    int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
-    [touchBarItem
-        setView:CreateTouchBarButton(icon, self, commandId, tooltipId)];
+    [self updateReloadStopButton];
+    [touchBarItem setView:reloadStopButton_.get()];
     [touchBarItem setCustomizationLabel:
                       l10n_util::GetNSString(
                           IDS_TOUCH_BAR_STOP_RELOAD_CUSTOMIZATION_LABEL)];
   } else if ([identifier hasSuffix:kHomeTouchId]) {
     [touchBarItem setView:CreateTouchBarButton(kNavigateHomeIcon, self,
-                                               IDC_HOME, IDS_TOOLTIP_HOME)];
+                                               IDC_HOME, IDS_ACCNAME_HOME)];
     [touchBarItem
         setCustomizationLabel:l10n_util::GetNSString(
                                   IDS_TOUCH_BAR_HOME_CUSTOMIZATION_LABEL)];
@@ -300,20 +280,19 @@ class HomePrefNotificationBridge {
         setCustomizationLabel:l10n_util::GetNSString(
                                   IDS_TOUCH_BAR_NEW_TAB_CUSTOMIZATION_LABEL)];
   } else if ([identifier hasSuffix:kStarTouchId]) {
-    const gfx::VectorIcon& icon =
-        isStarred_ ? toolbar::kStarActiveIcon : toolbar::kStarIcon;
-    SkColor iconColor =
-        isStarred_ ? kTouchBarStarActiveColor : kTouchBarDefaultIconColor;
-    int tooltipId = isStarred_ ? IDS_TOOLTIP_STARRED : IDS_TOOLTIP_STAR;
-    [touchBarItem setView:CreateTouchBarButton(icon, self, IDC_BOOKMARK_PAGE,
-                                               tooltipId, iconColor)];
+    [self updateStarredButton];
+    [touchBarItem setView:starredButton_.get()];
     [touchBarItem
         setCustomizationLabel:l10n_util::GetNSString(
                                   IDS_TOUCH_BAR_BOOKMARK_CUSTOMIZATION_LABEL)];
   } else if ([identifier hasSuffix:kSearchTouchId]) {
-    [touchBarItem setView:[self searchTouchBarView]];
-    [touchBarItem setCustomizationLabel:l10n_util::GetNSString(
-                                            IDS_TOUCH_BAR_GOOGLE_SEARCH)];
+    if (@available(macOS 10.12, *)) {
+      [touchBarItem setView:[self searchTouchBarView]];
+      [touchBarItem setCustomizationLabel:l10n_util::GetNSString(
+                                              IDS_TOUCH_BAR_GOOGLE_SEARCH)];
+    } else {
+      NOTREACHED();
+    }
   } else if ([identifier hasSuffix:kFullscreenOriginLabelTouchId]) {
     content::WebContents* contents =
         browser_->tab_strip_model()->GetActiveWebContents();
@@ -350,26 +329,21 @@ class HomePrefNotificationBridge {
   return touchBarItem.autorelease();
 }
 
-- (NSTouchBar*)createTabFullscreenTouchBar {
-  base::scoped_nsobject<NSTouchBar> touchBar(
-      [[NSClassFromString(@"NSTouchBar") alloc] init]);
+- (NSTouchBar*)createTabFullscreenTouchBar API_AVAILABLE(macos(10.12.2)) {
+  base::scoped_nsobject<NSTouchBar> touchBar([[ui::NSTouchBar() alloc] init]);
   [touchBar setDelegate:self];
 
   if ([touchBar respondsToSelector:
       @selector(setEscapeKeyReplacementItemIdentifier:)]) {
     NSString* exitIdentifier =
-        [BrowserWindowTouchBar identifierForTouchBarId:kTabFullscreenTouchBarId
-                                                itemId:kExitFullscreenTouchId];
+        ui::GetTouchBarItemId(kTabFullscreenTouchBarId, kExitFullscreenTouchId);
     [touchBar setEscapeKeyReplacementItemIdentifier:exitIdentifier];
-    [touchBar setDefaultItemIdentifiers:@[
-      [BrowserWindowTouchBar
-          identifierForTouchBarId:kTabFullscreenTouchBarId
-                           itemId:kFullscreenOriginLabelTouchId]
-    ]];
+    [touchBar setDefaultItemIdentifiers:@[ ui::GetTouchBarItemId(
+                                            kTabFullscreenTouchBarId,
+                                            kFullscreenOriginLabelTouchId) ]];
 
     base::scoped_nsobject<NSCustomTouchBarItem> touchBarItem(
-        [[NSClassFromString(@"NSCustomTouchBarItem") alloc]
-            initWithIdentifier:exitIdentifier]);
+        [[ui::NSCustomTouchBarItem() alloc] initWithIdentifier:exitIdentifier]);
 
     [touchBarItem
         setView:[NSButton buttonWithTitle:l10n_util::GetNSString(
@@ -383,10 +357,10 @@ class HomePrefNotificationBridge {
   return touchBar.autorelease();
 }
 
-- (NSView*)backOrForwardTouchBarView {
+- (void)setupBackForwardControl {
   NSMutableArray* images = [NSMutableArray arrayWithArray:@[
-    CreateNSImageFromIcon(ui::kBackArrowIcon),
-    CreateNSImageFromIcon(ui::kForwardArrowIcon)
+    CreateNSImageFromIcon(vector_icons::kBackArrowIcon),
+    CreateNSImageFromIcon(vector_icons::kForwardArrowIcon)
   ]];
 
   // Offset the icons so that it matches the height of the other Touch Bar
@@ -409,27 +383,51 @@ class HomePrefNotificationBridge {
                     trackingMode:NSSegmentSwitchTrackingMomentary
                           target:self
                           action:@selector(backOrForward:)];
-  control.segmentStyle = NSSegmentStyleSeparated;
-  [control setEnabled:commandUpdater_->IsCommandEnabled(IDC_BACK)
-           forSegment:kBackSegmentIndex];
-  [control setEnabled:commandUpdater_->IsCommandEnabled(IDC_FORWARD)
-           forSegment:kForwardSegmentIndex];
 
   // Use the accessibility protocol to get the children.
-  // Use NSAccessibilityUnignoredDescendant to be sure we start with the correct
-  // object.
+  // Use NSAccessibilityUnignoredDescendant to be sure we start with
+  // the correct object.
   id segmentElement = NSAccessibilityUnignoredDescendant(control);
   NSArray* segments = [segmentElement
       accessibilityAttributeValue:NSAccessibilityChildrenAttribute];
   NSEnumerator* e = [segments objectEnumerator];
-  [[e nextObject] accessibilitySetOverrideValue:l10n_util::GetNSString(
-                                                    IDS_TOOLTIP_TOUCH_BAR_BACK)
-                                   forAttribute:NSAccessibilityTitleAttribute];
   [[e nextObject]
-      accessibilitySetOverrideValue:l10n_util::GetNSString(
-                                        IDS_TOOLTIP_TOUCH_BAR_FORWARD)
+      accessibilitySetOverrideValue:l10n_util::GetNSString(IDS_ACCNAME_BACK)
                        forAttribute:NSAccessibilityTitleAttribute];
-  return control;
+  [[e nextObject]
+      accessibilitySetOverrideValue:l10n_util::GetNSString(IDS_ACCNAME_FORWARD)
+                       forAttribute:NSAccessibilityTitleAttribute];
+
+  backForwardControl_.reset([control retain]);
+}
+
+- (void)updateBackForwardControl {
+  if (!backForwardControl_)
+    [self setupBackForwardControl];
+
+  if (@available(macOS 10.10, *))
+    [backForwardControl_ setSegmentStyle:NSSegmentStyleSeparated];
+
+  [backForwardControl_ setEnabled:commandUpdater_->IsCommandEnabled(IDC_BACK)
+                       forSegment:kBackSegmentIndex];
+  [backForwardControl_ setEnabled:commandUpdater_->IsCommandEnabled(IDC_FORWARD)
+                       forSegment:kForwardSegmentIndex];
+}
+
+- (void)updateStarredButton {
+  const gfx::VectorIcon& icon =
+      isStarred_ ? toolbar::kStarActiveIcon : toolbar::kStarIcon;
+  SkColor iconColor =
+      isStarred_ ? kTouchBarStarActiveColor : kTouchBarDefaultIconColor;
+  int tooltipId = isStarred_ ? IDS_TOOLTIP_STARRED : IDS_TOOLTIP_STAR;
+  if (!starredButton_) {
+    starredButton_.reset([CreateTouchBarButton(icon, self, IDC_BOOKMARK_PAGE,
+                                               tooltipId, iconColor) retain]);
+    return;
+  }
+
+  [starredButton_ setImage:CreateNSImageFromIcon(icon, iconColor)];
+  [starredButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
 }
 
 - (NSView*)searchTouchBarView {
@@ -453,7 +451,7 @@ class HomePrefNotificationBridge {
                               gfx::kPlaceholderColor),
         base::mac::GetSRGBColorSpace());
   } else {
-    image = CreateNSImageFromIcon(ui::kSearchIcon);
+    image = CreateNSImageFromIcon(vector_icons::kSearchIcon);
   }
 
   NSButton* searchButton =
@@ -476,7 +474,7 @@ class HomePrefNotificationBridge {
   NSSegmentedControl* control = sender;
   int command =
       [control selectedSegment] == kBackSegmentIndex ? IDC_BACK : IDC_FORWARD;
-  LogTouchBarUMA(command);
+  LogTouchBarUMA(TouchBarActionFromCommand(command));
   commandUpdater_->ExecuteCommand(command);
 }
 
@@ -488,8 +486,33 @@ class HomePrefNotificationBridge {
 
 - (void)executeCommand:(id)sender {
   int command = [sender tag];
-  LogTouchBarUMA(command);
+  ui::LogTouchBarUMA(TouchBarActionFromCommand(command));
   commandUpdater_->ExecuteCommand(command);
+}
+
+- (void)updateReloadStopButton {
+  const gfx::VectorIcon& icon =
+      isPageLoading_ ? kNavigateStopIcon : kNavigateReloadIcon;
+  int commandId = isPageLoading_ ? IDC_STOP : IDC_RELOAD;
+  int tooltipId = isPageLoading_ ? IDS_TOOLTIP_STOP : IDS_TOOLTIP_RELOAD;
+
+  if (!reloadStopButton_) {
+    reloadStopButton_.reset(
+        [CreateTouchBarButton(icon, self, commandId, tooltipId) retain]);
+    return;
+  }
+
+  [reloadStopButton_
+      setImage:CreateNSImageFromIcon(icon, kTouchBarDefaultIconColor)];
+  [reloadStopButton_ setTag:commandId];
+  [reloadStopButton_ setAccessibilityLabel:l10n_util::GetNSString(tooltipId)];
+}
+
+- (void)setIsPageLoading:(BOOL)isPageLoading {
+  isPageLoading_ = isPageLoading;
+  [self updateReloadStopButton];
+  [self updateBackForwardControl];
+  [self updateStarredButton];
 }
 
 @end

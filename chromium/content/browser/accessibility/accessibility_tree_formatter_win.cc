@@ -12,11 +12,13 @@
 #include <utility>
 
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "base/win/scoped_bstr.h"
 #include "base/win/scoped_comptr.h"
 #include "content/browser/accessibility/accessibility_tree_formatter_utils_win.h"
@@ -170,8 +172,10 @@ void AccessibilityTreeFormatterWin::AddProperties(
   variant_self.vt = VT_I4;
   variant_self.lVal = CHILDID_SELF;
 
-  dict->SetString("role",
-                  IAccessible2RoleToString(ax_object->GetCOM()->ia2_role()));
+  long ia2_role = 0;
+  if (SUCCEEDED(ax_object->GetCOM()->role(&ia2_role))) {
+    dict->SetString("role", IAccessible2RoleToString(ia2_role));
+  }
 
   base::win::ScopedBstr temp_bstr;
   // If S_FALSE it means there is no name
@@ -180,7 +184,7 @@ void AccessibilityTreeFormatterWin::AddProperties(
     base::string16 name = base::string16(temp_bstr, temp_bstr.Length());
 
     // Ignore a JAWS workaround where the name of a document is " ".
-    if (name != L" " || ax_object->GetCOM()->ia2_role() != ROLE_SYSTEM_DOCUMENT)
+    if (name != L" " || ia2_role != ROLE_SYSTEM_DOCUMENT)
       dict->SetString("name", name);
   }
   temp_bstr.Reset();
@@ -191,27 +195,47 @@ void AccessibilityTreeFormatterWin::AddProperties(
   temp_bstr.Reset();
 
   std::vector<base::string16> state_strings;
-  int32_t ia_state = ax_object->GetCOM()->ia_state();
+
+  int32_t ia_state = 0;
+  VARIANT ia_state_variant;
+  if (ax_object->GetCOM()->get_accState(variant_self, &ia_state_variant) ==
+          S_OK &&
+      ia_state_variant.vt == VT_I4) {
+    ia_state = ia_state_variant.intVal;
+  }
 
   // Avoid flakiness: these states depend on whether the window is focused
   // and the position of the mouse cursor.
   ia_state &= ~STATE_SYSTEM_HOTTRACKED;
   ia_state &= ~STATE_SYSTEM_OFFSCREEN;
 
-  IAccessibleStateToStringVector(ia_state, &state_strings);
-  IAccessible2StateToStringVector(ax_object->GetCOM()->ia2_state(),
-                                  &state_strings);
-  std::unique_ptr<base::ListValue> states(new base::ListValue());
-  for (const base::string16& state_string : state_strings)
-    states->AppendString(base::UTF16ToUTF8(state_string));
-  dict->Set("states", std::move(states));
+  // For testing, having the focused state may also cause flakiness if the
+  // window isn't in the foreground.
+  ia_state &= ~STATE_SYSTEM_FOCUSED;
 
-  const std::vector<base::string16>& ia2_attributes =
-      ax_object->GetCOM()->ia2_attributes();
-  std::unique_ptr<base::ListValue> attributes(new base::ListValue());
-  for (const base::string16& ia2_attribute : ia2_attributes)
-    attributes->AppendString(base::UTF16ToUTF8(ia2_attribute));
-  dict->Set("attributes", std::move(attributes));
+  AccessibleStates states;
+  if (ax_object->GetCOM()->get_states(&states) == S_OK) {
+    IAccessibleStateToStringVector(ia_state, &state_strings);
+    IAccessible2StateToStringVector(states, &state_strings);
+    std::unique_ptr<base::ListValue> states(new base::ListValue());
+    for (const base::string16& state_string : state_strings)
+      states->AppendString(base::UTF16ToUTF8(state_string));
+    dict->Set("states", std::move(states));
+  }
+
+  if (ax_object->GetCOM()->get_attributes(temp_bstr.Receive()) == S_OK) {
+    // get_attributes() returns a semicolon delimited string. Turn it into a
+    // ListValue
+    std::vector<base::string16> ia2_attributes = base::SplitString(
+        base::string16(temp_bstr, temp_bstr.Length()), base::string16(1, ';'),
+        base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
+
+    std::unique_ptr<base::ListValue> attributes(new base::ListValue());
+    for (const base::string16& ia2_attribute : ia2_attributes)
+      attributes->AppendString(base::UTF16ToUTF8(ia2_attribute));
+    dict->Set("attributes", std::move(attributes));
+  }
+  temp_bstr.Reset();
 
   ax_object->GetCOM()->ComputeStylesIfNeeded();
   const std::map<int, std::vector<base::string16>>& ia2_text_attributes =
@@ -273,15 +297,15 @@ void AccessibilityTreeFormatterWin::AddProperties(
                                                  variant_self)) &&
       SUCCEEDED(ToBrowserAccessibilityWin(root)->GetCOM()->accLocation(
           &root_left, &root_top, &root_width, &root_height, variant_self))) {
-    base::DictionaryValue* location = new base::DictionaryValue;
+    auto location = base::MakeUnique<base::DictionaryValue>();
     location->SetInteger("x", left - root_left);
     location->SetInteger("y", top - root_top);
-    dict->Set("location", location);
+    dict->Set("location", std::move(location));
 
-    base::DictionaryValue* size = new base::DictionaryValue;
+    auto size = base::MakeUnique<base::DictionaryValue>();
     size->SetInteger("width", width);
     size->SetInteger("height", height);
-    dict->Set("size", size);
+    dict->Set("size", std::move(size));
   }
 
   LONG index_in_parent;

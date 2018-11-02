@@ -15,7 +15,7 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "chrome/browser/metrics/metrics_memory_details.h"
 #include "components/metrics/metrics_log_uploader.h"
@@ -35,6 +35,10 @@ class GoogleUpdateMetricsProviderWin;
 class PluginMetricsProvider;
 class Profile;
 class PrefRegistrySimple;
+
+#if defined(OS_ANDROID)
+class TabModelListObserver;
+#endif  // defined(OS_ANDROID)
 
 namespace browser_watcher {
 class WatcherMetricsProviderWin;
@@ -88,7 +92,6 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
       const metrics::MetricsLogUploader::UploadCallback& on_upload_complete)
       override;
   base::TimeDelta GetStandardUploadInterval() override;
-  base::string16 GetRegistryBackupKey() override;
   void OnPluginLoadingError(const base::FilePath& plugin_path) override;
   bool IsReportingPolicyManaged() override;
   metrics::EnableMetricsDefault GetMetricsReportingDefaultState() override;
@@ -171,7 +174,7 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   void CountBrowserCrashDumpAttempts();
 #endif  // OS_WIN
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Weak pointer to the MetricsStateManager.
   metrics::MetricsStateManager* metrics_state_manager_;
@@ -183,6 +186,13 @@ class ChromeMetricsServiceClient : public metrics::MetricsServiceClient,
   std::unique_ptr<ukm::UkmService> ukm_service_;
 
   content::NotificationRegistrar registrar_;
+
+#if defined(OS_ANDROID)
+  // Listener for changes in incognito activity.
+  // Desktop platform use BrowserList, and can listen for
+  // chrome::NOTIFICATION_BROWSER_OPENED instead.
+  std::unique_ptr<TabModelListObserver> incognito_observer_;
+#endif  // defined(OS_ANDROID)
 
 #if defined(OS_CHROMEOS)
   // On ChromeOS, holds a weak pointer to the ChromeOSMetricsProvider instance

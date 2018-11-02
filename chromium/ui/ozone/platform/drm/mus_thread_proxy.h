@@ -20,6 +20,14 @@ namespace base {
 class SingleThreadTaskRunner;
 }
 
+namespace display {
+class DisplaySnapshotMojo;
+}
+
+namespace service_manager {
+class Connector;
+}
+
 namespace ui {
 
 class DrmDisplayHostManager;
@@ -28,23 +36,6 @@ class DrmThread;
 class GpuThreadObserver;
 class MusThreadProxy;
 
-// Forwarding proxy to handle ownership semantics.
-class CursorProxyThread : public DrmCursorProxy {
- public:
-  explicit CursorProxyThread(MusThreadProxy* mus_thread_proxy);
-  ~CursorProxyThread() override;
-
- private:
-  // DrmCursorProxy.
-  void CursorSet(gfx::AcceleratedWidget window,
-                 const std::vector<SkBitmap>& bitmaps,
-                 const gfx::Point& point,
-                 int frame_delay_ms) override;
-  void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
-  void InitializeOnEvdev() override;
-  MusThreadProxy* const mus_thread_proxy_;  // Not owned.
-};
-
 // In Mus, the window server thread (analogous to Chrome's UI thread), GPU and
 // DRM threads coexist in a single Mus process. The |MusThreadProxy| connects
 // these threads together via cross-thread calls.
@@ -52,7 +43,7 @@ class MusThreadProxy : public GpuThreadAdapter,
                        public InterThreadMessagingProxy,
                        public DrmCursorProxy {
  public:
-  MusThreadProxy();
+  MusThreadProxy(DrmCursor* cursor, service_manager::Connector* connector);
   ~MusThreadProxy() override;
 
   void StartDrmThread();
@@ -113,7 +104,7 @@ class MusThreadProxy : public GpuThreadAdapter,
                  const gfx::Point& point,
                  int frame_delay_ms) override;
   void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
-  void InitializeOnEvdev() override;
+  void InitializeOnEvdevIfNecessary() override;
 
  private:
   void RunObservers();
@@ -121,13 +112,15 @@ class MusThreadProxy : public GpuThreadAdapter,
 
   void GpuCheckOverlayCapabilitiesCallback(
       gfx::AcceleratedWidget widget,
-      const std::vector<OverlayCheck_Params>& overlays) const;
+      const std::vector<OverlayCheck_Params>& overlays,
+      const std::vector<OverlayCheckReturn_Params>& returns) const;
 
   void GpuConfigureNativeDisplayCallback(int64_t display_id,
                                          bool success) const;
 
   void GpuRefreshNativeDisplaysCallback(
-      const std::vector<DisplaySnapshot_Params>& displays) const;
+      std::vector<std::unique_ptr<display::DisplaySnapshotMojo>> displays)
+      const;
   void GpuDisableNativeDisplayCallback(int64_t display_id, bool success) const;
   void GpuTakeDisplayControlCallback(bool success) const;
   void GpuRelinquishDisplayControlCallback(bool success) const;
@@ -145,6 +138,9 @@ class MusThreadProxy : public GpuThreadAdapter,
 
   DrmDisplayHostManager* display_manager_;  // Not owned.
   DrmOverlayManager* overlay_manager_;      // Not owned.
+  DrmCursor* cursor_;                       // Not owned.
+
+  service_manager::Connector* connector_;
 
   base::ObserverList<GpuThreadObserver> gpu_thread_observers_;
 

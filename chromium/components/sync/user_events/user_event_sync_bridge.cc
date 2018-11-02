@@ -76,7 +76,7 @@ UserEventSyncBridge::CreateMetadataChangeList() {
 
 base::Optional<ModelError> UserEventSyncBridge::MergeSyncData(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
-    EntityDataMap entity_data_map) {
+    EntityChangeList entity_data) {
   NOTREACHED();
   return {};
 }
@@ -84,7 +84,15 @@ base::Optional<ModelError> UserEventSyncBridge::MergeSyncData(
 base::Optional<ModelError> UserEventSyncBridge::ApplySyncChanges(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
     EntityChangeList entity_changes) {
-  NOTREACHED();
+  std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
+  for (EntityChange& change : entity_changes) {
+    DCHECK_EQ(EntityChange::ACTION_DELETE, change.type());
+    batch->DeleteData(change.storage_key());
+  }
+  batch->TransferMetadataChanges(std::move(metadata_change_list));
+  store_->CommitWriteBatch(
+      std::move(batch),
+      base::Bind(&UserEventSyncBridge::OnCommit, base::AsWeakPtr(this)));
   return {};
 }
 
@@ -115,6 +123,11 @@ void UserEventSyncBridge::DisableSync() {
 
 void UserEventSyncBridge::RecordUserEvent(
     std::unique_ptr<UserEventSpecifics> specifics) {
+  // TODO(skym): Remove this when ModelTypeStore synchronously returns a
+  // partially initialized reference, see crbug.com/709094.
+  if (!store_) {
+    return;
+  }
   std::string storage_key = GetStorageKeyFromSpecifics(*specifics);
   std::unique_ptr<WriteBatch> batch = store_->CreateWriteBatch();
   batch->WriteData(storage_key, specifics->SerializeAsString());

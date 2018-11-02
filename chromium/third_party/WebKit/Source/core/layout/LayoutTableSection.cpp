@@ -28,6 +28,7 @@
 
 #include <algorithm>
 #include <limits>
+#include "core/frame/UseCounter.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutAnalyzer.h"
 #include "core/layout/LayoutTableCell.h"
@@ -90,14 +91,11 @@ LayoutTableSection::LayoutTableSection(Element* element)
     : LayoutTableBoxComponent(element),
       c_col_(0),
       c_row_(0),
-      outer_border_start_(0),
-      outer_border_end_(0),
-      outer_border_before_(0),
-      outer_border_after_(0),
       needs_cell_recalc_(false),
       force_full_paint_(false),
       has_multiple_cell_levels_(false),
-      has_spanning_cells_(false) {
+      has_spanning_cells_(false),
+      is_repeating_header_group_(false) {
   // init LayoutObject attributes
   SetInline(false);  // our object is not Inline
 }
@@ -972,14 +970,14 @@ void LayoutTableSection::UpdateLayout() {
 
       if (!Table()->HasSameDirectionAs(row)) {
         UseCounter::Count(GetDocument(),
-                          UseCounter::kTableRowDirectionDifferentFromTable);
+                          WebFeature::kTableRowDirectionDifferentFromTable);
       }
     }
   }
 
   if (!Table()->HasSameDirectionAs(this)) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kTableSectionDirectionDifferentFromTable);
+                      WebFeature::kTableSectionDirectionDifferentFromTable);
   }
 
   ClearNeedsLayout();
@@ -1220,9 +1218,9 @@ int LayoutTableSection::PaginationStrutForRow(LayoutTableRow* row,
   DCHECK(row);
   if (row->GetPaginationBreakability() == kAllowAnyBreaks)
     return 0;
-  LayoutUnit page_logical_height = PageLogicalHeightForOffset(logical_offset);
-  if (!page_logical_height)
+  if (!IsPageLogicalHeightKnown())
     return 0;
+  LayoutUnit page_logical_height = PageLogicalHeightForOffset(logical_offset);
   // If the row is too tall for the page don't insert a strut.
   LayoutUnit row_logical_height = row->LogicalHeight();
   if (row_logical_height > page_logical_height)
@@ -1353,149 +1351,6 @@ void LayoutTableSection::MarkAllCellsWidthsDirtyAndOrNeedsLayout(
   }
 }
 
-int LayoutTableSection::CalcBlockDirectionOuterBorder(
-    BlockBorderSide side) const {
-  if (!grid_.size() || !Table()->NumEffectiveColumns())
-    return 0;
-
-  int border_width = 0;
-
-  const BorderValue& sb =
-      side == kBorderBefore ? Style()->BorderBefore() : Style()->BorderAfter();
-  if (sb.Style() == EBorderStyle::kHidden)
-    return -1;
-  if (ComputedStyle::BorderStyleIsVisible(sb.Style()))
-    border_width = sb.Width();
-
-  const BorderValue& rb = side == kBorderBefore
-                              ? FirstRow()->Style()->BorderBefore()
-                              : LastRow()->Style()->BorderAfter();
-  if (rb.Style() == EBorderStyle::kHidden)
-    return -1;
-  if (ComputedStyle::BorderStyleIsVisible(rb.Style()) &&
-      rb.Width() > border_width)
-    border_width = rb.Width();
-
-  bool all_hidden = true;
-  unsigned r = side == kBorderBefore ? 0 : grid_.size() - 1;
-  unsigned n_cols = NumCols(r);
-  for (unsigned c = 0; c < n_cols; c++) {
-    const auto& grid_cell = GridCellAt(r, c);
-    if (grid_cell.InColSpan() || !grid_cell.HasCells())
-      continue;
-    const ComputedStyle& primary_cell_style =
-        grid_cell.PrimaryCell()->StyleRef();
-    // FIXME: Make this work with perpendicular and flipped cells.
-    const BorderValue& cb = side == kBorderBefore
-                                ? primary_cell_style.BorderBefore()
-                                : primary_cell_style.BorderAfter();
-    // FIXME: Don't repeat for the same col group
-    LayoutTableCol* col =
-        Table()->ColElementAtAbsoluteColumn(c).InnermostColOrColGroup();
-    if (col) {
-      const BorderValue& gb = side == kBorderBefore
-                                  ? col->Style()->BorderBefore()
-                                  : col->Style()->BorderAfter();
-      if (gb.Style() == EBorderStyle::kHidden ||
-          cb.Style() == EBorderStyle::kHidden)
-        continue;
-      all_hidden = false;
-      if (ComputedStyle::BorderStyleIsVisible(gb.Style()) &&
-          gb.Width() > border_width)
-        border_width = gb.Width();
-      if (ComputedStyle::BorderStyleIsVisible(cb.Style()) &&
-          cb.Width() > border_width)
-        border_width = cb.Width();
-    } else {
-      if (cb.Style() == EBorderStyle::kHidden)
-        continue;
-      all_hidden = false;
-      if (ComputedStyle::BorderStyleIsVisible(cb.Style()) &&
-          cb.Width() > border_width)
-        border_width = cb.Width();
-    }
-  }
-  if (all_hidden)
-    return -1;
-
-  if (side == kBorderAfter)
-    border_width++;  // Distribute rounding error
-  return border_width / 2;
-}
-
-int LayoutTableSection::CalcInlineDirectionOuterBorder(
-    InlineBorderSide side) const {
-  unsigned total_cols = Table()->NumEffectiveColumns();
-  if (!grid_.size() || !total_cols)
-    return 0;
-  unsigned col_index = side == kBorderStart ? 0 : total_cols - 1;
-
-  int border_width = 0;
-
-  const BorderValue& sb =
-      side == kBorderStart ? Style()->BorderStart() : Style()->BorderEnd();
-  if (sb.Style() == EBorderStyle::kHidden)
-    return -1;
-  if (ComputedStyle::BorderStyleIsVisible(sb.Style()))
-    border_width = sb.Width();
-
-  if (LayoutTableCol* col = Table()
-                                ->ColElementAtAbsoluteColumn(col_index)
-                                .InnermostColOrColGroup()) {
-    const BorderValue& gb = side == kBorderStart ? col->Style()->BorderStart()
-                                                 : col->Style()->BorderEnd();
-    if (gb.Style() == EBorderStyle::kHidden)
-      return -1;
-    if (ComputedStyle::BorderStyleIsVisible(gb.Style()) &&
-        gb.Width() > border_width)
-      border_width = gb.Width();
-  }
-
-  bool all_hidden = true;
-  for (unsigned r = 0; r < grid_.size(); r++) {
-    if (col_index >= NumCols(r))
-      continue;
-    const auto& grid_cell = GridCellAt(r, col_index);
-    if (!grid_cell.HasCells())
-      continue;
-    // FIXME: Don't repeat for the same cell
-    const ComputedStyle& primary_cell_style =
-        grid_cell.PrimaryCell()->StyleRef();
-    const ComputedStyle& primary_cell_parent_style =
-        grid_cell.PrimaryCell()->Parent()->StyleRef();
-    // FIXME: Make this work with perpendicular and flipped cells.
-    const BorderValue& cb = side == kBorderStart
-                                ? primary_cell_style.BorderStart()
-                                : primary_cell_style.BorderEnd();
-    const BorderValue& rb = side == kBorderStart
-                                ? primary_cell_parent_style.BorderStart()
-                                : primary_cell_parent_style.BorderEnd();
-    if (cb.Style() == EBorderStyle::kHidden ||
-        rb.Style() == EBorderStyle::kHidden)
-      continue;
-    all_hidden = false;
-    if (ComputedStyle::BorderStyleIsVisible(cb.Style()) &&
-        cb.Width() > border_width)
-      border_width = cb.Width();
-    if (ComputedStyle::BorderStyleIsVisible(rb.Style()) &&
-        rb.Width() > border_width)
-      border_width = rb.Width();
-  }
-  if (all_hidden)
-    return -1;
-
-  if ((side == kBorderStart) != Table()->Style()->IsLeftToRightDirection())
-    border_width++;  // Distribute rounding error
-  return border_width / 2;
-}
-
-void LayoutTableSection::RecalcOuterBorder() {
-  outer_border_before_ = CalcBlockDirectionOuterBorder(kBorderBefore);
-  outer_border_after_ = CalcBlockDirectionOuterBorder(kBorderAfter);
-  outer_border_start_ = CalcInlineDirectionOuterBorder(kBorderStart);
-  outer_border_end_ = CalcInlineDirectionOuterBorder(kBorderEnd);
-}
-
 int LayoutTableSection::FirstLineBoxBaseline() const {
   if (!grid_.size())
     return -1;
@@ -1528,15 +1383,14 @@ LayoutRect LayoutTableSection::LogicalRectForWritingModeAndDirection(
 
   FlipForWritingMode(table_aligned_rect);
 
-  if (!Style()->IsHorizontalWritingMode())
+  if (!TableStyle().IsHorizontalWritingMode())
     table_aligned_rect = table_aligned_rect.TransposedRect();
 
   const Vector<int>& column_pos = Table()->EffectiveColumnPositions();
-  // FIXME: The table's direction should determine our row's direction, not the
-  // section's (see bug 96691).
-  if (!Style()->IsLeftToRightDirection())
+  if (!TableStyle().IsLeftToRightDirection()) {
     table_aligned_rect.SetX(column_pos[column_pos.size() - 1] -
                             table_aligned_rect.MaxX());
+  }
 
   return table_aligned_rect;
 }
@@ -1738,38 +1592,6 @@ unsigned LayoutTableSection::NumEffectiveColumns() const {
   return result + 1;
 }
 
-BorderValue LayoutTableSection::BorderAdjoiningStartCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  return HasSameDirectionAs(cell) ? Style()->BorderStart()
-                                  : Style()->BorderEnd();
-}
-
-BorderValue LayoutTableSection::BorderAdjoiningEndCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  return HasSameDirectionAs(cell) ? Style()->BorderEnd()
-                                  : Style()->BorderStart();
-}
-
-const LayoutTableCell* LayoutTableSection::FirstRowCellAdjoiningTableStart()
-    const {
-  unsigned adjoining_start_cell_column_index =
-      HasSameDirectionAs(Table()) ? 0 : Table()->LastEffectiveColumnIndex();
-  return PrimaryCellAt(0, adjoining_start_cell_column_index);
-}
-
-const LayoutTableCell* LayoutTableSection::FirstRowCellAdjoiningTableEnd()
-    const {
-  unsigned adjoining_end_cell_column_index =
-      HasSameDirectionAs(Table()) ? Table()->LastEffectiveColumnIndex() : 0;
-  return PrimaryCellAt(0, adjoining_end_cell_column_index);
-}
-
 LayoutTableCell* LayoutTableSection::OriginatingCellAt(
     unsigned row,
     unsigned effective_column) {
@@ -1917,19 +1739,18 @@ void LayoutTableSection::SetLogicalPositionForCell(
   LayoutPoint cell_location(0, row_pos_[cell->RowIndex()]);
   int horizontal_border_spacing = Table()->HBorderSpacing();
 
-  // FIXME: The table's direction should determine our row's direction, not the
-  // section's (see bug 96691).
-  if (!Style()->IsLeftToRightDirection())
+  if (!TableStyle().IsLeftToRightDirection()) {
     cell_location.SetX(LayoutUnit(
         Table()->EffectiveColumnPositions()[Table()->NumEffectiveColumns()] -
         Table()->EffectiveColumnPositions()
             [Table()->AbsoluteColumnToEffectiveColumn(
                 cell->AbsoluteColumnIndex() + cell->ColSpan())] +
         horizontal_border_spacing));
-  else
+  } else {
     cell_location.SetX(
         LayoutUnit(Table()->EffectiveColumnPositions()[effective_column] +
                    horizontal_border_spacing));
+  }
 
   cell->SetLogicalLocation(cell_location);
 }
@@ -2037,6 +1858,8 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
                                                 SubtreeLayoutScope& layouter) {
   row_object.SetPaginationStrut(LayoutUnit());
   row_object.SetLogicalHeight(LayoutUnit(LogicalHeightForRow(row_object)));
+  if (!IsPageLogicalHeightKnown())
+    return;
   int pagination_strut =
       PaginationStrutForRow(&row_object, row_object.LogicalTop());
   bool row_is_at_top_of_column = false;
@@ -2044,7 +1867,7 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
   if (!pagination_strut) {
     LayoutUnit page_logical_height =
         PageLogicalHeightForOffset(row_object.LogicalTop());
-    if (page_logical_height && Table()->Header() && Table()->Header() != this &&
+    if (Table()->Header() && Table()->Header() != this &&
         Table()->RowOffsetFromRepeatingHeader()) {
       offset_from_top_of_page =
           page_logical_height -
@@ -2063,9 +1886,6 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
   // fragmentainer, above this row. Otherwise, this row will just go at the top
   // of the next fragmentainer.
 
-  LayoutTableSection* header = Table()->Header();
-  if (row_object.IsFirstRowInSectionAfterHeader())
-    Table()->SetRowOffsetFromRepeatingHeader(LayoutUnit());
   // Border spacing from the previous row has pushed this row just past the top
   // of the page, so we must reposition it to the top of the page and avoid any
   // repeating header.
@@ -2074,6 +1894,7 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
 
   // If we have a header group we will paint it at the top of each page,
   // move the rows down to accomodate it.
+  LayoutTableSection* header = Table()->Header();
   if (header && header != this)
     pagination_strut += Table()->RowOffsetFromRepeatingHeader().ToInt();
   row_object.SetPaginationStrut(LayoutUnit(pagination_strut));
@@ -2091,30 +1912,27 @@ void LayoutTableSection::AdjustRowForPagination(LayoutTableRow& row_object,
   row_object.SetLogicalHeight(LayoutUnit(LogicalHeightForRow(row_object)));
 }
 
-bool LayoutTableSection::IsRepeatingHeaderGroup() const {
-  if (GetPaginationBreakability() == LayoutBox::kAllowAnyBreaks)
+bool LayoutTableSection::HeaderGroupShouldRepeat() const {
+  if (Table()->Header() != this)
     return false;
-  // TODO(rhogan): Should we paint a header repeatedly if it's self-painting?
+
+  if (GetPaginationBreakability() == kAllowAnyBreaks)
+    return false;
+  // TODO(rhogan): Sections can be self-painting.
   if (HasSelfPaintingLayer())
     return false;
-  LayoutUnit page_height = Table()->PageLogicalHeightForOffset(LayoutUnit());
-  if (!page_height)
-    return false;
+  // If we don't know the page height yet, just assume we fit.
+  if (!IsPageLogicalHeightKnown())
+    return true;
+  LayoutUnit page_height = PageLogicalHeightForOffset(LayoutUnit());
 
   if (LogicalHeight() > page_height)
     return false;
 
-  // If the first row of the section after the header group doesn't fit on the
-  // page, then don't repeat the header on each page.
-  // See https://drafts.csswg.org/css-tables-3/#repeated-headers
-  LayoutTableSection* section_below = Table()->SectionBelow(this);
-  if (!section_below)
-    return true;
-  if (LayoutTableRow* first_row = section_below->FirstRow()) {
-    if (first_row->PaginationStrut() ||
-        first_row->LogicalHeight() > page_height)
-      return false;
-  }
+  // See https://drafts.csswg.org/css-tables-3/#repeated-headers which says
+  // a header/footer can repeat if it takes up less than a quarter of the page.
+  if (LogicalHeight() > 0 && page_height / LogicalHeight() < 4)
+    return false;
 
   return true;
 }
@@ -2131,7 +1949,7 @@ bool LayoutTableSection::MapToVisualRectInAncestorSpaceInternal(
   // the header in all columns.
   // Note that this is in flow thread coordinates, not visual coordinates. The
   // enclosing LayoutFlowThread will convert to visual coordinates.
-  if (Table()->Header() == this && IsRepeatingHeaderGroup()) {
+  if (IsRepeatingHeaderGroup()) {
     transform_state.Flatten();
     FloatRect rect = transform_state.LastPlanarQuad().BoundingBox();
     rect.SetHeight(Table()->LogicalHeight());

@@ -10,6 +10,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node.h"
 #include "ui/accessibility/ax_serializable_tree.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
@@ -28,55 +29,6 @@ bool HasFocusableChild(const AXNode* node) {
     }
   }
   return false;
-}
-
-gfx::Rect RelativeToAbsoluteBounds(const AXNode* node,
-                                   gfx::RectF bounds,
-                                   const AXTree* tree) {
-  const AXNode* current = node;
-  while (current != nullptr) {
-    if (current->data().transform)
-      current->data().transform->TransformRect(&bounds);
-    auto* container = tree->GetFromId(current->data().offset_container_id);
-    if (!container) {
-      if (current == tree->root())
-        container = current->parent();
-      else
-        container = tree->root();
-    }
-    if (!container || container == current)
-      break;
-
-    gfx::RectF container_bounds = container->data().location;
-    bounds.Offset(container_bounds.x(), container_bounds.y());
-    current = container;
-  }
-  return gfx::ToEnclosingRect(bounds);
-}
-
-void FixEmptyBounds(const AXNode* node, gfx::RectF* bounds, const AXTree* tree);
-
-gfx::Rect GetPageBoundsRect(const AXNode* node, const AXTree* tree) {
-  gfx::RectF bounds = node->data().location;
-  FixEmptyBounds(node, &bounds, tree);
-  return RelativeToAbsoluteBounds(node, bounds, tree);
-}
-
-void FixEmptyBounds(const AXNode* node,
-                    gfx::RectF* bounds,
-                    const AXTree* tree) {
-  if (bounds->width() > 0 && bounds->height() > 0)
-    return;
-  for (auto* child : node->children()) {
-    gfx::Rect child_bounds = GetPageBoundsRect(child, tree);
-    if (child_bounds.width() == 0 || child_bounds.height() == 0)
-      continue;
-    if (bounds->width() == 0 || bounds->height() == 0) {
-      *bounds = gfx::RectF(child_bounds);
-      continue;
-    }
-    bounds->Union(gfx::RectF(child_bounds));
-  }
 }
 
 bool HasOnlyTextChildren(const AXNode* node) {
@@ -266,6 +218,50 @@ base::string16 GetText(const AXNode* node, bool show_password) {
   return text;
 }
 
+// Get string representation of AXRole. We are not using ToString() in
+// ax_enums.h since the names are subject to change in the future and
+// we are only interested in a subset of the roles.
+base::Optional<std::string> AXRoleToString(AXRole role) {
+  switch (role) {
+    case AX_ROLE_ARTICLE:
+      return base::Optional<std::string>("article");
+    case AX_ROLE_BANNER:
+      return base::Optional<std::string>("banner");
+    case AX_ROLE_CAPTION:
+      return base::Optional<std::string>("caption");
+    case AX_ROLE_COMPLEMENTARY:
+      return base::Optional<std::string>("complementary");
+    case AX_ROLE_DATE:
+      return base::Optional<std::string>("date");
+    case AX_ROLE_DATE_TIME:
+      return base::Optional<std::string>("date_time");
+    case AX_ROLE_DEFINITION:
+      return base::Optional<std::string>("definition");
+    case AX_ROLE_DETAILS:
+      return base::Optional<std::string>("details");
+    case AX_ROLE_DOCUMENT:
+      return base::Optional<std::string>("document");
+    case AX_ROLE_FEED:
+      return base::Optional<std::string>("feed");
+    case AX_ROLE_HEADING:
+      return base::Optional<std::string>("heading");
+    case AX_ROLE_IFRAME:
+      return base::Optional<std::string>("iframe");
+    case AX_ROLE_IFRAME_PRESENTATIONAL:
+      return base::Optional<std::string>("iframe_presentational");
+    case AX_ROLE_LIST:
+      return base::Optional<std::string>("list");
+    case AX_ROLE_LIST_ITEM:
+      return base::Optional<std::string>("list_item");
+    case AX_ROLE_MAIN:
+      return base::Optional<std::string>("main");
+    case AX_ROLE_PARAGRAPH:
+      return base::Optional<std::string>("paragraph");
+    default:
+      return base::Optional<std::string>();
+  }
+}
+
 }  // namespace
 
 AXSnapshotNodeAndroid::AXSnapshotNodeAndroid() = default;
@@ -384,6 +380,7 @@ AXSnapshotNodeAndroid::WalkAXTreeDepthFirst(
   result->text = GetText(node, config.show_password);
   result->class_name = AXSnapshotNodeAndroid::AXRoleToAndroidClassName(
       node->data().role, node->parent() != nullptr);
+  result->role = AXRoleToString(node->data().role);
 
   result->text_size = -1.0;
   result->bgcolor = 0;
@@ -397,7 +394,7 @@ AXSnapshotNodeAndroid::WalkAXTreeDepthFirst(
     gfx::RectF text_size_rect(
         0, 0, 1, node->data().GetFloatAttribute(ui::AX_ATTR_FONT_SIZE));
     gfx::Rect scaled_text_size_rect =
-        RelativeToAbsoluteBounds(node, text_size_rect, tree);
+        gfx::ToEnclosingRect(tree->RelativeToTreeBounds(node, text_size_rect));
     result->text_size = scaled_text_size_rect.height();
 
     const int text_style = node->data().GetIntAttribute(ui::AX_ATTR_TEXT_STYLE);
@@ -410,7 +407,8 @@ AXSnapshotNodeAndroid::WalkAXTreeDepthFirst(
     result->underline = (text_style & ui::AX_TEXT_STYLE_UNDERLINE) != 0;
   }
 
-  const gfx::Rect& absolute_rect = GetPageBoundsRect(node, tree);
+  const gfx::Rect& absolute_rect =
+      gfx::ToEnclosingRect(tree->GetTreeBounds(node));
   gfx::Rect parent_relative_rect = absolute_rect;
   bool is_root = node->parent() == nullptr;
   if (!is_root) {

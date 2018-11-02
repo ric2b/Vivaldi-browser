@@ -18,23 +18,23 @@ TEST_F(PositionTest, IsEquivalent) {
   EXPECT_TRUE(Position(sample, 0).IsEquivalent(Position(sample, 0)));
 
   EXPECT_TRUE(
-      Position(sample, 0).IsEquivalent(Position::FirstPositionInNode(sample)));
+      Position(sample, 0).IsEquivalent(Position::FirstPositionInNode(*sample)));
   EXPECT_TRUE(Position(sample, 0).IsEquivalent(
-      Position::BeforeNode(sample->firstChild())));
+      Position::BeforeNode(*sample->firstChild())));
   EXPECT_TRUE(Position(sample, 1).IsEquivalent(
-      Position::AfterNode(sample->firstChild())));
+      Position::AfterNode(*sample->firstChild())));
   EXPECT_TRUE(Position(sample, 1).IsEquivalent(
-      Position::BeforeNode(sample->firstChild()->nextSibling())));
+      Position::BeforeNode(*sample->firstChild()->nextSibling())));
   EXPECT_TRUE(Position(sample, 2).IsEquivalent(
-      Position::BeforeNode(sample->lastChild())));
+      Position::BeforeNode(*sample->lastChild())));
   EXPECT_TRUE(Position(sample, 3).IsEquivalent(
-      Position::AfterNode(sample->lastChild())));
+      Position::AfterNode(*sample->lastChild())));
   EXPECT_TRUE(
-      Position(sample, 3).IsEquivalent(Position::LastPositionInNode(sample)));
+      Position(sample, 3).IsEquivalent(Position::LastPositionInNode(*sample)));
 
   EXPECT_FALSE(Position(sample, 0).IsEquivalent(Position(sample, 1)));
   EXPECT_FALSE(
-      Position(sample, 0).IsEquivalent(Position::LastPositionInNode(sample)));
+      Position(sample, 0).IsEquivalent(Position::LastPositionInNode(*sample)));
 }
 
 TEST_F(PositionTest, NodeAsRangeLastNodeNull) {
@@ -48,11 +48,11 @@ TEST_F(PositionTest, editingPositionOfWithEditingIgnoresContent) {
   SetBodyContent(body_content);
   Node* textarea = GetDocument().getElementById("textarea");
 
-  EXPECT_EQ(Position::BeforeNode(textarea),
+  EXPECT_EQ(Position::BeforeNode(*textarea),
             Position::EditingPositionOf(textarea, 0));
-  EXPECT_EQ(Position::AfterNode(textarea),
+  EXPECT_EQ(Position::AfterNode(*textarea),
             Position::EditingPositionOf(textarea, 1));
-  EXPECT_EQ(Position::AfterNode(textarea),
+  EXPECT_EQ(Position::AfterNode(*textarea),
             Position::EditingPositionOf(textarea, 2));
 
   // Change DOM tree to
@@ -62,13 +62,13 @@ TEST_F(PositionTest, editingPositionOfWithEditingIgnoresContent) {
   textarea->appendChild(child1);
   textarea->appendChild(child2);
 
-  EXPECT_EQ(Position::BeforeNode(textarea),
+  EXPECT_EQ(Position::BeforeNode(*textarea),
             Position::EditingPositionOf(textarea, 0));
-  EXPECT_EQ(Position::AfterNode(textarea),
+  EXPECT_EQ(Position::AfterNode(*textarea),
             Position::EditingPositionOf(textarea, 1));
-  EXPECT_EQ(Position::AfterNode(textarea),
+  EXPECT_EQ(Position::AfterNode(*textarea),
             Position::EditingPositionOf(textarea, 2));
-  EXPECT_EQ(Position::AfterNode(textarea),
+  EXPECT_EQ(Position::AfterNode(*textarea),
             Position::EditingPositionOf(textarea, 3));
 }
 
@@ -89,7 +89,7 @@ TEST_F(PositionTest, NodeAsRangeLastNode) {
   EXPECT_EQ(t1, Position::InParentAfterNode(*p1).NodeAsRangeLastNode());
   EXPECT_EQ(p2, Position::InParentAfterNode(*p2).NodeAsRangeLastNode());
   EXPECT_EQ(t3, Position::InParentAfterNode(*p3).NodeAsRangeLastNode());
-  EXPECT_EQ(t3, Position::AfterNode(p3).NodeAsRangeLastNode());
+  EXPECT_EQ(t3, Position::AfterNode(*p3).NodeAsRangeLastNode());
 
   EXPECT_EQ(body,
             PositionInFlatTree::InParentBeforeNode(*p1).NodeAsRangeLastNode());
@@ -103,7 +103,7 @@ TEST_F(PositionTest, NodeAsRangeLastNode) {
             PositionInFlatTree::InParentAfterNode(*p2).NodeAsRangeLastNode());
   EXPECT_EQ(t3,
             PositionInFlatTree::InParentAfterNode(*p3).NodeAsRangeLastNode());
-  EXPECT_EQ(t3, PositionInFlatTree::AfterNode(p3).NodeAsRangeLastNode());
+  EXPECT_EQ(t3, PositionInFlatTree::AfterNode(*p3).NodeAsRangeLastNode());
 }
 
 TEST_F(PositionTest, NodeAsRangeLastNodeShadow) {
@@ -128,7 +128,7 @@ TEST_F(PositionTest, NodeAsRangeLastNodeShadow) {
   EXPECT_EQ(t1, Position::InParentBeforeNode(*n2).NodeAsRangeLastNode());
   EXPECT_EQ(t1, Position::InParentAfterNode(*n1).NodeAsRangeLastNode());
   EXPECT_EQ(t2, Position::InParentAfterNode(*n2).NodeAsRangeLastNode());
-  EXPECT_EQ(t3, Position::AfterNode(host).NodeAsRangeLastNode());
+  EXPECT_EQ(t3, Position::AfterNode(*host).NodeAsRangeLastNode());
 
   EXPECT_EQ(t2,
             PositionInFlatTree::InParentBeforeNode(*n1).NodeAsRangeLastNode());
@@ -138,7 +138,7 @@ TEST_F(PositionTest, NodeAsRangeLastNodeShadow) {
             PositionInFlatTree::InParentAfterNode(*n1).NodeAsRangeLastNode());
   EXPECT_EQ(t2,
             PositionInFlatTree::InParentAfterNode(*n2).NodeAsRangeLastNode());
-  EXPECT_EQ(t1, PositionInFlatTree::AfterNode(host).NodeAsRangeLastNode());
+  EXPECT_EQ(t1, PositionInFlatTree::AfterNode(*host).NodeAsRangeLastNode());
 }
 
 TEST_F(PositionTest, ToPositionInFlatTreeWithActiveInsertionPoint) {

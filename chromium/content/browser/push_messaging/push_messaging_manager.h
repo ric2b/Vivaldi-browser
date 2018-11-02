@@ -16,15 +16,15 @@
 #include "content/common/push_messaging.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/common/push_messaging_status.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "url/gurl.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace content {
+
+namespace mojom {
+enum class PushRegistrationStatus;
+enum class PushUnregistrationStatus;
+}  // namespace mojom
 
 class PushMessagingService;
 class ServiceWorkerContextWrapper;
@@ -39,13 +39,13 @@ class PushMessagingManager : public mojom::PushMessaging {
   PushMessagingManager(int render_process_id,
                        ServiceWorkerContextWrapper* service_worker_context);
 
-  void BindRequest(const service_manager::BindSourceInfo& source_info,
-                   mojom::PushMessagingRequest request);
+  void BindRequest(mojom::PushMessagingRequest request);
 
   // mojom::PushMessaging impl, run on IO thread.
   void Subscribe(int32_t render_frame_id,
                  int64_t service_worker_registration_id,
                  const PushSubscriptionOptions& options,
+                 bool user_gesture,
                  SubscribeCallback callback) override;
   void Unsubscribe(int64_t service_worker_registration_id,
                    UnsubscribeCallback callback) override;
@@ -88,10 +88,11 @@ class PushMessagingManager : public mojom::PushMessaging {
       ServiceWorkerStatusCode service_worker_status);
 
   // Called both from IO thread, and via PostTask from UI thread.
-  void SendSubscriptionError(RegisterData data, PushRegistrationStatus status);
+  void SendSubscriptionError(RegisterData data,
+                             mojom::PushRegistrationStatus status);
   // Called both from IO thread, and via PostTask from UI thread.
   void SendSubscriptionSuccess(RegisterData data,
-                               PushRegistrationStatus status,
+                               mojom::PushRegistrationStatus status,
                                const std::string& push_subscription_id,
                                const std::vector<uint8_t>& p256dh,
                                const std::vector<uint8_t>& auth);
@@ -105,7 +106,7 @@ class PushMessagingManager : public mojom::PushMessaging {
 
   // Called both from IO thread, and via PostTask from UI thread.
   void DidUnregister(UnsubscribeCallback callback,
-                     PushUnregistrationStatus unregistration_status);
+                     mojom::PushUnregistrationStatus unregistration_status);
 
   void DidGetSubscription(
       GetSubscriptionCallback callback,

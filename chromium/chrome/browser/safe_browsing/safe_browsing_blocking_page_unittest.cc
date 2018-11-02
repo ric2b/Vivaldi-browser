@@ -14,7 +14,6 @@
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
-#include "components/grit/components_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/browser/threat_details.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
@@ -93,6 +92,7 @@ class TestSafeBrowsingBlockingPageFactory
         web_contents->GetBrowserContext()->IsOffTheRecord(),
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
         is_proceed_anyway_disabled,
+        true,  // should_open_links_in_new_tab
         "cpn_safe_browsing" /* help_center_article_link */);
     return new TestSafeBrowsingBlockingPage(manager, web_contents,
                                             main_frame_url, unsafe_resources,
@@ -174,6 +174,7 @@ class TestSafeBrowsingBlockingQuietPageFactory
         web_contents->GetBrowserContext()->IsOffTheRecord(),
         IsExtendedReportingEnabled(*prefs), IsScout(*prefs),
         is_proceed_anyway_disabled,
+        true,  // should_open_links_in_new_tab
         "cpn_safe_browsing" /* help_center_article_link */);
     return new TestSafeBrowsingBlockingPageQuiet(
         manager, web_contents, main_frame_url, unsafe_resources,
@@ -209,14 +210,14 @@ class SafeBrowsingBlockingPageTest : public ChromeRenderViewHostTestHarness {
     sb_service_factory.SetTestUIManager(ui_manager_.get());
     auto* safe_browsing_service =
         sb_service_factory.CreateSafeBrowsingService();
+    TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
+        safe_browsing_service);
+    g_browser_process->safe_browsing_service()->Initialize();
     // A profile was created already but SafeBrowsingService wasn't around to
     // get notified of it, so include that notification now.
     safe_browsing_service->AddPrefService(
         Profile::FromBrowserContext(web_contents()->GetBrowserContext())
             ->GetPrefs());
-    TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
-        safe_browsing_service);
-    g_browser_process->safe_browsing_service()->Initialize();
   }
 
   void TearDown() override {

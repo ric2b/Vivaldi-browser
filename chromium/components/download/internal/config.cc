@@ -16,29 +16,50 @@ namespace download {
 namespace {
 
 // Default value for max concurrent downloads configuration.
-const int kDefaultMaxConcurrentDownloads = 4;
+const uint32_t kDefaultMaxConcurrentDownloads = 4;
 
 // Default value for maximum running downloads of the download service.
-const int kDefaultMaxRunningDownloads = 1;
+const uint32_t kDefaultMaxRunningDownloads = 2;
 
 // Default value for maximum scheduled downloads.
-const int kDefaultMaxScheduledDownloads = 15;
+const uint32_t kDefaultMaxScheduledDownloads = 15;
 
 // Default value for maximum retry count.
-const int kDefaultMaxRetryCount = 5;
+const uint32_t kDefaultMaxRetryCount = 5;
 
 // Default value for file keep alive time in minutes, keep the file alive for
 // 12 hours by default.
-const int kDefaultFileKeepAliveTimeMinutes = 12 * 60;
+const base::TimeDelta kDefaultFileKeepAliveTime =
+    base::TimeDelta::FromHours(12);
+
+// Default value for file cleanup window in minutes, the system will schedule a
+// cleanup task within this window.
+const base::TimeDelta kDefaultFileCleanupWindow =
+    base::TimeDelta::FromHours(24);
+
+// Default value for the start window time for OS to schedule background task.
+const base::TimeDelta kDefaultWindowStartTime = base::TimeDelta::FromMinutes(5);
+
+// Default value for the end window time for OS to schedule background task.
+const base::TimeDelta kDefaultWindowEndTime = base::TimeDelta::FromHours(8);
+
+// The default delay to notify the observer when network changes from
+// disconnected to connected.
+const base::TimeDelta kDefaultNetworkChangeDelay =
+    base::TimeDelta::FromSeconds(5);
+
+// The default value of download retry delay when the download is failed.
+const base::TimeDelta kDefaultDownloadRetryDelay =
+    base::TimeDelta::FromSeconds(20);
 
 // Helper routine to get Finch experiment parameter. If no Finch seed was found,
 // use the |default_value|. The |name| should match an experiment
 // parameter in Finch server configuration.
-int GetFinchConfigInt(const std::string& name, int default_value) {
+uint32_t GetFinchConfigUInt(const std::string& name, uint32_t default_value) {
   std::string finch_value =
       base::GetFieldTrialParamValueByFeature(kDownloadServiceFeature, name);
-  int result;
-  return base::StringToInt(finch_value, &result) ? result : default_value;
+  uint32_t result;
+  return base::StringToUint(finch_value, &result) ? result : default_value;
 }
 
 }  // namespace
@@ -46,16 +67,36 @@ int GetFinchConfigInt(const std::string& name, int default_value) {
 // static
 std::unique_ptr<Configuration> Configuration::CreateFromFinch() {
   std::unique_ptr<Configuration> config(new Configuration());
-  config->max_concurrent_downloads = GetFinchConfigInt(
+  config->max_concurrent_downloads = GetFinchConfigUInt(
       kMaxConcurrentDownloadsConfig, kDefaultMaxConcurrentDownloads);
-  config->max_running_downloads = GetFinchConfigInt(
+  config->max_running_downloads = GetFinchConfigUInt(
       kMaxRunningDownloadsConfig, kDefaultMaxRunningDownloads);
-  config->max_scheduled_downloads = GetFinchConfigInt(
+  config->max_scheduled_downloads = GetFinchConfigUInt(
       kMaxScheduledDownloadsConfig, kDefaultMaxScheduledDownloads);
   config->max_retry_count =
-      GetFinchConfigInt(kMaxRetryCountConfig, kDefaultMaxRetryCount);
-  config->file_keep_alive_time = base::TimeDelta::FromMinutes(GetFinchConfigInt(
-      kFileKeepAliveTimeMinutesConfig, kDefaultFileKeepAliveTimeMinutes));
+      GetFinchConfigUInt(kMaxRetryCountConfig, kDefaultMaxRetryCount);
+  config->file_keep_alive_time =
+      base::TimeDelta::FromMinutes(base::saturated_cast<int>(
+          GetFinchConfigUInt(kFileKeepAliveTimeMinutesConfig,
+                             kDefaultFileKeepAliveTime.InMinutes())));
+  config->file_cleanup_window =
+      base::TimeDelta::FromMinutes(base::saturated_cast<int>(
+          GetFinchConfigUInt(kFileCleanupWindowMinutesConfig,
+                             kDefaultFileCleanupWindow.InMinutes())));
+  config->window_start_time =
+      base::TimeDelta::FromSeconds(base::saturated_cast<int>(GetFinchConfigUInt(
+          kWindowStartTimeSecondsConfig, kDefaultWindowStartTime.InSeconds())));
+  config->window_end_time =
+      base::TimeDelta::FromSeconds(base::saturated_cast<int>(GetFinchConfigUInt(
+          kWindowEndTimeSecondsConfig, kDefaultWindowEndTime.InSeconds())));
+  config->network_change_delay =
+      base::TimeDelta::FromMilliseconds(base::saturated_cast<int>(
+          GetFinchConfigUInt(kNetworkChangeDelayMsConfig,
+                             kDefaultNetworkChangeDelay.InMilliseconds())));
+  config->download_retry_delay =
+      base::TimeDelta::FromMilliseconds(base::saturated_cast<int>(
+          GetFinchConfigUInt(kDownloadRetryDelayMsConfig,
+                             kDefaultDownloadRetryDelay.InMilliseconds())));
   return config;
 }
 
@@ -64,7 +105,11 @@ Configuration::Configuration()
       max_running_downloads(kDefaultMaxRunningDownloads),
       max_scheduled_downloads(kDefaultMaxScheduledDownloads),
       max_retry_count(kDefaultMaxRetryCount),
-      file_keep_alive_time(
-          base::TimeDelta::FromMinutes(kDefaultFileKeepAliveTimeMinutes)) {}
+      file_keep_alive_time(kDefaultFileKeepAliveTime),
+      file_cleanup_window(kDefaultFileCleanupWindow),
+      window_start_time(kDefaultWindowStartTime),
+      window_end_time(kDefaultWindowEndTime),
+      network_change_delay(kDefaultNetworkChangeDelay),
+      download_retry_delay(kDefaultDownloadRetryDelay) {}
 
 }  // namespace download

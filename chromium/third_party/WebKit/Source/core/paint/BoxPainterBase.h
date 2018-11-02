@@ -10,15 +10,17 @@
 #include "core/style/StyleImage.h"
 #include "platform/graphics/GraphicsTypes.h"
 #include "platform/wtf/Allocator.h"
+#include "third_party/skia/include/core/SkBlendMode.h"
 
 namespace blink {
 
 class ComputedStyle;
 class Document;
 class FloatRoundedRect;
-class LayoutPoint;
 class LayoutRect;
 class FillLayer;
+class LayoutRectOutsets;
+class ImageResourceObserver;
 struct PaintInfo;
 
 // Base class for box painting. Has no dependencies on the layout tree and thus
@@ -44,21 +46,18 @@ class BoxPainterBase {
                                   bool include_logical_left_edge = true,
                                   bool include_logical_right_edge = true);
 
-  // This form is used by callers requiring special computation of the outer
-  // bounds of the shadow. For example, TableCellPainter insets the bounds by
-  // half widths of collapsed borders instead of the default whole widths.
-  static void PaintInsetBoxShadowInBounds(
-      const PaintInfo&,
-      const FloatRoundedRect& bounds,
-      const ComputedStyle&,
-      bool include_logical_left_edge = true,
-      bool include_logical_right_edge = true);
+  static void PaintBorder(const ImageResourceObserver&,
+                          const Document&,
+                          Node*,
+                          const PaintInfo&,
+                          const LayoutRect&,
+                          const ComputedStyle&,
+                          BackgroundBleedAvoidance = kBackgroundBleedNone,
+                          bool include_logical_left_edge = true,
+                          bool include_logical_right_edge = true);
 
   static bool ShouldForceWhiteBackgroundForPrintEconomy(const Document&,
                                                         const ComputedStyle&);
-
-  LayoutRect BoundsForDrawingRecorder(const PaintInfo&,
-                                      const LayoutPoint& adjusted_paint_offset);
 
   typedef Vector<const FillLayer*, 8> FillLayerOcclusionOutputList;
   // Returns true if the result fill layers have non-associative blending or
@@ -73,7 +72,9 @@ class BoxPainterBase {
 
   struct FillLayerInfo {
     STACK_ALLOCATED();
+    WTF_MAKE_NONCOPYABLE(FillLayerInfo);
 
+   public:
     FillLayerInfo(const Document&,
                   const ComputedStyle&,
                   bool has_overflow_clip,
@@ -114,6 +115,15 @@ class BoxPainterBase {
       const LayoutSize& box_size,
       bool include_logical_left_edge,
       bool include_logical_right_edge);
+  static FloatRoundedRect RoundedBorderRectForClip(
+      const ComputedStyle&,
+      const FillLayerInfo&,
+      const FillLayer&,
+      const LayoutRect&,
+      BackgroundBleedAvoidance,
+      bool has_line_box_sibling,
+      const LayoutSize&,
+      LayoutRectOutsets border_padding_insets);
 };
 
 }  // namespace blink

@@ -32,31 +32,27 @@ class DEVICE_VR_EXPORT VRDevice {
       const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) = 0;
 
   virtual void RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
+                              mojom::VRPresentationProviderRequest request,
                               const base::Callback<void(bool)>& callback) = 0;
   virtual void SetSecureOrigin(bool secure_origin) = 0;
   virtual void ExitPresent() = 0;
-  virtual void SubmitFrame(int16_t frame_index,
-                           const gpu::MailboxHolder& mailbox) = 0;
-  virtual void UpdateLayerBounds(int16_t frame_index,
-                                 mojom::VRLayerBoundsPtr left_bounds,
-                                 mojom::VRLayerBoundsPtr right_bounds,
-                                 int16_t source_width,
-                                 int16_t source_height) = 0;
-  virtual void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) = 0;
+  virtual void GetNextMagicWindowPose(
+      VRDisplayImpl* display,
+      mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) = 0;
 
-  virtual void AddDisplay(VRDisplayImpl* display);
-  virtual void RemoveDisplay(VRDisplayImpl* display);
+  void AddDisplay(VRDisplayImpl* display);
+  void RemoveDisplay(VRDisplayImpl* display);
+  virtual void OnDisplayAdded(VRDisplayImpl* display) {}
+  virtual void OnDisplayRemoved(VRDisplayImpl* display) {}
+  virtual void OnListeningForActivateChanged(VRDisplayImpl* display){};
 
-  virtual bool IsAccessAllowed(VRDisplayImpl* display);
-  virtual bool CheckPresentingDisplay(VRDisplayImpl* display);
+  bool IsAccessAllowed(VRDisplayImpl* display);
+  bool CheckPresentingDisplay(VRDisplayImpl* display);
 
-  virtual void OnChanged();
-  virtual void OnExitPresent();
-  virtual void OnBlur();
-  virtual void OnFocus();
-  virtual void OnActivate(mojom::VRDisplayEventReason reason,
-                          const base::Callback<void(bool)>& on_handled);
-  virtual void OnDeactivate(mojom::VRDisplayEventReason reason);
+  void OnChanged();
+  void OnExitPresent();
+  void OnBlur();
+  void OnFocus();
 
  protected:
   friend class VRDisplayImpl;

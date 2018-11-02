@@ -93,8 +93,7 @@ cvox.BrailleInputHandler = function(translatorManager) {
  * @const {string}
  * @private
  */
-cvox.BrailleInputHandler.IME_EXTENSION_ID_ =
-    'jddehjeebkoimngcbdkaahpobgicbffp';
+cvox.BrailleInputHandler.IME_EXTENSION_ID_ = 'jddehjeebkoimngcbdkaahpobgicbffp';
 
 /**
  * Name of the port to use for communicating with the Braille IME.
@@ -175,13 +174,12 @@ cvox.BrailleInputHandler.prototype = {
    */
   onBrailleKeyEvent: function(event) {
     if (event.command === cvox.BrailleKeyCommand.DOTS)
-      return this.onBrailleDots_(/** @type {number} */(event.brailleDots));
+      return this.onBrailleDots_(/** @type {number} */ (event.brailleDots));
     // Any other braille command cancels the pending cells.
     this.pendingCells_.length = 0;
     if (event.command === cvox.BrailleKeyCommand.STANDARD_KEY) {
-      if (event.standardKeyCode === 'Backspace' &&
-          !event.altKey && !event.ctrlKey && !event.shiftKey &&
-          this.onBackspace_()) {
+      if (event.standardKeyCode === 'Backspace' && !event.altKey &&
+          !event.ctrlKey && !event.shiftKey && this.onBackspace_()) {
         return true;
       } else {
         this.commitAndClearEntryState_();
@@ -203,7 +201,7 @@ cvox.BrailleInputHandler.prototype = {
       return cvox.ExpandingBrailleTranslator.ExpansionType.ALL;
     if (this.entryState_ &&
         this.entryState_.translator ===
-        this.translatorManager_.getDefaultTranslator()) {
+            this.translatorManager_.getDefaultTranslator()) {
       return cvox.ExpandingBrailleTranslator.ExpansionType.NONE;
     }
     return cvox.ExpandingBrailleTranslator.ExpansionType.SELECTION;
@@ -348,8 +346,8 @@ cvox.BrailleInputHandler.prototype = {
    */
   onImeMessage_: function(message) {
     if (!goog.isObject(message)) {
-      console.error('Unexpected message from Braille IME: ',
-                    JSON.stringify(message));
+      console.error(
+          'Unexpected message from Braille IME: ', JSON.stringify(message));
     }
     switch (message.type) {
       case 'activeState':
@@ -369,17 +367,19 @@ cvox.BrailleInputHandler.prototype = {
         // Note that we can't send the backspace key through the
         // virtualKeyboardPrivate API in this case because it would then be
         // processed by the IME again, leading to an infinite loop.
-        this.postImeMessage_(
-            {type: 'keyEventHandled', requestId: message['requestId'],
-             result: this.onBackspace_()});
+        this.postImeMessage_({
+          type: 'keyEventHandled',
+          requestId: message['requestId'],
+          result: this.onBackspace_()
+        });
         break;
       case 'reset':
         this.clearEntryState_();
         break;
       default:
-        console.error('Unexpected message from Braille IME: ',
-                      JSON.stringify(message));
-      break;
+        console.error(
+            'Unexpected message from Braille IME: ', JSON.stringify(message));
+        break;
     }
   },
 
@@ -418,26 +418,35 @@ cvox.BrailleInputHandler.prototype = {
    * @private
    */
   sendKeyEventPair_: function(event) {
-    // Use the virtual keyboard API instead of the IME key event API
-    // so that these keys work even if the Braille IME is not active.
-    var keyName = /** @type {string} */ (event.standardKeyCode);
-    var numericCode = cvox.BrailleKeyEvent.keyCodeToLegacyCode(keyName);
-    if (!goog.isDef(numericCode))
-      throw Error('Unknown key code in event: ' + JSON.stringify(event));
-    var keyEvent = {
-      type: 'keydown',
-      keyCode: numericCode,
-      keyName: keyName,
-      charValue: cvox.BrailleKeyEvent.keyCodeToCharValue(keyName),
-      // See chrome/common/extensions/api/virtual_keyboard_private.json for
-      // these constants.
-      modifiers: (event.shiftKey ? 2 : 0) |
-          (event.ctrlKey ? 4 : 0) |
-          (event.altKey ? 8 : 0)
-    };
-    chrome.virtualKeyboardPrivate.sendKeyEvent(keyEvent);
-    keyEvent.type = 'keyup';
-    chrome.virtualKeyboardPrivate.sendKeyEvent(keyEvent);
+    chrome.virtualKeyboardPrivate.getKeyboardConfig(function(config) {
+      // Use the virtual keyboard API instead of the IME key event API
+      // so that these keys work even if the Braille IME is not active.
+
+      // The virtual keyboard private api fails silently if the a11y keyboard
+      // isn't enabled in settings. Let the user know.
+      if (!config.a11ymode) {
+        new Output().format('@enable_virtual_keyboard').go();
+        return;
+      }
+
+      var keyName = /** @type {string} */ (event.standardKeyCode);
+      var numericCode = cvox.BrailleKeyEvent.keyCodeToLegacyCode(keyName);
+      if (!goog.isDef(numericCode))
+        throw Error('Unknown key code in event: ' + JSON.stringify(event));
+      var keyEvent = {
+        type: 'keydown',
+        keyCode: numericCode,
+        keyName: keyName,
+        charValue: cvox.BrailleKeyEvent.keyCodeToCharValue(keyName),
+        // See chrome/common/extensions/api/virtual_keyboard_private.json for
+        // these constants.
+        modifiers: (event.shiftKey ? 2 : 0) | (event.ctrlKey ? 4 : 0) |
+            (event.altKey ? 8 : 0)
+      };
+      chrome.virtualKeyboardPrivate.sendKeyEvent(keyEvent);
+      keyEvent.type = 'keyup';
+      chrome.virtualKeyboardPrivate.sendKeyEvent(keyEvent);
+    });
   }
 };
 
@@ -544,8 +553,7 @@ cvox.BrailleInputHandler.EntryState_.prototype = {
    * Makes sure the current text is permanently added to the edit field.
    * After this call, this object should be abandoned.
    */
-  commit: function() {
-  },
+  commit: function() {},
 
   /**
    * @return {boolean} true if the entry state uses uncommitted cells.
@@ -592,8 +600,7 @@ cvox.BrailleInputHandler.EntryState_.prototype = {
    * @param {string} newText Text to send.
    * @private
    */
-  sendTextChange_: function(newText) {
-  }
+  sendTextChange_: function(newText) {}
 };
 
 /**
@@ -605,8 +612,7 @@ cvox.BrailleInputHandler.EntryState_.prototype = {
  * @extends {cvox.BrailleInputHandler.EntryState_}
  * @private
  */
-cvox.BrailleInputHandler.EditsEntryState_ = function(
-    inputHandler, translator) {
+cvox.BrailleInputHandler.EditsEntryState_ = function(inputHandler, translator) {
   cvox.BrailleInputHandler.EntryState_.call(this, inputHandler, translator);
 };
 
@@ -617,8 +623,8 @@ cvox.BrailleInputHandler.EditsEntryState_.prototype = {
   sendTextChange_: function(newText) {
     var oldText = this.text_;
     // Find the common prefix of the old and new text.
-    var commonPrefixLength = StringUtil.longestCommonPrefixLength(
-        oldText, newText);
+    var commonPrefixLength =
+        StringUtil.longestCommonPrefixLength(oldText, newText);
     // How many characters we need to delete from the existing text to replace
     // them with characters from the new text.
     var deleteLength = oldText.length - commonPrefixLength;
@@ -640,11 +646,12 @@ cvox.BrailleInputHandler.EditsEntryState_.prototype = {
         this.pendingTextsBefore_.push(textBeforeAfterDelete + toInsert);
       }
       // Send the replace operation to be performed asynchronously by the IME.
-      this.inputHandler_.postImeMessage_(
-          {type: 'replaceText',
-           contextID: this.inputHandler_.inputContext_.contextID,
-           deleteBefore: deleteLength,
-           newText: toInsert});
+      this.inputHandler_.postImeMessage_({
+        type: 'replaceText',
+        contextID: this.inputHandler_.inputContext_.contextID,
+        deleteBefore: deleteLength,
+        newText: toInsert
+      });
     }
   }
 };
@@ -669,9 +676,10 @@ cvox.BrailleInputHandler.LateCommitEntryState_.prototype = {
 
   /** @override */
   commit: function() {
-    this.inputHandler_.postImeMessage_(
-        {type: 'commitUncommitted',
-         contextID: this.inputHandler_.inputContext_.contextID});
+    this.inputHandler_.postImeMessage_({
+      type: 'commitUncommitted',
+      contextID: this.inputHandler_.inputContext_.contextID
+    });
   },
 
   /** @override */
@@ -681,9 +689,10 @@ cvox.BrailleInputHandler.LateCommitEntryState_.prototype = {
 
   /** @override */
   sendTextChange_: function(newText) {
-    this.inputHandler_.postImeMessage_(
-        {type: 'setUncommitted',
-         contextID: this.inputHandler_.inputContext_.contextID,
-         text: newText});
+    this.inputHandler_.postImeMessage_({
+      type: 'setUncommitted',
+      contextID: this.inputHandler_.inputContext_.contextID,
+      text: newText
+    });
   }
 };

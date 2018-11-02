@@ -68,7 +68,6 @@ class URLRequestQuicTest : public ::testing::Test {
     // To simplify the test, and avoid the race with the HTTP request, we force
     // QUIC for these requests.
     params->origins_to_force_quic_on.insert(HostPortPair(kTestServerHost, 443));
-    params->cert_verifier = &cert_verifier_;
     params->enable_quic = true;
     params->enable_server_push_cancellation = true;
     context_->set_host_resolver(host_resolver_.get());
@@ -307,15 +306,14 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached) {
 
   EXPECT_TRUE(entries[0].GetStringValue("push_url", &value));
   EXPECT_EQ(value, push_url_1);
-  // No net error code for this lookup transaction, the push is found.
-  EXPECT_FALSE(entries[1].GetIntegerValue("net_error", &net_error));
-
-  EXPECT_TRUE(entries[2].GetStringValue("push_url", &value));
+  EXPECT_TRUE(entries[1].GetStringValue("push_url", &value));
   EXPECT_EQ(value, push_url_2);
   // Net error code -400 is found for this lookup transaction, the push is not
   // found in the cache.
-  EXPECT_TRUE(entries[3].GetIntegerValue("net_error", &net_error));
+  EXPECT_TRUE(entries[2].GetIntegerValue("net_error", &net_error));
   EXPECT_EQ(net_error, -400);
+  // No net error code for this lookup transaction, the push is found.
+  EXPECT_FALSE(entries[3].GetIntegerValue("net_error", &net_error));
 
   // Verify the reset error count received on the server side.
   EXPECT_LE(1u, GetRstErrorCountReceivedByServer(QUIC_STREAM_CANCELLED));
@@ -394,11 +392,13 @@ TEST_F(URLRequestQuicTest, CancelPushIfCached2) {
 
   EXPECT_TRUE(entries[0].GetStringValue("push_url", &value));
   EXPECT_EQ(value, push_url_1);
-  // No net error code for this lookup transaction, the push is found.
-  EXPECT_FALSE(entries[1].GetIntegerValue("net_error", &net_error));
 
-  EXPECT_TRUE(entries[2].GetStringValue("push_url", &value));
+  EXPECT_TRUE(entries[1].GetStringValue("push_url", &value));
   EXPECT_EQ(value, push_url_2);
+
+  // No net error code for this lookup transaction, the push is found.
+  EXPECT_FALSE(entries[2].GetIntegerValue("net_error", &net_error));
+
   // No net error code for this lookup transaction, the push is found.
   EXPECT_FALSE(entries[3].GetIntegerValue("net_error", &net_error));
 

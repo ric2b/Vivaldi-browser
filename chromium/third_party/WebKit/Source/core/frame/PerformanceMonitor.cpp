@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "core/frame/PerformanceMonitor.h"
-
 #include "bindings/core/v8/ScheduledAction.h"
 #include "bindings/core/v8/ScriptEventListener.h"
 #include "bindings/core/v8/SourceLocation.h"
@@ -15,7 +14,9 @@
 #include "core/frame/LocalFrame.h"
 #include "core/html/parser/HTMLDocumentParser.h"
 #include "core/probe/CoreProbes.h"
+#include "platform/Histogram.h"
 #include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -202,6 +203,16 @@ void PerformanceMonitor::Did(const probe::CallFunction& probe) {
                               SourceLocation::FromFunction(probe.function));
 }
 
+void PerformanceMonitor::Will(const probe::V8Compile& probe) {
+  // Todo(maxlg): https://crbug.com/738495 Intentionally leave out as we need to
+  // verify monotonical time is reasonable in overhead.
+}
+
+void PerformanceMonitor::Did(const probe::V8Compile& probe) {
+  // Todo(maxlg): https://crbug.com/738495 Intentionally leave out as we need to
+  // verify monotonical time is reasonable in overhead.
+}
+
 void PerformanceMonitor::Will(const probe::UserCallback& probe) {
   ++user_callback_depth_;
 
@@ -217,6 +228,7 @@ void PerformanceMonitor::Did(const probe::UserCallback& probe) {
   --user_callback_depth_;
   if (!user_callback_depth_)
     user_callback_ = nullptr;
+  DCHECK(user_callback_ != &probe);
 }
 
 void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
@@ -226,8 +238,7 @@ void PerformanceMonitor::DocumentWriteFetchScript(Document* document) {
   InnerReportGenericViolation(document, kBlockedParser, text, 0, nullptr);
 }
 
-void PerformanceMonitor::WillProcessTask(scheduler::TaskQueue*,
-                                         double start_time) {
+void PerformanceMonitor::WillProcessTask(double start_time) {
   // Reset m_taskExecutionContext. We don't clear this in didProcessTask
   // as it is needed in ReportTaskTime which occurs after didProcessTask.
   task_execution_context_ = nullptr;
@@ -243,9 +254,7 @@ void PerformanceMonitor::WillProcessTask(scheduler::TaskQueue*,
   user_callback_ = nullptr;
 }
 
-void PerformanceMonitor::DidProcessTask(scheduler::TaskQueue*,
-                                        double start_time,
-                                        double end_time) {
+void PerformanceMonitor::DidProcessTask(double start_time, double end_time) {
   if (!enabled_)
     return;
   double layout_threshold = thresholds_[kLongLayout];

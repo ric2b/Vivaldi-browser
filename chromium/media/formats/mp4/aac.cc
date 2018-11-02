@@ -28,7 +28,7 @@ AAC::~AAC() {
 }
 
 bool AAC::Parse(const std::vector<uint8_t>& data, MediaLog* media_log) {
-#if defined(OS_ANDROID) || defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(OS_ANDROID)
   codec_specific_data_ = data;
 #endif
   if (data.empty())

@@ -63,6 +63,7 @@ class IdleRequestCallback;
 class IdleRequestOptions;
 class MediaQueryList;
 class MessageEvent;
+class Modulator;
 class Navigator;
 class PostMessageTimer;
 class Screen;
@@ -146,7 +147,7 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   double pageXOffset() const { return scrollX(); }
   double pageYOffset() const { return scrollY(); }
 
-  DOMVisualViewport* view();
+  DOMVisualViewport* visualViewport();
 
   const AtomicString& name() const;
   void setName(const AtomicString&);
@@ -232,6 +233,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   CustomElementRegistry* customElements() const;
   CustomElementRegistry* MaybeCustomElements() const;
 
+  void SetModulator(Modulator*);
+
   // Obsolete APIs
   void captureEvents() {}
   void releaseEvents() {}
@@ -244,7 +247,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   DEFINE_ATTRIBUTE_EVENT_LISTENER(animationstart);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(search);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(transitionend);
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(wheel);
 
   DEFINE_MAPPED_ATTRIBUTE_EVENT_LISTENER(webkitanimationstart,
                                          webkitAnimationStart);
@@ -261,8 +263,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   void FrameDestroyed();
   void Reset();
-
-  unsigned PendingUnloadEventListeners() const;
 
   Element* frameElement() const;
 
@@ -315,9 +315,6 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
 
   FloatSize GetViewportSize(IncludeScrollbarsInRect) const;
 
-  void SetHasLoadEventFired() { has_load_event_fired_ = true; }
-  bool HasLoadEventFired() { return has_load_event_fired_; }
-
  protected:
   // EventTarget overrides.
   void AddedEventListener(const AtomicString& event_type,
@@ -343,8 +340,8 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   void DispatchLoadEvent();
   void ClearDocument();
 
-  Member<Document> document_;
-  Member<DOMVisualViewport> view_;
+  TraceWrapperMember<Document> document_;
+  Member<DOMVisualViewport> visualViewport_;
   TaskRunnerTimer<LocalDOMWindow> unused_preloads_timer_;
 
   bool should_print_when_finished_loading_;
@@ -361,6 +358,13 @@ class CORE_EXPORT LocalDOMWindow final : public DOMWindow,
   mutable Member<Navigator> navigator_;
   mutable Member<StyleMedia> media_;
   mutable TraceWrapperMember<CustomElementRegistry> custom_elements_;
+  // We store reference to Modulator here to have it TraceWrapper-ed.
+  // This is wrong, as Modulator is per-context, where as LocalDOMWindow is
+  // shared among context. However, this *works* as Modulator is currently only
+  // enabled in the main world,
+  // TODO(kouhei): Remove this workaround once V8PerContextData::Data is
+  // TraceWrapperBase.
+  TraceWrapperMember<Modulator> modulator_;
   Member<External> external_;
 
   String status_;

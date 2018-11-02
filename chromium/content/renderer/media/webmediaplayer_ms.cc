@@ -22,6 +22,7 @@
 #include "content/public/renderer/media_stream_video_renderer.h"
 #include "content/renderer/media/web_media_element_source_utils.h"
 #include "content/renderer/media/webmediaplayer_ms_compositor.h"
+#include "content/renderer/media/webrtc_logging.h"
 #include "content/renderer/render_frame_impl.h"
 #include "content/renderer/render_thread_impl.h"
 #include "media/base/bind_to_current_loop.h"
@@ -36,6 +37,7 @@
 #include "third_party/WebKit/public/platform/WebMediaPlayerSource.h"
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebSize.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 namespace content {
 
@@ -71,10 +73,10 @@ class WebMediaPlayerMS::FrameDeliverer {
     base::TimeTicks render_time;
     if (frame->metadata()->GetTimeTicks(
             media::VideoFrameMetadata::REFERENCE_TIME, &render_time)) {
-      TRACE_EVENT1("webrtc", "WebMediaPlayerMS::OnVideoFrame",
-                   "Ideal Render Instant", render_time.ToInternalValue());
+      TRACE_EVENT1("webmediaplayerms", "OnVideoFrame", "Ideal Render Instant",
+                   render_time.ToInternalValue());
     } else {
-      TRACE_EVENT0("webrtc", "WebMediaPlayerMS::OnVideoFrame");
+      TRACE_EVENT0("webmediaplayerms", "OnVideoFrame");
     }
 
     const bool is_opaque = media::IsOpaque(frame->format());
@@ -141,7 +143,7 @@ class WebMediaPlayerMS::FrameDeliverer {
 };
 
 WebMediaPlayerMS::WebMediaPlayerMS(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     blink::WebMediaPlayerClient* client,
     media::WebMediaPlayerDelegate* delegate,
     std::unique_ptr<media::MediaLog> media_log,
@@ -254,6 +256,8 @@ void WebMediaPlayerMS::Load(LoadType load_type,
     audio_renderer_ = renderer_factory_->GetAudioRenderer(
         web_stream, frame->GetRoutingID(), initial_audio_output_device_id_,
         initial_security_origin_);
+    if (!audio_renderer_)
+      WebRtcLogMessage("Warning: Failed to instantiate audio renderer.");
   }
 
   if (!video_frame_provider_ && !audio_renderer_) {
@@ -290,6 +294,8 @@ void WebMediaPlayerMS::Play() {
   if (audio_renderer_)
     audio_renderer_->Play();
 
+  if (HasVideo())
+    delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
   // TODO(perkj, magjed): We use OneShot focus type here so that it takes
   // audio focus once it starts, and then will not respond to further audio
   // focus changes. See http://crbug.com/596516 for more details.
@@ -343,6 +349,7 @@ void WebMediaPlayerMS::SetVolume(double volume) {
   volume_ = volume;
   if (audio_renderer_.get())
     audio_renderer_->SetVolume(volume_ * volume_multiplier_);
+  delegate_->DidPlayerMutedStatusChange(delegate_id_, volume == 0.0);
 }
 
 void WebMediaPlayerMS::SetSinkId(
@@ -585,7 +592,7 @@ bool WebMediaPlayerMS::CopyVideoTextureToPlatformTexture(
     int level,
     bool premultiply_alpha,
     bool flip_y) {
-  TRACE_EVENT0("media", "WebMediaPlayerMS:copyVideoTextureToPlatformTexture");
+  TRACE_EVENT0("webmediaplayerms", "copyVideoTextureToPlatformTexture");
   DCHECK(thread_checker_.CalledOnValidThread());
 
   scoped_refptr<media::VideoFrame> video_frame =
@@ -620,7 +627,7 @@ bool WebMediaPlayerMS::TexImageImpl(TexImageFunctionID functionID,
                                     int zoffset,
                                     bool flip_y,
                                     bool premultiply_alpha) {
-  TRACE_EVENT0("media", "WebMediaPlayerMS:texImageImpl");
+  TRACE_EVENT0("webmediaplayerms", "texImageImpl");
   DCHECK(thread_checker_.CalledOnValidThread());
 
   const scoped_refptr<media::VideoFrame> video_frame =
@@ -719,6 +726,8 @@ void WebMediaPlayerMS::ResetCanvasCache() {
 
 void WebMediaPlayerMS::TriggerResize() {
   get_client()->SizeChanged();
+
+  delegate_->DidPlayerSizeChange(delegate_id_, NaturalSize());
 }
 
 }  // namespace content

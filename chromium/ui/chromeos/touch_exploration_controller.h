@@ -6,6 +6,7 @@
 #define UI_CHROMEOS_TOUCH_EXPLORATION_CONTROLLER_H_
 
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/timer/timer.h"
 #include "base/values.h"
 #include "ui/accessibility/ax_enums.h"
@@ -182,7 +183,7 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   explicit TouchExplorationController(
       aura::Window* root_window,
       ui::TouchExplorationControllerDelegate* delegate,
-      TouchAccessibilityEnabler* touch_accessibility_enabler);
+      base::WeakPtr<TouchAccessibilityEnabler> touch_accessibility_enabler);
   ~TouchExplorationController() override;
 
   // Make synthesized touch events are anchored at this point. This is
@@ -471,6 +472,11 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // A copy of the event from the initial touch press.
   std::unique_ptr<ui::TouchEvent> initial_press_;
 
+  // The timestamp of the most recent press event for the main touch id.
+  // The difference between this and |initial_press_->time_stamp| is that
+  // |most_recent_press_timestamp_| is reset in a double-tap.
+  base::TimeTicks most_recent_press_timestamp_;
+
   // Map of touch ids to where its initial press occurred relative to the
   // screen.
   std::map<int, gfx::Point> initial_presses_;
@@ -530,12 +536,15 @@ class UI_CHROMEOS_EXPORT TouchExplorationController
   // accessibility. That handler is always running, whereas this is not,
   // but events need to be sent to TouchAccessibilityEnabler before being
   // rewritten when TouchExplorationController is running.
-  TouchAccessibilityEnabler* touch_accessibility_enabler_;
+  base::WeakPtr<TouchAccessibilityEnabler> touch_accessibility_enabler_;
 
   // Any touch exploration that both starts and ends (touch pressed, and
   // released) within this rectangle, triggers a simulated single finger tap at
   // the anchor point on release.
   gfx::Rect lift_activation_bounds_;
+
+  // Whether or not we've seen a touch press event yet.
+  bool seen_press_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TouchExplorationController);
 };

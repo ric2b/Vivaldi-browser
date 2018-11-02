@@ -7,6 +7,7 @@ import("//mojo/public/tools/bindings/mojom.gni")
 mojom("interfaces") {
   sources = [
     "bitmap.mojom",
+    "blur_image_filter_tile_mode.mojom",
     "image_filter.mojom",
   ]
 }
@@ -20,9 +21,6 @@ mojom("test_interfaces") {
   public_deps = [
     ":interfaces",
   ]
-
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
 }
 
 source_set("struct_traits") {

@@ -97,7 +97,7 @@ class FillLayout : public aura::LayoutManager {
 };
 
 // A class that bridges the gap between CursorManager and Aura. It borrows
-// heavily from AshNativeCursorManager.
+// heavily from NativeCursorManagerAsh.
 class ShellNativeCursorManager : public wm::NativeCursorManager {
  public:
   explicit ShellNativeCursorManager(aura::WindowTreeHost* host)
@@ -134,10 +134,10 @@ class ShellNativeCursorManager : public wm::NativeCursorManager {
     }
   }
 
-  void SetCursorSet(ui::CursorSetType cursor_set,
-                    wm::NativeCursorManagerDelegate* delegate) override {
-    image_cursors_->SetCursorSet(cursor_set);
-    delegate->CommitCursorSet(cursor_set);
+  void SetCursorSize(ui::CursorSize cursor_size,
+                     wm::NativeCursorManagerDelegate* delegate) override {
+    image_cursors_->SetCursorSize(cursor_size);
+    delegate->CommitCursorSize(cursor_size);
     if (delegate->IsCursorVisible())
       SetCursor(delegate->GetCursor(), delegate);
   }
@@ -282,7 +282,7 @@ void ShellDesktopControllerAura::InitWindowManager() {
       new wm::FocusController(new AppsFocusRules());
   aura::client::SetFocusClient(host_->window(), focus_controller);
   host_->window()->AddPreTargetHandler(focus_controller);
-  aura::client::SetActivationClient(host_->window(), focus_controller);
+  wm::SetActivationClient(host_->window(), focus_controller);
   focus_client_.reset(focus_controller);
 
   capture_client_.reset(
@@ -348,7 +348,7 @@ void ShellDesktopControllerAura::DestroyRootWindow() {
       static_cast<wm::FocusController*>(focus_client_.get());
   if (focus_controller) {
     host_->window()->RemovePreTargetHandler(focus_controller);
-    aura::client::SetActivationClient(host_->window(), NULL);
+    wm::SetActivationClient(host_->window(), NULL);
   }
 
   host_->window()->RemovePreTargetHandler(root_window_event_filter_.get());

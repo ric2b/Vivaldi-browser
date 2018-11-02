@@ -6,6 +6,7 @@
 #define IOS_WEB_PUBLIC_PAYMENTS_PAYMENT_REQUEST_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "base/strings/string16.h"
@@ -147,8 +148,13 @@ class PaymentDetails {
   bool operator!=(const PaymentDetails& other) const;
 
   // Populates the properties of this PaymentDetails from |value|. Returns true
-  // if the required values are present.
-  bool FromDictionaryValue(const base::DictionaryValue& value);
+  // if the required values are present. If |requires_total| is true, the total
+  // property has to be present.
+  bool FromDictionaryValue(const base::DictionaryValue& value,
+                           bool requires_total);
+
+  // The unique free-form identifier for this payment request.
+  std::string id;
 
   // The total amount of the payment request.
   PaymentItem total;
@@ -228,7 +234,7 @@ class PaymentRequest {
 
   // The unique ID for this PaymentRequest. If it is not provided during
   // construction, one is generated.
-  base::string16 payment_request_id;
+  std::string payment_request_id;
 
   // Properties set in order to communicate user choices back to the page.
   payments::PaymentAddress shipping_address;
@@ -255,16 +261,16 @@ class PaymentResponse {
   // Populates |value| with the properties of this PaymentResponse.
   std::unique_ptr<base::DictionaryValue> ToDictionaryValue() const;
 
-  // The same paymentRequestID present in the original PaymentRequest.
-  base::string16 payment_request_id;
+  // The same ID present in the original PaymentRequest.
+  std::string payment_request_id;
 
   // The payment method identifier for the payment method that the user selected
   // to fulfil the transaction.
   base::string16 method_name;
 
-  // A credit card response object used by the merchant to process the
-  // transaction and determine successful fund transfer.
-  payments::BasicCardResponse details;
+  // The json-serialized stringified details of the payment method. Used by the
+  // merchant to process the transaction and determine successful fund transfer.
+  std::string details;
 
   // If request_shipping was set to true in the PaymentOptions passed to the
   // PaymentRequest constructor, this will be the full and final shipping

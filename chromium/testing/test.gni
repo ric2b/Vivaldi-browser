@@ -12,6 +12,10 @@ if (is_android) {
   import("//build/config/sanitizers/sanitizers.gni")
 }
 
+if (is_fuchsia) {
+  import("//build/config/fuchsia/rules.gni")
+}
+
 # Define a test as an executable (or apk on Android) with the "testonly" flag
 # set.
 # Variable:
@@ -59,7 +63,7 @@ template("test") {
         # the default shared_library configs rather than executable configs.
         configs -= [
           "//build/config:shared_library_config",
-          "//build/config/android:hide_all_but_jni_onload",
+          "//build/config/android:hide_all_but_jni",
         ]
         configs += [ "//build/config:executable_config" ]
 
@@ -220,6 +224,29 @@ template("test") {
       test_suite = _output_name
       test_type = "gtest"
     }
+  } else if (is_fuchsia) {
+    _output_name = invoker.target_name
+    _test_runner_target = "${_output_name}__test_runner_script"
+
+    test_runner_script(_test_runner_target) {
+      forward_variables_from(invoker,
+                             [
+                               "data",
+                               "data_deps",
+                               "deps",
+                               "public_deps",
+                             ])
+      test_name = _output_name
+    }
+
+    executable(target_name) {
+      testonly = true
+      forward_variables_from(invoker, "*")
+      if (!defined(data_deps)) {
+        data_deps = []
+      }
+      data_deps += [ ":$_test_runner_target" ]
+    }
   } else if (is_ios) {
     import("//build/config/ios/ios_sdk.gni")
     import("//build/config/ios/rules.gni")
@@ -294,6 +321,8 @@ template("test") {
 set_defaults("test") {
   if (is_android) {
     configs = default_shared_library_configs
+    configs -= [ "//build/config/android:hide_all_but_jni_onload" ]
+    configs += [ "//build/config/android:hide_all_but_jni" ]
   } else {
     configs = default_executable_configs
   }

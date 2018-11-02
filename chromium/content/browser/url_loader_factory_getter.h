@@ -8,12 +8,11 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "content/common/content_export.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 
 namespace content {
 
-class ChromeAppCacheService;
 class StoragePartitionImpl;
 
 // Holds on to URLLoaderFactory for a given StoragePartition and allows code
@@ -33,31 +32,30 @@ class URLLoaderFactoryGetter
   // The pointer shouldn't be cached.
   mojom::URLLoaderFactoryPtr* GetNetworkFactory();
 
+  // Called on the IO thread to get the URLLoaderFactory to the blob service.
+  // The pointer shouldn't be cached.
+  CONTENT_EXPORT mojom::URLLoaderFactoryPtr* GetBlobFactory();
+
   // Overrides the network URLLoaderFactory for subsequent requests. Passing a
   // null pointer will restore the default behavior.
   // This is called on the UI thread.
   CONTENT_EXPORT void SetNetworkFactoryForTesting(
       mojom::URLLoaderFactoryPtr test_factory);
 
-  // Called on the IO thread to get the URLLoaderFactory for AppCache. The
-  // pointer should not be cached.
-  mojom::URLLoaderFactoryPtr* GetAppCacheFactory();
-
  private:
   friend class base::DeleteHelper<URLLoaderFactoryGetter>;
   friend struct BrowserThread::DeleteOnThread<BrowserThread::IO>;
 
   CONTENT_EXPORT ~URLLoaderFactoryGetter();
-  void InitializeOnIOThread(
-      mojom::URLLoaderFactoryPtrInfo network_factory,
-      scoped_refptr<ChromeAppCacheService> appcache_service);
+  void InitializeOnIOThread(mojom::URLLoaderFactoryPtrInfo network_factory,
+                            mojom::URLLoaderFactoryPtrInfo blob_factory);
   void SetTestNetworkFactoryOnIOThread(
       mojom::URLLoaderFactoryPtrInfo test_factory);
 
   // Only accessed on IO thread.
   mojom::URLLoaderFactoryPtr network_factory_;
+  mojom::URLLoaderFactoryPtr blob_factory_;
   mojom::URLLoaderFactoryPtr test_factory_;
-  mojom::URLLoaderFactoryPtr appcache_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(URLLoaderFactoryGetter);
 };

@@ -12,6 +12,7 @@
 #include "chrome/browser/browser_shutdown.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
+#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/quick_unlock/quick_unlock_factory.h"
@@ -39,6 +40,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
 #include "ui/aura/client/capture_client.h"
+#include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/x/x11_util.h"
@@ -142,6 +144,8 @@ WebUIScreenLocker::~WebUIScreenLocker() {
   if (login_display_.get() && GetOobeUI())
     GetOobeUI()->ResetSigninScreenHandlerDelegate();
 
+  ClearLockScreenAppFocusCyclerDelegate();
+
   ResetKeyboardOverscrollOverride();
 
   RequestPreload();
@@ -151,7 +155,7 @@ void WebUIScreenLocker::LockScreen() {
   gfx::Rect bounds = display::Screen::GetScreen()->GetPrimaryDisplay().bounds();
 
   lock_time_ = base::TimeTicks::Now();
-  lock_window_ = new ash::LockWindow();
+  lock_window_ = new ash::LockWindow(chromeos::GetAshConfig());
   lock_window_->AddObserver(this);
 
   Init();
@@ -173,6 +177,8 @@ void WebUIScreenLocker::LockScreen() {
 
   GetOobeUI()->ShowSigninScreen(
       LoginScreenContext(), login_display_.get(), login_display_.get());
+
+  SetLockScreenAppFocusCyclerDelegate();
 
   DisableKeyboardOverscroll();
 }
@@ -317,7 +323,8 @@ bool WebUIScreenLocker::IsSigninInProgress() const {
 
 void WebUIScreenLocker::Login(const UserContext& user_context,
                               const SigninSpecifics& specifics) {
-  chromeos::ScreenLocker::default_screen_locker()->Authenticate(user_context);
+  chromeos::ScreenLocker::default_screen_locker()->Authenticate(
+      user_context, ScreenLocker::AuthenticateCallback());
 }
 
 void WebUIScreenLocker::MigrateUserData(const std::string& old_password) {
@@ -392,23 +399,23 @@ void WebUIScreenLocker::LidEventReceived(PowerManagerClient::LidState state,
   if (state == PowerManagerClient::LidState::OPEN) {
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&WebUIScreenLocker::FocusUserPod,
-                   weak_factory_.GetWeakPtr()));
+        base::BindOnce(&WebUIScreenLocker::FocusUserPod,
+                       weak_factory_.GetWeakPtr()));
   }
 }
 
 void WebUIScreenLocker::SuspendImminent() {
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&WebUIScreenLocker::ResetAndFocusUserPod,
-                 weak_factory_.GetWeakPtr()));
+      base::BindOnce(&WebUIScreenLocker::ResetAndFocusUserPod,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void WebUIScreenLocker::SuspendDone(const base::TimeDelta& sleep_duration) {
   content::BrowserThread::PostTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&WebUIScreenLocker::FocusUserPod, weak_factory_.GetWeakPtr()));
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&WebUIScreenLocker::FocusUserPod,
+                     weak_factory_.GetWeakPtr()));
 }
 
 void WebUIScreenLocker::RenderProcessGone(base::TerminationStatus status) {

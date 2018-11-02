@@ -43,19 +43,15 @@ class PackagedApp : public service_manager::Service,
   void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info, interface_name,
-                            std::move(interface_pipe));
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
-  void Create(const service_manager::BindSourceInfo& source_info,
-              service_manager::test::mojom::LifecycleControlRequest request) {
+  void Create(service_manager::test::mojom::LifecycleControlRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 
   // LifecycleControl:
-  void Ping(const PingCallback& callback) override {
-    callback.Run();
-  }
+  void Ping(PingCallback callback) override { std::move(callback).Run(); }
 
   void GracefulQuit() override {
     service_manager_connection_closed_callback_.Run();
@@ -109,17 +105,13 @@ class Package : public service_manager::ForwardingService,
   void OnBindInterface(const service_manager::BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    if (registry_.CanBindInterface(interface_name)) {
-      registry_.BindInterface(source_info, interface_name,
-                              std::move(interface_pipe));
-    } else {
+    if (!registry_.TryBindInterface(interface_name, &interface_pipe)) {
       ForwardingService::OnBindInterface(source_info, interface_name,
                                          std::move(interface_pipe));
     }
   }
 
-  void Create(const service_manager::BindSourceInfo& source_info,
-              service_manager::mojom::ServiceFactoryRequest request) {
+  void Create(service_manager::mojom::ServiceFactoryRequest request) {
     bindings_.AddBinding(this, std::move(request));
   }
 

@@ -4,24 +4,24 @@
 
 #include "core/paint/TableSectionPainter.h"
 
+#include <algorithm>
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutTableCol.h"
 #include "core/layout/LayoutTableRow.h"
 #include "core/paint/BoxClipper.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/CollapsedBorderPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/paint/TableCellPainter.h"
 #include "core/paint/TableRowPainter.h"
-#include <algorithm>
 
 namespace blink {
 
 void TableSectionPainter::PaintRepeatingHeaderGroup(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset,
-    const CollapsedBorderValue& current_border_value,
     ItemToPaint item_to_paint) {
   if (!layout_table_section_.IsRepeatingHeaderGroup())
     return;
@@ -33,8 +33,10 @@ void TableSectionPainter::PaintRepeatingHeaderGroup(
   LayoutUnit header_group_offset = table->BlockOffsetToFirstRepeatableHeader();
   // The header may have a pagination strut before it so we need to account for
   // that when establishing its position.
+  LayoutUnit strut_on_first_row;
   if (LayoutTableRow* row = layout_table_section_.FirstRow())
-    header_group_offset += row->PaginationStrut();
+    strut_on_first_row = row->PaginationStrut();
+  header_group_offset += strut_on_first_row;
   LayoutUnit offset_to_next_page =
       page_height - IntMod(header_group_offset, page_height);
   // Move paginationOffset to the top of the next page.
@@ -59,11 +61,15 @@ void TableSectionPainter::PaintRepeatingHeaderGroup(
                paint_offset.Y() + total_height_of_rows);
 
   while (pagination_offset.Y() < bottom_bound) {
+    LayoutPoint nested_offset = pagination_offset;
+    LayoutUnit height_of_previous_headers =
+        table->RowOffsetFromRepeatingHeader() -
+        layout_table_section_.LogicalHeight() + strut_on_first_row;
+    nested_offset.Move(LayoutUnit(), height_of_previous_headers);
     if (item_to_paint == kPaintCollapsedBorders) {
-      PaintCollapsedSectionBorders(paint_info, pagination_offset,
-                                   current_border_value);
+      PaintCollapsedSectionBorders(paint_info, nested_offset);
     } else {
-      PaintSection(paint_info, pagination_offset);
+      PaintSection(paint_info, nested_offset);
     }
     pagination_offset.Move(0, page_height.ToInt());
   }
@@ -76,8 +82,7 @@ void TableSectionPainter::Paint(const PaintInfo& paint_info,
   PaintSection(paint_info, paint_offset);
   LayoutTable* table = layout_table_section_.Table();
   if (table->Header() == layout_table_section_)
-    PaintRepeatingHeaderGroup(paint_info, paint_offset, CollapsedBorderValue(),
-                              kPaintSection);
+    PaintRepeatingHeaderGroup(paint_info, paint_offset, kPaintSection);
 }
 
 void TableSectionPainter::PaintSection(const PaintInfo& paint_info,
@@ -111,19 +116,16 @@ void TableSectionPainter::PaintSection(const PaintInfo& paint_info,
 
 void TableSectionPainter::PaintCollapsedBorders(
     const PaintInfo& paint_info,
-    const LayoutPoint& paint_offset,
-    const CollapsedBorderValue& current_border_value) {
-  PaintCollapsedSectionBorders(paint_info, paint_offset, current_border_value);
+    const LayoutPoint& paint_offset) {
+  PaintCollapsedSectionBorders(paint_info, paint_offset);
   LayoutTable* table = layout_table_section_.Table();
   if (table->Header() == layout_table_section_)
-    PaintRepeatingHeaderGroup(paint_info, paint_offset, current_border_value,
-                              kPaintCollapsedBorders);
+    PaintRepeatingHeaderGroup(paint_info, paint_offset, kPaintCollapsedBorders);
 }
 
 void TableSectionPainter::PaintCollapsedSectionBorders(
     const PaintInfo& paint_info,
-    const LayoutPoint& paint_offset,
-    const CollapsedBorderValue& current_border_value) {
+    const LayoutPoint& paint_offset) {
   if (!layout_table_section_.NumRows() ||
       !layout_table_section_.Table()->EffectiveColumns().size())
     return;
@@ -142,8 +144,15 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
 
   CellSpan dirtied_rows;
   CellSpan dirtied_columns;
-  layout_table_section_.DirtiedRowsAndEffectiveColumns(
-      table_aligned_rect, dirtied_rows, dirtied_columns);
+  if (UNLIKELY(
+          layout_table_section_.Table()->ShouldPaintAllCollapsedBorders())) {
+    // Ignore paint cull rect to simplify paint invalidation in such rare case.
+    dirtied_rows = layout_table_section_.FullSectionRowSpan();
+    dirtied_columns = layout_table_section_.FullTableEffectiveColumnSpan();
+  } else {
+    layout_table_section_.DirtiedRowsAndEffectiveColumns(
+        table_aligned_rect, dirtied_rows, dirtied_columns);
+  }
 
   if (dirtied_columns.Start() >= dirtied_columns.End())
     return;
@@ -151,19 +160,9 @@ void TableSectionPainter::PaintCollapsedSectionBorders(
   // Collapsed borders are painted from the bottom right to the top left so that
   // precedence due to cell position is respected.
   for (unsigned r = dirtied_rows.End(); r > dirtied_rows.Start(); r--) {
-    unsigned row = r - 1;
-    unsigned n_cols = layout_table_section_.NumCols(row);
-    for (unsigned c = std::min(dirtied_columns.End(), n_cols);
-         c > dirtied_columns.Start(); c--) {
-      unsigned col = c - 1;
-      if (const LayoutTableCell* cell =
-              layout_table_section_.OriginatingCellAt(row, col)) {
-        LayoutPoint cell_point =
-            layout_table_section_.FlipForWritingModeForChild(
-                cell, adjusted_paint_offset);
-        TableCellPainter(*cell).PaintCollapsedBorders(paint_info, cell_point,
-                                                      current_border_value);
-      }
+    if (const auto* row = layout_table_section_.RowLayoutObjectAt(r - 1)) {
+      TableRowPainter(*row).PaintCollapsedBorders(
+          paint_info, adjusted_paint_offset, dirtied_columns);
     }
   }
 }

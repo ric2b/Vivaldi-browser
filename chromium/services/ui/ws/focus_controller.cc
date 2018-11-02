@@ -182,17 +182,9 @@ bool FocusController::CanBeActivated(ServerWindow* window) const {
     return false;
 
   // The window must be drawn, or if it's not drawn, it must be minimized.
-  if (!window->IsDrawn()) {
-    bool is_minimized = false;
-    const ServerWindow::Properties& props = window->properties();
-    if (props.count(mojom::WindowManager::kShowState_Property)) {
-      // The type must match that of PropertyConverter::PrimitiveType.
-      is_minimized =
-          props.find(mojom::WindowManager::kShowState_Property)->second[0] ==
-          static_cast<int64_t>(ui::mojom::ShowState::MINIMIZED);
-    }
-    if (!is_minimized)
-      return false;
+  if (!window->IsDrawn() &&
+      window->GetShowState() != mojom::ShowState::MINIMIZED) {
+    return false;
   }
 
   // TODO(sad): If there's a transient modal window, then this cannot be
@@ -246,12 +238,8 @@ bool FocusController::SetFocusedWindowImpl(
   return true;
 }
 
-void FocusController::OnDrawnStateWillChange(ServerWindow* ancestor,
-                                             ServerWindow* window,
-                                             bool is_drawn) {
-  DCHECK(!is_drawn);
-  DCHECK_NE(ancestor, window);
-  DCHECK(root_->Contains(window));
+void FocusController::ProcessDrawnOrRootChange(ServerWindow* ancestor,
+                                               ServerWindow* window) {
   drawn_tracker_.reset();
 
   // Find the window that triggered this state-change notification.
@@ -305,10 +293,24 @@ void FocusController::OnDrawnStateWillChange(ServerWindow* ancestor,
   SetFocusedWindowImpl(FocusControllerChangeSource::DRAWN_STATE_CHANGED, focus);
 }
 
+void FocusController::OnDrawnStateWillChange(ServerWindow* ancestor,
+                                             ServerWindow* window,
+                                             bool is_drawn) {
+  DCHECK(!is_drawn);
+  DCHECK_NE(ancestor, window);
+  DCHECK(root_->Contains(window));
+  ProcessDrawnOrRootChange(ancestor, window);
+}
+
 void FocusController::OnDrawnStateChanged(ServerWindow* ancestor,
                                           ServerWindow* window,
                                           bool is_drawn) {
   // DCHECK(false);  TODO(sadrul):
+}
+
+void FocusController::OnRootWillChange(ServerWindow* ancestor,
+                                       ServerWindow* window) {
+  ProcessDrawnOrRootChange(ancestor, window);
 }
 
 }  // namespace ws

@@ -70,6 +70,8 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
 
   ~SharedBuffer();
 
+  // DEPRECATED: use a segment iterator, FlatData or Copy() instead.
+  //
   // Calling this function will force internal segmented buffers to be merged
   // into a flat buffer. Use getSomeData() whenever possible for better
   // performance.
@@ -79,7 +81,7 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
 
   bool IsEmpty() const { return !size(); }
 
-  void Append(PassRefPtr<SharedBuffer>);
+  void Append(const SharedBuffer&);
 
   HAS_STRICTLY_TYPED_ARG
   void Append(const char* data, STRICTLY_TYPED_ARG(size)) {
@@ -90,7 +92,9 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
 
   void Clear();
 
-  PassRefPtr<SharedBuffer> Copy() const;
+  // Copies the segmented data into a contiguous buffer.  Use GetSomeData() or
+  // ForEachSegment() whenever possible, as they are cheaper.
+  Vector<char> Copy() const;
 
   // Return the number of consecutive bytes after "position". "data"
   // points to the first byte.
@@ -112,26 +116,14 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
     return GetSomeDataInternal(data, position);
   }
 
-  // Returns the content data into "dest" as a flat buffer. "byteLength" must
-  // exactly match with size(). |dest| must not be null even if |bytesLength|
-  // is 0.
+  // Copies |byteLength| bytes from the beginning of the content data into
+  // |dest| as a flat buffer. Returns true on success, otherwise the content of
+  // |dest| is not guaranteed.
   HAS_STRICTLY_TYPED_ARG
-  void GetAsBytes(void* dest, STRICTLY_TYPED_ARG(byte_length)) const {
+  WARN_UNUSED_RESULT
+  bool GetBytes(void* dest, STRICTLY_TYPED_ARG(byte_length)) const {
     STRICT_ARG_TYPE(size_t);
-    DCHECK_EQ(byte_length, size());
-    auto result = GetAsBytesInternal(dest, 0, byte_length);
-    DCHECK(result);
-  }
-
-  // Copies "byteLength" bytes from "position"-th bytes (0 origin) of the
-  // content data into "dest" as a flat buffer, Returns true on success,
-  // otherwise the content of "dest" is not guaranteed.
-  HAS_STRICTLY_TYPED_ARG
-  bool GetPartAsBytes(void* dest,
-                      STRICTLY_TYPED_ARG(position),
-                      STRICTLY_TYPED_ARG(byte_length)) const {
-    STRICT_ARG_TYPE(size_t);
-    return GetAsBytesInternal(dest, position, byte_length);
+    return GetBytesInternal(dest, byte_length);
   }
 
   // Creates an SkData and copies this SharedBuffer's contents to that
@@ -139,6 +131,43 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
   sk_sp<SkData> GetAsSkData() const;
 
   void OnMemoryDump(const String& dump_prefix, WebProcessMemoryDump*) const;
+
+  // Helper for applying a lambda to all data segments, sequentially:
+  //
+  //   bool func(const char* segment, size_t segment_size,
+  //             size_t segment_offset);
+  //
+  // The iterator stops early when the lambda returns |false|.
+  //
+  template <typename Func>
+  void ForEachSegment(Func&& func) const {
+    const char* segment;
+    size_t pos = 0;
+
+    while (size_t length = GetSomeData(segment, pos)) {
+      if (!func(segment, length, pos))
+        break;
+      pos += length;
+    }
+  }
+
+  // Helper for providing a contiguous view of the data.  If the SharedBuffer is
+  // segmented, this will copy/merge all segments into a temporary buffer.
+  // In general, clients should use the efficient/segmented accessors.
+  class PLATFORM_EXPORT DeprecatedFlatData {
+    STACK_ALLOCATED();
+
+   public:
+    explicit DeprecatedFlatData(PassRefPtr<const SharedBuffer>);
+
+    const char* Data() const { return data_; }
+    size_t size() const { return buffer_->size(); }
+
+   private:
+    RefPtr<const SharedBuffer> buffer_;
+    Vector<char> flat_buffer_;
+    const char* data_;
+  };
 
  private:
   SharedBuffer();
@@ -150,7 +179,7 @@ class PLATFORM_EXPORT SharedBuffer : public RefCounted<SharedBuffer> {
   void MergeSegmentsIntoBuffer() const;
 
   void AppendInternal(const char* data, size_t);
-  bool GetAsBytesInternal(void* dest, size_t, size_t) const;
+  bool GetBytesInternal(void* dest, size_t) const;
   size_t GetSomeDataInternal(const char*& data, size_t position) const;
 
   size_t size_;

@@ -8,8 +8,7 @@ import logging
 
 from webkitpy.common.system.executive import ScriptError
 from webkitpy.w3c.chromium_commit import ChromiumCommit
-from webkitpy.w3c.common import WPT_GH_SSH_URL_TEMPLATE, CHROMIUM_WPT_DIR
-
+from webkitpy.w3c.common import WPT_GH_SSH_URL_TEMPLATE, WPT_MIRROR_URL, CHROMIUM_WPT_DIR
 
 _log = logging.getLogger(__name__)
 
@@ -17,7 +16,8 @@ _log = logging.getLogger(__name__)
 class LocalWPT(object):
 
     def __init__(self, host, gh_token=None, path='/tmp/wpt'):
-        """
+        """Initializes a LocalWPT instance.
+
         Args:
             host: A Host object.
             path: Optional, the path to the web-platform-tests repo.
@@ -29,22 +29,32 @@ class LocalWPT(object):
         self.gh_token = gh_token
 
     def fetch(self):
-        assert self.gh_token, 'LocalWPT.gh_token required for fetch'
+        """Fetches a copy of the web-platform-tests repo in `self.path`."""
         if self.host.filesystem.exists(self.path):
             _log.info('WPT checkout exists at %s, fetching latest', self.path)
             self.run(['git', 'fetch', 'origin'])
             self.run(['git', 'checkout', 'origin/master'])
-        else:
-            _log.info('Cloning GitHub w3c/web-platform-tests into %s', self.path)
+            return
+
+        _log.info('Cloning GitHub w3c/web-platform-tests into %s', self.path)
+        if self.gh_token:
             remote_url = WPT_GH_SSH_URL_TEMPLATE.format(self.gh_token)
-            self.host.executive.run_command(['git', 'clone', remote_url, self.path])
+        else:
+            remote_url = WPT_MIRROR_URL
+            _log.info('No credentials given, using wpt mirror URL.')
+            _log.info('It is possible for the mirror to be delayed; see https://crbug.com/698272.')
+        self.host.executive.run_command(['git', 'clone', remote_url, self.path])
 
     def run(self, command, **kwargs):
         """Runs a command in the local WPT directory."""
         return self.host.executive.run_command(command, cwd=self.path, **kwargs)
 
     def most_recent_chromium_commit(self):
-        """Finds the most recent commit in WPT with a Chromium commit position."""
+        """Finds the most recent commit in WPT with a Chromium commit position.
+
+        Returns:
+            A pair (commit hash, ChromiumCommit instance).
+        """
         wpt_commit_hash = self.run(['git', 'rev-list', 'HEAD', '-n', '1', '--grep=Cr-Commit-Position'])
         if not wpt_commit_hash:
             return None, None
@@ -58,6 +68,7 @@ class LocalWPT(object):
         return wpt_commit_hash, chromium_commit
 
     def clean(self):
+        """Resets git to a clean state, on origin/master with no changed files."""
         self.run(['git', 'reset', '--hard', 'HEAD'])
         self.run(['git', 'clean', '-fdx'])
         self.run(['git', 'checkout', 'origin/master'])
@@ -81,7 +92,7 @@ class LocalWPT(object):
             _log.info('Deleting old branch %s', branch_name)
             self.run(['git', 'branch', '-D', branch_name])
         except ScriptError:
-            # Ignore errors if branch not found.
+            # This might mean the branch wasn't found. Ignore this error.
             pass
 
         _log.info('Creating local branch %s', branch_name)
@@ -127,11 +138,12 @@ class LocalWPT(object):
             self.run(['git', 'apply', '-'], input=patch)
             self.run(['git', 'add', '.'])
             output = self.run(['git', 'diff', 'origin/master'])
-        except ScriptError:
-            _log.warning('Patch did not apply cleanly, skipping.')
+        except ScriptError as e:
+            _log.info('Patch did not apply cleanly for the following commit:')
             if chromium_commit:
-                _log.warning('Commit details:\n%s\n%s', chromium_commit.sha,
-                             chromium_commit.subject())
+                _log.info('Commit: %s', chromium_commit.url())
+                _log.info('Commit subject: "%s"', chromium_commit.subject())
+                _log.info('Message: %s\n\n', e.message)
             output = ''
 
         self.clean()

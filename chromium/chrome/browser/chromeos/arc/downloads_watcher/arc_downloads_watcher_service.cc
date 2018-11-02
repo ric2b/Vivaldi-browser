@@ -7,7 +7,6 @@
 #include <string.h>
 
 #include <algorithm>
-#include <iterator>
 #include <map>
 #include <memory>
 #include <utility>
@@ -17,13 +16,18 @@
 #include "base/files/file_path.h"
 #include "base/files/file_path_watcher.h"
 #include "base/memory/ptr_util.h"
+#include "base/memory/singleton.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "base/time/time.h"
 #include "chrome/browser/download/download_prefs.h"
-#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/common/chrome_paths.h"
 #include "components/arc/arc_bridge_service.h"
+#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "content/public/browser/browser_thread.h"
 
 using content::BrowserThread;
@@ -42,56 +46,6 @@ const base::FilePath::CharType kAndroidDownloadDir[] =
 // map.
 const base::TimeDelta kBuildTimestampMapDelay =
     base::TimeDelta::FromMilliseconds(1000);
-
-// The set of media file extensions supported by Android MediaScanner.
-// Entries must be lower-case and sorted by lexicographical order for
-// binary search.
-// The current list was taken from aosp-marshmallow version of
-// frameworks/base/media/java/android/media/MediaFile.java.
-const char* kAndroidSupportedMediaExtensions[] = {
-    ".3g2",    // FILE_TYPE_3GPP2, video/3gpp2
-    ".3gp",    // FILE_TYPE_3GPP, video/3gpp
-    ".3gpp",   // FILE_TYPE_3GPP, video/3gpp
-    ".3gpp2",  // FILE_TYPE_3GPP2, video/3gpp2
-    ".aac",    // FILE_TYPE_AAC, audio/aac, audio/aac-adts
-    ".amr",    // FILE_TYPE_AMR, audio/amr
-    ".asf",    // FILE_TYPE_ASF, video/x-ms-asf
-    ".avi",    // FILE_TYPE_AVI, video/avi
-    ".awb",    // FILE_TYPE_AWB, audio/amr-wb
-    ".bmp",    // FILE_TYPE_BMP, image/x-ms-bmp
-    ".fl",     // FILE_TYPE_FL, application/x-android-drm-fl
-    ".gif",    // FILE_TYPE_GIF, image/gif
-    ".imy",    // FILE_TYPE_IMY, audio/imelody
-    ".jpeg",   // FILE_TYPE_JPEG, image/jpeg
-    ".jpg",    // FILE_TYPE_JPEG, image/jpeg
-    ".m4a",    // FILE_TYPE_M4A, audio/mp4
-    ".m4v",    // FILE_TYPE_M4V, video/mp4
-    ".mid",    // FILE_TYPE_MID, audio/midi
-    ".midi",   // FILE_TYPE_MID, audio/midi
-    ".mka",    // FILE_TYPE_MKA, audio/x-matroska
-    ".mkv",    // FILE_TYPE_MKV, video/x-matroska
-    ".mp3",    // FILE_TYPE_MP3, audio/mpeg
-    ".mp4",    // FILE_TYPE_MP4, video/mp4
-    ".mpeg",   // FILE_TYPE_MP4, video/mpeg, video/mp2p
-    ".mpg",    // FILE_TYPE_MP4, video/mpeg, video/mp2p
-    ".mpga",   // FILE_TYPE_MP3, audio/mpeg
-    ".mxmf",   // FILE_TYPE_MID, audio/midi
-    ".oga",    // FILE_TYPE_OGG, application/ogg
-    ".ogg",    // FILE_TYPE_OGG, audio/ogg, application/ogg
-    ".ota",    // FILE_TYPE_MID, audio/midi
-    ".png",    // FILE_TYPE_PNG, image/png
-    ".rtttl",  // FILE_TYPE_MID, audio/midi
-    ".rtx",    // FILE_TYPE_MID, audio/midi
-    ".smf",    // FILE_TYPE_SMF, audio/sp-midi
-    ".ts",     // FILE_TYPE_MP2TS, video/mp2ts
-    ".wav",    // FILE_TYPE_WAV, audio/x-wav
-    ".wbmp",   // FILE_TYPE_WBMP, image/vnd.wap.wbmp
-    ".webm",   // FILE_TYPE_WEBM, video/webm
-    ".webp",   // FILE_TYPE_WEBP, image/webp
-    ".wma",    // FILE_TYPE_WMA, audio/x-ms-wma
-    ".wmv",    // FILE_TYPE_WMV, video/x-ms-wmv
-    ".xmf",    // FILE_TYPE_MID, audio/midi
-};
 
 // Compares two TimestampMaps and returns the list of file paths added/removed
 // or whose timestamp have changed.
@@ -164,21 +118,110 @@ std::pair<base::TimeTicks, TimestampMap> BuildTimestampMapCallback(
   return std::make_pair(snapshot_time, std::move(current_timestamp_map));
 }
 
+// Singleton factory for ArcDownloadsWatcherService.
+class ArcDownloadsWatcherServiceFactory
+    : public internal::ArcBrowserContextKeyedServiceFactoryBase<
+          ArcDownloadsWatcherService,
+          ArcDownloadsWatcherServiceFactory> {
+ public:
+  // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
+  static constexpr const char* kName = "ArcDownloadsWatcherServiceFactory";
+
+  static ArcDownloadsWatcherServiceFactory* GetInstance() {
+    return base::Singleton<ArcDownloadsWatcherServiceFactory>::get();
+  }
+
+ private:
+  friend base::DefaultSingletonTraits<ArcDownloadsWatcherServiceFactory>;
+  ArcDownloadsWatcherServiceFactory() = default;
+  ~ArcDownloadsWatcherServiceFactory() override = default;
+};
+
 }  // namespace
+
+// The set of media file extensions supported by Android MediaScanner.
+// Entries must be lower-case and sorted by lexicographical order for
+// binary search.
+//
+// The current list was taken from aosp-nougat version of
+// frameworks/base/media/java/android/media/MediaFile.java, and included
+// file type categories are:
+// - Audio
+// - MIDI
+// - Video
+// - Image
+// - Raw image
+const char* kAndroidSupportedMediaExtensions[] = {
+    ".3g2",    // FILE_TYPE_3GPP2, video/3gpp2
+    ".3gp",    // FILE_TYPE_3GPP, video/3gpp
+    ".3gpp",   // FILE_TYPE_3GPP, video/3gpp
+    ".3gpp2",  // FILE_TYPE_3GPP2, video/3gpp2
+    ".aac",    // FILE_TYPE_AAC, audio/aac, audio/aac-adts
+    ".amr",    // FILE_TYPE_AMR, audio/amr
+    ".arw",    // FILE_TYPE_ARW, image/x-sony-arw
+    ".asf",    // FILE_TYPE_ASF, video/x-ms-asf
+    ".avi",    // FILE_TYPE_AVI, video/avi
+    ".awb",    // FILE_TYPE_AWB, audio/amr-wb
+    ".bmp",    // FILE_TYPE_BMP, image/x-ms-bmp
+    ".cr2",    // FILE_TYPE_CR2, image/x-canon-cr2
+    ".dng",    // FILE_TYPE_DNG, image/x-adobe-dng
+    ".fl",     // FILE_TYPE_FL, application/x-android-drm-fl
+    ".gif",    // FILE_TYPE_GIF, image/gif
+    ".imy",    // FILE_TYPE_IMY, audio/imelody
+    ".jpeg",   // FILE_TYPE_JPEG, image/jpeg
+    ".jpg",    // FILE_TYPE_JPEG, image/jpeg
+    ".m4a",    // FILE_TYPE_M4A, audio/mp4
+    ".m4v",    // FILE_TYPE_M4V, video/mp4
+    ".mid",    // FILE_TYPE_MID, audio/midi
+    ".midi",   // FILE_TYPE_MID, audio/midi
+    ".mka",    // FILE_TYPE_MKA, audio/x-matroska
+    ".mkv",    // FILE_TYPE_MKV, video/x-matroska
+    ".mov",    // FILE_TYPE_QT, video/quicktime
+    ".mp3",    // FILE_TYPE_MP3, audio/mpeg
+    ".mp4",    // FILE_TYPE_MP4, video/mp4
+    ".mpeg",   // FILE_TYPE_MP4, video/mpeg, video/mp2p
+    ".mpg",    // FILE_TYPE_MP4, video/mpeg, video/mp2p
+    ".mpga",   // FILE_TYPE_MP3, audio/mpeg
+    ".mxmf",   // FILE_TYPE_MID, audio/midi
+    ".nef",    // FILE_TYPE_NEF, image/x-nikon-nef
+    ".nrw",    // FILE_TYPE_NRW, image/x-nikon-nrw
+    ".oga",    // FILE_TYPE_OGG, application/ogg
+    ".ogg",    // FILE_TYPE_OGG, audio/ogg, application/ogg
+    ".orf",    // FILE_TYPE_ORF, image/x-olympus-orf
+    ".ota",    // FILE_TYPE_MID, audio/midi
+    ".pef",    // FILE_TYPE_PEF, image/x-pentax-pef
+    ".png",    // FILE_TYPE_PNG, image/png
+    ".raf",    // FILE_TYPE_RAF, image/x-fuji-raf
+    ".rtttl",  // FILE_TYPE_MID, audio/midi
+    ".rtx",    // FILE_TYPE_MID, audio/midi
+    ".rw2",    // FILE_TYPE_RW2, image/x-panasonic-rw2
+    ".smf",    // FILE_TYPE_SMF, audio/sp-midi
+    ".srw",    // FILE_TYPE_SRW, image/x-samsung-srw
+    ".ts",     // FILE_TYPE_MP2TS, video/mp2ts
+    ".wav",    // FILE_TYPE_WAV, audio/x-wav
+    ".wbmp",   // FILE_TYPE_WBMP, image/vnd.wap.wbmp
+    ".webm",   // FILE_TYPE_WEBM, video/webm
+    ".webp",   // FILE_TYPE_WEBP, image/webp
+    ".wma",    // FILE_TYPE_WMA, audio/x-ms-wma
+    ".wmv",    // FILE_TYPE_WMV, video/x-ms-wmv
+    ".xmf",    // FILE_TYPE_MID, audio/midi
+};
+const int kAndroidSupportedMediaExtensionsSize =
+    arraysize(kAndroidSupportedMediaExtensions);
 
 bool HasAndroidSupportedMediaExtension(const base::FilePath& path) {
   const std::string extension = base::ToLowerASCII(path.Extension());
   const auto less_comparator = [](const char* a, const char* b) {
     return strcmp(a, b) < 0;
   };
-  DCHECK(std::is_sorted(std::begin(kAndroidSupportedMediaExtensions),
-                        std::end(kAndroidSupportedMediaExtensions),
-                        less_comparator));
-  auto** iter = std::lower_bound(std::begin(kAndroidSupportedMediaExtensions),
-                                 std::end(kAndroidSupportedMediaExtensions),
-                                 extension.c_str(), less_comparator);
-  return iter != std::end(kAndroidSupportedMediaExtensions) &&
-         strcmp(*iter, extension.c_str()) == 0;
+  DCHECK(std::is_sorted(
+      kAndroidSupportedMediaExtensions,
+      kAndroidSupportedMediaExtensions + kAndroidSupportedMediaExtensionsSize,
+      less_comparator));
+  return std::binary_search(
+      kAndroidSupportedMediaExtensions,
+      kAndroidSupportedMediaExtensions + kAndroidSupportedMediaExtensionsSize,
+      extension.c_str(), less_comparator);
 }
 
 // The core part of ArcDownloadsWatcherService to watch for file changes in
@@ -187,7 +230,7 @@ class ArcDownloadsWatcherService::DownloadsWatcher {
  public:
   using Callback = base::Callback<void(const std::vector<std::string>& paths)>;
 
-  explicit DownloadsWatcher(const Callback& callback);
+  DownloadsWatcher(content::BrowserContext* context, const Callback& callback);
   ~DownloadsWatcher();
 
   // Starts watching Downloads directory.
@@ -217,6 +260,8 @@ class ArcDownloadsWatcherService::DownloadsWatcher {
   // Whether or not there is an outstanding task to update last_timestamp_map_.
   bool outstanding_task_;
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
   // Note: This should remain the last member so it'll be destroyed and
   // invalidate the weak pointers before any other members are destroyed.
   base::WeakPtrFactory<DownloadsWatcher> weak_ptr_factory_;
@@ -225,24 +270,26 @@ class ArcDownloadsWatcherService::DownloadsWatcher {
 };
 
 ArcDownloadsWatcherService::DownloadsWatcher::DownloadsWatcher(
+    content::BrowserContext* context,
     const Callback& callback)
     : callback_(callback),
       last_notify_time_(base::TimeTicks()),
       outstanding_task_(false),
       weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DETACH_FROM_SEQUENCE(sequence_checker_);
 
-  downloads_dir_ = DownloadPrefs(ProfileManager::GetActiveUserProfile())
+  downloads_dir_ = DownloadPrefs(Profile::FromBrowserContext(context))
                        .GetDefaultDownloadDirectoryForProfile()
                        .StripTrailingSeparators();
 }
 
 ArcDownloadsWatcherService::DownloadsWatcher::~DownloadsWatcher() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 void ArcDownloadsWatcherService::DownloadsWatcher::Start() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Initialize with the current timestamp map and avoid initial notification.
   // It is not needed since MediaProvider scans whole storage area on boot.
@@ -261,13 +308,13 @@ void ArcDownloadsWatcherService::DownloadsWatcher::OnFilePathChanged(
     bool error) {
   // On Linux, |error| is always false. Also, |path| is always the same path
   // as one given to FilePathWatcher::Watch().
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!outstanding_task_) {
     outstanding_task_ = true;
-    BrowserThread::PostDelayedTask(
-        BrowserThread::FILE, FROM_HERE,
-        base::Bind(&DownloadsWatcher::DelayBuildTimestampMap,
-                   weak_ptr_factory_.GetWeakPtr()),
+    base::SequencedTaskRunnerHandle::Get()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(&DownloadsWatcher::DelayBuildTimestampMap,
+                       weak_ptr_factory_.GetWeakPtr()),
         kBuildTimestampMapDelay);
   } else {
     last_notify_time_ = base::TimeTicks::Now();
@@ -275,7 +322,7 @@ void ArcDownloadsWatcherService::DownloadsWatcher::OnFilePathChanged(
 }
 
 void ArcDownloadsWatcherService::DownloadsWatcher::DelayBuildTimestampMap() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(outstanding_task_);
   base::PostTaskWithTraitsAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
@@ -286,7 +333,7 @@ void ArcDownloadsWatcherService::DownloadsWatcher::DelayBuildTimestampMap() {
 
 void ArcDownloadsWatcherService::DownloadsWatcher::OnBuildTimestampMap(
     std::pair<base::TimeTicks, TimestampMap> timestamp_and_map) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(outstanding_task_);
   base::TimeTicks snapshot_time = timestamp_and_map.first;
   TimestampMap current_timestamp_map = std::move(timestamp_and_map.second);
@@ -301,25 +348,43 @@ void ArcDownloadsWatcherService::DownloadsWatcher::OnBuildTimestampMap(
   }
   BrowserThread::PostTask(
       BrowserThread::UI, FROM_HERE,
-      base::Bind(callback_, base::Passed(std::move(string_paths))));
+      base::BindOnce(callback_, base::Passed(std::move(string_paths))));
   if (last_notify_time_ > snapshot_time)
     DelayBuildTimestampMap();
   else
     outstanding_task_ = false;
 }
 
+// static
+ArcDownloadsWatcherService* ArcDownloadsWatcherService::GetForBrowserContext(
+    content::BrowserContext* context) {
+  return ArcDownloadsWatcherServiceFactory::GetForBrowserContext(context);
+}
+
 ArcDownloadsWatcherService::ArcDownloadsWatcherService(
+    content::BrowserContext* context,
     ArcBridgeService* bridge_service)
-    : ArcService(bridge_service), weak_ptr_factory_(this) {
+    : context_(context),
+      arc_bridge_service_(bridge_service),
+      file_task_runner_(
+          base::CreateSequencedTaskRunnerWithTraits({base::MayBlock()})),
+      weak_ptr_factory_(this) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  arc_bridge_service()->file_system()->AddObserver(this);
+  arc_bridge_service_->file_system()->AddObserver(this);
 }
 
 ArcDownloadsWatcherService::~ArcDownloadsWatcherService() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  arc_bridge_service()->file_system()->RemoveObserver(this);
+
   StopWatchingDownloads();
   DCHECK(!watcher_);
+
+  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
+  // BrowserContextKeyedService is not nested.
+  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
+  // so do not touch it.
+  if (ArcServiceManager::Get())
+    arc_bridge_service_->file_system()->RemoveObserver(this);
 }
 
 void ArcDownloadsWatcherService::OnInstanceReady() {
@@ -337,19 +402,17 @@ void ArcDownloadsWatcherService::StartWatchingDownloads() {
   StopWatchingDownloads();
   DCHECK(!watcher_);
   watcher_ = base::MakeUnique<DownloadsWatcher>(
-      base::Bind(&ArcDownloadsWatcherService::OnDownloadsChanged,
-                 weak_ptr_factory_.GetWeakPtr()));
-  BrowserThread::PostTask(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&DownloadsWatcher::Start, base::Unretained(watcher_.get())));
+      context_, base::Bind(&ArcDownloadsWatcherService::OnDownloadsChanged,
+                           weak_ptr_factory_.GetWeakPtr()));
+  file_task_runner_->PostTask(FROM_HERE,
+                              base::BindOnce(&DownloadsWatcher::Start,
+                                             base::Unretained(watcher_.get())));
 }
 
 void ArcDownloadsWatcherService::StopWatchingDownloads() {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  if (watcher_) {
-    BrowserThread::DeleteSoon(BrowserThread::FILE, FROM_HERE,
-                              watcher_.release());
-  }
+  if (watcher_)
+    file_task_runner_->DeleteSoon(FROM_HERE, watcher_.release());
 }
 
 void ArcDownloadsWatcherService::OnDownloadsChanged(
@@ -357,7 +420,7 @@ void ArcDownloadsWatcherService::OnDownloadsChanged(
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   auto* instance = ARC_GET_INSTANCE_FOR_METHOD(
-      arc_bridge_service()->file_system(), RequestMediaScan);
+      arc_bridge_service_->file_system(), RequestMediaScan);
   if (!instance)
     return;
   instance->RequestMediaScan(paths);

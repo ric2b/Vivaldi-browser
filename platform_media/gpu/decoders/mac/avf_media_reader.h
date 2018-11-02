@@ -13,7 +13,9 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/time/time.h"
+#include "gpu/gpu_export.h"
 #include "media/base/data_buffer.h"
+#include "media/base/data_source.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -28,14 +30,14 @@ class IPCDataSource;
 // AVFMediaReader takes raw media data as input and outputs decoded audio and
 // video data, handling both the demuxing and decoding internally.  Input data
 // is provided via an IPCDataSource.
-class AVFMediaReader {
+class GPU_EXPORT AVFMediaReader {
  public:
   // Once AVFMediaReader has been constructed, all functions must run on the
   // |queue| passed to the constructor.
   explicit AVFMediaReader(dispatch_queue_t queue);
   ~AVFMediaReader();
 
-  bool Initialize(IPCDataSource* data_source, const std::string& mime_type);
+  bool Initialize(media::DataSource* data_source, const std::string& mime_type);
 
   int bitrate() const;
   base::TimeDelta duration() const;

@@ -11,13 +11,11 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/common/extensions/permissions/chrome_permission_message_rules.h"
-#include "chrome/grit/generated_resources.h"
 #include "extensions/common/extensions_client.h"
 #include "extensions/common/permissions/permission_message_util.h"
 #include "extensions/common/permissions/permission_set.h"
 #include "extensions/common/url_pattern.h"
 #include "extensions/common/url_pattern_set.h"
-#include "extensions/strings/grit/extensions_strings.h"
 #include "url/gurl.h"
 
 namespace extensions {
@@ -196,6 +194,12 @@ bool ChromePermissionMessageProvider::IsAPIOrManifestPrivilegeIncrease(
     DropPermissionParameter(id, &old_ids);
     DropPermissionParameter(id, &new_ids);
   }
+
+  // For M62, we added a new permission ID for new tab page overrides. Consider
+  // the addition of this permission to not result in a privilege increase for
+  // the time being.
+  // TODO(robertshield): Remove this once most of the population is on M62+
+  new_ids.erase(APIPermission::kNewTabPageOverride);
 
   // If all the IDs were already there, it's not a privilege increase.
   if (old_ids.Includes(new_ids))

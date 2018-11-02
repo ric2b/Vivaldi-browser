@@ -30,17 +30,17 @@
 #include "core/dom/Document.h"
 #include "core/dom/PseudoElement.h"
 #include "core/editing/FrameSelection.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/layout/LayoutDetailsMarker.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutFileUploadControl.h"
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutListMarker.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/api/LayoutViewItem.h"
@@ -218,7 +218,7 @@ void LayoutTreeAsText::WriteLayoutObject(TextStream& ts,
         ts << o.ResolveColor(CSSPropertyBorderTopColor) << ")";
       }
 
-      if (o.Style()->BorderRight() != prev_border) {
+      if (!o.Style()->BorderRightEquals(prev_border)) {
         prev_border = o.Style()->BorderRight();
         if (!box.BorderRight()) {
           ts << " none";
@@ -229,7 +229,7 @@ void LayoutTreeAsText::WriteLayoutObject(TextStream& ts,
         }
       }
 
-      if (o.Style()->BorderBottom() != prev_border) {
+      if (!o.Style()->BorderBottomEquals(prev_border)) {
         prev_border = box.Style()->BorderBottom();
         if (!box.BorderBottom()) {
           ts << " none";
@@ -240,7 +240,7 @@ void LayoutTreeAsText::WriteLayoutObject(TextStream& ts,
         }
       }
 
-      if (o.Style()->BorderLeft() != prev_border) {
+      if (!o.Style()->BorderLeftEquals(prev_border)) {
         prev_border = o.Style()->BorderLeft();
         if (!box.BorderLeft()) {
           ts << " none";
@@ -508,8 +508,8 @@ void Write(TextStream& ts,
     Write(ts, *child, indent + 1, behavior);
   }
 
-  if (o.IsLayoutPart()) {
-    FrameView* frame_view = ToLayoutPart(o).ChildFrameView();
+  if (o.IsLayoutEmbeddedContent()) {
+    LocalFrameView* frame_view = ToLayoutEmbeddedContent(o).ChildFrameView();
     if (frame_view) {
       LayoutViewItem root_item = frame_view->GetLayoutViewItem();
       if (!root_item.IsNull()) {
@@ -546,7 +546,7 @@ static void Write(TextStream& ts,
 
   bool report_frame_scroll_info =
       layer.GetLayoutObject().IsLayoutView() &&
-      !RuntimeEnabledFeatures::rootLayerScrollingEnabled();
+      !RuntimeEnabledFeatures::RootLayerScrollingEnabled();
 
   if (report_frame_scroll_info) {
     LayoutView& layout_view = ToLayoutView(layer.GetLayoutObject());
@@ -673,8 +673,8 @@ void LayoutTreeAsText::WriteLayers(TextStream& ts,
           : layer->IntersectsDamageRect(layer_bounds, damage_rect.Rect(),
                                         offset_from_root);
 
-  if (layer->GetLayoutObject().IsLayoutPart() &&
-      ToLayoutPart(layer->GetLayoutObject()).IsThrottledFrameView())
+  if (layer->GetLayoutObject().IsLayoutEmbeddedContent() &&
+      ToLayoutEmbeddedContent(layer->GetLayoutObject()).IsThrottledFrameView())
     should_paint = false;
 
   Vector<PaintLayerStackingNode*>* neg_list =
@@ -788,8 +788,8 @@ static void WriteSelection(TextStream& ts, const LayoutObject* o) {
     ts << "selection start: position "
        << selection.Start().ComputeEditingOffset() << " of "
        << NodePosition(selection.Start().AnchorNode()) << "\n"
-       << "selection end:   position " << selection.end().ComputeEditingOffset()
-       << " of " << NodePosition(selection.end().AnchorNode()) << "\n";
+       << "selection end:   position " << selection.End().ComputeEditingOffset()
+       << " of " << NodePosition(selection.End().AnchorNode()) << "\n";
   }
 }
 

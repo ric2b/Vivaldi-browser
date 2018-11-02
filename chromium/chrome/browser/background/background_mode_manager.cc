@@ -154,7 +154,7 @@ void BackgroundModeManager::BackgroundModeData::BuildProfileMenu(
       DCHECK_LT(command_id, IDC_MinimumLabelValue);
       command_id_handler_vector_->push_back(
           base::Bind(&BackgroundModeManager::LaunchBackgroundApplication,
-                     profile_, application.get()));
+                     profile_, base::RetainedRef(application)));
       menu->AddItem(command_id, base::UTF8ToUTF16(name));
       if (icon)
         menu->SetIcon(menu->GetItemCount() - 1, gfx::Image(*icon));
@@ -287,6 +287,7 @@ BackgroundModeManager::BackgroundModeManager(
       in_background_mode_(false),
       keep_alive_for_test_(false),
       background_mode_suspended_(false),
+      task_runner_(CreateTaskRunner()),
       weak_factory_(this) {
   // We should never start up if there is no browser process or if we are
   // currently quitting.
@@ -644,7 +645,6 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
         chrome::ShowAboutChrome(bmd->GetBrowserWindow());
       } else {
         UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_NO_TUTORIAL,
                           profiles::USER_MANAGER_SELECT_PROFILE_ABOUT_CHROME);
       }
       break;
@@ -654,7 +654,6 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
         chrome::OpenTaskManager(bmd->GetBrowserWindow());
       } else {
         UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_NO_TUTORIAL,
                           profiles::USER_MANAGER_SELECT_PROFILE_TASK_MANAGER);
       }
       break;
@@ -683,7 +682,6 @@ void BackgroundModeManager::ExecuteCommand(int command_id, int event_flags) {
         bmd->ExecuteCommand(command_id, event_flags);
       } else {
         UserManager::Show(base::FilePath(),
-                          profiles::USER_MANAGER_NO_TUTORIAL,
                           profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
       }
       break;

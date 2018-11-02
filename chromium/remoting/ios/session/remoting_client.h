@@ -5,6 +5,7 @@
 #ifndef REMOTING_IOS_SESSION_REMOTING_CLIENT_H_
 #define REMOTING_IOS_SESSION_REMOTING_CLIENT_H_
 
+#import <CoreGraphics/CoreGraphics.h>
 #import <Foundation/Foundation.h>
 
 #import "remoting/ios/display/gl_display_handler.h"
@@ -29,7 +30,11 @@ extern NSString* const kHostSessionPinProvided;
 
 // List of keys in user info from events.
 extern NSString* const kSessionDetails;
+extern NSString* const kSessionSupportsPairing;
 extern NSString* const kSessonStateErrorCode;
+
+extern NSString* const kHostSessionCreatePairing;
+extern NSString* const kHostSessionHostName;
 extern NSString* const kHostSessionPin;
 
 // Remoting Client is the entry point for starting a session with a remote

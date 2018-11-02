@@ -85,18 +85,17 @@ struct CacheControlHeader {
 
 struct ServerTimingHeader {
   String metric;
-  double duration;
+  double value;
   String description;
 
-  ServerTimingHeader(String metric, double duration, String description)
-      : metric(metric), duration(duration), description(description) {}
+  ServerTimingHeader(String metric, double value, String description)
+      : metric(metric), value(value), description(description) {}
 };
 
 using ServerTimingHeaderVector = Vector<std::unique_ptr<ServerTimingHeader>>;
 
 PLATFORM_EXPORT bool IsContentDispositionAttachment(const String&);
 PLATFORM_EXPORT bool IsValidHTTPHeaderValue(const String&);
-PLATFORM_EXPORT bool IsValidHTTPFieldContentRFC7230(const String&);
 // Checks whether the given string conforms to the |token| ABNF production
 // defined in the RFC 7230 or not.
 //
@@ -122,11 +121,7 @@ PLATFORM_EXPORT double ParseDate(const String&);
 // - OWSes at the head and the tail of the region before the first semicolon
 //   are trimmed.
 PLATFORM_EXPORT AtomicString ExtractMIMETypeFromMediaType(const AtomicString&);
-PLATFORM_EXPORT String ExtractCharsetFromMediaType(const String&);
-PLATFORM_EXPORT void FindCharsetInMediaType(const String& media_type,
-                                            unsigned& charset_pos,
-                                            unsigned& charset_len,
-                                            unsigned start = 0);
+
 PLATFORM_EXPORT ReflectedXSSDisposition
 ParseXSSProtectionHeader(const String& header,
                          String& failure_reason,
@@ -186,7 +181,7 @@ PLATFORM_EXPORT bool ParseContentRangeHeaderFor206(const String& content_range,
 PLATFORM_EXPORT std::unique_ptr<ServerTimingHeaderVector>
 ParseServerTimingHeader(const String&);
 
-PLATFORM_EXPORT String CheckDoubleQuotedString(const String&);
+using Mode = blink::ParsedContentType::Mode;
 
 }  // namespace blink
 

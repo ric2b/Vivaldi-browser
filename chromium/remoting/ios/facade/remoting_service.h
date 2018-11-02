@@ -7,17 +7,26 @@
 
 #import "remoting/client/chromoting_client_runtime.h"
 
-#include "base/memory/weak_ptr.h"
-#include "remoting/base/oauth_token_getter.h"
-
 @class HostInfo;
 @class UserInfo;
-@class RemotingAuthentication;
+
+@protocol RemotingAuthentication;
+
+typedef NS_ENUM(NSInteger, HostListState) {
+  // Nobody has requested a host list fetch.
+  HostListStateNotFetched,
+
+  // The host list is currently being fetched.
+  HostListStateFetching,
+
+  // The host list has been fetched.
+  HostListStateFetched,
+};
 
 // Eventing related keys:
 
 // Hosts did update event.
-extern NSString* const kHostsDidUpdate;
+extern NSString* const kHostListStateDidChange;
 // User did update event name.
 extern NSString* const kUserDidUpdate;
 // Map key for UserInfo object.
@@ -29,21 +38,25 @@ extern NSString* const kUserInfo;
 // singleton and should only be accessed via the |SharedInstance| method.
 @interface RemotingService : NSObject
 
-// Access to the singleton shared instance from this method.
-+ (RemotingService*)SharedInstance;
-
 // Start a request to fetch the host list. This will produce an notification on
 // |kHostsDidUpdate| when a new host is ready.
 - (void)requestHostListFetch;
 
-@property(nonatomic, readonly) RemotingAuthentication* authentication;
+// Access to the singleton shared instance from this property.
+@property(nonatomic, readonly, class) RemotingService* instance;
 
 // Returns the current host list.
 @property(nonatomic, readonly) NSArray<HostInfo*>* hosts;
 
+@property(nonatomic, readonly) HostListState hostListState;
+
 // The Chromoting Client Runtime, this holds the threads and other shared
 // resources used by the Chromoting clients
 @property(nonatomic, readonly) remoting::ChromotingClientRuntime* runtime;
+
+// This must be set immediately after the authentication object is created. It
+// can only be set once.
+@property(nonatomic) id<RemotingAuthentication> authentication;
 
 @end
 

@@ -71,6 +71,14 @@
 
 namespace extensions {
 
+namespace {
+
+// If true, the extensions client will behave as though there is always a
+// new chrome update.
+bool g_did_chrome_update_for_testing = false;
+
+}  // namespace
+
 ChromeExtensionsBrowserClient::ChromeExtensionsBrowserClient() {
   process_manager_delegate_.reset(new ChromeProcessManagerDelegate);
   api_client_.reset(new ChromeExtensionsAPIClient);
@@ -207,6 +215,9 @@ bool ChromeExtensionsBrowserClient::DidVersionUpdate(
   ExtensionPrefs* extension_prefs = ExtensionPrefs::Get(profile);
   if (!extension_prefs)
     return false;
+
+  if (g_did_chrome_update_for_testing)
+    return true;
 
   // If we're inside a browser test, then assume prefs are all up to date.
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kTestType))
@@ -437,6 +448,22 @@ KioskDelegate* ChromeExtensionsBrowserClient::GetKioskDelegate() {
   if (!kiosk_delegate_)
     kiosk_delegate_.reset(new ChromeKioskDelegate());
   return kiosk_delegate_.get();
+}
+
+bool ChromeExtensionsBrowserClient::IsLockScreenContext(
+    content::BrowserContext* context) {
+#if defined(OS_CHROMEOS)
+  return chromeos::ProfileHelper::IsLockScreenAppProfile(
+      Profile::FromBrowserContext(context));
+#else
+  return false;
+#endif
+}
+
+// static
+void ChromeExtensionsBrowserClient::set_did_chrome_update_for_testing(
+    bool did_update) {
+  g_did_chrome_update_for_testing = did_update;
 }
 
 }  // namespace extensions

@@ -134,14 +134,6 @@ Element* TableElementJustAfter(const VisiblePosition&);
 CORE_EXPORT Element* TableElementJustBefore(const VisiblePosition&);
 CORE_EXPORT Element* TableElementJustBefore(const VisiblePositionInFlatTree&);
 
-// Returns the next leaf node or nullptr if there are no more. Delivers leaf
-// nodes as if the whole DOM tree were a linear chain of its leaf nodes.
-Node* NextAtomicLeafNode(const Node& start);
-
-// Returns the previous leaf node or nullptr if there are no more. Delivers leaf
-// nodes as if the whole DOM tree were a linear chain of its leaf nodes.
-Node* PreviousAtomicLeafNode(const Node& start);
-
 template <typename Strategy>
 ContainerNode* ParentCrossingShadowBoundaries(const Node&);
 template <>
@@ -194,8 +186,9 @@ bool IsBlockFlowElement(const Node&);
 EUserSelect UsedValueOfUserSelect(const Node&);
 bool IsInPasswordField(const Position&);
 bool IsTextSecurityNode(const Node*);
-CORE_EXPORT TextDirection DirectionOfEnclosingBlock(const Position&);
-CORE_EXPORT TextDirection DirectionOfEnclosingBlock(const PositionInFlatTree&);
+CORE_EXPORT TextDirection DirectionOfEnclosingBlockOf(const Position&);
+CORE_EXPORT TextDirection
+DirectionOfEnclosingBlockOf(const PositionInFlatTree&);
 CORE_EXPORT TextDirection PrimaryDirectionOf(const Node&);
 
 // -------------------------------------------------------------------------

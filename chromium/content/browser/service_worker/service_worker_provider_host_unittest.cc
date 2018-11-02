@@ -18,6 +18,8 @@
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/browser/service_worker/service_worker_version.h"
 #include "content/common/url_schemes.h"
+#include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/child_process_host.h"
 #include "content/public/common/origin_util.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
@@ -40,7 +42,8 @@ class ServiceWorkerProviderHostTest : public testing::Test {
  protected:
   ServiceWorkerProviderHostTest()
       : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
-        next_provider_id_(1) {
+        next_renderer_provided_id_(1),
+        next_browser_provided_id_(-2) {
     SetContentClient(&test_content_client_);
   }
   ~ServiceWorkerProviderHostTest() override {}
@@ -54,11 +57,15 @@ class ServiceWorkerProviderHostTest : public testing::Test {
     context_ = helper_->context();
     script_url_ = GURL("https://www.example.com/service_worker.js");
     registration1_ = new ServiceWorkerRegistration(
-        GURL("https://www.example.com/"), 1L, context_->AsWeakPtr());
+        ServiceWorkerRegistrationOptions(GURL("https://www.example.com/")), 1L,
+        context_->AsWeakPtr());
     registration2_ = new ServiceWorkerRegistration(
-        GURL("https://www.example.com/example"), 2L, context_->AsWeakPtr());
+        ServiceWorkerRegistrationOptions(
+            GURL("https://www.example.com/example")),
+        2L, context_->AsWeakPtr());
     registration3_ = new ServiceWorkerRegistration(
-        GURL("https://other.example.com/"), 3L, context_->AsWeakPtr());
+        ServiceWorkerRegistrationOptions(GURL("https://other.example.com/")),
+        3L, context_->AsWeakPtr());
   }
 
   void TearDown() override {
@@ -75,10 +82,26 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   }
 
   ServiceWorkerProviderHost* CreateProviderHost(const GURL& document_url) {
-    std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForWindow(
-            helper_->mock_render_process_id(), next_provider_id_++,
-            true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr());
+    remote_endpoints_.emplace_back();
+    std::unique_ptr<ServiceWorkerProviderHost> host;
+    if (IsBrowserSideNavigationEnabled()) {
+      host = ServiceWorkerProviderHost::PreCreateNavigationHost(
+          helper_->context()->AsWeakPtr(), true,
+          base::Callback<WebContents*(void)>());
+      ServiceWorkerProviderHostInfo info(next_browser_provided_id_--,
+                                         1 /* route_id */,
+                                         SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                         true /* is_parent_frame_secure */);
+      remote_endpoints_.back().BindWithProviderHostInfo(&info);
+      host->CompleteNavigationInitialized(helper_->mock_render_process_id(),
+                                          std::move(info), nullptr);
+    } else {
+      host = CreateProviderHostForWindow(
+          helper_->mock_render_process_id(), next_renderer_provided_id_++,
+          true /* is_parent_frame_secure */, helper_->context()->AsWeakPtr(),
+          &remote_endpoints_.back());
+    }
+
     ServiceWorkerProviderHost* host_raw = host.get();
     host->SetDocumentUrl(document_url);
     context_->AddProviderHost(std::move(host));
@@ -87,11 +110,12 @@ class ServiceWorkerProviderHostTest : public testing::Test {
 
   ServiceWorkerProviderHost* CreateProviderHostWithInsecureParentFrame(
       const GURL& document_url) {
+    remote_endpoints_.emplace_back();
     std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForWindow(helper_->mock_render_process_id(),
-                                    next_provider_id_++,
-                                    false /* is_parent_frame_secure */,
-                                    helper_->context()->AsWeakPtr());
+        CreateProviderHostForWindow(
+            helper_->mock_render_process_id(), next_renderer_provided_id_++,
+            false /* is_parent_frame_secure */, helper_->context()->AsWeakPtr(),
+            &remote_endpoints_.back());
     ServiceWorkerProviderHost* host_raw = host.get();
     host->SetDocumentUrl(document_url);
     context_->AddProviderHost(std::move(host));
@@ -108,7 +132,9 @@ class ServiceWorkerProviderHostTest : public testing::Test {
   ServiceWorkerTestContentClient test_content_client_;
   TestContentBrowserClient test_content_browser_client_;
   ContentBrowserClient* old_content_browser_client_;
-  int next_provider_id_;
+  int next_renderer_provided_id_;
+  int next_browser_provided_id_;
+  std::vector<ServiceWorkerRemoteProviderEndpoint> remote_endpoints_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerProviderHostTest);
@@ -222,6 +248,107 @@ TEST_F(ServiceWorkerProviderHostTest, ContextSecurity) {
   provider_host_insecure_parent->SetDocumentUrl(url);
   EXPECT_FALSE(
       provider_host_insecure_parent->IsContextSecureForServiceWorker());
+}
+
+class MockServiceWorkerRegistration : public ServiceWorkerRegistration {
+ public:
+  MockServiceWorkerRegistration(const ServiceWorkerRegistrationOptions& options,
+                                int64_t registration_id,
+                                base::WeakPtr<ServiceWorkerContextCore> context)
+      : ServiceWorkerRegistration(options, registration_id, context) {}
+
+  void AddListener(ServiceWorkerRegistration::Listener* listener) override {
+    listeners_.insert(listener);
+  }
+
+  void RemoveListener(ServiceWorkerRegistration::Listener* listener) override {
+    listeners_.erase(listener);
+  }
+
+  const std::set<ServiceWorkerRegistration::Listener*>& listeners() {
+    return listeners_;
+  }
+
+ protected:
+  ~MockServiceWorkerRegistration() override{};
+
+ private:
+  std::set<ServiceWorkerRegistration::Listener*> listeners_;
+};
+
+TEST_F(ServiceWorkerProviderHostTest, CrossSiteTransfer) {
+  if (IsBrowserSideNavigationEnabled())
+    return;
+
+  // Create a mock registration before creating the provider host which is in
+  // the scope.
+  ServiceWorkerRegistrationOptions options(GURL("https://cross.example.com/"));
+  scoped_refptr<MockServiceWorkerRegistration> registration =
+      new MockServiceWorkerRegistration(options, 4L,
+                                        helper_->context()->AsWeakPtr());
+
+  ServiceWorkerProviderHost* provider_host =
+      CreateProviderHost(GURL("https://cross.example.com/example.html"));
+  const int process_id = provider_host->process_id();
+  const int provider_id = provider_host->provider_id();
+  const int frame_id = provider_host->frame_id();
+  const ServiceWorkerProviderType type = provider_host->provider_type();
+  const bool is_parent_frame_secure = provider_host->is_parent_frame_secure();
+  const ServiceWorkerDispatcherHost* dispatcher_host =
+      provider_host->dispatcher_host();
+
+  EXPECT_EQ(1u, registration->listeners().count(provider_host));
+
+  std::unique_ptr<ServiceWorkerProviderHost> provisional_host =
+      provider_host->PrepareForCrossSiteTransfer();
+
+  EXPECT_EQ(process_id, provisional_host->process_id());
+  EXPECT_EQ(provider_id, provisional_host->provider_id());
+  EXPECT_EQ(frame_id, provisional_host->frame_id());
+  EXPECT_EQ(type, provisional_host->provider_type());
+  EXPECT_EQ(is_parent_frame_secure, provisional_host->is_parent_frame_secure());
+  EXPECT_EQ(dispatcher_host, provisional_host->dispatcher_host());
+
+  EXPECT_EQ(ChildProcessHost::kInvalidUniqueID, provider_host->process_id());
+  EXPECT_EQ(kInvalidServiceWorkerProviderId, provider_host->provider_id());
+  EXPECT_EQ(MSG_ROUTING_NONE, provider_host->frame_id());
+  EXPECT_EQ(SERVICE_WORKER_PROVIDER_UNKNOWN, provider_host->provider_type());
+  EXPECT_FALSE(provider_host->is_parent_frame_secure());
+  EXPECT_EQ(nullptr, provider_host->dispatcher_host());
+
+  EXPECT_EQ(0u, registration->listeners().size());
+
+  provider_host->CompleteCrossSiteTransfer(provisional_host.get());
+
+  EXPECT_EQ(process_id, provider_host->process_id());
+  EXPECT_EQ(provider_id, provider_host->provider_id());
+  EXPECT_EQ(frame_id, provider_host->frame_id());
+  EXPECT_EQ(type, provider_host->provider_type());
+  EXPECT_EQ(is_parent_frame_secure, provider_host->is_parent_frame_secure());
+  EXPECT_EQ(dispatcher_host, provider_host->dispatcher_host());
+
+  EXPECT_EQ(kInvalidServiceWorkerProviderId, provisional_host->provider_id());
+  EXPECT_EQ(MSG_ROUTING_NONE, provisional_host->frame_id());
+  EXPECT_EQ(SERVICE_WORKER_PROVIDER_UNKNOWN, provisional_host->provider_type());
+  EXPECT_FALSE(provisional_host->is_parent_frame_secure());
+  EXPECT_EQ(nullptr, provisional_host->dispatcher_host());
+
+  EXPECT_EQ(1u, registration->listeners().count(provider_host));
+}
+
+TEST_F(ServiceWorkerProviderHostTest, RemoveProvider) {
+  // Create a provider host connected with the renderer process.
+  ServiceWorkerProviderHost* provider_host =
+      CreateProviderHost(GURL("https://www.example.com/example1.html"));
+  int process_id = provider_host->process_id();
+  int provider_id = provider_host->provider_id();
+  EXPECT_TRUE(context_->GetProviderHost(process_id, provider_id));
+
+  // Disconnect the mojo pipe from the renderer side.
+  ASSERT_TRUE(remote_endpoints_.back().host_ptr()->is_bound());
+  remote_endpoints_.back().host_ptr()->reset();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(context_->GetProviderHost(process_id, provider_id));
 }
 
 }  // namespace content

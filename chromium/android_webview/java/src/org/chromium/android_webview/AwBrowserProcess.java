@@ -29,10 +29,10 @@ import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.ProcessInitException;
-import org.chromium.base.process_launcher.ChildProcessCreationParams;
 import org.chromium.components.minidump_uploader.CrashFileManager;
 import org.chromium.content.browser.BrowserStartupController;
-import org.chromium.content.browser.ChildProcessLauncher;
+import org.chromium.content.browser.ChildProcessCreationParams;
+import org.chromium.content.browser.ChildProcessLauncherHelper;
 import org.chromium.policy.CombinedPolicyProvider;
 
 import java.io.File;
@@ -45,7 +45,7 @@ import java.nio.channels.FileLock;
  * Wrapper for the steps needed to initialize the java and native sides of webview chromium.
  */
 @JNINamespace("android_webview")
-public abstract class AwBrowserProcess {
+public final class AwBrowserProcess {
     public static final String PRIVATE_DATA_DIRECTORY_SUFFIX = "webview";
 
     private static final String TAG = "AwBrowserProcess";
@@ -101,7 +101,7 @@ public abstract class AwBrowserProcess {
                 boolean multiProcess = CommandLine.getInstance().hasSwitch(
                         AwSwitches.WEBVIEW_SANDBOXED_RENDERER);
                 if (multiProcess) {
-                    ChildProcessLauncher.warmUp(appContext);
+                    ChildProcessLauncherHelper.warmUp(appContext);
                 }
                 // The policies are used by browser startup, so we need to register the policy
                 // providers before starting the browser process. This only registers java objects
@@ -156,6 +156,11 @@ public abstract class AwBrowserProcess {
     public static void setWebViewPackageName(String webViewPackageName) {
         assert sWebViewPackageName == null || sWebViewPackageName.equals(webViewPackageName);
         sWebViewPackageName = webViewPackageName;
+    }
+
+    public static String getWebViewPackageName() {
+        if (sWebViewPackageName == null) return ""; // May be null in testing.
+        return sWebViewPackageName;
     }
 
     /**
@@ -289,4 +294,7 @@ public abstract class AwBrowserProcess {
         }
                 .executeOnExecutor(AsyncTask.SERIAL_EXECUTOR);
     }
+
+    // Do not instantiate this class.
+    private AwBrowserProcess() {}
 }

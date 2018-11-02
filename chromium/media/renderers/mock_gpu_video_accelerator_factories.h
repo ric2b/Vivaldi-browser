@@ -48,6 +48,7 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
   MOCK_METHOD1(DeleteTexture, void(uint32_t texture_id));
   MOCK_METHOD0(CreateSyncToken, gpu::SyncToken());
   MOCK_METHOD1(WaitSyncToken, void(const gpu::SyncToken& sync_token));
+  MOCK_METHOD0(ShallowFlushCHROMIUM, void());
   MOCK_METHOD0(GetTaskRunner, scoped_refptr<base::SingleThreadTaskRunner>());
   MOCK_METHOD0(GetVideoDecodeAcceleratorCapabilities,
                VideoDecodeAccelerator::Capabilities());
@@ -79,10 +80,6 @@ class MockGpuVideoAcceleratorFactories : public GpuVideoAcceleratorFactories {
   void SetGpuMemoryBuffersInUseByMacOSWindowServer(bool in_use);
 
   std::unique_ptr<base::SharedMemory> CreateSharedMemory(size_t size) override;
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  MOCK_METHOD0(GetRouteID, int());
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
 
   std::unique_ptr<VideoDecodeAccelerator> CreateVideoDecodeAccelerator()
       override;

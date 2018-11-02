@@ -6,10 +6,10 @@ cr.define('settings_people_page_manage_profile', function() {
   /**
    * @constructor
    * @implements {settings.ManageProfileBrowserProxy}
-   * @extends {settings.TestBrowserProxy}
+   * @extends {TestBrowserProxy}
    */
   var TestManageProfileBrowserProxy = function() {
-    settings.TestBrowserProxy.call(this, [
+    TestBrowserProxy.call(this, [
       'getAvailableIcons',
       'setProfileIconToGaiaAvatar',
       'setProfileIconToDefaultAvatar',
@@ -24,7 +24,7 @@ cr.define('settings_people_page_manage_profile', function() {
   };
 
   TestManageProfileBrowserProxy.prototype = {
-    __proto__: settings.TestBrowserProxy.prototype,
+    __proto__: TestBrowserProxy.prototype,
 
     /** @param {!ProfileShortcutStatus} status */
     setProfileShortcutStatus: function(status) {
@@ -87,58 +87,38 @@ cr.define('settings_people_page_manage_profile', function() {
         manageProfile.profileName = 'Initial Fake Name';
         manageProfile.syncStatus = {supervisedUser: false, childUser: false};
         document.body.appendChild(manageProfile);
-        settings.navigateTo(settings.Route.MANAGE_PROFILE);
+        settings.navigateTo(settings.routes.MANAGE_PROFILE);
       });
 
       teardown(function() { manageProfile.remove(); });
 
       // Tests that the manage profile subpage
       //  - gets and receives all the available icons
-      //  - has the correct icon selected
       //  - can select a new icon
       test('ManageProfileChangeIcon', function() {
-        var selector = manageProfile.$.selector.$['avatar-grid'];
-        assertTrue(!!selector);
-
+        var items = null;
         return browserProxy.whenCalled('getAvailableIcons')
             .then(function() {
               Polymer.dom.flush();
+              items = manageProfile.$.selector.$['avatar-grid'].
+                  querySelectorAll('.avatar');
 
-              assertEquals('fake-icon-1.png', manageProfile.profileIconUrl);
-              assertEquals(3, selector.items.length);
-              assertTrue(selector.items[0].classList.contains('iron-selected'));
-              assertFalse(
-                  selector.items[1].classList.contains('iron-selected'));
-              assertFalse(
-                  selector.items[2].classList.contains('iron-selected'));
+              // Initially no item is selected, because of crbug.com/710660.
+              assertFalse(!!manageProfile.profileAvatar);
+              assertEquals(3, items.length);
+              assertFalse(items[0].classList.contains('iron-selected'));
+              assertFalse(items[1].classList.contains('iron-selected'));
+              assertFalse(items[2].classList.contains('iron-selected'));
 
-              MockInteractions.tap(selector.items[1]);
+              MockInteractions.tap(items[1]);
               return browserProxy.whenCalled('setProfileIconToDefaultAvatar');
             })
             .then(function(args) {
               assertEquals('fake-icon-2.png', args[0]);
 
-              MockInteractions.tap(selector.items[2]);
+              MockInteractions.tap(items[2]);
               return browserProxy.whenCalled('setProfileIconToGaiaAvatar');
             });
-      });
-
-      // Tests profile icon updates pushed from the browser.
-      test('ManageProfileIconUpdated', function() {
-        var selector = manageProfile.$.selector.$['avatar-grid'];
-        assertTrue(!!selector);
-
-        return browserProxy.whenCalled('getAvailableIcons').then(function() {
-          manageProfile.profileIconUrl = 'fake-icon-2.png';
-
-          Polymer.dom.flush();
-
-          assertEquals('fake-icon-2.png', manageProfile.profileIconUrl);
-          assertEquals(3, selector.items.length);
-          assertFalse(selector.items[0].classList.contains('iron-selected'));
-          assertTrue(selector.items[1].classList.contains('iron-selected'));
-          assertFalse(selector.items[2].classList.contains('iron-selected'));
-        });
       });
 
       test('ManageProfileChangeName', function() {
@@ -213,7 +193,7 @@ cr.define('settings_people_page_manage_profile', function() {
       // Tests profile shortcut toggle is visible and toggling it removes and
       // creates the profile shortcut respectively.
       test('ManageProfileShortcutToggle', function() {
-        settings.navigateTo(settings.Route.MANAGE_PROFILE);
+        settings.navigateTo(settings.routes.MANAGE_PROFILE);
         Polymer.dom.flush();
 
         assertFalse(!!manageProfile.$$('#hasShortcutToggle'));
@@ -250,7 +230,7 @@ cr.define('settings_people_page_manage_profile', function() {
         browserProxy.setProfileShortcutStatus(
             ProfileShortcutStatus.PROFILE_SHORTCUT_NOT_FOUND);
 
-        settings.navigateTo(settings.Route.MANAGE_PROFILE);
+        settings.navigateTo(settings.routes.MANAGE_PROFILE);
         Polymer.dom.flush();
 
         assertFalse(!!manageProfile.$$('#hasShortcutToggle'));
@@ -272,7 +252,7 @@ cr.define('settings_people_page_manage_profile', function() {
         browserProxy.setProfileShortcutStatus(
             ProfileShortcutStatus.PROFILE_SHORTCUT_SETTING_HIDDEN);
 
-        settings.navigateTo(settings.Route.MANAGE_PROFILE);
+        settings.navigateTo(settings.routes.MANAGE_PROFILE);
         Polymer.dom.flush();
 
         assertFalse(!!manageProfile.$$('#hasShortcutToggle'));

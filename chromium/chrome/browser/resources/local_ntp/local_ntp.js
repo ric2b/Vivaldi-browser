@@ -3,10 +3,6 @@
 // found in the LICENSE file.
 
 
-// NOTE: If you modify this file, you also have to change its hash in
-// local_ntp.html and in LocalNtpSource::GetContentSecurityPolicyScriptSrc.
-
-
 /**
  * @fileoverview The local InstantExtended NTP.
  */
@@ -26,6 +22,7 @@ function LocalNTP() {
  * @return {HTMLElement} The found element or null if not found.
  */
 function $(id) {
+  // eslint-disable-next-line no-restricted-properties
   return document.getElementById(id);
 }
 
@@ -230,37 +227,27 @@ function onThemeChange() {
 
 /**
  * Updates the NTP style according to theme.
- * @param {Object=} opt_themeInfo The information about the theme. If it is
- * omitted the style will be reverted to the default.
+ * @param {Object} themeInfo The information about the theme.
  * @private
  */
-// TODO(treib): We actually never call this without a themeInfo. Should we?
-function setCustomThemeStyle(opt_themeInfo) {
+function setCustomThemeStyle(themeInfo) {
   var customStyleElement = $(IDS.CUSTOM_THEME_STYLE);
   var head = document.head;
-  if (opt_themeInfo && !opt_themeInfo.usingDefaultTheme) {
+  if (!themeInfo.usingDefaultTheme) {
     $(IDS.NTP_CONTENTS).classList.remove(CLASSES.DEFAULT_THEME);
     var themeStyle =
       '#attribution {' +
-      '  color: ' + convertToRGBAColor(opt_themeInfo.textColorLightRgba) + ';' +
+      '  color: ' + convertToRGBAColor(themeInfo.textColorLightRgba) + ';' +
       '}' +
       '#mv-msg {' +
-      '  color: ' + convertToRGBAColor(opt_themeInfo.textColorRgba) + ';' +
+      '  color: ' + convertToRGBAColor(themeInfo.textColorRgba) + ';' +
       '}' +
       '#mv-notice-links span {' +
-      '  color: ' + convertToRGBAColor(opt_themeInfo.textColorLightRgba) + ';' +
+      '  color: ' + convertToRGBAColor(themeInfo.textColorLightRgba) + ';' +
       '}' +
       '#mv-notice-x {' +
       '  -webkit-filter: drop-shadow(0 0 0 ' +
-          convertToRGBAColor(opt_themeInfo.textColorRgba) + ');' +
-      '}' +
-      '.mv-page-ready .mv-mask {' +
-      '  border: 1px solid ' +
-          convertToRGBAColor(opt_themeInfo.sectionBorderColorRgba) + ';' +
-      '}' +
-      '.mv-page-ready:hover .mv-mask, .mv-page-ready .mv-focused ~ .mv-mask {' +
-      '  border-color: ' +
-          convertToRGBAColor(opt_themeInfo.headerColorRgba) + ';' +
+          convertToRGBAColor(themeInfo.textColorRgba) + ');' +
       '}';
 
     if (customStyleElement) {
@@ -637,7 +624,7 @@ function init() {
     document.body.appendChild(ogScript);
     ogScript.onload = function() {
       injectOneGoogleBar(og.html, og.end_of_body_html);
-    }
+    };
   } else {
     document.body.classList.add(CLASSES.NON_GOOGLE_PAGE);
   }
@@ -717,9 +704,9 @@ function injectOneGoogleBar(barHtml, endOfBodyHtml) {
         endOfBodyScript.src =
             'chrome-search://local-ntp/one-google/end-of-body.js';
         document.body.appendChild(endOfBodyScript);
-      }
-    }
-  }
+      };
+    };
+  };
 }
 
 

@@ -9,7 +9,7 @@
 #include <vector>
 
 #include "base/memory/ref_counted.h"
-#include "cc/output/renderer_settings.h"
+#include "components/viz/common/display/renderer_settings.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -38,7 +38,8 @@ class CompositorDependencies {
   virtual bool IsPartialRasterEnabled() = 0;
   virtual bool IsGpuMemoryBufferCompositorResourcesEnabled() = 0;
   virtual bool IsElasticOverscrollEnabled() = 0;
-  virtual const cc::BufferToTextureTargetMap& GetBufferToTextureTargetMap() = 0;
+  virtual const viz::BufferToTextureTargetMap&
+  GetBufferToTextureTargetMap() = 0;
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetCompositorMainThreadTaskRunner() = 0;
   // Returns null if the compositor is in single-threaded mode (ie. there is no
@@ -49,7 +50,6 @@ class CompositorDependencies {
   virtual cc::TaskGraphRunner* GetTaskGraphRunner() = 0;
   virtual bool IsThreadedAnimationEnabled() = 0;
   virtual bool IsScrollAnimatorEnabled() = 0;
-  virtual bool IsSurfaceSynchronizationEnabled() = 0;
 
   virtual ~CompositorDependencies() {}
 };

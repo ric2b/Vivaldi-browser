@@ -30,7 +30,8 @@ class WPTExpectationsUpdater(object):
         self.host = host
         self.port = self.host.port_factory.get()
         self.finder = PathFinder(self.host.filesystem)
-        self.port = self.host.port_factory.get()
+        self.ports_with_no_results = set()
+        self.ports_with_all_pass = set()
 
     def run(self, args=None):
         """Downloads text new baselines and adds test expectations lines."""
@@ -46,9 +47,9 @@ class WPTExpectationsUpdater(object):
             _log.error('No issue on current branch.')
             return 1
 
-        builds = self.get_latest_try_jobs()
-        _log.debug('Latest try jobs: %r', builds)
-        if not builds:
+        build_to_status = self.get_latest_try_jobs()
+        _log.debug('Latest try jobs: %r', build_to_status)
+        if not build_to_status:
             _log.error('No try job information was collected.')
             return 1
 
@@ -57,7 +58,11 @@ class WPTExpectationsUpdater(object):
 
         # Here we build up a dict of failing test results for all platforms.
         test_expectations = {}
-        for build in builds:
+        for build, job_status in build_to_status.iteritems():
+            if job_status.result == 'SUCCESS':
+                self.ports_with_all_pass.add(self.port_name(build))
+
+
             port_results = self.get_failing_results_dict(build)
             test_expectations = self.merge_dicts(test_expectations, port_results)
 
@@ -91,23 +96,32 @@ class WPTExpectationsUpdater(object):
 
         Returns:
             A dictionary with the structure: {
-                'full-port-name': {
-                    'expected': 'TIMEOUT',
-                    'actual': 'CRASH',
-                    'bug': 'crbug.com/11111'
+                test-with-failing-result: {
+                    'full-port-name': {
+                        'expected': 'TIMEOUT',
+                        'actual': 'CRASH',
+                        'bug': 'crbug.com/11111'
+                    }
                 }
             }
-            If there are no failing results or no results could be fetched,
+            If results could be fetched but none are failing,
             this will return an empty dictionary.
         """
+        port_name = self.port_name(build)
+        if port_name in self.ports_with_all_pass:
+            # All tests passed, so there should be no failing results.
+            return {}
         layout_test_results = self.host.buildbot.fetch_results(build)
         if layout_test_results is None:
             _log.warning('No results for build %s', build)
+            self.ports_with_no_results.add(self.port_name(build))
             return {}
-        port_name = self.host.builders.port_name_for_builder_name(build.builder_name)
         test_results = [result for result in layout_test_results.didnt_run_as_expected_results() if not result.did_pass()]
-        failing_results_dict = self.generate_results_dict(port_name, test_results)
-        return failing_results_dict
+        return self.generate_results_dict(self.port_name(build), test_results)
+
+    @memoized
+    def port_name(self, build):
+        return self.host.builders.port_name_for_builder_name(build.builder_name)
 
     def generate_results_dict(self, full_port_name, test_results):
         """Makes a dict with results for one platform.
@@ -123,6 +137,10 @@ class WPTExpectationsUpdater(object):
         test_dict = {}
         for result in test_results:
             test_name = result.test_name()
+
+            if not self.port.is_wpt_test(test_name):
+                continue
+
             test_dict[test_name] = {
                 full_port_name: {
                     'expected': result.expected_results(),
@@ -138,9 +156,10 @@ class WPTExpectationsUpdater(object):
         Args:
             target: First dictionary, which is updated based on source.
             source: Second dictionary, not modified.
+            path: A list of keys, only used for making error messages.
 
         Returns:
-            An updated target dictionary.
+            The updated target dictionary.
         """
         path = path or []
         for key in source:
@@ -268,15 +287,30 @@ class WPTExpectationsUpdater(object):
         line_list = []
         for test_name, port_results in sorted(merged_results.iteritems()):
             if not self.port.is_wpt_test(test_name):
+                _log.warning('Non-WPT test "%s" unexpectedly passed to create_line_list.', test_name)
                 continue
             for port_names, results in sorted(port_results.iteritems()):
                 line_list.append(self._create_line(test_name, port_names, results))
         return line_list
 
     def _create_line(self, test_name, port_names, results):
-        """Constructs one test expectations line string."""
+        """Constructs and returns a test expectation line string."""
+        port_names = self.tuple_or_value_to_list(port_names)
+
+        # The set of ports with no results is assumed to have have no
+        # overlap with the set of port names passed in here.
+        assert (set(port_names) & self.ports_with_no_results) == set()
+
+        # The ports with no results are generally ports of builders that
+        # failed, maybe for unrelated reasons. At this point, we add ports
+        # with no results to the list of platforms because we're guessing
+        # that this new expectation might be cross-platform and should
+        # also apply to any ports that we weren't able to get results for.
+        port_names.extend(self.ports_with_no_results)
+
+        specifier_part = self.specifier_part(port_names, test_name)
+
         line_parts = [results['bug']]
-        specifier_part = self.specifier_part(self.to_list(port_names), test_name)
         if specifier_part:
             line_parts.append(specifier_part)
         line_parts.append(test_name)
@@ -306,7 +340,7 @@ class WPTExpectationsUpdater(object):
         return '[ %s ]' % ' '.join(specifiers)
 
     @staticmethod
-    def to_list(tuple_or_value):
+    def tuple_or_value_to_list(tuple_or_value):
         """Converts a tuple to a list, and a string value to a one-item list."""
         if isinstance(tuple_or_value, tuple):
             return list(tuple_or_value)
@@ -360,67 +394,76 @@ class WPTExpectationsUpdater(object):
         return sorted(specifier.capitalize() for specifier in specifiers)
 
     def write_to_test_expectations(self, line_list):
-        """Writes to TestExpectations.
+        """Writes the given lines to the TestExpectations file.
 
-        The place in the file where the new lines are inserted is after a
-        marker comment line. If this marker comment line is not found, it will
-        be added to the end of the file.
+        The place in the file where the new lines are inserted is after a marker
+        comment line. If this marker comment line is not found, then everything
+        including the marker line is appended to the end of the file.
 
         Args:
             line_list: A list of lines to add to the TestExpectations file.
         """
+        if not line_list:
+            _log.info('No lines to write to TestExpectations.')
+            return
         _log.info('Lines to write to TestExpectations:')
         for line in line_list:
             _log.info('  %s', line)
+
         expectations_file_path = self.port.path_to_generic_test_expectations_file()
         file_contents = self.host.filesystem.read_text_file(expectations_file_path)
-        marker_comment_index = file_contents.find(MARKER_COMMENT)
+
         line_list = [line for line in line_list if self._test_name_from_expectation_string(line) not in file_contents]
         if not line_list:
             return
+
+        marker_comment_index = file_contents.find(MARKER_COMMENT)
         if marker_comment_index == -1:
             file_contents += '\n%s\n' % MARKER_COMMENT
             file_contents += '\n'.join(line_list)
         else:
             end_of_marker_line = (file_contents[marker_comment_index:].find('\n')) + marker_comment_index
             file_contents = file_contents[:end_of_marker_line + 1] + '\n'.join(line_list) + file_contents[end_of_marker_line:]
+
         self.host.filesystem.write_text_file(expectations_file_path, file_contents)
 
     @staticmethod
     def _test_name_from_expectation_string(expectation_string):
         return TestExpectationLine.tokenize_line(filename='', expectation_string=expectation_string, line_number=0).name
 
-    def download_text_baselines(self, tests_results):
+    def download_text_baselines(self, test_results):
         """Fetches new baseline files for tests that should be rebaselined.
 
         Invokes `webkit-patch rebaseline-cl` in order to download new baselines
         (-expected.txt files) for testharness.js tests that did not crash or
         time out. Then, the platform-specific test is removed from the overall
-        failure test dictionary.
+        failure test dictionary and the resulting dictionary is returned.
 
         Args:
-            tests_results: A dict mapping test name to platform to test results.
+            test_results: A dict mapping test name to platform to test results.
 
         Returns:
-            An updated tests_results dictionary without the platform-specific
-            testharness.js tests that required new baselines to be downloaded
-            from `webkit-patch rebaseline-cl`.
+            An updated test_results dictionary which should only contain
+            test failures for tests that couldn't be rebaselined.
         """
-        tests_to_rebaseline, tests_results = self.get_tests_to_rebaseline(tests_results)
+        tests_to_rebaseline, test_results = self.get_tests_to_rebaseline(test_results)
+        if not tests_to_rebaseline:
+            _log.info('No tests to rebaseline.')
+            return test_results
         _log.info('Tests to rebaseline:')
         for test in tests_to_rebaseline:
             _log.info('  %s', test)
-        if tests_to_rebaseline:
-            webkit_patch = self.finder.path_from_tools_scripts('webkit-patch')
-            self.host.executive.run_command([
-                'python',
-                webkit_patch,
-                'rebaseline-cl',
-                '--verbose',
-                '--no-trigger-jobs',
-                '--fill-missing',
-            ] + tests_to_rebaseline)
-        return tests_results
+
+        webkit_patch = self.finder.path_from_tools_scripts('webkit-patch')
+        self.host.executive.run_command([
+            'python',
+            webkit_patch,
+            'rebaseline-cl',
+            '--verbose',
+            '--no-trigger-jobs',
+            '--fill-missing',
+        ] + tests_to_rebaseline)
+        return test_results
 
     def get_tests_to_rebaseline(self, test_results):
         """Returns a list of tests to download new baselines for.

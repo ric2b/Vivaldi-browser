@@ -7,6 +7,7 @@
 #include "base/logging.h"
 #include "base/memory/ref_counted.h"
 #include "base/task_runner.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
 
 namespace arc {
 
@@ -15,31 +16,48 @@ namespace {
 constexpr base::TimeDelta kDefaultRestartDelay =
     base::TimeDelta::FromSeconds(5);
 
+chromeos::SessionManagerClient* GetSessionManagerClient() {
+  // If the DBusThreadManager or the SessionManagerClient aren't available,
+  // there isn't much we can do. This should only happen when running tests.
+  if (!chromeos::DBusThreadManager::IsInitialized() ||
+      !chromeos::DBusThreadManager::Get() ||
+      !chromeos::DBusThreadManager::Get()->GetSessionManagerClient())
+    return nullptr;
+  return chromeos::DBusThreadManager::Get()->GetSessionManagerClient();
+}
+
 }  // namespace
 
 ArcSessionRunner::ArcSessionRunner(const ArcSessionFactory& factory)
     : restart_delay_(kDefaultRestartDelay),
       factory_(factory),
-      weak_ptr_factory_(this) {}
+      weak_ptr_factory_(this) {
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client)
+    client->AddObserver(this);
+}
 
 ArcSessionRunner::~ArcSessionRunner() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (arc_session_)
     arc_session_->RemoveObserver(this);
+  chromeos::SessionManagerClient* client = GetSessionManagerClient();
+  if (client)
+    client->RemoveObserver(this);
 }
 
 void ArcSessionRunner::AddObserver(Observer* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   observer_list_.AddObserver(observer);
 }
 
 void ArcSessionRunner::RemoveObserver(Observer* observer) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   observer_list_.RemoveObserver(observer);
 }
 
 void ArcSessionRunner::RequestStart() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // Consecutive RequestStart() call. Do nothing.
   if (run_requested_)
@@ -52,30 +70,33 @@ void ArcSessionRunner::RequestStart() {
   // previous RequestStop() call).
   DCHECK(!restart_timer_.IsRunning());
 
-  if (arc_session_) {
+  if (arc_session_ && state_ >= State::STARTING) {
     // In this case, RequestStop() was called, and before |arc_session_| had
     // finished stopping, RequestStart() was called. Do nothing in that case,
     // since when |arc_session_| does actually stop, OnSessionStopped() will
     // be called, where it should automatically restart.
     DCHECK_EQ(state_, State::STOPPING);
   } else {
-    DCHECK_EQ(state_, State::STOPPED);
+    DCHECK_LE(state_, State::STARTING_FOR_LOGIN_SCREEN);
     StartArcSession();
   }
 }
 
-void ArcSessionRunner::RequestStop() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void ArcSessionRunner::RequestStop(bool always_stop_session) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  // Consecutive RequestStop() call. Do nothing.
-  if (!run_requested_)
-    return;
+  if (!run_requested_) {
+    // Call Stop() to stop an instance for login screen (if any.) If this is
+    // just a consecutive RequestStop() call, Stop() does nothing.
+    if (!always_stop_session || !arc_session_)
+      return;
+  }
 
   VLOG(1) << "Session ended";
   run_requested_ = false;
 
   if (arc_session_) {
-    // The |state_| could be either STARTING, RUNNING or STOPPING.
+    // The |state_| could be either STARTING*, RUNNING or STOPPING.
     DCHECK_NE(state_, State::STOPPED);
 
     if (state_ == State::STOPPING) {
@@ -96,7 +117,7 @@ void ArcSessionRunner::RequestStop() {
 }
 
 void ArcSessionRunner::OnShutdown() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   VLOG(1) << "OnShutdown";
   run_requested_ = false;
@@ -112,38 +133,40 @@ void ArcSessionRunner::OnShutdown() {
 }
 
 bool ArcSessionRunner::IsRunning() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return state_ == State::RUNNING;
 }
 
 bool ArcSessionRunner::IsStopped() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return state_ == State::STOPPED;
 }
 
 void ArcSessionRunner::SetRestartDelayForTesting(
     const base::TimeDelta& restart_delay) {
   DCHECK_EQ(state_, State::STOPPED);
-  DCHECK(!arc_session_);
   DCHECK(!restart_timer_.IsRunning());
   restart_delay_ = restart_delay;
 }
 
 void ArcSessionRunner::StartArcSession() {
-  DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK_EQ(state_, State::STOPPED);
-  DCHECK(!arc_session_);
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(!restart_timer_.IsRunning());
 
   VLOG(1) << "Starting ARC instance";
-  arc_session_ = factory_.Run();
-  arc_session_->AddObserver(this);
+  if (!arc_session_) {
+    DCHECK_EQ(state_, State::STOPPED);
+    arc_session_ = factory_.Run();
+    arc_session_->AddObserver(this);
+  } else {
+    DCHECK_EQ(state_, State::STARTING_FOR_LOGIN_SCREEN);
+  }
   state_ = State::STARTING;
   arc_session_->Start();
 }
 
 void ArcSessionRunner::OnSessionReady() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(state_, State::STARTING);
   DCHECK(arc_session_);
   DCHECK(!restart_timer_.IsRunning());
@@ -153,12 +176,17 @@ void ArcSessionRunner::OnSessionReady() {
 }
 
 void ArcSessionRunner::OnSessionStopped(ArcStopReason stop_reason) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_NE(state_, State::STOPPED);
   DCHECK(arc_session_);
   DCHECK(!restart_timer_.IsRunning());
 
   VLOG(0) << "ARC stopped: " << stop_reason;
+
+  // The observers should be agnostic to the existence of the limited-purpose
+  // instance.
+  const bool notify_observers = !arc_session_->IsForLoginScreen();
+
   arc_session_->RemoveObserver(this);
   arc_session_.reset();
 
@@ -188,8 +216,24 @@ void ArcSessionRunner::OnSessionStopped(ArcStopReason stop_reason) {
   }
 
   state_ = State::STOPPED;
-  for (auto& observer : observer_list_)
-    observer.OnSessionStopped(stop_reason, restarting);
+  if (notify_observers) {
+    for (auto& observer : observer_list_)
+      observer.OnSessionStopped(stop_reason, restarting);
+  }
+}
+
+void ArcSessionRunner::EmitLoginPromptVisibleCalled() {
+  // Since 'login-prompt-visible' Upstart signal starts all Upstart jobs the
+  // container may depend on such as cras, EmitLoginPromptVisibleCalled() is the
+  // safe place to start the container for login screen.
+  DCHECK(!arc_session_);
+  DCHECK_EQ(state_, State::STOPPED);
+
+  // TODO(yusukes): Once Chrome OS side is ready, uncomment the following:
+  // arc_session_ = factory_.Run();
+  // arc_session_->AddObserver(this);
+  // state_ = State::STARTING_FOR_LOGIN_SCREEN;
+  // arc_session_->StartForLoginScreen();
 }
 
 }  // namespace arc

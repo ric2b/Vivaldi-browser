@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <memory>
 
+#include "base/memory/aligned_memory.h"
 #include "base/message_loop/message_loop.h"
 #include "cc/base/math_util.h"
 #include "cc/output/gl_renderer.h"
@@ -137,7 +138,7 @@ void CreateTestTwoColoredTextureDrawQuad(const gfx::Rect& rect,
     }
   }
   ResourceId resource = resource_provider->CreateResource(
-      rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
   resource_provider->CopyToResource(
       resource, reinterpret_cast<uint8_t*>(&pixels.front()), rect.size());
@@ -173,7 +174,7 @@ void CreateTestTextureDrawQuad(const gfx::Rect& rect,
   std::vector<uint32_t> pixels(num_pixels, pixel_color);
 
   ResourceId resource = resource_provider->CreateResource(
-      rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
   resource_provider->CopyToResource(
       resource, reinterpret_cast<uint8_t*>(&pixels.front()), rect.size());
@@ -552,7 +553,7 @@ void CreateTestYUVVideoDrawQuad_NV12(const SharedQuadState* shared_state,
       rect.size(), ResourceProvider::TEXTURE_HINT_DEFAULT,
       resource_provider->YuvResourceFormat(8), gfx::ColorSpace());
   ResourceId u_resource = resource_provider->CreateResource(
-      uv_tex_size, ResourceProvider::TEXTURE_HINT_DEFAULT, RGBA_8888,
+      uv_tex_size, ResourceProvider::TEXTURE_HINT_DEFAULT, viz::RGBA_8888,
       gfx::ColorSpace());
   ResourceId v_resource = u_resource;
   ResourceId a_resource = 0;
@@ -810,6 +811,39 @@ TYPED_TEST(RendererPixelTest, PremultipliedTextureWithBackground) {
       FuzzyPixelOffByOneComparator(true)));
 }
 
+TEST_F(GLRendererPixelTest, SolidColorBlend) {
+  gfx::Rect rect(this->device_viewport_size_);
+
+  int id = 1;
+  std::unique_ptr<RenderPass> pass = CreateTestRootRenderPass(id, rect);
+
+  SharedQuadState* shared_state =
+      CreateTestSharedQuadState(gfx::Transform(), rect, pass.get());
+  shared_state->opacity = 1 - 16.0f / 255;
+  shared_state->blend_mode = SkBlendMode::kDstOut;
+
+  SolidColorDrawQuad* color_quad =
+      pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  color_quad->SetNew(shared_state, rect, rect, SK_ColorRED, false);
+
+  SharedQuadState* shared_state_background =
+      CreateTestSharedQuadState(gfx::Transform(), rect, pass.get());
+
+  SkColor background_color = SkColorSetRGB(0xff, 0xff * 14 / 16, 0xff);
+  SolidColorDrawQuad* color_quad_background =
+      pass->CreateAndAppendDrawQuad<SolidColorDrawQuad>();
+  color_quad_background->SetNew(shared_state_background, rect, rect,
+                                background_color, false);
+  // Result should be r=16, g=14, b=16.
+
+  RenderPassList pass_list;
+  pass_list.push_back(std::move(pass));
+
+  EXPECT_TRUE(this->RunPixelTest(
+      &pass_list, base::FilePath(FILE_PATH_LITERAL("dark_grey.png")),
+      FuzzyPixelOffByOneComparator(true)));
+}
+
 TEST_F(GLRendererPixelTest,
        PremultipliedTextureWithBackgroundAndVertexOpacity) {
   gfx::Rect rect(this->device_viewport_size_);
@@ -915,12 +949,13 @@ class IntersectingQuadGLPixelTest
  public:
   void SetUp() override {
     IntersectingQuadPixelTest<TypeParam>::SetUp();
-    video_resource_updater_.reset(
-        new VideoResourceUpdater(this->output_surface_->context_provider(),
-                                 this->resource_provider_.get()));
-    video_resource_updater2_.reset(
-        new VideoResourceUpdater(this->output_surface_->context_provider(),
-                                 this->resource_provider_.get()));
+    bool use_stream_video_draw_quad = false;
+    video_resource_updater_.reset(new VideoResourceUpdater(
+        this->output_surface_->context_provider(),
+        this->resource_provider_.get(), use_stream_video_draw_quad));
+    video_resource_updater2_.reset(new VideoResourceUpdater(
+        this->output_surface_->context_provider(),
+        this->resource_provider_.get(), use_stream_video_draw_quad));
   }
 
  protected:
@@ -1013,30 +1048,30 @@ TYPED_TEST(IntersectingQuadSoftwareTest, PictureQuads) {
   blue_recording->add_draw_rect_with_flags(outer_rect, black_flags);
   blue_recording->add_draw_rect_with_flags(inner_rect, blue_flags);
   blue_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> blue_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(blue_recording.get(), false);
+  scoped_refptr<RasterSource> blue_raster_source =
+      blue_recording->CreateRasterSource();
 
   PictureDrawQuad* blue_quad =
       this->render_pass_->template CreateAndAppendDrawQuad<PictureDrawQuad>();
 
   blue_quad->SetNew(this->front_quad_state_, this->quad_rect_, gfx::Rect(),
                     this->quad_rect_, gfx::RectF(this->quad_rect_),
-                    this->quad_rect_.size(), false, RGBA_8888, this->quad_rect_,
-                    1.f, blue_raster_source);
+                    this->quad_rect_.size(), false, viz::RGBA_8888,
+                    this->quad_rect_, 1.f, blue_raster_source);
 
   std::unique_ptr<FakeRecordingSource> green_recording =
       FakeRecordingSource::CreateFilledRecordingSource(this->quad_rect_.size());
   green_recording->add_draw_rect_with_flags(outer_rect, green_flags);
   green_recording->add_draw_rect_with_flags(inner_rect, black_flags);
   green_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> green_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(green_recording.get(), false);
+  scoped_refptr<RasterSource> green_raster_source =
+      green_recording->CreateRasterSource();
 
   PictureDrawQuad* green_quad =
       this->render_pass_->template CreateAndAppendDrawQuad<PictureDrawQuad>();
   green_quad->SetNew(this->back_quad_state_, this->quad_rect_, gfx::Rect(),
                      this->quad_rect_, gfx::RectF(this->quad_rect_),
-                     this->quad_rect_.size(), false, RGBA_8888,
+                     this->quad_rect_.size(), false, viz::RGBA_8888,
                      this->quad_rect_, 1.f, green_raster_source);
   SCOPED_TRACE("IntersectingPictureQuadsPass");
   this->AppendBackgroundAndRunTest(
@@ -1241,8 +1276,10 @@ class VideoGLRendererPixelTest : public GLRendererPixelTest {
 
   void SetUp() override {
     GLRendererPixelTest::SetUp();
+    bool use_stream_video_draw_quad = false;
     video_resource_updater_.reset(new VideoResourceUpdater(
-        output_surface_->context_provider(), resource_provider_.get()));
+        output_surface_->context_provider(), resource_provider_.get(),
+        use_stream_video_draw_quad));
   }
 
   std::unique_ptr<VideoResourceUpdater> video_resource_updater_;
@@ -1981,8 +2018,8 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad) {
   }
 
   ResourceId mask_resource_id = this->resource_provider_->CreateResource(
-      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
-      gfx::ColorSpace());
+      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
+      viz::RGBA_8888, gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
       mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
@@ -2074,8 +2111,8 @@ TYPED_TEST(RendererPixelTest, RenderPassAndMaskWithPartialQuad2) {
   }
 
   ResourceId mask_resource_id = this->resource_provider_->CreateResource(
-      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
-      gfx::ColorSpace());
+      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
+      viz::RGBA_8888, gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
       mask_resource_id, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
@@ -2537,7 +2574,7 @@ TEST_F(GLRendererPixelTest, AntiAliasingPerspective) {
 TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
   gfx::Rect viewport(this->device_viewport_size_);
   // TODO(enne): the renderer should figure this out on its own.
-  ResourceFormat texture_format = RGBA_8888;
+  viz::ResourceFormat texture_format = viz::RGBA_8888;
   bool nearest_neighbor = false;
 
   int id = 1;
@@ -2560,8 +2597,8 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
   blue_recording->add_draw_rect_with_flags(blue_clip_rect, blue_flags);
   blue_recording->Rerecord();
 
-  scoped_refptr<FakeRasterSource> blue_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(blue_recording.get(), false);
+  scoped_refptr<RasterSource> blue_raster_source =
+      blue_recording->CreateRasterSource();
 
   gfx::Vector2d offset(viewport.bottom_right() - blue_rect.bottom_right());
   gfx::Transform blue_quad_to_target_transform;
@@ -2587,8 +2624,8 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
   green_flags.setColor(SK_ColorGREEN);
   green_recording->add_draw_rect_with_flags(viewport, green_flags);
   green_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> green_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(green_recording.get(), false);
+  scoped_refptr<RasterSource> green_raster_source =
+      green_recording->CreateRasterSource();
 
   gfx::Transform green_quad_to_target_transform;
   SharedQuadState* green_shared_state = CreateTestSharedQuadState(
@@ -2613,7 +2650,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadIdentityScale) {
 // Not WithSkiaGPUBackend since that path currently requires tiles for opacity.
 TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadOpacity) {
   gfx::Rect viewport(this->device_viewport_size_);
-  ResourceFormat texture_format = RGBA_8888;
+  viz::ResourceFormat texture_format = viz::RGBA_8888;
   bool nearest_neighbor = false;
 
   int id = 1;
@@ -2628,8 +2665,8 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadOpacity) {
   green_flags.setColor(SK_ColorGREEN);
   green_recording->add_draw_rect_with_flags(viewport, green_flags);
   green_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> green_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(green_recording.get(), false);
+  scoped_refptr<RasterSource> green_raster_source =
+      green_recording->CreateRasterSource();
 
   gfx::Transform green_quad_to_target_transform;
   SharedQuadState* green_shared_state = CreateTestSharedQuadState(
@@ -2649,8 +2686,8 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadOpacity) {
   white_flags.setColor(SK_ColorWHITE);
   white_recording->add_draw_rect_with_flags(viewport, white_flags);
   white_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> white_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(white_recording.get(), false);
+  scoped_refptr<RasterSource> white_raster_source =
+      white_recording->CreateRasterSource();
 
   gfx::Transform white_quad_to_target_transform;
   SharedQuadState* white_shared_state = CreateTestSharedQuadState(
@@ -2701,7 +2738,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadDisableImageFiltering) {
     return;
 
   gfx::Rect viewport(this->device_viewport_size_);
-  ResourceFormat texture_format = RGBA_8888;
+  viz::ResourceFormat texture_format = viz::RGBA_8888;
   bool nearest_neighbor = false;
 
   int id = 1;
@@ -2724,8 +2761,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadDisableImageFiltering) {
   recording->add_draw_image_with_flags(surface->makeImageSnapshot(),
                                        gfx::Point(), flags);
   recording->Rerecord();
-  scoped_refptr<FakeRasterSource> raster_source =
-      FakeRasterSource::CreateFromRecordingSource(recording.get(), false);
+  scoped_refptr<RasterSource> raster_source = recording->CreateRasterSource();
 
   gfx::Transform quad_to_target_transform;
   SharedQuadState* shared_state =
@@ -2750,7 +2786,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadDisableImageFiltering) {
 // This disables filtering by setting |nearest_neighbor| on the PictureDrawQuad.
 TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNearestNeighbor) {
   gfx::Rect viewport(this->device_viewport_size_);
-  ResourceFormat texture_format = RGBA_8888;
+  viz::ResourceFormat texture_format = viz::RGBA_8888;
   bool nearest_neighbor = true;
 
   int id = 1;
@@ -2773,8 +2809,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNearestNeighbor) {
   recording->add_draw_image_with_flags(surface->makeImageSnapshot(),
                                        gfx::Point(), flags);
   recording->Rerecord();
-  scoped_refptr<FakeRasterSource> raster_source =
-      FakeRasterSource::CreateFromRecordingSource(recording.get(), false);
+  scoped_refptr<RasterSource> raster_source = recording->CreateRasterSource();
 
   gfx::Transform quad_to_target_transform;
   SharedQuadState* shared_state =
@@ -2810,7 +2845,7 @@ TYPED_TEST(RendererPixelTest, TileDrawQuadNearestNeighbor) {
 
   gfx::Size tile_size(2, 2);
   ResourceId resource = this->resource_provider_->CreateResource(
-      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
@@ -2855,7 +2890,7 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadNearestNeighbor) {
 
   gfx::Size tile_size(2, 2);
   ResourceId resource = this->resource_provider_->CreateResource(
-      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
@@ -2903,7 +2938,7 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadLinear) {
 
   gfx::Size tile_size(2, 2);
   ResourceId resource = this->resource_provider_->CreateResource(
-      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+      tile_size, ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
       gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
@@ -2938,7 +2973,7 @@ TYPED_TEST(SoftwareRendererPixelTest, TextureDrawQuadLinear) {
 TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   gfx::Rect viewport(this->device_viewport_size_);
   // TODO(enne): the renderer should figure this out on its own.
-  ResourceFormat texture_format = RGBA_8888;
+  viz::ResourceFormat texture_format = viz::RGBA_8888;
   bool nearest_neighbor = false;
 
   int id = 1;
@@ -2965,8 +3000,8 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   green_recording->add_draw_rect_with_flags(green_rect1, green_flags);
   green_recording->add_draw_rect_with_flags(green_rect2, green_flags);
   green_recording->Rerecord();
-  scoped_refptr<FakeRasterSource> green_raster_source =
-      FakeRasterSource::CreateFromRecordingSource(green_recording.get(), false);
+  scoped_refptr<RasterSource> green_raster_source =
+      green_recording->CreateRasterSource();
 
   SharedQuadState* top_right_green_shared_quad_state =
       CreateTestSharedQuadState(green_quad_to_target_transform, viewport,
@@ -3034,8 +3069,7 @@ TYPED_TEST(SoftwareRendererPixelTest, PictureDrawQuadNonIdentityScale) {
   recording->add_draw_rectf_with_flags(blue_layer_rect1, blue_flags);
   recording->add_draw_rectf_with_flags(blue_layer_rect2, blue_flags);
   recording->Rerecord();
-  scoped_refptr<FakeRasterSource> raster_source =
-      FakeRasterSource::CreateFromRecordingSource(recording.get(), false);
+  scoped_refptr<RasterSource> raster_source = recording->CreateRasterSource();
 
   gfx::Rect content_union_rect(
       gfx::ToEnclosingRect(gfx::ScaleRect(union_layer_rect, contents_scale)));
@@ -3264,8 +3298,8 @@ TEST_F(GLRendererPixelTest, TextureQuadBatching) {
   }
 
   ResourceId resource = this->resource_provider_->CreateResource(
-      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
-      gfx::ColorSpace());
+      mask_rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE,
+      viz::RGBA_8888, gfx::ColorSpace());
 
   this->resource_provider_->CopyToResource(
       resource, reinterpret_cast<uint8_t*>(bitmap.getPixels()),
@@ -3313,7 +3347,7 @@ TEST_F(GLRendererPixelTest, TextureQuadBatching) {
 class GLRendererPixelTestWithOverdrawFeedback : public GLRendererPixelTest {
  protected:
   void SetUp() override {
-    settings_.renderer_settings.show_overdraw_feedback = true;
+    renderer_settings_.show_overdraw_feedback = true;
     GLRendererPixelTest::SetUp();
   }
 };
@@ -3370,7 +3404,7 @@ class ColorTransformPixelTest
       public testing::WithParamInterface<ColorSpacePair> {
  public:
   ColorTransformPixelTest() {
-    settings_.renderer_settings.enable_color_correct_rendering = true;
+    renderer_settings_.enable_color_correct_rendering = true;
     // Note that this size of 17 is not random -- it is chosen to match the
     // size of LUTs that are created. If we did not match the LUT size exactly,
     // then the error for LUT based transforms is much larger.
@@ -3443,7 +3477,7 @@ TEST_P(ColorTransformPixelTest, Basic) {
         CreateTestSharedQuadState(gfx::Transform(), rect, pass.get());
 
     ResourceId resource = resource_provider_->CreateResource(
-        rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, RGBA_8888,
+        rect.size(), ResourceProvider::TEXTURE_HINT_IMMUTABLE, viz::RGBA_8888,
         src_color_space_);
     resource_provider_->CopyToResource(resource, input_colors.data(),
                                        rect.size());

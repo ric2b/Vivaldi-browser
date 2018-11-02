@@ -31,7 +31,7 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "components/prefs/pref_service.h"
 #include "prefs/vivaldi_pref_names.h"
 
@@ -149,6 +149,7 @@ TabLoader::~TabLoader() {
   DCHECK(shared_tab_loader_ == this);
   shared_tab_loader_ = nullptr;
   base::MemoryCoordinatorClientRegistry::GetInstance()->Unregister(this);
+  SessionRestore::OnTabLoaderFinishedLoadingTabs();
 }
 
 void TabLoader::StartLoading(const std::vector<RestoredTab>& tabs) {

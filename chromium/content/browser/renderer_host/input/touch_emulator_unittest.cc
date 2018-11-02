@@ -15,6 +15,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/WebKeyboardEvent.h"
 #include "third_party/WebKit/public/platform/WebMouseWheelEvent.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/blink/web_input_event_traits.h"
 
 using blink::WebGestureEvent;
@@ -65,8 +66,8 @@ class TouchEmulatorTest : public testing::Test,
   void ForwardEmulatedTouchEvent(const blink::WebTouchEvent& event) override {
     forwarded_events_.push_back(event.GetType());
     EXPECT_EQ(1U, event.touches_length);
-    EXPECT_EQ(last_mouse_x_, event.touches[0].position.x);
-    EXPECT_EQ(last_mouse_y_, event.touches[0].position.y);
+    EXPECT_EQ(last_mouse_x_, event.touches[0].PositionInWidget().x);
+    EXPECT_EQ(last_mouse_y_, event.touches[0].PositionInWidget().y);
     const int all_buttons =
         WebInputEvent::kLeftButtonDown | WebInputEvent::kMiddleButtonDown |
         WebInputEvent::kRightButtonDown | WebInputEvent::kBackButtonDown |
@@ -87,7 +88,8 @@ class TouchEmulatorTest : public testing::Test,
     cursor_ = cursor;
   }
 
-  void ShowContextMenuAtPoint(const gfx::Point& point) override {}
+  void ShowContextMenuAtPoint(const gfx::Point& point,
+                              const ui::MenuSourceType source_type) override {}
 
  protected:
   TouchEmulator* emulator() const {
@@ -201,10 +203,8 @@ class TouchEmulatorTest : public testing::Test,
     event.touches_length = 1;
     event.touches[0].id = 0;
     event.touches[0].state = state;
-    event.touches[0].position.x = x;
-    event.touches[0].position.y = y;
-    event.touches[0].screen_position.x = x;
-    event.touches[0].screen_position.y = y;
+    event.touches[0].SetPositionInWidget(x, y);
+    event.touches[0].SetPositionInScreen(x, y);
     return event;
   }
 

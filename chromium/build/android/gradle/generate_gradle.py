@@ -44,6 +44,7 @@ _DEFAULT_TARGETS = [
     # because it has resources as deps of android_apk() rather than using an
     #  android_library() intermediate target.
     # '//android_webview:system_webview_apk',
+    '//android_webview/test/embedded_test_server:aw_net_test_support_apk',
     '//android_webview/test:webview_instrumentation_apk',
     '//android_webview/test:webview_instrumentation_test_apk',
     '//base:base_junit_tests',
@@ -210,7 +211,7 @@ class _ProjectEntry(object):
 
   def JavaFiles(self):
     if self._java_files is None:
-      java_sources_file = self.Gradle().get('java_sources_file')
+      java_sources_file = self.DepsInfo().get('java_sources_file')
       java_files = []
       if java_sources_file:
         java_sources_file = _RebasePath(java_sources_file)
@@ -363,7 +364,7 @@ class _ProjectContextGenerator(object):
     res_dirs.add(
         os.path.join(self.EntryOutputDir(root_entry), _RES_SUBDIR))
     variables['res_dirs'] = self._Relativize(root_entry, res_dirs)
-    android_manifest = root_entry.Gradle().get('android_manifest')
+    android_manifest = root_entry.DepsInfo().get('android_manifest')
     if not android_manifest:
       android_manifest = self._GenCustomManifest(root_entry)
     variables['android_manifest'] = self._Relativize(

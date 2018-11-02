@@ -18,6 +18,7 @@ include_rules = [
   "+services/ui/public",
   "+skia/ext",
   "+third_party/cros_system_api",
+  "+third_party/icu",
   "+third_party/skia",
   "+net",
   "+ui",
@@ -38,6 +39,7 @@ include_rules = [
   "+chromeos/dbus/power_manager",
   "+chromeos/dbus/power_manager_client.h",
   "+chromeos/dbus/session_manager_client.h",
+  "+chromeos/dbus/shill_device_client.h",
   "+chromeos/dbus/system_clock_client.h",
   "+chromeos/login",
   # TODO(jamescook): Eliminate this. http://crbug.com/644355
@@ -45,11 +47,23 @@ include_rules = [
   # TODO(jamescook): Eliminate this. http://crbug.com/644361
   "+chromeos/settings/timezone_settings.h",
   "+chromeos/system",
+
+  # Ozone does not run in process in mus/mash.
+  "-ui/events/ozone",
+  "-ui/ozone",
 ]
 
 specific_include_rules = {
   "root_window_controller\.*": [
     "+ash/host"
+  ],
+  "shell.cc": [
+    "+ash/host/ash_window_tree_host_init_params.h"
+  ],
+  "shell_port_classic.cc": [
+    "+ash/host/ash_window_tree_host.h",
+    "+ash/host/ash_window_tree_host_init_params.h",
+    "+ui/ozone/public"
   ],
   "touch_transformer_controller\.*": [
     "+ash/host"

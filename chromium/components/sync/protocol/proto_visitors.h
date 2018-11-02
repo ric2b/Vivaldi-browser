@@ -477,13 +477,14 @@ VISIT_PROTO_FIELDS(const sync_pb::FaviconTrackingSpecifics& proto) {
   VISIT(is_bookmarked);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::FieldTrialEvent::FieldTrial& proto) {
+VISIT_PROTO_FIELDS(
+    const sync_pb::UserEventSpecifics::FieldTrial::FieldTrialPair& proto) {
   VISIT(name_id);
   VISIT(group_id);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::FieldTrialEvent& proto) {
-  VISIT_REP(field_trials);
+VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::FieldTrial& proto) {
+  VISIT_REP(field_trial_pairs);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::GcmChannelFlags& proto) {
@@ -545,14 +546,16 @@ VISIT_PROTO_FIELDS(const sync_pb::KeystoreEncryptionFlags& proto) {
   VISIT(enabled);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::LanguageDetection::Language& proto) {
+VISIT_PROTO_FIELDS(
+    const sync_pb::UserEventSpecifics::LanguageDetection::Language& proto) {
   VISIT(language_code);
   VISIT(is_reliable);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::LanguageDetection& proto) {
+VISIT_PROTO_FIELDS(
+    const sync_pb::UserEventSpecifics::LanguageDetection& proto) {
   VISIT_REP(detected_languages);
-  VISIT(adopted_language);
+  VISIT(adopted_language_code);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::LinkedAppIconInfo& proto) {
@@ -686,6 +689,7 @@ VISIT_PROTO_FIELDS(const sync_pb::PrinterSpecifics& proto) {
   VISIT(uri);
   VISIT(uuid);
   VISIT(ppd_reference);
+  VISIT(make_and_model);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PriorityPreferenceSpecifics& proto) {
@@ -852,6 +856,12 @@ VISIT_PROTO_FIELDS(const sync_pb::TimeRangeDirective& proto) {
   VISIT(end_time_usec);
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Translation& proto) {
+  VISIT(from_language_code);
+  VISIT(to_language_code);
+  VISIT_ENUM(interaction);
+}
+
 VISIT_PROTO_FIELDS(const sync_pb::TypeHint& proto) {
   VISIT(data_type_id);
   VISIT(has_valid_hint);
@@ -876,9 +886,13 @@ VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics& proto) {
   VISIT(event_time_usec);
   VISIT(navigation_id);
   VISIT(session_id);
+  VISIT(test_event);
   VISIT(field_trial_event);
-  VISIT(language_detection);
+  VISIT(language_detection_event);
+  VISIT(translation_event);
 }
+
+VISIT_PROTO_FIELDS(const sync_pb::UserEventSpecifics::Test& proto) {}
 
 VISIT_PROTO_FIELDS(const sync_pb::WalletMaskedCreditCard& proto) {
   VISIT(id);

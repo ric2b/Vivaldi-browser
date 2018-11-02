@@ -25,6 +25,7 @@ class LargeIconService;
 namespace favicon_base {
 struct FaviconImageResult;
 struct LargeIconResult;
+enum class GoogleFaviconServerRequestStatus;
 }  // namespace favicon_base
 
 namespace gfx {
@@ -51,6 +52,8 @@ class IconCacherImpl : public IconCacher {
       PopularSites::Site site,
       const base::Closure& icon_available,
       const base::Closure& preliminary_icon_available) override;
+
+  // TODO(jkrcal): Rename all instances of "MostLikely" to "ChromeSuggestions".
   void StartFetchMostLikely(const GURL& page_url,
                             const base::Closure& icon_available) override;
 
@@ -83,7 +86,9 @@ class IconCacherImpl : public IconCacher {
       const GURL& page_url,
       const favicon_base::LargeIconResult& result);
 
-  void OnMostLikelyFaviconDownloaded(const GURL& request_url, bool success);
+  void OnMostLikelyFaviconDownloaded(
+      const GURL& request_url,
+      favicon_base::GoogleFaviconServerRequestStatus status);
 
   bool StartRequest(const GURL& request_url,
                     const base::Closure& icon_available);

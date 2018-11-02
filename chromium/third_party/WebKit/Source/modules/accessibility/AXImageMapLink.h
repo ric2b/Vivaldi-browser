@@ -53,7 +53,6 @@ class AXImageMapLink final : public AXNodeObject {
   HTMLMapElement* MapElement() const;
 
   AccessibilityRole RoleValue() const override;
-  bool IsEnabled() const override { return true; }
   bool ComputeAccessibilityIsIgnored(IgnoredReasons* = nullptr) const override;
 
   Element* AnchorElement() const override;
@@ -61,8 +60,8 @@ class AXImageMapLink final : public AXNodeObject {
   KURL Url() const override;
   bool IsLink() const override { return true; }
   bool IsLinked() const override { return true; }
-  AXObjectImpl* ComputeParent() const override;
-  void GetRelativeBounds(AXObjectImpl** out_container,
+  AXObject* ComputeParent() const override;
+  void GetRelativeBounds(AXObject** out_container,
                          FloatRect& out_bounds_in_container,
                          SkMatrix44& out_container_transform) const override;
 

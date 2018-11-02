@@ -10,7 +10,7 @@
 
 namespace blink {
 
-class FrameView;
+class LocalFrameView;
 class LayoutRect;
 
 // ScrollableArea for the root frame's viewport. This class ties together the
@@ -21,7 +21,7 @@ class LayoutRect;
 // between the two viewports in accord with the pinch-zoom semantics. For other
 // APIs that don't make sense on the combined viewport, the call is delegated to
 // the layout viewport. Thus, we could say this class is a decorator on the
-// FrameView scrollable area that adds pinch-zoom semantics to scrolling.
+// LocalFrameView scrollable area that adds pinch-zoom semantics to scrolling.
 class CORE_EXPORT RootFrameViewport final
     : public GarbageCollectedFinalized<RootFrameViewport>,
       public ScrollableArea {
@@ -40,12 +40,13 @@ class CORE_EXPORT RootFrameViewport final
 
   // Convert from the root content document's coordinate space, into the
   // coordinate space of the layout viewport's content. In the normal case,
-  // this will be a no-op since the root FrameView is the layout viewport and
-  // so the root content is the layout viewport's content but if the page
+  // this will be a no-op since the root LocalFrameView is the layout viewport
+  // and so the root content is the layout viewport's content but if the page
   // sets a custom root scroller via document.rootScroller, another element
   // may be the layout viewport.
-  LayoutRect RootContentsToLayoutViewportContents(FrameView& root_frame_view,
-                                                  const LayoutRect&) const;
+  LayoutRect RootContentsToLayoutViewportContents(
+      LocalFrameView& root_frame_view,
+      const LayoutRect&) const;
 
   void RestoreToAnchor(const ScrollOffset&);
 
@@ -60,7 +61,9 @@ class CORE_EXPORT RootFrameViewport final
   LayoutRect ScrollIntoView(const LayoutRect& rect_in_content,
                             const ScrollAlignment& align_x,
                             const ScrollAlignment& align_y,
-                            ScrollType = kProgrammaticScroll) override;
+                            bool is_smooth,
+                            ScrollType = kProgrammaticScroll,
+                            bool is_for_scroll_sequence = false) override;
   IntRect VisibleContentRect(
       IncludeScrollbarsInRect = kExcludeScrollbars) const override;
   bool ShouldUseIntegerScrollOffset() const override;
@@ -94,6 +97,7 @@ class CORE_EXPORT RootFrameViewport final
   ScrollResult UserScroll(ScrollGranularity, const FloatSize&) override;
   bool ScrollAnimatorEnabled() const override;
   PlatformChromeClient* GetChromeClient() const override;
+  SmoothScrollSequencer* GetSmoothScrollSequencer() const override;
   void ServiceScrollAnimations(double) override;
   void UpdateCompositorScrollAnimations() override;
   void CancelProgrammaticScrollAnimation() override;

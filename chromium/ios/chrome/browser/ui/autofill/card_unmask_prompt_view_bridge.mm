@@ -144,8 +144,10 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
 @implementation CardUnmaskPromptViewController
 
 - (instancetype)initWithBridge:(autofill::CardUnmaskPromptViewBridge*)bridge {
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
   DCHECK(bridge);
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _bridge = bridge;
   }
@@ -204,11 +206,14 @@ void CardUnmaskPromptViewBridge::DeleteSelf() {
 
 - (void)viewWillLayoutSubviews {
   [super viewWillLayoutSubviews];
-  NSIndexPath* CVCIndexPath =
-      [self.collectionViewModel indexPathForItem:_CVCItem];
-  CVCCell* CVC = base::mac::ObjCCastStrict<CVCCell>(
-      [self.collectionView cellForItemAtIndexPath:CVCIndexPath]);
-  [self focusInputIfNeeded:CVC];
+  if ([self.collectionViewModel hasItemForItemType:ItemTypeCVC
+                                 sectionIdentifier:SectionIdentifierMain]) {
+    NSIndexPath* CVCIndexPath =
+        [self.collectionViewModel indexPathForItem:_CVCItem];
+    CVCCell* CVC = base::mac::ObjCCastStrict<CVCCell>(
+        [self.collectionView cellForItemAtIndexPath:CVCIndexPath]);
+    [self focusInputIfNeeded:CVC];
+  }
 }
 
 #pragma mark - CollectionViewController

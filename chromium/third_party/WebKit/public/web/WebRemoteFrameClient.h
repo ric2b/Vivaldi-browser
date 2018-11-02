@@ -13,6 +13,7 @@
 namespace blink {
 enum class WebClientRedirectPolicy;
 enum class WebFrameLoadType;
+class WebURLRequest;
 struct WebRect;
 
 class WebRemoteFrameClient {
@@ -41,6 +42,9 @@ class WebRemoteFrameClient {
       const WebRect& viewport_intersection) {}
 
   virtual void VisibilityChanged(bool visible) {}
+
+  // Set or clear the inert property on the remote frame.
+  virtual void SetIsInert(bool) {}
 
   // This frame updated its opener to another frame.
   virtual void DidChangeOpener(WebFrame* opener) {}

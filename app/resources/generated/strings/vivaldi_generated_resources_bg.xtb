@@ -16,7 +16,7 @@
 <translation id="1175364870820465910">&amp;Отпечатай…</translation>
 <translation id="1177863135347784049">потребителски</translation>
 <translation id="1181037720776840403">Премахни</translation>
-<translation id="1187722533808055681">Събуждания след престой</translation>
+<translation id="1187722533808055681">Брой събуждания</translation>
 <translation id="119944043368869598">Изчисти всичко</translation>
 <translation id="1221825588892235038">Само избраното</translation>
 <translation id="1244303850296295656">Грешка в разширението</translation>
@@ -36,7 +36,7 @@
 <translation id="1580652505892042215">Контекст:</translation>
 <translation id="1588438908519853928">Обикновен</translation>
 <translation id="1588870296199743671">Отвори препратката в…</translation>
-<translation id="159359590073980872">Кеш на картините</translation>
+<translation id="159359590073980872">Кеш за картини</translation>
 <translation id="1601560923496285236">Приложи</translation>
 <translation id="1603914832182249871">(частно)</translation>
 <translation id="1616206807336925449">Разширението не изисква специални разрешения.</translation>
@@ -133,7 +133,7 @@
 <translation id="2971033837577180453">&lt;span&gt;ИД:&lt;/span&gt;<ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">По&amp;втори</translation>
 <translation id="299483336428448530">Инсталирано от родителя.</translation>
-<translation id="3003623123441819449">Кеш на CSS</translation>
+<translation id="3003623123441819449">Кеш за CSS</translation>
 <translation id="3012631534724231212">(в iframe)</translation>
 <translation id="3021678814754966447">&amp;Покажи кода на рамката</translation>
 <translation id="302620147503052030">Покажи бутона</translation>
@@ -195,7 +195,7 @@
 <translation id="3797900183766075808">&amp;Потърси за „<ph name="SEARCH_TERMS" />“ чрез <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3798449238516105146">Версия</translation>
 <translation id="385051799172605136">Назад</translation>
-<translation id="3855441664322950881">Пакетиране на разширение1</translation>
+<translation id="3855441664322950881">Пакетирай разширението</translation>
 <translation id="3862134173397075045">Добре дошли в прехвърляне по Chrome!</translation>
 <translation id="3866249974567520381">Описание</translation>
 <translation id="3899879303189199559">Извън линия повече от 1 година</translation>
@@ -270,9 +270,9 @@
 <translation id="4850258771229959924">Покажи с инструменти за разработка</translation>
 <translation id="488785315393301722">Покажи подробности</translation>
 <translation id="4911714727432509308">Няма разширение, за което да е присвоен бързият клавиш.</translation>
-<translation id="4912643508233590958">Събуждания след престой</translation>
+<translation id="4912643508233590958">Брой събуждания</translation>
 <translation id="4918086044614829423">Приеми</translation>
-<translation id="4927301649992043040">Пакетиране на разширение2</translation>
+<translation id="4927301649992043040">Пакетирай разширението</translation>
 <translation id="4927753642311223124">Нататък, тук няма нищо.</translation>
 <translation id="4988526792673242964">Страници</translation>
 <translation id="49896407730300355">Завърти срещу ча&amp;совника</translation>
@@ -300,7 +300,7 @@
 <translation id="5311260548612583999">Файл с частен ключ (по избор):</translation>
 <translation id="5317780077021120954">Запиши</translation>
 <translation id="5329858601952122676">&amp;Изтрий</translation>
-<translation id="5334142896108694079">Кеш на скриптовете</translation>
+<translation id="5334142896108694079">Кеш за скриптове</translation>
 <translation id="5355926466126177564">Разширение „<ph name="EXTENSION_NAME" />“ промени страницата, показвана при търсене от омнибокса.</translation>
 <translation id="5360150013186312835">Показвай в лентата</translation>
 <translation id="5362741141255528695">Изберете файл с частен ключ.</translation>
@@ -353,7 +353,7 @@
 <translation id="6122081475643980456">Контролирано свързване с интернет</translation>
 <translation id="6124650939968185064">Следните разширения зависят от разширението:</translation>
 <translation id="6147020289383635445">Провален предизглед.</translation>
-<translation id="6156863943908443225">Кеш на скриптовете</translation>
+<translation id="6156863943908443225">Кеш за скриптове</translation>
 <translation id="6169666352732958425">Прехвърляне на работния плот е невъзможно.</translation>
 <translation id="6171948306033499786">Задръж отпечатването</translation>
 <translation id="6196854373336333322">Разширение „<ph name="EXTENSION_NAME" />“ пое контрол над настройките на сървър посредник, което значи, че може да променя, прекъсва и дори да следи всичко, докато сте на линия. Ако не сте сигурен на какво се дължи, вероятно не искате промяната да остане в сила.</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">Памет на SQLite</translation>
 <translation id="6655190889273724601">Разреши режим на разработка</translation>
 <translation id="6691936601825168937">Н&amp;апред</translation>
-<translation id="6700480081846086223">Прехвърли <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Обхват</translation>
 <translation id="6786747875388722282">Разширения</translation>
 <translation id="6787839852456839824">Бързи клавиши</translation>
@@ -515,13 +514,13 @@
 <translation id="8512476990829870887">Прекрати процеса</translation>
 <translation id="8523493869875972733">Запази промените</translation>
 <translation id="8523849605371521713">Добавено от фирмено правило</translation>
-<translation id="8546306075665861288">Кеш на картините</translation>
+<translation id="8546306075665861288">Кеш за картини</translation>
 <translation id="8569682776816196752">Няма намерени назначения</translation>
 <translation id="8584280235376696778">&amp;Отвори клипа в нов раздел</translation>
 <translation id="8605428685123651449">Памет на SQLite</translation>
 <translation id="8615618338313291042">Частно приложение: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">Избиране на източник</translation>
-<translation id="862750493060684461">Кеш на CSS</translation>
+<translation id="862750493060684461">Кеш за CSS</translation>
 <translation id="8652487083013326477">бутон за избор с обхват по страници</translation>
 <translation id="8658595122208653918">Променяне на настройките на принтера…</translation>
 <translation id="8661290697478713397">Отвори препратката в &amp;частен прозорец</translation>

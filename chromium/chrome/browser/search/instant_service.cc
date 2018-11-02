@@ -29,7 +29,6 @@
 #include "chrome/browser/ui/webui/theme_source.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/grit/theme_resources.h"
-#include "components/favicon/core/fallback_icon_service.h"
 #include "components/history/core/browser/top_sites.h"
 #include "components/image_fetcher/core/image_fetcher_impl.h"
 #include "components/keyed_service/core/service_access_type.h"
@@ -109,8 +108,8 @@ InstantService::InstantService(Profile* profile)
   if (profile_ && profile_->GetResourceContext()) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&InstantIOContext::SetUserDataOnIO,
-                   profile->GetResourceContext(), instant_io_context_));
+        base::BindOnce(&InstantIOContext::SetUserDataOnIO,
+                       profile->GetResourceContext(), instant_io_context_));
   }
 
   // Set up the data sources that Instant uses on the NTP.
@@ -141,8 +140,8 @@ void InstantService::AddInstantProcess(int process_id) {
   if (instant_io_context_.get()) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&InstantIOContext::AddInstantProcessOnIO,
-                   instant_io_context_, process_id));
+        base::BindOnce(&InstantIOContext::AddInstantProcessOnIO,
+                       instant_io_context_, process_id));
   }
 }
 
@@ -225,8 +224,8 @@ void InstantService::Shutdown() {
   if (instant_io_context_.get()) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&InstantIOContext::ClearInstantProcessesOnIO,
-                   instant_io_context_));
+        base::BindOnce(&InstantIOContext::ClearInstantProcessesOnIO,
+                       instant_io_context_));
   }
 
   if (most_visited_sites_) {
@@ -267,8 +266,8 @@ void InstantService::OnRendererProcessTerminated(int process_id) {
   if (instant_io_context_.get()) {
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&InstantIOContext::RemoveInstantProcessOnIO,
-                   instant_io_context_, process_id));
+        base::BindOnce(&InstantIOContext::RemoveInstantProcessOnIO,
+                       instant_io_context_, process_id));
   }
 }
 

@@ -4,9 +4,9 @@
 
 #include "core/paint/NinePieceImagePainter.h"
 
-#include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutBoxModelObject.h"
-#include "core/paint/BoxPainter.h"
+#include "core/page/ChromeClient.h"
+#include "core/page/Page.h"
 #include "core/paint/NinePieceImageGrid.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/NinePieceImage.h"
@@ -52,11 +52,13 @@ void PaintPieces(GraphicsContext& context,
 }  // anonymous namespace
 
 bool NinePieceImagePainter::Paint(GraphicsContext& graphics_context,
-                                  const LayoutBoxModelObject& layout_object,
+                                  const ImageResourceObserver& observer,
+                                  const Document& document,
+                                  Node* node,
                                   const LayoutRect& rect,
                                   const ComputedStyle& style,
                                   const NinePieceImage& nine_piece_image,
-                                  SkBlendMode op) const {
+                                  SkBlendMode op) {
   StyleImage* style_image = nine_piece_image.GetImage();
   if (!style_image)
     return false;
@@ -85,20 +87,18 @@ bool NinePieceImagePainter::Paint(GraphicsContext& graphics_context,
   // is one. For generated images, the actual image data (gradient stops, etc.)
   // are scaled to effective zoom instead so we must take care not to cause
   // scale of them again.
-  IntSize image_size = RoundedIntSize(style_image->ImageSize(
-      layout_object.GetDocument(), 1, border_image_rect.Size()));
-  RefPtr<Image> image = style_image->GetImage(layout_object, image_size);
+  IntSize image_size = RoundedIntSize(
+      style_image->ImageSize(document, 1, border_image_rect.Size()));
+  RefPtr<Image> image =
+      style_image->GetImage(observer, document, style, image_size);
 
-  InterpolationQuality interpolation_quality =
-      BoxPainter::ChooseInterpolationQuality(layout_object, image.Get(), 0,
-                                             rect_with_outsets.Size());
+  InterpolationQuality interpolation_quality = style.GetInterpolationQuality();
   InterpolationQuality previous_interpolation_quality =
       graphics_context.ImageInterpolationQuality();
   graphics_context.SetImageInterpolationQuality(interpolation_quality);
 
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "PaintImage",
-               "data",
-               InspectorPaintImageEvent::Data(layout_object, *style_image));
+               "data", InspectorPaintImageEvent::Data(node, *style_image));
 
   PaintPieces(graphics_context, border_image_rect, style, nine_piece_image,
               image.Get(), image_size, op);

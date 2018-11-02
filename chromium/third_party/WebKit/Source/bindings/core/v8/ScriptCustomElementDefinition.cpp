@@ -12,9 +12,9 @@
 #include "bindings/core/v8/V8ThrowDOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/custom/CustomElement.h"
 #include "core/events/ErrorEvent.h"
 #include "core/html/HTMLElement.h"
+#include "core/html/custom/CustomElement.h"
 #include "core/html/imports/HTMLImportsController.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/bindings/V8BindingMacros.h"
@@ -24,121 +24,71 @@
 
 namespace blink {
 
-// Retrieves the custom elements constructor -> name map, creating it
-// if necessary.
-static v8::Local<v8::Map> EnsureCustomElementRegistryMap(
-    ScriptState* script_state,
-    CustomElementRegistry* registry) {
-  CHECK(script_state->World().IsMainWorld());
-  v8::Isolate* isolate = script_state->GetIsolate();
-
-  V8PrivateProperty::Symbol symbol =
-      V8PrivateProperty::GetCustomElementRegistryMap(isolate);
-  v8::Local<v8::Object> wrapper = ToV8(registry, script_state).As<v8::Object>();
-  v8::Local<v8::Value> map = symbol.GetOrUndefined(wrapper);
-  if (map->IsUndefined()) {
-    map = v8::Map::New(isolate);
-    symbol.Set(wrapper, map);
-  }
-  return map.As<v8::Map>();
-}
-
 ScriptCustomElementDefinition* ScriptCustomElementDefinition::ForConstructor(
     ScriptState* script_state,
     CustomElementRegistry* registry,
     const v8::Local<v8::Value>& constructor) {
-  v8::Local<v8::Map> map =
-      EnsureCustomElementRegistryMap(script_state, registry);
-  v8::Local<v8::Value> name_value =
-      map->Get(script_state->GetContext(), constructor).ToLocalChecked();
-  if (!name_value->IsString())
+  V8PerContextData* per_context_data = script_state->PerContextData();
+  // TODO(yukishiino): Remove this check when crbug.com/583429 is fixed.
+  if (UNLIKELY(!per_context_data))
     return nullptr;
-  AtomicString name = ToCoreAtomicString(name_value.As<v8::String>());
+  auto private_id = per_context_data->GetPrivateCustomElementDefinitionId();
+  v8::Local<v8::Value> id_value;
+  if (!constructor.As<v8::Object>()
+           ->GetPrivate(script_state->GetContext(), private_id)
+           .ToLocal(&id_value))
+    return nullptr;
+  if (!id_value->IsUint32())
+    return nullptr;
+  uint32_t id = id_value.As<v8::Uint32>()->Value();
 
-  // This downcast is safe because only
-  // ScriptCustomElementDefinitions have a name associated with a V8
-  // constructor in the map; see
-  // ScriptCustomElementDefinition::create. This relies on three
-  // things:
+  // This downcast is safe because only ScriptCustomElementDefinitions
+  // have an ID associated with them. This relies on three things:
   //
-  // 1. Only ScriptCustomElementDefinition adds entries to the map.
-  //    Audit the use of private properties in general and how the
-  //    map is handled--it should never be leaked to script.
+  // 1. Only ScriptCustomElementDefinition::Create sets the private
+  //    property on a constructor.
   //
-  // 2. CustomElementRegistry does not overwrite definitions with a
-  //    given name--see the CHECK in CustomElementRegistry::define
-  //    --and adds ScriptCustomElementDefinitions to the map without
-  //    fail.
+  // 2. CustomElementRegistry adds ScriptCustomElementDefinitions
+  //    assigned an ID to the list of definitions without fail.
   //
   // 3. The relationship between the CustomElementRegistry and its
-  //    map is never mixed up; this is guaranteed by the bindings
-  //    system which provides a stable wrapper, and the map hangs
-  //    off the wrapper.
+  //    private property is never mixed up; this is guaranteed by the
+  //    bindings system because the registry is associated with its
+  //    context.
   //
   // At a meta-level, this downcast is safe because there is
   // currently only one implementation of CustomElementDefinition in
   // product code and that is ScriptCustomElementDefinition. But
   // that may change in the future.
-  CustomElementDefinition* definition = registry->DefinitionForName(name);
+  CustomElementDefinition* definition = registry->DefinitionForId(id);
   CHECK(definition);
   return static_cast<ScriptCustomElementDefinition*>(definition);
-}
-
-using SymbolGetter = V8PrivateProperty::Symbol (*)(v8::Isolate*);
-
-template <typename T>
-static void KeepAlive(v8::Local<v8::Object>& object,
-                      SymbolGetter symbol_getter,
-                      const v8::Local<T>& value,
-                      ScopedPersistent<T>& persistent,
-                      ScriptState* script_state) {
-  if (value.IsEmpty())
-    return;
-
-  v8::Isolate* isolate = script_state->GetIsolate();
-  symbol_getter(isolate).Set(object, value);
-  persistent.Set(isolate, value);
-  persistent.SetPhantom();
 }
 
 ScriptCustomElementDefinition* ScriptCustomElementDefinition::Create(
     ScriptState* script_state,
     CustomElementRegistry* registry,
     const CustomElementDescriptor& descriptor,
+    CustomElementDefinition::Id id,
     const v8::Local<v8::Object>& constructor,
     const v8::Local<v8::Function>& connected_callback,
     const v8::Local<v8::Function>& disconnected_callback,
     const v8::Local<v8::Function>& adopted_callback,
     const v8::Local<v8::Function>& attribute_changed_callback,
-    const HashSet<AtomicString>& observed_attributes) {
+    HashSet<AtomicString>&& observed_attributes) {
   ScriptCustomElementDefinition* definition = new ScriptCustomElementDefinition(
       script_state, descriptor, constructor, connected_callback,
       disconnected_callback, adopted_callback, attribute_changed_callback,
-      observed_attributes);
+      std::move(observed_attributes));
 
-  // Add a constructor -> name mapping to the registry.
-  v8::Local<v8::Value> name_value =
-      V8String(script_state->GetIsolate(), descriptor.GetName());
-  v8::Local<v8::Map> map =
-      EnsureCustomElementRegistryMap(script_state, registry);
-  map->Set(script_state->GetContext(), constructor, name_value)
-      .ToLocalChecked();
-  definition->constructor_.SetPhantom();
-
-  // We add the callbacks here to keep them alive. We use the name as
-  // the key because it is unique per-registry.
-  v8::Local<v8::Object> object = v8::Object::New(script_state->GetIsolate());
-  KeepAlive(object, V8PrivateProperty::GetCustomElementConnectedCallback,
-            connected_callback, definition->connected_callback_, script_state);
-  KeepAlive(object, V8PrivateProperty::GetCustomElementDisconnectedCallback,
-            disconnected_callback, definition->disconnected_callback_,
-            script_state);
-  KeepAlive(object, V8PrivateProperty::GetCustomElementAdoptedCallback,
-            adopted_callback, definition->adopted_callback_, script_state);
-  KeepAlive(object, V8PrivateProperty::GetCustomElementAttributeChangedCallback,
-            attribute_changed_callback, definition->attribute_changed_callback_,
-            script_state);
-  map->Set(script_state->GetContext(), name_value, object).ToLocalChecked();
+  // Tag the JavaScript constructor object with its ID.
+  v8::Local<v8::Value> id_value =
+      v8::Integer::NewFromUnsigned(script_state->GetIsolate(), id);
+  auto private_id =
+      script_state->PerContextData()->GetPrivateCustomElementDefinitionId();
+  CHECK(
+      constructor->SetPrivate(script_state->GetContext(), private_id, id_value)
+          .ToChecked());
 
   return definition;
 }
@@ -151,10 +101,32 @@ ScriptCustomElementDefinition::ScriptCustomElementDefinition(
     const v8::Local<v8::Function>& disconnected_callback,
     const v8::Local<v8::Function>& adopted_callback,
     const v8::Local<v8::Function>& attribute_changed_callback,
-    const HashSet<AtomicString>& observed_attributes)
-    : CustomElementDefinition(descriptor, observed_attributes),
+    HashSet<AtomicString>&& observed_attributes)
+    : CustomElementDefinition(descriptor, std::move(observed_attributes)),
       script_state_(script_state),
-      constructor_(script_state->GetIsolate(), constructor) {}
+      constructor_(script_state->GetIsolate(), this, constructor),
+      connected_callback_(this),
+      disconnected_callback_(this),
+      adopted_callback_(this),
+      attribute_changed_callback_(this) {
+  v8::Isolate* isolate = script_state->GetIsolate();
+  if (!connected_callback.IsEmpty())
+    connected_callback_.Set(isolate, connected_callback);
+  if (!disconnected_callback.IsEmpty())
+    disconnected_callback_.Set(isolate, disconnected_callback);
+  if (!adopted_callback.IsEmpty())
+    adopted_callback_.Set(isolate, adopted_callback);
+  if (!attribute_changed_callback.IsEmpty())
+    attribute_changed_callback_.Set(isolate, attribute_changed_callback);
+}
+
+DEFINE_TRACE_WRAPPERS(ScriptCustomElementDefinition) {
+  visitor->TraceWrappers(constructor_.Cast<v8::Value>());
+  visitor->TraceWrappers(connected_callback_.Cast<v8::Value>());
+  visitor->TraceWrappers(disconnected_callback_.Cast<v8::Value>());
+  visitor->TraceWrappers(adopted_callback_.Cast<v8::Value>());
+  visitor->TraceWrappers(attribute_changed_callback_.Cast<v8::Value>());
+}
 
 static void DispatchErrorEvent(v8::Isolate* isolate,
                                v8::Local<v8::Value> exception,

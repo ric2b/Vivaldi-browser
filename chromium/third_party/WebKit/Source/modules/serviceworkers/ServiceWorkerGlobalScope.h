@@ -42,13 +42,14 @@
 namespace blink {
 
 class Dictionary;
+class RespondWithObserver;
 class ScriptPromise;
 class ScriptState;
 class ServiceWorkerClients;
 class ServiceWorkerRegistration;
 class ServiceWorkerThread;
 class WaitUntilObserver;
-class WorkerThreadStartupData;
+struct GlobalScopeCreationParams;
 
 typedef RequestOrUSVString RequestInfo;
 
@@ -58,7 +59,8 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final : public WorkerGlobalScope {
  public:
   static ServiceWorkerGlobalScope* Create(
       ServiceWorkerThread*,
-      std::unique_ptr<WorkerThreadStartupData>);
+      std::unique_ptr<GlobalScopeCreationParams>,
+      double time_origin);
 
   ~ServiceWorkerGlobalScope() override;
   bool IsServiceWorkerGlobalScope() const override { return true; }
@@ -87,6 +89,11 @@ class MODULES_EXPORT ServiceWorkerGlobalScope final : public WorkerGlobalScope {
   const AtomicString& InterfaceName() const override;
 
   void DispatchExtendableEvent(Event*, WaitUntilObserver*);
+
+  // For ExtendableEvents that also have a respondWith() function.
+  void DispatchExtendableEventWithRespondWith(Event*,
+                                              WaitUntilObserver*,
+                                              RespondWithObserver*);
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(install);
   DEFINE_ATTRIBUTE_EVENT_LISTENER(activate);

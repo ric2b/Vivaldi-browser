@@ -29,6 +29,7 @@
 #include "remoting/host/host_mock_objects.h"
 #include "remoting/protocol/fake_connection_to_client.h"
 #include "remoting/protocol/fake_desktop_capturer.h"
+#include "remoting/protocol/fake_message_pipe.h"
 #include "remoting/protocol/fake_session.h"
 #include "remoting/protocol/protocol_mock_objects.h"
 #include "remoting/protocol/test_event_matchers.h"
@@ -55,6 +56,8 @@ using testing::ReturnRef;
 using testing::StrictMock;
 
 namespace {
+
+constexpr char kTestDataChannelCallbackName[] = "test_channel_name";
 
 // Matches a |protocol::Capabilities| argument against a list of capabilities
 // formatted as a space-separated string.
@@ -180,11 +183,11 @@ void ClientSessionTest::CreateClientSession(
   connection->set_client_stub(&client_stub_);
   connection_ = connection.get();
 
-  client_session_.reset(
-      new ClientSession(&session_event_handler_, std::move(connection),
-                        desktop_environment_factory_.get(),
-                        DesktopEnvironmentOptions::CreateDefault(),
-                        base::TimeDelta(), nullptr, extensions_));
+  client_session_.reset(new ClientSession(
+      &session_event_handler_, std::move(connection),
+      desktop_environment_factory_.get(),
+      DesktopEnvironmentOptions::CreateDefault(), base::TimeDelta(), nullptr,
+      extensions_));
 }
 
 void ClientSessionTest::CreateClientSession() {
@@ -427,6 +430,27 @@ TEST_F(ClientSessionTest, Extensions) {
 
   // ext3 was sent a message but not instantiated.
   EXPECT_FALSE(extension3.was_instantiated());
+}
+
+TEST_F(ClientSessionTest, DataChannelCallbackIsCalled) {
+  bool callback_called = false;
+
+  CreateClientSession();
+  client_session_->RegisterCreateHandlerCallbackForTesting(
+      kTestDataChannelCallbackName,
+      base::Bind([](bool* callback_was_called, const std::string& name,
+                    std::unique_ptr<protocol::MessagePipe> pipe)
+                     -> void { *callback_was_called = true; },
+                 &callback_called));
+  ConnectClientSession();
+
+  std::unique_ptr<protocol::MessagePipe> pipe =
+      base::WrapUnique(new protocol::FakeMessagePipe(false));
+
+  client_session_->OnIncomingDataChannel(kTestDataChannelCallbackName,
+                                         std::move(pipe));
+
+  ASSERT_TRUE(callback_called);
 }
 
 TEST_F(ClientSessionTest, ForwardHostSessionOptions1) {

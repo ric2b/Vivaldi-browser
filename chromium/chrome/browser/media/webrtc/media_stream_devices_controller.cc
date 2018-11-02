@@ -19,6 +19,7 @@
 #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/media/webrtc/media_stream_device_permissions.h"
 #include "chrome/browser/permissions/permission_manager.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/permissions/permission_util.h"
@@ -50,11 +51,9 @@
 #include "chrome/browser/permissions/permission_dialog_delegate.h"
 #include "chrome/browser/permissions/permission_update_infobar_delegate_android.h"
 #include "chrome/grit/theme_resources.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "ui/android/window_android.h"
 #else  // !defined(OS_ANDROID)
-#include "chrome/browser/permissions/permission_request_manager.h"
-#include "ui/vector_icons/vector_icons.h"
+#include "components/vector_icons/vector_icons.h"
 #endif
 
 using content::BrowserThread;
@@ -220,6 +219,18 @@ bool MediaStreamDevicesController::Request::IsAskingForVideo() const {
   return is_asking_for_video_;
 }
 
+PermissionRequest::IconId MediaStreamDevicesController::Request::GetIconId()
+    const {
+#if defined(OS_ANDROID)
+  return IsAskingForVideo() ? IDR_INFOBAR_MEDIA_STREAM_CAMERA
+                            : IDR_INFOBAR_MEDIA_STREAM_MIC;
+#else
+  return IsAskingForVideo() ? vector_icons::kVideocamIcon
+                            : vector_icons::kMicrophoneIcon;
+#endif
+}
+
+#if defined(OS_ANDROID)
 base::string16 MediaStreamDevicesController::Request::GetMessageText() const {
   int message_id = IDS_MEDIA_CAPTURE_AUDIO_AND_VIDEO;
   if (!IsAskingForAudio())
@@ -231,16 +242,7 @@ base::string16 MediaStreamDevicesController::Request::GetMessageText() const {
       url_formatter::FormatUrlForSecurityDisplay(
           GetOrigin(), url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC));
 }
-
-PermissionRequest::IconId MediaStreamDevicesController::Request::GetIconId()
-    const {
-#if defined(OS_ANDROID)
-  return IsAskingForVideo() ? IDR_INFOBAR_MEDIA_STREAM_CAMERA
-                            : IDR_INFOBAR_MEDIA_STREAM_MIC;
-#else
-  return IsAskingForVideo() ? ui::kVideocamIcon : ui::kMicrophoneIcon;
 #endif
-}
 
 base::string16 MediaStreamDevicesController::Request::GetMessageTextFragment()
     const {
@@ -291,7 +293,11 @@ MediaStreamDevicesController::Request::GetPermissionRequestType() const {
 
 bool MediaStreamDevicesController::Request::ShouldShowPersistenceToggle()
     const {
-  return PermissionUtil::ShouldShowPersistenceToggle();
+  // Camera and Mic are handled the same w.r.t. showing the persistence toggle,
+  // just check camera here for simplicity (this class will be removed once the
+  // Android and media refactorings are finished).
+  return PermissionUtil::ShouldShowPersistenceToggle(
+      CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA);
 }
 
 // Implementation of PermissionPromptDelegate which actually shows a permission
@@ -465,7 +471,8 @@ void MediaStreamDevicesController::RequestPermissionsWithDelegate(
     Profile* profile =
         Profile::FromBrowserContext(web_contents->GetBrowserContext());
     if (base::FeatureList::IsEnabled(
-            features::kUsePermissionManagerForMediaRequests)) {
+            features::kUsePermissionManagerForMediaRequests) &&
+        PermissionRequestManager::IsEnabled()) {
       std::vector<ContentSettingsType> content_settings_types;
 
       if (is_asking_for_audio)
@@ -757,12 +764,8 @@ ContentSetting MediaStreamDevicesController::GetContentSetting(
 bool MediaStreamDevicesController::IsUserAcceptAllowed(
     ContentSettingsType content_type) const {
 #if defined(OS_ANDROID)
-  content::ContentViewCore* cvc =
-      content::ContentViewCore::FromWebContents(web_contents_);
-  if (!cvc)
-    return false;
-
-  ui::WindowAndroid* window_android = cvc->GetWindowAndroid();
+  ui::WindowAndroid* window_android =
+      web_contents_->GetNativeView()->GetWindowAndroid();
   if (!window_android)
     return false;
 

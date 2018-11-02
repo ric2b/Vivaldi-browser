@@ -1,0 +1,134 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/viz/viz.gni")
+import("//testing/test.gni")
+
+viz_component("common") {
+  output_name = "viz_common"
+
+  defines = [ "VIZ_COMMON_IMPLEMENTATION" ]
+
+  sources = [
+    "display/renderer_settings.cc",
+    "display/renderer_settings.h",
+    "gl_helper.cc",
+    "gl_helper.h",
+    "gl_helper_readback_support.cc",
+    "gl_helper_readback_support.h",
+    "gl_helper_scaling.cc",
+    "gl_helper_scaling.h",
+    "gpu/context_cache_controller.cc",
+    "gpu/context_cache_controller.h",
+    "gpu/context_provider.cc",
+    "gpu/context_provider.h",
+    "gpu/in_process_context_provider.cc",
+    "gpu/in_process_context_provider.h",
+    "hit_test/aggregated_hit_test_region.h",
+    "quads/resource_format.h",
+    "quads/shared_bitmap.cc",
+    "quads/shared_bitmap.h",
+    "quads/texture_mailbox.cc",
+    "quads/texture_mailbox.h",
+    "resources/buffer_to_texture_target_map.cc",
+    "resources/buffer_to_texture_target_map.h",
+    "resources/platform_color.h",
+    "resources/resource_format_utils.cc",
+    "resources/resource_format_utils.h",
+    "resources/resource_settings.cc",
+    "resources/resource_settings.h",
+    "resources/shared_bitmap_manager.h",
+    "surfaces/frame_sink_id.cc",
+    "surfaces/frame_sink_id.h",
+    "surfaces/frame_sink_id_allocator.h",
+    "surfaces/local_surface_id.cc",
+    "surfaces/local_surface_id.h",
+    "surfaces/local_surface_id_allocator.cc",
+    "surfaces/local_surface_id_allocator.h",
+    "surfaces/sequence_surface_reference_factory.cc",
+    "surfaces/sequence_surface_reference_factory.h",
+    "surfaces/surface_id.cc",
+    "surfaces/surface_id.h",
+    "surfaces/surface_info.h",
+    "surfaces/surface_reference_factory.h",
+    "surfaces/surface_reference_owner.h",
+    "surfaces/surface_sequence.h",
+    "surfaces/surface_sequence_generator.cc",
+    "surfaces/surface_sequence_generator.h",
+    "viz_common_export.h",
+  ]
+
+  deps = [
+    "//base",
+    "//gpu",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/command_buffer/service",
+    "//gpu/ipc:gl_in_process_context",
+    "//gpu/skia_bindings:skia_bindings",
+    "//mojo/public/cpp/bindings",
+    "//skia",
+    "//ui/gfx:color_space",
+    "//ui/gfx:geometry_skia",
+    "//ui/gfx/geometry",
+  ]
+
+  public_deps = [
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/common",
+    "//mojo/public/cpp/bindings",
+  ]
+}
+
+viz_source_set("unit_tests") {
+  testonly = true
+  sources = [
+    "gl_helper_unittest.cc",
+    "resources/buffer_to_texture_target_map_unittest.cc",
+    "resources/platform_color_unittest.cc",
+    "surfaces/surface_sequence_generator_unittest.cc",
+    "yuv_readback_unittest.cc",
+  ]
+
+  deps = [
+    ":common",
+    "//base/test:test_support",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/command_buffer/client:gles2_interface",
+    "//gpu/ipc:gl_in_process_context",
+    "//gpu/ipc/common:surface_handle_type",
+    "//media",
+    "//testing/gtest",
+  ]
+}
+
+# Microbenchmark to measure performance of GLHelper code, for use in
+# debugging, profiling, and optimizing.
+viz_test("viz_benchmark") {
+  sources = [
+    "gl_helper_benchmark.cc",
+  ]
+
+  configs = [
+    "//build/config/compiler:no_size_t_to_int_warning",
+    "//third_party/khronos:khronos_headers",
+  ]
+
+  deps = [
+    ":common",
+    "//base",
+    "//base/test:test_support",
+    "//components/test:run_all_unittests",
+    "//gpu/command_buffer/client",
+    "//gpu/command_buffer/client:gles2_implementation",
+    "//gpu/ipc:gl_in_process_context",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//ui/gfx",
+  ]
+
+  data_deps = [
+    "//third_party/mesa:osmesa",
+  ]
+}

@@ -7,14 +7,21 @@
         "renderer": [
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::BudgetService",
           "chrome::mojom::CacheStatsRecorder",
           "chrome::mojom::NetBenchmarking",
           "extensions::StashService",
           "metrics::mojom::LeakDetector",
           "mojom::ModuleEventSink",
           "rappor::mojom::RapporRecorder",
+          "safe_browsing::mojom::SafeBrowsing",
+          "spellcheck::mojom::SpellCheckHost",
+          "spellcheck::mojom::SpellCheckPanelHost",
           "startup_metric_utils::mojom::StartupMetricHost",
           "translate::mojom::ContentTranslateDriver"
+	],
+        "url_keyed_metrics": [
+          "ukm::mojom::UkmRecorderInterface"
         ],
         "gpu": [
           "metrics::mojom::CallStackProfileCollector"
@@ -23,14 +30,21 @@
       },
       "requires": {
         "accessibility_autoclick": [ "ash:autoclick" ],
-        "ash": [ "ash" ],
+        "ash": [ "ash", "display" ],
+        // Only used in classic ash case.
+        "chrome": [ "input_device_controller" ],
         "device": [ "device:fingerprint" ],
         "identity": [ "identity_manager" ],
         "nacl_broker": [ "browser" ],
         "nacl_loader": [ "browser" ],
         "preferences_forwarder": [ "pref_client" ],
         "preferences": [ "pref_client", "pref_control" ],
-        "ui": [ "display_controller", "ime_registrar", "window_manager" ]
+        "ui": [
+          "display_controller",
+          "ime_registrar",
+          "input_device_controller",
+          "window_manager"
+        ]
       }
     },
     "navigation:frame": {
@@ -38,6 +52,7 @@
         "renderer": [
           "autofill::mojom::AutofillDriver",
           "autofill::mojom::PasswordManagerDriver",
+          "blink::mojom::BudgetService",
           "blink::mojom::InstalledAppProvider",
           "blink::mojom::ShareService",
           "bluetooth::mojom::AdapterFactory",
@@ -50,12 +65,14 @@
           "dom_distiller::mojom::DistillerJavaScriptService",
           "extensions::KeepAlive",
           "extensions::mime_handler::MimeHandlerService",
+          "extensions::mojom::InlineInstall",
           "media_router::mojom::MediaRouter",
           "page_load_metrics::mojom::PageLoadMetrics",
           "password_manager::mojom::CredentialManager",
           "translate::mojom::ContentTranslateDriver",
 
           // TODO(beng): These should be moved to a separate capability.
+	  "media::mojom::MediaEngagementScoreDetailsProvider",
           "mojom::OmniboxPageHandler",
           "mojom::PluginsPageHandler",
           "mojom::SiteEngagementDetailsProvider",

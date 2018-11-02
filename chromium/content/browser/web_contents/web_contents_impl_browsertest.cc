@@ -938,6 +938,57 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 }
 
 namespace {
+void NavigateToDataURLAndCheckForTerminationDisabler(
+    Shell* shell,
+    const std::string& html,
+    bool expect_onunload,
+    bool expect_onbeforeunload) {
+  NavigateToURL(shell, GURL("data:text/html," + html));
+  RenderFrameHostImpl* rfh =
+      static_cast<RenderFrameHostImpl*>(shell->web_contents()->GetMainFrame());
+  EXPECT_EQ(expect_onunload,
+            rfh->GetSuddenTerminationDisablerState(blink::kUnloadHandler));
+  EXPECT_EQ(expect_onbeforeunload, rfh->GetSuddenTerminationDisablerState(
+                                       blink::kBeforeUnloadHandler));
+}
+}  // namespace
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuddenTerminationDisablerNone) {
+  const std::string NO_HANDLERS_HTML = "<html><body>foo</body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(shell(), NO_HANDLERS_HTML,
+                                                  false, false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuddenTerminationDisablerOnUnload) {
+  const std::string UNLOAD_HTML =
+      "<html><body><script>window.onunload=function(e) {}</script>"
+      "</body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(shell(), UNLOAD_HTML, true,
+                                                  false);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuddenTerminationDisablerOnBeforeUnload) {
+  const std::string BEFORE_UNLOAD_HTML =
+      "<html><body><script>window.onbeforeunload=function(e) {}</script>"
+      "</body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(shell(), BEFORE_UNLOAD_HTML,
+                                                  false, true);
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       SuddenTerminationDisablerOnUnloadAndBeforeUnload) {
+  const std::string UNLOAD_AND_BEFORE_UNLOAD_HTML =
+      "<html><body><script>window.onunload=function(e) {};"
+      "window.onbeforeunload=function(e) {}</script>"
+      "</body></html>";
+  NavigateToDataURLAndCheckForTerminationDisabler(
+      shell(), UNLOAD_AND_BEFORE_UNLOAD_HTML, true, true);
+}
+
+namespace {
 
 class TestJavaScriptDialogManager : public JavaScriptDialogManager,
                                     public WebContentsDelegate {
@@ -1465,6 +1516,102 @@ IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
 
   wc->SetDelegate(nullptr);
   wc->SetJavaScriptDialogManagerForTesting(nullptr);
+}
+
+class FormBubbleDelegate : public WebContentsDelegate {
+ public:
+  FormBubbleDelegate() = default;
+
+  void WaitUntilShown() {
+    while (!is_visible_) {
+      message_loop_runner_ = new MessageLoopRunner;
+      message_loop_runner_->Run();
+    }
+  }
+
+  void WaitUntilHidden() {
+    while (is_visible_) {
+      message_loop_runner_ = new MessageLoopRunner;
+      message_loop_runner_->Run();
+    }
+  }
+
+ private:
+  void ShowValidationMessage(WebContents* web_contents,
+                             const gfx::Rect& anchor_in_root_view,
+                             const base::string16& main_text,
+                             const base::string16& sub_text) override {
+    is_visible_ = true;
+    if (message_loop_runner_)
+      message_loop_runner_->Quit();
+  }
+
+  void HideValidationMessage(WebContents* web_contents) override {
+    is_visible_ = false;
+    if (message_loop_runner_)
+      message_loop_runner_->Quit();
+  }
+
+  bool is_visible_ = false;
+  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+};
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       NavigationHidesFormValidationBubble) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("a.com", "/title1.html")));
+
+  // Start listening for requests to show or hide the form validation bubble.
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  FormBubbleDelegate bubble_delegate;
+  web_contents->SetDelegate(&bubble_delegate);
+
+  // Trigger a form validation bubble and verify that the bubble is shown.
+  std::string script = R"(
+      var input_field = document.createElement('input');
+      input_field.required = true;
+      var form = document.createElement('form');
+      form.appendChild(input_field);
+      document.body.appendChild(form);
+
+      setTimeout(function() {
+              input_field.setCustomValidity('Custom validity message');
+              input_field.reportValidity();
+          },
+          0);
+      )";
+  ASSERT_TRUE(ExecuteScript(web_contents, script));
+  bubble_delegate.WaitUntilShown();
+
+  // Navigate to another page and verify that the form validation bubble is
+  // hidden.
+  EXPECT_TRUE(NavigateToURL(
+      shell(), embedded_test_server()->GetURL("b.com", "/title2.html")));
+  bubble_delegate.WaitUntilHidden();
+}
+
+IN_PROC_BROWSER_TEST_F(WebContentsImplBrowserTest,
+                       FrameDetachInCopyDoesNotCrash) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  EXPECT_TRUE(NavigateToURL(
+      shell(),
+      embedded_test_server()->GetURL("a.com", "/detach_frame_in_copy.html")));
+
+  WebContentsImpl* web_contents =
+      static_cast<WebContentsImpl*>(shell()->web_contents());
+  // Focus the child frame before sending it a copy command: the child frame
+  // will detach itself upon getting a 'copy' event.
+  ASSERT_TRUE(ExecuteScript(web_contents, "window[0].focus();"));
+  FrameTree* frame_tree = web_contents->GetFrameTree();
+  FrameTreeNode* root = frame_tree->root();
+  ASSERT_EQ(root->child_at(0), frame_tree->GetFocusedFrame());
+  shell()->web_contents()->Copy();
+
+  TitleWatcher title_watcher(web_contents, base::ASCIIToUTF16("done"));
+  base::string16 title = title_watcher.WaitAndGetTitle();
+  ASSERT_EQ(title, base::ASCIIToUTF16("done"));
 }
 
 }  // namespace content

@@ -5,6 +5,7 @@
 #include "chromecast/crash/cast_crash_keys.h"
 
 #include "components/crash/core/common/crash_keys.h"
+#include "gpu/config/gpu_crash_keys.h"
 
 namespace chromecast {
 namespace crash_keys {
@@ -31,9 +32,12 @@ size_t RegisterCastCrashKeys() {
       {"num-extensions", ::crash_keys::kSmallSize},
       {"shutdown-type", ::crash_keys::kSmallSize},
       {"browser-unpin-trace", ::crash_keys::kMediumSize},
-      {"gpu-driver", ::crash_keys::kSmallSize},
-      {"gpu-psver", ::crash_keys::kSmallSize},
-      {"gpu-vsver", ::crash_keys::kSmallSize},
+
+      // gpu
+      {gpu::crash_keys::kGPUDriverVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUPixelShaderVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUVertexShaderVersion, ::crash_keys::kSmallSize},
+      {gpu::crash_keys::kGPUGLContextIsVirtual, ::crash_keys::kSmallSize},
 
       // content/:
       {"bad_message_reason", ::crash_keys::kSmallSize},
@@ -84,6 +88,9 @@ size_t RegisterCastCrashKeys() {
       {"swdh_set_hosted_version_host_pid", ::crash_keys::kSmallSize},
       {"swdh_set_hosted_version_is_new_process", ::crash_keys::kSmallSize},
       {"swdh_set_hosted_version_restart_count", ::crash_keys::kSmallSize},
+
+      // Temporary for https://crbug.com/685996.
+      {"user-cloud-policy-manager-connect-trace", ::crash_keys::kMediumSize},
   };
 
   return base::debug::InitCrashKeys(fixed_keys, arraysize(fixed_keys),

@@ -7,7 +7,7 @@
 
 #include <stdint.h>
 
-#include <deque>
+#include <map>
 #include <unordered_map>
 #include <vector>
 
@@ -15,7 +15,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "cc/surfaces/surface_hittest_delegate.h"
-#include "cc/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "content/browser/renderer_host/render_widget_host_view_base_observer.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/vector2d.h"
@@ -67,6 +67,7 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   void RouteGestureEvent(RenderWidgetHostViewBase* root_view,
                          blink::WebGestureEvent* event,
                          const ui::LatencyInfo& latency);
+  void OnHandledTouchStartOrFirstTouchMove(uint32_t unique_touch_event_id);
   void RouteTouchEvent(RenderWidgetHostViewBase* root_view,
                        blink::WebTouchEvent *event,
                        const ui::LatencyInfo& latency);
@@ -75,11 +76,11 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                          const blink::WebGestureEvent& event);
   void CancelScrollBubbling(RenderWidgetHostViewBase* target_view);
 
-  void AddFrameSinkIdOwner(const cc::FrameSinkId& id,
+  void AddFrameSinkIdOwner(const viz::FrameSinkId& id,
                            RenderWidgetHostViewBase* owner);
-  void RemoveFrameSinkIdOwner(const cc::FrameSinkId& id);
+  void RemoveFrameSinkIdOwner(const viz::FrameSinkId& id);
 
-  bool is_registered(const cc::FrameSinkId& id) {
+  bool is_registered(const viz::FrameSinkId& id) {
     return owner_map_.find(id) != owner_map_.end();
   }
 
@@ -104,28 +105,28 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
 
   class HittestDelegate : public cc::SurfaceHittestDelegate {
    public:
-    HittestDelegate(
-        const std::unordered_map<cc::SurfaceId, HittestData, cc::SurfaceIdHash>&
-            hittest_data);
+    HittestDelegate(const std::unordered_map<viz::SurfaceId,
+                                             HittestData,
+                                             viz::SurfaceIdHash>& hittest_data);
     bool RejectHitTarget(const cc::SurfaceDrawQuad* surface_quad,
                          const gfx::Point& point_in_quad_space) override;
     bool AcceptHitTarget(const cc::SurfaceDrawQuad* surface_quad,
                          const gfx::Point& point_in_quad_space) override;
 
-    const std::unordered_map<cc::SurfaceId, HittestData, cc::SurfaceIdHash>&
+    const std::unordered_map<viz::SurfaceId, HittestData, viz::SurfaceIdHash>&
         hittest_data_;
   };
 
-  using FrameSinkIdOwnerMap = std::unordered_map<cc::FrameSinkId,
+  using FrameSinkIdOwnerMap = std::unordered_map<viz::FrameSinkId,
                                                  RenderWidgetHostViewBase*,
-                                                 cc::FrameSinkIdHash>;
+                                                 viz::FrameSinkIdHash>;
   struct TargetData {
     RenderWidgetHostViewBase* target;
     gfx::Vector2d delta;
 
     TargetData() : target(nullptr) {}
   };
-  using TargetQueue = std::deque<TargetData>;
+  using TargetMap = std::map<uint32_t, TargetData>;
 
   void ClearAllObserverRegistrations();
 
@@ -158,12 +159,15 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
                             const blink::WebGestureEvent& event);
 
   FrameSinkIdOwnerMap owner_map_;
-  TargetQueue touchscreen_gesture_target_queue_;
+  TargetMap touchscreen_gesture_target_map_;
   TargetData touch_target_;
   TargetData touchscreen_gesture_target_;
   TargetData touchpad_gesture_target_;
   TargetData bubbling_gesture_scroll_target_;
   TargetData first_bubbling_scroll_target_;
+  // Used to target wheel events for the duration of a scroll when wheel scroll
+  // latching is enabled.
+  TargetData wheel_target_;
   // Maintains the same target between mouse down and mouse up.
   TargetData mouse_capture_target_;
 
@@ -177,12 +181,14 @@ class CONTENT_EXPORT RenderWidgetHostInputEventRouter
   // the main frame.
   bool in_touchscreen_gesture_pinch_;
   bool gesture_pinch_did_send_scroll_begin_;
-  std::unordered_map<cc::SurfaceId, HittestData, cc::SurfaceIdHash>
+  std::unordered_map<viz::SurfaceId, HittestData, viz::SurfaceIdHash>
       hittest_data_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostInputEventRouter);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
-                           InputEventRouterGestureTargetQueueTest);
+                           InputEventRouterGestureTargetMapTest);
+  FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
+                           InputEventRouterGesturePreventDefaultTargetMapTest);
   FRIEND_TEST_ALL_PREFIXES(SitePerProcessBrowserTest,
                            InputEventRouterTouchpadGestureTargetTest);
 };

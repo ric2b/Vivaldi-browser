@@ -15,10 +15,11 @@
 #include "components/payments/core/payments_profile_comparator.h"
 #include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
@@ -30,8 +31,8 @@ namespace payments {
 
 namespace {
 
-constexpr int kFirstTagValue = static_cast<int>(
-    payments::PaymentRequestCommonTags::PAYMENT_REQUEST_COMMON_TAG_MAX);
+constexpr int kFirstTagValue =
+    static_cast<int>(PaymentRequestCommonTags::PAYMENT_REQUEST_COMMON_TAG_MAX);
 
 enum class PaymentMethodViewControllerTags : int {
   // The tag for the button that triggers the "add address" flow. Starts at
@@ -47,29 +48,36 @@ class ProfileItem : public PaymentRequestItemList::Item {
   // are represented by the current instance of the dialog. |parent_view| points
   // to the controller which owns |parent_list|. |profile| is the
   // AutofillProfile that this specific list item represents. It's a cached
-  // profile owned by |state|.
+  // profile owned by |state|. |clickable| indicates whether or not this profile
+  // can be clicked (i.e., whether it's enabled).
   ProfileItem(autofill::AutofillProfile* profile,
               PaymentRequestSpec* spec,
               PaymentRequestState* state,
               PaymentRequestItemList* parent_list,
               ProfileListViewController* controller,
               PaymentRequestDialogView* dialog,
-              bool selected)
-      : payments::PaymentRequestItemList::Item(spec,
-                                               state,
-                                               parent_list,
-                                               selected,
-                                               /*show_edit_button=*/true),
+              bool selected,
+              bool clickable)
+      : PaymentRequestItemList::Item(spec,
+                                     state,
+                                     parent_list,
+                                     selected,
+                                     clickable,
+                                     /*show_edit_button=*/true),
         controller_(controller),
-        profile_(profile) {}
+        profile_(profile) {
+    Init();
+  }
   ~ProfileItem() override {}
 
  private:
-  // payments::PaymentRequestItemList::Item:
-  std::unique_ptr<views::View> CreateContentView() override {
+  // PaymentRequestItemList::Item:
+  std::unique_ptr<views::View> CreateContentView(
+      base::string16* accessible_content) override {
     DCHECK(profile_);
+    DCHECK(accessible_content);
 
-    return controller_->GetLabel(profile_);
+    return controller_->GetLabel(profile_, accessible_content);
   }
 
   void SelectedStateChanged() override {
@@ -78,18 +86,20 @@ class ProfileItem : public PaymentRequestItemList::Item {
     }
   }
 
-  bool IsEnabled() override { return controller_->IsEnabled(profile_); }
+  base::string16 GetNameForDataType() override {
+    return controller_->GetSheetTitle();
+  }
 
   bool CanBeSelected() override {
     // In order to be selectable, a profile entry needs to be enabled, and the
     // profile valid according to the controller. If either condition is false,
     // PerformSelectionFallback() is called.
-    return IsEnabled() && controller_->IsValidProfile(*profile_);
+    return clickable() && controller_->IsValidProfile(*profile_);
   }
 
   void PerformSelectionFallback() override {
     // If enabled, the editor is opened to complete the invalid profile.
-    if (IsEnabled())
+    if (clickable())
       controller_->ShowEditor(profile_);
   }
 
@@ -118,10 +128,11 @@ class ShippingProfileViewController : public ProfileListViewController,
  protected:
   // ProfileListViewController:
   std::unique_ptr<views::View> GetLabel(
-      autofill::AutofillProfile* profile) override {
+      autofill::AutofillProfile* profile,
+      base::string16* accessible_content) override {
     return GetShippingAddressLabelWithMissingInfo(
         AddressStyleType::DETAILED, state()->GetApplicationLocale(), *profile,
-        *(state()->profile_comparator()),
+        *(state()->profile_comparator()), accessible_content,
         /*enabled=*/IsEnabled(profile));
   }
 
@@ -161,38 +172,55 @@ class ShippingProfileViewController : public ProfileListViewController,
     return DialogViewID::SHIPPING_ADDRESS_SHEET_LIST_VIEW;
   }
 
+  // Creates a warning message when address is not valid or an informational
+  // message when the user has not selected their shipping address yet. The
+  // warning icon is displayed only for warning messages.
+  // ---------------------------------------------
+  // | Warning icon | Warning message            |
+  // ---------------------------------------------
   std::unique_ptr<views::View> CreateHeaderView() override {
-    if (spec()->selected_shipping_option_error().empty())
+    if (!spec()->GetShippingOptions().empty())
       return nullptr;
 
-    std::unique_ptr<views::View> header_view = base::MakeUnique<views::View>();
-    // 8 pixels between the warning icon view and the text.
+    auto header_view = base::MakeUnique<views::View>();
+    // 8 pixels between the warning icon view (if present) and the text.
     constexpr int kRowHorizontalSpacing = 8;
-    views::BoxLayout* layout = new views::BoxLayout(
+    auto layout = base::MakeUnique<views::BoxLayout>(
         views::BoxLayout::kHorizontal,
-        payments::kPaymentRequestRowHorizontalInsets, 0, kRowHorizontalSpacing);
+        gfx::Insets(0, kPaymentRequestRowHorizontalInsets),
+        kRowHorizontalSpacing);
     layout->set_main_axis_alignment(
         views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
     layout->set_cross_axis_alignment(
         views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
-    header_view->SetLayoutManager(layout);
+    header_view->SetLayoutManager(layout.release());
 
-    std::unique_ptr<views::ImageView> warning_icon =
-        base::MakeUnique<views::ImageView>();
-    warning_icon->set_can_process_events_within_subtree(false);
-    warning_icon->SetImage(gfx::CreateVectorIcon(
-        ui::kWarningIcon, 16,
-        warning_icon->GetNativeTheme()->GetSystemColor(
-            ui::NativeTheme::kColorId_AlertSeverityHigh)));
-    header_view->AddChildView(warning_icon.release());
-
-    std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(
-        spec()->selected_shipping_option_error());
+    auto label = base::MakeUnique<views::Label>(
+        spec()->selected_shipping_option_error().empty()
+            ? GetShippingAddressSelectorInfoMessage(spec()->shipping_type())
+            : spec()->selected_shipping_option_error());
+    // If the warning message comes from the websites, then align label
+    // according to the language of the website's text.
+    label->SetHorizontalAlignment(
+        spec()->selected_shipping_option_error().empty() ? gfx::ALIGN_LEFT
+                                                         : gfx::ALIGN_TO_HEAD);
     label->set_id(
-        static_cast<int>(DialogViewID::SHIPPING_ADDRESS_OPTION_ERROR));
-    label->SetEnabledColor(label->GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_AlertSeverityHigh));
+        static_cast<int>(DialogViewID::SHIPPING_ADDRESS_SECTION_HEADER_LABEL));
     label->SetMultiLine(true);
+    label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+
+    if (!spec()->selected_shipping_option_error().empty()) {
+      auto warning_icon = base::MakeUnique<views::ImageView>();
+      warning_icon->set_can_process_events_within_subtree(false);
+      warning_icon->SetImage(gfx::CreateVectorIcon(
+          vector_icons::kWarningIcon, 16,
+          warning_icon->GetNativeTheme()->GetSystemColor(
+              ui::NativeTheme::kColorId_AlertSeverityHigh)));
+      header_view->AddChildView(warning_icon.release());
+      label->SetEnabledColor(label->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_AlertSeverityHigh));
+    }
+
     header_view->AddChildView(label.release());
     return header_view;
   }
@@ -232,6 +260,7 @@ class ShippingProfileViewController : public ProfileListViewController,
         dialog()->GoBack();
       } else {
         // The error profile is known, refresh the view to display it correctly.
+        PopulateList();
         UpdateContentView();
       }
     }
@@ -253,10 +282,11 @@ class ContactProfileViewController : public ProfileListViewController {
  protected:
   // ProfileListViewController:
   std::unique_ptr<views::View> GetLabel(
-      autofill::AutofillProfile* profile) override {
-    return GetContactInfoLabel(AddressStyleType::DETAILED,
-                               state()->GetApplicationLocale(), *profile,
-                               *spec(), *(state()->profile_comparator()));
+      autofill::AutofillProfile* profile,
+      base::string16* accessible_content) override {
+    return GetContactInfoLabel(
+        AddressStyleType::DETAILED, state()->GetApplicationLocale(), *profile,
+        *spec(), *(state()->profile_comparator()), accessible_content);
   }
 
   void SelectProfile(autofill::AutofillProfile* profile) override {
@@ -353,22 +383,21 @@ std::unique_ptr<views::View> ProfileListViewController::CreateHeaderView() {
 void ProfileListViewController::PopulateList() {
   autofill::AutofillProfile* selected_profile = GetSelectedProfile();
 
-  // This must be done at Create-time, rather than construct-time, because
-  // the subclass method GetProfiles can't be called in the ctor.
+  list_.Clear();
+
   for (auto* profile : GetProfiles()) {
-    list_.AddItem(base::MakeUnique<ProfileItem>(profile, spec(), state(),
-                                                &list_, this, dialog(),
-                                                profile == selected_profile));
+    list_.AddItem(base::MakeUnique<ProfileItem>(
+        profile, spec(), state(), &list_, this, dialog(),
+        profile == selected_profile, IsEnabled(profile)));
   }
 }
 
 void ProfileListViewController::FillContentView(views::View* content_view) {
-  views::BoxLayout* layout =
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0);
+  auto layout = base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
-  content_view->SetLayoutManager(layout);
+  content_view->SetLayoutManager(layout.release());
   std::unique_ptr<views::View> header_view = CreateHeaderView();
   if (header_view)
     content_view->AddChildView(header_view.release());
@@ -379,10 +408,11 @@ void ProfileListViewController::FillContentView(views::View* content_view) {
 
 std::unique_ptr<views::View>
 ProfileListViewController::CreateExtraFooterView() {
-  std::unique_ptr<views::View> extra_view = base::MakeUnique<views::View>();
+  auto extra_view = base::MakeUnique<views::View>();
 
-  extra_view->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kPaymentRequestButtonSpacing));
+  extra_view->SetLayoutManager(
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
+                           kPaymentRequestButtonSpacing));
 
   views::LabelButton* button = views::MdTextButton::CreateSecondaryUiButton(
       this, l10n_util::GetStringUTF16(GetSecondaryButtonTextId()));

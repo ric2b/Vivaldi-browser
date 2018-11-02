@@ -30,13 +30,11 @@ Polymer({
     },
 
     /** @private */
-    mouseFocus_: {
-      type: Boolean,
-      reflectToAttribute: true,
-    },
-
-    /** @private */
     isFolder_: Boolean,
+  },
+
+  hostAttributes: {
+    'role': 'listitem',
   },
 
   observers: [
@@ -44,8 +42,6 @@ Polymer({
   ],
 
   listeners: {
-    'mousedown': 'onMousedown_',
-    'blur': 'onItemBlur_',
     'click': 'onClick_',
     'dblclick': 'onDblClick_',
     'contextmenu': 'onContextMenu_',
@@ -74,12 +70,14 @@ Polymer({
    */
   onContextMenu_: function(e) {
     e.preventDefault();
+    this.focus();
     if (!this.isSelectedItem_)
       this.selectThisItem_();
 
     this.fire('open-item-menu', {
       x: e.clientX,
       y: e.clientY,
+      source: MenuSource.LIST,
     });
   },
 
@@ -93,6 +91,7 @@ Polymer({
     this.selectThisItem_();
     this.fire('open-item-menu', {
       targetElement: e.target,
+      source: MenuSource.LIST,
     });
   },
 
@@ -124,20 +123,7 @@ Polymer({
   /** @private */
   onItemChanged_: function() {
     this.isFolder_ = !this.item_.url;
-  },
-
-  /**
-   * @private
-   */
-  onMousedown_: function() {
-    this.mouseFocus_ = true;
-  },
-
-  /**
-   * @private
-   */
-  onItemBlur_: function() {
-    this.mouseFocus_ = false;
+    this.setAttribute('aria-label', this.item_.title);
   },
 
   /**
@@ -148,10 +134,11 @@ Polymer({
     // Ignore double clicks so that Ctrl double-clicking an item won't deselect
     // the item before opening.
     if (e.detail != 2) {
+      var addKey = cr.isMac ? e.metaKey : e.ctrlKey;
       this.dispatch(bookmarks.actions.selectItem(this.itemId, this.getState(), {
-        clear: !e.ctrlKey,
+        clear: !addKey,
         range: e.shiftKey,
-        toggle: e.ctrlKey && !e.shiftKey,
+        toggle: addKey && !e.shiftKey,
       }));
     }
     e.stopPropagation();
@@ -163,6 +150,9 @@ Polymer({
    * @private
    */
   onDblClick_: function(e) {
+    if (!this.isSelectedItem_)
+      this.selectThisItem_();
+
     var commandManager = bookmarks.CommandManager.getInstance();
     var itemSet = this.getState().selection.items;
     if (commandManager.canExecute(Command.OPEN, itemSet))
@@ -174,6 +164,7 @@ Polymer({
    * @private
    */
   updateFavicon_: function(url) {
-    this.$.icon.style.backgroundImage = cr.icon.getFavicon(url);
+    this.$.icon.className = url ? 'website-icon' : 'folder-icon';
+    this.$.icon.style.backgroundImage = url ? cr.icon.getFavicon(url) : null;
   },
 });

@@ -151,7 +151,7 @@ class BrowserThreadBlocker {
             base::WaitableEvent::InitialState::NOT_SIGNALED)) {
     content::BrowserThread::PostTask(
         identifier, FROM_HERE,
-        base::Bind(&BlockThreadOnThread, base::Owned(unblock_event_)));
+        base::BindOnce(&BlockThreadOnThread, base::Owned(unblock_event_)));
   }
   ~BrowserThreadBlocker() { unblock_event_->Signal(); }
 
@@ -232,7 +232,7 @@ class OAuth2Test : public OobeBaseTest {
     // Wait for the session merge to finish.
     WaitForMergeSessionCompletion(OAuth2LoginManager::SESSION_RESTORE_DONE);
 
-    // Check for existance of refresh token.
+    // Check for existence of refresh token.
     ProfileOAuth2TokenService* token_service =
           ProfileOAuth2TokenServiceFactory::GetForProfile(profile);
     EXPECT_TRUE(token_service->RefreshTokenIsAvailable(account_id));
@@ -408,8 +408,7 @@ class CookieReader : public base::RefCountedThreadSafe<CookieReader> {
     context_ = profile->GetRequestContext();
     content::BrowserThread::PostTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&CookieReader::ReadCookiesOnIOThread,
-                   this));
+        base::BindOnce(&CookieReader::ReadCookiesOnIOThread, this));
     runner_ = new content::MessageLoopRunner;
     runner_->Run();
   }
@@ -434,15 +433,14 @@ class CookieReader : public base::RefCountedThreadSafe<CookieReader> {
 
   void ReadCookiesOnIOThread() {
     context_->GetURLRequestContext()->cookie_store()->GetAllCookiesAsync(
-        base::Bind(&CookieReader::OnGetAllCookiesOnUIThread, this));
+        base::BindOnce(&CookieReader::OnGetAllCookiesOnUIThread, this));
   }
 
   void OnGetAllCookiesOnUIThread(const net::CookieList& cookies) {
     cookie_list_ = cookies;
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&CookieReader::OnCookiesReadyOnUIThread,
-                   this));
+        base::BindOnce(&CookieReader::OnCookiesReadyOnUIThread, this));
   }
 
   void OnCookiesReadyOnUIThread() {
@@ -459,7 +457,7 @@ class CookieReader : public base::RefCountedThreadSafe<CookieReader> {
 // PRE_MergeSession is testing merge session for a new profile.
 IN_PROC_BROWSER_TEST_F(OAuth2Test, PRE_PRE_PRE_MergeSession) {
   StartNewUserSession(true);
-  // Check for existance of refresh token.
+  // Check for existence of refresh token.
   std::string account_id = PickAccountId(profile(), kTestGaiaId, kTestEmail);
   ProfileOAuth2TokenService* token_service =
         ProfileOAuth2TokenServiceFactory::GetForProfile(
@@ -540,8 +538,15 @@ IN_PROC_BROWSER_TEST_F(OAuth2Test, PRE_OverlappingContinueSessionRestore) {
   StartNewUserSession(true);
 }
 
+#if defined(OS_CHROMEOS)
+#define MAYBE_OverlappingContinueSessionRestore \
+  DISABLED_OverlappingContinueSessionRestore
+#else
+#define MAYBE_OverlappingContinueSessionRestore \
+  OverlappingContinueSessionRestore
+#endif
 // Tests that ContinueSessionRestore could be called multiple times.
-IN_PROC_BROWSER_TEST_F(OAuth2Test, OverlappingContinueSessionRestore) {
+IN_PROC_BROWSER_TEST_F(OAuth2Test, MAYBE_OverlappingContinueSessionRestore) {
   SetupGaiaServerForUnexpiredAccount();
   SimulateNetworkOnline();
 
@@ -586,6 +591,37 @@ IN_PROC_BROWSER_TEST_F(OAuth2Test, OverlappingContinueSessionRestore) {
   EXPECT_TRUE(token_service->RefreshTokenIsAvailable(account_id));
 }
 
+// Tests that user session is terminated if merge session fails for an online
+// sign-in. This is necessary to prevent policy exploit.
+// See http://crbug.com/677312
+IN_PROC_BROWSER_TEST_F(OAuth2Test, TerminateOnBadMergeSessionAfterOnlineAuth) {
+  SimulateNetworkOnline();
+  WaitForGaiaPageLoad();
+
+  content::WindowedNotificationObserver termination_waiter(
+      chrome::NOTIFICATION_APP_TERMINATING,
+      content::NotificationService::AllSources());
+
+  // Configure FakeGaia so that online auth succeeds but merge session fails.
+  FakeGaia::MergeSessionParams params;
+  params.auth_sid_cookie = kTestAuthSIDCookie;
+  params.auth_lsid_cookie = kTestAuthLSIDCookie;
+  params.auth_code = kTestAuthCode;
+  params.refresh_token = kTestRefreshToken;
+  params.access_token = kTestAuthLoginAccessToken;
+  fake_gaia_->SetMergeSessionParams(params);
+
+  // Simulate an online sign-in.
+  GetLoginDisplay()->ShowSigninScreenForCreds(kTestEmail, kTestAccountPassword);
+
+  // User session should be terminated.
+  termination_waiter.Wait();
+
+  // Merge session should fail. Check after |termination_waiter| to ensure
+  // user profile is initialized and there is an OAuth2LoginManage.
+  WaitForMergeSessionCompletion(OAuth2LoginManager::SESSION_RESTORE_FAILED);
+}
+
 const char kGooglePageContent[] =
     "<html><title>Hello!</title><script>alert('hello');</script>"
     "<body>Hello Google!</body></html>";
@@ -616,8 +652,8 @@ class FakeGoogle {
       start_event_.Signal();
       content::BrowserThread::PostTask(
           content::BrowserThread::UI, FROM_HERE,
-          base::Bind(&FakeGoogle::QuitRunnerOnUIThread,
-                     base::Unretained(this)));
+          base::BindOnce(&FakeGoogle::QuitRunnerOnUIThread,
+                         base::Unretained(this)));
 
       http_response->set_code(net::HTTP_OK);
       http_response->set_content_type("text/html");
@@ -690,8 +726,8 @@ class DelayedFakeGaia : public FakeGaia {
     start_event_.Signal();
     content::BrowserThread::PostTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&DelayedFakeGaia::QuitRunnerOnUIThread,
-                   base::Unretained(this)));
+        base::BindOnce(&DelayedFakeGaia::QuitRunnerOnUIThread,
+                       base::Unretained(this)));
     blocking_event_.Wait();
     FakeGaia::HandleMergeSession(request, http_response);
   }

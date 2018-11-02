@@ -4,6 +4,7 @@
 
 #include "remoting/ios/facade/host_list_fetcher.h"
 
+#include <algorithm>
 #include <thread>
 
 #include "base/bind.h"
@@ -17,6 +18,27 @@
 #include "remoting/base/url_request_context_getter.h"
 
 namespace remoting {
+
+namespace {
+
+// Returns true if |h1| should sort before |h2|.
+bool compareHost(const HostInfo& h1, const HostInfo& h2) {
+  // Online hosts always sort before offline hosts.
+  if (h1.status != h2.status) {
+    return h1.status == HostStatus::kHostStatusOnline;
+  }
+
+  // Sort by host name.
+  int name_compare = h1.host_name.compare(h2.host_name);
+  if (name_compare != 0) {
+    return name_compare < 0;
+  }
+
+  // Sort by last update time if names are identical.
+  return h1.updated_time < h2.updated_time;
+}
+
+}  // namespace
 
 HostListFetcher::HostListFetcher(
     const scoped_refptr<net::URLRequestContextGetter>&
@@ -82,8 +104,8 @@ bool HostListFetcher::ProcessResponse(
 
   const base::ListValue* hosts = nullptr;
   if (!data->GetList("items", &hosts)) {
-    LOG(ERROR) << "Failed to find hosts in Hostlist response data";
-    return false;
+    // This will happen if the user has no host.
+    return true;
   }
 
   // Any host_info with malformed data will not be added to the hostlist.
@@ -105,7 +127,9 @@ void HostListFetcher::OnURLFetchComplete(const net::URLFetcher* source) {
   if (!ProcessResponse(&hostlist)) {
     hostlist.clear();
   }
-  base::ResetAndReturn(&hostlist_callback_).Run(hostlist);
+  std::sort(hostlist.begin(), hostlist.end(), &compareHost);
+  base::ResetAndReturn(&hostlist_callback_)
+      .Run(request_->GetResponseCode(), hostlist);
 }
 
 }  // namespace remoting

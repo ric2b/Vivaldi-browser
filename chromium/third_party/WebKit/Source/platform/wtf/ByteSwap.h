@@ -31,12 +31,12 @@
 #ifndef WTF_ByteSwap_h
 #define WTF_ByteSwap_h
 
+#include <stdint.h>
+#include "build/build_config.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/Compiler.h"
 
-#include <stdint.h>
-
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 #include <stdlib.h>
 #endif
 
@@ -46,7 +46,7 @@ inline uint32_t Wswap32(uint32_t x) {
   return ((x & 0xffff0000) >> 16) | ((x & 0x0000ffff) << 16);
 }
 
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 
 ALWAYS_INLINE uint64_t Bswap64(uint64_t x) {
   return _byteswap_uint64(x);
@@ -68,20 +68,6 @@ ALWAYS_INLINE uint32_t Bswap32(uint32_t x) {
 }
 ALWAYS_INLINE uint16_t Bswap16(uint16_t x) {
   return __builtin_bswap16(x);
-}
-
-#endif
-
-#if CPU(64BIT)
-
-ALWAYS_INLINE size_t Bswapuintptrt(size_t x) {
-  return Bswap64(x);
-}
-
-#else
-
-ALWAYS_INLINE size_t Bswapuintptrt(size_t x) {
-  return Bswap32(x);
 }
 
 #endif

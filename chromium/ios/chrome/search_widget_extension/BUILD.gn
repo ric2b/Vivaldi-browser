@@ -25,6 +25,11 @@ compile_plist("entitlements") {
 ios_appex_bundle("search_widget_extension") {
   deps = [
     ":search_widget",
+    ":system_strings",
+    "resources:quick_action_camera_search",
+    "resources:quick_action_incognito_search",
+    "resources:quick_action_search",
+    "resources:quick_action_voice_search",
   ]
 
   extra_substitutions = [
@@ -39,6 +44,10 @@ ios_appex_bundle("search_widget_extension") {
 
 source_set("search_widget") {
   sources = [
+    "copied_url_view.h",
+    "copied_url_view.mm",
+    "search_action_view.h",
+    "search_action_view.mm",
     "search_widget_view.h",
     "search_widget_view.mm",
     "search_widget_view_controller.h",
@@ -48,8 +57,6 @@ source_set("search_widget") {
   ]
 
   deps = [
-    ":resources",
-    ":system_strings",
     "//base",
     "//components/open_from_clipboard:open_from_clipboard_impl",
     "//ios/chrome/common/app_group",
@@ -74,27 +81,6 @@ source_set("unit_tests") {
     "//testing/gtest",
   ]
   configs += [ "//build/config/compiler:enable_arc" ]
-}
-
-bundle_data("resources") {
-  visibility = [ ":*" ]
-  sources = [
-    "resources/quick_action_camera_search.png",
-    "resources/quick_action_camera_search@2x.png",
-    "resources/quick_action_camera_search@3x.png",
-    "resources/quick_action_incognito_search.png",
-    "resources/quick_action_incognito_search@2x.png",
-    "resources/quick_action_incognito_search@3x.png",
-    "resources/quick_action_search.png",
-    "resources/quick_action_search@2x.png",
-    "resources/quick_action_search@3x.png",
-    "resources/quick_action_voice_search.png",
-    "resources/quick_action_voice_search@2x.png",
-    "resources/quick_action_voice_search@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
 }
 
 repack_locales("packed_resources") {

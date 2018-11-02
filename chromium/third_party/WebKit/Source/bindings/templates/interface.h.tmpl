@@ -10,7 +10,7 @@
 
 namespace blink {
 
-{% if origin_trial_features %}
+{% if optional_features %}
 class ScriptState;
 {% endif %}
 {% if named_constructor %}
@@ -49,7 +49,7 @@ class {{v8_class}} {
     visitor->Trace(scriptWrappable->ToImpl<{{cpp_class}}>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<{{cpp_class}}>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<{{cpp_class}}>());
   }
   {% for method in methods %}
   {% if method.is_custom %}
@@ -131,14 +131,18 @@ class {{v8_class}} {
   {% endif %}
 
   {% if has_partial_interface %}
-  {{exported}}static void updateWrapperTypeInfo(InstallTemplateFunction, InstallRuntimeEnabledFunction, PreparePrototypeAndInterfaceObjectFunction);
+  {{exported}}static void UpdateWrapperTypeInfo(
+      InstallTemplateFunction,
+      InstallRuntimeEnabledFeaturesFunction,
+      InstallRuntimeEnabledFeaturesOnTemplateFunction,
+      PreparePrototypeAndInterfaceObjectFunction);
   {{exported}}static void install{{v8_class}}Template(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::FunctionTemplate> interfaceTemplate);
   {% for method in methods if method.overloads and method.overloads.has_partial_overloads %}
   {{exported}}static void register{{method.name | blink_capitalize}}MethodForPartialInterface(void (*)(const v8::FunctionCallbackInfo<v8::Value>&));
   {% endfor %}
   {% endif %}
 
-  {% for feature in origin_trial_features %}
+  {% for feature in optional_features %}
 
   static void install{{feature.name}}(v8::Isolate*, const DOMWrapperWorld&, v8::Local<v8::Object> instance, v8::Local<v8::Object> prototype, v8::Local<v8::Function> interface);
   static void install{{feature.name}}(ScriptState*, v8::Local<v8::Object> instance);
@@ -241,25 +245,43 @@ class {{v8_class}} {
   {% if indexed_property_getter or named_property_getter %}
   {{exported}}static void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>&);
   {% endif %}
-  {% if indexed_property_setter or named_property_setter %}
+  {% if indexed_property_getter or named_property_setter %}
   {{exported}}static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value>, const v8::PropertyCallbackInfo<v8::Value>&);
+  {% endif %}
+  {% if indexed_property_getter %}
+  {{exported}}static void indexedPropertyDescriptorCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>&);
   {% endif %}
   {% if indexed_property_deleter or named_property_deleter %}
   {{exported}}static void indexedPropertyDeleterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Boolean>&);
   {% endif %}
+  {% if indexed_property_getter %}
+  {{exported}}static void indexedPropertyDefinerCallback(uint32_t index, const v8::PropertyDescriptor&, const v8::PropertyCallbackInfo<v8::Value>&);
+  {% endif %}
 
   {% if needs_runtime_enabled_installer %}
-  {{exported}}static void installRuntimeEnabledFeatures(
-      v8::Isolate* isolate,
+  {{exported if has_partial_interface else ''}}static void InstallRuntimeEnabledFeatures(
+      v8::Isolate*,
       const DOMWrapperWorld& world,
       v8::Local<v8::Object> instance,
       v8::Local<v8::Object> prototype,
       v8::Local<v8::Function> interface);
 
   {% if has_partial_interface %}
-  static InstallRuntimeEnabledFunction install{{v8_class}}RuntimeEnabledFunction;
+  static InstallRuntimeEnabledFeaturesFunction
+  install_runtime_enabled_features_function_;
   {% endif %}
+  {% endif %}{# needs_runtime_enabled_installer #}
+
+  {% if not is_array_buffer_or_view %}
+  {{exported if has_partial_interface else ''}}static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
+  {% if has_partial_interface %}
+  static InstallRuntimeEnabledFeaturesOnTemplateFunction
+  install_runtime_enabled_features_on_template_function_;
   {% endif %}
+  {% endif %}{# not is_array_buffer_or_view #}
 
   {% if has_partial_interface %}
  private:

@@ -5,6 +5,7 @@
 #ifndef UI_GFX_SKIA_PAINT_UTIL_H_
 #define UI_GFX_SKIA_PAINT_UTIL_H_
 
+#include <memory>
 #include <vector>
 
 #include "cc/paint/paint_shader.h"
@@ -27,13 +28,13 @@ class ImageSkiaRep;
 //
 GFX_EXPORT sk_sp<cc::PaintShader> CreateImageRepShader(
     const gfx::ImageSkiaRep& image_rep,
-    cc::PaintShader::TileMode tile_mode,
+    SkShader::TileMode tile_mode,
     const SkMatrix& local_matrix);
 
 // Creates a bitmap shader for the image rep with the passed in scale factor.
 GFX_EXPORT sk_sp<cc::PaintShader> CreateImageRepShaderForScale(
     const gfx::ImageSkiaRep& image_rep,
-    cc::PaintShader::TileMode tile_mode,
+    SkShader::TileMode tile_mode,
     const SkMatrix& local_matrix,
     SkScalar scale);
 

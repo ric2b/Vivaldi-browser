@@ -19,6 +19,10 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 
+#if defined(OS_WIN)
+#include "base/win/com_init_check_hook.h"
+#endif
+
 namespace base {
 namespace internal {
 
@@ -102,13 +106,16 @@ class BASE_EXPORT SchedulerWorker
   // before Start() is called. |priority_hint| is the preferred thread priority;
   // the actual thread priority depends on shutdown state and platform
   // capabilities. |task_tracker| is used to handle shutdown behavior of Tasks.
-  // |backward_compatibility| indicates whether backward compatibility is
-  // enabled. |initial_state| determines whether the thread is created in
-  // Start() or in the first WakeUp() after Start(). Either JoinForTesting() or
-  // Cleanup() must be called before releasing the last external reference.
+  // |predecessor_lock| is a lock that is allowed to be held when calling
+  // methods on this SchedulerWorker. |backward_compatibility| indicates
+  // whether backward compatibility is enabled. |initial_state| determines
+  // whether the thread is created in Start() or in the first WakeUp() after
+  // Start(). Either JoinForTesting() or Cleanup() must be called before
+  // releasing the last external reference.
   SchedulerWorker(ThreadPriority priority_hint,
                   std::unique_ptr<Delegate> delegate,
                   TaskTracker* task_tracker,
+                  const SchedulerLock* predecessor_lock = nullptr,
                   SchedulerBackwardCompatibility backward_compatibility =
                       SchedulerBackwardCompatibility::DISABLED,
                   InitialState initial_state = InitialState::ALIVE);
@@ -192,7 +199,7 @@ class BASE_EXPORT SchedulerWorker
   const std::unique_ptr<Delegate> delegate_;
   TaskTracker* const task_tracker_;
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) && !defined(COM_INIT_CHECK_HOOK_ENABLED)
   const SchedulerBackwardCompatibility backward_compatibility_;
 #endif
 

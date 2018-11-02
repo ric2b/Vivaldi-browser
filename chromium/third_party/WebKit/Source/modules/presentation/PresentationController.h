@@ -40,6 +40,8 @@ class MODULES_EXPORT PresentationController final
   static void ProvideTo(LocalFrame&, WebPresentationClient*);
 
   WebPresentationClient* Client();
+  static WebPresentationClient* ClientFromContext(ExecutionContext*);
+  static PresentationController* FromContext(ExecutionContext*);
 
   // Implementation of Supplement.
   DECLARE_VIRTUAL_TRACE();
@@ -52,11 +54,6 @@ class MODULES_EXPORT PresentationController final
   void DidCloseConnection(const WebPresentationInfo&,
                           WebPresentationConnectionCloseReason,
                           const WebString& message) override;
-  void DidReceiveConnectionTextMessage(const WebPresentationInfo&,
-                                       const WebString&) override;
-  void DidReceiveConnectionBinaryMessage(const WebPresentationInfo&,
-                                         const uint8_t* data,
-                                         size_t length) override;
 
   // Called by the Presentation object to advertize itself to the controller.
   // The Presentation object is kept as a WeakMember in order to avoid keeping
@@ -94,15 +91,11 @@ class MODULES_EXPORT PresentationController final
   // client can't be used.
   WebPresentationClient* client_;
 
-  // Default PresentationRequest used by the embedder.
-  // Member<PresentationRequest> m_defaultRequest;
+  // The Presentation instance associated with that frame.
   WeakMember<Presentation> presentation_;
 
   // The presentation connections associated with that frame.
-  // TODO(mlamouri): the PresentationController will keep any created
-  // connections alive until the frame is detached. These should be weak ptr
-  // so that the connection can be GC'd.
-  HeapHashSet<Member<PresentationConnection>> connections_;
+  HeapHashSet<WeakMember<PresentationConnection>> connections_;
 };
 
 }  // namespace blink

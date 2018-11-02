@@ -27,6 +27,7 @@
 #ifndef IntPoint_h
 #define IntPoint_h
 
+#include "build/build_config.h"
 #include "platform/geometry/IntSize.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
@@ -34,7 +35,7 @@
 #include "platform/wtf/SaturatedArithmetic.h"
 #include "platform/wtf/VectorTraits.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 typedef struct CGPoint CGPoint;
 
 #ifdef __OBJC__
@@ -93,16 +94,10 @@ class PLATFORM_EXPORT IntPoint {
 
   IntPoint TransposedPoint() const { return IntPoint(y_, x_); }
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   explicit IntPoint(
       const CGPoint&);  // don't do this implicitly since it's lossy
   operator CGPoint() const;
-
-#if defined(__OBJC__) && !defined(NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES)
-  explicit IntPoint(
-      const NSPoint&);  // don't do this implicitly since it's lossy
-  operator NSPoint() const;
-#endif
 #endif
 
   String ToString() const;

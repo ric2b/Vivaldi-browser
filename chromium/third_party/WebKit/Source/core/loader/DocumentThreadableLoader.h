@@ -118,7 +118,12 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
 
   // Methods containing code to handle resource fetch results which are common
   // to both sync and async mode.
+  //
+  // The FetchCredentialsMode argument must be the request's credentials mode.
+  // It's used for CORS check.
   void HandleResponse(unsigned long identifier,
+                      WebURLRequest::FetchRequestMode,
+                      WebURLRequest::FetchCredentialsMode,
                       const ResourceResponse&,
                       std::unique_ptr<WebDataConsumerHandle>);
   void HandleReceivedData(const char* data, size_t data_length);
@@ -128,16 +133,18 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // Calls the appropriate loading method according to policy and data about
   // origin. Only for handling the initial load (including fallback after
   // consulting ServiceWorker).
-  void DispatchInitialRequest(const ResourceRequest&);
+  void DispatchInitialRequest(ResourceRequest&);
   void MakeCrossOriginAccessRequest(const ResourceRequest&);
   // Loads m_fallbackRequestForServiceWorker.
   void LoadFallbackRequestForServiceWorker();
-  // Loads m_actualRequest.
+  // Issues a CORS preflight.
+  void LoadPreflightRequest(const ResourceRequest&,
+                            const ResourceLoaderOptions&);
+  // Loads actual_request_.
   void LoadActualRequest();
-  // Clears m_actualRequest and reports access control check failure to
+  // Clears actual_request_ and reports access control check failure to
   // m_client.
-  void HandlePreflightFailure(const String& url,
-                              const String& error_description);
+  void HandlePreflightFailure(const KURL&, const String& error_description);
   // Investigates the response for the preflight request. If successful,
   // the actual request will be made later in handleSuccessfulFinish().
   void HandlePreflightResponse(const ResourceResponse&);
@@ -148,13 +155,17 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   void LoadRequestAsync(const ResourceRequest&, ResourceLoaderOptions);
   void LoadRequestSync(const ResourceRequest&, ResourceLoaderOptions);
 
-  void PrepareCrossOriginRequest(ResourceRequest&);
-  void LoadRequest(const ResourceRequest&, ResourceLoaderOptions);
-  bool IsAllowedRedirect(const KURL&) const;
-  // Returns DoNotAllowStoredCredentials if m_forceDoNotAllowStoredCredentials
-  // is set. Otherwise, just returns allowCredentials value of
-  // m_resourceLoaderOptions.
-  StoredCredentials EffectiveAllowCredentials() const;
+  void PrepareCrossOriginRequest(ResourceRequest&) const;
+
+  // This method modifies the ResourceRequest by calling
+  // SetAllowStoredCredentials() on it based on same-origin-ness and the
+  // credentials mode.
+  //
+  // This method configures the ResourceLoaderOptions so that the underlying
+  // ResourceFetcher doesn't perform some part of the CORS logic since this
+  // class performs it by itself.
+  void LoadRequest(ResourceRequest&, ResourceLoaderOptions);
+  bool IsAllowedRedirect(WebURLRequest::FetchRequestMode, const KURL&) const;
 
   // TODO(hiroshige): After crbug.com/633696 is fixed,
   // - Remove RawResourceClientStateChecker logic,
@@ -196,12 +207,10 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
   // up-to-date values from them and this variable, and use it.
   const ResourceLoaderOptions resource_loader_options_;
 
-  bool force_do_not_allow_stored_credentials_;
+  // Corresponds to the CORS flag in the Fetch spec.
+  bool cors_flag_;
+  bool suborigin_force_credentials_;
   RefPtr<SecurityOrigin> security_origin_;
-
-  // True while the initial URL and all the URLs of the redirects this object
-  // has followed, if any, are same-origin to getSecurityOrigin().
-  bool same_origin_request_;
 
   // Set to true when the response data is given to a data consumer handle.
   bool is_using_data_consumer_handle_;
@@ -210,6 +219,12 @@ class CORE_EXPORT DocumentThreadableLoader final : public ThreadableLoader,
 
   // Holds the original request context (used for sanity checks).
   WebURLRequest::RequestContext request_context_;
+
+  // Saved so that we can use the original value for the modes in
+  // ResponseReceived() where |resource| might be a reused one (e.g. preloaded
+  // resource) which can have different modes.
+  WebURLRequest::FetchRequestMode fetch_request_mode_;
+  WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
 
   // Holds the original request for fallback in case the Service Worker
   // does not respond.

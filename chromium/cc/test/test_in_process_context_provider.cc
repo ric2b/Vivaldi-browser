@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/context_cache_controller.h"
-#include "cc/resources/platform_color.h"
+#include "components/viz/common/gpu/context_cache_controller.h"
+#include "components/viz/common/resources/platform_color.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_implementation.h"
 #include "gpu/command_buffer/client/gles2_lib.h"
@@ -64,7 +64,7 @@ TestInProcessContextProvider::TestInProcessContextProvider(
       &gpu_memory_buffer_manager_, &image_factory_,
       (shared_context ? shared_context->context_.get() : nullptr),
       base::ThreadTaskRunnerHandle::Get());
-  cache_controller_.reset(new ContextCacheController(
+  cache_controller_.reset(new viz::ContextCacheController(
       context_->GetImplementation(), base::ThreadTaskRunnerHandle::Get()));
 }
 
@@ -93,7 +93,7 @@ class GrContext* TestInProcessContextProvider::GrContext() {
   return gr_context_->get();
 }
 
-ContextCacheController* TestInProcessContextProvider::CacheController() {
+viz::ContextCacheController* TestInProcessContextProvider::CacheController() {
   return cache_controller_.get();
 }
 
@@ -110,11 +110,11 @@ gpu::Capabilities TestInProcessContextProvider::ContextCapabilities() {
   gpu::Capabilities capabilities;
   capabilities.texture_rectangle = true;
   capabilities.sync_query = true;
-  switch (PlatformColor::Format()) {
-    case PlatformColor::SOURCE_FORMAT_RGBA8:
+  switch (viz::PlatformColor::Format()) {
+    case viz::PlatformColor::SOURCE_FORMAT_RGBA8:
       capabilities.texture_format_bgra8888 = false;
       break;
-    case PlatformColor::SOURCE_FORMAT_BGRA8:
+    case viz::PlatformColor::SOURCE_FORMAT_BGRA8:
       capabilities.texture_format_bgra8888 = true;
       break;
   }

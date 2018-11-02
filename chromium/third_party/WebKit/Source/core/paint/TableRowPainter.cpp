@@ -7,6 +7,7 @@
 #include "core/layout/LayoutTableCell.h"
 #include "core/layout/LayoutTableRow.h"
 #include "core/paint/BoxPainter.h"
+#include "core/paint/CollapsedBorderPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/ObjectPainter.h"
 #include "core/paint/PaintInfo.h"
@@ -52,6 +53,18 @@ void TableRowPainter::PaintOutline(const PaintInfo& paint_info,
       .PaintOutline(paint_info, adjusted_paint_offset);
 }
 
+void TableRowPainter::HandleChangedPartialPaint(
+    const PaintInfo& paint_info,
+    const CellSpan& dirtied_columns) {
+  PaintResult paint_result =
+      dirtied_columns ==
+              layout_table_row_.Section()->FullTableEffectiveColumnSpan()
+          ? kFullyPainted
+          : kMayBeClippedByPaintDirtyRect;
+  layout_table_row_.GetMutableForPainting().UpdatePaintResult(
+      paint_result, paint_info.GetCullRect());
+}
+
 void TableRowPainter::PaintBoxDecorationBackground(
     const PaintInfo& paint_info,
     const LayoutPoint& paint_offset,
@@ -61,13 +74,7 @@ void TableRowPainter::PaintBoxDecorationBackground(
   if (!has_background && !has_box_shadow)
     return;
 
-  const auto* section = layout_table_row_.Section();
-  PaintResult paint_result =
-      dirtied_columns == section->FullTableEffectiveColumnSpan()
-          ? kFullyPainted
-          : kMayBeClippedByPaintDirtyRect;
-  layout_table_row_.GetMutableForPainting().UpdatePaintResult(
-      paint_result, paint_info.GetCullRect());
+  HandleChangedPartialPaint(paint_info, dirtied_columns);
 
   if (LayoutObjectDrawingRecorder::UseCachedDrawingIfPossible(
           paint_info.context, layout_table_row_,
@@ -90,6 +97,7 @@ void TableRowPainter::PaintBoxDecorationBackground(
   }
 
   if (has_background) {
+    const auto* section = layout_table_row_.Section();
     PaintInfo paint_info_for_cells = paint_info.ForDescendants();
     for (auto c = dirtied_columns.Start(); c < dirtied_columns.End(); c++) {
       if (const auto* cell =
@@ -121,6 +129,41 @@ void TableRowPainter::PaintBackgroundBehindCell(
   }
   TableCellPainter(cell).PaintContainerBackgroundBehindCell(
       paint_info, cell_point, layout_table_row_);
+}
+
+void TableRowPainter::PaintCollapsedBorders(const PaintInfo& paint_info,
+                                            const LayoutPoint& paint_offset,
+                                            const CellSpan& dirtied_columns) {
+  Optional<LayoutObjectDrawingRecorder> recorder;
+
+  if (LIKELY(!layout_table_row_.Table()->ShouldPaintAllCollapsedBorders())) {
+    HandleChangedPartialPaint(paint_info, dirtied_columns);
+
+    if (DrawingRecorder::UseCachedDrawingIfPossible(
+            paint_info.context, layout_table_row_,
+            DisplayItem::kTableCollapsedBorders))
+      return;
+
+    LayoutRect bounds =
+        BoxPainter(layout_table_row_)
+            .BoundsForDrawingRecorder(
+                paint_info, paint_offset + layout_table_row_.Location());
+    recorder.emplace(paint_info.context, layout_table_row_,
+                     DisplayItem::kTableCollapsedBorders, bounds);
+  }
+  // Otherwise TablePainter should have created the drawing recorder.
+
+  const auto* section = layout_table_row_.Section();
+  unsigned row = layout_table_row_.RowIndex();
+  for (unsigned c = std::min(dirtied_columns.End(), section->NumCols(row));
+       c > dirtied_columns.Start(); c--) {
+    if (const auto* cell = section->OriginatingCellAt(row, c - 1)) {
+      LayoutPoint cell_point =
+          section->FlipForWritingModeForChild(cell, paint_offset);
+      CollapsedBorderPainter(*cell).PaintCollapsedBorders(paint_info,
+                                                          cell_point);
+    }
+  }
 }
 
 }  // namespace blink

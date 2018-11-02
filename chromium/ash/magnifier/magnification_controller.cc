@@ -221,7 +221,6 @@ class MagnificationControllerImpl : public MagnificationController,
   void OnMoveMagnifierTimer();
 
   // ui::InputMethodObserver:
-  void OnTextInputTypeChanged(const ui::TextInputClient* client) override {}
   void OnFocus() override {}
   void OnBlur() override {}
   void OnTextInputStateChanged(const ui::TextInputClient* client) override {}
@@ -379,7 +378,7 @@ bool MagnificationControllerImpl::RedrawDIP(const gfx::PointF& position_in_dip,
       display::Screen::GetScreen()->GetDisplayNearestWindow(root_window_);
   std::unique_ptr<RootWindowTransformer> transformer(
       CreateRootWindowTransformerForDisplay(root_window_, display));
-  GetRootWindowController(root_window_)
+  RootWindowController::ForWindow(root_window_)
       ->ash_host()
       ->SetRootWindowTransformer(std::move(transformer));
 
@@ -701,10 +700,8 @@ void MagnificationControllerImpl::OnTouchEvent(ui::TouchEvent* event) {
 }
 
 void MagnificationControllerImpl::OnGestureEvent(ui::GestureEvent* event) {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          chromeos::switches::kEnableTouchSupportForScreenMagnifier)) {
+  if (!IsEnabled())
     return;
-  }
 
   const ui::GestureEventDetails& details = event->details();
   if (details.type() == ui::ET_GESTURE_SCROLL_UPDATE &&

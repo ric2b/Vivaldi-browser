@@ -8,7 +8,6 @@
 
 #include "ash/shell.h"
 #include "base/macros.h"
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/input_method/mode_indicator_controller.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -18,6 +17,7 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/ime_candidate_window_handler_interface.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/ime/chromeos/input_method_whitelist.h"
 #include "ui/base/ime/ime_bridge.h"
 #include "ui/base/ime/input_method_factory.h"
@@ -133,7 +133,6 @@ IN_PROC_BROWSER_TEST_F(ModeIndicatorBrowserTest, Bounds) {
   // Add keyboard layouts to enable the mode indicator.
   imm->GetActiveIMEState()->EnableLoginLayouts("fr", keyboard_layouts);
   ASSERT_LT(1UL, imm->GetActiveIMEState()->GetNumActiveInputMethods());
-  EXPECT_TRUE(imm->GetActiveIMEState()->CanCycleInputMethod());
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
       ui::IMEBridge::Get()->GetCandidateWindowHandler();
@@ -203,7 +202,6 @@ IN_PROC_BROWSER_TEST_F(ModeIndicatorBrowserTest, NumOfWidgets) {
   // Add keyboard layouts to enable the mode indicator.
   imm->GetActiveIMEState()->EnableLoginLayouts("fr", keyboard_layouts);
   ASSERT_LT(1UL, imm->GetActiveIMEState()->GetNumActiveInputMethods());
-  EXPECT_TRUE(imm->GetActiveIMEState()->CanCycleInputMethod());
 
   chromeos::IMECandidateWindowHandlerInterface* candidate_window =
       ui::IMEBridge::Get()->GetCandidateWindowHandler();

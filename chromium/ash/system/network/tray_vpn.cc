@@ -4,10 +4,10 @@
 
 #include "ash/system/network/tray_vpn.h"
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/network/network_icon.h"
 #include "ash/system/network/network_icon_animation.h"
@@ -172,17 +172,18 @@ views::View* TrayVPN::CreateDetailedView(LoginStatus status) {
   if (!chromeos::NetworkHandler::IsInitialized())
     return nullptr;
 
-  ShellPort::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_DETAILED_VPN_VIEW);
+  Shell::Get()->metrics()->RecordUserMetricsAction(
+      UMA_STATUS_AREA_DETAILED_VPN_VIEW);
   detailed_ = new tray::VPNListView(this, status);
   detailed_->Init();
   return detailed_;
 }
 
-void TrayVPN::DestroyDefaultView() {
+void TrayVPN::OnDefaultViewDestroyed() {
   default_ = nullptr;
 }
 
-void TrayVPN::DestroyDetailedView() {
+void TrayVPN::OnDetailedViewDestroyed() {
   detailed_ = nullptr;
 }
 

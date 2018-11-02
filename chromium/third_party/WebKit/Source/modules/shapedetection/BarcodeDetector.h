@@ -15,23 +15,23 @@
 
 namespace blink {
 
+class ExecutionContext;
+
 class MODULES_EXPORT BarcodeDetector final : public ShapeDetector,
                                              public ScriptWrappable {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static BarcodeDetector* Create();
+  static BarcodeDetector* Create(ExecutionContext*);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  BarcodeDetector();
+  explicit BarcodeDetector(ExecutionContext*);
   ~BarcodeDetector() override = default;
 
   ScriptPromise DoDetect(ScriptPromiseResolver*,
-                         mojo::ScopedSharedBufferHandle,
-                         int image_width,
-                         int image_height) override;
+                         skia::mojom::blink::BitmapPtr) override;
   void OnDetectBarcodes(
       ScriptPromiseResolver*,
       Vector<shape_detection::mojom::blink::BarcodeDetectionResultPtr>);

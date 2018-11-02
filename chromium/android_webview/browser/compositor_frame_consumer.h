@@ -25,8 +25,8 @@ class CompositorFrameConsumer {
     ReturnedResources();
     ~ReturnedResources();
 
-    uint32_t compositor_frame_sink_id;
-    cc::ReturnedResourceArray resources;
+    uint32_t layer_tree_frame_sink_id;
+    std::vector<cc::ReturnedResource> resources;
   };
   using ReturnedResourcesMap =
       std::map<CompositorID, ReturnedResources, CompositorIDComparator>;
@@ -60,4 +60,4 @@ class CompositorFrameConsumer {
 
 }  // namespace android_webview
 
-#endif  // ANDROID_WEBVIEW_BROWSER_COMPOSITOR_FRAME_PRODUCER_H_
+#endif  // ANDROID_WEBVIEW_BROWSER_COMPOSITOR_FRAME_CONSUMER_H_

@@ -8,29 +8,43 @@
 #import <UIKit/UIKit.h>
 
 #import "ios/chrome/browser/ui/collection_view/collection_view_controller.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_controlling.h"
 
 @class ContentSuggestionsSectionInformation;
 @protocol ContentSuggestionsCommands;
 @protocol ContentSuggestionsDataSource;
+@protocol ContentSuggestionsHeaderSynchronizing;
+@protocol ContentSuggestionsViewControllerAudience;
+@protocol ContentSuggestionsViewControllerDelegate;
+@protocol OverscrollActionsControllerDelegate;
 @protocol SuggestedContent;
 
 // CollectionViewController to display the suggestions items.
-@interface ContentSuggestionsViewController : CollectionViewController
+@interface ContentSuggestionsViewController
+    : CollectionViewController<ContentSuggestionsCollectionControlling>
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
                    dataSource:(id<ContentSuggestionsDataSource>)dataSource
     NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithStyle:(CollectionViewControllerStyle)style
+- (instancetype)initWithLayout:(UICollectionViewLayout*)layout
+                         style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
 // Handler for the commands sent by the ContentSuggestionsViewController.
 @property(nonatomic, weak) id<ContentSuggestionsCommands>
     suggestionCommandHandler;
+@property(nonatomic, weak) id<ContentSuggestionsHeaderSynchronizing>
+    headerCommandHandler;
+@property(nonatomic, weak) id<ContentSuggestionsViewControllerAudience>
+    audience;
 // Override from superclass to have a more specific type.
 @property(nonatomic, readonly)
     CollectionViewModel<CollectionViewItem<SuggestedContent>*>*
         collectionViewModel;
+// Delegate for the overscroll actions.
+@property(nonatomic, weak) id<OverscrollActionsControllerDelegate>
+    overscrollDelegate;
 
 // Removes the entry at |indexPath|, from the collection and its model.
 - (void)dismissEntryAtIndexPath:(NSIndexPath*)indexPath;

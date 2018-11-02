@@ -14,7 +14,7 @@ FakeCompositorFrameSinkSupportClient::~FakeCompositorFrameSinkSupportClient() =
     default;
 
 void FakeCompositorFrameSinkSupportClient::DidReceiveCompositorFrameAck(
-    const ReturnedResourceArray& resources) {
+    const std::vector<ReturnedResource>& resources) {
   returned_resources_ = resources;
 }
 
@@ -22,15 +22,18 @@ void FakeCompositorFrameSinkSupportClient::OnBeginFrame(
     const BeginFrameArgs& args) {}
 
 void FakeCompositorFrameSinkSupportClient::ReclaimResources(
-    const ReturnedResourceArray& resources) {
+    const std::vector<ReturnedResource>& resources) {
   returned_resources_ = resources;
 }
 
 void FakeCompositorFrameSinkSupportClient::WillDrawSurface(
-    const LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     const gfx::Rect& damage_rect) {
   last_local_surface_id_ = local_surface_id;
   last_damage_rect_ = damage_rect;
 }
+
+void FakeCompositorFrameSinkSupportClient::OnBeginFramePausedChanged(
+    bool paused) {}
 
 };  // namespace cc

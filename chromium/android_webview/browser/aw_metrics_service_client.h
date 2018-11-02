@@ -14,6 +14,7 @@
 #include "components/metrics/enabled_state_provider.h"
 #include "components/metrics/metrics_log_uploader.h"
 #include "components/metrics/metrics_service_client.h"
+#include "components/version_info/channel.h"
 
 class PrefService;
 
@@ -43,9 +44,12 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
 
  public:
   static AwMetricsServiceClient* GetInstance();
+
+  // Retrieve the client ID or generate one if none exists
+  static void GetOrCreateGUID();
+
   void Initialize(PrefService* pref_service,
-                  net::URLRequestContextGetter* request_context,
-                  const base::FilePath guid_file_path);
+                  net::URLRequestContextGetter* request_context);
 
   // metrics::EnabledStateProvider implementation
   bool IsConsentGiven() override;
@@ -78,13 +82,14 @@ class AwMetricsServiceClient : public metrics::MetricsServiceClient,
   AwMetricsServiceClient();
   ~AwMetricsServiceClient() override;
 
-  void InitializeWithGUID(std::string* guid);
+  void InitializeWithGUID();
 
   bool is_enabled_;
   PrefService* pref_service_;
   net::URLRequestContextGetter* request_context_;
   std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
   std::unique_ptr<metrics::MetricsService> metrics_service_;
+  version_info::Channel channel_;
 
   DISALLOW_COPY_AND_ASSIGN(AwMetricsServiceClient);
 };

@@ -8,14 +8,13 @@
 #include <memory>
 #include <utility>
 
-#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
+#include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/system_notifier.h"
 #include "ash/system/tray/label_tray_view.h"
 #include "ash/system/tray/system_tray.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "base/logging.h"
@@ -50,12 +49,12 @@ TraySessionLengthLimit::TraySessionLengthLimit(SystemTray* system_tray)
       limit_state_(LIMIT_NONE),
       last_limit_state_(LIMIT_NONE),
       tray_bubble_view_(nullptr) {
-  Shell::Get()->system_tray_notifier()->AddSessionLengthLimitObserver(this);
+  Shell::Get()->session_controller()->AddObserver(this);
   Update();
 }
 
 TraySessionLengthLimit::~TraySessionLengthLimit() {
-  Shell::Get()->system_tray_notifier()->RemoveSessionLengthLimitObserver(this);
+  Shell::Get()->session_controller()->RemoveObserver(this);
 }
 
 // Add view to tray bubble.
@@ -70,11 +69,12 @@ views::View* TraySessionLengthLimit::CreateDefaultView(LoginStatus status) {
 }
 
 // View has been removed from tray bubble.
-void TraySessionLengthLimit::DestroyDefaultView() {
+void TraySessionLengthLimit::OnDefaultViewDestroyed() {
   tray_bubble_view_ = nullptr;
 }
 
-void TraySessionLengthLimit::OnSessionStartTimeChanged() {
+void TraySessionLengthLimit::OnSessionStateChanged(
+    session_manager::SessionState state) {
   Update();
 }
 
@@ -83,19 +83,24 @@ void TraySessionLengthLimit::OnSessionLengthLimitChanged() {
 }
 
 void TraySessionLengthLimit::Update() {
+  // Don't show notification or tray item until the user is logged in.
+  if (!Shell::Get()->session_controller()->IsActiveUserSessionStarted())
+    return;
+
   UpdateState();
   UpdateNotification();
   UpdateTrayBubbleView();
 }
 
 void TraySessionLengthLimit::UpdateState() {
-  SystemTrayDelegate* delegate = Shell::Get()->system_tray_delegate();
-  if (delegate->GetSessionStartTime(&session_start_time_) &&
-      delegate->GetSessionLengthLimit(&time_limit_)) {
+  SessionController* session = Shell::Get()->session_controller();
+  base::TimeDelta time_limit = session->session_length_limit();
+  base::TimeTicks session_start_time = session->session_start_time();
+  if (!time_limit.is_zero() && !session_start_time.is_null()) {
     const base::TimeDelta expiring_soon_threshold(
         base::TimeDelta::FromMinutes(kExpiringSoonThresholdInMinutes));
     remaining_session_time_ =
-        std::max(time_limit_ - (base::TimeTicks::Now() - session_start_time_),
+        std::max(time_limit - (base::TimeTicks::Now() - session_start_time),
                  base::TimeDelta());
     limit_state_ = remaining_session_time_ <= expiring_soon_threshold
                        ? LIMIT_EXPIRING_SOON
@@ -157,11 +162,12 @@ void TraySessionLengthLimit::UpdateNotification() {
               system_notifier::kNotifierSessionLengthTimeout),
           data, nullptr /* delegate */));
   notification->SetSystemPriority();
-  if (message_center->FindVisibleNotificationById(kNotificationId))
+  if (message_center->FindVisibleNotificationById(kNotificationId)) {
     message_center->UpdateNotification(kNotificationId,
                                        std::move(notification));
-  else
+  } else {
     message_center->AddNotification(std::move(notification));
+  }
   last_limit_state_ = limit_state_;
 }
 

@@ -4,7 +4,7 @@
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://bookmarks/actions.html">
-<link rel="import" href="chrome://bookmarks/icons.html">
+<link rel="import" href="chrome://bookmarks/command_manager.html">
 <link rel="import" href="chrome://bookmarks/shared_style.html">
 <link rel="import" href="chrome://bookmarks/store_client.html">
 
@@ -74,15 +74,19 @@
       }
 
       [no-children] {
-        -webkit-padding-start: 52px; /* The width of the arrow and its margin */
+        -webkit-margin-start: 52px; /* The width of the arrow and its margin */
       }
     </style>
 
-    <div id="container" class="v-centered" on-tap="selectFolder_"
-        draggable="[[!isTopLevelFolder_(depth)]]"
+    <div id="container"
+        class="v-centered"
+        draggable="true"
+        on-tap="selectFolder_"
+        on-contextmenu="onContextMenu_"
         tabindex$="[[getTabIndex_(isSelectedFolder_)]]"
-        hidden="[[isRootFolder_(depth)]]">
-      <template is="dom-if" if="[[hasChildFolder_(item_.children)]]">
+        hidden="[[isRootFolder_(depth)]]"
+        role="treeitem">
+      <template is="dom-if" if="[[hasChildFolder_]]">
         <button is="paper-icon-button-light" id="arrow"
             on-tap="toggleFolder_" on-mousedown="preventDefault_" tabindex="-1">
           <iron-icon icon="cr:arrow-drop-down" is-open$="[[!isClosed_]]">
@@ -90,20 +94,23 @@
         </button>
       </template>
       <div id="folder-label" class="v-centered">
-        <iron-icon icon="[[getFolderIcon_(isSelectedFolder_)]]"
-            no-children$="[[!hasChildFolder_(item_.children)]]">
-        </iron-icon>
+        <div class="folder-icon"
+            open$="[[isSelectedFolder_]]"
+            no-children$="[[!hasChildFolder_]]">
+        </div>
         <div class="menu-label">[[item_.title]]</div>
       </div>
     </div>
-    <div id="descendants" hidden$="[[isClosed_]]">
-      <template is="dom-repeat"
-          items="[[item_.children]]"
-          as="child"
-          filter="isFolder_">
-        <bookmarks-folder-node item-id="[[child]]"
-            depth="[[getChildDepth_(depth)]]">
-        </bookmarks-folder-node>
+    <div id="descendants" role="group">
+      <template is="dom-if" if="[[!isClosed_]]">
+        <template is="dom-repeat"
+            items="[[item_.children]]"
+            as="child"
+            filter="isFolder_">
+          <bookmarks-folder-node item-id="[[child]]"
+              depth="[[getChildDepth_(depth)]]">
+          </bookmarks-folder-node>
+        </template>
       </template>
     </div>
   </template>

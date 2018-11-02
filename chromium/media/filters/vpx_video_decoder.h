@@ -7,6 +7,7 @@
 
 #include "base/callback.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/threading/thread_checker.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/video_decoder.h"
@@ -19,6 +20,7 @@ struct vpx_image;
 
 namespace base {
 class SingleThreadTaskRunner;
+class TickClock;
 }
 
 namespace media {
@@ -46,6 +48,12 @@ class MEDIA_EXPORT VpxVideoDecoder : public VideoDecoder {
               const DecodeCB& decode_cb) override;
   void Reset(const base::Closure& closure) override;
 
+  // Returns the number of frames in the pool for testing purposes.
+  size_t GetPoolSizeForTesting() const;
+
+  // Allows injection of a base::SimpleTestClock for testing.
+  void SetTickClockForTesting(base::TickClock* tick_clock);
+
  private:
   enum DecoderState {
     kUninitialized,
@@ -62,6 +70,9 @@ class MEDIA_EXPORT VpxVideoDecoder : public VideoDecoder {
                         // data.
     kAlphaPlaneError  // Fatal error occured when trying to decode alpha plane.
   };
+
+  // Helper function for trampolining through the |offload_task_runner_|.
+  void ResetHelper(const base::Closure& closure);
 
   // Handles (re-)initializing the decoder with a (new) config.
   // Returns true when initialization was successful.
@@ -113,6 +124,9 @@ class MEDIA_EXPORT VpxVideoDecoder : public VideoDecoder {
   scoped_refptr<base::SingleThreadTaskRunner> offload_task_runner_;
 
   VideoFramePool frame_pool_;
+
+  // NOTE: Weak pointers must be invalidated before all other member variables.
+  base::WeakPtrFactory<VpxVideoDecoder> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(VpxVideoDecoder);
 };

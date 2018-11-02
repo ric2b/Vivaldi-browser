@@ -34,6 +34,7 @@
 
 #include <memory>
 #include "bindings/core/v8/ScriptController.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
@@ -50,7 +51,6 @@
 #include "core/probe/CoreProbes.h"
 #include "platform/Histogram.h"
 #include "platform/SharedBuffer.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/CurrentTime.h"
@@ -268,20 +268,14 @@ class ScheduledReload final : public ScheduledNavigation {
     std::unique_ptr<UserGestureIndicator> gesture_indicator =
         CreateUserGestureIndicator();
     ResourceRequest resource_request = frame->Loader().ResourceRequestForReload(
-        RuntimeEnabledFeatures::locationHardReloadEnabled()
-            ? kFrameLoadTypeReloadBypassingCache
-            : kFrameLoadTypeReload,
-        KURL(), ClientRedirectPolicy::kClientRedirect);
+        kFrameLoadTypeReload, KURL(), ClientRedirectPolicy::kClientRedirect);
     if (resource_request.IsNull())
       return;
     FrameLoadRequest request = FrameLoadRequest(nullptr, resource_request);
     request.SetClientRedirect(ClientRedirectPolicy::kClientRedirect);
     MaybeLogScheduledNavigationClobber(
         ScheduledNavigationType::kScheduledReload, frame);
-    frame->Loader().Load(request,
-                         RuntimeEnabledFeatures::locationHardReloadEnabled()
-                             ? kFrameLoadTypeReloadBypassingCache
-                             : kFrameLoadTypeReload);
+    frame->Loader().Load(request, kFrameLoadTypeReload);
   }
 
  private:
@@ -295,7 +289,7 @@ class ScheduledPageBlock final : public ScheduledNavigation {
   }
 
   void Fire(LocalFrame* frame) override {
-    frame->Loader().Client()->LoadErrorPage(reason_);
+    frame->Client()->LoadErrorPage(reason_);
   }
 
  private:

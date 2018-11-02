@@ -12,6 +12,7 @@ source_set("renderer") {
     ]
     deps = [
       "//base",
+      "//components/safe_browsing:features",
       "//components/safe_browsing/common:common",
       "//content/public/renderer",
       "//ipc",
@@ -19,4 +20,40 @@ source_set("renderer") {
       "//url/ipc:url_ipc",
     ]
   }
+}
+
+source_set("websocket_sb_handshake_throttle") {
+  sources = [
+    "websocket_sb_handshake_throttle.cc",
+    "websocket_sb_handshake_throttle.h",
+  ]
+
+  deps = [
+    "//base:base",
+    "//components/safe_browsing/common:interfaces",
+    "//content/public/common:common",
+    "//content/public/renderer:renderer",
+    "//ipc",
+    "//services/service_manager/public/cpp:cpp",
+    "//third_party/WebKit/public:blink",
+    "//url:url",
+  ]
+}
+
+source_set("websocket_sb_handshake_throttle_unittest") {
+  testonly = true
+  sources = [
+    "websocket_sb_handshake_throttle_unittest.cc",
+  ]
+
+  deps = [
+    ":websocket_sb_handshake_throttle",
+    "//base:base",
+    "//base/test:test_support",
+    "//components/safe_browsing/common:interfaces",
+    "//ipc",
+    "//testing/gmock",
+    "//testing/gtest",
+    "//third_party/WebKit/public:blink",
+  ]
 }

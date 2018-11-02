@@ -29,8 +29,7 @@ struct BidirectionalStreamRequestInfo;
 class IOBuffer;
 
 class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
-    : public BidirectionalStreamImpl,
-      public QuicChromiumClientStream::Delegate {
+    : public BidirectionalStreamImpl {
  public:
   explicit BidirectionalStreamQuicImpl(
       std::unique_ptr<QuicChromiumClientSession::Handle> session);
@@ -45,9 +44,6 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
              std::unique_ptr<base::Timer> timer) override;
   void SendRequestHeaders() override;
   int ReadData(IOBuffer* buffer, int buffer_len) override;
-  void SendData(const scoped_refptr<IOBuffer>& data,
-                int length,
-                bool end_stream) override;
   void SendvData(const std::vector<scoped_refptr<IOBuffer>>& buffers,
                  const std::vector<int>& lengths,
                  bool end_stream) override;
@@ -55,27 +51,32 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   int64_t GetTotalReceivedBytes() const override;
   int64_t GetTotalSentBytes() const override;
   bool GetLoadTimingInfo(LoadTimingInfo* load_timing_info) const override;
+  void PopulateNetErrorDetails(NetErrorDetails* details) override;
 
  private:
-  // QuicChromiumClientStream::Delegate implementation:
-  void OnDataAvailable() override;
-  void OnTrailingHeadersAvailable(const SpdyHeaderBlock& headers,
-                                  size_t frame_len) override;
-  void OnClose() override;
-  void OnError(int error) override;
-
+  int WriteHeaders();
   void OnStreamReady(int rv);
   void OnSendDataComplete(int rv);
   void ReadInitialHeaders();
   void OnReadInitialHeadersComplete(int rv);
+  void ReadTrailingHeaders();
+  void OnReadTrailingHeadersComplete(int rv);
   void OnReadDataComplete(int rv);
 
-  // Notifies the delegate of an error.
+  // Notifies the delegate of an error, clears |stream_| and |delegate_|,
+  // and cancels any pending callbacks.
   void NotifyError(int error);
+  // Notifies the delegate of an error, clears |stream_| and |delegate_|,
+  // and cancels any pending callbacks. If |notify_delegate_later| is true
+  // then the delegate will be notified asynchronously via a posted task,
+  // otherwise the notification will be synchronous.
+  void NotifyErrorImpl(int error, bool notify_delegate_later);
   // Notifies the delegate that the stream is ready.
   void NotifyStreamReady();
   // Resets the stream and ensures that |delegate_| won't be called back.
   void ResetStream();
+  // Invokes OnFailure(error) on |delegate|.
+  void NotifyFailure(BidirectionalStreamImpl::Delegate* delegate, int error);
 
   const std::unique_ptr<QuicChromiumClientSession::Handle> session_;
   std::unique_ptr<QuicChromiumClientStream::Handle> stream_;
@@ -94,6 +95,7 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   LoadTimingInfo::ConnectTiming connect_timing_;
 
   SpdyHeaderBlock initial_headers_;
+  SpdyHeaderBlock trailing_headers_;
 
   // User provided read buffer for ReadData() response.
   scoped_refptr<IOBuffer> read_buffer_;
@@ -121,6 +123,9 @@ class NET_EXPORT_PRIVATE BidirectionalStreamQuicImpl
   // until next SendData/SendvData, during which QUIC will try to combine header
   // frame with data frame in the same packet if possible.
   bool send_request_headers_automatically_;
+
+  // True when callbacks to the delegate may be invoked synchronously.
+  bool may_invoke_callbacks_;
 
   base::WeakPtrFactory<BidirectionalStreamQuicImpl> weak_factory_;
 

@@ -25,6 +25,7 @@
 #include "core/CSSPropertyNames.h"
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/parser/HTMLParserIdioms.h"
 #include "core/layout/LayoutListItem.h"
 
@@ -103,7 +104,7 @@ int HTMLOListElement::start() const {
   if (is_reversed_) {
     UseCounter::Count(
         GetDocument(),
-        UseCounter::kHTMLOListElementStartGetterReversedWithoutStartAttribute);
+        WebFeature::kHTMLOListElementStartGetterReversedWithoutStartAttribute);
     return ItemCount();
   }
 

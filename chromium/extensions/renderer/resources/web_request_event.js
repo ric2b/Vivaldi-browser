@@ -9,15 +9,20 @@ var utils = require('utils');
 var validate = require('schemaUtils').validate;
 var webRequestInternal = getInternalApi ?
     getInternalApi('webRequestInternal') :
-    require('webRequestInternal').binding;
+    require('binding').Binding.create('webRequestInternal').generate();
 
 function getUniqueSubEventName(eventName) {
   return eventName + '/' + idGeneratorNatives.GetNextId();
 }
 
 function createSubEvent(name, argSchemas) {
-  if (bindingUtil)
-    return bindingUtil.createCustomEvent(name, undefined, false);
+  if (bindingUtil) {
+    var supportsFilters = false;
+    var supportsLazyListeners = true;
+    return bindingUtil.createCustomEvent(name, undefined,
+                                         supportsFilters,
+                                         supportsLazyListeners);
+  }
   return new eventBindings.Event(name, argSchemas);
 }
 

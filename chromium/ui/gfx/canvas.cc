@@ -143,12 +143,12 @@ void Canvas::Save() {
 }
 
 void Canvas::SaveLayerAlpha(uint8_t alpha) {
-  canvas_->saveLayerAlpha(NULL, alpha);
+  canvas_->saveLayerAlpha(NULL, alpha, false);
 }
 
 void Canvas::SaveLayerAlpha(uint8_t alpha, const Rect& layer_bounds) {
   SkRect bounds(RectToSkRect(layer_bounds));
-  canvas_->saveLayerAlpha(&bounds, alpha);
+  canvas_->saveLayerAlpha(&bounds, alpha, false);
 }
 
 void Canvas::SaveLayerWithFlags(const cc::PaintFlags& flags) {
@@ -189,8 +189,8 @@ void Canvas::Translate(const Vector2d& offset) {
   canvas_->translate(SkIntToScalar(offset.x()), SkIntToScalar(offset.y()));
 }
 
-void Canvas::Scale(int x_scale, int y_scale) {
-  canvas_->scale(SkIntToScalar(x_scale), SkIntToScalar(y_scale));
+void Canvas::Scale(float x_scale, float y_scale) {
+  canvas_->scale(SkFloatToScalar(x_scale), SkFloatToScalar(y_scale));
 }
 
 void Canvas::DrawColor(SkColor color) {

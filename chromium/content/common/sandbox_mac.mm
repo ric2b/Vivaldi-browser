@@ -33,7 +33,10 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/sys_info.h"
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "media/base/data_source.h"
+#include "media/filters/file_data_source.h"
 #include "platform_media/common/mac/at_init.h"
+#include "platform_media/gpu/decoders/mac/avf_media_reader.h"
 #endif
 #include "content/grit/content_resources.h"
 #include "content/public/common/content_client.h"
@@ -43,12 +46,6 @@
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/base/layout.h"
 #include "ui/gl/init/gl_factory.h"
-
-extern "C" {
-void CGSSetDenyWindowServerConnections(bool);
-void CGSShutdownServerConnections();
-OSStatus SetApplicationIsDaemon(Boolean isDaemon);
-};
 
 namespace content {
 namespace {
@@ -63,161 +60,37 @@ struct SandboxTypeToResourceIDMapping {
 
 // Mapping from sandbox process types to resource IDs containing the sandbox
 // profile for all process types known to content.
+// TODO(tsepez): Implement profile for SANDBOX_TYPE_NETWORK.
 SandboxTypeToResourceIDMapping kDefaultSandboxTypeToResourceIDMapping[] = {
-  { SANDBOX_TYPE_RENDERER, IDR_RENDERER_SANDBOX_PROFILE },
-  { SANDBOX_TYPE_UTILITY,  IDR_UTILITY_SANDBOX_PROFILE },
-  { SANDBOX_TYPE_GPU,      IDR_GPU_SANDBOX_PROFILE },
-  { SANDBOX_TYPE_PPAPI,    IDR_PPAPI_SANDBOX_PROFILE },
+    {SANDBOX_TYPE_NO_SANDBOX, -1},
+    {SANDBOX_TYPE_RENDERER, IDR_RENDERER_SANDBOX_PROFILE},
+    {SANDBOX_TYPE_UTILITY, IDR_UTILITY_SANDBOX_PROFILE},
+    {SANDBOX_TYPE_GPU, IDR_GPU_SANDBOX_PROFILE},
+    {SANDBOX_TYPE_PPAPI, IDR_PPAPI_SANDBOX_PROFILE},
+    {SANDBOX_TYPE_NETWORK, -1},
 };
 
 static_assert(arraysize(kDefaultSandboxTypeToResourceIDMapping) == \
               size_t(SANDBOX_TYPE_AFTER_LAST_TYPE), \
               "sandbox type to resource id mapping incorrect");
 
-// Try to escape |c| as a "SingleEscapeCharacter" (\n, etc).  If successful,
-// returns true and appends the escape sequence to |dst|.
-bool EscapeSingleChar(char c, std::string* dst) {
-  const char *append = NULL;
-  switch (c) {
-    case '\b':
-      append = "\\b";
-      break;
-    case '\f':
-      append = "\\f";
-      break;
-    case '\n':
-      append = "\\n";
-      break;
-    case '\r':
-      append = "\\r";
-      break;
-    case '\t':
-      append = "\\t";
-      break;
-    case '\\':
-      append = "\\\\";
-      break;
-    case '"':
-      append = "\\\"";
-      break;
-  }
-
-  if (!append) {
-    return false;
-  }
-
-  dst->append(append);
-  return true;
-}
-
-// Errors quoting strings for the Sandbox profile are always fatal, report them
-// in a central place.
-NOINLINE void FatalStringQuoteException(const std::string& str) {
-  // Copy bad string to the stack so it's recorded in the crash dump.
-  char bad_string[256] = {0};
-  base::strlcpy(bad_string, str.c_str(), arraysize(bad_string));
-  DLOG(FATAL) << "String quoting failed " << bad_string;
-}
-
 }  // namespace
 
-// static
-bool Sandbox::QuotePlainString(const std::string& src_utf8, std::string* dst) {
-  dst->clear();
+// Static variable declarations.
+const char* Sandbox::kSandboxBrowserPID = "BROWSER_PID";
+const char* Sandbox::kSandboxBundlePath = "BUNDLE_PATH";
+const char* Sandbox::kSandboxChromeBundleId = "BUNDLE_ID";
+const char* Sandbox::kSandboxComponentPath = "COMPONENT_PATH";
+const char* Sandbox::kSandboxDisableDenialLogging =
+    "DISABLE_SANDBOX_DENIAL_LOGGING";
+const char* Sandbox::kSandboxEnableLogging = "ENABLE_LOGGING";
+const char* Sandbox::kSandboxHomedirAsLiteral = "USER_HOMEDIR_AS_LITERAL";
+const char* Sandbox::kSandboxLoggingPathAsLiteral = "LOG_FILE_PATH";
+const char* Sandbox::kSandboxOSVersion = "OS_VERSION";
+const char* Sandbox::kSandboxPermittedDir = "PERMITTED_DIR";
 
-  const char* src = src_utf8.c_str();
-  int32_t length = src_utf8.length();
-  int32_t position = 0;
-  while (position < length) {
-    UChar32 c;
-    U8_NEXT(src, position, length, c);  // Macro increments |position|.
-    DCHECK_GE(c, 0);
-    if (c < 0)
-      return false;
-
-    if (c < 128) {  // EscapeSingleChar only handles ASCII.
-      char as_char = static_cast<char>(c);
-      if (EscapeSingleChar(as_char, dst)) {
-        continue;
-      }
-    }
-
-    if (c < 32 || c > 126) {
-      // Any characters that aren't printable ASCII get the \u treatment.
-      unsigned int as_uint = static_cast<unsigned int>(c);
-      base::StringAppendF(dst, "\\u%04X", as_uint);
-      continue;
-    }
-
-    // If we got here we know that the character in question is strictly
-    // in the ASCII range so there's no need to do any kind of encoding
-    // conversion.
-    dst->push_back(static_cast<char>(c));
-  }
-  return true;
-}
-
-// static
-bool Sandbox::QuoteStringForRegex(const std::string& str_utf8,
-                                  std::string* dst) {
-  // Characters with special meanings in sandbox profile syntax.
-  const char regex_special_chars[] = {
-    '\\',
-
-    // Metacharacters
-    '^',
-    '.',
-    '[',
-    ']',
-    '$',
-    '(',
-    ')',
-    '|',
-
-    // Quantifiers
-    '*',
-    '+',
-    '?',
-    '{',
-    '}',
-  };
-
-  // Anchor regex at start of path.
-  dst->assign("^");
-
-  const char* src = str_utf8.c_str();
-  int32_t length = str_utf8.length();
-  int32_t position = 0;
-  while (position < length) {
-    UChar32 c;
-    U8_NEXT(src, position, length, c);  // Macro increments |position|.
-    DCHECK_GE(c, 0);
-    if (c < 0)
-      return false;
-
-    // The Mac sandbox regex parser only handles printable ASCII characters.
-    // 33 >= c <= 126
-    if (c < 32 || c > 125) {
-      return false;
-    }
-
-    for (size_t i = 0; i < arraysize(regex_special_chars); ++i) {
-      if (c == regex_special_chars[i]) {
-        dst->push_back('\\');
-        break;
-      }
-    }
-
-    dst->push_back(static_cast<char>(c));
-  }
-
-  // Make sure last element of path is interpreted as a directory. Leaving this
-  // off would allow access to files if they start with the same name as the
-  // directory.
-  dst->append("(/|$)");
-
-  return true;
-}
+const char* Sandbox::kSandboxElCapOrLater = "ELCAP_OR_LATER";
+const char* Sandbox::kSandboxHighSierraOrLater = "HIGH_SIERRA_OR_LATER";
 
 // Warm up System APIs that empirically need to be accessed before the Sandbox
 // is turned on.
@@ -308,6 +181,13 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
     media::InitializeVideoToolbox();
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
     InitializeAudioToolbox();
+
+    std::unique_ptr<media::DataSource> data_source_;
+    data_source_.reset(new media::FileDataSource());
+
+    std::unique_ptr<AVFMediaReader> reader_;
+    reader_.reset(new AVFMediaReader(dispatch_get_current_queue()));
+    reader_->Initialize(data_source_.get(), "video/mp4");
 #endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
   }
 
@@ -315,21 +195,6 @@ void Sandbox::SandboxWarmup(int sandbox_type) {
     // Preload AppKit color spaces used for Flash/ppapi. http://crbug.com/348304
     NSColor* color = [NSColor controlTextColor];
     [color colorUsingColorSpaceName:NSCalibratedRGBColorSpace];
-  }
-
-  if (sandbox_type == SANDBOX_TYPE_RENDERER) {
-    // Now disconnect from WindowServer, after all objects have been warmed up.
-    // Shutting down the connection requires connecting to WindowServer,
-    // so do this before actually engaging the sandbox. This may cause two log
-    // messages to be printed to the system logger on certain OS versions.
-    CGSSetDenyWindowServerConnections(true);
-    CGSShutdownServerConnections();
-
-    // Allow the process to continue without a LaunchServices ASN. The
-    // INIT_Process function in HIServices will abort if it cannot connect to
-    // launchservicesd to get an ASN. By setting this flag, HIServices skips
-    // that.
-    SetApplicationIsDaemon(true);
   }
 }
 
@@ -405,12 +270,8 @@ bool Sandbox::EnableSandbox(int sandbox_type,
   if (!allowed_dir.empty()) {
     // Add the sandbox parameters necessary to access the given directory.
     base::FilePath allowed_dir_canonical = GetCanonicalSandboxPath(allowed_dir);
-    std::string regex;
-    if (!QuoteStringForRegex(allowed_dir_canonical.value(), &regex)) {
-      FatalStringQuoteException(allowed_dir_canonical.value());
-      return false;
-    }
-    if (!compiler.InsertStringParam("PERMITTED_DIR", regex))
+    if (!compiler.InsertStringParam(kSandboxPermittedDir,
+                                    allowed_dir_canonical.value()))
       return false;
   }
 
@@ -420,12 +281,12 @@ bool Sandbox::EnableSandbox(int sandbox_type,
       base::CommandLine::ForCurrentProcess();
   bool enable_logging =
       command_line->HasSwitch(switches::kEnableSandboxLogging);;
-  if (!compiler.InsertBooleanParam("ENABLE_LOGGING", enable_logging))
+  if (!compiler.InsertBooleanParam(kSandboxEnableLogging, enable_logging))
     return false;
 
   // Without this, the sandbox will print a message to the system log every
   // time it denies a request.  This floods the console with useless spew.
-  if (!compiler.InsertBooleanParam("DISABLE_SANDBOX_DENIAL_LOGGING",
+  if (!compiler.InsertBooleanParam(kSandboxDisableDenialLogging,
                                    !enable_logging))
     return false;
 
@@ -436,17 +297,16 @@ bool Sandbox::EnableSandbox(int sandbox_type,
   base::FilePath home_dir_canonical =
       GetCanonicalSandboxPath(base::FilePath(home_dir));
 
-  std::string quoted_home_dir;
-  if (!QuotePlainString(home_dir_canonical.value(), &quoted_home_dir)) {
-    FatalStringQuoteException(home_dir_canonical.value());
-    return false;
-  }
-
-  if (!compiler.InsertStringParam("USER_HOMEDIR_AS_LITERAL", quoted_home_dir))
+  if (!compiler.InsertStringParam(kSandboxHomedirAsLiteral,
+                                  home_dir_canonical.value()))
     return false;
 
   bool elcap_or_later = base::mac::IsAtLeastOS10_11();
-  if (!compiler.InsertBooleanParam("ELCAP_OR_LATER", elcap_or_later))
+  if (!compiler.InsertBooleanParam(kSandboxElCapOrLater, elcap_or_later))
+    return false;
+
+  bool high_sierra_or_later = base::mac::IsAtLeastOS10_13();
+  if (!compiler.InsertBooleanParam(kSandboxHighSierraOrLater, high_sierra_or_later))
     return false;
 
   // Initialize sandbox.

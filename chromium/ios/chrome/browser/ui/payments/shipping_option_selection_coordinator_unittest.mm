@@ -5,16 +5,13 @@
 #import "ios/chrome/browser/ui/payments/shipping_option_selection_coordinator.h"
 
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/ios/wait_util.h"
 #include "components/autofill/core/browser/autofill_profile.h"
 #include "components/autofill/core/browser/credit_card.h"
-#include "components/autofill/core/browser/test_personal_data_manager.h"
-#include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
+#include "ios/chrome/browser/payments/test_payment_request.h"
 #import "ios/chrome/browser/ui/payments/payment_request_selector_view_controller.h"
-#include "ios/web/public/payments/payment_request.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#import "ios/chrome/browser/ui/payments/payment_request_unittest_base.h"
 #include "testing/platform_test.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
@@ -24,16 +21,16 @@
 #endif
 
 class PaymentRequestShippingOptionSelectionCoordinatorTest
-    : public PlatformTest {
+    : public PaymentRequestUnitTestBase,
+      public PlatformTest {
  protected:
-  PaymentRequestShippingOptionSelectionCoordinatorTest() {
-    payment_request_ = base::MakeUnique<PaymentRequest>(
-        payment_request_test_util::CreateTestWebPaymentRequest(),
-        &personal_data_manager_);
+  void SetUp() override {
+    PaymentRequestUnitTestBase::SetUp();
+
+    CreateTestPaymentRequest();
   }
 
-  autofill::TestPersonalDataManager personal_data_manager_;
-  std::unique_ptr<PaymentRequest> payment_request_;
+  void TearDown() override { PaymentRequestUnitTestBase::TearDown(); }
 };
 
 // Tests that invoking start and stop on the coordinator presents and dismisses
@@ -47,12 +44,12 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest, StartAndStop) {
   ShippingOptionSelectionCoordinator* coordinator =
       [[ShippingOptionSelectionCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 
@@ -62,7 +59,7 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest, StartAndStop) {
       isMemberOfClass:[PaymentRequestSelectorViewController class]]);
 
   [coordinator stop];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 }
@@ -80,12 +77,12 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest,
   ShippingOptionSelectionCoordinator* coordinator =
       [[ShippingOptionSelectionCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
       mockForProtocol:@protocol(ShippingOptionSelectionCoordinatorDelegate)];
-  web::PaymentShippingOption* option = payment_request_->shipping_options()[1];
+  web::PaymentShippingOption* option = payment_request()->shipping_options()[1];
   [[delegate expect] shippingOptionSelectionCoordinator:coordinator
                                 didSelectShippingOption:option];
   [coordinator setDelegate:delegate];
@@ -93,7 +90,7 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest,
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 
@@ -101,8 +98,8 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest,
   PaymentRequestSelectorViewController* view_controller =
       base::mac::ObjCCastStrict<PaymentRequestSelectorViewController>(
           navigation_controller.visibleViewController);
-  [coordinator paymentRequestSelectorViewController:view_controller
-                               didSelectItemAtIndex:1];
+  EXPECT_TRUE([coordinator paymentRequestSelectorViewController:view_controller
+                                           didSelectItemAtIndex:1]);
 
   // Wait for the coordinator delegate to be notified.
   base::test::ios::SpinRunLoopWithMinDelay(base::TimeDelta::FromSecondsD(0.5));
@@ -122,7 +119,7 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest, DidReturn) {
   ShippingOptionSelectionCoordinator* coordinator =
       [[ShippingOptionSelectionCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -133,7 +130,7 @@ TEST_F(PaymentRequestShippingOptionSelectionCoordinatorTest, DidReturn) {
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 

@@ -246,6 +246,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   void AddChild(PaintLayer* new_child, PaintLayer* before_child = 0);
   PaintLayer* RemoveChild(PaintLayer*);
 
+  void ClearClipRects(ClipRectsCacheSlot = kNumberOfClipRectsCacheSlots);
+
   void RemoveOnlyThisLayerAfterStyleChange();
   void InsertOnlyThisLayerAfterStyleChange();
 
@@ -563,8 +565,8 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 
   // Adjusts the given rect (in the coordinate space of the LayoutObject) to the
   // coordinate space of |paintInvalidationContainer|'s GraphicsLayer backing.
-  // Should use PaintInvalidationState::mapRectToPaintInvalidationBacking()
-  // instead if PaintInvalidationState is available.
+  // Should use PaintInvalidatorContext::MapRectToPaintInvalidationBacking()
+  // instead if PaintInvalidatorContext.
   static void MapRectToPaintInvalidationBacking(
       const LayoutObject&,
       const LayoutBoxModelObject& paint_invalidation_container,
@@ -849,13 +851,13 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 
   void UpdateSelfPaintingLayer();
   // This is O(depth) so avoid calling this in loops. Instead use optimizations
-  // like those in PaintInvalidationState.
+  // like those in PaintInvalidatorContext.
   PaintLayer* EnclosingSelfPaintingLayer();
 
   PaintLayer* EnclosingTransformedAncestor() const;
   LayoutPoint ComputeOffsetFromTransformedAncestor() const;
 
-  void DidUpdateNeedsCompositedScrolling();
+  void DidUpdateScrollsOverflow();
 
   bool HasSelfPaintingLayerDescendant() const {
     if (has_self_painting_layer_descendant_dirty_)
@@ -875,7 +877,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       OverlayScrollbarClipBehavior = kIgnorePlatformOverlayScrollbarSize,
       ShouldRespectOverflowClipType = kRespectOverflowClip,
       const LayoutPoint* offset_from_root = 0,
-      const LayoutSize& sub_pixel_accumulation = LayoutSize());
+      const LayoutSize& sub_pixel_accumulation = LayoutSize()) const;
   void CollectFragments(
       PaintLayerFragments&,
       const PaintLayer* root_layer,
@@ -886,7 +888,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
       ShouldRespectOverflowClipType = kRespectOverflowClip,
       const LayoutPoint* offset_from_root = 0,
       const LayoutSize& sub_pixel_accumulation = LayoutSize(),
-      const LayoutRect* layer_bounding_box = 0);
+      const LayoutRect* layer_bounding_box = 0) const;
 
   LayoutPoint LayoutBoxLocation() const {
     return GetLayoutObject().IsBox() ? ToLayoutBox(GetLayoutObject()).Location()
@@ -927,15 +929,6 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   void SetPreviousScrollOffsetAccumulationForPainting(const IntSize& s) {
     previous_scroll_offset_accumulation_for_painting_ = s;
   }
-
-  ClipRects* PreviousClipRects() const {
-    DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-    return previous_clip_rects_.Get();
-  }
-  void SetPreviousClipRects(ClipRects& clip_rects) {
-    previous_clip_rects_ = &clip_rects;
-  }
-  void ClearPreviousClipRects() { previous_clip_rects_.Clear(); }
 
   LayoutRect PreviousPaintDirtyRect() const {
     return previous_paint_dirty_rect_;
@@ -1013,20 +1006,19 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   // Whether the value of isSelfPaintingLayer() changed since the last clearing
   // (which happens after the flag is chedked during compositing update).
   bool SelfPaintingStatusChanged() const {
-    DCHECK(!RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+    DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
     return self_painting_status_changed_;
   }
   void ClearSelfPaintingStatusChanged() {
-    DCHECK(!RuntimeEnabledFeatures::slimmingPaintV2Enabled());
+    DCHECK(!RuntimeEnabledFeatures::SlimmingPaintV2Enabled());
     self_painting_status_changed_ = false;
   }
 
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-  void EndShouldKeepAliveAllClientsRecursive();
-#endif
-
-  // An id for this PaintLayer that is unique for the lifetime of the WebView.
-  PaintLayerId UniqueId() const { return unique_id_; }
+  // If RootLayerScrolling is off, the root layer delegates scrolling to the
+  // PaintLayerCompositor's special scrolling layers for the frame. In that
+  // case this method will return true. For all other layers or if we're in
+  // RLS mode it returns false.
+  bool IsScrolledByFrameView() const;
 
  private:
   void SetNeedsCompositingInputsUpdateInternal();
@@ -1116,10 +1108,7 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
 
   FilterOperations AddReflectionToFilterOperations(const ComputedStyle&) const;
 
-  // FIXME: We could lazily allocate our ScrollableArea based on style
-  // properties ('overflow', ...) but for now, we are always allocating it for
-  // LayoutBox as it's safer.  crbug.com/467721.
-  bool RequiresScrollableArea() const { return GetLayoutBox(); }
+  bool RequiresScrollableArea() const;
   void UpdateScrollableArea();
 
   void MarkAncestorChainForDescendantDependentFlagsUpdate();
@@ -1270,12 +1259,9 @@ class CORE_EXPORT PaintLayer : public DisplayItemClient {
   std::unique_ptr<PaintLayerStackingNode> stacking_node_;
 
   IntSize previous_scroll_offset_accumulation_for_painting_;
-  RefPtr<ClipRects> previous_clip_rects_;
   LayoutRect previous_paint_dirty_rect_;
 
   std::unique_ptr<PaintLayerRareData> rare_data_;
-
-  PaintLayerId unique_id_;
 
   FRIEND_TEST_ALL_PREFIXES(PaintLayerTest,
                            DescendantDependentFlagsStopsAtThrottledFrames);

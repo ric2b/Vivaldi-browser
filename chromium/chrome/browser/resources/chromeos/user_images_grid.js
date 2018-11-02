@@ -9,14 +9,11 @@ cr.define('options', function() {
   /** @const */ var GridSelectionController = cr.ui.GridSelectionController;
   /** @const */ var ListSingleSelectionModel = cr.ui.ListSingleSelectionModel;
 
-   /**
-    * Dimensions for camera capture.
-    * @const
-    */
-  var CAPTURE_SIZE = {
-    height: 480,
-    width: 480
-  };
+  /**
+   * Dimensions for camera capture.
+   * @const
+   */
+  var CAPTURE_SIZE = {height: 576, width: 576};
 
   /**
    * Path for internal URLs.
@@ -50,7 +47,7 @@ cr.define('options', function() {
       // than actual images so there is no need in full scale on HDPI.
       var url = this.dataItem.url;
       if (url.slice(0, CHROME_THEME_PATH.length) == CHROME_THEME_PATH)
-        imageEl.src = this.dataItem.url + '@1x';
+        imageEl.src = this.dataItem.url + '[0]@1x';
       else
         imageEl.src = this.dataItem.url;
       imageEl.title = this.dataItem.title || '';
@@ -63,7 +60,9 @@ cr.define('options', function() {
       if (typeof this.dataItem.decorateFn == 'function')
         this.dataItem.decorateFn(this);
       this.setAttribute('role', 'option');
-      this.oncontextmenu = function(e) { e.preventDefault(); };
+      this.oncontextmenu = function(e) {
+        e.preventDefault();
+      };
     }
   };
 
@@ -126,8 +125,8 @@ cr.define('options', function() {
     decorate: function() {
       Grid.prototype.decorate.call(this);
       this.dataModel = new ArrayDataModel([]);
-      this.itemConstructor = /** @type {function(new:cr.ui.ListItem, *)} */(
-          UserImagesGridItem);
+      this.itemConstructor =
+          /** @type {function(new:cr.ui.ListItem, *)} */ (UserImagesGridItem);
       this.selectionModel = new ListSingleSelectionModel();
       this.inProgramSelection_ = false;
       this.addEventListener('dblclick', this.handleDblClick_.bind(this));
@@ -181,7 +180,7 @@ cr.define('options', function() {
       var url = this.selectedItemUrl;
       if (url && this.previewImage_) {
         if (url.slice(0, CHROME_THEME_PATH.length) == CHROME_THEME_PATH)
-          this.previewImage_.src = url + '@' + window.devicePixelRatio + 'x';
+          this.previewImage_.src = url + '@2x';
         else
           this.previewImage_.src = url;
       }
@@ -222,8 +221,7 @@ cr.define('options', function() {
       this.stopCamera();
       this.cameraStartInProgress_ = true;
       navigator.webkitGetUserMedia(
-          {video: true},
-          this.handleCameraAvailable_.bind(this, onAvailable),
+          {video: true}, this.handleCameraAvailable_.bind(this, onAvailable),
           this.handleCameraAbsent_.bind(this));
     },
 
@@ -311,6 +309,8 @@ cr.define('options', function() {
       previewClassList[value == 'default' ? 'add' : 'remove']('default-image');
       previewClassList[value == 'profile' ? 'add' : 'remove']('profile-image');
       previewClassList[value == 'camera' ? 'add' : 'remove']('camera');
+      if (!$('user-image-grid'))
+        return;
 
       var setFocusIfLost = function() {
         // Set focus to the grid, if focus is not on UI.
@@ -429,10 +429,10 @@ cr.define('options', function() {
       this.previewElement_ = value;
       this.previewImage_ = value.querySelector('img');
       this.cameraVideo_ = value.querySelector('video');
-      this.cameraVideo_.addEventListener('canplay',
-                                         this.handleVideoStarted_.bind(this));
-      this.cameraVideo_.addEventListener('timeupdate',
-                                         this.handleVideoUpdate_.bind(this));
+      this.cameraVideo_.addEventListener(
+          'canplay', this.handleVideoStarted_.bind(this));
+      this.cameraVideo_.addEventListener(
+          'timeupdate', this.handleVideoUpdate_.bind(this));
       this.updatePreview_();
       // Initialize camera state and check for its presence.
       this.cameraLive = true;
@@ -457,8 +457,8 @@ cr.define('options', function() {
       if (!this.cameraLive) {
         // Flip current still photo.
         var e = new Event('photoupdated');
-        e.dataURL = this.flipPhoto ?
-            this.flipFrame_(this.previewImage_) : this.previewImage_.src;
+        e.dataURL = this.flipPhoto ? this.flipFrame_(this.previewImage_) :
+                                     this.previewImage_.src;
         this.dispatchEvent(e);
       }
     },
@@ -472,13 +472,13 @@ cr.define('options', function() {
     takePhoto: function() {
       if (!this.cameraOnline)
         return false;
-      var canvas = /** @type {HTMLCanvasElement} */(
-          document.createElement('canvas'));
+      var canvas =
+          /** @type {HTMLCanvasElement} */ (document.createElement('canvas'));
       canvas.width = CAPTURE_SIZE.width;
       canvas.height = CAPTURE_SIZE.height;
       this.captureFrame_(
           this.cameraVideo_,
-          /** @type {CanvasRenderingContext2D} */(canvas.getContext('2d')),
+          /** @type {CanvasRenderingContext2D} */ (canvas.getContext('2d')),
           CAPTURE_SIZE);
       // Preload image before displaying it.
       var previewImg = new Image();
@@ -513,8 +513,8 @@ cr.define('options', function() {
       var width = video.videoWidth;
       var height = video.videoHeight;
       if (width < destSize.width || height < destSize.height) {
-        console.error('Video capture size too small: ' +
-                      width + 'x' + height + '!');
+        console.error(
+            'Video capture size too small: ' + width + 'x' + height + '!');
       }
       var src = {};
       if (width / destSize.width > height / destSize.height) {
@@ -528,8 +528,9 @@ cr.define('options', function() {
       }
       src.x = (width - src.width) / 2;
       src.y = (height - src.height) / 2;
-      ctx.drawImage(video, src.x, src.y, src.width, src.height,
-                    0, 0, destSize.width, destSize.height);
+      ctx.drawImage(
+          video, src.x, src.y, src.width, src.height, 0, 0, destSize.width,
+          destSize.height);
     },
 
     /**
@@ -561,8 +562,8 @@ cr.define('options', function() {
      * @return {!Object} Image data inserted into the data model.
      */
     // TODO(ivankr): this function needs some argument list refactoring.
-    addItem: function(url, opt_title, opt_clickHandler, opt_position,
-                      opt_decorateFn) {
+    addItem: function(
+        url, opt_title, opt_clickHandler, opt_position, opt_decorateFn) {
       var imageInfo = {
         url: url,
         title: opt_title,
@@ -600,11 +601,8 @@ cr.define('options', function() {
       var wasSelected = this.selectionModel.selectedIndex == imageIndex;
       this.removeItem(imageInfo);
       var newInfo = this.addItem(
-          imageUrl,
-          opt_title === undefined ? imageInfo.title : opt_title,
-          imageInfo.clickHandler,
-          imageIndex,
-          imageInfo.decorateFn);
+          imageUrl, opt_title === undefined ? imageInfo.title : opt_title,
+          imageInfo.clickHandler, imageIndex, imageInfo.decorateFn);
       // Update image data with the reset of the keys from the old data.
       for (var k in imageInfo) {
         if (!(k in newInfo))
@@ -627,8 +625,8 @@ cr.define('options', function() {
         this.dataModel.splice(index, 1);
         if (wasSelected) {
           // If item removed was selected, select the item next to it.
-          this.selectedItem = this.dataModel.item(
-              Math.min(this.dataModel.length - 1, index));
+          this.selectedItem =
+              this.dataModel.item(Math.min(this.dataModel.length - 1, index));
         }
         this.inProgramSelection_ = false;
       }
@@ -669,10 +667,8 @@ cr.define('options', function() {
   UserImagesGrid.ButtonImages = {
     TAKE_PHOTO: 'chrome://theme/IDR_BUTTON_USER_IMAGE_TAKE_PHOTO',
     CHOOSE_FILE: 'chrome://theme/IDR_BUTTON_USER_IMAGE_CHOOSE_FILE',
-    PROFILE_PICTURE: 'chrome://theme/IDR_PROFILE_PICTURE_LOADING'
+    PROFILE_PICTURE: 'chrome://theme/IDR_LOGIN_DEFAULT_USER'
   };
 
-  return {
-    UserImagesGrid: UserImagesGrid
-  };
+  return {UserImagesGrid: UserImagesGrid};
 });

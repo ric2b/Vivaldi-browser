@@ -9,6 +9,7 @@
 #include "third_party/WebKit/public/platform/WebAudioDevice.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamCenter.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
+#include "third_party/WebKit/public/platform/WebSocketHandshakeThrottle.h"
 #include "third_party/WebKit/public/platform/WebSpeechSynthesizer.h"
 #include "third_party/WebKit/public/platform/modules/webmidi/WebMIDIAccessor.h"
 #include "ui/gfx/icc_profile.h"
@@ -86,6 +87,11 @@ blink::WebThemeEngine* ContentRendererClient::OverrideThemeEngine() {
   return nullptr;
 }
 
+std::unique_ptr<blink::WebSocketHandshakeThrottle>
+ContentRendererClient::CreateWebSocketHandshakeThrottle() {
+  return nullptr;
+}
+
 std::unique_ptr<blink::WebSpeechSynthesizer>
 ContentRendererClient::OverrideSpeechSynthesizer(
     blink::WebSpeechSynthesizerClient* client) {
@@ -131,10 +137,12 @@ bool ContentRendererClient::ShouldFork(blink::WebLocalFrame* frame,
   return false;
 }
 
-bool ContentRendererClient::WillSendRequest(blink::WebLocalFrame* frame,
-                                            ui::PageTransition transition_type,
-                                            const blink::WebURL& url,
-                                            GURL* new_url) {
+bool ContentRendererClient::WillSendRequest(
+    blink::WebLocalFrame* frame,
+    ui::PageTransition transition_type,
+    const blink::WebURL& url,
+    std::vector<std::unique_ptr<URLLoaderThrottle>>* throttles,
+    GURL* new_url) {
   return false;
 }
 
@@ -192,6 +200,11 @@ bool ContentRendererClient::IsSupportedVideoConfig(
   return ::media::IsSupportedVideoConfig(config);
 }
 
+bool ContentRendererClient::IsSupportedBitstreamAudioCodec(
+    media::AudioCodec codec) {
+  return false;
+}
+
 std::unique_ptr<MediaStreamRendererFactory>
 ContentRendererClient::CreateMediaStreamRendererFactory() {
   return nullptr;
@@ -206,9 +219,9 @@ bool ContentRendererClient::ShouldGatherSiteIsolationStats() const {
   return true;
 }
 
-blink::WebWorkerContentSettingsClientProxy*
-ContentRendererClient::CreateWorkerContentSettingsClientProxy(
-    RenderFrame* render_frame, blink::WebFrame* frame) {
+std::unique_ptr<blink::WebContentSettingsClient>
+ContentRendererClient::CreateWorkerContentSettingsClient(
+    RenderFrame* render_frame) {
   return nullptr;
 }
 
@@ -245,7 +258,7 @@ ContentRendererClient::GetTaskSchedulerInitParams() {
   return nullptr;
 }
 
-bool ContentRendererClient::AllowMediaSuspend() {
+bool ContentRendererClient::AllowIdleMediaSuspend() {
   return true;
 }
 

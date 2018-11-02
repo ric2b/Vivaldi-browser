@@ -445,7 +445,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   if (DispatchEventToMenu([self activeMenuController], event))
     return;
 
-  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(event);
+  ignore_result(
+      hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(event));
 }
 
 - (BOOL)handleUnhandledKeyDownAsKeyEvent {
@@ -476,7 +477,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
   if (textInputClient_ && textInputClient_->IsTextEditCommandEnabled(command))
     textInputClient_->SetTextEditCommandForNextKeyEvent(command);
 
-  hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(&event);
+  ignore_result(
+      hostedView_->GetWidget()->GetInputMethod()->DispatchKeyEvent(&event));
 }
 
 - (void)onFullKeyboardAccessModeChanged:(NSNotification*)notification {
@@ -528,6 +530,8 @@ ui::TextEditCommand GetTextEditCommandForMenuAction(SEL action) {
                            ui::EF_NONE);
     [self handleKeyEvent:&charEvent];
     hasUnhandledKeyDownEvent_ = NO;
+    if (charEvent.handled())
+      return;
   }
 
   // Forward the |text| to |textInputClient_| if no menu is active.

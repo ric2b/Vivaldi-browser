@@ -56,10 +56,6 @@ const CGFloat kAnimationDuration = 0.3;
 @property(nonatomic, strong) NSLayoutConstraint* imageSize;
 // Constraint for the distance between the texts and the image.
 @property(nonatomic, strong) NSLayoutConstraint* imageTitleSpacing;
-// Constraint for the vertical distance between the title and the subtitle.
-@property(nonatomic, strong) NSLayoutConstraint* titleSubtitleSpacing;
-// Label for the subtitle.
-@property(nonatomic, readonly, strong) UILabel* subtitleLabel;
 
 // Applies the constraints on the elements. Called in the init.
 - (void)applyConstraints;
@@ -69,7 +65,6 @@ const CGFloat kAnimationDuration = 0.3;
 @implementation ContentSuggestionsCell
 
 @synthesize titleLabel = _titleLabel;
-@synthesize subtitleLabel = _subtitleLabel;
 @synthesize imageContainer = _imageContainer;
 @synthesize noImageIcon = _noImageIcon;
 @synthesize additionalInformationLabel = _additionalInformationLabel;
@@ -78,25 +73,16 @@ const CGFloat kAnimationDuration = 0.3;
 @synthesize imageSize = _imageSize;
 @synthesize imageTitleSpacing = _imageTitleSpacing;
 @synthesize displayImage = _displayImage;
-@synthesize titleSubtitleSpacing = _titleSubtitleSpacing;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
   if (self) {
     _titleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _subtitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _imageContainer = [[UIView alloc] initWithFrame:CGRectZero];
     _noImageIcon = [[UIImageView alloc] initWithFrame:CGRectZero];
     _additionalInformationLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     _contentImageView = [[UIImageView alloc] initWithFrame:CGRectZero];
     _faviconView = [[FaviconViewNew alloc] init];
-
-    _titleLabel.numberOfLines = 2;
-    _subtitleLabel.numberOfLines = 2;
-    [_subtitleLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh
-                                      forAxis:UILayoutConstraintAxisVertical];
-    [_titleLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh
-                                   forAxis:UILayoutConstraintAxisVertical];
 
     _contentImageView.contentMode = UIViewContentModeScaleAspectFill;
     _contentImageView.clipsToBounds = YES;
@@ -105,14 +91,12 @@ const CGFloat kAnimationDuration = 0.3;
     _imageContainer.translatesAutoresizingMaskIntoConstraints = NO;
     _noImageIcon.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _additionalInformationLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _contentImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _faviconView.translatesAutoresizingMaskIntoConstraints = NO;
 
     [self.contentView addSubview:_imageContainer];
     [self.contentView addSubview:_titleLabel];
-    [self.contentView addSubview:_subtitleLabel];
     [self.contentView addSubview:_additionalInformationLabel];
     [self.contentView addSubview:_faviconView];
 
@@ -126,12 +110,10 @@ const CGFloat kAnimationDuration = 0.3;
     [_noImageIcon
         setTintColor:[UIColor colorWithWhite:kNoImageIconWhite alpha:1]];
 
-    _titleLabel.font = [MDCTypography subheadFont];
-    _subtitleLabel.font = [MDCTypography body1Font];
-    _additionalInformationLabel.font = [MDCTypography captionFont];
+    [[self class] configureTitleLabel:_titleLabel];
+    _additionalInformationLabel.font = [[self class] additionalInformationFont];
     _faviconView.font = [[MDCTypography fontLoader] mediumFontOfSize:10];
 
-    _subtitleLabel.textColor = [[MDCPalette greyPalette] tint700];
     _additionalInformationLabel.textColor = [[MDCPalette greyPalette] tint700];
 
     [self applyConstraints];
@@ -139,16 +121,20 @@ const CGFloat kAnimationDuration = 0.3;
   return self;
 }
 
-- (void)setContentImage:(UIImage*)image {
+- (void)setContentImage:(UIImage*)image animated:(BOOL)animated {
   if (!image) {
     self.contentImageView.hidden = YES;
     return;
   }
 
   self.contentImageView.image = image;
+  self.contentImageView.hidden = NO;
+
+  if (!animated) {
+    return;
+  }
 
   self.contentImageView.alpha = 0;
-  self.contentImageView.hidden = NO;
 
   [UIView animateWithDuration:kAnimationDuration
                    animations:^{
@@ -157,43 +143,12 @@ const CGFloat kAnimationDuration = 0.3;
 }
 
 - (void)setAdditionalInformationWithPublisherName:(NSString*)publisherName
-                                             date:(NSDate*)date
+                                             date:(NSString*)date
                               offlineAvailability:(BOOL)availableOffline {
-  NSString* dateString =
-      [NSDateFormatter localizedStringFromDate:date
-                                     dateStyle:NSDateFormatterMediumStyle
-                                     timeStyle:NSDateFormatterNoStyle];
-
-  NSString* publisherString = AdjustStringForLocaleDirection(
-      [NSString stringWithFormat:@"%@ - %@ ", publisherName, dateString]);
-
-  NSMutableAttributedString* additionInformation =
-      [[NSMutableAttributedString alloc] initWithString:publisherString
-                                             attributes:nil];
-
-  if (availableOffline) {
-    NSTextAttachment* offlineIcon = [[NSTextAttachment alloc] init];
-    offlineIcon.image = [[UIImage imageNamed:kOfflineIconName]
-        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    offlineIcon.bounds = CGRectMake(
-        0, (_additionalInformationLabel.font.xHeight - kOfflineIconSize) / 2,
-        kOfflineIconSize, kOfflineIconSize);
-
-    [additionInformation
-        appendAttributedString:[NSAttributedString
-                                   attributedStringWithAttachment:offlineIcon]];
-  }
-
-  self.additionalInformationLabel.attributedText = additionInformation;
-}
-
-- (void)setSubtitleText:(NSString*)subtitle {
-  self.subtitleLabel.text = subtitle;
-  if (subtitle.length > 0) {
-    self.titleSubtitleSpacing.constant = kSmallSpacing;
-  } else {
-    self.titleSubtitleSpacing.constant = 0;
-  }
+  self.additionalInformationLabel.attributedText =
+      [[self class] attributedStringForPublisher:publisherName
+                                            date:date
+                                availableOffline:availableOffline];
 }
 
 - (void)setDisplayImage:(BOOL)displayImage {
@@ -209,12 +164,40 @@ const CGFloat kAnimationDuration = 0.3;
   _displayImage = displayImage;
 }
 
++ (CGFloat)heightForWidth:(CGFloat)width
+                withImage:(BOOL)hasImage
+                    title:(NSString*)title
+            publisherName:(NSString*)publisherName
+          publicationDate:(NSString*)publicationDate
+         availableOffline:(BOOL)availableOffline {
+  UILabel* titleLabel = [[UILabel alloc] init];
+  [self configureTitleLabel:titleLabel];
+  titleLabel.text = title;
+
+  UILabel* additionalInfoLabel = [[UILabel alloc] init];
+  additionalInfoLabel.font = [self additionalInformationFont];
+  additionalInfoLabel.attributedText =
+      [self attributedStringForPublisher:publisherName
+                                    date:publicationDate
+                        availableOffline:availableOffline];
+
+  CGSize sizeForLabels =
+      CGSizeMake(width - [self labelMarginWithImage:hasImage], 500);
+
+  CGFloat labelHeight = 3 * kStandardSpacing;
+  labelHeight += [titleLabel sizeThatFits:sizeForLabels].height;
+  labelHeight += [additionalInfoLabel sizeThatFits:sizeForLabels].height;
+
+  CGFloat minimalHeight = hasImage ? kImageSize : 0;
+  minimalHeight += 2 * kStandardSpacing;
+  return MAX(minimalHeight, labelHeight);
+}
+
 #pragma mark - UICollectionViewCell
 
 - (void)prepareForReuse {
   [super prepareForReuse];
   self.titleLabel.text = nil;
-  [self setSubtitleText:nil];
   self.displayImage = NO;
 }
 
@@ -229,15 +212,8 @@ const CGFloat kAnimationDuration = 0.3;
   // changes, for instance on screen rotation.
   CGFloat parentWidth = CGRectGetWidth(self.contentView.bounds);
 
-  CGFloat offset = 0;
-  if (self.displayImage) {
-    offset = kImageSize + kStandardSpacing;
-  }
-
   self.titleLabel.preferredMaxLayoutWidth =
-      parentWidth - 2 * kStandardSpacing - offset;
-  self.subtitleLabel.preferredMaxLayoutWidth =
-      parentWidth - 2 * kStandardSpacing - offset;
+      parentWidth - [[self class] labelMarginWithImage:self.displayImage];
   self.additionalInformationLabel.preferredMaxLayoutWidth =
       parentWidth - kFaviconSize - kSmallSpacing - 2 * kStandardSpacing;
 
@@ -254,9 +230,6 @@ const CGFloat kAnimationDuration = 0.3;
   _imageTitleSpacing = [_imageContainer.leadingAnchor
       constraintEqualToAnchor:_titleLabel.trailingAnchor
                      constant:kStandardSpacing];
-  _titleSubtitleSpacing =
-      [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor
-                                               constant:kSmallSpacing];
 
   [NSLayoutConstraint activateConstraints:@[
     // Image.
@@ -264,29 +237,26 @@ const CGFloat kAnimationDuration = 0.3;
     [_imageContainer.widthAnchor
         constraintEqualToAnchor:_imageContainer.heightAnchor],
     [_imageContainer.topAnchor constraintEqualToAnchor:_titleLabel.topAnchor],
+    [_imageContainer.bottomAnchor
+        constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor
+                                 constant:-kStandardSpacing],
 
     // Text.
-    _imageTitleSpacing, _titleSubtitleSpacing,
-    [_titleLabel.trailingAnchor
-        constraintEqualToAnchor:_subtitleLabel.trailingAnchor],
+    _imageTitleSpacing,
 
     // Additional Information.
     [_additionalInformationLabel.topAnchor
-        constraintGreaterThanOrEqualToAnchor:_imageContainer.bottomAnchor
-                                    constant:kStandardSpacing],
-    [_additionalInformationLabel.topAnchor
-        constraintGreaterThanOrEqualToAnchor:_subtitleLabel.bottomAnchor
-                                    constant:kStandardSpacing],
+        constraintEqualToAnchor:_titleLabel.bottomAnchor
+                       constant:kStandardSpacing],
+    [_additionalInformationLabel.trailingAnchor
+        constraintEqualToAnchor:_titleLabel.trailingAnchor],
     [_additionalInformationLabel.bottomAnchor
         constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor
                                  constant:-kStandardSpacing],
 
     // Favicon.
     [_faviconView.topAnchor
-        constraintGreaterThanOrEqualToAnchor:_imageContainer.bottomAnchor
-                                    constant:kStandardSpacing],
-    [_faviconView.topAnchor
-        constraintGreaterThanOrEqualToAnchor:_subtitleLabel.bottomAnchor
+        constraintGreaterThanOrEqualToAnchor:_titleLabel.bottomAnchor
                                     constant:kStandardSpacing],
     [_faviconView.centerYAnchor
         constraintEqualToAnchor:_additionalInformationLabel.centerYAnchor],
@@ -312,19 +282,60 @@ const CGFloat kAnimationDuration = 0.3;
       @[
         @"H:|-(space)-[title]",
         @"H:[image]-(space)-|",
-        @"H:|-(space)-[text]",
         @"V:|-(space)-[title]",
-        @"H:|-(space)-[favicon]-(small)-[additional]-(space)-|",
+        @"H:|-(space)-[favicon]-(small)-[additional]",
       ],
       @{
         @"image" : _imageContainer,
         @"title" : _titleLabel,
-        @"text" : _subtitleLabel,
         @"additional" : _additionalInformationLabel,
         @"favicon" : _faviconView,
       },
       @{ @"space" : @(kStandardSpacing),
          @"small" : @(kSmallSpacing) });
+}
+
+// Configures the |titleLabel|.
++ (void)configureTitleLabel:(UILabel*)titleLabel {
+  titleLabel.font = [MDCTypography subheadFont];
+  titleLabel.numberOfLines = 2;
+}
+
+// Returns the font used to display the additional informations.
++ (UIFont*)additionalInformationFont {
+  return [MDCTypography captionFont];
+}
+
+// Returns the margin for the labels, depending if the cell |hasImage|.
++ (CGFloat)labelMarginWithImage:(BOOL)hasImage {
+  CGFloat offset = hasImage ? kImageSize + kStandardSpacing : 0;
+  return 2 * kStandardSpacing + offset;
+}
+
+// Returns the attributed string to be displayed.
++ (NSAttributedString*)attributedStringForPublisher:(NSString*)publisherName
+                                               date:(NSString*)date
+                                   availableOffline:(BOOL)availableOffline {
+  NSString* publisherString = AdjustStringForLocaleDirection(
+      [NSString stringWithFormat:@"%@ - %@ ", publisherName, date]);
+
+  NSMutableAttributedString* additionInformation =
+      [[NSMutableAttributedString alloc] initWithString:publisherString
+                                             attributes:nil];
+
+  if (availableOffline) {
+    NSTextAttachment* offlineIcon = [[NSTextAttachment alloc] init];
+    offlineIcon.image = [[UIImage imageNamed:kOfflineIconName]
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+    offlineIcon.bounds = CGRectMake(
+        0, ([self additionalInformationFont].xHeight - kOfflineIconSize) / 2,
+        kOfflineIconSize, kOfflineIconSize);
+
+    [additionInformation
+        appendAttributedString:[NSAttributedString
+                                   attributedStringWithAttachment:offlineIcon]];
+  }
+  return additionInformation;
 }
 
 @end

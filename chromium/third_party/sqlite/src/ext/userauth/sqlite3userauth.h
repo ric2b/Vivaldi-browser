@@ -21,6 +21,10 @@
 */
 #ifdef SQLITE_USER_AUTHENTICATION
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /*
 ** If a database contains the SQLITE_USER table, then the
 ** sqlite3_user_authenticate() interface must be invoked with an
@@ -62,7 +66,7 @@ int sqlite3_user_add(
 ** The sqlite3_user_change() interface can be used to change a users
 ** login credentials or admin privilege.  Any user can change their own
 ** login credentials.  Only an admin user can change another users login
-** credentials or admin privilege setting.  No user may change their own 
+** credentials or admin privilege setting.  No user may change their own
 ** admin privilege setting.
 */
 int sqlite3_user_change(
@@ -84,5 +88,9 @@ int sqlite3_user_delete(
   sqlite3 *db,           /* Database connection */
   const char *zUsername  /* Username to remove */
 );
+
+#ifdef __cplusplus
+}  /* end of the 'extern "C"' block */
+#endif
 
 #endif /* SQLITE_USER_AUTHENTICATION */

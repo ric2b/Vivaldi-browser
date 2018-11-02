@@ -89,6 +89,23 @@ Polymer({
   },
 
   /**
+   * Retrieves an image that corresponds to signal strength of the tether host.
+   * Custom icons are used here instead of a <cr-network-icon> because this
+   * dialog uses a special color scheme.
+   *
+   * @param {!CrOnc.NetworkProperties} networkProperties The network properties.
+   * @return {string} The name of the icon to be used to represent the network's
+   * signal strength.
+   */
+  getSignalStrengthIconName_: function(networkProperties) {
+    var signalStrength = this.get('Tether.SignalStrength', networkProperties);
+    if (signalStrength === undefined)
+      signalStrength = 4;
+    return 'settings:signal-cellular-' +
+        Math.min(4, Math.max(signalStrength, 0)) + '-bar';
+  },
+
+  /**
    * @param {!CrOnc.NetworkProperties} networkProperties The network properties.
    * @return {string}
    * @private
@@ -103,8 +120,9 @@ Polymer({
    * @private
    */
   getBatteryPercentageString_: function(networkProperties) {
-    return this.i18n('tetherConnectionBatteryPercentage',
-                     this.getBatteryPercentageAsString_(networkProperties));
+    return this.i18n(
+        'tetherConnectionBatteryPercentage',
+        this.getBatteryPercentageAsString_(networkProperties));
   },
 
   /**
@@ -113,8 +131,8 @@ Polymer({
    * @private
    */
   getExplanation_: function(networkProperties) {
-    return this.i18n('tetherConnectionExplanation',
-                     CrOnc.getNetworkName(networkProperties));
+    return this.i18n(
+        'tetherConnectionExplanation', CrOnc.getNetworkName(networkProperties));
   },
 
   /**
@@ -123,8 +141,9 @@ Polymer({
    * @private
    */
   getDescriptionTitle_: function(networkProperties) {
-    return this.i18n('tetherConnectionDescriptionTitle',
-                     CrOnc.getNetworkName(networkProperties));
+    return this.i18n(
+        'tetherConnectionDescriptionTitle',
+        CrOnc.getNetworkName(networkProperties));
   },
 
   /**
@@ -133,7 +152,8 @@ Polymer({
    * @private
    */
   getBatteryDescription_: function(networkProperties) {
-    return this.i18n('tetherConnectionDescriptionBattery',
-                     this.getBatteryPercentageAsString_(networkProperties));
+    return this.i18n(
+        'tetherConnectionDescriptionBattery',
+        this.getBatteryPercentageAsString_(networkProperties));
   },
 });

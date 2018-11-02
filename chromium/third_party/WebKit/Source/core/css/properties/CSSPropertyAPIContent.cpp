@@ -12,9 +12,8 @@
 #include "core/css/parser/CSSParserContext.h"
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 
+class CSSParserLocalContext;
 namespace blink {
-
-using CSSCounterValue = cssvalue::CSSCounterValue;
 
 namespace {
 
@@ -28,9 +27,8 @@ CSSValue* ConsumeAttr(CSSParserTokenRange args,
   if (!args.AtEnd())
     return nullptr;
 
-  // TODO(esprehn): This should be lowerASCII().
   if (context->IsHTMLDocument())
-    attr_name = attr_name.DeprecatedLower();
+    attr_name = attr_name.LowerASCII();
 
   CSSFunctionValue* attr_value = CSSFunctionValue::Create(CSSValueAttr);
   attr_value->Append(*CSSCustomIdentValue::Create(attr_name));
@@ -67,7 +65,7 @@ CSSValue* ConsumeCounterContent(CSSParserTokenRange args, bool counters) {
 
   if (!args.AtEnd())
     return nullptr;
-  return CSSCounterValue::Create(identifier, list_style, separator);
+  return cssvalue::CSSCounterValue::Create(identifier, list_style, separator);
 }
 
 }  // namespace
@@ -75,7 +73,7 @@ CSSValue* ConsumeCounterContent(CSSParserTokenRange args, bool counters) {
 const CSSValue* CSSPropertyAPIContent::parseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    CSSPropertyID) {
+    const CSSParserLocalContext&) {
   if (CSSPropertyParserHelpers::IdentMatches<CSSValueNone, CSSValueNormal>(
           range.Peek().Id()))
     return CSSPropertyParserHelpers::ConsumeIdent(range);

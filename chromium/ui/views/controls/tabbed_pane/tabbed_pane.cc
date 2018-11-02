@@ -19,6 +19,7 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/font_list.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -320,8 +321,8 @@ const char TabStrip::kViewClassName[] = "TabStrip";
 
 TabStrip::TabStrip() {
   const int kTabStripLeadingEdgePadding = 9;
-  BoxLayout* layout =
-      new BoxLayout(BoxLayout::kHorizontal, kTabStripLeadingEdgePadding, 0, 0);
+  BoxLayout* layout = new BoxLayout(
+      BoxLayout::kHorizontal, gfx::Insets(0, kTabStripLeadingEdgePadding));
   layout->set_main_axis_alignment(BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_END);
   layout->SetDefaultFlex(0);
@@ -392,7 +393,7 @@ Tab* TabStrip::GetTabAtDeltaFromSelected(int delta) const {
 }
 
 MdTabStrip::MdTabStrip() {
-  BoxLayout* layout = new BoxLayout(BoxLayout::kHorizontal, 0, 0, 0);
+  BoxLayout* layout = new BoxLayout(BoxLayout::kHorizontal);
   layout->set_main_axis_alignment(BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
   layout->set_cross_axis_alignment(BoxLayout::CROSS_AXIS_ALIGNMENT_STRETCH);
   layout->SetDefaultFlex(1);
@@ -401,13 +402,11 @@ MdTabStrip::MdTabStrip() {
   // These durations are taken from the Paper Tabs source:
   // https://github.com/PolymerElements/paper-tabs/blob/master/paper-tabs.html
   // See |selectionBar.expand| and |selectionBar.contract|.
-  const int kExpandAnimationDurationMs = 150;
   expand_animation_.reset(new gfx::LinearAnimation(this));
-  expand_animation_->SetDuration(kExpandAnimationDurationMs);
+  expand_animation_->SetDuration(base::TimeDelta::FromMilliseconds(150));
 
-  const int kContractAnimationDurationMs = 180;
   contract_animation_.reset(new gfx::LinearAnimation(this));
-  contract_animation_->SetDuration(kContractAnimationDurationMs);
+  contract_animation_->SetDuration(base::TimeDelta::FromMilliseconds(180));
 }
 
 MdTabStrip::~MdTabStrip() {}

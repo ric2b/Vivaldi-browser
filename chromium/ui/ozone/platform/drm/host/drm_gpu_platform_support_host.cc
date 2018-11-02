@@ -33,7 +33,7 @@ class CursorIPC : public DrmCursorProxy {
                  const gfx::Point& point,
                  int frame_delay_ms) override;
   void Move(gfx::AcceleratedWidget window, const gfx::Point& point) override;
-  void InitializeOnEvdev() override;
+  void InitializeOnEvdevIfNecessary() override;
 
  private:
   bool IsConnected();
@@ -66,7 +66,7 @@ void CursorIPC::Move(gfx::AcceleratedWidget window, const gfx::Point& point) {
   Send(new OzoneGpuMsg_CursorMove(window, point));
 }
 
-void CursorIPC::InitializeOnEvdev() {}
+void CursorIPC::InitializeOnEvdevIfNecessary() {}
 
 void CursorIPC::Send(IPC::Message* message) {
   if (IsConnected() &&
@@ -180,7 +180,8 @@ void DrmGpuPlatformSupportHost::OnChannelEstablished() {
   // and notify it after all other observers/handlers are notified such that the
   // (windowing) state on the GPU can be initialized before the cursor is
   // allowed to IPC messages (which are targeted to a specific window).
-  cursor_->SetDrmCursorProxy(new CursorIPC(send_runner_, send_callback_));
+  cursor_->SetDrmCursorProxy(
+      base::MakeUnique<CursorIPC>(send_runner_, send_callback_));
 }
 
 bool DrmGpuPlatformSupportHost::OnMessageReceivedForDrmDisplayHostManager(
@@ -292,8 +293,9 @@ bool DrmGpuPlatformSupportHost::OnMessageReceivedForDrmOverlayManager(
 
 void DrmGpuPlatformSupportHost::OnOverlayResult(
     gfx::AcceleratedWidget widget,
-    const std::vector<OverlayCheck_Params>& params) {
-  overlay_manager_->GpuSentOverlayResult(widget, params);
+    const std::vector<OverlayCheck_Params>& params,
+    const std::vector<OverlayCheckReturn_Params>& returns) {
+  overlay_manager_->GpuSentOverlayResult(widget, params, returns);
 }
 
 bool DrmGpuPlatformSupportHost::GpuCheckOverlayCapabilities(

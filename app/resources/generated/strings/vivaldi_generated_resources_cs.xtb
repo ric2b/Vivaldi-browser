@@ -104,6 +104,7 @@
 <translation id="2501797496290880632">Zadejte zkratku</translation>
 <translation id="2509495747794740764">Hodnota měřítka musí být v intervalu 10 až 200.</translation>
 <translation id="2550212893339833758">Stránkovaná paměť</translation>
+<translation id="2553440850688409052">Skrýt tento zásuvný modul</translation>
 <translation id="2580924999637585241">Celkem: <ph name="NUMBER_OF_SHEETS" /> <ph name="SHEETS_LABEL" /></translation>
 <translation id="2662876636500006917">Internetový obchod Chrome</translation>
 <translation id="2678063897982469759">Znovu aktivovat</translation>
@@ -222,6 +223,7 @@
           Budete také moci sdílet své tiskárny s kýmkoli
           a tisknout z Chromu, telefonu, tabletu, počítače 
           a jakéhokoli jiného zařízení připojeného k internetu.</translation>
+<translation id="4345587454538109430">Nastavit…</translation>
 <translation id="4348766275249686434">Zaznamenávat chyby</translation>
 <translation id="4363771538994847871">Nebyly nalezeny žádné cíle odesílání. Potřebujete pomoci?</translation>
 <translation id="4384652540891215547">Aktivovat rozšíření</translation>
@@ -368,7 +370,6 @@
 <translation id="6639554308659482635">Paměť SQLite</translation>
 <translation id="6655190889273724601">Vývojářský režim</translation>
 <translation id="6691936601825168937">&amp;Vpřed</translation>
-<translation id="6700480081846086223">Odesílat <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Rozsah</translation>
 <translation id="6786747875388722282">Rozšíření</translation>
 <translation id="6787839852456839824">Klávesové zkratky</translation>
@@ -484,6 +485,7 @@ Svůj soubor klíče uchovávejte na bezpečném místě. Budete jej potřebovat
 <translation id="8449008133205184768">Vložit jako prostý text</translation>
 <translation id="8463955938112983119">Zásuvný modul <ph name="PLUGIN_NAME" /> byl vypnut.</translation>
 <translation id="8465444703385715657">Zásuvný modul <ph name="PLUGIN_NAME" /> potřebuje ke spuštění vaše povolení</translation>
+<translation id="8496717697661868878">Spustit zásuvný modul</translation>
 <translation id="8512476990829870887">Ukončit proces</translation>
 <translation id="8523493869875972733">Uchovat změny</translation>
 <translation id="8523849605371521713">Dodáno z rozhodnutí podniku</translation>

@@ -52,7 +52,7 @@ class PredictorDatabaseInternal
   // Cancels pending DB transactions. Should only be called on the UI thread.
   void SetCancelled();
 
-  bool is_resource_prefetch_predictor_enabled_;
+  bool is_loading_predictor_enabled_;
   base::FilePath db_path_;
   std::unique_ptr<sql::Connection> db_;
 
@@ -75,8 +75,7 @@ PredictorDatabaseInternal::PredictorDatabaseInternal(Profile* profile)
   // This db does not use [meta] table, store mmap status data elsewhere.
   db_->set_mmap_alt_status();
 
-  is_resource_prefetch_predictor_enabled_ =
-      IsSpeculativeResourcePrefetchingEnabled(profile, nullptr);
+  is_loading_predictor_enabled_ = IsLoadingPredictorEnabled(profile, nullptr);
 }
 
 PredictorDatabaseInternal::~PredictorDatabaseInternal() {
@@ -119,7 +118,7 @@ void PredictorDatabaseInternal::LogDatabaseStats() {
         !BrowserThread::IsMessageLoopValid(BrowserThread::DB));
 
   autocomplete_table_->LogDatabaseStats();
-  if (is_resource_prefetch_predictor_enabled_)
+  if (is_loading_predictor_enabled_)
     resource_prefetch_tables_->LogDatabaseStats();
 }
 

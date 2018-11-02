@@ -52,7 +52,7 @@ TEST(SharedBufferTest, getAsBytes) {
 
   const size_t size = shared_buffer->size();
   std::unique_ptr<char[]> data = WrapArrayUnique(new char[size]);
-  shared_buffer->GetAsBytes(data.get(), size);
+  ASSERT_TRUE(shared_buffer->GetBytes(data.get(), size));
 
   char expected_concatenation[] = "HelloWorldGoodbye";
   ASSERT_EQ(strlen(expected_concatenation), size);
@@ -71,16 +71,14 @@ TEST(SharedBufferTest, getPartAsBytes) {
   shared_buffer->Append(test_data2, strlen(test_data2));
 
   struct TestData {
-    size_t position;
     size_t size;
     const char* expected;
   } test_data[] = {
-      {0, 17, "HelloWorldGoodbye"}, {0, 7, "HelloWo"}, {4, 7, "oWorldG"},
+      {17, "HelloWorldGoodbye"}, {7, "HelloWo"}, {3, "Hel"},
   };
   for (TestData& test : test_data) {
     std::unique_ptr<char[]> data = WrapArrayUnique(new char[test.size]);
-    ASSERT_TRUE(
-        shared_buffer->GetPartAsBytes(data.get(), test.position, test.size));
+    ASSERT_TRUE(shared_buffer->GetBytes(data.get(), test.size));
     EXPECT_EQ(0, memcmp(test.expected, data.get(), test.size));
   }
 }
@@ -102,7 +100,7 @@ TEST(SharedBufferTest, getAsBytesLargeSegments) {
 
   const size_t size = shared_buffer->size();
   std::unique_ptr<char[]> data = WrapArrayUnique(new char[size]);
-  shared_buffer->GetAsBytes(data.get(), size);
+  ASSERT_TRUE(shared_buffer->GetBytes(data.get(), size));
 
   ASSERT_EQ(0x4000U + 0x4000U + 0x4000U, size);
   int position = 0;
@@ -134,12 +132,14 @@ TEST(SharedBufferTest, copy) {
   // copy().
   ASSERT_EQ(length * 4, shared_buffer->size());
 
-  RefPtr<SharedBuffer> clone = shared_buffer->Copy();
-  ASSERT_EQ(length * 4, clone->size());
-  ASSERT_EQ(0, memcmp(clone->Data(), shared_buffer->Data(), clone->size()));
+  Vector<char> clone = shared_buffer->Copy();
+  ASSERT_EQ(length * 4, clone.size());
+  const Vector<char> contiguous = shared_buffer->Copy();
+  ASSERT_EQ(contiguous.size(), shared_buffer->size());
+  ASSERT_EQ(0, memcmp(clone.data(), contiguous.data(), clone.size()));
 
-  clone->Append(test_data.data(), length);
-  ASSERT_EQ(length * 5, clone->size());
+  clone.Append(test_data.data(), length);
+  ASSERT_EQ(length * 5, clone.size());
 }
 
 TEST(SharedBufferTest, constructorWithSizeOnly) {
@@ -151,6 +151,34 @@ TEST(SharedBufferTest, constructorWithSizeOnly) {
   // getSomeData() should directly return the full size.
   const char* data;
   ASSERT_EQ(length, shared_buffer->GetSomeData(data, static_cast<size_t>(0u)));
+}
+
+TEST(SharedBufferTest, FlatData) {
+  auto check_flat_data = [](RefPtr<const SharedBuffer> shared_buffer) {
+    const SharedBuffer::DeprecatedFlatData flat_buffer(shared_buffer);
+
+    EXPECT_EQ(shared_buffer->size(), flat_buffer.size());
+    shared_buffer->ForEachSegment([&flat_buffer](
+                                      const char* segment, size_t segment_size,
+                                      size_t segment_offset) -> bool {
+      EXPECT_EQ(
+          memcmp(segment, flat_buffer.Data() + segment_offset, segment_size),
+          0);
+
+      // If the SharedBuffer is not segmented, FlatData doesn't copy any data.
+      EXPECT_EQ(segment_size == flat_buffer.size(),
+                segment == flat_buffer.Data());
+      return true;
+    });
+  };
+
+  RefPtr<SharedBuffer> shared_buffer = SharedBuffer::Create();
+
+  // Add enough data to hit a couple of segments.
+  while (shared_buffer->size() < 10000) {
+    check_flat_data(shared_buffer);
+    shared_buffer->Append("FooBarBaz", 9u);
+  }
 }
 
 }  // namespace blink

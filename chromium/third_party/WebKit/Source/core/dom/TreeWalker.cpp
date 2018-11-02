@@ -28,6 +28,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/NodeTraversal.h"
+#include "core/dom/NodeTraversalStrategy.h"
 
 namespace blink {
 
@@ -126,76 +127,61 @@ Node* TreeWalker::lastChild(ExceptionState& exception_state) {
   return 0;
 }
 
-Node* TreeWalker::previousSibling(ExceptionState& exception_state) {
+// https://dom.spec.whatwg.org/#concept-traverse-siblings
+template <typename Strategy>
+Node* TreeWalker::TraverseSiblings(ExceptionState& exception_state) {
+  // 1. Let node be the value of the currentNode attribute.
   Node* node = current_;
+  // 2. If node is root, return null.
   if (node == root())
-    return 0;
-  while (1) {
-    for (Node* sibling = node->previousSibling(); sibling;) {
-      unsigned accept_node_result = AcceptNode(sibling, exception_state);
+    return nullptr;
+  // 3. While true:
+  while (true) {
+    // 1. Let sibling be node's next sibling if type is next, and node's
+    // previous sibling if type is previous.
+    Node* sibling = Strategy::NextNode(*node);
+    // 2. While sibling is not null:
+    while (sibling) {
+      // 1. Set node to sibling.
+      node = sibling;
+      // 2. Filter node and let result be the return value.
+      unsigned result = AcceptNode(node, exception_state);
       if (exception_state.HadException())
         return 0;
-      switch (accept_node_result) {
-        case NodeFilter::kFilterAccept:
-          current_ = sibling;
-          return current_.Get();
-        case NodeFilter::kFilterSkip:
-          if (sibling->lastChild()) {
-            sibling = sibling->lastChild();
-            node = sibling;
-            continue;
-          }
-          break;
-        case NodeFilter::kFilterReject:
-          break;
-      }
-      sibling = sibling->previousSibling();
+      // 3. If result is FILTER_ACCEPT, then set the currentNode attribute to
+      // node and return node.
+      if (result == NodeFilter::kFilterAccept)
+        return SetCurrent(node);
+      // 4. Set sibling to node's first child if type is next, and node's last
+      // child if type is previous.
+      sibling = Strategy::StartNode(*sibling);
+      // 5. If result is FILTER_REJECT or sibling is null, then set sibling to
+      // node's next sibling if type is next, and node's previous sibling if
+      // type is previous.
+      if (result == NodeFilter::kFilterReject || !sibling)
+        sibling = Strategy::NextNode(*node);
     }
+    // 3. Set node to its parent.
     node = node->parentNode();
+    // 4. If node is null or is root, return null.
     if (!node || node == root())
-      return 0;
-    unsigned accept_node_result = AcceptNode(node, exception_state);
+      return nullptr;
+    // 5. Filter node and if the return value is FILTER_ACCEPT, then return
+    // null.
+    unsigned result = AcceptNode(node, exception_state);
     if (exception_state.HadException())
-      return 0;
-    if (accept_node_result == NodeFilter::kFilterAccept)
-      return 0;
+      return nullptr;
+    if (result == NodeFilter::kFilterAccept)
+      return nullptr;
   }
 }
 
+Node* TreeWalker::previousSibling(ExceptionState& exception_state) {
+  return TraverseSiblings<PreviousNodeTraversalStrategy>(exception_state);
+}
+
 Node* TreeWalker::nextSibling(ExceptionState& exception_state) {
-  Node* node = current_;
-  if (node == root())
-    return 0;
-  while (1) {
-    for (Node* sibling = node->nextSibling(); sibling;) {
-      unsigned accept_node_result = AcceptNode(sibling, exception_state);
-      if (exception_state.HadException())
-        return 0;
-      switch (accept_node_result) {
-        case NodeFilter::kFilterAccept:
-          current_ = sibling;
-          return current_.Get();
-        case NodeFilter::kFilterSkip:
-          if (sibling->hasChildren()) {
-            sibling = sibling->firstChild();
-            node = sibling;
-            continue;
-          }
-          break;
-        case NodeFilter::kFilterReject:
-          break;
-      }
-      sibling = sibling->nextSibling();
-    }
-    node = node->parentNode();
-    if (!node || node == root())
-      return 0;
-    unsigned accept_node_result = AcceptNode(node, exception_state);
-    if (exception_state.HadException())
-      return 0;
-    if (accept_node_result == NodeFilter::kFilterAccept)
-      return 0;
-  }
+  return TraverseSiblings<NextNodeTraversalStrategy>(exception_state);
 }
 
 Node* TreeWalker::previousNode(ExceptionState& exception_state) {

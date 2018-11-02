@@ -15,6 +15,7 @@ namespace ash {
 
 // This delegate allows the UI code in ash, e.g. |PaletteTray|, to perform
 // Chrome-specific actions.
+// TODO(jamescook): Move this to //ash/system/palette.
 class PaletteDelegate {
  public:
   using EnableListener = base::Callback<void(bool)>;
@@ -54,13 +55,9 @@ class PaletteDelegate {
   // Cancels any active partial screenshot session.
   virtual void CancelPartialScreenshot() = 0;
 
-  // Returns true if the metalayer is available.
-  virtual bool IsMetalayerSupported() = 0;
-
-  // Shows the metalayer.
-  // |closed| will be invoked when the metalayer is closed or
-  // if the metalayer could not be shown.
-  virtual void ShowMetalayer(const base::Closure& closed) = 0;
+  // Shows the metalayer. |done| is called when the metalayer session has
+  // finished.
+  virtual void ShowMetalayer(base::OnceClosure done) = 0;
 
   // Hides the metalayer.
   virtual void HideMetalayer() = 0;

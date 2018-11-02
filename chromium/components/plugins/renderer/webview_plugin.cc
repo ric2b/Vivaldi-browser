@@ -68,7 +68,7 @@ WebViewPlugin* WebViewPlugin::Create(content::RenderView* render_view,
                                      const GURL& url) {
   DCHECK(url.is_valid()) << "Blink requires the WebView to have a valid URL.";
   WebViewPlugin* plugin = new WebViewPlugin(render_view, delegate, preferences);
-  plugin->web_view()->MainFrame()->LoadHTMLString(html_data, url);
+  plugin->main_frame()->LoadHTMLString(html_data, url);
   return plugin;
 }
 
@@ -259,16 +259,20 @@ WebViewPlugin::WebViewHelper::WebViewHelper(
   // ApplyWebPreferences before making a WebLocalFrame so that the frame sees a
   // consistent view of our preferences.
   content::RenderView::ApplyWebPreferences(preferences, web_view_);
-  WebLocalFrame* web_frame = WebLocalFrame::Create(
-      blink::WebTreeScopeType::kDocument, this, nullptr, nullptr);
-  web_view_->SetMainFrame(web_frame);
-  // TODO(dcheng): The main frame widget currently has a special case.
-  // Eliminate this once WebView is no longer a WebWidget.
-  WebFrameWidget::Create(this, web_view_, web_frame);
+  WebLocalFrame* web_frame =
+      WebLocalFrame::CreateMainFrame(web_view_, this, nullptr, nullptr);
+  WebFrameWidget::Create(this, web_frame);
 }
 
 WebViewPlugin::WebViewHelper::~WebViewHelper() {
   web_view_->Close();
+}
+
+blink::WebLocalFrame* WebViewPlugin::WebViewHelper::main_frame() {
+  // WebViewHelper doesn't support OOPIFs so the main frame will
+  // always be local.
+  DCHECK(web_view_->MainFrame()->IsWebLocalFrame());
+  return static_cast<WebLocalFrame*>(web_view_->MainFrame());
 }
 
 bool WebViewPlugin::WebViewHelper::AcceptsLoadDrops() {
@@ -296,11 +300,7 @@ void WebViewPlugin::WebViewHelper::StartDragging(blink::WebReferrerPolicy,
                                                  const WebImage&,
                                                  const WebPoint&) {
   // Immediately stop dragging.
-  DCHECK(web_view_->MainFrame()->IsWebLocalFrame());
-  web_view_->MainFrame()
-      ->ToWebLocalFrame()
-      ->FrameWidget()
-      ->DragSourceSystemDragEnded();
+  main_frame()->FrameWidget()->DragSourceSystemDragEnded();
 }
 
 bool WebViewPlugin::WebViewHelper::AllowsBrokenNullLayerTreeView() const {
@@ -334,9 +334,11 @@ void WebViewPlugin::WebViewHelper::ScheduleAnimation() {
 }
 
 std::unique_ptr<blink::WebURLLoader>
-WebViewPlugin::WebViewHelper::CreateURLLoader() {
+WebViewPlugin::WebViewHelper::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-  return blink::Platform::Current()->CreateURLLoader();
+  return blink::Platform::Current()->CreateURLLoader(request, task_runner);
 }
 
 void WebViewPlugin::WebViewHelper::DidClearWindowObject() {
@@ -345,8 +347,7 @@ void WebViewPlugin::WebViewHelper::DidClearWindowObject() {
 
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
-  v8::Local<v8::Context> context =
-      web_view_->MainFrame()->MainWorldScriptContext();
+  v8::Local<v8::Context> context = main_frame()->MainWorldScriptContext();
   DCHECK(!context.IsEmpty());
 
   v8::Context::Scope context_scope(context);

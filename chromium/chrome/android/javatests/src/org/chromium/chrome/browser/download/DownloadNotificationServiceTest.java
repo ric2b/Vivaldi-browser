@@ -308,7 +308,7 @@ public class DownloadNotificationServiceTest extends
 
         ContentId id1 = LegacyHelpers.buildLegacyContentId(false, guid1);
         service.notifyDownloadSuccessful(
-                id1, "/path/to/success", "success", 100L, false, false, true, null);
+                id1, "/path/to/success", "success", 100L, false, false, true, null, null, null);
         entries = DownloadManagerService.getStoredDownloadInfo(
                 sharedPrefs, DownloadSharedPreferenceHelper.KEY_PENDING_DOWNLOAD_NOTIFICATIONS);
         assertEquals(2, entries.size());
@@ -325,7 +325,7 @@ public class DownloadNotificationServiceTest extends
 
         ContentId id4 = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
         service.notifyDownloadSuccessful(
-                id4, "/path/to/success", "success", 100L, false, false, true, null);
+                id4, "/path/to/success", "success", 100L, false, false, true, null, null, null);
         assertEquals(3, getService().getNotificationIds().size());
         int nextNotificationId = getService().getLastAddedNotificationId();
         service.cancelNotification(nextNotificationId, id4);
@@ -345,7 +345,7 @@ public class DownloadNotificationServiceTest extends
         DownloadNotificationService service = bindNotificationService();
         ContentId id = LegacyHelpers.buildLegacyContentId(false, UUID.randomUUID().toString());
         service.notifyDownloadSuccessful(
-                id, "/path/to/test", "test", 100L, false, false, true, null);
+                id, "/path/to/test", "test", 100L, false, false, true, null, null, null);
         assertEquals(1, getService().getNotificationIds().size());
     }
 
@@ -431,6 +431,7 @@ public class DownloadNotificationServiceTest extends
 
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testServiceWillStopOnCompletedDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -444,12 +445,13 @@ public class DownloadNotificationServiceTest extends
                 10L, 1000L, 10L, false, false, false, null);
         assertFalse(service.hideSummaryNotificationIfNecessary(-1));
         service.notifyDownloadSuccessful(
-                id, "/path/to/test", "test", 100L, false, false, true, null);
+                id, "/path/to/test", "test", 100L, false, false, true, null, null, null);
         assertTrue(service.hideSummaryNotificationIfNecessary(-1));
     }
 
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testServiceWillStopOnFailedDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -468,6 +470,7 @@ public class DownloadNotificationServiceTest extends
 
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testServiceWillStopOnCancelledDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -522,6 +525,7 @@ public class DownloadNotificationServiceTest extends
 
     @SmallTest
     @Feature({"Download"})
+    @RetryOnFailure
     public void testServiceWillNotStopWithOneOngoingDownload() throws Exception {
         // On versions of Android that use a foreground service, the service will currently die with
         // the notifications.
@@ -541,10 +545,10 @@ public class DownloadNotificationServiceTest extends
         service.notifyDownloadPaused(id1, "/path/to/test", true, false, false, false, null);
         assertFalse(service.hideSummaryNotificationIfNecessary(-1));
         service.notifyDownloadSuccessful(
-                id1, "/path/to/test", "test", 100L, false, false, true, null);
+                id1, "/path/to/test", "test", 100L, false, false, true, null, null, null);
         assertFalse(service.hideSummaryNotificationIfNecessary(-1));
         service.notifyDownloadSuccessful(
-                id2, "/path/to/test", "test", 100L, false, false, true, null);
+                id2, "/path/to/test", "test", 100L, false, false, true, null, null, null);
         assertTrue(service.hideSummaryNotificationIfNecessary(-1));
     }
 }

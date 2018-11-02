@@ -28,8 +28,8 @@
 
 #include <cstddef>
 #include "base/numerics/safe_conversions.h"
+#include "build/build_config.h"
 #include "platform/wtf/Assertions.h"
-#include "platform/wtf/CPU.h"
 #include "platform/wtf/LeakAnnotations.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/TypeTraits.h"
@@ -37,6 +37,14 @@
 #if DCHECK_IS_ON()
 #include "platform/wtf/Threading.h"
 #endif
+
+#define DEFINE_STATIC_LOCAL_IMPL(Type, Name, Arguments, allow_cross_thread)    \
+  static WTF::StaticSingleton<Type> s_##Name(                                  \
+      [&]() { return new WTF::StaticSingleton<Type>::WrapperType Arguments; }, \
+      [&](void* leaked_ptr) {                                                  \
+        new (leaked_ptr) WTF::StaticSingleton<Type>::WrapperType Arguments;    \
+      });                                                                      \
+  Type& Name = s_##Name.Get(allow_cross_thread)
 
 // Use |DEFINE_STATIC_LOCAL()| to declare and define a static local variable
 // (|static T;|) so that it is leaked and its destructors are not called at
@@ -47,19 +55,16 @@
 // A |DEFINE_STATIC_LOCAL()| static should only be used on the thread it was
 // created on.
 //
-#define DEFINE_STATIC_LOCAL(Type, Name, Arguments)            \
-  static WTF::StaticSingleton<Type> s_##Name(                 \
-      new WTF::StaticSingleton<Type>::WrapperType Arguments); \
-  Type& Name = s_##Name.Get(false)
+#define DEFINE_STATIC_LOCAL(Type, Name, Arguments) \
+  DEFINE_STATIC_LOCAL_IMPL(Type, Name, Arguments, false)
 
 // |DEFINE_THREAD_SAFE_STATIC_LOCAL()| is the cross-thread accessible variant
 // of |DEFINE_STATIC_LOCAL()|; use it if the singleton can be accessed by
 // multiple threads.
 //
 // TODO: rename as DEFINE_CROSS_THREAD_STATIC_LOCAL() ?
-#define DEFINE_THREAD_SAFE_STATIC_LOCAL(Type, Name, Initializer) \
-  static WTF::StaticSingleton<Type> s_##Name(Initializer);       \
-  Type& Name = s_##Name.Get(true)
+#define DEFINE_THREAD_SAFE_STATIC_LOCAL(Type, Name, Arguments) \
+  DEFINE_STATIC_LOCAL_IMPL(Type, Name, Arguments, true)
 
 namespace blink {
 template <typename T>
@@ -107,22 +112,24 @@ class StaticSingleton final {
   // LEAK_SANITIZER_REGISTER_STATIC_LOCAL() use, it taking care of the grungy
   // details.
 
-  explicit StaticSingleton(WrapperType* instance)
-      : instance_(LEAK_SANITIZER_REGISTER_STATIC_LOCAL(WrapperType, instance))
+  template <typename HeapNew, typename PlacementNew>
+  StaticSingleton(const HeapNew& heap_new, const PlacementNew& placement_new)
+      : instance_(heap_new, placement_new)
 #if DCHECK_IS_ON()
         ,
         safely_initialized_(WTF::IsBeforeThreadCreated()),
         thread_(WTF::internal::CurrentThreadSyscall())
 #endif
   {
+    LEAK_SANITIZER_REGISTER_STATIC_LOCAL(WrapperType, instance_.Get());
   }
 
-  Type& Get(bool allow_cross_thread_use) const {
+  Type& Get(bool allow_cross_thread_use) {
 #if DCHECK_IS_ON()
     DCHECK(IsNotRacy(allow_cross_thread_use));
 #endif
     ALLOW_UNUSED_LOCAL(allow_cross_thread_use);
-    return Wrapper<Type>::Unwrap(instance_);
+    return Wrapper<Type>::Unwrap(instance_.Get());
   }
 
   operator Type&() { return Get(); }
@@ -138,8 +145,32 @@ class StaticSingleton final {
            thread_ == WTF::internal::CurrentThreadSyscall();
   }
 #endif
+  template <typename T, bool is_small = sizeof(T) <= 32>
+  class InstanceStorage {
+   public:
+    template <typename HeapNew, typename PlacementNew>
+    InstanceStorage(const HeapNew& heap_new, const PlacementNew&)
+        : pointer_(heap_new()) {}
+    T* Get() { return pointer_; }
 
-  WrapperType* instance_;
+   private:
+    T* pointer_;
+  };
+
+  template <typename T>
+  class InstanceStorage<T, true> {
+   public:
+    template <typename HeapNew, typename PlacementNew>
+    InstanceStorage(const HeapNew&, const PlacementNew& placement_new) {
+      placement_new(&object_);
+    }
+    T* Get() { return reinterpret_cast<T*>(object_); }
+
+   private:
+    alignas(T) char object_[sizeof(T)];
+  };
+
+  InstanceStorage<WrapperType> instance_;
 #if DCHECK_IS_ON()
   bool safely_initialized_;
   ThreadIdentifier thread_;
@@ -154,7 +185,7 @@ class StaticSingleton final {
 // DEFINE_STATIC_LOCAL macro, as this macro does not lead to an extra memory
 // allocation.
 #define DEFINE_STATIC_REF(type, name, arguments) \
-  static type* name = PassRefPtr<type>(arguments).LeakRef();
+  static type* name = RefPtr<type>(arguments).LeakRef();
 
 /*
  * The reinterpret_cast<Type1*>([pointer to Type2]) expressions - where
@@ -166,7 +197,7 @@ class StaticSingleton final {
  * - https://bugs.webkit.org/show_bug.cgi?id=38045
  * - http://gcc.gnu.org/bugzilla/show_bug.cgi?id=43976
  */
-#if CPU(ARM) && COMPILER(GCC)
+#if defined(ARCH_CPU_ARMEL) && defined(COMPILER_GCC)
 template <typename Type>
 bool isPointerTypeAlignmentOkay(Type* ptr) {
   return !(reinterpret_cast<intptr_t>(ptr) % __alignof__(Type));
@@ -255,7 +286,7 @@ inline To SafeCast(From value) {
 template <typename T, size_t Size>
 char (&ArrayLengthHelperFunction(T (&)[Size]))[Size];
 // GCC needs some help to deduce a 0 length array.
-#if COMPILER(GCC)
+#if defined(COMPILER_GCC)
 template <typename T>
 char (&ArrayLengthHelperFunction(T (&)[0]))[0];
 #endif

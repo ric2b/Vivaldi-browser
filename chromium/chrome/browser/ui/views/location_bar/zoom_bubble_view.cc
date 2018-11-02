@@ -35,6 +35,7 @@
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_features.h"
 #include "ui/gfx/favicon_size.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/text_utils.h"
 #include "ui/gfx/vector_icon_types.h"
 #include "ui/native_theme/native_theme.h"
@@ -44,7 +45,6 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
-#include "ui/views/layout/layout_constants.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
@@ -119,7 +119,11 @@ void ZoomBubbleView::ShowBubble(content::WebContents* web_contents,
                                 const gfx::Point& anchor_point,
                                 DisplayReason reason) {
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
-  DCHECK(browser && browser->window() &&
+  // |web_contents| could have been unloaded if a tab gets closed and a mouse
+  // event arrives before the zoom icon gets hidden.
+  if (!browser)
+    return;
+  DCHECK(browser->window() &&
          browser->exclusive_access_manager()->fullscreen_controller());
 
   views::View* anchor_view = nullptr;
@@ -239,6 +243,10 @@ ZoomBubbleView::~ZoomBubbleView() {
     immersive_mode_controller_->RemoveObserver(this);
 }
 
+int ZoomBubbleView::GetDialogButtons() const {
+  return ui::DIALOG_BUTTON_NONE;
+}
+
 void ZoomBubbleView::OnGestureEvent(ui::GestureEvent* event) {
   if (!zoom_bubble_ || !zoom_bubble_->auto_close_ ||
       event->type() != ui::ET_GESTURE_TAP) {
@@ -263,8 +271,8 @@ void ZoomBubbleView::Init() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
   const int margin =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
-  views::BoxLayout* box_layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, margin, 0, margin);
+  views::BoxLayout* box_layout = new views::BoxLayout(
+      views::BoxLayout::kHorizontal, gfx::Insets(0, margin), margin);
 
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);

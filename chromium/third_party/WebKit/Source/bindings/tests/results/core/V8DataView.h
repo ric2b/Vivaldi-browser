@@ -19,8 +19,8 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/tests/idls/core/TestDataView.h"
 #include "core/CoreExport.h"
-#include "core/dom/ArrayBufferViewHelpers.h"
-#include "core/dom/FlexibleArrayBufferView.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
+#include "core/typed_arrays/FlexibleArrayBufferView.h"
 #include "platform/bindings/ScriptWrappable.h"
 #include "platform/bindings/V8DOMWrapper.h"
 #include "platform/bindings/WrapperTypeInfo.h"
@@ -38,7 +38,7 @@ class V8DataView {
     visitor->Trace(scriptWrappable->ToImpl<TestDataView>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestDataView>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestDataView>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 

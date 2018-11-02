@@ -11,6 +11,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "base/memory/ref_counted.h"
+#include "media/base/data_source.h"
 
 namespace content {
 class DataRequestHandler;
@@ -20,12 +21,12 @@ class IPCDataSource;
 @interface DataSourceLoader : NSObject<AVAssetResourceLoaderDelegate> {
  @private
   base::scoped_nsobject<NSString> contentType_;
-  content::IPCDataSource* dataSource_;
+  media::DataSource* dataSource_;
   dispatch_queue_t queue_;
   scoped_refptr<content::DataRequestHandler> handler_;
   base::scoped_nsobject<AVAssetResourceLoadingRequest> lastRequest_;
 }
-- (id)initWithDataSource:(content::IPCDataSource*)dataSource
+- (id)initWithDataSource:(media::DataSource*)dataSource
             withMIMEType:(NSString*)mimeType;
 
 - (void)stop;

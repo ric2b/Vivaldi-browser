@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 import("//build/config/android/rules.gni")
+import("//device/vr/features/features.gni")
 import("//testing/test.gni")
 
 # Mark all targets as test only.
@@ -54,6 +55,8 @@ android_apk("webview_instrumentation_apk") {
   native_lib_version_arg = "@FileArg($_native_lib_file:full-quoted)"
 
   enable_multidex = true
+
+  command_line_flags_file = "android-webview-command-line"
 }
 
 android_resources("android_webview_apk_resources") {
@@ -83,6 +86,7 @@ android_assets("android_webview_apk_assets") {
     "shell/assets/visual_state_on_page_commit_visible_test.html",
     "shell/assets/visual_state_waits_for_js_detached_test.html",
     "shell/assets/visual_state_waits_for_js_test.html",
+    "shell/assets/webvr_not_functional_test.html",
   ]
 }
 
@@ -106,6 +110,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "//android_webview:android_webview_crash_services_java",
     "//android_webview:android_webview_java",
     "//android_webview:android_webview_platform_services_java",
+    "//android_webview/test/embedded_test_server:aw_net_java_test_support",
     "//base:base_java",
     "//base:base_java_test_support",
     "//components/minidump_uploader:minidump_uploader_java",
@@ -203,6 +208,7 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
     "../javatests/src/org/chromium/android_webview/test/WebViewAsynchronousFindApisTest.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewFindApisTestBase.java",
     "../javatests/src/org/chromium/android_webview/test/WebViewModalDialogOverrideTest.java",
+    "../javatests/src/org/chromium/android_webview/test/WebViewWebVrTest.java",
     "../javatests/src/org/chromium/android_webview/test/crash/CrashReceiverServiceTest.java",
     "../javatests/src/org/chromium/android_webview/test/crash/MinidumpUploaderTest.java",
     "../javatests/src/org/chromium/android_webview/test/crash/VisualStateCallbackTest.java",
@@ -221,7 +227,18 @@ instrumentation_test_apk("webview_instrumentation_test_apk") {
   data = [
     "data/",
   ]
-  additional_apks = [ "//net/android:net_test_support_apk" ]
+
+  # We only want to bother including these on bots set up for VR testing
+  if (include_vr_data) {
+    data += [
+      "//chrome/android/shared_preference_files/test/",
+      "//third_party/gvr-android-sdk/test-apks/vr_services/vr_services_current.apk",
+    ]
+  }
+  additional_apks = [
+    "//android_webview/test/embedded_test_server:aw_net_test_support_apk",
+    "//net/android:net_test_support_apk",
+  ]
 }
 
 test("android_webview_unittests") {
@@ -250,6 +267,7 @@ test("android_webview_unittests") {
     "../browser/aw_form_database_service_unittest.cc",
     "../browser/aw_media_url_interceptor_unittest.cc",
     "../browser/aw_permission_manager_unittest.cc",
+    "../browser/aw_safe_browsing_whitelist_manager_unittest.cc",
     "../browser/aw_static_cookie_policy_unittest.cc",
     "../browser/browser_view_renderer_unittest.cc",
     "../browser/command_line_helper_unittest.cc",

@@ -4,22 +4,22 @@
 
 #include "ash/system/overview/overview_button_tray.h"
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_state.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
-#include "ui/wm/core/window_util.h"
 
 namespace ash {
 
@@ -43,9 +43,12 @@ OverviewButtonTray::OverviewButtonTray(Shelf* shelf)
   set_separator_visibility(false);
 
   Shell::Get()->AddShellObserver(this);
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
 OverviewButtonTray::~OverviewButtonTray() {
+  if (Shell::Get()->tablet_mode_controller())
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
 }
 
@@ -69,7 +72,7 @@ bool OverviewButtonTray::PerformAction(const ui::Event& event) {
       // current window), if it exists.
       if (mru_window_list.size() > 1) {
         AnimateInkDrop(views::InkDropState::DEACTIVATED, nullptr);
-        ::wm::ActivateWindow(mru_window_list[1]);
+        wm::GetWindowState(mru_window_list[1])->Activate();
         return true;
       }
     }
@@ -81,7 +84,7 @@ bool OverviewButtonTray::PerformAction(const ui::Event& event) {
   // screen is locked, a modal dialog is open or is running in kiosk app
   // session.
   bool performed = controller->ToggleOverview();
-  ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_OVERVIEW);
+  Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_OVERVIEW);
   return performed;
 }
 
@@ -90,11 +93,11 @@ void OverviewButtonTray::OnSessionStateChanged(
   UpdateIconVisibility();
 }
 
-void OverviewButtonTray::OnMaximizeModeStarted() {
+void OverviewButtonTray::OnTabletModeStarted() {
   UpdateIconVisibility();
 }
 
-void OverviewButtonTray::OnMaximizeModeEnded() {
+void OverviewButtonTray::OnTabletModeEnded() {
   UpdateIconVisibility();
 }
 
@@ -126,7 +129,7 @@ void OverviewButtonTray::UpdateIconVisibility() {
 
   Shell* shell = Shell::Get();
   SetVisible(
-      shell->maximize_mode_controller()->IsMaximizeModeWindowManagerEnabled() &&
+      shell->tablet_mode_controller()->IsTabletModeWindowManagerEnabled() &&
       session_controller->IsActiveUserSessionStarted() &&
       !session_controller->IsScreenLocked() &&
       session_controller->GetSessionState() ==

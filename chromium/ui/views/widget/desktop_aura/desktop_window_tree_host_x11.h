@@ -22,7 +22,6 @@
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
-#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/views/views_export.h"
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 
@@ -170,6 +169,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
       const gfx::Point& location_in_pixels) override;
   void OnCursorVisibilityChangedNative(bool show) override;
 
+  // Overridden from display::DisplayObserver via aura::WindowTreeHost:
+  void OnDisplayMetricsChanged(const display::Display& display,
+                               uint32_t changed_metrics) override;
+
  private:
   friend class DesktopWindowTreeHostX11HighDPITest;
   // Initializes our X11 surface to draw on. This method performs all
@@ -278,6 +281,10 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
   // Enables event listening after closing |dialog|.
   void EnableEventListening();
 
+  // Removes |delayed_resize_task_| from the task queue (if it's in
+  // the queue) and adds it back at the end of the queue.
+  void RestartDelayedResizeTask();
+
   // X11 things
   // The display and the native X window hosting the root window.
   XDisplay* xdisplay_;
@@ -288,8 +295,6 @@ class VIEWS_EXPORT DesktopWindowTreeHostX11
 
   // The native root window.
   ::Window x_root_window_;
-
-  ui::X11AtomCache atom_cache_;
 
   // Whether the window is mapped with respect to the X server.
   bool window_mapped_in_server_;

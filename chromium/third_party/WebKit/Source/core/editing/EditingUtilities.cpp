@@ -33,8 +33,8 @@
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/Range.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/EditingStrategy.h"
 #include "core/editing/Editor.h"
 #include "core/editing/PlainTextRange.h"
@@ -47,8 +47,8 @@
 #include "core/editing/state_machines/BackspaceStateMachine.h"
 #include "core/editing/state_machines/BackwardGraphemeBoundaryStateMachine.h"
 #include "core/editing/state_machines/ForwardGraphemeBoundaryStateMachine.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLBRElement.h"
 #include "core/html/HTMLDivElement.h"
@@ -102,6 +102,34 @@ InputEvent::EventCancelable InputTypeIsCancelable(
     default:
       return InputEvent::EventCancelable::kIsCancelable;
   }
+}
+
+UChar WhitespaceRebalancingCharToAppend(const String& string,
+                                        bool start_is_start_of_paragraph,
+                                        bool should_emit_nbsp_before_end,
+                                        size_t index,
+                                        UChar previous) {
+  DCHECK_LT(index, string.length());
+
+  if (!IsWhitespace(string[index]))
+    return string[index];
+
+  if (!index && start_is_start_of_paragraph)
+    return kNoBreakSpaceCharacter;
+  if (index + 1 == string.length() && should_emit_nbsp_before_end)
+    return kNoBreakSpaceCharacter;
+
+  // Generally, alternate between space and no-break space.
+  if (previous == ' ')
+    return kNoBreakSpaceCharacter;
+  if (previous == kNoBreakSpaceCharacter)
+    return ' ';
+
+  // Run of two or more spaces starts with a no-break space (crbug.com/453042).
+  if (index + 1 < string.length() && IsWhitespace(string[index + 1]))
+    return kNoBreakSpaceCharacter;
+
+  return ' ';
 }
 
 }  // namespace
@@ -302,8 +330,8 @@ bool IsNodeFullyContained(const EphemeralRange& range, Node& node) {
   if (!NodeTraversal::CommonAncestor(*range.StartPosition().AnchorNode(), node))
     return false;
 
-  return range.StartPosition() <= Position::BeforeNode(&node) &&
-         Position::AfterNode(&node) <= range.EndPosition();
+  return range.StartPosition() <= Position::BeforeNode(node) &&
+         Position::AfterNode(node) <= range.EndPosition();
 }
 
 // TODO(editing-dev): We should implement real version which refers
@@ -627,9 +655,9 @@ PositionTemplate<Strategy> FirstEditablePositionAfterPositionInRootAlgorithm(
       << position << ' ' << highest_root;
   // position falls before highestRoot.
   if (position.CompareTo(PositionTemplate<Strategy>::FirstPositionInNode(
-          &highest_root)) == -1 &&
+          highest_root)) == -1 &&
       HasEditableStyle(highest_root))
-    return PositionTemplate<Strategy>::FirstPositionInNode(&highest_root);
+    return PositionTemplate<Strategy>::FirstPositionInNode(highest_root);
 
   PositionTemplate<Strategy> editable_position = position;
 
@@ -639,7 +667,7 @@ PositionTemplate<Strategy> FirstEditablePositionAfterPositionInRootAlgorithm(
     if (!shadow_ancestor)
       return PositionTemplate<Strategy>();
 
-    editable_position = PositionTemplate<Strategy>::AfterNode(shadow_ancestor);
+    editable_position = PositionTemplate<Strategy>::AfterNode(*shadow_ancestor);
   }
 
   Node* non_editable_node = nullptr;
@@ -704,8 +732,8 @@ PositionTemplate<Strategy> LastEditablePositionBeforePositionInRootAlgorithm(
       << position << ' ' << highest_root;
   // When position falls after highestRoot, the result is easy to compute.
   if (position.CompareTo(
-          PositionTemplate<Strategy>::LastPositionInNode(&highest_root)) == 1)
-    return PositionTemplate<Strategy>::LastPositionInNode(&highest_root);
+          PositionTemplate<Strategy>::LastPositionInNode(highest_root)) == 1)
+    return PositionTemplate<Strategy>::LastPositionInNode(highest_root);
 
   PositionTemplate<Strategy> editable_position = position;
 
@@ -822,7 +850,7 @@ PositionTemplate<Strategy> PreviousPositionOfAlgorithm(
 
   if (offset > 0) {
     if (EditingIgnoresContent(*node))
-      return PositionTemplate<Strategy>::BeforeNode(node);
+      return PositionTemplate<Strategy>::BeforeNode(*node);
     if (Node* child = Strategy::ChildAt(*node, offset - 1))
       return PositionTemplate<Strategy>::LastPositionInOrAfterNode(child);
 
@@ -848,7 +876,7 @@ PositionTemplate<Strategy> PreviousPositionOfAlgorithm(
 
   if (ContainerNode* parent = Strategy::Parent(*node)) {
     if (EditingIgnoresContent(*parent))
-      return PositionTemplate<Strategy>::BeforeNode(parent);
+      return PositionTemplate<Strategy>::BeforeNode(*parent);
     // TODO(yosin) We should use |Strategy::index(Node&)| instead of
     // |Node::nodeIndex()|.
     return PositionTemplate<Strategy>(parent, node->NodeIndex());
@@ -992,7 +1020,7 @@ EUserSelect UsedValueOfUserSelect(const Node& node) {
 }
 
 template <typename Strategy>
-TextDirection DirectionOfEnclosingBlockAlgorithm(
+TextDirection DirectionOfEnclosingBlockOfAlgorithm(
     const PositionTemplate<Strategy>& position) {
   Element* enclosing_block_element =
       EnclosingBlock(PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(
@@ -1005,12 +1033,12 @@ TextDirection DirectionOfEnclosingBlockAlgorithm(
                        : TextDirection::kLtr;
 }
 
-TextDirection DirectionOfEnclosingBlock(const Position& position) {
-  return DirectionOfEnclosingBlockAlgorithm<EditingStrategy>(position);
+TextDirection DirectionOfEnclosingBlockOf(const Position& position) {
+  return DirectionOfEnclosingBlockOfAlgorithm<EditingStrategy>(position);
 }
 
-TextDirection DirectionOfEnclosingBlock(const PositionInFlatTree& position) {
-  return DirectionOfEnclosingBlockAlgorithm<EditingInFlatTreeStrategy>(
+TextDirection DirectionOfEnclosingBlockOf(const PositionInFlatTree& position) {
+  return DirectionOfEnclosingBlockOfAlgorithm<EditingInFlatTreeStrategy>(
       position);
 }
 
@@ -1034,23 +1062,12 @@ String StringWithRebalancedWhitespace(const String& string,
   StringBuilder rebalanced_string;
   rebalanced_string.ReserveCapacity(length);
 
-  bool previous_character_was_space = false;
-  for (size_t i = 0; i < length; i++) {
-    UChar c = string[i];
-    if (!IsWhitespace(c)) {
-      rebalanced_string.Append(c);
-      previous_character_was_space = false;
-      continue;
-    }
-
-    if (previous_character_was_space || (!i && start_is_start_of_paragraph) ||
-        (i + 1 == length && should_emit_nbs_pbefore_end)) {
-      rebalanced_string.Append(kNoBreakSpaceCharacter);
-      previous_character_was_space = false;
-    } else {
-      rebalanced_string.Append(' ');
-      previous_character_was_space = true;
-    }
+  UChar char_to_append = 0;
+  for (size_t index = 0; index < length; index++) {
+    char_to_append = WhitespaceRebalancingCharToAppend(
+        string, start_is_start_of_paragraph, should_emit_nbs_pbefore_end, index,
+        char_to_append);
+    rebalanced_string.Append(char_to_append);
   }
 
   DCHECK_EQ(rebalanced_string.length(), length);
@@ -1200,49 +1217,6 @@ Element* TableElementJustAfter(const VisiblePosition& visible_position) {
     return ToElement(downstream.AnchorNode());
 
   return 0;
-}
-
-static Node* PreviousNodeConsideringAtomicNodes(const Node& start) {
-  if (start.previousSibling()) {
-    Node* node = start.previousSibling();
-    while (!IsAtomicNode(node) && node->lastChild())
-      node = node->lastChild();
-    return node;
-  }
-  return start.parentNode();
-}
-
-static Node* NextNodeConsideringAtomicNodes(const Node& start) {
-  if (!IsAtomicNode(&start) && start.hasChildren())
-    return start.firstChild();
-  if (start.nextSibling())
-    return start.nextSibling();
-  const Node* node = &start;
-  while (node && !node->nextSibling())
-    node = node->parentNode();
-  if (node)
-    return node->nextSibling();
-  return nullptr;
-}
-
-Node* PreviousAtomicLeafNode(const Node& start) {
-  Node* node = PreviousNodeConsideringAtomicNodes(start);
-  while (node) {
-    if (IsAtomicNode(node))
-      return node;
-    node = PreviousNodeConsideringAtomicNodes(*node);
-  }
-  return nullptr;
-}
-
-Node* NextAtomicLeafNode(const Node& start) {
-  Node* node = NextNodeConsideringAtomicNodes(start);
-  while (node) {
-    if (IsAtomicNode(node))
-      return node;
-    node = NextNodeConsideringAtomicNodes(*node);
-  }
-  return nullptr;
 }
 
 // Returns the visible position at the beginning of a node
@@ -1933,7 +1907,7 @@ int IndexForVisiblePosition(const VisiblePosition& visible_position,
   else
     scope = document.documentElement();
 
-  EphemeralRange range(Position::FirstPositionInNode(scope),
+  EphemeralRange range(Position::FirstPositionInNode(*scope),
                        p.ParentAnchoredEquivalent());
 
   return TextIterator::RangeLength(
@@ -2124,7 +2098,7 @@ DispatchEventResult DispatchBeforeInputInsertText(
     const String& data,
     InputEvent::InputType input_type,
     const StaticRangeVector* ranges) {
-  if (!RuntimeEnabledFeatures::inputEventEnabled())
+  if (!RuntimeEnabledFeatures::InputEventEnabled())
     return DispatchEventResult::kNotCanceled;
   if (!target)
     return DispatchEventResult::kNotCanceled;
@@ -2141,7 +2115,7 @@ DispatchEventResult DispatchBeforeInputEditorCommand(
     Node* target,
     InputEvent::InputType input_type,
     const StaticRangeVector* ranges) {
-  if (!RuntimeEnabledFeatures::inputEventEnabled())
+  if (!RuntimeEnabledFeatures::InputEventEnabled())
     return DispatchEventResult::kNotCanceled;
   if (!target)
     return DispatchEventResult::kNotCanceled;
@@ -2155,7 +2129,7 @@ DispatchEventResult DispatchBeforeInputDataTransfer(
     Node* target,
     InputEvent::InputType input_type,
     DataTransfer* data_transfer) {
-  if (!RuntimeEnabledFeatures::inputEventEnabled())
+  if (!RuntimeEnabledFeatures::InputEventEnabled())
     return DispatchEventResult::kNotCanceled;
   if (!target)
     return DispatchEventResult::kNotCanceled;
@@ -2191,19 +2165,19 @@ InputEvent::InputType DeletionInputTypeFromTextGranularity(
   using InputType = InputEvent::InputType;
   switch (direction) {
     case DeleteDirection::kForward:
-      if (granularity == kWordGranularity)
+      if (granularity == TextGranularity::kWord)
         return InputType::kDeleteWordForward;
-      if (granularity == kLineBoundary)
+      if (granularity == TextGranularity::kLineBoundary)
         return InputType::kDeleteSoftLineForward;
-      if (granularity == kParagraphBoundary)
+      if (granularity == TextGranularity::kParagraphBoundary)
         return InputType::kDeleteHardLineForward;
       return InputType::kDeleteContentForward;
     case DeleteDirection::kBackward:
-      if (granularity == kWordGranularity)
+      if (granularity == TextGranularity::kWord)
         return InputType::kDeleteWordBackward;
-      if (granularity == kLineBoundary)
+      if (granularity == TextGranularity::kLineBoundary)
         return InputType::kDeleteSoftLineBackward;
-      if (granularity == kParagraphBoundary)
+      if (granularity == TextGranularity::kParagraphBoundary)
         return InputType::kDeleteHardLineBackward;
       return InputType::kDeleteContentBackward;
     default:

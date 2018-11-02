@@ -34,6 +34,7 @@ TemplateURLData::TemplateURLData(const base::string16& name,
                                  base::StringPiece image_url,
                                  base::StringPiece new_tab_url,
                                  base::StringPiece contextual_search_url,
+                                 base::StringPiece logo_url,
                                  base::StringPiece search_url_post_params,
                                  base::StringPiece suggest_url_post_params,
                                  base::StringPiece instant_url_post_params,
@@ -48,6 +49,7 @@ TemplateURLData::TemplateURLData(const base::string16& name,
       image_url(image_url.as_string()),
       new_tab_url(new_tab_url.as_string()),
       contextual_search_url(contextual_search_url.as_string()),
+      logo_url(GURL(logo_url)),
       search_url_post_params(search_url_post_params.as_string()),
       suggestions_url_post_params(suggest_url_post_params.as_string()),
       instant_url_post_params(instant_url_post_params.as_string()),
@@ -78,8 +80,6 @@ TemplateURLData::~TemplateURLData() {
 }
 
 void TemplateURLData::SetShortName(const base::string16& short_name) {
-  DCHECK(!short_name.empty());
-
   // Remove tabs, carriage returns, and the like, as they can corrupt
   // how the short name is displayed.
   short_name_ = base::CollapseWhitespace(short_name, true);

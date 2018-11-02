@@ -7,7 +7,6 @@
 #include "ash/ash_switches.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
-#include "ash/shell_port.h"
 #include "ash/system/display_scale/scale_detailed_view.h"
 #include "ash/system/display_scale/scale_view.h"
 #include "ash/system/tray/system_tray.h"
@@ -44,11 +43,11 @@ views::View* TrayScale::CreateDetailedView(LoginStatus status) {
   return scale_detail_view_;
 }
 
-void TrayScale::DestroyDefaultView() {
+void TrayScale::OnDefaultViewDestroyed() {
   scale_view_ = nullptr;
 }
 
-void TrayScale::DestroyDetailedView() {
+void TrayScale::OnDetailedViewDestroyed() {
   scale_detail_view_ = nullptr;
 }
 

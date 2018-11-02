@@ -4,17 +4,12 @@
 
 #include "SkiaTextMetrics.h"
 
+#include "build/build_config.h"
 #include "platform/wtf/MathExtras.h"
 
 #include <SkPath.h>
 
 namespace blink {
-
-static hb_position_t SkiaScalarToHarfBuzzPosition(SkScalar value) {
-  // We treat HarfBuzz hb_position_t as 16.16 fixed-point.
-  static const int kHbPosition1 = 1 << 16;
-  return clampTo<int>(value * kHbPosition1);
-}
 
 SkiaTextMetrics::SkiaTextMetrics(const SkPaint* paint) : paint_(paint) {
   CHECK(paint_->getTextEncoding() == SkPaint::kGlyphID_TextEncoding);
@@ -60,7 +55,7 @@ void SkiaTextMetrics::GetGlyphExtentsForHarfBuzz(hb_codepoint_t codepoint,
 }
 
 void SkiaTextMetrics::GetSkiaBoundsForGlyph(Glyph glyph, SkRect* bounds) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // TODO(drott): Remove this once we have better metrics bounds
   // on Mac, https://bugs.chromium.org/p/skia/issues/detail?id=5328
   SkPath path;
@@ -85,6 +80,12 @@ float SkiaTextMetrics::GetSkiaWidthForGlyph(Glyph glyph) {
     sk_width = SkScalarRoundToInt(sk_width);
 
   return SkScalarToFloat(sk_width);
+}
+
+hb_position_t SkiaTextMetrics::SkiaScalarToHarfBuzzPosition(SkScalar value) {
+  // We treat HarfBuzz hb_position_t as 16.16 fixed-point.
+  static const int kHbPosition1 = 1 << 16;
+  return clampTo<int>(value * kHbPosition1);
 }
 
 }  // namespace blink

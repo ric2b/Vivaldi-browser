@@ -24,6 +24,7 @@ source_set("browser") {
   deps = [
     ":injected_js",
     "//base",
+    "//components/language/core/browser",
     "//components/prefs",
     "//components/translate/core/browser",
     "//components/translate/core/common",
@@ -58,7 +59,8 @@ source_set("unit_tests") {
     "//components/prefs:test_support",
     "//components/resources",
     "//components/translate/core/browser",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",

@@ -4,12 +4,14 @@
 
 #include "ash/system/audio/tray_audio.h"
 
+#include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 
 namespace ash {
 
-using TrayAudioTest = test::AshTestBase;
+using TrayAudioTest = AshTestBase;
 
 // Tests that the volume popup view can be explicitly shown.
 TEST_F(TrayAudioTest, ShowPopUpVolumeView) {
@@ -20,12 +22,20 @@ TEST_F(TrayAudioTest, ShowPopUpVolumeView) {
   EXPECT_FALSE(tray_audio->volume_view_for_testing());
   EXPECT_FALSE(tray_audio->pop_up_volume_view_for_testing());
 
+  // When set to autohide, the shelf shouldn't be shown.
+  StatusAreaWidget* status = StatusAreaWidgetTestHelper::GetStatusAreaWidget();
+  EXPECT_FALSE(status->ShouldShowShelf());
+
   // Simulate ARC asking to show the volume view.
   TrayAudio::ShowPopUpVolumeView();
 
   // Volume view is now visible.
   EXPECT_TRUE(tray_audio->volume_view_for_testing());
   EXPECT_TRUE(tray_audio->pop_up_volume_view_for_testing());
+
+  // This does not force the shelf to automatically show. Regression tests for
+  // crbug.com/729188
+  EXPECT_FALSE(status->ShouldShowShelf());
 }
 
 }  // namespace ash

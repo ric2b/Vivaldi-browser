@@ -6,9 +6,11 @@
 
 #include "base/time/time.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_cell.h"
+#include "ios/chrome/grit/ios_strings.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "third_party/ocmock/gtest_support.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -22,16 +24,14 @@ namespace {
 TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
   // Setup.
   NSString* title = @"testTitle";
-  NSString* subtitle = @"testSubtitle";
   GURL url = GURL("http://chromium.org");
   NSString* publisher = @"publisherName";
   base::Time publishTime = base::Time::Now();
-  NSDate* date = [NSDate dateWithTimeIntervalSince1970:publishTime.ToDoubleT()];
-  id delegateMock = OCMProtocolMock(@protocol(SuggestedContentDelegate));
+  NSString* date = l10n_util::GetNSString(IDS_IOS_READING_LIST_JUST_NOW);
+  id delegateMock = OCMProtocolMock(@protocol(ContentSuggestionsItemDelegate));
   ContentSuggestionsItem* item =
       [[ContentSuggestionsItem alloc] initWithType:0
                                              title:title
-                                          subtitle:subtitle
                                                url:url];
   item.delegate = delegateMock;
   item.hasImage = YES;
@@ -44,8 +44,7 @@ TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
   ASSERT_EQ(url, item.URL);
   ASSERT_EQ(nil, item.image);
   id cellMock = OCMPartialMock(cell);
-  OCMExpect([cellMock setContentImage:item.image]);
-  OCMExpect([cellMock setSubtitleText:subtitle]);
+  OCMExpect([cellMock setContentImage:item.image animated:NO]);
   OCMExpect([cellMock setAdditionalInformationWithPublisherName:publisher
                                                            date:date
                                             offlineAvailability:YES]);
@@ -61,16 +60,15 @@ TEST(ContentSuggestionsItemTest, CellIsConfiguredWithoutImage) {
 
 // Tests that configureCell: does not call the delegate if it fetched the image
 // once.
-TEST(ContentSuggestionsItemTest, DontFetchImageIsImageIsBeingFetched) {
+TEST(ContentSuggestionsItemTest, DontFetchImageIfImageIsBeingFetched) {
   // Setup.
   NSString* title = @"testTitle";
-  NSString* subtitle = @"testSubtitle";
   GURL url = GURL("http://chromium.org");
-  id niceDelegateMock = OCMProtocolMock(@protocol(SuggestedContentDelegate));
+  id niceDelegateMock =
+      OCMProtocolMock(@protocol(ContentSuggestionsItemDelegate));
   ContentSuggestionsItem* item =
       [[ContentSuggestionsItem alloc] initWithType:0
                                              title:title
-                                          subtitle:subtitle
                                                url:url];
   item.delegate = niceDelegateMock;
   item.hasImage = YES;
@@ -83,10 +81,10 @@ TEST(ContentSuggestionsItemTest, DontFetchImageIsImageIsBeingFetched) {
   ASSERT_OCMOCK_VERIFY(niceDelegateMock);
 
   id strictDelegateMock =
-      OCMStrictProtocolMock(@protocol(SuggestedContentDelegate));
+      OCMStrictProtocolMock(@protocol(ContentSuggestionsItemDelegate));
   item.delegate = strictDelegateMock;
   id cellMock = OCMPartialMock(cell);
-  OCMExpect([cellMock setContentImage:item.image]);
+  OCMExpect([cellMock setContentImage:item.image animated:NO]);
 
   // Action.
   [item configureCell:cell];
@@ -101,14 +99,13 @@ TEST(ContentSuggestionsItemTest, DontFetchImageIsImageIsBeingFetched) {
 TEST(ContentSuggestionsItemTest, NoDelegateCallWhenHasNotImage) {
   // Setup.
   NSString* title = @"testTitle";
-  NSString* subtitle = @"testSubtitle";
   GURL url = GURL("http://chromium.org");
   // Strict mock. Raise exception if the load method is called.
-  id delegateMock = OCMStrictProtocolMock(@protocol(SuggestedContentDelegate));
+  id delegateMock =
+      OCMStrictProtocolMock(@protocol(ContentSuggestionsItemDelegate));
   ContentSuggestionsItem* item =
       [[ContentSuggestionsItem alloc] initWithType:0
                                              title:title
-                                          subtitle:subtitle
                                                url:url];
   item.delegate = delegateMock;
   item.hasImage = NO;
@@ -118,4 +115,30 @@ TEST(ContentSuggestionsItemTest, NoDelegateCallWhenHasNotImage) {
   [item configureCell:cell];
 }
 
+// Tests that the display of the image is animated only for the first time.
+TEST(ContentSuggestionsItemTest, ImageAnimatedOnlyTheFirstTime) {
+  // Setup.
+  NSString* title = @"testTitle";
+  GURL url = GURL("http://chromium.org");
+  ContentSuggestionsItem* item =
+      [[ContentSuggestionsItem alloc] initWithType:0
+                                             title:title
+                                               url:url];
+  item.hasImage = YES;
+  item.image = [[UIImage alloc] init];
+
+  id cell1 = OCMClassMock([ContentSuggestionsCell class]);
+  OCMExpect([cell1 setContentImage:item.image animated:YES]);
+  id cell2 = OCMClassMock([ContentSuggestionsCell class]);
+  OCMExpect([cell2 setContentImage:item.image animated:NO]);
+  ASSERT_NE(nil, item.image);
+
+  // Action.
+  [item configureCell:cell1];
+  [item configureCell:cell2];
+
+  // Tests.
+  EXPECT_OCMOCK_VERIFY(cell1);
+  EXPECT_OCMOCK_VERIFY(cell2);
+}
 }  // namespace

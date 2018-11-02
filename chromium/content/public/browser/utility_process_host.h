@@ -11,6 +11,7 @@
 #include "build/build_config.h"
 #include "content/common/content_export.h"
 #include "content/public/common/bind_interface_helpers.h"
+#include "content/public/common/sandbox_type.h"
 #include "ipc/ipc_sender.h"
 #include "mojo/public/cpp/bindings/interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
@@ -52,19 +53,13 @@ class UtilityProcessHost : public IPC::Sender {
 
   virtual base::WeakPtr<UtilityProcessHost> AsWeakPtr() = 0;
 
-  // Starts utility process in batch mode. Caller must call EndBatchMode()
-  // to finish the utility process.
-  virtual bool StartBatchMode() = 0;
-
-  // Ends the utility process. Must be called after StartBatchMode().
-  virtual void EndBatchMode() = 0;
-
   // Allows a directory to be opened through the sandbox, in case it's needed by
   // the operation.
   virtual void SetExposedDir(const base::FilePath& dir) = 0;
 
-  // Make the process run without a sandbox.
-  virtual void DisableSandbox() = 0;
+  // Make the process run with a specific sandbox type, or unsandboxed if
+  // SANDBOX_TYPE_NO_SANDBOX is specified.
+  virtual void SetSandboxType(SandboxType sandbox_type) = 0;
 
 #if defined(OS_WIN)
   // Make the process run elevated.

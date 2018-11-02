@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "ash/ash_export.h"
+#include "ash/wm/overview/scoped_hide_overview_windows.h"
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "ui/aura/window_observer.h"
@@ -36,7 +37,7 @@ class WindowGrid;
 // one by clicking or tapping on it.
 class ASH_EXPORT WindowSelector : public display::DisplayObserver,
                                   public aura::WindowObserver,
-                                  public aura::client::ActivationChangeObserver,
+                                  public ::wm::ActivationChangeObserver,
                                   public views::TextfieldController {
  public:
   // Returns true if the window can be selected in overview mode.
@@ -50,7 +51,7 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   ~WindowSelector() override;
 
   // Initialize with the windows that can be selected.
-  void Init(const WindowList& windows);
+  void Init(const WindowList& windows, const WindowList& hide_windows);
 
   // Perform cleanup that cannot be done in the destructor.
   void Shutdown();
@@ -95,7 +96,7 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
   void OnWindowDestroying(aura::Window* window) override;
 
-  // aura::client::ActivationChangeObserver:
+  // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
@@ -192,6 +193,8 @@ class ASH_EXPORT WindowSelector : public display::DisplayObserver,
   int text_filter_bottom_;
 
   bool is_shut_down_ = false;
+
+  std::unique_ptr<ScopedHideOverviewWindows> hide_overview_windows_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowSelector);
 };

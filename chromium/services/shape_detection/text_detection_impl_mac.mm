@@ -17,55 +17,43 @@ namespace shape_detection {
 
 namespace {
 
-void RunCallbackWithResults(
-    const mojom::TextDetection::DetectCallback& callback,
-    std::vector<mojom::TextDetectionResultPtr> results) {
-  callback.Run(std::move(results));
-}
-
-void RunCallbackWithNoResults(
-    const mojom::TextDetection::DetectCallback& callback) {
-  callback.Run(std::vector<mojom::TextDetectionResultPtr>());
+void RunCallbackWithNoResults(mojom::TextDetection::DetectCallback callback) {
+  std::move(callback).Run({});
 }
 
 }  // anonymous namespace
 
 // static
-void TextDetectionImpl::Create(
-    const service_manager::BindSourceInfo& source_info,
-    mojom::TextDetectionRequest request) {
+void TextDetectionImpl::Create(mojom::TextDetectionRequest request) {
   // Text detection needs at least MAC OS X 10.11.
-  if (!base::mac::IsAtLeastOS10_11())
-    return;
-  mojo::MakeStrongBinding(base::MakeUnique<TextDetectionImplMac>(),
-                          std::move(request));
+  if (@available(macOS 10.11, *)) {
+    mojo::MakeStrongBinding(base::MakeUnique<TextDetectionImplMac>(),
+                            std::move(request));
+  }
 }
 
 TextDetectionImplMac::TextDetectionImplMac() {
   NSDictionary* const opts = @{CIDetectorAccuracy : CIDetectorAccuracyHigh};
-  detector_.reset([[CIDetector detectorOfType:CIDetectorTypeText
-                                      context:nil
-                                      options:opts] retain]);
+  detector_.reset(
+      [[CIDetector detectorOfType:CIDetectorTypeText context:nil options:opts]
+          retain]);
 }
 
 TextDetectionImplMac::~TextDetectionImplMac() {}
 
-void TextDetectionImplMac::Detect(mojo::ScopedSharedBufferHandle frame_data,
-                                  uint32_t width,
-                                  uint32_t height,
-                                  const DetectCallback& callback) {
+void TextDetectionImplMac::Detect(const SkBitmap& bitmap,
+                                  DetectCallback callback) {
   DCHECK(base::mac::IsAtLeastOS10_11());
   media::ScopedResultCallback<DetectCallback> scoped_callback(
-      base::Bind(&RunCallbackWithResults, callback),
-      base::Bind(&RunCallbackWithNoResults));
+      std::move(callback), base::Bind(&RunCallbackWithNoResults));
 
-  base::scoped_nsobject<CIImage> ci_image =
-      CreateCIImageFromSharedMemory(std::move(frame_data), width, height);
+  base::scoped_nsobject<CIImage> ci_image = CreateCIImageFromSkBitmap(bitmap);
   if (!ci_image)
     return;
 
   NSArray* const features = [detector_ featuresInImage:ci_image];
 
+  const int height = bitmap.height();
   std::vector<mojom::TextDetectionResultPtr> results;
   for (CIRectangleFeature* const f in features) {
     // CIRectangleFeature only has bounding box information.

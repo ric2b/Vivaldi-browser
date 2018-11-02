@@ -35,17 +35,17 @@
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/StyleEngine.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/frame/DeprecatedScheduleStyleRecalcDuringLayout.h"
 #include "core/frame/EventHandlerRegistry.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLHtmlElement.h"
@@ -55,6 +55,7 @@
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutCounter.h"
 #include "core/layout/LayoutDeprecatedFlexibleBox.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutFlowThread.h"
 #include "core/layout/LayoutGrid.h"
@@ -63,7 +64,6 @@
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutMultiColumnSpannerPlaceholder.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/LayoutScrollbarPart.h"
 #include "core/layout/LayoutTableCaption.h"
 #include "core/layout/LayoutTableCell.h"
@@ -71,10 +71,11 @@
 #include "core/layout/LayoutTableRow.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/layout/LayoutView.h"
-#include "core/layout/PaintInvalidationState.h"
 #include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutPartItem.h"
+#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/ng_layout_result.h"
+#include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/page/AutoscrollController.h"
 #include "core/page/Page.h"
 #include "core/paint/ObjectPaintInvalidator.h"
@@ -185,7 +186,7 @@ LayoutObject* LayoutObject::CreateObject(Element* element,
     case EDisplay::kBlock:
     case EDisplay::kFlowRoot:
     case EDisplay::kInlineBlock:
-      if (RuntimeEnabledFeatures::layoutNGEnabled())
+      if (RuntimeEnabledFeatures::LayoutNGEnabled())
         return new LayoutNGBlockFlow(element);
       return new LayoutBlockFlow(element);
     case EDisplay::kListItem:
@@ -254,10 +255,6 @@ bool LayoutObject::IsDescendantOf(const LayoutObject* obj) const {
 
 bool LayoutObject::IsHR() const {
   return isHTMLHRElement(GetNode());
-}
-
-bool LayoutObject::IsLegend() const {
-  return isHTMLLegendElement(GetNode());
 }
 
 void LayoutObject::SetIsInsideFlowThreadIncludingDescendants(
@@ -631,13 +628,18 @@ bool LayoutObject::ScrollRectToVisible(const LayoutRect& rect,
                                        const ScrollAlignment& align_x,
                                        const ScrollAlignment& align_y,
                                        ScrollType scroll_type,
-                                       bool make_visible_in_visual_viewport) {
+                                       bool make_visible_in_visual_viewport,
+                                       ScrollBehavior scroll_behavior) {
   LayoutBox* enclosing_box = this->EnclosingBox();
   if (!enclosing_box)
     return false;
 
-  enclosing_box->ScrollRectToVisible(rect, align_x, align_y, scroll_type,
-                                     make_visible_in_visual_viewport);
+  GetDocument().GetPage()->GetSmoothScrollSequencer()->AbortAnimations();
+  enclosing_box->ScrollRectToVisible(
+      rect, align_x, align_y, scroll_type, make_visible_in_visual_viewport,
+      scroll_behavior, scroll_type == kProgrammaticScroll);
+  GetDocument().GetPage()->GetSmoothScrollSequencer()->RunQueuedAnimations();
+
   return true;
 }
 
@@ -765,7 +767,7 @@ void LayoutObject::MarkContainerChainForLayout(bool schedule_relayout,
   // When we're in layout, we're marking a descendant as needing layout with
   // the intention of visiting it during this layout. We shouldn't be
   // scheduling it to be laid out later. Also, scheduleRelayout() must not be
-  // called while iterating FrameView::m_layoutSubtreeRootList.
+  // called while iterating LocalFrameView::layout_subtree_root_list_.
   schedule_relayout &= !GetFrameView()->IsInPerformLayout();
 
   LayoutObject* object = Container();
@@ -1132,90 +1134,11 @@ LayoutRect LayoutObject::InvalidatePaintRectangle(
       dirty_rect, display_item_client);
 }
 
-void LayoutObject::DeprecatedInvalidateTree(
-    const PaintInvalidationState& paint_invalidation_state) {
-  DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-  EnsureIsReadyForPaintInvalidation();
-
-  // If we didn't need paint invalidation then our children don't need as well.
-  // Skip walking down the tree as everything should be fine below us.
-  if (!ShouldCheckForPaintInvalidationWithPaintInvalidationState(
-          paint_invalidation_state))
-    return;
-
-  PaintInvalidationState new_paint_invalidation_state(paint_invalidation_state,
-                                                      *this);
-
-  if (MayNeedPaintInvalidationSubtree()) {
-    new_paint_invalidation_state
-        .SetForceSubtreeInvalidationCheckingWithinContainer();
-  }
-
-  PaintInvalidationReason reason =
-      DeprecatedInvalidatePaint(new_paint_invalidation_state);
-  new_paint_invalidation_state.UpdateForChildren(reason);
-  DeprecatedInvalidatePaintOfSubtrees(new_paint_invalidation_state);
-
-  ClearPaintInvalidationFlags();
-}
-
-DISABLE_CFI_PERF
-void LayoutObject::DeprecatedInvalidatePaintOfSubtrees(
-    const PaintInvalidationState& child_paint_invalidation_state) {
-  DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-
-  for (auto* child = SlowFirstChild(); child; child = child->NextSibling())
-    child->DeprecatedInvalidateTree(child_paint_invalidation_state);
-}
-
 LayoutRect LayoutObject::SelectionRectInViewCoordinates() const {
   LayoutRect selection_rect = LocalSelectionRect();
   if (!selection_rect.IsEmpty())
     MapToVisualRectInAncestorSpace(View(), selection_rect);
   return selection_rect;
-}
-
-PaintInvalidationReason LayoutObject::DeprecatedInvalidatePaint(
-    const PaintInvalidationState& paint_invalidation_state) {
-  DCHECK_EQ(&paint_invalidation_state.CurrentObject(), this);
-
-  if (StyleRef().HasOutline()) {
-    PaintLayer& layer = paint_invalidation_state.PaintingLayer();
-    if (&layer.GetLayoutObject() != this)
-      layer.SetNeedsPaintPhaseDescendantOutlines();
-  }
-
-  LayoutView* v = View();
-  if (v->GetDocument().Printing())
-    return PaintInvalidationReason::kNone;  // Don't invalidate paints if we're
-                                            // printing.
-
-  PaintInvalidatorContextAdapter context(paint_invalidation_state);
-
-  const LayoutBoxModelObject& paint_invalidation_container =
-      paint_invalidation_state.PaintInvalidationContainer();
-  DCHECK(paint_invalidation_container == ContainerForPaintInvalidation());
-
-  ObjectPaintInvalidator paint_invalidator(*this);
-  context.old_visual_rect = VisualRect();
-  context.old_location = paint_invalidator.LocationInBacking();
-  LayoutRect new_visual_rect =
-      paint_invalidation_state.ComputeVisualRectInBacking();
-  context.new_location = paint_invalidation_state.ComputeLocationInBacking(
-      new_visual_rect.Location());
-
-  SetVisualRect(new_visual_rect);
-  paint_invalidator.SetLocationInBacking(context.new_location);
-
-  if (!ShouldCheckForPaintInvalidation() &&
-      paint_invalidation_state
-          .ForcedSubtreeInvalidationRectUpdateWithinContainerOnly()) {
-    // We are done updating the visual rect. No other paint invalidation work
-    // to do for this object.
-    return PaintInvalidationReason::kNone;
-  }
-
-  return InvalidatePaint(context);
 }
 
 DISABLE_CFI_PERF
@@ -1469,7 +1392,7 @@ StyleDifference LayoutObject::AdjustStyleDifference(
       diff.SetNeedsFullLayout();
   }
 
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     // If transform changed, and the layer does not paint into its own separate
     // backing, then we need to invalidate paints.
     if (diff.TransformChanged()) {
@@ -1743,17 +1666,16 @@ void LayoutObject::SetStyle(PassRefPtr<ComputedStyle> style) {
 
   // Text nodes share style with their parents but the paint properties don't
   // apply to them, hence the !isText() check.
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() && !IsText() &&
-      (diff.TransformChanged() || diff.OpacityChanged() ||
-       diff.ZIndexChanged() || diff.FilterChanged() ||
-       diff.BackdropFilterChanged() || diff.CssClipChanged())) {
+  if (!IsText() && (diff.TransformChanged() || diff.OpacityChanged() ||
+                    diff.ZIndexChanged() || diff.FilterChanged() ||
+                    diff.BackdropFilterChanged() || diff.CssClipChanged())) {
     SetNeedsPaintPropertyUpdate();
 
     // We don't need to invalidate paint of objects on SPv2 when only paint
     // property or paint order change. Mark the painting layer needing repaint
     // for changed paint property or paint order. Raster invalidation will be
     // issued if needed during paint.
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
         !ShouldDoFullPaintInvalidation())
       ObjectPaintInvalidator(*this).SlowSetPaintingLayerNeedsRepaint();
   }
@@ -1938,7 +1860,7 @@ void LayoutObject::StyleDidChange(StyleDifference diff,
   if (old_style && old_style->StyleType() == kPseudoIdNone)
     ApplyPseudoStyleChanges(*old_style);
 
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled() && old_style &&
+  if (old_style &&
       old_style->UsedTransformStyle3D() != StyleRef().UsedTransformStyle3D()) {
     // Change of transform-style may affect descendant transform property nodes.
     SetSubtreeNeedsPaintPropertyUpdate();
@@ -2594,11 +2516,12 @@ inline LayoutObject* LayoutObject::ParentCrossingFrames() const {
 
 bool LayoutObject::IsSelectionBorder() const {
   SelectionState st = GetSelectionState();
-  return st == SelectionStart || st == SelectionEnd || st == SelectionBoth;
+  return st == SelectionState::kStart || st == SelectionState::kEnd ||
+         st == SelectionState::kStartAndEnd;
 }
 
 inline void LayoutObject::ClearLayoutRootIfNeeded() const {
-  if (FrameView* view = GetFrameView()) {
+  if (LocalFrameView* view = GetFrameView()) {
     if (!DocumentBeingDestroyed())
       view->ClearLayoutSubtreeRoot(*this);
   }
@@ -2752,7 +2675,7 @@ static bool FindReferencingScrollAnchors(
     }
     layer = layer->Parent();
   }
-  if (FrameView* view = layout_object->GetFrameView()) {
+  if (LocalFrameView* view = layout_object->GetFrameView()) {
     ScrollAnchor* anchor = view->GetScrollAnchor();
     DCHECK(anchor);
     if (anchor->RefersTo(layout_object)) {
@@ -2794,7 +2717,7 @@ void LayoutObject::WillBeRemovedFromTree() {
   if (Parent()->IsSVG())
     Parent()->SetNeedsBoundariesUpdate();
 
-  if (RuntimeEnabledFeatures::scrollAnchoringEnabled() &&
+  if (RuntimeEnabledFeatures::ScrollAnchoringEnabled() &&
       bitfields_.IsScrollAnchorObject()) {
     // Clear the bit first so that anchor.clear() doesn't recurse into
     // findReferencingScrollAnchors.
@@ -2996,13 +2919,13 @@ bool LayoutObject::NodeAtPoint(HitTestResult&,
 
 void LayoutObject::ScheduleRelayout() {
   if (IsLayoutView()) {
-    FrameView* view = ToLayoutView(this)->GetFrameView();
+    LocalFrameView* view = ToLayoutView(this)->GetFrameView();
     if (view)
       view->ScheduleRelayout();
   } else {
     if (IsRooted()) {
       if (LayoutView* layout_view = View()) {
-        if (FrameView* frame_view = layout_view->GetFrameView())
+        if (LocalFrameView* frame_view = layout_view->GetFrameView())
           frame_view->ScheduleRelayoutOfSubtree(this);
       }
     }
@@ -3153,7 +3076,7 @@ void LayoutObject::AddAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   if (Style()->Visibility() != EVisibility::kVisible || !IsBox())
     return;
 
-  if (Style()->GetDraggableRegionMode() == kDraggableRegionNone)
+  if (Style()->DraggableRegionMode() == EDraggableRegionMode::kNone)
     return;
 
   LayoutBox* box = ToLayoutBox(this);
@@ -3161,7 +3084,8 @@ void LayoutObject::AddAnnotatedRegions(Vector<AnnotatedRegionValue>& regions) {
   FloatRect abs_bounds = LocalToAbsoluteQuad(local_bounds).BoundingBox();
 
   AnnotatedRegionValue region;
-  region.draggable = Style()->GetDraggableRegionMode() == kDraggableRegionDrag;
+  region.draggable =
+      Style()->DraggableRegionMode() == EDraggableRegionMode::kDrag;
   region.bounds = LayoutRect(abs_bounds);
   regions.push_back(region);
 }
@@ -3446,12 +3370,6 @@ void LayoutObject::SetShouldInvalidateSelection() {
   GetFrameView()->ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 }
 
-bool LayoutObject::ShouldCheckForPaintInvalidationWithPaintInvalidationState(
-    const PaintInvalidationState& paint_invalidation_state) const {
-  return paint_invalidation_state.HasForcedSubtreeInvalidationFlags() ||
-         ShouldCheckForPaintInvalidation();
-}
-
 void LayoutObject::SetShouldDoFullPaintInvalidation(
     PaintInvalidationReason reason) {
   SetNeedsPaintOffsetAndVisualRectUpdate();
@@ -3563,7 +3481,6 @@ void LayoutObject::SetIsBackgroundAttachmentFixedObject(
 }
 
 PropertyTreeState LayoutObject::ContentsProperties() const {
-  DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
   return rare_paint_data_->ContentsProperties();
 }
 
@@ -3611,7 +3528,7 @@ void LayoutObject::InvalidatePaintForSelection() {
        child = child->NextSibling()) {
     if (!child->CanBeSelectionLeaf())
       continue;
-    if (child->GetSelectionState() == SelectionNone)
+    if (child->GetSelectionState() == SelectionState::kNone)
       continue;
     child->SetShouldInvalidateSelection();
   }

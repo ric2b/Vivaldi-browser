@@ -27,24 +27,22 @@
 #include "core/css/cssom/InlineStylePropertyMap.h"
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/Attr.h"
-#include "core/dom/ClassList.h"
-#include "core/dom/CompositorProxiedPropertySet.h"
+#include "core/dom/DOMTokenList.h"
 #include "core/dom/DatasetDOMStringMap.h"
-#include "core/dom/ElementIntersectionObserverData.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/NamedNodeMap.h"
 #include "core/dom/NodeRareData.h"
 #include "core/dom/PseudoElement.h"
 #include "core/dom/PseudoElementData.h"
-#include "core/dom/custom/CustomElementDefinition.h"
-#include "core/dom/custom/V0CustomElementDefinition.h"
-#include "core/dom/shadow/ElementShadow.h"
+#include "core/html/custom/CustomElementDefinition.h"
+#include "core/html/custom/V0CustomElementDefinition.h"
+#include "core/intersection_observer/ElementIntersectionObserverData.h"
 #include "platform/bindings/ScriptWrappableVisitor.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashSet.h"
 
 namespace blink {
 
-class CompositorProxiedPropertySet;
 class ResizeObservation;
 class ResizeObserver;
 
@@ -96,28 +94,16 @@ class ElementRareData : public NodeRareData {
   }
   void ClearComputedStyle() { computed_style_ = nullptr; }
 
-  ClassList* GetClassList() const { return class_list_.Get(); }
-  void SetClassList(ClassList* class_list) {
+  DOMTokenList* GetClassList() const { return class_list_.Get(); }
+  void SetClassList(DOMTokenList* class_list) {
     class_list_ = class_list;
     ScriptWrappableVisitor::WriteBarrier(this, class_list_);
-  }
-  void ClearClassListValueForQuirksMode() {
-    if (!class_list_)
-      return;
-    class_list_->ClearValueForQuirksMode();
   }
 
   DatasetDOMStringMap* Dataset() const { return dataset_.Get(); }
   void SetDataset(DatasetDOMStringMap* dataset) {
     dataset_ = dataset;
     ScriptWrappableVisitor::WriteBarrier(this, dataset_);
-  }
-
-  LayoutSize MinimumSizeForResizing() const {
-    return minimum_size_for_resizing_;
-  }
-  void SetMinimumSizeForResizing(LayoutSize size) {
-    minimum_size_for_resizing_ = size;
   }
 
   ScrollOffset SavedLayerScrollOffset() const {
@@ -136,12 +122,6 @@ class ElementRareData : public NodeRareData {
 
   bool HasPseudoElements() const;
   void ClearPseudoElements();
-
-  void IncrementCompositorProxiedProperties(uint32_t properties);
-  void DecrementCompositorProxiedProperties(uint32_t properties);
-  CompositorProxiedPropertySet* ProxiedPropertyCounts() const {
-    return proxied_properties_.get();
-  }
 
   void V0SetCustomElementDefinition(V0CustomElementDefinition* definition) {
     v0_custom_element_definition_ = definition;
@@ -200,21 +180,16 @@ class ElementRareData : public NodeRareData {
   DECLARE_TRACE_WRAPPERS_AFTER_DISPATCH();
 
  private:
-  CompositorProxiedPropertySet& EnsureCompositorProxiedPropertySet();
-  void ClearCompositorProxiedPropertySet() { proxied_properties_ = nullptr; }
-
-  LayoutSize minimum_size_for_resizing_;
   ScrollOffset saved_layer_scroll_offset_;
   AtomicString nonce_;
 
   Member<DatasetDOMStringMap> dataset_;
   Member<ElementShadow> shadow_;
-  Member<ClassList> class_list_;
+  Member<DOMTokenList> class_list_;
   Member<NamedNodeMap> attribute_map_;
   Member<AttrNodeList> attr_node_list_;
   Member<InlineCSSStyleDeclaration> cssom_wrapper_;
   Member<InlineStylePropertyMap> cssom_map_wrapper_;
-  std::unique_ptr<CompositorProxiedPropertySet> proxied_properties_;
 
   Member<ElementAnimations> element_animations_;
   Member<ElementIntersectionObserverData> intersection_observer_data_;
@@ -238,9 +213,7 @@ inline LayoutSize DefaultMinimumSizeForResizing() {
 }
 
 inline ElementRareData::ElementRareData(NodeRenderingData* node_layout_data)
-    : NodeRareData(node_layout_data),
-      minimum_size_for_resizing_(DefaultMinimumSizeForResizing()),
-      class_list_(nullptr) {
+    : NodeRareData(node_layout_data), class_list_(nullptr) {
   is_element_rare_data_ = true;
 }
 
@@ -271,25 +244,6 @@ inline PseudoElement* ElementRareData::GetPseudoElement(
   if (!pseudo_element_data_)
     return nullptr;
   return pseudo_element_data_->GetPseudoElement(pseudo_id);
-}
-
-inline void ElementRareData::IncrementCompositorProxiedProperties(
-    uint32_t properties) {
-  EnsureCompositorProxiedPropertySet().Increment(properties);
-}
-
-inline void ElementRareData::DecrementCompositorProxiedProperties(
-    uint32_t properties) {
-  proxied_properties_->Decrement(properties);
-  if (proxied_properties_->IsEmpty())
-    ClearCompositorProxiedPropertySet();
-}
-
-inline CompositorProxiedPropertySet&
-ElementRareData::EnsureCompositorProxiedPropertySet() {
-  if (!proxied_properties_)
-    proxied_properties_ = CompositorProxiedPropertySet::Create();
-  return *proxied_properties_;
 }
 
 }  // namespace blink

@@ -25,8 +25,8 @@
 
 #include "core/layout/LayoutFullScreen.h"
 
-#include "core/dom/Fullscreen.h"
 #include "core/frame/VisualViewport.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/layout/LayoutBlockFlow.h"
 #include "core/page/Page.h"
 
@@ -108,7 +108,7 @@ void LayoutFullScreen::UpdateStyle(LayoutObject* parent) {
   // Alignment (align-items) value can't be used to resolve its children Self
   // Alignment 'auto' values.
   fullscreen_style->SetAlignItemsPosition(kItemPositionCenter);
-  fullscreen_style->SetFlexDirection(kFlowColumn);
+  fullscreen_style->SetFlexDirection(EFlexDirection::kColumn);
 
   fullscreen_style->SetPosition(EPosition::kFixed);
   fullscreen_style->SetLeft(Length(0, blink::kFixed));

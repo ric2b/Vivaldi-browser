@@ -15,8 +15,6 @@ from telemetry import story
 @benchmark.Owner(emails=['vovoy@chromium.org'],
                  component='OS>Performance')
 @benchmark.Enabled('has tabs')
-@benchmark.Disabled('mac')  # http://crbug.com/612774
-@benchmark.Disabled('android')  # http://crbug.com/460084
 class TabSwitchingTypical25(perf_benchmark.PerfBenchmark):
   """This test records the MPArch.RWH_TabSwitchPaintDuration histogram.
 
@@ -48,3 +46,10 @@ class TabSwitchingTypical25(perf_benchmark.PerfBenchmark):
   @classmethod
   def ShouldTearDownStateAfterEachStoryRun(cls):
     return False
+
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        self.PermanentlyDisableBenchmark([story.expectations.ALL_MOBILE],
+                                         'Desktop benchmark.')
+    return StoryExpectations()

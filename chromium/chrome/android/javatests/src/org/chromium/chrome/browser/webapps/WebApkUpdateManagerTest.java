@@ -86,14 +86,15 @@ public class WebApkUpdateManagerTest {
         }
 
         @Override
-        public void onGotManifestData(WebApkInfo fetchedInfo, String bestIconUrl) {
-            super.onGotManifestData(fetchedInfo, bestIconUrl);
+        public void onGotManifestData(WebApkInfo fetchedInfo, String primaryIconUrl,
+                String badgeIconUrl) {
+            super.onGotManifestData(fetchedInfo, primaryIconUrl, badgeIconUrl);
             mWaiter.notifyCalled();
         }
 
         @Override
-        protected void scheduleUpdate(WebApkInfo fetchedInfo, String bestIconUrl,
-                boolean isManifestStale) {
+        protected void buildProtoAndScheduleUpdate(final WebApkInfo info, String primaryIconUrl,
+                String badgeIconUrl, boolean isManifestStale) {
             mNeedsUpdate = true;
         }
 
@@ -163,7 +164,7 @@ public class WebApkUpdateManagerTest {
             @Override
             public void run() {
                 WebApkInfo info = WebApkInfo.create(WEBAPK_ID, "", false /* forceNavigation */,
-                        creationData.scope, null, creationData.name, creationData.shortName,
+                        creationData.scope, null, null, creationData.name, creationData.shortName,
                         creationData.displayMode, creationData.orientation, 0,
                         creationData.themeColor, creationData.backgroundColor, "",
                         WebApkVersion.CURRENT_SHELL_APK_VERSION, creationData.manifestUrl,

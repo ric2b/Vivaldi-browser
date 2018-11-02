@@ -318,7 +318,7 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
 
   void set_webui_type(int type) { factory_.set_webui_type(type); }
 
-  void NavigateActiveAndCommit(const GURL& url) {
+  void NavigateActiveAndCommit(const GURL& url, bool dont_swap_out = false) {
     // Note: we navigate the active RenderFrameHost because previous navigations
     // won't have committed yet, so NavigateAndCommit does the wrong thing
     // for us.
@@ -357,6 +357,8 @@ class RenderFrameHostManagerTest : public RenderViewHostImplTestHarness {
     // Simulate the swap out ACK coming from the pending renderer.  This should
     // either shut down the old RFH or leave it in a swapped out state.
     if (old_rfh != active_rfh) {
+      if (dont_swap_out)
+        return;
       old_rfh->OnSwappedOut();
       EXPECT_TRUE(rfh_observer.deleted());
     }
@@ -574,14 +576,12 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // Navigate our first tab to a chrome url and then to the destination.
   NavigateActiveAndCommit(kChromeURL);
   TestRenderFrameHost* ntp_rfh = contents()->GetMainFrame();
-  TestRenderViewHost* ntp_rvh = ntp_rfh->GetRenderViewHost();
 
   // Send an update favicon message and make sure it works.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(ntp_rfh->GetRenderViewHost()->GetWidget()->OnMessageReceived(
-        ViewHostMsg_UpdateFaviconURL(
-            ntp_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(ntp_rfh->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(ntp_rfh->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
   // Create one more frame in the same SiteInstance where ntp_rfh
@@ -589,8 +589,8 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // site.
   ntp_rfh->GetSiteInstance()->IncrementActiveFrameCount();
 
-  // Navigate to a cross-site URL.
-  NavigateActiveAndCommit(kDestUrl);
+  // Navigate to a cross-site URL (don't swap out to keep |ntp_rfh| alive).
+  NavigateActiveAndCommit(kDestUrl, true /* dont_swap_out */);
   TestRenderFrameHost* dest_rfh = contents()->GetMainFrame();
   ASSERT_TRUE(dest_rfh);
   EXPECT_NE(ntp_rfh, dest_rfh);
@@ -598,9 +598,8 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // The new RVH should be able to update its favicon.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(dest_rfh->GetRenderViewHost()->GetWidget()->OnMessageReceived(
-        ViewHostMsg_UpdateFaviconURL(
-            dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(dest_rfh->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(dest_rfh->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
 
@@ -608,17 +607,16 @@ TEST_F(RenderFrameHostManagerTest, FilterMessagesWhileSwappedOut) {
   // filtered out and not take effect.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(
-        ntp_rvh->GetWidget()->OnMessageReceived(ViewHostMsg_UpdateFaviconURL(
-            dest_rfh->GetRenderViewHost()->GetRoutingID(), icons)));
+    EXPECT_TRUE(ntp_rfh->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(ntp_rfh->GetRoutingID(), icons)));
     EXPECT_FALSE(observer.favicon_received());
   }
 }
 
-// Test that the ViewHostMsg_UpdateFaviconURL IPC message is ignored if the
+// Test that the FrameHostMsg_UpdateFaviconURL IPC message is ignored if the
 // renderer is in the STATE_PENDING_SWAP_OUT_STATE. The favicon code assumes
-// that it only gets ViewHostMsg_UpdateFaviconURL messages for the most recently
-// committed navigation for each WebContentsImpl.
+// that it only gets FrameHostMsg_UpdateFaviconURL messages for the most
+// recently committed navigation for each WebContentsImpl.
 TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   const GURL kChromeURL("chrome://foo");
   const GURL kDestUrl("http://www.google.com/");
@@ -631,9 +629,8 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // Send an update favicon message and make sure it works.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh1->GetRenderViewHost()->GetWidget()->OnMessageReceived(
-        ViewHostMsg_UpdateFaviconURL(rfh1->GetRenderViewHost()->GetRoutingID(),
-                                     icons)));
+    EXPECT_TRUE(rfh1->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(rfh1->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
 
@@ -655,9 +652,8 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // The new RVH should be able to update its favicons.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh2->GetRenderViewHost()->GetWidget()->OnMessageReceived(
-        ViewHostMsg_UpdateFaviconURL(rfh2->GetRenderViewHost()->GetRoutingID(),
-                                     icons)));
+    EXPECT_TRUE(rfh2->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(rfh2->GetRoutingID(), icons)));
     EXPECT_TRUE(observer.favicon_received());
   }
 
@@ -665,9 +661,8 @@ TEST_F(RenderFrameHostManagerTest, UpdateFaviconURLWhilePendingSwapOut) {
   // be ignored.
   {
     PluginFaviconMessageObserver observer(contents());
-    EXPECT_TRUE(rfh1->GetRenderViewHost()->GetWidget()->OnMessageReceived(
-        ViewHostMsg_UpdateFaviconURL(rfh1->GetRenderViewHost()->GetRoutingID(),
-                                     icons)));
+    EXPECT_TRUE(rfh1->OnMessageReceived(
+        FrameHostMsg_UpdateFaviconURL(rfh1->GetRoutingID(), icons)));
     EXPECT_FALSE(observer.favicon_received());
   }
 }
@@ -1270,8 +1265,9 @@ TEST_F(RenderFrameHostManagerTest, NavigateAfterMissingSwapOutACK) {
 
   // The back navigation commits.
   const NavigationEntry* entry1 = contents()->GetController().GetPendingEntry();
-  contents()->GetPendingMainFrame()->SendNavigate(
-      entry1->GetUniqueID(), false, entry1->GetURL());
+  contents()->GetPendingMainFrame()->SendNavigateWithTransition(
+      entry1->GetUniqueID(), false, entry1->GetURL(),
+      entry1->GetTransitionType());
   EXPECT_TRUE(rfh2->IsWaitingForUnloadACK());
   EXPECT_FALSE(rfh2->is_active());
 
@@ -1279,8 +1275,9 @@ TEST_F(RenderFrameHostManagerTest, NavigateAfterMissingSwapOutACK) {
   contents()->GetController().GoForward();
   contents()->GetMainFrame()->PrepareForCommit();
   const NavigationEntry* entry2 = contents()->GetController().GetPendingEntry();
-  contents()->GetPendingMainFrame()->SendNavigate(
-      entry2->GetUniqueID(), false, entry2->GetURL());
+  contents()->GetPendingMainFrame()->SendNavigateWithTransition(
+      entry2->GetUniqueID(), false, entry2->GetURL(),
+      entry2->GetTransitionType());
   EXPECT_TRUE(main_test_rfh()->is_active());
 }
 
@@ -1445,8 +1442,9 @@ TEST_F(RenderFrameHostManagerTest, DisownOpenerDuringNavigation) {
 
   // The back navigation commits.
   const NavigationEntry* entry1 = contents()->GetController().GetPendingEntry();
-  contents()->GetPendingMainFrame()->SendNavigate(
-      entry1->GetUniqueID(), false, entry1->GetURL());
+  contents()->GetPendingMainFrame()->SendNavigateWithTransition(
+      entry1->GetUniqueID(), false, entry1->GetURL(),
+      entry1->GetTransitionType());
 
   // Ensure the opener is still cleared.
   EXPECT_FALSE(contents()->HasOpener());
@@ -1479,8 +1477,9 @@ TEST_F(RenderFrameHostManagerTest, DisownOpenerAfterNavigation) {
   contents()->GetController().GoBack();
   contents()->GetMainFrame()->PrepareForCommit();
   const NavigationEntry* entry1 = contents()->GetController().GetPendingEntry();
-  contents()->GetPendingMainFrame()->SendNavigate(
-      entry1->GetUniqueID(), false, entry1->GetURL());
+  contents()->GetPendingMainFrame()->SendNavigateWithTransition(
+      entry1->GetUniqueID(), false, entry1->GetURL(),
+      entry1->GetTransitionType());
 
   // Disown the opener from rfh2.
   rfh2->DidChangeOpener(MSG_ROUTING_NONE);

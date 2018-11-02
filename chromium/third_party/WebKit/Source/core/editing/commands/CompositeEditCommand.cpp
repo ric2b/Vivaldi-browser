@@ -549,7 +549,7 @@ void CompositeEditCommand::ReplaceTextInNode(Text* node,
 
 Position CompositeEditCommand::ReplaceSelectedTextInNode(const String& text) {
   Position start = EndingSelection().Start();
-  Position end = EndingSelection().end();
+  Position end = EndingSelection().End();
   if (start.ComputeContainerNode() != end.ComputeContainerNode() ||
       !start.ComputeContainerNode()->IsTextNode() ||
       IsTabHTMLSpanElementTextNode(start.ComputeContainerNode()))
@@ -780,7 +780,7 @@ void CompositeEditCommand::RebalanceWhitespace() {
 
   RebalanceWhitespaceAt(selection.Start());
   if (selection.IsRange())
-    RebalanceWhitespaceAt(selection.end());
+    RebalanceWhitespaceAt(selection.End());
 }
 
 void CompositeEditCommand::DeleteInsignificantText(Text* text_node,
@@ -798,8 +798,7 @@ void CompositeEditCommand::DeleteInsignificantText(Text* text_node,
   Vector<InlineTextBox*> sorted_text_boxes;
   size_t sorted_text_boxes_position = 0;
 
-  for (InlineTextBox* text_box = text_layout_object->FirstTextBox(); text_box;
-       text_box = text_box->NextTextBox())
+  for (InlineTextBox* text_box : InlineTextBoxesOf(*text_layout_object))
     sorted_text_boxes.push_back(text_box);
 
   // If there is mixed directionality text, the boxes can be out of order,
@@ -1053,10 +1052,11 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   if (visible_paragraph_end.IsNull())
     return nullptr;
 
-  HTMLElement* new_block =
+  HTMLElement* const new_block =
       InsertNewDefaultParagraphElementAt(upstream_start, editing_state);
   if (editing_state->IsAborted())
     return nullptr;
+  DCHECK(new_block);
 
   bool end_was_br =
       isHTMLBRElement(*visible_paragraph_end.DeepEquivalent().AnchorNode());
@@ -1068,7 +1068,7 @@ HTMLElement* CompositeEditCommand::MoveParagraphContentsToNewBlockIfNecessary(
   visible_paragraph_start = StartOfParagraph(visible_pos);
   visible_paragraph_end = EndOfParagraph(visible_pos);
   MoveParagraphs(visible_paragraph_start, visible_paragraph_end,
-                 VisiblePosition::FirstPositionInNode(new_block),
+                 VisiblePosition::FirstPositionInNode(*new_block),
                  editing_state);
   if (editing_state->IsAborted())
     return nullptr;
@@ -1505,7 +1505,7 @@ void CompositeEditCommand::MoveParagraphs(
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   destination_index = TextIterator::RangeLength(
-      Position::FirstPositionInNode(GetDocument().documentElement()),
+      Position::FirstPositionInNode(*GetDocument().documentElement()),
       destination.ToParentAnchoredPosition(),
       TextIteratorBehavior::AllVisiblePositionsRangeLengthBehavior());
 
@@ -1679,7 +1679,7 @@ bool CompositeEditCommand::BreakOutOfEmptyListItem(
     return false;
 
   SetEndingSelection(SelectionInDOMTree::Builder()
-                         .Collapse(Position::FirstPositionInNode(new_block))
+                         .Collapse(Position::FirstPositionInNode(*new_block))
                          .SetIsDirectional(EndingSelection().IsDirectional())
                          .Build());
 
@@ -1730,7 +1730,7 @@ bool CompositeEditCommand::BreakOutOfEmptyMailBlockquotedParagraph(
 
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-  VisiblePosition at_br = VisiblePosition::BeforeNode(br);
+  VisiblePosition at_br = VisiblePosition::BeforeNode(*br);
   // If the br we inserted collapsed, for example:
   //   foo<br><blockquote>...</blockquote>
   // insert a second one.
@@ -1799,9 +1799,9 @@ Position CompositeEditCommand::PositionAvoidingSpecialElementBoundary(
   // wrong paragraph.
   if (enclosing_anchor && !IsEnclosingBlock(enclosing_anchor)) {
     VisiblePosition first_in_anchor =
-        VisiblePosition::FirstPositionInNode(enclosing_anchor);
+        VisiblePosition::FirstPositionInNode(*enclosing_anchor);
     VisiblePosition last_in_anchor =
-        VisiblePosition::LastPositionInNode(enclosing_anchor);
+        VisiblePosition::LastPositionInNode(*enclosing_anchor);
     // If visually just after the anchor, insert *inside* the anchor unless it's
     // the last VisiblePosition in the document, to match NSTextView.
     if (visible_pos.DeepEquivalent() == last_in_anchor.DeepEquivalent()) {
@@ -1883,7 +1883,7 @@ Node* CompositeEditCommand::SplitTreeToNode(Node* start,
 
     // Do not split a node when doing so introduces an empty node.
     VisiblePosition position_in_parent =
-        VisiblePosition::FirstPositionInNode(parent_element);
+        VisiblePosition::FirstPositionInNode(*parent_element);
     VisiblePosition position_in_node =
         CreateVisiblePosition(FirstPositionInOrBeforeNode(node));
     if (position_in_parent.DeepEquivalent() !=

@@ -32,11 +32,15 @@
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity.h"
 #import "ios/public/provider/chrome/browser/signin/fake_chrome_identity_service.h"
 #import "ios/testing/wait_util.h"
-#import "ios/web/public/test/http_server.h"
-#import "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "net/base/mac/url_conversions.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -455,9 +459,6 @@ void AssertNumberOfEntitiesWithName(int entity_count,
                   }];
   BOOL success = [condition waitWithTimeout:kSyncOperationTimeout];
   DCHECK(success || blockSafeError);
-  if (blockSafeError) {
-    [blockSafeError autorelease];
-  }
   GREYAssertTrue(success, [blockSafeError localizedDescription]);
 }
 
@@ -580,9 +581,6 @@ void AssertNumberOfEntitiesWithName(int entity_count,
                   }];
   BOOL success = [condition waitWithTimeout:kSyncOperationTimeout];
   DCHECK(success || blockSafeError);
-  if (blockSafeError) {
-    [blockSafeError autorelease];
-  }
   GREYAssert(success, [blockSafeError localizedDescription]);
 }
 

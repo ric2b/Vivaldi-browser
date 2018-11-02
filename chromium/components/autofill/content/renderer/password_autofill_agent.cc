@@ -268,13 +268,13 @@ bool IsElementEditable(const blink::WebInputElement& element) {
   return element.IsEnabled() && !element.IsReadOnly();
 }
 
-bool DoUsernamesMatch(const base::string16& username1,
-                      const base::string16& username2,
+bool DoUsernamesMatch(const base::string16& potential_suggestion,
+                      const base::string16& current_username,
                       bool exact_match) {
-  if (exact_match)
-    return username1 == username2;
-  return FieldIsSuggestionSubstringStartingOnTokenBoundary(username1, username2,
-                                                           true);
+  if (potential_suggestion == current_username)
+    return true;
+  return !exact_match && IsPrefixOfEmailEndingWithAtSign(current_username,
+                                                         potential_suggestion);
 }
 
 // Returns whether the given |element| is editable.
@@ -373,6 +373,54 @@ void UpdateFieldValueAndPropertiesMaskMap(
   }
 }
 
+// This function attempts to find the matching credentials for the
+// |current_username| by scanning |fill_data|. The result is written in
+// |username| and |password| parameters.
+void FindMatchesByUsername(const PasswordFormFillData& fill_data,
+                           const base::string16& current_username,
+                           bool exact_username_match,
+                           RendererSavePasswordProgressLogger* logger,
+                           base::string16* username,
+                           base::string16* password) {
+  // Look for any suitable matches to current field text.
+  if (DoUsernamesMatch(fill_data.username_field.value, current_username,
+                       exact_username_match)) {
+    *username = fill_data.username_field.value;
+    *password = fill_data.password_field.value;
+    if (logger)
+      logger->LogMessage(Logger::STRING_USERNAMES_MATCH);
+  } else {
+    // Scan additional logins for a match.
+    for (const auto& it : fill_data.additional_logins) {
+      if (DoUsernamesMatch(it.first, current_username, exact_username_match)) {
+        *username = it.first;
+        *password = it.second.password;
+        break;
+      }
+    }
+    if (logger) {
+      logger->LogBoolean(Logger::STRING_MATCH_IN_ADDITIONAL,
+                         !(username->empty() && password->empty()));
+    }
+
+    // Check possible usernames.
+    if (username->empty() && password->empty()) {
+      for (const auto& it : fill_data.other_possible_usernames) {
+        for (size_t i = 0; i < it.second.size(); ++i) {
+          if (DoUsernamesMatch(it.second[i], current_username,
+                               exact_username_match)) {
+            *username = it.second[i];
+            *password = it.first.password;
+            break;
+          }
+        }
+        if (!password->empty())
+          break;
+      }
+    }
+  }
+}
+
 // This function attempts to fill |username_element| and |password_element|
 // with values from |fill_data|. The |password_element| will only have the
 // suggestedValue set, and will be registered for copying that to the real
@@ -404,43 +452,9 @@ bool FillUserNameAndPassword(
   base::string16 username;
   base::string16 password;
 
-  // Look for any suitable matches to current field text.
-  if (DoUsernamesMatch(fill_data.username_field.value, current_username,
-                       exact_username_match)) {
-    username = fill_data.username_field.value;
-    password = fill_data.password_field.value;
-    if (logger)
-      logger->LogMessage(Logger::STRING_USERNAMES_MATCH);
-  } else {
-    // Scan additional logins for a match.
-    for (const auto& it : fill_data.additional_logins) {
-      if (DoUsernamesMatch(it.first, current_username, exact_username_match)) {
-        username = it.first;
-        password = it.second.password;
-        break;
-      }
-    }
-    if (logger) {
-      logger->LogBoolean(Logger::STRING_MATCH_IN_ADDITIONAL,
-                         !(username.empty() && password.empty()));
-    }
+  FindMatchesByUsername(fill_data, current_username, exact_username_match,
+                        logger, &username, &password);
 
-    // Check possible usernames.
-    if (username.empty() && password.empty()) {
-      for (const auto& it : fill_data.other_possible_usernames) {
-        for (size_t i = 0; i < it.second.size(); ++i) {
-          if (DoUsernamesMatch(
-                  it.second[i], current_username, exact_username_match)) {
-            username = it.second[i];
-            password = it.first.password;
-            break;
-          }
-        }
-        if (!username.empty() && !password.empty())
-          break;
-      }
-    }
-  }
   if (password.empty())
     return false;
 
@@ -462,10 +476,6 @@ bool FillUserNameAndPassword(
       form_util::PreviewSuggestion(username, current_username,
                                    username_element);
     }
-  } else if (current_username != username) {
-    // If the username can't be filled and it doesn't match a saved password
-    // as is, don't autofill a password.
-    return false;
   }
 
   // Wait to fill in the password until a user gesture occurs. This is to make
@@ -550,12 +560,14 @@ bool FillFormOnPasswordReceived(
         blink::WebString::FromUTF16(fill_data.username_field.value));
   }
 
-  // Fill if we have an exact match for the username. Note that this sets
-  // username to autofilled.
+  bool exact_username_match =
+      username_element.IsNull() || IsElementEditable(username_element);
+  // Use the exact match for the editable username fields and allow prefix
+  // match for read-only username fields.
   return FillUserNameAndPassword(
-      &username_element, &password_element, fill_data,
-      true /* exact_username_match */, false /* set_selection */,
-      field_value_and_properties_map, registration_callback, logger);
+      &username_element, &password_element, fill_data, exact_username_match,
+      false /* set_selection */, field_value_and_properties_map,
+      registration_callback, logger);
 }
 
 // Annotate |forms| with form and field signatures as HTML attributes.
@@ -612,7 +624,7 @@ bool HasPasswordField(const blink::WebLocalFrame& frame) {
 // preceding the |password_element| either in a form, if it belongs to one, or
 // in the |frame|.
 blink::WebInputElement FindUsernameElementPrecedingPasswordElement(
-    blink::WebFrame* frame,
+    blink::WebLocalFrame* frame,
     const blink::WebInputElement& password_element) {
   DCHECK(!password_element.IsNull());
 
@@ -688,7 +700,6 @@ PasswordAutofillAgent::~PasswordAutofillAgent() {
 }
 
 void PasswordAutofillAgent::BindRequest(
-    const service_manager::BindSourceInfo& source_info,
     mojom::PasswordAutofillAgentRequest request) {
   binding_.Bind(std::move(request));
 }
@@ -763,7 +774,7 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
                                          &field_value_and_properties_map_);
   }
 
-  blink::WebFrame* const element_frame = element.GetDocument().GetFrame();
+  blink::WebLocalFrame* const element_frame = element.GetDocument().GetFrame();
   // The element's frame might have been detached in the meantime (see
   // http://crbug.com/585363, comments 5 and 6), in which case frame() will
   // return null. This was hardly caused by form submission (unless the user
@@ -798,6 +809,9 @@ void PasswordAutofillAgent::UpdateStateForTextChange(
       mutable_element.SetAutofilled(false);
     }
   }
+
+  if (element.IsPasswordField())
+    GetPasswordManagerDriver()->UserModifiedPasswordField();
 }
 
 bool PasswordAutofillAgent::FillSuggestion(
@@ -986,7 +1000,8 @@ bool PasswordAutofillAgent::IsUsernameOrPasswordField(
   // to be the username field.
   std::unique_ptr<PasswordForm> password_form;
   if (element.Form().IsNull()) {
-    blink::WebFrame* const element_frame = element.GetDocument().GetFrame();
+    blink::WebLocalFrame* const element_frame =
+        element.GetDocument().GetFrame();
     if (!element_frame)
       return false;
 
@@ -1105,7 +1120,7 @@ void PasswordAutofillAgent::OnSameDocumentNavigationCompleted(
 
   // Prompt to save only if the form is now gone, either invisible or
   // removed from the DOM.
-  blink::WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   const auto& password_form = provisionally_saved_form_.password_form();
   // TODO(crbug.com/720347): This method could be called often and checking form
   // visibility could be expesive. Add performance metrics for this.
@@ -1187,6 +1202,11 @@ void PasswordAutofillAgent::SendPasswordForms(bool only_visible) {
 
   std::vector<PasswordForm> password_forms;
   for (const blink::WebFormElement& form : forms) {
+    if (IsGaiaReauthenticationForm(form)) {
+      // Bail if this is a GAIA passwords site reauthentication form, so that
+      // page will be ignored.
+      return;
+    }
     if (only_visible) {
       bool is_form_visible = form_util::AreFormContentsVisible(form);
       if (logger) {

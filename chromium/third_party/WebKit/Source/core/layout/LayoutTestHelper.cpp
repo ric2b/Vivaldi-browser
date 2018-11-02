@@ -8,8 +8,8 @@
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "core/css/FontFaceDescriptors.h"
 #include "core/css/FontFaceSet.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/html/HTMLIFrameElement.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/scroll/ScrollbarTheme.h"
 #include "platform/testing/UnitTestHelpers.h"
@@ -17,7 +17,6 @@
 namespace blink {
 
 LocalFrame* SingleChildLocalFrameClient::CreateFrame(
-    const FrameLoadRequest&,
     const AtomicString& name,
     HTMLFrameOwnerElement* owner_element) {
   DCHECK(!child_) << "This test helper only supports one child frame.";
@@ -54,7 +53,7 @@ void RenderingTest::SetUp() {
                               local_frame_client_, SettingOverrider());
 
   Settings::SetMockScrollbarsEnabled(true);
-  RuntimeEnabledFeatures::setOverlayScrollbarsEnabled(true);
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(true);
   EXPECT_TRUE(ScrollbarTheme::GetTheme().UsesOverlayScrollbars());
 
   // This ensures that the minimal DOM tree gets attached
@@ -80,10 +79,10 @@ void RenderingTest::SetChildFrameHTML(const String& html) {
 
 void RenderingTest::LoadAhem() {
   RefPtr<SharedBuffer> shared_buffer =
-      testing::ReadFromFile(testing::WebTestDataPath("Ahem.ttf"));
+      testing::ReadFromFile(testing::CoreTestDataPath("Ahem.ttf"));
   StringOrArrayBufferOrArrayBufferView buffer =
       StringOrArrayBufferOrArrayBufferView::fromArrayBuffer(
-          DOMArrayBuffer::Create(shared_buffer->Data(), shared_buffer->size()));
+          DOMArrayBuffer::Create(shared_buffer));
   FontFace* ahem =
       FontFace::Create(&GetDocument(), "Ahem", buffer, FontFaceDescriptors());
 

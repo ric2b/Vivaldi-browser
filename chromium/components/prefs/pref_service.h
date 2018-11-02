@@ -23,7 +23,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/observer_list.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/values.h"
 #include "components/prefs/base_prefs_export.h"
 #include "components/prefs/persistent_pref_store.h"
@@ -55,7 +55,7 @@ class ScopedUserPrefUpdateBase;
 // Settings and storage accessed through this class represent
 // user-selected preferences and information and MUST not be
 // extracted, overwritten or modified except through the defined APIs.
-class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
+class COMPONENTS_PREFS_EXPORT PrefService {
  public:
   enum PrefInitializationStatus {
     INITIALIZATION_STATUS_WAITING,
@@ -176,6 +176,11 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
   // Lands pending writes to disk. This should only be used if we need to save
   // immediately (basically, during shutdown).
   void CommitPendingWrite();
+
+  // Lands pending writes to disk. This should only be used if we need to save
+  // immediately. |done_callback| will be invoked when changes have been
+  // written.
+  void CommitPendingWrite(base::OnceClosure done_callback);
 
   // Schedule a write if there is any lossy data pending. Unlike
   // CommitPendingWrite() this does not immediately sync to disk, instead it
@@ -396,6 +401,8 @@ class COMPONENTS_PREFS_EXPORT PrefService : public base::NonThreadSafe {
   // is authoritative with respect to what the types and default values
   // of registered preferences are.
   mutable PreferenceMap prefs_map_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(PrefService);
 };

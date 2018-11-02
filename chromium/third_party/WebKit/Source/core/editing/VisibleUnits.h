@@ -52,7 +52,10 @@ struct InlineBoxPosition {
   InlineBoxPosition() : inline_box(nullptr), offset_in_box(0) {}
 
   InlineBoxPosition(InlineBox* inline_box, int offset_in_box)
-      : inline_box(inline_box), offset_in_box(offset_in_box) {}
+      : inline_box(inline_box), offset_in_box(offset_in_box) {
+    DCHECK(inline_box);
+    DCHECK_GE(offset_in_box, 0);
+  }
 
   bool operator==(const InlineBoxPosition& other) const {
     return inline_box == other.inline_box &&
@@ -62,6 +65,18 @@ struct InlineBoxPosition {
   bool operator!=(const InlineBoxPosition& other) const {
     return !operator==(other);
   }
+};
+
+// This struct represents local caret rectangle in |layout_object|.
+struct LocalCaretRect {
+  LayoutObject* layout_object = nullptr;
+  LayoutRect rect;
+
+  LocalCaretRect() = default;
+  LocalCaretRect(LayoutObject* layout_object, const LayoutRect& rect)
+      : layout_object(layout_object), rect(rect) {}
+
+  bool IsEmpty() const { return !layout_object || rect.IsEmpty(); }
 };
 
 // The print for |InlineBoxPosition| is available only for testing
@@ -130,19 +145,6 @@ CORE_EXPORT UChar32 CharacterAfter(const VisiblePositionInFlatTree&);
 CORE_EXPORT UChar32 CharacterBefore(const VisiblePosition&);
 CORE_EXPORT UChar32 CharacterBefore(const VisiblePositionInFlatTree&);
 
-// TODO(yosin) Since return value of |leftPositionOf()| with |VisiblePosition|
-// isn't defined well on flat tree, we should not use it for a position in
-// flat tree.
-CORE_EXPORT VisiblePosition LeftPositionOf(const VisiblePosition&);
-CORE_EXPORT VisiblePositionInFlatTree
-LeftPositionOf(const VisiblePositionInFlatTree&);
-// TODO(yosin) Since return value of |rightPositionOf()| with |VisiblePosition|
-// isn't defined well on flat tree, we should not use it for a position in
-// flat tree.
-CORE_EXPORT VisiblePosition RightPositionOf(const VisiblePosition&);
-CORE_EXPORT VisiblePositionInFlatTree
-RightPositionOf(const VisiblePositionInFlatTree&);
-
 CORE_EXPORT VisiblePosition
 NextPositionOf(const VisiblePosition&,
                EditingBoundaryCrossingRule = kCanCrossEditingBoundary);
@@ -183,10 +185,6 @@ CORE_EXPORT VisiblePositionInFlatTree
 EndOfWord(const VisiblePositionInFlatTree&, EWordSide = kRightWordIfOnBoundary);
 VisiblePosition PreviousWordPosition(const VisiblePosition&);
 VisiblePosition NextWordPosition(const VisiblePosition&);
-VisiblePosition RightWordPosition(const VisiblePosition&,
-                                  bool skips_space_when_moving_right);
-VisiblePosition LeftWordPosition(const VisiblePosition&,
-                                 bool skips_space_when_moving_right);
 
 // sentences
 CORE_EXPORT VisiblePosition StartOfSentence(const VisiblePosition&);
@@ -244,8 +242,6 @@ CORE_EXPORT VisiblePositionInFlatTree
 LogicalEndOfLine(const VisiblePositionInFlatTree&);
 CORE_EXPORT bool IsLogicalEndOfLine(const VisiblePosition&);
 CORE_EXPORT bool IsLogicalEndOfLine(const VisiblePositionInFlatTree&);
-VisiblePosition LeftBoundaryOfLine(const VisiblePosition&, TextDirection);
-VisiblePosition RightBoundaryOfLine(const VisiblePosition&, TextDirection);
 
 // paragraphs (perhaps a misnomer, can be divided by line break elements)
 // TODO(yosin) Since return value of |startOfParagraph()| with |VisiblePosition|
@@ -290,7 +286,6 @@ VisiblePosition StartOfBlock(
 VisiblePosition EndOfBlock(
     const VisiblePosition&,
     EditingBoundaryCrossingRule = kCannotCrossEditingBoundary);
-bool InSameBlock(const VisiblePosition&, const VisiblePosition&);
 bool IsStartOfBlock(const VisiblePosition&);
 bool IsEndOfBlock(const VisiblePosition&);
 
@@ -326,10 +321,10 @@ ComputeInlineBoxPosition(const PositionInFlatTree&,
 CORE_EXPORT InlineBoxPosition ComputeInlineBoxPosition(const VisiblePosition&);
 
 // Rect is local to the returned layoutObject
-CORE_EXPORT LayoutRect LocalCaretRectOfPosition(const PositionWithAffinity&,
-                                                LayoutObject*&);
-CORE_EXPORT LayoutRect
-LocalCaretRectOfPosition(const PositionInFlatTreeWithAffinity&, LayoutObject*&);
+CORE_EXPORT LocalCaretRect
+LocalCaretRectOfPosition(const PositionWithAffinity&);
+CORE_EXPORT LocalCaretRect
+LocalCaretRectOfPosition(const PositionInFlatTreeWithAffinity&);
 bool HasRenderedNonAnonymousDescendantsWithHeight(LayoutObject*);
 
 // Returns a hit-tested VisiblePosition for the given point in contents-space
@@ -345,6 +340,56 @@ CORE_EXPORT PositionInFlatTree SkipWhitespace(const PositionInFlatTree&);
 CORE_EXPORT IntRect ComputeTextRect(const EphemeralRange&);
 IntRect ComputeTextRect(const EphemeralRangeInFlatTree&);
 FloatRect ComputeTextFloatRect(const EphemeralRange&);
+
+// Export below functions only for |VisibleUnit| family.
+enum BoundarySearchContextAvailability {
+  kDontHaveMoreContext,
+  kMayHaveMoreContext
+};
+
+typedef unsigned (*BoundarySearchFunction)(const UChar*,
+                                           unsigned length,
+                                           unsigned offset,
+                                           BoundarySearchContextAvailability,
+                                           bool& need_more_context);
+
+Position NextBoundary(const VisiblePosition&, BoundarySearchFunction);
+PositionInFlatTree NextBoundary(const VisiblePositionInFlatTree&,
+                                BoundarySearchFunction);
+Position PreviousBoundary(const VisiblePosition&, BoundarySearchFunction);
+PositionInFlatTree PreviousBoundary(const VisiblePositionInFlatTree&,
+                                    BoundarySearchFunction);
+
+PositionWithAffinity HonorEditingBoundaryAtOrBefore(const PositionWithAffinity&,
+                                                    const Position&);
+
+PositionInFlatTreeWithAffinity HonorEditingBoundaryAtOrBefore(
+    const PositionInFlatTreeWithAffinity&,
+    const PositionInFlatTree&);
+
+VisiblePosition HonorEditingBoundaryAtOrAfter(const VisiblePosition&,
+                                              const Position&);
+
+VisiblePositionInFlatTree HonorEditingBoundaryAtOrAfter(
+    const VisiblePositionInFlatTree&,
+    const PositionInFlatTree&);
+
+// Export below functions only for |SelectionModifier|.
+VisiblePosition HonorEditingBoundaryAtOrBefore(const VisiblePosition&,
+                                               const Position&);
+
+VisiblePositionInFlatTree HonorEditingBoundaryAtOrBefore(
+    const VisiblePositionInFlatTree&,
+    const PositionInFlatTree&);
+
+Position NextRootInlineBoxCandidatePosition(Node*,
+                                            const VisiblePosition&,
+                                            EditableType);
+
+CORE_EXPORT Position
+PreviousRootInlineBoxCandidatePosition(Node*,
+                                       const VisiblePosition&,
+                                       EditableType);
 
 }  // namespace blink
 

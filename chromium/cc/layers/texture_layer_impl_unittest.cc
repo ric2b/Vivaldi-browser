@@ -6,12 +6,12 @@
 
 #include <stddef.h>
 
-#include "cc/output/compositor_frame_sink.h"
-#include "cc/output/context_provider.h"
+#include "cc/output/layer_tree_frame_sink.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/texture_draw_quad.h"
-#include "cc/test/fake_compositor_frame_sink.h"
+#include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/layer_test_common.h"
+#include "components/viz/common/gpu/context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -55,11 +55,11 @@ TEST(TextureLayerImplTest, Occlusion) {
   LayerTestCommon::LayerImplTest impl;
 
   gpu::Mailbox mailbox;
-  impl.compositor_frame_sink()
+  impl.layer_tree_frame_sink()
       ->context_provider()
       ->ContextGL()
       ->GenMailboxCHROMIUM(mailbox.name);
-  TextureMailbox texture_mailbox(
+  viz::TextureMailbox texture_mailbox(
       mailbox,
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO, 0x123,
                      gpu::CommandBufferId::FromUnsafeValue(0x234), 0x456),
@@ -115,11 +115,11 @@ TEST(TextureLayerImplTest, OutputIsSecure) {
   LayerTestCommon::LayerImplTest impl;
 
   gpu::Mailbox mailbox;
-  impl.compositor_frame_sink()
+  impl.layer_tree_frame_sink()
       ->context_provider()
       ->ContextGL()
       ->GenMailboxCHROMIUM(mailbox.name);
-  TextureMailbox texture_mailbox(
+  viz::TextureMailbox texture_mailbox(
       mailbox,
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO, 0x123,
                      gpu::CommandBufferId::FromUnsafeValue(0x234), 0x456),
@@ -151,18 +151,18 @@ TEST(TextureLayerImplTest, OutputIsSecure) {
 TEST(TextureLayerImplTest, ResourceNotFreedOnGpuRasterToggle) {
   bool released = false;
   LayerTestCommon::LayerImplTest impl(
-      FakeCompositorFrameSink::Create3dForGpuRasterization());
+      FakeLayerTreeFrameSink::Create3dForGpuRasterization());
   impl.host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
 
   gfx::Size layer_size(1000, 1000);
   gfx::Size viewport_size(1000, 1000);
 
   gpu::Mailbox mailbox;
-  impl.compositor_frame_sink()
+  impl.layer_tree_frame_sink()
       ->context_provider()
       ->ContextGL()
       ->GenMailboxCHROMIUM(mailbox.name);
-  TextureMailbox texture_mailbox(
+  viz::TextureMailbox texture_mailbox(
       mailbox,
       gpu::SyncToken(gpu::CommandBufferNamespace::GPU_IO, 0x123,
                      gpu::CommandBufferId::FromUnsafeValue(0x234), 0x456),
@@ -186,7 +186,6 @@ TEST(TextureLayerImplTest, ResourceNotFreedOnGpuRasterToggle) {
   EXPECT_FALSE(released);
   // Toggling the gpu rasterization clears all tilings on both trees.
   impl.host_impl()->SetHasGpuRasterizationTrigger(true);
-  impl.host_impl()->SetContentIsSuitableForGpuRasterization(true);
   impl.host_impl()->CommitComplete();
   EXPECT_TRUE(impl.host_impl()->use_gpu_rasterization());
   EXPECT_FALSE(released);

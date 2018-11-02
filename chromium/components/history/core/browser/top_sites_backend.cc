@@ -14,6 +14,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/task/cancelable_task_tracker.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
 #include "components/history/core/browser/top_sites_database.h"
@@ -23,9 +25,10 @@
 
 namespace history {
 
-TopSitesBackend::TopSitesBackend(
-    const scoped_refptr<base::SingleThreadTaskRunner>& db_task_runner)
-    : db_(new TopSitesDatabase()), db_task_runner_(db_task_runner) {
+TopSitesBackend::TopSitesBackend()
+    : db_(new TopSitesDatabase()),
+      db_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
+          {base::TaskPriority::USER_VISIBLE, base::MayBlock()})) {
   DCHECK(db_task_runner_);
 }
 
@@ -85,7 +88,7 @@ TopSitesBackend::~TopSitesBackend() {
 }
 
 void TopSitesBackend::InitDBOnDBThread(const base::FilePath& path) {
-  DCHECK(db_task_runner_->BelongsToCurrentThread());
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
   if (!db_->Init(path)) {
     LOG(ERROR) << "Failed to initialize database.";
     db_.reset();
@@ -93,13 +96,13 @@ void TopSitesBackend::InitDBOnDBThread(const base::FilePath& path) {
 }
 
 void TopSitesBackend::ShutdownDBOnDBThread() {
-  DCHECK(db_task_runner_->BelongsToCurrentThread());
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
   db_.reset();
 }
 
 void TopSitesBackend::GetMostVisitedThumbnailsOnDBThread(
     scoped_refptr<MostVisitedThumbnails> thumbnails) {
-  DCHECK(db_task_runner_->BelongsToCurrentThread());
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
 
   if (db_) {
     db_->GetPageThumbnails(&(thumbnails->most_visited),
@@ -141,11 +144,10 @@ void TopSitesBackend::SetPageThumbnailOnDBThread(const MostVisitedURL& url,
 }
 
 void TopSitesBackend::ResetDatabaseOnDBThread(const base::FilePath& file_path) {
+  DCHECK(db_task_runner_->RunsTasksInCurrentSequence());
   if (vivaldi::IsVivaldiRunning()) {
-  DCHECK(db_task_runner_->BelongsToCurrentThread());
-  db_->DeleteDataExceptBookmarkThumbnails();
+    db_->DeleteDataExceptBookmarkThumbnails();
   } else {
-  DCHECK(db_task_runner_->BelongsToCurrentThread());
   db_.reset(NULL);
   sql::Connection::Delete(db_path_);
   db_.reset(new TopSitesDatabase());

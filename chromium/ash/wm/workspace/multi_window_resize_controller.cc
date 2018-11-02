@@ -434,9 +434,8 @@ void MultiWindowResizeController::ShowNow() {
   params.name = "MultiWindowResizeController";
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
-  RootWindowController::ForWindow(windows_.window1)
-      ->ConfigureWidgetInitParamsForContainer(
-          resize_widget_.get(), kShellWindowId_AlwaysOnTopContainer, &params);
+  params.parent = windows_.window1->GetRootWindow()->GetChildById(
+      kShellWindowId_AlwaysOnTopContainer);
   ResizeView* view = new ResizeView(this, windows_.direction);
   resize_widget_->set_focus_on_creation(false);
   resize_widget_->Init(params);
@@ -474,7 +473,7 @@ void MultiWindowResizeController::StartResize(
   int component = windows_.direction == LEFT_RIGHT ? HTRIGHT : HTBOTTOM;
   wm::WindowState* window_state = wm::GetWindowState(windows_.window1);
   window_state->CreateDragDetails(location_in_parent, component,
-                                  aura::client::WINDOW_MOVE_SOURCE_MOUSE);
+                                  ::wm::WINDOW_MOVE_SOURCE_MOUSE);
   window_resizer_.reset(WorkspaceWindowResizer::Create(window_state, windows));
 
   // Do not hide the resize widget while a drag is active.

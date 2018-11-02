@@ -57,6 +57,7 @@ class OfflinePageModel : public base::SupportsUserData {
   struct SavePageParams {
     SavePageParams();
     SavePageParams(const SavePageParams& other);
+    ~SavePageParams();
 
     // The last committed URL of the page to save.
     GURL url;
@@ -76,6 +77,22 @@ class OfflinePageModel : public base::SupportsUserData {
 
     // Run page problem detectors while generating MTHML if true.
     bool use_page_problem_detectors;
+
+    // The app package that the request originated from.
+    std::string request_origin;
+  };
+
+  // Information about a deleted page.
+  struct DeletedPageInfo {
+    DeletedPageInfo(int64_t offline_id,
+                    const ClientId& client_id,
+                    const std::string& request_origin);
+    // The ID of the deleted page.
+    int64_t offline_id;
+    // Client ID of the deleted page.
+    ClientId client_id;
+    // The origin that the page was saved on behalf of.
+    std::string request_origin;
   };
 
   // Observer of the OfflinePageModel.
@@ -89,8 +106,7 @@ class OfflinePageModel : public base::SupportsUserData {
                                   const OfflinePageItem& added_page) = 0;
 
     // Invoked when an offline copy related to |offline_id| was deleted.
-    virtual void OfflinePageDeleted(int64_t offline_id,
-                                    const ClientId& client_id) = 0;
+    virtual void OfflinePageDeleted(const DeletedPageInfo& page_info) = 0;
 
    protected:
     virtual ~Observer() = default;
@@ -120,6 +136,10 @@ class OfflinePageModel : public base::SupportsUserData {
   virtual void SavePage(const SavePageParams& save_page_params,
                         std::unique_ptr<OfflinePageArchiver> archiver,
                         const SavePageCallback& callback) = 0;
+
+  // Adds a page entry to the metadata store.
+  virtual void AddPage(const OfflinePageItem& page,
+                       const AddPageCallback& callback) = 0;
 
   // Marks that the offline page related to the passed |offline_id| has been
   // accessed. Its access info, including last access time and access count,

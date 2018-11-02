@@ -417,12 +417,14 @@ void ChunkDemuxerStream::CompletePendingReadIfPossible_Locked() {
 
 ChunkDemuxer::ChunkDemuxer(
     const base::Closure& open_cb,
+    const base::Closure& progress_cb,
     const EncryptedMediaInitDataCB& encrypted_media_init_data_cb,
     MediaLog* media_log)
     : state_(WAITING_FOR_INIT),
       cancel_next_seek_(false),
       host_(NULL),
       open_cb_(open_cb),
+      progress_cb_(progress_cb),
       encrypted_media_init_data_cb_(encrypted_media_init_data_cb),
       enable_text_(false),
       media_log_(media_log),
@@ -669,6 +671,14 @@ void ChunkDemuxer::SetTracksWatcher(
   source_state_map_[id]->SetTracksWatcher(tracks_updated_cb);
 }
 
+void ChunkDemuxer::SetParseWarningCallback(
+    const std::string& id,
+    const SourceBufferParseWarningCB& parse_warning_cb) {
+  base::AutoLock auto_lock(lock_);
+  CHECK(IsValidId(id));
+  source_state_map_[id]->SetParseWarningCallback(parse_warning_cb);
+}
+
 void ChunkDemuxer::RemoveId(const std::string& id) {
   DVLOG(1) << __func__ << " id=" << id;
   base::AutoLock auto_lock(lock_);
@@ -869,6 +879,7 @@ bool ChunkDemuxer::AppendData(const std::string& id,
   }
 
   host_->OnBufferedTimeRangesChanged(ranges);
+  progress_cb_.Run();
   return true;
 }
 

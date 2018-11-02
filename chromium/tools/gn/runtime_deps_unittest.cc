@@ -4,8 +4,7 @@
 
 #include <stddef.h>
 
-#include <algorithm>
-
+#include "base/stl_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "tools/gn/runtime_deps.h"
 #include "tools/gn/scheduler.h"
@@ -51,27 +50,27 @@ TEST(RuntimeDeps, Libs) {
   //                                 -> loadable module
   //                                 -> source set
 
-  Target stat(setup.settings(), Label(SourceDir("//"), "stat"));
+  Target stat(setup.settings(), Label(SourceDir("//"), "stat"), {});
   InitTargetWithType(setup, &stat, Target::STATIC_LIBRARY);
   stat.data().push_back("//stat.dat");
   ASSERT_TRUE(stat.OnResolved(&err));
 
-  Target shared(setup.settings(), Label(SourceDir("//"), "shared"));
+  Target shared(setup.settings(), Label(SourceDir("//"), "shared"), {});
   InitTargetWithType(setup, &shared, Target::SHARED_LIBRARY);
   shared.data().push_back("//shared.dat");
   ASSERT_TRUE(shared.OnResolved(&err));
 
-  Target loadable(setup.settings(), Label(SourceDir("//"), "loadable"));
+  Target loadable(setup.settings(), Label(SourceDir("//"), "loadable"), {});
   InitTargetWithType(setup, &loadable, Target::LOADABLE_MODULE);
   loadable.data().push_back("//loadable.dat");
   ASSERT_TRUE(loadable.OnResolved(&err));
 
-  Target set(setup.settings(), Label(SourceDir("//"), "set"));
+  Target set(setup.settings(), Label(SourceDir("//"), "set"), {});
   InitTargetWithType(setup, &set, Target::SOURCE_SET);
   set.data().push_back("//set.dat");
   ASSERT_TRUE(set.OnResolved(&err));
 
-  Target main(setup.settings(), Label(SourceDir("//"), "main"));
+  Target main(setup.settings(), Label(SourceDir("//"), "main"), {});
   InitTargetWithType(setup, &main, Target::EXECUTABLE);
   main.private_deps().push_back(LabelTargetPair(&stat));
   main.private_deps().push_back(LabelTargetPair(&shared));
@@ -91,29 +90,25 @@ TEST(RuntimeDeps, Libs) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined. First the data files.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../stat.dat", &stat)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../shared.dat", &shared)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../loadable.dat", &loadable)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../set.dat", &set)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../main.dat", &main)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../stat.dat", &stat)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../shared.dat", &shared)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../loadable.dat", &loadable)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../set.dat", &set)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../main.dat", &main)))
+      << GetVectorDescription(result);
 
   // Check the static library and loadable module.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./libshared.so", &shared)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./libloadable.so", &loadable)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./libshared.so", &shared)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("./libloadable.so", &loadable)))
+      << GetVectorDescription(result);
 }
 
 // Tests that executables that aren't listed as data deps aren't included in
@@ -127,27 +122,27 @@ TEST(RuntimeDeps, ExeDataDep) {
   // The final_in/out targets each have data files. final_in's should be
   // included, final_out's should not be.
 
-  Target final_in(setup.settings(), Label(SourceDir("//"), "final_in"));
+  Target final_in(setup.settings(), Label(SourceDir("//"), "final_in"), {});
   InitTargetWithType(setup, &final_in, Target::SOURCE_SET);
   final_in.data().push_back("//final_in.dat");
   ASSERT_TRUE(final_in.OnResolved(&err));
 
-  Target datadep(setup.settings(), Label(SourceDir("//"), "datadep"));
+  Target datadep(setup.settings(), Label(SourceDir("//"), "datadep"), {});
   InitTargetWithType(setup, &datadep, Target::EXECUTABLE);
   datadep.private_deps().push_back(LabelTargetPair(&final_in));
   ASSERT_TRUE(datadep.OnResolved(&err));
 
-  Target final_out(setup.settings(), Label(SourceDir("//"), "final_out"));
+  Target final_out(setup.settings(), Label(SourceDir("//"), "final_out"), {});
   InitTargetWithType(setup, &final_out, Target::SOURCE_SET);
   final_out.data().push_back("//final_out.dat");
   ASSERT_TRUE(final_out.OnResolved(&err));
 
-  Target dep(setup.settings(), Label(SourceDir("//"), "dep"));
+  Target dep(setup.settings(), Label(SourceDir("//"), "dep"), {});
   InitTargetWithType(setup, &dep, Target::EXECUTABLE);
   dep.private_deps().push_back(LabelTargetPair(&final_out));
   ASSERT_TRUE(dep.OnResolved(&err));
 
-  Target main(setup.settings(), Label(SourceDir("//"), "main"));
+  Target main(setup.settings(), Label(SourceDir("//"), "main"), {});
   InitTargetWithType(setup, &main, Target::EXECUTABLE);
   main.private_deps().push_back(LabelTargetPair(&dep));
   main.data_deps().push_back(LabelTargetPair(&datadep));
@@ -163,12 +158,11 @@ TEST(RuntimeDeps, ExeDataDep) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./datadep", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../final_in.dat", &final_in)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./datadep", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../final_in.dat", &final_in)))
+      << GetVectorDescription(result);
 }
 
 // Tests that action and copy outputs are considered if they're data deps, but
@@ -183,14 +177,15 @@ TEST(RuntimeDeps, ActionOutputs) {
   //                                 -> dep (action)
   //                                 -> dep_copy (copy)
 
-  Target datadep(setup.settings(), Label(SourceDir("//"), "datadep"));
+  Target datadep(setup.settings(), Label(SourceDir("//"), "datadep"), {});
   InitTargetWithType(setup, &datadep, Target::ACTION);
   datadep.data().push_back("//datadep.data");
   datadep.action_values().outputs() =
       SubstitutionList::MakeForTest("//datadep.output");
   ASSERT_TRUE(datadep.OnResolved(&err));
 
-  Target datadep_copy(setup.settings(), Label(SourceDir("//"), "datadep_copy"));
+  Target datadep_copy(setup.settings(), Label(SourceDir("//"), "datadep_copy"),
+                      {});
   InitTargetWithType(setup, &datadep_copy, Target::COPY_FILES);
   datadep_copy.sources().push_back(SourceFile("//input"));
   datadep_copy.data().push_back("//datadep_copy.data");
@@ -198,14 +193,14 @@ TEST(RuntimeDeps, ActionOutputs) {
       SubstitutionList::MakeForTest("//datadep_copy.output");
   ASSERT_TRUE(datadep_copy.OnResolved(&err));
 
-  Target dep(setup.settings(), Label(SourceDir("//"), "dep"));
+  Target dep(setup.settings(), Label(SourceDir("//"), "dep"), {});
   InitTargetWithType(setup, &dep, Target::ACTION);
   dep.data().push_back("//dep.data");
   dep.action_values().outputs() =
       SubstitutionList::MakeForTest("//dep.output");
   ASSERT_TRUE(dep.OnResolved(&err));
 
-  Target dep_copy(setup.settings(), Label(SourceDir("//"), "dep_copy"));
+  Target dep_copy(setup.settings(), Label(SourceDir("//"), "dep_copy"), {});
   InitTargetWithType(setup, &dep_copy, Target::COPY_FILES);
   dep_copy.sources().push_back(SourceFile("//input"));
   dep_copy.data().push_back("//dep_copy/data/");  // Tests a directory.
@@ -213,7 +208,7 @@ TEST(RuntimeDeps, ActionOutputs) {
       SubstitutionList::MakeForTest("//dep_copy.output");
   ASSERT_TRUE(dep_copy.OnResolved(&err));
 
-  Target main(setup.settings(), Label(SourceDir("//"), "main"));
+  Target main(setup.settings(), Label(SourceDir("//"), "main"), {});
   InitTargetWithType(setup, &main, Target::EXECUTABLE);
   main.private_deps().push_back(LabelTargetPair(&dep));
   main.private_deps().push_back(LabelTargetPair(&dep_copy));
@@ -232,24 +227,23 @@ TEST(RuntimeDeps, ActionOutputs) {
   EXPECT_TRUE(MakePair("./main", &main) == result[0]);
 
   // The rest of the ordering is undefined.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep.data", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep_copy.data", &datadep_copy)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep.output", &datadep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../datadep_copy.output", &datadep_copy)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dep.data", &dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dep_copy/data/", &dep_copy)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../datadep.data", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(
+      result, MakePair("../../datadep_copy.data", &datadep_copy)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../datadep.output", &datadep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(
+      result, MakePair("../../datadep_copy.output", &datadep_copy)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../dep.data", &dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../dep_copy/data/", &dep_copy)))
+      << GetVectorDescription(result);
 
   // Explicitly asking for the runtime deps of an action target only includes
   // the data and not all outputs.
@@ -274,13 +268,13 @@ TEST(RuntimeDeps, CreateBundle) {
   const SourceDir source_dir("//");
   const std::string& build_dir = setup.build_settings()->build_dir().value();
 
-  Target loadable_module(setup.settings(),
-                         Label(source_dir, "loadable_module"));
+  Target loadable_module(setup.settings(), Label(source_dir, "loadable_module"),
+                         {});
   InitTargetWithType(setup, &loadable_module, Target::LOADABLE_MODULE);
   loadable_module.data().push_back("//lm.data");
   ASSERT_TRUE(loadable_module.OnResolved(&err));
 
-  Target module_data(setup.settings(), Label(source_dir, "module_data"));
+  Target module_data(setup.settings(), Label(source_dir, "module_data"), {});
   InitTargetWithType(setup, &module_data, Target::BUNDLE_DATA);
   module_data.private_deps().push_back(LabelTargetPair(&loadable_module));
   module_data.bundle_data().file_rules().push_back(BundleFileRule(
@@ -289,12 +283,12 @@ TEST(RuntimeDeps, CreateBundle) {
       SubstitutionPattern::MakeForTest("{{bundle_resources_dir}}")));
   ASSERT_TRUE(module_data.OnResolved(&err));
 
-  Target source_set(setup.settings(), Label(source_dir, "sources"));
+  Target source_set(setup.settings(), Label(source_dir, "sources"), {});
   InitTargetWithType(setup, &source_set, Target::SOURCE_SET);
   source_set.sources().push_back(SourceFile(source_dir.value() + "foo.cc"));
   ASSERT_TRUE(source_set.OnResolved(&err));
 
-  Target dylib(setup.settings(), Label(source_dir, "dylib"));
+  Target dylib(setup.settings(), Label(source_dir, "dylib"), {});
   dylib.set_output_prefix_override(true);
   dylib.set_output_extension("");
   dylib.set_output_name("Bundle");
@@ -302,7 +296,7 @@ TEST(RuntimeDeps, CreateBundle) {
   dylib.private_deps().push_back(LabelTargetPair(&source_set));
   ASSERT_TRUE(dylib.OnResolved(&err));
 
-  Target dylib_data(setup.settings(), Label(source_dir, "dylib_data"));
+  Target dylib_data(setup.settings(), Label(source_dir, "dylib_data"), {});
   InitTargetWithType(setup, &dylib_data, Target::BUNDLE_DATA);
   dylib_data.private_deps().push_back(LabelTargetPair(&dylib));
   dylib_data.bundle_data().file_rules().push_back(BundleFileRule(
@@ -310,12 +304,12 @@ TEST(RuntimeDeps, CreateBundle) {
       SubstitutionPattern::MakeForTest("{{bundle_executable_dir}}")));
   ASSERT_TRUE(dylib_data.OnResolved(&err));
 
-  Target data_dep(setup.settings(), Label(source_dir, "datadep"));
+  Target data_dep(setup.settings(), Label(source_dir, "datadep"), {});
   InitTargetWithType(setup, &data_dep, Target::EXECUTABLE);
   data_dep.data().push_back("//dd.data");
   ASSERT_TRUE(data_dep.OnResolved(&err));
 
-  Target bundle(setup.settings(), Label(source_dir, "bundle"));
+  Target bundle(setup.settings(), Label(source_dir, "bundle"), {});
   InitTargetWithType(setup, &bundle, Target::CREATE_BUNDLE);
   const std::string root_dir(build_dir + "Bundle.framework/Versions/A/");
   bundle.bundle_data().root_dir() = SourceDir(root_dir);
@@ -327,7 +321,7 @@ TEST(RuntimeDeps, CreateBundle) {
   bundle.data().push_back("//b.data");
   ASSERT_TRUE(bundle.OnResolved(&err));
 
-  Target main(setup.settings(), Label(source_dir, "main"));
+  Target main(setup.settings(), Label(source_dir, "main"), {});
   InitTargetWithType(setup, &main, Target::EXECUTABLE);
   main.data_deps().push_back(LabelTargetPair(&bundle));
   ASSERT_TRUE(main.OnResolved(&err));
@@ -344,19 +338,16 @@ TEST(RuntimeDeps, CreateBundle) {
   // The rest of the ordering is undefined.
 
   // The framework bundle's internal dependencies should not be incldued.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("Bundle.framework/", &bundle)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("Bundle.framework/", &bundle)))
+      << GetVectorDescription(result);
   // But direct data and data dependencies should be.
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("./datadep", &data_dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../dd.data", &data_dep)) !=
-              result.end()) << GetVectorDescription(result);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../b.data", &bundle)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("./datadep", &data_dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../dd.data", &data_dep)))
+      << GetVectorDescription(result);
+  EXPECT_TRUE(base::ContainsValue(result, MakePair("../../b.data", &bundle)))
+      << GetVectorDescription(result);
 }
 
 // Tests that a dependency duplicated in regular and data deps is processed
@@ -365,13 +356,13 @@ TEST(RuntimeDeps, Dupe) {
   TestWithScope setup;
   Err err;
 
-  Target action(setup.settings(), Label(SourceDir("//"), "action"));
+  Target action(setup.settings(), Label(SourceDir("//"), "action"), {});
   InitTargetWithType(setup, &action, Target::ACTION);
   action.action_values().outputs() =
       SubstitutionList::MakeForTest("//action.output");
   ASSERT_TRUE(action.OnResolved(&err));
 
-  Target target(setup.settings(), Label(SourceDir("//"), "foo"));
+  Target target(setup.settings(), Label(SourceDir("//"), "foo"), {});
   InitTargetWithType(setup, &target, Target::EXECUTABLE);
   target.private_deps().push_back(LabelTargetPair(&action));
   target.data_deps().push_back(LabelTargetPair(&action));
@@ -380,9 +371,9 @@ TEST(RuntimeDeps, Dupe) {
   // The results should be the executable and the copy output.
   std::vector<std::pair<OutputFile, const Target*>> result =
       ComputeRuntimeDeps(&target);
-  EXPECT_TRUE(std::find(result.begin(), result.end(),
-                        MakePair("../../action.output", &action)) !=
-              result.end()) << GetVectorDescription(result);
+  EXPECT_TRUE(
+      base::ContainsValue(result, MakePair("../../action.output", &action)))
+      << GetVectorDescription(result);
 }
 
 // Tests that actions can't have output substitutions.

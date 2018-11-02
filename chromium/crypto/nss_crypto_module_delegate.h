@@ -7,8 +7,7 @@
 
 #include <string>
 
-#include "base/callback_forward.h"
-#include "crypto/scoped_nss_types.h"
+#include "base/memory/ref_counted.h"
 
 namespace crypto {
 
@@ -17,9 +16,9 @@ namespace crypto {
 // user data argument (|wincx|) to relevant NSS functions, which the global
 // password handler will call to do the actual work. This delegate should only
 // be used in NSS calls on worker threads due to the blocking nature.
-class CryptoModuleBlockingPasswordDelegate {
+class CryptoModuleBlockingPasswordDelegate
+    : public base::RefCountedThreadSafe<CryptoModuleBlockingPasswordDelegate> {
  public:
-  virtual ~CryptoModuleBlockingPasswordDelegate() {}
 
   // Return a value suitable for passing to the |wincx| argument of relevant NSS
   // functions. This should be used instead of passing the object pointer
@@ -35,16 +34,11 @@ class CryptoModuleBlockingPasswordDelegate {
   // user entered.
   virtual std::string RequestPassword(const std::string& slot_name, bool retry,
                                       bool* cancelled) = 0;
-};
 
-// Extends CryptoModuleBlockingPasswordDelegate with the ability to return a
-// slot in which to act. (Eg, which slot to store a generated key in.)
-class NSSCryptoModuleDelegate : public CryptoModuleBlockingPasswordDelegate {
- public:
-  ~NSSCryptoModuleDelegate() override {}
+ protected:
+  friend class base::RefCountedThreadSafe<CryptoModuleBlockingPasswordDelegate>;
 
-  // Get the slot to store the generated key.
-  virtual ScopedPK11Slot RequestSlot() = 0;
+  virtual ~CryptoModuleBlockingPasswordDelegate() {}
 };
 
 }  // namespace crypto

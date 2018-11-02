@@ -1,4 +1,5 @@
 {% from 'utilities.cpp.tmpl' import declare_enum_validation_variable, v8_value_to_local_cpp_value %}
+{% from 'methods.cpp.tmpl' import runtime_timer_scope, runtime_call_stats_enter, runtime_call_stats_leave %}
 
 {##############################################################################}
 {% macro attribute_getter(attribute, world_suffix) %}
@@ -8,6 +9,7 @@ const v8::PropertyCallbackInfo<v8::Value>& info
 {%- else %}
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
+  {{ runtime_timer_scope(attribute.runtime_call_stats.getter_counter) | indent(2) }}
   {% filter format_remove_duplicates(['ExceptionState exceptionState']) %}
   {% set define_exception_state -%}
   ExceptionState exceptionState(info.GetIsolate(), ExceptionState::kGetterContext, "{{interface_name}}", "{{attribute.name}}");
@@ -217,11 +219,11 @@ v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>& info
 const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
   {% if attribute.deprecate_as %}
-  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.deprecate_as}});
+  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.deprecate_as}});
   {% endif %}
 
   {% if attribute.measure_as %}
-  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.measure_as('AttributeGetter')}});
+  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.measure_as('AttributeGetter')}});
   {% endif %}
 
   {% if world_suffix in attribute.activity_logging_world_list_for_getter %}
@@ -262,11 +264,11 @@ v8::Local<v8::Private> {{v8_class_or_partial}}::{{attribute.name}}CachedProperty
 {% macro constructor_getter_callback(attribute, world_suffix) %}
 void {{v8_class_or_partial}}::{{attribute.name}}ConstructorGetterCallback{{world_suffix}}(v8::Local<v8::Name> property, const v8::PropertyCallbackInfo<v8::Value>& info) {
   {% if attribute.deprecate_as %}
-  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.deprecate_as}});
+  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.deprecate_as}});
   {% endif %}
 
   {% if attribute.measure_as %}
-  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.measure_as('ConstructorGetter')}});
+  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.measure_as('ConstructorGetter')}});
   {% endif %}
 
   V8ConstructorAttributeGetter(property, info);
@@ -284,6 +286,7 @@ v8::Local<v8::Value> v8Value, const v8::PropertyCallbackInfo<void>& info
 {%- else %}
 v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
 {%- endif %}) {
+  {{ runtime_timer_scope(attribute.runtime_call_stats.setter_counter) | indent(2) }}
   {% filter format_remove_duplicates(['ExceptionState exceptionState']) %}
   v8::Isolate* isolate = info.GetIsolate();
   ALLOW_UNUSED_LOCAL(isolate);
@@ -342,14 +345,14 @@ v8::Local<v8::Value> v8Value, const v8::FunctionCallbackInfo<v8::Value>& info
   // [PutForwards] => {{attribute.name}}.{{attribute.target_attribute_name}}
   {{define_exception_state}}
   v8::Local<v8::Value> target;
-  if (!holder->Get(isolate->GetCurrentContext(), V8String(isolate, "{{attribute.name}}")).ToLocal(&target))
+  if (!holder->Get(isolate->GetCurrentContext(), V8AtomicString(isolate, "{{attribute.name}}")).ToLocal(&target))
     return;
   if (!target->IsObject()) {
     exceptionState.ThrowTypeError("The attribute value is not an object");
     return;
   }
   bool result;
-  if (!target.As<v8::Object>()->Set(isolate->GetCurrentContext(), V8String(isolate, "{{attribute.target_attribute_name}}"), v8Value).To(&result))
+  if (!target.As<v8::Object>()->Set(isolate->GetCurrentContext(), V8AtomicString(isolate, "{{attribute.target_attribute_name}}"), v8Value).To(&result))
     return;
   if (!result)
     return;
@@ -438,11 +441,11 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   {% endif %}
 
   {% if attribute.deprecate_as %}
-  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.deprecate_as}});
+  Deprecation::CountDeprecation(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.deprecate_as}});
   {% endif %}
 
   {% if attribute.measure_as %}
-  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), UseCounter::k{{attribute.measure_as('AttributeSetter')}});
+  UseCounter::Count(CurrentExecutionContext(info.GetIsolate()), WebFeature::k{{attribute.measure_as('AttributeSetter')}});
   {% endif %}
 
   {% if world_suffix in attribute.activity_logging_world_list_for_setter %}
@@ -488,57 +491,48 @@ const v8::FunctionCallbackInfo<v8::Value>& info
     {% set getter_callback = '%s::%sConstructorGetterCallback' % (v8_class_or_partial, attribute.name) %}
   {% else %}
     {% set getter_callback = 'V8%s::NamedConstructorAttributeGetter' % (attribute.constructor_type)
-       if attribute.is_named_constructor else 'V8ConstructorAttributeGetter' %}
+        if attribute.is_named_constructor else 'V8ConstructorAttributeGetter' %}
   {% endif %}
-{% set setter_callback = 'nullptr' %}
+  {% set setter_callback = 'nullptr' %}
 {% else %}{# regular attributes #}
-{% set getter_callback = '%s::%sAttributeGetterCallback' %
-           (v8_class_or_partial, attribute.name) %}
-{% set setter_callback = '%s::%sAttributeSetterCallback' %
-           (v8_class_or_partial, attribute.name)
-           if attribute.has_setter else 'nullptr' %}
+  {% set getter_callback = '%s::%sAttributeGetterCallback' % (v8_class_or_partial, attribute.name) %}
+  {% set setter_callback = '%s::%sAttributeSetterCallback' % (v8_class_or_partial, attribute.name)
+      if attribute.has_setter else 'nullptr' %}
 {% endif %}
+
 {% set wrapper_type_info =
-       'const_cast<WrapperTypeInfo*>(&V8%s::wrapperTypeInfo)' % attribute.constructor_type
-       if attribute.constructor_type else 'nullptr' %}
+    'const_cast<WrapperTypeInfo*>(&V8%s::wrapperTypeInfo)' % attribute.constructor_type
+    if attribute.constructor_type else 'nullptr' %}
 {% set property_attribute = 'static_cast<v8::PropertyAttribute>(%s)' %
                             ' | '.join(attribute.property_attributes) %}
 {% set cached_property_key =
-       '%s::%sCachedPropertyKey' % (v8_class_or_partial, attribute.name)
-       if attribute.is_cached_accessor else
-       'nullptr' %}
+    '%s::%sCachedPropertyKey' % (v8_class_or_partial, attribute.name)
+    if attribute.is_cached_accessor else 'nullptr' %}
 {% set holder_check = 'V8DOMConfiguration::kDoNotCheckHolder'
-       if attribute.is_lenient_this else 'V8DOMConfiguration::kCheckHolder' %}
+    if attribute.is_lenient_this else 'V8DOMConfiguration::kCheckHolder' %}
 {% if attribute.is_per_world_bindings %}
-{% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
-{% set setter_callback_for_main_world =
-       '%sForMainWorld' % setter_callback
-       if attribute.has_setter else 'nullptr' %}
+  {% set getter_callback_for_main_world = '%sForMainWorld' % getter_callback %}
+  {% set setter_callback_for_main_world =
+      '%sForMainWorld' % setter_callback if attribute.has_setter else 'nullptr' %}
 {% endif %}
-
-
 {% set config_pre = {
-  "main" : [
-         '"%s"' % attribute.name,
-         getter_callback_for_main_world,
-         setter_callback_for_main_world,
-       ],
-  "non_main" : [
-         '"%s"' % attribute.name,
-         getter_callback,
-         setter_callback,
-       ],
+    'main' : [
+        '"%s"' % attribute.name,
+        getter_callback_for_main_world,
+        setter_callback_for_main_world,
+    ],
+    'non_main' : [
+        '"%s"' % attribute.name,
+        getter_callback,
+        setter_callback,
+    ],
 } %}
-
-{% set accessor_only_fields = [] if config_type == 'attribute' else [
-      cached_property_key,
-] %}
-
+{% set accessor_only_fields = [] if config_type == 'attribute' else [cached_property_key] %}
 {% set config_post = [
-       wrapper_type_info,
-       property_attribute,
-       property_location(attribute),
-       holder_check,
+    wrapper_type_info,
+    property_attribute,
+    property_location(attribute),
+    holder_check,
 ] %}
 
 {% if attribute.is_per_world_bindings %}
@@ -547,14 +541,14 @@ const v8::FunctionCallbackInfo<v8::Value>& info
   {% set non_main_config_list = config_pre["non_main"] + accessor_only_fields +
       config_post + ['V8DOMConfiguration::kNonMainWorlds'] %}
   {# Emit for main world then non-main.#}
-  { {{main_config_list | join(', ')}} },
-  { {{non_main_config_list | join(', ')}} }
-{% else %}
+{ {{main_config_list | join(', ')}} },
+{ {{non_main_config_list | join(', ')}} }
+{%- else -%}
   {% set all_worlds_config_list = config_pre["non_main"] + accessor_only_fields +
       config_post + ['V8DOMConfiguration::kAllWorlds'] %}
   {# Emit only for all worlds #}
-  { {{all_worlds_config_list | join(', ')}} }
-{% endif %}
+{ {{all_worlds_config_list | join(', ')}} }
+{%- endif -%}
 {% endmacro %}
 
 
@@ -577,7 +571,7 @@ const v8::FunctionCallbackInfo<v8::Value>& info
 {% filter secure_context(attribute.secure_context_test) %}
 {% filter runtime_enabled(attribute.runtime_enabled_feature_name) %}
 static const V8DOMConfiguration::AccessorConfiguration accessorConfiguration[] = {
-  {{accessor_configuration(attribute)}}
+    {{accessor_configuration(attribute) | indent(4)}}
 };
 for (const auto& accessorConfig : accessorConfiguration)
   V8DOMConfiguration::InstallAccessor(isolate, world, v8::Local<v8::Object>(), prototypeObject, interfaceObject, signature, accessorConfig);

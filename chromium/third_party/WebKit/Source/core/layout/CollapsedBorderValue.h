@@ -26,6 +26,7 @@
 #define CollapsedBorderValue_h
 
 #include "core/style/ComputedStyle.h"
+#include "platform/geometry/LayoutRect.h"
 #include "platform/wtf/Allocator.h"
 
 namespace blink {
@@ -55,11 +56,34 @@ class CollapsedBorderValue {
                        const Color& color,
                        EBorderPrecedence precedence)
       : color_(color),
-        width_(ComputedStyle::BorderStyleIsVisible(border.Style())
-                   ? border.Width()
-                   : 0),
         style_(static_cast<unsigned>(border.Style())),
         precedence_(precedence) {
+    if (!ComputedStyle::BorderStyleIsVisible(border.Style())) {
+      width_ = 0;
+    } else {
+      if (border.Width() > 0.0f && border.Width() <= 1.0f)
+        width_ = 1;
+      else
+        width_ = border.Width();
+    }
+    DCHECK(precedence != kBorderPrecedenceOff);
+  }
+
+  CollapsedBorderValue(EBorderStyle style,
+                       const float width,
+                       const Color& color,
+                       EBorderPrecedence precedence)
+      : color_(color),
+        style_(static_cast<unsigned>(style)),
+        precedence_(precedence) {
+    if (!ComputedStyle::BorderStyleIsVisible(style)) {
+      width_ = 0;
+    } else {
+      if (width > 0.0f && width <= 1.0f)
+        width_ = 1;
+      else
+        width_ = width;
+    }
     DCHECK(precedence != kBorderPrecedenceOff);
   }
 
@@ -86,9 +110,76 @@ class CollapsedBorderValue {
 
   bool IsVisible() const { return Width() && !IsTransparent(); }
 
-  bool ShouldPaint(
-      const CollapsedBorderValue& table_current_border_value) const {
-    return IsVisible() && IsSameIgnoringColor(table_current_border_value);
+  // Compares the precedence of two borders for conflict resolution. Returns
+  // true if |this| has lower precedence than |other|.
+  //
+  // The following rules apply for resolving conflicts and figuring out which
+  // border to use:
+  // (See https://www.w3.org/TR/CSS2/tables.html#border-conflict-resolution)
+  // (1) Borders with the 'border-style' of 'hidden' take precedence over all
+  //     other conflicting borders. Any border with this value suppresses all
+  //     borders at this location.
+  // (2) Borders with a style of 'none' have the lowest priority. Only if the
+  //     border properties of all the elements meeting at this edge are 'none'
+  //     will the border be omitted (but note that 'none' is the default value
+  //     for the border style.)
+  // (3) If none of the styles are 'hidden' and at least one of them is not
+  //     'none', then narrow borders are discarded in favor of wider ones. If
+  //      several have the same 'border-width' then styles are preferred in this
+  //      order: 'double', 'solid', 'dashed', 'dotted', 'ridge', 'outset',
+  //     'groove', and the lowest: 'inset'.
+  // (4) If border styles differ only in color, then a style set on a cell wins
+  //     over one on a row, which wins over a row group, column, column group
+  //     and, lastly, table. It is undefined which color is used when two
+  //     elements of the same type disagree.
+  bool LessThan(const CollapsedBorderValue& other) const {
+    // Sanity check the values passed in. The null border have lowest priority.
+    if (!other.Exists())
+      return false;
+    if (!Exists())
+      return true;
+
+    // Rule #1 above.
+    if (Style() == EBorderStyle::kHidden)
+      return false;
+    if (other.Style() == EBorderStyle::kHidden)
+      return true;
+
+    // Rule #2 above.  A style of 'none' has lowest priority and always loses to
+    // any other border.
+    if (other.Style() == EBorderStyle::kNone)
+      return false;
+    if (Style() == EBorderStyle::kNone)
+      return true;
+
+    // The first part of rule #3 above. Wider borders win.
+    if (Width() != other.Width())
+      return Width() < other.Width();
+
+    // The borders have equal width.  Sort by border style.
+    if (Style() != other.Style())
+      return Style() < other.Style();
+
+    // The border have the same width and style.  Rely on precedence (cell over
+    // row over row group, etc.)
+    return Precedence() < other.Precedence();
+  }
+
+  // Suppose |this| and |other| are adjoining borders forming a joint, this
+  // method returns true if |this| should cover the joint. The rule similar to
+  // LessThan() except that invisible borders always lose.
+  bool CoversJoint(const CollapsedBorderValue& other) const {
+    return IsVisible() && (!other.IsVisible() || !LessThan(other));
+  }
+
+  // A border may form a joint with other 3 borders. Returns true if this border
+  // wins to cover the joint.
+  bool CoversJoint(const CollapsedBorderValue* other1,
+                   const CollapsedBorderValue* other2,
+                   const CollapsedBorderValue* other3) const {
+    return (!other1 || CoversJoint(*other1)) &&
+           (!other2 || CoversJoint(*other2)) &&
+           (!other3 || CoversJoint(*other3));
   }
 
  private:
@@ -96,6 +187,54 @@ class CollapsedBorderValue {
   unsigned width_ : 25;
   unsigned style_ : 4;       // EBorderStyle
   unsigned precedence_ : 3;  // EBorderPrecedence
+};
+
+// Holds 4 CollapsedBorderValue's for 4 sides of a table cell.
+// The logical directions 'start', 'end', 'before', 'after' are according to
+// the table's writing mode and direction.
+// TODO(crbug.com/128227,crbug.com/727173): The direction is incorrect in some
+// cases.
+class CollapsedBorderValues {
+  USING_FAST_MALLOC(CollapsedBorderValues);
+
+ public:
+  CollapsedBorderValues(const CollapsedBorderValue& start,
+                        const CollapsedBorderValue& end,
+                        const CollapsedBorderValue& before,
+                        const CollapsedBorderValue& after) {
+    borders_[0] = start;
+    borders_[1] = end;
+    borders_[2] = before;
+    borders_[3] = after;
+  }
+
+  const CollapsedBorderValue& StartBorder() const { return borders_[0]; }
+  const CollapsedBorderValue& EndBorder() const { return borders_[1]; }
+  const CollapsedBorderValue& BeforeBorder() const { return borders_[2]; }
+  const CollapsedBorderValue& AfterBorder() const { return borders_[3]; }
+
+  // Returns all borders. The caller should not assume that the returned
+  // borders are in any particular order.
+  const CollapsedBorderValue* Borders() const { return borders_; }
+
+  LayoutRect LocalVisualRect() const { return local_visual_rect_; }
+  void SetLocalVisualRect(const LayoutRect& r) { local_visual_rect_ = r; }
+
+  bool HasNonZeroWidthBorder() const {
+    return StartBorder().Width() || EndBorder().Width() ||
+           BeforeBorder().Width() || AfterBorder().Width();
+  }
+
+  bool VisuallyEquals(const CollapsedBorderValues& other) const {
+    return StartBorder().VisuallyEquals(other.StartBorder()) &&
+           EndBorder().VisuallyEquals(other.EndBorder()) &&
+           BeforeBorder().VisuallyEquals(other.BeforeBorder()) &&
+           AfterBorder().VisuallyEquals(other.AfterBorder());
+  }
+
+ private:
+  CollapsedBorderValue borders_[4];
+  LayoutRect local_visual_rect_;
 };
 
 }  // namespace blink

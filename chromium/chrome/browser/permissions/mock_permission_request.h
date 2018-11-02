@@ -16,7 +16,9 @@ class MockPermissionRequest : public PermissionRequest {
   MockPermissionRequest(const std::string& text,
                         PermissionRequestType request_type,
                         PermissionRequestGestureType gesture_type);
-  MockPermissionRequest(const std::string& text, const GURL& url);
+  MockPermissionRequest(const std::string& text,
+                        PermissionRequestType request_type,
+                        const GURL& url);
   MockPermissionRequest(const std::string& text,
                         const std::string& accept_label,
                         const std::string& deny_label);
@@ -24,6 +26,9 @@ class MockPermissionRequest : public PermissionRequest {
   ~MockPermissionRequest() override;
 
   IconId GetIconId() const override;
+#if defined(OS_ANDROID)
+  base::string16 GetMessageText() const override;
+#endif
   base::string16 GetMessageTextFragment() const override;
   GURL GetOrigin() const override;
 

@@ -8,8 +8,8 @@
 #include <stdint.h>
 
 #include "ash/ash_export.h"
-#include "ash/shelf/shelf_observer.h"
 #include "ash/shell_observer.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/macros.h"
 #include "ui/app_list/presenter/app_list_presenter_delegate.h"
 #include "ui/events/event_handler.h"
@@ -37,7 +37,7 @@ class ASH_EXPORT AppListPresenterDelegate
       public ui::EventHandler,
       public keyboard::KeyboardControllerObserver,
       public ShellObserver,
-      public ShelfObserver {
+      public TabletModeObserver {
  public:
   AppListPresenterDelegate(
       app_list::AppListPresenterImpl* presenter,
@@ -54,6 +54,8 @@ class ASH_EXPORT AppListPresenterDelegate
   void UpdateBounds() override;
   gfx::Vector2d GetVisibilityAnimationOffset(
       aura::Window* root_window) override;
+  base::TimeDelta GetVisibilityAnimationDuration(aura::Window* root_window,
+                                                 bool is_visible) override;
 
  private:
   void ProcessLocatedEvent(ui::LocatedEvent* event);
@@ -69,11 +71,15 @@ class ASH_EXPORT AppListPresenterDelegate
   // ShellObserver overrides:
   void OnOverviewModeStarting() override;
 
-  // ShelfObserver overrides:
-  void OnShelfIconPositionsChanged() override;
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
   // Whether the app list is visible (or in the process of being shown).
   bool is_visible_ = false;
+
+  // Whether the fullscreen app list feature is enabled.
+  const bool is_fullscreen_app_list_enabled_;
 
   // Not owned. Pointer is guaranteed to be valid while this object is alive.
   app_list::AppListPresenterImpl* presenter_;

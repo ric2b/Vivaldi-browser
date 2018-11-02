@@ -90,7 +90,7 @@ class VivaldiMenuController : public ui::SimpleMenuModel::Delegate {
   std::vector<vivaldi::show_menu::MenuItem>* menu_items_;  // Not owned by us.
   ui::SimpleMenuModel menu_model_;
   std::unique_ptr<::vivaldi::VivaldiContextMenu> menu_;
-  ScopedVector<ui::SimpleMenuModel> models_;
+  std::vector<std::unique_ptr<ui::SimpleMenuModel>> models_;
   content::WebContents* web_contents_;  // Not owned by us.
   Profile* profile_;
   std::map<int, std::string*> url_map_;

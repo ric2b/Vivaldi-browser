@@ -14,7 +14,7 @@
 namespace cc {
 
 FakeOutputSurface::FakeOutputSurface(
-    scoped_refptr<ContextProvider> context_provider)
+    scoped_refptr<viz::ContextProvider> context_provider)
     : OutputSurface(std::move(context_provider)), weak_ptr_factory_(this) {
   DCHECK(OutputSurface::context_provider());
 }
@@ -86,6 +86,10 @@ bool FakeOutputSurface::SurfaceIsSuspendForRecycle() const {
 OverlayCandidateValidator* FakeOutputSurface::GetOverlayCandidateValidator()
     const {
   return overlay_candidate_validator_;
+}
+
+gfx::BufferFormat FakeOutputSurface::GetOverlayBufferFormat() const {
+  return gfx::BufferFormat::RGBX_8888;
 }
 
 bool FakeOutputSurface::IsDisplayedAsOverlayPlane() const {

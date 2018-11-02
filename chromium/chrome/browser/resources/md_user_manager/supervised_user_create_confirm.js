@@ -18,9 +18,7 @@ var MAX_NAME_LENGTH = 50;
 Polymer({
   is: 'supervised-user-create-confirm',
 
-  behaviors: [
-    I18nBehavior
-  ],
+  behaviors: [I18nBehavior],
 
   properties: {
     /**
@@ -29,16 +27,16 @@ Polymer({
      */
     profileInfo: {
       type: Object,
-      value: function() { return null; }
+      value: function() {
+        return null;
+      }
     },
 
     /** @private {!signin.ProfileBrowserProxy} */
     browserProxy_: Object
   },
 
-  listeners: {
-    'tap': 'onTap_'
-  },
+  listeners: {'tap': 'onTap_'},
 
   /** @override */
   created: function() {
@@ -92,8 +90,8 @@ Polymer({
    * @private
    */
   titleText_: function(profileInfo) {
-    return this.i18n('supervisedUserCreatedTitle',
-                     this.elideProfileName_(profileInfo));
+    return this.i18n(
+        'supervisedUserCreatedTitle', this.elideProfileName_(profileInfo));
   },
 
   /**
@@ -104,9 +102,12 @@ Polymer({
    * @private
    */
   confirmationMessage_: function(profileInfo) {
-    return this.i18n('supervisedUserCreatedText',
-                     this.elideProfileName_(profileInfo),
-                     this.elideCustodianUsername_(profileInfo));
+    return this.i18nAdvanced('supervisedUserCreatedText', {
+      substitutions: [
+        this.elideProfileName_(profileInfo),
+        this.elideCustodianUsername_(profileInfo)
+      ],
+    });
   },
 
   /**
@@ -116,8 +117,8 @@ Polymer({
    * @private
    */
   switchUserText_: function(profileInfo) {
-    return this.i18n('supervisedUserCreatedSwitch',
-                     this.elideProfileName_(profileInfo));
+    return this.i18n(
+        'supervisedUserCreatedSwitch', this.elideProfileName_(profileInfo));
   },
 
   /**

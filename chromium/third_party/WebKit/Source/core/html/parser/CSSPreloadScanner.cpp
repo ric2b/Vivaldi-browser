@@ -266,7 +266,7 @@ CSSPreloaderResourceClient::CSSPreloaderResourceClient(
                   : kScanOnly),
       preloader_(preloader),
       resource_(ToCSSStyleSheetResource(resource)) {
-  resource_->AddClient(this, Resource::kDontMarkAsReferenced);
+  resource_->AddClient(this);
 }
 
 CSSPreloaderResourceClient::~CSSPreloaderResourceClient() {}
@@ -275,7 +275,7 @@ void CSSPreloaderResourceClient::SetCSSStyleSheet(
     const String& href,
     const KURL& base_url,
     ReferrerPolicy referrer_policy,
-    const String& charset,
+    const WTF::TextEncoding&,
     const CSSStyleSheetResource*) {
   ClearResource();
 }

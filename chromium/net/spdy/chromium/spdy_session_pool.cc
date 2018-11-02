@@ -22,6 +22,8 @@
 #include "net/log/net_log_event_type.h"
 #include "net/log/net_log_source.h"
 #include "net/log/net_log_with_source.h"
+#include "net/spdy/chromium/bidirectional_stream_spdy_impl.h"
+#include "net/spdy/chromium/spdy_http_stream.h"
 #include "net/spdy/chromium/spdy_session.h"
 #include "net/spdy/core/hpack/hpack_constants.h"
 #include "net/spdy/core/hpack/hpack_huffman_table.h"
@@ -48,6 +50,7 @@ SpdySessionPool::SpdySessionPool(
     SSLConfigService* ssl_config_service,
     HttpServerProperties* http_server_properties,
     TransportSecurityState* transport_security_state,
+    const QuicVersionVector& quic_supported_versions,
     bool enable_ping_based_connection_checking,
     size_t session_max_recv_window_size,
     const SettingsMap& initial_settings,
@@ -57,6 +60,7 @@ SpdySessionPool::SpdySessionPool(
       transport_security_state_(transport_security_state),
       ssl_config_service_(ssl_config_service),
       resolver_(resolver),
+      quic_supported_versions_(quic_supported_versions),
       enable_sending_initial_data_(true),
       enable_ping_based_connection_checking_(
           enable_ping_based_connection_checking),
@@ -72,6 +76,7 @@ SpdySessionPool::SpdySessionPool(
 }
 
 SpdySessionPool::~SpdySessionPool() {
+  DCHECK(spdy_session_request_map_.empty());
   CloseAllSessions();
 
   while (!sessions_.empty()) {
@@ -89,8 +94,7 @@ SpdySessionPool::~SpdySessionPool() {
 base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
     const SpdySessionKey& key,
     std::unique_ptr<ClientSocketHandle> connection,
-    const NetLogWithSource& net_log,
-    bool is_secure) {
+    const NetLogWithSource& net_log) {
   TRACE_EVENT0(kNetTracingCategory,
                "SpdySessionPool::CreateAvailableSessionFromSocket");
 
@@ -99,11 +103,12 @@ base::WeakPtr<SpdySession> SpdySessionPool::CreateAvailableSessionFromSocket(
 
   auto new_session = base::MakeUnique<SpdySession>(
       key, http_server_properties_, transport_security_state_,
-      enable_sending_initial_data_, enable_ping_based_connection_checking_,
-      session_max_recv_window_size_, initial_settings_, time_func_,
-      push_delegate_, proxy_delegate_, net_log.net_log());
+      quic_supported_versions_, enable_sending_initial_data_,
+      enable_ping_based_connection_checking_, session_max_recv_window_size_,
+      initial_settings_, time_func_, push_delegate_, proxy_delegate_,
+      net_log.net_log());
 
-  new_session->InitializeWithSocket(std::move(connection), this, is_secure);
+  new_session->InitializeWithSocket(std::move(connection), this);
 
   base::WeakPtr<SpdySession> available_session = new_session->GetWeakPtr();
   sessions_.insert(new_session.release());
@@ -393,6 +398,100 @@ void SpdySessionPool::OnSSLConfigChanged() {
 
 void SpdySessionPool::OnCertDBChanged() {
   CloseCurrentSessions(ERR_CERT_DATABASE_CHANGED);
+}
+
+void SpdySessionPool::OnNewSpdySessionReady(
+    const base::WeakPtr<SpdySession>& spdy_session,
+    bool direct,
+    const SSLConfig& used_ssl_config,
+    const ProxyInfo& used_proxy_info,
+    bool was_alpn_negotiated,
+    NextProto negotiated_protocol,
+    bool using_spdy,
+    NetLogSource source_dependency) {
+  while (spdy_session) {
+    const SpdySessionKey& spdy_session_key = spdy_session->spdy_session_key();
+    // Each iteration may empty out the RequestSet for |spdy_session_key| in
+    // |spdy_session_request_map_|. So each time, check for RequestSet and use
+    // the first one.
+    //
+    // TODO(willchan): If it's important, switch RequestSet out for a FIFO
+    // queue (Order by priority first, then FIFO within same priority). Unclear
+    // that it matters here.
+    auto iter = spdy_session_request_map_.find(spdy_session_key);
+    if (iter == spdy_session_request_map_.end())
+      return;
+    HttpStreamFactoryImpl::Request* request = *iter->second.begin();
+    request->Complete(was_alpn_negotiated, negotiated_protocol, using_spdy);
+    RemoveRequestFromSpdySessionRequestMap(request);
+    if (request->stream_type() == HttpStreamRequest::BIDIRECTIONAL_STREAM) {
+      request->OnBidirectionalStreamImplReadyOnPooledConnection(
+          used_ssl_config, used_proxy_info,
+          base::MakeUnique<BidirectionalStreamSpdyImpl>(spdy_session,
+                                                        source_dependency));
+    } else {
+      bool use_relative_url =
+          direct || request->url().SchemeIs(url::kHttpsScheme);
+      request->OnStreamReadyOnPooledConnection(
+          used_ssl_config, used_proxy_info,
+          base::MakeUnique<SpdyHttpStream>(spdy_session, use_relative_url,
+                                           source_dependency));
+    }
+  }
+  // TODO(mbelshe): Alert other valid requests.
+}
+
+bool SpdySessionPool::StartRequest(const SpdySessionKey& spdy_session_key,
+                                   const base::Closure& callback) {
+  auto iter = spdy_session_pending_request_map_.find(spdy_session_key);
+  if (iter == spdy_session_pending_request_map_.end()) {
+    spdy_session_pending_request_map_.emplace(spdy_session_key,
+                                              std::list<base::Closure>{});
+    return true;
+  }
+  iter->second.push_back(callback);
+  return false;
+}
+
+void SpdySessionPool::ResumePendingRequests(
+    const SpdySessionKey& spdy_session_key) {
+  auto iter = spdy_session_pending_request_map_.find(spdy_session_key);
+  if (iter != spdy_session_pending_request_map_.end()) {
+    for (auto callback : iter->second) {
+      base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE, callback);
+    }
+    spdy_session_pending_request_map_.erase(iter);
+  }
+}
+
+void SpdySessionPool::AddRequestToSpdySessionRequestMap(
+    const SpdySessionKey& spdy_session_key,
+    HttpStreamFactoryImpl::Request* request) {
+  if (request->HasSpdySessionKey())
+    return;
+  RequestSet& request_set = spdy_session_request_map_[spdy_session_key];
+  DCHECK(!base::ContainsKey(request_set, request));
+  request_set.insert(request);
+  request->SetSpdySessionKey(spdy_session_key);
+}
+
+void SpdySessionPool::RemoveRequestFromSpdySessionRequestMap(
+    HttpStreamFactoryImpl::Request* request) {
+  if (!request->HasSpdySessionKey())
+    return;
+  const SpdySessionKey& spdy_session_key = request->GetSpdySessionKey();
+  // Resume all pending requests now that |request| is done/canceled.
+  ResumePendingRequests(spdy_session_key);
+
+  auto iter = spdy_session_request_map_.find(spdy_session_key);
+  DCHECK(iter != spdy_session_request_map_.end());
+  RequestSet& request_set = iter->second;
+  DCHECK(base::ContainsKey(request_set, request));
+  request_set.erase(request);
+  if (request_set.empty())
+    spdy_session_request_map_.erase(spdy_session_key);
+  // Resets |request|'s SpdySessionKey. This will invalid |spdy_session_key|.
+  request->ResetSpdySessionKey();
 }
 
 void SpdySessionPool::DumpMemoryStats(

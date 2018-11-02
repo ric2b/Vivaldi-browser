@@ -45,6 +45,8 @@ const char kArcTermsAccepted[] = "arc.terms.accepted";
 const char kArcLocationServiceEnabled[] = "arc.location_service.enabled";
 // A preference to keep list of Android packages and their infomation.
 const char kArcPackages[] = "arc.packages";
+// A preference that indicates that Play Auto Install flow was already started.
+const char kArcPaiStarted[] = "arc.pai.started";
 // A preference to keep deferred requests of setting notifications enabled flag.
 const char kArcSetNotificationsEnabledDeferred[] =
     "arc.set_notifications_enabled_deferred";
@@ -54,6 +56,21 @@ const char kArcSignedIn[] = "arc.signedin";
 // the user directory (i.e., the user finished required migration.)
 extern const char kArcCompatibleFilesystemChosen[] =
     "arc.compatible_filesystem.chosen";
+// A preference that indicates that user accepted Voice Interaction Value Prop.
+const char kArcVoiceInteractionValuePropAccepted[] =
+    "arc.voice_interaction_value_prop.accepted";
+// A preference that indicates the user has enabled voice interaction services.
+const char kVoiceInteractionEnabled[] = "settings.voice_interaction.enabled";
+// A preference that indicates the user has allowed voice interaction services
+// to access the "context" (text and graphic content that is currently on
+// screen).
+const char kVoiceInteractionContextEnabled[] =
+    "settings.voice_interaction.context.enabled";
+// A preference indicating whether voice interaction settings have been read
+// from ARC. This synchronization only happens when user goes through the flow
+// to set up voice interaction.
+const char kVoiceInteractionPrefSynced[] =
+    "settings.voice_interaction.context.synced";
 #endif
 
 // A bool pref that keeps whether the child status for this profile was already
@@ -67,10 +84,22 @@ const char kChildAccountStatusKnown[] = "child_account_status_known";
 // Defaults apps are installed only when creating a new profile.
 const char kDefaultApps[] = "default_apps";
 
+// Disable SafeBrowsing checks for files coming from trusted URLs when false.
+const char kSafeBrowsingForTrustedSourcesEnabled[] =
+    "safebrowsing_for_trusted_sources_enabled";
+
 // Disables screenshot accelerators and extension APIs.
 // This setting resides both in profile prefs and local state. Accelerator
 // handling code reads local state, while extension APIs use profile pref.
 const char kDisableScreenshots[] = "disable_screenshots";
+
+// Prevents certain types of downloads based on integer value, which corresponds
+// to DownloadPrefs::DownloadRestriction.
+// 0 - No special restrictions (default)
+// 1 - Block dangerous downloads
+// 2 - Block potentially dangerous downloads
+// 3 - Block all downloads
+const char kDownloadRestrictions[] = "download_restrictions";
 
 // If set to true profiles are created in ephemeral mode and do not store their
 // data in the profile folder on disk but only in memory.
@@ -92,7 +121,14 @@ const char kImportantSitesDialogHistory[] = "important_sites_dialog";
 // compared to this value and if different will result in a profile reset
 // prompt. See triggered_profile_resetter.h for more information.
 const char kLastProfileResetTimestamp[] = "profile.last_reset_timestamp";
+
+// A boolean indicating if settings should be reset for this profile once a
+// run of the Chrome Cleanup Tool has completed.
+const char kChromeCleanerResetPending[] = "chrome_cleaner.reset_pending";
 #endif
+
+// Used to determine if the New Tab in-product help has been shown or not.
+extern const char kNewTabInProductHelp[] = "newtab_in_product_help";
 
 // The URL to open the new tab page to. Only set by Group Policy.
 const char kNewTabPageLocationOverride[] = "newtab_page_location_override";
@@ -113,6 +149,9 @@ const char kSessionExitedCleanly[] = "profile.exited_cleanly";
 // one of |kPrefExitTypeNormal| or |kPrefExitTypeSessionEnded| during
 // shutdown. Used to determine the exit type the last time the profile was open.
 const char kSessionExitType[] = "profile.exit_type";
+
+// Stores the total amount of active session time for the user.
+const char kSessionTimeTotal[] = "profile.total_time";
 
 // The last time that the site engagement service recorded an engagement event
 // for this profile for any URL. Recorded only during shutdown. Used to prevent
@@ -395,22 +434,6 @@ const char kWebKitEncryptedMediaEnabled[] =
 // TODO(bengr): Migrate the preference string to "data_saver.enabled"
 // (crbug.com/564207).
 const char kDataSaverEnabled[] = "spdy_proxy.enabled";
-
-// Boolean that is true when SafeBrowsing is enabled.
-const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
-
-// Boolean that is true when the SafeBrowsing interstitial should not allow
-// users to proceed anyway.
-const char kSafeBrowsingProceedAnywayDisabled[] =
-    "safebrowsing.proceed_anyway_disabled";
-
-// A dictionary mapping incident types to a dict of incident key:digest pairs.
-const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
-
-// Boolean that tells us whether users are given the option to opt in to Safe
-// Browsing extended reporting.
-const char kSafeBrowsingExtendedReportingOptInAllowed[] =
-    "safebrowsing.extended_reporting_opt_in_allowed";
 
 // Boolean that is true when the SSL interstitial should allow users to
 // proceed anyway. Otherwise, proceeding is not possible.
@@ -707,6 +730,17 @@ const char kNoteTakingAppId[] = "settings.note_taking_app_id";
 const char kNoteTakingAppEnabledOnLockScreen[] =
     "settings.note_taking_app_enabled_on_lock_screen";
 
+// List of note taking aps that can be enabled to run on the lock screen.
+// The intended usage is to whitelist the set of apps that the user can enable
+// to run on lock screen, not to actually enable the apps to run on lock screen.
+const char kNoteTakingAppsLockScreenWhitelist[] =
+    "settings.note_taking_apps_lock_screen_whitelist";
+
+// Whether the preferred note taking app should be requested to restore the last
+// note created on lock screen when launched on lock screen.
+const char kRestoreLastLockScreenNote[] =
+    "settings.restore_last_lock_screen_note";
+
 // A boolean pref indicating whether user activity has been observed in the
 // current session already. The pref is used to restore information about user
 // activity after browser crashes.
@@ -809,13 +843,6 @@ const char kPowerForceNonzeroBrightnessForUserActivity[] =
 // The URL from which the Terms of Service can be downloaded. The value is only
 // honored for public accounts.
 const char kTermsOfServiceURL[] = "terms_of_service.url";
-
-// Indicates that the Profile has made navigations that used a certificate
-// installed by the system administrator. If that is true then the local cache
-// of remote data is tainted (e.g. shared scripts), and future navigations
-// show a warning indicating that the organization may track the browsing
-// session.
-const char kUsedPolicyCertificatesOnce[] = "used_policy_certificates_once";
 
 // Indicates whether the remote attestation is enabled for the user.
 const char kAttestationEnabled[] = "attestation.enabled";
@@ -979,6 +1006,14 @@ const char kInstantTetheringAllowed[] = "tether.allowed";
 
 // Boolean pref indicating whether a user has enabled Tether.
 const char kInstantTetheringEnabled[] = "tether.enabled";
+
+// Boolean pref indicating whether this device supports BLE advertising.
+const char kInstantTetheringBleAdvertisingSupported[] =
+    "tether.ble_advertising_supported";
+
+// Integer pref indicating the ecryptfs to ext4 migration strategy. One of
+// options: forbidden = 0, migrate = 1, wipe = 2 or ask the user = 3.
+const char kEcryptfsMigrationStrategy[] = "ecryptfs_migration_strategy";
 #endif  // defined(OS_CHROMEOS)
 
 // A boolean pref set to true if a Home button to open the Home pages should be
@@ -997,7 +1032,7 @@ const char kSavingBrowserHistoryDisabled[] = "history.saving_disabled";
 // permitted.
 const char kAllowDeletingBrowserHistory[] = "history.deleting_enabled";
 
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
 // Whether the "Click here to clear your browsing data" tooltip promo has been
 // shown on the Material Design History page.
 const char kMdHistoryMenuPromoShown[] = "history.menu_promo_shown";
@@ -1230,6 +1265,13 @@ const char kPrintPreviewDisabled[] = "printing.print_preview_disabled";
 const char kPrintPreviewDefaultDestinationSelectionRules[] =
     "printing.default_destination_selection_rules";
 
+#if !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
+// A pref that sets the default destination in Print Preview to always be the
+// OS default printer instead of the most recently used destination.
+const char kPrintPreviewUseSystemDefaultPrinter[] =
+    "printing.use_system_default_printer";
+#endif  // !OS_CHROMEOS && !OS_ANDROID
+
 #if defined(OS_CHROMEOS)
 // List of all printers that the user has configured.
 const char kPrintingDevices[] = "printing.devices";
@@ -1320,15 +1362,8 @@ const char kGCMProductCategoryForSubtypes[] =
 // Whether a user is allowed to use Easy Unlock.
 const char kEasyUnlockAllowed[] = "easy_unlock.allowed";
 
-// Whether Easy Unlock is enabled.
-const char kEasyUnlockEnabled[] = "easy_unlock.enabled";
-
 // Preference storing Easy Unlock pairing data.
 const char kEasyUnlockPairing[] = "easy_unlock.pairing";
-
-// Whether close proximity between the remote and the local device is required
-// in order to use Easy Unlock.
-const char kEasyUnlockProximityRequired[] = "easy_unlock.proximity_required";
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 // Used to indicate whether or not the toolbar redesign bubble has been shown
@@ -1496,6 +1531,9 @@ const char kSaveFileDefaultDirectory[] = "savefile.default_directory";
 // The type used to save the page. See the enum SavePackage::SavePackageType in
 // the chrome/browser/download/save_package.h for the possible values.
 const char kSaveFileType[] = "savefile.type";
+
+// A list of download sources that can be trusted, e.g., enterprise intranet.
+const char kTrustedDownloadSources[] = "trusted_download_sources";
 
 // String which specifies the last directory that was chosen for uploading
 // or opening a file.
@@ -1914,11 +1952,6 @@ const char kOobeMdMode[] = "OobeMdModeEnabled";
 // shark/remora setup process. A controller can help the device go through OOBE
 // and get enrolled into a domain automatically.
 const char kOobeControllerDetected[] = "OobeControllerDetected";
-
-// A 64-bit signed integer pref (encoded as a string) which stores the time
-// of the last OOBE-initiated update check not resulting in an update.
-const char kOobeTimeOfLastUpdateCheckWithoutUpdate[] =
-    "OobeTimeOfLastUpdateCheckWithoutUpdate";
 
 // A boolean pref for whether the Goodies promotion webpage has been displayed,
 // or otherwise disqualified for auto-display, on this device.
@@ -2554,6 +2587,33 @@ const char kSettingsResetPromptLastTriggeredForHomepage[] =
 // internal format (int64) in local store.  (I.e., this is not a per-profile
 // pref.)
 const char kClipboardLastModifiedTime[] = "ui.clipboard.last_modified_time";
+#endif
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+const char kOfflinePrefetchBackoff[] = "offline_prefetch.backoff";
+
+// The following set of Prefs is used by OfflineMetricsCollectorImpl to
+// backup the current Chrome usage tracking state and accumulated counters
+// of days with specific Chrome usage.
+
+// The boolean flags indicating whether the specific activity was observed
+// in Chrome during the day that started at |kOfflineUsageTrackingDay|. These
+// are used to track usage of Chrome is used while offline and how various
+// offline features affect that.
+const char kOfflineUsageStartObserved[] = "offline_pages.start_observed";
+const char kOfflineUsageOnlineObserved[] = "offline_pages.online_observed";
+const char kOfflineUsageOfflineObserved[] = "offline_pages.offline_observed";
+// A time corresponding to a midnight that starts the day for which
+// OfflineMetricsCollector tracks the Chrome usage. Once current time passes
+// 24hrs from this point, the further tracking is attributed to the next day.
+const char kOfflineUsageTrackingDay[] = "offline_pages.tracking_day";
+// Accumulated counters of days with specified Chrome usage. When there is
+// likely a network connection, these counters are reported via UMA and reset.
+const char kOfflineUsageUnusedCount[] = "offline_pages.unused_count";
+const char kOfflineUsageStartedCount[] = "offline_pages.started_count";
+const char kOfflineUsageOfflineCount[] = "offline_pages.offline_count";
+const char kOfflineUsageOnlineCount[] = "offline_pages.online_count";
+const char kOfflineUsageMixedCount[] = "offline_pages.mixed_count";
 #endif
 
 }  // namespace prefs

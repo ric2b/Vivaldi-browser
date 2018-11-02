@@ -17,12 +17,14 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/styled_label.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/grid_layout.h"
+#include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/typography.h"
 #include "ui/views/widget/widget.h"
 
@@ -40,19 +42,19 @@ enum ColumnSetType {
 // Construct a |type| ColumnSet and add it to |layout|.
 void BuildColumnSet(ColumnSetType type, views::GridLayout* layout) {
   views::ColumnSet* column_set = layout->AddColumnSet(type);
-  const int horizontal_padding =
+  const gfx::Insets horizontal_insets =
       type == SINGLE_VIEW_COLUMN_SET
-          ? ChromeLayoutProvider::Get()->GetDistanceMetric(
-                views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN)
-          : 0;
-  column_set->AddPaddingColumn(0, horizontal_padding);
+          ? ChromeLayoutProvider::Get()->GetInsetsMetric(
+                views::INSETS_DIALOG_TITLE)
+          : gfx::Insets();
+  column_set->AddPaddingColumn(0, horizontal_insets.left());
   column_set->AddColumn(views::GridLayout::FILL,
                         views::GridLayout::FILL,
                         1,
                         views::GridLayout::USE_PREF,
                         0,
                         0);
-  column_set->AddPaddingColumn(0, horizontal_padding);
+  column_set->AddPaddingColumn(0, horizontal_insets.right());
 }
 
 views::StyledLabel::RangeStyleInfo GetLinkStyle() {
@@ -74,7 +76,7 @@ views::ScrollView* CreateCredentialsView(
     net::URLRequestContextGetter* request_context) {
   views::View* list_view = new views::View;
   list_view->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+      new views::BoxLayout(views::BoxLayout::kVertical));
   int item_height = 0;
   for (const auto& form : forms) {
     std::pair<base::string16, base::string16> titles =
@@ -162,10 +164,6 @@ int AccountChooserDialogView::GetDialogButtons() const {
   return ui::DIALOG_BUTTON_CANCEL;
 }
 
-bool AccountChooserDialogView::ShouldDefaultButtonBeBlue() const {
-  return show_signin_button_;
-}
-
 base::string16 AccountChooserDialogView::GetDialogButtonLabel(
     ui::DialogButton button) const {
   int message_id = 0;
@@ -176,10 +174,6 @@ base::string16 AccountChooserDialogView::GetDialogButtonLabel(
   else
     NOTREACHED();
   return l10n_util::GetStringUTF16(message_id);
-}
-
-gfx::Size AccountChooserDialogView::CalculatePreferredSize() const {
-  return gfx::Size(kDesiredWidth, GetHeightForWidth(kDesiredWidth));
 }
 
 void AccountChooserDialogView::StyledLabelLinkClicked(views::StyledLabel* label,

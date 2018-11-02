@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_ANDROID_SIGNIN_SIGNIN_MANAGER_ANDROID_H_
 #define CHROME_BROWSER_ANDROID_SIGNIN_SIGNIN_MANAGER_ANDROID_H_
 
-#include <jni.h>
-
 #include <memory>
 #include <string>
 
@@ -31,9 +29,6 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
  public:
   SigninManagerAndroid(JNIEnv* env, jobject obj);
 
-  // Registers the SigninManagerAndroid's native methods through JNI.
-  static bool Register(JNIEnv* env);
-
   void CheckPolicyBeforeSignIn(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -57,9 +52,16 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 
+  // Delete all data for this profile.
   void WipeProfileData(JNIEnv* env,
                        const base::android::JavaParamRef<jobject>& obj,
                        const base::android::JavaParamRef<jobject>& hooks);
+
+  // Delete service worker caches for google.<eTLD>.
+  void WipeGoogleServiceWorkerCaches(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      const base::android::JavaParamRef<jobject>& hooks);
 
   void LogInSignedInUser(JNIEnv* env,
                          const base::android::JavaParamRef<jobject>& obj);
@@ -85,12 +87,15 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
   // SigninManagerBase::Observer implementation.
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
  private:
+  friend class SigninManagerAndroidTest;
+  FRIEND_TEST_ALL_PREFIXES(SigninManagerAndroidTest,
+                           DeleteGoogleServiceWorkerCaches);
+
   ~SigninManagerAndroid() override;
 
   void OnPolicyRegisterDone(const std::string& dm_token,
@@ -100,9 +105,11 @@ class SigninManagerAndroid : public SigninManagerBase::Observer {
   void OnBrowsingDataRemoverDone(
       const base::android::ScopedJavaGlobalRef<jobject>& callback);
 
-  void ClearLastSignedInUser();
-
   void OnSigninAllowedPrefChanged();
+
+  static void WipeData(Profile* profile,
+                       bool all_data,
+                       const base::Closure& callback);
 
   Profile* profile_;
 

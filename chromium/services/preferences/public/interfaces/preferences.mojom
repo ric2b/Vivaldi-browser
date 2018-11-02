@@ -4,10 +4,13 @@
 
 module prefs.mojom;
 
+import "mojo/common/file_path.mojom";
+import "mojo/common/string16.mojom";
 import "mojo/common/values.mojom";
-import "services/preferences/public/interfaces/preferences_configuration.mojom";
+import "services/preferences/public/interfaces/tracked_preference_validation_delegate.mojom";
 
 const string kServiceName = "preferences";
+const string kLocalStateServiceName = "local_state";
 const string kForwarderServiceName = "preferences_forwarder";
 
 // The know pref store types.
@@ -30,6 +33,13 @@ interface PrefStoreObserver {
 
   // The PrefStore has been initialized (asynchronously).
   OnInitializationCompleted(bool succeeded);
+
+  // A preference write by this client has been applied. If this
+  // PrefStoreObserver is associated with a PersistentPrefStore, one
+  // OnPrefChangeAck() message is sent in response to each SetValues() message.
+  // This exists to ensure acks are ordered with respect to OnPrefsChanged
+  // messages.
+  OnPrefChangeAck();
 };
 
 // Captures the connections to a PrefStore by supplying the initial state of the
@@ -68,34 +78,21 @@ struct PersistentPrefStoreConnection {
   bool read_only;
 };
 
-// Manages actual read of preference data. Accepts observers who subscribe to
-// preferences, notifying them of changes.
-interface PrefStore {
-  // Add an observer of changes to prefs contained in |prefs_to_observe|. This
-  // current values of all prefs will not be communicated through a call to
-  // |observer| but instead be returned in |initial_prefs|.
-  AddObserver(array<string> prefs_to_observe) => (
-      PrefStoreConnection connection);
-};
-
-// Manages a registry of all pref stores. Registered pref stores can be
-// connected to through the |PrefStoreConnector| interface.
-interface PrefStoreRegistry {
-  // Register a pref store.
-  Register(PrefStoreType type, PrefStore pref_store);
-};
-
 // Allows connections to pref stores registered with |PrefStoreRegistry|.
 interface PrefStoreConnector {
   // Connect to all registered pref stores, retrieving the current values of all
   // prefs in each store and an |observer| interfaces through which updates can
-  // be received. The client asserts that it is already connected to the
-  // |already_connected_types| pref stores through some other means, so the
-  // Connect call will not connect to those.
-  [Sync]
-  Connect(PrefRegistry pref_registry,
-          array<PrefStoreType> already_connected_types) =>
+  // be received.
+  //
+  // The returned |connection| is the connection to the main writable user pref
+  // store.
+  //
+  // Calls to |Connect| before |Init| are allowed and will cause the calls to
+  // queue and connect once |Init| has been called.
+  Connect(PrefRegistry pref_registry) =>
       (PersistentPrefStoreConnection connection,
+       PersistentPrefStoreConnection? underlay,
+       array<PrefRegistration> remote_defaults,
        map<PrefStoreType, PrefStoreConnection> connections);
 };
 
@@ -130,18 +127,36 @@ interface PersistentPrefStore {
   // Sets the values for prefs.
   SetValues(array<PrefUpdate> updates);
 
+  // Requests that the pref service transmits its value for a pref (or sub-pref
+  // if |sub_pref_path| is non-empty). The value will be transmitted over the
+  // corresponding PrefStoreObserver interface previous returned by
+  // PrefStoreConnector.Connect().
+  RequestValue(string key, array<string> sub_pref_path);
+
   // These mirror the C++ PersistentPrefStore methods.
-  CommitPendingWrite();
+  CommitPendingWrite() => ();
   SchedulePendingLossyWrites();
   ClearMutableValues();
 };
 
 // A registry of all prefs registered by a single client.
 struct PrefRegistry {
-  array<string> registrations;
+  // A list of pref keys that are private to this client. This client claims
+  // exclusive access to these prefs.
+  array<string> private_registrations;
+
+  // A list of pref keys that are public, but owned by another client.
+  array<string> foreign_registrations;
+
+  // A list of prefs that are publicly owned by this client. Each registration
+  // contains the key, the default value and flags. These are shared with
+  // clients that list the same pref in |foreign_registrations|.
+  array<PrefRegistration> public_registrations;
 };
 
 struct PrefRegistration {
+  string key;
+
   mojo.common.mojom.Value default_value;
 
   // A bitfield of flags. Flag values are defined in
@@ -150,8 +165,49 @@ struct PrefRegistration {
   uint32 flags;
 };
 
-interface PrefServiceControl {
-  // Initializes the pref service. This must be called before the service can
-  // be used.
-  Init(PersistentPrefStoreConfiguration configuration);
+// ---------------------------------------------------------------------
+// Service Configuration
+
+// These parameters are passed to prefs::CreateTrackedPersistentPrefStore() in
+// services/preferences/persistent_pref_store_factory.cc.
+struct TrackedPersistentPrefStoreConfiguration {
+  mojo.common.mojom.FilePath unprotected_pref_filename;
+  mojo.common.mojom.FilePath protected_pref_filename;
+  array<TrackedPreferenceMetadata> tracking_configuration;
+  uint64 reporting_ids_count;
+  string seed;
+  string legacy_device_id;
+  string registry_seed;
+  mojo.common.mojom.String16 registry_path;
+  TrackedPreferenceValidationDelegate? validation_delegate;
+  ResetOnLoadObserver? reset_on_load_observer;
+};
+
+struct TrackedPreferenceMetadata {
+  enum EnforcementLevel { NO_ENFORCEMENT, ENFORCE_ON_LOAD };
+
+  enum PrefTrackingStrategy {
+    // Atomic preferences are tracked as a whole.
+    ATOMIC,
+    // Split preferences are dictionaries for which each top-level entry is
+    // tracked independently. Note: preferences using this strategy must be kept
+    // in sync with TrackedSplitPreferences in histograms.xml.
+    SPLIT,
+  };
+
+  enum ValueType {
+    IMPERSONAL,
+    // The preference value may contain personal information.
+    PERSONAL,
+  };
+
+  uint64 reporting_id;
+  string name;
+  EnforcementLevel enforcement_level;
+  PrefTrackingStrategy strategy;
+  ValueType value_type;
+};
+
+interface ResetOnLoadObserver {
+  OnResetOnLoad();
 };

@@ -24,6 +24,7 @@ class VideoCaptureDeviceLauncherSwitcher : public VideoCaptureDeviceLauncher {
                          MediaStreamType stream_type,
                          const media::VideoCaptureParams& params,
                          base::WeakPtr<media::VideoFrameReceiver> receiver,
+                         base::OnceClosure connection_lost_cb,
                          Callbacks* callbacks,
                          base::OnceClosure done_cb) override {
     if (stream_type == content::MEDIA_DEVICE_VIDEO_CAPTURE) {
@@ -33,8 +34,8 @@ class VideoCaptureDeviceLauncherSwitcher : public VideoCaptureDeviceLauncher {
           base::Bind(&VideoCaptureDeviceLauncher::AbortLaunch,
                      base::Unretained(media_device_launcher_.get()));
       return media_device_launcher_->LaunchDeviceAsync(
-          device_id, stream_type, params, std::move(receiver), callbacks,
-          std::move(done_cb));
+          device_id, stream_type, params, std::move(receiver),
+          std::move(connection_lost_cb), callbacks, std::move(done_cb));
     }
     // Use of Unretained() is safe, because |other_types_launcher_| is owned by
     // |this|.
@@ -42,8 +43,8 @@ class VideoCaptureDeviceLauncherSwitcher : public VideoCaptureDeviceLauncher {
         base::Bind(&VideoCaptureDeviceLauncher::AbortLaunch,
                    base::Unretained(other_types_launcher_.get()));
     return other_types_launcher_->LaunchDeviceAsync(
-        device_id, stream_type, params, std::move(receiver), callbacks,
-        std::move(done_cb));
+        device_id, stream_type, params, std::move(receiver),
+        std::move(connection_lost_cb), callbacks, std::move(done_cb));
   }
 
   void AbortLaunch() override {
@@ -68,14 +69,10 @@ VideoCaptureProviderSwitcher::VideoCaptureProviderSwitcher(
 
 VideoCaptureProviderSwitcher::~VideoCaptureProviderSwitcher() = default;
 
-void VideoCaptureProviderSwitcher::Uninitialize() {
-  media_device_capture_provider_->Uninitialize();
-  other_types_capture_provider_->Uninitialize();
-}
-
 void VideoCaptureProviderSwitcher::GetDeviceInfosAsync(
-    const GetDeviceInfosCallback& result_callback) {
-  media_device_capture_provider_->GetDeviceInfosAsync(result_callback);
+    GetDeviceInfosCallback result_callback) {
+  media_device_capture_provider_->GetDeviceInfosAsync(
+      std::move(result_callback));
 }
 
 std::unique_ptr<VideoCaptureDeviceLauncher>

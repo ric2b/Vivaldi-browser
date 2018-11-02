@@ -9,10 +9,9 @@
 #include "cc/layers/picture_image_layer.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/solid_color_layer.h"
-#include "cc/paint/drawing_display_item.h"
 #include "cc/paint/paint_flags.h"
 #include "cc/paint/paint_image.h"
-#include "cc/paint/paint_recorder.h"
+#include "cc/paint/paint_op_buffer.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/layer_tree_pixel_resource_test.h"
 #include "cc/test/pixel_comparator.h"
@@ -40,31 +39,29 @@ class MaskContentLayerClient : public ContentLayerClient {
 
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
-    PaintRecorder recorder;
-    PaintCanvas* canvas =
-        recorder.beginRecording(gfx::RectToSkRect(PaintableRegion()));
+    auto display_list = make_scoped_refptr(new DisplayItemList);
+    PaintOpBuffer* buffer = display_list->StartPaint();
+
+    buffer->push<SaveOp>();
+    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                             SkClipOp::kIntersect, false);
+    SkColor color = SK_ColorTRANSPARENT;
+    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kStroke_Style);
     flags.setStrokeWidth(SkIntToScalar(2));
     flags.setColor(SK_ColorWHITE);
 
-    canvas->clear(SK_ColorTRANSPARENT);
     gfx::Rect inset_rect(bounds_);
     while (!inset_rect.IsEmpty()) {
       inset_rect.Inset(3, 3, 2, 2);
-      canvas->drawRect(
-          SkRect::MakeXYWH(inset_rect.x(), inset_rect.y(), inset_rect.width(),
-                           inset_rect.height()),
-          flags);
+      buffer->push<DrawRectOp>(gfx::RectToSkRect(inset_rect), flags);
       inset_rect.Inset(3, 3, 2, 2);
     }
 
-    auto display_list = make_scoped_refptr(new DisplayItemList);
-    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        PaintableRegion(), recorder.finishRecordingAsPicture(),
-        gfx::RectToSkRect(PaintableRegion()));
-
+    buffer->push<RestoreOp>();
+    display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
   }
@@ -152,41 +149,6 @@ TEST_P(LayerTreeHostMasksPixelTest, MaskOfClippedLayer) {
       base::FilePath(FILE_PATH_LITERAL("mask_of_clipped_layer.png")));
 }
 
-TEST_P(LayerTreeHostMasksPixelTest, MaskOfLargerLayer) {
-  scoped_refptr<SolidColorLayer> background =
-      CreateSolidColorLayer(gfx::Rect(100, 100), SK_ColorWHITE);
-
-  scoped_refptr<SolidColorLayer> green = CreateSolidColorLayerWithBorder(
-      gfx::Rect(0, 0, 100, 100), kCSSGreen, 1, SK_ColorBLACK);
-  background->AddChild(green);
-
-  gfx::Size mask_bounds(50, 50);
-  MaskContentLayerClient client(mask_bounds);
-  scoped_refptr<PictureLayer> mask = PictureLayer::Create(&client);
-  mask->SetBounds(mask_bounds);
-  mask->SetIsDrawable(true);
-  mask->SetLayerMaskType(mask_type_);
-  green->SetMaskLayer(mask.get());
-
-  if (raster_buffer_provider_type_ == RASTER_BUFFER_PROVIDER_TYPE_BITMAP) {
-    // Bitmap produces a sharper (but equivalent sized) mask.
-    float percentage_pixels_large_error = 40.0f;
-    float percentage_pixels_small_error = 0.0f;
-    float average_error_allowed_in_bad_pixels = 65.0f;
-    int large_error_allowed = 120;
-    int small_error_allowed = 0;
-    pixel_comparator_.reset(new FuzzyPixelComparator(
-        true,  // discard_alpha
-        percentage_pixels_large_error, percentage_pixels_small_error,
-        average_error_allowed_in_bad_pixels, large_error_allowed,
-        small_error_allowed));
-  }
-
-  RunPixelResourceTest(
-      background,
-      base::FilePath(FILE_PATH_LITERAL("mask_of_larger_layer.png")));
-}
-
 TEST_P(LayerTreeHostMasksPixelTest, MaskOfLayerNonExactTextureSize) {
   scoped_refptr<SolidColorLayer> background =
       CreateSolidColorLayer(gfx::Rect(100, 100), SK_ColorWHITE);
@@ -221,30 +183,35 @@ class CheckerContentLayerClient : public ContentLayerClient {
   gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
-    PaintRecorder recorder;
-    PaintCanvas* canvas =
-        recorder.beginRecording(gfx::RectToSkRect(PaintableRegion()));
+    auto display_list = make_scoped_refptr(new DisplayItemList);
+    PaintOpBuffer* buffer = display_list->StartPaint();
+
+    buffer->push<SaveOp>();
+    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                             SkClipOp::kIntersect, false);
+    SkColor color = SK_ColorTRANSPARENT;
+    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kStroke_Style);
     flags.setStrokeWidth(SkIntToScalar(4));
     flags.setColor(color_);
-    canvas->clear(SK_ColorTRANSPARENT);
     if (vertical_) {
       for (int i = 4; i < bounds_.width(); i += 16) {
-        canvas->drawLine(i, 0, i, bounds_.height(), flags);
+        gfx::PointF p1(i, 0.f);
+        gfx::PointF p2(i, bounds_.height());
+        buffer->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
       }
     } else {
       for (int i = 4; i < bounds_.height(); i += 16) {
-        canvas->drawLine(0, i, bounds_.width(), i, flags);
+        gfx::PointF p1(0.f, i);
+        gfx::PointF p2(bounds_.width(), i);
+        buffer->push<DrawLineOp>(p1.x(), p1.y(), p2.x(), p2.y(), flags);
       }
     }
 
-    auto display_list = make_scoped_refptr(new DisplayItemList);
-    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        PaintableRegion(), recorder.finishRecordingAsPicture(),
-        gfx::RectToSkRect(PaintableRegion()));
-
+    buffer->push<RestoreOp>();
+    display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
   }
@@ -265,22 +232,23 @@ class CircleContentLayerClient : public ContentLayerClient {
   gfx::Rect PaintableRegion() override { return gfx::Rect(bounds_); }
   scoped_refptr<DisplayItemList> PaintContentsToDisplayList(
       PaintingControlSetting picture_control) override {
-    PaintRecorder recorder;
-    PaintCanvas* canvas =
-        recorder.beginRecording(gfx::RectToSkRect(PaintableRegion()));
+    auto display_list = make_scoped_refptr(new DisplayItemList);
+    PaintOpBuffer* buffer = display_list->StartPaint();
+
+    buffer->push<SaveOp>();
+    buffer->push<ClipRectOp>(gfx::RectToSkRect(PaintableRegion()),
+                             SkClipOp::kIntersect, false);
+    SkColor color = SK_ColorTRANSPARENT;
+    buffer->push<DrawColorOp>(color, SkBlendMode::kSrc);
 
     PaintFlags flags;
     flags.setStyle(PaintFlags::kFill_Style);
     flags.setColor(SK_ColorWHITE);
-    canvas->clear(SK_ColorTRANSPARENT);
-    canvas->drawCircle(bounds_.width() / 2, bounds_.height() / 2,
-                       bounds_.width() / 4, flags);
+    buffer->push<DrawCircleOp>(bounds_.width() / 2.f, bounds_.height() / 2.f,
+                               bounds_.width() / 4.f, flags);
 
-    auto display_list = make_scoped_refptr(new DisplayItemList);
-    display_list->CreateAndAppendDrawingItem<DrawingDisplayItem>(
-        PaintableRegion(), recorder.finishRecordingAsPicture(),
-        gfx::RectToSkRect(PaintableRegion()));
-
+    buffer->push<RestoreOp>();
+    display_list->EndPaintOfUnpaired(PaintableRegion());
     display_list->Finalize();
     return display_list;
   }

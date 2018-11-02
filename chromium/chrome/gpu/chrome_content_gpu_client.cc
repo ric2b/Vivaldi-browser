@@ -20,7 +20,8 @@
 #include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/gpu/gpu_arc_video_service.h"
+#include "chrome/gpu/gpu_arc_video_decode_accelerator.h"
+#include "chrome/gpu/gpu_arc_video_encode_accelerator.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #endif
@@ -50,22 +51,14 @@ ChromeContentGpuClient::ChromeContentGpuClient()
 ChromeContentGpuClient::~ChromeContentGpuClient() {}
 
 void ChromeContentGpuClient::Initialize(
-    base::FieldTrialList::Observer* observer,
     service_manager::BinderRegistry* registry) {
-  DCHECK(!field_trial_syncer_);
-  const base::CommandLine& command_line =
-      *base::CommandLine::ForCurrentProcess();
-  // No need for field trial syncer if we're in the browser process.
-  if (!command_line.HasSwitch(switches::kInProcessGPU)) {
-    field_trial_syncer_.reset(
-        new variations::ChildProcessFieldTrialSyncer(observer));
-    field_trial_syncer_->InitFieldTrialObserving(command_line,
-                                                 switches::kSingleProcess);
-  }
-
 #if defined(OS_CHROMEOS)
   registry->AddInterface(
-      base::Bind(&ChromeContentGpuClient::CreateArcVideoAcceleratorService,
+      base::Bind(&ChromeContentGpuClient::CreateArcVideoDecodeAccelerator,
+                 base::Unretained(this)),
+      base::ThreadTaskRunnerHandle::Get());
+  registry->AddInterface(
+      base::Bind(&ChromeContentGpuClient::CreateArcVideoEncodeAccelerator,
                  base::Unretained(this)),
       base::ThreadTaskRunnerHandle::Get());
 #endif
@@ -86,12 +79,19 @@ void ChromeContentGpuClient::GpuServiceInitialized(
 
 #if defined(OS_CHROMEOS)
 
-void ChromeContentGpuClient::CreateArcVideoAcceleratorService(
-    const service_manager::BindSourceInfo& source_info,
-    ::arc::mojom::VideoAcceleratorServiceRequest request) {
+void ChromeContentGpuClient::CreateArcVideoDecodeAccelerator(
+    ::arc::mojom::VideoDecodeAcceleratorRequest request) {
   mojo::MakeStrongBinding(
-      base::MakeUnique<chromeos::arc::GpuArcVideoService>(gpu_preferences_),
+      base::MakeUnique<chromeos::arc::GpuArcVideoDecodeAccelerator>(
+          gpu_preferences_),
       std::move(request));
 }
 
+void ChromeContentGpuClient::CreateArcVideoEncodeAccelerator(
+    ::arc::mojom::VideoEncodeAcceleratorRequest request) {
+  mojo::MakeStrongBinding(
+      base::MakeUnique<chromeos::arc::GpuArcVideoEncodeAccelerator>(
+          gpu_preferences_),
+      std::move(request));
+}
 #endif

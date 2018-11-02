@@ -66,6 +66,8 @@ class TestHooks : public AnimationDelegate {
   virtual void WillAnimateLayers(LayerTreeHostImpl* host_impl,
                                  base::TimeTicks monotonic_time) {}
   virtual void DidInvalidateContentOnImplSide(LayerTreeHostImpl* host_impl) {}
+  virtual void DidReceiveImplSideInvalidationRequest(
+      LayerTreeHostImpl* host_impl) {}
   virtual void DidRequestImplSideInvalidation(LayerTreeHostImpl* host_impl) {}
 
   // Asynchronous compositor thread hooks.
@@ -74,7 +76,7 @@ class TestHooks : public AnimationDelegate {
   // DrawLayersOnThread() instead. For that reason these methods do not receive
   // a LayerTreeHostImpl pointer.
   virtual void DisplayReceivedLocalSurfaceIdOnThread(
-      const LocalSurfaceId& local_surface_id) {}
+      const viz::LocalSurfaceId& local_surface_id) {}
   virtual void DisplayReceivedCompositorFrameOnThread(
       const CompositorFrame& frame) {}
   virtual void DisplayWillDrawAndSwapOnThread(
@@ -94,8 +96,8 @@ class TestHooks : public AnimationDelegate {
   virtual void WillBeginMainFrame() {}
   virtual void DidBeginMainFrame() {}
   virtual void UpdateLayerTreeHost() {}
-  virtual void DidInitializeCompositorFrameSink() {}
-  virtual void DidFailToInitializeCompositorFrameSink() {}
+  virtual void DidInitializeLayerTreeFrameSink() {}
+  virtual void DidFailToInitializeLayerTreeFrameSink() {}
   virtual void DidAddAnimation() {}
   virtual void WillCommit() {}
   virtual void DidCommit() {}
@@ -122,9 +124,9 @@ class TestHooks : public AnimationDelegate {
 
   // OutputSurface indirections to the LayerTreeTest, that can be further
   // overridden.
-  virtual void RequestNewCompositorFrameSink() = 0;
+  virtual void RequestNewLayerTreeFrameSink() = 0;
   virtual std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
-      scoped_refptr<ContextProvider> compositor_context_provider) = 0;
+      scoped_refptr<viz::ContextProvider> compositor_context_provider) = 0;
 };
 
 }  // namespace cc

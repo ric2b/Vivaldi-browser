@@ -18,9 +18,7 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
-#include "ash/wm_window.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -60,6 +58,7 @@
 #include "chrome/grit/browser_resources.h"
 #include "chromeos/audio/audio_a11y_controller.h"
 #include "chromeos/audio/chromeos_sounds.h"
+#include "chromeos/chromeos_switches.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "components/prefs/pref_member.h"
@@ -84,10 +83,12 @@
 #include "media/audio/sounds/sounds_manager.h"
 #include "media/base/media_switches.h"
 #include "services/service_manager/public/cpp/connector.h"
+#include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_util.h"
+#include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_observer.h"
 
 using content::BrowserThread;
@@ -117,7 +118,7 @@ BrailleController* GetBrailleController() {
   // Don't use the real braille controller for tests to avoid automatically
   // starting ChromeVox which confuses some tests.
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
-  if (command_line->HasSwitch(switches::kTestType))
+  if (command_line->HasSwitch(::switches::kTestType))
     return StubBrailleController::GetInstance();
   return BrailleController::GetInstance();
 }
@@ -174,7 +175,6 @@ AccessibilityStatusEventDetails::AccessibilityStatusEventDetails(
       notify(notify) {}
 
 ///////////////////////////////////////////////////////////////////////////////
-//
 // AccessibilityManager::PrefHandler
 
 AccessibilityManager::PrefHandler::PrefHandler(const char* pref_path)
@@ -277,6 +277,9 @@ AccessibilityManager::AccessibilityManager()
       weak_ptr_factory_(this) {
   notification_registrar_.Add(this,
                               chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+                              content::NotificationService::AllSources());
+  notification_registrar_.Add(this,
+                              chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
                               content::NotificationService::AllSources());
   notification_registrar_.Add(this,
                               chrome::NOTIFICATION_SESSION_STARTED,
@@ -421,8 +424,8 @@ void AccessibilityManager::UpdateLargeCursorFromPref() {
 
   NotifyAccessibilityStatusChanged(details);
 
-  ash::Shell::Get()->cursor_manager()->SetCursorSet(
-      enabled ? ui::CURSOR_SET_LARGE : ui::CURSOR_SET_NORMAL);
+  ash::Shell::Get()->cursor_manager()->SetCursorSize(
+      enabled ? ui::CursorSize::kLarge : ui::CursorSize::kNormal);
   ash::Shell::Get()->SetLargeCursorSizeInDip(large_cursor_size_in_dip);
   ash::Shell::Get()->SetCursorCompositingEnabled(
       ShouldEnableCursorCompositing());
@@ -474,9 +477,6 @@ void AccessibilityManager::EnableSpokenFeedback(
     ash::AccessibilityNotificationVisibility notify) {
   if (!profile_)
     return;
-  ash::ShellPort::Get()->RecordUserMetricsAction(
-      enabled ? ash::UMA_STATUS_AREA_ENABLE_SPOKEN_FEEDBACK
-              : ash::UMA_STATUS_AREA_DISABLE_SPOKEN_FEEDBACK);
 
   spoken_feedback_notification_ = notify;
 
@@ -802,7 +802,7 @@ void AccessibilityManager::UpdateVirtualKeyboardFromPref() {
     if (keyboard::IsKeyboardEnabled())
       ash::Shell::Get()->CreateKeyboard();
     else
-      ash::Shell::Get()->DeactivateKeyboard();
+      ash::Shell::Get()->DestroyKeyboard();
   } else {
     // TODO(mash): Support on-screen keyboard. See http://crbug.com/646565
     NOTIMPLEMENTED();
@@ -1028,6 +1028,18 @@ void AccessibilityManager::UpdateSwitchAccessFromPref() {
   const bool enabled = profile_->GetPrefs()->GetBoolean(
       prefs::kAccessibilitySwitchAccessEnabled);
 
+  // The Switch Access setting is behind a flag. Don't enable the feature
+  // even if the preference is enabled, if the flag isn't also set.
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(
+          chromeos::switches::kEnableExperimentalAccessibilityFeatures)) {
+    if (enabled) {
+      LOG(WARNING) << "Switch access enabled but experimental accessibility "
+                   << "features flag is not set.";
+    }
+    return;
+  }
+
   if (switch_access_enabled_ == enabled)
     return;
   switch_access_enabled_ = enabled;
@@ -1093,14 +1105,14 @@ void AccessibilityManager::UpdateBrailleImeState() {
       preload_engines_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_ALL);
   std::vector<base::StringPiece>::iterator it =
       std::find(preload_engines.begin(), preload_engines.end(),
-                extension_misc::kBrailleImeEngineId);
+                extension_ime_util::kBrailleImeEngineId);
   bool is_enabled = (it != preload_engines.end());
   bool should_be_enabled =
       (spoken_feedback_enabled_ && braille_display_connected_);
   if (is_enabled == should_be_enabled)
     return;
   if (should_be_enabled)
-    preload_engines.push_back(extension_misc::kBrailleImeEngineId);
+    preload_engines.push_back(extension_ime_util::kBrailleImeEngineId);
   else
     preload_engines.erase(it);
   pref_service->SetString(prefs::kLanguagePreloadEngines,
@@ -1123,7 +1135,7 @@ void AccessibilityManager::InputMethodChanged(
   const chromeos::input_method::InputMethodDescriptor descriptor =
       manager->GetActiveIMEState()->GetCurrentInputMethod();
   braille_ime_current_ =
-      (descriptor.id() == extension_misc::kBrailleImeEngineId);
+      (descriptor.id() == extension_ime_util::kBrailleImeEngineId);
 }
 
 void AccessibilityManager::OnSessionStateChanged() {
@@ -1141,6 +1153,13 @@ void AccessibilityManager::OnSessionStateChanged() {
 }
 
 void AccessibilityManager::SetProfile(Profile* profile) {
+  // Do nothing if this is called for the current profile. This can happen. For
+  // example, ChromeSessionManager fires both
+  // NOTIFICATION_LOGIN_USER_PROFILE_PREPARED and NOTIFICATION_SESSION_STARTED,
+  // and we are observing both events.
+  if (profile_ == profile)
+    return;
+
   pref_change_registrar_.reset();
   local_state_pref_change_registrar_.reset();
 
@@ -1272,7 +1291,8 @@ void AccessibilityManager::SetProfile(Profile* profile) {
 
 void AccessibilityManager::ActiveUserChanged(
     const user_manager::User* active_user) {
-  SetProfile(ProfileManager::GetActiveUserProfile());
+  if (active_user && active_user->is_profile_created())
+    SetProfile(ProfileManager::GetActiveUserProfile());
 }
 
 void AccessibilityManager::OnFullscreenStateChanged(bool is_fullscreen,
@@ -1385,6 +1405,12 @@ void AccessibilityManager::Observe(
         SetProfile(profile);
       break;
     }
+    case chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED:
+      // Update |profile_| when login user profile is prepared.
+      // NOTIFICATION_SESSION_STARTED is not fired from UserSessionManager, but
+      // profile may be changed by UserSessionManager in OOBE flow.
+      SetProfile(ProfileManager::GetActiveUserProfile());
+      break;
     case chrome::NOTIFICATION_SESSION_STARTED:
       // Update |profile_| when entering a session.
       SetProfile(ProfileManager::GetActiveUserProfile());
@@ -1425,7 +1451,7 @@ void AccessibilityManager::OnBrailleKeyEvent(const KeyEvent& event) {
       !braille_ime_current_) {
     input_method::InputMethodManager::Get()
         ->GetActiveIMEState()
-        ->ChangeInputMethod(extension_misc::kBrailleImeEngineId,
+        ->ChangeInputMethod(extension_ime_util::kBrailleImeEngineId,
                             false /* show_message */);
   }
 }
@@ -1469,9 +1495,9 @@ void AccessibilityManager::PostLoadChromeVox() {
   }
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableAudioFocus)) {
+          ::switches::kEnableAudioFocus)) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
-        switches::kEnableAudioFocus);
+        ::switches::kEnableAudioFocus);
   }
 }
 
@@ -1529,6 +1555,11 @@ void AccessibilityManager::SetKeyboardListenerExtensionId(
       extensions::ExtensionRegistry::Get(context);
   if (!extension_registry_observer_.IsObserving(registry) && !id.empty())
     extension_registry_observer_.Add(registry);
+}
+
+void AccessibilityManager::SetSwitchAccessKeys(const std::set<int>& key_codes) {
+  if (switch_access_enabled_)
+    switch_access_event_handler_->SetKeysToCapture(key_codes);
 }
 
 }  // namespace chromeos

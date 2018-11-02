@@ -34,10 +34,9 @@ void ResourcePrefetchPredictorTabHelper::DocumentOnLoadCompletedInMainFrame() {
   if (!loading_predictor)
     return;
 
-  auto* resource_prefetch_predictor =
-      loading_predictor->resource_prefetch_predictor();
+  auto* collector = loading_predictor->loading_data_collector();
   NavigationID navigation_id(web_contents());
-  resource_prefetch_predictor->RecordMainFrameLoadComplete(navigation_id);
+  collector->RecordMainFrameLoadComplete(navigation_id);
 }
 
 void ResourcePrefetchPredictorTabHelper::DidLoadResourceFromMemoryCache(
@@ -51,17 +50,16 @@ void ResourcePrefetchPredictorTabHelper::DidLoadResourceFromMemoryCache(
   if (!loading_predictor)
     return;
 
-  ResourcePrefetchPredictor::URLRequestSummary summary;
+  URLRequestSummary summary;
   summary.navigation_id = NavigationID(web_contents());
   summary.resource_url = url;
+  summary.request_url = url;
   summary.mime_type = mime_type;
-  summary.resource_type =
-      ResourcePrefetchPredictor::GetResourceTypeFromMimeType(
-          mime_type, resource_type);
+  summary.resource_type = LoadingDataCollector::GetResourceTypeFromMimeType(
+      mime_type, resource_type);
   summary.was_cached = true;
-  auto* resource_prefetch_predictor =
-      loading_predictor->resource_prefetch_predictor();
-  resource_prefetch_predictor->RecordURLResponse(summary);
+  auto* collector = loading_predictor->loading_data_collector();
+  collector->RecordURLResponse(summary);
 }
 
 }  // namespace predictors

@@ -182,10 +182,6 @@ void BrowserGpuChannelHostFactory::CloseChannel() {
   }
 }
 
-bool BrowserGpuChannelHostFactory::CanUseForTesting() {
-  return GpuDataManager::GetInstance()->GpuAccessAllowed(NULL);
-}
-
 void BrowserGpuChannelHostFactory::Initialize(bool establish_gpu_channel) {
   DCHECK(!instance_);
   instance_ = new BrowserGpuChannelHostFactory();
@@ -256,6 +252,7 @@ BrowserGpuChannelHostFactory::AllocateSharedMemory(size_t size) {
 void BrowserGpuChannelHostFactory::EstablishGpuChannel(
     const gpu::GpuChannelEstablishedCallback& callback) {
   DCHECK(!service_manager::ServiceManagerIsRemote());
+  DCHECK(IsMainThread());
   if (gpu_channel_.get() && gpu_channel_->IsLost()) {
     DCHECK(!pending_request_.get());
     // Recreate the channel if it has been lost.
@@ -281,7 +278,7 @@ void BrowserGpuChannelHostFactory::EstablishGpuChannel(
 // (Opening the initial channel to a child process involves handling a reply
 // task on the UI thread first, so we cannot block here.)
 scoped_refptr<gpu::GpuChannelHost>
-BrowserGpuChannelHostFactory::EstablishGpuChannelSync(bool force_access_to_gpu) {
+BrowserGpuChannelHostFactory::EstablishGpuChannelSync() {
 #if defined(OS_ANDROID)
   NOTREACHED();
   return nullptr;

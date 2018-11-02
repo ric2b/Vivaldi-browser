@@ -8,8 +8,6 @@
 #include <memory>
 
 #include "base/id_map.h"
-#include "base/optional.h"
-#include "base/time/time.h"
 #include "content/child/child_thread_impl.h"
 #include "content/child/scoped_child_process_reference.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
@@ -35,8 +33,11 @@ class ServiceWorkerContextClient;
 class EmbeddedWorkerInstanceClientImpl
     : public mojom::EmbeddedWorkerInstanceClient {
  public:
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     mojom::EmbeddedWorkerInstanceClientRequest request);
+  static void Create(
+      base::TimeTicks blink_initialized_time,
+      scoped_refptr<base::SingleThreadTaskRunner> io_thread_runner,
+      mojom::EmbeddedWorkerInstanceClientRequest request,
+      const service_manager::BindSourceInfo& source_info);
 
   ~EmbeddedWorkerInstanceClientImpl() override;
 
@@ -51,7 +52,7 @@ class EmbeddedWorkerInstanceClientImpl
   // references automatically.
   class WorkerWrapper {
    public:
-    WorkerWrapper(blink::WebEmbeddedWorker* worker,
+    WorkerWrapper(std::unique_ptr<blink::WebEmbeddedWorker> worker,
                   int devtools_agent_route_id);
     ~WorkerWrapper();
 
@@ -67,12 +68,14 @@ class EmbeddedWorkerInstanceClientImpl
   };
 
   EmbeddedWorkerInstanceClientImpl(
+      scoped_refptr<base::SingleThreadTaskRunner> io_thread_runner,
       mojo::InterfaceRequest<mojom::EmbeddedWorkerInstanceClient> request);
 
   // mojom::EmbeddedWorkerInstanceClient implementation
   void StartWorker(
       const EmbeddedWorkerStartParams& params,
       mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host)
       override;
   void StopWorker() override;
@@ -85,6 +88,7 @@ class EmbeddedWorkerInstanceClientImpl
 
   std::unique_ptr<WorkerWrapper> StartWorkerContext(
       const EmbeddedWorkerStartParams& params,
+      mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
       std::unique_ptr<ServiceWorkerContextClient> context_client);
 
   mojo::Binding<mojom::EmbeddedWorkerInstanceClient> binding_;
@@ -96,7 +100,10 @@ class EmbeddedWorkerInstanceClientImpl
   // nullptr means the worker is not running.
   std::unique_ptr<WorkerWrapper> wrapper_;
 
-  base::Optional<base::TimeTicks> stop_worker_time_;
+  // For UMA.
+  base::TimeTicks blink_initialized_time_;
+
+  scoped_refptr<base::SingleThreadTaskRunner> io_thread_runner_;
 
   DISALLOW_COPY_AND_ASSIGN(EmbeddedWorkerInstanceClientImpl);
 };

@@ -17,6 +17,7 @@
 #include "base/macros.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sequenced_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "crypto/ec_private_key.h"
 #include "net/cert/asn1_util.h"
@@ -197,7 +198,7 @@ void SQLiteChannelIDStore::Backend::Load(
 void SQLiteChannelIDStore::Backend::LoadInBackground(
     std::vector<std::unique_ptr<DefaultChannelIDStore::ChannelID>>*
         channel_ids) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
 
   // This method should be called only once per instance.
   DCHECK(!db_.get());
@@ -428,7 +429,7 @@ bool SQLiteChannelIDStore::Backend::EnsureDatabaseVersion() {
 void SQLiteChannelIDStore::Backend::DatabaseErrorCallback(
     int error,
     sql::Statement* stmt) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
 
   if (!sql::IsErrorCatastrophic(error))
     return;
@@ -448,7 +449,7 @@ void SQLiteChannelIDStore::Backend::DatabaseErrorCallback(
 }
 
 void SQLiteChannelIDStore::Backend::KillDatabase() {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
 
   if (db_) {
     // This Backend will now be in-memory only. In a future run the database
@@ -521,17 +522,13 @@ void SQLiteChannelIDStore::Backend::BatchOperation(
 
 void SQLiteChannelIDStore::Backend::PrunePendingOperationsForDeletes(
     const std::list<std::string>& server_identifiers) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   base::AutoLock locked(lock_);
 
   for (PendingOperationsList::iterator it = pending_.begin();
        it != pending_.end();) {
-    bool remove =
-        std::find(server_identifiers.begin(), server_identifiers.end(),
-                  (*it)->channel_id().server_identifier()) !=
-        server_identifiers.end();
-
-    if (remove) {
+    if (base::ContainsValue(server_identifiers,
+                            (*it)->channel_id().server_identifier())) {
       std::unique_ptr<PendingOperation> po(*it);
       it = pending_.erase(it);
       --num_pending_;
@@ -547,7 +544,7 @@ void SQLiteChannelIDStore::Backend::Flush() {
 }
 
 void SQLiteChannelIDStore::Backend::Commit() {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
 
   PendingOperationsList ops;
   {
@@ -620,7 +617,7 @@ void SQLiteChannelIDStore::Backend::Close() {
 }
 
 void SQLiteChannelIDStore::Backend::InternalBackgroundClose() {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
   // Commit any pending operations
   Commit();
   db_.reset();
@@ -628,7 +625,7 @@ void SQLiteChannelIDStore::Backend::InternalBackgroundClose() {
 
 void SQLiteChannelIDStore::Backend::BackgroundDeleteAllInList(
     const std::list<std::string>& server_identifiers) {
-  DCHECK(background_task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(background_task_runner_->RunsTasksInCurrentSequence());
 
   if (!db_.get())
     return;

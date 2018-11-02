@@ -41,7 +41,7 @@ class V8TestInterfaceGarbageCollected {
     visitor->Trace(scriptWrappable->ToImpl<TestInterfaceGarbageCollected>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestInterfaceGarbageCollected>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestInterfaceGarbageCollected>());
   }
   static const int eventListenerCacheIndex = kV8DefaultWrapperInternalFieldCount + 0;
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 1;
@@ -62,6 +62,11 @@ class V8TestInterfaceGarbageCollected {
   CORE_EXPORT static void clearMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void deleteMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
   CORE_EXPORT static void iteratorMethodCallback(const v8::FunctionCallbackInfo<v8::Value>&);
+
+  static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
 };
 
 template <>

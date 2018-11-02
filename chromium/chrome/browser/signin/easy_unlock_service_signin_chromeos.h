@@ -22,6 +22,10 @@ namespace chromeos {
 class EasyUnlockChallengeWrapper;
 }
 
+namespace proximity_auth {
+class ProximityAuthLocalStatePrefManager;
+}
+
 // EasyUnlockService instance that should be used for signin profile.
 class EasyUnlockServiceSignin
     : public EasyUnlockService,
@@ -78,6 +82,8 @@ class EasyUnlockServiceSignin
   };
 
   // EasyUnlockService implementation:
+  proximity_auth::ProximityAuthPrefManager* GetProximityAuthPrefManager()
+      override;
   EasyUnlockService::Type GetType() const override;
   AccountId GetAccountId() const override;
   void LaunchSetup() override;
@@ -100,8 +106,11 @@ class EasyUnlockServiceSignin
   void InitializeInternal() override;
   void ShutdownInternal() override;
   bool IsAllowedInternal() const override;
+  bool IsEnabled() const override;
+  bool IsChromeOSLoginEnabled() const override;
   void OnWillFinalizeUnlock(bool success) override;
   void OnSuspendDoneInternal() override;
+  void OnBluetoothAdapterPresentChanged() override;
 
   // proximity_auth::ScreenlockBridge::Observer implementation:
   void OnScreenDidLock(proximity_auth::ScreenlockBridge::LockHandler::ScreenType
@@ -127,6 +136,10 @@ class EasyUnlockServiceSignin
   // Otherwise, returns NULL.
   const UserData* FindLoadedDataForCurrentUser() const;
 
+  // Shows the hardlock or connecting state as initial UI before cryptohome
+  // keys checking and state update from the app.
+  void ShowInitialUserPodState();
+
   // User id of the user currently associated with the service.
   AccountId account_id_;
 
@@ -148,6 +161,10 @@ class EasyUnlockServiceSignin
 
   // Handles wrapping the user's challenge with the TPM.
   std::unique_ptr<chromeos::EasyUnlockChallengeWrapper> challenge_wrapper_;
+
+  // Manages the EasyUnlock prefs for the local state.
+  std::unique_ptr<proximity_auth::ProximityAuthLocalStatePrefManager>
+      pref_manager_;
 
   base::WeakPtrFactory<EasyUnlockServiceSignin> weak_ptr_factory_;
 

@@ -79,15 +79,19 @@ std::unique_ptr<TracedValue> GetTraceArgsForScriptElement(
   return value;
 }
 
-bool DoExecuteScript(ScriptElementBase* element,
-                     const Script* script,
-                     const TextPosition& text_position) {
+void DoExecuteScript(PendingScript* pending_script, const KURL& document_url) {
+  ScriptElementBase* element = pending_script->GetElement();
   ScriptLoader* script_loader = element->Loader();
   DCHECK(script_loader);
-  TRACE_EVENT_WITH_FLOW1("blink", "HTMLParserScriptRunner ExecuteScript",
-                         element, TRACE_EVENT_FLAG_FLOW_IN, "data",
-                         GetTraceArgsForScriptElement(element, text_position));
-  return script_loader->ExecuteScript(script);
+  const char* const trace_event_name =
+      pending_script->ErrorOccurred()
+          ? "HTMLParserScriptRunner ExecuteScriptFailed"
+          : "HTMLParserScriptRunner ExecuteScript";
+  TRACE_EVENT_WITH_FLOW1("blink", trace_event_name, element,
+                         TRACE_EVENT_FLAG_FLOW_IN, "data",
+                         GetTraceArgsForScriptElement(
+                             element, pending_script->StartingPosition()));
+  script_loader->ExecuteScriptBlock(pending_script, document_url);
 }
 
 void TraceParserBlockingScript(const PendingScript* pending_script,
@@ -158,7 +162,7 @@ HTMLParserScriptRunner::HTMLParserScriptRunner(
     : reentry_permit_(reentry_permit),
       document_(document),
       host_(host),
-      parser_blocking_script_(nullptr) {
+      parser_blocking_script_(this, nullptr) {
   DCHECK(host_);
 }
 
@@ -201,10 +205,6 @@ bool HTMLParserScriptRunner::IsParserBlockingScriptReady() {
 void HTMLParserScriptRunner::ExecutePendingScriptAndDispatchEvent(
     PendingScript* pending_script,
     ScriptStreamer::Type pending_script_type) {
-  bool error_occurred = false;
-  Script* script = pending_script->GetSource(
-      DocumentURLForScriptExecution(document_), error_occurred);
-
   // Stop watching loads before executeScript to prevent recursion if the script
   // reloads itself.
   // TODO(kouhei): Consider merging this w/ pendingScript->dispose() after the
@@ -221,17 +221,12 @@ void HTMLParserScriptRunner::ExecutePendingScriptAndDispatchEvent(
     }
   }
 
-  TextPosition script_start_position = pending_script->StartingPosition();
   double script_parser_blocking_time =
       pending_script->ParserBlockingLoadStartTime();
   ScriptElementBase* element = pending_script->GetElement();
 
   // 1. "Let the script be the pending parsing-blocking script.
   //     There is no longer a pending parsing-blocking script."
-  // Clear the pending script before possible re-entrancy from executeScript()
-  pending_script->Dispose();
-  pending_script = nullptr;
-
   if (pending_script_type == ScriptStreamer::kParsingBlocking) {
     parser_blocking_script_ = nullptr;
   }
@@ -247,26 +242,14 @@ void HTMLParserScriptRunner::ExecutePendingScriptAndDispatchEvent(
         ignore_destructive_write_count_incrementer(document_);
 
     // 8. "Execute the script."
-    if (error_occurred) {
-      TRACE_EVENT_WITH_FLOW1(
-          "blink", "HTMLParserScriptRunner ExecuteScriptFailed", element,
-          TRACE_EVENT_FLAG_FLOW_IN, "data",
-          GetTraceArgsForScriptElement(element, script_start_position));
-      script_loader->DispatchErrorEvent();
-    } else {
-      DCHECK(IsExecutingScript());
-      if (script_parser_blocking_time > 0.0) {
-        DocumentParserTiming::From(*document_)
-            .RecordParserBlockedOnScriptLoadDuration(
-                MonotonicallyIncreasingTime() - script_parser_blocking_time,
-                script_loader->WasCreatedDuringDocumentWrite());
-      }
-      if (!DoExecuteScript(element, script, script_start_position)) {
-        script_loader->DispatchErrorEvent();
-      } else {
-        element->DispatchLoadEvent();
-      }
+    DCHECK(IsExecutingScript());
+    if (!pending_script->ErrorOccurred() && script_parser_blocking_time > 0.0) {
+      DocumentParserTiming::From(*document_)
+          .RecordParserBlockedOnScriptLoadDuration(
+              MonotonicallyIncreasingTime() - script_parser_blocking_time,
+              script_loader->WasCreatedDuringDocumentWrite());
     }
+    DoExecuteScript(pending_script, DocumentURLForScriptExecution(document_));
 
     // 9. "Decrement the parser's script nesting level by one.
     //     If the parser's script nesting level is zero
@@ -504,7 +487,7 @@ bool HTMLParserScriptRunner::ExecuteScriptsWaitingForParsing() {
   while (!scripts_to_execute_after_parsing_.IsEmpty()) {
     DCHECK(!IsExecutingScript());
     DCHECK(!HasParserBlockingScript());
-    DCHECK(scripts_to_execute_after_parsing_.front()->IsExternal());
+    DCHECK(scripts_to_execute_after_parsing_.front()->IsExternalOrModule());
 
     // 1. "Spin the event loop until the first script in the list of scripts
     //     that will execute when the document has finished parsing
@@ -573,12 +556,13 @@ void HTMLParserScriptRunner::RequestDeferredScript(Element* element) {
                                              ScriptStreamer::kDeferred);
   }
 
-  DCHECK(pending_script->IsExternal());
+  DCHECK(pending_script->IsExternalOrModule());
 
   // "Add the element to the end of the list of scripts that will execute
   //  when the document has finished parsing associated with the Document
   //  of the parser that created the element."
-  scripts_to_execute_after_parsing_.push_back(pending_script);
+  scripts_to_execute_after_parsing_.push_back(
+      TraceWrapperMember<PendingScript>(this, pending_script));
 }
 
 PendingScript* HTMLParserScriptRunner::RequestPendingScript(
@@ -653,11 +637,9 @@ void HTMLParserScriptRunner::ProcessScriptElementInternal(
         if (parser_blocking_script_)
           parser_blocking_script_->Dispose();
         parser_blocking_script_ = nullptr;
-        ScriptSourceCode source_code(script->textContent(),
-                                     DocumentURLForScriptExecution(document_),
-                                     script_start_position);
-        DoExecuteScript(element, ClassicScript::Create(source_code),
-                        script_start_position);
+        DoExecuteScript(
+            ClassicPendingScript::Create(element, script_start_position),
+            DocumentURLForScriptExecution(document_));
       }
     } else {
       // 2nd Clause of Step 23.
@@ -680,6 +662,11 @@ DEFINE_TRACE(HTMLParserScriptRunner) {
   visitor->Trace(parser_blocking_script_);
   visitor->Trace(scripts_to_execute_after_parsing_);
   PendingScriptClient::Trace(visitor);
+}
+DEFINE_TRACE_WRAPPERS(HTMLParserScriptRunner) {
+  visitor->TraceWrappers(parser_blocking_script_);
+  for (const auto& member : scripts_to_execute_after_parsing_)
+    visitor->TraceWrappers(member);
 }
 
 }  // namespace blink

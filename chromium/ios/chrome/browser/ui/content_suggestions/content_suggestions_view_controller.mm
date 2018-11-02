@@ -4,14 +4,24 @@
 
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller.h"
 
+#include "base/ios/ios_util.h"
 #include "base/mac/foundation_util.h"
+#include "base/metrics/user_metrics.h"
+#include "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/ui/collection_view/cells/MDCCollectionViewCell+Chrome.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_item.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_most_visited_cell.h"
+#import "ios/chrome/browser/ui/content_suggestions/cells/suggested_content.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_updater.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_commands.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_header_synchronizing.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_layout.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_audience.h"
+#import "ios/chrome/browser/ui/content_suggestions/content_suggestions_view_controller_delegate.h"
+#import "ios/chrome/browser/ui/overscroll_actions/overscroll_actions_controller.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -19,6 +29,13 @@
 
 namespace {
 using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
+const CGFloat kMaxCardWidth = 432;
+
+// Returns whether the cells should be displayed using the full width.
+BOOL ShouldCellsBeFullWidth(UITraitCollection* collection) {
+  return collection.horizontalSizeClass == UIUserInterfaceSizeClassCompact &&
+         collection.verticalSizeClass != UIUserInterfaceSizeClassCompact;
+}
 }
 
 @interface ContentSuggestionsViewController ()
@@ -26,25 +43,48 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 @property(nonatomic, strong)
     ContentSuggestionsCollectionUpdater* collectionUpdater;
 
+// Left and right margins for the content inset of the collection view.
+@property(nonatomic, assign) CGFloat cardStyleMargin;
+
+// The overscroll actions controller managing accelerators over the toolbar.
+@property(nonatomic, strong)
+    OverscrollActionsController* overscrollActionsController;
 @end
 
 @implementation ContentSuggestionsViewController
 
+@synthesize audience = _audience;
 @synthesize suggestionCommandHandler = _suggestionCommandHandler;
+@synthesize headerCommandHandler = _headerCommandHandler;
+@synthesize suggestionsDelegate = _suggestionsDelegate;
 @synthesize collectionUpdater = _collectionUpdater;
+@synthesize cardStyleMargin = _cardStyleMargin;
+@synthesize overscrollActionsController = _overscrollActionsController;
+@synthesize overscrollDelegate = _overscrollDelegate;
+@synthesize scrolledToTop = _scrolledToTop;
 @dynamic collectionViewModel;
 
-#pragma mark - Public
+#pragma mark - Lifecycle
 
 - (instancetype)initWithStyle:(CollectionViewControllerStyle)style
                    dataSource:(id<ContentSuggestionsDataSource>)dataSource {
-  self = [super initWithStyle:style];
+  UICollectionViewLayout* layout = [[ContentSuggestionsLayout alloc] init];
+  self = [super initWithLayout:layout style:style];
   if (self) {
     _collectionUpdater = [[ContentSuggestionsCollectionUpdater alloc]
         initWithDataSource:dataSource];
+    if (base::ios::IsRunningOnIOS10OrLater()) {
+      self.collectionView.prefetchingEnabled = NO;
+    }
   }
   return self;
 }
+
+- (void)dealloc {
+  [self.overscrollActionsController invalidate];
+}
+
+#pragma mark - Public
 
 - (void)dismissEntryAtIndexPath:(NSIndexPath*)indexPath {
   if (!indexPath || ![self.collectionViewModel hasItemAtIndexPath:indexPath]) {
@@ -61,8 +101,9 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
     [self addEmptySectionPlaceholderIfNeeded:indexPath.section];
   }
       completion:^(BOOL) {
+        [self.audience contentSuggestionsDidScroll];
         // The context menu could be displayed for the deleted entry.
-        [self.suggestionCommandHandler dismissContextMenu];
+        [self.suggestionCommandHandler dismissModals];
       }];
 }
 
@@ -79,8 +120,9 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
     [self.collectionView deleteSections:[NSIndexSet indexSetWithIndex:section]];
   }
       completion:^(BOOL) {
+        [self.audience contentSuggestionsDidScroll];
         // The context menu could be displayed for the deleted entries.
-        [self.suggestionCommandHandler dismissContextMenu];
+        [self.suggestionCommandHandler dismissModals];
       }];
 }
 
@@ -95,15 +137,25 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
         addSectionsForSectionInfoToModel:@[ sectionInfo ]];
     [self.collectionView insertSections:addedSections];
   }
-                                completion:nil];
+      completion:^(BOOL) {
+        [self.audience contentSuggestionsDidScroll];
+      }];
 
   [self.collectionView performBatchUpdates:^{
+    NSIndexPath* removedItem = [self.collectionUpdater
+        removeEmptySuggestionsForSectionInfo:sectionInfo];
+    if (removedItem) {
+      [self.collectionView deleteItemsAtIndexPaths:@[ removedItem ]];
+    }
+
     NSArray<NSIndexPath*>* addedItems =
         [self.collectionUpdater addSuggestionsToModel:suggestions
                                       withSectionInfo:sectionInfo];
     [self.collectionView insertItemsAtIndexPaths:addedItems];
   }
-                                completion:nil];
+      completion:^(BOOL) {
+        [self.audience contentSuggestionsDidScroll];
+      }];
 }
 
 #pragma mark - UIViewController
@@ -114,7 +166,22 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
   _collectionUpdater.collectionViewController = self;
 
   self.collectionView.delegate = self;
-  self.styler.cellStyle = MDCCollectionViewCellStyleCard;
+  self.collectionView.backgroundColor = [UIColor whiteColor];
+  if (ShouldCellsBeFullWidth(
+          [UIApplication sharedApplication].keyWindow.traitCollection)) {
+    self.styler.cellStyle = MDCCollectionViewCellStyleGrouped;
+  } else {
+    self.styler.cellStyle = MDCCollectionViewCellStyleCard;
+    CGFloat margin =
+        MAX(0, (self.collectionView.frame.size.width - kMaxCardWidth) / 2);
+    self.collectionView.contentInset = UIEdgeInsetsMake(0, margin, 0, margin);
+  }
+  self.automaticallyAdjustsScrollViewInsets = NO;
+  self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
+  ApplyVisualConstraints(
+      @[ @"V:[top][collection]|", @"H:|[collection]|" ],
+      @{ @"collection" : self.collectionView,
+         @"top" : self.topLayoutGuide });
 
   UILongPressGestureRecognizer* longPressRecognizer =
       [[UILongPressGestureRecognizer alloc]
@@ -122,12 +189,48 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
                   action:@selector(handleLongPress:)];
   longPressRecognizer.numberOfTouchesRequired = 1;
   [self.collectionView addGestureRecognizer:longPressRecognizer];
+
+  if (!IsIPadIdiom()) {
+    self.overscrollActionsController = [[OverscrollActionsController alloc]
+        initWithScrollView:self.collectionView];
+    [self.overscrollActionsController
+        setStyle:OverscrollStyle::NTP_NON_INCOGNITO];
+    self.overscrollActionsController.delegate = self.overscrollDelegate;
+  }
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
            (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+  // Change the margin, in case -willTransitionToTraitCollection: is called
+  // after this method.
+  self.cardStyleMargin = MAX(0, (size.width - kMaxCardWidth) / 2);
+  if (self.styler.cellStyle == MDCCollectionViewCellStyleCard) {
+    self.collectionView.contentInset =
+        UIEdgeInsetsMake(0, self.cardStyleMargin, 0, self.cardStyleMargin);
+  }
   [self.collectionUpdater updateMostVisitedForSize:size];
+  [self.collectionView reloadData];
+}
+
+- (void)willTransitionToTraitCollection:(UITraitCollection*)newCollection
+              withTransitionCoordinator:
+                  (id<UIViewControllerTransitionCoordinator>)coordinator {
+  [super willTransitionToTraitCollection:newCollection
+               withTransitionCoordinator:coordinator];
+  // Invalidating the layout after changing the cellStyle/contentInset results
+  // in the layout not being updated. Do it before to have it taken into
+  // account.
+  [self.collectionView.collectionViewLayout invalidateLayout];
+  if (ShouldCellsBeFullWidth(newCollection)) {
+    self.collectionView.contentInset = UIEdgeInsetsZero;
+    self.styler.cellStyle = MDCCollectionViewCellStyleGrouped;
+  } else {
+    self.collectionView.contentInset =
+        UIEdgeInsetsMake(0, self.cardStyleMargin, 0, self.cardStyleMargin);
+    self.styler.cellStyle = MDCCollectionViewCellStyleCard;
+  }
 }
 
 #pragma mark - UICollectionViewDelegate
@@ -136,16 +239,26 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
     didSelectItemAtIndexPath:(NSIndexPath*)indexPath {
   [super collectionView:collectionView didSelectItemAtIndexPath:indexPath];
 
+  [self.headerCommandHandler unfocusOmnibox];
+
   CollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
   switch ([self.collectionUpdater contentSuggestionTypeForItem:item]) {
     case ContentSuggestionTypeReadingList:
+      base::RecordAction(base::UserMetricsAction("MobileReadingListOpen"));
+      [self.suggestionCommandHandler openPageForItem:item];
+      break;
     case ContentSuggestionTypeArticle:
       [self.suggestionCommandHandler openPageForItem:item];
       break;
     case ContentSuggestionTypeMostVisited:
-      // TODO(crbug.com/707754): Open the most visited site.
+      [self.suggestionCommandHandler openMostVisitedItem:item
+                                                 atIndex:indexPath.item];
       break;
+    case ContentSuggestionTypePromo:
+      [self dismissEntryAtIndexPath:indexPath];
+      [self.suggestionCommandHandler handlePromoTapped];
+      [self.collectionViewLayout invalidateLayout];
     case ContentSuggestionTypeEmpty:
       break;
   }
@@ -158,6 +271,13 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
     sizeForItemAtIndexPath:(NSIndexPath*)indexPath {
   if ([self.collectionUpdater isMostVisitedSection:indexPath.section]) {
     return [ContentSuggestionsMostVisitedCell defaultSize];
+  } else if ([self.collectionUpdater isHeaderSection:indexPath.section]) {
+    CGFloat height =
+        [self collectionView:collectionView cellHeightAtIndexPath:indexPath];
+    CGFloat width = collectionView.frame.size.width -
+                    2 * content_suggestions::centeredTilesMarginForWidth(
+                            collectionView.frame.size.width);
+    return CGSizeMake(width, height);
   }
   return [super collectionView:collectionView
                         layout:collectionViewLayout
@@ -167,14 +287,17 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 - (UIEdgeInsets)collectionView:(UICollectionView*)collectionView
                         layout:(UICollectionViewLayout*)collectionViewLayout
         insetForSectionAtIndex:(NSInteger)section {
-  if ([self.collectionUpdater isMostVisitedSection:section]) {
+  UIEdgeInsets parentInset = [super collectionView:collectionView
+                                            layout:collectionViewLayout
+                            insetForSectionAtIndex:section];
+  if ([self.collectionUpdater isMostVisitedSection:section] ||
+      [self.collectionUpdater isHeaderSection:section]) {
     CGFloat margin = content_suggestions::centeredTilesMarginForWidth(
-        collectionView.frame.size.width);
-    return UIEdgeInsetsMake(0, margin, 0, margin);
+        collectionView.frame.size.width - 2 * collectionView.contentInset.left);
+    parentInset.left = margin;
+    parentInset.right = margin;
   }
-  return [super collectionView:collectionView
-                        layout:collectionViewLayout
-        insetForSectionAtIndex:section];
+  return parentInset;
 }
 
 - (CGFloat)collectionView:(UICollectionView*)collectionView
@@ -191,6 +314,28 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 
 #pragma mark - MDCCollectionViewStylingDelegate
 
+// TODO(crbug.com/724493): Use collectionView:hidesInkViewAtIndexPath: when it
+// is fixed. For now hidding the ink prevent cell interaction.
+- (UIColor*)collectionView:(UICollectionView*)collectionView
+       inkColorAtIndexPath:(NSIndexPath*)indexPath {
+  ContentSuggestionType itemType = [self.collectionUpdater
+      contentSuggestionTypeForItem:[self.collectionViewModel
+                                       itemAtIndexPath:indexPath]];
+  if ([self.collectionUpdater isMostVisitedSection:indexPath.section] ||
+      itemType == ContentSuggestionTypeEmpty) {
+    return [UIColor clearColor];
+  }
+  return nil;
+}
+
+- (MDCCollectionViewCellStyle)collectionView:(UICollectionView*)collectionView
+                         cellStyleForSection:(NSInteger)section {
+  if ([self.collectionUpdater isHeaderSection:section]) {
+    return MDCCollectionViewCellStyleDefault;
+  }
+  return [super collectionView:collectionView cellStyleForSection:section];
+}
+
 - (UIColor*)collectionView:(nonnull UICollectionView*)collectionView
     cellBackgroundColorAtIndexPath:(nonnull NSIndexPath*)indexPath {
   if ([self.collectionUpdater
@@ -198,6 +343,18 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
     return [UIColor clearColor];
   }
   return [UIColor whiteColor];
+}
+
+- (CGSize)collectionView:(UICollectionView*)collectionView
+                             layout:
+                                 (UICollectionViewLayout*)collectionViewLayout
+    referenceSizeForHeaderInSection:(NSInteger)section {
+  if ([self.collectionUpdater isHeaderSection:section]) {
+    return CGSizeMake(0, [self.suggestionsDelegate headerHeight]);
+  }
+  return [super collectionView:collectionView
+                               layout:collectionViewLayout
+      referenceSizeForHeaderInSection:section];
 }
 
 - (BOOL)collectionView:(nonnull UICollectionView*)collectionView
@@ -213,16 +370,74 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 
 - (CGFloat)collectionView:(UICollectionView*)collectionView
     cellHeightAtIndexPath:(NSIndexPath*)indexPath {
-  CollectionViewItem* item =
+  CSCollectionViewItem* item =
       [self.collectionViewModel itemAtIndexPath:indexPath];
   UIEdgeInsets inset = [self collectionView:collectionView
                                      layout:collectionView.collectionViewLayout
                      insetForSectionAtIndex:indexPath.section];
+  UIEdgeInsets contentInset = self.collectionView.contentInset;
+  CGFloat width = CGRectGetWidth(collectionView.bounds) - inset.left -
+                  inset.right - contentInset.left - contentInset.right;
 
-  return [MDCCollectionViewCell
-      cr_preferredHeightForWidth:CGRectGetWidth(collectionView.bounds) -
-                                 inset.left - inset.right
-                         forItem:item];
+  return [item cellHeightForWidth:width];
+}
+
+#pragma mark - MDCCollectionViewEditingDelegate
+
+- (BOOL)collectionViewAllowsSwipeToDismissItem:
+    (UICollectionView*)collectionView {
+  return YES;
+}
+
+- (BOOL)collectionView:(UICollectionView*)collectionView
+    canSwipeToDismissItemAtIndexPath:(NSIndexPath*)indexPath {
+  CollectionViewItem* item =
+      [self.collectionViewModel itemAtIndexPath:indexPath];
+  return ![self.collectionUpdater isMostVisitedSection:indexPath.section] &&
+         ![self.collectionUpdater isHeaderSection:indexPath.section] &&
+         [self.collectionUpdater contentSuggestionTypeForItem:item] !=
+             ContentSuggestionTypeEmpty;
+}
+
+- (void)collectionView:(UICollectionView*)collectionView
+    didEndSwipeToDismissItemAtIndexPath:(NSIndexPath*)indexPath {
+  [self.collectionUpdater
+      dismissItem:[self.collectionViewModel itemAtIndexPath:indexPath]];
+  [self dismissEntryAtIndexPath:indexPath];
+}
+
+#pragma mark - UIScrollViewDelegate Methods.
+
+- (void)scrollViewDidScroll:(UIScrollView*)scrollView {
+  [super scrollViewDidScroll:scrollView];
+  [self.overscrollActionsController scrollViewDidScroll:scrollView];
+  [self.audience contentSuggestionsDidScroll];
+  [self.headerCommandHandler updateFakeOmniboxForScrollView:scrollView];
+  self.scrolledToTop =
+      scrollView.contentOffset.y >= [self.suggestionsDelegate pinnedOffsetY];
+}
+
+- (void)scrollViewWillBeginDragging:(UIScrollView*)scrollView {
+  [self.overscrollActionsController scrollViewWillBeginDragging:scrollView];
+}
+
+- (void)scrollViewDidEndDragging:(UIScrollView*)scrollView
+                  willDecelerate:(BOOL)decelerate {
+  [super scrollViewDidEndDragging:scrollView willDecelerate:decelerate];
+  [self.overscrollActionsController scrollViewDidEndDragging:scrollView
+                                              willDecelerate:decelerate];
+}
+
+- (void)scrollViewWillEndDragging:(UIScrollView*)scrollView
+                     withVelocity:(CGPoint)velocity
+              targetContentOffset:(inout CGPoint*)targetContentOffset {
+  [super scrollViewWillEndDragging:scrollView
+                      withVelocity:velocity
+               targetContentOffset:targetContentOffset];
+  [self.overscrollActionsController
+      scrollViewWillEndDragging:scrollView
+                   withVelocity:velocity
+            targetContentOffset:targetContentOffset];
 }
 
 #pragma mark - Private
@@ -245,16 +460,25 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
   CollectionViewItem* touchedItem =
       [self.collectionViewModel itemAtIndexPath:touchedItemIndexPath];
 
-  if ([self.collectionUpdater contentSuggestionTypeForItem:touchedItem] !=
-      ContentSuggestionTypeArticle) {
-    // Only trigger context menu on articles.
-    return;
+  ContentSuggestionType type =
+      [self.collectionUpdater contentSuggestionTypeForItem:touchedItem];
+  switch (type) {
+    case ContentSuggestionTypeArticle:
+      [self.suggestionCommandHandler
+          displayContextMenuForArticle:touchedItem
+                               atPoint:touchLocation
+                           atIndexPath:touchedItemIndexPath];
+      break;
+    case ContentSuggestionTypeMostVisited:
+      [self.suggestionCommandHandler
+          displayContextMenuForMostVisitedItem:touchedItem
+                                       atPoint:touchLocation
+                                   atIndexPath:touchedItemIndexPath];
+      break;
+    default:
+      break;
   }
 
-  [self.suggestionCommandHandler
-      displayContextMenuForArticle:touchedItem
-                           atPoint:touchLocation
-                       atIndexPath:touchedItemIndexPath];
 }
 
 // Checks if the |section| is empty and add an empty element if it is the case.
@@ -265,7 +489,8 @@ using CSCollectionViewItem = CollectionViewItem<SuggestedContent>;
 
   NSIndexPath* emptyItem =
       [self.collectionUpdater addEmptyItemForSection:section];
-  [self.collectionView insertItemsAtIndexPaths:@[ emptyItem ]];
+  if (emptyItem)
+    [self.collectionView insertItemsAtIndexPaths:@[ emptyItem ]];
 }
 
 @end

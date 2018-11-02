@@ -4,12 +4,14 @@
 
 #include "base/command_line.h"
 #include "base/memory/weak_ptr.h"
+#include "content/browser/frame_host/debug_urls.h"
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/web_contents/web_contents_impl.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/common/bindings_policy.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/url_constants.h"
@@ -54,12 +56,14 @@ class TestNavigationThrottle : public NavigationThrottle {
 
   const char* GetNameForLogging() override { return "TestNavigationThrottle"; }
 
-  void Resume() { navigation_handle()->Resume(); }
-  void Cancel(NavigationThrottle::ThrottleCheckResult result) {
-    navigation_handle()->CancelDeferredNavigation(result);
-  }
-
   RequestContextType request_context_type() { return request_context_type_; }
+
+  // Expose Resume and Cancel to the installer.
+  void ResumeNavigation() { Resume(); }
+
+  void CancelNavigation(NavigationThrottle::ThrottleCheckResult result) {
+    CancelDeferredNavigation(result);
+  }
 
  private:
   // NavigationThrottle implementation.
@@ -154,9 +158,9 @@ class TestNavigationThrottleInstaller : public WebContentsObserver {
   void Continue(NavigationThrottle::ThrottleCheckResult result) {
     ASSERT_NE(NavigationThrottle::DEFER, result);
     if (result == NavigationThrottle::PROCEED)
-      navigation_throttle()->Resume();
+      navigation_throttle()->ResumeNavigation();
     else
-      navigation_throttle()->Cancel(result);
+      navigation_throttle()->CancelNavigation(result);
   }
 
   int will_start_called() { return will_start_called_; }
@@ -701,21 +705,21 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, ThrottleDefer) {
   EXPECT_EQ(1, installer.will_start_called());
   EXPECT_EQ(0, installer.will_redirect_called());
   EXPECT_EQ(0, installer.will_process_called());
-  installer.navigation_throttle()->Resume();
+  installer.navigation_throttle()->ResumeNavigation();
 
   // Wait for WillRedirectRequest.
   installer.WaitForThrottleWillRedirect();
   EXPECT_EQ(1, installer.will_start_called());
   EXPECT_EQ(1, installer.will_redirect_called());
   EXPECT_EQ(0, installer.will_process_called());
-  installer.navigation_throttle()->Resume();
+  installer.navigation_throttle()->ResumeNavigation();
 
   // Wait for WillProcessResponse.
   installer.WaitForThrottleWillProcess();
   EXPECT_EQ(1, installer.will_start_called());
   EXPECT_EQ(1, installer.will_redirect_called());
   EXPECT_EQ(1, installer.will_process_called());
-  installer.navigation_throttle()->Resume();
+  installer.navigation_throttle()->ResumeNavigation();
 
   // Wait for the end of the navigation.
   navigation_observer.Wait();
@@ -1246,6 +1250,10 @@ class NavigationLogger : public WebContentsObserver {
     started_navigation_urls_.push_back(navigation_handle->GetURL());
   }
 
+  void DidRedirectNavigation(NavigationHandle* navigation_handle) override {
+    redirected_navigation_urls_.push_back(navigation_handle->GetURL());
+  }
+
   void DidFinishNavigation(NavigationHandle* navigation_handle) override {
     finished_navigation_urls_.push_back(navigation_handle->GetURL());
   }
@@ -1253,12 +1261,16 @@ class NavigationLogger : public WebContentsObserver {
   const std::vector<GURL>& started_navigation_urls() const {
     return started_navigation_urls_;
   }
+  const std::vector<GURL>& redirected_navigation_urls() const {
+    return redirected_navigation_urls_;
+  }
   const std::vector<GURL>& finished_navigation_urls() const {
     return finished_navigation_urls_;
   }
 
  private:
   std::vector<GURL> started_navigation_urls_;
+  std::vector<GURL> redirected_navigation_urls_;
   std::vector<GURL> finished_navigation_urls_;
 };
 
@@ -1332,7 +1344,7 @@ IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest, ErrorCodeOnRedirect) {
       ExecuteScript(shell(), base::StringPrintf("location.href = '%s';",
                                                 redirect_url.spec().c_str())));
   same_tab_observer.Wait();
-  EXPECT_EQ(net::ERR_ABORTED, observer.net_error_code());
+  EXPECT_EQ(net::ERR_UNSAFE_REDIRECT, observer.net_error_code());
 }
 
 // This class allows running tests with PlzNavigate enabled, regardless of
@@ -1509,6 +1521,163 @@ IN_PROC_BROWSER_TEST_F(PlzNavigateNavigationHandleImplBrowserTest,
   EXPECT_TRUE(commit_observer.has_committed());
   EXPECT_TRUE(commit_observer.is_error());
   EXPECT_FALSE(commit_observer.is_renderer_initiated());
+}
+
+// Redirects to renderer debug URLs caused problems.
+// See https://crbug.com/728398.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
+                       RedirectToRendererDebugUrl) {
+  GURL url(embedded_test_server()->GetURL("/title1.html"));
+  EXPECT_TRUE(NavigateToURL(shell(), url));
+
+  const struct {
+    const GURL renderer_debug_url;
+    const net::Error error_code;
+  } kTestCases[] = {
+      {GURL("javascript:window.alert('hello')"), net::ERR_ABORTED},
+      {GURL(kChromeUIBadCastCrashURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUICrashURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUIDumpURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUIKillURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUIHangURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUIShorthangURL), net::ERR_UNSAFE_REDIRECT},
+      {GURL(kChromeUIMemoryExhaustURL), net::ERR_UNSAFE_REDIRECT},
+  };
+
+  for (const auto& test_case : kTestCases) {
+    SCOPED_TRACE(testing::Message()
+                 << "renderer_debug_url = " << test_case.renderer_debug_url);
+
+    GURL redirecting_url = embedded_test_server()->GetURL(
+        "/server-redirect?" + test_case.renderer_debug_url.spec());
+
+    NavigationHandleObserver observer(shell()->web_contents(), redirecting_url);
+    NavigationLogger logger(shell()->web_contents());
+
+    // Try to navigate to the url. The navigation should be canceled and the
+    // NavigationHandle should have the right error code.
+    EXPECT_FALSE(NavigateToURL(shell(), redirecting_url));
+    EXPECT_EQ(test_case.error_code, observer.net_error_code());
+
+    // Both WebContentsObserver::{DidStartNavigation, DidFinishNavigation}
+    // are called, but no WebContentsObserver::DidRedirectNavigation.
+    std::vector<GURL> started_navigation = {redirecting_url};
+    std::vector<GURL> redirected_navigation;  // Empty.
+    std::vector<GURL> finished_navigation = {redirecting_url};
+    EXPECT_EQ(started_navigation, logger.started_navigation_urls());
+    EXPECT_EQ(redirected_navigation, logger.redirected_navigation_urls());
+    EXPECT_EQ(finished_navigation, logger.finished_navigation_urls());
+  }
+}
+
+// Check that iframe with embedded credentials are blocked.
+// See https://crbug.com/755892.
+IN_PROC_BROWSER_TEST_F(NavigationHandleImplBrowserTest,
+                       BlockCredentialedSubresources) {
+  if (!base::FeatureList::IsEnabled(features::kBlockCredentialedSubresources))
+    return;
+
+  const struct {
+    GURL main_url;
+    GURL iframe_url;
+    bool blocked;
+  } kTestCases[] = {
+      // Normal case with no credential in neither of the urls.
+      {GURL("http://a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://a.com/title1.html"), false},
+
+      // Username in the iframe, but nothing in the main frame.
+      {GURL("http://a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user@a.com/title1.html"), true},
+
+      // Username and password in the iframe, but none in the main frame.
+      {GURL("http://a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user:pass@a.com/title1.html"), true},
+
+      // Username and password in the main frame, but none in the iframe.
+      {GURL("http://user:pass@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://a.com/title1.html"), false},
+
+      // Same usernames in both frames.
+      // Relative URLs on top-level pages that were loaded with embedded
+      // credentials should load correctly. It doesn't work correctly when
+      // PlzNavigate is disabled. See https://crbug.com/756846.
+      {GURL("http://user@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user@a.com/title1.html"),
+       !IsBrowserSideNavigationEnabled()},
+
+      // Same usernames and passwords in both frames.
+      // Relative URLs on top-level pages that were loaded with embedded
+      // credentials should load correctly. It doesn't work correctly when
+      // PlzNavigate is disabled. See https://crbug.com/756846.
+      {GURL("http://user:pass@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user:pass@a.com/title1.html"),
+       !IsBrowserSideNavigationEnabled()},
+
+      // Different usernames.
+      {GURL("http://user@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://wrong@a.com/title1.html"), true},
+
+      // Different passwords.
+      {GURL("http://user:pass@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user:wrong@a.com/title1.html"), true},
+
+      // Different usernames and same passwords.
+      {GURL("http://user:pass@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://wrong:pass@a.com/title1.html"), true},
+
+      // Different origins.
+      {GURL("http://user:pass@a.com/frame_tree/page_with_one_frame.html"),
+       GURL("http://user:pass@b.com/title1.html"), true},
+  };
+  for (const auto test_case : kTestCases) {
+    // Modify the URLs port to use the embedded test server's port.
+    std::string port_str(std::to_string(embedded_test_server()->port()));
+    GURL::Replacements set_port;
+    set_port.SetPortStr(port_str);
+    GURL main_url(test_case.main_url.ReplaceComponents(set_port));
+    GURL iframe_url_final(test_case.iframe_url.ReplaceComponents(set_port));
+    GURL iframe_url_with_redirect = GURL(embedded_test_server()->GetURL(
+        "/server-redirect?" + iframe_url_final.spec()));
+
+    ASSERT_TRUE(NavigateToURL(shell(), main_url));
+
+    // Blocking the request must work, even after a redirect.
+    for (bool redirect : {false, true}) {
+      const GURL& iframe_url =
+          redirect ? iframe_url_with_redirect : iframe_url_final;
+      SCOPED_TRACE(::testing::Message()
+                   << std::endl
+                   << "- main_url = " << main_url << std::endl
+                   << "- iframe_url = " << iframe_url << std::endl);
+      NavigationHandleObserver subframe_observer(shell()->web_contents(),
+                                                 iframe_url);
+      TestNavigationThrottleInstaller installer(
+          shell()->web_contents(), NavigationThrottle::PROCEED,
+          NavigationThrottle::PROCEED, NavigationThrottle::PROCEED);
+
+      NavigateIframeToURL(shell()->web_contents(), "child0", iframe_url);
+
+      FrameTreeNode* root =
+          static_cast<WebContentsImpl*>(shell()->web_contents())
+              ->GetFrameTree()
+              ->root();
+      ASSERT_EQ(1u, root->child_count());
+      if (test_case.blocked) {
+        EXPECT_EQ(redirect, !!installer.will_start_called());
+        EXPECT_FALSE(installer.will_process_called());
+        EXPECT_FALSE(subframe_observer.has_committed());
+        EXPECT_TRUE(subframe_observer.last_committed_url().is_empty());
+        EXPECT_NE(iframe_url_final, root->child_at(0u)->current_url());
+      } else {
+        EXPECT_TRUE(installer.will_start_called());
+        EXPECT_TRUE(installer.will_process_called());
+        EXPECT_TRUE(subframe_observer.has_committed());
+        EXPECT_EQ(iframe_url_final, subframe_observer.last_committed_url());
+        EXPECT_EQ(iframe_url_final, root->child_at(0u)->current_url());
+      }
+    }
+  }
 }
 
 }  // namespace content

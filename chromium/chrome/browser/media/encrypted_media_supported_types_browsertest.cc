@@ -32,8 +32,8 @@
 #include "url/gurl.h"
 
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
-#include "chrome/browser/media/pepper_cdm_test_constants.h"
 #include "chrome/browser/media/pepper_cdm_test_helper.h"
+#include "media/cdm/cdm_paths.h"
 #endif
 
 #if defined(OS_ANDROID)
@@ -159,10 +159,6 @@ class EncryptedMediaSupportedTypesTest : public InProcessBrowserTest {
     clear_key_exclusive_video_common_codecs_.push_back("vp09.03.10.10");
   }
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
-  }
-
   typedef std::vector<std::string> CodecVector;
 
   const CodecVector& no_codecs() const { return no_codecs_; }
@@ -191,8 +187,6 @@ class EncryptedMediaSupportedTypesTest : public InProcessBrowserTest {
 #endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
 
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-
     // Load the test page needed so that checkKeySystemWithMediaMimeType()
     // is available.
     std::unique_ptr<net::EmbeddedTestServer> http_test_server(
@@ -299,9 +293,10 @@ class EncryptedMediaSupportedTypesExternalClearKeyTest
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
-    RegisterPepperCdm(command_line, kClearKeyCdmBaseDirectory,
-                      kClearKeyCdmAdapterFileName, kClearKeyCdmDisplayName,
-                      kClearKeyCdmPepperMimeType);
+    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
+                      media::kClearKeyCdmAdapterFileName,
+                      media::kClearKeyCdmDisplayName,
+                      media::kClearKeyCdmPepperMimeType);
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     media::kExternalClearKeyForTesting.name);
   }
@@ -318,9 +313,10 @@ class EncryptedMediaSupportedTypesExternalClearKeyNotEnabledTest
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
 #if BUILDFLAG(ENABLE_PEPPER_CDMS)
-    RegisterPepperCdm(command_line, kClearKeyCdmBaseDirectory,
-                      kClearKeyCdmAdapterFileName, kClearKeyCdmDisplayName,
-                      kClearKeyCdmPepperMimeType);
+    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
+                      media::kClearKeyCdmAdapterFileName,
+                      media::kClearKeyCdmDisplayName,
+                      media::kClearKeyCdmPepperMimeType);
 #endif  // BUILDFLAG(ENABLE_PEPPER_CDMS)
   }
 };
@@ -336,10 +332,10 @@ class EncryptedMediaSupportedTypesClearKeyCDMRegisteredWithWrongPathTest
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     EncryptedMediaSupportedTypesTest::SetUpCommandLine(command_line);
-    RegisterPepperCdm(command_line, kClearKeyCdmBaseDirectory,
+    RegisterPepperCdm(command_line, media::kClearKeyCdmBaseDirectory,
                       "clearkeycdmadapterwrongname.dll",
-                      kClearKeyCdmDisplayName, kClearKeyCdmPepperMimeType,
-                      false);
+                      media::kClearKeyCdmDisplayName,
+                      media::kClearKeyCdmPepperMimeType, false);
     command_line->AppendSwitchASCII(switches::kEnableFeatures,
                                     media::kExternalClearKeyForTesting.name);
   }

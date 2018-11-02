@@ -14,7 +14,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/metrics/statistics_recorder.h"
-#include "base/threading/thread_checker.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "components/metrics/metrics_provider.h"
 
@@ -57,7 +57,9 @@ class FileMetricsProvider : public MetricsProvider,
     // the ImportantFileWriter) will not get read. Files that have been
     // read will be attempted to be deleted; should those files not be
     // deletable by this process, it is the reponsibility of the producer
-    // to keep the directory pruned in some manner.
+    // to keep the directory pruned in some manner. Added files must have a
+    // timestamp later (not the same or earlier) than the newest file that
+    // already exists or it may be assumed to have been already uploaded.
     SOURCE_HISTOGRAMS_ATOMIC_DIR,
 
     // "Active" files may be open by one or more other processes and updated
@@ -80,10 +82,22 @@ class FileMetricsProvider : public MetricsProvider,
     // This is important when metrics are dumped as part of a crash of the
     // previous run. This can only be used with FILE_HISTOGRAMS_ATOMIC.
     ASSOCIATE_PREVIOUS_RUN,
+
+    // Associates the metrics in the file with the a profile embedded in the
+    // same file. The reporting will take place at a convenient time after
+    // startup when the browser is otherwise idle. If there is no embedded
+    // system profile, these metrics will be lost.
+    ASSOCIATE_INTERNAL_PROFILE,
+
+    // Like above but fall back to ASSOCIATE_PREVIOUS_RUN if there is no
+    // embedded profile. This has a small cost during startup as that is
+    // when previous-run metrics are sent so the file has be checked at
+    // that time even though actual transfer will be delayed if an
+    // embedded profile is found.
+    ASSOCIATE_INTERNAL_PROFILE_OR_PREVIOUS_RUN,
   };
 
-  FileMetricsProvider(const scoped_refptr<base::TaskRunner>& task_runner,
-                      PrefService* local_state);
+  explicit FileMetricsProvider(PrefService* local_state);
   ~FileMetricsProvider() override;
 
   // Indicates a file or directory to be monitored and how the file or files
@@ -103,6 +117,10 @@ class FileMetricsProvider : public MetricsProvider,
   // typically the filename.
   static void RegisterPrefs(PrefRegistrySimple* prefs,
                             const base::StringPiece prefs_key);
+
+  // Sets the task runner to use for testing.
+  static void SetTaskRunnerForTesting(
+      const scoped_refptr<base::TaskRunner>& task_runner);
 
  private:
   friend class FileMetricsProviderTest;
@@ -147,6 +165,9 @@ class FileMetricsProvider : public MetricsProvider,
   // be internally updated to indicate the next file to be read.
   static bool LocateNextFileInDirectory(SourceInfo* source);
 
+  // Handles the completion of a source.
+  static void FinishedWithSource(SourceInfo* source, AccessResult result);
+
   // Checks a list of sources (on a task-runner allowed to do I/O) and merge
   // any data found within them.
   static void CheckAndMergeMetricSourcesOnTaskRunner(SourceInfoList* sources);
@@ -175,8 +196,11 @@ class FileMetricsProvider : public MetricsProvider,
   // Updates the persistent state information to show a source as being read.
   void RecordSourceAsRead(SourceInfo* source);
 
-  // metrics::MetricsDataProvider:
+  // metrics::MetricsProvider:
   void OnDidCreateMetricsLog() override;
+  bool ProvideIndependentMetrics(
+      SystemProfileProto* system_profile_proto,
+      base::HistogramSnapshotManager* snapshot_manager) override;
   bool HasInitialStabilityMetrics() override;
   void RecordInitialHistogramSnapshots(
       base::HistogramSnapshotManager* snapshot_manager) override;
@@ -193,6 +217,9 @@ class FileMetricsProvider : public MetricsProvider,
   // A list of currently active sources to be merged when required.
   SourceInfoList sources_mapped_;
 
+  // A list of currently active sources to be merged when required.
+  SourceInfoList sources_with_profile_;
+
   // A list of sources for a previous run. These are held separately because
   // they are not subject to the periodic background checking that handles
   // metrics for the current run.
@@ -201,7 +228,7 @@ class FileMetricsProvider : public MetricsProvider,
   // The preferences-service used to store persistent state about sources.
   PrefService* pref_service_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
   base::WeakPtrFactory<FileMetricsProvider> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FileMetricsProvider);

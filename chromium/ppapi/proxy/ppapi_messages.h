@@ -391,6 +391,11 @@ IPC_STRUCT_TRAITS_BEGIN(ppapi::Preferences)
   IPC_STRUCT_TRAITS_MEMBER(is_accelerated_video_decode_enabled)
 IPC_STRUCT_TRAITS_END()
 
+IPC_STRUCT_TRAITS_BEGIN(ppapi::TouchPointWithTilt)
+  IPC_STRUCT_TRAITS_MEMBER(touch)
+  IPC_STRUCT_TRAITS_MEMBER(tilt)
+IPC_STRUCT_TRAITS_END()
+
 IPC_STRUCT_TRAITS_BEGIN(ppapi::InputEventData)
   IPC_STRUCT_TRAITS_MEMBER(is_filtered)
   IPC_STRUCT_TRAITS_MEMBER(event_type)
@@ -1836,6 +1841,9 @@ IPC_MESSAGE_CONTROL3(PpapiHostMsg_PlatformVerification_ChallengePlatformReply,
                      std::vector<uint8_t> /* signed_data */,
                      std::vector<uint8_t> /* signed_data_signature */,
                      std::string /* platform_key_certificate */)
+IPC_MESSAGE_CONTROL0(PpapiHostMsg_PlatformVerification_GetStorageId)
+IPC_MESSAGE_CONTROL1(PpapiHostMsg_PlatformVerification_GetStorageIdReply,
+                     std::string /* storage_id */)
 
 // Printing.
 IPC_MESSAGE_CONTROL0(PpapiHostMsg_Printing_Create)
@@ -2541,8 +2549,5 @@ IPC_MESSAGE_CONTROL1(PpapiPluginMsg_VideoCapture_OnError,
                      uint32_t /* error */)
 IPC_MESSAGE_CONTROL1(PpapiPluginMsg_VideoCapture_OnBufferReady,
                      uint32_t /* buffer */)
-
-// Sent by the PPAPI process to indicate that a field trial has been activated.
-IPC_MESSAGE_CONTROL1(PpapiHostMsg_FieldTrialActivated, std::string /* name */)
 
 #endif  // !defined(OS_NACL) && !defined(NACL_WIN64)

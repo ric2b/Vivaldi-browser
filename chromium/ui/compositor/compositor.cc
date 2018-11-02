@@ -15,6 +15,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/sys_info.h"
@@ -27,13 +28,15 @@
 #include "cc/input/input_handler.h"
 #include "cc/layers/layer.h"
 #include "cc/output/begin_frame_args.h"
-#include "cc/output/context_provider.h"
 #include "cc/output/latency_info_swap_promise.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
 #include "cc/trees/layer_tree_host.h"
 #include "cc/trees/layer_tree_settings.h"
+#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/resources/resource_settings.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/compositor/compositor_observer.h"
 #include "ui/compositor/compositor_switches.h"
@@ -43,16 +46,18 @@
 #include "ui/compositor/layer_animator_collection.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/display/display_switches.h"
+#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/icc_profile.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_switches.h"
 
 namespace ui {
 
-Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
+Compositor::Compositor(const viz::FrameSinkId& frame_sink_id,
                        ui::ContextFactory* context_factory,
                        ui::ContextFactoryPrivate* context_factory_private,
-                       scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+                       scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+                       bool enable_surface_synchronization)
     : context_factory_(context_factory),
       context_factory_private_(context_factory_private),
       frame_sink_id_(frame_sink_id),
@@ -64,8 +69,9 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       weak_ptr_factory_(this),
       lock_timeout_weak_ptr_factory_(this) {
   if (context_factory_private) {
-    context_factory_private->GetSurfaceManager()->RegisterFrameSinkId(
-        frame_sink_id_);
+    context_factory_private->GetFrameSinkManager()
+        ->surface_manager()
+        ->RegisterFrameSinkId(frame_sink_id_);
   }
   root_web_layer_ = cc::Layer::Create();
 
@@ -79,9 +85,17 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
   settings.layers_always_allowed_lcd_text = true;
   // Use occlusion to allow more overlapping windows to take less memory.
   settings.use_occlusion_for_tile_prioritization = true;
-  refresh_rate_ = settings.renderer_settings.refresh_rate =
-      context_factory_->GetRefreshRate();
+  refresh_rate_ = context_factory_->GetRefreshRate();
   settings.main_frame_before_activation_enabled = false;
+
+  if (command_line->HasSwitch(switches::kLimitFps)) {
+    std::string fps_str =
+        command_line->GetSwitchValueASCII(switches::kLimitFps);
+    double fps;
+    if (base::StringToDouble(fps_str, &fps) && fps > 0) {
+      forced_refresh_rate_ = fps;
+    }
+  }
 
   if (command_line->HasSwitch(cc::switches::kUIShowCompositedLayerBorders)) {
     std::string layer_borders_string = command_line->GetSwitchValueASCII(
@@ -125,8 +139,7 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
 
   settings.initial_debug_state.SetRecordRenderingStats(
       command_line->HasSwitch(cc::switches::kEnableGpuBenchmarking));
-  settings.enable_surface_synchronization =
-      command_line->HasSwitch(cc::switches::kEnableSurfaceSynchronization);
+  settings.enable_surface_synchronization = enable_surface_synchronization;
 
   settings.use_zero_copy = IsUIZeroCopyEnabled();
 
@@ -134,11 +147,15 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
       command_line->HasSwitch(cc::switches::kUIEnableLayerLists);
 
   settings.enable_color_correct_rasterization =
-      command_line->HasSwitch(switches::kEnableColorCorrectRendering);
+      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
 
   // UI compositor always uses partial raster if not using zero-copy. Zero copy
   // doesn't currently support partial raster.
   settings.use_partial_raster = !settings.use_zero_copy;
+
+  if (command_line->HasSwitch(switches::kUIEnableRGBA4444Textures))
+    settings.preferred_tile_format = viz::RGBA_4444;
+  settings.resource_settings = context_factory_->GetResourceSettings();
 
   settings.gpu_memory_policy.bytes_limit_when_visible = 512 * 1024 * 1024;
   settings.gpu_memory_policy.priority_cutoff_when_visible =
@@ -146,9 +163,6 @@ Compositor::Compositor(const cc::FrameSinkId& frame_sink_id,
 
   settings.disallow_non_exact_resource_reuse =
       command_line->HasSwitch(cc::switches::kDisallowNonExactResourceReuse);
-
-  // TODO(staraz): LayerTreeSettings shouldn't have a RendererSettings.
-  settings.renderer_settings = context_factory_->GetRendererSettings();
 
   base::TimeTicks before_create = base::TimeTicks::Now();
 
@@ -199,12 +213,12 @@ Compositor::~Compositor() {
 
   context_factory_->RemoveCompositor(this);
   if (context_factory_private_) {
-    auto* manager = context_factory_private_->GetSurfaceManager();
+    auto* manager = context_factory_private_->GetFrameSinkManager();
     for (auto& client : child_frame_sinks_) {
       DCHECK(client.is_valid());
       manager->UnregisterFrameSinkHierarchy(frame_sink_id_, client);
     }
-    manager->InvalidateFrameSinkId(frame_sink_id_);
+    manager->surface_manager()->InvalidateFrameSinkId(frame_sink_id_);
   }
 }
 
@@ -212,33 +226,34 @@ bool Compositor::IsForSubframe() {
   return false;
 }
 
-void Compositor::AddFrameSink(const cc::FrameSinkId& frame_sink_id) {
+void Compositor::AddFrameSink(const viz::FrameSinkId& frame_sink_id) {
   if (!context_factory_private_)
     return;
-  context_factory_private_->GetSurfaceManager()->RegisterFrameSinkHierarchy(
+  context_factory_private_->GetFrameSinkManager()->RegisterFrameSinkHierarchy(
       frame_sink_id_, frame_sink_id);
   child_frame_sinks_.insert(frame_sink_id);
 }
 
-void Compositor::RemoveFrameSink(const cc::FrameSinkId& frame_sink_id) {
+void Compositor::RemoveFrameSink(const viz::FrameSinkId& frame_sink_id) {
   if (!context_factory_private_)
     return;
   auto it = child_frame_sinks_.find(frame_sink_id);
   DCHECK(it != child_frame_sinks_.end());
   DCHECK(it->is_valid());
-  context_factory_private_->GetSurfaceManager()->UnregisterFrameSinkHierarchy(
+  context_factory_private_->GetFrameSinkManager()->UnregisterFrameSinkHierarchy(
       frame_sink_id_, *it);
   child_frame_sinks_.erase(it);
 }
 
-void Compositor::SetLocalSurfaceId(const cc::LocalSurfaceId& local_surface_id) {
+void Compositor::SetLocalSurfaceId(
+    const viz::LocalSurfaceId& local_surface_id) {
   host_->SetLocalSurfaceId(local_surface_id);
 }
 
-void Compositor::SetCompositorFrameSink(
-    std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink) {
-  compositor_frame_sink_requested_ = false;
-  host_->SetCompositorFrameSink(std::move(compositor_frame_sink));
+void Compositor::SetLayerTreeFrameSink(
+    std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink) {
+  layer_tree_frame_sink_requested_ = false;
+  host_->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
   // Display properties are reset when the output surface is lost, so update it
   // to match the Compositor's.
   if (context_factory_private_) {
@@ -315,14 +330,14 @@ void Compositor::SetScaleAndSize(float scale, const gfx::Size& size_in_pixel) {
   }
 }
 
-void Compositor::SetDisplayColorProfile(const gfx::ICCProfile& icc_profile) {
-  blending_color_space_ = icc_profile.GetColorSpace();
+void Compositor::SetDisplayColorSpace(const gfx::ColorSpace& color_space) {
+  blending_color_space_ = color_space;
   output_color_space_ = blending_color_space_;
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {
     blending_color_space_ = gfx::ColorSpace::CreateExtendedSRGB();
     output_color_space_ = gfx::ColorSpace::CreateSCRGBLinear();
   }
-  host_->SetRasterColorSpace(icc_profile.GetParametricColorSpace());
+  host_->SetRasterColorSpace(color_space.GetParametricApproximation());
   // Color space is reset when the output surface is lost, so this must also be
   // updated then.
   // TODO(fsamuel): Get rid of this.
@@ -371,6 +386,10 @@ void Compositor::SetAuthoritativeVSyncInterval(
 
 void Compositor::SetDisplayVSyncParameters(base::TimeTicks timebase,
                                            base::TimeDelta interval) {
+  if (forced_refresh_rate_) {
+    timebase = base::TimeTicks();
+    interval = base::TimeDelta::FromSeconds(1) / forced_refresh_rate_;
+  }
   if (interval.is_zero()) {
     // TODO(brianderson): We should not be receiving 0 intervals.
     interval = cc::BeginFrameArgs::DefaultInterval();
@@ -391,13 +410,13 @@ void Compositor::SetAcceleratedWidget(gfx::AcceleratedWidget widget) {
   DCHECK(!widget_valid_);
   widget_ = widget;
   widget_valid_ = true;
-  if (compositor_frame_sink_requested_)
-    context_factory_->CreateCompositorFrameSink(weak_ptr_factory_.GetWeakPtr());
+  if (layer_tree_frame_sink_requested_)
+    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
 }
 
 gfx::AcceleratedWidget Compositor::ReleaseAcceleratedWidget() {
   DCHECK(!IsVisible());
-  host_->ReleaseCompositorFrameSink();
+  host_->ReleaseLayerTreeFrameSink();
   context_factory_->RemoveCompositor(this);
   widget_valid_ = false;
   gfx::AcceleratedWidget widget = widget_;
@@ -466,15 +485,15 @@ void Compositor::UpdateLayerTreeHost() {
   SendDamagedRectsRecursive(root_layer());
 }
 
-void Compositor::RequestNewCompositorFrameSink() {
-  DCHECK(!compositor_frame_sink_requested_);
-  compositor_frame_sink_requested_ = true;
+void Compositor::RequestNewLayerTreeFrameSink() {
+  DCHECK(!layer_tree_frame_sink_requested_);
+  layer_tree_frame_sink_requested_ = true;
   if (widget_valid_)
-    context_factory_->CreateCompositorFrameSink(weak_ptr_factory_.GetWeakPtr());
+    context_factory_->CreateLayerTreeFrameSink(weak_ptr_factory_.GetWeakPtr());
 }
 
-void Compositor::DidFailToInitializeCompositorFrameSink() {
-  // The CompositorFrameSink should already be bound/initialized before being
+void Compositor::DidFailToInitializeLayerTreeFrameSink() {
+  // The LayerTreeFrameSink should already be bound/initialized before being
   // given to
   // the Compositor.
   NOTREACHED();

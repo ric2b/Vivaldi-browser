@@ -53,6 +53,7 @@ class ProgrammaticScrollAnimator;
 struct ScrollAlignment;
 class ScrollAnchor;
 class ScrollAnimatorBase;
+class SmoothScrollSequencer;
 class CompositorAnimationTimeline;
 
 enum IncludeScrollbarsInRect {
@@ -77,6 +78,10 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
 
   virtual PlatformChromeClient* GetChromeClient() const { return 0; }
 
+  virtual SmoothScrollSequencer* GetSmoothScrollSequencer() const {
+    return nullptr;
+  }
+
   virtual ScrollResult UserScroll(ScrollGranularity, const ScrollOffset&);
 
   virtual void SetScrollOffset(const ScrollOffset&,
@@ -99,7 +104,9 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
   virtual LayoutRect ScrollIntoView(const LayoutRect& rect_in_content,
                                     const ScrollAlignment& align_x,
                                     const ScrollAlignment& align_y,
-                                    ScrollType = kProgrammaticScroll);
+                                    bool is_smooth,
+                                    ScrollType = kProgrammaticScroll,
+                                    bool is_for_scroll_sequence = false);
 
   static bool ScrollBehaviorFromString(const String&, ScrollBehavior&);
 
@@ -167,7 +174,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
   // TODO(szager): Now that scroll offsets are floats everywhere, can we get rid
   // of this?
   virtual bool ShouldUseIntegerScrollOffset() const {
-    return !RuntimeEnabledFeatures::fractionalScrollOffsetsEnabled();
+    return !RuntimeEnabledFeatures::FractionalScrollOffsetsEnabled();
   }
 
   virtual bool IsActive() const = 0;
@@ -179,22 +186,22 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
   virtual void GetTickmarks(Vector<IntRect>&) const {}
 
   // Convert points and rects between the scrollbar and its containing
-  // FrameViewBase. The client needs to implement these in order to be aware of
-  // layout effects like CSS transforms.
-  virtual IntRect ConvertFromScrollbarToContainingFrameViewBase(
+  // EmbeddedContentView. The client needs to implement these in order to be
+  // aware of layout effects like CSS transforms.
+  virtual IntRect ConvertFromScrollbarToContainingEmbeddedContentView(
       const Scrollbar& scrollbar,
       const IntRect& scrollbar_rect) const {
     IntRect local_rect = scrollbar_rect;
     local_rect.MoveBy(scrollbar.Location());
     return local_rect;
   }
-  virtual IntPoint ConvertFromContainingFrameViewBaseToScrollbar(
+  virtual IntPoint ConvertFromContainingEmbeddedContentViewToScrollbar(
       const Scrollbar& scrollbar,
       const IntPoint& parent_point) const {
     NOTREACHED();
     return parent_point;
   }
-  virtual IntPoint ConvertFromScrollbarToContainingFrameViewBase(
+  virtual IntPoint ConvertFromScrollbarToContainingEmbeddedContentView(
       const Scrollbar& scrollbar,
       const IntPoint& scrollbar_point) const {
     NOTREACHED();
@@ -234,7 +241,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
   }
 
   virtual IntRect VisibleContentRect(
-      IncludeScrollbarsInRect = kExcludeScrollbars) const;
+      IncludeScrollbarsInRect = kExcludeScrollbars) const = 0;
   virtual int VisibleHeight() const { return VisibleContentRect().Height(); }
   virtual int VisibleWidth() const { return VisibleContentRect().Width(); }
   virtual IntSize ContentsSize() const = 0;
@@ -348,7 +355,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
                                               const LayoutObject*,
                                               unsigned = 0) const;
 
-  virtual bool IsFrameView() const { return false; }
+  virtual bool IsLocalFrameView() const { return false; }
   virtual bool IsPaintLayerScrollableArea() const { return false; }
   virtual bool IsRootFrameViewport() const { return false; }
 
@@ -412,7 +419,7 @@ class PLATFORM_EXPORT ScrollableArea : public GarbageCollectedMixin,
   virtual void ScrollbarVisibilityChanged() {}
 
  private:
-  void ProgrammaticScrollHelper(const ScrollOffset&, ScrollBehavior);
+  void ProgrammaticScrollHelper(const ScrollOffset&, ScrollBehavior, bool);
   void UserScrollHelper(const ScrollOffset&, ScrollBehavior);
 
   void FadeOverlayScrollbarsTimerFired(TimerBase*);

@@ -5,28 +5,37 @@
 #include "chrome/browser/banners/app_banner_manager_desktop.h"
 
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "build/build_config.h"
 #include "chrome/browser/banners/app_banner_infobar_delegate_desktop.h"
 #include "chrome/browser/banners/app_banner_metrics.h"
 #include "chrome/browser/banners/app_banner_settings_helper.h"
 #include "chrome/browser/extensions/bookmark_app_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_switches.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/web_application_info.h"
 #include "extensions/common/constants.h"
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(banners::AppBannerManagerDesktop);
 
+namespace {
+
+bool gDisableTriggeringForTesting = false;
+
+}  // namespace
+
 namespace banners {
 
 bool AppBannerManagerDesktop::IsEnabled() {
-#if defined(OS_CHROMEOS)
-  return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kDisableAddToShelf);
-#else
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kEnableAddToShelf);
-#endif
+  if (gDisableTriggeringForTesting)
+    return false;
+
+  return base::FeatureList::IsEnabled(features::kAppBanners) ||
+         base::FeatureList::IsEnabled(features::kExperimentalAppBanners);
+}
+
+void AppBannerManagerDesktop::DisableTriggeringForTesting() {
+  gDisableTriggeringForTesting = true;
 }
 
 AppBannerManagerDesktop::AppBannerManagerDesktop(
@@ -46,7 +55,7 @@ void AppBannerManagerDesktop::DidFinishCreatingBookmarkApp(
     if (extension == nullptr) {
       Stop();
     } else {
-      SendBannerAccepted(event_request_id());
+      SendBannerAccepted();
 
       AppBannerSettingsHelper::RecordBannerInstallEvent(
           contents, GetAppIdentifier(), AppBannerSettingsHelper::WEB);
@@ -62,7 +71,7 @@ bool AppBannerManagerDesktop::IsWebAppInstalled(
       browser_context, start_url);
 }
 
-void AppBannerManagerDesktop::ShowBanner() {
+void AppBannerManagerDesktop::ShowBannerUi() {
   content::WebContents* contents = web_contents();
   DCHECK(contents && !manifest_.IsEmpty());
 
@@ -77,8 +86,7 @@ void AppBannerManagerDesktop::ShowBanner() {
   // the InfoBarService to show the banner. On desktop, an InfoBar class
   // is not required, and the delegate calls the InfoBarService.
   infobars::InfoBar* infobar = AppBannerInfoBarDelegateDesktop::Create(
-      contents, GetWeakPtr(), bookmark_app_helper_.get(), manifest_,
-      event_request_id());
+      contents, GetWeakPtr(), bookmark_app_helper_.get(), manifest_);
   if (infobar) {
     RecordDidShowBanner("AppBanner.WebApp.Shown");
     TrackDisplayEvent(DISPLAY_EVENT_WEB_APP_BANNER_CREATED);
@@ -91,9 +99,7 @@ void AppBannerManagerDesktop::ShowBanner() {
 void AppBannerManagerDesktop::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
-  // Explicitly forbid banners from triggering on navigation unless this is
-  // enabled.
-  if (!IsEnabled())
+  if (gDisableTriggeringForTesting)
     return;
 
   AppBannerManager::DidFinishLoad(render_frame_host, validated_url);
@@ -103,9 +109,7 @@ void AppBannerManagerDesktop::OnEngagementIncreased(
     content::WebContents* web_contents,
     const GURL& url,
     double score) {
-  // Explicitly forbid banners from triggering on navigation unless this is
-  // enabled.
-  if (!IsEnabled())
+  if (gDisableTriggeringForTesting)
     return;
 
   AppBannerManager::OnEngagementIncreased(web_contents, url, score);

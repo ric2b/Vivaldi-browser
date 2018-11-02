@@ -76,7 +76,7 @@ static void ReportFatalErrorInMainThread(const char* location,
   int memory_usage_mb = Platform::Current()->ActualMemoryUsageMB();
   DVLOG(1) << "V8 error: " << message << " (" << location
            << ").  Current memory usage: " << memory_usage_mb << " MB";
-  CRASH();
+  LOG(FATAL);
 }
 
 static void ReportOOMErrorInMainThread(const char* location, bool is_js_heap) {
@@ -295,13 +295,21 @@ static void FailedAccessCheckCallbackInMainThread(v8::Local<v8::Object> holder,
 }
 
 static bool CodeGenerationCheckCallbackInMainThread(
-    v8::Local<v8::Context> context) {
+    v8::Local<v8::Context> context,
+    v8::Local<v8::String> source) {
   if (ExecutionContext* execution_context = ToExecutionContext(context)) {
     if (ContentSecurityPolicy* policy =
-            ToDocument(execution_context)->GetContentSecurityPolicy())
-      return policy->AllowEval(ScriptState::From(context),
-                               SecurityViolationReportingPolicy::kReport,
-                               ContentSecurityPolicy::kWillThrowException);
+            ToDocument(execution_context)->GetContentSecurityPolicy()) {
+      v8::String::Value source_str(source);
+      UChar snippet[ContentSecurityPolicy::kMaxSampleLength + 1];
+      size_t len = std::min((sizeof(snippet) / sizeof(UChar)) - 1,
+                            static_cast<size_t>(source_str.length()));
+      memcpy(snippet, *source_str, len * sizeof(UChar));
+      snippet[len] = 0;
+      return policy->AllowEval(
+          ScriptState::From(context), SecurityViolationReportingPolicy::kReport,
+          ContentSecurityPolicy::kWillThrowException, snippet);
+    }
   }
   return false;
 }
@@ -401,14 +409,46 @@ class ArrayBufferAllocator : public v8::ArrayBuffer::Allocator {
   void Free(void* data, size_t size) override {
     WTF::ArrayBufferContents::FreeMemory(data);
   }
+
+  void* Reserve(size_t length) override {
+    return WTF::ArrayBufferContents::ReserveMemory(length);
+  }
+
+  void Free(void* data, size_t length, AllocationMode mode) override {
+    switch (mode) {
+      case AllocationMode::kNormal:
+        Free(data, length);
+        return;
+      case AllocationMode::kReservation:
+        WTF::ArrayBufferContents::ReleaseReservedMemory(data, length);
+        return;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  void SetProtection(void* data,
+                     size_t length,
+                     Protection protection) override {
+    switch (protection) {
+      case Protection::kNoAccess:
+        WTF::SetSystemPagesInaccessible(data, length);
+        return;
+      case Protection::kReadWrite:
+        (void)WTF::SetSystemPagesAccessible(data, length);
+        return;
+      default:
+        NOTREACHED();
+    }
+  }
 };
 
 }  // namespace
 
 static void AdjustAmountOfExternalAllocatedMemory(int64_t diff) {
 #if DCHECK_IS_ON()
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(int64_t, process_total, new int64_t(0));
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, new Mutex);
+  static int64_t process_total = 0;
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, ());
   {
     MutexLocker locker(mutex);
 
@@ -427,7 +467,7 @@ void V8Initializer::InitializeMainThread() {
   WTF::ArrayBufferContents::Initialize(AdjustAmountOfExternalAllocatedMemory);
 
   DEFINE_STATIC_LOCAL(ArrayBufferAllocator, array_buffer_allocator, ());
-  auto v8_extras_mode = RuntimeEnabledFeatures::experimentalV8ExtrasEnabled()
+  auto v8_extras_mode = RuntimeEnabledFeatures::ExperimentalV8ExtrasEnabled()
                             ? gin::IsolateHolder::kStableAndExperimentalV8Extras
                             : gin::IsolateHolder::kStableV8Extras;
   gin::IsolateHolder::Initialize(gin::IsolateHolder::kNonStrictMode,
@@ -456,7 +496,7 @@ void V8Initializer::InitializeMainThread() {
       FailedAccessCheckCallbackInMainThread);
   isolate->SetAllowCodeGenerationFromStringsCallback(
       CodeGenerationCheckCallbackInMainThread);
-  if (RuntimeEnabledFeatures::v8IdleTasksEnabled()) {
+  if (RuntimeEnabledFeatures::V8IdleTasksEnabled()) {
     V8PerIsolateData::EnableIdleTasks(
         isolate, WTF::MakeUnique<V8IdleTaskRunner>(scheduler));
   }
@@ -485,7 +525,7 @@ static void ReportFatalErrorInWorker(const char* location,
                                      const char* message) {
   // FIXME: We temporarily deal with V8 internal error situations such as
   // out-of-memory by crashing the worker.
-  CRASH();
+  LOG(FATAL);
 }
 
 static void MessageHandlerInWorker(v8::Local<v8::Message> message,

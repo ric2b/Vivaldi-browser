@@ -172,6 +172,25 @@ class PickleTest : public testing::Test {
     return proxy;
   }
 
+ protected:
+  static void ForceMessageSerialization(bool forced) {
+    // Force messages to be serialized in this test since it intentionally
+    // exercises StructTraits logic.
+    Connector::OverrideDefaultSerializationBehaviorForTesting(
+        forced ? Connector::OutgoingSerializationMode::kEager
+               : Connector::OutgoingSerializationMode::kLazy,
+        Connector::IncomingSerializationMode::kDispatchAsIs);
+  }
+
+  class ScopedForceMessageSerialization {
+   public:
+    ScopedForceMessageSerialization() { ForceMessageSerialization(true); }
+    ~ScopedForceMessageSerialization() { ForceMessageSerialization(false); }
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(ScopedForceMessageSerialization);
+  };
+
  private:
   base::MessageLoop loop_;
   ChromiumPicklePasserImpl chromium_service_;
@@ -182,8 +201,9 @@ class PickleTest : public testing::Test {
 
 }  // namespace
 
-#if _MSC_FULL_VER == 191025017
-// Disabled due to this VS 2017 RTM code-gen bug:
+#if _MSC_FULL_VER == 191025017 || _MSC_FULL_VER == 191125303
+// Disabled due to this VS 2017 RTM code-gen bug, still present in Update 3
+// Preview 1:
 // https://developercommunity.visualstudio.com/content/problem/40904/bad-code-gen-in-chromes-mojo-public-bindings-unitt.html
 #define MAYBE_ChromiumProxyToChromiumService \
   DISABLED_ChromiumProxyToChromiumService
@@ -310,6 +330,7 @@ TEST_F(PickleTest, MAYBE_BlinkProxyToChromiumService) {
 }
 
 TEST_F(PickleTest, PickleArray) {
+  ScopedForceMessageSerialization force_serialization;
   auto proxy = ConnectToChromiumService();
   auto pickles = std::vector<PickledStructChromium>(2);
   pickles[0].set_foo(1);
@@ -341,6 +362,7 @@ TEST_F(PickleTest, PickleArray) {
 }
 
 TEST_F(PickleTest, PickleArrayArray) {
+  ScopedForceMessageSerialization force_serialization;
   auto proxy = ConnectToChromiumService();
   auto pickle_arrays = std::vector<std::vector<PickledStructChromium>>(2);
   for (size_t i = 0; i < 2; ++i)
@@ -387,6 +409,7 @@ TEST_F(PickleTest, PickleArrayArray) {
 }
 
 TEST_F(PickleTest, PickleContainer) {
+  ScopedForceMessageSerialization force_serialization;
   auto proxy = ConnectToChromiumService();
   PickleContainerPtr pickle_container = PickleContainer::New();
   pickle_container->f_struct.set_foo(42);

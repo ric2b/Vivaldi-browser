@@ -80,10 +80,6 @@ std::vector<views::View*> AppListTestViewDelegate::CreateCustomPageWebViews(
   return std::vector<views::View*>();
 }
 
-views::View* AppListTestViewDelegate::GetSearchAnswerWebView() {
-  return nullptr;
-}
-
 bool AppListTestViewDelegate::IsSpeechRecognitionEnabled() {
   return false;
 }
@@ -91,6 +87,10 @@ bool AppListTestViewDelegate::IsSpeechRecognitionEnabled() {
 void AppListTestViewDelegate::ReplaceTestModel(int item_count) {
   model_.reset(new AppListTestModel);
   model_->PopulateApps(item_count);
+}
+
+void AppListTestViewDelegate::SetSearchEngineIsGoogle(bool is_google) {
+  model_->SetSearchEngineIsGoogle(is_google);
 }
 
 }  // namespace test

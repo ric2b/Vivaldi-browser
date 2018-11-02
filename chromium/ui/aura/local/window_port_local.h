@@ -7,7 +7,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/surfaces/frame_sink_id.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
 #include "ui/aura/window_port.h"
 #include "ui/base/property_data.h"
 
@@ -34,23 +34,25 @@ class AURA_EXPORT WindowPortLocal : public WindowPort {
   void OnVisibilityChanged(bool visible) override;
   void OnDidChangeBounds(const gfx::Rect& old_bounds,
                          const gfx::Rect& new_bounds) override;
+  void OnDidChangeTransform(const gfx::Transform& old_transform,
+                            const gfx::Transform& new_transform) override;
   std::unique_ptr<ui::PropertyData> OnWillChangeProperty(
       const void* key) override;
   void OnPropertyChanged(const void* key,
                          int64_t old_value,
                          std::unique_ptr<ui::PropertyData> data) override;
-  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink() override;
-  cc::SurfaceId GetSurfaceId() const override;
+  std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink() override;
+  viz::SurfaceId GetSurfaceId() const override;
   void OnWindowAddedToRootWindow() override;
   void OnWillRemoveWindowFromRootWindow() override;
 
  private:
-  void OnSurfaceChanged(const cc::SurfaceId& surface_id,
+  void OnSurfaceChanged(const viz::SurfaceId& surface_id,
                         const gfx::Size& surface_size);
 
   Window* const window_;
-  cc::FrameSinkId frame_sink_id_;
-  cc::LocalSurfaceId local_surface_id_;
+  viz::FrameSinkId frame_sink_id_;
+  viz::LocalSurfaceId local_surface_id_;
 
   base::WeakPtrFactory<WindowPortLocal> weak_factory_;
 

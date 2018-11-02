@@ -63,7 +63,7 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
     {autofill::ADDRESS_HOME_STATE, IDS_IOS_AUTOFILL_STATE, UIReturnKeyNext,
      UIKeyboardTypeDefault, UITextAutocapitalizationTypeSentences},
     {autofill::ADDRESS_HOME_ZIP, IDS_IOS_AUTOFILL_ZIP, UIReturnKeyNext,
-     UIKeyboardTypeNumberPad, UITextAutocapitalizationTypeSentences},
+     UIKeyboardTypeDefault, UITextAutocapitalizationTypeAllCharacters},
     {autofill::ADDRESS_HOME_COUNTRY, IDS_IOS_AUTOFILL_COUNTRY, UIReturnKeyNext,
      UIKeyboardTypeDefault, UITextAutocapitalizationTypeSentences},
     {autofill::PHONE_HOME_WHOLE_NUMBER, IDS_IOS_AUTOFILL_PHONE, UIReturnKeyNext,
@@ -94,7 +94,9 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
             personalDataManager:(autofill::PersonalDataManager*)dataManager {
   DCHECK(dataManager);
 
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _personalDataManager = dataManager;
     _autofillProfile = profile;
@@ -187,6 +189,9 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
         autofill::AutofillType(field.autofillType), locale));
     item.autofillUIType = AutofillUITypeFromAutofillType(field.autofillType);
     item.textFieldEnabled = self.editor.editing;
+    item.autoCapitalizationType = field.autoCapitalizationType;
+    item.returnKeyType = field.returnKeyType;
+    item.keyboardType = field.keyboardType;
     [model addItem:item toSectionWithIdentifier:SectionIdentifierFields];
   }
 }
@@ -215,13 +220,7 @@ static const AutofillFieldDisplayInfo kFieldsToDisplay[] = {
 
   AutofillEditCell* textFieldCell =
       base::mac::ObjCCastStrict<AutofillEditCell>(cell);
-  NSUInteger index =
-      [self.collectionViewModel indexInItemTypeForIndexPath:indexPath];
-  const AutofillFieldDisplayInfo& field = kFieldsToDisplay[index];
   textFieldCell.accessibilityIdentifier = textFieldCell.textLabel.text;
-  textFieldCell.textField.autocapitalizationType = field.autoCapitalizationType;
-  textFieldCell.textField.returnKeyType = field.returnKeyType;
-  textFieldCell.textField.keyboardType = field.keyboardType;
   textFieldCell.textField.delegate = self;
   return textFieldCell;
 }

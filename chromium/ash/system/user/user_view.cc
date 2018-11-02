@@ -7,9 +7,9 @@
 #include <algorithm>
 #include <utility>
 
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/multi_profile_uma.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/resources/grit/ash_resources.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
@@ -19,7 +19,6 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
@@ -27,7 +26,6 @@
 #include "ash/system/user/login_status.h"
 #include "ash/system/user/rounded_image_view.h"
 #include "ash/system/user/user_card_view.h"
-#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
@@ -65,7 +63,7 @@ void SwitchUser(UserIndex user_index) {
   MultiProfileUMA::RecordSwitchActiveUser(
       MultiProfileUMA::SWITCH_ACTIVE_USER_BY_TRAY);
   controller->SwitchActiveUser(
-      controller->GetUserSession(user_index)->account_id);
+      controller->GetUserSession(user_index)->user_info->account_id);
 }
 
 bool IsMultiProfileSupportedAndUserActive() {
@@ -78,11 +76,11 @@ views::View* CreateAddUserView(AddUserSessionPolicy policy) {
   auto* view = new views::View;
   const int icon_padding = (kMenuButtonSize - kMenuIconSize) / 2;
   auto* layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
                            kTrayPopupLabelHorizontalPadding + icon_padding);
   layout->set_minimum_cross_axis_size(kTrayPopupItemMinHeight);
   view->SetLayoutManager(layout);
-  view->set_background(views::Background::CreateThemedSolidBackground(
+  view->SetBackground(views::CreateThemedSolidBackground(
       view, ui::NativeTheme::kColorId_BubbleBackground));
 
   int message_id = 0;
@@ -211,7 +209,7 @@ UserView::UserView(SystemTrayItem* owner, LoginStatus login) : owner_(owner) {
   AddLogoutButton(login);
   AddUserCard(login);
 
-  auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+  auto* layout = new views::BoxLayout(views::BoxLayout::kHorizontal);
   SetLayoutManager(layout);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
@@ -249,7 +247,7 @@ int UserView::GetHeightForWidth(int width) const {
 
 void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
   if (sender == logout_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_SIGN_OUT);
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_STATUS_AREA_SIGN_OUT);
     HideUserDropdownWidget();
     Shell::Get()->system_tray_controller()->SignOut();
   } else if (sender == user_card_container_ &&
@@ -263,13 +261,13 @@ void UserView::ButtonPressed(views::Button* sender, const ui::Event& event) {
     // The last item is the "sign in another user" row.
     if (index_in_add_menu == sender->parent()->child_count() - 1) {
       MultiProfileUMA::RecordSigninUser(MultiProfileUMA::SIGNIN_USER_BY_TRAY);
-      Shell::Get()->system_tray_delegate()->ShowUserLogin();
+      Shell::Get()->session_controller()->ShowMultiProfileLogin();
     } else {
       const int user_index = index_in_add_menu;
       SwitchUser(user_index);
     }
     HideUserDropdownWidget();
-    owner_->system_tray()->CloseSystemBubble();
+    owner_->system_tray()->CloseBubble();
   } else {
     NOTREACHED();
   }
@@ -294,7 +292,7 @@ void UserView::AddLogoutButton(LoginStatus login) {
 void UserView::AddUserCard(LoginStatus login) {
   DCHECK(!user_card_container_);
   DCHECK(!user_card_view_);
-  user_card_view_ = new UserCardView(login, 0);
+  user_card_view_ = new UserCardView(0);
   // The entry is clickable when no system modal dialog is open and the multi
   // profile option is active.
   if (!ShellPort::Get()->IsSystemModalWindowOpen() &&
@@ -324,10 +322,8 @@ void UserView::ToggleUserDropdownWidget() {
   params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
   params.opacity = views::Widget::InitParams::TRANSLUCENT_WINDOW;
   params.name = "AddUserMenuOption";
-  RootWindowController::ForWindow(GetWidget()->GetNativeWindow())
-      ->ConfigureWidgetInitParamsForContainer(
-          user_dropdown_widget_.get(),
-          kShellWindowId_DragImageAndTooltipContainer, &params);
+  params.parent = GetWidget()->GetNativeWindow()->GetRootWindow()->GetChildById(
+      kShellWindowId_DragImageAndTooltipContainer);
   user_dropdown_widget_->Init(params);
 
   const SessionController* const session_controller =
@@ -357,7 +353,7 @@ void UserView::ToggleUserDropdownWidget() {
   user_dropdown_padding->SetBorder(views::CreateSolidSidedBorder(
       kMenuSeparatorVerticalPadding - kSeparatorWidth, 0, 0, 0, bg_color));
   user_dropdown_padding->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+      new views::BoxLayout(views::BoxLayout::kVertical));
   views::Separator* separator = new views::Separator();
   separator->SetPreferredHeight(kSeparatorWidth);
   separator->SetColor(
@@ -371,9 +367,8 @@ void UserView::ToggleUserDropdownWidget() {
 
   // Add other logged in users.
   for (int i = 1; i < session_controller->NumberOfLoggedInUsers(); ++i) {
-    user_dropdown_padding->AddChildView(
-        new ButtonFromView(new UserCardView(LoginStatus::USER, i), this,
-                           TrayPopupInkDropStyle::INSET_BOUNDS));
+    user_dropdown_padding->AddChildView(new ButtonFromView(
+        new UserCardView(i), this, TrayPopupInkDropStyle::INSET_BOUNDS));
   }
 
   // Add the "add user" option or the "can't add another user" message.

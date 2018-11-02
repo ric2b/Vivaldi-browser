@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/strings/string16.h"
@@ -15,18 +16,19 @@
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/omnibox/browser/autocomplete_provider.h"
+#include "components/omnibox/browser/omnibox_field_trial.h"
 #include "components/omnibox/browser/suggestion_answer.h"
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_service.h"
-#include "components/url_formatter/url_formatter.h"
 #include "ui/gfx/vector_icon_types.h"
 
 #if !defined(OS_ANDROID) && !defined(OS_IOS)
 #include "components/omnibox/browser/vector_icons.h"  // nogncheck
-#include "ui/vector_icons/vector_icons.h"             // nogncheck
+#include "components/vector_icons/vector_icons.h"     // nogncheck
 #endif
 
 namespace {
@@ -202,7 +204,7 @@ const gfx::VectorIcon& AutocompleteMatch::TypeToVectorIcon(Type type) {
     case Type::SEARCH_OTHER_ENGINE:
     case Type::CONTACT_DEPRECATED:
     case Type::VOICE_SUGGEST:
-      return ui::kSearchIcon;
+      return vector_icons::kSearchIcon;
 
     case Type::EXTENSION_APP:
       return omnibox::kExtensionAppIcon;
@@ -483,6 +485,30 @@ GURL AutocompleteMatch::GURLToStrippedGURL(
     stripped_destination_url = stripped_destination_url.ReplaceComponents(
         replacements);
   return stripped_destination_url;
+}
+
+// static
+url_formatter::FormatUrlTypes AutocompleteMatch::GetFormatTypes(
+    bool trim_scheme) {
+  auto format_types = url_formatter::kFormatUrlOmitAll;
+  if (!trim_scheme) {
+    format_types &= ~url_formatter::kFormatUrlOmitHTTP;
+  } else if (base::FeatureList::IsEnabled(
+                 omnibox::kUIExperimentHideSuggestionUrlScheme)) {
+    format_types |= url_formatter::kFormatUrlExperimentalOmitHTTPS;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentElideSuggestionUrlAfterHost)) {
+    format_types |= url_formatter::kFormatUrlExperimentalElideAfterHost;
+  }
+
+  if (base::FeatureList::IsEnabled(
+          omnibox::kUIExperimentHideSuggestionUrlTrivialSubdomains)) {
+    format_types |= url_formatter::kFormatUrlExperimentalOmitTrivialSubdomains;
+  }
+
+  return format_types;
 }
 
 void AutocompleteMatch::ComputeStrippedDestinationURL(

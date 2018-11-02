@@ -39,7 +39,7 @@ inline HTMLOutputElement::HTMLOutputElement(Document& document)
     : HTMLFormControlElement(HTMLNames::outputTag, document),
       is_default_value_mode_(true),
       default_value_(""),
-      tokens_(DOMTokenList::Create(this)) {}
+      tokens_(DOMTokenList::Create(*this, HTMLNames::forAttr)) {}
 
 HTMLOutputElement::~HTMLOutputElement() {}
 
@@ -67,17 +67,13 @@ bool HTMLOutputElement::SupportsFocus() const {
 void HTMLOutputElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == HTMLNames::forAttr)
-    SetFor(params.new_value);
+    tokens_->DidUpdateAttributeValue(params.old_value, params.new_value);
   else
     HTMLFormControlElement::ParseAttribute(params);
 }
 
 DOMTokenList* HTMLOutputElement::htmlFor() const {
   return tokens_.Get();
-}
-
-void HTMLOutputElement::SetFor(const AtomicString& value) {
-  tokens_->setValue(value);
 }
 
 void HTMLOutputElement::ChildrenChanged(const ChildrenChange& change) {
@@ -109,10 +105,6 @@ void HTMLOutputElement::setValue(const String& value) {
   setTextContent(value);
 }
 
-void HTMLOutputElement::ValueWasSet() {
-  SetSynchronizedLazyAttribute(HTMLNames::forAttr, tokens_->value());
-}
-
 String HTMLOutputElement::defaultValue() const {
   return default_value_;
 }
@@ -134,7 +126,6 @@ int HTMLOutputElement::tabIndex() const {
 DEFINE_TRACE(HTMLOutputElement) {
   visitor->Trace(tokens_);
   HTMLFormControlElement::Trace(visitor);
-  DOMTokenListObserver::Trace(visitor);
 }
 
 }  // namespace blink

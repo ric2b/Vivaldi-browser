@@ -17,8 +17,10 @@
 
 namespace blink {
 
-CSSLengthInterpolationType::CSSLengthInterpolationType(PropertyHandle property)
-    : CSSInterpolationType(property),
+CSSLengthInterpolationType::CSSLengthInterpolationType(
+    PropertyHandle property,
+    const PropertyRegistration* registration)
+    : CSSInterpolationType(property, registration),
       value_range_(LengthPropertyFunctions::GetValueRange(CssProperty())) {}
 
 float CSSLengthInterpolationType::EffectiveZoom(
@@ -28,7 +30,8 @@ float CSSLengthInterpolationType::EffectiveZoom(
              : 1;
 }
 
-class InheritedLengthChecker : public InterpolationType::ConversionChecker {
+class InheritedLengthChecker
+    : public CSSInterpolationType::CSSConversionChecker {
  public:
   static std::unique_ptr<InheritedLengthChecker> Create(CSSPropertyID property,
                                                         const Length& length) {
@@ -39,11 +42,11 @@ class InheritedLengthChecker : public InterpolationType::ConversionChecker {
   InheritedLengthChecker(CSSPropertyID property, const Length& length)
       : property_(property), length_(length) {}
 
-  bool IsValid(const InterpolationEnvironment& environment,
+  bool IsValid(const StyleResolverState& state,
                const InterpolationValue& underlying) const final {
     Length parent_length;
-    if (!LengthPropertyFunctions::GetLength(
-            property_, *environment.GetState().ParentStyle(), parent_length))
+    if (!LengthPropertyFunctions::GetLength(property_, *state.ParentStyle(),
+                                            parent_length))
       return false;
     return parent_length == length_;
   }

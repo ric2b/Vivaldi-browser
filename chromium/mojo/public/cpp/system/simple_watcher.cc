@@ -9,6 +9,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/heap_profiler.h"
 #include "mojo/public/c/system/watcher.h"
 
@@ -22,10 +23,11 @@ class SimpleWatcher::Context : public base::RefCountedThreadSafe<Context> {
   // |handle| for |signals|.
   static scoped_refptr<Context> Create(
       base::WeakPtr<SimpleWatcher> watcher,
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+      scoped_refptr<base::SequencedTaskRunner> task_runner,
       WatcherHandle watcher_handle,
       Handle handle,
       MojoHandleSignals signals,
+      MojoWatchCondition condition,
       int watch_id,
       MojoResult* watch_result) {
     scoped_refptr<Context> context =
@@ -37,7 +39,7 @@ class SimpleWatcher::Context : public base::RefCountedThreadSafe<Context> {
     context->AddRef();
 
     *watch_result = MojoWatch(watcher_handle.value(), handle.value(), signals,
-                              context->value());
+                              condition, context->value());
     if (*watch_result != MOJO_RESULT_OK) {
       // Balanced by the AddRef() above since watching failed.
       context->Release();
@@ -71,7 +73,7 @@ class SimpleWatcher::Context : public base::RefCountedThreadSafe<Context> {
   friend class base::RefCountedThreadSafe<Context>;
 
   Context(base::WeakPtr<SimpleWatcher> weak_watcher,
-          scoped_refptr<base::SingleThreadTaskRunner> task_runner,
+          scoped_refptr<base::SequencedTaskRunner> task_runner,
           int watch_id)
       : weak_watcher_(weak_watcher),
         task_runner_(task_runner),
@@ -94,22 +96,24 @@ class SimpleWatcher::Context : public base::RefCountedThreadSafe<Context> {
         return;
     }
 
+    HandleSignalsState state(signals_state.satisfied_signals,
+                             signals_state.satisfiable_signals);
     if ((flags & MOJO_WATCHER_NOTIFICATION_FLAG_FROM_SYSTEM) &&
         task_runner_->RunsTasksInCurrentSequence() && weak_watcher_ &&
         weak_watcher_->is_default_task_runner_) {
       // System notifications will trigger from the task runner passed to
       // mojo::edk::ScopedIPCSupport. In Chrome this happens to always be the
       // default task runner for the IO thread.
-      weak_watcher_->OnHandleReady(watch_id_, result);
+      weak_watcher_->OnHandleReady(watch_id_, result, state);
     } else {
       task_runner_->PostTask(
           FROM_HERE, base::Bind(&SimpleWatcher::OnHandleReady, weak_watcher_,
-                                watch_id_, result));
+                                watch_id_, result, state));
     }
   }
 
   const base::WeakPtr<SimpleWatcher> weak_watcher_;
-  const scoped_refptr<base::SingleThreadTaskRunner> task_runner_;
+  const scoped_refptr<base::SequencedTaskRunner> task_runner_;
   const int watch_id_;
 
   base::Lock lock_;
@@ -120,16 +124,17 @@ class SimpleWatcher::Context : public base::RefCountedThreadSafe<Context> {
 
 SimpleWatcher::SimpleWatcher(const tracked_objects::Location& from_here,
                              ArmingPolicy arming_policy,
-                             scoped_refptr<base::SingleThreadTaskRunner> runner)
+                             scoped_refptr<base::SequencedTaskRunner> runner)
     : arming_policy_(arming_policy),
       task_runner_(std::move(runner)),
-      is_default_task_runner_(task_runner_ ==
-                              base::ThreadTaskRunnerHandle::Get()),
+      is_default_task_runner_(base::ThreadTaskRunnerHandle::IsSet() &&
+                              task_runner_ ==
+                                  base::ThreadTaskRunnerHandle::Get()),
       heap_profiler_tag_(from_here.file_name()),
       weak_factory_(this) {
   MojoResult rv = CreateWatcher(&Context::CallNotify, &watcher_handle_);
   DCHECK_EQ(MOJO_RESULT_OK, rv);
-  DCHECK(task_runner_->BelongsToCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 }
 
 SimpleWatcher::~SimpleWatcher() {
@@ -138,14 +143,15 @@ SimpleWatcher::~SimpleWatcher() {
 }
 
 bool SimpleWatcher::IsWatching() const {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return context_ != nullptr;
 }
 
 MojoResult SimpleWatcher::Watch(Handle handle,
                                 MojoHandleSignals signals,
-                                const ReadyCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+                                MojoWatchCondition condition,
+                                const ReadyCallbackWithState& callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsWatching());
   DCHECK(!callback.is_null());
 
@@ -155,8 +161,8 @@ MojoResult SimpleWatcher::Watch(Handle handle,
 
   MojoResult watch_result = MOJO_RESULT_UNKNOWN;
   context_ = Context::Create(weak_factory_.GetWeakPtr(), task_runner_,
-                             watcher_handle_.get(), handle_, signals, watch_id_,
-                             &watch_result);
+                             watcher_handle_.get(), handle_, signals, condition,
+                             watch_id_, &watch_result);
   if (!context_) {
     handle_.set_value(kInvalidHandleValue);
     callback_.Reset();
@@ -171,7 +177,7 @@ MojoResult SimpleWatcher::Watch(Handle handle,
 }
 
 void SimpleWatcher::Cancel() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // The watcher may have already been cancelled if the handle was closed.
   if (!context_)
@@ -199,15 +205,19 @@ void SimpleWatcher::Cancel() {
   DCHECK(rv == MOJO_RESULT_OK || rv == MOJO_RESULT_NOT_FOUND);
 }
 
-MojoResult SimpleWatcher::Arm(MojoResult* ready_result) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+MojoResult SimpleWatcher::Arm(MojoResult* ready_result,
+                              HandleSignalsState* ready_state) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   uint32_t num_ready_contexts = 1;
   uintptr_t ready_context;
   MojoResult local_ready_result;
-  MojoHandleSignalsState ready_state;
+  HandleSignalsState local_ready_state;
+  if (!ready_state)
+    ready_state = &local_ready_state;
   MojoResult rv =
       MojoArmWatcher(watcher_handle_.get().value(), &num_ready_contexts,
-                     &ready_context, &local_ready_result, &ready_state);
+                     &ready_context, &local_ready_result,
+                     reinterpret_cast<MojoHandleSignalsState*>(ready_state));
   if (rv == MOJO_RESULT_FAILED_PRECONDITION) {
     DCHECK(context_);
     DCHECK_EQ(1u, num_ready_contexts);
@@ -220,32 +230,36 @@ MojoResult SimpleWatcher::Arm(MojoResult* ready_result) {
 }
 
 void SimpleWatcher::ArmOrNotify() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Already cancelled, nothing to do.
   if (!IsWatching())
     return;
 
   MojoResult ready_result;
-  MojoResult rv = Arm(&ready_result);
+  HandleSignalsState ready_state;
+  MojoResult rv = Arm(&ready_result, &ready_state);
   if (rv == MOJO_RESULT_OK)
     return;
 
   DCHECK_EQ(MOJO_RESULT_FAILED_PRECONDITION, rv);
-  task_runner_->PostTask(FROM_HERE, base::Bind(&SimpleWatcher::OnHandleReady,
-                                               weak_factory_.GetWeakPtr(),
-                                               watch_id_, ready_result));
+  task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&SimpleWatcher::OnHandleReady, weak_factory_.GetWeakPtr(),
+                 watch_id_, ready_result, ready_state));
 }
 
-void SimpleWatcher::OnHandleReady(int watch_id, MojoResult result) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+void SimpleWatcher::OnHandleReady(int watch_id,
+                                  MojoResult result,
+                                  const HandleSignalsState& state) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // This notification may be for a previously watched context, in which case
   // we just ignore it.
   if (watch_id != watch_id_)
     return;
 
-  ReadyCallback callback = callback_;
+  ReadyCallbackWithState callback = callback_;
   if (result == MOJO_RESULT_CANCELLED) {
     // Implicit cancellation due to someone closing the watched handle. We clear
     // the SimppleWatcher's state before dispatching this.
@@ -259,7 +273,7 @@ void SimpleWatcher::OnHandleReady(int watch_id, MojoResult result) {
     TRACE_HEAP_PROFILER_API_SCOPED_TASK_EXECUTION event(heap_profiler_tag_);
 
     base::WeakPtr<SimpleWatcher> weak_self = weak_factory_.GetWeakPtr();
-    callback.Run(result);
+    callback.Run(result, state);
     if (!weak_self)
       return;
 

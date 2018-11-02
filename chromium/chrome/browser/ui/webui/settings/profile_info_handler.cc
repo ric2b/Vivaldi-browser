@@ -17,7 +17,7 @@
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
-#include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
+#include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_manager.h"
 #include "content/public/browser/notification_service.h"
@@ -48,8 +48,7 @@ ProfileInfoHandler::ProfileInfoHandler(Profile* profile)
       callback_weak_ptr_factory_(this) {
 #if defined(OS_CHROMEOS)
   // Set up the chrome://userimage/ source.
-  content::URLDataSource::Add(profile,
-                              new chromeos::options::UserImageSource());
+  content::URLDataSource::Add(profile, new chromeos::UserImageSource());
 #endif
 }
 
@@ -131,9 +130,6 @@ void ProfileInfoHandler::HandleGetProfileInfo(const base::ListValue* args) {
 void ProfileInfoHandler::HandleGetProfileStats(const base::ListValue* args) {
   AllowJavascript();
 
-  // Because there is open browser window for the current profile, statistics
-  // from the ProfileAttributesStorage may not be up-to-date or may be missing
-  // (e.g., |item.success| is false). Therefore, query the actual statistics.
   ProfileStatisticsFactory::GetForProfile(profile_)->GatherStatistics(
       base::Bind(&ProfileInfoHandler::PushProfileStatsCount,
                  callback_weak_ptr_factory_.GetWeakPtr()));
@@ -143,11 +139,6 @@ void ProfileInfoHandler::PushProfileStatsCount(
     profiles::ProfileCategoryStats stats) {
   int count = 0;
   for (const auto& item : stats) {
-    std::unique_ptr<base::DictionaryValue> stat(new base::DictionaryValue);
-    if (!item.success) {
-      count = 0;
-      break;
-    }
     count += item.count;
   }
   // PushProfileStatsCount gets invoked multiple times as each stat becomes
@@ -194,7 +185,7 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
   // Get image as data URL instead of using chrome://userimage source to avoid
   // issues with caching.
   scoped_refptr<base::RefCountedMemory> image =
-      chromeos::options::UserImageSource::GetUserImage(user->GetAccountId());
+      chromeos::UserImageSource::GetUserImage(user->GetAccountId());
   icon_url = webui::GetPngDataUrl(image->front(), image->size());
 #else   // !defined(OS_CHROMEOS)
   ProfileAttributesEntry* entry;
@@ -212,10 +203,10 @@ ProfileInfoHandler::GetAccountNameAndIcon() const {
   }
 #endif  // defined(OS_CHROMEOS)
 
-  base::DictionaryValue* response = new base::DictionaryValue();
+  auto response = base::MakeUnique<base::DictionaryValue>();
   response->SetString("name", name);
   response->SetString("iconUrl", icon_url);
-  return base::WrapUnique(response);
+  return response;
 }
 
 bool ProfileInfoHandler::IsProfileManagingSupervisedUsers() const {

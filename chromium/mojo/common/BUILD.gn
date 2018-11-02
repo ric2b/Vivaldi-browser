@@ -16,6 +16,7 @@ mojom("common_custom_types") {
   sources = [
     "file.mojom",
     "file_path.mojom",
+    "memory_allocator_dump_cross_process_uid.mojom",
     "process_id.mojom",
     "string16.mojom",
     "text_direction.mojom",
@@ -24,6 +25,9 @@ mojom("common_custom_types") {
     "values.mojom",
     "version.mojom",
   ]
+
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  js_bindings_mode = "both"
 }
 
 component("common_base") {
@@ -53,9 +57,6 @@ mojom("test_common_custom_types") {
   public_deps = [
     ":common_custom_types",
   ]
-
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
 }
 
 test("mojo_common_unittests") {
@@ -93,5 +94,17 @@ source_set("struct_traits") {
   ]
   public_deps = [
     "//base:i18n",
+  ]
+}
+
+source_set("values_struct_traits") {
+  sources = [
+    "values_struct_traits.cc",
+    "values_struct_traits.h",
+  ]
+  public_deps = [
+    ":common_custom_types_shared_cpp_sources",
+    "//base",
+    "//mojo/public/cpp/bindings:bindings",
   ]
 }

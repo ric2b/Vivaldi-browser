@@ -10,10 +10,12 @@
           "app_list::mojom::AppList",
           "ash::mojom::AcceleratorController",
           "ash::mojom::CastConfig",
+          "ash::mojom::ImeController",
           "ash::mojom::LocaleNotificationController",
           "ash::mojom::LockScreen",
           "ash::mojom::MediaController",
           "ash::mojom::NewWindowController",
+          "ash::mojom::NightLightController",
           "ash::mojom::SessionController",
           "ash::mojom::ShelfController",
           "ash::mojom::ShutdownController",
@@ -23,11 +25,16 @@
           "ash::mojom::VpnList",
           "ash::mojom::WallpaperController"
         ],
+        // Only chrome is allowed to use this (required as dbus runs in Chrome).
+        "display": [
+          "ash::mojom::AshDisplayController"
+        ],
         "mus:window_manager": [ "ui::mojom::AcceleratorRegistrar" ]
       },
       "requires": {
         "*": [ "accessibility", "app" ],
         "preferences_forwarder": [ "pref_client" ],
+        "local_state": [ "pref_client" ],
         "ui": [ "display_test", "window_manager" ],
         "touch_hud": [ "mash:launchable" ]
       }

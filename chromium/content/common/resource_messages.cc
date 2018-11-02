@@ -101,7 +101,6 @@ void ParamTraits<net::SSLInfo>::GetSize(base::PickleSizer* s,
   GetParamSize(s, p.pinning_failure_log);
   GetParamSize(s, p.signed_certificate_timestamps);
   GetParamSize(s, p.ct_compliance_details_available);
-  GetParamSize(s, p.ct_ev_policy_compliance);
   GetParamSize(s, p.ct_cert_policy_compliance);
   GetParamSize(s, p.ocsp_result.response_status);
   GetParamSize(s, p.ocsp_result.revocation_status);
@@ -128,7 +127,6 @@ void ParamTraits<net::SSLInfo>::Write(base::Pickle* m, const param_type& p) {
   WriteParam(m, p.pinning_failure_log);
   WriteParam(m, p.signed_certificate_timestamps);
   WriteParam(m, p.ct_compliance_details_available);
-  WriteParam(m, p.ct_ev_policy_compliance);
   WriteParam(m, p.ct_cert_policy_compliance);
   WriteParam(m, p.ocsp_result.response_status);
   WriteParam(m, p.ocsp_result.revocation_status);
@@ -159,7 +157,6 @@ bool ParamTraits<net::SSLInfo>::Read(const base::Pickle* m,
          ReadParam(m, iter, &r->pinning_failure_log) &&
          ReadParam(m, iter, &r->signed_certificate_timestamps) &&
          ReadParam(m, iter, &r->ct_compliance_details_available) &&
-         ReadParam(m, iter, &r->ct_ev_policy_compliance) &&
          ReadParam(m, iter, &r->ct_cert_policy_compliance) &&
          ReadParam(m, iter, &r->ocsp_result.response_status) &&
          ReadParam(m, iter, &r->ocsp_result.revocation_status);
@@ -532,7 +529,7 @@ void ParamTraits<net::LoadTimingInfo>::Log(const param_type& p,
   l->append(")");
 }
 
-void ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::GetSize(
+void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::GetSize(
     base::PickleSizer* s,
     const param_type& p) {
   GetParamSize(s, p.get() != NULL);
@@ -543,7 +540,7 @@ void ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::GetSize(
   }
 }
 
-void ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::Write(
+void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Write(
     base::Pickle* m,
     const param_type& p) {
   WriteParam(m, p.get() != NULL);
@@ -554,7 +551,7 @@ void ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::Write(
   }
 }
 
-bool ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::Read(
+bool ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Read(
     const base::Pickle* m,
     base::PickleIterator* iter,
     param_type* r) {
@@ -572,17 +569,17 @@ bool ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::Read(
   bool contains_sensitive_info;
   if (!ReadParam(m, iter, &contains_sensitive_info))
     return false;
-  *r = new content::ResourceRequestBodyImpl;
+  *r = new content::ResourceRequestBody;
   (*r)->swap_elements(&elements);
   (*r)->set_identifier(identifier);
   (*r)->set_contains_sensitive_info(contains_sensitive_info);
   return true;
 }
 
-void ParamTraits<scoped_refptr<content::ResourceRequestBodyImpl>>::Log(
+void ParamTraits<scoped_refptr<content::ResourceRequestBody>>::Log(
     const param_type& p,
     std::string* l) {
-  l->append("<ResourceRequestBodyImpl>");
+  l->append("<ResourceRequestBody>");
 }
 
 void ParamTraits<scoped_refptr<net::ct::SignedCertificateTimestamp>>::GetSize(

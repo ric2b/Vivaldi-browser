@@ -56,6 +56,9 @@ void SyncConfirmationHandler::RegisterMessages() {
                  base::Unretained(this)));
   web_ui()->RegisterMessageCallback("undo",
       base::Bind(&SyncConfirmationHandler::HandleUndo, base::Unretained(this)));
+  web_ui()->RegisterMessageCallback(
+      "goToSettings", base::Bind(&SyncConfirmationHandler::HandleGoToSettings,
+                                 base::Unretained(this)));
   web_ui()->RegisterMessageCallback("initializedWithSize",
       base::Bind(&SyncConfirmationHandler::HandleInitializedWithSize,
                  base::Unretained(this)));
@@ -63,11 +66,12 @@ void SyncConfirmationHandler::RegisterMessages() {
 
 void SyncConfirmationHandler::HandleConfirm(const base::ListValue* args) {
   did_user_explicitly_interact = true;
-  bool configure_sync_first = false;
-  CHECK(args->GetBoolean(0, &configure_sync_first));
-  CloseModalSigninWindow(configure_sync_first
-                             ? LoginUIService::CONFIGURE_SYNC_FIRST
-                             : LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
+  CloseModalSigninWindow(LoginUIService::SYNC_WITH_DEFAULT_SETTINGS);
+}
+
+void SyncConfirmationHandler::HandleGoToSettings(const base::ListValue* args) {
+  did_user_explicitly_interact = true;
+  CloseModalSigninWindow(LoginUIService::CONFIGURE_SYNC_FIRST);
 }
 
 void SyncConfirmationHandler::HandleUndo(const base::ListValue* args) {
@@ -85,11 +89,12 @@ void SyncConfirmationHandler::HandleUndo(const base::ListValue* args) {
 
 void SyncConfirmationHandler::SetUserImageURL(const std::string& picture_url) {
   std::string picture_url_to_load;
-  GURL url;
-  if (picture_url != AccountTrackerService::kNoPictureURLFound &&
-      profiles::GetImageURLWithThumbnailSize(GURL(picture_url),
-                                             kProfileImageSize, &url)) {
-    picture_url_to_load = url.spec();
+  GURL picture_gurl(picture_url);
+  if (picture_gurl.is_valid()) {
+    picture_url_to_load =
+        profiles::GetImageURLWithOptions(picture_gurl, kProfileImageSize,
+                                         false /* no_silhouette */)
+            .spec();
   } else {
     // Use the placeholder avatar icon until the account picture URL is fetched.
     picture_url_to_load = profiles::GetPlaceholderAvatarIconUrl();

@@ -5,26 +5,23 @@
 #include "platform/fonts/AcceptLanguagesResolver.h"
 
 #include "platform/LayoutLocale.h"
+#include "platform/fonts/FontGlobalContext.h"
 
 namespace blink {
 
-static String& CurrentAcceptLanguages() {
-  DEFINE_STATIC_LOCAL(String, current, ());
-  return current;
-}
-
 void AcceptLanguagesResolver::AcceptLanguagesChanged(
     const String& accept_languages) {
-  String& current_value = CurrentAcceptLanguages();
+  String& current_value = FontGlobalContext::CurrentAcceptLanguages();
   if (current_value == accept_languages)
     return;
 
   current_value = accept_languages;
-  LayoutLocale::InvalidateLocaleForHan();
+  FontGlobalContext::InvalidateLocaleForHan();
 }
 
 const LayoutLocale* AcceptLanguagesResolver::LocaleForHan() {
-  return LocaleForHanFromAcceptLanguages(CurrentAcceptLanguages());
+  return LocaleForHanFromAcceptLanguages(
+      FontGlobalContext::CurrentAcceptLanguages());
 }
 
 const LayoutLocale* AcceptLanguagesResolver::LocaleForHanFromAcceptLanguages(

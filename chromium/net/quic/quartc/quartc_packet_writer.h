@@ -6,6 +6,7 @@
 #define NET_QUIC_QUARTC_QUARTC_PACKET_WRITER_H_
 
 #include "net/quic/core/quic_packet_writer.h"
+#include "net/quic/platform/api/quic_export.h"
 #include "net/quic/quartc/quartc_session_interface.h"
 
 namespace net {
@@ -13,7 +14,7 @@ namespace net {
 // Implements a QuicPacketWriter using a
 // QuartcSessionInterface::PacketTransport, which allows a QuicConnection to
 // use(for example), a WebRTC IceTransport.
-class QuartcPacketWriter : public QuicPacketWriter {
+class QUIC_EXPORT_PRIVATE QuartcPacketWriter : public QuicPacketWriter {
  public:
   QuartcPacketWriter(QuartcSessionInterface::PacketTransport* packet_transport,
                      QuicByteCount max_packet_size);

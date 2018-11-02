@@ -23,7 +23,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
 #include "net/base/cache_type.h"
@@ -57,8 +57,7 @@ class NetLog;
 class ViewCacheHelper;
 struct HttpRequestInfo;
 
-class NET_EXPORT HttpCache : public HttpTransactionFactory,
-                             NON_EXPORTED_BASE(public base::NonThreadSafe) {
+class NET_EXPORT HttpCache : public HttpTransactionFactory {
  public:
   // The cache mode of operation.
   enum Mode {
@@ -194,7 +193,14 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
 
   // Causes all transactions created after this point to simulate lock timeout
   // and effectively bypass the cache lock whenever there is lock contention.
-  void SimulateCacheLockTimeout() { bypass_lock_for_test_ = true; }
+  void SimulateCacheLockTimeoutForTesting() { bypass_lock_for_test_ = true; }
+
+  // Causes all transactions created after this point to simulate lock timeout
+  // and effectively bypass the cache lock whenever there is lock contention
+  // after the transaction has completed its headers phase.
+  void SimulateCacheLockTimeoutAfterHeadersForTesting() {
+    bypass_lock_after_headers_for_test_ = true;
+  }
 
   // Causes all transactions created after this point to generate a failure
   // when attempting to conditionalize a network request.
@@ -240,13 +246,38 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   class QuicServerInfoFactoryAdaptor;
   class Transaction;
   class WorkItem;
+  class Writers;
+  friend class WritersTest;  // To access ActiveEntry in the test class.
+  friend class MockHttpCacheTransaction;
   friend class Transaction;
   friend class ViewCacheHelper;
   struct PendingOp;  // Info for an entry under construction.
 
+  // To help with testing.
+  friend class MockHttpCache;
+
   using TransactionList = std::list<Transaction*>;
   using TransactionSet = std::unordered_set<Transaction*>;
   typedef std::list<std::unique_ptr<WorkItem>> WorkItemList;
+
+  // We implement a basic reader/writer lock for the disk cache entry. If there
+  // is a writer, then all transactions must wait to read the body. But the
+  // waiting transactions can start their headers phase in parallel. Headers
+  // phase is allowed for one transaction at a time so that if it doesn't match
+  // the existing headers, remaining transactions do not also try to match the
+  // existing entry in parallel leading to wasted network requests. If the
+  // headers do not match, this entry will be doomed.
+  //
+  // A transaction goes through these state transitions.
+  //
+  // Write mode transactions:
+  // add_to_entry_queue-> headers_transaction -> writer
+  // add_to_entry_queue-> headers_transaction -> done_headers_queue -> readers
+  // (once the data is written to the cache by another writer)
+  //
+  // Read only transactions:
+  // add_to_entry_queue-> headers_transaction -> done_headers_queue -> readers
+  // (once the data is written to the cache by the writer)
 
   struct ActiveEntry {
     explicit ActiveEntry(disk_cache::Entry* entry);
@@ -256,12 +287,32 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
     // Returns true if no transactions are associated with this entry.
     bool HasNoTransactions();
 
-    disk_cache::Entry* disk_entry;
-    Transaction*       writer;
+    disk_cache::Entry* disk_entry = nullptr;
+
+    // Transactions waiting to be added to entry.
+    TransactionList add_to_entry_queue;
+
+    // Transaction currently in the headers phase, either validating the
+    // response or getting new headers. This can exist simultaneously with
+    // writer or readers while validating existing headers.
+    Transaction* headers_transaction = nullptr;
+
+    // Transactions that have completed their headers phase and are waiting
+    // to read the response body or write the response body.
+    TransactionList done_headers_queue;
+
+    // Transaction currently reading from the network and writing to the cache.
+    Transaction* writer = nullptr;
+
+    // Transactions that can only read from the cache. Only one of writer or
+    // readers can exist at a time.
     TransactionSet readers;
-    TransactionList    pending_queue;
-    bool               will_process_pending_queue;
-    bool               doomed;
+
+    // The following variables are true if OnProcessQueuedTransactions is posted
+    bool will_process_queued_transactions = false;
+
+    // True if entry is doomed.
+    bool doomed = false;
   };
 
   using ActiveEntriesMap =
@@ -293,7 +344,9 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
 
   // Dooms the entry selected by |key|. |trans| will be notified via its IO
   // callback if this method returns ERR_IO_PENDING. The entry can be
-  // currently in use or not.
+  // currently in use or not. If entry is in use and the invoking transaction
+  // is associated with this entry and this entry is already doomed, this API
+  // should not be invoked.
   int DoomEntry(const std::string& key, Transaction* trans);
 
   // Dooms the entry selected by |key|. |trans| will be notified via its IO
@@ -342,28 +395,94 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   // Destroys an ActiveEntry (active or doomed).
   void DestroyEntry(ActiveEntry* entry);
 
-  // Adds a transaction to an ActiveEntry. If this method returns ERR_IO_PENDING
-  // the transaction will be notified about completion via its IO callback. This
-  // method returns ERR_CACHE_RACE to signal the transaction that it cannot be
-  // added to the provided entry, and it should retry the process with another
-  // one (in this case, the entry is no longer valid).
-  int AddTransactionToEntry(ActiveEntry* entry, Transaction* trans);
+  // Adds a transaction to an ActiveEntry. This method returns ERR_IO_PENDING
+  // and the transaction will be notified about completion via its IO callback.
+  // In a failure case, the callback will be invoked with ERR_CACHE_RACE.
+  int AddTransactionToEntry(ActiveEntry* entry, Transaction* transaction);
 
-  // Called when the transaction has finished working with this entry. |cancel|
-  // is true if the operation was cancelled by the caller instead of running
-  // to completion.
-  void DoneWithEntry(ActiveEntry* entry, Transaction* trans, bool cancel);
+  // Transaction invokes this when its response headers phase is complete
+  // If the transaction is responsible for writing the response body,
+  // it becomes the writer and returns OK. In other cases ERR_IO_PENDING is
+  // returned and the transaction will be notified about completion via its
+  // IO callback. In a failure case, the callback will be invoked with
+  // ERR_CACHE_RACE.
+  int DoneWithResponseHeaders(ActiveEntry* entry,
+                              Transaction* transaction,
+                              bool is_partial);
+
+  // Called when the transaction has finished working with this entry.
+  // |process_cancel| is true if the transaction could have been writing the
+  // response body and was cancelled by the caller instead of running
+  // to completion. This will be confirmed and if true, its impact on queued
+  // transactions will be processed.
+  void DoneWithEntry(ActiveEntry* entry,
+                     Transaction* transaction,
+                     bool process_cancel,
+                     bool is_partial);
 
   // Called when the transaction has finished writing to this entry. |success|
   // is false if the cache entry should be deleted.
-  void DoneWritingToEntry(ActiveEntry* entry, bool success);
+  void DoneWritingToEntry(ActiveEntry* entry,
+                          bool success,
+                          Transaction* transaction);
 
   // Called when the transaction has finished reading from this entry.
-  void DoneReadingFromEntry(ActiveEntry* entry, Transaction* trans);
+  void DoneReadingFromEntry(ActiveEntry* entry, Transaction* transaction);
 
-  // Converts the active writer transaction to a reader so that other
-  // transactions can start reading from this entry.
-  void ConvertWriterToReader(ActiveEntry* entry);
+  // Called when the transaction has received a non-matching response to
+  // validation and it's not the transaction responsible for writing the
+  // response body.
+  void DoomEntryValidationNoMatch(ActiveEntry* entry);
+
+  // Removes and returns all queued transactions in |entry| in FIFO order. This
+  // includes transactions that have completed the headers phase and those that
+  // have not been added to the entry yet in that order. |list| is the output
+  // argument.
+  void RemoveAllQueuedTransactions(ActiveEntry* entry, TransactionList* list);
+
+  // Processes either writer's failure to write response body or
+  // headers_transactions's failure to write headers.
+  void ProcessEntryFailure(ActiveEntry* entry, Transaction* transaction);
+
+  // Restarts headers_transaction and done_headers_queue transactions.
+  void RestartHeadersPhaseTransactions(ActiveEntry* entry,
+                                       Transaction* transaction);
+
+  // Restarts the headers_transaction by setting its state. Since the
+  // headers_transaction is awaiting an asynchronous operation completion,
+  // it will be restarted when it's IO callback is invoked.
+  void RestartHeadersTransaction(ActiveEntry* entry);
+
+  // Resumes processing the queued transactions of |entry|.
+  void ProcessQueuedTransactions(ActiveEntry* entry);
+
+  // Checks if a transaction can be added to the entry. If yes, it will
+  // invoke the IO callback of the transaction. This is a helper function for
+  // OnProcessQueuedTransactions. It will take a transaction from
+  // add_to_entry_queue and make it a headers_transaction, if one doesn't exist
+  // already.
+  void ProcessAddToEntryQueue(ActiveEntry* entry);
+
+  // Invoked when a transaction that has already completed the response headers
+  // phase can resume reading/writing the response body. It will invoke the IO
+  // callback of the transaction. This is a helper function for
+  // OnProcessQueuedTransactions.
+  void ProcessDoneHeadersQueue(ActiveEntry* entry);
+
+  // Returns true if this transaction can write headers to the entry.
+  bool CanTransactionWriteResponseHeaders(ActiveEntry* entry,
+                                          Transaction* transaction,
+                                          bool is_partial,
+                                          bool is_match) const;
+
+  // Returns true if any transactions in the ActiveEntry depend on this
+  // transaction to complete writing to the cache.
+  bool HasDependentTransactions(ActiveEntry* entry,
+                                Transaction* transaction,
+                                bool is_partial) const;
+
+  // Returns true if a transaction is currently writing the response body.
+  bool IsWritingInProgress(ActiveEntry* entry) const;
 
   // Returns the LoadState of the provided pending transaction.
   LoadState GetLoadStateForPendingTransaction(const Transaction* trans);
@@ -379,12 +498,10 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   // Removes the transaction |trans|, from the pending list of |pending_op|.
   bool RemovePendingTransactionFromPendingOp(PendingOp* pending_op,
                                              Transaction* trans);
-  // Resumes processing the pending list of |entry|.
-  void ProcessPendingQueue(ActiveEntry* entry);
 
   // Events (called via PostTask) ---------------------------------------------
 
-  void OnProcessPendingQueue(ActiveEntry* entry);
+  void OnProcessQueuedTransactions(ActiveEntry* entry);
 
   // Callbacks ----------------------------------------------------------------
 
@@ -412,6 +529,7 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
   std::unique_ptr<BackendFactory> backend_factory_;
   bool building_backend_;
   bool bypass_lock_for_test_;
+  bool bypass_lock_after_headers_for_test_;
   bool fail_conditionalization_for_test_;
 
   Mode mode_;
@@ -433,6 +551,8 @@ class NET_EXPORT HttpCache : public HttpTransactionFactory,
 
   // A clock that can be swapped out for testing.
   std::unique_ptr<base::Clock> clock_;
+
+  THREAD_CHECKER(thread_checker_);
 
   base::WeakPtrFactory<HttpCache> weak_factory_;
 

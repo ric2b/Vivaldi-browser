@@ -14,7 +14,7 @@ class PartialInvalidationCasesPage(page_module.Page):
 
   def __init__(self, url, page_set):
     super(PartialInvalidationCasesPage, self).__init__(
-        url=url, page_set=page_set)
+        url=url, page_set=page_set, name=url.split('/')[-1])
 
 
 class PartialInvalidationCasesPageSet(story.StorySet):
@@ -35,3 +35,9 @@ class PartialInvalidationCasesPageSet(story.StorySet):
 
     for url in other_urls:
       self.AddStory(PartialInvalidationCasesPage(url, self))
+
+
+class PartialInvalidationCasesStoryExpectations(
+    story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass # No tests disabled.

@@ -10,10 +10,6 @@
 #include "base/memory/ref_counted.h"
 #include "chromeos/chromeos_export.h"
 
-namespace base {
-class TaskRunner;
-}
-
 namespace chromeos {
 namespace system {
 
@@ -91,14 +87,11 @@ CHROMEOS_EXPORT extern const char kKeyboardLayoutKey[];
 // This interface provides access to Chrome OS statistics.
 class CHROMEOS_EXPORT StatisticsProvider {
  public:
-  // Starts loading the machine statistics. File operations are performed on
-  // |file_task_runner|.
-  virtual void StartLoadingMachineStatistics(
-      const scoped_refptr<base::TaskRunner>& file_task_runner,
-      bool load_oem_manifest) = 0;
+  // Starts loading the machine statistics.
+  virtual void StartLoadingMachineStatistics(bool load_oem_manifest) = 0;
 
   // Returns true if the named machine statistic (e.g. "hardware_class") is
-  // found and stores it in |result| (if provided). Probing for the existance of
+  // found and stores it in |result| (if provided). Probing for the existence of
   // a statistic by setting |result| to nullptr supresses the usual warning in
   // case the statistic is not found. Safe to call from any thread except the
   // task runner passed to Initialize() (e.g. FILE). This may block if called

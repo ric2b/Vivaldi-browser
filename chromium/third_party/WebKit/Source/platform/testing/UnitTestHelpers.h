@@ -26,6 +26,7 @@
 #ifndef UnitTestHelpers_h
 #define UnitTestHelpers_h
 
+#include "platform/Timer.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -39,9 +40,8 @@ namespace testing {
 // provides runUntilIdle() method that can work with WebURLLoaderMockFactory.
 void RunPendingTasks();
 
-// Waits for delayed task to complete or timers to fire for |delayMs|
-// milliseconds.
-void RunDelayedTasks(double delay_ms);
+// Waits for delayed task to complete or timers to fire for |delay|.
+void RunDelayedTasks(TimeDelta delay);
 
 void EnterRunLoop();
 void ExitRunLoop();
@@ -52,10 +52,13 @@ void YieldCurrentThread();
 // /src/third_party/WebKit.
 String BlinkRootDir();
 
-// Returns test data absolute path for webkit_unit_tests, i.e.
-// <blinkRootDir>/Source/web/tests/data/<relativePath>.
+// Returns directory containing the current executable as absolute path.
+String ExecutableDir();
+
+// Returns test data absolute path for webkit_unit_tests in core, i.e.
+// <blinkRootDir>/Source/core/testing/data/<relativePath>.
 // It returns the top web test directory if |relativePath| was not specified.
-String WebTestDataPath(const String& relative_path = String());
+String CoreTestDataPath(const String& relative_path = String());
 
 // Returns test data absolute path for blink_platform_unittests, i.e.
 // <blinkRootDir>/Source/platform/testing/data/<relativePath>.

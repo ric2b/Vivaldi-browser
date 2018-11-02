@@ -4,22 +4,49 @@
 
 #import "ios/chrome/browser/ui/payments/cells/page_info_item.h"
 
+#import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
+#include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#include "url/url_constants.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
 NSString* const kPageInfoFaviconImageViewID = @"kPageInfoFaviconImageViewID";
+NSString* const kPageInfoLockIndicatorImageViewID =
+    @"kPageInfoLockIndicatorImageViewID";
 
 namespace {
 // Padding used on the top and bottom edges of the cell.
-const CGFloat kVerticalPadding = 12;
+const CGFloat kVerticalPadding = 10;
 
-// Padding used on the leading and trailing edges of the cell and between the
-// favicon and labels.
+// Vertical spacing between the labels.
+const CGFloat kLabelsVerticalSpacing = 2;
+
+// Padding used on the leading and trailing edges of the cell.
 const CGFloat kHorizontalPadding = 16;
+
+// Horizontal spacing between the favicon and the labels.
+const CGFloat kFaviconAndLabelsHorizontalSpacing = 12;
+
+// Dimension for lock indicator in points.
+const CGFloat kLockIndicatorDimension = 16;
+
+// There is some empty space between the left and right edges of the lock
+// indicator image contents and the square box it is contained within.
+// This padding represents that difference. This is useful when it comes
+// to aligning the lock indicator image with the title label.
+const CGFloat kLockIndicatorHorizontalPadding = 4;
+
+// There is some empty space between the top and bottom edges of the lock
+// indicator image contents and the square box it is contained within.
+// This padding represents that difference. This is useful when it comes
+// to aligning the lock indicator image with the bottom of the host label.
+const CGFloat kLockIndicatorVerticalPadding = 4;
 }
 
 @implementation PageInfoItem
@@ -27,6 +54,7 @@ const CGFloat kHorizontalPadding = 16;
 @synthesize pageFavicon = _pageFavicon;
 @synthesize pageTitle = _pageTitle;
 @synthesize pageHost = _pageHost;
+@synthesize connectionSecure = _connectionSecure;
 
 #pragma mark CollectionViewItem
 
@@ -42,7 +70,27 @@ const CGFloat kHorizontalPadding = 16;
   [super configureCell:cell];
   cell.pageFaviconView.image = self.pageFavicon;
   cell.pageTitleLabel.text = self.pageTitle;
-  cell.pageHostLabel.text = self.pageHost;
+
+  if (self.connectionSecure) {
+    cell.pageHostLabel.text = [NSString
+        stringWithFormat:@"%s://%@", url::kHttpsScheme, self.pageHost];
+    NSMutableAttributedString* text = [[NSMutableAttributedString alloc]
+        initWithString:cell.pageHostLabel.text];
+    [text addAttribute:NSForegroundColorAttributeName
+                 value:[[MDCPalette cr_greenPalette] tint700]
+                 range:NSMakeRange(0, strlen(url::kHttpsScheme))];
+    [cell.pageHostLabel setAttributedText:text];
+    // Set lock image. UIImageRenderingModeAlwaysTemplate is used so that
+    // the color of the lock indicator image can be changed to green.
+    cell.pageLockIndicatorView.image = [ResizeImage(
+        NativeImage(IDR_IOS_OMNIBOX_HTTPS_VALID),
+        CGSizeMake(kLockIndicatorDimension, kLockIndicatorDimension),
+        ProjectionMode::kAspectFillNoClipping)
+        imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+  } else {
+    cell.pageHostLabel.text = self.pageHost;
+    cell.pageLockIndicatorView.image = nil;
+  }
 
   // Invalidate the constraints so that layout can account for whether or not a
   // favicon is present.
@@ -53,11 +101,13 @@ const CGFloat kHorizontalPadding = 16;
 
 @implementation PageInfoCell {
   NSLayoutConstraint* _pageTitleLabelLeadingConstraint;
+  NSLayoutConstraint* _pageHostLabelLeadingConstraint;
 }
 
 @synthesize pageTitleLabel = _pageTitleLabel;
 @synthesize pageHostLabel = _pageHostLabel;
 @synthesize pageFaviconView = _pageFaviconView;
+@synthesize pageLockIndicatorView = _pageLockIndicatorView;
 
 - (instancetype)initWithFrame:(CGRect)frame {
   self = [super initWithFrame:frame];
@@ -72,8 +122,7 @@ const CGFloat kHorizontalPadding = 16;
 
     // Page title
     _pageTitleLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _pageTitleLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:12];
+    _pageTitleLabel.font = [[MDCTypography fontLoader] mediumFontOfSize:12];
     _pageTitleLabel.textColor = [[MDCPalette greyPalette] tint900];
     _pageTitleLabel.backgroundColor = [UIColor clearColor];
     _pageTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -81,16 +130,34 @@ const CGFloat kHorizontalPadding = 16;
 
     // Page host
     _pageHostLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-    _pageHostLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:12];
+    _pageHostLabel.font = [[MDCTypography fontLoader] regularFontOfSize:12];
     _pageHostLabel.textColor = [[MDCPalette greyPalette] tint600];
-    // Allow the label to break to multiple lines. This should be very rare but
-    // will prevent malicious domains from suppling very long host names and
-    // having the domain name truncated.
-    _pageHostLabel.numberOfLines = 0;
+    // Truncate host name from the leading side if it is too long. This is
+    // according to Eliding Origin Names and Hostnames guideline found here:
+    // https://www.chromium.org/Home/chromium-security/enamel#TOC-Presenting-Origins
+    _pageHostLabel.lineBreakMode = NSLineBreakByTruncatingHead;
     _pageHostLabel.backgroundColor = [UIColor clearColor];
     _pageHostLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    // Prevents host label from bleeding into lock indicator view when host text
+    // is very long.
+    [_pageHostLabel
+        setContentCompressionResistancePriority:UILayoutPriorityDefaultLow
+                                        forAxis:
+                                            UILayoutConstraintAxisHorizontal];
     [self.contentView addSubview:_pageHostLabel];
+
+    // Lock indicator
+    _pageLockIndicatorView = [[UIImageView alloc] initWithFrame:CGRectZero];
+    _pageLockIndicatorView.translatesAutoresizingMaskIntoConstraints = NO;
+    _pageLockIndicatorView.accessibilityIdentifier =
+        kPageInfoLockIndicatorImageViewID;
+    [_pageLockIndicatorView
+        setTintColor:[[MDCPalette cr_greenPalette] tint700]];
+    [self.contentView addSubview:_pageLockIndicatorView];
+
+    CGFloat faviconHeight = _pageTitleLabel.font.pointSize +
+                            _pageHostLabel.font.pointSize +
+                            kLabelsVerticalSpacing;
 
     // Layout
     [NSLayoutConstraint activateConstraints:@[
@@ -99,33 +166,36 @@ const CGFloat kHorizontalPadding = 16;
                          constant:kHorizontalPadding],
       [_pageFaviconView.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
-      [_pageFaviconView.heightAnchor
-          constraintEqualToAnchor:self.contentView.heightAnchor
-                         constant:-(2 * kVerticalPadding)],
+      [_pageFaviconView.heightAnchor constraintEqualToConstant:faviconHeight],
       [_pageFaviconView.widthAnchor
           constraintEqualToAnchor:_pageFaviconView.heightAnchor],
 
-      // The constraint on the leading achor of the title label is activated in
-      // updateConstraints rather than here so that it can depend on whether a
-      // favicon is present or not.
-      [_pageHostLabel.leadingAnchor
-          constraintEqualToAnchor:_pageTitleLabel.leadingAnchor],
+      // The constraint on the leading anchor of the lock indicator is
+      // activated in updateConstraints rather than here so that it can
+      // depend on whether a favicon is present or not.
+      [_pageLockIndicatorView.leadingAnchor
+          constraintEqualToAnchor:_pageTitleLabel.leadingAnchor
+                         constant:-kLockIndicatorHorizontalPadding],
+      [_pageLockIndicatorView.bottomAnchor
+          constraintEqualToAnchor:_pageHostLabel.firstBaselineAnchor
+                         constant:kLockIndicatorVerticalPadding],
+
+      [_pageTitleLabel.topAnchor
+          constraintEqualToAnchor:self.contentView.topAnchor
+                         constant:kVerticalPadding],
+      [_pageTitleLabel.bottomAnchor
+          constraintEqualToAnchor:_pageHostLabel.topAnchor
+                         constant:-kLabelsVerticalSpacing],
+      [_pageHostLabel.bottomAnchor
+          constraintEqualToAnchor:self.contentView.bottomAnchor
+                         constant:-kVerticalPadding],
 
       [_pageTitleLabel.trailingAnchor
           constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor
                                    constant:-kHorizontalPadding],
       [_pageHostLabel.trailingAnchor
-          constraintEqualToAnchor:_pageTitleLabel.trailingAnchor],
-
-      // UILabel leaves some empty space above the height of capital letters. In
-      // order to align the tops of the letters with the top of the favicon,
-      // anchor the bottom of the label to the top of the favicon plus
-      // pointSize (which describes the actual height of the letters).
-      [_pageTitleLabel.bottomAnchor
-          constraintEqualToAnchor:_pageFaviconView.topAnchor
-                         constant:_pageTitleLabel.font.pointSize],
-      [_pageHostLabel.firstBaselineAnchor
-          constraintEqualToAnchor:_pageFaviconView.bottomAnchor],
+          constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor
+                                   constant:-kHorizontalPadding],
     ]];
   }
   return self;
@@ -135,12 +205,22 @@ const CGFloat kHorizontalPadding = 16;
 
 - (void)updateConstraints {
   _pageTitleLabelLeadingConstraint.active = NO;
-  _pageTitleLabelLeadingConstraint = [_pageTitleLabel.leadingAnchor
-      constraintEqualToAnchor:_pageFaviconView.image
-                                  ? _pageFaviconView.trailingAnchor
-                                  : self.contentView.leadingAnchor
-                     constant:kHorizontalPadding];
+  _pageTitleLabelLeadingConstraint =
+      _pageFaviconView.image
+          ? [_pageTitleLabel.leadingAnchor
+                constraintEqualToAnchor:_pageFaviconView.trailingAnchor
+                               constant:kFaviconAndLabelsHorizontalSpacing]
+          : [_pageTitleLabel.leadingAnchor
+                constraintEqualToAnchor:self.contentView.leadingAnchor
+                               constant:kHorizontalPadding];
   _pageTitleLabelLeadingConstraint.active = YES;
+
+  _pageHostLabelLeadingConstraint.active = NO;
+  _pageHostLabelLeadingConstraint = [_pageHostLabel.leadingAnchor
+      constraintEqualToAnchor:_pageLockIndicatorView.image
+                                  ? _pageLockIndicatorView.trailingAnchor
+                                  : _pageTitleLabel.leadingAnchor];
+  _pageHostLabelLeadingConstraint.active = YES;
 
   [super updateConstraints];
 }

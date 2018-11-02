@@ -28,10 +28,10 @@
 #include "bindings/core/v8/AddEventListenerOptionsOrBoolean.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
-#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/RawDataDocumentParser.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/events/EventListener.h"
 #include "core/events/KeyboardEvent.h"
@@ -53,7 +53,6 @@
 #include "core/loader/FrameLoader.h"
 #include "platform/Histogram.h"
 #include "platform/KeyboardCodes.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/text/PlatformLocale.h"
 
 namespace blink {
@@ -136,7 +135,7 @@ class MediaLoadedEventListener final : public EventListener {
     HTMLVideoElement* media =
         static_cast<HTMLVideoElement*>(event->target()->ToNode());
     UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&media->GetDocument()));
+        UserGestureToken::Create(&media->GetDocument()));
     // TODO(shaktisahu): Enable fullscreen after https://crbug/698353 is fixed.
     media->Play();
   }
@@ -194,7 +193,7 @@ void MediaDocumentParser::CreateDocumentStructure() {
 
   if (GetDocument()->GetSettings() &&
       GetDocument()->GetSettings()->GetEmbeddedMediaExperienceEnabled() &&
-      source->type().StartsWith("video/", kTextCaseASCIIInsensitive)) {
+      source->type().StartsWithIgnoringASCIICase("video/")) {
     EventListener* listener = MediaLoadedEventListener::Create();
     AddEventListenerOptions options;
     options.setOnce(true);
@@ -204,7 +203,7 @@ void MediaDocumentParser::CreateDocumentStructure() {
                             options_or_boolean);
   }
 
-  if (RuntimeEnabledFeatures::mediaDocumentDownloadButtonEnabled()) {
+  if (RuntimeEnabledFeatures::MediaDocumentDownloadButtonEnabled()) {
     HTMLAnchorElement* anchor = HTMLAnchorElement::Create(*GetDocument());
     anchor->setAttribute(downloadAttr, "");
     anchor->SetURL(GetDocument()->Url());
@@ -266,9 +265,9 @@ MediaDocument::MediaDocument(const DocumentInit& initializer)
     : HTMLDocument(initializer, kMediaDocumentClass) {
   SetCompatibilityMode(kQuirksMode);
   LockCompatibilityMode();
-  UseCounter::Count(*this, UseCounter::kMediaDocument);
+  UseCounter::Count(*this, WebFeature::kMediaDocument);
   if (!IsInMainFrame())
-    UseCounter::Count(*this, UseCounter::kMediaDocumentInFrame);
+    UseCounter::Count(*this, WebFeature::kMediaDocumentInFrame);
 }
 
 DocumentParser* MediaDocument::CreateParser() {

@@ -15,6 +15,10 @@
 #error "This file requires ARC support."
 #endif
 
+namespace {
+NSString* const kTestTitle = @"title";
+}  // namespace
+
 @interface TestPaymentRequestSelectorMediator
     : NSObject<PaymentRequestSelectorViewControllerDataSource>
 
@@ -42,16 +46,20 @@
 
 #pragma mark - PaymentRequestSelectorViewControllerDataSource
 
+- (BOOL)allowsEditMode {
+  return NO;
+}
+
+- (NSString*)title {
+  return kTestTitle;
+}
+
 - (CollectionViewItem*)headerItem {
   return [[CollectionViewItem alloc] init];
 }
 
 - (NSArray<CollectionViewItem*>*)selectableItems {
   return _items;
-}
-
-- (CollectionViewItem*)selectableItemAtIndex:(NSUInteger)index {
-  return [_items objectAtIndex:index];
 }
 
 - (CollectionViewItem*)addButtonItem {
@@ -89,6 +97,7 @@ TEST_F(PaymentRequestSelectorViewControllerTest, TestModel) {
   CheckController();
 
   [GetPaymentRequestSelectorViewController() loadModel];
+  CheckTitle(kTestTitle);
 
   ASSERT_EQ(1, NumberOfSections());
   // One header item, two selectable items, and one add button.

@@ -6,9 +6,10 @@
 
 #include "base/run_loop.h"
 #include "chrome/browser/safe_browsing/safe_browsing_blocking_page.h"
-#include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/browser/safe_browsing/test_safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
+#include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing_db/util.h"
@@ -70,15 +71,31 @@ class SafeBrowsingUIManagerTest : public ChromeRenderViewHostTestHarness {
  public:
   SafeBrowsingUIManagerTest() : ui_manager_(new SafeBrowsingUIManager(NULL)) {}
 
-  ~SafeBrowsingUIManagerTest() override{};
+  ~SafeBrowsingUIManagerTest() override {}
 
   void SetUp() override {
     SetThreadBundleOptions(content::TestBrowserThreadBundle::REAL_IO_THREAD);
     ChromeRenderViewHostTestHarness::SetUp();
     SafeBrowsingUIManager::CreateWhitelistForTesting(web_contents());
+
+    safe_browsing::TestSafeBrowsingServiceFactory sb_service_factory;
+    auto* safe_browsing_service =
+        sb_service_factory.CreateSafeBrowsingService();
+    TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(
+        safe_browsing_service);
+    g_browser_process->safe_browsing_service()->Initialize();
+    // A profile was created already but SafeBrowsingService wasn't around to
+    // get notified of it, so include that notification now.
+    safe_browsing_service->AddPrefService(
+        Profile::FromBrowserContext(web_contents()->GetBrowserContext())
+            ->GetPrefs());
   }
 
-  void TearDown() override { ChromeRenderViewHostTestHarness::TearDown(); }
+  void TearDown() override {
+    TestingBrowserProcess::GetGlobal()->safe_browsing_service()->ShutDown();
+    TestingBrowserProcess::GetGlobal()->SetSafeBrowsingService(nullptr);
+    ChromeRenderViewHostTestHarness::TearDown();
+  }
 
   bool IsWhitelisted(security_interstitials::UnsafeResource resource) {
     return ui_manager_->IsWhitelisted(resource);
@@ -346,11 +363,12 @@ class TestSafeBrowsingBlockingPage : public SafeBrowsingBlockingPage {
             unsafe_resources,
             BaseSafeBrowsingErrorUI::SBErrorDisplayOptions(
                 BaseBlockingPage::IsMainPageLoadBlocked(unsafe_resources),
-                false,  // is_extended_reporting_opt_in_allowed
-                false,  // is_off_the_record
-                false,  // is_extended_reporting_enabled
-                false,  // is_scout_reporting_enabled
-                false,  // is_proceed_anyway_disabled
+                false,                   // is_extended_reporting_opt_in_allowed
+                false,                   // is_off_the_record
+                false,                   // is_extended_reporting_enabled
+                false,                   // is_scout_reporting_enabled
+                false,                   // is_proceed_anyway_disabled
+                true,                    // should_open_links_in_new_tab
                 "cpn_safe_browsing")) {  // help_center_article_link
     // Don't delay details at all for the unittest.
     SetThreatDetailsProceedDelayForTesting(0);

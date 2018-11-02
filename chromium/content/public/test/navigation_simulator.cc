@@ -10,12 +10,13 @@
 #include "content/browser/frame_host/navigation_handle_impl.h"
 #include "content/browser/frame_host/navigation_request.h"
 #include "content/common/frame_messages.h"
-#include "content/public/browser/global_request_id.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/test/test_navigation_url_loader.h"
 #include "content/test/test_render_frame_host.h"
+#include "net/base/host_port_pair.h"
 #include "net/base/load_flags.h"
 #include "net/url_request/redirect_info.h"
 
@@ -98,7 +99,12 @@ NavigationSimulator::NavigationSimulator(const GURL& original_url,
       render_frame_host_(render_frame_host),
       handle_(nullptr),
       navigation_url_(original_url),
+      socket_address_("2001:db8::1", 80),
       weak_factory_(this) {
+  // Since this is a renderer-initiated navigation, the RenderFrame must be
+  // initialized. Do it if it hasn't happened yet.
+  render_frame_host->InitializeRenderFrameIfNeeded();
+
   if (render_frame_host->GetParent()) {
     if (!render_frame_host->frame_tree_node()->has_committed_real_load())
       transition_ = ui::PAGE_TRANSITION_AUTO_SUBFRAME;
@@ -146,7 +152,7 @@ void NavigationSimulator::Start() {
         std::vector<GURL>(), base::TimeTicks::Now()));
     DCHECK_EQ(handle_, render_frame_host_->navigation_handle());
     handle_->WillStartRequest(
-        "GET", scoped_refptr<content::ResourceRequestBodyImpl>(), referrer_,
+        "GET", scoped_refptr<content::ResourceRequestBody>(), referrer_,
         true /* user_gesture */, transition_, false /* is_external_protocol */,
         REQUEST_CONTEXT_TYPE_LOCATION,
         blink::WebMixedContentContextType::kNotMixedContent,
@@ -207,7 +213,7 @@ void NavigationSimulator::Redirect(const GURL& new_url) {
     handle_->WillRedirectRequest(
         new_url, "GET", referrer_.url, false /* is_external_protocol */,
         scoped_refptr<net::HttpResponseHeaders>(),
-        net::HttpResponseInfo::ConnectionInfo(),
+        net::HttpResponseInfo::ConnectionInfo(), nullptr,
         base::Callback<void(NavigationThrottle::ThrottleCheckResult)>());
   }
 
@@ -252,12 +258,16 @@ void NavigationSimulator::Commit() {
   // Note that the handle's state can be CANCELING if a throttle cancelled it
   // synchronously in PrepareForCommit.
   if (handle_->state_for_testing() < NavigationHandleImpl::CANCELING) {
+    // This code path should only be executed when browser-side navigation isn't
+    // enabled. When browser-side navigation is enabled, WillProcessResponse
+    // gets invoked via the call to PrepareForCommit() above.
+    DCHECK(!IsBrowserSideNavigationEnabled());
+
     // Start the request_ids at 1000 to avoid collisions with request ids from
     // network resources (it should be rare to compare these in unit tests).
     static int request_id = 1000;
     GlobalRequestID global_id(render_frame_host_->GetProcess()->GetID(),
                               ++request_id);
-    DCHECK(!IsBrowserSideNavigationEnabled());
     handle_->WillProcessResponse(
         render_frame_host_, scoped_refptr<net::HttpResponseHeaders>(),
         net::HttpResponseInfo::ConnectionInfo(), SSLStatus(), global_id,
@@ -275,6 +285,8 @@ void NavigationSimulator::Commit() {
 
   CHECK_EQ(1, num_will_process_response_called_);
   CHECK_EQ(1, num_ready_to_commit_called_);
+
+  request_id_ = handle_->GetGlobalRequestID();
 
   // Update the RenderFrameHost now that we know which RenderFrameHost will
   // commit the navigation.
@@ -312,13 +324,19 @@ void NavigationSimulator::Commit() {
   params.contents_mime_type = "text/html";
   params.method = "GET";
   params.http_status_code = 200;
-  params.socket_address.set_host("2001:db8::1");
-  params.socket_address.set_port(80);
+  params.socket_address = socket_address_;
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
   params.was_within_same_document = false;
-  params.page_state =
-      PageState::CreateForTesting(navigation_url_, false, nullptr, nullptr);
+
+  // Simulate Blink assigning an item and document sequence number to the
+  // navigation.
+  params.item_sequence_number = base::Time::Now().ToDoubleT() * 1000000;
+  params.document_sequence_number = params.item_sequence_number + 1;
+
+  params.page_state = PageState::CreateForTestingWithSequenceNumbers(
+      navigation_url_, params.item_sequence_number,
+      params.document_sequence_number);
 
   render_frame_host_->SendNavigateWithParams(&params);
 
@@ -409,8 +427,16 @@ void NavigationSimulator::CommitErrorPage() {
   params.transition = transition_;
   params.was_within_same_document = false;
   params.url_is_unreachable = true;
-  params.page_state =
-      PageState::CreateForTesting(navigation_url_, false, nullptr, nullptr);
+
+  // Simulate Blink assigning an item and document sequence number to the
+  // navigation.
+  params.item_sequence_number = base::Time::Now().ToDoubleT() * 1000000;
+  params.document_sequence_number = params.item_sequence_number + 1;
+
+  params.page_state = PageState::CreateForTestingWithSequenceNumbers(
+      navigation_url_, params.item_sequence_number,
+      params.document_sequence_number);
+
   render_frame_host_->SendNavigateWithParams(&params);
 
   // Simulate the UnloadACK in the old RenderFrameHost if it was swapped out at
@@ -444,8 +470,7 @@ void NavigationSimulator::CommitSameDocument() {
   params.contents_mime_type = "text/html";
   params.method = "GET";
   params.http_status_code = 200;
-  params.socket_address.set_host("2001:db8::1");
-  params.socket_address.set_port(80);
+  params.socket_address = socket_address_;
   params.history_list_was_cleared = false;
   params.original_request_url = navigation_url_;
   params.was_within_same_document = true;
@@ -478,6 +503,13 @@ void NavigationSimulator::SetReferrer(const Referrer& referrer) {
   referrer_ = referrer;
 }
 
+void NavigationSimulator::SetSocketAddress(
+    const net::HostPortPair& socket_address) {
+  CHECK_LE(state_, STARTED) << "The socket address cannot be set after the "
+                               "navigation has committed or failed";
+  socket_address_ = socket_address;
+}
+
 NavigationThrottle::ThrottleCheckResult
 NavigationSimulator::GetLastThrottleCheckResult() {
   return last_throttle_check_result_.value();
@@ -486,6 +518,13 @@ NavigationSimulator::GetLastThrottleCheckResult() {
 NavigationHandle* NavigationSimulator::GetNavigationHandle() const {
   CHECK_EQ(STARTED, state_);
   return handle_;
+}
+
+content::GlobalRequestID NavigationSimulator::GetGlobalRequestID() const {
+  CHECK_GT(state_, STARTED) << "The GlobalRequestID is not available until "
+                               "after the navigation has completed "
+                               "WillProcessResponse";
+  return request_id_;
 }
 
 void NavigationSimulator::DidStartNavigation(

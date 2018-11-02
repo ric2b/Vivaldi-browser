@@ -114,10 +114,9 @@ class APP_LIST_EXPORT AppListItemView : public views::CustomButton,
   // Invoked when |mouse_drag_timer_| fires to show dragging UI.
   void OnMouseDragTimer();
 
-  // views::View overrides:
-  const char* GetClassName() const override;
-  void Layout() override;
-  void OnPaint(gfx::Canvas* canvas) override;
+  // Invoked when |touch_drag_timer_| fires to show dragging UI.
+  void OnTouchDragTimer(const gfx::Point& tap_down_location,
+                        const gfx::Point& tap_down_root_location);
 
   // views::ContextMenuController overrides:
   void ShowContextMenuForView(views::View* source,
@@ -127,8 +126,12 @@ class APP_LIST_EXPORT AppListItemView : public views::CustomButton,
   // views::CustomButton overrides:
   void StateChanged(ButtonState old_state) override;
   bool ShouldEnterPushedState(const ui::Event& event) override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
 
   // views::View overrides:
+  const char* GetClassName() const override;
+  void Layout() override;
+  gfx::Size CalculatePreferredSize() const override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -153,20 +156,24 @@ class APP_LIST_EXPORT AppListItemView : public views::CustomButton,
 
   std::unique_ptr<views::MenuRunner> context_menu_runner_;
 
-  UIState ui_state_;
+  UIState ui_state_ = UI_STATE_NORMAL;
 
   // True if scroll gestures should contribute to dragging.
-  bool touch_dragging_;
+  bool touch_dragging_ = false;
 
-  ImageShadowAnimator shadow_animator_;
+  std::unique_ptr<ImageShadowAnimator> shadow_animator_;
 
-  bool is_installing_;
-  bool is_highlighted_;
+  bool is_installing_ = false;
+  bool is_highlighted_ = false;
+
+  const bool is_fullscreen_app_list_enabled_;
 
   base::string16 tooltip_text_;
 
   // A timer to defer showing drag UI when mouse is pressed.
   base::OneShotTimer mouse_drag_timer_;
+  // A timer to defer showing drag UI when the app item is touch pressed.
+  base::OneShotTimer touch_drag_timer_;
 
   DISALLOW_COPY_AND_ASSIGN(AppListItemView);
 };

@@ -5,10 +5,10 @@
 #include "core/dom/Element.h"
 
 #include <memory>
-#include "core/dom/ClientRect.h"
 #include "core/dom/Document.h"
 #include "core/editing/EditingTestBase.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/layout/LayoutBoxModelObject.h"
 #include "core/paint/PaintLayer.h"
@@ -51,7 +51,7 @@ TEST_F(ElementTest,
 
   // The sticky element should remain at (0, 25) relative to the viewport due to
   // the constraints.
-  ClientRect* bounding_client_rect = sticky->getBoundingClientRect();
+  DOMRect* bounding_client_rect = sticky->getBoundingClientRect();
   EXPECT_EQ(0, bounding_client_rect->top());
   EXPECT_EQ(25, bounding_client_rect->left());
 
@@ -211,11 +211,12 @@ TEST_F(ElementTest, StickySubtreesAreTrackedCorrectly) {
   document.View()->UpdateAllLifecyclePhases();
   EXPECT_EQ(DocumentLifecycle::kPaintClean, document.Lifecycle().GetState());
 
-  EXPECT_EQ(kRubyPositionBefore, outer_sticky->StyleRef().GetRubyPosition());
-  EXPECT_EQ(kRubyPositionAfter, child->StyleRef().GetRubyPosition());
-  EXPECT_EQ(kRubyPositionAfter, grandchild->StyleRef().GetRubyPosition());
-  EXPECT_EQ(kRubyPositionAfter, inner_sticky->StyleRef().GetRubyPosition());
-  EXPECT_EQ(kRubyPositionAfter, great_grandchild->StyleRef().GetRubyPosition());
+  EXPECT_EQ(RubyPosition::kBefore, outer_sticky->StyleRef().GetRubyPosition());
+  EXPECT_EQ(RubyPosition::kAfter, child->StyleRef().GetRubyPosition());
+  EXPECT_EQ(RubyPosition::kAfter, grandchild->StyleRef().GetRubyPosition());
+  EXPECT_EQ(RubyPosition::kAfter, inner_sticky->StyleRef().GetRubyPosition());
+  EXPECT_EQ(RubyPosition::kAfter,
+            great_grandchild->StyleRef().GetRubyPosition());
 
   // Setting -webkit-ruby value shouldn't have affected the sticky subtree bit.
   EXPECT_TRUE(outer_sticky->StyleRef().SubtreeIsSticky());

@@ -26,10 +26,10 @@
 #include "base/observer_list.h"
 #include "base/single_thread_task_runner.h"
 #include "base/time/time.h"
+#include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/browser/loader/global_routing_id.h"
 #include "content/browser/loader/resource_loader_delegate.h"
 #include "content/common/content_export.h"
-#include "content/common/url_loader.mojom.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/resource_dispatcher_host.h"
 #include "content/public/browser/resource_request_info.h"
@@ -37,9 +37,11 @@
 #include "content/public/common/previews_state.h"
 #include "content/public/common/request_context_type.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "ipc/ipc_message.h"
 #include "net/base/load_states.h"
 #include "net/base/request_priority.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "third_party/WebKit/public/platform/WebMixedContentContextType.h"
 #include "url/gurl.h"
 
@@ -278,12 +280,14 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   void OnRenderFrameDeleted(const GlobalFrameRoutingId& global_routing_id);
 
   // Called when loading a request with mojo.
-  void OnRequestResourceWithMojo(ResourceRequesterInfo* requester_info,
-                                 int routing_id,
-                                 int request_id,
-                                 const ResourceRequest& request,
-                                 mojom::URLLoaderAssociatedRequest mojo_request,
-                                 mojom::URLLoaderClientPtr url_loader_client);
+  void OnRequestResourceWithMojo(
+      ResourceRequesterInfo* requester_info,
+      int routing_id,
+      int request_id,
+      const ResourceRequest& request,
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   void OnSyncLoadWithMojo(ResourceRequesterInfo* requester_info,
                           int routing_id,
@@ -457,6 +461,13 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       int count,
       ResourceRequestInfoImpl* info);
 
+  // Called from IncrementOutstandingRequestsCount to update the per-tab
+  // request stats in |outstanding_requests_per_tab_map_|.
+  // TODO(ksakamoto): This is just for temporary metrics collection for the
+  // Loading Dispatcher v0 (crbug.com/723233), and will be removed soon.
+  void IncrementOutstandingRequestsPerTab(int count,
+                                          const ResourceRequestInfoImpl& info);
+
   // Estimate how much heap space |request| will consume to run.
   static int CalculateApproximateMemoryCost(net::URLRequest* request);
 
@@ -513,22 +524,30 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // Checks all pending requests and updates the load info if necessary.
   void UpdateLoadInfo();
 
+  // Records statistics about outstanding requests since the last call, and
+  // reset the stats.
+  void RecordOutstandingRequestsStats();
+
   // Resumes or cancels (if |cancel_requests| is true) any blocked requests.
   void ProcessBlockedRequestsForRoute(
       const GlobalFrameRoutingId& global_routing_id,
       bool cancel_requests);
 
-  void OnRequestResource(ResourceRequesterInfo* requester_info,
-                         int routing_id,
-                         int request_id,
-                         const ResourceRequest& request_data);
+  void OnRequestResource(
+      ResourceRequesterInfo* requester_info,
+      int routing_id,
+      int request_id,
+      const ResourceRequest& request_data,
+      net::MutableNetworkTrafficAnnotationTag traffic_annotation);
 
-  void OnRequestResourceInternal(ResourceRequesterInfo* requester_info,
-                                 int routing_id,
-                                 int request_id,
-                                 const ResourceRequest& request_data,
-                                 mojom::URLLoaderAssociatedRequest mojo_request,
-                                 mojom::URLLoaderClientPtr url_loader_client);
+  void OnRequestResourceInternal(
+      ResourceRequesterInfo* requester_info,
+      int routing_id,
+      int request_id,
+      const ResourceRequest& request_data,
+      mojom::URLLoaderAssociatedRequest mojo_request,
+      mojom::URLLoaderClientPtr url_loader_client,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   void OnSyncLoad(ResourceRequesterInfo* requester_info,
                   int request_id,
@@ -563,7 +582,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const SyncLoadResultCallback& sync_result_handler,  // only valid for sync
       int route_id,
       mojom::URLLoaderAssociatedRequest mojo_request,
-      mojom::URLLoaderClientPtr url_loader_client);
+      mojom::URLLoaderClientPtr url_loader_client,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation);
 
   // There are requests which need decisions to be made like the following:
   // Whether the presence of certain HTTP headers like the Origin header are
@@ -582,6 +602,8 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       const net::HttpRequestHeaders& headers,
       mojom::URLLoaderAssociatedRequest mojo_request,
       mojom::URLLoaderClientPtr url_loader_client,
+      BlobHandles blob_handles,
+      const net::NetworkTrafficAnnotationTag& traffic_annotation,
       HeaderInterceptorResult interceptor_result);
 
   // Creates a ResourceHandler to be used by BeginRequest() for normal resource
@@ -695,6 +717,10 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
       bool must_download,
       bool is_new_request);
 
+  // Returns true if there are two or more tabs that are not network 2-quiet
+  // (i.e. have at least three outstanding requests).
+  bool HasRequestsFromMultipleActiveTabs();
+
   LoaderMap pending_loaders_;
 
   // Collection of temp files downloaded for child processes via
@@ -709,6 +735,10 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // A timer that periodically calls UpdateLoadInfo while pending_loaders_ is
   // not empty and at least one RenderViewHost is loading.
   std::unique_ptr<base::RepeatingTimer> update_load_states_timer_;
+
+  // A timer that periodically calls RecordOutstandingRequestsStats.
+  std::unique_ptr<base::RepeatingTimer>
+      record_outstanding_requests_stats_timer_;
 
   // Request ID for browser initiated requests. request_ids generated by
   // child processes are counted up from 0, while browser created requests
@@ -731,6 +761,14 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
   // being used to service its resource requests. No entry implies 0 cost.
   typedef std::map<int, OustandingRequestsStats> OutstandingRequestsStatsMap;
   OutstandingRequestsStatsMap outstanding_requests_stats_map_;
+
+  // Maps (child_id, route_id) to the number of outstanding requests.
+  // Used only when OOPIF is not enabled, since in OOPIF modes routing_id
+  // doesn't represent tabs.
+  // TODO(ksakamoto): This is just for temporary metrics collection for the
+  // Loading Dispatcher v0 (crbug.com/723233), and will be removed soon.
+  typedef std::map<std::pair<int, int>, int> OutstandingRequestsPerTabMap;
+  OutstandingRequestsPerTabMap outstanding_requests_per_tab_map_;
 
   // |num_in_flight_requests_| is the total number of requests currently issued
   // summed across all renderers.
@@ -762,6 +800,15 @@ class CONTENT_EXPORT ResourceDispatcherHostImpl
 
   // Largest number of outstanding requests seen so far in any single process.
   int largest_outstanding_request_per_process_count_seen_;
+
+  // Largest number of outstanding requests seen since the last call to
+  // RecordOutstandingRequestsStats.
+  int peak_outstanding_request_count_ = 0;
+
+  // Largest number of outstanding requests seen while there are outstanding
+  // requests from two or more tabs, since the last call to
+  // RecordOutstandingRequestsStats.
+  int peak_outstanding_request_count_multitab_ = 0;
 
   // Time of the last user gesture. Stored so that we can add a load
   // flag to requests occurring soon after a gesture to indicate they

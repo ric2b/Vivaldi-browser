@@ -228,11 +228,20 @@ void TaskManagerImpl::GetTerminationStatus(TaskId task_id,
 }
 
 int64_t TaskManagerImpl::GetNetworkUsage(TaskId task_id) const {
-  return GetTaskByTaskId(task_id)->network_usage();
+  return GetTaskByTaskId(task_id)->network_usage_rate();
+}
+
+int64_t TaskManagerImpl::GetCumulativeNetworkUsage(TaskId task_id) const {
+  return GetTaskByTaskId(task_id)->cumulative_network_usage();
 }
 
 int64_t TaskManagerImpl::GetProcessTotalNetworkUsage(TaskId task_id) const {
-  return GetTaskGroupByTaskId(task_id)->per_process_network_usage();
+  return GetTaskGroupByTaskId(task_id)->per_process_network_usage_rate();
+}
+
+int64_t TaskManagerImpl::GetCumulativeProcessTotalNetworkUsage(
+    TaskId task_id) const {
+  return GetTaskGroupByTaskId(task_id)->cumulative_per_process_network_usage();
 }
 
 int64_t TaskManagerImpl::GetSqliteMemoryUsed(TaskId task_id) const {
@@ -446,23 +455,29 @@ void TaskManagerImpl::TaskUnresponsive(Task* task) {
 }
 
 // static
-void TaskManagerImpl::OnMultipleBytesReadUI(
-    std::vector<BytesReadParam>* params) {
+void TaskManagerImpl::OnMultipleBytesTransferredUI(BytesTransferredMap params) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  DCHECK(params);
+  for (const auto& entry : params) {
+    const BytesTransferredKey& process_info = entry.first;
+    const BytesTransferredParam& bytes_transferred = entry.second;
 
-  for (BytesReadParam& param : *params) {
-    if (!GetInstance()->UpdateTasksWithBytesRead(param)) {
+    if (!GetInstance()->UpdateTasksWithBytesTransferred(process_info,
+                                                        bytes_transferred)) {
       // We can't match a task to the notification.  That might mean the
       // tab that started a download was closed, or the request may have had
       // no originating task associated with it in the first place.
       // We attribute orphaned/unaccounted activity to the Browser process.
-      DCHECK(param.origin_pid || (param.child_id != -1));
-
-      param.origin_pid = 0;
-      param.child_id = param.route_id = -1;
-
-      GetInstance()->UpdateTasksWithBytesRead(param);
+      DCHECK(process_info.origin_pid || (process_info.child_id != -1));
+      // Since the key is meant to be immutable we create a fake key for the
+      // purpose of attributing the orphaned/unaccounted activity to the Browser
+      // process.
+      int dummy_origin_pid = 0;
+      int dummy_child_id = -1;
+      int dummy_route_id = -1;
+      BytesTransferredKey dummy_key = {dummy_origin_pid, dummy_child_id,
+                                       dummy_route_id};
+      GetInstance()->UpdateTasksWithBytesTransferred(dummy_key,
+                                                     bytes_transferred);
     }
   }
 }
@@ -499,7 +514,8 @@ void TaskManagerImpl::StartUpdating() {
   for (const auto& provider : task_providers_)
     provider->SetObserver(this);
 
-  io_thread_helper_manager_.reset(new IoThreadHelperManager);
+  io_thread_helper_manager_.reset(new IoThreadHelperManager(
+      base::BindRepeating(&TaskManagerImpl::OnMultipleBytesTransferredUI)));
 }
 
 void TaskManagerImpl::StopUpdating() {
@@ -530,13 +546,15 @@ Task* TaskManagerImpl::GetTaskByPidOrRoute(int origin_pid,
   return nullptr;
 }
 
-bool TaskManagerImpl::UpdateTasksWithBytesRead(const BytesReadParam& param) {
+bool TaskManagerImpl::UpdateTasksWithBytesTransferred(
+    const BytesTransferredKey& key,
+    const BytesTransferredParam& param) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
-  Task* task =
-      GetTaskByPidOrRoute(param.origin_pid, param.child_id, param.route_id);
+  Task* task = GetTaskByPidOrRoute(key.origin_pid, key.child_id, key.route_id);
   if (task) {
-    task->OnNetworkBytesRead(param.byte_count);
+    task->OnNetworkBytesRead(param.byte_read_count);
+    task->OnNetworkBytesSent(param.byte_sent_count);
     return true;
   }
 

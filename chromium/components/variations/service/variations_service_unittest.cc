@@ -11,17 +11,24 @@
 #include <vector>
 
 #include "base/base64.h"
+#include "base/base_switches.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "base/message_loop/message_loop.h"
 #include "base/sha1.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
 #include "base/test/histogram_tester.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/version.h"
+#include "components/metrics/clean_exit_beacon.h"
+#include "components/metrics/client_info.h"
+#include "components/metrics/metrics_pref_names.h"
+#include "components/metrics/metrics_state_manager.h"
+#include "components/metrics/test_enabled_state_provider.h"
 #include "components/prefs/testing_pref_service.h"
 #include "components/variations/pref_names.h"
 #include "components/variations/proto/study.pb.h"
@@ -34,20 +41,30 @@
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace variations {
-
 namespace {
+
+// A stub for the metrics state manager.
+void StubStoreClientInfo(const metrics::ClientInfo& /* client_info */) {}
+
+// A stub for the metrics state manager.
+std::unique_ptr<metrics::ClientInfo> StubLoadClientInfo() {
+  return std::unique_ptr<metrics::ClientInfo>();
+}
+
+base::Version StubGetVersionForSimulation() {
+  return base::Version();
+}
 
 class TestVariationsServiceClient : public VariationsServiceClient {
  public:
   TestVariationsServiceClient() {}
   ~TestVariationsServiceClient() override {}
 
-  // variations::VariationsServiceClient:
+  // VariationsServiceClient:
   std::string GetApplicationLocale() override { return std::string(); }
-  base::SequencedWorkerPool* GetBlockingPool() override { return nullptr; }
   base::Callback<base::Version(void)> GetVersionForSimulationCallback()
       override {
-    return base::Callback<base::Version(void)>();
+    return base::Bind(&StubGetVersionForSimulation);
   }
   net::URLRequestContextGetter* GetURLRequestContext() override {
     return nullptr;
@@ -64,7 +81,6 @@ class TestVariationsServiceClient : public VariationsServiceClient {
     *parameter = restrict_parameter_;
     return true;
   }
-  void OnInitialStartup() override {}
 
   void set_restrict_parameter(const std::string& value) {
     restrict_parameter_ = value;
@@ -81,11 +97,12 @@ class TestVariationsService : public VariationsService {
  public:
   TestVariationsService(
       std::unique_ptr<web_resource::TestRequestAllowedNotifier> test_notifier,
-      PrefService* local_state)
+      PrefService* local_state,
+      metrics::MetricsStateManager* state_manager)
       : VariationsService(base::WrapUnique(new TestVariationsServiceClient()),
                           std::move(test_notifier),
                           local_state,
-                          NULL,
+                          state_manager,
                           UIStringOverrider()),
         intercepts_fetch_(true),
         fetch_attempted_(false),
@@ -139,11 +156,6 @@ class TestVariationsService : public VariationsService {
   }
 
  private:
-  bool LoadSeed(VariationsSeed* seed) override {
-    if (!seed_stored_)
-      return false;
-    return seed->ParseFromString(stored_seed_data_);
-  }
 
   bool intercepts_fetch_;
   bool fetch_attempted_;
@@ -159,9 +171,7 @@ class TestVariationsService : public VariationsService {
 class TestVariationsServiceObserver : public VariationsService::Observer {
  public:
   TestVariationsServiceObserver()
-      : best_effort_changes_notified_(0),
-        crticial_changes_notified_(0) {
-  }
+      : best_effort_changes_notified_(0), crticial_changes_notified_(0) {}
   ~TestVariationsServiceObserver() override {}
 
   void OnExperimentChangesDetected(Severity severity) override {
@@ -203,12 +213,12 @@ const char kTestSeedSerialNumber[] = "123";
 // study called "test", which contains one experiment called "abc" with
 // probability weight 100. |seed|'s study field will be cleared before adding
 // the new study.
-variations::VariationsSeed CreateTestSeed() {
-  variations::VariationsSeed seed;
-  variations::Study* study = seed.add_study();
+VariationsSeed CreateTestSeed() {
+  VariationsSeed seed;
+  Study* study = seed.add_study();
   study->set_name(kTestSeedStudyName);
   study->set_default_experiment_name(kTestSeedExperimentName);
-  variations::Study_Experiment* experiment = study->add_experiment();
+  Study_Experiment* experiment = study->add_experiment();
   experiment->set_name(kTestSeedExperimentName);
   experiment->set_probability_weight(kTestSeedExperimentProbability);
   seed.set_serial_number(kTestSeedSerialNumber);
@@ -216,7 +226,7 @@ variations::VariationsSeed CreateTestSeed() {
 }
 
 // Serializes |seed| to protobuf binary format.
-std::string SerializeSeed(const variations::VariationsSeed& seed) {
+std::string SerializeSeed(const VariationsSeed& seed) {
   std::string serialized_seed;
   seed.SerializeToString(&serialized_seed);
   return serialized_seed;
@@ -260,97 +270,37 @@ std::string ListValueToString(const base::ListValue& list_value) {
 
 class VariationsServiceTest : public ::testing::Test {
  protected:
-  VariationsServiceTest() {}
+  VariationsServiceTest()
+      : enabled_state_provider_(
+            new metrics::TestEnabledStateProvider(false, false)) {
+    VariationsService::RegisterPrefs(prefs_.registry());
+    metrics::CleanExitBeacon::RegisterPrefs(prefs_.registry());
+    metrics::MetricsStateManager::RegisterPrefs(prefs_.registry());
+  }
+
+  metrics::MetricsStateManager* GetMetricsStateManager() {
+    // Lazy-initialize the metrics_state_manager so that it correctly reads the
+    // stability state from prefs after tests have a chance to initialize it.
+    if (!metrics_state_manager_) {
+      metrics_state_manager_ = metrics::MetricsStateManager::Create(
+          &prefs_, enabled_state_provider_.get(), base::string16(),
+          base::Bind(&StubStoreClientInfo), base::Bind(&StubLoadClientInfo));
+    }
+    return metrics_state_manager_.get();
+  }
+
+ protected:
+  TestingPrefServiceSimple prefs_;
 
  private:
-  base::MessageLoop message_loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
+  std::unique_ptr<metrics::TestEnabledStateProvider> enabled_state_provider_;
+  std::unique_ptr<metrics::MetricsStateManager> metrics_state_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(VariationsServiceTest);
 };
 
-TEST_F(VariationsServiceTest, CreateTrialsFromSeed) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
-  // Create a local base::FieldTrialList, to hold the field trials created in
-  // this test.
-  base::FieldTrialList field_trial_list(nullptr);
-
-  // Create a variations service.
-  TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
-  service.SetCreateTrialsFromSeedCalledForTesting(false);
-
-  // Store a seed.
-  service.StoreSeed(SerializeSeed(CreateTestSeed()), std::string(),
-                    std::string(), base::Time::Now(), false, false);
-  prefs.SetInt64(prefs::kVariationsLastFetchTime,
-                 base::Time::Now().ToInternalValue());
-
-  // Check that field trials are created from the seed. Since the test study has
-  // only 1 experiment with 100% probability weight, we must be part of it.
-  EXPECT_TRUE(service.CreateTrialsFromSeed(base::FeatureList::GetInstance()));
-  EXPECT_EQ(kTestSeedExperimentName,
-            base::FieldTrialList::FindFullName(kTestSeedStudyName));
-}
-
-TEST_F(VariationsServiceTest, CreateTrialsFromSeedNoLastFetchTime) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
-  // Create a local base::FieldTrialList, to hold the field trials created in
-  // this test.
-  base::FieldTrialList field_trial_list(nullptr);
-
-  // Create a variations service
-  TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
-  service.SetCreateTrialsFromSeedCalledForTesting(false);
-
-  // Store a seed. To simulate a first run, |prefs::kVariationsLastFetchTime|
-  // is left empty.
-  service.StoreSeed(SerializeSeed(CreateTestSeed()), std::string(),
-                    std::string(), base::Time::Now(), false, false);
-  EXPECT_EQ(0, prefs.GetInt64(prefs::kVariationsLastFetchTime));
-
-  // Check that field trials are created from the seed. Since the test study has
-  // only 1 experiment with 100% probability weight, we must be part of it.
-  EXPECT_TRUE(service.CreateTrialsFromSeed(base::FeatureList::GetInstance()));
-  EXPECT_EQ(base::FieldTrialList::FindFullName(kTestSeedStudyName),
-            kTestSeedExperimentName);
-}
-
-TEST_F(VariationsServiceTest, CreateTrialsFromOutdatedSeed) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
-  // Create a local base::FieldTrialList, to hold the field trials created in
-  // this test.
-  base::FieldTrialList field_trial_list(nullptr);
-
-  // Create a variations service.
-  TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
-  service.SetCreateTrialsFromSeedCalledForTesting(false);
-
-  // Store a seed, with a fetch time 31 days in the past.
-  const base::Time seed_date =
-      base::Time::Now() - base::TimeDelta::FromDays(31);
-  service.StoreSeed(SerializeSeed(CreateTestSeed()), std::string(),
-                    std::string(), seed_date, false, false);
-  prefs.SetInt64(prefs::kVariationsLastFetchTime, seed_date.ToInternalValue());
-
-  // Check that field trials are not created from the seed.
-  EXPECT_FALSE(service.CreateTrialsFromSeed(base::FeatureList::GetInstance()));
-  EXPECT_TRUE(base::FieldTrialList::FindFullName(kTestSeedStudyName).empty());
-}
-
 TEST_F(VariationsServiceTest, GetVariationsServerURL) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
   const std::string default_variations_url =
       VariationsService::GetDefaultVariationsServerURLForTesting();
 
@@ -360,31 +310,31 @@ TEST_F(VariationsServiceTest, GetVariationsServerURL) {
   TestVariationsServiceClient* raw_client = client.get();
   VariationsService service(
       std::move(client),
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs, NULL, UIStringOverrider());
-  GURL url = service.GetVariationsServerURL(&prefs, std::string());
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager(), UIStringOverrider());
+  GURL url = service.GetVariationsServerURL(&prefs_, std::string());
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   EXPECT_FALSE(net::GetValueForKeyInQuery(url, "restrict", &value));
 
-  prefs.SetString(prefs::kVariationsRestrictParameter, "restricted");
-  url = service.GetVariationsServerURL(&prefs, std::string());
+  prefs_.SetString(prefs::kVariationsRestrictParameter, "restricted");
+  url = service.GetVariationsServerURL(&prefs_, std::string());
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   EXPECT_TRUE(net::GetValueForKeyInQuery(url, "restrict", &value));
   EXPECT_EQ("restricted", value);
 
-  // A client override should take precedence over what's in prefs.
+  // A client override should take precedence over what's in prefs_.
   raw_client->set_restrict_parameter("client");
-  url = service.GetVariationsServerURL(&prefs, std::string());
+  url = service.GetVariationsServerURL(&prefs_, std::string());
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   EXPECT_TRUE(net::GetValueForKeyInQuery(url, "restrict", &value));
   EXPECT_EQ("client", value);
 
   // The override value passed to the method should take precedence over
-  // what's in prefs and a client override.
-  url = service.GetVariationsServerURL(&prefs, "override");
+  // what's in prefs_ and a client override.
+  url = service.GetVariationsServerURL(&prefs_, "override");
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   EXPECT_TRUE(net::GetValueForKeyInQuery(url, "restrict", &value));
@@ -392,12 +342,10 @@ TEST_F(VariationsServiceTest, GetVariationsServerURL) {
 }
 
 TEST_F(VariationsServiceTest, VariationsURLHasOSNameParam) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
   TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
-  const GURL url = service.GetVariationsServerURL(&prefs, std::string());
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+  const GURL url = service.GetVariationsServerURL(&prefs_, std::string());
 
   std::string value;
   EXPECT_TRUE(net::GetValueForKeyInQuery(url, "osname", &value));
@@ -405,15 +353,13 @@ TEST_F(VariationsServiceTest, VariationsURLHasOSNameParam) {
 }
 
 TEST_F(VariationsServiceTest, RequestsInitiallyNotAllowed) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
   // Pass ownership to TestVariationsService, but keep a weak pointer to
   // manipulate it for this test.
   std::unique_ptr<web_resource::TestRequestAllowedNotifier> test_notifier =
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_);
   web_resource::TestRequestAllowedNotifier* raw_notifier = test_notifier.get();
-  TestVariationsService test_service(std::move(test_notifier), &prefs);
+  TestVariationsService test_service(std::move(test_notifier), &prefs_,
+                                     GetMetricsStateManager());
 
   // Force the notifier to initially disallow requests.
   raw_notifier->SetRequestsAllowedOverride(false);
@@ -425,15 +371,13 @@ TEST_F(VariationsServiceTest, RequestsInitiallyNotAllowed) {
 }
 
 TEST_F(VariationsServiceTest, RequestsInitiallyAllowed) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
   // Pass ownership to TestVariationsService, but keep a weak pointer to
   // manipulate it for this test.
   std::unique_ptr<web_resource::TestRequestAllowedNotifier> test_notifier =
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_);
   web_resource::TestRequestAllowedNotifier* raw_notifier = test_notifier.get();
-  TestVariationsService test_service(std::move(test_notifier), &prefs);
+  TestVariationsService test_service(std::move(test_notifier), &prefs_,
+                                     GetMetricsStateManager());
 
   raw_notifier->SetRequestsAllowedOverride(true);
   test_service.StartRepeatedVariationsSeedFetch();
@@ -441,12 +385,9 @@ TEST_F(VariationsServiceTest, RequestsInitiallyAllowed) {
 }
 
 TEST_F(VariationsServiceTest, SeedStoredWhenOKStatus) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
   TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
   service.set_intercepts_fetch(false);
 
   net::TestURLFetcherFactory factory;
@@ -470,34 +411,31 @@ TEST_F(VariationsServiceTest, SeedNotStoredWhenNonOKStatus) {
     net::HTTP_SERVICE_UNAVAILABLE,
   };
 
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
   TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
   service.set_intercepts_fetch(false);
   for (size_t i = 0; i < arraysize(non_ok_status_codes); ++i) {
     net::TestURLFetcherFactory factory;
     service.DoActualFetch();
-    EXPECT_TRUE(prefs.FindPreference(prefs::kVariationsSeed)->IsDefaultValue());
+    EXPECT_TRUE(prefs_.FindPreference(prefs::kVariationsCompressedSeed)
+                    ->IsDefaultValue());
 
     net::TestURLFetcher* fetcher = factory.GetFetcherByID(0);
     SimulateServerResponse(non_ok_status_codes[i], fetcher);
     service.OnURLFetchComplete(fetcher);
 
-    EXPECT_TRUE(prefs.FindPreference(prefs::kVariationsSeed)->IsDefaultValue());
+    EXPECT_TRUE(prefs_.FindPreference(prefs::kVariationsCompressedSeed)
+                    ->IsDefaultValue());
   }
 }
 
 TEST_F(VariationsServiceTest, RequestGzipCompressedSeed) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
   net::TestURLFetcherFactory factory;
 
   TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
   service.set_intercepts_fetch(false);
   service.DoActualFetch();
 
@@ -525,15 +463,13 @@ TEST_F(VariationsServiceTest, InstanceManipulations) {
     {"IM:deflate,x-bm,gzip", false, false, false},
   };
 
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
   std::string serialized_seed = SerializeSeed(CreateTestSeed());
   net::TestURLFetcherFactory factory;
 
   for (size_t i = 0; i < arraysize(cases); ++i) {
     TestVariationsService service(
-        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-        &prefs);
+        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+        &prefs_, GetMetricsStateManager());
     service.set_intercepts_fetch(false);
     service.DoActualFetch();
     net::TestURLFetcher* fetcher = factory.GetFetcherByID(0);
@@ -552,12 +488,9 @@ TEST_F(VariationsServiceTest, InstanceManipulations) {
 }
 
 TEST_F(VariationsServiceTest, CountryHeader) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
-
   TestVariationsService service(
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs);
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
   service.set_intercepts_fetch(false);
 
   net::TestURLFetcherFactory factory;
@@ -576,12 +509,10 @@ TEST_F(VariationsServiceTest, CountryHeader) {
 }
 
 TEST_F(VariationsServiceTest, Observer) {
-  TestingPrefServiceSimple prefs;
-  VariationsService::RegisterPrefs(prefs.registry());
   VariationsService service(
       base::MakeUnique<TestVariationsServiceClient>(),
-      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-      &prefs, NULL, UIStringOverrider());
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager(), UIStringOverrider());
 
   struct {
     int normal_count;
@@ -607,7 +538,7 @@ TEST_F(VariationsServiceTest, Observer) {
     TestVariationsServiceObserver observer;
     service.AddObserver(&observer);
 
-    variations::VariationsSeedSimulator::Result result;
+    VariationsSeedSimulator::Result result;
     result.normal_group_change_count = cases[i].normal_count;
     result.kill_best_effort_group_change_count = cases[i].best_effort_count;
     result.kill_critical_group_change_count = cases[i].critical_count;
@@ -676,24 +607,24 @@ TEST_F(VariationsServiceTest, LoadPermanentConsistencyCountry) {
   };
 
   for (const auto& test : test_cases) {
-    TestingPrefServiceSimple prefs;
-    VariationsService::RegisterPrefs(prefs.registry());
     VariationsService service(
         base::MakeUnique<TestVariationsServiceClient>(),
-        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-        &prefs, NULL, UIStringOverrider());
+        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+        &prefs_, GetMetricsStateManager(), UIStringOverrider());
 
-    if (test.pref_value_before) {
+    if (!test.pref_value_before) {
+      prefs_.ClearPref(prefs::kVariationsPermanentConsistencyCountry);
+    } else {
       base::ListValue list_value;
       for (const std::string& component :
            base::SplitString(test.pref_value_before, ",", base::TRIM_WHITESPACE,
                              base::SPLIT_WANT_ALL)) {
         list_value.AppendString(component);
       }
-      prefs.Set(prefs::kVariationsPermanentConsistencyCountry, list_value);
+      prefs_.Set(prefs::kVariationsPermanentConsistencyCountry, list_value);
     }
 
-    variations::VariationsSeed seed(CreateTestSeed());
+    VariationsSeed seed(CreateTestSeed());
     std::string latest_country;
     if (test.latest_country_code)
       latest_country = test.latest_country_code;
@@ -712,7 +643,7 @@ TEST_F(VariationsServiceTest, LoadPermanentConsistencyCountry) {
       expected_list_value.AppendString(component);
     }
     const base::ListValue* pref_value =
-        prefs.GetList(prefs::kVariationsPermanentConsistencyCountry);
+        prefs_.GetList(prefs::kVariationsPermanentConsistencyCountry);
     EXPECT_EQ(ListValueToString(expected_list_value),
               ListValueToString(*pref_value))
         << test.pref_value_before << ", " << test.version << ", "
@@ -748,23 +679,23 @@ TEST_F(VariationsServiceTest, OverrideStoredPermanentCountry) {
   };
 
   for (const auto& test : test_cases) {
-    TestingPrefServiceSimple prefs;
-    VariationsService::RegisterPrefs(prefs.registry());
     TestVariationsService service(
-        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs),
-        &prefs);
+        base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+        &prefs_, GetMetricsStateManager());
 
-    if (!test.pref_value_before.empty()) {
+    if (test.pref_value_before.empty()) {
+      prefs_.ClearPref(prefs::kVariationsPermanentConsistencyCountry);
+    } else {
       base::ListValue list_value;
       for (const std::string& component :
            base::SplitString(test.pref_value_before, ",", base::TRIM_WHITESPACE,
                              base::SPLIT_WANT_ALL)) {
         list_value.AppendString(component);
       }
-      prefs.Set(prefs::kVariationsPermanentConsistencyCountry, list_value);
+      prefs_.Set(prefs::kVariationsPermanentConsistencyCountry, list_value);
     }
 
-    variations::VariationsSeed seed(CreateTestSeed());
+    VariationsSeed seed(CreateTestSeed());
 
     EXPECT_EQ(test.has_updated, service.OverrideStoredPermanentCountry(
                                     test.country_code_override))
@@ -777,11 +708,228 @@ TEST_F(VariationsServiceTest, OverrideStoredPermanentCountry) {
       expected_list_value.AppendString(component);
     }
     const base::ListValue* pref_value =
-        prefs.GetList(prefs::kVariationsPermanentConsistencyCountry);
+        prefs_.GetList(prefs::kVariationsPermanentConsistencyCountry);
     EXPECT_EQ(ListValueToString(expected_list_value),
               ListValueToString(*pref_value))
         << test.pref_value_before << ", " << test.country_code_override;
   }
+}
+
+TEST_F(VariationsServiceTest, SafeMode_NoPrefs) {
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      false, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 0,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 0, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_NoCrashes_NoFetchFailures) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 0);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 0);
+
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      false, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 0,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 0, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_SomeCrashes_SomeFetchFailures) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 1);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 2);
+
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      false, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 1,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 2, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_NoCrashes_ManyFetchFailures) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 0);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 3);
+
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      true, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 0,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 3, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_ManyCrashes_NoFetchFailures) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 3);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 0);
+
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      true, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 3,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 0, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_OverriddenByCommandlineFlag) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 3);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 3);
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      ::switches::kForceFieldTrials, "SomeFieldTrial");
+
+  // Create a variations service.
+  base::HistogramTester histogram_tester;
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.FellBackToSafeMode",
+                                      false, 1);
+  histogram_tester.ExpectUniqueSample("Variations.SafeMode.Streak.Crashes", 3,
+                                      1);
+  histogram_tester.ExpectUniqueSample(
+      "Variations.SafeMode.Streak.FetchFailures", 3, 1);
+}
+
+TEST_F(VariationsServiceTest, SafeMode_CrashIncrementsCrashStreak) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 1);
+  prefs_.SetBoolean(metrics::prefs::kStabilityExitedCleanly, false);
+
+  // Create a variations service.
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  EXPECT_EQ(2, prefs_.GetInteger(prefs::kVariationsCrashStreak));
+}
+
+TEST_F(VariationsServiceTest, SafeMode_NoCrashPreservesCrashStreak) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 1);
+  prefs_.SetBoolean(metrics::prefs::kStabilityExitedCleanly, true);
+
+  // Create a variations service.
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  EXPECT_EQ(1, prefs_.GetInteger(prefs::kVariationsCrashStreak));
+}
+
+TEST_F(VariationsServiceTest, SafeMode_StartingRequestIncrementsFetchFailures) {
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 1);
+
+  // Create a variations service and start the fetch.
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+  service.set_intercepts_fetch(false);
+  net::TestURLFetcherFactory factory;
+  service.DoActualFetch();
+
+  EXPECT_EQ(2, prefs_.GetInteger(prefs::kVariationsFailedToFetchSeedStreak));
+}
+
+TEST_F(VariationsServiceTest, SafeMode_SuccessfulFetchClearsFailureStreaks) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 2);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 1);
+
+  // Create a variations service and perform a successful fetch.
+  VariationsService service(
+      base::MakeUnique<TestVariationsServiceClient>(),
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager(), UIStringOverrider());
+
+  service.SetCreateTrialsFromSeedCalledForTesting(true);
+  net::TestURLFetcherFactory factory;
+  // This will actually start the fetch.
+  service.PerformPreMainMessageLoopStartup();
+
+  // The below seed and signature pair were generated using the server's
+  // private key.
+  const std::string base64_seed_data =
+      "CigxZDI5NDY0ZmIzZDc4ZmYxNTU2ZTViNTUxYzY0NDdjYmM3NGU1ZmQwEr0BCh9VTUEtVW5p"
+      "Zm9ybWl0eS1UcmlhbC0xMC1QZXJjZW50GICckqUFOAFCB2RlZmF1bHRKCwoHZGVmYXVsdBAB"
+      "SgwKCGdyb3VwXzAxEAFKDAoIZ3JvdXBfMDIQAUoMCghncm91cF8wMxABSgwKCGdyb3VwXzA0"
+      "EAFKDAoIZ3JvdXBfMDUQAUoMCghncm91cF8wNhABSgwKCGdyb3VwXzA3EAFKDAoIZ3JvdXBf"
+      "MDgQAUoMCghncm91cF8wORAB";
+  const std::string base64_seed_signature =
+      "MEQCIDD1IVxjzWYncun+9IGzqYjZvqxxujQEayJULTlbTGA/AiAr0oVmEgVUQZBYq5VLOSvy"
+      "96JkMYgzTkHPwbv7K/CmgA==";
+
+  std::string response;
+  ASSERT_TRUE(base::Base64Decode(base64_seed_data, &response));
+  const std::string header = "X-Seed-Signature:" + base64_seed_signature;
+
+  net::TestURLFetcher* fetcher = factory.GetFetcherByID(0);
+  SimulateServerResponseWithHeader(net::HTTP_OK, fetcher, &header);
+  fetcher->SetResponseString(response);
+  service.OnURLFetchComplete(fetcher);
+
+  // Verify that the streaks were rest.
+  EXPECT_EQ(0, prefs_.GetInteger(prefs::kVariationsCrashStreak));
+  EXPECT_EQ(0, prefs_.GetInteger(prefs::kVariationsFailedToFetchSeedStreak));
+}
+
+TEST_F(VariationsServiceTest, SafeMode_NotModifiedFetchClearsFailureStreaks) {
+  prefs_.SetInteger(prefs::kVariationsCrashStreak, 2);
+  prefs_.SetInteger(prefs::kVariationsFailedToFetchSeedStreak, 1);
+
+  // Create a variations service and perform a successful fetch.
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+  service.set_intercepts_fetch(false);
+
+  net::TestURLFetcherFactory factory;
+  service.DoActualFetch();
+
+  net::TestURLFetcher* fetcher = factory.GetFetcherByID(0);
+  SimulateServerResponse(net::HTTP_NOT_MODIFIED, fetcher);
+  service.OnURLFetchComplete(fetcher);
+
+  EXPECT_EQ(0, prefs_.GetInteger(prefs::kVariationsCrashStreak));
+  EXPECT_EQ(0, prefs_.GetInteger(prefs::kVariationsFailedToFetchSeedStreak));
+}
+
+TEST_F(VariationsServiceTest, FieldTrialCreatorInitializedCorrectly) {
+  TestVariationsService service(
+      base::MakeUnique<web_resource::TestRequestAllowedNotifier>(&prefs_),
+      &prefs_, GetMetricsStateManager());
+
+  // Call will crash in service's VariationsFieldTrialCreator if not initialized
+  // correctly.
+  service.GetClientFilterableStateForVersionCalledForTesting();
 }
 
 }  // namespace variations

@@ -55,6 +55,7 @@
 #include "media/capture/video/video_capture_device_factory.h"
 #include "media/capture/video/video_capture_system_impl.h"
 #include "services/video_capture/public/cpp/constants.h"
+#include "services/video_capture/public/uma/video_capture_service_event.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -428,6 +429,8 @@ MediaStreamManager::MediaStreamManager(
           InProcessVideoCaptureProvider::CreateInstanceForNonDeviceCapture(
               std::move(device_task_runner)));
     } else {
+      video_capture::uma::LogVideoCaptureServiceEvent(
+          video_capture::uma::BROWSER_USING_LEGACY_CAPTURE);
       video_capture_provider = InProcessVideoCaptureProvider::CreateInstance(
           base::MakeUnique<media::VideoCaptureSystemImpl>(
               media::VideoCaptureDeviceFactory::CreateFactory(
@@ -500,7 +503,7 @@ std::string MediaStreamManager::MakeMediaAccessRequest(
     int page_request_id,
     const StreamControls& controls,
     const url::Origin& security_origin,
-    const MediaRequestResponseCallback& callback) {
+    MediaRequestResponseCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   // TODO(perkj): The argument list with NULL parameters to DeviceRequest
@@ -513,7 +516,7 @@ std::string MediaStreamManager::MakeMediaAccessRequest(
 
   const std::string& label = AddRequest(request);
 
-  request->callback = callback;
+  request->callback = std::move(callback);
   // Post a task and handle the request asynchronously. The reason is that the
   // requester won't have a label for the request until this function returns
   // and thus can not handle a response. Using base::Unretained is safe since
@@ -1216,7 +1219,8 @@ void MediaStreamManager::FinalizeRequestFailed(
 
   if (request->request_type == MEDIA_DEVICE_ACCESS &&
       !request->callback.is_null()) {
-    request->callback.Run(MediaStreamDevices(), std::move(request->ui_proxy));
+    std::move(request->callback)
+        .Run(MediaStreamDevices(), std::move(request->ui_proxy));
   }
 
   DeleteRequest(label);
@@ -1235,7 +1239,7 @@ void MediaStreamManager::FinalizeMediaAccessRequest(
     DeviceRequest* request,
     const MediaStreamDevices& devices) {
   if (!request->callback.is_null())
-    request->callback.Run(devices, std::move(request->ui_proxy));
+    std::move(request->callback).Run(devices, std::move(request->ui_proxy));
 
   // Delete the request since it is done.
   DeleteRequest(label);

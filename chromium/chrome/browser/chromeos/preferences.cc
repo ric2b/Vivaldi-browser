@@ -29,6 +29,8 @@
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/prefs/pref_service_syncable_util.h"
+#include "chrome/browser/ui/ash/ash_util.h"
+#include "chrome/browser/ui/ash/system_tray_client.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/chromeos_switches.h"
@@ -119,6 +121,9 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterIntegerPref(
       prefs::kSystemTimezoneAutomaticDetectionPolicy,
       enterprise_management::SystemTimezoneProto::USERS_DECIDE);
+  // Register ash prefs.
+  if (!ash_util::IsRunningInMash())
+    ash::Shell::RegisterLocalStatePrefs(registry);
 }
 
 // static
@@ -137,7 +142,8 @@ void Preferences::RegisterProfilePrefs(
   }
 
   // Register ash prefs.
-  ash::Shell::RegisterPrefs(registry);
+  if (!ash_util::IsRunningInMash())
+    ash::Shell::RegisterProfilePrefs(registry);
 
   registry->RegisterBooleanPref(prefs::kPerformanceTracingEnabled, false);
 
@@ -311,6 +317,8 @@ void Preferences::RegisterProfilePrefs(
   registry->RegisterStringPref(prefs::kNoteTakingAppId, std::string());
   registry->RegisterBooleanPref(prefs::kNoteTakingAppEnabledOnLockScreen,
                                 false);
+  registry->RegisterListPref(prefs::kNoteTakingAppsLockScreenWhitelist);
+  registry->RegisterBooleanPref(prefs::kRestoreLastLockScreenNote, true);
 
   // We don't sync wake-on-wifi related prefs because they are device specific.
   registry->RegisterBooleanPref(prefs::kWakeOnWifiDarkConnect, true);
@@ -514,6 +522,7 @@ void Preferences::ApplyPreferences(ApplyReason reason,
       tracing_manager_ = TracingManager::Create();
     else
       tracing_manager_.reset();
+    SystemTrayClient::Get()->SetPerformanceTracingIconVisible(enabled);
   }
   if (reason != REASON_PREF_CHANGED || pref_name == prefs::kTapToClickEnabled) {
     const bool enabled = tap_to_click_enabled_.GetValue();

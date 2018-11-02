@@ -11,9 +11,9 @@
 
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/public/cpp/shelf_model_observer.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/interfaces/shelf.mojom.h"
-#include "ash/shelf/shelf_model_observer.h"
 #include "base/auto_reset.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -26,6 +26,8 @@
 #include "components/prefs/pref_change_registrar.h"
 #include "components/sync_preferences/pref_service_syncable_observer.h"
 #include "mojo/public/cpp/bindings/associated_binding.h"
+#include "mojo/public/cpp/bindings/binding.h"
+#include "mojo/public/cpp/bindings/interface_ptr_set.h"
 
 class AccountId;
 class AppIconLoader;
@@ -42,7 +44,6 @@ class LauncherControllerHelper;
 
 namespace ash {
 class Shelf;
-struct ShelfItem;
 class ShelfModel;
 }  // namespace ash
 
@@ -110,6 +111,9 @@ class ChromeLauncherController
   // browsers shelf item if needed.
   void SetItemStatus(const ash::ShelfID& id, ash::ShelfItemStatus status);
 
+  // Updates the shelf item title (displayed in the tooltip).
+  void SetItemTitle(const ash::ShelfID& id, const base::string16& title);
+
   // Closes or unpins the shelf item.
   void CloseLauncherItem(const ash::ShelfID& id);
 
@@ -119,11 +123,6 @@ class ChromeLauncherController
   // Set the shelf item status for the V1 application with the given |app_id|.
   // Adds or removes an item as needed to respect the running and pinned state.
   void SetV1AppStatus(const std::string& app_id, ash::ShelfItemStatus status);
-
-  // Requests that the shelf item controller specified by |id| open a new
-  // instance of the app.  |event_flags| holds the flags of the event which
-  // triggered this command.
-  void Launch(const ash::ShelfID& id, int event_flags);
 
   // Closes the specified item.
   void Close(const ash::ShelfID& id);
@@ -135,10 +134,12 @@ class ChromeLauncherController
   bool IsPlatformApp(const ash::ShelfID& id);
 
   // Opens a new instance of the application identified by the ShelfID.
-  // Used by the app-list, and by pinned-app shelf items.
+  // Used by the app-list, and by pinned-app shelf items. |display_id| is id of
+  // the display from which the app is launched.
   void LaunchApp(const ash::ShelfID& id,
                  ash::ShelfLaunchSource source,
-                 int event_flags);
+                 int event_flags,
+                 int64_t display_id);
 
   // If |app_id| is running, reactivates the app's most recently active window,
   // otherwise launches and activates the app.
@@ -150,6 +151,9 @@ class ChromeLauncherController
   // Set the image for a specific shelf item (e.g. when set by the app).
   void SetLauncherItemImage(const ash::ShelfID& shelf_id,
                             const gfx::ImageSkia& image);
+
+  // Updates the image for a specific shelf item from the app's icon loader.
+  void UpdateLauncherItemImage(const std::string& app_id);
 
   // Notify the controller that the state of an non platform app's tabs
   // have changed,
@@ -219,8 +223,6 @@ class ChromeLauncherController
 
   // Controller to launch ARC apps in deferred mode.
   ArcAppDeferredLauncherController* GetArcDeferredLauncher();
-
-  AppIconLoader* GetAppIconLoaderForApp(const std::string& app_id);
 
   // Sets the shelf auto-hide and/or alignment behavior from prefs.
   void SetShelfAutoHideBehaviorFromPrefs();
@@ -333,8 +335,8 @@ class ChromeLauncherController
       int index,
       ash::ShelfItemType shelf_item_type);
 
-  // Create ShelfItem for Browser Shortcut.
-  void CreateBrowserShortcutLauncherItem();
+  // Initialize the Chrome browser shortcut ShelfItem.
+  void InitBrowserShortcutItem();
 
   // Check if the given |web_contents| is in incognito mode.
   bool IsIncognito(const content::WebContents* web_contents) const;
@@ -359,12 +361,21 @@ class ChromeLauncherController
                           int64_t display_id) override;
   void OnAutoHideBehaviorChanged(ash::ShelfAutoHideBehavior auto_hide,
                                  int64_t display_id) override;
+  void OnShelfItemAdded(int32_t index, const ash::ShelfItem& item) override;
+  void OnShelfItemRemoved(const ash::ShelfID& id) override;
+  void OnShelfItemMoved(const ash::ShelfID& id, int32_t index) override;
+  void OnShelfItemUpdated(const ash::ShelfItem& item) override;
+  void OnShelfItemDelegateChanged(
+      const ash::ShelfID& id,
+      ash::mojom::ShelfItemDelegatePtr delegate) override;
 
   // ash::ShelfModelObserver:
   void ShelfItemAdded(int index) override;
   void ShelfItemRemoved(int index, const ash::ShelfItem& old_item) override;
   void ShelfItemMoved(int start_index, int target_index) override;
   void ShelfItemChanged(int index, const ash::ShelfItem& old_item) override;
+  void ShelfItemDelegateChanged(const ash::ShelfID& id,
+                                ash::ShelfItemDelegate* delegate) override;
 
   // ash::WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;
@@ -381,6 +392,9 @@ class ChromeLauncherController
   // An internal helper to unpin a shelf item; this does not update prefs.
   void UnpinShelfItemInternal(const ash::ShelfID& id);
 
+  // Resolves the app icon image loader for the app.
+  AppIconLoader* GetAppIconLoaderForApp(const std::string& app_id);
+
   static ChromeLauncherController* instance_;
 
   // The currently loaded profile used for prefs and loading extensions. This is
@@ -388,6 +402,9 @@ class ChromeLauncherController
   // multi-profile use cases this might change over time.
   Profile* profile_ = nullptr;
 
+  // In classic Ash, this the ShelfModel owned by ash::Shell's ShelfController.
+  // In the mash config, this is a separate ShelfModel instance, owned by
+  // ChromeBrowserMainExtraPartsAsh, and synchronized with Ash's ShelfModel.
   ash::ShelfModel* model_;
 
   // Ash's mojom::ShelfController used to change shelf state.
@@ -398,6 +415,10 @@ class ChromeLauncherController
 
   // True when setting a shelf pref in response to an observer notification.
   bool updating_shelf_pref_from_observer_ = false;
+
+  // True when applying changes from the remote ShelfModel owned by Ash.
+  // Changes to the local ShelfModel should not be reported during this time.
+  bool applying_remote_shelf_model_changes_ = false;
 
   // When true, changes to pinned shelf items should update the sync model.
   bool should_sync_pin_changes_ = true;

@@ -59,6 +59,7 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
                            bool directional_movement) override;
   void NotifyFirstResultYIndex(int y_index) override;
   int GetYSize() override;
+  views::View* GetSelectedView() const override;
 
  private:
   friend class test::SearchResultListViewTest;
@@ -72,7 +73,7 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   void CancelAutoLaunchTimeout();
 
   // Helper function to get SearchResultView at given |index|.
-  SearchResultView* GetResultViewAt(int index);
+  SearchResultView* GetResultViewAt(int index) const;
 
   // Forcibly auto-launch for test if it is in auto-launching state.
   void ForceAutoLaunchForTest();
@@ -92,6 +93,9 @@ class APP_LIST_EXPORT SearchResultListView : public gfx::AnimationDelegate,
   views::View* results_container_;
   views::View* auto_launch_indicator_;
   std::unique_ptr<gfx::LinearAnimation> auto_launch_animation_;
+
+  // True if the fullscreen app list feature is enabled.
+  const bool is_fullscreen_app_list_enabled_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultListView);
 };

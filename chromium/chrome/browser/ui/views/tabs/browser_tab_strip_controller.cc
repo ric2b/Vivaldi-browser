@@ -56,8 +56,7 @@ namespace {
 
 TabRendererData::NetworkState TabContentsNetworkState(
     WebContents* contents) {
-  if (!contents)
-    return TabRendererData::NETWORK_STATE_NONE;
+  DCHECK(contents);
 
   if (!contents->IsLoadingToDifferentDocument()) {
     content::NavigationEntry* entry =
@@ -313,16 +312,8 @@ void BrowserTabStripController::ShowContextMenuForTab(
 }
 
 void BrowserTabStripController::UpdateLoadingAnimations() {
-  // Don't use the model count here as it's possible for this to be invoked
-  // before we've applied an update from the model (Browser::TabInsertedAt may
-  // be processed before us and invokes this).
-  for (int i = 0, tab_count = tabstrip_->tab_count(); i < tab_count; ++i) {
-    if (model_->ContainsIndex(i)) {
-      Tab* tab = tabstrip_->tab_at(i);
-      WebContents* contents = model_->GetWebContentsAt(i);
-      tab->UpdateLoadingAnimation(TabContentsNetworkState(contents));
-    }
-  }
+  for (int i = 0, tab_count = tabstrip_->tab_count(); i < tab_count; ++i)
+    tabstrip_->tab_at(i)->StepLoadingAnimation();
 }
 
 int BrowserTabStripController::HasAvailableDragActions() const {
@@ -508,7 +499,6 @@ void BrowserTabStripController::SetTabRendererDataFromModel(
   data->network_state = TabContentsNetworkState(contents);
   data->title = contents->GetTitle();
   data->url = contents->GetURL();
-  data->loading = contents->IsLoading();
   data->crashed_status = contents->GetCrashedStatus();
   data->incognito = contents->GetBrowserContext()->IsOffTheRecord();
   data->pinned = model_->IsTabPinned(model_index);

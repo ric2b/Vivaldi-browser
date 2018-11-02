@@ -51,8 +51,20 @@ extern const FormatUrlType kFormatUrlOmitHTTP;
 // meaningful for non-file "standard" URLs.
 extern const FormatUrlType kFormatUrlOmitTrailingSlashOnBareHostname;
 
-// Convenience for omitting all unecessary types.
+// Convenience for omitting all unecessary types. Does not include experimental
+// flags below.
 extern const FormatUrlType kFormatUrlOmitAll;
+
+// Replaces the path, query, and ref with an ellipsis. Experimental and not in
+// kFormatUrlOmitAll.
+extern const FormatUrlType kFormatUrlExperimentalElideAfterHost;
+
+// If the scheme is 'https://', it's removed. Experimental and not in
+// kFormatUrlOmitAll.
+extern const FormatUrlType kFormatUrlExperimentalOmitHTTPS;
+
+// Omits some trivially informative subdomains such as "www" or "m".
+extern const FormatUrlType kFormatUrlExperimentalOmitTrivialSubdomains;
 
 // Creates a string representation of |url|. The IDN host name is turned to
 // Unicode if the Unicode representation is deemed safe. |format_type| is a

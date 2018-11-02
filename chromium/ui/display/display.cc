@@ -16,6 +16,7 @@
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size_conversions.h"
+#include "ui/gfx/icc_profile.h"
 
 namespace display {
 namespace {
@@ -99,6 +100,40 @@ void Display::SetForceDeviceScaleFactor(double dsf) {
       switches::kForceDeviceScaleFactor, base::StringPrintf("%.2f", dsf));
 }
 
+// static
+gfx::ColorSpace Display::GetForcedColorProfile() {
+  DCHECK(HasForceColorProfile());
+  std::string value =
+      base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
+          switches::kForceColorProfile);
+  if (value == "srgb") {
+    return gfx::ColorSpace::CreateSRGB();
+  } else if (value == "generic-rgb") {
+    return gfx::ColorSpace(gfx::ColorSpace::PrimaryID::APPLE_GENERIC_RGB,
+                           gfx::ColorSpace::TransferID::GAMMA18);
+  } else if (value == "color-spin-gamma24") {
+    // Run this color profile through an ICC profile. The resulting color space
+    // is slightly different from the input color space, and removing the ICC
+    // profile would require rebaselineing many layout tests.
+    gfx::ColorSpace color_space(
+        gfx::ColorSpace::PrimaryID::WIDE_GAMUT_COLOR_SPIN,
+        gfx::ColorSpace::TransferID::GAMMA24);
+    gfx::ICCProfile icc_profile;
+    color_space.GetICCProfile(&icc_profile);
+    return icc_profile.GetColorSpace();
+  }
+  LOG(ERROR) << "Invalid forced color profile";
+  return gfx::ColorSpace::CreateSRGB();
+}
+
+// static
+bool Display::HasForceColorProfile() {
+  static bool has_force_color_profile =
+      base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kForceColorProfile);
+  return has_force_color_profile;
+}
+
 Display::Display() : Display(kInvalidDisplayId) {}
 
 Display::Display(int64_t id) : Display(id, gfx::Rect()) {}
@@ -108,6 +143,8 @@ Display::Display(int64_t id, const gfx::Rect& bounds)
       bounds_(bounds),
       work_area_(bounds),
       device_scale_factor_(GetForcedDeviceScaleFactor()),
+      color_space_(HasForceColorProfile() ? GetForcedColorProfile()
+                                          : gfx::ColorSpace::CreateSRGB()),
       color_depth_(DEFAULT_BITS_PER_PIXEL),
       depth_per_component_(DEFAULT_BITS_PER_COMPONENT) {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(switches::kEnableHDR)) {

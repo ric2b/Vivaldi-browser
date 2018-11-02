@@ -15,12 +15,12 @@
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
-#include "cc/surfaces/surface_sequence.h"
 #include "cc/test/begin_frame_args_test.h"
 #include "cc/test/fake_external_begin_frame_source.h"
+#include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
 #include "content/browser/frame_host/cross_process_frame_connector.h"
 #include "content/browser/gpu/compositor_util.h"
@@ -38,7 +38,7 @@
 namespace content {
 namespace {
 
-const cc::LocalSurfaceId kArbitraryLocalSurfaceId(
+const viz::LocalSurfaceId kArbitraryLocalSurfaceId(
     1,
     base::UnguessableToken::Deserialize(2, 3));
 
@@ -47,6 +47,10 @@ class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
   MockRenderWidgetHostDelegate() {}
   ~MockRenderWidgetHostDelegate() override {}
  private:
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {}
+
   void Cut() override {}
   void Copy() override {}
   void Paste() override {}
@@ -60,8 +64,8 @@ class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
   MockCrossProcessFrameConnector() : CrossProcessFrameConnector(nullptr) {}
   ~MockCrossProcessFrameConnector() override {}
 
-  void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
-                            const cc::SurfaceSequence& sequence) override {
+  void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
+                            const viz::SurfaceSequence& sequence) override {
     last_surface_info_ = surface_info;
   }
 
@@ -73,7 +77,7 @@ class MockCrossProcessFrameConnector : public CrossProcessFrameConnector {
     return nullptr;
   }
 
-  cc::SurfaceInfo last_surface_info_;
+  viz::SurfaceInfo last_surface_info_;
 };
 
 class RenderWidgetHostViewChildFrameTest : public testing::Test {
@@ -101,10 +105,10 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
     test_frame_connector_ = new MockCrossProcessFrameConnector();
     view_->SetCrossProcessFrameConnector(test_frame_connector_);
 
-    cc::mojom::MojoCompositorFrameSinkPtr sink;
-    cc::mojom::MojoCompositorFrameSinkRequest sink_request =
+    cc::mojom::CompositorFrameSinkPtr sink;
+    cc::mojom::CompositorFrameSinkRequest sink_request =
         mojo::MakeRequest(&sink);
-    cc::mojom::MojoCompositorFrameSinkClientRequest client_request =
+    cc::mojom::CompositorFrameSinkClientRequest client_request =
         mojo::MakeRequest(&renderer_compositor_frame_sink_ptr_);
     renderer_compositor_frame_sink_ =
         base::MakeUnique<FakeRendererCompositorFrameSink>(
@@ -129,11 +133,11 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
 #endif
   }
 
-  cc::SurfaceId GetSurfaceId() const {
-    return cc::SurfaceId(view_->frame_sink_id_, view_->local_surface_id_);
+  viz::SurfaceId GetSurfaceId() const {
+    return viz::SurfaceId(view_->frame_sink_id_, view_->local_surface_id_);
   }
 
-  cc::LocalSurfaceId GetLocalSurfaceId() const {
+  viz::LocalSurfaceId GetLocalSurfaceId() const {
     return view_->local_surface_id_;
   }
 
@@ -156,8 +160,7 @@ class RenderWidgetHostViewChildFrameTest : public testing::Test {
       renderer_compositor_frame_sink_;
 
  private:
-  cc::mojom::MojoCompositorFrameSinkClientPtr
-      renderer_compositor_frame_sink_ptr_;
+  cc::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_ptr_;
 
   DISALLOW_COPY_AND_ASSIGN(RenderWidgetHostViewChildFrameTest);
 };
@@ -167,7 +170,7 @@ cc::CompositorFrame CreateDelegatedFrame(float scale_factor,
                                          const gfx::Rect& damage) {
   cc::CompositorFrame frame;
   frame.metadata.device_scale_factor = scale_factor;
-  frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, 1, true);
+  frame.metadata.begin_frame_ack = cc::BeginFrameAck(0, 1, true);
 
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
   pass->SetNew(1, gfx::Rect(size), damage, gfx::Transform());
@@ -189,7 +192,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
   gfx::Size view_size(100, 100);
   gfx::Rect view_rect(view_size);
   float scale_factor = 1.f;
-  cc::LocalSurfaceId local_surface_id(1, base::UnguessableToken::Create());
+  viz::LocalSurfaceId local_surface_id(1, base::UnguessableToken::Create());
 
   view_->SetSize(view_size);
   view_->Show();
@@ -198,12 +201,13 @@ TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
       local_surface_id,
       CreateDelegatedFrame(scale_factor, view_size, view_rect));
 
-  cc::SurfaceId id = GetSurfaceId();
+  viz::SurfaceId id = GetSurfaceId();
   if (id.is_valid()) {
 #if !defined(OS_ANDROID)
     ImageTransportFactory* factory = ImageTransportFactory::GetInstance();
-    cc::SurfaceManager* manager =
-        factory->GetContextFactoryPrivate()->GetSurfaceManager();
+    cc::SurfaceManager* manager = factory->GetContextFactoryPrivate()
+                                      ->GetFrameSinkManager()
+                                      ->surface_manager();
     cc::Surface* surface = manager->GetSurfaceForId(id);
     EXPECT_TRUE(surface);
     // There should be a SurfaceSequence created by the RWHVChildFrame.
@@ -212,7 +216,7 @@ TEST_F(RenderWidgetHostViewChildFrameTest, SwapCompositorFrame) {
 
     // Surface ID should have been passed to CrossProcessFrameConnector to
     // be sent to the embedding renderer.
-    EXPECT_EQ(cc::SurfaceInfo(id, scale_factor, view_size),
+    EXPECT_EQ(viz::SurfaceInfo(id, scale_factor, view_size),
               test_frame_connector_->last_surface_info_);
   }
 }
@@ -246,51 +250,6 @@ TEST_F(RenderWidgetHostViewChildFrameTest, FrameEviction) {
       CreateDelegatedFrame(scale_factor, view_size, view_rect));
   EXPECT_EQ(kArbitraryLocalSurfaceId, GetLocalSurfaceId());
   EXPECT_TRUE(view_->has_frame());
-}
-
-// Tests that BeginFrameAcks are forwarded correctly from the
-// SwapCompositorFrame and DidNotProduceFrame IPCs through the
-// CompositorFrameSinkSupport.
-TEST_F(RenderWidgetHostViewChildFrameTest, ForwardsBeginFrameAcks) {
-  gfx::Size view_size(100, 100);
-  gfx::Rect view_rect(view_size);
-  float scale_factor = 1.f;
-
-  view_->SetSize(view_size);
-  view_->Show();
-
-  // Replace BeginFrameSource so that we can observe acknowledgments.
-  cc::FakeExternalBeginFrameSource source(0.f, false);
-  uint32_t source_id = source.source_id();
-  view_->support_->SetBeginFrameSource(&source);
-  view_->SetNeedsBeginFrames(true);
-
-  {
-    cc::BeginFrameArgs args =
-        cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 5u);
-    source.TestOnBeginFrame(args);
-
-    // Ack from CompositorFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 5, 4, true);
-    cc::CompositorFrame frame =
-        CreateDelegatedFrame(scale_factor, view_size, view_rect);
-    frame.metadata.begin_frame_ack = ack;
-    view_->SubmitCompositorFrame(kArbitraryLocalSurfaceId, std::move(frame));
-    EXPECT_EQ(ack, source.LastAckForObserver(view_->support_.get()));
-  }
-
-  {
-    cc::BeginFrameArgs args =
-        cc::CreateBeginFrameArgsForTesting(BEGINFRAME_FROM_HERE, source_id, 6u);
-    source.TestOnBeginFrame(args);
-
-    // Explicit ack through OnDidNotProduceFrame is forwarded.
-    cc::BeginFrameAck ack(source_id, 6, 4, false);
-    view_->OnDidNotProduceFrame(ack);
-    EXPECT_EQ(ack, source.LastAckForObserver(view_->support_.get()));
-  }
-
-  view_->SetNeedsBeginFrames(false);
 }
 
 // Tests that the viewport intersection rect is dispatched to the RenderWidget

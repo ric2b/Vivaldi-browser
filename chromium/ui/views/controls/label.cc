@@ -53,13 +53,19 @@ Label::Label(const base::string16& text)
     : Label(text, style::CONTEXT_LABEL, style::STYLE_PRIMARY) {}
 
 Label::Label(const base::string16& text, int text_context, int text_style)
-    : context_menu_contents_(this) {
+    : text_context_(text_context), context_menu_contents_(this) {
   Init(text, style::GetFont(text_context, text_style));
   SetLineHeight(style::GetLineHeight(text_context, text_style));
+
+  // If an explicit style is given, ignore color changes due to the NativeTheme.
+  if (text_style != style::STYLE_PRIMARY) {
+    SetEnabledColor(
+        style::GetColor(text_context, text_style, GetNativeTheme()));
+  }
 }
 
 Label::Label(const base::string16& text, const CustomFont& font)
-    : context_menu_contents_(this) {
+    : text_context_(style::CONTEXT_LABEL), context_menu_contents_(this) {
   Init(text, font.font_list);
 }
 
@@ -103,15 +109,6 @@ void Label::SetEnabledColor(SkColor color) {
   RecalculateColors();
 }
 
-void Label::SetDisabledColor(SkColor color) {
-  if (disabled_color_set_ && requested_disabled_color_ == color)
-    return;
-  is_first_paint_text_ = true;
-  requested_disabled_color_ = color;
-  disabled_color_set_ = true;
-  RecalculateColors();
-}
-
 void Label::SetBackgroundColor(SkColor color) {
   if (background_color_set_ && background_color_ == color)
     return;
@@ -140,7 +137,8 @@ void Label::SetSelectionBackgroundColor(SkColor color) {
 }
 
 void Label::SetShadows(const gfx::ShadowValues& shadows) {
-  // TODO(mukai): early exit if the specified shadows are same.
+  if (render_text_->shadows() == shadows)
+    return;
   is_first_paint_text_ = true;
   render_text_->set_shadows(shadows);
   ResetLayout();
@@ -403,7 +401,6 @@ WordLookupClient* Label::GetWordLookupClient() {
 
 void Label::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ui::AX_ROLE_STATIC_TEXT;
-  node_data->AddState(ui::AX_STATE_READ_ONLY);
   // Note that |render_text_| is never elided (see the comment in Init() too).
   node_data->SetName(render_text_->GetDisplayText());
 }
@@ -424,11 +421,6 @@ bool Label::GetTooltipText(const gfx::Point& p, base::string16* tooltip) const {
   }
 
   return false;
-}
-
-void Label::OnEnabledChanged() {
-  ApplyTextColors();
-  View::OnEnabledChanged();
 }
 
 std::unique_ptr<gfx::RenderText> Label::CreateRenderText(
@@ -822,7 +814,7 @@ void Label::Init(const base::string16& text, const gfx::FontList& font_list) {
 
   elide_behavior_ = gfx::ELIDE_TAIL;
   stored_selection_range_ = gfx::Range::InvalidRange();
-  enabled_color_set_ = disabled_color_set_ = background_color_set_ = false;
+  enabled_color_set_ = background_color_set_ = false;
   selection_text_color_set_ = selection_background_color_set_ = false;
   subpixel_rendering_enabled_ = true;
   auto_color_readability_ = true;
@@ -968,10 +960,6 @@ void Label::RecalculateColors() {
       color_utils::GetReadableColor(requested_enabled_color_,
                                     background_color_) :
       requested_enabled_color_;
-  actual_disabled_color_ = auto_color_readability_ ?
-      color_utils::GetReadableColor(requested_disabled_color_,
-                                    background_color_) :
-      requested_disabled_color_;
   actual_selection_text_color_ =
       auto_color_readability_
           ? color_utils::GetReadableColor(requested_selection_text_color_,
@@ -983,12 +971,11 @@ void Label::RecalculateColors() {
 }
 
 void Label::ApplyTextColors() const {
-  SkColor color = enabled() ? actual_enabled_color_ : actual_disabled_color_;
   bool subpixel_rendering_suppressed =
       SkColorGetA(background_color_) != SK_AlphaOPAQUE ||
       !subpixel_rendering_enabled_;
   for (size_t i = 0; i < lines_.size(); ++i) {
-    lines_[i]->SetColor(color);
+    lines_[i]->SetColor(actual_enabled_color_);
     lines_[i]->set_selection_color(actual_selection_text_color_);
     lines_[i]->set_selection_background_focused_color(
         selection_background_color_);
@@ -998,12 +985,8 @@ void Label::ApplyTextColors() const {
 
 void Label::UpdateColorsFromTheme(const ui::NativeTheme* theme) {
   if (!enabled_color_set_) {
-    requested_enabled_color_ = theme->GetSystemColor(
-        ui::NativeTheme::kColorId_LabelEnabledColor);
-  }
-  if (!disabled_color_set_) {
-    requested_disabled_color_ = theme->GetSystemColor(
-        ui::NativeTheme::kColorId_LabelDisabledColor);
+    requested_enabled_color_ =
+        style::GetColor(text_context_, style::STYLE_PRIMARY, theme);
   }
   if (!background_color_set_) {
     background_color_ =

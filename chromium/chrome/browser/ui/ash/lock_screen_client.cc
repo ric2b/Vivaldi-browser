@@ -4,8 +4,12 @@
 
 #include "chrome/browser/ui/ash/lock_screen_client.h"
 
+#include <utility>
+
 #include "ash/public/interfaces/constants.mojom.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
+#include "chrome/browser/chromeos/login/reauth_stats.h"
+#include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "content/public/common/service_manager_connection.h"
 #include "services/service_manager/public/cpp/connector.h"
 
@@ -13,12 +17,17 @@ namespace {
 LockScreenClient* g_instance = nullptr;
 }  // namespace
 
+LockScreenClient::Delegate::Delegate() = default;
+LockScreenClient::Delegate::~Delegate() = default;
+
 LockScreenClient::LockScreenClient() : binding_(this) {
   content::ServiceManagerConnection::GetForProcess()
       ->GetConnector()
       ->BindInterface(ash::mojom::kServiceName, &lock_screen_);
   // Register this object as the client interface implementation.
-  lock_screen_->SetClient(binding_.CreateInterfacePtrAndBind());
+  ash::mojom::LockScreenClientPtr client;
+  binding_.Bind(mojo::MakeRequest(&client));
+  lock_screen_->SetClient(std::move(client));
 
   DCHECK(!g_instance);
   g_instance = this;
@@ -36,15 +45,55 @@ LockScreenClient* LockScreenClient::Get() {
 
 void LockScreenClient::AuthenticateUser(const AccountId& account_id,
                                         const std::string& hashed_password,
-                                        bool authenticated_by_pin) {
-  // TODO(xiaoyinh): Complete the implementation below.
-  // It should be similar as SigninScreenHandler::HandleAuthenticateUser.
-  chromeos::UserContext user_context(account_id);
-  chromeos::Key key(chromeos::Key::KEY_TYPE_SALTED_SHA256_TOP_HALF,
-                    std::string(), hashed_password);
-  user_context.SetKey(key);
-  user_context.SetIsUsingPin(authenticated_by_pin);
-  chromeos::ScreenLocker::default_screen_locker()->Authenticate(user_context);
+                                        bool authenticated_by_pin,
+                                        AuthenticateUserCallback callback) {
+  if (delegate_)
+    delegate_->HandleAuthenticateUser(account_id, hashed_password,
+                                    authenticated_by_pin, std::move(callback));
+}
+
+void LockScreenClient::ShowLockScreen(
+    ash::mojom::LockScreen::ShowLockScreenCallback on_shown) {
+  lock_screen_->ShowLockScreen(std::move(on_shown));
+}
+
+void LockScreenClient::AttemptUnlock(const AccountId& account_id) {
+  if (delegate_)
+    delegate_->HandleAttemptUnlock(account_id);
+}
+
+void LockScreenClient::HardlockPod(const AccountId& account_id) {
+  if (delegate_)
+    delegate_->HandleHardlockPod(account_id);
+}
+
+void LockScreenClient::RecordClickOnLockIcon(const AccountId& account_id) {
+  if (delegate_)
+    delegate_->HandleRecordClickOnLockIcon(account_id);
+}
+
+void LockScreenClient::OnFocusPod(const AccountId& account_id) {
+  if (delegate_)
+    delegate_->HandleOnFocusPod(account_id);
+}
+
+void LockScreenClient::OnNoPodFocused() {
+  if (delegate_)
+    delegate_->HandleOnNoPodFocused();
+}
+
+void LockScreenClient::LoadWallpaper(const AccountId& account_id) {
+  chromeos::WallpaperManager::Get()->SetUserWallpaperDelayed(account_id);
+}
+
+void LockScreenClient::SignOutUser() {
+  chromeos::ScreenLocker::default_screen_locker()->Signout();
+}
+
+void LockScreenClient::OnMaxIncorrectPasswordAttempted(
+    const AccountId& account_id) {
+  RecordReauthReason(account_id,
+                     chromeos::ReauthReason::INCORRECT_PASSWORD_ENTERED);
 }
 
 void LockScreenClient::ShowErrorMessage(int32_t login_attempts,
@@ -57,4 +106,35 @@ void LockScreenClient::ShowErrorMessage(int32_t login_attempts,
 
 void LockScreenClient::ClearErrors() {
   lock_screen_->ClearErrors();
+}
+
+void LockScreenClient::ShowUserPodCustomIcon(
+    const AccountId& account_id,
+    ash::mojom::UserPodCustomIconOptionsPtr icon) {
+  lock_screen_->ShowUserPodCustomIcon(account_id, std::move(icon));
+}
+
+void LockScreenClient::HideUserPodCustomIcon(const AccountId& account_id) {
+  lock_screen_->HideUserPodCustomIcon(account_id);
+}
+
+void LockScreenClient::SetAuthType(const AccountId& account_id,
+                                   proximity_auth::mojom::AuthType auth_type,
+                                   const base::string16& initial_value) {
+  lock_screen_->SetAuthType(account_id, auth_type, initial_value);
+}
+
+void LockScreenClient::LoadUsers(
+    std::vector<ash::mojom::LoginUserInfoPtr> users_list,
+    bool show_guest) {
+  lock_screen_->LoadUsers(std::move(users_list), show_guest);
+}
+
+void LockScreenClient::SetPinEnabledForUser(const AccountId& account_id,
+                                            bool is_enabled) {
+  lock_screen_->SetPinEnabledForUser(account_id, is_enabled);
+}
+
+void LockScreenClient::SetDelegate(Delegate* delegate) {
+  delegate_ = delegate;
 }

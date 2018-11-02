@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/android/jni_generator/jni_exception_list.gni")
 import("//build/buildflag_header.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -29,6 +30,7 @@ cast_test_group("cast_tests") {
   filters = []
   tests = [
     "//base:base_unittests",
+    "//cc:cc_unittests",
     "//chromecast/base:cast_base_unittests",
     "//chromecast/base/component:cast_component_unittests",
     "//chromecast/crypto:cast_crypto_unittests",
@@ -60,11 +62,7 @@ cast_test_group("cast_tests") {
   }
 
   if (!is_android && use_alsa) {
-    tests += [
-      "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests",
-      "//chromecast/media/cma/backend/alsa:libcast_governor_unittests",
-      "//chromecast/media/cma/backend/alsa:slew_volume_unittests",
-    ]
+    tests += [ "//chromecast/media/cma/backend/alsa:cast_alsa_cma_backend_unittests" ]
   }
 
   if (!is_android) {
@@ -169,12 +167,16 @@ cast_test_group("cast_tests") {
       # Disable StackContainer.BufferAlignment (don't support 16-byte alignment)
       # Disable SystemMetrics2Test.GetSystemMemoryInfo (buffers>0 can't be guaranteed)
       # Disable TimeFormattingTest.TimeFormat* for flakiness on devices (crbug/671429)
+      # Disable PostTasksViaTaskRunner/* to green up devices (b/62246873)
+      # Disable WorkerDetaches to green up devices (b/62246873)
       gtest_excludes = [
         "ProcessMetricsTest.GetNumberOfThreads",
         "ProcessUtilTest.*",
         "StackContainer.BufferAlignment",
         "SystemMetrics2Test.GetSystemMemoryInfo",
         "TimeFormattingTest.TimeFormat*",
+        "OneTraitsExecutionModePair/TaskSchedulerImplTest.PostTasksViaTaskRunner/*",
+        "TaskSchedulerWorkerTest.WorkerDetaches",
       ]
 
       if (is_cast_audio_only) {
@@ -210,6 +212,17 @@ cast_test_group("cast_tests") {
     if (is_cast_audio_only) {
       # No way to display URL's on audio only cast devices.
       gtest_excludes += [ "NavigationEntryTest.NavigationEntryURLs" ]
+    }
+    if (enable_assistant && !is_cast_desktop_build) {
+      # Temporarily disable InvalidUUID and DefaultConstructor on assistant
+      # device builds. Cause of failure is unclear, but it's highly likely it's
+      # related to them being DEATH tests. These were passing until the
+      # is_official_build flag was enabled. These tests are considered
+      # non-critical in this context. (b/62469368)
+      gtest_excludes += [
+        "BluetoothBlocklistTest.InvalidUUID",
+        "WebBluetoothDeviceIdTest.DefaultConstructor",
+      ]
     }
   }
   filters += [ content_unittests_filter ]
@@ -252,6 +265,17 @@ cast_test_group("cast_tests") {
     }
   }
   filters += [ media_unittests_filter ]
+
+  midi_unittests_filter = {
+    test_name = "midi_unittests"
+    if (!is_cast_desktop_build && !is_cast_audio_only) {
+      # Disable MidiTaskServiceTest.RunBoundTasks. This is failing on v1
+      # devices. Temporarily disable to get dashboards green again while the
+      # failure is investigated. (crbug/744777)
+      gtest_excludes = [ "MidiTaskServiceTest.RunBoundTasks" ]
+    }
+  }
+  filters += [ midi_unittests_filter ]
 
   net_unittests_filter = {
     test_name = "net_unittests"
@@ -298,8 +322,6 @@ cast_test_group_list("cast_test_lists") {
 
   additional_options = [ "--ozone-platform=headless --test-launcher-bot-mode" ]
 
-  build_tests = true
-
   test_groups = [ ":cast_tests" ]
 
   if (chromecast_branding != "public") {
@@ -325,7 +347,6 @@ if (is_android) {
     build_list_path = "$root_out_dir/junit/build_junit_test_list.txt"
     runtime_deps_path = "$root_out_dir/junit/runtime_deps.json"
     run_list_path = "$root_out_dir/junit/run_junit_test_list.txt"
-    build_tests = true
     test_groups = [ ":cast_junit_tests" ]
     if (chromecast_branding != "public") {
       test_groups += [ "//chromecast/internal:internal_cast_junit_tests" ]
@@ -372,7 +393,7 @@ group("cast_shell_lib") {
   }
 }
 
-executable("cast_shell") {
+cast_executable("cast_shell") {
   sources = [
     "app/cast_main.cc",
   ]
@@ -463,12 +484,20 @@ group("chromecast_locales_pak") {
 buildflag_header("chromecast_features") {
   header = "chromecast_features.h"
   flags = [
+    "ENABLE_ASSISTANT=$enable_assistant",
+    "IS_ANDROID_THINGS=$is_android_things",
     "IS_CAST_AUDIO_ONLY=$is_cast_audio_only",
     "IS_CAST_USING_CMA_BACKEND=$is_cast_using_cma_backend",
+    "SUPPORTS_MULTIZONE=$supports_multizone",
   ]
 }
 
 if (is_android) {
+  generate_jni_registration("cast_shell_jni_registration") {
+    target = ":cast_shell_apk"
+    output = "$root_gen_dir/chromecast/android/${target_name}.h"
+    exception_files = jni_exception_files
+  }
   android_assets("cast_shell_apk_assets") {
     assert(v8_use_external_startup_data)
 
@@ -497,5 +526,7 @@ if (is_android) {
       "//chromecast/android:libcast_shell_android",
       "//chromecast/browser/android:cast_shell_java",
     ]
+
+    command_line_flags_file = "castshell-command-line"
   }
 }

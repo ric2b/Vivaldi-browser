@@ -20,7 +20,6 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
@@ -28,9 +27,9 @@
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_actions.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/data_response_provider.h"
+#include "ios/web/public/test/http_server/data_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "net/http/http_response_headers.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
@@ -40,7 +39,6 @@
 #endif
 
 using chrome_test_util::OmniboxText;
-using chrome_test_util::WebViewContainingText;
 
 namespace {
 
@@ -132,11 +130,6 @@ id<GREYMatcher> TabWithTitle(const std::string& tab_title) {
                     notPartOfOmnibox, nil);
 }
 
-// Matcher for a Go button that is interactable.
-id<GREYMatcher> GoButtonMatcher() {
-  return grey_allOf(grey_accessibilityID(@"Go"), grey_interactable(), nil);
-}
-
 // Tests that page successfully reloads.
 - (void)testReload {
   // Set up test HTTP server responses.
@@ -148,16 +141,12 @@ id<GREYMatcher> GoButtonMatcher() {
   [ChromeEarlGrey loadURL:URL];
   std::string expectedBodyBeforeReload(
       ReloadResponseProvider::GetResponseBody(0 /* request number */));
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText(expectedBodyBeforeReload)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:expectedBodyBeforeReload];
 
   [ChromeEarlGreyUI reload];
   std::string expectedBodyAfterReload(
       ReloadResponseProvider::GetResponseBody(1 /* request_number */));
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText(expectedBodyAfterReload)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:expectedBodyAfterReload];
 }
 
 // Tests that a tab's title is based on the URL when no other information is
@@ -238,11 +227,11 @@ id<GREYMatcher> GoButtonMatcher() {
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
 
   [ChromeEarlGrey loadURL:URL];
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   chrome_test_util::TapWebViewElementWithId("link");
 
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Verify the new tab was opened with the expected URL.
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
@@ -268,11 +257,11 @@ id<GREYMatcher> GoButtonMatcher() {
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
 
   [ChromeEarlGrey loadURL:URL];
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   chrome_test_util::TapWebViewElementWithId("link");
 
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Verify the new tab was opened with the expected URL.
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
@@ -308,11 +297,11 @@ id<GREYMatcher> GoButtonMatcher() {
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
 
   [ChromeEarlGrey loadURL:URL];
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   chrome_test_util::TapWebViewElementWithId("link");
 
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Verify the new tab was opened with the expected URL.
   [[EarlGrey selectElementWithMatcher:OmniboxText(anchorURL.GetContent())]
@@ -347,11 +336,11 @@ id<GREYMatcher> GoButtonMatcher() {
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
 
   [ChromeEarlGrey loadURL:URL];
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   chrome_test_util::TapWebViewElementWithId("link");
 
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   // Verify the new tab was opened with the expected URL.
   [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
@@ -379,29 +368,9 @@ id<GREYMatcher> GoButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:OmniboxText(destURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  [self goBack];
+  [ChromeEarlGrey goBack];
   [[EarlGrey selectElementWithMatcher:OmniboxText(URL.GetContent())]
       assertWithMatcher:grey_notNil()];
-}
-
-// TODO(crbug.com/638674): Evaluate if this can move to shared code
-// Navigates back to the previous webpage.
-- (void)goBack {
-  GenericChromeCommand* backCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_BACK];
-  chrome_test_util::RunCommandWithActiveViewController(backCommand);
-
-  [ChromeEarlGrey waitForPageToFinishLoading];
-}
-
-// Navigates forward to a previous webpage.
-// TODO(crbug.com/638674): Evaluate if this can move to shared code
-- (void)goForward {
-  GenericChromeCommand* forwardCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_FORWARD];
-  chrome_test_util::RunCommandWithActiveViewController(forwardCommand);
-
-  [ChromeEarlGrey waitForPageToFinishLoading];
 }
 
 // Tests that a link with WebUI URL does not trigger a load. WebUI pages may
@@ -422,8 +391,8 @@ id<GREYMatcher> GoButtonMatcher() {
   web::test::SetUpSimpleHttpServer(responses);
 
   // Assert that test is starting with one tab.
-  chrome_test_util::AssertMainTabCount(1U);
-  chrome_test_util::AssertIncognitoTabCount(0U);
+  [ChromeEarlGrey waitForMainTabCount:1];
+  [ChromeEarlGrey waitForIncognitoTabCount:0];
 
   [ChromeEarlGrey loadURL:URL];
 
@@ -434,53 +403,10 @@ id<GREYMatcher> GoButtonMatcher() {
   // onclick event.
   [[EarlGrey selectElementWithMatcher:OmniboxText("chrome://version")]
       assertWithMatcher:grey_nil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("Hello world!")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"Hello world!"];
 
   // Verify that no new tabs were open which could load chrome://version.
-  chrome_test_util::AssertMainTabCount(1U);
-}
-
-// Tests that pressing the button on a POST-based form with same-page action
-// does not change the page and that the back button works as expected
-// afterwards.
-- (void)testBrowsingPostToSamePage {
-// TODO(crbug.com/714303): Re-enable this test on devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
-#endif
-
-  // Create map of canned responses and set up the test HTML server.
-  std::map<GURL, std::string> responses;
-  const GURL firstURL = web::test::HttpServer::MakeUrl("http://first");
-  const GURL formURL = web::test::HttpServer::MakeUrl("http://form");
-  // This is just a page with some text.
-  responses[firstURL] = "foo";
-  // This is a page with at button that posts to the current URL.
-  responses[formURL] =
-      "<form method='post'>"
-      "<input value='button' type='submit' id='button'></form>";
-  web::test::SetUpSimpleHttpServer(responses);
-
-  // Open the first URL so it's in history.
-  [ChromeEarlGrey loadURL:firstURL];
-
-  // Open the second URL, tap the button, and verify the browser navigates to
-  // the expected URL.
-  [ChromeEarlGrey loadURL:formURL];
-  chrome_test_util::TapWebViewElementWithId("button");
-  [[EarlGrey selectElementWithMatcher:OmniboxText(formURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-
-  // Go back once and verify the browser navigates to the form URL.
-  [self goBack];
-  [[EarlGrey selectElementWithMatcher:OmniboxText(formURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-
-  // Go back a second time and verify the browser navigates to the first URL.
-  [self goBack];
-  [[EarlGrey selectElementWithMatcher:OmniboxText(firstURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests that evaluating user JavaScript that causes navigation correctly
@@ -515,7 +441,7 @@ id<GREYMatcher> GoButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:OmniboxText(targetURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 
-  [self goBack];
+  [ChromeEarlGrey goBack];
   [[EarlGrey selectElementWithMatcher:OmniboxText(startURL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
@@ -546,115 +472,15 @@ id<GREYMatcher> GoButtonMatcher() {
   [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Go")]
       performAction:grey_tap()];
 
-  id<GREYMatcher> webView = chrome_test_util::WebViewContainingText("foo");
-  [[EarlGrey selectElementWithMatcher:webView] assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"foo"];
 
   // Verify that the JavaScript did not affect history by going back and then
   // forward again.
-  [self goBack];
+  [ChromeEarlGrey goBack];
   [[EarlGrey selectElementWithMatcher:OmniboxText(firstURL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  [self goForward];
+  [ChromeEarlGrey goForward];
   [[EarlGrey selectElementWithMatcher:OmniboxText(secondURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-}
-
-// Tap the text field indicated by |ID| to open the keyboard, and then
-// press the keyboard's "Go" button to submit the form.
-- (void)submitFormUsingKeyboardGoButtonWithInputID:(const std::string&)ID {
-  // Disable EarlGrey's synchronization since it is blocked by opening the
-  // keyboard from a web view.
-  [[GREYConfiguration sharedInstance]
-          setValue:@NO
-      forConfigKey:kGREYConfigKeySynchronizationEnabled];
-
-  // Wait for web view to be interactable before tapping.
-  GREYCondition* interactableCondition = [GREYCondition
-      conditionWithName:@"Wait for web view to be interactable."
-                  block:^BOOL {
-                    NSError* error = nil;
-                    id<GREYMatcher> webViewMatcher = WebViewInWebState(
-                        chrome_test_util::GetCurrentWebState());
-                    [[EarlGrey selectElementWithMatcher:webViewMatcher]
-                        assertWithMatcher:grey_interactable()
-                                    error:&error];
-                    return !error;
-                  }];
-  GREYAssert(
-      [interactableCondition waitWithTimeout:testing::kWaitForUIElementTimeout],
-      @"Web view did not become interactable.");
-
-  web::WebState* currentWebState = chrome_test_util::GetCurrentWebState();
-  [[EarlGrey selectElementWithMatcher:web::WebViewInWebState(currentWebState)]
-      performAction:web::WebViewTapElement(currentWebState, ID)];
-
-  // Wait until the keyboard shows up before tapping.
-  GREYCondition* condition = [GREYCondition
-      conditionWithName:@"Wait for the keyboard to show up."
-                  block:^BOOL {
-                    NSError* error = nil;
-                    [[EarlGrey selectElementWithMatcher:GoButtonMatcher()]
-                        assertWithMatcher:grey_notNil()
-                                    error:&error];
-                    return (error == nil);
-                  }];
-  GREYAssert([condition waitWithTimeout:10],
-             @"No keyboard with 'Go' button showed up.");
-
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(@"Go")]
-      performAction:grey_tap()];
-
-  // Reenable synchronization now that the keyboard has been closed.
-  [[GREYConfiguration sharedInstance]
-          setValue:@YES
-      forConfigKey:kGREYConfigKeySynchronizationEnabled];
-}
-
-// Tests that submitting a POST-based form by tapping the 'Go' button on the
-// keyboard navigates to the correct URL and the back button works as expected
-// afterwards.
-// TODO(crbug.com/711108): Move test to forms_egtest.mm.
-- (void)testBrowsingPostEntryWithKeyboard {
-// TODO(crbug.com/704618): Re-enable this test on devices.
-#if !TARGET_IPHONE_SIMULATOR
-  EARL_GREY_TEST_DISABLED(@"Test disabled on device.");
-#endif
-
-  // Create map of canned responses and set up the test HTML server.
-  std::map<GURL, std::string> responses;
-  const GURL URL =
-      web::test::HttpServer::MakeUrl("http://postEntryWithKeyboard");
-  const GURL destinationURL = web::test::HttpServer::MakeUrl("http://foo");
-  // This is a page this an input text field and a button that posts to the
-  // destination.
-  responses[URL] = base::StringPrintf(
-      "hello!"
-      "<form action='%s' method='post'>"
-      "<input value='textfield' id='textfield' type='text'></label>"
-      "<input type='submit'></form>",
-      destinationURL.spec().c_str());
-  // This is the page that should be showing at the end of the test.
-  responses[destinationURL] = "baz!";
-  web::test::SetUpSimpleHttpServer(responses);
-
-  // Open the URL, focus the textfield,and submit via keyboard.
-  [ChromeEarlGrey loadURL:URL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("hello!")]
-      assertWithMatcher:grey_notNil()];
-
-  [self submitFormUsingKeyboardGoButtonWithInputID:"textfield"];
-
-  // Verify that the browser navigates to the expected URL.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("baz!")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:OmniboxText(destinationURL.GetContent())]
-      assertWithMatcher:grey_notNil()];
-
-  // Go back and verify that the browser navigates to the original URL.
-  [self goBack];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("hello!")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:OmniboxText(URL.GetContent())]
       assertWithMatcher:grey_notNil()];
 }
 

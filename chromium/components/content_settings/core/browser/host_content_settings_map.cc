@@ -16,6 +16,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/clock.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "components/content_settings/core/browser/content_settings_default_provider.h"
 #include "components/content_settings/core/browser/content_settings_details.h"
@@ -29,6 +30,7 @@
 #include "components/content_settings/core/browser/content_settings_utils.h"
 #include "components/content_settings/core/browser/website_settings_registry.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -55,6 +57,7 @@ const ProviderNamesSourceMapEntry kProviderNamesSourceMap[] = {
     {"policy", content_settings::SETTING_SOURCE_POLICY},
     {"supervised_user", content_settings::SETTING_SOURCE_SUPERVISED},
     {"extension", content_settings::SETTING_SOURCE_EXTENSION},
+    {"notification_android", content_settings::SETTING_SOURCE_USER},
     {"preference", content_settings::SETTING_SOURCE_USER},
     {"default", content_settings::SETTING_SOURCE_USER},
 };
@@ -384,6 +387,8 @@ void HostContentSettingsMap::SetWebsiteSettingCustomScope(
     std::unique_ptr<base::Value> value) {
   DCHECK(SupportsResourceIdentifier(content_type) ||
          resource_identifier.empty());
+  // TODO(crbug.com/731126): Verify that assumptions for notification content
+  // settings are met.
   UsedContentSettingsProviders();
 
   for (const auto& provider_pair : content_settings_providers_) {
@@ -526,7 +531,7 @@ void HostContentSettingsMap::MigrateDomainScopedSettings(bool after_sync) {
       if (setting_entry.source != "preference")
         continue;
       // Migrate ALLOW settings only.
-      if (setting_entry.setting != CONTENT_SETTING_ALLOW)
+      if (setting_entry.GetContentSetting() != CONTENT_SETTING_ALLOW)
         continue;
       // Skip default settings.
       if (setting_entry.primary_pattern == ContentSettingsPattern::Wildcard())
@@ -733,7 +738,7 @@ void HostContentSettingsMap::AddSettingsForOneType(
 
   while (rule_iterator->HasNext()) {
     const content_settings::Rule& rule = rule_iterator->Next();
-    ContentSetting setting_value = CONTENT_SETTING_DEFAULT;
+    std::unique_ptr<base::Value> setting_value;
     // TODO(bauerb): Return rules as a list of values, not content settings.
     // Handle the case using base::Values for its exceptions and default
     // setting. Here we assume all the exceptions are granted as
@@ -742,12 +747,13 @@ void HostContentSettingsMap::AddSettingsForOneType(
             content_type) &&
         rule.value.get() &&
         rule.primary_pattern != ContentSettingsPattern::Wildcard()) {
-      setting_value = CONTENT_SETTING_ALLOW;
+      setting_value =
+          content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW);
     } else {
-      setting_value = content_settings::ValueToContentSetting(rule.value.get());
+      setting_value = base::MakeUnique<base::Value>(*(rule.value));
     }
     settings->push_back(ContentSettingPatternSource(
-        rule.primary_pattern, rule.secondary_pattern, setting_value,
+        rule.primary_pattern, rule.secondary_pattern, std::move(setting_value),
         kProviderNamesSourceMap[provider_type].provider_name, incognito));
   }
 }

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <set>
 
@@ -255,7 +256,7 @@ class ConnectionListener
   // This lock protects all the members below, which each are used on both the
   // IO and UI thread. Members declared after the lock are protected by it.
   mutable base::Lock lock_;
-  typedef base::hash_map<uint16_t, SocketStatus> SocketContainer;
+  typedef std::map<uint16_t, SocketStatus> SocketContainer;
   SocketContainer sockets_;
 
   // If |num_accepted_connections_needed_| is non zero, then the object is
@@ -514,7 +515,6 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   void SetUpInProcessBrowserTestFixture() override {
     scoped_host_resolver_proc_.reset(new net::ScopedDefaultHostResolverProc(
         rule_based_resolver_proc_.get()));
-    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -605,7 +605,6 @@ class PredictorBrowserTest : public InProcessBrowserTest {
   }
 
   void TearDownInProcessBrowserTestFixture() override {
-    InProcessBrowserTest::TearDownInProcessBrowserTestFixture();
     scoped_host_resolver_proc_.reset();
   }
 

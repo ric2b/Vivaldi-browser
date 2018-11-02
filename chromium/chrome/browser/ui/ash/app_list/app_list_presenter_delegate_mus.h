@@ -37,12 +37,14 @@ class AppListPresenterDelegateMus : public app_list::AppListPresenterDelegate,
   void UpdateBounds() override;
   gfx::Vector2d GetVisibilityAnimationOffset(
       aura::Window* root_window) override;
+  base::TimeDelta GetVisibilityAnimationDuration(aura::Window* root_window,
+                                                 bool is_visible) override;
 
  private:
   // views::PointerWatcher:
   void OnPointerEventObserved(const ui::PointerEvent& event,
                               const gfx::Point& location_in_screen,
-                              views::Widget* target) override;
+                              gfx::NativeView target) override;
 
   // Not owned. Pointer is guaranteed to be valid while this object is alive.
   app_list::AppListPresenterImpl* presenter_;

@@ -14,7 +14,7 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "content/common/content_export.h"
 #include "net/base/priority_queue.h"
 #include "net/base/request_priority.h"
@@ -52,7 +52,7 @@ class ResourceThrottle;
 // The scheduler may defer issuing the request via the ResourceThrottle
 // interface or it may alter the request's priority by calling set_priority() on
 // the URLRequest.
-class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
+class CONTENT_EXPORT ResourceScheduler {
  public:
   ResourceScheduler();
   ~ResourceScheduler();
@@ -109,12 +109,6 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
                            net::RequestPriority new_priority);
 
  private:
-  // Returns the maximum number of delayable requests to all be in-flight at
-  // any point in time (across all hosts).
-  size_t max_num_delayable_requests() const {
-    return max_num_delayable_requests_;
-  }
-
   class RequestQueue;
   class ScheduledResourceRequest;
   struct RequestPriorityParams;
@@ -138,7 +132,6 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   Client* GetClient(int child_id, int route_id);
 
   ClientMap client_map_;
-  size_t max_num_delayable_requests_;
   RequestSet unowned_requests_;
 
   // True if requests to servers that support priorities (e.g., H2/QUIC) can
@@ -149,6 +142,8 @@ class CONTENT_EXPORT ResourceScheduler : public base::NonThreadSafe {
   // start resource requests.
   bool yielding_scheduler_enabled_;
   int max_requests_before_yielding_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(ResourceScheduler);
 };

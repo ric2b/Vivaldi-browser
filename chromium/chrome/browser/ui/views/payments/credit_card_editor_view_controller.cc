@@ -17,6 +17,9 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/autofill/autofill_dialog_models.h"
+#include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/singleton_tabs.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
@@ -28,18 +31,23 @@
 #include "components/autofill/core/browser/autofill_type.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/validation.h"
 #include "components/autofill/core/common/autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
+#include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/controls/button/md_text_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/styled_label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
@@ -77,17 +85,25 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
         app_locale_(app_locale),
         initially_valid_(initially_valid) {}
 
-  bool IsValidTextfield(views::Textfield* textfield) override {
+  bool IsValidTextfield(views::Textfield* textfield,
+                        base::string16* error_message) override {
     NOTREACHED();
     return true;
   }
 
-  bool IsValidCombobox(views::Combobox* combobox) override {
+  bool IsValidCombobox(views::Combobox* combobox,
+                       base::string16* error_message) override {
     // View will have no parent if it's not been attached yet. Use initial
     // validity state.
     views::View* view_parent = combobox->parent();
-    if (!view_parent)
+    if (!view_parent) {
+      *error_message =
+          initially_valid_
+              ? base::string16()
+              : l10n_util::GetStringUTF16(
+                    IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED);
       return initially_valid_;
+    }
 
     // Get the combined date from the month and year dropdowns.
     views::Combobox* month_combobox = static_cast<views::Combobox*>(
@@ -106,6 +122,10 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
     month_combobox->SetInvalid(is_expired);
     year_combobox->SetInvalid(is_expired);
 
+    *error_message =
+        is_expired ? l10n_util::GetStringUTF16(
+                         IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED)
+                   : base::string16();
     return !is_expired;
   }
 
@@ -116,12 +136,10 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
   }
 
   bool ComboboxValueChanged(views::Combobox* combobox) override {
-    bool is_valid = IsValidCombobox(combobox);
+    base::string16 error_message;
+    bool is_valid = IsValidCombobox(combobox, &error_message);
     controller_->DisplayErrorMessageForField(
-        autofill::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR,
-        is_valid ? base::string16()
-                 : l10n_util::GetStringUTF16(
-                       IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED));
+        autofill::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR, error_message);
     return is_valid;
   }
 
@@ -134,29 +152,6 @@ class ExpirationDateValidationDelegate : public ValidationDelegate {
 
   DISALLOW_COPY_AND_ASSIGN(ExpirationDateValidationDelegate);
 };
-
-// Formats card number. For example, "4111111111111111" is formatted into
-// "4111 1111 1111 1111".
-base::string16 FormatCardNumber(const base::string16& text) {
-  // Do not format masked card numbers, which start with a letter.
-  base::string16 number = autofill::CreditCard::StripSeparators(text);
-  if (number.empty() || !base::IsAsciiDigit(number[0]))
-    return text;
-
-  std::vector<size_t> positions = {4U, 9U, 14U};
-  if (autofill::CreditCard::GetCardNetwork(number) ==
-      autofill::kAmericanExpressCard) {
-    positions = {4U, 11U};
-  }
-
-  static const base::char16 kSeparator = base::ASCIIToUTF16(" ")[0];
-  for (size_t i : positions) {
-    if (number.size() > i)
-      number.insert(i, 1U, kSeparator);
-  }
-
-  return number;
-}
 
 }  // namespace
 
@@ -197,26 +192,24 @@ CreditCardEditorViewController::CreateHeaderView() {
   // the first input field.
   constexpr int kRowBottomPadding = 6;
   views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kVertical, payments::kPaymentRequestRowHorizontalInsets,
-      kRowBottomPadding, kRowVerticalSpacing);
+      views::BoxLayout::kVertical,
+      gfx::Insets(kRowBottomPadding, kPaymentRequestRowHorizontalInsets),
+      kRowVerticalSpacing);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
   view->SetLayoutManager(layout);
 
-  // "Cards accepted" label is "disabled" grey.
-  std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(
-      l10n_util::GetStringUTF16(IDS_PAYMENTS_ACCEPTED_CARDS_LABEL));
-  label->SetDisabledColor(label->GetNativeTheme()->GetSystemColor(
-      ui::NativeTheme::kColorId_LabelDisabledColor));
-  label->SetEnabled(false);
-  view->AddChildView(label.release());
+  // "Cards accepted" label is "hint" grey.
+  view->AddChildView(CreateHintLabel(GetAcceptedCardTypesText(
+                                         spec()->supported_card_types_set()))
+                         .release());
 
   // 8dp padding is required between icons.
   constexpr int kPaddingBetweenCardIcons = 8;
   std::unique_ptr<views::View> icons_row = base::MakeUnique<views::View>();
   views::BoxLayout* icons_layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0, kPaddingBetweenCardIcons);
+      views::BoxLayout::kHorizontal, gfx::Insets(), kPaddingBetweenCardIcons);
   icons_row->SetLayoutManager(icons_layout);
 
   std::string selected_network =
@@ -249,6 +242,35 @@ CreditCardEditorViewController::CreateHeaderView() {
   }
   view->AddChildView(icons_row.release());
 
+  // If dealing with a server card, we add "From Google Payments" with an edit
+  // link.
+  if (IsEditingServerCard()) {
+    std::unique_ptr<views::View> data_source = base::MakeUnique<views::View>();
+    auto data_source_layout = base::MakeUnique<views::BoxLayout>(
+        views::BoxLayout::kHorizontal, gfx::Insets(), kPaddingBetweenCardIcons);
+    data_source->SetLayoutManager(data_source_layout.release());
+
+    // "From Google Payments".
+    data_source->AddChildView(
+        CreateHintLabel(
+            l10n_util::GetStringUTF16(IDS_AUTOFILL_FROM_GOOGLE_ACCOUNT_LONG))
+            .release());
+
+    // "Edit" link.
+    base::string16 link_text =
+        l10n_util::GetStringUTF16(IDS_AUTOFILL_WALLET_MANAGEMENT_LINK_TEXT);
+    auto edit_link = base::MakeUnique<views::StyledLabel>(link_text, this);
+    edit_link->set_id(
+        static_cast<int>(DialogViewID::GOOGLE_PAYMENTS_EDIT_LINK_LABEL));
+    edit_link->AddStyleRange(
+        gfx::Range(0, link_text.size()),
+        views::StyledLabel::RangeStyleInfo::CreateForLink());
+    edit_link->SizeToFit(0);
+    data_source->AddChildView(edit_link.release());
+
+    view->AddChildView(data_source.release());
+  }
+
   return view;
 }
 
@@ -256,7 +278,8 @@ std::unique_ptr<views::View>
 CreditCardEditorViewController::CreateCustomFieldView(
     autofill::ServerFieldType type,
     views::View** focusable_field,
-    bool* valid) {
+    bool* valid,
+    base::string16* error_message) {
   DCHECK_EQ(type, autofill::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR);
 
   std::unique_ptr<views::View> view = base::MakeUnique<views::View>();
@@ -289,7 +312,7 @@ CreditCardEditorViewController::CreateCustomFieldView(
         EditorField::LengthHint::HINT_SHORT,
         /*required=*/true, EditorField::ControlType::COMBOBOX};
     std::unique_ptr<ValidatingCombobox> month_combobox =
-        CreateComboboxForField(tmp_month);
+        CreateComboboxForField(tmp_month, error_message);
     *focusable_field = month_combobox.get();
     combobox_layout->AddView(month_combobox.release(), 1, 1,
                              views::GridLayout::FILL, views::GridLayout::FILL,
@@ -301,7 +324,7 @@ CreditCardEditorViewController::CreateCustomFieldView(
         EditorField::LengthHint::HINT_SHORT,
         /*required=*/true, EditorField::ControlType::COMBOBOX};
     std::unique_ptr<ValidatingCombobox> year_combobox =
-        CreateComboboxForField(tmp_year);
+        CreateComboboxForField(tmp_year, error_message);
     combobox_layout->AddView(year_combobox.release(), 1, 1,
                              views::GridLayout::FILL, views::GridLayout::FILL,
                              0, kInputFieldHeight);
@@ -337,6 +360,10 @@ CreditCardEditorViewController::CreateExtraViewForField(
   return button_view;
 }
 
+bool CreditCardEditorViewController::IsEditingExistingItem() {
+  return !!credit_card_to_edit_;
+}
+
 std::vector<EditorField> CreditCardEditorViewController::GetFieldDefinitions() {
   bool is_server_card = IsEditingServerCard();
   return std::vector<EditorField>{
@@ -368,7 +395,9 @@ base::string16 CreditCardEditorViewController::GetInitialValueForType(
   base::string16 info = credit_card_to_edit_->GetInfo(
       autofill::AutofillType(type), state()->GetApplicationLocale());
 
-  return type == autofill::CREDIT_CARD_NUMBER ? FormatCardNumber(info) : info;
+  return type == autofill::CREDIT_CARD_NUMBER
+             ? data_util::FormatCardNumberForDisplay(info)
+             : info;
 }
 
 bool CreditCardEditorViewController::ValidateModelAndSave() {
@@ -506,6 +535,17 @@ CreditCardEditorViewController::GetComboboxModelForType(
   return std::unique_ptr<ui::ComboboxModel>();
 }
 
+void CreditCardEditorViewController::StyledLabelLinkClicked(
+    views::StyledLabel* label,
+    const gfx::Range& range,
+    int event_flags) {
+  // The only thing that can trigger this is the user clicking on the "edit"
+  // link for a server card.
+  chrome::ScopedTabbedBrowserDisplayer displayer(dialog()->GetProfile());
+  chrome::ShowSingletonTab(displayer.browser(),
+                           autofill::payments::GetManageAddressesUrl(0));
+}
+
 void CreditCardEditorViewController::SelectBasicCardNetworkIcon(
     const std::string& basic_card_network) {
   // If empty string was passed or if the icon representing |basic_card_network|
@@ -627,17 +667,18 @@ bool CreditCardEditorViewController::CreditCardValidationDelegate::
 base::string16
 CreditCardEditorViewController::CreditCardValidationDelegate::Format(
     const base::string16& text) {
-  return FormatCardNumber(text);
+  return data_util::FormatCardNumberForDisplay(text);
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::
-    IsValidTextfield(views::Textfield* textfield) {
-  return ValidateValue(textfield->text(), nullptr);
+    IsValidTextfield(views::Textfield* textfield,
+                     base::string16* error_message) {
+  return ValidateValue(textfield->text(), error_message);
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::
-    IsValidCombobox(views::Combobox* combobox) {
-  return ValidateCombobox(combobox, nullptr);
+    IsValidCombobox(views::Combobox* combobox, base::string16* error_message) {
+  return ValidateCombobox(combobox, error_message);
 }
 
 bool CreditCardEditorViewController::CreditCardValidationDelegate::

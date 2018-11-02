@@ -36,9 +36,7 @@ class PLATFORM_EXPORT PaintArtifact final {
 
  public:
   PaintArtifact();
-  PaintArtifact(DisplayItemList,
-                Vector<PaintChunk>,
-                bool is_suitable_for_gpu_rasterization);
+  PaintArtifact(DisplayItemList, Vector<PaintChunk>);
   PaintArtifact(PaintArtifact&&);
   ~PaintArtifact();
 
@@ -57,10 +55,6 @@ class PLATFORM_EXPORT PaintArtifact final {
   Vector<PaintChunk>::const_iterator FindChunkByDisplayItemIndex(
       size_t index) const {
     return FindChunkInVectorByDisplayItemIndex(paint_chunks_, index);
-  }
-
-  bool IsSuitableForGpuRasterization() const {
-    return is_suitable_for_gpu_rasterization_;
   }
 
   // Resets to an empty paint artifact.
@@ -84,12 +78,12 @@ class PLATFORM_EXPORT PaintArtifact final {
       const PropertyTreeState& replay_state = PropertyTreeState::Root()) const;
 
   // Writes the paint artifact into a WebDisplayItemList.
-  void AppendToWebDisplayItemList(WebDisplayItemList*) const;
+  void AppendToWebDisplayItemList(const LayoutSize& visual_rect_offset,
+                                  WebDisplayItemList*) const;
 
  private:
   DisplayItemList display_item_list_;
   Vector<PaintChunk> paint_chunks_;
-  bool is_suitable_for_gpu_rasterization_;
 };
 
 }  // namespace blink

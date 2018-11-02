@@ -7,6 +7,7 @@
 #import <Foundation/Foundation.h>
 #import <WebKit/WebKit.h>
 
+#include "base/format_macros.h"
 #include "base/mac/foundation_util.h"
 #include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
@@ -19,8 +20,10 @@
 #import "ios/chrome/test/app/history_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #import "ios/chrome/test/app/static_html_view_test_util.h"
+#import "ios/chrome/test/app/tab_test_util.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/js_test_util.h"
+#import "ios/web/public/test/web_view_content_test_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_state/js/crw_js_injection_receiver.h"
 #import "ios/web/public/web_state/web_state.h"
@@ -104,10 +107,8 @@ id ExecuteJavaScript(NSString* javascript,
 
 #pragma mark - Navigation Utilities
 
-+ (void)loadURL:(GURL)URL {
++ (void)loadURL:(const GURL&)URL {
   chrome_test_util::LoadUrl(URL);
-  // Make sure that the page started loading.
-  GREYAssert(chrome_test_util::IsLoading(), @"Page did not start loading.");
   [ChromeEarlGrey waitForPageToFinishLoading];
 
   web::WebState* webState = chrome_test_util::GetCurrentWebState();
@@ -116,23 +117,19 @@ id ExecuteJavaScript(NSString* javascript,
 }
 
 + (void)reload {
-  base::scoped_nsobject<GenericChromeCommand> reloadCommand(
-      [[GenericChromeCommand alloc] initWithTag:IDC_RELOAD]);
-  chrome_test_util::RunCommandWithActiveViewController(reloadCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
 
 + (void)goBack {
-  base::scoped_nsobject<GenericChromeCommand> reloadCommand(
-      [[GenericChromeCommand alloc] initWithTag:IDC_BACK]);
-  chrome_test_util::RunCommandWithActiveViewController(reloadCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goBack];
+
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
 
 + (void)goForward {
-  base::scoped_nsobject<GenericChromeCommand> reloadCommand(
-      [[GenericChromeCommand alloc] initWithTag:IDC_FORWARD]);
-  chrome_test_util::RunCommandWithActiveViewController(reloadCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goForward];
+
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
 
@@ -184,4 +181,50 @@ id ExecuteJavaScript(NSString* javascript,
              @"Failed, there was a static html view containing %@", text);
 }
 
++ (void)waitForWebViewContainingText:(std::string)text {
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for web view containing text"
+                  block:^BOOL {
+                    return web::test::IsWebViewContainingText(
+                        chrome_test_util::GetCurrentWebState(), text);
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"Failed waiting for web view containing %s", text.c_str());
+}
+
++ (void)waitForWebViewNotContainingText:(std::string)text {
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for web view not containing text"
+                  block:^BOOL {
+                    return !web::test::IsWebViewContainingText(
+                        chrome_test_util::GetCurrentWebState(), text);
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"Failed waiting for web view not containing %s", text.c_str());
+}
+
++ (void)waitForMainTabCount:(NSUInteger)count {
+  // Allow the UI to become idle, in case any tabs are being opened or closed.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for main tab count"
+                  block:^BOOL {
+                    return chrome_test_util::GetMainTabCount() == count;
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"Failed waiting for main tab count to become %" PRIuNS, count);
+}
+
++ (void)waitForIncognitoTabCount:(NSUInteger)count {
+  // Allow the UI to become idle, in case any tabs are being opened or closed.
+  [[GREYUIThreadExecutor sharedInstance] drainUntilIdle];
+  GREYCondition* condition = [GREYCondition
+      conditionWithName:@"Wait for incognito tab count"
+                  block:^BOOL {
+                    return chrome_test_util::GetIncognitoTabCount() == count;
+                  }];
+  GREYAssert([condition waitWithTimeout:testing::kWaitForUIElementTimeout],
+             @"Failed waiting for incognito tab count to become %" PRIuNS,
+             count);
+}
 @end

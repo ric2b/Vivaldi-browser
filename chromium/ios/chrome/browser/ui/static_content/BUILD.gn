@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("static_content") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "static_html_native_content.h",
     "static_html_native_content.mm",
@@ -34,7 +35,8 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui",
     "//ios/testing:ocmock_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
     "//net",
     "//testing/gtest",
     "//third_party/ocmock",

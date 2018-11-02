@@ -24,15 +24,19 @@
 #include "chrome/grit/generated_resources.h"
 #include "chrome/service/cloud_print/cloud_print_service_helpers.h"
 #include "net/base/mime_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace cloud_print {
 
-CloudPrintConnector::CloudPrintConnector(Client* client,
-                                         const ConnectorSettings& settings)
-  : client_(client),
-    next_response_handler_(NULL),
-    stats_ptr_factory_(this) {
+CloudPrintConnector::CloudPrintConnector(
+    Client* client,
+    const ConnectorSettings& settings,
+    const net::PartialNetworkTrafficAnnotationTag& partial_traffic_annotation)
+    : client_(client),
+      next_response_handler_(NULL),
+      partial_traffic_annotation_(partial_traffic_annotation),
+      stats_ptr_factory_(this) {
   settings_.CopyFrom(settings);
 }
 
@@ -57,8 +61,9 @@ bool CloudPrintConnector::InitPrintSystem() {
 
 void CloudPrintConnector::ScheduleStatsReport() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&CloudPrintConnector::ReportStats,
-                            stats_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&CloudPrintConnector::ReportStats,
+                     stats_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromHours(1));
 }
 
@@ -336,7 +341,7 @@ void CloudPrintConnector::StartGetRequest(const GURL& url,
                                           int max_retries,
                                           ResponseHandler handler) {
   next_response_handler_ = handler;
-  request_ = CloudPrintURLFetcher::Create();
+  request_ = CloudPrintURLFetcher::Create(partial_traffic_annotation_);
   request_->StartGetRequest(CloudPrintURLFetcher::REQUEST_UPDATE_JOB,
                             url, this, max_retries, std::string());
 }
@@ -349,7 +354,7 @@ void CloudPrintConnector::StartPostRequest(
     const std::string& post_data,
     ResponseHandler handler) {
   next_response_handler_ = handler;
-  request_ = CloudPrintURLFetcher::Create();
+  request_ = CloudPrintURLFetcher::Create(partial_traffic_annotation_);
   request_->StartPostRequest(
       type, url, this, max_retries, mime_type, post_data, std::string());
 }
@@ -366,7 +371,8 @@ void CloudPrintConnector::ReportUserMessage(const std::string& message_id,
   net::AddMultipartFinalDelimiterForUpload(mime_boundary, &post_data);
   std::string mime_type("multipart/form-data; boundary=");
   mime_type += mime_boundary;
-  user_message_request_ = CloudPrintURLFetcher::Create();
+  user_message_request_ =
+      CloudPrintURLFetcher::Create(partial_traffic_annotation_);
   user_message_request_->StartPostRequest(
       CloudPrintURLFetcher::REQUEST_USER_MESSAGE, url, this, 1, mime_type,
       post_data, std::string());
@@ -489,7 +495,8 @@ void CloudPrintConnector::AddPendingTask(const PendingTask& task) {
   // If this is the only pending task, we need to start the process.
   if (pending_tasks_.size() == 1) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&CloudPrintConnector::ProcessPendingTask, this));
+        FROM_HERE,
+        base::BindOnce(&CloudPrintConnector::ProcessPendingTask, this));
   }
 }
 
@@ -527,7 +534,8 @@ void CloudPrintConnector::ContinuePendingTaskProcessing() {
     return;
 
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&CloudPrintConnector::ProcessPendingTask, this));
+      FROM_HERE,
+      base::BindOnce(&CloudPrintConnector::ProcessPendingTask, this));
 }
 
 void CloudPrintConnector::OnPrintersAvailable() {

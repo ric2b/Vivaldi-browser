@@ -7,7 +7,6 @@
 
 #include <memory>
 #include "core/workers/ThreadedWorkletMessagingProxy.h"
-#include "platform/wtf/Allocator.h"
 
 namespace blink {
 
@@ -15,15 +14,13 @@ class ExecutionContext;
 class WorkerThread;
 
 class AudioWorkletMessagingProxy final : public ThreadedWorkletMessagingProxy {
-  USING_FAST_MALLOC(AudioWorkletMessagingProxy);
-
  public:
-  explicit AudioWorkletMessagingProxy(ExecutionContext*);
+  AudioWorkletMessagingProxy(ExecutionContext*, WorkerClients*);
 
- protected:
+ private:
   ~AudioWorkletMessagingProxy() override;
 
-  std::unique_ptr<WorkerThread> CreateWorkerThread(double origin_time) override;
+  std::unique_ptr<WorkerThread> CreateWorkerThread() override;
 };
 
 }  // namespace blink

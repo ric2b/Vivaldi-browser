@@ -5,7 +5,9 @@
 [
     ActiveScriptWrappable,
     DependentLifetime,
-    RuntimeEnabled=MojoJS,
+    Exposed=(Window,Worker),
+    ContextEnabled=MojoJS,
+    RuntimeEnabled=MojoJS
 ] interface MojoWatcher {
     MojoResult cancel();
 };

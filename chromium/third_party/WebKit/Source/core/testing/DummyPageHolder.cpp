@@ -31,9 +31,9 @@
 #include "core/testing/DummyPageHolder.h"
 
 #include <memory>
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/loader/EmptyClients.h"
@@ -46,18 +46,16 @@ std::unique_ptr<DummyPageHolder> DummyPageHolder::Create(
     const IntSize& initial_view_size,
     Page::PageClients* page_clients,
     LocalFrameClient* local_frame_client,
-    FrameSettingOverrideFunction setting_overrider,
-    InterfaceProvider* interface_provider) {
-  return WTF::WrapUnique(
-      new DummyPageHolder(initial_view_size, page_clients, local_frame_client,
-                          setting_overrider, interface_provider));
+    FrameSettingOverrideFunction setting_overrider) {
+  return WTF::WrapUnique(new DummyPageHolder(
+      initial_view_size, page_clients, local_frame_client, setting_overrider));
 }
 
-DummyPageHolder::DummyPageHolder(const IntSize& initial_view_size,
-                                 Page::PageClients* page_clients_argument,
-                                 LocalFrameClient* local_frame_client,
-                                 FrameSettingOverrideFunction setting_overrider,
-                                 InterfaceProvider* interface_provider) {
+DummyPageHolder::DummyPageHolder(
+    const IntSize& initial_view_size,
+    Page::PageClients* page_clients_argument,
+    LocalFrameClient* local_frame_client,
+    FrameSettingOverrideFunction setting_overrider) {
   Page::PageClients page_clients;
   if (!page_clients_argument) {
     FillWithEmptyClients(page_clients);
@@ -81,9 +79,8 @@ DummyPageHolder::DummyPageHolder(const IntSize& initial_view_size,
   if (!local_frame_client_)
     local_frame_client_ = EmptyLocalFrameClient::Create();
 
-  frame_ = LocalFrame::Create(local_frame_client_.Get(), *page_, nullptr,
-                              interface_provider);
-  frame_->SetView(FrameView::Create(*frame_, initial_view_size));
+  frame_ = LocalFrame::Create(local_frame_client_.Get(), *page_, nullptr);
+  frame_->SetView(LocalFrameView::Create(*frame_, initial_view_size));
   frame_->View()->GetPage()->GetVisualViewport().SetSize(initial_view_size);
   frame_->Init();
 }
@@ -103,7 +100,7 @@ LocalFrame& DummyPageHolder::GetFrame() const {
   return *frame_;
 }
 
-FrameView& DummyPageHolder::GetFrameView() const {
+LocalFrameView& DummyPageHolder::GetFrameView() const {
   return *frame_->View();
 }
 

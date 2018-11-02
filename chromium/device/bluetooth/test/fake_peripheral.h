@@ -8,9 +8,11 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
+#include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "device/bluetooth/bluetooth_device.h"
 #include "device/bluetooth/test/fake_central.h"
+#include "device/bluetooth/test/fake_remote_gatt_service.h"
 
 namespace bluetooth {
 
@@ -24,12 +26,29 @@ class FakePeripheral : public device::BluetoothDevice {
   // Changes the name of the device.
   void SetName(base::Optional<std::string> name);
 
-  // Set it to indicate if the Peripheral is connected or not.
-  void SetGattConnected(bool gatt_connected);
+  // Set it to indicate if the system has connected to the Peripheral outside of
+  // the Bluetooth interface e.g. the user connected to the device through
+  // system settings.
+  void SetSystemConnected(bool gatt_connected);
 
   // Updates the peripheral's UUIDs that are returned by
   // BluetoothDevice::GetUUIDs().
   void SetServiceUUIDs(UUIDSet service_uuids);
+
+  // If |code| is kHCISuccess calls a pending success callback for
+  // CreateGattConnection. Otherwise calls a pending error callback
+  // with the ConnectErrorCode corresponding to |code|.
+  void SetNextGATTConnectionResponse(uint16_t code);
+
+  // If |code| is kHCISuccess, calls
+  // BluetoothAdapter::Observer::GattServicesDiscovered otherwise
+  // sets IsGattDiscoveryComplete to false. Both of these happen
+  // after IsGattDiscoveryComplete is called.
+  void SetNextGATTDiscoveryResponse(uint16_t code);
+
+  // Adds a fake primary service with |service_uuid| to this peripheral.
+  // Returns the service's Id.
+  std::string AddFakeService(const device::BluetoothUUID& service_uuid);
 
   // BluetoothDevice overrides:
   uint32_t GetBluetoothClass() const override;
@@ -78,16 +97,47 @@ class FakePeripheral : public device::BluetoothDevice {
       const device::BluetoothUUID& uuid,
       const ConnectToServiceCallback& callback,
       const ConnectToServiceErrorCallback& error_callback) override;
+  void CreateGattConnection(
+      const GattConnectionCallback& callback,
+      const ConnectErrorCallback& error_callback) override;
+  bool IsGattServicesDiscoveryComplete() const override;
 
  protected:
   void CreateGattConnectionImpl() override;
   void DisconnectGatt() override;
 
  private:
+  void DispatchConnectionResponse();
+  void DispatchDiscoveryResponse();
+
   const std::string address_;
   base::Optional<std::string> name_;
-  bool gatt_connected_;
   UUIDSet service_uuids_;
+  // True when the system has connected to the device outside of the Bluetooth
+  // interface e.g. the user connected to the device through system settings.
+  bool system_connected_;
+  // True when this Bluetooth interface is connected to the device.
+  bool gatt_connected_;
+
+  // Keeps track of the last Id used to create a fake service. Incremented
+  // every time a new fake service is added.
+  size_t last_service_id_;
+
+  // Used to simulate a GATT Discovery procedure.
+  // Mutable because IsGattServicesDiscoveryComplete needs to set this but
+  // is const.
+  mutable bool pending_gatt_discovery_;
+
+  // Used to decide which callback should be called when
+  // CreateGattConnection is called.
+  base::Optional<uint16_t> next_connection_response_;
+
+  // Used to decide if the GattServicesDiscovered method is called.
+  base::Optional<uint16_t> next_discovery_response_;
+
+  // Mutable because IsGattServicesDiscoveryComplete needs to post a task but
+  // is const.
+  mutable base::WeakPtrFactory<FakePeripheral> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(FakePeripheral);
 };

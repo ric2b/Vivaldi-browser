@@ -47,8 +47,8 @@ class CORE_EXPORT HTMLIFrameElement final
   DOMTokenList* sandbox() const;
   DOMTokenList* allow() const;
 
-  void SandboxValueWasSet();
-  void AllowValueWasSet();
+  Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy()
+      const override;
 
  private:
   explicit HTMLIFrameElement(Document&);

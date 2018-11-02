@@ -12,6 +12,7 @@
 #include "base/i18n/rtl.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
@@ -35,14 +36,14 @@
 #include "ui/events/gestures/gesture_recognizer.h"
 #include "ui/gfx/geometry/point_conversions.h"
 #include "ui/views/event_monitor.h"
-#include "ui/views/focus/view_storage.h"
+#include "ui/views/view_tracker.h"
 #include "ui/views/widget/root_view.h"
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_ASH)
 #include "ash/accelerators/accelerator_commands.h"  // nogncheck
 #include "ash/shell.h"                   // nogncheck
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"  // nogncheck
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"  // nogncheck
 #include "ash/wm/window_state.h"  // nogncheck
 #include "ui/wm/core/coordinate_conversion.h"  // nogncheck
 #endif
@@ -192,8 +193,7 @@ TabDragController::TabDragController()
       attached_tabstrip_(NULL),
       can_release_capture_(true),
       offset_to_width_ratio_(0),
-      old_focused_view_id_(
-          views::ViewStorage::GetInstance()->CreateStorageID()),
+      old_focused_view_tracker_(base::MakeUnique<views::ViewTracker>()),
       last_move_screen_loc_(0),
       started_drag_(false),
       active_(true),
@@ -220,8 +220,6 @@ TabDragController::TabDragController()
 }
 
 TabDragController::~TabDragController() {
-  views::ViewStorage::GetInstance()->RemoveView(old_focused_view_id_);
-
   if (instance_ == this)
     instance_ = NULL;
 
@@ -250,7 +248,7 @@ void TabDragController::Init(
     MoveBehavior move_behavior,
     EventSource event_source) {
   DCHECK(!tabs.empty());
-  DCHECK(std::find(tabs.begin(), tabs.end(), source_tab) != tabs.end());
+  DCHECK(base::ContainsValue(tabs, source_tab));
   source_tabstrip_ = source_tabstrip;
   was_source_maximized_ = source_tabstrip->GetWidget()->IsMaximized();
   was_source_fullscreen_ = source_tabstrip->GetWidget()->IsFullscreen();
@@ -302,8 +300,8 @@ void TabDragController::Init(
 
 #if defined(USE_ASH)
   if (ash::Shell::HasInstance() && ash::Shell::Get()
-                                       ->maximize_mode_controller()
-                                       ->IsMaximizeModeWindowManagerEnabled()) {
+                                       ->tablet_mode_controller()
+                                       ->IsTabletModeWindowManagerEnabled()) {
     detach_behavior_ = NOT_DETACHABLE;
   }
 #endif
@@ -477,11 +475,8 @@ gfx::Point TabDragController::GetWindowCreatePoint(
 
 void TabDragController::SaveFocus() {
   DCHECK(source_tabstrip_);
-  views::View* focused_view =
-      source_tabstrip_->GetFocusManager()->GetFocusedView();
-  if (focused_view)
-    views::ViewStorage::GetInstance()->StoreView(old_focused_view_id_,
-                                                 focused_view);
+  old_focused_view_tracker_->SetView(
+      source_tabstrip_->GetFocusManager()->GetFocusedView());
   source_tabstrip_->GetFocusManager()->SetFocusedView(source_tabstrip_);
   // WARNING: we may have been deleted.
 }
@@ -495,8 +490,7 @@ void TabDragController::RestoreFocus() {
     }
     return;
   }
-  views::View* old_focused_view =
-      views::ViewStorage::GetInstance()->RetrieveView(old_focused_view_id_);
+  views::View* old_focused_view = old_focused_view_tracker_->view();
   if (!old_focused_view)
     return;
   old_focused_view->GetFocusManager()->SetFocusedView(old_focused_view);

@@ -16,6 +16,10 @@ paper-button[focused] {
   border-color: var(--oobe-text-button-focused-border-color);
 }
 
+paper-button[android] {
+  height: 31px;
+}
+
 #container {
   border-radius: 2px;
   padding: 0 16px;
@@ -37,8 +41,28 @@ paper-button[focused] {
   border-width: 1px;
 }
 
+#textButton[android][border] #container {
+  height: 27px;
+  padding: 0 18px;
+}
+
+#textButton[android][disabled]:not([inverse]) {
+  background-color: white;
+  color: rgba(66, 133, 244, .38);
+}
+
+#textButton[android][disabled][inverse] {
+  background-color: rgba(66, 133, 244, .38);
+  color: white;
+}
+
 ::content * {
   font: var(--oobe-roboto-medium), sans-serif;
   font-size: 12px;
   text-transform: none;
+}
+
+#textButton[android] #container ::content * {
+  font-size: 10px;
+  text-transform: uppercase;
 }

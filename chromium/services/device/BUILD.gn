@@ -25,16 +25,16 @@ source_set("lib") {
 
   deps = [
     "//base",
-    "//device/generic_sensor",
     "//device/sensors",
     "//device/sensors/public/interfaces",
-    "//device/wake_lock",
     "//services/device/fingerprint",
+    "//services/device/generic_sensor",
     "//services/device/power_monitor",
     "//services/device/public/cpp:device_features",
     "//services/device/public/interfaces",
     "//services/device/screen_orientation",
     "//services/device/time_zone_monitor",
+    "//services/device/wake_lock",
     "//services/service_manager/public/cpp",
     "//ui/gfx",
   ]
@@ -53,27 +53,42 @@ source_set("lib") {
   }
 }
 
+is_linux_without_udev = is_linux && !use_udev
+
 source_set("tests") {
   testonly = true
 
   sources = [
     "battery/battery_status_manager_win_unittest.cc",
     "battery/battery_status_service_unittest.cc",
+    "generic_sensor/generic_sensor_service_unittest.cc",
+    "generic_sensor/platform_sensor_and_provider_unittest_win.cc",
+    "generic_sensor/platform_sensor_provider_unittest_android.cc",
     "power_monitor/power_monitor_message_broadcaster_unittest.cc",
     "public/cpp/power_monitor/power_monitor_broadcast_source_unittest.cc",
     "vibration/vibration_manager_impl_unittest.cc",
+    "wake_lock/wake_lock_unittest.cc",
   ]
 
   deps = [
     ":test_support",
     "//base",
     "//base/test:test_support",
+    "//device/base/synchronization",
     "//mojo/public/cpp/bindings",
+    "//services/device/generic_sensor",
     "//services/device/power_monitor",
+    "//services/device/public/cpp:device_features",
     "//services/device/public/cpp/power_monitor",
+    "//services/device/wake_lock",
     "//testing/gmock",
     "//testing/gtest",
   ]
+
+  if (!is_linux_without_udev) {
+    sources +=
+        [ "generic_sensor/platform_sensor_and_provider_unittest_linux.cc" ]
+  }
 
   if (is_linux && !is_chromeos && use_dbus) {
     sources += [ "battery/battery_status_manager_linux_unittest.cc" ]
@@ -101,6 +116,14 @@ source_set("tests") {
     deps += [
       "//services/device/battery",
       "//services/device/vibration",
+    ]
+  }
+
+  if (is_win) {
+    # Needed for "generic_sensor/platform_sensor_and_provider_unittest_win.cc"
+    libs = [
+      "propsys.lib",
+      "sensorsapi.lib",
     ]
   }
 }
@@ -167,12 +190,14 @@ if (is_android) {
       "//mojo/public/java:bindings_java",
       "//mojo/public/java:system_java",
       "//services/device/battery/android:battery_monitor_java",
+      "//services/device/generic_sensor:java",
       "//services/device/nfc/android:java",
       "//services/device/public/interfaces:interfaces_java",
       "//services/device/public/java:nfc_java",
       "//services/device/screen_orientation:java",
       "//services/device/time_zone_monitor:java",
       "//services/device/vibration/android:vibration_manager_java",
+      "//services/device/wake_lock/power_save_blocker:java",
       "//services/service_manager/public/interfaces:interfaces_java",
       "//services/service_manager/public/java:service_manager_java",
     ]

@@ -31,12 +31,6 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id);
 // accessibility trait UIAccessibilityTraitStaticText.
 id<GREYMatcher> StaticTextWithAccessibilityLabel(NSString* label);
 
-// Returns matcher for webview containing |text|.
-id<GREYMatcher> WebViewContainingText(std::string text);
-
-// Returns matcher for webview not containing |text|.
-id<GREYMatcher> WebViewNotContainingText(std::string text);
-
 // Returns matcher for WKWebView containing a blocked |image_id|.  When blocked,
 // the image element will be smaller than actual image.
 id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id);
@@ -119,6 +113,18 @@ id<GREYMatcher> SettingsAccountButton();
 
 // Returns matcher for the menu button to sync accounts.
 id<GREYMatcher> AccountsSyncButton();
+
+// Returns matcher for the Content Settings button on the main Settings screen.
+id<GREYMatcher> ContentSettingsButton();
+
+// Returns matcher for the back button on a settings menu.
+id<GREYMatcher> SettingsMenuBackButton();
+
+// Returns matcher for the Privacy cell on the main Settings screen.
+id<GREYMatcher> SettingsMenuPrivacyButton();
+
+// Returns matcher for the Save passwords cell on the main Settings screen.
+id<GREYMatcher> SettingsMenuPasswordsButton();
 
 }  // namespace chrome_test_util
 

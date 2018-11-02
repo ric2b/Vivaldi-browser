@@ -9,20 +9,25 @@
 
 #include "base/logging.h"
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/app_list_switches.h"
 #include "ui/app_list/app_list_view_delegate.h"
 #include "ui/app_list/views/app_list_folder_view.h"
 #include "ui/app_list/views/app_list_main_view.h"
+#include "ui/app_list/views/app_list_view.h"
 #include "ui/app_list/views/apps_container_view.h"
 #include "ui/app_list/views/apps_grid_view.h"
 #include "ui/app_list/views/custom_launcher_page_view.h"
 #include "ui/app_list/views/search_box_view.h"
+#include "ui/app_list/views/search_result_answer_card_view.h"
 #include "ui/app_list/views/search_result_list_view.h"
 #include "ui/app_list/views/search_result_page_view.h"
 #include "ui/app_list/views/search_result_tile_item_list_view.h"
 #include "ui/app_list/views/start_page_view.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/display/display.h"
+#include "ui/display/screen.h"
 #include "ui/events/event.h"
-#include "ui/views/layout/box_layout.h"
 #include "ui/views/view_model.h"
 #include "ui/views/widget/widget.h"
 
@@ -30,45 +35,31 @@ namespace app_list {
 
 namespace {
 
-// Container of the search answer view.
-class SearchAnswerContainerView : public views::View {
- public:
-  explicit SearchAnswerContainerView(views::View* search_results_page_view)
-      : search_results_page_view_(search_results_page_view) {
-    views::BoxLayout* answer_container_layout =
-        new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
-    answer_container_layout->set_main_axis_alignment(
-        views::BoxLayout::MAIN_AXIS_ALIGNMENT_CENTER);
-    SetLayoutManager(answer_container_layout);
-  }
+// Layout constants.
+constexpr int kDefaultContentsViewHeight = 623;
 
-  // views::View overrides:
-  void ChildPreferredSizeChanged(View* child) override {
-    if (visible())
-      search_results_page_view_->Layout();
-  }
-
-  const char* GetClassName() const override {
-    return "SearchAnswerContainerView";
-  }
-
- private:
-  views::View* const search_results_page_view_;
-
-  DISALLOW_COPY_AND_ASSIGN(SearchAnswerContainerView);
-};
+void DoCloseAnimation(base::TimeDelta animation_duration, ui::Layer* layer) {
+  ui::ScopedLayerAnimationSettings animation(layer->GetAnimator());
+  animation.SetTransitionDuration(animation_duration);
+  animation.SetTweenType(gfx::Tween::EASE_OUT);
+  animation.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  layer->SetOpacity(0.0f);
+}
 
 }  // namespace
 
-ContentsView::ContentsView(AppListMainView* app_list_main_view)
+ContentsView::ContentsView(AppListMainView* app_list_main_view,
+                           AppListView* app_list_view)
     : model_(nullptr),
       apps_container_view_(nullptr),
       search_results_page_view_(nullptr),
       start_page_view_(nullptr),
       custom_page_view_(nullptr),
-      search_answer_container_view_(nullptr),
       app_list_main_view_(app_list_main_view),
-      page_before_search_(0) {
+      app_list_view_(app_list_view),
+      page_before_search_(0),
+      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
   pagination_model_.SetTransitionDurations(kPageTransitionDurationInMs,
                                            kOverscrollPageTransitionDurationMs);
   pagination_model_.AddObserver(this);
@@ -76,8 +67,6 @@ ContentsView::ContentsView(AppListMainView* app_list_main_view)
 
 ContentsView::~ContentsView() {
   pagination_model_.RemoveObserver(this);
-  if (model_)
-    model_->RemoveObserver(this);
 }
 
 void ContentsView::Init(AppListModel* model) {
@@ -97,23 +86,30 @@ void ContentsView::Init(AppListModel* model) {
                     AppListModel::STATE_CUSTOM_LAUNCHER_PAGE);
   }
 
-  // Start page.
-  start_page_view_ = new StartPageView(app_list_main_view_, view_delegate);
-  AddLauncherPage(start_page_view_, AppListModel::STATE_START);
+  apps_container_view_ = new AppsContainerView(app_list_main_view_, model);
+
+  // Start page is only for non-fullscreen app list.
+  if (is_fullscreen_app_list_enabled_) {
+    // Add |apps_container_view_| as STATE_START corresponding page for
+    // fullscreen app list.
+    AddLauncherPage(apps_container_view_, AppListModel::STATE_START);
+  } else {
+    start_page_view_ =
+        new StartPageView(app_list_main_view_, view_delegate, app_list_view_);
+    AddLauncherPage(start_page_view_, AppListModel::STATE_START);
+  }
 
   // Search results UI.
   search_results_page_view_ = new SearchResultPageView();
 
-  // Search answer container UI.
-  search_answer_container_view_ =
-      new SearchAnswerContainerView(search_results_page_view_);
-  search_answer_container_view_->SetVisible(false);
-  views::View* search_answer_view = view_delegate->GetSearchAnswerWebView();
-  if (search_answer_view)
-    search_answer_container_view_->AddChildView(search_answer_view);
-  search_results_page_view_->AddChildView(search_answer_container_view_);
-
+  // Search result containers.
   AppListModel::SearchResults* results = view_delegate->GetModel()->results();
+
+  if (features::IsAnswerCardEnabled()) {
+    search_results_page_view_->AddSearchResultContainerView(
+        results, new SearchResultAnswerCardView(view_delegate));
+  }
+
   search_results_page_view_->AddSearchResultContainerView(
       results, new SearchResultListView(app_list_main_view_, view_delegate));
 
@@ -122,8 +118,6 @@ void ContentsView::Init(AppListModel* model) {
                    GetSearchBoxView()->search_box(), view_delegate));
   AddLauncherPage(search_results_page_view_,
                   AppListModel::STATE_SEARCH_RESULTS);
-
-  apps_container_view_ = new AppsContainerView(app_list_main_view_, model);
 
   AddLauncherPage(apps_container_view_, AppListModel::STATE_APPS);
 
@@ -142,8 +136,6 @@ void ContentsView::Init(AppListModel* model) {
   pagination_model_.SelectPage(initial_page_index, false);
 
   ActivePageChanged();
-
-  model_->AddObserver(this);
 }
 
 void ContentsView::CancelDrag() {
@@ -242,16 +234,16 @@ void ContentsView::ActivePageChanged() {
 
   app_list_main_view_->model()->SetState(state);
 
-  DCHECK(start_page_view_);
-
   // Set the visibility of the search box's back button.
-  app_list_main_view_->search_box_view()->back_button()->SetVisible(
-      state != AppListModel::STATE_START);
-  app_list_main_view_->search_box_view()->Layout();
-  bool folder_active = (state == AppListModel::STATE_APPS)
-                           ? apps_container_view_->IsInFolderView()
-                           : false;
-  app_list_main_view_->search_box_view()->SetBackButtonLabel(folder_active);
+  const bool folder_active = state == AppListModel::STATE_APPS &&
+                             apps_container_view_->IsInFolderView();
+
+  if (!is_fullscreen_app_list_enabled_) {
+    app_list_main_view_->search_box_view()->back_button()->SetVisible(
+        state != AppListModel::STATE_START);
+    app_list_main_view_->search_box_view()->Layout();
+    app_list_main_view_->search_box_view()->SetBackButtonLabel(folder_active);
+  }
 
   // Whenever the page changes, the custom launcher page is considered to have
   // been reset.
@@ -350,10 +342,15 @@ void ContentsView::UpdateSearchBox(double progress,
                          gfx::Tween::LinearIntValueBetween(
                              progress, original_shadow.y(), target_shadow.y()));
     search_box->SetShadow(gfx::ShadowValue(
-        offset, gfx::Tween::LinearIntValueBetween(
-                    progress, original_shadow.blur(), target_shadow.blur()),
+        offset,
+        gfx::Tween::LinearIntValueBetween(progress, original_shadow.blur(),
+                                          target_shadow.blur()),
         gfx::Tween::ColorValueBetween(progress, original_shadow.color(),
                                       target_shadow.color())));
+  }
+  if (is_fullscreen_app_list_enabled_) {
+    search_box->UpdateLayout(progress, current_state, target_state);
+    search_box->UpdateBackground(progress, current_state, target_state);
   }
   search_box->GetWidget()->SetBounds(
       search_box->GetViewBoundsForSearchBoxContentsBounds(
@@ -398,23 +395,45 @@ int ContentsView::AddLauncherPage(AppListPage* view,
 }
 
 gfx::Rect ContentsView::GetDefaultSearchBoxBounds() const {
-  gfx::Rect search_box_bounds(0, 0, GetDefaultContentsSize().width(),
-                              GetSearchBoxView()->GetPreferredSize().height());
-  search_box_bounds.set_y(kSearchBoxPadding);
-  search_box_bounds.Inset(kSearchBoxPadding, 0);
+  gfx::Rect search_box_bounds;
+  if (is_fullscreen_app_list_enabled_) {
+    search_box_bounds.set_size(GetSearchBoxView()->GetPreferredSize());
+    search_box_bounds.Offset((bounds().width() - search_box_bounds.width()) / 2,
+                             0);
+    search_box_bounds.set_y(kSearchBoxTopPadding);
+  } else {
+    search_box_bounds =
+        gfx::Rect(0, 0, GetDefaultContentsSize().width(),
+                  GetSearchBoxView()->GetPreferredSize().height());
+    search_box_bounds.set_y(kSearchBoxPadding);
+    search_box_bounds.Inset(kSearchBoxPadding, 0);
+  }
   return search_box_bounds;
 }
 
 gfx::Rect ContentsView::GetSearchBoxBoundsForState(
     AppListModel::State state) const {
   AppListPage* page = GetPageView(GetPageIndexForState(state));
-  return page->GetSearchBoxBounds();
+  return page->GetSearchBoxBoundsForState(state);
 }
 
 gfx::Rect ContentsView::GetDefaultContentsBounds() const {
-  gfx::Rect bounds(gfx::Point(0, GetDefaultSearchBoxBounds().bottom()),
-                   GetDefaultContentsSize());
-  return bounds;
+  const gfx::Size contents_size(GetDefaultContentsSize());
+  gfx::Point origin(0, GetDefaultSearchBoxBounds().bottom());
+  if (is_fullscreen_app_list_enabled_)
+    origin.Offset((bounds().width() - contents_size.width()) / 2, 0);
+  return gfx::Rect(origin, contents_size);
+}
+
+gfx::Size ContentsView::GetMaximumContentsSize() const {
+  int max_width = 0;
+  int max_height = 0;
+  for (AppListPage* page : app_list_pages_) {
+    const gfx::Size size(page->GetPreferredSize());
+    max_width = std::max(size.width(), max_width);
+    max_height = std::max(size.height(), max_height);
+  }
+  return gfx::Size(max_width, max_height);
 }
 
 bool ContentsView::Back() {
@@ -430,13 +449,17 @@ bool ContentsView::Back() {
         SetActiveState(AppListModel::STATE_START);
       break;
     case AppListModel::STATE_APPS:
-      if (apps_container_view_->IsInFolderView())
+      if (apps_container_view_->IsInFolderView()) {
         apps_container_view_->app_list_folder_view()->CloseFolderPage();
-      else
-        SetActiveState(AppListModel::STATE_START);
+      } else {
+        is_fullscreen_app_list_enabled_
+            ? app_list_view_->SetState(AppListView::CLOSED)
+            : SetActiveState(AppListModel::STATE_START);
+      }
       break;
     case AppListModel::STATE_SEARCH_RESULTS:
       GetSearchBoxView()->ClearSearch();
+      GetSearchBoxView()->SetSearchBoxActive(false);
       ShowSearchResults(false);
       break;
     case AppListModel::INVALID_STATE:  // Falls through.
@@ -447,7 +470,10 @@ bool ContentsView::Back() {
 }
 
 gfx::Size ContentsView::GetDefaultContentsSize() const {
-  return apps_container_view_->GetPreferredSize();
+  gfx::Size size = apps_container_view_->GetPreferredSize();
+  if (is_fullscreen_app_list_enabled_)
+    size.set_height(kDefaultContentsViewHeight);
+  return size;
 }
 
 gfx::Size ContentsView::CalculatePreferredSize() const {
@@ -457,7 +483,9 @@ gfx::Size ContentsView::CalculatePreferredSize() const {
       search_box_bounds.bottom_right().OffsetFromOrigin();
   bottom_right.SetToMax(
       default_contents_bounds.bottom_right().OffsetFromOrigin());
-  return gfx::Size(bottom_right.x(), bottom_right.y());
+  return gfx::Size(bottom_right.x(), is_fullscreen_app_list_enabled_
+                                         ? GetDisplayHeight()
+                                         : bottom_right.y());
 }
 
 void ContentsView::Layout() {
@@ -475,7 +503,10 @@ void ContentsView::Layout() {
     return;
 
   for (AppListPage* page : app_list_pages_) {
-    page->SetBoundsRect(page->GetPageBoundsForState(GetActiveState()));
+    if (app_list_view_ && app_list_view_->is_in_drag())
+      page->SetBoundsRect(page->GetPageBoundsDuringDragging(GetActiveState()));
+    else
+      page->SetBoundsRect(page->GetPageBoundsForState(GetActiveState()));
   }
 
   // The search box is contained in a widget so set the bounds of the widget
@@ -490,24 +521,31 @@ void ContentsView::Layout() {
 }
 
 bool ContentsView::OnKeyPressed(const ui::KeyEvent& event) {
-  bool handled = app_list_pages_[GetActivePageIndex()]->OnKeyPressed(event);
-
-  if (!handled) {
-    if (event.key_code() == ui::VKEY_TAB && event.IsShiftDown()) {
-      GetSearchBoxView()->MoveTabFocus(true);
-      handled = true;
-    }
+  if (app_list_pages_[GetActivePageIndex()]->OnKeyPressed(event))
+    return true;
+  if (event.key_code() != ui::VKEY_TAB &&
+      !GetSearchBoxView()->IsArrowKey(event))
+    return false;
+  if (is_fullscreen_app_list_enabled_) {
+    if (event.key_code() == ui::VKEY_TAB)
+      GetSearchBoxView()->MoveTabFocus(event.IsShiftDown());
+    else
+      GetSearchBoxView()->MoveArrowFocus(event);
+    return true;
+  }
+  if (event.IsShiftDown()) {
+    GetSearchBoxView()->MoveTabFocus(true);
+    return true;
   }
 
-  return handled;
+  return false;
 }
 
 const char* ContentsView::GetClassName() const {
   return "ContentsView";
 }
 
-void ContentsView::TotalPagesChanged() {
-}
+void ContentsView::TotalPagesChanged() {}
 
 void ContentsView::SelectedPageChanged(int old_selected, int new_selected) {
   if (old_selected >= 0)
@@ -517,19 +555,28 @@ void ContentsView::SelectedPageChanged(int old_selected, int new_selected) {
     app_list_pages_[new_selected]->OnShown();
 }
 
-void ContentsView::TransitionStarted() {
-}
+void ContentsView::TransitionStarted() {}
 
 void ContentsView::TransitionChanged() {
   UpdatePageBounds();
 }
 
-void ContentsView::OnSearchAnswerAvailableChanged(bool has_answer) {
-  if (has_answer == search_answer_container_view_->visible())
-    return;
+int ContentsView::GetDisplayHeight() const {
+  return display::Screen::GetScreen()
+      ->GetDisplayNearestView(GetWidget()->GetNativeView())
+      .work_area()
+      .size()
+      .height();
+}
 
-  search_answer_container_view_->SetVisible(has_answer);
-  search_results_page_view_->Layout();
+void ContentsView::FadeOutOnClose(base::TimeDelta animation_duration) {
+  DCHECK(is_fullscreen_app_list_enabled_);
+  DoCloseAnimation(animation_duration, this->layer());
+  DoCloseAnimation(animation_duration, GetSearchBoxView()->layer());
+}
+
+views::View* ContentsView::GetSelectedView() const {
+  return app_list_pages_[GetActivePageIndex()]->GetSelectedView();
 }
 
 }  // namespace app_list

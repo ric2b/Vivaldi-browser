@@ -9,6 +9,7 @@
 #include <stdint.h>
 
 #include "base/mac/scoped_nsautorelease_pool.h"
+#include "base/message_loop/message_loop.h"
 #include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/compositor/test/no_transport_image_transport_factory.h"
@@ -73,57 +74,63 @@ bool CheckObjectRespondsToEditCommands(NSArray* edit_commands, id test_obj) {
   return true;
 }
 
-class MockRenderWidgetHostDelegate : public RenderWidgetHostDelegate {
+class RenderWidgetHostDelegateEditCommandCounter
+    : public RenderWidgetHostDelegate {
  public:
-  MockRenderWidgetHostDelegate() {}
-  ~MockRenderWidgetHostDelegate() override {}
-
-  private:
-   void Cut() override {}
-   void Copy() override {}
-   void Paste() override {}
-   void SelectAll() override {}
-};
-
-// Create a RenderWidget for which we can filter messages.
-class RenderWidgetHostEditCommandCounter : public RenderWidgetHostImpl {
- public:
-  RenderWidgetHostEditCommandCounter(RenderWidgetHostDelegate* delegate,
-                                     RenderProcessHost* process,
-                                     int32_t routing_id)
-      : RenderWidgetHostImpl(delegate, process, routing_id, false),
-        edit_command_message_count_(0) {}
-
-  bool Send(IPC::Message* message) override {
-    if (message->type() == InputMsg_ExecuteEditCommand::ID)
-      edit_command_message_count_++;
-    return RenderWidgetHostImpl::Send(message);
-  }
-
+  RenderWidgetHostDelegateEditCommandCounter()
+      : edit_command_message_count_(0) {}
+  ~RenderWidgetHostDelegateEditCommandCounter() override {}
   unsigned int edit_command_message_count_;
+
+ private:
+  void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) override {
+    edit_command_message_count_++;
+  }
+  void Cut() override {}
+  void Copy() override {}
+  void Paste() override {}
+  void SelectAll() override {}
 };
 
 class RenderWidgetHostViewMacEditCommandHelperTest : public PlatformTest {
  protected:
   void SetUp() override {
     ImageTransportFactory::InitializeForUnitTests(
-        std::unique_ptr<ImageTransportFactory>(
-            new NoTransportImageTransportFactory));
+        base::MakeUnique<NoTransportImageTransportFactory>());
   }
   void TearDown() override { ImageTransportFactory::Terminate(); }
+
+ private:
+  base::MessageLoop message_loop_;
+};
+
+class RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest
+    : public PlatformTest {
+ protected:
+  void SetUp() override {
+    ImageTransportFactory::InitializeForUnitTests(
+        base::MakeUnique<NoTransportImageTransportFactory>());
+  }
+  void TearDown() override { ImageTransportFactory::Terminate(); }
+
+ private:
+  // This has a MessageLoop for ImageTransportFactory.
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
 };
 
 }  // namespace
 
 // Tests that editing commands make it through the pipeline all the way to
 // RenderWidgetHost.
-TEST_F(RenderWidgetHostViewMacEditCommandHelperTest,
+TEST_F(RenderWidgetHostViewMacEditCommandHelperWithTaskEnvTest,
        TestEditingCommandDelivery) {
-  MockRenderWidgetHostDelegate delegate;
+  RenderWidgetHostDelegateEditCommandCounter delegate;
   TestBrowserContext browser_context;
   MockRenderProcessHostFactory process_host_factory;
   RenderProcessHost* process_host =
-      process_host_factory.CreateRenderProcessHost(&browser_context, nullptr);
+      process_host_factory.CreateRenderProcessHost(&browser_context);
 
   // Populates |g_supported_scale_factors|.
   std::vector<ui::ScaleFactor> supported_factors;
@@ -131,12 +138,11 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperTest,
   ui::test::ScopedSetSupportedScaleFactors scoped_supported(supported_factors);
 
   base::mac::ScopedNSAutoreleasePool pool;
-  base::test::ScopedTaskEnvironment scoped_task_environment_;
 
   int32_t routing_id = process_host->GetNextRoutingID();
-  RenderWidgetHostEditCommandCounter* render_widget =
-      new RenderWidgetHostEditCommandCounter(&delegate, process_host,
-                                             routing_id);
+
+  RenderWidgetHostImpl* render_widget =
+      new RenderWidgetHostImpl(&delegate, process_host, routing_id, false);
 
   ui::WindowResizeHelperMac::Get()->Init(base::ThreadTaskRunnerHandle::Get());
 
@@ -160,7 +166,7 @@ TEST_F(RenderWidgetHostViewMacEditCommandHelperTest,
   }
 
   size_t num_edit_commands = [edit_command_strings count];
-  EXPECT_EQ(render_widget->edit_command_message_count_, num_edit_commands);
+  EXPECT_EQ(delegate.edit_command_message_count_, num_edit_commands);
   rwhv_cocoa.reset();
   pool.Recycle();
 

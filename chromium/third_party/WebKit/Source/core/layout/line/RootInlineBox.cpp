@@ -114,11 +114,11 @@ LayoutUnit RootInlineBox::PlaceEllipsis(const AtomicString& ellipsis_str,
                                         LayoutUnit block_right_edge,
                                         LayoutUnit ellipsis_width,
                                         LayoutUnit logical_left_offset,
-                                        bool found_box) {
+                                        InlineBox** found_box,
+                                        ForceEllipsisOnLine force_ellipsis) {
   // Create an ellipsis box if we don't already have one. If we already have one
-  // we're just
-  // here to blank out (truncate) the text boxes.
-  if (!found_box) {
+  // we're just here to blank out (truncate) the text boxes.
+  if (!*found_box) {
     EllipsisBox* ellipsis_box = new EllipsisBox(
         GetLineLayoutItem(), ellipsis_str, this, ellipsis_width,
         LogicalHeight(), Location(), !PrevRootBox(), IsHorizontal());
@@ -131,8 +131,9 @@ LayoutUnit RootInlineBox::PlaceEllipsis(const AtomicString& ellipsis_str,
 
   // FIXME: Do we need an RTL version of this?
   LayoutUnit adjusted_logical_left = logical_left_offset + LogicalLeft();
-  if (ltr && (adjusted_logical_left + LogicalWidth() + ellipsis_width) <=
-                 block_right_edge) {
+  if (force_ellipsis == ForceEllipsis && ltr &&
+      (adjusted_logical_left + LogicalWidth() + ellipsis_width) <=
+          block_right_edge) {
     if (HasEllipsisBox())
       GetEllipsisBox()->SetLogicalLeft(LogicalLeft() + LogicalWidth());
     return LogicalWidth() + ellipsis_width;
@@ -155,7 +156,7 @@ LayoutUnit RootInlineBox::PlaceEllipsisBox(bool ltr,
                                            LayoutUnit block_right_edge,
                                            LayoutUnit ellipsis_width,
                                            LayoutUnit& truncated_width,
-                                           bool& found_box,
+                                           InlineBox** found_box,
                                            LayoutUnit logical_left_offset) {
   LayoutUnit result = InlineFlowBox::PlaceEllipsisBox(
       ltr, block_left_edge, block_right_edge, ellipsis_width, truncated_width,
@@ -343,21 +344,26 @@ LayoutUnit RootInlineBox::BeforeAnnotationsAdjustment() const {
 
 SelectionState RootInlineBox::GetSelectionState() const {
   // Walk over all of the selected boxes.
-  SelectionState state = SelectionNone;
+  SelectionState state = SelectionState::kNone;
   for (InlineBox* box = FirstLeafChild(); box; box = box->NextLeafChild()) {
     SelectionState box_state = box->GetSelectionState();
-    if ((box_state == SelectionStart && state == SelectionEnd) ||
-        (box_state == SelectionEnd && state == SelectionStart)) {
-      state = SelectionBoth;
-    } else if (state == SelectionNone ||
-               ((box_state == SelectionStart || box_state == SelectionEnd) &&
-                (state == SelectionNone || state == SelectionInside))) {
+    if ((box_state == SelectionState::kStart &&
+         state == SelectionState::kEnd) ||
+        (box_state == SelectionState::kEnd &&
+         state == SelectionState::kStart)) {
+      state = SelectionState::kStartAndEnd;
+    } else if (state == SelectionState::kNone ||
+               ((box_state == SelectionState::kStart ||
+                 box_state == SelectionState::kEnd) &&
+                (state == SelectionState::kNone ||
+                 state == SelectionState::kInside))) {
       state = box_state;
-    } else if (box_state == SelectionNone && state == SelectionStart) {
+    } else if (box_state == SelectionState::kNone &&
+               state == SelectionState::kStart) {
       // We are past the end of the selection.
-      state = SelectionBoth;
+      state = SelectionState::kStartAndEnd;
     }
-    if (state == SelectionBoth)
+    if (state == SelectionState::kStartAndEnd)
       break;
   }
 
@@ -366,7 +372,7 @@ SelectionState RootInlineBox::GetSelectionState() const {
 
 InlineBox* RootInlineBox::FirstSelectedBox() const {
   for (InlineBox* box = FirstLeafChild(); box; box = box->NextLeafChild()) {
-    if (box->GetSelectionState() != SelectionNone)
+    if (box->GetSelectionState() != SelectionState::kNone)
       return box;
   }
 
@@ -375,7 +381,7 @@ InlineBox* RootInlineBox::FirstSelectedBox() const {
 
 InlineBox* RootInlineBox::LastSelectedBox() const {
   for (InlineBox* box = LastLeafChild(); box; box = box->PrevLeafChild()) {
-    if (box->GetSelectionState() != SelectionNone)
+    if (box->GetSelectionState() != SelectionState::kNone)
       return box;
   }
 

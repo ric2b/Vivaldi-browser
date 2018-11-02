@@ -69,7 +69,7 @@ PassRefPtr<SharedBuffer> SharedBuffer::AdoptVector(Vector<char>& vector) {
   RefPtr<SharedBuffer> buffer = Create();
   buffer->buffer_.swap(vector);
   buffer->size_ = buffer->buffer_.size();
-  return buffer.Release();
+  return buffer;
 }
 
 size_t SharedBuffer::size() const {
@@ -81,10 +81,10 @@ const char* SharedBuffer::Data() const {
   return buffer_.data();
 }
 
-void SharedBuffer::Append(PassRefPtr<SharedBuffer> data) {
+void SharedBuffer::Append(const SharedBuffer& data) {
   const char* segment;
   size_t position = 0;
-  while (size_t length = data->GetSomeDataInternal(segment, position)) {
+  while (size_t length = data.GetSomeDataInternal(segment, position)) {
     Append(segment, length);
     position += length;
   }
@@ -140,21 +140,18 @@ void SharedBuffer::Clear() {
   buffer_.clear();
 }
 
-PassRefPtr<SharedBuffer> SharedBuffer::Copy() const {
-  RefPtr<SharedBuffer> clone(AdoptRef(new SharedBuffer));
-  clone->size_ = size_;
-  clone->buffer_.ReserveInitialCapacity(size_);
-  clone->buffer_.Append(buffer_.data(), buffer_.size());
-  if (!segments_.IsEmpty()) {
-    const char* segment = 0;
-    size_t position = buffer_.size();
-    while (size_t segment_size = GetSomeDataInternal(segment, position)) {
-      clone->buffer_.Append(segment, segment_size);
-      position += segment_size;
-    }
-    DCHECK_EQ(position, clone->size());
-  }
-  return clone.Release();
+Vector<char> SharedBuffer::Copy() const {
+  Vector<char> buffer;
+  buffer.ReserveInitialCapacity(size_);
+
+  ForEachSegment([&buffer](const char* segment, size_t segment_size,
+                           size_t segment_offset) -> bool {
+    buffer.Append(segment, segment_size);
+    return true;
+  });
+
+  DCHECK_EQ(buffer.size(), size_);
+  return buffer;
 }
 
 void SharedBuffer::MergeSegmentsIntoBuffer() const {
@@ -204,13 +201,12 @@ size_t SharedBuffer::GetSomeDataInternal(const char*& some_data,
   return 0;
 }
 
-bool SharedBuffer::GetAsBytesInternal(void* dest,
-                                      size_t load_position,
-                                      size_t byte_length) const {
+bool SharedBuffer::GetBytesInternal(void* dest, size_t byte_length) const {
   if (!dest)
     return false;
 
   const char* segment = nullptr;
+  size_t load_position = 0;
   size_t write_position = 0;
   while (byte_length > 0) {
     size_t load_size = GetSomeDataInternal(segment, load_position);
@@ -264,6 +260,28 @@ void SharedBuffer::OnMemoryDump(const String& dump_prefix,
     memory_dump->AddSuballocation(
         dump->Guid(), String(WTF::Partitions::kAllocatedObjectPoolName));
   }
+}
+
+SharedBuffer::DeprecatedFlatData::DeprecatedFlatData(
+    PassRefPtr<const SharedBuffer> buffer)
+    : buffer_(std::move(buffer)) {
+  DCHECK(buffer_);
+
+  if (buffer_->size() <= buffer_->buffer_.size()) {
+    // The SharedBuffer is not segmented - just point to its data.
+    data_ = buffer_->buffer_.data();
+    return;
+  }
+
+  // Merge all segments.
+  flat_buffer_.ReserveInitialCapacity(buffer_->size());
+  buffer_->ForEachSegment([this](const char* segment, size_t segment_size,
+                                 size_t segment_offset) -> bool {
+    flat_buffer_.Append(segment, segment_size);
+    return true;
+  });
+
+  data_ = flat_buffer_.data();
 }
 
 }  // namespace blink

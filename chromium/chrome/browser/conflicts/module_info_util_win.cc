@@ -18,11 +18,13 @@
 #include <string>
 
 #include "base/environment.h"
+#include "base/files/file.h"
 #include "base/i18n/case_conversion.h"
 #include "base/scoped_generic.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/win/scoped_handle.h"
+#include "chrome/common/safe_browsing/pe_image_reader_win.h"
 
 namespace {
 
@@ -219,6 +221,8 @@ void GetCatalogCertificateInfo(const base::FilePath& filename,
 
 }  // namespace
 
+const wchar_t kClassIdRegistryKeyFormat[] = L"CLSID\\%ls\\InProcServer32";
+
 // ModuleDatabase::CertificateInfo ---------------------------------------------
 
 CertificateInfo::CertificateInfo() : type(CertificateType::NO_CERTIFICATE) {}
@@ -288,4 +292,33 @@ void CollapseMatchingPrefixInPath(const StringMapping& prefix_mapping,
       }
     }
   }
+}
+
+bool GetModuleImageSizeAndTimeDateStamp(const base::FilePath& path,
+                                        uint32_t* size_of_image,
+                                        uint32_t* time_date_stamp) {
+  base::File file(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
+  if (!file.IsValid())
+    return false;
+
+  // The values fetched here from the NT header live in the first 4k bytes of
+  // the file in a well-formed dll.
+  constexpr size_t kPageSize = 4096;
+
+  // Note: base::MakeUnique() is explicitly avoided because it does value-
+  //       initialization on arrays, which is not needed in this case.
+  auto buffer = std::unique_ptr<uint8_t[]>(new uint8_t[kPageSize]);
+  int bytes_read =
+      file.Read(0, reinterpret_cast<char*>(buffer.get()), kPageSize);
+  if (bytes_read == -1)
+    return false;
+
+  safe_browsing::PeImageReader pe_image_reader;
+  if (!pe_image_reader.Initialize(buffer.get(), bytes_read))
+    return false;
+
+  *size_of_image = pe_image_reader.GetSizeOfImage();
+  *time_date_stamp = pe_image_reader.GetCoffFileHeader()->TimeDateStamp;
+
+  return true;
 }

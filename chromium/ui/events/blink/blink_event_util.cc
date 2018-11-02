@@ -119,6 +119,26 @@ WebPointerProperties::PointerType ToWebPointerType(int tool_type) {
   return WebPointerProperties::PointerType::kUnknown;
 }
 
+WebPointerProperties::PointerType ToWebPointerType(
+    EventPointerType event_pointer_type) {
+  switch (event_pointer_type) {
+    case EventPointerType::POINTER_TYPE_UNKNOWN:
+      return WebPointerProperties::PointerType::kUnknown;
+    case EventPointerType::POINTER_TYPE_MOUSE:
+      return WebPointerProperties::PointerType::kMouse;
+    case EventPointerType::POINTER_TYPE_PEN:
+      return WebPointerProperties::PointerType::kPen;
+    case EventPointerType::POINTER_TYPE_TOUCH:
+      return WebPointerProperties::PointerType::kTouch;
+    case EventPointerType::POINTER_TYPE_ERASER:
+      return WebPointerProperties::PointerType::kEraser;
+    default:
+      NOTREACHED() << "Invalid EventPointerType = "
+                   << static_cast<int>(event_pointer_type);
+      return WebPointerProperties::PointerType::kUnknown;
+  }
+}
+
 WebPointerProperties::Button ToWebPointerButton(int android_button_state) {
   if (android_button_state & MotionEvent::BUTTON_PRIMARY)
     return WebPointerProperties::Button::kLeft;
@@ -149,10 +169,10 @@ WebTouchPoint CreateWebTouchPoint(const MotionEvent& event,
       0 /* no button changed */, event.GetToolType(pointer_index));
 
   touch.state = ToWebTouchPointState(event, pointer_index);
-  touch.position.x = event.GetX(pointer_index);
-  touch.position.y = event.GetY(pointer_index);
-  touch.screen_position.x = event.GetRawX(pointer_index);
-  touch.screen_position.y = event.GetRawY(pointer_index);
+  touch.SetPositionInWidget(event.GetX(pointer_index),
+                            event.GetY(pointer_index));
+  touch.SetPositionInScreen(event.GetRawX(pointer_index),
+                            event.GetRawY(pointer_index));
 
   // A note on touch ellipse specifications:
   //
@@ -283,6 +303,7 @@ void Coalesce(const WebMouseWheelEvent& event_to_coalesce,
   float old_wheelTicksY = event->wheel_ticks_y;
   float old_movementX = event->movement_x;
   float old_movementY = event->movement_y;
+  WebInputEvent::DispatchType old_dispatch_type = event->dispatch_type;
   *event = event_to_coalesce;
   event->delta_x += old_deltaX;
   event->delta_y += old_deltaY;
@@ -294,6 +315,8 @@ void Coalesce(const WebMouseWheelEvent& event_to_coalesce,
       GetAccelerationRatio(event->delta_x, unaccelerated_x);
   event->acceleration_ratio_y =
       GetAccelerationRatio(event->delta_y, unaccelerated_y);
+  event->dispatch_type =
+      MergeDispatchTypes(old_dispatch_type, event_to_coalesce.dispatch_type);
 }
 
 bool CanCoalesce(const WebTouchEvent& event_to_coalesce,
@@ -498,6 +521,7 @@ std::pair<WebGestureEvent, WebGestureEvent> CoalesceScrollAndPinch(
                                new_event.TimeStampSeconds());
   WebGestureEvent pinch_event;
   scroll_event.source_device = new_event.source_device;
+  scroll_event.primary_pointer_type = new_event.primary_pointer_type;
   pinch_event = scroll_event;
   pinch_event.SetType(WebInputEvent::kGesturePinchUpdate);
   pinch_event.x = new_event.GetType() == WebInputEvent::kGesturePinchUpdate
@@ -627,6 +651,10 @@ WebGestureEvent CreateWebGestureEvent(const GestureEventDetails& details,
       break;
   }
 
+  gesture.is_source_touch_event_set_non_blocking =
+      details.is_source_touch_event_set_non_blocking();
+  gesture.primary_pointer_type =
+      ToWebPointerType(details.primary_pointer_type());
   gesture.unique_touch_event_id = unique_touch_event_id;
 
   switch (details.type()) {
@@ -783,10 +811,9 @@ std::unique_ptr<blink::WebInputEvent> TranslateAndScaleWebInputEvent(
     scaled_event.reset(touch_event);
     *touch_event = static_cast<const blink::WebTouchEvent&>(event);
     for (unsigned i = 0; i < touch_event->touches_length; i++) {
-      touch_event->touches[i].position.x += delta.x();
-      touch_event->touches[i].position.y += delta.y();
-      touch_event->touches[i].position.x *= scale;
-      touch_event->touches[i].position.y *= scale;
+      touch_event->touches[i].SetPositionInWidget(
+          (touch_event->touches[i].PositionInWidget().x + delta.x()) * scale,
+          (touch_event->touches[i].PositionInWidget().y + delta.y()) * scale);
       touch_event->touches[i].radius_x *= scale;
       touch_event->touches[i].radius_y *= scale;
     }

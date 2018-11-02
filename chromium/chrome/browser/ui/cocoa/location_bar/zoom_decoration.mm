@@ -9,7 +9,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/ui/browser_dialogs.h"
+#include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
 #import "chrome/browser/ui/cocoa/l10n_util.h"
 #import "chrome/browser/ui/cocoa/location_bar/autocomplete_text_field.h"
@@ -17,7 +17,6 @@
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_view_mac.h"
 #import "chrome/browser/ui/cocoa/omnibox/omnibox_view_mac.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/zoom/zoom_controller.h"
 #include "ui/base/cocoa/cocoa_base_utils.h"
 #include "ui/base/l10n/l10n_util_mac.h"
@@ -96,8 +95,8 @@ void ZoomDecoration::ShowBubble(BOOL auto_close) {
     NSPoint anchor = [browser_window_controller bookmarkBubblePoint];
     gfx::Point anchor_point = gfx::ScreenPointFromNSPoint(
         ui::ConvertPointFromWindowToScreen(window, anchor));
-    chrome::ShowZoomBubbleViewsAtPoint(web_contents, anchor_point,
-                                       auto_close == NO /* user_action */);
+    chrome::ShowZoomBubbleViewsAtPoint(
+        web_contents, anchor_point, auto_close == NO /* user_action */, this);
     return;
   }
 

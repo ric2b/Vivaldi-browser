@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "build/build_config.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "content/common/content_export.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/public/common/drop_data.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "third_party/WebKit/public/platform/WebInputEvent.h"
@@ -126,6 +126,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
       GetOrCreateRootBrowserAccessibilityManager();
 
   // Send OS Cut/Copy/Paste actions to the focused frame.
+  virtual void ExecuteEditCommand(
+      const std::string& command,
+      const base::Optional<base::string16>& value) = 0;
   virtual void Cut() = 0;
   virtual void Copy() = 0;
   virtual void Paste() = 0;
@@ -137,6 +140,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
   // Requests the renderer to select the region between two points in the
   // currently focused frame.
   virtual void SelectRange(const gfx::Point& base, const gfx::Point& extent) {}
+
+  // Request the renderer to Move the caret to the new position.
+  virtual void MoveCaret(const gfx::Point& extent) {}
 
   virtual RenderWidgetHostInputEventRouter* GetInputEventRouter();
 
@@ -271,6 +277,9 @@ class CONTENT_EXPORT RenderWidgetHostDelegate {
 
   // Reset the auto-size value, to indicate that auto-size is no longer active.
   virtual void ResetAutoResizeSize() {}
+
+  // Returns true if there is context menu shown on page.
+  virtual bool IsShowingContextMenuOnPage() const;
 
   // TODO(ekaramad): This is only used for BrowserPlugins. Remove this once the
   // issue https://crbug.com/533069 is fixed.

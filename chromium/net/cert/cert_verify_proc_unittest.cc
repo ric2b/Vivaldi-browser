@@ -25,6 +25,7 @@
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/crl_set_storage.h"
+#include "net/cert/ev_root_ca_metadata.h"
 #include "net/cert/internal/signature_algorithm.h"
 #include "net/cert/test_root_certs.h"
 #include "net/cert/x509_certificate.h"
@@ -133,6 +134,8 @@ CertVerifyProcType GetDefaultCertVerifyProcType() {
   return CERT_VERIFY_PROC_MAC;
 #elif defined(OS_WIN)
   return CERT_VERIFY_PROC_WIN;
+#elif defined(OS_FUCHSIA)
+  return CERT_VERIFY_PROC_BUILTIN;
 #else
 // Will fail to compile.
 #endif
@@ -182,6 +185,16 @@ const std::vector<CertVerifyProcType> kAllCertVerifiers = {
     CERT_VERIFY_PROC_BUILTIN
 #endif
 };
+
+// Returns true if a test root added through ScopedTestRoot can verify
+// successfully as a target certificate with chain of length 1 on the given
+// CertVerifyProcType.
+bool ScopedTestRootCanTrustTargetCert(CertVerifyProcType verify_proc_type) {
+  return verify_proc_type == CERT_VERIFY_PROC_MAC ||
+         verify_proc_type == CERT_VERIFY_PROC_IOS ||
+         verify_proc_type == CERT_VERIFY_PROC_NSS ||
+         verify_proc_type == CERT_VERIFY_PROC_ANDROID;
+}
 
 }  // namespace
 
@@ -346,6 +359,79 @@ TEST_P(CertVerifyProcInternalTest, EVVerificationMultipleOID) {
   EXPECT_TRUE(verify_result.cert_status & CERT_STATUS_IS_EV);
 }
 
+// Target cert has an EV policy, and verifies successfully, but has a chain of
+// length 1 because the target cert was directly trusted in the trust store.
+// Should verify OK but not with STATUS_IS_EV.
+TEST_P(CertVerifyProcInternalTest, TrustedTargetCertWithEVPolicy) {
+  // The policy that "explicit-policy-chain.pem" target certificate asserts.
+  static const char kEVTestCertPolicy[] = "1.2.3.4";
+  ScopedTestEVPolicy scoped_test_ev_policy(EVRootCAMetadata::GetInstance(),
+                                           SHA1HashValue(), kEVTestCertPolicy);
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "explicit-policy-chain.pem");
+  ASSERT_TRUE(cert);
+  ScopedTestRoot scoped_test_root(cert.get());
+
+  CertVerifyResult verify_result;
+  int flags = CertVerifier::VERIFY_EV_CERT;
+  int error = Verify(cert.get(), "policy_test.example", flags,
+                     nullptr /*crl_set*/, CertificateList(), &verify_result);
+  // TODO(eroman): builtin verifier cannot verify a chain of length 1.
+  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
+    EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+  } else if (ScopedTestRootCanTrustTargetCert(verify_proc_type())) {
+    EXPECT_THAT(error, IsOk());
+    ASSERT_TRUE(verify_result.verified_cert);
+    EXPECT_TRUE(
+        verify_result.verified_cert->GetIntermediateCertificates().empty());
+  } else {
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_EV);
+}
+
+// Target cert has an EV policy, and verifies successfully with a chain of
+// length 1, and its fingerprint matches the cert fingerprint for that ev
+// policy. This should never happen in reality, but just test that things don't
+// explode if it does.
+TEST_P(CertVerifyProcInternalTest,
+       TrustedTargetCertWithEVPolicyAndEVFingerprint) {
+  // The policy that "explicit-policy-chain.pem" target certificate asserts.
+  static const char kEVTestCertPolicy[] = "1.2.3.4";
+  // This the fingerprint of the "explicit-policy-chain.pem" target certificate.
+  // See net/data/ssl/certificates/explicit-policy-chain.pem
+  static const SHA1HashValue kEVTestCertFingerprint = {
+      {0x45, 0x1f, 0x20, 0x51, 0x97, 0xe9, 0x41, 0x96, 0xc4, 0xd8,
+       0x5f, 0x83, 0xc7, 0x52, 0x6e, 0x90, 0x1f, 0x87, 0x5b, 0xd4}};
+  ScopedTestEVPolicy scoped_test_ev_policy(EVRootCAMetadata::GetInstance(),
+                                           kEVTestCertFingerprint,
+                                           kEVTestCertPolicy);
+
+  scoped_refptr<X509Certificate> cert =
+      ImportCertFromFile(GetTestCertsDirectory(), "explicit-policy-chain.pem");
+  ASSERT_TRUE(cert);
+  ScopedTestRoot scoped_test_root(cert.get());
+
+  CertVerifyResult verify_result;
+  int flags = CertVerifier::VERIFY_EV_CERT;
+  int error = Verify(cert.get(), "policy_test.example", flags,
+                     nullptr /*crl_set*/, CertificateList(), &verify_result);
+  // TODO(eroman): builtin verifier cannot verify a chain of length 1.
+  if (verify_proc_type() == CERT_VERIFY_PROC_BUILTIN) {
+    EXPECT_THAT(error, IsError(ERR_CERT_INVALID));
+  } else if (ScopedTestRootCanTrustTargetCert(verify_proc_type())) {
+    EXPECT_THAT(error, IsOk());
+    ASSERT_TRUE(verify_result.verified_cert);
+    EXPECT_TRUE(
+        verify_result.verified_cert->GetIntermediateCertificates().empty());
+  } else {
+    EXPECT_THAT(error, IsError(ERR_CERT_AUTHORITY_INVALID));
+  }
+  // An EV Root certificate should never be used as an end-entity certificate.
+  EXPECT_FALSE(verify_result.cert_status & CERT_STATUS_IS_EV);
+}
+
 // TODO(crbug.com/605457): the test expectation was incorrect on some
 // configurations, so disable the test until it is fixed (better to have
 // a bug to track a failing test than a false sense of security due to
@@ -403,7 +489,7 @@ TEST_P(CertVerifyProcInternalTest, InvalidTarget) {
   base::FilePath certs_dir =
       GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
   scoped_refptr<X509Certificate> bad_cert =
-      ImportCertFromFile(certs_dir, "extensions_data_after_sequence.pem");
+      ImportCertFromFile(certs_dir, "signature_algorithm_null.pem");
   ASSERT_TRUE(bad_cert);
 
   scoped_refptr<X509Certificate> ok_cert(
@@ -431,7 +517,7 @@ TEST_P(CertVerifyProcInternalTest, InvalidIntermediate) {
   base::FilePath certs_dir =
       GetTestNetDataDirectory().AppendASCII("parse_certificate_unittest");
   scoped_refptr<X509Certificate> bad_cert =
-      ImportCertFromFile(certs_dir, "extensions_data_after_sequence.pem");
+      ImportCertFromFile(certs_dir, "signature_algorithm_null.pem");
   ASSERT_TRUE(bad_cert);
 
   scoped_refptr<X509Certificate> ok_cert(
@@ -1226,8 +1312,7 @@ TEST_P(CertVerifyProcInternalTest, PublicKeyHashes) {
                      CertificateList(), &verify_result);
   EXPECT_THAT(error, IsOk());
 
-  // There are 2 hashes each of the 3 certificates in the verified chain.
-  EXPECT_EQ(6u, verify_result.public_key_hashes.size());
+  EXPECT_EQ(3u, verify_result.public_key_hashes.size());
 
   // Convert |public_key_hashes| to strings for ease of comparison.
   std::vector<std::string> public_key_hash_strings;
@@ -1236,16 +1321,13 @@ TEST_P(CertVerifyProcInternalTest, PublicKeyHashes) {
 
   std::vector<std::string> expected_public_key_hashes = {
       // Target
-      "sha1/fSQl8GTgpmark/9mDK9qzIIGfFE=",
-      "sha256/5I5+4ndAhwDiWd1WqfBgDkKAAIEhsq0MfAx25Hoc+dA=",
+      "sha256/jpsUnwFFTO7e+l5zQDYhutkf7uA+dCVsWfRvv0UDX40=",
 
       // Intermediate
-      "sha1/7+0Ms07hEkAc6zVPOo+uLtMEwfU=",
-      "sha256/MtnqgdSwAIgEjse7SpxnmyKoo/RTiL9CDIWwFnz4nas=",
+      "sha256/D9u0epgvPYlG9YiVp7V+IMT+xhUpB5BhsS/INjDXc4Y=",
 
       // Trust anchor
-      "sha1/dJwvO4gEVIZvretArGyBNggjlrQ=",
-      "sha256/z7x1Szes+eQOqJp6rBK3u/tQMs55FYojZHUCFiBcjuc="};
+      "sha256/VypP3VWL7OaqTJ7mIBehWYlv8khPuFHpWiearZI2YjI="};
 
   // |public_key_hashes| does not have an ordering guarantee.
   EXPECT_THAT(expected_public_key_hashes,

@@ -24,6 +24,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
@@ -38,7 +39,6 @@
 #include "google_apis/gcm/engine/gservices_settings.h"
 #include "google_apis/gcm/engine/mcs_client.h"
 #include "google_apis/gcm/monitoring/fake_gcm_stats_recorder.h"
-#include "net/base/host_mapping_rules.h"
 #include "net/cert/cert_verifier.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/multi_log_ct_verifier.h"
@@ -49,7 +49,7 @@
 #include "net/http/http_network_session.h"
 #include "net/http/http_server_properties_impl.h"
 #include "net/http/transport_security_state.h"
-#include "net/log/write_to_file_net_log_observer.h"
+#include "net/log/file_net_log_observer.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/socket/ssl_client_socket.h"
 #include "net/ssl/channel_id_service.h"
@@ -196,7 +196,11 @@ class MCSProbeAuthPreferences : public net::HttpAuthPreferences {
                                 ,
                             std::string()
 #endif
-                                ) {
+#if defined(OS_CHROMEOS)
+                                ,
+                            true
+#endif
+                            ) {
   }
   bool IsSupportedScheme(const std::string& scheme) const override {
     return scheme == std::string(net::kBasicAuthScheme);
@@ -247,7 +251,7 @@ class MCSProbe {
   // Network state.
   scoped_refptr<net::URLRequestContextGetter> url_request_context_getter_;
   net::NetLog net_log_;
-  std::unique_ptr<net::WriteToFileNetLogObserver> logger_;
+  std::unique_ptr<net::FileNetLogObserver> logger_;
   std::unique_ptr<net::HostResolver> host_resolver_;
   std::unique_ptr<net::CertVerifier> cert_verifier_;
   std::unique_ptr<net::ChannelIDService> system_channel_id_service_;
@@ -257,7 +261,6 @@ class MCSProbe {
   MCSProbeAuthPreferences http_auth_preferences_;
   std::unique_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory_;
   std::unique_ptr<net::HttpServerPropertiesImpl> http_server_properties_;
-  std::unique_ptr<net::HostMappingRules> host_mapping_rules_;
   std::unique_ptr<net::HttpNetworkSession> network_session_;
   std::unique_ptr<net::ProxyService> proxy_service_;
 
@@ -307,7 +310,7 @@ MCSProbe::MCSProbe(
 
 MCSProbe::~MCSProbe() {
   if (logger_)
-    logger_->StopObserving(nullptr);
+    logger_->StopObserving(nullptr, base::OnceClosure());
   file_thread_.Stop();
 }
 
@@ -374,20 +377,12 @@ void MCSProbe::UpdateCallback(bool success) {
 }
 
 void MCSProbe::InitializeNetworkState() {
-  base::ScopedFILE log_file;
   if (command_line_.HasSwitch(kLogFileSwitch)) {
     base::FilePath log_path = command_line_.GetSwitchValuePath(kLogFileSwitch);
-#if defined(OS_WIN)
-    log_file.reset(_wfopen(log_path.value().c_str(), L"w"));
-#elif defined(OS_POSIX)
-    log_file.reset(fopen(log_path.value().c_str(), "w"));
-#endif
-  }
-  if (log_file.get()) {
-    logger_.reset(new net::WriteToFileNetLogObserver());
-    logger_->set_capture_mode(
-        net::NetLogCaptureMode::IncludeCookiesAndCredentials());
-    logger_->StartObserving(&net_log_, std::move(log_file), nullptr, nullptr);
+    logger_ = net::FileNetLogObserver::CreateUnbounded(log_path, nullptr);
+    net::NetLogCaptureMode capture_mode =
+        net::NetLogCaptureMode::IncludeCookiesAndCredentials();
+    logger_->StartObserving(&net_log_, capture_mode);
   }
 
   host_resolver_ = net::HostResolver::CreateDefaultResolver(&net_log_);
@@ -406,29 +401,31 @@ void MCSProbe::InitializeNetworkState() {
   http_auth_handler_factory_ = net::HttpAuthHandlerRegistryFactory::Create(
       &http_auth_preferences_, host_resolver_.get());
   http_server_properties_.reset(new net::HttpServerPropertiesImpl());
-  host_mapping_rules_.reset(new net::HostMappingRules());
   proxy_service_ = net::ProxyService::CreateDirectWithNetLog(&net_log_);
 }
 
 void MCSProbe::BuildNetworkSession() {
   net::HttpNetworkSession::Params session_params;
-  session_params.host_resolver = host_resolver_.get();
-  session_params.cert_verifier = cert_verifier_.get();
-  session_params.channel_id_service = system_channel_id_service_.get();
-  session_params.transport_security_state = transport_security_state_.get();
-  session_params.cert_transparency_verifier = cert_transparency_verifier_.get();
-  session_params.ct_policy_enforcer = ct_policy_enforcer_.get();
-  session_params.ssl_config_service = new net::SSLConfigServiceDefaults();
-  session_params.http_auth_handler_factory = http_auth_handler_factory_.get();
-  session_params.http_server_properties = http_server_properties_.get();
-  session_params.host_mapping_rules = host_mapping_rules_.get();
   session_params.ignore_certificate_errors = true;
   session_params.testing_fixed_http_port = 0;
   session_params.testing_fixed_https_port = 0;
-  session_params.net_log = &net_log_;
-  session_params.proxy_service = proxy_service_.get();
 
-  network_session_.reset(new net::HttpNetworkSession(session_params));
+  net::HttpNetworkSession::Context session_context;
+  session_context.host_resolver = host_resolver_.get();
+  session_context.cert_verifier = cert_verifier_.get();
+  session_context.channel_id_service = system_channel_id_service_.get();
+  session_context.transport_security_state = transport_security_state_.get();
+  session_context.cert_transparency_verifier =
+      cert_transparency_verifier_.get();
+  session_context.ct_policy_enforcer = ct_policy_enforcer_.get();
+  session_context.ssl_config_service = new net::SSLConfigServiceDefaults();
+  session_context.http_auth_handler_factory = http_auth_handler_factory_.get();
+  session_context.http_server_properties = http_server_properties_.get();
+  session_context.net_log = &net_log_;
+  session_context.proxy_service = proxy_service_.get();
+
+  network_session_.reset(
+      new net::HttpNetworkSession(session_params, session_context));
 }
 
 void MCSProbe::ErrorCallback() {
@@ -500,6 +497,7 @@ int MCSProbeMain(int argc, char* argv[]) {
   logging::InitLogging(settings);
 
   base::MessageLoopForIO message_loop;
+  base::TaskScheduler::CreateAndStartWithDefaultParams("MCSProbe");
 
   // For check-in and creating registration ids.
   const scoped_refptr<MyTestURLRequestContextGetter> context_getter =
@@ -513,6 +511,8 @@ int MCSProbeMain(int argc, char* argv[]) {
 
   base::RunLoop run_loop;
   run_loop.Run();
+
+  base::TaskScheduler::GetInstance()->Shutdown();
 
   return 0;
 }

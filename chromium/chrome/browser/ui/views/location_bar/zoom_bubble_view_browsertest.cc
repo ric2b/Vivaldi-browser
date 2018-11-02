@@ -8,6 +8,7 @@
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller_test.h"
+#include "chrome/browser/ui/test/test_browser_dialog.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -15,7 +16,7 @@
 typedef InProcessBrowserTest ZoomBubbleBrowserTest;
 
 #if defined(USE_ASH)
-#include "ash/test/immersive_fullscreen_controller_test_api.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller_ash.h"
 #endif
 
@@ -139,3 +140,41 @@ IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, ImmersiveFullscreen) {
   }
 }
 #endif  // OS_CHROMEOS
+
+// Tests that trying to open zoom bubble with stale WebContents is safe.
+IN_PROC_BROWSER_TEST_F(ZoomBubbleBrowserTest, NoWebContentsIsSafe) {
+  BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
+  content::WebContents* web_contents = browser_view->GetActiveWebContents();
+
+  ZoomBubbleView::ShowBubble(web_contents, gfx::Point(),
+                             ZoomBubbleView::AUTOMATIC);
+
+  // Close the current tab and try opening the zoom bubble with stale
+  // |web_contents|.
+  chrome::CloseTab(browser());
+  ZoomBubbleView::ShowBubble(web_contents, gfx::Point(),
+                             ZoomBubbleView::AUTOMATIC);
+}
+
+class ZoomBubbleDialogTest : public DialogBrowserTest {
+ public:
+  ZoomBubbleDialogTest() {}
+
+  // DialogBrowserTest:
+  void ShowDialog(const std::string& name) override {
+    BrowserView* browser_view = static_cast<BrowserView*>(browser()->window());
+    content::WebContents* web_contents = browser_view->GetActiveWebContents();
+    ZoomBubbleView::ShowBubble(web_contents, gfx::Point(),
+                               ZoomBubbleView::USER_GESTURE);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(ZoomBubbleDialogTest);
+};
+
+// Test that calls ShowDialog("default"). Interactive when run via
+// browser_tests --gtest_filter=BrowserDialogTest.Invoke --interactive
+// --dialog=ZoomBubbleDialogTest.InvokeDialog_default
+IN_PROC_BROWSER_TEST_F(ZoomBubbleDialogTest, InvokeDialog_default) {
+  RunDialog();
+}

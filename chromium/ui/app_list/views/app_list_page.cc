@@ -10,40 +10,47 @@ namespace {
 
 // The default z height for the search box.
 const int kDefaultSearchBoxZHeight = 2;
-}
+}  // namespace
 
 namespace app_list {
 
-AppListPage::AppListPage() : contents_view_(nullptr) {
-}
+AppListPage::AppListPage() : contents_view_(nullptr) {}
 
-AppListPage::~AppListPage() {
-}
+AppListPage::~AppListPage() {}
 
-void AppListPage::OnShown() {
-}
+void AppListPage::OnShown() {}
 
-void AppListPage::OnWillBeShown() {
-}
+void AppListPage::OnWillBeShown() {}
 
-void AppListPage::OnHidden() {
-}
+void AppListPage::OnHidden() {}
 
-void AppListPage::OnWillBeHidden() {
-}
+void AppListPage::OnWillBeHidden() {}
 
 void AppListPage::OnAnimationUpdated(double progress,
                                      AppListModel::State from_state,
-                                     AppListModel::State to_state) {
-}
+                                     AppListModel::State to_state) {}
 
 gfx::Rect AppListPage::GetSearchBoxBounds() const {
   DCHECK(contents_view_);
   return contents_view_->GetDefaultSearchBoxBounds();
 }
 
+gfx::Rect AppListPage::GetSearchBoxBoundsForState(
+    AppListModel::State state) const {
+  return GetSearchBoxBounds();
+}
+
+gfx::Rect AppListPage::GetPageBoundsDuringDragging(
+    AppListModel::State state) const {
+  return GetPageBoundsForState(state);
+}
+
 int AppListPage::GetSearchBoxZHeight() const {
   return kDefaultSearchBoxZHeight;
+}
+
+views::View* AppListPage::GetSelectedView() const {
+  return nullptr;
 }
 
 gfx::Rect AppListPage::GetAboveContentsOffscreenBounds(
@@ -69,6 +76,11 @@ gfx::Rect AppListPage::GetFullContentsBounds() const {
 gfx::Rect AppListPage::GetDefaultContentsBounds() const {
   DCHECK(contents_view_);
   return contents_view_->GetDefaultContentsBounds();
+}
+
+bool AppListPage::IsCustomLauncherPageActive() const {
+  return contents_view_->IsStateActive(
+      AppListModel::STATE_CUSTOM_LAUNCHER_PAGE);
 }
 
 }  // namespace app_list

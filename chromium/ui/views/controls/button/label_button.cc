@@ -25,7 +25,7 @@
 #include "ui/views/animation/square_ink_drop_ripple.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/label_button_border.h"
-#include "ui/views/layout/layout_constants.h"
+#include "ui/views/controls/button/label_button_label.h"
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
@@ -42,7 +42,7 @@ LabelButton::LabelButton(ButtonListener* listener,
                          int button_context)
     : CustomButton(listener),
       image_(new ImageView()),
-      label_(new Label(text, button_context, style::STYLE_PRIMARY)),
+      label_(new LabelButtonLabel(text, button_context)),
       ink_drop_container_(new InkDropContainerView()),
       cached_normal_font_list_(
           style::GetFont(button_context, style::STYLE_PRIMARY)),
@@ -178,10 +178,6 @@ void LabelButton::SetImageLabelSpacing(int spacing) {
   image_label_spacing_ = spacing;
   ResetCachedPreferredSize();
   InvalidateLayout();
-}
-
-void LabelButton::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
-  focus_painter_ = std::move(focus_painter);
 }
 
 gfx::Size LabelButton::CalculatePreferredSize() const {
@@ -330,17 +326,16 @@ void LabelButton::SetBorder(std::unique_ptr<Border> border) {
   ResetCachedPreferredSize();
 }
 
+Label* LabelButton::label() const {
+  return label_;
+}
+
 gfx::Rect LabelButton::GetChildAreaBounds() {
   return GetLocalBounds();
 }
 
 bool LabelButton::ShouldUseFloodFillInkDrop() const {
   return !GetText().empty();
-}
-
-void LabelButton::OnPaint(gfx::Canvas* canvas) {
-  View::OnPaint(canvas);
-  Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
 }
 
 void LabelButton::OnFocus() {
@@ -450,13 +445,13 @@ void LabelButton::ResetColorsFromNativeTheme() {
     colors[STATE_NORMAL] = colors[STATE_HOVERED] = colors[STATE_PRESSED] =
         SK_ColorWHITE;
     label_->SetBackgroundColor(SK_ColorBLACK);
-    label_->set_background(Background::CreateSolidBackground(SK_ColorBLACK));
+    label_->SetBackground(CreateSolidBackground(SK_ColorBLACK));
     label_->SetAutoColorReadabilityEnabled(true);
     label_->SetShadows(gfx::ShadowValues());
   } else {
     if (style() == STYLE_BUTTON)
       PlatformStyle::ApplyLabelButtonTextStyle(label_, &colors);
-    label_->set_background(nullptr);
+    label_->SetBackground(nullptr);
     label_->SetAutoColorReadabilityEnabled(false);
   }
 

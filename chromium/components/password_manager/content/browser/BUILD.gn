@@ -14,8 +14,6 @@ static_library("browser") {
     "credential_manager_impl.h",
     "password_manager_internals_service_factory.cc",
     "password_manager_internals_service_factory.h",
-    "visible_password_observer.cc",
-    "visible_password_observer.h",
   ]
 
   public_deps = [
@@ -24,7 +22,6 @@ static_library("browser") {
     "//components/autofill/content/common:mojo_interfaces",
     "//components/autofill/core/common",
     "//components/keyed_service/content",
-    "//components/password_manager/content/common:mojo_interfaces",
     "//components/password_manager/core/browser",
     "//components/password_manager/core/common",
     "//components/prefs",

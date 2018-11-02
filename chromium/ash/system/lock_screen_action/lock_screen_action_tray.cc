@@ -12,7 +12,9 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/tray_action/tray_action.h"
+#include "base/command_line.h"
 #include "base/logging.h"
+#include "chromeos/chromeos_switches.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -23,45 +25,38 @@ namespace ash {
 
 namespace {
 
-// The preferred size for the tray item view.
-const int kItemViewPreferredSize = 32;
+bool IsLockScreenActionTrayEnabled() {
+  // The lock screen action entry point will be move from system tray to the
+  // lock screen UI - for current incarnation of lock screen UI, this has
+  // already been done, so the tray action button is not needed in this case.
+  // For views base lock screen (used when show-md-login is set), this is not
+  // the case.
+  // TODO(tbarzic): Replace LockScreenActionTray item with a button in the lock
+  //     screen UI for views base lock screen implementation.
+  //     http://crbug.com/746596
+  return base::CommandLine::ForCurrentProcess()->HasSwitch(
+      chromeos::switches::kShowMdLogin);
+}
 
 }  // namespace
-
-// View for the tray item for the lock screen note creation action.
-class LockScreenActionTray::NewNoteActionView : public views::View {
- public:
-  NewNoteActionView() {
-    SetLayoutManager(new views::FillLayout);
-    icon_ = new views::ImageView();
-    icon_->SetImage(CreateVectorIcon(kPaletteActionCreateNoteIcon,
-                                     kTrayIconSize, kShelfIconColor));
-    icon_->SetTooltipText(
-        l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_CREATE_NOTE_ACTION));
-    AddChildView(icon_);
-  }
-
-  ~NewNoteActionView() override {}
-
-  gfx::Size CalculatePreferredSize() const override {
-    return gfx::Size(kItemViewPreferredSize, kItemViewPreferredSize);
-  }
-
-  const gfx::ImageSkia& GetImage() const { return icon_->GetImage(); }
-
- private:
-  views::ImageView* icon_;
-
-  DISALLOW_COPY_AND_ASSIGN(NewNoteActionView);
-};
 
 LockScreenActionTray::LockScreenActionTray(Shelf* shelf)
     : TrayBackgroundView(shelf),
       session_observer_(this),
       tray_action_observer_(this) {
-  SetInkDropMode(InkDropMode::ON);
   SetVisible(false);
-  new_note_action_view_ = new NewNoteActionView();
+
+  if (!IsLockScreenActionTrayEnabled())
+    return;
+
+  SetInkDropMode(InkDropMode::ON);
+  new_note_action_view_ = new views::ImageView();
+  new_note_action_view_->SetImage(
+      CreateVectorIcon(kTrayActionNewLockScreenNoteIcon, kShelfIconColor));
+  new_note_action_view_->SetTooltipText(
+      l10n_util::GetStringUTF16(IDS_ASH_STYLUS_TOOLS_CREATE_NOTE_ACTION));
+  new_note_action_view_->SetPreferredSize(
+      gfx::Size(kTrayItemSize, kTrayItemSize));
   tray_container()->AddChildView(new_note_action_view_);
 }
 
@@ -69,6 +64,9 @@ LockScreenActionTray::~LockScreenActionTray() {}
 
 void LockScreenActionTray::Initialize() {
   TrayBackgroundView::Initialize();
+
+  if (!IsLockScreenActionTrayEnabled())
+    return;
 
   session_observer_.Add(Shell::Get()->session_controller());
 
@@ -108,7 +106,8 @@ void LockScreenActionTray::OnLockScreenNoteStateChanged(
 }
 
 bool LockScreenActionTray::IsStateVisible() const {
-  return Shell::Get()->session_controller()->IsScreenLocked() &&
+  return IsLockScreenActionTrayEnabled() &&
+         Shell::Get()->session_controller()->IsScreenLocked() &&
          (new_note_state_ == mojom::TrayActionState::kAvailable ||
           new_note_state_ == mojom::TrayActionState::kLaunching);
 }

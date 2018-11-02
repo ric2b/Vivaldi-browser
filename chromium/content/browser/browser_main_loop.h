@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "base/files/file_path.h"
+#include "base/gtest_prod_util.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/timer/timer.h"
@@ -28,6 +29,7 @@ class HighResolutionTimerManager;
 class MemoryPressureMonitor;
 class MessageLoop;
 class PowerMonitor;
+class SingleThreadTaskRunner;
 class SystemMonitor;
 namespace trace_event {
 class TraceEventSystemStatsMonitor;
@@ -36,6 +38,10 @@ class TraceEventSystemStatsMonitor;
 
 namespace discardable_memory {
 class DiscardableSharedMemoryManager;
+}
+
+namespace gpu {
+class GpuChannelEstablishFactory;
 }
 
 namespace media {
@@ -75,6 +81,11 @@ namespace gfx {
 class ClientNativePixmapFactory;
 }  // namespace gfx
 #endif
+
+namespace viz {
+class FrameSinkManagerImpl;
+class HostFrameSinkManager;
+}
 
 namespace content {
 class BrowserMainParts;
@@ -151,7 +162,6 @@ class CONTENT_EXPORT BrowserMainLoop {
     return discardable_shared_memory_manager_.get();
   }
   midi::MidiService* midi_service() const { return midi_service_.get(); }
-  base::Thread* indexed_db_thread() const { return indexed_db_thread_.get(); }
 
   bool is_tracing_startup_for_duration() const {
     return is_tracing_startup_for_duration_;
@@ -160,6 +170,30 @@ class CONTENT_EXPORT BrowserMainLoop {
   const base::FilePath& startup_trace_file() const {
     return startup_trace_file_;
   }
+
+  // Returns the task runner for tasks that that are critical to producing a new
+  // CompositorFrame on resize. On Mac this will be the task runner provided by
+  // WindowResizeHelperMac, on other platforms it will just be the thread task
+  // runner.
+  scoped_refptr<base::SingleThreadTaskRunner> GetResizeTaskRunner();
+
+  gpu::GpuChannelEstablishFactory* gpu_channel_establish_factory() const;
+
+#if defined(OS_ANDROID)
+  void SynchronouslyFlushStartupTasks();
+#endif  // OS_ANDROID
+
+#if !defined(OS_ANDROID)
+  // TODO(fsamuel): We should find an object to own HostFrameSinkManager on all
+  // platforms including Android. See http://crbug.com/732507.
+  viz::HostFrameSinkManager* host_frame_sink_manager() const {
+    return host_frame_sink_manager_.get();
+  }
+
+  // TODO(crbug.com/657959): This will be removed once there are no users, as
+  // SurfaceManager is being moved out of process.
+  viz::FrameSinkManagerImpl* GetFrameSinkManager() const;
+#endif
 
   void StopStartupTracingTimer();
 
@@ -170,7 +204,7 @@ class CONTENT_EXPORT BrowserMainLoop {
 #endif
 
  private:
-  class MemoryObserver;
+  FRIEND_TEST_ALL_PREFIXES(BrowserMainLoopTest, CreateThreadsInSingleProcess);
 
   void InitializeMainThread();
 
@@ -246,8 +280,6 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<ScreenOrientationDelegate> screen_orientation_delegate_;
 #endif
 
-  std::unique_ptr<MemoryObserver> memory_observer_;
-
   // Members initialized in |InitStartupTracingForDuration()| ------------------
   base::FilePath startup_trace_file_;
 
@@ -275,18 +307,23 @@ class CONTENT_EXPORT BrowserMainLoop {
 #endif
 
   // Members initialized in |CreateThreads()| ----------------------------------
-  // Note: some |*_thread_| members below may never be initialized when
-  // redirection to TaskScheduler is enabled. (ref.
-  // ContentBrowserClient::RedirectNonUINonIOBrowserThreadsToTaskScheduler()).
-  std::unique_ptr<BrowserProcessSubThread> db_thread_;
-  std::unique_ptr<BrowserProcessSubThread> file_user_blocking_thread_;
-  std::unique_ptr<BrowserProcessSubThread> file_thread_;
-  std::unique_ptr<BrowserProcessSubThread> process_launcher_thread_;
-  std::unique_ptr<BrowserProcessSubThread> cache_thread_;
+  // Only the IO thread is a real thread by default, other BrowserThreads are
+  // redirected to TaskScheduler under the hood.
   std::unique_ptr<BrowserProcessSubThread> io_thread_;
+#if defined(OS_ANDROID)
+  // On Android, the PROCESS_LAUNCHER thread is handled by Java,
+  // |process_launcher_thread_| is merely a proxy to the real message loop.
+  std::unique_ptr<BrowserProcessSubThread> process_launcher_thread_;
+#elif defined(OS_WIN)
+  // TaskScheduler doesn't support async I/O on Windows as CACHE thread is
+  // the only user and this use case is going away in
+  // https://codereview.chromium.org/2216583003/.
+  // TODO(gavinp): Remove this (and thus enable redirection of the CACHE thread
+  // on Windows) once that CL lands.
+  std::unique_ptr<BrowserProcessSubThread> cache_thread_;
+#endif
 
   // Members initialized in |BrowserThreadsStarted()| --------------------------
-  std::unique_ptr<base::Thread> indexed_db_thread_;
   std::unique_ptr<ServiceManagerContext> service_manager_context_;
   std::unique_ptr<mojo::edk::ScopedIPCSupport> mojo_ipc_support_;
 
@@ -298,6 +335,9 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<media::AudioSystem> audio_system_;
 
   std::unique_ptr<midi::MidiService> midi_service_;
+
+  // Must be deleted on the IO thread.
+  std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;
 
 #if defined(OS_WIN)
   std::unique_ptr<media::SystemMessageWindowWin> system_message_window_;
@@ -313,12 +353,20 @@ class CONTENT_EXPORT BrowserMainLoop {
   std::unique_ptr<LoaderDelegateImpl> loader_delegate_;
   std::unique_ptr<ResourceDispatcherHostImpl> resource_dispatcher_host_;
   std::unique_ptr<MediaStreamManager> media_stream_manager_;
-  std::unique_ptr<SpeechRecognitionManagerImpl> speech_recognition_manager_;
   std::unique_ptr<discardable_memory::DiscardableSharedMemoryManager>
       discardable_shared_memory_manager_;
   scoped_refptr<SaveFileManager> save_file_manager_;
   std::unique_ptr<memory_instrumentation::CoordinatorImpl>
       memory_instrumentation_coordinator_;
+#if !defined(OS_ANDROID)
+  std::unique_ptr<viz::HostFrameSinkManager> host_frame_sink_manager_;
+  // This is owned here so that SurfaceManager will be accessible in process
+  // when display is in the same process. Other than using SurfaceManager,
+  // access to |in_process_frame_sink_manager_| should happen via
+  // |host_frame_sink_manager_| instead which uses Mojo. See
+  // http://crbug.com/657959.
+  std::unique_ptr<viz::FrameSinkManagerImpl> frame_sink_manager_impl_;
+#endif
 
   // DO NOT add members here. Add them to the right categories above.
 

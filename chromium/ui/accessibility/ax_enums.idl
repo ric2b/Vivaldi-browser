@@ -216,7 +216,6 @@
     busy,
     collapsed,
     default,
-    disabled,
     editable,
     expanded,
     focusable,
@@ -229,9 +228,7 @@
     multiline,
     multiselectable,
     offscreen,
-    pressed,
     protected,
-    read_only,
     required,
     richly_editable,
     selectable,
@@ -246,6 +243,8 @@
   // object, e.g. "FOCUS".
   enum AXAction {
     blur,
+
+    custom_action,
 
     // Decrement a slider or range control by one step value.
     decrement,
@@ -348,7 +347,6 @@
     placeholder,
     role,
     role_description,
-    shortcut,
     url,
     value
   };
@@ -406,6 +404,7 @@
 
     // Relationships between this element and other elements.
     activedescendant_id,
+    details_id,
     errormessage_id,
     in_page_link_target_id,
     member_of_id,
@@ -414,6 +413,11 @@
 
     // Identifies a child tree which this node hosts.
     child_tree_id,
+
+    // Input restriction, if any, such as readonly or disabled.
+    // Of type AXRestriction, see below.
+    // No value or enabled control or other object that is not disabled.
+    restriction,
 
     // Position or Number of items in current set of listitems or treeitems
     set_size,
@@ -467,9 +471,6 @@
     // If a dialog box is marked as explicitly modal
     modal,
 
-    // ARIA readonly flag.
-    aria_readonly,
-
     // If this is set, all of the other fields in this struct should
     // be ignored and only the locations should change.
     update_location_only,
@@ -488,7 +489,6 @@
     // Relationships between this element and other elements.
     controls_ids,
     describedby_ids,
-    details_ids,
     flowto_ids,
     labelledby_ids,
     radio_group_ids,
@@ -531,9 +531,23 @@
     // For inline text. These int lists must be the same size; they represent
     // the start and end character offset of each word within this text.
     word_starts,
-    word_ends
+    word_ends,
+
+    // Used for an UI element to define custom actions for it. For example, a
+    // list UI will allow a user to reorder items in the list by dragging the
+    // items. Developer can expose those actions as custom actions. Currently
+    // custom actions are used only in Android window.
+    custom_action_ids
   };
 
+  [cpp_enum_prefix_override="ax_attr"] enum AXStringListAttribute {
+    // Descriptions for custom actions. This must be aligned with
+    // custom_action_ids.
+    custom_action_descriptions
+  };
+
+  // TODO(dmazzoni, nektar): make this list not grow exponentially as new
+  // MarkerTypes are added
   enum AXMarkerType {
     // Assignments are ignored by the parser, but are kept here for clarity.
     spelling = 1,
@@ -542,7 +556,17 @@
     text_match = 4,
     spelling_text_match = 5,
     grammar_text_match = 6,
-    spelling_grammar_text_match = 7
+    spelling_grammar_text_match = 7,
+    // DocumentMarker::MarkerType::Composition = 8 is ignored for accessibility
+    // purposes
+    active_suggestion = 16,
+    spelling_active_suggestion = 17,
+    grammar_active_suggestion = 18,
+    spelling_grammar_active_suggestion = 19,
+    text_match_active_suggestion = 20,
+    spelling_text_match_active_suggestion = 21,
+    grammar_text_match_active_suggestion = 22,
+    spelling_grammar_text_match_active_suggestion = 23
   };
 
   enum AXTextDirection {
@@ -589,6 +613,15 @@
     spelling,
     grammar,
     other
+  };
+
+  // Input restriction associated with an object.
+  // No value for a control means it is enabled.
+  // Use read_only for a textbox that allows focus/selection but not input.
+  // Use disabled for a control or group of controls that disallows input.
+  enum AXRestriction {
+    read_only,
+    disabled
   };
 
   enum AXCheckedState {

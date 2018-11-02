@@ -20,9 +20,6 @@
 namespace security_interstitials {
 namespace {
 
-// URL for the Help Center
-const char kLearnMore[] = "https://support.google.com/chrome/";
-
 // For malware interstitial pages, we link the problematic URL to Google's
 // diagnostic page.
 #if defined(GOOGLE_CHROME_BUILD)
@@ -70,9 +67,10 @@ SafeBrowsingLoudErrorUI::SafeBrowsingLoudErrorUI(
   controller->metrics_helper()->RecordUserDecision(MetricsHelper::SHOW);
   controller->metrics_helper()->RecordUserInteraction(
       MetricsHelper::TOTAL_VISITS);
-  if (is_proceed_anyway_disabled())
+  if (is_proceed_anyway_disabled()) {
     controller->metrics_helper()->RecordUserDecision(
         security_interstitials::MetricsHelper::PROCEEDING_DISABLED);
+  }
 }
 
 SafeBrowsingLoudErrorUI::~SafeBrowsingLoudErrorUI() {
@@ -165,12 +163,13 @@ void SafeBrowsingLoudErrorUI::HandleCommand(
       // User pressed "Learn more".
       controller()->metrics_helper()->RecordUserInteraction(
           security_interstitials::MetricsHelper::SHOW_LEARN_MORE);
-      GURL learn_more_url(kLearnMore);
+
+      GURL learn_more_url = controller()->GetBaseHelpCenterUrl();
       learn_more_url = net::AppendQueryParameter(
           learn_more_url, "p", get_help_center_article_link());
       learn_more_url =
           google_util::AppendGoogleLocaleParam(learn_more_url, app_locale());
-      controller()->OpenUrlInCurrentTab(learn_more_url);
+      controller()->OpenURL(should_open_links_in_new_tab(), learn_more_url);
       break;
     }
     case CMD_RELOAD: {
@@ -181,11 +180,13 @@ void SafeBrowsingLoudErrorUI::HandleCommand(
     }
     case CMD_OPEN_REPORTING_PRIVACY: {
       // User pressed on the SB Extended Reporting "privacy policy" link.
-      controller()->OpenExtendedReportingPrivacyPolicy();
+      controller()->OpenExtendedReportingPrivacyPolicy(
+          should_open_links_in_new_tab());
       break;
     }
     case CMD_OPEN_WHITEPAPER: {
-      controller()->OpenExtendedReportingWhitepaper();
+      controller()->OpenExtendedReportingWhitepaper(
+          should_open_links_in_new_tab());
       break;
     }
     case CMD_OPEN_DIAGNOSTIC: {
@@ -197,7 +198,7 @@ void SafeBrowsingLoudErrorUI::HandleCommand(
       GURL diagnostic_url(diagnostic);
       diagnostic_url =
           google_util::AppendGoogleLocaleParam(diagnostic_url, app_locale());
-      controller()->OpenUrlInCurrentTab(diagnostic_url);
+      controller()->OpenURL(should_open_links_in_new_tab(), diagnostic_url);
       break;
     }
     case CMD_REPORT_PHISHING_ERROR: {
@@ -206,7 +207,7 @@ void SafeBrowsingLoudErrorUI::HandleCommand(
       GURL phishing_error_url(kReportPhishingErrorUrl);
       phishing_error_url = google_util::AppendGoogleLocaleParam(
           phishing_error_url, app_locale());
-      controller()->OpenUrlInCurrentTab(phishing_error_url);
+      controller()->OpenURL(should_open_links_in_new_tab(), phishing_error_url);
       break;
     }
     case CMD_OPEN_DATE_SETTINGS:
@@ -288,8 +289,9 @@ void SafeBrowsingLoudErrorUI::PopulateExtendedReportingOption(
   bool can_show_extended_reporting_option = CanShowExtendedReportingOption();
   load_time_data->SetBoolean(security_interstitials::kDisplayCheckBox,
                              can_show_extended_reporting_option);
-  if (!can_show_extended_reporting_option)
+  if (!can_show_extended_reporting_option) {
     return;
+  }
 
   const std::string privacy_link = base::StringPrintf(
       security_interstitials::kPrivacyLinkHtml,

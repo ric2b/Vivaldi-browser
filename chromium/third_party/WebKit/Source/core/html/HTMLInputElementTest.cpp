@@ -8,7 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/KeyboardEventInit.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLBodyElement.h"
 #include "core/html/HTMLFormElement.h"
@@ -20,7 +20,7 @@
 
 namespace blink {
 
-class HTMLInputElementTest : public testing::Test {
+class HTMLInputElementTest : public ::testing::Test {
  protected:
   Document& GetDocument() { return page_holder_->GetDocument(); }
   HTMLInputElement& TestElement() {

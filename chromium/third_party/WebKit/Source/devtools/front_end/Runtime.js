@@ -285,40 +285,6 @@ var Runtime = class {
   }
 
   /**
-   * @param {string} appName
-   */
-  static startSharedWorker(appName) {
-    var startPromise = Runtime.startApplication(appName);
-
-    /**
-     * @param {!MessageEvent} event
-     */
-    self.onconnect = function(event) {
-      var newPort = /** @type {!MessagePort} */ (event.ports[0]);
-      startPromise.then(sendWorkerReadyAndContinue);
-
-      function sendWorkerReadyAndContinue() {
-        newPort.postMessage('workerReady');
-        if (Runtime._sharedWorkerNewPortCallback)
-          Runtime._sharedWorkerNewPortCallback.call(null, newPort);
-        else
-          Runtime._sharedWorkerConnectedPorts.push(newPort);
-      }
-    };
-  }
-
-  /**
-   * @param {function(!MessagePort)} callback
-   */
-  static setSharedWorkerNewPortCallback(callback) {
-    Runtime._sharedWorkerNewPortCallback = callback;
-    while (Runtime._sharedWorkerConnectedPorts.length) {
-      var port = Runtime._sharedWorkerConnectedPorts.shift();
-      callback.call(null, port);
-    }
-  }
-
-  /**
    * @param {string} name
    * @return {?string}
    */
@@ -593,12 +559,6 @@ Runtime.cachedResources = {
 };
 
 
-/** @type {?function(!MessagePort)} */
-Runtime._sharedWorkerNewPortCallback = null;
-/** @type {!Array<!MessagePort>} */
-Runtime._sharedWorkerConnectedPorts = [];
-
-
 Runtime._console = console;
 Runtime._originalAssert = console.assert;
 
@@ -777,6 +737,7 @@ Runtime.Module = class {
       'ui': 'UI',
       'object_ui': 'ObjectUI',
       'perf_ui': 'PerfUI',
+      'har_importer': 'HARImporter',
     };
     var namespace = specialCases[this._name] || this._name.split('_').map(a => a.substring(0, 1).toUpperCase() + a.substring(1)).join('');
     self[namespace] = self[namespace] || {};

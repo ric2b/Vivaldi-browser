@@ -2,6 +2,11 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//extensions/features/features.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
 source_set("usb") {
   sources = [
     "usb_api.cc",
@@ -23,6 +28,8 @@ source_set("usb") {
     "//content/public/browser",
     "//content/public/common",
     "//device/usb",
+    "//device/usb/public/cpp",
+    "//device/usb/public/interfaces",
     "//extensions/common/api",
   ]
 

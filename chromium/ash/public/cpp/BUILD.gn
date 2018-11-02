@@ -5,23 +5,43 @@
 # C++ headers and sources that can be used outside ash.
 component("ash_public_cpp") {
   sources = [
+    "app_types.h",
     "ash_pref_names.cc",
     "ash_pref_names.h",
     "ash_public_export.h",
     "ash_typography.cc",
     "ash_typography.h",
     "config.h",
+    "immersive/immersive_context.cc",
+    "immersive/immersive_context.h",
+    "immersive/immersive_focus_watcher.h",
+    "immersive/immersive_fullscreen_controller.cc",
+    "immersive/immersive_fullscreen_controller.h",
+    "immersive/immersive_fullscreen_controller_delegate.h",
+    "immersive/immersive_gesture_handler.h",
+    "immersive/immersive_handler_factory.cc",
+    "immersive/immersive_handler_factory.h",
+    "immersive/immersive_revealed_lock.cc",
+    "immersive/immersive_revealed_lock.h",
     "mus_property_mirror_ash.cc",
     "mus_property_mirror_ash.h",
+    "remote_shelf_item_delegate.cc",
+    "remote_shelf_item_delegate.h",
+    "scale_utility.cc",
+    "scale_utility.h",
     "session_types.h",
     "shelf_item.cc",
     "shelf_item.h",
     "shelf_item_delegate.cc",
     "shelf_item_delegate.h",
+    "shelf_model.cc",
+    "shelf_model.h",
+    "shelf_model_observer.h",
     "shelf_types.cc",
     "shelf_types.h",
     "shell_window_ids.cc",
     "shell_window_ids.h",
+    "voice_interaction_state.h",
     "window_pin_type.cc",
     "window_pin_type.h",
     "window_properties.cc",
@@ -53,6 +73,7 @@ component("ash_public_cpp") {
 source_set("unit_tests") {
   testonly = true
   sources = [
+    "shelf_model_unittest.cc",
     "shelf_struct_traits_unittest.cc",
   ]
 

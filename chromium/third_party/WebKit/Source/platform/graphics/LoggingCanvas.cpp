@@ -249,8 +249,6 @@ String ColorTypeName(SkColorType color_type) {
       return "None";
     case kAlpha_8_SkColorType:
       return "A8";
-    case kIndex_8_SkColorType:
-      return "Index8";
     case kRGB_565_SkColorType:
       return "RGB565";
     case kARGB_4444_SkColorType:
@@ -580,7 +578,7 @@ JSONObject* AutoLogger::LogItemWithParams(const String& name) {
   JSONObject* item = LogItem(name);
   std::unique_ptr<JSONObject> params = JSONObject::Create();
   item->SetObject("params", std::move(params));
-  return item->GetObject("params");
+  return item->GetJSONObject("params");
 }
 
 LoggingCanvas::LoggingCanvas(int width, int height)
@@ -910,7 +908,7 @@ std::unique_ptr<JSONArray> LoggingCanvas::Log() {
 String RecordAsDebugString(const PaintRecord* record, const SkRect& bounds) {
   const SkIRect enclosing_bounds = bounds.roundOut();
   LoggingCanvas canvas(enclosing_bounds.width(), enclosing_bounds.height());
-  record->playback(&canvas);
+  record->Playback(&canvas);
   std::unique_ptr<JSONObject> record_as_json = JSONObject::Create();
   record_as_json->SetObject("cullRect", ObjectForSkRect(bounds));
   record_as_json->SetArray("operations", canvas.Log());

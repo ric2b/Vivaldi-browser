@@ -7,6 +7,17 @@
  * 'settings-display' is the settings subpage for display settings.
  */
 
+/**
+ * The types of Night Light automatic schedule. The values of the enum values
+ * are synced with the pref "prefs.ash.night_light.schedule_type".
+ * @enum {number}
+ */
+var NightLightScheduleType = {
+  NEVER: 0,
+  SUNSET_TO_SUNRISE: 1,
+  CUSTOM: 2,
+};
+
 cr.define('settings.display', function() {
   var systemDisplayApi = /** @type {!SystemDisplay} */ (chrome.system.display);
 
@@ -93,7 +104,39 @@ Polymer({
       type: Boolean,
       value: false,
     },
+
+    /** @private */
+    scheduleTypesList_: {
+      type: Array,
+      value: function() {
+        return [
+          {
+            name: loadTimeData.getString('displayNightLightScheduleNever'),
+            value: NightLightScheduleType.NEVER
+          },
+          {
+            name: loadTimeData.getString(
+                'displayNightLightScheduleSunsetToSunRise'),
+            value: NightLightScheduleType.SUNSET_TO_SUNRISE
+          },
+          {
+            name: loadTimeData.getString('displayNightLightScheduleCustom'),
+            value: NightLightScheduleType.CUSTOM
+          }
+        ];
+      },
+    },
+
+    /** @private */
+    shouldOpenCustomScheduleCollapse_: {
+      type: Boolean,
+      value: false,
+    },
   },
+
+  observers: [
+    'onScheduleTypeChanged_(prefs.ash.night_light.schedule_type.*)',
+  ],
 
   /** @private {number} Selected mode index received from chrome. */
   currentSelectedModeIndex_: -1,
@@ -203,8 +246,8 @@ Polymer({
       this.currentSelectedModeIndex_ = 0;
     } else {
       this.modeValues_ = Array.from(Array(numModes).keys());
-      this.currentSelectedModeIndex_ = this.getSelectedModeIndex_(
-        selectedDisplay);
+      this.currentSelectedModeIndex_ =
+          this.getSelectedModeIndex_(selectedDisplay);
     }
     // Set |selectedDisplay| first since only the resolution slider depends
     // on |selectedModePref_|.
@@ -346,7 +389,7 @@ Polymer({
           this.selectedDisplay.bounds.height.toString());
     }
     var mode = this.selectedDisplay.modes[
-        /** @type {number} */(this.selectedModePref_.value)];
+        /** @type {number} */ (this.selectedModePref_.value)];
     assert(mode);
     var best =
         this.selectedDisplay.isInternal ? mode.uiScale == 1.0 : mode.isNative;
@@ -431,7 +474,7 @@ Polymer({
     }
     /** @type {!chrome.system.display.DisplayProperties} */ var properties = {
       displayMode: this.selectedDisplay.modes[
-          /** @type {number} */(this.selectedModePref_.value)]
+          /** @type {number} */ (this.selectedModePref_.value)]
     };
     settings.display.systemDisplayApi.setDisplayProperties(
         this.selectedDisplay.id, properties,
@@ -531,5 +574,12 @@ Polymer({
       console.error(
           'setDisplayProperties Error: ' + chrome.runtime.lastError.message);
     }
+  },
+
+  /** @private */
+  onScheduleTypeChanged_: function() {
+    this.shouldOpenCustomScheduleCollapse_ =
+        this.getPref('ash.night_light.schedule_type').value ==
+        NightLightScheduleType.CUSTOM;
   },
 });

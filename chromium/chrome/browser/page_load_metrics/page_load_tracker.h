@@ -15,6 +15,7 @@
 #include "chrome/browser/page_load_metrics/page_load_metrics_update_dispatcher.h"
 #include "chrome/browser/page_load_metrics/user_input_tracker.h"
 #include "chrome/common/page_load_metrics/page_load_timing.h"
+#include "components/ukm/ukm_source.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/base/page_transition_types.h"
@@ -32,7 +33,6 @@ class NavigationHandle;
 namespace page_load_metrics {
 
 class PageLoadMetricsEmbedderInterface;
-class PageLoadMetricsObserver;
 
 namespace internal {
 
@@ -43,6 +43,7 @@ extern const char kAbortChainSizeNewNavigation[];
 extern const char kAbortChainSizeNoCommit[];
 extern const char kAbortChainSizeSameURL[];
 extern const char kPageLoadCompletedAfterAppBackground[];
+extern const char kPageLoadStartedInForeground[];
 
 }  // namespace internal
 
@@ -190,9 +191,6 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
 
   void NotifyClientRedirectTo(const PageLoadTracker& destination);
 
-  void OnStartedResource(
-      const ExtraRequestStartInfo& extra_request_started_info);
-
   void OnLoadedResource(
       const ExtraRequestCompleteInfo& extra_request_complete_info);
 
@@ -272,6 +270,10 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   void OnNavigationDelayComplete(base::TimeDelta scheduled_delay,
                                  base::TimeDelta actual_delay);
 
+  // Informs the observers that the event corresponding to |event_key| has
+  // occurred.
+  void BroadcastEventToObservers(const void* const event_key);
+
  private:
   // This function converts a TimeTicks value taken in the browser process
   // to navigation_start_ if:
@@ -291,7 +293,7 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   // committed load.
   void LogAbortChainHistograms(content::NavigationHandle* final_navigation);
 
-  void MaybeUpdateURL(content::NavigationHandle* navigation_handle);
+  void RecordUkmSourceInfo();
 
   UserInputTracker input_tracker_;
 
@@ -369,6 +371,8 @@ class PageLoadTracker : public PageLoadMetricsUpdateDispatcher::Client {
   std::vector<std::unique_ptr<PageLoadMetricsObserver>> observers_;
 
   PageLoadMetricsUpdateDispatcher metrics_update_dispatcher_;
+
+  const ukm::SourceId source_id_;
 
   DISALLOW_COPY_AND_ASSIGN(PageLoadTracker);
 };

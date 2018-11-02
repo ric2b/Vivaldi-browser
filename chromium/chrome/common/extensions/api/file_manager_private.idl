@@ -194,6 +194,18 @@ enum Verb {
   share_with
 };
 
+// Recent file sources allowed in getRecentFiles().
+enum SourceRestriction {
+  // Allows any source.
+  any_source,
+
+  // Allows source with native local file system only.
+  native_source,
+
+  // Allows native source and Drive source.
+  native_or_drive_source
+};
+
 // A file task represents an action that the file manager can perform over the
 // currently selected files. See
 // chrome/browser/chromeos/extensions/file_manager/file_tasks.h for details
@@ -661,6 +673,9 @@ callback GetCustomActionsCallback = void(fileSystemProvider.Action[] actions);
 // |size| result size.
 callback GetDirectorySizeCallback = void(double size);
 
+// |entries| Recently modified entries.
+callback GetRecentFilesCallback = void([instanceOf=Entry] object[] entries);
+
 interface Functions {
   // Logout the current user for navigating to the re-authentication screen for
   // the Google account.
@@ -987,6 +1002,13 @@ interface Functions {
   [nocompile]
   static void getDirectorySize([instanceof=DirectoryEntry] object entry,
                                GetDirectorySizeCallback callback);
+
+  // Gets recently modified files across file systems.
+  // |restriction| Flag to restrict sources of recent files.
+  // |callback|
+  [nocompile]
+  static void getRecentFiles(SourceRestriction restriction,
+                             GetRecentFilesCallback callback);
 };
 
 interface Events {

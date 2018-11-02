@@ -20,6 +20,8 @@
 #include "components/browsing_data/core/counters/browsing_data_counter.h"
 #include "components/browsing_data/core/history_notice_utils.h"
 #include "components/browsing_data/core/pref_names.h"
+#include "components/feature_engagement_tracker/public/event_constants.h"
+#include "components/feature_engagement_tracker/public/feature_engagement_tracker.h"
 #include "components/google/core/browser/google_util.h"
 #include "components/history/core/browser/web_history_service.h"
 #include "components/prefs/pref_service.h"
@@ -32,6 +34,7 @@
 #include "ios/chrome/browser/browsing_data/ios_chrome_browsing_data_remover.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/experimental_flags.h"
+#include "ios/chrome/browser/feature_engagement_tracker/feature_engagement_tracker_factory.h"
 #include "ios/chrome/browser/history/web_history_service_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
@@ -185,7 +188,9 @@ const int kMaxTimesHistoryNoticeShown = 1;
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
   DCHECK(browserState);
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     self.accessibilityTraits |= UIAccessibilityTraitButton;
 
@@ -273,13 +278,10 @@ const int kMaxTimesHistoryNoticeShown = 1;
 
   // Data types section.
   [model addSectionWithIdentifier:SectionIdentifierDataTypes];
-  int clearBrowsingHistoryMask =
-      IOSChromeBrowsingDataRemover::REMOVE_HISTORY |
-      IOSChromeBrowsingDataRemover::REMOVE_GOOGLE_APP_LAUNCHER_DATA;
   CollectionViewItem* browsingHistoryItem =
       [self clearDataItemWithType:ItemTypeDataTypeBrowsingHistory
                           titleID:IDS_IOS_CLEAR_BROWSING_HISTORY
-                             mask:clearBrowsingHistoryMask
+                             mask:IOSChromeBrowsingDataRemover::REMOVE_HISTORY
                          prefName:browsing_data::prefs::kDeleteBrowsingHistory];
   [model addItem:browsingHistoryItem
       toSectionWithIdentifier:SectionIdentifierDataTypes];
@@ -637,6 +639,12 @@ const int kMaxTimesHistoryNoticeShown = 1;
                                                   timePeriod:_timePeriod];
   [self chromeExecuteCommand:command];
 
+  // Send the "Cleared Browsing Data" event to the FeatureEngagementTracker
+  // when the user initiates a clear browsing data action. No event is sent if
+  // the browsing data is cleared without the user's input.
+  FeatureEngagementTrackerFactory::GetForBrowserState(_browserState)
+      ->NotifyEvent(feature_engagement_tracker::events::kClearedBrowsingData);
+
   if (!!(dataTypeMask && IOSChromeBrowsingDataRemover::REMOVE_HISTORY)) {
     [self showBrowsingHistoryRemovedDialog];
   }
@@ -726,9 +734,7 @@ const int kMaxTimesHistoryNoticeShown = 1;
   if (!model)
     return;
 
-  if (data_mask &
-      (IOSChromeBrowsingDataRemover::REMOVE_HISTORY |
-       IOSChromeBrowsingDataRemover::REMOVE_GOOGLE_APP_LAUNCHER_DATA)) {
+  if (data_mask & IOSChromeBrowsingDataRemover::REMOVE_HISTORY) {
     NSIndexPath* indexPath = [self.collectionViewModel
         indexPathForItemType:ItemTypeDataTypeBrowsingHistory
            sectionIdentifier:SectionIdentifierDataTypes];

@@ -52,8 +52,6 @@
 #include "public/platform/Platform.h"
 
 #ifdef ANNOTATE_CONTIGUOUS_CONTAINER
-// FIXME: have ContainerAnnotations.h define an ENABLE_-style name instead.
-#define ENABLE_ASAN_CONTAINER_ANNOTATIONS 1
 
 // When finalizing a non-inlined vector backing store/container, remove
 // its contiguous container annotation. Required as it will not be destructed
@@ -81,14 +79,13 @@
     static_cast<LargeObjectPage*>(large_page)->SetIsVectorBackingPage(); \
   }
 #else
-#define ENABLE_ASAN_CONTAINER_ANNOTATIONS 0
 #define ASAN_RETIRE_CONTAINER_ANNOTATION(payload, payloadSize)
 #define ASAN_MARK_LARGE_VECTOR_CONTAINER(arena, largeObject)
 #endif
 
 namespace blink {
 
-#if DCHECK_IS_ON() && CPU(64BIT)
+#if DCHECK_IS_ON() && defined(ARCH_CPU_64_BITS)
 NO_SANITIZE_ADDRESS
 void HeapObjectHeader::ZapMagic() {
   CheckHeader();
@@ -504,10 +501,15 @@ void NormalPageArena::SweepAndCompact() {
     normal_page->SweepAndCompact(context);
   }
 
+  // All pages were empty; nothing to compact.
+  if (!context.current_page_) {
+    heap.Compaction()->FinishedArenaCompaction(this, 0, 0);
+    return;
+  }
+
   size_t freed_size = 0;
   size_t freed_page_count = 0;
 
-  DCHECK(context.current_page_);
   // If the current page hasn't been allocated into, add it to the available
   // list, for subsequent release below.
   size_t allocation_point = context.allocation_point_;
@@ -1708,7 +1710,7 @@ LargeObjectPage::LargeObjectPage(PageMemory* storage,
                                  size_t payload_size)
     : BasePage(storage, arena),
       payload_size_(payload_size)
-#if ENABLE(ASAN_CONTAINER_ANNOTATIONS)
+#ifdef ANNOTATE_CONTIGUOUS_CONTAINER
       ,
       is_vector_backing_page_(false)
 #endif

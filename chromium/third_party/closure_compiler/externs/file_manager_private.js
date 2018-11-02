@@ -659,6 +659,13 @@ chrome.fileManagerPrivate.getCustomActions = function(entries, callback) {};
 chrome.fileManagerPrivate.getDirectorySize = function(entry, callback) {};
 
 /**
+ * Gets recently modified files across file systems.
+ * @param {string} restriction
+ * @param {function((!Array<!FileEntry>))} callback
+ */
+chrome.fileManagerPrivate.getRecentFiles = function(restriction, callback) {};
+
+/**
  * Executes the action on the specified set of entries. If not possible, then
  * returns an error via chrome.runtime.lastError.
  * @param {!Array<!Entry>} entries
@@ -701,4 +708,11 @@ chrome.fileManagerPrivate.Verb = {
   ADD_TO: 'add_to',
   PACK_WITH: 'pack_with',
   SHARE_WITH: 'share_with',
+};
+
+/** @enum {string} */
+chrome.fileManagerPrivate.SourceRestriction = {
+  ANY_SOURCE: 'any_source',
+  NATIVE_SOURCE: 'native_source',
+  NATIVE_OR_DRIVE_SOURCE: 'native_or_drive_source',
 };

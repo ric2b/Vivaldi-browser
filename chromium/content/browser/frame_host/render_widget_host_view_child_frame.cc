@@ -15,9 +15,11 @@
 #include "build/build_config.h"
 #include "cc/output/copy_output_request.h"
 #include "cc/output/copy_output_result.h"
-#include "cc/surfaces/compositor_frame_sink_support.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
+#include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
 #include "content/browser/compositor/surface_utils.h"
@@ -35,6 +37,7 @@
 #include "content/public/browser/guest_mode.h"
 #include "content/public/browser/render_process_host.h"
 #include "gpu/ipc/common/gpu_messages.h"
+#include "services/service_manager/runner/common/client_util.h"
 #include "third_party/WebKit/public/platform/WebTouchEvent.h"
 #include "ui/gfx/geometry/size_conversions.h"
 #include "ui/gfx/geometry/size_f.h"
@@ -62,14 +65,21 @@ RenderWidgetHostViewChildFrame::RenderWidgetHostViewChildFrame(
       frame_connector_(nullptr),
       background_color_(SK_ColorWHITE),
       weak_factory_(this) {
-  GetSurfaceManager()->RegisterFrameSinkId(frame_sink_id_);
-  CreateCompositorFrameSinkSupport();
+  if (!service_manager::ServiceManagerIsRemote()) {
+    GetFrameSinkManager()->surface_manager()->RegisterFrameSinkId(
+        frame_sink_id_);
+    CreateCompositorFrameSinkSupport();
+  }
 }
 
 RenderWidgetHostViewChildFrame::~RenderWidgetHostViewChildFrame() {
-  ResetCompositorFrameSinkSupport();
-  if (GetSurfaceManager())
-    GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
+  if (!service_manager::ServiceManagerIsRemote()) {
+    ResetCompositorFrameSinkSupport();
+    if (GetFrameSinkManager()) {
+      GetFrameSinkManager()->surface_manager()->InvalidateFrameSinkId(
+          frame_sink_id_);
+    }
+  }
 }
 
 void RenderWidgetHostViewChildFrame::Init() {
@@ -85,7 +95,7 @@ void RenderWidgetHostViewChildFrame::
 
   auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
   if (root_view) {
-    auto* manager = root_view->touch_selection_controller_client_manager();
+    auto* manager = root_view->GetTouchSelectionControllerClientManager();
     if (manager)
       manager->RemoveObserver(this);
   }
@@ -99,12 +109,13 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
     return;
 
   if (frame_connector_) {
-    if (parent_frame_sink_id_.is_valid()) {
-      GetSurfaceManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                        frame_sink_id_);
+    if (parent_frame_sink_id_.is_valid() &&
+        !service_manager::ServiceManagerIsRemote()) {
+      GetFrameSinkManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                          frame_sink_id_);
     }
-    parent_frame_sink_id_ = cc::FrameSinkId();
-    local_surface_id_ = cc::LocalSurfaceId();
+    parent_frame_sink_id_ = viz::FrameSinkId();
+    local_surface_id_ = viz::LocalSurfaceId();
 
     // Unlocks the mouse if this RenderWidgetHostView holds the lock.
     UnlockMouse();
@@ -117,8 +128,10 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
     if (parent_view) {
       parent_frame_sink_id_ = parent_view->GetFrameSinkId();
       DCHECK(parent_frame_sink_id_.is_valid());
-      GetSurfaceManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                      frame_sink_id_);
+      if (!service_manager::ServiceManagerIsRemote()) {
+        GetFrameSinkManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                          frame_sink_id_);
+      }
     }
 
     auto* root_view = frame_connector_->GetRootRenderWidgetHostView();
@@ -129,7 +142,7 @@ void RenderWidgetHostViewChildFrame::SetCrossProcessFrameConnector(
       if (current_device_scale_factor_ == 0.f)
         current_device_scale_factor_ = 1.f;
 
-      auto* manager = root_view->touch_selection_controller_client_manager();
+      auto* manager = root_view->GetTouchSelectionControllerClientManager();
       if (manager) {
         // We will only have a manager on Aura (and eventually Android).
         // TODO(wjmaclean): update this comment when TSE OOPIF support becomes
@@ -383,34 +396,57 @@ void RenderWidgetHostViewChildFrame::UpdateViewportIntersection(
                                                     viewport_intersection));
 }
 
+void RenderWidgetHostViewChildFrame::SetIsInert() {
+  if (host_ && frame_connector_) {
+    host_->Send(new ViewMsg_SetIsInert(host_->GetRoutingID(),
+                                       frame_connector_->is_inert()));
+  }
+}
+
 void RenderWidgetHostViewChildFrame::GestureEventAck(
     const blink::WebGestureEvent& event,
     InputEventAckState ack_result) {
   bool not_consumed = ack_result == INPUT_EVENT_ACK_STATE_NOT_CONSUMED ||
                       ack_result == INPUT_EVENT_ACK_STATE_NO_CONSUMER_EXISTS;
-  // GestureScrollBegin is consumed by the target frame and not forwarded,
-  // because we don't know whether we will need to bubble scroll until we
-  // receive a GestureScrollUpdate ACK. GestureScrollUpdate with unused
-  // scroll extent is forwarded for bubbling, while GestureScrollEnd is
-  // always forwarded and handled according to current scroll state in the
-  // RenderWidgetHostInputEventRouter.
+
   if (!frame_connector_)
     return;
-  if ((event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
-       not_consumed) ||
-      event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-      event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
-    frame_connector_->BubbleScrollEvent(event);
+  if (wheel_scroll_latching_enabled()) {
+    // GestureScrollBegin is a blocking event; It is forwarded for bubbling if
+    // its ack is not consumed. For the rest of the scroll events
+    // (GestureScrollUpdate, GestureScrollEnd, GestureFlingStart) the
+    // frame_connector_ decides to forward them for bubbling if the
+    // GestureScrollBegin event is forwarded.
+    if ((event.GetType() == blink::WebInputEvent::kGestureScrollBegin &&
+         not_consumed) ||
+        event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
+        event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+        event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      frame_connector_->BubbleScrollEvent(event);
+    }
+  } else {
+    // GestureScrollBegin is consumed by the target frame and not forwarded,
+    // because we don't know whether we will need to bubble scroll until we
+    // receive a GestureScrollUpdate ACK. GestureScrollUpdate with unused
+    // scroll extent is forwarded for bubbling, while GestureScrollEnd is
+    // always forwarded and handled according to current scroll state in the
+    // RenderWidgetHostInputEventRouter.
+    if ((event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
+         not_consumed) ||
+        event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+        event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      frame_connector_->BubbleScrollEvent(event);
+    }
   }
 }
 
 void RenderWidgetHostViewChildFrame::DidReceiveCompositorFrameAck(
-    const cc::ReturnedResourceArray& resources) {
+    const std::vector<cc::ReturnedResource>& resources) {
   renderer_compositor_frame_sink_->DidReceiveCompositorFrameAck(resources);
 }
 
 void RenderWidgetHostViewChildFrame::DidCreateNewRendererCompositorFrameSink(
-    cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink) {
+    cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink) {
   ResetCompositorFrameSinkSupport();
   renderer_compositor_frame_sink_ = renderer_compositor_frame_sink;
   CreateCompositorFrameSinkSupport();
@@ -418,7 +454,7 @@ void RenderWidgetHostViewChildFrame::DidCreateNewRendererCompositorFrameSink(
 }
 
 void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
   current_surface_size_ = frame.render_pass_list.back()->output_rect.size();
   current_surface_scale_factor_ = frame.metadata.device_scale_factor;
@@ -442,26 +478,28 @@ void RenderWidgetHostViewChildFrame::ProcessCompositorFrame(
 }
 
 void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedder() {
-  cc::SurfaceSequence sequence =
-      cc::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
-  cc::SurfaceManager* manager = GetSurfaceManager();
-  cc::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
+  if (service_manager::ServiceManagerIsRemote())
+    return;
+  viz::SurfaceSequence sequence =
+      viz::SurfaceSequence(frame_sink_id_, next_surface_sequence_++);
+  cc::SurfaceManager* manager = GetFrameSinkManager()->surface_manager();
+  viz::SurfaceId surface_id(frame_sink_id_, local_surface_id_);
   // The renderer process will satisfy this dependency when it creates a
   // SurfaceLayer.
   manager->RequireSequence(surface_id, sequence);
-  cc::SurfaceInfo surface_info(surface_id, current_surface_scale_factor_,
-                               current_surface_size_);
+  viz::SurfaceInfo surface_info(surface_id, current_surface_scale_factor_,
+                                current_surface_size_);
   SendSurfaceInfoToEmbedderImpl(surface_info, sequence);
 }
 
 void RenderWidgetHostViewChildFrame::SendSurfaceInfoToEmbedderImpl(
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   frame_connector_->SetChildFrameSurface(surface_info, sequence);
 }
 
 void RenderWidgetHostViewChildFrame::SubmitCompositorFrame(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     cc::CompositorFrame frame) {
   TRACE_EVENT0("content",
                "RenderWidgetHostViewChildFrame::OnSwapCompositorFrame");
@@ -477,8 +515,8 @@ void RenderWidgetHostViewChildFrame::OnDidNotProduceFrame(
 }
 
 void RenderWidgetHostViewChildFrame::OnSurfaceChanged(
-    const cc::SurfaceInfo& surface_info) {
-  cc::SurfaceSequence sequence(frame_sink_id_, next_surface_sequence_++);
+    const viz::SurfaceInfo& surface_info) {
+  viz::SurfaceSequence sequence(frame_sink_id_, next_surface_sequence_++);
   SendSurfaceInfoToEmbedderImpl(surface_info, sequence);
 }
 
@@ -532,7 +570,7 @@ bool RenderWidgetHostViewChildFrame::IsMouseLocked() {
   return host_->delegate()->HasMouseLock(host_);
 }
 
-cc::FrameSinkId RenderWidgetHostViewChildFrame::GetFrameSinkId() {
+viz::FrameSinkId RenderWidgetHostViewChildFrame::GetFrameSinkId() {
   return frame_sink_id_;
 }
 
@@ -582,20 +620,20 @@ gfx::Point RenderWidgetHostViewChildFrame::TransformPointToRootCoordSpace(
     return point;
 
   return frame_connector_->TransformPointToRootCoordSpace(
-      point, cc::SurfaceId(frame_sink_id_, local_surface_id_));
+      point, viz::SurfaceId(frame_sink_id_, local_surface_id_));
 }
 
 bool RenderWidgetHostViewChildFrame::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& original_surface,
+    const viz::SurfaceId& original_surface,
     gfx::Point* transformed_point) {
   *transformed_point = point;
   if (!frame_connector_ || !local_surface_id_.is_valid())
     return false;
 
   return frame_connector_->TransformPointToLocalCoordSpace(
-      point, original_surface, cc::SurfaceId(frame_sink_id_, local_surface_id_),
-      transformed_point);
+      point, original_surface,
+      viz::SurfaceId(frame_sink_id_, local_surface_id_), transformed_point);
 }
 
 bool RenderWidgetHostViewChildFrame::TransformPointToCoordSpaceForView(
@@ -611,7 +649,7 @@ bool RenderWidgetHostViewChildFrame::TransformPointToCoordSpaceForView(
   }
 
   return frame_connector_->TransformPointToCoordSpaceForView(
-      point, target_view, cc::SurfaceId(frame_sink_id_, local_surface_id_),
+      point, target_view, viz::SurfaceId(frame_sink_id_, local_surface_id_),
       transformed_point);
 }
 
@@ -620,8 +658,18 @@ bool RenderWidgetHostViewChildFrame::IsRenderWidgetHostViewChildFrame() {
 }
 
 void RenderWidgetHostViewChildFrame::WillSendScreenRects() {
-  if (frame_connector_)
+  // TODO(kenrb): These represent post-initialization state updates that are
+  // needed by the renderer. During normal OOPIF setup these are unnecessary,
+  // as the parent renderer will send the information and it will be
+  // immediately propagated to the OOPIF. However when an OOPIF navigates from
+  // one process to another, the parent doesn't know that, and certain
+  // browser-side state needs to be sent again. There is probably a less
+  // spammy way to do this, but triggering on SendScreenRects() is reasonable
+  // until somebody figures that out. RWHVCF::Init() is too early.
+  if (frame_connector_) {
     UpdateViewportIntersection(frame_connector_->viewport_intersection());
+    SetIsInert();
+  }
 }
 
 #if defined(OS_MACOSX)
@@ -687,8 +735,8 @@ void RenderWidgetHostViewChildFrame::SubmitSurfaceCopyRequest(
 
   std::unique_ptr<cc::CopyOutputRequest> request =
       cc::CopyOutputRequest::CreateRequest(
-          base::Bind(&CopyFromCompositingSurfaceHasResult, output_size,
-                     preferred_color_type, callback));
+          base::BindOnce(&CopyFromCompositingSurfaceHasResult, output_size,
+                         preferred_color_type, callback));
   if (!src_subrect.IsEmpty())
     request->set_area(src_subrect);
 
@@ -706,13 +754,17 @@ bool RenderWidgetHostViewChildFrame::HasAcceleratedSurface(
 }
 
 void RenderWidgetHostViewChildFrame::ReclaimResources(
-    const cc::ReturnedResourceArray& resources) {
+    const std::vector<cc::ReturnedResource>& resources) {
   renderer_compositor_frame_sink_->ReclaimResources(resources);
 }
 
 void RenderWidgetHostViewChildFrame::OnBeginFrame(
     const cc::BeginFrameArgs& args) {
-  host_->Send(new ViewMsg_BeginFrame(host_->GetRoutingID(), args));
+  renderer_compositor_frame_sink_->OnBeginFrame(args);
+}
+
+void RenderWidgetHostViewChildFrame::OnBeginFramePausedChanged(bool paused) {
+  renderer_compositor_frame_sink_->OnBeginFramePausedChanged(paused);
 }
 
 void RenderWidgetHostViewChildFrame::SetNeedsBeginFrames(
@@ -743,11 +795,24 @@ InputEventAckState RenderWidgetHostViewChildFrame::FilterInputEvent(
     }
   }
 
+  // TODO(mcnee): Allow the root RWHV to consume the child's
+  // GestureScrollUpdates. This is needed to prevent the child from consuming
+  // them after the root has started an overscroll.
+  // See crbug.com/713368
+
   return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
-void RenderWidgetHostViewChildFrame::OnSetNeedsFlushInput() {
-  NOTIMPLEMENTED();
+InputEventAckState RenderWidgetHostViewChildFrame::FilterChildGestureEvent(
+    const blink::WebGestureEvent& gesture_event) {
+  // We may be the owner of a RenderWidgetHostViewGuest,
+  // so we talk to the root RWHV on its behalf.
+  // TODO(mcnee): Remove once MimeHandlerViewGuest is based on OOPIF.
+  // See crbug.com/659750
+  if (frame_connector_)
+    return frame_connector_->GetRootRenderWidgetHostView()
+        ->FilterChildGestureEvent(gesture_event);
+  return INPUT_EVENT_ACK_STATE_NOT_CONSUMED;
 }
 
 BrowserAccessibilityManager*
@@ -768,21 +833,24 @@ bool RenderWidgetHostViewChildFrame::IsChildFrameForTesting() const {
   return true;
 }
 
-cc::SurfaceId RenderWidgetHostViewChildFrame::SurfaceIdForTesting() const {
-  return cc::SurfaceId(frame_sink_id_, local_surface_id_);
-};
+viz::SurfaceId RenderWidgetHostViewChildFrame::SurfaceIdForTesting() const {
+  return viz::SurfaceId(frame_sink_id_, local_surface_id_);
+}
 
 void RenderWidgetHostViewChildFrame::CreateCompositorFrameSinkSupport() {
+  if (service_manager::ServiceManagerIsRemote())
+    return;
+
   DCHECK(!support_);
   constexpr bool is_root = false;
   constexpr bool handles_frame_sink_id_invalidation = false;
   constexpr bool needs_sync_points = true;
-  support_ = cc::CompositorFrameSinkSupport::Create(
-      this, GetSurfaceManager(), frame_sink_id_, is_root,
-      handles_frame_sink_id_invalidation, needs_sync_points);
+  support_ = GetHostFrameSinkManager()->CreateCompositorFrameSinkSupport(
+      this, frame_sink_id_, is_root, handles_frame_sink_id_invalidation,
+      needs_sync_points);
   if (parent_frame_sink_id_.is_valid()) {
-    GetSurfaceManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                    frame_sink_id_);
+    GetFrameSinkManager()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                      frame_sink_id_);
   }
   if (host_->needs_begin_frames())
     support_->SetNeedsBeginFrame(true);
@@ -792,8 +860,8 @@ void RenderWidgetHostViewChildFrame::ResetCompositorFrameSinkSupport() {
   if (!support_)
     return;
   if (parent_frame_sink_id_.is_valid()) {
-    GetSurfaceManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                      frame_sink_id_);
+    GetFrameSinkManager()->UnregisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                        frame_sink_id_);
   }
   support_.reset();
 }

@@ -19,6 +19,10 @@ class ReaderModeInfoBar : public InfoBarAndroid {
       std::unique_ptr<ReaderModeInfoBarDelegate> delegate);
   ~ReaderModeInfoBar() override;
 
+  base::android::ScopedJavaLocalRef<jobject> GetTab(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
  protected:
   infobars::InfoBarDelegate* GetDelegate();
 
@@ -30,8 +34,5 @@ class ReaderModeInfoBar : public InfoBarAndroid {
  private:
   DISALLOW_COPY_AND_ASSIGN(ReaderModeInfoBar);
 };
-
-// Register native methods.
-bool RegisterReaderModeInfoBar(JNIEnv* env);
 
 #endif  // CHROME_BROWSER_UI_ANDROID_INFOBARS_READER_MODE_INFOBAR_H_

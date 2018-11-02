@@ -63,8 +63,8 @@ void CaptivePortalTabHelper::DidStartNavigation(
     return;
   }
 
-  // TODO(clamy): Remove this when we understand the root cause behind
-  // crbug.com/704892.
+  // TODO(clamy): The root cause behind crbug.com/704892 is known.
+  // Remove this code if it is never reached until ~ 2017-July-20.
   if (navigation_handle == navigation_handle_)
     base::debug::DumpWithoutCrashing();
 
@@ -95,6 +95,7 @@ void CaptivePortalTabHelper::DidRedirectNavigation(
 void CaptivePortalTabHelper::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+
   // Exclude subframe navigations.
   if (!navigation_handle->IsInMainFrame())
     return;

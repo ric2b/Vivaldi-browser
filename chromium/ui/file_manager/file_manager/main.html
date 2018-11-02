@@ -60,6 +60,21 @@
       paper-progress {
         --paper-progress-active-color: rgb(26, 194, 34);
       }
+
+      body.check-select .dialog-header files-toggle-ripple {
+        --files-toggle-ripple: {
+          background-color: black;
+        };
+        --files-toggle-ripple-activated: {
+          opacity: 0.08;
+        };
+      }
+
+      body.check-select .dialog-header files-ripple {
+        --files-ripple: {
+          background-color: black;
+        }
+      }
     </style>
 
     <script src="foreground/js/elements_importer.js"></script>
@@ -126,7 +141,8 @@
                shortcut=".|Ctrl" hide-shortcut-text>
 
       <command id="default-task">
-      <command id="open-with" i18n-values="label:MORE_ACTIONS_BUTTON_LABEL">
+      <command id="open-with" i18n-values="label:OPEN_WITH_BUTTON_LABEL">
+      <command id="more-actions" i18n-values="label:MORE_ACTIONS_BUTTON_LABEL">
       <command id="zip-selection"
                i18n-values="label:ZIP_SELECTION_BUTTON_LABEL">
       <command id="set-wallpaper"
@@ -158,10 +174,12 @@
     <cr-menu id="file-context-menu" class="chrome-menu files-menu"
              menu-item-selector="cr-menu-item,hr" showShortcuts>
       <cr-menu-item id="default-task-menu-item" command="#default-task"
-                visibleif="full-page" hidden></cr-menu-item>
+                visibleif="full-page" class="hide-on-toolbar" hidden></cr-menu-item>
       <cr-menu-item command="#open-with"
-                visibleif="full-page" hidden></cr-menu-item>
-      <hr id="tasks-separator" visibleif="full-page" hidden>
+                visibleif="full-page" class="hide-on-toolbar" hidden></cr-menu-item>
+      <cr-menu-item command="#more-actions"
+                visibleif="full-page" class="hide-on-toolbar" hidden></cr-menu-item>
+      <hr id="tasks-separator" visibleif="full-page" class="hide-on-toolbar" hidden>
       <hr id="actions-separator" hidden>
       <cr-menu-item command="#cut" visibleif="full-page"></cr-menu-item>
       <cr-menu-item command="#copy" visibleif="full-page"></cr-menu-item>
@@ -170,12 +188,13 @@
       <hr visibleif="full-page">
       <cr-menu-item command="#get-info"></cr-menu-item>
       <cr-menu-item command="#rename"></cr-menu-item>
-      <cr-menu-item command="#delete" i18n-content="DELETE_BUTTON_LABEL"></cr-menu-item>
+      <cr-menu-item command="#delete" i18n-content="DELETE_BUTTON_LABEL"
+                class="hide-on-toolbar"></cr-menu-item>
       <cr-menu-item command="#zip-selection"></cr-menu-item>
       <cr-menu-item command="#set-wallpaper"></cr-menu-item>
-      <hr visibleif="saveas-file full-page">
-      <cr-menu-item command="#new-folder"
-                visibleif="saveas-file full-page"></cr-menu-item>
+      <hr visibleif="saveas-file full-page" class="hide-on-toolbar">
+      <cr-menu-item command="#new-folder" visibleif="saveas-file full-page"
+                class="hide-on-toolbar"></cr-menu-item>
     </cr-menu>
 
     <cr-menu id="roots-context-menu" class="chrome-menu files-menu"
@@ -245,6 +264,12 @@
              menu-item-selector="cr-menu-item, hr">
     </cr-menu>
 
+    <cr-menu id="share-menu" class="chrome-menu files-menu"
+             menu-item-selector="cr-menu-item, hr">
+      <cr-menu-item command="#share"></cr-menu-item>
+      <hr id="drive-share-separator">
+    </cr-menu>
+
     <cr-menu id="add-new-services-menu"
              class="chrome-menu files-menu has-icon-start"
              menu-item-selector="cr-menu-item, hr">
@@ -264,7 +289,7 @@
         <paper-button id="cancel-selection-button" tabindex="8"
               i18n-values="aria-label:CANCEL_SELECTION_BUTTON_LABEL">
           <span class="icon-arrow-back"></span>
-          <span i18n-content="CANCEL_SELECTION_BUTTON_LABEL"></span>
+          <span id="cancel-selection-label" i18n-content="CANCEL_SELECTION_BUTTON_LABEL"></span>
         </paper-button>
       </div>
       <div id="files-selected-label"></div>
@@ -273,12 +298,12 @@
               tabindex="10" hidden
               i18n-values="aria-label:TASKS_BUTTON_LABEL">
       </button>
-      <button id="share-button" class="icon-button" command="#share"
-              tabindex="11" hidden
-              i18n-values="aria-label:SHARE_BUTTON_LABEL"
-              visibleif="full-page"
+      <button id="share-menu-button" class="icon-button" tabindex="11" hidden
+              menu="#share-menu"
+              i18n-values="aria-label:SHARE_BUTTON_TOOLTIP"
+              aria-activedescendant="share-menu"
               has-tooltip>
-        <files-ripple></files-ripple>
+        <files-toggle-ripple></files-toggle-ripple>
         <div class="icon"></div>
       </button>
       <button id="delete-button" class="icon-button" tabindex="12" hidden
@@ -350,6 +375,14 @@
               i18n-values="aria-label:GEAR_BUTTON_TOOLTIP"
               aria-activedescendant="gear-menu"
               has-tooltip>
+        <files-toggle-ripple></files-toggle-ripple>
+        <div class="icon"></div>
+      </button>
+      <button id="selection-menu-button" class="icon-button" tabindex="19"
+              menu="#file-context-menu"
+              i18n-values="aria-label:SELECTION_MENU_BUTTON_TOOLTIP"
+              aria-activedescendant="file-context-menu"
+              has-tooltip hidden>
         <files-toggle-ripple></files-toggle-ripple>
         <div class="icon"></div>
       </button>

@@ -15,6 +15,16 @@
 #define ENABLE_SYNC_CALL_RESTRICTIONS 0
 #endif
 
+class ChromeSelectFileDialogFactory;
+
+namespace sync_preferences {
+class PrefServiceSyncable;
+}
+
+namespace content {
+class BrowserTestBase;
+}
+
 namespace display {
 class ForwardingDisplayDelegate;
 }
@@ -45,15 +55,15 @@ namespace mojo {
 // Before processing a sync call, the bindings call
 // SyncCallRestrictions::AssertSyncCallAllowed() to check whether sync calls are
 // allowed. By default, it is determined by the mojo system property
-// MOJO_PROPERTY_SYNC_CALL_ALLOWED. If the default setting says no but you have
-// a very compelling reason to disregard that (which should be very very rare),
-// you can override it by constructing a ScopedAllowSyncCall object, which
-// allows making sync calls on the current thread during its lifetime.
+// MOJO_PROPERTY_TYPE_SYNC_CALL_ALLOWED. If the default setting says no but you
+// have a very compelling reason to disregard that (which should be very very
+// rare), you can override it by constructing a ScopedAllowSyncCall object,
+// which allows making sync calls on the current sequence during its lifetime.
 class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
  public:
 #if ENABLE_SYNC_CALL_RESTRICTIONS
-  // Checks whether the current thread is allowed to make sync calls, and causes
-  // a DCHECK if not.
+  // Checks whether the current sequence is allowed to make sync calls, and
+  // causes a DCHECK if not.
   static void AssertSyncCallAllowed();
 #else
   // Inline the empty definitions of functions so that they can be compiled out.
@@ -63,12 +73,16 @@ class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
  private:
   // DO NOT ADD ANY OTHER FRIEND STATEMENTS, talk to mojo/OWNERS first.
   // BEGIN ALLOWED USAGE.
+  friend class content::BrowserTestBase;  // Test-only.
   friend class ui::Gpu;  // http://crbug.com/620058
   // LevelDBMojoProxy makes same-process sync calls from the DB thread.
   friend class leveldb::LevelDBMojoProxy;
   // Pref service connection is sync at startup.
   friend class prefs::PersistentPrefStoreClient;
-
+  // Incognito pref service instances are created synchronously.
+  friend class sync_preferences::PrefServiceSyncable;
+  // For file open and save dialogs created synchronously.
+  friend class ::ChromeSelectFileDialogFactory;
   // END ALLOWED USAGE.
 
   // BEGIN USAGE THAT NEEDS TO BE FIXED.
@@ -92,7 +106,7 @@ class MOJO_CPP_BINDINGS_EXPORT SyncCallRestrictions {
 
   // If a process is configured to disallow sync calls in general, constructing
   // a ScopedAllowSyncCall object temporarily allows making sync calls on the
-  // current thread. Doing this is almost always incorrect, which is why we
+  // current sequence. Doing this is almost always incorrect, which is why we
   // limit who can use this through friend. If you find yourself needing to use
   // this, talk to mojo/OWNERS.
   class ScopedAllowSyncCall {

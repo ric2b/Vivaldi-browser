@@ -11,7 +11,6 @@
 #include <map>
 #include <memory>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 #include "base/compiler_specific.h"
@@ -21,7 +20,9 @@
 #include "net/quic/core/quic_packet_creator.h"
 #include "net/quic/core/quic_packets.h"
 #include "net/quic/core/quic_stream.h"
+#include "net/quic/core/quic_stream_frame_data_producer.h"
 #include "net/quic/core/quic_write_blocked_list.h"
+#include "net/quic/core/stream_notifier_interface.h"
 #include "net/quic/platform/api/quic_containers.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_socket_address.h"
@@ -36,7 +37,9 @@ namespace test {
 class QuicSessionPeer;
 }  // namespace test
 
-class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
+class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface,
+                                        public StreamNotifierInterface,
+                                        public QuicStreamFrameDataProducer {
  public:
   // An interface from the session to the entity owning the session.
   // This lets the session notify its owner (the Dispatcher) when the connection
@@ -106,6 +109,23 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   bool HasPendingHandshake() const override;
   bool HasOpenDynamicStreams() const override;
   void OnPathDegrading() override;
+
+  // QuicStreamFrameDataProducer methods:
+  void SaveStreamData(QuicStreamId id,
+                      QuicIOVector iov,
+                      size_t iov_offset,
+                      QuicStreamOffset offset,
+                      QuicByteCount data_length) override;
+  bool WriteStreamData(QuicStreamId id,
+                       QuicStreamOffset offset,
+                       QuicByteCount data_length,
+                       QuicDataWriter* writer) override;
+
+  // StreamNotifierInterface methods:
+  void OnStreamFrameAcked(const QuicStreamFrame& frame,
+                          QuicTime::Delta ack_delay_time) override;
+  void OnStreamFrameRetransmitted(const QuicStreamFrame& frame) override;
+  void OnStreamFrameDiscarded(const QuicStreamFrame& frame) override;
 
   // Called on every incoming packet. Passes |packet| through to |connection_|.
   virtual void ProcessUdpPacket(const QuicSocketAddress& self_address,
@@ -208,6 +228,11 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // WINDOW_UPDATE arrives.
   void MarkConnectionLevelWriteBlocked(QuicStreamId id);
 
+  // Called when stream |id| is done waiting for acks either because all data
+  // gets acked or is not interested in data being acked (which happens when
+  // a stream is reset because of an error).
+  void OnStreamDoneWaitingForAcks(QuicStreamId id);
+
   // Returns true if the session has data to be sent, either queued in the
   // connection, or in a write-blocked stream.
   bool HasDataToWrite() const;
@@ -254,6 +279,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
     respect_goaway_ = respect_goaway;
   }
 
+  bool use_stream_notifier() const { return use_stream_notifier_; }
+
+  bool streams_own_data() const { return streams_own_data_; }
+
  protected:
   using StaticStreamMap = QuicSmallMap<QuicStreamId, QuicStream*, 2>;
 
@@ -261,6 +290,9 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
       QuicSmallMap<QuicStreamId, std::unique_ptr<QuicStream>, 10>;
 
   using ClosedStreams = std::vector<std::unique_ptr<QuicStream>>;
+
+  using ZombieStreamMap =
+      QuicSmallMap<QuicStreamId, std::unique_ptr<QuicStream>, 10>;
 
   // TODO(ckrasic) - For all *DynamicStream2 below, rename after
   // quic_reloadable_flag_quic_refactor_stream_creation is deprecated.
@@ -347,6 +379,8 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   ClosedStreams* closed_streams() { return &closed_streams_; }
 
+  const ZombieStreamMap& zombie_streams() const { return zombie_streams_; }
+
   void set_max_open_incoming_streams(size_t max_open_incoming_streams);
   void set_max_open_outgoing_streams(size_t max_open_outgoing_streams);
 
@@ -416,6 +450,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // starting with larger flow control receive windows.
   void AdjustInitialFlowControlWindows(size_t stream_window);
 
+  // Find stream with |id|, returns nullptr if the stream does not exist or
+  // closed.
+  QuicStream* GetStream(QuicStreamId id) const;
+
   // Keep track of highest received byte offset of locally closed streams, while
   // waiting for a definitive final highest offset from the peer.
   std::map<QuicStreamId, QuicStreamOffset>
@@ -427,6 +465,10 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   Visitor* visitor_;
 
   ClosedStreams closed_streams_;
+
+  // Streams which are closed, but need to be kept alive. Currently, the only
+  // reason is the stream's sent data (including FIN) does not get fully acked.
+  ZombieStreamMap zombie_streams_;
 
   QuicConfig config_;
 
@@ -448,12 +490,12 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
 
   // Set of stream ids that are less than the largest stream id that has been
   // received, but are nonetheless available to be created.
-  std::unordered_set<QuicStreamId> available_streams_;
+  QuicUnorderedSet<QuicStreamId> available_streams_;
 
   // Set of stream ids that are "draining" -- a FIN has been sent and received,
   // but the stream object still exists because not all the received data has
   // been consumed.
-  std::unordered_set<QuicStreamId> draining_streams_;
+  QuicUnorderedSet<QuicStreamId> draining_streams_;
 
   // A list of streams which need to write more data.
   QuicWriteBlockedList write_blocked_streams_;
@@ -484,6 +526,13 @@ class QUIC_EXPORT_PRIVATE QuicSession : public QuicConnectionVisitorInterface {
   // allow the creation of outgoing streams regardless of the high
   // chance they will fail.
   bool respect_goaway_;
+
+  // This session is notified on every ack or loss.
+  const bool use_stream_notifier_;
+
+  // Streams of this session own their outstanding data. Outstanding data here
+  // means sent data waiting to be acked.
+  const bool streams_own_data_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicSession);
 };

@@ -10,8 +10,6 @@
 #include "chrome/browser/chromeos/system/system_clock_observer.h"
 #include "chrome/browser/upgrade_observer.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
-#include "content/public/browser/notification_observer.h"
-#include "content/public/browser/notification_registrar.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace ash {
@@ -29,7 +27,6 @@ class WidgetDelegate;
 class SystemTrayClient : public ash::mojom::SystemTrayClient,
                          public chromeos::system::SystemClockObserver,
                          public policy::CloudPolicyStore::Observer,
-                         public content::NotificationObserver,
                          public UpgradeObserver {
  public:
   SystemTrayClient();
@@ -57,6 +54,7 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   // Wrappers around ash::mojom::SystemTray interface:
   void SetPrimaryTrayEnabled(bool enabled);
   void SetPrimaryTrayVisible(bool visible);
+  void SetPerformanceTracingIconVisible(bool visible);
 
   // ash::mojom::SystemTrayClient:
   void ShowSettings() override;
@@ -101,19 +99,15 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   // chromeos::system::SystemClockObserver:
   void OnSystemClockChanged(chromeos::system::SystemClock* clock) override;
 
-  // UpgradeObserver:
+  // UpgradeObserver implementation.
   void OnUpdateOverCellularAvailable() override;
+  void OnUpgradeRecommended() override;
 
   // policy::CloudPolicyStore::Observer
   void OnStoreLoaded(policy::CloudPolicyStore* store) override;
   void OnStoreError(policy::CloudPolicyStore* store) override;
 
-  void UpdateEnterpriseDomain();
-
-  // content::NotificationObserver:
-  void Observe(int type,
-               const content::NotificationSource& source,
-               const content::NotificationDetails& details) override;
+  void UpdateEnterpriseDisplayDomain();
 
   // System tray mojo service in ash.
   ash::mojom::SystemTrayPtr system_tray_;
@@ -124,12 +118,10 @@ class SystemTrayClient : public ash::mojom::SystemTrayClient,
   // Whether an Adobe Flash component update is available.
   bool flash_update_available_ = false;
 
-  // Avoid sending ash an empty enterprise domain at startup and suppress
-  // duplicate IPCs during the session.
-  std::string last_enterprise_domain_;
+  // Avoid sending ash an empty enterprise display domain at startup and
+  // suppress duplicate IPCs during the session.
+  std::string last_enterprise_display_domain_;
   bool last_active_directory_managed_ = false;
-
-  content::NotificationRegistrar registrar_;
 
   DISALLOW_COPY_AND_ASSIGN(SystemTrayClient);
 };

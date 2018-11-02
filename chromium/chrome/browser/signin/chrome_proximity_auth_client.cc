@@ -21,6 +21,7 @@
 #include "components/cryptauth/cryptauth_client_impl.h"
 #include "components/cryptauth/cryptauth_device_manager.h"
 #include "components/cryptauth/cryptauth_enrollment_manager.h"
+#include "components/cryptauth/local_device_data_provider.h"
 #include "components/cryptauth/secure_message_delegate.h"
 #include "components/prefs/pref_service.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -91,8 +92,12 @@ void ChromeProximityAuthClient::GetChallengeForUserAndDevice(
 #endif
 }
 
-PrefService* ChromeProximityAuthClient::GetPrefService() {
-  return profile_->GetPrefs();
+proximity_auth::ProximityAuthPrefManager*
+ChromeProximityAuthClient::GetPrefManager() {
+  EasyUnlockService* service = EasyUnlockService::Get(profile_);
+  if (service)
+    return service->GetProximityAuthPrefManager();
+  return nullptr;
 }
 
 std::unique_ptr<cryptauth::SecureMessageDelegate>
@@ -133,4 +138,11 @@ ChromeProximityAuthClient::GetCryptAuthDeviceManager() {
 cryptauth::CryptAuthService* ChromeProximityAuthClient::GetCryptAuthService() {
   return ChromeCryptAuthServiceFactory::GetInstance()->GetForBrowserContext(
       profile_);
+}
+
+std::string ChromeProximityAuthClient::GetLocalDevicePublicKey() {
+  cryptauth::LocalDeviceDataProvider provider(GetCryptAuthService());
+  std::string local_public_key;
+  provider.GetLocalDeviceData(&local_public_key, nullptr);
+  return local_public_key;
 }

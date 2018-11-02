@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "base/message_loop/message_loop.h"
+#include "build/build_config.h"
 #include "core/dom/TaskRunnerHelper.h"
+#include "core/testing/sim/SimRequest.h"
+#include "core/testing/sim/SimTest.h"
 #include "platform/scheduler/renderer/web_view_scheduler.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "public/platform/Platform.h"
@@ -11,8 +14,6 @@
 #include "public/web/WebScriptExecutionCallback.h"
 #include "public/web/WebScriptSource.h"
 #include "public/web/WebView.h"
-#include "web/tests/sim/SimRequest.h"
-#include "web/tests/sim/SimTest.h"
 
 namespace blink {
 
@@ -68,7 +69,7 @@ void RunTasksForPeriod(double delay_ms) {
 }
 
 // http://crbug.com/633321
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 #define MAYBE_DOMTimersFireInExpectedOrder DISABLED_DOMTimersFireInExpectedOrder
 #else
 #define MAYBE_DOMTimersFireInExpectedOrder DOMTimersFireInExpectedOrder
@@ -95,7 +96,7 @@ TEST_F(VirtualTimeTest, MAYBE_DOMTimersFireInExpectedOrder) {
 }
 
 // http://crbug.com/633321
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 #define MAYBE_SetInterval DISABLED_SetInterval
 #else
 #define MAYBE_SetInterval SetInterval
@@ -121,7 +122,7 @@ TEST_F(VirtualTimeTest, MAYBE_SetInterval) {
 }
 
 // http://crbug.com/633321
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 #define MAYBE_AllowVirtualTimeToAdvance DISABLED_AllowVirtualTimeToAdvance
 #else
 #define MAYBE_AllowVirtualTimeToAdvance AllowVirtualTimeToAdvance
@@ -151,7 +152,7 @@ TEST_F(VirtualTimeTest, MAYBE_AllowVirtualTimeToAdvance) {
 }
 
 // http://crbug.com/633321
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 #define MAYBE_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading \
   DISABLED_VirtualTimeNotAllowedToAdvanceWhileResourcesLoading
 #else
@@ -200,7 +201,7 @@ TEST_F(VirtualTimeTest,
 }
 
 // http://crbug.com/633321
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 #define MAYBE_DOMTimersSuspended DISABLED_DOMTimersSuspended
 #else
 #define MAYBE_DOMTimersSuspended DOMTimersSuspended
@@ -208,10 +209,11 @@ TEST_F(VirtualTimeTest,
 TEST_F(VirtualTimeTest, MAYBE_DOMTimersSuspended) {
   WebView().Scheduler()->EnableVirtualTime();
 
-  // Schedule a normal DOM timer to run at 1s in the future.
+  // Schedule normal DOM timers to run at 1s and 1.001s in the future.
   ExecuteJavaScript(
       "var run_order = [];"
-      "setTimeout(() => { run_order.push(1); }, 1000);");
+      "setTimeout(() => { run_order.push(1); }, 1000);"
+      "setTimeout(() => { run_order.push(2); }, 1001);");
 
   RefPtr<WebTaskRunner> runner =
       TaskRunnerHelper::Get(TaskType::kTimer, Window().GetExecutionContext());
@@ -226,13 +228,13 @@ TEST_F(VirtualTimeTest, MAYBE_DOMTimersSuspended) {
                               WTF::Unretained(WebView().Scheduler())),
                           TimeDelta::FromMilliseconds(1000));
 
-  // ALso schedule a second timer for the same point in time.
+  // ALso schedule a third timer for the same point in time.
   ExecuteJavaScript("setTimeout(() => { run_order.push(2); }, 1000);");
 
-  // The second DOM timer shouldn't have run because pausing virtual time also
-  // atomically pauses DOM timers.
+  // The second DOM timer shouldn't have run because the virtual time budget
+  // expired.
   testing::RunPendingTasks();
-  EXPECT_EQ("1", ExecuteJavaScript("run_order.join(', ')"));
+  EXPECT_EQ("1, 2", ExecuteJavaScript("run_order.join(', ')"));
 }
 
 }  // namespace blink

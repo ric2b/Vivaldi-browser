@@ -90,12 +90,9 @@ MockRead CreateMockRead(const SpdySerializedFrame& resp, int seq);
 
 MockRead CreateMockRead(const SpdySerializedFrame& resp, int seq, IoMode mode);
 
-// Combines the given SpdySerializedFrame into the given char array and returns
-// the total length.
-int CombineFrames(const SpdySerializedFrame** frames,
-                  int num_frames,
-                  char* buf,
-                  int buf_len);
+// Combines the given vector of SpdySerializedFrame into a single frame.
+SpdySerializedFrame CombineFrames(
+    std::vector<const SpdySerializedFrame*> frames);
 
 // Returns the SpdyPriority embedded in the given frame.  Returns true
 // and fills in |priority| on success.
@@ -192,6 +189,8 @@ struct SpdySessionDependencies {
       ClientSocketFactory* factory);
   static HttpNetworkSession::Params CreateSessionParams(
       SpdySessionDependencies* session_deps);
+  static HttpNetworkSession::Context CreateSessionContext(
+      SpdySessionDependencies* session_deps);
 
   // NOTE: host_resolver must be ordered before http_auth_handler_factory.
   std::unique_ptr<MockHostResolverBase> host_resolver;
@@ -235,14 +234,6 @@ class SpdyURLRequestContext : public URLRequestContext {
 // NULL.
 bool HasSpdySession(SpdySessionPool* pool, const SpdySessionKey& key);
 
-// Creates a SPDY session for the given key and puts it in the SPDY
-// session pool in |http_session|. A SPDY session for |key| must not
-// already exist.
-base::WeakPtr<SpdySession> CreateInsecureSpdySession(
-    HttpNetworkSession* http_session,
-    const SpdySessionKey& key,
-    const NetLogWithSource& net_log);
-
 // Tries to create a SPDY session for the given key but expects the
 // attempt to fail with the given error. A SPDY session for |key| must
 // not already exist. The session will be created but close in the
@@ -253,15 +244,16 @@ base::WeakPtr<SpdySession> TryCreateSpdySessionExpectingFailure(
     Error expected_error,
     const NetLogWithSource& net_log);
 
-// Like CreateInsecureSpdySession(), but uses TLS.
-base::WeakPtr<SpdySession> CreateSecureSpdySession(
-    HttpNetworkSession* http_session,
-    const SpdySessionKey& key,
-    const NetLogWithSource& net_log);
+// Creates a SPDY session for the given key and puts it in the SPDY
+// session pool in |http_session|. A SPDY session for |key| must not
+// already exist.
+base::WeakPtr<SpdySession> CreateSpdySession(HttpNetworkSession* http_session,
+                                             const SpdySessionKey& key,
+                                             const NetLogWithSource& net_log);
 
-// Like CreateSecureSpdySession(), but does not fail if there is already an IP
+// Like CreateSpdySession(), but does not fail if there is already an IP
 // pooled session for |key|.
-base::WeakPtr<SpdySession> CreateSecureSpdySessionWithIpBasedPoolingDisabled(
+base::WeakPtr<SpdySession> CreateSpdySessionWithIpBasedPoolingDisabled(
     HttpNetworkSession* http_session,
     const SpdySessionKey& key,
     const NetLogWithSource& net_log);
@@ -436,12 +428,6 @@ class SpdyTestUtil {
   SpdySerializedFrame ConstructSpdyGetReply(const char* const extra_headers[],
                                             int extra_header_count,
                                             int stream_id);
-
-  // Constructs a standard SPDY HEADERS frame to match the SPDY GET.
-  // |extra_headers| are the extra header-value pairs, which typically
-  // will vary the most between calls.
-  // Returns a SpdySerializedFrame.
-  SpdySerializedFrame ConstructSpdyGetReplyRedirect(int stream_id);
 
   // Constructs a standard SPDY HEADERS frame with an Internal Server
   // Error status code.

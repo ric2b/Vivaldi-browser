@@ -20,6 +20,7 @@ class ExecuteScript;
 class RecalculateStyle;
 class UpdateLayout;
 class UserCallback;
+class V8Compile;
 }
 
 class DOMWindow;
@@ -88,6 +89,9 @@ class CORE_EXPORT PerformanceMonitor final
   void Will(const probe::UserCallback&);
   void Did(const probe::UserCallback&);
 
+  void Will(const probe::V8Compile&);
+  void Did(const probe::V8Compile&);
+
   void DocumentWriteFetchScript(Document*);
 
   // Direct API for core.
@@ -116,10 +120,8 @@ class CORE_EXPORT PerformanceMonitor final
                                    std::unique_ptr<SourceLocation>);
 
   // scheduler::TaskTimeObserver implementation
-  void WillProcessTask(scheduler::TaskQueue*, double start_time) override;
-  void DidProcessTask(scheduler::TaskQueue*,
-                      double start_time,
-                      double end_time) override;
+  void WillProcessTask(double start_time) override;
+  void DidProcessTask(double start_time, double end_time) override;
   void OnBeginNestedRunLoop() override {}
   void WillExecuteScript(ExecutionContext*);
   void DidExecuteScript();

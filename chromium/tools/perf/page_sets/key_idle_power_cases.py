@@ -16,7 +16,8 @@ class KeyIdlePowerPage(page_module.Page):
         url=url,
         page_set=page_set,
         shared_page_state_class=(android_screen_restoration_shared_state
-            .AndroidScreenRestorationSharedState))
+            .AndroidScreenRestorationSharedState),
+        name=url.split('/')[-1])
     self._turn_screen_off = turn_screen_off
     self._duration_seconds = duration_seconds
 
@@ -49,7 +50,7 @@ class KeyLongIdlePowerPage(KeyIdlePowerPage):
         duration_seconds=90,
         shared_page_state_class=(android_screen_restoration_shared_state
             .AndroidScreenRestorationSharedState))
-    self._name = self.display_name + " (Long Idle)"
+    self._name = self.name + " (Long Idle)"
 
 
 class KeyIdlePowerCasesPageSet(story.StorySet):
@@ -84,3 +85,8 @@ class KeyIdlePowerCasesPageSet(story.StorySet):
     # Why: Ensure that activity strictly diminishes the longer the idle time.
     self.AddStory(KeyLongIdlePowerPage(
         'file://key_idle_power_cases/set-timeout.html', self, True))
+
+
+class KeyIdlePowerCasesStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass

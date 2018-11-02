@@ -6,14 +6,11 @@
 #define CONTENT_BROWSER_PERMISSIONS_PERMISSION_SERVICE_CONTEXT_H_
 
 #include "base/macros.h"
+#include "content/common/content_export.h"
 #include "content/public/browser/permission_type.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "mojo/public/cpp/bindings/strong_binding_set.h"
 #include "third_party/WebKit/public/platform/modules/permissions/permission.mojom.h"
-
-namespace service_manager {
-struct BindSourceInfo;
-}
 
 namespace url {
 class Origin;
@@ -29,14 +26,13 @@ class RenderProcessHost;
 // There is one PermissionServiceContext per RenderFrameHost/RenderProcessHost
 // which owns it. It then owns all PermissionServiceImpl associated to their
 // owner.
-class PermissionServiceContext : public WebContentsObserver {
+class CONTENT_EXPORT PermissionServiceContext : public WebContentsObserver {
  public:
   explicit PermissionServiceContext(RenderFrameHost* render_frame_host);
   explicit PermissionServiceContext(RenderProcessHost* render_process_host);
   ~PermissionServiceContext() override;
 
-  void CreateService(const service_manager::BindSourceInfo& source_info,
-                     blink::mojom::PermissionServiceRequest request);
+  void CreateService(blink::mojom::PermissionServiceRequest request);
 
   void CreateSubscription(PermissionType permission_type,
                           const url::Origin& origin,

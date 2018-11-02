@@ -80,7 +80,7 @@ GLuint ToGLuint(const void* ptr) {
   return static_cast<GLuint>(reinterpret_cast<size_t>(ptr));
 }
 
-static base::StaticAtomicSequenceNumber g_flush_id;
+static base::AtomicSequenceNumber g_flush_id;
 
 uint32_t GenerateNextFlushId() {
   return static_cast<uint32_t>(g_flush_id.GetNext());
@@ -467,9 +467,16 @@ bool GLES2Implementation::OnMemoryDump(
                     transfer_buffer_->GetFreeSize());
     auto guid = GetBufferGUIDForTracing(tracing_process_id,
                                         transfer_buffer_->GetShmId());
+    auto shared_memory_guid =
+        transfer_buffer_->shared_memory_handle().GetGUID();
     const int kImportance = 2;
-    pmd->CreateSharedGlobalAllocatorDump(guid);
-    pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+    if (!shared_memory_guid.is_empty()) {
+      pmd->CreateSharedMemoryOwnershipEdge(dump->guid(), guid,
+                                           shared_memory_guid, kImportance);
+    } else {
+      pmd->CreateSharedGlobalAllocatorDump(guid);
+      pmd->AddOwnershipEdge(dump->guid(), guid, kImportance);
+    }
   }
 
   return true;
@@ -6084,6 +6091,18 @@ void GLES2Implementation::AddLatencyInfo(
   gpu_control_->AddLatencyInfo(latency_info);
 }
 
+bool GLES2Implementation::ThreadSafeShallowLockDiscardableTexture(
+    uint32_t texture_id) {
+  ClientDiscardableManager* manager = share_group()->discardable_manager();
+  return manager->TextureIsValid(texture_id) &&
+         manager->LockTexture(texture_id);
+}
+
+void GLES2Implementation::CompleteLockDiscardableTexureOnContextThread(
+    uint32_t texture_id) {
+  helper_->LockDiscardableTextureCHROMIUM(texture_id);
+}
+
 void GLES2Implementation::SetLostContextCallback(
     const base::Closure& callback) {
   lost_context_callback_ = callback;
@@ -6229,6 +6248,8 @@ bool CreateImageValidInternalFormat(GLenum internalformat,
       return capabilities.texture_format_dxt5;
     case GL_ETC1_RGB8_OES:
       return capabilities.texture_format_etc1;
+    case GL_R16_EXT:
+      return capabilities.texture_norm16;
     case GL_RED:
     case GL_RG_EXT:
     case GL_RGB:

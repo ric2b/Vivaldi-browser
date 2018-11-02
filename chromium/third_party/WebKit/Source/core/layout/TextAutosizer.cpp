@@ -32,8 +32,8 @@
 
 #include <memory>
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/VisualViewport.h"
 #include "core/html/HTMLTextAreaElement.h"
@@ -41,6 +41,7 @@
 #include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutListItem.h"
 #include "core/layout/LayoutListMarker.h"
+#include "core/layout/LayoutMultiColumnFlowThread.h"
 #include "core/layout/LayoutRubyRun.h"
 #include "core/layout/LayoutTable.h"
 #include "core/layout/LayoutTableCell.h"
@@ -474,7 +475,7 @@ float TextAutosizer::Inflate(LayoutObject* parent,
   }
 
   if (page_info_.has_autosized_)
-    UseCounter::Count(*document_, UseCounter::kTextAutosizing);
+    UseCounter::Count(*document_, WebFeature::kTextAutosizing);
 
   return multiplier;
 }
@@ -675,8 +676,12 @@ TextAutosizer::BlockFlags TextAutosizer::ClassifyBlock(
     if (mask & POTENTIAL_ROOT)
       flags |= POTENTIAL_ROOT;
 
+    LayoutMultiColumnFlowThread* flow_thread = nullptr;
+    if (block->IsLayoutBlockFlow())
+      flow_thread = ToLayoutBlockFlow(block)->MultiColumnFlowThread();
     if ((mask & INDEPENDENT) &&
-        (IsIndependentDescendant(block) || block->IsTable()))
+        (IsIndependentDescendant(block) || block->IsTable() ||
+         (flow_thread && flow_thread->ColumnCount() > 1)))
       flags |= INDEPENDENT;
 
     if ((mask & EXPLICIT_WIDTH) && HasExplicitWidth(block))
@@ -1009,6 +1014,11 @@ const LayoutBlock* TextAutosizer::DeepestBlockContainingAllText(
 // FIXME: Refactor this to look more like TextAutosizer::deepestCommonAncestor.
 const LayoutBlock* TextAutosizer::DeepestBlockContainingAllText(
     const LayoutBlock* root) const {
+  // To avoid font-size shaking caused by the change of LayoutView's
+  // DeepestBlockContainingAllText.
+  if (root->IsLayoutView())
+    return root;
+
   size_t first_depth = 0;
   const LayoutObject* first_text_leaf = FindTextLeaf(root, first_depth, kFirst);
   if (!first_text_leaf)
@@ -1155,7 +1165,8 @@ bool TextAutosizer::IsWiderOrNarrowerDescendant(Cluster* cluster) {
       parent_deepest_block_containing_all_text));
 #endif
 
-  float content_width = cluster->root_->ContentLogicalWidth().ToFloat();
+  float content_width =
+      DeepestBlockContainingAllText(cluster)->ContentLogicalWidth().ToFloat();
   float cluster_text_width =
       parent_deepest_block_containing_all_text->ContentLogicalWidth().ToFloat();
 

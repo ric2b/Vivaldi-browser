@@ -5,6 +5,8 @@
 #ifndef CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_SESSION_H_
 #define CONTENT_BROWSER_DEVTOOLS_DEVTOOLS_SESSION_H_
 
+#include <map>
+
 #include "base/containers/flat_map.h"
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
@@ -29,22 +31,29 @@ class DevToolsSession : public protocol::FrontendChannel {
   void SetRenderFrameHost(RenderFrameHostImpl* host);
   void SetFallThroughForNotFound(bool value);
 
+  struct Message {
+    std::string method;
+    std::string message;
+  };
+  using MessageByCallId = std::map<int, Message>;
+  MessageByCallId& waiting_messages() { return waiting_for_response_messages_; }
+  const std::string& state_cookie() { return chunk_processor_.state_cookie(); }
+
   protocol::Response::Status Dispatch(
       const std::string& message,
       int* call_id,
       std::string* method);
-
-  // Only used by DevToolsAgentHostImpl.
-  DevToolsAgentHostClient* client() const { return client_; }
+  bool ReceiveMessageChunk(const DevToolsMessageChunk& chunk);
+  void SendMessageToClient(const std::string& message);
 
   template <typename Handler>
   static std::vector<Handler*> HandlersForAgentHost(
       DevToolsAgentHostImpl* agent_host,
       const std::string& name) {
     std::vector<Handler*> result;
-    if (agent_host->sessions_.empty())
+    if (agent_host->sessions().empty())
       return result;
-    for (const auto& session : agent_host->sessions_) {
+    for (DevToolsSession* session : agent_host->sessions()) {
       auto it = session->handlers_.find(name);
       if (it != session->handlers_.end())
         result.push_back(static_cast<Handler*>(it->second.get()));
@@ -53,7 +62,9 @@ class DevToolsSession : public protocol::FrontendChannel {
   }
 
  private:
-  void sendResponse(std::unique_ptr<base::DictionaryValue> response);
+  void SendMessageFromProcessor(int session_id, const std::string& message);
+  void SendResponse(std::unique_ptr<base::DictionaryValue> response);
+
   // protocol::FrontendChannel implementation.
   void sendProtocolResponse(
       int call_id,
@@ -69,6 +80,10 @@ class DevToolsSession : public protocol::FrontendChannel {
       handlers_;
   RenderFrameHostImpl* host_;
   std::unique_ptr<protocol::UberDispatcher> dispatcher_;
+  // Chunk processor's state cookie always corresponds to a state before
+  // any of the waiting for response messages have been handled.
+  DevToolsMessageChunkProcessor chunk_processor_;
+  MessageByCallId waiting_for_response_messages_;
 
   base::WeakPtrFactory<DevToolsSession> weak_factory_;
 };

@@ -17,7 +17,7 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/accessibility/browser_accessibility_android.h"
 #include "content/browser/accessibility/browser_accessibility_manager_android.h"
-#include "content/browser/android/content_view_core_impl.h"
+#include "content/browser/android/content_view_core.h"
 #include "content/browser/android/interstitial_page_delegate_android.h"
 #include "content/browser/frame_host/interstitial_page_impl.h"
 #include "content/browser/media/android/browser_media_player_manager.h"
@@ -317,12 +317,6 @@ jint WebContentsAndroid::GetBackgroundColor(JNIEnv* env,
   return rwhva->GetCachedBackgroundColor();
 }
 
-ScopedJavaLocalRef<jstring> WebContentsAndroid::GetURL(
-    JNIEnv* env,
-    const JavaParamRef<jobject>& obj) const {
-  return ConvertUTF8ToJavaString(env, web_contents_->GetURL().spec());
-}
-
 ScopedJavaLocalRef<jstring> WebContentsAndroid::GetLastCommittedURL(
     JNIEnv* env,
     const JavaParamRef<jobject>&) const {
@@ -415,11 +409,10 @@ void WebContentsAndroid::UpdateBrowserControlsState(
 void WebContentsAndroid::ScrollFocusedEditableNodeIntoView(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  RenderViewHost* host = web_contents_->GetRenderViewHost();
-  if (!host)
+  RenderFrameHostImpl* frame = web_contents_->GetFocusedFrame();
+  if (!frame)
     return;
-  host->Send(new InputMsg_ScrollFocusedEditableNodeIntoRect(
-      host->GetRoutingID(), gfx::Rect()));
+  frame->GetFrameInputHandler()->ScrollFocusedEditableNodeIntoRect(gfx::Rect());
 }
 
 void WebContentsAndroid::SelectWordAroundCaret(
@@ -646,14 +639,15 @@ void WebContentsAndroid::DismissTextHandles(
     view->DismissTextHandles();
 }
 
-void WebContentsAndroid::ShowContextMenuAtPoint(
+void WebContentsAndroid::ShowContextMenuAtTouchHandle(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj,
     int x,
     int y) {
   RenderWidgetHostViewAndroid* view = GetRenderWidgetHostViewAndroid();
   if (view)
-    view->ShowContextMenuAtPoint(gfx::Point(x, y));
+    view->ShowContextMenuAtPoint(gfx::Point(x, y),
+                                 ui::MENU_SOURCE_TOUCH_HANDLE);
 }
 
 void WebContentsAndroid::SetHasPersistentVideo(
@@ -667,6 +661,25 @@ bool WebContentsAndroid::HasActiveEffectivelyFullscreenVideo(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   return web_contents_->HasActiveEffectivelyFullscreenVideo();
+}
+
+base::android::ScopedJavaLocalRef<jobject>
+WebContentsAndroid::GetCurrentlyPlayingVideoSizes(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& obj) {
+  const WebContents::VideoSizeMap& sizes =
+      web_contents_->GetCurrentlyPlayingVideoSizes();
+  DCHECK_GT(sizes.size(), 0u);
+
+  ScopedJavaLocalRef<jobject> jsizes = Java_WebContentsImpl_createSizeList(env);
+
+  using MapEntry = std::pair<WebContentsObserver::MediaPlayerId, gfx::Size>;
+  for (const MapEntry& entry : sizes) {
+    Java_WebContentsImpl_createSizeAndAddToList(
+        env, jsizes, entry.second.width(), entry.second.height());
+  }
+
+  return jsizes;
 }
 
 ScopedJavaLocalRef<jobject> WebContentsAndroid::GetOrCreateEventForwarder(

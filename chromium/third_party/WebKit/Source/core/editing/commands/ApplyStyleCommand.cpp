@@ -118,7 +118,7 @@ ApplyStyleCommand::ApplyStyleCommand(Document& document,
       input_type_(input_type),
       property_level_(property_level),
       start_(MostForwardCaretPosition(EndingSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingSelection().end())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(nullptr),
       remove_only_(false),
@@ -145,7 +145,7 @@ ApplyStyleCommand::ApplyStyleCommand(Element* element, bool remove_only)
       input_type_(InputEvent::InputType::kNone),
       property_level_(kPropertyDefault),
       start_(MostForwardCaretPosition(EndingSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingSelection().end())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(element),
       remove_only_(remove_only),
@@ -161,7 +161,7 @@ ApplyStyleCommand::ApplyStyleCommand(
       input_type_(input_type),
       property_level_(kPropertyDefault),
       start_(MostForwardCaretPosition(EndingSelection().Start())),
-      end_(MostBackwardCaretPosition(EndingSelection().end())),
+      end_(MostBackwardCaretPosition(EndingSelection().End())),
       use_ending_selection_(true),
       styled_inline_element_(nullptr),
       remove_only_(true),
@@ -193,7 +193,7 @@ Position ApplyStyleCommand::StartPosition() {
 
 Position ApplyStyleCommand::EndPosition() {
   if (use_ending_selection_)
-    return EndingSelection().end();
+    return EndingSelection().End();
 
   return end_;
 }
@@ -263,19 +263,19 @@ void ApplyStyleCommand::ApplyBlockStyle(EditingStyle* style,
   Node& scope = NodeTraversal::HighestAncestorOrSelf(
       *visible_start.DeepEquivalent().AnchorNode());
   Range* start_range =
-      Range::Create(GetDocument(), Position::FirstPositionInNode(&scope),
+      Range::Create(GetDocument(), Position::FirstPositionInNode(scope),
                     visible_start.DeepEquivalent().ParentAnchoredEquivalent());
   Range* end_range =
-      Range::Create(GetDocument(), Position::FirstPositionInNode(&scope),
+      Range::Create(GetDocument(), Position::FirstPositionInNode(scope),
                     visible_end.DeepEquivalent().ParentAnchoredEquivalent());
 
   const TextIteratorBehavior behavior =
       TextIteratorBehavior::AllVisiblePositionsRangeLengthBehavior();
 
-  int start_index = TextIterator::RangeLength(
-      start_range->StartPosition(), start_range->EndPosition(), behavior);
-  int end_index = TextIterator::RangeLength(end_range->StartPosition(),
-                                            end_range->EndPosition(), behavior);
+  int start_index =
+      TextIterator::RangeLength(EphemeralRange(start_range), behavior);
+  int end_index =
+      TextIterator::RangeLength(EphemeralRange(end_range), behavior);
 
   VisiblePosition paragraph_start(StartOfParagraph(visible_start));
   VisiblePosition next_paragraph_start(
@@ -303,8 +303,8 @@ void ApplyStyleCommand::ApplyBlockStyle(EditingStyle* style,
           block = new_block;
           if (paragraph_start.IsOrphan()) {
             GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-            paragraph_start =
-                CreateVisiblePosition(Position::FirstPositionInNode(new_block));
+            paragraph_start = CreateVisiblePosition(
+                Position::FirstPositionInNode(*new_block));
           }
         }
         DCHECK(!paragraph_start.IsOrphan()) << paragraph_start;
@@ -1068,7 +1068,7 @@ bool ApplyStyleCommand::ShouldApplyInlineStyleToRun(EditingStyle* style,
     if (!style->StyleIsPresentInComputedStyleOfNode(node))
       return true;
     if (styled_inline_element_ &&
-        !EnclosingElementWithTag(Position::BeforeNode(node),
+        !EnclosingElementWithTag(Position::BeforeNode(*node),
                                  styled_inline_element_->TagQName()))
       return true;
   }
@@ -1552,7 +1552,7 @@ void ApplyStyleCommand::SplitTextAtStart(const Position& start,
 
   Text* text = ToText(start.ComputeContainerNode());
   SplitTextNode(text, start.OffsetInContainerNode());
-  UpdateStartEnd(Position::FirstPositionInNode(text), new_end);
+  UpdateStartEnd(Position::FirstPositionInNode(*text), new_end);
 }
 
 void ApplyStyleCommand::SplitTextAtEnd(const Position& start,
@@ -1573,7 +1573,7 @@ void ApplyStyleCommand::SplitTextAtEnd(const Position& start,
       should_update_start
           ? Position(ToText(prev_node), start.OffsetInContainerNode())
           : start;
-  UpdateStartEnd(new_start, Position::LastPositionInNode(prev_node));
+  UpdateStartEnd(new_start, Position::LastPositionInNode(*prev_node));
 }
 
 void ApplyStyleCommand::SplitTextElementAtStart(const Position& start,
@@ -1590,7 +1590,7 @@ void ApplyStyleCommand::SplitTextElementAtStart(const Position& start,
 
   SplitTextNodeContainingElement(ToText(start.ComputeContainerNode()),
                                  start.OffsetInContainerNode());
-  UpdateStartEnd(Position::BeforeNode(start.ComputeContainerNode()), new_end);
+  UpdateStartEnd(Position::BeforeNode(*start.ComputeContainerNode()), new_end);
 }
 
 void ApplyStyleCommand::SplitTextElementAtEnd(const Position& start,
@@ -1613,7 +1613,7 @@ void ApplyStyleCommand::SplitTextElementAtEnd(const Position& start,
       should_update_start
           ? Position(ToText(first_text_node), start.OffsetInContainerNode())
           : start;
-  UpdateStartEnd(new_start, Position::AfterNode(first_text_node));
+  UpdateStartEnd(new_start, Position::AfterNode(*first_text_node));
 }
 
 bool ApplyStyleCommand::ShouldSplitTextElement(Element* element,
@@ -1834,11 +1834,11 @@ Position ApplyStyleCommand::PositionToComputeInlineStyleChange(
   // relevant styles from the current run.
   if (!start_node->IsElementNode()) {
     dummy_element = HTMLSpanElement::Create(GetDocument());
-    InsertNodeAt(dummy_element, Position::BeforeNode(start_node),
+    InsertNodeAt(dummy_element, Position::BeforeNode(*start_node),
                  editing_state);
     if (editing_state->IsAborted())
       return Position();
-    return Position::BeforeNode(dummy_element);
+    return Position::BeforeNode(*dummy_element);
   }
 
   return FirstPositionInOrBeforeNode(start_node);

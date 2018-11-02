@@ -22,7 +22,7 @@ struct PaintLayerPainterTestParam {
 };
 
 class PaintLayerPainterTest
-    : public testing::WithParamInterface<PaintLayerPainterTestParam>,
+    : public ::testing::WithParamInterface<PaintLayerPainterTestParam>,
       private ScopedRootLayerScrollingForTest,
       public PaintControllerPaintTestBase {
   USING_FAST_MALLOC(PaintLayerPainterTest);
@@ -36,7 +36,7 @@ class PaintLayerPainterTest
                                     bool expected_value) {
     // The optimization to skip painting for effectively-invisible content is
     // limited to SPv1.
-    if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+    if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
       return;
 
     PaintLayer* target_layer =
@@ -47,8 +47,15 @@ class PaintLayerPainterTest
         PaintLayerPainter(*target_layer).PaintedOutputInvisible(painting_info);
     EXPECT_EQ(expected_value, invisible)
         << "Failed painted output visibility [spv2_enabled="
-        << RuntimeEnabledFeatures::slimmingPaintV2Enabled()
+        << RuntimeEnabledFeatures::SlimmingPaintV2Enabled()
         << ", expected=" << expected_value << ", actual=" << invisible << "].";
+  }
+
+  PaintController& MainGraphicsLayerPaintController() {
+    return GetLayoutView()
+        .Layer()
+        ->GraphicsLayerBacking(&GetLayoutView())
+        ->GetPaintController();
   }
 
  private:
@@ -58,61 +65,81 @@ class PaintLayerPainterTest
   }
 };
 
-INSTANTIATE_TEST_CASE_P(
-    All,
-    PaintLayerPainterTest,
-    ::testing::Values(PaintLayerPainterTestParam(
-                          false,
-                          false),  // non-root-layer-scrolls, slimming-paint-v1
-                      PaintLayerPainterTestParam(
-                          false,
-                          true),  // non-root-layer-scrolls, slimming-paint-v2
-                      PaintLayerPainterTestParam(
-                          true,
-                          false),  // root-layer-scrolls, slimming-paint-v1
-                      PaintLayerPainterTestParam(
-                          true,
-                          true)));  // root-layer-scrolls, slimming-paint-v2
+INSTANTIATE_TEST_CASE_P(All,
+                        PaintLayerPainterTest,
+                        ::testing::Values(
+                            // non-root-layer-scrolls, slimming-paint-v1
+                            PaintLayerPainterTestParam(false, false),
+                            // non-root-layer-scrolls, slimming-paint-v2
+                            PaintLayerPainterTestParam(false, true),
+                            // root-layer-scrolls, slimming-paint-v1
+                            PaintLayerPainterTestParam(true, false),
+                            // root-layer-scrolls, slimming-paint-v2
+                            PaintLayerPainterTestParam(true, true)));
 
 TEST_P(PaintLayerPainterTest, CachedSubsequence) {
   SetBodyInnerHTML(
-      "<div id='container1' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content1' style='position: absolute; width: 100px; height: "
-      "100px; background-color: red'></div>"
+      "<div id='container1' style='position: relative; z-index: 1;"
+      "    width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content1' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: red'></div>"
       "</div>"
-      "<div id='container2' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content2' style='position: absolute; width: 100px; height: "
-      "100px; background-color: green'></div>"
-      "</div>");
-  GetDocument().View()->UpdateAllLifecyclePhases();
+      "<div id='filler1' style='position: relative; z-index: 2;"
+      "    width: 20px; height: 20px; background-color: gray'></div>"
+      "<div id='container2' style='position: relative; z-index: 3;"
+      "    width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content2' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: green;'></div>"
+      "</div>"
+      "<div id='filler2' style='position: relative; z-index: 4;"
+      "    width: 20px; height: 20px; background-color: gray'></div>");
 
-  LayoutObject& container1 =
-      *GetDocument().getElementById("container1")->GetLayoutObject();
-  LayoutObject& content1 =
-      *GetDocument().getElementById("content1")->GetLayoutObject();
-  LayoutObject& container2 =
-      *GetDocument().getElementById("container2")->GetLayoutObject();
-  LayoutObject& content2 =
-      *GetDocument().getElementById("content2")->GetLayoutObject();
+  auto& container1 = *GetLayoutObjectByElementId("container1");
+  auto& content1 = *GetLayoutObjectByElementId("content1");
+  auto& filler1 = *GetLayoutObjectByElementId("filler1");
+  auto& container2 = *GetLayoutObjectByElementId("container2");
+  auto& content2 = *GetLayoutObjectByElementId("content2");
+  auto& filler2 = *GetLayoutObjectByElementId("filler2");
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
+  DisplayItemClient* background_display_item_client = nullptr;
+
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    // With SPv1 and RLS, the document background uses the scrolling contents
+    // layer as its DisplayItemClient.
+    background_display_item_client =
+        GetLayoutView().Layer()->GraphicsLayerBacking();
   } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
+    background_display_item_client = &GetLayoutView();
+  }
+
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 7,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(filler1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2, kBackgroundType),
+      TestDisplayItem(filler2, kBackgroundType));
+
+  auto* root_layer = GetLayoutView().Layer();
+  auto* container1_layer = ToLayoutBoxModelObject(container1).Layer();
+  auto* filler1_layer = ToLayoutBoxModelObject(filler1).Layer();
+  auto* container2_layer = ToLayoutBoxModelObject(container2).Layer();
+  auto* filler2_layer = ToLayoutBoxModelObject(filler2).Layer();
+
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    // Check that new paint chunks were forced for |container1| and
+    // |container2|.
+    Vector<PaintChunk> paint_chunks =
+        RootPaintController().GetPaintArtifact().PaintChunks();
+    EXPECT_EQ(5u, paint_chunks.size());
+    EXPECT_EQ(root_layer, &paint_chunks[0].id.client);
+    EXPECT_EQ(container1_layer, &paint_chunks[1].id.client);
+    EXPECT_EQ(filler1_layer, &paint_chunks[2].id.client);
+    EXPECT_EQ(container2_layer, &paint_chunks[3].id.client);
+    EXPECT_EQ(filler2_layer, &paint_chunks[4].id.client);
   }
 
   ToHTMLElement(content1.GetNode())
@@ -121,53 +148,57 @@ TEST_P(PaintLayerPainterTest, CachedSubsequence) {
                      "background-color: green");
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_TRUE(PaintWithoutCommit());
-
-  EXPECT_EQ(4, NumCachedNewItems());
+  EXPECT_EQ(6, NumCachedNewItems());
 
   Commit();
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
-  } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 7,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(filler1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2, kBackgroundType),
+      TestDisplayItem(filler2, kBackgroundType));
+
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    // We should still have the paint chunks forced by the cached subsequences.
+    Vector<PaintChunk> paint_chunks =
+        RootPaintController().GetPaintArtifact().PaintChunks();
+    EXPECT_EQ(5u, paint_chunks.size());
+    EXPECT_EQ(root_layer, &paint_chunks[0].id.client);
+    EXPECT_EQ(container1_layer, &paint_chunks[1].id.client);
+    EXPECT_EQ(filler1_layer, &paint_chunks[2].id.client);
+    EXPECT_EQ(container2_layer, &paint_chunks[3].id.client);
+    EXPECT_EQ(filler2_layer, &paint_chunks[4].id.client);
   }
 }
 
 TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange) {
   // TODO(wangxianzhu): SPv2 deals with interest rect differently, so disable
   // this test for SPv2 temporarily.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(
-      "<div id='container1' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content1' style='position: absolute; width: 100px; height: "
-      "100px; background-color: green'></div>"
+      "<div id='container1' style='position: relative; z-index: 1;"
+      "   width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content1' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: green'></div>"
       "</div>"
-      "<div id='container2' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content2a' style='position: absolute; width: 100px; height: "
-      "100px; background-color: green'></div>"
-      "  <div id='content2b' style='position: absolute; top: 200px; width: "
-      "100px; height: 100px; background-color: green'></div>"
+      "<div id='container2' style='position: relative; z-index: 1;"
+      "    width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content2a' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: green'></div>"
+      "  <div id='content2b' style='position: absolute; top: 200px;"
+      "      width: 100px; height: 100px; background-color: green'></div>"
       "</div>"
-      "<div id='container3' style='position: absolute; z-index: 2; left: "
-      "300px; top: 0; width: 200px; height: 200px; background-color: blue'>"
-      "  <div id='content3' style='position: absolute; width: 200px; height: "
-      "200px; background-color: green'></div>"
+      "<div id='container3' style='position: absolute; z-index: 2;"
+      "    left: 300px; top: 0; width: 200px; height: 200px;"
+      "    background-color: blue'>"
+      "  <div id='content3' style='position: absolute; width: 200px;"
+      "      height: 200px; background-color: green'></div>"
       "</div>");
   RootPaintController().InvalidateAll();
 
@@ -190,18 +221,31 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange) {
   IntRect interest_rect(0, 0, 400, 300);
   Paint(&interest_rect);
 
+  DisplayItemClient* background_display_item_client = nullptr;
+
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    // With SPv1 and RLS, the document background uses the scrolling contents
+    // layer as its DisplayItemClient.
+    background_display_item_client =
+        GetLayoutView().Layer()->GraphicsLayerBacking();
+  } else {
+    background_display_item_client = &GetLayoutView();
+  }
+
   // Container1 is fully in the interest rect;
   // Container2 is partly (including its stacking chidren) in the interest rect;
   // Content2b is out of the interest rect and output nothing;
   // Container3 is partly in the interest rect.
-  EXPECT_DISPLAY_LIST(RootPaintController().GetDisplayItemList(), 7,
-                      TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-                      TestDisplayItem(container1, kBackgroundType),
-                      TestDisplayItem(content1, kBackgroundType),
-                      TestDisplayItem(container2, kBackgroundType),
-                      TestDisplayItem(content2a, kBackgroundType),
-                      TestDisplayItem(container3, kBackgroundType),
-                      TestDisplayItem(content3, kBackgroundType));
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 7,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2a, kBackgroundType),
+      TestDisplayItem(container3, kBackgroundType),
+      TestDisplayItem(content3, kBackgroundType));
 
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   IntRect new_interest_rect(0, 100, 300, 1000);
@@ -217,27 +261,28 @@ TEST_P(PaintLayerPainterTest, CachedSubsequenceOnInterestRectChange) {
 
   Commit();
 
-  EXPECT_DISPLAY_LIST(RootPaintController().GetDisplayItemList(), 6,
-                      TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-                      TestDisplayItem(container1, kBackgroundType),
-                      TestDisplayItem(content1, kBackgroundType),
-                      TestDisplayItem(container2, kBackgroundType),
-                      TestDisplayItem(content2a, kBackgroundType),
-                      TestDisplayItem(content2b, kBackgroundType));
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 6,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2a, kBackgroundType),
+      TestDisplayItem(content2b, kBackgroundType));
 }
 
 TEST_P(PaintLayerPainterTest,
        CachedSubsequenceOnStyleChangeWithInterestRectClipping) {
   SetBodyInnerHTML(
-      "<div id='container1' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content1' style='position: absolute; width: 100px; height: "
-      "100px; background-color: red'></div>"
+      "<div id='container1' style='position: relative; z-index: 1;"
+      "    width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content1' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: red'></div>"
       "</div>"
-      "<div id='container2' style='position: relative; z-index: 1; width: "
-      "200px; height: 200px; background-color: blue'>"
-      "  <div id='content2' style='position: absolute; width: 100px; height: "
-      "100px; background-color: green'></div>"
+      "<div id='container2' style='position: relative; z-index: 1;"
+      "    width: 200px; height: 200px; background-color: blue'>"
+      "  <div id='content2' style='position: absolute; width: 100px;"
+      "      height: 100px; background-color: green'></div>"
       "</div>");
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   // PaintResult of all subsequences will be MayBeClippedByPaintDirtyRect.
@@ -253,23 +298,25 @@ TEST_P(PaintLayerPainterTest,
   LayoutObject& content2 =
       *GetDocument().getElementById("content2")->GetLayoutObject();
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
+  DisplayItemClient* background_display_item_client = nullptr;
+
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+      RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    // With SPv1 and RLS, the document background uses the scrolling contents
+    // layer as its DisplayItemClient.
+    background_display_item_client =
+        GetLayoutView().Layer()->GraphicsLayerBacking();
   } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
+    background_display_item_client = &GetLayoutView();
   }
+
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 5,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2, kBackgroundType));
 
   ToHTMLElement(content1.GetNode())
       ->setAttribute(HTMLNames::styleAttr,
@@ -277,28 +324,17 @@ TEST_P(PaintLayerPainterTest,
                      "background-color: green");
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
   EXPECT_TRUE(PaintWithoutCommit(&interest_rect));
-
   EXPECT_EQ(4, NumCachedNewItems());
 
   Commit();
 
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
-  } else {
-    EXPECT_DISPLAY_LIST(
-        RootPaintController().GetDisplayItemList(), 5,
-        TestDisplayItem(GetLayoutView(), kDocumentBackgroundType),
-        TestDisplayItem(container1, kBackgroundType),
-        TestDisplayItem(content1, kBackgroundType),
-        TestDisplayItem(container2, kBackgroundType),
-        TestDisplayItem(content2, kBackgroundType));
-  }
+  EXPECT_DISPLAY_LIST(
+      RootPaintController().GetDisplayItemList(), 5,
+      TestDisplayItem(*background_display_item_client, kDocumentBackgroundType),
+      TestDisplayItem(container1, kBackgroundType),
+      TestDisplayItem(content1, kBackgroundType),
+      TestDisplayItem(container2, kBackgroundType),
+      TestDisplayItem(content2, kBackgroundType));
 }
 
 TEST_P(PaintLayerPainterTest, PaintPhaseOutline) {
@@ -376,7 +412,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseFloat) {
       "  <div id='non-self-painting-layer' style='overflow: hidden'>"
       "    <div>"
       "      <div id='float' style='width: 10px; height: 10px; "
-      "background-color: blue'></div>"
+      "          background-color: blue'></div>"
       "    </div>"
       "  </div>"
       "</div>");
@@ -427,7 +463,7 @@ TEST_P(PaintLayerPainterTest, PaintPhaseFloatUnderInlineLayer) {
       "  <div id='non-self-painting-layer' style='overflow: hidden'>"
       "    <span id='span' style='position: relative'>"
       "      <div id='float' style='width: 10px; height: 10px; "
-      "background-color: blue; float: left'></div>"
+      "          background-color: blue; float: left'></div>"
       "    </span>"
       "  </div>"
       "</div>");
@@ -524,15 +560,21 @@ TEST_P(PaintLayerPainterTest, PaintPhaseBlockBackground) {
   ToHTMLElement(background_div.GetNode())
       ->setAttribute(HTMLNames::styleAttr, style_without_background);
   GetDocument().View()->UpdateAllLifecyclePhases();
-  EXPECT_FALSE(self_painting_layer.NeedsPaintPhaseDescendantBlockBackgrounds());
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() ||
+      !RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
+    // In RootLayerScrolls+SPv1, the empty paint phase optimization doesn't
+    // apply to the composited scrolling layer so we don't need this check.
+    EXPECT_FALSE(
+        self_painting_layer.NeedsPaintPhaseDescendantBlockBackgrounds());
+  }
 }
 
 TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnLayerRemoval) {
   SetBodyInnerHTML(
       "<div id='layer' style='position: relative'>"
       "  <div style='height: 100px'>"
-      "    <div style='height: 20px; outline: 1px solid red; background-color: "
-      "green'>outline and background</div>"
+      "    <div style='height: 20px; outline: 1px solid red;"
+      "        background-color: green'>outline and background</div>"
       "    <div style='float: left'>float</div>"
       "  </div>"
       "</div>");
@@ -566,8 +608,8 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnLayerAddition) {
   SetBodyInnerHTML(
       "<div id='will-be-layer'>"
       "  <div style='height: 100px'>"
-      "    <div style='height: 20px; outline: 1px solid red; background-color: "
-      "green'>outline and background</div>"
+      "    <div style='height: 20px; outline: 1px solid red;"
+      "        background-color: green'>outline and background</div>"
       "    <div style='float: left'>float</div>"
       "  </div>"
       "</div>");
@@ -600,8 +642,9 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnBecomingSelfPainting) {
       "<div id='will-be-self-painting' style='width: 100px; height: 100px; "
       "overflow: hidden'>"
       "  <div>"
-      "    <div style='outline: 1px solid red; background-color: "
-      "green'>outline and background</div>"
+      "    <div style='outline: 1px solid red; background-color: green'>"
+      "      outline and background"
+      "    </div>"
       "  </div>"
       "</div>");
 
@@ -633,8 +676,9 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnBecomingNonSelfPainting) {
       "<div id='will-be-non-self-painting' style='width: 100px; height: 100px; "
       "overflow: hidden; position: relative'>"
       "  <div>"
-      "    <div style='outline: 1px solid red; background-color: "
-      "green'>outline and background</div>"
+      "    <div style='outline: 1px solid red; background-color: green'>"
+      "      outline and background"
+      "    </div>"
       "  </div>"
       "</div>");
 
@@ -666,18 +710,14 @@ TEST_P(PaintLayerPainterTest, PaintPhasesUpdateOnBecomingNonSelfPainting) {
 
 TEST_P(PaintLayerPainterTest,
        TableCollapsedBorderNeedsPaintPhaseDescendantBlockBackgrounds) {
-  // TODO(wangxianzhu): Enable this test slimmingPaintInvalidation when its
-  // fully functional.
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-    return;
-
   // "position: relative" makes the table and td self-painting layers.
   // The table's layer should be marked needsPaintPhaseDescendantBlockBackground
   // because it will paint collapsed borders in the phase.
   SetBodyInnerHTML(
       "<table id='table' style='position: relative; border-collapse: collapse'>"
-      "  <tr><td style='position: relative; border: 1px solid "
-      "green'>Cell</td></tr>"
+      "  <tr><td style='position: relative; border: 1px solid green'>"
+      "    Cell"
+      "  </td></tr>"
       "</table>");
 
   LayoutBoxModelObject& table =
@@ -690,15 +730,11 @@ TEST_P(PaintLayerPainterTest,
 
 TEST_P(PaintLayerPainterTest,
        TableCollapsedBorderNeedsPaintPhaseDescendantBlockBackgroundsDynamic) {
-  // TODO(wangxianzhu): Enable this test slimmingPaintInvalidation when its
-  // fully functional.
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-    return;
-
   SetBodyInnerHTML(
       "<table id='table' style='position: relative'>"
-      "  <tr><td style='position: relative; border: 1px solid "
-      "green'>Cell</td></tr>"
+      "  <tr><td style='position: relative; border: 1px solid green'>"
+      "    Cell"
+      "  </td></tr>"
       "</table>");
 
   LayoutBoxModelObject& table =
@@ -724,14 +760,14 @@ TEST_P(PaintLayerPainterTest, DontPaintWithTinyOpacity) {
 TEST_P(PaintLayerPainterTest, DoPaintWithTinyOpacityAndWillChangeOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001; "
-      "will-change: opacity'></div>");
+      "    will-change: opacity'></div>");
   ExpectPaintedOutputInvisible("target", false);
 }
 
 TEST_P(PaintLayerPainterTest, DoPaintWithTinyOpacityAndBackdropFilter) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001;"
-      "  backdrop-filter: blur(2px);'></div>");
+      "    backdrop-filter: blur(2px);'></div>");
   ExpectPaintedOutputInvisible("target", false);
 }
 
@@ -739,14 +775,14 @@ TEST_P(PaintLayerPainterTest,
        DoPaintWithTinyOpacityAndBackdropFilterAndWillChangeOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001;"
-      "  backdrop-filter: blur(2px); will-change: opacity'></div>");
+      "    backdrop-filter: blur(2px); will-change: opacity'></div>");
   ExpectPaintedOutputInvisible("target", false);
 }
 
 TEST_P(PaintLayerPainterTest, DoPaintWithCompositedTinyOpacity) {
   SetBodyInnerHTML(
       "<div id='target' style='background: blue; opacity: 0.0001;"
-      " will-change: transform'></div>");
+      "    will-change: transform'></div>");
   ExpectPaintedOutputInvisible("target", false);
 }
 
@@ -783,8 +819,8 @@ TEST_P(PaintLayerPainterTest, DoPaintWithTransformAnimationZeroOpacity) {
       "  opacity: 0.0; "
       "} "
       "@keyframes example { "
-      " from { transform: translate(0px, 0px); } "
-      " to { transform: translate(3em, 0px); } "
+      "  from { transform: translate(0px, 0px); } "
+      "  to { transform: translate(3em, 0px); } "
       "} "
       "</style> "
       "<div id='target'>x</div></div>");
@@ -802,8 +838,8 @@ TEST_P(PaintLayerPainterTest,
       "  will-change: opacity; "
       "} "
       "@keyframes example { "
-      " from { transform: translate(0px, 0px); } "
-      " to { transform: translate(3em, 0px); } "
+      "  from { transform: translate(0px, 0px); } "
+      "  to { transform: translate(3em, 0px); } "
       "} "
       "</style> "
       "<div id='target'>x</div></div>");

@@ -15,21 +15,19 @@
 #include "ios/chrome/test/app/history_test_util.h"
 #include "ios/chrome/test/app/navigation_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/wait_util.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/html_response_provider.h"
+#include "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-using chrome_test_util::WebViewContainingText;
 using web::test::HttpServer;
 
 namespace {
@@ -160,9 +158,7 @@ class ScopedBlockPopupsPref {
 // Reloads the web view and waits for the loading to complete.
 // TODO(crbug.com/638674): Evaluate if this can move to shared code
 - (void)reloadPage {
-  GenericChromeCommand* reloadCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_RELOAD];
-  chrome_test_util::RunCommandWithActiveViewController(reloadCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() reload];
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
@@ -170,9 +166,7 @@ class ScopedBlockPopupsPref {
 // Navigates back to the previous webpage.
 // TODO(crbug.com/638674): Evaluate if this can move to shared code.
 - (void)goBack {
-  GenericChromeCommand* backCommand =
-      [[GenericChromeCommand alloc] initWithTag:IDC_BACK];
-  chrome_test_util::RunCommandWithActiveViewController(backCommand);
+  [chrome_test_util::BrowserCommandDispatcherForMainBVC() goBack];
 
   [ChromeEarlGrey waitForPageToFinishLoading];
 }
@@ -188,34 +182,24 @@ class ScopedBlockPopupsPref {
 
   // 1st hit to server. Verify that the server has the correct hit count.
   [ChromeEarlGrey loadURL:cacheTestFirstPageURL];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 1")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // Navigate to another page. 2nd hit to server.
   chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID);
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 2")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 2"];
 
   // Navigate back. This should not hit the server. Verify the page has been
   // loaded from cache. The serverHitCounter will remain the same.
   [self goBack];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 1")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // Reload page. 3rd hit to server. Verify that page reload causes the
   // hitCounter to show updated value.
   [self reloadPage];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 3")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 3"];
 
   // Verify that page reload causes Cache-Control value to be sent with request.
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("cacheControl: max-age=0")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"cacheControl: max-age=0"];
 }
 
 // Tests caching behavior when opening new tab. New tab should not use the
@@ -230,29 +214,21 @@ class ScopedBlockPopupsPref {
 
   // 1st hit to server. Verify title and hitCount.
   [ChromeEarlGrey loadURL:cacheTestFirstPageURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("First Page")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 1")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // 2nd hit to server. Verify hitCount.
   [ChromeEarlGrey loadURL:cacheTestThirdPageURL];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 2")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 2"];
 
   // Open the first page in a new tab. Verify that cache was not used. Must
   // first allow popups.
   ScopedBlockPopupsPref prefSetter(CONTENT_SETTING_ALLOW);
   chrome_test_util::TapWebViewElementWithId(kCacheTestLinkID);
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
   [ChromeEarlGrey waitForPageToFinishLoading];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("First Page")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 3")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 3"];
 }
 
 // Tests that cache is not used when selecting omnibox suggested website, even
@@ -268,11 +244,8 @@ class ScopedBlockPopupsPref {
 
   // 1st hit to server. Verify title and hitCount.
   [ChromeEarlGrey loadURL:cacheTestFirstPageURL];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("First Page")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 1")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 1"];
 
   // Type a search into omnnibox and select the first suggestion (second row)
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
@@ -282,11 +255,8 @@ class ScopedBlockPopupsPref {
       performAction:grey_tap()];
 
   // Verify title and hitCount. Cache should not be used.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("First Page")]
-      assertWithMatcher:grey_notNil()];
-  [[EarlGrey
-      selectElementWithMatcher:WebViewContainingText("serverHitCounter: 2")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"First Page"];
+  [ChromeEarlGrey waitForWebViewContainingText:"serverHitCounter: 2"];
 }
 
 @end

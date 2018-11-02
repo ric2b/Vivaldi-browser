@@ -23,12 +23,12 @@ struct Entry;
 // The internal implementation of Model.
 class ModelImpl : public Model {
  public:
-  ModelImpl(Client* client, std::unique_ptr<Store> store);
+  ModelImpl(std::unique_ptr<Store> store);
   ~ModelImpl() override;
 
   // Model implementation.
-  void Initialize() override;
-  void Destroy() override;
+  void Initialize(Client* client) override;
+  void HardRecover() override;
   void Add(const Entry& entry) override;
   void Update(const Entry& entry) override;
   void Remove(const std::string& guid) override;
@@ -40,7 +40,7 @@ class ModelImpl : public Model {
 
   void OnInitializedFinished(bool success,
                              std::unique_ptr<std::vector<Entry>> entries);
-  void OnDestroyFinished(bool success);
+  void OnHardRecoverFinished(bool success);
   void OnAddFinished(DownloadClient client,
                      const std::string& guid,
                      bool success);
@@ -53,7 +53,7 @@ class ModelImpl : public Model {
 
   // The external Model::Client reference that will receive all interesting
   // Model notifications.
-  Client* const client_;
+  Client* client_;
 
   // The backing Store that is responsible for saving and loading the
   // persisted entries.

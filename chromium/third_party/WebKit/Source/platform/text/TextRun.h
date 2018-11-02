@@ -74,7 +74,7 @@ class PLATFORM_EXPORT TextRun final {
         direction_(static_cast<unsigned>(direction)),
         directional_override_(directional_override),
         disable_spacing_(false),
-        text_justify_(kTextJustifyAuto),
+        text_justify_(static_cast<unsigned>(TextJustify::kAuto)),
         normalize_space_(false),
         tab_size_(0) {
     data_.characters8 = c;
@@ -99,7 +99,7 @@ class PLATFORM_EXPORT TextRun final {
         direction_(static_cast<unsigned>(direction)),
         directional_override_(directional_override),
         disable_spacing_(false),
-        text_justify_(kTextJustifyAuto),
+        text_justify_(static_cast<unsigned>(TextJustify::kAuto)),
         normalize_space_(false),
         tab_size_(0) {
     data_.characters16 = c;
@@ -122,7 +122,7 @@ class PLATFORM_EXPORT TextRun final {
         direction_(static_cast<unsigned>(direction)),
         directional_override_(directional_override),
         disable_spacing_(false),
-        text_justify_(kTextJustifyAuto),
+        text_justify_(static_cast<unsigned>(TextJustify::kAuto)),
         normalize_space_(false),
         tab_size_(0) {
     if (!characters_length_) {
@@ -191,6 +191,8 @@ class PLATFORM_EXPORT TextRun final {
     U16_NEXT(Characters16(), i, len_, codepoint);
     return codepoint;
   }
+
+  const void* Bytes() const { return data_.bytes_; }
 
   bool Is8Bit() const { return is8_bit_; }
   unsigned length() const { return len_; }
@@ -270,6 +272,7 @@ class PLATFORM_EXPORT TextRun final {
   union {
     const LChar* characters8;
     const UChar* characters16;
+    const void* bytes_;
   } data_;
   // Marks the end of the characters buffer.  Default equals to m_len.
   unsigned characters_length_;

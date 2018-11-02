@@ -27,7 +27,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #include "ios/shared/chrome/browser/ui/omnibox/location_bar_delegate.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ios/web/public/navigation_item.h"
 #include "ios/web/public/navigation_manager.h"
 #include "ios/web/public/ssl_status.h"
@@ -193,7 +193,6 @@ void LocationBarControllerImpl::OnChanged() {
     }
   }
   UpdateRightDecorations();
-  [delegate_ locationBarChanged];
 
   NSString* placeholderText =
       show_hint_text_ ? l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT) : nil;
@@ -282,8 +281,7 @@ void LocationBarControllerImpl::InstallLocationIcon() {
   // Set chip text options.
   [button setTitleColor:[UIColor colorWithWhite:0.631 alpha:1]
                forState:UIControlStateNormal];
-  [button titleLabel].font =
-      [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:12];
+  [button titleLabel].font = [[MDCTypography fontLoader] regularFontOfSize:12];
   [field_ setLeftView:button];
 
   // The placeholder image is only shown when in edit mode on iPhone, and always
@@ -327,8 +325,7 @@ void LocationBarControllerImpl::UpdateRightDecorations() {
     // omnibox animation is completed.
     if (IsIPadIdiom())
       [field_ setRightView:nil];
-  } else if ([field_ displayedText].empty() &&
-             ![field_ isShowingQueryRefinementChip]) {
+  } else if ([field_ displayedText].empty()) {
     [field_ setRightView:nil];
   } else {
     [field_ setRightView:clear_text_button_];

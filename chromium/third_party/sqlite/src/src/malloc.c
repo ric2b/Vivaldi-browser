@@ -92,7 +92,7 @@ int sqlite3_memory_alarm(
 #endif
 
 /*
-** Set the soft heap-size limit for the library. Passing a zero or 
+** Set the soft heap-size limit for the library. Passing a zero or
 ** negative value indicates no limit.
 */
 sqlite3_int64 sqlite3_soft_heap_limit64(sqlite3_int64 n){
@@ -204,7 +204,7 @@ sqlite3_int64 sqlite3_memory_highwater(int resetFlag){
 }
 
 /*
-** Trigger the alarm 
+** Trigger the alarm
 */
 static void sqlite3MallocAlarm(int nByte){
   if( mem0.alarmThreshold<=0 ) return;
@@ -229,6 +229,13 @@ static void mallocWithAlarm(int n, void **pp){
   ** or else a crash results.  Hence, do not attempt to optimize out the
   ** following xRoundup() call. */
   nFull = sqlite3GlobalConfig.m.xRoundup(n);
+
+#ifdef SQLITE_MAX_MEMORY
+  if( sqlite3StatusValue(SQLITE_STATUS_MEMORY_USED)+nFull>SQLITE_MAX_MEMORY ){
+    *pp = 0;
+    return;
+  }
+#endif
 
   sqlite3StatusHighwater(SQLITE_STATUS_MALLOC_SIZE, n);
   if( mem0.alarmThreshold>0 ){
@@ -418,7 +425,7 @@ int sqlite3MallocSize(void *p){
 int sqlite3DbMallocSize(sqlite3 *db, void *p){
   assert( p!=0 );
   if( db==0 || !isLookaside(db,p) ){
-#if SQLITE_DEBUG
+#ifdef SQLITE_DEBUG
     if( db==0 ){
       assert( sqlite3MemdebugNoType(p, (u8)~MEMTYPE_HEAP) );
       assert( sqlite3MemdebugHasType(p, MEMTYPE_HEAP) );
@@ -467,11 +474,12 @@ static SQLITE_NOINLINE void measureAllocationSize(sqlite3 *db, void *p){
 
 /*
 ** Free memory that might be associated with a particular database
-** connection.
+** connection.  Calling sqlite3DbFree(D,X) for X==0 is a harmless no-op.
+** The sqlite3DbFreeNN(D,X) version requires that X be non-NULL.
 */
-void sqlite3DbFree(sqlite3 *db, void *p){
+void sqlite3DbFreeNN(sqlite3 *db, void *p){
   assert( db==0 || sqlite3_mutex_held(db->mutex) );
-  if( p==0 ) return;
+  assert( p!=0 );
   if( db ){
     if( db->pnBytesFreed ){
       measureAllocationSize(db, p);
@@ -479,7 +487,7 @@ void sqlite3DbFree(sqlite3 *db, void *p){
     }
     if( isLookaside(db, p) ){
       LookasideSlot *pBuf = (LookasideSlot*)p;
-#if SQLITE_DEBUG
+#ifdef SQLITE_DEBUG
       /* Trash all content in the buffer being freed */
       memset(p, 0xaa, db->lookaside.sz);
 #endif
@@ -494,6 +502,10 @@ void sqlite3DbFree(sqlite3 *db, void *p){
   assert( db!=0 || sqlite3MemdebugNoType(p, MEMTYPE_LOOKASIDE) );
   sqlite3MemdebugSetType(p, MEMTYPE_HEAP);
   sqlite3_free(p);
+}
+void sqlite3DbFree(sqlite3 *db, void *p){
+  assert( db==0 || sqlite3_mutex_held(db->mutex) );
+  if( p ) sqlite3DbFreeNN(db, p);
 }
 
 /*
@@ -526,7 +538,7 @@ void *sqlite3Realloc(void *pOld, u64 nBytes){
     sqlite3_mutex_enter(mem0.mutex);
     sqlite3StatusHighwater(SQLITE_STATUS_MALLOC_SIZE, (int)nBytes);
     nDiff = nNew - nOld;
-    if( nDiff>0 && sqlite3StatusValue(SQLITE_STATUS_MEMORY_USED) >= 
+    if( nDiff>0 && sqlite3StatusValue(SQLITE_STATUS_MEMORY_USED) >=
           mem0.alarmThreshold-nDiff ){
       sqlite3MallocAlarm(nDiff);
     }
@@ -568,7 +580,7 @@ void *sqlite3_realloc64(void *pOld, sqlite3_uint64 n){
 
 /*
 ** Allocate and zero memory.
-*/ 
+*/
 void *sqlite3MallocZero(u64 n){
   void *p = sqlite3Malloc(n);
   if( p ){
@@ -598,13 +610,13 @@ static SQLITE_NOINLINE void *dbMallocRawFinish(sqlite3 *db, u64 n){
   assert( db!=0 );
   p = sqlite3Malloc(n);
   if( !p ) sqlite3OomFault(db);
-  sqlite3MemdebugSetType(p, 
+  sqlite3MemdebugSetType(p,
          (db->lookaside.bDisable==0) ? MEMTYPE_LOOKASIDE : MEMTYPE_HEAP);
   return p;
 }
 
 /*
-** Allocate memory, either lookaside (if possible) or heap.  
+** Allocate memory, either lookaside (if possible) or heap.
 ** If the allocation fails, set the mallocFailed flag in
 ** the connection pointer.
 **
@@ -721,9 +733,9 @@ void *sqlite3DbReallocOrFree(sqlite3 *db, void *p, u64 n){
 }
 
 /*
-** Make a copy of a string in memory obtained from sqliteMalloc(). These 
+** Make a copy of a string in memory obtained from sqliteMalloc(). These
 ** functions call sqlite3MallocRaw() directly instead of sqliteMalloc(). This
-** is because when memory debugging is turned on, these two functions are 
+** is because when memory debugging is turned on, these two functions are
 ** called via macros that record the current file and line number in the
 ** ThreadData structure.
 */
@@ -805,20 +817,20 @@ static SQLITE_NOINLINE int apiOomError(sqlite3 *db){
 }
 
 /*
-** This function must be called before exiting any API function (i.e. 
+** This function must be called before exiting any API function (i.e.
 ** returning control to the user) that has called sqlite3_malloc or
 ** sqlite3_realloc.
 **
 ** The returned value is normally a copy of the second argument to this
 ** function. However, if a malloc() failure has occurred since the previous
-** invocation SQLITE_NOMEM is returned instead. 
+** invocation SQLITE_NOMEM is returned instead.
 **
 ** If an OOM as occurred, then the connection error-code (the value
 ** returned by sqlite3_errcode()) is set to SQLITE_NOMEM.
 */
 int sqlite3ApiExit(sqlite3* db, int rc){
   /* If the db handle must hold the connection handle mutex here.
-  ** Otherwise the read (and possible write) of db->mallocFailed 
+  ** Otherwise the read (and possible write) of db->mallocFailed
   ** is unsafe, as is the call to sqlite3Error().
   */
   assert( db!=0 );

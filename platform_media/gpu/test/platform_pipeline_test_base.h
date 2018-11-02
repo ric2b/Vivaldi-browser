@@ -2,7 +2,6 @@
 #define MEDIA_TEST_PLATFORM_PIPELINE_TEST_BASE_H
 
 #include "base/files/file_path.h"
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "media/base/data_source.h"
 #include "media/base/demuxer.h"

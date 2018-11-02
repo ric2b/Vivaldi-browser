@@ -8,6 +8,8 @@ from telemetry.page import shared_page_state
 class KeyMobileSitesPage(page_module.Page):
 
   def __init__(self, url, page_set, name='', tags=None):
+    if name == '':
+      name = url
     super(KeyMobileSitesPage, self).__init__(
         url=url, page_set=page_set, name=name,
         shared_page_state_class=shared_page_state.SharedMobilePageState,
@@ -131,25 +133,6 @@ class YahooAnswersPage(KeyMobileSitesPage):
     super(YahooAnswersPage, self).RunNavigateSteps(action_runner)
     action_runner.WaitForElement(text='Other Answers (1 - 20 of 149)')
     action_runner.ClickElement(text='Other Answers (1 - 20 of 149)')
-
-
-class GmailPage(KeyMobileSitesPage):
-
-  """ Why: productivity, top google properties """
-
-  def __init__(self, page_set):
-    super(GmailPage, self).__init__(
-      url='https://mail.google.com/mail/',
-      page_set=page_set)
-
-    self.credentials = 'google'
-
-  def RunNavigateSteps(self, action_runner):
-    super(GmailPage, self).RunNavigateSteps(action_runner)
-    action_runner.WaitForJavaScriptCondition(
-        'document.getElementById("og_user_warning") !== null')
-    action_runner.WaitForJavaScriptCondition(
-        'document.getElementById("og_user_warning") === null')
 
 
 class GroupClonedPage(KeyMobileSitesPage):

@@ -52,7 +52,8 @@ blink::WebView* WebViewTestClient::CreateView(
     const blink::WebWindowFeatures& features,
     const blink::WebString& frame_name,
     blink::WebNavigationPolicy policy,
-    bool suppress_opener) {
+    bool suppress_opener,
+    blink::WebSandboxFlags sandbox_flags) {
   if (test_runner()->shouldDumpNavigationPolicy()) {
     delegate()->PrintMessage("Default policy for createView for '" +
                              URLDescription(request.Url()) + "' is '" +
@@ -70,14 +71,6 @@ blink::WebView* WebViewTestClient::CreateView(
   // somewhat ugly cast is used to do this while fitting into the existing
   // WebViewClient interface.
   return reinterpret_cast<blink::WebView*>(0xdeadbeef);
-}
-
-void WebViewTestClient::SetStatusText(const blink::WebString& text) {
-  if (!test_runner()->shouldDumpStatusCallbacks())
-    return;
-  delegate()->PrintMessage(
-      std::string("UI DELEGATE STATUS CALLBACK: setStatusText:") +
-      text.Utf8().data() + "\n");
 }
 
 // Simulate a print by going into print mode and then exit straight away.

@@ -96,9 +96,7 @@ PrimaryLoader::PrimaryLoader()
           LoadMFLibrary(GetMFVideoDecoderLibraryName().c_str()) &&
           LoadMFLibrary("evr.dll")) {
   audio_decoder_available_[kCodecMP3] =
-      TURN_ON_MSE_VIVALDI
-          ? LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecMP3).c_str())
-          : false;
+      LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecMP3).c_str());
   audio_decoder_available_[kCodecAAC] =
       LoadMFLibrary(GetMFAudioDecoderLibraryName(kCodecAAC).c_str());
 

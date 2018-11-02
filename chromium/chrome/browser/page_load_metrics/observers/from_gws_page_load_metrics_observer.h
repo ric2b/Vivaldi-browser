@@ -8,6 +8,7 @@
 #include "base/macros.h"
 #include "base/optional.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_observer.h"
+#include "components/ukm/ukm_source.h"
 #include "url/gurl.h"
 
 namespace internal {
@@ -34,6 +35,8 @@ extern const char kHistogramFromGWSAbortReloadBeforeInteraction[];
 extern const char kHistogramFromGWSForegroundDuration[];
 extern const char kHistogramFromGWSForegroundDurationAfterPaint[];
 extern const char kHistogramFromGWSForegroundDurationNoCommit[];
+
+extern const char kUkmFromGoogleSearchName[];
 
 }  // namespace internal
 
@@ -62,6 +65,8 @@ class FromGWSPageLoadMetricsLogger {
   }
 
   // Invoked when metrics for the given page are complete.
+  void OnCommit(content::NavigationHandle* navigation_handle,
+                ukm::SourceId source_id);
   void OnComplete(const page_load_metrics::mojom::PageLoadTiming& timing,
                   const page_load_metrics::PageLoadExtraInfo& extra_info);
   void OnFailedProvisionalLoad(
@@ -95,29 +100,11 @@ class FromGWSPageLoadMetricsLogger {
       const page_load_metrics::PageLoadExtraInfo& extra_info);
 
   // The methods below are public only for testing.
-  static bool IsGoogleSearchHostname(const GURL& url);
-  static bool IsGoogleSearchResultUrl(const GURL& url);
-  static bool IsGoogleSearchRedirectorUrl(const GURL& url);
   bool ShouldLogFailedProvisionalLoadMetrics();
   bool ShouldLogPostCommitMetrics(const GURL& url);
   bool ShouldLogForegroundEventAfterCommit(
       const base::Optional<base::TimeDelta>& event,
       const page_load_metrics::PageLoadExtraInfo& info);
-
-  // Whether the given query string contains the given component. The query
-  // parameter should contain the query string of a URL (the portion following
-  // the question mark, excluding the question mark). The component must fully
-  // match a component in the query string. For example, 'foo=bar' would match
-  // the query string 'a=b&foo=bar&c=d' but would not match 'a=b&zzzfoo=bar&c=d'
-  // since, though foo=bar appears in the query string, the key specified in the
-  // component 'foo' does not match the full key in the query string
-  // 'zzzfoo'. For QueryContainsComponent, the component should of the form
-  // 'key=value'. For QueryContainsComponentPrefix, the component should be of
-  // the form 'key=' (where the value is not specified).
-  static bool QueryContainsComponent(const base::StringPiece query,
-                                     const base::StringPiece component);
-  static bool QueryContainsComponentPrefix(const base::StringPiece query,
-                                           const base::StringPiece component);
 
  private:
   bool previously_committed_url_is_search_results_ = false;
@@ -133,11 +120,6 @@ class FromGWSPageLoadMetricsLogger {
   // The time of first user interaction after paint from navigation start.
   base::Optional<base::TimeDelta> first_user_interaction_after_paint_;
 
-  // Common helper for QueryContainsComponent and QueryContainsComponentPrefix.
-  static bool QueryContainsComponentHelper(const base::StringPiece query,
-                                           const base::StringPiece component,
-                                           bool component_is_prefix);
-
   DISALLOW_COPY_AND_ASSIGN(FromGWSPageLoadMetricsLogger);
 };
 
@@ -150,7 +132,8 @@ class FromGWSPageLoadMetricsObserver
   ObservePolicy OnStart(content::NavigationHandle* navigation_handle,
                          const GURL& currently_committed_url,
                          bool started_in_foreground) override;
-  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle) override;
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
+                         ukm::SourceId source_id) override;
 
   ObservePolicy FlushMetricsOnAppEnterBackground(
       const page_load_metrics::mojom::PageLoadTiming& timing,

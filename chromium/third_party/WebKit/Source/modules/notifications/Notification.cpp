@@ -35,10 +35,10 @@
 #include "bindings/core/v8/serialization/SerializedScriptValueFactory.h"
 #include "bindings/modules/v8/V8NotificationAction.h"
 #include "core/dom/Document.h"
-#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/ScopedWindowFocusAllowedIndicator.h"
 #include "core/dom/TaskRunnerHelper.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/PerformanceMonitor.h"
@@ -50,7 +50,6 @@
 #include "modules/notifications/NotificationOptions.h"
 #include "modules/notifications/NotificationResourcesLoader.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/Functional.h"
@@ -75,7 +74,7 @@ Notification* Notification::Create(ExecutionContext* context,
                                    ExceptionState& exception_state) {
   // The Notification constructor may be disabled through a runtime feature when
   // the platform does not support non-persistent notifications.
-  if (!RuntimeEnabledFeatures::notificationConstructorEnabled()) {
+  if (!RuntimeEnabledFeatures::NotificationConstructorEnabled()) {
     exception_state.ThrowTypeError(
         "Illegal constructor. Use ServiceWorkerRegistration.showNotification() "
         "instead.");
@@ -96,17 +95,19 @@ Notification* Notification::Create(ExecutionContext* context,
   }
 
   if (context->IsSecureContext()) {
-    UseCounter::Count(context, UseCounter::kNotificationSecureOrigin);
-    if (context->IsDocument())
+    UseCounter::Count(context, WebFeature::kNotificationSecureOrigin);
+    if (context->IsDocument()) {
       UseCounter::CountCrossOriginIframe(
-          *ToDocument(context), UseCounter::kNotificationAPISecureOriginIframe);
+          *ToDocument(context), WebFeature::kNotificationAPISecureOriginIframe);
+    }
   } else {
     Deprecation::CountDeprecation(context,
-                                  UseCounter::kNotificationInsecureOrigin);
-    if (context->IsDocument())
+                                  WebFeature::kNotificationInsecureOrigin);
+    if (context->IsDocument()) {
       Deprecation::CountDeprecationCrossOriginIframe(
           *ToDocument(context),
-          UseCounter::kNotificationAPIInsecureOriginIframe);
+          WebFeature::kNotificationAPIInsecureOriginIframe);
+    }
   }
 
   WebNotificationData data =
@@ -210,7 +211,7 @@ void Notification::DispatchShowEvent() {
 
 void Notification::DispatchClickEvent() {
   ExecutionContext* context = GetExecutionContext();
-  UserGestureIndicator gesture_indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator gesture_indicator(UserGestureToken::Create(
       context->IsDocument() ? ToDocument(context) : nullptr,
       UserGestureToken::kNewGesture));
   ScopedWindowFocusAllowedIndicator window_focus_allowed(GetExecutionContext());
@@ -366,14 +367,14 @@ ScriptPromise Notification::requestPermission(
   ExecutionContext* context = ExecutionContext::From(script_state);
   if (!context->IsSecureContext()) {
     Deprecation::CountDeprecation(
-        context, UseCounter::kNotificationPermissionRequestedInsecureOrigin);
+        context, WebFeature::kNotificationPermissionRequestedInsecureOrigin);
   }
 
   if (context->IsDocument()) {
     LocalFrame* frame = ToDocument(context)->GetFrame();
     if (frame && !frame->IsMainFrame()) {
       Deprecation::CountDeprecation(
-          context, UseCounter::kNotificationPermissionRequestedIframe);
+          context, WebFeature::kNotificationPermissionRequestedIframe);
     }
   }
 

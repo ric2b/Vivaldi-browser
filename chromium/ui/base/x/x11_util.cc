@@ -57,6 +57,7 @@
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/skia_util.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_error_tracker.h"
 
 #if defined(OS_FREEBSD)
@@ -93,7 +94,7 @@ int DefaultX11IOErrorHandler(XDisplay* d) {
 bool GetProperty(XID window, const std::string& property_name, long max_length,
                  XAtom* type, int* format, unsigned long* num_items,
                  unsigned char** property) {
-  XAtom property_atom = GetAtom(property_name.c_str());
+  XAtom property_atom = gfx::GetAtom(property_name.c_str());
   unsigned long remaining_bytes = 0;
   return XGetWindowProperty(gfx::GetXDisplay(),
                             window,
@@ -441,7 +442,7 @@ void SetUseOSWindowFrame(XID window, bool use_os_window_frame) {
   motif_hints.flags = (1L << 1);
   motif_hints.decorations = use_os_window_frame ? 1 : 0;
 
-  XAtom hint_atom = GetAtom("_MOTIF_WM_HINTS");
+  XAtom hint_atom = gfx::GetAtom("_MOTIF_WM_HINTS");
   XChangeProperty(gfx::GetXDisplay(),
                   window,
                   hint_atom,
@@ -471,14 +472,11 @@ void SetHideTitlebarWhenMaximizedProperty(XID window,
                                           HideTitlebarWhenMaximized property) {
   // XChangeProperty() expects "hide" to be long.
   unsigned long hide = property;
-  XChangeProperty(gfx::GetXDisplay(),
-      window,
-      GetAtom("_GTK_HIDE_TITLEBAR_WHEN_MAXIMIZED"),
-      XA_CARDINAL,
-      32,  // size in bits
-      PropModeReplace,
-      reinterpret_cast<unsigned char*>(&hide),
-      1);
+  XChangeProperty(gfx::GetXDisplay(), window,
+                  gfx::GetAtom("_GTK_HIDE_TITLEBAR_WHEN_MAXIMIZED"),
+                  XA_CARDINAL,
+                  32,  // size in bits
+                  PropModeReplace, reinterpret_cast<unsigned char*>(&hide), 1);
 }
 
 void ClearX11DefaultRootWindow() {
@@ -513,7 +511,7 @@ bool IsWindowVisible(XID window) {
   // Minimized windows are not visible.
   std::vector<XAtom> wm_states;
   if (GetAtomArrayProperty(window, "_NET_WM_STATE", &wm_states)) {
-    XAtom hidden_atom = GetAtom("_NET_WM_STATE_HIDDEN");
+    XAtom hidden_atom = gfx::GetAtom("_NET_WM_STATE_HIDDEN");
     if (base::ContainsValue(wm_states, hidden_atom))
       return false;
   }
@@ -824,8 +822,8 @@ bool SetIntArrayProperty(XID window,
                          const std::string& type,
                          const std::vector<int>& value) {
   DCHECK(!value.empty());
-  XAtom name_atom = GetAtom(name.c_str());
-  XAtom type_atom = GetAtom(type.c_str());
+  XAtom name_atom = gfx::GetAtom(name.c_str());
+  XAtom type_atom = gfx::GetAtom(type.c_str());
 
   // XChangeProperty() expects values of type 32 to be longs.
   std::unique_ptr<long[]> data(new long[value.size()]);
@@ -857,8 +855,8 @@ bool SetAtomArrayProperty(XID window,
                           const std::string& type,
                           const std::vector<XAtom>& value) {
   DCHECK(!value.empty());
-  XAtom name_atom = GetAtom(name.c_str());
-  XAtom type_atom = GetAtom(type.c_str());
+  XAtom name_atom = gfx::GetAtom(name.c_str());
+  XAtom type_atom = gfx::GetAtom(type.c_str());
 
   // XChangeProperty() expects values of type 32 to be longs.
   std::unique_ptr<XAtom[]> data(new XAtom[value.size()]);
@@ -893,11 +891,6 @@ bool SetStringProperty(XID window,
   return !err_tracker.FoundNewError();
 }
 
-XAtom GetAtom(const char* name) {
-  // TODO(derat): Cache atoms to avoid round-trips to the server.
-  return XInternAtom(gfx::GetXDisplay(), name, false);
-}
-
 void SetWindowClassHint(XDisplay* display,
                         XID window,
                         const std::string& res_name,
@@ -913,13 +906,12 @@ void SetWindowClassHint(XDisplay* display,
 
 void SetWindowRole(XDisplay* display, XID window, const std::string& role) {
   if (role.empty()) {
-    XDeleteProperty(display, window, GetAtom("WM_WINDOW_ROLE"));
+    XDeleteProperty(display, window, gfx::GetAtom("WM_WINDOW_ROLE"));
   } else {
     char* role_c = const_cast<char*>(role.c_str());
-    XChangeProperty(display, window, GetAtom("WM_WINDOW_ROLE"), XA_STRING, 8,
-                    PropModeReplace,
-                    reinterpret_cast<unsigned char*>(role_c),
-                    role.size());
+    XChangeProperty(display, window, gfx::GetAtom("WM_WINDOW_ROLE"), XA_STRING,
+                    8, PropModeReplace,
+                    reinterpret_cast<unsigned char*>(role_c), role.size());
   }
 }
 
@@ -1111,7 +1103,7 @@ bool CopyAreaToCanvas(XID drawable,
     SkBitmap bitmap;
     bitmap.installPixels(
         SkImageInfo::MakeN32Premul(image->width, image->height), image->data,
-        image->bytes_per_line, nullptr, &ReleaseXImage, image.release());
+        image->bytes_per_line, &ReleaseXImage, image.release());
     gfx::ImageSkia image_skia;
     gfx::ImageSkiaRep image_rep(bitmap, canvas->image_scale());
     image_skia.AddRepresentation(image_rep);
@@ -1185,7 +1177,8 @@ std::string GuessWindowManagerName() {
 
 bool IsCompositingManagerPresent() {
   static bool is_compositing_manager_present =
-      XGetSelectionOwner(gfx::GetXDisplay(), GetAtom("_NET_WM_CM_S0")) != None;
+      XGetSelectionOwner(gfx::GetXDisplay(), gfx::GetAtom("_NET_WM_CM_S0")) !=
+      None;
   return is_compositing_manager_present;
 }
 
@@ -1197,16 +1190,13 @@ bool IsX11WindowFullScreen(XID window) {
   // If _NET_WM_STATE_FULLSCREEN is in _NET_SUPPORTED, use the presence or
   // absence of _NET_WM_STATE_FULLSCREEN in _NET_WM_STATE to determine
   // whether we're fullscreen.
-  XAtom fullscreen_atom = GetAtom("_NET_WM_STATE_FULLSCREEN");
+  XAtom fullscreen_atom = gfx::GetAtom("_NET_WM_STATE_FULLSCREEN");
   if (WmSupportsHint(fullscreen_atom)) {
     std::vector<XAtom> atom_properties;
     if (GetAtomArrayProperty(window,
                              "_NET_WM_STATE",
                              &atom_properties)) {
-      return std::find(atom_properties.begin(),
-                       atom_properties.end(),
-                       fullscreen_atom) !=
-          atom_properties.end();
+      return base::ContainsValue(atom_properties, fullscreen_atom);
     }
   }
 
@@ -1237,8 +1227,7 @@ bool WmSupportsHint(XAtom atom) {
     return false;
   }
 
-  return std::find(supported_atoms.begin(), supported_atoms.end(), atom) !=
-      supported_atoms.end();
+  return base::ContainsValue(supported_atoms, atom);
 }
 
 XRefcountedMemory::XRefcountedMemory(unsigned char* x11_data, size_t length)
@@ -1391,7 +1380,7 @@ XVisualManager::XVisualManager()
   for (int i = 0; i < visuals_len; ++i)
     visuals_[visual_list[i].visualid].reset(new XVisualData(visual_list[i]));
 
-  XAtom NET_WM_CM_S0 = XInternAtom(display_, "_NET_WM_CM_S0", False);
+  XAtom NET_WM_CM_S0 = gfx::GetAtom("_NET_WM_CM_S0");
   using_compositing_wm_ = XGetSelectionOwner(display_, NET_WM_CM_S0) != None;
 
   // Choose the opaque visual.

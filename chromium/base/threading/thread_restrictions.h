@@ -58,6 +58,15 @@ class InFlightIO;
 namespace gpu {
 class GpuChannelHost;
 }
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// IPCAudioDecoder needs to use base::ThreadRestrictions::ScopedAllowWait
+// to mimic a synchronous API for AudioFileReader
+namespace media {
+  class IPCAudioDecoder;
+}
+#endif // USE_SYSTEM_PROPRIETARY_CODECS
+
 namespace mojo {
 class SyncCallRestrictions;
 namespace edk {
@@ -86,6 +95,10 @@ class WindowResizeHelperMac;
 
 namespace views {
 class ScreenMus;
+}
+
+namespace viz {
+class ServerGpuMemoryBufferManager;
 }
 
 namespace base {
@@ -216,6 +229,12 @@ class BASE_EXPORT ThreadRestrictions {
   friend class ui::CommandBufferLocal;
   friend class ui::GpuState;
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  // IPCAudioDecoder needs to use base::ThreadRestrictions::ScopedAllowWait
+  // to mimic a synchronous API for AudioFileReader
+  friend class media::IPCAudioDecoder;
+#endif // USE_SYSTEM_PROPRIETARY_CODECS
+
   // END ALLOWED USAGE.
   // BEGIN USAGE THAT NEEDS TO BE FIXED.
   friend class ::chromeos::BlockingMethodCaller;  // http://crbug.com/125360
@@ -238,6 +257,7 @@ class BASE_EXPORT ThreadRestrictions {
   friend class content::SoftwareOutputDeviceMus;  // Interim non-production code
 #endif
   friend class views::ScreenMus;
+  friend class viz::ServerGpuMemoryBufferManager;
 // END USAGE THAT NEEDS TO BE FIXED.
 
 #if DCHECK_IS_ON()

@@ -43,26 +43,25 @@
 #include "core/dom/DocumentType.h"
 #include "core/dom/Element.h"
 #include "core/dom/ElementRareData.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/GetRootNodeOptions.h"
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 #include "core/dom/NodeRareData.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/ProcessingInstruction.h"
 #include "core/dom/Range.h"
+#include "core/dom/ShadowRoot.h"
+#include "core/dom/SlotAssignment.h"
 #include "core/dom/StaticNodeList.h"
 #include "core/dom/StyleEngine.h"
 #include "core/dom/TemplateContentDocumentFragment.h"
 #include "core/dom/Text.h"
 #include "core/dom/TreeScopeAdopter.h"
 #include "core/dom/UserActionElementSet.h"
-#include "core/dom/custom/CustomElement.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/FlatTreeTraversal.h"
-#include "core/dom/shadow/InsertionPoint.h"
-#include "core/dom/shadow/ShadowRoot.h"
-#include "core/dom/shadow/SlotAssignment.h"
+#include "core/dom/V0InsertionPoint.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/Event.h"
@@ -81,16 +80,17 @@
 #include "core/events/UIEvent.h"
 #include "core/events/WheelEvent.h"
 #include "core/frame/EventHandlerRegistry.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLSlotElement.h"
+#include "core/html/custom/CustomElement.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutBox.h"
-#include "core/layout/LayoutPart.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/page/ContextMenuController.h"
 #include "core/page/Page.h"
 #include "core/plugins/PluginView.h"
@@ -138,6 +138,25 @@ struct SameSizeAsNode : EventTarget {
   Member<void*> willbe_member_[4];
   void* pointer_;
 };
+
+NodeRenderingData::NodeRenderingData(LayoutObject* layout_object,
+                                     RefPtr<ComputedStyle> non_attached_style)
+    : layout_object_(layout_object), non_attached_style_(non_attached_style) {}
+
+NodeRenderingData::~NodeRenderingData() {
+  CHECK(!layout_object_);
+}
+
+void NodeRenderingData::SetNonAttachedStyle(
+    RefPtr<ComputedStyle> non_attached_style) {
+  DCHECK_NE(&SharedEmptyData(), this);
+  non_attached_style_ = non_attached_style;
+}
+
+NodeRenderingData& NodeRenderingData::SharedEmptyData() {
+  DEFINE_STATIC_LOCAL(NodeRenderingData, shared_empty_data, (nullptr, nullptr));
+  return shared_empty_data;
+}
 
 static_assert(sizeof(Node) <= sizeof(SameSizeAsNode), "Node should stay small");
 
@@ -781,8 +800,8 @@ static ContainerNode* GetReattachParent(Node& node) {
   }
   if (node.IsInV0ShadowTree() || node.IsChildOfV0ShadowHost()) {
     if (ShadowWhereNodeCanBeDistributedForV0(node)) {
-      if (InsertionPoint* insertion_point =
-              const_cast<InsertionPoint*>(ResolveReprojection(&node))) {
+      if (V0InsertionPoint* insertion_point =
+              const_cast<V0InsertionPoint*>(ResolveReprojection(&node))) {
         return insertion_point;
       }
     }
@@ -860,7 +879,7 @@ bool Node::IsInert() const {
     return true;
   }
 
-  if (RuntimeEnabledFeatures::inertAttributeEnabled()) {
+  if (RuntimeEnabledFeatures::InertAttributeEnabled()) {
     const Element* element = this->IsElementNode()
                                  ? ToElement(this)
                                  : FlatTreeTraversal::ParentElement(*this);
@@ -870,7 +889,7 @@ bool Node::IsInert() const {
       element = FlatTreeTraversal::ParentElement(*element);
     }
   }
-  return GetDocument().LocalOwner() && GetDocument().LocalOwner()->IsInert();
+  return GetDocument().GetFrame() && GetDocument().GetFrame()->IsInert();
 }
 
 unsigned Node::NodeIndex() const {
@@ -988,27 +1007,31 @@ Node* Node::CommonAncestor(const Node& other,
   return nullptr;
 }
 
-void Node::ReattachLayoutTree(const AttachContext& context) {
-  AttachContext reattach_context(context);
-  reattach_context.performing_reattach = true;
+void Node::ReattachLayoutTree(AttachContext& context) {
+  context.performing_reattach = true;
 
   // We only need to detach if the node has already been through
   // attachLayoutTree().
   if (GetStyleChangeType() < kNeedsReattachStyleChange)
-    DetachLayoutTree(reattach_context);
-  AttachLayoutTree(reattach_context);
+    DetachLayoutTree(context);
+  AttachLayoutTree(context);
 }
 
-void Node::AttachLayoutTree(const AttachContext&) {
+void Node::AttachLayoutTree(AttachContext& context) {
   DCHECK(GetDocument().InStyleRecalc() || IsDocumentNode());
   DCHECK(!GetDocument().Lifecycle().InDetach());
   DCHECK(NeedsAttach());
-  DCHECK(!GetLayoutObject() ||
-         (GetLayoutObject()->Style() &&
-          (GetLayoutObject()->Parent() || GetLayoutObject()->IsLayoutView())));
+
+  LayoutObject* layout_object = GetLayoutObject();
+  DCHECK(!layout_object ||
+         (layout_object->Style() &&
+          (layout_object->Parent() || layout_object->IsLayoutView())));
 
   ClearNeedsStyleRecalc();
   ClearNeedsReattachLayoutTree();
+
+  if (layout_object && !layout_object->IsFloatingOrOutOfFlowPositioned())
+    context.previous_in_flow = layout_object;
 
   if (AXObjectCache* cache = GetDocument().AxObjectCache())
     cache->UpdateCacheAfterNodeIsAttached(this);
@@ -1023,23 +1046,6 @@ void Node::DetachLayoutTree(const AttachContext& context) {
   SetLayoutObject(nullptr);
   SetStyleChange(kNeedsReattachStyleChange);
   ClearChildNeedsStyleInvalidation();
-}
-
-void Node::ReattachWhitespaceSiblingsIfNeeded(Text* start) {
-  ScriptForbiddenScope forbid_script_during_raw_iteration;
-  for (Node* sibling = start; sibling; sibling = sibling->nextSibling()) {
-    if (sibling->IsTextNode() && ToText(sibling)->ContainsOnlyWhitespace()) {
-      bool had_layout_object = !!sibling->GetLayoutObject();
-      ToText(sibling)->ReattachLayoutTreeIfNeeded();
-      // If sibling's layout object status didn't change we don't need to
-      // continue checking other siblings since their layout object status won't
-      // change either.
-      if (!!sibling->GetLayoutObject() == had_layout_object)
-        return;
-    } else if (sibling->GetLayoutObject()) {
-      return;
-    }
-  }
 }
 
 const ComputedStyle* Node::VirtualEnsureComputedStyle(
@@ -1066,7 +1072,7 @@ bool Node::CanStartSelection() const {
     // We allow selections to begin within an element that has
     // -webkit-user-select: none set, but if the element is draggable then
     // dragging should take priority over selection.
-    if (style.UserDrag() == DRAG_ELEMENT &&
+    if (style.UserDrag() == EUserDrag::kElement &&
         style.UserSelect() == EUserSelect::kNone)
       return false;
   }
@@ -1091,13 +1097,13 @@ bool Node::IsStyledElement() const {
 
 bool Node::CanParticipateInFlatTree() const {
   // TODO(hayato): Return false for pseudo elements.
-  return !IsShadowRoot() && !IsActiveSlotOrActiveInsertionPoint();
+  return !IsShadowRoot() && !IsActiveSlotOrActiveV0InsertionPoint();
 }
 
-bool Node::IsActiveSlotOrActiveInsertionPoint() const {
+bool Node::IsActiveSlotOrActiveV0InsertionPoint() const {
   return (isHTMLSlotElement(*this) &&
           toHTMLSlotElement(*this).SupportsDistribution()) ||
-         IsActiveInsertionPoint(*this);
+         IsActiveV0InsertionPoint(*this);
 }
 
 AtomicString Node::SlotName() const {
@@ -2163,9 +2169,9 @@ void Node::HandleLocalEvents(Event& event) {
     return;
 
   if (IsDisabledFormControl(this) && event.IsMouseEvent() &&
-      !RuntimeEnabledFeatures::sendMouseEventsDisabledFormControlsEnabled()) {
+      !RuntimeEnabledFeatures::SendMouseEventsDisabledFormControlsEnabled()) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kDispatchMouseEventOnDisabledFormControl);
+                      WebFeature::kDispatchMouseEventOnDisabledFormControl);
     return;
   }
 
@@ -2245,7 +2251,7 @@ void Node::CreateAndDispatchPointerEvent(const AtomicString& mouse_event_name,
   IntPoint location_in_frame_zoomed;
   if (view && view->GetFrame() && view->GetFrame()->View()) {
     LocalFrame* frame = view->GetFrame();
-    FrameView* frame_view = frame->View();
+    LocalFrameView* frame_view = frame->View();
     IntPoint location_in_contents = frame_view->RootFrameToContents(
         FlooredIntPoint(mouse_event.PositionInRootFrame()));
     location_in_frame_zoomed =
@@ -2315,16 +2321,19 @@ void Node::DefaultEventHandler(Event* event) {
     if (DispatchDOMActivateEvent(detail, *event) !=
         DispatchEventResult::kNotCanceled)
       event->SetDefaultHandled();
-  } else if (event_type == EventTypeNames::contextmenu) {
-    if (Page* page = GetDocument().GetPage())
-      page->GetContextMenuController().HandleContextMenuEvent(event);
+  } else if (event_type == EventTypeNames::contextmenu &&
+             event->IsMouseEvent()) {
+    if (Page* page = GetDocument().GetPage()) {
+      page->GetContextMenuController().HandleContextMenuEvent(
+          ToMouseEvent(event));
+    }
   } else if (event_type == EventTypeNames::textInput) {
     if (event->HasInterface(EventNames::TextEvent)) {
       if (LocalFrame* frame = GetDocument().GetFrame())
         frame->GetEventHandler().DefaultTextInputEventHandler(
             ToTextEvent(event));
     }
-  } else if (RuntimeEnabledFeatures::middleClickAutoscrollEnabled() &&
+  } else if (RuntimeEnabledFeatures::MiddleClickAutoscrollEnabled() &&
              event_type == EventTypeNames::mousedown && event->IsMouseEvent()) {
     MouseEvent* mouse_event = ToMouseEvent(event);
     if (mouse_event->button() ==
@@ -2359,12 +2368,16 @@ void Node::DefaultEventHandler(Event* event) {
   } else if (event->type() == EventTypeNames::webkitEditableContentChanged) {
     // TODO(chongz): Remove after shipped.
     // New InputEvent are dispatched in Editor::appliedEditing, etc.
-    if (!RuntimeEnabledFeatures::inputEventEnabled())
+    if (!RuntimeEnabledFeatures::InputEventEnabled())
       DispatchInputEvent();
   }
 }
 
 void Node::WillCallDefaultEventHandler(const Event&) {}
+
+bool Node::HasActivationBehavior() const {
+  return false;
+}
 
 bool Node::WillRespondToMouseMoveEvents() {
   if (IsDisabledFormControl(this))
@@ -2409,7 +2422,7 @@ void Node::DecrementConnectedSubframeCount() {
 
 StaticNodeList* Node::getDestinationInsertionPoints() {
   UpdateDistribution();
-  HeapVector<Member<InsertionPoint>, 8> insertion_points;
+  HeapVector<Member<V0InsertionPoint>, 8> insertion_points;
   CollectDestinationInsertionPoints(*this, insertion_points);
   HeapVector<Member<Node>> filtered_insertion_points;
   for (const auto& insertion_point : insertion_points) {
@@ -2563,51 +2576,52 @@ void Node::SetV0CustomElementState(V0CustomElementState new_state) {
 void Node::CheckSlotChange(SlotChangeType slot_change_type) {
   // Common check logic is used in both cases, "after inserted" and "before
   // removed".
+
+  // Relevant DOM Standard:
+  // https://dom.spec.whatwg.org/#concept-node-insert
+  // https://dom.spec.whatwg.org/#concept-node-remove
+
+  // This function is usually called while DOM Mutation is still in-progress.
+  // For "after inserted" case, we assume that a parent and a child have been
+  // already connected. For "before removed" case, we assume that a parent and a
+  // child have not been disconnected yet.
+
   if (!IsSlotable())
     return;
+
   if (ShadowRoot* root = V1ShadowRootOfParent()) {
-    // Relevant DOM Standard:
-    // https://dom.spec.whatwg.org/#concept-node-insert
-    // - 6.1.2: If parent is a shadow host and node is a slotable, then assign a
-    //   slot for node.
-    // https://dom.spec.whatwg.org/#concept-node-remove
-    // - 10. If node is assigned, then run assign slotables for node’s assigned
-    //   slot.
+    // A shadow host's child can be assigned to a slot in the host's shadow
+    // tree.
 
     // Although DOM Standard requires "assign a slot for node / run assign
     // slotables" at this timing, we skip it as an optimization.
     if (HTMLSlotElement* slot = root->AssignedSlotFor(*this))
       slot->DidSlotChange(slot_change_type);
-  } else {
-    // Relevant DOM Standard:
-    // https://dom.spec.whatwg.org/#concept-node-insert
-    // - 6.1.3: If parent is a slot whose assigned nodes is the empty list, then
-    //   run signal a slot change for parent.
-    // https://dom.spec.whatwg.org/#concept-node-remove
-    // - 11. If parent is a slot whose assigned nodes is the empty list, then
-    //   run signal a slot change for parent.
+  } else if (IsInV1ShadowTree()) {
+    // Checking for fallback content if the node is in a v1 shadow tree.
     Element* parent = parentElement();
     if (parent && isHTMLSlotElement(parent)) {
       HTMLSlotElement& parent_slot = toHTMLSlotElement(*parent);
-      // TODO(hayato): Support slotchange for slots in non-shadow trees.
-      if (ShadowRoot* root = ContainingShadowRoot()) {
-        if (root && root->IsV1() && !parent_slot.HasAssignedNodesSlow())
-          parent_slot.DidSlotChange(slot_change_type);
-      }
+      DCHECK(parent_slot.SupportsDistribution());
+      // The parent_slot's assigned nodes might not be calculated because they
+      // are lazy evaluated later at UpdateDistribution() so we have to check it
+      // here.
+      if (!parent_slot.HasAssignedNodesSlow())
+        parent_slot.DidSlotChange(slot_change_type);
     }
   }
 }
 
-WebPluginContainerBase* Node::GetWebPluginContainerBase() const {
+WebPluginContainerImpl* Node::GetWebPluginContainer() const {
   if (!isHTMLObjectElement(this) && !isHTMLEmbedElement(this)) {
     return nullptr;
   }
 
   LayoutObject* object = GetLayoutObject();
-  if (object && object->IsLayoutPart()) {
-    PluginView* plugin = ToLayoutPart(object)->Plugin();
+  if (object && object->IsLayoutEmbeddedContent()) {
+    PluginView* plugin = ToLayoutEmbeddedContent(object)->Plugin();
     if (plugin) {
-      return plugin->GetWebPluginContainerBase();
+      return plugin->GetWebPluginContainer();
     }
   }
 
@@ -2632,7 +2646,7 @@ DEFINE_TRACE_WRAPPERS(Node) {
   visitor->TraceWrappersWithManualWriteBarrier(previous_);
   visitor->TraceWrappersWithManualWriteBarrier(next_);
   if (HasRareData())
-    visitor->TraceWrappers(RareData());
+    visitor->TraceWrappersWithManualWriteBarrier(RareData());
   EventTarget::TraceWrappers(visitor);
 }
 

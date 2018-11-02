@@ -162,10 +162,13 @@ struct FormFieldData;
 //   name_on_card
 //   network            Issuer network of the card. For example, "VISA". Renamed
 //                      from "type" in version 72.
+//   type               Card type. One of CreditCard::CardType enum values.
+//                      Added in version 74.
 //   last_four          Last four digits of the card number. For de-duping
 //                      with locally stored cards and generating descriptions.
 //   exp_month          Expiration month: 1-12
 //   exp_year           Four-digit year: 2017
+//   bank_name          Issuer bank name of the credit card.
 //
 // unmasked_credit_cards
 //                      When a masked credit credit card is unmasked and the
@@ -464,6 +467,8 @@ class AutofillTable : public WebDatabaseTable,
   bool MigrateToVersion70AddSyncMetadata();
   bool MigrateToVersion71AddHasConvertedAndBillingAddressIdMetadata();
   bool MigrateToVersion72RenameCardTypeToIssuerNetwork();
+  bool MigrateToVersion73AddMaskedCardBankName();
+  bool MigrateToVersion74AddServerCardTypeColumn();
 
   // Max data length saved in the table, AKA the maximum length allowed for
   // form data.
@@ -473,9 +478,8 @@ class AutofillTable : public WebDatabaseTable,
  private:
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_AddChanges);
-  FRIEND_TEST_ALL_PREFIXES(
-      AutofillTableTest,
-      Autofill_GetCountOfValuesContainedBetween);
+  FRIEND_TEST_ALL_PREFIXES(AutofillTableTest,
+                           Autofill_GetCountOfValuesContainedBetween);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_RemoveBetweenChanges);
   FRIEND_TEST_ALL_PREFIXES(AutofillTableTest, Autofill_UpdateDontReplace);
   FRIEND_TEST_ALL_PREFIXES(
@@ -511,10 +515,9 @@ class AutofillTable : public WebDatabaseTable,
 
   // Methods for adding autofill entries at a specified time.  For
   // testing only.
-  bool AddFormFieldValuesTime(
-      const std::vector<FormFieldData>& elements,
-      std::vector<AutofillChange>* changes,
-      base::Time time);
+  bool AddFormFieldValuesTime(const std::vector<FormFieldData>& elements,
+                              std::vector<AutofillChange>* changes,
+                              base::Time time);
   bool AddFormFieldValueTime(const FormFieldData& element,
                              std::vector<AutofillChange>* changes,
                              base::Time time);

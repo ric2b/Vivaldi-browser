@@ -4,12 +4,19 @@
 
 #include "components/subresource_filter/content/browser/subframe_navigation_filtering_throttle.h"
 
+#include <sstream>
+
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
+#include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "components/subresource_filter/core/common/time_measurements.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/console_message_level.h"
 
 namespace subresource_filter {
 
@@ -24,16 +31,21 @@ SubframeNavigationFilteringThrottle::SubframeNavigationFilteringThrottle(
 }
 
 SubframeNavigationFilteringThrottle::~SubframeNavigationFilteringThrottle() {
-  if (disallowed_) {
-    UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
-        "SubresourceFilter.DocumentLoad.SubframeFilteringDelay.Disallowed",
-        total_defer_time_, base::TimeDelta::FromMicroseconds(1),
-        base::TimeDelta::FromSeconds(10), 50);
-  } else {
-    UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
-        "SubresourceFilter.DocumentLoad.SubframeFilteringDelay.Allowed",
-        total_defer_time_, base::TimeDelta::FromMicroseconds(1),
-        base::TimeDelta::FromSeconds(10), 50);
+  switch (load_policy_) {
+    case LoadPolicy::ALLOW:
+      UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
+          "SubresourceFilter.DocumentLoad.SubframeFilteringDelay.Allowed",
+          total_defer_time_, base::TimeDelta::FromMicroseconds(1),
+          base::TimeDelta::FromSeconds(10), 50);
+      break;
+    case LoadPolicy::WOULD_DISALLOW:
+    // fall through
+    case LoadPolicy::DISALLOW:
+      UMA_HISTOGRAM_CUSTOM_MICRO_TIMES(
+          "SubresourceFilter.DocumentLoad.SubframeFilteringDelay.Disallowed",
+          total_defer_time_, base::TimeDelta::FromMicroseconds(1),
+          base::TimeDelta::FromSeconds(10), 50);
+      break;
   }
 }
 
@@ -47,6 +59,13 @@ SubframeNavigationFilteringThrottle::WillRedirectRequest() {
   return DeferToCalculateLoadPolicy(ThrottlingStage::WillRedirectRequest);
 }
 
+content::NavigationThrottle::ThrottleCheckResult
+SubframeNavigationFilteringThrottle::WillProcessResponse() {
+  DCHECK_NE(load_policy_, LoadPolicy::DISALLOW);
+  NotifyLoadPolicy();
+  return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
+}
+
 const char* SubframeNavigationFilteringThrottle::GetNameForLogging() {
   return "SubframeNavigationFilteringThrottle";
 }
@@ -54,6 +73,9 @@ const char* SubframeNavigationFilteringThrottle::GetNameForLogging() {
 content::NavigationThrottle::ThrottleCheckResult
 SubframeNavigationFilteringThrottle::DeferToCalculateLoadPolicy(
     ThrottlingStage stage) {
+  DCHECK_NE(load_policy_, LoadPolicy::DISALLOW);
+  if (load_policy_ == LoadPolicy::WOULD_DISALLOW)
+    return content::NavigationThrottle::ThrottleCheckResult::PROCEED;
   parent_frame_filter_->GetLoadPolicyForSubdocument(
       navigation_handle()->GetURL(),
       base::Bind(&SubframeNavigationFilteringThrottle::OnCalculatedLoadPolicy,
@@ -66,22 +88,43 @@ void SubframeNavigationFilteringThrottle::OnCalculatedLoadPolicy(
     ThrottlingStage stage,
     LoadPolicy policy) {
   DCHECK(!last_defer_timestamp_.is_null());
+  load_policy_ = policy;
   total_defer_time_ += base::TimeTicks::Now() - last_defer_timestamp_;
-  // TODO(csharrison): Support WouldDisallow pattern and expose the policy for
-  // metrics.
+
   if (policy == LoadPolicy::DISALLOW) {
-    disallowed_ = true;
+    if (parent_frame_filter_->activation_state().enable_logging) {
+      std::ostringstream oss(kDisallowSubframeConsoleMessagePrefix);
+      oss << navigation_handle()->GetURL();
+      oss << kDisallowSubframeConsoleMessageSuffix;
+      navigation_handle()
+          ->GetWebContents()
+          ->GetMainFrame()
+          ->AddMessageToConsole(content::CONSOLE_MESSAGE_LEVEL_ERROR,
+                                oss.str());
+    }
+
     parent_frame_filter_->ReportDisallowedLoad();
+    // Other load policies will be reported in WillProcessResponse.
+    NotifyLoadPolicy();
 
     const bool block_and_collapse_is_supported =
         content::IsBrowserSideNavigationEnabled() ||
         stage == ThrottlingStage::WillStartRequest;
-    navigation_handle()->CancelDeferredNavigation(
+    CancelDeferredNavigation(
         block_and_collapse_is_supported
             ? content::NavigationThrottle::BLOCK_REQUEST_AND_COLLAPSE
             : content::NavigationThrottle::CANCEL);
   } else {
-    navigation_handle()->Resume();
+    Resume();
+  }
+}
+
+void SubframeNavigationFilteringThrottle::NotifyLoadPolicy() const {
+  if (auto* observer_manager =
+          SubresourceFilterObserverManager::FromWebContents(
+              navigation_handle()->GetWebContents())) {
+    observer_manager->NotifySubframeNavigationEvaluated(navigation_handle(),
+                                                        load_policy_);
   }
 }
 

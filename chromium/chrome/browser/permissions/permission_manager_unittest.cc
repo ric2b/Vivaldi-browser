@@ -8,7 +8,10 @@
 #include "build/build_config.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/permissions/permission_manager_factory.h"
+#include "chrome/browser/permissions/permission_request_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
+#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -17,18 +20,12 @@
 #include "device/vr/features/features.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if BUILDFLAG(ENABLE_VR)
-#include "chrome/browser/android/vr_shell/vr_tab_helper.h"
-#endif  // BUILDFLAG(ENABLE_VR)
-
 using blink::mojom::PermissionStatus;
 using content::PermissionType;
 
 namespace {
 
-#if BUILDFLAG(ENABLE_VR)
 int kNoPendingOperation = -1;
-#endif  // BUILDFLAG(ENABLE_VR)
 
 class PermissionManagerTestingProfile final : public TestingProfile {
  public:
@@ -103,6 +100,10 @@ class PermissionManagerTest : public ChromeRenderViewHostTestHarness {
   void Reset() {
     callback_called_ = false;
     callback_result_ = PermissionStatus::ASK;
+  }
+
+  bool PendingRequestsEmpty() {
+    return GetPermissionManager()->pending_requests_.IsEmpty();
   }
 
  private:
@@ -400,10 +401,9 @@ TEST_F(PermissionManagerTest, SubscribeMIDIPermission) {
   GetPermissionManager()->UnsubscribePermissionStatusChange(subscription_id);
 }
 
-#if BUILDFLAG(ENABLE_VR)
 TEST_F(PermissionManagerTest, SuppressPermissionRequests) {
   content::WebContents* contents = web_contents();
-  vr_shell::VrTabHelper::CreateForWebContents(contents);
+  vr::VrTabHelper::CreateForWebContents(contents);
   NavigateAndCommit(url());
 
   SetPermission(CONTENT_SETTINGS_TYPE_NOTIFICATIONS, CONTENT_SETTING_ALLOW);
@@ -414,8 +414,7 @@ TEST_F(PermissionManagerTest, SuppressPermissionRequests) {
   EXPECT_TRUE(callback_called());
   EXPECT_EQ(PermissionStatus::GRANTED, callback_result());
 
-  vr_shell::VrTabHelper* vr_tab_helper =
-      vr_shell::VrTabHelper::FromWebContents(contents);
+  vr::VrTabHelper* vr_tab_helper = vr::VrTabHelper::FromWebContents(contents);
   vr_tab_helper->SetIsInVr(true);
   EXPECT_EQ(
       kNoPendingOperation,
@@ -434,4 +433,26 @@ TEST_F(PermissionManagerTest, SuppressPermissionRequests) {
   EXPECT_TRUE(callback_called());
   EXPECT_EQ(PermissionStatus::GRANTED, callback_result());
 }
-#endif  // BUILDFLAG(ENABLE_VR)
+
+TEST_F(PermissionManagerTest, PermissionIgnoredCleanup) {
+  content::WebContents* contents = web_contents();
+  PermissionRequestManager::CreateForWebContents(contents);
+  PermissionRequestManager* manager =
+      PermissionRequestManager::FromWebContents(contents);
+  auto prompt_factory = base::MakeUnique<MockPermissionPromptFactory>(manager);
+  manager->DisplayPendingRequests();
+
+  NavigateAndCommit(url());
+
+  GetPermissionManager()->RequestPermission(
+      PermissionType::VIDEO_CAPTURE, main_rfh(), url(), /*user_gesture=*/true,
+      base::Bind(&PermissionManagerTest::OnPermissionChange,
+                 base::Unretained(this)));
+
+  EXPECT_FALSE(PendingRequestsEmpty());
+
+  NavigateAndCommit(GURL("https://foobar.com"));
+
+  EXPECT_FALSE(callback_called());
+  EXPECT_TRUE(PendingRequestsEmpty());
+}

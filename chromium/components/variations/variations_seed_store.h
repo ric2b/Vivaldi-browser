@@ -12,15 +12,14 @@
 #include "base/macros.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "components/variations/metrics.h"
 
 class PrefService;
 class PrefRegistrySimple;
 
 namespace variations {
-class VariationsSeed;
-}
 
-namespace variations {
+class VariationsSeed;
 
 // VariationsSeedStore is a helper class for reading and writing the variations
 // seed from Local State.
@@ -32,7 +31,7 @@ class VariationsSeedStore {
   // Loads the variations seed data from local state into |seed|. If there is a
   // problem with loading, the pref value is cleared and false is returned. If
   // successful, |seed| will contain the loaded data and true is returned.
-  bool LoadSeed(variations::VariationsSeed* seed);
+  bool LoadSeed(VariationsSeed* seed) WARN_UNUSED_RESULT;
 
   // Stores the given seed |data| (serialized protobuf) to local state, along
   // with a base64-encoded digital signature for seed and the date when it was
@@ -51,7 +50,7 @@ class VariationsSeedStore {
                      const base::Time& date_fetched,
                      bool is_delta_compressed,
                      bool is_gzip_compressed,
-                     variations::VariationsSeed* parsed_seed);
+                     VariationsSeed* parsed_seed) WARN_UNUSED_RESULT;
 
   // Updates |kVariationsSeedDate| and logs when previous date was from a
   // different day.
@@ -65,11 +64,6 @@ class VariationsSeedStore {
     return variations_serial_number_;
   }
 
-  // Returns whether the last loaded or stored seed has the country field set.
-  bool seed_has_country_code() const {
-    return seed_has_country_code_;
-  }
-
   // Returns the invalid signature in base64 format, or an empty string if the
   // signature was valid, missing, or if signature verification is disabled.
   std::string GetInvalidSignature() const;
@@ -77,26 +71,13 @@ class VariationsSeedStore {
   // Registers Local State prefs used by this class.
   static void RegisterPrefs(PrefRegistrySimple* registry);
 
- protected:
-  // Note: UMA histogram enum - don't re-order or remove entries.
-  enum VerifySignatureResult {
-    VARIATIONS_SEED_SIGNATURE_MISSING,
-    VARIATIONS_SEED_SIGNATURE_DECODE_FAILED,
-    VARIATIONS_SEED_SIGNATURE_INVALID_SIGNATURE,
-    VARIATIONS_SEED_SIGNATURE_INVALID_SEED,
-    VARIATIONS_SEED_SIGNATURE_VALID,
-    VARIATIONS_SEED_SIGNATURE_ENUM_SIZE,
-  };
+  PrefService* local_state() { return local_state_; }
 
-  // Verifies a variations seed (the serialized proto bytes) with the specified
-  // base-64 encoded signature that was received from the server and returns the
-  // result. The signature is assumed to be an "ECDSA with SHA-256" signature
-  // (see kECDSAWithSHA256AlgorithmID in the .cc file). Returns the result of
-  // signature verification or VARIATIONS_SEED_SIGNATURE_ENUM_SIZE if signature
-  // verification is not enabled.
-  virtual VariationsSeedStore::VerifySignatureResult VerifySeedSignature(
-      const std::string& seed_bytes,
-      const std::string& base64_seed_signature);
+  const PrefService* local_state() const { return local_state_; }
+
+ protected:
+  // Whether signature verification is enabled. Overridable for tests.
+  virtual bool SignatureVerificationEnabled();
 
  private:
   FRIEND_TEST_ALL_PREFIXES(VariationsSeedStoreTest, VerifySeedSignature);
@@ -111,33 +92,31 @@ class VariationsSeedStore {
   void ImportFirstRunJavaSeed();
 #endif  // OS_ANDROID
 
-  // Reads the variations seed data from prefs; returns true on success.
-  bool ReadSeedData(std::string* seed_data);
+  // Reads the variations seed data from prefs into |seed_data|, and returns the
+  // result of the load. The value stored into |seed_data| should only be used
+  // if the result is SUCCESS.
+  // Side-effect: If the read fails, clears the prefs associated with the seed.
+  LoadSeedResult ReadSeedData(std::string* seed_data) WARN_UNUSED_RESULT;
 
   // Internal version of |StoreSeedData()| that assumes |seed_data| is not delta
   // compressed.
-  bool StoreSeedDataNoDelta(
-      const std::string& seed_data,
-      const std::string& base64_seed_signature,
-      const std::string& country_code,
-      const base::Time& date_fetched,
-      variations::VariationsSeed* parsed_seed);
+  bool StoreSeedDataNoDelta(const std::string& seed_data,
+                            const std::string& base64_seed_signature,
+                            const std::string& country_code,
+                            const base::Time& date_fetched,
+                            VariationsSeed* parsed_seed) WARN_UNUSED_RESULT;
 
   // Applies a delta-compressed |patch| to |existing_data|, producing the result
   // in |output|. Returns whether the operation was successful.
   static bool ApplyDeltaPatch(const std::string& existing_data,
                               const std::string& patch,
-                              std::string* output);
+                              std::string* output) WARN_UNUSED_RESULT;
 
   // The pref service used to persist the variations seed.
   PrefService* local_state_;
 
   // Cached serial number from the most recently fetched variations seed.
   std::string variations_serial_number_;
-
-  // Whether the most recently fetched variations seed has the country code
-  // field set.
-  bool seed_has_country_code_;
 
   // Keeps track of an invalid signature.
   std::string invalid_base64_signature_;

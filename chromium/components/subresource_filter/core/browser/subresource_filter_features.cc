@@ -172,6 +172,13 @@ Configuration ParseExperimentalConfiguration(
       ParseBool(TakeVariationParamOrReturnEmpty(
           params, kWhitelistSiteOnReloadParameterName));
 
+  configuration.activation_options.should_strengthen_popup_blocker =
+      ParseBool(TakeVariationParamOrReturnEmpty(
+          params, kStrengthenPopupBlockerParameterName));
+
+  configuration.activation_options.should_disable_ruleset_rules =
+      ParseBool(TakeVariationParamOrReturnEmpty(params, kDisableRulesetRules));
+
   // GeneralSettings:
   configuration.general_settings.ruleset_flavor =
       TakeVariationParamOrReturnEmpty(params, kRulesetFlavorParameterName);
@@ -259,6 +266,8 @@ const char kPerformanceMeasurementRateParameterName[] =
     "performance_measurement_rate";
 const char kSuppressNotificationsParameterName[] = "suppress_notifications";
 const char kWhitelistSiteOnReloadParameterName[] = "whitelist_site_on_reload";
+const char kStrengthenPopupBlockerParameterName[] = "strengthen_popup_blocker";
+const char kDisableRulesetRules[] = "disable_ruleset_rules";
 
 const char kRulesetFlavorParameterName[] = "ruleset_flavor";
 
@@ -310,6 +319,8 @@ bool Configuration::operator==(const Configuration& rhs) const {
                     config.activation_options.performance_measurement_rate,
                     config.activation_options.should_whitelist_site_on_reload,
                     config.activation_options.should_suppress_notifications,
+                    config.activation_options.should_strengthen_popup_blocker,
+                    config.activation_options.should_disable_ruleset_rules,
                     config.general_settings.ruleset_flavor);
   };
   return tie(*this) == tie(rhs);
@@ -319,14 +330,20 @@ bool Configuration::operator!=(const Configuration& rhs) const {
   return !(*this == rhs);
 }
 
+std::unique_ptr<base::trace_event::TracedValue>
+Configuration::ActivationConditions::ToTracedValue() const {
+  auto value = base::MakeUnique<base::trace_event::TracedValue>();
+  value->SetString("activation_scope", StreamToString(activation_scope));
+  value->SetString("activation_list", StreamToString(activation_list));
+  value->SetInteger("priority", priority);
+  return value;
+}
+
 std::unique_ptr<base::trace_event::TracedValue> Configuration::ToTracedValue()
     const {
   auto value = base::MakeUnique<base::trace_event::TracedValue>();
-  value->SetString("activation_scope",
-                   StreamToString(activation_conditions.activation_scope));
-  value->SetString("activation_list",
-                   StreamToString(activation_conditions.activation_list));
-  value->SetInteger("priority", activation_conditions.priority);
+  auto traced_conditions = activation_conditions.ToTracedValue();
+  value->SetValue("activation_conditions", *traced_conditions);
   value->SetString("activation_level",
                    StreamToString(activation_options.activation_level));
   value->SetDouble("performance_measurement_rate",
@@ -335,6 +352,10 @@ std::unique_ptr<base::trace_event::TracedValue> Configuration::ToTracedValue()
                     activation_options.should_suppress_notifications);
   value->SetBoolean("should_whitelist_site_on_reload",
                     activation_options.should_whitelist_site_on_reload);
+  value->SetBoolean("should_strengthen_popup_blocker",
+                    activation_options.should_strengthen_popup_blocker);
+  value->SetBoolean("should_disable_ruleset_rules",
+                    activation_options.should_disable_ruleset_rules);
   value->SetString("ruleset_flavor",
                    StreamToString(general_settings.ruleset_flavor));
   return value;

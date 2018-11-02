@@ -445,12 +445,14 @@ static void MapLoweredLocalNameToName(PrefixedNameToQualifiedNameMap* map,
   for (size_t i = 0; i < length; ++i) {
     const QualifiedName& name = *names[i];
     const AtomicString& local_name = name.LocalName();
-    AtomicString lowered_local_name = local_name.DeprecatedLower();
+    AtomicString lowered_local_name = local_name.LowerASCII();
     if (lowered_local_name != local_name)
       map->insert(lowered_local_name, name);
   }
 }
 
+// "Any other start tag" bullet in
+// https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inforeign
 static void AdjustSVGTagNameCase(AtomicHTMLToken* token) {
   static PrefixedNameToQualifiedNameMap* case_map = 0;
   if (!case_map) {
@@ -482,10 +484,12 @@ static void AdjustAttributes(AtomicHTMLToken* token) {
   }
 }
 
+// https://html.spec.whatwg.org/multipage/parsing.html#adjust-svg-attributes
 static void AdjustSVGAttributes(AtomicHTMLToken* token) {
   AdjustAttributes<SVGNames::getSVGAttrs, SVGNames::SVGAttrsCount>(token);
 }
 
+// https://html.spec.whatwg.org/multipage/parsing.html#adjust-mathml-attributes
 static void AdjustMathMLAttributes(AtomicHTMLToken* token) {
   AdjustAttributes<MathMLNames::getMathMLAttrs, MathMLNames::MathMLAttrsCount>(
       token);
@@ -619,7 +623,7 @@ void HTMLTreeBuilder::ProcessStartTagForInBody(AtomicHTMLToken* token) {
     if (tree_.IsFormElementPointerNonNull() && !IsParsingTemplateContents()) {
       ParseError(token);
       UseCounter::Count(tree_.CurrentNode()->GetDocument(),
-                        UseCounter::kHTMLParseErrorNestedForm);
+                        WebFeature::kHTMLParseErrorNestedForm);
       return;
     }
     ProcessFakePEndTagIfPInButtonScope();
@@ -1384,9 +1388,6 @@ bool HTMLTreeBuilder::ProcessBodyEndTagForInBody(AtomicHTMLToken* token) {
 
 void HTMLTreeBuilder::ProcessAnyOtherEndTagForInBody(AtomicHTMLToken* token) {
   DCHECK_EQ(token->GetType(), HTMLToken::kEndTag);
-  if (token->GetName() == menuitemTag)
-    UseCounter::Count(tree_.CurrentNode()->GetDocument(),
-                      UseCounter::kMenuItemCloseTag);
   HTMLElementStack::ElementRecord* record = tree_.OpenElements()->TopRecord();
   while (1) {
     HTMLStackItem* item = record->StackItem();

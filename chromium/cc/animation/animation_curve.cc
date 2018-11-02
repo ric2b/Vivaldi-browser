@@ -57,4 +57,22 @@ ScrollOffsetAnimationCurve* AnimationCurve::ToScrollOffsetAnimationCurve() {
   return static_cast<ScrollOffsetAnimationCurve*>(this);
 }
 
+const SizeAnimationCurve* AnimationCurve::ToSizeAnimationCurve() const {
+  DCHECK(Type() == AnimationCurve::SIZE);
+  return static_cast<const SizeAnimationCurve*>(this);
+}
+
+AnimationCurve::CurveType SizeAnimationCurve::Type() const {
+  return SIZE;
+}
+
+const BooleanAnimationCurve* AnimationCurve::ToBooleanAnimationCurve() const {
+  DCHECK(Type() == AnimationCurve::BOOLEAN);
+  return static_cast<const BooleanAnimationCurve*>(this);
+}
+
+AnimationCurve::CurveType BooleanAnimationCurve::Type() const {
+  return BOOLEAN;
+}
+
 }  // namespace cc

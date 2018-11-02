@@ -9,14 +9,14 @@
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
+#include "core/dom/AnimationWorkletProxyClient.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
-#include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
 #include "core/workers/WorkerReportingProxy.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
@@ -47,6 +47,17 @@ class AnimationWorkletTestPlatform : public TestingPlatformSupport {
   TestingCompositorSupport compositor_support_;
 };
 
+class TestAnimationWorkletProxyClient
+    : public GarbageCollected<TestAnimationWorkletProxyClient>,
+      public AnimationWorkletProxyClient {
+  USING_GARBAGE_COLLECTED_MIXIN(TestAnimationWorkletProxyClient);
+
+ public:
+  TestAnimationWorkletProxyClient() {}
+  void SetGlobalScope(WorkletGlobalScope*) override {}
+  void Dispose() override {}
+};
+
 }  // namespace
 
 class AnimationWorkletThreadTest : public ::testing::Test {
@@ -63,15 +74,20 @@ class AnimationWorkletThreadTest : public ::testing::Test {
   }
 
   std::unique_ptr<AnimationWorkletThread> CreateAnimationWorkletThread() {
+    WorkerClients* clients = WorkerClients::Create();
+    ProvideAnimationWorkletProxyClientTo(clients,
+                                         new TestAnimationWorkletProxyClient());
+
     std::unique_ptr<AnimationWorkletThread> thread =
         AnimationWorkletThread::Create(nullptr, *reporting_proxy_);
+
     thread->Start(
-        WorkerThreadStartupData::Create(
+        WTF::MakeUnique<GlobalScopeCreationParams>(
             KURL(kParsedURLString, "http://fake.url/"), "fake user agent", "",
             nullptr, kDontPauseWorkerGlobalScopeOnStart, nullptr, "",
-            security_origin_.Get(), nullptr, kWebAddressSpaceLocal, nullptr,
-            nullptr, WorkerV8Settings::Default()),
-        ParentFrameTaskRunners::Create(nullptr));
+            security_origin_.Get(), clients, kWebAddressSpaceLocal, nullptr,
+            nullptr, kV8CacheOptionsDefault),
+        WTF::nullopt, ParentFrameTaskRunners::Create());
     return thread;
   }
 
@@ -108,7 +124,8 @@ TEST_F(AnimationWorkletThreadTest, Basic) {
   std::unique_ptr<AnimationWorkletThread> worklet =
       CreateAnimationWorkletThread();
   CheckWorkletCanExecuteScript(worklet.get());
-  worklet->TerminateAndWait();
+  worklet->Terminate();
+  worklet->WaitForShutdownForTesting();
 }
 
 // Tests that the same WebThread is used for new worklets if the WebThread is
@@ -143,7 +160,8 @@ TEST_F(AnimationWorkletThreadTest, CreateSecondAndTerminateFirst) {
   // Verify that the worklet can still successfully execute script.
   CheckWorkletCanExecuteScript(second_worklet.get());
 
-  second_worklet->TerminateAndWait();
+  second_worklet->Terminate();
+  second_worklet->WaitForShutdownForTesting();
 }
 
 // Tests that a new WebThread is created if all existing worklets are
@@ -167,7 +185,8 @@ TEST_F(AnimationWorkletThreadTest, TerminateFirstAndCreateSecond) {
   EXPECT_EQ(first_thread, second_thread);
   CheckWorkletCanExecuteScript(worklet.get());
 
-  worklet->TerminateAndWait();
+  worklet->Terminate();
+  worklet->WaitForShutdownForTesting();
 }
 
 // Tests that v8::Isolate and WebThread are correctly set-up if a worklet is
@@ -196,7 +215,8 @@ TEST_F(AnimationWorkletThreadTest, CreatingSecondDuringTerminationOfFirst) {
   // Verify that the isolate can run some scripts correctly in the second
   // worklet.
   CheckWorkletCanExecuteScript(second_worklet.get());
-  second_worklet->TerminateAndWait();
+  second_worklet->Terminate();
+  second_worklet->WaitForShutdownForTesting();
 }
 
 }  // namespace blink

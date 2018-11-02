@@ -109,13 +109,15 @@ class TestDataReductionProxyMetricsObserver
   ~TestDataReductionProxyMetricsObserver() override {}
 
   // page_load_metrics::PageLoadMetricsObserver implementation:
-  ObservePolicy OnCommit(
-      content::NavigationHandle* navigation_handle) override {
+  ObservePolicy OnCommit(content::NavigationHandle* navigation_handle,
+                         ukm::SourceId source_id) override {
     DataReductionProxyData* data =
         DataForNavigationHandle(web_contents_, navigation_handle);
     data->set_used_data_reduction_proxy(data_reduction_proxy_used_);
+    data->set_request_url(GURL(kDefaultTestUrl));
     data->set_lofi_requested(lofi_used_);
-    return DataReductionProxyMetricsObserver::OnCommit(navigation_handle);
+    return DataReductionProxyMetricsObserver::OnCommit(navigation_handle,
+                                                       source_id);
   }
 
   DataReductionProxyPingbackClient* GetPingbackClient() const override {
@@ -416,18 +418,21 @@ TEST_F(DataReductionProxyMetricsObserverTest, OnCompletePingback) {
   std::unique_ptr<DataReductionProxyData> data =
       base::MakeUnique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
+  data->set_request_url(GURL(kDefaultTestUrl));
   data->set_lofi_received(true);
 
   // Verify LoFi is tracked when a LoFi response is received.
 
   page_load_metrics::ExtraRequestCompleteInfo resource = {
-      GURL(),
+      GURL(kResourceUrl),
+      net::HostPortPair(),
       -1 /* frame_tree_node_id */,
       true /*was_cached*/,
       1024 * 40 /* raw_body_bytes */,
       0 /* original_network_content_length */,
       std::move(data),
-      content::ResourceType::RESOURCE_TYPE_MAIN_FRAME};
+      content::ResourceType::RESOURCE_TYPE_SCRIPT,
+      0};
 
   RunTest(true, false);
   SimulateLoadedResource(resource);
@@ -442,12 +447,12 @@ TEST_F(DataReductionProxyMetricsObserverTest, OnCompletePingback) {
   EXPECT_FALSE(pingback_client_->send_pingback_called());
 
   ResetTest();
-  // Verify that when the holdback experiment is enabled, no pingback is sent.
+  // Verify that when the holdback experiment is enabled, a pingback is sent.
   base::FieldTrialList field_trial_list(nullptr);
   ASSERT_TRUE(base::FieldTrialList::CreateFieldTrial(
       "DataCompressionProxyHoldback", "Enabled"));
   RunTestAndNavigateToUntrackedUrl(true, false);
-  EXPECT_FALSE(pingback_client_->send_pingback_called());
+  EXPECT_TRUE(pingback_client_->send_pingback_called());
 }
 
 TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationCompression) {
@@ -458,30 +463,32 @@ TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationCompression) {
   std::unique_ptr<DataReductionProxyData> data =
       base::MakeUnique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
+  data->set_request_url(GURL(kDefaultTestUrl));
 
   // Prepare 4 resources of varying size and configurations.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+       0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 10 /* original_network_content_length */, data->DeepCopy(),
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 * 5 /* original_network_content_length */, std::move(data),
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
   };
 
   int network_resources = 0;
@@ -517,30 +524,32 @@ TEST_F(DataReductionProxyMetricsObserverTest, ByteInformationInflation) {
   std::unique_ptr<DataReductionProxyData> data =
       base::MakeUnique<DataReductionProxyData>();
   data->set_used_data_reduction_proxy(true);
+  data->set_request_url(GURL(kDefaultTestUrl));
 
   // Prepare 4 resources of varying size and configurations.
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */, 0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       true /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
+       0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached proxied request with .1 compression ratio.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 * 10 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 * 10 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */, data->DeepCopy(),
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached proxied request with .5 compression ratio.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 * 5 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 * 5 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */, std::move(data),
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
   };
 
   int network_resources = 0;

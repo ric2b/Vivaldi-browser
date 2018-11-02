@@ -9,6 +9,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/debug/stack_trace.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -44,8 +45,10 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
                                        public CloudPolicyService::Observer,
                                        public KeyedService {
  public:
-  // If |wait_for_policy_fetch| is true, IsInitializationComplete() will return
-  // false as long as there hasn't been a successful policy fetch.
+  // If |initial_policy_fetch_timeout| is non-zero, IsInitializationComplete()
+  // is forced to false until either there has been a successful policy fetch
+  // from the server or |initial_policy_fetch_timeout| has expired. (The timeout
+  // may be set to TimeDelta::Max() to block permanently.)
   // |task_runner| is the runner for policy refresh tasks.
   // |file_task_runner| is used for file operations. Currently this must be the
   // FILE BrowserThread.
@@ -55,7 +58,6 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
       std::unique_ptr<CloudPolicyStore> store,
       std::unique_ptr<CloudExternalDataManager> external_data_manager,
       const base::FilePath& component_policy_cache_path,
-      bool wait_for_policy_fetch,
       base::TimeDelta initial_policy_fetch_timeout,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       const scoped_refptr<base::SequencedTaskRunner>& file_task_runner,
@@ -124,19 +126,19 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
                                   const GoogleServiceAuthError& error);
 
   // Completion handler for the explicit policy fetch triggered on startup in
-  // case |wait_for_policy_fetch_| is true. |success| is true if the fetch was
-  // successful.
+  // case |waiting_for_initial_policy_fetch_| is true. |success| is true if the
+  // fetch was successful.
   void OnInitialPolicyFetchComplete(bool success);
 
-  // Called when |policy_fetch_timeout_| times out, to cancel the blocking
-  // wait for the initial policy fetch.
+  // Called when |policy_fetch_timeout_| times out, to cancel the blocking wait
+  // for the initial policy fetch.
   void OnBlockingFetchTimeout();
 
-  // Cancels waiting for the policy fetch and flags the
+  // Cancels waiting for the initial policy fetch and flags the
   // ConfigurationPolicyProvider ready (assuming all other initialization tasks
-  // have completed). Pass |true| if policy fetch was successful (either
-  // because policy was successfully fetched, or if DMServer has notified us
-  // that the user is not managed).
+  // have completed). Pass |true| if policy fetch was successful (either because
+  // policy was successfully fetched, or if DMServer has notified us that the
+  // user is not managed).
   void CancelWaitForPolicyFetch(bool success);
 
   void StartRefreshSchedulerIfReady();
@@ -153,18 +155,18 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   // Path where policy for components will be cached.
   base::FilePath component_policy_cache_path_;
 
-  // Whether to wait for a policy fetch to complete before reporting
+  // Whether we're waiting for a policy fetch to complete before reporting
   // IsInitializationComplete().
-  bool wait_for_policy_fetch_;
+  bool waiting_for_initial_policy_fetch_;
 
-  // Whether we should allow policy fetches to fail, or wait forever until they
-  // succeed (typically we won't allow them to fail until we have loaded policy
-  // at least once).
-  bool allow_failed_policy_fetches_;
+  // Whether the user session is continued in case of failure of initial policy
+  // fetch.
+  bool initial_policy_fetch_may_fail_;
 
   // A timer that puts a hard limit on the maximum time to wait for the initial
   // policy fetch.
-  base::Timer policy_fetch_timeout_;
+  base::Timer policy_fetch_timeout_{false /* retain_user_task */,
+                                    false /* is_repeating */};
 
   // The pref service to pass to the refresh scheduler on initialization.
   PrefService* local_state_;
@@ -185,6 +187,11 @@ class UserCloudPolicyManagerChromeOS : public CloudPolicyManager,
   base::Time time_init_completed_;
   base::Time time_token_available_;
   base::Time time_client_registered_;
+
+  // Stack trace of the previous Connect() method call.
+  // TODO(emaxx): Remove after the crashes tracked at https://crbug.com/685996
+  // are fixed.
+  base::debug::StackTrace connect_callstack_;
 
   DISALLOW_COPY_AND_ASSIGN(UserCloudPolicyManagerChromeOS);
 };

@@ -12,7 +12,7 @@ namespace blink {
 
 class DocumentMarker;
 
-class DocumentMarkerListEditor {
+class CORE_EXPORT DocumentMarkerListEditor final {
  public:
   using MarkerList = HeapVector<Member<DocumentMarker>>;
 
@@ -45,6 +45,11 @@ class DocumentMarkerListEditor {
                                              unsigned offset,
                                              unsigned old_length,
                                              unsigned new_length);
+
+  static HeapVector<Member<DocumentMarker>> MarkersIntersectingRange(
+      const MarkerList&,
+      unsigned start_offset,
+      unsigned end_offset);
 };
 
 }  // namespace blink

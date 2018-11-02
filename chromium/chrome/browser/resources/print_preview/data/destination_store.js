@@ -8,107 +8,94 @@ cr.define('print_preview', function() {
   /**
    * A data store that stores destinations and dispatches events when the data
    * store changes.
-   * @param {!print_preview.NativeLayer} nativeLayer Used to fetch local print
-   *     destinations.
    * @param {!print_preview.UserInfo} userInfo User information repository.
    * @param {!print_preview.AppState} appState Application state.
+   * @param {!WebUIListenerTracker} listenerTracker Tracker for WebUI listeners
+   *     added in DestinationStore constructor.
    * @constructor
    * @extends {cr.EventTarget}
    */
-  function DestinationStore(nativeLayer, userInfo, appState) {
+  function DestinationStore(userInfo, appState, listenerTracker) {
     cr.EventTarget.call(this);
 
     /**
      * Used to fetch local print destinations.
-     * @type {!print_preview.NativeLayer}
-     * @private
+     * @private {!print_preview.NativeLayer}
      */
-    this.nativeLayer_ = nativeLayer;
+    this.nativeLayer_ = print_preview.NativeLayer.getInstance();
 
     /**
      * User information repository.
-     * @type {!print_preview.UserInfo}
-     * @private
+     * @private {!print_preview.UserInfo}
      */
     this.userInfo_ = userInfo;
 
     /**
      * Used to load and persist the selected destination.
-     * @type {!print_preview.AppState}
-     * @private
+     * @private {!print_preview.AppState}
      */
     this.appState_ = appState;
 
     /**
      * Used to track metrics.
-     * @type {!print_preview.DestinationSearchMetricsContext}
-     * @private
+     * @private {!print_preview.DestinationSearchMetricsContext}
      */
     this.metrics_ = new print_preview.DestinationSearchMetricsContext();
 
     /**
      * Internal backing store for the data store.
-     * @type {!Array<!print_preview.Destination>}
-     * @private
+     * @private {!Array<!print_preview.Destination>}
      */
     this.destinations_ = [];
 
     /**
      * Cache used for constant lookup of destinations by origin and id.
-     * @type {Object<!print_preview.Destination>}
-     * @private
+     * @private {Object<!print_preview.Destination>}
      */
     this.destinationMap_ = {};
 
     /**
      * Currently selected destination.
-     * @type {print_preview.Destination}
-     * @private
+     * @private {print_preview.Destination}
      */
     this.selectedDestination_ = null;
 
     /**
      * Whether the destination store will auto select the destination that
      * matches this set of parameters.
-     * @type {print_preview.DestinationMatch}
-     * @private
+     * @private {print_preview.DestinationMatch}
      */
     this.autoSelectMatchingDestination_ = null;
 
     /**
      * Event tracker used to track event listeners of the destination store.
-     * @type {!EventTracker}
-     * @private
+     * @private {!EventTracker}
      */
     this.tracker_ = new EventTracker();
 
     /**
      * Whether PDF printer is enabled. It's disabled, for example, in App Kiosk
      * mode.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.pdfPrinterEnabled_ = false;
 
     /**
      * ID of the system default destination.
-     * @type {?string}
-     * @private
+     * @private {?string}
      */
     this.systemDefaultDestinationId_ = null;
 
     /**
      * Used to fetch cloud-based print destinations.
-     * @type {cloudprint.CloudPrintInterface}
-     * @private
+     * @private {cloudprint.CloudPrintInterface}
      */
     this.cloudPrintInterface_ = null;
 
     /**
      * Maps user account to the list of origins for which destinations are
      * already loaded.
-     * @type {!Object<Array<print_preview.DestinationOrigin>>}
-     * @private
+     * @private {!Object<Array<!print_preview.DestinationOrigin>>}
      */
     this.loadedCloudOrigins_ = {};
 
@@ -117,91 +104,82 @@ cr.define('print_preview', function() {
      * destination matches the initial destination ID after the specified
      * timeout, the first destination in the store will be automatically
      * selected.
-     * @type {?number}
-     * @private
+     * @private {?number}
      */
     this.autoSelectTimeout_ = null;
 
     /**
      * Whether a search for local destinations is in progress.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isLocalDestinationSearchInProgress_ = false;
 
     /**
      * Whether the destination store has already loaded or is loading all local
      * destinations.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.hasLoadedAllLocalDestinations_ = false;
 
     /**
      * Whether a search for privet destinations is in progress.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isPrivetDestinationSearchInProgress_ = false;
 
     /**
      * Whether the destination store has already loaded or is loading all privet
      * destinations.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.hasLoadedAllPrivetDestinations_ = false;
 
     /**
-     * ID of a timeout after the start of a privet search to end that privet
-     * search.
-     * @type {?number}
-     * @private
-     */
-    this.privetSearchTimeout_ = null;
-
-    /**
      * Whether a search for extension destinations is in progress.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.isExtensionDestinationSearchInProgress_ = false;
 
     /**
      * Whether the destination store has already loaded all extension
      * destinations.
-     * @type {boolean}
-     * @private
+     * @private {boolean}
      */
     this.hasLoadedAllExtensionDestinations_ = false;
 
     /**
      * ID of a timeout set at the start of an extension destination search. The
      * timeout ends the search.
-     * @type {?number}
-     * @private
+     * @private {?number}
      */
     this.extensionSearchTimeout_ = null;
 
     /**
      * MDNS service name of destination that we are waiting to register.
-     * @type {?string}
-     * @private
+     * @private {?string}
      */
     this.waitForRegisterDestination_ = null;
 
     /**
      * Local destinations are CROS destinations on ChromeOS because they require
      * extra setup.
-     * @type {!print_preview.DestinationOrigin}
-     * @private
+     * @private {!print_preview.DestinationOrigin}
      */
     this.platformOrigin_ = cr.isChromeOS ?
         print_preview.DestinationOrigin.CROS :
         print_preview.DestinationOrigin.LOCAL;
 
-    this.addEventListeners_();
+    /**
+     * Whether to default to the system default printer instead of the most
+     * recent destination.
+     * @private {boolean}
+     */
+    this.useSystemDefaultAsDefault_ =
+        loadTimeData.getBoolean('useSystemDefaultPrinter');
+
     this.reset_();
+
+    this.addWebUIEventListeners_(listenerTracker);
   }
 
   /**
@@ -220,8 +198,7 @@ cr.define('print_preview', function() {
         'print_preview.DestinationStore.PROVISIONAL_DESTINATION_RESOLVED',
     CACHED_SELECTED_DESTINATION_INFO_READY:
         'print_preview.DestinationStore.CACHED_SELECTED_DESTINATION_INFO_READY',
-    SELECTED_DESTINATION_CAPABILITIES_READY:
-        'print_preview.DestinationStore' +
+    SELECTED_DESTINATION_CAPABILITIES_READY: 'print_preview.DestinationStore' +
         '.SELECTED_DESTINATION_CAPABILITIES_READY',
   };
 
@@ -233,13 +210,6 @@ cr.define('print_preview', function() {
    * @const
    */
   DestinationStore.AUTO_SELECT_TIMEOUT_ = 15000;
-
-  /**
-   * Amount of time spent searching for privet destination, in milliseconds.
-   * @private {number}
-   * @const
-   */
-  DestinationStore.PRIVET_SEARCH_DURATION_ = 5000;
 
   /**
    * Maximum amount of time spent searching for extension destinations, in
@@ -440,10 +410,8 @@ cr.define('print_preview', function() {
     for (var i = 0, media; (media = mediaSize.option[i]); i++) {
       // No need to patch capabilities with localized names provided.
       if (!media.custom_display_name_localized) {
-        media.custom_display_name =
-            media.custom_display_name ||
-            DestinationStore.MEDIA_DISPLAY_NAMES_[media.name] ||
-            media.name;
+        media.custom_display_name = media.custom_display_name ||
+            DestinationStore.MEDIA_DISPLAY_NAMES_[media.name] || media.name;
       }
     }
     return capabilities;
@@ -495,9 +463,10 @@ cr.define('print_preview', function() {
       var category;
       if (name.startsWith('NA_')) {
         category = categoryStandardNA;
-      } else if (name.startsWith('PRC_') || name.startsWith('ROC_') ||
-                 name == 'OM_DAI_PA_KAI' || name == 'OM_JUURO_KU_KAI' ||
-                 name == 'OM_PA_KAI') {
+      } else if (
+          name.startsWith('PRC_') || name.startsWith('ROC_') ||
+          name == 'OM_DAI_PA_KAI' || name == 'OM_JUURO_KU_KAI' ||
+          name == 'OM_PA_KAI') {
         category = categoryStandardCN;
       } else if (name.startsWith('ISO_')) {
         category = categoryStandardISO;
@@ -522,8 +491,9 @@ cr.define('print_preview', function() {
 
     // Then put it all back together.
     mediaSize.option = categoryStandardNA;
-    mediaSize.option.push(...categoryStandardCN, ...categoryStandardISO,
-        ...categoryStandardJP, ...categoryStandardMisc, ...categoryCustom);
+    mediaSize.option.push(
+        ...categoryStandardCN, ...categoryStandardISO, ...categoryStandardJP,
+        ...categoryStandardMisc, ...categoryCustom);
     return capabilities;
   };
 
@@ -564,8 +534,8 @@ cr.define('print_preview', function() {
      */
     get isLocalDestinationSearchInProgress() {
       return this.isLocalDestinationSearchInProgress_ ||
-        this.isPrivetDestinationSearchInProgress_ ||
-        this.isExtensionDestinationSearchInProgress_;
+          this.isPrivetDestinationSearchInProgress_ ||
+          this.isExtensionDestinationSearchInProgress_;
     },
 
     /**
@@ -573,7 +543,24 @@ cr.define('print_preview', function() {
      */
     get isCloudDestinationSearchInProgress() {
       return !!this.cloudPrintInterface_ &&
-             this.cloudPrintInterface_.isCloudDestinationSearchInProgress;
+          this.cloudPrintInterface_.isCloudDestinationSearchInProgress;
+    },
+
+    /**
+     * Starts listening for relevant WebUI events and adds the listeners to
+     * |listenerTracker|. |listenerTracker| is responsible for removing the
+     * listeners when necessary.
+     * @param {!WebUIListenerTracker} listenerTracker
+     * @private
+     */
+    addWebUIEventListeners_: function(listenerTracker) {
+      listenerTracker.add(
+          'privet-printer-added', this.onPrivetPrinterAdded_.bind(this));
+      listenerTracker.add(
+          'extension-printers-added',
+          this.onExtensionPrintersAdded_.bind(this));
+      listenerTracker.add(
+          'reload-printer-list', this.onDestinationsReload.bind(this));
     },
 
     /**
@@ -589,8 +576,7 @@ cr.define('print_preview', function() {
      *     default destination selection rules.
      */
     init: function(
-        isInAppKioskMode,
-        systemDefaultDestinationId,
+        isInAppKioskMode, systemDefaultDestinationId,
         serializedDefaultDestinationSelectionRulesStr) {
       this.pdfPrinterEnabled_ = !isInAppKioskMode;
       this.systemDefaultDestinationId_ = systemDefaultDestinationId;
@@ -631,31 +617,26 @@ cr.define('print_preview', function() {
           account = this.appState_.recentDestinations[i].account || '';
           name = this.appState_.recentDestinations[i].name || '';
           capabilities = this.appState_.recentDestinations[i].capabilities;
-          extensionId = this.appState_.recentDestinations[i].extensionId ||
-                        '';
+          extensionId = this.appState_.recentDestinations[i].extensionId || '';
           extensionName =
               this.appState_.recentDestinations[i].extensionName || '';
-          var candidate =
-              this.destinationMap_[this.getDestinationKey_(origin,
-                                                           id, account)];
+          var candidate = this.destinationMap_[this.getDestinationKey_(
+              origin, id, account)];
           if (candidate != null) {
-            if (!foundDestination)
+            if (!foundDestination && !this.useSystemDefaultAsDefault_)
               this.selectDestination(candidate);
             candidate.isRecent = true;
             foundDestination = true;
-          } else if (!foundDestination) {
+          } else if (!foundDestination && !this.useSystemDefaultAsDefault_) {
             foundDestination = this.fetchPreselectedDestination_(
-                                    origin,
-                                    id,
-                                    account,
-                                    name,
-                                    capabilities,
-                                    extensionId,
-                                    extensionName);
+                origin, id, account, name, capabilities, extensionId,
+                extensionName);
           }
         }
       }
-      if (foundDestination) return;
+
+      if (foundDestination && !this.useSystemDefaultAsDefault_)
+        return;
 
       // Try the system default
       id = this.systemDefaultDestinationId_ || '';
@@ -671,12 +652,7 @@ cr.define('print_preview', function() {
       }
 
       if (this.fetchPreselectedDestination_(
-              origin,
-              id,
-              account,
-              name,
-              capabilities,
-              extensionId,
+              origin, id, account, name, capabilities, extensionId,
               extensionName)) {
         return;
       }
@@ -697,6 +673,7 @@ cr.define('print_preview', function() {
      *     destination.
      * @param {string} extensionName Extension name associated with this
      *     destination.
+     * @return {boolean} Whether capabilities fetch was successfully started.
      * @private
      */
     fetchPreselectedDestination_: function(
@@ -706,7 +683,11 @@ cr.define('print_preview', function() {
 
       if (origin == print_preview.DestinationOrigin.LOCAL ||
           origin == print_preview.DestinationOrigin.CROS) {
-        this.nativeLayer_.startGetLocalDestinationCapabilities(id);
+        this.nativeLayer_.getPrinterCapabilities(id).then(
+            this.onLocalDestinationCapabilitiesSet_.bind(this),
+            this.onGetCapabilitiesFail_.bind(
+                this,
+                /** @type {print_preview.DestinationOrigin} */ (origin), id));
         return true;
       }
 
@@ -715,31 +696,32 @@ cr.define('print_preview', function() {
            origin == print_preview.DestinationOrigin.DEVICE)) {
         this.cloudPrintInterface_.printer(
             id,
-            /** @type {print_preview.DestinationOrigin} */(origin),
-            account);
+            /** @type {print_preview.DestinationOrigin} */ (origin), account);
         return true;
       }
 
       if (origin == print_preview.DestinationOrigin.PRIVET) {
         // TODO(noamsml): Resolve a specific printer instead of listing all
         // privet printers in this case.
-        this.nativeLayer_.startGetPrivetDestinations();
+        this.nativeLayer_.getPrivetPrinters().then(
+            this.endPrivetPrinterSearch_.bind(this));
 
         // Create a fake selectedDestination_ that is not actually in the
         // destination store. When the real destination is created, this
         // destination will be overwritten.
         this.selectedDestination_ = new print_preview.Destination(
-            id,
-            print_preview.DestinationType.LOCAL,
-            print_preview.DestinationOrigin.PRIVET,
-            name,
-            false /*isRecent*/,
+            id, print_preview.DestinationType.LOCAL,
+            print_preview.DestinationOrigin.PRIVET, name, false /*isRecent*/,
             print_preview.DestinationConnectionStatus.ONLINE);
-        this.selectedDestination_.capabilities = capabilities;
 
-        cr.dispatchSimpleEvent(
-          this,
-          DestinationStore.EventType.CACHED_SELECTED_DESTINATION_INFO_READY);
+        if (capabilities) {
+          this.selectedDestination_.capabilities = capabilities;
+
+          cr.dispatchSimpleEvent(
+              this,
+              DestinationStore.EventType
+                  .CACHED_SELECTED_DESTINATION_INFO_READY);
+        }
         return true;
       }
 
@@ -778,26 +760,22 @@ cr.define('print_preview', function() {
     fetchMatchingDestination_: function(destinationMatch) {
       this.autoSelectMatchingDestination_ = destinationMatch;
 
-      if (destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.LOCAL) ||
-          destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.CROS)) {
+      if (destinationMatch.matchOrigin(print_preview.DestinationOrigin.LOCAL) ||
+          destinationMatch.matchOrigin(print_preview.DestinationOrigin.CROS)) {
         this.startLoadLocalDestinations();
       }
       if (destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.PRIVET)) {
+              print_preview.DestinationOrigin.PRIVET)) {
         this.startLoadPrivetDestinations();
       }
       if (destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.EXTENSION)) {
+              print_preview.DestinationOrigin.EXTENSION)) {
         this.startLoadExtensionDestinations();
       }
       if (destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.COOKIES) ||
+              print_preview.DestinationOrigin.COOKIES) ||
           destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.DEVICE) ||
-          destinationMatch.matchOrigin(
-            print_preview.DestinationOrigin.PROFILE)) {
+              print_preview.DestinationOrigin.DEVICE)) {
         this.startLoadCloudDestinations();
       }
     },
@@ -817,9 +795,8 @@ cr.define('print_preview', function() {
           matchRules =
               JSON.parse(serializedDefaultDestinationSelectionRulesStr);
         }
-      } catch(e) {
-        console.error(
-            'Failed to parse defaultDestinationSelectionRules: ' + e);
+      } catch (e) {
+        console.error('Failed to parse defaultDestinationSelectionRules: ' + e);
       }
       if (!matchRules)
         return null;
@@ -841,7 +818,6 @@ cr.define('print_preview', function() {
       if (isCloud) {
         origins.push(print_preview.DestinationOrigin.COOKIES);
         origins.push(print_preview.DestinationOrigin.DEVICE);
-        origins.push(print_preview.DestinationOrigin.PROFILE);
       }
 
       var idRegExp = null;
@@ -863,9 +839,7 @@ cr.define('print_preview', function() {
       }
 
       return new print_preview.DestinationMatch(
-          origins,
-          idRegExp,
-          displayNameRegExp,
+          origins, idRegExp, displayNameRegExp,
           true /*skipVirtualDestinations*/);
     },
 
@@ -882,8 +856,7 @@ cr.define('print_preview', function() {
       }
       if (this.systemDefaultDestinationId_) {
         return this.createExactDestinationMatch_(
-            this.platformOrigin_,
-            this.systemDefaultDestinationId_);
+            this.platformOrigin_, this.systemDefaultDestinationId_);
       }
       return null;
     },
@@ -900,8 +873,7 @@ cr.define('print_preview', function() {
       return new print_preview.DestinationMatch(
           [origin],
           new RegExp('^' + id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '$'),
-          null /*displayNameRegExp*/,
-          false /*skipVirtualDestinations*/);
+          null /*displayNameRegExp*/, false /*skipVirtualDestinations*/);
     },
 
     /**
@@ -910,6 +882,7 @@ cr.define('print_preview', function() {
      *     to set.
      */
     setCloudPrintInterface: function(cloudPrintInterface) {
+      assert(this.cloudPrintInterface_ == null);
       this.cloudPrintInterface_ = cloudPrintInterface;
       this.tracker_.add(
           this.cloudPrintInterface_,
@@ -965,8 +938,9 @@ cr.define('print_preview', function() {
         return;
       }
 
-      assert(!destination.isProvisional,
-             'Unable to select provisonal destinations');
+      assert(
+          !destination.isProvisional,
+          'Unable to select provisonal destinations');
 
       // Update and persist selected destination.
       this.selectedDestination_ = destination;
@@ -978,29 +952,40 @@ cr.define('print_preview', function() {
             return otherDestination.cloudID == destination.cloudID &&
                 otherDestination != destination;
           })) {
-        this.metrics_.record(destination.isPrivet ?
-            print_preview.Metrics.DestinationSearchBucket.
-                PRIVET_DUPLICATE_SELECTED :
-            print_preview.Metrics.DestinationSearchBucket.
-                CLOUD_DUPLICATE_SELECTED);
+        this.metrics_.record(
+            destination.isPrivet ? print_preview.Metrics.DestinationSearchBucket
+                                       .PRIVET_DUPLICATE_SELECTED :
+                                   print_preview.Metrics.DestinationSearchBucket
+                                       .CLOUD_DUPLICATE_SELECTED);
       }
       // Notify about selected destination change.
       cr.dispatchSimpleEvent(
           this, DestinationStore.EventType.DESTINATION_SELECT);
-      // Request destination capabilities, of not known yet.
+      // Request destination capabilities from backend, since they are not
+      // known yet.
       if (destination.capabilities == null) {
         if (destination.isPrivet) {
-          this.nativeLayer_.startGetPrivetDestinationCapabilities(
-              destination.id);
+          this.nativeLayer_.getPrivetPrinterCapabilities(destination.id)
+              .then(
+                  this.onPrivetCapabilitiesSet_.bind(this),
+                  this.onGetCapabilitiesFail_.bind(
+                      this, destination.origin, destination.id));
         } else if (destination.isExtension) {
-          this.nativeLayer_.startGetExtensionDestinationCapabilities(
-              destination.id);
+          this.nativeLayer_.getExtensionPrinterCapabilities(destination.id)
+              .then(
+                  this.onExtensionCapabilitiesSet_.bind(this, destination.id),
+                  this.onGetCapabilitiesFail_.bind(
+                      this, destination.origin, destination.id));
         } else if (destination.isLocal) {
-          this.nativeLayer_.startGetLocalDestinationCapabilities(
-              destination.id);
+          this.nativeLayer_.getPrinterCapabilities(destination.id)
+              .then(
+                  this.onLocalDestinationCapabilitiesSet_.bind(this),
+                  this.onGetCapabilitiesFail_.bind(
+                      this, destination.origin, destination.id));
         } else {
-          assert(this.cloudPrintInterface_ != null,
-                 'Cloud destination selected, but GCP is not enabled');
+          assert(
+              this.cloudPrintInterface_ != null,
+              'Cloud destination selected, but GCP is not enabled');
           this.cloudPrintInterface_.printer(
               destination.id, destination.origin, destination.account);
         }
@@ -1032,7 +1017,35 @@ cr.define('print_preview', function() {
           destination.provisionalType ==
               print_preview.DestinationProvisionalType.NEEDS_USB_PERMISSION,
           'Provisional type cannot be resolved.');
-      this.nativeLayer_.grantExtensionPrinterAccess(destination.id);
+      this.nativeLayer_.grantExtensionPrinterAccess(destination.id).then(
+          /**
+           * @param {!print_preview.ProvisionalDestinationInfo}
+           *     destinationInfo Information about the resolved printer.
+           */
+          function(destinationInfo) {
+            /**
+             * Removes the destination from the store and replaces it with a
+             * destination created from the resolved destination properties, if
+             * any are reported. Then sends a PROVISIONAL_DESTINATION_RESOLVED
+             * event.
+             */
+            this.removeProvisionalDestination_(destination.id);
+            var parsedDestination =
+                print_preview.ExtensionDestinationParser.parse(destinationInfo);
+            this.insertIntoStore_(parsedDestination);
+            this.dispatchProvisionalDestinationResolvedEvent_(
+                destination.id, parsedDestination);
+          }.bind(this),
+          function() {
+            /**
+             * The provisional destination is removed from the store and a
+             * PROVISIONAL_DESTINATION_RESOLVED event is dispatched with a null
+             * destination.
+             */
+            this.removeProvisionalDestination_(destination.id);
+            this.dispatchProvisionalDestinationResolvedEvent_(destination.id,
+                                                              null);
+          }.bind(this));
     },
 
     /**
@@ -1042,8 +1055,7 @@ cr.define('print_preview', function() {
     selectPdfDestination_: function() {
       var saveToPdfKey = this.getDestinationKey_(
           print_preview.DestinationOrigin.LOCAL,
-          print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
-          '');
+          print_preview.Destination.GooglePromotedId.SAVE_AS_PDF, '');
       this.selectDestination(
           this.destinationMap_[saveToPdfKey] || this.destinations_[0] || null);
     },
@@ -1057,16 +1069,11 @@ cr.define('print_preview', function() {
       if (this.systemDefaultDestinationId_) {
         if (this.autoSelectMatchingDestination_ &&
             !this.autoSelectMatchingDestination_.matchIdAndOrigin(
-                this.systemDefaultDestinationId_,
-                this.platformOrigin_)) {
+                this.systemDefaultDestinationId_, this.platformOrigin_)) {
           if (this.fetchPreselectedDestination_(
-                this.platformOrigin_,
-                this.systemDefaultDestinationId_,
-                '' /*account*/,
-                '' /*name*/,
-                null /*capabilities*/,
-                '' /*extensionId*/,
-                '' /*extensionName*/)) {
+                  this.platformOrigin_, this.systemDefaultDestinationId_,
+                  '' /*account*/, '' /*name*/, null /*capabilities*/,
+                  '' /*extensionId*/, '' /*extensionName*/)) {
             return;
           }
         }
@@ -1078,7 +1085,8 @@ cr.define('print_preview', function() {
     startLoadLocalDestinations: function() {
       if (!this.hasLoadedAllLocalDestinations_) {
         this.hasLoadedAllLocalDestinations_ = true;
-        this.nativeLayer_.startGetLocalDestinations();
+        this.nativeLayer_.getPrinters().then(
+            this.onLocalDestinationsSet_.bind(this));
         this.isLocalDestinationSearchInProgress_ = true;
         cr.dispatchSimpleEvent(
             this, DestinationStore.EventType.DESTINATION_SEARCH_STARTED);
@@ -1087,17 +1095,17 @@ cr.define('print_preview', function() {
 
     /** Initiates loading of privet print destinations. */
     startLoadPrivetDestinations: function() {
-      if (!this.hasLoadedAllPrivetDestinations_) {
-        if (this.privetDestinationSearchInProgress_)
-          clearTimeout(this.privetSearchTimeout_);
-        this.isPrivetDestinationSearchInProgress_ = true;
-        this.nativeLayer_.startGetPrivetDestinations();
-        cr.dispatchSimpleEvent(
-            this, DestinationStore.EventType.DESTINATION_SEARCH_STARTED);
-        this.privetSearchTimeout_ = setTimeout(
-            this.endPrivetPrinterSearch_.bind(this),
-            DestinationStore.PRIVET_SEARCH_DURATION_);
-      }
+      if (this.hasLoadedAllPrivetDestinations_)
+        return;
+      this.isPrivetDestinationSearchInProgress_ = true;
+      this.nativeLayer_.getPrivetPrinters().then(
+          this.endPrivetPrinterSearch_.bind(this), function() {
+            // Rejected by C++, indicating privet printing is disabled.
+            this.hasLoadedAllPrivetDestinations_ = true;
+            this.isPrivetDestinationSearchInProgress_ = false;
+          }.bind(this));
+      cr.dispatchSimpleEvent(
+          this, DestinationStore.EventType.DESTINATION_SEARCH_STARTED);
     },
 
     /** Initializes loading of extension managed print destinations. */
@@ -1109,7 +1117,8 @@ cr.define('print_preview', function() {
         clearTimeout(this.extensionSearchTimeout_);
 
       this.isExtensionDestinationSearchInProgress_ = true;
-      this.nativeLayer_.startGetExtensionDestinations();
+      this.nativeLayer_.getExtensionPrinters().then(
+          this.onExtensionPrintersDone_.bind(this));
       cr.dispatchSimpleEvent(
           this, DestinationStore.EventType.DESTINATION_SEARCH_STARTED);
       this.extensionSearchTimeout_ = setTimeout(
@@ -1159,53 +1168,41 @@ cr.define('print_preview', function() {
      * Wait for a privet device to be registered.
      */
     waitForRegister: function(id) {
-      this.nativeLayer_.startGetPrivetDestinations();
+      this.nativeLayer_.getPrivetPrinters().then(
+          this.endPrivetPrinterSearch_.bind(this));
       this.waitForRegisterDestination_ = id;
     },
 
     /**
-     * Event handler for {@code
-     * print_preview.NativeLayer.EventType.PROVISIONAL_DESTINATION_RESOLVED}.
-     * Currently assumes the provisional destination is an extension
-     * destination.
-     * Called when a provisional destination resolvement attempt finishes.
-     * The provisional destination is removed from the store and replaced with
-     * a destination created from the resolved destination properties, if any
-     * are reported.
-     * Emits {@code DestinationStore.EventType.PROVISIONAL_DESTINATION_RESOLVED}
-     * event.
-     * @param {!Event} evt The event containing the provisional destination ID
-     *     and resolved destination description. If the destination was not
-     *     successfully resolved, the description will not be set.
+     * Removes the provisional destination with ID |provisionalId| from
+     * |destinationMap_| and |destinations_|.
+     * @param{string} provisionalId The provisional destination ID.
      * @private
      */
-    handleProvisionalDestinationResolved_: function(evt) {
-      var provisionalDestinationIndex = -1;
-      var provisionalDestination = null;
-      for (var i = 0; i < this.destinations_.length; ++i) {
-        if (evt.provisionalId == this.destinations_[i].id) {
-          provisionalDestinationIndex = i;
-          provisionalDestination = this.destinations_[i];
-          break;
-        }
-      }
+    removeProvisionalDestination_: function(provisionalId) {
+      this.destinations_ = this.destinations_.filter(
+          function(el) {
+            if (el.id == provisionalId) {
+              delete this.destinationMap_[this.getKey_(el)];
+              return false;
+            }
+            return true;
+          }, this);
+    },
 
-      if (!provisionalDestination)
-        return;
-
-      this.destinations_.splice(provisionalDestinationIndex, 1);
-      delete this.destinationMap_[this.getKey_(provisionalDestination)];
-
-      var destination = evt.destination ?
-          print_preview.ExtensionDestinationParser.parse(evt.destination) :
-          null;
-
-      if (destination)
-        this.insertIntoStore_(destination);
-
+    /**
+     * Dispatches the PROVISIONAL_DESTINATION_RESOLVED event for id
+     * |provisionalId| and destination |destination|.
+     * @param {string} provisionalId The ID of the destination that was
+     *     resolved.
+     * @param {?print_preview.Destination} destination Information about the
+     *     destination if it was resolved successfully.
+     */
+    dispatchProvisionalDestinationResolvedEvent_: function(
+        provisionalId, destination) {
       var event = new Event(
           DestinationStore.EventType.PROVISIONAL_DESTINATION_RESOLVED);
-      event.provisionalId = evt.provisionalId;
+      event.provisionalId = provisionalId;
       event.destination = destination;
       this.dispatchEvent(event);
     },
@@ -1274,8 +1271,8 @@ cr.define('print_preview', function() {
       assert(destination.constructor !== Array, 'Single printer expected');
       destination.capabilities_ = DestinationStore.localizeCapabilities_(
           assert(destination.capabilities_));
-      destination.capabilities_ = DestinationStore.sortMediaSizes_(
-          destination.capabilities_);
+      destination.capabilities_ =
+          DestinationStore.sortMediaSizes_(destination.capabilities_);
       var existingDestination = this.destinationMap_[this.getKey_(destination)];
       if (existingDestination != null) {
         existingDestination.capabilities = destination.capabilities;
@@ -1298,7 +1295,6 @@ cr.define('print_preview', function() {
      * @private
      */
     endPrivetPrinterSearch_: function() {
-      this.nativeLayer_.stopGetPrivetDestinations();
       this.isPrivetDestinationSearchInProgress_ = false;
       this.hasLoadedAllPrivetDestinations_ = true;
       cr.dispatchSimpleEvent(
@@ -1319,8 +1315,7 @@ cr.define('print_preview', function() {
       if (this.autoSelectMatchingDestination_ &&
           this.autoSelectMatchingDestination_.matchOrigin(
               print_preview.DestinationOrigin.EXTENSION) &&
-          this.selectedDestination_ &&
-          this.selectedDestination_.isExtension) {
+          this.selectedDestination_ && this.selectedDestination_.isExtension) {
         this.selectDefaultDestination_();
       }
     },
@@ -1335,67 +1330,24 @@ cr.define('print_preview', function() {
       var key = this.getKey_(destination);
       var existingDestination = this.destinationMap_[key];
       if (existingDestination == null) {
-        destination.isRecent |= this.appState_.recentDestinations.some(
-            function(recent) {
-              return (destination.id == recent.id &&
-                      destination.origin == recent.origin);
+        destination.isRecent |=
+            this.appState_.recentDestinations.some(function(recent) {
+              return (
+                  destination.id == recent.id &&
+                  destination.origin == recent.origin);
             }, this);
         this.destinations_.push(destination);
         this.destinationMap_[key] = destination;
         return true;
-      } else if (existingDestination.connectionStatus ==
-                     print_preview.DestinationConnectionStatus.UNKNOWN &&
-                 destination.connectionStatus !=
-                     print_preview.DestinationConnectionStatus.UNKNOWN) {
+      }
+      if (existingDestination.connectionStatus ==
+              print_preview.DestinationConnectionStatus.UNKNOWN &&
+          destination.connectionStatus !=
+              print_preview.DestinationConnectionStatus.UNKNOWN) {
         existingDestination.connectionStatus = destination.connectionStatus;
         return true;
-      } else {
-        return false;
       }
-    },
-
-    /**
-     * Binds handlers to events.
-     * @private
-     */
-    addEventListeners_: function() {
-      var nativeLayerEventTarget = this.nativeLayer_.getEventTarget();
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.LOCAL_DESTINATIONS_SET,
-          this.onLocalDestinationsSet_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.CAPABILITIES_SET,
-          this.onLocalDestinationCapabilitiesSet_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.GET_CAPABILITIES_FAIL,
-          this.onGetCapabilitiesFail_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.DESTINATIONS_RELOAD,
-          this.onDestinationsReload_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.PRIVET_PRINTER_CHANGED,
-          this.onPrivetPrinterAdded_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.PRIVET_CAPABILITIES_SET,
-          this.onPrivetCapabilitiesSet_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.EXTENSION_PRINTERS_ADDED,
-          this.onExtensionPrintersAdded_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.EXTENSION_CAPABILITIES_SET,
-          this.onExtensionCapabilitiesSet_.bind(this));
-      this.tracker_.add(
-          nativeLayerEventTarget,
-          print_preview.NativeLayer.EventType.PROVISIONAL_DESTINATION_RESOLVED,
-          this.handleProvisionalDestinationResolved_.bind(this));
+      return false;
     },
 
     /**
@@ -1410,8 +1362,7 @@ cr.define('print_preview', function() {
             print_preview.Destination.GooglePromotedId.SAVE_AS_PDF,
             print_preview.DestinationType.LOCAL,
             print_preview.DestinationOrigin.LOCAL,
-            loadTimeData.getString('printToPDF'),
-            false /*isRecent*/,
+            loadTimeData.getString('printToPDF'), false /*isRecent*/,
             print_preview.DestinationConnectionStatus.ONLINE));
       }
     },
@@ -1437,11 +1388,12 @@ cr.define('print_preview', function() {
 
     /**
      * Called when the local destinations have been got from the native layer.
-     * @param {Event} event Contains the local destinations.
+     * @param {!Array<!print_preview.LocalDestinationInfo>} destinationInfos A
+     *     list of the local destinations retrieved.
      * @private
      */
-    onLocalDestinationsSet_: function(event) {
-      var localDestinations = event.destinationInfos.map(function(destInfo) {
+    onLocalDestinationsSet_: function(destinationInfos) {
+      var localDestinations = destinationInfos.map(function(destInfo) {
         return print_preview.LocalDestinationParser.parse(destInfo);
       });
       this.insertDestinations_(localDestinations);
@@ -1455,26 +1407,24 @@ cr.define('print_preview', function() {
      * local destination. Updates the destination with new capabilities if the
      * destination already exists, otherwise it creates a new destination and
      * then updates its capabilities.
-     * @param {Event} event Contains the capabilities of the local print
-     *     destination.
+     * @param {print_preview.PrinterCapabilitiesResponse} settingsInfo Contains
+     *     information about and capabilities of the local print destination.
      * @private
      */
-    onLocalDestinationCapabilitiesSet_: function(event) {
-      var destinationId = event.settingsInfo['printerId'];
-      var printerName = event.settingsInfo['printerName'];
-      var printerDescription = event.settingsInfo['printerDescription'];
+    onLocalDestinationCapabilitiesSet_: function(settingsInfo) {
+      var destinationId = settingsInfo['printerId'];
+      var printerName = settingsInfo['printerName'];
+      var printerDescription = settingsInfo['printerDescription'];
       // PDF is special since we don't need to query the device for
       // capabilities.
       var origin = destinationId ==
-          print_preview.Destination.GooglePromotedId.SAVE_AS_PDF ?
-          print_preview.DestinationOrigin.LOCAL : this.platformOrigin_;
-      var key = this.getDestinationKey_(
-          origin,
-          destinationId,
-          '');
+              print_preview.Destination.GooglePromotedId.SAVE_AS_PDF ?
+          print_preview.DestinationOrigin.LOCAL :
+          this.platformOrigin_;
+      var key = this.getDestinationKey_(origin, destinationId, '');
       var destination = this.destinationMap_[key];
-      var capabilities = DestinationStore.localizeCapabilities_(
-          event.settingsInfo.capabilities);
+      var capabilities =
+          DestinationStore.localizeCapabilities_(settingsInfo.capabilities);
       // Special case for PDF printer (until local printers capabilities are
       // reported in CDD format too).
       if (destinationId ==
@@ -1491,12 +1441,13 @@ cr.define('print_preview', function() {
           }
           destination.capabilities = capabilities;
         } else {
-          var isEnterprisePrinter = event.settingsInfo['cupsEnterprisePrinter'];
-          destination = print_preview.LocalDestinationParser.parse(
-              {deviceName: destinationId,
-               printerName: printerName,
-               cupsEnterprisePrinter: isEnterprisePrinter,
-               printerDescription: printerDescription});
+          var isEnterprisePrinter = settingsInfo['cupsEnterprisePrinter'];
+          destination = print_preview.LocalDestinationParser.parse({
+            deviceName: destinationId,
+            printerName: printerName,
+            cupsEnterprisePrinter: isEnterprisePrinter,
+            printerDescription: printerDescription
+          });
           destination.capabilities = capabilities;
           this.insertDestination_(destination);
         }
@@ -1513,15 +1464,17 @@ cr.define('print_preview', function() {
      * Called when a request to get a local destination's print capabilities
      * fails. If the destination is the initial destination, auto-select another
      * destination instead.
-     * @param {Event} event Contains the destination ID that failed.
+     * @param {print_preview.DestinationOrigin} origin The origin type of the
+     *     failed destination.
+     * @param {string} destinationId The destination ID that failed.
      * @private
      */
-    onGetCapabilitiesFail_: function(event) {
-      console.warn('Failed to get print capabilities for printer ' +
-                    event.destinationId);
+    onGetCapabilitiesFail_: function(origin, destinationId) {
+      console.warn(
+          'Failed to get print capabilities for printer ' + destinationId);
       if (this.autoSelectMatchingDestination_ &&
           this.autoSelectMatchingDestination_.matchIdAndOrigin(
-              event.destinationId, event.destinationOrigin)) {
+              destinationId, origin)) {
         this.selectDefaultDestination_();
       }
     },
@@ -1591,35 +1544,35 @@ cr.define('print_preview', function() {
 
     /**
      * Called when a Privet printer is added to the local network.
-     * @param {{printer: {serviceName: string,
-     *                    name: string,
-     *                    hasLocalPrinting: boolean,
-     *                    isUnregistered: boolean,
-     *                    cloudID: string}}} event Contains information about
-     *      the added printer.
+     * @param {!{serviceName: string,
+     *           name: string,
+     *           hasLocalPrinting: boolean,
+     *           isUnregistered: boolean,
+     *           cloudID: string}} printer Information about the added printer.
      * @private
      */
-    onPrivetPrinterAdded_: function(event) {
-      if (event.printer.serviceName == this.waitForRegisterDestination_ &&
-          !event.printer.isUnregistered) {
+    onPrivetPrinterAdded_: function(printer) {
+      if (printer.serviceName == this.waitForRegisterDestination_ &&
+          !printer.isUnregistered) {
         this.waitForRegisterDestination_ = null;
-        this.onDestinationsReload_();
+        this.onDestinationsReload();
       } else {
         this.insertDestinations_(
-            print_preview.PrivetDestinationParser.parse(event.printer));
+            print_preview.PrivetDestinationParser.parse(printer));
       }
     },
 
     /**
      * Called when capabilities for a privet printer are set.
-     * @param {Object} event Contains the capabilities and printer ID.
+     * @param {!print_preview.PrivetPrinterCapabilitiesResponse} printerInfo
+     *     Contains the privet printer's description and capabilities.
      * @private
      */
-    onPrivetCapabilitiesSet_: function(event) {
+    onPrivetCapabilitiesSet_: function(printerInfo) {
       var destinations =
-          print_preview.PrivetDestinationParser.parse(event.printer);
+          print_preview.PrivetDestinationParser.parse(printerInfo.printer);
       destinations.forEach(function(dest) {
-        dest.capabilities = event.capabilities;
+        dest.capabilities = printerInfo.capabilities;
         this.updateDestination_(dest);
       }, this);
     },
@@ -1627,18 +1580,26 @@ cr.define('print_preview', function() {
     /**
      * Called when an extension responds to a getExtensionDestinations
      * request.
-     * @param {Object} event Contains information about list of printers
-     *     reported by the extension.
-     *     {@code done} parameter is set iff this is the final list of printers
-     *     returned as part of getExtensionDestinations request.
+     * @param {!Array<!{extensionId: string,
+     *                  extensionName: string,
+     *                  id: string,
+     *                  name: string,
+     *                  description: (string|undefined),
+     *                  provisional: (boolean|undefined)}>} printers The list
+     *     containing information about printers added by an extension.
      * @private
      */
-    onExtensionPrintersAdded_: function(event) {
-      this.insertDestinations_(event.printers.map(function(printer) {
-        return print_preview.ExtensionDestinationParser.parse(printer);
-      }));
+    onExtensionPrintersAdded_: function(printers) {
+      this.insertDestinations_(
+          printers.map(print_preview.ExtensionDestinationParser.parse));
+    },
 
-      if (event.done && this.isExtensionDestinationSearchInProgress_) {
+    /**
+     * Called when all extensions are done adding printers.
+     * @private
+     */
+    onExtensionPrintersDone_: function() {
+      if (this.isExtensionDestinationSearchInProgress_) {
         clearTimeout(this.extensionSearchTimeout_);
         this.endExtensionPrinterSearch_();
       }
@@ -1646,27 +1607,26 @@ cr.define('print_preview', function() {
 
     /**
      * Called when capabilities for an extension managed printer are set.
-     * @param {Object} event Contains the printer's capabilities and ID.
+     * @param {string} printerId The printer Id.
+     * @param {!print_preview.Cdd} capabilities The printer's capabilities.
      * @private
      */
-    onExtensionCapabilitiesSet_: function(event) {
+    onExtensionCapabilitiesSet_: function(printerId, capabilities) {
       var destinationKey = this.getDestinationKey_(
-          print_preview.DestinationOrigin.EXTENSION,
-          event.printerId,
+          print_preview.DestinationOrigin.EXTENSION, printerId,
           '' /* account */);
       var destination = this.destinationMap_[destinationKey];
       if (!destination)
         return;
-      destination.capabilities = event.capabilities;
+      destination.capabilities = capabilities;
       this.updateDestination_(destination);
     },
 
     /**
-     * Called from native layer after the user was requested to sign in, and did
-     * so successfully.
-     * @private
+     * Called from print preview after the user was requested to sign in, and
+     * did so successfully.
      */
-    onDestinationsReload_: function() {
+    onDestinationsReload: function() {
       this.reset_();
       this.autoSelectMatchingDestination_ =
           this.convertPreselectedToDestinationMatch_();
@@ -1700,7 +1660,5 @@ cr.define('print_preview', function() {
   };
 
   // Export
-  return {
-    DestinationStore: DestinationStore
-  };
+  return {DestinationStore: DestinationStore};
 });

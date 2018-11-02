@@ -36,14 +36,15 @@ PaymentRequest::PaymentRequest(
       observer_for_testing_(observer_for_testing),
       journey_logger_(delegate_->IsIncognito(),
                       web_contents_->GetLastCommittedURL(),
-                      delegate_->GetUkmRecorder()) {
+                      delegate_->GetUkmRecorder()),
+      weak_ptr_factory_(this) {
   // OnConnectionTerminated will be called when the Mojo pipe is closed. This
   // will happen as a result of many renderer-side events (both successful and
   // erroneous in nature).
   // TODO(crbug.com/683636): Investigate using
   // set_connection_error_with_reason_handler with Binding::CloseWithReason.
   binding_.set_connection_error_handler(base::Bind(
-      &PaymentRequest::OnConnectionTerminated, base::Unretained(this)));
+      &PaymentRequest::OnConnectionTerminated, weak_ptr_factory_.GetWeakPtr()));
 }
 
 PaymentRequest::~PaymentRequest() {}
@@ -85,7 +86,7 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
         delegate_->GetApplicationLocale());
     state_ = base::MakeUnique<PaymentRequestState>(
         spec_.get(), this, delegate_->GetApplicationLocale(),
-        delegate_->GetPersonalDataManager(), delegate_.get());
+        delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
     return;
   }
 
@@ -107,7 +108,7 @@ void PaymentRequest::Init(mojom::PaymentRequestClientPtr client,
       delegate_->GetApplicationLocale());
   state_ = base::MakeUnique<PaymentRequestState>(
       spec_.get(), this, delegate_->GetApplicationLocale(),
-      delegate_->GetPersonalDataManager(), delegate_.get());
+      delegate_->GetPersonalDataManager(), delegate_.get(), &journey_logger_);
 }
 
 void PaymentRequest::Show() {
@@ -120,12 +121,18 @@ void PaymentRequest::Show() {
   // A tab can display only one PaymentRequest UI at a time.
   if (!manager_->CanShow(this)) {
     LOG(ERROR) << "A PaymentRequest UI is already showing";
+    journey_logger_.SetNotShown(
+        JourneyLogger::NOT_SHOWN_REASON_CONCURRENT_REQUESTS);
+    has_recorded_completion_ = true;
     client_->OnError(mojom::PaymentErrorReason::USER_CANCEL);
     OnConnectionTerminated();
     return;
   }
 
   if (!state_->AreRequestedMethodsSupported()) {
+    journey_logger_.SetNotShown(
+        JourneyLogger::NOT_SHOWN_REASON_NO_SUPPORTED_PAYMENT_METHOD);
+    has_recorded_completion_ = true;
     client_->OnError(mojom::PaymentErrorReason::NOT_SUPPORTED);
     if (observer_for_testing_)
       observer_for_testing_->OnNotSupportedError();
@@ -134,6 +141,11 @@ void PaymentRequest::Show() {
   }
 
   journey_logger_.SetShowCalled();
+  journey_logger_.SetEventOccurred(JourneyLogger::EVENT_SHOWN);
+  journey_logger_.SetRequestedInformation(
+      spec_->request_shipping(), spec_->request_payer_email(),
+      spec_->request_payer_phone(), spec_->request_payer_name());
+
   delegate_->ShowDialog(this);
 }
 
@@ -144,6 +156,13 @@ void PaymentRequest::UpdateWith(mojom::PaymentDetailsPtr details) {
     OnConnectionTerminated();
     return;
   }
+
+  if (!details->total) {
+    LOG(ERROR) << "Missing total";
+    OnConnectionTerminated();
+    return;
+  }
+
   spec_->UpdateWith(std::move(details));
 }
 
@@ -170,7 +189,9 @@ void PaymentRequest::Complete(mojom::PaymentComplete result) {
   if (!client_.is_bound())
     return;
 
-  if (result != mojom::PaymentComplete::SUCCESS) {
+  // Failed transactions show an error. Successful and unknown-state
+  // transactions don't show an error.
+  if (result == mojom::PaymentComplete::FAIL) {
     delegate_->ShowErrorMessage();
   } else {
     DCHECK(!has_recorded_completion_);
@@ -217,6 +238,8 @@ void PaymentRequest::CanMakePayment() {
 
 void PaymentRequest::OnPaymentResponseAvailable(
     mojom::PaymentResponsePtr response) {
+  journey_logger_.SetEventOccurred(
+      JourneyLogger::EVENT_RECEIVED_INSTRUMENT_DETAILS);
   client_->OnPaymentResponse(std::move(response));
 }
 
@@ -272,6 +295,9 @@ void PaymentRequest::OnConnectionTerminated() {
 }
 
 void PaymentRequest::Pay() {
+  journey_logger_.SetEventOccurred(JourneyLogger::EVENT_PAY_CLICKED);
+  journey_logger_.SetSelectedPaymentMethod(
+      JourneyLogger::SELECTED_PAYMENT_METHOD_CREDIT_CARD);
   state_->GeneratePaymentResponse();
 }
 

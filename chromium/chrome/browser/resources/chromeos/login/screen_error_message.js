@@ -27,8 +27,7 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
   /** @const */ var FIX_PROXY_SETTINGS_ID = 'proxy-settings-fix-link';
 
   // Class of the elements which hold current network name.
-  /** @const */ var CURRENT_NETWORK_NAME_CLASS =
-      'portal-network-name';
+  /** @const */ var CURRENT_NETWORK_NAME_CLASS = 'portal-network-name';
 
   // Link which triggers frame reload.
   /** @const */ var RELOAD_PAGE_ID = 'proxy-error-signin-retry-link';
@@ -73,13 +72,8 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
 
   return {
     EXTERNAL_API: [
-      'updateLocalizedContent',
-      'onBeforeShow',
-      'onBeforeHide',
-      'allowGuestSignin',
-      'allowOfflineLogin',
-      'setUIState',
-      'setErrorState',
+      'updateLocalizedContent', 'onBeforeShow', 'onBeforeHide',
+      'allowGuestSignin', 'allowOfflineLogin', 'setUIState', 'setErrorState',
       'showConnectingIndicator'
     ],
 
@@ -105,30 +99,64 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
       this.updateLocalizedContent();
 
       var self = this;
-      this.context.addObserver(CONTEXT_KEY_ERROR_STATE_CODE,
-                               function(error_state) {
-        self.setErrorState(error_state);
-      });
-      this.context.addObserver(CONTEXT_KEY_ERROR_STATE_NETWORK,
-                               function(network) {
-        self.setNetwork_(network);
-      });
-      this.context.addObserver(CONTEXT_KEY_GUEST_SIGNIN_ALLOWED,
-                               function(allowed) {
-        self.allowGuestSignin(allowed);
-      });
-      this.context.addObserver(CONTEXT_KEY_OFFLINE_SIGNIN_ALLOWED,
-                               function(allowed) {
-        self.allowOfflineLogin(allowed);
-      });
-      this.context.addObserver(CONTEXT_KEY_SHOW_CONNECTING_INDICATOR,
-                               function(show) {
-        self.showConnectingIndicator(show);
-      });
+      this.context.addObserver(
+          CONTEXT_KEY_ERROR_STATE_CODE, function(error_state) {
+            self.setErrorState(error_state);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_ERROR_STATE_NETWORK, function(network) {
+            self.setNetwork_(network);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_GUEST_SIGNIN_ALLOWED, function(allowed) {
+            self.allowGuestSignin(allowed);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_OFFLINE_SIGNIN_ALLOWED, function(allowed) {
+            self.allowOfflineLogin(allowed);
+          });
+      this.context.addObserver(
+          CONTEXT_KEY_SHOW_CONNECTING_INDICATOR, function(show) {
+            self.showConnectingIndicator(show);
+          });
       this.context.addObserver(CONTEXT_KEY_UI_STATE, function(ui_state) {
         self.setUIState(ui_state);
       });
       $('error-navigation').addEventListener('close', this.cancel.bind(this));
+      $('error-message-back-button')
+          .addEventListener('tap', this.cancel.bind(this));
+
+      $('error-message-md-reboot-button').addEventListener('tap', function(e) {
+        self.send(login.Screen.CALLBACK_USER_ACTED, USER_ACTION_REBOOT);
+        e.stopPropagation();
+      });
+      $('error-message-md-diagnose-button')
+          .addEventListener('tap', function(e) {
+            self.send(login.Screen.CALLBACK_USER_ACTED, USER_ACTION_DIAGNOSE);
+            e.stopPropagation();
+          });
+      $('error-message-md-configure-certs-button')
+          .addEventListener('tap', function(e) {
+            self.send(
+                login.Screen.CALLBACK_USER_ACTED, USER_ACTION_CONFIGURE_CERTS);
+            e.stopPropagation();
+          });
+      $('error-message-md-continue-button')
+          .addEventListener('tap', function(e) {
+            chrome.send('continueAppLaunch');
+            e.stopPropagation();
+          });
+      $('error-message-md-ok-button').addEventListener('tap', function(e) {
+        chrome.send('cancelOnReset');
+        e.stopPropagation();
+      });
+      $('error-message-md-powerwash-button')
+          .addEventListener('tap', function(e) {
+            self.send(
+                login.Screen.CALLBACK_USER_ACTED,
+                USER_ACTION_LOCAL_STATE_POWERWASH);
+            e.stopPropagation();
+          });
     },
 
     /**
@@ -149,20 +177,21 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
       };
 
       $('captive-portal-message-text').innerHTML = loadTimeData.getStringF(
-        'captivePortalMessage',
-        '<b class="' + CURRENT_NETWORK_NAME_CLASS + '"></b>',
-        '<a id="' + FIX_CAPTIVE_PORTAL_ID + '" class="signin-link" href="#">',
-        '</a>');
+          'captivePortalMessage',
+          '<b class="' + CURRENT_NETWORK_NAME_CLASS + '"></b>',
+          '<a id="' + FIX_CAPTIVE_PORTAL_ID + '" class="signin-link" href="#">',
+          '</a>');
       $(FIX_CAPTIVE_PORTAL_ID).onclick = function() {
-        self.send(login.Screen.CALLBACK_USER_ACTED,
-                  USER_ACTION_SHOW_CAPTIVE_PORTAL);
+        self.send(
+            login.Screen.CALLBACK_USER_ACTED, USER_ACTION_SHOW_CAPTIVE_PORTAL);
       };
 
       $('captive-portal-proxy-message-text').innerHTML =
-        loadTimeData.getStringF(
-          'captivePortalProxyMessage',
-          '<a id="' + FIX_PROXY_SETTINGS_ID + '" class="signin-link" href="#">',
-          '</a>');
+          loadTimeData.getStringF(
+              'captivePortalProxyMessage',
+              '<a id="' + FIX_PROXY_SETTINGS_ID +
+                  '" class="signin-link" href="#">',
+              '</a>');
       $(FIX_PROXY_SETTINGS_ID).onclick = function() {
         chrome.send('openProxySettings');
       };
@@ -192,18 +221,16 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
           'guestSignin',
           '<a id="error-guest-signin-link" class="signin-link" href="#">',
           '</a>');
-      $('error-guest-signin-link').addEventListener(
-          'click',
-          this.launchGuestSession_.bind(this));
+      $('error-guest-signin-link')
+          .addEventListener('click', this.launchGuestSession_.bind(this));
 
       $('error-guest-signin-fix-network').innerHTML = loadTimeData.getStringF(
           'guestSigninFixNetwork',
           '<a id="error-guest-fix-network-signin-link" class="signin-link" ' +
               'href="#">',
           '</a>');
-      $('error-guest-fix-network-signin-link').addEventListener(
-          'click',
-          this.launchGuestSession_.bind(this));
+      $('error-guest-fix-network-signin-link')
+          .addEventListener('click', this.launchGuestSession_.bind(this));
 
       $('error-offline-login').innerHTML = loadTimeData.getStringF(
           'offlineLogin',
@@ -221,6 +248,7 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
       $('connecting-indicator').innerHTML =
           loadTimeData.getStringF('connectingIndicatorText', ellipsis);
 
+      this.updateMdMode_();
       this.onContentChange_();
     },
 
@@ -273,8 +301,8 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
       certsButton.textContent = loadTimeData.getString('configureCertsButton');
       certsButton.classList.add('show-with-ui-state-kiosk-mode');
       certsButton.addEventListener('click', function(e) {
-        self.send(login.Screen.CALLBACK_USER_ACTED,
-                  USER_ACTION_CONFIGURE_CERTS);
+        self.send(
+            login.Screen.CALLBACK_USER_ACTED, USER_ACTION_CONFIGURE_CERTS);
         e.stopPropagation();
       });
       buttons.push(certsButton);
@@ -307,11 +335,12 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
       var powerwashButton = this.ownerDocument.createElement('button');
       powerwashButton.id = 'error-message-restart-and-powerwash-button';
       powerwashButton.textContent =
-        loadTimeData.getString('localStateErrorPowerwashButton');
+          loadTimeData.getString('localStateErrorPowerwashButton');
       powerwashButton.classList.add('show-with-ui-state-local-state-error');
       powerwashButton.addEventListener('click', function(e) {
-        self.send(login.Screen.CALLBACK_USER_ACTED,
-                  USER_ACTION_LOCAL_STATE_POWERWASH);
+        self.send(
+            login.Screen.CALLBACK_USER_ACTED,
+            USER_ACTION_LOCAL_STATE_POWERWASH);
         e.stopPropagation();
       });
       buttons.push(powerwashButton);
@@ -320,10 +349,10 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
     },
 
     /**
-      * Sets current UI state of the screen.
-      * @param {string} ui_state New UI state of the screen.
-      * @private
-      */
+     * Sets current UI state of the screen.
+     * @param {string} ui_state New UI state of the screen.
+     * @private
+     */
     setUIState_: function(ui_state) {
       this.classList.remove(this.ui_state);
       this.ui_state = ui_state;
@@ -339,10 +368,10 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
     },
 
     /**
-      * Sets current error state of the screen.
-      * @param {string} error_state New error state of the screen.
-      * @private
-      */
+     * Sets current error state of the screen.
+     * @param {string} error_state New error state of the screen.
+     * @private
+     */
     setErrorState_: function(error_state) {
       this.classList.remove(this.error_state);
       this.error_state = error_state;
@@ -367,8 +396,19 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
      * @private
      */
     onContentChange_: function() {
-      if (Oobe.getInstance().currentScreen === this)
+      if (Oobe.getInstance().currentScreen === this) {
         Oobe.getInstance().updateScreenSize(this);
+        if (window.getComputedStyle($('offline-networks-list-dropdown-label2'))
+                .display == 'none') {
+          $('offline-networks-list-dropdown')
+              .setAttribute(
+                  'aria-labelledby', 'offline-networks-list-dropdown-label1');
+        } else {
+          $('offline-networks-list-dropdown')
+              .setAttribute(
+                  'aria-labelledby', 'offline-networks-list-dropdown-label2');
+        }
+      }
     },
 
     /**
@@ -377,8 +417,8 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
      */
     launchGuestSession_: function() {
       if (Oobe.getInstance().isOobeUI()) {
-        this.send(login.Screen.CALLBACK_USER_ACTED,
-                  USER_ACTION_LAUNCH_OOBE_GUEST);
+        this.send(
+            login.Screen.CALLBACK_USER_ACTED, USER_ACTION_LAUNCH_OOBE_GUEST);
       } else {
         chrome.send('launchIncognito');
       }
@@ -403,19 +443,19 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
     },
 
     /**
-      * Sets current UI state of the screen.
-      * @param {number} ui_state New UI state of the screen.
-      * @private
-      */
+     * Sets current UI state of the screen.
+     * @param {number} ui_state New UI state of the screen.
+     * @private
+     */
     setUIState: function(ui_state) {
       this.setUIState_(UI_STATES[ui_state]);
     },
 
     /**
-      * Sets current error state of the screen.
-      * @param {number} error_state New error state of the screen.
-      * @private
-      */
+     * Sets current error state of the screen.
+     * @param {number} error_state New error state of the screen.
+     * @private
+     */
     setErrorState: function(error_state) {
       this.setErrorState_(ERROR_STATES[error_state]);
     },
@@ -435,6 +475,21 @@ login.createScreen('ErrorMessageScreen', 'error-message', function() {
     cancel: function() {
       if (this.cancelable)
         Oobe.showUserPods();
-    }
+    },
+
+    /**
+     * Switches UI to MD mode.
+     */
+    updateMdMode_: function() {
+      if (loadTimeData.getString('errorScreenMDMode') === 'on') {
+        $('error-message').setAttribute('md-mode', true);
+        $('error-message-md-header').appendChild($('error-header-id'));
+        $('error-message-md-footer')
+            .insertBefore(
+                $('error-body-id'), $('error-message-md-footer-spacer'));
+        $('error-message-classic').hidden = true;
+        $('error-message-md').hidden = false;
+      }
+    },
   };
 });

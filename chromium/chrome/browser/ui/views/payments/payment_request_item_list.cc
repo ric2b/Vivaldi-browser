@@ -5,12 +5,14 @@
 #include "chrome/browser/ui/views/payments/payment_request_item_list.h"
 
 #include "chrome/browser/ui/views/payments/payment_request_dialog_view_ids.h"
-#include "chrome/browser/ui/views/payments/payment_request_row_view.h"
 #include "chrome/browser/ui/views/payments/payment_request_views_util.h"
 #include "components/payments/content/payment_request_state.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
@@ -24,7 +26,18 @@ namespace payments {
 
 namespace {
 
-const SkColor kCheckmarkColor = 0xFF609265;
+constexpr SkColor kCheckmarkColor = 0xFF609265;
+
+constexpr gfx::Insets kRowInsets = gfx::Insets(
+    kPaymentRequestRowVerticalInsets,
+    kPaymentRequestRowHorizontalInsets,
+    kPaymentRequestRowVerticalInsets,
+    kPaymentRequestRowHorizontalInsets + kPaymentRequestRowExtraRightInset);
+
+// The space between the checkmark, extra view, and edit button.
+constexpr int kExtraViewSpacing = 16;
+
+constexpr int kEditIconSize = 16;
 
 }  // namespace
 
@@ -32,8 +45,10 @@ PaymentRequestItemList::Item::Item(PaymentRequestSpec* spec,
                                    PaymentRequestState* state,
                                    PaymentRequestItemList* list,
                                    bool selected,
+                                   bool clickable,
                                    bool show_edit_button)
-    : spec_(spec),
+    : PaymentRequestRowView(this, clickable, kRowInsets),
+      spec_(spec),
       state_(state),
       list_(list),
       selected_(selected),
@@ -41,19 +56,12 @@ PaymentRequestItemList::Item::Item(PaymentRequestSpec* spec,
 
 PaymentRequestItemList::Item::~Item() {}
 
-std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateItemView() {
-  std::unique_ptr<views::View> content = CreateContentView();
+void PaymentRequestItemList::Item::Init() {
+  std::unique_ptr<views::View> content =
+      CreateContentView(&accessible_item_description_);
 
-  const gfx::Insets row_insets(
-      kPaymentRequestRowVerticalInsets, kPaymentRequestRowHorizontalInsets,
-      kPaymentRequestRowVerticalInsets,
-      kPaymentRequestRowHorizontalInsets + kPaymentRequestRowExtraRightInset);
-  std::unique_ptr<PaymentRequestRowView> row =
-      base::MakeUnique<PaymentRequestRowView>(this,
-                                              /* clickable= */ IsEnabled(),
-                                              row_insets);
-  views::GridLayout* layout = new views::GridLayout(row.get());
-  row->SetLayoutManager(layout);
+  views::GridLayout* layout = new views::GridLayout(this);
+  SetLayoutManager(layout);
 
   // Add a column for the item's content view.
   views::ColumnSet* columns = layout->AddColumnSet(0);
@@ -64,8 +72,6 @@ std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateItemView() {
   columns->AddColumn(views::GridLayout::TRAILING, views::GridLayout::CENTER, 0,
                      views::GridLayout::USE_PREF, 0, 0);
 
-  // The space between the checkmark, extra view, and edit button.
-  constexpr int kExtraViewSpacing = 16;
   std::unique_ptr<views::View> extra_view = CreateExtraView();
   if (extra_view) {
     columns->AddPaddingColumn(0, kExtraViewSpacing);
@@ -74,7 +80,6 @@ std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateItemView() {
                        0, views::GridLayout::USE_PREF, 0, 0);
   }
 
-  constexpr int kEditIconSize = 16;
   if (show_edit_button_) {
     columns->AddPaddingColumn(0, kExtraViewSpacing);
     // Add a column for the edit_button if it exists.
@@ -87,7 +92,7 @@ std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateItemView() {
   content->set_can_process_events_within_subtree(false);
   layout->AddView(content.release());
 
-  checkmark_ = CreateCheckmark(selected() && IsEnabled());
+  checkmark_ = CreateCheckmark(selected() && clickable());
   layout->AddView(checkmark_.get());
 
   if (extra_view)
@@ -97,16 +102,18 @@ std::unique_ptr<views::View> PaymentRequestItemList::Item::CreateItemView() {
     views::ImageButton* edit_button = views::CreateVectorImageButton(this);
     const SkColor icon_color =
         color_utils::DeriveDefaultIconColor(SK_ColorBLACK);
-    edit_button->SetImage(
-        views::Button::STATE_NORMAL,
-        gfx::CreateVectorIcon(ui::kEditIcon, kEditIconSize, icon_color));
+    edit_button->SetImage(views::Button::STATE_NORMAL,
+                          gfx::CreateVectorIcon(vector_icons::kEditIcon,
+                                                kEditIconSize, icon_color));
     edit_button->set_ink_drop_base_color(icon_color);
     edit_button->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     edit_button->set_id(static_cast<int>(DialogViewID::EDIT_ITEM_BUTTON));
+    edit_button->SetAccessibleName(
+        l10n_util::GetStringUTF16(IDS_PAYMENTS_EDIT));
     layout->AddView(edit_button);
   }
 
-  return std::move(row);
+  UpdateAccessibleName();
 }
 
 void PaymentRequestItemList::Item::SetSelected(bool selected, bool notify) {
@@ -116,6 +123,8 @@ void PaymentRequestItemList::Item::SetSelected(bool selected, bool notify) {
   // instantiated.
   if (checkmark_)
     checkmark_->SetVisible(selected_);
+
+  UpdateAccessibleName();
 
   if (notify)
     SelectedStateChanged();
@@ -131,6 +140,7 @@ std::unique_ptr<views::ImageView> PaymentRequestItemList::Item::CreateCheckmark(
   checkmark->SetImage(
       gfx::CreateVectorIcon(views::kMenuCheckIcon, kCheckmarkColor));
   checkmark->SetVisible(selected);
+  checkmark->SetFocusBehavior(views::View::FocusBehavior::NEVER);
   return checkmark;
 }
 
@@ -149,6 +159,17 @@ void PaymentRequestItemList::Item::ButtonPressed(views::Button* sender,
   }
 }
 
+void PaymentRequestItemList::Item::UpdateAccessibleName() {
+  base::string16 accessible_content =
+      selected_ ? l10n_util::GetStringFUTF16(
+                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_SELECTED_FORMAT,
+                      GetNameForDataType(), accessible_item_description_)
+                : l10n_util::GetStringFUTF16(
+                      IDS_PAYMENTS_ROW_ACCESSIBLE_NAME_FORMAT,
+                      GetNameForDataType(), accessible_item_description_);
+  SetAccessibleName(accessible_content);
+}
+
 PaymentRequestItemList::PaymentRequestItemList() : selected_item_(nullptr) {}
 
 PaymentRequestItemList::~PaymentRequestItemList() {}
@@ -164,15 +185,21 @@ void PaymentRequestItemList::AddItem(
   }
 }
 
+void PaymentRequestItemList::Clear() {
+  items_.clear();
+  selected_item_ = nullptr;
+}
+
 std::unique_ptr<views::View> PaymentRequestItemList::CreateListView() {
   std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
 
-  views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kVertical, 0, kPaymentRequestRowVerticalInsets, 0);
+  views::BoxLayout* layout =
+      new views::BoxLayout(views::BoxLayout::kVertical,
+                           gfx::Insets(kPaymentRequestRowVerticalInsets, 0), 0);
   content_view->SetLayoutManager(layout);
 
   for (auto& item : items_)
-    content_view->AddChildView(item->CreateItemView().release());
+    content_view->AddChildView(item.release());
 
   return content_view;
 }

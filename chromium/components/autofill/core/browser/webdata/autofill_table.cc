@@ -193,6 +193,7 @@ std::unique_ptr<CreditCard> CreditCardFromStatement(
       base::Time::FromTimeT(s.ColumnInt64(index++)));
   credit_card->set_origin(s.ColumnString(index++));
   credit_card->set_billing_address_id(s.ColumnString(index++));
+  credit_card->set_bank_name(s.ColumnString(index++));
 
   return credit_card;
 }
@@ -472,6 +473,12 @@ bool AutofillTable::MigrateToVersion(int version,
     case 72:
       *update_compatible_version = true;
       return MigrateToVersion72RenameCardTypeToIssuerNetwork();
+    case 73:
+      *update_compatible_version = false;
+      return MigrateToVersion73AddMaskedCardBankName();
+    case 74:
+      *update_compatible_version = false;
+      return MigrateToVersion74AddServerCardTypeColumn();
   }
   return true;
 }
@@ -1215,11 +1222,13 @@ bool AutofillTable::GetServerCreditCards(
       "metadata.use_count,"           // 3
       "metadata.use_date,"            // 4
       "network,"                      // 5
-      "status,"                       // 6
-      "name_on_card,"                 // 7
-      "exp_month,"                    // 8
-      "exp_year,"                     // 9
-      "metadata.billing_address_id "  // 10
+      "type,"                         // 6
+      "status,"                       // 7
+      "name_on_card,"                 // 8
+      "exp_month,"                    // 9
+      "exp_year,"                     // 10
+      "metadata.billing_address_id,"  // 11
+      "bank_name "                    // 12
       "FROM masked_credit_cards masked "
       "LEFT OUTER JOIN unmasked_credit_cards USING (id) "
       "LEFT OUTER JOIN server_card_metadata metadata USING (id)"));
@@ -1256,11 +1265,18 @@ bool AutofillTable::GetServerCreditCards(
       DCHECK_EQ(CreditCard::GetCardNetwork(full_card_number), card_network);
     }
 
+    int card_type = s.ColumnInt(index++);
+    if (card_type >= CreditCard::CARD_TYPE_UNKNOWN &&
+        card_type <= CreditCard::CARD_TYPE_PREPAID) {
+      card->set_card_type(static_cast<CreditCard::CardType>(card_type));
+    }
+
     card->SetServerStatus(ServerStatusStringToEnum(s.ColumnString(index++)));
     card->SetRawInfo(CREDIT_CARD_NAME_FULL, s.ColumnString16(index++));
     card->SetRawInfo(CREDIT_CARD_EXP_MONTH, s.ColumnString16(index++));
     card->SetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR, s.ColumnString16(index++));
     card->set_billing_address_id(s.ColumnString(index++));
+    card->set_bank_name(s.ColumnString(index++));
     credit_cards->push_back(std::move(card));
   }
   return s.Succeeded();
@@ -1273,24 +1289,27 @@ void AutofillTable::AddMaskedCreditCards(
       db_->GetUniqueStatement("INSERT INTO masked_credit_cards("
                               "id,"            // 0
                               "network,"       // 1
-                              "status,"        // 2
-                              "name_on_card,"  // 3
-                              "last_four,"     // 4
-                              "exp_month,"     // 5
-                              "exp_year)"      // 6
-                              "VALUES (?,?,?,?,?,?,?)"));
+                              "type,"          // 2
+                              "status,"        // 3
+                              "name_on_card,"  // 4
+                              "last_four,"     // 5
+                              "exp_month,"     // 6
+                              "exp_year,"      // 7
+                              "bank_name)"     // 8
+                              "VALUES (?,?,?,?,?,?,?,?,?)"));
   for (const CreditCard& card : credit_cards) {
     DCHECK_EQ(CreditCard::MASKED_SERVER_CARD, card.record_type());
     masked_insert.BindString(0, card.server_id());
     masked_insert.BindString(1, card.network());
-    masked_insert.BindString(2,
+    masked_insert.BindInt(2, card.card_type());
+    masked_insert.BindString(3,
                              ServerStatusEnumToString(card.GetServerStatus()));
-    masked_insert.BindString16(3, card.GetRawInfo(CREDIT_CARD_NAME_FULL));
-    masked_insert.BindString16(4, card.LastFourDigits());
-    masked_insert.BindString16(5, card.GetRawInfo(CREDIT_CARD_EXP_MONTH));
-    masked_insert.BindString16(6,
+    masked_insert.BindString16(4, card.GetRawInfo(CREDIT_CARD_NAME_FULL));
+    masked_insert.BindString16(5, card.LastFourDigits());
+    masked_insert.BindString16(6, card.GetRawInfo(CREDIT_CARD_EXP_MONTH));
+    masked_insert.BindString16(7,
                                card.GetRawInfo(CREDIT_CARD_EXP_4_DIGIT_YEAR));
-
+    masked_insert.BindString(8, card.bank_name());
     masked_insert.Run();
     masked_insert.Reset(true);
 
@@ -1355,12 +1374,12 @@ bool AutofillTable::AddFullServerCreditCard(const CreditCard& credit_card) {
 
 void AutofillTable::AddUnmaskedCreditCard(const std::string& id,
                                           const base::string16& full_number) {
-  sql::Statement s(db_->GetUniqueStatement(
-      "INSERT INTO unmasked_credit_cards("
-          "id,"
-          "card_number_encrypted,"
-          "unmask_date)"
-      "VALUES (?,?,?)"));
+  sql::Statement s(
+      db_->GetUniqueStatement("INSERT INTO unmasked_credit_cards("
+                              "id,"
+                              "card_number_encrypted,"
+                              "unmask_date)"
+                              "VALUES (?,?,?)"));
   s.BindString(0, id);
 
   std::string encrypted_data;
@@ -1956,7 +1975,9 @@ bool AutofillTable::InitMaskedCreditCardsTable() {
                       "network VARCHAR,"
                       "last_four VARCHAR,"
                       "exp_month INTEGER DEFAULT 0,"
-                      "exp_year INTEGER DEFAULT 0)")) {
+                      "exp_year INTEGER DEFAULT 0, "
+                      "bank_name VARCHAR, "
+                      "type INTEGER DEFAULT 0)")) {
       NOTREACHED();
       return false;
     }
@@ -2597,6 +2618,30 @@ bool AutofillTable::MigrateToVersion72RenameCardTypeToIssuerNetwork() {
              "ALTER TABLE masked_credit_cards_temp "
              "RENAME TO masked_credit_cards") &&
          transaction.Commit();
+}
+
+bool AutofillTable::MigrateToVersion73AddMaskedCardBankName() {
+  // Add the new bank_name column to the masked_credit_cards table.
+  return db_->DoesColumnExist("masked_credit_cards", "bank_name") ||
+         db_->Execute(
+             "ALTER TABLE masked_credit_cards ADD COLUMN bank_name VARCHAR");
+}
+
+bool AutofillTable::MigrateToVersion74AddServerCardTypeColumn() {
+  // Version 73 was actually used by two different schemas; an attempt to add
+  // the "type" column (as in this version 74) was landed and reverted, and then
+  // the "bank_name" column was added (and stuck). Some clients may have been
+  // upgraded to one and some the other. Figure out which is the case.
+  const bool added_type_column_in_v73 =
+      db_->DoesColumnExist("masked_credit_cards", "type");
+
+  // If we previously added the "type" column, then it's already present with
+  // the correct semantics, but we now need to run the "bank_name" migration.
+  // Otherwise, we need to add "type" now.
+  return added_type_column_in_v73 ? MigrateToVersion73AddMaskedCardBankName()
+                                  : db_->Execute(
+                                        "ALTER TABLE masked_credit_cards ADD "
+                                        "COLUMN type INTEGER DEFAULT 0");
 }
 
 }  // namespace autofill

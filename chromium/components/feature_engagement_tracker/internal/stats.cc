@@ -20,11 +20,19 @@ namespace {
 const char kEventStoreSuffix[] = "EventStore";
 const char kAvailabilityStoreSuffix[] = "AvailabilityStore";
 
+// A shadow histogram across all features. Also the base name for the suffix
+// based feature specific histograms; for example for IPH_MyFun, it would be:
+// InProductHelp.ShouldTriggerHelpUI.IPH_MyFun.
+const char kShouldTriggerHelpUIHistogram[] =
+    "InProductHelp.ShouldTriggerHelpUI";
+
 // Helper function to log a TriggerHelpUIResult.
 void LogTriggerHelpUIResult(const std::string& name,
                             TriggerHelpUIResult result) {
   // Must not use histograms macros here because we pass in the histogram name.
   base::UmaHistogramEnumeration(name, result, TriggerHelpUIResult::COUNT);
+  base::UmaHistogramEnumeration(kShouldTriggerHelpUIHistogram, result,
+                                TriggerHelpUIResult::COUNT);
 }
 
 }  // namespace
@@ -51,12 +59,12 @@ void RecordNotifyEvent(const std::string& event_name,
   const Configuration::ConfigMap& features = config->GetRegisteredFeatures();
   std::string feature_name;
   for (const auto& element : features) {
-    const base::Feature* feature = element.first;
+    const std::string fname = element.first;
     const FeatureConfig& feature_config = element.second;
 
     // Track used event separately.
     if (feature_config.used.name == event_name) {
-      feature_name = feature->name;
+      feature_name = fname;
       DCHECK(!feature_name.empty());
       std::string used_event_action = "InProductHelp.NotifyUsedEvent.";
       used_event_action.append(feature_name);
@@ -67,12 +75,12 @@ void RecordNotifyEvent(const std::string& event_name,
     // Find if the |event_name| matches any configuration.
     for (const auto& event : feature_config.event_configs) {
       if (event.name == event_name) {
-        feature_name = feature->name;
+        feature_name = fname;
         break;
       }
     }
     if (feature_config.trigger.name == event_name) {
-      feature_name = feature->name;
+      feature_name = fname;
       break;
     }
   }
@@ -93,8 +101,9 @@ void RecordNotifyEvent(const std::string& event_name,
 void RecordShouldTriggerHelpUI(const base::Feature& feature,
                                const ConditionValidator::Result& result) {
   // Records the user action.
-  std::string name = "InProductHelp.ShouldTriggerHelpUI.";
-  name.append(feature.name);
+  std::string name = std::string(kShouldTriggerHelpUIHistogram)
+                         .append(".")
+                         .append(feature.name);
   base::RecordComputedAction(name);
 
   // Total count histogram, used to compute the percentage of each failure type,

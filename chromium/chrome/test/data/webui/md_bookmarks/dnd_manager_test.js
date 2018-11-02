@@ -89,8 +89,9 @@ suite('drag and drop', function() {
           createFolder('2', [])),
       selectedFolder: '1',
     });
-    bookmarks.Store.instance_ = store;
+    store.replaceSingleton();
 
+    draggedIds = null;
     chrome.bookmarkManagerPrivate.startDrag = function(nodes, isTouch) {
       draggedIds = nodes;
     };
@@ -100,7 +101,7 @@ suite('drag and drop', function() {
     list = app.$$('bookmarks-list');
     rootFolderNode = app.$$('bookmarks-folder-node');
     dndManager = app.dndManager_;
-    dndManager.disableTimeoutsForTesting();
+    dndManager.setTimerProxyForTesting(new bookmarks.TestTimerProxy());
     Polymer.dom.flush();
   });
 
@@ -489,5 +490,58 @@ suite('drag and drop', function() {
     dispatchDragEvent('dragstart', dragElement);
     assertDeepEquals([], normalizeSet(store.data.selection.items));
     dispatchDragEvent('dragend', dragElement);
+  });
+
+  test('cannot drag items when editing is disabled', function() {
+    store.data.prefs.canEdit = false;
+    store.notifyObservers();
+
+    var dragElement = getFolderNode('11');
+    dispatchDragEvent('dragstart', dragElement);
+    assertEquals(null, draggedIds);
+  });
+
+  test('cannot start dragging unmodifiable items', function() {
+    store.data.nodes['2'].unmodifiable = 'managed';
+    store.notifyObservers();
+
+    var dragElement = getFolderNode('1');
+    dispatchDragEvent('dragstart', dragElement);
+    assertEquals(null, draggedIds);
+
+    dragElement = getFolderNode('2');
+    dispatchDragEvent('dragstart', dragElement);
+    assertEquals(null, draggedIds);
+  });
+
+  test('cannot drag onto folders with unmodifiable children', function() {
+    store.data.nodes['2'].unmodifiable = 'managed';
+    store.notifyObservers();
+
+    var dragElement = getListItem('12');
+    dispatchDragEvent('dragstart', dragElement);
+
+    // Can't drag onto the unmodifiable node.
+    var dragTarget = getFolderNode('2');
+    dispatchDragEvent('dragover', dragTarget);
+    assertEquals(
+        DropPosition.NONE, dndManager.calculateValidDropPositions_(dragTarget));
+  });
+
+  test('ensure drag and drop chip shows', function() {
+    var dragElement = getListItem('13');
+    var dragTarget = getFolderNode('2');
+    dispatchDragEvent('dragstart', dragElement);
+    dndManager.dragInfo_.handleChromeDragEnter(createDragData(draggedIds));
+
+    dispatchDragEvent('dragover', dragTarget, {x: 50, y: 80});
+    assertTrue(!!dndManager.chip_);
+    var dndChip = dndManager.dndChip;
+    assertEquals('50px', dndChip.style.getPropertyValue('--mouse-x'));
+    assertEquals('80px', dndChip.style.getPropertyValue('--mouse-y'));
+    assertTrue(dndChip.showing_);
+
+    dispatchDragEvent('dragend', dragElement);
+    assertFalse(dndChip.showing_);
   });
 });

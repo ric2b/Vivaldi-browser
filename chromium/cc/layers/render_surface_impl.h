@@ -13,6 +13,7 @@
 
 #include "base/macros.h"
 #include "cc/cc_export.h"
+#include "cc/layers/draw_mode.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/shared_quad_state.h"
@@ -33,7 +34,7 @@ class LayerTreeImpl;
 
 class CC_EXPORT RenderSurfaceImpl {
  public:
-  RenderSurfaceImpl(LayerTreeImpl* layer_tree_impl, int stable_effect_id);
+  RenderSurfaceImpl(LayerTreeImpl* layer_tree_impl, uint64_t stable_id);
   virtual ~RenderSurfaceImpl();
 
   // Returns the RenderSurfaceImpl that this render surface contributes to. Root
@@ -141,7 +142,7 @@ class CC_EXPORT RenderSurfaceImpl {
     occlusion_in_content_space_ = occlusion;
   }
 
-  int id() const { return stable_effect_id_; }
+  uint64_t id() const { return stable_id_; }
 
   LayerImpl* MaskLayer();
   bool HasMask() const;
@@ -153,19 +154,22 @@ class CC_EXPORT RenderSurfaceImpl {
 
   bool HasCopyRequest() const;
 
+  bool ShouldCacheRenderSurface() const;
+
   void ResetPropertyChangedFlags();
   bool SurfacePropertyChanged() const;
   bool SurfacePropertyChangedOnlyFromDescendant() const;
   bool AncestorPropertyChanged() const;
   void NoteAncestorPropertyChanged();
+  bool HasDamageFromeContributingContent() const;
 
   DamageTracker* damage_tracker() const { return damage_tracker_.get(); }
   gfx::Rect GetDamageRect() const;
 
-  int GetRenderPassId();
-
   std::unique_ptr<RenderPass> CreateRenderPass();
-  void AppendQuads(RenderPass* render_pass, AppendQuadsData* append_quads_data);
+  void AppendQuads(DrawMode draw_mode,
+                   RenderPass* render_pass,
+                   AppendQuadsData* append_quads_data);
 
   int TransformTreeIndex() const;
   int ClipTreeIndex() const;
@@ -185,7 +189,7 @@ class CC_EXPORT RenderSurfaceImpl {
                      const gfx::Rect& visible_layer_rect);
 
   LayerTreeImpl* layer_tree_impl_;
-  int stable_effect_id_;
+  uint64_t stable_id_;
   int effect_tree_index_;
 
   // Container for properties that render surfaces need to compute before they

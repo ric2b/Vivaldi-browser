@@ -26,19 +26,20 @@
 #include "platform/audio/VectorMath.h"
 
 #include <stdint.h>
+#include "build/build_config.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/MathExtras.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #include <Accelerate/Accelerate.h>
 #endif
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
 #include <emmintrin.h>
 #endif
 
-#if CPU(ARM_NEON)
+#if WTF_CPU_ARM_NEON
 #include <arm_neon.h>
 #endif
 
@@ -53,7 +54,7 @@ namespace blink {
 
 namespace VectorMath {
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 // On the Mac we use the highly optimized versions in Accelerate.framework
 // In 32-bit mode (__ppc__ or __i386__) <Accelerate/Accelerate.h> includes
 // <vecLib/vDSP_translate.h> which defines macros of the same name as
@@ -66,8 +67,9 @@ void Vsmul(const float* source_p,
            float* dest_p,
            int dest_stride,
            size_t frames_to_process) {
-#if CPU(X86)
-  ::vsmul(sourceP, sourceStride, scale, destP, destStride, framesToProcess);
+#if defined(ARCH_CPU_X86)
+  ::vsmul(source_p, source_stride, scale, dest_p, dest_stride,
+          frames_to_process);
 #else
   vDSP_vsmul(source_p, source_stride, scale, dest_p, dest_stride,
              frames_to_process);
@@ -81,9 +83,9 @@ void Vadd(const float* source1p,
           float* dest_p,
           int dest_stride,
           size_t frames_to_process) {
-#if CPU(X86)
-  ::vadd(source1P, sourceStride1, source2P, sourceStride2, destP, destStride,
-         framesToProcess);
+#if defined(ARCH_CPU_X86)
+  ::vadd(source1p, source_stride1, source2p, source_stride2, dest_p,
+         dest_stride, frames_to_process);
 #else
   vDSP_vadd(source1p, source_stride1, source2p, source_stride2, dest_p,
             dest_stride, frames_to_process);
@@ -97,9 +99,9 @@ void Vmul(const float* source1p,
           float* dest_p,
           int dest_stride,
           size_t frames_to_process) {
-#if CPU(X86)
-  ::vmul(source1P, sourceStride1, source2P, sourceStride2, destP, destStride,
-         framesToProcess);
+#if defined(ARCH_CPU_X86)
+  ::vmul(source1p, source_stride1, source2p, source_stride2, dest_p,
+         dest_stride, frames_to_process);
 #else
   vDSP_vmul(source1p, source_stride1, source2p, source_stride2, dest_p,
             dest_stride, frames_to_process);
@@ -122,8 +124,8 @@ void Zvmul(const float* real1p,
   sc2.imagp = const_cast<float*>(imag2p);
   dest.realp = real_dest_p;
   dest.imagp = imag_dest_p;
-#if CPU(X86)
-  ::zvmul(&sc1, 1, &sc2, 1, &dest, 1, framesToProcess, 1);
+#if defined(ARCH_CPU_X86)
+  ::zvmul(&sc1, 1, &sc2, 1, &dest, 1, frames_to_process, 1);
 #else
   vDSP_zvmul(&sc1, 1, &sc2, 1, &dest, 1, frames_to_process, 1);
 #endif
@@ -176,7 +178,7 @@ void Vsma(const float* source_p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
 
@@ -218,7 +220,7 @@ void Vsma(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -237,7 +239,7 @@ void Vsma(const float* source_p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if ((sourceStride == 1) && (destStride == 1)) {
+  if ((source_stride == 1) && (dest_stride == 1)) {
     float* destPCopy = destP;
     v4f32 vScale;
     v4f32 vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6, vSrc7;
@@ -248,13 +250,13 @@ void Vsma(const float* source_p,
     vScale = (v4f32)__msa_fill_w(scaleVal.intVal);
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(sourceP, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
+      LD_SP8(source_p, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
              vSrc7);
       LD_SP8(destPCopy, 4, vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6,
              vDst7);
       VSMA4(vSrc0, vSrc1, vSrc2, vSrc3, vDst0, vDst1, vDst2, vDst3, vScale);
       VSMA4(vSrc4, vSrc5, vSrc6, vSrc7, vDst4, vDst5, vDst6, vDst7, vScale);
-      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, destP, 4);
+      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, dest_p, 4);
     }
   }
 #endif
@@ -274,7 +276,7 @@ void Vsmul(const float* source_p,
            size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
 
@@ -323,7 +325,7 @@ void Vsmul(const float* source_p,
       n--;
     }
   } else {  // If strides are not 1, rollback to normal algorithm.
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     float k = *scale;
     int tail_frames = n % 4;
@@ -339,7 +341,7 @@ void Vsmul(const float* source_p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if ((sourceStride == 1) && (destStride == 1)) {
+  if ((source_stride == 1) && (dest_stride == 1)) {
     v4f32 vScale;
     v4f32 vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6, vSrc7;
     v4f32 vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7;
@@ -349,11 +351,11 @@ void Vsmul(const float* source_p,
     vScale = (v4f32)__msa_fill_w(scaleVal.intVal);
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(sourceP, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
+      LD_SP8(source_p, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
              vSrc7);
       VSMUL4(vSrc0, vSrc1, vSrc2, vSrc3, vDst0, vDst1, vDst2, vDst3, vScale);
       VSMUL4(vSrc4, vSrc5, vSrc6, vSrc7, vDst4, vDst5, vDst6, vDst7, vScale);
-      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, destP, 4);
+      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, dest_p, 4);
     }
   }
 #endif
@@ -363,7 +365,7 @@ void Vsmul(const float* source_p,
       source_p += source_stride;
       dest_p += dest_stride;
     }
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   }
 #endif
 }
@@ -377,7 +379,7 @@ void Vadd(const float* source1p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -461,7 +463,7 @@ void Vadd(const float* source1p,
       n--;
     }
   } else {  // if strides are not 1, rollback to normal algorithm
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -478,7 +480,7 @@ void Vadd(const float* source1p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if ((sourceStride1 == 1) && (sourceStride2 == 1) && (destStride == 1)) {
+  if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     v4f32 vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5, vSrc1P6,
         vSrc1P7;
     v4f32 vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5, vSrc2P6,
@@ -486,15 +488,15 @@ void Vadd(const float* source1p,
     v4f32 vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7;
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(source1P, 4, vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5,
+      LD_SP8(source1p, 4, vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5,
              vSrc1P6, vSrc1P7);
-      LD_SP8(source2P, 4, vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5,
+      LD_SP8(source2p, 4, vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5,
              vSrc2P6, vSrc2P7);
       ADD4(vSrc1P0, vSrc2P0, vSrc1P1, vSrc2P1, vSrc1P2, vSrc2P2, vSrc1P3,
            vSrc2P3, vDst0, vDst1, vDst2, vDst3);
       ADD4(vSrc1P4, vSrc2P4, vSrc1P5, vSrc2P5, vSrc1P6, vSrc2P6, vSrc1P7,
            vSrc2P7, vDst4, vDst5, vDst6, vDst7);
-      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, destP, 4);
+      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, dest_p, 4);
     }
   }
 #endif
@@ -504,7 +506,7 @@ void Vadd(const float* source1p,
       source2p += source_stride2;
       dest_p += dest_stride;
     }
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   }
 #endif
 }
@@ -518,7 +520,7 @@ void Vmul(const float* source1p,
           size_t frames_to_process) {
   int n = frames_to_process;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     // If the source1P address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -564,7 +566,7 @@ void Vmul(const float* source1p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -581,7 +583,7 @@ void Vmul(const float* source1p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if ((sourceStride1 == 1) && (sourceStride2 == 1) && (destStride == 1)) {
+  if ((source_stride1 == 1) && (source_stride2 == 1) && (dest_stride == 1)) {
     v4f32 vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5, vSrc1P6,
         vSrc1P7;
     v4f32 vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5, vSrc2P6,
@@ -589,15 +591,15 @@ void Vmul(const float* source1p,
     v4f32 vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7;
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(source1P, 4, vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5,
+      LD_SP8(source1p, 4, vSrc1P0, vSrc1P1, vSrc1P2, vSrc1P3, vSrc1P4, vSrc1P5,
              vSrc1P6, vSrc1P7);
-      LD_SP8(source2P, 4, vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5,
+      LD_SP8(source2p, 4, vSrc2P0, vSrc2P1, vSrc2P2, vSrc2P3, vSrc2P4, vSrc2P5,
              vSrc2P6, vSrc2P7);
       MUL4(vSrc1P0, vSrc2P0, vSrc1P1, vSrc2P1, vSrc1P2, vSrc2P2, vSrc1P3,
            vSrc2P3, vDst0, vDst1, vDst2, vDst3);
       MUL4(vSrc1P4, vSrc2P4, vSrc1P5, vSrc2P5, vSrc1P6, vSrc2P6, vSrc1P7,
            vSrc2P7, vDst4, vDst5, vDst6, vDst7);
-      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, destP, 4);
+      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, dest_p, 4);
     }
   }
 #endif
@@ -618,7 +620,7 @@ void Zvmul(const float* real1p,
            float* imag_dest_p,
            size_t frames_to_process) {
   unsigned i = 0;
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   // Only use the SSE optimization in the very common case that all addresses
   // are 16-byte aligned.  Otherwise, fall through to the scalar code below.
   if (!(reinterpret_cast<uintptr_t>(real1p) & 0x0F) &&
@@ -642,7 +644,7 @@ void Zvmul(const float* real1p,
       i += 4;
     }
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   unsigned end_size = frames_to_process - frames_to_process % 4;
   while (i < end_size) {
     float32x4_t real1 = vld1q_f32(real1p + i);
@@ -677,7 +679,7 @@ void Vsvesq(const float* source_p,
   int n = frames_to_process;
   float sum = 0;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (source_stride == 1) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -707,7 +709,7 @@ void Vsvesq(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if (source_stride == 1) {
     int tail_frames = n % 4;
     const float* end_p = source_p + n - tail_frames;
@@ -746,7 +748,7 @@ void Vmaxmgv(const float* source_p,
   int n = frames_to_process;
   float max = 0;
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (source_stride == 1) {
     // If the sourceP address is not 16-byte aligned, the first several frames
     // (at most three) should be processed separately.
@@ -782,7 +784,7 @@ void Vmaxmgv(const float* source_p,
 
     n = tail_frames;
   }
-#elif CPU(ARM_NEON)
+#elif WTF_CPU_ARM_NEON
   if (source_stride == 1) {
     int tail_frames = n % 4;
     const float* end_p = source_p + n - tail_frames;
@@ -803,7 +805,7 @@ void Vmaxmgv(const float* source_p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if (sourceStride == 1) {
+  if (source_stride == 1) {
     v4f32 vMax = {
         0,
     };
@@ -811,7 +813,7 @@ void Vmaxmgv(const float* source_p,
     const v16i8 vSignBitMask = (v16i8)__msa_fill_w(0x7FFFFFFF);
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(sourceP, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
+      LD_SP8(source_p, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
              vSrc7);
       AND_W4_SP(vSrc0, vSrc1, vSrc2, vSrc3, vSignBitMask);
       VMAX_W4_SP(vSrc0, vSrc1, vSrc2, vSrc3, vMax);
@@ -847,7 +849,7 @@ void Vclip(const float* source_p,
   float high_threshold = *high_threshold_p;
 
 // FIXME: Optimize for SSE2.
-#if CPU(ARM_NEON)
+#if WTF_CPU_ARM_NEON
   if ((source_stride == 1) && (dest_stride == 1)) {
     int tail_frames = n % 4;
     const float* end_p = dest_p + n - tail_frames;
@@ -863,25 +865,25 @@ void Vclip(const float* source_p,
     n = tail_frames;
   }
 #elif HAVE(MIPS_MSA_INTRINSICS)
-  if ((sourceStride == 1) && (destStride == 1)) {
+  if ((source_stride == 1) && (dest_stride == 1)) {
     v4f32 vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6, vSrc7;
     v4f32 vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7;
     v4f32 vLowThr, vHighThr;
     FloatInt lowThr, highThr;
 
-    lowThr.floatVal = lowThreshold;
-    highThr.floatVal = highThreshold;
+    lowThr.floatVal = low_threshold;
+    highThr.floatVal = high_threshold;
     vLowThr = (v4f32)__msa_fill_w(lowThr.intVal);
     vHighThr = (v4f32)__msa_fill_w(highThr.intVal);
 
     for (; n >= 32; n -= 32) {
-      LD_SP8(sourceP, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
+      LD_SP8(source_p, 4, vSrc0, vSrc1, vSrc2, vSrc3, vSrc4, vSrc5, vSrc6,
              vSrc7);
       VCLIP4(vSrc0, vSrc1, vSrc2, vSrc3, vLowThr, vHighThr, vDst0, vDst1, vDst2,
              vDst3);
       VCLIP4(vSrc4, vSrc5, vSrc6, vSrc7, vLowThr, vHighThr, vDst4, vDst5, vDst6,
              vDst7);
-      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, destP, 4);
+      ST_SP8(vDst0, vDst1, vDst2, vDst3, vDst4, vDst5, vDst6, vDst7, dest_p, 4);
     }
   }
 #endif
@@ -892,7 +894,7 @@ void Vclip(const float* source_p,
   }
 }
 
-#endif  // OS(MACOSX)
+#endif  // defined(OS_MACOSX)
 
 }  // namespace VectorMath
 

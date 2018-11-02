@@ -14,70 +14,251 @@
 #include "base/bind.h"
 #include "base/lazy_instance.h"
 #include "base/logging.h"
+#include "base/numerics/safe_math.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/thread_local.h"
 #include "mojo/public/cpp/bindings/associated_group_controller.h"
 #include "mojo/public/cpp/bindings/lib/array_internal.h"
+#include "mojo/public/cpp/bindings/lib/unserialized_message_context.h"
 
 namespace mojo {
 
 namespace {
 
 base::LazyInstance<base::ThreadLocalPointer<internal::MessageDispatchContext>>::
-    DestructorAtExit g_tls_message_dispatch_context = LAZY_INSTANCE_INITIALIZER;
+    Leaky g_tls_message_dispatch_context = LAZY_INSTANCE_INITIALIZER;
 
-base::LazyInstance<base::ThreadLocalPointer<SyncMessageResponseContext>>::
-    DestructorAtExit g_tls_sync_response_context = LAZY_INSTANCE_INITIALIZER;
+base::LazyInstance<base::ThreadLocalPointer<SyncMessageResponseContext>>::Leaky
+    g_tls_sync_response_context = LAZY_INSTANCE_INITIALIZER;
 
 void DoNotifyBadMessage(Message message, const std::string& error) {
   message.NotifyBadMessage(error);
 }
 
+template <typename HeaderType>
+void AllocateHeaderFromBuffer(internal::Buffer* buffer, HeaderType** header) {
+  *header = static_cast<HeaderType*>(buffer->Allocate(sizeof(HeaderType)));
+  (*header)->num_bytes = sizeof(HeaderType);
+}
+
+void WriteMessageHeader(uint32_t name,
+                        uint32_t flags,
+                        size_t payload_interface_id_count,
+                        internal::Buffer* payload_buffer) {
+  if (payload_interface_id_count > 0) {
+    // Version 2
+    internal::MessageHeaderV2* header;
+    AllocateHeaderFromBuffer(payload_buffer, &header);
+    header->version = 2;
+    header->name = name;
+    header->flags = flags;
+    // The payload immediately follows the header.
+    header->payload.Set(header + 1);
+  } else if (flags &
+             (Message::kFlagExpectsResponse | Message::kFlagIsResponse)) {
+    // Version 1
+    internal::MessageHeaderV1* header;
+    AllocateHeaderFromBuffer(payload_buffer, &header);
+    header->version = 1;
+    header->name = name;
+    header->flags = flags;
+  } else {
+    internal::MessageHeader* header;
+    AllocateHeaderFromBuffer(payload_buffer, &header);
+    header->version = 0;
+    header->name = name;
+    header->flags = flags;
+  }
+}
+
+void CreateSerializedMessageObject(uint32_t name,
+                                   uint32_t flags,
+                                   size_t payload_size,
+                                   size_t payload_interface_id_count,
+                                   std::vector<ScopedHandle>* handles,
+                                   ScopedMessageHandle* out_handle,
+                                   internal::Buffer* out_buffer) {
+  ScopedMessageHandle handle;
+  MojoResult rv = mojo::CreateMessage(&handle);
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  DCHECK(handle.is_valid());
+
+  void* buffer;
+  uint32_t buffer_size;
+  size_t total_size = internal::ComputeSerializedMessageSize(
+      flags, payload_size, payload_interface_id_count);
+  DCHECK(base::IsValueInRangeForNumericType<uint32_t>(total_size));
+  DCHECK(!handles ||
+         base::IsValueInRangeForNumericType<uint32_t>(handles->size()));
+  rv = MojoAttachSerializedMessageBuffer(
+      handle->value(), static_cast<uint32_t>(total_size),
+      handles ? reinterpret_cast<MojoHandle*>(handles->data()) : nullptr,
+      handles ? static_cast<uint32_t>(handles->size()) : 0, &buffer,
+      &buffer_size);
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  if (handles) {
+    // Handle ownership has been taken by MojoAttachSerializedMessageBuffer.
+    for (size_t i = 0; i < handles->size(); ++i)
+      ignore_result(handles->at(i).release());
+  }
+
+  internal::Buffer payload_buffer(buffer, buffer_size);
+
+  // Make sure we zero the memory first!
+  memset(payload_buffer.data(), 0, total_size);
+  WriteMessageHeader(name, flags, payload_interface_id_count, &payload_buffer);
+
+  *out_handle = std::move(handle);
+  *out_buffer = std::move(payload_buffer);
+}
+
+void SerializeUnserializedContext(MojoMessageHandle message,
+                                  uintptr_t context_value) {
+  auto* context =
+      reinterpret_cast<internal::UnserializedMessageContext*>(context_value);
+  size_t num_bytes;
+  size_t num_handles;
+  context->GetSerializedSize(&num_bytes, &num_handles);
+  if (!base::IsValueInRangeForNumericType<uint32_t>(num_bytes))
+    return;
+  if (!base::IsValueInRangeForNumericType<uint32_t>(num_handles))
+    return;
+
+  std::vector<MojoHandle> handles(num_handles);
+  if (num_handles)
+    context->SerializeHandles(handles.data());
+
+  void* buffer;
+  uint32_t buffer_size;
+  MojoResult rv = MojoAttachSerializedMessageBuffer(
+      message, static_cast<uint32_t>(num_bytes), handles.data(),
+      static_cast<uint32_t>(num_handles), &buffer, &buffer_size);
+  if (rv != MOJO_RESULT_OK)
+    return;
+
+  internal::Buffer payload_buffer(buffer, num_bytes);
+  WriteMessageHeader(context->message_name(), context->message_flags(),
+                     0 /* payload_interface_id_count */, &payload_buffer);
+
+  // We need to copy additional header data which may have been set after
+  // message construction, as this codepath may be reached at some arbitrary
+  // time between message send and message dispatch.
+  static_cast<internal::MessageHeader*>(buffer)->interface_id =
+      context->header()->interface_id;
+  if (context->header()->flags &
+      (Message::kFlagExpectsResponse | Message::kFlagIsResponse)) {
+    DCHECK_GE(context->header()->version, 1u);
+    static_cast<internal::MessageHeaderV1*>(buffer)->request_id =
+        context->header()->request_id;
+  }
+
+  context->SerializePayload(&payload_buffer);
+}
+
+void DestroyUnserializedContext(uintptr_t context) {
+  delete reinterpret_cast<internal::UnserializedMessageContext*>(context);
+}
+
+ScopedMessageHandle CreateUnserializedMessageObject(
+    std::unique_ptr<internal::UnserializedMessageContext> context) {
+  ScopedMessageHandle handle;
+  MojoResult rv = mojo::CreateMessage(&handle);
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  DCHECK(handle.is_valid());
+
+  rv = MojoAttachMessageContext(
+      handle->value(), reinterpret_cast<uintptr_t>(context.release()),
+      &SerializeUnserializedContext, &DestroyUnserializedContext);
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  return handle;
+}
+
 }  // namespace
 
-Message::Message() {
+Message::Message() = default;
+
+Message::Message(Message&& other) = default;
+
+Message::Message(std::unique_ptr<internal::UnserializedMessageContext> context)
+    : Message(CreateUnserializedMessageObject(std::move(context))) {}
+
+Message::Message(uint32_t name,
+                 uint32_t flags,
+                 size_t payload_size,
+                 size_t payload_interface_id_count,
+                 std::vector<ScopedHandle>* handles) {
+  CreateSerializedMessageObject(name, flags, payload_size,
+                                payload_interface_id_count, handles, &handle_,
+                                &payload_buffer_);
+  data_ = payload_buffer_.data();
+  data_size_ = payload_buffer_.size();
+  transferable_ = true;
+  serialized_ = true;
 }
 
-Message::Message(Message&& other)
-    : buffer_(std::move(other.buffer_)),
-      handles_(std::move(other.handles_)),
-      associated_endpoint_handles_(
-          std::move(other.associated_endpoint_handles_)) {}
+Message::Message(ScopedMessageHandle handle) {
+  DCHECK(handle.is_valid());
 
-Message::~Message() {
-  CloseHandles();
+  uintptr_t context_value = 0;
+  MojoResult get_context_result = MojoGetMessageContext(
+      handle->value(), &context_value, MOJO_GET_MESSAGE_CONTEXT_FLAG_NONE);
+  if (get_context_result == MOJO_RESULT_NOT_FOUND) {
+    // It's a serialized message. Extract handles if possible.
+    uint32_t num_bytes;
+    void* buffer;
+    uint32_t num_handles = 0;
+    MojoResult rv = MojoGetSerializedMessageContents(
+        handle->value(), &buffer, &num_bytes, nullptr, &num_handles,
+        MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+    if (rv == MOJO_RESULT_RESOURCE_EXHAUSTED) {
+      handles_.resize(num_handles);
+      rv = MojoGetSerializedMessageContents(
+          handle->value(), &buffer, &num_bytes,
+          reinterpret_cast<MojoHandle*>(handles_.data()), &num_handles,
+          MOJO_GET_SERIALIZED_MESSAGE_CONTENTS_FLAG_NONE);
+    } else {
+      // No handles, so it's safe to retransmit this message if the caller
+      // really wants to.
+      transferable_ = true;
+    }
+
+    if (rv != MOJO_RESULT_OK) {
+      // Failed to deserialize handles. Leave the Message uninitialized.
+      return;
+    }
+
+    data_ = buffer;
+    data_size_ = num_bytes;
+    serialized_ = true;
+  } else {
+    DCHECK_EQ(MOJO_RESULT_OK, get_context_result);
+    auto* context =
+        reinterpret_cast<internal::UnserializedMessageContext*>(context_value);
+    // Dummy data address so common header accessors still behave properly. The
+    // choice is V1 reflects unserialized message capabilities: we may or may
+    // not need to support request IDs (which require at least V1), but we never
+    // (for now, anyway) need to support associated interface handles (V2).
+    data_ = context->header();
+    data_size_ = sizeof(internal::MessageHeaderV1);
+    transferable_ = true;
+    serialized_ = false;
+  }
+
+  handle_ = std::move(handle);
 }
 
-Message& Message::operator=(Message&& other) {
-  Reset();
-  std::swap(other.buffer_, buffer_);
-  std::swap(other.handles_, handles_);
-  std::swap(other.associated_endpoint_handles_, associated_endpoint_handles_);
-  return *this;
-}
+Message::~Message() = default;
+
+Message& Message::operator=(Message&& other) = default;
 
 void Message::Reset() {
-  CloseHandles();
+  handle_.reset();
   handles_.clear();
   associated_endpoint_handles_.clear();
-  buffer_.reset();
-}
-
-void Message::Initialize(size_t capacity, bool zero_initialized) {
-  DCHECK(!buffer_);
-
-  if (capacity > 50*1024*1024)
-    LOG(ERROR) << "Message::Initialize " << capacity;
-
-  buffer_.reset(new internal::MessageBuffer(capacity, zero_initialized));
-}
-
-void Message::InitializeFromMojoMessage(ScopedMessageHandle message,
-                                        uint32_t num_bytes,
-                                        std::vector<Handle>* handles) {
-  DCHECK(!buffer_);
-  buffer_.reset(new internal::MessageBuffer(std::move(message), num_bytes));
-  handles_.swap(*handles);
+  data_ = nullptr;
+  data_size_ = 0;
+  transferable_ = false;
+  serialized_ = false;
 }
 
 const uint8_t* Message::payload() const {
@@ -123,48 +304,15 @@ ScopedMessageHandle Message::TakeMojoMessage() {
   // If there are associated endpoints transferred,
   // SerializeAssociatedEndpointHandles() must be called before this method.
   DCHECK(associated_endpoint_handles_.empty());
-
-  if (handles_.empty())  // Fast path for the common case: No handles.
-    return buffer_->TakeMessage();
-
-  // Allocate a new message with space for the handles, then copy the buffer
-  // contents into it.
-  //
-  // TODO(rockot): We could avoid this copy by extending GetSerializedSize()
-  // behavior to collect handles. It's unoptimized for now because it's much
-  // more common to have messages with no handles.
-  ScopedMessageHandle new_message;
-  MojoResult rv = AllocMessage(
-      data_num_bytes(),
-      handles_.empty() ? nullptr
-                       : reinterpret_cast<const MojoHandle*>(handles_.data()),
-      handles_.size(),
-      MOJO_ALLOC_MESSAGE_FLAG_NONE,
-      &new_message);
-  CHECK_EQ(rv, MOJO_RESULT_OK);
-  handles_.clear();
-
-  void* new_buffer = nullptr;
-  rv = GetMessageBuffer(new_message.get(), &new_buffer);
-  CHECK_EQ(rv, MOJO_RESULT_OK);
-
-  memcpy(new_buffer, data(), data_num_bytes());
-  buffer_.reset();
-
-  return new_message;
+  DCHECK(transferable_);
+  auto handle = std::move(handle_);
+  Reset();
+  return handle;
 }
 
 void Message::NotifyBadMessage(const std::string& error) {
-  DCHECK(buffer_);
-  buffer_->NotifyBadMessage(error);
-}
-
-void Message::CloseHandles() {
-  for (std::vector<Handle>::iterator it = handles_.begin();
-       it != handles_.end(); ++it) {
-    if (it->is_valid())
-      CloseRaw(*it);
-  }
+  DCHECK(handle_.is_valid());
+  mojo::NotifyBadMessage(handle_.get(), error);
 }
 
 void Message::SerializeAssociatedEndpointHandles(
@@ -174,9 +322,10 @@ void Message::SerializeAssociatedEndpointHandles(
 
   DCHECK_GE(version(), 2u);
   DCHECK(header_v2()->payload_interface_ids.is_null());
+  DCHECK(payload_buffer_.is_valid());
 
   size_t size = associated_endpoint_handles_.size();
-  auto* data = internal::Array_Data<uint32_t>::New(size, buffer());
+  auto* data = internal::Array_Data<uint32_t>::New(size, &payload_buffer_);
   header_v2()->payload_interface_ids.Set(data);
 
   for (size_t i = 0; i < size; ++i) {
@@ -215,11 +364,50 @@ bool Message::DeserializeAssociatedEndpointHandles(
   return result;
 }
 
+void Message::SerializeIfNecessary() {
+  MojoResult rv = MojoSerializeMessage(handle_->value());
+  if (rv == MOJO_RESULT_FAILED_PRECONDITION)
+    return;
+
+  // Reconstruct this Message instance from the serialized message's handle.
+  *this = Message(std::move(handle_));
+}
+
+std::unique_ptr<internal::UnserializedMessageContext>
+Message::TakeUnserializedContext(
+    const internal::UnserializedMessageContext::Tag* tag) {
+  DCHECK(handle_.is_valid());
+  uintptr_t context_value = 0;
+  MojoResult rv = MojoGetMessageContext(handle_->value(), &context_value,
+                                        MOJO_GET_MESSAGE_CONTEXT_FLAG_NONE);
+  if (rv == MOJO_RESULT_NOT_FOUND)
+    return nullptr;
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+
+  auto* context =
+      reinterpret_cast<internal::UnserializedMessageContext*>(context_value);
+  if (context->tag() != tag)
+    return nullptr;
+
+  // Detach the context from the message.
+  rv = MojoGetMessageContext(handle_->value(), &context_value,
+                             MOJO_GET_MESSAGE_CONTEXT_FLAG_RELEASE);
+  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  DCHECK_EQ(context_value, reinterpret_cast<uintptr_t>(context));
+  return base::WrapUnique(context);
+}
+
+bool MessageReceiver::PrefersSerializedMessages() {
+  return false;
+}
+
 PassThroughFilter::PassThroughFilter() {}
 
 PassThroughFilter::~PassThroughFilter() {}
 
-bool PassThroughFilter::Accept(Message* message) { return true; }
+bool PassThroughFilter::Accept(Message* message) {
+  return true;
+}
 
 SyncMessageResponseContext::SyncMessageResponseContext()
     : outer_context_(current()) {
@@ -250,33 +438,13 @@ SyncMessageResponseContext::GetBadMessageCallback() {
 }
 
 MojoResult ReadMessage(MessagePipeHandle handle, Message* message) {
-  MojoResult rv;
-
-  std::vector<Handle> handles;
-  ScopedMessageHandle mojo_message;
-  uint32_t num_bytes = 0, num_handles = 0;
-  rv = ReadMessageNew(handle,
-                      &mojo_message,
-                      &num_bytes,
-                      nullptr,
-                      &num_handles,
-                      MOJO_READ_MESSAGE_FLAG_NONE);
-  if (rv == MOJO_RESULT_RESOURCE_EXHAUSTED) {
-    DCHECK_GT(num_handles, 0u);
-    handles.resize(num_handles);
-    rv = ReadMessageNew(handle,
-                        &mojo_message,
-                        &num_bytes,
-                        reinterpret_cast<MojoHandle*>(handles.data()),
-                        &num_handles,
-                        MOJO_READ_MESSAGE_FLAG_NONE);
-  }
-
+  ScopedMessageHandle message_handle;
+  MojoResult rv =
+      ReadMessageNew(handle, &message_handle, MOJO_READ_MESSAGE_FLAG_NONE);
   if (rv != MOJO_RESULT_OK)
     return rv;
 
-  message->InitializeFromMojoMessage(
-      std::move(mojo_message), num_bytes, &handles);
+  *message = Message(std::move(message_handle));
   return MOJO_RESULT_OK;
 }
 

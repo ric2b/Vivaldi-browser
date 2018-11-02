@@ -36,20 +36,25 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/Fullscreen.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/MessageEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/UIEventWithKeyState.h"
 #include "core/exported/SharedWorkerRepositoryClientImpl.h"
 #include "core/exported/WebDataSourceImpl.h"
+#include "core/exported/WebDevToolsAgentImpl.h"
+#include "core/exported/WebDevToolsFrontendImpl.h"
+#include "core/exported/WebPluginContainerImpl.h"
 #include "core/exported/WebViewBase.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/WebLocalFrameBase.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLFrameElementBase.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLPlugInElement.h"
 #include "core/input/EventHandler.h"
+#include "core/inspector/DevToolsEmulator.h"
 #include "core/layout/HitTestResult.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoadRequest.h"
@@ -57,7 +62,6 @@
 #include "core/loader/HistoryItem.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "core/page/Page.h"
-#include "core/page/WindowFeatures.h"
 #include "modules/audio_output_devices/HTMLMediaElementAudioOutputDevice.h"
 #include "modules/device_orientation/DeviceMotionController.h"
 #include "modules/device_orientation/DeviceOrientationAbsoluteController.h"
@@ -73,13 +77,12 @@
 #include "modules/vr/NavigatorVR.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/exported/WrappedResourceRequest.h"
 #include "platform/exported/WrappedResourceResponse.h"
 #include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/network/HTTPParsers.h"
-#include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/StringExtras.h"
@@ -105,10 +108,6 @@
 #include "public/web/WebPluginParams.h"
 #include "public/web/WebViewClient.h"
 #include "v8/include/v8.h"
-#include "web/DevToolsEmulator.h"
-#include "web/WebDevToolsAgentImpl.h"
-#include "web/WebDevToolsFrontendImpl.h"
-#include "web/WebPluginContainerImpl.h"
 
 namespace blink {
 
@@ -165,6 +164,10 @@ DEFINE_TRACE(LocalFrameClientImpl) {
   LocalFrameClient::Trace(visitor);
 }
 
+WebLocalFrameBase* LocalFrameClientImpl::GetWebFrame() const {
+  return web_frame_.Get();
+}
+
 void LocalFrameClientImpl::DidCreateNewDocument() {
   if (web_frame_->Client())
     web_frame_->Client()->DidCreateNewDocument(web_frame_);
@@ -181,10 +184,10 @@ void LocalFrameClientImpl::DispatchDidClearWindowObjectInMainWorld() {
       NavigatorGamepad::From(*document);
       NavigatorServiceWorker::From(*document);
       DOMWindowStorageController::From(*document);
-      if (RuntimeEnabledFeatures::webVREnabled() ||
+      if (RuntimeEnabledFeatures::WebVREnabled() ||
           OriginTrials::webVREnabled(document->GetExecutionContext()))
         NavigatorVR::From(*document);
-      if (RuntimeEnabledFeatures::presentationEnabled() &&
+      if (RuntimeEnabledFeatures::PresentationEnabled() &&
           web_frame_->GetFrame()->GetSettings()->GetPresentationReceiver()) {
         // Call this in order to ensure the object is created.
         PresentationReceiver::From(*document);
@@ -212,6 +215,45 @@ void LocalFrameClientImpl::RunScriptsAtDocumentElementAvailable() {
 }
 
 void LocalFrameClientImpl::RunScriptsAtDocumentReady(bool document_is_empty) {
+  if (!document_is_empty && IsLoadedAsMHTMLArchive(web_frame_->GetFrame())) {
+    // For MHTML pages, recreate the shadow DOM contents from the templates that
+    // are captured from the shadow DOM trees at serialization.
+    // Note that the MHTML page is loaded in sandboxing mode with script
+    // execution disabled and thus only the following script will be executed.
+    // Any other scripts and event handlers outside the scope of the following
+    // script, including those that may be inserted in shadow DOM templates,
+    // will NOT be run.
+    String script = R"(
+function createShadowRootWithin(node) {
+  var nodes = node.querySelectorAll('template[shadowmode]');
+  for (var i = 0; i < nodes.length; ++i) {
+    var template = nodes[i];
+    var mode = template.getAttribute('shadowmode');
+    var parent = template.parentNode;
+    if (!parent)
+      continue;
+    parent.removeChild(template);
+    var shadowRoot;
+    if (mode == 'v0') {
+      shadowRoot = parent.createShadowRoot();
+    } else if (mode == 'open' || mode == 'closed') {
+      var delegatesFocus = template.hasAttribute('shadowdelegatesfocus');
+      shadowRoot = parent.attachShadow({'mode': mode,
+                                        'delegatesFocus': delegatesFocus});
+    }
+    if (!shadowRoot)
+      continue;
+    var clone = document.importNode(template.content, true);
+    shadowRoot.appendChild(clone);
+    createShadowRootWithin(shadowRoot);
+  }
+}
+createShadowRootWithin(document.body);
+)";
+    web_frame_->GetFrame()->GetScriptController().ExecuteScriptInMainWorld(
+        script, ScriptController::kExecuteScriptWhenScriptsDisabled);
+  }
+
   if (web_frame_->Client()) {
     web_frame_->Client()->RunScriptsAtDocumentReady(document_is_empty);
   }
@@ -255,7 +297,7 @@ void LocalFrameClientImpl::DidUpdateCurrentHistoryItem() {
 
 bool LocalFrameClientImpl::AllowContentInitiatedDataUrlNavigations(
     const KURL& url) {
-  if (RuntimeEnabledFeatures::allowContentInitiatedDataUrlNavigationsEnabled())
+  if (RuntimeEnabledFeatures::AllowContentInitiatedDataUrlNavigationsEnabled())
     return true;
   if (web_frame_->Client())
     return web_frame_->Client()->AllowContentInitiatedDataUrlNavigations(url);
@@ -316,6 +358,10 @@ void LocalFrameClientImpl::Detached(FrameDetachType type) {
 
   client->FrameDetached(web_frame_,
                         static_cast<WebFrameClient::DetachType>(type));
+
+  if (type == FrameDetachType::kRemove)
+    web_frame_->DetachFromParent();
+
   // Clear our reference to LocalFrame at the very end, in case the client
   // refers to it.
   web_frame_->SetCoreFrame(nullptr);
@@ -496,6 +542,7 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
     NavigationPolicy policy,
     bool replaces_current_history_item,
     bool is_client_redirect,
+    WebTriggeringEventInfo triggering_event_info,
     HTMLFormElement* form,
     ContentSecurityPolicyDisposition
         should_check_main_world_content_security_policy) {
@@ -517,6 +564,7 @@ NavigationPolicy LocalFrameClientImpl::DecidePolicyForNavigation(
   navigation_info.extra_data = ds ? ds->GetExtraData() : nullptr;
   navigation_info.replaces_current_history_item = replaces_current_history_item;
   navigation_info.is_client_redirect = is_client_redirect;
+  navigation_info.triggering_event_info = triggering_event_info;
   navigation_info.should_check_main_world_content_security_policy =
       should_check_main_world_content_security_policy ==
               kCheckContentSecurityPolicy
@@ -599,18 +647,28 @@ void LocalFrameClientImpl::DidStopLoading() {
     web_frame_->Client()->DidStopLoading();
 }
 
+void LocalFrameClientImpl::DownloadURL(const ResourceRequest& request,
+                                       const String& suggested_name) {
+  if (!web_frame_->Client())
+    return;
+  DCHECK(web_frame_->GetFrame()->GetDocument());
+  web_frame_->Client()->DownloadURL(WrappedResourceRequest(request),
+                                    suggested_name);
+}
+
 void LocalFrameClientImpl::LoadURLExternally(
     const ResourceRequest& request,
     NavigationPolicy policy,
-    const String& suggested_name,
+    WebTriggeringEventInfo triggering_event_info,
     bool should_replace_current_entry) {
+  DCHECK_NE(policy, NavigationPolicy::kNavigationPolicyDownload);
   if (!web_frame_->Client())
     return;
   DCHECK(web_frame_->GetFrame()->GetDocument());
   Fullscreen::FullyExitFullscreen(*web_frame_->GetFrame()->GetDocument());
   web_frame_->Client()->LoadURLExternally(
       WrappedResourceRequest(request), static_cast<WebNavigationPolicy>(policy),
-      suggested_name, should_replace_current_entry);
+      triggering_event_info, should_replace_current_entry);
 }
 
 void LocalFrameClientImpl::LoadErrorPage(int reason) {
@@ -628,6 +686,7 @@ bool LocalFrameClientImpl::NavigateBackForward(int offset) const {
     return false;
   if (offset < -webview->Client()->HistoryBackListCount())
     return false;
+  web_frame_->Scheduler()->WillNavigateBackForwardSoon();
   webview->Client()->NavigateBackForwardSoon(offset);
   return true;
 }
@@ -736,10 +795,9 @@ void LocalFrameClientImpl::TransitionToCommittedForNewPage() {
 }
 
 LocalFrame* LocalFrameClientImpl::CreateFrame(
-    const FrameLoadRequest& request,
     const AtomicString& name,
     HTMLFrameOwnerElement* owner_element) {
-  return web_frame_->CreateChildFrame(request, name, owner_element);
+  return web_frame_->CreateChildFrame(name, owner_element);
 }
 
 bool LocalFrameClientImpl::CanCreatePluginWithoutRenderer(
@@ -751,7 +809,7 @@ bool LocalFrameClientImpl::CanCreatePluginWithoutRenderer(
 }
 
 PluginView* LocalFrameClientImpl::CreatePlugin(
-    HTMLPlugInElement* element,
+    HTMLPlugInElement& element,
     const KURL& url,
     const Vector<String>& param_names,
     const Vector<String>& param_values,
@@ -779,7 +837,7 @@ PluginView* LocalFrameClientImpl::CreatePlugin(
   if (!web_plugin->Initialize(container))
     return nullptr;
 
-  if (policy != kAllowDetachedPlugin && !element->GetLayoutObject())
+  if (policy != kAllowDetachedPlugin && !element.GetLayoutObject())
     return nullptr;
 
   return container;
@@ -807,47 +865,6 @@ std::unique_ptr<WebMediaPlayer> LocalFrameClientImpl::CreateWebMediaPlayer(
 WebRemotePlaybackClient* LocalFrameClientImpl::CreateWebRemotePlaybackClient(
     HTMLMediaElement& html_media_element) {
   return HTMLMediaElementRemotePlayback::remote(html_media_element);
-}
-
-ObjectContentType LocalFrameClientImpl::GetObjectContentType(
-    const KURL& url,
-    const String& explicit_mime_type,
-    bool should_prefer_plug_ins_for_images) {
-  // This code is based on Apple's implementation from
-  // WebCoreSupport/WebFrameBridge.mm.
-
-  String mime_type = explicit_mime_type;
-  if (mime_type.IsEmpty()) {
-    // Try to guess the MIME type based off the extension.
-    String filename = url.LastPathComponent();
-    int extension_pos = filename.ReverseFind('.');
-    if (extension_pos >= 0) {
-      String extension = filename.Substring(extension_pos + 1);
-      mime_type = MIMETypeRegistry::GetWellKnownMIMETypeForExtension(extension);
-    }
-
-    if (mime_type.IsEmpty())
-      return kObjectContentFrame;
-  }
-
-  // If Chrome is started with the --disable-plugins switch, pluginData is 0.
-  PluginData* plugin_data = web_frame_->GetFrame()->GetPluginData();
-  bool plug_in_supports_mime_type =
-      plugin_data && plugin_data->SupportsMimeType(mime_type);
-
-  if (MIMETypeRegistry::IsSupportedImageMIMEType(mime_type)) {
-    return should_prefer_plug_ins_for_images && plug_in_supports_mime_type
-               ? kObjectContentNetscapePlugin
-               : kObjectContentImage;
-  }
-
-  if (plug_in_supports_mime_type)
-    return kObjectContentNetscapePlugin;
-
-  if (MIMETypeRegistry::IsSupportedNonImageMIMEType(mime_type))
-    return kObjectContentFrame;
-
-  return kObjectContentNone;
 }
 
 WebCookieJar* LocalFrameClientImpl::CookieJar() const {
@@ -976,18 +993,16 @@ unsigned LocalFrameClientImpl::BackForwardLength() {
 
 void LocalFrameClientImpl::SuddenTerminationDisablerChanged(
     bool present,
-    SuddenTerminationDisablerType type) {
+    WebSuddenTerminationDisablerType type) {
   if (web_frame_->Client()) {
-    web_frame_->Client()->SuddenTerminationDisablerChanged(
-        present,
-        static_cast<WebFrameClient::SuddenTerminationDisablerType>(type));
+    web_frame_->Client()->SuddenTerminationDisablerChanged(present, type);
   }
 }
 
 BlameContext* LocalFrameClientImpl::GetFrameBlameContext() {
-  if (!web_frame_->Client())
-    return nullptr;
-  return web_frame_->Client()->GetFrameBlameContext();
+  if (WebFrameClient* client = web_frame_->Client())
+    return client->GetFrameBlameContext();
+  return nullptr;
 }
 
 LinkResource* LocalFrameClientImpl::CreateServiceWorkerLinkResource(
@@ -999,6 +1014,12 @@ WebEffectiveConnectionType LocalFrameClientImpl::GetEffectiveConnectionType() {
   if (web_frame_->Client())
     return web_frame_->Client()->GetEffectiveConnectionType();
   return WebEffectiveConnectionType::kTypeUnknown;
+}
+
+bool LocalFrameClientImpl::IsClientLoFiActiveForFrame() {
+  if (web_frame_->Client())
+    return web_frame_->Client()->IsClientLoFiActiveForFrame();
+  return false;
 }
 
 bool LocalFrameClientImpl::ShouldUseClientLoFiForRequest(
@@ -1041,12 +1062,30 @@ void LocalFrameClientImpl::AbortClientNavigation() {
     web_frame_->Client()->AbortClientNavigation();
 }
 
+WebSpellCheckPanelHostClient* LocalFrameClientImpl::SpellCheckPanelHostClient()
+    const {
+  return web_frame_->SpellCheckPanelHostClient();
+}
+
 TextCheckerClient& LocalFrameClientImpl::GetTextCheckerClient() const {
   return web_frame_->GetTextCheckerClient();
 }
 
-std::unique_ptr<blink::WebURLLoader> LocalFrameClientImpl::CreateURLLoader() {
-  return web_frame_->CreateURLLoader();
+std::unique_ptr<blink::WebURLLoader> LocalFrameClientImpl::CreateURLLoader(
+    const ResourceRequest& request,
+    WebTaskRunner* task_runner) {
+  WrappedResourceRequest wrapped(request);
+  return web_frame_->CreateURLLoader(wrapped,
+                                     task_runner->ToSingleThreadTaskRunner());
+}
+
+service_manager::InterfaceProvider*
+LocalFrameClientImpl::GetInterfaceProvider() {
+  return web_frame_->Client()->GetInterfaceProvider();
+}
+
+void LocalFrameClientImpl::AnnotatedRegionsChanged() {
+  web_frame_->Client()->DraggableRegionsChanged();
 }
 
 // VB-6063:

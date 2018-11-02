@@ -22,11 +22,13 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_handle.h"
+#include "content/browser/service_worker/service_worker_navigation_handle_core.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -50,22 +52,59 @@ void SetUpDummyMessagePort(std::vector<MessagePort>* ports) {
   ports->push_back(MessagePort(std::move(pipe.handle0)));
 }
 
+struct RemoteProviderInfo {
+  mojom::ServiceWorkerProviderHostAssociatedPtr host_ptr;
+  mojom::ServiceWorkerProviderAssociatedRequest client_request;
+};
+
+RemoteProviderInfo SetupProviderHostInfoPtrs(
+    ServiceWorkerProviderHostInfo* host_info) {
+  RemoteProviderInfo remote_info;
+  mojom::ServiceWorkerProviderAssociatedPtr browser_side_client_ptr;
+  remote_info.client_request =
+      mojo::MakeIsolatedRequest(&browser_side_client_ptr);
+  host_info->host_request = mojo::MakeIsolatedRequest(&remote_info.host_ptr);
+  host_info->client_ptr_info = browser_side_client_ptr.PassInterface();
+  EXPECT_TRUE(host_info->host_request.is_pending());
+  EXPECT_TRUE(host_info->client_ptr_info.is_valid());
+  EXPECT_TRUE(remote_info.host_ptr.is_bound());
+  EXPECT_TRUE(remote_info.client_request.is_pending());
+  return remote_info;
+}
+
+std::unique_ptr<ServiceWorkerNavigationHandleCore> CreateNavigationHandleCore(
+    ServiceWorkerContextWrapper* context_wrapper) {
+  std::unique_ptr<ServiceWorkerNavigationHandleCore> navigation_handle_core;
+  BrowserThread::PostTaskAndReplyWithResult(
+      BrowserThread::UI, FROM_HERE,
+      base::Bind(
+          [](ServiceWorkerContextWrapper* wrapper) {
+            return base::MakeUnique<ServiceWorkerNavigationHandleCore>(nullptr,
+                                                                       wrapper);
+          },
+          base::RetainedRef(context_wrapper)),
+      base::Bind(
+          [](std::unique_ptr<ServiceWorkerNavigationHandleCore>* dest,
+             std::unique_ptr<ServiceWorkerNavigationHandleCore> src) {
+            *dest = std::move(src);
+          },
+          &navigation_handle_core));
+  base::RunLoop().RunUntilIdle();
+  return navigation_handle_core;
+}
+
 }  // namespace
 
 static const int kRenderFrameId = 1;
 
 class TestingServiceWorkerDispatcherHost : public ServiceWorkerDispatcherHost {
  public:
-  TestingServiceWorkerDispatcherHost(
-      int process_id,
-      ServiceWorkerContextWrapper* context_wrapper,
-      ResourceContext* resource_context,
-      EmbeddedWorkerTestHelper* helper)
+  TestingServiceWorkerDispatcherHost(int process_id,
+                                     ResourceContext* resource_context,
+                                     EmbeddedWorkerTestHelper* helper)
       : ServiceWorkerDispatcherHost(process_id, resource_context),
         bad_messages_received_count_(0),
-        helper_(helper) {
-    Init(context_wrapper);
-  }
+        helper_(helper) {}
 
   bool Send(IPC::Message* message) override { return helper_->Send(message); }
 
@@ -123,14 +162,16 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     helper_.reset(helper.release());
     // Replace the default dispatcher host.
     int process_id = helper_->mock_render_process_id();
-    context()->RemoveDispatcherHost(process_id);
     dispatcher_host_ = new TestingServiceWorkerDispatcherHost(
-        process_id, context_wrapper(), &resource_context_, helper_.get());
+        process_id, &resource_context_, helper_.get());
+    helper_->RegisterDispatcherHost(process_id, nullptr);
+    dispatcher_host_->Init(context_wrapper());
   }
 
   void SetUpRegistration(const GURL& scope, const GURL& script_url) {
-    registration_ = new ServiceWorkerRegistration(
-        scope, 1L, helper_->context()->AsWeakPtr());
+    registration_ =
+        new ServiceWorkerRegistration(ServiceWorkerRegistrationOptions(scope),
+                                      1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(registration_.get(), script_url, 1L,
                                         helper_->context()->AsWeakPtr());
     std::vector<ServiceWorkerDatabase::ResourceRecord> records;
@@ -160,7 +201,7 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
                               int64_t version_id,
                               int embedded_worker_id) {
     dispatcher_host_->OnSetHostedVersionId(provider_id, version_id,
-                                           embedded_worker_id);
+                                           embedded_worker_id, nullptr);
   }
 
   void SendProviderCreated(ServiceWorkerProviderType type,
@@ -168,6 +209,8 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
     const int64_t kProviderId = 99;
     ServiceWorkerProviderHostInfo info(kProviderId, MSG_ROUTING_NONE, type,
                                        true /* is_parent_frame_secure */);
+    remote_endpoint_.BindWithProviderHostInfo(&info);
+
     dispatcher_host_->OnProviderCreated(std::move(info));
     helper_->SimulateAddProcessToPattern(pattern,
                                          helper_->mock_render_process_id());
@@ -176,9 +219,10 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   }
 
   void SendRegister(int64_t provider_id, GURL pattern, GURL worker_url) {
+    ServiceWorkerRegistrationOptions options(pattern);
     dispatcher_host_->OnMessageReceived(
-        ServiceWorkerHostMsg_RegisterServiceWorker(
-            -1, -1, provider_id, pattern, worker_url));
+        ServiceWorkerHostMsg_RegisterServiceWorker(-1, -1, provider_id,
+                                                   worker_url, options));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -253,7 +297,7 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
       int provider_id) {
     return CreateProviderHostWithDispatcherHost(
         helper_->mock_render_process_id(), provider_id, context()->AsWeakPtr(),
-        kRenderFrameId, dispatcher_host_.get());
+        kRenderFrameId, dispatcher_host_.get(), &remote_endpoint_);
   }
 
   TestBrowserThreadBundle browser_thread_bundle_;
@@ -263,6 +307,7 @@ class ServiceWorkerDispatcherHostTest : public testing::Test {
   scoped_refptr<ServiceWorkerRegistration> registration_;
   scoped_refptr<ServiceWorkerVersion> version_;
   ServiceWorkerProviderHost* provider_host_;
+  ServiceWorkerRemoteProviderEndpoint remote_endpoint_;
 };
 
 class ServiceWorkerTestContentBrowserClient : public TestContentBrowserClient {
@@ -303,8 +348,9 @@ TEST_F(ServiceWorkerDispatcherHostTest,
   // find it.
   const int64_t kRegistrationId = 999;  // Dummy value
   scoped_refptr<ServiceWorkerRegistration> registration(
-      new ServiceWorkerRegistration(GURL("https://www.example.com/"),
-                                    kRegistrationId, context()->AsWeakPtr()));
+      new ServiceWorkerRegistration(
+          ServiceWorkerRegistrationOptions(GURL("https://www.example.com/")),
+          kRegistrationId, context()->AsWeakPtr()));
   Unregister(kProviderId, kRegistrationId,
              ServiceWorkerMsg_ServiceWorkerUnregistrationError::ID);
 
@@ -509,32 +555,66 @@ TEST_F(ServiceWorkerDispatcherHostTest, EarlyContextDeletion) {
 }
 
 TEST_F(ServiceWorkerDispatcherHostTest, ProviderCreatedAndDestroyed) {
-  const int kProviderId = 1001;
+  // |kProviderId| must be -2 when PlzNavigate is enabled to match the
+  // pre-created provider host. Otherwise |kProviderId| is just a dummy value.
+  const int kProviderId = (IsBrowserSideNavigationEnabled() ? -2 : 1001);
   int process_id = helper_->mock_render_process_id();
 
-  dispatcher_host_->OnProviderCreated(ServiceWorkerProviderHostInfo(
-      kProviderId, MSG_ROUTING_NONE, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      true /* is_parent_frame_secure */));
+  // Setup ServiceWorkerProviderHostInfo.
+  ServiceWorkerProviderHostInfo host_info_1(kProviderId, 1 /* route_id */,
+                                            SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                            true /* is_parent_frame_secure */);
+  ServiceWorkerProviderHostInfo host_info_2(kProviderId, 1 /* route_id */,
+                                            SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                            true /* is_parent_frame_secure */);
+  ServiceWorkerProviderHostInfo host_info_3(kProviderId, 1 /* route_id */,
+                                            SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                            true /* is_parent_frame_secure */);
+  RemoteProviderInfo remote_info_1 = SetupProviderHostInfoPtrs(&host_info_1);
+  RemoteProviderInfo remote_info_2 = SetupProviderHostInfoPtrs(&host_info_2);
+  RemoteProviderInfo remote_info_3 = SetupProviderHostInfoPtrs(&host_info_3);
+
+  // PlzNavigate
+  std::unique_ptr<ServiceWorkerNavigationHandleCore> navigation_handle_core;
+  if (IsBrowserSideNavigationEnabled()) {
+    navigation_handle_core =
+        CreateNavigationHandleCore(helper_->context_wrapper());
+    ASSERT_TRUE(navigation_handle_core);
+    // ProviderHost should be created before OnProviderCreated.
+    navigation_handle_core->DidPreCreateProviderHost(
+        ServiceWorkerProviderHost::PreCreateNavigationHost(
+            helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+            base::Callback<WebContents*(void)>()));
+  }
+
+  dispatcher_host_->OnProviderCreated(std::move(host_info_1));
   EXPECT_TRUE(context()->GetProviderHost(process_id, kProviderId));
 
   // Two with the same ID should be seen as a bad message.
-  dispatcher_host_->OnProviderCreated(ServiceWorkerProviderHostInfo(
-      kProviderId, MSG_ROUTING_NONE, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      true /* is_parent_frame_secure */));
+  dispatcher_host_->OnProviderCreated(std::move(host_info_2));
   EXPECT_EQ(1, dispatcher_host_->bad_messages_received_count_);
 
-  dispatcher_host_->OnProviderDestroyed(kProviderId);
+  // Releasing the interface pointer destroys the counterpart.
+  remote_info_1.host_ptr.reset();
+  base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(context()->GetProviderHost(process_id, kProviderId));
 
-  // Destroying an ID that does not exist warrants a bad message.
-  dispatcher_host_->OnProviderDestroyed(kProviderId);
-  EXPECT_EQ(2, dispatcher_host_->bad_messages_received_count_);
+  // PlzNavigate
+  // Prepare another navigation handle to create another provider host.
+  if (IsBrowserSideNavigationEnabled()) {
+    navigation_handle_core =
+        CreateNavigationHandleCore(helper_->context_wrapper());
+    ASSERT_TRUE(navigation_handle_core);
+    // ProviderHost should be created before OnProviderCreated.
+    navigation_handle_core->DidPreCreateProviderHost(
+        ServiceWorkerProviderHost::PreCreateNavigationHost(
+            helper_->context()->AsWeakPtr(), true /* are_ancestors_secure */,
+            base::Callback<WebContents*(void)>()));
+  }
 
   // Deletion of the dispatcher_host should cause providers for that
   // process to get deleted as well.
-  dispatcher_host_->OnProviderCreated(ServiceWorkerProviderHostInfo(
-      kProviderId, MSG_ROUTING_NONE, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      true /* is_parent_frame_secure */));
+  dispatcher_host_->OnProviderCreated(std::move(host_info_3));
   EXPECT_TRUE(context()->GetProviderHost(process_id, kProviderId));
   EXPECT_TRUE(dispatcher_host_->HasOneRef());
   dispatcher_host_ = nullptr;
@@ -663,15 +743,19 @@ TEST_F(ServiceWorkerDispatcherHostTest, CleanupOnRendererCrash) {
   // is not yet destroyed. This is what the browser does when reusing a crashed
   // render process.
   scoped_refptr<TestingServiceWorkerDispatcherHost> new_dispatcher_host(
-      new TestingServiceWorkerDispatcherHost(
-          process_id, context_wrapper(), &resource_context_, helper_.get()));
+      new TestingServiceWorkerDispatcherHost(process_id, &resource_context_,
+                                             helper_.get()));
+  new_dispatcher_host->Init(context_wrapper());
 
   // To show the new dispatcher can operate, simulate provider creation. Since
   // the old dispatcher cleaned up the old provider host, the new one won't
   // complain.
-  new_dispatcher_host->OnProviderCreated(ServiceWorkerProviderHostInfo(
-      provider_id, MSG_ROUTING_NONE, SERVICE_WORKER_PROVIDER_FOR_WINDOW,
-      true /* is_parent_frame_secure */));
+  ServiceWorkerProviderHostInfo host_info(provider_id, MSG_ROUTING_NONE,
+                                          SERVICE_WORKER_PROVIDER_FOR_WINDOW,
+                                          true /* is_parent_frame_secure */);
+  ServiceWorkerRemoteProviderEndpoint remote_endpoint;
+  remote_endpoint.BindWithProviderHostInfo(&host_info);
+  new_dispatcher_host->OnProviderCreated(std::move(host_info));
   EXPECT_EQ(0, new_dispatcher_host->bad_messages_received_count_);
 }
 

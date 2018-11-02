@@ -57,8 +57,10 @@ class AURA_EXPORT WindowManagerClient {
   virtual void AddActivationParent(Window* window) = 0;
   virtual void RemoveActivationParent(Window* window) = 0;
   virtual void ActivateNextWindow() = 0;
-  virtual void SetExtendedHitArea(Window* window,
-                                  const gfx::Insets& hit_area) = 0;
+  virtual void SetExtendedHitRegionForChildren(
+      Window* window,
+      const gfx::Insets& mouse_area,
+      const gfx::Insets& touch_area) = 0;
 
   // Queues changes to the cursor instead of applying them instantly. Queued
   // changes will be executed on UnlockCursor().
@@ -70,10 +72,17 @@ class AURA_EXPORT WindowManagerClient {
   // Globally shows or hides the cursor.
   virtual void SetCursorVisible(bool visible) = 0;
 
+  // Globally sets whether we use normal or large cursors.
+  virtual void SetCursorSize(ui::CursorSize cursor_size) = 0;
+
   // Sets a cursor which is used instead of the per window cursors. Pass a
   // nullopt in |cursor| to clear the override.
   virtual void SetGlobalOverrideCursor(
       base::Optional<ui::CursorData> cursor) = 0;
+
+  // Sets the list of keys which don't hide the cursor.
+  virtual void SetKeyEventsThatDontHideCursor(
+      std::vector<ui::mojom::EventMatcherPtr> cursor_key_list) = 0;
 
   // Requests the client embedded in |window| to close the window. Only
   // applicable to top-level windows. If a client is not embedded in |window|,
@@ -90,6 +99,25 @@ class AURA_EXPORT WindowManagerClient {
   // (see ConnectAsWindowManager()). The caller needs to configure
   // DisplayInitParams on the returned object.
   virtual WindowTreeHostMusInitParams CreateInitParamsForNewDisplay() = 0;
+
+  // Configures the displays. This is used when the window manager manually
+  // configures display roots.
+  virtual void SetDisplayConfiguration(
+      const std::vector<display::Display>& displays,
+      std::vector<ui::mojom::WmViewportMetricsPtr> viewport_metrics,
+      int64_t primary_display_id) = 0;
+
+  // Adds |display| as a new display moving |window_tree_host| to the new
+  // display. This results in closing the previous display |window_tree_host|
+  // was associated with.
+  virtual void AddDisplayReusingWindowTreeHost(
+      WindowTreeHostMus* window_tree_host,
+      const display::Display& display,
+      ui::mojom::WmViewportMetricsPtr viewport_metrics) = 0;
+
+  // Swaps the roots of the two displays.
+  virtual void SwapDisplayRoots(WindowTreeHostMus* window_tree_host1,
+                                WindowTreeHostMus* window_tree_host2) = 0;
 
  protected:
   virtual ~WindowManagerClient() {}

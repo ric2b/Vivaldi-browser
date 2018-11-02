@@ -132,6 +132,20 @@ int ChromeExtensionsRendererClient::GetLowestIsolatedWorldId() const {
   return chrome::ISOLATED_WORLD_ID_EXTENSIONS;
 }
 
+extensions::Dispatcher* ChromeExtensionsRendererClient::GetDispatcher() {
+  return extension_dispatcher_.get();
+}
+
+void ChromeExtensionsRendererClient::OnExtensionLoaded(
+    const extensions::Extension& extension) {
+  resource_request_policy_->OnExtensionLoaded(extension);
+}
+
+void ChromeExtensionsRendererClient::OnExtensionUnloaded(
+    const extensions::ExtensionId& extension_id) {
+  resource_request_policy_->OnExtensionUnloaded(extension_id);
+}
+
 void ChromeExtensionsRendererClient::RenderThreadStarted() {
   content::RenderThread* thread = content::RenderThread::Get();
   extension_dispatcher_delegate_.reset(
@@ -194,6 +208,7 @@ bool ChromeExtensionsRendererClient::AllowPopup() {
     case extensions::Feature::UNBLESSED_EXTENSION_CONTEXT:
     case extensions::Feature::WEBUI_CONTEXT:
     case extensions::Feature::SERVICE_WORKER_CONTEXT:
+    case extensions::Feature::LOCK_SCREEN_EXTENSION_CONTEXT:
       return false;
     case extensions::Feature::BLESSED_EXTENSION_CONTEXT:
     case extensions::Feature::CONTENT_SCRIPT_CONTEXT:

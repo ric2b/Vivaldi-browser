@@ -16,8 +16,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
-#include "base/metrics/histogram_macros.h"
-#include "base/metrics/sparse_histogram.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -302,14 +300,14 @@ std::unique_ptr<base::Value> NetLogProxyConfigChangedCallback(
 std::unique_ptr<base::Value> NetLogBadProxyListCallback(
     const ProxyRetryInfoMap* retry_info,
     NetLogCaptureMode /* capture_mode */) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  base::ListValue* list = new base::ListValue();
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto list = base::MakeUnique<base::ListValue>();
 
   for (ProxyRetryInfoMap::const_iterator iter = retry_info->begin();
        iter != retry_info->end(); ++iter) {
     list->AppendString(iter->first);
   }
-  dict->Set("bad_proxy_list", list);
+  dict->Set("bad_proxy_list", std::move(list));
   return std::move(dict);
 }
 
@@ -863,17 +861,13 @@ class ProxyService::PacRequest
   int QueryDidComplete(int result_code) {
     DCHECK(!was_cancelled());
 
-    // This state is cleared when resolve_job_ is reset below.
-    bool script_executed = is_started();
-
     // Clear |resolve_job_| so is_started() returns false while
     // DidFinishResolvingProxy() runs.
     resolve_job_.reset();
 
     // Note that DidFinishResolvingProxy might modify |results_|.
     int rv = service_->DidFinishResolvingProxy(url_, method_, proxy_delegate_,
-                                               results_, result_code, net_log_,
-                                               creation_time_, script_executed);
+                                               results_, result_code, net_log_);
 
     // Make a note in the results which configuration was in use at the
     // time of the resolve.
@@ -1042,7 +1036,7 @@ int ProxyService::ResolveProxyHelper(const GURL& raw_url,
                                      PacRequest** pac_request,
                                      ProxyDelegate* proxy_delegate,
                                      const NetLogWithSource& net_log) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   net_log.BeginEvent(NetLogEventType::PROXY_SERVICE);
 
@@ -1065,9 +1059,8 @@ int ProxyService::ResolveProxyHelper(const GURL& raw_url,
   // using a direct connection for example).
   int rv = TryToCompleteSynchronously(url, proxy_delegate, result);
   if (rv != ERR_IO_PENDING) {
-    rv = DidFinishResolvingProxy(
-        url, method, proxy_delegate, result, rv, net_log,
-        callback.is_null() ? TimeTicks() : TimeTicks::Now(), false);
+    rv = DidFinishResolvingProxy(url, method, proxy_delegate, result, rv,
+                                 net_log);
     return rv;
   }
 
@@ -1137,6 +1130,7 @@ int ProxyService::TryToCompleteSynchronously(const GURL& url,
 }
 
 ProxyService::~ProxyService() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   NetworkChangeNotifier::RemoveIPAddressObserver(this);
   NetworkChangeNotifier::RemoveDNSObserver(this);
   config_service_->RemoveObserver(this);
@@ -1232,12 +1226,6 @@ void ProxyService::OnInitProxyResolverComplete(int result) {
 
   init_proxy_resolver_.reset();
 
-  // When using the out-of-process resolver, creating the resolver can complete
-  // with the ERR_PAC_SCRIPT_TERMINATED result code, which indicates the
-  // resolver process crashed.
-  UMA_HISTOGRAM_BOOLEAN("Net.ProxyService.ScriptTerminatedOnInit",
-                        result == ERR_PAC_SCRIPT_TERMINATED);
-
   if (result != OK) {
     if (fetched_config_.pac_mandatory()) {
       VLOG(1) << "Failed configuring with mandatory PAC script, blocking all "
@@ -1272,7 +1260,7 @@ int ProxyService::ReconsiderProxyAfterError(const GURL& url,
                                             PacRequest** pac_request,
                                             ProxyDelegate* proxy_delegate,
                                             const NetLogWithSource& net_log) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   // Check to see if we have a new config since ResolveProxy was called.  We
   // want to re-run ResolveProxy in two cases: 1) we have a new config, or 2) a
@@ -1314,7 +1302,7 @@ bool ProxyService::MarkProxiesAsBadUntil(
 
 void ProxyService::ReportSuccess(const ProxyInfo& result,
                                  ProxyDelegate* proxy_delegate) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
   const ProxyRetryInfoMap& new_retry_info = result.proxy_retry_info();
   if (new_retry_info.empty())
@@ -1343,7 +1331,7 @@ void ProxyService::ReportSuccess(const ProxyInfo& result,
 }
 
 void ProxyService::CancelPacRequest(PacRequest* req) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(req);
   req->Cancel();
   RemovePendingRequest(req);
@@ -1370,32 +1358,7 @@ int ProxyService::DidFinishResolvingProxy(const GURL& url,
                                           ProxyDelegate* proxy_delegate,
                                           ProxyInfo* result,
                                           int result_code,
-                                          const NetLogWithSource& net_log,
-                                          base::TimeTicks start_time,
-                                          bool script_executed) {
-  // Don't track any metrics if start_time is 0, which will happen when the user
-  // calls |TryResolveProxySynchronously|.
-  if (!start_time.is_null()) {
-    TimeDelta diff = TimeTicks::Now() - start_time;
-    if (script_executed) {
-      // This function "fixes" the result code, so make sure script terminated
-      // errors are tracked. Only track result codes that were a result of
-      // script execution.
-      UMA_HISTOGRAM_BOOLEAN("Net.ProxyService.ScriptTerminated",
-                            result_code == ERR_PAC_SCRIPT_TERMINATED);
-      UMA_HISTOGRAM_CUSTOM_TIMES("Net.ProxyService.GetProxyUsingScriptTime",
-                                 diff, base::TimeDelta::FromMicroseconds(100),
-                                 base::TimeDelta::FromSeconds(20), 50);
-      UMA_HISTOGRAM_SPARSE_SLOWLY("Net.ProxyService.GetProxyUsingScriptResult",
-                                  std::abs(result_code));
-    }
-    UMA_HISTOGRAM_BOOLEAN("Net.ProxyService.ResolvedUsingScript",
-                          script_executed);
-    UMA_HISTOGRAM_CUSTOM_TIMES("Net.ProxyService.ResolveProxyTime", diff,
-                               base::TimeDelta::FromMicroseconds(100),
-                               base::TimeDelta::FromSeconds(20), 50);
-  }
-
+                                          const NetLogWithSource& net_log) {
   // Log the result of the proxy resolution.
   if (result_code == OK) {
     // Allow the proxy delegate to interpose on the resolution decision,
@@ -1454,7 +1417,7 @@ int ProxyService::DidFinishResolvingProxy(const GURL& url,
 void ProxyService::SetProxyScriptFetchers(
     ProxyScriptFetcher* proxy_script_fetcher,
     std::unique_ptr<DhcpProxyScriptFetcher> dhcp_proxy_script_fetcher) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   State previous_state = ResetProxyConfig(false);
   proxy_script_fetcher_.reset(proxy_script_fetcher);
   dhcp_proxy_script_fetcher_ = std::move(dhcp_proxy_script_fetcher);
@@ -1474,12 +1437,12 @@ void ProxyService::OnShutdown() {
 }
 
 ProxyScriptFetcher* ProxyService::GetProxyScriptFetcher() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   return proxy_script_fetcher_.get();
 }
 
 ProxyService::State ProxyService::ResetProxyConfig(bool reset_fetched_config) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   State previous_state = current_state_;
 
   permanent_error_ = OK;
@@ -1498,7 +1461,7 @@ ProxyService::State ProxyService::ResetProxyConfig(bool reset_fetched_config) {
 
 void ProxyService::ResetConfigService(
     std::unique_ptr<ProxyConfigService> new_proxy_config_service) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   State previous_state = ResetProxyConfig(true);
 
   // Release the old configuration service.
@@ -1514,7 +1477,7 @@ void ProxyService::ResetConfigService(
 }
 
 void ProxyService::ForceReloadProxyConfig() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   ResetProxyConfig(false);
   ApplyProxyConfigIfAvailable();
 }
@@ -1522,8 +1485,7 @@ void ProxyService::ForceReloadProxyConfig() {
 // static
 std::unique_ptr<ProxyConfigService>
 ProxyService::CreateSystemProxyConfigService(
-    const scoped_refptr<base::SingleThreadTaskRunner>& io_task_runner,
-    const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner) {
+    const scoped_refptr<base::SequencedTaskRunner>& io_task_runner) {
 #if defined(OS_WIN)
   return base::MakeUnique<ProxyConfigServiceWin>();
 #elif defined(OS_IOS)
@@ -1547,10 +1509,10 @@ ProxyService::CreateSystemProxyConfigService(
 
   // Synchronously fetch the current proxy config (since we are running on
   // glib_default_loop). Additionally register for notifications (delivered in
-  // either |glib_default_loop| or |file_task_runner|) to keep us updated when
-  // the proxy config changes.
-  linux_config_service->SetupAndFetchInitialConfig(
-      glib_thread_task_runner, io_task_runner, file_task_runner);
+  // either |glib_default_loop| or an internal sequenced task runner) to
+  // keep us updated when the proxy config changes.
+  linux_config_service->SetupAndFetchInitialConfig(glib_thread_task_runner,
+                                                   io_task_runner);
 
   return std::move(linux_config_service);
 #elif defined(OS_ANDROID)

@@ -10,7 +10,7 @@
 #include "chrome/browser/android/resource_mapper.h"
 #include "chrome/browser/android/tab_android.h"
 #include "chrome/browser/permissions/grouped_permission_infobar_delegate_android.h"
-#include "jni/GroupedPermissionInfoBar_jni.h"
+#include "chrome/browser/ui/android/infobars/permission_infobar.h"
 
 GroupedPermissionInfoBar::GroupedPermissionInfoBar(
     std::unique_ptr<GroupedPermissionInfoBarDelegate> delegate)
@@ -19,27 +19,12 @@ GroupedPermissionInfoBar::GroupedPermissionInfoBar(
 GroupedPermissionInfoBar::~GroupedPermissionInfoBar() {
 }
 
-bool GroupedPermissionInfoBar::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
-void GroupedPermissionInfoBar::SetPermissionState(
-    JNIEnv* env,
-    const base::android::JavaParamRef<jobject>& obj,
-    const base::android::JavaParamRef<jbooleanArray>& permissions) {
-  for (size_t i = 0; i < GetDelegate()->PermissionCount(); i++) {
-    jboolean value;
-    env->GetBooleanArrayRegion(permissions.obj(), i, 1, &value);
-    GetDelegate()->ToggleAccept(i, value);
-  }
-}
-
 void GroupedPermissionInfoBar::ProcessButton(int action) {
   // Check if the delegate asked us to display a persistence toggle. If so,
   // inform it of the toggle state.
   GroupedPermissionInfoBarDelegate* delegate = GetDelegate();
   if (delegate->ShouldShowPersistenceToggle()) {
-    delegate->set_persist(Java_GroupedPermissionInfoBar_isPersistSwitchOn(
+    delegate->set_persist(PermissionInfoBar::IsSwitchOn(
         base::android::AttachCurrentThread(), GetJavaInfoBar()));
   }
 
@@ -50,42 +35,24 @@ base::android::ScopedJavaLocalRef<jobject>
 GroupedPermissionInfoBar::CreateRenderInfoBar(JNIEnv* env) {
   GroupedPermissionInfoBarDelegate* delegate = GetDelegate();
 
-  base::android::ScopedJavaLocalRef<jstring> message_text =
-      base::android::ConvertUTF16ToJavaString(
-          env, delegate->GetMessageText());
-  base::android::ScopedJavaLocalRef<jstring> ok_button_text =
-      base::android::ConvertUTF16ToJavaString(
-          env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_OK));
-  base::android::ScopedJavaLocalRef<jstring> cancel_button_text =
-      base::android::ConvertUTF16ToJavaString(
-          env, GetTextFor(ConfirmInfoBarDelegate::BUTTON_CANCEL));
+  base::string16 message_text = delegate->GetMessageText();
+  base::string16 link_text = delegate->GetLinkText();
+  base::string16 ok_button_text = GetTextFor(ConfirmInfoBarDelegate::BUTTON_OK);
+  base::string16 cancel_button_text =
+      GetTextFor(ConfirmInfoBarDelegate::BUTTON_CANCEL);
 
-  std::vector<base::string16> permission_strings;
-  std::vector<int> permission_icons;
+  int permission_icon =
+      ResourceMapper::MapFromChromiumId(delegate->GetIconId());
+
   std::vector<int> content_settings_types;
-
   for (size_t i = 0; i < delegate->PermissionCount(); i++) {
-    permission_strings.push_back(delegate->GetMessageTextFragment(i));
-    permission_icons.push_back(
-        ResourceMapper::MapFromChromiumId(delegate->GetIconIdForPermission(i)));
     content_settings_types.push_back(delegate->GetContentSettingType(i));
   }
 
-  return Java_GroupedPermissionInfoBar_create(
-      env, GetTab()->GetJavaObject(),
-      base::android::ToJavaIntArray(env, content_settings_types), message_text,
-      ok_button_text, cancel_button_text,
-      delegate->ShouldShowPersistenceToggle(),
-      base::android::ToJavaArrayOfStrings(env, permission_strings),
-      base::android::ToJavaIntArray(env, permission_icons));
-}
-
-void GroupedPermissionInfoBar::SetJavaInfoBar(
-    const base::android::JavaRef<jobject>& java_info_bar) {
-  InfoBarAndroid::SetJavaInfoBar(java_info_bar);
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_GroupedPermissionInfoBar_setNativePtr(env, java_info_bar,
-                                             reinterpret_cast<intptr_t>(this));
+  return PermissionInfoBar::CreateRenderInfoBarHelper(
+      env, permission_icon, GetTab()->GetJavaObject(), nullptr, message_text,
+      link_text, ok_button_text, cancel_button_text, content_settings_types,
+      delegate->ShouldShowPersistenceToggle());
 }
 
 GroupedPermissionInfoBarDelegate* GroupedPermissionInfoBar::GetDelegate() {

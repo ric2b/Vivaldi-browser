@@ -25,6 +25,7 @@
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/gfx/image/image.h"
 
 namespace ntp_snippets {
@@ -232,6 +233,9 @@ void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
     RecordFaviconFetchResult(continue_to_google_server
                                  ? FaviconFetchResult::SUCCESS_CACHED
                                  : FaviconFetchResult::SUCCESS_FETCHED);
+    // Update the time when the icon was last requested - postpone thus the
+    // automatic eviction of the favicon from the favicon database.
+    large_icon_service_->TouchIconFromGoogleServer(result.icon_url);
     return;
   }
 
@@ -250,10 +254,29 @@ void ContentSuggestionsService::OnGetFaviconFromCacheFinished(
   // TODO(jkrcal): Currently used only for Articles for you which have public
   // URLs. Let the provider decide whether |publisher_url| may be private or
   // not.
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("content_suggestion_get_favicon", R"(
+        semantics {
+          sender: "Content Suggestion"
+          description:
+            "Sends a request to a Google server to retrieve the favicon bitmap "
+            "for an article suggestion on the new tab page (URLs are public "
+            "and provided by Google)."
+          trigger:
+            "A request can be sent if Chrome does not have a favicon for a "
+            "particular page."
+          data: "Page URL and desired icon size."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting: "This feature cannot be disabled by settings."
+          policy_exception_justification: "Not implemented."
+        })");
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
           publisher_url, minimum_size_in_pixel, desired_size_in_pixel,
-          /*may_page_url_be_private=*/false,
+          /*may_page_url_be_private=*/false, traffic_annotation,
           base::Bind(
               &ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished,
               base::Unretained(this), publisher_url, minimum_size_in_pixel,
@@ -265,8 +288,8 @@ void ContentSuggestionsService::OnGetFaviconFromGoogleServerFinished(
     int minimum_size_in_pixel,
     int desired_size_in_pixel,
     const ImageFetchedCallback& callback,
-    bool success) {
-  if (!success) {
+    favicon_base::GoogleFaviconServerRequestStatus status) {
+  if (status != favicon_base::GoogleFaviconServerRequestStatus::SUCCESS) {
     callback.Run(gfx::Image());
     RecordFaviconFetchResult(FaviconFetchResult::FAILURE);
     return;
@@ -412,19 +435,28 @@ void ContentSuggestionsService::ReloadSuggestions() {
 }
 
 void ContentSuggestionsService::SetRemoteSuggestionsEnabled(bool enabled) {
-  pref_service_->SetBoolean(prefs::kEnableSnippets, enabled);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsEnabled() const {
-  return pref_service_->GetBoolean(prefs::kEnableSnippets);
+  return remote_suggestions_provider_ &&
+         !remote_suggestions_provider_->IsDisabled();
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsManaged() const {
-  return pref_service_->IsManagedPreference(prefs::kEnableSnippets);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
+  return false;
 }
 
 bool ContentSuggestionsService::AreRemoteSuggestionsManagedByCustodian() const {
-  return pref_service_->IsPreferenceManagedByCustodian(prefs::kEnableSnippets);
+  // TODO(dgn): Rewire if we decide to implement a dedicated prefs page. If not
+  // remove by M62.
+  NOTREACHED();
+  return false;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -497,8 +529,7 @@ void ContentSuggestionsService::OnSuggestionInvalidated(
 // SigninManagerBase::Observer implementation
 void ContentSuggestionsService::GoogleSigninSucceeded(
     const std::string& account_id,
-    const std::string& username,
-    const std::string& password) {
+    const std::string& username) {
   OnSignInStateChanged();
 }
 

@@ -38,6 +38,10 @@
 #include "ipc/ipc_platform_file.h"
 #endif
 
+#if defined(OS_FUCHSIA)
+#include "ipc/handle_fuchsia.h"
+#endif
+
 namespace IPC {
 
 namespace {
@@ -419,7 +423,7 @@ void ParamTraits<unsigned int>::Log(const param_type& p, std::string* l) {
   l->append(base::UintToString(p));
 }
 
-#if defined(OS_WIN) || defined(OS_LINUX) || \
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_FUCHSIA) || \
     (defined(OS_ANDROID) && defined(ARCH_CPU_64_BITS)) || \
     defined(USE_SYSTEM_PROPRIETARY_CODECS)
 void ParamTraits<long>::Log(const param_type& p, std::string* l) {
@@ -754,6 +758,10 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
   HandleWin handle_win;
   if (!ReadParam(m, iter, &handle_win))
     return false;
+#elif defined(OS_FUCHSIA)
+  HandleFuchsia handle_fuchsia;
+  if (!ReadParam(m, iter, &handle_fuchsia))
+    return false;
 #else
   scoped_refptr<base::Pickle::Attachment> attachment;
   if (!m->ReadAttachment(iter, &attachment))
@@ -776,6 +784,9 @@ bool ParamTraits<base::SharedMemoryHandle>::Read(const base::Pickle* m,
                                 static_cast<size_t>(size), guid);
 #elif defined(OS_WIN)
   *r = base::SharedMemoryHandle(handle_win.get_handle(),
+                                static_cast<size_t>(size), guid);
+#elif defined(OS_FUCHSIA)
+  *r = base::SharedMemoryHandle(handle_fuchsia.get_handle(),
                                 static_cast<size_t>(size), guid);
 #else
   *r = base::SharedMemoryHandle(

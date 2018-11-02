@@ -121,10 +121,14 @@ void Enqueue(PipelineStatus status) {
 void ReportDecoderStreamError(const DemuxerStream* stream) {
   switch (stream->type()) {
     case DemuxerStream::AUDIO:
+      LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << ": DECODER_AUDIO_DECODE_ERROR";
       Enqueue(DECODER_AUDIO_DECODE_ERROR);
       break;
 
     case DemuxerStream::VIDEO:
+      LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << ": DECODER_VIDEO_DECODE_ERROR";
       Enqueue(DECODER_VIDEO_DECODE_ERROR);
       break;
 
@@ -138,10 +142,14 @@ void ReportPipelineStreamError(const DemuxerStream* stream,
                                PlatformMediaDecodingMode decoding_mode) {
   switch (stream->type()) {
     case DemuxerStream::AUDIO:
+      LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << ": PIPELINE_AUDIO_DECODE_ERROR";
       Enqueue(PIPELINE_AUDIO_DECODE_ERROR);
       break;
 
     case DemuxerStream::VIDEO: {
+      LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                 << ": PIPELINE_VIDEO_DECODE_ERROR";
       Enqueue(decoding_mode == PlatformMediaDecodingMode::HARDWARE
                   ? PIPELINE_VIDEO_DECODE_ERROR_HW
                   : PIPELINE_VIDEO_DECODE_ERROR);
@@ -178,16 +186,22 @@ void ReportStartResult(
     return;
   }
 
+  LOG(ERROR) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+             << ": PIPELINE_INITIALIZE_ERROR";
   Enqueue(attempted_video_decoding_mode == PlatformMediaDecodingMode::HARDWARE
               ? PIPELINE_INITIALIZE_ERROR_HW
               : PIPELINE_INITIALIZE_ERROR);
 }
 
 void ReportAudioDecoderInitResult(bool success) {
+  LOG_IF(ERROR, !success) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                          << ": DECODER_AUDIO_INITIALIZE_ERROR";
   Enqueue(success ? DECODER_AUDIO_INITIALIZED : DECODER_AUDIO_INITIALIZE_ERROR);
 }
 
 void ReportVideoDecoderInitResult(bool success) {
+  LOG_IF(ERROR, !success) << " PROPMEDIA(COMMON) : " << __FUNCTION__
+                          << ": DECODER_VIDEO_INITIALIZE_ERROR";
   Enqueue(success ? DECODER_VIDEO_INITIALIZED : DECODER_VIDEO_INITIALIZE_ERROR);
 }
 

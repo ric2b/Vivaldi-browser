@@ -16,7 +16,6 @@
 #include "base/atomicops.h"
 #include "base/gtest_prod_util.h"
 #include "base/macros.h"
-#include "base/memory/scoped_vector.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_config.h"
 #include "base/trace_event/trace_event_impl.h"
@@ -269,6 +268,13 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
                                 const char* name,
                                 TraceEventHandle handle);
 
+  void UpdateTraceEventDurationExplicit(
+      const unsigned char* category_group_enabled,
+      const char* name,
+      TraceEventHandle handle,
+      const TimeTicks& now,
+      const ThreadTicks& thread_now);
+
   void EndFilteredEvent(const unsigned char* category_group_enabled,
                         const char* name,
                         TraceEventHandle handle);
@@ -363,10 +369,6 @@ class BASE_EXPORT TraceLog : public MemoryDumpProvider {
   void UpdateCategoryState(TraceCategory* category);
 
   void CreateFiltersForTraceConfig();
-
-  // Configure synthetic delays based on the values set in the current
-  // trace config.
-  void UpdateSyntheticDelaysFromTraceConfig();
 
   InternalTraceOptions GetInternalOptionsFromTraceConfig(
       const TraceConfig& config);

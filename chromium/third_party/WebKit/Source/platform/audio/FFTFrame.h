@@ -30,17 +30,19 @@
 #define FFTFrame_h
 
 #include <memory>
+
+#include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/audio/AudioArray.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Threading.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #include <Accelerate/Accelerate.h>
-#elif USE(WEBAUDIO_OPENMAX_DL_FFT)
+#elif defined(WTF_USE_WEBAUDIO_OPENMAX_DL_FFT)
 #include <dl/sp/api/omxSP.h>
-#elif USE(WEBAUDIO_FFMPEG)
+#elif defined(WTF_USE_WEBAUDIO_FFMPEG)
 struct RDFTContext;
 #endif
 
@@ -99,20 +101,20 @@ class PLATFORM_EXPORT FFTFrame {
   AudioFloatArray real_data_;
   AudioFloatArray imag_data_;
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   DSPSplitComplex& DspSplitComplex() { return frame_; }
   DSPSplitComplex DspSplitComplex() const { return frame_; }
   static FFTSetup FftSetupForSize(unsigned fft_size);
   static FFTSetup* fft_setups_;
   FFTSetup fft_setup_;
   DSPSplitComplex frame_;
-#elif USE(WEBAUDIO_FFMPEG)
+#elif defined(WTF_USE_WEBAUDIO_FFMPEG)
   static RDFTContext* ContextForSize(unsigned fft_size, int trans);
   RDFTContext* forward_context_;
   RDFTContext* inverse_context_;
   float* GetUpToDateComplexData();
   AudioFloatArray complex_data_;
-#elif USE(WEBAUDIO_OPENMAX_DL_FFT)
+#elif defined(WTF_USE_WEBAUDIO_OPENMAX_DL_FFT)
   static OMXFFTSpec_R_F32* ContextForSize(unsigned log2fft_size);
   OMXFFTSpec_R_F32* forward_context_;
   OMXFFTSpec_R_F32* inverse_context_;

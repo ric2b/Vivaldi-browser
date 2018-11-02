@@ -5,17 +5,17 @@
 #ifndef CHROME_BROWSER_CHROMEOS_NET_NETWORK_PORTAL_DETECTOR_IMPL_H_
 #define CHROME_BROWSER_CHROMEOS_NET_NETWORK_PORTAL_DETECTOR_IMPL_H_
 
+#include <map>
 #include <memory>
 #include <string>
 
 #include "base/cancelable_callback.h"
 #include "base/compiler_specific.h"
-#include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "chromeos/network/network_state_handler_observer.h"
 #include "chromeos/network/portal_detector/network_portal_detector.h"
@@ -42,7 +42,6 @@ class NetworkState;
 // NetworkStateHandler and delegates portal detection for the default
 // network to CaptivePortalService.
 class NetworkPortalDetectorImpl : public NetworkPortalDetector,
-                                  public base::NonThreadSafe,
                                   public chromeos::NetworkStateHandlerObserver,
                                   public content::NotificationObserver,
                                   public PortalDetectorStrategy::Delegate {
@@ -76,7 +75,7 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
   friend class NetworkPortalDetectorImplTest;
   friend class NetworkPortalDetectorImplBrowserTest;
 
-  using CaptivePortalStateMap = base::hash_map<std::string, CaptivePortalState>;
+  using CaptivePortalStateMap = std::map<std::string, CaptivePortalState>;
 
   enum State {
     // No portal check is running.
@@ -85,6 +84,8 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
     STATE_PORTAL_CHECK_PENDING,
     // Portal check is in progress.
     STATE_CHECKING_FOR_PORTAL,
+    // No portal check when successfully behind portal.
+    STATE_BEHIND_PORTAL_IDLE,
   };
 
   struct DetectionAttemptCompletedReport {
@@ -170,6 +171,9 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
   }
   bool is_checking_for_portal() const {
     return state_ == STATE_CHECKING_FOR_PORTAL;
+  }
+  bool is_behind_portal_idle() const {
+    return state_ == STATE_BEHIND_PORTAL_IDLE;
   }
 
   int same_detection_result_count_for_testing() const {
@@ -258,6 +262,11 @@ class NetworkPortalDetectorImpl : public NetworkPortalDetector,
 
   // Number of detection attempts in a row with NO RESPONSE result.
   int no_response_result_count_ = 0;
+
+  // Must be declared before |notification_controller_| as
+  // ~NetworkPortalNotificationController() calls
+  // NetworkPortalDetectorImpl::RemoveObserver() which uses this.
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // UI notification controller about captive portal state.
   std::unique_ptr<NetworkPortalNotificationController> notification_controller_;

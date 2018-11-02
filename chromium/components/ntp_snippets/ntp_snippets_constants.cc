@@ -9,6 +9,12 @@ namespace ntp_snippets {
 const base::FilePath::CharType kDatabaseFolder[] =
     FILE_PATH_LITERAL("NTPSnippets");
 
+const base::FilePath::CharType kBreakingNewsDatabaseFolder[] =
+    FILE_PATH_LITERAL("NTPBreakingNews");
+
+const char kContentSuggestionsApiScope[] =
+    "https://www.googleapis.com/auth/chrome-content-suggestions";
+
 const char kContentSuggestionsServer[] =
     "https://chromecontentsuggestions-pa.googleapis.com/v1/suggestions/fetch";
 const char kContentSuggestionsStagingServer[] =
@@ -17,5 +23,25 @@ const char kContentSuggestionsStagingServer[] =
 const char kContentSuggestionsAlphaServer[] =
     "https://alpha-chromecontentsuggestions-pa.sandbox.googleapis.com/v1/"
     "suggestions/fetch";
+
+const char kPushUpdatesSubscriptionServer[] =
+    "https://chromecontentsuggestions-pa.googleapis.com/v1/suggestions/"
+    "subscribe";
+const char kPushUpdatesSubscriptionStagingServer[] =
+    "https://staging-chromecontentsuggestions-pa.googleapis.com/v1/suggestions/"
+    "subscribe";
+const char kPushUpdatesSubscriptionAlphaServer[] =
+    "https://alpha-chromecontentsuggestions-pa.sandbox.googleapis.com/v1/"
+    "suggestions/subscribe";
+
+const char kPushUpdatesUnsubscriptionServer[] =
+    "https://chromecontentsuggestions-pa.googleapis.com/v1/suggestions/"
+    "unsubscribe";
+const char kPushUpdatesUnsubscriptionStagingServer[] =
+    "https://staging-chromecontentsuggestions-pa.googleapis.com/v1/suggestions/"
+    "unsubscribe";
+const char kPushUpdatesUnsubscriptionAlphaServer[] =
+    "https://alpha-chromecontentsuggestions-pa.sandbox.googleapis.com/v1/"
+    "suggestions/unsubscribe";
 
 }  // namespace ntp_snippets

@@ -31,9 +31,9 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/editing/spellcheck/SpellChecker.h"
@@ -197,10 +197,10 @@ void HTMLTextAreaElement::ParseAttribute(
   } else if (name == accesskeyAttr) {
     // ignore for the moment
   } else if (name == maxlengthAttr) {
-    UseCounter::Count(GetDocument(), UseCounter::kTextAreaMaxLength);
+    UseCounter::Count(GetDocument(), WebFeature::kTextAreaMaxLength);
     SetNeedsValidityCheck();
   } else if (name == minlengthAttr) {
-    UseCounter::Count(GetDocument(), UseCounter::kTextAreaMinLength);
+    UseCounter::Count(GetDocument(), WebFeature::kTextAreaMinLength);
     SetNeedsValidityCheck();
   } else {
     TextControlElement::ParseAttribute(params);

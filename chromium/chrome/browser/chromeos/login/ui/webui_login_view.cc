@@ -20,12 +20,13 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_util.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
+#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/login/enrollment/auto_enrollment_controller.h"
 #include "chrome/browser/chromeos/login/ui/login_display_host_impl.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view.h"
 #include "chrome/browser/chromeos/login/ui/preloaded_web_view_factory.h"
 #include "chrome/browser/chromeos/login/ui/proxy_settings_dialog.h"
 #include "chrome/browser/chromeos/login/ui/web_contents_forced_title.h"
-#include "chrome/browser/chromeos/login/ui/web_contents_set_background_color.h"
 #include "chrome/browser/chromeos/login/ui/webui_login_display.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/extensions/chrome_extension_web_contents_observer.h"
@@ -57,9 +58,11 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
 #include "ui/keyboard/keyboard_controller.h"
+#include "ui/views/controls/webview/web_contents_set_background_color.h"
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 
+using chromeos::AutoEnrollmentController;
 using content::NativeWebKeyboardEvent;
 using content::RenderViewHost;
 using content::WebContents;
@@ -141,9 +144,17 @@ WebUILoginView::WebUILoginView(const WebViewSettings& settings)
   }
   accel_map_[ui::Accelerator(ui::VKEY_V, ui::EF_ALT_DOWN)] =
       kAccelNameVersion;
-  accel_map_[ui::Accelerator(ui::VKEY_R,
-      ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
-      kAccelNameReset;
+
+  // Devices with forced re-enrollment enabled shouldn't be able to powerwash.
+  const AutoEnrollmentController::FRERequirement requirement =
+      AutoEnrollmentController::GetFRERequirement();
+  if (requirement == AutoEnrollmentController::NOT_REQUIRED ||
+      requirement == AutoEnrollmentController::EXPLICITLY_NOT_REQUIRED) {
+    accel_map_[ui::Accelerator(ui::VKEY_R,
+                               ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN |
+                                   ui::EF_SHIFT_DOWN)] = kAccelNameReset;
+  }
+
   accel_map_[ui::Accelerator(ui::VKEY_X,
       ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN | ui::EF_SHIFT_DOWN)] =
       kAccelNameEnableDebugging;
@@ -220,7 +231,7 @@ void WebUILoginView::InitializeWebView(views::WebView* web_view,
   if (!title.empty())
     WebContentsForcedTitle::CreateForWebContentsWithTitle(web_contents, title);
 
-  WebContentsSetBackgroundColor::CreateForWebContentsWithColor(
+  views::WebContentsSetBackgroundColor::CreateForWebContentsWithColor(
       web_contents, SK_ColorTRANSPARENT);
 
   // Ensure that the login UI has a tab ID, which will allow the GAIA auth
@@ -433,6 +444,20 @@ views::WebView* WebUILoginView::web_view() {
   return webui_login_.get();
 }
 
+void WebUILoginView::SetLockScreenAppFocusCyclerDelegate() {
+  if (lock_screen_apps::StateController::IsEnabled()) {
+    delegates_lock_screen_app_focus_cycle_ = true;
+    lock_screen_apps::StateController::Get()->SetFocusCyclerDelegate(this);
+  }
+}
+
+void WebUILoginView::ClearLockScreenAppFocusCyclerDelegate() {
+  if (!delegates_lock_screen_app_focus_cycle_)
+    return;
+  lock_screen_apps::StateController::Get()->SetFocusCyclerDelegate(nullptr);
+  delegates_lock_screen_app_focus_cycle_ = false;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // ash::ShellObserver:
 
@@ -512,21 +537,28 @@ bool WebUILoginView::TakeFocus(content::WebContents* source, bool reverse) {
   if (!forward_keyboard_event_)
     return false;
 
-  // Focus is accepted, but the Ash system tray is not available in Mash, so
-  // exit early.
-  if (ash_util::IsRunningInMash())
+  // For default tab order, after login UI, try focusing the system tray.
+  if (!reverse && MoveFocusToSystemTray(reverse))
     return true;
 
-  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
-  if (tray && tray->GetWidget()->IsVisible() && tray->visible()) {
-    ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
-        ->set_default_last_focusable_child(reverse);
-    ash::Shell::Get()->focus_cycler()->RotateFocus(
-        reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
-  } else {
-    AboutToRequestFocusFromTabTraversal(reverse);
+  // Either if tab order is reversed (in which case system tray focus was not
+  // attempted), or system tray focus failed (in which case focusing an app
+  // window is preferrable to  focus returning to login UI), try moving focus
+  // to the app window.
+  if (!lock_screen_app_focus_handler_.is_null()) {
+    lock_screen_app_focus_handler_.Run(reverse);
+    return true;
   }
 
+  // If initial MoveFocusToSystemTray was skipped due to lock screen app being
+  // a preferred option (due to traversal direction), try focusing system tray
+  // again.
+  if (reverse && MoveFocusToSystemTray(reverse))
+    return true;
+
+  // Since neither system tray nor a lock screen app window was focusable, the
+  // focus should stay in the login UI.
+  AboutToRequestFocusFromTabTraversal(reverse);
   return true;
 }
 
@@ -555,8 +587,46 @@ bool WebUILoginView::PreHandleGestureEvent(
   return blink::WebInputEvent::IsPinchGestureEventType(event.GetType());
 }
 
-void WebUILoginView::OnFocusOut(bool reverse) {
+void WebUILoginView::RegisterLockScreenAppFocusHandler(
+    const LockScreenAppFocusCallback& focus_handler) {
+  lock_screen_app_focus_handler_ = focus_handler;
+}
+
+void WebUILoginView::UnregisterLockScreenAppFocusHandler() {
+  lock_screen_app_focus_handler_.Reset();
+}
+
+void WebUILoginView::HandleLockScreenAppFocusOut(bool reverse) {
+  if (reverse && MoveFocusToSystemTray(reverse))
+    return;
+
   AboutToRequestFocusFromTabTraversal(reverse);
+}
+
+void WebUILoginView::OnFocusOut(bool reverse) {
+  if (!reverse && !lock_screen_app_focus_handler_.is_null()) {
+    lock_screen_app_focus_handler_.Run(reverse);
+    return;
+  }
+
+  AboutToRequestFocusFromTabTraversal(reverse);
+}
+
+bool WebUILoginView::MoveFocusToSystemTray(bool reverse) {
+  // Focus is accepted, but the Ash system tray is not available in Mash, so
+  // exit early.
+  if (ash_util::IsRunningInMash())
+    return true;
+
+  ash::SystemTray* tray = ash::Shell::Get()->GetPrimarySystemTray();
+  if (!tray || !tray->GetWidget()->IsVisible() || !tray->visible())
+    return false;
+
+  ash::StatusAreaWidgetDelegate::GetPrimaryInstance()
+      ->set_default_last_focusable_child(reverse);
+  ash::Shell::Get()->focus_cycler()->RotateFocus(
+      reverse ? ash::FocusCycler::BACKWARD : ash::FocusCycler::FORWARD);
+  return true;
 }
 
 void WebUILoginView::OnLoginPromptVisible() {

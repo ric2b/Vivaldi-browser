@@ -11,13 +11,13 @@
 #import "ios/chrome/browser/ui/rtl_geometry.h"
 #import "ios/chrome/browser/ui/uikit_ui_util.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
+#import "ios/clean/chrome/browser/ui/commands/find_in_page_visibility_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/navigation_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button+factory.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_constants.h"
 #import "ios/clean/chrome/browser/ui/tools/menu_overflow_controls_stackview.h"
-#import "ios/clean/chrome/browser/ui/tools/tools_actions.h"
 #import "ios/clean/chrome/browser/ui/tools/tools_menu_item.h"
 #import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
@@ -33,7 +33,7 @@ const CGFloat kOverflowControlsMargin = 58.0;
 const CGFloat kCloseButtonHeight = 44.0;
 }
 
-@interface MenuViewController ()<ToolsActions>
+@interface MenuViewController ()
 @property(nonatomic, strong) UIScrollView* menuScrollView;
 @property(nonatomic, strong) UIStackView* menuStackView;
 @property(nonatomic, strong) NSArray<ToolsMenuItem*>* menuItems;
@@ -82,9 +82,6 @@ const CGFloat kCloseButtonHeight = 44.0;
   self.menuScrollView = [[UIScrollView alloc] init];
   self.menuScrollView.translatesAutoresizingMaskIntoConstraints = NO;
   [self.view addSubview:self.menuScrollView];
-
-  // PLACEHOLDER: Hardcoded value until the mediator observes the Webstate.
-  self.currentPageLoading = NO;
 
   [self setupCloseMenuButton];
   [self setupMenuStackView];
@@ -137,12 +134,18 @@ const CGFloat kCloseButtonHeight = 44.0;
                                          0, kMenuItemLeadingEdgeInset, 0, 0)];
     [menuButton.titleLabel setFont:[MDCTypography subheadFont]];
     [menuButton.titleLabel setTextAlignment:NSTextAlignmentNatural];
+    menuButton.enabled = item.enabled;
     [menuButton addTarget:self.dispatcher
                    action:@selector(closeToolsMenu)
          forControlEvents:UIControlEventTouchUpInside];
     if (item.action) {
       [menuButton addTarget:self.dispatcher
                      action:item.action
+           forControlEvents:UIControlEventTouchUpInside];
+    } else {
+      // TODO(crbug.com/740793): Remove alert once all menu items have actions.
+      [menuButton addTarget:self
+                     action:@selector(showAlert:)
            forControlEvents:UIControlEventTouchUpInside];
     }
     [buttons addObject:menuButton];
@@ -198,6 +201,20 @@ const CGFloat kCloseButtonHeight = 44.0;
                 action:@selector(stopLoadingPage)
       forControlEvents:UIControlEventTouchUpInside];
 
+  // TODO(crbug.com/740793): Remove alert once share is implemented.
+  self.toolbarOverflowStackView.shareButton.titleLabel.text = @"Share";
+  [self.toolbarOverflowStackView.shareButton
+             addTarget:self
+                action:@selector(showAlert:)
+      forControlEvents:UIControlEventTouchUpInside];
+
+  // TODO(crbug.com/740793): Remove alert once bookmarking is implemented.
+  self.toolbarOverflowStackView.starButton.titleLabel.text = @"Bookmark";
+  [self.toolbarOverflowStackView.starButton
+             addTarget:self
+                action:@selector(showAlert:)
+      forControlEvents:UIControlEventTouchUpInside];
+
   [self.menuStackView insertArrangedSubview:self.toolbarOverflowStackView
                                     atIndex:0];
   NSLayoutConstraint* leadingConstraint =
@@ -240,6 +257,8 @@ const CGFloat kCloseButtonHeight = 44.0;
     // CloseMenu Button Constraint.
     [self.closeMenuButton.trailingAnchor
         constraintEqualToAnchor:self.view.trailingAnchor],
+    [self.closeMenuButton.topAnchor
+        constraintEqualToAnchor:self.menuScrollView.topAnchor],
   ]];
 }
 
@@ -251,6 +270,37 @@ const CGFloat kCloseButtonHeight = 44.0;
 
 - (void)displayOverflowControls:(BOOL)displayOverflowControls {
   self.displayOverflowControls = displayOverflowControls;
+}
+
+- (void)setIsLoading:(BOOL)isLoading {
+  self.currentPageLoading = isLoading;
+}
+
+- (void)setCurrentPageLoading:(BOOL)currentPageLoading {
+  _currentPageLoading = currentPageLoading;
+  // If the OverflowButtons have been initialized update their visibility.
+  if (self.toolbarOverflowStackView) {
+    self.toolbarOverflowStackView.reloadButton.hidden = currentPageLoading;
+    self.toolbarOverflowStackView.stopButton.hidden = !currentPageLoading;
+  }
+}
+
+#pragma mark - Private Methods
+
+// TODO(crbug.com/740793): Remove this method once no item is using it.
+- (void)showAlert:(UIButton*)sender {
+  UIAlertController* alertController =
+      [UIAlertController alertControllerWithTitle:sender.titleLabel.text
+                                          message:nil
+                                   preferredStyle:UIAlertControllerStyleAlert];
+  UIAlertAction* action =
+      [UIAlertAction actionWithTitle:@"Done"
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+  [alertController addAction:action];
+  [self.presentingViewController presentViewController:alertController
+                                              animated:YES
+                                            completion:nil];
 }
 
 @end

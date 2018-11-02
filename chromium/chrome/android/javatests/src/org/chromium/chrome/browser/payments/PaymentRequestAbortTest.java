@@ -12,9 +12,11 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Feature;
+import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.autofill.AutofillTestHelper;
+import org.chromium.chrome.browser.autofill.CardType;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.AutofillProfile;
 import org.chromium.chrome.browser.autofill.PersonalDataManager.CreditCard;
 import org.chromium.chrome.browser.payments.PaymentRequestTestRule.MainActivityStartCallback;
@@ -46,13 +48,14 @@ public class PaymentRequestAbortTest implements MainActivityStartCallback {
                 "US", "555-555-5555", "jon.doe@google.com", "en-US"));
         helper.setCreditCard(new CreditCard("", "https://example.com", true, true, "Jon Doe",
                 "4111111111111111", "1111", "12", "2050", "visa", R.drawable.visa_card,
-                billingAddressId, "" /* serverId */));
+                CardType.UNKNOWN, billingAddressId, "" /* serverId */));
     }
 
     /** If the user has not clicked "Pay" yet, then merchant's abort will succeed. */
     @Test
     @MediumTest
     @Feature({"Payments"})
+    @RetryOnFailure
     public void testAbortBeforePayClicked()
             throws InterruptedException, ExecutionException, TimeoutException {
         mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyToPay());
@@ -64,6 +67,7 @@ public class PaymentRequestAbortTest implements MainActivityStartCallback {
     @Test
     @MediumTest
     @Feature({"Payments"})
+    @RetryOnFailure
     public void testAbortWhileUnmaskingCard()
             throws InterruptedException, ExecutionException, TimeoutException {
         mPaymentRequestTestRule.triggerUIAndWait(mPaymentRequestTestRule.getReadyToPay());

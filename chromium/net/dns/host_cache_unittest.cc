@@ -5,6 +5,7 @@
 #include "net/dns/host_cache.h"
 
 #include <string>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/callback.h"
@@ -12,6 +13,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "net/base/net_errors.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,6 +31,16 @@ HostCache::Key Key(const std::string& hostname) {
 bool FoobarIndexIsOdd(const std::string& foobarx_com) {
   return (foobarx_com[6] - '0') % 2 == 1;
 }
+
+class MockPersistenceDelegate : public HostCache::PersistenceDelegate {
+ public:
+  void ScheduleWrite() override { ++num_changes_; }
+
+  int num_changes() const { return num_changes_; }
+
+ private:
+  int num_changes_ = 0;
+};
 
 }  // namespace
 
@@ -273,7 +285,7 @@ TEST(HostCacheTest, NoCache) {
   HostCache::Entry entry = HostCache::Entry(OK, AddressList());
 
   // Lookup and Set should have no effect.
-  EXPECT_FALSE(cache.Lookup(Key("foobar.com"),now));
+  EXPECT_FALSE(cache.Lookup(Key("foobar.com"), now));
   cache.Set(Key("foobar.com"), entry, now, kTTL);
   EXPECT_FALSE(cache.Lookup(Key("foobar.com"), now));
 
@@ -638,6 +650,190 @@ TEST(HostCacheTest, KeyComparators) {
         FAIL() << "Invalid expectation. Can be only -1, 0, 1";
     }
   }
+}
+
+TEST(HostCacheTest, SerializeAndDeserialize) {
+  const base::TimeDelta kTTL = base::TimeDelta::FromSeconds(10);
+
+  HostCache cache(kMaxCacheEntries);
+
+  // Start at t=0.
+  base::TimeTicks now;
+
+  HostCache::Key key1 = Key("foobar.com");
+  HostCache::Key key2 = Key("foobar2.com");
+  HostCache::Key key3 = Key("foobar3.com");
+  HostCache::Key key4 = Key("foobar4.com");
+
+  IPAddress address_ipv4(1, 2, 3, 4);
+  IPAddress address_ipv6(0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  IPEndPoint endpoint_ipv4(address_ipv4, 0);
+  IPEndPoint endpoint_ipv6(address_ipv6, 0);
+
+  HostCache::Entry entry1 = HostCache::Entry(OK, AddressList(endpoint_ipv4));
+  AddressList addresses2 = AddressList(endpoint_ipv6);
+  addresses2.push_back(endpoint_ipv4);
+  HostCache::Entry entry2 = HostCache::Entry(OK, addresses2);
+  HostCache::Entry entry3 = HostCache::Entry(OK, AddressList(endpoint_ipv6));
+  HostCache::Entry entry4 = HostCache::Entry(OK, AddressList(endpoint_ipv4));
+
+  EXPECT_EQ(0u, cache.size());
+
+  // Add an entry for "foobar.com" at t=0.
+  EXPECT_FALSE(cache.Lookup(key1, now));
+  cache.Set(key1, entry1, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_TRUE(cache.Lookup(key1, now)->error() == entry1.error());
+
+  EXPECT_EQ(1u, cache.size());
+
+  // Advance to t=5.
+  now += base::TimeDelta::FromSeconds(5);
+
+  // Add entries for "foobar2.com" and "foobar3.com" at t=5.
+  EXPECT_FALSE(cache.Lookup(key2, now));
+  cache.Set(key2, entry2, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key2, now));
+  EXPECT_EQ(2u, cache.size());
+
+  EXPECT_FALSE(cache.Lookup(key3, now));
+  cache.Set(key3, entry3, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key3, now));
+  EXPECT_EQ(3u, cache.size());
+
+  // Advance to t=12, ansd serialize the cache.
+  now += base::TimeDelta::FromSeconds(7);
+
+  base::ListValue serialized_cache;
+  cache.GetAsListValue(&serialized_cache, /*include_staleness=*/false);
+  HostCache restored_cache(kMaxCacheEntries);
+
+  // Add entries for "foobar3.com" and "foobar4.com" to the cache before
+  // restoring it. The "foobar3.com" result is different from the original.
+  EXPECT_FALSE(restored_cache.Lookup(key3, now));
+  restored_cache.Set(key3, entry1, now, kTTL);
+  EXPECT_TRUE(restored_cache.Lookup(key3, now));
+  EXPECT_EQ(1u, restored_cache.size());
+
+  EXPECT_FALSE(restored_cache.Lookup(key4, now));
+  restored_cache.Set(key4, entry4, now, kTTL);
+  EXPECT_TRUE(restored_cache.Lookup(key4, now));
+  EXPECT_EQ(2u, restored_cache.size());
+
+  restored_cache.RestoreFromListValue(serialized_cache);
+
+  HostCache::EntryStaleness stale;
+
+  // The "foobar.com" entry is stale due to both network changes and expiration
+  // time.
+  EXPECT_FALSE(restored_cache.Lookup(key1, now));
+  const HostCache::Entry* result1 =
+      restored_cache.LookupStale(key1, now, &stale);
+  EXPECT_TRUE(result1);
+  EXPECT_EQ(1u, result1->addresses().size());
+  EXPECT_EQ(address_ipv4, result1->addresses().front().address());
+  EXPECT_EQ(1, stale.network_changes);
+  // Time to TimeTicks conversion is fuzzy, so just check that expected and
+  // actual expiration times are close.
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(1),
+            (base::TimeDelta::FromSeconds(2) - stale.expired_by).magnitude());
+
+  // The "foobar2.com" entry is stale only due to network changes.
+  EXPECT_FALSE(restored_cache.Lookup(key2, now));
+  const HostCache::Entry* result2 =
+      restored_cache.LookupStale(key2, now, &stale);
+  EXPECT_TRUE(result2);
+  EXPECT_EQ(2u, result2->addresses().size());
+  EXPECT_EQ(address_ipv6, result2->addresses().front().address());
+  EXPECT_EQ(address_ipv4, result2->addresses().back().address());
+  EXPECT_EQ(1, stale.network_changes);
+  EXPECT_GT(base::TimeDelta::FromMilliseconds(1),
+            (base::TimeDelta::FromSeconds(-3) - stale.expired_by).magnitude());
+
+  // The "foobar3.com" entry is the new one, not the restored one.
+  const HostCache::Entry* result3 = restored_cache.Lookup(key3, now);
+  EXPECT_TRUE(result3);
+  EXPECT_EQ(1u, result3->addresses().size());
+  EXPECT_EQ(address_ipv4, result3->addresses().front().address());
+
+  // The "foobar4.com" entry is still present and usable.
+  const HostCache::Entry* result4 = restored_cache.Lookup(key4, now);
+  EXPECT_TRUE(result4);
+  EXPECT_EQ(1u, result4->addresses().size());
+  EXPECT_EQ(address_ipv4, result4->addresses().front().address());
+}
+
+TEST(HostCacheTest, PersistenceDelegate) {
+  const base::TimeDelta kTTL = base::TimeDelta::FromSeconds(10);
+  HostCache cache(kMaxCacheEntries);
+  MockPersistenceDelegate delegate;
+  cache.set_persistence_delegate(&delegate);
+
+  HostCache::Key key1 = Key("foobar.com");
+  HostCache::Key key2 = Key("foobar2.com");
+
+  IPAddress address_ipv4(1, 2, 3, 4);
+  IPAddress address_ipv6(0x20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+  IPEndPoint endpoint_ipv4(address_ipv4, 0);
+  IPEndPoint endpoint_ipv6(address_ipv6, 0);
+
+  HostCache::Entry entry1 = HostCache::Entry(OK, AddressList(endpoint_ipv4));
+  AddressList addresses2 = AddressList(endpoint_ipv6);
+  addresses2.push_back(endpoint_ipv4);
+  HostCache::Entry entry2 = HostCache::Entry(OK, addresses2);
+  HostCache::Entry entry3 =
+      HostCache::Entry(ERR_NAME_NOT_RESOLVED, AddressList());
+  HostCache::Entry entry4 = HostCache::Entry(OK, AddressList());
+
+  // Start at t=0.
+  base::TimeTicks now;
+  EXPECT_EQ(0u, cache.size());
+
+  // Add two entries at t=0.
+  EXPECT_FALSE(cache.Lookup(key1, now));
+  cache.Set(key1, entry1, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_EQ(1u, cache.size());
+  EXPECT_EQ(1, delegate.num_changes());
+
+  EXPECT_FALSE(cache.Lookup(key2, now));
+  cache.Set(key2, entry3, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key2, now));
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_EQ(2, delegate.num_changes());
+
+  // Advance to t=5.
+  now += base::TimeDelta::FromSeconds(5);
+
+  // Changes that shouldn't trigger a write:
+  // Add an entry for "foobar.com" with different expiration time.
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  cache.Set(key1, entry1, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_EQ(2, delegate.num_changes());
+
+  // Add an entry for "foobar.com" with different TTL.
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  cache.Set(key1, entry1, now, kTTL - base::TimeDelta::FromSeconds(5));
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_EQ(2, delegate.num_changes());
+
+  // Changes that should trigger a write:
+  // Add an entry for "foobar.com" with different address list.
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  cache.Set(key1, entry2, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_EQ(3, delegate.num_changes());
+
+  // Add an entry for "foobar2.com" with different error.
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  cache.Set(key2, entry4, now, kTTL);
+  EXPECT_TRUE(cache.Lookup(key1, now));
+  EXPECT_EQ(2u, cache.size());
+  EXPECT_EQ(4, delegate.num_changes());
 }
 
 }  // namespace net

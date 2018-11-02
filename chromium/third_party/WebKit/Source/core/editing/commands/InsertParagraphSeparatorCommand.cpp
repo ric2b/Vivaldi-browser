@@ -61,6 +61,14 @@ static Element* HighestVisuallyEquivalentDivBelowRoot(Element* start_block) {
   return cur_block;
 }
 
+static bool InSameBlock(const VisiblePosition& a, const VisiblePosition& b) {
+  DCHECK(a.IsValid()) << a;
+  DCHECK(b.IsValid()) << b;
+  return !a.IsNull() &&
+         EnclosingBlock(a.DeepEquivalent().ComputeContainerNode()) ==
+             EnclosingBlock(b.DeepEquivalent().ComputeContainerNode());
+}
+
 InsertParagraphSeparatorCommand::InsertParagraphSeparatorCommand(
     Document& document,
     bool must_use_default_paragraph_element,
@@ -329,7 +337,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       return;
 
     SetEndingSelection(SelectionInDOMTree::Builder()
-                           .Collapse(Position::FirstPositionInNode(parent))
+                           .Collapse(Position::FirstPositionInNode(*parent))
                            .SetIsDirectional(EndingSelection().IsDirectional())
                            .Build());
     return;
@@ -488,7 +496,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       SplitTextNode(text_node, text_offset);
       GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
-      position_after_split = Position::FirstPositionInNode(text_node);
+      position_after_split = Position::FirstPositionInNode(*text_node);
       insertion_position = Position(text_node->previousSibling(), text_offset);
     }
   }
@@ -530,7 +538,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
 
   // Move the start node and the siblings of the start node.
   if (CreateVisiblePosition(insertion_position).DeepEquivalent() !=
-      VisiblePosition::BeforeNode(block_to_insert).DeepEquivalent()) {
+      VisiblePosition::BeforeNode(*block_to_insert).DeepEquivalent()) {
     Node* n;
     if (insertion_position.ComputeContainerNode() == start_block) {
       n = insertion_position.ComputeNodeAfterPosition();
@@ -546,7 +554,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
       GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
       for (n = start_block->firstChild(); n; n = n->nextSibling()) {
-        VisiblePosition before_node_position = VisiblePosition::BeforeNode(n);
+        VisiblePosition before_node_position = VisiblePosition::BeforeNode(*n);
         if (!before_node_position.IsNull() &&
             ComparePositions(CreateVisiblePosition(insertion_position),
                              before_node_position) <= 0)
@@ -582,7 +590,7 @@ void InsertParagraphSeparatorCommand::DoApply(EditingState* editing_state) {
 
   SetEndingSelection(
       SelectionInDOMTree::Builder()
-          .Collapse(Position::FirstPositionInNode(block_to_insert))
+          .Collapse(Position::FirstPositionInNode(*block_to_insert))
           .SetIsDirectional(EndingSelection().IsDirectional())
           .Build());
   ApplyStyleAfterInsertion(start_block, editing_state);

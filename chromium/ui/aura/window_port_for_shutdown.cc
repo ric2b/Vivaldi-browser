@@ -5,7 +5,7 @@
 #include "ui/aura/window_port_for_shutdown.h"
 
 #include "base/memory/ptr_util.h"
-#include "cc/output/compositor_frame_sink.h"
+#include "cc/output/layer_tree_frame_sink.h"
 #include "ui/aura/window.h"
 
 namespace aura {
@@ -37,6 +37,10 @@ void WindowPortForShutdown::OnVisibilityChanged(bool visible) {}
 void WindowPortForShutdown::OnDidChangeBounds(const gfx::Rect& old_bounds,
                                               const gfx::Rect& new_bounds) {}
 
+void WindowPortForShutdown::OnDidChangeTransform(
+    const gfx::Transform& old_transform,
+    const gfx::Transform& new_transform) {}
+
 std::unique_ptr<ui::PropertyData> WindowPortForShutdown::OnWillChangeProperty(
     const void* key) {
   return nullptr;
@@ -47,13 +51,13 @@ void WindowPortForShutdown::OnPropertyChanged(
     int64_t old_value,
     std::unique_ptr<ui::PropertyData> data) {}
 
-std::unique_ptr<cc::CompositorFrameSink>
-WindowPortForShutdown::CreateCompositorFrameSink() {
+std::unique_ptr<cc::LayerTreeFrameSink>
+WindowPortForShutdown::CreateLayerTreeFrameSink() {
   return nullptr;
 }
 
-cc::SurfaceId WindowPortForShutdown::GetSurfaceId() const {
-  return cc::SurfaceId();
+viz::SurfaceId WindowPortForShutdown::GetSurfaceId() const {
+  return viz::SurfaceId();
 }
 
 void WindowPortForShutdown::OnWindowAddedToRootWindow() {}

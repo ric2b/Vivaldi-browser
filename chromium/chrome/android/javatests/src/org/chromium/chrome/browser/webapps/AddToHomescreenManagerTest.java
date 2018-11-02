@@ -9,6 +9,7 @@ import android.content.Intent;
 import android.graphics.Bitmap;
 import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.SmallTest;
+import android.text.TextUtils;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -152,7 +153,11 @@ public class AddToHomescreenManagerTest {
         public void showDialog() {
             AddToHomescreenManager.Observer observer = new AddToHomescreenManager.Observer() {
                 @Override
-                public void onUserTitleAvailable(String title) {}
+                public void onUserTitleAvailable(String title) {
+                    if (TextUtils.isEmpty(mTitle)) {
+                        mTitle = title;
+                    }
+                }
 
                 @Override
                 public void onReadyToAdd(Bitmap icon) {
@@ -172,7 +177,6 @@ public class AddToHomescreenManagerTest {
     @Before
     public void setUp() throws Exception {
         mActivityTestRule.startMainActivityOnBlankPage();
-        ChromeWebApkHost.initForTesting(false);
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
         mShortcutHelperDelegate = new TestShortcutHelperDelegate();
@@ -266,6 +270,9 @@ public class AddToHomescreenManagerTest {
     @Test
     @SmallTest
     @Feature("{Webapp}")
+    @CommandLineFlags.Add({ContentSwitches.DISABLE_POPUP_BLOCKING,
+            // TODO(yfriedman): Force WebApks off as this tests old A2HS behaviour.
+            "disable-field-trial-config"})
     public void testAddWebappShortcutSplashScreenIcon() throws Exception {
         try {
             // Sets the overriden factory to observer splash screen update.
@@ -306,8 +313,9 @@ public class AddToHomescreenManagerTest {
             addShortcutToTab(mTab, "");
 
             // Wait for the tab title to change. This will happen (due to the JavaScript that runs
-            // in the page) once the appinstalled event has been fired.
-            new TabTitleObserver(mTab, "Got appinstalled").waitForTitleUpdate(3);
+            // in the page) once the appinstalled event has been fired twice: once to test
+            // addEventListener('appinstalled'), once to test onappinstalled attribute.
+            new TabTitleObserver(mTab, "Got appinstalled: listener, attr").waitForTitleUpdate(3);
         } finally {
             mTestServer.stopAndDestroyServer();
         }

@@ -30,7 +30,6 @@ class DictionaryValue;
 namespace blink {
 class MotionData;
 class OrientationData;
-class WebFrame;
 class WebURLRequest;
 class WebView;
 }
@@ -85,7 +84,6 @@ class BlinkTestRunner : public RenderViewObserver,
   test_runner::TestPreferences* Preferences() override;
   void ApplyPreferences() override;
   void SetPopupBlockingEnabled(bool block_popups) override;
-  virtual std::string makeURLErrorDescription(const blink::WebURLError& error);
   void UseUnfortunateSynchronousResizeMode(bool enable) override;
   void EnableAutoResizeMode(const blink::WebSize& min_size,
                             const blink::WebSize& max_size) override;
@@ -105,7 +103,7 @@ class BlinkTestRunner : public RenderViewObserver,
   void SimulateWebNotificationClose(const std::string& title,
                                     bool by_user) override;
   void SetDeviceScaleFactor(float factor) override;
-  void SetDeviceColorProfile(const std::string& name) override;
+  void SetDeviceColorSpace(const std::string& name) override;
   float GetWindowToViewportScale() override;
   std::unique_ptr<blink::WebInputEvent> TransformScreenToWidgetCoordinates(
       test_runner::WebWidgetTestProxyBase* web_widget_test_proxy_base,
@@ -151,7 +149,7 @@ class BlinkTestRunner : public RenderViewObserver,
       blink::WebMediaStream* stream) override;
   bool AddMediaStreamAudioSourceAndTrack(
       blink::WebMediaStream* stream) override;
-  cc::SharedBitmapManager* GetSharedBitmapManager() override;
+  viz::SharedBitmapManager* GetSharedBitmapManager() override;
   void DispatchBeforeInstallPromptEvent(
       const std::vector<std::string>& event_platforms,
       const base::Callback<void(bool)>& callback) override;
@@ -161,7 +159,7 @@ class BlinkTestRunner : public RenderViewObserver,
     const blink::WebPluginParams& params) override;
   float GetDeviceScaleFactor() const override;
   void RunIdleTasks(const base::Closure& callback) override;
-  void ForceTextInputStateUpdate(blink::WebFrame* frame) override;
+  void ForceTextInputStateUpdate(blink::WebLocalFrame* frame) override;
   bool IsNavigationInitiatedByRenderer(
       const blink::WebURLRequest& request) override;
 

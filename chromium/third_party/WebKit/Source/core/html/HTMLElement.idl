@@ -30,14 +30,13 @@ interface HTMLElement : Element {
 
     // user interaction
     [CEReactions, Reflect] attribute boolean hidden;
-    void click();
+    [RuntimeCallStatsCounter=HTMLElementClick] void click();
     [CEReactions, CustomElementCallbacks] attribute long tabIndex;
     [CEReactions, RuntimeEnabled=InertAttribute, Reflect] attribute boolean inert;
     void focus();
     void blur();
     [CEReactions, Reflect] attribute DOMString accessKey;
     [CEReactions, CustomElementCallbacks] attribute boolean draggable;
-    [CEReactions, RuntimeEnabled=ContextMenu] attribute HTMLMenuElement? contextMenu;
     [CEReactions] attribute boolean spellcheck;
 
     // HTMLElement implements ElementContentEditable

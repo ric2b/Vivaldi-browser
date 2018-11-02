@@ -294,6 +294,8 @@ IPCMediaPipelineHostImpl::IPCMediaPipelineHostImpl(
   for (int i = 0; i < media::PLATFORM_MEDIA_DATA_TYPE_COUNT; ++i) {
     shared_decoded_data_[i].reset(new SharedData(channel));
   }
+
+  LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
 }
 
 IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
@@ -308,17 +310,35 @@ IPCMediaPipelineHostImpl::~IPCMediaPipelineHostImpl() {
   }
 }
 
+int32_t IPCMediaPipelineHostImpl::command_buffer_route_id() const {
+
+    if (!factories_)
+        return MSG_ROUTING_NONE;
+
+    int32_t factories_route_id = factories_->GetCommandBufferRouteId();
+
+    if (!factories_route_id)
+        return MSG_ROUTING_NONE;
+
+    return factories_route_id;
+}
+
 void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
                                           const InitializeCB& callback) {
   DCHECK(task_runner_->RunsTasksOnCurrentThread());
   DCHECK(!is_connected());
   DCHECK(init_callback_.is_null());
 
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " With Mimetype : " << mimetype;
+
   routing_id_ = channel_->GenerateRouteID();
-  int32_t gpu_video_accelerator_factories_route_id =
-      factories_ ? factories_->GetRouteID() : MSG_ROUTING_NONE;
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Create pipeline";
+
   if (!channel_->Send(new MediaPipelineMsg_New(
-          routing_id_, gpu_video_accelerator_factories_route_id))) {
+          routing_id_, command_buffer_route_id()))) {
     callback.Run(false, -1, media::PlatformMediaTimeInfo(),
                  media::PlatformAudioConfig(), media::PlatformVideoConfig());
     return;
@@ -330,6 +350,10 @@ void IPCMediaPipelineHostImpl::Initialize(const std::string& mimetype,
   int64_t size = -1;
   if (!data_source_->GetSize(&size))
     size = -1;
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " Initialize pipeline - size of source : " << size;
+
   channel_->Send(new MediaPipelineMsg_Initialize(
       routing_id_, size, data_source_->IsStreaming(), mimetype));
 }

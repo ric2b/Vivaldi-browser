@@ -11,7 +11,6 @@ import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
@@ -63,6 +62,7 @@ import org.chromium.chrome.browser.ntp.snippets.CategoryInt;
 import org.chromium.chrome.browser.ntp.snippets.CategoryStatus;
 import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
+import org.chromium.chrome.browser.ntp.snippets.SuggestionsSource;
 import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.preferences.ChromePreferenceManager;
 import org.chromium.chrome.browser.signin.SigninManager;
@@ -73,12 +73,14 @@ import org.chromium.chrome.browser.suggestions.DestructionObserver;
 import org.chromium.chrome.browser.suggestions.SuggestionsEventReporter;
 import org.chromium.chrome.browser.suggestions.SuggestionsRanker;
 import org.chromium.chrome.browser.suggestions.SuggestionsUiDelegate;
+import org.chromium.chrome.browser.util.FeatureUtilities;
 import org.chromium.chrome.test.util.browser.Features;
 import org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.CategoryInfoBuilder;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -234,6 +236,10 @@ public class NewTabPageAdapterTest {
         MockitoAnnotations.initMocks(this);
 
         ContextUtils.initApplicationContextForTests(RuntimeEnvironment.application);
+        // Make sure that isChromeHome() is current value set by the test, not the value saved in
+        // the shared preference.
+        // TODO(changwan): check if we can clear shared preferences for each test case.
+        FeatureUtilities.resetChromeHomeEnabledForTests();
 
         // Set empty variation params for the test.
         CardsVariationParameters.setTestVariationParams(new HashMap<String, String>());
@@ -249,10 +255,7 @@ public class NewTabPageAdapterTest {
         mSource.setInfoForCategory(
                 TEST_CATEGORY, new CategoryInfoBuilder(TEST_CATEGORY).showIfEmpty().build());
 
-        when(mUiDelegate.getSuggestionsSource()).thenReturn(mSource);
-        when(mUiDelegate.getEventReporter()).thenReturn(mock(SuggestionsEventReporter.class));
-        when(mUiDelegate.getSuggestionsRanker()).thenReturn(mock(SuggestionsRanker.class));
-
+        resetUiDelegate();
         reloadNtp();
     }
 
@@ -346,7 +349,7 @@ public class NewTabPageAdapterTest {
 
         // Add another suggestion.
         suggestions.add(new SnippetArticle(TEST_CATEGORY, "https://site.com/url3", "title3", "pub3",
-                "txt3", "https://site.com/url3", 0, 0, 0));
+                "txt3", "https://site.com/url3", 0, 0, 0, false));
 
         // When the provider is removed, we should not be able to load suggestions. The UI should
         // stay the same though.
@@ -887,28 +890,26 @@ public class NewTabPageAdapterTest {
     @Test
     @Feature({"Ntp"})
     public void testSigninPromo() {
+        @CategoryInt
+        final int remoteCategory = KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY;
+
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         when(mMockSigninManager.isSignedInOnNative()).thenReturn(false);
-        ArgumentCaptor<DestructionObserver> observers =
-                ArgumentCaptor.forClass(DestructionObserver.class);
-
-        doNothing().when(mUiDelegate).addDestructionObserver(observers.capture());
-
+        mSource.setRemoteSuggestionsEnabled(true);
+        resetUiDelegate();
         reloadNtp();
+
         assertTrue(isSignInPromoVisible());
 
-        // Note: As currently implemented, these two variables should point to the same object, a
+        // Note: As currently implemented, these variables should point to the same object, a
         // SignInPromo.SigninObserver
-        SignInStateObserver signInStateObserver = null;
-        SignInAllowedObserver signInAllowedObserver = null;
-        for (DestructionObserver observer : observers.getAllValues()) {
-            if (observer instanceof SignInStateObserver) {
-                signInStateObserver = (SignInStateObserver) observer;
-            }
-            if (observer instanceof SignInAllowedObserver) {
-                signInAllowedObserver = (SignInAllowedObserver) observer;
-            }
-        }
+        List<DestructionObserver> observers = getDestructionObserver(mUiDelegate);
+        SignInStateObserver signInStateObserver =
+                findFirstInstanceOf(observers, SignInStateObserver.class);
+        SignInAllowedObserver signInAllowedObserver =
+                findFirstInstanceOf(observers, SignInAllowedObserver.class);
+        SuggestionsSource.Observer suggestionsObserver =
+                findFirstInstanceOf(observers, SuggestionsSource.Observer.class);
 
         signInStateObserver.onSignedIn();
         assertFalse(isSignInPromoVisible());
@@ -922,6 +923,15 @@ public class NewTabPageAdapterTest {
 
         when(mMockSigninManager.isSignInAllowed()).thenReturn(true);
         signInAllowedObserver.onSignInAllowedChanged();
+        assertTrue(isSignInPromoVisible());
+
+        mSource.setRemoteSuggestionsEnabled(false);
+        suggestionsObserver.onCategoryStatusChanged(
+                remoteCategory, CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        assertFalse(isSignInPromoVisible());
+
+        mSource.setRemoteSuggestionsEnabled(true);
+        suggestionsObserver.onCategoryStatusChanged(remoteCategory, CategoryStatus.AVAILABLE);
         assertTrue(isSignInPromoVisible());
     }
 
@@ -955,17 +965,8 @@ public class NewTabPageAdapterTest {
     @Test
     @Feature({"Ntp"})
     public void testAllDismissedVisibility() {
-        ArgumentCaptor<DestructionObserver> observers =
-                ArgumentCaptor.forClass(DestructionObserver.class);
-
-        verify(mUiDelegate, atLeastOnce()).addDestructionObserver(observers.capture());
-
-        SigninObserver signinObserver = null;
-        for (DestructionObserver observer : observers.getAllValues()) {
-            if (observer instanceof SigninObserver) {
-                signinObserver = (SigninObserver) observer;
-            }
-        }
+        SigninObserver signinObserver =
+                findFirstInstanceOf(getDestructionObserver(mUiDelegate), SigninObserver.class);
 
         @SuppressWarnings("unchecked")
         Callback<String> itemDismissedCallback = mock(Callback.class);
@@ -1040,8 +1041,30 @@ public class NewTabPageAdapterTest {
         assertEquals(RecyclerView.NO_POSITION,
                 mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
 
+        // Disabling remote suggestions should remove both the promo and the AllDismissed item
+        mSource.setRemoteSuggestionsEnabled(false);
+        signinObserver.onCategoryStatusChanged(
+                KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY,
+                CategoryStatus.CATEGORY_EXPLICITLY_DISABLED);
+        // Adapter content:
+        // Idx | Item
+        // ----|--------------------
+        // 0   | Above-the-fold
+        assertEquals(
+                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.FOOTER));
+        assertEquals(
+                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.SPACING));
+        assertEquals(RecyclerView.NO_POSITION,
+                mAdapter.getFirstPositionForType(ItemViewType.ALL_DISMISSED));
+        assertEquals(
+                RecyclerView.NO_POSITION, mAdapter.getFirstPositionForType(ItemViewType.PROMO));
+        assertEquals(1, mAdapter.getItemCount());
+
         // Prepare some suggestions. They should not load because the category is dismissed on
         // the current NTP.
+        mSource.setRemoteSuggestionsEnabled(true);
+        signinObserver.onCategoryStatusChanged(
+                KnownCategories.REMOTE_CATEGORIES_OFFSET + TEST_CATEGORY, CategoryStatus.AVAILABLE);
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.AVAILABLE);
         mSource.setSuggestionsForCategory(TEST_CATEGORY, createDummySuggestions(1, TEST_CATEGORY));
         mSource.setInfoForCategory(TEST_CATEGORY, new CategoryInfoBuilder(TEST_CATEGORY).build());
@@ -1132,10 +1155,17 @@ public class NewTabPageAdapterTest {
         return new SectionDescriptor(Collections.<SnippetArticle>emptyList());
     }
 
+    private void resetUiDelegate() {
+        reset(mUiDelegate);
+        when(mUiDelegate.getSuggestionsSource()).thenReturn(mSource);
+        when(mUiDelegate.getEventReporter()).thenReturn(mock(SuggestionsEventReporter.class));
+        when(mUiDelegate.getSuggestionsRanker()).thenReturn(mock(SuggestionsRanker.class));
+    }
+
     private void reloadNtp() {
         mAdapter = new NewTabPageAdapter(mUiDelegate, mock(View.class), makeUiConfig(),
-                mOfflinePageBridge, mock(ContextMenuManager.class), /* tileGroupDelegate =
-                */ null);
+                mOfflinePageBridge, mock(ContextMenuManager.class),
+                /* tileGroupDelegate = */ null, /* suggestionsCarousel = */ null);
         mAdapter.refreshSuggestions();
     }
 
@@ -1145,5 +1175,26 @@ public class NewTabPageAdapterTest {
 
     private int getCategory(TreeNode item) {
         return ((SuggestionsSection) item).getCategory();
+    }
+
+    /**
+     * Note: Currently the observers need to be re-registered to be returned again if this method
+     * has been called, as it relies on argument captors that don't repeatedly capture individual
+     * calls.
+     * @return The currently registered destruction observers.
+     */
+    private List<DestructionObserver> getDestructionObserver(SuggestionsUiDelegate delegate) {
+        ArgumentCaptor<DestructionObserver> observers =
+                ArgumentCaptor.forClass(DestructionObserver.class);
+        verify(delegate, atLeastOnce()).addDestructionObserver(observers.capture());
+        return observers.getAllValues();
+    }
+
+    @SuppressWarnings("unchecked")
+    private static <T> T findFirstInstanceOf(Collection<?> collection, Class<T> clazz) {
+        for (Object item : collection) {
+            if (clazz.isAssignableFrom(item.getClass())) return (T) item;
+        }
+        return null;
     }
 }

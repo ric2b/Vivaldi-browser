@@ -28,6 +28,7 @@
 #include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/UseCounter.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/loader/DocumentLoader.h"
 #include "core/loader/FrameLoader.h"
@@ -105,30 +106,31 @@ void XSSAuditorDelegate::DidBlockScript(const XSSInfo& xss_info) {
   DCHECK(IsMainThread());
 
   UseCounter::Count(document_, xss_info.did_block_entire_page_
-                                   ? UseCounter::kXSSAuditorBlockedEntirePage
-                                   : UseCounter::kXSSAuditorBlockedScript);
+                                   ? WebFeature::kXSSAuditorBlockedEntirePage
+                                   : WebFeature::kXSSAuditorBlockedScript);
 
   document_->AddConsoleMessage(ConsoleMessage::Create(
       kJSMessageSource, kErrorMessageLevel, xss_info.BuildConsoleError()));
 
-  FrameLoader& frame_loader = document_->GetFrame()->Loader();
+  LocalFrame* local_frame = document_->GetFrame();
+  FrameLoader& frame_loader = local_frame->Loader();
   if (xss_info.did_block_entire_page_)
     frame_loader.StopAllLoaders();
 
-  if (!did_send_notifications_ && frame_loader.Client()) {
+  if (!did_send_notifications_ && local_frame->Client()) {
     did_send_notifications_ = true;
 
-    frame_loader.Client()->DidDetectXSS(document_->Url(),
+    local_frame->Client()->DidDetectXSS(document_->Url(),
                                         xss_info.did_block_entire_page_);
 
     if (!report_url_.IsEmpty())
-      PingLoader::SendViolationReport(document_->GetFrame(), report_url_,
+      PingLoader::SendViolationReport(local_frame, report_url_,
                                       GenerateViolationReport(xss_info),
                                       PingLoader::kXSSAuditorViolationReport);
   }
 
   if (xss_info.did_block_entire_page_) {
-    document_->GetFrame()->GetNavigationScheduler().SchedulePageBlock(
+    local_frame->GetNavigationScheduler().SchedulePageBlock(
         document_, ResourceError::BLOCKED_BY_XSS_AUDITOR);
   }
 }

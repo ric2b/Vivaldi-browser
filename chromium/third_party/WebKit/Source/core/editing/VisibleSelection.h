@@ -61,6 +61,12 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   // Note: |create()| should be used only by |createVisibleSelection|.
   static VisibleSelectionTemplate Create(const SelectionTemplate<Strategy>&);
 
+  // Note: |CreateWithGranularity()| should be used only by
+  // |CreateVisibleSelectionWithGranularity()|.
+  static VisibleSelectionTemplate CreateWithGranularity(
+      const SelectionTemplate<Strategy>&,
+      TextGranularity);
+
   SelectionType GetSelectionType() const { return selection_type_; }
 
   TextAffinity Affinity() const { return affinity_; }
@@ -69,7 +75,7 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   PositionTemplate<Strategy> Base() const { return base_; }
   PositionTemplate<Strategy> Extent() const { return extent_; }
   PositionTemplate<Strategy> Start() const { return start_; }
-  PositionTemplate<Strategy> end() const { return end_; }
+  PositionTemplate<Strategy> End() const { return end_; }
 
   VisiblePositionTemplate<Strategy> VisibleStart() const {
     return CreateVisiblePosition(
@@ -101,17 +107,17 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   bool IsCaret() const { return GetSelectionType() == kCaretSelection; }
   bool IsRange() const { return GetSelectionType() == kRangeSelection; }
   bool IsNonOrphanedRange() const {
-    return IsRange() && !Start().IsOrphan() && !end().IsOrphan();
+    return IsRange() && !Start().IsOrphan() && !End().IsOrphan();
   }
   bool IsNonOrphanedCaretOrRange() const {
-    return !IsNone() && !Start().IsOrphan() && !end().IsOrphan();
+    return !IsNone() && !Start().IsOrphan() && !End().IsOrphan();
   }
 
   // True if base() <= extent().
   bool IsBaseFirst() const { return base_is_first_; }
   bool IsDirectional() const { return is_directional_; }
 
-  void AppendTrailingWhitespace();
+  VisibleSelectionTemplate<Strategy> AppendTrailingWhitespace() const;
 
   // TODO(yosin) Most callers probably don't want these functions, but
   // are using them for historical reasons. |toNormalizedEphemeralRange()|
@@ -125,8 +131,14 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   bool IsContentRichlyEditable() const;
 
   bool IsValidFor(const Document&) const;
-  void SetWithoutValidation(const PositionTemplate<Strategy>&,
-                            const PositionTemplate<Strategy>&);
+
+  // TODO(editing-dev): |CreateWithoutValidationDeprecated()| is allowed
+  // only to use in |TypingCommand| to remove part of grapheme cluster.
+  // Note: |base| and |extent| can be disconnect position.
+  static VisibleSelectionTemplate<Strategy> CreateWithoutValidationDeprecated(
+      const PositionTemplate<Strategy>& base,
+      const PositionTemplate<Strategy>& extent,
+      TextAffinity);
 
   DECLARE_TRACE();
 
@@ -138,13 +150,11 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
  private:
   friend class SelectionAdjuster;
 
-  VisibleSelectionTemplate(const SelectionTemplate<Strategy>&);
+  VisibleSelectionTemplate(const SelectionTemplate<Strategy>&, TextGranularity);
 
-  void Validate(TextGranularity = kCharacterGranularity);
+  void Validate(const SelectionTemplate<Strategy>&, TextGranularity);
 
-  // Support methods for validate()
-  void SetBaseAndExtentToDeepEquivalents();
-  void AdjustSelectionToAvoidCrossingShadowBoundaries();
+  // Support methods for Validate()
   void AdjustSelectionToAvoidCrossingEditingBoundaries();
   void UpdateSelectionType();
 
@@ -170,13 +180,6 @@ class CORE_TEMPLATE_CLASS_EXPORT VisibleSelectionTemplate {
   // Non-directional ignores m_baseIsFirst and selection always extends on shift
   // + arrow key.
   bool is_directional_ : 1;
-
-  TextGranularity granularity_;
-  // |updateIfNeeded()| uses |m_hasTrailingWhitespace| for word granularity.
-  // |m_hasTrailingWhitespace| is set by |appendTrailingWhitespace()|.
-  // TODO(yosin): Once we unify start/end and base/extent, we should get rid
-  // of |m_hasTrailingWhitespace|.
-  bool has_trailing_whitespace_ : 1;
 };
 
 extern template class CORE_EXTERN_TEMPLATE_EXPORT
@@ -192,6 +195,14 @@ CORE_EXPORT VisibleSelection CreateVisibleSelection(const SelectionInDOMTree&);
 CORE_EXPORT VisibleSelectionInFlatTree
 CreateVisibleSelection(const SelectionInFlatTree&);
 
+CORE_EXPORT VisibleSelection
+CreateVisibleSelectionWithGranularity(const SelectionInDOMTree&,
+                                      TextGranularity);
+
+CORE_EXPORT VisibleSelectionInFlatTree
+CreateVisibleSelectionWithGranularity(const SelectionInFlatTree&,
+                                      TextGranularity);
+
 // We don't yet support multi-range selections, so we only ever have one range
 // to return.
 CORE_EXPORT EphemeralRange FirstEphemeralRangeOf(const VisibleSelection&);
@@ -199,6 +210,15 @@ CORE_EXPORT EphemeralRange FirstEphemeralRangeOf(const VisibleSelection&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&, const VisibleSelection&);
 CORE_EXPORT std::ostream& operator<<(std::ostream&,
                                      const VisibleSelectionInFlatTree&);
+
+PositionInFlatTree ComputeStartRespectingGranularity(
+    const PositionInFlatTreeWithAffinity&,
+    TextGranularity);
+
+PositionInFlatTree ComputeEndRespectingGranularity(
+    const PositionInFlatTree&,
+    const PositionInFlatTreeWithAffinity&,
+    TextGranularity);
 
 }  // namespace blink
 

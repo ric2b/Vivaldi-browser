@@ -22,7 +22,7 @@ class Rect;
 
 namespace ash {
 class LockWindowState;
-class MaximizeModeWindowState;
+class TabletModeWindowState;
 
 namespace mojom {
 enum class WindowPinType;
@@ -310,7 +310,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // active. This should be done before a resizer gets created.
   void CreateDragDetails(const gfx::Point& point_in_parent,
                          int window_component,
-                         aura::client::WindowMoveSource source);
+                         ::wm::WindowMoveSource source);
 
   // Deletes and clears a pointer to DragDetails. This should be done when the
   // resizer gets destroyed.
@@ -326,7 +326,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
  private:
   friend class DefaultState;
   friend class ash::LockWindowState;
-  friend class ash::MaximizeModeWindowState;
+  friend class ash::TabletModeWindowState;
   friend WindowState* GetWindowState(aura::Window*);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest, CrossFadeToBounds);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest,

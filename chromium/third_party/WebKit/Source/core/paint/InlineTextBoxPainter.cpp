@@ -4,9 +4,11 @@
 
 #include "core/paint/InlineTextBoxPainter.h"
 
-#include "core/editing/CompositionUnderline.h"
+#include "build/build_config.h"
 #include "core/editing/Editor.h"
+#include "core/editing/markers/CompositionMarker.h"
 #include "core/editing/markers/DocumentMarkerController.h"
+#include "core/editing/markers/TextMatchMarker.h"
 #include "core/frame/LocalFrame.h"
 #include "core/layout/LayoutTextCombine.h"
 #include "core/layout/LayoutTheme.h"
@@ -21,6 +23,7 @@
 #include "platform/graphics/paint/DrawingRecorder.h"
 #include "platform/graphics/paint/PaintRecord.h"
 #include "platform/graphics/paint/PaintRecorder.h"
+#include "platform/graphics/paint/PaintShader.h"
 #include "platform/wtf/Optional.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 
@@ -151,15 +154,6 @@ bool InlineTextBoxPainter::PaintsMarkerHighlights(
              layout_object.GetNode());
 }
 
-static bool PaintsCompositionMarkers(const LayoutObject& layout_object) {
-  return layout_object.GetNode() &&
-         layout_object.GetDocument()
-                 .Markers()
-                 .MarkersFor(layout_object.GetNode(),
-                             DocumentMarker::kComposition)
-                 .size() > 0;
-}
-
 static void PrepareContextForDecoration(
     GraphicsContext& context,
     GraphicsContextStateSaver& state_saver,
@@ -226,11 +220,12 @@ static void PaintDecorationsExceptLineThrough(
 
   for (const AppliedTextDecoration& decoration : decorations) {
     TextDecoration lines = decoration.Lines();
+    bool has_underline = EnumHasFlags(lines, TextDecoration::kUnderline);
+    bool has_overline = EnumHasFlags(lines, TextDecoration::kOverline);
     if (flip_underline_and_overline) {
-      lines ^= (TextDecoration::kUnderline | TextDecoration::kOverline);
+      std::swap(has_underline, has_overline);
     }
-    if (EnumHasFlags(lines, TextDecoration::kUnderline) &&
-        decoration_info.font_data) {
+    if (has_underline && decoration_info.font_data) {
       const int underline_offset = ComputeUnderlineOffset(
           underline_position, *decoration_info.style,
           decoration_info.font_data->GetFontMetrics(), &box, decorating_box,
@@ -239,7 +234,7 @@ static void PaintDecorationsExceptLineThrough(
           context, decoration_info, decoration, underline_offset,
           decoration_info.double_offset);
     }
-    if (EnumHasFlags(lines, TextDecoration::kOverline)) {
+    if (has_overline) {
       const int overline_offset = ComputeUnderlineOffsetForUnder(
           *decoration_info.style, &box, decorating_box,
           decoration_info.thickness,
@@ -287,9 +282,9 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
   bool is_printing = paint_info.IsPrinting();
 
   // Determine whether or not we're selected.
-  bool have_selection = !is_printing &&
-                        paint_info.phase != kPaintPhaseTextClip &&
-                        inline_text_box_.GetSelectionState() != SelectionNone;
+  bool have_selection =
+      !is_printing && paint_info.phase != kPaintPhaseTextClip &&
+      inline_text_box_.GetSelectionState() != SelectionState::kNone;
   if (!have_selection && paint_info.phase == kPaintPhaseSelection) {
     // When only painting the selection, don't bother to paint if there is none.
     return;
@@ -329,8 +324,12 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
                                              inline_text_box_.LogicalHeight()));
 
   int length = inline_text_box_.Len();
-  StringView string = StringView(inline_text_box_.GetLineLayoutItem().GetText(),
-                                 inline_text_box_.Start(), length);
+  const String& layout_item_string =
+      inline_text_box_.GetLineLayoutItem().GetText();
+  // TODO(szager): Figure out why this CHECK sometimes fails, it shouldn't.
+  CHECK(inline_text_box_.Start() + length <= layout_item_string.length());
+  StringView string =
+      StringView(layout_item_string, inline_text_box_.Start(), length);
   int maximum_length = inline_text_box_.GetLineLayoutItem().TextLength() -
                        inline_text_box_.Start();
 
@@ -399,9 +398,7 @@ void InlineTextBoxPainter::Paint(const PaintInfo& paint_info,
       paint_info.phase != kPaintPhaseTextClip && !is_printing) {
     PaintDocumentMarkers(paint_info, box_origin, style_to_use, font,
                          DocumentMarkerPaintPhase::kBackground);
-
-    const LayoutObject& text_box_layout_object = InlineLayoutObject();
-    if (have_selection && !PaintsCompositionMarkers(text_box_layout_object)) {
+    if (have_selection) {
       if (combined_text)
         PaintSelection<InlineTextBoxPainter::PaintOptions::kCombinedText>(
             context, box_rect, style_to_use, font, selection_style.fill_color,
@@ -547,15 +544,14 @@ bool InlineTextBoxPainter::ShouldPaintTextBox(const PaintInfo& paint_info) {
   return true;
 }
 
-unsigned InlineTextBoxPainter::UnderlinePaintStart(
-    const CompositionUnderline& underline) {
+unsigned InlineTextBoxPainter::MarkerPaintStart(const DocumentMarker& marker) {
   DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
   DCHECK(inline_text_box_.Len());
 
   // Start painting at the beginning of the text or the specified underline
   // start offset, whichever is higher.
   unsigned paint_start =
-      std::max(inline_text_box_.Start(), underline.StartOffset());
+      std::max(inline_text_box_.Start(), marker.StartOffset());
   // Cap the maximum paint start to (if no truncation) the last character,
   // else the last character before the truncation ellipsis.
   return std::min(paint_start, (inline_text_box_.Truncation() == kCNoTruncation)
@@ -564,8 +560,7 @@ unsigned InlineTextBoxPainter::UnderlinePaintStart(
                                          inline_text_box_.Truncation() - 1);
 }
 
-unsigned InlineTextBoxPainter::UnderlinePaintEnd(
-    const CompositionUnderline& underline) {
+unsigned InlineTextBoxPainter::MarkerPaintEnd(const DocumentMarker& marker) {
   DCHECK(inline_text_box_.Truncation() != kCFullTruncation);
   DCHECK(inline_text_box_.Len());
 
@@ -573,7 +568,7 @@ unsigned InlineTextBoxPainter::UnderlinePaintEnd(
   // offset, whichever is lower.
   unsigned paint_end = std::min(
       inline_text_box_.end() + 1,
-      underline.EndOffset());  // end() points at the last char, not past it.
+      marker.EndOffset());  // end() points at the last char, not past it.
   // Cap the maximum paint end to (if no truncation) one past the last
   // character, else one past the last character before the truncation
   // ellipsis.
@@ -583,7 +578,7 @@ unsigned InlineTextBoxPainter::UnderlinePaintEnd(
                                        inline_text_box_.Truncation());
 }
 
-void InlineTextBoxPainter::PaintSingleCompositionBackgroundRun(
+void InlineTextBoxPainter::PaintSingleMarkerBackgroundRun(
     GraphicsContext& context,
     const LayoutPoint& box_origin,
     const ComputedStyle& style,
@@ -650,9 +645,8 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
         break;
       case DocumentMarker::kTextMatch:
       case DocumentMarker::kComposition:
+      case DocumentMarker::kActiveSuggestion:
         break;
-      default:
-        continue;
     }
 
     if (marker.EndOffset() <= inline_text_box_.Start()) {
@@ -677,24 +671,27 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
                                              marker, style, font, true);
         break;
       case DocumentMarker::kTextMatch:
-        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
+        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground) {
           inline_text_box_.PaintTextMatchMarkerBackground(
-              paint_info, box_origin, marker, style, font);
-        else
+              paint_info, box_origin, ToTextMatchMarker(marker), style, font);
+        } else {
           inline_text_box_.PaintTextMatchMarkerForeground(
-              paint_info, box_origin, marker, style, font);
+              paint_info, box_origin, ToTextMatchMarker(marker), style, font);
+        }
         break;
-      case DocumentMarker::kComposition: {
-        CompositionUnderline underline(marker.StartOffset(), marker.EndOffset(),
-                                       marker.UnderlineColor(), marker.Thick(),
-                                       marker.BackgroundColor());
-        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground)
-          PaintSingleCompositionBackgroundRun(
-              paint_info.context, box_origin, style, font,
-              underline.BackgroundColor(), UnderlinePaintStart(underline),
-              UnderlinePaintEnd(underline));
-        else
-          PaintCompositionUnderline(paint_info.context, box_origin, underline);
+      case DocumentMarker::kComposition:
+      case DocumentMarker::kActiveSuggestion: {
+        const StyleableMarker& styleable_marker = ToStyleableMarker(marker);
+        if (marker_paint_phase == DocumentMarkerPaintPhase::kBackground) {
+          PaintSingleMarkerBackgroundRun(paint_info.context, box_origin, style,
+                                         font,
+                                         styleable_marker.BackgroundColor(),
+                                         MarkerPaintStart(styleable_marker),
+                                         MarkerPaintEnd(styleable_marker));
+        } else {
+          PaintStyleableMarkerUnderline(paint_info.context, box_origin,
+                                        styleable_marker);
+        }
       } break;
       default:
         NOTREACHED();
@@ -704,15 +701,18 @@ void InlineTextBoxPainter::PaintDocumentMarkers(
 
 namespace {
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 
 static const float kMarkerWidth = 4;
 static const float kMarkerHeight = 2;
 
 sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
-  SkColor color = (marker_type == DocumentMarker::kGrammar)
-                      ? SkColorSetRGB(0xC0, 0xC0, 0xC0)
-                      : SK_ColorRED;
+  SkColor color =
+      (marker_type == DocumentMarker::kGrammar)
+          ? LayoutTheme::GetTheme().PlatformGrammarMarkerUnderlineColor().Rgb()
+          : LayoutTheme::GetTheme()
+                .PlatformSpellingMarkerUnderlineColor()
+                .Rgb();
 
   // Record the path equivalent to this legacy pattern:
   //   X o   o X o   o X
@@ -745,15 +745,18 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
   return recorder.finishRecordingAsPicture();
 }
 
-#else  // OS(MACOSX)
+#else  // defined(OS_MACOSX)
 
 static const float kMarkerWidth = 4;
 static const float kMarkerHeight = 3;
 
 sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
-  SkColor color = (marker_type == DocumentMarker::kGrammar)
-                      ? SkColorSetRGB(0x6B, 0x6B, 0x6B)
-                      : SkColorSetRGB(0xFB, 0x2D, 0x1D);
+  SkColor color =
+      (marker_type == DocumentMarker::kGrammar)
+          ? LayoutTheme::GetTheme().PlatformGrammarMarkerUnderlineColor().Rgb()
+          : LayoutTheme::GetTheme()
+                .PlatformSpellingMarkerUnderlineColor()
+                .Rgb();
 
   // Match the artwork used by the Mac.
   static const float kR = 1.5f;
@@ -774,7 +777,7 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
   PaintFlags flags;
   flags.setAntiAlias(true);
   flags.setColor(color);
-  flags.setShader(SkGradientShader::MakeLinear(
+  flags.setShader(PaintShader::MakeLinearGradient(
       pts, colors, nullptr, ARRAY_SIZE(colors), SkShader::kClamp_TileMode));
   PaintRecorder recorder;
   recorder.beginRecording(kMarkerWidth, kMarkerHeight);
@@ -783,7 +786,7 @@ sk_sp<PaintRecord> RecordMarker(DocumentMarker::MarkerType marker_type) {
   return recorder.finishRecordingAsPicture();
 }
 
-#endif  // OS(MACOSX)
+#endif  // defined(OS_MACOSX)
 
 void DrawDocumentMarker(GraphicsContext& context,
                         const FloatPoint& pt,
@@ -805,7 +808,7 @@ void DrawDocumentMarker(GraphicsContext& context,
   SkScalar origin_x = WebCoreFloatToSkScalar(pt.X());
   SkScalar origin_y = WebCoreFloatToSkScalar(pt.Y());
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // Make sure to draw only complete dots, and finish inside the marked text.
   width -= fmodf(width, kMarkerWidth * zoom);
 #else
@@ -818,9 +821,9 @@ void DrawDocumentMarker(GraphicsContext& context,
 
   PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setShader(WrapSkShader(MakePaintShaderRecord(
+  flags.setShader(PaintShader::MakePaintRecord(
       sk_ref_sp(marker), FloatRect(0, 0, kMarkerWidth, kMarkerHeight),
-      SkShader::kRepeat_TileMode, SkShader::kClamp_TileMode, &local_matrix)));
+      SkShader::kRepeat_TileMode, SkShader::kClamp_TileMode, &local_matrix));
 
   // Apply the origin translation as a global transform.  This ensures that the
   // shader local matrix depends solely on zoom => Skia can reuse the same
@@ -1033,18 +1036,18 @@ void InlineTextBoxPainter::ExpandToIncludeNewlineForSelection(
   rect.Expand(outsets);
 }
 
-void InlineTextBoxPainter::PaintCompositionUnderline(
+void InlineTextBoxPainter::PaintStyleableMarkerUnderline(
     GraphicsContext& context,
     const LayoutPoint& box_origin,
-    const CompositionUnderline& underline) {
-  if (underline.GetColor() == Color::kTransparent)
+    const StyleableMarker& marker) {
+  if (marker.UnderlineColor() == Color::kTransparent)
     return;
 
   if (inline_text_box_.Truncation() == kCFullTruncation)
     return;
 
-  unsigned paint_start = UnderlinePaintStart(underline);
-  unsigned paint_end = UnderlinePaintEnd(underline);
+  unsigned paint_start = MarkerPaintStart(marker);
+  unsigned paint_end = MarkerPaintEnd(marker);
   DCHECK_LT(paint_start, paint_end);
 
   // start of line to draw
@@ -1097,7 +1100,7 @@ void InlineTextBoxPainter::PaintCompositionUnderline(
           .PrimaryFont();
   DCHECK(font_data);
   int baseline = font_data ? font_data->GetFontMetrics().Ascent() : 0;
-  if (underline.Thick() && inline_text_box_.LogicalHeight() - baseline >= 2)
+  if (marker.IsThick() && inline_text_box_.LogicalHeight() - baseline >= 2)
     line_thickness = 2;
 
   // We need to have some space between underlines of subsequent clauses,
@@ -1107,7 +1110,7 @@ void InlineTextBoxPainter::PaintCompositionUnderline(
   start += 1;
   width -= 2;
 
-  context.SetStrokeColor(underline.GetColor());
+  context.SetStrokeColor(marker.UnderlineColor());
   context.SetStrokeThickness(line_thickness);
   context.DrawLineForText(
       FloatPoint(
@@ -1120,7 +1123,7 @@ void InlineTextBoxPainter::PaintCompositionUnderline(
 void InlineTextBoxPainter::PaintTextMatchMarkerForeground(
     const PaintInfo& paint_info,
     const LayoutPoint& box_origin,
-    const DocumentMarker& marker,
+    const TextMatchMarker& marker,
     const ComputedStyle& style,
     const Font& font) {
   if (!InlineLayoutObject()
@@ -1162,7 +1165,7 @@ void InlineTextBoxPainter::PaintTextMatchMarkerForeground(
 void InlineTextBoxPainter::PaintTextMatchMarkerBackground(
     const PaintInfo& paint_info,
     const LayoutPoint& box_origin,
-    const DocumentMarker& marker,
+    const TextMatchMarker& marker,
     const ComputedStyle& style,
     const Font& font) {
   if (!LineLayoutAPIShim::LayoutObjectFrom(inline_text_box_.GetLineLayoutItem())

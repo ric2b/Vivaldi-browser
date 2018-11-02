@@ -40,17 +40,20 @@
 #include "content/common/frame_message_enums.h"
 #include "content/common/frame_replication_state.h"
 #include "content/common/image_downloader/image_downloader.mojom.h"
+#include "content/common/input/input_handler.mojom.h"
 #include "content/common/navigation_params.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/common/javascript_dialog_type.h"
 #include "content/public/common/previews_state.h"
-#include "device/wake_lock/public/interfaces/wake_lock_context.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "media/mojo/interfaces/interface_factory.mojom.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "mojo/public/cpp/system/data_pipe.h"
 #include "net/http/http_response_headers.h"
+#include "services/device/public/interfaces/wake_lock_context.mojom.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
+#include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "third_party/WebKit/public/platform/modules/bluetooth/web_bluetooth.mojom.h"
 #include "third_party/WebKit/public/web/WebTextDirection.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
@@ -87,6 +90,7 @@ class Range;
 namespace content {
 class AssociatedInterfaceProviderImpl;
 class AssociatedInterfaceRegistryImpl;
+class LegacyIPCFrameInputHandler;
 class FeaturePolicy;
 class FrameTree;
 class FrameTreeNode;
@@ -192,6 +196,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void ResumeBlockedRequestsForFrame() override;
   void DisableBeforeUnloadHangMonitorForTesting() override;
   bool IsBeforeUnloadHangMonitorDisabledForTesting() override;
+  bool GetSuddenTerminationDisablerState(
+      blink::WebSuddenTerminationDisablerType disabler_type) override;
+
   bool IsFeatureEnabled(blink::WebFeaturePolicyFeature feature) override;
 
   // mojom::FrameHostInterfaceBroker
@@ -231,6 +238,8 @@ class CONTENT_EXPORT RenderFrameHostImpl
       GURL* blocked_url,
       SourceLocation* source_location) const override;
 
+  mojom::FrameInputHandler* GetFrameInputHandler();
+
   // Creates a RenderFrame in the renderer process.
   bool CreateRenderFrame(int proxy_routing_id,
                          int opener_routing_id,
@@ -245,6 +254,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Called for renderer-created windows to resume requests from this frame,
   // after they are blocked in RenderWidgetHelper::CreateNewWindow.
   void Init();
+
+  // Returns true if the frame recently plays an audio.
+  bool is_audible() const { return is_audible_; }
+  void OnAudibleStateChanged(bool is_audible);
 
   int routing_id() const { return routing_id_; }
 
@@ -448,21 +461,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   void AdvanceFocus(blink::WebFocusType type,
                     RenderFrameProxyHost* source_proxy);
 
-  // Deletes the current selection plus the specified number of characters
-  // before and after the selection or caret.
-  void ExtendSelectionAndDelete(size_t before, size_t after);
-
-  // Deletes text before and after the current cursor position, excluding the
-  // selection. The lengths are supplied in Java chars (UTF-16 Code Unit), not
-  // in code points or in glyphs.
-  void DeleteSurroundingText(size_t before, size_t after);
-
-  // Deletes text before and after the current cursor position, excluding the
-  // selection. The lengths are supplied in code points, not in Java chars
-  // (UTF-16 Code Unit) or in glyphs. Do nothing if there are one or more
-  // invalid surrogate pairs in the requested range.
-  void DeleteSurroundingTextInCodePoints(int before, int after);
-
   // Notifies the RenderFrame that the JavaScript message that was shown was
   // closed by the user.
   void JavaScriptDialogClosed(IPC::Message* reply_msg,
@@ -537,12 +535,17 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // PlzNavigate: Indicates that a navigation is ready to commit and can be
   // handled by this RenderFrame.
-  void CommitNavigation(ResourceResponse* response,
-                        std::unique_ptr<StreamHandle> body,
-                        mojo::ScopedDataPipeConsumerHandle handle,
-                        const CommonNavigationParams& common_params,
-                        const RequestNavigationParams& request_params,
-                        bool is_view_source);
+  // |subresource_url_loader_factory_info| is used in network service land to
+  // allow factories interested in handling subresource requests to the
+  // renderer. E.g. AppCache.
+  void CommitNavigation(
+      ResourceResponse* response,
+      std::unique_ptr<StreamHandle> body,
+      mojo::ScopedDataPipeConsumerHandle handle,
+      const CommonNavigationParams& common_params,
+      const RequestNavigationParams& request_params,
+      bool is_view_source,
+      mojom::URLLoaderFactoryPtrInfo subresource_url_loader_factory_info);
 
   // PlzNavigate
   // Indicates that a navigation failed and that this RenderFrame should display
@@ -588,6 +591,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
 
   // Returns the Mojo ImageDownloader service.
   const content::mojom::ImageDownloaderPtr& GetMojoImageDownloader();
+
+  // Returns the interface to the Global Resource Coordinator
+  resource_coordinator::ResourceCoordinatorInterface*
+  GetFrameResourceCoordinator() override;
 
   // Resets the loading state. Following this call, the RenderFrameHost will be
   // in a non-loading state.
@@ -646,6 +653,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Once media switches to mojo, we should be able to remove this in favor of
   // sending a mojo overlay factory.
   const base::UnguessableToken& GetOverlayRoutingToken();
+
+  const StreamHandle* stream_handle_for_testing() const {
+    return stream_handle_.get();
+  }
 
  protected:
   friend class RenderFrameHostFactory;
@@ -783,6 +794,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
                                 base::string16 text,
                                 base::string16 html);
   void OnToggleFullscreen(bool enter_fullscreen);
+  void OnSuddenTerminationDisablerChanged(
+      bool present,
+      blink::WebSuddenTerminationDisablerType disabler_type);
   void OnDidStartLoading(bool to_different_document);
   void OnDidStopLoading();
   void OnDidChangeLoadProgress(double load_progress);
@@ -864,8 +878,7 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // |body|.  It is important that the ResourceRequestBody has been validated
   // upon receipt from the renderer process to prevent it from forging access to
   // files without the user's consent.
-  void GrantFileAccessFromResourceRequestBody(
-      const ResourceRequestBodyImpl& body);
+  void GrantFileAccessFromResourceRequestBody(const ResourceRequestBody& body);
 
   void UpdatePermissionsForNavigation(
       const CommonNavigationParams& common_params,
@@ -914,27 +927,25 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Creates Web Bluetooth Service owned by the frame. Returns a raw pointer
   // to it.
   WebBluetoothServiceImpl* CreateWebBluetoothService(
-      const service_manager::BindSourceInfo& source_info,
       blink::mojom::WebBluetoothServiceRequest request);
 
   // Deletes the Web Bluetooth Service owned by the frame.
   void DeleteWebBluetoothService(
       WebBluetoothServiceImpl* web_bluetooth_service);
 
+  void CreateAudioOutputStreamFactory(
+      mojom::RendererAudioOutputStreamFactoryRequest request);
+
   void BindMediaInterfaceFactoryRequest(
-      const service_manager::BindSourceInfo& source_info,
       media::mojom::InterfaceFactoryRequest request);
 
   // Callback for connection error on the media::mojom::InterfaceFactory client.
   void OnMediaInterfaceFactoryConnectionError();
 
-  void BindWakeLockServiceRequest(
-      const service_manager::BindSourceInfo& source_info,
-      device::mojom::WakeLockServiceRequest request);
+  void BindWakeLockRequest(device::mojom::WakeLockRequest request);
 
 #if defined(OS_ANDROID)
-  void BindNFCRequest(const service_manager::BindSourceInfo& source_info,
-                      device::mojom::NFCRequest request);
+  void BindNFCRequest(device::mojom::NFCRequest request);
 #endif
 
   // service_manager::mojom::InterfaceProvider:
@@ -944,9 +955,6 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Allows tests to disable the swapout event timer to simulate bugs that
   // happen before it fires (to avoid flakiness).
   void DisableSwapOutTimerForTesting();
-
-  void OnRendererConnect(const service_manager::BindSourceInfo& local_info,
-                         const service_manager::BindSourceInfo& remote_info);
 
   void SendJavaScriptDialogReply(IPC::Message* reply_msg,
                                  bool success,
@@ -965,9 +973,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // to |url|.
   void SetLastCommittedSiteUrl(const GURL& url);
 
-  // Ensures that the upload parameters sent by the renderer process are
-  // valid and any files specified are allowed for access.
-  bool ValidateUploadParams(const CommonNavigationParams& common_params);
+  // PlzNavigate: Called when the frame has consumed the StreamHandle and it
+  // can be released.
+  void OnStreamHandleConsumed(const GURL& stream_url);
 
   // For now, RenderFrameHosts indirectly keep RenderViewHosts alive via a
   // refcount that calls Shutdown when it reaches zero.  This allows each
@@ -1157,6 +1165,10 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // Holder of Mojo connection with ImageDownloader service in RenderFrame.
   content::mojom::ImageDownloaderPtr mojo_image_downloader_;
 
+  // Holds the interface wrapper to the Global Resource Coordinator service.
+  std::unique_ptr<resource_coordinator::ResourceCoordinatorInterface>
+      frame_resource_coordinator_;
+
   // Tracks a navigation happening in this frame. Note that while there can be
   // two navigations in the same FrameTreeNode, there can only be one
   // navigation per RenderFrameHost.
@@ -1183,6 +1195,11 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // If true, then the RenderFrame has selected text.
   bool has_selection_;
 
+  // If true, then this RenderFrame has one or more audio streams with audible
+  // signal. If false, all audio streams are currently silent (or there are no
+  // audio streams).
+  bool is_audible_;
+
   // PlzNavigate: The Previews state of the last navigation. This is used during
   // history navigation of subframes to ensure that subframes navigate with the
   // same Previews status as the top-level frame.
@@ -1206,9 +1223,15 @@ class CONTENT_EXPORT RenderFrameHostImpl
       PendingNavigation;
   std::unique_ptr<PendingNavigation> pendinging_navigate_;
 
+  // Bitfield for renderer-side state that blocks fast shutdown of the frame.
+  blink::WebSuddenTerminationDisablerType
+      sudden_termination_disabler_types_enabled_ = 0;
+
   // Callback for responding when
   // |FrameHostMsg_TextSurroundingSelectionResponse| message comes.
   TextSurroundingSelectionCallback text_surrounding_selection_callback_;
+
+  UniqueAudioOutputStreamFactoryPtr audio_output_stream_factory_;
 
   // Hosts media::mojom::InterfaceFactory for the RenderFrame and forwards
   // media::mojom::InterfaceFactory calls to the remote "media" service.
@@ -1248,6 +1271,9 @@ class CONTENT_EXPORT RenderFrameHostImpl
   // TODO(alexclarke): Remove once there is a solution for stable frame IDs. See
   // crbug.com/715541
   std::string untrusted_devtools_frame_id_;
+
+  mojom::FrameInputHandlerPtr frame_input_handler_;
+  std::unique_ptr<LegacyIPCFrameInputHandler> legacy_frame_input_handler_;
 
   // NOTE: This must be the last member.
   base::WeakPtrFactory<RenderFrameHostImpl> weak_ptr_factory_;

@@ -42,6 +42,16 @@ Polymer({
 
     /** @type {?Map<string, string>} */
     focusConfig_: Object,
+
+    // <if expr="chromeos">
+    /** @private */
+    voiceInteractionFeatureEnabled_: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.getBoolean('enableVoiceInteraction');
+      },
+    }
+    // </if>
   },
 
   /** @private {?settings.SearchEnginesBrowserProxy} */
@@ -71,12 +81,22 @@ Polymer({
         'google-now-availability-changed',
         this.googleNowAvailabilityUpdate_.bind(this));
     this.browserProxy_.getGoogleNowAvailability().then(function(available) {
-        this.googleNowAvailabilityUpdate_(available);
+      this.googleNowAvailabilityUpdate_(available);
     }.bind(this));
 
     this.focusConfig_ = new Map();
-    this.focusConfig_.set(
-        settings.Route.SEARCH_ENGINES.path, '#subpage-trigger .subpage-arrow');
+    if (settings.routes.SEARCH_ENGINES) {
+      this.focusConfig_.set(
+          settings.routes.SEARCH_ENGINES.path,
+          '#engines-subpage-trigger .subpage-arrow');
+    }
+    // <if expr="chromeos">
+    if (settings.routes.GOOGLE_ASSISTANT) {
+      this.focusConfig_.set(
+          settings.routes.GOOGLE_ASSISTANT.path,
+          '#assistant-subpage-trigger .subpage-arrow');
+    }
+    // </if>
   },
 
   /** @private */
@@ -93,11 +113,19 @@ Polymer({
 
   /** @private */
   onManageSearchEnginesTap_: function() {
-    settings.navigateTo(settings.Route.SEARCH_ENGINES);
+    settings.navigateTo(settings.routes.SEARCH_ENGINES);
   },
 
+  // <if expr="chromeos">
+  /** @private */
+  onGoogleAssistantTap_: function() {
+    assert(this.voiceInteractionFeatureEnabled_);
+    settings.navigateTo(settings.routes.GOOGLE_ASSISTANT);
+  },
+  // </if>
+
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onHotwordSearchEnableChange_: function(event) {
@@ -166,8 +194,31 @@ Polymer({
     this.browserProxy_.setHotwordSearchEnabled(this.hotwordInfo_.enabled);
   },
 
+  // <if expr="chromeos">
   /**
-   * @param {Event} event
+   * @param {boolean} toggleValue
+   * @return {string}
+   * @private
+   */
+  getAssistantEnabledDisabledLabel_: function(toggleValue) {
+    return this.i18n(
+        toggleValue ? 'searchGoogleAssistantEnabled' :
+                      'searchGoogleAssistantDisabled');
+  },
+
+  /**
+   * @param {boolean} featureAvailable
+   * @param {boolean} arcEnabled
+   * @return {boolean}
+   * @private
+   */
+  showAssistantSection_: function(featureAvailable, arcEnabled) {
+    return featureAvailable && arcEnabled;
+  },
+  // </if>
+
+  /**
+   * @param {!Event} event
    * @private
    */
   doNothing_: function(event) {

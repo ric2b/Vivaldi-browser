@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">Необходима авторизация</translation>
 <translation id="2166378884831602661">Этот сайт не может обеспечить безопасное соединение</translation>
 <translation id="2230458221926704099">Чтобы устранить неполадки, проведите <ph name="BEGIN_LINK" />диагностику<ph name="END_LINK" /> подключения</translation>
-<translation id="224482879335890159">Выполните поиск по запросу <ph name="LINK" /> в Vivaldi</translation>
 <translation id="2292556288342944218">Доступ в Интернет отсутствует</translation>
 <translation id="2317259163369394535">Домен <ph name="DOMAIN" /> запрашивает имя пользователя и пароль.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Провести диагностику сети<ph name="END_LINK" /></translation>
@@ -54,7 +53,6 @@
 <translation id="3630155396527302611">Если программа входит в список тех, которым разрешён доступ к сети,
       удалите её из списка и добавьте туда снова.</translation>
 <translation id="3658742229777143148">Версия</translation>
-<translation id="3693415264595406141">Пароль:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Проверьте настройки прокси-сервера, брандмауэра и DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Если вы используете прокси-сервер...</translation>
 <translation id="3973234410852337861">Сайт <ph name="HOST_NAME" /> заблокирован</translation>
@@ -66,16 +64,17 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Проверьте настройки брандмауэра и антивирусного ПО<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Попробуйте провести диагностику сети<ph name="END_LINK" />.</translation>
 <translation id="4304224509867189079">Вход</translation>
-<translation id="4381091992796011497">Имя пользователя:</translation>
 <translation id="4432688616882109544">Ваш сертификат отклонён сайтом <ph name="HOST_NAME" /> или не был выдан.</translation>
 <translation id="4506599922270137252">Обратитесь за помощью к системному администратору</translation>
 <translation id="4522570452068850558">Подробнее</translation>
 <translation id="4558551763791394412">Попробуйте отключить расширения.</translation>
+<translation id="4611292653554630842">Войти</translation>
 <translation id="4708268264240856090">Соединение прервано</translation>
 <translation id="4722547256916164131"><ph name="BEGIN_LINK" />Запустить средства диагностики сети Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Путь к исполняемому файлу</translation>
 <translation id="4764776831041365478">Веб-страница по адресу <ph name="URL" />, возможно, временно недоступна или перемещена по новому адресу.</translation>
 <translation id="4807049035289105102">Прямо сейчас вы не можете открыть <ph name="SITE" /> потому, что сайт отправил некорректные данные. Как правило, ошибки сети или атаки злоумышленников носят временный характер, данная страница может быть доступна позже.</translation>
+<translation id="4913131542719409934">Требуется авторизация</translation>
 <translation id="5023310440958281426">Проверьте правила, установленные администратором</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Проверьте адрес прокси-сервера<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 бит)</translation>
@@ -105,17 +104,19 @@
 <translation id="6328639280570009161">Отключите предсказание сетевых действий</translation>
 <translation id="6433595998831338502">Сайт <ph name="HOST_NAME" /> не позволяет установить соединение.</translation>
 <translation id="6569060085658103619">Вы просматриваете страницу расширения</translation>
+<translation id="6657585470893396449">Пароль</translation>
 <translation id="6685834062052613830">Выйдите из учётной записи и завершите настройку</translation>
 <translation id="6711464428925977395">На прокси-сервере возникла проблема или адрес указан неверно.</translation>
 <translation id="6757797048963528358">Ваш компьютер перешёл в спящий режим.</translation>
 <translation id="6897140037006041989">User Agent</translation>
+<translation id="7090678807593890770">Выполните поиск по запросу <ph name="LINK" /> в Google</translation>
 <translation id="7210863904660874423">Сайт <ph name="HOST_NAME" /> не соответствует стандартам безопасности.</translation>
 <translation id="7353601530677266744">Командная строка</translation>
 <translation id="7419106976560586862">Путь к профилю</translation>
 <translation id="7518003948725431193">Не найдена страница для веб-адреса: <ph name="URL" /></translation>
 <translation id="7549584377607005141">Для корректного отображения веб-страницы требуются введённые ранее данные. Их можно отправить повторно, но в этом случае все действия на странице будут выполнены снова.</translation>
 <translation id="759889825892636187">Сайт <ph name="HOST_NAME" /> пока не может обработать этот запрос.</translation>
-<translation id="7716424297397655342">Не удалось загрузить сайт из кеша</translation>
+<translation id="7716424297397655342">Не удалось загрузить сайт из кэша</translation>
 <translation id="7758069387465995638">Возможно, подключение заблокировано брандмауэром или антивирусным ПО.</translation>
 <translation id="7834399512844817676">Обычно сайт <ph name="SITE" /> использует шифрование для защиты ваших данных. Но сейчас при попытке подключиться к сайту <ph name="SITE" /> были получены неверные данные авторизации. Возможно, злоумышленники пытались замаскироваться под сайт <ph name="SITE" /> или окно подключения к Wi-Fi нарушило соединение. Ваши данные по-прежнему защищены - браузер разорвал соединение до того, как произошёл обмен данными.</translation>
 <translation id="7951415247503192394">(32 бит)</translation>
@@ -127,6 +128,7 @@
 <translation id="8289355894181816810">Уточните информацию у администратора сети.</translation>
 <translation id="8332188693563227489">Доступ к <ph name="HOST_NAME" /> запрещён</translation>
 <translation id="8498891568109133222">Превышено время ожидания ответа от сайта <ph name="HOST_NAME" />.</translation>
+<translation id="8503813439785031346">Имя пользователя</translation>
 <translation id="8740359287975076522">Не удается найти &lt;abbr id="dnsDefinition"&gt;DNS-адрес&lt;/abbr&gt; сайта <ph name="HOST_NAME" />. Выполняется диагностика.</translation>
 <translation id="9001074447101275817">Прокси-сервер <ph name="DOMAIN" /> запрашивает имя пользователя и пароль.</translation>
 <translation id="9183425211371246419">Сайт <ph name="HOST_NAME" /> использует неподдерживаемый протокол.</translation>

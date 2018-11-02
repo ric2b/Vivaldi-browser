@@ -126,11 +126,23 @@ GLES2DecoderTestBase::GLES2DecoderTestBase()
       cached_depth_mask_(true),
       cached_stencil_front_mask_(static_cast<GLuint>(-1)),
       cached_stencil_back_mask_(static_cast<GLuint>(-1)),
-      shader_language_version_(100) {
+      shader_language_version_(100),
+      shader_translator_cache_(gpu_preferences_) {
   memset(immediate_buffer_, 0xEE, sizeof(immediate_buffer_));
 }
 
 GLES2DecoderTestBase::~GLES2DecoderTestBase() {}
+
+void GLES2DecoderTestBase::OnConsoleMessage(int32_t id,
+                                            const std::string& message) {}
+void GLES2DecoderTestBase::CacheShader(const std::string& key,
+                                       const std::string& shader) {}
+void GLES2DecoderTestBase::OnFenceSyncRelease(uint64_t release) {}
+bool GLES2DecoderTestBase::OnWaitSyncToken(const gpu::SyncToken&) {
+  return false;
+}
+void GLES2DecoderTestBase::OnDescheduleUntilFinished() {}
+void GLES2DecoderTestBase::OnRescheduleAfterFinished() {}
 
 void GLES2DecoderTestBase::SetUp() {
   InitState init;
@@ -196,12 +208,12 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
     feature_info = new FeatureInfo(*command_line, gpu_driver_bug_workaround);
   }
 
-  group_ = scoped_refptr<ContextGroup>(
-      new ContextGroup(gpu_preferences_, NULL, memory_tracker_,
-                       new ShaderTranslatorCache(gpu_preferences_),
-                       new FramebufferCompletenessCache, feature_info,
-                       normalized_init.bind_generates_resource, nullptr,
-                       nullptr, GpuFeatureInfo(), &discardable_manager_));
+  group_ = scoped_refptr<ContextGroup>(new ContextGroup(
+      gpu_preferences_, &mailbox_manager_, memory_tracker_,
+      &shader_translator_cache_, &framebuffer_completeness_cache_, feature_info,
+      normalized_init.bind_generates_resource, &image_manager_,
+      nullptr /* image_factory */, nullptr /* progress_reporter */,
+      GpuFeatureInfo(), &discardable_manager_));
   bool use_default_textures = normalized_init.bind_generates_resource;
 
   InSequence sequence;
@@ -230,7 +242,8 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   // We initialize the ContextGroup with a MockGLES2Decoder so that
   // we can use the ContextGroup to figure out how the real GLES2Decoder
   // will initialize itself.
-  mock_decoder_.reset(new MockGLES2Decoder());
+  command_buffer_service_.reset(new FakeCommandBufferServiceBase());
+  mock_decoder_.reset(new MockGLES2Decoder(command_buffer_service_.get()));
 
   EXPECT_TRUE(group_->Initialize(mock_decoder_.get(), init.context_type,
                                  DisallowedFeatures()));
@@ -457,7 +470,6 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
   }
 #endif
 
-  command_buffer_service_.reset(new FakeCommandBufferServiceBase());
   scoped_refptr<gpu::Buffer> buffer =
       command_buffer_service_->CreateTransferBufferHelper(kSharedBufferSize,
                                                           &shared_memory_id_);
@@ -475,7 +487,8 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
       normalized_init.lose_context_when_out_of_memory;
   attribs.context_type = init.context_type;
 
-  decoder_.reset(GLES2Decoder::Create(group_.get()));
+  decoder_.reset(
+      GLES2Decoder::Create(this, command_buffer_service_.get(), group_.get()));
   decoder_->SetIgnoreCachedStateForTest(ignore_cached_state_for_test_);
   decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
   ASSERT_TRUE(decoder_->Initialize(surface_, context_, false,
@@ -487,7 +500,6 @@ void GLES2DecoderTestBase::InitDecoderWithCommandLine(
         .WillOnce(Return(GL_NO_ERROR));
   }
   decoder_->MakeCurrent();
-  decoder_->set_command_buffer_service(command_buffer_service_.get());
   decoder_->BeginDecoding();
 
   EXPECT_CALL(*gl_, GenBuffersARB(_, _))
@@ -1172,10 +1184,12 @@ void GLES2DecoderTestBase::DoRenderbufferStorageMultisampleCHROMIUM(
     GLenum internal_format,
     GLenum gl_format,
     GLsizei width,
-    GLsizei height) {
+    GLsizei height,
+    bool expect_bind) {
   EXPECT_CALL(*gl_, GetError())
       .WillOnce(Return(GL_NO_ERROR))
       .RetiresOnSaturation();
+  EnsureRenderbufferBound(expect_bind);
   EXPECT_CALL(*gl_,
               RenderbufferStorageMultisampleEXT(
                   target, samples, gl_format, width, height))

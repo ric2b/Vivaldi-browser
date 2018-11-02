@@ -7,12 +7,15 @@
 
 #import "ios/chrome/browser/ui/settings/settings_root_collection_view_controller.h"
 
+// Controller for the About Google Chrome collection view, which allows users to
+// view open source licenses, terms of service, etc.
 @interface AboutChromeCollectionViewController
     : SettingsRootCollectionViewController
 
 - (instancetype)init NS_DESIGNATED_INITIALIZER;
 
-- (instancetype)initWithStyle:(CollectionViewControllerStyle)style
+- (instancetype)initWithLayout:(UICollectionViewLayout*)layout
+                         style:(CollectionViewControllerStyle)style
     NS_UNAVAILABLE;
 
 @end

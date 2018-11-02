@@ -13,6 +13,7 @@
 #include "base/memory/singleton.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "chrome/browser/chromeos/base/locale_util.h"
 #include "chrome/browser/chromeos/eol_notification.h"
 #include "chrome/browser/chromeos/hats/hats_notification_controller.h"
@@ -216,10 +217,6 @@ class UserSessionManager
   // Returns true if Easy unlock keys needs to be updated.
   bool NeedsToUpdateEasyUnlockKeys() const;
 
-  // Returns true if there are pending Easy unlock key operations and
-  // |callback| will be invoked when it is done.
-  bool CheckEasyUnlockKeyOps(const base::Closure& callback);
-
   void AddSessionStateObserver(chromeos::UserSessionStateObserver* observer);
   void RemoveSessionStateObserver(chromeos::UserSessionStateObserver* observer);
 
@@ -249,6 +246,10 @@ class UserSessionManager
 
   const UserContext& user_context() const { return user_context_; }
   bool has_auth_cookies() const { return has_auth_cookies_; }
+
+  const base::Time& ui_shown_time() const { return ui_shown_time_; }
+
+  void WaitForEasyUnlockKeyOpsFinished(base::OnceClosure callback);
 
   void Shutdown();
 
@@ -312,6 +313,14 @@ class UserSessionManager
   // Callback to resume profile creation after transferring auth data from
   // the authentication profile.
   void CompleteProfileCreateAfterAuthTransfer(Profile* profile);
+
+  // Asynchronously prepares TPM devices and calls FinalizePrepareProfile on UI
+  // thread.
+  void PrepareTpmDeviceAndFinalizeProfile(Profile* profile);
+
+  // Called on UI thread once Cryptohome operation completes.
+  void OnCryptohomeOperationCompleted(Profile* profile,
+                                      DBusMethodCallStatus call_status);
 
   // Finalized profile preparation.
   void FinalizePrepareProfile(Profile* profile);
@@ -426,6 +435,8 @@ class UserSessionManager
   // Sends metrics for user pods display when existing user has logged in.
   void SendUserPodsMetrics();
 
+  void NotifyEasyUnlockKeyOpsFinished();
+
   UserSessionManagerDelegate* delegate_;
 
   // Authentication/user context.
@@ -498,7 +509,6 @@ class UserSessionManager
   // Manages Easy unlock cryptohome keys.
   std::unique_ptr<EasyUnlockKeyManager> easy_unlock_key_manager_;
   bool running_easy_unlock_key_ops_;
-  base::Closure easy_unlock_key_ops_finished_callback_;
 
   // Whether should fetch token handles, tests may override this value.
   bool should_obtain_handles_;
@@ -512,7 +522,14 @@ class UserSessionManager
   // Child account status is necessary for InitializeStartUrls call.
   bool waiting_for_child_account_status_;
 
+  // If set then contains the time when UI is shown.
+  base::Time ui_shown_time_;
+
   scoped_refptr<HatsNotificationController> hats_notification_controller_;
+
+  bool easy_unlock_key_ops_finished_ = true;
+
+  std::vector<base::OnceClosure> easy_unlock_key_ops_finished_callbacks_;
 
   base::WeakPtrFactory<UserSessionManager> weak_factory_;
 

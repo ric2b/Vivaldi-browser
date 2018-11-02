@@ -15,6 +15,10 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/latency/latency_info.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace gfx {
 enum class SwapResult;
 }
@@ -35,8 +39,6 @@ class GpuChannelEstablishFactory;
 
 namespace content {
 
-class FrameSinkManagerHost;
-
 // This class provides the interface for creating the support for the
 // cross-process image transport, both for creating the shared surface handle
 // (destination surface for the GPU process) and the transport client (logic for
@@ -46,7 +48,8 @@ class CONTENT_EXPORT ImageTransportFactory {
   virtual ~ImageTransportFactory() {}
 
   // Initializes the global transport factory.
-  static void Initialize();
+  static void Initialize(
+      scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner);
 
   // Initializes the global transport factory for unit tests using the provided
   // context factory.
@@ -71,9 +74,6 @@ class CONTENT_EXPORT ImageTransportFactory {
   // GLHelper will get destroyed whenever the shared context is lost
   // (ImageTransportFactoryObserver::OnLostResources is called).
   virtual viz::GLHelper* GetGLHelper() = 0;
-
-  // Gets the frame sink manager host instance.
-  virtual FrameSinkManagerHost* GetFrameSinkManagerHost() = 0;
 
   virtual void SetGpuChannelEstablishFactory(
       gpu::GpuChannelEstablishFactory* factory) = 0;

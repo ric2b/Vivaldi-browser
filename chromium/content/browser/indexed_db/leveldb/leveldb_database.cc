@@ -33,11 +33,11 @@
 #include "content/browser/indexed_db/leveldb/leveldb_write_batch.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
+#include "third_party/leveldatabase/src/include/leveldb/cache.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
 #include "third_party/leveldatabase/src/include/leveldb/filter_policy.h"
 #include "third_party/leveldatabase/src/include/leveldb/slice.h"
-
 using base::StringPiece;
 
 namespace content {
@@ -117,6 +117,13 @@ void LevelDBDatabase::CloseDatabase() {
   }
 }
 
+static size_t DefaultBlockCacheSize() {
+  if (base::SysInfo::IsLowEndDevice())
+    return 512 * 1024;  // 512KB
+  else
+    return 8 * 1024 * 1024;  // 8MB
+}
+
 static leveldb::Status OpenDB(
     leveldb::Comparator* comparator,
     leveldb::Env* env,
@@ -139,12 +146,16 @@ static leveldb::Status OpenDB(
   options.max_open_files = 80;
   options.env = env;
 
-  // ChromiumEnv assumes UTF8, converts back to FilePath before using.
-  leveldb::DB* db_ptr = nullptr;
-  leveldb::Status s = leveldb::DB::Open(options, path.AsUTF8Unsafe(), &db_ptr);
-  db->reset(db_ptr);
+  // A shared block cache for all IndexedDB instances across all renderers.
+  // See also components/leveldb_proto/leveldb_database.cc, which has
+  // its own block cache for a different (internal use-cases) set of LevelDB
+  // instances.
+  static leveldb::Cache* default_block_cache =
+      leveldb::NewLRUCache(DefaultBlockCacheSize());
+  options.block_cache = default_block_cache;
 
-  return s;
+  // ChromiumEnv assumes UTF8, converts back to FilePath before using.
+  return leveldb_env::OpenDB(options, path.AsUTF8Unsafe(), db);
 }
 
 leveldb::Status LevelDBDatabase::Destroy(const base::FilePath& file_name) {
@@ -491,10 +502,11 @@ bool LevelDBDatabase::OnMemoryDump(
 
   dump->AddString("file_name", "", file_name_for_tracing);
 
-  // Memory is allocated from system allocator (malloc).
+  // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
+  // an edge to avoid double counting.
   pmd->AddSuballocation(dump->guid(),
-                        base::trace_event::MemoryDumpManager::GetInstance()
-                            ->system_allocator_pool_name());
+                        leveldb_env::DBTracker::GetMemoryDumpName(db_.get()));
+
   return true;
 }
 

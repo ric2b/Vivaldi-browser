@@ -25,7 +25,7 @@ class ChildFrame {
  public:
   ChildFrame(
       scoped_refptr<content::SynchronousCompositor::FrameFuture> frame_future,
-      uint32_t compositor_frame_sink_id,
+      uint32_t layer_tree_frame_sink_id,
       std::unique_ptr<cc::CompositorFrame> frame,
       const CompositorID& compositor_id,
       bool viewport_rect_for_tile_priority_empty,
@@ -41,7 +41,7 @@ class ChildFrame {
   // or |frame|. It's illegal if both are non-null.
   scoped_refptr<content::SynchronousCompositor::FrameFuture> frame_future;
   // These two fields are not const to make async path easier.
-  uint32_t compositor_frame_sink_id;
+  uint32_t layer_tree_frame_sink_id;
   std::unique_ptr<cc::CompositorFrame> frame;
   // The id of the compositor this |frame| comes from.
   const CompositorID compositor_id;
@@ -56,6 +56,6 @@ class ChildFrame {
 
 using ChildFrameQueue = std::deque<std::unique_ptr<ChildFrame>>;
 
-}  // namespace webview
+}  // namespace android_webview
 
 #endif  // ANDROID_WEBVIEW_BROWSER_CHILD_FRAME_H_

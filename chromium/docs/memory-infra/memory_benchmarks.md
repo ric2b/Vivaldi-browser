@@ -92,6 +92,15 @@ To view data from one of the benchmarks on the
 *   **Subtest (3):** The name of a *[user story](#User-stories)*
     (with `:` replaced by `_`).
 
+If you are investigating a Perf dashboard alert and would like to see the
+details, you can click on any point of the graph. It gives you the commit range,
+buildbot output and a link to the trace file taken during the buildbot run.
+(More information about reading trace files [here][memory-infra])
+
+[memory-infra]: /docs/memory-infra/README.md
+
+![Chrome Performance Dashboard Alert](https://storage.googleapis.com/chromium-docs.appspot.com/perfdashboard_alert.png)
+
 ## How to run the benchmarks
 
 Benchmarks may be run on a local platform/device or remotely on a try job.
@@ -126,6 +135,7 @@ Other useful options for this command are:
 For WebView make sure to [replace the system WebView][webview_install]
 on your device and use `--browser android-webview`.
 
+[memory-infra]: /docs/memory-infra/README.md
 [webview_install]: https://www.chromium.org/developers/how-tos/build-instructions-android-webview
 
 ### How to run a try job
@@ -170,14 +180,20 @@ where:
 *   **source:** One of `reported_by_chrome` or `reported_by_os`
 *   **component:** May be a Chrome component, e.g. `skia` or `sqlite`;
     details about a specific component, e.g. `v8:heap`; or a class of memory
-    as seen by the OS, e.g. `system_memory:native_heap` or `gpu_memory`.
+    as seen by the OS, e.g. `system_memory:native_heap` or `gpu_memory`. If
+    reported by chrome, the metrics are gathered by `MemoryDumpProvider`s,
+    probes placed in the specific components' codebase. For example, in
+    "memory:chrome:all_processes:reported_by_chrome:net:effective_size_avg,"
+    the component is "net" which is Chrome's network stack and
+    "reported_by_chrome" means that this metric is gathered via probes in
+    the network stack.
 *   **kind:** The kind of memory being reported. For metrics reported by
     Chrome this usually is `effective_size` (others are `locked_size`
     and `allocated_objects_size`); for metrics by the OS this usually is
     `proportional_resident_size` (others are `peak_resident_size` and
     `private_dirty_size`).
 
-[memory-infra]: /memory-infra/README.md
+[memory-infra]: /docs/memory-infra/README.md
 
 ## Appendix
 
@@ -187,36 +203,35 @@ on the kind of stories that they run.
 
 ### memory.top_10_mobile
 
-The *top-10-mobile* benchmarks are in the process of being deprecated
+The [memory.top_10_mobile][memory_py] benchmark is in the process of being deprecated
 in favor of system health benchmarks. This process, however, hasn't been
 finalized and currently they are still the reference benchmark used for
 decision making in the Android release process. Therefore, **it is important
-to diagnose and fix regressions caught by these benchmarks**.
+to diagnose and fix regressions caught by this benchmark**.
 
-*   [memory.top_10_mobile][memory_py] - Cycle between:
+The benchmark's work flow is:
 
-    - load a page on Chrome, wait for it to load, [force garbage collection
-      and measure memory][measure];
-    - push Chrome to the background, force garbage collection and measure
-      memory again.
+- Cycle between:
 
-    Repeat for each of 10 pages *without closing the browser*.
+  - load a page on Chrome, wait for it to load, [force garbage collection
+    and measure memory][measure];
+  - push Chrome to the background, force garbage collection and measure
+    memory again.
 
-    Close the browser, re-open and repeat the full page set a total of 5 times.
+- Repeat for each of 10 pages *without closing the browser*.
 
-    Story groups are either `foreground` or `background` depending on the state
-    of the browser at the time of measurement.
+- Close the browser, re-open and repeat the full page set a total of 5 times.
 
-*   [memory.top_10_mobile_stress][memory_py] - same as above, but keeps a single
-    instance of the browser open for the whole duration of the test and
-    *does not* force any garbage collection.
+- Story groups are either `foreground` or `background` depending on the state
+  of the browser at the time of measurement.
 
-The main difference to watch out between these and system health benchmarks is
+The main difference to watch out between this and system health benchmarks is
 that, since a single browser instance is kept open and shared by many
 individual stories, they are not independent of each other. In particular, **do
 not use the `--story-filter` argument when trying to reproduce regressions**
 on these benchmarks, as doing so will affect the results.
 
+[memory_py]: https://cs.chromium.org/chromium/src/tools/perf/benchmarks/memory.py
 [measure]: https://github.com/catapult-project/catapult/blob/master/telemetry/telemetry/internal/actions/action_runner.py#L133
 
 ### Dual browser benchmarks
@@ -224,16 +239,16 @@ on these benchmarks, as doing so will affect the results.
 Dual browser benchmarks are intended to assess the memory implications of
 shared resources between Chrome and WebView.
 
-*   [memory.dual_browser_test][memory_py] - cycle between doing Google searches
-    on a WebView-based browser (a stand-in for the Google Search app) and
-    loading pages on Chrome. Runs on Android devices only.
+*   [memory.dual_browser_test][memory_extra_py] - cycle between doing Google
+    searches on a WebView-based browser (a stand-in for the Google Search app)
+    and loading pages on Chrome. Runs on Android devices only.
 
     Story groups are either `on_chrome` or `on_webview`, indicating the browser
     in foreground at the moment when the memory measurement was made.
 
-*   [memory.long_running_dual_browser_test][memory_py] - same as above, but the
-    test is run for 60 iterations keeping both browsers alive for the whole
-    duration of the test and without forcing garbage collection. Intended as a
-    last-resort net to catch memory leaks not apparent on shorter tests.
+*   [memory.long_running_dual_browser_test][memory_extra_py] - same as above,
+    but the test is run for 60 iterations keeping both browsers alive for the
+    whole duration of the test and without forcing garbage collection. Intended
+    as a last-resort net to catch memory leaks not apparent on shorter tests.
 
-[memory_py]: https://chromium.googlesource.com/chromium/src/+/master/tools/perf/benchmarks/memory.py
+[memory_extra_py]: https://cs.chromium.org/chromium/src/tools/perf/contrib/memory_extras/memory_extras.py

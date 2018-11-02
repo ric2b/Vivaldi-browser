@@ -32,18 +32,20 @@
 
 #include "platform/fonts/FontCustomPlatformData.h"
 
+#include "build/build_config.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/SharedBuffer.h"
 #include "platform/fonts/FontCache.h"
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/WebFontDecoder.h"
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 #include "platform/fonts/mac/CoreTextVariationsSupport.h"
 #endif
 #include "platform/fonts/opentype/FontSettings.h"
+#include "platform/fonts/opentype/VariableFontCheck.h"
 #include "third_party/skia/include/core/SkStream.h"
 #include "third_party/skia/include/core/SkTypeface.h"
-#if OS(WIN) || OS(MACOSX)
+#if defined(OS_WIN) || defined(OS_MACOSX)
 #include "third_party/skia/include/ports/SkFontMgr_empty.h"
 #endif
 #include "platform/wtf/PtrUtil.h"
@@ -74,10 +76,10 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
   // now, going with a reasonable upper limit. Deduplication is
   // handled by Skia with priority given to the last occuring
   // assignment.
-  if (variation_settings && variation_settings->size() < UINT16_MAX) {
-#if OS(WIN)
+  if (VariableFontCheck::IsVariableFont(base_typeface_.get())) {
+#if defined(OS_WIN)
     sk_sp<SkFontMgr> fm(SkFontMgr_New_Custom_Empty());
-#elif OS(MACOSX)
+#elif defined(OS_MACOSX)
     sk_sp<SkFontMgr> fm;
     if (CoreTextVersionSupportsVariations())
       fm = SkFontMgr::RefDefault();
@@ -87,12 +89,15 @@ FontPlatformData FontCustomPlatformData::GetFontPlatformData(
     sk_sp<SkFontMgr> fm(SkFontMgr::RefDefault());
 #endif
     Vector<SkFontMgr::FontParameters::Axis, 0> axes;
-    axes.ReserveCapacity(variation_settings->size());
-    for (size_t i = 0; i < variation_settings->size(); ++i) {
-      SkFontMgr::FontParameters::Axis axis = {
-          AtomicStringToFourByteTag(variation_settings->at(i).Tag()),
-          SkFloatToScalar(variation_settings->at(i).Value())};
-      axes.push_back(axis);
+
+    if (variation_settings && variation_settings->size() < UINT16_MAX) {
+      axes.ReserveCapacity(variation_settings->size());
+      for (size_t i = 0; i < variation_settings->size(); ++i) {
+        SkFontMgr::FontParameters::Axis axis = {
+            AtomicStringToFourByteTag(variation_settings->at(i).Tag()),
+            SkFloatToScalar(variation_settings->at(i).Value())};
+        axes.push_back(axis);
+      }
     }
 
     sk_sp<SkTypeface> sk_variation_font(fm->createFromStream(

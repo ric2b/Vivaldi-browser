@@ -16,10 +16,23 @@
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_state.h"
 #include "components/subresource_filter/core/common/document_subresource_filter.h"
+#include "components/subresource_filter/core/common/load_policy.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
 namespace subresource_filter {
+
+class MemoryMappedRuleset;
+
+// Computes whether/how subresource filtering should be activated while loading
+// |document_url| in a frame, based on the parent document's |activation_state|,
+// the |parent_document_origin|, as well as any applicable deactivation rules in
+// non-null |ruleset|.
+ActivationState ComputeActivationState(
+    const GURL& document_url,
+    const url::Origin& parent_document_origin,
+    const ActivationState& parent_activation_state,
+    const MemoryMappedRuleset* ruleset);
 
 // An asynchronous wrapper around DocumentSubresourceFilter (DSF).
 //
@@ -101,9 +114,9 @@ class AsyncDocumentSubresourceFilter {
   void ReportDisallowedLoad();
 
   // Must be called after activation state computation is finished.
-  const ActivationState& activation_state() const {
-    return activation_state_.value();
-  }
+  const ActivationState& activation_state() const;
+
+  bool has_activation_state() const { return activation_state_.has_value(); }
 
   // The |first_disallowed_load_callback|, if it is non-null, is invoked on the
   // first ReportDisallowedLoad() call.

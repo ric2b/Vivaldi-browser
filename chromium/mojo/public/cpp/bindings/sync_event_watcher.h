@@ -10,8 +10,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "base/synchronization/waitable_event.h"
-#include "base/threading/thread_checker.h"
 #include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/sync_handle_registry.h"
 
@@ -19,7 +19,7 @@ namespace mojo {
 
 // SyncEventWatcher supports waiting on a base::WaitableEvent to signal while
 // also allowing other SyncEventWatchers and SyncHandleWatchers on the same
-// thread to wake up as needed.
+// sequence to wake up as needed.
 //
 // This class is not thread safe.
 class MOJO_CPP_BINDINGS_EXPORT SyncEventWatcher {
@@ -29,12 +29,13 @@ class MOJO_CPP_BINDINGS_EXPORT SyncEventWatcher {
   ~SyncEventWatcher();
 
   // Registers |event_| with SyncHandleRegistry, so that when others perform
-  // sync watching on the same thread, |event_| will be watched along with them.
+  // sync watching on the same sequence, |event_| will be watched along with
+  // them.
   void AllowWokenUpBySyncWatchOnSameThread();
 
   // Waits on |event_| plus all other events and handles registered with this
-  // thread's SyncHandleRegistry, running callbacks synchronously for any ready
-  // events and handles.
+  // sequence's SyncHandleRegistry, running callbacks synchronously for any
+  // ready events and handles.
   // This method:
   //   - returns true when |should_stop| is set to true;
   //   - return false when any error occurs, including this object being
@@ -58,7 +59,7 @@ class MOJO_CPP_BINDINGS_EXPORT SyncEventWatcher {
 
   scoped_refptr<base::RefCountedData<bool>> destroyed_;
 
-  base::ThreadChecker thread_checker_;
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(SyncEventWatcher);
 };

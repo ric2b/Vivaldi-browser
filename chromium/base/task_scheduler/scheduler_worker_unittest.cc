@@ -30,6 +30,8 @@
 
 #if defined(OS_WIN)
 #include <objbase.h>
+
+#include "base/win/com_init_check_hook.h"
 #endif
 
 using testing::_;
@@ -764,7 +766,7 @@ TEST(TaskSchedulerWorkerTest, StartDetached) {
   scoped_refptr<ControllableDetachDelegate::Controls> controls =
       delegate->controls();
   auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, WrapUnique(delegate), &task_tracker,
+      ThreadPriority::NORMAL, WrapUnique(delegate), &task_tracker, nullptr,
       SchedulerBackwardCompatibility::DISABLED,
       SchedulerWorker::InitialState::DETACHED));
   worker->Start();
@@ -864,7 +866,7 @@ TEST(TaskSchedulerWorkerTest, BumpPriorityOfDetachedThreadDuringShutdown) {
 
   // Create a DETACHED thread.
   auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::BACKGROUND, std::move(delegate), &task_tracker,
+      ThreadPriority::BACKGROUND, std::move(delegate), &task_tracker, nullptr,
       SchedulerBackwardCompatibility::DISABLED,
       SchedulerWorker::InitialState::DETACHED));
   worker->Start();
@@ -923,7 +925,7 @@ TEST(TaskSchedulerWorkerTest, BackwardCompatibilityEnabled) {
   // Create a worker with backward compatibility ENABLED. Wake it up and wait
   // until GetWork() returns.
   auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker,
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker, nullptr,
       SchedulerBackwardCompatibility::INIT_COM_STA));
   worker->Start();
   worker->WakeUp();
@@ -931,7 +933,13 @@ TEST(TaskSchedulerWorkerTest, BackwardCompatibilityEnabled) {
 
   // The call to CoInitializeEx() should have returned S_FALSE to indicate that
   // the COM library was already initialized on the thread.
+  // See SchedulerWorker::Thread::ThreadMain for why we expect two different
+  // results here.
+#if defined(COM_INIT_CHECK_HOOK_ENABLED)
+  EXPECT_EQ(S_OK, delegate_raw->coinitialize_hresult());
+#else
   EXPECT_EQ(S_FALSE, delegate_raw->coinitialize_hresult());
+#endif
 
   worker->JoinForTesting();
 }
@@ -944,7 +952,7 @@ TEST(TaskSchedulerWorkerTest, BackwardCompatibilityDisabled) {
   // Create a worker with backward compatibility DISABLED. Wake it up and wait
   // until GetWork() returns.
   auto worker = make_scoped_refptr(new SchedulerWorker(
-      ThreadPriority::NORMAL, std::move(delegate), &task_tracker,
+      ThreadPriority::NORMAL, std::move(delegate), &task_tracker, nullptr,
       SchedulerBackwardCompatibility::DISABLED));
   worker->Start();
   worker->WakeUp();

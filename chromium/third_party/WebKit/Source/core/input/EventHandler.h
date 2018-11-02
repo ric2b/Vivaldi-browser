@@ -27,10 +27,12 @@
 #define EventHandler_h
 
 #include "core/CoreExport.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/TextEventInputType.h"
 #include "core/input/GestureManager.h"
 #include "core/input/KeyboardEventManager.h"
 #include "core/input/MouseEventManager.h"
+#include "core/input/MouseWheelEventManager.h"
 #include "core/input/PointerEventManager.h"
 #include "core/input/ScrollManager.h"
 #include "core/layout/HitTestRequest.h"
@@ -38,7 +40,6 @@
 #include "core/page/EventWithHitTestResults.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Cursor.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/geometry/LayoutPoint.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -48,6 +49,7 @@
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebInputEvent.h"
 #include "public/platform/WebInputEventResult.h"
+#include "public/platform/WebMenuSourceType.h"
 
 namespace blink {
 
@@ -95,7 +97,7 @@ class CORE_EXPORT EventHandler final
 
   void StopAutoscroll();
 
-  void DispatchFakeMouseMoveEventSoon();
+  void DispatchFakeMouseMoveEventSoon(MouseEventManager::FakeMouseMoveReason);
   void DispatchFakeMouseMoveEventSoonInQuad(const FloatQuad&);
 
   HitTestResult HitTestResultAtPoint(
@@ -123,6 +125,10 @@ class CORE_EXPORT EventHandler final
   // Return whether a mouse cursor update is currently pending.  Used for
   // testing.
   bool CursorUpdatePending();
+
+  // Return whether sending a fake mouse move is currently pending.  Used for
+  // testing.
+  bool FakeMouseMovePending() const;
 
   void SetResizingFrameSet(HTMLFrameSetElement*);
 
@@ -194,15 +200,18 @@ class CORE_EXPORT EventHandler final
       const WebMouseEvent&,
       Node* override_target_node = nullptr);
   WebInputEventResult ShowNonLocatedContextMenu(
-      Element* override_target_element = nullptr);
+      Element* override_target_element = nullptr,
+      WebMenuSourceType = kMenuSourceNone);
 
   // Returns whether pointerId is active or not
   bool IsPointerEventActive(int);
 
   void SetPointerCapture(int, EventTarget*);
   void ReleasePointerCapture(int, EventTarget*);
+  void ReleaseMousePointerCapture();
   bool HasPointerCapture(int, const EventTarget*) const;
   bool HasProcessedPointerCapture(int, const EventTarget*) const;
+  void ProcessPendingPointerCaptureForPointerLock(const WebMouseEvent&);
 
   void ElementRemoved(EventTarget*);
 
@@ -256,6 +265,10 @@ class CORE_EXPORT EventHandler final
 
   bool IsTouchPointerIdActiveOnFrame(int, LocalFrame*) const;
 
+  // Clears drag target and related states. It is called when drag is done or
+  // canceled.
+  void ClearDragState();
+
  private:
   WebInputEventResult HandleMouseMoveOrLeaveEvent(
       const WebMouseEvent&,
@@ -307,10 +320,6 @@ class CORE_EXPORT EventHandler final
       const String& canvas_region_id,
       const WebMouseEvent&,
       const Vector<WebMouseEvent>& coalesced_events);
-
-  // Clears drag target and related states. It is called when drag is done or
-  // canceled.
-  void ClearDragState();
 
   WebInputEventResult PassMousePressEventToSubframe(
       MouseEventWithHitTestResults&,
@@ -369,6 +378,7 @@ class CORE_EXPORT EventHandler final
 
   Member<ScrollManager> scroll_manager_;
   Member<MouseEventManager> mouse_event_manager_;
+  Member<MouseWheelEventManager> mouse_wheel_event_manager_;
   Member<KeyboardEventManager> keyboard_event_manager_;
   Member<PointerEventManager> pointer_event_manager_;
   Member<GestureManager> gesture_manager_;

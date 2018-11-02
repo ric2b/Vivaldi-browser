@@ -10,8 +10,8 @@
 #include "base/memory/memory_coordinator_client.h"
 #include "base/memory/memory_coordinator_proxy.h"
 #include "base/memory/memory_pressure_monitor.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 #include "content/common/content_export.h"
@@ -38,15 +38,13 @@ using MemoryState = base::MemoryState;
 // to purge memory, and scheduling tab discarding.
 enum class MemoryCondition : int {
   NORMAL = 0,
-  WARNING = 1,
-  CRITICAL = 2,
+  CRITICAL = 1,
 };
 
 // MemoryCoordinatorImpl is an implementation of MemoryCoordinator.
 class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
                                              public MemoryCoordinator,
-                                             public NotificationObserver,
-                                             public base::NonThreadSafe {
+                                             public NotificationObserver {
  public:
   static MemoryCoordinatorImpl* GetInstance();
 
@@ -56,8 +54,6 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
    public:
     virtual ~Policy() {}
 
-    // Called periodically while the memory condition is WARNING.
-    virtual void OnWarningCondition() {}
     // Called periodically while the memory condition is CRITICAL.
     virtual void OnCriticalCondition() {}
     // Called when the current MemoryCondition has changed.
@@ -115,11 +111,6 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   // Tries to purge memory from the provided child process.
   bool TryToPurgeMemoryFromChild(int render_process_id);
 
-  // Records memory pressure notifications. Called by MemoryPressureMonitor.
-  // TODO(bashi): Remove this when MemoryPressureMonitor is retired.
-  void RecordMemoryPressure(
-      base::MemoryPressureMonitor::MemoryPressureLevel level);
-
   // base::MemoryCoordinator implementations:
   MemoryState GetCurrentMemoryState() const override;
 
@@ -146,7 +137,7 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   void UpdateConditionIfNeeded(MemoryCondition condition);
 
   // Asks the delegate to discard a tab.
-  void DiscardTab();
+  void DiscardTab(bool skip_unload_handlers);
 
   // Gets the current TimeTicks.
   base::TimeTicks NowTicks() const { return tick_clock_->NowTicks(); }
@@ -167,7 +158,11 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   void SetDelegateForTesting(
       std::unique_ptr<MemoryCoordinatorDelegate> delegate);
 
+  // Sets a policy for testing.
+  void SetPolicyForTesting(std::unique_ptr<Policy> policy);
+
   MemoryCoordinatorDelegate* delegate() { return delegate_.get(); }
+  Policy* policy() { return policy_.get(); }
 
   // Adds the given ChildMemoryCoordinator as a child of this coordinator.
   void AddChildForTesting(int dummy_render_process_id,
@@ -180,27 +175,15 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   // for testing.
   void OnConnectionError(int render_process_id);
 
-  // Returns true when a given renderer can be suspended.
-  bool CanSuspendRenderer(int render_process_id);
-
   base::SingleThreadTaskRunner* task_runner() { return task_runner_.get(); }
 
  private:
 #if !defined(OS_MACOSX)
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplBrowserTest, HandleAdded);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplBrowserTest,
-                           CanSuspendRenderer);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorWithServiceWorkerTest,
-                           CannotSuspendRendererWithServiceWorker);
 #endif
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnChildVisibilityChanged);
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, CalculateNextCondition);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, UpdateCondition);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, SetMemoryStateForTesting);
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, ForceSetMemoryCondition);
   FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, DiscardTabUnderCritical);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnWarningCondition);
-  FRIEND_TEST_ALL_PREFIXES(MemoryCoordinatorImplTest, OnCriticalCondition);
 
   friend class MemoryCoordinatorHandleImpl;
 
@@ -255,6 +238,8 @@ class CONTENT_EXPORT MemoryCoordinatorImpl : public base::MemoryCoordinator,
   // MemoryCoordinator and removed automatically when an underlying binding is
   // disconnected.
   ChildInfoMap children_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(MemoryCoordinatorImpl);
 };

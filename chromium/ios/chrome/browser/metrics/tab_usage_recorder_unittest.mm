@@ -4,7 +4,7 @@
 
 #include <memory>
 
-#include "base/mac/scoped_nsobject.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_samples.h"
 #include "base/stl_util.h"
@@ -14,25 +14,49 @@
 #import "ios/chrome/browser/metrics/tab_usage_recorder_delegate.h"
 #import "ios/chrome/browser/tabs/tab.h"
 #include "ios/testing/ocmock_complex_type_helper.h"
+#import "ios/web/public/test/fakes/test_navigation_manager.h"
+#import "ios/web/public/test/fakes/test_web_state.h"
 #include "ios/web/public/test/test_web_thread.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "testing/platform_test.h"
 #include "third_party/ocmock/ocmock_extensions.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 @interface TURTestTabMock : OCMockComplexTypeHelper {
-  GURL _url;
+  GURL _lastCommittedURL;
+  GURL _visibleURL;
+  web::TestWebState _webState;
 }
 
-@property(nonatomic, assign) const GURL& url;
+@property(nonatomic, assign) const GURL& lastCommittedURL;
+@property(nonatomic, assign) const GURL& visibleURL;
+@property(nonatomic, readonly) web::WebState* webState;
+
 @end
 
 @implementation TURTestTabMock
-- (const GURL&)url {
-  return _url;
+- (const GURL&)lastCommittedURL {
+  return _lastCommittedURL;
 }
-- (void)setUrl:(const GURL&)url {
-  _url = url;
+- (void)setLastCommittedURL:(const GURL&)lastCommittedURL {
+  _lastCommittedURL = lastCommittedURL;
+}
+- (const GURL&)visibleURL {
+  return _visibleURL;
+}
+- (void)setVisibleURL:(const GURL&)visibleURL {
+  _visibleURL = visibleURL;
+}
+- (web::WebState*)webState {
+  if (!_webState.GetNavigationManager()) {
+    _webState.SetNavigationManager(
+        base::MakeUnique<web::TestNavigationManager>());
+  }
+  return &_webState;
 }
 @end
 
@@ -102,10 +126,11 @@ class TabUsageRecorderTest : public PlatformTest {
         [OCMockObject mockForClass:[CRWWebController class]];
     [[[tab_mock stub] andReturn:web_controller_mock] webController];
     [[[tab_mock stub] andReturnBool:false] isPrerenderTab];
-    [tab_mock setUrl:webUrl_];
+    [tab_mock setLastCommittedURL:webUrl_];
+    [tab_mock setVisibleURL:webUrl_];
     [[[web_controller_mock stub] andReturnBool:inMemory] isViewAlive];
     [[web_controller_mock stub] removeObserver:OCMOCK_ANY];
-    return [tab_mock autorelease];
+    return tab_mock;
   }
 
   GURL webUrl_;
@@ -169,8 +194,10 @@ TEST_F(TabUsageRecorderTest, CountPageLoadsBeforeEvictedTab) {
 TEST_F(TabUsageRecorderTest, CountNativePageLoadsBeforeEvictedTab) {
   id tab_mock_a = MockTab(true);
   id tab_mock_b = MockTab(false);
-  [tab_mock_a setUrl:nativeUrl_];
-  [tab_mock_b setUrl:nativeUrl_];
+  [tab_mock_a setLastCommittedURL:nativeUrl_];
+  [tab_mock_a setVisibleURL:nativeUrl_];
+  [tab_mock_b setLastCommittedURL:nativeUrl_];
+  [tab_mock_b setVisibleURL:nativeUrl_];
 
   // Call reload an arbitrary number of times.
   const int kNumReloads = 4;
@@ -312,8 +339,8 @@ TEST_F(TabUsageRecorderTest, RendererTerminated) {
   Tab* terminated_tab = MockTab(false);
 
   // Set up the delegate to return |kAliveTabsCountAtRenderTermination|.
-  base::scoped_nsobject<MockTabUsageRecorderDelegate> delegate(
-      [[MockTabUsageRecorderDelegate alloc] init]);
+  MockTabUsageRecorderDelegate* delegate =
+      [[MockTabUsageRecorderDelegate alloc] init];
   [delegate setLiveTabsCount:kAliveTabsCountAtRendererTermination];
   tab_usage_recorder_->SetDelegate(delegate);
 

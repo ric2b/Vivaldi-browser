@@ -69,11 +69,26 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
                              AccessControlStatus access_control_status,
-                             const TextPosition& position) override {
+                             const TextPosition& position,
+                             ExceptionState& exception_state) override {
     ScriptState::Scope scope(script_state_.Get());
-    return ScriptModule::Compile(script_state_->GetIsolate(),
-                                 "export default 'foo';", "",
-                                 access_control_status);
+    return ScriptModule::Compile(
+        script_state_->GetIsolate(), "export default 'foo';", "",
+        access_control_status, TextPosition::MinimumPosition(),
+        exception_state);
+  }
+
+  void SetModuleRequests(const Vector<String>& requests) {
+    requests_.clear();
+    for (const String& request : requests) {
+      requests_.emplace_back(request, TextPosition::MinimumPosition());
+    }
+  }
+  Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override {
+    return requests_;
+  }
+  ScriptModuleState GetRecordStatus(ScriptModule) override {
+    return ScriptModuleState::kUninstantiated;
   }
 
   DECLARE_TRACE();
@@ -81,6 +96,7 @@ class ModuleScriptLoaderTestModulator final : public DummyModulator {
  private:
   RefPtr<ScriptState> script_state_;
   RefPtr<SecurityOrigin> security_origin_;
+  Vector<ModuleRequest> requests_;
 };
 
 DEFINE_TRACE(ModuleScriptLoaderTestModulator) {
@@ -99,21 +115,22 @@ class ModuleScriptLoaderTest : public ::testing::Test {
   LocalFrame& GetFrame() { return dummy_page_holder_->GetFrame(); }
   Document& GetDocument() { return dummy_page_holder_->GetDocument(); }
   ResourceFetcher* Fetcher() { return fetcher_.Get(); }
-  Modulator* GetModulator() { return modulator_.Get(); }
+  ModuleScriptLoaderTestModulator* GetModulator() { return modulator_.Get(); }
 
  protected:
   ScopedTestingPlatformSupport<FetchTestingPlatformSupport> platform_;
   std::unique_ptr<DummyPageHolder> dummy_page_holder_;
   Persistent<ResourceFetcher> fetcher_;
-  Persistent<Modulator> modulator_;
+  Persistent<ModuleScriptLoaderTestModulator> modulator_;
 };
 
 void ModuleScriptLoaderTest::SetUp() {
   platform_->AdvanceClockSeconds(1.);  // For non-zero DocumentParserTimings
   dummy_page_holder_ = DummyPageHolder::Create(IntSize(500, 500));
-  GetDocument().SetURL(KURL(KURL(), "https://example.test"));
-  fetcher_ = ResourceFetcher::Create(
-      MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource));
+  GetDocument().SetURL(KURL(NullURL(), "https://example.test"));
+  auto* context =
+      MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
+  fetcher_ = ResourceFetcher::Create(context);
   modulator_ = new ModuleScriptLoaderTestModulator(
       ToScriptStateForMainWorld(&GetFrame()),
       GetDocument().GetSecurityOrigin());
@@ -121,7 +138,7 @@ void ModuleScriptLoaderTest::SetUp() {
 
 TEST_F(ModuleScriptLoaderTest, fetchDataURL) {
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
-  KURL url(KURL(), "data:text/javascript,export default 'grapes';");
+  KURL url(NullURL(), "data:text/javascript,export default 'grapes';");
   ModuleScriptFetchRequest module_request(
       url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
   TestModuleScriptLoaderClient* client = new TestModuleScriptLoaderClient;
@@ -131,8 +148,24 @@ TEST_F(ModuleScriptLoaderTest, fetchDataURL) {
   EXPECT_TRUE(client->WasNotifyFinished())
       << "ModuleScriptLoader should finish synchronously.";
   ASSERT_TRUE(client->GetModuleScript());
-  EXPECT_EQ(client->GetModuleScript()->InstantiationState(),
-            ModuleInstantiationState::kUninstantiated);
+  EXPECT_FALSE(client->GetModuleScript()->IsErrored());
+}
+
+TEST_F(ModuleScriptLoaderTest, InvalidSpecifier) {
+  ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
+  KURL url(NullURL(),
+           "data:text/javascript,import 'invalid';export default 'grapes';");
+  ModuleScriptFetchRequest module_request(
+      url, String(), kParserInserted, WebURLRequest::kFetchCredentialsModeOmit);
+  TestModuleScriptLoaderClient* client = new TestModuleScriptLoaderClient;
+  GetModulator()->SetModuleRequests({"invalid"});
+  registry->Fetch(module_request, ModuleGraphLevel::kTopLevelModuleFetch,
+                  GetModulator(), Fetcher(), client);
+
+  EXPECT_TRUE(client->WasNotifyFinished())
+      << "ModuleScriptLoader should finish synchronously.";
+  ASSERT_TRUE(client->GetModuleScript());
+  EXPECT_TRUE(client->GetModuleScript()->IsErrored());
 }
 
 TEST_F(ModuleScriptLoaderTest, fetchInvalidURL) {
@@ -153,7 +186,7 @@ TEST_F(ModuleScriptLoaderTest, fetchInvalidURL) {
 TEST_F(ModuleScriptLoaderTest, fetchURL) {
   KURL url(kParsedURLString, "http://127.0.0.1:8000/module.js");
   URLTestHelpers::RegisterMockedURLLoad(
-      url, testing::WebTestDataPath("module.js"), "text/javascript");
+      url, testing::CoreTestDataPath("module.js"), "text/javascript");
 
   ModuleScriptLoaderRegistry* registry = ModuleScriptLoaderRegistry::Create();
   ModuleScriptFetchRequest module_request(

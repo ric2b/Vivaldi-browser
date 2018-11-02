@@ -15,8 +15,8 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/surfaces/surface_id.h"
-#include "cc/surfaces/surface_reference_factory.h"
+#include "components/viz/common/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_reference_factory.h"
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -24,7 +24,6 @@ namespace cc {
 struct SurfaceSequence;
 
 class Layer;
-class SurfaceInfo;
 }
 
 namespace blink {
@@ -35,6 +34,10 @@ class WebRemoteFrame;
 
 namespace gfx {
 class Size;
+}
+
+namespace viz {
+class SurfaceInfo;
 }
 
 namespace content {
@@ -51,12 +54,12 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
       RenderFrameProxy* render_frame_proxy);
 
   void OnContainerDestroy();
-  void OnSetSurface(const cc::SurfaceInfo& surface_info,
-                    const cc::SurfaceSequence& sequence);
+  void OnSetSurface(const viz::SurfaceInfo& surface_info,
+                    const viz::SurfaceSequence& sequence);
   void UpdateVisibility(bool);
   void ChildFrameGone();
 
-  cc::SurfaceId surface_id() const { return surface_id_; }
+  viz::SurfaceId surface_id() const { return surface_id_; }
 
  protected:
   // Friend RefCounted so that the dtor can be non-public.
@@ -89,10 +92,10 @@ class CONTENT_EXPORT ChildFrameCompositingHelper
   RenderFrameProxy* const render_frame_proxy_;
 
   std::unique_ptr<blink::WebLayer> web_layer_;
-  cc::SurfaceId surface_id_;
+  viz::SurfaceId surface_id_;
   blink::WebRemoteFrame* frame_;
 
-  scoped_refptr<cc::SurfaceReferenceFactory> surface_reference_factory_;
+  scoped_refptr<viz::SurfaceReferenceFactory> surface_reference_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(ChildFrameCompositingHelper);
 };

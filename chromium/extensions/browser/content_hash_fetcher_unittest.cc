@@ -14,6 +14,7 @@
 #include "base/path_service.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/version.h"
 #include "content/public/browser/browser_thread.h"
@@ -125,19 +126,16 @@ class MockDelegate : public ContentVerifierDelegate {
 
 class ContentHashFetcherTest : public ExtensionsTest {
  public:
-  ContentHashFetcherTest() {}
-  ~ContentHashFetcherTest() override {}
-
-  void SetUp() override {
-    ExtensionsTest::SetUp();
-    // We need a real IO thread to be able to intercept the network request
-    // for the missing verified_contents.json file.
-    browser_threads_.reset(new content::TestBrowserThreadBundle(
-        content::TestBrowserThreadBundle::REAL_IO_THREAD));
+  ContentHashFetcherTest()
+      // We need a real IO thread to be able to intercept the network request
+      // for the missing verified_contents.json file.
+      : ExtensionsTest(base::MakeUnique<content::TestBrowserThreadBundle>(
+            content::TestBrowserThreadBundle::REAL_IO_THREAD)) {
     request_context_ = new net::TestURLRequestContextGetter(
         content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::IO));
   }
+  ~ContentHashFetcherTest() override {}
 
   net::URLRequestContextGetter* request_context() {
     return request_context_.get();
@@ -175,12 +173,12 @@ class ContentHashFetcherTest : public ExtensionsTest {
         url.scheme(), url.host(),
         content::BrowserThread::GetTaskRunnerForThread(
             content::BrowserThread::IO),
-        content::BrowserThread::GetBlockingPool());
+        base::CreateTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::BACKGROUND}));
     interceptor_->SetResponse(url, response_path);
   }
 
  protected:
-  std::unique_ptr<content::TestBrowserThreadBundle> browser_threads_;
   std::unique_ptr<net::TestURLRequestInterceptor> interceptor_;
   scoped_refptr<net::TestURLRequestContextGetter> request_context_;
   base::ScopedTempDir temp_dir_;

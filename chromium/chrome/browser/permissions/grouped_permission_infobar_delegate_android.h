@@ -17,15 +17,16 @@ class PermissionPromptAndroid;
 
 // An InfoBar that displays a group of permission requests, each of which can be
 // allowed or blocked independently.
-// TODO(tsergeant): Expand this class so it can be used without subclassing.
+// TODO(timloh): This is incorrectly named as we've removed grouped permissions,
+// rename it to PermissionInfoBarDelegate once crbug.com/606138 is done.
 class GroupedPermissionInfoBarDelegate : public ConfirmInfoBarDelegate {
  public:
   // Public so we can have std::unique_ptr<GroupedPermissionInfoBarDelegate>.
   ~GroupedPermissionInfoBarDelegate() override;
 
-  static infobars::InfoBar* Create(PermissionPromptAndroid* permission_prompt,
-                                   InfoBarService* infobar_service,
-                                   const GURL& requesting_origin);
+  static infobars::InfoBar* Create(
+      const base::WeakPtr<PermissionPromptAndroid>& permission_prompt,
+      InfoBarService* infobar_service);
 
   bool persist() const { return persist_; }
   void set_persist(bool persist) { persist_ = persist; }
@@ -36,40 +37,34 @@ class GroupedPermissionInfoBarDelegate : public ConfirmInfoBarDelegate {
   bool ShouldShowPersistenceToggle() const;
 
   ContentSettingsType GetContentSettingType(size_t position) const;
-  int GetIconIdForPermission(size_t position) const;
 
-  // Message text to display for an individual permission at |position|.
-  base::string16 GetMessageTextFragment(size_t position) const;
-
-  // Toggle accept value for an individual permission at |position|.
-  void ToggleAccept(size_t position, bool new_value);
+  // InfoBarDelegate:
+  int GetIconId() const override;
 
   // ConfirmInfoBarDelegate:
   base::string16 GetMessageText() const override;
   bool Accept() override;
   bool Cancel() override;
   void InfoBarDismissed() override;
-
- protected:
-  bool GetAcceptState(size_t position);
+  base::string16 GetLinkText() const override;
 
  private:
-  GroupedPermissionInfoBarDelegate(PermissionPromptAndroid* permission_prompt,
-                                   const GURL& requesting_origin);
+  GroupedPermissionInfoBarDelegate(
+      const base::WeakPtr<PermissionPromptAndroid>& permission_prompt);
 
   // ConfirmInfoBarDelegate:
   InfoBarIdentifier GetIdentifier() const override;
   Type GetInfoBarType() const override;
   int GetButtons() const override;
   base::string16 GetButtonLabel(InfoBarButton button) const override;
+  GURL GetLinkURL() const override;
 
   // InfoBarDelegate:
   bool EqualsDelegate(infobars::InfoBarDelegate* delegate) const override;
 
-  const GURL requesting_origin_;
   // Whether the accept/deny decision is persisted.
   bool persist_;
-  PermissionPromptAndroid* permission_prompt_;
+  base::WeakPtr<PermissionPromptAndroid> permission_prompt_;
 
   DISALLOW_COPY_AND_ASSIGN(GroupedPermissionInfoBarDelegate);
 };

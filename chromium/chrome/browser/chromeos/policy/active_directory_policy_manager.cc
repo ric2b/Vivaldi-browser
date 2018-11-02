@@ -9,7 +9,6 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chromeos/dbus/auth_policy_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/policy/core/common/policy_bundle.h"
@@ -18,16 +17,9 @@
 
 namespace {
 
-// Refresh policy every 90 minutes which matches the Windows default:
+// Fetch policy every 90 minutes which matches the Windows default:
 // https://technet.microsoft.com/en-us/library/cc940895.aspx
-constexpr base::TimeDelta kRefreshInterval = base::TimeDelta::FromMinutes(90);
-
-// After startup, delay initial policy fetch to keep authpolicyd free for more
-// important tasks like user auth.
-constexpr base::TimeDelta kInitialFetchDelay = base::TimeDelta::FromSeconds(60);
-
-// Retry delay in case of |refresh_in_progress_|.
-constexpr base::TimeDelta kBusyRetryInterval = base::TimeDelta::FromSeconds(1);
+constexpr base::TimeDelta kFetchInterval = base::TimeDelta::FromMinutes(90);
 
 }  // namespace
 
@@ -39,17 +31,23 @@ ActiveDirectoryPolicyManager::~ActiveDirectoryPolicyManager() {}
 std::unique_ptr<ActiveDirectoryPolicyManager>
 ActiveDirectoryPolicyManager::CreateForDevicePolicy(
     std::unique_ptr<CloudPolicyStore> store) {
+  // Can't use MakeUnique<> because the constructor is private.
   return base::WrapUnique(
-      new ActiveDirectoryPolicyManager(EmptyAccountId(), std::move(store)));
+      new ActiveDirectoryPolicyManager(EmptyAccountId(), base::TimeDelta(),
+                                       base::OnceClosure(), std::move(store)));
 }
 
 // static
 std::unique_ptr<ActiveDirectoryPolicyManager>
 ActiveDirectoryPolicyManager::CreateForUserPolicy(
     const AccountId& account_id,
+    base::TimeDelta initial_policy_fetch_timeout,
+    base::OnceClosure exit_session,
     std::unique_ptr<CloudPolicyStore> store) {
-  return base::WrapUnique(
-      new ActiveDirectoryPolicyManager(account_id, std::move(store)));
+  // Can't use MakeUnique<> because the constructor is private.
+  return base::WrapUnique(new ActiveDirectoryPolicyManager(
+      account_id, initial_policy_fetch_timeout, std::move(exit_session),
+      std::move(store)));
 }
 
 void ActiveDirectoryPolicyManager::Init(SchemaRegistry* registry) {
@@ -63,7 +61,12 @@ void ActiveDirectoryPolicyManager::Init(SchemaRegistry* registry) {
   // Does nothing if |store_| hasn't yet initialized.
   PublishPolicy();
 
-  ScheduleAutomaticRefresh();
+  scheduler_ = base::MakeUnique<PolicyScheduler>(
+      base::BindRepeating(&ActiveDirectoryPolicyManager::DoPolicyFetch,
+                          weak_ptr_factory_.GetWeakPtr()),
+      base::BindRepeating(&ActiveDirectoryPolicyManager::OnPolicyFetched,
+                          weak_ptr_factory_.GetWeakPtr()),
+      kFetchInterval);
 }
 
 void ActiveDirectoryPolicyManager::Shutdown() {
@@ -73,6 +76,9 @@ void ActiveDirectoryPolicyManager::Shutdown() {
 
 bool ActiveDirectoryPolicyManager::IsInitializationComplete(
     PolicyDomain domain) const {
+  if (waiting_for_initial_policy_fetch_) {
+    return false;
+  }
   if (domain == POLICY_DOMAIN_CHROME) {
     return store_->is_initialized();
   }
@@ -80,13 +86,19 @@ bool ActiveDirectoryPolicyManager::IsInitializationComplete(
 }
 
 void ActiveDirectoryPolicyManager::RefreshPolicies() {
-  ScheduleRefresh(base::TimeDelta());
+  scheduler_->ScheduleTaskNow();
 }
 
 void ActiveDirectoryPolicyManager::OnStoreLoaded(
     CloudPolicyStore* cloud_policy_store) {
   DCHECK_EQ(store_.get(), cloud_policy_store);
   PublishPolicy();
+  if (fetch_ever_completed_) {
+    // Policy is guaranteed to be up to date with the previous fetch result
+    // because OnPolicyFetched() cancels any potentially running Load()
+    // operations.
+    CancelWaitForInitialPolicy(fetch_ever_succeeded_ /* success */);
+  }
 }
 
 void ActiveDirectoryPolicyManager::OnStoreError(
@@ -96,14 +108,39 @@ void ActiveDirectoryPolicyManager::OnStoreError(
   // complete on the ConfigurationPolicyProvider interface. Technically, this is
   // only required on the first load, but doesn't hurt in any case.
   PublishPolicy();
+  if (fetch_ever_completed_) {
+    CancelWaitForInitialPolicy(false /* success */);
+  }
+}
+
+void ActiveDirectoryPolicyManager::ForceTimeoutForTest() {
+  DCHECK(initial_policy_timeout_.IsRunning());
+  // Stop the timer to mimic what happens when a real timer fires, then invoke
+  // the timer callback directly.
+  initial_policy_timeout_.Stop();
+  OnBlockingFetchTimeout();
 }
 
 ActiveDirectoryPolicyManager::ActiveDirectoryPolicyManager(
     const AccountId& account_id,
+    base::TimeDelta initial_policy_fetch_timeout,
+    base::OnceClosure exit_session,
     std::unique_ptr<CloudPolicyStore> store)
     : account_id_(account_id),
-      store_(std::move(store)),
-      weak_ptr_factory_(this) {}
+      waiting_for_initial_policy_fetch_(
+          !initial_policy_fetch_timeout.is_zero()),
+      initial_policy_fetch_may_fail_(!initial_policy_fetch_timeout.is_max()),
+      exit_session_(std::move(exit_session)),
+      store_(std::move(store)) {
+  // Delaying initialization complete is intended for user policy only.
+  DCHECK(account_id != EmptyAccountId() || !waiting_for_initial_policy_fetch_);
+  if (waiting_for_initial_policy_fetch_ && initial_policy_fetch_may_fail_) {
+    initial_policy_timeout_.Start(
+        FROM_HERE, initial_policy_fetch_timeout,
+        base::Bind(&ActiveDirectoryPolicyManager::OnBlockingFetchTimeout,
+                   weak_ptr_factory_.GetWeakPtr()));
+  }
+}
 
 void ActiveDirectoryPolicyManager::PublishPolicy() {
   if (!store_->is_initialized()) {
@@ -122,61 +159,8 @@ void ActiveDirectoryPolicyManager::PublishPolicy() {
   UpdatePolicy(std::move(bundle));
 }
 
-void ActiveDirectoryPolicyManager::OnPolicyRefreshed(bool success) {
-  if (!success) {
-    LOG(ERROR) << "Active Directory policy refresh failed.";
-  }
-  // Load independently of success or failure to keep up to date with whatever
-  // has happened on the authpolicyd / session manager side.
-  store_->Load();
-
-  refresh_in_progress_ = false;
-  last_refresh_ = base::TimeTicks::Now();
-  ScheduleAutomaticRefresh();
-}
-
-void ActiveDirectoryPolicyManager::ScheduleRefresh(base::TimeDelta delay) {
-  if (refresh_task_) {
-    refresh_task_->Cancel();
-  }
-  refresh_task_ = base::MakeUnique<base::CancelableClosure>(
-      base::Bind(&ActiveDirectoryPolicyManager::RunScheduledRefresh,
-                 weak_ptr_factory_.GetWeakPtr()));
-  base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, refresh_task_->callback(), delay);
-}
-
-void ActiveDirectoryPolicyManager::ScheduleAutomaticRefresh() {
-  base::TimeTicks baseline;
-  base::TimeDelta interval;
-  if (retry_refresh_) {
-    baseline = last_refresh_;
-    interval = kBusyRetryInterval;
-  } else if (last_refresh_ == base::TimeTicks()) {
-    baseline = startup_;
-    interval = kInitialFetchDelay;
-  } else {
-    baseline = last_refresh_;
-    interval = kRefreshInterval;
-  }
-  base::TimeDelta delay;
-  const base::TimeTicks now(base::TimeTicks::Now());
-  if (now < baseline + interval) {
-    delay = baseline + interval - now;
-  }
-  ScheduleRefresh(delay);
-}
-
-void ActiveDirectoryPolicyManager::RunScheduledRefresh() {
-  // Abort if a refresh is currently in progress (to avoid D-Bus jobs piling up
-  // behind each other).
-  if (refresh_in_progress_) {
-    retry_refresh_ = true;
-    return;
-  }
-
-  retry_refresh_ = false;
-  refresh_in_progress_ = true;
+void ActiveDirectoryPolicyManager::DoPolicyFetch(
+    base::OnceCallback<void(bool success)> callback) {
   chromeos::DBusThreadManager* thread_manager =
       chromeos::DBusThreadManager::Get();
   DCHECK(thread_manager);
@@ -184,15 +168,72 @@ void ActiveDirectoryPolicyManager::RunScheduledRefresh() {
       thread_manager->GetAuthPolicyClient();
   DCHECK(auth_policy_client);
   if (account_id_ == EmptyAccountId()) {
-    auth_policy_client->RefreshDevicePolicy(
-        base::Bind(&ActiveDirectoryPolicyManager::OnPolicyRefreshed,
-                   weak_ptr_factory_.GetWeakPtr()));
+    auth_policy_client->RefreshDevicePolicy(std::move(callback));
   } else {
-    auth_policy_client->RefreshUserPolicy(
-        account_id_,
-        base::Bind(&ActiveDirectoryPolicyManager::OnPolicyRefreshed,
-                   weak_ptr_factory_.GetWeakPtr()));
+    auth_policy_client->RefreshUserPolicy(account_id_, std::move(callback));
   }
+}
+
+void ActiveDirectoryPolicyManager::OnPolicyFetched(bool success) {
+  fetch_ever_completed_ = true;
+  if (success) {
+    fetch_ever_succeeded_ = true;
+  } else {
+    LOG(ERROR) << "Active Directory policy fetch failed.";
+    if (store_->is_initialized()) {
+      CancelWaitForInitialPolicy(false /* success */);
+    }
+  }
+  // Load independently of success or failure to keep in sync with the state in
+  // session manager. This cancels any potentially running Load() operations
+  // thus it is guaranteed that at the next OnStoreLoaded() invocation the
+  // policy is up-to-date with what was fetched.
+  store_->Load();
+}
+
+void ActiveDirectoryPolicyManager::OnBlockingFetchTimeout() {
+  DCHECK(waiting_for_initial_policy_fetch_);
+  LOG(WARNING) << "Timed out while waiting for the policy fetch. "
+               << "The session will start with the cached policy.";
+  CancelWaitForInitialPolicy(false);
+}
+
+void ActiveDirectoryPolicyManager::CancelWaitForInitialPolicy(bool success) {
+  if (!waiting_for_initial_policy_fetch_)
+    return;
+
+  initial_policy_timeout_.Stop();
+
+  // If the conditions to continue profile initialization are not met, the user
+  // session is exited and initialization is not set as completed.
+  // TODO(tnagel): Maybe add code to retry policy fetch?
+  if (!store_->has_policy()) {
+    // If there's no policy at all (not even cached) the user session must not
+    // continue.
+    LOG(ERROR) << "Policy could not be obtained. "
+               << "Aborting profile initialization";
+    // Prevent duplicate exit session calls.
+    if (exit_session_) {
+      std::move(exit_session_).Run();
+    }
+    return;
+  }
+  if (!success && !initial_policy_fetch_may_fail_) {
+    LOG(ERROR) << "Policy fetch failed for the user. "
+               << "Aborting profile initialization";
+    // Prevent duplicate exit session calls.
+    if (exit_session_) {
+      std::move(exit_session_).Run();
+    }
+    return;
+  }
+
+  // Set initialization complete.
+  waiting_for_initial_policy_fetch_ = false;
+
+  // Publish policy (even though it hasn't changed) in order to signal load
+  // complete on the ConfigurationPolicyProvider interface.
+  PublishPolicy();
 }
 
 }  // namespace policy

@@ -11,6 +11,8 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/strings/string_util.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "build/build_config.h"
 
 #if defined(OS_CHROMEOS)
@@ -21,10 +23,8 @@
 namespace device {
 
 SerialIoHandler::SerialIoHandler(
-    scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
     scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner)
-    : file_thread_task_runner_(file_thread_task_runner),
-      ui_thread_task_runner_(ui_thread_task_runner) {
+    : ui_thread_task_runner_(ui_thread_task_runner) {
   options_.bitrate = 9600;
   options_.data_bits = serial::DataBits::EIGHT;
   options_.parity_bit = serial::ParityBit::NO_PARITY;
@@ -34,17 +34,16 @@ SerialIoHandler::SerialIoHandler(
 }
 
 SerialIoHandler::~SerialIoHandler() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   Close();
 }
 
 void SerialIoHandler::Open(const std::string& port,
                            const serial::ConnectionOptions& options,
                            const OpenCompleteCallback& callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(open_complete_.is_null());
   open_complete_ = callback;
-  DCHECK(file_thread_task_runner_.get());
   DCHECK(ui_thread_task_runner_.get());
   MergeConnectionOptions(options);
   port_ = port;
@@ -63,9 +62,11 @@ void SerialIoHandler::Open(const std::string& port,
           port, base::Bind(&SerialIoHandler::OnPathOpened, this, task_runner),
           base::Bind(&SerialIoHandler::OnPathOpenError, this, task_runner)));
 #else
-  file_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&SerialIoHandler::StartOpen, this, port,
-                            base::ThreadTaskRunnerHandle::Get()));
+  base::PostTaskWithTraits(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
+      base::Bind(&SerialIoHandler::StartOpen, this, port,
+                 base::ThreadTaskRunnerHandle::Get()));
 #endif  // defined(OS_CHROMEOS)
 }
 
@@ -91,7 +92,7 @@ void SerialIoHandler::OnPathOpenError(
 
 void SerialIoHandler::ReportPathOpenError(const std::string& error_name,
                                           const std::string& error_message) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!open_complete_.is_null());
   LOG(ERROR) << "Permission broker failed to open '" << port_
              << "': " << error_name << ": " << error_message;
@@ -126,7 +127,6 @@ void SerialIoHandler::StartOpen(
     const std::string& port,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner) {
   DCHECK(!open_complete_.is_null());
-  DCHECK(file_thread_task_runner_->RunsTasksInCurrentSequence());
   DCHECK(!file_.IsValid());
   // It's the responsibility of the API wrapper around SerialIoHandler to
   // validate the supplied path against the set of valid port names, and
@@ -143,7 +143,7 @@ void SerialIoHandler::StartOpen(
 }
 
 void SerialIoHandler::FinishOpen(base::File file) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!open_complete_.is_null());
   OpenCompleteCallback callback = open_complete_;
   open_complete_.Reset();
@@ -170,9 +170,9 @@ bool SerialIoHandler::PostOpen() {
 
 void SerialIoHandler::Close() {
   if (file_.IsValid()) {
-    DCHECK(file_thread_task_runner_.get());
-    file_thread_task_runner_->PostTask(
+    base::PostTaskWithTraits(
         FROM_HERE,
+        {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
         base::Bind(&SerialIoHandler::DoClose, Passed(std::move(file_))));
   }
 }
@@ -183,7 +183,7 @@ void SerialIoHandler::DoClose(base::File port) {
 }
 
 void SerialIoHandler::Read(std::unique_ptr<WritableBuffer> buffer) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsReadPending());
   pending_read_buffer_ = std::move(buffer);
   read_canceled_ = false;
@@ -192,7 +192,7 @@ void SerialIoHandler::Read(std::unique_ptr<WritableBuffer> buffer) {
 }
 
 void SerialIoHandler::Write(std::unique_ptr<ReadOnlyBuffer> buffer) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!IsWritePending());
   pending_write_buffer_ = std::move(buffer);
   write_canceled_ = false;
@@ -202,7 +202,7 @@ void SerialIoHandler::Write(std::unique_ptr<ReadOnlyBuffer> buffer) {
 
 void SerialIoHandler::ReadCompleted(int bytes_read,
                                     serial::ReceiveError error) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsReadPending());
   std::unique_ptr<WritableBuffer> pending_read_buffer =
       std::move(pending_read_buffer_);
@@ -216,7 +216,7 @@ void SerialIoHandler::ReadCompleted(int bytes_read,
 
 void SerialIoHandler::WriteCompleted(int bytes_written,
                                      serial::SendError error) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(IsWritePending());
   std::unique_ptr<ReadOnlyBuffer> pending_write_buffer =
       std::move(pending_write_buffer_);
@@ -230,17 +230,17 @@ void SerialIoHandler::WriteCompleted(int bytes_written,
 }
 
 bool SerialIoHandler::IsReadPending() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return pending_read_buffer_ != NULL;
 }
 
 bool SerialIoHandler::IsWritePending() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return pending_write_buffer_ != NULL;
 }
 
 void SerialIoHandler::CancelRead(serial::ReceiveError reason) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (IsReadPending() && !read_canceled_) {
     read_canceled_ = true;
     read_cancel_reason_ = reason;
@@ -249,7 +249,7 @@ void SerialIoHandler::CancelRead(serial::ReceiveError reason) {
 }
 
 void SerialIoHandler::CancelWrite(serial::SendError reason) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (IsWritePending() && !write_canceled_) {
     write_canceled_ = true;
     write_cancel_reason_ = reason;

@@ -116,6 +116,25 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
       const std::vector<Dispatcher::DispatcherInTransit>& dispatchers,
       MojoHandle* handles);
 
+  // Marks a set of handles as busy and acquires references to each of their
+  // dispatchers. The caller MUST eventually call ReleaseDispatchersForTransit()
+  // on the resulting |*dispatchers|.
+  MojoResult AcquireDispatchersForTransit(
+      const MojoHandle* handles,
+      size_t num_handles,
+      std::vector<Dispatcher::DispatcherInTransit>* dispatchers);
+
+  // Releases dispatchers previously acquired by
+  // |AcquireDispatchersForTransit()|. |in_transit| should be |true| if the
+  // caller has fully serialized every dispatcher in |dispatchers|, in which
+  // case this will close and remove their handles from the handle table.
+  //
+  // If |in_transit| is false, this simply unmarks the dispatchers as busy,
+  // making them available for general use once again.
+  void ReleaseDispatchersForTransit(
+      const std::vector<Dispatcher::DispatcherInTransit>& dispatchers,
+      bool in_transit);
+
   // See "mojo/edk/embedder/embedder.h" for more information on these functions.
   MojoResult CreatePlatformHandleWrapper(ScopedPlatformHandle platform_handle,
                                          MojoHandle* wrapper_handle);
@@ -164,6 +183,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   MojoResult Watch(MojoHandle watcher_handle,
                    MojoHandle handle,
                    MojoHandleSignals signals,
+                   MojoWatchCondition condition,
                    uintptr_t context);
   MojoResult CancelWatch(MojoHandle watcher_handle, uintptr_t context);
   MojoResult ArmWatcher(MojoHandle watcher_handle,
@@ -171,53 +191,56 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
                         uintptr_t* ready_contexts,
                         MojoResult* ready_results,
                         MojoHandleSignalsState* ready_signals_states);
-  MojoResult AllocMessage(uint32_t num_bytes,
-                          const MojoHandle* handles,
-                          uint32_t num_handles,
-                          MojoAllocMessageFlags flags,
-                          MojoMessageHandle* message);
-  MojoResult FreeMessage(MojoMessageHandle message);
-  MojoResult GetMessageBuffer(MojoMessageHandle message, void** buffer);
+  MojoResult CreateMessage(MojoMessageHandle* message_handle);
+  MojoResult DestroyMessage(MojoMessageHandle message_handle);
+  MojoResult SerializeMessage(MojoMessageHandle message_handle);
+  MojoResult AttachSerializedMessageBuffer(MojoMessageHandle message_handle,
+                                           uint32_t payload_size,
+                                           const MojoHandle* handles,
+                                           uint32_t num_handles,
+                                           void** buffer,
+                                           uint32_t* buffer_size);
+  MojoResult ExtendSerializedMessagePayload(MojoMessageHandle message_handle,
+                                            uint32_t new_payload_size,
+                                            void** new_buffer,
+                                            uint32_t* new_buffer_size);
+  MojoResult GetSerializedMessageContents(
+      MojoMessageHandle message_handle,
+      void** buffer,
+      uint32_t* num_bytes,
+      MojoHandle* handles,
+      uint32_t* num_handles,
+      MojoGetSerializedMessageContentsFlags flags);
+  MojoResult AttachMessageContext(MojoMessageHandle message_handle,
+                                  uintptr_t context,
+                                  MojoMessageContextSerializer serializer,
+                                  MojoMessageContextDestructor destructor);
+  MojoResult GetMessageContext(MojoMessageHandle message_handle,
+                               uintptr_t* context,
+                               MojoGetMessageContextFlags flags);
   MojoResult GetProperty(MojoPropertyType type, void* value);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/message_pipe.h":
-  MojoResult CreateMessagePipe(
-      const MojoCreateMessagePipeOptions* options,
-      MojoHandle* message_pipe_handle0,
-      MojoHandle* message_pipe_handle1);
+  MojoResult CreateMessagePipe(const MojoCreateMessagePipeOptions* options,
+                               MojoHandle* message_pipe_handle0,
+                               MojoHandle* message_pipe_handle1);
   MojoResult WriteMessage(MojoHandle message_pipe_handle,
-                          const void* bytes,
-                          uint32_t num_bytes,
-                          const MojoHandle* handles,
-                          uint32_t num_handles,
+                          MojoMessageHandle message_handle,
                           MojoWriteMessageFlags flags);
-  MojoResult WriteMessageNew(MojoHandle message_pipe_handle,
-                             MojoMessageHandle message,
-                             MojoWriteMessageFlags flags);
   MojoResult ReadMessage(MojoHandle message_pipe_handle,
-                         void* bytes,
-                         uint32_t* num_bytes,
-                         MojoHandle* handles,
-                         uint32_t* num_handles,
+                         MojoMessageHandle* message_handle,
                          MojoReadMessageFlags flags);
-  MojoResult ReadMessageNew(MojoHandle message_pipe_handle,
-                            MojoMessageHandle* message,
-                            uint32_t* num_bytes,
-                            MojoHandle* handles,
-                            uint32_t* num_handles,
-                            MojoReadMessageFlags flags);
   MojoResult FuseMessagePipes(MojoHandle handle0, MojoHandle handle1);
-  MojoResult NotifyBadMessage(MojoMessageHandle message,
+  MojoResult NotifyBadMessage(MojoMessageHandle message_handle,
                               const char* error,
                               size_t error_num_bytes);
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/data_pipe.h":
-  MojoResult CreateDataPipe(
-      const MojoCreateDataPipeOptions* options,
-      MojoHandle* data_pipe_producer_handle,
-      MojoHandle* data_pipe_consumer_handle);
+  MojoResult CreateDataPipe(const MojoCreateDataPipeOptions* options,
+                            MojoHandle* data_pipe_producer_handle,
+                            MojoHandle* data_pipe_consumer_handle);
   MojoResult WriteData(MojoHandle data_pipe_producer_handle,
                        const void* elements,
                        uint32_t* num_bytes,
@@ -241,10 +264,9 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
 
   // These methods correspond to the API functions defined in
   // "mojo/public/c/system/buffer.h":
-  MojoResult CreateSharedBuffer(
-      const MojoCreateSharedBufferOptions* options,
-      uint64_t num_bytes,
-      MojoHandle* shared_buffer_handle);
+  MojoResult CreateSharedBuffer(const MojoCreateSharedBufferOptions* options,
+                                uint64_t num_bytes,
+                                MojoHandle* shared_buffer_handle);
   MojoResult DuplicateBufferHandle(
       MojoHandle buffer_handle,
       const MojoDuplicateBufferHandleOptions* options,
@@ -265,12 +287,14 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   MojoResult WrapPlatformSharedBufferHandle(
       const MojoPlatformHandle* platform_handle,
       size_t size,
+      const MojoSharedBufferGuid* guid,
       MojoPlatformSharedBufferHandleFlags flags,
       MojoHandle* mojo_handle);
   MojoResult UnwrapPlatformSharedBufferHandle(
       MojoHandle mojo_handle,
       MojoPlatformHandle* platform_handle,
       size_t* size,
+      MojoSharedBufferGuid* guid,
       MojoPlatformSharedBufferHandleFlags* flags);
 
   void GetActiveHandlesForTest(std::vector<MojoHandle>* handles);
@@ -299,8 +323,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Core {
   // but cannot be associated with a specific process.
   ProcessErrorCallback default_process_error_callback_;
 
-  base::Lock handles_lock_;
-  HandleTable handles_;
+  std::unique_ptr<HandleTable> handles_;
 
   base::Lock mapping_table_lock_;  // Protects |mapping_table_|.
   MappingTable mapping_table_;

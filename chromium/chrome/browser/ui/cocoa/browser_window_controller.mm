@@ -78,7 +78,9 @@
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_controller.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_strip_view.h"
 #import "chrome/browser/ui/cocoa/tabs/tab_view.h"
+#import "chrome/browser/ui/cocoa/toolbar/app_toolbar_button.h"
 #import "chrome/browser/ui/cocoa/toolbar/toolbar_controller.h"
+#include "chrome/browser/ui/cocoa/translate/translate_bubble_bridge_views.h"
 #import "chrome/browser/ui/cocoa/translate/translate_bubble_controller.h"
 #include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
@@ -1059,8 +1061,10 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)setStarredState:(BOOL)isStarred {
   [toolbarController_ setStarredState:isStarred];
 
-  [touchBar_ setIsStarred:isStarred];
-  [self invalidateTouchBar];
+  if ([touchBar_ isStarred] != isStarred) {
+    [touchBar_ setIsStarred:isStarred];
+    [self invalidateTouchBar];
+  }
 }
 
 - (void)setCurrentPageIsTranslated:(BOOL)on {
@@ -1083,8 +1087,10 @@ bool IsTabDetachingInFullscreenEnabled() {
       manager->DisplayPendingRequests();
   }
 
-  if ([self isInAnyFullscreenMode])
-    [[self fullscreenToolbarController] revealToolbarForTabStripChanges];
+  if ([self isInAnyFullscreenMode]) {
+    [[self fullscreenToolbarController] revealToolbarForWebContents:newContents
+                                                       inForeground:YES];
+  }
 }
 
 - (void)zoomChangedForActiveTab:(BOOL)canShowBubble {
@@ -1199,7 +1205,6 @@ bool IsTabDetachingInFullscreenEnabled() {
 - (void)setIsLoading:(BOOL)isLoading force:(BOOL)force {
   [toolbarController_ setIsLoading:isLoading force:force];
   [touchBar_ setIsPageLoading:isLoading];
-  [self invalidateTouchBar];
 }
 
 // Make the location bar the first responder, if possible.
@@ -1523,9 +1528,18 @@ bool IsTabDetachingInFullscreenEnabled() {
   [infoBarContainerController_ tabDetachedWithContents:contents];
 }
 
-- (void)onTabInsertedInForeground:(BOOL)inForeground {
+- (void)onTabInsertedWithContents:(content::WebContents*)contents
+                     inForeground:(BOOL)inForeground {
   if ([self isInAnyFullscreenMode] && !inForeground)
-    [[self fullscreenToolbarController] revealToolbarForTabStripChanges];
+    [[self fullscreenToolbarController]
+        revealToolbarForWebContents:contents
+                       inForeground:inForeground];
+
+  if (inForeground) {
+    AppToolbarButton* appMenuButton =
+        static_cast<AppToolbarButton*>([toolbarController_ appMenuButton]);
+    [appMenuButton animateIfPossible];
+  }
 }
 
 - (void)userChangedTheme {
@@ -1627,6 +1641,11 @@ bool IsTabDetachingInFullscreenEnabled() {
                                      step:(translate::TranslateStep)step
                                 errorType:(translate::TranslateErrors::Type)
                                 errorType {
+  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+    ShowTranslateBubbleViews([self window], [self locationBarBridge], contents,
+                             step, errorType, true);
+    return;
+  }
   // TODO(hajimehoshi): The similar logic exists at TranslateBubbleView::
   // ShowBubble. This should be unified.
   if (translateBubbleController_) {

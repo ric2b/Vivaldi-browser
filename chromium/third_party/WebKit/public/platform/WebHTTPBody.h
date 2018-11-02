@@ -38,13 +38,12 @@
 #include "WebURL.h"
 
 #if INSIDE_BLINK
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #endif
 
 namespace blink {
 
 class EncodedFormData;
-class WebHTTPBodyPrivate;
 
 class WebHTTPBody {
  public:
@@ -61,8 +60,8 @@ class WebHTTPBody {
 
   ~WebHTTPBody() { Reset(); }
 
-  WebHTTPBody() : private_(0) {}
-  WebHTTPBody(const WebHTTPBody& b) : private_(0) { Assign(b); }
+  WebHTTPBody() {}
+  WebHTTPBody(const WebHTTPBody& b) { Assign(b); }
   WebHTTPBody& operator=(const WebHTTPBody& b) {
     Assign(b);
     return *this;
@@ -106,17 +105,15 @@ class WebHTTPBody {
   BLINK_PLATFORM_EXPORT void SetContainsPasswordData(bool);
 
 #if INSIDE_BLINK
-  BLINK_PLATFORM_EXPORT WebHTTPBody(WTF::PassRefPtr<EncodedFormData>);
-  BLINK_PLATFORM_EXPORT WebHTTPBody& operator=(
-      WTF::PassRefPtr<EncodedFormData>);
-  BLINK_PLATFORM_EXPORT operator WTF::PassRefPtr<EncodedFormData>() const;
+  BLINK_PLATFORM_EXPORT WebHTTPBody(WTF::RefPtr<EncodedFormData>);
+  BLINK_PLATFORM_EXPORT WebHTTPBody& operator=(WTF::RefPtr<EncodedFormData>);
+  BLINK_PLATFORM_EXPORT operator WTF::RefPtr<EncodedFormData>() const;
 #endif
 
  private:
-  BLINK_PLATFORM_EXPORT void Assign(WebHTTPBodyPrivate*);
   BLINK_PLATFORM_EXPORT void EnsureMutable();
 
-  WebHTTPBodyPrivate* private_;
+  WebPrivatePtr<EncodedFormData> private_;
 };
 
 }  // namespace blink

@@ -10,27 +10,39 @@
 
 #include <memory>
 
-#import <GLKit/GLKit.h>
-
 #import "ios/third_party/material_components_ios/src/components/Buttons/src/MaterialButtons.h"
+#import "remoting/ios/app/remoting_theme.h"
+#import "remoting/ios/app/settings/remoting_settings_view_controller.h"
 #import "remoting/ios/client_gestures.h"
 #import "remoting/ios/client_keyboard.h"
+#import "remoting/ios/display/eagl_view.h"
+#import "remoting/ios/domain/host_info.h"
+#import "remoting/ios/domain/host_settings.h"
+#import "remoting/ios/mdc/MDCActionImageView.h"
+#import "remoting/ios/persistence/remoting_preferences.h"
 #import "remoting/ios/session/remoting_client.h"
 
 #include "base/strings/sys_string_conversions.h"
+#include "remoting/base/string_resources.h"
+#include "remoting/client/chromoting_client_runtime.h"
 #include "remoting/client/gesture_interpreter.h"
 #include "remoting/client/input/keyboard_interpreter.h"
+#include "ui/base/l10n/l10n_util.h"
 
 static const CGFloat kFabInset = 15.f;
 static const CGFloat kKeyboardAnimationTime = 0.3;
 
 @interface HostViewController ()<ClientKeyboardDelegate,
-                                 ClientGesturesDelegate> {
+                                 ClientGesturesDelegate,
+                                 RemotingSettingsViewControllerDelegate> {
   RemotingClient* _client;
+  MDCActionImageView* _actionImageView;
   MDCFloatingButton* _floatingButton;
   ClientGestures* _clientGestures;
   ClientKeyboard* _clientKeyboard;
   CGSize _keyboardSize;
+  BOOL _surfaceCreated;
+  HostSettings* _settings;
 }
 @end
 
@@ -41,6 +53,9 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   if (self) {
     _client = client;
     _keyboardSize = CGSizeZero;
+    _surfaceCreated = NO;
+    _settings =
+        [[RemotingPreferences instance] settingsForHost:client.hostInfo.hostId];
   }
   return self;
 }
@@ -48,27 +63,42 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 #pragma mark - UIViewController
 
 - (void)loadView {
-  self.view = [[GLKView alloc] initWithFrame:CGRectZero];
+  EAGLView* glView = [[EAGLView alloc] initWithFrame:CGRectZero];
+  glView.displayTaskRunner =
+      remoting::ChromotingClientRuntime::GetInstance()->display_task_runner();
+  self.view = glView;
 }
 
 - (void)viewDidLoad {
   [super viewDidLoad];
   _floatingButton =
       [MDCFloatingButton floatingButtonWithShape:MDCFloatingButtonShapeMini];
-  [_floatingButton setTitle:@"+" forState:UIControlStateNormal];
+  // Note(nicholss): Setting title to " " because the FAB requires the title
+  // or image to be set but we are using the rotating image instead. Until this
+  // is directly supported by the FAB, a space for the title is a work-around.
+  [_floatingButton setTitle:@" " forState:UIControlStateNormal];
   [_floatingButton addTarget:self
                       action:@selector(didTap:)
             forControlEvents:UIControlEventTouchUpInside];
-
-  UIImage* settingsImage = [UIImage imageNamed:@"Settings"];
-  [_floatingButton setImage:settingsImage forState:UIControlStateNormal];
   [_floatingButton sizeToFit];
+
+  _actionImageView =
+      [[MDCActionImageView alloc] initWithFrame:_floatingButton.bounds
+                                   primaryImage:RemotingTheme.settingsIcon
+                                    activeImage:RemotingTheme.closeIcon];
+  [_floatingButton addSubview:_actionImageView];
   [self.view addSubview:_floatingButton];
+
+  [self applyInputMode];
 }
 
 - (void)viewDidUnload {
   [super viewDidUnload];
   // TODO(nicholss): There needs to be a hook to tell the client we are done.
+
+  [(EAGLView*)self.view stop];
+  _clientGestures = nil;
+  _client = nil;
 }
 
 - (BOOL)prefersStatusBarHidden {
@@ -77,31 +107,24 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 
 - (void)viewDidAppear:(BOOL)animated {
   [super viewDidAppear:animated];
-  GLKView* glView = (GLKView*)self.view;
-  glView.context = [_client.displayHandler GetEAGLContext];
-  [_client.displayHandler onSurfaceCreated:glView];
-
+  if (!_surfaceCreated) {
+    [_client.displayHandler onSurfaceCreated:(EAGLView*)self.view];
+    _surfaceCreated = YES;
+  }
   // viewDidLayoutSubviews may be called before viewDidAppear, in which case
   // the surface is not ready to handle the transformation matrix.
   // Call onSurfaceChanged here to cover that case.
   [_client surfaceChanged:self.view.frame];
-
-  // TODO(yuweih): This should be loaded from and stored into user defaults.
-  _client.gestureInterpreter->SetInputMode(
-      remoting::GestureInterpreter::DIRECT_INPUT_MODE);
-}
-
-- (void)viewDidDisappear:(BOOL)animated {
-  [super viewDidDisappear:animated];
-  [(GLKView*)self.view deleteDrawable];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
   [super viewWillAppear:animated];
 
-  _clientGestures =
-      [[ClientGestures alloc] initWithView:self.view client:_client];
-  _clientGestures.delegate = self;
+  if (!_clientGestures) {
+    _clientGestures =
+        [[ClientGestures alloc] initWithView:self.view client:_client];
+    _clientGestures.delegate = self;
+  }
   [[NSNotificationCenter defaultCenter]
       addObserver:self
          selector:@selector(keyboardWillShow:)
@@ -118,15 +141,16 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 - (void)viewWillDisappear:(BOOL)animated {
   [super viewWillDisappear:animated];
 
-  _clientGestures = nil;
-  _client = nil;
+  [[RemotingPreferences instance] setSettings:_settings
+                                      forHost:_client.hostInfo.hostId];
+
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
 
-  if (((GLKView*)self.view).context != nil) {
+  if (self.view.window != nil) {
     // If the context is not set yet, the view size will be set in
     // viewDidAppear.
     [_client surfaceChanged:self.view.bounds];
@@ -212,7 +236,52 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   [self hideKeyboard];
 }
 
+#pragma mark - RemotingSettingsViewControllerDelegate
+
+- (void)setShrinkToFit:(BOOL)shrinkToFit {
+  // TODO(nicholss): I don't think this option makes sense for mobile.
+  NSLog(@"TODO: shrinkToFit %d", shrinkToFit);
+}
+
+- (void)setResizeToFit:(BOOL)resizeToFit {
+  // TODO(nicholss): I don't think this option makes sense for phones. Maybe
+  // for an iPad. Maybe we add a native screen size mimimum before enabling
+  // this option? Ask Jon.
+  NSLog(@"TODO: resizeToFit %d", resizeToFit);
+}
+
+- (void)useDirectInputMode {
+  _settings.inputMode = ClientInputModeDirect;
+  [self applyInputMode];
+}
+
+- (void)useTrackpadInputMode {
+  _settings.inputMode = ClientInputModeTrackpad;
+  [self applyInputMode];
+}
+
+- (void)sendCtrAltDel {
+  _client.keyboardInterpreter->HandleCtrlAltDeleteEvent();
+}
+
+- (void)sendPrintScreen {
+  _client.keyboardInterpreter->HandlePrintScreenEvent();
+}
+
 #pragma mark - Private
+
+- (void)applyInputMode {
+  switch (_settings.inputMode) {
+    case ClientInputModeTrackpad:
+      _client.gestureInterpreter->SetInputMode(
+          remoting::GestureInterpreter::TRACKPAD_INPUT_MODE);
+      break;
+    case ClientInputModeDirect:  // Fall-through.
+    default:
+      _client.gestureInterpreter->SetInputMode(
+          remoting::GestureInterpreter::DIRECT_INPUT_MODE);
+  }
+}
 
 - (void)didTap:(id)sender {
   // TODO(nicholss): The FAB is being used to launch an alert window with
@@ -220,37 +289,47 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   // modal window option selector. Replace this with a real menu later.
 
   UIAlertController* alert = [UIAlertController
-      alertControllerWithTitle:@"Remote Settings"
+      alertControllerWithTitle:nil
                        message:nil
                 preferredStyle:UIAlertControllerStyleActionSheet];
 
   if ([self isKeyboardActive]) {
     void (^hideKeyboardHandler)(UIAlertAction*) = ^(UIAlertAction*) {
       [self hideKeyboard];
+      [_actionImageView setActive:NO animated:YES];
     };
-    [alert addAction:[UIAlertAction actionWithTitle:@"Hide Keyboard"
+    [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
+                                                        IDS_HIDE_KEYBOARD)
                                               style:UIAlertActionStyleDefault
                                             handler:hideKeyboardHandler]];
   } else {
     void (^showKeyboardHandler)(UIAlertAction*) = ^(UIAlertAction*) {
       [self showKeyboard];
+      [_actionImageView setActive:NO animated:YES];
     };
-    [alert addAction:[UIAlertAction actionWithTitle:@"Show Keyboard"
+    [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
+                                                        IDS_SHOW_KEYBOARD)
                                               style:UIAlertActionStyleDefault
                                             handler:showKeyboardHandler]];
   }
 
   remoting::GestureInterpreter::InputMode currentInputMode =
       _client.gestureInterpreter->GetInputMode();
-  NSString* switchInputModeTitle =
+  NSString* switchInputModeTitle = l10n_util::GetNSString(
       currentInputMode == remoting::GestureInterpreter::DIRECT_INPUT_MODE
-          ? @"Trackpad Mode"
-          : @"Touch Mode";
+          ? IDS_SELECT_TRACKPAD_MODE
+          : IDS_SELECT_TOUCH_MODE);
   void (^switchInputModeHandler)(UIAlertAction*) = ^(UIAlertAction*) {
-    _client.gestureInterpreter->SetInputMode(
-        currentInputMode == remoting::GestureInterpreter::DIRECT_INPUT_MODE
-            ? remoting::GestureInterpreter::TRACKPAD_INPUT_MODE
-            : remoting::GestureInterpreter::DIRECT_INPUT_MODE);
+    switch (currentInputMode) {
+      case remoting::GestureInterpreter::DIRECT_INPUT_MODE:
+        [self useTrackpadInputMode];
+        break;
+      case remoting::GestureInterpreter::TRACKPAD_INPUT_MODE:  // Fall-through.
+      default:
+        [self useDirectInputMode];
+        break;
+    }
+    [_actionImageView setActive:NO animated:YES];
   };
   [alert addAction:[UIAlertAction actionWithTitle:switchInputModeTitle
                                             style:UIAlertActionStyleDefault
@@ -258,18 +337,40 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
 
   void (^disconnectHandler)(UIAlertAction*) = ^(UIAlertAction*) {
     [_client disconnectFromHost];
-    [self dismissViewControllerAnimated:YES completion:nil];
+    [self.navigationController popToRootViewControllerAnimated:YES];
+    [_actionImageView setActive:NO animated:YES];
   };
-  [alert addAction:[UIAlertAction actionWithTitle:@"Disconnect"
-                                            style:UIAlertActionStyleDefault
-                                          handler:disconnectHandler]];
+  [alert
+      addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
+                                                   IDS_DISCONNECT_MYSELF_BUTTON)
+                                         style:UIAlertActionStyleDefault
+                                       handler:disconnectHandler]];
 
-  void (^cancelHandler)(UIAlertAction*) = ^(UIAlertAction*) {
-    [alert dismissViewControllerAnimated:YES completion:nil];
+  __weak HostViewController* weakSelf = self;
+  void (^settingsHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+    RemotingSettingsViewController* settingsViewController =
+        [[RemotingSettingsViewController alloc] init];
+    settingsViewController.delegate = weakSelf;
+    settingsViewController.inputMode = currentInputMode;
+    UINavigationController* navController = [[UINavigationController alloc]
+        initWithRootViewController:settingsViewController];
+    [weakSelf presentViewController:navController animated:YES completion:nil];
+    [_actionImageView setActive:NO animated:YES];
   };
-  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                            style:UIAlertActionStyleCancel
-                                          handler:cancelHandler]];
+  [alert addAction:[UIAlertAction actionWithTitle:l10n_util::GetNSString(
+                                                      IDS_SETTINGS_BUTTON)
+                                            style:UIAlertActionStyleDefault
+                                          handler:settingsHandler]];
+
+  __weak UIAlertController* weakAlert = alert;
+  void (^cancelHandler)(UIAlertAction*) = ^(UIAlertAction*) {
+    [weakAlert dismissViewControllerAnimated:YES completion:nil];
+    [_actionImageView setActive:NO animated:YES];
+  };
+  [alert addAction:[UIAlertAction
+                       actionWithTitle:l10n_util::GetNSString(IDS_CANCEL)
+                                 style:UIAlertActionStyleCancel
+                               handler:cancelHandler]];
 
   alert.popoverPresentationController.sourceView = self.view;
   // Target the alert menu at the top middle of the FAB.
@@ -279,6 +380,7 @@ static const CGFloat kKeyboardAnimationTime = 0.3;
   alert.popoverPresentationController.permittedArrowDirections =
       UIPopoverArrowDirectionDown;
   [self presentViewController:alert animated:YES completion:nil];
+  [_actionImageView setActive:YES animated:YES];
 }
 
 @end

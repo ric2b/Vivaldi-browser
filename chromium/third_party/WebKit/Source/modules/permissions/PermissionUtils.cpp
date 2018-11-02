@@ -7,34 +7,37 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalFrame.h"
-#include "public/platform/InterfaceProvider.h"
-#include "public/platform/Platform.h"
+#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerThread.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
-using mojom::blink::PermissionDescriptor;
+// There are two PermissionDescriptor, one in Mojo bindings and one
+// in v8 bindings so we'll rename one here.
+using MojoPermissionDescriptor = mojom::blink::PermissionDescriptor;
 using mojom::blink::PermissionDescriptorPtr;
 using mojom::blink::PermissionName;
 
 bool ConnectToPermissionService(
     ExecutionContext* execution_context,
     mojom::blink::PermissionServiceRequest request) {
-  InterfaceProvider* interface_provider = nullptr;
-  if (execution_context->IsDocument()) {
-    Document* document = ToDocument(execution_context);
-    if (document->GetFrame())
-      interface_provider = document->GetFrame()->GetInterfaceProvider();
-  } else {
-    interface_provider = Platform::Current()->GetInterfaceProvider();
+  if (execution_context->IsWorkerGlobalScope()) {
+    WorkerThread* thread = ToWorkerGlobalScope(execution_context)->GetThread();
+    thread->GetInterfaceProvider().GetInterface(std::move(request));
+    return true;
   }
 
-  if (interface_provider)
-    interface_provider->GetInterface(std::move(request));
-  return interface_provider;
+  LocalFrame* frame = ToDocument(execution_context)->GetFrame();
+  if (!frame)
+    return false;
+
+  frame->GetInterfaceProvider().GetInterface(std::move(request));
+  return true;
 }
 
 PermissionDescriptorPtr CreatePermissionDescriptor(PermissionName name) {
-  auto descriptor = PermissionDescriptor::New();
+  auto descriptor = MojoPermissionDescriptor::New();
   descriptor->name = name;
   return descriptor;
 }

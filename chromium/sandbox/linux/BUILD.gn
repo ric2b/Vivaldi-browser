@@ -44,6 +44,9 @@ group("sandbox") {
   if (use_seccomp_bpf || is_nacl_nonsfi) {
     public_deps += [ ":seccomp_bpf" ]
   }
+  if (is_android) {
+    public_deps += [ ":seccomp_starter_android" ]
+  }
 }
 
 source_set("sandbox_linux_test_utils") {
@@ -221,6 +224,8 @@ component("seccomp_bpf") {
     "bpf_dsl/trap_registry.h",
     "seccomp-bpf-helpers/baseline_policy.cc",
     "seccomp-bpf-helpers/baseline_policy.h",
+    "seccomp-bpf-helpers/baseline_policy_android.cc",
+    "seccomp-bpf-helpers/baseline_policy_android.h",
     "seccomp-bpf-helpers/sigsys_handlers.cc",
     "seccomp-bpf-helpers/sigsys_handlers.h",
     "seccomp-bpf-helpers/syscall_parameters_restrictions.cc",
@@ -263,6 +268,30 @@ component("seccomp_bpf") {
       "seccomp-bpf-helpers/syscall_sets.h",
     ]
     configs += [ ":nacl_nonsfi_warnings" ]
+  }
+}
+
+if (is_android) {
+  # This target is available even if use_seccomp_bpf is disabled, but it also
+  # works when it is enabled.
+  component("seccomp_starter_android") {
+    sources = [
+      "seccomp-bpf-helpers/seccomp_starter_android.cc",
+      "seccomp-bpf-helpers/seccomp_starter_android.h",
+    ]
+
+    defines = [ "SANDBOX_IMPLEMENTATION" ]
+
+    deps = [
+      "//base",
+      "//sandbox:sandbox_features",
+    ]
+
+    if (use_seccomp_bpf) {
+      deps += [ ":seccomp_bpf" ]
+    }
+
+    visibility = [ ":*" ]
   }
 }
 

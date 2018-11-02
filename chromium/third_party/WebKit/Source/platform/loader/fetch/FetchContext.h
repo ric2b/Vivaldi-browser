@@ -32,6 +32,7 @@
 #define FetchContext_h
 
 #include "platform/PlatformExport.h"
+#include "platform/WebFrameScheduler.h"
 #include "platform/heap/Handle.h"
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/FetchParameters.h"
@@ -42,6 +43,8 @@
 #include "platform/weborigin/SecurityViolationReportingPolicy.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/Noncopyable.h"
+#include "public/platform/WebApplicationCacheHost.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLLoader.h"
 
 namespace blink {
@@ -53,8 +56,6 @@ class PlatformProbeSink;
 class ResourceError;
 class ResourceResponse;
 class ResourceTimingInfo;
-class WebTaskRunner;
-enum class WebCachePolicy;
 
 enum FetchResourceType { kFetchMainResource, kFetchSubresource };
 
@@ -175,6 +176,9 @@ class PLATFORM_EXPORT FetchContext
 
   virtual bool IsControlledByServiceWorker() const { return false; }
   virtual int64_t ServiceWorkerID() const { return -1; }
+  virtual int ApplicationCacheHostID() const {
+    return WebApplicationCacheHost::kAppCacheNoHostId;
+  }
 
   virtual bool IsMainFrame() const { return true; }
   virtual bool DefersLoading() const { return false; }
@@ -204,16 +208,27 @@ class PLATFORM_EXPORT FetchContext
 
   virtual MHTMLArchive* Archive() const { return nullptr; }
 
-  virtual RefPtr<WebTaskRunner> LoadingTaskRunner() const { return nullptr; }
-
   PlatformProbeSink* GetPlatformProbeSink() const {
     return platform_probe_sink_;
   }
 
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader() {
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
+      const ResourceRequest&) {
     NOTREACHED();
     return nullptr;
   }
+
+  virtual bool IsDetached() const { return false; }
+
+  // Obtains WebFrameScheduler instance that is used in the attached frame.
+  // May return nullptr if a frame is not attached or detached.
+  virtual WebFrameScheduler* GetFrameScheduler() { return nullptr; }
+
+  // Called when the underlying context is detached. Note that some
+  // FetchContexts continue working after detached (e.g., for fetch() operations
+  // with "keepalive" specified).
+  // Returns a "detached" fetch context which can be null.
+  virtual FetchContext* Detach() { return nullptr; }
 
  protected:
   FetchContext();

@@ -13,6 +13,7 @@
 #include <memory>
 
 #include "base/command_line.h"
+#include "base/ios/ios_util.h"
 #include "base/logging.h"
 #include "base/mac/bundle_locations.h"
 #include "base/mac/foundation_util.h"
@@ -29,6 +30,7 @@
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #include "ios/chrome/browser/search_engines/template_url_service_factory.h"
 #import "ios/chrome/browser/tabs/tab.h"
@@ -36,16 +38,18 @@
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/history/tab_history_popup_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
-#import "ios/chrome/browser/ui/keyboard/hardware_keyboard_watcher.h"
 #include "ios/chrome/browser/ui/omnibox/location_bar_controller_impl.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_view_ios.h"
 #import "ios/chrome/browser/ui/popup_menu/popup_menu_view.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
 #include "ios/chrome/browser/ui/rtl_geometry.h"
+#import "ios/chrome/browser/ui/toolbar/keyboard_accessory_view_delegate.h"
+#import "ios/chrome/browser/ui/toolbar/new_keyboard_accessory_view.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller+protected.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_controller.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_model_ios.h"
@@ -115,8 +119,6 @@ const CGFloat kCancelButtonBottomMargin = 4.0;
 const CGFloat kCancelButtonTopMargin = 4.0;
 const CGFloat kCancelButtonLeadingMargin = 7.0;
 const CGFloat kCancelButtonWidth = 40.0;
-const CGFloat kIpadButtonTitleFontSize = 20.0;
-const CGFloat kIphoneButtonTitleFontSize = 15.0;
 
 // Additional offset to adjust the y coordinate of the determinate progress bar
 // up by.
@@ -222,23 +224,11 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 }  // namespace
 
-// View for the accessory view above the keyboard. Subclassed to allow playing
-// input clicks when pressed.
-@interface KeyboardAccessoryView : UIInputView<UIInputViewAudioFeedback>
-@end
-
-@implementation KeyboardAccessoryView
-
-- (BOOL)enableInputClicksWhenVisible {
-  return YES;
-}
-
-@end
-
 // TODO(crbug.com/619982) Remove this block and add CAAnimationDelegate when we
 // switch the main bots to Xcode 8.
 #if defined(__IPHONE_10_0) && (__IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0)
-@interface WebToolbarController ()<CAAnimationDelegate>
+@interface WebToolbarController ()<CAAnimationDelegate,
+                                   KeyboardAccessoryViewDelegate>
 @end
 #endif
 
@@ -255,8 +245,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   UIButton* _voiceSearchButton;
   OmniboxTextFieldIOS* _omniBox;
   UIButton* _cancelButton;
-  UIView* _keyBoardAccessoryView;
-  UIButton* _keyboardVoiceSearchButton;
   // Progress bar used to show what fraction of the page has loaded.
   MDCProgressView* _determinateProgressView;
   UIImageView* _omniboxBackground;
@@ -295,10 +283,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   // View controller for displaying tab history when the user long presses the
   // back or forward button. nil if not visible.
   TabHistoryPopupController* _tabHistoryPopupController;
-
-  // Hardware keyboard watcher, to detect the type of keyboard currently
-  // attached.
-  HardwareKeyboardWatcher* _hardwareKeyboardWatcher;
 
   // The current browser state.
   ios::ChromeBrowserState* _browserState;  // weak
@@ -344,9 +328,11 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)updateToolbarAlphaForFrame:(CGRect)frame;
 // Navigate to |query| from omnibox.
 - (void)loadURLForQuery:(NSString*)query;
-- (UIView*)keyboardButtonWithTitle:(NSString*)title frame:(CGRect)frame;
 // Lazily instantiate the keyboard accessory view.
 - (UIView*)keyboardAccessoryView;
+// Configures the KeyboardAccessoryView and InputAssistantItem associated with
+// the omnibox.
+- (void)configureAssistiveKeyboardViews;
 - (void)preloadVoiceSearch:(id)sender;
 // Calculates the CGRect to use for the omnibox's frame. Also sets the frames
 // of some buttons and |_webToolbar|.
@@ -368,8 +354,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (void)updateSnapshotWithWidth:(CGFloat)width forced:(BOOL)force;
 // Insert 'com' without the period if cursor is directly after a period.
 - (NSString*)updateTextForDotCom:(NSString*)text;
-// Handle the user pressing a key in the keyboard accessory view.
-- (void)pressKey:(id)sender;
 @end
 
 @implementation WebToolbarController
@@ -380,7 +364,9 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 - (instancetype)initWithDelegate:(id<WebToolbarDelegate>)delegate
                        urlLoader:(id<UrlLoader>)urlLoader
                     browserState:(ios::ChromeBrowserState*)browserState
-                 preloadProvider:(id<PreloadProvider>)preloader {
+                 preloadProvider:(id<PreloadProvider>)preloader
+                      dispatcher:
+                          (id<ApplicationCommands, BrowserCommands>)dispatcher {
   DCHECK(delegate);
   DCHECK(urlLoader);
   DCHECK(browserState);
@@ -388,8 +374,10 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   _urlLoader = urlLoader;
   _browserState = browserState;
   _incognito = browserState->IsOffTheRecord();
-  self = [super initWithStyle:(_incognito ? ToolbarControllerStyleIncognitoMode
-                                          : ToolbarControllerStyleLightMode)];
+  ToolbarControllerStyle style =
+      (_incognito ? ToolbarControllerStyleIncognitoMode
+                  : ToolbarControllerStyleLightMode);
+  self = [super initWithStyle:style dispatcher:dispatcher];
   if (!self)
     return nil;
 
@@ -412,6 +400,19 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
                                             font:[MDCTypography subheadFont]
                                        textColor:textColor
                                        tintColor:tintColor];
+
+  // Disable default drop interactions on the omnibox.
+  // TODO(crbug.com/739903): Handle drop events once Chrome iOS is built with
+  // the iOS 11 SDK.
+  if (base::ios::IsRunningOnIOS11OrLater()) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+    SEL setInteractionsSelector = NSSelectorFromString(@"setInteractions:");
+    if ([_omniBox respondsToSelector:setInteractionsSelector]) {
+      [_omniBox performSelector:setInteractionsSelector withObject:@[]];
+    }
+#pragma clang diagnostic pop
+  }
   if (_incognito) {
     [_omniBox setIncognito:YES];
     [_omniBox
@@ -512,6 +513,11 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     [_voiceSearchButton
         setAutoresizingMask:UIViewAutoresizingFlexibleBottomMargin |
                             UIViewAutoresizingFlexibleLeadingMargin()];
+
+    // Assign tags before calling -setUpButton, since only buttons with tags
+    // have -chromeExecuteCommand added as a target.
+    [_voiceSearchButton setTag:IDC_VOICE_SEARCH];
+
     [_webToolbar addSubview:_voiceSearchButton];
     [_webToolbar addSubview:_starButton];
     [_webToolbar addSubview:_stopButton];
@@ -537,6 +543,17 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
         hasDisabledImage:YES
            synchronously:NO];
     [_stopButton setHidden:YES];
+
+    // Assign targets for buttons using the dispatcher.
+    [_stopButton addTarget:self.dispatcher
+                    action:@selector(stopLoading)
+          forControlEvents:UIControlEventTouchUpInside];
+    [_reloadButton addTarget:self.dispatcher
+                      action:@selector(reload)
+            forControlEvents:UIControlEventTouchUpInside];
+    [_starButton addTarget:self.dispatcher
+                    action:@selector(bookmarkPage)
+          forControlEvents:UIControlEventTouchUpInside];
   } else {
     [_forwardButton setAlpha:0.0];
   }
@@ -552,6 +569,14 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
        forInitialState:UIControlStateDisabled
       hasDisabledImage:YES
          synchronously:NO];
+
+  // Assign targets for buttons using the dispatcher.
+  [_backButton addTarget:self.dispatcher
+                  action:@selector(goBack)
+        forControlEvents:UIControlEventTouchUpInside];
+  [_forwardButton addTarget:self.dispatcher
+                     action:@selector(goForward)
+           forControlEvents:UIControlEventTouchUpInside];
 
   _backButtonMode = ToolbarButtonModeNormal;
   _forwardButtonMode = ToolbarButtonModeNormal;
@@ -579,13 +604,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   [_stopButton addTarget:self
                   action:@selector(cancelOmniboxEdit)
         forControlEvents:UIControlEventTouchUpInside];
-
-  [_backButton setTag:IDC_BACK];
-  [_forwardButton setTag:IDC_FORWARD];
-  [_reloadButton setTag:IDC_RELOAD];
-  [_stopButton setTag:IDC_STOP];
-  [_starButton setTag:IDC_BOOKMARK_PAGE];
-  [_voiceSearchButton setTag:IDC_VOICE_SEARCH];
 
   SetA11yLabelAndUiAutomationName(_backButton, IDS_ACCNAME_BACK, @"Back");
   SetA11yLabelAndUiAutomationName(_forwardButton, IDS_ACCNAME_FORWARD,
@@ -626,8 +644,7 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     [self.view addSubview:_determinateProgressView];
   }
 
-  // Attach the spacebar view to the omnibox.
-  [_omniBox setInputAccessoryView:[self keyboardAccessoryView]];
+  [self configureAssistiveKeyboardViews];
 
   // Add the handler to preload voice search when the voice search button is
   // tapped, but only if voice search is enabled.
@@ -891,11 +908,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     [_stopButton setHidden:isCompactTabletView];
     [self updateToolbarState];
 
-    // Update keyboard accessory views.
-    BOOL hidden = [_keyboardVoiceSearchButton isHidden];
-    _keyBoardAccessoryView = nil;
-    [_omniBox setInputAccessoryView:[self keyboardAccessoryView]];
-    [_keyboardVoiceSearchButton setHidden:hidden];
     if ([_omniBox isFirstResponder]) {
       [_omniBox reloadInputViews];
     }
@@ -968,8 +980,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     base::RecordAction(UserMetricsAction("MobileToolbarStop"));
   } else if (sender == _voiceSearchButton) {
     base::RecordAction(UserMetricsAction("MobileToolbarVoiceSearch"));
-  } else if (sender == _keyboardVoiceSearchButton) {
-    base::RecordAction(UserMetricsAction("MobileCustomRowVoiceSearch"));
   } else if (sender == _starButton) {
     base::RecordAction(UserMetricsAction("MobileToolbarToggleBookmark"));
   } else {
@@ -1280,8 +1290,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   [self.delegate locationBarDidBecomeFirstResponder:self];
   [self animateMaterialOmnibox];
 
-  [_keyboardVoiceSearchButton setHidden:NO];
-
   // Record the appropriate user action for focusing the omnibox.
   web::WebState* webState = [self.delegate currentWebState];
   if (webState) {
@@ -1308,20 +1316,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
 
 - (void)locationBarBeganEdit {
   [self.delegate locationBarBeganEdit:self];
-}
-
-- (void)locationBarChanged {
-  // Hide the voice search button once the user starts editing the omnibox but
-  // show it if the omnibox is empty.
-  bool isEditingOrEmpty = _locationBar->GetLocationEntry()->IsEditingOrEmpty();
-  BOOL editingAndNotEmpty = isEditingOrEmpty && _omniBox.text.length != 0;
-  // If the voice search button is visible but about to be hidden (i.e.
-  // the omnibox is no longer empty) then this is the first omnibox text so
-  // record a user action.
-  if (![_keyboardVoiceSearchButton isHidden] && editingAndNotEmpty) {
-    base::RecordAction(UserMetricsAction("MobileFirstTextInOmnibox"));
-  }
-  [_keyboardVoiceSearchButton setHidden:editingAndNotEmpty];
 }
 
 - (web::WebState*)getWebState {
@@ -1470,6 +1464,39 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
     UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification,
                                     _omniBox);
   }
+}
+
+#pragma mark -
+#pragma mark KeyboardAccessoryViewDelegate
+
+- (void)keyboardAccessoryVoiceSearchTouchDown:(UIView*)view {
+  if (ios::GetChromeBrowserProvider()
+          ->GetVoiceSearchProvider()
+          ->IsVoiceSearchEnabled()) {
+    [self preloadVoiceSearch:view];
+  }
+}
+
+- (void)keyboardAccessoryVoiceSearchTouchUpInside:(UIView*)view {
+  if (ios::GetChromeBrowserProvider()
+          ->GetVoiceSearchProvider()
+          ->IsVoiceSearchEnabled()) {
+    base::RecordAction(UserMetricsAction("MobileCustomRowVoiceSearch"));
+    GenericChromeCommand* command =
+        [[GenericChromeCommand alloc] initWithTag:IDC_VOICE_SEARCH];
+    [view chromeExecuteCommand:command];
+  }
+}
+
+- (void)keyboardAccessoryCameraSearchTouchUpInside:(UIView*)view {
+  GenericChromeCommand* command =
+      [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_QR_SCANNER];
+  [view chromeExecuteCommand:command];
+}
+
+- (void)keyPressed:(NSString*)title {
+  NSString* text = [self updateTextForDotCom:title];
+  [_omniBox insertTextWhileEditing:text];
 }
 
 #pragma mark -
@@ -1827,158 +1854,32 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   }
 }
 
-- (UIView*)keyboardButtonWithTitle:(NSString*)title frame:(CGRect)frame {
-  UIButton* button = [UIButton buttonWithType:UIButtonTypeCustom];
-  UIFont* font = nil;
-  UIImage* backgroundImage = nil;
-  if (IsIPadIdiom()) {
-    font = GetUIFont(FONT_HELVETICA, false, kIpadButtonTitleFontSize);
-  } else {
-    font = GetUIFont(FONT_HELVETICA, true, kIphoneButtonTitleFontSize);
-  }
-  // TODO(leng): Consider moving these images to pak files as well.
-  backgroundImage = [UIImage imageNamed:@"keyboard_button"];
-
-  button.frame = frame;
-  [button setTitle:title forState:UIControlStateNormal];
-  [button setTitleColor:[UIColor blackColor] forState:UIControlStateNormal];
-  [button.titleLabel setFont:font];
-  [button setBackgroundImage:backgroundImage forState:UIControlStateNormal];
-  [button addTarget:self
-                action:@selector(pressKey:)
-      forControlEvents:UIControlEventTouchUpInside];
-  button.isAccessibilityElement = YES;
-  [button setAccessibilityLabel:title];
-
-  return button;
+- (UIView*)keyboardAccessoryView {
+  NSArray<NSString*>* buttonTitles = @[ @":", @"-", @"/", kDotComTLD ];
+  UIView* keyboardAccessoryView =
+      [[NewKeyboardAccessoryView alloc] initWithButtons:buttonTitles
+                                               delegate:self];
+  [keyboardAccessoryView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
+  return keyboardAccessoryView;
 }
 
-- (UIView*)keyboardAccessoryView {
-  const CGFloat kViewHeightTablet = 70.0;
-  const CGFloat kViewHeightPhone = 43.0;
-  const CGFloat kButtonInset = 5.0;
-  const CGFloat kButtonSizeXTablet = 61.0;
-  const CGFloat kButtonSizeXPhone = 46.0;
-  const CGFloat kButtonSizeYTablet = 62.0;
-  const CGFloat kButtonSizeYPhone = 35.0;
-  const CGFloat kBetweenButtonSpacing = 15.0;
-  const CGFloat kBetweenButtonSpacingPhone = 7.0;
-
-  if (_keyBoardAccessoryView)
-    return _keyBoardAccessoryView;
-
-  const BOOL isTablet = IsIPadIdiom() && !IsCompactTablet(self.view);
-
-  // TODO(pinkerton): purge this view when low memory.
-  CGFloat width = [[UIScreen mainScreen] bounds].size.width;
-  CGFloat height = isTablet ? kViewHeightTablet : kViewHeightPhone;
-  CGRect frame = CGRectMake(0.0, 0.0, width, height);
-
-  _keyBoardAccessoryView =
-      [[KeyboardAccessoryView alloc] initWithFrame:frame
-                                    inputViewStyle:UIInputViewStyleKeyboard];
-  [_keyBoardAccessoryView setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-
-  NSArray* buttonTitles =
-      [NSArray arrayWithObjects:@":", @".", @"-", @"/", kDotComTLD, nil];
-
-  // Center buttons in available space by placing them within a parent view
-  // that auto-centers.
-  CGFloat betweenButtonSpacing =
-      isTablet ? kBetweenButtonSpacing : kBetweenButtonSpacingPhone;
-  const CGFloat buttonWidth = isTablet ? kButtonSizeXTablet : kButtonSizeXPhone;
-
-  CGFloat totalWidth = (buttonTitles.count * buttonWidth) +
-                       ((buttonTitles.count - 1) * betweenButtonSpacing);
-  CGFloat indent = floor((width - totalWidth) / 2.0);
-  if (indent < kButtonInset)
-    indent = kButtonInset;
-  CGRect parentViewRect = CGRectMake(indent, 0.0, totalWidth, height);
-  UIView* parentView = [[UIView alloc] initWithFrame:parentViewRect];
-  [parentView setAutoresizingMask:UIViewAutoresizingFlexibleLeftMargin |
-                                  UIViewAutoresizingFlexibleRightMargin];
-  [_keyBoardAccessoryView addSubview:parentView];
-
-  // Create the buttons, starting at the left edge of |parentView|.
-  CGRect currentFrame =
-      CGRectMake(0.0, kButtonInset, buttonWidth,
-                 isTablet ? kButtonSizeYTablet : kButtonSizeYPhone);
-
-  for (NSString* title in buttonTitles) {
-    UIView* button = [self keyboardButtonWithTitle:title frame:currentFrame];
-    [parentView addSubview:button];
-    currentFrame.origin.x = CGRectGetMaxX(currentFrame) + betweenButtonSpacing;
-  }
-
-  // Create the voice search button and add it to _keyBoardAccessoryView over
-  // the text buttons.
-  _keyboardVoiceSearchButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [_keyboardVoiceSearchButton
-      setAutoresizingMask:UIViewAutoresizingFlexibleWidth];
-  [_keyboardVoiceSearchButton setTag:IDC_VOICE_SEARCH];
-  SetA11yLabelAndUiAutomationName(_keyboardVoiceSearchButton,
-                                  IDS_IOS_ACCNAME_VOICE_SEARCH,
-                                  @"Voice Search");
-  // TODO(leng): Consider moving these icons into a pak file.
-  UIImage* voiceRow = [UIImage imageNamed:@"custom_row_voice"];
-  UIImage* voiceRowPressed = [UIImage imageNamed:@"custom_row_voice_pressed"];
-  [_keyboardVoiceSearchButton setBackgroundImage:voiceRow
-                                        forState:UIControlStateNormal];
-  [_keyboardVoiceSearchButton setBackgroundImage:voiceRowPressed
-                                        forState:UIControlStateHighlighted];
-
-  UIImage* voiceIcon = [UIImage imageNamed:@"voice_icon_keyboard_accessory"];
-  [_keyboardVoiceSearchButton setAdjustsImageWhenHighlighted:NO];
-  [_keyboardVoiceSearchButton setImage:voiceIcon forState:UIControlStateNormal];
-  [_keyboardVoiceSearchButton setFrame:[_keyBoardAccessoryView bounds]];
-
-  // Only add the voice search actions if voice search is enabled.
-  if (ios::GetChromeBrowserProvider()
-          ->GetVoiceSearchProvider()
-          ->IsVoiceSearchEnabled()) {
-    [_keyboardVoiceSearchButton addTarget:self
-                                   action:@selector(recordUserMetrics:)
-                         forControlEvents:UIControlEventTouchUpInside];
-    [_keyboardVoiceSearchButton addTarget:_keyboardVoiceSearchButton
-                                   action:@selector(chromeExecuteCommand:)
-                         forControlEvents:UIControlEventTouchUpInside];
-    [_keyboardVoiceSearchButton addTarget:self
-                                   action:@selector(preloadVoiceSearch:)
-                         forControlEvents:UIControlEventTouchDown];
-  } else {
-    [_keyboardVoiceSearchButton addTarget:self
-                                   action:@selector(ignoreVoiceSearch:)
-                         forControlEvents:UIControlEventTouchUpInside];
-  }
-
-  [_keyBoardAccessoryView addSubview:_keyboardVoiceSearchButton];
-
-  // Reset the external keyboard watcher.
-  _hardwareKeyboardWatcher = [[HardwareKeyboardWatcher alloc]
-      initWithAccessoryView:_keyBoardAccessoryView];
-
-  return _keyBoardAccessoryView;
+- (void)configureAssistiveKeyboardViews {
+  // The InputAssistantItems are disabled when the new Keyboard Accessory View
+  // is enabled.
+  _omniBox.inputAssistantItem.leadingBarButtonGroups = @[];
+  _omniBox.inputAssistantItem.trailingBarButtonGroups = @[];
+  [_omniBox setInputAccessoryView:[self keyboardAccessoryView]];
 }
 
 - (void)preloadVoiceSearch:(id)sender {
   DCHECK(ios::GetChromeBrowserProvider()
              ->GetVoiceSearchProvider()
              ->IsVoiceSearchEnabled());
-  [sender removeTarget:self
-                action:@selector(preloadVoiceSearch:)
-      forControlEvents:UIControlEventTouchDown];
-
   // Use a GenericChromeCommand because |sender| already has a tag set for a
   // different command.
   GenericChromeCommand* command =
       [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH];
   [sender chromeExecuteCommand:command];
-}
-
-// Called when the keyboard voice search button is tapped with voice search
-// disabled.  Hides the voice search button but takes no other action.
-- (void)ignoreVoiceSearch:(id)sender {
-  [_keyboardVoiceSearchButton setHidden:YES];
 }
 
 - (CGFloat)omniboxLeading {
@@ -2157,25 +2058,23 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
   if (growOmnibox) {
     [self fadeOutNavigationControls];
     [self fadeInOmniboxTrailingView];
-    if (![_omniBox isShowingQueryRefinementChip]) {
-      // Don't animate the query refinement chip.
-      if (_locationBar.get()->IsShowingPlaceholderWhileCollapsed())
-        [self fadeOutOmniboxLeadingView];
-      else
-        [_omniBox leftView].alpha = 0;
-    }
+
+    if (_locationBar.get()->IsShowingPlaceholderWhileCollapsed())
+      [self fadeOutOmniboxLeadingView];
+    else
+      [_omniBox leftView].alpha = 0;
+
     if (_incognito)
       [self fadeInIncognitoIcon];
   } else {
     [self fadeInNavigationControls];
     [self fadeOutOmniboxTrailingView];
-    if (![_omniBox isShowingQueryRefinementChip]) {
-      // Don't animate the query refinement chip.
-      if (_locationBar.get()->IsShowingPlaceholderWhileCollapsed())
-        [self fadeInOmniboxLeadingView];
-      else
-        [_omniBox leftView].alpha = 1;
-    }
+
+    if (_locationBar.get()->IsShowingPlaceholderWhileCollapsed())
+      [self fadeInOmniboxLeadingView];
+    else
+      [_omniBox leftView].alpha = 1;
+
     if (_incognito)
       [self fadeOutIncognitoIcon];
   }
@@ -2528,13 +2427,6 @@ CGRect RectShiftedDownAndResizedForStatusBar(CGRect rect) {
       return [kDotComTLD substringFromIndex:1];
   }
   return text;
-}
-
-- (void)pressKey:(id)sender {
-  DCHECK([sender isKindOfClass:[UIButton class]]);
-  [[UIDevice currentDevice] playInputClick];
-  NSString* text = [self updateTextForDotCom:[sender currentTitle]];
-  [_omniBox insertTextWhileEditing:text];
 }
 
 @end

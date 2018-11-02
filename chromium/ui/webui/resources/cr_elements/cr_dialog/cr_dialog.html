@@ -1,13 +1,14 @@
-<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
-<link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/html/assert.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+
+<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/cr_icons_css.html">
+<link rel="import" href="chrome://resources/html/assert.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/default-theme.html">
 
 <dom-module id="cr-dialog">
   <template>
-    <style include="cr-hidden-style">
+    <style include="cr-hidden-style cr-icons">
       :host {
         --scroll-border: 1px solid var(--paper-grey-300);
         border: 0;
@@ -16,23 +17,23 @@
         box-shadow: 0 0 16px rgba(0, 0, 0, 0.12),
                     0 16px 16px rgba(0, 0, 0, 0.24);
         color: inherit;
-        overflow: auto;
         padding: 0;
         top: 0;
         width: 512px;
       }
 
-      :host([open]) {
+      :host([open]) #content-wrapper {
         /* Keep max-height within viewport, and flex content accordingly. */
         display: flex;
         flex-direction: column;
         max-height: 100vh;
+        overflow: auto;
       }
 
       /* When needing to flex, force .body-container alone to shrink. */
       .top-container,
-      :host ::content .button-container,
-      :host ::content .footer {
+      :host ::slotted([slot=button-container]),
+      :host ::slotted([slot=footer]) {
         flex-shrink: 0;
       }
 
@@ -45,37 +46,29 @@
         top: 0;
       }
 
-      :host ::content .body {
+      :host ::slotted([slot=body]) {
         padding: 12px 16px;
       }
 
-      :host ::content .title {
+      :host ::slotted([slot=title]) {
         flex: 1;
         font-size: calc(15 / 13 * 100%);
         line-height: 1;
         padding: 16px 16px;
       }
 
-      :host ::content .button-container {
+      :host ::slotted([slot=button-container]) {
         display: flex;
         justify-content: flex-end;
         padding: 16px;
       }
 
-      :host ::content .button-container .cancel-button {
-        -webkit-margin-end: 8px;
-        color: var(--paper-grey-600);
-      }
-
-      :host ::content .footer {
+      :host ::slotted([slot=footer]) {
         border-bottom-left-radius: inherit;
         border-bottom-right-radius: inherit;
+        border-top: 1px solid var(--divider-color);
         margin: 0;
         padding: 16px 20px;
-      }
-
-      :host ::content .border-top-divider {
-        border-top: 1px solid var(--divider-color);
       }
 
       .body-container {
@@ -112,11 +105,6 @@
       }
 
       #close {
-        --paper-icon-button: {
-          height: 36px;
-          width: 36px;
-        };
-
         --layout-inline: {
           display: flex;
         };
@@ -127,22 +115,26 @@
         padding: 10px;  /* Makes the actual icon 16x16. */
       }
     </style>
-    <div class="top-container">
-      <div class="title-container" tabindex="-1">
-        <content select=".title"></content>
+    <!-- This wrapper is necessary, such that the "pulse" animation is not
+      erroneously played when the user clicks on the outer-most scrollbar. -->
+    <div id="content-wrapper">
+      <div class="top-container">
+        <div class="title-container" tabindex="-1">
+          <slot name="title"></slot>
+        </div>
+        <button is="paper-icon-button-light" class="icon-clear" id="close"
+            aria-label$="[[closeText]]" hidden$="[[noCancel]]" on-tap="cancel"
+            on-keypress="onCloseKeypress_">
+        </button>
       </div>
-      <paper-icon-button icon="cr:clear" on-tap="cancel" id="close"
-          aria-label$="[[closeText]]" on-keypress="onCloseKeypress_"
-          hidden$="[[noCancel]]">
-      </paper-icon-button>
+      <div class="body-container">
+        <span id="bodyTopMarker"></span>
+        <slot name="body"></slot>
+        <span id="bodyBottomMarker"></span>
+      </div>
+      <slot name="button-container"></slot>
+      <slot name="footer"></slot>
     </div>
-    <div class="body-container">
-      <span id="bodyTopMarker"></span>
-      <content select=".body"></content>
-      <span id="bodyBottomMarker"></span>
-    </div>
-    <content select=".button-container"></content>
-    <content select=".footer"></content>
   </template>
   <script src="cr_dialog.js"></script>
 </dom-module>

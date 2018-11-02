@@ -23,13 +23,11 @@ namespace content {
 class PresentationScreenAvailabilityListener;
 
 using PresentationConnectionCallback =
-    base::Callback<void(const PresentationInfo&)>;
+    base::OnceCallback<void(const PresentationInfo&)>;
 using PresentationConnectionErrorCallback =
-    base::Callback<void(const PresentationError&)>;
-
-// Param: a vector of messages that are received.
-using PresentationConnectionMessageCallback =
-    base::Callback<void(std::vector<content::PresentationConnectionMessage>)>;
+    base::OnceCallback<void(const PresentationError&)>;
+using DefaultPresentationConnectionCallback =
+    base::RepeatingCallback<void(const PresentationInfo&)>;
 
 struct PresentationConnectionStateChangeInfo {
   explicit PresentationConnectionStateChangeInfo(
@@ -46,16 +44,16 @@ struct PresentationConnectionStateChangeInfo {
 };
 
 using PresentationConnectionStateChangedCallback =
-    base::Callback<void(const PresentationConnectionStateChangeInfo&)>;
+    base::RepeatingCallback<void(const PresentationConnectionStateChangeInfo&)>;
 
 using PresentationConnectionPtr = blink::mojom::PresentationConnectionPtr;
 using PresentationConnectionRequest =
     blink::mojom::PresentationConnectionRequest;
 
 using ReceiverConnectionAvailableCallback =
-    base::Callback<void(const content::PresentationInfo&,
-                        PresentationConnectionPtr,
-                        PresentationConnectionRequest)>;
+    base::RepeatingCallback<void(const content::PresentationInfo&,
+                                 PresentationConnectionPtr,
+                                 PresentationConnectionRequest)>;
 
 // Base class for ControllerPresentationServiceDelegate and
 // ReceiverPresentationServiceDelegate.
@@ -99,7 +97,7 @@ class CONTENT_EXPORT PresentationServiceDelegate {
 class CONTENT_EXPORT ControllerPresentationServiceDelegate
     : public PresentationServiceDelegate {
  public:
-  using SendMessageCallback = base::Callback<void(bool)>;
+  using SendMessageCallback = base::OnceCallback<void(bool)>;
 
   // Registers |listener| to continuously listen for
   // availability updates for a presentation URL, originated from the frame
@@ -131,7 +129,7 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
       int render_process_id,
       int render_frame_id,
       const std::vector<GURL>& default_presentation_urls,
-      const PresentationConnectionCallback& callback) = 0;
+      DefaultPresentationConnectionCallback callback) = 0;
 
   // Starts a new presentation. The presentation id of the presentation will
   // be the default presentation ID if any or a generated one otherwise.
@@ -147,8 +145,8 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
       int render_process_id,
       int render_frame_id,
       const std::vector<GURL>& presentation_urls,
-      const PresentationConnectionCallback& success_cb,
-      const PresentationConnectionErrorCallback& error_cb) = 0;
+      PresentationConnectionCallback success_cb,
+      PresentationConnectionErrorCallback error_cb) = 0;
 
   // Reconnects to an existing presentation. Unlike StartPresentation(), this
   // does not bring a screen list UI.
@@ -163,8 +161,8 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
       int render_frame_id,
       const std::vector<GURL>& presentation_urls,
       const std::string& presentation_id,
-      const PresentationConnectionCallback& success_cb,
-      const PresentationConnectionErrorCallback& error_cb) = 0;
+      PresentationConnectionCallback success_cb,
+      PresentationConnectionErrorCallback error_cb) = 0;
 
   // Closes an existing presentation connection.
   // |render_process_id|, |render_frame_id|: ID for originating frame.
@@ -179,29 +177,6 @@ class CONTENT_EXPORT ControllerPresentationServiceDelegate
   virtual void Terminate(int render_process_id,
                          int render_frame_id,
                          const std::string& presentation_id) = 0;
-
-  // Listens for messages from a presentation.
-  // |render_process_id|, |render_frame_id|: ID for originating frame.
-  // |presentation_info|: URL and ID of presentation to listen for messages.
-  // |message_cb|: Invoked with a non-empty list of messages whenever there are
-  // messages.
-  virtual void ListenForConnectionMessages(
-      int render_process_id,
-      int render_frame_id,
-      const content::PresentationInfo& presentation_info,
-      const PresentationConnectionMessageCallback& message_cb) = 0;
-
-  // Sends a message (string or binary data) to a presentation.
-  // |render_process_id|, |render_frame_id|: ID of originating frame.
-  // |presentation_info|: The presentation to send the message to.
-  // |message|: The message to send. The embedder takes ownership of |message|.
-  //            Must not be null.
-  // |send_message_cb|: Invoked after handling the send message request.
-  virtual void SendMessage(int render_process_id,
-                           int render_frame_id,
-                           const content::PresentationInfo& presentation_info,
-                           PresentationConnectionMessage message,
-                           const SendMessageCallback& send_message_cb) = 0;
 
   // Continuously listen for state changes for a PresentationConnection in a
   // frame.

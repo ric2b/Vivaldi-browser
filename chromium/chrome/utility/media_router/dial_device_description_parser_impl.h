@@ -6,8 +6,8 @@
 #define CHROME_UTILITY_MEDIA_ROUTER_DIAL_DEVICE_DESCRIPTION_PARSER_IMPL_H_
 
 #include "base/macros.h"
+#include "base/threading/thread_checker.h"
 #include "chrome/common/media_router/mojo/dial_device_description_parser.mojom.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace media_router {
 
@@ -20,8 +20,7 @@ class DialDeviceDescriptionParserImpl
   DialDeviceDescriptionParserImpl();
   ~DialDeviceDescriptionParserImpl() override;
 
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     chrome::mojom::DialDeviceDescriptionParserRequest request);
+  static void Create(chrome::mojom::DialDeviceDescriptionParserRequest request);
 
  private:
   friend class DialDeviceDescriptionParserImplTest;
@@ -29,7 +28,7 @@ class DialDeviceDescriptionParserImpl
   // extensions::mojom::DialDeviceDescriptionParser:
   void ParseDialDeviceDescription(
       const std::string& device_description_xml_data,
-      const ParseDialDeviceDescriptionCallback& callback) override;
+      ParseDialDeviceDescriptionCallback callback) override;
 
   // Processes the result of getting device description. Returns valid
   // DialDeviceDescriptionPtr if processing succeeds; otherwise returns nullptr.

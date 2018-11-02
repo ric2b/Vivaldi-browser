@@ -4,13 +4,11 @@
 
 #include "chrome/browser/feedback/system_logs/about_system_logs_fetcher.h"
 
-#include "base/bind.h"
-#include "base/bind_helpers.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/feedback/system_logs/log_sources/chrome_internal_log_source.h"
 #include "chrome/browser/feedback/system_logs/log_sources/memory_details_log_source.h"
-#include "content/public/browser/browser_thread.h"
+#include "components/feedback/system_logs/system_logs_fetcher.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/system_logs/command_line_log_source.h"
@@ -21,31 +19,28 @@
 #include "chrome/browser/chromeos/system_logs/touch_log_source.h"
 #endif
 
-using content::BrowserThread;
-
 namespace system_logs {
 
-AboutSystemLogsFetcher::AboutSystemLogsFetcher() {
-  data_sources_.push_back(base::MakeUnique<ChromeInternalLogSource>());
-  data_sources_.push_back(base::MakeUnique<MemoryDetailsLogSource>());
+SystemLogsFetcher* BuildAboutSystemLogsFetcher() {
+  const bool scrub_data = false;
+  SystemLogsFetcher* fetcher = new SystemLogsFetcher(scrub_data);
+
+  fetcher->AddSource(base::MakeUnique<ChromeInternalLogSource>());
+  fetcher->AddSource(base::MakeUnique<MemoryDetailsLogSource>());
 
 #if defined(OS_CHROMEOS)
-  data_sources_.push_back(base::MakeUnique<CommandLineLogSource>());
-  data_sources_.push_back(base::MakeUnique<DBusLogSource>());
-  data_sources_.push_back(base::MakeUnique<DeviceEventLogSource>());
-  data_sources_.push_back(base::MakeUnique<LsbReleaseLogSource>());
-  data_sources_.push_back(base::MakeUnique<TouchLogSource>());
+  fetcher->AddSource(base::MakeUnique<CommandLineLogSource>());
+  fetcher->AddSource(base::MakeUnique<DBusLogSource>());
+  fetcher->AddSource(base::MakeUnique<DeviceEventLogSource>());
+  fetcher->AddSource(base::MakeUnique<LsbReleaseLogSource>());
+  fetcher->AddSource(base::MakeUnique<TouchLogSource>());
 
   // Debug Daemon data source - currently only this data source supports
   // the scrub_data parameter.
-  const bool scrub_data = false;
-  data_sources_.push_back(base::MakeUnique<DebugDaemonLogSource>(scrub_data));
+  fetcher->AddSource(base::MakeUnique<DebugDaemonLogSource>(scrub_data));
 #endif
 
-  num_pending_requests_ = data_sources_.size();
-}
-
-AboutSystemLogsFetcher::~AboutSystemLogsFetcher() {
+  return fetcher;
 }
 
 }  // namespace system_logs

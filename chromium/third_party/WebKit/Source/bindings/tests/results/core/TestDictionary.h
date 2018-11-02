@@ -21,9 +21,9 @@
 #include "bindings/core/v8/TestInterface2OrUint8Array.h"
 #include "bindings/tests/idls/core/TestInterface2.h"
 #include "core/CoreExport.h"
-#include "core/dom/ArrayBufferViewHelpers.h"
-#include "core/dom/DOMTypedArray.h"
 #include "core/testing/InternalDictionary.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
+#include "core/typed_arrays/DOMTypedArray.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/WTFString.h"
@@ -101,6 +101,10 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   bool hasInternalDictionarySequenceMember() const;
   const HeapVector<InternalDictionary>& internalDictionarySequenceMember() const;
   void setInternalDictionarySequenceMember(const HeapVector<InternalDictionary>&);
+
+  bool hasIsPublic() const;
+  bool isPublic() const;
+  void setIsPublic(bool);
 
   bool hasLongMember() const;
   int32_t longMember() const;
@@ -214,6 +218,7 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   bool m_hasEnumSequenceMember = false;
   bool m_hasGarbageCollectedRecordMember = false;
   bool m_hasInternalDictionarySequenceMember = false;
+  bool m_hasIsPublic = false;
   bool m_hasLongMember = false;
   bool m_hasRecordMember = false;
   bool m_hasRestrictedDoubleMember = false;
@@ -240,6 +245,7 @@ class CORE_EXPORT TestDictionary : public IDLDictionaryBase {
   Member<EventTarget> m_eventTargetMember;
   HeapVector<std::pair<String, Member<TestObject>>> m_garbageCollectedRecordMember;
   HeapVector<InternalDictionary> m_internalDictionarySequenceMember;
+  bool m_isPublic;
   int32_t m_longMember;
   ScriptValue m_objectMember;
   ScriptValue m_objectOrNullMember;

@@ -13,8 +13,8 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
 #include "storage/browser/quota/quota_callbacks.h"
 #include "storage/browser/quota/quota_client.h"
 #include "storage/browser/quota/quota_task.h"
@@ -44,6 +44,8 @@ class STORAGE_EXPORT UsageTracker : public QuotaTaskObserver {
   void GetGlobalLimitedUsage(const UsageCallback& callback);
   void GetGlobalUsage(const GlobalUsageCallback& callback);
   void GetHostUsage(const std::string& host, const UsageCallback& callback);
+  void GetHostUsageWithBreakdown(const std::string& host,
+                                 const UsageWithBreakdownCallback& callback);
   void UpdateUsageCache(QuotaClient::ID client_id,
                         const GURL& origin,
                         int64_t delta);
@@ -62,16 +64,21 @@ class STORAGE_EXPORT UsageTracker : public QuotaTaskObserver {
 
  private:
   struct AccumulateInfo {
-    AccumulateInfo() : pending_clients(0), usage(0), unlimited_usage(0) {}
-    int pending_clients;
-    int64_t usage;
-    int64_t unlimited_usage;
+    AccumulateInfo();
+    ~AccumulateInfo();
+    int pending_clients = 0;
+    int64_t usage = 0;
+    int64_t unlimited_usage = 0;
+    base::flat_map<QuotaClient::ID, int64_t> usage_breakdown;
   };
 
   typedef CallbackQueue<UsageCallback, int64_t> UsageCallbackQueue;
   typedef CallbackQueue<GlobalUsageCallback, int64_t, int64_t>
       GlobalUsageCallbackQueue;
-  typedef CallbackQueueMap<UsageCallback, std::string, int64_t>
+  typedef CallbackQueueMap<UsageWithBreakdownCallback,
+                           std::string,
+                           int64_t,
+                           base::flat_map<QuotaClient::ID, int64_t>>
       HostUsageCallbackMap;
 
   friend class ClientUsageTracker;
@@ -80,9 +87,13 @@ class STORAGE_EXPORT UsageTracker : public QuotaTaskObserver {
   void AccumulateClientGlobalUsage(AccumulateInfo* info,
                                    int64_t usage,
                                    int64_t unlimited_usage);
-  void AccumulateClientHostUsage(AccumulateInfo* info,
+  void AccumulateClientHostUsage(const base::Closure& barrier,
+                                 AccumulateInfo* info,
                                  const std::string& host,
+                                 QuotaClient::ID client,
                                  int64_t usage);
+  void FinallySendHostUsageWithBreakdown(AccumulateInfo* info,
+                                         const std::string& host);
 
   const StorageType type_;
   std::map<QuotaClient::ID, std::unique_ptr<ClientUsageTracker>>

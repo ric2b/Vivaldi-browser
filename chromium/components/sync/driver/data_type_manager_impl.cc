@@ -205,7 +205,6 @@ DataTypeManagerImpl::BuildDataTypeConfigStateMap(
   // 3. Flip |types_being_configured| to CONFIGURE_ACTIVE.
   // 4. Set non-enabled user types as DISABLED.
   // 5. Set the fatal, crypto, and unready types to their respective states.
-  ModelTypeSet error_types = data_type_status_table_.GetFailedTypes();
   ModelTypeSet fatal_types = data_type_status_table_.GetFatalErrorTypes();
   ModelTypeSet crypto_types = data_type_status_table_.GetCryptoErrorTypes();
   ModelTypeSet unready_types = data_type_status_table_.GetUnreadyErrorTypes();
@@ -539,6 +538,7 @@ ModelTypeSet DataTypeManagerImpl::PrepareConfigureParams(
 
   types_to_download.PutAll(clean_types);
   types_to_download.RemoveAll(ProxyTypes());
+  types_to_download.RemoveAll(CommitOnlyTypes());
   if (!types_to_download.Empty())
     types_to_download.Put(NIGORI);
 

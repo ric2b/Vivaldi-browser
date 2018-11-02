@@ -15,29 +15,34 @@
 namespace blink {
 
 enum class WebTreeScopeType;
-class InterfaceProvider;
 class InterfaceRegistry;
 class WebFrameClient;
 class WebLayer;
 class WebRemoteFrameClient;
 class WebString;
+class WebView;
 
 class WebRemoteFrame : public WebFrame {
  public:
+  // Factory methods for creating a WebRemoteFrame. The WebRemoteFrameClient
+  // argument must be non-null for all creation methods.
   BLINK_EXPORT static WebRemoteFrame* Create(WebTreeScopeType,
-                                             WebRemoteFrameClient*,
-                                             WebFrame* opener = nullptr);
+                                             WebRemoteFrameClient*);
 
-  // Functions for the embedder replicate the frame tree between processes.
+  BLINK_EXPORT static WebRemoteFrame*
+  CreateMainFrame(WebView*, WebRemoteFrameClient*, WebFrame* opener = nullptr);
+
+  // Specialized factory methods to allow the embedder to replicate the frame
+  // tree between processes.
   // TODO(dcheng): The embedder currently does not replicate local frames in
-  // insertion order, so the local child version takes a previous sibling to
+  // insertion order, so the local child version takes |previous_sibling| to
   // ensure that it is inserted into the correct location in the list of
-  // children.
+  // children. If |previous_sibling| is null, the child is inserted at the
+  // beginning.
   virtual WebLocalFrame* CreateLocalChild(WebTreeScopeType,
                                           const WebString& name,
                                           WebSandboxFlags,
                                           WebFrameClient*,
-                                          blink::InterfaceProvider*,
                                           blink::InterfaceRegistry*,
                                           WebFrame* previous_sibling,
                                           const WebParsedFeaturePolicy&,
@@ -99,8 +104,6 @@ class WebRemoteFrame : public WebFrame {
   virtual void WillEnterFullscreen() = 0;
 
   virtual void SetHasReceivedUserGesture() = 0;
-
-  virtual v8::Local<v8::Object> GlobalProxy() const = 0;
 
  protected:
   explicit WebRemoteFrame(WebTreeScopeType scope) : WebFrame(scope) {}

@@ -148,8 +148,16 @@ void RawResource::DidAddClient(ResourceClient* c) {
     client->ResponseReceived(this, GetResponse(), nullptr);
   if (!HasClient(c))
     return;
-  if (Data())
-    client->DataReceived(this, Data()->Data(), Data()->size());
+  if (RefPtr<SharedBuffer> data = Data()) {
+    data->ForEachSegment([this, &client](const char* segment,
+                                         size_t segment_size,
+                                         size_t segment_offset) -> bool {
+      client->DataReceived(this, segment, segment_size);
+
+      // Stop pushing data if the client removed itself.
+      return HasClient(client);
+    });
+  }
   if (!HasClient(c))
     return;
   Resource::DidAddClient(client);
@@ -303,7 +311,7 @@ bool RawResource::CanReuse(const FetchParameters& new_fetch_parameters) const {
       return false;
   }
 
-  return true;
+  return Resource::CanReuse(new_fetch_parameters);
 }
 
 RawResourceClientStateChecker::RawResourceClientStateChecker()

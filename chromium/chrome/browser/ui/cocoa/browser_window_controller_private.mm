@@ -1081,6 +1081,10 @@ willPositionSheet:(NSWindow*)sheet
 }
 
 - (BOOL)shouldUseCustomAppKitFullscreenTransition:(BOOL)enterFullScreen {
+  // Use the native transition on 10.13+: https://crbug.com/741478.
+  if (base::mac::IsAtLeastOS10_13())
+    return NO;
+
   // Disable the custom exit animation in OSX 10.9: http://crbug.com/526327#c3.
   if (base::mac::IsOS10_9() && !enterFullScreen)
     return NO;
@@ -1125,7 +1129,10 @@ willPositionSheet:(NSWindow*)sheet
   static const bool fullscreen_low_power_disabled_at_command_line =
       base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableFullscreenLowPowerMode);
-  if (!fullscreen_low_power_disabled_at_command_line) {
+  // Temporarily disabled on 10.13 because the window turns black when exiting
+  // FSLP. See https://crbug.com/742691 for progress.
+  if (!base::mac::IsAtLeastOS10_13() &&
+      !fullscreen_low_power_disabled_at_command_line) {
     WebContents* webContents = [self webContents];
     if (webContents && webContents->GetRenderWidgetHostView()) {
       fullscreenLowPowerCoordinator_.reset(

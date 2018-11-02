@@ -25,8 +25,6 @@
 #include "core/editing/EditingBehaviorTypes.h"
 #include "platform/wtf/Allocator.h"
 
-#include "app/vivaldi_apptools.h"
-
 namespace blink {
 class KeyboardEvent;
 
@@ -82,17 +80,6 @@ class CORE_EXPORT EditingBehavior {
   // should be selected.
   bool ShouldSelectOnContextualMenuClick() const {
     return type_ == kEditingMacBehavior;
-  }
-
-  // On Mac and Windows, pressing backspace (when it isn't handled otherwise)
-  // should navigate back.
-  bool ShouldNavigateBackOnBackspace() const {
-    if (vivaldi::IsVivaldiRunning()) {
-      //NOTE: daniel@vivaldi.com: Disable backspace navigation and add in our own code
-      return false;
-    } else {
-    return type_ != kEditingUnixBehavior && type_ != kEditingAndroidBehavior;
-    }
   }
 
   // On Mac, selecting backwards by word/line from the middle of a word/line,

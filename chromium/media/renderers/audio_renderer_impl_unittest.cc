@@ -174,6 +174,8 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
   }
   MOCK_METHOD1(OnBufferingStateChange, void(BufferingState));
   MOCK_METHOD0(OnWaitingForDecryptionKey, void(void));
+  MOCK_METHOD1(OnAudioConfigChange, void(const AudioDecoderConfig&));
+  MOCK_METHOD1(OnVideoConfigChange, void(const VideoDecoderConfig&));
   MOCK_METHOD1(OnVideoNaturalSizeChange, void(const gfx::Size&));
   MOCK_METHOD1(OnVideoOpacityChange, void(bool));
   MOCK_METHOD1(OnDurationChange, void(base::TimeDelta));
@@ -183,6 +185,7 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
     EXPECT_CALL(*this, OnWaitingForDecryptionKey()).Times(0);
     EXPECT_CALL(*this, OnVideoNaturalSizeChange(_)).Times(0);
     EXPECT_CALL(*this, OnVideoOpacityChange(_)).Times(0);
+    EXPECT_CALL(*this, OnVideoConfigChange(_)).Times(0);
     renderer_->Initialize(demuxer_stream, nullptr, this, pipeline_status_cb);
   }
 
@@ -385,8 +388,8 @@ class AudioRendererImplTest : public ::testing::Test, public RendererClient {
     return OutputFrames(buffer_capacity().value - frames_buffered().value);
   }
 
-  void force_config_change() {
-    renderer_->OnConfigChange();
+  void force_config_change(const AudioDecoderConfig& config) {
+    renderer_->OnConfigChange(config);
   }
 
   InputFrames converter_input_frames_left() const {
@@ -512,6 +515,35 @@ TEST_F(AudioRendererImplTest, ReinitializeForDifferentStream) {
   WaitableMessageLoopEvent event;
   InitializeRenderer(&new_stream, event.GetPipelineStatusCB());
   event.RunAndWaitForStatus(PIPELINE_OK);
+}
+
+TEST_F(AudioRendererImplTest, SignalConfigChange) {
+  // Initialize and start playback.
+  Initialize();
+  Preroll();
+  StartTicking();
+  EXPECT_TRUE(ConsumeBufferedData(OutputFrames(256)));
+  WaitForPendingRead();
+
+  // Force config change to simulate detected change from decoder stream. Expect
+  // that RendererClient to be signaled with the new config.
+  const AudioDecoderConfig kValidAudioConfig(
+      kCodecVorbis, kSampleFormatPlanarF32, CHANNEL_LAYOUT_STEREO, 44100,
+      EmptyExtraData(), Unencrypted());
+  EXPECT_TRUE(kValidAudioConfig.IsValidConfig());
+  EXPECT_CALL(*this, OnAudioConfigChange(DecoderConfigEq(kValidAudioConfig)));
+  force_config_change(kValidAudioConfig);
+
+  // Verify rendering can continue after config change.
+  EXPECT_TRUE(ConsumeBufferedData(OutputFrames(256)));
+  WaitForPendingRead();
+
+  // Force a config change with an invalid dummy config. This is occasionally
+  // done to reset internal state and should not bubble to the RendererClient.
+  EXPECT_CALL(*this, OnAudioConfigChange(_)).Times(0);
+  const AudioDecoderConfig kInvalidConfig;
+  EXPECT_FALSE(kInvalidConfig.IsValidConfig());
+  force_config_change(kInvalidConfig);
 }
 
 TEST_F(AudioRendererImplTest, Preroll) {
@@ -676,6 +708,29 @@ TEST_F(AudioRendererImplTest, ChannelMask) {
   EXPECT_FALSE(mask.empty());
   ASSERT_EQ(mask.size(), static_cast<size_t>(hw_params.channels()));
   for (int ch = 0; ch < hw_params.channels(); ++ch)
+    ASSERT_TRUE(mask[ch]);
+}
+
+// Verify that the proper channel mask is configured when downmixing is applied
+// to the input with discrete layout. The default hardware layout is stereo.
+TEST_F(AudioRendererImplTest, ChannelMask_DownmixDiscreteLayout) {
+  int audio_channels = 9;
+
+  AudioDecoderConfig audio_config(
+      kCodecOpus, kSampleFormat, CHANNEL_LAYOUT_DISCRETE,
+      kInputSamplesPerSecond, EmptyExtraData(), Unencrypted());
+  audio_config.SetChannelsForDiscrete(audio_channels);
+  demuxer_stream_.set_audio_decoder_config(audio_config);
+  ConfigureDemuxerStream(true);
+
+  // Fake an attached webaudio client.
+  sink_->SetIsOptimizedForHardwareParameters(false);
+
+  Initialize();
+  std::vector<bool> mask = channel_mask();
+  EXPECT_FALSE(mask.empty());
+  ASSERT_EQ(mask.size(), static_cast<size_t>(audio_channels));
+  for (int ch = 0; ch < audio_channels; ++ch)
     ASSERT_TRUE(mask[ch]);
 }
 

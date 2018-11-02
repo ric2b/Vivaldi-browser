@@ -10,15 +10,13 @@
   position: relative;
 }
 
-paper-dialog {
-  --paper-dialog-title: {
-    font-size: 15px;
-  };
-
+#forgotPasswordDlg {
+  color: var(--primary-text-color);
+  font-size: 15px;
   width: 384px;
 }
 
-#forgotPasswordDlg .buttons {
-  padding: 15px 24px 24px;
+oobe-dialog gaia-input-form {
+  margin: 44px 64px 0 64px;
+  width: 640px;
 }
-

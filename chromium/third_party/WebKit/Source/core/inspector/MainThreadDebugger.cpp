@@ -45,6 +45,7 @@
 #include "core/dom/Element.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/StaticNodeList.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/ErrorEvent.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/FrameConsole.h"
@@ -63,7 +64,6 @@
 #include "core/workers/MainThreadWorkletGlobalScope.h"
 #include "core/xml/XPathEvaluator.h"
 #include "core/xml/XPathResult.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/ThreadingPrimitives.h"
@@ -78,7 +78,7 @@ int FrameId(LocalFrame& frame) {
 }
 
 Mutex& CreationMutex() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, (new Mutex));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(Mutex, mutex, ());
   return mutex;
 }
 
@@ -150,9 +150,8 @@ void MainThreadDebugger::ContextCreated(ScriptState* script_state,
   aux_data_builder.Append(IdentifiersFactory::FrameId(frame));
   aux_data_builder.Append("\"}");
   String aux_data = aux_data_builder.ToString();
-  String human_readable_name = world.IsIsolatedWorld()
-                                   ? world.IsolatedWorldHumanReadableName()
-                                   : String();
+  String human_readable_name =
+      !world.IsMainWorld() ? world.NonMainWorldHumanReadableName() : String();
   String origin_string = origin ? origin->ToRawString() : String();
   v8_inspector::V8ContextInfo context_info(
       script_state->GetContext(), ContextGroupId(frame),

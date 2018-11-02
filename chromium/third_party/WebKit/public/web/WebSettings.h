@@ -119,6 +119,7 @@ class WebSettings {
     kNoUserGestureRequired = 0,
     kUserGestureRequired,
     kUserGestureRequiredForCrossOrigin,
+    kDocumentUserActivationRequired,
   };
 
   // Sets value of a setting by its string identifier from Settings.in and
@@ -193,7 +194,6 @@ class WebSettings {
   virtual void SetImageAnimationPolicy(ImageAnimationPolicy) = 0;
   virtual void SetImagesEnabled(bool) = 0;
   virtual void SetInlineTextBoxAccessibilityEnabled(bool) = 0;
-  virtual void SetInertVisualViewport(bool) = 0;
   virtual void SetJavaScriptCanAccessClipboard(bool) = 0;
   virtual void SetJavaScriptEnabled(bool) = 0;
   virtual void SetLoadsImagesAutomatically(bool) = 0;
@@ -297,11 +297,6 @@ class WebSettings {
   virtual void SetWebSecurityEnabled(bool) = 0;
   virtual void SetWideViewportQuirkEnabled(bool) = 0;
   virtual void SetXSSAuditorEnabled(bool) = 0;
-  // Background timer throttling aggressiveness settings.
-  virtual void SetExpensiveBackgroundThrottlingCPUBudget(float) = 0;
-  virtual void SetExpensiveBackgroundThrottlingInitialBudget(float) = 0;
-  virtual void SetExpensiveBackgroundThrottlingMaxBudget(float) = 0;
-  virtual void SetExpensiveBackgroundThrottlingMaxDelay(float) = 0;
   virtual void SetMediaControlsEnabled(bool) = 0;
   virtual void SetDoNotUpdateSelectionOnMutatingSelectionRange(bool) = 0;
 

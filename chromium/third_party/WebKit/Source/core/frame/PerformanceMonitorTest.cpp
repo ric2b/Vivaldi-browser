@@ -36,14 +36,12 @@ class PerformanceMonitorTest : public ::testing::Test {
   }
 
   // scheduler::TaskTimeObserver implementation
-  void WillProcessTask(scheduler::TaskQueue* queue, double start_time) {
-    monitor_->WillProcessTask(queue, start_time);
+  void WillProcessTask(double start_time) {
+    monitor_->WillProcessTask(start_time);
   }
 
-  void DidProcessTask(scheduler::TaskQueue* queue,
-                      double start_time,
-                      double end_time) {
-    monitor_->DidProcessTask(queue, start_time, end_time);
+  void DidProcessTask(double start_time, double end_time) {
+    monitor_->DidProcessTask(start_time, end_time);
   }
 
   String FrameContextURL();
@@ -56,13 +54,14 @@ class PerformanceMonitorTest : public ::testing::Test {
 
 void PerformanceMonitorTest::SetUp() {
   page_holder_ = DummyPageHolder::Create(IntSize(800, 600));
-  page_holder_->GetDocument().SetURL(KURL(KURL(), "https://example.com/foo"));
+  page_holder_->GetDocument().SetURL(
+      KURL(NullURL(), "https://example.com/foo"));
   monitor_ = new PerformanceMonitor(GetFrame());
 
   // Create another dummy page holder and pretend this is the iframe.
   another_page_holder_ = DummyPageHolder::Create(IntSize(400, 300));
   another_page_holder_->GetDocument().SetURL(
-      KURL(KURL(), "https://iframed.com/bar"));
+      KURL(NullURL(), "https://iframed.com/bar"));
 }
 
 void PerformanceMonitorTest::TearDown() {
@@ -86,17 +85,17 @@ int PerformanceMonitorTest::NumUniqueFrameContextsSeen() {
 }
 
 TEST_F(PerformanceMonitorTest, SingleScriptInTask) {
-  WillProcessTask(nullptr, 3719349.445172);
+  WillProcessTask(3719349.445172);
   EXPECT_EQ(0, NumUniqueFrameContextsSeen());
   WillExecuteScript(GetExecutionContext());
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
-  DidProcessTask(nullptr, 3719349.445172, 3719349.5561923);  // Long task
+  DidProcessTask(3719349.445172, 3719349.5561923);  // Long task
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
   EXPECT_EQ("https://example.com/foo", FrameContextURL());
 }
 
 TEST_F(PerformanceMonitorTest, MultipleScriptsInTask_SingleContext) {
-  WillProcessTask(nullptr, 3719349.445172);
+  WillProcessTask(3719349.445172);
   EXPECT_EQ(0, NumUniqueFrameContextsSeen());
   WillExecuteScript(GetExecutionContext());
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
@@ -104,13 +103,13 @@ TEST_F(PerformanceMonitorTest, MultipleScriptsInTask_SingleContext) {
 
   WillExecuteScript(GetExecutionContext());
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
-  DidProcessTask(nullptr, 3719349.445172, 3719349.5561923);  // Long task
+  DidProcessTask(3719349.445172, 3719349.5561923);  // Long task
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
   EXPECT_EQ("https://example.com/foo", FrameContextURL());
 }
 
 TEST_F(PerformanceMonitorTest, MultipleScriptsInTask_MultipleContexts) {
-  WillProcessTask(nullptr, 3719349.445172);
+  WillProcessTask(3719349.445172);
   EXPECT_EQ(0, NumUniqueFrameContextsSeen());
   WillExecuteScript(GetExecutionContext());
   EXPECT_EQ(1, NumUniqueFrameContextsSeen());
@@ -118,18 +117,18 @@ TEST_F(PerformanceMonitorTest, MultipleScriptsInTask_MultipleContexts) {
 
   WillExecuteScript(AnotherExecutionContext());
   EXPECT_EQ(2, NumUniqueFrameContextsSeen());
-  DidProcessTask(nullptr, 3719349.445172, 3719349.5561923);  // Long task
+  DidProcessTask(3719349.445172, 3719349.5561923);  // Long task
   EXPECT_EQ(2, NumUniqueFrameContextsSeen());
   EXPECT_EQ("", FrameContextURL());
 }
 
 TEST_F(PerformanceMonitorTest, NoScriptInLongTask) {
-  WillProcessTask(nullptr, 3719349.445172);
+  WillProcessTask(3719349.445172);
   WillExecuteScript(GetExecutionContext());
-  DidProcessTask(nullptr, 3719349.445172, 3719349.445182);
+  DidProcessTask(3719349.445172, 3719349.445182);
 
-  WillProcessTask(nullptr, 3719349.445172);
-  DidProcessTask(nullptr, 3719349.445172, 3719349.5561923);  // Long task
+  WillProcessTask(3719349.445172);
+  DidProcessTask(3719349.445172, 3719349.5561923);  // Long task
   // Without presence of Script, FrameContext URL is not available
   EXPECT_EQ(0, NumUniqueFrameContextsSeen());
 }

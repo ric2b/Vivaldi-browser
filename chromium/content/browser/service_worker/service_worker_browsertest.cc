@@ -22,6 +22,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -31,12 +33,11 @@
 #include "content/browser/cache_storage/cache_storage_cache_handle.h"
 #include "content/browser/cache_storage/cache_storage_context_impl.h"
 #include "content/browser/cache_storage/cache_storage_manager.h"
-#include "content/browser/memory/memory_coordinator_impl.h"
 #include "content/browser/service_worker/embedded_worker_instance.h"
 #include "content/browser/service_worker/embedded_worker_registry.h"
 #include "content/browser/service_worker/embedded_worker_status.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
-#include "content/browser/service_worker/service_worker_context_observer.h"
+#include "content/browser/service_worker/service_worker_context_core_observer.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_fetch_dispatcher.h"
 #include "content/browser/service_worker/service_worker_registration.h"
@@ -174,7 +175,7 @@ void ExpectResultAndRun(bool expected,
 }
 
 class WorkerActivatedObserver
-    : public ServiceWorkerContextObserver,
+    : public ServiceWorkerContextCoreObserver,
       public base::RefCountedThreadSafe<WorkerActivatedObserver> {
  public:
   explicit WorkerActivatedObserver(ServiceWorkerContextWrapper* context)
@@ -182,7 +183,7 @@ class WorkerActivatedObserver
   void Init() {
     RunOnIOThread(base::Bind(&WorkerActivatedObserver::InitOnIOThread, this));
   }
-  // ServiceWorkerContextObserver overrides.
+  // ServiceWorkerContextCoreObserver overrides.
   void OnVersionStateChanged(int64_t version_id,
                              ServiceWorkerVersion::Status) override {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
@@ -520,14 +521,14 @@ class ConsoleListener : public EmbeddedWorkerInstance::Listener {
 
 // Listens to console messages on ServiceWorkerContextWrapper.
 class ConsoleMessageContextObserver
-    : public ServiceWorkerContextObserver,
+    : public ServiceWorkerContextCoreObserver,
       public base::RefCountedThreadSafe<ConsoleMessageContextObserver> {
  public:
   explicit ConsoleMessageContextObserver(ServiceWorkerContextWrapper* context)
       : context_(context) {}
   void Init() { context_->AddObserver(this); }
 
-  // ServiceWorkerContextObserver overrides.
+  // ServiceWorkerContextCoreObserver overrides.
   void OnReportConsoleMessage(int64_t version_id,
                               int process_id,
                               int thread_id,
@@ -573,6 +574,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   void TearDownOnIOThread() override {
     registration_ = NULL;
     version_ = NULL;
+    remote_endpoints_.clear();
   }
 
   void InstallTestHelper(const std::string& worker_url,
@@ -641,7 +643,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
     const GURL pattern = embedded_test_server()->GetURL("/service_worker/");
     registration_ = new ServiceWorkerRegistration(
-        pattern,
+        ServiceWorkerRegistrationOptions(pattern),
         wrapper()->context()->storage()->NewRegistrationId(),
         wrapper()->context()->AsWeakPtr());
     // Set the update check time to avoid triggering updates in the middle of
@@ -663,16 +665,18 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
 
   void TimeoutWorkerOnIOThread() {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    EXPECT_TRUE(version_->timeout_timer_.IsRunning());
     version_->SimulatePingTimeoutForTesting();
   }
 
   void AddControlleeOnIOThread() {
     ASSERT_TRUE(BrowserThread::CurrentlyOn(BrowserThread::IO));
+    remote_endpoints_.emplace_back();
     std::unique_ptr<ServiceWorkerProviderHost> host =
-        CreateProviderHostForWindow(33 /* dummy render process id */,
-                                    1 /* dummy provider_id */,
-                                    true /* is_parent_frame_secure */,
-                                    wrapper()->context()->AsWeakPtr());
+        CreateProviderHostForWindow(
+            33 /* dummy render process id */, 1 /* dummy provider_id */,
+            true /* is_parent_frame_secure */,
+            wrapper()->context()->AsWeakPtr(), &remote_endpoints_.back());
     host->SetDocumentUrl(
         embedded_test_server()->GetURL("/service_worker/host"));
     host->AssociateRegistration(registration_.get(),
@@ -919,6 +923,7 @@ class ServiceWorkerVersionBrowserTest : public ServiceWorkerBrowserTest {
   scoped_refptr<ServiceWorkerVersion> version_;
   scoped_refptr<ChromeBlobStorageContext> blob_context_;
   std::unique_ptr<ServiceWorkerFetchDispatcher> fetch_dispatcher_;
+  std::vector<ServiceWorkerRemoteProviderEndpoint> remote_endpoints_;
 };
 
 IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, StartAndStop) {
@@ -1174,7 +1179,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutStartingWorker) {
 
   // Simulate execution timeout. Use a delay to prevent killing the worker
   // before it's started execution.
-  EXPECT_TRUE(version_->timeout_timer_.IsRunning());
   RunOnIOThreadWithDelay(
       base::Bind(&self::TimeoutWorkerOnIOThread, base::Unretained(this)),
       base::TimeDelta::FromMilliseconds(100));
@@ -1208,7 +1212,6 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerVersionBrowserTest, TimeoutWorkerInEvent) {
 
   // Simulate execution timeout. Use a delay to prevent killing the worker
   // before it's started execution.
-  EXPECT_TRUE(version_->timeout_timer_.IsRunning());
   RunOnIOThreadWithDelay(
       base::Bind(&self::TimeoutWorkerOnIOThread, base::Unretained(this)),
       base::TimeDelta::FromMilliseconds(100));
@@ -2170,7 +2173,7 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerNavigationPreloadTest,
   // preloadResponse must be resolve with an opaque redirect response. But
   // currently Chrome handles the invalid location URL in the browser process as
   // an error. crbug.com/707185
-  EXPECT_EQ("NetworkError: " + kNavigationPreloadAbortError,
+  EXPECT_EQ("NetworkError: " + kNavigationPreloadNetworkError,
             LoadNavigationPreloadTestPage(page_url, worker_url, "REJECTED"));
 
   // The page request must be sent only once, since the worker responded with
@@ -2654,9 +2657,7 @@ class CacheStorageSideDataSizeChecker
       std::unique_ptr<storage::BlobDataHandle> blob_data_handle) {
     ASSERT_EQ(CACHE_STORAGE_OK, error);
     blob_data_handle_ = std::move(blob_data_handle);
-    blob_reader_ = blob_data_handle_->CreateReader(
-        file_system_context_,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
+    blob_reader_ = blob_data_handle_->CreateReader(file_system_context_);
     const storage::BlobReader::Status status = blob_reader_->CalculateSize(
         base::Bind(&self::OnBlobReaderCalculateSizeCallback, this, result,
                    continuation));
@@ -2969,69 +2970,5 @@ IN_PROC_BROWSER_TEST_F(ServiceWorkerDisableWebSecurityTest, UpdateNoCrash) {
   RegisterServiceWorkerOnCrossOriginServer(kScopeUrl, kWorkerUrl);
   RunTestWithCrossOriginURL(kPageUrl, kScopeUrl);
 }
-
-class MemoryCoordinatorWithServiceWorkerTest
-    : public ServiceWorkerVersionBrowserTest {
- public:
-  MemoryCoordinatorWithServiceWorkerTest() {}
-
-  void SetUp() override {
-    scoped_feature_list_.InitAndEnableFeature(features::kMemoryCoordinator);
-    ServiceWorkerVersionBrowserTest::SetUp();
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-
-  DISALLOW_COPY_AND_ASSIGN(MemoryCoordinatorWithServiceWorkerTest);
-};
-
-class TestMemoryCoordinatorDelegate : public MemoryCoordinatorDelegate {
- public:
-  TestMemoryCoordinatorDelegate() {}
-  ~TestMemoryCoordinatorDelegate() override {}
-
-  bool CanSuspendBackgroundedRenderer(int render_process_id) override {
-    return true;
-  }
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(TestMemoryCoordinatorDelegate);
-};
-
-// MemoryCoordinatorWithServiceWorkerTest checks if a process won't be
-// suspended when it has one or more shared workers or service workers.
-// TODO(shimazu): Enable these tests on macos when MemoryMonitorMac is
-// implemented.
-#if !defined(OS_MACOSX)
-IN_PROC_BROWSER_TEST_F(MemoryCoordinatorWithServiceWorkerTest,
-                       CannotSuspendRendererWithServiceWorker) {
-  StartServerAndNavigateToSetup();
-  InstallTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
-  ActivateTestHelper("/service_worker/fetch_event.js", SERVICE_WORKER_OK);
-
-  MemoryCoordinatorImpl* memory_coordinator =
-      MemoryCoordinatorImpl::GetInstance();
-  memory_coordinator->SetDelegateForTesting(
-      base::MakeUnique<TestMemoryCoordinatorDelegate>());
-
-  // Ensure only one process host exists.
-  ASSERT_EQ(1, CountRenderProcessHosts());
-  ASSERT_EQ(1u, memory_coordinator->children().size());
-
-  // Check the number of workers.
-  int render_process_id = memory_coordinator->children().begin()->first;
-  RenderProcessHost* rph = RenderProcessHost::FromID(render_process_id);
-  EXPECT_EQ(1u, rph->GetWorkerRefCount());
-
-  // A process should be backgrounded to ensure the worker reference count takes
-  // effect in CanSuspendRenderer().
-  shell()->web_contents()->WasHidden();
-  EXPECT_TRUE(rph->IsProcessBackgrounded());
-
-  // The process which has service worker thread shouldn't be suspended.
-  EXPECT_FALSE(memory_coordinator->CanSuspendRenderer(render_process_id));
-}
-#endif
 
 }  // namespace content

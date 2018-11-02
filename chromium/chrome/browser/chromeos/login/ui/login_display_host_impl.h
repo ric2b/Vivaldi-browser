@@ -82,6 +82,8 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
       bool auto_launch) override;
   void StartDemoAppLaunch() override;
   void StartArcKiosk(const AccountId& account_id) override;
+  bool IsVoiceInteractionOobe() override;
+  void StartVoiceInteractionOobe() override;
 
   // Creates WizardController instance.
   WizardController* CreateWizardController();
@@ -305,8 +307,9 @@ class LoginDisplayHostImpl : public LoginDisplayHost,
 
   // Keeps a copy of the old Drag'n'Drop client, so that it would be disabled
   // during a login session and restored afterwards.
-  std::unique_ptr<aura::client::ScopedDragDropDisabler>
-      scoped_drag_drop_disabler_;
+  std::unique_ptr<wm::ScopedDragDropDisabler> scoped_drag_drop_disabler_;
+
+  bool is_voice_interaction_oobe_ = false;
 
   base::WeakPtrFactory<LoginDisplayHostImpl> pointer_factory_;
   base::WeakPtrFactory<LoginDisplayHostImpl> animation_weak_ptr_factory_;

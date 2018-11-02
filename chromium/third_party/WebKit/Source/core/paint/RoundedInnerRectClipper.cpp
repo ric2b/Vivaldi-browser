@@ -4,25 +4,28 @@
 
 #include "core/paint/RoundedInnerRectClipper.h"
 
-#include "core/layout/LayoutObject.h"
 #include "core/paint/PaintInfo.h"
 #include "platform/graphics/paint/ClipDisplayItem.h"
+#include "platform/graphics/paint/DisplayItemClient.h"
 #include "platform/graphics/paint/PaintController.h"
 
 namespace blink {
 
 RoundedInnerRectClipper::RoundedInnerRectClipper(
-    const LayoutObject& layout_object,
+    const DisplayItemClient& display_item,
     const PaintInfo& paint_info,
     const LayoutRect& rect,
     const FloatRoundedRect& clip_rect,
     RoundedInnerRectClipperBehavior behavior)
-    : layout_object_(layout_object),
+    : display_item_(display_item),
       paint_info_(paint_info),
       use_paint_controller_(behavior == kApplyToDisplayList),
       clip_type_(use_paint_controller_
                      ? paint_info_.DisplayItemTypeForClipping()
                      : DisplayItem::kClipBoxPaintPhaseFirst) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && use_paint_controller_)
+    return;
+
   Vector<FloatRoundedRect> rounded_rect_clips;
   if (clip_rect.IsRenderable()) {
     rounded_rect_clips.push_back(clip_rect);
@@ -70,24 +73,25 @@ RoundedInnerRectClipper::RoundedInnerRectClipper(
 
   if (use_paint_controller_) {
     paint_info_.context.GetPaintController().CreateAndAppend<ClipDisplayItem>(
-        layout_object, clip_type_, LayoutRect::InfiniteIntRect(),
+        display_item, clip_type_, LayoutRect::InfiniteIntRect(),
         rounded_rect_clips);
   } else {
-    ClipDisplayItem clip_display_item(layout_object, clip_type_,
-                                      LayoutRect::InfiniteIntRect(),
-                                      rounded_rect_clips);
-    clip_display_item.Replay(paint_info.context);
+    paint_info.context.Save();
+    for (const auto& rrect : rounded_rect_clips)
+      paint_info.context.ClipRoundedRect(rrect);
   }
 }
 
 RoundedInnerRectClipper::~RoundedInnerRectClipper() {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && use_paint_controller_)
+    return;
+
   DisplayItem::Type end_type = DisplayItem::ClipTypeToEndClipType(clip_type_);
   if (use_paint_controller_) {
     paint_info_.context.GetPaintController().EndItem<EndClipDisplayItem>(
-        layout_object_, end_type);
+        display_item_, end_type);
   } else {
-    EndClipDisplayItem end_clip_display_item(layout_object_, end_type);
-    end_clip_display_item.Replay(paint_info_.context);
+    paint_info_.context.Restore();
   }
 }
 

@@ -49,10 +49,14 @@ class CdmSessionAdapter : public base::RefCounted<CdmSessionAdapter> {
   void SetServerCertificate(const std::vector<uint8_t>& certificate,
                             std::unique_ptr<SimpleCdmPromise> promise);
 
-  // Creates a new session and adds it to the internal map. The caller owns the
-  // created session. RemoveSession() must be called when destroying it, if
-  // RegisterSession() was called.
-  WebContentDecryptionModuleSessionImpl* CreateSession();
+  // Gets the key status for a hypothetical key with |min_hdcp_version|
+  // requirement.
+  void GetStatusForPolicy(HdcpVersion min_hdcp_version,
+                          std::unique_ptr<KeyStatusCdmPromise> promise);
+
+  // Creates a new session and adds it to the internal map. RemoveSession()
+  // must be called when destroying it, if RegisterSession() was called.
+  std::unique_ptr<WebContentDecryptionModuleSessionImpl> CreateSession();
 
   // Adds a session to the internal map. Called once the session is successfully
   // initialized. Returns true if the session was registered, false if there is

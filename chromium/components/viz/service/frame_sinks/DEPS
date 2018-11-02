@@ -1,0 +1,8 @@
+include_rules = [
+  "+cc/base",
+  "+cc/ipc",
+  "+cc/surfaces",
+  "+cc/scheduler",
+  "+gpu/ipc/common",
+  "+mojo/public/cpp/bindings",
+]

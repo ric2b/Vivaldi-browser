@@ -2,6 +2,7 @@ include_rules = [
   # Chrome under mustash cannot call directly into ash internals.
   "-ash",
   "+ash/public",
+  "+ash/system/network",
   "+components/captive_portal",
 ]
 
@@ -15,5 +16,8 @@ specific_include_rules = {
   "network_state_notifier\.cc": [
     "+ash/system/system_notifier.h",
     "+ash/resources/grit/ash_resources.h",
+  ],
+  "tether_notification_presenter\.cc": [
+    "+ash/system/system_notifier.h",
   ],
 }

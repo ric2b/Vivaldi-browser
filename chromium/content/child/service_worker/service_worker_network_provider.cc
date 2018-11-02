@@ -15,6 +15,7 @@
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "ipc/ipc_sync_channel.h"
+#include "mojo/public/cpp/bindings/associated_group.h"
 #include "third_party/WebKit/public/platform/WebSecurityOrigin.h"
 #include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerNetworkProvider.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
@@ -26,7 +27,7 @@ namespace {
 
 // Must be unique in the child process.
 int GetNextProviderId() {
-  static base::StaticAtomicSequenceNumber sequence;
+  static base::AtomicSequenceNumber sequence;
   return sequence.GetNext();  // We start at zero.
 }
 
@@ -162,6 +163,10 @@ ServiceWorkerNetworkProvider::CreateForNavigation(
 ServiceWorkerNetworkProvider*
 ServiceWorkerNetworkProvider::FromWebServiceWorkerNetworkProvider(
     blink::WebServiceWorkerNetworkProvider* provider) {
+  if (!provider) {
+    DCHECK(ServiceWorkerUtils::IsServicificationEnabled());
+    return nullptr;
+  }
   return static_cast<WebServiceWorkerNetworkProviderForFrame*>(provider)
       ->provider();
 }
@@ -176,14 +181,22 @@ ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
     return;
   if (!ChildThreadImpl::current())
     return;  // May be null in some tests.
-  ServiceWorkerProviderHostInfo provider_info(
-      provider_id_, route_id, provider_type, is_parent_frame_secure);
+
+  ServiceWorkerProviderHostInfo host_info(provider_id_, route_id, provider_type,
+                                          is_parent_frame_secure);
+  host_info.host_request = mojo::MakeRequest(&provider_host_);
+  mojom::ServiceWorkerProviderAssociatedRequest client_request =
+      mojo::MakeRequest(&host_info.client_ptr_info);
+
+  DCHECK(host_info.host_request.is_pending());
+  DCHECK(host_info.host_request.handle().is_valid());
   context_ = new ServiceWorkerProviderContext(
-      provider_id_, provider_type,
+      provider_id_, provider_type, std::move(client_request),
       ChildThreadImpl::current()->thread_safe_sender());
+
   ChildThreadImpl::current()->channel()->GetRemoteAssociatedInterface(
       &dispatcher_host_);
-  dispatcher_host_->OnProviderCreated(std::move(provider_info));
+  dispatcher_host_->OnProviderCreated(std::move(host_info));
 }
 
 ServiceWorkerNetworkProvider::ServiceWorkerNetworkProvider(
@@ -203,7 +216,7 @@ ServiceWorkerNetworkProvider::~ServiceWorkerNetworkProvider() {
     return;
   if (!ChildThreadImpl::current())
     return;  // May be null in some tests.
-  dispatcher_host_->OnProviderDestroyed(provider_id());
+  provider_host_.reset();
 }
 
 void ServiceWorkerNetworkProvider::SetServiceWorkerVersionId(
@@ -212,11 +225,17 @@ void ServiceWorkerNetworkProvider::SetServiceWorkerVersionId(
   DCHECK_NE(kInvalidServiceWorkerProviderId, provider_id_);
   if (!ChildThreadImpl::current())
     return;  // May be null in some tests.
-  dispatcher_host_->OnSetHostedVersionId(provider_id(), version_id,
-                                         embedded_worker_id);
+  dispatcher_host_->OnSetHostedVersionId(
+      provider_id(), version_id, embedded_worker_id,
+      mojo::MakeRequest(&script_loader_factory_));
 }
 
 bool ServiceWorkerNetworkProvider::IsControlledByServiceWorker() const {
+  if (ServiceWorkerUtils::IsServicificationEnabled()) {
+    // Interception for subresource loading is not working (yet)
+    // when servicification is enabled.
+    return false;
+  }
   return context() && context()->controller();
 }
 

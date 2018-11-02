@@ -50,11 +50,14 @@ class AXARIAGridCell final : public AXTableCell {
   // fills in the start location and column span of cell
   void ColumnIndexRange(std::pair<unsigned, unsigned>& column_range) override;
   AccessibilityRole ScanToDecideHeaderRole() final;
+  bool CanSetSelectedAttribute() const final {
+    return Restriction() != kDisabled;
+  }
 
  protected:
   bool IsAriaColumnHeader() const;
   bool IsAriaRowHeader() const;
-  AXObjectImpl* ParentTable() const override;
+  AXObject* ParentTable() const override;
 };
 
 }  // namespace blink

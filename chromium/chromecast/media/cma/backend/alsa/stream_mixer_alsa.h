@@ -196,6 +196,10 @@ class StreamMixerAlsa {
   // Sets the volume multiplier limit for the given content |type|.
   void SetOutputLimit(AudioContentType type, float limit);
 
+  // Sends configuration string |config| to processor |name|.
+  void SetPostProcessorConfig(const std::string& name,
+                              const std::string& config);
+
  protected:
   StreamMixerAlsa();
   virtual ~StreamMixerAlsa();
@@ -257,6 +261,7 @@ class StreamMixerAlsa {
   scoped_refptr<base::SingleThreadTaskRunner> mixer_task_runner_;
 
   unsigned int fixed_output_samples_per_second_;
+  int num_output_channels_;
   unsigned int low_sample_rate_cutoff_;
   int requested_output_samples_per_second_;
   int output_samples_per_second_;

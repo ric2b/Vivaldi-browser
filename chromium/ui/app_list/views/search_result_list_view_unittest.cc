@@ -78,6 +78,7 @@ class SearchResultListViewTest : public views::ViewsTestBase,
   }
 
   int GetOpenResultCountAndReset(int ranking) {
+    EXPECT_GT(view_delegate_.open_search_result_counts().count(ranking), 0u);
     int result = view_delegate_.open_search_result_counts()[ranking];
     view_delegate_.open_search_result_counts().clear();
     return result;
@@ -218,7 +219,7 @@ TEST_F(SearchResultListViewTest, SpokenFeedback) {
             GetResultViewAt(2)->ComputeAccessibleName());
 }
 
-TEST_F(SearchResultListViewTest, ModelObservers) {
+TEST_F(SearchResultListViewTest, DISABLED_ModelObservers) {
   SetUpSearchResults();
   ExpectConsistent();
 

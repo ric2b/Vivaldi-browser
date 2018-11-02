@@ -15,13 +15,13 @@
 #include "base/strings/stringprintf.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "crypto/sha2.h"
 #include "net/base/net_errors.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
 #include "net/cert/asn1_util.h"
 #include "net/cert/cert_status_flags.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert/cert_verify_proc_whitelist.h"
 #include "net/cert/cert_verify_result.h"
 #include "net/cert/crl_set.h"
 #include "net/cert/internal/parse_ocsp.h"
@@ -42,6 +42,8 @@
 #elif defined(OS_WIN)
 #include "base/win/windows_version.h"
 #include "net/cert/cert_verify_proc_win.h"
+#elif defined(OS_FUCHSIA)
+#include "net/cert/cert_verify_proc_builtin.h"
 #else
 #error Implement certificate verification.
 #endif
@@ -500,7 +502,7 @@ WARN_UNUSED_RESULT bool InspectSignatureAlgorithmsInChain(
 }  // namespace
 
 // static
-CertVerifyProc* CertVerifyProc::CreateDefault() {
+scoped_refptr<CertVerifyProc> CertVerifyProc::CreateDefault() {
 #if defined(USE_NSS_CERTS)
   return new CertVerifyProcNSS();
 #elif defined(OS_ANDROID)
@@ -511,6 +513,8 @@ CertVerifyProc* CertVerifyProc::CreateDefault() {
   return new CertVerifyProcMac();
 #elif defined(OS_WIN)
   return new CertVerifyProcWin();
+#elif defined(OS_FUCHSIA)
+  return CreateCertVerifyProcBuiltin();
 #else
 #error Unsupported platform
 #endif
@@ -579,12 +583,6 @@ int CertVerifyProc::Verify(X509Certificate* cert,
                                   dns_names,
                                   ip_addrs)) {
     verify_result->cert_status |= CERT_STATUS_NAME_CONSTRAINT_VIOLATION;
-    rv = MapCertStatusToNetError(verify_result->cert_status);
-  }
-
-  if (IsNonWhitelistedCertificate(*verify_result->verified_cert,
-                                  verify_result->public_key_hashes, hostname)) {
-    verify_result->cert_status |= CERT_STATUS_AUTHORITY_INVALID;
     rv = MapCertStatusToNetError(verify_result->cert_status);
   }
 
@@ -753,11 +751,11 @@ static bool CheckNameConstraints(const std::vector<std::string>& dns_names,
   return true;
 }
 
-// PublicKeyDomainLimitation contains a SHA1, SPKI hash and a pointer to an
-// array of fixed-length strings that contain the domains that the SPKI is
-// allowed to issue for.
+// PublicKeyDomainLimitation contains SHA-256(SPKI) and a pointer to an array of
+// fixed-length strings that contain the domains that the SPKI is allowed to
+// issue for.
 struct PublicKeyDomainLimitation {
-  uint8_t public_key[base::kSHA1Length];
+  uint8_t public_key[crypto::kSHA256Length];
   const char (*domains)[kMaxDomainLength];
 };
 
@@ -803,37 +801,50 @@ bool CertVerifyProc::HasNameConstraintsViolation(
   static const PublicKeyDomainLimitation kLimits[] = {
       // C=FR, ST=France, L=Paris, O=PM/SGDN, OU=DCSSI,
       // CN=IGC/A/emailAddress=igca@sgdn.pm.gouv.fr
+      //
+      // net/data/ssl/blacklist/b9bea7860a962ea3611dab97ab6da3e21c1068b97d55575ed0e11279c11c8932.pem
       {
-          {0x79, 0x23, 0xd5, 0x8d, 0x0f, 0xe0, 0x3c, 0xe6, 0xab, 0xad, 0xae,
-           0x27, 0x1a, 0x6d, 0x94, 0xf4, 0x14, 0xd1, 0xa8, 0x73},
+          {0x86, 0xc1, 0x3a, 0x34, 0x08, 0xdd, 0x1a, 0xa7, 0x7e, 0xe8, 0xb6,
+           0x94, 0x7c, 0x03, 0x95, 0x87, 0x72, 0xf5, 0x31, 0x24, 0x8c, 0x16,
+           0x27, 0xbe, 0xfb, 0x2c, 0x4f, 0x4b, 0x04, 0xd0, 0x44, 0x96},
           kDomainsANSSI,
       },
       // C=IN, O=India PKI, CN=CCA India 2007
       // Expires: July 4th 2015.
+      //
+      // net/data/ssl/blacklist/f375e2f77a108bacc4234894a9af308edeca1acd8fbde0e7aaa9634e9daf7e1c.pem
       {
-          {0xfe, 0xe3, 0x95, 0x21, 0x2d, 0x5f, 0xea, 0xfc, 0x7e, 0xdc, 0xcf,
-           0x88, 0x3f, 0x1e, 0xc0, 0x58, 0x27, 0xd8, 0xb8, 0xe4},
+          {0x7e, 0x6a, 0xcd, 0x85, 0x3c, 0xac, 0xc6, 0x93, 0x2e, 0x9b, 0x51,
+           0x9f, 0xda, 0xd1, 0xbe, 0xb5, 0x15, 0xed, 0x2a, 0x2d, 0x00, 0x25,
+           0xcf, 0xd3, 0x98, 0xc3, 0xac, 0x1f, 0x0d, 0xbb, 0x75, 0x4b},
           kDomainsIndiaCCA,
       },
       // C=IN, O=India PKI, CN=CCA India 2011
       // Expires: March 11 2016.
+      //
+      // net/data/ssl/blacklist/2d66a702ae81ba03af8cff55ab318afa919039d9f31b4d64388680f81311b65a.pem
       {
-          {0xf1, 0x42, 0xf6, 0xa2, 0x7d, 0x29, 0x3e, 0xa8, 0xf9, 0x64, 0x52,
-           0x56, 0xed, 0x07, 0xa8, 0x63, 0xf2, 0xdb, 0x1c, 0xdf},
+          {0x42, 0xa7, 0x09, 0x84, 0xff, 0xd3, 0x99, 0xc4, 0xea, 0xf0, 0xe7,
+           0x02, 0xa4, 0x4b, 0xef, 0x2a, 0xd8, 0xa7, 0x9b, 0x8b, 0xf4, 0x64,
+           0x8f, 0x6b, 0xb2, 0x10, 0xe1, 0x23, 0xfd, 0x07, 0x57, 0x93},
           kDomainsIndiaCCA,
       },
       // C=IN, O=India PKI, CN=CCA India 2014
       // Expires: March 5 2024.
+      //
+      // net/data/ssl/blacklist/60109bc6c38328598a112c7a25e38b0f23e5a7511cb815fb64e0c4ff05db7df7.pem
       {
-          {0x36, 0x8c, 0x4a, 0x1e, 0x2d, 0xb7, 0x81, 0xe8, 0x6b, 0xed, 0x5a,
-           0x0a, 0x42, 0xb8, 0xc5, 0xcf, 0x6d, 0xb3, 0x57, 0xe1},
+          {0x9c, 0xf4, 0x70, 0x4f, 0x3e, 0xe5, 0xa5, 0x98, 0x94, 0xb1, 0x6b,
+           0xf0, 0x0c, 0xfe, 0x73, 0xd5, 0x88, 0xda, 0xe2, 0x69, 0xf5, 0x1d,
+           0xe6, 0x6a, 0x4b, 0xa7, 0x74, 0x46, 0xee, 0x2b, 0xd1, 0xf7},
           kDomainsIndiaCCA,
       },
-      // Not a real certificate - just for testing. This is the SPKI hash of
-      // the keys used in net/data/ssl/certificates/name_constraint_*.pem.
+      // Not a real certificate - just for testing.
+      // net/data/ssl/certificates/name_constraint_*.pem
       {
-          {0x48, 0x49, 0x4a, 0xc5, 0x5a, 0x3e, 0xcd, 0xc5, 0x62, 0x9f, 0xef,
-           0x23, 0x14, 0xad, 0x05, 0xa9, 0x2a, 0x5c, 0x39, 0xc0},
+          {0x8e, 0x9b, 0x14, 0x9f, 0x01, 0x45, 0x4c, 0xee, 0xde, 0xfa, 0x5e,
+           0x73, 0x40, 0x36, 0x21, 0xba, 0xd9, 0x1f, 0xee, 0xe0, 0x3e, 0x74,
+           0x25, 0x6c, 0x59, 0xf4, 0x6f, 0xbf, 0x45, 0x03, 0x5f, 0x8d},
           kDomainsTest,
       },
   };
@@ -841,8 +852,9 @@ bool CertVerifyProc::HasNameConstraintsViolation(
   for (unsigned i = 0; i < arraysize(kLimits); ++i) {
     for (HashValueVector::const_iterator j = public_key_hashes.begin();
          j != public_key_hashes.end(); ++j) {
-      if (j->tag == HASH_VALUE_SHA1 &&
-          memcmp(j->data(), kLimits[i].public_key, base::kSHA1Length) == 0) {
+      if (j->tag == HASH_VALUE_SHA256 &&
+          memcmp(j->data(), kLimits[i].public_key, crypto::kSHA256Length) ==
+              0) {
         if (dns_names.empty() && ip_addrs.empty()) {
           std::vector<std::string> dns_names;
           dns_names.push_back(common_name);

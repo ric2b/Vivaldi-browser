@@ -1145,33 +1145,6 @@ ShellUtil::DefaultState ProbeAppIsDefaultHandlers(
   return ShellUtil::IS_DEFAULT;
 }
 
-// Probe the current commands registered to handle the shell "open" verb for
-// |protocols| (Windows XP); see ProbeProtocolHandlers.
-ShellUtil::DefaultState ProbeOpenCommandHandlers(
-    const base::FilePath& chrome_exe,
-    const wchar_t* const* protocols,
-    size_t num_protocols) {
-  const HKEY root_key = HKEY_CLASSES_ROOT;
-  base::string16 key_path;
-  base::win::RegKey key;
-  base::string16 value;
-  InstallUtil::ProgramCompare chrome_compare(chrome_exe);
-  for (size_t i = 0; i < num_protocols; ++i) {
-    // Get the command line from HKCU\<protocol>\shell\open\command.
-    key_path.assign(protocols[i]).append(ShellUtil::kRegShellOpen);
-    if (key.Open(root_key, key_path.c_str(),
-                 KEY_QUERY_VALUE) != ERROR_SUCCESS ||
-        key.ReadValue(L"", &value) != ERROR_SUCCESS) {
-      return ShellUtil::NOT_DEFAULT;
-    }
-
-    if (!chrome_compare.Evaluate(value))
-      return ShellUtil::NOT_DEFAULT;
-  }
-
-  return ShellUtil::IS_DEFAULT;
-}
-
 // A helper function that probes default protocol handler registration (in a
 // manner appropriate for the current version of Windows) to determine if
 // Chrome is the default handler for |protocols|.  Returns IS_DEFAULT
@@ -1190,10 +1163,8 @@ ShellUtil::DefaultState ProbeProtocolHandlers(
 
   if (windows_version >= base::win::VERSION_WIN8)
     return ProbeCurrentDefaultHandlers(chrome_exe, protocols, num_protocols);
-  else if (windows_version >= base::win::VERSION_VISTA)
-    return ProbeAppIsDefaultHandlers(chrome_exe, protocols, num_protocols);
 
-  return ProbeOpenCommandHandlers(chrome_exe, protocols, num_protocols);
+  return ProbeAppIsDefaultHandlers(chrome_exe, protocols, num_protocols);
 }
 
 // (Windows 8+) Finds and stores an app shortcuts folder path in *|path|.
@@ -1863,8 +1834,7 @@ ShellUtil::DefaultState ShellUtil::GetChromeDefaultStateFromPath(
   static const wchar_t* const kChromeProtocols[] = { L"http", L"https" };
   DefaultState default_state = ProbeProtocolHandlers(
       chrome_exe, kChromeProtocols, arraysize(kChromeProtocols));
-  UpdateDefaultBrowserBeaconWithState(BrowserDistribution::GetDistribution(),
-                                      default_state);
+  UpdateDefaultBrowserBeaconWithState(default_state);
   return default_state;
 }
 
@@ -1929,34 +1899,30 @@ bool ShellUtil::MakeChromeDefault(BrowserDistribution* dist,
   // browser.
   base::string16 app_name = GetApplicationName(chrome_exe);
 
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    // On Windows Vista and Win7 we still can set ourselves via the
-    // the IApplicationAssociationRegistration interface.
-    VLOG(1) << "Registering Chrome as default browser on Vista.";
-    base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
-    HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
-                                    NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
-    if (SUCCEEDED(hr)) {
-      for (int i = 0; kBrowserProtocolAssociations[i] != NULL; i++) {
-        hr = pAAR->SetAppAsDefault(app_name.c_str(),
-            kBrowserProtocolAssociations[i], AT_URLPROTOCOL);
-        if (!SUCCEEDED(hr)) {
-          ret = false;
-          LOG(ERROR) << "Failed to register as default for protocol "
-                     << kBrowserProtocolAssociations[i]
-                     << " (" << hr << ")";
-        }
+  // On Windows 7 we still can set ourselves via the the
+  // IApplicationAssociationRegistration interface.
+  VLOG(1) << "Registering Chrome as default browser on Windows 7.";
+  base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
+  HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
+                                  NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
+  if (SUCCEEDED(hr)) {
+    for (int i = 0; kBrowserProtocolAssociations[i] != NULL; i++) {
+      hr = pAAR->SetAppAsDefault(
+          app_name.c_str(), kBrowserProtocolAssociations[i], AT_URLPROTOCOL);
+      if (!SUCCEEDED(hr)) {
+        ret = false;
+        LOG(ERROR) << "Failed to register as default for protocol "
+                   << kBrowserProtocolAssociations[i] << " (" << hr << ")";
       }
+    }
 
-      for (int i = 0; kDefaultFileAssociations[i] != NULL; i++) {
-        hr = pAAR->SetAppAsDefault(app_name.c_str(),
-            kDefaultFileAssociations[i], AT_FILEEXTENSION);
-        if (!SUCCEEDED(hr)) {
-          ret = false;
-          LOG(ERROR) << "Failed to register as default for file extension "
-                     << kDefaultFileAssociations[i]
-                     << " (" << hr << ")";
-        }
+    for (int i = 0; kDefaultFileAssociations[i] != NULL; i++) {
+      hr = pAAR->SetAppAsDefault(app_name.c_str(), kDefaultFileAssociations[i],
+                                 AT_FILEEXTENSION);
+      if (!SUCCEEDED(hr)) {
+        ret = false;
+        LOG(ERROR) << "Failed to register as default for file extension "
+                   << kDefaultFileAssociations[i] << " (" << hr << ")";
       }
     }
   }
@@ -2035,24 +2001,22 @@ bool ShellUtil::MakeChromeDefaultProtocolClient(
     return false;
 
   bool ret = true;
-  // First use the new "recommended" way on Vista to make Chrome default
+  // First use the "recommended" way introduced in Vista to make Chrome default
   // protocol handler.
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    VLOG(1) << "Registering Chrome as default handler for " << protocol
-            << " on Vista.";
-    base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
-    HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
-                                    NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
-    if (SUCCEEDED(hr)) {
-      base::string16 app_name = GetApplicationName(chrome_exe);
-      hr = pAAR->SetAppAsDefault(app_name.c_str(), protocol.c_str(),
-                                 AT_URLPROTOCOL);
-    }
-    if (!SUCCEEDED(hr)) {
-      ret = false;
-      LOG(ERROR) << "Could not make Chrome default protocol client (Vista):"
-                 << " HRESULT=" << hr << ".";
-    }
+  VLOG(1) << "Registering Chrome as default handler for " << protocol
+          << " on Windows 7.";
+  base::win::ScopedComPtr<IApplicationAssociationRegistration> pAAR;
+  HRESULT hr = ::CoCreateInstance(CLSID_ApplicationAssociationRegistration,
+                                  NULL, CLSCTX_INPROC, IID_PPV_ARGS(&pAAR));
+  if (SUCCEEDED(hr)) {
+    base::string16 app_name = GetApplicationName(chrome_exe);
+    hr = pAAR->SetAppAsDefault(app_name.c_str(), protocol.c_str(),
+                               AT_URLPROTOCOL);
+  }
+  if (!SUCCEEDED(hr)) {
+    ret = false;
+    LOG(ERROR) << "Could not make Chrome default protocol client (Windows 7):"
+               << " HRESULT=" << hr << ".";
   }
 
   // Now use the old way to associate Chrome with the desired protocol. This
@@ -2246,8 +2210,7 @@ bool ShellUtil::RegisterChromeForProtocol(BrowserDistribution* dist,
     std::vector<std::unique_ptr<RegistryEntry>> entries;
     GetProtocolCapabilityEntries(suffix, protocol, &entries);
     return AddRegistryEntries(root, entries);
-  } else if (elevate_if_not_admin &&
-             base::win::GetVersion() >= base::win::VERSION_VISTA) {
+  } else if (elevate_if_not_admin) {
     // Elevate to do the whole job
     return ElevateAndRegisterChrome(dist, chrome_exe, suffix, protocol);
   } else {

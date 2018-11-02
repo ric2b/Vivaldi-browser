@@ -26,7 +26,7 @@
 
 #include "core/CSSValueKeywords.h"
 #include "core/InputTypeNames.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/editing/FrameSelection.h"
 #include "core/frame/LocalFrame.h"
 #include "core/html/shadow/ShadowElementNames.h"
@@ -306,8 +306,9 @@ PassRefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
 
   text_block_style->SetWhiteSpace(EWhiteSpace::kPre);
   text_block_style->SetOverflowWrap(EOverflowWrap::kNormal);
-  text_block_style->SetTextOverflow(
-      TextShouldBeTruncated() ? kTextOverflowEllipsis : kTextOverflowClip);
+  text_block_style->SetTextOverflow(TextShouldBeTruncated()
+                                        ? ETextOverflow::kEllipsis
+                                        : ETextOverflow::kClip);
 
   int computed_line_height =
       LineHeight(true, kHorizontalLine, kPositionOfInteriorLineBoxes).ToInt();
@@ -344,12 +345,12 @@ PassRefPtr<ComputedStyle> LayoutTextControlSingleLine::CreateInnerEditorStyle(
   text_block_style->AddCachedPseudoStyle(no_scrollbar_style);
   text_block_style->SetHasPseudoStyle(kPseudoIdScrollbar);
 
-  return text_block_style.Release();
+  return text_block_style;
 }
 
 bool LayoutTextControlSingleLine::TextShouldBeTruncated() const {
   return GetDocument().FocusedElement() != GetNode() &&
-         StyleRef().GetTextOverflow() == kTextOverflowEllipsis;
+         StyleRef().TextOverflow() == ETextOverflow::kEllipsis;
 }
 
 void LayoutTextControlSingleLine::Autoscroll(const IntPoint& position) {

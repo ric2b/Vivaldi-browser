@@ -11,10 +11,10 @@
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#include "ios/web/public/test/response_providers/data_response_provider.h"
-#include "ios/web/public/test/response_providers/error_page_response_provider.h"
+#include "ios/web/public/test/http_server/data_response_provider.h"
+#include "ios/web/public/test/http_server/error_page_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
@@ -24,9 +24,6 @@
 
 using chrome_test_util::OmniboxText;
 using chrome_test_util::TapWebViewElementWithId;
-using chrome_test_util::WebViewContainingText;
-using chrome_test_util::WebViewNotContainingText;
-
 using web::test::HttpServer;
 
 // Tests display of error pages for bad URLs.
@@ -50,8 +47,7 @@ using web::test::HttpServer;
       assertWithMatcher:grey_notNil()];
   const std::string kError =
       l10n_util::GetStringUTF8(IDS_ERRORPAGES_HEADING_NOT_AVAILABLE);
-  [[EarlGrey selectElementWithMatcher:WebViewNotContainingText(kError)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewNotContainingText:kError];
 }
 
 #pragma mark - tests
@@ -139,8 +135,7 @@ using web::test::HttpServer;
 
   [ChromeEarlGrey loadURL:URL];
   // Check that the timer has completed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTimerCompleted)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTimerCompleted];
   // DNS error page should still not appear.
   [self checkErrorPageIsNotVisible];
 }
@@ -176,8 +171,7 @@ using web::test::HttpServer;
   [ChromeEarlGrey loadURL:URL];
   TapWebViewElementWithId(kButtonId);
   // Check that the timer has completed.
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kTimerCompleted)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kTimerCompleted];
   // DNS error page should still not appear.
   [self checkErrorPageIsNotVisible];
 }

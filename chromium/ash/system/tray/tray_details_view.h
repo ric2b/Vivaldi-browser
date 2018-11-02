@@ -27,9 +27,6 @@ class ScrollView;
 }  // namespace views
 
 namespace ash {
-namespace test {
-class TrayDetailsViewTest;
-}  // namespace test
 
 class HoverHighlightView;
 class ScrollBorder;
@@ -85,6 +82,12 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   HoverHighlightView* AddScrollListCheckableItem(const base::string16& text,
                                                  bool checked);
 
+  // Adds connected sub label to the |view| with appropriate style.
+  void SetupConnectedScrollListItem(HoverHighlightView* view);
+
+  // Adds connecting sub label to the |view| with appropriate style.
+  void SetupConnectingScrollListItem(HoverHighlightView* view);
+
   // Adds a sticky sub header to |scroll_content_| containing |icon| and a text
   // represented by |text_id| resource id.
   TriView* AddScrollListSubHeader(const gfx::VectorIcon& icon, int text_id);
@@ -112,7 +115,7 @@ class ASH_EXPORT TrayDetailsView : public views::View,
   views::View* scroll_content() const { return scroll_content_; }
 
  private:
-  friend class test::TrayDetailsViewTest;
+  friend class TrayDetailsViewTest;
 
   // Overridden to handle clicks on subclass-specific views.
   virtual void HandleViewClicked(views::View* view);

@@ -227,6 +227,18 @@ void RenderViewTest::SetUp() {
       test_io_thread_->task_runner(),
       mojo::edk::ScopedIPCSupport::ShutdownPolicy::FAST));
 
+  // Subclasses can set render_thread_ with their own implementation before
+  // calling RenderViewTest::SetUp().
+  // The render thread needs to exist before blink::Initialize. It also mirrors
+  // the order on Chromium initialization.
+  if (!render_thread_)
+    render_thread_.reset(new MockRenderThread());
+  render_thread_->set_routing_id(kRouteId);
+  render_thread_->set_new_window_routing_id(kNewWindowRouteId);
+  render_thread_->set_new_window_main_frame_widget_routing_id(
+      kNewFrameWidgetRouteId);
+  render_thread_->set_new_frame_routing_id(kNewFrameRouteId);
+
   // Blink needs to be initialized before calling CreateContentRendererClient()
   // because it uses blink internally.
   blink::Initialize(blink_platform_impl_.Get());
@@ -246,16 +258,6 @@ void RenderViewTest::SetUp() {
   // font IPCs, causing all font loading to fail.
   SetDWriteFontProxySenderForTesting(CreateFakeCollectionSender());
 #endif
-
-  // Subclasses can set render_thread_ with their own implementation before
-  // calling RenderViewTest::SetUp().
-  if (!render_thread_)
-    render_thread_.reset(new MockRenderThread());
-  render_thread_->set_routing_id(kRouteId);
-  render_thread_->set_new_window_routing_id(kNewWindowRouteId);
-  render_thread_->set_new_window_main_frame_widget_routing_id(
-      kNewFrameWidgetRouteId);
-  render_thread_->set_new_frame_routing_id(kNewFrameRouteId);
 
 #if defined(OS_MACOSX)
   autorelease_pool_.reset(new base::mac::ScopedNSAutoreleasePool());
@@ -372,20 +374,26 @@ void RenderViewTest::SendNativeKeyEvent(
   SendWebKeyboardEvent(key_event);
 }
 
-void RenderViewTest::SendWebKeyboardEvent(
-    const blink::WebKeyboardEvent& key_event) {
+void RenderViewTest::SendInputEvent(const blink::WebInputEvent& input_event) {
   RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
   impl->OnMessageReceived(InputMsg_HandleInputEvent(
-      0, &key_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
+      0, &input_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
       InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
+}
+
+void RenderViewTest::SendWebKeyboardEvent(
+    const blink::WebKeyboardEvent& key_event) {
+  SendInputEvent(key_event);
 }
 
 void RenderViewTest::SendWebMouseEvent(
     const blink::WebMouseEvent& mouse_event) {
-  RenderViewImpl* impl = static_cast<RenderViewImpl*>(view_);
-  impl->OnMessageReceived(InputMsg_HandleInputEvent(
-      0, &mouse_event, std::vector<const WebInputEvent*>(), ui::LatencyInfo(),
-      InputEventDispatchType::DISPATCH_TYPE_BLOCKING));
+  SendInputEvent(mouse_event);
+}
+
+void RenderViewTest::SendWebGestureEvent(
+    const blink::WebGestureEvent& gesture_event) {
+  SendInputEvent(gesture_event);
 }
 
 const char* const kGetCoordinatesScript =
@@ -637,7 +645,11 @@ ContentRendererClient* RenderViewTest::CreateContentRendererClient() {
 }
 
 std::unique_ptr<ResizeParams> RenderViewTest::InitialSizeParams() {
-  return base::MakeUnique<ResizeParams>();
+  auto initial_size = base::MakeUnique<ResizeParams>();
+  // Ensure the view has some size so tests involving scrolling bounds work.
+  initial_size->new_size = gfx::Size(400, 300);
+  initial_size->visible_viewport_size = gfx::Size(400, 300);
+  return initial_size;
 }
 
 void RenderViewTest::GoToOffset(int offset,

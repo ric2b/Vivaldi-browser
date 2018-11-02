@@ -88,6 +88,8 @@ std::unique_ptr<base::ThreadTaskRunnerHandle> g_thread_task_runner_handle;
 }  // namespace
 
 void CastMediaShlib::Initialize(const std::vector<std::string>& argv) {
+  // Sets logging to display process and thread ID.
+  logging::SetLogItems(true, true, false, false);
   chromecast::InitCommandLineShlib(argv);
 
   g_video_plane = new DefaultVideoPlane();
@@ -131,7 +133,7 @@ MediaPipelineBackend* CastMediaShlib::CreateMediaPipelineBackend(
         new base::ThreadTaskRunnerHandle(task_runner));
   }
 
-  // TODO(cleichner): Implement MediaSyncType in MediaPipelineDeviceAlsa
+  // TODO(cleichner): Implement MediaSyncType in MediaPipelineDeviceAlsa.
   return new MediaPipelineBackendAlsa(params);
 }
 
@@ -195,6 +197,11 @@ void CastMediaShlib::AddLoopbackAudioObserver(LoopbackAudioObserver* observer) {
 void CastMediaShlib::RemoveLoopbackAudioObserver(
     LoopbackAudioObserver* observer) {
   StreamMixerAlsa::Get()->RemoveLoopbackAudioObserver(observer);
+}
+
+void CastMediaShlib::SetPostProcessorConfig(const std::string& name,
+                                            const std::string& config) {
+  StreamMixerAlsa::Get()->SetPostProcessorConfig(name, config);
 }
 
 }  // namespace media

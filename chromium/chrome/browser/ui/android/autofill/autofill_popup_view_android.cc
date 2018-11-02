@@ -16,7 +16,6 @@
 #include "components/autofill/core/browser/suggestion.h"
 #include "components/autofill/core/common/autofill_util.h"
 #include "components/security_state/core/security_state.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "jni/AutofillPopupBridge_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -53,7 +52,7 @@ void AutofillPopupViewAndroid::Show() {
 }
 
 void AutofillPopupViewAndroid::Hide() {
-  controller_ = NULL;
+  controller_ = nullptr;
   JNIEnv* env = base::android::AttachCurrentThread();
   if (!java_object_.is_null()) {
     Java_AutofillPopupBridge_dismiss(env, java_object_);
@@ -171,12 +170,9 @@ void AutofillPopupViewAndroid::PopupDismissed(
   if (controller_)
     controller_->ViewDestroyed();
 
+  // The controller has now deleted itself. Remove dangling weak reference.
+  controller_ = nullptr;
   delete this;
-}
-
-// static
-bool AutofillPopupViewAndroid::RegisterAutofillPopupViewAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 // static

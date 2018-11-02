@@ -2,22 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-bundle_data("assets") {
-  sources = [
-    "resources/QRScanner.xcassets/Contents.json",
-    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/Contents.json",
-    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off.png",
-    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@2x.png",
-    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@3x.png",
-    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/Contents.json",
-    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on.png",
-    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@2x.png",
-    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
+import("//build/config/ios/imageset.gni")
 
 source_set("qr_scanner") {
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -34,7 +19,8 @@ source_set("qr_scanner") {
     "qr_scanner_view_controller.mm",
   ]
   deps = [
-    ":assets",
+    ":qr_scanner_torch_off",
+    ":qr_scanner_torch_on",
     "//base",
     "//components/version_info",
     "//ios/chrome/app/strings",
@@ -52,6 +38,7 @@ source_set("qr_scanner") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "qr_scanner_view_controller_egtest.mm",
@@ -75,12 +62,30 @@ source_set("eg_tests") {
     "//ios/shared/chrome/browser/ui/omnibox",
     "//ios/testing/earl_grey:earl_grey_support",
     "//ios/third_party/earl_grey",
-    "//ios/web:test_support",
+    "//ios/web/public/test/http_server",
     "//third_party/ocmock",
     "//ui/base",
   ]
   libs = [
     "AVFoundation.framework",
     "UIKit.framework",
+  ]
+}
+
+imageset("qr_scanner_torch_off") {
+  sources = [
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/Contents.json",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@2x.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_off.imageset/torch_off@3x.png",
+  ]
+}
+
+imageset("qr_scanner_torch_on") {
+  sources = [
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/Contents.json",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@2x.png",
+    "resources/QRScanner.xcassets/qr_scanner_torch_on.imageset/torch_on@3x.png",
   ]
 }

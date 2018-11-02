@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -28,27 +29,14 @@
 #include <algorithm>
 #include <string>
 
+using namespace platform_media;
+
 namespace content {
 
 namespace {
 
 const int kMicrosecondsPerSecond = 1000000;
 const int kHundredsOfNanosecondsPerSecond = 10000000;
-
-class AutoPropVariant {
- public:
-  AutoPropVariant();
-  ~AutoPropVariant();
-
-  PROPVARIANT* get() { return &var; }
-  PROPVARIANT& get_ref() { return var; }
-
-  HRESULT ToInt64(LONGLONG* ret);
-  HRESULT ToInt32(int* ret);
-
- private:
-  PROPVARIANT var;
-};  // class AutoPropVariant
 
 class SourceReaderCallback : public IMFSourceReaderCallback {
  public:
@@ -83,22 +71,6 @@ class SourceReaderCallback : public IMFSourceReaderCallback {
   DISALLOW_COPY_AND_ASSIGN(SourceReaderCallback);
 };  // class SourceReaderCallback
 
-AutoPropVariant::AutoPropVariant() {
-  PropVariantInit(&var);
-}
-
-AutoPropVariant::~AutoPropVariant() {
-  PropVariantClear(&var);
-}
-
-HRESULT AutoPropVariant::ToInt64(LONGLONG* ret) {
-  return PropVariantToInt64(var, ret);
-}
-
-HRESULT AutoPropVariant::ToInt32(int* ret) {
-  return PropVariantToInt32(var, ret);
-}
-
 SourceReaderCallback::SourceReaderCallback(
     const OnReadSampleCB& on_read_sample_cb)
     : on_read_sample_cb_(on_read_sample_cb), reference_count_(1) {
@@ -132,17 +104,20 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
   base::win::ScopedComPtr<IMFSample> sample(unwrapped_sample);
 
   if (FAILED(status)) {
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Error";
     on_read_sample_cb_.Run(media::MediaDataStatus::kError, stream_index,
                            sample);
     return S_OK;
   }
 
   if (stream_flags & MF_SOURCE_READERF_ENDOFSTREAM) {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": EndOfStream";
     on_read_sample_cb_.Run(media::MediaDataStatus::kEOS, stream_index, sample);
     return S_OK;
   }
 
   if (stream_flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
+    VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": MediaTypeChanged";
     on_read_sample_cb_.Run(media::MediaDataStatus::kConfigChanged, stream_index,
                            sample);
     return S_OK;
@@ -155,11 +130,13 @@ STDMETHODIMP SourceReaderCallback::OnReadSample(HRESULT status,
     // with "live sources" of AV data (like cameras?), so we should be safe to
     // ignore it
     DCHECK(!(stream_flags & MF_SOURCE_READERF_STREAMTICK));
+    LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Abort";
     on_read_sample_cb_.Run(media::MediaDataStatus::kError, stream_index,
                            sample);
     return E_ABORT;
   }
 
+  VLOG(7) << " PROPMEDIA(GPU) : " << __FUNCTION__ << ": Deliver Sample";
   on_read_sample_cb_.Run(media::MediaDataStatus::kOk, stream_index, sample);
   return S_OK;
 }
@@ -625,8 +602,14 @@ WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
 
   if (preferred_decoding_mode == media::PlatformMediaDecodingMode::HARDWARE) {
     InitializationResult result;
-    if (CreateDXVASourceReader(byte_stream, attributes, &result))
+    if (CreateDXVASourceReader(byte_stream, attributes, &result)) {
+      VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+              << ": HARDWARE";
       return result;
+    } else  {
+      LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
+                 << " Failed to create HARDWARE source reader.";
+    }
   }
 
   // Fall back to SW SourceReader.
@@ -635,11 +618,13 @@ WMFMediaPipeline::InitializationResult WMFMediaPipeline::CreateSourceReader(
       byte_stream.get(), attributes.Get(), result.source_reader.GetAddressOf());
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
-               << " Failed to create source reader.";
+               << " Failed to create SOFTWARE source reader.";
     // We use (result.source_reader != NULL) as status.
     result.source_reader.Reset();
   }
 
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << ": SOFTWARE";
   return result;
 }
 
@@ -705,8 +690,11 @@ bool WMFMediaPipeline::CreateDXVASourceReader(
 void WMFMediaPipeline::Initialize(const std::string& mime_type,
                                   const InitializeCB& initialize_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!source_reader_.Get());
+  DCHECK(!source_reader_worker_.hasReader());
   DCHECK(data_source_);
+
+  LOG(INFO) << " PROPMEDIA(GPU) : " << __FUNCTION__
+            << " mime type " << mime_type;
 
   // For diagnostics, the attempted video decoding mode is at least as
   // interesting on failure as it is on success.
@@ -798,7 +786,7 @@ void WMFMediaPipeline::FinalizeInitialization(
     return;
   }
 
-  source_reader_ = result.source_reader;
+  source_reader_worker_.SetReader(result.source_reader);
   direct3d_context_.reset(new Direct3DContext(result.direct3d_context));
   source_reader_output_video_format_ = result.source_reader_output_video_format;
 
@@ -850,7 +838,7 @@ void WMFMediaPipeline::FinalizeInitialization(
 void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(read_audio_data_cb_.is_null());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   // We might have some data ready to send.
   if (pending_decoded_data_[media::PLATFORM_MEDIA_AUDIO]) {
@@ -859,11 +847,8 @@ void WMFMediaPipeline::ReadAudioData(const ReadDataCB& read_audio_data_cb) {
     return;
   }
 
-  // Read the next sample using asynchronous mode.
-  // http://msdn.microsoft.com/en-us/library/windows/desktop/gg583871(v=vs.85).aspx
-  HRESULT hr =
-      source_reader_->ReadSample(stream_indices_[media::PLATFORM_MEDIA_AUDIO],
-                                 0, nullptr, nullptr, nullptr, nullptr);
+  HRESULT hr = source_reader_worker_.ReadSampleAsync(stream_indices_[media::PLATFORM_MEDIA_AUDIO]);
+
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to read audio sample";
@@ -901,13 +886,10 @@ void WMFMediaPipeline::ReadVideoData(const ReadDataCB& read_video_data_cb,
     }
   }
 
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
-  // Read the next sample using asynchronous mode.
-  // http://msdn.microsoft.com/en-us/library/windows/desktop/gg583871(v=vs.85).aspx
-  HRESULT hr =
-      source_reader_->ReadSample(stream_indices_[media::PLATFORM_MEDIA_VIDEO],
-                                 0, nullptr, nullptr, nullptr, nullptr);
+  HRESULT hr = source_reader_worker_.ReadSampleAsync(stream_indices_[media::PLATFORM_MEDIA_VIDEO]);
+
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to read video sample";
@@ -1122,6 +1104,8 @@ scoped_refptr<media::DataBuffer> WMFMediaPipeline::CreateDataBuffer(
 
 void WMFMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  VLOG(1) << " PROPMEDIA(GPU) : " << __FUNCTION__
+          << ": time " << time;
 
   AutoPropVariant position;
   // IMFSourceReader::SetCurrentPosition expects position in 100-nanosecond
@@ -1134,7 +1118,7 @@ void WMFMediaPipeline::Seek(base::TimeDelta time, const SeekCB& seek_cb) {
   }
 
   audio_timestamp_calculator_->RecapturePosition();
-  hr = source_reader_->SetCurrentPosition(GUID_NULL, position.get_ref());
+  hr = source_reader_worker_.SetCurrentPosition(position);
   seek_cb.Run(SUCCEEDED(hr));
 }
 
@@ -1152,7 +1136,7 @@ void WMFMediaPipeline::SetNoMediaStream(media::PlatformMediaDataType type) {
 bool WMFMediaPipeline::GetAudioDecoderConfig(
     media::PlatformAudioConfig* audio_config) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   // In case of some audio streams SourceReader might not get everything
   // right just from examining the stream (i.e. during initialization), so some
@@ -1163,8 +1147,9 @@ bool WMFMediaPipeline::GetAudioDecoderConfig(
   audio_config->format = media::kSampleFormatF32;
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_AUDIO], media_type.GetAddressOf());
+  HRESULT hr = source_reader_worker_.GetCurrentMediaType(
+      stream_indices_[media::PLATFORM_MEDIA_AUDIO], media_type);
+
   if (FAILED(hr) || !media_type) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to obtain audio media type.";
@@ -1199,7 +1184,7 @@ bool WMFMediaPipeline::GetAudioDecoderConfig(
 bool WMFMediaPipeline::GetVideoDecoderConfig(
     media::PlatformVideoConfig* video_config) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   // In case of some video streams SourceReader might not get everything
   // right just from examining the stream (i.e. during initialization), so some
@@ -1208,8 +1193,9 @@ bool WMFMediaPipeline::GetVideoDecoderConfig(
   // what will allow us to get proper configuration.
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.GetAddressOf());
+  HRESULT hr = source_reader_worker_.GetCurrentMediaType(
+      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type);
+
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to obtain video media type.";
@@ -1376,7 +1362,7 @@ bool WMFMediaPipeline::CreateSourceReaderCallbackAndAttributes(
 
 bool WMFMediaPipeline::RetrieveStreamIndices() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   DWORD stream_index = 0;
   HRESULT hr = S_OK;
@@ -1384,8 +1370,7 @@ bool WMFMediaPipeline::RetrieveStreamIndices() {
   while (!(HasMediaStream(media::PLATFORM_MEDIA_AUDIO) &&
            HasMediaStream(media::PLATFORM_MEDIA_VIDEO))) {
     base::win::ScopedComPtr<IMFMediaType> media_type;
-    hr = source_reader_->GetNativeMediaType(
-        stream_index, 0, media_type.GetAddressOf());
+    hr = source_reader_worker_.GetNativeMediaType(stream_index, media_type);
 
     if (hr == MF_E_INVALIDSTREAMNUMBER)
       break;  // No more streams.
@@ -1414,16 +1399,18 @@ bool WMFMediaPipeline::RetrieveStreamIndices() {
 
 bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
+
   DCHECK(stream_index == stream_indices_[media::PLATFORM_MEDIA_AUDIO] ||
          stream_index == stream_indices_[media::PLATFORM_MEDIA_VIDEO]);
   bool is_video = stream_index == stream_indices_[media::PLATFORM_MEDIA_VIDEO];
 
   if (is_video) {
     base::win::ScopedComPtr<IMFMediaType> input_video_type;
-    HRESULT hr = source_reader_->GetCurrentMediaType(
-        stream_indices_[media::PLATFORM_MEDIA_VIDEO],
-        input_video_type.GetAddressOf());
+    HRESULT hr = source_reader_worker_.GetCurrentMediaType(
+        stream_indices_[media::PLATFORM_MEDIA_VIDEO], input_video_type);
+
+
     if (FAILED(hr)) {
       LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                  << " Failed to obtain video media type. No video track?";
@@ -1457,8 +1444,8 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
     return false;
   }
 
-  hr = source_reader_->SetCurrentMediaType(
-      stream_index, NULL, new_current_media_type.Get());
+  hr = source_reader_worker_.SetCurrentMediaType(
+      stream_index, new_current_media_type);
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to set media type. No "
@@ -1471,7 +1458,8 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
   // needed -- e.g., when decoding is requested.  Since this figuring-out
   // process can fail, let's force it now by calling GetCurrentMediaType().
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  hr = source_reader_->GetCurrentMediaType(stream_index, media_type.GetAddressOf());
+  hr = source_reader_worker_.GetCurrentMediaType(stream_index, media_type);
+
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to obtain media type.";
@@ -1483,7 +1471,7 @@ bool WMFMediaPipeline::ConfigureStream(DWORD stream_index) {
 
 bool WMFMediaPipeline::ConfigureSourceReader() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   static const media::PlatformMediaDataType media_types[] = {
       media::PLATFORM_MEDIA_AUDIO, media::PLATFORM_MEDIA_VIDEO};
@@ -1505,14 +1493,11 @@ bool WMFMediaPipeline::ConfigureSourceReader() {
 
 base::TimeDelta WMFMediaPipeline::GetDuration() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   AutoPropVariant var;
 
-  HRESULT hr = source_reader_->GetPresentationAttribute(
-      static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
-      MF_PD_DURATION,
-      var.get());
+  HRESULT hr = source_reader_worker_.GetDuration(var);
   if (FAILED(hr)) {
     DLOG_IF(WARNING, !data_source_->IsStreaming())
         << "Failed to obtain media duration.";
@@ -1533,25 +1518,19 @@ base::TimeDelta WMFMediaPipeline::GetDuration() {
 
 int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
   DCHECK_GT(duration.InMicroseconds(), 0);
 
   AutoPropVariant var;
 
   // Calculating the media bitrate
-  HRESULT hr = source_reader_->GetPresentationAttribute(
-      static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
-      MF_PD_AUDIO_ENCODING_BITRATE,
-      var.get());
+  HRESULT hr = source_reader_worker_.GetAudioBitrate(var);
   int audio_bitrate = 0;
   hr = var.ToInt32(&audio_bitrate);
   if (FAILED(hr))
     audio_bitrate = 0;
 
-  hr = source_reader_->GetPresentationAttribute(
-      static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE),
-      MF_PD_VIDEO_ENCODING_BITRATE,
-      var.get());
+  hr = source_reader_worker_.GetVideoBitrate(var);
   int video_bitrate = 0;
   hr = var.ToInt32(&video_bitrate);
   if (FAILED(hr))
@@ -1561,9 +1540,7 @@ int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
   if (bitrate == 0 && !data_source_->IsStreaming()) {
     // If we have a valid bitrate we can use it, otherwise we have to calculate
     // it from file size and duration.
-    hr = source_reader_->GetPresentationAttribute(
-        static_cast<DWORD>(MF_SOURCE_READER_MEDIASOURCE), MF_PD_TOTAL_FILE_SIZE,
-        var.get());
+      hr = source_reader_worker_.GetFileSize(var);
     if (SUCCEEDED(hr) && duration.InMicroseconds() > 0) {
       int64_t file_size_in_bytes;
       hr = var.ToInt64(&file_size_in_bytes);
@@ -1579,11 +1556,12 @@ int WMFMediaPipeline::GetBitrate(base::TimeDelta duration) {
 
 bool WMFMediaPipeline::GetStride(int* stride) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(source_reader_.Get());
+  DCHECK(source_reader_worker_.hasReader());
 
   base::win::ScopedComPtr<IMFMediaType> media_type;
-  HRESULT hr = source_reader_->GetCurrentMediaType(
-      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type.GetAddressOf());
+  HRESULT hr = source_reader_worker_.GetCurrentMediaType(
+      stream_indices_[media::PLATFORM_MEDIA_VIDEO], media_type);
+
   if (FAILED(hr)) {
     LOG(ERROR) << " PROPMEDIA(GPU) : " << __FUNCTION__
                << " Failed to obtain media type.";

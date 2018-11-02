@@ -104,10 +104,10 @@ var ModulesView = (function() {
   /**
    * Returns protocol type of a layered service provider as a string.
    */
-  ModulesView.getLayeredServiceProviderProtocolType =
-      function(serviceProvider) {
+  ModulesView.getLayeredServiceProviderProtocolType = function(
+      serviceProvider) {
     return tryGetValueWithKey(PROTOCOL_TYPE, serviceProvider.socket_protocol);
-  }
+  };
 
   var NAMESPACE_PROVIDER_PTYPE = {
     '12': 'NS_DNS',

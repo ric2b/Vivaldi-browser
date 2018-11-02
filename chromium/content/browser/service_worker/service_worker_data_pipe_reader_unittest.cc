@@ -11,6 +11,7 @@
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
 #include "content/browser/service_worker/service_worker_version.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -35,10 +36,11 @@ class MockServiceWorkerURLRequestJob : public ServiceWorkerURLRequestJob {
                                    FETCH_REQUEST_MODE_NO_CORS,
                                    FETCH_CREDENTIALS_MODE_OMIT,
                                    FetchRedirectMode::FOLLOW_MODE,
+                                   std::string() /* integrity */,
                                    RESOURCE_TYPE_MAIN_FRAME,
                                    REQUEST_CONTEXT_TYPE_HYPERLINK,
                                    REQUEST_CONTEXT_FRAME_TYPE_TOP_LEVEL,
-                                   scoped_refptr<ResourceRequestBodyImpl>(),
+                                   scoped_refptr<ResourceRequestBody>(),
                                    ServiceWorkerFetchType::FETCH,
                                    base::Optional<base::TimeDelta>(),
                                    delegate),
@@ -77,8 +79,9 @@ class ServiceWorkerDataPipeReaderTest
     helper_ = base::MakeUnique<EmbeddedWorkerTestHelper>(base::FilePath());
     mock_url_request_job_ =
         base::MakeUnique<MockServiceWorkerURLRequestJob>(this);
+    ServiceWorkerRegistrationOptions options(GURL("https://example.com/"));
     registration_ = new ServiceWorkerRegistration(
-        GURL("https://example.com/"), 1L, helper_->context()->AsWeakPtr());
+        options, 1L, helper_->context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(
         registration_.get(), GURL("https://example.com/service_worker.js"), 1L,
         helper_->context()->AsWeakPtr());

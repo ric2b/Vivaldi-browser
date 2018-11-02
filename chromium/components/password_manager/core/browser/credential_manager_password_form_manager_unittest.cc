@@ -54,6 +54,7 @@ TEST_F(CredentialManagerPasswordFormManagerTest, AbortEarly) {
       &client_, driver_.AsWeakPtr(), observed_form,
       base::MakeUnique<PasswordForm>(observed_form), &delegate,
       base::MakeUnique<StubFormSaver>(), base::MakeUnique<FakeFormFetcher>());
+  form_manager->Init(nullptr);
 
   auto deleter = [&form_manager]() { form_manager.reset(); };
 
@@ -72,6 +73,20 @@ TEST_F(CredentialManagerPasswordFormManagerTest, AbortEarly) {
   // Ultimately, |form_fetcher| should have been deleted. It just should happen
   // after it finishes executing.
   EXPECT_FALSE(form_manager);
+}
+
+// Ensure that GetCredentialSource is actually overriden and returns the proper
+// value.
+TEST_F(CredentialManagerPasswordFormManagerTest, GetCredentialSource) {
+  PasswordForm observed_form;
+  MockDelegate delegate;
+  auto form_manager = base::MakeUnique<CredentialManagerPasswordFormManager>(
+      &client_, driver_.AsWeakPtr(), observed_form,
+      base::MakeUnique<PasswordForm>(observed_form), &delegate,
+      base::MakeUnique<StubFormSaver>(), base::MakeUnique<FakeFormFetcher>());
+  form_manager->Init(nullptr);
+  ASSERT_EQ(metrics_util::CredentialSourceType::kCredentialManagementAPI,
+            form_manager->GetCredentialSource());
 }
 
 }  // namespace password_manager

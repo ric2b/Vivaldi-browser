@@ -15,6 +15,7 @@
 #include "base/values.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
+#include "chrome/browser/extensions/api/content_settings/content_settings_api.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_web_ui.h"
 #include "chrome/browser/importer/external_process_importer_host.h"
@@ -22,8 +23,8 @@
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/chrome_select_file_policy.h"
-#include "chrome/browser/ui/webui/options/content_settings_handler.h"
 #include "chrome/browser/ui/webui/settings_utils.h"
+#include "chrome/browser/ui/webui/site_settings_helper.h"
 #include "chrome/common/importer/importer_data_types.h"
 #include "chrome/common/pref_names.h"
 
@@ -64,6 +65,26 @@
 class Browser;
 
 namespace extensions {
+
+namespace {
+
+ContentSetting vivContentSettingFromString(const std::string& name) {
+  ContentSetting setting;
+  content_settings::ContentSettingFromString(name, &setting);
+  return setting;
+}
+
+ContentSettingsType vivContentSettingsTypeFromGroupName(
+  const std::string& name) {
+  return site_settings::ContentSettingsTypeFromGroupName(name);
+}
+
+std::string vivContentSettingToString(ContentSetting setting) {
+  return content_settings::ContentSettingToString(setting);
+}
+
+}
+
 namespace GetProfiles = vivaldi::import_data::GetProfiles;
 using content::WebContents;
 

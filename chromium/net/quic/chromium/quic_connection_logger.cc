@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
@@ -108,14 +109,13 @@ std::unique_ptr<base::Value> NetLogQuicStreamFrameCallback(
 std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
     const QuicAckFrame* frame,
     NetLogCaptureMode /* capture_mode */) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   dict->SetString("largest_observed",
                   base::Uint64ToString(frame->largest_observed));
   dict->SetString("delta_time_largest_observed_us",
                   base::Int64ToString(frame->ack_delay_time.ToMicroseconds()));
 
-  base::ListValue* missing = new base::ListValue();
-  dict->Set("missing_packets", missing);
+  auto missing = base::MakeUnique<base::ListValue>();
   if (!frame->packets.Empty()) {
     // V34 and above express acked packets, but only print
     // missing packets, because it's typically a shorter list.
@@ -126,18 +126,19 @@ std::unique_ptr<base::Value> NetLogQuicAckFrameCallback(
       }
     }
   }
+  dict->Set("missing_packets", std::move(missing));
 
-  base::ListValue* received = new base::ListValue();
-  dict->Set("received_packet_times", received);
+  auto received = base::MakeUnique<base::ListValue>();
   const PacketTimeVector& received_times = frame->received_packet_times;
   for (PacketTimeVector::const_iterator it = received_times.begin();
        it != received_times.end(); ++it) {
-    std::unique_ptr<base::DictionaryValue> info(new base::DictionaryValue());
+    auto info = base::MakeUnique<base::DictionaryValue>();
     info->SetInteger("packet_number", static_cast<int>(it->first));
     info->SetString("received",
                     base::Int64ToString(it->second.ToDebuggingValue()));
     received->Append(std::move(info));
   }
+  dict->Set("received_packet_times", std::move(received));
 
   return std::move(dict);
 }
@@ -190,24 +191,24 @@ std::unique_ptr<base::Value> NetLogQuicGoAwayFrameCallback(
 std::unique_ptr<base::Value> NetLogQuicStopWaitingFrameCallback(
     const QuicStopWaitingFrame* frame,
     NetLogCaptureMode /* capture_mode */) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  base::DictionaryValue* sent_info = new base::DictionaryValue();
-  dict->Set("sent_info", sent_info);
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto sent_info = base::MakeUnique<base::DictionaryValue>();
   sent_info->SetString("least_unacked",
                        base::Uint64ToString(frame->least_unacked));
+  dict->Set("sent_info", std::move(sent_info));
   return std::move(dict);
 }
 
 std::unique_ptr<base::Value> NetLogQuicVersionNegotiationPacketCallback(
     const QuicVersionNegotiationPacket* packet,
     NetLogCaptureMode /* capture_mode */) {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  base::ListValue* versions = new base::ListValue();
-  dict->Set("versions", versions);
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto versions = base::MakeUnique<base::ListValue>();
   for (QuicVersionVector::const_iterator it = packet->versions.begin();
        it != packet->versions.end(); ++it) {
     versions->AppendString(QuicVersionToString(*it));
   }
+  dict->Set("versions", std::move(versions));
   return std::move(dict);
 }
 
@@ -248,13 +249,12 @@ std::unique_ptr<base::Value> NetLogQuicCertificateVerifiedCallback(
   // More fields could be logged in the future.
   std::vector<std::string> dns_names;
   cert->GetDNSNames(&dns_names);
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
-  base::ListValue* subjects = new base::ListValue();
-  for (std::vector<std::string>::const_iterator it = dns_names.begin();
-       it != dns_names.end(); it++) {
-    subjects->AppendString(*it);
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  auto subjects = base::MakeUnique<base::ListValue>();
+  for (auto& dns_name : dns_names) {
+    subjects->GetList().emplace_back(std::move(dns_name));
   }
-  dict->Set("subjects", subjects);
+  dict->Set("subjects", std::move(subjects));
   return std::move(dict);
 }
 
@@ -306,20 +306,20 @@ QuicConnectionLogger::QuicConnectionLogger(
       socket_performance_watcher_(std::move(socket_performance_watcher)) {}
 
 QuicConnectionLogger::~QuicConnectionLogger() {
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.OutOfOrderPacketsReceived",
-                       num_out_of_order_received_packets_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.OutOfOrderLargePacketsReceived",
-                       num_out_of_order_large_received_packets_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.IncorrectConnectionIDsReceived",
-                       num_incorrect_connection_ids_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.UndecryptablePacketsReceived",
-                       num_undecryptable_packets_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.DuplicatePacketsReceived",
-                       num_duplicate_packets_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.BlockedFrames.Received",
-                       num_blocked_frames_received_);
-  UMA_HISTOGRAM_COUNTS("Net.QuicSession.BlockedFrames.Sent",
-                       num_blocked_frames_sent_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.OutOfOrderPacketsReceived",
+                          num_out_of_order_received_packets_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.OutOfOrderLargePacketsReceived",
+                          num_out_of_order_large_received_packets_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.IncorrectConnectionIDsReceived",
+                          num_incorrect_connection_ids_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.UndecryptablePacketsReceived",
+                          num_undecryptable_packets_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.DuplicatePacketsReceived",
+                          num_duplicate_packets_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.BlockedFrames.Received",
+                          num_blocked_frames_received_);
+  UMA_HISTOGRAM_COUNTS_1M("Net.QuicSession.BlockedFrames.Sent",
+                          num_blocked_frames_sent_);
 
   const QuicConnectionStats& stats = session_->connection()->GetStats();
   UMA_HISTOGRAM_TIMES("Net.QuicSession.MinRTT",
@@ -491,8 +491,9 @@ void QuicConnectionLogger::OnPacketHeader(const QuicPacketHeader& header) {
       // There is a gap between the largest packet previously received and
       // the current packet.  This indicates either loss, or out-of-order
       // delivery.
-      UMA_HISTOGRAM_COUNTS("Net.QuicSession.PacketGapReceived",
-                           static_cast<base::HistogramBase::Sample>(delta - 1));
+      UMA_HISTOGRAM_COUNTS_1M(
+          "Net.QuicSession.PacketGapReceived",
+          static_cast<base::HistogramBase::Sample>(delta - 1));
     }
     largest_received_packet_number_ = header.packet_number;
   }
@@ -503,12 +504,12 @@ void QuicConnectionLogger::OnPacketHeader(const QuicPacketHeader& header) {
     ++num_out_of_order_received_packets_;
     if (previous_received_packet_size_ < last_received_packet_size_)
       ++num_out_of_order_large_received_packets_;
-    UMA_HISTOGRAM_COUNTS(
+    UMA_HISTOGRAM_COUNTS_1M(
         "Net.QuicSession.OutOfOrderGapReceived",
         static_cast<base::HistogramBase::Sample>(last_received_packet_number_ -
                                                  header.packet_number));
   } else if (no_packet_received_after_ping_) {
-    UMA_HISTOGRAM_COUNTS(
+    UMA_HISTOGRAM_COUNTS_1M(
         "Net.QuicSession.PacketGapReceivedNearPing",
         static_cast<base::HistogramBase::Sample>(header.packet_number -
                                                  last_received_packet_number_));

@@ -253,7 +253,7 @@ bool BrowserViewRenderer::OnDrawHardware() {
 
   allow_async_draw_ = true;
   std::unique_ptr<ChildFrame> child_frame = base::MakeUnique<ChildFrame>(
-      std::move(future), frame.compositor_frame_sink_id, std::move(frame.frame),
+      std::move(future), frame.layer_tree_frame_sink_id, std::move(frame.frame),
       compositor_id_, viewport_rect_for_tile_priority.IsEmpty(),
       transform_for_tile_priority, offscreen_pre_raster_,
       external_draw_constraints_.is_layer);
@@ -315,14 +315,14 @@ void BrowserViewRenderer::ReturnUnusedResource(
   if (!child_frame.get() || !child_frame->frame.get())
     return;
 
-  cc::ReturnedResourceArray resources;
-  cc::TransferableResource::ReturnResources(child_frame->frame->resource_list,
-                                            &resources);
+  std::vector<cc::ReturnedResource> resources =
+      cc::TransferableResource::ReturnResources(
+          child_frame->frame->resource_list);
   content::SynchronousCompositor* compositor =
       FindCompositor(child_frame->compositor_id);
   if (compositor && !resources.empty())
-    compositor->ReturnResources(child_frame->compositor_frame_sink_id,
-                                resources);
+    compositor->ReturnResources(child_frame->layer_tree_frame_sink_id,
+                                std::move(resources));
 }
 
 void BrowserViewRenderer::ReturnResourceFromParent(
@@ -332,11 +332,11 @@ void BrowserViewRenderer::ReturnResourceFromParent(
   for (auto& pair : returned_resource_map) {
     CompositorID compositor_id = pair.first;
     content::SynchronousCompositor* compositor = FindCompositor(compositor_id);
-    cc::ReturnedResourceArray resources;
+    std::vector<cc::ReturnedResource> resources;
     resources.swap(pair.second.resources);
 
     if (compositor && !resources.empty()) {
-      compositor->ReturnResources(pair.second.compositor_frame_sink_id,
+      compositor->ReturnResources(pair.second.layer_tree_frame_sink_id,
                                   resources);
     }
   }

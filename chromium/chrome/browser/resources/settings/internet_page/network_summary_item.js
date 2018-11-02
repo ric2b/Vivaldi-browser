@@ -4,7 +4,9 @@
 
 /**
  * @fileoverview Polymer element for displaying the network state for a specific
- * type and a list of networks for that type.
+ * type and a list of networks for that type. NOTE: It both Cellular and Tether
+ * technologies are available, they are combined into a single 'Mobile data'
+ * section. See crbug.com/726380.
  */
 
 Polymer({
@@ -19,6 +21,13 @@ Polymer({
      * @type {!CrOnc.DeviceStateProperties|undefined}
      */
     deviceState: Object,
+
+    /**
+     * If both Cellular and Tether technologies exist, we combine the sections
+     * and set this to the device state for Tether.
+     * @type {!CrOnc.DeviceStateProperties|undefined}
+     */
+    tetherDeviceState: Object,
 
     /**
      * Network state for the active network.
@@ -66,8 +75,12 @@ Polymer({
     if (deviceState) {
       if (deviceState.State == CrOnc.DeviceState.ENABLING)
         return this.i18n('internetDeviceEnabling');
-      if (deviceState.Type == CrOnc.Type.CELLULAR && this.deviceState.Scanning)
+      if (deviceState.Type == CrOnc.Type.CELLULAR && deviceState.Scanning)
         return this.i18n('internetMobileSearching');
+      if (deviceState.Type == CrOnc.Type.TETHER &&
+          deviceState.State == CrOnc.DeviceState.UNINITIALIZED) {
+        return this.i18n('tetherEnableBluetooth');
+      }
       if (deviceState.State == CrOnc.DeviceState.ENABLED)
         return CrOncStrings.networkListItemNotConnected;
     }
@@ -162,7 +175,9 @@ Polymer({
    */
   enableToggleIsVisible_: function(deviceState) {
     return !!deviceState && deviceState.Type != CrOnc.Type.ETHERNET &&
-        deviceState.Type != CrOnc.Type.VPN;
+        deviceState.Type != CrOnc.Type.VPN &&
+        (deviceState.Type == CrOnc.Type.TETHER ||
+         deviceState.State != CrOnc.DeviceState.UNINITIALIZED);
   },
 
   /**
@@ -171,7 +186,9 @@ Polymer({
    * @private
    */
   enableToggleIsEnabled_: function(deviceState) {
-    return !!deviceState && deviceState.State != CrOnc.DeviceState.PROHIBITED;
+    return this.enableToggleIsVisible_(deviceState) &&
+        deviceState.State != CrOnc.DeviceState.PROHIBITED &&
+        deviceState.State != CrOnc.DeviceState.UNINITIALIZED;
   },
 
   /**
@@ -184,7 +201,6 @@ Polymer({
       return '';
     switch (deviceState.Type) {
       case CrOnc.Type.TETHER:
-        return this.i18n('internetToggleTetherA11yLabel');
       case CrOnc.Type.CELLULAR:
         return this.i18n('internetToggleMobileA11yLabel');
       case CrOnc.Type.WI_FI:
@@ -219,11 +235,13 @@ Polymer({
     if (!deviceState)
       return false;
     var type = deviceState.Type;
-    var minlen = (deviceState.Type == CrOnc.Type.WI_FI ||
-                  deviceState.Type == CrOnc.Type.VPN ||
-                  deviceState.Type == CrOnc.Type.TETHER) ?
-        1 :
-        2;
+    if (type == CrOnc.Type.TETHER ||
+        (type == CrOnc.Type.CELLULAR && this.tetherDeviceState)) {
+      // The "Mobile data" subpage should always be shown if Tether networks are
+      // available, even if there are currently no associated networks.
+      return true;
+    }
+    var minlen = (type == CrOnc.Type.WI_FI || type == CrOnc.Type.VPN) ? 1 : 2;
     return networkStateList.length >= minlen;
   },
 
@@ -233,9 +251,11 @@ Polymer({
    */
   onShowDetailsTap_: function(event) {
     if (!this.deviceIsEnabled_(this.deviceState)) {
-      this.fire(
-          'device-enabled-toggled',
-          {enabled: true, type: this.deviceState.Type});
+      if (this.enableToggleIsEnabled_(this.deviceState)) {
+        this.fire(
+            'device-enabled-toggled',
+            {enabled: true, type: this.deviceState.Type});
+      }
     } else if (this.shouldShowSubpage_(
                    this.deviceState, this.networkStateList)) {
       this.fire('show-networks', this.deviceState);

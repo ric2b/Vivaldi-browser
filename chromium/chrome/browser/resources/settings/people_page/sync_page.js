@@ -135,24 +135,24 @@ Polymer({
 
   /** @override */
   attached: function() {
-    this.addWebUIListener('page-status-changed',
-                          this.handlePageStatusChanged_.bind(this));
-    this.addWebUIListener('sync-prefs-changed',
-                          this.handleSyncPrefsChanged_.bind(this));
+    this.addWebUIListener(
+        'page-status-changed', this.handlePageStatusChanged_.bind(this));
+    this.addWebUIListener(
+        'sync-prefs-changed', this.handleSyncPrefsChanged_.bind(this));
 
-    if (settings.getCurrentRoute() == settings.Route.SYNC)
+    if (settings.getCurrentRoute() == settings.routes.SYNC)
       this.onNavigateToPage_();
   },
 
   /** @override */
   detached: function() {
-    if (settings.getCurrentRoute() == settings.Route.SYNC)
+    if (settings.getCurrentRoute() == settings.routes.SYNC)
       this.onNavigateAwayFromPage_();
   },
 
   /** @protected */
   currentRouteChanged: function() {
-    if (settings.getCurrentRoute() == settings.Route.SYNC)
+    if (settings.getCurrentRoute() == settings.routes.SYNC)
       this.onNavigateToPage_();
     else
       this.onNavigateAwayFromPage_();
@@ -169,7 +169,7 @@ Polymer({
 
   /** @private */
   onNavigateToPage_: function() {
-    assert(settings.getCurrentRoute() == settings.Route.SYNC);
+    assert(settings.getCurrentRoute() == settings.routes.SYNC);
 
     if (this.unloadCallback_)
       return;
@@ -216,8 +216,8 @@ Polymer({
 
     // Focus the password input box if password is needed to start sync.
     if (this.syncPrefs.passphraseRequired) {
-      // Async to allow the dom-if templates to render first.
-      this.async(function() {
+      // Wait for the dom-if templates to render and subpage to become visible.
+      listenOnce(document, 'show-container', function() {
         var input = /** @type {!PaperInputElement} */ (
             this.$$('#existingPassphraseInput'));
         input.inputElement.focus();
@@ -260,8 +260,8 @@ Polymer({
    */
   onSingleSyncDataTypeChanged_: function() {
     assert(this.syncPrefs);
-    this.browserProxy_.setSyncDatatypes(this.syncPrefs).then(
-        this.handlePageStatusChanged_.bind(this));
+    this.browserProxy_.setSyncDatatypes(this.syncPrefs)
+        .then(this.handlePageStatusChanged_.bind(this));
   },
 
   /** @private */
@@ -274,8 +274,8 @@ Polymer({
    * @private
    */
   onAutofillDataTypeChanged_: function() {
-    this.set('syncPrefs.paymentsIntegrationEnabled',
-             this.syncPrefs.autofillSynced);
+    this.set(
+        'syncPrefs.paymentsIntegrationEnabled', this.syncPrefs.autofillSynced);
 
     this.onSingleSyncDataTypeChanged_();
   },
@@ -293,7 +293,7 @@ Polymer({
   /**
    * Sends the newly created custom sync passphrase to the browser.
    * @private
-   * @param {Event} e
+   * @param {!Event} e
    */
   onSaveNewPassphraseTap_: function(e) {
     assert(this.creatingNewPassphrase_);
@@ -313,14 +313,14 @@ Polymer({
     this.syncPrefs.setNewPassphrase = true;
     this.syncPrefs.passphrase = this.passphrase_;
 
-    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
-        this.handlePageStatusChanged_.bind(this));
+    this.browserProxy_.setSyncEncryption(this.syncPrefs)
+        .then(this.handlePageStatusChanged_.bind(this));
   },
 
   /**
    * Sends the user-entered existing password to re-enable sync.
    * @private
-   * @param {Event} e
+   * @param {!Event} e
    */
   onSubmitExistingPassphraseTap_: function(e) {
     if (e.type == 'keypress' && e.key != 'Enter')
@@ -333,8 +333,8 @@ Polymer({
     this.syncPrefs.passphrase = this.existingPassphrase_;
     this.existingPassphrase_ = '';
 
-    this.browserProxy_.setSyncEncryption(this.syncPrefs).then(
-        this.handlePageStatusChanged_.bind(this));
+    this.browserProxy_.setSyncEncryption(this.syncPrefs)
+        .then(this.handlePageStatusChanged_.bind(this));
   },
 
   /**
@@ -350,12 +350,12 @@ Polymer({
         this.pageStatus_ = pageStatus;
         return;
       case settings.PageStatus.DONE:
-        if (settings.getCurrentRoute() == settings.Route.SYNC)
-          settings.navigateTo(settings.Route.PEOPLE);
+        if (settings.getCurrentRoute() == settings.routes.SYNC)
+          settings.navigateTo(settings.routes.PEOPLE);
         return;
       case settings.PageStatus.PASSPHRASE_FAILED:
-        if (this.pageStatus_ == this.pages_.CONFIGURE &&
-            this.syncPrefs && this.syncPrefs.passphraseRequired) {
+        if (this.pageStatus_ == this.pages_.CONFIGURE && this.syncPrefs &&
+            this.syncPrefs.passphraseRequired) {
           this.$$('#existingPassphraseInput').invalid = true;
         }
         return;

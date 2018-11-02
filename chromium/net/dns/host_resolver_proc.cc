@@ -125,12 +125,9 @@ int SystemHostResolverCall(const std::string& host,
                            HostResolverFlags host_resolver_flags,
                            AddressList* addrlist,
                            int* os_error) {
-  // Make sure |host| is properly formed.
-  {
-    std::string out_ignored;
-    if (!DNSDomainFromDot(host, &out_ignored))
-      return ERR_NAME_NOT_RESOLVED;
-  }
+  // |host| should be a valid domain name. HostResolverImpl::Resolve has checks
+  // to fail early if this is not the case.
+  DCHECK(IsValidDNSDomain(host));
 
   if (os_error)
     *os_error = 0;
@@ -194,7 +191,7 @@ int SystemHostResolverCall(const std::string& host,
   hints.ai_socktype = SOCK_STREAM;
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_OPENBSD) && \
-    !defined(OS_ANDROID)
+    !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
   DnsReloaderMaybeReload();
 #endif
   int err = getaddrinfo(host.c_str(), NULL, &hints, &ai);

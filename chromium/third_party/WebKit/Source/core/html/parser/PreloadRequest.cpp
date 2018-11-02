@@ -11,6 +11,7 @@
 #include "platform/loader/fetch/FetchInitiatorInfo.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/weborigin/SecurityPolicy.h"
 
 namespace blink {
@@ -51,7 +52,9 @@ Resource* PreloadRequest::Start(Document* document) {
   if (resource_type_ == Resource::kScript)
     MaybeDisallowFetchForDocWrittenScript(resource_request, defer_, *document);
 
-  FetchParameters params(resource_request, initiator_info);
+  ResourceLoaderOptions options;
+  options.initiator_info = initiator_info;
+  FetchParameters params(resource_request, options);
 
   if (resource_type_ == Resource::kImportResource) {
     SecurityOrigin* security_origin =
@@ -78,8 +81,8 @@ Resource* PreloadRequest::Start(Document* document) {
   if (resource_type_ == Resource::kScript ||
       resource_type_ == Resource::kCSSStyleSheet ||
       resource_type_ == Resource::kImportResource) {
-    params.SetCharset(charset_.IsEmpty() ? document->characterSet().GetString()
-                                         : charset_);
+    params.SetCharset(charset_.IsEmpty() ? document->Encoding()
+                                         : WTF::TextEncoding(charset_));
   }
   FetchParameters::SpeculativePreloadType speculative_preload_type =
       FetchParameters::SpeculativePreloadType::kInDocument;

@@ -36,6 +36,13 @@ namespace blink {
 
 namespace {
 
+struct PolicyAreasHashTraits : HashTraits<SchemeRegistry::PolicyAreas> {
+  static const bool kEmptyValueIsZero = true;
+  static SchemeRegistry::PolicyAreas EmptyValue() {
+    return SchemeRegistry::kPolicyAreaNone;
+  }
+};
+
 class URLSchemesRegistry final {
  public:
   URLSchemesRegistry()
@@ -73,7 +80,7 @@ class URLSchemesRegistry final {
   URLSchemesSet service_worker_schemes;
   URLSchemesSet fetch_api_schemes;
   URLSchemesSet first_party_when_top_level_schemes;
-  URLSchemesMap<SchemeRegistry::PolicyAreas>
+  URLSchemesMap<SchemeRegistry::PolicyAreas, PolicyAreasHashTraits>
       content_security_policy_bypassing_schemes;
   URLSchemesSet secure_context_bypassing_schemes;
   URLSchemesSet allowed_in_referrer_schemes;
@@ -117,11 +124,6 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsLocal(const String& scheme) {
   if (scheme.IsEmpty())
     return false;
   return GetURLSchemesRegistry().local_schemes.Contains(scheme);
-}
-
-void SchemeRegistry::RegisterURLSchemeAsNoAccess(const String& scheme) {
-  DCHECK_EQ(scheme, scheme.DeprecatedLower());
-  GetMutableURLSchemesRegistry().schemes_with_unique_origins.insert(scheme);
 }
 
 bool SchemeRegistry::ShouldTreatURLSchemeAsNoAccess(const String& scheme) {
@@ -213,11 +215,6 @@ bool SchemeRegistry::ShouldTreatURLSchemeAsNotAllowingJavascriptURLs(
     return false;
   return GetURLSchemesRegistry().not_allowing_javascript_urls_schemes.Contains(
       scheme);
-}
-
-void SchemeRegistry::RegisterURLSchemeAsCORSEnabled(const String& scheme) {
-  DCHECK_EQ(scheme, scheme.DeprecatedLower());
-  GetMutableURLSchemesRegistry().cors_enabled_schemes.insert(scheme);
 }
 
 bool SchemeRegistry::ShouldTreatURLSchemeAsCORSEnabled(const String& scheme) {

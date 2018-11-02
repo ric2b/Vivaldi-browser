@@ -9,13 +9,11 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_positioner.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/macros.h"
 #include "chrome/browser/chromeos/login/users/wallpaper/wallpaper_manager.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
@@ -143,7 +141,7 @@ bool UserSwitchAnimatorChromeOS::CoversScreen(aura::Window* window) {
   // area.
   if (ash::wm::GetWindowState(window)->IsFullscreen())
     return true;
-  gfx::Rect bounds = window->GetBoundsInRootWindow();
+  gfx::Rect bounds = window->GetBoundsInScreen();
   gfx::Rect work_area =
       display::Screen::GetScreen()->GetDisplayNearestWindow(window).work_area();
   bounds.Intersect(work_area);
@@ -372,8 +370,8 @@ void UserSwitchAnimatorChromeOS::TransitionWindows(
         if (owner_->IsWindowOnDesktopOfUser(window, new_account_id_) &&
             !window_state->IsMinimized()) {
           // Several unit tests come here without an activation client.
-          aura::client::ActivationClient* client =
-              aura::client::GetActivationClient(window->GetRootWindow());
+          wm::ActivationClient* client =
+              wm::GetActivationClient(window->GetRootWindow());
           if (client)
             client->ActivateWindow(window);
         }

@@ -111,18 +111,27 @@ typedef NS_ENUM(NSInteger, ItemType) {
 // phase to avoid observing services for a browser state that is being killed.
 - (void)stopBrowserStateServiceObservers;
 
+@property(nonatomic, readonly, weak) id<ApplicationSettingsCommands> dispatcher;
+
 @end
 
 @implementation AccountsCollectionViewController
 
+@synthesize dispatcher = _dispatcher;
+
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState
-           closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount {
+           closeSettingsOnAddAccount:(BOOL)closeSettingsOnAddAccount
+                          dispatcher:
+                              (id<ApplicationSettingsCommands>)dispatcher {
   DCHECK(browserState);
   DCHECK(!browserState->IsOffTheRecord());
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _browserState = browserState;
     _closeSettingsOnAddAccount = closeSettingsOnAddAccount;
+    _dispatcher = dispatcher;
     browser_sync::ProfileSyncService* syncService =
         IOSChromeProfileSyncServiceFactory::GetForBrowserState(_browserState);
     _syncObserver.reset(new SyncObserverBridge(self, syncService));
@@ -447,7 +456,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   UINavigationController* settingsDetails =
       ios::GetChromeBrowserProvider()
           ->GetChromeIdentityService()
-          ->NewWebAndAppSettingDetails(
+          ->CreateWebAndAppSettingDetailsController(
               [self authService]->GetAuthenticatedIdentity(), self);
   UIImage* closeIcon = [ChromeIcon closeIcon];
   SEL action = @selector(closeGoogleActivitySettings:);
@@ -484,7 +493,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
                    accessPoint:signin_metrics::AccessPoint::
                                    ACCESS_POINT_SETTINGS
                    promoAction:signin_metrics::PromoAction::
-                                   PROMO_ACTION_NO_SIGNIN_PROMO];
+                                   PROMO_ACTION_NO_SIGNIN_PROMO
+                    dispatcher:self.dispatcher];
 
   // |_authenticationOperationInProgress| is reset when the signin interaction
   // controller is dismissed.
@@ -509,9 +519,10 @@ typedef NS_ENUM(NSInteger, ItemType) {
 - (void)showAccountDetails:(ChromeIdentity*)identity {
   if ([_alertCoordinator isVisible])
     return;
-  UIViewController* accountDetails = ios::GetChromeBrowserProvider()
-                                         ->GetChromeIdentityService()
-                                         ->NewAccountDetails(identity, self);
+  UIViewController* accountDetails =
+      ios::GetChromeBrowserProvider()
+          ->GetChromeIdentityService()
+          ->CreateAccountDetailsController(identity, self);
   if (!accountDetails) {
     // Failed to create a new account details. Ignored.
     return;
@@ -643,7 +654,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - ChromeIdentityServiceObserver
 
-- (void)onProfileUpdate:(ChromeIdentity*)identity {
+- (void)profileUpdate:(ChromeIdentity*)identity {
   CollectionViewAccountItem* item =
       base::mac::ObjCCastStrict<CollectionViewAccountItem>(
           [_identityMap objectForKey:identity.gaiaID]);
@@ -655,7 +666,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
   [self.collectionView reloadItemsAtIndexPaths:@[ indexPath ]];
 }
 
-- (void)onChromeIdentityServiceWillBeDestroyed {
+- (void)chromeIdentityServiceWillBeDestroyed {
   _identityServiceObserver.reset();
 }
 

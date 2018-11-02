@@ -6,7 +6,9 @@
 
 #include "base/macros.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/ui/bookmarks/bookmark_bar_constants.h"
 #include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
 #include "chrome/browser/ui/views/frame/browser_view_layout.h"
 #include "chrome/browser/ui/views/frame/test_with_browser_view.h"
@@ -114,6 +116,9 @@ TEST_F(BrowserViewTest, BrowserViewLayout) {
   BookmarkBarView* bookmark_bar = browser_view()->GetBookmarkBarView();
   EXPECT_FALSE(bookmark_bar->visible());
   EXPECT_FALSE(bookmark_bar->IsDetached());
+  EXPECT_EQ(devtools_web_view->y(), bookmark_bar->height());
+  EXPECT_EQ(chrome::kMinimumBookmarkBarHeight,
+            bookmark_bar->GetMinimumSize().height());
   chrome::ExecuteCommand(browser, IDC_SHOW_BOOKMARK_BAR);
   EXPECT_TRUE(bookmark_bar->visible());
   EXPECT_FALSE(bookmark_bar->IsDetached());
@@ -140,17 +145,10 @@ TEST_F(BrowserViewTest, BrowserViewLayout) {
 
   // Bookmark bar layout on NTP.
   EXPECT_EQ(0, bookmark_bar->x());
-  EXPECT_EQ(tabstrip->bounds().bottom() + toolbar->height() -
-                views::NonClientFrameView::kClientEdgeThickness,
-            bookmark_bar->y());
+  EXPECT_EQ(tabstrip->bounds().bottom() + toolbar->height(), bookmark_bar->y());
   EXPECT_EQ(toolbar->bounds().bottom(), contents_container->y());
-  // Contents view has a "top margin" pushing it below the bookmark bar.
-  EXPECT_EQ(bookmark_bar->height() -
-                views::NonClientFrameView::kClientEdgeThickness,
-            devtools_web_view->y());
-  EXPECT_EQ(bookmark_bar->height() -
-                views::NonClientFrameView::kClientEdgeThickness,
-            contents_web_view->y());
+  EXPECT_EQ(bookmark_bar->height(), devtools_web_view->y());
+  EXPECT_EQ(bookmark_bar->height(), contents_web_view->y());
 
   // Bookmark bar is parented back to top container on normal page.
   NavigateAndCommitActiveTabWithTitle(browser,
@@ -183,6 +181,28 @@ TEST_F(BrowserViewTest, RepeatedAccelerators) {
   const ui::Accelerator kNextTabRepeatAccel(
       ui::VKEY_TAB, ui::EF_CONTROL_DOWN | ui::EF_IS_REPEAT);
   EXPECT_TRUE(browser_view()->AcceleratorPressed(kNextTabRepeatAccel));
+}
+
+// Test that bookmark bar view becomes invisible when closing the browser.
+TEST_F(BrowserViewTest, BookmarkBarInvisibleOnShutdown) {
+  BookmarkBarView::DisableAnimationsForTesting(true);
+
+  Browser* browser = browser_view()->browser();
+  TabStripModel* tab_strip_model = browser->tab_strip_model();
+  EXPECT_EQ(0, tab_strip_model->count());
+
+  AddTab(browser, GURL("about:blank"));
+  EXPECT_EQ(1, tab_strip_model->count());
+
+  BookmarkBarView* bookmark_bar = browser_view()->GetBookmarkBarView();
+  chrome::ExecuteCommand(browser, IDC_SHOW_BOOKMARK_BAR);
+  EXPECT_TRUE(bookmark_bar->visible());
+
+  tab_strip_model->CloseWebContentsAt(tab_strip_model->active_index(), 0);
+  EXPECT_EQ(0, tab_strip_model->count());
+  EXPECT_FALSE(bookmark_bar->visible());
+
+  BookmarkBarView::DisableAnimationsForTesting(false);
 }
 
 class BrowserViewHostedAppTest : public TestWithBrowserView {

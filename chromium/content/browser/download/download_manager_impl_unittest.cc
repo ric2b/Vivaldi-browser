@@ -73,6 +73,12 @@ class ByteStreamReader;
 
 namespace {
 
+// Matches a DownloadCreateInfo* that points to the same object as |info| and
+// has a |default_download_directory| that matches |download_directory|.
+MATCHER_P2(DownloadCreateInfoWithDefaultPath, info, download_directory, "") {
+  return arg == info && arg->default_download_directory == download_directory;
+}
+
 class MockDownloadManagerDelegate : public DownloadManagerDelegate {
  public:
   MockDownloadManagerDelegate();
@@ -320,6 +326,7 @@ class MockBrowserContext : public BrowserContext {
   MOCK_METHOD0(GetSSLHostStateDelegate, SSLHostStateDelegate*());
   MOCK_METHOD0(GetPermissionManager, PermissionManager*());
   MOCK_METHOD0(GetBackgroundSyncController, BackgroundSyncController*());
+  MOCK_METHOD0(GetBrowsingDataRemoverDelegate, BrowsingDataRemoverDelegate*());
   MOCK_METHOD0(CreateMediaRequestContext,
                net::URLRequestContextGetter*());
   MOCK_METHOD2(CreateMediaRequestContextForStoragePartition,
@@ -546,7 +553,7 @@ TEST_F(DownloadManagerTest, StartDownload) {
   EXPECT_CALL(GetMockDownloadManagerDelegate(), GetNextId(_))
       .WillOnce(RunCallback<0>(local_id));
 
-#if !defined(OS_LINUX) || defined(OS_CHROMEOS)
+#if !defined(USE_X11) || defined(OS_CHROMEOS)
   // Doing nothing will set the default download directory to null.
   EXPECT_CALL(GetMockDownloadManagerDelegate(), GetSaveDir(_, _, _, _));
 #endif

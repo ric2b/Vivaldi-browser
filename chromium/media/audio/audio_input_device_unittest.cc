@@ -54,6 +54,7 @@ class MockCaptureCallback : public AudioCapturerSource::CaptureCallback {
                     bool key_pressed));
 
   MOCK_METHOD1(OnCaptureError, void(const std::string& message));
+  MOCK_METHOD1(OnCaptureMuted, void(bool is_muted));
 };
 
 // Used to terminate a loop from a different thread than the loop belongs to.
@@ -99,7 +100,7 @@ TEST(AudioInputDeviceTest, FailToCreateStream) {
 
 ACTION_P5(ReportOnStreamCreated, device, handle, socket, length, segments) {
   static_cast<AudioInputIPCDelegate*>(device)->OnStreamCreated(
-      handle, socket, length, segments);
+      handle, socket, length, segments, false);
 }
 
 TEST(AudioInputDeviceTest, CreateStream) {

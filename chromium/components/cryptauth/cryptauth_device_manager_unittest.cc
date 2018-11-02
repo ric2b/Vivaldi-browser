@@ -21,6 +21,7 @@
 #include "components/cryptauth/pref_names.h"
 #include "components/prefs/scoped_user_pref_update.h"
 #include "components/prefs/testing_pref_service.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -52,7 +53,7 @@ const bool kStoredMobileHotspotSupported = true;
 
 // ExternalDeviceInfo fields for the synced unlock key.
 const char kPublicKey1[] = "GOOG";
-const char kDeviceName1[] = "Nexus 5";
+const char kDeviceName1[] = "Pixel XL";
 const char kBluetoothAddress1[] = "aa:bb:cc:ee:dd:ff";
 const bool kUnlockKey1 = true;
 const bool kUnlockable1 = false;
@@ -63,6 +64,8 @@ const int64_t kBeaconSeed1EndTime = 123457;
 const char kBeaconSeed2Data[] = "beaconSeed2Data";
 const int64_t kBeaconSeed2StartTime = 234567;
 const int64_t kBeaconSeed2EndTime = 234568;
+const bool kArcPlusPlus1 = true;
+const bool kPixelPhone1 = true;
 
 // ExternalDeviceInfo fields for a non-synced unlockable device.
 const char kPublicKey2[] = "MSFT";
@@ -76,6 +79,8 @@ const int64_t kBeaconSeed3EndTime = 123457;
 const char kBeaconSeed4Data[] = "beaconSeed4Data";
 const int64_t kBeaconSeed4StartTime = 234567;
 const int64_t kBeaconSeed4EndTime = 234568;
+const bool kArcPlusPlus2 = false;
+const bool kPixelPhone2 = false;
 
 // Validates that |devices| is equal to |expected_devices|.
 void ExpectSyncedDevicesAreEqual(
@@ -297,14 +302,11 @@ class TestCryptAuthDeviceManager : public CryptAuthDeviceManager {
                                gcm_manager,
                                pref_service),
         scoped_sync_scheduler_(new NiceMock<MockSyncScheduler>()),
-        weak_sync_scheduler_factory_(scoped_sync_scheduler_.get()) {}
+        weak_sync_scheduler_factory_(scoped_sync_scheduler_) {
+    SetSyncSchedulerForTest(base::WrapUnique(scoped_sync_scheduler_));
+  }
 
   ~TestCryptAuthDeviceManager() override {}
-
-  std::unique_ptr<SyncScheduler> CreateSyncScheduler() override {
-    EXPECT_TRUE(scoped_sync_scheduler_);
-    return std::move(scoped_sync_scheduler_);
-  }
 
   base::WeakPtr<MockSyncScheduler> GetSyncScheduler() {
     return weak_sync_scheduler_factory_.GetWeakPtr();
@@ -312,8 +314,8 @@ class TestCryptAuthDeviceManager : public CryptAuthDeviceManager {
 
  private:
   // Ownership is passed to |CryptAuthDeviceManager| super class when
-  // |CreateSyncScheduler()| is called.
-  std::unique_ptr<MockSyncScheduler> scoped_sync_scheduler_;
+  // SetSyncSchedulerForTest() is called.
+  MockSyncScheduler* scoped_sync_scheduler_;
 
   // Stores the pointer of |scoped_sync_scheduler_| after ownership is passed to
   // the super class.
@@ -353,6 +355,8 @@ class CryptAuthDeviceManagerTest
     seed2->set_data(kBeaconSeed2Data);
     seed2->set_start_time_millis(kBeaconSeed2StartTime);
     seed2->set_end_time_millis(kBeaconSeed2EndTime);
+    unlock_key.set_arc_plus_plus(kArcPlusPlus1);
+    unlock_key.set_pixel_phone(kPixelPhone1);
     devices_in_response_.push_back(unlock_key);
 
     ExternalDeviceInfo unlockable_device;
@@ -369,6 +373,8 @@ class CryptAuthDeviceManagerTest
     seed4->set_data(kBeaconSeed4Data);
     seed4->set_start_time_millis(kBeaconSeed4StartTime);
     seed4->set_end_time_millis(kBeaconSeed4EndTime);
+    unlockable_device.set_arc_plus_plus(kArcPlusPlus2);
+    unlockable_device.set_pixel_phone(kPixelPhone2);
     devices_in_response_.push_back(unlockable_device);
   }
 
@@ -411,8 +417,7 @@ class CryptAuthDeviceManagerTest
                                      bluetooth_address_b64);
     device_dictionary->SetBoolean("unlock_key", kStoredUnlockKey);
     device_dictionary->SetBoolean("unlockable", kStoredUnlockable);
-    device_dictionary->Set("beacon_seeds",
-                               base::WrapUnique(new base::ListValue()));
+    device_dictionary->Set("beacon_seeds", base::MakeUnique<base::ListValue>());
     device_dictionary->SetBoolean("mobile_hotspot_supported",
                                   kStoredMobileHotspotSupported);
     {
@@ -473,7 +478,7 @@ class CryptAuthDeviceManagerTest
 
   // MockCryptAuthClientFactory::Observer:
   void OnCryptAuthClientCreated(MockCryptAuthClient* client) override {
-    EXPECT_CALL(*client, GetMyDevices(_, _, _))
+    EXPECT_CALL(*client, GetMyDevices(_, _, _, _))
         .WillOnce(DoAll(SaveArg<0>(&get_my_devices_request_),
                         SaveArg<1>(&success_callback_),
                         SaveArg<2>(&error_callback_)));

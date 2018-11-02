@@ -5,7 +5,7 @@
 #ifndef MediaControlOverlayPlayButtonElement_h
 #define MediaControlOverlayPlayButtonElement_h
 
-#include "core/html/shadow/MediaControlElementTypes.h"
+#include "modules/media_controls/elements/MediaControlInputElement.h"
 
 namespace blink {
 
@@ -19,6 +19,9 @@ class MediaControlOverlayPlayButtonElement final
 
   // MediaControlInputElement overrides.
   void UpdateDisplayType() override;
+
+ protected:
+  const char* GetNameForHistograms() const override;
 
  private:
   void DefaultEventHandler(Event*) override;

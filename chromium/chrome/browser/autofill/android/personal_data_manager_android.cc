@@ -37,22 +37,22 @@
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
 #include "components/autofill/core/common/autofill_switches.h"
-#include "components/grit/components_scaled_resources.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "jni/PersonalDataManager_jni.h"
 #include "third_party/libaddressinput/chromium/chrome_metadata_source.h"
 #include "third_party/libaddressinput/chromium/chrome_storage_impl.h"
-
-using base::android::ConvertJavaStringToUTF8;
-using base::android::ConvertUTF16ToJavaString;
-using base::android::ConvertUTF8ToJavaString;
-using base::android::JavaParamRef;
-using base::android::ScopedJavaGlobalRef;
-using base::android::ScopedJavaLocalRef;
+#include "ui/base/l10n/l10n_util.h"
 
 namespace autofill {
 namespace {
+
+using ::base::android::ConvertJavaStringToUTF8;
+using ::base::android::ConvertUTF16ToJavaString;
+using ::base::android::ConvertUTF8ToJavaString;
+using ::base::android::JavaParamRef;
+using ::base::android::ScopedJavaGlobalRef;
+using ::base::android::ScopedJavaLocalRef;
 
 Profile* GetProfile() {
   return ProfileManager::GetActiveUserProfile()->GetOriginalProfile();
@@ -96,10 +96,9 @@ void MaybeSetRawInfo(AutofillProfile* profile,
     profile->SetRawInfo(type, ConvertJavaStringToUTF16(jstr));
 }
 
-void PopulateNativeProfileFromJava(
-    const JavaParamRef<jobject>& jprofile,
-    JNIEnv* env,
-    AutofillProfile* profile) {
+void PopulateNativeProfileFromJava(const JavaParamRef<jobject>& jprofile,
+                                   JNIEnv* env,
+                                   AutofillProfile* profile) {
   profile->set_origin(
       ConvertJavaStringToUTF8(Java_AutofillProfile_getOrigin(env, jprofile)));
   profile->SetInfo(
@@ -154,14 +153,13 @@ ScopedJavaLocalRef<jobject> CreateJavaCreditCardFromNative(
       ConvertUTF8ToJavaString(env,
                               payment_request_data.basic_card_issuer_network),
       ResourceMapper::MapFromChromiumId(payment_request_data.icon_resource_id),
-      ConvertUTF8ToJavaString(env, card.billing_address_id()),
+      card.card_type(), ConvertUTF8ToJavaString(env, card.billing_address_id()),
       ConvertUTF8ToJavaString(env, card.server_id()));
 }
 
-void PopulateNativeCreditCardFromJava(
-    const jobject& jcard,
-    JNIEnv* env,
-    CreditCard* card) {
+void PopulateNativeCreditCardFromJava(const jobject& jcard,
+                                      JNIEnv* env,
+                                      CreditCard* card) {
   card->set_origin(
       ConvertJavaStringToUTF8(Java_CreditCard_getOrigin(env, jcard)));
   card->SetRawInfo(
@@ -180,6 +178,11 @@ void PopulateNativeCreditCardFromJava(
       ConvertJavaStringToUTF8(Java_CreditCard_getBillingAddressId(env, jcard)));
   card->set_server_id(
       ConvertJavaStringToUTF8(Java_CreditCard_getServerId(env, jcard)));
+
+  jint card_type = Java_CreditCard_getCardType(env, jcard);
+  DCHECK_GE(CreditCard::CARD_TYPE_PREPAID, card_type);
+  DCHECK_LE(CreditCard::CARD_TYPE_UNKNOWN, card_type);
+  card->set_card_type(static_cast<CreditCard::CardType>(card_type));
 
   // Only set the guid if it is an existing card (java guid not empty).
   // Otherwise, keep the generated one.
@@ -308,10 +311,12 @@ class AndroidAddressNormalizerDelegate
 };
 
 void OnSubKeysReceived(ScopedJavaGlobalRef<jobject> jdelegate,
-                       const std::vector<std::string>& sub_keys) {
+                       const std::vector<std::string>& subkeys_codes,
+                       const std::vector<std::string>& subkeys_names) {
   JNIEnv* env = base::android::AttachCurrentThread();
   Java_GetSubKeysRequestDelegate_onSubKeysReceived(
-      env, jdelegate, base::android::ToJavaArrayOfStrings(env, sub_keys));
+      env, jdelegate, base::android::ToJavaArrayOfStrings(env, subkeys_codes),
+      base::android::ToJavaArrayOfStrings(env, subkeys_names));
 }
 
 }  // namespace
@@ -375,8 +380,7 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetProfile(
     const JavaParamRef<jobject>& unused_obj,
     const JavaParamRef<jobject>& jprofile) {
   std::string guid = ConvertJavaStringToUTF8(
-      env,
-      Java_AutofillProfile_getGUID(env, jprofile).obj());
+      env, Java_AutofillProfile_getGUID(env, jprofile).obj());
 
   AutofillProfile profile;
   PopulateNativeProfileFromJava(jprofile, env, &profile);
@@ -500,7 +504,7 @@ ScopedJavaLocalRef<jobject> PersonalDataManagerAndroid::GetCreditCardByGUID(
     const JavaParamRef<jobject>& unused_obj,
     const JavaParamRef<jstring>& jguid) {
   CreditCard* card = personal_data_manager_->GetCreditCardByGUID(
-          ConvertJavaStringToUTF8(env, jguid));
+      ConvertJavaStringToUTF8(env, jguid));
   if (!card)
     return ScopedJavaLocalRef<jobject>();
 
@@ -521,9 +525,8 @@ ScopedJavaLocalRef<jstring> PersonalDataManagerAndroid::SetCreditCard(
     JNIEnv* env,
     const JavaParamRef<jobject>& unused_obj,
     const JavaParamRef<jobject>& jcard) {
-  std::string guid = ConvertJavaStringToUTF8(
-       env,
-       Java_CreditCard_getGUID(env, jcard).obj());
+  std::string guid =
+      ConvertJavaStringToUTF8(env, Java_CreditCard_getGUID(env, jcard).obj());
 
   CreditCard card;
   PopulateNativeCreditCardFromJava(jcard, env, &card);
@@ -569,7 +572,7 @@ void PersonalDataManagerAndroid::AddServerCreditCardForTest(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& unused_obj,
     const base::android::JavaParamRef<jobject>& jcard) {
-  std::unique_ptr<CreditCard> card(new CreditCard);
+  std::unique_ptr<CreditCard> card = base::MakeUnique<CreditCard>();
   PopulateNativeCreditCardFromJava(jcard, env, card.get());
   card->set_record_type(CreditCard::MASKED_SERVER_CARD);
   personal_data_manager_->AddServerCreditCardForTest(std::move(card));
@@ -597,11 +600,11 @@ void PersonalDataManagerAndroid::GetFullCardForPaymentRequest(
     const JavaParamRef<jobject>& jweb_contents,
     const JavaParamRef<jobject>& jcard,
     const JavaParamRef<jobject>& jdelegate) {
-  std::unique_ptr<CreditCard> card(new CreditCard);
+  std::unique_ptr<CreditCard> card = base::MakeUnique<CreditCard>();
   PopulateNativeCreditCardFromJava(jcard, env, card.get());
   // Self-deleting object.
-  (new FullCardRequester())->GetFullCard(
-      env, jweb_contents, jdelegate, std::move(card));
+  (new FullCardRequester())
+      ->GetFullCard(env, jweb_contents, jdelegate, std::move(card));
 }
 
 void PersonalDataManagerAndroid::OnPersonalDataChanged() {
@@ -611,11 +614,6 @@ void PersonalDataManagerAndroid::OnPersonalDataChanged() {
     return;
 
   Java_PersonalDataManager_personalDataChanged(env, java_obj);
-}
-
-// static
-bool PersonalDataManagerAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 void PersonalDataManagerAndroid::RecordAndLogProfileUse(
@@ -776,8 +774,10 @@ void PersonalDataManagerAndroid::StartRegionSubKeysRequest(
   ::payments::SubKeyReceiverCallback cb = base::BindOnce(
       &OnSubKeysReceived, ScopedJavaGlobalRef<jobject>(my_jdelegate));
 
-  subkey_requester_.StartRegionSubKeysRequest(region_code, jtimeout_seconds,
-                                              std::move(cb));
+  std::string language =
+      l10n_util::GetLanguage(g_browser_process->GetApplicationLocale());
+  subkey_requester_.StartRegionSubKeysRequest(region_code, language,
+                                              jtimeout_seconds, std::move(cb));
 }
 
 void PersonalDataManagerAndroid::CancelPendingGetSubKeys(
@@ -816,7 +816,7 @@ ScopedJavaLocalRef<jobjectArray> PersonalDataManagerAndroid::GetProfileLabels(
   std::unique_ptr<std::vector<ServerFieldType>> suggested_fields;
   size_t minimal_fields_shown = 2;
   if (address_only) {
-    suggested_fields.reset(new std::vector<ServerFieldType>);
+    suggested_fields = base::MakeUnique<std::vector<ServerFieldType>>();
     if (include_name_in_label)
       suggested_fields->push_back(NAME_FULL);
     if (include_organization_in_label)

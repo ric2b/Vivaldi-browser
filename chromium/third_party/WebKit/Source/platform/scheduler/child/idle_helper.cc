@@ -20,14 +20,12 @@ IdleHelper::IdleHelper(
     SchedulerHelper* helper,
     Delegate* delegate,
     const char* idle_period_tracing_name,
-    base::TimeDelta required_quiescence_duration_before_long_idle_period)
+    base::TimeDelta required_quiescence_duration_before_long_idle_period,
+    scoped_refptr<TaskQueue> idle_queue)
     : helper_(helper),
       delegate_(delegate),
-      idle_queue_(
-          helper_->NewTaskQueue(TaskQueue::Spec(TaskQueue::QueueType::IDLE))),
-      state_(helper,
-             delegate,
-             idle_period_tracing_name),
+      idle_queue_(std::move(idle_queue)),
+      state_(helper, delegate, idle_period_tracing_name),
       required_quiescence_duration_before_long_idle_period_(
           required_quiescence_duration_before_long_idle_period),
       is_shutdown_(false),
@@ -256,18 +254,11 @@ void IdleHelper::UpdateLongIdlePeriodStateAfterIdleTask() {
   } else if (idle_queue_->BlockedByFence()) {
     // If there is still idle work to do then just start the next idle period.
     base::TimeDelta next_long_idle_period_delay;
-    if (state_.idle_period_state() ==
-        IdlePeriodState::IN_LONG_IDLE_PERIOD_WITH_MAX_DEADLINE) {
-      // If we are in a max deadline long idle period then start the next
-      // idle period immediately.
-      next_long_idle_period_delay = base::TimeDelta();
-    } else {
-      // Otherwise ensure that we kick the scheduler at the right time to
-      // initiate the next idle period.
-      next_long_idle_period_delay = std::max(
-          base::TimeDelta(), state_.idle_period_deadline() -
-                                 helper_->scheduler_tqm_delegate()->NowTicks());
-    }
+    // Ensure that we kick the scheduler at the right time to
+    // initiate the next idle period.
+    next_long_idle_period_delay = std::max(
+        base::TimeDelta(), state_.idle_period_deadline() -
+                               helper_->scheduler_tqm_delegate()->NowTicks());
     if (next_long_idle_period_delay.is_zero()) {
       EnableLongIdlePeriod();
     } else {
@@ -301,6 +292,7 @@ void IdleHelper::OnIdleTaskPostedOnMainThread() {
                "OnIdleTaskPostedOnMainThread");
   if (is_shutdown_)
     return;
+  delegate_->OnPendingTasksChanged(true);
   if (state_.idle_period_state() ==
       IdlePeriodState::IN_LONG_IDLE_PERIOD_PAUSED) {
     // Restart long idle period ticks.
@@ -324,6 +316,7 @@ void IdleHelper::DidProcessIdleTask() {
   if (IsInLongIdlePeriod(state_.idle_period_state())) {
     UpdateLongIdlePeriodStateAfterIdleTask();
   }
+  delegate_->OnPendingTasksChanged(idle_queue_->GetNumberOfPendingTasks() > 0);
 }
 
 base::TimeTicks IdleHelper::NowTicks() {

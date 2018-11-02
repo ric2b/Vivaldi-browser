@@ -125,7 +125,7 @@ DefaultRendererFactory::CreateVideoDecoders(
   // https://code.google.com/p/chromium/issues/detail?id=470466.
     if (decoder_factory_) {
       decoder_factory_->CreateVideoDecoders(media_task_runner, gpu_factories,
-                                            &video_decoders);
+                                            media_log_, &video_decoders);
     }
     if (gpu_factories)
       video_decoders.push_back(base::MakeUnique<GpuVideoDecoder>(

@@ -19,7 +19,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/chrome_utility_printing_messages.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/browser_thread.h"
@@ -229,7 +228,8 @@ PdfConverterUtilityProcessHostClient::GetFileFromTemp(
   std::unique_ptr<base::File, content::BrowserThread::DeleteOnFileThread>
       temp_file) {
   if (settings_.mode == PdfRenderSettings::Mode::POSTSCRIPT_LEVEL2 ||
-      settings_.mode == PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3) {
+      settings_.mode == PdfRenderSettings::Mode::POSTSCRIPT_LEVEL3 ||
+      settings_.mode == PdfRenderSettings::Mode::TEXTONLY) {
     return base::MakeUnique<PostScriptMetaFile>(temp_dir_,
                                                 std::move(temp_file));
   }

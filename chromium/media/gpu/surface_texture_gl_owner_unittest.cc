@@ -38,17 +38,17 @@ class SurfaceTextureGLOwnerTest : public testing::Test {
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size(320, 240));
     surface_->Initialize();
 
-    share_group_ = new gl::GLShareGroup;
+    share_group_ = new gl::GLShareGroup();
     context_ = new gl::GLContextEGL(share_group_.get());
     context_->Initialize(surface_.get(), gl::GLContextAttribs());
     ASSERT_TRUE(context_->MakeCurrent(surface_.get()));
 
-    surface_texture_ = SurfaceTextureGLOwner::Create();
-    texture_id_ = surface_texture_->texture_id();
+    surface_texture_ = SurfaceTextureGLOwnerImpl::Create();
+    texture_id_ = surface_texture_->GetTextureId();
     // Bind and un-bind the texture, since that's required for glIsTexture to
     // return true.
-    glBindTexture(GL_TEXTURE_2D, texture_id_);
-    glBindTexture(GL_TEXTURE_2D, 0);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, texture_id_);
+    glBindTexture(GL_TEXTURE_EXTERNAL_OES, 0);
     ASSERT_TRUE(glIsTexture(texture_id_));
   }
 
@@ -77,16 +77,16 @@ TEST_F(SurfaceTextureGLOwnerTest, GLTextureIsCreatedAndDestroyed) {
   ASSERT_FALSE(glIsTexture(texture_id_));
 }
 
-// Calling ReleaseSurfaceTexture shouldn't deallocate the texture handle.
+// Calling ReleaseBackBuffers shouldn't deallocate the texture handle.
 TEST_F(SurfaceTextureGLOwnerTest, ReleaseDoesntDestroyTexture) {
-  surface_texture_->ReleaseSurfaceTexture();
+  surface_texture_->ReleaseBackBuffers();
   ASSERT_TRUE(glIsTexture(texture_id_));
 }
 
 // Make sure that |surface_texture_| remembers the correct context and surface.
 TEST_F(SurfaceTextureGLOwnerTest, ContextAndSurfaceAreCaptured) {
-  ASSERT_EQ(context_, surface_texture_->context());
-  ASSERT_EQ(surface_, surface_texture_->surface());
+  ASSERT_EQ(context_, surface_texture_->GetContext());
+  ASSERT_EQ(surface_, surface_texture_->GetSurface());
 }
 
 // Verify that destruction works even if some other context is current.
@@ -95,7 +95,7 @@ TEST_F(SurfaceTextureGLOwnerTest, DestructionWorksWithWrongContext) {
       new gl::PbufferGLSurfaceEGL(gfx::Size(320, 240)));
   new_surface->Initialize();
 
-  scoped_refptr<gl::GLShareGroup> new_share_group(new gl::GLShareGroup);
+  scoped_refptr<gl::GLShareGroup> new_share_group(new gl::GLShareGroup());
   scoped_refptr<gl::GLContext> new_context(
       new gl::GLContextEGL(new_share_group.get()));
   new_context->Initialize(new_surface.get(), gl::GLContextAttribs());

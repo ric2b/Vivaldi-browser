@@ -22,9 +22,9 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/cc_export.h"
 #include "cc/paint/draw_image.h"
-#include "cc/resources/resource_format.h"
 #include "cc/tiles/decoded_draw_image.h"
 #include "cc/tiles/image_decode_cache.h"
+#include "components/viz/common/quads/resource_format.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 #include "ui/gfx/geometry/rect.h"
 
@@ -37,7 +37,7 @@ namespace cc {
 class CC_EXPORT ImageDecodeCacheKey {
  public:
   static ImageDecodeCacheKey FromDrawImage(const DrawImage& image,
-                                           ResourceFormat format);
+                                           viz::ResourceFormat format);
 
   ImageDecodeCacheKey(const ImageDecodeCacheKey& other);
 
@@ -121,7 +121,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   enum class DecodeTaskType { USE_IN_RASTER_TASKS, USE_OUT_OF_RASTER_TASKS };
 
-  SoftwareImageDecodeCache(ResourceFormat format,
+  SoftwareImageDecodeCache(viz::ResourceFormat format,
                            size_t locked_memory_limit_bytes);
   ~SoftwareImageDecodeCache() override;
 
@@ -142,6 +142,7 @@ class CC_EXPORT SoftwareImageDecodeCache
       bool aggressively_free_resources) override {}
   void ClearCache() override;
   size_t GetMaximumMemoryLimitBytes() const override;
+  void NotifyImageUnused(uint32_t skimage_id) override;
 
   // Decode the given image and store it in the cache. This is only called by an
   // image decode task from a worker thread.
@@ -188,6 +189,7 @@ class CC_EXPORT SoftwareImageDecodeCache
     // scaled image. Either case represents this decode as being valuable and
     // not wasted.
     void mark_used() { usage_stats_.used = true; }
+    void mark_out_of_raster() { usage_stats_.first_lock_out_of_raster = true; }
 
    private:
     struct UsageStats {
@@ -197,6 +199,7 @@ class CC_EXPORT SoftwareImageDecodeCache
       bool used = false;
       bool last_lock_failed = false;
       bool first_lock_wasted = false;
+      bool first_lock_out_of_raster = false;
     };
 
     bool locked_;
@@ -321,7 +324,7 @@ class CC_EXPORT SoftwareImageDecodeCache
 
   MemoryBudget locked_images_budget_;
 
-  ResourceFormat format_;
+  viz::ResourceFormat format_;
   size_t max_items_in_cache_;
 
   // Used to uniquely identify DecodedImages for memory traces.

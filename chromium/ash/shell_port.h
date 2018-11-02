@@ -11,27 +11,28 @@
 #include <vector>
 
 #include "ash/ash_export.h"
-#include "ash/metrics/gesture_action_type.h"
-#include "ash/metrics/user_metrics_action.h"
 #include "ash/wm/lock_state_observer.h"
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "ui/aura/client/window_types.h"
 #include "ui/base/cursor/cursor_data.h"
 #include "ui/base/ui_base_types.h"
-#include "ui/compositor/layer_type.h"
-#include "ui/wm/public/activation_change_observer.h"
+
+namespace aura {
+class Window;
+}
 
 namespace display {
-class Display;
-class ManagedDisplayInfo;
 class NativeDisplayDelegate;
 class TouchTransformSetter;
 }
 
 namespace gfx {
-class Insets;
 class Point;
+}
+
+namespace ui {
+enum class CursorSize;
 }
 
 namespace views {
@@ -44,24 +45,17 @@ class AcceleratorController;
 class AshWindowTreeHost;
 struct AshWindowTreeHostInitParams;
 class ImmersiveFullscreenController;
-class KeyEventWatcher;
 class KeyboardUI;
 class RootWindowController;
-class ScopedDisableInternalMouseAndKeyboard;
-class SessionStateDelegate;
-struct ShellInitParams;
 class WindowCycleEventFilter;
 class WindowResizer;
-class WmDisplayObserver;
-class WmWindow;
 class WorkspaceEventHandler;
 
 enum class Config;
-enum class LoginStatus;
 enum class TaskSwitchSource;
 
 namespace wm {
-class MaximizeModeEventHandler;
+class TabletModeEventHandler;
 class WindowState;
 }
 
@@ -78,42 +72,10 @@ class ASH_EXPORT ShellPort {
 
   virtual Config GetAshConfig() const = 0;
 
-  virtual aura::Window* GetPrimaryRootWindow() = 0;
-
-  // Returns the root window for the specified display.
-  virtual aura::Window* GetRootWindowForDisplayId(int64_t display_id) = 0;
-
-  // Retuns the display info associated with |display_id|.
-  // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
-  virtual const display::ManagedDisplayInfo& GetDisplayInfo(
-      int64_t display_id) const = 0;
-
-  // Matches that of DisplayManager::IsActiveDisplayId().
-  // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
-  virtual bool IsActiveDisplayId(int64_t display_id) const = 0;
-
-  // Returns true if the desktop is in unified mode and there are no mirroring
-  // displays.
-  // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
-  virtual bool IsInUnifiedMode() const = 0;
-
-  // Returns true if the desktop is in unified mode.
-  // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
-  virtual bool IsInUnifiedModeIgnoreMirroring() const = 0;
-
-  // Returns the first display; this is the first display listed by hardware,
-  // which corresponds to internal displays on devices with integrated displays.
-  // TODO(mash): Remove when DisplayManager has been moved. crbug.com/622480
-  virtual display::Display GetFirstDisplay() const = 0;
-
   // Returns true if the first window shown on first run should be
   // unconditionally maximized, overriding the heuristic that normally chooses
   // the window size.
   bool IsForceMaximizeOnFirstRun();
-
-  // Sets work area insets of the display containing |window|, pings observers.
-  virtual void SetDisplayWorkAreaInsets(WmWindow* window,
-                                        const gfx::Insets& insets) = 0;
 
   // Returns true if a system-modal dialog window is currently open.
   bool IsSystemModalWindowOpen();
@@ -128,8 +90,6 @@ class ASH_EXPORT ShellPort {
 
   // The return value from this is supplied to AshTouchTransformController; see
   // it and TouchTransformSetter for details.
-  // TODO(sky): remove once simplified disable management enabled everywhere;
-  // http://crbug.com/718860.
   virtual std::unique_ptr<display::TouchTransformSetter>
   CreateTouchTransformDelegate() = 0;
 
@@ -143,15 +103,10 @@ class ASH_EXPORT ShellPort {
   virtual void UnlockCursor() = 0;
   virtual void ShowCursor() = 0;
   virtual void HideCursor() = 0;
+  virtual void SetCursorSize(ui::CursorSize cursor_size) = 0;
   virtual void SetGlobalOverrideCursor(
       base::Optional<ui::CursorData> cursor) = 0;
   virtual bool IsMouseEventsEnabled() = 0;
-
-  virtual std::vector<WmWindow*> GetAllRootWindows() = 0;
-
-  virtual void RecordGestureAction(GestureActionType action) = 0;
-  virtual void RecordUserMetricsAction(UserMetricsAction action) = 0;
-  virtual void RecordTaskSwitchMetric(TaskSwitchSource source) = 0;
 
   // Shows the context menu for the wallpaper or shelf at |location_in_screen|.
   void ShowContextMenu(const gfx::Point& location_in_screen,
@@ -167,27 +122,17 @@ class ASH_EXPORT ShellPort {
   virtual std::unique_ptr<WindowCycleEventFilter>
   CreateWindowCycleEventFilter() = 0;
 
-  virtual std::unique_ptr<wm::MaximizeModeEventHandler>
-  CreateMaximizeModeEventHandler() = 0;
+  virtual std::unique_ptr<wm::TabletModeEventHandler>
+  CreateTabletModeEventHandler() = 0;
 
   virtual std::unique_ptr<WorkspaceEventHandler> CreateWorkspaceEventHandler(
-      WmWindow* workspace_window) = 0;
-
-  virtual std::unique_ptr<ScopedDisableInternalMouseAndKeyboard>
-  CreateScopedDisableInternalMouseAndKeyboard() = 0;
+      aura::Window* workspace_window) = 0;
 
   virtual std::unique_ptr<ImmersiveFullscreenController>
   CreateImmersiveFullscreenController() = 0;
 
   // Creates the KeyboardUI. This is called early on.
   virtual std::unique_ptr<KeyboardUI> CreateKeyboardUI() = 0;
-
-  virtual std::unique_ptr<KeyEventWatcher> CreateKeyEventWatcher() = 0;
-
-  virtual SessionStateDelegate* GetSessionStateDelegate() = 0;
-
-  virtual void AddDisplayObserver(WmDisplayObserver* observer) = 0;
-  virtual void RemoveDisplayObserver(WmDisplayObserver* observer) = 0;
 
   // If |events| is PointerWatcherEventTypes::MOVES,
   // PointerWatcher::OnPointerEventObserved() is called for pointer move events.
@@ -231,10 +176,9 @@ class ASH_EXPORT ShellPort {
  protected:
   ShellPort();
 
-  // Called during startup to create the primary WindowTreeHost and
-  // the corresponding RootWindowController.
-  virtual void CreatePrimaryHost() = 0;
-  virtual void InitHosts(const ShellInitParams& init_params) = 0;
+  // Called after WindowTreeHostManager::InitHosts().
+  virtual void OnHostsInitialized() = 0;
+
   virtual std::unique_ptr<display::NativeDisplayDelegate>
   CreateNativeDisplayDelegate() = 0;
 

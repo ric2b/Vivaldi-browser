@@ -289,6 +289,16 @@ CommandUtil.isRootEntry = function(volumeManager, entry) {
 };
 
 /**
+ * Returns true if the given event was triggered by the selection menu button.
+ * @event {!Event} event Command event.
+ * @return {boolean} Ture if the event was triggered by the selection menu
+ * button.
+ */
+CommandUtil.isFromSelectionMenu = function(event) {
+  return event.target.id == 'selection-menu-button';
+};
+
+/**
  * If entry is fake/invalid/root, we don't show menu items for regular entries.
  * @param {VolumeManagerWrapper} volumeManager
  * @param {(!Entry|!FakeEntry)} entry Entry or a fake entry.
@@ -801,7 +811,8 @@ CommandHandler.COMMANDS_['delete'] = (function() {
       }
 
       event.canExecute = entries.length > 0 &&
-          !this.containsReadOnlyEntry_(entries, fileManager);
+          !this.containsReadOnlyEntry_(entries, fileManager) &&
+          !fileManager.directoryModel.isReadOnly();
       event.command.setHidden(false);
     },
 
@@ -931,7 +942,10 @@ CommandHandler.COMMANDS_['rename'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   canExecute: function(event, fileManager) {
-    var entries = CommandUtil.getCommandEntries(event.target);
+    var renameTarget = CommandUtil.isFromSelectionMenu(event) ?
+        fileManager.ui.listContainer.currentList :
+        event.target;
+    var entries = CommandUtil.getCommandEntries(renameTarget);
     if (entries.length === 0 ||
         !CommandUtil.shouldShowMenuItemsForEntry(
             fileManager.volumeManager, entries[0])) {
@@ -941,7 +955,7 @@ CommandHandler.COMMANDS_['rename'] = /** @type {Command} */ ({
     }
 
     var parentEntry =
-        CommandUtil.getParentEntry(event.target, fileManager.directoryModel);
+        CommandUtil.getParentEntry(renameTarget, fileManager.directoryModel);
     var locationInfo = parentEntry ?
         fileManager.volumeManager.getLocationInfo(parentEntry) : null;
     event.canExecute =
@@ -1028,7 +1042,7 @@ CommandHandler.COMMANDS_['default-task'] = /** @type {Command} */ ({
 });
 
 /**
- * Displays "open with"/"more actions" dialog for current selection.
+ * Displays "open with" dialog for current selection.
  * @type {Command}
  */
 CommandHandler.COMMANDS_['open-with'] = /** @type {Command} */ ({
@@ -1037,19 +1051,52 @@ CommandHandler.COMMANDS_['open-with'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   execute: function(event, fileManager) {
-    fileManager.taskController.getFileTasks().then(function(tasks) {
-      tasks.showTaskPicker(fileManager.ui.defaultTaskPicker,
-          str('MORE_ACTIONS_BUTTON_LABEL'),
-          '',
-          function(task) {
-            tasks.execute(task.taskId);
-          },
-          false);
-    })
-    .catch(function(error) {
-      if (error)
-        console.error(error.stack || error);
-    });
+    fileManager.taskController.getFileTasks()
+        .then(function(tasks) {
+          tasks.showTaskPicker(
+              fileManager.ui.defaultTaskPicker, str('OPEN_WITH_BUTTON_LABEL'),
+              '', function(task) {
+                tasks.execute(task.taskId);
+              }, FileTasks.TaskPickerType.OpenWith);
+        })
+        .catch(function(error) {
+          if (error)
+            console.error(error.stack || error);
+        });
+  },
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  canExecute: function(event, fileManager) {
+    var canExecute = fileManager.taskController.canExecuteOpenActions();
+    event.canExecute = canExecute;
+    event.command.setHidden(!canExecute);
+  }
+});
+
+/**
+ * Displays "More actions" dialog for current selection.
+ * @type {Command}
+ */
+CommandHandler.COMMANDS_['more-actions'] = /** @type {Command} */ ({
+  /**
+   * @param {!Event} event Command event.
+   * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
+   */
+  execute: function(event, fileManager) {
+    fileManager.taskController.getFileTasks()
+        .then(function(tasks) {
+          tasks.showTaskPicker(
+              fileManager.ui.defaultTaskPicker,
+              str('MORE_ACTIONS_BUTTON_LABEL'), '', function(task) {
+                tasks.execute(task.taskId);
+              }, FileTasks.TaskPickerType.MoreActions);
+        })
+        .catch(function(error) {
+          if (error)
+            console.error(error.stack || error);
+        });
   },
   /**
    * @param {!Event} event Command event.
@@ -1080,7 +1127,8 @@ CommandHandler.COMMANDS_['get-info'] = /** @type {Command} */ ({
    * @param {!CommandHandlerDeps} fileManager CommandHandlerDeps to use.
    */
   canExecute: function(event, fileManager) {
-    var entries = CommandUtil.getCommandEntries(event.target);
+    // QuickViewModel refers the file selection instead of event target.
+    var entries = fileManager.getSelection().entries;
     if (entries.length === 0) {
       event.canExecute = false;
       event.command.setHidden(true);
@@ -1606,7 +1654,7 @@ CommandHandler.COMMANDS_['set-wallpaper'] = /** @type {Command} */ ({
     });
   },
   canExecute: function(event, fileManager) {
-    var entries = CommandUtil.getCommandEntries(event.target);
+    var entries = fileManager.getSelection().entries;
     if (entries.length === 0) {
       event.canExecute = false;
       event.command.setHidden(true);

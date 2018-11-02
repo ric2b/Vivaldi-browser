@@ -27,8 +27,8 @@
 #include "ui/message_center/views/message_view.h"
 #include "ui/message_center/views/message_view_context_menu_controller.h"
 #include "ui/message_center/views/message_view_factory.h"
+#include "ui/message_center/views/notification_control_buttons_view.h"
 #include "ui/message_center/views/notifier_settings_view.h"
-#include "ui/resources/grit/ui_resources.h"
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -81,8 +81,7 @@ MessageCenterView::MessageCenterView(MessageCenter* message_center,
       focus_manager_(nullptr) {
   message_center_->AddObserver(this);
   set_notify_enter_exit_on_child(true);
-  set_background(views::Background::CreateSolidBackground(
-      kMessageCenterBackgroundColor));
+  SetBackground(views::CreateSolidBackground(kMessageCenterBackgroundColor));
 
   NotifierSettingsProvider* notifier_settings_provider =
       message_center_->GetNotifierSettingsProvider();
@@ -212,12 +211,15 @@ void MessageCenterView::SetIsClosing(bool is_closing) {
 
 void MessageCenterView::OnDidChangeFocus(views::View* before,
                                          views::View* now) {
-  if (message_list_view_ && (message_list_view_->Contains(before) ||
-                             message_list_view_->Contains(now))) {
-    // Focus state of a children of message view center is changed.
-    for (auto pair : notification_views_) {
-      if (pair.second->Contains(before) || pair.second->Contains(now))
-        pair.second->UpdateControlButtonsVisibility();
+  // Update the button visibility when the focus state is changed.
+  for (auto pair : notification_views_) {
+    // ControlButtonsView is not in the same view hierarchy on ARC++
+    // notifications, so check it separately.
+    if (pair.second->Contains(before) || pair.second->Contains(now) ||
+        (pair.second->GetControlButtonsView() &&
+         (pair.second->GetControlButtonsView()->Contains(before) ||
+          pair.second->GetControlButtonsView()->Contains(now)))) {
+      pair.second->UpdateControlButtonsVisibility();
     }
   }
 }
@@ -513,7 +515,12 @@ void MessageCenterView::AddNotificationAt(const Notification& notification,
                                           int index) {
   MessageView* view =
       MessageViewFactory::Create(this, notification, false);  // Not top-level.
-  view->set_context_menu_controller(context_menu_controller_.get());
+
+  // TODO(yoshiki): Temporary disable context menu on custom notifications.
+  // See crbug.com/750307 for detail.
+  if (notification.type() != NOTIFICATION_TYPE_CUSTOM)
+    view->set_context_menu_controller(context_menu_controller_.get());
+
   notification_views_[notification.id()] = view;
   view->set_scroller(scroller_);
   message_list_view_->AddNotificationAt(view, index);

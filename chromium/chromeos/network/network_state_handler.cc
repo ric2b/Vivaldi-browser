@@ -67,6 +67,32 @@ std::string ValueAsString(const base::Value& value) {
   return vstr.empty() ? "''" : vstr;
 }
 
+bool ShouldIncludeNetworkInList(const NetworkState* network_state,
+                                bool configured_only,
+                                bool visible_only,
+                                bool get_active) {
+  if (configured_only && !network_state->IsInProfile())
+    return false;
+
+  if (visible_only && !network_state->visible())
+    return false;
+
+  bool is_network_active =
+      network_state->IsConnectedState() || network_state->IsConnectingState();
+  if (is_network_active != get_active)
+    return false;
+
+  if (network_state->type() == shill::kTypeWifi &&
+      !network_state->tether_guid().empty()) {
+    // Wi-Fi networks which are actually underlying Wi-Fi hotspots for a
+    // Tether network should not be included since they should only be shown
+    // to the user as Tether networks.
+    return false;
+  }
+
+  return true;
+}
+
 }  // namespace
 
 const char NetworkStateHandler::kDefaultCheckPortalList[] =
@@ -158,8 +184,8 @@ void NetworkStateHandler::SetTechnologyEnabled(
       if (tether_technology_state_ != TECHNOLOGY_ENABLED &&
           tether_technology_state_ != TECHNOLOGY_AVAILABLE) {
         NET_LOG(ERROR) << "SetTechnologyEnabled() called for the Tether "
-                       << "DeviceState, but the current state was not "
-                       << "TECHNOLOGY_ENABLED or TECHNOLOGY_AVAILABLE.";
+                       << "DeviceState, but the current state was: "
+                       << tether_technology_state_;
         network_handler::RunErrorCallback(
             error_callback, kTetherDevicePath,
             NetworkConnectionHandler::kErrorEnabledOrDisabledWhenNotAvailable,
@@ -200,7 +226,11 @@ void NetworkStateHandler::SetTetherTechnologyState(
 void NetworkStateHandler::SetTetherScanState(bool is_scanning) {
   DeviceState* tether_device_state =
       GetModifiableDeviceState(kTetherDevicePath);
-  DCHECK(tether_device_state);
+  if (!tether_device_state) {
+    NET_LOG(ERROR) << "SetTetherScanState() called when Tether TechnologyState "
+                   << "is UNAVAILABLE; cannot set scanning state.";
+    return;
+  }
 
   bool was_scanning = tether_device_state->scanning();
   tether_device_state->set_scanning(is_scanning);
@@ -365,13 +395,7 @@ const NetworkState* NetworkStateHandler::FirstNetworkByType(
   if (!network_list_sorted_)
     SortNetworkList();  // Sort to ensure visible networks are listed first.
 
-  // If |type| matches Tether networks and at least one Tether network is
-  // present, return the first network (since it has been sorted already).
-  if (type.MatchesPattern(NetworkTypePattern::Tether()) &&
-      !tether_network_list_.empty()) {
-    return tether_network_list_[0]->AsNetworkState();
-  }
-
+  const NetworkState* first_network = nullptr;
   for (auto iter = network_list_.begin(); iter != network_list_.end(); ++iter) {
     const NetworkState* network = (*iter)->AsNetworkState();
     DCHECK(network);
@@ -379,10 +403,36 @@ const NetworkState* NetworkStateHandler::FirstNetworkByType(
       continue;
     if (!network->visible())
       break;
-    if (network->Matches(type))
-      return network;
+    if (network->Matches(type)) {
+      first_network = network;
+      break;
+    }
   }
-  return nullptr;
+
+  // Active Ethernet networks are the highest priority.
+  if (first_network && first_network->type() == shill::kTypeEthernet)
+    return first_network;
+
+  const NetworkState* first_tether_network =
+      type.MatchesPattern(NetworkTypePattern::Tether()) &&
+              !tether_network_list_.empty()
+          ? tether_network_list_[0]->AsNetworkState()
+          : nullptr;
+
+  // Active Tether networks are next.
+  if (first_tether_network && first_tether_network->IsConnectingOrConnected())
+    return first_tether_network;
+
+  // Other active networks are next.
+  if (first_network && first_network->IsConnectingOrConnected())
+    return first_network;
+
+  // Non-active Tether networks are next.
+  if (first_tether_network)
+    return first_tether_network;
+
+  // Other networks are last.
+  return first_network;
 }
 
 std::string NetworkStateHandler::FormattedHardwareAddressForType(
@@ -414,60 +464,80 @@ void NetworkStateHandler::GetVisibleNetworkList(NetworkStateList* list) {
 void NetworkStateHandler::GetNetworkListByType(const NetworkTypePattern& type,
                                                bool configured_only,
                                                bool visible_only,
-                                               int limit,
+                                               size_t limit,
                                                NetworkStateList* list) {
   DCHECK(list);
   list->clear();
 
-  // Sort the network list if necessary.
+  // If |limit| is 0, there is no limit. Simplify the calculations below by
+  // setting it to the maximum size_t value.
+  if (limit == 0)
+    limit = std::numeric_limits<size_t>::max();
+
   if (!network_list_sorted_)
     SortNetworkList();
 
-  if (type.MatchesPattern(NetworkTypePattern::Tether())) {
-    GetTetherNetworkList(limit, list);
-  }
+  // First, add active Tether networks.
+  if (type.MatchesPattern(NetworkTypePattern::Tether()))
+    AppendTetherNetworksToList(true /* get_active */, limit, list);
 
-  int count = list->size();
-
-  if (type.Equals(NetworkTypePattern::Tether()) ||
-      (limit != 0 && count >= limit)) {
-    // If only searching for Tether networks, there is no need to continue
-    // searching through other network types; likewise, if the limit has already
-    // been reached, there is no need to continue searching.
-    return;
-  }
-
-  for (auto iter = network_list_.begin(); iter != network_list_.end(); ++iter) {
+  // Second, add active non-Tether networks.
+  for (auto iter = network_list_.begin();
+       iter != network_list_.end() && list->size() < limit; ++iter) {
     const NetworkState* network = (*iter)->AsNetworkState();
     DCHECK(network);
     if (!network->update_received() || !network->Matches(type))
       continue;
-    if (configured_only && !network->IsInProfile())
+    if (!ShouldIncludeNetworkInList(network, configured_only, visible_only,
+                                    true /* get_active */)) {
       continue;
-    if (visible_only && !network->visible())
-      continue;
+    }
     if (network->type() == shill::kTypeEthernet) {
       // Ethernet networks should always be in front.
       list->insert(list->begin(), network);
     } else {
       list->push_back(network);
     }
-    if (limit > 0 && ++count >= limit)
-      break;
+  }
+
+  // Third, add inactive Tether networks.
+  if (type.MatchesPattern(NetworkTypePattern::Tether()))
+    AppendTetherNetworksToList(false /* get_active */, limit, list);
+
+  // Fourth, add inactive non-Tether networks.
+  for (auto iter = network_list_.begin();
+       iter != network_list_.end() && list->size() < limit; ++iter) {
+    const NetworkState* network = (*iter)->AsNetworkState();
+    DCHECK(network);
+    if (!network->update_received() || !network->Matches(type))
+      continue;
+    if (!ShouldIncludeNetworkInList(network, configured_only, visible_only,
+                                    false /* get_active */)) {
+      continue;
+    }
+    list->push_back(network);
   }
 }
 
-void NetworkStateHandler::GetTetherNetworkList(int limit,
-                                               NetworkStateList* list) {
+void NetworkStateHandler::AppendTetherNetworksToList(bool get_active,
+                                                     size_t limit,
+                                                     NetworkStateList* list) {
   DCHECK(list);
-  list->clear();
-  int count = 0;
+  DCHECK(limit != 0);
+  if (!IsTechnologyEnabled(NetworkTypePattern::Tether()))
+    return;
 
   for (auto iter = tether_network_list_.begin();
-       iter != tether_network_list_.end(); ++iter) {
-    list->push_back((*iter)->AsNetworkState());
-    if (limit > 0 && ++count >= limit)
-      return;
+       iter != tether_network_list_.end() && list->size() < limit; ++iter) {
+    const NetworkState* network = (*iter)->AsNetworkState();
+    DCHECK(network);
+
+    if (!ShouldIncludeNetworkInList(network, false /* configured_only */,
+                                    false /* visible_only */, get_active)) {
+      continue;
+    }
+
+    list->push_back(network);
   }
 }
 
@@ -536,6 +606,8 @@ void NetworkStateHandler::AddTetherNetworkState(const std::string& guid,
   tether_network_state->set_signal_strength(signal_strength);
 
   tether_network_list_.push_back(std::move(tether_network_state));
+  network_list_sorted_ = false;
+
   NotifyNetworkListChanged();
 }
 
@@ -560,8 +632,9 @@ bool NetworkStateHandler::UpdateTetherNetworkProperties(
   tether_network_state->set_carrier(carrier);
   tether_network_state->set_battery_percentage(battery_percentage);
   tether_network_state->set_signal_strength(signal_strength);
+  network_list_sorted_ = false;
 
-  NotifyNetworkListChanged();
+  NotifyNetworkPropertiesUpdated(tether_network_state);
   return true;
 }
 
@@ -579,7 +652,9 @@ bool NetworkStateHandler::SetTetherNetworkHasConnectedToHost(
   }
 
   tether_network_state->set_tether_has_connected_to_host(true);
-  NotifyNetworkListChanged();
+  network_list_sorted_ = false;
+
+  NotifyNetworkPropertiesUpdated(tether_network_state);
   return true;
 }
 
@@ -603,31 +678,38 @@ bool NetworkStateHandler::RemoveTetherNetworkState(const std::string& guid) {
 
 bool NetworkStateHandler::DisassociateTetherNetworkStateFromWifiNetwork(
     const std::string& tether_network_guid) {
-  NetworkState* tether_network =
+  NetworkState* tether_network_state =
       GetModifiableNetworkStateFromGuid(tether_network_guid);
 
-  if (!tether_network) {
+  if (!tether_network_state) {
     NET_LOG(ERROR) << "DisassociateTetherNetworkStateWithWifiNetwork(): Tether "
                    << "network with ID " << tether_network_guid
                    << " not registered; could not remove association.";
     return false;
   }
 
-  std::string wifi_network_guid = tether_network->tether_guid();
-  NetworkState* wifi_network =
+  std::string wifi_network_guid = tether_network_state->tether_guid();
+  NetworkState* wifi_network_state =
       GetModifiableNetworkStateFromGuid(wifi_network_guid);
 
-  if (!wifi_network) {
+  if (!wifi_network_state) {
     NET_LOG(ERROR) << "DisassociateTetherNetworkStateWithWifiNetwork(): Wi-Fi "
                    << "network with ID " << wifi_network_guid
                    << " not registered; could not remove association.";
     return false;
   }
 
-  wifi_network->set_tether_guid(std::string());
-  tether_network->set_tether_guid(std::string());
+  if (wifi_network_state->tether_guid().empty() &&
+      tether_network_state->tether_guid().empty()) {
+    return true;
+  }
 
-  NotifyNetworkListChanged();
+  wifi_network_state->set_tether_guid(std::string());
+  tether_network_state->set_tether_guid(std::string());
+  network_list_sorted_ = false;
+
+  NotifyNetworkPropertiesUpdated(wifi_network_state);
+  NotifyNetworkPropertiesUpdated(tether_network_state);
 
   return true;
 }
@@ -642,46 +724,64 @@ bool NetworkStateHandler::AssociateTetherNetworkStateWithWifiNetwork(
     return false;
   }
 
-  NetworkState* tether_network =
+  NetworkState* tether_network_state =
       GetModifiableNetworkStateFromGuid(tether_network_guid);
-  if (!tether_network) {
+  if (!tether_network_state) {
     NET_LOG(ERROR) << "Tether network does not exist: " << tether_network_guid;
     return false;
   }
-  if (!NetworkTypePattern::Tether().MatchesType(tether_network->type())) {
+  if (!NetworkTypePattern::Tether().MatchesType(tether_network_state->type())) {
     NET_LOG(ERROR) << "Network is not a Tether network: "
                    << tether_network_guid;
     return false;
   }
 
-  NetworkState* wifi_network =
+  NetworkState* wifi_network_state =
       GetModifiableNetworkStateFromGuid(wifi_network_guid);
-  if (!wifi_network) {
+  if (!wifi_network_state) {
     NET_LOG(ERROR) << "Wi-Fi Network does not exist: " << wifi_network_guid;
     return false;
   }
-  if (!NetworkTypePattern::WiFi().MatchesType(wifi_network->type())) {
+  if (!NetworkTypePattern::WiFi().MatchesType(wifi_network_state->type())) {
     NET_LOG(ERROR) << "Network is not a W-Fi network: " << wifi_network_guid;
     return false;
   }
 
-  tether_network->set_tether_guid(wifi_network_guid);
-  wifi_network->set_tether_guid(tether_network_guid);
-  NotifyNetworkListChanged();
+  if (wifi_network_state->tether_guid() == tether_network_guid &&
+      tether_network_state->tether_guid() == wifi_network_guid) {
+    return true;
+  }
+
+  tether_network_state->set_tether_guid(wifi_network_guid);
+  wifi_network_state->set_tether_guid(tether_network_guid);
+  network_list_sorted_ = false;
+
+  NotifyNetworkPropertiesUpdated(wifi_network_state);
+  NotifyNetworkPropertiesUpdated(tether_network_state);
+
   return true;
 }
 
 void NetworkStateHandler::SetTetherNetworkStateDisconnected(
     const std::string& guid) {
-  // TODO(khorimoto): Remove the Tether network as the default network, and
-  // send a connection status change.
   SetTetherNetworkStateConnectionState(guid, shill::kStateDisconnect);
 }
 
 void NetworkStateHandler::SetTetherNetworkStateConnecting(
     const std::string& guid) {
-  // TODO(khorimoto): Set the Tether network as the default network, and send
-  // a connection status change.
+  // The default network should only be set if there currently is no default
+  // network. Otherwise, the default network should not change unless the
+  // connection completes successfully and the newly-connected network is
+  // prioritized higher than the existing default network. Note that, in
+  // general, a connected Ethernet network is still considered the default
+  // network even if a Tether or Wi-Fi network becomes connected.
+  if (default_network_path_.empty()) {
+    NET_LOG(EVENT) << "Connecting to Tether network when there is currently no "
+                   << "default network; setting as new default network. GUID: "
+                   << guid;
+    default_network_path_ = guid;
+  }
+
   SetTetherNetworkStateConnectionState(guid, shill::kStateConfiguration);
 }
 
@@ -692,24 +792,39 @@ void NetworkStateHandler::SetTetherNetworkStateConnected(
   DCHECK(GetNetworkStateFromGuid(GetNetworkStateFromGuid(guid)->tether_guid())
              ->tether_guid() == guid);
 
-  // TODO(khorimoto): Send a connection status change.
+  // At this point, there should be a default network set.
+  DCHECK(!default_network_path_.empty());
+
   SetTetherNetworkStateConnectionState(guid, shill::kStateOnline);
 }
 
 void NetworkStateHandler::SetTetherNetworkStateConnectionState(
     const std::string& guid,
     const std::string& connection_state) {
-  NetworkState* tether_network = GetModifiableNetworkStateFromGuid(guid);
-  if (!tether_network) {
+  NetworkState* tether_network_state = GetModifiableNetworkStateFromGuid(guid);
+  if (!tether_network_state) {
     NET_LOG(ERROR) << "SetTetherNetworkStateConnectionState: Tether network "
                    << "not found: " << guid;
     return;
   }
 
-  DCHECK(NetworkTypePattern::Tether().MatchesType(tether_network->type()));
+  DCHECK(
+      NetworkTypePattern::Tether().MatchesType(tether_network_state->type()));
 
-  tether_network->set_connection_state(connection_state);
-  NotifyNetworkListChanged();
+  std::string prev_connection_state = tether_network_state->connection_state();
+  tether_network_state->set_connection_state(connection_state);
+  network_list_sorted_ = false;
+
+  DCHECK(!tether_network_state->is_captive_portal());
+  if (ConnectionStateChanged(tether_network_state, prev_connection_state,
+                             false /* prev_is_captive_portal */)) {
+    NET_LOG(EVENT) << "Changing connection state for Tether network with GUID "
+                   << guid << ". Old state: " << prev_connection_state << ", "
+                   << "New state: " << connection_state;
+
+    OnNetworkConnectionStateChanged(tether_network_state);
+    NotifyNetworkPropertiesUpdated(tether_network_state);
+  }
 }
 
 void NetworkStateHandler::EnsureTetherDeviceState() {
@@ -1167,8 +1282,10 @@ void NetworkStateHandler::ManagedStateListChanged(
   }
 }
 
-// TODO(khorimoto): Add sorting for the Tether network list as well.
 void NetworkStateHandler::SortNetworkList() {
+  if (tether_sort_delegate_)
+    tether_sort_delegate_->SortTetherNetworkList(&tether_network_list_);
+
   // Note: usually active networks will precede inactive networks, however
   // this may briefly be untrue during state transitions (e.g. a network may
   // transition to idle before the list is updated).
@@ -1233,6 +1350,17 @@ void NetworkStateHandler::DefaultNetworkServiceChanged(
   if (new_service_path == default_network_path_)
     return;
 
+  if (new_service_path.empty()) {
+    // If Shill reports that there is no longer a default network but there is
+    // still an active Tether connection corresponding to the default network,
+    // return early without changing |default_network_path_|. Observers will be
+    // notified of the default network change due to a subsequent call to
+    // SetTetherNetworkStateDisconnected().
+    const NetworkState* old_default_network = DefaultNetwork();
+    if (old_default_network && old_default_network->type() == kTypeTether)
+      return;
+  }
+
   default_network_path_ = service_path;
   NET_LOG_EVENT("DefaultNetworkServiceChanged:", default_network_path_);
   const NetworkState* network = nullptr;
@@ -1243,6 +1371,15 @@ void NetworkStateHandler::DefaultNetworkServiceChanged(
       // they will be notified when the state is received.
       NET_LOG(EVENT) << "Default NetworkState not available: "
                      << default_network_path_;
+      return;
+    }
+    if (!network->tether_guid().empty()) {
+      DCHECK(network->type() == shill::kTypeWifi);
+
+      // If the new default network from Shill's point of view is a Wi-Fi
+      // network which corresponds to a hotspot for a Tether network, set the
+      // default network to be the associated Tether network instead.
+      default_network_path_ = network->tether_guid();
       return;
     }
   }

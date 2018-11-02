@@ -83,10 +83,17 @@ class AX_EXPORT AXTreeDelegate {
       AXIntListAttribute attr,
       const std::vector<int32_t>& old_value,
       const std::vector<int32_t>& new_value) {}
+  virtual void OnStringListAttributeChanged(
+      AXTree* tree,
+      AXNode* node,
+      AXStringListAttribute attr,
+      const std::vector<std::string>& old_value,
+      const std::vector<std::string>& new_value) {}
 
   // Called when tree data changes.
-  virtual void OnTreeDataChanged(AXTree* tree) = 0;
-
+  virtual void OnTreeDataChanged(AXTree* tree,
+                                 const ui::AXTreeData& old_data,
+                                 const ui::AXTreeData& new_data) = 0;
   // Called just before a node is deleted. Its id and data will be valid,
   // but its links to parents and children are invalid. This is called
   // in the middle of an update, the tree may be in an invalid state!
@@ -170,6 +177,14 @@ class AX_EXPORT AXTree {
   virtual bool Unserialize(const AXTreeUpdate& update);
 
   virtual void UpdateData(const AXTreeData& data);
+
+  // Convert any rectangle from the local coordinate space of one node in
+  // the tree, to bounds in the coordinate space of the tree.
+  gfx::RectF RelativeToTreeBounds(const AXNode* node,
+                                  gfx::RectF node_bounds) const;
+
+  // Get the bounds of a node in the coordinate space of the tree.
+  gfx::RectF GetTreeBounds(const AXNode* node) const;
 
   // Return a multi-line indented string representation, for logging.
   std::string ToString() const;

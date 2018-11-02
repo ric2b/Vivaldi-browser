@@ -9,7 +9,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "remoting/host/host_status_observer.h"
 #include "remoting/protocol/transport.h"
 #include "remoting/signaling/log_to_server.h"
@@ -21,13 +21,12 @@ class HostStatusMonitor;
 // HostStatusLogger sends host log entries to a server.
 // The contents of the log entries are described in server_log_entry_host.cc.
 // They do not contain any personally identifiable information.
-class HostStatusLogger : public HostStatusObserver,
-                         public base::NonThreadSafe {
+class HostStatusLogger : public HostStatusObserver {
  public:
-  HostStatusLogger(base::WeakPtr<HostStatusMonitor> monitor,
-                  ServerLogEntry::Mode mode,
-                  SignalStrategy* signal_strategy,
-                  const std::string& directory_bot_jid);
+  HostStatusLogger(scoped_refptr<HostStatusMonitor> monitor,
+                   ServerLogEntry::Mode mode,
+                   SignalStrategy* signal_strategy,
+                   const std::string& directory_bot_jid);
   ~HostStatusLogger() override;
 
   // Logs a session state change. Currently, this is either
@@ -47,12 +46,14 @@ class HostStatusLogger : public HostStatusObserver,
  private:
   LogToServer log_to_server_;
 
-  base::WeakPtr<HostStatusMonitor> monitor_;
+  scoped_refptr<HostStatusMonitor> monitor_;
 
   // A map from client JID to the route type of that client's connection to
   // this host.
   std::map<std::string, protocol::TransportRoute::RouteType>
       connection_route_type_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(HostStatusLogger);
 };

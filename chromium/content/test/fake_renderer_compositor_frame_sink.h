@@ -5,7 +5,7 @@
 #ifndef CONTENT_TEST_FAKE_RENDERER_COMPOSITOR_FRAME_SINK_H_
 #define CONTENT_TEST_FAKE_RENDERER_COMPOSITOR_FRAME_SINK_H_
 
-#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
+#include "cc/ipc/compositor_frame_sink.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace content {
@@ -13,23 +13,25 @@ namespace content {
 // This class is given to RenderWidgetHost/RenderWidgetHostView unit tests
 // instead of RendererCompositorFrameSink.
 class FakeRendererCompositorFrameSink
-    : public cc::mojom::MojoCompositorFrameSinkClient {
+    : public cc::mojom::CompositorFrameSinkClient {
  public:
   FakeRendererCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkPtr sink,
-      cc::mojom::MojoCompositorFrameSinkClientRequest request);
+      cc::mojom::CompositorFrameSinkPtr sink,
+      cc::mojom::CompositorFrameSinkClientRequest request);
   ~FakeRendererCompositorFrameSink() override;
 
   bool did_receive_ack() { return did_receive_ack_; }
-  cc::ReturnedResourceArray& last_reclaimed_resources() {
+  std::vector<cc::ReturnedResource>& last_reclaimed_resources() {
     return last_reclaimed_resources_;
   }
 
-  // cc::mojom::MojoCompositorFrameSinkClient implementation.
+  // cc::mojom::CompositorFrameSinkClient implementation.
   void DidReceiveCompositorFrameAck(
-      const cc::ReturnedResourceArray& resources) override;
+      const std::vector<cc::ReturnedResource>& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override {}
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
+  void OnBeginFramePausedChanged(bool paused) override {}
+  void ReclaimResources(
+      const std::vector<cc::ReturnedResource>& resources) override;
 
   // Resets test data.
   void Reset();
@@ -38,10 +40,10 @@ class FakeRendererCompositorFrameSink
   void Flush();
 
  private:
-  mojo::Binding<cc::mojom::MojoCompositorFrameSinkClient> binding_;
-  cc::mojom::MojoCompositorFrameSinkPtr sink_;
+  mojo::Binding<cc::mojom::CompositorFrameSinkClient> binding_;
+  cc::mojom::CompositorFrameSinkPtr sink_;
   bool did_receive_ack_ = false;
-  cc::ReturnedResourceArray last_reclaimed_resources_;
+  std::vector<cc::ReturnedResource> last_reclaimed_resources_;
 
   DISALLOW_COPY_AND_ASSIGN(FakeRendererCompositorFrameSink);
 };

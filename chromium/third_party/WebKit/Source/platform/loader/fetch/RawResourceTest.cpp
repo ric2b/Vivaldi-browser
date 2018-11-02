@@ -111,13 +111,13 @@ TEST_F(RawResourceTest, DontIgnoreAcceptForCacheReuse) {
   ResourceRequest jpeg_request;
   jpeg_request.SetHTTPAccept("image/jpeg");
 
-  RawResource* jpeg_resource(RawResource::Create(jpeg_request, Resource::kRaw));
+  RawResource* jpeg_resource(
+      RawResource::CreateForTest(jpeg_request, Resource::kRaw));
 
   ResourceRequest png_request;
   png_request.SetHTTPAccept("image/png");
 
-  EXPECT_FALSE(jpeg_resource->CanReuse(
-      FetchParameters(png_request, FetchInitiatorInfo())));
+  EXPECT_FALSE(jpeg_resource->CanReuse(FetchParameters(png_request)));
 }
 
 class DummyClient final : public GarbageCollectedFinalized<DummyClient>,
@@ -197,7 +197,7 @@ class AddingClient final : public GarbageCollectedFinalized<AddingClient>,
 
 TEST_F(RawResourceTest, RevalidationSucceeded) {
   Resource* resource =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+      RawResource::CreateForTest("data:text/html,", Resource::kRaw);
   ResourceResponse response;
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
@@ -230,7 +230,7 @@ TEST_F(RawResourceTest, RevalidationSucceeded) {
 
 TEST_F(RawResourceTest, RevalidationSucceededForResourceWithoutBody) {
   Resource* resource =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+      RawResource::CreateForTest("data:text/html,", Resource::kRaw);
   ResourceResponse response;
   response.SetHTTPStatusCode(200);
   resource->ResponseReceived(response, nullptr);
@@ -261,7 +261,7 @@ TEST_F(RawResourceTest, RevalidationSucceededForResourceWithoutBody) {
 
 TEST_F(RawResourceTest, RevalidationSucceededUpdateHeaders) {
   Resource* resource =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+      RawResource::CreateForTest("data:text/html,", Resource::kRaw);
   ResourceResponse response;
   response.SetHTTPStatusCode(200);
   response.AddHTTPHeaderField("keep-alive", "keep-alive value");
@@ -336,8 +336,8 @@ TEST_F(RawResourceTest, RevalidationSucceededUpdateHeaders) {
 }
 
 TEST_F(RawResourceTest, RedirectDuringRevalidation) {
-  Resource* resource = RawResource::Create(
-      ResourceRequest("https://example.com/1"), Resource::kRaw);
+  Resource* resource =
+      RawResource::CreateForTest("https://example.com/1", Resource::kRaw);
   ResourceResponse response;
   response.SetURL(KURL(kParsedURLString, "https://example.com/1"));
   response.SetHTTPStatusCode(200);
@@ -421,8 +421,7 @@ TEST_F(RawResourceTest, RedirectDuringRevalidation) {
 }
 
 TEST_F(RawResourceTest, AddClientDuringCallback) {
-  Resource* raw =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+  Resource* raw = RawResource::CreateForTest("data:text/html,", Resource::kRaw);
 
   // Create a non-null response.
   ResourceResponse response = raw->GetResponse();
@@ -467,8 +466,7 @@ class RemovingClient : public GarbageCollectedFinalized<RemovingClient>,
 };
 
 TEST_F(RawResourceTest, RemoveClientDuringCallback) {
-  Resource* raw =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+  Resource* raw = RawResource::CreateForTest("data:text/html,", Resource::kRaw);
 
   // Create a non-null response.
   ResourceResponse response = raw->GetResponse();
@@ -502,7 +500,7 @@ TEST_F(RawResourceTest, StartFailedRevalidationWhileResourceCallback) {
   new_response.SetHTTPStatusCode(201);
 
   Resource* resource =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+      RawResource::CreateForTest("data:text/html,", Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
   resource->AppendData("oldData", 8);
   resource->Finish();
@@ -546,7 +544,7 @@ TEST_F(RawResourceTest, StartSuccessfulRevalidationWhileResourceCallback) {
   new_response.SetHTTPStatusCode(304);
 
   Resource* resource =
-      RawResource::Create(ResourceRequest("data:text/html,"), Resource::kRaw);
+      RawResource::CreateForTest("data:text/html,", Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
   resource->AppendData("oldData", 8);
   resource->Finish();
@@ -582,9 +580,9 @@ TEST_F(RawResourceTest,
   ResourceRequest request("data:text/html,");
   request.SetHTTPHeaderField(
       HTTPNames::X_DevTools_Emulate_Network_Conditions_Client_Id, "Foo");
-  Resource* raw = RawResource::Create(request, Resource::kRaw);
-  EXPECT_TRUE(raw->CanReuse(FetchParameters(ResourceRequest("data:text/html,"),
-                                            FetchInitiatorInfo())));
+  Resource* raw = RawResource::CreateForTest(request, Resource::kRaw);
+  EXPECT_TRUE(
+      raw->CanReuse(FetchParameters(ResourceRequest("data:text/html,"))));
 }
 
 }  // namespace blink

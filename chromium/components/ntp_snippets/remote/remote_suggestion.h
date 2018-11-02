@@ -31,6 +31,8 @@ class RemoteSuggestion {
  public:
   using PtrVector = std::vector<std::unique_ptr<RemoteSuggestion>>;
 
+  enum ContentType { UNKNOWN, VIDEO };
+
   ~RemoteSuggestion();
 
   // Creates a RemoteSuggestion from a dictionary, as returned by Chrome Reader.
@@ -53,14 +55,6 @@ class RemoteSuggestion {
   // if the protocol buffer doesn't correspond to a valid suggestion.
   static std::unique_ptr<RemoteSuggestion> CreateFromProto(
       const SnippetProto& proto);
-
-  // TODO(treib): Make tests use the public interface and remove this.
-  static std::unique_ptr<RemoteSuggestion> CreateForTesting(
-      const std::string& id,
-      int remote_category_id,
-      const GURL& url,
-      const std::string& publisher_name,
-      const GURL& amp_url);
 
   // Creates a protocol buffer corresponding to this suggestion, for persisting.
   SnippetProto ToProto() const;
@@ -115,6 +109,8 @@ class RemoteSuggestion {
   bool should_notify() const { return should_notify_; }
   base::Time notification_deadline() const { return notification_deadline_; }
 
+  ContentType content_type() const { return content_type_; }
+
   bool is_dismissed() const { return is_dismissed_; }
   void set_dismissed(bool dismissed) { is_dismissed_ = dismissed; }
 
@@ -155,6 +151,8 @@ class RemoteSuggestion {
 
   bool should_notify_;
   base::Time notification_deadline_;
+
+  ContentType content_type_;
 
   // The time when the remote suggestion was fetched from the server.
   base::Time fetch_date_;

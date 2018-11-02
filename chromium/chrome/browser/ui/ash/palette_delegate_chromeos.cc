@@ -4,24 +4,22 @@
 
 #include "chrome/browser/ui/ash/palette_delegate_chromeos.h"
 
-#include "ash/accelerators/accelerator_controller_delegate_aura.h"
-#include "ash/aura/shell_port_classic.h"
+#include "ash/accelerators/accelerator_controller_delegate_classic.h"
+#include "ash/highlighter/highlighter_controller.h"
+#include "ash/highlighter/highlighter_selection_observer.h"
 #include "ash/screenshot_delegate.h"
 #include "ash/shell.h"
+#include "ash/shell_port_classic.h"
 #include "ash/system/palette/palette_utils.h"
 #include "ash/utility/screenshot_controller.h"
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/chromeos/arc/arc_util.h"
 #include "chrome/browser/chromeos/arc/voice_interaction/arc_voice_interaction_framework_service.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/pref_names.h"
-#include "components/arc/arc_bridge_service.h"
-#include "components/arc/arc_service_manager.h"
-#include "components/arc/common/voice_interaction_framework.mojom.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -30,35 +28,58 @@
 
 namespace chromeos {
 
-class VoiceInteractionScreenshotDelegate : public ash::ScreenshotDelegate {
+constexpr int kMetalayerSelectionDelayMs = 600;
+
+class VoiceInteractionSelectionObserver
+    : public ash::HighlighterSelectionObserver {
  public:
-  VoiceInteractionScreenshotDelegate() {}
-  ~VoiceInteractionScreenshotDelegate() override {}
+  explicit VoiceInteractionSelectionObserver(Profile* profile)
+      : profile_(profile) {
+    ash::Shell::Get()->highlighter_controller()->SetObserver(this);
+  }
+
+  ~VoiceInteractionSelectionObserver() override {
+    if (ash::Shell::HasInstance() &&
+        ash::Shell::Get()->highlighter_controller()) {
+      ash::Shell::Get()->highlighter_controller()->SetObserver(nullptr);
+    }
+  };
+
+  void set_on_selection_done(base::OnceClosure done) {
+    on_selection_done_ = std::move(done);
+  }
 
  private:
-  void HandleTakeScreenshotForAllRootWindows() override { NOTIMPLEMENTED(); }
+  void HandleSelection(const gfx::Rect& rect) override {
+    // Delay the actual voice interaction service invocation for better
+    // visual synchronization with the metalayer animation.
+    delay_timer_ = base::MakeUnique<base::Timer>(
+        FROM_HERE,
+        base::TimeDelta::FromMilliseconds(kMetalayerSelectionDelayMs),
+        base::Bind(&VoiceInteractionSelectionObserver::ReportSelection,
+                   base::Unretained(this), rect),
+        false /* not repeating */);
+    delay_timer_->Reset();
 
-  void HandleTakePartialScreenshot(aura::Window* window,
-                                   const gfx::Rect& rect) override {
-    arc::mojom::VoiceInteractionFrameworkInstance* framework =
-        ARC_GET_INSTANCE_FOR_METHOD(arc::ArcServiceManager::Get()
-                                        ->arc_bridge_service()
-                                        ->voice_interaction_framework(),
-                                    StartVoiceInteractionSessionForRegion);
+    DCHECK(on_selection_done_);
+    std::move(on_selection_done_).Run();
+  }
+
+  void ReportSelection(const gfx::Rect& rect) {
+    auto* framework =
+        arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(
+            profile_);
     if (!framework)
       return;
-    double device_scale_factor = window->layer()->device_scale_factor();
-    framework->StartVoiceInteractionSessionForRegion(
-        gfx::ScaleToEnclosingRect(rect, device_scale_factor));
+    framework->StartSessionFromUserInteraction(rect);
   }
 
-  void HandleTakeWindowScreenshot(aura::Window* window) override {
-    NOTIMPLEMENTED();
-  }
+  Profile* const profile_;  // Owned by ProfileManager.
 
-  bool CanTakeScreenshot() override { return true; }
+  std::unique_ptr<base::Timer> delay_timer_;
+  base::OnceClosure on_selection_done_;
 
-  DISALLOW_COPY_AND_ASSIGN(VoiceInteractionScreenshotDelegate);
+  DISALLOW_COPY_AND_ASSIGN(VoiceInteractionSelectionObserver);
 };
 
 PaletteDelegateChromeOS::PaletteDelegateChromeOS() : weak_factory_(this) {
@@ -68,7 +89,8 @@ PaletteDelegateChromeOS::PaletteDelegateChromeOS() : weak_factory_(this) {
                  content::NotificationService::AllSources());
 }
 
-PaletteDelegateChromeOS::~PaletteDelegateChromeOS() {}
+PaletteDelegateChromeOS::~PaletteDelegateChromeOS() {
+}
 
 std::unique_ptr<PaletteDelegateChromeOS::EnableListenerSubscription>
 PaletteDelegateChromeOS::AddPaletteEnableListener(
@@ -177,22 +199,9 @@ void PaletteDelegateChromeOS::TakeScreenshot() {
 
 void PaletteDelegateChromeOS::TakePartialScreenshot(const base::Closure& done) {
   auto* screenshot_controller = ash::Shell::Get()->screenshot_controller();
-
-  ash::ScreenshotDelegate* screenshot_delegate;
-  if (IsMetalayerSupported()) {
-    // This is an experimental mode. It will be either taken out or grow
-    // into a separate tool next to "Capture region".
-    if (!voice_interaction_screenshot_delegate_) {
-      voice_interaction_screenshot_delegate_ =
-          base::MakeUnique<VoiceInteractionScreenshotDelegate>();
-    }
-    screenshot_delegate = voice_interaction_screenshot_delegate_.get();
-  } else {
-    screenshot_delegate = ash::ShellPortClassic::Get()
-                              ->accelerator_controller_delegate()
-                              ->screenshot_delegate();
-  }
-
+  auto* screenshot_delegate = ash::ShellPortClassic::Get()
+                                  ->accelerator_controller_delegate()
+                                  ->screenshot_delegate();
   screenshot_controller->set_pen_events_only(true);
   screenshot_controller->StartPartialScreenshotSession(
       screenshot_delegate, false /* draw_overlay_immediately */);
@@ -205,35 +214,29 @@ void PaletteDelegateChromeOS::CancelPartialScreenshot() {
   ash::Shell::Get()->screenshot_controller()->CancelScreenshotSession();
 }
 
-bool PaletteDelegateChromeOS::IsMetalayerSupported() {
-  if (!arc::IsArcAllowedForProfile(profile_))
-    return false;
-
-  arc::ArcVoiceInteractionFrameworkService* service =
-      arc::ArcServiceManager::Get()
-          ->GetService<arc::ArcVoiceInteractionFrameworkService>();
-  return service && service->IsMetalayerSupported();
-}
-
-void PaletteDelegateChromeOS::ShowMetalayer(const base::Closure& closed) {
-  arc::ArcVoiceInteractionFrameworkService* service =
-      arc::ArcServiceManager::Get()
-          ->GetService<arc::ArcVoiceInteractionFrameworkService>();
-  if (!service) {
-    if (!closed.is_null())
-      closed.Run();
+void PaletteDelegateChromeOS::ShowMetalayer(base::OnceClosure done) {
+  auto* service =
+      arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(profile_);
+  if (!service)
     return;
+  service->ShowMetalayer();
+
+  if (!highlighter_selection_observer_) {
+    highlighter_selection_observer_ =
+        base::MakeUnique<VoiceInteractionSelectionObserver>(profile_);
   }
-  service->ShowMetalayer(closed);
+  highlighter_selection_observer_->set_on_selection_done(std::move(done));
+  ash::Shell::Get()->highlighter_controller()->SetEnabled(true);
 }
 
 void PaletteDelegateChromeOS::HideMetalayer() {
-  arc::ArcVoiceInteractionFrameworkService* service =
-      arc::ArcServiceManager::Get()
-          ->GetService<arc::ArcVoiceInteractionFrameworkService>();
+  auto* service =
+      arc::ArcVoiceInteractionFrameworkService::GetForBrowserContext(profile_);
   if (!service)
     return;
   service->HideMetalayer();
+
+  ash::Shell::Get()->highlighter_controller()->SetEnabled(false);
 }
 
 }  // namespace chromeos

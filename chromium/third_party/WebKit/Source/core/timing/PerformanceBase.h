@@ -98,11 +98,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(resourcetimingbufferfull);
 
-  void clearFrameTimings();
-  void setFrameTimingBufferSize(unsigned);
-
-  DEFINE_ATTRIBUTE_EVENT_LISTENER(frametimingbufferfull);
-
   void AddLongTaskTiming(double start_time,
                          double end_time,
                          const String& name,
@@ -111,12 +106,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
                          const String& culprit_frame_name);
 
   void AddResourceTiming(const ResourceTimingInfo&);
-
-  enum class ShouldAddToBuffer {
-    Always,
-    Never,
-  };
-  void AddServerTiming(const ResourceResponse&, ShouldAddToBuffer);
 
   void NotifyNavigationTimingToObservers();
 
@@ -166,9 +155,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   bool IsResourceTimingBufferFull();
   void AddResourceTimingBuffer(PerformanceEntry&);
 
-  bool IsFrameTimingBufferFull();
-  void AddFrameTimingBuffer(PerformanceEntry&);
-
   void NotifyObserversOfEntry(PerformanceEntry&);
   void NotifyObserversOfEntries(PerformanceEntryVector&);
   bool HasObserverFor(PerformanceEntry::EntryType) const;
@@ -179,7 +165,6 @@ class CORE_EXPORT PerformanceBase : public EventTargetWithInlineData {
   unsigned frame_timing_buffer_size_;
   PerformanceEntryVector resource_timing_buffer_;
   unsigned resource_timing_buffer_size_;
-  PerformanceEntryVector server_timing_buffer_;
   Member<PerformanceEntry> navigation_timing_;
   Member<UserTiming> user_timing_;
   Member<PerformanceEntry> first_paint_timing_;

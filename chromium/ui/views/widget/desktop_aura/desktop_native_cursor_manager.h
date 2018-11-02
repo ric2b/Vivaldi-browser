@@ -28,7 +28,7 @@ class NativeCursorManagerDelegate;
 namespace views {
 
 // A NativeCursorManager that performs the desktop-specific setting of cursor
-// state. Similar to AshNativeCursorManager, it also communicates these changes
+// state. Similar to NativeCursorManagerAsh, it also communicates these changes
 // to all root windows.
 class VIEWS_EXPORT DesktopNativeCursorManager
     : public wm::NativeCursorManager {
@@ -54,8 +54,8 @@ class VIEWS_EXPORT DesktopNativeCursorManager
                  wm::NativeCursorManagerDelegate* delegate) override;
   void SetVisibility(bool visible,
                      wm::NativeCursorManagerDelegate* delegate) override;
-  void SetCursorSet(ui::CursorSetType cursor_set,
-                    wm::NativeCursorManagerDelegate* delegate) override;
+  void SetCursorSize(ui::CursorSize cursor_size,
+                     wm::NativeCursorManagerDelegate* delegate) override;
   void SetMouseEventsEnabled(
       bool enabled,
       wm::NativeCursorManagerDelegate* delegate) override;

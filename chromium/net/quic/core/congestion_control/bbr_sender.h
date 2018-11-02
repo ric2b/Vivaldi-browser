@@ -196,16 +196,6 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
                            bool has_losses,
                            bool is_round_start);
 
-  // Returns true if recent ack rate has decreased substantially and if sender
-  // is allowed to continue sending when congestion window limited.
-  bool SlowDeliveryAllowsSending(QuicTime now, QuicByteCount bytes_in_flight);
-
-  // Updates history of recently received acks. Acks are considered recent
-  // if received within kRecentlyAckedRttFraction x smoothed RTT in the past.
-  // Adds new ack to recently_acked_ if |newly_acked_bytes| is non-zero.
-  void UpdateRecentlyAcked(QuicTime new_ack_time,
-                           QuicByteCount newly_acked_bytes);
-
   // Updates the ack aggregation max filter in bytes.
   void UpdateAckAggregationBytes(QuicTime ack_time,
                                  QuicByteCount newly_acked_bytes);
@@ -249,6 +239,10 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   QuicTime aggregation_epoch_start_time_;
   QuicByteCount aggregation_epoch_bytes_;
 
+  // The number of bytes acknowledged since the last time bytes in flight
+  // dropped below the target window.
+  QuicByteCount bytes_acked_since_queue_drained_;
+
   // Minimum RTT estimate.  Automatically expires within 10 seconds (and
   // triggers PROBE_RTT mode) if no new value is sampled during that period.
   QuicTime::Delta min_rtt_;
@@ -280,13 +274,6 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   const float rtt_variance_weight_;
   // The number of RTTs to stay in STARTUP mode.  Defaults to 3.
   QuicRoundTripCount num_startup_rtts_;
-
-  // Gain to use when delivery rate is slow.
-  // TODO(jri): Make this a constant if we decide to use this code for BBR.
-  const float congestion_window_gain_for_slow_delivery_;
-  // Threshold multiplier below which delivery is considered slow.
-  // TODO(jri): Make this a constant if we decide to use this code for BBR.
-  const float threshold_multiplier_for_slow_delivery_;
 
   // Number of round-trips in PROBE_BW mode, used for determining the current
   // pacing gain cycle.
@@ -323,16 +310,8 @@ class QUIC_EXPORT_PRIVATE BbrSender : public SendAlgorithmInterface {
   // A window used to limit the number of bytes in flight during loss recovery.
   QuicByteCount recovery_window_;
 
-  // Records information about a received ack
-  struct DataDelivered {
-    QuicTime ack_time;
-    QuicByteCount acked_bytes;
-  };
-
-  // Data structure to record recently received acks. Used for determining
-  // recently seen ack rate over a short period in the past.
-  std::deque<DataDelivered> recently_acked_;
-  QuicByteCount bytes_recently_acked_;
+  // When true, recovery is rate based rather than congestion window based.
+  bool rate_based_recovery_;
 
   DISALLOW_COPY_AND_ASSIGN(BbrSender);
 };

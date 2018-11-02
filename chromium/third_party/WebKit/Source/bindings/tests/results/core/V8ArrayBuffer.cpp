@@ -26,12 +26,24 @@ namespace blink {
 
 // Suppress warning: global constructors, because struct WrapperTypeInfo is trivial
 // and does not depend on another global objects.
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wglobal-constructors"
 #endif
-const WrapperTypeInfo V8ArrayBuffer::wrapperTypeInfo = { gin::kEmbedderBlink, 0, V8ArrayBuffer::Trace, V8ArrayBuffer::TraceWrappers, nullptr, "ArrayBuffer", 0, WrapperTypeInfo::kWrapperTypeObjectPrototype, WrapperTypeInfo::kObjectClassId, WrapperTypeInfo::kNotInheritFromActiveScriptWrappable, WrapperTypeInfo::kIndependent };
-#if defined(COMPONENT_BUILD) && defined(WIN32) && COMPILER(CLANG)
+const WrapperTypeInfo V8ArrayBuffer::wrapperTypeInfo = {
+    gin::kEmbedderBlink,
+    nullptr,
+    V8ArrayBuffer::Trace,
+    V8ArrayBuffer::TraceWrappers,
+    nullptr,
+    "ArrayBuffer",
+    nullptr,
+    WrapperTypeInfo::kWrapperTypeObjectPrototype,
+    WrapperTypeInfo::kObjectClassId,
+    WrapperTypeInfo::kNotInheritFromActiveScriptWrappable,
+    WrapperTypeInfo::kIndependent,
+};
+#if defined(COMPONENT_BUILD) && defined(WIN32) && defined(__clang__)
 #pragma clang diagnostic pop
 #endif
 
@@ -66,7 +78,23 @@ TestArrayBuffer* V8ArrayBuffer::toImpl(v8::Local<v8::Object> object) {
   // Transfer the ownership of the allocated memory to an ArrayBuffer without
   // copying.
   v8::ArrayBuffer::Contents v8Contents = v8buffer->Externalize();
-  WTF::ArrayBufferContents::DataHandle data(v8Contents.Data(), WTF::ArrayBufferContents::FreeMemory);
+  WTF::ArrayBufferContents::AllocationKind kind = WTF::ArrayBufferContents::AllocationKind::kNormal;
+  switch (v8Contents.AllocationMode()) {
+    case v8::ArrayBuffer::Allocator::AllocationMode::kNormal:
+      kind = WTF::ArrayBufferContents::AllocationKind::kNormal;
+      break;
+    case v8::ArrayBuffer::Allocator::AllocationMode::kReservation:
+      kind = WTF::ArrayBufferContents::AllocationKind::kReservation;
+      break;
+    default:
+      NOTREACHED();
+  };
+  WTF::ArrayBufferContents::DataHandle data(v8Contents.AllocationBase(),
+                                            v8Contents.AllocationLength(),
+                                            v8Contents.Data(),
+                                            v8Contents.ByteLength(),
+                                            kind,
+                                            WTF::ArrayBufferContents::FreeMemory);
   WTF::ArrayBufferContents contents(std::move(data), v8Contents.ByteLength(), WTF::ArrayBufferContents::kNotShared);
   TestArrayBuffer* buffer = TestArrayBuffer::Create(contents);
   v8::Local<v8::Object> associatedWrapper = buffer->AssociateWithWrapper(v8::Isolate::GetCurrent(), buffer->GetWrapperTypeInfo(), object);

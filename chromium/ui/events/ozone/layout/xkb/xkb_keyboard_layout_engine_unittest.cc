@@ -819,6 +819,10 @@ TEST_F(XkbLayoutEngineVkTest, KeyboardCodeForNonPrintable) {
     {{DomCode::ENTER, EF_NONE, XKB_KEY_Return}, VKEY_RETURN},
     {{DomCode::NUMPAD_ENTER, EF_NONE, XKB_KEY_KP_Enter}, VKEY_RETURN},
     {{DomCode::SLEEP, EF_NONE, XKB_KEY_XF86Sleep}, VKEY_SLEEP},
+    // Verify that we can translate some Dom codes even if they are not
+    // known to XKB.
+    {{DomCode::LAUNCH_ASSISTANT, EF_NONE}, VKEY_ASSISTANT},
+    {{DomCode::LAUNCH_CONTROL_PANEL, EF_NONE}, VKEY_SETTINGS},
     // Verify that number pad digits produce located VKEY codes.
     {{DomCode::NUMPAD0, EF_NONE, XKB_KEY_KP_0, '0'}, VKEY_NUMPAD0},
     {{DomCode::NUMPAD9, EF_NONE, XKB_KEY_KP_9, '9'}, VKEY_NUMPAD9},

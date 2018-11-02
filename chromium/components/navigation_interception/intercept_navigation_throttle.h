@@ -30,8 +30,7 @@ class InterceptNavigationThrottle : public content::NavigationThrottle {
       CheckCallback;
 
   InterceptNavigationThrottle(content::NavigationHandle* navigation_handle,
-                              CheckCallback should_ignore_callback,
-                              bool run_callback_synchronously);
+                              CheckCallback should_ignore_callback);
   ~InterceptNavigationThrottle() override;
 
   // content::NavigationThrottle implementation:
@@ -42,21 +41,7 @@ class InterceptNavigationThrottle : public content::NavigationThrottle {
  private:
   ThrottleCheckResult CheckIfShouldIgnoreNavigation(bool is_redirect);
 
-  // Called to perform the checks asynchronously
-  void RunCallbackAsynchronously(const NavigationParams& navigation_params);
-  // TODO(clamy): remove |throttle_was_destroyed| once crbug.com/570200 is
-  // fixed.
-  void OnAsynchronousChecksPerformed(bool should_ignore_navigation,
-                                     bool throttle_was_destroyed);
-
   CheckCallback should_ignore_callback_;
-
-  // Whether the callback will be run synchronously or not. If the callback can
-  // lead to the destruction of the WebContents, this should be false.
-  // Otherwise this should be true.
-  const bool run_callback_synchronously_;
-
-  base::WeakPtrFactory<InterceptNavigationThrottle> weak_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(InterceptNavigationThrottle);
 };

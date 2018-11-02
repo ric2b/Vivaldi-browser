@@ -24,6 +24,7 @@
 
 #include "platform/fonts/FontCache.h"
 
+#include "build/build_config.h"
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/SimpleFontData.h"
 #include "platform/wtf/text/CString.h"
@@ -38,7 +39,7 @@ FontCache::FontCache()
     : purge_prevent_count_(0), font_manager_(sk_ref_sp(static_font_manager_)) {}
 
 static AtomicString& MutableSystemFontFamily() {
-  DEFINE_STATIC_LOCAL(AtomicString, system_font_family, ());
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(AtomicString, system_font_family, ());
   return system_font_family;
 }
 
@@ -83,7 +84,7 @@ void FontCache::GetFontForCharacter(
   }
 }
 
-#if !OS(ANDROID)
+#if !defined(OS_ANDROID)
 PassRefPtr<SimpleFontData> FontCache::FallbackFontForCharacter(
     const FontDescription& font_description,
     UChar32 c,
@@ -167,6 +168,6 @@ PassRefPtr<SimpleFontData> FontCache::FallbackFontForCharacter(
   return FontDataFromFontPlatformData(platform_data.get(), kDoNotRetain);
 }
 
-#endif  // !OS(ANDROID)
+#endif  // !defined(OS_ANDROID)
 
 }  // namespace blink

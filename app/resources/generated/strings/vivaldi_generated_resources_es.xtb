@@ -20,7 +20,7 @@
 <translation id="119944043368869598">Eliminar todo</translation>
 <translation id="1221825588892235038">Solo el contenido seleccionado</translation>
 <translation id="1244303850296295656">Error de extensión</translation>
-<translation id="1278049586634282054">I&amp;nspeccionar vistas:</translation>
+<translation id="1278049586634282054">Inspeccionar vistas:</translation>
 <translation id="1297175357211070620">Destino</translation>
 <translation id="1303101771013849280">Archivo HTML de marcadores</translation>
 <translation id="1303319084542230573">Añadir una impresora</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">Memoria de SQLite</translation>
 <translation id="6655190889273724601">Modo desarrollador</translation>
 <translation id="6691936601825168937">&amp;Reenviar</translation>
-<translation id="6700480081846086223">Enviar <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Alcance</translation>
 <translation id="6786747875388722282">Extensiones</translation>
 <translation id="6787839852456839824">Combinaciones de teclas</translation>

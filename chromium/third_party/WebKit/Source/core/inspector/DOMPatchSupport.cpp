@@ -43,6 +43,7 @@
 #include "core/html/HTMLDocument.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/parser/HTMLDocumentParser.h"
+#include "core/inspector/AddStringToDigestor.h"
 #include "core/inspector/DOMEditor.h"
 #include "core/inspector/InspectorHistory.h"
 #include "core/xml/parser/XMLDocumentParser.h"
@@ -55,13 +56,6 @@
 #include "public/platform/Platform.h"
 
 namespace blink {
-
-void DOMPatchSupport::PatchDocument(Document& document, const String& markup) {
-  InspectorHistory history;
-  DOMEditor dom_editor(&history);
-  DOMPatchSupport patch_support(&dom_editor, document);
-  patch_support.PatchDocument(markup);
-}
 
 DOMPatchSupport::DOMPatchSupport(DOMEditor* dom_editor, Document& document)
     : dom_editor_(dom_editor), document_(document) {}
@@ -432,13 +426,6 @@ bool DOMPatchSupport::InnerPatchChildren(
       return false;
   }
   return true;
-}
-
-static void AddStringToDigestor(WebCryptoDigestor* digestor,
-                                const String& string) {
-  digestor->Consume(
-      reinterpret_cast<const unsigned char*>(string.Utf8().data()),
-      string.length());
 }
 
 DOMPatchSupport::Digest* DOMPatchSupport::CreateDigest(

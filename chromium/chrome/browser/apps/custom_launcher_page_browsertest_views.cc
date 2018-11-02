@@ -139,7 +139,7 @@ IN_PROC_BROWSER_TEST_F(CustomLauncherPageBrowserTest,
 // Test that the app list will switch to the custom launcher page by sending a
 // click inside the clickzone, or a mouse scroll event.
 IN_PROC_BROWSER_TEST_F(CustomLauncherPageBrowserTest,
-                       EventsActivateSwitchToCustomPage) {
+                       DISABLED_EventsActivateSwitchToCustomPage) {
   LoadAndLaunchPlatformApp(kCustomLauncherPagePath, "Launched");
   // Use an event generator to ensure targeting is correct.
   app_list::AppListView* app_list_view = GetAppListView();

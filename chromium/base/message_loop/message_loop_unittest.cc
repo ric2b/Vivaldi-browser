@@ -23,6 +23,7 @@
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_simple_task_runner.h"
 #include "base/threading/platform_thread.h"
+#include "base/threading/sequence_local_storage_slot.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
@@ -728,78 +729,6 @@ TEST(MessageLoopTest, HighResolutionTimer) {
 
 #endif  // defined(OS_WIN)
 
-#if defined(OS_POSIX) && !defined(OS_NACL)
-
-namespace {
-
-class QuitDelegate : public MessageLoopForIO::Watcher {
- public:
-  void OnFileCanWriteWithoutBlocking(int fd) override {
-    MessageLoop::current()->QuitWhenIdle();
-  }
-  void OnFileCanReadWithoutBlocking(int fd) override {
-    MessageLoop::current()->QuitWhenIdle();
-  }
-};
-
-TEST(MessageLoopTest, FileDescriptorWatcherOutlivesMessageLoop) {
-  // Simulate a MessageLoop that dies before an FileDescriptorWatcher.
-  // This could happen when people use the Singleton pattern or atexit.
-
-  // Create a file descriptor.  Doesn't need to be readable or writable,
-  // as we don't need to actually get any notifications.
-  // pipe() is just the easiest way to do it.
-  int pipefds[2];
-  int err = pipe(pipefds);
-  ASSERT_EQ(0, err);
-  int fd = pipefds[1];
-  {
-    // Arrange for controller to live longer than message loop.
-    MessageLoopForIO::FileDescriptorWatcher controller(FROM_HERE);
-    {
-      MessageLoopForIO message_loop;
-
-      QuitDelegate delegate;
-      message_loop.WatchFileDescriptor(fd,
-          true, MessageLoopForIO::WATCH_WRITE, &controller, &delegate);
-      // and don't run the message loop, just destroy it.
-    }
-  }
-  if (IGNORE_EINTR(close(pipefds[0])) < 0)
-    PLOG(ERROR) << "close";
-  if (IGNORE_EINTR(close(pipefds[1])) < 0)
-    PLOG(ERROR) << "close";
-}
-
-TEST(MessageLoopTest, FileDescriptorWatcherDoubleStop) {
-  // Verify that it's ok to call StopWatchingFileDescriptor().
-  // (Errors only showed up in valgrind.)
-  int pipefds[2];
-  int err = pipe(pipefds);
-  ASSERT_EQ(0, err);
-  int fd = pipefds[1];
-  {
-    // Arrange for message loop to live longer than controller.
-    MessageLoopForIO message_loop;
-    {
-      MessageLoopForIO::FileDescriptorWatcher controller(FROM_HERE);
-
-      QuitDelegate delegate;
-      message_loop.WatchFileDescriptor(fd,
-          true, MessageLoopForIO::WATCH_WRITE, &controller, &delegate);
-      controller.StopWatchingFileDescriptor();
-    }
-  }
-  if (IGNORE_EINTR(close(pipefds[0])) < 0)
-    PLOG(ERROR) << "close";
-  if (IGNORE_EINTR(close(pipefds[1])) < 0)
-    PLOG(ERROR) << "close";
-}
-
-}  // namespace
-
-#endif  // defined(OS_POSIX) && !defined(OS_NACL)
-
 namespace {
 // Inject a test point for recording the destructor calls for Closure objects
 // send to MessageLoop::PostTask(). It is awkward usage since we are trying to
@@ -1041,6 +970,55 @@ TEST(MessageLoopTest, ThreadName) {
     ASSERT_TRUE(thread.StartAndWaitForTesting());
     EXPECT_EQ(kThreadName, thread.message_loop()->GetThreadName());
   }
+}
+
+// Verify that tasks posted to and code running in the scope of the same
+// MessageLoop access the same SequenceLocalStorage values.
+TEST(MessageLoopTest, SequenceLocalStorageSetGet) {
+  MessageLoop loop;
+
+  SequenceLocalStorageSlot<int> slot;
+
+  ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      BindOnce(&SequenceLocalStorageSlot<int>::Set, Unretained(&slot), 11));
+
+  ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, BindOnce(
+                     [](SequenceLocalStorageSlot<int>* slot) {
+                       EXPECT_EQ(slot->Get(), 11);
+                     },
+                     &slot));
+
+  RunLoop().RunUntilIdle();
+  EXPECT_EQ(slot.Get(), 11);
+}
+
+// Verify that tasks posted to and code running in different MessageLoops access
+// different SequenceLocalStorage values.
+TEST(MessageLoopTest, SequenceLocalStorageDifferentMessageLoops) {
+  SequenceLocalStorageSlot<int> slot;
+
+  {
+    MessageLoop loop;
+    ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE,
+        BindOnce(&SequenceLocalStorageSlot<int>::Set, Unretained(&slot), 11));
+
+    RunLoop().RunUntilIdle();
+    EXPECT_EQ(slot.Get(), 11);
+  }
+
+  MessageLoop loop;
+  ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, BindOnce(
+                     [](SequenceLocalStorageSlot<int>* slot) {
+                       EXPECT_NE(slot->Get(), 11);
+                     },
+                     &slot));
+
+  RunLoop().RunUntilIdle();
+  EXPECT_NE(slot.Get(), 11);
 }
 
 }  // namespace base

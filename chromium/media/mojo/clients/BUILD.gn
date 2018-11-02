@@ -35,12 +35,16 @@ source_set("clients") {
     "mojo_decryptor.h",
     "mojo_demuxer_stream_impl.cc",
     "mojo_demuxer_stream_impl.h",
+    "mojo_media_log_service.cc",
+    "mojo_media_log_service.h",
     "mojo_renderer.cc",
     "mojo_renderer.h",
     "mojo_renderer_factory.cc",
     "mojo_renderer_factory.h",
     "mojo_video_decoder.cc",
     "mojo_video_decoder.h",
+    "mojo_video_encode_accelerator.cc",
+    "mojo_video_encode_accelerator.h",
   ]
 
   if (is_android) {
@@ -61,7 +65,9 @@ source_set("clients") {
   ]
 
   deps = [
+    "//media/gpu",
     "//media/mojo/common",
+    "//media/mojo/common:mojo_shared_buffer_video_frame",
     "//mojo/common",
     "//services/service_manager/public/cpp",
   ]

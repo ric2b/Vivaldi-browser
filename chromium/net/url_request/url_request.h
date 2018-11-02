@@ -17,7 +17,7 @@
 #include "base/optional.h"
 #include "base/strings/string16.h"
 #include "base/supports_user_data.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "net/base/auth.h"
 #include "net/base/completion_callback.h"
@@ -69,8 +69,7 @@ class X509Certificate;
 //
 // NOTE: All usage of all instances of this class should be on the same thread.
 //
-class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
-                              public base::SupportsUserData {
+class NET_EXPORT URLRequest : public base::SupportsUserData {
  public:
   // Callback function implemented by protocol handlers to create new jobs.
   // The factory may return NULL to indicate an error, which will cause other
@@ -88,25 +87,30 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // setting the initial Referer, and the ReferrerPolicy only controls
   // what happens to the Referer while following redirects.
   enum ReferrerPolicy {
-    // Clear the referrer header if the protocol changes from HTTPS to
-    // HTTP. This is the default behavior of URLRequest.
+    // Clear the referrer header if the header value is HTTPS but the request
+    // destination is HTTP. This is the default behavior of URLRequest.
     CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
-    // A slight variant on
-    // CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE: If the
-    // request downgrades from HTTPS to HTTP, the referrer will be
-    // cleared. If the request transitions cross-origin (but does not
-    // downgrade), the referrer's granularity will be reduced (currently
-    // stripped down to an origin rather than a full URL). Same-origin
-    // requests will send the full referrer.
+    // A slight variant on CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
+    // If the request destination is HTTP, an HTTPS referrer will be cleared. If
+    // the request's destination is cross-origin with the referrer (but does not
+    // downgrade), the referrer's granularity will be stripped down to an origin
+    // rather than a full URL. Same-origin requests will send the full referrer.
     REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN,
-    // Strip the referrer down to an origin upon cross-origin navigation.
+    // Strip the referrer down to an origin when the origin of the referrer is
+    // different from the destination's origin.
     ORIGIN_ONLY_ON_TRANSITION_CROSS_ORIGIN,
     // Never change the referrer.
     NEVER_CLEAR_REFERRER,
     // Strip the referrer down to the origin regardless of the redirect
     // location.
     ORIGIN,
-    // Always clear the referrer regardless of the redirect location.
+    // Clear the referrer when the request's referrer is cross-origin with
+    // the request's destination.
+    CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN,
+    // Strip the referrer down to the origin, but clear it entirely if the
+    // referrer value is HTTPS and the destination is HTTP.
+    ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE,
+    // Always clear the referrer regardless of the request destination.
     NO_REFERRER,
     MAX_REFERRER_POLICY
   };
@@ -315,16 +319,22 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   const std::string& method() const { return method_; }
   void set_method(const std::string& method);
 
-  // The referrer URL for the request.  This header may actually be suppressed
-  // from the underlying network request for security reasons (e.g., a HTTPS
-  // URL will not be sent as the referrer for a HTTP request).  The referrer
-  // may only be changed before Start() is called.
+  // The referrer URL for the request
   const std::string& referrer() const { return referrer_; }
-  // Referrer is sanitized to remove URL fragment, user name and password.
+  // Sets the referrer URL for the request. Can only be changed before Start()
+  // is called. |referrer| is sanitized to remove URL fragment, user name and
+  // password. If a referrer policy is set via set_referrer_policy(), then
+  // |referrer| should obey the policy; if it doesn't, it will be cleared when
+  // the request is started. The referrer URL may be suppressed or changed
+  // during the course of the request, for example because of a referrer policy
+  // set with set_referrer_policy().
   void SetReferrer(const std::string& referrer);
 
   // The referrer policy to apply when updating the referrer during redirects.
-  // The referrer policy may only be changed before Start() is called.
+  // The referrer policy may only be changed before Start() is called. Any
+  // referrer set via SetReferrer() is expected to obey the policy set via
+  // set_referrer_policy(); otherwise the referrer will be cleared when the
+  // request is started.
   ReferrerPolicy referrer_policy() const { return referrer_policy_; }
   void set_referrer_policy(ReferrerPolicy referrer_policy);
 
@@ -601,8 +611,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // This method can be called after the user selects a client certificate to
   // instruct this URLRequest to continue with the request with the
   // certificate.  Pass NULL if the user doesn't have a client certificate.
-  void ContinueWithCertificate(X509Certificate* client_cert,
-                               SSLPrivateKey* client_private_key);
+  void ContinueWithCertificate(scoped_refptr<X509Certificate> client_cert,
+                               scoped_refptr<SSLPrivateKey> client_private_key);
 
   // This method can be called after some error notifications to instruct this
   // URLRequest to ignore the current error and continue with the request.  To
@@ -664,9 +674,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   // Allow the URLRequestJob class to set our status too.
   void set_status(URLRequestStatus status);
 
-  // Allow the URLRequestJob to redirect this request.  Returns OK if
-  // successful, otherwise an error code is returned.
-  int Redirect(const RedirectInfo& redirect_info);
+  // Allow the URLRequestJob to redirect this request.
+  void Redirect(const RedirectInfo& redirect_info);
 
   // Called by URLRequestJob to allow interception when a redirect occurs.
   void NotifyReceivedRedirect(const RedirectInfo& redirect_info,
@@ -861,6 +870,8 @@ class NET_EXPORT URLRequest : NON_EXPORTED_BASE(public base::NonThreadSafe),
   int raw_header_size_;
 
   const NetworkTrafficAnnotationTag traffic_annotation_;
+
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(URLRequest);
 };

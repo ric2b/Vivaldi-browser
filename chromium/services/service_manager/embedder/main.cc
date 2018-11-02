@@ -79,14 +79,14 @@ namespace {
 constexpr size_t kMaximumMojoMessageSize = 256 * 1024 * 1024;
 
 class ServiceProcessLauncherDelegateImpl
-    : public service_manager::ServiceProcessLauncher::Delegate {
+    : public service_manager::ServiceProcessLauncherDelegate {
  public:
   explicit ServiceProcessLauncherDelegateImpl(MainDelegate* main_delegate)
       : main_delegate_(main_delegate) {}
   ~ServiceProcessLauncherDelegateImpl() override {}
 
  private:
-  // service_manager::ServiceProcessLauncher::Delegate:
+  // service_manager::ServiceProcessLauncherDelegate:
   void AdjustCommandLineArgumentsForTarget(
       const service_manager::Identity& target,
       base::CommandLine* command_line) override {
@@ -233,14 +233,6 @@ void OnInstanceQuit(MainDelegate* delegate,
 
 int RunServiceManager(MainDelegate* delegate) {
   NonEmbedderProcessInit();
-
-#if defined(OS_WIN)
-  // Route stdio to parent console (if any) or create one.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableLogging)) {
-    base::RouteStdioToConsole(true);
-  }
-#endif
 
   base::MessageLoop message_loop(base::MessageLoop::TYPE_UI);
 
@@ -440,6 +432,14 @@ int Main(const MainParams& params) {
     }
     return exit_code;
   }
+
+#if defined(OS_WIN)
+  // Route stdio to parent console (if any) or create one.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kEnableLogging)) {
+    base::RouteStdioToConsole(true);
+  }
+#endif
 
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           ::switches::kTraceToConsole)) {

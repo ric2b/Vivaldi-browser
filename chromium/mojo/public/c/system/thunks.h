@@ -30,16 +30,10 @@ struct MojoSystemThunks {
       MojoHandle* message_pipe_handle0,
       MojoHandle* message_pipe_handle1);
   MojoResult (*WriteMessage)(MojoHandle message_pipe_handle,
-                             const void* bytes,
-                             uint32_t num_bytes,
-                             const MojoHandle* handles,
-                             uint32_t num_handles,
+                             MojoMessageHandle message_handle,
                              MojoWriteMessageFlags flags);
   MojoResult (*ReadMessage)(MojoHandle message_pipe_handle,
-                            void* bytes,
-                            uint32_t* num_bytes,
-                            MojoHandle* handles,
-                            uint32_t* num_handles,
+                            MojoMessageHandle* message_handle,
                             MojoReadMessageFlags flags);
   MojoResult (*CreateDataPipe)(const struct MojoCreateDataPipeOptions* options,
                                MojoHandle* data_pipe_producer_handle,
@@ -83,6 +77,7 @@ struct MojoSystemThunks {
   MojoResult (*Watch)(MojoHandle watcher_handle,
                       MojoHandle handle,
                       MojoHandleSignals signals,
+                      MojoWatchCondition condition,
                       uintptr_t context);
   MojoResult (*CancelWatch)(MojoHandle watcher_handle, uintptr_t context);
   MojoResult (*ArmWatcher)(MojoHandle watcher_handle,
@@ -91,22 +86,33 @@ struct MojoSystemThunks {
                            MojoResult* ready_results,
                            MojoHandleSignalsState* ready_signals_states);
   MojoResult (*FuseMessagePipes)(MojoHandle handle0, MojoHandle handle1);
-  MojoResult (*WriteMessageNew)(MojoHandle message_pipe_handle,
-                                MojoMessageHandle message,
-                                MojoWriteMessageFlags flags);
-  MojoResult (*ReadMessageNew)(MojoHandle message_pipe_handle,
-                               MojoMessageHandle* message,
-                               uint32_t* num_bytes,
-                               MojoHandle* handles,
-                               uint32_t* num_handles,
-                               MojoReadMessageFlags flags);
-  MojoResult (*AllocMessage)(uint32_t num_bytes,
-                             const MojoHandle* handles,
-                             uint32_t num_handles,
-                             MojoAllocMessageFlags flags,
-                             MojoMessageHandle* message);
-  MojoResult (*FreeMessage)(MojoMessageHandle message);
-  MojoResult (*GetMessageBuffer)(MojoMessageHandle message, void** buffer);
+  MojoResult (*CreateMessage)(MojoMessageHandle* message);
+  MojoResult (*DestroyMessage)(MojoMessageHandle message);
+  MojoResult (*SerializeMessage)(MojoMessageHandle message);
+  MojoResult (*AttachSerializedMessageBuffer)(MojoMessageHandle message,
+                                              uint32_t payload_size,
+                                              const MojoHandle* handles,
+                                              uint32_t num_handles,
+                                              void** buffer,
+                                              uint32_t* buffer_size);
+  MojoResult (*ExtendSerializedMessagePayload)(MojoMessageHandle message,
+                                               uint32_t new_payload_size,
+                                               void** buffer,
+                                               uint32_t* buffer_size);
+  MojoResult (*GetSerializedMessageContents)(
+      MojoMessageHandle message,
+      void** buffer,
+      uint32_t* num_bytes,
+      MojoHandle* handles,
+      uint32_t* num_handles,
+      MojoGetSerializedMessageContentsFlags flags);
+  MojoResult (*AttachMessageContext)(MojoMessageHandle message,
+                                     uintptr_t context,
+                                     MojoMessageContextSerializer serializer,
+                                     MojoMessageContextDestructor destructor);
+  MojoResult (*GetMessageContext)(MojoMessageHandle message,
+                                  uintptr_t* context,
+                                  MojoGetMessageContextFlags flags);
   MojoResult (*WrapPlatformHandle)(
       const struct MojoPlatformHandle* platform_handle,
       MojoHandle* mojo_handle);
@@ -116,12 +122,14 @@ struct MojoSystemThunks {
   MojoResult (*WrapPlatformSharedBufferHandle)(
       const struct MojoPlatformHandle* platform_handle,
       size_t num_bytes,
+      const struct MojoSharedBufferGuid* guid,
       MojoPlatformSharedBufferHandleFlags flags,
       MojoHandle* mojo_handle);
   MojoResult (*UnwrapPlatformSharedBufferHandle)(
       MojoHandle mojo_handle,
       struct MojoPlatformHandle* platform_handle,
       size_t* num_bytes,
+      struct MojoSharedBufferGuid* guid,
       MojoPlatformSharedBufferHandleFlags* flags);
   MojoResult (*NotifyBadMessage)(MojoMessageHandle message,
                                  const char* error,
@@ -142,7 +150,7 @@ typedef size_t (*MojoSetSystemThunksFn)(
 
 // A function for setting up the embedder's own system thunks. This should only
 // be called by Mojo embedder code.
-MOJO_SYSTEM_EXPORT size_t MojoEmbedderSetSystemThunks(
-    const struct MojoSystemThunks* system_thunks);
+MOJO_SYSTEM_EXPORT size_t
+MojoEmbedderSetSystemThunks(const struct MojoSystemThunks* system_thunks);
 
 #endif  // MOJO_PUBLIC_C_SYSTEM_THUNKS_H_

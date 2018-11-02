@@ -98,26 +98,6 @@ void LayoutTableRow::StyleDidChange(StyleDifference diff,
   }
 }
 
-BorderValue LayoutTableRow::BorderAdjoiningStartCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  // FIXME: https://webkit.org/b/79272 - Add support for mixed directionality at
-  // the cell level.
-  return Style()->BorderStart();
-}
-
-BorderValue LayoutTableRow::BorderAdjoiningEndCell(
-    const LayoutTableCell* cell) const {
-#if DCHECK_IS_ON()
-  DCHECK(cell->IsFirstOrLastCellInRow());
-#endif
-  // FIXME: https://webkit.org/b/79272 - Add support for mixed directionality at
-  // the cell level.
-  return Style()->BorderEnd();
-}
-
 void LayoutTableRow::AddChild(LayoutObject* child, LayoutObject* before_child) {
   if (!child->IsTableCell()) {
     LayoutObject* last = before_child;
@@ -328,23 +308,16 @@ void LayoutTableRow::AddOverflowFromCell(const LayoutTableCell* cell) {
   AddContentsVisualOverflow(cell_visual_overflow_rect);
 
   LayoutRect cell_layout_overflow_rect =
-      cell->LayoutOverflowRectForPropagation();
+      cell->LayoutOverflowRectForPropagation(this);
   cell_layout_overflow_rect.Move(cell_row_offset);
   AddLayoutOverflow(cell_layout_overflow_rect);
 }
 
-bool LayoutTableRow::IsFirstRowInSectionAfterHeader() const {
-  // If there isn't room on the page for at least one content row after the
-  // header group, then we won't repeat the header on each page.
-  // https://drafts.csswg.org/css-tables-3/#repeated-headers reads like
-  // it wants us to drop headers on only the pages that a single row
-  // won't fit but we avoid the complexity of that reading until it
-  // is clarified. Tracked by crbug.com/675904
-  if (RowIndex())
-    return false;
-  LayoutTableSection* header = Table()->Header();
-  return header && Table()->SectionAbove(Section()) == header &&
-         header->GetPaginationBreakability() != kAllowAnyBreaks;
+bool LayoutTableRow::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
+  return LayoutTableBoxComponent::
+             PaintedOutputOfObjectHasNoEffectRegardlessOfSize() &&
+         // Row paints collapsed borders.
+         !Table()->HasCollapsedBorders();
 }
 
 }  // namespace blink

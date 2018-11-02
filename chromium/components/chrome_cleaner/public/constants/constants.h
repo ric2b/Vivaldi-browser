@@ -33,12 +33,6 @@ extern const char kChromeSystemInstallSwitch[];
 // The Chrome version string.
 extern const char kChromeVersionSwitch[];
 
-// Indicates whether logs upload is enabled in the cleaner process. Should be
-// set by Chrome only be set if user has opted into Safe Browsing Extended
-// Reporting v2. Takes effect only if execution mode is not
-// ExecutionMode::kNone.
-extern const char kEnableCleanerLoggingSwitch[];
-
 // Indicates that crash reporting is enabled for the current user.
 extern const char kEnableCrashReportingSwitch[];
 
@@ -54,6 +48,7 @@ extern const char kEngineSwitch[];
 extern const char kExecutionModeSwitch[];
 
 // Indicates that the current user opted into Safe Browsing Extended Reporting.
+// This should not be used by non-legacy-mode Chrome Cleanup Tool.
 extern const char kExtendedSafeBrowsingEnabledSwitch[];
 
 // Specifies the suffix to the registry path where metrics data will be saved.
@@ -78,6 +73,9 @@ extern const wchar_t kSoftwareRemovalToolRegistryKey[];
 extern const wchar_t kCleanerSubKey[];
 // The suffix for registry key paths where scan times will be written to.
 extern const wchar_t kScanTimesSubKey[];
+
+// Registry value names that indicate if a cleanup has completed.
+extern const wchar_t kCleanupCompletedValueName[];
 
 // Registry value names where metrics are written to.
 extern const wchar_t kEndTimeValueName[];
@@ -112,17 +110,15 @@ enum class ExecutionMode {
   // will show its own UI and handle logs uploading permissions.
   kNone = 0,
   // The cleaner will run in scanning mode. No UI will be shown to the user
-  // (UI handled by Chrome) and logs will only be uploaded if the user opted
-  // into Extended Safe Browsing Reporting.
+  // (UI handled by Chrome) and logs will not be uploaded.
   kScanning = 1,
-  // The cleaner will run in cleanup mode only. No UI will be shown to the
-  // user (UI handled by Chrome) and logs will only be uploaded if the user
-  // opted into Extended Safe Browsing Reporting v2.
+  // The cleaner will run in cleaning mode. No UI will be shown to the user
+  // (UI handled by Chrome) and logs will be uploaded if the user did not opt
+  // out of logs collection when it was offered by the Chrome UI.
+  // Chrome should not try to launch the Chrome Cleanup Tool with |kCleanup|.
+  // It should instead communicate through IPC with the cleaner launched with
+  // |kScanning| to ask it to start cleanup.
   kCleanup = 2,
-  // The cleaner will run in post-reboot validation mode. No UI will be shown
-  // to the user and logs will only be uploaded if the user opted into Extended
-  // Safe Browsing Reporting v2.
-  kPostRebootValidation = 3,
 
   // Auxiliary enumerator for range checking.
   kNumValues,

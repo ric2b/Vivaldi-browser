@@ -194,6 +194,10 @@ bool MimeHandlerViewGuest::ZoomPropagatesFromEmbedderToGuest() const {
   return false;
 }
 
+bool MimeHandlerViewGuest::ShouldDestroyOnDetach() const {
+  return true;
+}
+
 WebContents* MimeHandlerViewGuest::OpenURLFromTab(
     WebContents* source,
     const content::OpenURLParams& params) {

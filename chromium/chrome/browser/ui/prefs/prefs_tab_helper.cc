@@ -27,7 +27,6 @@
 #include "chrome/common/pref_font_webkit_names.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/pref_names_util.h"
-#include "chrome/grit/locale_settings.h"
 #include "chrome/grit/platform_locale_settings.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
@@ -57,10 +56,6 @@
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 #include "chrome/browser/themes/theme_service.h"
 #include "chrome/browser/themes/theme_service_factory.h"
-#endif
-
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
 #endif
 
 using content::WebContents;
@@ -167,8 +162,7 @@ bool ShouldUseAlternateDefaultFixedFont(const std::string& script) {
     return false;
   UINT smooth_type = 0;
   SystemParametersInfo(SPI_GETFONTSMOOTHINGTYPE, 0, &smooth_type, 0);
-  return (base::win::GetVersion() >= base::win::VERSION_WIN7) &&
-         (smooth_type == FE_FONTSMOOTHINGCLEARTYPE);
+  return smooth_type == FE_FONTSMOOTHINGCLEARTYPE;
 }
 #endif
 

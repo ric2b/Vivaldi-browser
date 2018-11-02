@@ -17,6 +17,10 @@
 #include "net/cookies/cookie_store_unittest.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace net {
 
 struct InactiveCookieStoreIOSTestTraits {
@@ -30,6 +34,7 @@ struct InactiveCookieStoreIOSTestTraits {
   static const bool preserves_trailing_dots = true;
   static const bool filters_schemes = false;
   static const bool has_path_prefix_bug = false;
+  static const bool forbids_setting_empty_name = false;
   static const int creation_time_granularity_in_ms = 0;
   static const int enforces_prefixes = true;
   static const bool enforce_strict_secure = false;
@@ -62,10 +67,11 @@ class CookieStoreIOSPersistentTest : public testing::Test {
   ~CookieStoreIOSPersistentTest() override {}
 
   // Gets the cookies. |callback| will be called on completion.
-  void GetCookies(const net::CookieStore::GetCookiesCallback& callback) {
+  void GetCookies(net::CookieStore::GetCookiesCallback callback) {
     net::CookieOptions options;
     options.set_include_httponly();
-    store_->GetCookiesWithOptionsAsync(kTestCookieURL, options, callback);
+    store_->GetCookiesWithOptionsAsync(kTestCookieURL, options,
+                                       std::move(callback));
   }
 
   // Sets a cookie.
@@ -118,7 +124,8 @@ TEST_F(CookieStoreIOSPersistentTest, SetCookieCallsHook) {
 TEST_F(CookieStoreIOSPersistentTest, NotSynchronized) {
   // Start fetching the cookie.
   GetCookieCallback callback;
-  GetCookies(base::Bind(&GetCookieCallback::Run, base::Unretained(&callback)));
+  GetCookies(
+      base::BindOnce(&GetCookieCallback::Run, base::Unretained(&callback)));
   // Backend loading completes.
   backend_->RunLoadedCallback();
   EXPECT_TRUE(callback.did_run());

@@ -42,6 +42,7 @@
     *   [get_target_outputs: [file list] Get the list of outputs from a target.](#get_target_outputs)
     *   [getenv: Get an environment variable.](#getenv)
     *   [import: Import a file into the current scope.](#import)
+    *   [not_needed: Mark variables from scope as not needed.](#not_needed)
     *   [pool: Defines a pool object.](#pool)
     *   [print: Prints to the console.](#print)
     *   [process_file_template: Do template expansion over a list of files.](#process_file_template)
@@ -96,12 +97,12 @@
     *   [code_signing_sources: [file list] Sources for code signing step.](#code_signing_sources)
     *   [complete_static_lib: [boolean] Links all deps into a static library.](#complete_static_lib)
     *   [configs: [label list] Configs applying to this target or config.](#configs)
-    *   [console: [boolean] Run this action in the console pool.](#console)
     *   [data: [file list] Runtime data file dependencies.](#data)
     *   [data_deps: [label list] Non-linked dependencies.](#data_deps)
     *   [defines: [string list] C preprocessor defines.](#defines)
     *   [depfile: [string] File name for input dependencies for actions.](#depfile)
     *   [deps: [label list] Private linked dependencies.](#deps)
+    *   [xcode_extra_attributes: [scope] Extra attributes for Xcode projects.](#depfile)
     *   [include_dirs: [directory list] Additional include directories.](#include_dirs)
     *   [inputs: [file list] Additional compile-time dependencies.](#inputs)
     *   [ldflags: [string list] Flags passed to the linker.](#ldflags)
@@ -112,6 +113,7 @@
     *   [output_name: [string] Name for the output file other than the default.](#output_name)
     *   [output_prefix_override: [boolean] Don't use prefix for output name.](#output_prefix_override)
     *   [outputs: [file list] Output files for actions and copy targets.](#outputs)
+    *   [pool: [string] Label of the pool used by the action.](#pool)
     *   [precompiled_header: [string] Header file to precompile.](#precompiled_header)
     *   [precompiled_header_type: [string] "gcc" or "msvc".](#precompiled_header_type)
     *   [precompiled_source: [file name] Source file to precompile.](#precompiled_source)
@@ -122,6 +124,7 @@
     *   [response_file_contents: [string list] Contents of .rsp file for actions.](#response_file_contents)
     *   [script: [file name] Script file for actions.](#script)
     *   [sources: [file list] Source files for a target.](#sources)
+    *   [xcode_test_application_name: [string] Xcode test application name for unit or ui test.](#xcode_test_application_name)
     *   [testonly: [boolean] Declares a target must only be used for testing.](#testonly)
     *   [visibility: [label list] A list of labels that can depend on a target.](#visibility)
     *   [write_runtime_deps: Writes the target's runtime_deps to the given path.](#write_runtime_deps)
@@ -598,7 +601,7 @@
 ### <a name="gen:"></a>**gn gen**: Generate ninja files.
 
 ```
-  gn gen [<ide options>] <out_dir>
+  gn gen [--check] [<ide options>] <out_dir>
 
   Generates ninja files from the current tree and puts them in the given output
   directory.
@@ -607,6 +610,9 @@
       //out/foo
   Or it can be a directory relative to the current directory such as:
       out/foo
+
+  "gn gen --check" is the same as running "gn check". See "gn help check"
+  for documentation on that mode.
 
   See "gn help switches" for the common command-line switches.
 ```
@@ -645,6 +651,11 @@
   --no-deps
       Don't include targets dependencies to the solution. Changes the way how
       --filters option works. Only directly matching targets are included.
+
+  --winsdk=<sdk_version>
+      Use the specified Windows 10 SDK version to generate project files.
+      As an example, "10.0.15063.0" can be specified to use Creators Update SDK
+      instead of the default one.
 ```
 
 #### **Xcode Flags**
@@ -688,9 +699,10 @@
 #### **Generic JSON Output**
 
 ```
-  Dumps target information to JSON file and optionally invokes python script on
-  generated file. See comments at the beginning of json_project_writer.cc and
-  desc_builder.cc for overview of JSON file format.
+  Dumps target information to a JSON file and optionally invokes a
+  python script on the generated file. See the comments at the beginning
+  of json_project_writer.cc and desc_builder.cc for an overview of the JSON
+  file format.
 
   --json-file-name=<json_file_name>
       Overrides default file name (project.json) of generated JSON file.
@@ -1030,7 +1042,7 @@
 #### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
+  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
   response_file_contents, script*, sources
   * = required
 ```
@@ -1108,7 +1120,7 @@
 #### **Variables**
 
 ```
-  args, console, data, data_deps, depfile, deps, inputs, outputs*,
+  args, data, data_deps, depfile, deps, inputs, outputs*, pool,
   response_file_contents, script*, sources*
   * = required
 ```
@@ -1337,6 +1349,11 @@
           bundle_resources_dir = bundle_root_dir
           bundle_executable_dir = bundle_root_dir
           bundle_plugins_dir = bundle_root_dir + "/Plugins"
+
+          xcode_extra_attributes = {
+            ONLY_ACTIVE_ARCH = "YES"
+            DEBUG_INFORMATION_FORMAT = "dwarf"
+          }
         } else {
           bundle_root_dir = "${root_build_dir}/target_name/Contents"
           bundle_resources_dir = bundle_root_dir + "/Resources"
@@ -1385,7 +1402,8 @@
   Deps: data_deps, deps, public_deps
   Dependent configs: all_dependent_configs, public_configs
   General: check_includes, configs, data, inputs, output_name,
-           output_extension, public, sources, testonly, visibility
+           output_extension, public, sources, testonly, visibility,
+           xcode_extra_attributes
 ```
 ### <a name="group"></a>**group**: Declare a named group of targets.
 
@@ -1932,7 +1950,7 @@
   get_label_info(":foo", "name")
   # Returns string "foo".
 
-  get_label_info("//foo/bar:baz", "gen_dir")
+  get_label_info("//foo/bar:baz", "target_gen_dir")
   # Returns string "//out/Debug/gen/foo/bar".
 ```
 ### <a name="get_path_info"></a>**get_path_info**: Extract parts of a file or directory name.
@@ -2126,6 +2144,27 @@
 
   # Looks in the current directory.
   import("my_vars.gni")
+```
+### <a name="not_needed"></a>**not_needed**: Mark variables from scope as not needed.
+
+```
+  not_needed(variable_list_or_star, variable_to_ignore_list = [])
+  not_needed(from_scope, variable_list_or_star,
+             variable_to_ignore_list = [])
+
+  Mark the variables in the current or given scope as not needed, which means
+  you will not get an error about unused variables for these. The
+  variable_to_ignore_list allows excluding variables from "all matches" if
+  variable_list_or_star is "*".
+```
+
+#### **Example**
+
+```
+  not_needed("*", [ "config" ])
+  not_needed([ "data_deps", "deps" ])
+  not_needed(invoker, "*", [ "config" ])
+  not_needed(invoker, [ "data_deps", "deps" ])
 ```
 ### <a name="pool"></a>**pool**: Defines a pool object.
 
@@ -2582,6 +2621,22 @@
   would have a dependency on the action to make it run.
 ```
 
+#### **Overriding builtin targets**
+
+```
+  You can use template to redefine a built-in target in which case your template
+  takes a precedence over the built-in one. All uses of the target from within
+  the template definition will refer to the built-in target which makes it
+  possible to extend the behavior of the built-in target:
+
+    template("shared_library") {
+      shared_library(shlib) {
+        forward_variables_from(invoker, [ "*" ])
+        ...
+      }
+    }
+```
+
 #### **Example of defining a template**
 
 ```
@@ -2686,6 +2741,7 @@
     Other tools:
       "stamp": Tool for creating stamp files
       "copy": Tool to copy files.
+      "action": Defaults for actions
 
     Platform specific tools:
       "copy_bundle_data": [iOS, OS X] Tool to copy files in a bundle.
@@ -2696,7 +2752,7 @@
 
 ```
     command  [string with substitutions]
-        Valid for: all tools (required)
+        Valid for: all tools except "action" (required)
 
         The command to run.
 
@@ -2796,6 +2852,7 @@
           ]
 
     pool [label, optional]
+        Valid for: all tools (optional)
 
         Label of the pool to use for the tool. Pools are used to limit the
         number of tasks that can execute concurrently during the build.
@@ -2866,13 +2923,13 @@
           restat = true
 
     rspfile  [string with substitutions]
-        Valid for: all tools (optional)
+        Valid for: all tools except "action" (optional)
 
         Name of the response file. If empty, no response file will be
         used. See "rspfile_content".
 
     rspfile_content  [string with substitutions]
-        Valid for: all tools (required when "rspfile" is specified)
+        Valid for: all tools except "action" (required when "rspfile" is used)
 
         The contents to be written to the response file. This may include all
         or part of the command to send to the tool which allows you to get
@@ -4279,27 +4336,6 @@
     }
   }
 ```
-### <a name="console"></a>**console**: Run this action in the console pool.
-
-```
-  Boolean. Defaults to false.
-
-  Actions marked "console = true" will be run in the built-in ninja "console"
-  pool. They will have access to real stdin and stdout, and output will not be
-  buffered by ninja. This can be useful for long-running actions with progress
-  logs, or actions that require user input.
-
-  Only one console pool target can run at any one time in Ninja. Refer to the
-  Ninja documentation on the console pool for more info.
-```
-
-#### **Example**
-
-```
-  action("long_action_with_progress_logs") {
-    console = true
-  }
-```
 ### <a name="data"></a>**data**: Runtime data file dependencies.
 
 ```
@@ -4458,6 +4494,26 @@
   "gn help runtime_deps".
 
   See also "public_deps".
+```
+### <a name="xcode_extra_attributes"></a>**xcode_extra_attributes**: Extra attributes for Xcode projects.
+
+```
+  The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
+  property of the generated Xcode project. They are only meaningful when
+  generating with --ide=xcode.
+
+  See "gn help create_bundle" for more information.
+```
+
+#### **Example**
+
+```
+  create_bundle("chrome") {
+    xcode_extra_attributes = {
+      ONLY_ACTIVE_ARCH = "YES"
+    }
+    ...
+  }
 ```
 ### <a name="include_dirs"></a>**include_dirs**: Additional include directories.
 
@@ -4845,6 +4901,21 @@
     Action targets (excluding action_foreach) must list literal output file(s)
     with no source expansions. See "gn help action".
 ```
+### <a name="pool"></a>**pool**: Label of the pool used by the action.
+
+```
+  A fully-qualified label representing the pool that will be used for the
+  action. Pools are defined using the pool() {...} declaration.
+```
+
+#### **Example**
+
+```
+  action("action") {
+    pool = "//build:custom_pool"
+    ...
+  }
+```
 ### <a name="precompiled_header"></a>**precompiled_header**: [string] Header file to precompile.
 
 ```
@@ -5111,7 +5182,7 @@
   For binary targets (source sets, executables, and libraries), the known file
   types will be compiled with the associated tools. Unknown file types and
   headers will be skipped. However, you should still list all C/C+ header files
-  so GN knows about the existance of those files for the purposes of include
+  so GN knows about the existence of those files for the purposes of include
   checking.
 
   As a special case, a file ending in ".def" will be treated as a Windows
@@ -5135,6 +5206,24 @@
 
   copy
     The source are the source files to copy.
+```
+### <a name="xcode_test_application_name"></a>**xcode_test_application_name**: Xcode test application name for unit or ui test target.
+
+```
+  Each Xcode unit and ui test target must have a test application target, and
+  this value is used to specify the relationship. Only meaningful to Xcode
+  (used as part of the Xcode project generation).
+
+  See "gn help create_bundle" for more information.
+```
+
+#### **Example**
+
+```
+  create_bundle("chrome_xctest") {
+    xcode_test_application_name = "chrome"
+    ...
+  }
 ```
 ### <a name="testonly"></a>**testonly**: Declares a target must only be used for testing.
 
@@ -5357,6 +5446,11 @@
       Label of the root build target. The GN build will start by loading the
       build file containing this target name. This defaults to "//:" which will
       cause the file //BUILD.gn to be loaded.
+
+  script_executable [optional]
+      Path to specific Python executable or potentially a different language
+      interpreter that is used to execute scripts in action targets and
+      exec_script calls.
 
   secondary_source [optional]
       Label of an alternate directory tree to find input files. When searching

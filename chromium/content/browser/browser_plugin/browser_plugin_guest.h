@@ -51,15 +51,15 @@ struct BrowserPluginHostMsg_SetComposition_Params;
 struct FrameHostMsg_ShowPopup_Params;
 #endif
 
-namespace cc {
-class SurfaceId;
-class SurfaceInfo;
-struct SurfaceSequence;
-}  // namespace cc
-
 namespace gfx {
 class Range;
 }  // namespace gfx
+
+namespace viz {
+class SurfaceId;
+class SurfaceInfo;
+struct SurfaceSequence;
+}  // namespace viz
 
 namespace content {
 
@@ -237,7 +237,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void EmbedderSystemDragEnded();
   void EndSystemDragIfApplicable();
 
-  // Vivaldi: We need to change the delegate when we use the content from the tab-strip.
+  // Vivaldi: We need to change the delegate when we use the content from the
+  // tab-strip.
   void set_delegate(BrowserPluginGuestDelegate* delegate) {
     DCHECK(delegate_);
     delegate_ = delegate;
@@ -256,8 +257,8 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   gfx::Rect guest_window_rect(){return guest_window_rect_;}
 
   // The next function is virtual for test purposes.
-  virtual void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
-                                    const cc::SurfaceSequence& sequence);
+  virtual void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
+                                    const viz::SurfaceSequence& sequence);
 
   void ResendEventToEmbedder(const blink::WebInputEvent& event);
 
@@ -296,10 +297,10 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
   void InitInternal(const BrowserPluginHostMsg_Attach_Params& params,
                     WebContentsImpl* owner_web_contents);
 
-  void OnSatisfySequence(int instance_id, const cc::SurfaceSequence& sequence);
+  void OnSatisfySequence(int instance_id, const viz::SurfaceSequence& sequence);
   void OnRequireSequence(int instance_id,
-                         const cc::SurfaceId& id,
-                         const cc::SurfaceSequence& sequence);
+                         const viz::SurfaceId& id,
+                         const viz::SurfaceSequence& sequence);
   // Message handlers for messages from embedder.
   void OnDetach(int instance_id);
   // Handles drag events from the embedder.
@@ -317,7 +318,6 @@ class CONTENT_EXPORT BrowserPluginGuest : public GuestHost,
                             const std::string& command);
 
   void OnLockMouse(bool user_gesture,
-                   bool last_unlocked_by_target,
                    bool privileged);
   void OnLockMouseAck(int instance_id, bool succeeded);
   // Resizes the guest's web contents.

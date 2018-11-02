@@ -12,6 +12,8 @@
 // The a11y ID of the tools menu table view (used by integration tests).
 extern NSString* const kToolsMenuTableViewId;
 
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 @class ToolsMenuConfiguration;
 
 // The view controller for the tools menu within the top toolbar.
@@ -23,7 +25,9 @@ extern NSString* const kToolsMenuTableViewId;
 
 // Initializes the popup with the given |configuration|, a set of information
 // used to determine the appearance of the menu and the entries displayed.
-- (instancetype)initWithConfiguration:(ToolsMenuConfiguration*)configuration;
+- (instancetype)initWithConfiguration:(ToolsMenuConfiguration*)configuration
+                           dispatcher:(id<ApplicationCommands, BrowserCommands>)
+                                          dispatcher;
 
 // Called when the current tab loading state changes.
 - (void)setIsTabLoading:(BOOL)isTabLoading;

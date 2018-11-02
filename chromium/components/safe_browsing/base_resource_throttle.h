@@ -13,6 +13,7 @@
 #include "base/timer/timer.h"
 #include "components/safe_browsing/base_ui_manager.h"
 #include "components/safe_browsing_db/database_manager.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "components/security_interstitials/content/unsafe_resource.h"
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/common/resource_type.h"
@@ -50,15 +51,6 @@ class BaseResourceThrottle
       public SafeBrowsingDatabaseManager::Client,
       public base::SupportsWeakPtr<BaseResourceThrottle> {
  public:
-  // Construct a BaseResourceThrottle, or return nullptr if we
-  // cannot access the safe browsing API on Android
-  static BaseResourceThrottle* MaybeCreate(
-      net::URLRequest* request,
-      content::ResourceType resource_type,
-      scoped_refptr<SafeBrowsingDatabaseManager>
-          database_manager,
-      scoped_refptr<BaseUIManager> ui_manager);
-
   // content::ResourceThrottle implementation (called on IO thread):
   void WillStartRequest(bool* defer) override;
   void WillRedirectRequest(const net::RedirectInfo& redirect_info,
@@ -74,12 +66,16 @@ class BaseResourceThrottle
       SBThreatType threat_type,
       const ThreatMetadata& metadata) override;
 
+  // Called on the IO thread when the user has decided to proceed with the
+  // current request, or go back.
+  void OnBlockingPageComplete(bool proceed);
+
  protected:
   BaseResourceThrottle(
       const net::URLRequest* request,
       content::ResourceType resource_type,
-      scoped_refptr<SafeBrowsingDatabaseManager>
-          database_manager,
+      SBThreatTypeSet threat_types,
+      scoped_refptr<SafeBrowsingDatabaseManager> database_manager,
       scoped_refptr<BaseUIManager> ui_manager);
 
   ~BaseResourceThrottle() override;
@@ -104,6 +100,18 @@ class BaseResourceThrottle
   // page, but may be overridden in a subclass.
   virtual void CancelResourceLoad();
 
+  // Starts displaying the safe browsing interstitial page. Called on the UI
+  // thread.
+  static void StartDisplayingBlockingPage(
+      const base::WeakPtr<BaseResourceThrottle>& throttle,
+      scoped_refptr<BaseUIManager> ui_manager,
+      const security_interstitials::UnsafeResource& resource);
+
+  // Starts running |url| through the safe browsing check. Returns true if the
+  // URL is safe to visit. Otherwise returns false and will call
+  // OnBrowseUrlResult() when the check has completed.
+  virtual bool CheckUrl(const GURL& url);
+
   scoped_refptr<BaseUIManager> ui_manager();
 
  private:
@@ -126,27 +134,16 @@ class BaseResourceThrottle
     DEFERRED_PROCESSING,
   };
 
+  // Checks if |url| is one of the hardcoded WebUI match URLs. Returns true if
+  // the URL is one of the hardcoded URLs and will post a task to
+  // OnCheckBrowseUrlResult.
+  bool CheckWebUIUrls(const GURL& url);
+
   scoped_refptr<BaseUIManager> ui_manager_;
-
-  // Called on the IO thread when the user has decided to proceed with the
-  // current request, or go back.
-  void OnBlockingPageComplete(bool proceed);
-
-  // Starts running |url| through the safe browsing check. Returns true if the
-  // URL is safe to visit. Otherwise returns false and will call
-  // OnBrowseUrlResult() when the check has completed.
-  bool CheckUrl(const GURL& url);
 
   // Callback for when the safe browsing check (which was initiated by
   // StartCheckingUrl()) has taken longer than kCheckUrlTimeoutMs.
   void OnCheckUrlTimeout();
-
-  // Starts displaying the safe browsing interstitial page. Called on the UI
-  // thread.
-  static void StartDisplayingBlockingPage(
-      const base::WeakPtr<BaseResourceThrottle>& throttle,
-      scoped_refptr<BaseUIManager> ui_manager,
-      const security_interstitials::UnsafeResource& resource);
 
   void ResumeRequest();
 
@@ -177,6 +174,7 @@ class BaseResourceThrottle
   GURL unchecked_redirect_url_;
   GURL url_being_checked_;
 
+  const SBThreatTypeSet threat_types_;
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
   const net::URLRequest* request_;
 

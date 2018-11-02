@@ -6,6 +6,8 @@
 #define BASE_TEST_SCOPED_FEATURE_LIST_H_
 
 #include <initializer_list>
+#include <memory>
+#include <string>
 
 #include "base/feature_list.h"
 
@@ -32,30 +34,43 @@ class ScopedFeatureList final {
   ScopedFeatureList();
   ~ScopedFeatureList();
 
+  // WARNING: This method will reset any globally configured features to their
+  // default values, which can hide feature interaction bugs. Please use
+  // sparingly.  https://crbug.com/713390
   // Initializes and registers a FeatureList instance with no overrides.
   void Init();
 
+  // WARNING: This method will reset any globally configured features to their
+  // default values, which can hide feature interaction bugs. Please use
+  // sparingly.  https://crbug.com/713390
   // Initializes and registers the given FeatureList instance.
   void InitWithFeatureList(std::unique_ptr<FeatureList> feature_list);
 
-  // Initializes and registers a FeatureList instance with the given enabled
-  // and disabled features.
-  void InitWithFeatures(
-      const std::initializer_list<base::Feature>& enabled_features,
-      const std::initializer_list<base::Feature>& disabled_features);
-
-  // Initializes and registers a FeatureList instance with the given
+  // WARNING: This method will reset any globally configured features to their
+  // default values, which can hide feature interaction bugs. Please use
+  // sparingly.  https://crbug.com/713390
+  // Initializes and registers a FeatureList instance with only the given
   // enabled and disabled features (comma-separated names).
   void InitFromCommandLine(const std::string& enable_features,
                            const std::string& disable_features);
 
-  // Initializes and registers a FeatureList instance enabling a single
-  // feature.
-  void InitAndEnableFeature(const base::Feature& feature);
+  // Initializes and registers a FeatureList instance based on present
+  // FeatureList and overridden with the given enabled and disabled features.
+  // Any feature overrides already present in the global FeatureList will
+  // continue to apply, unless they conflict with the overrides passed into this
+  // method. This is important for testing potentially unexpected feature
+  // interactions.
+  void InitWithFeatures(
+      const std::initializer_list<Feature>& enabled_features,
+      const std::initializer_list<Feature>& disabled_features);
 
-  // Initializes and registers a FeatureList instance disabling a single
-  // feature.
-  void InitAndDisableFeature(const base::Feature& feature);
+  // Initializes and registers a FeatureList instance based on present
+  // FeatureList and overridden with single enabled feature.
+  void InitAndEnableFeature(const Feature& feature);
+
+  // Initializes and registers a FeatureList instance based on present
+  // FeatureList and overridden with single disabled feature.
+  void InitAndDisableFeature(const Feature& feature);
 
  private:
   std::unique_ptr<FeatureList> original_feature_list_;

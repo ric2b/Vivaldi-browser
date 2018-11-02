@@ -13,61 +13,87 @@
 namespace blink {
 
 class ResourceFetcher;
+class SubresourceFilter;
 class WebTaskRunner;
 class WebURLLoader;
 class WebWorkerFetchContext;
-class WorkerGlobalScope;
 class WorkerClients;
+class WorkerOrWorkletGlobalScope;
 
 CORE_EXPORT void ProvideWorkerFetchContextToWorker(
     WorkerClients*,
     std::unique_ptr<WebWorkerFetchContext>);
 
 // The WorkerFetchContext is a FetchContext for workers (dedicated, shared and
-// service workers). This class is used only when off-main-thread-fetch is
-// enabled, and is still under development.
+// service workers) and threaded worklets (animation and audio worklets). This
+// class is used only when off-main-thread-fetch is enabled, and is still under
+// development.
 // TODO(horo): Implement all methods of FetchContext. crbug.com/443374
 class WorkerFetchContext final : public BaseFetchContext {
  public:
-  static WorkerFetchContext* Create(WorkerGlobalScope&);
+  static WorkerFetchContext* Create(WorkerOrWorkletGlobalScope&);
   virtual ~WorkerFetchContext();
 
-  ResourceFetcher* GetResourceFetcher();
-  KURL FirstPartyForCookies() const;
+  RefPtr<WebTaskRunner> GetTaskRunner() { return loading_task_runner_; }
 
   // BaseFetchContext implementation:
-  ContentSettingsClient* GetContentSettingsClient() const override;
-  Settings* GetSettings() const override;
+  KURL GetFirstPartyForCookies() const override;
+  bool AllowScriptFromSource(const KURL&) const override;
   SubresourceFilter* GetSubresourceFilter() const override;
-  SecurityContext* GetParentSecurityContext() const override;
   bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason) const override;
   bool ShouldBypassMainWorldCSP() const override;
   bool IsSVGImageChromeClient() const override;
-  void CountUsage(UseCounter::Feature) const override;
-  void CountDeprecation(UseCounter::Feature) const override;
+  void CountUsage(WebFeature) const override;
+  void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
       const ResourceRequest&,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
+  bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
+                                                 const KURL&) const override;
+  ReferrerPolicy GetReferrerPolicy() const override;
+  String GetOutgoingReferrer() const override;
+  const KURL& Url() const override;
+  const SecurityOrigin* GetParentSecurityOrigin() const override;
+  Optional<WebAddressSpace> GetAddressSpace() const override;
+  const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
+  void AddConsoleMessage(ConsoleMessage*) const override;
 
   // FetchContext implementation:
-  // TODO(horo): Implement more methods.
-  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
+  SecurityOrigin* GetSecurityOrigin() const override;
+  std::unique_ptr<WebURLLoader> CreateURLLoader(
+      const ResourceRequest&) override;
   void PrepareRequest(ResourceRequest&, RedirectType) override;
   bool IsControlledByServiceWorker() const override;
-  RefPtr<WebTaskRunner> LoadingTaskRunner() const override;
-
+  int ApplicationCacheHostID() const override;
   void AddAdditionalRequestHeaders(ResourceRequest&,
                                    FetchResourceType) override;
+  void DispatchWillSendRequest(unsigned long,
+                               ResourceRequest&,
+                               const ResourceResponse&,
+                               const FetchInitiatorInfo&) override;
   void DispatchDidReceiveResponse(unsigned long identifier,
                                   const ResourceResponse&,
                                   WebURLRequest::FrameType,
                                   WebURLRequest::RequestContext,
                                   Resource*,
                                   ResourceResponseType) override;
+  void DispatchDidReceiveData(unsigned long identifier,
+                              const char* data,
+                              int dataLength) override;
+  void DispatchDidReceiveEncodedData(unsigned long identifier,
+                                     int encodedDataLength) override;
+  void DispatchDidFinishLoading(unsigned long identifier,
+                                double finishTime,
+                                int64_t encodedDataLength,
+                                int64_t decodedBodyLength) override;
+  void DispatchDidFail(unsigned long identifier,
+                       const ResourceError&,
+                       int64_t encodedDataLength,
+                       bool isInternalRequest) override;
   void AddResourceTiming(const ResourceTimingInfo&) override;
   void PopulateResourceRequest(const KURL&,
                                Resource::Type,
@@ -81,11 +107,12 @@ class WorkerFetchContext final : public BaseFetchContext {
   DECLARE_VIRTUAL_TRACE();
 
  private:
-  WorkerFetchContext(WorkerGlobalScope&,
+  WorkerFetchContext(WorkerOrWorkletGlobalScope&,
                      std::unique_ptr<WebWorkerFetchContext>);
 
-  Member<WorkerGlobalScope> worker_global_scope_;
+  Member<WorkerOrWorkletGlobalScope> global_scope_;
   std::unique_ptr<WebWorkerFetchContext> web_context_;
+  Member<SubresourceFilter> subresource_filter_;
   Member<ResourceFetcher> resource_fetcher_;
   RefPtr<WebTaskRunner> loading_task_runner_;
 };

@@ -365,14 +365,19 @@ void PacmanFramePainter::DrawPacman(base::TimeDelta elapsed_time,
 
 FakePhotoDevice::FakePhotoDevice(
     std::unique_ptr<PacmanFramePainter> sk_n32_painter,
-    const FakeDeviceState* fake_device_state)
+    const FakeDeviceState* fake_device_state,
+    const FakePhotoDeviceConfig& config)
     : sk_n32_painter_(std::move(sk_n32_painter)),
-      fake_device_state_(fake_device_state) {}
+      fake_device_state_(fake_device_state),
+      config_(config) {}
 
 FakePhotoDevice::~FakePhotoDevice() = default;
 
 void FakePhotoDevice::TakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
                                 base::TimeDelta elapsed_time) {
+  if (config_.should_fail_take_photo)
+    return;
+
   // Create a PNG-encoded frame and send it back to |callback|.
   auto required_sk_n32_buffer_size = VideoFrame::AllocationSize(
       PIXEL_FORMAT_ARGB, fake_device_state_->format.frame_size);
@@ -438,65 +443,75 @@ void FakeVideoCaptureDevice::StopAndDeAllocate() {
   frame_deliverer_.reset();
 }
 
-void FakeVideoCaptureDevice::GetPhotoCapabilities(
-    GetPhotoCapabilitiesCallback callback) {
+void FakeVideoCaptureDevice::GetPhotoState(GetPhotoStateCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  photo_device_->GetPhotoCapabilities(std::move(callback));
+  photo_device_->GetPhotoState(std::move(callback));
 }
 
-void FakePhotoDevice::GetPhotoCapabilities(
-    VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) {
-  mojom::PhotoCapabilitiesPtr photo_capabilities =
-      mojom::PhotoCapabilities::New();
+void FakePhotoDevice::GetPhotoState(
+    VideoCaptureDevice::GetPhotoStateCallback callback) {
+  if (config_.should_fail_get_photo_capabilities)
+    return;
 
-  photo_capabilities->current_white_balance_mode = mojom::MeteringMode::NONE;
-  photo_capabilities->current_exposure_mode = mojom::MeteringMode::NONE;
-  photo_capabilities->current_focus_mode = mojom::MeteringMode::NONE;
+  mojom::PhotoStatePtr photo_state = mojom::PhotoState::New();
 
-  photo_capabilities->exposure_compensation = mojom::Range::New();
-  photo_capabilities->color_temperature = mojom::Range::New();
-  photo_capabilities->iso = mojom::Range::New();
-  photo_capabilities->iso->current = 100.0;
-  photo_capabilities->iso->max = 100.0;
-  photo_capabilities->iso->min = 100.0;
-  photo_capabilities->iso->step = 0.0;
+  photo_state->current_white_balance_mode = mojom::MeteringMode::NONE;
+  photo_state->current_exposure_mode = mojom::MeteringMode::NONE;
+  photo_state->current_focus_mode = mojom::MeteringMode::NONE;
 
-  photo_capabilities->brightness = media::mojom::Range::New();
-  photo_capabilities->contrast = media::mojom::Range::New();
-  photo_capabilities->saturation = media::mojom::Range::New();
-  photo_capabilities->sharpness = media::mojom::Range::New();
+  photo_state->exposure_compensation = mojom::Range::New();
+  photo_state->color_temperature = mojom::Range::New();
+  photo_state->iso = mojom::Range::New();
+  photo_state->iso->current = 100.0;
+  photo_state->iso->max = 100.0;
+  photo_state->iso->min = 100.0;
+  photo_state->iso->step = 0.0;
 
-  photo_capabilities->zoom = mojom::Range::New();
-  photo_capabilities->zoom->current = fake_device_state_->zoom;
-  photo_capabilities->zoom->max = kMaxZoom;
-  photo_capabilities->zoom->min = kMinZoom;
-  photo_capabilities->zoom->step = kZoomStep;
+  photo_state->brightness = media::mojom::Range::New();
+  photo_state->contrast = media::mojom::Range::New();
+  photo_state->saturation = media::mojom::Range::New();
+  photo_state->sharpness = media::mojom::Range::New();
 
-  photo_capabilities->supports_torch = false;
-  photo_capabilities->torch = false;
+  photo_state->zoom = mojom::Range::New();
+  photo_state->zoom->current = fake_device_state_->zoom;
+  photo_state->zoom->max = kMaxZoom;
+  photo_state->zoom->min = kMinZoom;
+  photo_state->zoom->step = kZoomStep;
 
-  photo_capabilities->red_eye_reduction = mojom::RedEyeReduction::NEVER;
-  photo_capabilities->height = mojom::Range::New();
-  photo_capabilities->height->current =
-      fake_device_state_->format.frame_size.height();
-  photo_capabilities->height->max = 1080.0;
-  photo_capabilities->height->min = 96.0;
-  photo_capabilities->height->step = 1.0;
-  photo_capabilities->width = mojom::Range::New();
-  photo_capabilities->width->current =
-      fake_device_state_->format.frame_size.width();
-  photo_capabilities->width->max = 1920.0;
-  photo_capabilities->width->min = 96.0;
-  photo_capabilities->width->step = 1.0;
+  photo_state->supports_torch = false;
+  photo_state->torch = false;
 
-  callback.Run(std::move(photo_capabilities));
+  photo_state->red_eye_reduction = mojom::RedEyeReduction::NEVER;
+  photo_state->height = mojom::Range::New();
+  photo_state->height->current = fake_device_state_->format.frame_size.height();
+  photo_state->height->max = 1080.0;
+  photo_state->height->min = 96.0;
+  photo_state->height->step = 1.0;
+  photo_state->width = mojom::Range::New();
+  photo_state->width->current = fake_device_state_->format.frame_size.width();
+  photo_state->width->max = 1920.0;
+  photo_state->width->min = 96.0;
+  photo_state->width->step = 1.0;
+
+  callback.Run(std::move(photo_state));
 }
 
 void FakeVideoCaptureDevice::SetPhotoOptions(mojom::PhotoSettingsPtr settings,
                                              SetPhotoOptionsCallback callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
+  photo_device_->SetPhotoOptions(std::move(settings), std::move(callback),
+                                 device_state_.get());
+}
+
+void FakePhotoDevice::SetPhotoOptions(
+    mojom::PhotoSettingsPtr settings,
+    VideoCaptureDevice::SetPhotoOptionsCallback callback,
+    FakeDeviceState* device_state_write_access) {
+  if (config_.should_fail_set_photo_options)
+    return;
+
   if (settings->has_zoom) {
-    device_state_->zoom =
+    device_state_write_access->zoom =
         std::max(kMinZoom, std::min(settings->zoom, kMaxZoom));
   }
 
@@ -591,17 +606,13 @@ void JpegEncodingFrameDeliverer::PaintAndDeliverNextFrame(
   frame_painter()->PaintFrame(timestamp_to_paint, &sk_n32_buffer_[0]);
 
   static const int kQuality = 75;
-  const gfx::JPEGCodec::ColorFormat encoding_source_format =
-      (kN32_SkColorType == kRGBA_8888_SkColorType)
-          ? gfx::JPEGCodec::FORMAT_RGBA
-          : gfx::JPEGCodec::FORMAT_BGRA;
-  bool success = gfx::JPEGCodec::Encode(
-      &sk_n32_buffer_[0], encoding_source_format,
+  SkImageInfo info = SkImageInfo::MakeN32(
       device_state()->format.frame_size.width(),
-      device_state()->format.frame_size.height(),
-      VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
-                           device_state()->format.frame_size.width()),
-      kQuality, &jpeg_buffer_);
+      device_state()->format.frame_size.height(), kOpaque_SkAlphaType);
+  SkPixmap src(info, &sk_n32_buffer_[0],
+               VideoFrame::RowBytes(0 /* plane */, PIXEL_FORMAT_ARGB,
+                                    device_state()->format.frame_size.width()));
+  bool success = gfx::JPEGCodec::Encode(src, kQuality, &jpeg_buffer_);
   if (!success) {
     DLOG(ERROR) << "Jpeg encoding failed";
     return;

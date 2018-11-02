@@ -13,13 +13,11 @@ DataUse::DataUse(TrafficType traffic_type)
 
 DataUse::~DataUse() {}
 
-void DataUse::MergeFrom(const DataUse& other) {
-  // Traffic type need not be same while merging. One of the data use created
-  // when mainframe is created could have UNKNOWN traffic type, and later merged
-  // with the data use created for its mainframe request which could be
-  // USER_TRAFFIC.
-  total_bytes_sent_ += other.total_bytes_sent_;
-  total_bytes_received_ += other.total_bytes_received_;
+void DataUse::IncrementTotalBytes(int64_t bytes_received, int64_t bytes_sent) {
+  total_bytes_received_ += bytes_received;
+  total_bytes_sent_ += bytes_sent;
+  DCHECK_LE(0, total_bytes_received_);
+  DCHECK_LE(0, total_bytes_sent_);
 }
 
 }  // namespace data_use_measurement

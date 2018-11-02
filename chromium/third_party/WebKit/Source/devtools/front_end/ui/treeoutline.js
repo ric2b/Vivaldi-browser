@@ -188,12 +188,10 @@ UI.TreeOutline = class extends Common.Object {
     var nextSelectedElement = this.selectedTreeElement.traversePreviousTreeElement(true);
     while (nextSelectedElement && !nextSelectedElement.selectable)
       nextSelectedElement = nextSelectedElement.traversePreviousTreeElement(!this.expandTreeElementsWhenArrowing);
-    if (nextSelectedElement) {
-      nextSelectedElement.reveal();
-      nextSelectedElement.select(false, true);
-      return true;
-    }
-    return false;
+    if (!nextSelectedElement)
+      return false;
+    nextSelectedElement.select(false, true);
+    return true;
   }
 
   /**
@@ -203,12 +201,10 @@ UI.TreeOutline = class extends Common.Object {
     var nextSelectedElement = this.selectedTreeElement.traverseNextTreeElement(true);
     while (nextSelectedElement && !nextSelectedElement.selectable)
       nextSelectedElement = nextSelectedElement.traverseNextTreeElement(!this.expandTreeElementsWhenArrowing);
-    if (nextSelectedElement) {
-      nextSelectedElement.reveal();
-      nextSelectedElement.select(false, true);
-      return true;
-    }
-    return false;
+    if (!nextSelectedElement)
+      return false;
+    nextSelectedElement.select(false, true);
+    return true;
   }
 
   /**
@@ -929,13 +925,10 @@ UI.TreeElement = class {
     while (nextSelectedElement && !nextSelectedElement.selectable)
       nextSelectedElement = nextSelectedElement.parent;
 
-    if (nextSelectedElement) {
-      nextSelectedElement.reveal();
-      nextSelectedElement.select(false, true);
-      return true;
-    }
-
-    return false;
+    if (!nextSelectedElement)
+      return false;
+    nextSelectedElement.select(false, true);
+    return true;
   }
 
   /**
@@ -958,13 +951,10 @@ UI.TreeElement = class {
     while (nextSelectedElement && !nextSelectedElement.selectable)
       nextSelectedElement = nextSelectedElement.nextSibling;
 
-    if (nextSelectedElement) {
-      nextSelectedElement.reveal();
-      nextSelectedElement.select(false, true);
-      return true;
-    }
-
-    return false;
+    if (!nextSelectedElement)
+      return false;
+    nextSelectedElement.select(false, true);
+    return true;
   }
 
   /**
@@ -1008,13 +998,15 @@ UI.TreeElement = class {
   select(omitFocus, selectedByUser) {
     if (!this.treeOutline || !this.selectable || this.selected)
       return false;
-
-    if (this.treeOutline.selectedTreeElement)
-      this.treeOutline.selectedTreeElement.deselect();
+    // Wait to deselect this element so that focus only changes once
+    var lastSelected = this.treeOutline.selectedTreeElement;
     this.treeOutline.selectedTreeElement = null;
 
-    if (this.treeOutline._rootElement === this)
+    if (this.treeOutline._rootElement === this) {
+      if (lastSelected)
+        lastSelected.deselect();
       return false;
+    }
 
     this.selected = true;
 
@@ -1026,6 +1018,8 @@ UI.TreeElement = class {
 
     this._listItemNode.classList.add('selected');
     this.treeOutline.dispatchEventToListeners(UI.TreeOutline.Events.ElementSelected, this);
+    if (lastSelected)
+      lastSelected.deselect();
     return this.onselect(selectedByUser);
   }
 

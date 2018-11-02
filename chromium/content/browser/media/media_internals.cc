@@ -19,8 +19,6 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
 #include "build/build_config.h"
-#include "components/ukm/public/ukm_entry_builder.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "content/browser/renderer_host/media/media_stream_manager.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -34,6 +32,8 @@
 #include "media/base/media_log_event.h"
 #include "media/base/watch_time_keys.h"
 #include "media/filters/gpu_video_decoder.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 #if !defined(OS_ANDROID)
 #include "media/filters/decrypting_video_decoder.h"
@@ -407,7 +407,12 @@ class MediaInternals::MediaInternalsUMAHandler {
     }
   }
 
-  enum class FinalizeType { EVERYTHING, POWER_ONLY, CONTROLS_ONLY };
+  enum class FinalizeType {
+    EVERYTHING,
+    POWER_ONLY,
+    CONTROLS_ONLY,
+    DISPLAY_ONLY
+  };
   void FinalizeWatchTime(bool has_video,
                          const GURL& url,
                          int* underflow_count,
@@ -444,6 +449,10 @@ class MediaInternals::MediaInternalsUMAHandler {
         RecordWatchTimeWithFilter(url, watch_time_info,
                                   watch_time_controls_keys_);
         break;
+      case FinalizeType::DISPLAY_ONLY:
+        RecordWatchTimeWithFilter(url, watch_time_info,
+                                  watch_time_display_keys_);
+        break;
     }
   }
 
@@ -465,6 +474,9 @@ class MediaInternals::MediaInternalsUMAHandler {
   // Set of only the controls related watch time keys.
   const base::flat_set<base::StringPiece> watch_time_controls_keys_;
 
+  // Set of only the display related watch time keys.
+  const base::flat_set<base::StringPiece> watch_time_display_keys_;
+
   // Mapping of WatchTime metric keys to MeanTimeBetweenRebuffers (MTBR) and
   // smooth rate (had zero rebuffers) keys.
   struct RebufferMapping {
@@ -484,6 +496,7 @@ MediaInternals::MediaInternalsUMAHandler::MediaInternalsUMAHandler(
     : watch_time_keys_(media::GetWatchTimeKeys()),
       watch_time_power_keys_(media::GetWatchTimePowerKeys()),
       watch_time_controls_keys_(media::GetWatchTimeControlsKeys()),
+      watch_time_display_keys_(media::GetWatchTimeDisplayKeys()),
       rebuffer_keys_(
           {{media::kWatchTimeAudioSrc, media::kMeanTimeBetweenRebuffersAudioSrc,
             media::kRebuffersCountAudioSrc},
@@ -632,6 +645,17 @@ void MediaInternals::MediaInternalsUMAHandler::SavePlayerState(
                             &player_info.watch_time_info,
                             FinalizeType::CONTROLS_ONLY);
         }
+
+        if (event.params.HasKey(media::kWatchTimeFinalizeDisplay)) {
+          bool should_finalize;
+          DCHECK(event.params.GetBoolean(media::kWatchTimeFinalizeDisplay,
+                                         &should_finalize) &&
+                 should_finalize);
+          FinalizeWatchTime(player_info.has_video, player_info.origin_url,
+                            &player_info.underflow_count,
+                            &player_info.watch_time_info,
+                            FinalizeType::DISPLAY_ONLY);
+        }
       }
       break;
     }
@@ -768,6 +792,10 @@ MediaInternals::MediaInternals()
     : can_update_(false),
       owner_ids_(),
       uma_handler_(new MediaInternalsUMAHandler(this)) {
+  // TODO(sandersd): Is there ever a relevant case where TERMINATED is sent
+  // without CLOSED also being sent?
+  registrar_.Add(this, NOTIFICATION_RENDERER_PROCESS_CLOSED,
+                 NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, NOTIFICATION_RENDERER_PROCESS_TERMINATED,
                  NotificationService::AllBrowserContextsAndSources());
 }
@@ -778,10 +806,9 @@ void MediaInternals::Observe(int type,
                              const NotificationSource& source,
                              const NotificationDetails& details) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK_EQ(type, NOTIFICATION_RENDERER_PROCESS_TERMINATED);
   RenderProcessHost* process = Source<RenderProcessHost>(source).ptr();
-
   uma_handler_->OnProcessTerminated(process->GetID());
+  // TODO(sandersd): Send a termination event before clearing the log.
   saved_events_by_process_.erase(process->GetID());
 }
 
@@ -814,7 +841,7 @@ static bool ConvertEventToUpdate(int render_process_id,
     dict.SetString("params.pipeline_error",
                    media::MediaLog::PipelineStatusToString(error));
   } else {
-    dict.Set("params", event.params.DeepCopy());
+    dict.Set("params", base::MakeUnique<base::Value>(event.params));
   }
 
   *update = SerializeUpdate("media.onMediaEvent", &dict);
@@ -906,7 +933,7 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
   video_capture_capabilities_cached_data_.Clear();
 
   for (const auto& device_format_pair : descriptors_and_formats) {
-    base::ListValue* format_list = new base::ListValue();
+    auto format_list = base::MakeUnique<base::ListValue>();
     // TODO(nisse): Representing format information as a string, to be
     // parsed by the javascript handler, is brittle. Consider passing
     // a list of mappings instead.
@@ -922,7 +949,7 @@ void MediaInternals::UpdateVideoCaptureDeviceCapabilities(
         new base::DictionaryValue());
     device_dict->SetString("id", descriptor.device_id);
     device_dict->SetString("name", descriptor.GetNameAndModel());
-    device_dict->Set("formats", format_list);
+    device_dict->Set("formats", std::move(format_list));
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX) || \
     defined(OS_ANDROID)
     device_dict->SetString("captureApi", descriptor.GetCaptureApiTypeString());
@@ -969,28 +996,26 @@ void MediaInternals::SaveEvent(int process_id,
                                const media::MediaLogEvent& event) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  // Do not save instantaneous events that happen frequently and have little
-  // value in the future.
-  if (event.type == media::MediaLogEvent::NETWORK_ACTIVITY_SET ||
-      event.type == media::MediaLogEvent::BUFFERED_EXTENTS_CHANGED) {
-    return;
-  }
+// Save the event and limit the total number per renderer. At the time of
+// writing, 512 events of the kind: { "property": value } together consume
+// ~88kb of memory on linux.
+#if defined(OS_ANDROID)
+  const size_t kEventLimit = 128;
+#else
+  const size_t kEventLimit = 512;
+#endif
 
-  // Save the event and limit the total number per renderer. At the time of
-  // writing, 512 events of the kind: { "property": value } together consume
-  // ~88kb of memory on linux.
-  std::list<media::MediaLogEvent>& saved_events =
-      saved_events_by_process_[process_id];
+  auto& saved_events = saved_events_by_process_[process_id];
   saved_events.push_back(event);
-  if (saved_events.size() > 512) {
+  if (saved_events.size() > kEventLimit) {
     // Remove all events for a given player as soon as we have to remove a
     // single event for that player to avoid showing incomplete players.
-    int id_to_remove = saved_events.front().id;
-    auto new_end = std::remove_if(saved_events.begin(), saved_events.end(),
-                                  [&](const media::MediaLogEvent& event) {
-                                    return event.id == id_to_remove;
-                                  });
-    saved_events.erase(new_end, saved_events.end());
+    const int id_to_remove = saved_events.front().id;
+    saved_events.erase(std::remove_if(saved_events.begin(), saved_events.end(),
+                                      [&](const media::MediaLogEvent& event) {
+                                        return event.id == id_to_remove;
+                                      }),
+                       saved_events.end());
   }
 }
 
@@ -1005,7 +1030,8 @@ void MediaInternals::UpdateAudioLog(AudioLogUpdateType type,
       return;
     } else if (!has_entry) {
       DCHECK_EQ(type, CREATE);
-      audio_streams_cached_data_.Set(cache_key, value->DeepCopy());
+      audio_streams_cached_data_.Set(cache_key,
+                                     base::MakeUnique<base::Value>(*value));
     } else if (type == UPDATE_AND_DELETE) {
       std::unique_ptr<base::Value> out_value;
       CHECK(audio_streams_cached_data_.Remove(cache_key, &out_value));

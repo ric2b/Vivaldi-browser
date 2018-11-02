@@ -17,11 +17,6 @@ using ::base::android::ConvertJavaStringToUTF8;
 
 }  // namespace
 
-// static
-bool JourneyLoggerAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 JourneyLoggerAndroid::JourneyLoggerAndroid(bool is_incognito,
                                            const std::string& url)
     : journey_logger_(is_incognito,
@@ -39,11 +34,13 @@ void JourneyLoggerAndroid::SetNumberOfSuggestionsShown(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller,
     jint jsection,
-    jint jnumber) {
+    jint jnumber,
+    jboolean jhas_complete_suggestion) {
   DCHECK_GE(jsection, 0);
   DCHECK_LT(jsection, JourneyLogger::Section::SECTION_MAX);
   journey_logger_.SetNumberOfSuggestionsShown(
-      static_cast<JourneyLogger::Section>(jsection), jnumber);
+      static_cast<JourneyLogger::Section>(jsection), jnumber,
+      jhas_complete_suggestion);
 }
 
 void JourneyLoggerAndroid::IncrementSelectionChanges(

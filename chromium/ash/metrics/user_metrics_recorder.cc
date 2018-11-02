@@ -7,15 +7,13 @@
 #include "ash/metrics/desktop_task_switch_metric_recorder.h"
 #include "ash/metrics/pointer_metrics_recorder.h"
 #include "ash/public/cpp/shelf_item.h"
+#include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
@@ -219,9 +217,6 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_ACCEL_SHUT_DOWN_POWER_BUTTON:
       RecordAction(UserMetricsAction("Accel_ShutDown_PowerButton"));
       break;
-    case UMA_CLOSE_THROUGH_CONTEXT_MENU:
-      RecordAction(UserMetricsAction("CloseFromContextMenu"));
-      break;
     case UMA_DESKTOP_SWITCH_TASK:
       RecordAction(UserMetricsAction("Desktop_SwitchTask"));
       task_switch_metrics_recorder_.OnTaskSwitch(TaskSwitchSource::DESKTOP);
@@ -363,44 +358,6 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_STATUS_AREA_DETAILED_VPN_VIEW:
       RecordAction(UserMetricsAction("StatusArea_VPN_Detailed"));
       break;
-    case UMA_STATUS_AREA_DISABLE_AUTO_CLICK:
-      RecordAction(UserMetricsAction("StatusArea_AutoClickDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_CARET_HIGHLIGHT:
-      RecordAction(UserMetricsAction("StatusArea_CaretHighlightDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_HIGH_CONTRAST:
-      RecordAction(UserMetricsAction("StatusArea_HighContrastDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_HIGHLIGHT_KEYBOARD_FOCUS:
-      RecordAction(
-          UserMetricsAction("StatusArea_HighlightKeyboardFocusDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_HIGHLIGHT_MOUSE_CURSOR:
-      RecordAction(
-          UserMetricsAction("StatusArea_HighlightMouseCursorDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_LARGE_CURSOR:
-      RecordAction(UserMetricsAction("StatusArea_LargeCursorDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_MAGNIFIER:
-      RecordAction(UserMetricsAction("StatusArea_MagnifierDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_MONO_AUDIO:
-      RecordAction(UserMetricsAction("StatusArea_MonoAudioDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_SPOKEN_FEEDBACK:
-      RecordAction(UserMetricsAction("StatusArea_SpokenFeedbackDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_STICKY_KEYS:
-      RecordAction(UserMetricsAction("StatusArea_StickyKeysDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_TAP_DRAGGING:
-      RecordAction(UserMetricsAction("StatusArea_TapDraggingDisabled"));
-      break;
-    case UMA_STATUS_AREA_DISABLE_VIRTUAL_KEYBOARD:
-      RecordAction(UserMetricsAction("StatusArea_VirtualKeyboardDisabled"));
-      break;
     case UMA_STATUS_AREA_DISPLAY_DEFAULT_SELECTED:
       RecordAction(UserMetricsAction("StatusArea_Display_Default_Selected"));
       break;
@@ -429,51 +386,8 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
     case UMA_STATUS_AREA_DRIVE_SETTINGS:
       RecordAction(UserMetricsAction("StatusArea_Drive_Settings"));
       break;
-    case UMA_STATUS_AREA_ENABLE_AUTO_CLICK:
-      RecordAction(UserMetricsAction("StatusArea_AutoClickEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_CARET_HIGHLIGHT:
-      RecordAction(UserMetricsAction("StatusArea_CaretHighlightEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_HIGH_CONTRAST:
-      RecordAction(UserMetricsAction("StatusArea_HighContrastEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_HIGHLIGHT_KEYBOARD_FOCUS:
-      RecordAction(
-          UserMetricsAction("StatusArea_HighlightKeyboardFocusEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_HIGHLIGHT_MOUSE_CURSOR:
-      RecordAction(UserMetricsAction("StatusArea_HighlightMouseCursorEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_LARGE_CURSOR:
-      RecordAction(UserMetricsAction("StatusArea_LargeCursorEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_MAGNIFIER:
-      RecordAction(UserMetricsAction("StatusArea_MagnifierEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_MONO_AUDIO:
-      RecordAction(UserMetricsAction("StatusArea_MonoAudioEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_SPOKEN_FEEDBACK:
-      RecordAction(UserMetricsAction("StatusArea_SpokenFeedbackEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_STICKY_KEYS:
-      RecordAction(UserMetricsAction("StatusArea_StickyKeysEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_TAP_DRAGGING:
-      RecordAction(UserMetricsAction("StatusArea_TapDraggingEnabled"));
-      break;
-    case UMA_STATUS_AREA_ENABLE_VIRTUAL_KEYBOARD:
-      RecordAction(UserMetricsAction("StatusArea_VirtualKeyboardEnabled"));
-      break;
     case UMA_STATUS_AREA_ENABLE_WIFI:
       RecordAction(UserMetricsAction("StatusArea_Network_WifiEnabled"));
-      break;
-    case UMA_STATUS_AREA_IME_SHOW_DETAILED:
-      RecordAction(UserMetricsAction("StatusArea_IME_Detailed"));
-      break;
-    case UMA_STATUS_AREA_IME_SWITCH_MODE:
-      RecordAction(UserMetricsAction("StatusArea_IME_SwitchMode"));
       break;
     case UMA_STATUS_AREA_MENU_OPENED:
       RecordAction(UserMetricsAction("StatusArea_MenuOpened"));
@@ -522,6 +436,12 @@ void UserMetricsRecorder::RecordUserMetricsAction(UserMetricsAction action) {
       break;
     case UMA_STATUS_AREA_VPN_SETTINGS_OPENED:
       RecordAction(UserMetricsAction("StatusArea_VPN_Settings"));
+      break;
+    case UMA_TABLET_WINDOW_CLOSE_THROUGH_CAPTION_BUTTON:
+      RecordAction(UserMetricsAction("Tablet_WindowCloseFromCaptionButton"));
+      break;
+    case UMA_TABLET_WINDOW_CLOSE_THROUGH_OVERVIEW_CLOSE_BUTTON:
+      RecordAction(UserMetricsAction("Tablet_WindowCloseFromOverviewButton"));
       break;
     case UMA_TOGGLE_MAXIMIZE_CAPTION_CLICK:
       RecordAction(UserMetricsAction("Caption_ClickTogglesMaximize"));

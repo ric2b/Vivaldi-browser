@@ -11,6 +11,7 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/flat_set.h"
 #include "base/containers/hash_tables.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
@@ -22,6 +23,7 @@ namespace gpu {
 namespace gles2 {
 
 class FeatureInfo;
+class Framebuffer;
 class RenderbufferManager;
 
 // Info about a Renderbuffer.
@@ -72,6 +74,15 @@ class GPU_EXPORT Renderbuffer
     return has_been_bound_ && !IsDeleted();
   }
 
+  // Regenerates the object backing this client_id, creating a new service_id.
+  // Also reattaches any framebuffers using this renderbuffer.
+  bool RegenerateAndBindBackingObjectIfNeeded();
+
+  void AddFramebufferAttachmentPoint(Framebuffer* framebuffer,
+                                     GLenum attachment);
+  void RemoveFramebufferAttachmentPoint(Framebuffer* framebuffer,
+                                        GLenum attachment);
+
   size_t EstimatedSize();
 
   size_t GetSignatureSize() const;
@@ -87,14 +98,10 @@ class GPU_EXPORT Renderbuffer
     cleared_ = cleared;
   }
 
-  void SetInfo(
-      GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height) {
-    samples_ = samples;
-    internal_format_ = internalformat;
-    width_ = width;
-    height_ = height;
-    cleared_ = false;
-  }
+  void SetInfoAndInvalidate(GLsizei samples,
+                            GLenum internalformat,
+                            GLsizei width,
+                            GLsizei height);
 
   void MarkAsDeleted() {
     client_id_ = 0;
@@ -112,6 +119,9 @@ class GPU_EXPORT Renderbuffer
   // Whether this renderbuffer has been cleared
   bool cleared_;
 
+  // Whether this renderbuffer has been allocated.
+  bool allocated_;
+
   // Whether this renderbuffer has ever been bound.
   bool has_been_bound_;
 
@@ -124,6 +134,11 @@ class GPU_EXPORT Renderbuffer
   // Dimensions of renderbuffer.
   GLsizei width_;
   GLsizei height_;
+
+  // Framebuffer objects that this renderbuffer is attached to
+  // (client ID, attachment).
+  base::flat_set<std::pair<Framebuffer*, GLenum>>
+      framebuffer_attachment_points_;
 };
 
 // This class keeps track of the renderbuffers and whether or not they have
@@ -149,9 +164,11 @@ class GPU_EXPORT RenderbufferManager
     return num_uncleared_renderbuffers_ != 0;
   }
 
-  void SetInfo(
-      Renderbuffer* renderbuffer,
-      GLsizei samples, GLenum internalformat, GLsizei width, GLsizei height);
+  void SetInfoAndInvalidate(Renderbuffer* renderbuffer,
+                            GLsizei samples,
+                            GLenum internalformat,
+                            GLsizei width,
+                            GLsizei height);
 
   void SetCleared(Renderbuffer* renderbuffer, bool cleared);
 

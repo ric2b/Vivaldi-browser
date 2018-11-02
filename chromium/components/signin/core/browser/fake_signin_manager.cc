@@ -31,7 +31,8 @@ FakeSigninManager::FakeSigninManager(
     : SigninManager(client,
                     token_service,
                     account_tracker_service,
-                    cookie_manager_service) {}
+                    cookie_manager_service),
+      token_service_(token_service) {}
 
 FakeSigninManager::~FakeSigninManager() {}
 
@@ -57,8 +58,9 @@ void FakeSigninManager::CompletePendingSignin() {
   SetAuthenticatedAccountId(GetAccountIdForAuthInProgress());
   set_auth_in_progress(std::string());
   for (auto& observer : observer_list_) {
-    observer.GoogleSigninSucceeded(authenticated_account_id_, username_,
-                                   password_);
+    observer.GoogleSigninSucceeded(authenticated_account_id_, username_);
+    observer.GoogleSigninSucceededWithPassword(authenticated_account_id_,
+                                               username_, password_);
   }
 }
 
@@ -91,6 +93,8 @@ void FakeSigninManager::SignOut(
   const std::string account_id = GetAuthenticatedAccountId();
   const std::string username = GetAuthenticatedAccountInfo().email;
   authenticated_account_id_.clear();
+  if (token_service_)
+    token_service_->RevokeAllCredentials();
 
   for (auto& observer : observer_list_)
     observer.GoogleSignedOut(account_id, username);

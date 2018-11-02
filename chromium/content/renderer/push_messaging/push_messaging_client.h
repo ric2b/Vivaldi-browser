@@ -13,7 +13,6 @@
 
 #include "base/macros.h"
 #include "content/common/push_messaging.mojom.h"
-#include "content/public/common/push_messaging_status.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "third_party/WebKit/public/platform/modules/push_messaging/WebPushClient.h"
 #include "third_party/WebKit/public/platform/modules/push_messaging/WebPushPermissionStatus.h"
@@ -25,6 +24,10 @@ struct WebPushSubscriptionOptions;
 }
 
 namespace content {
+
+namespace mojom {
+enum class PushRegistrationStatus;
+}
 
 struct Manifest;
 struct ManifestDebugInfo;
@@ -44,11 +47,13 @@ class PushMessagingClient : public RenderFrameObserver,
   void Subscribe(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       const blink::WebPushSubscriptionOptions& options,
+      bool user_gesture,
       std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks) override;
 
   void DidGetManifest(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       const blink::WebPushSubscriptionOptions& options,
+      bool user_gesture,
       std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks,
       const GURL& manifest_url,
       const Manifest& manifest,
@@ -57,13 +62,14 @@ class PushMessagingClient : public RenderFrameObserver,
   void DoSubscribe(
       blink::WebServiceWorkerRegistration* service_worker_registration,
       const PushSubscriptionOptions& options,
+      bool user_gesture,
       std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks);
 
   void DidSubscribe(
       std::unique_ptr<blink::WebPushSubscriptionCallbacks> callbacks,
-      content::PushRegistrationStatus status,
+      mojom::PushRegistrationStatus status,
       const base::Optional<GURL>& endpoint,
-      const base::Optional<content::PushSubscriptionOptions>& options,
+      const base::Optional<PushSubscriptionOptions>& options,
       const base::Optional<std::vector<uint8_t>>& p256dh,
       const base::Optional<std::vector<uint8_t>>& auth);
 

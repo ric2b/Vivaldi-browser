@@ -139,9 +139,7 @@ class TestDelegateBase : public BidirectionalStreamImpl::Delegate {
   }
 
   void SendData(IOBuffer* data, int length, bool end_of_stream) {
-    not_expect_callback_ = true;
-    stream_->SendData(data, length, end_of_stream);
-    not_expect_callback_ = false;
+    SendvData({data}, {length}, end_of_stream);
   }
 
   void SendvData(const std::vector<scoped_refptr<IOBuffer>>& data,
@@ -264,8 +262,7 @@ class BidirectionalStreamSpdyImplTest : public testing::TestWithParam<bool> {
     session_deps_.socket_factory->AddSocketDataProvider(sequenced_data_.get());
     session_deps_.net_log = net_log_.bound().net_log();
     http_session_ = SpdySessionDependencies::SpdyCreateSession(&session_deps_);
-    session_ =
-        CreateSecureSpdySession(http_session_.get(), key_, net_log_.bound());
+    session_ = CreateSpdySession(http_session_.get(), key_, net_log_.bound());
   }
 
   BoundTestNetLog net_log_;

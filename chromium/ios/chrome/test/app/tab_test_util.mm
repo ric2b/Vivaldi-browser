@@ -7,7 +7,6 @@
 #import <Foundation/Foundation.h>
 
 #import "base/mac/foundation_util.h"
-#import "base/mac/scoped_nsobject.h"
 #import "ios/chrome/app/main_controller_private.h"
 #import "ios/chrome/browser/autofill/form_input_accessory_view_controller.h"
 #include "ios/chrome/browser/experimental_flags.h"
@@ -16,11 +15,16 @@
 #import "ios/chrome/browser/tabs/tab_model.h"
 #import "ios/chrome/browser/tabs/tab_private.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
-#include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/tabs/tab_strip_controller_private.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/testing/wait_util.h"
+#import "ios/web/web_state/ui/crw_web_controller.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace chrome_test_util {
 
@@ -46,17 +50,15 @@ BOOL IsIncognitoMode() {
 
 void OpenNewTab() {
   @autoreleasepool {  // Make sure that all internals are deallocated.
-    base::scoped_nsobject<GenericChromeCommand> command(
-        [[GenericChromeCommand alloc] initWithTag:IDC_NEW_TAB]);
-    chrome_test_util::RunCommandWithActiveViewController(command);
+    OpenNewTabCommand* command = [OpenNewTabCommand command];
+    [chrome_test_util::DispatcherForActiveViewController() openNewTab:command];
   }
 }
 
 void OpenNewIncognitoTab() {
   @autoreleasepool {  // Make sure that all internals are deallocated.
-    base::scoped_nsobject<GenericChromeCommand> command(
-        [[GenericChromeCommand alloc] initWithTag:IDC_NEW_INCOGNITO_TAB]);
-    chrome_test_util::RunCommandWithActiveViewController(command);
+    OpenNewTabCommand* command = [OpenNewTabCommand incognitoTabCommand];
+    [chrome_test_util::DispatcherForActiveViewController() openNewTab:command];
   }
 }
 

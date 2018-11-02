@@ -682,6 +682,8 @@ PDFiumEngine::PDFiumEngine(PDFEngine::Client* client)
       selecting_(false),
       mouse_down_state_(PDFiumPage::NONSELECTABLE_AREA,
                         PDFiumPage::LinkTarget()),
+      in_form_text_area_(false),
+      mouse_left_button_down_(false),
       next_page_to_search_(-1),
       last_page_to_search_(-1),
       last_character_index_to_search_(-1),
@@ -780,16 +782,8 @@ PDFiumEngine::~PDFiumEngine() {
 
   if (doc_) {
     FORM_DoDocumentAAction(form_, FPDFDOC_AACTION_WC);
-
-#if defined(PDF_ENABLE_XFA)
-    // XFA may require |form_| to outlive |doc_|, so shut down in that order.
-    FPDF_CloseDocument(doc_);
-    FPDFDOC_ExitFormFillEnvironment(form_);
-#else
-    // Normally |doc_| should outlive |form_|.
     FPDFDOC_ExitFormFillEnvironment(form_);
     FPDF_CloseDocument(doc_);
-#endif
   }
   FPDFAvail_Destroy(fpdf_availability_);
 }
@@ -1424,16 +1418,20 @@ FPDF_DOCUMENT PDFiumEngine::CreateSinglePageRasterPdf(
   // page.
   FPDF_PAGEOBJECT temp_img = FPDFPageObj_NewImageObj(temp_doc);
 
+  bool encoded = false;
   std::vector<uint8_t> compressed_bitmap_data;
-  // Use quality = 40 as this does not significantly degrade the printed
-  // document relative to a normal bitmap and provides better compression than
-  // a higher quality setting.
-  const int quality = 40;
-  if (!(print_settings.format & PP_PRINTOUTPUTFORMAT_PDF) &&
-      (gfx::JPEGCodec::Encode(
-          bitmap_data, gfx::JPEGCodec::FORMAT_BGRA, FPDFBitmap_GetWidth(bitmap),
-          FPDFBitmap_GetHeight(bitmap), FPDFBitmap_GetStride(bitmap), quality,
-          &compressed_bitmap_data))) {
+  if (!(print_settings.format & PP_PRINTOUTPUTFORMAT_PDF)) {
+    // Use quality = 40 as this does not significantly degrade the printed
+    // document relative to a normal bitmap and provides better compression than
+    // a higher quality setting.
+    const int kQuality = 40;
+    SkImageInfo info = SkImageInfo::Make(
+        FPDFBitmap_GetWidth(bitmap), FPDFBitmap_GetHeight(bitmap),
+        kBGRA_8888_SkColorType, kOpaque_SkAlphaType);
+    SkPixmap src(info, bitmap_data, FPDFBitmap_GetStride(bitmap));
+    encoded = gfx::JPEGCodec::Encode(src, kQuality, &compressed_bitmap_data);
+  }
+  if (encoded) {
     FPDF_FILEACCESS file_access = {};
     file_access.m_FileLen =
         static_cast<unsigned long>(compressed_bitmap_data.size());
@@ -1536,7 +1534,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsRasterPDF(
   return buffer;
 }
 
-pp::Buffer_Dev PDFiumEngine::GetFlattenedPrintData(const FPDF_DOCUMENT& doc) {
+pp::Buffer_Dev PDFiumEngine::GetFlattenedPrintData(FPDF_DOCUMENT doc) {
   pp::Buffer_Dev buffer;
   ScopedSubstFont scoped_subst_font(this);
   int page_count = FPDF_GetPageCount(doc);
@@ -1612,7 +1610,7 @@ pp::Buffer_Dev PDFiumEngine::PrintPagesAsPDF(
 }
 
 void PDFiumEngine::FitContentsToPrintableAreaIfRequired(
-    const FPDF_DOCUMENT& doc,
+    FPDF_DOCUMENT doc,
     const PP_PrintSettings_Dev& print_settings) {
   // Check to see if we need to fit pdf contents to printer paper size.
   if (print_settings.print_scaling_option !=
@@ -1631,7 +1629,34 @@ void PDFiumEngine::FitContentsToPrintableAreaIfRequired(
 
 void PDFiumEngine::SaveSelectedFormForPrint() {
   FORM_ForceToKillFocus(form_);
-  client_->FormTextFieldFocusChange(false);
+  SetInFormTextArea(false);
+}
+
+void PDFiumEngine::SetFormSelectedText(FPDF_FORMHANDLE form_handle,
+                                       FPDF_PAGE page) {
+  unsigned long form_sel_text_len =
+      FORM_GetSelectedText(form_handle, page, nullptr, 0);
+
+  // If form selected text is empty and there was no previous form text
+  // selection, exit early because nothing has changed. When |form_sel_text_len|
+  // is 2, that represents a wide string with just a NUL-terminator.
+  if (form_sel_text_len <= 2 && selected_form_text_.empty())
+    return;
+
+  base::string16 selected_form_text16;
+  PDFiumAPIStringBufferSizeInBytesAdapter<base::string16> string_adapter(
+      &selected_form_text16, form_sel_text_len, false);
+  string_adapter.Close(FORM_GetSelectedText(
+      form_handle, page, string_adapter.GetData(), form_sel_text_len));
+
+  // Update previous and current selections, then compare them to check if
+  // selection has changed. If so, set plugin text selection.
+  std::string selected_form_text = selected_form_text_;
+  selected_form_text_ = base::UTF16ToUTF8(selected_form_text16);
+  if (selected_form_text != selected_form_text_) {
+    DCHECK(in_form_text_area_);
+    pp::PDF::SetSelectedText(GetPluginInstance(), selected_form_text_.c_str());
+  }
 }
 
 void PDFiumEngine::PrintEnd() {
@@ -1700,7 +1725,10 @@ bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
     return false;
   }
 
-  SelectionChangeInvalidator selection_invalidator(this);
+  SetMouseLeftButtonDown(event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT);
+
+  auto selection_invalidator =
+      base::MakeUnique<SelectionChangeInvalidator>(this);
   selection_.clear();
 
   int page_index = -1;
@@ -1728,18 +1756,29 @@ bool PDFiumEngine::OnMouseDown(const pp::MouseInputEvent& event) {
 
     FORM_OnLButtonDown(form_, pages_[page_index]->GetPage(), 0, page_x, page_y);
     if (form_type > FPDF_FORMFIELD_UNKNOWN) {  // returns -1 sometimes...
-      mouse_down_state_.Set(PDFiumPage::NONSELECTABLE_AREA, target);
+      mouse_down_state_.Set(PDFiumPage::FormTypeToArea(form_type), target);
+
+      // Destroy SelectionChangeInvalidator object before SetInFormTextArea()
+      // changes plugin's focus to be in form text area. This way, regular text
+      // selection can be cleared when a user clicks into a form text area
+      // because the pp::PDF::SetSelectedText() call in
+      // ~SelectionChangeInvalidator() still goes to the Mimehandler
+      // (not the Renderer).
+      selection_invalidator.reset();
+
       bool is_valid_control = (form_type == FPDF_FORMFIELD_TEXTFIELD ||
                                form_type == FPDF_FORMFIELD_COMBOBOX);
+
+// TODO(bug_62400): figure out selection and copying
+// for XFA fields
 #if defined(PDF_ENABLE_XFA)
       is_valid_control |= (form_type == FPDF_FORMFIELD_XFA);
 #endif
-      client_->FormTextFieldFocusChange(is_valid_control);
+      SetInFormTextArea(is_valid_control);
       return true;  // Return now before we get into the selection code.
     }
   }
-
-  client_->FormTextFieldFocusChange(false);
+  SetInFormTextArea(false);
 
   if (area != PDFiumPage::TEXT_AREA)
     return true;  // Return true so WebKit doesn't do its own highlighting.
@@ -1792,6 +1831,9 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
     return false;
   }
 
+  if (event.GetButton() == PP_INPUTEVENT_MOUSEBUTTON_LEFT)
+    SetMouseLeftButtonDown(false);
+
   int page_index = -1;
   int char_index = -1;
   int form_type = FPDF_FORMFIELD_UNKNOWN;
@@ -1814,12 +1856,12 @@ bool PDFiumEngine::OnMouseUp(const pp::MouseInputEvent& event) {
           middle_button, alt_key, ctrl_key, meta_key, shift_key);
 
       client_->NavigateTo(target.url, disposition);
-      client_->FormTextFieldFocusChange(false);
+      SetInFormTextArea(false);
       return true;
     }
     if (area == PDFiumPage::DOCLINK_AREA) {
       client_->ScrollToPage(target.page);
-      client_->FormTextFieldFocusChange(false);
+      SetInFormTextArea(false);
       return true;
     }
   }
@@ -1866,6 +1908,7 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
         cursor = PP_CURSORTYPE_HAND;
         break;
       case PDFiumPage::NONSELECTABLE_AREA:
+      case PDFiumPage::FORM_TEXT_AREA:
       default:
         switch (form_type) {
           case FPDF_FORMFIELD_PUSHBUTTON:
@@ -1898,6 +1941,14 @@ bool PDFiumEngine::OnMouseMove(const pp::MouseInputEvent& event) {
       link_under_cursor_ = url;
       pp::PDF::SetLinkUnderCursor(GetPluginInstance(), url.c_str());
     }
+
+    // If in form text area while left mouse button is held down, check if form
+    // text selection needs to be updated.
+    if (mouse_left_button_down_ && area == PDFiumPage::FORM_TEXT_AREA &&
+        last_page_mouse_down_ != -1) {
+      SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
+    }
+
     // No need to swallow the event, since this might interfere with the
     // scrollbars if the user is dragging them.
     return false;
@@ -1998,6 +2049,11 @@ bool PDFiumEngine::OnKeyDown(const pp::KeyboardInputEvent& event) {
 bool PDFiumEngine::OnKeyUp(const pp::KeyboardInputEvent& event) {
   if (last_page_mouse_down_ == -1)
     return false;
+
+  // Check if form text selection needs to be updated.
+  if (in_form_text_area_) {
+    SetFormSelectedText(form_, pages_[last_page_mouse_down_]->GetPage());
+  }
 
   return !!FORM_OnKeyUp(form_, pages_[last_page_mouse_down_]->GetPage(),
                         event.GetKeyCode(), event.GetModifiers());
@@ -2390,6 +2446,9 @@ bool PDFiumEngine::HasPermission(DocumentPermission permission) const {
 }
 
 void PDFiumEngine::SelectAll() {
+  if (in_form_text_area_)
+    return;
+
   SelectionChangeInvalidator selection_invalidator(this);
 
   selection_.clear();
@@ -3227,10 +3286,9 @@ void PDFiumEngine::Highlight(void* buffer,
 
 PDFiumEngine::SelectionChangeInvalidator::SelectionChangeInvalidator(
     PDFiumEngine* engine)
-    : engine_(engine) {
-  previous_origin_ = engine_->GetVisibleRect().point();
-  GetVisibleSelectionsScreenRects(&old_selections_);
-}
+    : engine_(engine),
+      previous_origin_(engine_->GetVisibleRect().point()),
+      old_selections_(GetVisibleSelections()) {}
 
 PDFiumEngine::SelectionChangeInvalidator::~SelectionChangeInvalidator() {
   // Offset the old selections if the document scrolled since we recorded them.
@@ -3238,8 +3296,7 @@ PDFiumEngine::SelectionChangeInvalidator::~SelectionChangeInvalidator() {
   for (auto& old_selection : old_selections_)
     old_selection.Offset(offset);
 
-  std::vector<pp::Rect> new_selections;
-  GetVisibleSelectionsScreenRects(&new_selections);
+  std::vector<pp::Rect> new_selections = GetVisibleSelections();
   for (auto& new_selection : new_selections) {
     for (auto& old_selection : old_selections_) {
       if (!old_selection.IsEmpty() && new_selection == old_selection) {
@@ -3251,30 +3308,44 @@ PDFiumEngine::SelectionChangeInvalidator::~SelectionChangeInvalidator() {
     }
   }
 
+  bool selection_changed = false;
   for (const auto& old_selection : old_selections_) {
-    if (!old_selection.IsEmpty())
-      engine_->client_->Invalidate(old_selection);
+    if (!old_selection.IsEmpty()) {
+      Invalidate(old_selection);
+      selection_changed = true;
+    }
   }
   for (const auto& new_selection : new_selections) {
-    if (!new_selection.IsEmpty())
-      engine_->client_->Invalidate(new_selection);
+    if (!new_selection.IsEmpty()) {
+      Invalidate(new_selection);
+      selection_changed = true;
+    }
   }
-  engine_->OnSelectionChanged();
+  if (selection_changed)
+    engine_->OnSelectionChanged();
 }
 
-void PDFiumEngine::SelectionChangeInvalidator::GetVisibleSelectionsScreenRects(
-    std::vector<pp::Rect>* rects) {
-  pp::Rect visible_rect = engine_->GetVisibleRect();
+std::vector<pp::Rect>
+PDFiumEngine::SelectionChangeInvalidator::GetVisibleSelections() const {
+  std::vector<pp::Rect> rects;
+  pp::Point visible_point = engine_->GetVisibleRect().point();
   for (auto& range : engine_->selection_) {
-    int page_index = range.page_index();
-    if (!engine_->IsPageVisible(page_index))
-      continue;  // This selection is on a page that's not currently visible.
+    // Exclude selections on pages that's not currently visible.
+    if (!engine_->IsPageVisible(range.page_index()))
+      continue;
 
-    std::vector<pp::Rect> selection_rects =
-        range.GetScreenRects(visible_rect.point(), engine_->current_zoom_,
-                             engine_->current_rotation_);
-    rects->insert(rects->end(), selection_rects.begin(), selection_rects.end());
+    std::vector<pp::Rect> selection_rects = range.GetScreenRects(
+        visible_point, engine_->current_zoom_, engine_->current_rotation_);
+    rects.insert(rects.end(), selection_rects.begin(), selection_rects.end());
   }
+  return rects;
+}
+
+void PDFiumEngine::SelectionChangeInvalidator::Invalidate(
+    const pp::Rect& selection) {
+  pp::Rect expanded_selection = selection;
+  expanded_selection.Inset(-1, -1);
+  engine_->client_->Invalidate(expanded_selection);
 }
 
 PDFiumEngine::MouseDownState::MouseDownState(
@@ -3523,6 +3594,7 @@ void PDFiumEngine::GetRegion(const pp::Point& location,
 }
 
 void PDFiumEngine::OnSelectionChanged() {
+  DCHECK(!in_form_text_area_);
   pp::PDF::SetSelectedText(GetPluginInstance(), GetSelectedText().c_str());
 }
 
@@ -3558,6 +3630,22 @@ void PDFiumEngine::SetSelecting(bool selecting) {
   selecting_ = selecting;
   if (selecting_ != was_selecting)
     client_->IsSelectingChanged(selecting);
+}
+
+void PDFiumEngine::SetInFormTextArea(bool in_form_text_area) {
+  // If focus was previously in form text area, clear form text selection.
+  // Clearing needs to be done before changing focus to ensure the correct
+  // observer is notified of the change in selection. When |in_form_text_area_|
+  // is true, this is the Renderer. After it flips, the MimeHandler is notified.
+  if (in_form_text_area_)
+    pp::PDF::SetSelectedText(GetPluginInstance(), "");
+
+  client_->FormTextFieldFocusChange(in_form_text_area);
+  in_form_text_area_ = in_form_text_area;
+}
+
+void PDFiumEngine::SetMouseLeftButtonDown(bool is_mouse_left_button_down) {
+  mouse_left_button_down_ = is_mouse_left_button_down;
 }
 
 void PDFiumEngine::ScheduleTouchTimer(const pp::TouchInputEvent& evt) {
@@ -4066,10 +4154,9 @@ void PDFiumEngineExports::SetPDFUseGDIPrinting(bool enable) {
   FPDF_SetPrintTextWithGDI(enable);
 }
 
-void PDFiumEngineExports::SetPDFPostscriptPrintingLevel(int postscript_level) {
-  FPDF_SetPrintPostscriptLevel(postscript_level);
+void PDFiumEngineExports::SetPDFUsePrintMode(int mode) {
+  FPDF_SetPrintMode(mode);
 }
-
 #endif  // defined(OS_WIN)
 
 bool PDFiumEngineExports::RenderPDFPageToBitmap(

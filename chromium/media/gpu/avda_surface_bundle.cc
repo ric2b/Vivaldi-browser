@@ -16,7 +16,7 @@ AVDASurfaceBundle::AVDASurfaceBundle(std::unique_ptr<AndroidOverlay> overlay)
 AVDASurfaceBundle::AVDASurfaceBundle(
     scoped_refptr<SurfaceTextureGLOwner> surface_texture_owner)
     : surface_texture(std::move(surface_texture_owner)),
-      surface_texture_surface(gl::ScopedJavaSurface(surface_texture.get())) {}
+      surface_texture_surface(surface_texture->CreateJavaSurface()) {}
 
 AVDASurfaceBundle::~AVDASurfaceBundle() {
   // Explicitly free the surface first, just to be sure that it's deleted before
@@ -24,9 +24,16 @@ AVDASurfaceBundle::~AVDASurfaceBundle() {
   surface_texture_surface = gl::ScopedJavaSurface();
 
   // Also release the back buffers.
-  if (surface_texture)
-    surface_texture->ReleaseSurfaceTexture();
-  surface_texture = nullptr;
+  if (surface_texture) {
+    auto task_runner = surface_texture->task_runner();
+    if (task_runner->RunsTasksOnCurrentThread()) {
+      surface_texture->ReleaseBackBuffers();
+    } else {
+      task_runner->PostTask(
+          FROM_HERE, base::Bind(&SurfaceTextureGLOwner::ReleaseBackBuffers,
+                                surface_texture));
+    }
+  }
 }
 
 const base::android::JavaRef<jobject>& AVDASurfaceBundle::GetJavaSurface()

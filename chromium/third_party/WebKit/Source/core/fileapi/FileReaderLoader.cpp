@@ -31,18 +31,20 @@
 #include "core/fileapi/FileReaderLoader.h"
 
 #include <memory>
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
 #include "core/fileapi/FileReaderLoaderClient.h"
 #include "core/html/parser/TextResourceDecoder.h"
 #include "core/loader/ThreadableLoader.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
@@ -88,24 +90,16 @@ void FileReaderLoader::Start(ExecutionContext* execution_context,
   // FIXME: Should this really be 'internal'? Do we know anything about the
   // actual request that generated this fetch?
   request.SetRequestContext(WebURLRequest::kRequestContextInternal);
+  request.SetFetchRequestMode(WebURLRequest::kFetchRequestModeSameOrigin);
 
   request.SetHTTPMethod(HTTPNames::GET);
-  if (has_range_)
-    request.SetHTTPHeaderField(
-        HTTPNames::Range,
-        AtomicString(String::Format("bytes=%d-%d", range_start_, range_end_)));
 
   ThreadableLoaderOptions options;
-  options.preflight_policy = kConsiderPreflight;
-  options.cross_origin_request_policy = kDenyCrossOriginRequests;
-  // FIXME: Is there a directive to which this load should be subject?
-  options.content_security_policy_enforcement =
-      kDoNotEnforceContentSecurityPolicy;
-  // Use special initiator to hide the request from the inspector.
-  options.initiator = FetchInitiatorTypeNames::internal;
 
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.allow_credentials = kAllowStoredCredentials;
+  // Use special initiator to hide the request from the inspector.
+  resource_loader_options.initiator_info.name =
+      FetchInitiatorTypeNames::internal;
 
   if (client_) {
     DCHECK(!loader_);
@@ -172,10 +166,6 @@ void FileReaderLoader::DidReceiveResponse(
   long long initial_buffer_length = -1;
 
   if (total_bytes_ >= 0) {
-    initial_buffer_length = total_bytes_;
-  } else if (has_range_) {
-    // Set m_totalBytes and allocate a buffer based on the specified range.
-    total_bytes_ = 1LL + range_end_ - range_start_;
     initial_buffer_length = total_bytes_;
   } else {
     // Nothing is known about the size of the resource. Normalize
@@ -367,9 +357,11 @@ String FileReaderLoader::ConvertToText() {
   // override the provided encoding.
   // FIXME: consider supporting incremental decoding to improve the perf.
   StringBuilder builder;
-  if (!decoder_)
-    decoder_ = TextResourceDecoder::Create(
-        "text/plain", encoding_.IsValid() ? encoding_ : UTF8Encoding());
+  if (!decoder_) {
+    decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
+        TextResourceDecoderOptions::kPlainTextContent,
+        encoding_.IsValid() ? encoding_ : UTF8Encoding()));
+  }
   builder.Append(decoder_->Decode(static_cast<const char*>(raw_data_->Data()),
                                   raw_data_->ByteLength()));
 

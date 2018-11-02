@@ -4,14 +4,21 @@
 
 #include "services/resource_coordinator/public/cpp/coordination_unit_id.h"
 
-#include "base/logging.h"
 #include "base/numerics/safe_conversions.h"
-#include "third_party/smhasher/src/MurmurHash2.h"
+#include "base/unguessable_token.h"
+#include "third_party/smhasher/src/City.h"
 
 namespace resource_coordinator {
 
-// The seed to use when taking the murmur2 hash of the id.
-const uint64_t kMurmur2HashSeed = 0;
+namespace {
+
+uint64_t CreateCityHash64(const std::string& id) {
+  DCHECK(base::IsValueInRangeForNumericType<int>(id.size()));
+
+  return CityHash64(&id.front(), static_cast<int>(id.size()));
+}
+
+}  // namespace
 
 CoordinationUnitID::CoordinationUnitID()
     : id(0), type(CoordinationUnitType::kInvalidType) {}
@@ -19,17 +26,12 @@ CoordinationUnitID::CoordinationUnitID()
 CoordinationUnitID::CoordinationUnitID(const CoordinationUnitType& type,
                                        const std::string& new_id)
     : type(type) {
-  DCHECK(base::IsValueInRangeForNumericType<int>(new_id.size()));
-  if (!new_id.empty()) {
-    id = MurmurHash64A(&new_id.front(), static_cast<int>(new_id.size()),
-                       kMurmur2HashSeed);
-  } else {
-    id = 0;
-  }
+  id = CreateCityHash64(
+      !new_id.empty() ? new_id : base::UnguessableToken().Create().ToString());
 }
 
 CoordinationUnitID::CoordinationUnitID(const CoordinationUnitType& type,
                                        uint64_t new_id)
     : id(new_id), type(type) {}
 
-}  // resource_coordinator
+}  // namespace resource_coordinator

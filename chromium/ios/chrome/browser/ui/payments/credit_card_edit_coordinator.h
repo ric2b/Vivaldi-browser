@@ -6,14 +6,17 @@
 #define IOS_CHROME_BROWSER_UI_PAYMENTS_CREDIT_CARD_EDIT_COORDINATOR_H_
 
 #import "ios/chrome/browser/chrome_coordinator.h"
-#import "ios/chrome/browser/ui/payments/credit_card_edit_view_controller.h"
+#import "ios/chrome/browser/ui/payments/address_edit_coordinator.h"
+#import "ios/chrome/browser/ui/payments/billing_address_selection_coordinator.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller.h"
 
-namespace autofill {
-class CreditCard;
-}  // namespace autofill
+namespace payments {
+class AutofillPaymentInstrument;
+}
 
+namespace payments {
 class PaymentRequest;
+}  // namespace payments
 
 @class CreditCardEditCoordinator;
 
@@ -21,11 +24,12 @@ class PaymentRequest;
 @protocol CreditCardEditCoordinatorDelegate<NSObject>
 
 // Notifies the delegate that the user has finished editing or creating
-// |creditCard|. |creditCard| will be a new credit card owned by the
-// PaymentRequest object if no credit card instance was provided to the
+// |paymentMethod|. |paymentMethod| will be a new payment method owned by the
+// PaymentRequest object if no payment method instance was provided to the
 // coordinator. Otherwise, it will be the same edited instance.
 - (void)creditCardEditCoordinator:(CreditCardEditCoordinator*)coordinator
-       didFinishEditingCreditCard:(autofill::CreditCard*)creditCard;
+    didFinishEditingPaymentMethod:
+        (payments::AutofillPaymentInstrument*)paymentMethod;
 
 // Notifies the delegate that the user has chosen to cancel editing or creating
 // a credit card and return to the previous screen.
@@ -38,17 +42,19 @@ class PaymentRequest;
 // controller. This view controller will be presented by the view controller
 // provided in the initializer.
 @interface CreditCardEditCoordinator
-    : ChromeCoordinator<CreditCardEditViewControllerDelegate,
+    : ChromeCoordinator<AddressEditCoordinatorDelegate,
+                        BillingAddressSelectionCoordinatorDelegate,
+                        PaymentRequestEditViewControllerDelegate,
                         PaymentRequestEditViewControllerValidator>
 
-// The credit card to be edited, if any. This pointer is not owned by this class
-// and should outlive it.
-@property(nonatomic, assign) autofill::CreditCard* creditCard;
+// The payment method to be edited, if any. This pointer is not owned by this
+// class and should outlive it.
+@property(nonatomic, assign) payments::AutofillPaymentInstrument* paymentMethod;
 
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This pointer is not
 // owned by this class and should outlive it.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The delegate to be notified when the user returns or finishes creating or
 // editing a credit card.

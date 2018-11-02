@@ -36,7 +36,7 @@ UI.highlightedCurrentSearchResultClassName = 'current-search-result';
  * @param {?function(!MouseEvent): boolean} elementDragStart
  * @param {function(!MouseEvent)} elementDrag
  * @param {?function(!MouseEvent)} elementDragEnd
- * @param {string} cursor
+ * @param {?string} cursor
  * @param {?string=} hoverCursor
  * @param {number=} startDelay
  */
@@ -66,7 +66,7 @@ UI.installDragHandle = function(
   if (startDelay)
     element.addEventListener('mouseup', onMouseUp, false);
   if (hoverCursor !== null)
-    element.style.cursor = hoverCursor || cursor;
+    element.style.cursor = hoverCursor || cursor || '';
 };
 
 /**
@@ -74,7 +74,7 @@ UI.installDragHandle = function(
  * @param {?function(!MouseEvent):boolean} elementDragStart
  * @param {function(!MouseEvent)} elementDrag
  * @param {?function(!MouseEvent)} elementDragEnd
- * @param {string} cursor
+ * @param {?string} cursor
  * @param {!Event} event
  */
 UI.elementDragStart = function(targetElement, elementDragStart, elementDrag, elementDragEnd, cursor, event) {
@@ -117,7 +117,7 @@ UI.DragHandler = class {
    * @param {?function(!MouseEvent):boolean} elementDragStart
    * @param {function(!MouseEvent)} elementDrag
    * @param {?function(!MouseEvent)} elementDragEnd
-   * @param {string} cursor
+   * @param {?string} cursor
    * @param {!Event} event
    */
   elementDragStart(targetElement, elementDragStart, elementDrag, elementDragEnd, cursor, event) {
@@ -630,14 +630,14 @@ UI.formatLocalized = function(format, substitutions) {
  * @return {string}
  */
 UI.openLinkExternallyLabel = function() {
-  return Common.UIString.capitalize('Open in ^new ^tab');
+  return Common.UIString('Open in new tab');
 };
 
 /**
  * @return {string}
  */
 UI.copyLinkAddressLabel = function() {
-  return Common.UIString.capitalize('Copy ^link ^address');
+  return Common.UIString('Copy link address');
 };
 
 /**
@@ -711,6 +711,19 @@ UI.createShadowRootWithCoreStyles = function(element, cssFile) {
 UI._windowFocused = function(document, event) {
   if (event.target.document.nodeType === Node.DOCUMENT_NODE)
     document.body.classList.remove('inactive');
+  UI._keyboardFocus = true;
+  var listener = () => {
+    var activeElement = document.deepActiveElement();
+    if (activeElement)
+      activeElement.removeAttribute('data-keyboard-focus');
+    UI._keyboardFocus = false;
+  };
+  document.defaultView.requestAnimationFrame(() => {
+    UI._keyboardFocus = false;
+    document.removeEventListener('mousedown', listener, true);
+  });
+  document.addEventListener('mousedown', listener, true);
+
 };
 
 /**
@@ -1170,16 +1183,30 @@ UI.registerCustomElement = function(localName, typeExtension, prototype) {
  * @param {string} text
  * @param {function(!Event)=} clickHandler
  * @param {string=} className
- * @param {string=} title
+ * @param {boolean=} primary
  * @return {!Element}
  */
-UI.createTextButton = function(text, clickHandler, className, title) {
+UI.createTextButton = function(text, clickHandler, className, primary) {
   var element = createElementWithClass('button', className || '', 'text-button');
   element.textContent = text;
+  if (primary)
+    element.classList.add('primary-button');
   if (clickHandler)
     element.addEventListener('click', clickHandler, false);
-  if (title)
-    element.title = title;
+  return element;
+};
+
+/**
+ * @param {string=} className
+ * @param {string=} type
+ * @return {!Element}
+ */
+UI.createInput = function(className, type) {
+  var element = createElementWithClass('input', className || '');
+  element.spellcheck = false;
+  element.classList.add('harmony-input');
+  if (type)
+    element.type = type;
   return element;
 };
 

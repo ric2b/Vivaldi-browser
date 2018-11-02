@@ -4,17 +4,19 @@
 
 #include "chrome/browser/android/logo_service.h"
 
+#include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/sequenced_worker_pool.h"
-#include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "chrome/browser/image_decoder.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/search_engines/ui_thread_search_terms_data.h"
+#include "chrome/common/chrome_switches.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_provider_logos/fixed_logo_api.h"
 #include "components/search_provider_logos/google_logo_api.h"
 #include "content/public/browser/browser_thread.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -29,17 +31,6 @@ namespace {
 const char kCachedLogoDirectory[] = "Search Logo";
 const int kDecodeLogoTimeoutSeconds = 30;
 
-// Returns the URL where the doodle can be downloaded, e.g.
-// https://www.google.com/async/newtab_mobile. This depends on the user's
-// Google domain.
-GURL GetGoogleDoodleURL(Profile* profile) {
-  GURL google_base_url(UIThreadSearchTermsData(profile).GoogleBaseURLValue());
-  const char kGoogleDoodleURLPath[] = "async/newtab_mobile";
-  GURL::Replacements replacements;
-  replacements.SetPathStr(kGoogleDoodleURLPath);
-  return google_base_url.ReplaceComponents(replacements);
-}
-
 class LogoDecoderDelegate : public ImageDecoder::ImageRequest {
  public:
   LogoDecoderDelegate(
@@ -49,9 +40,10 @@ class LogoDecoderDelegate : public ImageDecoder::ImageRequest {
     // If the ImageDecoder crashes or otherwise never completes, call
     // OnImageDecodeTimedOut() eventually to ensure that image_decoded_callback_
     // is run.
-    base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-        FROM_HERE, base::Bind(&LogoDecoderDelegate::OnDecodeImageFailed,
-                              weak_ptr_factory_.GetWeakPtr()),
+    task_runner()->PostDelayedTask(
+        FROM_HERE,
+        base::Bind(&LogoDecoderDelegate::OnDecodeImageFailed,
+                   weak_ptr_factory_.GetWeakPtr()),
         base::TimeDelta::FromSeconds(kDecodeLogoTimeoutSeconds));
   }
 
@@ -84,9 +76,10 @@ class ChromeLogoDelegate : public search_provider_logos::LogoDelegate {
   void DecodeUntrustedImage(
       const scoped_refptr<base::RefCountedString>& encoded_image,
       base::Callback<void(const SkBitmap&)> image_decoded_callback) override {
-    LogoDecoderDelegate* delegate =
-        new LogoDecoderDelegate(image_decoded_callback);
-    ImageDecoder::Start(delegate, encoded_image->data());
+    // TODO(bauerb): Switch to the components/image_fetcher implementation.
+    auto delegate =
+        base::MakeUnique<LogoDecoderDelegate>(image_decoded_callback);
+    ImageDecoder::Start(delegate.release(), encoded_image->data());
   }
 
  private:
@@ -111,27 +104,50 @@ void LogoService::GetLogo(search_provider_logos::LogoObserver* observer) {
 
   const TemplateURL* template_url =
       template_url_service->GetDefaultSearchProvider();
-  if (!template_url || !template_url->url_ref().HasGoogleBaseURLs(
-          template_url_service->search_terms_data()))
+  if (!template_url)
     return;
 
-  if (!logo_tracker_) {
-    logo_tracker_.reset(new LogoTracker(
-        profile_->GetPath().Append(kCachedLogoDirectory),
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
-        BrowserThread::GetBlockingPool(), profile_->GetRequestContext(),
-        std::unique_ptr<search_provider_logos::LogoDelegate>(
-            new ChromeLogoDelegate())));
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  GURL logo_url;
+  if (command_line->HasSwitch(switches::kSearchProviderLogoURL)) {
+    logo_url = GURL(
+        command_line->GetSwitchValueASCII(switches::kSearchProviderLogoURL));
+  } else {
+    logo_url = template_url->logo_url();
+  }
+  const bool use_fixed_logo = logo_url.is_valid();
+
+  if (!template_url->url_ref().HasGoogleBaseURLs(
+          template_url_service->search_terms_data()) &&
+      !use_fixed_logo) {
+    return;
   }
 
-  bool use_gray_background =
-      !base::FeatureList::IsEnabled(chrome::android::kChromeHomeFeature);
-  logo_tracker_->SetServerAPI(
-      GetGoogleDoodleURL(profile_),
-      base::Bind(&search_provider_logos::GoogleParseLogoResponse),
-      base::Bind(&search_provider_logos::GoogleAppendQueryparamsToLogoURL),
-      true, /* wants_cta */
-      use_gray_background);
+  if (!logo_tracker_) {
+    logo_tracker_ = base::MakeUnique<LogoTracker>(
+        profile_->GetPath().Append(kCachedLogoDirectory),
+        profile_->GetRequestContext(), base::MakeUnique<ChromeLogoDelegate>());
+  }
+
+  if (use_fixed_logo) {
+    logo_tracker_->SetServerAPI(
+        logo_url, base::Bind(&search_provider_logos::ParseFixedLogoResponse),
+        base::Bind(&search_provider_logos::UseFixedLogoUrl));
+  } else {
+    GURL google_base_url =
+        GURL(UIThreadSearchTermsData(profile_).GoogleBaseURLValue());
+
+    bool use_gray_background =
+        !base::FeatureList::IsEnabled(chrome::android::kChromeHomeFeature);
+
+    logo_tracker_->SetServerAPI(
+        search_provider_logos::GetGoogleDoodleURL(google_base_url),
+        search_provider_logos::GetGoogleParseLogoResponseCallback(
+            google_base_url),
+        search_provider_logos::GetGoogleAppendQueryparamsCallback(
+            use_gray_background));
+  }
+
   logo_tracker_->GetLogo(observer);
 }
 

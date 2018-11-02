@@ -91,13 +91,7 @@ class PasswordGenerationAgentTest : public ChromeRenderViewTest {
                                  bool available) {
     FocusField(element_id);
     base::RunLoop().RunUntilIdle();
-    fake_pw_client_.Flush();
-    bool called = fake_pw_client_.called_show_pw_generation_popup();
-    if (available)
-      ASSERT_TRUE(called);
-    else
-      ASSERT_FALSE(called);
-
+    ASSERT_EQ(available, GetCalledShowPasswordGenerationPopup());
     fake_pw_client_.reset_called_show_pw_generation_popup();
   }
 
@@ -249,6 +243,18 @@ const char kNewPasswordAutocompleteAttributeFormHTML[] =
     "  <INPUT type = 'submit' value = 'LOGIN' />"
     "</FORM>";
 
+const char kCurrentAndNewPasswordAutocompleteAttributeFormHTML[] =
+    "<FORM name = 'blah' action = 'http://www.random.com/'> "
+    "  <INPUT type = 'password' id = 'old_password' "
+    "         autocomplete='current-password'/>"
+    "  <INPUT type = 'password' id = 'new_password' "
+    "         autocomplete='new-password'/>"
+    "  <INPUT type = 'password' id = 'confirm_password' "
+    "         autocomplete='new-password'/>"
+    "  <INPUT type = 'button' id = 'dummy'/> "
+    "  <INPUT type = 'submit' value = 'LOGIN' />"
+    "</FORM>";
+
 const char kPasswordChangeFormHTML[] =
     "<FORM name = 'ChangeWithUsernameForm' action = 'http://www.bidule.com'> "
     "  <INPUT type = 'text' id = 'username'/> "
@@ -312,12 +318,13 @@ TEST_F(PasswordGenerationAgentTest, FillTest) {
   // Make sure that we are enabled before loading HTML.
   std::string html =
       std::string(kAccountCreationFormHTML) + events_registration_script;
-  LoadHTMLWithUserGesture(html.c_str());
-  SetNotBlacklistedMessage(password_generation_, html.c_str());
-  SetAccountCreationFormsDetectedMessage(password_generation_,
-                                         GetMainFrame()->GetDocument(), 0, 1);
-
+  // Begin with no gesture and therefore no focused element.
+  LoadHTML(html.c_str());
   WebDocument document = GetMainFrame()->GetDocument();
+  ASSERT_TRUE(document.FocusedElement().IsNull());
+  SetNotBlacklistedMessage(password_generation_, html.c_str());
+  SetAccountCreationFormsDetectedMessage(password_generation_, document, 0, 1);
+
   WebElement element =
       document.GetElementById(WebString::FromUTF8("first_password"));
   ASSERT_FALSE(element.IsNull());
@@ -605,21 +612,27 @@ TEST_F(PasswordGenerationAgentTest, AutocompleteAttributesTest) {
   LoadHTMLWithUserGesture(kBothAutocompleteAttributesFormHTML);
   SetNotBlacklistedMessage(password_generation_,
                            kBothAutocompleteAttributesFormHTML);
-
   ExpectGenerationAvailable("first_password", true);
 
-  // Only setting one of the two attributes doesn't trigger generation.
+  // Only username autocomplete attribute enabled doesn't trigger generation.
   LoadHTMLWithUserGesture(kUsernameAutocompleteAttributeFormHTML);
   SetNotBlacklistedMessage(password_generation_,
                            kUsernameAutocompleteAttributeFormHTML);
-
   ExpectGenerationAvailable("first_password", false);
 
+  // Only new-password autocomplete attribute enabled does trigger generation.
   LoadHTMLWithUserGesture(kNewPasswordAutocompleteAttributeFormHTML);
   SetNotBlacklistedMessage(password_generation_,
                            kNewPasswordAutocompleteAttributeFormHTML);
+  ExpectGenerationAvailable("first_password", true);
 
-  ExpectGenerationAvailable("first_password", false);
+  // Generation is triggered if the form has only password fields.
+  LoadHTMLWithUserGesture(kCurrentAndNewPasswordAutocompleteAttributeFormHTML);
+  SetNotBlacklistedMessage(password_generation_,
+                           kCurrentAndNewPasswordAutocompleteAttributeFormHTML);
+  ExpectGenerationAvailable("old_password", false);
+  ExpectGenerationAvailable("new_password", true);
+  ExpectGenerationAvailable("confirm_password", false);
 }
 
 TEST_F(PasswordGenerationAgentTest, ChangePasswordFormDetectionTest) {

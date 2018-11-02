@@ -1,9 +1,9 @@
 // Copyright 2016 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
+
 /**
  * @implements {Common.OutputStream}
- * @implements {Bindings.OutputStreamDelegate}
  * @unrestricted
  */
 Timeline.TimelineLoader = class {
@@ -13,7 +13,7 @@ Timeline.TimelineLoader = class {
   constructor(client) {
     this._client = client;
 
-    this._backingStorage = new Bindings.TempFileBackingStorage('tracing');
+    this._backingStorage = new Bindings.TempFileBackingStorage();
     this._tracingModel = new SDK.TracingModel(this._backingStorage);
 
     /** @type {?function()} */
@@ -22,7 +22,6 @@ Timeline.TimelineLoader = class {
     this._buffer = '';
     this._firstRawChunk = true;
     this._firstChunk = true;
-
     this._loadedBytes = 0;
     /** @type {number} */
     this._totalSize;
@@ -36,10 +35,13 @@ Timeline.TimelineLoader = class {
    */
   static loadFromFile(file, client) {
     var loader = new Timeline.TimelineLoader(client);
-    var fileReader = Timeline.TimelineLoader._createFileReader(file, loader);
+    var fileReader = new Bindings.ChunkedFileReader(file, Timeline.TimelineLoader.TransferChunkLengthBytes);
     loader._canceledCallback = fileReader.cancel.bind(fileReader);
     loader._totalSize = file.size;
-    fileReader.start(loader);
+    fileReader.read(loader).then(success => {
+      if (!success)
+        this._reportErrorAndCancelLoading(fileReader.error().message);
+    });
     return loader;
   }
 
@@ -49,24 +51,15 @@ Timeline.TimelineLoader = class {
    * @return {!Timeline.TimelineLoader}
    */
   static loadFromURL(url, client) {
-    var stream = new Timeline.TimelineLoader(client);
-    Host.ResourceLoader.loadAsStream(url, null, stream);
-    return stream;
-  }
-
-  /**
-   * @param {!File} file
-   * @param {!Bindings.OutputStreamDelegate} delegate
-   * @return {!Bindings.ChunkedReader}
-   */
-  static _createFileReader(file, delegate) {
-    return new Bindings.ChunkedFileReader(file, Timeline.TimelineLoader.TransferChunkLengthBytes, delegate);
+    var loader = new Timeline.TimelineLoader(client);
+    Host.ResourceLoader.loadAsStream(url, null, loader);
+    return loader;
   }
 
   cancel() {
     this._tracingModel = null;
     this._backingStorage.reset();
-    this._client.loadingComplete(null, null);
+    this._client.loadingComplete(null);
     this._client = null;
     if (this._canceledCallback)
       this._canceledCallback();
@@ -75,10 +68,11 @@ Timeline.TimelineLoader = class {
   /**
    * @override
    * @param {string} chunk
+   * @return {!Promise}
    */
   write(chunk) {
     if (!this._client)
-      return;
+      return Promise.resolve();
     this._loadedBytes += chunk.length;
     if (this._firstRawChunk)
       this._client.loadingStarted();
@@ -95,13 +89,13 @@ Timeline.TimelineLoader = class {
         this._state = Timeline.TimelineLoader.State.ReadingEvents;
       } else {
         this._reportErrorAndCancelLoading(Common.UIString('Malformed timeline data: Unknown JSON format'));
-        return;
+        return Promise.resolve();
       }
     }
 
     if (this._state === Timeline.TimelineLoader.State.LoadingCPUProfileFormat) {
       this._buffer += chunk;
-      return;
+      return Promise.resolve();
     }
 
     if (this._state === Timeline.TimelineLoader.State.LookingForEvents) {
@@ -110,20 +104,19 @@ Timeline.TimelineLoader = class {
       this._buffer += chunk;
       var pos = this._buffer.indexOf(objectName, startPos);
       if (pos === -1)
-        return;
+        return Promise.resolve();
       chunk = this._buffer.slice(pos + objectName.length);
       this._state = Timeline.TimelineLoader.State.ReadingEvents;
     }
 
     if (this._state !== Timeline.TimelineLoader.State.ReadingEvents)
-      return;
+      return Promise.resolve();
     if (this._jsonTokenizer.write(chunk))
-      return;
+      return Promise.resolve();
     this._state = Timeline.TimelineLoader.State.SkippingTail;
-    if (this._firstChunk) {
+    if (this._firstChunk)
       this._reportErrorAndCancelLoading(Common.UIString('Malformed timeline input, wrong JSON brackets balance'));
-      return;
-    }
+    return Promise.resolve();
   }
 
   /**
@@ -195,47 +188,7 @@ Timeline.TimelineLoader = class {
       this._buffer = '';
     }
     this._tracingModel.tracingComplete();
-    this._client.loadingComplete(this._tracingModel, this._backingStorage);
-  }
-
-  /**
-   * @override
-   */
-  onTransferStarted() {
-  }
-
-  /**
-   * @override
-   * @param {!Bindings.ChunkedReader} reader
-   */
-  onChunkTransferred(reader) {
-  }
-
-  /**
-   * @override
-   */
-  onTransferFinished() {
-  }
-
-  /**
-   * @override
-   * @param {!Bindings.ChunkedReader} reader
-   * @param {!Event} event
-   */
-  onError(reader, event) {
-    switch (event.target.error.name) {
-      case 'NotFoundError':
-        this._reportErrorAndCancelLoading(Common.UIString('File "%s" not found.', reader.fileName()));
-        break;
-      case 'NotReadableError':
-        this._reportErrorAndCancelLoading(Common.UIString('File "%s" is not readable', reader.fileName()));
-        break;
-      case 'AbortError':
-        break;
-      default:
-        this._reportErrorAndCancelLoading(
-            Common.UIString('An error occurred while reading the file "%s"', reader.fileName()));
-    }
+    this._client.loadingComplete(this._tracingModel);
   }
 
   /**
@@ -274,9 +227,8 @@ Timeline.TimelineLoader.Client.prototype = {
 
   /**
    * @param {?SDK.TracingModel} tracingModel
-   * @param {?Bindings.TempFileBackingStorage} backingStorage
    */
-  loadingComplete(tracingModel, backingStorage) {},
+  loadingComplete(tracingModel) {},
 };
 
 /**
@@ -288,40 +240,4 @@ Timeline.TimelineLoader.State = {
   ReadingEvents: Symbol('ReadingEvents'),
   SkippingTail: Symbol('SkippingTail'),
   LoadingCPUProfileFormat: Symbol('LoadingCPUProfileFormat')
-};
-
-/**
- * @implements {Bindings.OutputStreamDelegate}
- * @unrestricted
- */
-Timeline.TracingTimelineSaver = class {
-  /**
-   * @override
-   */
-  onTransferStarted() {
-  }
-
-  /**
-   * @override
-   */
-  onTransferFinished() {
-  }
-
-  /**
-   * @override
-   * @param {!Bindings.ChunkedReader} reader
-   */
-  onChunkTransferred(reader) {
-  }
-
-  /**
-   * @override
-   * @param {!Bindings.ChunkedReader} reader
-   * @param {!Event} event
-   */
-  onError(reader, event) {
-    var error = event.target.error;
-    Common.console.error(
-        Common.UIString('Failed to save timeline: %s (%s, %s)', error.message, error.name, error.code));
-  }
 };

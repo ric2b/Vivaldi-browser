@@ -6,6 +6,10 @@
   width: 650px;
 }
 
+#error-message[md-mode] {
+  width: 768px;
+}
+
 .show-with-ui-state-update,
 .show-with-ui-state-signin,
 .show-with-ui-state-supervised,
@@ -42,11 +46,7 @@
   display: block;
 }
 
-#oobe.error-message #step-logo {
-  z-index: 1;
-}
-
-.error-header {
+#error-message-classic .error-header {
   background-clip: padding-box;
   background-color: white;
   border-bottom: 1px solid rgb(238,238,238);
@@ -61,12 +61,16 @@
   margin-bottom: 40px;
 }
 
-.error-title {
+oobe-dialog .error-icon {
+  display: none;
+}
+
+#error-message-classic .error-title {
   color: #606060;
   font-size: 15px;
 }
 
-.error-body {
+#error-message-classic .error-body {
   background-color: rgb(249,249,249);
   padding: 20px 20px 20px;
 }
@@ -81,8 +85,12 @@
   line-height: 18px;
 }
 
-.error-message-paragraph {
+#error-message-classic .error-message-paragraph {
   margin-top: 20px;
+}
+
+#error-message-md .error-message-paragraph {
+  margin-bottom: 20px;
 }
 
 .error-message-paragraph a {
@@ -146,4 +154,8 @@
   right: 0;
   top: 0;
   z-index: 1;
+}
+
+#error-message-md-bottom-margin {
+  height: 24px;
 }

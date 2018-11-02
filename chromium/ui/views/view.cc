@@ -53,7 +53,6 @@
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/drag_controller.h"
-#include "ui/views/focus/view_storage.h"
 #include "ui/views/layout/layout_manager.h"
 #include "ui/views/view_observer.h"
 #include "ui/views/views_delegate.h"
@@ -156,8 +155,6 @@ View::View()
 View::~View() {
   if (parent_)
     parent_->RemoveChildView(this);
-
-  ViewStorage::GetInstance()->ViewRemoved(this);
 
   {
     internal::ScopedChildrenLock lock(this);
@@ -804,6 +801,16 @@ void View::ConvertPointFromScreen(const View* dst, gfx::Point* p) {
   ConvertPointFromWidget(dst, p);
 }
 
+// static
+void View::ConvertRectToScreen(const View* src, gfx::Rect* rect) {
+  DCHECK(src);
+  DCHECK(rect);
+
+  gfx::Point new_origin = rect->origin();
+  views::View::ConvertPointToScreen(src, &new_origin);
+  rect->set_origin(new_origin);
+}
+
 gfx::Rect View::ConvertRectToParent(const gfx::Rect& rect) const {
   gfx::RectF x_rect = gfx::RectF(rect);
   GetTransform().TransformRect(&x_rect);
@@ -911,8 +918,8 @@ void View::Paint(const ui::PaintContext& parent_context) {
   PaintChildren(context);
 }
 
-void View::set_background(Background* b) {
-  background_.reset(b);
+void View::SetBackground(std::unique_ptr<Background> b) {
+  background_ = std::move(b);
 }
 
 void View::SetBorder(std::unique_ptr<Border> b) {
@@ -1866,10 +1873,9 @@ std::string View::DoPrintViewGraph(bool first, View* view_with_children) {
                    decomp.translate[1]);
     result.append(bounds_buffer);
 
-    base::snprintf(bounds_buffer,
-                   arraysize(bounds_buffer),
+    base::snprintf(bounds_buffer, arraysize(bounds_buffer),
                    "\\n rotation: %3.2f",
-                   std::acos(decomp.quaternion[3]) * 360.0 / M_PI);
+                   std::acos(decomp.quaternion.w()) * 360.0 / M_PI);
     result.append(bounds_buffer);
 
     base::snprintf(bounds_buffer,
@@ -2431,15 +2437,6 @@ bool View::ProcessMousePressed(const ui::MouseEvent& event) {
       context_menu_controller_ : 0;
   View::DragInfo* drag_info = GetDragInfo();
 
-  // TODO(sky): for debugging 360238.
-  int storage_id = 0;
-  if (event.IsOnlyRightMouseButton() && context_menu_controller &&
-      kContextMenuOnMousePress && HitTestPoint(event.location())) {
-    ViewStorage* view_storage = ViewStorage::GetInstance();
-    storage_id = view_storage->CreateStorageID();
-    view_storage->StoreView(storage_id, this);
-  }
-
   const bool enabled = enabled_;
   const bool result = OnMousePressed(event);
 
@@ -2450,10 +2447,8 @@ bool View::ProcessMousePressed(const ui::MouseEvent& event) {
       kContextMenuOnMousePress) {
     // Assume that if there is a context menu controller we won't be deleted
     // from mouse pressed.
-    gfx::Point location(event.location());
-    if (HitTestPoint(location)) {
-      if (storage_id != 0)
-        CHECK_EQ(this, ViewStorage::GetInstance()->RetrieveView(storage_id));
+    if (HitTestPoint(event.location())) {
+      gfx::Point location(event.location());
       ConvertPointToScreen(this, &location);
       ShowContextMenu(location, ui::MENU_SOURCE_MOUSE);
       return true;

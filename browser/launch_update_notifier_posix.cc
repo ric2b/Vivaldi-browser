@@ -3,5 +3,5 @@
 #include "browser/launch_update_notifier.h"
 
 namespace vivaldi {
-void LaunchUpdateNotifier() {}
+void LaunchUpdateNotifier(Profile* profile) {}
 }  // namespace vivaldi

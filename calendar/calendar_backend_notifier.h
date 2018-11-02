@@ -9,6 +9,9 @@
 #ifndef CALENDAR_CALENDAR_BACKEND_NOTIFIER_H_
 #define CALENDAR_CALENDAR_BACKEND_NOTIFIER_H_
 
+#include "calendar/calendar_type.h"
+#include "calendar/event_type.h"
+
 namespace calendar {
 
 // The CalendarBackendNotifier forwards notifications from the CalendarBackend's
@@ -19,13 +22,22 @@ class CalendarBackendNotifier {
   virtual ~CalendarBackendNotifier() {}
 
   // Sends notification that |event| was created
-  virtual void NotifyEventCreated() = 0;
+  virtual void NotifyEventCreated(const EventRow& row) = 0;
 
   // Sends notification that |events| have been changed or added.
-  virtual void NotifyEventModified() = 0;
+  virtual void NotifyEventModified(const EventRow& row) = 0;
 
   // Sends notification that |event| has been deleted.
-  virtual void NotifyEventDeleted() = 0;
+  virtual void NotifyEventDeleted(const EventRow& row) = 0;
+
+  // Sends notification that |calendar| was created
+  virtual void NotifyCalendarCreated(const CalendarRow& row) = 0;
+
+  // Sends notification that |calendar| has been changed
+  virtual void NotifyCalendarModified(const CalendarRow& row) = 0;
+
+  // Sends notification that |calendar| was deleted
+  virtual void NotifyCalendarDeleted(const CalendarRow& row) = 0;
 };
 
 }  // namespace calendar

@@ -50,13 +50,19 @@ bool InProcessWorkerBase::Initialize(ExecutionContext* context,
   if (script_url.IsEmpty())
     return false;
 
-  CrossOriginRequestPolicy cross_origin_request_policy =
-      script_url.ProtocolIsData() ? kAllowCrossOriginRequests
-                                  : kDenyCrossOriginRequests;
+  WebURLRequest::FetchRequestMode fetch_request_mode =
+      WebURLRequest::kFetchRequestModeSameOrigin;
+  WebURLRequest::FetchCredentialsMode fetch_credentials_mode =
+      WebURLRequest::kFetchCredentialsModeSameOrigin;
+  if (script_url.ProtocolIsData()) {
+    fetch_request_mode = WebURLRequest::kFetchRequestModeNoCORS;
+    fetch_credentials_mode = WebURLRequest::kFetchCredentialsModeInclude;
+  }
 
   script_loader_ = WorkerScriptLoader::Create();
   script_loader_->LoadAsynchronously(
-      *context, script_url, cross_origin_request_policy,
+      *context, script_url, WebURLRequest::kRequestContextWorker,
+      fetch_request_mode, fetch_credentials_mode,
       context->GetSecurityContext().AddressSpace(),
       WTF::Bind(&InProcessWorkerBase::OnResponse, WrapPersistent(this)),
       WTF::Bind(&InProcessWorkerBase::OnFinished, WrapPersistent(this)));
@@ -105,6 +111,7 @@ void InProcessWorkerBase::OnFinished() {
 }
 
 DEFINE_TRACE(InProcessWorkerBase) {
+  visitor->Trace(context_proxy_);
   AbstractWorker::Trace(visitor);
 }
 

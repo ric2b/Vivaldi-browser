@@ -337,8 +337,10 @@ bool CheckCertChainEV(const X509Certificate* cert,
 
   // Root should have matching policy in EVRootCAMetadata.
   std::string der_cert;
-  if (!X509Certificate::GetDEREncoded(os_cert_chain.back(), &der_cert))
+  if (os_cert_chain.empty() ||
+      !X509Certificate::GetDEREncoded(os_cert_chain.back(), &der_cert)) {
     return false;
+  }
   SHA1HashValue weak_fingerprint;
   base::SHA1HashBytes(reinterpret_cast<const unsigned char*>(der_cert.data()),
                       der_cert.size(), weak_fingerprint.data);
@@ -379,10 +381,6 @@ void AppendPublicKeyHashes(CFArrayRef chain,
     base::StringPiece spki_bytes;
     if (!asn1::ExtractSPKIFromDERCert(der_bytes, &spki_bytes))
       continue;
-
-    HashValue sha1(HASH_VALUE_SHA1);
-    CC_SHA1(spki_bytes.data(), spki_bytes.size(), sha1.data());
-    hashes->push_back(sha1);
 
     HashValue sha256(HASH_VALUE_SHA256);
     CC_SHA256(spki_bytes.data(), spki_bytes.size(), sha256.data());

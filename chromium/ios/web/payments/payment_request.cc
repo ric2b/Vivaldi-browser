@@ -4,6 +4,7 @@
 
 #include "ios/web/public/payments/payment_request.h"
 
+#include "base/json/json_reader.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 
@@ -17,6 +18,7 @@ static const char kPaymentCurrencyAmountCurrencySystemISO4217[] =
 static const char kPaymentCurrencyAmountCurrencySystem[] = "currencySystem";
 static const char kPaymentCurrencyAmountCurrency[] = "currency";
 static const char kPaymentCurrencyAmountValue[] = "value";
+static const char kPaymentDetailsId[] = "id";
 static const char kPaymentDetailsDisplayItems[] = "displayItems";
 static const char kPaymentDetailsError[] = "error";
 static const char kPaymentDetailsShippingOptions[] = "shippingOptions";
@@ -32,9 +34,10 @@ static const char kPaymentOptionsShippingTypeDelivery[] = "delivery";
 static const char kPaymentOptionsShippingTypePickup[] = "pickup";
 static const char kPaymentOptionsShippingType[] = "shippingType";
 static const char kPaymentRequestDetails[] = "details";
-static const char kPaymentRequestId[] = "paymentRequestID";
+static const char kPaymentRequestId[] = "id";
 static const char kPaymentRequestMethodData[] = "methodData";
 static const char kPaymentRequestOptions[] = "options";
+static const char kPaymentResponseId[] = "requestId";
 static const char kPaymentResponseDetails[] = "details";
 static const char kPaymentResponseMethodName[] = "methodName";
 static const char kPaymentResponsePayerEmail[] = "payerEmail";
@@ -178,7 +181,7 @@ PaymentDetails::PaymentDetails(const PaymentDetails& other) = default;
 PaymentDetails::~PaymentDetails() = default;
 
 bool PaymentDetails::operator==(const PaymentDetails& other) const {
-  return this->total == other.total &&
+  return this->id == other.id && this->total == other.total &&
          this->display_items == other.display_items &&
          this->shipping_options == other.shipping_options &&
          this->modifiers == other.modifiers && this->error == other.error;
@@ -188,16 +191,21 @@ bool PaymentDetails::operator!=(const PaymentDetails& other) const {
   return !(*this == other);
 }
 
-bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value) {
+bool PaymentDetails::FromDictionaryValue(const base::DictionaryValue& value,
+                                         bool requires_total) {
   this->display_items.clear();
   this->shipping_options.clear();
   this->modifiers.clear();
 
+  // ID is optional.
+  value.GetString(kPaymentDetailsId, &this->id);
+
   const base::DictionaryValue* total_dict = nullptr;
-  if (!value.GetDictionary(kPaymentDetailsTotal, &total_dict)) {
+  if (!value.GetDictionary(kPaymentDetailsTotal, &total_dict) &&
+      requires_total) {
     return false;
   }
-  if (!this->total.FromDictionaryValue(*total_dict)) {
+  if (total_dict && !this->total.FromDictionaryValue(*total_dict)) {
     return false;
   }
 
@@ -302,6 +310,10 @@ bool PaymentRequest::operator!=(const PaymentRequest& other) const {
 bool PaymentRequest::FromDictionaryValue(const base::DictionaryValue& value) {
   this->method_data.clear();
 
+  if (!value.GetString(kPaymentRequestId, &this->payment_request_id)) {
+    return false;
+  }
+
   // Parse the payment method data.
   const base::ListValue* method_data_list = nullptr;
   // At least one method is required.
@@ -323,7 +335,8 @@ bool PaymentRequest::FromDictionaryValue(const base::DictionaryValue& value) {
   // Parse the payment details.
   const base::DictionaryValue* payment_details_dict = nullptr;
   if (!value.GetDictionary(kPaymentRequestDetails, &payment_details_dict) ||
-      !this->details.FromDictionaryValue(*payment_details_dict)) {
+      !this->details.FromDictionaryValue(*payment_details_dict,
+                                         /*requires_total=*/true)) {
     return false;
   }
 
@@ -360,9 +373,15 @@ std::unique_ptr<base::DictionaryValue> PaymentResponse::ToDictionaryValue()
     const {
   std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
 
-  result->SetString(kPaymentRequestId, this->payment_request_id);
+  result->SetString(kPaymentResponseId, this->payment_request_id);
   result->SetString(kPaymentResponseMethodName, this->method_name);
-  result->Set(kPaymentResponseDetails, this->details.ToDictionaryValue());
+  // |this.details| is a json-serialized string. Parse it to a base::Value so
+  // that when |this| is converted to a JSON string, |this.details| won't get
+  // json-escaped.
+  std::unique_ptr<base::Value> details =
+      base::JSONReader().ReadToValue(this->details);
+  if (details)
+    result->Set(kPaymentResponseDetails, std::move(details));
   if (!this->shipping_address.ToDictionaryValue()->empty()) {
     result->Set(kPaymentResponseShippingAddress,
                 this->shipping_address.ToDictionaryValue());

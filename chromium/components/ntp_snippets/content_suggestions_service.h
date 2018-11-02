@@ -15,7 +15,6 @@
 #include "base/observer_list.h"
 #include "base/optional.h"
 #include "base/scoped_observer.h"
-#include "base/supports_user_data.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/time/time.h"
 #include "components/history/core/browser/history_service.h"
@@ -48,7 +47,6 @@ class RemoteSuggestionsProvider;
 // Retrieves suggestions from a number of ContentSuggestionsProviders and serves
 // them grouped into categories. There can be at most one provider per category.
 class ContentSuggestionsService : public KeyedService,
-                                  public base::SupportsUserData,
                                   public ContentSuggestionsProvider::Observer,
                                   public SigninManagerBase::Observer,
                                   public history::HistoryServiceObserver {
@@ -291,8 +289,7 @@ class ContentSuggestionsService : public KeyedService,
 
   // SigninManagerBase::Observer implementation
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -353,7 +350,7 @@ class ContentSuggestionsService : public KeyedService,
       int minimum_size_in_pixel,
       int desired_size_in_pixel,
       const ImageFetchedCallback& callback,
-      bool success);
+      favicon_base::GoogleFaviconServerRequestStatus status);
 
   // Whether the content suggestions feature is enabled.
   State state_;

@@ -115,6 +115,8 @@ void CoreAudioDemuxer::Seek(base::TimeDelta time,
     status_cb.Run(PIPELINE_OK);
     return;
   }
+  LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+             << ": PIPELINE_ERROR_ABORT";
   status_cb.Run(PIPELINE_ERROR_ABORT);
 }
 
@@ -222,11 +224,15 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
     const PipelineStatusCB& status_cb,
     int read_size) {
   if (!blocking_thread_.IsRunning()) {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": PIPELINE_ERROR_ABORT";
     status_cb.Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (read_size <= 0) {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": DEMUXER_ERROR_COULD_NOT_OPEN";
     status_cb.Run(DEMUXER_ERROR_COULD_NOT_OPEN);
     return;
   }
@@ -249,13 +255,18 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
     }
   }
 
-  if (err != noErr)
+  if (err != noErr) {
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": PIPELINE_ERROR_ABORT";
     status_cb.Run(PIPELINE_ERROR_ABORT);
+  }
 
   if (input_format_found_) {
     audio_stream_.reset(CreateAudioDemuxerStream());
     if (!audio_stream_->audio_decoder_config().IsValidConfig()) {
       audio_stream_.reset();
+      LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+                 << ": DEMUXER_ERROR_NO_SUPPORTED_STREAMS";
       status_cb.Run(DEMUXER_ERROR_NO_SUPPORTED_STREAMS);
       return;
     }
@@ -267,6 +278,8 @@ void CoreAudioDemuxer::OnReadAudioFormatInfoDone(
 }
 
 void CoreAudioDemuxer::OnDataSourceError() {
+  LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+             << ": PIPELINE_ERROR_READ";
   host_->OnDemuxerError(PIPELINE_ERROR_READ);
 }
 

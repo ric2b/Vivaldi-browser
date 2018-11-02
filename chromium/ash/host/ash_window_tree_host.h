@@ -8,6 +8,7 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ui/display/display.h"
 
 namespace aura {
 class WindowTreeHost;
@@ -33,9 +34,6 @@ class ASH_EXPORT AshWindowTreeHost {
   static std::unique_ptr<AshWindowTreeHost> Create(
       const AshWindowTreeHostInitParams& init_params);
 
-  // Toggles the host's full screen state.
-  virtual void ToggleFullScreen() = 0;
-
   // Clips the cursor to the bounds of the root window until UnConfineCursor().
   // We would like to be able to confine the cursor to that window. However,
   // currently, we do not have such functionality in X. So we just confine
@@ -55,6 +53,12 @@ class ASH_EXPORT AshWindowTreeHost {
   virtual void PrepareForShutdown() {}
 
   virtual void RegisterMirroringHost(AshWindowTreeHost* mirroring_ash_host) {}
+
+#if defined(USE_OZONE)
+  virtual void SetCursorConfig(const display::Display& display,
+                               display::Display::Rotation rotation) = 0;
+  virtual void ClearCursorConfig() = 0;
+#endif
 
  protected:
   // Translates the native mouse location into screen coordinates.

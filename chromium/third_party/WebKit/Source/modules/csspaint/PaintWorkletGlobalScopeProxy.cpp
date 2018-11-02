@@ -18,28 +18,31 @@ PaintWorkletGlobalScopeProxy* PaintWorkletGlobalScopeProxy::From(
   return static_cast<PaintWorkletGlobalScopeProxy*>(proxy);
 }
 
-PaintWorkletGlobalScopeProxy::PaintWorkletGlobalScopeProxy(LocalFrame* frame) {
+PaintWorkletGlobalScopeProxy::PaintWorkletGlobalScopeProxy(
+    LocalFrame* frame,
+    PaintWorkletPendingGeneratorRegistry* pending_generator_registry) {
   DCHECK(IsMainThread());
   Document* document = frame->GetDocument();
   global_scope_ = PaintWorkletGlobalScope::Create(
       frame, document->Url(), document->UserAgent(),
-      document->GetSecurityOrigin(), ToIsolate(document));
+      document->GetSecurityOrigin(), ToIsolate(document),
+      pending_generator_registry);
 }
 
 void PaintWorkletGlobalScopeProxy::FetchAndInvokeScript(
     const KURL& module_url_record,
     WebURLRequest::FetchCredentialsMode credentials_mode,
+    RefPtr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());
   global_scope_->FetchAndInvokeScript(module_url_record, credentials_mode,
+                                      std::move(outside_settings_task_runner),
                                       pending_tasks);
 }
 
-void PaintWorkletGlobalScopeProxy::EvaluateScript(
-    const ScriptSourceCode& script_source_code) {
-  // This should be called only for threaded worklets that still use classic
-  // script loading.
-  NOTREACHED();
+void PaintWorkletGlobalScopeProxy::WorkletObjectDestroyed() {
+  DCHECK(IsMainThread());
+  // Do nothing.
 }
 
 void PaintWorkletGlobalScopeProxy::TerminateWorkletGlobalScope() {
@@ -55,11 +58,8 @@ CSSPaintDefinition* PaintWorkletGlobalScopeProxy::FindDefinition(
   return global_scope_->FindDefinition(name);
 }
 
-void PaintWorkletGlobalScopeProxy::AddPendingGenerator(
-    const String& name,
-    CSSPaintImageGeneratorImpl* generator) {
-  DCHECK(IsMainThread());
-  global_scope_->AddPendingGenerator(name, generator);
+DEFINE_TRACE(PaintWorkletGlobalScopeProxy) {
+  visitor->Trace(global_scope_);
 }
 
 }  // namespace blink

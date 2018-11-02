@@ -24,6 +24,7 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/button/checkbox.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/tabbed_pane/tabbed_pane.h"
@@ -55,9 +56,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     DesktopMediaPickerViews* parent,
     const base::string16& app_name,
     const base::string16& target_name,
-    std::unique_ptr<DesktopMediaList> screen_list,
-    std::unique_ptr<DesktopMediaList> window_list,
-    std::unique_ptr<DesktopMediaList> tab_list,
+    std::vector<std::unique_ptr<DesktopMediaList>> source_lists,
     bool request_audio)
     : parent_(parent),
       description_label_(new views::Label()),
@@ -67,113 +66,120 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 
   SetLayoutManager(new views::BoxLayout(
       views::BoxLayout::kVertical,
-      provider->GetDistanceMetric(
-          views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN),
-      provider->GetDistanceMetric(
-          views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN),
+      provider->GetInsetsMetric(views::INSETS_DIALOG_CONTENTS),
       provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL_SMALL)));
 
   description_label_->SetMultiLine(true);
   description_label_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   AddChildView(description_label_);
 
-  if (screen_list) {
-    source_types_.push_back(DesktopMediaID::TYPE_SCREEN);
+  for (auto& source_list : source_lists) {
+    switch (source_list->GetMediaListType()) {
+      case DesktopMediaID::TYPE_NONE: {
+        NOTREACHED();
+        break;
+      }
+      case DesktopMediaID::TYPE_SCREEN: {
+        source_types_.push_back(DesktopMediaID::TYPE_SCREEN);
 
-    const DesktopMediaSourceViewStyle kSingleScreenStyle(
-        1,                                       // columns
-        gfx::Size(360, 280),                     // item_size
-        gfx::Rect(),                             // icon_rect
-        gfx::Rect(),                             // label_rect
-        gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
-        gfx::Rect(20, 20, 320, 240),             // image_rect
-        4,                                       // selection_border_thickness
-        5);                                      // focus_rectangle_inset
+        const DesktopMediaSourceViewStyle kSingleScreenStyle(
+            1,                                       // columns
+            gfx::Size(360, 280),                     // item_size
+            gfx::Rect(),                             // icon_rect
+            gfx::Rect(),                             // label_rect
+            gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
+            gfx::Rect(20, 20, 320, 240),             // image_rect
+            4,   // selection_border_thickness
+            5);  // focus_rectangle_inset
 
-    const DesktopMediaSourceViewStyle kGenericScreenStyle(
-        2,                                       // columns
-        gfx::Size(270, 220),                     // item_size
-        gfx::Rect(),                             // icon_rect
-        gfx::Rect(15, 165, 240, 40),             // label_rect
-        gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
-        gfx::Rect(15, 15, 240, 150),             // image_rect
-        2,                                       // selection_border_thickness
-        5);                                      // focus_rectangle_inset
+        const DesktopMediaSourceViewStyle kGenericScreenStyle(
+            2,                                       // columns
+            gfx::Size(270, 220),                     // item_size
+            gfx::Rect(),                             // icon_rect
+            gfx::Rect(15, 165, 240, 40),             // label_rect
+            gfx::HorizontalAlignment::ALIGN_CENTER,  // text_alignment
+            gfx::Rect(15, 15, 240, 150),             // image_rect
+            2,   // selection_border_thickness
+            5);  // focus_rectangle_inset
 
-    views::ScrollView* screen_scroll_view =
-        views::ScrollView::CreateScrollViewWithBorder();
-    base::string16 screen_title_text =
-        l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_SCREEN);
-    list_views_.push_back(new DesktopMediaListView(
-        this, std::move(screen_list), kGenericScreenStyle, kSingleScreenStyle,
-        screen_title_text));
+        views::ScrollView* screen_scroll_view =
+            views::ScrollView::CreateScrollViewWithBorder();
+        base::string16 screen_title_text = l10n_util::GetStringUTF16(
+            IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_SCREEN);
+        list_views_.push_back(new DesktopMediaListView(
+            this, std::move(source_list), kGenericScreenStyle,
+            kSingleScreenStyle, screen_title_text));
 
-    screen_scroll_view->SetContents(list_views_.back());
-    screen_scroll_view->ClipHeightTo(
-        kGenericScreenStyle.item_size.height(),
-        kGenericScreenStyle.item_size.height() * 2);
-    screen_scroll_view->set_hide_horizontal_scrollbar(true);
+        screen_scroll_view->SetContents(list_views_.back());
+        screen_scroll_view->ClipHeightTo(
+            kGenericScreenStyle.item_size.height(),
+            kGenericScreenStyle.item_size.height() * 2);
+        screen_scroll_view->set_hide_horizontal_scrollbar(true);
 
-    pane_->AddTab(screen_title_text, screen_scroll_view);
-    pane_->set_listener(this);
-  }
+        pane_->AddTab(screen_title_text, screen_scroll_view);
+        pane_->set_listener(this);
+        break;
+      }
+      case DesktopMediaID::TYPE_WINDOW: {
+        source_types_.push_back(DesktopMediaID::TYPE_WINDOW);
 
-  if (window_list) {
-    source_types_.push_back(DesktopMediaID::TYPE_WINDOW);
+        const DesktopMediaSourceViewStyle kWindowStyle(
+            3,                                     // columns
+            gfx::Size(180, 160),                   // item_size
+            gfx::Rect(10, 120, 20, 20),            // icon_rect
+            gfx::Rect(32, 110, 138, 40),           // label_rect
+            gfx::HorizontalAlignment::ALIGN_LEFT,  // text_alignment
+            gfx::Rect(8, 8, 164, 104),             // image_rect
+            2,                                     // selection_border_thickness
+            5);                                    // focus_rectangle_inset
 
-    const DesktopMediaSourceViewStyle kWindowStyle(
-        3,                                     // columns
-        gfx::Size(180, 160),                   // item_size
-        gfx::Rect(10, 120, 20, 20),            // icon_rect
-        gfx::Rect(32, 110, 138, 40),           // label_rect
-        gfx::HorizontalAlignment::ALIGN_LEFT,  // text_alignment
-        gfx::Rect(8, 8, 164, 104),             // image_rect
-        2,                                     // selection_border_thickness
-        5);                                    // focus_rectangle_inset
+        views::ScrollView* window_scroll_view =
+            views::ScrollView::CreateScrollViewWithBorder();
+        base::string16 window_title_text = l10n_util::GetStringUTF16(
+            IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_WINDOW);
+        list_views_.push_back(
+            new DesktopMediaListView(this, std::move(source_list), kWindowStyle,
+                                     kWindowStyle, window_title_text));
+        window_scroll_view->SetContents(list_views_.back());
+        window_scroll_view->ClipHeightTo(kWindowStyle.item_size.height(),
+                                         kWindowStyle.item_size.height() * 2);
+        window_scroll_view->set_hide_horizontal_scrollbar(true);
 
-    views::ScrollView* window_scroll_view =
-        views::ScrollView::CreateScrollViewWithBorder();
-    base::string16 window_title_text =
-        l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_WINDOW);
-    list_views_.push_back(new DesktopMediaListView(this, std::move(window_list),
-                                                   kWindowStyle, kWindowStyle,
-                                                   window_title_text));
-    window_scroll_view->SetContents(list_views_.back());
-    window_scroll_view->ClipHeightTo(kWindowStyle.item_size.height(),
-                                     kWindowStyle.item_size.height() * 2);
-    window_scroll_view->set_hide_horizontal_scrollbar(true);
+        pane_->AddTab(window_title_text, window_scroll_view);
+        pane_->set_listener(this);
+        break;
+      }
+      case DesktopMediaID::TYPE_WEB_CONTENTS: {
+        source_types_.push_back(DesktopMediaID::TYPE_WEB_CONTENTS);
 
-    pane_->AddTab(window_title_text, window_scroll_view);
-    pane_->set_listener(this);
-  }
+        const DesktopMediaSourceViewStyle kTabStyle(
+            1,                                     // columns
+            gfx::Size(600, 30),                    // item_size
+            gfx::Rect(),                           // icon_rect
+            gfx::Rect(46, 0, 490, 30),             // label_rect
+            gfx::HorizontalAlignment::ALIGN_LEFT,  // text_alignment
+            gfx::Rect(10, 2, 26, 26),              // image_rect
+            1,                                     // selection_border_thickness
+            0);                                    // focus_rectangle_inset
 
-  if (tab_list) {
-    source_types_.push_back(DesktopMediaID::TYPE_WEB_CONTENTS);
+        views::ScrollView* tab_scroll_view =
+            views::ScrollView::CreateScrollViewWithBorder();
+        base::string16 tab_title_text =
+            l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_TAB);
+        list_views_.push_back(
+            new DesktopMediaListView(this, std::move(source_list), kTabStyle,
+                                     kTabStyle, tab_title_text));
 
-    const DesktopMediaSourceViewStyle kTabStyle(
-        1,                                     // columns
-        gfx::Size(600, 30),                    // item_size
-        gfx::Rect(),                           // icon_rect
-        gfx::Rect(46, 0, 490, 30),             // label_rect
-        gfx::HorizontalAlignment::ALIGN_LEFT,  // text_alignment
-        gfx::Rect(10, 2, 26, 26),              // image_rect
-        1,                                     // selection_border_thickness
-        0);                                    // focus_rectangle_inset
+        tab_scroll_view->SetContents(list_views_.back());
+        tab_scroll_view->ClipHeightTo(kTabStyle.item_size.height(),
+                                      kTabStyle.item_size.height() * 10);
+        tab_scroll_view->set_hide_horizontal_scrollbar(true);
 
-    views::ScrollView* tab_scroll_view =
-        views::ScrollView::CreateScrollViewWithBorder();
-    base::string16 tab_title_text =
-        l10n_util::GetStringUTF16(IDS_DESKTOP_MEDIA_PICKER_SOURCE_TYPE_TAB);
-    list_views_.push_back(new DesktopMediaListView(
-        this, std::move(tab_list), kTabStyle, kTabStyle, tab_title_text));
-
-    tab_scroll_view->SetContents(list_views_.back());
-    tab_scroll_view->ClipHeightTo(kTabStyle.item_size.height(),
-                                  kTabStyle.item_size.height() * 10);
-    tab_scroll_view->set_hide_horizontal_scrollbar(true);
-
-    pane_->AddTab(tab_title_text, tab_scroll_view);
-    pane_->set_listener(this);
+        pane_->AddTab(tab_title_text, tab_scroll_view);
+        pane_->set_listener(this);
+        break;
+      }
+    }
   }
 
   if (app_name == target_name) {
@@ -195,7 +201,7 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
   }
 
   // Focus on the first non-null media_list.
-  SwitchSourceType(0);
+  OnSourceTypeSwitched(0);
 
   // If |parent_web_contents| is set and it's not a background page then the
   // picker will be shown modal to the web contents. Otherwise the picker is
@@ -236,12 +242,12 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
 DesktopMediaPickerDialogView::~DesktopMediaPickerDialogView() {}
 
 void DesktopMediaPickerDialogView::TabSelectedAt(int index) {
-  SwitchSourceType(index);
+  OnSourceTypeSwitched(index);
   list_views_[index]->RequestFocus();
   GetDialogClientView()->UpdateDialogButtons();
 }
 
-void DesktopMediaPickerDialogView::SwitchSourceType(int index) {
+void DesktopMediaPickerDialogView::OnSourceTypeSwitched(int index) {
   // Set whether the checkbox is visible based on the source type.
   if (audio_share_checkbox_) {
     switch (source_types_[index]) {
@@ -298,10 +304,6 @@ base::string16 DesktopMediaPickerDialogView::GetDialogButtonLabel(
   return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK
                                        ? IDS_DESKTOP_MEDIA_PICKER_SHARE
                                        : IDS_CANCEL);
-}
-
-bool DesktopMediaPickerDialogView::ShouldDefaultButtonBeBlue() const {
-  return true;
 }
 
 views::View* DesktopMediaPickerDialogView::CreateExtraView() {
@@ -364,6 +366,16 @@ void DesktopMediaPickerDialogView::OnDoubleClick() {
   GetDialogClientView()->AcceptWindow();
 }
 
+void DesktopMediaPickerDialogView::SelectTab(
+    content::DesktopMediaID::Type source_type) {
+  for (size_t i = 0; i < source_types_.size(); i++) {
+    if (source_types_[i] == source_type) {
+      pane_->SelectTabAt(i);
+      return;
+    }
+  }
+}
+
 void DesktopMediaPickerDialogView::OnMediaListRowsChanged() {
   gfx::Rect widget_bound = GetWidget()->GetWindowBoundsInScreen();
 
@@ -419,16 +431,13 @@ void DesktopMediaPickerViews::Show(
     gfx::NativeWindow parent,
     const base::string16& app_name,
     const base::string16& target_name,
-    std::unique_ptr<DesktopMediaList> screen_list,
-    std::unique_ptr<DesktopMediaList> window_list,
-    std::unique_ptr<DesktopMediaList> tab_list,
+    std::vector<std::unique_ptr<DesktopMediaList>> source_lists,
     bool request_audio,
     const DoneCallback& done_callback) {
   callback_ = done_callback;
   dialog_ = new DesktopMediaPickerDialogView(
       web_contents, context, this, app_name, target_name,
-      std::move(screen_list), std::move(window_list), std::move(tab_list),
-      request_audio);
+      std::move(source_lists), request_audio);
 }
 
 void DesktopMediaPickerViews::NotifyDialogResult(DesktopMediaID source) {

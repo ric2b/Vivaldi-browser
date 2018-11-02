@@ -16,7 +16,7 @@
 #include "base/metrics/user_metrics_action.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
-#import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
 #import "ios/chrome/browser/ui/fullscreen_controller.h"
 #import "ios/chrome/browser/ui/image_util.h"
@@ -33,7 +33,7 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/chrome/grit/ios_theme_resources.h"
 #import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -249,6 +249,7 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
 @synthesize shadowView = shadowView_;
 @synthesize toolsPopupController = toolsPopupController_;
 @synthesize style = style_;
+@synthesize dispatcher = dispatcher_;
 
 - (void)setReadingListModel:(ReadingListModel*)readingListModel {
   readingListModel_ = readingListModel;
@@ -259,10 +260,13 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
   }
 }
 
-- (instancetype)initWithStyle:(ToolbarControllerStyle)style {
+- (instancetype)initWithStyle:(ToolbarControllerStyle)style
+                   dispatcher:
+                       (id<ApplicationCommands, BrowserCommands>)dispatcher {
   self = [super init];
   if (self) {
     style_ = style;
+    dispatcher_ = dispatcher;
     DCHECK_LT(style_, ToolbarControllerStyleMaxStyles);
 
     InterfaceIdiom idiom = IsIPadIdiom() ? IPAD_IDIOM : IPHONE_IDIOM;
@@ -285,7 +289,9 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
     toolsMenuButton_ =
         [[ToolbarToolsMenuButton alloc] initWithFrame:toolsMenuButtonFrame
                                                 style:style_];
-    [toolsMenuButton_ setTag:IDC_SHOW_TOOLS_MENU];
+    [toolsMenuButton_ addTarget:self.dispatcher
+                         action:@selector(showToolsMenu)
+               forControlEvents:UIControlEventTouchUpInside];
     [toolsMenuButton_
         setAutoresizingMask:UIViewAutoresizingFlexibleLeadingMargin() |
                             UIViewAutoresizingFlexibleBottomMargin];
@@ -299,7 +305,6 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
     if (idiom == IPAD_IDIOM) {
       CGRect shareButtonFrame = LayoutRectGetRect(kShareMenuButtonFrame);
       shareButton_ = [[UIButton alloc] initWithFrame:shareButtonFrame];
-      [shareButton_ setTag:IDC_SHARE_PAGE];
       [shareButton_
           setAutoresizingMask:UIViewAutoresizingFlexibleLeadingMargin() |
                               UIViewAutoresizingFlexibleBottomMargin];
@@ -308,6 +313,9 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
            forInitialState:UIControlStateNormal
           hasDisabledImage:YES
              synchronously:NO];
+      [shareButton_ addTarget:self.dispatcher
+                       action:@selector(sharePage)
+             forControlEvents:UIControlEventTouchUpInside];
       SetA11yLabelAndUiAutomationName(shareButton_, IDS_IOS_TOOLS_MENU_SHARE,
                                       kToolbarShareButtonIdentifier);
       [view_ addSubview:shareButton_];
@@ -403,7 +411,7 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
 }
 
 - (UIFont*)fontForSize:(NSInteger)size {
-  return [[MDFRobotoFontLoader sharedInstance] boldFontOfSize:size];
+  return [[MDCTypography fontLoader] boldFontOfSize:size];
 }
 
 - (void)dealloc {
@@ -558,9 +566,12 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
   [button addTarget:self
                 action:@selector(recordUserMetrics:)
       forControlEvents:UIControlEventTouchUpInside];
-  [button addTarget:button
-                action:@selector(chromeExecuteCommand:)
-      forControlEvents:UIControlEventTouchUpInside];
+  // Only register buttons with defined tags for -chromeExecuteCommand:.
+  if (button.tag) {
+    [button addTarget:button
+                  action:@selector(chromeExecuteCommand:)
+        forControlEvents:UIControlEventTouchUpInside];
+  }
 }
 
 - (CGRect)shareButtonAnchorRect {
@@ -588,7 +599,8 @@ const LayoutOffset kButtonFadeOutXOffset = 10;
 
   [configuration setToolsMenuButton:toolsMenuButton_];
   toolsPopupController_ =
-      [[ToolsPopupController alloc] initWithConfiguration:configuration];
+      [[ToolsPopupController alloc] initWithConfiguration:configuration
+                                               dispatcher:self.dispatcher];
 
   [toolsPopupController_ setDelegate:self];
 

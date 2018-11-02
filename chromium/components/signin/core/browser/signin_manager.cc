@@ -56,6 +56,8 @@ std::string SigninManager::SigninTypeToString(SigninManager::SigninType type) {
       return "No Signin";
     case SIGNIN_TYPE_WITH_REFRESH_TOKEN:
       return "With refresh token";
+    case SIGNIN_TYPE_WITHOUT_REFRESH_TOKEN:
+      return "Without refresh token";
   }
 
   NOTREACHED();
@@ -68,9 +70,9 @@ bool SigninManager::PrepareForSignin(SigninType type,
                                      const std::string& password) {
   std::string account_id =
       account_tracker_service()->PickAccountIdForAccount(gaia_id, username);
+  DCHECK(!account_id.empty());
   DCHECK(possibly_invalid_account_id_.empty() ||
          possibly_invalid_account_id_ == account_id);
-  DCHECK(!account_id.empty());
 
   if (!IsAllowedUsername(username)) {
     // Account is not allowed by admin policy.
@@ -103,19 +105,21 @@ void SigninManager::StartSignInWithRefreshToken(
     const std::string& password,
     const OAuthTokenFetchedCallback& callback) {
   DCHECK(!IsAuthenticated());
-
-  if (!PrepareForSignin(SIGNIN_TYPE_WITH_REFRESH_TOKEN, gaia_id, username,
-                        password)) {
+  SigninType signin_type = refresh_token.empty()
+                               ? SIGNIN_TYPE_WITHOUT_REFRESH_TOKEN
+                               : SIGNIN_TYPE_WITH_REFRESH_TOKEN;
+  if (!PrepareForSignin(signin_type, gaia_id, username, password)) {
     return;
   }
 
-  // Store our token.
+  // Store the refresh token.
   temp_refresh_token_ = refresh_token;
 
-  if (!callback.is_null() && !temp_refresh_token_.empty()) {
+  if (!callback.is_null()) {
+    // Callback present, let the caller complete the pending sign-in.
     callback.Run(temp_refresh_token_);
   } else {
-    // No oauth token or callback, so just complete our pending signin.
+    // No callback, so just complete the pending signin.
     CompletePendingSignin();
   }
 }
@@ -356,13 +360,13 @@ void SigninManager::CompletePendingSignin() {
   DCHECK(!possibly_invalid_account_id_.empty());
   OnSignedIn();
 
-  DCHECK(!temp_refresh_token_.empty());
   DCHECK(IsAuthenticated());
 
-  std::string account_id = GetAuthenticatedAccountId();
-  token_service_->UpdateCredentials(account_id, temp_refresh_token_);
-  temp_refresh_token_.clear();
-
+  if (!temp_refresh_token_.empty()) {
+    std::string account_id = GetAuthenticatedAccountId();
+    token_service_->UpdateCredentials(account_id, temp_refresh_token_);
+    temp_refresh_token_.clear();
+  }
   MergeSigninCredentialIntoCookieJar();
 }
 
@@ -391,8 +395,11 @@ void SigninManager::OnSignedIn() {
 
   for (auto& observer : observer_list_) {
     observer.GoogleSigninSucceeded(GetAuthenticatedAccountId(),
-                                   GetAuthenticatedAccountInfo().email,
-                                   password_);
+                                   GetAuthenticatedAccountInfo().email);
+
+    observer.GoogleSigninSucceededWithPassword(
+        GetAuthenticatedAccountId(), GetAuthenticatedAccountInfo().email,
+        password_);
   }
 
   client_->OnSignedIn(GetAuthenticatedAccountId(), gaia_id,

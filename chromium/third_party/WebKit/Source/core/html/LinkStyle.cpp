@@ -4,7 +4,9 @@
 
 #include "core/html/LinkStyle.h"
 
+#include "core/HTMLNames.h"
 #include "core/css/StyleSheetContents.h"
+#include "core/dom/Document.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/SubresourceIntegrity.h"
@@ -13,8 +15,15 @@
 #include "core/html/HTMLLinkElement.h"
 #include "core/loader/resource/CSSStyleSheetResource.h"
 #include "platform/Histogram.h"
+#include "platform/loader/fetch/FetchParameters.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/network/mime/ContentType.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
+#include "platform/weborigin/KURL.h"
+#include "platform/weborigin/ReferrerPolicy.h"
+#include "platform/weborigin/SecurityPolicy.h"
+#include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
@@ -41,10 +50,6 @@ LinkStyle::LinkStyle(HTMLLinkElement* owner)
 
 LinkStyle::~LinkStyle() {}
 
-Document& LinkStyle::GetDocument() {
-  return owner_->GetDocument();
-}
-
 enum StyleSheetCacheStatus {
   kStyleSheetNewEntry,
   kStyleSheetInDiskCache,
@@ -56,7 +61,7 @@ void LinkStyle::SetCSSStyleSheet(
     const String& href,
     const KURL& base_url,
     ReferrerPolicy referrer_policy,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     const CSSStyleSheetResource* cached_style_sheet) {
   if (!owner_->isConnected()) {
     // While the stylesheet is asynchronously loading, the owner can be
@@ -72,7 +77,7 @@ void LinkStyle::SetCSSStyleSheet(
   // See the comment in PendingScript.cpp about why this check is necessary
   // here, instead of in the resource fetcher. https://crbug.com/500701.
   if (!cached_style_sheet->ErrorOccurred() &&
-      !owner_->FastGetAttribute(HTMLNames::integrityAttr).IsEmpty() &&
+      !owner_->FastGetAttribute(integrityAttr).IsEmpty() &&
       !cached_style_sheet->IntegrityMetadata().IsEmpty()) {
     ResourceIntegrityDisposition disposition =
         cached_style_sheet->IntegrityDisposition();
@@ -90,9 +95,8 @@ void LinkStyle::SetCSSStyleSheet(
         size = cached_style_sheet->ResourceBuffer()->size();
       }
       check_result = SubresourceIntegrity::CheckSubresourceIntegrity(
-          owner_->FastGetAttribute(HTMLNames::integrityAttr),
-          owner_->GetDocument(), data, size, KURL(base_url, href),
-          *cached_style_sheet);
+          owner_->FastGetAttribute(integrityAttr), GetDocument(), data, size,
+          KURL(base_url, href), *cached_style_sheet);
       disposition = check_result ? ResourceIntegrityDisposition::kPassed
                                  : ResourceIntegrityDisposition::kFailed;
 
@@ -111,7 +115,7 @@ void LinkStyle::SetCSSStyleSheet(
   }
 
   CSSParserContext* parser_context = CSSParserContext::Create(
-      owner_->GetDocument(), base_url, referrer_policy, charset);
+      GetDocument(), base_url, referrer_policy, charset);
 
   if (StyleSheetContents* restored_sheet =
           const_cast<CSSStyleSheetResource*>(cached_style_sheet)
@@ -146,7 +150,7 @@ void LinkStyle::SetCSSStyleSheet(
   SetCrossOriginStylesheetStatus(sheet_.Get());
 
   style_sheet->ParseAuthorStyleSheet(cached_style_sheet,
-                                     owner_->GetDocument().GetSecurityOrigin());
+                                     GetDocument().GetSecurityOrigin());
 
   loading_ = false;
   style_sheet->NotifyLoadedSheet(cached_style_sheet);
@@ -203,7 +207,7 @@ void LinkStyle::AddPendingSheet(PendingSheetType type) {
 
   if (pending_sheet_type_ == kNonBlocking)
     return;
-  owner_->GetDocument().GetStyleEngine().AddPendingSheet(style_engine_context_);
+  GetDocument().GetStyleEngine().AddPendingSheet(style_engine_context_);
 }
 
 void LinkStyle::RemovePendingSheet() {
@@ -215,13 +219,12 @@ void LinkStyle::RemovePendingSheet() {
     return;
   if (type == kNonBlocking) {
     // Tell StyleEngine to re-compute styleSheets of this m_owner's treescope.
-    owner_->GetDocument().GetStyleEngine().ModifiedStyleSheetCandidateNode(
-        *owner_);
+    GetDocument().GetStyleEngine().ModifiedStyleSheetCandidateNode(*owner_);
     return;
   }
 
-  owner_->GetDocument().GetStyleEngine().RemovePendingSheet(
-      *owner_, style_engine_context_);
+  GetDocument().GetStyleEngine().RemovePendingSheet(*owner_,
+                                                    style_engine_context_);
 }
 
 void LinkStyle::SetDisabledState(bool disabled) {
@@ -270,19 +273,19 @@ void LinkStyle::SetCrossOriginStylesheetStatus(CSSStyleSheet* sheet) {
     // Record the security origin the CORS access check succeeded at, if cross
     // origin.  Only origins that are script accessible to it may access the
     // stylesheet's rules.
-    sheet->SetAllowRuleAccessFromOrigin(
-        owner_->GetDocument().GetSecurityOrigin());
+    sheet->SetAllowRuleAccessFromOrigin(GetDocument().GetSecurityOrigin());
   }
   fetch_following_cors_ = false;
 }
 
 // TODO(yoav): move that logic to LinkLoader
 LinkStyle::LoadReturnValue LinkStyle::LoadStylesheetIfNeeded(
-    const LinkRequestBuilder& builder,
+    const KURL& url,
+    const WTF::TextEncoding& charset,
     const String& type) {
   if (disabled_state_ == kDisabled || !owner_->RelAttribute().IsStyleSheet() ||
       !StyleSheetTypeIsSupported(type) || !ShouldLoadResource() ||
-      !builder.Url().IsValid())
+      !url.IsValid())
     return kNotNeeded;
 
   if (GetResource()) {
@@ -316,24 +319,40 @@ LinkStyle::LoadReturnValue LinkStyle::LoadStylesheetIfNeeded(
                   owner_->IsCreatedByParser();
   AddPendingSheet(blocking ? kBlocking : kNonBlocking);
 
+  ResourceRequest resource_request(GetDocument().CompleteURL(url));
+  ReferrerPolicy referrer_policy = owner_->GetReferrerPolicy();
+  if (referrer_policy != kReferrerPolicyDefault) {
+    resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
+        referrer_policy, url, GetDocument().OutgoingReferrer()));
+  }
+
+  ResourceLoaderOptions options;
+  options.initiator_info.name = owner_->localName();
+  FetchParameters params(resource_request, options);
+  params.SetCharset(charset);
+
   // Load stylesheets that are not needed for the layout immediately with low
   // priority.  When the link element is created by scripts, load the
   // stylesheets asynchronously but in high priority.
-  bool low_priority = !media_query_matches || owner_->IsAlternate();
-  FetchParameters params = builder.Build(low_priority);
-  CrossOriginAttributeValue cross_origin = GetCrossOriginAttributeValue(
-      owner_->FastGetAttribute(HTMLNames::crossoriginAttr));
+  if (!media_query_matches || owner_->IsAlternate())
+    params.SetDefer(FetchParameters::kLazyLoad);
+
+  params.SetContentSecurityPolicyNonce(owner_->nonce());
+
+  CrossOriginAttributeValue cross_origin =
+      GetCrossOriginAttributeValue(owner_->FastGetAttribute(crossoriginAttr));
   if (cross_origin != kCrossOriginAttributeNotSet) {
     params.SetCrossOriginAccessControl(GetDocument().GetSecurityOrigin(),
                                        cross_origin);
     SetFetchFollowingCORS();
   }
 
-  String integrity_attr = owner_->FastGetAttribute(HTMLNames::integrityAttr);
+  String integrity_attr = owner_->FastGetAttribute(integrityAttr);
   if (!integrity_attr.IsEmpty()) {
     IntegrityMetadataSet metadata_set;
     SubresourceIntegrity::ParseIntegrityAttribute(integrity_attr, metadata_set);
     params.SetIntegrityMetadata(metadata_set);
+    params.MutableResourceRequest().SetFetchIntegrity(integrity_attr);
   }
   SetResource(CSSStyleSheetResource::Fetch(params, GetDocument().Fetcher()));
 
@@ -356,29 +375,28 @@ void LinkStyle::Process() {
   String type = owner_->TypeValue().DeprecatedLower();
   String as = owner_->AsValue().DeprecatedLower();
   String media = owner_->Media().DeprecatedLower();
-  LinkRequestBuilder builder(owner_);
 
-  if (owner_->RelAttribute().GetIconType() != kInvalidIcon &&
-      builder.Url().IsValid() && !builder.Url().IsEmpty()) {
+  const KURL& href = owner_->GetNonEmptyURLAttribute(hrefAttr);
+  WTF::TextEncoding charset = GetCharset();
+
+  if (owner_->RelAttribute().GetIconType() != kInvalidIcon && href.IsValid() &&
+      !href.IsEmpty()) {
     if (!owner_->ShouldLoadLink())
       return;
-    if (!GetDocument().GetSecurityOrigin()->CanDisplay(builder.Url()))
+    if (!GetDocument().GetSecurityOrigin()->CanDisplay(href))
       return;
-    if (!GetDocument().GetContentSecurityPolicy()->AllowImageFromSource(
-            builder.Url()))
+    if (!GetDocument().GetContentSecurityPolicy()->AllowImageFromSource(href))
       return;
-    if (GetDocument().GetFrame() &&
-        GetDocument().GetFrame()->Loader().Client()) {
-      GetDocument().GetFrame()->Loader().Client()->DispatchDidChangeIcons(
+    if (GetDocument().GetFrame() && GetDocument().GetFrame()->Client()) {
+      GetDocument().GetFrame()->Client()->DispatchDidChangeIcons(
           owner_->RelAttribute().GetIconType());
     }
   }
 
-  if (!owner_->LoadLink(type, as, media, owner_->GetReferrerPolicy(),
-                        builder.Url()))
+  if (!owner_->LoadLink(type, as, media, owner_->GetReferrerPolicy(), href))
     return;
 
-  if (LoadStylesheetIfNeeded(builder, type) == kNotNeeded && sheet_) {
+  if (LoadStylesheetIfNeeded(href, charset, type) == kNotNeeded && sheet_) {
     // we no longer contain a stylesheet, e.g. perhaps rel or type was changed
     ClearSheet();
     GetDocument().GetStyleEngine().SetNeedsActiveStyleUpdate(

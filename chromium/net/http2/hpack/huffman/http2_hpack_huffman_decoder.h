@@ -15,10 +15,10 @@
 #include <stddef.h>
 
 #include <iosfwd>
-#include <string>
 
-#include "base/strings/string_piece.h"
-#include "net/base/net_export.h"
+#include "net/http2/platform/api/http2_export.h"
+#include "net/http2/platform/api/http2_string.h"
+#include "net/http2/platform/api/http2_string_piece.h"
 
 namespace net {
 
@@ -37,7 +37,7 @@ typedef size_t HuffmanAccumulatorBitCount;
 
 // HuffmanBitBuffer stores the leading edge of bits to be decoded. The high
 // order bit of accumulator_ is the next bit to be decoded.
-class NET_EXPORT_PRIVATE HuffmanBitBuffer {
+class HTTP2_EXPORT_PRIVATE HuffmanBitBuffer {
  public:
   HuffmanBitBuffer();
 
@@ -46,7 +46,7 @@ class NET_EXPORT_PRIVATE HuffmanBitBuffer {
 
   // Add as many whole bytes to the accumulator (accumulator_) as possible,
   // returning the number of bytes added.
-  size_t AppendBytes(base::StringPiece input);
+  size_t AppendBytes(Http2StringPiece input);
 
   // Get the bits of the accumulator.
   HuffmanAccumulator value() const { return accumulator_; }
@@ -73,7 +73,7 @@ class NET_EXPORT_PRIVATE HuffmanBitBuffer {
   // of them 1. Otherwise returns false.
   bool InputProperlyTerminated() const;
 
-  std::string DebugString() const;
+  Http2String DebugString() const;
 
  private:
   HuffmanAccumulator accumulator_;
@@ -84,7 +84,7 @@ inline std::ostream& operator<<(std::ostream& out, const HuffmanBitBuffer& v) {
   return out << v.DebugString();
 }
 
-class NET_EXPORT_PRIVATE HpackHuffmanDecoder {
+class HTTP2_EXPORT_PRIVATE HpackHuffmanDecoder {
  public:
   HpackHuffmanDecoder();
   ~HpackHuffmanDecoder();
@@ -108,7 +108,7 @@ class NET_EXPORT_PRIVATE HpackHuffmanDecoder {
   // will contain the leading bits of the code for that symbol, but not the
   // final bits of that code.
   // Note that output should be empty, but that it is not cleared by Decode().
-  bool Decode(base::StringPiece input, std::string* output);
+  bool Decode(Http2StringPiece input, Http2String* output);
 
   // Is what remains in the bit_buffer_ valid at the end of an encoded string?
   // Call after passing the the final portion of a Huffman string to Decode,
@@ -119,7 +119,7 @@ class NET_EXPORT_PRIVATE HpackHuffmanDecoder {
 
   bool IsEmptyForTest() const { return bit_buffer_.IsEmpty(); }
 
-  std::string DebugString() const;
+  Http2String DebugString() const;
 
   //////////////////////////////////////////////////////////////////////////////
   // Alternate implementations of Decode:
@@ -127,13 +127,13 @@ class NET_EXPORT_PRIVATE HpackHuffmanDecoder {
   // As above, implemented using a tree of if statements to determine the code
   // length, etc., which are returned as a tree. See PrefixToInfo. This is the
   // original implementation, current as of 2016-8-8.
-  bool DecodeWithIfTreeAndStruct(base::StringPiece input, std::string* output);
+  bool DecodeWithIfTreeAndStruct(Http2StringPiece input, Http2String* output);
 
   // Based on DecodeWithIfTreeAndStruct, but adds an optimization for the common
   // case of short codes (5, 6 or 7), which make up a large fraction of the
   // frequency distribution on which the HPACK table was based.
   // TODO(jamessynge): Be precise about that fraction.
-  bool DecodeShortCodesFirst(base::StringPiece input, std::string* output);
+  bool DecodeShortCodesFirst(Http2StringPiece input, Http2String* output);
 
  private:
   HuffmanBitBuffer bit_buffer_;

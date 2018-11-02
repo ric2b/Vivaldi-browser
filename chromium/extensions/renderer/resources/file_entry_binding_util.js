@@ -4,11 +4,19 @@
 
 var fileSystemNatives = requireNative('file_system_natives');
 var GetIsolatedFileSystem = fileSystemNatives.GetIsolatedFileSystem;
-var lastError = require('lastError');
 var GetModuleSystem = requireNative('v8_context').GetModuleSystem;
 // TODO(sammc): Don't require extension. See http://crbug.com/235689.
 var GetExtensionViews = requireNative('runtime').GetExtensionViews;
 var safeCallbackApply = require('uncaught_exception_handler').safeCallbackApply;
+
+var jsLastError = bindingUtil ? undefined : require('lastError');
+function runCallbackWithLastError(name, message, stack, callback) {
+  if (bindingUtil)
+    bindingUtil.runCallbackWithLastError(message, callback);
+  else
+    jsLastError.run(name, message, stack, callback);
+}
+
 
 var WINDOW = {};
 try {
@@ -28,7 +36,10 @@ try {
 //   previously saved file entries.
 function getFileBindingsForApi(apiName) {
   // Fallback to using the current window if no background page is running.
-  var backgroundPage = GetExtensionViews(-1, -1, 'BACKGROUND')[0] || WINDOW;
+  var views = GetExtensionViews(-1, -1, 'BACKGROUND');
+  // GetExtensionViews() can return null if called from a context without an
+  // associated extension.
+  var backgroundPage = views && views[0] ? views[0] : WINDOW;
   var backgroundPageModuleSystem = GetModuleSystem(backgroundPage);
 
   // All windows use the bindFileEntryCallback from the background page so their
@@ -51,7 +62,7 @@ function getFileBindingsForApi(apiName) {
           var getEntryError = function(fileError) {
             if (!hasError) {
               hasError = true;
-              lastError.run(
+              runCallbackWithLastError(
                   apiName + '.' + functionName,
                   'Error getting fileEntry, code: ' + fileError.code,
                   request.stack,
@@ -103,10 +114,9 @@ function getFileBindingsForApi(apiName) {
             } catch (e) {
               if (!hasError) {
                 hasError = true;
-                lastError.run(apiName + '.' + functionName,
-                              'Error getting fileEntry: ' + e.stack,
-                              request.stack,
-                              callback);
+                runCallbackWithLastError(apiName + '.' + functionName,
+                                         'Error getting fileEntry: ' + e.stack,
+                                         request.stack, callback);
               }
             }
           });
@@ -131,7 +141,10 @@ function getFileBindingsForApi(apiName) {
 function getBindDirectoryEntryCallback() {
   // Get the background page if one exists. Otherwise, default to the current
   // window.
-  var backgroundPage = GetExtensionViews(-1, -1, 'BACKGROUND')[0] || WINDOW;
+  var views = GetExtensionViews(-1, -1, 'BACKGROUND');
+  // GetExtensionViews() can return null if called from a context without an
+  // associated extension.
+  var backgroundPage = views && views[0] ? views[0] : WINDOW;
 
   // For packaged apps, all windows use the bindFileEntryCallback from the
   // background page so their FileEntry objects have the background page's
@@ -150,16 +163,15 @@ function getBindDirectoryEntryCallback() {
 
         try {
           fs.root.getDirectory(baseName, {}, callback, function(fileError) {
-            lastError.run('runtime.' + functionName,
-                          'Error getting Entry, code: ' + fileError.code,
-                          request.stack,
-                          callback);
+            runCallbackWithLastError(
+                'runtime.' + functionName,
+                'Error getting Entry, code: ' + fileError.code,
+                request.stack, callback);
           });
         } catch (e) {
-          lastError.run('runtime.' + functionName,
-                        'Error: ' + e.stack,
-                        request.stack,
-                        callback);
+          runCallbackWithLastError('runtime.' + functionName,
+                                   'Error: ' + e.stack,
+                                   request.stack, callback);
         }
       }
     }

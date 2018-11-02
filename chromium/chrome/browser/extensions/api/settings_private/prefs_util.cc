@@ -18,6 +18,7 @@
 #include "components/drive/drive_pref_names.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/prefs/pref_service.h"
+#include "components/proximity_auth/proximity_auth_pref_names.h"
 #include "components/proxy_config/proxy_config_pref_names.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_manager.h"
@@ -226,6 +227,10 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kEnableQuickUnlockFingerprint] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[proximity_auth::prefs::kEasyUnlockProximityThreshold] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[proximity_auth::prefs::kProximityAuthIsChromeOSLoginEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Accessibility.
   (*s_whitelist)[::prefs::kAccessibilitySpokenFeedbackEnabled] =
@@ -265,6 +270,12 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kArcEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
+  // Google Assistant.
+  (*s_whitelist)[::prefs::kVoiceInteractionEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::prefs::kVoiceInteractionContextEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+
   // Misc.
   (*s_whitelist)[::prefs::kUse24HourClock] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
@@ -276,6 +287,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[chromeos::kAttestationForContentProtectionEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[prefs::kRestoreLastLockScreenNote] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Bluetooth & Internet settings.
   (*s_whitelist)[chromeos::kAllowBluetooth] =
@@ -285,6 +298,8 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
   (*s_whitelist)[::prefs::kWakeOnWifiDarkConnect] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::chromeos::kSignedDataRoamingEnabled] =
+      settings_private::PrefType::PREF_TYPE_BOOLEAN;
+  (*s_whitelist)[::ash::prefs::kUserBluetoothAdapterEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
 
   // Timezone settings.
@@ -298,11 +313,15 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetWhitelistedKeys() {
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[::prefs::kLaunchPaletteOnEjectEvent] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
-  (*s_whitelist)[::prefs::kNoteTakingAppEnabledOnLockScreen] =
-      settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kNightLightEnabled] =
       settings_private::PrefType::PREF_TYPE_BOOLEAN;
   (*s_whitelist)[ash::prefs::kNightLightTemperature] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[ash::prefs::kNightLightScheduleType] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[ash::prefs::kNightLightCustomStartTime] =
+      settings_private::PrefType::PREF_TYPE_NUMBER;
+  (*s_whitelist)[ash::prefs::kNightLightCustomEndTime] =
       settings_private::PrefType::PREF_TYPE_NUMBER;
 
   // Input method settings.

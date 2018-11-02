@@ -28,66 +28,100 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @unrestricted
- */
-Network.RequestResponseView = class extends Network.RequestContentView {
+Network.RequestResponseView = class extends UI.VBox {
   /**
    * @param {!SDK.NetworkRequest} request
    */
   constructor(request) {
-    super(request);
-  }
-
-  get sourceView() {
-    if (this._sourceView || !Network.RequestView.hasTextContent(this.request))
-      return this._sourceView;
-
-    var contentProvider = new Network.RequestResponseView.ContentProvider(this.request);
-    var highlighterType = this.request.resourceType().canonicalMimeType() || this.request.mimeType;
-    this._sourceView = SourceFrame.ResourceSourceFrame.createSearchableView(contentProvider, highlighterType);
-    return this._sourceView;
+    super();
+    this.element.classList.add('request-view');
+    /** @protected */
+    this.request = request;
+    /** @type {?Promise<!UI.Widget>} */
+    this._contentViewPromise = null;
   }
 
   /**
-   * @param {string} message
-   * @return {!UI.EmptyWidget}
+   * @param {!SDK.NetworkRequest} request
+   * @param {!SDK.NetworkRequest.ContentData} contentData
+   * @return {boolean}
    */
-  _createMessageView(message) {
-    return new UI.EmptyWidget(message);
+  static _hasTextContent(request, contentData) {
+    if (request.resourceType().isTextType())
+      return true;
+    if (contentData.error)
+      return false;
+    if (request.resourceType() === Common.resourceTypes.Other)
+      return !!contentData.content && !contentData.encoded;
+    return false;
+  }
+
+  /**
+   * @protected
+   * @param {!SDK.NetworkRequest} request
+   * @return {!Promise<?UI.SearchableView>}
+   */
+  static async sourceViewForRequest(request) {
+    var sourceView = request[Network.RequestResponseView._sourceViewSymbol];
+    if (sourceView !== undefined)
+      return sourceView;
+
+    var contentData = await request.contentData();
+    if (!Network.RequestResponseView._hasTextContent(request, contentData)) {
+      request[Network.RequestResponseView._sourceViewSymbol] = null;
+      return null;
+    }
+
+    var contentProvider = new Network.DecodingContentProvider(request);
+    var highlighterType = request.resourceType().canonicalMimeType() || request.mimeType;
+    sourceView = SourceFrame.ResourceSourceFrame.createSearchableView(contentProvider, highlighterType);
+    request[Network.RequestResponseView._sourceViewSymbol] = sourceView;
+    return sourceView;
   }
 
   /**
    * @override
+   * @final
    */
-  contentLoaded() {
-    if ((!this.request.content || !this.sourceView) && !this.request.contentError()) {
-      if (!this._emptyWidget) {
-        this._emptyWidget = this._createMessageView(Common.UIString('This request has no response data available.'));
-        this._emptyWidget.show(this.element);
-      }
-    } else {
-      if (this._emptyWidget) {
-        this._emptyWidget.detach();
-        delete this._emptyWidget;
-      }
+  wasShown() {
+    this.showPreview();
+  }
 
-      if (this.request.content && this.sourceView) {
-        this.sourceView.show(this.element);
-      } else {
-        if (!this._errorView)
-          this._errorView = this._createMessageView(Common.UIString('Failed to load response data'));
-        this._errorView.show(this.element);
-      }
-    }
+  /**
+   * @protected
+   * @return {!Promise<?UI.Widget>}
+   */
+  async showPreview() {
+    if (!this._contentViewPromise)
+      this._contentViewPromise = this.createPreview();
+    var responseView = await this._contentViewPromise;
+    if (this.element.contains(responseView.element))
+      return null;
+
+    responseView.show(this.element);
+    return responseView;
+  }
+
+  /**
+   * @return {!Promise<!UI.Widget>}
+   */
+  async createPreview() {
+    var contentData = await this.request.contentData();
+    var sourceView = await Network.RequestResponseView.sourceViewForRequest(this.request);
+    if ((!contentData.content || !sourceView) && !contentData.error)
+      return new UI.EmptyWidget(Common.UIString('This request has no response data available.'));
+    if (contentData.content && sourceView)
+      return sourceView;
+    return new UI.EmptyWidget(Common.UIString('Failed to load response data'));
   }
 };
 
+Network.RequestResponseView._sourceViewSymbol = Symbol('RequestResponseSourceView');
+
 /**
  * @implements {Common.ContentProvider}
- * @unrestricted
  */
-Network.RequestResponseView.ContentProvider = class {
+Network.DecodingContentProvider = class {
   /**
    * @param {!SDK.NetworkRequest} request
    */
@@ -115,16 +149,9 @@ Network.RequestResponseView.ContentProvider = class {
    * @override
    * @return {!Promise<?string>}
    */
-  requestContent() {
-    /**
-     * @param {?string} content
-     * @this {Network.RequestResponseView.ContentProvider}
-     */
-    function decodeContent(content) {
-      return this._request.contentEncoded ? window.atob(content || '') : content;
-    }
-
-    return this._request.requestContent().then(decodeContent.bind(this));
+  async requestContent() {
+    var contentData = await this._request.contentData();
+    return contentData.encoded ? window.atob(contentData.content || '') : contentData.content;
   }
 
   /**
@@ -132,9 +159,9 @@ Network.RequestResponseView.ContentProvider = class {
    * @param {string} query
    * @param {boolean} caseSensitive
    * @param {boolean} isRegex
-   * @param {function(!Array.<!Common.ContentProvider.SearchMatch>)} callback
+   * @return {!Promise<!Array<!Common.ContentProvider.SearchMatch>>}
    */
-  searchInContent(query, caseSensitive, isRegex, callback) {
-    this._request.searchInContent(query, caseSensitive, isRegex, callback);
+  searchInContent(query, caseSensitive, isRegex) {
+    return this._request.searchInContent(query, caseSensitive, isRegex);
   }
 };

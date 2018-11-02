@@ -7,11 +7,12 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "services/ui/display/screen_manager.h"
 #include "services/ui/public/interfaces/cursor/cursor_struct_traits.h"
 #include "services/ui/ws/server_window.h"
-#include "ui/base/cursor/image_cursors.h"
+#include "services/ui/ws/threaded_image_cursors.h"
 #include "ui/display/display.h"
 #include "ui/events/event.h"
 #include "ui/events/event_utils.h"
@@ -25,6 +26,7 @@
 #elif defined(OS_ANDROID)
 #include "ui/platform_window/android/platform_window_android.h"
 #elif defined(USE_OZONE)
+#include "ui/events/ozone/chromeos/cursor_controller.h"
 #include "ui/ozone/public/cursor_factory_ozone.h"
 #include "ui/ozone/public/ozone_platform.h"
 #endif
@@ -35,20 +37,27 @@ namespace ws {
 PlatformDisplayDefault::PlatformDisplayDefault(
     ServerWindow* root_window,
     const display::ViewportMetrics& metrics,
-    std::unique_ptr<ImageCursors> image_cursors)
+    std::unique_ptr<ThreadedImageCursors> image_cursors)
     : root_window_(root_window),
       image_cursors_(std::move(image_cursors)),
       metrics_(metrics),
       widget_(gfx::kNullAcceleratedWidget) {}
 
 PlatformDisplayDefault::~PlatformDisplayDefault() {
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  ui::CursorController::GetInstance()->ClearCursorConfigForWindow(
+      GetAcceleratedWidget());
+#endif
+
   // Don't notify the delegate from the destructor.
   delegate_ = nullptr;
 
   frame_generator_.reset();
+  image_cursors_.reset();
   // Destroy the PlatformWindow early on as it may call us back during
   // destruction and we want to be in a known state. But destroy the surface
-  // first because it can still be using the platform window.
+  // and ThreadedImageCursors first because they can still be using the platform
+  // window.
   platform_window_.reset();
 }
 
@@ -104,12 +113,15 @@ void PlatformDisplayDefault::SetCursor(const ui::CursorData& cursor_data) {
   if (!image_cursors_)
     return;
 
-  ui::Cursor native_cursor(cursor_data.cursor_type());
+  ui::CursorType cursor_type = cursor_data.cursor_type();
 
 #if defined(USE_OZONE)
-  if (cursor_data.cursor_type() != ui::CursorType::kCustom) {
-    image_cursors_->SetPlatformCursor(&native_cursor);
+  if (cursor_type != ui::CursorType::kCustom) {
+    // |platform_window_| is destroyed after |image_cursors_|, so it is
+    // guaranteed to outlive |image_cursors_|.
+    image_cursors_->SetCursor(cursor_type, platform_window_.get());
   } else {
+    ui::Cursor native_cursor(cursor_type);
     // In Ozone builds, we have an interface available which turns bitmap data
     // into platform cursors.
     ui::CursorFactoryOzone* cursor_factory =
@@ -118,6 +130,7 @@ void PlatformDisplayDefault::SetCursor(const ui::CursorData& cursor_data) {
         cursor_data.cursor_frames(), cursor_data.hotspot_in_pixels(),
         cursor_data.frame_delay().InMilliseconds(),
         cursor_data.scale_factor()));
+    platform_window_->SetCursor(native_cursor.platform());
   }
 #else
   // Outside of ozone builds, there isn't a single interface for creating
@@ -129,14 +142,21 @@ void PlatformDisplayDefault::SetCursor(const ui::CursorData& cursor_data) {
   // cursor management on its own mus windows so we can remove Webcursor from
   // //content/ and do this in way that's safe cross-platform, instead of as an
   // ozone-specific hack.
-  if (cursor_data.cursor_type() == ui::CursorType::kCustom) {
+  if (cursor_type == ui::CursorType::kCustom) {
     NOTIMPLEMENTED() << "No custom cursor support on non-ozone yet.";
-    native_cursor = ui::Cursor(ui::CursorType::kPointer);
+    cursor_type = ui::CursorType::kPointer;
   }
-  image_cursors_->SetPlatformCursor(&native_cursor);
+  image_cursors_->SetCursor(cursor_type, platform_window_.get());
 #endif
+}
 
-  platform_window_->SetCursor(native_cursor.platform());
+void PlatformDisplayDefault::MoveCursorTo(
+    const gfx::Point& window_pixel_location) {
+  platform_window_->MoveCursorTo(window_pixel_location);
+}
+
+void PlatformDisplayDefault::SetCursorSize(const ui::CursorSize& cursor_size) {
+  image_cursors_->SetCursorSize(cursor_size);
 }
 
 void PlatformDisplayDefault::UpdateTextInputState(
@@ -178,13 +198,13 @@ gfx::AcceleratedWidget PlatformDisplayDefault::GetAcceleratedWidget() const {
   return widget_;
 }
 
-void PlatformDisplayDefault::UpdateEventRootLocation(ui::LocatedEvent* event) {
-  // TODO(riajiang): This is broken for HDPI because it mixes PPs and DIPs. See
-  // http://crbug.com/701036 for details.
-  const display::Display& display = delegate_->GetDisplay();
-  gfx::Point location = event->location();
-  location.Offset(display.bounds().x(), display.bounds().y());
-  event->set_root_location(location);
+void PlatformDisplayDefault::SetCursorConfig(
+    display::Display::Rotation rotation,
+    float scale) {
+#if defined(USE_OZONE) && defined(OS_CHROMEOS)
+  ui::CursorController::GetInstance()->SetCursorConfigForWindow(
+      GetAcceleratedWidget(), rotation, scale);
+#endif
 }
 
 void PlatformDisplayDefault::OnBoundsChanged(const gfx::Rect& new_bounds) {
@@ -202,9 +222,8 @@ void PlatformDisplayDefault::OnDamageRect(const gfx::Rect& damaged_region) {
 }
 
 void PlatformDisplayDefault::DispatchEvent(ui::Event* event) {
-  if (event->IsLocatedEvent())
-    UpdateEventRootLocation(event->AsLocatedEvent());
-
+  // Event location and event root location are the same, and both in pixels
+  // and display coordinates.
   if (event->IsScrollEvent()) {
     // TODO(moshayedi): crbug.com/602859. Dispatch scroll events as
     // they are once we have proper support for scroll events.
@@ -249,10 +268,10 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
   widget_ = widget;
   delegate_->OnAcceleratedWidgetAvailable();
 
-  cc::mojom::MojoCompositorFrameSinkAssociatedPtr compositor_frame_sink;
+  cc::mojom::CompositorFrameSinkAssociatedPtr compositor_frame_sink;
   cc::mojom::DisplayPrivateAssociatedPtr display_private;
-  cc::mojom::MojoCompositorFrameSinkClientPtr compositor_frame_sink_client;
-  cc::mojom::MojoCompositorFrameSinkClientRequest
+  cc::mojom::CompositorFrameSinkClientPtr compositor_frame_sink_client;
+  cc::mojom::CompositorFrameSinkClientRequest
       compositor_frame_sink_client_request =
           mojo::MakeRequest(&compositor_frame_sink_client);
 
@@ -261,6 +280,7 @@ void PlatformDisplayDefault::OnAcceleratedWidgetAvailable(
       std::move(compositor_frame_sink_client),
       mojo::MakeRequest(&display_private));
 
+  display_private->SetDisplayVisible(true);
   frame_generator_ = base::MakeUnique<FrameGenerator>();
   auto frame_sink_client_binding =
       base::MakeUnique<CompositorFrameSinkClientBinding>(

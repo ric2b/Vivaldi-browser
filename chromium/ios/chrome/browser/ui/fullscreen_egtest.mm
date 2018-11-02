@@ -15,16 +15,15 @@
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/settings_test_util.h"
 #import "ios/chrome/test/app/web_view_interaction_test_util.h"
-#include "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
-#import "ios/web/public/test/http_server.h"
-#import "ios/web/public/test/http_server_util.h"
-#import "ios/web/public/test/response_providers/error_page_response_provider.h"
+#import "ios/web/public/test/http_server/error_page_response_provider.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #include "url/gurl.h"
 
@@ -75,14 +74,6 @@ void AssertURLIs(const GURL& expectedURL) {
     return (error == nil);
   };
   GREYAssert(testing::WaitUntilConditionOrTimeout(1.0, condition), description);
-}
-
-// Asserts that the current web view containers contains |text|.
-void AssertStringIsPresentOnPage(const std::string& text) {
-  id<GREYMatcher> response_matcher =
-      chrome_test_util::WebViewContainingText(text);
-  [[EarlGrey selectElementWithMatcher:response_matcher]
-      assertWithMatcher:grey_notNil()];
 }
 
 }  // namespace
@@ -170,8 +161,7 @@ void AssertStringIsPresentOnPage(const std::string& text) {
 - (void)testChromeToChromeURLKeepsHeaderOnScreen {
   const GURL kChromeAboutURL("chrome://chrome-urls");
   [ChromeEarlGrey loadURL:kChromeAboutURL];
-
-  AssertStringIsPresentOnPage("chrome://version");
+  [ChromeEarlGrey waitForWebViewContainingText:"chrome://version"];
 
   // Hide the toolbar. The page is not long enough to dismiss the toolbar using
   // the UI so we have to zoom in.
@@ -250,7 +240,7 @@ void AssertStringIsPresentOnPage(const std::string& text) {
   web::test::SetUpSimpleHttpServer(responses);
 
   [ChromeEarlGrey loadURL:URL];
-  AssertStringIsPresentOnPage("Tall page");
+  [ChromeEarlGrey waitForWebViewContainingText:"Tall page"];
 
   // Hide the toolbar.
   HideToolbarUsingUI();
@@ -290,8 +280,8 @@ void AssertStringIsPresentOnPage(const std::string& text) {
   chrome_test_util::SetContentSettingsBlockPopups(CONTENT_SETTING_ALLOW);
 
   [ChromeEarlGrey loadURL:URL];
-  AssertStringIsPresentOnPage("link1");
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForWebViewContainingText:"link1"];
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   // Hide the toolbar.
   HideToolbarUsingUI();
@@ -301,8 +291,8 @@ void AssertStringIsPresentOnPage(const std::string& text) {
   chrome_test_util::TapWebViewElementWithId("link1");
 
   // Check that a new Tab was created.
-  AssertStringIsPresentOnPage("link2");
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForWebViewContainingText:"link2"];
+  [ChromeEarlGrey waitForMainTabCount:2];
 
   AssertURLIs(destinationURL);
 
@@ -312,10 +302,10 @@ void AssertStringIsPresentOnPage(const std::string& text) {
 
   // Close the tab.
   chrome_test_util::TapWebViewElementWithId("link2");
-  AssertStringIsPresentOnPage("link1");
+  [ChromeEarlGrey waitForWebViewContainingText:"link1"];
 
   // Make sure the toolbar is on the screen.
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
   [ChromeEarlGreyUI waitForToolbarVisible:YES];
 }
 
@@ -343,14 +333,14 @@ void AssertStringIsPresentOnPage(const std::string& text) {
 
   [ChromeEarlGrey loadURL:originURL];
 
-  AssertStringIsPresentOnPage("link1");
+  [ChromeEarlGrey waitForWebViewContainingText:"link1"];
   // Dismiss the toolbar.
   HideToolbarUsingUI();
   [ChromeEarlGreyUI waitForToolbarVisible:NO];
 
   // Navigate to the other page.
   chrome_test_util::TapWebViewElementWithId("link1");
-  AssertStringIsPresentOnPage("link2");
+  [ChromeEarlGrey waitForWebViewContainingText:"link2"];
 
   // Make sure toolbar is shown since a new load has started.
   [ChromeEarlGreyUI waitForToolbarVisible:YES];
@@ -380,7 +370,7 @@ void AssertStringIsPresentOnPage(const std::string& text) {
   web::test::SetUpSimpleHttpServer(responses);
 
   [ChromeEarlGrey loadURL:URL];
-  AssertStringIsPresentOnPage("link");
+  [ChromeEarlGrey waitForWebViewContainingText:"link"];
 
   // Dismiss the toolbar.
   HideToolbarUsingUI();

@@ -6,12 +6,14 @@
 
 #include "cc/output/compositor_frame.h"
 #include "cc/quads/texture_draw_quad.h"
+#include "components/viz/common/quads/resource_format.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/Histogram.h"
 #include "platform/WebTaskRunner.h"
 #include "platform/graphics/OffscreenCanvasPlaceholder.h"
 #include "platform/graphics/gpu/SharedGpuContext.h"
+#include "platform/scheduler/child/web_scheduler.h"
 #include "platform/wtf/typed_arrays/ArrayBuffer.h"
 #include "platform/wtf/typed_arrays/Uint8Array.h"
 #include "public/platform/InterfaceProvider.h"
@@ -39,7 +41,7 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
     int width,
     int height)
     : OffscreenCanvasFrameDispatcher(client),
-      frame_sink_id_(cc::FrameSinkId(client_id, sink_id)),
+      frame_sink_id_(viz::FrameSinkId(client_id, sink_id)),
       width_(width),
       height_(height),
       change_size_for_next_commit_(false),
@@ -55,8 +57,18 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
     mojom::blink::OffscreenCanvasProviderPtr provider;
     Platform::Current()->GetInterfaceProvider()->GetInterface(
         mojo::MakeRequest(&provider));
-    provider->CreateCompositorFrameSink(frame_sink_id_,
-                                        binding_.CreateInterfacePtrAndBind(),
+
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner;
+    auto scheduler = blink::Platform::Current()->CurrentThread()->Scheduler();
+    if (scheduler) {
+      WebTaskRunner* web_task_runner = scheduler->CompositorTaskRunner();
+      if (web_task_runner) {
+        task_runner = web_task_runner->ToSingleThreadTaskRunner();
+      }
+    }
+    cc::mojom::blink::CompositorFrameSinkClientPtr client;
+    binding_.Bind(mojo::MakeRequest(&client), task_runner);
+    provider->CreateCompositorFrameSink(frame_sink_id_, std::move(client),
                                         mojo::MakeRequest(&sink_));
   }
 }
@@ -64,14 +76,27 @@ OffscreenCanvasFrameDispatcherImpl::OffscreenCanvasFrameDispatcherImpl(
 OffscreenCanvasFrameDispatcherImpl::~OffscreenCanvasFrameDispatcherImpl() {
 }
 
+std::unique_ptr<OffscreenCanvasFrameDispatcherImpl::FrameResource>
+OffscreenCanvasFrameDispatcherImpl::createOrRecycleFrameResource() {
+  if (recycleable_resource_) {
+    recycleable_resource_->spare_lock_ = true;
+    return std::move(recycleable_resource_);
+  }
+  return std::unique_ptr<FrameResource>(new FrameResource());
+}
+
 void OffscreenCanvasFrameDispatcherImpl::SetTransferableResourceToSharedBitmap(
     cc::TransferableResource& resource,
     RefPtr<StaticBitmapImage> image) {
-  std::unique_ptr<cc::SharedBitmap> bitmap =
-      Platform::Current()->AllocateSharedBitmap(IntSize(width_, height_));
-  if (!bitmap)
-    return;
-  unsigned char* pixels = bitmap->pixels();
+  std::unique_ptr<FrameResource> frame_resource =
+      createOrRecycleFrameResource();
+  if (!frame_resource->shared_bitmap_) {
+    frame_resource->shared_bitmap_ =
+        Platform::Current()->AllocateSharedBitmap(IntSize(width_, height_));
+    if (!frame_resource->shared_bitmap_)
+      return;
+  }
+  unsigned char* pixels = frame_resource->shared_bitmap_->pixels();
   DCHECK(pixels);
   SkImageInfo image_info = SkImageInfo::Make(
       width_, height_, kN32_SkColorType,
@@ -81,13 +106,11 @@ void OffscreenCanvasFrameDispatcherImpl::SetTransferableResourceToSharedBitmap(
   // does a GPU readback which is required.
   image->ImageForCurrentFrame()->readPixels(image_info, pixels,
                                             image_info.minRowBytes(), 0, 0);
-  resource.mailbox_holder.mailbox = bitmap->id();
+  resource.mailbox_holder.mailbox = frame_resource->shared_bitmap_->id();
   resource.mailbox_holder.texture_target = 0;
   resource.is_software = true;
 
-  // Hold ref to |bitmap|, to keep it alive until the browser ReclaimResources.
-  // It guarantees that the shared bitmap is not re-used or deleted.
-  shared_bitmaps_.insert(next_resource_id_, std::move(bitmap));
+  resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::
@@ -104,6 +127,9 @@ void OffscreenCanvasFrameDispatcherImpl::
   // the gl interface should not be expensive.
   gpu::gles2::GLES2Interface* gl = SharedGpuContext::Gl();
 
+  std::unique_ptr<FrameResource> frame_resource =
+      createOrRecycleFrameResource();
+
   SkImageInfo info = SkImageInfo::Make(
       width_, height_, kN32_SkColorType,
       image->IsPremultiplied() ? kPremul_SkAlphaType : kUnpremul_SkAlphaType);
@@ -112,28 +138,29 @@ void OffscreenCanvasFrameDispatcherImpl::
   // If it fails to create a buffer for copying the pixel data, then exit early.
   if (!dst_buffer)
     return;
+  unsigned byte_length = dst_buffer->ByteLength();
   RefPtr<Uint8Array> dst_pixels =
-      Uint8Array::Create(dst_buffer, 0, dst_buffer->ByteLength());
+      Uint8Array::Create(std::move(dst_buffer), 0, byte_length);
   image->ImageForCurrentFrame()->readPixels(info, dst_pixels->Data(),
                                             info.minRowBytes(), 0, 0);
 
-  GLuint texture_id = 0u;
-  gl->GenTextures(1, &texture_id);
-  gl->BindTexture(GL_TEXTURE_2D, texture_id);
-  GLenum format =
-      (kN32_SkColorType == kRGBA_8888_SkColorType) ? GL_RGBA : GL_BGRA_EXT;
-  gl->TexImage2D(GL_TEXTURE_2D, 0, format, width_, height_, 0, format,
-                 GL_UNSIGNED_BYTE, 0);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, format,
-                    GL_UNSIGNED_BYTE, dst_pixels->Data());
+  if (frame_resource->texture_id_ == 0u) {
+    gl->GenTextures(1, &frame_resource->texture_id_);
+    gl->BindTexture(GL_TEXTURE_2D, frame_resource->texture_id_);
+    GLenum format =
+        (kN32_SkColorType == kRGBA_8888_SkColorType) ? GL_RGBA : GL_BGRA_EXT;
+    gl->TexImage2D(GL_TEXTURE_2D, 0, format, width_, height_, 0, format,
+                   GL_UNSIGNED_BYTE, 0);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    gl->TexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    gl->TexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, width_, height_, format,
+                      GL_UNSIGNED_BYTE, dst_pixels->Data());
 
-  gpu::Mailbox mailbox;
-  gl->GenMailboxCHROMIUM(mailbox.name);
-  gl->ProduceTextureCHROMIUM(GL_TEXTURE_2D, mailbox.name);
+    gl->GenMailboxCHROMIUM(frame_resource->mailbox_.name);
+    gl->ProduceTextureCHROMIUM(GL_TEXTURE_2D, frame_resource->mailbox_.name);
+  }
 
   const GLuint64 fence_sync = gl->InsertFenceSyncCHROMIUM();
   gl->ShallowFlushCHROMIUM();
@@ -141,13 +168,11 @@ void OffscreenCanvasFrameDispatcherImpl::
   gl->GenSyncTokenCHROMIUM(fence_sync, sync_token.GetData());
 
   resource.mailbox_holder =
-      gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D);
+      gpu::MailboxHolder(frame_resource->mailbox_, sync_token, GL_TEXTURE_2D);
   resource.read_lock_fences_enabled = false;
   resource.is_software = false;
 
-  // Hold ref to |textureId| for the piece of GPU memory where the pixel data
-  // is uploaded to, to keep it alive until the browser ReclaimResources.
-  cached_texture_ids_.insert(next_resource_id_, texture_id);
+  resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::
@@ -160,9 +185,13 @@ void OffscreenCanvasFrameDispatcherImpl::
   resource.read_lock_fences_enabled = false;
   resource.is_software = false;
 
-  // Hold ref to |image|, to keep it alive until the browser ReclaimResources.
-  // It guarantees that the resource is not re-used or deleted.
-  cached_images_.insert(next_resource_id_, std::move(image));
+  // TODO(junov): crbug.com/725919 Recycle mailboxes for this code path. This is
+  // hard to do because the texture associated with the mailbox gets recycled
+  // through skia and skia does not store mailbox names.
+  std::unique_ptr<FrameResource> frame_resource =
+      createOrRecycleFrameResource();
+  frame_resource->image_ = std::move(image);
+  resources_.insert(next_resource_id_, std::move(frame_resource));
 }
 
 namespace {
@@ -192,21 +221,24 @@ void OffscreenCanvasFrameDispatcherImpl::PostImageToPlaceholder(
   RefPtr<WebTaskRunner> dispatcher_task_runner =
       Platform::Current()->CurrentThread()->GetWebTaskRunner();
 
-  Platform::Current()->MainThread()->GetWebTaskRunner()->PostTask(
-      BLINK_FROM_HERE,
-      CrossThreadBind(UpdatePlaceholderImage, this->CreateWeakPtr(),
-                      WTF::Passed(std::move(dispatcher_task_runner)),
-                      placeholder_canvas_id_, std::move(image),
-                      next_resource_id_));
-  spare_resource_locks_.insert(next_resource_id_);
+  Platform::Current()
+      ->MainThread()
+      ->Scheduler()
+      ->CompositorTaskRunner()
+      ->PostTask(BLINK_FROM_HERE,
+                 CrossThreadBind(UpdatePlaceholderImage, this->CreateWeakPtr(),
+                                 WTF::Passed(std::move(dispatcher_task_runner)),
+                                 placeholder_canvas_id_, std::move(image),
+                                 next_resource_id_));
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
     RefPtr<StaticBitmapImage> image,
     double commit_start_time,
-    bool
-        is_web_gl_software_rendering /* This flag is true when WebGL's commit is
-    called on SwiftShader. */) {
+    const SkIRect& damage_rect,
+    bool is_web_gl_software_rendering /* This flag is true when WebGL's commit
+                                         is called on SwiftShader. */
+    ) {
   if (!image || !VerifyImageSize(image->Size()))
     return;
   if (!frame_sink_id_.is_valid()) {
@@ -229,7 +261,10 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
   const gfx::Rect bounds(width_, height_);
   const int kRenderPassId = 1;
   std::unique_ptr<cc::RenderPass> pass = cc::RenderPass::Create();
-  pass->SetNew(kRenderPassId, bounds, bounds, gfx::Transform());
+  pass->SetNew(kRenderPassId, bounds,
+               gfx::Rect(damage_rect.x(), damage_rect.y(), damage_rect.width(),
+                         damage_rect.height()),
+               gfx::Transform());
 
   cc::SharedQuadState* sqs = pass->CreateAndAppendSharedQuadState();
   sqs->SetAll(gfx::Transform(), bounds, bounds, bounds, false, 1.f,
@@ -237,7 +272,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
 
   cc::TransferableResource resource;
   resource.id = next_resource_id_;
-  resource.format = cc::ResourceFormat::RGBA_8888;
+  resource.format = viz::ResourceFormat::RGBA_8888;
   resource.size = gfx::Size(width_, height_);
   // This indicates the filtering on the resource inherently, not the desired
   // filtering effect on the quad.
@@ -249,8 +284,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
   OffscreenCanvasCommitType commit_type;
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, commit_type_histogram,
-      new EnumerationHistogram("OffscreenCanvas.CommitType",
-                               kOffscreenCanvasCommitTypeCount));
+      ("OffscreenCanvas.CommitType", kOffscreenCanvasCommitTypeCount));
   if (image->IsTextureBacked()) {
     if (Platform::Current()->IsGPUCompositingEnabled() &&
         !is_web_gl_software_rendering) {
@@ -326,9 +360,8 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
         DEFINE_THREAD_SAFE_STATIC_LOCAL(
             CustomCountHistogram,
             commit_gpu_canvas_gpu_compositing_worker_timer,
-            new CustomCountHistogram(
-                "Blink.Canvas.OffscreenCommit.GPUCanvasGPUCompositingWorker", 0,
-                10000000, 50));
+            ("Blink.Canvas.OffscreenCommit.GPUCanvasGPUCompositingWorker", 0,
+             10000000, 50));
         commit_gpu_canvas_gpu_compositing_worker_timer.Count(elapsed_time *
                                                              1000000.0);
       }
@@ -346,9 +379,9 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
         DEFINE_THREAD_SAFE_STATIC_LOCAL(
             CustomCountHistogram,
             commit_gpu_canvas_software_compositing_worker_timer,
-            new CustomCountHistogram("Blink.Canvas.OffscreenCommit."
-                                     "GPUCanvasSoftwareCompositingWorker",
-                                     0, 10000000, 50));
+            ("Blink.Canvas.OffscreenCommit."
+             "GPUCanvasSoftwareCompositingWorker",
+             0, 10000000, 50));
         commit_gpu_canvas_software_compositing_worker_timer.Count(elapsed_time *
                                                                   1000000.0);
       }
@@ -366,9 +399,9 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
         DEFINE_THREAD_SAFE_STATIC_LOCAL(
             CustomCountHistogram,
             commit_software_canvas_gpu_compositing_worker_timer,
-            new CustomCountHistogram("Blink.Canvas.OffscreenCommit."
-                                     "SoftwareCanvasGPUCompositingWorker",
-                                     0, 10000000, 50));
+            ("Blink.Canvas.OffscreenCommit."
+             "SoftwareCanvasGPUCompositingWorker",
+             0, 10000000, 50));
         commit_software_canvas_gpu_compositing_worker_timer.Count(elapsed_time *
                                                                   1000000.0);
       }
@@ -387,9 +420,9 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
         DEFINE_THREAD_SAFE_STATIC_LOCAL(
             CustomCountHistogram,
             commit_software_canvas_software_compositing_worker_timer,
-            new CustomCountHistogram("Blink.Canvas.OffscreenCommit."
-                                     "SoftwareCanvasSoftwareCompositingWorker",
-                                     0, 10000000, 50));
+            ("Blink.Canvas.OffscreenCommit."
+             "SoftwareCanvasSoftwareCompositingWorker",
+             0, 10000000, 50));
         commit_software_canvas_software_compositing_worker_timer.Count(
             elapsed_time * 1000000.0);
       }
@@ -408,7 +441,7 @@ void OffscreenCanvasFrameDispatcherImpl::DispatchFrame(
 }
 
 void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck(
-    const cc::ReturnedResourceArray& resources) {
+    const WTF::Vector<cc::ReturnedResource>& resources) {
   ReclaimResources(resources);
   pending_compositor_frames_--;
   DCHECK_GE(pending_compositor_frames_, 0);
@@ -416,9 +449,25 @@ void OffscreenCanvasFrameDispatcherImpl::DidReceiveCompositorFrameAck(
 
 void OffscreenCanvasFrameDispatcherImpl::SetNeedsBeginFrame(
     bool needs_begin_frame) {
-  if (sink_ && needs_begin_frame != needs_begin_frame_) {
-    needs_begin_frame_ = needs_begin_frame;
-    sink_->SetNeedsBeginFrame(needs_begin_frame);
+  if (needs_begin_frame_ == needs_begin_frame)
+    return;
+  needs_begin_frame_ = needs_begin_frame;
+  if (!suspend_animation_)
+    SetNeedsBeginFrameInternal();
+}
+
+void OffscreenCanvasFrameDispatcherImpl::SetSuspendAnimation(
+    bool suspend_animation) {
+  if (suspend_animation_ == suspend_animation)
+    return;
+  suspend_animation_ = suspend_animation;
+  if (needs_begin_frame_)
+    SetNeedsBeginFrameInternal();
+}
+
+void OffscreenCanvasFrameDispatcherImpl::SetNeedsBeginFrameInternal() {
+  if (sink_) {
+    sink_->SetNeedsBeginFrame(needs_begin_frame_ && !suspend_animation_);
   }
 }
 
@@ -426,10 +475,8 @@ void OffscreenCanvasFrameDispatcherImpl::OnBeginFrame(
     const cc::BeginFrameArgs& begin_frame_args) {
   DCHECK(Client());
 
-  // TODO(eseckler): Set correct |latest_confirmed_sequence_number|.
   current_begin_frame_ack_ = cc::BeginFrameAck(
-      begin_frame_args.source_id, begin_frame_args.sequence_number,
-      begin_frame_args.sequence_number, false);
+      begin_frame_args.source_id, begin_frame_args.sequence_number, false);
 
   if (pending_compositor_frames_ >= kMaxPendingCompositorFrames ||
       (begin_frame_args.type == cc::BeginFrameArgs::MISSED &&
@@ -444,43 +491,49 @@ void OffscreenCanvasFrameDispatcherImpl::OnBeginFrame(
       cc::BeginFrameArgs::kInvalidFrameNumber;
 }
 
+OffscreenCanvasFrameDispatcherImpl::FrameResource::~FrameResource() {
+  gpu::gles2::GLES2Interface* gl = SharedGpuContext::Gl();
+  if (texture_id_)
+    gl->DeleteTextures(1, &texture_id_);
+  if (image_id_)
+    gl->DestroyImageCHROMIUM(image_id_);
+}
+
 void OffscreenCanvasFrameDispatcherImpl::ReclaimResources(
-    const cc::ReturnedResourceArray& resources) {
+    const WTF::Vector<cc::ReturnedResource>& resources) {
   for (const auto& resource : resources) {
-    RefPtr<StaticBitmapImage> image = cached_images_.at(resource.id);
-    if (image) {
-      if (image->HasMailbox()) {
-        image->UpdateSyncToken(resource.sync_token);
-      } else if (SharedGpuContext::IsValid() && resource.sync_token.HasData()) {
-        // Although image has MailboxTextureHolder at the time when it is
-        // inserted to m_cachedImages, the
-        // OffscreenCanvasPlaceHolder::placeholderFrame() exposes this image to
-        // everyone accessing the placeholder canvas as an image source, some of
-        // which may want to consume the image as a SkImage, thereby converting
-        // the MailTextureHolder to a SkiaTextureHolder. In this case, we
-        // need to wait for the new sync token passed by CompositorFrameSink.
-        SharedGpuContext::Gl()->WaitSyncTokenCHROMIUM(
-            resource.sync_token.GetConstData());
-      }
+    auto it = resources_.find(resource.id);
+
+    DCHECK(it != resources_.end());
+    if (it == resources_.end())
+      continue;
+
+    if (SharedGpuContext::IsValid() && resource.sync_token.HasData()) {
+      SharedGpuContext::Gl()->WaitSyncTokenCHROMIUM(
+          resource.sync_token.GetConstData());
     }
-    ReclaimResource(resource.id);
+    ReclaimResourceInternal(it);
   }
 }
 
 void OffscreenCanvasFrameDispatcherImpl::ReclaimResource(unsigned resource_id) {
-  // An image resource needs to be returned by both the
-  // CompositorFrameSink and the HTMLCanvasElement. These
-  // events can happen in any order.  The first of the two
-  // to return a given resource will result in the spare
-  // resource lock being lifted, and the second will delete
-  // the resource for real.
-  if (spare_resource_locks_.Contains(resource_id)) {
-    spare_resource_locks_.erase(resource_id);
-    return;
+  auto it = resources_.find(resource_id);
+  if (it != resources_.end()) {
+    ReclaimResourceInternal(it);
   }
-  cached_images_.erase(resource_id);
-  shared_bitmaps_.erase(resource_id);
-  cached_texture_ids_.erase(resource_id);
+}
+
+void OffscreenCanvasFrameDispatcherImpl::ReclaimResourceInternal(
+    const ResourceMap::iterator& it) {
+  if (it->value->spare_lock_) {
+    it->value->spare_lock_ = false;
+  } else {
+    // Really reclaim the resources
+    recycleable_resource_ = std::move(it->value);
+    // release SkImage immediately since it is not recycleable
+    recycleable_resource_->image_ = nullptr;
+    resources_.erase(it);
+  }
 }
 
 bool OffscreenCanvasFrameDispatcherImpl::VerifyImageSize(

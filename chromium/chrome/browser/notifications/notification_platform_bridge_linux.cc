@@ -25,8 +25,8 @@
 #include "base/task_scheduler/post_task.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
-#include "chrome/browser/notifications/native_notification_display_service.h"
 #include "chrome/browser/notifications/notification.h"
+#include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/shell_integration_linux.h"
@@ -166,8 +166,8 @@ void ProfileLoadedCallback(NotificationCommon::Operation operation,
   if (!profile)
     return;
 
-  auto* display_service = static_cast<NativeNotificationDisplayService*>(
-      NotificationDisplayServiceFactory::GetForProfile(profile));
+  auto* display_service =
+      NotificationDisplayServiceFactory::GetForProfile(profile);
   display_service->ProcessNotificationOperation(operation, notification_type,
                                                 origin, notification_id,
                                                 action_index, reply);
@@ -238,6 +238,10 @@ class NotificationPlatformBridgeLinuxImpl
   explicit NotificationPlatformBridgeLinuxImpl(scoped_refptr<dbus::Bus> bus)
       : bus_(bus) {
     DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+    // While the tasks in NotificationPlatformBridgeLinux merely need
+    // to run in sequence, many APIs in ::dbus are required to be
+    // called from the same thread (https://crbug.com/130984), so
+    // |task_runner_| is created as the single-threaded flavor.
     task_runner_ = base::CreateSingleThreadTaskRunnerWithTraits(
         {base::MayBlock(), base::TaskPriority::USER_BLOCKING});
     registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
@@ -341,7 +345,7 @@ class NotificationPlatformBridgeLinuxImpl
 
     // A copy of the origin_url from the underlying
     // message_center::Notification.  Used to pass back to
-    // NativeNotificationDisplayService.
+    // NotificationDisplayService.
     const GURL origin_url;
 
     // Used to keep track of the IDs of the buttons currently displayed
@@ -579,10 +583,12 @@ class NotificationPlatformBridgeLinuxImpl
         actions.push_back(kDefaultButtonId);
         actions.push_back("");
       }
-      // Always add a settings button.
-      actions.push_back(kSettingsButtonId);
-      actions.push_back(
-          l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_SETTINGS));
+      // Always add a settings button for web notifications.
+      if (notification_type != NotificationCommon::EXTENSION) {
+        actions.push_back(kSettingsButtonId);
+        actions.push_back(
+            l10n_util::GetStringUTF8(IDS_NOTIFICATION_BUTTON_SETTINGS));
+      }
     }
     writer.AppendArrayOfStrings(actions);
 

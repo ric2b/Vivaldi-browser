@@ -35,11 +35,13 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Navigator.h"
 #include "core/frame/UseCounter.h"
 #include "modules/webmidi/MIDIAccessInitializer.h"
 #include "modules/webmidi/MIDIOptions.h"
+#include "public/platform/WebFeaturePolicyFeature.h"
 
 namespace blink {
 
@@ -81,12 +83,19 @@ ScriptPromise NavigatorWebMIDI::requestMIDIAccess(ScriptState* script_state,
 
   Document& document = *ToDocument(ExecutionContext::From(script_state));
   if (options.hasSysex() && options.sysex()) {
-    UseCounter::Count(document, UseCounter::kRequestMIDIAccessWithSysExOption);
+    UseCounter::Count(
+        document,
+        WebFeature::kRequestMIDIAccessWithSysExOption_ObscuredByFootprinting);
     UseCounter::CountCrossOriginIframe(
-        document, UseCounter::kRequestMIDIAccessIframeWithSysExOption);
+        document,
+        WebFeature::
+            kRequestMIDIAccessIframeWithSysExOption_ObscuredByFootprinting);
   }
-  UseCounter::CountCrossOriginIframe(document,
-                                     UseCounter::kRequestMIDIAccessIframe);
+  UseCounter::CountCrossOriginIframe(
+      document, WebFeature::kRequestMIDIAccessIframe_ObscuredByFootprinting);
+  Deprecation::CountDeprecationFeaturePolicy(
+      document, WebFeaturePolicyFeature::kMidiFeature);
+
   return MIDIAccessInitializer::Start(script_state, options);
 }
 

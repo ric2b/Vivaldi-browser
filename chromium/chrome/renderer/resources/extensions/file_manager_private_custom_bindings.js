@@ -201,6 +201,16 @@ binding.registerCustomHook(function(bindingsAPI) {
     var url = fileManagerPrivateNatives.GetEntryURL(entry);
     fileManagerPrivateInternal.getDirectorySize(url, callback);
   });
+
+  apiFunctions.setHandleRequest('getRecentFiles', function(
+        restriction, callback) {
+    fileManagerPrivateInternal.getRecentFiles(restriction, function(
+          entryDescriptions) {
+      callback(entryDescriptions.map(function(description) {
+        return GetExternalFileEntry(description);
+      }));
+    });
+  });
 });
 
 eventBindings.registerArgumentMassager(

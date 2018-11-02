@@ -14,11 +14,13 @@
  * @param {!Array<?string>} mimeTypes
  * @param {!Array<!Object>} tasks
  * @param {Object} defaultTask
+ * @param {!TaskHistory} taskHistory
  * @constructor
  * @struct
  */
-function FileTasks(volumeManager, metadataModel, directoryModel, ui, entries,
-    mimeTypes, tasks, defaultTask) {
+function FileTasks(
+    volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes, tasks,
+    defaultTask, taskHistory) {
   /**
    * @private {!VolumeManagerWrapper}
    * @const
@@ -66,6 +68,12 @@ function FileTasks(volumeManager, metadataModel, directoryModel, ui, entries,
    * @const
    */
   this.defaultTask_ = defaultTask;
+
+  /**
+   * @private {!TaskHistory}
+   * @const
+   */
+  this.taskHistory_ = taskHistory;
 };
 
 FileTasks.prototype = {
@@ -102,6 +110,16 @@ FileTasks.TaskMenuButtonItemType = {
 };
 
 /**
+ * Dialog types to show a task picker.
+ * @enum {string}
+ */
+FileTasks.TaskPickerType = {
+  ChangeDefault: 'ChangeDefault',
+  OpenWith: 'OpenWith',
+  MoreActions: 'MoreActions'
+};
+
+/**
  * Creates an instance of FileTasks for the specified list of entries with mime
  * types.
  *
@@ -111,10 +129,12 @@ FileTasks.TaskMenuButtonItemType = {
  * @param {!FileManagerUI} ui
  * @param {!Array<!Entry>} entries
  * @param {!Array<?string>} mimeTypes
+ * @param {!TaskHistory} taskHistory
  * @return {!Promise<!FileTasks>}
  */
-FileTasks.create = function(volumeManager, metadataModel, directoryModel, ui,
-    entries, mimeTypes) {
+FileTasks.create = function(
+    volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes,
+    taskHistory) {
   var tasksPromise = new Promise(function(fulfill) {
     if (entries.length === 0) {
       fulfill([]);
@@ -135,19 +155,35 @@ FileTasks.create = function(volumeManager, metadataModel, directoryModel, ui,
     return FileTasks.getDefaultTask(tasks);
   });
 
-  return Promise.all([tasksPromise, defaultTaskPromise]).then(
-      function(args) {
-        return new FileTasks(volumeManager, metadataModel, directoryModel, ui,
-            entries, mimeTypes, args[0], args[1]);
-      });
+  return Promise.all([tasksPromise, defaultTaskPromise]).then(function(args) {
+    return new FileTasks(
+        volumeManager, metadataModel, directoryModel, ui, entries, mimeTypes,
+        args[0], args[1], taskHistory);
+  });
 };
 
 /**
  * Obtains the task items.
- * @return {Array<!Object>}
+ * @return {!Array<!Object>}
  */
 FileTasks.prototype.getTaskItems = function() {
   return this.tasks_;
+};
+
+/**
+ * Obtain tasks which are categorized as OPEN tasks.
+ * @return {!Array<!Object>}
+ */
+FileTasks.prototype.getOpenTaskItems = function() {
+  return this.tasks_.filter(FileTasks.isOpenTask);
+};
+
+/**
+ * Obtain tasks which are not categorized as OPEN tasks.
+ * @return {!Array<!Object>}
+ */
+FileTasks.prototype.getNonOpenTaskItems = function() {
+  return this.tasks_.filter(task => !FileTasks.isOpenTask(task));
 };
 
 /**
@@ -257,6 +293,19 @@ FileTasks.isInternalTask_ = function(taskId) {
 };
 
 /**
+ * Returns true if the given task is categorized as an OPEN task.
+ *
+ * @param {!Object} task
+ * @return {boolean} True if the given task is an OPEN task.
+ */
+FileTasks.isOpenTask = function(task) {
+  // We consider following types of tasks as OPEN tasks.
+  // - Files app's internal tasks
+  // - file_handler tasks with OPEN_WITH verb
+  return !task.verb || task.verb == chrome.fileManagerPrivate.Verb.OPEN_WITH;
+};
+
+/**
  * Annotates tasks returned from the API.
  *
  * @param {!Array<!Object>} tasks Input tasks from the API.
@@ -325,7 +374,7 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
 
     // Add verb to title.
     if (task.verb) {
-      var verb_button_label = 'OPEN_WITH_VERB_BUTTON_LABEL';  // Default.
+      var verb_button_label = '';
       switch (task.verb) {
         case chrome.fileManagerPrivate.Verb.ADD_TO:
           verb_button_label = 'ADD_TO_VERB_BUTTON_LABEL';
@@ -334,15 +383,23 @@ FileTasks.annotateTasks_ = function(tasks, entries) {
           verb_button_label = 'PACK_WITH_VERB_BUTTON_LABEL';
           break;
         case chrome.fileManagerPrivate.Verb.SHARE_WITH:
-          verb_button_label = 'SHARE_WITH_VERB_BUTTON_LABEL';
+          // Even when the task has SHARE_WITH verb, we don't prefix the title
+          // with "Share with" when the task is from SEND/SEND_MULTIPLE intent
+          // handlers from Android apps, since the title can already have an
+          // appropriate verb.
+          if (!(taskParts[1] == 'arc' &&
+                (taskParts[2] == 'send' || taskParts[2] == 'send_multiple'))) {
+            verb_button_label = 'SHARE_WITH_VERB_BUTTON_LABEL';
+          }
           break;
         case chrome.fileManagerPrivate.Verb.OPEN_WITH:
-          // Nothing to do as same as initialization button label.
+          verb_button_label = 'OPEN_WITH_VERB_BUTTON_LABEL';
           break;
         default:
           console.error('Invalid task verb: ' + task.verb + '.');
       }
-      task.title = loadTimeData.getStringF(verb_button_label, task.title);
+      if (verb_button_label)
+        task.title = loadTimeData.getStringF(verb_button_label, task.title);
     }
 
     result.push(task);
@@ -424,8 +481,11 @@ FileTasks.prototype.executeDefaultInternal_ = function(opt_callback) {
 
     this.openSuggestAppsDialog(
         function() {
-          FileTasks.create(this.volumeManager_, this.metadataModel_,
-              this.directoryModel_, this.ui_, this.entries_, this.mimeTypes_)
+          FileTasks
+              .create(
+                  this.volumeManager_, this.metadataModel_,
+                  this.directoryModel_, this.ui_, this.entries_,
+                  this.mimeTypes_, this.taskHistory_)
               .then(
                   function(tasks) {
                     tasks.executeDefault();
@@ -488,6 +548,7 @@ FileTasks.prototype.execute = function(taskId) {
  */
 FileTasks.prototype.executeInternal_ = function(taskId) {
   this.checkAvailability_(function() {
+    this.taskHistory_.recordTaskExecuted(taskId);
     if (FileTasks.isInternalTask_(taskId)) {
       this.executeInternalTask_(taskId);
     } else {
@@ -658,25 +719,43 @@ FileTasks.prototype.mountArchivesInternal_ = function() {
 };
 
 /**
- * Displays the list of tasks in a task picker combobutton.
+ * Displays the list of tasks in a open task picker combobutton and a share
+ * options menu.
  *
- * @param {cr.ui.ComboButton} combobutton The task picker element.
+ * @param {!cr.ui.ComboButton} openCombobutton The open task picker combobutton.
+ * @param {!cr.ui.MenuButton} shareMenuButton The menu button for share options.
  * @public
  */
-FileTasks.prototype.display = function(combobutton) {
-  // If there does not exist available task, hide combobutton.
-  if (this.tasks_.length === 0) {
-    combobutton.hidden = true;
-    return;
+FileTasks.prototype.display = function(openCombobutton, shareMenuButton) {
+  var openTasks = [];
+  var otherTasks = [];
+  for (var i = 0; i < this.tasks_.length; i++) {
+    var task = this.tasks_[i];
+    if (FileTasks.isOpenTask(task))
+      openTasks.push(task);
+    else
+      otherTasks.push(task);
   }
+  this.updateOpenComboButton_(openCombobutton, openTasks);
+  this.updateShareMenuButton_(shareMenuButton, otherTasks);
+};
+
+/**
+ * Setup a task picker combobutton based on the given tasks.
+ * @param {!cr.ui.ComboButton} combobutton
+ * @param {!Array<!Object>} tasks
+ */
+FileTasks.prototype.updateOpenComboButton_ = function(combobutton, tasks) {
+  combobutton.hidden = tasks.length == 0;
+  if (tasks.length == 0)
+    return;
 
   combobutton.clear();
-  combobutton.hidden = false;
 
   // If there exist defaultTask show it on the combobutton.
   if (this.defaultTask_) {
-    combobutton.defaultItem = this.createCombobuttonItem_(this.defaultTask_,
-        str('TASK_OPEN'));
+    combobutton.defaultItem =
+        this.createCombobuttonItem_(this.defaultTask_, str('TASK_OPEN'));
   } else {
     combobutton.defaultItem = {
       type: FileTasks.TaskMenuButtonItemType.ShowMenu,
@@ -687,7 +766,7 @@ FileTasks.prototype.display = function(combobutton) {
   // If there exist 2 or more available tasks, show them in context menu
   // (including defaultTask). If only one generic task is available, we
   // also show it in the context menu.
-  var items = this.createItems_();
+  var items = this.createItems_(tasks);
   if (items.length > 1 || (items.length === 1 && this.defaultTask_ === null)) {
     for (var j = 0; j < items.length; j++) {
       combobutton.addDropDownItem(items[j]);
@@ -707,18 +786,60 @@ FileTasks.prototype.display = function(combobutton) {
 };
 
 /**
+ * Setup a menu button for sharing options based on the given tasks.
+ * @param {!cr.ui.MenuButton} shareMenuButton
+ * @param {!Array<!Object>} tasks
+ */
+FileTasks.prototype.updateShareMenuButton_ = function(shareMenuButton, tasks) {
+  var driveShareCommand =
+      shareMenuButton.menu.querySelector('cr-menu-item[command="#share"]');
+  var driveShareCommandSeparator =
+      shareMenuButton.menu.querySelector('#drive-share-separator');
+
+  shareMenuButton.hidden = driveShareCommand.disabled && tasks.length == 0;
+
+  // Show the separator if Drive share command is enabled and there is at least
+  // one other share actions.
+  driveShareCommandSeparator.hidden =
+      driveShareCommand.disabled || tasks.length == 0;
+
+  // Clear menu items except for drive share menu and a separator for it.
+  // As querySelectorAll() returns live NodeList, we need to copy elements to
+  // Array object to modify DOM in the for loop.
+  var itemsToRemove = [].slice.call(shareMenuButton.menu.querySelectorAll(
+      'cr-menu-item:not([command="#share"])'));
+  for (var i = 0; i < itemsToRemove.length; i++) {
+    var item = itemsToRemove[i];
+    item.parentNode.removeChild(item);
+  }
+
+  // Add menu items for the new tasks.
+  var items = this.createItems_(tasks);
+  for (var i = 0; i < items.length; i++) {
+    var menuitem = shareMenuButton.menu.addMenuItem(items[i]);
+    cr.ui.decorate(menuitem, cr.ui.FilesMenuItem);
+    menuitem.data = items[i];
+    if (items[i].iconType) {
+      menuitem.style.backgroundImage = '';
+      menuitem.setAttribute('file-type-icon', items[i].iconType);
+    }
+  }
+};
+
+/**
  * Creates sorted array of available task descriptions such as title and icon.
  *
+ * @param {!Array<!Object>} tasks Tasks to create items.
  * @return {!Array<!Object>} Created array can be used to feed combobox, menus
  *     and so on.
  * @private
  */
-FileTasks.prototype.createItems_ = function() {
+FileTasks.prototype.createItems_ = function(tasks) {
   var items = [];
 
   // Create items.
-  for (var index = 0; index < this.tasks_.length; index++) {
-    var task = this.tasks_[index];
+  for (var index = 0; index < tasks.length; index++) {
+    var task = tasks[index];
     if (task === this.defaultTask_) {
       var title = task.title + ' ' +
                   loadTimeData.getString('DEFAULT_TASK_LABEL');
@@ -728,22 +849,22 @@ FileTasks.prototype.createItems_ = function() {
     }
   }
 
-  // Sort items (Sort order: isDefault, isGenericFileHandler, label).
+  // Sort items (Sort order: isDefault, lastExecutedTime, label).
   items.sort(function(a, b) {
     // Sort by isDefaultTask.
     var isDefault = (b.isDefault ? 1 : 0) - (a.isDefault ? 1 : 0);
     if (isDefault !== 0)
       return isDefault;
 
-    // Sort by isGenericFileHandler.
-    var isGenericFileHandler =
-        (a.isGenericFileHandler ? 1 : 0) - (b.isGenericFileHandler ? 1 : 0);
-    if (isGenericFileHandler !== 0)
-      return isGenericFileHandler;
+    // Sort by last-executed time.
+    var aTime = this.taskHistory_.getLastExecutedTime(a.task.taskId);
+    var bTime = this.taskHistory_.getLastExecutedTime(b.task.taskId);
+    if (aTime != bTime)
+      return bTime - aTime;
 
     // Sort by label.
     return a.label.localeCompare(b.label);
-  });
+  }.bind(this));
 
   return items;
 };
@@ -781,16 +902,16 @@ FileTasks.prototype.createCombobuttonItem_ = function(task, opt_title,
  * @param {string} title Title to use.
  * @param {string} message Message to use.
  * @param {function(Object)} onSuccess Callback to pass selected task.
- * @param {boolean=} opt_hideGenericFileHandler Whether to hide generic file
- *     handler or not.
+ * @param {FileTasks.TaskPickerType} pickerType Task picker type.
  */
-FileTasks.prototype.showTaskPicker = function(taskDialog, title, message,
-                                              onSuccess,
-                                              opt_hideGenericFileHandler) {
-  var items = !opt_hideGenericFileHandler ? this.createItems_() :
-      this.createItems_().filter(function(item) {
-        return !item.isGenericFileHandler;
-      });
+FileTasks.prototype.showTaskPicker = function(
+    taskDialog, title, message, onSuccess, pickerType) {
+  var tasks = pickerType == FileTasks.TaskPickerType.MoreActions ?
+      this.getNonOpenTaskItems() :
+      this.getOpenTaskItems();
+  var items = this.createItems_(tasks);
+  if (pickerType == FileTasks.TaskPickerType.ChangeDefault)
+    items = items.filter(item => !item.isGenericFileHandler);
 
   var defaultIdx = 0;
   for (var j = 0; j < items.length; j++) {

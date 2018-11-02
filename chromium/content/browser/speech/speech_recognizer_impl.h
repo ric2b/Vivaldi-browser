@@ -143,11 +143,14 @@ class CONTENT_EXPORT SpeechRecognizerImpl
   void OnAudioClosed(media::AudioInputController*);
 
   // AudioInputController::EventHandler methods.
-  void OnCreated(media::AudioInputController* controller) override {}
+  void OnCreated(media::AudioInputController* controller,
+                 bool initially_muted) override {}
   void OnError(media::AudioInputController* controller,
                media::AudioInputController::ErrorCode error_code) override;
   void OnLog(media::AudioInputController* controller,
              const std::string& message) override {}
+  void OnMuted(media::AudioInputController* controller,
+               bool is_muted) override {}
 
   // AudioInputController::SyncWriter methods.
   void Write(const media::AudioBus* data,

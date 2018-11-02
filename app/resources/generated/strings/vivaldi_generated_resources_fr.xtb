@@ -27,7 +27,7 @@
 <translation id="1317502925920562130">Est-ce bien la page d’accueil que vous attendiez ?</translation>
 <translation id="1368832886055348810">De gauche à droite</translation>
 <translation id="1430915738399379752">Imprimer</translation>
-<translation id="1451375123200651445">Page Web, un seul fichier</translation>
+<translation id="1451375123200651445">Page Web complète, en un seul fichier MHTML</translation>
 <translation id="1465176863081977902">C&amp;opier l’adresse du fichier audio</translation>
 <translation id="1476607407192946488">&amp;Paramètres linguistiques</translation>
 <translation id="1507705801791187716">Génial, aucune erreur !</translation>
@@ -139,7 +139,7 @@
 <translation id="302620147503052030">Afficher le bouton</translation>
 <translation id="3031601332414921114">Reprendre l’impression</translation>
 <translation id="3036546437875325427">Activer Flash</translation>
-<translation id="3046910703532196514">Page Web, complète</translation>
+<translation id="3046910703532196514">Page Web complète, HTML et dossier</translation>
 <translation id="3067198360141518313">Exécuter ce plugin</translation>
 <translation id="3080207940057008665">Un autre programme sur votre ordinateur a ajouté un thème qui risque de modifier le fonctionnement de Vivaldi.</translation>
 <translation id="3084548735795614657">Déposez ici pour installer l’extension</translation>
@@ -263,7 +263,7 @@
 <translation id="4711638718396952945">Restaurer les paramètres</translation>
 <translation id="4726710629007580002">Il y a eu des messages d’avertissement lors de l’installation de cette extension :</translation>
 <translation id="4742746985488890273">Épingler</translation>
-<translation id="479536056609751218">Page Web, HTML uniquement</translation>
+<translation id="479536056609751218">Page Web, fichier HTML seul</translation>
 <translation id="4816492930507672669">Ajuster à la page</translation>
 <translation id="4839303808932127586">En&amp;registrer la vidéo sous...</translation>
 <translation id="4850258771229959924">Afficher dans les outils de développement</translation>
@@ -390,7 +390,6 @@
 <translation id="6639554308659482635">Mémoire SQLite</translation>
 <translation id="6655190889273724601">Mode « développeur »</translation>
 <translation id="6691936601825168937">P&amp;age suivante</translation>
-<translation id="6700480081846086223">Caster <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Scope</translation>
 <translation id="6786747875388722282">Extensions</translation>
 <translation id="6787839852456839824">Raccourcis clavier</translation>

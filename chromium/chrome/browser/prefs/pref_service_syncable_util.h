@@ -5,6 +5,10 @@
 #ifndef CHROME_BROWSER_PREFS_PREF_SERVICE_SYNCABLE_UTIL_H_
 #define CHROME_BROWSER_PREFS_PREF_SERVICE_SYNCABLE_UTIL_H_
 
+#include <set>
+
+#include "components/prefs/pref_value_store.h"
+
 class PrefStore;
 class Profile;
 
@@ -30,8 +34,12 @@ sync_preferences::PrefServiceSyncable* PrefServiceSyncableIncognitoFromProfile(
 // a fresh non-persistent overlay for the user pref store and an individual
 // extension pref store (to cache the effective extension prefs for incognito
 // windows).
+//
+// If the Mojo pref service is in use |incognito_connector| and |user_connector|
+// must be non-null.
 sync_preferences::PrefServiceSyncable* CreateIncognitoPrefServiceSyncable(
     sync_preferences::PrefServiceSyncable* pref_service,
-    PrefStore* incognito_extension_pref_store);
+    PrefStore* incognito_extension_pref_store,
+    std::unique_ptr<PrefValueStore::Delegate> delegate);
 
 #endif  // CHROME_BROWSER_PREFS_PREF_SERVICE_SYNCABLE_UTIL_H_

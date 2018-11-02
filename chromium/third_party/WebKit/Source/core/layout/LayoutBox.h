@@ -107,6 +107,13 @@ struct LayoutBoxRareData {
   // m_hasPreviousContentBoxSizeAndLayoutOverflowRect is true.
   LayoutSize previous_content_box_size_;
   LayoutRect previous_layout_overflow_rect_;
+
+  // Used by LocalFrameView::ScrollIntoView. When the scroll is sequenced
+  // rather than instantly performed, we need the pending_offset_to_scroll
+  // to calculate the next rect_to_scroll as if the scroll has been performed.
+  // TODO(sunyunjia): We should get rid of this variable and move the next
+  // rect_to_scroll calculation into ScrollRectToVisible. crbug.com/741830
+  LayoutSize pending_offset_to_scroll_;
 };
 
 // LayoutBox implements the full CSS box model.
@@ -376,8 +383,12 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   DISABLE_CFI_PERF LayoutRect PaddingBoxRect() const {
     return LayoutRect(ClientLeft(), ClientTop(), ClientWidth(), ClientHeight());
   }
-  IntRect PixelSnappedBorderBoxRect() const {
-    return IntRect(IntPoint(), frame_rect_.PixelSnappedSize());
+
+  IntRect PixelSnappedBorderBoxRect(
+      const LayoutSize& offset = LayoutSize()) const {
+    return IntRect(IntPoint(),
+                   PixelSnappedIntSize(frame_rect_.Size(),
+                                       frame_rect_.Location() + offset));
   }
   IntRect BorderBoundingBox() const final {
     return PixelSnappedBorderBoxRect();
@@ -584,11 +595,15 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void ScrollByRecursively(const ScrollOffset& delta);
   // If makeVisibleInVisualViewport is set, the visual viewport will be scrolled
   // if required to make the rect visible.
+  // TODO(sunyunjia): Rename this method to distinguish with the one in
+  // LayoutObject. crbug.com/738160
   void ScrollRectToVisible(const LayoutRect&,
                            const ScrollAlignment& align_x,
                            const ScrollAlignment& align_y,
                            ScrollType = kProgrammaticScroll,
-                           bool make_visible_in_visual_viewport = true);
+                           bool make_visible_in_visual_viewport = true,
+                           ScrollBehavior = kScrollBehaviorAuto,
+                           bool is_for_scroll_sequence = false);
 
   LayoutRectOutsets MarginBoxOutsets() const override {
     return margin_box_outsets_;
@@ -791,6 +806,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     return rare_data_ ? rare_data_->offset_to_next_page_ : LayoutUnit();
   }
   void SetOffsetToNextPage(LayoutUnit);
+
+  LayoutSize PendingOffsetToScroll() const {
+    return rare_data_ ? rare_data_->pending_offset_to_scroll_ : LayoutSize();
+  }
+  void SetPendingOffsetToScroll(LayoutSize);
 
   // Specify which page or column to associate with an offset, if said offset is
   // exactly at a page or column boundary.
@@ -1031,17 +1051,13 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   virtual void StopAutoscroll() {}
 
   DISABLE_CFI_PERF bool HasAutoVerticalScrollbar() const {
-    return HasOverflowClip() &&
-           (Style()->OverflowY() == EOverflow::kAuto ||
-            Style()->OverflowY() == EOverflow::kWebkitPagedY ||
-            Style()->OverflowY() == EOverflow::kOverlay);
+    return HasOverflowClip() && Style()->HasAutoVerticalScroll();
   }
   DISABLE_CFI_PERF bool HasAutoHorizontalScrollbar() const {
-    return HasOverflowClip() && (Style()->OverflowX() == EOverflow::kAuto ||
-                                 Style()->OverflowX() == EOverflow::kOverlay);
+    return HasOverflowClip() && Style()->HasAutoHorizontalScroll();
   }
   DISABLE_CFI_PERF bool ScrollsOverflow() const {
-    return ScrollsOverflowX() || ScrollsOverflowY();
+    return HasOverflowClip() && Style()->ScrollsOverflow();
   }
   virtual bool ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const {
     return Style()->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft();
@@ -1056,12 +1072,10 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
            PixelSnappedScrollHeight() != PixelSnappedClientHeight();
   }
   virtual bool ScrollsOverflowX() const {
-    return HasOverflowClip() && (Style()->OverflowX() == EOverflow::kScroll ||
-                                 HasAutoHorizontalScrollbar());
+    return HasOverflowClip() && Style()->ScrollsOverflowX();
   }
   virtual bool ScrollsOverflowY() const {
-    return HasOverflowClip() && (Style()->OverflowY() == EOverflow::kScroll ||
-                                 HasAutoVerticalScrollbar());
+    return HasOverflowClip() && Style()->ScrollsOverflowY();
   }
 
   // Elements such as the <input> field override this to specify that they are
@@ -1161,6 +1175,11 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
 
   bool IsGridItem() const { return Parent() && Parent()->IsLayoutGrid(); }
 
+  // Return true if this is the "rendered legend" of a fieldset. They get
+  // special treatment, in that they establish a new formatting context, and
+  // shrink to fit if no logical width is specified.
+  bool IsRenderedLegend() const;
+
   LayoutUnit LineHeight(
       bool first_line,
       LineDirectionMode,
@@ -1181,36 +1200,40 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
     // for vertical writing modes).
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return position;
-    return LogicalHeight() - position;
+    DCHECK(!IsHorizontalWritingMode());
+    return frame_rect_.Width() - position;
   }
   WARN_UNUSED_RESULT LayoutPoint
   FlipForWritingMode(const LayoutPoint& position) const {
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return position;
-    return IsHorizontalWritingMode()
-               ? LayoutPoint(position.X(), frame_rect_.Height() - position.Y())
-               : LayoutPoint(frame_rect_.Width() - position.X(), position.Y());
+    DCHECK(!IsHorizontalWritingMode());
+    return LayoutPoint(frame_rect_.Width() - position.X(), position.Y());
   }
   WARN_UNUSED_RESULT LayoutSize
   FlipForWritingMode(const LayoutSize& offset) const {
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return offset;
+    DCHECK(!IsHorizontalWritingMode());
     return LayoutSize(frame_rect_.Width() - offset.Width(), offset.Height());
   }
   void FlipForWritingMode(LayoutRect& rect) const {
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return;
+    DCHECK(!IsHorizontalWritingMode());
     rect.SetX(frame_rect_.Width() - rect.MaxX());
   }
   WARN_UNUSED_RESULT FloatPoint
   FlipForWritingMode(const FloatPoint& position) const {
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return position;
+    DCHECK(!IsHorizontalWritingMode());
     return FloatPoint(frame_rect_.Width() - position.X(), position.Y());
   }
   void FlipForWritingMode(FloatRect& rect) const {
     if (!UNLIKELY(HasFlippedBlocksWritingMode()))
       return;
+    DCHECK(!IsHorizontalWritingMode());
     rect.SetX(frame_rect_.Width() - rect.MaxX());
   }
 
@@ -1230,8 +1253,9 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   LayoutRect VisualOverflowRectForPropagation() const {
     return RectForOverflowPropagation(VisualOverflowRect());
   }
-  LayoutRect LogicalLayoutOverflowRectForPropagation() const;
-  LayoutRect LayoutOverflowRectForPropagation() const;
+  LayoutRect LogicalLayoutOverflowRectForPropagation(
+      LayoutObject* container) const;
+  LayoutRect LayoutOverflowRectForPropagation(LayoutObject* container) const;
 
   bool HasOverflowModel() const { return overflow_.get(); }
   bool HasSelfVisualOverflow() const {
@@ -1286,8 +1310,8 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
                                 VisualRectFlags,
                                 TransformState&) const;
 
-  virtual bool HasRelativeLogicalWidth() const;
-  virtual bool HasRelativeLogicalHeight() const;
+  bool HasRelativeLogicalWidth() const;
+  bool HasRelativeLogicalHeight() const;
 
   bool HasHorizontalLayoutOverflow() const {
     if (!overflow_)
@@ -1482,8 +1506,6 @@ class CORE_EXPORT LayoutBox : public LayoutBoxModelObject {
   void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                const LayoutPoint& layer_offset) const override;
 
-  PaintInvalidationReason DeprecatedInvalidatePaint(
-      const PaintInvalidationState&) override;
   PaintInvalidationReason InvalidatePaint(
       const PaintInvalidatorContext&) const override;
 

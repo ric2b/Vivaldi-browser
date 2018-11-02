@@ -99,8 +99,9 @@ def package_ios_framework_using_gn(out_dir='out/Framework', extra_options=''):
       gn_args = 'target_os="ios" enable_websockets=false ' \
                 'is_cronet_build=true is_component_build=false ' \
                 'disable_file_support=true disable_ftp_support=true ' \
+                'include_transport_security_state_preload_list=false ' \
                 'use_platform_icu_alternatives=true ' \
-                'disable_brotli_filter=true enable_dsyms=true ' \
+                'disable_brotli_filter=false enable_dsyms=true ' \
                 'target_cpu="%s" additional_target_cpus = ["%s"] %s' % \
                 (target_cpu, additional_cpu, gn_extra_args)
 
@@ -117,10 +118,13 @@ def package_ios_framework_using_gn(out_dir='out/Framework', extra_options=''):
 
       # Copy framework.
       shutil.copytree(os.path.join(build_dir, 'Cronet.framework'),
-                      os.path.join(out_dir, target_dir, 'Cronet.framework'))
+          os.path.join(out_dir, 'Dynamic', target_dir, 'Cronet.framework'))
       # Copy symbols.
       shutil.copytree(os.path.join(build_dir, 'Cronet.dSYM'),
-          os.path.join(out_dir, target_dir, 'Cronet.framework.dSYM'))
+          os.path.join(out_dir, 'Dynamic', target_dir, 'Cronet.framework.dSYM'))
+      # Copy static framework.
+      shutil.copytree(os.path.join(build_dir, 'Static', 'Cronet.framework'),
+          os.path.join(out_dir, 'Static', target_dir, 'Cronet.framework'))
 
   # Copy common files from last built package.
   package_dir = os.path.join(build_dir, 'cronet')
@@ -131,7 +135,7 @@ def package_ios_framework_using_gn(out_dir='out/Framework', extra_options=''):
   shutil.copytree(os.path.join(build_dir,
                                'Cronet.framework', 'Headers'),
                   os.path.join(out_dir, 'Headers'))
-  print 'Cronet dynamic framework is packaged into %s' % out_dir
+  print 'Cronet framework is packaged into %s' % out_dir
 
 
 def main():
@@ -174,7 +178,7 @@ def main():
 
   gyp_defines = 'GYP_DEFINES="OS=ios enable_websockets=0 '+ \
       'disable_file_support=1 disable_ftp_support=1 '+ \
-      'enable_errorprone=1 disable_brotli_filter=1 chromium_ios_signing=0 ' + \
+      'enable_errorprone=1 disable_brotli_filter=0 chromium_ios_signing=0 ' + \
       'target_subarch=both ' + use_platform_icu_alternatives + '"'
 
   if not options.gn:

@@ -107,6 +107,11 @@ class BrowsingDataCounter {
             ClearBrowsingDataTab clear_browsing_data_tab,
             const Callback& callback);
 
+  // Can be called instead of |Init()|, to create a counter that doesn't
+  // observe pref changes and counts data that was changed since |begin_time|.
+  // This mode doesn't use delayed responses.
+  void InitWithoutPref(base::Time begin_time, const Callback& callback);
+
   // Name of the preference associated with this counter.
   virtual const char* GetPrefName() const = 0;
 
@@ -168,8 +173,14 @@ class BrowsingDataCounter {
   // is to be deleted.
   IntegerPrefMember period_;
 
+  // This time period is used when |period_| is not initialized.
+  base::Time begin_time_;
+
   // Whether this class was properly initialized by calling |Init|.
   bool initialized_;
+
+  // Whether to introduce a delayed response to avoid flickering.
+  bool use_delay_;
 
   // State of the counter.
   State state_;

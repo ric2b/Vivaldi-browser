@@ -11,8 +11,8 @@
 #include "base/callback.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/non_thread_safe.h"
 #include "media/base/audio_parameters.h"
 #include "media/base/channel_layout.h"
 #include "media/base/media_log.h"
@@ -41,7 +41,7 @@ PipelineStatusCB NewExpectedStatusCB(PipelineStatus status);
 // testing classes that run on more than a single thread.
 //
 // Events are intended for single use and cannot be reset.
-class WaitableMessageLoopEvent : public base::NonThreadSafe {
+class WaitableMessageLoopEvent {
  public:
   WaitableMessageLoopEvent();
   explicit WaitableMessageLoopEvent(base::TimeDelta timeout);
@@ -73,6 +73,8 @@ class WaitableMessageLoopEvent : public base::NonThreadSafe {
   std::unique_ptr<base::RunLoop> run_loop_;
   const base::TimeDelta timeout_;
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
   DISALLOW_COPY_AND_ASSIGN(WaitableMessageLoopEvent);
 };
 
@@ -83,12 +85,12 @@ class TestVideoConfig {
   // Returns a configuration that is invalid.
   static VideoDecoderConfig Invalid();
 
-  static VideoDecoderConfig Normal();
+  static VideoDecoderConfig Normal(VideoCodec codec = kCodecVP8);
   static VideoDecoderConfig NormalH264();
   static VideoDecoderConfig NormalEncrypted();
 
   // Returns a configuration that is larger in dimensions than Normal().
-  static VideoDecoderConfig Large();
+  static VideoDecoderConfig Large(VideoCodec codec = kCodecVP8);
   static VideoDecoderConfig LargeEncrypted();
 
   // Returns coded size for Normal and Large config.
@@ -97,6 +99,13 @@ class TestVideoConfig {
 
  private:
   DISALLOW_COPY_AND_ASSIGN(TestVideoConfig);
+};
+
+// Provides pre-canned AudioDecoderConfig. These types are used for tests that
+// don't care about detailed parameters of the config.
+class TestAudioConfig {
+ public:
+  static AudioDecoderConfig Normal();
 };
 
 // Provides pre-canned AudioParameters objects.
@@ -148,6 +157,11 @@ scoped_refptr<DecoderBuffer> CreateFakeVideoBufferForTest(
 bool VerifyFakeVideoBufferForTest(const scoped_refptr<DecoderBuffer>& buffer,
                                   const VideoDecoderConfig& config);
 
+// Compares two {Audio|Video}DecoderConfigs
+MATCHER_P(DecoderConfigEq, config, "") {
+  return arg.Matches(config);
+}
+
 MATCHER_P(HasTimestamp, timestamp_in_ms, "") {
   return arg.get() && !arg->end_of_stream() &&
          arg->timestamp().InMilliseconds() == timestamp_in_ms;
@@ -163,8 +177,40 @@ MATCHER_P(SegmentMissingFrames, track_id, "") {
                std::string(track_id));
 }
 
+MATCHER(MuxedSequenceModeWarning, "") {
+  return CONTAINS_STRING(arg,
+                         "Warning: using MSE 'sequence' AppendMode for a "
+                         "SourceBuffer with multiple tracks");
+}
+
+MATCHER_P2(KeyframeTimeGreaterThanDependant,
+           keyframe_time_string,
+           nonkeyframe_time_string,
+           "") {
+  return CONTAINS_STRING(
+      arg,
+      "Warning: presentation time of most recently processed random access "
+      "point (" +
+          std::string(keyframe_time_string) +
+          " s) is later than the presentation time of a non-keyframe (" +
+          nonkeyframe_time_string +
+          " s) that depends on it. This type of random access point is not "
+          "well supported by MSE; buffered range reporting may be less "
+          "precise.");
+}
+
 MATCHER(StreamParsingFailed, "") {
   return CONTAINS_STRING(arg, "Append: stream parsing failed.");
+}
+
+MATCHER(ParsedBuffersNotInDTSSequence, "") {
+  return CONTAINS_STRING(arg, "Parsed buffers not in DTS sequence");
+}
+
+MATCHER(ParsedDTSGreaterThanPTS, "") {
+  return CONTAINS_STRING(arg, "Parsed ") &&
+         CONTAINS_STRING(arg, "frame has DTS ") &&
+         CONTAINS_STRING(arg, ", which is after the frame's PTS");
 }
 
 MATCHER_P(FoundStream, stream_type_string, "") {
@@ -193,6 +239,12 @@ MATCHER_P(InitSegmentMissesExpectedTrack, missing_codec, "") {
 MATCHER_P2(UnexpectedTrack, track_type, id, "") {
   return CONTAINS_STRING(arg, std::string("Got unexpected ") + track_type +
                                   " track track_id=" + id);
+}
+
+MATCHER_P2(FrameTypeMismatchesTrackType, frame_type, track_type, "") {
+  return CONTAINS_STRING(arg, std::string("Frame type ") + frame_type +
+                                  " doesn't match track buffer type " +
+                                  track_type);
 }
 
 MATCHER_P2(SkippingSpliceAtOrBefore,
@@ -246,6 +298,13 @@ MATCHER_P3(TrimmedSpliceOverlap,
                "us. Trimmed tail of overlapped buffer (PTS=" +
                base::IntToString(overlapped_start_us) + "us) by " +
                base::IntToString(trim_duration_us));
+}
+
+MATCHER_P2(NoSpliceForBadMux, overlapped_buffer_count, splice_time_us, "") {
+  return CONTAINS_STRING(arg, "Media is badly muxed. Detected " +
+                                  base::IntToString(overlapped_buffer_count) +
+                                  " overlapping audio buffers at time " +
+                                  base::IntToString(splice_time_us));
 }
 
 }  // namespace media

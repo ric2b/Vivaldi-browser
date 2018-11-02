@@ -49,7 +49,9 @@ ExampleAppListPresenter::~ExampleAppListPresenter() {}
 
 app_list::mojom::AppListPresenterPtr
 ExampleAppListPresenter::CreateInterfacePtrAndBind() {
-  return binding_.CreateInterfacePtrAndBind();
+  app_list::mojom::AppListPresenterPtr ptr;
+  binding_.Bind(mojo::MakeRequest(&ptr));
+  return ptr;
 }
 
 void ExampleAppListPresenter::Show(int64_t display_id) {
@@ -65,6 +67,13 @@ void ExampleAppListPresenter::ToggleAppList(int64_t display_id) {
 }
 
 void ExampleAppListPresenter::StartVoiceInteractionSession() {}
+
+void ExampleAppListPresenter::ToggleVoiceInteractionSession() {}
+
+void ExampleAppListPresenter::UpdateYPositionAndOpacity(
+    int new_y_position,
+    float background_opacity,
+    bool is_end_gesture) {}
 
 }  // namespace shell
 }  // namespace ash

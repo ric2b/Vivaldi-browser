@@ -14,7 +14,7 @@
 #include "base/android/scoped_java_ref.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "components/invalidation/impl/invalidation_logger.h"
 #include "components/invalidation/impl/invalidator_registrar.h"
 #include "components/invalidation/public/invalidation_service.h"
@@ -26,9 +26,7 @@ class InvalidationLogger;
 
 // This InvalidationService is used to deliver invalidations on Android.  The
 // Android operating system has its own mechanisms for delivering invalidations.
-class InvalidationServiceAndroid
-    : public base::NonThreadSafe,
-      public InvalidationService {
+class InvalidationServiceAndroid : public InvalidationService {
  public:
   explicit InvalidationServiceAndroid();
   ~InvalidationServiceAndroid() override;
@@ -62,8 +60,6 @@ class InvalidationServiceAndroid
   // This is used only by unit tests.
   void TriggerStateChangeForTest(syncer::InvalidatorState state);
 
-  static bool RegisterJni(JNIEnv* env);
-
  private:
   typedef std::map<invalidation::ObjectId, int64_t, syncer::ObjectIdLessThan>
       ObjectIdVersionMap;
@@ -86,6 +82,8 @@ class InvalidationServiceAndroid
   // The invalidation logger object we use to record state changes
   // and invalidations.
   InvalidationLogger logger_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(InvalidationServiceAndroid);
 };

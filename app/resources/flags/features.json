@@ -12,9 +12,9 @@
       "value": "true",
       "internal_value": "true"
     },
-    "calendar": {
-      "friendly_name": "Calendar",
-      "description": "Enables Vivaldi Calendar",
+    "window_panel": {
+      "friendly_name": "Window panel",
+      "description": "Enables Window Panel",
       "value": "false",
       "internal_value": "true"
     }

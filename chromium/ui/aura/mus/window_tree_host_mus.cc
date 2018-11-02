@@ -52,7 +52,7 @@ WindowTreeHostMus::WindowTreeHostMus(WindowTreeHostMusInitParams init_params)
   // seems them at the time the window is created.
   for (auto& pair : init_params.properties)
     window_mus->SetPropertyFromServer(pair.first, &pair.second);
-  CreateCompositor(cc::FrameSinkId());
+  CreateCompositor(viz::FrameSinkId());
   gfx::AcceleratedWidget accelerated_widget;
 // We need accelerated widget numbers to be different for each
 // window and fit in the smallest sizeof(AcceleratedWidget) uint32_t
@@ -193,17 +193,14 @@ void WindowTreeHostMus::OnCloseRequest() {
   OnHostCloseRequested();
 }
 
-gfx::ICCProfile WindowTreeHostMus::GetICCProfileForCurrentDisplay() {
-  // TODO: This should read the profile from mus. crbug.com/647510
-  return gfx::ICCProfile();
-}
-
 void WindowTreeHostMus::MoveCursorToScreenLocationInPixels(
     const gfx::Point& location_in_pixels) {
-  // TODO: this needs to message the server http://crbug.com/693340. Setting
-  // the location is really only appropriate in tests, outside of tests this
-  // value is ignored.
-  NOTIMPLEMENTED();
+  gfx::Point screen_location_in_pixels = location_in_pixels;
+  gfx::Point location = GetLocationOnScreenInPixels();
+  screen_location_in_pixels.Offset(-location.x(), -location.y());
+  delegate_->OnWindowTreeHostMoveCursorToDisplayLocation(
+      screen_location_in_pixels, display_id_);
+
   Env::GetInstance()->set_last_mouse_location(location_in_pixels);
 }
 

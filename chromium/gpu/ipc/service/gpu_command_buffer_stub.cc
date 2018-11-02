@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
+#include "base/debug/crash_logging.h"
 #include "base/hash.h"
 #include "base/json/json_writer.h"
 #include "base/macros.h"
@@ -35,6 +36,7 @@
 #include "gpu/command_buffer/service/service_utils.h"
 #include "gpu/command_buffer/service/sync_point_manager.h"
 #include "gpu/command_buffer/service/transfer_buffer_manager.h"
+#include "gpu/config/gpu_crash_keys.h"
 #include "gpu/ipc/common/gpu_messages.h"
 #include "gpu/ipc/service/gpu_channel.h"
 #include "gpu/ipc/service/gpu_channel_manager.h"
@@ -268,7 +270,9 @@ bool GpuCommandBufferStub::OnMessageReceived(const IPC::Message& message) {
   TRACE_EVENT1(TRACE_DISABLED_BY_DEFAULT("devtools.timeline"), "GPUTask",
                "data", DevToolsChannelData::CreateForChannel(channel()));
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
-
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   bool have_context = false;
   // Ensure the appropriate GL context is current before handling any IPC
   // messages directed at the command buffer. This ensures that the message
@@ -406,8 +410,10 @@ void GpuCommandBufferStub::PollWork() {
 
 void GpuCommandBufferStub::PerformWork() {
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::PerformWork");
-
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   if (decoder_.get() && !MakeCurrent())
     return;
 
@@ -499,6 +505,10 @@ bool GpuCommandBufferStub::MakeCurrent() {
 }
 
 void GpuCommandBufferStub::Destroy() {
+  FastSetActiveURL(active_url_, active_url_hash_, channel_);
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
   if (wait_for_token_) {
     Send(wait_for_token_->reply.release());
     wait_for_token_.reset();
@@ -570,16 +580,16 @@ bool GpuCommandBufferStub::Initialize(
     gpu::GpuMemoryBufferFactory* gmb_factory =
         channel_->gpu_channel_manager()->gpu_memory_buffer_factory();
     context_group_ = new gles2::ContextGroup(
-        manager->gpu_preferences(), channel_->mailbox_manager(),
+        manager->gpu_preferences(), manager->mailbox_manager(),
         new GpuCommandBufferMemoryTracker(
             channel_, command_buffer_id_.GetUnsafeValue(),
             init_params.attribs.context_type, channel_->task_runner()),
         manager->shader_translator_cache(),
         manager->framebuffer_completeness_cache(), feature_info,
-        init_params.attribs.bind_generates_resource,
+        init_params.attribs.bind_generates_resource, channel_->image_manager(),
         gmb_factory ? gmb_factory->AsImageFactory() : nullptr,
-        channel_->watchdog() /* progress_reporter */,
-        manager->gpu_feature_info(), channel_->discardable_manager());
+        manager->watchdog() /* progress_reporter */,
+        manager->gpu_feature_info(), manager->discardable_manager());
   }
 
 #if defined(OS_MACOSX)
@@ -595,7 +605,7 @@ bool GpuCommandBufferStub::Initialize(
 
   // MailboxManagerSync synchronization correctness currently depends on having
   // only a single context. See crbug.com/510243 for details.
-  use_virtualized_gl_context_ |= channel_->mailbox_manager()->UsesSync();
+  use_virtualized_gl_context_ |= manager->mailbox_manager()->UsesSync();
 
   bool offscreen = (surface_handle_ == kNullSurfaceHandle);
   gl::GLSurface* default_surface = manager->GetDefaultOffscreenSurface();
@@ -633,26 +643,14 @@ bool GpuCommandBufferStub::Initialize(
     use_virtualized_gl_context_ = false;
 #endif
 
-
-  decoder_.reset(gles2::GLES2Decoder::Create(context_group_.get()));
-
   command_buffer_.reset(new CommandBufferService(
-      context_group_->transfer_buffer_manager(), decoder_.get()));
+      this, context_group_->transfer_buffer_manager()));
+  decoder_.reset(gles2::GLES2Decoder::Create(this, command_buffer_.get(),
+                                             context_group_.get()));
 
   sync_point_client_state_ =
       channel_->sync_point_manager()->CreateSyncPointClientState(
           CommandBufferNamespace::GPU_IO, command_buffer_id_, sequence_id_);
-
-  if (channel_->scheduler()) {
-    command_buffer_->SetPauseExecutionCallback(
-        base::Bind(&Scheduler::ShouldYield,
-                   base::Unretained(channel_->scheduler()), sequence_id_));
-  } else if (channel_->preempted_flag()) {
-    command_buffer_->SetPauseExecutionCallback(
-        base::Bind(&PreemptionFlag::IsSet, channel_->preempted_flag()));
-  }
-
-  decoder_->set_command_buffer_service(command_buffer_.get());
 
   if (offscreen) {
     // Do we want to create an offscreen rendering context suitable
@@ -691,6 +689,19 @@ bool GpuCommandBufferStub::Initialize(
       surface_ = default_surface;
     }
   } else {
+    switch (init_params.attribs.color_space) {
+      case gles2::COLOR_SPACE_UNSPECIFIED:
+        surface_format.SetColorSpace(
+            gl::GLSurfaceFormat::COLOR_SPACE_UNSPECIFIED);
+        break;
+      case gles2::COLOR_SPACE_SRGB:
+        surface_format.SetColorSpace(gl::GLSurfaceFormat::COLOR_SPACE_SRGB);
+        break;
+      case gles2::COLOR_SPACE_DISPLAY_P3:
+        surface_format.SetColorSpace(
+            gl::GLSurfaceFormat::COLOR_SPACE_DISPLAY_P3);
+        break;
+    }
     surface_ = ImageTransportSurface::CreateNativeSurface(
         AsWeakPtr(), surface_handle_, surface_format);
     if (!surface_ || !surface_->Initialize(surface_format)) {
@@ -713,6 +724,10 @@ bool GpuCommandBufferStub::Initialize(
     // group
     share_group_ = channel_->share_group();
   }
+
+  // TODO(sunnyps): Should this use ScopedCrashKey instead?
+  base::debug::SetCrashKeyValue(crash_keys::kGPUGLContextIsVirtual,
+                                use_virtualized_gl_context_ ? "1" : "0");
 
   scoped_refptr<gl::GLContext> context;
   if (use_virtualized_gl_context_ && share_group_) {
@@ -787,29 +802,6 @@ bool GpuCommandBufferStub::Initialize(
     decoder_->set_log_commands(true);
   }
 
-  decoder_->GetLogger()->SetMsgCallback(base::Bind(
-      &GpuCommandBufferStub::SendConsoleMessage, base::Unretained(this)));
-  decoder_->SetShaderCacheCallback(base::Bind(
-      &GpuCommandBufferStub::SendCachedShader, base::Unretained(this)));
-  decoder_->SetFenceSyncReleaseCallback(base::Bind(
-      &GpuCommandBufferStub::OnFenceSyncRelease, base::Unretained(this)));
-  decoder_->SetWaitSyncTokenCallback(base::Bind(
-      &GpuCommandBufferStub::OnWaitSyncToken, base::Unretained(this)));
-  decoder_->SetDescheduleUntilFinishedCallback(
-      base::Bind(&GpuCommandBufferStub::OnDescheduleUntilFinished,
-                 base::Unretained(this)));
-  decoder_->SetRescheduleAfterFinishedCallback(
-      base::Bind(&GpuCommandBufferStub::OnRescheduleAfterFinished,
-                 base::Unretained(this)));
-
-  command_buffer_->SetParseErrorCallback(
-      base::Bind(&GpuCommandBufferStub::OnParseError, base::Unretained(this)));
-
-  if (channel_->watchdog()) {
-    command_buffer_->SetCommandProcessedCallback(base::Bind(
-        &GpuCommandBufferStub::OnCommandProcessed, base::Unretained(this)));
-  }
-
   const size_t kSharedStateSize = sizeof(CommandBufferSharedState);
   if (!shared_state_shm->Map(kSharedStateSize)) {
     DLOG(ERROR) << "Failed to map shared state buffer.";
@@ -826,10 +818,10 @@ bool GpuCommandBufferStub::Initialize(
     // is in an indeterminate state, since the GLStateRestorer was not
     // initialized at the time the GLContextVirtual was made current. In
     // the case that this command decoder is the next one to be
-    // processed, force a "full" MakeCurrent to be performed. Note that
-    // GpuChannel's initialization of the gpu::Capabilities expects the
-    // context to be left current.
-    context->ReleaseCurrent(surface_.get());
+    // processed, force a "full virtual" MakeCurrent to be performed.
+    // Note that GpuChannel's initialization of the gpu::Capabilities
+    // expects the context to be left current.
+    context->ForceReleaseVirtuallyCurrent();
     if (!context->MakeCurrent(surface_.get())) {
       LOG(ERROR) << "Failed to make context current after initialization.";
       return false;
@@ -869,6 +861,20 @@ void GpuCommandBufferStub::OnTakeFrontBuffer(const Mailbox& mailbox) {
 void GpuCommandBufferStub::OnReturnFrontBuffer(const Mailbox& mailbox,
                                                bool is_lost) {
   decoder_->ReturnFrontBuffer(mailbox, is_lost);
+}
+
+CommandBufferServiceClient::CommandBatchProcessedResult
+GpuCommandBufferStub::OnCommandBatchProcessed() {
+  GpuWatchdogThread* watchdog = channel_->gpu_channel_manager()->watchdog();
+  if (watchdog)
+    watchdog->CheckArmed();
+  bool pause = false;
+  if (channel_->scheduler()) {
+    pause = channel_->scheduler()->ShouldYield(sequence_id_);
+  } else if (channel_->preempted_flag()) {
+    pause = channel_->preempted_flag()->IsSet();
+  }
+  return pause ? kPauseExecution : kContinueExecution;
 }
 
 void GpuCommandBufferStub::OnParseError() {
@@ -974,7 +980,7 @@ void GpuCommandBufferStub::OnAsyncFlush(
   last_flush_count_ = flush_count;
   CommandBuffer::State pre_state = command_buffer_->GetState();
   FastSetActiveURL(active_url_, active_url_hash_, channel_);
-  command_buffer_->Flush(put_offset);
+  command_buffer_->Flush(put_offset, decoder_.get());
   CommandBuffer::State post_state = command_buffer_->GetState();
 
   if (pre_state.get_offset != post_state.get_offset)
@@ -1012,11 +1018,6 @@ void GpuCommandBufferStub::OnDestroyTransferBuffer(int32_t id) {
 
   if (command_buffer_)
     command_buffer_->DestroyTransferBuffer(id);
-}
-
-void GpuCommandBufferStub::OnCommandProcessed() {
-  DCHECK(channel_->watchdog());
-  channel_->watchdog()->CheckArmed();
 }
 
 void GpuCommandBufferStub::ReportState() {
@@ -1125,10 +1126,7 @@ void GpuCommandBufferStub::OnCreateImage(
   const uint32_t internalformat = params.internal_format;
   const uint64_t image_release_count = params.image_release_count;
 
-  if (!decoder_)
-    return;
-
-  gles2::ImageManager* image_manager = decoder_->GetImageManager();
+  gles2::ImageManager* image_manager = channel_->image_manager();
   DCHECK(image_manager);
   if (image_manager->LookupImage(id)) {
     LOG(ERROR) << "Image already exists with same ID.";
@@ -1165,10 +1163,7 @@ void GpuCommandBufferStub::OnCreateImage(
 void GpuCommandBufferStub::OnDestroyImage(int32_t id) {
   TRACE_EVENT0("gpu", "GpuCommandBufferStub::OnDestroyImage");
 
-  if (!decoder_)
-    return;
-
-  gles2::ImageManager* image_manager = decoder_->GetImageManager();
+  gles2::ImageManager* image_manager = channel_->image_manager();
   DCHECK(image_manager);
   if (!image_manager->LookupImage(id)) {
     LOG(ERROR) << "Image with ID doesn't exist.";
@@ -1178,8 +1173,8 @@ void GpuCommandBufferStub::OnDestroyImage(int32_t id) {
   image_manager->RemoveImage(id);
 }
 
-void GpuCommandBufferStub::SendConsoleMessage(int32_t id,
-                                              const std::string& message) {
+void GpuCommandBufferStub::OnConsoleMessage(int32_t id,
+                                            const std::string& message) {
   GPUCommandBufferConsoleMessage console_message;
   console_message.id = id;
   console_message.message = message;
@@ -1189,8 +1184,8 @@ void GpuCommandBufferStub::SendConsoleMessage(int32_t id,
   Send(msg);
 }
 
-void GpuCommandBufferStub::SendCachedShader(const std::string& key,
-                                            const std::string& shader) {
+void GpuCommandBufferStub::CacheShader(const std::string& key,
+                                       const std::string& shader) {
   channel_->CacheShader(key, shader);
 }
 

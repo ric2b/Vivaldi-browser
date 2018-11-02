@@ -19,6 +19,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -302,7 +303,7 @@ void SendOnMessageEventOnUI(
   // process. We use a filter here so that only event listeners for a particular
   // <webview> will fire.
   if (is_web_view_guest) {
-    event_filtering_info.SetInstanceID(is_web_view_guest);
+    event_filtering_info.instance_id = is_web_view_guest;
     histogram_value = events::WEB_VIEW_INTERNAL_ON_MESSAGE;
     event_name = webview::kEventMessage;
   } else {
@@ -628,9 +629,7 @@ int ExtensionWebRequestEventRouter::OnBeforeRequest(
     NotifyPageLoad();
 
   request_time_tracker_->LogRequestStartTime(request->identifier(),
-                                             base::Time::Now(),
-                                             request->url(),
-                                             browser_context);
+                                             base::Time::Now());
 
   // Whether to initialized |blocked_requests_|.
   bool initialize_blocked_requests = false;
@@ -1439,14 +1438,21 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
       continue;
     }
 
-    // If this is a PlzNavigate request, then |navigation_ui_data| will be valid
-    // and the IDs will be -1. We can skip this verification since
-    // |navigation_ui_data| was created and set in the browser so it's trusted.
-    if (is_web_view_guest && !navigation_ui_data &&
-        (listener->id.embedder_process_id !=
-             web_view_info.embedder_process_id ||
-         listener->id.web_view_instance_id != web_view_info.instance_id)) {
-      continue;
+    if (is_web_view_guest) {
+      // If this is a PlzNavigate request, then |navigation_ui_data| will be
+      // valid and the IDs will be -1. We can skip this verification since
+      // |navigation_ui_data| was created and set in the browser so it's
+      // trusted.
+      if (!navigation_ui_data && (listener->id.embedder_process_id !=
+                                  web_view_info.embedder_process_id)) {
+        continue;
+      }
+
+      int instance_id = navigation_ui_data
+                            ? navigation_ui_data->web_view_instance_id()
+                            : web_view_info.instance_id;
+      if (listener->id.web_view_instance_id != instance_id)
+        continue;
     }
 
     // Filter requests from other extensions / apps. This does not work for
@@ -1488,8 +1494,7 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
     }
 
     const std::vector<WebRequestResourceType>& types = listener->filter.types;
-    if (!types.empty() &&
-        std::find(types.begin(), types.end(), resource_type) == types.end()) {
+    if (!types.empty() && !base::ContainsValue(types, resource_type)) {
       continue;
     }
 
@@ -1498,7 +1503,9 @@ void ExtensionWebRequestEventRouter::GetMatchingListenersImpl(
           WebRequestPermissions::CanExtensionAccessURL(
               extension_info_map, listener->id.extension_id, url,
               frame_data.tab_id, crosses_incognito,
-              WebRequestPermissions::REQUIRE_HOST_PERMISSION);
+              WebRequestPermissions::REQUIRE_HOST_PERMISSION,
+              request->initiator());
+
       if (access != PermissionsData::ACCESS_ALLOWED) {
         if (access == PermissionsData::ACCESS_WITHHELD &&
             web_request_event_router_delegate_) {
@@ -1619,13 +1626,14 @@ helpers::EventResponseDelta* CalculateDelta(
   }
 }
 
-base::Value* SerializeResponseHeaders(const helpers::ResponseHeaders& headers) {
-  std::unique_ptr<base::ListValue> serialized_headers(new base::ListValue());
+std::unique_ptr<base::Value> SerializeResponseHeaders(
+    const helpers::ResponseHeaders& headers) {
+  auto serialized_headers = base::MakeUnique<base::ListValue>();
   for (const auto& it : headers) {
     serialized_headers->Append(
         helpers::CreateHeaderDictionary(it.first, it.second));
   }
-  return serialized_headers.release();
+  return std::move(serialized_headers);
 }
 
 // Convert a RequestCookieModifications/ResponseCookieModifications object to a
@@ -1633,11 +1641,11 @@ base::Value* SerializeResponseHeaders(const helpers::ResponseHeaders& headers) {
 // the two types (request/response) are different but contain essentially the
 // same fields.
 template <typename CookieType>
-base::ListValue* SummarizeCookieModifications(
+std::unique_ptr<base::ListValue> SummarizeCookieModifications(
     const std::vector<linked_ptr<CookieType>>& modifications) {
-  std::unique_ptr<base::ListValue> cookie_modifications(new base::ListValue());
+  auto cookie_modifications = base::MakeUnique<base::ListValue>();
   for (const auto& it : modifications) {
-    std::unique_ptr<base::DictionaryValue> summary(new base::DictionaryValue());
+    auto summary = base::MakeUnique<base::DictionaryValue>();
     const CookieType& mod = *(it.get());
     switch (mod.type) {
       case helpers::ADD:
@@ -1675,7 +1683,7 @@ base::ListValue* SummarizeCookieModifications(
     }
     cookie_modifications->Append(std::move(summary));
   }
-  return cookie_modifications.release();
+  return cookie_modifications;
 }
 
 // Converts an EventResponseDelta object to a dictionary value suitable for the
@@ -1697,14 +1705,14 @@ std::unique_ptr<base::DictionaryValue> SummarizeResponseDelta(
   }
   if (!modified_headers->empty()) {
     details->Set(activity_log::kModifiedRequestHeadersKey,
-                 modified_headers.release());
+                 std::move(modified_headers));
   }
 
   std::unique_ptr<base::ListValue> deleted_headers(new base::ListValue());
   deleted_headers->AppendStrings(delta.deleted_request_headers);
   if (!deleted_headers->empty()) {
     details->Set(activity_log::kDeletedRequestHeadersKey,
-                 deleted_headers.release());
+                 std::move(deleted_headers));
   }
 
   if (!delta.added_response_headers.empty()) {
@@ -1761,13 +1769,6 @@ void ExtensionWebRequestEventRouter::DecrementBlockCount(
 
     blocked_request.response_deltas.push_back(
         linked_ptr<helpers::EventResponseDelta>(delta));
-  }
-
-  if (!extension_id.empty()) {
-    base::TimeDelta block_time =
-        base::Time::Now() - blocked_request.blocking_time;
-    request_time_tracker_->IncrementExtensionBlockTime(
-        extension_id, request_id, block_time);
   }
 
   if (num_handlers_blocking == 0) {

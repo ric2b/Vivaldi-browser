@@ -85,8 +85,6 @@ source_set("win") {
     "com_security.h",
     "default_audio_device_change_detector.cc",
     "default_audio_device_change_detector.h",
-    "elevation_helpers.cc",
-    "elevation_helpers.h",
     "launch_process_with_token.cc",
     "launch_process_with_token.h",
     "omaha.cc",
@@ -115,13 +113,18 @@ source_set("win") {
     "//remoting/build/config:version",
   ]
 
+  if (is_clang) {
+    # TODO(thakis): Remove this once midl.exe no longer produces nonstandard
+    # C++ (see the enums in com_imported_mstscax.tlh).
+    cflags = [ "-Wno-microsoft-enum-forward-reference" ]
+  }
+
   defines = [ "WEBRTC_CHROMIUM_BUILD" ]
 
   deps = [
     "//base:i18n",
     "//components/policy/core/common",
     "//crypto",
-    "//device/power_save_blocker",
     "//ipc",
     "//remoting/base",
     "//remoting/host/security_key",
@@ -129,6 +132,7 @@ source_set("win") {
     "//remoting/host/win:remoting_lib_idl",
     "//remoting/protocol",
     "//remoting/resources",
+    "//services/device/wake_lock/power_save_blocker",
     "//ui/base",
     "//ui/events:dom_keycode_converter",
     "//ui/events/platform",

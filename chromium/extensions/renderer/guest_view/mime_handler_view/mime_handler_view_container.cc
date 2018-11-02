@@ -22,6 +22,7 @@
 #include "gin/interceptor.h"
 #include "gin/object_template_builder.h"
 #include "gin/wrappable.h"
+#include "third_party/WebKit/public/platform/WebURLRequest.h"
 #include "third_party/WebKit/public/web/WebAssociatedURLLoader.h"
 #include "third_party/WebKit/public/web/WebAssociatedURLLoaderOptions.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
@@ -147,16 +148,15 @@ void MimeHandlerViewContainer::OnReady() {
   if (!render_frame() || !is_embedded_)
     return;
 
-  blink::WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
+
   blink::WebAssociatedURLLoaderOptions options;
-  // The embedded plugin is allowed to be cross-origin and we should always
-  // send credentials/cookies with the request.
-  options.cross_origin_request_policy =
-      blink::WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyAllow;
-  options.allow_credentials = true;
   DCHECK(!loader_);
   loader_.reset(frame->CreateAssociatedURLLoader(options));
 
+  // The embedded plugin is allowed to be cross-origin and we should always
+  // send credentials/cookies with the request. So, use the default mode
+  // "no-cors" and credentials mode "include".
   blink::WebURLRequest request(original_url_);
   request.SetRequestContext(blink::WebURLRequest::kRequestContextObject);
   loader_->LoadAsynchronously(request, this);
@@ -236,14 +236,7 @@ void MimeHandlerViewContainer::PostMessage(v8::Isolate* isolate,
   v8::Context::Scope context_scope(
       render_frame()->GetWebFrame()->MainWorldScriptContext());
 
-  // TODO(lazyboy,nasko): The WebLocalFrame branch is not used when running
-  // on top of out-of-process iframes. Remove it once the code is converted.
-  v8::Local<v8::Object> guest_proxy_window;
-  if (guest_proxy_frame->IsWebLocalFrame()) {
-    guest_proxy_window = guest_proxy_frame->MainWorldScriptContext()->Global();
-  } else {
-    guest_proxy_window = guest_proxy_frame->ToWebRemoteFrame()->GlobalProxy();
-  }
+  v8::Local<v8::Object> guest_proxy_window = guest_proxy_frame->GlobalProxy();
   gin::Dictionary window_object(isolate, guest_proxy_window);
   v8::Local<v8::Function> post_message;
   if (!window_object.Get(std::string(kPostMessageName), &post_message))
@@ -261,17 +254,15 @@ void MimeHandlerViewContainer::PostMessage(v8::Isolate* isolate,
 
 void MimeHandlerViewContainer::PostMessageFromValue(
     const base::Value& message) {
-  blink::WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (!frame)
     return;
 
   v8::Isolate* isolate = v8::Isolate::GetCurrent();
   v8::HandleScope handle_scope(isolate);
   v8::Context::Scope context_scope(frame->MainWorldScriptContext());
-  std::unique_ptr<content::V8ValueConverter> converter(
-      content::V8ValueConverter::create());
-  PostMessage(isolate,
-              converter->ToV8Value(&message, frame->MainWorldScriptContext()));
+  PostMessage(isolate, content::V8ValueConverter::Create()->ToV8Value(
+                           &message, frame->MainWorldScriptContext()));
 }
 
 void MimeHandlerViewContainer::OnCreateMimeHandlerViewGuestACK(
@@ -302,7 +293,7 @@ void MimeHandlerViewContainer::OnMimeHandlerViewGuestOnLoadCompleted(
     return;
 
   // Now that the guest has loaded, flush any unsent messages.
-  blink::WebFrame* frame = render_frame()->GetWebFrame();
+  blink::WebLocalFrame* frame = render_frame()->GetWebFrame();
   if (!frame)
     return;
 

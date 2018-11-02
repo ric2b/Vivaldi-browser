@@ -12,6 +12,7 @@
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_util.h"
+#include "base/task_scheduler/post_task.h"
 #include "build/build_config.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/push_messaging_service.h"
@@ -73,7 +74,9 @@ class MojomProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
 
     return new net::URLRequestFileJob(
         request, network_delegate, path,
-        BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE));
+        base::CreateTaskRunnerWithTraits(
+            {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
+             base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN}));
   }
 };
 
@@ -82,7 +85,6 @@ class MojomProtocolHandler : public net::URLRequestJobFactory::ProtocolHandler {
 LayoutTestBrowserContext::LayoutTestBrowserContext(bool off_the_record,
                                                    net::NetLog* net_log)
     : ShellBrowserContext(off_the_record, net_log) {
-  ignore_certificate_errors_ = true;
 }
 
 LayoutTestBrowserContext::~LayoutTestBrowserContext() {
@@ -97,7 +99,6 @@ LayoutTestBrowserContext::CreateURLRequestContextGetter(
   return new LayoutTestURLRequestContextGetter(
       ignore_certificate_errors(), GetPath(),
       BrowserThread::GetTaskRunnerForThread(BrowserThread::IO),
-      BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
       protocol_handlers, std::move(request_interceptors), net_log());
 }
 

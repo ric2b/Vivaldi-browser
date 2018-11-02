@@ -98,7 +98,9 @@
 
 #include "platform/wtf/Threading.h"
 
-#if OS(WIN)
+#include "build/build_config.h"
+
+#if defined(OS_WIN)
 
 #include "platform/wtf/CurrentTime.h"
 #include "platform/wtf/DateMath.h"
@@ -412,15 +414,22 @@ DWORD AbsoluteTimeToWaitTimeoutInterval(double absolute_time) {
 #if DCHECK_IS_ON()
 static bool g_thread_created = false;
 
+Mutex& GetThreadCreatedMutex() {
+  static Mutex g_thread_created_mutex;
+  return g_thread_created_mutex;
+}
+
 bool IsBeforeThreadCreated() {
+  MutexLocker locker(GetThreadCreatedMutex());
   return !g_thread_created;
 }
 
 void WillCreateThread() {
+  MutexLocker locker(GetThreadCreatedMutex());
   g_thread_created = true;
 }
 #endif
 
 }  // namespace WTF
 
-#endif  // OS(WIN)
+#endif  // defined(OS_WIN)

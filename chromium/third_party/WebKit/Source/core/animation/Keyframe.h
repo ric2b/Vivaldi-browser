@@ -56,7 +56,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
   PassRefPtr<Keyframe> CloneWithOffset(double offset) const {
     RefPtr<Keyframe> the_clone = Clone();
     the_clone->SetOffset(offset);
-    return the_clone.Release();
+    return the_clone;
   }
 
   virtual bool IsAnimatableValueKeyframe() const { return false; }
@@ -89,7 +89,7 @@ class CORE_EXPORT Keyframe : public RefCounted<Keyframe> {
         const ComputedStyle* parent_style) const {
       return false;
     }
-    virtual PassRefPtr<AnimatableValue> GetAnimatableValue() const = 0;
+    virtual const AnimatableValue* GetAnimatableValue() const = 0;
 
     virtual bool IsAnimatableValuePropertySpecificKeyframe() const {
       return false;

@@ -14,7 +14,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
 #include "services/ui/common/types.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree_host.mojom.h"
@@ -76,8 +76,7 @@ class Display : public PlatformDisplayDelegate,
   // display::Display ID. In external mode this hasn't been defined yet.
   int64_t GetId() const;
 
-  // Sets the display::Display corresponding to this ws::Display. This is only
-  // valid in internal window mode.
+  // Sets the display::Display corresponding to this ws::Display.
   void SetDisplay(const display::Display& display);
 
   // PlatformDisplayDelegate:
@@ -152,12 +151,17 @@ class Display : public PlatformDisplayDelegate,
   // Sets the native cursor to |cursor|.
   void SetNativeCursor(const ui::CursorData& curosor);
 
+  // Sets the native cursor size to |cursor_size|.
+  void SetNativeCursorSize(ui::CursorSize cursor_size);
+
   // mojom::WindowTreeHost:
   void SetSize(const gfx::Size& size) override;
   void SetTitle(const std::string& title) override;
 
   // Updates the size of display root ServerWindow and WM root ServerWindow(s).
   void OnViewportMetricsChanged(const display::ViewportMetrics& metrics);
+
+  void SetBoundsInPixels(const gfx::Rect& bounds_in_pixels);
 
   // Returns the root window of the active user.
   ServerWindow* GetActiveRootWindow();
@@ -183,6 +187,9 @@ class Display : public PlatformDisplayDelegate,
   // Creates the root ServerWindow for this display, where |size| is in physical
   // pixels.
   void CreateRootWindow(const gfx::Size& size);
+
+  // Applyes the cursor scale and rotation to the PlatformDisplay.
+  void UpdateCursorConfig();
 
   // PlatformDisplayDelegate:
   ServerWindow* GetRootWindow() override;
@@ -223,7 +230,7 @@ class Display : public PlatformDisplayDelegate,
 
   ServerWindowTracker activation_parents_;
 
-  cc::LocalSurfaceIdAllocator allocator_;
+  viz::LocalSurfaceIdAllocator allocator_;
 
   WindowManagerDisplayRootMap window_manager_display_root_map_;
 

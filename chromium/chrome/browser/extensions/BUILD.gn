@@ -7,6 +7,7 @@ import("//build/config/ui.gni")
 import("//chrome/common/features.gni")
 import("//extensions/features/features.gni")
 import("//media/media_options.gni")
+import("//mojo/public/tools/bindings/mojom.gni")
 import("//rlz/features/features.gni")
 
 assert(enable_extensions)
@@ -191,8 +192,10 @@ static_library("extensions") {
     "api/feedback_private/feedback_service.h",
     "api/file_handlers/non_native_file_system_delegate_chromeos.cc",
     "api/file_handlers/non_native_file_system_delegate_chromeos.h",
-    "api/file_system/file_system_api.cc",
-    "api/file_system/file_system_api.h",
+    "api/file_system/chrome_file_system_delegate.cc",
+    "api/file_system/chrome_file_system_delegate.h",
+    "api/file_system/file_entry_picker.cc",
+    "api/file_system/file_entry_picker.h",
     "api/font_settings/font_settings_api.cc",
     "api/font_settings/font_settings_api.h",
     "api/gcm/gcm_api.cc",
@@ -223,8 +226,6 @@ static_library("extensions") {
     "api/identity/identity_mint_queue.h",
     "api/identity/identity_remove_cached_auth_token_function.cc",
     "api/identity/identity_remove_cached_auth_token_function.h",
-    "api/identity/identity_signin_flow.cc",
-    "api/identity/identity_signin_flow.h",
     "api/identity/web_auth_flow.cc",
     "api/identity/web_auth_flow.h",
     "api/idltest/idltest_api.cc",
@@ -457,8 +458,6 @@ static_library("extensions") {
     "blacklist_factory.h",
     "blacklist_state_fetcher.cc",
     "blacklist_state_fetcher.h",
-    "blob_reader.cc",
-    "blob_reader.h",
     "bookmark_app_helper.cc",
     "bookmark_app_helper.h",
     "browser_action_test_util.h",
@@ -696,8 +695,6 @@ static_library("extensions") {
     "ntp_overridden_bubble_delegate.h",
     "pack_extension_job.cc",
     "pack_extension_job.h",
-    "path_util.cc",
-    "path_util.h",
     "pending_extension_info.cc",
     "pending_extension_info.h",
     "pending_extension_manager.cc",
@@ -742,10 +739,6 @@ static_library("extensions") {
     "tab_helper.h",
     "theme_installed_infobar_delegate.cc",
     "theme_installed_infobar_delegate.h",
-    "token_cache/token_cache_service.cc",
-    "token_cache/token_cache_service.h",
-    "token_cache/token_cache_service_factory.cc",
-    "token_cache/token_cache_service_factory.h",
     "unpacked_installer.cc",
     "unpacked_installer.h",
     "update_install_gate.cc",
@@ -820,7 +813,9 @@ static_library("extensions") {
     "//chrome/browser/devtools",
     "//chrome/browser/media/router",
     "//chrome/browser/media/router/discovery",
+    "//chrome/browser/safe_browsing",
     "//chrome/common",
+    "//chrome/common/extensions:mojo_bindings",
     "//chrome/common/extensions/api:api_registration",
     "//chrome/common/extensions/api:extensions_features",
     "//chrome/common/safe_browsing:proto",
@@ -836,6 +831,7 @@ static_library("extensions") {
     "//components/cryptauth",
     "//components/data_reduction_proxy/core/browser",
     "//components/dom_distiller/core",
+    "//components/download/content/public",
     "//components/drive",
     "//components/favicon/content",
     "//components/feedback",
@@ -875,6 +871,7 @@ static_library("extensions") {
     "//components/update_client",
     "//components/url_matcher",
     "//components/user_prefs",
+    "//components/vector_icons",
     "//components/web_modal",
     "//components/zoom",
     "//content/app/resources",
@@ -909,6 +906,7 @@ static_library("extensions") {
     "//third_party/libaddressinput:util",
     "//third_party/re2",
     "//third_party/webrtc/modules/desktop_capture",
+    "//third_party/zlib/google:zip",
     "//ui/accessibility:ax_gen",
     "//ui/base",
     "//ui/base/ime",
@@ -919,7 +917,6 @@ static_library("extensions") {
     "//ui/resources",
     "//ui/shell_dialogs",
     "//ui/strings",
-    "//ui/vector_icons",
     "//url",
   ]
 
@@ -937,6 +934,14 @@ static_library("extensions") {
       "api/enterprise_platform_keys/enterprise_platform_keys_api.h",
       "api/enterprise_platform_keys_private/enterprise_platform_keys_private_api.cc",
       "api/enterprise_platform_keys_private/enterprise_platform_keys_private_api.h",
+      "api/feedback_private/log_source_access_manager.cc",
+      "api/feedback_private/log_source_access_manager.h",
+      "api/feedback_private/log_source_resource.cc",
+      "api/feedback_private/log_source_resource.h",
+      "api/feedback_private/single_log_source_factory.cc",
+      "api/feedback_private/single_log_source_factory.h",
+      "api/file_system/consent_provider.cc",
+      "api/file_system/consent_provider.h",
       "api/file_system/request_file_system_notification.cc",
       "api/file_system/request_file_system_notification.h",
       "api/input_ime/input_ime_api.cc",
@@ -945,14 +950,6 @@ static_library("extensions") {
       "api/input_ime/input_ime_api_chromeos.h",
       "api/input_ime/input_ime_event_router_base.cc",
       "api/input_ime/input_ime_event_router_base.h",
-      "api/log_private/filter_handler.cc",
-      "api/log_private/filter_handler.h",
-      "api/log_private/log_parser.cc",
-      "api/log_private/log_parser.h",
-      "api/log_private/log_private_api.h",
-      "api/log_private/log_private_api_chromeos.cc",
-      "api/log_private/syslog_parser.cc",
-      "api/log_private/syslog_parser.h",
       "api/messaging/native_message_host_chromeos.cc",
       "api/networking_cast_private/chrome_networking_cast_private_delegate.cc",
       "api/networking_cast_private/chrome_networking_cast_private_delegate.h",
@@ -988,6 +985,7 @@ static_library("extensions") {
       configs += [ "//build/config/linux/dbus" ]
     }
     deps += [
+      "//components/arc",
       "//components/chrome_apps",
       "//components/constrained_window",
       "//components/drive",
@@ -1002,6 +1000,9 @@ static_library("extensions") {
       "//ui/file_manager",
       "//ui/views/",
     ]
+    if (enable_nacl) {
+      deps += [ "//chrome/browser/resources/chromeos/zip_archiver" ]
+    }
   } else {
     sources += [
       "api/easy_unlock_private/easy_unlock_private_crypto_delegate_stub.cc",
@@ -1034,7 +1035,7 @@ static_library("extensions") {
   }
 
   if (is_linux) {
-    deps += [ "//build/linux:fontconfig" ]
+    deps += [ "//third_party/fontconfig" ]
 
     if (use_dbus) {
       deps += [ "//dbus" ]

@@ -5,11 +5,12 @@
 #ifndef UI_VIEWS_WIN_FULLSCREEN_HANDLER_H_
 #define UI_VIEWS_WIN_FULLSCREEN_HANDLER_H_
 
-#include <windows.h>
+#include <shobjidl.h>
 
 #include <map>
 
 #include "base/macros.h"
+#include "base/win/scoped_comptr.h"
 
 namespace gfx {
 class Rect;
@@ -25,6 +26,9 @@ class FullscreenHandler {
   void set_hwnd(HWND hwnd) { hwnd_ = hwnd; }
 
   void SetFullscreen(bool fullscreen);
+
+  // Informs the taskbar whether the window is a fullscreen window.
+  void MarkFullscreen(bool fullscreen);
 
   gfx::Rect GetRestoreBounds() const;
 
@@ -47,6 +51,8 @@ class FullscreenHandler {
   // Saved window information from before entering fullscreen mode.
   // TODO(beng): move to private once GetRestoredBounds() moves onto Widget.
   SavedWindowInfo saved_window_info_;
+  // Used to mark a window as fullscreen.
+  base::win::ScopedComPtr<ITaskbarList2> task_bar_list_;
 
   DISALLOW_COPY_AND_ASSIGN(FullscreenHandler);
 };

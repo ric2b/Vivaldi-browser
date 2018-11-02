@@ -9,7 +9,6 @@
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSPropertyMetadata.h"
 #include "core/css/resolver/StyleResolver.h"
-#include "core/style/ComputedStyle.h"
 #include "core/svg/SVGElement.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
@@ -143,7 +142,7 @@ StringKeyframe::CSSPropertySpecificKeyframe::CloneWithOffset(
   RefPtr<CSSPropertySpecificKeyframe> clone =
       Create(offset, easing_, value_.Get(), composite_);
   clone->animatable_value_cache_ = animatable_value_cache_;
-  return clone.Release();
+  return clone;
 }
 
 PassRefPtr<Keyframe::PropertySpecificKeyframe>

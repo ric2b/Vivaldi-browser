@@ -26,7 +26,11 @@ class ApiClass(namedtuple('ApiClass', 'index,classname,property_ids,methods_for_
 def get_classname(property):
     if property['api_class'] is True:
         # This property had the generated_api_class flag set in CSSProperties.json5.
-        return 'CSSPropertyAPI' + property['upper_camel_name']
+        if property['longhands']:
+            api_prefix = 'CSSShorthandPropertyAPI'
+        else:
+            api_prefix = 'CSSPropertyAPI'
+        return api_prefix + property['upper_camel_name']
     # This property has a specified class name.
     assert isinstance(property['api_class'], str), \
         ("api_class value for " + property['api_class'] + " should be None, True or a string")
@@ -45,7 +49,6 @@ class CSSPropertyAPIWriter(StyleBuilderWriter):
         self._outputs = {
             'CSSPropertyDescriptor.cpp': self.generate_property_descriptor_cpp,
             'CSSPropertyDescriptor.h': self.generate_property_descriptor_h,
-            'CSSPropertyAPI.h': self.generate_property_api,
         }
 
         # Stores a map of API method name -> (return_type, parameters)
@@ -100,34 +103,30 @@ class CSSPropertyAPIWriter(StyleBuilderWriter):
             for property_enum in property_enums_for_class[api_class.classname]:
                 self._descriptor_indices[property_enum] = {'id': api_class.index, 'api': api_class.classname}
 
-    @template_expander.use_jinja('CSSPropertyDescriptor.cpp.tmpl')
+    @template_expander.use_jinja('templates/CSSPropertyDescriptor.cpp.tmpl')
     def generate_property_descriptor_cpp(self):
         return {
+            'input_files': self._input_files,
             'api_classes': self._api_classes,
             'ordered_api_method_names': self.ordered_api_method_names,
             'descriptor_indices': self._descriptor_indices,
             'invalid_descriptor_index': self._invalid_descriptor_index
         }
 
-    @template_expander.use_jinja('CSSPropertyDescriptor.h.tmpl')
+    @template_expander.use_jinja('templates/CSSPropertyDescriptor.h.tmpl')
     def generate_property_descriptor_h(self):
         return {
-            'ordered_api_method_names': self.ordered_api_method_names,
-            'all_api_methods': self.all_api_methods,
-        }
-
-    @template_expander.use_jinja('CSSPropertyAPI.h.tmpl')
-    def generate_property_api(self):
-        return {
+            'input_files': self._input_files,
             'ordered_api_method_names': self.ordered_api_method_names,
             'all_api_methods': self.all_api_methods,
         }
 
     # Provides a function object given the classname of the property.
     def generate_property_api_h_builder(self, api_classname, property_name):
-        @template_expander.use_jinja('CSSPropertyAPIFiles.h.tmpl')
+        @template_expander.use_jinja('templates/CSSPropertyAPIFiles.h.tmpl')
         def generate_property_api_h():
             return {
+                'input_files': self._input_files,
                 'api_classname': api_classname,
                 'property_name': property_name,
                 'methods_for_class': self.methods_for_classes[api_classname],

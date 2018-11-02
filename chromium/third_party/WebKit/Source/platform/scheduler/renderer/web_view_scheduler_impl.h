@@ -35,7 +35,7 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
  public:
   WebViewSchedulerImpl(
       WebScheduler::InterventionReporter* intervention_reporter,
-      WebViewScheduler::WebViewSchedulerSettings* settings,
+      WebViewScheduler::WebViewSchedulerDelegate* delegate,
       RendererSchedulerImpl* renderer_scheduler,
       bool disable_background_timer_throttling);
 
@@ -54,6 +54,7 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
       std::unique_ptr<WTF::Closure> budget_exhausted_callback) override;
   void AudioStateChanged(bool is_audio_playing) override;
   bool HasActiveConnectionForTest() const override;
+  void RequestBeginMainFrameNotExpected(bool new_state) override;
 
   // Virtual for testing.
   virtual void ReportIntervention(const std::string& message);
@@ -67,6 +68,9 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   void DecrementBackgroundParserCount();
   void Unregister(WebFrameSchedulerImpl* frame_scheduler);
   void OnNavigation();
+  void WillNavigateBackForwardSoon(WebFrameSchedulerImpl* frame_scheduler);
+  void DidBeginProvisionalLoad(WebFrameSchedulerImpl* frame_scheduler);
+  void DidEndProvisionalLoad(WebFrameSchedulerImpl* frame_scheduler);
 
   bool IsAudioPlaying() const;
 
@@ -98,10 +102,10 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   // number of active connections.
   void UpdateBackgroundBudgetPoolThrottlingState();
 
-  void EnableBackgroundThrottling();
-
   std::set<WebFrameSchedulerImpl*> frame_schedulers_;
   std::set<unsigned long> pending_loads_;
+  std::set<WebFrameSchedulerImpl*> provisional_loads_;
+  std::set<WebFrameSchedulerImpl*> expect_backward_forwards_navigation_;
   WebScheduler::InterventionReporter* intervention_reporter_;  // Not owned.
   RendererSchedulerImpl* renderer_scheduler_;
   VirtualTimePolicy virtual_time_policy_;
@@ -109,18 +113,16 @@ class PLATFORM_EXPORT WebViewSchedulerImpl : public WebViewScheduler {
   TaskHandle virtual_time_budget_expired_task_handle_;
   int background_parser_count_;
   bool page_visible_;
-  bool should_throttle_frames_;
   bool disable_background_timer_throttling_;
   bool allow_virtual_time_to_advance_;
-  bool timers_suspended_;
+  bool virtual_time_paused_;
   bool have_seen_loading_task_;
   bool virtual_time_;
   bool is_audio_playing_;
   bool reported_background_throttling_since_navigation_;
   bool has_active_connection_;
   CPUTimeBudgetPool* background_time_budget_pool_;  // Not owned.
-  CancelableClosureHolder delayed_background_throttling_enabler_;
-  WebViewScheduler::WebViewSchedulerSettings* settings_;  // Not owned.
+  WebViewScheduler::WebViewSchedulerDelegate* delegate_;  // Not owned.
 
   DISALLOW_COPY_AND_ASSIGN(WebViewSchedulerImpl);
 };

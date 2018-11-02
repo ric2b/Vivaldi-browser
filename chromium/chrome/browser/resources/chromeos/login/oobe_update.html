@@ -2,7 +2,6 @@
      Use of this source code is governed by a BSD-style license that can be
      found in the LICENSE file. -->
 
-<link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/classes/iron-flex-layout.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-iconset-svg/iron-iconset-svg.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-progress/paper-progress.html">
@@ -25,19 +24,24 @@
 
 <dom-module id="oobe-update-md">
   <template>
-    <link rel="stylesheet" href="oobe_update.css">
     <link rel="stylesheet" href="oobe_dialog_parameters.css">
+    <link rel="stylesheet" href="oobe_flex_layout.css">
+    <link rel="stylesheet" href="oobe_update.css">
     <oobe-dialog hidden="[[!checkingForUpdate]]" tabindex="0"
         aria-live="polite">
       <iron-icon icon="oobe-update:googleg" class="oobe-icon"></iron-icon>
       <div class="header">
         <h1 class="title" i18n-content="checkingForUpdates"></h1>
-        <div class="subtitle" id="checkingForUpdateCancelHint"
+        <div class="subtitle update-subtitle" id="checkingForUpdateCancelHint"
             i18n-content="cancelUpdateHint" hidden="[[!cancelAllowed]]">
         </div>
       </div>
       <div class="footer flex layout vertical">
         <paper-progress id="checking-progress" indeterminate></paper-progress>
+        <div class="flex"></div>
+        <img class="update-illustration"
+            srcset="images/1x/updating_1x.png 1x,
+                    images/2x/updating_2x.png 2x">
       </div>
     </oobe-dialog>
     <oobe-dialog hidden="[[checkingForUpdate]]" tabindex="0"
@@ -45,19 +49,35 @@
       <iron-icon icon="oobe-update:googleg" class="oobe-icon"></iron-icon>
       <div class="header">
         <h1 class="title" i18n-content="updatingScreenTitle"></h1>
-        <div class="subtitle" i18n-content="installingUpdateDesc"></div>
-        <div class="subtitle" id="updatingCancelHint"
-            i18n-content="cancelUpdateHint" hidden="[[!cancelAllowed]]">
+        <div class="subtitle update-subtitle"
+            i18n-content="installingUpdateDesc"
+            hidden="[[updateCompleted]]"></div>
+        <div class="subtitle update-subtitle" id="updatingCancelHint"
+            i18n-content="cancelUpdateHint"
+            hidden="[[isNotAllowedOrUpdateCompleted_(cancelAllowed,
+                                                     updateCompleted)]]">
         </div>
+        <div class="subtitle update-subtitle" i18n-content="updateCompeletedMsg"
+            hidden="[[!updateCompleted]]"></div>
       </div>
       <div class="footer flex layout vertical">
-        <div id="update-upper-label">[[updateUpperLabel]]</div>
-        <paper-progress min="0" max="100" value="[[progressValue]]">
+        <paper-progress min="0" max="100" value="[[progressValue]]"
+          hidden="[[updateCompleted]]">
         </paper-progress>
-        <div id="estimated-time-left" class="progress-message"
-            hidden="[[!estimatedTimeLeftShown]]">[[estimatedTimeLeft]]</div>
-        <div id="progress-message" class="progress-message"
-            hidden="[[!progressMessageShown]]">[[progressMessage]]</div>
+        <div id="estimated-time-left" class="progress-message text"
+            hidden="[[isNotAllowedOrUpdateCompleted_(estimatedTimeLeftShown,
+                                                     updateCompleted)]]">
+          [[estimatedTimeLeft]]
+        </div>
+        <div id="progress-message" class="progress-message text"
+            hidden="[[isNotAllowedOrUpdateCompleted_(progressMessageShown,
+                                                     updateCompleted)]]">
+          [[progressMessage]]
+        </div>
+        <div class="flex"></div>
+        <img class="update-illustration"
+            srcset="images/1x/updating_1x.png 1x,
+                    images/2x/updating_2x.png 2x">
       </div>
     </oobe-dialog>
   </template>

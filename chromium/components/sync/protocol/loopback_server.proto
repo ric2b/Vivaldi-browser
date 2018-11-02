@@ -21,6 +21,8 @@ message LoopbackServerEntity {
     PERMANENT = 2;
     TOMBSTONE = 3;
     UNIQUE = 4;
+
+    NOTES = 10000;
   }
 
   optional Type type = 1;

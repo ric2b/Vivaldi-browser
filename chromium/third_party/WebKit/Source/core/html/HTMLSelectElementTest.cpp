@@ -4,14 +4,14 @@
 
 #include "core/html/HTMLSelectElement.h"
 
+#include <memory>
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/forms/FormController.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include <memory>
 
 namespace blink {
 
@@ -484,6 +484,16 @@ TEST_F(HTMLSelectElementTest, SetRecalcListItemsByOptgroupRemoval) {
       toHTMLSelectElement(GetDocument().body()->firstChild());
   select->setInnerHTML("");
   // PASS if setInnerHTML didn't have a check failure.
+}
+
+TEST_F(HTMLSelectElementTest, ScrollToOptionAfterLayoutCrash) {
+  // crbug.com/737447
+  // This test passes if no crash.
+  GetDocument().documentElement()->setInnerHTML(
+      "<style>*:checked { position:fixed; }</style>"
+      "<select multiple><<option>o1</option><option "
+      "selected>o2</option></select>");
+  GetDocument().View()->UpdateAllLifecyclePhases();
 }
 
 }  // namespace blink

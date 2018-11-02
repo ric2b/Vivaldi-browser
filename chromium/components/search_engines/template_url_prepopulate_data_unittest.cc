@@ -12,7 +12,9 @@
 #include "base/command_line.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/macros.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/values.h"
 #include "components/google/core/browser/google_switches.h"
 #include "components/search_engines/prepopulated_engines.h"
 #include "components/search_engines/search_engines_pref_names.h"
@@ -20,6 +22,7 @@
 #include "components/search_engines/template_url.h"
 #include "components/search_engines/template_url_data_util.h"
 #include "components/search_engines/template_url_service.h"
+#include "components/search_engines/testing_search_terms_data.h"
 #include "components/sync_preferences/testing_pref_service_syncable.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -159,9 +162,9 @@ TEST_F(TemplateURLPrepopulateDataTest, ProvidersFromPrefs) {
   // Test the optional settings too.
   entry->SetString("suggest_url", "http://foo.com/suggest?q={searchTerms}");
   entry->SetString("instant_url", "http://foo.com/instant?q={searchTerms}");
-  base::ListValue* alternate_urls = new base::ListValue;
+  auto alternate_urls = base::MakeUnique<base::ListValue>();
   alternate_urls->AppendString("http://foo.com/alternate?q={searchTerms}");
-  entry->Set("alternate_urls", alternate_urls);
+  entry->Set("alternate_urls", std::move(alternate_urls));
   entry->SetString("search_terms_replacement_key", "espv");
   overrides = base::MakeUnique<base::ListValue>();
   overrides->Append(entry->CreateDeepCopy());
@@ -365,5 +368,60 @@ TEST_F(TemplateURLPrepopulateDataTest, GetEngineTypeForAllPrepopulatedEngines) {
         TemplateURLDataFromPrepopulatedEngine(*engine);
     EXPECT_EQ(engine->type,
               TemplateURL(*data).GetEngineType(SearchTermsData()));
+  }
+}
+
+namespace {
+
+void CheckTemplateUrlRefIsCryptographic(const TemplateURLRef& url_ref) {
+  TestingSearchTermsData search_terms_data("https://www.google.com/");
+  if (!url_ref.IsValid(search_terms_data)) {
+    ADD_FAILURE() << url_ref.GetURL();
+    return;
+  }
+
+  // Double parentheses around the string16 constructor to prevent the compiler
+  // from parsing it as a function declaration.
+  TemplateURLRef::SearchTermsArgs search_term_args((base::string16()));
+  GURL url(url_ref.ReplaceSearchTerms(search_term_args, search_terms_data));
+  EXPECT_TRUE(url.is_empty() || url.SchemeIsCryptographic()) << url;
+}
+
+}  // namespace
+
+TEST_F(TemplateURLPrepopulateDataTest, HttpsUrls) {
+  // Preexisting search engines that don't use HTTPS URLs.
+  // Don't add new entries to this list!
+  std::set<int> exceptions{
+      4,  6,  16, 17, 21, 27, 35, 36, 43, 44, 45, 50, 54, 55, 56, 60, 61,
+      62, 63, 64, 65, 66, 68, 70, 74, 75, 76, 77, 78, 79, 80, 81, 85, 90,
+  };
+  using PrepopulatedEngine = TemplateURLPrepopulateData::PrepopulatedEngine;
+  const std::vector<const PrepopulatedEngine*> all_engines =
+      TemplateURLPrepopulateData::GetAllPrepopulatedEngines();
+  for (const PrepopulatedEngine* engine : all_engines) {
+    std::unique_ptr<TemplateURLData> data =
+        TemplateURLDataFromPrepopulatedEngine(*engine);
+    if (base::ContainsKey(exceptions, data->prepopulate_id))
+      continue;
+
+    GURL logo_url = data->logo_url;
+    EXPECT_TRUE(logo_url.is_empty() || logo_url.SchemeIsCryptographic())
+        << logo_url;
+    GURL favicon_url = data->favicon_url;
+    EXPECT_TRUE(favicon_url.is_empty() || favicon_url.SchemeIsCryptographic())
+        << favicon_url;
+
+    TemplateURL template_url(*data);
+
+    // Intentionally don't check alternate URLs, because those are only used
+    // for matching.
+    CheckTemplateUrlRefIsCryptographic(template_url.url_ref());
+    CheckTemplateUrlRefIsCryptographic(template_url.suggestions_url_ref());
+    CheckTemplateUrlRefIsCryptographic(template_url.instant_url_ref());
+    CheckTemplateUrlRefIsCryptographic(template_url.image_url_ref());
+    CheckTemplateUrlRefIsCryptographic(template_url.new_tab_url_ref());
+    CheckTemplateUrlRefIsCryptographic(
+        template_url.contextual_search_url_ref());
   }
 }

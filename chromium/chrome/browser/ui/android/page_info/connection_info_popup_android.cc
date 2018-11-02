@@ -12,7 +12,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/ui/page_info/page_info.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/security_state/core/security_state.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/browser_context.h"
@@ -153,11 +152,4 @@ void ConnectionInfoPopupAndroid::SetPermissionInfo(
     const PermissionInfoList& permission_info_list,
     ChosenObjectInfoList chosen_object_info_list) {
   NOTIMPLEMENTED();
-}
-
-// static
-bool
-ConnectionInfoPopupAndroid::RegisterConnectionInfoPopupAndroid(
-    JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

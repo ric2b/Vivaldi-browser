@@ -13,11 +13,14 @@
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "base/strings/string16.h"
+#include "components/autofill/core/browser/credit_card.h"
 #include "components/payments/core/currency_formatter.h"
 #include "components/payments/core/payment_options_provider.h"
-#include "components/payments/mojom/payment_request.mojom.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace payments {
+
+class PaymentInstrument;
 
 // Identifier for the basic card payment method in the PaymentMethodData.
 extern const char kBasicCardMethodName[];
@@ -82,6 +85,13 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
       const {
     return stringified_method_data_;
   }
+  const std::set<autofill::CreditCard::CardType>& supported_card_types_set()
+      const {
+    return supported_card_types_set_;
+  }
+  const std::vector<std::string>& url_payment_method_identifiers() const {
+    return url_payment_method_identifiers_;
+  }
   // Returns whether the |method_name| was specified as supported through the
   // "basic-card" payment method. If false, it means either the |method_name| is
   // not supported at all, or specified directly in supportedMethods.
@@ -107,19 +117,30 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
     return selected_shipping_option_error_;
   }
 
-  const mojom::PaymentDetails& details() const { return *details_.get(); }
-
   void StartWaitingForUpdateWith(UpdateReason reason);
-
   bool IsMixedCurrency() const;
 
   UpdateReason current_update_reason() const { return current_update_reason_; }
 
+  // Returns the total object of this payment request, taking into account the
+  // applicable modifier for |selected_instrument| if any.
+  const mojom::PaymentItemPtr& GetTotal(
+      PaymentInstrument* selected_instrument) const;
+  // Returns the display items for this payment request, taking into account the
+  // applicable modifier for |selected_instrument| if any.
+  std::vector<const mojom::PaymentItemPtr*> GetDisplayItems(
+      PaymentInstrument* selected_instrument) const;
+
+  const std::vector<mojom::PaymentShippingOptionPtr>& GetShippingOptions()
+      const;
+
  private:
-  // Validates the |method_data| and fills |supported_card_networks_|,
-  // |supported_card_networks_set_| and |basic_card_specified_networks_|.
-  void PopulateValidatedMethodData(
-      const std::vector<mojom::PaymentMethodDataPtr>& method_data);
+  // Returns the first applicable modifier in the Payment Request for the
+  // |selected_instrument|.
+  const mojom::PaymentDetailsModifierPtr* GetApplicableModifier(
+      PaymentInstrument* selected_instrument) const;
+
+  const mojom::PaymentDetails& details() const { return *details_.get(); }
 
   // Updates the |selected_shipping_option| based on the data passed to this
   // payment request by the website. This will set selected_shipping_option_ to
@@ -157,9 +178,17 @@ class PaymentRequestSpec : public PaymentOptionsProvider {
   std::vector<std::string> supported_card_networks_;
   std::set<std::string> supported_card_networks_set_;
 
+  std::set<autofill::CreditCard::CardType> supported_card_types_set_;
+
   // Only the set of basic-card specified networks. NOTE: callers should use
   // |supported_card_networks_set_| to check merchant support.
   std::set<std::string> basic_card_specified_networks_;
+
+  // A list of supported url-based payment method identifers specified by the
+  // merchant. This encompasses one of the two types of payment method
+  // identifers, the other being standardized payment method identifiers i.e.,
+  // basic-card.
+  std::vector<std::string> url_payment_method_identifiers_;
 
   // A mapping of the payment method names to the corresponding JSON-stringified
   // payment method specific data.

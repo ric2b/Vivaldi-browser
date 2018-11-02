@@ -69,6 +69,8 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   blink::WebBlendMode BlendMode() const override;
   void SetIsRootForIsolatedGroup(bool root) override;
   bool IsRootForIsolatedGroup() override;
+  void SetShouldHitTest(bool should_hit_test) override;
+  bool ShouldHitTest() override;
   void SetOpaque(bool opaque) override;
   bool Opaque() const override;
   void SetPosition(const blink::WebFloatPoint& position) override;
@@ -89,9 +91,9 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   void SetFiltersOrigin(const blink::WebFloatPoint& origin) override;
   void SetBackgroundFilters(const cc::FilterOperations& filters) override;
   bool HasTickingAnimationForTesting() override;
+  void SetScrollable(const blink::WebSize&) override;
   void SetScrollPosition(blink::WebFloatPoint position) override;
   blink::WebFloatPoint ScrollPosition() const override;
-  void SetScrollClipLayer(blink::WebLayer* clip_layer) override;
   bool Scrollable() const override;
   void SetUserScrollable(bool horizontal, bool vertical) override;
   bool UserScrollableHorizontal() const override;
@@ -127,6 +129,8 @@ class CC_BLINK_EXPORT WebLayerImpl : public NON_EXPORTED_BASE(blink::WebLayer) {
   uint32_t CompositorMutableProperties() const override;
   void SetHasWillChangeTransformHint(bool has_will_change) override;
   void ShowScrollbars() override;
+  void SetScrollBoundaryBehavior(
+      const blink::WebScrollBoundaryBehavior&) override;
 
   void SetScrollParent(blink::WebLayer* parent) override;
   void SetClipParent(blink::WebLayer* parent) override;

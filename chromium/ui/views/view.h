@@ -21,6 +21,7 @@
 #include "build/build_config.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/base/class_property.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -115,7 +116,8 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
                           public ui::LayerOwner,
                           public ui::AcceleratorTarget,
                           public ui::EventTarget,
-                          public ui::EventHandler {
+                          public ui::EventHandler,
+                          public ui::PropertyHandler {
  public:
   using Views = std::vector<View*>;
 
@@ -515,6 +517,9 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // system.
   static void ConvertPointFromScreen(const View* dst, gfx::Point* point);
 
+  // Convert a rect from a View's coordinate system to that of the screen.
+  static void ConvertRectToScreen(const View* src, gfx::Rect* rect);
+
   // Applies transformation on the rectangle, which is in the view's coordinate
   // system, to convert it into the parent's coordinate system.
   gfx::Rect ConvertRectToParent(const gfx::Rect& rect) const;
@@ -540,12 +545,12 @@ class VIEWS_EXPORT View : public ui::LayerDelegate,
   // the hierarchy beneath it.
   void Paint(const ui::PaintContext& parent_context);
 
-  // The background object is owned by this object and may be NULL.
-  void set_background(Background* b);
+  // The background object may be null.
+  void SetBackground(std::unique_ptr<Background> b);
   const Background* background() const { return background_.get(); }
   Background* background() { return background_.get(); }
 
-  // The border object is owned by this object and may be NULL.
+  // The border object may be null.
   virtual void SetBorder(std::unique_ptr<Border> b);
   const Border* border() const { return border_.get(); }
   Border* border() { return border_.get(); }

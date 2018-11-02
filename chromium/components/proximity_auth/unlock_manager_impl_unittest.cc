@@ -119,7 +119,7 @@ class TestUnlockManager : public UnlockManagerImpl {
  public:
   TestUnlockManager(ProximityAuthSystem::ScreenlockType screenlock_type,
                     ProximityAuthClient* proximity_auth_client)
-      : UnlockManagerImpl(screenlock_type, proximity_auth_client),
+      : UnlockManagerImpl(screenlock_type, proximity_auth_client, nullptr),
         proximity_monitor_(nullptr) {}
   ~TestUnlockManager() override {}
 
@@ -137,7 +137,8 @@ class TestUnlockManager : public UnlockManagerImpl {
 
  private:
   std::unique_ptr<ProximityMonitor> CreateProximityMonitor(
-      cryptauth::Connection* connection) override {
+      cryptauth::Connection* connection,
+      ProximityAuthPrefManager* pref_manager) override {
     EXPECT_EQ(cryptauth::kTestRemoteDevicePublicKey,
               connection->remote_device().public_key);
     std::unique_ptr<MockProximityMonitor> proximity_monitor(
@@ -312,6 +313,8 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
        IsUnlockAllowed_SecureChannelNotEstablished) {
   CreateUnlockManager(ProximityAuthSystem::SESSION_LOCK);
 
+  life_cycle_.set_connection(nullptr);
+  life_cycle_.set_messenger(nullptr);
   unlock_manager_->SetRemoteDeviceLifeCycle(&life_cycle_);
   life_cycle_.ChangeState(RemoteDeviceLifeCycle::State::AUTHENTICATING);
   unlock_manager_->OnLifeCycleStateChanged();
@@ -424,6 +427,24 @@ TEST_F(ProximityAuthUnlockManagerImplTest, SetRemoteDeviceLifeCycle_WakingUp) {
   EXPECT_CALL(proximity_auth_client_,
               UpdateScreenlockState(ScreenlockState::BLUETOOTH_CONNECTING));
   unlock_manager_->SetRemoteDeviceLifeCycle(&life_cycle_);
+}
+
+TEST_F(ProximityAuthUnlockManagerImplTest,
+       SetRemoteDeviceLifeCycle_TimesOutBeforeConnection) {
+  CreateUnlockManager(ProximityAuthSystem::SESSION_LOCK);
+
+  life_cycle_.set_connection(nullptr);
+  life_cycle_.set_messenger(nullptr);
+  life_cycle_.ChangeState(RemoteDeviceLifeCycle::State::FINDING_CONNECTION);
+
+  EXPECT_CALL(proximity_auth_client_,
+              UpdateScreenlockState(ScreenlockState::BLUETOOTH_CONNECTING));
+  unlock_manager_->SetRemoteDeviceLifeCycle(&life_cycle_);
+
+  EXPECT_CALL(proximity_auth_client_,
+              UpdateScreenlockState(ScreenlockState::NO_PHONE));
+  // Simulate timing out before a connection is established.
+  RunPendingTasks();
 }
 
 TEST_F(ProximityAuthUnlockManagerImplTest,
@@ -593,15 +614,15 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
 
 TEST_F(ProximityAuthUnlockManagerImplTest, OnScreenDidLock_SetsWakingUpState) {
   CreateUnlockManager(ProximityAuthSystem::SESSION_LOCK);
-  SimulateUserPresentState();
-
-  unlock_manager_.get()->OnScreenDidUnlock(
-      ScreenlockBridge::LockHandler::LOCK_SCREEN);
 
   EXPECT_CALL(proximity_auth_client_,
               UpdateScreenlockState(ScreenlockState::BLUETOOTH_CONNECTING));
 
   life_cycle_.ChangeState(RemoteDeviceLifeCycle::State::FINDING_CONNECTION);
+  unlock_manager_->SetRemoteDeviceLifeCycle(&life_cycle_);
+  unlock_manager_.get()->OnScreenDidLock(
+      ScreenlockBridge::LockHandler::LOCK_SCREEN);
+
   unlock_manager_->OnLifeCycleStateChanged();
 }
 
@@ -640,7 +661,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   unlock_manager_->SetRemoteDeviceLifeCycle(nullptr);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(false));
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 }
 
 TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_UnlockNotAllowed) {
@@ -650,7 +671,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_UnlockNotAllowed) {
   ON_CALL(*proximity_monitor(), IsUnlockAllowed()).WillByDefault(Return(false));
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(false));
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 }
 
 TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_NotUserClick) {
@@ -658,8 +679,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_NotUserClick) {
   SimulateUserPresentState();
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(_)).Times(0);
-  unlock_manager_->OnAuthAttempted(
-      ScreenlockBridge::LockHandler::EXPAND_THEN_USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::EXPAND_THEN_USER_CLICK);
 }
 
 TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_DuplicateCall) {
@@ -667,17 +687,17 @@ TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_DuplicateCall) {
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, RequestUnlock());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(messenger_, RequestUnlock()).Times(0);
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 }
 
 TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_TimesOut) {
   CreateUnlockManager(ProximityAuthSystem::SESSION_LOCK);
   SimulateUserPresentState();
 
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   // Simulate the timeout period elapsing.
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(false));
@@ -689,7 +709,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   CreateUnlockManager(ProximityAuthSystem::SESSION_LOCK);
   SimulateUserPresentState();
 
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(_));
   unlock_manager_->OnUnlockResponse(false);
@@ -706,7 +726,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, RequestUnlock());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(false));
   unlock_manager_->OnUnlockResponse(false);
@@ -719,7 +739,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, RequestUnlock());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
   unlock_manager_->OnUnlockResponse(true);
@@ -735,7 +755,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, RequestUnlock());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
   unlock_manager_->OnUnlockResponse(true);
@@ -751,7 +771,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(false));
   unlock_manager_->OnUnlockEventSent(false);
@@ -764,7 +784,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
   SimulateUserPresentState();
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeUnlock(true));
   unlock_manager_->OnUnlockEventSent(true);
@@ -788,7 +808,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest, OnAuthAttempted_SignIn_Success) {
           }));
 
   EXPECT_CALL(messenger_, RequestDecryption(kChallenge));
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
   unlock_manager_->OnDecryptResponse(kSignInSecret);
@@ -816,7 +836,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
           }));
 
   EXPECT_CALL(messenger_, RequestDecryption(kChallenge));
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(messenger_, DispatchUnlockEvent());
   unlock_manager_->OnDecryptResponse(kSignInSecret);
@@ -844,7 +864,7 @@ TEST_F(ProximityAuthUnlockManagerImplTest,
           }));
 
   EXPECT_CALL(messenger_, RequestDecryption(kChallenge));
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 
   EXPECT_CALL(proximity_auth_client_, FinalizeSignin(std::string()));
   unlock_manager_->OnDecryptResponse(std::string());

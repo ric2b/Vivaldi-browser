@@ -37,8 +37,6 @@
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/ssl/client_cert_store.h"
-#include "net/ssl/ssl_platform_key.h"
-#include "net/ssl/ssl_private_key.h"
 #include "net/url_request/redirect_info.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_status.h"
@@ -469,16 +467,12 @@ void ResourceLoader::ContinueSSLRequest() {
   request_->ContinueDespiteLastError();
 }
 
-void ResourceLoader::ContinueWithCertificate(net::X509Certificate* cert) {
+void ResourceLoader::ContinueWithCertificate(
+    scoped_refptr<net::X509Certificate> cert,
+    scoped_refptr<net::SSLPrivateKey> private_key) {
   DCHECK(ssl_client_auth_handler_);
   ssl_client_auth_handler_.reset();
-  if (!cert) {
-    request_->ContinueWithCertificate(nullptr, nullptr);
-    return;
-  }
-  scoped_refptr<net::SSLPrivateKey> private_key =
-      net::FetchClientCertPrivateKey(cert);
-  request_->ContinueWithCertificate(cert, private_key.get());
+  request_->ContinueWithCertificate(std::move(cert), std::move(private_key));
 }
 
 void ResourceLoader::CancelCertificateSelection() {
@@ -645,6 +639,16 @@ void ResourceLoader::CompleteResponseStarted() {
   PopulateResourceResponse(info, request_.get(), response.get());
 
   delegate_->DidReceiveResponse(this, response.get());
+
+  // For back-forward navigations, record metrics.
+  // TODO(clamy): Remove once we understand the root cause behind the regression
+  // of PLT for b/f navigations in PlzNavigate.
+  if ((info->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK) &&
+      IsResourceTypeFrame(info->GetResourceType()) &&
+      request_->url().SchemeIsHTTPOrHTTPS()) {
+    UMA_HISTOGRAM_BOOLEAN("Navigation.BackForward.WasCached",
+                          request_->was_cached());
+  }
 
   read_deferral_start_time_ = base::TimeTicks::Now();
   // Using a ScopedDeferral here would result in calling ReadMore(true) on sync

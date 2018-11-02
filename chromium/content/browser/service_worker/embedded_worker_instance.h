@@ -47,6 +47,8 @@ class ServiceWorkerContextCore;
 // This gives an interface to control one EmbeddedWorker instance, which
 // may be 'in-waiting' or running in one of the child processes added by
 // AddProcessReference().
+//
+// Owned by ServiceWorkerVersion. Lives on the IO thread.
 class CONTENT_EXPORT EmbeddedWorkerInstance
     : NON_EXPORTED_BASE(public mojom::EmbeddedWorkerInstanceHost) {
  public:
@@ -55,18 +57,20 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
 
   // This enum is used in UMA histograms. Append-only.
   enum StartingPhase {
-    NOT_STARTING,
-    ALLOCATING_PROCESS,
-    REGISTERING_TO_DEVTOOLS,
-    SENT_START_WORKER,
-    SCRIPT_DOWNLOADING,
-    SCRIPT_LOADED,
-    SCRIPT_EVALUATED,
-    THREAD_STARTED,  // Happens after SCRIPT_LOADED and before SCRIPT_EVALUATED
+    NOT_STARTING = 0,
+    ALLOCATING_PROCESS = 1,
+    // REGISTERING_TO_DEVTOOLS = 2,  // Obsolete
+    SENT_START_WORKER = 3,
+    SCRIPT_DOWNLOADING = 4,
+    SCRIPT_LOADED = 5,
+    SCRIPT_EVALUATED = 6,
+    // THREAD_STARTED happens after SCRIPT_LOADED and before SCRIPT_EVALUATED
+    THREAD_STARTED = 7,
     // Script read happens after SENT_START_WORKER and before SCRIPT_LOADED
     // (installed scripts only)
-    SCRIPT_READ_STARTED,
-    SCRIPT_READ_FINISHED,
+    SCRIPT_READ_STARTED = 8,
+    SCRIPT_READ_FINISHED = 9,
+    SCRIPT_STREAMING = 10,
     // Add new values here.
     STARTING_PHASE_MAX_VALUE,
   };
@@ -108,9 +112,12 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // STOPPED status. |callback| is invoked after the worker script has been
   // started and evaluated, or when an error occurs.
   // |params| should be populated with service worker version info needed
-  // to start the worker.
+  // to start the worker. If the worker is already installed,
+  // |installed_scripts_info| holds information about its scripts; otherwise,
+  // it is null.
   void Start(std::unique_ptr<EmbeddedWorkerStartParams> params,
              mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+             mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
              const StatusCallback& callback);
 
   // Stops the worker. It is invalid to call this when the worker is
@@ -140,9 +147,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   int restart_count() const { return restart_count_; }
   int process_id() const;
   int thread_id() const { return thread_id_; }
-  // This should be called only when the worker instance has a valid process,
-  // that is, when |process_id()| returns a valid process id.
-  bool is_new_process() const;
   int worker_devtools_agent_route_id() const;
 
   void AddListener(Listener* listener);
@@ -195,6 +199,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   class StartTask;
   class WorkerProcessHandle;
   friend class EmbeddedWorkerRegistry;
+  friend class EmbeddedWorkerInstanceTest;
   FRIEND_TEST_ALL_PREFIXES(EmbeddedWorkerInstanceTest, StartAndStop);
   FRIEND_TEST_ALL_PREFIXES(EmbeddedWorkerInstanceTest, DetachDuringStart);
   FRIEND_TEST_ALL_PREFIXES(EmbeddedWorkerInstanceTest, StopDuringStart);
@@ -211,7 +216,6 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Called back from StartTask after the worker is registered to
   // WorkerDevToolsManager.
   void OnRegisteredToDevToolsManager(
-      bool is_new_process,
       std::unique_ptr<DevToolsProxy> devtools_proxy,
       bool wait_for_debugger);
 
@@ -220,7 +224,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
       std::unique_ptr<EmbeddedWorkerStartParams> params);
 
   // Called back from StartTask after a start worker message is sent.
-  void OnStartWorkerMessageSent();
+  void OnStartWorkerMessageSent(bool is_script_streaming);
 
   // Implements mojom::EmbeddedWorkerInstanceHost.
   // These functions all run on the IO thread.
@@ -233,7 +237,7 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Fires the callback passed to Start().
   void OnScriptEvaluated(bool success) override;
   // Changes the internal worker status from STARTING to RUNNING.
-  void OnStarted() override;
+  void OnStarted(mojom::EmbeddedWorkerStartTimingPtr start_timing) override;
   // Resets the embedded worker instance to the initial state. This will change
   // the internal status from STARTING or RUNNING to STOPPED.
   void OnStopped() override;
@@ -289,9 +293,15 @@ class CONTENT_EXPORT EmbeddedWorkerInstance
   // Binding for EmbeddedWorkerInstanceHost, runs on IO thread.
   mojo::AssociatedBinding<EmbeddedWorkerInstanceHost> instance_host_binding_;
 
-  // TODO(shimazu): Remove this after EmbeddedWorkerStartParams is changed to
-  // a mojo struct.
+  // |pending_dispatcher_request_| and |pending_installed_scripts_info_| are
+  // parameters of the StartWorker message. These are called "pending" because
+  // they are not used directly by this class and are just transferred to the
+  // renderer in SendStartWorker().
+  // TODO(shimazu): Remove |pending_dispatcher_request_| and
+  // |pending_installed_scripts_info_| when EmbeddedWorkerStartParams is
+  // changed to a mojo struct and we put them in EmbeddedWorkerStartParams.
   mojom::ServiceWorkerEventDispatcherRequest pending_dispatcher_request_;
+  mojom::ServiceWorkerInstalledScriptsInfoPtr pending_installed_scripts_info_;
 
   // Whether devtools is attached or not.
   bool devtools_attached_;

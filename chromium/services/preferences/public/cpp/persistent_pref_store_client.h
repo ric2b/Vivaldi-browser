@@ -23,8 +23,6 @@ namespace base {
 class Value;
 }
 
-class PrefRegistry;
-
 namespace prefs {
 
 // An implementation of PersistentPrefStore backed by a
@@ -32,11 +30,6 @@ namespace prefs {
 class PersistentPrefStoreClient
     : public PrefStoreClientMixin<PersistentPrefStore> {
  public:
-  PersistentPrefStoreClient(
-      mojom::PrefStoreConnectorPtr connector,
-      scoped_refptr<PrefRegistry> pref_registry,
-      std::vector<PrefValueStore::PrefStoreType> already_connected_types);
-
   explicit PersistentPrefStoreClient(
       mojom::PersistentPrefStoreConnectionPtr connection);
 
@@ -60,7 +53,7 @@ class PersistentPrefStoreClient
   PrefReadError GetReadError() const override;
   PrefReadError ReadPrefs() override;
   void ReadPrefsAsync(ReadErrorDelegate* error_delegate) override;
-  void CommitPendingWrite() override;
+  void CommitPendingWrite(base::OnceClosure done_callback) override;
   void SchedulePendingLossyWrites() override;
   void ClearMutableValues() override;
 
@@ -69,18 +62,21 @@ class PersistentPrefStoreClient
   ~PersistentPrefStoreClient() override;
 
  private:
-  void OnConnect(mojom::PersistentPrefStoreConnectionPtr connection,
-                 std::unordered_map<PrefValueStore::PrefStoreType,
-                                    prefs::mojom::PrefStoreConnectionPtr>
-                     other_pref_stores);
+  class InFlightWriteTrie;
+  struct InFlightWrite;
 
   void QueueWrite(const std::string& key,
                   std::set<std::vector<std::string>> path_components,
                   uint32_t flags);
   void FlushPendingWrites();
 
-  mojom::PrefStoreConnectorPtr connector_;
-  scoped_refptr<PrefRegistry> pref_registry_;
+  // prefs::mojom::PreferenceObserver:
+  void OnPrefChangeAck() override;
+
+  bool ShouldSkipWrite(const std::string& key,
+                       const std::vector<std::string>& path,
+                       const base::Value* new_value) override;
+
   bool read_only_ = false;
   PrefReadError read_error_ = PersistentPrefStore::PREF_READ_ERROR_NONE;
   mojom::PersistentPrefStorePtr pref_store_;
@@ -88,7 +84,9 @@ class PersistentPrefStoreClient
       pending_writes_;
 
   std::unique_ptr<ReadErrorDelegate> error_delegate_;
-  std::vector<PrefValueStore::PrefStoreType> already_connected_types_;
+
+  std::queue<std::vector<InFlightWrite>> in_flight_writes_queue_;
+  std::map<std::string, InFlightWriteTrie> in_flight_writes_tries_;
 
   base::WeakPtrFactory<PersistentPrefStoreClient> weak_factory_;
 

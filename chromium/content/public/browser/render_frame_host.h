@@ -14,7 +14,9 @@
 #include "content/public/common/file_chooser_params.h"
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
+#include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "url/gurl.h"
@@ -28,8 +30,11 @@ namespace base {
 class Value;
 }
 
+namespace resource_coordinator {
+class ResourceCoordinatorInterface;
+}
+
 namespace service_manager {
-class BinderRegistry;
 class InterfaceProvider;
 }
 
@@ -38,6 +43,7 @@ struct AXActionData;
 }
 
 namespace content {
+
 class AssociatedInterfaceProvider;
 class RenderProcessHost;
 class RenderViewHost;
@@ -88,6 +94,11 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // access to this RenderFrameHost, and must therefore live in the same
   // process.
   virtual SiteInstance* GetSiteInstance() = 0;
+
+  // Returns the interface for the Global Resource Coordinator
+  // for this frame.
+  virtual resource_coordinator::ResourceCoordinatorInterface*
+  GetFrameResourceCoordinator() = 0;
 
   // Returns the process for this frame.
   virtual RenderProcessHost* GetProcess() = 0;
@@ -273,6 +284,11 @@ class CONTENT_EXPORT RenderFrameHost : public IPC::Listener,
   // timeout skips the dialog.
   virtual void DisableBeforeUnloadHangMonitorForTesting() = 0;
   virtual bool IsBeforeUnloadHangMonitorDisabledForTesting() = 0;
+
+  // Check whether the specific Blink feature is currently preventing fast
+  // shutdown of the frame.
+  virtual bool GetSuddenTerminationDisablerState(
+      blink::WebSuddenTerminationDisablerType disabler_type) = 0;
 
   // Returns true if the given Feature Policy |feature| is enabled for this
   // RenderFrameHost and is allowed to be used by it. Use this in the browser

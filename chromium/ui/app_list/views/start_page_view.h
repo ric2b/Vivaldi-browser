@@ -16,17 +16,24 @@
 namespace app_list {
 
 class AppListMainView;
+class AppListView;
 class AppListViewDelegate;
 class CustomLauncherPageBackgroundView;
+class ExpandArrowView;
 class SearchResultTileItemView;
+class SuggestionsContainerView;
 class TileItemView;
 
 // The start page for the app list.
 class APP_LIST_EXPORT StartPageView : public AppListPage {
  public:
   StartPageView(AppListMainView* app_list_main_view,
-                AppListViewDelegate* view_delegate);
+                AppListViewDelegate* view_delegate,
+                AppListView* app_list_view);
   ~StartPageView() override;
+
+  static int kNoSelection;           // No view is selected.
+  static int kExpandArrowSelection;  // Expand arrow is selected.
 
   void Reset();
 
@@ -50,16 +57,30 @@ class APP_LIST_EXPORT StartPageView : public AppListPage {
   void OnGestureEvent(ui::GestureEvent* event) override;
   void OnScrollEvent(ui::ScrollEvent* event) override;
 
+  // Used only in the tests to get the selected index in start page view.
+  // Returns |kNoSelection|, |kExpandArrowSelection| or an index >= 0 which is
+  // the selected index in suggestions container view.
+  int GetSelectedIndexForTest() const;
+
+  // Updates the opacity of the items in start page during dragging.
+  void UpdateOpacity(float work_area_bottom, bool is_end_gesture);
 
  private:
-  class StartPageTilesContainer;
-
   void InitInstantContainer();
+
   void MaybeOpenCustomLauncherPage();
 
   void SetCustomLauncherPageSelected(bool selected);
 
+  // Updates opacity of |view_item| in the start page based on |centroid_y|.
+  void UpdateOpacityOfItem(views::View* view_item, float centroid_y);
+
   TileItemView* GetTileItemView(size_t index);
+
+  // Handles key events in fullscreen app list.
+  bool HandleKeyPressedFullscreen(const ui::KeyEvent& event);
+
+  AppListView* app_list_view_;
 
   // The parent view of ContentsView which is the parent of this view.
   AppListMainView* app_list_main_view_;
@@ -73,8 +94,20 @@ class APP_LIST_EXPORT StartPageView : public AppListPage {
 
   views::View* instant_container_;  // Owned by views hierarchy.
   CustomLauncherPageBackgroundView*
-      custom_launcher_page_background_;       // Owned by view hierarchy.
-  StartPageTilesContainer* tiles_container_;  // Owned by views hierarchy.
+      custom_launcher_page_background_;     // Owned by views hierarchy.
+  SuggestionsContainerView*
+      suggestions_container_;  // Owned by views hierarchy.
+  ExpandArrowView* expand_arrow_view_ = nullptr;  // Owned by views hierarchy.
+
+  // TODO(minch|weidong): Remove fullscreen related code in StartPageView and
+  // corresponding tests. http://crbug.com/757704.
+  const bool is_fullscreen_app_list_enabled_;
+
+  // The bottom of work area.
+  float work_area_bottom_ = 0.f;
+
+  // True if it is the end gesture of dragging.
+  bool is_end_gesture_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(StartPageView);
 };

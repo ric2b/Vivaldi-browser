@@ -63,6 +63,7 @@ void BackgroundLoaderContents::CanDownload(
 
 bool BackgroundLoaderContents::ShouldCreateWebContents(
     content::WebContents* web_contents,
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     int32_t route_id,
     int32_t main_frame_route_id,
@@ -113,6 +114,25 @@ bool BackgroundLoaderContents::CheckMediaAccessPermission(
     const GURL& security_origin,
     content::MediaStreamType type) {
   return false;  // No permissions granted.
+}
+
+void BackgroundLoaderContents::AdjustPreviewsStateForNavigation(
+    content::PreviewsState* previews_state) {
+  DCHECK(previews_state);
+
+  // If previews are already disabled, do nothing.
+  if (*previews_state == content::PREVIEWS_OFF ||
+      *previews_state == content::PREVIEWS_NO_TRANSFORM) {
+    return;
+  }
+
+  if (*previews_state == content::PREVIEWS_UNSPECIFIED) {
+    *previews_state = content::PARTIAL_CONTENT_SAFE_PREVIEWS;
+  } else {
+    *previews_state &= content::PARTIAL_CONTENT_SAFE_PREVIEWS;
+    if (*previews_state == 0)
+      *previews_state = content::PREVIEWS_OFF;
+  }
 }
 
 BackgroundLoaderContents::BackgroundLoaderContents()

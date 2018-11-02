@@ -24,7 +24,6 @@
 #include "chrome/browser/extensions/api/identity/identity_launch_web_auth_flow_function.h"
 #include "chrome/browser/extensions/api/identity/identity_mint_queue.h"
 #include "chrome/browser/extensions/api/identity/identity_remove_cached_auth_token_function.h"
-#include "chrome/browser/extensions/api/identity/identity_signin_flow.h"
 #include "chrome/browser/extensions/api/identity/web_auth_flow.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "components/signin/core/browser/profile_identity_provider.h"
@@ -93,21 +92,13 @@ class IdentityAPI : public BrowserContextKeyedAPI,
 
   const CachedTokens& GetAllCachedTokens();
 
-  // Account queries.
-  std::vector<std::string> GetAccounts() const;
-  std::string FindAccountKeyByGaiaId(const std::string& gaia_id);
-
   // BrowserContextKeyedAPI implementation.
   void Shutdown() override;
   static BrowserContextKeyedAPIFactory<IdentityAPI>* GetFactoryInstance();
 
   // gaia::AccountTracker::Observer implementation:
-  void OnAccountAdded(const gaia::AccountIds& ids) override;
-  void OnAccountRemoved(const gaia::AccountIds& ids) override;
   void OnAccountSignInChanged(const gaia::AccountIds& ids,
                               bool is_signed_in) override;
-
-  void SetAccountStateForTest(gaia::AccountIds ids, bool is_signed_in);
 
   void set_get_auth_token_function(
       IdentityGetAuthTokenFunction* get_auth_token_function) {

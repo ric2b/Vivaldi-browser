@@ -36,7 +36,7 @@ class TestNotificationContentsView : public views::View {
  public:
   TestNotificationContentsView() {
     SetFocusBehavior(FocusBehavior::ALWAYS);
-    set_background(views::Background::CreateSolidBackground(kBackgroundColor));
+    SetBackground(views::CreateSolidBackground(kBackgroundColor));
     SetPreferredSize(gfx::Size(100, 100));
   }
   ~TestNotificationContentsView() override = default;
@@ -78,6 +78,10 @@ class TestContentViewDelegate : public ArcNotificationContentViewDelegate {
   void RequestFocusOnCloseButton() override {}
   void UpdateControlButtonsVisibility() override {}
   void OnSlideChanged() override {}
+  message_center::NotificationControlButtonsView* GetControlButtonsView()
+      const override {
+    return nullptr;
+  }
 };
 
 class TestNotificationDelegate : public message_center::NotificationDelegate {

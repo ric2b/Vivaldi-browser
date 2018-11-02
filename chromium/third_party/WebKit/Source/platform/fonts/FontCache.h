@@ -31,16 +31,25 @@
 #define FontCache_h
 
 #include <limits.h>
+
 #include <memory>
+
+#include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/fonts/FallbackListCompositeKey.h"
+#include "platform/fonts/FontCacheClient.h"
 #include "platform/fonts/FontCacheKey.h"
+#include "platform/fonts/FontDataCache.h"
 #include "platform/fonts/FontFaceCreationParams.h"
 #include "platform/fonts/FontFallbackPriority.h"
+#include "platform/fonts/FontPlatformData.h"
+#include "platform/fonts/shaping/ShapeCache.h"
+#include "platform/heap/HeapAllocator.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/Unicode.h"
 #include "platform/wtf/text/WTFString.h"
@@ -59,22 +68,34 @@ class ProcessMemoryDump;
 
 namespace blink {
 
-class FontCacheClient;
 class FontFaceCreationParams;
-class FontPlatformData;
+class FontGlobalContext;
 class FontDescription;
 class OpenTypeVerticalData;
-class ShapeCache;
 class SimpleFontData;
 
-enum ShouldRetain { kRetain, kDoNotRetain };
-enum PurgeSeverity { kPurgeIfNeeded, kForcePurge };
 enum class AlternateFontName {
   kAllowAlternate,
   kNoAlternate,
   kLocalUniqueFace,
   kLastResort
 };
+
+typedef HashMap<unsigned,
+                std::unique_ptr<FontPlatformData>,
+                WTF::IntHash<unsigned>,
+                WTF::UnsignedWithZeroKeyHashTraits<unsigned>>
+    SizedFontPlatformDataSet;
+typedef HashMap<FontCacheKey,
+                SizedFontPlatformDataSet,
+                FontCacheKeyHash,
+                FontCacheKeyTraits>
+    FontPlatformDataCache;
+typedef HashMap<FallbackListCompositeKey,
+                std::unique_ptr<ShapeCache>,
+                FallbackListCompositeKeyHash,
+                FallbackListCompositeKeyTraits>
+    FallbackListShaperCache;
 
 class PLATFORM_EXPORT FontCache {
   friend class FontCachePurgePreventer;
@@ -139,16 +160,16 @@ class PLATFORM_EXPORT FontCache {
   SkFontMgr* FontManager() { return font_manager_.get(); }
   static void SetFontManager(sk_sp<SkFontMgr>);
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
   static const AtomicString& SystemFontFamily();
 #else
   static const AtomicString& LegacySystemFontFamily();
 #endif
-#if OS(LINUX) || OS(ANDROID)
+#if defined(OS_LINUX) || defined(OS_ANDROID)
   static void SetSystemFontFamily(const AtomicString&);
 #endif
 
-#if OS(WIN)
+#if defined(OS_WIN)
   static bool AntialiasedTextEnabled() { return antialiased_text_enabled_; }
   static bool LcdTextEnabled() { return lcd_text_enabled_; }
   static float DeviceScaleFactor() { return device_scale_factor_; }
@@ -190,7 +211,7 @@ class PLATFORM_EXPORT FontCache {
 
   static void AcceptLanguagesChanged(const String&);
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   static AtomicString GetGenericFamilyNameForScript(
       const AtomicString& family_name,
       const FontDescription&);
@@ -220,9 +241,11 @@ class PLATFORM_EXPORT FontCache {
   void DumpFontPlatformDataCache(base::trace_event::ProcessMemoryDump*);
   void DumpShapeResultCache(base::trace_event::ProcessMemoryDump*);
 
+  ~FontCache() {}
+
  private:
+  friend class FontGlobalContext;
   FontCache();
-  ~FontCache();
 
   void Purge(PurgeSeverity = kPurgeIfNeeded);
 
@@ -238,7 +261,7 @@ class PLATFORM_EXPORT FontCache {
       const FontDescription&,
       const FontFaceCreationParams&,
       AlternateFontName = AlternateFontName::kAllowAlternate);
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
   FontPlatformData* SystemFontPlatformData(const FontDescription&);
 #endif
 
@@ -259,7 +282,7 @@ class PLATFORM_EXPORT FontCache {
                                    const FontFaceCreationParams&,
                                    CString& name);
 
-#if OS(ANDROID) || OS(LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX)
   static AtomicString GetFamilyNameForCharacter(SkFontMgr*,
                                                 UChar32,
                                                 const FontDescription&,
@@ -277,7 +300,7 @@ class PLATFORM_EXPORT FontCache {
   // A leaky owning bare pointer.
   static SkFontMgr* static_font_manager_;
 
-#if OS(WIN)
+#if defined(OS_WIN)
   static bool antialiased_text_enabled_;
   static bool lcd_text_enabled_;
   static float device_scale_factor_;
@@ -291,6 +314,17 @@ class PLATFORM_EXPORT FontCache {
   static int32_t status_font_height_;
   static bool use_skia_font_fallback_;
 #endif
+
+  unsigned short generation_ = 0;
+  bool platform_init_ = false;
+  Persistent<HeapHashSet<WeakMember<FontCacheClient>>> font_cache_clients_;
+  FontPlatformDataCache font_platform_data_cache_;
+  FallbackListShaperCache fallback_list_shaper_cache_;
+  FontDataCache font_data_cache_;
+
+  void PurgePlatformFontDataCache();
+  void PurgeFontVerticalDataCache();
+  void PurgeFallbackListShaperCache();
 
   friend class SimpleFontData;  // For fontDataFromFontPlatformData
   friend class FontFallbackList;

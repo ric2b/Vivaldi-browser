@@ -8,7 +8,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/macros.h"
 #include "base/observer_list.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/common/content_export.h"
@@ -52,10 +51,13 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   bool IsDefaultSubframeSiteInstance() const override;
 
   // The policy to apply when selecting a RenderProcessHost for the
-  // SiteInstance. Normal SiteInstances don't proactively reuse processes, but
-  // when over the limit, they reuse randomly, not based on site. In contrast,
-  // process-per-site and ServiceWorkers proactively join a process that already
-  // contains the site.
+  // SiteInstance. If no suitable RenderProcessHost for the SiteInstance exists
+  // according to the policy, and there are processes with unmatched service
+  // workers for the site, the newest process with an unmatched service worker
+  // is reused. If still no RenderProcessHost exists a new RenderProcessHost
+  // will be created unless the process limit has been reached. When the limit
+  // has been reached, the RenderProcessHost reused will be chosen randomly and
+  // not based on the site.
   enum class ProcessReusePolicy {
     // In this mode, all instances of the site will be hosted in the same
     // RenderProcessHost.
@@ -66,14 +68,16 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
 
     // In this mode, the site will be rendered in a RenderProcessHost that is
     // already in use for the site, either for a pending navigation or a
-    // committed navigation.  If none exists, a new process will be created.  If
-    // multiple such processes exist, ones that have foreground frames are given
-    // priority, and otherwise one is selected randomly.
+    // committed navigation. If multiple such processes exist, ones that have
+    // foreground frames are given priority, and otherwise one is selected
+    // randomly.
     REUSE_PENDING_OR_COMMITTED_SITE,
 
-    // By default, a new RenderProcessHost will be created unless the process
-    // limit has been reached. The RenderProcessHost reused will be chosen
-    // randomly and not based on the site.
+    // In this mode, SiteInstances don't proactively reuse processes. An
+    // existing process with an unmatched service worker for the site is reused
+    // only for navigations, not for service workers. When the process limit has
+    // been reached, a randomly chosen RenderProcessHost is reused as in the
+    // other policies.
     DEFAULT,
   };
 
@@ -83,6 +87,14 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   ProcessReusePolicy process_reuse_policy() const {
     return process_reuse_policy_;
   }
+
+  // Whether the SiteInstance is created for a service worker. If this flag
+  // is true, when a new process is created for this SiteInstance or a randomly
+  // chosen existing process is reused because of the process limit, the process
+  // will be tracked as having an unmatched service worker until reused by
+  // another SiteInstance from the same site.
+  void set_is_for_service_worker() { is_for_service_worker_ = true; }
+  bool is_for_service_worker() const { return is_for_service_worker_; }
 
   // Returns the SiteInstance, related to this one, that should be used
   // for subframes when an oopif is required, but a dedicated process is not.
@@ -150,6 +162,19 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   static bool DoesSiteRequireDedicatedProcess(BrowserContext* browser_context,
                                               const GURL& url);
 
+  // Returns true if a process for |site_url| should be locked to just that
+  // site.  Returning true here also implies that |site_url| requires a
+  // dedicated process.  However, the converse does not hold: this might still
+  // return false for certain special cases where an origin lock can't be
+  // applied even when |site_url| requires a dedicated process (e.g., with
+  // --site-per-process).  Examples of those cases include <webview> guests,
+  // WebUI, or extensions where a process is currently allowed to be reused for
+  // different extensions.  Most of these special cases should eventually be
+  // removed, and this function should become equivalent to
+  // DoesSiteRequireDedicatedProcess().
+  static bool ShouldLockToOrigin(BrowserContext* browser_context,
+                                 GURL site_url);
+
  private:
   friend class BrowsingInstance;
   friend class SiteInstanceTestBrowserClient;
@@ -168,7 +193,7 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
                            int exit_code) override;
 
   // Used to restrict a process' origin access rights.
-  void LockToOrigin();
+  void LockToOriginIfNeeded();
 
   // This gets the render process to use for default subframe site instances.
   RenderProcessHost* GetDefaultSubframeProcessHost(
@@ -205,6 +230,9 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance,
   // The ProcessReusePolicy to use when creating a RenderProcessHost for this
   // SiteInstance.
   ProcessReusePolicy process_reuse_policy_;
+
+  // Whether the SiteInstance was created for a service worker.
+  bool is_for_service_worker_;
 
   base::ObserverList<Observer, true> observers_;
 

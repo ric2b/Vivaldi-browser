@@ -8,39 +8,41 @@
 #include <utility>
 
 #include "ash/accessibility_delegate.h"
+#include "ash/app_list/test_app_list_view_presenter_impl.h"
 #include "ash/frame/custom_frame_view_ash.h"
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/session/session_controller.h"
-#include "ash/shared/app_types.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shell.h"
 #include "ash/shell_observer.h"
-#include "ash/shell_port.h"
+#include "ash/shell_test_api.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/shell_test_api.h"
 #include "ash/test/test_accessibility_delegate.h"
-#include "ash/test/test_session_controller_client.h"
-#include "ash/test/workspace_controller_test_api.h"
 #include "ash/wm/fullscreen_window_finder.h"
-#include "ash/wm/maximize_mode/maximize_mode_backdrop_delegate_impl.h"
 #include "ash/wm/overview/window_selector_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_backdrop_delegate_impl.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/backdrop_delegate.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
-#include "ash/wm_window.h"
+#include "ash/wm/workspace_controller_test_api.h"
 #include "base/command_line.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "chromeos/audio/chromeos_sounds.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/aura/client/window_parenting_client.h"
 #include "ui/aura/test/test_window_delegate.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_targeter.h"
@@ -135,7 +137,7 @@ class CustomFrameViewAshSizeLock {
   DISALLOW_COPY_AND_ASSIGN(CustomFrameViewAshSizeLock);
 };
 
-using WorkspaceLayoutManagerTest = test::AshTestBase;
+using WorkspaceLayoutManagerTest = AshTestBase;
 
 // Verifies that a window containing a restore coordinate will be restored to
 // to the size prior to minimize, keeping the restore rectangle in tact (if
@@ -362,8 +364,7 @@ class DontClobberRestoreBoundsWindowObserver : public aura::WindowObserver {
       aura::Window* w = window_;
       window_ = nullptr;
 
-      gfx::Rect shelf_bounds(
-          test::AshTestBase::GetPrimaryShelf()->GetIdealBounds());
+      gfx::Rect shelf_bounds(AshTestBase::GetPrimaryShelf()->GetIdealBounds());
       const gfx::Rect& window_bounds(w->bounds());
       w->SetBounds(gfx::Rect(window_bounds.x(), shelf_bounds.y() - 1,
                              window_bounds.width(), window_bounds.height()));
@@ -425,10 +426,10 @@ TEST_F(WorkspaceLayoutManagerTest, MaximizeWithEmptySize) {
       nullptr, aura::client::WINDOW_TYPE_NORMAL));
   window->Init(ui::LAYER_TEXTURED);
   wm::GetWindowState(window.get())->Maximize();
-  WmWindow* default_container =
-      Shell::GetPrimaryRootWindowController()->GetWmContainer(
+  aura::Window* default_container =
+      Shell::GetPrimaryRootWindowController()->GetContainer(
           kShellWindowId_DefaultContainer);
-  default_container->aura_window()->AddChild(window.get());
+  default_container->AddChild(window.get());
   window->Show();
   gfx::Rect work_area(
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area());
@@ -577,8 +578,7 @@ TEST_F(WorkspaceLayoutManagerTest,
       CreateTestWindow(gfx::Rect(10, 20, 100, 200)));
   wm::WindowState* window_state = wm::GetWindowState(window.get());
   gfx::Insets insets(0, 0, 50, 0);
-  ShellPort::Get()->SetDisplayWorkAreaInsets(WmWindow::Get(window.get()),
-                                             insets);
+  Shell::Get()->SetDisplayWorkAreaInsets(window.get(), insets);
   const wm::WMEvent snap_left(wm::WM_EVENT_SNAP_LEFT);
   window_state->OnWMEvent(&snap_left);
   EXPECT_EQ(wm::WINDOW_STATE_TYPE_LEFT_SNAPPED, window_state->GetStateType());
@@ -594,12 +594,10 @@ TEST_F(WorkspaceLayoutManagerTest,
   // The following two SetDisplayWorkAreaInsets calls simulate the case of
   // crbug.com/673803 that work area first becomes fullscreen and then returns
   // to the original state.
-  ShellPort::Get()->SetDisplayWorkAreaInsets(WmWindow::Get(window.get()),
-                                             gfx::Insets(0, 0, 0, 0));
+  Shell::Get()->SetDisplayWorkAreaInsets(window.get(), gfx::Insets(0, 0, 0, 0));
   ui::LayerAnimator* animator = window->layer()->GetAnimator();
   EXPECT_TRUE(animator->is_animating());
-  ShellPort::Get()->SetDisplayWorkAreaInsets(WmWindow::Get(window.get()),
-                                             insets);
+  Shell::Get()->SetDisplayWorkAreaInsets(window.get(), insets);
   animator->StopAnimating();
   EXPECT_FALSE(animator->is_animating());
   EXPECT_EQ(expected_bounds.ToString(), window->bounds().ToString());
@@ -623,13 +621,13 @@ TEST_F(WorkspaceLayoutManagerTest,
   window2->Show();
 
   gfx::Rect expected_bounds = window2->bounds();
-  ShellPort::Get()->SetDisplayWorkAreaInsets(WmWindow::Get(window.get()),
-                                             gfx::Insets(50, 0, 0, 0));
+  Shell::Get()->SetDisplayWorkAreaInsets(window.get(),
+                                         gfx::Insets(50, 0, 0, 0));
   EXPECT_EQ(expected_bounds.ToString(), window2->bounds().ToString());
 }
 
 // Following "Solo" tests were originally written for BaseLayoutManager.
-using WorkspaceLayoutManagerSoloTest = test::AshTestBase;
+using WorkspaceLayoutManagerSoloTest = AshTestBase;
 
 // Tests normal->maximize->normal.
 TEST_F(WorkspaceLayoutManagerSoloTest, Maximize) {
@@ -968,7 +966,7 @@ WorkspaceLayoutManager* GetWorkspaceLayoutManager(aura::Window* container) {
   return static_cast<WorkspaceLayoutManager*>(container->layout_manager());
 }
 
-class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
+class WorkspaceLayoutManagerBackdropTest : public AshTestBase {
  public:
   WorkspaceLayoutManagerBackdropTest() : default_container_(nullptr) {}
   ~WorkspaceLayoutManagerBackdropTest() override {}
@@ -981,15 +979,24 @@ class WorkspaceLayoutManagerBackdropTest : public test::AshTestBase {
   }
 
   // Turn the top window back drop on / off.
-  void ShowTopWindowBackdrop(bool show) {
+  void ShowTopWindowBackdropForContainer(aura::Window* container, bool show) {
     std::unique_ptr<BackdropDelegate> backdrop;
     if (show) {
-      backdrop = base::MakeUnique<MaximizeModeBackdropDelegateImpl>();
+      backdrop = base::MakeUnique<TabletModeBackdropDelegateImpl>();
     }
-    GetWorkspaceLayoutManager(default_container_)
-        ->SetBackdropDelegate(std::move(backdrop));
+    GetWorkspaceLayoutManager(container)->SetBackdropDelegate(
+        std::move(backdrop));
     // Closing and / or opening can be a delayed operation.
     base::RunLoop().RunUntilIdle();
+  }
+
+  aura::Window* CreateTestWindowInParent(aura::Window* root_window) {
+    aura::Window* window = new aura::Window(nullptr);
+    window->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_NORMAL);
+    window->SetType(aura::client::WINDOW_TYPE_NORMAL);
+    window->Init(ui::LAYER_TEXTURED);
+    aura::client::ParentWindowWithContext(window, root_window, gfx::Rect());
+    return window;
   }
 
   // Return the default container.
@@ -1036,13 +1043,13 @@ constexpr int kNoSoundKey = -1;
 // Check that creating the BackDrop without destroying it does not lead into
 // a crash.
 TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropCrashTest) {
-  ShowTopWindowBackdrop(true);
+  ShowTopWindowBackdropForContainer(default_container(), true);
 }
 
 // Verify basic assumptions about the backdrop.
 TEST_F(WorkspaceLayoutManagerBackdropTest, BasicBackdropTests) {
   // The background widget will be created when there is a window.
-  ShowTopWindowBackdrop(true);
+  ShowTopWindowBackdropForContainer(default_container(), true);
   ASSERT_EQ(0u, default_container()->children().size());
 
   {
@@ -1063,7 +1070,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BasicBackdropTests) {
   EXPECT_FALSE(default_container()->children()[0]->IsVisible());
 
   // Destroying the Backdrop should empty the container.
-  ShowTopWindowBackdrop(false);
+  ShowTopWindowBackdropForContainer(default_container(), false);
   ASSERT_EQ(0U, default_container()->children().size());
 }
 
@@ -1093,7 +1100,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, VerifyBackdropAndItsStacking) {
 
   // Turn on the backdrop mode and check that the window shows up where it
   // should be (second highest number).
-  ShowTopWindowBackdrop(true);
+  ShowTopWindowBackdropForContainer(default_container(), true);
   backdrop = default_container()->children()[2];
   EXPECT_EQ("C,X,B,A", GetWindowOrderAsString(backdrop, window1.get(),
                                               window2.get(), window3.get()));
@@ -1115,7 +1122,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, VerifyBackdropAndItsStacking) {
   window3.reset();
   EXPECT_EQ("b,x", GetWindowOrderAsString(backdrop, window1.get(),
                                           window2.get(), window3.get()));
-  ShowTopWindowBackdrop(false);
+  ShowTopWindowBackdropForContainer(default_container(), false);
   EXPECT_EQ("b", GetWindowOrderAsString(nullptr, window1.get(), window2.get(),
                                         window3.get()));
 }
@@ -1125,7 +1132,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
        ShelfVisibilityDoesNotChangesBounds) {
   Shelf* shelf = GetPrimaryShelf();
   ShelfLayoutManager* shelf_layout_manager = shelf->shelf_layout_manager();
-  ShowTopWindowBackdrop(true);
+  ShowTopWindowBackdropForContainer(default_container(), true);
   RunAllPendingInMessageLoop();
   const gfx::Size fullscreen_size =
       display::Screen::GetScreen()->GetPrimaryDisplay().size();
@@ -1154,9 +1161,8 @@ TEST_F(WorkspaceLayoutManagerBackdropTest,
 }
 
 TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
-  WorkspaceController* wc =
-      test::ShellTestApi(Shell::Get()).workspace_controller();
-  test::WorkspaceControllerTestApi test_helper(wc);
+  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
+  WorkspaceControllerTestApi test_helper(wc);
 
   std::unique_ptr<aura::Window> window1(
       CreateTestWindow(gfx::Rect(0, 0, 100, 100)));
@@ -1241,9 +1247,9 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
     EXPECT_EQ(children[3], window3.get());
   }
 
-  // Enabling the backdrop delegate for maximized mode will put the
+  // Enabling the backdrop delegate for tablet mode will put the
   // backdrop on the top most window.
-  ShowTopWindowBackdrop(true);
+  ShowTopWindowBackdropForContainer(default_container(), true);
   {
     aura::Window::Windows children = window1->parent()->children();
     EXPECT_EQ(children[0], window1.get());
@@ -1268,7 +1274,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
   }
 
   // Removing the delegate will move the backdrop back to window1.
-  ShowTopWindowBackdrop(false);
+  ShowTopWindowBackdropForContainer(default_container(), false);
   {
     aura::Window::Windows children = window1->parent()->children();
     EXPECT_EQ(children[0], backdrop);
@@ -1279,11 +1285,10 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, BackdropTest) {
 }
 
 TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
-  WorkspaceController* wc =
-      test::ShellTestApi(Shell::Get()).workspace_controller();
-  test::WorkspaceControllerTestApi test_helper(wc);
-  test::TestAccessibilityDelegate* accessibility_delegate =
-      static_cast<test::TestAccessibilityDelegate*>(
+  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
+  WorkspaceControllerTestApi test_helper(wc);
+  TestAccessibilityDelegate* accessibility_delegate =
+      static_cast<TestAccessibilityDelegate*>(
           Shell::Get()->accessibility_delegate());
 
   aura::test::TestWindowDelegate delegate;
@@ -1338,12 +1343,103 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackFullscreenBackground) {
   EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
 }
 
+TEST_F(WorkspaceLayoutManagerBackdropTest,
+       DualDisplayShowAppListWithBackdropState) {
+  // Create two displays.
+  UpdateDisplay("0+0-200x200,+200+0-100x100");
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  EXPECT_EQ(root_windows.size(), 2u);
+
+  // Create a window in each display and show them in maximized state.
+  aura::Window* window_1 = CreateTestWindowInParent(root_windows[0]);
+  window_1->SetBounds(gfx::Rect(0, 0, 100, 100));
+  window_1->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
+  window_1->Show();
+  aura::Window* window_2 = CreateTestWindowInParent(root_windows[1]);
+  window_2->SetBounds(gfx::Rect(201, 0, 100, 100));
+  window_2->SetProperty(aura::client::kShowStateKey, ui::SHOW_STATE_MAXIMIZED);
+  window_2->Show();
+
+  RootWindowController* primary_controller =
+      Shell::GetPrimaryRootWindowController();
+  WorkspaceController* primary_wc = primary_controller->workspace_controller();
+  Shell::RootWindowControllerList controllers =
+      Shell::GetAllRootWindowControllers();
+  WorkspaceController* secondary_wc = nullptr;
+  RootWindowController* secondary_controller = nullptr;
+  EXPECT_EQ(controllers.size(), 2u);
+  for (size_t i = 0; i < controllers.size(); ++i) {
+    if (controllers[i] != primary_controller) {
+      secondary_controller = controllers[i];
+      secondary_wc = secondary_controller->workspace_controller();
+    }
+  }
+
+  // Turn on top window backdrop for two displays.
+  WorkspaceControllerTestApi primary_test_helper(primary_wc);
+  WorkspaceControllerTestApi secondary_test_helper(secondary_wc);
+  ShowTopWindowBackdropForContainer(default_container(), true);
+  EXPECT_TRUE(primary_test_helper.GetBackdropWindow());
+  ShowTopWindowBackdropForContainer(
+      secondary_controller->GetContainer(kShellWindowId_DefaultContainer),
+      true);
+  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
+
+  // Enable fullscreen app list.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      app_list::features::kEnableFullscreenAppList);
+  EXPECT_TRUE(app_list::features::IsFullscreenAppListEnabled());
+
+  // Show app list in primary display will not hide the backdrop in secondary
+  // display.
+  EXPECT_TRUE(primary_test_helper.GetBackdropWindow());
+  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
+  TestAppListViewPresenterImpl app_list_presenter_impl_;
+  app_list_presenter_impl_.Show(
+      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_FALSE(primary_test_helper.GetBackdropWindow());
+  EXPECT_TRUE(secondary_test_helper.GetBackdropWindow());
+}
+
+// Fullscreen app list changes to visible should hide the backdrop, otherwise,
+// should show the backdrop.
+TEST_F(WorkspaceLayoutManagerBackdropTest,
+       UpdateBackdropOnAppListVisibilityNotification) {
+  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
+  WorkspaceControllerTestApi test_helper(wc);
+  TestAppListViewPresenterImpl app_list_presenter_impl_;
+  std::unique_ptr<aura::Window> window(
+      CreateTestWindow(gfx::Rect(0, 0, 100, 100)));
+  EXPECT_FALSE(test_helper.GetBackdropWindow());
+
+  // Turn the top window backdrop on.
+  ShowTopWindowBackdropForContainer(default_container(), true);
+  EXPECT_TRUE(test_helper.GetBackdropWindow());
+
+  // Enable fullscreen app list.
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndEnableFeature(
+      app_list::features::kEnableFullscreenAppList);
+  EXPECT_TRUE(test_helper.GetBackdropWindow());
+  EXPECT_TRUE(app_list::features::IsFullscreenAppListEnabled());
+  // Showing the fullscreen app list should hide the backdrop.
+  app_list_presenter_impl_.Show(
+      display::Screen::GetScreen()->GetPrimaryDisplay().id());
+  EXPECT_FALSE(test_helper.GetBackdropWindow());
+  // Dismissing the app list should cause the backdrop to be shown again.
+  gfx::Rect work_area =
+      display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
+  gfx::Point shelf_point(work_area.CenterPoint().x(), work_area.bottom() + 5);
+  GetEventGenerator().GestureTapAt(shelf_point);
+  EXPECT_TRUE(test_helper.GetBackdropWindow());
+}
+
 TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
-  WorkspaceController* wc =
-      test::ShellTestApi(Shell::Get()).workspace_controller();
-  test::WorkspaceControllerTestApi test_helper(wc);
-  test::TestAccessibilityDelegate* accessibility_delegate =
-      static_cast<test::TestAccessibilityDelegate*>(
+  WorkspaceController* wc = ShellTestApi(Shell::Get()).workspace_controller();
+  WorkspaceControllerTestApi test_helper(wc);
+  TestAccessibilityDelegate* accessibility_delegate =
+      static_cast<TestAccessibilityDelegate*>(
           Shell::Get()->accessibility_delegate());
 
   accessibility_delegate->ToggleSpokenFeedback(A11Y_NOTIFICATION_NONE);
@@ -1386,7 +1482,7 @@ TEST_F(WorkspaceLayoutManagerBackdropTest, SpokenFeedbackForArc) {
   EXPECT_EQ(kNoSoundKey, accessibility_delegate->GetPlayedEarconAndReset());
 }
 
-class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
+class WorkspaceLayoutManagerKeyboardTest : public AshTestBase {
  public:
   WorkspaceLayoutManagerKeyboardTest() : layout_manager_(nullptr) {}
   ~WorkspaceLayoutManagerKeyboardTest() override {}
@@ -1404,15 +1500,14 @@ class WorkspaceLayoutManagerKeyboardTest : public test::AshTestBase {
     layout_manager_->OnKeyboardBoundsChanging(keyboard_bounds_);
     restore_work_area_insets_ =
         display::Screen::GetScreen()->GetPrimaryDisplay().GetWorkAreaInsets();
-    ShellPort::Get()->SetDisplayWorkAreaInsets(
-        WmWindow::Get(Shell::GetPrimaryRootWindow()),
+    Shell::Get()->SetDisplayWorkAreaInsets(
+        Shell::GetPrimaryRootWindow(),
         gfx::Insets(0, 0, keyboard_bounds_.height(), 0));
   }
 
   void HideKeyboard() {
-    ShellPort::Get()->SetDisplayWorkAreaInsets(
-        WmWindow::Get(Shell::GetPrimaryRootWindow()),
-        restore_work_area_insets_);
+    Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
+                                           restore_work_area_insets_);
     layout_manager_->OnKeyboardBoundsChanging(gfx::Rect());
   }
 

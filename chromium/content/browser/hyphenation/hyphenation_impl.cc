@@ -14,6 +14,7 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/timer/elapsed_timer.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 
@@ -60,18 +61,28 @@ HyphenationImpl::HyphenationImpl() {}
 HyphenationImpl::~HyphenationImpl() {}
 
 // static
-void HyphenationImpl::Create(const service_manager::BindSourceInfo& source_info,
-                             blink::mojom::HyphenationRequest request) {
+void HyphenationImpl::Create(blink::mojom::HyphenationRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<HyphenationImpl>(),
                           std::move(request));
 }
 
+// static
+scoped_refptr<base::SequencedTaskRunner> HyphenationImpl::GetTaskRunner() {
+  CR_DEFINE_STATIC_LOCAL(
+      scoped_refptr<base::SequencedTaskRunner>, runner,
+      (base::CreateSequencedTaskRunnerWithTraits(
+          {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN,
+           base::TaskPriority::USER_BLOCKING})));
+  return runner;
+}
+
 void HyphenationImpl::OpenDictionary(const std::string& locale,
-                                     const OpenDictionaryCallback& callback) {
+                                     OpenDictionaryCallback callback) {
+  DCHECK(GetTaskRunner()->RunsTasksInCurrentSequence());
   if (IsValidLocale(locale))
-    callback.Run(GetDictionaryFile(locale));
+    std::move(callback).Run(GetDictionaryFile(locale));
   else
-    callback.Run(base::File());
+    std::move(callback).Run(base::File());
 }
 
 }  // namespace hyphenation

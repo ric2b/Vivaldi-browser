@@ -5,6 +5,9 @@
 #ifndef COMPONENTS_BROWSER_WATCHER_STABILITY_PATHS_H_
 #define COMPONENTS_BROWSER_WATCHER_STABILITY_PATHS_H_
 
+#include <set>
+#include <vector>
+
 #include "base/files/file_path.h"
 #include "base/process/process.h"
 #include "build/build_config.h"
@@ -35,8 +38,22 @@ bool GetStabilityFileForProcess(const base::Process& process,
 // Returns a pattern that matches file names returned by GetFileForProcess.
 base::FilePath::StringType GetStabilityFilePattern();
 
-// Marks the stability file for deletion.
-void MarkStabilityFileForDeletion(const base::FilePath& user_data_dir);
+// Returns files in |stability_dir| that match |stability_file_pattern|,
+// excluding those in |excluded_stability_files|.
+std::vector<base::FilePath> GetStabilityFiles(
+    const base::FilePath& stability_dir,
+    const base::FilePath::StringType& stability_file_pattern,
+    const std::set<base::FilePath>& excluded_stability_files);
+
+// Sets the current process's stability file's state to deleted (via the
+// GlobalActivityTracker) and opens the file for deletion. Metrics pertaining to
+// stability recording are logged.
+void MarkOwnStabilityFileDeleted(const base::FilePath& user_data_dir);
+
+// Sets another process's stability file's state to deleted, then opens it for
+// deletion. This function is meant for use by the crashpad handler; it logs
+// metrics labelled as in the context of crash collection.
+void MarkStabilityFileDeletedOnCrash(const base::FilePath& file_path);
 
 #endif  // defined(OS_WIN)
 

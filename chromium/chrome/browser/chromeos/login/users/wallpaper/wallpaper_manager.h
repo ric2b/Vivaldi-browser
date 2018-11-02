@@ -16,18 +16,23 @@
 #include "base/scoped_observer.h"
 #include "chrome/browser/chromeos/customization/customization_wallpaper_downloader.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "components/user_manager/user.h"
-#include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
-#include "components/wallpaper/wallpaper_layout.h"
 #include "components/wallpaper/wallpaper_manager_base.h"
 #include "content/public/browser/notification_observer.h"
 #include "content/public/browser/notification_registrar.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "ui/aura/window_observer.h"
-#include "ui/gfx/image/image_skia.h"
 #include "ui/wm/public/activation_change_observer.h"
 #include "ui/wm/public/activation_client.h"
+
+namespace gfx {
+class ImageSkia;
+}
+
+namespace user_manager {
+class User;
+class UserImage;
+}  // namespace user_manager
 
 namespace chromeos {
 
@@ -36,15 +41,14 @@ class WallpaperManager
       public ash::mojom::WallpaperPicker,
       public content::NotificationObserver,
       public user_manager::UserManager::UserSessionStateObserver,
-      public aura::client::ActivationChangeObserver,
+      public wm::ActivationChangeObserver,
       public aura::WindowObserver {
  public:
   class PendingWallpaper;
 
   ~WallpaperManager() override;
 
-  // Creates an instance of Wallpaper Manager. If there is no instance, create
-  // one. Otherwise, returns the existing instance.
+  // Expects there is no instance of WallpaperManager and create one.
   static void Initialize();
 
   // Gets pointer to singleton WallpaperManager instance.
@@ -53,6 +57,10 @@ class WallpaperManager
   // Deletes the existing instance of WallpaperManager. Allows the
   // WallpaperManager to remove any observers it has registered.
   static void Shutdown();
+
+  // Returns if the image is in the pending list. |image_id| can be obtained
+  // from gfx::ImageSkia by using WallpaperResizer::GetImageId().
+  bool IsPendingWallpaper(uint32_t image_id);
 
   // wallpaper::WallpaperManagerBase:
   WallpaperResolution GetAppropriateResolution() override;
@@ -67,13 +75,14 @@ class WallpaperManager
                           const wallpaper::WallpaperFilesId& wallpaper_files_id,
                           const std::string& file,
                           wallpaper::WallpaperLayout layout,
-                          user_manager::User::WallpaperType type,
+                          wallpaper::WallpaperType type,
                           const gfx::ImageSkia& image,
                           bool update_wallpaper) override;
   void SetDefaultWallpaperNow(const AccountId& account_id) override;
   void SetDefaultWallpaperDelayed(const AccountId& account_id) override;
   void DoSetDefaultWallpaper(
       const AccountId& account_id,
+      bool update_wallpaper,
       wallpaper::MovableOnDestroyCallbackHolder on_finish) override;
   void SetUserWallpaperInfo(const AccountId& account_id,
                             const wallpaper::WallpaperInfo& info,
@@ -101,7 +110,7 @@ class WallpaperManager
   // user_manager::UserManager::UserSessionStateObserver:
   void UserChangedChildStatus(user_manager::User* user) override;
 
-  // aura::client::ActivationChangeObserver:
+  // wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
@@ -167,7 +176,7 @@ class WallpaperManager
   base::FilePath GetDeviceWallpaperFilePath() override;
   void OnWallpaperDecoded(
       const AccountId& account_id,
-      wallpaper::WallpaperLayout layout,
+      const wallpaper::WallpaperInfo& info,
       bool update_wallpaper,
       wallpaper::MovableOnDestroyCallbackHolder on_finish,
       std::unique_ptr<user_manager::UserImage> user_image) override;
@@ -192,12 +201,14 @@ class WallpaperManager
   void OnDefaultWallpaperDecoded(
       const base::FilePath& path,
       const wallpaper::WallpaperLayout layout,
+      bool update_wallpaper,
       std::unique_ptr<user_manager::UserImage>* result,
       wallpaper::MovableOnDestroyCallbackHolder on_finish,
       std::unique_ptr<user_manager::UserImage> user_image) override;
   void StartLoadAndSetDefaultWallpaper(
       const base::FilePath& path,
       const wallpaper::WallpaperLayout layout,
+      bool update_wallpaper,
       wallpaper::MovableOnDestroyCallbackHolder on_finish,
       std::unique_ptr<user_manager::UserImage>* result_out) override;
   void SetDefaultWallpaperPath(
@@ -206,6 +217,7 @@ class WallpaperManager
       const base::FilePath& customized_default_wallpaper_file_large,
       std::unique_ptr<gfx::ImageSkia> large_wallpaper_image) override;
   void RecordWallpaperAppType() override;
+  bool CanGetWallpaperFilesId() const override;
 
   mojo::Binding<ash::mojom::WallpaperPicker> binding_;
 
@@ -230,8 +242,7 @@ class WallpaperManager
 
   content::NotificationRegistrar registrar_;
 
-  ScopedObserver<aura::client::ActivationClient,
-                 aura::client::ActivationChangeObserver>
+  ScopedObserver<wm::ActivationClient, wm::ActivationChangeObserver>
       activation_client_observer_;
   ScopedObserver<aura::Window, aura::WindowObserver> window_observer_;
 

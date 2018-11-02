@@ -38,6 +38,7 @@ void WMFVideoDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 }
 
 void WMFVideoDecoder::Reset(const base::Closure& closure) {
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__;
   impl_.Reset(closure);
 }
 

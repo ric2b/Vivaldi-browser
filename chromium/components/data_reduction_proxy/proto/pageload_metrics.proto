@@ -101,4 +101,8 @@ message PageloadMetrics {
 
   // The previews type that was used on the page.
   optional PreviewsType previews_type = 18;
+
+  // The name of the finch group for the data reduction proxy holdback
+  // experiment. This can be an empty string if not included in a finch group.
+  optional string holdback_group = 19;
 }

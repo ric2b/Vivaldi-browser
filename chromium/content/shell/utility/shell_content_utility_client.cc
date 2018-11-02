@@ -17,6 +17,7 @@
 #include "content/public/test/test_host_resolver.h"
 #include "content/public/test/test_service.h"
 #include "content/public/test/test_service.mojom.h"
+#include "content/shell/common/power_monitor_test_impl.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "mojo/public/cpp/system/buffer.h"
 #include "net/base/net_errors.h"
@@ -30,8 +31,7 @@ namespace {
 
 class TestServiceImpl : public mojom::TestService {
  public:
-  static void Create(const service_manager::BindSourceInfo&,
-                     mojom::TestServiceRequest request) {
+  static void Create(mojom::TestServiceRequest request) {
     mojo::MakeStrongBinding(base::WrapUnique(new TestServiceImpl),
                             std::move(request));
   }
@@ -118,6 +118,10 @@ void ShellContentUtilityClient::UtilityThreadStarted() {
   auto registry = base::MakeUnique<service_manager::BinderRegistry>();
   registry->AddInterface(base::Bind(&TestServiceImpl::Create),
                          base::ThreadTaskRunnerHandle::Get());
+  registry->AddInterface<mojom::PowerMonitorTest>(
+      base::Bind(&PowerMonitorTestImpl::MakeStrongBinding,
+                 base::Passed(base::MakeUnique<PowerMonitorTestImpl>())),
+      base::ThreadTaskRunnerHandle::Get());
   content::ChildThread::Get()
       ->GetServiceManagerConnection()
       ->AddConnectionFilter(
@@ -125,7 +129,7 @@ void ShellContentUtilityClient::UtilityThreadStarted() {
 }
 
 void ShellContentUtilityClient::RegisterServices(StaticServiceMap* services) {
-  ServiceInfo info;
+  service_manager::EmbeddedServiceInfo info;
   info.factory = base::Bind(&CreateTestService);
   services->insert(std::make_pair(kTestServiceUrl, info));
 }
@@ -138,7 +142,6 @@ void ShellContentUtilityClient::RegisterNetworkBinders(
 }
 
 void ShellContentUtilityClient::BindNetworkServiceTestRequest(
-    const service_manager::BindSourceInfo& source_info,
     mojom::NetworkServiceTestRequest request) {
   DCHECK(!network_service_test_);
   network_service_test_ =

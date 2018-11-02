@@ -26,87 +26,80 @@
 #ifndef TextIteratorTextState_h
 #define TextIteratorTextState_h
 
-#include "base/macros.h"
 #include "core/CoreExport.h"
-#include "core/dom/Range.h"
 #include "core/editing/iterators/ForwardsTextBuffer.h"
-#include "core/editing/iterators/TextIteratorBehavior.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/text/WTFString.h"
 
 namespace blink {
-
-class LayoutText;
-class TextIteratorBehavior;
 
 class CORE_EXPORT TextIteratorTextState {
   STACK_ALLOCATED();
 
  public:
-  explicit TextIteratorTextState(const TextIteratorBehavior&);
-  ~TextIteratorTextState() {}
+  TextIteratorTextState() = default;
 
-  const String& GetString() const { return text_; }
-
+  // Return properties of the current text.
   int length() const { return text_length_; }
   UChar CharacterAt(unsigned index) const;
   String Substring(unsigned position, unsigned length) const;
   void AppendTextToStringBuilder(StringBuilder&,
                                  unsigned position = 0,
                                  unsigned max_length = UINT_MAX) const;
+  void AppendTextTo(ForwardsTextBuffer* output,
+                    unsigned position,
+                    unsigned length_to_append) const;
 
   void SpliceBuffer(UChar,
                     Node* text_node,
                     Node* offset_base_node,
                     int text_start_offset,
                     int text_end_offset);
-  void EmitText(Node* text_node,
-                LayoutText* layout_object,
+  void EmitText(Node*,
+                int position_start_offset,
+                int position_end_offset,
+                const String&,
                 int text_start_offset,
                 int text_end_offset);
   void EmitAltText(Node*);
   void UpdateForReplacedElement(Node* base_node);
+
+  // Return position of the current text.
   void FlushPositionOffsets() const;
   int PositionStartOffset() const { return position_start_offset_; }
   int PositionEndOffset() const { return position_end_offset_; }
   Node* PositionNode() const { return position_node_; }
+
   bool HasEmitted() const { return has_emitted_; }
   UChar LastCharacter() const { return last_character_; }
-  int TextStartOffset() const { return text_start_offset_; }
   void ResetRunInformation() {
     position_node_ = nullptr;
     text_length_ = 0;
   }
 
-  void AppendTextTo(ForwardsTextBuffer* output,
-                    unsigned position,
-                    unsigned length_to_append) const;
-
  private:
-  int text_length_;
-  String text_;
+  int text_length_ = 0;
 
   // Used for whitespace characters that aren't in the DOM, so we can point at
   // them.
-  // If non-zero, overrides m_text.
-  UChar single_character_buffer_;
+  // If non-zero, overrides |text_|.
+  UChar single_character_buffer_ = 0;
 
-  // The current text and its position, in the form to be returned from the
-  // iterator.
+  // The current text when |single_character_buffer_| is zero, in which case it
+  // is |text_.Substring(text_start_offset_, text_length_)|.
+  String text_;
+  int text_start_offset_ = 0;
+
+  // Position of the current text, in the form to be returned from the iterator.
   Member<Node> position_node_;
   mutable Member<Node> position_offset_base_node_;
-  mutable int position_start_offset_;
-  mutable int position_end_offset_;
+  mutable int position_start_offset_ = 0;
+  mutable int position_end_offset_ = 0;
 
   // Used when deciding whether to emit a "positioning" (e.g. newline) before
   // any other content
-  bool has_emitted_;
-  UChar last_character_;
-
-  const TextIteratorBehavior behavior_;
-
-  // Stores the length of :first-letter when we are at the remaining text.
-  // Equals to 0 in all other cases.
-  int text_start_offset_;
+  bool has_emitted_ = false;
+  UChar last_character_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(TextIteratorTextState);
 };

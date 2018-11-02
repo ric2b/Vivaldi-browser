@@ -16,7 +16,35 @@ import sys
 import time
 
 
-MOTOPHO_THREAD_TIMEOUT = 30
+MOTOPHO_THREAD_TIMEOUT = 15
+DEFAULT_URLS = [
+    # TODO(bsheedy): See about having versioned copies of the flicker app
+    # instead of using personal github.
+    # Purely a flicker app - no additional CPU/GPU load.
+    'https://weableandbob.github.io/Motopho/'
+    'flicker_apps/webvr/webvr-flicker-app-klaus.html?'
+    'polyfill=0\&canvasClickPresents=1',
+    # URLs that render 3D scenes in addition to the Motopho patch.
+    # Heavy CPU load, moderate GPU load.
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'heavyGpu=1\&workTime=20\&cubeCount=8\&cubeScale=0.4',
+    # Moderate CPU load, light GPU load.
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'heavyGpu=1\&workTime=12\&cubeCount=8\&cubeScale=0.3',
+    # Light CPU load, moderate GPU load.
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'heavyGpu=1\&workTime=5\&cubeCount=8\&cubeScale=0.4',
+    # Heavy CPU load, very light GPU load.
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1\&'
+    'workTime=20',
+    # No additional CPU load, very light GPU load.
+    'https://webvr.info/samples/test-slow-render.html?'
+    'latencyPatch=1\&canvasClickPresents=1',
+]
 
 
 def GetTtyDevices(tty_pattern, vendor_ids):
@@ -62,55 +90,44 @@ def GetTtyDevices(tty_pattern, vendor_ids):
 class WebVrLatencyTest(object):
   """Base class for all WebVR latency tests.
 
-  This is meant to be subclassed for each platform the test is run on. While
-  the latency test itself is cross-platform, the setup and teardown for
-  tests is platform-dependent.
+  This handles the platform-independent _Run and _SaveResultsToFile functions.
+  Platform-specific setup and teardown should be somehow handled by classes
+  that inherit from this one.
   """
   def __init__(self, args):
-    self.args = args
+    super(WebVrLatencyTest, self).__init__(args)
     self._num_samples = args.num_samples
-    self._flicker_app_url = args.url
+    self._test_urls = args.urls or DEFAULT_URLS
     assert (self._num_samples > 0),'Number of samples must be greater than 0'
-    self._device_name = 'generic_device'
+    self._test_results = {}
 
-    # Connect to the Arduino that drives the servos
+    # Connect to the Arduino that drives the servos.
     devices = GetTtyDevices(r'ttyACM\d+', [0x2a03, 0x2341])
     assert (len(devices) == 1),'Found %d devices, expected 1' % len(devices)
     self.robot_arm = ra.RobotArm(devices[0])
 
-  def RunTest(self):
-    """Runs the steps to start Chrome, measure/save latency, and clean up."""
-    self._Setup()
-    self._Run()
-    self._Teardown()
-
-  def _Setup(self):
-    """Perform any platform-specific setup."""
-    raise NotImplementedError(
-        'Platform-specific setup must be implemented in subclass')
-
-  def _Run(self):
+  def _Run(self, url):
     """Run the latency test.
 
     Handles the actual latency measurement, which is identical across
-    different platforms, as well as result saving.
+    different platforms, as well as result storing.
     """
-    # Motopho scripts use relative paths, so switch to the Motopho directory
-    os.chdir(self.args.motopho_path)
+    # Motopho scripts use relative paths, so switch to the Motopho directory.
+    os.chdir(self._args.motopho_path)
 
-    # Set up the thread that runs the Motopho script
+    # Set up the thread that runs the Motopho script.
     motopho_thread = mt.MotophoThread(self._num_samples)
     motopho_thread.start()
 
-    # Run multiple times so we can get an average and standard deviation
+    # Run multiple times so we can get an average and standard deviation.
     for _ in xrange(self._num_samples):
       self.robot_arm.ResetPosition()
-      # Start the Motopho script
+      # Start the Motopho script.
       motopho_thread.StartIteration()
-      # Let the Motopho be stationary so the script can calculate the bias
+      # Let the Motopho be stationary so the script can calculate the bias.
       time.sleep(3)
       motopho_thread.BlockNextIteration()
-      # Move so we can measure latency
+      # Move so we can measure latency.
       self.robot_arm.StartMotophoMovement()
       if not motopho_thread.WaitForIterationEnd(MOTOPHO_THREAD_TIMEOUT):
         # TODO(bsheedy): Look into ways to prevent Motopho from not sending any
@@ -119,79 +136,93 @@ class WebVrLatencyTest(object):
                       'Motopho may need to be replugged.')
       self.robot_arm.StopAllMovement()
       time.sleep(1)
-    self._SaveResults(motopho_thread.latencies, motopho_thread.correlations)
+    self._StoreResults(motopho_thread.latencies, motopho_thread.correlations,
+                       url)
 
-  def _Teardown(self):
-    """Performs any platform-specific teardown."""
-    raise NotImplementedError(
-        'Platform-specific setup must be implemented in subclass')
+  def _StoreResults(self, latencies, correlations, url):
+    """Temporarily stores the results of a test.
 
-  def _RunCommand(self, cmd):
-    """Runs the given cmd list and returns its output.
-
-    Prints the command's output and exits if any error occurs.
-
-    Returns:
-      A string containing the stdout and stderr of the command.
-    """
-    try:
-      return subprocess.check_output(cmd, stderr=subprocess.STDOUT)
-    except subprocess.CalledProcessError as e:
-      logging.error('Failed command output: %s', e.output)
-      raise e
-
-  def _SetChromeCommandLineFlags(self, flags):
-    raise NotImplementedError(
-        'Command-line flag setting must be implemented in subclass')
-
-  def _SaveResults(self, latencies, correlations):
-    """Saves the results to a JSON file.
-
-    Saved JSON object is compatible with Chrome perf dashboard if
-    put in as the 'chart_data' value. Also logs the raw data and its
-    average/standard deviation.
+    Stores the given results in memory to be later retrieved and written to
+    a file in _SaveResultsToFile once all tests are done. Also logs the raw
+    data and its average/standard deviation.
     """
     avg_latency = sum(latencies) / len(latencies)
     std_latency = numpy.std(latencies)
     avg_correlation = sum(correlations) / len(correlations)
     std_correlation = numpy.std(correlations)
-    logging.info('Raw latencies: %s\nRaw correlations: %s\n'
+    logging.info('\nURL: %s\n'
+                 'Raw latencies: %s\nRaw correlations: %s\n'
                  'Avg latency: %f +/- %f\nAvg correlation: %f +/- %f',
-                 str(latencies), str(correlations), avg_latency, std_latency,
-                 avg_correlation, std_correlation)
+                 url, str(latencies), str(correlations), avg_latency,
+                 std_latency, avg_correlation, std_correlation)
 
-    if not (self.args.output_dir and os.path.isdir(self.args.output_dir)):
+    self._test_results[url] = {
+        'correlations': correlations,
+        'std_correlation': std_correlation,
+        'latencies': latencies,
+        'std_latency': std_latency,
+    }
+
+  def _SaveResultsToFile(self):
+    if not (self._args.output_dir and os.path.isdir(self._args.output_dir)):
       logging.warning('No output directory set, not saving results to file')
       return
+
+    correlation_string = self._device_name + '_correlation'
+    latency_string = self._device_name + '_latency'
+    charts = {
+        correlation_string: {
+            'summary': {
+                'improvement_direction': 'up',
+                'name': correlation_string,
+                'std': 0.0,
+                'type': 'list_of_scalar_values',
+                'units': '',
+                'values': [],
+            }
+        },
+        latency_string: {
+            'summary': {
+                'improvement_direction': 'down',
+                'name': latency_string,
+                'std': 0.0,
+                'type': 'list_of_scalar_values',
+                'units': 'ms',
+                'values': [],
+            }
+        }
+    }
+    for url, results in self._test_results.iteritems():
+      charts[correlation_string][url] = {
+          'improvement_direction': 'up',
+          'name': correlation_string,
+          'std': results['std_correlation'],
+          'type': 'list_of_scalar_values',
+          'units': '',
+          'values': results['correlations'],
+      }
+
+      charts[correlation_string]['summary']['values'].extend(
+          results['correlations'])
+
+      charts[latency_string][url] = {
+          'improvement_direction': 'down',
+          'name': latency_string,
+          'std': results['std_latency'],
+          'type': 'list_of_scalar_values',
+          'units': 'ms',
+          'values': results['latencies'],
+      }
+
+      charts[latency_string]['summary']['values'].extend(results['latencies'])
 
     results = {
       'format_version': '1.0',
       'benchmark_name': 'webvr_latency',
       'benchmark_description': 'Measures the motion-to-photon latency of WebVR',
-      'charts': {
-        'correlation': {
-          'summary': {
-            'improvement_direction': 'up',
-            'name': 'correlation',
-            'std': std_correlation,
-            'type': 'list_of_scalar_values',
-            'units': '',
-            'values': correlations,
-          },
-        },
-        'latency': {
-          'summary': {
-            'improvement_direction': 'down',
-            'name': 'latency',
-            'std': std_latency,
-            'type': 'list_of_scalar_values',
-            'units': 'ms',
-            'values': latencies,
-          },
-        }
-      }
+      'charts': charts,
     }
 
-    with file(os.path.join(self.args.output_dir,
-                           self.args.results_file), 'w') as outfile:
+    with file(os.path.join(self._args.output_dir,
+                           self._args.results_file), 'w') as outfile:
       json.dump(results, outfile)

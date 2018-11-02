@@ -7,34 +7,42 @@
 #include <memory>
 
 #include "base/memory/ptr_util.h"
-#include "base/metrics/histogram_macros.h"
 #include "base/strings/utf_string_conversions.h"
 #include "content/child/scoped_child_process_reference.h"
 #include "content/common/service_worker/embedded_worker_messages.h"
+#include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/common/content_client.h"
 #include "content/renderer/service_worker/embedded_worker_devtools_agent.h"
 #include "content/renderer/service_worker/service_worker_context_client.h"
+#include "content/renderer/service_worker/web_service_worker_installed_scripts_manager_impl.h"
+#include "third_party/WebKit/public/platform/WebContentSettingsClient.h"
+#include "third_party/WebKit/public/platform/modules/serviceworker/WebServiceWorkerInstalledScriptsManager.h"
 #include "third_party/WebKit/public/web/WebEmbeddedWorker.h"
 #include "third_party/WebKit/public/web/WebEmbeddedWorkerStartData.h"
 
 namespace content {
 
 EmbeddedWorkerInstanceClientImpl::WorkerWrapper::WorkerWrapper(
-    blink::WebEmbeddedWorker* worker,
+    std::unique_ptr<blink::WebEmbeddedWorker> worker,
     int devtools_agent_route_id)
-    : worker_(worker),
+    : worker_(std::move(worker)),
       devtools_agent_(base::MakeUnique<EmbeddedWorkerDevToolsAgent>(
-          worker,
+          worker_.get(),
           devtools_agent_route_id)) {}
 
 EmbeddedWorkerInstanceClientImpl::WorkerWrapper::~WorkerWrapper() = default;
 
 // static
 void EmbeddedWorkerInstanceClientImpl::Create(
-    const service_manager::BindSourceInfo& source_info,
-    mojom::EmbeddedWorkerInstanceClientRequest request) {
+    base::TimeTicks blink_initialized_time,
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_runner,
+    mojom::EmbeddedWorkerInstanceClientRequest request,
+    const service_manager::BindSourceInfo& source_info) {
   // This won't be leaked because the lifetime will be managed internally.
-  new EmbeddedWorkerInstanceClientImpl(std::move(request));
+  EmbeddedWorkerInstanceClientImpl* client =
+      new EmbeddedWorkerInstanceClientImpl(std::move(io_thread_runner),
+                                           std::move(request));
+  client->blink_initialized_time_ = blink_initialized_time;
 }
 
 void EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed() {
@@ -42,41 +50,35 @@ void EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed() {
   TRACE_EVENT0("ServiceWorker",
                "EmbeddedWorkerInstanceClientImpl::WorkerContextDestroyed");
 
-  if (stop_worker_time_) {
-    UMA_HISTOGRAM_MEDIUM_TIMES(
-        "ServiceWorker.TerminateThread.Time",
-        base::TimeTicks::Now() - stop_worker_time_.value());
-    stop_worker_time_.reset();
-  }
   wrapper_.reset();
 }
 
 void EmbeddedWorkerInstanceClientImpl::StartWorker(
     const EmbeddedWorkerStartParams& params,
     mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+    mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host) {
   DCHECK(ChildThreadImpl::current());
   DCHECK(!wrapper_);
-  DCHECK(!stop_worker_time_.has_value());
   TRACE_EVENT0("ServiceWorker",
                "EmbeddedWorkerInstanceClientImpl::StartWorker");
 
-  wrapper_ = StartWorkerContext(
-      params,
-      base::MakeUnique<ServiceWorkerContextClient>(
-          params.embedded_worker_id, params.service_worker_version_id,
-          params.scope, params.script_url, std::move(dispatcher_request),
-          std::move(instance_host), std::move(temporal_self_)));
+  auto client = base::MakeUnique<ServiceWorkerContextClient>(
+      params.embedded_worker_id, params.service_worker_version_id, params.scope,
+      params.script_url, std::move(dispatcher_request),
+      std::move(instance_host), std::move(temporal_self_));
+  client->set_blink_initialized_time(blink_initialized_time_);
+  client->set_start_worker_received_time(base::TimeTicks::Now());
+  wrapper_ = StartWorkerContext(params, std::move(installed_scripts_info),
+                                std::move(client));
 }
 
 void EmbeddedWorkerInstanceClientImpl::StopWorker() {
   // StopWorker must be called after StartWorker is called.
   DCHECK(ChildThreadImpl::current());
   DCHECK(wrapper_);
-  DCHECK(!stop_worker_time_.has_value());
 
   TRACE_EVENT0("ServiceWorker", "EmbeddedWorkerInstanceClientImpl::StopWorker");
-  stop_worker_time_ = base::TimeTicks::Now();
   wrapper_->worker()->TerminateWorkerContext();
 }
 
@@ -96,8 +98,11 @@ void EmbeddedWorkerInstanceClientImpl::AddMessageToConsole(
 }
 
 EmbeddedWorkerInstanceClientImpl::EmbeddedWorkerInstanceClientImpl(
+    scoped_refptr<base::SingleThreadTaskRunner> io_thread_runner,
     mojo::InterfaceRequest<mojom::EmbeddedWorkerInstanceClient> request)
-    : binding_(this, std::move(request)), temporal_self_(this) {
+    : binding_(this, std::move(request)),
+      temporal_self_(this),
+      io_thread_runner_(std::move(io_thread_runner)) {
   binding_.set_connection_error_handler(base::Bind(
       &EmbeddedWorkerInstanceClientImpl::OnError, base::Unretained(this)));
 }
@@ -112,9 +117,18 @@ void EmbeddedWorkerInstanceClientImpl::OnError() {
 std::unique_ptr<EmbeddedWorkerInstanceClientImpl::WorkerWrapper>
 EmbeddedWorkerInstanceClientImpl::StartWorkerContext(
     const EmbeddedWorkerStartParams& params,
+    mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
     std::unique_ptr<ServiceWorkerContextClient> context_client) {
+  std::unique_ptr<blink::WebServiceWorkerInstalledScriptsManager> manager;
+  if (ServiceWorkerUtils::IsScriptStreamingEnabled()) {
+    DCHECK(installed_scripts_info);
+    manager = WebServiceWorkerInstalledScriptsManagerImpl::Create(
+        std::move(installed_scripts_info), io_thread_runner_);
+  }
+
   auto wrapper = base::MakeUnique<WorkerWrapper>(
-      blink::WebEmbeddedWorker::Create(context_client.release(), nullptr),
+      blink::WebEmbeddedWorker::Create(std::move(context_client),
+                                       std::move(manager), nullptr),
       params.worker_devtools_agent_route_id);
 
   blink::WebEmbeddedWorkerStartData start_data;

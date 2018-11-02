@@ -28,7 +28,7 @@
 #include "core/dom/StyleEngine.h"
 #include "core/editing/TextAffinity.h"
 #include "core/editing/VisiblePosition.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/svg/LayoutSVGText.h"
 #include "core/layout/svg/SVGLayoutSupport.h"
 #include "core/layout/svg/line/SVGInlineTextBox.h"
@@ -44,19 +44,18 @@ namespace blink {
 // Turn tabs, newlines and carriage returns into spaces. In the future this
 // should be removed in favor of letting the generic white-space code handle
 // this.
-static PassRefPtr<StringImpl> NormalizeWhitespace(
-    PassRefPtr<StringImpl> string) {
+static RefPtr<StringImpl> NormalizeWhitespace(RefPtr<StringImpl> string) {
   RefPtr<StringImpl> new_string = string->Replace('\t', ' ');
   new_string = new_string->Replace('\n', ' ');
   new_string = new_string->Replace('\r', ' ');
-  return new_string.Release();
+  return new_string;
 }
 
 LayoutSVGInlineText::LayoutSVGInlineText(Node* n, PassRefPtr<StringImpl> string)
     : LayoutText(n, NormalizeWhitespace(std::move(string))),
       scaling_factor_(1) {}
 
-void LayoutSVGInlineText::SetTextInternal(PassRefPtr<StringImpl> text) {
+void LayoutSVGInlineText::SetTextInternal(RefPtr<StringImpl> text) {
   LayoutText::SetTextInternal(std::move(text));
   if (LayoutSVGText* text_layout_object =
           LayoutSVGText::LocateLayoutSVGTextAncestor(this))
@@ -125,7 +124,7 @@ LayoutRect LayoutSVGInlineText::LocalCaretRect(InlineBox* box,
 
 FloatRect LayoutSVGInlineText::FloatLinesBoundingBox() const {
   FloatRect bounding_box;
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox())
+  for (InlineTextBox* box : InlineTextBoxesOf(*this))
     bounding_box.Unite(FloatRect(box->FrameRect()));
   return bounding_box;
 }
@@ -177,7 +176,7 @@ PositionWithAffinity LayoutSVGInlineText::PositionForPoint(
   const SVGTextFragment* closest_distance_fragment = nullptr;
   SVGInlineTextBox* closest_distance_box = nullptr;
 
-  for (InlineTextBox* box = FirstTextBox(); box; box = box->NextTextBox()) {
+  for (InlineTextBox* box : InlineTextBoxesOf(*this)) {
     if (!box->IsSVGInlineTextBox())
       continue;
 
@@ -422,11 +421,11 @@ FloatRect LayoutSVGInlineText::VisualRectInLocalSVGCoordinates() const {
   return Parent()->VisualRectInLocalSVGCoordinates();
 }
 
-PassRefPtr<StringImpl> LayoutSVGInlineText::OriginalText() const {
+RefPtr<StringImpl> LayoutSVGInlineText::OriginalText() const {
   RefPtr<StringImpl> result = LayoutText::OriginalText();
   if (!result)
     return nullptr;
-  return NormalizeWhitespace(result);
+  return NormalizeWhitespace(std::move(result));
 }
 
 }  // namespace blink

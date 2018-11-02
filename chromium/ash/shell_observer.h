@@ -12,12 +12,18 @@ namespace aura {
 class Window;
 }
 
+class PrefService;
+
 namespace ash {
 
-class WmWindow;
+enum class VoiceInteractionState;
 
 class ASH_EXPORT ShellObserver {
  public:
+  // Called when the AppList is shown or dismissed.
+  virtual void OnAppListVisibilityChanged(bool shown,
+                                          aura::Window* root_window) {}
+
   // Called when a casting session is started or stopped.
   virtual void OnCastingSessionStartedOrStopped(bool started) {}
 
@@ -25,13 +31,13 @@ class ASH_EXPORT ShellObserver {
   virtual void OnRootWindowAdded(aura::Window* root_window) {}
 
   // Invoked after the shelf has been created for |root_window|.
-  virtual void OnShelfCreatedForRootWindow(WmWindow* root_window) {}
+  virtual void OnShelfCreatedForRootWindow(aura::Window* root_window) {}
 
   // Invoked when the shelf alignment in |root_window| is changed.
-  virtual void OnShelfAlignmentChanged(WmWindow* root_window) {}
+  virtual void OnShelfAlignmentChanged(aura::Window* root_window) {}
 
   // Invoked when the shelf auto-hide behavior in |root_window| is changed.
-  virtual void OnShelfAutoHideBehaviorChanged(WmWindow* root_window) {}
+  virtual void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) {}
 
   // Invoked when the projection touch HUD is toggled.
   virtual void OnTouchHudProjectionToggled(bool enabled) {}
@@ -50,23 +56,48 @@ class ASH_EXPORT ShellObserver {
   // Called after overview mode has ended.
   virtual void OnOverviewModeEnded() {}
 
-  // Called when the always maximize mode has started. Windows might still
-  // animate though.
-  virtual void OnMaximizeModeStarted() {}
+  // Called when the split view mode is about to be started (before the window
+  // gets snapped and activated).
+  virtual void OnSplitViewModeStarting() {}
 
-  // Called when the maximize mode is about to end.
-  virtual void OnMaximizeModeEnding() {}
-
-  // Called when the maximize mode has ended. Windows may still be
-  // animating but have been restored.
-  virtual void OnMaximizeModeEnded() {}
+  // Called after split view mode has ended.
+  virtual void OnSplitViewModeEnded() {}
 
   // Called when keyboard is activated/deactivated in |root_window|.
   virtual void OnVirtualKeyboardStateChanged(bool activated,
                                              aura::Window* root_window) {}
 
+  // Called when a new KeyboardController is created.
+  virtual void OnKeyboardControllerCreated() {}
+
+  // Called when voice interaction session state changes.
+  virtual void OnVoiceInteractionStatusChanged(VoiceInteractionState state) {}
+
+  // Called when voice interaction is enabled/disabled.
+  virtual void OnVoiceInteractionEnabled(bool enabled) {}
+
+  // Called when voice interaction service is allowed/disallowed to access
+  // the "context" (text and graphic content that is currently on screen).
+  virtual void OnVoiceInteractionContextEnabled(bool enabled) {}
+
+  // Called when voice interaction setup flow completed.
+  virtual void OnVoiceInteractionSetupCompleted() {}
+
   // Called at the end of Shell::Init.
   virtual void OnShellInitialized() {}
+
+  // Called near the end of ~Shell. Shell::Get() still returns the Shell, but
+  // most of Shell's state has been deleted.
+  virtual void OnShellDestroyed() {}
+
+  // Called when the user profile pref service is available. Also called after
+  // multiprofile user switch. Never called with the login screen profile.
+  // On mash will be called with null at the start of user switch then again
+  // with a pref service once the connection to the mojo pref service is made.
+  // TODO(jamescook): Either maintain pref service connections for all multiuser
+  // profiles or make the pref service switch atomic with active user switch.
+  // http://crbug.com/705347
+  virtual void OnActiveUserPrefServiceChanged(PrefService* pref_service) {}
 
  protected:
   virtual ~ShellObserver() {}

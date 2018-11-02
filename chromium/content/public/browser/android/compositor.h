@@ -15,7 +15,6 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace cc {
-class ContextProvider;
 class Layer;
 }
 
@@ -32,6 +31,10 @@ class ResourceManager;
 class UIResourceProvider;
 }
 
+namespace viz {
+class ContextProvider;
+}
+
 namespace content {
 class CompositorClient;
 
@@ -45,9 +48,9 @@ class CONTENT_EXPORT Compositor {
   static void Initialize();
 
   // Creates a GL context for the provided |handle|. If a null handle is passed,
-  // an offscreen context is created.
+  // an offscreen context is created. This must be called on the UI thread.
   using ContextProviderCallback =
-      base::Callback<void(scoped_refptr<cc::ContextProvider>)>;
+      base::Callback<void(scoped_refptr<viz::ContextProvider>)>;
   static void CreateContextProvider(
       gpu::SurfaceHandle handle,
       gpu::gles2::ContextCreationAttribHelper attributes,
@@ -70,6 +73,11 @@ class CONTENT_EXPORT Compositor {
 
   // Tells the view tree to assume a transparent background when rendering.
   virtual void SetHasTransparentBackground(bool flag) = 0;
+
+  // Tells the compositor to allocate an alpha channel.  This won't take effect
+  // until the compositor selects a new egl config, usually when the underlying
+  // Android Surface changes format.
+  virtual void SetRequiresAlphaChannel(bool flag) = 0;
 
   // Request layout and draw. You only need to call this if you need to trigger
   // Composite *without* having modified the layer tree.

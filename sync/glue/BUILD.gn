@@ -10,7 +10,8 @@ source_set("glue"){
     "notes_model_associator.h",
   ]
   deps = [
-    "//chrome/browser",
+    #"//chrome/browser",
+    "//content/public/common",
     "//skia",
   ]
   public_deps = [

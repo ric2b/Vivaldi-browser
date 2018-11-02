@@ -42,7 +42,7 @@ void DestructAllocationContextTracker(void* alloc_ctx_tracker) {
 // Cannot call ThreadIdNameManager::GetName because it holds a lock and causes
 // deadlock when lock is already held by ThreadIdNameManager before the current
 // allocation. Gets the thread name from kernel if available or returns a string
-// with id. This function intenionally leaks the allocated strings since they
+// with id. This function intentionally leaks the allocated strings since they
 // are used to tag allocations even after the thread dies.
 const char* GetAndLeakThreadName() {
   char name[16];
@@ -156,7 +156,6 @@ void AllocationContextTracker::PopCurrentTaskContext(const char* context) {
   task_contexts_.pop_back();
 }
 
-// static
 bool AllocationContextTracker::GetContextSnapshot(AllocationContext* ctx) {
   if (ignore_scope_depth_)
     return false;
@@ -207,12 +206,12 @@ bool AllocationContextTracker::GetContextSnapshot(AllocationContext* ctx) {
 // than our backtrace capacity.
 #if !defined(OS_NACL)  // We don't build base/debug/stack_trace.cc for NaCl.
 #if BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
-      const void* frames[Backtrace::kMaxFrameCount + 1];
-      static_assert(arraysize(frames) >= Backtrace::kMaxFrameCount,
-                    "not requesting enough frames to fill Backtrace");
-      size_t frame_count = debug::TraceStackFramePointers(
-          frames, arraysize(frames),
-          1 /* exclude this function from the trace */);
+        const void* frames[Backtrace::kMaxFrameCount + 1];
+        static_assert(arraysize(frames) >= Backtrace::kMaxFrameCount,
+                      "not requesting enough frames to fill Backtrace");
+        size_t frame_count = debug::TraceStackFramePointers(
+            frames, arraysize(frames),
+            1 /* exclude this function from the trace */);
 #else   // BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
         // Fall-back to capturing the stack with base::debug::StackTrace,
         // which is likely slower, but more reliable.
@@ -221,17 +220,17 @@ bool AllocationContextTracker::GetContextSnapshot(AllocationContext* ctx) {
         const void* const* frames = stack_trace.Addresses(&frame_count);
 #endif  // BUILDFLAG(CAN_UNWIND_WITH_FRAME_POINTERS)
 
-      // If there are too many frames, keep the ones furthest from main().
-      size_t backtrace_capacity = backtrace_end - backtrace;
-      int32_t starting_frame_index = frame_count;
-      if (frame_count > backtrace_capacity) {
-        starting_frame_index = backtrace_capacity - 1;
-        *backtrace++ = StackFrame::FromTraceEventName("<truncated>");
-      }
-      for (int32_t i = starting_frame_index - 1; i >= 0; --i) {
-        const void* frame = frames[i];
-        *backtrace++ = StackFrame::FromProgramCounter(frame);
-      }
+        // If there are too many frames, keep the ones furthest from main().
+        size_t backtrace_capacity = backtrace_end - backtrace;
+        int32_t starting_frame_index = frame_count;
+        if (frame_count > backtrace_capacity) {
+          starting_frame_index = backtrace_capacity - 1;
+          *backtrace++ = StackFrame::FromTraceEventName("<truncated>");
+        }
+        for (int32_t i = starting_frame_index - 1; i >= 0; --i) {
+          const void* frame = frames[i];
+          *backtrace++ = StackFrame::FromProgramCounter(frame);
+        }
 #endif  // !defined(OS_NACL)
         break;
       }

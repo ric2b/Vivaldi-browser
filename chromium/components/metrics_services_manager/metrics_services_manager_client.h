@@ -51,9 +51,6 @@ class MetricsServicesManagerClient {
   // Returns whether metrics reporting is enabled.
   virtual bool IsMetricsReportingEnabled() = 0;
 
-  // Whether the metrics services should record but not report metrics.
-  virtual bool OnlyDoMetricsRecording() = 0;
-
   // Returns whether there are any Incognito browsers/tabs open.
   virtual bool IsIncognitoSessionActive() = 0;
 

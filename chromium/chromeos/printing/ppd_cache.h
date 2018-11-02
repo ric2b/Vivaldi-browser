@@ -11,12 +11,10 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/memory/ref_counted.h"
-#include "base/sequenced_task_runner.h"
 #include "base/time/time.h"
 #include "chromeos/chromeos_export.h"
 
 namespace chromeos {
-namespace printing {
 
 // PpdCache manages a cache of locally-stored PPD files.  At its core, it
 // operates like a persistent hash from PpdReference to files.  If you give the
@@ -46,9 +44,7 @@ class CHROMEOS_EXPORT PpdCache : public base::RefCounted<PpdCache> {
   // Create and return a Ppdcache that uses cache_dir to store state.  If
   // cache_base_dir does not exist, it will be lazily created the first time the
   // cache needs to store state.
-  static scoped_refptr<PpdCache> Create(
-      const base::FilePath& cache_base_dir,
-      scoped_refptr<base::SequencedTaskRunner> disk_task_runner);
+  static scoped_refptr<PpdCache> Create(const base::FilePath& cache_base_dir);
 
   // Start a Find, looking, for an entry with the given key that is at most
   // |max_age| old.  |cb| will be invoked on the calling thread.
@@ -58,18 +54,13 @@ class CHROMEOS_EXPORT PpdCache : public base::RefCounted<PpdCache> {
   // be invoked on completion.
   virtual void Store(const std::string& key,
                      const std::string& contents,
-                     const base::Callback<void()>& cb) = 0;
-
-  // Hook for testing.  Returns true if all outstanding cache operations
-  // are complete.
-  virtual bool Idle() const = 0;
+                     const base::Closure& cb) = 0;
 
  protected:
   friend class base::RefCounted<PpdCache>;
   virtual ~PpdCache() {}
 };
 
-}  // namespace printing
 }  // namespace chromeos
 
 #endif  // CHROMEOS_PRINTING_PPD_CACHE_H_

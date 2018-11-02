@@ -54,19 +54,25 @@ class PresentationMediaSinksObserverTest : public ::testing::Test {
 
 TEST_F(PresentationMediaSinksObserverTest, AvailableScreens) {
   std::vector<MediaSink> result;
-  result.push_back(MediaSink("sinkId", "Sink", MediaSink::IconType::CAST));
+  result.push_back(MediaSink("sinkId", "Sink", SinkIconType::CAST));
 
-  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(true)).Times(1);
+  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(
+                             blink::mojom::ScreenAvailability::AVAILABLE))
+      .Times(1);
   observer_->OnSinksReceived(result);
 }
 
 TEST_F(PresentationMediaSinksObserverTest, NoAvailableScreens) {
-  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(false)).Times(1);
+  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(
+                             blink::mojom::ScreenAvailability::UNAVAILABLE))
+      .Times(1);
   observer_->OnSinksReceived(std::vector<MediaSink>());
 }
 
 TEST_F(PresentationMediaSinksObserverTest, ConsecutiveResults) {
-  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(false)).Times(1);
+  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(
+                             blink::mojom::ScreenAvailability::UNAVAILABLE))
+      .Times(1);
   observer_->OnSinksReceived(std::vector<MediaSink>());
   EXPECT_TRUE(Mock::VerifyAndClearExpectations(&listener_));
 
@@ -76,19 +82,23 @@ TEST_F(PresentationMediaSinksObserverTest, ConsecutiveResults) {
 
   // |listener_| should get result since it changed to true.
   std::vector<MediaSink> result;
-  result.push_back(MediaSink("sinkId", "Sink", MediaSink::IconType::CAST));
+  result.push_back(MediaSink("sinkId", "Sink", SinkIconType::CAST));
 
-  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(true)).Times(1);
+  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(
+                             blink::mojom::ScreenAvailability::AVAILABLE))
+      .Times(1);
   observer_->OnSinksReceived(result);
   EXPECT_TRUE(Mock::VerifyAndClearExpectations(&listener_));
 
   // Does not propagate result to |listener_| since result is same.
-  result.push_back(MediaSink("sinkId2", "Sink 2", MediaSink::IconType::CAST));
+  result.push_back(MediaSink("sinkId2", "Sink 2", SinkIconType::CAST));
   observer_->OnSinksReceived(result);
   EXPECT_TRUE(Mock::VerifyAndClearExpectations(&listener_));
 
   // |listener_| should get result since it changed to false.
-  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(false)).Times(1);
+  EXPECT_CALL(listener_, OnScreenAvailabilityChanged(
+                             blink::mojom::ScreenAvailability::UNAVAILABLE))
+      .Times(1);
   observer_->OnSinksReceived(std::vector<MediaSink>());
   EXPECT_TRUE(Mock::VerifyAndClearExpectations(&listener_));
 }

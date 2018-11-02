@@ -18,6 +18,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/content_settings/core/common/content_settings_types.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "components/rappor/test_rappor_service.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/test/test_navigation_observer.h"
@@ -222,10 +223,6 @@ IN_PROC_BROWSER_TEST_F(ContentSettingBubbleModelMediaStreamTest,
                             TabSpecificContentSettings::CAMERA_ACCESSED);
   EXPECT_EQ(GURL("chrome://settings/content#media-stream-mic"),
             GetActiveTab()->GetLastCommittedURL());
-
-  // In ChromeOS, we do not sanitize chrome://settings-frame to
-  // chrome://settings for same-document navigations. See crbug.com/416157. For
-  // this reason, order the tests so no same-document navigation occurs.
 
   // The camera bubble links to camera exceptions.
   ManageMediaStreamSettings(TabSpecificContentSettings::CAMERA_ACCESSED);

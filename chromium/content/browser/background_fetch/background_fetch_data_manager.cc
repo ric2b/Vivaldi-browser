@@ -54,7 +54,7 @@ class BackgroundFetchDataManager::RegistrationData {
   bool HasPendingRequests() const { return !pending_requests_.empty(); }
 
   // Consumes a request from the queue that is to be fetched.
-  scoped_refptr<BackgroundFetchRequestInfo> GetPendingRequest() {
+  scoped_refptr<BackgroundFetchRequestInfo> PopNextPendingRequest() {
     DCHECK(!pending_requests_.empty());
 
     auto request = pending_requests_.front();
@@ -83,7 +83,7 @@ class BackgroundFetchDataManager::RegistrationData {
 
   // Marks the |request| as having completed. Verifies that the |request| is
   // currently active and moves it to the |completed_requests_| vector.
-  void MarkRequestAsComplete(BackgroundFetchRequestInfo* request) {
+  bool MarkRequestAsComplete(BackgroundFetchRequestInfo* request) {
     const auto iter = std::find_if(
         active_requests_.begin(), active_requests_.end(),
         [&request](scoped_refptr<BackgroundFetchRequestInfo> active_request) {
@@ -95,6 +95,10 @@ class BackgroundFetchDataManager::RegistrationData {
 
     completed_requests_.push_back(*iter);
     active_requests_.erase(iter);
+
+    bool has_pending_or_active_requests =
+        !pending_requests_.empty() || !active_requests_.empty();
+    return has_pending_or_active_requests;
   }
 
   // Returns the vector with all completed requests part of this registration.
@@ -122,7 +126,10 @@ class BackgroundFetchDataManager::RegistrationData {
 BackgroundFetchDataManager::BackgroundFetchDataManager(
     BrowserContext* browser_context)
     : weak_ptr_factory_(this) {
+  // Constructed on the UI thread, then used on a different thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DETACH_FROM_SEQUENCE(sequence_checker_);
+
   DCHECK(browser_context);
 
   // Store the blob storage context for the given |browser_context|.
@@ -131,45 +138,53 @@ BackgroundFetchDataManager::BackgroundFetchDataManager(
   DCHECK(blob_storage_context_);
 }
 
-BackgroundFetchDataManager::~BackgroundFetchDataManager() = default;
+BackgroundFetchDataManager::~BackgroundFetchDataManager() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+}
 
 void BackgroundFetchDataManager::CreateRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     const std::vector<ServiceWorkerFetchRequest>& requests,
     const BackgroundFetchOptions& options,
     CreateRegistrationCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (registrations_.find(registration_id) != registrations_.end()) {
-    std::move(callback).Run(
-        blink::mojom::BackgroundFetchError::DUPLICATED_TAG,
-        std::vector<scoped_refptr<BackgroundFetchRequestInfo>>());
+    std::move(callback).Run(blink::mojom::BackgroundFetchError::DUPLICATED_TAG);
     return;
   }
 
-  std::unique_ptr<RegistrationData> registration_data =
-      base::MakeUnique<RegistrationData>(requests, options);
-
-  // Create a vector with the initial requests to feed the Job Controller with.
-  std::vector<scoped_refptr<BackgroundFetchRequestInfo>> initial_requests;
-  for (size_t i = 0; i < kMaximumBackgroundFetchParallelRequests; ++i) {
-    if (!registration_data->HasPendingRequests())
-      break;
-
-    initial_requests.push_back(registration_data->GetPendingRequest());
-  }
-
-  // Store the created |registration_data| so that we can easily access it.
-  registrations_.insert(
-      std::make_pair(registration_id, std::move(registration_data)));
+  // Create the |RegistrationData|, and store it for easy access.
+  registrations_.insert(std::make_pair(
+      registration_id, base::MakeUnique<RegistrationData>(requests, options)));
 
   // Inform the |callback| of the newly created registration.
-  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE,
-                          std::move(initial_requests));
+  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE);
+}
+
+void BackgroundFetchDataManager::PopNextRequest(
+    const BackgroundFetchRegistrationId& registration_id,
+    NextRequestCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+  auto iter = registrations_.find(registration_id);
+  DCHECK(iter != registrations_.end());
+
+  RegistrationData* registration_data = iter->second.get();
+
+  scoped_refptr<BackgroundFetchRequestInfo> next_request;
+  if (registration_data->HasPendingRequests())
+    next_request = registration_data->PopNextPendingRequest();
+
+  std::move(callback).Run(std::move(next_request));
 }
 
 void BackgroundFetchDataManager::MarkRequestAsStarted(
     const BackgroundFetchRegistrationId& registration_id,
     BackgroundFetchRequestInfo* request,
     const std::string& download_guid) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   auto iter = registrations_.find(registration_id);
   DCHECK(iter != registrations_.end());
 
@@ -177,26 +192,27 @@ void BackgroundFetchDataManager::MarkRequestAsStarted(
   registration_data->MarkRequestAsStarted(request, download_guid);
 }
 
-void BackgroundFetchDataManager::MarkRequestAsCompleteAndGetNextRequest(
+void BackgroundFetchDataManager::MarkRequestAsComplete(
     const BackgroundFetchRegistrationId& registration_id,
     BackgroundFetchRequestInfo* request,
-    NextRequestCallback callback) {
+    MarkedCompleteCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   auto iter = registrations_.find(registration_id);
   DCHECK(iter != registrations_.end());
 
   RegistrationData* registration_data = iter->second.get();
-  registration_data->MarkRequestAsComplete(request);
+  bool has_pending_or_active_requests =
+      registration_data->MarkRequestAsComplete(request);
 
-  scoped_refptr<BackgroundFetchRequestInfo> next_request;
-  if (registration_data->HasPendingRequests())
-    next_request = registration_data->GetPendingRequest();
-
-  std::move(callback).Run(std::move(next_request));
+  std::move(callback).Run(has_pending_or_active_requests);
 }
 
 void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     SettledFetchesCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   auto iter = registrations_.find(registration_id);
   DCHECK(iter != registrations_.end());
 
@@ -235,6 +251,8 @@ void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
 
       if (request->GetFileSize() > 0) {
         DCHECK(!request->GetFilePath().empty());
+        // CreateFileBackedBlob DCHECKs that it is called on the IO thread. This
+        // imposes a more specific requirement than our sequence_checker_.
         std::unique_ptr<BlobHandle> blob_handle =
             blob_storage_context_->CreateFileBackedBlob(
                 request->GetFilePath(), 0 /* offset */, request->GetFileSize(),
@@ -271,6 +289,8 @@ void BackgroundFetchDataManager::GetSettledFetchesForRegistration(
 void BackgroundFetchDataManager::DeleteRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     DeleteRegistrationCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   auto iter = registrations_.find(registration_id);
   if (iter == registrations_.end()) {
     std::move(callback).Run(blink::mojom::BackgroundFetchError::INVALID_TAG);

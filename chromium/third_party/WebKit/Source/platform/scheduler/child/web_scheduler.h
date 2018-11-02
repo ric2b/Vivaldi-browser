@@ -81,7 +81,7 @@ class PLATFORM_EXPORT WebScheduler {
   // the associated WebThread.
   virtual std::unique_ptr<WebViewScheduler> CreateWebViewScheduler(
       InterventionReporter*,
-      WebViewScheduler::WebViewSchedulerSettings*) = 0;
+      WebViewScheduler::WebViewSchedulerDelegate*) = 0;
 
   // Suspends the timer queue and increments the timer queue suspension count.
   // May only be called from the main thread.

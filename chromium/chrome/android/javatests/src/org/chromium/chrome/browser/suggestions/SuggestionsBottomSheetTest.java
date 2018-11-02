@@ -4,69 +4,79 @@
 
 package org.chromium.chrome.browser.suggestions;
 
-import static org.chromium.chrome.test.util.browser.suggestions.ContentSuggestionsTestUtils.registerCategory;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import static org.chromium.chrome.test.util.ChromeRestriction.RESTRICTION_TYPE_PHONE;
 
 import android.os.SystemClock;
+import android.support.test.InstrumentationRegistry;
 import android.support.test.filters.MediumTest;
 import android.support.v7.widget.RecyclerView.ViewHolder;
 import android.view.MotionEvent;
 
+import org.junit.Before;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+
 import org.chromium.base.ThreadUtils;
+import org.chromium.base.test.util.Restriction;
 import org.chromium.base.test.util.RetryOnFailure;
 import org.chromium.chrome.R;
+import org.chromium.chrome.browser.ntp.NtpUiCaptureTestData;
 import org.chromium.chrome.browser.ntp.cards.ItemViewType;
-import org.chromium.chrome.test.BottomSheetTestCaseBase;
+import org.chromium.chrome.test.BottomSheetTestRule;
+import org.chromium.chrome.test.ChromeJUnit4ClassRunner;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
-import org.chromium.chrome.test.util.browser.suggestions.DummySuggestionsEventReporter;
-import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
+import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 
 /**
  * Instrumentation tests for {@link SuggestionsBottomSheetContent}.
  */
-public class SuggestionsBottomSheetTest extends BottomSheetTestCaseBase {
-    private FakeSuggestionsSource mSuggestionsSource;
-
-    @Override
-    protected void setUp() throws Exception {
-        mSuggestionsSource = new FakeSuggestionsSource();
-        registerCategory(mSuggestionsSource, /* category = */ 42, /* count = */ 5);
-        SuggestionsBottomSheetContent.setSuggestionsSourceForTesting(mSuggestionsSource);
-        SuggestionsBottomSheetContent.setEventReporterForTesting(
-                new DummySuggestionsEventReporter());
-        super.setUp();
+@RunWith(ChromeJUnit4ClassRunner.class)
+@Restriction(RESTRICTION_TYPE_PHONE) // ChromeHome is only enabled on phones
+public class SuggestionsBottomSheetTest {
+    @Rule
+    public BottomSheetTestRule mActivityRule = new BottomSheetTestRule();
+    @Rule
+    public SuggestionsDependenciesRule createSuggestions() {
+        return new SuggestionsDependenciesRule(NtpUiCaptureTestData.createFactory());
     }
 
-    @Override
-    protected void tearDown() throws Exception {
-        SuggestionsBottomSheetContent.setSuggestionsSourceForTesting(null);
-        SuggestionsBottomSheetContent.setEventReporterForTesting(null);
-        super.tearDown();
+    @Before
+    public void setUp() throws InterruptedException {
+        mActivityRule.startMainActivityOnBlankPage();
     }
 
+    @Test
     @RetryOnFailure
     @MediumTest
     public void testContextMenu() throws InterruptedException {
         SuggestionsRecyclerView recyclerView =
-                (SuggestionsRecyclerView) getBottomSheetContent().getContentView().findViewById(
-                        R.id.recycler_view);
+                (SuggestionsRecyclerView) mActivityRule.getBottomSheetContent()
+                        .getContentView()
+                        .findViewById(R.id.recycler_view);
 
         ViewHolder firstCardViewHolder = RecyclerViewTestUtils.waitForView(recyclerView, 2);
         assertEquals(firstCardViewHolder.getItemViewType(), ItemViewType.SNIPPET);
 
-        assertFalse(getActivity().getBottomSheet().onInterceptTouchEvent(createTapEvent()));
+        assertFalse(mActivityRule.getBottomSheet().onInterceptTouchEvent(createTapEvent()));
 
-        TestTouchUtils.longClickView(getInstrumentation(), firstCardViewHolder.itemView);
-        assertTrue(getActivity().getBottomSheet().onInterceptTouchEvent(createTapEvent()));
+        TestTouchUtils.longClickView(
+                InstrumentationRegistry.getInstrumentation(), firstCardViewHolder.itemView);
+        assertTrue(mActivityRule.getBottomSheet().onInterceptTouchEvent(createTapEvent()));
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                getActivity().closeContextMenu();
+                mActivityRule.getActivity().closeContextMenu();
             }
         });
 
-        assertFalse(getActivity().getBottomSheet().onInterceptTouchEvent(createTapEvent()));
+        assertFalse(mActivityRule.getBottomSheet().onInterceptTouchEvent(createTapEvent()));
     }
 
     private static MotionEvent createTapEvent() {

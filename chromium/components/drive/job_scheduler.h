@@ -20,6 +20,7 @@
 #include "components/drive/job_queue.h"
 #include "components/drive/service/drive_service_interface.h"
 #include "net/base/network_change_notifier.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
 
 class PrefService;
 
@@ -66,7 +67,9 @@ class JobScheduler
   JobScheduler(PrefService* pref_service,
                EventLogger* logger,
                DriveServiceInterface* drive_service,
-               base::SequencedTaskRunner* blocking_task_runner);
+               base::SequencedTaskRunner* blocking_task_runner,
+               device::mojom::WakeLockProviderPtr wake_lock_provider);
+
   ~JobScheduler() override;
 
   // JobListInterface overrides.

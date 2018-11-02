@@ -27,26 +27,28 @@
 #include "modules/media_controls/MediaControlsImpl.h"
 
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/ClientRect.h"
-#include "core/dom/Fullscreen.h"
 #include "core/dom/MutationCallback.h"
 #include "core/dom/MutationObserver.h"
 #include "core/dom/MutationObserverInit.h"
 #include "core/dom/MutationRecord.h"
-#include "core/dom/ResizeObserver.h"
-#include "core/dom/ResizeObserverCallback.h"
-#include "core/dom/ResizeObserverEntry.h"
 #include "core/dom/TaskRunnerHelper.h"
+#include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
+#include "core/fullscreen/Fullscreen.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
+#include "core/html/media/AutoplayPolicy.h"
 #include "core/html/media/HTMLMediaElementControlsList.h"
 #include "core/html/track/TextTrackContainer.h"
 #include "core/html/track/TextTrackList.h"
 #include "core/layout/LayoutObject.h"
 #include "core/layout/LayoutTheme.h"
+#include "core/page/SpatialNavigation.h"
+#include "core/resize_observer/ResizeObserver.h"
+#include "core/resize_observer/ResizeObserverEntry.h"
 #include "modules/media_controls/MediaControlsMediaEventListener.h"
 #include "modules/media_controls/MediaControlsOrientationLockDelegate.h"
 #include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
@@ -71,6 +73,7 @@
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
 #include "modules/remoteplayback/RemotePlayback.h"
 #include "platform/EventDispatchForbiddenScope.h"
+#include "platform/RuntimeEnabledFeatures.h"
 
 namespace blink {
 
@@ -113,7 +116,7 @@ bool ShouldShowFullscreenButton(const HTMLMediaElement& media_element) {
 
   if (media_element.ControlsListInternal()->ShouldHideFullscreen()) {
     UseCounter::Count(media_element.GetDocument(),
-                      UseCounter::kHTMLMediaElementControlsListNoFullscreen);
+                      WebFeature::kHTMLMediaElementControlsListNoFullscreen);
     return false;
   }
 
@@ -135,7 +138,7 @@ bool ShouldShowCastButton(HTMLMediaElement& media_element) {
   if (media_element.ControlsListInternal()->ShouldHideRemotePlayback()) {
     UseCounter::Count(
         media_element.GetDocument(),
-        UseCounter::kHTMLMediaElementControlsListNoRemotePlayback);
+        WebFeature::kHTMLMediaElementControlsListNoRemotePlayback);
     return false;
   }
 
@@ -177,17 +180,17 @@ class MediaControlsImpl::BatchedControlUpdate {
 // Count of number open batches for controls visibility.
 int MediaControlsImpl::BatchedControlUpdate::batch_depth_ = 0;
 
-class MediaControlsImpl::MediaControlsResizeObserverCallback final
-    : public ResizeObserverCallback {
+class MediaControlsImpl::MediaControlsResizeObserverDelegate final
+    : public ResizeObserver::Delegate {
  public:
-  explicit MediaControlsResizeObserverCallback(MediaControlsImpl* controls)
+  explicit MediaControlsResizeObserverDelegate(MediaControlsImpl* controls)
       : controls_(controls) {
     DCHECK(controls);
   }
-  ~MediaControlsResizeObserverCallback() override = default;
+  ~MediaControlsResizeObserverDelegate() override = default;
 
-  void handleEvent(const HeapVector<Member<ResizeObserverEntry>>& entries,
-                   ResizeObserver* observer) override {
+  void OnResize(
+      const HeapVector<Member<ResizeObserverEntry>>& entries) override {
     DCHECK_EQ(1u, entries.size());
     DCHECK_EQ(entries[0]->target(), controls_->MediaElement());
     controls_->NotifyElementSizeChanged(entries[0]->contentRect());
@@ -195,7 +198,7 @@ class MediaControlsImpl::MediaControlsResizeObserverCallback final
 
   DEFINE_INLINE_TRACE() {
     visitor->Trace(controls_);
-    ResizeObserverCallback::Trace(visitor);
+    ResizeObserver::Delegate::Trace(visitor);
   }
 
  private:
@@ -296,7 +299,7 @@ MediaControlsImpl::MediaControlsImpl(HTMLMediaElement& media_element)
       is_paused_for_scrubbing_(false),
       resize_observer_(ResizeObserver::Create(
           media_element.GetDocument(),
-          new MediaControlsResizeObserverCallback(this))),
+          new MediaControlsResizeObserverDelegate(this))),
       element_size_changed_timer_(
           TaskRunnerHelper::Get(TaskType::kUnspecedTimer,
                                 &media_element.GetDocument()),
@@ -313,14 +316,14 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
   controls->InitializeControls();
   controls->Reset();
 
-  if (RuntimeEnabledFeatures::videoFullscreenOrientationLockEnabled() &&
+  if (RuntimeEnabledFeatures::VideoFullscreenOrientationLockEnabled() &&
       media_element.IsHTMLVideoElement()) {
     // Initialize the orientation lock when going fullscreen feature.
     controls->orientation_lock_delegate_ =
         new MediaControlsOrientationLockDelegate(
             toHTMLVideoElement(media_element));
   }
-  if (RuntimeEnabledFeatures::videoRotateToFullscreenEnabled() &&
+  if (RuntimeEnabledFeatures::VideoRotateToFullscreenEnabled() &&
       media_element.IsHTMLVideoElement()) {
     // Initialize the rotate-to-fullscreen feature.
     controls->rotate_to_fullscreen_delegate_ =
@@ -381,7 +384,7 @@ MediaControlsImpl* MediaControlsImpl::Create(HTMLMediaElement& media_element,
 void MediaControlsImpl::InitializeControls() {
   overlay_enclosure_ = new MediaControlOverlayEnclosureElement(*this);
 
-  if (RuntimeEnabledFeatures::mediaControlsOverlayPlayButtonEnabled()) {
+  if (RuntimeEnabledFeatures::MediaControlsOverlayPlayButtonEnabled()) {
     overlay_play_button_ = new MediaControlOverlayPlayButtonElement(*this);
     overlay_enclosure_->AppendChild(overlay_play_button_);
   }
@@ -449,18 +452,18 @@ void MediaControlsImpl::InitializeControls() {
   // relative to each other.  The first item appended appears at the top of the
   // overflow menu.
   overflow_list_->AppendChild(play_button_->CreateOverflowElement(
-      *this, new MediaControlPlayButtonElement(*this)));
+      new MediaControlPlayButtonElement(*this)));
   overflow_list_->AppendChild(fullscreen_button_->CreateOverflowElement(
-      *this, new MediaControlFullscreenButtonElement(*this)));
+      new MediaControlFullscreenButtonElement(*this)));
   overflow_list_->AppendChild(download_button_->CreateOverflowElement(
-      *this, new MediaControlDownloadButtonElement(*this)));
+      new MediaControlDownloadButtonElement(*this)));
   overflow_list_->AppendChild(mute_button_->CreateOverflowElement(
-      *this, new MediaControlMuteButtonElement(*this)));
+      new MediaControlMuteButtonElement(*this)));
   overflow_list_->AppendChild(cast_button_->CreateOverflowElement(
-      *this, new MediaControlCastButtonElement(*this, false)));
+      new MediaControlCastButtonElement(*this, false)));
   overflow_list_->AppendChild(
       toggle_closed_captions_button_->CreateOverflowElement(
-          *this, new MediaControlToggleClosedCaptionsButtonElement(*this)));
+          new MediaControlToggleClosedCaptionsButtonElement(*this)));
 }
 
 Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
@@ -482,7 +485,7 @@ Node::InsertionNotificationRequest MediaControlsImpl::InsertedInto(
   if (!resize_observer_) {
     resize_observer_ =
         ResizeObserver::Create(MediaElement().GetDocument(),
-                               new MediaControlsResizeObserverCallback(this));
+                               new MediaControlsResizeObserverDelegate(this));
     HTMLMediaElement& html_media_element = MediaElement();
     resize_observer_->observe(&html_media_element);
   }
@@ -724,15 +727,16 @@ void MediaControlsImpl::RefreshCastButtonVisibilityWithoutUpdate() {
     return;
   }
 
-  // The reason for the autoplay test is that some pages (e.g. vimeo.com) have
-  // an autoplay background video, which doesn't autoplay on Chrome for Android
-  // (we prevent it) so starts paused. In such cases we don't want to
-  // automatically show the cast button, since it looks strange and is unlikely
-  // to correspond with anything the user wants to do.  If a user does want to
-  // cast a paused autoplay video then they can still do so by touching or
-  // clicking on the video, which will cause the cast button to appear.
-  if (!MediaElement().ShouldShowControls() && !MediaElement().Autoplay() &&
-      MediaElement().paused()) {
+  // The reason for the autoplay muted test is that some pages (e.g. vimeo.com)
+  // have an autoplay background video which has to be muted on Android to play.
+  // In such cases we don't want to automatically show the cast button, since
+  // it looks strange and is unlikely to correspond with anything the user wants
+  // to do.  If a user does want to cast a muted autoplay video then they can
+  // still do so by touching or clicking on the video, which will cause the cast
+  // button to appear. Note that this concerns various animated images websites
+  // too.
+  if (!MediaElement().ShouldShowControls() &&
+      !MediaElement().GetAutoplayPolicy().IsOrWillBeAutoplayingMuted()) {
     // Note that this is a case where we add the overlay cast button
     // without wanting the panel cast button.  We depend on the fact
     // that computeWhichControlsFit() won't change overlay cast button
@@ -741,7 +745,8 @@ void MediaControlsImpl::RefreshCastButtonVisibilityWithoutUpdate() {
     // non-cast changes (e.g., resize) occur.  If the panel button
     // is shown, however, compute...() will take control of the
     // overlay cast button if it needs to hide it from the panel.
-    overlay_cast_button_->TryShowOverlay();
+    if (RuntimeEnabledFeatures::MediaCastOverlayButtonEnabled())
+      overlay_cast_button_->TryShowOverlay();
     cast_button_->SetIsWanted(false);
   } else if (MediaElement().ShouldShowControls()) {
     overlay_cast_button_->SetIsWanted(false);
@@ -751,7 +756,8 @@ void MediaControlsImpl::RefreshCastButtonVisibilityWithoutUpdate() {
 
 void MediaControlsImpl::ShowOverlayCastButtonIfNeeded() {
   if (MediaElement().ShouldShowControls() ||
-      !ShouldShowCastButton(MediaElement())) {
+      !ShouldShowCastButton(MediaElement()) ||
+      !RuntimeEnabledFeatures::MediaCastOverlayButtonEnabled()) {
     return;
   }
 
@@ -850,6 +856,25 @@ void MediaControlsImpl::DefaultEventHandler(Event* event) {
   if (event->type() == EventTypeNames::focusin ||
       event->type() == EventTypeNames::input)
     ResetHideMediaControlsTimer();
+
+  if (event->IsKeyboardEvent() &&
+      !IsSpatialNavigationEnabled(GetDocument().GetFrame())) {
+    const String& key = ToKeyboardEvent(event)->key();
+    if (key == "Enter" || ToKeyboardEvent(event)->keyCode() == ' ') {
+      play_button_->OnMediaKeyboardEvent(event);
+      return;
+    }
+    if (key == "ArrowLeft" || key == "ArrowRight" || key == "Home" ||
+        key == "End") {
+      timeline_->OnMediaKeyboardEvent(event);
+      return;
+    }
+    if (key == "ArrowDown" || key == "ArrowUp") {
+      for (int i = 0; i < 5; i++)
+        volume_slider_->OnMediaKeyboardEvent(event);
+      return;
+    }
+  }
 }
 
 void MediaControlsImpl::HideMediaControlsTimerFired(TimerBase*) {
@@ -947,12 +972,12 @@ void MediaControlsImpl::OnPlay() {
   UpdatePlayState();
   timeline_->SetPosition(MediaElement().currentTime());
   UpdateCurrentTimeDisplay();
-
-  StartHideMediaControlsTimer();
 }
 
 void MediaControlsImpl::OnPlaying() {
   timeline_->OnPlaying();
+
+  StartHideMediaControlsTimer();
 }
 
 void MediaControlsImpl::OnPause() {
@@ -1005,7 +1030,7 @@ void MediaControlsImpl::OnPanelKeypress() {
   ResetHideMediaControlsTimer();
 }
 
-void MediaControlsImpl::NotifyElementSizeChanged(ClientRect* new_size) {
+void MediaControlsImpl::NotifyElementSizeChanged(DOMRectReadOnly* new_size) {
   // Note that this code permits a bad frame on resize, since it is
   // run after the relayout / paint happens.  It would be great to improve
   // this, but it would be even greater to move this code entirely to
@@ -1038,7 +1063,7 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
   // won't benefit from that anwyay, we just do it here like JS will.
 
   // Controls that we'll hide / show, in order of decreasing priority.
-  MediaControlElement* elements[] = {
+  MediaControlElementBase* elements[] = {
       // Exclude m_overflowMenu; we handle it specially.
       play_button_.Get(),
       fullscreen_button_.Get(),
@@ -1061,7 +1086,7 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
     // This prevents the wrong controls from being shown briefly
     // immediately after the first layout and paint, but before we have
     // a chance to revise them.
-    for (MediaControlElement* element : elements) {
+    for (MediaControlElementBase* element : elements) {
       if (element)
         element->SetDoesFit(false);
     }
@@ -1091,32 +1116,35 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
   overflow_menu_->SetIsWanted(true);
   int used_width = minimum_width;
 
-  std::list<MediaControlElement*> overflow_elements;
-  MediaControlElement* first_displaced_element = nullptr;
+  std::list<MediaControlElementBase*> overflow_elements;
+  MediaControlElementBase* first_displaced_element = nullptr;
   // For each control that fits, enable it in order of decreasing priority.
-  for (MediaControlElement* element : elements) {
+  for (MediaControlElementBase* element : elements) {
     if (!element)
       continue;
+
     int width = minimum_width;
     if ((element == timeline_.Get()) || (element == volume_slider_.Get()))
       width += kSliderMargin;
-    element->ShouldShowButtonInOverflowMenu(false);
-    if (element->IsWanted()) {
-      if (used_width + width <= size_.Width()) {
-        element->SetDoesFit(true);
-        used_width += width;
-      } else {
-        element->SetDoesFit(false);
-        element->ShouldShowButtonInOverflowMenu(true);
-        if (element->HasOverflowButton())
-          overflow_elements.push_front(element);
-        // We want a way to access the first media element that was
-        // removed. If we don't end up needing an overflow menu, we can
-        // use the space the overflow menu would have taken up to
-        // instead display that media element.
-        if (!element->HasOverflowButton() && !first_displaced_element)
-          first_displaced_element = element;
-      }
+
+    element->SetOverflowElementIsWanted(false);
+    if (!element->IsWanted())
+      continue;
+
+    if (used_width + width <= size_.Width()) {
+      element->SetDoesFit(true);
+      used_width += width;
+    } else {
+      element->SetDoesFit(false);
+      element->SetOverflowElementIsWanted(true);
+      if (element->HasOverflowButton())
+        overflow_elements.push_front(element);
+      // We want a way to access the first media element that was
+      // removed. If we don't end up needing an overflow menu, we can
+      // use the space the overflow menu would have taken up to
+      // instead display that media element.
+      if (!element->HasOverflowButton() && !first_displaced_element)
+        first_displaced_element = element;
     }
   }
 
@@ -1143,6 +1171,16 @@ void MediaControlsImpl::ComputeWhichControlsFit() {
     bool does_fit = size_.Width() >= kMinWidthForOverlayPlayButton &&
                     size_.Height() >= kMinHeightForOverlayPlayButton;
     overlay_play_button_->SetDoesFit(does_fit);
+  }
+
+  // Record the display state when needed. It is only recorded when the media
+  // element is in a state that allows it in order to reduce noise in the
+  // metrics.
+  if (MediaControlInputElement::ShouldRecordDisplayStates(MediaElement())) {
+    // Record which controls are used.
+    for (const auto& element : elements)
+      element->MaybeRecordDisplayed();
+    overflow_menu_->MaybeRecordDisplayed();
   }
 }
 

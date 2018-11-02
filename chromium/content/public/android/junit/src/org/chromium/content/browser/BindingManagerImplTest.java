@@ -22,7 +22,8 @@ import org.robolectric.Robolectric;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.process_launcher.ChildProcessCreationParams;
+import org.chromium.base.process_launcher.ChildProcessConnection;
+import org.chromium.base.test.TestChildProcessConnection;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
@@ -37,79 +38,17 @@ import java.util.ArrayList;
 @RunWith(LocalRobolectricTestRunner.class)
 @Config(manifest = Config.NONE)
 public class BindingManagerImplTest {
-    private static class MockChildServiceConnection
-            implements ChildProcessConnection.ChildServiceConnection {
-        private boolean mBound;
-
-        @Override
-        public boolean bind() {
-            mBound = true;
-            return true;
-        }
-
-        @Override
-        public void unbind() {
-            mBound = false;
-        }
-
-        @Override
-        public boolean isBound() {
-            return mBound;
-        }
-    }
-
-    private static class TestChildProcessConnection extends ChildProcessConnection {
-        private final int mPid;
-        private boolean mConnected;
-
-        /**
-         * Creates a mock binding corresponding to real ManagedChildProcessConnection after the
-         * connection is established: with initial binding bound and no strong binding.
-         */
-        private TestChildProcessConnection(int pid) {
-            super(null /* context */, null /* deathCallback */,
-                    new ComponentName("org.chromium.test", "TestService"),
-                    false /* isExternalService */, null /* childProcessCommonParameters */,
-                    new ChildProcessCreationParams("org.chromium.test",
-                            false /* isExternalService */, 0 /* libraryProcessType */,
-                            false /* bindToCallerCheck */));
-            mPid = pid;
-        }
-
-        @Override
-        public int getPid() {
-            return mPid;
-        }
-
-        @Override
-        protected ChildServiceConnection createServiceConnection(int bindFlags) {
-            return new MockChildServiceConnection();
-        }
-
-        // We don't have a real service so we have to mock the connection status.
-        @Override
-        public void start(boolean useStrongBinding, StartCallback startCallback) {
-            super.start(useStrongBinding, startCallback);
-            mConnected = true;
-        }
-
-        @Override
-        public void stop() {
-            super.stop();
-            mConnected = false;
-        }
-
-        @Override
-        public boolean isConnected() {
-            return mConnected;
-        }
-    }
 
     // Creates a mocked ChildProcessConnection that is optionally added to a BindingManager.
     private static ChildProcessConnection createTestChildProcessConnection(
             int pid, BindingManager manager) {
-        ChildProcessConnection connection = new TestChildProcessConnection(pid);
-        connection.start(false /* useStrongBinding */, null /* startCallback */);
+        TestChildProcessConnection connection = new TestChildProcessConnection(
+                new ComponentName("org.chromium.test", "TestService"),
+                false /* bindToCallerCheck */, false /* bindAsExternalService */,
+                null /* serviceBundle */);
+        connection.setPid(pid);
+        connection.start(false /* useStrongBinding */, null /* serviceCallback */,
+                false /* retryOnTimeout */);
         if (manager != null) {
             manager.addNewConnection(pid, connection);
         }

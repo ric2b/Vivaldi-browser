@@ -40,7 +40,7 @@ class SVGScriptElement final : public SVGElement,
  public:
   static SVGScriptElement* Create(Document&, bool was_inserted_by_parser);
 
-  ScriptLoader* Loader() const { return loader_.Get(); }
+  ScriptLoader* Loader() const final { return loader_.Get(); }
 
 #if DCHECK_IS_ON()
   bool IsAnimatableAttribute(const QualifiedName&) const override;
@@ -49,6 +49,7 @@ class SVGScriptElement final : public SVGElement,
   bool IsScriptElement() const override { return true; }
 
   DECLARE_VIRTUAL_TRACE();
+  DECLARE_TRACE_WRAPPERS();
 
  private:
   SVGScriptElement(Document&,
@@ -81,14 +82,14 @@ class SVGScriptElement final : public SVGElement,
   String SourceAttributeValue() const override;
   String TypeAttributeValue() const override;
   String TextFromChildren() override;
-  String TextContent() const override;
   bool HasSourceAttribute() const override;
   bool IsConnected() const override;
   bool HasChildren() const override;
   const AtomicString& GetNonceForElement() const override;
   bool AllowInlineScriptForCSP(const AtomicString& nonce,
                                const WTF::OrdinalNumber&,
-                               const String& script_content) override;
+                               const String& script_content,
+                               ContentSecurityPolicy::InlineType) override;
   AtomicString InitiatorName() const override;
   Document& GetDocument() const override;
   void DispatchLoadEvent() override;
@@ -98,6 +99,8 @@ class SVGScriptElement final : public SVGElement,
 
   Element* CloneElementWithoutAttributesAndChildren() override;
   bool LayoutObjectIsNeeded(const ComputedStyle&) override { return false; }
+
+  TraceWrapperMember<ScriptLoader> loader_;
 };
 
 }  // namespace blink

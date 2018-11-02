@@ -184,13 +184,13 @@ int32_t PPB_Graphics3D_Impl::DoSwapBuffers(const gpu::SyncToken& sync_token,
     // Don't need to check for NULL from GetPluginInstance since when we're
     // bound, we know our instance is valid.
     bool is_overlay_candidate = use_image_chromium_;
-    cc::TextureMailbox texture_mailbox(
+    viz::TextureMailbox texture_mailbox(
         taken_front_buffer_, sync_token,
 // TODO(reveman): Get texture target from browser process.
 #if defined(OS_MACOSX)
         use_image_chromium_ ? GL_TEXTURE_RECTANGLE_ARB : GL_TEXTURE_2D,
 #else
-        use_image_chromium_ ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D,
+        GL_TEXTURE_2D,
 #endif
         size, is_overlay_candidate, false);
     taken_front_buffer_.SetZero();

@@ -88,6 +88,8 @@ enum class SpdyFrameType : uint8_t {
   // The specific value of EXTENSION is meaningless; it is a placeholder used
   // within SpdyFramer's state machine when handling unknown frames via an
   // extension API.
+  // TODO(birenroy): Remove the fake EXTENSION value from the SpdyFrameType
+  // enum.
   EXTENSION = 0xff
 };
 
@@ -119,11 +121,6 @@ enum SpdyHeadersFlags {
 enum SpdyPushPromiseFlags {
   PUSH_PROMISE_FLAG_END_PUSH_PROMISE = 0x04,
   PUSH_PROMISE_FLAG_PADDED = 0x08,
-};
-
-// Flags on the SETTINGS control frame.
-enum SpdySettingsControlFlags {
-  SETTINGS_FLAG_CLEAR_PREVIOUSLY_PERSISTED_SETTINGS = 0x01,
 };
 
 enum Http2SettingsControlFlags {
@@ -275,6 +272,34 @@ const int32_t kInitialSessionWindowSize = 64 * 1024 - 1;
 // The NPN string for HTTP2, "h2".
 extern const char* const kHttp2Npn;
 
+// Wire sizes of priority payloads.
+const size_t kPriorityDependencyPayloadSize = 4;
+const size_t kPriorityWeightPayloadSize = 1;
+
+namespace size_utils {
+
+// Returns the (minimum) size of frames (sans variable-length portions).
+size_t GetFrameHeaderSize();
+size_t GetDataFrameMinimumSize();
+size_t GetHeadersMinimumSize();
+size_t GetPrioritySize();
+size_t GetRstStreamSize();
+size_t GetSettingsMinimumSize();
+size_t GetPushPromiseMinimumSize();
+size_t GetPingSize();
+size_t GetGoAwayMinimumSize();
+size_t GetWindowUpdateSize();
+size_t GetContinuationMinimumSize();
+size_t GetAltSvcMinimumSize();
+
+// Convenience function for above.
+size_t GetMinimumSizeOfFrame(SpdyFrameType frame_type);
+
+// Returns the minimum size a frame can be (data or control).
+size_t GetFrameMinimumSize();
+
+}  // namespace size_utils
+
 // Variant type (i.e. tagged union) that is either a SPDY 3.x priority value,
 // or else an HTTP/2 stream dependency tuple {parent stream ID, weight,
 // exclusive bit}. Templated to allow for use by QUIC code; SPDY and HTTP/2
@@ -381,6 +406,11 @@ class SPDY_EXPORT_PRIVATE SpdyFrameIR {
   virtual void Visit(SpdyFrameVisitor* visitor) const = 0;
   virtual SpdyFrameType frame_type() const = 0;
   SpdyStreamId stream_id() const { return stream_id_; }
+  virtual bool fin() const;
+
+  // Returns the number of bytes of flow control window that would be consumed
+  // by this frame if written to the wire.
+  virtual int flow_control_window_consumed() const;
 
  protected:
   SpdyFrameIR() : stream_id_(0) {}
@@ -397,7 +427,7 @@ class SPDY_EXPORT_PRIVATE SpdyFrameIR {
 class SPDY_EXPORT_PRIVATE SpdyFrameWithFinIR : public SpdyFrameIR {
  public:
   ~SpdyFrameWithFinIR() override {}
-  bool fin() const { return fin_; }
+  bool fin() const override;
   void set_fin(bool fin) { fin_ = fin; }
 
  protected:
@@ -496,6 +526,8 @@ class SPDY_EXPORT_PRIVATE SpdyDataIR
   void Visit(SpdyFrameVisitor* visitor) const override;
 
   SpdyFrameType frame_type() const override;
+
+  int flow_control_window_consumed() const override;
 
  private:
   // Used to store data that this SpdyDataIR should own.
@@ -791,6 +823,35 @@ class SPDY_EXPORT_PRIVATE SpdyPriorityIR : public SpdyFrameIR {
   DISALLOW_COPY_AND_ASSIGN(SpdyPriorityIR);
 };
 
+// Represents a frame of unrecognized type.
+class SPDY_EXPORT_PRIVATE SpdyUnknownIR : public SpdyFrameIR {
+ public:
+  SpdyUnknownIR(SpdyStreamId stream_id,
+                uint8_t type,
+                uint8_t flags,
+                SpdyString payload)
+      : SpdyFrameIR(stream_id),
+        type_(type),
+        flags_(flags),
+        payload_(std::move(payload)) {}
+  uint8_t type() const { return type_; }
+  uint8_t flags() const { return flags_; }
+  const SpdyString& payload() const { return payload_; }
+
+  void Visit(SpdyFrameVisitor* visitor) const override;
+
+  SpdyFrameType frame_type() const override;
+
+  int flow_control_window_consumed() const override;
+
+ private:
+  uint8_t type_;
+  uint8_t flags_;
+  const SpdyString payload_;
+
+  DISALLOW_COPY_AND_ASSIGN(SpdyUnknownIR);
+};
+
 class SpdySerializedFrame {
  public:
   SpdySerializedFrame()
@@ -886,6 +947,9 @@ class SpdyFrameVisitor {
   virtual void VisitAltSvc(const SpdyAltSvcIR& altsvc) = 0;
   virtual void VisitPriority(const SpdyPriorityIR& priority) = 0;
   virtual void VisitData(const SpdyDataIR& data) = 0;
+  virtual void VisitUnknown(const SpdyUnknownIR& unknown) {
+    // TODO(birenroy): make abstract.
+  }
 
  protected:
   SpdyFrameVisitor() {}

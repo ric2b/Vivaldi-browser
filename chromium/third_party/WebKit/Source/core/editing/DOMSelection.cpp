@@ -38,6 +38,7 @@
 #include "core/dom/TreeScope.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
+#include "core/editing/SelectionModifier.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/LocalFrame.h"
@@ -88,7 +89,7 @@ void DOMSelection::UpdateFrameSelection(const SelectionInDOMTree& selection,
   frame_selection.DidSetSelectionDeprecated();
   if (GetFrame() && GetFrame()->GetDocument() &&
       focused_element != GetFrame()->GetDocument()->FocusedElement())
-    UseCounter::Count(GetFrame(), UseCounter::kSelectionFuncionsChangeFocus);
+    UseCounter::Count(GetFrame(), WebFeature::kSelectionFuncionsChangeFocus);
 }
 
 const VisibleSelection& DOMSelection::GetVisibleSelection() const {
@@ -107,13 +108,13 @@ bool DOMSelection::IsBaseFirstInSelection() const {
 // removed.
 static Position AnchorPosition(const VisibleSelection& selection) {
   Position anchor =
-      selection.IsBaseFirst() ? selection.Start() : selection.end();
+      selection.IsBaseFirst() ? selection.Start() : selection.End();
   return anchor.ParentAnchoredEquivalent();
 }
 
 static Position FocusPosition(const VisibleSelection& selection) {
   Position focus =
-      selection.IsBaseFirst() ? selection.end() : selection.Start();
+      selection.IsBaseFirst() ? selection.End() : selection.Start();
   return focus.ParentAnchoredEquivalent();
 }
 
@@ -241,7 +242,7 @@ void DOMSelection::collapse(Node* node,
   // 1. If node is null, this method must behave identically as
   // removeAllRanges() and abort these steps.
   if (!node) {
-    UseCounter::Count(GetFrame(), UseCounter::kSelectionCollapseNull);
+    UseCounter::Count(GetFrame(), WebFeature::kSelectionCollapseNull);
     GetFrame()->Selection().Clear();
     return;
   }
@@ -364,12 +365,12 @@ void DOMSelection::setBaseAndExtent(Node* base_node,
   // TODO(editing-dev): Behavior on where base or extent is null is still
   // under discussion: https://github.com/w3c/selection-api/issues/72
   if (!base_node) {
-    UseCounter::Count(GetFrame(), UseCounter::kSelectionSetBaseAndExtentNull);
+    UseCounter::Count(GetFrame(), WebFeature::kSelectionSetBaseAndExtentNull);
     GetFrame()->Selection().Clear();
     return;
   }
   if (!extent_node) {
-    UseCounter::Count(GetFrame(), UseCounter::kSelectionSetBaseAndExtentNull);
+    UseCounter::Count(GetFrame(), WebFeature::kSelectionSetBaseAndExtentNull);
     extent_offset = 0;
   }
 
@@ -414,11 +415,11 @@ void DOMSelection::modify(const String& alter_string,
   if (!IsAvailable())
     return;
 
-  FrameSelection::EAlteration alter;
+  SelectionModifyAlteration alter;
   if (DeprecatedEqualIgnoringCase(alter_string, "extend"))
-    alter = FrameSelection::kAlterationExtend;
+    alter = SelectionModifyAlteration::kExtend;
   else if (DeprecatedEqualIgnoringCase(alter_string, "move"))
-    alter = FrameSelection::kAlterationMove;
+    alter = SelectionModifyAlteration::kMove;
   else
     return;
 
@@ -436,23 +437,23 @@ void DOMSelection::modify(const String& alter_string,
 
   TextGranularity granularity;
   if (DeprecatedEqualIgnoringCase(granularity_string, "character"))
-    granularity = kCharacterGranularity;
+    granularity = TextGranularity::kCharacter;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "word"))
-    granularity = kWordGranularity;
+    granularity = TextGranularity::kWord;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "sentence"))
-    granularity = kSentenceGranularity;
+    granularity = TextGranularity::kSentence;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "line"))
-    granularity = kLineGranularity;
+    granularity = TextGranularity::kLine;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "paragraph"))
-    granularity = kParagraphGranularity;
+    granularity = TextGranularity::kParagraph;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "lineboundary"))
-    granularity = kLineBoundary;
+    granularity = TextGranularity::kLineBoundary;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "sentenceboundary"))
-    granularity = kSentenceBoundary;
+    granularity = TextGranularity::kSentenceBoundary;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "paragraphboundary"))
-    granularity = kParagraphBoundary;
+    granularity = TextGranularity::kParagraphBoundary;
   else if (DeprecatedEqualIgnoringCase(granularity_string, "documentboundary"))
-    granularity = kDocumentBoundary;
+    granularity = TextGranularity::kDocumentBoundary;
   else
     return;
 
@@ -464,7 +465,7 @@ void DOMSelection::modify(const String& alter_string,
   GetFrame()->Selection().Modify(alter, direction, granularity);
   if (GetFrame() && GetFrame()->GetDocument() &&
       focused_element != GetFrame()->GetDocument()->FocusedElement())
-    UseCounter::Count(GetFrame(), UseCounter::kSelectionFuncionsChangeFocus);
+    UseCounter::Count(GetFrame(), WebFeature::kSelectionFuncionsChangeFocus);
 }
 
 // https://www.w3.org/TR/selection-api/#dom-selection-extend
@@ -667,7 +668,7 @@ void DOMSelection::addRange(Range* new_range) {
   // warning message for a while, and continue to collect the usage data.
   // <https://code.google.com/p/chromium/issues/detail?id=353069>.
   Deprecation::CountDeprecation(GetFrame(),
-                                UseCounter::kSelectionAddRangeIntersect);
+                                WebFeature::kSelectionAddRangeIntersect);
 }
 
 // https://www.w3.org/TR/selection-api/#dom-selection-deletefromdocument

@@ -27,17 +27,10 @@ FetchTestingPlatformSupport::~FetchTestingPlatformSupport() {
 
 MockFetchContext* FetchTestingPlatformSupport::Context() {
   if (!context_) {
-    context_ = MockFetchContext::Create(
-        MockFetchContext::kShouldLoadNewResource,
-        CurrentThread()->Scheduler()->LoadingTaskRunner());
+    context_ =
+        MockFetchContext::Create(MockFetchContext::kShouldLoadNewResource);
   }
   return context_;
-}
-
-WebURLError FetchTestingPlatformSupport::CancelledError(
-    const WebURL& url) const {
-  return ResourceError(kErrorDomainBlinkInternal, -1, url.GetString(),
-                       "cancelledError for testing");
 }
 
 WebURLLoaderMockFactory*
@@ -45,7 +38,9 @@ FetchTestingPlatformSupport::GetURLLoaderMockFactory() {
   return url_loader_mock_factory_.get();
 }
 
-std::unique_ptr<WebURLLoader> FetchTestingPlatformSupport::CreateURLLoader() {
+std::unique_ptr<WebURLLoader> FetchTestingPlatformSupport::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   return url_loader_mock_factory_->CreateURLLoader(nullptr);
 }
 

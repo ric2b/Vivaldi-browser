@@ -13,12 +13,12 @@
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/lock.h"
+#include "build/build_config.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/prerender/prerender_contents.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/login/login_interstitial_delegate.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/password_manager/core/browser/browser_save_password_progress_logger.h"
 #include "components/password_manager/core/browser/log_manager.h"
 #include "components/password_manager/core/browser/password_manager.h"
@@ -508,16 +508,20 @@ void LoginHandler::GetDialogStrings(const GURL& request_url,
             auth_info.challenger, url_formatter::SchemeDisplay::SHOW));
     authority_url = auth_info.challenger.GetURL();
   } else {
-    *authority = l10n_util::GetStringFUTF16(
-        IDS_LOGIN_DIALOG_AUTHORITY,
-        url_formatter::FormatUrlForSecurityDisplay(request_url));
+    *authority = url_formatter::FormatUrlForSecurityDisplay(request_url);
+#if defined(OS_ANDROID)
+    // Android concatenates with a space rather than displaying on two separate
+    // lines, so it needs some surrounding text.
+    *authority =
+        l10n_util::GetStringFUTF16(IDS_LOGIN_DIALOG_AUTHORITY, *authority);
+#endif
     authority_url = request_url;
   }
 
   if (!content::IsOriginSecure(authority_url)) {
     // TODO(asanka): The string should be different for proxies and servers.
     // http://crbug.com/620756
-    *explanation = l10n_util::GetStringUTF16(IDS_PAGE_INFO_NOT_SECURE_SUMMARY);
+    *explanation = l10n_util::GetStringUTF16(IDS_LOGIN_DIALOG_NOT_PRIVATE);
   } else {
     explanation->clear();
   }

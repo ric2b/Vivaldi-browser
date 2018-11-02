@@ -41,7 +41,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/NodeComputedStyle.h"
 #include "core/frame/FrameConsole.h"
 #include "core/frame/LocalFrame.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -132,7 +131,7 @@ EffectModel* CreateEffectModelFromKeyframes(
   StringKeyframeEffectModel* keyframe_effect_model =
       StringKeyframeEffectModel::Create(keyframes,
                                         LinearTimingFunction::Shared());
-  if (!RuntimeEnabledFeatures::cssAdditiveAnimationsEnabled()) {
+  if (!RuntimeEnabledFeatures::CSSAdditiveAnimationsEnabled()) {
     for (const auto& keyframe_group :
          keyframe_effect_model->GetPropertySpecificKeyframeGroups()) {
       PropertyHandle property = keyframe_group.key;

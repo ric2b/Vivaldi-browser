@@ -32,7 +32,7 @@
 #include "ui/gfx/native_widget_types.h"
 
 namespace cc {
-class CompositorFrameSink;
+class LayerTreeFrameSink;
 }
 
 namespace display {
@@ -309,11 +309,11 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   // Returns true if there was state needing to be cleaned up.
   bool CleanupGestureState();
 
-  // Create a CompositorFrameSink for the aura::Window.
-  std::unique_ptr<cc::CompositorFrameSink> CreateCompositorFrameSink();
+  // Create a LayerTreeFrameSink for the aura::Window.
+  std::unique_ptr<cc::LayerTreeFrameSink> CreateLayerTreeFrameSink();
 
-  // Get the current cc::SurfaceId.
-  cc::SurfaceId GetSurfaceId() const;
+  // Get the current viz::SurfaceId.
+  viz::SurfaceId GetSurfaceId() const;
 
  protected:
   // Deletes (or removes if not owned by parent) all child windows. Intended for
@@ -417,10 +417,6 @@ class AURA_EXPORT Window : public ui::LayerDelegate,
   bool NotifyWindowVisibilityChangedDown(aura::Window* target, bool visible);
   // Notifies this window and its parent hierarchy.
   void NotifyWindowVisibilityChangedUp(aura::Window* target, bool visible);
-
-  // Notifies this window and its child hierarchy of a transform applied to
-  // |source|.
-  void NotifyAncestorWindowTransformed(Window* source);
 
   // Overridden from ui::LayerDelegate:
   void OnPaintLayer(const ui::PaintContext& context) override;

@@ -17,13 +17,13 @@
 #include "base/i18n/time_formatting.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringize_macros.h"
 #include "base/strings/stringprintf.h"
 #include "base/sys_info.h"
 #include "base/values.h"
 #include "build/build_config.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/grit/content_resources.h"
@@ -38,6 +38,7 @@
 #include "content/public/common/url_constants.h"
 #include "gpu/config/gpu_feature_type.h"
 #include "gpu/config/gpu_info.h"
+#include "gpu/ipc/host/gpu_memory_buffer_support.h"
 #include "skia/ext/skia_commit_hash.h"
 #include "third_party/angle/src/common/version.h"
 #include "third_party/skia/include/core/SkMilestone.h"
@@ -80,17 +81,17 @@ std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
 
 std::unique_ptr<base::DictionaryValue> NewDescriptionValuePair(
     const std::string& desc,
-    base::Value* value) {
+    std::unique_ptr<base::Value> value) {
   std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
   dict->SetString("description", desc);
-  dict->Set("value", value);
+  dict->Set("value", std::move(value));
   return dict;
 }
 
 #if defined(OS_WIN)
 // Output DxDiagNode tree as nested array of {description,value} pairs
-base::ListValue* DxDiagNodeToList(const gpu::DxDiagNode& node) {
-  base::ListValue* list = new base::ListValue();
+std::unique_ptr<base::ListValue> DxDiagNodeToList(const gpu::DxDiagNode& node) {
+  auto list = base::MakeUnique<base::ListValue>();
   for (std::map<std::string, std::string>::const_iterator it =
       node.values.begin();
       it != node.values.end();
@@ -102,8 +103,8 @@ base::ListValue* DxDiagNodeToList(const gpu::DxDiagNode& node) {
       node.children.begin();
       it != node.children.end();
       ++it) {
-    base::ListValue* sublist = DxDiagNodeToList(it->second);
-    list->Append(NewDescriptionValuePair(it->first, sublist));
+    std::unique_ptr<base::ListValue> sublist = DxDiagNodeToList(it->second);
+    list->Append(NewDescriptionValuePair(it->first, std::move(sublist)));
   }
   return list;
 }
@@ -120,21 +121,23 @@ std::string GPUDeviceToString(const gpu::GPUInfo::GPUDevice& gpu) {
       vendor.c_str(), device.c_str(), gpu.active ? " *ACTIVE*" : "");
 }
 
-base::DictionaryValue* GpuInfoAsDictionaryValue() {
+std::unique_ptr<base::DictionaryValue> GpuInfoAsDictionaryValue() {
   gpu::GPUInfo gpu_info = GpuDataManagerImpl::GetInstance()->GetGPUInfo();
-  base::ListValue* basic_info = new base::ListValue();
+  auto basic_info = base::MakeUnique<base::ListValue>();
   basic_info->Append(NewDescriptionValuePair(
       "Initialization time",
       base::Int64ToString(gpu_info.initialization_time.InMilliseconds())));
   basic_info->Append(NewDescriptionValuePair(
-      "In-process GPU", new base::Value(gpu_info.in_process_gpu)));
+      "In-process GPU",
+      base::MakeUnique<base::Value>(gpu_info.in_process_gpu)));
   basic_info->Append(NewDescriptionValuePair(
       "Passthrough Command Decoder",
-      new base::Value(gpu_info.passthrough_cmd_decoder)));
+      base::MakeUnique<base::Value>(gpu_info.passthrough_cmd_decoder)));
   basic_info->Append(NewDescriptionValuePair(
-      "Supports overlays", new base::Value(gpu_info.supports_overlays)));
+      "Supports overlays",
+      base::MakeUnique<base::Value>(gpu_info.supports_overlays)));
   basic_info->Append(NewDescriptionValuePair(
-      "Sandboxed", new base::Value(gpu_info.sandboxed)));
+      "Sandboxed", base::MakeUnique<base::Value>(gpu_info.sandboxed)));
   basic_info->Append(NewDescriptionValuePair(
       "GPU0", GPUDeviceToString(gpu_info.gpu)));
   for (size_t i = 0; i < gpu_info.secondary_gpus.size(); ++i) {
@@ -142,12 +145,13 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
         base::StringPrintf("GPU%d", static_cast<int>(i + 1)),
         GPUDeviceToString(gpu_info.secondary_gpus[i])));
   }
-  basic_info->Append(
-      NewDescriptionValuePair("Optimus", new base::Value(gpu_info.optimus)));
-  basic_info->Append(
-      NewDescriptionValuePair("Optimus", new base::Value(gpu_info.optimus)));
   basic_info->Append(NewDescriptionValuePair(
-      "AMD switchable", new base::Value(gpu_info.amd_switchable)));
+      "Optimus", base::MakeUnique<base::Value>(gpu_info.optimus)));
+  basic_info->Append(NewDescriptionValuePair(
+      "Optimus", base::MakeUnique<base::Value>(gpu_info.optimus)));
+  basic_info->Append(NewDescriptionValuePair(
+      "AMD switchable",
+      base::MakeUnique<base::Value>(gpu_info.amd_switchable)));
 #if defined(OS_WIN)
   std::string compositor =
       ui::win::IsAeroGlassEnabled() ? "Aero Glass" : "none";
@@ -232,17 +236,16 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
   basic_info->Append(NewDescriptionValuePair(
       "Reset notification strategy", reset_strategy));
 
-  basic_info->Append(
-      NewDescriptionValuePair("GPU process crash count",
-                              new base::Value(gpu_info.process_crash_count)));
+  basic_info->Append(NewDescriptionValuePair(
+      "GPU process crash count",
+      base::MakeUnique<base::Value>(gpu_info.process_crash_count)));
 
-  base::DictionaryValue* info = new base::DictionaryValue();
-  info->Set("basic_info", basic_info);
+  auto info = base::MakeUnique<base::DictionaryValue>();
 
 #if defined(OS_WIN)
   auto dx_info = base::MakeUnique<base::Value>();
   if (gpu_info.dx_diagnostics.children.size())
-    dx_info.reset(DxDiagNodeToList(gpu_info.dx_diagnostics));
+    dx_info = DxDiagNodeToList(gpu_info.dx_diagnostics);
   info->Set("diagnostics", std::move(dx_info));
 #endif
 
@@ -253,6 +256,7 @@ base::DictionaryValue* GpuInfoAsDictionaryValue() {
       "RGBA visual ID", base::Uint64ToString(gpu_info.rgba_visual)));
 #endif
 
+  info->Set("basic_info", std::move(basic_info));
   return info;
 }
 
@@ -270,6 +274,8 @@ const char* BufferFormatToString(gfx::BufferFormat format) {
       return "ETC1";
     case gfx::BufferFormat::R_8:
       return "R_8";
+    case gfx::BufferFormat::R_16:
+      return "R_16";
     case gfx::BufferFormat::RG_88:
       return "RG_88";
     case gfx::BufferFormat::BGR_565:
@@ -314,8 +320,8 @@ const char* BufferUsageToString(gfx::BufferUsage usage) {
   return nullptr;
 }
 
-base::ListValue* CompositorInfo() {
-  base::ListValue* compositor_info = new base::ListValue();
+std::unique_ptr<base::ListValue> CompositorInfo() {
+  auto compositor_info = base::MakeUnique<base::ListValue>();
 
   compositor_info->Append(NewDescriptionValuePair(
       "Tile Update Mode",
@@ -326,24 +332,25 @@ base::ListValue* CompositorInfo() {
   return compositor_info;
 }
 
-base::ListValue* GpuMemoryBufferInfo() {
-  base::ListValue* gpu_memory_buffer_info = new base::ListValue();
+std::unique_ptr<base::ListValue> GpuMemoryBufferInfo() {
+  auto gpu_memory_buffer_info = base::MakeUnique<base::ListValue>();
 
-  BrowserGpuMemoryBufferManager* gpu_memory_buffer_manager =
-      BrowserGpuMemoryBufferManager::current();
-
+  const auto native_configurations =
+      gpu::GetNativeGpuMemoryBufferConfigurations();
   for (size_t format = 0;
        format < static_cast<size_t>(gfx::BufferFormat::LAST) + 1; format++) {
     std::string native_usage_support;
     for (size_t usage = 0;
          usage < static_cast<size_t>(gfx::BufferUsage::LAST) + 1; usage++) {
-      if (gpu_memory_buffer_manager->IsNativeGpuMemoryBufferConfiguration(
-              static_cast<gfx::BufferFormat>(format),
-              static_cast<gfx::BufferUsage>(usage)))
+      if (base::ContainsKey(
+              native_configurations,
+              std::make_pair(static_cast<gfx::BufferFormat>(format),
+                             static_cast<gfx::BufferUsage>(usage)))) {
         native_usage_support = base::StringPrintf(
             "%s%s %s", native_usage_support.c_str(),
             native_usage_support.empty() ? "" : ",",
             BufferUsageToString(static_cast<gfx::BufferUsage>(usage)));
+      }
     }
     if (native_usage_support.empty())
       native_usage_support = base::StringPrintf("Software only");
@@ -381,8 +388,10 @@ class GpuMessageHandler
   void OnCallAsync(const base::ListValue* list);
 
   // Submessages dispatched from OnCallAsync
-  base::Value* OnRequestClientInfo(const base::ListValue* list);
-  base::Value* OnRequestLogMessages(const base::ListValue* list);
+  std::unique_ptr<base::DictionaryValue> OnRequestClientInfo(
+      const base::ListValue* list);
+  std::unique_ptr<base::ListValue> OnRequestLogMessages(
+      const base::ListValue* list);
 
  private:
   // True if observing the GpuDataManager (re-attaching as observer would
@@ -431,7 +440,7 @@ void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
   ok = args->GetString(1, &submessage);
   DCHECK(ok);
 
-  base::ListValue* submessageArgs = new base::ListValue();
+  auto submessageArgs = base::MakeUnique<base::ListValue>();
   for (size_t i = 2; i < args->GetSize(); ++i) {
     const base::Value* arg;
     ok = args->Get(i, &arg);
@@ -441,23 +450,20 @@ void GpuMessageHandler::OnCallAsync(const base::ListValue* args) {
   }
 
   // call the submessage handler
-  base::Value* ret = NULL;
+  std::unique_ptr<base::Value> ret;
   if (submessage == "requestClientInfo") {
-    ret = OnRequestClientInfo(submessageArgs);
+    ret = OnRequestClientInfo(submessageArgs.get());
   } else if (submessage == "requestLogMessages") {
-    ret = OnRequestLogMessages(submessageArgs);
+    ret = OnRequestLogMessages(submessageArgs.get());
   } else {  // unrecognized submessage
     NOTREACHED();
-    delete submessageArgs;
     return;
   }
-  delete submessageArgs;
 
   // call BrowserBridge.onCallAsyncReply with result
   if (ret) {
     web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
                                            *requestId, *ret);
-    delete ret;
   } else {
     web_ui()->CallJavascriptFunctionUnsafe("browserBridge.onCallAsyncReply",
                                            *requestId);
@@ -484,11 +490,11 @@ void GpuMessageHandler::OnBrowserBridgeInitialized(
   OnGpuInfoUpdate();
 }
 
-base::Value* GpuMessageHandler::OnRequestClientInfo(
+std::unique_ptr<base::DictionaryValue> GpuMessageHandler::OnRequestClientInfo(
     const base::ListValue* list) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  base::DictionaryValue* dict = new base::DictionaryValue();
+  auto dict = base::MakeUnique<base::DictionaryValue>();
 
   dict->SetString("version", GetContentClient()->GetProduct());
   dict->SetString("command_line",
@@ -508,7 +514,8 @@ base::Value* GpuMessageHandler::OnRequestClientInfo(
   return dict;
 }
 
-base::Value* GpuMessageHandler::OnRequestLogMessages(const base::ListValue*) {
+std::unique_ptr<base::ListValue> GpuMessageHandler::OnRequestLogMessages(
+    const base::ListValue*) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   return GpuDataManagerImpl::GetInstance()->GetLogMessages();
@@ -520,14 +527,14 @@ void GpuMessageHandler::OnGpuInfoUpdate() {
       GpuInfoAsDictionaryValue());
 
   // Add in blacklisting features
-  base::DictionaryValue* feature_status = new base::DictionaryValue;
+  auto feature_status = base::MakeUnique<base::DictionaryValue>();
   feature_status->Set("featureStatus", GetFeatureStatus());
   feature_status->Set("problems", GetProblems());
-  base::ListValue* workarounds = new base::ListValue();
+  auto workarounds = base::MakeUnique<base::ListValue>();
   for (const std::string& workaround : GetDriverBugWorkarounds())
     workarounds->AppendString(workaround);
-  feature_status->Set("workarounds", workarounds);
-  gpu_info_val->Set("featureStatus", feature_status);
+  feature_status->Set("workarounds", std::move(workarounds));
+  gpu_info_val->Set("featureStatus", std::move(feature_status));
   gpu_info_val->Set("compositorInfo", CompositorInfo());
   gpu_info_val->Set("gpuMemoryBufferInfo", GpuMemoryBufferInfo());
 

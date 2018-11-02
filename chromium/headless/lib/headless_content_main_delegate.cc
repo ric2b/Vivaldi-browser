@@ -87,11 +87,13 @@ bool HeadlessContentMainDelegate::BasicStartupComplete(int* exit_code) {
   command_line->AppendSwitchASCII(switches::kOzonePlatform, "headless");
 #endif
 
-  if (!browser_->options()->gl_implementation.empty()) {
-    command_line->AppendSwitchASCII(switches::kUseGL,
-                                    browser_->options()->gl_implementation);
-  } else {
-    command_line->AppendSwitch(switches::kDisableGpu);
+  if (!command_line->HasSwitch(switches::kUseGL)) {
+    if (!browser_->options()->gl_implementation.empty()) {
+      command_line->AppendSwitchASCII(switches::kUseGL,
+                                      browser_->options()->gl_implementation);
+    } else {
+      command_line->AppendSwitch(switches::kDisableGpu);
+    }
   }
 
   SetContentClient(&content_client_);
@@ -180,9 +182,9 @@ void HeadlessContentMainDelegate::InitCrashReporter(
     breakpad::InitCrashReporter(process_type);
 #elif defined(OS_MACOSX)
   crash_reporter::InitializeCrashpad(process_type.empty(), process_type);
-// Avoid adding this dependency in Windows Chrome component build, since
+// Avoid adding this dependency in Windows Chrome non component builds, since
 // crashpad is already enabled.
-// TODO(dvallet): Ideally we would also want to avoid this for component build.
+// TODO(dvallet): Ideally we would also want to avoid this for component builds.
 #elif defined(OS_WIN) && !defined(CHROME_MULTIPLE_DLL)
   crash_reporter::InitializeCrashpadWithEmbeddedHandler(process_type.empty(),
                                                         process_type);

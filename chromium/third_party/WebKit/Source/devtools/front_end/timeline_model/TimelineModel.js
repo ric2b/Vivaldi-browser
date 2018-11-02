@@ -33,7 +33,7 @@
  */
 TimelineModel.TimelineModel = class {
   constructor() {
-    this.reset();
+    this._reset();
   }
 
   /**
@@ -168,7 +168,7 @@ TimelineModel.TimelineModel = class {
    * @param {boolean=} produceTraceStartedInPage
    */
   setEvents(tracingModel, produceTraceStartedInPage) {
-    this.reset();
+    this._reset();
     this._resetProcessingState();
 
     this._minimumRecordTime = tracingModel.minimumRecordTime();
@@ -225,6 +225,9 @@ TimelineModel.TimelineModel = class {
         pageDevToolsMetadataEvents.push(event);
         var frames = ((event.args['data'] && event.args['data']['frames']) || []);
         frames.forEach(payload => this._addPageFrame(event, payload));
+        var rootFrame = this.rootFrames()[0];
+        if (rootFrame && rootFrame.url)
+          this._pageURL = rootFrame.url;
       } else if (event.name === TimelineModel.TimelineModel.DevToolsMetadataEvent.TracingSessionIdForWorker) {
         workersDevToolsMetadataEvents.push(event);
       } else if (event.name === TimelineModel.TimelineModel.DevToolsMetadataEvent.TracingStartedInBrowser) {
@@ -767,6 +770,8 @@ TimelineModel.TimelineModel = class {
           return false;
         if (!eventData['isMainFrame'])
           break;
+        if (eventData.url)
+          this._pageURL = eventData.url;
         this._hadCommitLoad = true;
         this._firstCompositeLayers = null;
         break;
@@ -871,7 +876,7 @@ TimelineModel.TimelineModel = class {
       parent.addChild(pageFrame);
   }
 
-  reset() {
+  _reset() {
     this._virtualThreads = [];
     /** @type {!Array<!SDK.TracingModel.Event>} */
     this._mainThreadEvents = [];
@@ -897,6 +902,7 @@ TimelineModel.TimelineModel = class {
     this._pageFrames = new Map();
     /** @type {!Map<string, !Array<!SDK.TracingModel.Event>>} */
     this._eventsByFrame = new Map();
+    this._pageURL = '';
 
     this._minimumRecordTime = 0;
     this._maximumRecordTime = 0;
@@ -980,6 +986,13 @@ TimelineModel.TimelineModel = class {
   }
 
   /**
+   * @return {string}
+   */
+  pageURL() {
+    return this._pageURL;
+  }
+
+  /**
    * @param {string} frameId
    * @return {?TimelineModel.TimelineModel.PageFrame}
    */
@@ -1008,7 +1021,7 @@ TimelineModel.TimelineModel = class {
     var types = TimelineModel.TimelineModel.RecordType;
     var resourceTypes = new Set(
         [types.ResourceSendRequest, types.ResourceReceiveResponse, types.ResourceReceivedData, types.ResourceFinish]);
-    var events = this.mainThreadEvents();
+    var events = this.inspectedTargetEvents();
     for (var i = 0; i < events.length; ++i) {
       var e = events[i];
       if (!resourceTypes.has(e.name))
@@ -1340,6 +1353,13 @@ TimelineModel.TimelineModel.NetworkRequest = class {
       this.timing = eventData['timing'];
     if (eventData['fromServiceWorker'])
       this.fromServiceWorker = true;
+  }
+
+  /**
+   * @return {number}
+   */
+  beginTime() {
+    return Math.min(this.startTime, this.timing && this.timing.pushStart * 1000 || Infinity);
   }
 };
 

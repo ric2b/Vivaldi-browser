@@ -35,32 +35,26 @@ using base::android::ConvertUTF16ToJavaString;
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
 
-namespace {
-
-bool IsInfoEmpty(const std::unique_ptr<ShortcutInfo>& info) {
-  return !info || info->url.is_empty();
-}
-
-}  // anonymous namespace
-
 namespace banners {
 
 // static
 bool AppBannerInfoBarDelegateAndroid::Create(
     content::WebContents* web_contents,
     base::WeakPtr<AppBannerManager> weak_manager,
-    const base::string16& app_title,
     std::unique_ptr<ShortcutInfo> shortcut_info,
     const SkBitmap& primary_icon,
     const SkBitmap& badge_icon,
-    int event_request_id,
     bool is_webapk,
     webapk::InstallSource webapk_install_source) {
+  DCHECK(shortcut_info);
   const GURL url = shortcut_info->url;
+  if (url.is_empty())
+    return false;
+
   auto infobar_delegate =
       base::WrapUnique(new banners::AppBannerInfoBarDelegateAndroid(
-          weak_manager, app_title, std::move(shortcut_info), primary_icon,
-          badge_icon, event_request_id, is_webapk, webapk_install_source));
+          weak_manager, std::move(shortcut_info), primary_icon, badge_icon,
+          is_webapk, webapk_install_source));
   auto* raw_delegate = infobar_delegate.get();
   auto infobar = base::MakeUnique<AppBannerInfoBarAndroid>(
       std::move(infobar_delegate), url, is_webapk);
@@ -88,12 +82,10 @@ bool AppBannerInfoBarDelegateAndroid::Create(
     const base::string16& app_title,
     const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
     const SkBitmap& icon,
-    const std::string& native_app_package,
-    const std::string& referrer,
-    int event_request_id) {
+    const std::string& native_app_package_name,
+    const std::string& referrer) {
   auto infobar_delegate = base::WrapUnique(new AppBannerInfoBarDelegateAndroid(
-      app_title, native_app_data, icon, native_app_package, referrer,
-      event_request_id));
+      app_title, native_app_data, icon, native_app_package_name, referrer));
   return InfoBarService::FromWebContents(web_contents)
       ->AddInfoBar(base::MakeUnique<AppBannerInfoBarAndroid>(
            std::move(infobar_delegate), native_app_data));
@@ -115,8 +107,8 @@ AppBannerInfoBarDelegateAndroid::~AppBannerInfoBarDelegateAndroid() {
 
   if (TriggeredFromBanner())
     TrackDismissEvent(DISMISS_EVENT_DISMISSED);
-  JNIEnv* env = base::android::AttachCurrentThread();
-  Java_AppBannerInfoBarDelegateAndroid_destroy(env, java_delegate_);
+  Java_AppBannerInfoBarDelegateAndroid_destroy(
+      base::android::AttachCurrentThread(), java_delegate_);
   java_delegate_.Reset();
 }
 
@@ -126,10 +118,12 @@ void AppBannerInfoBarDelegateAndroid::UpdateInstallState(
   if (native_app_data_.is_null() && !is_webapk_)
     return;
 
+  ScopedJavaLocalRef<jstring> jpackage_name(
+      ConvertUTF8ToJavaString(env, package_name_));
   int newState = Java_AppBannerInfoBarDelegateAndroid_determineInstallState(
-      env, java_delegate_, native_app_data_);
-  static_cast<AppBannerInfoBarAndroid*>(infobar())
-      ->OnInstallStateChanged(newState);
+      env, java_delegate_, jpackage_name);
+  static_cast<AppBannerInfoBarAndroid*>(infobar())->OnInstallStateChanged(
+      newState);
 }
 
 void AppBannerInfoBarDelegateAndroid::OnInstallIntentReturned(
@@ -137,14 +131,13 @@ void AppBannerInfoBarDelegateAndroid::OnInstallIntentReturned(
     const JavaParamRef<jobject>& obj,
     jboolean jis_installing) {
   DCHECK(infobar());
+  DCHECK(!package_name_.empty());
 
   content::WebContents* web_contents =
       InfoBarService::WebContentsFromInfoBar(infobar());
   if (jis_installing) {
     AppBannerSettingsHelper::RecordBannerEvent(
-        web_contents,
-        web_contents->GetURL(),
-        native_app_package_,
+        web_contents, web_contents->GetURL(), package_name_,
         AppBannerSettingsHelper::APP_BANNER_EVENT_DID_ADD_TO_HOMESCREEN,
         AppBannerManager::GetCurrentTime());
 
@@ -192,40 +185,23 @@ bool AppBannerInfoBarDelegateAndroid::Accept() {
   return AcceptWebApp(web_contents);
 }
 
-void AppBannerInfoBarDelegateAndroid::UpdateStateForInstalledWebAPK(
-    const std::string& webapk_package_name) {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  ScopedJavaLocalRef<jstring> java_webapk_package_name =
-      base::android::ConvertUTF8ToJavaString(env, webapk_package_name);
-  Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
-      env, java_delegate_, false);
-  Java_AppBannerInfoBarDelegateAndroid_setWebApkPackageName(
-      env, java_delegate_, java_webapk_package_name);
-  UpdateInstallState(env, nullptr);
-  install_state_ = INSTALLED;
-}
-
 AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
     base::WeakPtr<AppBannerManager> weak_manager,
-    const base::string16& app_title,
     std::unique_ptr<ShortcutInfo> shortcut_info,
     const SkBitmap& primary_icon,
     const SkBitmap& badge_icon,
-    int event_request_id,
     bool is_webapk,
     webapk::InstallSource webapk_install_source)
     : weak_manager_(weak_manager),
-      app_title_(app_title),
+      app_title_(shortcut_info->name),
       shortcut_info_(std::move(shortcut_info)),
       primary_icon_(primary_icon),
       badge_icon_(badge_icon),
-      event_request_id_(event_request_id),
       has_user_interaction_(false),
       is_webapk_(is_webapk),
       install_state_(INSTALL_NOT_STARTED),
       webapk_install_source_(webapk_install_source),
       weak_ptr_factory_(this) {
-  DCHECK(!IsInfoEmpty(shortcut_info_));
   CreateJavaDelegate();
 }
 
@@ -233,25 +209,24 @@ AppBannerInfoBarDelegateAndroid::AppBannerInfoBarDelegateAndroid(
     const base::string16& app_title,
     const base::android::ScopedJavaGlobalRef<jobject>& native_app_data,
     const SkBitmap& icon,
-    const std::string& native_app_package,
-    const std::string& referrer,
-    int event_request_id)
+    const std::string& native_app_package_name,
+    const std::string& referrer)
     : app_title_(app_title),
       native_app_data_(native_app_data),
       primary_icon_(icon),
-      native_app_package_(native_app_package),
+      package_name_(native_app_package_name),
       referrer_(referrer),
-      event_request_id_(event_request_id),
       has_user_interaction_(false),
+      is_webapk_(false),
       weak_ptr_factory_(this) {
   DCHECK(!native_app_data_.is_null());
+  DCHECK(!package_name_.empty());
   CreateJavaDelegate();
 }
 
 void AppBannerInfoBarDelegateAndroid::CreateJavaDelegate() {
   java_delegate_.Reset(Java_AppBannerInfoBarDelegateAndroid_create(
-      base::android::AttachCurrentThread(),
-      reinterpret_cast<intptr_t>(this)));
+      base::android::AttachCurrentThread(), reinterpret_cast<intptr_t>(this)));
 }
 
 bool AppBannerInfoBarDelegateAndroid::AcceptNativeApp(
@@ -280,8 +255,6 @@ bool AppBannerInfoBarDelegateAndroid::AcceptNativeApp(
 
 bool AppBannerInfoBarDelegateAndroid::AcceptWebApp(
     content::WebContents* web_contents) {
-  if (IsInfoEmpty(shortcut_info_))
-    return true;
   TrackUserResponse(USER_RESPONSE_WEB_APP_ACCEPTED);
 
   AppBannerSettingsHelper::RecordBannerInstallEvent(
@@ -296,15 +269,16 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApp(
 
 bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
     content::WebContents* web_contents) {
-  if (IsInfoEmpty(shortcut_info_))
-    return true;
-
   JNIEnv* env = base::android::AttachCurrentThread();
 
   // If the WebAPK is installed and the "Open" button is clicked, open the
   // WebAPK. Do not send a BannerAccepted message.
   if (install_state_ == INSTALLED) {
-    Java_AppBannerInfoBarDelegateAndroid_openWebApk(env, java_delegate_);
+    DCHECK(!package_name_.empty());
+    ScopedJavaLocalRef<jstring> jpackage_name(
+        ConvertUTF8ToJavaString(env, package_name_));
+    Java_AppBannerInfoBarDelegateAndroid_openApp(env, java_delegate_,
+                                                 jpackage_name);
     webapk::TrackUserAction(webapk::USER_ACTION_INSTALLED_OPEN);
     return true;
   }
@@ -329,8 +303,6 @@ bool AppBannerInfoBarDelegateAndroid::AcceptWebApk(
         AppBannerManager::GetCurrentTime());
   }
 
-  Java_AppBannerInfoBarDelegateAndroid_setWebApkInstallingState(
-      env, java_delegate_, true);
   UpdateInstallState(env, nullptr);
   WebApkInstallService::FinishCallback callback =
       base::Bind(&AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished,
@@ -354,7 +326,7 @@ void AppBannerInfoBarDelegateAndroid::SendBannerAccepted() {
     return;
 
   if (TriggeredFromBanner())
-    weak_manager_->SendBannerAccepted(event_request_id_);
+    weak_manager_->SendBannerAccepted();
 
   // Send the appinstalled event. Note that this is fired *before* the
   // installation actually takes place (which can be a significant amount of
@@ -371,7 +343,10 @@ void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFinished(
     OnWebApkInstallFailed(result);
     return;
   }
-  UpdateStateForInstalledWebAPK(webapk_package_name);
+
+  install_state_ = INSTALLED;
+  package_name_ = webapk_package_name;
+  UpdateInstallState(base::android::AttachCurrentThread(), nullptr);
 }
 
 void AppBannerInfoBarDelegateAndroid::OnWebApkInstallFailed(
@@ -422,7 +397,7 @@ void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
       InfoBarService::WebContentsFromInfoBar(infobar());
 
   if (weak_manager_ && TriggeredFromBanner())
-    weak_manager_->SendBannerDismissed(event_request_id_);
+    weak_manager_->SendBannerDismissed();
 
   if (native_app_data_.is_null()) {
     if (is_webapk_)
@@ -434,9 +409,10 @@ void AppBannerInfoBarDelegateAndroid::InfoBarDismissed() {
           AppBannerSettingsHelper::WEB);
     }
   } else {
+    DCHECK(!package_name_.empty());
     TrackUserResponse(USER_RESPONSE_NATIVE_APP_DISMISSED);
     AppBannerSettingsHelper::RecordBannerDismissEvent(
-        web_contents, native_app_package_, AppBannerSettingsHelper::NATIVE);
+        web_contents, package_name_, AppBannerSettingsHelper::NATIVE);
   }
 }
 
@@ -454,22 +430,17 @@ bool AppBannerInfoBarDelegateAndroid::LinkClicked(
     return false;
 
   // Try to show the details for the native app.
-  JNIEnv* env = base::android::AttachCurrentThread();
-
   content::WebContents* web_contents =
       InfoBarService::WebContentsFromInfoBar(infobar());
   TabAndroid* tab = TabAndroid::FromWebContents(web_contents);
   DCHECK(tab);
 
   Java_AppBannerInfoBarDelegateAndroid_showAppDetails(
-      env, java_delegate_, tab->GetJavaObject(), native_app_data_);
+      base::android::AttachCurrentThread(), java_delegate_,
+      tab->GetJavaObject(), native_app_data_);
 
   TrackDismissEvent(DISMISS_EVENT_BANNER_CLICK);
   return true;
-}
-
-bool RegisterAppBannerInfoBarDelegateAndroid(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace banners

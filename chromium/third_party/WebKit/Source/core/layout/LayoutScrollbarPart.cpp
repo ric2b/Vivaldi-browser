@@ -25,7 +25,7 @@
 
 #include "core/layout/LayoutScrollbarPart.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/layout/LayoutScrollbar.h"
 #include "core/layout/LayoutScrollbarTheme.h"
@@ -44,14 +44,6 @@ LayoutScrollbarPart::LayoutScrollbarPart(ScrollableArea* scrollable_area,
   DCHECK(scrollable_area_);
 }
 
-LayoutScrollbarPart::~LayoutScrollbarPart() {
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-  // We may not have invalidated the painting layer for now, but the
-  // scrollable area will invalidate during paint invalidation.
-  EndShouldKeepAlive();
-#endif
-}
-
 static void RecordScrollbarPartStats(Document& document, ScrollbarPart part) {
   switch (part) {
     case kBackButtonStartPart:
@@ -59,21 +51,21 @@ static void RecordScrollbarPartStats(Document& document, ScrollbarPart part) {
     case kBackButtonEndPart:
     case kForwardButtonEndPart:
       UseCounter::Count(document,
-                        UseCounter::kCSSSelectorPseudoScrollbarButton);
+                        WebFeature::kCSSSelectorPseudoScrollbarButton);
       break;
     case kBackTrackPart:
     case kForwardTrackPart:
       UseCounter::Count(document,
-                        UseCounter::kCSSSelectorPseudoScrollbarTrackPiece);
+                        WebFeature::kCSSSelectorPseudoScrollbarTrackPiece);
       break;
     case kThumbPart:
-      UseCounter::Count(document, UseCounter::kCSSSelectorPseudoScrollbarThumb);
+      UseCounter::Count(document, WebFeature::kCSSSelectorPseudoScrollbarThumb);
       break;
     case kTrackBGPart:
-      UseCounter::Count(document, UseCounter::kCSSSelectorPseudoScrollbarTrack);
+      UseCounter::Count(document, WebFeature::kCSSSelectorPseudoScrollbarTrack);
       break;
     case kScrollbarBGPart:
-      UseCounter::Count(document, UseCounter::kCSSSelectorPseudoScrollbar);
+      UseCounter::Count(document, WebFeature::kCSSSelectorPseudoScrollbar);
       break;
     case kNoPart:
     case kAllParts:
@@ -234,7 +226,7 @@ void LayoutScrollbarPart::SetNeedsPaintInvalidation() {
 
   // This LayoutScrollbarPart is a scroll corner or a resizer.
   DCHECK_EQ(part_, kNoPart);
-  if (FrameView* frame_view = View()->GetFrameView()) {
+  if (LocalFrameView* frame_view = View()->GetFrameView()) {
     if (frame_view->IsFrameViewScrollCorner(this)) {
       frame_view->SetScrollCornerNeedsPaintInvalidation();
       return;

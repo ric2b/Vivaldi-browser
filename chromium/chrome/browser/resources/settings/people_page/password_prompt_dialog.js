@@ -27,7 +27,7 @@
 (function() {
 'use strict';
 
-/** @const */ var PASSWORD_ACTIVE_DURATION_MS = 10 * 60 * 1000; // Ten minutes.
+/** @const */ var PASSWORD_ACTIVE_DURATION_MS = 10 * 60 * 1000;  // Ten minutes.
 
 Polymer({
   is: 'settings-password-prompt-dialog',
@@ -97,28 +97,11 @@ Polymer({
 
   /** @override */
   attached: function() {
+    this.writeUma_(LockScreenProgress.START_SCREEN_LOCK);
+    this.$.dialog.showModal();
     this.async(function() {
       this.$.passwordInput.focus();
     }.bind(this));
-  },
-
-  /**
-   * Open up the dialog. This will wait until the dialog has loaded before
-   * opening it.
-   */
-  open: function() {
-    // Wait until the dialog is attached to the DOM before trying to open it.
-    var dialog = /** @type {{isConnected: boolean}} */ (this.$.dialog);
-    if (!dialog.isConnected) {
-      setTimeout(this.open.bind(this));
-      return;
-    }
-
-    if (this.$.dialog.open)
-      return;
-
-    this.writeUma_(LockScreenProgress.START_SCREEN_LOCK);
-    this.$.dialog.showModal();
   },
 
   /** @private */
@@ -173,7 +156,7 @@ Polymer({
         }
 
         this.clearAccountPasswordTimeout_ = setTimeout(
-          clearSetModes.bind(this), this.passwordActiveDurationMs_);
+            clearSetModes.bind(this), this.passwordActiveDurationMs_);
 
         // Clear stored password state and close the dialog.
         this.password_ = '';

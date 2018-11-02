@@ -43,6 +43,7 @@
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceError.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceRequest.h"
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/weborigin/SecurityOrigin.h"
@@ -104,14 +105,16 @@ static xmlDocPtr DocLoaderFunc(const xmlChar* uri,
                reinterpret_cast<const char*>(uri));
       xmlFree(base);
 
-      ResourceLoaderOptions fetch_options(
-          ResourceFetcher::DefaultResourceOptions());
-      FetchParameters params(ResourceRequest(url), FetchInitiatorTypeNames::xml,
-                             fetch_options);
+      ResourceLoaderOptions fetch_options;
+      fetch_options.initiator_info.name = FetchInitiatorTypeNames::xml;
+      FetchParameters params(ResourceRequest(url), fetch_options);
       params.SetOriginRestriction(FetchParameters::kRestrictToSameOrigin);
       Resource* resource =
           RawResource::FetchSynchronously(params, g_global_resource_fetcher);
       if (!resource || !g_global_processor)
+        return nullptr;
+      RefPtr<const SharedBuffer> data = resource->ResourceBuffer();
+      if (!data)
         return nullptr;
 
       FrameConsole* console = nullptr;
@@ -122,13 +125,25 @@ static xmlDocPtr DocLoaderFunc(const xmlChar* uri,
       xmlSetStructuredErrorFunc(console, XSLTProcessor::ParseErrorFunc);
       xmlSetGenericErrorFunc(console, XSLTProcessor::GenericErrorFunc);
 
+      xmlDocPtr doc = nullptr;
+
       // We don't specify an encoding here. Neither Gecko nor WinIE respects
       // the encoding specified in the HTTP headers.
-      RefPtr<const SharedBuffer> data = resource->ResourceBuffer();
-      xmlDocPtr doc = data ? xmlReadMemory(data->Data(), data->size(),
-                                           (const char*)uri, 0, options)
-                           : nullptr;
+      xmlParserCtxtPtr ctx = xmlCreatePushParserCtxt(
+          nullptr, nullptr, nullptr, 0, reinterpret_cast<const char*>(uri));
+      if (ctx && !xmlCtxtUseOptions(ctx, options)) {
+        data->ForEachSegment([&data, &ctx](const char* segment,
+                                           size_t segment_size,
+                                           size_t segment_offset) -> bool {
+          bool final_chunk = segment_offset + segment_size == data->size();
+          return !xmlParseChunk(ctx, segment, segment_size, final_chunk);
+        });
 
+        if (ctx->wellFormed)
+          doc = ctx->myDoc;
+      }
+
+      xmlFreeParserCtxt(ctx);
       xmlSetStructuredErrorFunc(0, 0);
       xmlSetGenericErrorFunc(0, 0);
 
@@ -216,9 +231,13 @@ static const char** XsltParamArrayFromParameterMap(
   if (parameters.IsEmpty())
     return nullptr;
 
-  const char** parameter_array = static_cast<const char**>(
-      WTF::Partitions::FastMalloc(((parameters.size() * 2) + 1) * sizeof(char*),
-                                  WTF_HEAP_PROFILER_TYPE_NAME(XSLTProcessor)));
+  WTF::CheckedSizeT size = parameters.size();
+  size *= 2;
+  ++size;
+  size *= sizeof(char*);
+  const char** parameter_array =
+      static_cast<const char**>(WTF::Partitions::FastMalloc(
+          size.ValueOrDie(), WTF_HEAP_PROFILER_TYPE_NAME(XSLTProcessor)));
 
   unsigned index = 0;
   for (auto& parameter : parameters) {
@@ -344,17 +363,14 @@ bool XSLTProcessor::TransformToString(Node* source_node,
 
     xsltSecurityPrefsPtr security_prefs = xsltNewSecurityPrefs();
     // Read permissions are checked by docLoaderFunc.
-    if (0 != xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_WRITE_FILE,
-                                  xsltSecurityForbid))
-      CRASH();
-    if (0 != xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_CREATE_DIRECTORY,
-                                  xsltSecurityForbid))
-      CRASH();
-    if (0 != xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_WRITE_NETWORK,
-                                  xsltSecurityForbid))
-      CRASH();
-    if (0 != xsltSetCtxtSecurityPrefs(security_prefs, transform_context))
-      CRASH();
+    CHECK_EQ(0, xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_WRITE_FILE,
+                                     xsltSecurityForbid));
+    CHECK_EQ(0,
+             xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_CREATE_DIRECTORY,
+                                  xsltSecurityForbid));
+    CHECK_EQ(0, xsltSetSecurityPrefs(security_prefs, XSLT_SECPREF_WRITE_NETWORK,
+                                     xsltSecurityForbid));
+    CHECK_EQ(0, xsltSetCtxtSecurityPrefs(security_prefs, transform_context));
 
     // <http://bugs.webkit.org/show_bug.cgi?id=16077>: XSLT processor
     // <xsl:sort> algorithm only compares by code point.

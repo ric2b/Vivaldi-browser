@@ -4,12 +4,10 @@
 
 package org.chromium.content_shell_apk;
 
-import android.content.Context;
-
-import org.chromium.base.process_launcher.ChildProcessCreationParams;
+import org.chromium.base.process_launcher.ChildProcessConnection;
 import org.chromium.base.process_launcher.FileDescriptorInfo;
 import org.chromium.base.process_launcher.IChildProcessService;
-import org.chromium.content.browser.ChildProcessConnection;
+import org.chromium.content.browser.ChildProcessCreationParams;
 import org.chromium.content.browser.ChildProcessLauncherHelper;
 import org.chromium.content.browser.LauncherThread;
 
@@ -55,14 +53,14 @@ public final class ChildProcessLauncherTestUtils {
         }
     }
 
-    public static ChildProcessLauncherHelper startForTesting(final Context context,
-            final boolean sandboxed, final boolean alwaysInForeground, final String[] commandLine,
-            final FileDescriptorInfo[] filesToBeMapped, final ChildProcessCreationParams params) {
+    public static ChildProcessLauncherHelper startForTesting(final boolean sandboxed,
+            final String[] commandLine, final FileDescriptorInfo[] filesToBeMapped,
+            final ChildProcessCreationParams params, final boolean doSetupConnection) {
         return runOnLauncherAndGetResult(new Callable<ChildProcessLauncherHelper>() {
             @Override
             public ChildProcessLauncherHelper call() {
-                return ChildProcessLauncherHelper.createAndStartForTesting(0L /* nativePointer */,
-                        commandLine, filesToBeMapped, params, sandboxed, alwaysInForeground);
+                return ChildProcessLauncherHelper.createAndStartForTesting(params, commandLine,
+                        filesToBeMapped, sandboxed, null /* binderCallback */, doSetupConnection);
             }
         });
     }

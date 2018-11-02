@@ -7,6 +7,7 @@
 #include <algorithm>
 #include "cc/trees/effect_node.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "cc/trees/scroll_node.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 
 namespace cc {
@@ -59,52 +60,80 @@ bool ScrollbarLayerImplBase::SetCurrentPos(float current_pos) {
   return true;
 }
 
-bool ScrollbarLayerImplBase::CanScrollOrientation() const {
-  // TODO(pdr): Refactor this to not depend on layers by using the associated
-  // scroll node's user_scrollable values.
-  LayerImpl* scroll_layer =
-      layer_tree_impl()->LayerByElementId(scroll_element_id_);
-  if (!scroll_layer)
-    return false;
-
-  return scroll_layer->user_scrollable(orientation()) &&
-         // Ensure clip_layer_length_ smaller than scroll_layer_length_ not
-         // caused by floating error.
-         !MathUtil::IsFloatNearlyTheSame(clip_layer_length_,
-                                         scroll_layer_length_) &&
-         clip_layer_length_ < scroll_layer_length_;
+float ScrollbarLayerImplBase::current_pos() const {
+  DCHECK(!layer_tree_impl()->ScrollbarGeometriesNeedUpdate());
+  return current_pos_;
 }
 
-bool ScrollbarLayerImplBase::SetVerticalAdjust(float vertical_adjust) {
+float ScrollbarLayerImplBase::clip_layer_length() const {
+  DCHECK(!layer_tree_impl()->ScrollbarGeometriesNeedUpdate());
+  return clip_layer_length_;
+}
+
+float ScrollbarLayerImplBase::scroll_layer_length() const {
+  DCHECK(!layer_tree_impl()->ScrollbarGeometriesNeedUpdate());
+  return scroll_layer_length_;
+}
+
+float ScrollbarLayerImplBase::vertical_adjust() const {
+  DCHECK(!layer_tree_impl()->ScrollbarGeometriesNeedUpdate());
+  return vertical_adjust_;
+}
+
+bool ScrollbarLayerImplBase::CanScrollOrientation() const {
+  PropertyTrees* property_trees = layer_tree_impl()->property_trees();
+  const auto* scroll_node =
+      property_trees->scroll_tree.FindNodeFromElementId(scroll_element_id_);
+  DCHECK(scroll_node);
+
+  if (orientation() == ScrollbarOrientation::HORIZONTAL) {
+    if (!scroll_node->user_scrollable_horizontal)
+      return false;
+  } else {
+    if (!scroll_node->user_scrollable_vertical)
+      return false;
+  }
+
+  // Ensure the clip_layer_length and scroll_layer_length values are up-to-date.
+  // TODO(pdr): Instead of using the clip and scroll layer lengths which require
+  // an update, refactor to use the scroll tree (ScrollTree::MaxScrollOffset
+  // as in LayerTreeHostImpl::TryScroll).
+  layer_tree_impl()->UpdateScrollbarGeometries();
+
+  // Ensure clip_layer_length is smaller than scroll_layer_length, not including
+  // small deltas due to floating point error.
+  return !MathUtil::IsFloatNearlyTheSame(clip_layer_length(),
+                                         scroll_layer_length()) &&
+         clip_layer_length() < scroll_layer_length();
+}
+
+void ScrollbarLayerImplBase::SetVerticalAdjust(float vertical_adjust) {
   if (vertical_adjust_ == vertical_adjust)
-    return false;
+    return;
   vertical_adjust_ = vertical_adjust;
   NoteLayerPropertyChanged();
-  return true;
 }
 
-bool ScrollbarLayerImplBase::SetClipLayerLength(float clip_layer_length) {
+void ScrollbarLayerImplBase::SetClipLayerLength(float clip_layer_length) {
   if (clip_layer_length_ == clip_layer_length)
-    return false;
+    return;
   clip_layer_length_ = clip_layer_length;
   NoteLayerPropertyChanged();
-  return true;
 }
 
-bool ScrollbarLayerImplBase::SetScrollLayerLength(float scroll_layer_length) {
+void ScrollbarLayerImplBase::SetScrollLayerLength(float scroll_layer_length) {
   if (scroll_layer_length_ == scroll_layer_length)
-    return false;
+    return;
   scroll_layer_length_ = scroll_layer_length;
   NoteLayerPropertyChanged();
-  return true;
+  return;
 }
 
-bool ScrollbarLayerImplBase::SetThumbThicknessScaleFactor(float factor) {
+void ScrollbarLayerImplBase::SetThumbThicknessScaleFactor(float factor) {
   if (thumb_thickness_scale_factor_ == factor)
-    return false;
+    return;
   thumb_thickness_scale_factor_ = factor;
   NoteLayerPropertyChanged();
-  return true;
 }
 
 gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRectWithThumbThicknessScale(
@@ -173,10 +202,10 @@ gfx::Rect ScrollbarLayerImplBase::ComputeThumbQuadRectWithThumbThicknessScale(
   float track_length = TrackLength();
   int thumb_length = ThumbLength();
   int thumb_thickness = ThumbThickness();
-  float maximum = scroll_layer_length_ - clip_layer_length_;
+  float maximum = scroll_layer_length() - clip_layer_length();
 
   // With the length known, we can compute the thumb's position.
-  float clamped_current_pos = std::min(std::max(current_pos_, 0.f), maximum);
+  float clamped_current_pos = std::min(std::max(current_pos(), 0.f), maximum);
 
   int thumb_offset = TrackStart();
   if (maximum > 0) {

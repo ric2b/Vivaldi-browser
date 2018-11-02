@@ -6,7 +6,7 @@
 
 #include <string>
 
-#include "ash/shared/app_types.h"
+#include "ash/public/cpp/app_types.h"
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "chromeos/chromeos_switches.h"
@@ -30,6 +30,9 @@ const base::Feature kEnableArcFeature{"EnableARC",
 constexpr char kAvailabilityNone[] = "none";
 constexpr char kAvailabilityInstalled[] = "installed";
 constexpr char kAvailabilityOfficiallySupported[] = "officially-supported";
+constexpr char kAlwaysStart[] = "always-start";
+constexpr char kAlwaysStartWithNoPlayStore[] =
+    "always-start-with-no-play-store";
 
 void SetArcCpuRestrictionCallback(
     login_manager::ContainerCpuRestrictionState state,
@@ -49,8 +52,8 @@ bool IsArcAvailable() {
   const auto* command_line = base::CommandLine::ForCurrentProcess();
 
   if (command_line->HasSwitch(chromeos::switches::kArcAvailability)) {
-    std::string value = command_line->GetSwitchValueASCII(
-        chromeos::switches::kArcAvailability);
+    const std::string value =
+        command_line->GetSwitchValueASCII(chromeos::switches::kArcAvailability);
     DCHECK(value == kAvailabilityNone || value == kAvailabilityInstalled ||
            value == kAvailabilityOfficiallySupported)
         << "Unknown flag value: " << value;
@@ -63,18 +66,44 @@ bool IsArcAvailable() {
   // TODO(hidehiko): Remove this and clean up whole this function, when
   // session_manager supports a new flag.
   return command_line->HasSwitch(chromeos::switches::kEnableArc) ||
-      (command_line->HasSwitch(chromeos::switches::kArcAvailable) &&
-       base::FeatureList::IsEnabled(kEnableArcFeature));
+         (command_line->HasSwitch(chromeos::switches::kArcAvailable) &&
+          base::FeatureList::IsEnabled(kEnableArcFeature));
+}
+
+bool IsWebstoreSearchEnabled() {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(chromeos::switches::kArcAvailability)) {
+    const std::string value =
+        command_line->GetSwitchValueASCII(chromeos::switches::kArcAvailability);
+
+    return value == kAvailabilityNone;
+  }
+  return true;
+}
+
+bool IsPlayStoreAvailable() {
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(chromeos::switches::kArcStartMode))
+    return true;
+
+  const std::string value =
+      command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode);
+  return value != kAlwaysStartWithNoPlayStore;
 }
 
 bool ShouldArcAlwaysStart() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      chromeos::switches::kArcAlwaysStart);
+  const auto* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(chromeos::switches::kArcStartMode))
+    return false;
+  const std::string value =
+      command_line->GetSwitchValueASCII(chromeos::switches::kArcStartMode);
+  return value == kAlwaysStartWithNoPlayStore || value == kAlwaysStart;
 }
 
-void SetArcAlwaysStartForTesting() {
-  base::CommandLine::ForCurrentProcess()->AppendSwitch(
-      chromeos::switches::kArcAlwaysStart);
+void SetArcAlwaysStartForTesting(bool play_store_available) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitchASCII(
+      chromeos::switches::kArcStartMode,
+      play_store_available ? kAlwaysStart : kAlwaysStartWithNoPlayStore);
 }
 
 bool IsArcKioskAvailable() {

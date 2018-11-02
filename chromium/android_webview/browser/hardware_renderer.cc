@@ -15,9 +15,9 @@
 #include "base/memory/ptr_util.h"
 #include "base/trace_event/trace_event.h"
 #include "cc/output/compositor_frame.h"
-#include "cc/surfaces/compositor_frame_sink_support.h"
-#include "cc/surfaces/local_surface_id_allocator.h"
-#include "cc/surfaces/surface_manager.h"
+#include "components/viz/common/surfaces/local_surface_id_allocator.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "ui/gfx/transform.h"
 #include "ui/gl/gl_bindings.h"
 
@@ -29,11 +29,12 @@ HardwareRenderer::HardwareRenderer(RenderThreadManager* state)
       surfaces_(SurfacesInstance::GetOrCreateInstance()),
       frame_sink_id_(surfaces_->AllocateFrameSinkId()),
       local_surface_id_allocator_(
-          base::MakeUnique<cc::LocalSurfaceIdAllocator>()),
-      last_committed_compositor_frame_sink_id_(0u),
-      last_submitted_compositor_frame_sink_id_(0u) {
+          base::MakeUnique<viz::LocalSurfaceIdAllocator>()),
+      last_committed_layer_tree_frame_sink_id_(0u),
+      last_submitted_layer_tree_frame_sink_id_(0u) {
   DCHECK(last_egl_context_);
-  surfaces_->GetSurfaceManager()->RegisterFrameSinkId(frame_sink_id_);
+  surfaces_->GetFrameSinkManager()->surface_manager()->RegisterFrameSinkId(
+      frame_sink_id_);
   CreateNewCompositorFrameSinkSupport();
 }
 
@@ -43,7 +44,8 @@ HardwareRenderer::~HardwareRenderer() {
   if (child_id_.is_valid())
     DestroySurface();
   support_.reset();
-  surfaces_->GetSurfaceManager()->InvalidateFrameSinkId(frame_sink_id_);
+  surfaces_->GetFrameSinkManager()->surface_manager()->InvalidateFrameSinkId(
+      frame_sink_id_);
 
   // Reset draw constraints.
   render_thread_manager_->PostExternalDrawConstraintsToChildCompositorOnRT(
@@ -85,8 +87,8 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
     child_frame_queue_.clear();
   }
   if (child_frame_) {
-    last_committed_compositor_frame_sink_id_ =
-        child_frame_->compositor_frame_sink_id;
+    last_committed_layer_tree_frame_sink_id_ =
+        child_frame_->layer_tree_frame_sink_id;
   }
 
   // We need to watch if the current Android context has changed and enforce
@@ -104,15 +106,15 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
   // unnecessary kModeProcess.
   if (child_frame_.get() && child_frame_->frame.get()) {
     if (!compositor_id_.Equals(child_frame_->compositor_id) ||
-        last_submitted_compositor_frame_sink_id_ !=
-            child_frame_->compositor_frame_sink_id) {
+        last_submitted_layer_tree_frame_sink_id_ !=
+            child_frame_->layer_tree_frame_sink_id) {
       if (child_id_.is_valid())
         DestroySurface();
 
       CreateNewCompositorFrameSinkSupport();
       compositor_id_ = child_frame_->compositor_id;
-      last_submitted_compositor_frame_sink_id_ =
-          child_frame_->compositor_frame_sink_id;
+      last_submitted_layer_tree_frame_sink_id_ =
+          child_frame_->layer_tree_frame_sink_id;
     }
 
     std::unique_ptr<cc::CompositorFrame> child_compositor_frame =
@@ -158,40 +160,27 @@ void HardwareRenderer::DrawGL(AwDrawGLInfo* draw_info) {
                  draw_info->clip_right - draw_info->clip_left,
                  draw_info->clip_bottom - draw_info->clip_top);
   surfaces_->DrawAndSwap(viewport, clip, transform, surface_size_,
-                         cc::SurfaceId(frame_sink_id_, child_id_));
+                         viz::SurfaceId(frame_sink_id_, child_id_));
 }
 
 void HardwareRenderer::AllocateSurface() {
   DCHECK(!child_id_.is_valid());
   child_id_ = local_surface_id_allocator_->GenerateId();
-  surfaces_->AddChildId(cc::SurfaceId(frame_sink_id_, child_id_));
+  surfaces_->AddChildId(viz::SurfaceId(frame_sink_id_, child_id_));
 }
 
 void HardwareRenderer::DestroySurface() {
   DCHECK(child_id_.is_valid());
 
-  // Submit an empty frame to force any existing resources to be returned.
-  gfx::Rect rect(surface_size_);
-  std::unique_ptr<cc::RenderPass> render_pass = cc::RenderPass::Create();
-  render_pass->SetNew(1, rect, rect, gfx::Transform());
-  cc::CompositorFrame frame;
-  frame.render_pass_list.push_back(std::move(render_pass));
-  // We submit without a prior BeginFrame, so acknowledge a manual BeginFrame.
-  frame.metadata.begin_frame_ack =
-      cc::BeginFrameAck::CreateManualAckWithDamage();
-  frame.metadata.device_scale_factor = device_scale_factor_;
-  bool result = support_->SubmitCompositorFrame(child_id_, std::move(frame));
-  DCHECK(result);
-
-  surfaces_->RemoveChildId(cc::SurfaceId(frame_sink_id_, child_id_));
+  surfaces_->RemoveChildId(viz::SurfaceId(frame_sink_id_, child_id_));
   support_->EvictCurrentSurface();
-  child_id_ = cc::LocalSurfaceId();
+  child_id_ = viz::LocalSurfaceId();
 }
 
 void HardwareRenderer::DidReceiveCompositorFrameAck(
-    const cc::ReturnedResourceArray& resources) {
+    const std::vector<cc::ReturnedResource>& resources) {
   ReturnResourcesToCompositor(resources, compositor_id_,
-                              last_submitted_compositor_frame_sink_id_);
+                              last_submitted_layer_tree_frame_sink_id_);
 }
 
 void HardwareRenderer::OnBeginFrame(const cc::BeginFrameArgs& args) {
@@ -199,14 +188,16 @@ void HardwareRenderer::OnBeginFrame(const cc::BeginFrameArgs& args) {
 }
 
 void HardwareRenderer::ReclaimResources(
-    const cc::ReturnedResourceArray& resources) {
+    const std::vector<cc::ReturnedResource>& resources) {
   ReturnResourcesToCompositor(resources, compositor_id_,
-                              last_submitted_compositor_frame_sink_id_);
+                              last_submitted_layer_tree_frame_sink_id_);
 }
 
 void HardwareRenderer::WillDrawSurface(
-    const cc::LocalSurfaceId& local_surface_id,
+    const viz::LocalSurfaceId& local_surface_id,
     const gfx::Rect& damage_rect) {}
+
+void HardwareRenderer::OnBeginFramePausedChanged(bool paused) {}
 
 // static
 ChildFrameQueue HardwareRenderer::WaitAndPruneFrameQueue(
@@ -250,24 +241,24 @@ void HardwareRenderer::ReturnChildFrame(
   if (!child_frame || !child_frame->frame)
     return;
 
-  cc::ReturnedResourceArray resources_to_return;
-  cc::TransferableResource::ReturnResources(child_frame->frame->resource_list,
-                                            &resources_to_return);
+  std::vector<cc::ReturnedResource> resources_to_return =
+      cc::TransferableResource::ReturnResources(
+          child_frame->frame->resource_list);
 
   // The child frame's compositor id is not necessarily same as
   // compositor_id_.
   ReturnResourcesToCompositor(resources_to_return, child_frame->compositor_id,
-                              child_frame->compositor_frame_sink_id);
+                              child_frame->layer_tree_frame_sink_id);
 }
 
 void HardwareRenderer::ReturnResourcesToCompositor(
-    const cc::ReturnedResourceArray& resources,
+    const std::vector<cc::ReturnedResource>& resources,
     const CompositorID& compositor_id,
-    uint32_t compositor_frame_sink_id) {
-  if (compositor_frame_sink_id != last_committed_compositor_frame_sink_id_)
+    uint32_t layer_tree_frame_sink_id) {
+  if (layer_tree_frame_sink_id != last_committed_layer_tree_frame_sink_id_)
     return;
   render_thread_manager_->InsertReturnedResourcesOnRT(resources, compositor_id,
-                                                      compositor_frame_sink_id);
+                                                      layer_tree_frame_sink_id);
 }
 
 void HardwareRenderer::CreateNewCompositorFrameSinkSupport() {
@@ -275,8 +266,8 @@ void HardwareRenderer::CreateNewCompositorFrameSinkSupport() {
   constexpr bool handles_frame_sink_id_invalidation = false;
   constexpr bool needs_sync_points = true;
   support_.reset();
-  support_ = cc::CompositorFrameSinkSupport::Create(
-      this, surfaces_->GetSurfaceManager(), frame_sink_id_, is_root,
+  support_ = viz::CompositorFrameSinkSupport::Create(
+      this, surfaces_->GetFrameSinkManager(), frame_sink_id_, is_root,
       handles_frame_sink_id_invalidation, needs_sync_points);
 }
 

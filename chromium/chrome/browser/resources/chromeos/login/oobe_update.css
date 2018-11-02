@@ -2,11 +2,16 @@
  * Use of this source code is governed by a BSD-style license that can be
  * found in the LICENSE file. */
 
-#estimated-time-left,
-#progress-message,
-#cancel-hint {
+:host .text {
+  color: #333;
   font: 13px Roboto, sans-serif;
-  margin: 0 20px;
+  line-height: 18px;
+}
+
+.subtitle.update-subtitle {
+  color: #333;
+  font: 13px Roboto, sans-serif;
+  line-height: 18px;
 }
 
 #estimated-time-left,
@@ -18,6 +23,10 @@
 #updatingCancelHint {
   color: rgb(170, 0, 0);
   padding: 0;
+}
+
+.update-illustration {
+  padding-bottom: 82px;
 }
 
 paper-progress {

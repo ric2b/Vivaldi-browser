@@ -44,10 +44,8 @@ std::vector<SkBitmap> ExtractSkBitmapsToStore(const gfx::Image& image) {
   const std::vector<float> favicon_scales = favicon_base::GetFaviconScales();
   for (size_t i = 0; i < image_reps.size(); ++i) {
     // Don't save if the scale isn't one of supported favicon scales.
-    if (std::find(favicon_scales.begin(), favicon_scales.end(),
-                  image_reps[i].scale()) == favicon_scales.end()) {
+    if (!base::ContainsValue(favicon_scales, image_reps[i].scale()))
       continue;
-    }
     bitmaps.push_back(image_reps[i].sk_bitmap());
   }
   return bitmaps;
@@ -209,6 +207,10 @@ void FaviconServiceImpl::SetFaviconOutOfDateForPage(const GURL& page_url) {
   history_service_->SetFaviconsOutOfDateForPage(page_url);
 }
 
+void FaviconServiceImpl::TouchOnDemandFavicon(const GURL& icon_url) {
+  history_service_->TouchOnDemandFavicon(icon_url);
+}
+
 void FaviconServiceImpl::SetImportedFavicons(
     const favicon_base::FaviconUsageDataList& favicon_usage) {
   history_service_->SetImportedFavicons(favicon_usage);
@@ -232,13 +234,13 @@ void FaviconServiceImpl::SetFavicons(const GURL& page_url,
                                 ExtractSkBitmapsToStore(image));
 }
 
-void FaviconServiceImpl::SetLastResortFavicons(
+void FaviconServiceImpl::SetOnDemandFavicons(
     const GURL& page_url,
     const GURL& icon_url,
     favicon_base::IconType icon_type,
     const gfx::Image& image,
     base::Callback<void(bool)> callback) {
-  history_service_->SetLastResortFavicons(
+  history_service_->SetOnDemandFavicons(
       page_url, icon_type, icon_url, ExtractSkBitmapsToStore(image), callback);
 }
 

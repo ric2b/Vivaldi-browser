@@ -275,7 +275,7 @@ void VivaldiSyncManager::SetToken(bool has_login_details,
   if (has_login_details) {
     // Avoid passing an implicit password here, so that we can detect later on
     // if the account password needs to be provided for decryption.
-    GoogleSigninSucceeded(account_id, username, "");
+    GoogleSigninSucceeded(account_id, username);
   }
 
   token_service->UpdateCredentials(account_id, token);

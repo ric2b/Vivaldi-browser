@@ -5,9 +5,11 @@
 #include "components/payments/content/android/payment_manifest_parser_android.h"
 
 #include <stddef.h>
+#include <vector>
 
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
+#include "base/android/scoped_java_ref.h"
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
@@ -26,7 +28,10 @@ class ParseCallback {
   ~ParseCallback() {}
 
   // Copies payment method manifest into Java.
-  void OnPaymentMethodManifestParsed(std::vector<GURL> web_app_manifest_urls) {
+  void OnPaymentMethodManifestParsed(
+      const std::vector<GURL>& web_app_manifest_urls,
+      const std::vector<url::Origin>& unused_supported_origins,
+      bool unused_all_origins_supported) {
     DCHECK_GE(100U, web_app_manifest_urls.size());
     JNIEnv* env = base::android::AttachCurrentThread();
 
@@ -136,10 +141,6 @@ void PaymentManifestParserAndroid::StopUtilityProcess(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& jcaller) {
   delete this;
-}
-
-bool RegisterPaymentManifestParser(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 // Caller owns the result.

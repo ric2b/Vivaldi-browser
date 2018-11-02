@@ -4,17 +4,18 @@
 
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_coordinator.h"
 
+#include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
 #import "ios/clean/chrome/browser/ui/omnibox/location_bar_coordinator.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_mediator.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_view_controller.h"
 #import "ios/clean/chrome/browser/ui/tools/tools_coordinator.h"
+#import "ios/shared/chrome/browser/ui/broadcaster/chrome_broadcaster.h"
 #import "ios/shared/chrome/browser/ui/browser_list/browser.h"
 #import "ios/shared/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/shared/chrome/browser/ui/coordinators/browser_coordinator+internal.h"
 #import "ios/shared/chrome/browser/ui/tools_menu/tools_menu_configuration.h"
-#import "ios/web/public/navigation_manager.h"
-#include "ios/web/public/web_state/web_state.h"
+#import "ios/web/public/web_state/web_state.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -47,22 +48,21 @@
 }
 
 - (void)start {
-  self.viewController = [[ToolbarViewController alloc] init];
+  self.viewController = [[ToolbarViewController alloc]
+      initWithDispatcher:static_cast<id>(self.browser->dispatcher())];
 
   CommandDispatcher* dispatcher = self.browser->dispatcher();
   [dispatcher startDispatchingToTarget:self
                            forSelector:@selector(showToolsMenu)];
   [dispatcher startDispatchingToTarget:self
                            forSelector:@selector(closeToolsMenu)];
-  [dispatcher startDispatchingToTarget:self forSelector:@selector(goBack)];
-  [dispatcher startDispatchingToTarget:self forSelector:@selector(goForward)];
-  [dispatcher startDispatchingToTarget:self forSelector:@selector(reloadPage)];
-  [dispatcher startDispatchingToTarget:self
-                           forSelector:@selector(stopLoadingPage)];
 
-  self.viewController.dispatcher = static_cast<id>(self.browser->dispatcher());
   self.mediator.consumer = self.viewController;
+  self.mediator.webStateList = &self.browser->web_state_list();
 
+  [self.browser->broadcaster()
+      addObserver:self.mediator
+      forSelector:@selector(broadcastTabStripVisible:)];
   LocationBarCoordinator* locationBarCoordinator =
       [[LocationBarCoordinator alloc] init];
   self.locationBarCoordinator = locationBarCoordinator;
@@ -74,6 +74,9 @@
 
 - (void)stop {
   [super stop];
+  [self.browser->broadcaster()
+      removeObserver:self.mediator
+         forSelector:@selector(broadcastTabStripVisible:)];
   [self.browser->dispatcher() stopDispatchingToTarget:self];
 }
 
@@ -104,7 +107,12 @@
   ToolsMenuConfiguration* menuConfiguration =
       [[ToolsMenuConfiguration alloc] initWithDisplayView:nil];
   menuConfiguration.inTabSwitcher = NO;
+  menuConfiguration.noOpenedTabs = NO;
+  menuConfiguration.inNewTabPage =
+      (self.webState->GetLastCommittedURL() == GURL(kChromeUINewTabURL));
+
   toolsCoordinator.toolsMenuConfiguration = menuConfiguration;
+  toolsCoordinator.webState = self.webState;
   [toolsCoordinator start];
   self.toolsMenuCoordinator = toolsCoordinator;
 }
@@ -112,30 +120,6 @@
 - (void)closeToolsMenu {
   [self.toolsMenuCoordinator stop];
   [self removeChildCoordinator:self.toolsMenuCoordinator];
-}
-
-// PLACEHOLDER: These will move to an object that handles navigation.
-#pragma mark - NavigationCommands
-
-- (void)goBack {
-  if (self.webState->GetNavigationManager()->CanGoBack()) {
-    self.webState->GetNavigationManager()->GoBack();
-  }
-}
-
-- (void)goForward {
-  if (self.webState->GetNavigationManager()->CanGoForward()) {
-    self.webState->GetNavigationManager()->GoForward();
-  }
-}
-
-- (void)stopLoadingPage {
-  self.webState->Stop();
-}
-
-- (void)reloadPage {
-  self.webState->GetNavigationManager()->Reload(web::ReloadType::NORMAL,
-                                                false /*check_for_repost*/);
 }
 
 @end

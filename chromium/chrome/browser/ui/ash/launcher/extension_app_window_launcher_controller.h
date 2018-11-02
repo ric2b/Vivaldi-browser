@@ -45,7 +45,7 @@ class ExtensionAppWindowLauncherController
       aura::Window* window) override;
 
   // Overridden from AppWindowRegistry::Observer:
-  void OnAppWindowIconChanged(extensions::AppWindow* app_window) override;
+  void OnAppWindowAdded(extensions::AppWindow* app_window) override;
   void OnAppWindowShown(extensions::AppWindow* app_window,
                         bool was_hidden) override;
   void OnAppWindowHidden(extensions::AppWindow* app_window) override;
@@ -54,10 +54,10 @@ class ExtensionAppWindowLauncherController
   void OnWindowDestroying(aura::Window* window) override;
 
  protected:
-  // Registers a app window with the shelf and this object.
+  // Registers an app window with the shelf and this object.
   void RegisterApp(extensions::AppWindow* app_window);
 
-  // Unregisters a app window with the shelf and this object.
+  // Unregisters an app window with the shelf and this object.
   void UnregisterApp(aura::Window* window);
 
   // Check if a given window is known to the launcher controller.

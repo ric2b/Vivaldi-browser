@@ -6,7 +6,6 @@
 
 #include <utility>
 
-#include "base/mac/scoped_nsobject.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -21,6 +20,10 @@
 #include "ios/chrome/grit/ios_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using password_manager::PasswordFormManager;
 
 // static
@@ -32,14 +35,17 @@ void IOSChromeUpdatePasswordInfoBarDelegate::Create(
   auto delegate = base::WrapUnique(new IOSChromeUpdatePasswordInfoBarDelegate(
       is_smart_lock_branding_enabled, std::move(form_manager)));
   std::unique_ptr<InfoBarIOS> infobar(new InfoBarIOS(std::move(delegate)));
-  base::scoped_nsobject<UpdatePasswordInfoBarController> controller(
-      [[UpdatePasswordInfoBarController alloc] initWithDelegate:infobar.get()]);
+  UpdatePasswordInfoBarController* controller =
+      [[UpdatePasswordInfoBarController alloc] initWithDelegate:infobar.get()];
   infobar->SetController(controller);
   infobar_manager->AddInfoBar(std::move(infobar));
 }
 
 IOSChromeUpdatePasswordInfoBarDelegate::
-    ~IOSChromeUpdatePasswordInfoBarDelegate() {}
+    ~IOSChromeUpdatePasswordInfoBarDelegate() {
+  form_to_save()->metrics_recorder()->RecordUIDismissalReason(
+      infobar_response());
+}
 
 IOSChromeUpdatePasswordInfoBarDelegate::IOSChromeUpdatePasswordInfoBarDelegate(
     bool is_smart_lock_branding_enabled,
@@ -47,6 +53,9 @@ IOSChromeUpdatePasswordInfoBarDelegate::IOSChromeUpdatePasswordInfoBarDelegate(
     : IOSChromePasswordManagerInfoBarDelegate(is_smart_lock_branding_enabled,
                                               std::move(form_manager)) {
   selected_account_ = form_to_save()->preferred_match()->username_value;
+  form_to_save()->metrics_recorder()->RecordPasswordBubbleShown(
+      form_to_save()->GetCredentialSource(),
+      password_manager::metrics_util::AUTOMATIC_WITH_PASSWORD_PENDING_UPDATE);
 }
 
 bool IOSChromeUpdatePasswordInfoBarDelegate::ShowMultipleAccounts() const {
@@ -103,5 +112,12 @@ bool IOSChromeUpdatePasswordInfoBarDelegate::Accept() {
   } else {
     form_to_save()->Update(form_to_save()->pending_credentials());
   }
+  set_infobar_response(password_manager::metrics_util::CLICKED_SAVE);
+  return true;
+}
+
+bool IOSChromeUpdatePasswordInfoBarDelegate::Cancel() {
+  DCHECK(form_to_save());
+  set_infobar_response(password_manager::metrics_util::CLICKED_CANCEL);
   return true;
 }

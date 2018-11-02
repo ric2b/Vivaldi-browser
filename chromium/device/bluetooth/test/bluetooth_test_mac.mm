@@ -2,28 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "device/bluetooth/test/bluetooth_test_mac.h"
+#import "device/bluetooth/test/bluetooth_test_mac.h"
 
+#import <CoreBluetooth/CoreBluetooth.h>
 #include <stdint.h>
 
-#include "base/mac/foundation_util.h"
+#import "base/mac/foundation_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #include "build/build_config.h"
-#include "device/bluetooth/bluetooth_adapter_mac.h"
-#include "device/bluetooth/bluetooth_device_mac.h"
-#include "device/bluetooth/bluetooth_remote_gatt_characteristic_mac.h"
-#include "device/bluetooth/bluetooth_remote_gatt_descriptor_mac.h"
-#include "device/bluetooth/bluetooth_remote_gatt_service_mac.h"
-#include "device/bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h"
-#include "device/bluetooth/test/mock_bluetooth_cbdescriptor_mac.h"
-#include "device/bluetooth/test/mock_bluetooth_cbperipheral_mac.h"
-#include "device/bluetooth/test/mock_bluetooth_cbservice_mac.h"
-#include "device/bluetooth/test/mock_bluetooth_central_manager_mac.h"
-#include "device/bluetooth/test/test_bluetooth_adapter_observer.h"
-#include "third_party/ocmock/OCMock/OCMock.h"
-
-#import <CoreBluetooth/CoreBluetooth.h>
+#import "device/bluetooth/bluetooth_adapter_mac.h"
+#import "device/bluetooth/bluetooth_device_mac.h"
+#import "device/bluetooth/bluetooth_remote_gatt_characteristic_mac.h"
+#import "device/bluetooth/bluetooth_remote_gatt_descriptor_mac.h"
+#import "device/bluetooth/bluetooth_remote_gatt_service_mac.h"
+#import "device/bluetooth/test/mock_bluetooth_cbcharacteristic_mac.h"
+#import "device/bluetooth/test/mock_bluetooth_cbdescriptor_mac.h"
+#import "device/bluetooth/test/mock_bluetooth_cbperipheral_mac.h"
+#import "device/bluetooth/test/mock_bluetooth_cbservice_mac.h"
+#import "device/bluetooth/test/mock_bluetooth_central_manager_mac.h"
+#import "device/bluetooth/test/test_bluetooth_adapter_observer.h"
+#import "third_party/ocmock/OCMock/OCMock.h"
 
 using base::mac::ObjCCast;
 using base::scoped_nsobject;
@@ -38,7 +37,7 @@ class BluetoothTestMac::ScopedMockCentralManager {
   }
 
   // Returns MockCentralManager instance.
-  MockCentralManager* get() { return mock_central_manager_.get(); };
+  MockCentralManager* get() { return mock_central_manager_; };
 
  private:
   scoped_nsobject<MockCentralManager> mock_central_manager_;
@@ -114,7 +113,7 @@ void BluetoothTestMac::InitWithoutDefaultAdapter() {
     mock_central_manager_.reset(
         new ScopedMockCentralManager([[MockCentralManager alloc] init]));
     [mock_central_manager_->get() setBluetoothTestMac:this];
-    [mock_central_manager_->get() setState:CBCentralManagerStateUnsupported];
+    [mock_central_manager_->get() setState:CBManagerStateUnsupported];
     adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
   }
 }
@@ -130,7 +129,7 @@ void BluetoothTestMac::InitWithFakeAdapter() {
     mock_central_manager_.reset(
         new ScopedMockCentralManager([[MockCentralManager alloc] init]));
     mock_central_manager_->get().bluetoothTestMac = this;
-    [mock_central_manager_->get() setState:CBCentralManagerStatePoweredOn];
+    [mock_central_manager_->get() setState:CBManagerStatePoweredOn];
     adapter_mac_->SetCentralManagerForTesting((id)mock_central_manager_->get());
   }
 }
@@ -141,7 +140,7 @@ void BluetoothTestMac::ResetEventCounts() {
 }
 
 void BluetoothTestMac::SimulateAdapterPoweredOff() {
-  [mock_central_manager_->get() setState:CBCentralManagerStatePoweredOff];
+  [mock_central_manager_->get() setState:CBManagerStatePoweredOff];
 
   for (BluetoothDevice* device : adapter_->GetDevices()) {
     MockCBPeripheral* peripheral_mock = GetMockCBPeripheral(device);
@@ -235,10 +234,10 @@ BluetoothDevice* BluetoothTestMac::SimulateLowEnergyDevice(int device_ordinal) {
   scoped_nsobject<MockCBPeripheral> mock_peripheral([[MockCBPeripheral alloc]
       initWithUTF8StringIdentifier:identifier
                               name:name]);
-  mock_peripheral.get().bluetoothTestMac = this;
+  [mock_peripheral setBluetoothTestMac:this];
   [central_manager_delegate
              centralManager:central_manager
-      didDiscoverPeripheral:mock_peripheral.get().peripheral
+      didDiscoverPeripheral:[mock_peripheral peripheral]
           advertisementData:CreateAdvertisementData(name, uuids, service_data,
                                                     tx_power)
                        RSSI:rssi];
@@ -276,14 +275,14 @@ void BluetoothTestMac::SimulateConnectedLowEnergyDevice(
   }
   DCHECK(name);
   DCHECK(identifier);
-  DCHECK([cbUUIDs.get() count] > 0);
+  DCHECK([cbUUIDs count] > 0);
   scoped_nsobject<MockCBPeripheral> mock_peripheral([[MockCBPeripheral alloc]
       initWithUTF8StringIdentifier:identifier
                               name:name]);
-  mock_peripheral.get().bluetoothTestMac = this;
+  [mock_peripheral setBluetoothTestMac:this];
   [mock_central_manager_->get()
-      setConnectedMockPeripheral:mock_peripheral.get().peripheral
-                withServiceUUIDs:cbUUIDs.get()];
+      setConnectedMockPeripheral:[mock_peripheral peripheral]
+                withServiceUUIDs:cbUUIDs];
 }
 
 void BluetoothTestMac::SimulateGattConnectionError(

@@ -927,29 +927,6 @@ Example
   }
 )";
 
-const char kConsole[] = "console";
-const char kConsole_HelpShort[] =
-    "console: [boolean] Run this action in the console pool.";
-const char kConsole_Help[] =
-    R"(console: Run this action in the console pool.
-
-  Boolean. Defaults to false.
-
-  Actions marked "console = true" will be run in the built-in ninja "console"
-  pool. They will have access to real stdin and stdout, and output will not be
-  buffered by ninja. This can be useful for long-running actions with progress
-  logs, or actions that require user input.
-
-  Only one console pool target can run at any one time in Ninja. Refer to the
-  Ninja documentation on the console pool for more info.
-
-Example
-
-  action("long_action_with_progress_logs") {
-    console = true
-  }
-)";
-
 const char kData[] = "data";
 const char kData_HelpShort[] =
     "data: [file list] Runtime data file dependencies.";
@@ -1103,6 +1080,19 @@ Details of dependency propagation
   "gn help runtime_deps".
 
   See also "public_deps".
+)";
+
+const char kXcodeExtraAttributes[] = "xcode_extra_attributes";
+const char kXcodeExtraAttributes_HelpShort[] =
+    "xcode_extra_attributes: [scope] Extra attributes for Xcode projects.";
+const char kXcodeExtraAttributes_Help[] =
+    R"(xcode_extra_attributes: [scope] Extra attributes for Xcode projects.
+
+  The value defined in this scope will be copied to the EXTRA_ATTRIBUTES
+  property of the generated Xcode project. They are only meaningful when
+  generating with --ide=xcode.
+
+  See "gn help create_bundle" for more information.
 )";
 
 const char kIncludeDirs[] = "include_dirs";
@@ -1441,6 +1431,23 @@ const char kOutputs_Help[] =
     with no source expansions. See "gn help action".
 )";
 
+const char kPool[] = "pool";
+const char kPool_HelpShort[] =
+    "pool: [string] Label of the pool used by the action.";
+const char kPool_Help[] =
+    R"(pool: Label of the pool used by the action.
+
+  A fully-qualified label representing the pool that will be used for the
+  action. Pools are defined using the pool() {...} declaration.
+
+Example
+
+  action("action") {
+    pool = "//build:custom_pool"
+    ...
+  }
+)";
+
 const char kPrecompiledHeader[] = "precompiled_header";
 const char kPrecompiledHeader_HelpShort[] =
     "precompiled_header: [string] Header file to precompile.";
@@ -1715,7 +1722,7 @@ Sources for binary targets
   For binary targets (source sets, executables, and libraries), the known file
   types will be compiled with the associated tools. Unknown file types and
   headers will be skipped. However, you should still list all C/C+ header files
-  so GN knows about the existance of those files for the purposes of include
+  so GN knows about the existence of those files for the purposes of include
   checking.
 
   As a special case, a file ending in ".def" will be treated as a Windows
@@ -1737,6 +1744,27 @@ Sources for non-binary targets
 
   copy
     The source are the source files to copy.
+)";
+
+const char kXcodeTestApplicationName[] = "xcode_test_application_name";
+const char kXcodeTestApplicationName_HelpShort[] =
+    "test_application_name: [string] Test application name for unit or ui test "
+    "target.";
+const char kXcodeTestApplicationName_Help[] =
+    R"(test_application_name: Test application name for unit or ui test target.
+
+  Each unit and ui test target must have a test application target, and this
+  value is used to specify the relationship. Only meaningful to Xcode (used as
+  part of the Xcode project generation).
+
+  See "gn help create_bundle" for more information.
+
+Exmaple
+
+  create_bundle("chrome_xctest") {
+    test_application_name = "chrome"
+    ...
+  }
 )";
 
 const char kTestonly[] = "testonly";
@@ -1919,12 +1947,12 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(CodeSigningOutputs)
     INSERT_VARIABLE(CompleteStaticLib)
     INSERT_VARIABLE(Configs)
-    INSERT_VARIABLE(Console)
     INSERT_VARIABLE(Data)
     INSERT_VARIABLE(DataDeps)
     INSERT_VARIABLE(Defines)
     INSERT_VARIABLE(Depfile)
     INSERT_VARIABLE(Deps)
+    INSERT_VARIABLE(XcodeExtraAttributes)
     INSERT_VARIABLE(IncludeDirs)
     INSERT_VARIABLE(Inputs)
     INSERT_VARIABLE(Ldflags)
@@ -1935,6 +1963,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(OutputName)
     INSERT_VARIABLE(OutputPrefixOverride)
     INSERT_VARIABLE(Outputs)
+    INSERT_VARIABLE(Pool)
     INSERT_VARIABLE(PrecompiledHeader)
     INSERT_VARIABLE(PrecompiledHeaderType)
     INSERT_VARIABLE(PrecompiledSource)
@@ -1945,6 +1974,7 @@ const VariableInfoMap& GetTargetVariables() {
     INSERT_VARIABLE(ResponseFileContents)
     INSERT_VARIABLE(Script)
     INSERT_VARIABLE(Sources)
+    INSERT_VARIABLE(XcodeTestApplicationName)
     INSERT_VARIABLE(Testonly)
     INSERT_VARIABLE(Visibility)
     INSERT_VARIABLE(WriteRuntimeDeps)

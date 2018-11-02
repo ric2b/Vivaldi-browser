@@ -30,10 +30,15 @@
  */
 
 #include <unicode/locid.h>
+
 #include <memory>
+
 #include "SkFontMgr.h"
 #include "SkStream.h"
 #include "SkTypeface.h"
+
+#include "build/build_config.h"
+#include "platform/FontFamilyNames.h"
 #include "platform/Language.h"
 #include "platform/fonts/AlternateFontFamily.h"
 #include "platform/fonts/FontCache.h"
@@ -48,7 +53,7 @@
 #include "public/platform/Platform.h"
 #include "public/platform/linux/WebSandboxSupport.h"
 
-#if !OS(WIN) && !OS(ANDROID)
+#if !defined(OS_WIN) && !defined(OS_ANDROID)
 #include "SkFontConfigInterface.h"
 
 static sk_sp<SkTypeface> typefaceForFontconfigInterfaceIdAndTtcIndex(
@@ -68,7 +73,7 @@ AtomicString ToAtomicString(const SkString& str) {
   return AtomicString::FromUTF8(str.c_str(), str.size());
 }
 
-#if OS(ANDROID) || OS(LINUX)
+#if defined(OS_ANDROID) || defined(OS_LINUX)
 // Android special locale for retrieving the color emoji font
 // based on the proposed changes in UTR #51 for introducing
 // an Emoji script code:
@@ -152,59 +157,63 @@ PassRefPtr<SimpleFontData> FontCache::GetLastResortFallbackFont(
   // We should at least have Sans or Arial which is the last resort fallback of
   // SkFontHost ports.
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams, sans_creation_params,
-                        (AtomicString("Sans")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    sans_creation_params,
+                                    (FontFamilyNames::Sans));
     font_platform_data = GetFontPlatformData(description, sans_creation_params,
                                              AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams, arial_creation_params,
-                        (AtomicString("Arial")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    arial_creation_params,
+                                    (FontFamilyNames::Arial));
     font_platform_data = GetFontPlatformData(description, arial_creation_params,
                                              AlternateFontName::kLastResort);
   }
-#if OS(WIN)
+#if defined(OS_WIN)
   // Try some more Windows-specific fallbacks.
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams,
-                        msuigothic_creation_params,
-                        (AtomicString("MS UI Gothic")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    msuigothic_creation_params,
+                                    (FontFamilyNames::MS_UI_Gothic));
     font_platform_data =
         GetFontPlatformData(description, msuigothic_creation_params,
                             AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams,
-                        mssansserif_creation_params,
-                        (AtomicString("Microsoft Sans Serif")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    mssansserif_creation_params,
+                                    (FontFamilyNames::Microsoft_Sans_Serif));
     font_platform_data =
         GetFontPlatformData(description, mssansserif_creation_params,
                             AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams, segoeui_creation_params,
-                        (AtomicString("Segoe UI")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    segoeui_creation_params,
+                                    (FontFamilyNames::Segoe_UI));
     font_platform_data = GetFontPlatformData(
         description, segoeui_creation_params, AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams, calibri_creation_params,
-                        (AtomicString("Calibri")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    calibri_creation_params,
+                                    (FontFamilyNames::Calibri));
     font_platform_data = GetFontPlatformData(
         description, calibri_creation_params, AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams,
-                        timesnewroman_creation_params,
-                        (AtomicString("Times New Roman")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    timesnewroman_creation_params,
+                                    (FontFamilyNames::Times_New_Roman));
     font_platform_data =
         GetFontPlatformData(description, timesnewroman_creation_params,
                             AlternateFontName::kLastResort);
   }
   if (!font_platform_data) {
-    DEFINE_STATIC_LOCAL(const FontFaceCreationParams,
-                        couriernew_creation_params,
-                        (AtomicString("Courier New")));
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(const FontFaceCreationParams,
+                                    couriernew_creation_params,
+                                    (FontFamilyNames::Courier_New));
     font_platform_data =
         GetFontPlatformData(description, couriernew_creation_params,
                             AlternateFontName::kLastResort);
@@ -219,7 +228,7 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     CString& name) {
-#if !OS(WIN) && !OS(ANDROID)
+#if !defined(OS_WIN) && !defined(OS_ANDROID)
   if (creation_params.CreationType() == kCreateFontByFciIdAndTtcIndex) {
     if (Platform::Current()->GetSandboxSupport())
       return typefaceForFontconfigInterfaceIdAndTtcIndex(
@@ -240,7 +249,7 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
     name = family.Utf8();
   }
 
-#if OS(WIN)
+#if defined(OS_WIN)
   if (sideloaded_fonts_) {
     HashMap<String, sk_sp<SkTypeface>>::iterator sideloaded_font =
         sideloaded_fonts_->find(name.data());
@@ -249,7 +258,7 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
   }
 #endif
 
-#if OS(LINUX) || OS(WIN)
+#if defined(OS_LINUX) || defined(OS_WIN)
   // On linux if the fontManager has been overridden then we should be calling
   // the embedder provided font Manager rather than calling
   // SkTypeface::CreateFromName which may redirect the call to the default font
@@ -266,7 +275,7 @@ sk_sp<SkTypeface> FontCache::CreateTypeface(
       fm->legacyCreateTypeface(name.data(), font_description.SkiaFontStyle()));
 }
 
-#if !OS(WIN)
+#if !defined(OS_WIN)
 std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
@@ -289,6 +298,6 @@ std::unique_ptr<FontPlatformData> FontCache::CreateFontPlatformData(
                                font_description.IsSyntheticItalic(),
                            font_description.Orientation()));
 }
-#endif  // !OS(WIN)
+#endif  // !defined(OS_WIN)
 
 }  // namespace blink

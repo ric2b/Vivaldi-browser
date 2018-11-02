@@ -72,7 +72,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
   DCHECK(browserState);
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     self.collectionViewAccessibilityIdentifier = @"kAutofillCollectionViewId";
     self.title = l10n_util::GetNSString(IDS_IOS_AUTOFILL);
@@ -303,11 +305,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
   _userInteractionInProgress = YES;
   [self setWalletEnabled:[switchView isOn]];
   _userInteractionInProgress = NO;
-  if ([switchView isOn]) {
-    [self insertCardSection];
-  } else {
-    [self removeCardSection];
-  }
 }
 
 #pragma mark - Switch Helpers
@@ -387,27 +384,6 @@ typedef NS_ENUM(NSInteger, ItemType) {
                            sectionForSectionIdentifier:SectionIdentifierCards]];
   }
   return sections;
-}
-
-- (void)insertCardSection {
-  [self populateCardSection];
-  if ([self.collectionViewModel
-          hasSectionForSectionIdentifier:SectionIdentifierCards]) {
-    NSInteger section = [self.collectionViewModel
-        sectionForSectionIdentifier:SectionIdentifierCards];
-    [self.collectionView insertSections:[NSIndexSet indexSetWithIndex:section]];
-  }
-}
-
-- (void)removeCardSection {
-  if (![self.collectionViewModel
-          hasSectionForSectionIdentifier:SectionIdentifierCards]) {
-    return;
-  }
-  NSInteger section = [self.collectionViewModel
-      sectionForSectionIdentifier:SectionIdentifierCards];
-  [self.collectionViewModel removeSectionWithIdentifier:SectionIdentifierCards];
-  [self.collectionView deleteSections:[NSIndexSet indexSetWithIndex:section]];
 }
 
 #pragma mark - MDCCollectionViewStylingDelegate

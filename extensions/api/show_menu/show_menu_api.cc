@@ -429,7 +429,7 @@ void VivaldiMenuController::PopulateModel(const show_menu::MenuItem* item,
     if (visible) {
       if (item->items) {
         ui::SimpleMenuModel* child_menu_model = new ui::SimpleMenuModel(this);
-        models_.push_back(child_menu_model);
+        models_.push_back(base::WrapUnique(child_menu_model));
         for (std::vector<show_menu::MenuItem>::const_iterator it =
                  item->items->begin();
              it != item->items->end(); ++it) {

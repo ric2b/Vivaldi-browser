@@ -25,9 +25,9 @@
 #include "core/CSSValueKeywords.h"
 #include "core/HTMLNames.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLContentElement.h"
@@ -75,7 +75,7 @@ HTMLDetailsElement* HTMLDetailsElement::Create(Document& document) {
 
 HTMLDetailsElement::HTMLDetailsElement(Document& document)
     : HTMLElement(detailsTag, document), is_open_(false) {
-  UseCounter::Count(document, UseCounter::kDetailsElement);
+  UseCounter::Count(document, WebFeature::kDetailsElement);
 }
 
 HTMLDetailsElement::~HTMLDetailsElement() {}

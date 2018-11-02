@@ -58,7 +58,7 @@ ChromeBrowserStateImplIOData::Handle::Handle(
 ChromeBrowserStateImplIOData::Handle::~Handle() {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   if (io_data_->http_server_properties_manager_)
-    io_data_->http_server_properties_manager_->ShutdownOnPrefThread();
+    io_data_->http_server_properties_manager_->ShutdownOnPrefSequence();
 
   io_data_->ShutdownOnUIThread(GetAllContextGetters());
 }
@@ -158,7 +158,9 @@ void ChromeBrowserStateImplIOData::Handle::LazyInitialize() const {
   initialized_ = true;
   PrefService* pref_service = browser_state_->GetPrefs();
   io_data_->http_server_properties_manager_ =
-      HttpServerPropertiesManagerFactory::CreateManager(pref_service);
+      HttpServerPropertiesManagerFactory::CreateManager(
+          pref_service,
+          GetApplicationContext()->GetIOSChromeIOThread()->net_log());
   io_data_->set_http_server_properties(
       base::WrapUnique(io_data_->http_server_properties_manager_));
   io_data_->InitializeOnUIThread(browser_state_);
@@ -215,7 +217,7 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
   ApplyProfileParamsToContext(main_context);
 
   if (http_server_properties_manager_)
-    http_server_properties_manager_->InitializeOnNetworkThread();
+    http_server_properties_manager_->InitializeOnNetworkSequence();
 
   main_context->set_transport_security_state(transport_security_state());
 
@@ -287,8 +289,6 @@ void ChromeBrowserStateImplIOData::InitializeInternal(
   main_job_factory_ = SetUpJobFactoryDefaults(std::move(main_job_factory),
                                               main_context->network_delegate());
   main_context->set_job_factory(main_job_factory_.get());
-  main_context->set_network_quality_estimator(
-      io_thread_globals->network_quality_estimator.get());
 
   lazy_params_.reset();
 }
@@ -305,11 +305,12 @@ ChromeBrowserStateImplIOData::InitializeAppRequestContext(
       new net::ChannelIDService(new net::DefaultChannelIDStore(nullptr)));
 
   // Build a new HttpNetworkSession that uses the new ChannelIDService.
-  net::HttpNetworkSession::Params network_params =
-      http_network_session_->params();
-  network_params.channel_id_service = channel_id_service.get();
+  net::HttpNetworkSession::Context session_context =
+      http_network_session_->context();
+  session_context.channel_id_service = channel_id_service.get();
   std::unique_ptr<net::HttpNetworkSession> http_network_session(
-      new net::HttpNetworkSession(network_params));
+      new net::HttpNetworkSession(http_network_session_->params(),
+                                  session_context));
 
   // Use a separate HTTP disk cache for isolated apps.
   std::unique_ptr<net::HttpCache::BackendFactory> app_backend =

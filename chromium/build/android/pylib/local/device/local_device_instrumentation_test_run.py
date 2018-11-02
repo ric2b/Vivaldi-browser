@@ -7,13 +7,15 @@ import logging
 import os
 import posixpath
 import re
+import sys
 import tempfile
 import time
 
+from devil.android import crash_handler
 from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import flag_changer
-from devil.android.sdk import shared_prefs
+from devil.android.tools import system_app
 from devil.utils import reraiser_thread
 from pylib import valgrind_tools
 from pylib.android import logdog_logcat_monitor
@@ -23,7 +25,9 @@ from pylib.instrumentation import instrumentation_test_instance
 from pylib.local.device import local_device_environment
 from pylib.local.device import local_device_test_run
 from pylib.utils import google_storage_helper
+from pylib.utils import instrumentation_tracing
 from pylib.utils import logdog_helper
+from pylib.utils import shared_preference_utils
 from py_trace_event import trace_event
 from py_utils import contextlib_ext
 from py_utils import tempfile_ext
@@ -112,6 +116,7 @@ class LocalDeviceInstrumentationTestRun(
     super(LocalDeviceInstrumentationTestRun, self).__init__(env, test_instance)
     self._flag_changers = {}
     self._ui_capture_dir = dict()
+    self._replace_package_contextmanager = None
 
   #override
   def TestPackage(self):
@@ -125,25 +130,40 @@ class LocalDeviceInstrumentationTestRun(
     def individual_device_set_up(dev, host_device_tuples):
       steps = []
 
-      def install_helper(apk, permissions):
-        @trace_event.traced("apk_path")
-        def install_helper_internal(apk_path=apk.path):
-          # pylint: disable=unused-argument
-          dev.Install(apk, permissions=permissions)
-        return install_helper_internal
+      if self._test_instance.replace_system_package:
+        # We need the context manager to be applied before modifying any shared
+        # preference files in case the replacement APK needs to be set up, and
+        # it needs to be applied while the test is running. Thus, it needs to
+        # be applied early during setup, but must still be applied during
+        # _RunTest, which isn't possible using 'with' without applying the
+        # context manager up in test_runner. Instead, we manually invoke
+        # its __enter__ and __exit__ methods in setup and teardown
+        self._replace_package_contextmanager = system_app.ReplaceSystemApp(
+            dev, self._test_instance.replace_system_package.package,
+            self._test_instance.replace_system_package.replacement_apk)
+        steps.append(self._replace_package_contextmanager.__enter__)
 
-      def incremental_install_helper(dev, apk, script):
+      def install_helper(apk, permissions):
+        @instrumentation_tracing.no_tracing
         @trace_event.traced("apk_path")
-        def incremental_install_helper_internal(apk_path=apk.path):
+        def install_helper_internal(d, apk_path=apk.path):
+          # pylint: disable=unused-argument
+          d.Install(apk, permissions=permissions)
+        return lambda: crash_handler.RetryOnSystemCrash(
+            install_helper_internal, dev)
+
+      def incremental_install_helper(apk, script):
+        @trace_event.traced("apk_path")
+        def incremental_install_helper_internal(d, apk_path=apk.path):
           # pylint: disable=unused-argument
           local_device_test_run.IncrementalInstall(
-              dev, apk, script)
-        return incremental_install_helper_internal
+              d, apk, script)
+        return lambda: crash_handler.RetryOnSystemCrash(
+            incremental_install_helper_internal, dev)
 
       if self._test_instance.apk_under_test:
         if self._test_instance.apk_under_test_incremental_install_script:
           steps.append(incremental_install_helper(
-                           dev,
                            self._test_instance.apk_under_test,
                            self._test_instance.
                                apk_under_test_incremental_install_script))
@@ -154,7 +174,6 @@ class LocalDeviceInstrumentationTestRun(
 
       if self._test_instance.test_apk_incremental_install_script:
         steps.append(incremental_install_helper(
-                         dev,
                          self._test_instance.test_apk,
                          self._test_instance.
                              test_apk_incremental_install_script))
@@ -179,32 +198,13 @@ class LocalDeviceInstrumentationTestRun(
             dev.RunShellCommand(['am', 'set-debug-app', '--persistent',
                                  self._test_instance.package_info.package],
                                 check_return=True)
-      @trace_event.traced
-      def edit_shared_prefs():
-        for pref in self._test_instance.edit_shared_prefs:
-          prefs = shared_prefs.SharedPrefs(dev, pref['package'],
-                                           pref['filename'])
-          prefs.Load()
-          for key in pref.get('remove', []):
-            try:
-              prefs.Remove(key)
-            except KeyError:
-              logging.warning("Attempted to remove non-existent key %s", key)
-          for key, value in pref.get('set', {}).iteritems():
-            if isinstance(value, bool):
-              prefs.SetBoolean(key, value)
-            elif isinstance(value, basestring):
-              prefs.SetString(key, value)
-            elif isinstance(value, long) or isinstance(value, int):
-              prefs.SetLong(key, value)
-            elif isinstance(value, list):
-              prefs.SetStringSet(key, value)
-            else:
-              raise ValueError("Given invalid value type %s for key %s" % (
-                  str(type(value)), key))
-          prefs.Commit()
 
       @trace_event.traced
+      def edit_shared_prefs():
+        shared_preference_utils.ApplySharedPreferenceSettings(
+            dev, self._test_instance.edit_shared_prefs)
+
+      @instrumentation_tracing.no_tracing
       def push_test_data():
         device_root = posixpath.join(dev.GetExternalStoragePath(),
                                      'chromium_tests_root')
@@ -279,6 +279,9 @@ class LocalDeviceInstrumentationTestRun(
       if self._test_instance.ui_screenshot_dir:
         pull_ui_screen_captures(dev)
 
+      if self._replace_package_contextmanager:
+        self._replace_package_contextmanager.__exit__(*sys.exc_info())
+
     @trace_event.traced
     def pull_ui_screen_captures(dev):
       file_names = dev.ListDirectory(self._ui_capture_dir[dev])
@@ -318,7 +321,6 @@ class LocalDeviceInstrumentationTestRun(
     extras = {}
 
     flags_to_add = []
-    flags_to_remove = []
     test_timeout_scale = None
     if self._test_instance.coverage_directory:
       coverage_basename = '%s.ec' % ('%s_group' % test[0]['method']
@@ -374,9 +376,8 @@ class LocalDeviceInstrumentationTestRun(
         target = '%s/%s' % (
             self._test_instance.test_package, self._test_instance.test_runner)
       extras['class'] = test_name
-      if 'flags' in test:
-        flags_to_add.extend(test['flags'].add)
-        flags_to_remove.extend(test['flags'].remove)
+      if 'flags' in test and test['flags']:
+        flags_to_add.extend(test['flags'])
       timeout = self._GetTimeoutFromAnnotations(
         test['annotations'], test_display_name)
 
@@ -397,10 +398,9 @@ class LocalDeviceInstrumentationTestRun(
       flags_to_add.append('--render-test-output-dir=%s' %
                           render_tests_device_output_dir)
 
-    if flags_to_add or flags_to_remove:
+    if flags_to_add:
       self._CreateFlagChangerIfNeeded(device)
-      self._flag_changers[str(device)].PushFlags(
-        add=flags_to_add, remove=flags_to_remove)
+      self._flag_changers[str(device)].PushFlags(add=flags_to_add)
 
     time_ms = lambda: int(time.time() * 1e3)
     start_ms = time_ms()
@@ -423,11 +423,6 @@ class LocalDeviceInstrumentationTestRun(
 
     logcat_url = logmon.GetLogcatURL()
     duration_ms = time_ms() - start_ms
-    if flags_to_add or flags_to_remove:
-      self._flag_changers[str(device)].Restore()
-    if test_timeout_scale:
-      valgrind_tools.SetChromeTimeoutScale(
-          device, self._test_instance.timeout_scale)
 
     # TODO(jbudorick): Make instrumentation tests output a JSON so this
     # doesn't have to parse the output.
@@ -435,23 +430,56 @@ class LocalDeviceInstrumentationTestRun(
         self._test_instance.ParseAmInstrumentRawOutput(output))
     results = self._test_instance.GenerateTestResults(
         result_code, result_bundle, statuses, start_ms, duration_ms)
+
+    def restore_flags():
+      if flags_to_add:
+        self._flag_changers[str(device)].Restore()
+
+    def restore_timeout_scale():
+      if test_timeout_scale:
+        valgrind_tools.SetChromeTimeoutScale(
+            device, self._test_instance.timeout_scale)
+
+    def handle_coverage_data():
+      if self._test_instance.coverage_directory:
+        device.PullFile(coverage_directory,
+            self._test_instance.coverage_directory)
+        device.RunShellCommand(
+            'rm -f %s' % posixpath.join(coverage_directory, '*'),
+            check_return=True, shell=True)
+
+    def handle_render_test_data():
+      if _IsRenderTest(test):
+        # Render tests do not cause test failure by default. So we have to check
+        # to see if any failure images were generated even if the test does not
+        # fail.
+        try:
+          self._ProcessRenderTestResults(
+              device, render_tests_device_output_dir, results)
+        finally:
+          device.RemovePath(render_tests_device_output_dir,
+                            recursive=True, force=True)
+
+    # While constructing the TestResult objects, we can parallelize several
+    # steps that involve ADB. These steps should NOT depend on any info in
+    # the results! Things such as whether the test CRASHED have not yet been
+    # determined.
+    post_test_steps = [restore_flags, restore_timeout_scale,
+                       handle_coverage_data, handle_render_test_data]
+    if self._env.concurrent_adb:
+      post_test_step_thread_group = reraiser_thread.ReraiserThreadGroup(
+          reraiser_thread.ReraiserThread(f) for f in post_test_steps)
+      post_test_step_thread_group.StartAll(will_block=True)
+    else:
+      for step in post_test_steps:
+        step()
+
     for result in results:
       if logcat_url:
         result.SetLink('logcat', logcat_url)
 
-    if _IsRenderTest(test):
-      # Render tests do not cause test failure by default. So we have to check
-      # to see if any failure images were generated even if the test does not
-      # fail.
-      try:
-        self._ProcessRenderTestResults(
-            device, render_tests_device_output_dir, results)
-      finally:
-        device.RemovePath(render_tests_device_output_dir,
-                          recursive=True, force=True)
-
     # Update the result name if the test used flags.
-    if flags_to_add or flags_to_remove:
+    if flags_to_add:
       for r in results:
         if r.GetName() == test_name:
           r.SetName(test_display_name)
@@ -502,12 +530,6 @@ class LocalDeviceInstrumentationTestRun(
       logging.debug('raw output from %s:', test_display_name)
       for l in output:
         logging.debug('  %s', l)
-    if self._test_instance.coverage_directory:
-      device.PullFile(coverage_directory,
-          self._test_instance.coverage_directory)
-      device.RunShellCommand(
-          'rm -f %s' % posixpath.join(coverage_directory, '*'),
-          check_return=True, shell=True)
     if self._test_instance.store_tombstones:
       tombstones_url = None
       for result in results:
@@ -524,6 +546,9 @@ class LocalDeviceInstrumentationTestRun(
             tombstones_url = logdog_helper.text(
                 stream_name, '\n'.join(resolved_tombstones))
           result.SetLink('tombstones', tombstones_url)
+
+    if self._env.concurrent_adb:
+      post_test_step_thread_group.JoinAll()
     return results, None
 
   def _SaveScreenshot(self, device, screenshot_host_dir, screenshot_device_file,

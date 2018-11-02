@@ -30,6 +30,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/task/cancelable_task_tracker.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -56,11 +57,11 @@
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/safe_browsing/common/safebrowsing_switches.h"
+#include "components/safe_browsing/common/utils.h"
 #include "components/safe_browsing/csd.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/page_navigator.h"
-#include "crypto/sha2.h"
 #include "google_apis/google_api_keys.h"
 #include "net/base/escape.h"
 #include "net/base/load_flags.h"
@@ -74,6 +75,7 @@
 #include "net/url_request/url_request_status.h"
 
 #if defined(OS_MACOSX)
+#include "chrome/browser/safe_browsing/disk_image_type_sniffer_mac.h"
 #include "chrome/browser/safe_browsing/sandboxed_dmg_analyzer_mac.h"
 #endif
 
@@ -107,15 +109,6 @@ void RecordCountOfWhitelistedDownload(WhitelistType type) {
                             WHITELIST_TYPE_MAX);
 }
 
-}  // namespace
-
-const char DownloadProtectionService::kDownloadRequestUrl[] =
-    "https://sb-ssl.google.com/safebrowsing/clientreport/download";
-
-const void* const DownloadProtectionService::kDownloadPingTokenKey
-    = &kDownloadPingTokenKey;
-
-namespace {
 void RecordFileExtensionType(const std::string& metric_name,
                              const base::FilePath& file) {
   UMA_HISTOGRAM_SPARSE_SLOWLY(
@@ -164,7 +157,26 @@ enum SBStatsType {
   DOWNLOAD_CHECKS_MAX
 };
 
+void AddEventUrlToReferrerChain(const content::DownloadItem& item,
+                                ReferrerChain* out_referrer_chain) {
+  ReferrerChainEntry* event_url_entry = out_referrer_chain->Add();
+  event_url_entry->set_url(item.GetURL().spec());
+  event_url_entry->set_type(ReferrerChainEntry::EVENT_URL);
+  event_url_entry->set_referrer_url(
+      item.GetWebContents()->GetLastCommittedURL().spec());
+  event_url_entry->set_is_retargeting(false);
+  event_url_entry->set_navigation_time_msec(base::Time::Now().ToJavaTime());
+  for (const GURL& url : item.GetUrlChain())
+    event_url_entry->add_server_redirect_chain()->set_url(url.spec());
+}
+
 }  // namespace
+
+const char DownloadProtectionService::kDownloadRequestUrl[] =
+    "https://sb-ssl.google.com/safebrowsing/clientreport/download";
+
+const void* const DownloadProtectionService::kDownloadPingTokenKey =
+    &kDownloadPingTokenKey;
 
 // SafeBrowsing::Client class used to lookup the bad binary URL list.
 
@@ -222,7 +234,7 @@ class DownloadUrlSBClient
   }
 
   bool IsDangerous(SBThreatType threat_type) const {
-    return threat_type == SB_THREAT_TYPE_BINARY_MALWARE_URL;
+    return threat_type == SB_THREAT_TYPE_URL_BINARY_MALWARE;
   }
 
   // Implements SafeBrowsingDatabaseManager::Client.
@@ -253,13 +265,14 @@ class DownloadUrlSBClient
       UpdateDownloadCheckStats(dangerous_type_);
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&DownloadUrlSBClient::ReportMalware, this, threat_type));
+          base::BindOnce(&DownloadUrlSBClient::ReportMalware, this,
+                         threat_type));
     } else {
       // Identify download referrer chain, which will be used in
       // ClientDownloadRequest.
       BrowserThread::PostTask(
           BrowserThread::UI, FROM_HERE,
-          base::Bind(&DownloadUrlSBClient::IdentifyReferrerChain, this));
+          base::BindOnce(&DownloadUrlSBClient::IdentifyReferrerChain, this));
     }
     BrowserThread::PostTask(BrowserThread::UI, FROM_HERE,
                             base::BindOnce(callback_, result));
@@ -298,10 +311,9 @@ class DownloadUrlSBClient
     if (!item_)
       return;
 
-    item_->SetUserData(
-        kDownloadReferrerChainDataKey,
-        base::MakeUnique<ReferrerChainData>(service_->IdentifyReferrerChain(
-            item_->GetURL(), item_->GetWebContents())));
+    item_->SetUserData(kDownloadReferrerChainDataKey,
+                       base::MakeUnique<ReferrerChainData>(
+                           service_->IdentifyReferrerChain(*item_)));
   }
 
   void UpdateDownloadCheckStats(SBStatsType stat_type) {
@@ -350,6 +362,9 @@ class DownloadProtectionService::CheckClientDownloadRequest
         tab_referrer_url_(item->GetTabReferrerUrl()),
         archived_executable_(false),
         archive_is_valid_(ArchiveValid::UNSET),
+#if defined(OS_MACOSX)
+        disk_image_signature_(nullptr),
+#endif
         callback_(callback),
         service_(service),
         binary_feature_extractor_(binary_feature_extractor),
@@ -471,7 +486,19 @@ class DownloadProtectionService::CheckClientDownloadRequest
       StartExtractDmgFeatures();
 #endif
     } else {
+#if defined(OS_MACOSX)
+      // Checks for existence of "koly" signature even if file doesn't have
+      // archive-type extension, then calls ExtractFileOrDmgFeatures() with
+      // result.
+      BrowserThread::PostTaskAndReplyWithResult(
+          BrowserThread::FILE, FROM_HERE,
+          base::Bind(DiskImageTypeSnifferMac::IsAppleDiskImage,
+                     item_->GetTargetFilePath()),
+          base::Bind(&CheckClientDownloadRequest::ExtractFileOrDmgFeatures,
+                     this));
+#else
       StartExtractFileFeatures();
+#endif
     }
   }
 
@@ -779,11 +806,33 @@ class DownloadProtectionService::CheckClientDownloadRequest
     dmg_analysis_start_time_ = base::TimeTicks::Now();
   }
 
+  // Extracts DMG features if file has 'koly' signature, otherwise extracts
+  // regular file features.
+  void ExtractFileOrDmgFeatures(bool download_file_has_koly_signature) {
+    DCHECK_CURRENTLY_ON(BrowserThread::UI);
+    UMA_HISTOGRAM_BOOLEAN(
+        "SBClientDownload."
+        "DownloadFileWithoutDiskImageExtensionHasKolySignature",
+        download_file_has_koly_signature);
+    // Returns if DownloadItem was destroyed during parsing of file metadata.
+    if (item_ == nullptr)
+      return;
+    if (download_file_has_koly_signature)
+      StartExtractDmgFeatures();
+    else
+      StartExtractFileFeatures();
+  }
+
   void OnDmgAnalysisFinished(const ArchiveAnalyzerResults& results) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     DCHECK_EQ(ClientDownloadRequest::MAC_EXECUTABLE, type_);
     if (!service_)
       return;
+
+    if (results.signature_blob.size() > 0) {
+      disk_image_signature_ =
+          base::MakeUnique<std::vector<uint8_t>>(results.signature_blob);
+    }
 
     // Even if !results.success, some of the DMG may have been parsed.
     archive_is_valid_ =
@@ -954,16 +1003,7 @@ class DownloadProtectionService::CheckClientDownloadRequest
     if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE)
       return url.GetOrigin().spec();
 
-    std::string spec = url.spec();
-    if (url.SchemeIs(url::kDataScheme)) {
-      size_t comma_pos = spec.find(',');
-      if (comma_pos != std::string::npos && comma_pos != spec.size() - 1) {
-        std::string hash_value = crypto::SHA256HashString(spec);
-        spec.erase(comma_pos + 1);
-        spec += base::HexEncode(hash_value.data(), hash_value.size());
-      }
-    }
-    return spec;
+    return ShortURLForReporting(url);
   }
 
   void SendRequest() {
@@ -1034,7 +1074,22 @@ class DownloadProtectionService::CheckClientDownloadRequest
         !referrer_chain_data->GetReferrerChain()->empty()) {
       request.mutable_referrer_chain()->Swap(
           referrer_chain_data->GetReferrerChain());
+      if (type_ == ClientDownloadRequest::SAMPLED_UNSUPPORTED_FILE)
+        SafeBrowsingNavigationObserverManager::SanitizeReferrerChain(
+            request.mutable_referrer_chain());
     }
+
+#if defined(OS_MACOSX)
+    UMA_HISTOGRAM_BOOLEAN(
+        "SBClientDownload."
+        "DownloadFileHasDmgSignature",
+        disk_image_signature_ != nullptr);
+
+    if (disk_image_signature_) {
+      request.set_udif_code_signature(disk_image_signature_->data(),
+                                      disk_image_signature_->size());
+    }
+#endif
 
     if (archive_is_valid_ != ArchiveValid::UNSET)
       request.set_archive_valid(archive_is_valid_ == ArchiveValid::VALID);
@@ -1230,6 +1285,10 @@ class DownloadProtectionService::CheckClientDownloadRequest
 
   bool archived_executable_;
   ArchiveValid archive_is_valid_;
+
+#if defined(OS_MACOSX)
+  std::unique_ptr<std::vector<uint8_t>> disk_image_signature_;
+#endif
 
   ClientDownloadRequest_SignatureInfo signature_info_;
   std::unique_ptr<ClientDownloadRequest_ImageHeaders> image_headers_;
@@ -1657,9 +1716,11 @@ DownloadProtectionService::DownloadProtectionService(
       enabled_(false),
       binary_feature_extractor_(new BinaryFeatureExtractor()),
       download_request_timeout_ms_(kDownloadRequestTimeoutMs),
-      feedback_service_(
-          new DownloadFeedbackService(request_context_getter_.get(),
-                                      BrowserThread::GetBlockingPool())),
+      feedback_service_(new DownloadFeedbackService(
+          request_context_getter_.get(),
+          base::CreateSequencedTaskRunnerWithTraits(
+              {base::MayBlock(), base::TaskPriority::BACKGROUND})
+              .get())),
       whitelist_sample_rate_(kWhitelistDownloadSampleRate) {
   if (sb_service) {
     ui_manager_ = sb_service->ui_manager();
@@ -1933,8 +1994,7 @@ GURL DownloadProtectionService::GetDownloadRequestUrl() {
 }
 
 std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
-    const GURL& download_url,
-    content::WebContents* web_contents) {
+    const content::DownloadItem& item) {
   // If navigation_observer_manager_ is null, return immediately. This could
   // happen in tests.
   if (!navigation_observer_manager_)
@@ -1942,6 +2002,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
 
   std::unique_ptr<ReferrerChain> referrer_chain =
       base::MakeUnique<ReferrerChain>();
+  content::WebContents* web_contents = item.GetWebContents();
   int download_tab_id = SessionTabHelper::IdForTab(web_contents);
   UMA_HISTOGRAM_BOOLEAN(
       "SafeBrowsing.ReferrerHasInvalidTabID.DownloadAttribution",
@@ -1949,7 +2010,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
   // We look for the referrer chain that leads to the download url first.
   SafeBrowsingNavigationObserverManager::AttributionResult result =
       navigation_observer_manager_->IdentifyReferrerChainByEventURL(
-          download_url, download_tab_id, kDownloadAttributionUserGestureLimit,
+          item.GetURL(), download_tab_id, kDownloadAttributionUserGestureLimit,
           referrer_chain.get());
 
   // If no navigation event is found, this download is not triggered by regular
@@ -1958,6 +2019,7 @@ std::unique_ptr<ReferrerChain> DownloadProtectionService::IdentifyReferrerChain(
   if (result ==
           SafeBrowsingNavigationObserverManager::NAVIGATION_EVENT_NOT_FOUND &&
       web_contents && web_contents->GetLastCommittedURL().is_valid()) {
+    AddEventUrlToReferrerChain(item, referrer_chain.get());
     result = navigation_observer_manager_->IdentifyReferrerChainByWebContents(
         web_contents, kDownloadAttributionUserGestureLimit,
         referrer_chain.get());

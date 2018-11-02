@@ -15,12 +15,12 @@
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/favicon/core/favicon_driver_observer.h"
 #include "components/zoom/zoom_observer.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_event_histogram_value.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
-
 
 typedef std::map<base::string16, base::string16> TabDragDataCollection;
 typedef base::Callback<void(base::SharedMemoryHandle handle,
@@ -82,12 +82,11 @@ class TabsPrivateEventRouter : public TabDragDelegate {
       int screen_y,
       blink::WebDragOperationsMask ops) override;
 
- private:
   // Helper to actually dispatch an event to extension listeners.
   void DispatchEvent(events::HistogramValue histogram_value,
                      const std::string& event_name,
                      std::unique_ptr<base::ListValue> args);
-
+ private:
   Profile* profile_ = nullptr;
   const std::vector<std::string> tab_drag_data_;
 
@@ -99,6 +98,9 @@ class TabsPrivateAPI : public BrowserContextKeyedAPI,
  public:
   explicit TabsPrivateAPI(content::BrowserContext* context);
   ~TabsPrivateAPI() override;
+
+  void SendKeyboardShortcutEvent(
+    const content::NativeWebKeyboardEvent& event);
 
   // KeyedService implementation.
   void Shutdown() override;
@@ -143,14 +145,19 @@ class VivaldiPrivateTabObserver
                              content::RenderViewHost* new_host) override;
   void WebContentsDestroyed() override;
   bool OnMessageReceived(const IPC::Message& message) override;
+  void DocumentAvailableInMainFrame() override;
 
   void SetShowImages(bool show_images);
   void SetLoadFromCacheOnly(bool load_from_cache_only);
   void SetEnablePlugins(bool enable_plugins);
+  void SetContentsMimeType(std::string mimetype) {
+    contents_mime_type_ = mimetype;
+  }
 
   bool show_images() { return show_images_; }
   bool load_from_cache_only() { return load_from_cache_only_; }
   bool enable_plugins() { return enable_plugins_; }
+  std::string contents_mime_type() { return contents_mime_type_; }
 
   // Commit setting to the active RenderViewHost
   void CommitSettings();
@@ -211,6 +218,9 @@ class VivaldiPrivateTabObserver
 
   // Vivaldi tab zoom level
   double tab_zoom_level_ = 0;
+
+  // Mimetype of displayed document.
+  std::string contents_mime_type_;
 
   // Callback to call when we get an capture response message from the renderer.
   CaptureTabDoneCallback capture_callback_;

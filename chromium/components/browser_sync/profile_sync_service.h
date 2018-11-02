@@ -25,7 +25,6 @@
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "build/build_config.h"
-#include "components/keyed_service/core/keyed_service.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "components/signin/core/browser/signin_manager_base.h"
 #include "components/sync/base/experiments.h"
@@ -174,7 +173,6 @@ class ProfileSyncService : public syncer::SyncServiceBase,
                            public syncer::SyncPrefObserver,
                            public syncer::DataTypeManagerObserver,
                            public syncer::UnrecoverableErrorHandler,
-                           public KeyedService,
                            public OAuth2TokenService::Consumer,
                            public OAuth2TokenService::Observer,
                            public SigninManagerBase::Observer,
@@ -388,8 +386,7 @@ class ProfileSyncService : public syncer::SyncServiceBase,
 
   // SigninManagerBase::Observer implementation.
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -440,6 +437,10 @@ class ProfileSyncService : public syncer::SyncServiceBase,
 
   // Returns whether sync is currently allowed on this platform.
   bool IsSyncAllowedByPlatform() const;
+
+  // Whether sync is currently blocked from starting because the sync
+  // confirmation dialog hasn't been confirmed.
+  virtual bool IsSyncConfirmationNeeded() const;
 
   // Returns whether sync is managed, i.e. controlled by configuration
   // management. If so, the user is not allowed to configure sync.
@@ -692,12 +693,6 @@ class ProfileSyncService : public syncer::SyncServiceBase,
       bool sync_everything,
       const syncer::ModelTypeSet chosen_types) const;
 
-#if defined(OS_CHROMEOS)
-  // Refresh spare sync bootstrap token for re-enabling the sync service.
-  // Called on successful sign-in notifications.
-  void RefreshSpareBootstrapToken(const std::string& passphrase);
-#endif
-
   // Internal unrecoverable error handler. Used to track error reason via
   // Sync.UnrecoverableErrors histogram.
   void OnInternalUnrecoverableError(const tracked_objects::Location& from_here,
@@ -733,6 +728,9 @@ class ProfileSyncService : public syncer::SyncServiceBase,
 
   // Check if previous shutdown is shutdown cleanly.
   void ReportPreviousSessionMemoryWarningCount();
+
+  // Estimates and records memory usage histograms per type.
+  void RecordMemoryUsageHistograms();
 
   // After user switches to custom passphrase encryption a set of steps needs to
   // be performed:

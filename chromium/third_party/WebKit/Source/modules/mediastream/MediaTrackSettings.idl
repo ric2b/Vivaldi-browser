@@ -7,16 +7,14 @@
 dictionary MediaTrackSettings {
     long width;
     long height;
-    // aspectRatio is not implemented.
-    // double aspectRatio;
+    double aspectRatio;
     double frameRate;
     DOMString facingMode;
     // volume, sampleRate and sampleSize are not implemented.
     // double volume;
     // long sampleRate;
     // long sampleSize;
-    // echoCancellation is not implemented: crbug.com/682245
-    // boolean echoCancellation;
+    boolean echoCancellation;
     // latency and channelCount are not implemented.
     // double latency;
     // long channelCount;

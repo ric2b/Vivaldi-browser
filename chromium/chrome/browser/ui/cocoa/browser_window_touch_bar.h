@@ -7,6 +7,7 @@
 
 #import <Cocoa/Cocoa.h>
 
+#include "base/mac/availability.h"
 #import "ui/base/cocoa/touch_bar_forward_declarations.h"
 
 class Browser;
@@ -22,16 +23,12 @@ class Browser;
 // True if the current page is starred. Used by star touch bar button.
 @property(nonatomic, assign) BOOL isStarred;
 
-// Returns a touch bar item identifier for the given |touchBarId| and |itemId|.
-+ (NSString*)identifierForTouchBarId:(NSString*)touchBarId
-                              itemId:(NSString*)itemId;
-
 // Designated initializer.
 - (instancetype)initWithBrowser:(Browser*)browser
         browserWindowController:(BrowserWindowController*)bwc;
 
 // Creates and returns a touch bar for the browser window.
-- (NSTouchBar*)makeTouchBar;
+- (NSTouchBar*)makeTouchBar API_AVAILABLE(macos(10.12.2));
 
 @end
 

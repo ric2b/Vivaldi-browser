@@ -15,8 +15,8 @@
 namespace security_interstitials {
 namespace {
 
-// URL for help page.
-const char kHelpURL[] = "https://support.google.com/chrome/answer/6098869";
+// Path to the relevant help center page.
+const char kHelpPath[] = "answer/6098869";
 
 bool IsMasked(int options, SSLErrorUI::SSLErrorOptionsMask mask) {
   return ((options & mask) != 0);
@@ -84,6 +84,22 @@ void SSLErrorUI::PopulateStringsForHTML(base::DictionaryValue* load_time_data) {
     PopulateOverridableStrings(load_time_data);
   else
     PopulateNonOverridableStrings(load_time_data);
+}
+
+const net::SSLInfo& SSLErrorUI::ssl_info() const {
+  return ssl_info_;
+}
+
+const base::Time& SSLErrorUI::time_triggered() const {
+  return time_triggered_;
+}
+
+ControllerClient* SSLErrorUI::controller() const {
+  return controller_;
+}
+
+int SSLErrorUI::cert_error() const {
+  return cert_error_;
 }
 
 void SSLErrorUI::PopulateOverridableStrings(
@@ -174,7 +190,8 @@ void SSLErrorUI::HandleCommand(SecurityInterstitialCommands command) {
     case CMD_OPEN_HELP_CENTER:
       controller_->metrics_helper()->RecordUserInteraction(
           security_interstitials::MetricsHelper::SHOW_LEARN_MORE);
-      controller_->OpenUrlInCurrentTab(GURL(kHelpURL));
+      controller_->OpenUrlInNewForegroundTab(
+          controller_->GetBaseHelpCenterUrl().Resolve(kHelpPath));
       break;
     case CMD_RELOAD:
       controller_->metrics_helper()->RecordUserInteraction(
@@ -182,10 +199,10 @@ void SSLErrorUI::HandleCommand(SecurityInterstitialCommands command) {
       controller_->Reload();
       break;
     case CMD_OPEN_REPORTING_PRIVACY:
-      controller_->OpenExtendedReportingPrivacyPolicy();
+      controller_->OpenExtendedReportingPrivacyPolicy(true);
       break;
     case CMD_OPEN_WHITEPAPER:
-      controller_->OpenExtendedReportingWhitepaper();
+      controller_->OpenExtendedReportingWhitepaper(true);
       break;
     case CMD_OPEN_DATE_SETTINGS:
     case CMD_OPEN_DIAGNOSTIC:

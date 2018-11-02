@@ -91,6 +91,7 @@ source_set("history") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "favicon_view_provider_unittest.mm",
@@ -125,7 +126,7 @@ source_set("unit_tests") {
     "//ios/chrome/common",
     "//ios/chrome/test:test_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -174,7 +175,7 @@ source_set("unit_tests_arc") {
     "//ios/chrome/common",
     "//ios/chrome/test:test_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
@@ -227,7 +228,8 @@ source_set("eg_tests") {
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/testing:ios_test_support",
     "//ios/third_party/earl_grey",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//net",
     "//ui/base",
   ]

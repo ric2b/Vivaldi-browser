@@ -88,6 +88,8 @@ if (is_win) {
       "stability_data_names.h",
       "stability_debugging.cc",
       "stability_debugging.h",
+      "stability_metrics.cc",
+      "stability_metrics.h",
       "stability_paths.cc",
       "stability_paths.h",
     ]
@@ -105,6 +107,8 @@ if (is_win) {
       "postmortem_minidump_writer_win_unittest.cc",
       "postmortem_report_collector_unittest.cc",
       "stability_debugging_win_unittest.cc",
+      "stability_paths_unittest.cc",
+      "stability_report_extractor_unittest.cc",
       "system_session_analyzer_win_unittest.cc",
       "watcher_client_win_unittest.cc",
       "watcher_metrics_provider_win_unittest.cc",

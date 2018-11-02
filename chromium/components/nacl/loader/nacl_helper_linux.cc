@@ -39,7 +39,6 @@
 #include "content/public/common/mojo_channel_switches.h"
 #include "content/public/common/send_zygote_child_ping_linux.h"
 #include "content/public/common/zygote_fork_delegate_linux.h"
-#include "ipc/ipc_descriptors.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "sandbox/linux/services/credentials.h"
 #include "sandbox/linux/services/namespace_sandbox.h"
@@ -411,21 +410,8 @@ static size_t CheckReservedAtZero() {
 // Do not install the SIGSEGV handler in ASan. This should make the NaCl
 // platform qualification test pass.
 // detect_odr_violation=0: http://crbug.com/376306
-static const char kAsanDefaultOptionsNaCl[] =
-    "handle_segv=0:detect_odr_violation=0";
-
-// Override the default ASan options for the NaCl helper.
-// __asan_default_options should not be instrumented, because it is called
-// before ASan is initialized.
-extern "C"
-__attribute__((no_sanitize_address))
-// The function isn't referenced from the executable itself. Make sure it isn't
-// stripped by the linker.
-__attribute__((used))
-__attribute__((visibility("default")))
-const char* __asan_default_options() {
-  return kAsanDefaultOptionsNaCl;
-}
+extern const char* kAsanDefaultOptionsNaCl;
+const char* kAsanDefaultOptionsNaCl = "handle_segv=0:detect_odr_violation=0";
 #endif
 
 int main(int argc, char* argv[]) {

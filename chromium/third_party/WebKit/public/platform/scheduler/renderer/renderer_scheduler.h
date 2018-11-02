@@ -109,21 +109,25 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
       const WebInputEvent& web_input_event,
       WebInputEventResult result) = 0;
 
+  // Returns the most recently reported expected queueing time, computed over
+  // the past 1 second window.
+  virtual base::TimeDelta MostRecentExpectedQueueingTime() = 0;
+
   // Tells the scheduler that the system is displaying an input animation (e.g.
   // a fling). Called by the compositor (impl) thread.
   virtual void DidAnimateForInputOnCompositorThread() = 0;
 
-  // Tells the scheduler that the renderer process has been backgrounded, i.e.,
-  // there are no critical, user facing activities (visual, audio, etc...)
-  // driven by this process. A stricter condition than |OnRendererHidden()|, the
-  // process is assumed to be foregrounded when the scheduler is constructed.
+  // Tells the scheduler about the change of renderer visibility status (e.g.
+  // "all widgets are hidden" condition). Used mostly for metric purposes.
   // Must be called on the main thread.
-  virtual void OnRendererBackgrounded() = 0;
+  virtual void SetRendererHidden(bool hidden) = 0;
 
-  // Tells the scheduler that the renderer process has been foregrounded.
-  // This is the assumed state when the scheduler is constructed.
-  // Must be called on the main thread.
-  virtual void OnRendererForegrounded() = 0;
+  // Tells the scheduler about the change of renderer background status, i.e.,
+  // there are no critical, user facing activities (visual, audio, etc...)
+  // driven by this process. A stricter condition than |SetRendererHidden()|,
+  // the process is assumed to be foregrounded when the scheduler is
+  // constructed. Must be called on the main thread.
+  virtual void SetRendererBackgrounded(bool backgrounded) = 0;
 
   // Tells the scheduler that the render process should be suspended. This can
   // only be done when the renderer is backgrounded. The renderer will be
@@ -151,7 +155,9 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Tells the scheduler that a navigation has started.  The scheduler will
   // prioritize loading tasks for a short duration afterwards.
   // Must be called from the main thread.
-  virtual void OnNavigationStarted() = 0;
+  // TODO(maxlg): remove OnNavigate and migrate this part into
+  // DidCommitProvisionalLoad::OnCommitProvisionalLoad.
+  virtual void OnNavigate() = 0;
 
   // Returns true if the scheduler has reason to believe that high priority work
   // may soon arrive on the main thread, e.g., if gesture events were observed
@@ -159,16 +165,26 @@ class BLINK_PLATFORM_EXPORT RendererScheduler : public ChildScheduler {
   // Must be called from the main thread.
   virtual bool IsHighPriorityWorkAnticipated() = 0;
 
-  // Suspends the timer queue and increments the timer queue suspension count.
+  // Suspends the timer queues and increments the timer queue suspension count.
   // May only be called from the main thread.
   virtual void SuspendTimerQueue() = 0;
 
-  // Decrements the timer queue suspension count and re-enables the timer queue
+  // Decrements the timer queue suspension count and re-enables the timer queues
   // if the suspension count is zero and the current schduler policy allows it.
   virtual void ResumeTimerQueue() = 0;
 
+  // Suspends the timer queues by inserting a fence that blocks any tasks posted
+  // after this point from running. Orthogonal to SuspendTimerQueue. Care must
+  // be taken when using this API to avoid fighting with the TaskQueueThrottler.
+  virtual void VirtualTimePaused() = 0;
+
+  // Removes the fence added by VirtualTimePaused allowing timers to execute
+  // normally. Care must be taken when using this API to avoid fighting with the
+  // TaskQueueThrottler.
+  virtual void VirtualTimeResumed() = 0;
+
   // Sets whether to allow suspension of timers after the backgrounded signal is
-  // received via OnRendererBackgrounded. Defaults to disabled.
+  // received via SetRendererBackgrounded(true). Defaults to disabled.
   virtual void SetTimerQueueSuspensionWhenBackgroundedEnabled(bool enabled) = 0;
 
   // Sets the default blame context to which top level work should be

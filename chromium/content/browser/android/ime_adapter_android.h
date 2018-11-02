@@ -14,11 +14,11 @@
 #include "content/common/content_export.h"
 #include "ui/gfx/geometry/rect_f.h"
 
-namespace blink {
+namespace ui {
 
-struct WebCompositionUnderline;
+struct CompositionUnderline;
 
-}  // namespace blink
+}  // namespace ui
 
 namespace content {
 
@@ -106,10 +106,14 @@ class CONTENT_EXPORT ImeAdapterAndroid : public RenderWidgetHostConnector {
 
   void UpdateState(const TextInputState& state);
 
+  void AdvanceFocusInForm(JNIEnv*,
+                          const base::android::JavaParamRef<jobject>&,
+                          jint);
+
  private:
   RenderWidgetHostImpl* GetFocusedWidget();
   RenderFrameHost* GetFocusedFrame();
-  std::vector<blink::WebCompositionUnderline> GetUnderlinesFromSpans(
+  std::vector<ui::CompositionUnderline> GetUnderlinesFromSpans(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& text,

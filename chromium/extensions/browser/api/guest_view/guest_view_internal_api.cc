@@ -102,12 +102,17 @@ bool GuestViewInternalCreateGuestFunction::GetExternalWebContents(
 
   if (guest) {
     // If there is a guest with the WebContents already in the tabstrip then
-    // use this. This is done through the WebContentsImpl::CreateNewWindow
-    // code-path. Ie. clicking a link in a webpage with target set. The guest
-    // has been created with
+    // use this if it is not yet attached. This is done through the
+    // WebContentsImpl::CreateNewWindow code-path. Ie. clicking a link in a
+    // webpage with target set. The guest has been created with
     // GuestViewManager::CreateGuestWithWebContentsParams.
-    callback.Run(guest->web_contents());
-    return true;
+    if (!guest->attached()) {
+      callback.Run(guest->web_contents());
+      return true;
+    }
+    // Otherwise we need to make sure the guest is recreated since the guest is
+    // un-mounted and mounted.
+    guest->Destroy(true);
   }
   return false;
 }

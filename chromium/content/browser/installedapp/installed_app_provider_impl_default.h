@@ -11,10 +11,6 @@
 #include "third_party/WebKit/public/platform/modules/installedapp/installed_app_provider.mojom.h"
 #include "third_party/WebKit/public/platform/modules/installedapp/related_application.mojom.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace content {
 
 // The default (no-op) implementation of the InstalledAppProvider Mojo service.
@@ -28,10 +24,9 @@ class InstalledAppProviderImplDefault
   // InstalledAppProvider overrides:
   void FilterInstalledApps(
       std::vector<blink::mojom::RelatedApplicationPtr> related_apps,
-      const FilterInstalledAppsCallback& callback) override;
+      FilterInstalledAppsCallback callback) override;
 
   static void Create(
-      const service_manager::BindSourceInfo& source_info,
       mojo::InterfaceRequest<blink::mojom::InstalledAppProvider> request);
 };
 

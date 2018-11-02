@@ -14,26 +14,30 @@
 #include "v8/include/v8.h"
 
 namespace base {
-class DictionaryValue;
 class ListValue;
 }
 
 namespace extensions {
-class EventMatcher;
+class IPCMessageSender;
+struct EventFilteringInfo;
 
 // This class deals with the javascript bindings related to Event objects.
 class EventBindings : public ObjectBackedNativeHandler {
  public:
-  explicit EventBindings(ScriptContext* context);
+  EventBindings(ScriptContext* context, IPCMessageSender* ipc_message_sender);
   ~EventBindings() override;
+
+  // Returns true if there is a listener for the given |event| in the given
+  // |context|.
+  static bool HasListener(ScriptContext* context,
+                          const std::string& event_name);
 
   // Dispatches the event in the given |context| with the provided
   // |event_args| and |filtering_info|.
-  static void DispatchEventInContext(
-      const std::string& event_name,
-      const base::ListValue* event_args,
-      const base::DictionaryValue* filtering_info,
-      ScriptContext* context);
+  static void DispatchEventInContext(const std::string& event_name,
+                                     const base::ListValue* event_args,
+                                     const EventFilteringInfo* filtering_info,
+                                     ScriptContext* context);
 
  private:
   // JavaScript handler which forwards to AttachEvent().
@@ -42,7 +46,7 @@ class EventBindings : public ObjectBackedNativeHandler {
 
   // Attach an event name to an object.
   // |event_name| The name of the event to attach.
-  void AttachEvent(const std::string& event_name);
+  void AttachEvent(const std::string& event_name, bool supports_lazy_listeners);
 
   // JavaScript handler which forwards to DetachEvent().
   // args[0] forwards to |event_name|.
@@ -54,7 +58,7 @@ class EventBindings : public ObjectBackedNativeHandler {
   // |is_manual| True if this detach was done by the user via removeListener()
   // as opposed to automatically during shutdown, in which case we should inform
   // the browser we are no longer interested in that event.
-  void DetachEvent(const std::string& event_name, bool is_manual);
+  void DetachEvent(const std::string& event_name, bool remove_lazy_listener);
 
   // MatcherID AttachFilteredEvent(string event_name, object filter)
   // |event_name| Name of the event to attach.
@@ -75,13 +79,16 @@ class EventBindings : public ObjectBackedNativeHandler {
   // |matcher_id| The ID of the filtered event.
   // |is_manual| false if this is part of the extension unload process where all
   // listeners are automatically detached.
-  void DetachFilteredEvent(int matcher_id, bool is_manual);
+  void DetachFilteredEvent(int matcher_id, bool remove_lazy_listener);
 
-  std::unique_ptr<EventMatcher> ParseEventMatcher(
-      std::unique_ptr<base::DictionaryValue> filter);
+  void AttachUnmanagedEvent(const v8::FunctionCallbackInfo<v8::Value>& args);
+  void DetachUnmanagedEvent(const v8::FunctionCallbackInfo<v8::Value>& args);
 
   // Called when our context, and therefore us, is invalidated. Run any cleanup.
   void OnInvalidated();
+
+  // The associated message sender. Guaranteed to outlive this object.
+  IPCMessageSender* const ipc_message_sender_;
 
   // The set of attached events and filtered events. Maintain these so that we
   // can detch them on unload.

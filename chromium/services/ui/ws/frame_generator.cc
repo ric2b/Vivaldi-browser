@@ -8,7 +8,6 @@
 #include <vector>
 
 #include "cc/output/compositor_frame.h"
-#include "cc/output/compositor_frame_sink.h"
 #include "cc/quads/render_pass.h"
 #include "cc/quads/render_pass_draw_quad.h"
 #include "cc/quads/shared_quad_state.h"
@@ -37,7 +36,7 @@ void FrameGenerator::SetHighContrastMode(bool enabled) {
   SetNeedsBeginFrame(true);
 }
 
-void FrameGenerator::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
+void FrameGenerator::OnSurfaceCreated(const viz::SurfaceInfo& surface_info) {
   DCHECK(surface_info.is_valid());
 
   // Only handle embedded surfaces changing here. The display root surface
@@ -46,6 +45,16 @@ void FrameGenerator::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
     window_manager_surface_info_ = surface_info;
     SetNeedsBeginFrame(true);
   }
+}
+
+void FrameGenerator::SwapSurfaceWith(FrameGenerator* other) {
+  viz::SurfaceInfo window_manager_surface_info = window_manager_surface_info_;
+  window_manager_surface_info_ = other->window_manager_surface_info_;
+  other->window_manager_surface_info_ = window_manager_surface_info;
+  if (window_manager_surface_info_.is_valid())
+    SetNeedsBeginFrame(true);
+  if (other->window_manager_surface_info_.is_valid())
+    other->SetNeedsBeginFrame(true);
 }
 
 void FrameGenerator::OnWindowDamaged() {
@@ -61,26 +70,25 @@ void FrameGenerator::OnWindowSizeChanged(const gfx::Size& pixel_size) {
 }
 
 void FrameGenerator::Bind(
-    std::unique_ptr<cc::mojom::MojoCompositorFrameSink> compositor_frame_sink) {
+    std::unique_ptr<cc::mojom::CompositorFrameSink> compositor_frame_sink) {
   DCHECK(!compositor_frame_sink_);
   compositor_frame_sink_ = std::move(compositor_frame_sink);
 }
 
 void FrameGenerator::ReclaimResources(
-    const cc::ReturnedResourceArray& resources) {
+    const std::vector<cc::ReturnedResource>& resources) {
   // Nothing to do here because FrameGenerator CompositorFrames don't reference
   // any resources.
   DCHECK(resources.empty());
 }
 
 void FrameGenerator::DidReceiveCompositorFrameAck(
-    const cc::ReturnedResourceArray& resources) {}
+    const std::vector<cc::ReturnedResource>& resources) {}
 
 void FrameGenerator::OnBeginFrame(const cc::BeginFrameArgs& begin_frame_args) {
   DCHECK(compositor_frame_sink_);
   current_begin_frame_ack_ = cc::BeginFrameAck(
-      begin_frame_args.source_id, begin_frame_args.sequence_number,
-      begin_frame_args.sequence_number, false);
+      begin_frame_args.source_id, begin_frame_args.sequence_number, false);
   if (begin_frame_args.type == cc::BeginFrameArgs::MISSED) {
     compositor_frame_sink_->DidNotProduceFrame(current_begin_frame_ack_);
     return;

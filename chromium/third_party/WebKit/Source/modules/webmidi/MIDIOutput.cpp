@@ -31,9 +31,11 @@
 #include "modules/webmidi/MIDIOutput.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/UseCounter.h"
 #include "core/timing/DOMWindowPerformance.h"
 #include "core/timing/Performance.h"
 #include "media/midi/midi_service.mojom-blink.h"
@@ -229,14 +231,23 @@ void MIDIOutput::send(NotShared<DOMUint8Array> array,
   if (timestamp == 0.0)
     timestamp = Now(GetExecutionContext());
 
+  UseCounter::Count(*ToDocument(GetExecutionContext()),
+                    WebFeature::kMIDIOutputSend);
+
   // Implicit open. It does nothing if the port is already opened.
   // This should be performed even if |array| is invalid.
   open();
 
   if (MessageValidator::Validate(array.View(), exception_state,
                                  midiAccess()->sysexEnabled())) {
-    midiAccess()->SendMIDIData(port_index_, array.View()->Data(),
-                               array.View()->length(), timestamp);
+    if (IsOpening()) {
+      pending_data_.push_back(std::make_pair(Vector<uint8_t>(), timestamp));
+      pending_data_.back().first.Append(array.View()->Data(),
+                                        array.View()->length());
+    } else {
+      midiAccess()->SendMIDIData(port_index_, array.View()->Data(),
+                                 array.View()->length(), timestamp);
+    }
   }
 }
 
@@ -273,6 +284,17 @@ void MIDIOutput::send(NotShared<DOMUint8Array> data,
 void MIDIOutput::send(Vector<unsigned> unsigned_data,
                       ExceptionState& exception_state) {
   send(unsigned_data, 0.0, exception_state);
+}
+
+void MIDIOutput::DidOpen(bool opened) {
+  while (!pending_data_.empty()) {
+    if (opened) {
+      auto& front = pending_data_.front();
+      midiAccess()->SendMIDIData(port_index_, front.first.data(),
+                                 front.first.size(), front.second);
+    }
+    pending_data_.TakeFirst();
+  }
 }
 
 DEFINE_TRACE(MIDIOutput) {

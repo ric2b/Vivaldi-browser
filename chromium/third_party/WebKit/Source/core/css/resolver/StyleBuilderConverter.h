@@ -38,7 +38,6 @@
 #include "core/style/ShadowList.h"
 #include "core/style/StyleOffsetRotation.h"
 #include "core/style/StyleReflection.h"
-#include "core/style/StyleScrollSnapData.h"
 #include "core/style/TransformOrigin.h"
 #include "platform/LengthSize.h"
 #include "platform/fonts/FontDescription.h"
@@ -54,6 +53,23 @@ class ScaleTransformOperation;
 class StylePath;
 class TextSizeAdjust;
 class TranslateTransformOperation;
+
+class StyleBuilderConverterBase {
+  STATIC_ONLY(StyleBuilderConverterBase);
+
+ public:
+  static FontWeight ConvertFontWeight(const CSSValue&, FontWeight);
+  static FontDescription::FontVariantCaps ConvertFontVariantCaps(
+      const CSSValue&);
+  static FontDescription::FamilyDescription ConvertFontFamily(
+      const CSSValue&,
+      FontBuilder*,
+      const Document* document_for_count);
+  static FontDescription::Size ConvertFontSize(
+      const CSSValue&,
+      const CSSToLengthConversionData&,
+      FontDescription::Size parent_size);
+};
 
 // Note that we assume the parser only allows valid CSSValue types.
 class StyleBuilderConverter {
@@ -112,6 +128,7 @@ class StyleBuilderConverter {
                                                         const CSSValue&);
   template <typename T>
   static T ConvertLineWidth(StyleResolverState&, const CSSValue&);
+  static float ConvertBorderWidth(StyleResolverState&, const CSSValue&);
   static Length ConvertLength(const StyleResolverState&, const CSSValue&);
   static UnzoomedLength ConvertUnzoomedLength(const StyleResolverState&,
                                               const CSSValue&);
@@ -178,12 +195,8 @@ class StyleBuilderConverter {
       const OrderedNamedGridLines&,
       NamedGridLinesMap&);
 
-  static ScrollSnapPoints ConvertSnapPoints(StyleResolverState&,
-                                            const CSSValue&);
-  static Vector<LengthPoint> ConvertSnapCoordinates(StyleResolverState&,
-                                                    const CSSValue&);
-  static LengthPoint ConvertSnapDestination(StyleResolverState&,
-                                            const CSSValue&);
+  static ScrollSnapType ConvertSnapType(StyleResolverState&, const CSSValue&);
+  static ScrollSnapAlign ConvertSnapAlign(StyleResolverState&, const CSSValue&);
   static PassRefPtr<TranslateTransformOperation> ConvertTranslate(
       StyleResolverState&,
       const CSSValue&);

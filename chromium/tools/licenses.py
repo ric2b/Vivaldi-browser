@@ -34,6 +34,7 @@ _REPOSITORY_ROOT = os.path.dirname(os.path.dirname(__file__))
 sys.path.append(os.path.join(_REPOSITORY_ROOT, 'build/android/gyp/util'))
 import build_utils
 
+
 # Paths from the root of the tree to directories to skip.
 PRUNE_PATHS = set([
     # Placeholder directory only, not third-party code.
@@ -496,7 +497,7 @@ def GetThirdPartyDepsFromGNDepsOutput(gn_deps):
     third_party_deps = set()
     for build_dep in gn_deps.split():
         m = re.search(r'^(.+/third_party/[^/]+)/(.+/)?BUILD\.gn$', build_dep)
-        if m:
+        if m and not os.path.join('build', 'secondary') in build_dep:
             third_party_deps.add(m.group(1))
     return third_party_deps
 
@@ -558,6 +559,18 @@ def GenerateCredits(
             template = template.replace('{{%s}}' % key, val)
         return template
 
+    def MetadataToTemplateEntry(metadata, entry_template):
+        env = {
+            'name': metadata['Name'],
+            'url': metadata['URL'],
+            'license': open(metadata['License File'], 'rb').read(),
+        }
+        return {
+            'name': metadata['Name'],
+            'content': EvaluateTemplate(entry_template, env),
+            'license_file': metadata['License File'],
+        }
+
     if gn_target:
         third_party_dirs = FindThirdPartyDeps(gn_out_dir, gn_target)
 
@@ -579,6 +592,14 @@ def GenerateCredits(
 
     entry_template = open(entry_template_file).read()
     entries = []
+    # Start from Chromium's LICENSE file
+    chromium_license_metadata = {
+        'Name': 'The Chromium Project',
+        'URL': 'http://www.chromium.org',
+        'License File': os.path.join(_REPOSITORY_ROOT, 'LICENSE') }
+    entries.append(MetadataToTemplateEntry(chromium_license_metadata,
+        entry_template))
+
     for path in third_party_dirs:
         try:
             metadata = ParseDir(path, _REPOSITORY_ROOT)
@@ -595,26 +616,14 @@ def GenerateCredits(
             # updated to provide --gn-target to this script.
             if path in KNOWN_NON_IOS_LIBRARIES:
                 continue
-        env = {
-            'name': metadata['Name'],
-            'url': metadata['URL'],
-            'license': open(metadata['License File'], 'rb').read(),
-        }
-        entry = {
-            'name': metadata['Name'],
-            'content': EvaluateTemplate(entry_template, env),
-            'license_file': metadata['License File'],
-        }
-        entries.append(entry)
+        entries.append(MetadataToTemplateEntry(metadata, entry_template))
 
     entries.extend(licenses_vivaldi.GetEntries(
                   entry_template, EvaluateTemplate))
 
-    # Sort by size in order to improve gzip compression ratio (puts similar
-    # licenses near each other). The licenses are re-sorted by the JavaScript
-    # when loaded.
-    entries.sort(key=lambda entry: (len(entry['content']),
-                                    entry['name'], entry['content']))
+    entries.sort(key=lambda entry: (entry['name'], entry['content']))
+    for entry_id, entry in enumerate(entries):
+        entry['content'] = entry['content'].replace('{{id}}', str(entry_id))
 
     entries_contents = '\n'.join([entry['content'] for entry in entries])
     file_template = open(file_template_file).read()

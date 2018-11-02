@@ -4,12 +4,14 @@
 
 #include "components/proximity_auth/proximity_auth_system.h"
 
+#include "base/command_line.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/default_clock.h"
 #include "components/proximity_auth/logging/logging.h"
 #include "components/proximity_auth/proximity_auth_client.h"
-#include "components/proximity_auth/proximity_auth_pref_manager.h"
+#include "components/proximity_auth/proximity_auth_profile_pref_manager.h"
 #include "components/proximity_auth/remote_device_life_cycle_impl.h"
+#include "components/proximity_auth/switches.h"
 #include "components/proximity_auth/unlock_manager_impl.h"
 
 namespace proximity_auth {
@@ -25,12 +27,13 @@ const int64_t kPasswordReauthPeriodHours = 20;
 ProximityAuthSystem::ProximityAuthSystem(
     ScreenlockType screenlock_type,
     ProximityAuthClient* proximity_auth_client)
-    : proximity_auth_client_(proximity_auth_client),
-      unlock_manager_(
-          new UnlockManagerImpl(screenlock_type, proximity_auth_client)),
+    : screenlock_type_(screenlock_type),
+      proximity_auth_client_(proximity_auth_client),
       clock_(new base::DefaultClock()),
-      pref_manager_(new ProximityAuthPrefManager(
-          proximity_auth_client->GetPrefService())),
+      pref_manager_(proximity_auth_client->GetPrefManager()),
+      unlock_manager_(new UnlockManagerImpl(screenlock_type,
+                                            proximity_auth_client_,
+                                            pref_manager_)),
       suspended_(false),
       started_(false),
       weak_ptr_factory_(this) {}
@@ -40,11 +43,12 @@ ProximityAuthSystem::ProximityAuthSystem(
     ProximityAuthClient* proximity_auth_client,
     std::unique_ptr<UnlockManager> unlock_manager,
     std::unique_ptr<base::Clock> clock,
-    std::unique_ptr<ProximityAuthPrefManager> pref_manager)
-    : proximity_auth_client_(proximity_auth_client),
-      unlock_manager_(std::move(unlock_manager)),
+    ProximityAuthPrefManager* pref_manager)
+    : screenlock_type_(screenlock_type),
+      proximity_auth_client_(proximity_auth_client),
       clock_(std::move(clock)),
-      pref_manager_(std::move(pref_manager)),
+      pref_manager_(pref_manager),
+      unlock_manager_(std::move(unlock_manager)),
       suspended_(false),
       started_(false),
       weak_ptr_factory_(this) {}
@@ -94,7 +98,7 @@ cryptauth::RemoteDeviceList ProximityAuthSystem::GetRemoteDevicesForUser(
 
 void ProximityAuthSystem::OnAuthAttempted(const AccountId& /* account_id */) {
   // TODO(tengs): There is no reason to pass the |account_id| argument anymore.
-  unlock_manager_->OnAuthAttempted(ScreenlockBridge::LockHandler::USER_CLICK);
+  unlock_manager_->OnAuthAttempted(mojom::AuthType::USER_CLICK);
 }
 
 void ProximityAuthSystem::OnSuspend() {
@@ -189,6 +193,15 @@ void ProximityAuthSystem::OnFocusedUserChanged(const AccountId& account_id) {
 }
 
 bool ProximityAuthSystem::ShouldForcePassword() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          proximity_auth::switches::kEnableForcePasswordReauth))
+    return false;
+
+  // TODO(tengs): We need to properly propagate the last login time to the login
+  // screen.
+  if (screenlock_type_ == ScreenlockType::SIGN_IN)
+    return false;
+
   // TODO(tengs): Put this force password reauth logic behind an enterprise
   // policy. See crbug.com/724717.
   int64_t now_ms = clock_->Now().ToJavaTime();

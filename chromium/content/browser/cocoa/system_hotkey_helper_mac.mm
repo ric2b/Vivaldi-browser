@@ -9,6 +9,9 @@
 #include "base/mac/foundation_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
+#include "base/threading/thread_restrictions.h"
 #include "content/browser/cocoa/system_hotkey_map.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -30,9 +33,10 @@ SystemHotkeyHelperMac* SystemHotkeyHelperMac::GetInstance() {
 }
 
 void SystemHotkeyHelperMac::DeferredLoadSystemHotkeys() {
-  BrowserThread::PostDelayedTask(
-      BrowserThread::FILE,
+  base::PostDelayedTaskWithTraits(
       FROM_HERE,
+      {base::TaskPriority::USER_VISIBLE,
+       base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN, base::MayBlock()},
       base::Bind(&SystemHotkeyHelperMac::LoadSystemHotkeys,
                  base::Unretained(this)),
       base::TimeDelta::FromSeconds(kLoadHotkeysDelaySeconds));
@@ -45,7 +49,7 @@ SystemHotkeyHelperMac::~SystemHotkeyHelperMac() {
 }
 
 void SystemHotkeyHelperMac::LoadSystemHotkeys() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   std::string library_path(base::mac::GetUserLibraryPath().value());
   NSString* expanded_file_path =

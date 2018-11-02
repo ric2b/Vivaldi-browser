@@ -1,5 +1,7 @@
-{% from 'macros.tmpl' import license %}
+{% from 'templates/macros.tmpl' import license, source_files_for_generated_file %}
 {{license()}}
+
+{{source_files_for_generated_file(template_file, input_files)}}
 
 #ifndef InternalRuntimeFlags_h
 #define InternalRuntimeFlags_h
@@ -26,13 +28,13 @@ class InternalRuntimeFlags :
   // using RuntimeEnabledFeatures::Backup.
   {% for feature in standard_features if feature.settable_from_internals %}
   void set{{feature.name}}Enabled(bool isEnabled) {
-    RuntimeEnabledFeatures::set{{feature.name}}Enabled(isEnabled);
+    RuntimeEnabledFeatures::Set{{feature.name}}Enabled(isEnabled);
   }
   {% endfor %}
 
   {% for feature in standard_features %}
   bool {{feature.first_lowered_name}}Enabled() {
-    return RuntimeEnabledFeatures::{{feature.first_lowered_name}}Enabled();
+    return RuntimeEnabledFeatures::{{feature.name}}Enabled();
   }
   {% endfor %}
 

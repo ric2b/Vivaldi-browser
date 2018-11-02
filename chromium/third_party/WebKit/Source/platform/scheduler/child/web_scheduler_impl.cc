@@ -71,14 +71,13 @@ blink::WebTaskRunner* WebSchedulerImpl::TimerTaskRunner() {
 }
 
 blink::WebTaskRunner* WebSchedulerImpl::CompositorTaskRunner() {
-  NOTREACHED();
   return nullptr;
 }
 
 std::unique_ptr<blink::WebViewScheduler>
 WebSchedulerImpl::CreateWebViewScheduler(
     InterventionReporter*,
-    WebViewScheduler::WebViewSchedulerSettings*) {
+    WebViewScheduler::WebViewSchedulerDelegate*) {
   NOTREACHED();
   return nullptr;
 }

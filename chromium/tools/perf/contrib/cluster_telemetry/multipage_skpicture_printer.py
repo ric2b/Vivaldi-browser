@@ -8,8 +8,9 @@ from contrib.cluster_telemetry import ct_benchmarks_util
 from contrib.cluster_telemetry import page_set
 from contrib.cluster_telemetry import repaint_helpers
 
-from telemetry.core import discover
 from telemetry import story
+
+from py_utils import discover
 
 from measurements import multipage_skpicture_printer
 
@@ -54,6 +55,12 @@ class MultipageSkpicturePrinter(perf_benchmark.PerfBenchmark):
                                         options.page_set_base_dir)
     return story_set_class()
 
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        pass # Not tests disabled.
+    return StoryExpectations()
+
 
 class MultipageSkpicturePrinterCT(perf_benchmark.PerfBenchmark):
   """Captures mSKPs for Cluster Telemetry."""
@@ -81,3 +88,9 @@ class MultipageSkpicturePrinterCT(perf_benchmark.PerfBenchmark):
     return page_set.CTPageSet(
         options.urls_list, options.user_agent, options.archive_data_file,
         run_page_interaction_callback=repaint_helpers.WaitThenRepaint)
+
+  def GetExpectations(self):
+    class StoryExpectations(story.expectations.StoryExpectations):
+      def SetExpectations(self):
+        pass # Not tests disabled.
+    return StoryExpectations()

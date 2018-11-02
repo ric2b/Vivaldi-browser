@@ -18,7 +18,6 @@
 #include "base/memory/ref_counted.h"
 #include "gpu/command_buffer/service/common_decoder.h"
 #include "gpu/command_buffer/service/gl_utils.h"
-#include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/shader_manager.h"
 #include "gpu/gpu_export.h"
 
@@ -29,6 +28,7 @@ struct GpuPreferences;
 namespace gles2 {
 
 class FeatureInfo;
+class GLES2DecoderClient;
 class ProgramCache;
 class ProgramManager;
 class ProgressReporter;
@@ -133,16 +133,20 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
     std::vector<GLuint> texture_units;
   };
   struct VertexAttrib {
-    VertexAttrib(GLsizei _size, GLenum _type, const std::string& _name,
-                 GLint _location)
-        : size(_size),
-          type(_type),
-          location(_location),
-          name(_name) {
-    }
+    VertexAttrib(GLsizei size,
+                 GLenum type,
+                 const std::string& name,
+                 GLint location,
+                 size_t location_count)
+        : size(size),
+          type(type),
+          location(location),
+          location_count(location_count),
+          name(name) {}
     GLsizei size;
     GLenum type;
     GLint location;
+    size_t location_count;
     std::string name;
   };
   struct UniformBlockSizeInfo {
@@ -323,7 +327,7 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
   // Performs glLinkProgram and related activities.
   bool Link(ShaderManager* manager,
             VaryingsPackingOption varyings_packing_option,
-            const ShaderCacheCallback& shader_callback);
+            GLES2DecoderClient* client);
 
   // Performs glValidateProgram and related activities.
   void Validate();
@@ -488,7 +492,7 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
 
   // Updates the program info after a successful link.
   void Update();
-  void UpdateUniforms();
+  bool UpdateUniforms();
   void UpdateFragmentInputs();
   void UpdateProgramOutputs();
   void UpdateFragmentOutputBaseTypes();
@@ -569,6 +573,7 @@ class GPU_EXPORT Program : public base::RefCounted<Program> {
 
   // Shaders by type of shader.
   scoped_refptr<Shader> attached_shaders_[kMaxAttachedShaders];
+  scoped_refptr<Shader> shaders_from_last_successful_link_[kMaxAttachedShaders];
 
   // True if this program is marked as deleted.
   bool deleted_;

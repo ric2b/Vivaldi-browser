@@ -14,6 +14,8 @@
 #include "chrome/browser/history/top_sites_factory.h"
 #if defined(OS_WIN)
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/win/jumplist_factory.h"
+#include "chrome/browser/win/jumplist.h"
 #endif
 #include "chrome/common/extensions/api/bookmarks.h"
 #include "components/bookmarks/browser/bookmark_model.h"
@@ -105,24 +107,10 @@ bool BookmarksPrivateUpdateSpeedDialsForWindowsJumplistFunction::RunAsync() {
   EXTENSION_FUNCTION_VALIDATE(params.get());
 #if defined(OS_WIN)
   Browser* browser = FindVivaldiBrowser();
-  if (browser) {
-    if (browser->is_vivaldi()) {
-      VivaldiBrowserWindow* browser_view =
-          VivaldiBrowserWindow::GetBrowserWindowForBrowser(browser);
-      if (browser_view && browser_view->GetJumpList()) {
-        JumpList* jump_list = browser_view->GetJumpList();
-        if (jump_list)
-          jump_list->OnUpdateVivaldiSpeedDials(params->speed_dials);
-      }
-    } else {
-      BrowserView* browser_view =
-          BrowserView::GetBrowserViewForBrowser(browser);
-      if (browser_view && browser_view->GetJumpList()) {
-        JumpList* jump_list = browser_view->GetJumpList();
-        if (jump_list)
-          jump_list->OnUpdateVivaldiSpeedDials(params->speed_dials);
-      }
-    }
+  if (browser && browser->is_vivaldi()) {
+    JumpList* jump_list = JumpListFactory::GetForProfile(browser->profile());
+    if (jump_list)
+      jump_list->NotifyVivaldiSpeedDialsChanged(params->speed_dials);
   }
 #endif
   SendResponse(true);

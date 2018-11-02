@@ -25,20 +25,23 @@ MainThreadWorkletGlobalScope::MainThreadWorkletGlobalScope(
     const String& user_agent,
     PassRefPtr<SecurityOrigin> security_origin,
     v8::Isolate* isolate)
-    : WorkletGlobalScope(url, user_agent, std::move(security_origin), isolate),
+    : WorkletGlobalScope(url,
+                         user_agent,
+                         std::move(security_origin),
+                         isolate,
+                         nullptr /* worker_clients */),
       ContextClient(frame) {}
 
 MainThreadWorkletGlobalScope::~MainThreadWorkletGlobalScope() {}
 
-void MainThreadWorkletGlobalScope::ReportFeature(UseCounter::Feature feature) {
+void MainThreadWorkletGlobalScope::ReportFeature(WebFeature feature) {
   DCHECK(IsMainThread());
   // A parent document is on the same thread, so just record API use in the
   // document's UseCounter.
   UseCounter::Count(GetFrame(), feature);
 }
 
-void MainThreadWorkletGlobalScope::ReportDeprecation(
-    UseCounter::Feature feature) {
+void MainThreadWorkletGlobalScope::ReportDeprecation(WebFeature feature) {
   DCHECK(IsMainThread());
   // A parent document is on the same thread, so just record API use in the
   // document's UseCounter.
@@ -56,6 +59,7 @@ WorkerThread* MainThreadWorkletGlobalScope::GetThread() const {
 void MainThreadWorkletGlobalScope::FetchAndInvokeScript(
     const KURL& module_url_record,
     WebURLRequest::FetchCredentialsMode credentials_mode,
+    RefPtr<WebTaskRunner> outside_settings_task_runner,
     WorkletPendingTasks* pending_tasks) {
   DCHECK(IsMainThread());
   // Step 1: "Let insideSettings be the workletGlobalScope's associated
@@ -71,8 +75,8 @@ void MainThreadWorkletGlobalScope::FetchAndInvokeScript(
 
   // Step 3 to 5 are implemented in
   // WorkletModuleTreeClient::NotifyModuleTreeLoadFinished.
-  WorkletModuleTreeClient* client =
-      new WorkletModuleTreeClient(modulator, pending_tasks);
+  WorkletModuleTreeClient* client = new WorkletModuleTreeClient(
+      modulator, std::move(outside_settings_task_runner), pending_tasks);
   modulator->FetchTree(module_request, client);
 }
 

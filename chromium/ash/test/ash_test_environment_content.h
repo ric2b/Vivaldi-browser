@@ -15,9 +15,6 @@ class TestBrowserThreadBundle;
 namespace ash {
 
 class ShellContentState;
-
-namespace test {
-
 class TestShellContentState;
 
 // AshTestEnvironment implementation for tests that use content.
@@ -36,7 +33,6 @@ class AshTestEnvironmentContent : public AshTestEnvironment {
   // AshTestEnvironment:
   void SetUp() override;
   void TearDown() override;
-  base::SequencedWorkerPool* GetBlockingPool() override;
   std::unique_ptr<AshTestViewsDelegate> CreateViewsDelegate() override;
 
  private:
@@ -54,7 +50,6 @@ class AshTestEnvironmentContent : public AshTestEnvironment {
   DISALLOW_COPY_AND_ASSIGN(AshTestEnvironmentContent);
 };
 
-}  // namespace test
 }  // namespace ash
 
 #endif  // ASH_TEST_ASH_TEST_ENVIRONMENT_CONTENT_H_

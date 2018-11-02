@@ -439,7 +439,7 @@ ChannelProxy::ChannelProxy(
 }
 
 ChannelProxy::~ChannelProxy() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   Close();
 }
@@ -463,7 +463,7 @@ void ChannelProxy::Init(const IPC::ChannelHandle& channel_handle,
 
 void ChannelProxy::Init(std::unique_ptr<ChannelFactory> factory,
                         bool create_pipe_now) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!did_init_);
 
   if (create_pipe_now) {
@@ -503,7 +503,7 @@ void ChannelProxy::Flush() {
 }
 
 void ChannelProxy::Close() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Clear the backpointer to the listener so that any pending calls to
   // Context::OnDispatchMessage or OnDispatchError will be ignored.  It is
@@ -517,6 +517,12 @@ void ChannelProxy::Close() {
 }
 
 bool ChannelProxy::Send(Message* message) {
+  DCHECK(!message->is_sync()) << "Need to use IPC::SyncChannel";
+  SendInternal(message);
+  return true;
+}
+
+void ChannelProxy::SendInternal(Message* message) {
   DCHECK(did_init_);
 
   // TODO(alexeypa): add DCHECK(CalledOnValidThread()) here. Currently there are
@@ -535,17 +541,16 @@ bool ChannelProxy::Send(Message* message) {
 #endif
 
   context_->Send(message);
-  return true;
 }
 
 void ChannelProxy::AddFilter(MessageFilter* filter) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   context_->AddFilter(filter);
 }
 
 void ChannelProxy::RemoveFilter(MessageFilter* filter) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   context_->ipc_task_runner()->PostTask(
       FROM_HERE, base::Bind(&Context::OnRemoveFilter, context_,
@@ -567,7 +572,7 @@ void ChannelProxy::GetGenericRemoteAssociatedInterface(
 }
 
 void ChannelProxy::ClearIPCTaskRunner() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   context()->ClearIPCTaskRunner();
 }
 

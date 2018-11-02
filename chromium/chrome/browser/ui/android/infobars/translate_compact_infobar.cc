@@ -13,10 +13,26 @@
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/translate/android/translate_utils.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
+#include "components/variations/variations_associated_data.h"
 #include "jni/TranslateCompactInfoBar_jni.h"
 
 using base::android::JavaParamRef;
 using base::android::ScopedJavaLocalRef;
+
+// Default values for the finch parameters. (used when the corresponding finch
+// parameter does not exist.)
+const int kDefaultAutoAlwaysThreshold = 5;
+const int kDefaultAutoNeverThreshold = 10;
+const int kDefaultMaxNumberOfAutoAlways = 2;
+const int kDefaultMaxNumberOfAutoNever = 2;
+
+// Finch parameter names:
+const char kTranslateAutoAlwaysThreshold[] = "translate_auto_always_threshold";
+const char kTranslateAutoNeverThreshold[] = "translate_auto_never_threshold";
+const char kTranslateMaxNumberOfAutoAlways[] =
+    "translate_max_number_of_auto_always";
+const char kTranslateMaxNumberOfAutoNever[] =
+    "translate_max_number_of_auto_never";
 
 // TranslateInfoBar -----------------------------------------------------------
 
@@ -71,6 +87,13 @@ void TranslateCompactInfoBar::ProcessButton(int action) {
       JNIEnv* env = base::android::AttachCurrentThread();
       Java_TranslateCompactInfoBar_setAutoAlwaysTranslate(env,
                                                           GetJavaInfoBar());
+
+      // Auto-always is triggered by the line above.  Need to increment the
+      // auto-always counter.
+      delegate->IncrementTranslationAutoAlwaysCount();
+      // Reset translateAcceptedCount so that auto-always could be triggered
+      // again.
+      delegate->ResetTranslationAcceptedCount();
     }
   } else if (action == InfoBarAndroid::ACTION_TRANSLATE_SHOW_ORIGINAL) {
     action_flags_ |= FLAG_REVERT;
@@ -137,7 +160,8 @@ void TranslateCompactInfoBar::ApplyBoolTranslateOption(
 
 bool TranslateCompactInfoBar::ShouldAutoAlwaysTranslate() {
   translate::TranslateInfoBarDelegate* delegate = GetDelegate();
-  return (delegate->GetTranslationAcceptedCount() == kAcceptCountThreshold);
+  return (delegate->GetTranslationAcceptedCount() == AutoAlwaysThreshold() &&
+          delegate->GetTranslationAutoAlwaysCount() < MaxNumberOfAutoAlways());
 }
 
 jboolean TranslateCompactInfoBar::ShouldAutoNeverTranslate(
@@ -157,7 +181,52 @@ jboolean TranslateCompactInfoBar::ShouldAutoNeverTranslate(
       !delegate->IsTranslatableLanguageByPrefs())
     return false;
 
-  return (delegate->GetTranslationDeniedCount() == kDeniedCountThreshold);
+  int auto_never_count = delegate->GetTranslationAutoNeverCount();
+
+  // At the beginning (auto_never_count == 0), deniedCount starts at 0 and is
+  // off-by-one (because this checking is done before increment). However, after
+  // auto-never is triggered once (auto_never_count > 0), deniedCount starts at
+  // 1.  So there is no off-by-one by then.
+  int off_by_one = auto_never_count == 0 ? 1 : 0;
+
+  bool never_translate = (delegate->GetTranslationDeniedCount() + off_by_one ==
+                              AutoNeverThreshold() &&
+                          auto_never_count < MaxNumberOfAutoNever());
+  if (never_translate) {
+    // Auto-never will be triggered.  Need to increment the auto-never counter.
+    delegate->IncrementTranslationAutoNeverCount();
+    // Reset translateDeniedCount so that auto-never could be triggered again.
+    delegate->ResetTranslationDeniedCount();
+  }
+  return never_translate;
+}
+
+int TranslateCompactInfoBar::GetParam(const std::string& paramName,
+                                      int default_value) {
+  std::map<std::string, std::string> params;
+  if (!variations::GetVariationParams(translate::kTranslateCompactUI.name,
+                                      &params))
+    return default_value;
+  int value = 0;
+  base::StringToInt(params[paramName], &value);
+  return value <= 0 ? default_value : value;
+}
+
+int TranslateCompactInfoBar::AutoAlwaysThreshold() {
+  return GetParam(kTranslateAutoAlwaysThreshold, kDefaultAutoAlwaysThreshold);
+}
+
+int TranslateCompactInfoBar::AutoNeverThreshold() {
+  return GetParam(kTranslateAutoNeverThreshold, kDefaultAutoNeverThreshold);
+}
+
+int TranslateCompactInfoBar::MaxNumberOfAutoAlways() {
+  return GetParam(kTranslateMaxNumberOfAutoAlways,
+                  kDefaultMaxNumberOfAutoAlways);
+}
+
+int TranslateCompactInfoBar::MaxNumberOfAutoNever() {
+  return GetParam(kTranslateMaxNumberOfAutoNever, kDefaultMaxNumberOfAutoNever);
 }
 
 translate::TranslateInfoBarDelegate* TranslateCompactInfoBar::GetDelegate() {
@@ -181,11 +250,4 @@ void TranslateCompactInfoBar::OnTranslateStepChanged(
 bool TranslateCompactInfoBar::IsDeclinedByUser() {
   // Whether there is any affirmative action bit.
   return action_flags_ == FLAG_NONE;
-}
-
-// Native JNI methods ---------------------------------------------------------
-
-// static
-bool RegisterTranslateCompactInfoBar(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }

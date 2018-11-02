@@ -20,8 +20,8 @@
 #include "chrome/browser/ui/views/download/download_item_view.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_manager.h"
 #include "content/public/browser/page_navigator.h"
@@ -30,8 +30,6 @@
 #include "ui/base/theme_provider.h"
 #include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/canvas.h"
-#include "ui/resources/grit/ui_resources.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/image_button.h"
@@ -339,11 +337,11 @@ void DownloadShelfView::UpdateColorsFromTheme() {
   if (show_all_view_)
     ConfigureButtonForTheme(show_all_view_);
 
-  set_background(views::Background::CreateSolidBackground(
+  SetBackground(views::CreateSolidBackground(
       GetThemeProvider()->GetColor(ThemeProperties::COLOR_TOOLBAR)));
 
   views::SetImageFromVectorIcon(
-      close_button_, ui::kCloseIcon,
+      close_button_, vector_icons::kCloseIcon,
       DownloadItemView::GetTextColorForThemeProvider(GetThemeProvider()));
 }
 

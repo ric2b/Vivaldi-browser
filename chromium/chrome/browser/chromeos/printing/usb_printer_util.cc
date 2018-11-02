@@ -13,11 +13,13 @@
 #include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chromeos/printing/printer_configuration.h"
+#include "device/usb/public/cpp/filter_utils.h"
+#include "device/usb/public/interfaces/device_manager.mojom.h"
 #include "device/usb/usb_device.h"
-#include "device/usb/usb_device_filter.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace chromeos {
@@ -112,9 +114,10 @@ std::string UsbPrinterId(const device::UsbDevice& device) {
 }  // namespace
 
 bool UsbDeviceIsPrinter(const device::UsbDevice& usb_device) {
-  device::UsbDeviceFilter printer_filter;
-  printer_filter.interface_class = kPrinterInterfaceClass;
-  return printer_filter.Matches(usb_device);
+  auto printer_filter = device::mojom::UsbDeviceFilter::New();
+  printer_filter->has_class_code = true;
+  printer_filter->class_code = kPrinterInterfaceClass;
+  return UsbDeviceFilterMatches(*printer_filter, usb_device);
 }
 
 std::string UsbPrinterDeviceDetailsAsString(const device::UsbDevice& device) {
@@ -144,8 +147,7 @@ std::string UsbPrinterDeviceDetailsAsString(const device::UsbDevice& device) {
 // from arbitrary devices.
 std::unique_ptr<Printer> UsbDeviceToPrinter(const device::UsbDevice& device) {
   // Preflight all required fields and log errors if we find something wrong.
-  if (device.vendor_id() == 0 || device.product_id() == 0 ||
-      device.manufacturer_string().empty() || device.product_string().empty()) {
+  if (device.vendor_id() == 0 || device.product_id() == 0) {
     LOG(ERROR) << "Failed to convert USB device to printer.  Fields were:\n"
                << UsbPrinterDeviceDetailsAsString(device);
     return nullptr;
@@ -154,9 +156,28 @@ std::unique_ptr<Printer> UsbDeviceToPrinter(const device::UsbDevice& device) {
   auto printer = base::MakeUnique<Printer>();
   printer->set_manufacturer(base::UTF16ToUTF8(device.manufacturer_string()));
   printer->set_model(base::UTF16ToUTF8(device.product_string()));
-  printer->set_display_name(base::StringPrintf("%s %s (USB)",
-                                               printer->manufacturer().c_str(),
-                                               printer->model().c_str()));
+  // Synthesize make-and-model string for printer identification.
+  printer->set_make_and_model(
+      base::JoinString({printer->manufacturer(), printer->model()}, " "));
+
+  // TODO(crbug.com/740727): i18n for display names.
+  // Construct the display name by however much of the manufacturer/model
+  // information that we have available.
+  std::vector<std::string> display_name_parts;
+  if (!printer->manufacturer().empty()) {
+    display_name_parts.push_back(printer->manufacturer());
+  }
+  if (!printer->model().empty()) {
+    display_name_parts.push_back(printer->model());
+  }
+  if (display_name_parts.empty()) {
+    // If we have neither manufacturer nor model, just display the name as
+    // unknown.
+    display_name_parts.push_back("Unknown Printer");
+  }
+
+  display_name_parts.push_back("(USB)");
+  printer->set_display_name(base::JoinString(display_name_parts, " "));
   printer->set_description(printer->display_name());
   printer->set_uri(UsbPrinterUri(device));
   printer->set_id(UsbPrinterId(device));

@@ -7,7 +7,6 @@
 
 #include <memory>
 
-#include "base/event_types.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
 #include "ui/aura/window_observer.h"
@@ -32,8 +31,9 @@ class CallbackAnimationObserver;
 class KeyboardControllerObserver;
 class KeyboardUI;
 
-// Animation distance.
-const int kAnimationDistance = 30;
+// Relative distance from the parent window, from which show animation starts
+// or hide animation finishes.
+constexpr int kAnimationDistance = 30;
 
 enum KeyboardMode {
   // Invalid mode.
@@ -44,6 +44,27 @@ enum KeyboardMode {
   // Floating virtual keyboard. The virtual keyboard window has customizable
   // width and is draggable.
   FLOATING,
+};
+
+// Represents the current state of the keyboard managed by the controller.
+// Don't change the numeric value of the members because they are used in UMA
+// - VirtualKeyboard.ControllerStateTransition.
+// - VirtualKeyboard.LingeringIntermediateState
+enum class KeyboardControllerState {
+  UNKNOWN = 0,
+  // Keyboard has never been shown.
+  INITIAL = 1,
+  // Waiting for an extension to be loaded. Will move to HIDDEN if this is
+  // loading pre-emptively, otherwise will move to SHOWN.
+  LOADING_EXTENSION = 2,
+  // Keyboard is shown.
+  SHOWN = 4,
+  // Keyboard is still shown, but will move to HIDING in a short period, or if
+  // an input element gets focused again, will move to SHOWN.
+  WILL_HIDE = 5,
+  // Keyboard is hidden, but has shown at least once.
+  HIDDEN = 7,
+  COUNT,
 };
 
 // Provides control of the virtual keyboard, including providing a container
@@ -59,8 +80,8 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
     HIDE_REASON_MANUAL,
   };
 
-  // Takes ownership of |ui|.
-  explicit KeyboardController(KeyboardUI* ui, KeyboardLayoutDelegate* delegate);
+  KeyboardController(std::unique_ptr<KeyboardUI> ui,
+                     KeyboardLayoutDelegate* delegate);
   ~KeyboardController() override;
 
   // Returns the container for the keyboard, which is owned by
@@ -78,18 +99,12 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // loaded yet.
   void Reload();
 
-  // Hides virtual keyboard and notifies observer bounds change.
-  // This function should be called with a delay to avoid layout flicker
-  // when the focus of input field quickly change. |automatic| is true when the
-  // call is made by the system rather than initiated by the user.
-  void HideKeyboard(HideReason reason);
-
-  // Notifies the keyboard observer for keyboard bounds changed.
-  void NotifyKeyboardBoundsChanging(const gfx::Rect& new_bounds);
+  // Notifies the observer for contents bounds changed.
+  void NotifyContentsBoundsChanging(const gfx::Rect& new_bounds);
 
   // Management of the observer list.
   void AddObserver(KeyboardControllerObserver* observer);
-  bool HasObserver(KeyboardControllerObserver* observer);
+  bool HasObserver(KeyboardControllerObserver* observer) const;
   void RemoveObserver(KeyboardControllerObserver* observer);
 
   KeyboardUI* ui() { return ui_.get(); }
@@ -102,9 +117,18 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
 
   void SetKeyboardMode(KeyboardMode mode);
 
+  // Immediately starts hiding animation of virtual keyboard and notifies
+  // observers bounds change. This method forcibly sets keyboard_locked_
+  // false while closing the keyboard.
+  void HideKeyboard(HideReason reason);
+
   // Force the keyboard to show up if not showing and lock the keyboard if
   // |lock| is true.
   void ShowKeyboard(bool lock);
+
+  // Loads the keyboard UI contents in the background, but does not display
+  // the keyboard.
+  void LoadKeyboardUiInBackground();
 
   // Force the keyboard to show up in the specific display if not showing and
   // lock the keyboard
@@ -118,23 +142,28 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // Retrieve the active keyboard controller.
   static KeyboardController* GetInstance();
 
-  // Returns true if keyboard is currently visible.
-  bool keyboard_visible() { return keyboard_visible_; }
-
-  bool show_on_resize() { return show_on_resize_; }
+  // Returns true if keyboard is in SHOWN or SHOWING state.
+  bool keyboard_visible() const;
 
   // Returns true if keyboard window has been created.
   bool IsKeyboardWindowCreated();
 
   // Returns the current keyboard bounds. An empty rectangle will get returned
   // when the keyboard is not shown or in FLOATING mode.
-  const gfx::Rect& current_keyboard_bounds() {
+  const gfx::Rect& current_keyboard_bounds() const {
     return current_keyboard_bounds_;
   }
+
+  KeyboardControllerState GetStateForTest() const { return state_; }
 
  private:
   // For access to Observer methods for simulation.
   friend class KeyboardControllerTest;
+
+  // For access to SetContainerBounds.
+  friend class KeyboardLayoutManager;
+
+  bool show_on_resize() const { return show_on_resize_; }
 
   // aura::WindowObserver overrides
   void OnWindowHierarchyChanged(const HierarchyChangeParams& params) override;
@@ -146,16 +175,22 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
                              const gfx::Rect& new_bounds) override;
 
   // InputMethodObserver overrides
-  void OnTextInputTypeChanged(const ui::TextInputClient* client) override {}
-  void OnFocus() override {}
   void OnBlur() override {}
   void OnCaretBoundsChanged(const ui::TextInputClient* client) override {}
+  void OnFocus() override {}
+  void OnInputMethodDestroyed(const ui::InputMethod* input_method) override {}
   void OnTextInputStateChanged(const ui::TextInputClient* client) override;
-  void OnInputMethodDestroyed(const ui::InputMethod* input_method) override;
   void OnShowImeIfNeeded() override;
+
+  // Sets the bounds of the container window. Shows the keyboard if contents
+  // is first loaded and show_on_resize() is true. Called by
+  // KayboardLayoutManager.
+  void SetContainerBounds(const gfx::Rect& new_bounds,
+                          const bool contents_loaded);
 
   // Show virtual keyboard immediately with animation.
   void ShowKeyboardInternal(int64_t display_id);
+  void PopulateKeyboardContent(int64_t display_id, bool show_keyboard);
 
   // Returns true if keyboard is scheduled to hide.
   bool WillHideKeyboard() const;
@@ -163,11 +198,22 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // Called when show and hide animation finished successfully. If the animation
   // is aborted, it won't be called.
   void ShowAnimationFinished();
-  void HideAnimationFinished();
+
+  void NotifyKeyboardBoundsChangingAndEnsrueCaretInWorkArea();
 
   // Called when the keyboard mode is set or the keyboard is moved to another
   // display.
   void AdjustKeyboardBounds();
+
+  // Validates the state transition. Called from ChangeState.
+  void CheckStateTransition(KeyboardControllerState prev,
+                            KeyboardControllerState next);
+
+  // Changes the current state with validating the transition.
+  void ChangeState(KeyboardControllerState state);
+
+  // Reports error histogram in case lingering in an intermediate state.
+  void ReportLingeringState();
 
   std::unique_ptr<KeyboardUI> ui_;
   KeyboardLayoutDelegate* layout_delegate_;
@@ -176,8 +222,6 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   // uses container_'s animator.
   std::unique_ptr<CallbackAnimationObserver> animation_observer_;
 
-  ui::InputMethod* input_method_;
-  bool keyboard_visible_;
   bool show_on_resize_;
   // If true, the keyboard is always visible even if no window has input focus.
   bool keyboard_locked_;
@@ -187,11 +231,16 @@ class KEYBOARD_EXPORT KeyboardController : public ui::InputMethodObserver,
   base::ObserverList<KeyboardControllerObserver> observer_list_;
 
   // The currently used keyboard position.
+  // If the contents window is visible, this should be the same size as the
+  // contents window. If not, this should be empty.
   gfx::Rect current_keyboard_bounds_;
+
+  KeyboardControllerState state_;
 
   static KeyboardController* instance_;
 
-  base::WeakPtrFactory<KeyboardController> weak_factory_;
+  base::WeakPtrFactory<KeyboardController> weak_factory_report_lingering_state_;
+  base::WeakPtrFactory<KeyboardController> weak_factory_will_hide_;
 
   DISALLOW_COPY_AND_ASSIGN(KeyboardController);
 };

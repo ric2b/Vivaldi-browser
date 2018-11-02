@@ -8,20 +8,23 @@
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
 #include "components/crx_file/id_util.h"
+#include "content/public/test/mock_render_thread.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_builder.h"
 #include "extensions/common/extension_messages.h"
 #include "extensions/common/manifest.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "extensions/common/value_builder.h"
-#include "extensions/renderer/api_binding_test.h"
-#include "extensions/renderer/api_binding_test_util.h"
-#include "extensions/renderer/api_invocation_errors.h"
+#include "extensions/renderer/bindings/api_binding_test.h"
+#include "extensions/renderer/bindings/api_binding_test_util.h"
+#include "extensions/renderer/bindings/api_invocation_errors.h"
+#include "extensions/renderer/ipc_message_sender.h"
 #include "extensions/renderer/module_system.h"
 #include "extensions/renderer/safe_builtins.h"
 #include "extensions/renderer/script_context.h"
 #include "extensions/renderer/script_context_set.h"
 #include "extensions/renderer/string_source_map.h"
+#include "extensions/renderer/test_extensions_renderer_client.h"
 #include "extensions/renderer/test_v8_extension_configuration.h"
 #include "testing/gmock/include/gmock/gmock.h"
 
@@ -86,6 +89,53 @@ bool PropertyExists(v8::Local<v8::Context> context,
   return !value->IsUndefined();
 };
 
+class TestIPCMessageSender : public IPCMessageSender {
+ public:
+  TestIPCMessageSender() {}
+  ~TestIPCMessageSender() override {}
+
+  // IPCMessageSender:
+  void SendRequestIPC(ScriptContext* context,
+                      std::unique_ptr<ExtensionHostMsg_Request_Params> params,
+                      binding::RequestThread thread) override {
+    last_params_ = std::move(params);
+  }
+  void SendOnRequestResponseReceivedIPC(int request_id) override {}
+  // The event listener methods are less of a pain to mock (since they don't
+  // have complex parameters like ExtensionHostMsg_Request_Params).
+  MOCK_METHOD2(SendAddUnfilteredEventListenerIPC,
+               void(ScriptContext* context, const std::string& event_name));
+  MOCK_METHOD2(SendRemoveUnfilteredEventListenerIPC,
+               void(ScriptContext* context, const std::string& event_name));
+
+  // Send a message to add/remove a lazy unfiltered listener.
+  MOCK_METHOD2(SendAddUnfilteredLazyEventListenerIPC,
+               void(ScriptContext* context, const std::string& event_name));
+  MOCK_METHOD2(SendRemoveUnfilteredLazyEventListenerIPC,
+               void(ScriptContext* context, const std::string& event_name));
+
+  // Send a message to add/remove a filtered listener.
+  MOCK_METHOD4(SendAddFilteredEventListenerIPC,
+               void(ScriptContext* context,
+                    const std::string& event_name,
+                    const base::DictionaryValue& filter,
+                    bool is_lazy));
+  MOCK_METHOD4(SendRemoveFilteredEventListenerIPC,
+               void(ScriptContext* context,
+                    const std::string& event_name,
+                    const base::DictionaryValue& filter,
+                    bool remove_lazy_listener));
+
+  const ExtensionHostMsg_Request_Params* last_params() const {
+    return last_params_.get();
+  }
+
+ private:
+  std::unique_ptr<ExtensionHostMsg_Request_Params> last_params_;
+
+  DISALLOW_COPY_AND_ASSIGN(TestIPCMessageSender);
+};
+
 }  // namespace
 
 class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
@@ -101,12 +151,12 @@ class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
   }
 
   void SetUp() override {
+    render_thread_ = base::MakeUnique<content::MockRenderThread>();
     script_context_set_ = base::MakeUnique<ScriptContextSet>(&extension_ids_);
+    auto ipc_message_sender = base::MakeUnique<TestIPCMessageSender>();
+    ipc_message_sender_ = ipc_message_sender.get();
     bindings_system_ = base::MakeUnique<NativeExtensionBindingsSystem>(
-        base::Bind(&NativeExtensionBindingsSystemUnittest::MockSendRequestIPC,
-                   base::Unretained(this)),
-        base::Bind(&NativeExtensionBindingsSystemUnittest::MockSendListenerIPC,
-                   base::Unretained(this)));
+        std::move(ipc_message_sender));
     APIBindingTest::SetUp();
   }
 
@@ -124,32 +174,8 @@ class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
     ASSERT_TRUE(raw_script_contexts_.empty());
     script_context_set_.reset();
     bindings_system_.reset();
+    render_thread_.reset();
     APIBindingTest::TearDown();
-  }
-
-  void MockSendRequestIPC(ScriptContext* context,
-                          const ExtensionHostMsg_Request_Params& params,
-                          binding::RequestThread thread) {
-    last_params_.name = params.name;
-    last_params_.arguments.Swap(params.arguments.CreateDeepCopy().get());
-    last_params_.extension_id = params.extension_id;
-    last_params_.source_url = params.source_url;
-    last_params_.request_id = params.request_id;
-    last_params_.has_callback = params.has_callback;
-    last_params_.user_gesture = params.user_gesture;
-    last_params_.worker_thread_id = params.worker_thread_id;
-    last_params_.service_worker_version_id = params.service_worker_version_id;
-  }
-
-  void MockSendListenerIPC(binding::EventListenersChanged changed,
-                           ScriptContext* context,
-                           const std::string& event_name,
-                           const base::DictionaryValue* filter,
-                           bool was_manual) {
-    if (event_change_handler_) {
-      event_change_handler_->OnChange(changed, context, event_name, filter,
-                                      was_manual);
-    }
   }
 
   ScriptContext* CreateScriptContext(v8::Local<v8::Context> v8_context,
@@ -178,31 +204,38 @@ class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
     raw_script_contexts_.erase(iter);
   }
 
-  void RegisterExtension(const ExtensionId& id) { extension_ids_.insert(id); }
+  void RegisterExtension(scoped_refptr<const Extension> extension) {
+    extension_ids_.insert(extension->id());
+    RendererExtensionRegistry::Get()->Insert(extension);
+  }
 
   void InitEventChangeHandler() {
-    event_change_handler_ = base::MakeUnique<MockEventChangeHandler>();
   }
 
   NativeExtensionBindingsSystem* bindings_system() {
     return bindings_system_.get();
   }
-  const ExtensionHostMsg_Request_Params& last_params() { return last_params_; }
-  StringSourceMap* source_map() { return &source_map_; }
-  MockEventChangeHandler* event_change_handler() {
-    return event_change_handler_.get();
+  bool has_last_params() const { return !!ipc_message_sender_->last_params(); }
+  const ExtensionHostMsg_Request_Params& last_params() {
+    return *ipc_message_sender_->last_params();
   }
+  StringSourceMap* source_map() { return &source_map_; }
+  TestIPCMessageSender* ipc_message_sender() { return ipc_message_sender_; }
 
  private:
   ExtensionIdSet extension_ids_;
+  std::unique_ptr<content::MockRenderThread> render_thread_;
   std::unique_ptr<ScriptContextSet> script_context_set_;
   std::vector<ScriptContext*> raw_script_contexts_;
   std::unique_ptr<NativeExtensionBindingsSystem> bindings_system_;
+  // The TestIPCMessageSender; owned by the bindings system.
+  TestIPCMessageSender* ipc_message_sender_ = nullptr;
 
-  ExtensionHostMsg_Request_Params last_params_;
+  std::unique_ptr<ExtensionHostMsg_Request_Params> last_params_;
   std::unique_ptr<MockEventChangeHandler> event_change_handler_;
 
   StringSourceMap source_map_;
+  TestExtensionsRendererClient renderer_client_;
 
   DISALLOW_COPY_AND_ASSIGN(NativeExtensionBindingsSystemUnittest);
 };
@@ -210,7 +243,7 @@ class NativeExtensionBindingsSystemUnittest : public APIBindingTest {
 TEST_F(NativeExtensionBindingsSystemUnittest, Basic) {
   scoped_refptr<Extension> extension = CreateExtension(
       "foo", ItemType::EXTENSION, {"idle", "power", "webRequest"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -320,7 +353,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Basic) {
 TEST_F(NativeExtensionBindingsSystemUnittest, Events) {
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle", "power"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -362,7 +395,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, Events) {
 TEST_F(NativeExtensionBindingsSystemUnittest, APIObjectsAreEqual) {
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -390,7 +423,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle", "power"});
 
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -446,7 +479,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestBridgingToJSCustomBindings) {
 
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -536,7 +569,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestSendRequestHook) {
 
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -572,7 +605,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestEventRegistration) {
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle", "power"});
 
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -593,27 +626,29 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestEventRegistration) {
       "});";
   v8::Local<v8::Function> add_listener =
       FunctionFromString(context, kAddListener);
-  EXPECT_CALL(*event_change_handler(),
-              OnChange(binding::EventListenersChanged::HAS_LISTENERS,
-                       script_context, kEventName, nullptr, true))
+  EXPECT_CALL(*ipc_message_sender(),
+              SendAddUnfilteredEventListenerIPC(script_context, kEventName))
       .Times(1);
   v8::Local<v8::Value> argv[] = {listener};
   RunFunction(add_listener, context, arraysize(argv), argv);
-  ::testing::Mock::VerifyAndClearExpectations(event_change_handler());
+  ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
+  EXPECT_TRUE(bindings_system()->HasEventListenerInContext(
+      "idle.onStateChanged", script_context));
 
   // Remove the event listener. We should be notified again.
   const char kRemoveListener[] =
       "(function(listener) {\n"
       "  chrome.idle.onStateChanged.removeListener(listener);\n"
       "});";
-  EXPECT_CALL(*event_change_handler(),
-              OnChange(binding::EventListenersChanged::NO_LISTENERS,
-                       script_context, kEventName, nullptr, true))
+  EXPECT_CALL(*ipc_message_sender(),
+              SendRemoveUnfilteredEventListenerIPC(script_context, kEventName))
       .Times(1);
   v8::Local<v8::Function> remove_listener =
       FunctionFromString(context, kRemoveListener);
   RunFunction(remove_listener, context, arraysize(argv), argv);
-  ::testing::Mock::VerifyAndClearExpectations(event_change_handler());
+  ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
+  EXPECT_FALSE(bindings_system()->HasEventListenerInContext(
+      "idle.onStateChanged", script_context));
 }
 
 TEST_F(NativeExtensionBindingsSystemUnittest,
@@ -622,7 +657,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
   scoped_refptr<Extension> app = CreateExtension("foo", ItemType::PLATFORM_APP,
                                                  std::vector<std::string>());
   EXPECT_TRUE(app->is_platform_app());
-  RegisterExtension(app->id());
+  RegisterExtension(app);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -649,19 +684,19 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
       "});";
   v8::Local<v8::Function> use_app_runtime =
       FunctionFromString(context, kUseAppRuntime);
-  EXPECT_CALL(*event_change_handler(),
-              OnChange(binding::EventListenersChanged::HAS_LISTENERS,
-                       script_context, "app.runtime.onLaunched", nullptr, true))
+  EXPECT_CALL(*ipc_message_sender(),
+              SendAddUnfilteredEventListenerIPC(script_context,
+                                                "app.runtime.onLaunched"))
       .Times(1);
   RunFunctionOnGlobal(use_app_runtime, context, 0, nullptr);
-  ::testing::Mock::VerifyAndClearExpectations(event_change_handler());
+  ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
 }
 
 TEST_F(NativeExtensionBindingsSystemUnittest,
        TestPrefixedApiMethodsAndSystemBinding) {
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"system.cpu"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -701,7 +736,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
 TEST_F(NativeExtensionBindingsSystemUnittest, TestLastError) {
   scoped_refptr<Extension> extension =
       CreateExtension("foo", ItemType::EXTENSION, {"idle", "power"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -751,7 +786,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestLastError) {
 TEST_F(NativeExtensionBindingsSystemUnittest, TestCustomProperties) {
   scoped_refptr<Extension> extension =
       CreateExtension("storage extension", ItemType::EXTENSION, {"storage"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -787,7 +822,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
        CheckDifferentContextsHaveDifferentAPIObjects) {
   scoped_refptr<Extension> extension =
       CreateExtension("extension", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context_a = MainContext();
@@ -822,45 +857,78 @@ TEST_F(NativeExtensionBindingsSystemUnittest,
 // context are properly present or absent from the API object.
 TEST_F(NativeExtensionBindingsSystemUnittest,
        CheckRestrictedFeaturesBasedOnContext) {
-  scoped_refptr<Extension> extension =
-      CreateExtension("extension", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  scoped_refptr<Extension> connectable_extension;
+  {
+    DictionaryBuilder manifest;
+    manifest.Set("name", "connectable")
+        .Set("manifest_version", 2)
+        .Set("version", "0.1")
+        .Set("description", "test extension");
+    DictionaryBuilder connectable;
+    connectable.Set("matches",
+                    ListBuilder().Append("*://example.com/*").Build());
+    manifest.Set("externally_connectable", connectable.Build());
+    connectable_extension =
+        ExtensionBuilder()
+            .SetManifest(manifest.Build())
+            .SetLocation(Manifest::INTERNAL)
+            .SetID(crx_file::id_util::GenerateId("connectable"))
+            .Build();
+  }
+
+  RegisterExtension(connectable_extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> blessed_context = MainContext();
-  v8::Local<v8::Context> webpage_context = AddContext();
+  v8::Local<v8::Context> connectable_webpage_context = AddContext();
+  v8::Local<v8::Context> nonconnectable_webpage_context = AddContext();
 
   // Create two contexts - a blessed extension context and a normal web page
   // context.
-  ScriptContext* blessed_script_context = CreateScriptContext(
-      blessed_context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
-  blessed_script_context->set_url(extension->url());
+  ScriptContext* blessed_script_context =
+      CreateScriptContext(blessed_context, connectable_extension.get(),
+                          Feature::BLESSED_EXTENSION_CONTEXT);
+  blessed_script_context->set_url(connectable_extension->url());
   bindings_system()->UpdateBindingsForContext(blessed_script_context);
 
-  ScriptContext* webpage_script_context =
-      CreateScriptContext(webpage_context, nullptr, Feature::WEB_PAGE_CONTEXT);
-  webpage_script_context->set_url(GURL("http://example.com"));
-  bindings_system()->UpdateBindingsForContext(webpage_script_context);
+  ScriptContext* connectable_webpage_script_context = CreateScriptContext(
+      connectable_webpage_context, nullptr, Feature::WEB_PAGE_CONTEXT);
+  connectable_webpage_script_context->set_url(GURL("http://example.com"));
+  bindings_system()->UpdateBindingsForContext(
+      connectable_webpage_script_context);
+
+  ScriptContext* nonconnectable_webpage_script_context = CreateScriptContext(
+      nonconnectable_webpage_context, nullptr, Feature::WEB_PAGE_CONTEXT);
+  nonconnectable_webpage_script_context->set_url(GURL("http://notexample.com"));
+  bindings_system()->UpdateBindingsForContext(
+      nonconnectable_webpage_script_context);
 
   // Check that properties are correctly restricted. The blessed context should
-  // have access to the whole runtime API, but the webpage should only have
-  // access to sendMessage.
+  // have access to the whole runtime API, the connectable webpage should only
+  // have access to sendMessage, and the nonconnectable webpage should not have
+  // access to any of the API.
+  const char kRuntime[] = "chrome.runtime";
   const char kSendMessage[] = "chrome.runtime.sendMessage";
   const char kGetUrl[] = "chrome.runtime.getURL";
   const char kOnMessage[] = "chrome.runtime.onMessage";
+  ASSERT_TRUE(PropertyExists(blessed_context, kRuntime));
   EXPECT_TRUE(PropertyExists(blessed_context, kSendMessage));
   EXPECT_TRUE(PropertyExists(blessed_context, kGetUrl));
   EXPECT_TRUE(PropertyExists(blessed_context, kOnMessage));
-  EXPECT_TRUE(PropertyExists(webpage_context, kSendMessage));
-  EXPECT_FALSE(PropertyExists(webpage_context, kGetUrl));
-  EXPECT_FALSE(PropertyExists(webpage_context, kOnMessage));
+
+  ASSERT_TRUE(PropertyExists(connectable_webpage_context, kRuntime));
+  EXPECT_TRUE(PropertyExists(connectable_webpage_context, kSendMessage));
+  EXPECT_FALSE(PropertyExists(connectable_webpage_context, kGetUrl));
+  EXPECT_FALSE(PropertyExists(connectable_webpage_context, kOnMessage));
+
+  EXPECT_FALSE(PropertyExists(nonconnectable_webpage_context, kRuntime));
 }
 
 // Tests behavior when script sets window.chrome to be various things.
 TEST_F(NativeExtensionBindingsSystemUnittest, TestUsingOtherChromeObjects) {
   scoped_refptr<Extension> extension = CreateExtension(
       "extension", ItemType::EXTENSION, std::vector<std::string>());
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context_a = MainContext();
@@ -929,7 +997,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUsingOtherChromeObjects) {
 TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
   scoped_refptr<Extension> extension =
       CreateExtension("extension", ItemType::EXTENSION, {"idle"});
-  RegisterExtension(extension->id());
+  RegisterExtension(extension);
 
   v8::HandleScope handle_scope(isolate());
   v8::Local<v8::Context> context = MainContext();
@@ -984,7 +1052,7 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
     RunFunctionAndExpectError(
         run_idle, context, arraysize(args), args,
         "Uncaught Error: 'idle.queryState' is not available in this context.");
-    EXPECT_TRUE(last_params().name.empty());
+    EXPECT_FALSE(has_last_params());
   }
 
   {
@@ -1017,6 +1085,36 @@ TEST_F(NativeExtensionBindingsSystemUnittest, TestUpdatingPermissions) {
     RunFunction(run_idle, context, arraysize(args), args);
     EXPECT_EQ("idle.queryState", last_params().name);
   }
+}
+
+TEST_F(NativeExtensionBindingsSystemUnittest, UnmanagedEvents) {
+  InitEventChangeHandler();
+
+  scoped_refptr<Extension> extension =
+      CreateExtension("foo", ItemType::EXTENSION, std::vector<std::string>());
+  RegisterExtension(extension);
+
+  v8::HandleScope handle_scope(isolate());
+  v8::Local<v8::Context> context = MainContext();
+  ScriptContext* script_context = CreateScriptContext(
+      context, extension.get(), Feature::BLESSED_EXTENSION_CONTEXT);
+  script_context->set_url(extension->url());
+
+  bindings_system()->UpdateBindingsForContext(script_context);
+
+  const char kAddListeners[] =
+      "(function() {\n"
+      "  chrome.runtime.onMessage.addListener(function() {});\n"
+      "  chrome.runtime.onConnect.addListener(function() {});\n"
+      "});";
+
+  v8::Local<v8::Function> add_listeners =
+      FunctionFromString(context, kAddListeners);
+  RunFunctionOnGlobal(add_listeners, context, 0, nullptr);
+
+  // We should have no notifications for event listeners added (since the
+  // mock is a strict mock, this will fail if anything was called).
+  ::testing::Mock::VerifyAndClearExpectations(ipc_message_sender());
 }
 
 }  // namespace extensions

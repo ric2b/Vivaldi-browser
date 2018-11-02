@@ -45,7 +45,7 @@ using offline_pages::OfflinePageModelQueryBuilder;
 namespace {
 
 const int kDefaultMaxSuggestionsCount = 5;
-const int kDefaultMaxDownloadAgeHours = 6 * 7 * 24;  // 6 weeks
+const int kDefaultMaxDownloadAgeHours = 24;
 const char kAssetDownloadsPrefix = 'D';
 const char kOfflinePageDownloadsPrefix = 'O';
 
@@ -383,12 +383,11 @@ void DownloadSuggestionsProvider::OfflinePageAdded(
 }
 
 void DownloadSuggestionsProvider::OfflinePageDeleted(
-    int64_t offline_id,
-    const offline_pages::ClientId& client_id) {
+    const offline_pages::OfflinePageModel::DeletedPageInfo& page_info) {
   DCHECK(offline_page_model_);
   if (IsClientIdForOfflinePageDownload(
-          offline_page_model_->GetPolicyController(), client_id)) {
-    InvalidateSuggestion(GetOfflinePagePerCategoryID(offline_id));
+          offline_page_model_->GetPolicyController(), page_info.client_id)) {
+    InvalidateSuggestion(GetOfflinePagePerCategoryID(page_info.offline_id));
   }
 }
 

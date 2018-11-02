@@ -10,6 +10,7 @@
 #include "mojo/edk/system/data_pipe_producer_dispatcher.h"
 #include "mojo/edk/system/message_pipe_dispatcher.h"
 #include "mojo/edk/system/platform_handle_dispatcher.h"
+#include "mojo/edk/system/ports/event.h"
 #include "mojo/edk/system/shared_buffer_dispatcher.h"
 
 namespace mojo {
@@ -24,6 +25,7 @@ Dispatcher::DispatcherInTransit::~DispatcherInTransit() {}
 
 MojoResult Dispatcher::WatchDispatcher(scoped_refptr<Dispatcher> dispatcher,
                                        MojoHandleSignals signals,
+                                       MojoWatchCondition condition,
                                        uintptr_t context) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
@@ -39,17 +41,14 @@ MojoResult Dispatcher::Arm(uint32_t* num_ready_contexts,
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
-MojoResult Dispatcher::WriteMessage(std::unique_ptr<MessageForTransit> message,
-                                    MojoWriteMessageFlags flags) {
+MojoResult Dispatcher::WriteMessage(
+    std::unique_ptr<ports::UserMessageEvent> message,
+    MojoWriteMessageFlags flags) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
-MojoResult Dispatcher::ReadMessage(std::unique_ptr<MessageForTransit>* message,
-                                   uint32_t* num_bytes,
-                                   MojoHandle* handles,
-                                   uint32_t* num_handles,
-                                   MojoReadMessageFlags flags,
-                                   bool read_any_size) {
+MojoResult Dispatcher::ReadMessage(
+    std::unique_ptr<ports::UserMessageEvent>* message) {
   return MOJO_RESULT_INVALID_ARGUMENT;
 }
 
@@ -148,7 +147,9 @@ bool Dispatcher::EndSerialize(void* destination,
   return true;
 }
 
-bool Dispatcher::BeginTransit() { return true; }
+bool Dispatcher::BeginTransit() {
+  return true;
+}
 
 void Dispatcher::CompleteTransitAndClose() {}
 
@@ -165,13 +166,13 @@ scoped_refptr<Dispatcher> Dispatcher::Deserialize(
     size_t num_platform_handles) {
   switch (type) {
     case Type::MESSAGE_PIPE:
-      return MessagePipeDispatcher::Deserialize(
-          bytes, num_bytes, ports, num_ports, platform_handles,
-          num_platform_handles);
+      return MessagePipeDispatcher::Deserialize(bytes, num_bytes, ports,
+                                                num_ports, platform_handles,
+                                                num_platform_handles);
     case Type::SHARED_BUFFER:
-      return SharedBufferDispatcher::Deserialize(
-          bytes, num_bytes, ports, num_ports, platform_handles,
-          num_platform_handles);
+      return SharedBufferDispatcher::Deserialize(bytes, num_bytes, ports,
+                                                 num_ports, platform_handles,
+                                                 num_platform_handles);
     case Type::DATA_PIPE_CONSUMER:
       return DataPipeConsumerDispatcher::Deserialize(
           bytes, num_bytes, ports, num_ports, platform_handles,
@@ -181,9 +182,9 @@ scoped_refptr<Dispatcher> Dispatcher::Deserialize(
           bytes, num_bytes, ports, num_ports, platform_handles,
           num_platform_handles);
     case Type::PLATFORM_HANDLE:
-      return PlatformHandleDispatcher::Deserialize(
-          bytes, num_bytes, ports, num_ports, platform_handles,
-          num_platform_handles);
+      return PlatformHandleDispatcher::Deserialize(bytes, num_bytes, ports,
+                                                   num_ports, platform_handles,
+                                                   num_platform_handles);
     default:
       LOG(ERROR) << "Deserializing invalid dispatcher type.";
       return nullptr;

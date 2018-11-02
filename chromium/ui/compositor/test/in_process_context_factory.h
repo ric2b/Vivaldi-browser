@@ -9,17 +9,23 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "cc/surfaces/display.h"
-#include "cc/surfaces/frame_sink_id_allocator.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_image_factory.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/test/test_task_graph_runner.h"
+#include "components/viz/common/surfaces/frame_sink_id_allocator.h"
+#include "components/viz/service/display/display.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/ipc/common/surface_handle.h"
 #include "ui/compositor/compositor.h"
 
 namespace cc {
-class SurfaceManager;
+class FrameSinkManagerImpl;
+class ResourceSettings;
+}
+
+namespace viz {
+class HostFrameSinkManager;
 }
 
 namespace ui {
@@ -28,9 +34,12 @@ class InProcessContextProvider;
 class InProcessContextFactory : public ContextFactory,
                                 public ContextFactoryPrivate {
  public:
-  // surface_manager is owned by the creator of this and must outlive the
-  // context factory.
-  explicit InProcessContextFactory(cc::SurfaceManager* surface_manager);
+  // Both |host_frame_sink_manager| and |frame_sink_manager| must outlive the
+  // ContextFactory.
+  // TODO(crbug.com/657959): |frame_sink_manager| should go away and we should
+  // use the LayerTreeFrameSink from the HostFrameSinkManager.
+  InProcessContextFactory(viz::HostFrameSinkManager* host_frame_sink_manager,
+                          viz::FrameSinkManagerImpl* frame_sink_manager);
   ~InProcessContextFactory() override;
 
   // If true (the default) an OutputSurface is created that does not display
@@ -47,20 +56,21 @@ class InProcessContextFactory : public ContextFactory,
   // used for tests.
   void SetUseFastRefreshRateForTests();
 
-  // ContextFactory implementation
-  void CreateCompositorFrameSink(base::WeakPtr<Compositor> compositor) override;
+  // ContextFactory implementation.
+  void CreateLayerTreeFrameSink(base::WeakPtr<Compositor> compositor) override;
 
   std::unique_ptr<Reflector> CreateReflector(Compositor* mirrored_compositor,
                                              Layer* mirroring_layer) override;
   void RemoveReflector(Reflector* reflector) override;
 
-  scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
+  scoped_refptr<viz::ContextProvider> SharedMainThreadContextProvider()
+      override;
   void RemoveCompositor(Compositor* compositor) override;
   double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  cc::FrameSinkId AllocateFrameSinkId() override;
-  cc::SurfaceManager* GetSurfaceManager() override;
+  viz::FrameSinkId AllocateFrameSinkId() override;
+  viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
@@ -74,9 +84,10 @@ class InProcessContextFactory : public ContextFactory,
                                  base::TimeTicks timebase,
                                  base::TimeDelta interval) override {}
   void SetOutputIsSecure(ui::Compositor* compositor, bool secure) override {}
-  const cc::RendererSettings& GetRendererSettings() const override;
+  const viz::ResourceSettings& GetResourceSettings() const override;
   void AddObserver(ContextFactoryObserver* observer) override;
   void RemoveObserver(ContextFactoryObserver* observer) override;
+  viz::FrameSinkManagerImpl* GetFrameSinkManager() override;
 
  private:
   struct PerCompositorData;
@@ -89,13 +100,14 @@ class InProcessContextFactory : public ContextFactory,
   cc::TestGpuMemoryBufferManager gpu_memory_buffer_manager_;
   cc::TestImageFactory image_factory_;
   cc::TestTaskGraphRunner task_graph_runner_;
-  cc::FrameSinkIdAllocator frame_sink_id_allocator_;
+  viz::FrameSinkIdAllocator frame_sink_id_allocator_;
   bool use_test_surface_;
   double refresh_rate_ = 60.0;
-  cc::SurfaceManager* surface_manager_;
+  viz::HostFrameSinkManager* const host_frame_sink_manager_;
+  viz::FrameSinkManagerImpl* const frame_sink_manager_;
   base::ObserverList<ContextFactoryObserver> observer_list_;
 
-  cc::RendererSettings renderer_settings_;
+  viz::RendererSettings renderer_settings_;
   using PerCompositorDataMap =
       base::hash_map<ui::Compositor*, std::unique_ptr<PerCompositorData>>;
   PerCompositorDataMap per_compositor_data_;

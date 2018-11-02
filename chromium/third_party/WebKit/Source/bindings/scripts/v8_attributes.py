@@ -87,12 +87,12 @@ def attribute_context(interface, attribute, interfaces):
     # [CEReactions]
     is_ce_reactions = 'CEReactions' in extended_attributes
     if is_ce_reactions:
-        includes.add('core/dom/custom/CEReactionsScope.h')
+        includes.add('core/html/custom/CEReactionsScope.h')
     # [CustomElementCallbacks], [Reflect]
     is_custom_element_callbacks = 'CustomElementCallbacks' in extended_attributes
     is_reflect = 'Reflect' in extended_attributes
     if is_custom_element_callbacks or is_reflect:
-        includes.add('core/dom/custom/V0CustomElementProcessingStack.h')
+        includes.add('core/html/custom/V0CustomElementProcessingStack.h')
     # [PerWorldBindings]
     if 'PerWorldBindings' in extended_attributes:
         assert idl_type.is_wrapper_type or 'LogActivity' in extended_attributes, '[PerWorldBindings] should only be used with wrapper types: %s.%s' % (interface.name, attribute.name)
@@ -124,6 +124,7 @@ def attribute_context(interface, attribute, interfaces):
         'activity_logging_world_check': v8_utilities.activity_logging_world_check(attribute),  # [ActivityLogging]
         'cached_attribute_validation_method': cached_attribute_validation_method,
         'constructor_type': constructor_type,
+        'context_enabled_feature_name': v8_utilities.context_enabled_feature_name(attribute),
         'cpp_name': cpp_name(attribute),
         'cpp_type': idl_type.cpp_type,
         'cpp_type_initializer': idl_type.cpp_type_initializer,
@@ -196,6 +197,9 @@ def attribute_context(interface, attribute, interfaces):
     if not has_custom_setter(attribute) and has_setter(interface, attribute):
         setter_context(interface, attribute, interfaces, context)
 
+    # [RuntimeCallStatsCounter]
+    runtime_call_stats_context(context, extended_attributes)
+
     # [CrossOrigin] is incompatible with a number of other attributes, so check
     # for them here.
     if is_cross_origin:
@@ -209,10 +213,25 @@ def attribute_context(interface, attribute, interfaces):
     return context
 
 
+def runtime_call_stats_context(context, extended_attributes):
+    counter = ''
+    if 'RuntimeCallStatsCounter' in extended_attributes:
+        includes.add('platform/bindings/RuntimeCallStats.h')
+        counter = extended_attributes['RuntimeCallStatsCounter']
+    runtime_call_stats = {
+        'getter_counter': 'k%s_Getter' % counter if counter else '',
+        'setter_counter': 'k%s_Setter' % counter if counter else ''
+    }
+    context.update({
+        'runtime_call_stats': runtime_call_stats
+    })
+
+
 def filter_accessors(attributes):
     return [attribute for attribute in attributes if
             not (attribute['exposed_test'] or
                  attribute['secure_context_test'] or
+                 attribute['context_enabled_feature_name'] or
                  attribute['origin_trial_enabled_function'] or
                  attribute['runtime_enabled_feature_name']) and
             not attribute['is_data_type_property']]
@@ -221,6 +240,7 @@ def filter_accessors(attributes):
 def is_data_attribute(attribute):
     return (not (attribute['exposed_test'] or
                  attribute['secure_context_test'] or
+                 attribute['context_enabled_feature_name'] or
                  attribute['origin_trial_enabled_function'] or
                  attribute['runtime_enabled_feature_name']) and
             attribute['is_data_type_property'])
@@ -362,6 +382,8 @@ def is_keep_alive_for_gc(interface, attribute):
     idl_type = attribute.idl_type
     base_idl_type = idl_type.base_type
     extended_attributes = attribute.extended_attributes
+    if attribute.is_static:
+        return False
     return (
         # For readonly attributes, for performance reasons we keep the attribute
         # wrapper alive while the owner wrapper is alive, because the attribute

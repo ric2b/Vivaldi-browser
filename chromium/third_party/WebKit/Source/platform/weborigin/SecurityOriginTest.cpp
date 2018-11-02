@@ -206,7 +206,7 @@ TEST_F(SecurityOriginTest, IsSecure) {
               SecurityOrigin::IsSecure(KURL(kParsedURLString, test.url)))
         << "URL: '" << test.url << "'";
 
-  EXPECT_FALSE(SecurityOrigin::IsSecure(KURL()));
+  EXPECT_FALSE(SecurityOrigin::IsSecure(NullURL()));
 }
 
 TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
@@ -217,13 +217,13 @@ TEST_F(SecurityOriginTest, IsSecureViaTrustworthy) {
   for (const char* test : urls) {
     KURL url(kParsedURLString, test);
     EXPECT_FALSE(SecurityOrigin::IsSecure(url));
-    SecurityPolicy::AddOriginTrustworthyWhiteList(SecurityOrigin::Create(url));
+    SecurityPolicy::AddOriginTrustworthyWhiteList(*SecurityOrigin::Create(url));
     EXPECT_TRUE(SecurityOrigin::IsSecure(url));
   }
 }
 
 TEST_F(SecurityOriginTest, Suborigins) {
-  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
 
   RefPtr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
@@ -268,7 +268,7 @@ TEST_F(SecurityOriginTest, Suborigins) {
 }
 
 TEST_F(SecurityOriginTest, SuboriginsParsing) {
-  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
   String protocol, real_protocol, host, real_host, suborigin;
   protocol = "https";
   host = "test.com";
@@ -310,7 +310,7 @@ TEST_F(SecurityOriginTest, SuboriginsParsing) {
 }
 
 TEST_F(SecurityOriginTest, SuboriginsIsSameSchemeHostPortAndSuborigin) {
-  blink::RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  blink::RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
   RefPtr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https-so://foobar.test.com");
   RefPtr<SecurityOrigin> other1 =
@@ -330,7 +330,7 @@ TEST_F(SecurityOriginTest, SuboriginsIsSameSchemeHostPortAndSuborigin) {
 }
 
 TEST_F(SecurityOriginTest, CanAccess) {
-  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
 
   struct TestCase {
     bool can_access;
@@ -356,7 +356,7 @@ TEST_F(SecurityOriginTest, CanAccess) {
 }
 
 TEST_F(SecurityOriginTest, CanRequest) {
-  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
 
   struct TestCase {
     bool can_request;
@@ -516,7 +516,7 @@ TEST_F(SecurityOriginTest, CanonicalizeHost) {
   };
 
   for (const TestCase& test : cases) {
-    SCOPED_TRACE(testing::Message() << "raw host: '" << test.host << "'");
+    SCOPED_TRACE(::testing::Message() << "raw host: '" << test.host << "'");
     String host = String::FromUTF8(test.host);
     bool success = false;
     String canonical_host = SecurityOrigin::CanonicalizeHost(host, &success);

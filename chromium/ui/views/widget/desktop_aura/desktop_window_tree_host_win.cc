@@ -113,7 +113,10 @@ void DesktopWindowTreeHostWin::Init(aura::Window* content_window,
   content_window_ = content_window;
   wants_mouse_events_when_inactive_ = params.wants_mouse_events_when_inactive;
 
-  aura::client::SetAnimationHost(content_window_, this);
+  wm::SetAnimationHost(content_window_, this);
+  if (params.type == Widget::InitParams::TYPE_WINDOW &&
+      !params.remove_standard_frame)
+    content_window_->SetProperty(aura::client::kAnimationsDisabledKey, true);
 
   ConfigureWindowStyles(message_handler_.get(), params,
                         GetWidget()->widget_delegate(),
@@ -581,7 +584,7 @@ void DesktopWindowTreeHostWin::MoveCursorToScreenLocationInPixels(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// DesktopWindowTreeHostWin, aura::AnimationHost implementation:
+// DesktopWindowTreeHostWin, wm::AnimationHost implementation:
 
 void DesktopWindowTreeHostWin::SetHostTransitionOffsets(
     const gfx::Vector2d& top_left_delta,
@@ -599,6 +602,10 @@ void DesktopWindowTreeHostWin::OnWindowHidingAnimationCompleted() {
 
 ////////////////////////////////////////////////////////////////////////////////
 // DesktopWindowTreeHostWin, HWNDMessageHandlerDelegate implementation:
+
+ui::InputMethod* DesktopWindowTreeHostWin::GetHWNDMessageDelegateInputMethod() {
+  return GetInputMethod();
+}
 
 bool DesktopWindowTreeHostWin::HasNonClientView() const {
   return has_non_client_view_;
@@ -901,8 +908,7 @@ bool DesktopWindowTreeHostWin::HandleTooltipNotify(int w_param,
 
 void DesktopWindowTreeHostWin::HandleMenuLoop(bool in_menu_loop) {
   if (in_menu_loop) {
-    tooltip_disabler_.reset(
-        new aura::client::ScopedTooltipDisabler(window()));
+    tooltip_disabler_.reset(new wm::ScopedTooltipDisabler(window()));
   } else {
     tooltip_disabler_.reset();
   }

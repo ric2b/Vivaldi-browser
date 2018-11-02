@@ -10,16 +10,14 @@
 #include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm_window.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/events/event_utils.h"
 
 namespace ash {
-namespace test {
 
-class DragDropTrackerTest : public test::AshTestBase {
+class DragDropTrackerTest : public AshTestBase {
  public:
   void SetUp() override { AshTestBase::SetUp(); }
 
@@ -176,5 +174,4 @@ TEST_F(DragDropTrackerTest, ConvertEvent) {
   EXPECT_EQ(original11.flags(), converted11->flags());
 }
 
-}  // namespace test
 }  // namespace aura

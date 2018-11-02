@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_WEBUI_PRINT_PREVIEW_PRINT_PREVIEW_HANDLER_H_
 
 #include <memory>
+#include <queue>
 #include <string>
 
 #include "base/files/file_path.h"
@@ -13,6 +14,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/common/features.h"
 #include "components/signin/core/browser/gaia_cookie_manager_service.h"
 #include "content/public/browser/web_ui_message_handler.h"
@@ -75,6 +77,35 @@ class PrintPreviewHandler
   // Called when print preview failed.
   void OnPrintPreviewFailed();
 
+  // Called when print preview is cancelled due to a new request.
+  void OnPrintPreviewCancelled();
+
+  // Called when printer settings were invalid.
+  void OnInvalidPrinterSettings();
+
+  // Called when print preview is ready.
+  void OnPrintPreviewReady(int preview_uid, int request_id);
+
+  // Called when a print request is cancelled due to its initiator closing.
+  void OnPrintRequestCancelled();
+
+  // Send the print preset options from the document.
+  void SendPrintPresetOptions(bool disable_scaling, int copies, int duplex);
+
+  // Send the print preview page count and fit to page scaling
+  void SendPageCountReady(int page_count,
+                          int request_id,
+                          int fit_to_page_scaling);
+
+  // Send the default page layout
+  void SendPageLayoutReady(const base::DictionaryValue& layout,
+                           bool has_custom_page_size_style);
+
+  // Notify the WebUI that the page preview is ready.
+  void SendPagePreviewReady(int page_index,
+                            int preview_uid,
+                            int preview_response_id);
+
 #if BUILDFLAG(ENABLE_BASIC_PRINTING)
   // Called when the user press ctrl+shift+p to display the native system
   // dialog.
@@ -105,9 +136,17 @@ class PrintPreviewHandler
   // Sets |pdf_file_saved_closure_| to |closure|.
   void SetPdfSavedClosureForTesting(const base::Closure& closure);
 
+  // Fires the 'enable-manipulate-settings-for-test' WebUI event.
+  void SendEnableManipulateSettingsForTest();
+
+  // Fires the 'manipulate-settings-for-test' WebUI event with |settings|.
+  void SendManipulateSettingsForTest(const base::DictionaryValue& settings);
+
  protected:
-  // If |prompt_user| is true, displays a modal dialog, prompting the user to
-  // select a file. Otherwise, just accept |default_path| and uniquify it.
+  // If |prompt_user| is true, starts a task to create the default Save As PDF
+  // directory if needed. OnDirectoryCreated() will be called when it
+  // finishes to open the modal dialog and prompt the user. Otherwise, just
+  // accept |default_path| and uniquify it.
   // Protected so unit tests can access.
   virtual void SelectFile(const base::FilePath& default_path, bool prompt_user);
 
@@ -142,9 +181,6 @@ class PrintPreviewHandler
   // |args| is the provisional printer ID.
   void HandleGrantExtensionPrinterAccess(const base::ListValue* args);
 
-  // Stops getting all local privet printers. |arg| is unused.
-  void HandleStopGetPrivetPrinters(const base::ListValue* args);
-
   // Asks the initiator renderer to generate a preview.  First element of |args|
   // is a job settings JSON string.
   void HandleGetPreview(const base::ListValue* args);
@@ -177,7 +213,7 @@ class PrintPreviewHandler
 #endif
 
   // Callback for the signin dialog to call once signin is complete.
-  void OnSigninComplete();
+  void OnSigninComplete(const std::string& callback_id);
 
   // Brings up a dialog to allow the user to sign into cloud print.
   // |args| is unused.
@@ -225,13 +261,17 @@ class PrintPreviewHandler
                            const std::string& default_printer);
 
   // Send OAuth2 access token.
-  void SendAccessToken(const std::string& type,
+  void SendAccessToken(const std::string& callback_id,
                        const std::string& access_token);
+
+  // Send message indicating a request for token was already in progress.
+  void SendRequestInProgress(const std::string& callback_id);
 
   // Sends the printer capabilities to the Web UI. |settings_info| contains
   // printer capabilities information. If |settings_info| is empty, sends
   // error notification to the Web UI instead.
   void SendPrinterCapabilities(
+      const std::string& callback_id,
       const std::string& printer_name,
       std::unique_ptr<base::DictionaryValue> settings_info);
 
@@ -242,13 +282,15 @@ class PrintPreviewHandler
                         std::unique_ptr<base::DictionaryValue> settings_info);
 
   // Send the list of printers to the Web UI.
-  void SetupPrinterList(const printing::PrinterList& printer_list);
+  void SetupPrinterList(const std::string& callback_id,
+                        const printing::PrinterList& printer_list);
 
   // Send whether cloud print integration should be enabled.
   void SendCloudPrintEnabled();
 
   // Send the PDF data to the cloud to print.
-  void SendCloudPrintJob(const base::RefCountedBytes* data);
+  void SendCloudPrintJob(const std::string& callback_id,
+                         const base::RefCountedBytes* data);
 
   // Gets the initiator for the print preview dialog.
   content::WebContents* GetInitiator() const;
@@ -261,6 +303,10 @@ class PrintPreviewHandler
 
   // Clears initiator details for the print preview dialog.
   void ClearInitiatorDetails();
+
+  // Called when the directory to save to has been created. Opens a modal
+  // dialog to prompt the user to select the file for Save As PDF.
+  void OnDirectoryCreated(const base::FilePath& path);
 
   // Posts a task to save |data| to pdf at |print_to_pdf_path_|.
   void PostPrintToPdfTask();
@@ -285,21 +331,27 @@ class PrintPreviewHandler
 #if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
   void StartPrivetLister(const scoped_refptr<
       local_discovery::ServiceDiscoverySharedClient>& client);
-  void OnPrivetCapabilities(const base::DictionaryValue* capabilities);
+  void StopPrivetLister();
+  void OnPrivetCapabilities(const std::string& callback_id,
+                            const base::DictionaryValue* capabilities);
   void PrivetCapabilitiesUpdateClient(
+      const std::string& callback_id,
       std::unique_ptr<cloud_print::PrivetHTTPClient> http_client);
   void PrivetLocalPrintUpdateClient(
+      const std::string& callback_id,
       std::string print_ticket,
       std::string capabilities,
       gfx::Size page_size,
       std::unique_ptr<cloud_print::PrivetHTTPClient> http_client);
   bool PrivetUpdateClient(
+      const std::string& callback_id,
       std::unique_ptr<cloud_print::PrivetHTTPClient> http_client);
   void StartPrivetLocalPrint(const std::string& print_ticket,
                              const std::string& capabilities,
                              const gfx::Size& page_size);
   void SendPrivetCapabilitiesError(const std::string& id);
-  void PrintToPrivetPrinter(const std::string& printer_name,
+  void PrintToPrivetPrinter(const std::string& callback_id,
+                            const std::string& printer_name,
                             const std::string& print_ticket,
                             const std::string& capabilities,
                             const gfx::Size& page_size);
@@ -319,31 +371,38 @@ class PrintPreviewHandler
   void EnsureExtensionPrinterHandlerSet();
 
   // Called when a list of printers is reported by an extension.
+  // |callback_id|: The javascript callback to call if all extension printers
+  //     are loaded (when |done| = true)
   // |printers|: The list of printers managed by the extension.
   // |done|: Whether all the extensions have reported the list of printers
   //     they manage.
-  void OnGotPrintersForExtension(const base::ListValue& printers, bool done);
+  void OnGotPrintersForExtension(const std::string& callback_id,
+                                 const base::ListValue& printers,
+                                 bool done);
 
   // Called when an extension reports information requested for a provisional
   // printer.
-  // |printer_id|: The provisional printer id.
+  // |callback_id|: The javascript callback to resolve or reject.
   // |printer_info|: The data reported by the extension.
-  void OnGotExtensionPrinterInfo(const std::string& printer_id,
+  void OnGotExtensionPrinterInfo(const std::string& callback_id,
                                  const base::DictionaryValue& printer_info);
 
   // Called when an extension reports the set of print capabilites for a
   // printer.
-  // |printer_id|: The id of the printer whose capabilities are reported.
+  // |callback_id|: The Javascript callback to reject or resolve
   // |capabilities|: The printer capabilities.
   void OnGotExtensionPrinterCapabilities(
-      const std::string& printer_id,
+      const std::string& callback_id,
       const base::DictionaryValue& capabilities);
 
   // Called when an extension print job is completed.
+  // |callback_id|: The javascript callback to run.
   // |success|: Whether the job succeeded.
   // |status|: The returned print job status. Useful for reporting a specific
   //     error.
-  void OnExtensionPrintResult(bool success, const std::string& status);
+  void OnExtensionPrintResult(const std::string& callback_id,
+                              bool success,
+                              const std::string& status);
 
   // Register/unregister from notifications of changes done to the GAIA
   // cookie.
@@ -379,7 +438,7 @@ class PrintPreviewHandler
   scoped_refptr<local_discovery::ServiceDiscoverySharedClient>
       service_discovery_client_;
   std::unique_ptr<cloud_print::PrivetLocalPrinterLister> printer_lister_;
-
+  std::unique_ptr<base::OneShotTimer> privet_lister_timer_;
   std::unique_ptr<cloud_print::PrivetHTTPAsynchronousFactory>
       privet_http_factory_;
   std::unique_ptr<cloud_print::PrivetHTTPResolution> privet_http_resolution_;
@@ -397,6 +456,23 @@ class PrintPreviewHandler
   // Notifies tests that want to know if the PDF has been saved. This doesn't
   // notify the test if it was a successful save, only that it was attempted.
   base::Closure pdf_file_saved_closure_;
+
+  std::queue<std::string> preview_callbacks_;
+
+#if BUILDFLAG(ENABLE_SERVICE_DISCOVERY)
+  // Callback ID to be used to notify UI that privet search is finished.
+  std::string privet_search_callback_id_;
+
+  // Callback ID to be used to notify UI that privet printing is finished.
+  std::string privet_print_callback_id_;
+#endif
+
+  // Callback ID to be used to notify UI that PDF file selection has finished.
+  std::string pdf_callback_id_;
+
+  // Print settings to use in the local print request to send when
+  // HandleHidePreview() is called.
+  std::unique_ptr<base::DictionaryValue> settings_;
 
   // Proxy for calls to the print backend.  Lazily initialized since web_ui() is
   // not available at construction time.

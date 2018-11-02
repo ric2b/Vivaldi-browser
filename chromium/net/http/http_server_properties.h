@@ -20,6 +20,7 @@
 #include "net/base/net_export.h"
 #include "net/quic/core/quic_bandwidth.h"
 #include "net/quic/core/quic_server_id.h"
+#include "net/quic/core/quic_versions.h"
 #include "net/socket/next_proto.h"
 #include "net/spdy/core/spdy_framer.h"  // TODO(willchan): Reconsider this.
 #include "net/spdy/core/spdy_protocol.h"
@@ -103,6 +104,7 @@ struct NET_EXPORT AlternativeService {
            std::tie(other.protocol, other.host, other.port);
   }
 
+  // Output format: "protocol host:port", e.g. "h2 www.google.com:1234".
   std::string ToString() const;
 
   NextProto protocol;
@@ -114,28 +116,36 @@ NET_EXPORT_PRIVATE std::ostream& operator<<(
     std::ostream& os,
     const AlternativeService& alternative_service);
 
-struct NET_EXPORT AlternativeServiceInfo {
-  AlternativeServiceInfo() : alternative_service() {}
+struct AlternativeServiceHash {
+  size_t operator()(const net::AlternativeService& entry) const {
+    return entry.protocol ^ std::hash<std::string>()(entry.host) ^ entry.port;
+  }
+};
 
-  AlternativeServiceInfo(const AlternativeService& alternative_service,
-                         base::Time expiration)
-      : alternative_service(alternative_service),
-        expiration(expiration) {}
+class NET_EXPORT_PRIVATE AlternativeServiceInfo {
+ public:
+  static AlternativeServiceInfo CreateHttp2AlternativeServiceInfo(
+      const AlternativeService& alternative_service,
+      base::Time expiration);
 
-  AlternativeServiceInfo(NextProto protocol,
-                         const std::string& host,
-                         uint16_t port,
-                         base::Time expiration)
-      : alternative_service(protocol, host, port), expiration(expiration) {}
+  static AlternativeServiceInfo CreateQuicAlternativeServiceInfo(
+      const AlternativeService& alternative_service,
+      base::Time expiration,
+      const QuicVersionVector& advertised_versions);
+
+  AlternativeServiceInfo();
+  ~AlternativeServiceInfo();
 
   AlternativeServiceInfo(
-      const AlternativeServiceInfo& alternative_service_info) = default;
+      const AlternativeServiceInfo& alternative_service_info);
+
   AlternativeServiceInfo& operator=(
-      const AlternativeServiceInfo& alternative_service_info) = default;
+      const AlternativeServiceInfo& alternative_service_info);
 
   bool operator==(const AlternativeServiceInfo& other) const {
-    return alternative_service == other.alternative_service &&
-           expiration == other.expiration;
+    return alternative_service_ == other.alternative_service() &&
+           expiration_ == other.expiration() &&
+           advertised_versions_ == other.advertised_versions();
   }
 
   bool operator!=(const AlternativeServiceInfo& other) const {
@@ -144,8 +154,59 @@ struct NET_EXPORT AlternativeServiceInfo {
 
   std::string ToString() const;
 
-  AlternativeService alternative_service;
-  base::Time expiration;
+  void set_alternative_service(const AlternativeService& alternative_service) {
+    alternative_service_ = alternative_service;
+  }
+
+  void set_protocol(const NextProto& protocol) {
+    alternative_service_.protocol = protocol;
+  }
+
+  void set_host(const std::string& host) { alternative_service_.host = host; }
+
+  void set_port(uint16_t port) { alternative_service_.port = port; }
+
+  void set_expiration(const base::Time& expiration) {
+    expiration_ = expiration;
+  }
+
+  void set_advertised_versions(const QuicVersionVector& advertised_versions) {
+    if (alternative_service_.protocol != kProtoQUIC)
+      return;
+
+    advertised_versions_ = advertised_versions;
+    std::sort(advertised_versions_.begin(), advertised_versions_.end());
+  }
+
+  const AlternativeService& alternative_service() const {
+    return alternative_service_;
+  }
+
+  NextProto protocol() const { return alternative_service_.protocol; }
+
+  HostPortPair host_port_pair() const {
+    return alternative_service_.host_port_pair();
+  }
+
+  base::Time expiration() const { return expiration_; }
+
+  const QuicVersionVector& advertised_versions() const {
+    return advertised_versions_;
+  }
+
+ private:
+  AlternativeServiceInfo(const AlternativeService& alternative_service,
+                         base::Time expiration,
+                         const QuicVersionVector& advertised_versions);
+
+  AlternativeService alternative_service_;
+  base::Time expiration_;
+
+  // Lists all the QUIC versions that are advertised by the server and supported
+  // by Chrome. If empty, defaults to versions used by the current instance of
+  // the netstack.
+  // This list MUST be sorted in ascending order.
+  QuicVersionVector advertised_versions_;
 };
 
 struct NET_EXPORT SupportsQuic {
@@ -179,8 +240,14 @@ struct NET_EXPORT ServerNetworkStats {
 
 typedef std::vector<AlternativeService> AlternativeServiceVector;
 typedef std::vector<AlternativeServiceInfo> AlternativeServiceInfoVector;
+// Flattened representation of servers (scheme, host, port) that either support
+// or not support SPDY protocol.
+typedef base::MRUCache<std::string, bool> SpdyServersMap;
 typedef base::MRUCache<url::SchemeHostPort, AlternativeServiceInfoVector>
     AlternativeServiceMap;
+// Pairs of broken alternative services and when their brokenness expires.
+typedef std::list<std::pair<AlternativeService, base::TimeTicks>>
+    BrokenAlternativeServiceList;
 // Map to the number of times each alternative service has been marked broken.
 typedef base::MRUCache<AlternativeService, int>
     RecentlyBrokenAlternativeServices;
@@ -195,9 +262,8 @@ extern const char kAlternativeServiceHeader[];
 
 // The interface for setting/retrieving the HTTP server properties.
 // Currently, this class manages servers':
-// * SPDY support (based on NPN results).
-// * alternative service support.
-// * SPDY Settings (like CWND ID field).
+// * HTTP/2 support;
+// * Alternative Service support;
 // * QUIC data (like ServerNetworkStats and QuicServerInfo).
 //
 // Embedders must ensure that HttpServerProperites is completely initialized
@@ -243,15 +309,26 @@ class NET_EXPORT HttpServerProperties {
   virtual AlternativeServiceInfoVector GetAlternativeServiceInfos(
       const url::SchemeHostPort& origin) = 0;
 
-  // Set a single alternative service for |origin|.  Previous alternative
+  // Set a single HTTP/2 alternative service for |origin|.  Previous
+  // alternative services for |origin| are discarded.
+  // |alternative_service.host| may be empty.
+  // Return true if |alternative_service_map_| has changed significantly enough
+  // that it should be persisted to disk.
+  virtual bool SetHttp2AlternativeService(
+      const url::SchemeHostPort& origin,
+      const AlternativeService& alternative_service,
+      base::Time expiration) = 0;
+
+  // Set a single QUIC alternative service for |origin|.  Previous alternative
   // services for |origin| are discarded.
   // |alternative_service.host| may be empty.
   // Return true if |alternative_service_map_| has changed significantly enough
   // that it should be persisted to disk.
-  virtual bool SetAlternativeService(
+  virtual bool SetQuicAlternativeService(
       const url::SchemeHostPort& origin,
       const AlternativeService& alternative_service,
-      base::Time expiration) = 0;
+      base::Time expiration,
+      const QuicVersionVector& advertised_versions) = 0;
 
   // Set alternative services for |origin|.  Previous alternative services for
   // |origin| are discarded.

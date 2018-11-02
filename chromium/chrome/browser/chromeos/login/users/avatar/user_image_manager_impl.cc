@@ -16,7 +16,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
-#include "base/rand_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/strings/string_util.h"
 #include "base/task_runner_util.h"
@@ -34,7 +33,6 @@
 #include "chrome/browser/profiles/profile_downloader.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
@@ -42,6 +40,7 @@
 #include "components/user_manager/user_image/user_image.h"
 #include "components/user_manager/user_manager.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/gfx/image/image_skia.h"
 
 namespace chromeos {
@@ -325,8 +324,7 @@ void UserImageManagerImpl::Job::LoadImage(base::FilePath image_path,
   image_url_ = image_url;
   image_path_ = image_path;
 
-  if (image_index_ >= 0 &&
-      image_index_ < default_user_image::kDefaultImagesCount) {
+  if (default_user_image::IsValidIndex(image_index_)) {
     // Load one of the default images. This happens synchronously.
     std::unique_ptr<user_manager::UserImage> user_image(
         new user_manager::UserImage(
@@ -356,8 +354,7 @@ void UserImageManagerImpl::Job::SetToDefaultImage(int default_image_index) {
   DCHECK(!run_);
   run_ = true;
 
-  DCHECK_LE(0, default_image_index);
-  DCHECK_GT(default_user_image::kDefaultImagesCount, default_image_index);
+  DCHECK(default_user_image::IsValidIndex(default_image_index));
 
   image_index_ = default_image_index;
   std::unique_ptr<user_manager::UserImage> user_image(
@@ -446,7 +443,7 @@ void UserImageManagerImpl::Job::UpdateUser(
     user->SetStubImage(
         base::MakeUnique<user_manager::UserImage>(
             *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                IDR_PROFILE_PICTURE_LOADING)),
+                IDR_LOGIN_DEFAULT_USER)),
         image_index_, false);
   }
   user->SetImageURL(image_url_);
@@ -600,8 +597,7 @@ void UserImageManagerImpl::LoadUserImage() {
 
   int image_index = user_manager::User::USER_IMAGE_INVALID;
   image_properties->GetInteger(kImageIndexNodeName, &image_index);
-  if (image_index >= 0 &&
-      image_index < default_user_image::kDefaultImagesCount) {
+  if (default_user_image::IsValidIndex(image_index)) {
     user->SetImage(base::MakeUnique<user_manager::UserImage>(
                        default_user_image::GetDefaultImage(image_index)),
                    image_index);
@@ -623,7 +619,7 @@ void UserImageManagerImpl::LoadUserImage() {
   user->SetImageURL(image_url);
   user->SetStubImage(base::MakeUnique<user_manager::UserImage>(
                          *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-                             IDR_PROFILE_PICTURE_LOADING)),
+                             IDR_LOGIN_DEFAULT_USER)),
                      image_index, true);
   DCHECK(!image_path.empty() ||
          image_index == user_manager::User::USER_IMAGE_PROFILE);
@@ -919,9 +915,7 @@ bool UserImageManagerImpl::IsUserImageManaged() const {
 
 void UserImageManagerImpl::SetInitialUserImage() {
   // Choose a random default image.
-  SaveUserDefaultImageIndex(
-      base::RandInt(default_user_image::kFirstDefaultImageIndex,
-                    default_user_image::kDefaultImagesCount - 1));
+  SaveUserDefaultImageIndex(default_user_image::GetRandomDefaultImageIndex());
 }
 
 void UserImageManagerImpl::TryToInitDownloadedProfileImage() {
@@ -976,10 +970,8 @@ void UserImageManagerImpl::DeleteUserImageAndLocalStateEntry(
   image_properties->GetString(kImagePathNodeName, &image_path);
   if (!image_path.empty()) {
     background_task_runner_->PostTask(
-        FROM_HERE,
-        base::Bind(base::IgnoreResult(&base::DeleteFile),
-                   base::FilePath(image_path),
-                   false));
+        FROM_HERE, base::BindOnce(base::IgnoreResult(&base::DeleteFile),
+                                  base::FilePath(image_path), false));
   }
   update->RemoveWithoutPathExpansion(user_id(), nullptr);
 }

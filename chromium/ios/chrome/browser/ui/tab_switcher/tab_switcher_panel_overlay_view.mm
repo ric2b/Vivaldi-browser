@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_switcher_panel_overlay_view.h"
 
+#include "base/mac/foundation_util.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
 #include "components/signin/core/browser/signin_metrics.h"
@@ -14,7 +15,9 @@
 #import "ios/chrome/browser/ui/authentication/signin_promo_view_mediator.h"
 #import "ios/chrome/browser/ui/colors/MDCPalette+CrAdditions.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/commands/show_signin_command.h"
 #import "ios/chrome/browser/ui/material_components/activity_indicator.h"
 #import "ios/chrome/browser/ui/sync/sync_util.h"
@@ -84,12 +87,15 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
 }
 
 @synthesize overlayType = _overlayType;
+@synthesize dispatcher = _dispatcher;
 
 - (instancetype)initWithFrame:(CGRect)frame
-                 browserState:(ios::ChromeBrowserState*)browserState {
+                 browserState:(ios::ChromeBrowserState*)browserState
+                   dispatcher:(id<BrowserCommands>)dispatcher {
   self = [super initWithFrame:frame];
   if (self) {
     _browserState = browserState;
+    _dispatcher = dispatcher;
     // Create and add container. Will be vertically and horizontally centered.
     _container = [[UIView alloc] initWithFrame:CGRectZero];
     [_container setTranslatesAutoresizingMaskIntoConstraints:NO];
@@ -180,6 +186,10 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
   return self;
 }
 
+- (void)dealloc {
+  [_signinPromoViewMediator signinPromoViewRemoved];
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGRect containerFrame = [_container frame];
@@ -203,6 +213,7 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
     [_signinPromoView removeFromSuperview];
     _signinPromoView = nil;
     _signinPromoViewMediator.consumer = nil;
+    [_signinPromoViewMediator signinPromoViewRemoved];
     _signinPromoViewMediator = nil;
     [self updateText];
     [self updateButtonTarget];
@@ -235,9 +246,10 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
       constraintEqualToAnchor:self.centerYAnchor
                      constant:kContainerOriginYOffset]
       .active = YES;
-  _signinPromoViewMediator = [[SigninPromoViewMediator alloc] init];
-  _signinPromoViewMediator.accessPoint =
-      signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS;
+  _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+      initWithBrowserState:_browserState
+               accessPoint:signin_metrics::AccessPoint::
+                               ACCESS_POINT_TAB_SWITCHER];
   _signinPromoView.delegate = _signinPromoViewMediator;
   _signinPromoViewMediator.consumer = self;
   [[_signinPromoViewMediator createConfigurator]
@@ -409,15 +421,13 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
       shouldShowTextButton = NO;
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_NO_OPEN_TABS:
-      tag = IDC_NEW_TAB;
-      selector = @selector(rootViewControllerChromeCommand:);
+      selector = @selector(sendNewTabCommand:);
       _recordedMetricString = "MobileTabSwitcherCreateNonIncognitoTab";
       shouldShowTextButton = NO;
       shouldShowFloatingButton = YES;
       break;
     case TabSwitcherPanelOverlayType::OVERLAY_PANEL_USER_NO_INCOGNITO_TABS:
-      tag = IDC_NEW_INCOGNITO_TAB;
-      selector = @selector(rootViewControllerChromeCommand:);
+      selector = @selector(sendNewIncognitoTabCommand:);
       _recordedMetricString = "MobileTabSwitcherCreateIncognitoTab";
       shouldShowTextButton = NO;
       shouldShowFloatingButton = YES;
@@ -455,8 +465,20 @@ const CGFloat kSubtitleMinimunLineHeight = 24.0;
                                  _browserState)];
 }
 
-- (void)rootViewControllerChromeCommand:(id)command {
-  [self chromeExecuteCommand:command];
+- (void)sendNewTabCommand:(id)sender {
+  UIView* view = base::mac::ObjCCast<UIView>(sender);
+  CGPoint center = [view.superview convertPoint:view.center toView:view.window];
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithIncognito:NO originPoint:center];
+  [self.dispatcher openNewTab:command];
+}
+
+- (void)sendNewIncognitoTabCommand:(id)sender {
+  UIView* view = base::mac::ObjCCast<UIView>(sender);
+  CGPoint center = [view.superview convertPoint:view.center toView:view.window];
+  OpenNewTabCommand* command =
+      [[OpenNewTabCommand alloc] initWithIncognito:YES originPoint:center];
+  [self.dispatcher openNewTab:command];
 }
 
 - (void)recordMetrics {

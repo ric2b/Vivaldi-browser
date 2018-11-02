@@ -12,9 +12,6 @@
 #include "ui/views/controls/button/custom_button.h"
 
 namespace ash {
-namespace test {
-class OverflowButtonTestApi;
-}  // namespace test
 
 class Shelf;
 class ShelfView;
@@ -34,7 +31,7 @@ class ASH_EXPORT OverflowButton : public views::CustomButton {
   void UpdateShelfItemBackground(SkColor color);
 
  private:
-  friend class test::OverflowButtonTestApi;
+  friend class OverflowButtonTestApi;
 
   enum class ChevronDirection { UP, DOWN, LEFT, RIGHT };
 
@@ -46,12 +43,12 @@ class ASH_EXPORT OverflowButton : public views::CustomButton {
   void UpdateChevronImage();
 
   // views::CustomButton:
-  void OnPaint(gfx::Canvas* canvas) override;
   std::unique_ptr<views::InkDrop> CreateInkDrop() override;
   std::unique_ptr<views::InkDropRipple> CreateInkDropRipple() const override;
   bool ShouldEnterPushedState(const ui::Event& event) override;
   void NotifyClick(const ui::Event& event) override;
   std::unique_ptr<views::InkDropMask> CreateInkDropMask() const override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
 
   // Helper functions to paint the background and foreground of the button
   // at |bounds|.

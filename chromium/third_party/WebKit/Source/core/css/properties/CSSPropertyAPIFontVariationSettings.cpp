@@ -10,6 +10,7 @@
 #include "core/css/parser/CSSPropertyParserHelpers.h"
 #include "platform/RuntimeEnabledFeatures.h"
 
+class CSSParserLocalContext;
 namespace blink {
 
 namespace {
@@ -44,8 +45,8 @@ CSSFontVariationValue* ConsumeFontVariationTag(CSSParserTokenRange& range) {
 const CSSValue* CSSPropertyAPIFontVariationSettings::parseSingleValue(
     CSSParserTokenRange& range,
     const CSSParserContext& context,
-    CSSPropertyID) {
-  DCHECK(RuntimeEnabledFeatures::cssVariableFontsEnabled());
+    const CSSParserLocalContext&) {
+  DCHECK(RuntimeEnabledFeatures::CSSVariableFontsEnabled());
   if (range.Peek().Id() == CSSValueNormal)
     return CSSPropertyParserHelpers::ConsumeIdent(range);
   CSSValueList* variation_settings = CSSValueList::CreateCommaSeparated();

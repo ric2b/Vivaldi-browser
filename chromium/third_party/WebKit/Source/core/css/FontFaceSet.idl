@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// https://dev.w3.org/csswg/css-font-loading/#FontFaceSet-interface
+// https://drafts.csswg.org/css-font-loading/#FontFaceSet-interface
 
 enum FontFaceSetLoadStatus { "loading", "loaded" };
 
@@ -36,7 +36,7 @@ enum FontFaceSetLoadStatus { "loading", "loaded" };
 // have a constructor, and thus not have [NoInterfaceObject].
 [
     DependentLifetime,
-    NoInterfaceObject,
+    NoInterfaceObject
 ] interface FontFaceSet : EventTarget {
     setlike<FontFace>;
 

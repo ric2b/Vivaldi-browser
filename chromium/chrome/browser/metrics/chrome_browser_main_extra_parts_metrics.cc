@@ -13,6 +13,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -22,7 +24,6 @@
 #include "chrome/browser/mac/bluetooth_utility.h"
 #include "chrome/browser/shell_integration.h"
 #include "components/flags_ui/pref_service_flags_storage.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/base/ui_base_switches.h"
@@ -40,6 +41,9 @@
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
 #include <gnu/libc-version.h>
 
+#include "base/linux_util.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/version.h"
 #if defined(USE_X11)
 #include "ui/base/x/x11_util.h"
@@ -59,6 +63,35 @@
 #endif  // defined(OS_WIN)
 
 namespace {
+
+// These values are written to logs.  New enum values can be added, but existing
+// enums must never be renumbered or deleted and reused.
+enum UMALinuxDistro {
+  UMA_LINUX_DISTRO_UNKNOWN = 0,
+  UMA_LINUX_DISTRO_UBUNTU_OTHER = 1,
+  UMA_LINUX_DISTRO_UBUNTU_14_04 = 2,
+  UMA_LINUX_DISTRO_UBUNTU_16_04 = 3,
+  UMA_LINUX_DISTRO_UBUNTU_16_10 = 4,
+  UMA_LINUX_DISTRO_UBUNTU_17_04 = 5,
+  UMA_LINUX_DISTRO_DEBIAN_OTHER = 6,
+  UMA_LINUX_DISTRO_DEBIAN_8 = 7,
+  UMA_LINUX_DISTRO_OPENSUSE_OTHER = 8,
+  UMA_LINUX_DISTRO_OPENSUSE_LEAP_42_2 = 9,
+  UMA_LINUX_DISTRO_FEDORA_OTHER = 10,
+  UMA_LINUX_DISTRO_FEDORA_24 = 11,
+  UMA_LINUX_DISTRO_FEDORA_25 = 12,
+  UMA_LINUX_DISTRO_FEDORA_26 = 13,
+  UMA_LINUX_DISTRO_DEBIAN_9 = 14,
+  UMA_LINUX_DISTRO_ARCH = 15,
+  UMA_LINUX_DISTRO_CENTOS = 16,
+  UMA_LINUX_DISTRO_ELEMENTARY = 17,
+  UMA_LINUX_DISTRO_MINT = 18,
+  UMA_LINUX_DISTRO_RHEL = 19,
+  UMA_LINUX_DISTRO_SUSE_ENTERPRISE = 20,
+  // Note: Add new distros to the list above this line, and update LinuxDistro
+  // in tools/metrics/histograms/enums.xml accordingly.
+  UMA_LINUX_DISTRO_MAX
+};
 
 enum UMALinuxGlibcVersion {
   UMA_LINUX_GLIBC_NOT_PARSEABLE,
@@ -141,9 +174,9 @@ void RecordMicroArchitectureStats() {
                               base::SysInfo::NumberOfProcessors());
 }
 
-// Called on the blocking pool some time after startup to avoid slowing down
+// Called on a background thread, with low priority to avoid slowing down
 // startup with metrics that aren't trivial to compute.
-void RecordStartupMetricsOnBlockingPool() {
+void RecordStartupMetrics() {
 #if defined(OS_WIN)
   GoogleUpdateSettings::RecordChromeUpdatePolicyHistograms();
 
@@ -163,7 +196,7 @@ void RecordStartupMetricsOnBlockingPool() {
   UMA_HISTOGRAM_ENUMERATION("OSX.BluetoothAvailability",
                             availability,
                             bluetooth_utility::BLUETOOTH_AVAILABILITY_COUNT);
-#endif   // defined(OS_MACOSX)
+#endif  // defined(OS_MACOSX)
 
   // Record whether Chrome is the default browser or not.
   shell_integration::DefaultWebClientState default_state =
@@ -171,6 +204,95 @@ void RecordStartupMetricsOnBlockingPool() {
   UMA_HISTOGRAM_ENUMERATION("DefaultBrowser.State", default_state,
                             shell_integration::NUM_DEFAULT_STATES);
 }
+
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+void RecordLinuxDistro() {
+  UMALinuxDistro distro_result = UMA_LINUX_DISTRO_UNKNOWN;
+
+  std::vector<std::string> distro_tokens =
+      base::SplitString(base::GetLinuxDistro(), base::kWhitespaceASCII,
+                        base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  if (distro_tokens.size() > 0) {
+    if (distro_tokens[0] == "Ubuntu") {
+      // Format: Ubuntu YY.MM.P [LTS]
+      // We are only concerned with release (YY.MM) not the patch (P).
+      distro_result = UMA_LINUX_DISTRO_UBUNTU_OTHER;
+      if (distro_tokens.size() >= 2) {
+        base::Version version(distro_tokens[1]);
+        if (version.IsValid()) {
+          if (version.CompareToWildcardString("14.04.*") == 0) {
+            distro_result = UMA_LINUX_DISTRO_UBUNTU_14_04;
+          } else if (version.CompareToWildcardString("16.04.*") == 0) {
+            distro_result = UMA_LINUX_DISTRO_UBUNTU_16_04;
+          } else if (version.CompareToWildcardString("16.10.*") == 0) {
+            distro_result = UMA_LINUX_DISTRO_UBUNTU_16_10;
+          } else if (version.CompareToWildcardString("17.04.*") == 0) {
+            distro_result = UMA_LINUX_DISTRO_UBUNTU_17_04;
+          }
+        }
+      }
+    } else if (distro_tokens[0] == "openSUSE") {
+      // Format: openSUSE Leap RR.R
+      distro_result = UMA_LINUX_DISTRO_OPENSUSE_OTHER;
+      if (distro_tokens.size() >= 3 && distro_tokens[1] == "Leap" &&
+          distro_tokens[2] == "42.2") {
+        distro_result = UMA_LINUX_DISTRO_OPENSUSE_LEAP_42_2;
+      }
+    } else if (distro_tokens[0] == "Debian") {
+      // Format: Debian GNU/Linux R.P (<codename>)
+      // We are only concerned with the release (R) not the patch (P).
+      distro_result = UMA_LINUX_DISTRO_DEBIAN_OTHER;
+      if (distro_tokens.size() >= 3) {
+        base::Version version(distro_tokens[2]);
+        if (version.IsValid()) {
+          if (version.CompareToWildcardString("8.*")) {
+            distro_result = UMA_LINUX_DISTRO_DEBIAN_8;
+          } else if (version.CompareToWildcardString("9.*")) {
+            distro_result = UMA_LINUX_DISTRO_DEBIAN_9;
+          }
+        }
+      }
+    } else if (distro_tokens[0] == "Fedora") {
+      // Format: Fedora release RR (<codename>)
+      distro_result = UMA_LINUX_DISTRO_FEDORA_OTHER;
+      if (distro_tokens.size() >= 3) {
+        if (distro_tokens[2] == "24") {
+          distro_result = UMA_LINUX_DISTRO_FEDORA_24;
+        } else if (distro_tokens[2] == "25") {
+          distro_result = UMA_LINUX_DISTRO_FEDORA_25;
+        } else if (distro_tokens[2] == "26") {
+          distro_result = UMA_LINUX_DISTRO_FEDORA_26;
+        }
+      }
+    } else if (distro_tokens[0] == "Arch") {
+      // Format: Arch Linux
+      distro_result = UMA_LINUX_DISTRO_ARCH;
+    } else if (distro_tokens[0] == "CentOS") {
+      // Format: CentOS [Linux] release <version> (<codename>)
+      distro_result = UMA_LINUX_DISTRO_CENTOS;
+    } else if (distro_tokens[0] == "elementary") {
+      // Format: elementary OS <release name>
+      distro_result = UMA_LINUX_DISTRO_ELEMENTARY;
+    } else if (distro_tokens.size() >= 2 && distro_tokens[1] == "Mint") {
+      // Format: Linux Mint RR <codename>
+      distro_result = UMA_LINUX_DISTRO_MINT;
+    } else if (distro_tokens.size() >= 4 && distro_tokens[0] == "Red" &&
+               distro_tokens[1] == "Hat" && distro_tokens[2] == "Enterprise" &&
+               distro_tokens[3] == "Linux") {
+      // Format: Red Hat Enterprise Linux <variant> [release] R.P (<codename>)
+      distro_result = UMA_LINUX_DISTRO_RHEL;
+    } else if (distro_tokens.size() >= 3 && distro_tokens[0] == "SUSE" &&
+               distro_tokens[1] == "Linux" &&
+               distro_tokens[2] == "Enterprise") {
+      // Format: SUSE Linux Enterprise <variant> RR (<platform>)
+      distro_result = UMA_LINUX_DISTRO_SUSE_ENTERPRISE;
+    }
+  }
+
+  UMA_HISTOGRAM_ENUMERATION("Linux.Distro", distro_result,
+                            UMA_LINUX_DISTRO_MAX);
+}
+#endif  // defined(OS_LINUX) && !defined(OS_CHROMEOS)
 
 void RecordLinuxGlibcVersion() {
 #if defined(OS_LINUX) && !defined(OS_CHROMEOS)
@@ -197,7 +319,7 @@ void RecordLinuxGlibcVersion() {
 #endif
 }
 
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
+#if defined(OS_LINUX) && defined(USE_X11) && !defined(OS_CHROMEOS)
 UMALinuxWindowManager GetLinuxWindowManager() {
   switch (ui::GuessWindowManager()) {
     case ui::WM_OTHER:
@@ -337,7 +459,9 @@ void OnIsPinnedToTaskbarResult(bool succeeded, bool is_pinned_to_taskbar) {
   UMA_HISTOGRAM_ENUMERATION("Windows.IsPinnedToTaskbar", result, NUM_RESULTS);
 }
 
-// Records the pinned state of the current executable into a histogram.
+// Records the pinned state of the current executable into a histogram. Should
+// be called on a background thread, with low priority, to avoid slowing down
+// startup.
 void RecordIsPinnedToTaskbarHistogram() {
   shell_integration::win::GetIsPinnedToTaskbarState(
       base::Bind(&OnShellHandlerConnectionError),
@@ -378,10 +502,17 @@ void ChromeBrowserMainExtraPartsMetrics::PreBrowserStart() {
 
 void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   RecordLinuxGlibcVersion();
-#if defined(USE_X11) && !defined(OS_CHROMEOS)
-  UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager",
-                            GetLinuxWindowManager(),
+#if defined(OS_LINUX) && defined(USE_X11) && !defined(OS_CHROMEOS)
+  UMA_HISTOGRAM_ENUMERATION("Linux.WindowManager", GetLinuxWindowManager(),
                             UMA_LINUX_WINDOW_MANAGER_COUNT);
+#endif
+
+  constexpr base::TaskTraits background_task_traits = {
+      base::MayBlock(), base::TaskPriority::BACKGROUND,
+      base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN};
+#if defined(OS_LINUX) && !defined(OS_CHROMEOS)
+  base::PostTaskWithTraits(FROM_HERE, background_task_traits,
+                           base::BindOnce(&RecordLinuxDistro));
 #endif
 
 #if defined(USE_OZONE) || defined(USE_X11)
@@ -402,16 +533,24 @@ void ChromeBrowserMainExtraPartsMetrics::PostBrowserStart() {
   RecordMacMetrics();
 #endif  // defined(OS_MACOSX)
 
-  constexpr base::TimeDelta kStartupMetricsGatheringDelay =
-      base::TimeDelta::FromSeconds(45);
-  content::BrowserThread::GetBlockingPool()->PostDelayedTask(
-      FROM_HERE, base::BindOnce(&RecordStartupMetricsOnBlockingPool),
-      kStartupMetricsGatheringDelay);
 #if defined(OS_WIN)
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&RecordIsPinnedToTaskbarHistogram),
-      kStartupMetricsGatheringDelay);
+  // RecordStartupMetrics calls into shell_integration::GetDefaultBrowser(),
+  // which requires a COM thread on Windows.
+  base::CreateCOMSTATaskRunnerWithTraits(background_task_traits)
+      ->PostTask(FROM_HERE, base::BindOnce(&RecordStartupMetrics));
+#else
+  base::PostTaskWithTraits(FROM_HERE, background_task_traits,
+                           base::BindOnce(&RecordStartupMetrics));
+#endif  // defined(OS_WIN)
+
+#if defined(OS_WIN)
+  // TODO(isherman): The delay below is currently needed to avoid (flakily)
+  // breaking some tests, including all of the ProcessMemoryMetricsEmitterTest
+  // tests. Figure out why there is a dependency and fix the tests.
+  base::CreateSequencedTaskRunnerWithTraits(background_task_traits)
+      ->PostDelayedTask(FROM_HERE,
+                        base::BindOnce(&RecordIsPinnedToTaskbarHistogram),
+                        base::TimeDelta::FromSeconds(45));
 #endif  // defined(OS_WIN)
 
   display_count_ = display::Screen::GetScreen()->GetNumDisplays();

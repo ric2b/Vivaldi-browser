@@ -21,6 +21,8 @@
 #include "base/threading/thread_checker.h"
 #include "content/common/content_export.h"
 #include "content/renderer/media/webrtc/media_stream_track_metrics.h"
+#include "content/renderer/media/webrtc/webrtc_media_stream_adapter_map.h"
+#include "content/renderer/media/webrtc/webrtc_media_stream_track_adapter_map.h"
 #include "ipc/ipc_platform_file.h"
 #include "third_party/WebKit/public/platform/WebMediaStreamSource.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandler.h"
@@ -28,7 +30,7 @@
 #include "third_party/WebKit/public/platform/WebRTCStatsResponse.h"
 
 namespace blink {
-class WebFrame;
+class WebLocalFrame;
 class WebRTCAnswerOptions;
 class WebRTCDataChannelHandler;
 class WebRTCLegacyStats;
@@ -42,7 +44,6 @@ class PeerConnectionDependencyFactory;
 class PeerConnectionTracker;
 class RemoteMediaStreamImpl;
 class RtcDataChannelHandler;
-class WebRtcMediaStreamAdapter;
 
 // Mockable wrapper for blink::WebRTCStatsResponse
 class CONTENT_EXPORT LocalRTCStatsResponse
@@ -101,7 +102,7 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // Destroy all existing RTCPeerConnectionHandler objects.
   static void DestructAllHandlers();
 
-  void associateWithFrame(blink::WebFrame* frame);
+  void associateWithFrame(blink::WebLocalFrame* frame);
 
   // Initialize method only used for unit test.
   bool InitializeForTest(
@@ -151,6 +152,11 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
       override;
   blink::WebVector<std::unique_ptr<blink::WebRTCRtpReceiver>> GetReceivers()
       override;
+  std::unique_ptr<blink::WebRTCRtpSender> AddTrack(
+      const blink::WebMediaStreamTrack& web_track,
+      const blink::WebVector<blink::WebMediaStream>& web_streams) override;
+  bool RemoveTrack(blink::WebRTCRtpSender* web_sender) override;
+
   blink::WebRTCDataChannelHandler* CreateDataChannel(
       const blink::WebString& label,
       const blink::WebRTCDataChannelInit& init) override;
@@ -231,18 +237,10 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
       const FirstSessionDescription& local,
       const FirstSessionDescription& remote);
 
-  // Virtual to allow mocks to override.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
+  scoped_refptr<base::SingleThreadTaskRunner> signaling_thread() const;
 
   void RunSynchronousClosureOnSignalingThread(const base::Closure& closure,
                                               const char* trace_event_name);
-
-  // If a track is not found with the specified id, the returned track's
-  // |isNull| will return true.
-  blink::WebMediaStreamTrack GetRemoteAudioTrack(
-      const std::string& track_id) const;
-  blink::WebMediaStreamTrack GetRemoteVideoTrack(
-      const std::string& track_id) const;
 
   base::ThreadChecker thread_checker_;
 
@@ -259,9 +257,33 @@ class CONTENT_EXPORT RTCPeerConnectionHandler
   // RenderThreadImpl.
   PeerConnectionDependencyFactory* const dependency_factory_;
 
-  blink::WebFrame* frame_ = nullptr;
+  blink::WebLocalFrame* frame_ = nullptr;
 
-  std::vector<std::unique_ptr<WebRtcMediaStreamAdapter>> local_streams_;
+  // Map and owners of track adapters. Every track that is in use by the peer
+  // connection has an associated blink and webrtc layer representation of it.
+  // The map keeps track of the relationship between
+  // |blink::WebMediaStreamTrack|s and |webrtc::MediaStreamTrackInterface|s.
+  // Track adapters are created on the fly when a component (such as a stream)
+  // needs to reference it, and automatically disposed when there are no longer
+  // any components referencing it.
+  scoped_refptr<WebRtcMediaStreamTrackAdapterMap> track_adapter_map_;
+  // Map and owners of stream adapters. Every stream that is in use by the peer
+  // connection has an associated blink and webrtc layer representation of it.
+  // The map keeps track of the relationship between |blink::WebMediaStream|s
+  // and |webrtc::MediaStreamInterface|s. Stream adapters are created on the fly
+  // when a component (such as |local_streams_| or a sender) needs to reference
+  // it, and automatically disposed when there are no longer any components
+  // referencing it.
+  // TODO(hbos): Update and use the map for the |remote_streams_| case too.
+  // crbug.com/705901
+  scoped_refptr<WebRtcMediaStreamAdapterMap> stream_adapter_map_;
+  // Local stream adapters. Every stream that is in use by the peer connection
+  // has an associated blink and webrtc layer representation of it. This vector
+  // keeps track of the relationship between |blink::WebMediaStream|s and
+  // |webrtc::MediaStreamInterface|s. Streams are added and removed from the
+  // peer connection using |AddStream| and |RemoveStream|.
+  std::vector<std::unique_ptr<WebRtcMediaStreamAdapterMap::AdapterRef>>
+      local_streams_;
 
   base::WeakPtr<PeerConnectionTracker> peer_connection_tracker_;
 

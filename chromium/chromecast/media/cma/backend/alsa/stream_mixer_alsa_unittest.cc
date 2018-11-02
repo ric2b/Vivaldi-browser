@@ -11,7 +11,6 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "base/memory/scoped_vector.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
@@ -338,6 +337,9 @@ class MockPostProcessor : public PostProcessingPipeline {
   bool IsRinging() override { return ringing_; }
   int delay() { return rendering_delay_; }
   std::string name() const { return name_; }
+
+  MOCK_METHOD2(SetPostProcessorConfig,
+               void(const std::string& name, const std::string& config));
 
   static std::unordered_map<std::string, MockPostProcessor*>* instances() {
     return &instances_;
@@ -1137,14 +1139,24 @@ TEST_F(StreamMixerAlsaTest, InvalidStreamTypeCrashes) {
 }
 )json";
 
+// String arguments aren't passed to CHECK() in official builds.
+#if defined(OFFICIAL_BUILD) && defined(NDEBUG)
+  EXPECT_DEATH(StreamMixerAlsa::Get()->ResetPostProcessorsForTest(json), "");
+#else
   EXPECT_DEATH(StreamMixerAlsa::Get()->ResetPostProcessorsForTest(json),
                "foobar is not a stream type");
+#endif
 }
 
 TEST_F(StreamMixerAlsaTest, BadJsonCrashes) {
   const std::string json("{{");
+// String arguments aren't passed to CHECK() in official builds.
+#if defined(OFFICIAL_BUILD) && defined(NDEBUG)
+  EXPECT_DEATH(StreamMixerAlsa::Get()->ResetPostProcessorsForTest(json), "");
+#else
   EXPECT_DEATH(StreamMixerAlsa::Get()->ResetPostProcessorsForTest(json),
                "Invalid JSON");
+#endif
 }
 
 TEST_F(StreamMixerAlsaTest, MultiplePostProcessorsInOneStream) {
@@ -1155,15 +1167,18 @@ TEST_F(StreamMixerAlsaTest, MultiplePostProcessorsInOneStream) {
       "streams": [ "default" ],
       "processors": [{
         "processor": "%s",
+        "name": "%s",
         "config": { "delay": 10 }
       }, {
         "processor": "%s",
+        "name": "%s",
         "config": { "delay": 100 }
       }]
     }],
     "mix": {
       "processors": [{
         "processor": "%s",
+        "name": "%s",
         "config": { "delay": 1000 }
       }, {
         "processor": "%s",
@@ -1174,9 +1189,12 @@ TEST_F(StreamMixerAlsaTest, MultiplePostProcessorsInOneStream) {
 }
 )json";
 
-  std::string json =
-      base::StringPrintf(kJsonTemplate, kDelayModuleSolib, kDelayModuleSolib,
-                         kDelayModuleSolib, kDelayModuleSolib);
+  std::string json = base::StringPrintf(
+      kJsonTemplate, kDelayModuleSolib, "delayer_1",  // unique processor name
+      kDelayModuleSolib, "delayer_2",  // non-unique processor names
+      kDelayModuleSolib, "delayer_2",
+      kDelayModuleSolib  // intentionally omitted processor name
+      );
 
   StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
   mixer->ResetPostProcessorsForTest(json);
@@ -1189,6 +1207,19 @@ TEST_F(StreamMixerAlsaTest, MultiplePostProcessorsInOneStream) {
   CHECK_EQ(post_processors->find("mix")->second->delay(), 11000);
   CHECK_EQ(post_processors->find("linearize")->second->delay(), 0);
   mixer->WriteFramesForTest();
+}
+
+TEST_F(StreamMixerAlsaTest, SetPostProcessorConfig) {
+  std::string name = "ThisIsMyName";
+  std::string config = "ThisIsMyConfig";
+  StreamMixerAlsa* mixer = StreamMixerAlsa::Get();
+  auto* post_processors = MockPostProcessor::instances();
+
+  for (auto const& x : *post_processors) {
+    EXPECT_CALL(*(x.second), SetPostProcessorConfig(name, config));
+  }
+
+  mixer->SetPostProcessorConfig(name, config);
 }
 
 }  // namespace media

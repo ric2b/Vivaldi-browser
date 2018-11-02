@@ -21,6 +21,7 @@
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/history/core/browser/history_service.h"
 #include "components/history/core/browser/history_types.h"
+#include "components/history/core/browser/url_database.h"
 #include "db/vivaldi_history_types.h"
 #include "extensions/schema/history_private.h"
 
@@ -85,6 +86,72 @@ HistoryPrivateAPI::~HistoryPrivateAPI() {}
 void HistoryPrivateAPI::Shutdown() {
   history_event_router_.reset();
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
+}
+
+// static
+ui::PageTransition HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
+    vivaldi::history_private::TransitionType transition) {
+  switch (transition) {
+    case vivaldi::history_private::TRANSITION_TYPE_LINK:
+      return ui::PAGE_TRANSITION_LINK;
+    case vivaldi::history_private::TRANSITION_TYPE_TYPED:
+      return ui::PAGE_TRANSITION_TYPED;
+    case vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK:
+      return ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+    case vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME:
+      return ui::PAGE_TRANSITION_AUTO_SUBFRAME;
+    case vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME:
+      return ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
+    case vivaldi::history_private::TRANSITION_TYPE_GENERATED:
+      return ui::PAGE_TRANSITION_GENERATED;
+    case vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL:
+      return ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+    case vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT:
+      return ui::PAGE_TRANSITION_FORM_SUBMIT;
+    case vivaldi::history_private::TRANSITION_TYPE_RELOAD:
+      return ui::PAGE_TRANSITION_RELOAD;
+    case vivaldi::history_private::TRANSITION_TYPE_KEYWORD:
+      return ui::PAGE_TRANSITION_KEYWORD;
+    case vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED:
+      return ui::PAGE_TRANSITION_KEYWORD_GENERATED;
+    default:
+      NOTREACHED();
+  }
+  // We have to return something
+  return ui::PAGE_TRANSITION_LINK;
+}
+// static
+vivaldi::history_private::TransitionType
+HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
+    ui::PageTransition transition) {
+  switch (transition & ui::PAGE_TRANSITION_CORE_MASK) {
+    case ui::PAGE_TRANSITION_LINK:
+      return vivaldi::history_private::TRANSITION_TYPE_LINK;
+    case ui::PAGE_TRANSITION_TYPED:
+      return vivaldi::history_private::TRANSITION_TYPE_TYPED;
+    case ui::PAGE_TRANSITION_AUTO_BOOKMARK:
+      return vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK;
+    case ui::PAGE_TRANSITION_AUTO_SUBFRAME:
+      return vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME;
+    case ui::PAGE_TRANSITION_MANUAL_SUBFRAME:
+      return vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME;
+    case ui::PAGE_TRANSITION_GENERATED:
+      return vivaldi::history_private::TRANSITION_TYPE_GENERATED;
+    case ui::PAGE_TRANSITION_AUTO_TOPLEVEL:
+      return vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL;
+    case ui::PAGE_TRANSITION_FORM_SUBMIT:
+      return vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT;
+    case ui::PAGE_TRANSITION_RELOAD:
+      return vivaldi::history_private::TRANSITION_TYPE_RELOAD;
+    case ui::PAGE_TRANSITION_KEYWORD:
+      return vivaldi::history_private::TRANSITION_TYPE_KEYWORD;
+    case ui::PAGE_TRANSITION_KEYWORD_GENERATED:
+      return vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED;
+    default:
+      NOTREACHED();
+  }
+  // We have to return something
+  return vivaldi::history_private::TRANSITION_TYPE_LINK;
 }
 
 static base::LazyInstance<BrowserContextKeyedAPIFactory<HistoryPrivateAPI>>::
@@ -172,7 +239,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDbSearchFunction::Run() {
                  base::Unretained(this)),
       &task_tracker_);
 
-  AddRef();               // Balanced in SearchComplete().
+  AddRef();  // Balanced in SearchComplete().
   return RespondLater();
 }
 
@@ -184,7 +251,7 @@ void HistoryPrivateDbSearchFunction::SearchComplete(
              results->begin();
          iterator != results->end(); ++iterator) {
       history_item_vec.push_back(
-          std::move(*base::WrapUnique(GetHistoryItem(**iterator).release())));
+          std::move(*base::WrapUnique(GetHistoryItem(*iterator).release())));
     }
   }
   // This must be revisited since it is slow!
@@ -230,7 +297,7 @@ ExtensionFunction::ResponseAction HistoryPrivateSearchFunction::Run() {
                               base::Unretained(this)),
                    &task_tracker_);
 
-  AddRef();               // Balanced in SearchComplete().
+  AddRef();  // Balanced in SearchComplete().
   return RespondLater();
 }
 
@@ -265,8 +332,8 @@ void HistoryPrivateSearchFunction::SearchComplete(
   BookmarkModel* model =
       BookmarkModelFactory::GetForBrowserContext(GetProfile());
   if (results && !results->empty()) {
-    for (const history::URLResult* item : *results)
-      history_item_vec.push_back(GetHistoryAndVisitItem(*item, model));
+    for (const auto item : *results)
+      history_item_vec.push_back(GetHistoryAndVisitItem(item, model));
   }
   Respond(ArgumentList(DBSearch::Results::Create(history_item_vec)));
   Release();
@@ -296,7 +363,7 @@ ExtensionFunction::ResponseAction HistoryPrivateDeleteVisitsFunction::Run() {
                  base::Unretained(this)),
       &task_tracker_);
 
-  AddRef();               // Balanced in DeleteVisitComplete().
+  AddRef();  // Balanced in DeleteVisitComplete().
   return RespondLater();
 }
 
@@ -321,7 +388,7 @@ HistoryPrivateGetTopUrlsPerDayFunction::Run() {
       number_of_days,
       base::Bind(&HistoryPrivateGetTopUrlsPerDayFunction::TopUrlsComplete,
                  base::Unretained(this)));
-  AddRef();               // Balanced in TopUrlsComplete().
+  AddRef();  // Balanced in TopUrlsComplete().
   return RespondLater();
 }
 
@@ -368,46 +435,9 @@ std::unique_ptr<HistoryPrivateItem> GetVisitsItem(
   history_item->hour.reset(new int(exploded.hour));
   history_item->visit_count.reset(new int(visit.visit_count));
 
-  TransitionType transition = vivaldi::history_private::TRANSITION_TYPE_LINK;
-  switch (visit.transition & ui::PAGE_TRANSITION_CORE_MASK) {
-    case ui::PAGE_TRANSITION_LINK:
-      transition = vivaldi::history_private::TRANSITION_TYPE_LINK;
-      break;
-    case ui::PAGE_TRANSITION_TYPED:
-      transition = vivaldi::history_private::TRANSITION_TYPE_TYPED;
-      break;
-    case ui::PAGE_TRANSITION_AUTO_BOOKMARK:
-      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_BOOKMARK;
-      break;
-    case ui::PAGE_TRANSITION_AUTO_SUBFRAME:
-      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_SUBFRAME;
-      break;
-    case ui::PAGE_TRANSITION_MANUAL_SUBFRAME:
-      transition = vivaldi::history_private::TRANSITION_TYPE_MANUAL_SUBFRAME;
-      break;
-    case ui::PAGE_TRANSITION_GENERATED:
-      transition = vivaldi::history_private::TRANSITION_TYPE_GENERATED;
-      break;
-    case ui::PAGE_TRANSITION_AUTO_TOPLEVEL:
-      transition = vivaldi::history_private::TRANSITION_TYPE_AUTO_TOPLEVEL;
-      break;
-    case ui::PAGE_TRANSITION_FORM_SUBMIT:
-      transition = vivaldi::history_private::TRANSITION_TYPE_FORM_SUBMIT;
-      break;
-    case ui::PAGE_TRANSITION_RELOAD:
-      transition = vivaldi::history_private::TRANSITION_TYPE_RELOAD;
-      break;
-    case ui::PAGE_TRANSITION_KEYWORD:
-      transition = vivaldi::history_private::TRANSITION_TYPE_KEYWORD;
-      break;
-    case ui::PAGE_TRANSITION_KEYWORD_GENERATED:
-      transition = vivaldi::history_private::TRANSITION_TYPE_KEYWORD_GENERATED;
-      break;
-    default:
-      DCHECK(false);
-  }
-
-  history_item->transition_type = transition;
+  history_item->transition_type =
+      HistoryPrivateAPI::UiTransitionToPrivateHistoryTransition(
+          visit.transition);
   return history_item;
 }
 
@@ -427,9 +457,9 @@ ExtensionFunction::ResponseAction HistoryPrivateVisitSearchFunction::Run() {
       GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
 
   hs->VisitSearch(options,
-            base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
-                       base::Unretained(this)));
-  AddRef();               // Balanced in VisitsComplete().
+                  base::Bind(&HistoryPrivateVisitSearchFunction::VisitsComplete,
+                             base::Unretained(this)));
+  AddRef();  // Balanced in VisitsComplete().
   return RespondLater();
 }
 
@@ -445,6 +475,79 @@ void HistoryPrivateVisitSearchFunction::VisitsComplete(
   }
   Respond(ArgumentList(VisitSearch::Results::Create(history_item_vec)));
   Release();
+}
+
+ExtensionFunction::ResponseAction
+HistoryPrivateSetKeywordSearchTermsForURLFunction::Run() {
+  std::unique_ptr<vivaldi::history_private::SetKeywordSearchTermsForURL::Params>
+      params(
+          vivaldi::history_private::SetKeywordSearchTermsForURL::Params::Create(
+              *args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  HistoryServiceFactory::GetForProfile(GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->SetKeywordSearchTermsForURL(GURL(params->url), params->keyword_id,
+                                    base::UTF8ToUTF16(params->search_terms));
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+HistoryPrivateDeleteAllSearchTermsForKeywordFunction::Run() {
+  std::unique_ptr<
+      vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params>
+      params(vivaldi::history_private::DeleteAllSearchTermsForKeyword::Params::
+                 Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  HistoryServiceFactory::GetForProfile(GetProfile(),
+                                       ServiceAccessType::EXPLICIT_ACCESS)
+      ->DeleteAllSearchTermsForKeyword(params->keyword_id);
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction HistoryPrivateGetTypedHistoryFunction::Run() {
+  std::unique_ptr<vivaldi::history_private::GetTypedHistory::Params> params(
+      vivaldi::history_private::GetTypedHistory::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  history::HistoryService* hs = HistoryServiceFactory::GetForProfile(
+      GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
+  history::URLDatabase::TypedUrlResults results;
+  hs->InMemoryDatabase()->GetVivaldiTypedHistory(
+      params->query, params->prefix_keyword_id, params->max_results, &results);
+
+  std::vector<vivaldi::history_private::TypedHistoryItem> response;
+  for (const auto& result : results) {
+    vivaldi::history_private::TypedHistoryItem item;
+    item.url.assign(result.url.spec());
+    item.title.assign(result.title);
+    item.keyword_id = result.keyword_id;
+    item.terms.assign(result.terms);
+    response.push_back(std::move(item));
+  }
+
+  return RespondNow(ArgumentList(
+      vivaldi::history_private::GetTypedHistory::Results::Create(response)));
+}
+
+ExtensionFunction::ResponseAction
+HistoryPrivateMigrateOldTypedUrlFunction::Run() {
+  std::unique_ptr<vivaldi::history_private::MigrateOldTypedUrl::Params> params(
+      vivaldi::history_private::MigrateOldTypedUrl::Params::Create(*args_));
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  HistoryServiceFactory::GetForProfile(GetProfile(),
+                                       ServiceAccessType::IMPLICIT_ACCESS)
+      ->AddPage(GURL(params->url), base::Time::FromJsTime(params->time),
+                nullptr, 0, GURL(), history::RedirectList(),
+                HistoryPrivateAPI::PrivateHistoryTransitionToUiTransition(
+                    params->transition_type),
+                history::SOURCE_BROWSED, false);
+
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

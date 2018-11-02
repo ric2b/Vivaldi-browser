@@ -26,7 +26,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/safe_browsing/chrome_password_protection_service.h"
 #include "chrome/browser/safe_browsing/ping_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_navigation_observer_manager.h"
 #include "chrome/browser/safe_browsing/ui_manager.h"
@@ -71,6 +70,7 @@
 #include "chrome/browser/safe_browsing/incident_reporting/resource_request_detector.h"
 #include "chrome/browser/safe_browsing/incident_reporting/variations_seed_signature_analyzer.h"
 #include "chrome/browser/safe_browsing/protocol_manager.h"
+#include "components/safe_browsing/password_protection/password_protection_service.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -78,29 +78,6 @@
 using content::BrowserThread;
 
 namespace safe_browsing {
-
-namespace {
-
-// The default URL prefix where browser fetches chunk updates, hashes,
-// and reports safe browsing hits and malware details.
-const char kSbDefaultURLPrefix[] =
-    "https://safebrowsing.google.com/safebrowsing";
-
-// The backup URL prefix used when there are issues establishing a connection
-// with the server at the primary URL.
-const char kSbBackupConnectErrorURLPrefix[] =
-    "https://alt1-safebrowsing.google.com/safebrowsing";
-
-// The backup URL prefix used when there are HTTP-specific issues with the
-// server at the primary URL.
-const char kSbBackupHttpErrorURLPrefix[] =
-    "https://alt2-safebrowsing.google.com/safebrowsing";
-
-// The backup URL prefix used when there are local network specific issues.
-const char kSbBackupNetworkErrorURLPrefix[] =
-    "https://alt3-safebrowsing.google.com/safebrowsing";
-
-}  // namespace
 
 // static
 SafeBrowsingServiceFactory* SafeBrowsingService::factory_ = NULL;
@@ -210,9 +187,6 @@ void SafeBrowsingService::ShutDown() {
   // observer of the preferences.
   prefs_map_.clear();
 
-  // Delete the ChromePasswordProtectionService instances.
-  password_protection_service_map_.clear();
-
   Stop(true);
 
   services_delegate_->ShutdownServices();
@@ -299,10 +273,7 @@ TriggerManager* SafeBrowsingService::trigger_manager() const {
 
 PasswordProtectionService* SafeBrowsingService::GetPasswordProtectionService(
     Profile* profile) const {
-  DCHECK(profile);
-  auto it = password_protection_service_map_.find(profile);
-  DCHECK(it != password_protection_service_map_.end());
-  return it->second.get();
+  return services_delegate_->GetPasswordProtectionService(profile);
 }
 
 std::unique_ptr<prefs::mojom::TrackedPreferenceValidationDelegate>
@@ -509,7 +480,7 @@ void SafeBrowsingService::Observe(int type,
     case chrome::NOTIFICATION_PROFILE_CREATED: {
       DCHECK_CURRENTLY_ON(BrowserThread::UI);
       Profile* profile = content::Source<Profile>(source).ptr();
-      CreatePasswordProtectionService(profile);
+      services_delegate_->CreatePasswordProtectionService(profile);
       if (!profile->IsOffTheRecord())
         AddPrefService(profile->GetPrefs());
       break;
@@ -517,7 +488,7 @@ void SafeBrowsingService::Observe(int type,
     case chrome::NOTIFICATION_PROFILE_DESTROYED: {
       DCHECK_CURRENTLY_ON(BrowserThread::UI);
       Profile* profile = content::Source<Profile>(source).ptr();
-      RemovePasswordProtectionService(profile);
+      services_delegate_->RemovePasswordProtectionService(profile);
       if (!profile->IsOffTheRecord())
         RemovePrefService(profile->GetPrefs());
       break;
@@ -626,24 +597,6 @@ void SafeBrowsingService::ProcessResourceRequest(
     const ResourceRequestInfo& request) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   services_delegate_->ProcessResourceRequest(&request);
-}
-
-void SafeBrowsingService::CreatePasswordProtectionService(Profile* profile) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(profile);
-  auto it = password_protection_service_map_.find(profile);
-  DCHECK(it == password_protection_service_map_.end());
-  std::unique_ptr<ChromePasswordProtectionService> service =
-      base::MakeUnique<ChromePasswordProtectionService>(this, profile);
-  password_protection_service_map_[profile] = std::move(service);
-}
-
-void SafeBrowsingService::RemovePasswordProtectionService(Profile* profile) {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  DCHECK(profile);
-  auto it = password_protection_service_map_.find(profile);
-  if (it != password_protection_service_map_.end())
-    password_protection_service_map_.erase(it);
 }
 
 void SafeBrowsingService::CreateTriggerManager() {

@@ -9,16 +9,14 @@
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/wm/workspace/workspace_layout_manager.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
-#include "ui/keyboard/keyboard_util.h"
 
 namespace ash {
-namespace test {
 
 class VirtualKeyboardAlwaysOnTopControllerTest : public AshTestBase {
  public:
@@ -28,7 +26,7 @@ class VirtualKeyboardAlwaysOnTopControllerTest : public AshTestBase {
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         keyboard::switches::kEnableVirtualKeyboard);
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
   }
 
  private:
@@ -78,19 +76,16 @@ TEST_F(VirtualKeyboardAlwaysOnTopControllerTest, NotifyKeyboardBoundsChanged) {
       Shell::GetContainer(root_window, kShellWindowId_VirtualKeyboardContainer);
   ASSERT_TRUE(keyboard_container);
   keyboard_container->Show();
-  aura::Window* keyboard_window =
-      keyboard_controller->ui()->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
+  aura::Window* contents_window =
+      keyboard_controller->ui()->GetContentsWindow();
   const int kKeyboardHeight = 200;
   gfx::Rect keyboard_bounds = keyboard::FullWidthKeyboardBoundsFromRootBounds(
       root_window->bounds(), kKeyboardHeight);
-  keyboard_window->SetBounds(keyboard_bounds);
-  keyboard_window->Show();
-  keyboard_controller->NotifyKeyboardBoundsChanging(keyboard_bounds);
+  contents_window->SetBounds(keyboard_bounds);
+  contents_window->Show();
+  keyboard_controller->NotifyContentsBoundsChanging(keyboard_bounds);
   // Verify that test manager was notified of bounds change.
   ASSERT_TRUE(manager->keyboard_bounds_changed());
 }
 
-}  // namespace test
 }  // namespace ash

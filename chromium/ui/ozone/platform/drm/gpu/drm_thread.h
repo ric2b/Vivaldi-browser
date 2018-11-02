@@ -18,6 +18,7 @@
 #include "ui/gfx/native_widget_types.h"
 #include "ui/gfx/vsync_provider.h"
 #include "ui/ozone/common/gpu/ozone_gpu_message_params.h"
+#include "ui/ozone/platform/drm/common/display_types.h"
 #include "ui/ozone/public/interfaces/device_cursor.mojom.h"
 #include "ui/ozone/public/swap_completion_callback.h"
 
@@ -94,13 +95,13 @@ class DrmThread : public base::Thread, public ozone::mojom::DeviceCursor {
       gfx::AcceleratedWidget widget,
       const std::vector<OverlayCheck_Params>& overlays,
       base::OnceCallback<void(gfx::AcceleratedWidget,
-                              const std::vector<OverlayCheck_Params>&)>
+                              const std::vector<OverlayCheck_Params>&,
+                              const std::vector<OverlayCheckReturn_Params>&)>
           callback);
   void RefreshNativeDisplays(
-      base::OnceCallback<void(const std::vector<DisplaySnapshot_Params>&)>
-          callback);
+      base::OnceCallback<void(MovableDisplaySnapshots)> callback);
   void ConfigureNativeDisplay(int64_t id,
-                              std::unique_ptr<const display::DisplayMode> mode,
+                              std::unique_ptr<display::DisplayMode> mode,
                               const gfx::Point& origin,
                               base::OnceCallback<void(int64_t, bool)> callback);
   void DisableNativeDisplay(int64_t id,

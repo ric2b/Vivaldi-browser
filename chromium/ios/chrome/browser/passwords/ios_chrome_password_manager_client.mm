@@ -14,14 +14,21 @@
 #include "components/password_manager/core/browser/password_manager_util.h"
 #include "components/password_manager/core/common/password_manager_pref_names.h"
 #include "components/signin/core/browser/signin_manager_base.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/experimental_flags.h"
 #include "ios/chrome/browser/passwords/ios_chrome_password_store_factory.h"
 #include "ios/chrome/browser/signin/signin_manager_factory.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using password_manager::PasswordFormManager;
+using password_manager::PasswordManagerMetricsRecorder;
 using password_manager::PasswordStore;
 using password_manager::PasswordSyncState;
 
@@ -46,9 +53,10 @@ IOSChromePasswordManagerClient::IOSChromePasswordManagerClient(
       credentials_filter_(
           this,
           base::Bind(&GetSyncService, delegate_.browserState),
-          base::Bind(&GetSigninManager, delegate_.browserState)) {
+          base::Bind(&GetSigninManager, delegate_.browserState)),
+      ukm_source_id_(0) {
   saving_passwords_enabled_.Init(
-      password_manager::prefs::kPasswordManagerSavingEnabled, GetPrefs());
+      password_manager::prefs::kCredentialsEnableService, GetPrefs());
 }
 
 IOSChromePasswordManagerClient::~IOSChromePasswordManagerClient() = default;
@@ -132,4 +140,30 @@ const GURL& IOSChromePasswordManagerClient::GetLastCommittedEntryURL() const {
 const password_manager::CredentialsFilter*
 IOSChromePasswordManagerClient::GetStoreResultFilter() const {
   return &credentials_filter_;
+}
+
+ukm::UkmRecorder* IOSChromePasswordManagerClient::GetUkmRecorder() {
+  return GetApplicationContext()->GetUkmRecorder();
+}
+
+ukm::SourceId IOSChromePasswordManagerClient::GetUkmSourceId() {
+  // TODO(crbug.com/732846): The UKM Source should be recycled (e.g. from the
+  // web contents), once the UKM framework provides a mechanism for that.
+  if (ukm_source_url_ != delegate_.lastCommittedURL) {
+    metrics_recorder_.reset();
+    ukm_source_url_ = delegate_.lastCommittedURL;
+    ukm_source_id_ = ukm::UkmRecorder::GetNewSourceID();
+  }
+  return ukm_source_id_;
+}
+
+PasswordManagerMetricsRecorder&
+IOSChromePasswordManagerClient::GetMetricsRecorder() {
+  if (!metrics_recorder_) {
+    // Query source_id first, because that has the side effect of initializing
+    // |ukm_source_url_|.
+    ukm::SourceId source_id = GetUkmSourceId();
+    metrics_recorder_.emplace(GetUkmRecorder(), source_id, ukm_source_url_);
+  }
+  return metrics_recorder_.value();
 }

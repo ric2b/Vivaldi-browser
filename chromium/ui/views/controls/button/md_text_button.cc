@@ -28,6 +28,14 @@ namespace views {
 
 namespace {
 
+bool UseMaterialSecondaryButtons() {
+#if defined(OS_MACOSX)
+  return true;
+#else
+  return ui::MaterialDesignController::IsSecondaryUiMaterial();
+#endif  // defined(OS_MACOSX)
+}
+
 LabelButton* CreateButton(ButtonListener* listener,
                           const base::string16& text,
                           bool md) {
@@ -44,15 +52,14 @@ LabelButton* CreateButton(ButtonListener* listener,
 // static
 LabelButton* MdTextButton::CreateSecondaryUiButton(ButtonListener* listener,
                                                    const base::string16& text) {
-  return CreateButton(listener, text,
-                      ui::MaterialDesignController::IsSecondaryUiMaterial());
+  return CreateButton(listener, text, UseMaterialSecondaryButtons());
 }
 
 // static
 LabelButton* MdTextButton::CreateSecondaryUiBlueButton(
     ButtonListener* listener,
     const base::string16& text) {
-  if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
+  if (UseMaterialSecondaryButtons()) {
     MdTextButton* md_button =
         MdTextButton::Create(listener, text, style::CONTEXT_BUTTON_MD);
     md_button->SetProminent(true);
@@ -213,6 +220,10 @@ void MdTextButton::UpdatePadding() {
       label()->font_list().GetFontSize() -
       style::GetFont(style::CONTEXT_BUTTON_MD, style::STYLE_PRIMARY)
           .GetFontSize();
+  // TODO(tapted): This should get |target_height| using LayoutProvider::
+  // GetControlHeightForFont(). It can't because that only returns a correct
+  // result with --secondary-ui-md, and MdTextButtons appear in top chrome
+  // without that.
   const int kBaseHeight = 28;
   int target_height = std::max(kBaseHeight + size_delta * 2,
                                label()->font_list().GetFontSize() * 2);
@@ -231,21 +242,21 @@ void MdTextButton::UpdatePadding() {
 }
 
 void MdTextButton::UpdateColors() {
-  ui::NativeTheme::ColorId fg_color_id =
-      is_prominent_ ? ui::NativeTheme::kColorId_TextOnProminentButtonColor
-                    : ui::NativeTheme::kColorId_ButtonEnabledColor;
-
   ui::NativeTheme* theme = GetNativeTheme();
+  SkColor enabled_text_color = style::GetColor(
+      label()->text_context(),
+      is_prominent_ ? style::STYLE_DIALOG_BUTTON_DEFAULT : style::STYLE_PRIMARY,
+      theme);
   if (!explicitly_set_normal_color()) {
     const auto colors = explicitly_set_colors();
-    LabelButton::SetEnabledTextColors(theme->GetSystemColor(fg_color_id));
+    LabelButton::SetEnabledTextColors(enabled_text_color);
     set_explicitly_set_colors(colors);
   }
 
   // Prominent buttons keep their enabled text color; disabled state is conveyed
   // by shading the background instead.
   if (is_prominent_)
-    SetTextColor(STATE_DISABLED, theme->GetSystemColor(fg_color_id));
+    SetTextColor(STATE_DISABLED, enabled_text_color);
 
   SkColor text_color = label()->enabled_color();
   SkColor bg_color =
@@ -283,9 +294,10 @@ void MdTextButton::UpdateColors() {
   }
 
   DCHECK_EQ(SK_AlphaOPAQUE, static_cast<int>(SkColorGetA(bg_color)));
-  set_background(Background::CreateBackgroundPainter(
-      Painter::CreateRoundRectWith1PxBorderPainter(bg_color, stroke_color,
-                                                   kInkDropSmallCornerRadius)));
+  SetBackground(
+      CreateBackgroundFromPainter(Painter::CreateRoundRectWith1PxBorderPainter(
+          bg_color, stroke_color, kInkDropSmallCornerRadius)));
+  SchedulePaint();
 }
 
 }  // namespace views

@@ -27,6 +27,9 @@ const char kEnableMainFrameBeforeActivation[] =
 // Enables defering image decodes to the image decode service.
 const char kEnableCheckerImaging[] = "enable-checker-imaging";
 
+// Disabled defering image decodes to the image decode service.
+const char kDisableCheckerImaging[] = "disable-checker-imaging";
+
 // Percentage of the browser controls need to be hidden before they will auto
 // hide.
 const char kBrowserControlsHideThreshold[] = "top-controls-hide-threshold";
@@ -47,8 +50,8 @@ const char kEnableTileCompression[] = "enable-tile-compression";
 const char kEnableGpuBenchmarking[] = "enable-gpu-benchmarking";
 
 // Enables multi-client Surface synchronization. In practice, this indicates
-// that LayerTreeHost expects to be given a valid LocalSurfaceId provided by
-// the parent compositor.
+// that LayerTreeHost expects to be given a valid viz::LocalSurfaceId provided
+// by the parent compositor.
 const char kEnableSurfaceSynchronization[] = "enable-surface-synchronization";
 
 // Renders a border around compositor layers to help debug and study
@@ -59,10 +62,12 @@ const char kCompositedRenderPassBorders[] = "renderpass";
 const char kCompositedSurfaceBorders[] = "surface";
 const char kCompositedLayerBorders[] = "layer";
 
-// Renders a green border around GL composited texture quads to help
-// debug and study overlay support.
-const char kGlCompositedTextureQuadBorder[] =
-    "gl-composited-texture-quad-border";
+// TODO(dcastagna): Draw debug quad borders only when it is actually
+// an overlay candidate.
+// Renders a border around GL composited overlay candidate quads to
+// help debug and study overlay support.
+const char kGlCompositedOverlayCandidateQuadBorder[] =
+    "gl-composited-overlay-candidate-quad-border";
 
 // Draws a heads-up-display showing Frames Per Second as well as GPU memory
 // usage. If you also use --enable-logging=stderr --vmodule="head*=1" then FPS

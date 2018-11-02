@@ -9,7 +9,7 @@
     RaisesException=Constructor,
     ConstructorCallWith=ExecutionContext,
     Exposed=(Window,Worker),
-    RuntimeEnabled=GeometryInterfaces,
+    RuntimeEnabled=GeometryInterfaces
 ] interface DOMMatrixReadOnly {
     [RaisesException, NewObject] static DOMMatrixReadOnly fromMatrix(optional DOMMatrixInit other);
     [RaisesException, NewObject] static DOMMatrixReadOnly fromFloat32Array(Float32Array array32);
@@ -76,6 +76,6 @@
     DOMPoint transformPoint(optional DOMPointInit point);
     Float32Array toFloat32Array();
     Float64Array toFloat64Array();
-    stringifier;
+    [Exposed=Window, RaisesException] stringifier;
     serializer = { attribute };
 };

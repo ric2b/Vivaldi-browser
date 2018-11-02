@@ -18,6 +18,7 @@
 #include "chrome/browser/chromeos/app_mode/kiosk_app_manager.h"
 #include "chrome/browser/chromeos/arc/arc_service_launcher.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
+#include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
 #include "chrome/browser/chromeos/login/lock/webui_screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -87,7 +88,7 @@ void StartLoginOobeSession() {
 // 2. Chrome is restarted for Guest session.
 // 3. Chrome is started in browser_tests skipping the login flow.
 // 4. Chrome is started on dev machine i.e. not on Chrome OS device w/o
-//    login flow. In that case --login-user=[user_manager::kStubUser] is
+//    login flow. In that case --login-user=[user_manager::kStubUserEmail] is
 //    added. See PreEarlyInitialization().
 void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
@@ -107,12 +108,10 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     user_session_mgr->InitializeCerts(user_profile);
     user_session_mgr->InitializeCRLSetFetcher(user);
     user_session_mgr->InitializeCertificateTransparencyComponents(user);
+    if (lock_screen_apps::StateController::IsEnabled())
+      lock_screen_apps::StateController::Get()->SetPrimaryProfile(user_profile);
 
     arc::ArcServiceLauncher::Get()->OnPrimaryUserProfilePrepared(user_profile);
-
-    TetherService* tether_service = TetherService::Get(user_profile);
-    if (tether_service)
-      tether_service->StartTetherIfEnabled();
 
     // Send the PROFILE_PREPARED notification and call SessionStarted()
     // so that the Launcher and other Profile dependent classes are created.
@@ -141,6 +140,10 @@ void StartUserSession(Profile* user_profile, const std::string& login_user_id) {
     // restore Sync.
     UserSessionManager::GetInstance()->RestoreAuthenticationSession(
         user_profile);
+
+    TetherService* tether_service = TetherService::Get(user_profile);
+    if (tether_service)
+      tether_service->StartTetherIfPossible();
   }
 }
 

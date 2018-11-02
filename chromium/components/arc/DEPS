@@ -1,26 +1,27 @@
 include_rules = [
+  "+ash/public/cpp",
   "+chromeos/chromeos_switches.h",
   "+chromeos/cryptohome",
   "+chromeos/dbus",
   "+components/exo",
+  "+components/keyed_service",
   "+components/prefs",
+  "+components/session_manager/core",
   "+components/signin/core/account_id",
   "+components/user_manager",
   "+mojo",
   "+storage/browser/fileapi",
   "+third_party/re2",
   "+third_party/skia",
-  "+ui/gfx/geometry/rect.h",
+  "+ui/gfx/geometry",
   "+ui/gfx/range/range.h",
 ]
 
 specific_include_rules = {
   "arc_util.cc": [
-    "+ash/shared",
     "+ui/aura",
   ],
   "arc_util_unittest.cc": [
-    "+ash/shared",
     "+ui/aura",
   ],
 }

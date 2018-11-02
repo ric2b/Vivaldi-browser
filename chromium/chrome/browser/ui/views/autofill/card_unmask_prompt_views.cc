@@ -11,11 +11,10 @@
 #include "chrome/browser/ui/autofill/create_card_unmask_prompt_view.h"
 #include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/views/autofill/view_util.h"
-#include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/autofill/core/browser/ui/card_unmask_prompt_controller.h"
 #include "components/constrained_window/constrained_window_views.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "components/web_modal/web_contents_modal_dialog_host.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager_delegate.h"
@@ -25,9 +24,9 @@
 #include "ui/compositor/compositing_recorder.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/safe_integer_conversions.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/tooltip_icon.h"
@@ -226,12 +225,11 @@ views::View* CardUnmaskPromptViews::CreateFootnoteView() {
   // Local storage checkbox and (?) tooltip.
   storage_row_ = new FadeOutView();
   views::BoxLayout* storage_row_layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, kEdgePadding, kEdgePadding, 0);
+      views::BoxLayout::kHorizontal, gfx::Insets(kEdgePadding));
   storage_row_->SetLayoutManager(storage_row_layout);
   storage_row_->SetBorder(
       views::CreateSolidSidedBorder(1, 0, 0, 0, kSubtleBorderColor));
-  storage_row_->set_background(
-      views::Background::CreateSolidBackground(kLightShadingColor));
+  storage_row_->SetBackground(views::CreateSolidBackground(kLightShadingColor));
 
   storage_checkbox_ = new views::Checkbox(l10n_util::GetStringUTF16(
       IDS_AUTOFILL_CARD_UNMASK_PROMPT_STORAGE_CHECKBOX));
@@ -278,8 +276,7 @@ int CardUnmaskPromptViews::GetHeightForWidth(int width) const {
 void CardUnmaskPromptViews::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   SkColor bg_color =
       theme->GetSystemColor(ui::NativeTheme::kColorId_DialogBackground);
-  progress_overlay_->set_background(
-      views::Background::CreateSolidBackground(bg_color));
+  progress_overlay_->SetBackground(views::CreateSolidBackground(bg_color));
   progress_label_->SetBackgroundColor(bg_color);
   progress_label_->SetEnabledColor(theme->GetSystemColor(
       ui::NativeTheme::kColorId_ThrobberSpinningColor));
@@ -303,10 +300,6 @@ base::string16 CardUnmaskPromptViews::GetDialogButtonLabel(
     return controller_->GetOkButtonLabel();
 
   return DialogDelegateView::GetDialogButtonLabel(button);
-}
-
-bool CardUnmaskPromptViews::ShouldDefaultButtonBeBlue() const {
-  return true;
 }
 
 bool CardUnmaskPromptViews::IsDialogButtonEnabled(
@@ -388,15 +381,15 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   main_contents_ = new views::View();
   main_contents_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 12));
+      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 12));
   AddChildView(main_contents_);
 
   permanent_error_label_ = new views::Label();
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
   permanent_error_label_->SetFontList(
       rb.GetFontList(ui::ResourceBundle::BoldFont));
-  permanent_error_label_->set_background(
-      views::Background::CreateSolidBackground(kWarningColor));
+  permanent_error_label_->SetBackground(
+      views::CreateSolidBackground(kWarningColor));
   permanent_error_label_->SetBorder(
       views::CreateEmptyBorder(12, kEdgePadding, 12, kEdgePadding));
   permanent_error_label_->SetEnabledColor(SK_ColorWHITE);
@@ -407,8 +400,8 @@ void CardUnmaskPromptViews::InitIfNecessary() {
   main_contents_->AddChildView(permanent_error_label_);
 
   views::View* controls_container = new views::View();
-  controls_container->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, kEdgePadding, 0, 0));
+  controls_container->SetLayoutManager(new views::BoxLayout(
+      views::BoxLayout::kVertical, gfx::Insets(0, kEdgePadding)));
   main_contents_->AddChildView(controls_container);
 
   instructions_ = new views::Label(controller_->GetInstructionsMessage());
@@ -420,7 +413,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   input_row_ = new views::View();
   input_row_->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 5));
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 5));
   controls_container->AddChildView(input_row_);
 
   month_input_ = new views::Combobox(&month_combobox_model_);
@@ -450,7 +443,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
 
   views::View* temporary_error = new views::View();
   views::BoxLayout* temporary_error_layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 4);
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 4);
   temporary_error->SetLayoutManager(temporary_error_layout);
   temporary_error_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
@@ -460,7 +453,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
   error_icon_ = new views::ImageView();
   error_icon_->SetVisible(false);
   error_icon_->SetImage(
-      gfx::CreateVectorIcon(ui::kWarningIcon, 16, kWarningColor));
+      gfx::CreateVectorIcon(vector_icons::kWarningIcon, 16, kWarningColor));
   temporary_error->AddChildView(error_icon_);
 
   // Reserve vertical space for the error label, assuming it's one line.
@@ -473,7 +466,7 @@ void CardUnmaskPromptViews::InitIfNecessary() {
   progress_overlay_ = new FadeOutView();
   progress_overlay_->set_fade_everything(true);
   views::BoxLayout* progress_layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 5);
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 5);
   progress_layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_CENTER);
   progress_layout->set_main_axis_alignment(

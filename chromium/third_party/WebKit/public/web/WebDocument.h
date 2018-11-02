@@ -49,13 +49,14 @@ class Local;
 namespace blink {
 
 class Document;
-class WebAXObject;
 class WebElement;
 class WebFormElement;
 class WebElementCollection;
 class WebString;
 class WebURL;
 struct WebDistillabilityFeatures;
+
+using WebStyleSheetId = unsigned;
 
 // Provides readonly access to some properties of a DOM document.
 class WebDocument : public WebNode {
@@ -107,21 +108,13 @@ class WebDocument : public WebNode {
   BLINK_EXPORT WebReferrerPolicy GetReferrerPolicy() const;
   BLINK_EXPORT WebString OutgoingReferrer();
 
-  // Accessibility support. These methods should only be called on the
-  // top-level document, because one accessibility cache spans all of
-  // the documents on the page.
+  // Inserts the given CSS source code as a stylesheet in the document, and
+  // return its id.
+  BLINK_EXPORT WebStyleSheetId InsertStyleSheet(const WebString& source_code);
 
-  // Gets the accessibility object for this document.
-  BLINK_EXPORT WebAXObject AccessibilityObject() const;
-
-  // Gets the accessibility object for an object on this page by ID.
-  BLINK_EXPORT WebAXObject AccessibilityObjectFromID(int ax_id) const;
-
-  // Gets the accessibility object that has focus.
-  BLINK_EXPORT WebAXObject FocusedAccessibilityObject() const;
-
-  // Inserts the given CSS source code as a stylesheet in the document.
-  BLINK_EXPORT void InsertStyleSheet(const WebString& source_code);
+  // Removes the CSS which was previously inserted by a call to
+  // InsertStyleSheet().
+  BLINK_EXPORT void RemoveInsertedStyleSheet(WebStyleSheetId);
 
   // Arranges to call WebFrameClient::didMatchCSS(frame(), ...) when one of
   // the selectors matches or stops matching an element in this document.

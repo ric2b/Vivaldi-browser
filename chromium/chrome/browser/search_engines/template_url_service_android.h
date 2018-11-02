@@ -52,6 +52,9 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   jboolean IsDefaultSearchEngineGoogle(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
+  jboolean DoesDefaultSearchEngineHaveLogo(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
   jboolean IsSearchResultsPageFromDefaultSearchProvider(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -80,6 +83,9 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jkeyword);
+  void SetFilteringDisabled(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj,
+                            jboolean filtering_disabled);
 
   // Adds a custom search engine, sets |jkeyword| as its short_name and keyword,
   // and sets its date_created as |age_in_days| days before the current time.
@@ -95,8 +101,6 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jstring>& jkeyword);
-
-  static bool Register(JNIEnv* env);
 
  private:
   ~TemplateUrlServiceAndroid() override;
@@ -122,6 +126,7 @@ class TemplateUrlServiceAndroid : public TemplateURLServiceObserver {
   // Caches the up-to-date TemplateURL list so that calls from Android could
   // directly get data from it.
   std::vector<TemplateURL*> template_urls_;
+  bool filtering_disabled_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(TemplateUrlServiceAndroid);
 };

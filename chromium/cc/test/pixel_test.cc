@@ -22,13 +22,13 @@
 #include "cc/resources/resource_provider.h"
 #include "cc/scheduler/begin_frame_source.h"
 #include "cc/test/fake_output_surface_client.h"
-#include "cc/test/paths.h"
 #include "cc/test/pixel_test_output_surface.h"
 #include "cc/test/pixel_test_utils.h"
 #include "cc/test/test_gpu_memory_buffer_manager.h"
 #include "cc/test/test_in_process_context_provider.h"
 #include "cc/test/test_shared_bitmap_manager.h"
 #include "cc/trees/blocking_task_runner.h"
+#include "components/viz/test/paths.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -39,8 +39,7 @@ PixelTest::PixelTest()
       disable_picture_quad_image_filtering_(false),
       output_surface_client_(new FakeOutputSurfaceClient),
       main_thread_task_runner_(
-          BlockingTaskRunner::Create(base::ThreadTaskRunnerHandle::Get())) {
-}
+          BlockingTaskRunner::Create(base::ThreadTaskRunnerHandle::Get())) {}
 PixelTest::~PixelTest() {}
 
 bool PixelTest::RunPixelTest(RenderPassList* pass_list,
@@ -69,8 +68,8 @@ bool PixelTest::RunPixelTestWithReadbackTargetAndArea(
 
   std::unique_ptr<CopyOutputRequest> request =
       CopyOutputRequest::CreateBitmapRequest(
-          base::Bind(&PixelTest::ReadbackResult, base::Unretained(this),
-                     run_loop.QuitClosure()));
+          base::BindOnce(&PixelTest::ReadbackResult, base::Unretained(this),
+                         run_loop.QuitClosure()));
   if (copy_rect)
     request->set_area(*copy_rect);
   target->copy_requests.push_back(std::move(request));
@@ -100,8 +99,8 @@ bool PixelTest::RunPixelTest(RenderPassList* pass_list,
 
   std::unique_ptr<CopyOutputRequest> request =
       CopyOutputRequest::CreateBitmapRequest(
-          base::Bind(&PixelTest::ReadbackResult, base::Unretained(this),
-                     run_loop.QuitClosure()));
+          base::BindOnce(&PixelTest::ReadbackResult, base::Unretained(this),
+                         run_loop.QuitClosure()));
   target->copy_requests.push_back(std::move(request));
 
   if (software_renderer_) {
@@ -139,7 +138,7 @@ void PixelTest::ReadbackResult(base::Closure quit_run_loop,
 bool PixelTest::PixelsMatchReference(const base::FilePath& ref_file,
                                      const PixelComparator& comparator) {
   base::FilePath test_data_dir;
-  if (!PathService::Get(CCPaths::DIR_TEST_DATA, &test_data_dir))
+  if (!PathService::Get(viz::Paths::DIR_TEST_DATA, &test_data_dir))
     return false;
 
   // If this is false, we didn't set up a readback on a render pass.
@@ -167,21 +166,20 @@ void PixelTest::SetUpGLRenderer(bool use_skia_gpu_backend,
   shared_bitmap_manager_.reset(new TestSharedBitmapManager);
   gpu_memory_buffer_manager_.reset(new TestGpuMemoryBufferManager);
   // Not relevant for display compositor since it's not delegated.
-  bool delegated_sync_points_required = false;
+  constexpr bool delegated_sync_points_required = false;
   resource_provider_ = base::MakeUnique<ResourceProvider>(
       output_surface_->context_provider(), shared_bitmap_manager_.get(),
-      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(), 1,
+      gpu_memory_buffer_manager_.get(), main_thread_task_runner_.get(),
       delegated_sync_points_required,
-      settings_.renderer_settings.use_gpu_memory_buffer_resources,
       settings_.enable_color_correct_rasterization,
-      settings_.renderer_settings.buffer_to_texture_target_map);
+      settings_.resource_settings);
 
   texture_mailbox_deleter_ = base::MakeUnique<TextureMailboxDeleter>(
       base::ThreadTaskRunnerHandle::Get());
 
   renderer_ = base::MakeUnique<GLRenderer>(
-      &settings_.renderer_settings, output_surface_.get(),
-      resource_provider_.get(), texture_mailbox_deleter_.get());
+      &renderer_settings_, output_surface_.get(), resource_provider_.get(),
+      texture_mailbox_deleter_.get());
   renderer_->Initialize();
   renderer_->SetVisible(true);
 }
@@ -196,16 +194,15 @@ void PixelTest::SetUpSoftwareRenderer() {
       new PixelTestOutputSurface(base::MakeUnique<SoftwareOutputDevice>()));
   output_surface_->BindToClient(output_surface_client_.get());
   shared_bitmap_manager_.reset(new TestSharedBitmapManager());
-  bool delegated_sync_points_required = false;  // Meaningless for software.
+  constexpr bool delegated_sync_points_required =
+      false;  // Meaningless for software.
   resource_provider_ = base::MakeUnique<ResourceProvider>(
       nullptr, shared_bitmap_manager_.get(), gpu_memory_buffer_manager_.get(),
-      main_thread_task_runner_.get(), 1, delegated_sync_points_required,
-      settings_.renderer_settings.use_gpu_memory_buffer_resources,
+      main_thread_task_runner_.get(), delegated_sync_points_required,
       settings_.enable_color_correct_rasterization,
-      settings_.renderer_settings.buffer_to_texture_target_map);
+      settings_.resource_settings);
   auto renderer = base::MakeUnique<SoftwareRenderer>(
-      &settings_.renderer_settings, output_surface_.get(),
-      resource_provider_.get());
+      &renderer_settings_, output_surface_.get(), resource_provider_.get());
   software_renderer_ = renderer.get();
   renderer_ = std::move(renderer);
   renderer_->Initialize();

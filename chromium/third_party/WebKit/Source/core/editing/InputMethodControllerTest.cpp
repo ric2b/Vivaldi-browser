@@ -12,8 +12,8 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/markers/DocumentMarkerController.h"
 #include "core/events/MouseEvent.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/HTMLTextAreaElement.h"
@@ -181,7 +181,7 @@ TEST_F(InputMethodControllerTest, SetCompositionFromExistingText) {
 
   PlainTextRange plain_text_range(PlainTextRange::Create(*div, *range));
   EXPECT_EQ(0u, plain_text_range.Start());
-  EXPECT_EQ(5u, plain_text_range.end());
+  EXPECT_EQ(5u, plain_text_range.End());
 }
 
 TEST_F(InputMethodControllerTest, SetCompositionAfterEmoji) {
@@ -202,7 +202,7 @@ TEST_F(InputMethodControllerTest, SetCompositionAfterEmoji) {
   EXPECT_EQ(2, GetFrame()
                    .Selection()
                    .ComputeVisibleSelectionInDOMTreeDeprecated()
-                   .end()
+                   .End()
                    .ComputeOffsetInContainerNode());
 
   Controller().SetComposition(String("a"), underlines, 1, 1);
@@ -225,7 +225,7 @@ TEST_F(InputMethodControllerTest, SetCompositionWithGraphemeCluster) {
       String::FromUTF8("\xE0\xA4\xB9\xE0\xA5\x87\xE0\xA4\xB2\xE0\xA4\xB2"),
       underlines, 4, 4);
   EXPECT_EQ(4u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(4u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(4u, Controller().GetSelectionOffsets().End());
 
   // UTF16 = 0x0939 0x0947 0x0932 0x094D 0x0932 0x094B.
   Controller().SetComposition(
@@ -233,7 +233,7 @@ TEST_F(InputMethodControllerTest, SetCompositionWithGraphemeCluster) {
                        "\xA4\xB2\xE0\xA5\x8B"),
       underlines, 6, 6);
   EXPECT_EQ(6u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(6u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(6u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -259,7 +259,7 @@ TEST_F(InputMethodControllerTest,
       "\x8B\nab c",
       div->innerText().Utf8().data());
   EXPECT_EQ(11u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(11u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(11u, Controller().GetSelectionOffsets().End());
 
   Controller().SetComposition(String("cd"), underlines, 2, 2);
   EXPECT_STREQ(
@@ -267,7 +267,7 @@ TEST_F(InputMethodControllerTest,
       "\x8B\nab cd",
       div->innerText().Utf8().data());
   EXPECT_EQ(12u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(12u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(12u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest, SetCompositionKeepingStyle) {
@@ -285,14 +285,14 @@ TEST_F(InputMethodControllerTest, SetCompositionKeepingStyle) {
   EXPECT_STREQ("abc1<b>2</b>3457<b>8</b>9d<b>e</b>f",
                div->innerHTML().Utf8().data());
   EXPECT_EQ(11u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(11u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(11u, Controller().GetSelectionOffsets().End());
 
   // Append a character.
   Controller().SetComposition(String("123456789"), underlines, 9, 9);
   EXPECT_STREQ("abc1<b>2</b>34567<b>8</b>9d<b>e</b>f",
                div->innerHTML().Utf8().data());
   EXPECT_EQ(12u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(12u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(12u, Controller().GetSelectionOffsets().End());
 
   // Subtract and append characters.
   Controller().SetComposition(String("123hello789"), underlines, 11, 11);
@@ -391,12 +391,13 @@ TEST_F(InputMethodControllerTest, InsertTextWithNewLineIncrementally) {
       InsertHTMLElement("<div id='sample' contenteditable></div>", "sample");
 
   Vector<CompositionUnderline> underlines;
-  underlines.push_back(CompositionUnderline(0, 11, Color(255, 0, 0), false, 0));
-  Controller().SetComposition("foo", underlines, 0, 2);
-  EXPECT_STREQ("foo", div->innerHTML().Utf8().data());
+  Controller().CommitText("a", underlines, 0);
+  Controller().SetComposition("bcd", underlines, 0, 2);
+  EXPECT_STREQ("abcd", div->innerHTML().Utf8().data());
 
-  Controller().CommitText(String("hello\nworld"), underlines, 0);
-  EXPECT_STREQ("hello<div>world</div>", div->innerHTML().Utf8().data());
+  Controller().CommitText(String("bcd\nefgh\nijkl"), underlines, 0);
+  EXPECT_STREQ("abcd<div>efgh</div><div>ijkl</div>",
+               div->innerHTML().Utf8().data());
 }
 
 TEST_F(InputMethodControllerTest, SelectionOnConfirmExistingText) {
@@ -416,7 +417,7 @@ TEST_F(InputMethodControllerTest, SelectionOnConfirmExistingText) {
   EXPECT_EQ(0, GetFrame()
                    .Selection()
                    .ComputeVisibleSelectionInDOMTreeDeprecated()
-                   .end()
+                   .End()
                    .ComputeOffsetInContainerNode());
 }
 
@@ -464,7 +465,7 @@ TEST_F(InputMethodControllerTest,
 
   PlainTextRange plain_text_range(PlainTextRange::Create(*div, *range));
   EXPECT_EQ(0u, plain_text_range.Start());
-  EXPECT_EQ(5u, plain_text_range.end());
+  EXPECT_EQ(5u, plain_text_range.End());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -787,22 +788,22 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextForMultipleNodes) {
   Controller().SetEditableSelectionOffsets(PlainTextRange(8, 8));
   EXPECT_STREQ("aaa\nbbb\nccc\nddd\neee", div->innerText().Utf8().data());
   EXPECT_EQ(8u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(8u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(8u, Controller().GetSelectionOffsets().End());
 
   Controller().DeleteSurroundingText(1, 0);
   EXPECT_STREQ("aaa\nbbbccc\nddd\neee", div->innerText().Utf8().data());
   EXPECT_EQ(7u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(7u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(7u, Controller().GetSelectionOffsets().End());
 
   Controller().DeleteSurroundingText(0, 4);
   EXPECT_STREQ("aaa\nbbbddd\neee", div->innerText().Utf8().data());
   EXPECT_EQ(7u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(7u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(7u, Controller().GetSelectionOffsets().End());
 
   Controller().DeleteSurroundingText(5, 5);
   EXPECT_STREQ("aaee", div->innerText().Utf8().data());
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -883,7 +884,7 @@ TEST_F(InputMethodControllerTest, DeleteSurroundingTextInCodePointsWithImage) {
   Controller().DeleteSurroundingTextInCodePoints(1, 1);
   EXPECT_STREQ("aaabb", div->innerText().Utf8().data());
   EXPECT_EQ(3u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(3u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(3u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -933,7 +934,7 @@ TEST_F(InputMethodControllerTest, SetCompositionForInputWithNewCaretPositions) {
   Controller().SetEditableSelectionOffsets(PlainTextRange(2, 2));
   EXPECT_STREQ("hello", input->value().Utf8().data());
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 
   Vector<CompositionUnderline> underlines;
   underlines.push_back(CompositionUnderline(0, 2, Color(255, 0, 0), false, 0));
@@ -943,42 +944,42 @@ TEST_F(InputMethodControllerTest, SetCompositionForInputWithNewCaretPositions) {
   Controller().SetComposition("AB", underlines, -100, -100);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(0u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(0u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(0u, Controller().GetSelectionOffsets().End());
 
   // The caret is on left boundary.
   // "*heABllo".
   Controller().SetComposition("AB", underlines, -2, -2);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(0u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(0u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(0u, Controller().GetSelectionOffsets().End());
 
   // The caret is before the composing text.
   // "he*ABllo".
   Controller().SetComposition("AB", underlines, 0, 0);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 
   // The caret is after the composing text.
   // "heAB*llo".
   Controller().SetComposition("AB", underlines, 2, 2);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(4u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(4u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(4u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary.
   // "heABllo*".
   Controller().SetComposition("AB", underlines, 5, 5);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(7u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(7u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(7u, Controller().GetSelectionOffsets().End());
 
   // The caret exceeds right boundary.
   // "heABllo*".
   Controller().SetComposition("AB", underlines, 100, 100);
   EXPECT_STREQ("heABllo", input->value().Utf8().data());
   EXPECT_EQ(7u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(7u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(7u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -997,7 +998,7 @@ TEST_F(InputMethodControllerTest,
   Controller().SetEditableSelectionOffsets(PlainTextRange(17, 17));
   EXPECT_STREQ("hello\nworld\n0123456789", div->innerText().Utf8().data());
   EXPECT_EQ(17u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(17u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(17u, Controller().GetSelectionOffsets().End());
 
   Vector<CompositionUnderline> underlines;
   underlines.push_back(CompositionUnderline(0, 2, Color(255, 0, 0), false, 0));
@@ -1007,77 +1008,77 @@ TEST_F(InputMethodControllerTest,
   Controller().SetComposition("AB", underlines, -100, -100);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(0u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(0u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(0u, Controller().GetSelectionOffsets().End());
 
   // The caret is on left boundary.
   // "*hello\nworld\n01234AB56789".
   Controller().SetComposition("AB", underlines, -17, -17);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(0u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(0u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(0u, Controller().GetSelectionOffsets().End());
 
   // The caret is in the 1st node.
   // "he*llo\nworld\n01234AB56789".
   Controller().SetComposition("AB", underlines, -15, -15);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary of the 1st node.
   // "hello*\nworld\n01234AB56789".
   Controller().SetComposition("AB", underlines, -12, -12);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(5u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(5u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(5u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary of the 2nd node.
   // "hello\n*world\n01234AB56789".
   Controller().SetComposition("AB", underlines, -11, -11);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(6u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(6u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(6u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary of the 3rd node.
   // "hello\nworld*\n01234AB56789".
   Controller().SetComposition("AB", underlines, -6, -6);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(11u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(11u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(11u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary of the 4th node.
   // "hello\nworld\n*01234AB56789".
   Controller().SetComposition("AB", underlines, -5, -5);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(12u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(12u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(12u, Controller().GetSelectionOffsets().End());
 
   // The caret is before the composing text.
   // "hello\nworld\n01234*AB56789".
   Controller().SetComposition("AB", underlines, 0, 0);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(17u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(17u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(17u, Controller().GetSelectionOffsets().End());
 
   // The caret is after the composing text.
   // "hello\nworld\n01234AB*56789".
   Controller().SetComposition("AB", underlines, 2, 2);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(19u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(19u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(19u, Controller().GetSelectionOffsets().End());
 
   // The caret is on right boundary.
   // "hello\nworld\n01234AB56789*".
   Controller().SetComposition("AB", underlines, 7, 7);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(24u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(24u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(24u, Controller().GetSelectionOffsets().End());
 
   // The caret exceeds right boundary.
   // "hello\nworld\n01234AB56789*".
   Controller().SetComposition("AB", underlines, 100, 100);
   EXPECT_STREQ("hello\nworld\n01234AB56789", div->innerText().Utf8().data());
   EXPECT_EQ(24u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(24u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(24u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest, SetCompositionWithEmptyText) {
@@ -1087,7 +1088,7 @@ TEST_F(InputMethodControllerTest, SetCompositionWithEmptyText) {
   Controller().SetEditableSelectionOffsets(PlainTextRange(2, 2));
   EXPECT_STREQ("hello", div->innerText().Utf8().data());
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 
   Vector<CompositionUnderline> underlines0;
   underlines0.push_back(CompositionUnderline(0, 0, Color(255, 0, 0), false, 0));
@@ -1099,13 +1100,13 @@ TEST_F(InputMethodControllerTest, SetCompositionWithEmptyText) {
   Controller().SetComposition("", underlines0, 2, 2);
   EXPECT_STREQ("hello", div->innerText().Utf8().data());
   EXPECT_EQ(4u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(4u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(4u, Controller().GetSelectionOffsets().End());
 
   // Without previous composition.
   Controller().SetComposition("", underlines0, -1, -1);
   EXPECT_STREQ("hello", div->innerText().Utf8().data());
   EXPECT_EQ(3u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(3u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(3u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest, InsertLineBreakWhileComposingText) {
@@ -1117,12 +1118,12 @@ TEST_F(InputMethodControllerTest, InsertLineBreakWhileComposingText) {
   Controller().SetComposition("hello", underlines, 5, 5);
   EXPECT_STREQ("hello", div->innerText().Utf8().data());
   EXPECT_EQ(5u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(5u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(5u, Controller().GetSelectionOffsets().End());
 
   GetFrame().GetEditor().InsertLineBreak();
   EXPECT_STREQ("\n\n", div->innerText().Utf8().data());
   EXPECT_EQ(1u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(1u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(1u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest, InsertLineBreakAfterConfirmingText) {
@@ -1136,12 +1137,12 @@ TEST_F(InputMethodControllerTest, InsertLineBreakAfterConfirmingText) {
 
   Controller().SetEditableSelectionOffsets(PlainTextRange(2, 2));
   EXPECT_EQ(2u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(2u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(2u, Controller().GetSelectionOffsets().End());
 
   GetFrame().GetEditor().InsertLineBreak();
   EXPECT_STREQ("he\nllo", div->innerText().Utf8().data());
   EXPECT_EQ(3u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(3u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(3u, Controller().GetSelectionOffsets().End());
 }
 
 TEST_F(InputMethodControllerTest, CompositionInputEventIsComposing) {
@@ -1297,7 +1298,7 @@ TEST_F(InputMethodControllerTest, CompositionEndEventWithNoSelection) {
   Controller().SetComposition("hello", underlines, 1, 1);
   GetDocument().UpdateStyleAndLayout();
   EXPECT_EQ(1u, Controller().GetSelectionOffsets().Start());
-  EXPECT_EQ(1u, Controller().GetSelectionOffsets().end());
+  EXPECT_EQ(1u, Controller().GetSelectionOffsets().End());
 
   // Confirm the ongoing composition. Note that it moves the caret to the end of
   // text [5,5] before firing 'compositonend' event.
@@ -1519,6 +1520,133 @@ TEST_F(InputMethodControllerTest, CommitEmptyTextDeletesSelection) {
   EXPECT_STREQ("Abc 1", input->value().Utf8().data());
 }
 
+static String GetMarkedText(
+    DocumentMarkerController& document_marker_controller,
+    Node* node,
+    int marker_index) {
+  DocumentMarker* marker = document_marker_controller.Markers()[marker_index];
+  return node->textContent().Substring(
+      marker->StartOffset(), marker->EndOffset() - marker->StartOffset());
+}
+
+TEST_F(InputMethodControllerTest,
+       Marker_WhitespaceFixupAroundContentIndependentMarkerNotContainingSpace) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text blah</div>", "sample");
+
+  // Add marker under "text" (use TextMatch since Composition markers don't
+  // persist across editing operations)
+  EphemeralRange marker_range = PlainTextRange(8, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+  // Delete "Initial"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 7);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Delete "blah"
+  Controller().SetCompositionFromExistingText(empty_underlines, 6, 10);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Check that the marker is still attached to "text" and doesn't include
+  // either space around it
+  EXPECT_EQ(1u, GetDocument().Markers().MarkersFor(div->firstChild()).size());
+  EXPECT_STREQ("text",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
+TEST_F(InputMethodControllerTest,
+       Marker_WhitespaceFixupAroundContentIndependentMarkerBeginningWithSpace) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text blah</div>", "sample");
+
+  // Add marker under " text" (use TextMatch since Composition markers don't
+  // persist across editing operations)
+  EphemeralRange marker_range = PlainTextRange(7, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+  // Delete "Initial"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 7);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Delete "blah"
+  Controller().SetCompositionFromExistingText(empty_underlines, 6, 10);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Check that the marker is still attached to " text" and includes the space
+  // before "text" but not the space after
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("\xC2\xA0text",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
+TEST_F(InputMethodControllerTest,
+       Marker_WhitespaceFixupAroundContentIndependentMarkerEndingWithSpace) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text blah</div>", "sample");
+
+  // Add marker under "text " (use TextMatch since Composition markers don't
+  // persist across editing operations)
+  EphemeralRange marker_range = PlainTextRange(8, 13).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+  // Delete "Initial"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 7);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Delete "blah"
+  Controller().SetCompositionFromExistingText(empty_underlines, 6, 10);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Check that the marker is still attached to "text " and includes the space
+  // after "text" but not the space before
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("text\xC2\xA0",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
+TEST_F(
+    InputMethodControllerTest,
+    Marker_WhitespaceFixupAroundContentIndependentMarkerBeginningAndEndingWithSpaces) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text blah</div>", "sample");
+
+  // Add marker under " text " (use TextMatch since Composition markers don't
+  // persist across editing operations)
+  EphemeralRange marker_range = PlainTextRange(7, 13).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Delete "Initial"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 7);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Delete "blah"
+  Controller().SetCompositionFromExistingText(empty_underlines, 6, 10);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Check that the marker is still attached to " text " and includes both the
+  // space before "text" and the space after
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("\xC2\xA0text\xC2\xA0",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
 TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceStartOfMarker) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>Initial text</div>", "sample");
@@ -1526,7 +1654,7 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceStartOfMarker) {
   // Add marker under "Initial text"
   EphemeralRange marker_range = PlainTextRange(0, 12).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Replace "Initial" with "Original"
   Vector<CompositionUnderline> empty_underlines;
@@ -1538,6 +1666,30 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceStartOfMarker) {
 }
 
 TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceStartOfMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text</div>", "sample");
+
+  // Add marker under "Initial text"
+  EphemeralRange marker_range = PlainTextRange(0, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Replace "Initial" with "Original"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 7);
+  Controller().CommitText(String("Original"), empty_underlines, 0);
+
+  // Verify marker is under "Original text"
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("Original text",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
+TEST_F(InputMethodControllerTest,
        ContentDependentMarker_ReplaceTextContainsStartOfMarker) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>This is some initial text</div>",
@@ -1546,7 +1698,7 @@ TEST_F(InputMethodControllerTest,
   // Add marker under "initial text"
   EphemeralRange marker_range = PlainTextRange(13, 25).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Replace "some initial" with "boring"
   Vector<CompositionUnderline> empty_underlines;
@@ -1557,6 +1709,31 @@ TEST_F(InputMethodControllerTest,
   EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
 }
 
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceTextContainsStartOfMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>This is some initial text</div>",
+      "sample");
+
+  // Add marker under "initial text"
+  EphemeralRange marker_range = PlainTextRange(13, 25).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Replace "some initial" with "boring"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 8, 20);
+  Controller().CommitText(String("boring"), empty_underlines, 0);
+
+  // Verify marker is under " text"
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  EXPECT_STREQ(" text",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
 TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEndOfMarker) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>Initial text</div>", "sample");
@@ -1564,7 +1741,7 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEndOfMarker) {
   // Add marker under "Initial text"
   EphemeralRange marker_range = PlainTextRange(0, 12).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Replace "text" with "string"
   Vector<CompositionUnderline> empty_underlines;
@@ -1573,6 +1750,29 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEndOfMarker) {
 
   // Verify marker was removed
   EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
+}
+
+TEST_F(InputMethodControllerTest, ContentIndependentMarker_ReplaceEndOfMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text</div>", "sample");
+
+  // Add marker under "Initial text"
+  EphemeralRange marker_range = PlainTextRange(0, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Replace "text" with "string"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 8, 12);
+  Controller().CommitText(String("string"), empty_underlines, 0);
+
+  // Verify marker is under "Initial string"
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("Initial string",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
 }
 
 TEST_F(InputMethodControllerTest,
@@ -1584,7 +1784,7 @@ TEST_F(InputMethodControllerTest,
   // Add marker under "some initial"
   EphemeralRange marker_range = PlainTextRange(8, 20).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Replace "initial text" with "content"
   Vector<CompositionUnderline> empty_underlines;
@@ -1597,6 +1797,33 @@ TEST_F(InputMethodControllerTest,
   EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
 }
 
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceTextContainsEndOfMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>This is some initial text</div>",
+      "sample");
+
+  // Add marker under "some initial"
+  EphemeralRange marker_range = PlainTextRange(8, 20).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Replace "initial text" with "content"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 13, 25);
+  Controller().CommitText(String("content"), empty_underlines, 0);
+
+  EXPECT_STREQ("This is some content", div->innerHTML().Utf8().data());
+
+  // Verify marker is under "some "
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("some ",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
 TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEntireMarker) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>Initial text</div>", "sample");
@@ -1604,7 +1831,7 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEntireMarker) {
   // Add marker under "text"
   EphemeralRange marker_range = PlainTextRange(8, 12).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Replace "text" with "string"
   Vector<CompositionUnderline> empty_underlines;
@@ -1616,6 +1843,30 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_ReplaceEntireMarker) {
 }
 
 TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceEntireMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text</div>", "sample");
+
+  // Add marker under "text"
+  EphemeralRange marker_range = PlainTextRange(8, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Replace "text" with "string"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 8, 12);
+  Controller().CommitText(String("string"), empty_underlines, 0);
+
+  // Verify marker is under "string"
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+  ASSERT_STREQ("string",
+               GetMarkedText(GetDocument().Markers(), div->firstChild(), 0)
+                   .Utf8()
+                   .data());
+}
+
+TEST_F(InputMethodControllerTest,
        ContentDependentMarker_ReplaceTextWithMarkerAtBeginning) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>Initial text</div>", "sample");
@@ -1623,7 +1874,29 @@ TEST_F(InputMethodControllerTest,
   // Add marker under "Initial"
   EphemeralRange marker_range = PlainTextRange(0, 7).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
+
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+
+  // Replace "Initial text" with "New string"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 12);
+  Controller().CommitText(String("New string"), empty_underlines, 0);
+
+  // Verify marker was removed
+  EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
+}
+
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceTextWithMarkerAtBeginning) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text</div>", "sample");
+
+  // Add marker under "Initial"
+  EphemeralRange marker_range = PlainTextRange(0, 7).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
 
   EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
 
@@ -1644,7 +1917,29 @@ TEST_F(InputMethodControllerTest,
   // Add marker under "text"
   EphemeralRange marker_range = PlainTextRange(8, 12).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
+
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+
+  // Replace "Initial text" with "New string"
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 0, 12);
+  Controller().CommitText(String("New string"), empty_underlines, 0);
+
+  // Verify marker was removed
+  EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
+}
+
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_ReplaceTextWithMarkerAtEnd) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>Initial text</div>", "sample");
+
+  // Add marker under "text"
+  EphemeralRange marker_range = PlainTextRange(8, 12).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
 
   EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
 
@@ -1664,23 +1959,23 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_Deletions) {
 
   EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(5, 10).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(10, 15).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(15, 20).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(20, 25).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   EXPECT_EQ(5u, GetDocument().Markers().Markers().size());
 
@@ -1699,6 +1994,59 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_Deletions) {
   EXPECT_EQ(16u, GetDocument().Markers().Markers()[1]->EndOffset());
 }
 
+TEST_F(InputMethodControllerTest, ContentIndependentMarker_Deletions) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>1111122222333334444455555</div>",
+      "sample");
+
+  EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(5, 10).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(10, 15).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(15, 20).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(20, 25).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  EXPECT_EQ(5u, GetDocument().Markers().Markers().size());
+
+  // Delete third marker and portions of second and fourth
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 8, 17);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  // Verify markers were updated correctly
+  EXPECT_EQ(4u, GetDocument().Markers().Markers().size());
+
+  EXPECT_EQ(0u, GetDocument().Markers().Markers()[0]->StartOffset());
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[0]->EndOffset());
+
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[1]->StartOffset());
+  EXPECT_EQ(8u, GetDocument().Markers().Markers()[1]->EndOffset());
+
+  EXPECT_EQ(8u, GetDocument().Markers().Markers()[2]->StartOffset());
+  EXPECT_EQ(11u, GetDocument().Markers().Markers()[2]->EndOffset());
+
+  EXPECT_EQ(11u, GetDocument().Markers().Markers()[3]->StartOffset());
+  EXPECT_EQ(16u, GetDocument().Markers().Markers()[3]->EndOffset());
+}
+
 TEST_F(InputMethodControllerTest,
        ContentDependentMarker_DeleteExactlyOnMarker) {
   Element* div = InsertHTMLElement(
@@ -1707,7 +2055,27 @@ TEST_F(InputMethodControllerTest,
 
   EphemeralRange marker_range = PlainTextRange(5, 10).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
+
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+
+  // Delete exactly on the marker
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 5, 10);
+  Controller().CommitText(String(""), empty_underlines, 0);
+  EXPECT_EQ(0u, GetDocument().Markers().Markers().size());
+}
+
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_DeleteExactlyOnMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>1111122222333334444455555</div>",
+      "sample");
+
+  EphemeralRange marker_range = PlainTextRange(5, 10).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
 
   EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
 
@@ -1725,7 +2093,7 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_DeleteMiddleOfMarker) {
 
   EphemeralRange marker_range = PlainTextRange(5, 10).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   // Delete middle of marker
   Vector<CompositionUnderline> empty_underlines;
@@ -1737,6 +2105,28 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_DeleteMiddleOfMarker) {
 }
 
 TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_DeleteMiddleOfMarker) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>1111122222333334444455555</div>",
+      "sample");
+
+  EphemeralRange marker_range = PlainTextRange(5, 10).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  // Delete middle of marker
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetCompositionFromExistingText(empty_underlines, 6, 9);
+  Controller().CommitText(String(""), empty_underlines, 0);
+
+  EXPECT_EQ(1u, GetDocument().Markers().Markers().size());
+
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[0]->StartOffset());
+  EXPECT_EQ(7u, GetDocument().Markers().Markers()[0]->EndOffset());
+}
+
+TEST_F(InputMethodControllerTest,
        ContentDependentMarker_InsertInMarkerInterior) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>1111122222333334444455555</div>",
@@ -1744,15 +2134,15 @@ TEST_F(InputMethodControllerTest,
 
   EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(5, 10).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(10, 15).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
 
@@ -1770,6 +2160,46 @@ TEST_F(InputMethodControllerTest,
   EXPECT_EQ(20u, GetDocument().Markers().Markers()[1]->EndOffset());
 }
 
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_InsertInMarkerInterior) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>1111122222333334444455555</div>",
+      "sample");
+
+  EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(5, 10).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(10, 15).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
+
+  // insert in middle of second marker
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetComposition("", empty_underlines, 7, 7);
+  Controller().CommitText(String("66666"), empty_underlines, -7);
+
+  EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
+
+  EXPECT_EQ(0u, GetDocument().Markers().Markers()[0]->StartOffset());
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[0]->EndOffset());
+
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[1]->StartOffset());
+  EXPECT_EQ(15u, GetDocument().Markers().Markers()[1]->EndOffset());
+
+  EXPECT_EQ(15u, GetDocument().Markers().Markers()[2]->StartOffset());
+  EXPECT_EQ(20u, GetDocument().Markers().Markers()[2]->EndOffset());
+}
+
 TEST_F(InputMethodControllerTest, ContentDependentMarker_InsertBetweenMarkers) {
   Element* div = InsertHTMLElement(
       "<div id='sample' contenteditable>1111122222333334444455555</div>",
@@ -1777,15 +2207,54 @@ TEST_F(InputMethodControllerTest, ContentDependentMarker_InsertBetweenMarkers) {
 
   EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(5, 15).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
 
   marker_range = PlainTextRange(15, 20).CreateRange(*div);
   GetDocument().Markers().AddTextMatchMarker(
-      marker_range, DocumentMarker::MatchStatus::kInactive);
+      marker_range, TextMatchMarker::MatchStatus::kInactive);
+
+  EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
+
+  Vector<CompositionUnderline> empty_underlines;
+  Controller().SetComposition("", empty_underlines, 5, 5);
+  Controller().CommitText(String("77777"), empty_underlines, 0);
+
+  EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
+
+  EXPECT_EQ(0u, GetDocument().Markers().Markers()[0]->StartOffset());
+  EXPECT_EQ(5u, GetDocument().Markers().Markers()[0]->EndOffset());
+
+  EXPECT_EQ(10u, GetDocument().Markers().Markers()[1]->StartOffset());
+  EXPECT_EQ(20u, GetDocument().Markers().Markers()[1]->EndOffset());
+
+  EXPECT_EQ(20u, GetDocument().Markers().Markers()[2]->StartOffset());
+  EXPECT_EQ(25u, GetDocument().Markers().Markers()[2]->EndOffset());
+}
+
+TEST_F(InputMethodControllerTest,
+       ContentIndependentMarker_InsertBetweenMarkers) {
+  Element* div = InsertHTMLElement(
+      "<div id='sample' contenteditable>1111122222333334444455555</div>",
+      "sample");
+
+  EphemeralRange marker_range = PlainTextRange(0, 5).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(5, 15).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
+
+  marker_range = PlainTextRange(15, 20).CreateRange(*div);
+  GetDocument().Markers().AddActiveSuggestionMarker(
+      marker_range, Color::kBlack, StyleableMarker::Thickness::kThin,
+      Color::kBlack);
 
   EXPECT_EQ(3u, GetDocument().Markers().Markers().size());
 
@@ -1817,6 +2286,20 @@ TEST_F(InputMethodControllerTest, TextInputTypeAtBeforeEditable) {
           .Build());
 
   EXPECT_EQ(kWebTextInputTypeContentEditable, Controller().TextInputType());
+}
+
+// http://crbug.com/721666
+TEST_F(InputMethodControllerTest, MaxLength) {
+  HTMLInputElement* input = toHTMLInputElement(
+      InsertHTMLElement("<input id='a' maxlength='4'/>", "a"));
+
+  EXPECT_EQ(kWebTextInputTypeText, Controller().TextInputType());
+
+  Controller().SetComposition("abcde", Vector<CompositionUnderline>(), 4, 4);
+  EXPECT_STREQ("abcde", input->value().Utf8().data());
+
+  Controller().FinishComposingText(InputMethodController::kKeepSelection);
+  EXPECT_STREQ("abcd", input->value().Utf8().data());
 }
 
 }  // namespace blink

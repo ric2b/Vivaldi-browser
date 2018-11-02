@@ -13,7 +13,6 @@
 #include "ash/ash_switches.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
 #include "ash/wm/overview/cleanup_animation_observer.h"
@@ -22,7 +21,6 @@
 #include "ash/wm/overview/window_selector_delegate.h"
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/i18n/string_search.h"
 #include "base/memory/ptr_util.h"
@@ -228,9 +226,7 @@ views::Widget* CreateBackgroundWidget(aura::Window* root_window,
   // the shield and selection widgets. Since that container is created with
   // USE_LOCAL_COORDINATES BoundsInScreenBehavior local bounds in |root_window_|
   // need to be provided.
-  RootWindowController::ForWindow(root_window)
-      ->ConfigureWidgetInitParamsForContainer(
-          widget, kShellWindowId_WallpaperContainer, &params);
+  params.parent = root_window->GetChildById(kShellWindowId_WallpaperContainer);
   widget->Init(params);
   aura::Window* widget_window = widget->GetNativeWindow();
   // Disable the "bounce in" animation when showing the window.
@@ -243,7 +239,7 @@ views::Widget* CreateBackgroundWidget(aura::Window* root_window,
   } else {
     views::View* content_view =
         new RoundedRectView(border_radius, SK_ColorTRANSPARENT);
-    content_view->set_background(new BackgroundWith1PxBorder(
+    content_view->SetBackground(base::MakeUnique<BackgroundWith1PxBorder>(
         background_color, border_color, border_thickness, border_radius));
     widget->SetContentsView(content_view);
   }

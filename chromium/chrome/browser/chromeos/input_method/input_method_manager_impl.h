@@ -16,11 +16,10 @@
 #include "base/observer_list.h"
 #include "base/threading/thread_checker.h"
 #include "chrome/browser/chromeos/input_method/candidate_window_controller.h"
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/profiles/profile.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
-#include "ui/base/ime/chromeos/input_method_whitelist.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/ime/ime_engine_handler_interface.h"
 
 namespace ui {
@@ -67,16 +66,13 @@ class InputMethodManagerImpl : public InputMethodManager,
         const std::vector<std::string>& input_method_ids,
         const std::string& current_input_methodid);
 
-    // Returns the IDs of the subset of input methods which are active and are
-    // associated with |accelerator|. For example,
-    // { "mozc-hangul", "xkb:kr:kr104:kor" } is returned for
-    // ui::VKEY_DBE_SBCSCHAR if the two input methods are active.
-    void GetCandidateInputMethodsForAccelerator(
-        const ui::Accelerator& accelerator,
-        std::vector<std::string>* out_candidate_ids);
-
     // Returns true if given input method requires pending extension.
     bool MethodAwaitsExtensionLoad(const std::string& input_method_id) const;
+
+    // Returns whether the input method (or keyboard layout) can be switched
+    // to the next or previous one. Returns false if only one input method is
+    // enabled.
+    bool CanCycleInputMethod() const;
 
     // InputMethodManager::State overrides.
     scoped_refptr<InputMethodManager::State> Clone() const override;
@@ -104,15 +100,11 @@ class InputMethodManagerImpl : public InputMethodManager,
     void SetInputMethodLoginDefault() override;
     void SetInputMethodLoginDefaultFromVPD(const std::string& locale,
                                            const std::string& layout) override;
-    bool CanCycleInputMethod() override;
     void SwitchToNextInputMethod() override;
     void SwitchToPreviousInputMethod() override;
-    bool CanSwitchInputMethod(const ui::Accelerator& accelerator) override;
-    void SwitchInputMethod(const ui::Accelerator& accelerator) override;
     InputMethodDescriptor GetCurrentInputMethod() const override;
     bool ReplaceEnabledInputMethods(
         const std::vector<std::string>& new_active_input_method_ids) override;
-
     bool SetAllowedInputMethods(
         const std::vector<std::string>& new_allowed_input_method_ids) override;
     const std::vector<std::string>& GetAllowedInputMethods() override;
@@ -190,6 +182,8 @@ class InputMethodManagerImpl : public InputMethodManager,
   void MaybeNotifyImeMenuActivationChanged() override;
   void OverrideKeyboardUrlRef(const std::string& keyset) override;
   bool IsEmojiHandwritingVoiceOnImeMenuEnabled() override;
+  void SetImeMenuFeatureEnabled(ImeMenuFeature feature, bool enabled) override;
+  bool GetImeMenuFeatureEnabled(ImeMenuFeature feature) const override;
 
   // chromeos::UserAddingScreen:
   void OnUserAddingStarted() override;
@@ -305,6 +299,9 @@ class InputMethodManagerImpl : public InputMethodManager,
 
   // Whether the expanded IME menu is activated.
   bool is_ime_menu_activated_;
+
+  // The enabled state of keyboard features.
+  uint32_t features_enabled_state_;
 
   // The engine map from extension_id to an engine.
   typedef std::map<std::string, ui::IMEEngineHandlerInterface*> EngineMap;

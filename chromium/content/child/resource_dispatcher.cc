@@ -31,11 +31,13 @@
 #include "content/common/inter_process_time_ticks_converter.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request.h"
-#include "content/common/resource_request_completion_status.h"
+#include "content/common/throttling_url_loader.h"
 #include "content/public/child/fixed_received_data.h"
 #include "content/public/child/request_peer.h"
 #include "content/public/child/resource_dispatcher_delegate.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
 #include "net/base/net_errors.h"
@@ -68,7 +70,7 @@ int MakeRequestID() {
   // NOTE: The resource_dispatcher_host also needs probably unique
   // request_ids, so they count down from -2 (-1 is a special we're
   // screwed value), while the renderer process counts up.
-  static base::StaticAtomicSequenceNumber sequence;
+  static base::AtomicSequenceNumber sequence;
   return sequence.GetNext();  // We start at zero.
 }
 
@@ -579,12 +581,18 @@ void ResourceDispatcher::StartSync(
     int routing_id,
     SyncLoadResponse* response,
     blink::WebURLRequest::LoadingIPCType ipc_type,
-    mojom::URLLoaderFactory* url_loader_factory) {
+    mojom::URLLoaderFactory* url_loader_factory,
+    std::vector<std::unique_ptr<URLLoaderThrottle>> throttles) {
   CheckSchemeForReferrerPolicy(*request);
 
   SyncLoadResult result;
 
   if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
+    // TODO(yzshen): There is no way to apply a throttle to sync loading. We
+    // could use async loading + sync handle watching to emulate this behavior.
+    // That may require to extend the bindings API to change the priority of
+    // messages. It would result in more messages during this blocking
+    // operation, but sync loading is discouraged anyway.
     if (!url_loader_factory->SyncLoad(
             routing_id, MakeRequestID(), *request, &result)) {
       response->error_code = net::ERR_FAILED;
@@ -625,6 +633,7 @@ int ResourceDispatcher::StartAsync(
     std::unique_ptr<RequestPeer> peer,
     blink::WebURLRequest::LoadingIPCType ipc_type,
     mojom::URLLoaderFactory* url_loader_factory,
+    std::vector<std::unique_ptr<URLLoaderThrottle>> throttles,
     mojo::ScopedDataPipeConsumerHandle consumer_handle) {
   CheckSchemeForReferrerPolicy(*request);
 
@@ -654,22 +663,56 @@ int ResourceDispatcher::StartAsync(
     return request_id;
   }
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("blink_resource_loader", R"(
+      semantics {
+        sender: "Blink Resource Loader"
+        description:
+          "Blink initiated request, which includes all resources for "
+          "normal page loads, chrome URLs, resources for installed "
+          "extensions, as well as downloads."
+        trigger:
+          "Navigating to a URL or downloading a file. A webpage, "
+          "ServiceWorker, chrome:// page, or extension may also initiate "
+          "requests in the background."
+        data: "Anything the initiator wants to send."
+        destination: OTHER
+      }
+      policy {
+        cookies_allowed: true
+        cookies_store: "user"
+        setting: "These requests cannot be disabled in settings."
+        policy_exception_justification:
+          "Not implemented. Without these requests, Chrome will be unable "
+          "to load any webpage."
+      })");
+
   if (ipc_type == blink::WebURLRequest::LoadingIPCType::kMojo) {
     scoped_refptr<base::SingleThreadTaskRunner> task_runner =
         loading_task_runner ? loading_task_runner : thread_task_runner_;
     std::unique_ptr<URLLoaderClientImpl> client(
-        new URLLoaderClientImpl(request_id, this, std::move(task_runner)));
-    mojom::URLLoaderAssociatedPtr url_loader;
-    mojom::URLLoaderClientPtr client_ptr;
-    client->Bind(&client_ptr);
-    url_loader_factory->CreateLoaderAndStart(
-        MakeRequest(&url_loader), routing_id, request_id,
-        mojom::kURLLoadOptionNone, *request, std::move(client_ptr));
+        new URLLoaderClientImpl(request_id, this, task_runner));
+
+    uint32_t options = mojom::kURLLoadOptionNone;
+    // TODO(jam): use this flag for ResourceDispatcherHost code path once
+    // MojoLoading is the only IPC code path.
+    if (base::FeatureList::IsEnabled(features::kNetworkService) &&
+        request->fetch_request_context_type != REQUEST_CONTEXT_TYPE_FETCH) {
+      // MIME sniffing should be disabled for a request initiated by fetch().
+      options |= mojom::kURLLoadOptionSniffMimeType;
+    }
+
+    std::unique_ptr<ThrottlingURLLoader> url_loader =
+        ThrottlingURLLoader::CreateLoaderAndStart(
+            url_loader_factory, std::move(throttles), routing_id, request_id,
+            options, *request, client.get(), traffic_annotation,
+            std::move(task_runner));
     pending_requests_[request_id]->url_loader = std::move(url_loader);
     pending_requests_[request_id]->url_loader_client = std::move(client);
   } else {
-    message_sender_->Send(
-        new ResourceHostMsg_RequestResource(routing_id, request_id, *request));
+    message_sender_->Send(new ResourceHostMsg_RequestResource(
+        routing_id, request_id, *request,
+        net::MutableNetworkTrafficAnnotationTag(traffic_annotation)));
   }
 
   return request_id;
@@ -770,8 +813,17 @@ void ResourceDispatcher::ContinueForNavigation(
   // WebURLLoaderImpl::Context::OnReceivedResponse.
   client_ptr->OnReceiveResponse(ResourceResponseHead(), base::nullopt,
                                 mojom::DownloadedTempFilePtr());
+
+  // Abort if the request is cancelled.
+  if (!GetPendingRequestInfo(request_id))
+    return;
+
   // Start streaming now.
   client_ptr->OnStartLoadingResponseBody(std::move(consumer_handle));
+
+  // Abort if the request is cancelled.
+  if (!GetPendingRequestInfo(request_id))
+    return;
 
   // Call OnComplete now too, as it won't get called on the client.
   // TODO(kinuko): Fill this properly.

@@ -15,7 +15,6 @@
 #include "base/threading/thread_checker.h"
 #include "build/build_config.h"
 #include "content/child/child_process.h"
-#include "content/common/field_trial_recorder.mojom.h"
 #include "content/gpu/gpu_service_factory.h"
 #include "content/public/common/connection_filter.h"
 #include "content/public/common/content_client.h"
@@ -85,7 +84,6 @@ class QueueingConnectionFilter : public ConnectionFilter {
 
  private:
   struct PendingRequest {
-    service_manager::BindSourceInfo source_info;
     std::string interface_name;
     mojo::ScopedMessagePipeHandle interface_pipe;
   };
@@ -98,12 +96,10 @@ class QueueingConnectionFilter : public ConnectionFilter {
     DCHECK(io_thread_checker_.CalledOnValidThread());
     if (registry_->CanBindInterface(interface_name)) {
       if (released_) {
-        registry_->BindInterface(source_info, interface_name,
-                                 std::move(*interface_pipe));
+        registry_->BindInterface(interface_name, std::move(*interface_pipe));
       } else {
         std::unique_ptr<PendingRequest> request =
             base::MakeUnique<PendingRequest>();
-        request->source_info = source_info;
         request->interface_name = interface_name;
         request->interface_pipe = std::move(*interface_pipe);
         pending_requests_.push_back(std::move(request));
@@ -115,7 +111,7 @@ class QueueingConnectionFilter : public ConnectionFilter {
     DCHECK(io_thread_checker_.CalledOnValidThread());
     released_ = true;
     for (auto& request : pending_requests_) {
-      registry_->BindInterface(request->source_info, request->interface_name,
+      registry_->BindInterface(request->interface_name,
                                std::move(request->interface_pipe));
     }
   }
@@ -209,7 +205,7 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
                                     weak_factory_.GetWeakPtr()),
                          base::ThreadTaskRunnerHandle::Get());
   if (GetContentClient()->gpu())  // NULL in tests.
-    GetContentClient()->gpu()->Initialize(this, registry.get());
+    GetContentClient()->gpu()->Initialize(registry.get());
 
   std::unique_ptr<QueueingConnectionFilter> filter =
       base::MakeUnique<QueueingConnectionFilter>(GetIOTaskRunner(),
@@ -218,14 +214,6 @@ void GpuChildThread::Init(const base::Time& process_start_time) {
   GetServiceManagerConnection()->AddConnectionFilter(std::move(filter));
 
   StartServiceManagerConnection();
-}
-
-void GpuChildThread::OnFieldTrialGroupFinalized(const std::string& trial_name,
-                                                const std::string& group_name) {
-  mojom::FieldTrialRecorderPtr field_trial_recorder;
-  GetConnector()->BindInterface(mojom::kBrowserServiceName,
-                                &field_trial_recorder);
-  field_trial_recorder->FieldTrialActivated(trial_name);
 }
 
 void GpuChildThread::CreateGpuMainService(
@@ -304,7 +292,6 @@ void GpuChildThread::CreateFrameSinkManager(
 }
 
 void GpuChildThread::BindServiceFactoryRequest(
-    const service_manager::BindSourceInfo& source_info,
     service_manager::mojom::ServiceFactoryRequest request) {
   DVLOG(1) << "GPU: Binding service_manager::mojom::ServiceFactoryRequest";
   DCHECK(service_factory_);

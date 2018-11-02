@@ -9,6 +9,8 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
@@ -129,8 +131,8 @@ bool NetLog::IsCapturing() const {
   return base::subtle::NoBarrier_Load(&is_capturing_) != 0;
 }
 
-void NetLog::DeprecatedAddObserver(NetLog::ThreadSafeObserver* observer,
-                                   NetLogCaptureMode capture_mode) {
+void NetLog::AddObserver(NetLog::ThreadSafeObserver* observer,
+                         NetLogCaptureMode capture_mode) {
   base::AutoLock lock(lock_);
 
   DCHECK(!observer->net_log_);
@@ -153,7 +155,7 @@ void NetLog::SetObserverCaptureMode(NetLog::ThreadSafeObserver* observer,
   observer->capture_mode_ = capture_mode;
 }
 
-void NetLog::DeprecatedRemoveObserver(NetLog::ThreadSafeObserver* observer) {
+void NetLog::RemoveObserver(NetLog::ThreadSafeObserver* observer) {
   base::AutoLock lock(lock_);
 
   DCHECK_EQ(this, observer->net_log_);
@@ -174,8 +176,7 @@ void NetLog::UpdateIsCapturing() {
 
 bool NetLog::HasObserver(ThreadSafeObserver* observer) {
   lock_.AssertAcquired();
-  auto it = std::find(observers_.begin(), observers_.end(), observer);
-  return it != observers_.end();
+  return base::ContainsValue(observers_, observer);
 }
 
 // static
@@ -199,12 +200,12 @@ const char* NetLog::EventTypeToString(NetLogEventType event) {
 }
 
 // static
-base::Value* NetLog::GetEventTypesAsValue() {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+std::unique_ptr<base::Value> NetLog::GetEventTypesAsValue() {
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   for (int i = 0; i < static_cast<int>(NetLogEventType::COUNT); ++i) {
     dict->SetInteger(EventTypeToString(static_cast<NetLogEventType>(i)), i);
   }
-  return dict.release();
+  return std::move(dict);
 }
 
 // static
@@ -222,12 +223,12 @@ const char* NetLog::SourceTypeToString(NetLogSourceType source) {
 }
 
 // static
-base::Value* NetLog::GetSourceTypesAsValue() {
-  std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+std::unique_ptr<base::Value> NetLog::GetSourceTypesAsValue() {
+  auto dict = base::MakeUnique<base::DictionaryValue>();
   for (int i = 0; i < static_cast<int>(NetLogSourceType::COUNT); ++i) {
     dict->SetInteger(SourceTypeToString(static_cast<NetLogSourceType>(i)), i);
   }
-  return dict.release();
+  return std::move(dict);
 }
 
 // static

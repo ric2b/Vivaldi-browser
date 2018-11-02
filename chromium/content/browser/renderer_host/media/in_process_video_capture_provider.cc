@@ -37,25 +37,21 @@ InProcessVideoCaptureProvider::CreateInstance(
       std::move(video_capture_system), std::move(device_task_runner));
 }
 
-void InProcessVideoCaptureProvider::Uninitialize() {
-  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
-}
-
 void InProcessVideoCaptureProvider::GetDeviceInfosAsync(
-    const GetDeviceInfosCallback& result_callback) {
+    GetDeviceInfosCallback result_callback) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!video_capture_system_) {
     std::vector<media::VideoCaptureDeviceInfo> empty_result;
-    result_callback.Run(empty_result);
+    base::ResetAndReturn(&result_callback).Run(empty_result);
     return;
   }
   // Using Unretained() is safe because |this| owns
   // |video_capture_system_| and |result_callback| has ownership of
   // |this|.
   device_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&media::VideoCaptureSystem::GetDeviceInfosAsync,
-                            base::Unretained(video_capture_system_.get()),
-                            result_callback));
+      FROM_HERE, base::BindOnce(&media::VideoCaptureSystem::GetDeviceInfosAsync,
+                                base::Unretained(video_capture_system_.get()),
+                                std::move(result_callback)));
 }
 
 std::unique_ptr<VideoCaptureDeviceLauncher>

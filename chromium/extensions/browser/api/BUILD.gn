@@ -3,7 +3,11 @@
 # found in the LICENSE file.
 
 import("//extensions/common/api/schema.gni")
+import("//extensions/features/features.gni")
 import("//tools/json_schema_compiler/json_schema_api.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
 
 source_set("api") {
   sources = [
@@ -53,6 +57,7 @@ source_set("api") {
     "//extensions/browser/api/dns",
     "//extensions/browser/api/document_scan",
     "//extensions/browser/api/file_handlers",
+    "//extensions/browser/api/file_system",
     "//extensions/browser/api/hid",
     "//extensions/browser/api/idle",
     "//extensions/browser/api/management",
@@ -88,7 +93,6 @@ source_set("api") {
     "//base:i18n",
     "//components/keyed_service/content:content",
     "//extensions/browser:browser_sources",
-    "//extensions/browser/guest_view",
     "//extensions/common/api",
     "//extensions/strings",
   ]
@@ -100,12 +104,18 @@ source_set("api") {
     "//device/base",
     "//device/bluetooth",
     "//device/hid",
-    "//device/power_save_blocker",
     "//device/serial",
   ]
 
   if (is_chromeos) {
     sources += [
+      "lock_screen_data/data_item.cc",
+      "lock_screen_data/data_item.h",
+      "lock_screen_data/lock_screen_data_api.cc",
+      "lock_screen_data/lock_screen_data_api.h",
+      "lock_screen_data/lock_screen_item_storage.cc",
+      "lock_screen_data/lock_screen_item_storage.h",
+      "lock_screen_data/operation_result.h",
       "media_perception_private/conversion_utils.cc",
       "media_perception_private/conversion_utils.h",
       "media_perception_private/media_perception_api_manager.cc",
@@ -142,7 +152,6 @@ json_schema_api("api_registration") {
     ":api",
     "//device/serial",
     "//extensions/common/api",
-    "//extensions/common/api/cast_channel:cast_channel_proto",
     "//skia",
   ]
 }

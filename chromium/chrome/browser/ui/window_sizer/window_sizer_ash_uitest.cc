@@ -5,7 +5,6 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/location.h"
 #include "base/macros.h"
@@ -37,7 +36,6 @@ class WindowSizerTest : public InProcessBrowserTest {
   ~WindowSizerTest() override {}
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
     // Make screens sufficiently wide to host 2 browsers side by side.
     command_line->AppendSwitchASCII("ash-host-window-bounds",
                                     "600x600,601+0-600x600");

@@ -7,6 +7,7 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -67,7 +68,8 @@ LabelExample::~LabelExample() {
 
 void LabelExample::CreateExampleView(View* container) {
   // A very simple label example, followed by additional helpful examples.
-  container->SetLayoutManager(new BoxLayout(BoxLayout::kVertical, 0, 0, 10));
+  container->SetLayoutManager(
+      new BoxLayout(BoxLayout::kVertical, gfx::Insets(), 10));
   Label* label = new Label(ASCIIToUTF16("Hello world!"));
   container->AddChildView(label);
 
@@ -160,8 +162,7 @@ void LabelExample::ContentsChanged(Textfield* sender,
 void LabelExample::AddCustomLabel(View* container) {
   View* control_container = new View();
   control_container->SetBorder(CreateSolidBorder(2, SK_ColorGRAY));
-  control_container->set_background(
-      Background::CreateSolidBackground(SK_ColorLTGRAY));
+  control_container->SetBackground(CreateSolidBackground(SK_ColorLTGRAY));
   GridLayout* layout = GridLayout::CreatePanel(control_container);
   control_container->SetLayoutManager(layout);
 

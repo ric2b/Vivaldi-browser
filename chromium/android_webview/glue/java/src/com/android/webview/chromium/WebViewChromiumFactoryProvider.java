@@ -20,6 +20,7 @@ import android.os.StrictMode;
 import android.os.UserManager;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.ViewGroup;
 import android.webkit.CookieManager;
 import android.webkit.GeolocationPermissions;
 import android.webkit.ServiceWorkerController;
@@ -62,10 +63,12 @@ import org.chromium.base.library_loader.LibraryLoader;
 import org.chromium.base.library_loader.LibraryProcessType;
 import org.chromium.base.library_loader.NativeLibraries;
 import org.chromium.base.library_loader.ProcessInitException;
+import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.content.browser.input.LGEmailActionModeWorkaround;
 import org.chromium.net.NetworkChangeNotifier;
 
 import java.io.File;
+import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -417,6 +420,7 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
         // The WebView package name is used to locate the separate Service to which we copy crash
         // minidumps. This package name must be set before a render process has a chance to crash -
         // otherwise we might try to copy a minidump without knowing what process to copy it to.
+        // It's also used to determine channel for UMA, so it must be set before initializing UMA.
         AwBrowserProcess.setWebViewPackageName(webViewPackageName);
         AwBrowserProcess.configureChildProcessLauncher(webViewPackageName, isExternalService);
         AwBrowserProcess.start();
@@ -555,13 +559,14 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
 
                     /**
                      * Starts Safe Browsing initialization. This should only be called once.
-                     * @param context is the activity context the WebView will be used in.
+                     * @param context is the application context the WebView will be used in.
                      * @param callback will be called with the value true if initialization is
                      * successful. The callback will be run on the UI thread.
                      */
                     // TODO(ntfschr): add @Override once next android SDK rolls
                     public void initSafeBrowsing(Context context, ValueCallback<Boolean> callback) {
-                        AwContentsStatics.initSafeBrowsing(context, callback);
+                        AwContentsStatics.initSafeBrowsing(
+                                context.getApplicationContext(), callback);
                     }
 
                     /**
@@ -572,6 +577,22 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
                         AwContentsStatics.shutdownSafeBrowsing();
                     }
 
+                    // TODO(ntfschr): add @Override once next android SDK rolls
+                    public void setSafeBrowsingWhitelist(
+                            List<String> urls, ValueCallback<Boolean> callback) {
+                        AwContentsStatics.setSafeBrowsingWhitelist(urls, callback);
+                    }
+
+                    /**
+                     * Returns a URL pointing to the privacy policy for Safe Browsing reporting.
+                     *
+                     * @return the url pointing to a privacy policy document which can be displayed
+                     * to users.
+                     */
+                    // TODO(ntfschr): add @Override once next android SDK rolls
+                    public Uri getSafeBrowsingPrivacyPolicyUrl() {
+                        return AwContentsStatics.getSafeBrowsingPrivacyPolicyUrl();
+                    }
                 };
             }
         }
@@ -707,5 +728,9 @@ public class WebViewChromiumFactoryProvider implements WebViewFactoryProvider {
     WebViewContentsClientAdapter createWebViewContentsClientAdapter(WebView webView,
             Context context) {
         return new WebViewContentsClientAdapter(webView, context, mWebViewDelegate);
+    }
+
+    AutofillProvider createAutofillProvider(Context context, ViewGroup containerView) {
+        return null;
     }
 }

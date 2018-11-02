@@ -14,6 +14,7 @@
 
 #include "build/build_config.h"
 #include "chrome/common/features.h"
+#include "components/signin/core/common/signin_features.h"
 #include "content/public/common/url_constants.h"
 #include "media/media_features.h"
 #include "ppapi/features/features.h"
@@ -50,6 +51,7 @@ extern const char kChromeUIFeedbackURL[];
 extern const char kChromeUIFlagsURL[];
 extern const char kChromeUIFlashURL[];
 extern const char kChromeUIGCMInternalsURL[];
+// TODO(dbeam): remove help-frame.
 extern const char kChromeUIHelpFrameURL[];
 extern const char kChromeUIHelpURL[];
 extern const char kChromeUIHistoryURL[];
@@ -59,8 +61,9 @@ extern const char kChromeUIInspectURL[];
 extern const char kChromeUIInstantURL[];
 extern const char kChromeUIInterstitialURL[];
 extern const char kChromeUIInvalidationsURL[];
-extern const char kChromeUILargeIconURL[];
 extern const char kChromeUIMdPolicyURL[];
+extern const char kChromeUIMdSettingsURL[];
+extern const char kChromeUIMediaEngagementHost[];
 extern const char kChromeUINaClURL[];
 extern const char kChromeUINetInternalsURL[];
 extern const char kChromeUINewProfileURL[];
@@ -73,12 +76,11 @@ extern const char kChromeUIMdUserManagerUrl[];
 extern const char kChromeUIPrintURL[];
 extern const char kChromeUIQuitURL[];
 extern const char kChromeUIRestartURL[];
-extern const char kChromeUIMdSettingsURL[];
 extern const char kChromeUISettingsURL[];
 extern const char kChromeUIContentSettingsURL[];
-extern const char kChromeUISettingsFrameURL[];
 extern const char kChromeUISigninEmailConfirmationURL[];
 extern const char kChromeUISigninErrorURL[];
+extern const char kChromeUISiteDetailsPrefixURL[];
 extern const char kChromeUISiteEngagementHost[];
 extern const char kChromeUISuggestionsURL[];
 extern const char kChromeUISupervisedUserPassphrasePageURL[];
@@ -124,15 +126,19 @@ extern const char kChromeUISystemInfoURL[];
 extern const char kChromeUITermsOemURL[];
 extern const char kChromeUIUserImageURL[];
 extern const char kChromeUIMdCupsSettingsURL[];
+extern const char kCupsPrintLearnMoreURL[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
-extern const char kChromeUICleanupToolURL[];
 extern const char kChromeUIMetroFlowURL[];
 #endif
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 extern const char kChromeUITabModalConfirmDialogURL[];
+#endif
+
+#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
+extern const char kChromeUIMemoryInternalsURL[];
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -145,7 +151,6 @@ extern const char kChromeUICastURL[];
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-extern const char kChromeUIDiscardsHost[];
 extern const char kChromeUIDiscardsURL[];
 #endif
 
@@ -189,6 +194,7 @@ extern const char kChromeUIFeedbackHost[];
 extern const char kChromeUIFlagsHost[];
 extern const char kChromeUIFlashHost[];
 extern const char kChromeUIGCMInternalsHost[];
+// TODO(dbeam): remove help-frame.
 extern const char kChromeUIHelpFrameHost[];
 extern const char kChromeUIHelpHost[];
 extern const char kChromeUIHangHost[];
@@ -222,7 +228,6 @@ extern const char kChromeUIQuotaInternalsHost[];
 extern const char kChromeUIQuitHost[];
 extern const char kChromeUIRestartHost[];
 extern const char kChromeUISettingsHost[];
-extern const char kChromeUISettingsFrameHost[];
 extern const char kChromeUIShorthangHost[];
 extern const char kChromeUISigninEmailConfirmationHost[];
 extern const char kChromeUISigninErrorHost[];
@@ -256,6 +261,14 @@ extern const char kChromeUIWorkersHost[];
 extern const char kChromeUIPrintHost[];
 #endif  // ENABLE_PRINT_PREVIEW
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+extern const char kChromeUISigninDiceInternalsHost[];
+#endif
+
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+extern const char kChromeUIDiscardsHost[];
+#endif
+
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 extern const char kChromeUILinuxProxyConfigHost[];
 #endif
@@ -268,7 +281,6 @@ extern const char kChromeUISandboxHost[];
 extern const char kChromeUIContextualSearchPromoHost[];
 extern const char kChromeUIOfflineInternalsURL[];
 extern const char kChromeUIPhysicalWebDiagnosticsHost[];
-extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUISnippetsInternalsHost[];
 extern const char kChromeUIWebApksHost[];
 #endif
@@ -311,12 +323,15 @@ extern const char kChromeOSAssetPath[];
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
-extern const char kChromeUICleanupToolHost[];
 extern const char kChromeUIMetroFlowHost[];
 #endif
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 extern const char kChromeUITabModalConfirmDialogHost[];
+#endif
+
+#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
+extern const char kChromeUIMemoryInternalsHost[];
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -350,7 +365,6 @@ extern const char kAccessibilitySubPage[];
 extern const char kBluetoothSubPage[];
 extern const char kDateTimeSubPage[];
 extern const char kDisplaySubPage[];
-extern const char kDeprecatedOptionsSearchSubPage[];
 extern const char kHelpSubPage[];
 extern const char kInternetSubPage[];
 extern const char kNetworkDetailSubPage[];
@@ -509,8 +523,11 @@ extern const char kNaturalScrollHelpURL[];
 // The URL for the Learn More page about enterprise enrolled devices.
 extern const char kLearnMoreEnterpriseURL[];
 
-// The URL fo the "learn more" link for Google Play Store (ARC) settings.
+// The URL for the "learn more" link for Google Play Store (ARC) settings.
 extern const char kAndroidAppsLearnMoreURL[];
+
+// The URL for the "learn more" link for Instant Tethering.
+extern const char kInstantTetheringLearnMoreURL[];
 #endif
 
 // The URL for the Learn More link of the non-CWS bubble.
@@ -518,6 +535,9 @@ extern const char kRemoveNonCWSExtensionURL[];
 
 #if defined(OS_WIN)
 extern const char kNotificationsHelpURL[];
+
+// The URL for the Learn More link in the Chrome Cleanup settings card.
+extern const char kChromeCleanerLearnMoreURL[];
 #endif
 
 // The Welcome Notification More Info URL.

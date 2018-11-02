@@ -36,21 +36,21 @@
 #include "core/origin_trials/OriginTrialContext.h"
 #include "core/workers/WorkerGlobalScope.h"
 #include "platform/HTTPNames.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/network/ContentSecurityPolicyResponseHeaders.h"
 #include "platform/network/NetworkUtils.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/RefPtr.h"
 #include "public/platform/WebAddressSpace.h"
-#include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
 WorkerScriptLoader::WorkerScriptLoader()
     : response_callback_(nullptr),
       finished_callback_(nullptr),
-      request_context_(WebURLRequest::kRequestContextWorker),
       response_address_space_(kWebAddressSpacePublic) {}
 
 WorkerScriptLoader::~WorkerScriptLoader() {
@@ -65,22 +65,22 @@ WorkerScriptLoader::~WorkerScriptLoader() {
 void WorkerScriptLoader::LoadSynchronously(
     ExecutionContext& execution_context,
     const KURL& url,
-    CrossOriginRequestPolicy cross_origin_request_policy,
+    WebURLRequest::RequestContext request_context,
     WebAddressSpace creation_address_space) {
   url_ = url;
   execution_context_ = &execution_context;
 
-  ResourceRequest request(CreateResourceRequest(creation_address_space));
+  ResourceRequest request(url);
+  request.SetHTTPMethod(HTTPNames::GET);
+  request.SetExternalRequestStateFromRequestorAddressSpace(
+      creation_address_space);
+  request.SetRequestContext(request_context);
+
   SECURITY_DCHECK(execution_context.IsWorkerGlobalScope());
 
   ThreadableLoaderOptions options;
-  options.cross_origin_request_policy = cross_origin_request_policy;
-  // FIXME: Should we add EnforceScriptSrcDirective here?
-  options.content_security_policy_enforcement =
-      kDoNotEnforceContentSecurityPolicy;
 
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.allow_credentials = kAllowStoredCredentials;
   resource_loader_options.parser_disposition =
       ParserDisposition::kNotParserInserted;
 
@@ -92,7 +92,9 @@ void WorkerScriptLoader::LoadSynchronously(
 void WorkerScriptLoader::LoadAsynchronously(
     ExecutionContext& execution_context,
     const KURL& url,
-    CrossOriginRequestPolicy cross_origin_request_policy,
+    WebURLRequest::RequestContext request_context,
+    WebURLRequest::FetchRequestMode fetch_request_mode,
+    WebURLRequest::FetchCredentialsMode fetch_credentials_mode,
     WebAddressSpace creation_address_space,
     std::unique_ptr<WTF::Closure> response_callback,
     std::unique_ptr<WTF::Closure> finished_callback) {
@@ -102,12 +104,17 @@ void WorkerScriptLoader::LoadAsynchronously(
   url_ = url;
   execution_context_ = &execution_context;
 
-  ResourceRequest request(CreateResourceRequest(creation_address_space));
+  ResourceRequest request(url);
+  request.SetHTTPMethod(HTTPNames::GET);
+  request.SetExternalRequestStateFromRequestorAddressSpace(
+      creation_address_space);
+  request.SetRequestContext(request_context);
+  request.SetFetchRequestMode(fetch_request_mode);
+  request.SetFetchCredentialsMode(fetch_credentials_mode);
+
   ThreadableLoaderOptions options;
-  options.cross_origin_request_policy = cross_origin_request_policy;
 
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.allow_credentials = kAllowStoredCredentials;
 
   // During create, callbacks may happen which could remove the last reference
   // to this object, while some of the callchain assumes that the client and
@@ -125,16 +132,6 @@ void WorkerScriptLoader::LoadAsynchronously(
 const KURL& WorkerScriptLoader::ResponseURL() const {
   DCHECK(!Failed());
   return response_url_;
-}
-
-ResourceRequest WorkerScriptLoader::CreateResourceRequest(
-    WebAddressSpace creation_address_space) {
-  ResourceRequest request(url_);
-  request.SetHTTPMethod(HTTPNames::GET);
-  request.SetRequestContext(request_context_);
-  request.SetExternalRequestStateFromRequestorAddressSpace(
-      creation_address_space);
-  return request;
 }
 
 void WorkerScriptLoader::DidReceiveResponse(
@@ -181,11 +178,14 @@ void WorkerScriptLoader::DidReceiveData(const char* data, unsigned len) {
     return;
 
   if (!decoder_) {
-    if (!response_encoding_.IsEmpty())
-      decoder_ =
-          TextResourceDecoder::Create("text/javascript", response_encoding_);
-    else
-      decoder_ = TextResourceDecoder::Create("text/javascript", "UTF-8");
+    if (!response_encoding_.IsEmpty()) {
+      decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
+          TextResourceDecoderOptions::kPlainTextContent,
+          WTF::TextEncoding(response_encoding_)));
+    } else {
+      decoder_ = TextResourceDecoder::Create(TextResourceDecoderOptions(
+          TextResourceDecoderOptions::kPlainTextContent, UTF8Encoding()));
+    }
   }
 
   if (!len)

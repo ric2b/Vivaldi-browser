@@ -30,11 +30,12 @@
 
 #include "platform/fonts/FontDataCache.h"
 
+#include "build/build_config.h"
 #include "platform/fonts/SimpleFontData.h"
 
 namespace blink {
 
-#if !OS(ANDROID)
+#if !defined(OS_ANDROID)
 const unsigned kCMaxInactiveFontData = 250;
 const unsigned kCTargetInactiveFontData = 200;
 #else
@@ -71,7 +72,7 @@ PassRefPtr<SimpleFontData> FontDataCache::Get(
     cache_.Set(&new_value.first->PlatformData(), new_value);
     if (should_retain == kDoNotRetain)
       inactive_font_data_.insert(new_value.first);
-    return new_value.first.Release();
+    return std::move(new_value.first);
   }
 
   if (!result.Get()->value.second) {

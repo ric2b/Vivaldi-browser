@@ -8,6 +8,7 @@
 #include <jni.h>
 
 #include <string>
+#include <vector>
 
 #include "base/base_export.h"
 #include "base/macros.h"
@@ -27,7 +28,8 @@ enum SdkVersion {
   SDK_VERSION_LOLLIPOP = 21,
   SDK_VERSION_LOLLIPOP_MR1 = 22,
   SDK_VERSION_MARSHMALLOW = 23,
-  SDK_VERSION_NOUGAT = 24
+  SDK_VERSION_NOUGAT = 24,
+  SDK_VERSION_NOUGAT_MR1 = 25
 };
 
 // BuildInfo is a singleton class that stores android build and device
@@ -99,6 +101,10 @@ class BASE_EXPORT BuildInfo {
     return build_type_;
   }
 
+  const char* installer_package_name() const { return installer_package_name_; }
+
+  const char* abi_name() const { return abi_name_; }
+
   std::string extracted_file_suffix() const { return extracted_file_suffix_; }
 
   int sdk_int() const {
@@ -116,27 +122,29 @@ class BASE_EXPORT BuildInfo {
  private:
   friend struct BuildInfoSingletonTraits;
 
-  explicit BuildInfo(JNIEnv* env);
+  explicit BuildInfo(const std::vector<std::string>& params);
 
   // Const char* is used instead of std::strings because these values must be
   // available even if the process is in a crash state. Sadly
   // std::string.c_str() doesn't guarantee that memory won't be allocated when
   // it is called.
+  const char* const brand_;
   const char* const device_;
+  const char* const android_build_id_;
   const char* const manufacturer_;
   const char* const model_;
-  const char* const brand_;
-  const char* const android_build_id_;
-  const char* const android_build_fp_;
-  const char* const gms_version_code_;
-  const char* const package_version_code_;
-  const char* const package_version_name_;
+  const int sdk_int_;
+  const char* const build_type_;
   const char* const package_label_;
   const char* const package_name_;
-  const char* const build_type_;
+  const char* const package_version_code_;
+  const char* const package_version_name_;
+  const char* const android_build_fp_;
+  const char* const gms_version_code_;
+  const char* const installer_package_name_;
+  const char* const abi_name_;
   // Not needed by breakpad.
   const std::string extracted_file_suffix_;
-  const int sdk_int_;
   // This is set via set_java_exception_info, not at constructor time.
   const char* java_exception_info_;
 

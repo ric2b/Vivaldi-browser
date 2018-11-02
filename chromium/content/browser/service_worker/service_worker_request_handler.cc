@@ -9,20 +9,23 @@
 
 #include "base/command_line.h"
 #include "base/macros.h"
+#include "content/browser/loader/url_loader_request_handler.h"
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/service_worker/service_worker_navigation_handle_core.h"
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_url_request_job.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_types.h"
 #include "content/common/service_worker/service_worker_utils.h"
 #include "content/public/browser/resource_context.h"
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/origin_util.h"
+#include "content/public/common/resource_request_body.h"
+#include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_message.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request.h"
@@ -57,29 +60,6 @@ class ServiceWorkerRequestInterceptor
   DISALLOW_COPY_AND_ASSIGN(ServiceWorkerRequestInterceptor);
 };
 
-void FinalizeHandlerInitialization(
-    net::URLRequest* request,
-    ServiceWorkerProviderHost* provider_host,
-    storage::BlobStorageContext* blob_storage_context,
-    bool skip_service_worker,
-    FetchRequestMode request_mode,
-    FetchCredentialsMode credentials_mode,
-    FetchRedirectMode redirect_mode,
-    ResourceType resource_type,
-    RequestContextType request_context_type,
-    RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBodyImpl> body) {
-  std::unique_ptr<ServiceWorkerRequestHandler> handler(
-      provider_host->CreateRequestHandler(
-          request_mode, credentials_mode, redirect_mode, resource_type,
-          request_context_type, frame_type, blob_storage_context->AsWeakPtr(),
-          body, skip_service_worker));
-  if (!handler)
-    return;
-
-  request->SetUserData(&kUserDataKey, std::move(handler));
-}
-
 }  // namespace
 
 // PlzNavigate
@@ -92,7 +72,7 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     bool is_parent_frame_secure,
-    scoped_refptr<ResourceRequestBodyImpl> body,
+    scoped_refptr<ResourceRequestBody> body,
     const base::Callback<WebContents*(void)>& web_contents_getter) {
   CHECK(IsBrowserSideNavigationEnabled());
 
@@ -119,11 +99,14 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
           navigation_handle_core->context_wrapper()->context()->AsWeakPtr(),
           is_parent_frame_secure, web_contents_getter);
 
-  FinalizeHandlerInitialization(
-      request, provider_host.get(), blob_storage_context, skip_service_worker,
-      FETCH_REQUEST_MODE_NAVIGATE, FETCH_CREDENTIALS_MODE_INCLUDE,
-      FetchRedirectMode::MANUAL_MODE, resource_type, request_context_type,
-      frame_type, body);
+  std::unique_ptr<ServiceWorkerRequestHandler> handler(
+      provider_host->CreateRequestHandler(
+          FETCH_REQUEST_MODE_NAVIGATE, FETCH_CREDENTIALS_MODE_INCLUDE,
+          FetchRedirectMode::MANUAL_MODE, std::string() /* integrity */,
+          resource_type, request_context_type, frame_type,
+          blob_storage_context->AsWeakPtr(), body, skip_service_worker));
+  if (handler)
+    request->SetUserData(&kUserDataKey, std::move(handler));
 
   // Transfer ownership to the ServiceWorkerNavigationHandleCore.
   // In the case of a successful navigation, the SWProviderHost will be
@@ -135,7 +118,7 @@ void ServiceWorkerRequestHandler::InitializeForNavigation(
 
 // PlzNavigate and --enable-network-service.
 // static
-mojom::URLLoaderFactoryPtr
+std::unique_ptr<URLLoaderRequestHandler>
 ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
     const ResourceRequest& resource_request,
     ResourceContext* resource_context,
@@ -146,13 +129,45 @@ ServiceWorkerRequestHandler::InitializeForNavigationNetworkService(
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
     bool is_parent_frame_secure,
-    scoped_refptr<ResourceRequestBodyImpl> body,
+    scoped_refptr<ResourceRequestBody> body,
     const base::Callback<WebContents*(void)>& web_contents_getter) {
   DCHECK(IsBrowserSideNavigationEnabled() &&
-         base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kEnableNetworkService));
-  // TODO(scottmg): Currently being implemented. See https://crbug.com/715640.
-  return mojom::URLLoaderFactoryPtr();
+         base::FeatureList::IsEnabled(features::kNetworkService));
+  DCHECK(navigation_handle_core);
+
+  // Create the handler even for insecure HTTP since it's used in the
+  // case of redirect to HTTPS.
+  if (!resource_request.url.SchemeIsHTTPOrHTTPS() &&
+      !OriginCanAccessServiceWorkers(resource_request.url)) {
+    return nullptr;
+  }
+
+  if (!navigation_handle_core->context_wrapper() ||
+      !navigation_handle_core->context_wrapper()->context()) {
+    return nullptr;
+  }
+
+  // Initialize the SWProviderHost.
+  std::unique_ptr<ServiceWorkerProviderHost> provider_host =
+      ServiceWorkerProviderHost::PreCreateNavigationHost(
+          navigation_handle_core->context_wrapper()->context()->AsWeakPtr(),
+          is_parent_frame_secure, web_contents_getter);
+
+  std::unique_ptr<ServiceWorkerRequestHandler> handler(
+      provider_host->CreateRequestHandler(
+          FETCH_REQUEST_MODE_NAVIGATE, FETCH_CREDENTIALS_MODE_INCLUDE,
+          FetchRedirectMode::MANUAL_MODE, std::string() /* integrity */,
+          resource_type, request_context_type, frame_type,
+          blob_storage_context->AsWeakPtr(), body, skip_service_worker));
+
+  // Transfer ownership to the ServiceWorkerNavigationHandleCore.
+  // In the case of a successful navigation, the SWProviderHost will be
+  // transferred to its "final" destination in the OnProviderCreated handler. If
+  // the navigation fails, it will be destroyed along with the
+  // ServiceWorkerNavigationHandleCore.
+  navigation_handle_core->DidPreCreateProviderHost(std::move(provider_host));
+
+  return base::WrapUnique<URLLoaderRequestHandler>(handler.release());
 }
 
 void ServiceWorkerRequestHandler::InitializeHandler(
@@ -165,10 +180,11 @@ void ServiceWorkerRequestHandler::InitializeHandler(
     FetchRequestMode request_mode,
     FetchCredentialsMode credentials_mode,
     FetchRedirectMode redirect_mode,
+    const std::string& integrity,
     ResourceType resource_type,
     RequestContextType request_context_type,
     RequestContextFrameType frame_type,
-    scoped_refptr<ResourceRequestBodyImpl> body) {
+    scoped_refptr<ResourceRequestBody> body) {
   // Create the handler even for insecure HTTP since it's used in the
   // case of redirect to HTTPS.
   if (!request->url().SchemeIsHTTPOrHTTPS() &&
@@ -186,10 +202,13 @@ void ServiceWorkerRequestHandler::InitializeHandler(
   if (!provider_host || !provider_host->IsContextAlive())
     return;
 
-  FinalizeHandlerInitialization(request, provider_host, blob_storage_context,
-                                skip_service_worker, request_mode,
-                                credentials_mode, redirect_mode, resource_type,
-                                request_context_type, frame_type, body);
+  std::unique_ptr<ServiceWorkerRequestHandler> handler(
+      provider_host->CreateRequestHandler(
+          request_mode, credentials_mode, redirect_mode, integrity,
+          resource_type, request_context_type, frame_type,
+          blob_storage_context->AsWeakPtr(), body, skip_service_worker));
+  if (handler)
+    request->SetUserData(&kUserDataKey, std::move(handler));
 }
 
 ServiceWorkerRequestHandler* ServiceWorkerRequestHandler::GetHandler(
@@ -218,6 +237,14 @@ ServiceWorkerProviderHost* ServiceWorkerRequestHandler::GetProviderHost(
     const net::URLRequest* request) {
   ServiceWorkerRequestHandler* handler = GetHandler(request);
   return handler ? handler->provider_host_.get() : nullptr;
+}
+
+void ServiceWorkerRequestHandler::MaybeCreateLoader(
+    const ResourceRequest& request,
+    ResourceContext* resource_context,
+    LoaderCallback callback) {
+  NOTREACHED();
+  std::move(callback).Run(StartLoaderCallback());
 }
 
 void ServiceWorkerRequestHandler::PrepareForCrossSiteTransfer(

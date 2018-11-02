@@ -19,9 +19,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_interfaces.h"
-#include "net/base/zap.h"
-#include "net/http/des.h"
-#include "net/http/md4.h"
+#include "net/ntlm/des.h"
+#include "net/ntlm/md4.h"
 
 namespace net {
 
@@ -245,7 +244,6 @@ static void NTLM_Hash(const base::string16& password, uint8_t* hash) {
   WriteUnicodeLE(passbuf, password.data(), len);
   weak_crypto::MD4Sum(passbuf, len * 2, hash);
 
-  ZapBuf(passbuf, len * 2);
   free(passbuf);
 #else
   weak_crypto::MD4Sum(reinterpret_cast<const uint8_t*>(password.data()),
@@ -270,7 +268,7 @@ static void LM_Response(const uint8_t* hash,
   uint8_t keybytes[21], k1[8], k2[8], k3[8];
 
   memcpy(keybytes, hash, 16);
-  ZapBuf(keybytes + 16, 5);
+  memset(keybytes + 16, 0, 5);
 
   DESMakeKey(keybytes, k1);
   DESMakeKey(keybytes + 7, k2);
@@ -365,11 +363,19 @@ static int ParseType2Msg(const void* in_buf, uint32_t in_len, Type2Msg* msg) {
   uint32_t offset = ReadUint32(cursor);  // get offset from in_buf
   msg->target_len = 0;
   msg->target = NULL;
-  // Check the offset / length combo is in range of the input buffer, including
-  // integer overflow checking.
-  if (offset + target_len > offset && offset + target_len <= in_len) {
-    msg->target_len = target_len;
-    msg->target = ((const uint8_t*)in_buf) + offset;
+
+  // Target length 0 is valid and indicates no target information.
+  if (target_len != 0) {
+    // Check the offset / length combo is in range of the input buffer,
+    // including integer overflow checking.
+    if (target_len <= in_len && in_len - offset >= target_len) {
+      msg->target_len = target_len;
+      msg->target = ((const uint8_t*)in_buf) + offset;
+    } else {
+      // Reject a message with a non-zero target length that
+      // would cause an overflow.
+      return ERR_UNEXPECTED;
+    }
   }
 
   // read flags
@@ -594,9 +600,7 @@ int HttpAuthHandlerNTLM::InitializeBeforeFirstChallenge() {
   return OK;
 }
 
-HttpAuthHandlerNTLM::~HttpAuthHandlerNTLM() {
-  credentials_.Zap();
-}
+HttpAuthHandlerNTLM::~HttpAuthHandlerNTLM() {}
 
 // static
 HttpAuthHandlerNTLM::GenerateRandomProc

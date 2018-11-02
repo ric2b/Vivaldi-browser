@@ -6,11 +6,14 @@
 
 #include "bindings/core/v8/ScriptPromise.h"
 #include "core/dom/DOMException.h"
+#include "core/dom/Document.h"
+#include "core/frame/LocalFrame.h"
+#include "core/workers/WorkerGlobalScope.h"
+#include "core/workers/WorkerThread.h"
 #include "modules/payments/PaymentInstruments.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
 
 namespace blink {
@@ -34,13 +37,22 @@ DEFINE_TRACE(PaymentManager) {
 PaymentManager::PaymentManager(ServiceWorkerRegistration* registration)
     : registration_(registration), instruments_(nullptr) {
   DCHECK(registration);
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&manager_));
+
+  auto request = mojo::MakeRequest(&manager_);
+  ExecutionContext* context = registration->GetExecutionContext();
+  if (context && context->IsDocument()) {
+    LocalFrame* frame = ToDocument(context)->GetFrame();
+    if (frame)
+      frame->GetInterfaceProvider().GetInterface(std::move(request));
+  } else if (context && context->IsWorkerGlobalScope()) {
+    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
+    thread->GetInterfaceProvider().GetInterface(std::move(request));
+  }
 
   manager_.set_connection_error_handler(ConvertToBaseCallback(WTF::Bind(
       &PaymentManager::OnServiceConnectionError, WrapWeakPersistent(this))));
-
-  manager_->Init(registration_->scope());
+  manager_->Init(registration_->GetExecutionContext()->Url().GetString(),
+                 registration_->scope());
 }
 
 void PaymentManager::OnServiceConnectionError() {

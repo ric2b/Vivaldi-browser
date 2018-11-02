@@ -109,6 +109,9 @@ post_process_target("//content/common:common") {
       "//vivaldi/platform_media/common/mac/at_init.h",
     ]
 
+    # VB-24641 dispatch_get_current_queue is deprecated
+    cflags = [ "-Wno-deprecated-declarations" ]
+
     libs += [
       "AudioToolbox.framework",
     ]
@@ -151,6 +154,8 @@ post_process_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/mac/platform_media_pipeline_mac.cc",
     ]
 
+    defines += [ "GPU_IMPLEMENTATION" ]
+
     libs += [
       "AudioToolbox.framework",
       "AVFoundation.framework",
@@ -161,12 +166,14 @@ post_process_target("//media:media") {
       "CoreServices.framework",
     ]
 
-    # VB-18038 audio doesn't work with -O2
-    configs -= [ "//build/config/compiler:default_optimization" ]
-    configs += [ "//build/config/compiler:optimize_medium" ]
+    if (!is_debug) {
+      # VB-18038 audio doesn't work with -O2
+      configs -= [ "//build/config/compiler:default_optimization" ]
+      cflags = [ "-O1" ]
+    }
 
     # VB-24641 dispatch_get_current_queue is deprecated
-    cflags = [ "-Wno-deprecated-declarations" ]
+    cflags += [ "-Wno-deprecated-declarations" ]
   }
 
   if (is_win) {
@@ -179,6 +186,8 @@ post_process_target("//media:media") {
       "//vivaldi/platform_media/gpu/pipeline/win/platform_media_pipeline_win.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.cc",
       "//vivaldi/platform_media/gpu/pipeline/win/wmf_media_pipeline.h",
+      "//vivaldi/platform_media/gpu/pipeline/win/source_reader_worker.cc",
+      "//vivaldi/platform_media/gpu/pipeline/win/source_reader_worker.h",
     ]
 
     libs += [

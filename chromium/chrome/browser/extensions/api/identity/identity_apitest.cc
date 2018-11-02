@@ -9,9 +9,11 @@
 
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
+#include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/values.h"
 #include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "components/prefs/pref_service.h"
 #if defined(OS_CHROMEOS)
@@ -63,6 +65,7 @@
 #include "extensions/common/test_util.h"
 #include "google_apis/gaia/google_service_auth_error.h"
 #include "google_apis/gaia/oauth2_mint_token_flow.h"
+#include "google_apis/gaia/oauth2_token_service.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -282,6 +285,12 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
     scope_ui_failure_ = failure;
   }
 
+  void set_scope_ui_service_error(const GoogleServiceAuthError& service_error) {
+    scope_ui_result_ = false;
+    scope_ui_failure_ = GaiaWebAuthFlow::SERVICE_AUTH_ERROR;
+    scope_ui_service_error_ = service_error;
+  }
+
   void set_scope_ui_oauth_error(const std::string& oauth_error) {
     scope_ui_result_ = false;
     scope_ui_failure_ = GaiaWebAuthFlow::OAUTH_ERROR;
@@ -296,15 +305,16 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
 
   void StartLoginAccessTokenRequest() override {
     if (auto_login_access_token_) {
-      if (login_access_token_result_) {
-        OnGetTokenSuccess(login_token_request_.get(),
-                          "access_token",
-                          base::Time::Now() + base::TimeDelta::FromHours(1LL));
-      } else {
-        GoogleServiceAuthError error(
+      base::Optional<std::string> access_token("access_token");
+      GoogleServiceAuthError error = GoogleServiceAuthError::AuthErrorNone();
+      if (!login_access_token_result_) {
+        access_token = base::nullopt;
+        error = GoogleServiceAuthError(
             GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS);
-        OnGetTokenFailure(login_token_request_.get(), error);
       }
+      OnGetAccessTokenComplete(
+          access_token, base::Time::Now() + base::TimeDelta::FromHours(1LL),
+          error);
     } else {
       // Make a request to the token service. The test now must tell
       // the token service to issue an access token (or an error).
@@ -321,10 +331,17 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   void ShowLoginPopup() override {
     EXPECT_FALSE(login_ui_shown_);
     login_ui_shown_ = true;
-    if (login_ui_result_)
-      SigninSuccess();
-    else
+    if (login_ui_result_) {
+      ::identity::AccountState account_state;
+      account_state.has_refresh_token = true;
+      account_state.is_primary_account = true;
+      OnPrimaryAccountAvailable(
+          SigninManagerFactory::GetForProfile(GetProfile())
+              ->GetAuthenticatedAccountInfo(),
+          account_state);
+    } else {
       SigninFailed();
+    }
   }
 
   void ShowOAuthApprovalDialog(const IssueAdviceInfo& issue_advice) override {
@@ -333,8 +350,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
     if (scope_ui_result_) {
       OnGaiaFlowCompleted(kAccessToken, "3600");
     } else if (scope_ui_failure_ == GaiaWebAuthFlow::SERVICE_AUTH_ERROR) {
-      GoogleServiceAuthError error(GoogleServiceAuthError::CONNECTION_FAILED);
-      OnGaiaFlowFailure(scope_ui_failure_, error, "");
+      OnGaiaFlowFailure(scope_ui_failure_, scope_ui_service_error_, "");
     } else {
       GoogleServiceAuthError error(GoogleServiceAuthError::NONE);
       OnGaiaFlowFailure(scope_ui_failure_, error, scope_ui_oauth_error_);
@@ -360,6 +376,7 @@ class FakeGetAuthTokenFunction : public IdentityGetAuthTokenFunction {
   bool login_ui_result_;
   bool scope_ui_result_;
   GaiaWebAuthFlow::Failure scope_ui_failure_;
+  GoogleServiceAuthError scope_ui_service_error_;
   std::string scope_ui_oauth_error_;
   bool login_ui_shown_;
   bool scope_ui_shown_;
@@ -382,18 +399,93 @@ gaia::AccountIds CreateIds(const std::string& email, const std::string& obfid) {
   return ids;
 }
 
-class IdentityGetAccountsFunctionTest : public ExtensionBrowserTest {
+class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
+ public:
+  void SetUpInProcessBrowserTestFixture() override {
+    AsyncExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
+
+    will_create_browser_context_services_subscription_ =
+        BrowserContextDependencyManager::GetInstance()
+            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
+                base::Bind(
+                    &IdentityTestWithSignin::OnWillCreateBrowserContextServices,
+                    base::Unretained(this)));
+  }
+
+  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
+    // Replace the signin manager and token service with fakes. Do this ahead of
+    // creating the browser so that a bunch of classes don't register as
+    // observers and end up needing to unregister when the fake is substituted.
+    SigninManagerFactory::GetInstance()->SetTestingFactory(
+        context, &BuildFakeSigninManagerBase);
+    ProfileOAuth2TokenServiceFactory::GetInstance()->SetTestingFactory(
+        context, &BuildFakeProfileOAuth2TokenService);
+    GaiaCookieManagerServiceFactory::GetInstance()->SetTestingFactory(
+        context, &BuildFakeGaiaCookieManagerService);
+  }
+
+  void SetUpOnMainThread() override {
+    AsyncExtensionBrowserTest::SetUpOnMainThread();
+
+    // Grab references to the fake signin manager and token service.
+    signin_manager_ = static_cast<FakeSigninManagerForTesting*>(
+        SigninManagerFactory::GetInstance()->GetForProfile(profile()));
+    ASSERT_TRUE(signin_manager_);
+    token_service_ = static_cast<FakeProfileOAuth2TokenService*>(
+        ProfileOAuth2TokenServiceFactory::GetInstance()->GetForProfile(
+            profile()));
+    ASSERT_TRUE(token_service_);
+    GaiaCookieManagerServiceFactory::GetInstance()
+        ->GetForProfile(profile())
+        ->Init();
+  }
+
+ protected:
+  void SignIn(const std::string& account_key) {
+    SignIn(account_key, account_key);
+  }
+
+  void SignIn(const std::string& email, const std::string& gaia) {
+    AccountTrackerService* account_tracker =
+        AccountTrackerServiceFactory::GetForProfile(profile());
+    std::string account_id = account_tracker->SeedAccountInfo(gaia, email);
+
+#if defined(OS_CHROMEOS)
+    signin_manager_->SetAuthenticatedAccountInfo(gaia, email);
+#else
+    signin_manager_->SignIn(gaia, email, "password");
+#endif
+    token_service_->UpdateCredentials(account_id, "refresh_token");
+  }
+
+  void AddAccount(const std::string& email, const std::string& gaia) {
+    AccountTrackerService* account_tracker =
+        AccountTrackerServiceFactory::GetForProfile(profile());
+    std::string account_id = account_tracker->SeedAccountInfo(gaia, email);
+    token_service_->UpdateCredentials(account_id, "refresh_token");
+  }
+
+  void SeedAccountInfo(const std::string& account_key) {
+    AccountTrackerService* account_tracker =
+        AccountTrackerServiceFactory::GetForProfile(profile());
+    account_tracker->SeedAccountInfo(account_key, account_key);
+  }
+
+  FakeSigninManagerForTesting* signin_manager_;
+  FakeProfileOAuth2TokenService* token_service_;
+
+  std::unique_ptr<
+      base::CallbackList<void(content::BrowserContext*)>::Subscription>
+      will_create_browser_context_services_subscription_;
+};
+
+class IdentityGetAccountsFunctionTest : public IdentityTestWithSignin {
   void SetUpCommandLine(base::CommandLine* command_line) override {
     ExtensionBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kExtensionsMultiAccount);
   }
 
  protected:
-  void SetAccountState(gaia::AccountIds ids, bool is_signed_in) {
-    IdentityAPI::GetFactoryInstance()->Get(profile())->SetAccountStateForTest(
-        ids, is_signed_in);
-  }
-
   testing::AssertionResult ExpectGetAccounts(
       const std::vector<std::string>& accounts) {
     scoped_refptr<IdentityGetAccountsFunction> func(
@@ -476,15 +568,15 @@ IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, NoneSignedIn) {
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest,
                        PrimaryAccountSignedIn) {
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
+  SignIn("primary@example.com", "1");
   std::vector<std::string> primary;
   primary.push_back("1");
   EXPECT_TRUE(ExpectGetAccounts(primary));
 }
 
 IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, TwoAccountsSignedIn) {
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SignIn("primary@example.com", "1");
+  AddAccount("secondary@example.com", "2");
   std::vector<std::string> two_accounts;
   two_accounts.push_back("1");
   two_accounts.push_back("2");
@@ -494,6 +586,7 @@ IN_PROC_BROWSER_TEST_F(IdentityGetAccountsFunctionTest, TwoAccountsSignedIn) {
 class IdentityOldProfilesGetAccountsFunctionTest
     : public IdentityGetAccountsFunctionTest {
   void SetUpCommandLine(base::CommandLine* command_line) override {
+    ExtensionBrowserTest::SetUpCommandLine(command_line);
     // Don't add the multi-account switch that parent class would have.
   }
 };
@@ -505,79 +598,12 @@ IN_PROC_BROWSER_TEST_F(IdentityOldProfilesGetAccountsFunctionTest,
 
 IN_PROC_BROWSER_TEST_F(IdentityOldProfilesGetAccountsFunctionTest,
                        TwoAccountsSignedIn) {
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SignIn("primary@example.com", "1");
+  AddAccount("secondary@example.com", "2");
   std::vector<std::string> only_primary;
   only_primary.push_back("1");
   EXPECT_TRUE(ExpectGetAccounts(only_primary));
 }
-
-class IdentityTestWithSignin : public AsyncExtensionBrowserTest {
- public:
-  void SetUpInProcessBrowserTestFixture() override {
-    AsyncExtensionBrowserTest::SetUpInProcessBrowserTestFixture();
-
-    will_create_browser_context_services_subscription_ =
-        BrowserContextDependencyManager::GetInstance()
-            ->RegisterWillCreateBrowserContextServicesCallbackForTesting(
-                base::Bind(
-                    &IdentityTestWithSignin::OnWillCreateBrowserContextServices,
-                    base::Unretained(this)));
-  }
-
-  void OnWillCreateBrowserContextServices(content::BrowserContext* context) {
-    // Replace the signin manager and token service with fakes. Do this ahead of
-    // creating the browser so that a bunch of classes don't register as
-    // observers and end up needing to unregister when the fake is substituted.
-    SigninManagerFactory::GetInstance()->SetTestingFactory(
-        context, &BuildFakeSigninManagerBase);
-    ProfileOAuth2TokenServiceFactory::GetInstance()->SetTestingFactory(
-        context, &BuildFakeProfileOAuth2TokenService);
-    GaiaCookieManagerServiceFactory::GetInstance()->SetTestingFactory(
-        context, &BuildFakeGaiaCookieManagerService);
-  }
-
-  void SetUpOnMainThread() override {
-    AsyncExtensionBrowserTest::SetUpOnMainThread();
-
-    // Grab references to the fake signin manager and token service.
-    signin_manager_ = static_cast<FakeSigninManagerForTesting*>(
-        SigninManagerFactory::GetInstance()->GetForProfile(profile()));
-    ASSERT_TRUE(signin_manager_);
-    token_service_ = static_cast<FakeProfileOAuth2TokenService*>(
-        ProfileOAuth2TokenServiceFactory::GetInstance()->GetForProfile(
-            profile()));
-    ASSERT_TRUE(token_service_);
-    GaiaCookieManagerServiceFactory::GetInstance()->GetForProfile(profile())
-        ->Init();
-  }
-
- protected:
-  void SignIn(const std::string& account_key) {
-    SignIn(account_key, account_key);
-  }
-
-  void SignIn(const std::string& email, const std::string& gaia) {
-    AccountTrackerService* account_tracker =
-        AccountTrackerServiceFactory::GetForProfile(profile());
-    std::string account_id =
-        account_tracker->SeedAccountInfo(gaia, email);
-
-#if defined(OS_CHROMEOS)
-    signin_manager_->SetAuthenticatedAccountInfo(gaia, email);
-#else
-    signin_manager_->SignIn(gaia, email, "password");
-#endif
-    token_service_->UpdateCredentials(account_id, "refresh_token");
-  }
-
-  FakeSigninManagerForTesting* signin_manager_;
-  FakeProfileOAuth2TokenService* token_service_;
-
-  std::unique_ptr<
-      base::CallbackList<void(content::BrowserContext*)>::Subscription>
-      will_create_browser_context_services_subscription_;
-};
 
 class IdentityGetProfileUserInfoFunctionTest : public IdentityTestWithSignin {
  protected:
@@ -642,7 +668,9 @@ IN_PROC_BROWSER_TEST_F(IdentityGetProfileUserInfoFunctionTest,
   EXPECT_TRUE(info->id.empty());
 }
 
-class GetAuthTokenFunctionTest : public IdentityTestWithSignin {
+class GetAuthTokenFunctionTest
+    : public IdentityTestWithSignin,
+      public OAuth2TokenService::DiagnosticsObserver {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     IdentityTestWithSignin::SetUpCommandLine(command_line);
@@ -660,11 +688,6 @@ class GetAuthTokenFunctionTest : public IdentityTestWithSignin {
         base::Time::Now() + base::TimeDelta::FromSeconds(3600));
   }
 
-  void SetAccountState(gaia::AccountIds ids, bool is_signed_in) {
-    IdentityAPI::GetFactoryInstance()->Get(profile())->SetAccountStateForTest(
-        ids, is_signed_in);
-  }
-
  protected:
   enum OAuth2Fields {
     NONE = 0,
@@ -672,6 +695,16 @@ class GetAuthTokenFunctionTest : public IdentityTestWithSignin {
     SCOPES = 2,
     AS_COMPONENT = 4
   };
+
+  void SetUpOnMainThread() override {
+    IdentityTestWithSignin::SetUpOnMainThread();
+    token_service_->AddDiagnosticsObserver(this);
+  }
+
+  void TearDownOnMainThread() override {
+    token_service_->RemoveDiagnosticsObserver(this);
+    IdentityTestWithSignin::TearDownOnMainThread();
+  }
 
   ~GetAuthTokenFunctionTest() override {}
 
@@ -736,7 +769,26 @@ class GetAuthTokenFunctionTest : public IdentityTestWithSignin {
     id_api()->mint_queue()->RequestComplete(type, key, request);
   }
 
+  base::OnceClosure on_access_token_requested_;
+
  private:
+  // OAuth2TokenService::DiagnosticsObserver:
+  void OnAccessTokenRequested(
+      const std::string& account_id,
+      const std::string& consumer_id,
+      const OAuth2TokenService::ScopeSet& scopes) override {
+    if (on_access_token_requested_.is_null())
+      return;
+    base::ResetAndReturn(&on_access_token_requested_).Run();
+  }
+  void OnFetchAccessTokenComplete(const std::string& account_id,
+                                  const std::string& consumer_id,
+                                  const OAuth2TokenService::ScopeSet& scopes,
+                                  GoogleServiceAuthError error,
+                                  base::Time expiration_time) override {}
+  void OnTokenRemoved(const std::string& account_id,
+                      const OAuth2TokenService::ScopeSet& scopes) override {}
+
   std::string extension_id_;
   std::set<std::string> oauth_scopes_;
 };
@@ -883,15 +935,18 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
             GetCachedToken(std::string()).status());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
-                       InteractiveLoginCanceled) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveLoginCanceled) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_login_ui_result(false);
   std::string error = utils::RunFunctionAndReturnError(
       func.get(), "[{\"interactive\": true}]", browser());
   EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
+// ChromeOS does not support the interactive login flow, so the login UI will
+// never be shown on that platform.
+#if !defined(OS_CHROMEOS)
   EXPECT_TRUE(func->login_ui_shown());
+#endif
   EXPECT_FALSE(func->scope_ui_shown());
 }
 
@@ -906,22 +961,18 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   std::string error = utils::RunFunctionAndReturnError(
       func.get(), "[{\"interactive\": true}]", browser());
   EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
+// ChromeOS does not support the interactive login flow, so the login UI will
+// never be shown on that platform.
+#if !defined(OS_CHROMEOS)
   EXPECT_TRUE(func->login_ui_shown());
+#endif
   EXPECT_FALSE(func->scope_ui_shown());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
-                       InteractiveLoginSuccessNoToken) {
-  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
-  func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
-  func->set_login_ui_result(false);
-  std::string error = utils::RunFunctionAndReturnError(
-      func.get(), "[{\"interactive\": true}]", browser());
-  EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
-  EXPECT_TRUE(func->login_ui_shown());
-  EXPECT_FALSE(func->scope_ui_shown());
-}
-
+// The interactive login flow is always short-circuited out with failure on
+// ChromeOS, so the tests of the interactive login flow being successful are not
+// relevant on that platform.
+#if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveLoginSuccessMintFailure) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -997,6 +1048,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_TRUE(func->login_ui_shown());
   EXPECT_TRUE(func->scope_ui_shown());
 }
+#endif
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        InteractiveApprovalAborted) {
@@ -1046,7 +1098,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
-  func->set_scope_ui_failure(GaiaWebAuthFlow::SERVICE_AUTH_ERROR);
+  func->set_scope_ui_service_error(
+      GoogleServiceAuthError(GoogleServiceAuthError::CONNECTION_FAILED));
   std::string error = utils::RunFunctionAndReturnError(
       func.get(), "[{\"interactive\": true}]", browser());
   EXPECT_TRUE(base::StartsWith(error, errors::kAuthFailure,
@@ -1086,8 +1139,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   }
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
-                       InteractiveApprovalSuccess) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, InteractiveApprovalSuccess) {
   SignIn("primary@example.com");
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1105,6 +1157,41 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(std::string()).status());
 }
+
+#if !defined(OS_MACOSX)
+// Test for http://crbug.com/753014
+//
+// On macOS, closing all browsers does not shut down the browser process.
+// TODO(http://crbug.com/756462): Figure out how to shut down the browser
+// process on macOS and enable this test on macOS as well.
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       InteractiveSigninFailedDuringBrowserProcessShutDown) {
+  SignIn("primary@example.com");
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_mint_token_result(TestOAuth2MintTokenFlow::ISSUE_ADVICE_SUCCESS);
+  func->set_scope_ui_service_error(
+      GoogleServiceAuthError(GoogleServiceAuthError::INVALID_GAIA_CREDENTIALS));
+  func->set_login_ui_result(false);
+
+  // Closing all browsers ensures that the browser process is shutting down.
+  CloseAllBrowsers();
+
+  std::string error = utils::RunFunctionAndReturnError(
+      func.get(), "[{\"interactive\": true}]", browser());
+  // Check that the OAuth approval dialog is shown to ensure that the Gaia flow
+  // fails with an |SERVICE_AUTH_ERROR| error (with |INVALID_GAIA_CREDENTIALS|
+  // service error). This reproduces the crash conditions in bug
+  // http://crbug.com/753014.
+  // This condition may be fragile as it depends on the identity manager not
+  // being destroyed before the OAuth approval dialog is shown.
+  EXPECT_TRUE(func->scope_ui_shown());
+
+  // The login screen should not be shown when the browser process is shutting
+  // down.
+  EXPECT_FALSE(func->login_ui_shown());
+}
+#endif  // !defined(OS_MACOSX)
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, NoninteractiveQueue) {
   SignIn("primary@example.com");
@@ -1324,6 +1411,9 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_FALSE(func->scope_ui_shown());
 }
 
+// The interactive login UI is never shown on ChromeOS, so tests of the
+// interactive login flow being successful are not relevant on that platform.
+#if !defined(OS_CHROMEOS)
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        LoginInvalidatesTokenCache) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1350,6 +1440,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
             GetCachedToken(std::string()).status());
 }
+#endif
 
 IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ComponentWithChromeClientId) {
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
@@ -1372,18 +1463,21 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ComponentWithNormalClientId) {
   EXPECT_EQ("client1", func->GetOAuth2ClientId());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiDefaultUser) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ManuallyIssueToken) {
   SignIn("primary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_extension(extension.get());
-  func->set_auto_login_access_token(false);
   func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
 
+  // Have GetAuthTokenFunction actually make the request for the access token.
+  func->set_auto_login_access_token(false);
+
+  base::RunLoop run_loop;
+  on_access_token_requested_ = run_loop.QuitClosure();
   RunFunctionAsync(func.get(), "[{}]");
+  run_loop.Run();
 
   IssueLoginAccessTokenForAccount("primary@example.com");
 
@@ -1396,11 +1490,37 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiDefaultUser) {
   EXPECT_EQ("access_token-primary@example.com", func->login_access_token());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiPrimaryUser) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, ManuallyIssueTokenFailure) {
   SignIn("primary@example.com");
-  IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+  func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+
+  // Have GetAuthTokenFunction actually make the request for the access token.
+  func->set_auto_login_access_token(false);
+
+  base::RunLoop run_loop;
+  on_access_token_requested_ = run_loop.QuitClosure();
+  RunFunctionAsync(func.get(), "[{}]");
+  run_loop.Run();
+
+  token_service_->IssueErrorForAllPendingRequestsForAccount(
+      "primary@example.com",
+      GoogleServiceAuthError(GoogleServiceAuthError::SERVICE_UNAVAILABLE));
+
+  EXPECT_EQ(
+      std::string(errors::kAuthFailure) +
+          GoogleServiceAuthError(GoogleServiceAuthError::SERVICE_UNAVAILABLE)
+              .ToString(),
+      WaitForError(func.get()));
+}
+
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       MultiDefaultUserManuallyIssueToken) {
+  SignIn("primary@example.com");
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
@@ -1408,7 +1528,10 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiPrimaryUser) {
   func->set_auto_login_access_token(false);
   func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
 
-  RunFunctionAsync(func.get(), "[{\"account\": { \"id\": \"1\" } }]");
+  base::RunLoop run_loop;
+  on_access_token_requested_ = run_loop.QuitClosure();
+  RunFunctionAsync(func.get(), "[{}]");
+  run_loop.Run();
 
   IssueLoginAccessTokenForAccount("primary@example.com");
 
@@ -1421,11 +1544,11 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiPrimaryUser) {
   EXPECT_EQ("access_token-primary@example.com", func->login_access_token());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiSecondaryUser) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       MultiPrimaryUserManuallyIssueToken) {
   SignIn("primary@example.com");
   IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
@@ -1433,7 +1556,40 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiSecondaryUser) {
   func->set_auto_login_access_token(false);
   func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
 
-  RunFunctionAsync(func.get(), "[{\"account\": { \"id\": \"2\" } }]");
+  base::RunLoop run_loop;
+  on_access_token_requested_ = run_loop.QuitClosure();
+  RunFunctionAsync(func.get(),
+                   "[{\"account\": { \"id\": \"primary@example.com\" } }]");
+  run_loop.Run();
+
+  IssueLoginAccessTokenForAccount("primary@example.com");
+
+  std::unique_ptr<base::Value> value(WaitForSingleResult(func.get()));
+  std::string access_token;
+  EXPECT_TRUE(value->GetAsString(&access_token));
+  EXPECT_EQ(std::string(kAccessToken), access_token);
+  EXPECT_EQ(IdentityTokenCacheValue::CACHE_STATUS_TOKEN,
+            GetCachedToken(std::string()).status());
+  EXPECT_EQ("access_token-primary@example.com", func->login_access_token());
+}
+
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       MultiSecondaryUserManuallyIssueToken) {
+  SignIn("primary@example.com");
+  IssueLoginRefreshTokenForAccount("secondary@example.com");
+  SeedAccountInfo("secondary@example.com");
+
+  scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
+  scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
+  func->set_extension(extension.get());
+  func->set_auto_login_access_token(false);
+  func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_SUCCESS);
+
+  base::RunLoop run_loop;
+  on_access_token_requested_ = run_loop.QuitClosure();
+  RunFunctionAsync(func.get(),
+                   "[{\"account\": { \"id\": \"secondary@example.com\" } }]");
+  run_loop.Run();
 
   IssueLoginAccessTokenForAccount("secondary@example.com");
 
@@ -1446,11 +1602,11 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiSecondaryUser) {
   EXPECT_EQ("access_token-secondary@example.com", func->login_access_token());
 }
 
-IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiUnknownUser) {
+IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
+                       MultiUnknownUserGetTokenFromTokenServiceFailure) {
   SignIn("primary@example.com");
   IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   scoped_refptr<const Extension> extension(CreateExtension(CLIENT_ID | SCOPES));
@@ -1458,7 +1614,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest, MultiUnknownUser) {
   func->set_auto_login_access_token(false);
 
   std::string error = utils::RunFunctionAndReturnError(
-      func.get(), "[{\"account\": { \"id\": \"3\" } }]", browser());
+      func.get(), "[{\"account\": { \"id\": \"unknown@example.com\" } }]",
+      browser());
   EXPECT_EQ(std::string(errors::kUserNotSignedIn), error);
 }
 
@@ -1466,14 +1623,14 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryNonInteractiveMintFailure) {
   SignIn("primary@example.com");
   IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_mint_token_result(TestOAuth2MintTokenFlow::MINT_TOKEN_FAILURE);
   std::string error = utils::RunFunctionAndReturnError(
-      func.get(), "[{\"account\": { \"id\": \"2\" } }]", browser());
+      func.get(), "[{\"account\": { \"id\": \"secondary@example.com\" } }]",
+      browser());
   EXPECT_TRUE(base::StartsWith(error, errors::kAuthFailure,
                                base::CompareCase::INSENSITIVE_ASCII));
   EXPECT_FALSE(func->login_ui_shown());
@@ -1484,14 +1641,14 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryNonInteractiveLoginAccessTokenFailure) {
   SignIn("primary@example.com");
   IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
   func->set_login_access_token_result(false);
   std::string error = utils::RunFunctionAndReturnError(
-      func.get(), "[{\"account\": { \"id\": \"2\" } }]", browser());
+      func.get(), "[{\"account\": { \"id\": \"secondary@example.com\" } }]",
+      browser());
   EXPECT_TRUE(base::StartsWith(error, errors::kAuthFailure,
                                base::CompareCase::INSENSITIVE_ASCII));
 }
@@ -1500,8 +1657,7 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
                        MultiSecondaryInteractiveApprovalAborted) {
   SignIn("primary@example.com");
   IssueLoginRefreshTokenForAccount("secondary@example.com");
-  SetAccountState(CreateIds("primary@example.com", "1"), true);
-  SetAccountState(CreateIds("secondary@example.com", "2"), true);
+  SeedAccountInfo("secondary@example.com");
 
   scoped_refptr<FakeGetAuthTokenFunction> func(new FakeGetAuthTokenFunction());
   func->set_extension(CreateExtension(CLIENT_ID | SCOPES));
@@ -1509,7 +1665,8 @@ IN_PROC_BROWSER_TEST_F(GetAuthTokenFunctionTest,
   func->set_scope_ui_failure(GaiaWebAuthFlow::WINDOW_CLOSED);
   std::string error = utils::RunFunctionAndReturnError(
       func.get(),
-      "[{\"account\": { \"id\": \"2\" }, \"interactive\": true}]",
+      "[{\"account\": { \"id\": \"secondary@example.com\" }, \"interactive\": "
+      "true}]",
       browser());
   EXPECT_EQ(std::string(errors::kUserRejected), error);
   EXPECT_FALSE(func->login_ui_shown());

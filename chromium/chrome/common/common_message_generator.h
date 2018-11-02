@@ -4,10 +4,8 @@
 
 // Multiply-included file, hence no include guard.
 
-#include "chrome/common/chrome_utility_messages.h"
 #include "chrome/common/common_param_traits_macros.h"
 #include "chrome/common/mac/app_shim_messages.h"
-#include "chrome/common/page_load_metrics/page_load_metrics_messages.h"
 #include "chrome/common/prerender_messages.h"
 #include "chrome/common/render_messages.h"
 #include "chrome/common/tts_messages.h"
@@ -21,6 +19,7 @@
 #include "chrome/common/cast_messages.h"
 #include "chrome/common/extensions/chrome_extension_messages.h"
 #include "chrome/common/extensions/chrome_utility_extensions_messages.h"
+#include "chrome/common/extensions/mojom/inline_install_traits.h"
 #endif
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
@@ -33,4 +32,8 @@
 
 #if BUILDFLAG(ENABLE_WEBRTC)
 #include "chrome/common/media/webrtc_logging_messages.h"
+#endif
+
+#if defined(FULL_SAFE_BROWSING)
+#include "chrome/common/safe_browsing/safe_archive_analyzer_param_traits.h"
 #endif

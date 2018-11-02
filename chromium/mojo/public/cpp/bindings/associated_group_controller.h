@@ -10,7 +10,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/optional.h"
-#include "base/single_thread_task_runner.h"
+#include "base/sequenced_task_runner.h"
 #include "mojo/public/cpp/bindings/bindings_export.h"
 #include "mojo/public/cpp/bindings/disconnect_reason.h"
 #include "mojo/public/cpp/bindings/interface_id.h"
@@ -53,21 +53,25 @@ class MOJO_CPP_BINDINGS_EXPORT AssociatedGroupController
 
   // Attaches a client to the specified endpoint to send and receive messages.
   // The returned object is still owned by the controller. It must only be used
-  // on the same thread as this call, and only before the client is detached
+  // on the same sequence as this call, and only before the client is detached
   // using DetachEndpointClient().
   virtual InterfaceEndpointController* AttachEndpointClient(
       const ScopedInterfaceEndpointHandle& handle,
       InterfaceEndpointClient* endpoint_client,
-      scoped_refptr<base::SingleThreadTaskRunner> runner) = 0;
+      scoped_refptr<base::SequencedTaskRunner> runner) = 0;
 
   // Detaches the client attached to the specified endpoint. It must be called
-  // on the same thread as the corresponding AttachEndpointClient() call.
+  // on the same sequence as the corresponding AttachEndpointClient() call.
   virtual void DetachEndpointClient(
       const ScopedInterfaceEndpointHandle& handle) = 0;
 
   // Raises an error on the underlying message pipe. It disconnects the pipe
   // and notifies all interfaces running on this pipe.
   virtual void RaiseError() = 0;
+
+  // Indicates whether or this endpoint prefers to accept outgoing messages in
+  // serializaed form only.
+  virtual bool PrefersSerializedMessages() = 0;
 
  protected:
   friend class base::RefCountedThreadSafe<AssociatedGroupController>;

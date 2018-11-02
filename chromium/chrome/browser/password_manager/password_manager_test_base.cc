@@ -4,7 +4,10 @@
 
 #include "chrome/browser/password_manager/password_manager_test_base.h"
 
+#include <map>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -219,7 +222,8 @@ void BubbleObserver::Dismiss() const  {
 
 void BubbleObserver::AcceptSavePrompt() const {
   ASSERT_TRUE(IsShowingSavePrompt());
-  passwords_ui_controller_->SavePassword();
+  passwords_ui_controller_->SavePassword(
+      passwords_ui_controller_->GetPendingPassword().username_value);
   EXPECT_FALSE(IsShowingSavePrompt());
 }
 
@@ -453,7 +457,8 @@ void PasswordManagerBrowserTestBase::WaitForPasswordStore() {
       PasswordStoreFactory::GetForProfile(browser()->profile(),
                                           ServiceAccessType::IMPLICIT_ACCESS);
   PasswordStoreResultsObserver syncer;
-  password_store->GetAutofillableLoginsWithAffiliatedRealms(&syncer);
+  password_store->GetAutofillableLoginsWithAffiliationAndBrandingInformation(
+      &syncer);
   syncer.Wait();
 }
 

@@ -27,6 +27,15 @@ Polymer({
     /** @private {boolean} Whether a low-power (USB) charger is being used. */
     lowPowerCharger_: Boolean,
 
+    /** @private {boolean} Whether the idle behavior is controlled by policy. */
+    idleControlled_: Boolean,
+
+    /** @private {string} Text for label describing the lid-closed behavior. */
+    lidClosedLabel_: String,
+
+    /** @private {boolean} Whether the system posesses a lid. */
+    hasLid_: Boolean,
+
     /**
      * List of available dual-role power sources, if enablePowerSettings is on.
      * @private {!Array<!settings.PowerSource>|undefined}
@@ -55,6 +64,20 @@ Polymer({
       type: String,
       computed: 'computePowerSourceName_(powerSources_, lowPowerCharger_)',
     },
+
+    /** @private */
+    idleOptions_: {
+      type: Array,
+      computed: 'computeIdleOptions_(idleControlled_)',
+    },
+
+    /** @private {!chrome.settingsPrivate.PrefObject} */
+    lidClosedPref_: {
+      type: Object,
+      value: function() {
+        return /** @type {!chrome.settingsPrivate.PrefObject} */ ({});
+      },
+    },
   },
 
   /** @override */
@@ -72,6 +95,12 @@ Polymer({
     this.addWebUIListener(
         'power-sources-changed', this.powerSourcesChanged_.bind(this));
     settings.DevicePageBrowserProxyImpl.getInstance().updatePowerStatus();
+
+    this.addWebUIListener(
+        'power-management-settings-changed',
+        this.powerManagementSettingsChanged_.bind(this));
+    settings.DevicePageBrowserProxyImpl.getInstance()
+        .requestPowerManagementSettings();
   },
 
   /**
@@ -113,9 +142,56 @@ Polymer({
     return '';
   },
 
+  /**
+   * @param {boolean} idleControlled
+   * @return {!Array<!{value: settings.IdleBehavior, name: string}>} Options to
+   *     display in idle-behavior select.
+   * @private
+   */
+  computeIdleOptions_: function(idleControlled) {
+    var options = [
+      {
+        value: settings.IdleBehavior.DISPLAY_OFF_SLEEP,
+        name: loadTimeData.getString('powerIdleDisplayOffSleep'),
+      },
+      {
+        value: settings.IdleBehavior.DISPLAY_OFF,
+        name: loadTimeData.getString('powerIdleDisplayOff'),
+      },
+      {
+        value: settings.IdleBehavior.DISPLAY_ON,
+        name: loadTimeData.getString('powerIdleDisplayOn'),
+      },
+    ];
+    if (idleControlled) {
+      options.push({
+        value: settings.IdleBehavior.OTHER,
+        name: loadTimeData.getString('powerIdleOther'),
+      });
+    }
+    return options;
+  },
+
+  /** @private */
   onPowerSourceChange_: function() {
     settings.DevicePageBrowserProxyImpl.getInstance().setPowerSource(
-        this.$$('#powerSource').value);
+        this.$.powerSource.value);
+  },
+
+  /** @private */
+  onIdleSelectChange_: function() {
+    var behavior = /** @type {settings.IdleBehavior} */
+        (parseInt(this.$.idleSelect.value, 10));
+    settings.DevicePageBrowserProxyImpl.getInstance().setIdleBehavior(behavior);
+  },
+
+  /** @private */
+  onLidClosedToggleChange_: function() {
+    // Other behaviors are only displayed when the setting is controlled, in
+    // which case the toggle can't be changed by the user.
+    settings.DevicePageBrowserProxyImpl.getInstance().setLidClosedBehavior(
+        this.$.lidClosedToggle.checked ? settings.LidClosedBehavior.SUSPEND :
+                                         settings.LidClosedBehavior.DO_NOTHING);
   },
 
   /**
@@ -129,6 +205,62 @@ Polymer({
     this.powerSources_ = sources;
     this.selectedPowerSourceId_ = selectedId;
     this.lowPowerCharger_ = lowPowerCharger;
+  },
+
+  /**
+   * @param {settings.LidClosedBehavior} behavior Current behavior.
+   * @param {boolean} isControlled Whether the underlying pref is controlled.
+   * @private
+   */
+  updateLidClosedLabelAndPref_: function(behavior, isControlled) {
+    var pref = {
+      key: '',
+      type: chrome.settingsPrivate.PrefType.BOOLEAN,
+      // Most behaviors get a dedicated label and appear as checked.
+      value: true,
+    };
+
+    switch (behavior) {
+      case settings.LidClosedBehavior.SUSPEND:
+      case settings.LidClosedBehavior.DO_NOTHING:
+        // "Suspend" and "do nothing" share the "sleep" label and communicate
+        // their state via the toggle state.
+        this.lidClosedLabel_ = loadTimeData.getString('powerLidSleepLabel');
+        pref.value = behavior == settings.LidClosedBehavior.SUSPEND;
+        break;
+      case settings.LidClosedBehavior.STOP_SESSION:
+        this.lidClosedLabel_ = loadTimeData.getString('powerLidSignOutLabel');
+        break;
+      case settings.LidClosedBehavior.SHUT_DOWN:
+        this.lidClosedLabel_ = loadTimeData.getString('powerLidShutDownLabel');
+        break;
+    }
+
+    if (isControlled) {
+      pref.enforcement = chrome.settingsPrivate.Enforcement.ENFORCED;
+      pref.controlledBy = chrome.settingsPrivate.ControlledBy.USER_POLICY;
+    }
+
+    this.lidClosedPref_ = pref;
+  },
+
+  /**
+   * @param {!settings.PowerManagementSettings} browserSettings Current power
+   *     management settings.
+   * @private
+   */
+  powerManagementSettingsChanged_: function(browserSettings) {
+    this.idleControlled_ = browserSettings.idleControlled;
+    this.hasLid_ = browserSettings.hasLid;
+    this.updateLidClosedLabelAndPref_(
+        browserSettings.lidClosedBehavior, browserSettings.lidClosedControlled);
+
+    // The idle behavior select element includes an "Other" option when
+    // controlled but omits it otherwise. Make sure that the option is there
+    // before we potentially try to select it.
+    this.async(function() {
+      this.$.idleSelect.value = browserSettings.idleBehavior;
+    });
   },
 
   /**

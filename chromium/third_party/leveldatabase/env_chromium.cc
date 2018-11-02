@@ -11,17 +11,24 @@
 #include <sys/types.h>
 #endif
 
+#include "base/bind.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
+#include "base/format_macros.h"
 #include "base/lazy_instance.h"
+#include "base/logging.h"
 #include "base/macros.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/process/process_metrics.h"
 #include "base/stl_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/trace_event/memory_dump_manager.h"
+#include "base/trace_event/memory_dump_provider.h"
+#include "base/trace_event/process_memory_dump.h"
 #include "base/trace_event/trace_event.h"
 #include "third_party/leveldatabase/chromium_logger.h"
 #include "third_party/leveldatabase/src/include/leveldb/options.h"
@@ -294,11 +301,13 @@ Status ChromiumWritableFile::SyncParent() {
   FilePath path = FilePath::FromUTF8Unsafe(parent_dir_);
   base::File f(path, base::File::FLAG_OPEN | base::File::FLAG_READ);
   if (!f.IsValid()) {
+    uma_logger_->RecordOSError(kSyncParent, f.error_details());
     return MakeIOError(parent_dir_, "Unable to open directory", kSyncParent,
                        f.error_details());
   }
   if (!f.Flush()) {
     base::File::Error error = LastFileError();
+    uma_logger_->RecordOSError(kSyncParent, error);
     return MakeIOError(parent_dir_, base::File::ErrorToString(error),
                        kSyncParent, error);
   }
@@ -417,6 +426,9 @@ Status MakeIOError(Slice filename,
   char buf[512];
   base::snprintf(buf, sizeof(buf), "%s (ChromeMethodBFE: %d::%s::%d)",
            message.c_str(), method, MethodIDToString(method), -error);
+  // TOOD(crbug.com/760362): Map base::File::FILE_ERROR_NOT_FOUND to
+  //                         Status::NotFound, after fixing LevelDB to handle
+  //                         the NotFound correctly.
   return Status::IOError(filename, buf);
 }
 
@@ -1091,6 +1103,203 @@ LevelDBStatusValue GetLevelDBStatusUMAValue(const leveldb::Status& s) {
   // TODO(cmumford): IsInvalidArgument() was just added to leveldb. Use this
   // function once that change goes to the public repository.
   return LEVELDB_STATUS_INVALID_ARGUMENT;
+}
+
+// Forwards all calls to the underlying leveldb::DB instance.
+// Adds / removes itself in the DBTracker it's created with.
+class DBTracker::TrackedDBImpl : public base::LinkNode<TrackedDBImpl>,
+                                 public TrackedDB {
+ public:
+  TrackedDBImpl(DBTracker* tracker, const std::string name, leveldb::DB* db)
+      : tracker_(tracker), name_(name), db_(db) {
+    tracker_->DatabaseOpened(this);
+  }
+
+  ~TrackedDBImpl() override { tracker_->DatabaseDestroyed(this); }
+
+  const std::string& name() const override { return name_; }
+
+  leveldb::Status Put(const leveldb::WriteOptions& options,
+                      const leveldb::Slice& key,
+                      const leveldb::Slice& value) override {
+    return db_->Put(options, key, value);
+  }
+
+  leveldb::Status Delete(const leveldb::WriteOptions& options,
+                         const leveldb::Slice& key) override {
+    return db_->Delete(options, key);
+  }
+
+  leveldb::Status Write(const leveldb::WriteOptions& options,
+                        leveldb::WriteBatch* updates) override {
+    return db_->Write(options, updates);
+  }
+
+  leveldb::Status Get(const leveldb::ReadOptions& options,
+                      const leveldb::Slice& key,
+                      std::string* value) override {
+    return db_->Get(options, key, value);
+  }
+
+  const leveldb::Snapshot* GetSnapshot() override { return db_->GetSnapshot(); }
+
+  void ReleaseSnapshot(const leveldb::Snapshot* snapshot) override {
+    return db_->ReleaseSnapshot(snapshot);
+  }
+
+  bool GetProperty(const leveldb::Slice& property,
+                   std::string* value) override {
+    return db_->GetProperty(property, value);
+  }
+
+  void GetApproximateSizes(const leveldb::Range* range,
+                           int n,
+                           uint64_t* sizes) override {
+    return db_->GetApproximateSizes(range, n, sizes);
+  }
+
+  void CompactRange(const leveldb::Slice* begin,
+                    const leveldb::Slice* end) override {
+    return db_->CompactRange(begin, end);
+  }
+
+  leveldb::Iterator* NewIterator(const leveldb::ReadOptions& options) override {
+    return db_->NewIterator(options);
+  }
+
+ private:
+  DBTracker* tracker_;
+  std::string name_;
+  std::unique_ptr<leveldb::DB> db_;
+};
+
+// Reports live databases to memory-infra. For each live database the following
+// information is reported:
+// 1. Instance pointer (to disambiguate databases).
+// 2. Memory taken by the database.
+// 3. The name of the database (when not in BACKGROUND mode to avoid exposing
+//    PIIs in slow reports).
+//
+// Example report (as seen after clicking "leveldatabase" in "Overview" pane
+// in Chrome tracing UI):
+//
+// Component             size          name
+// ---------------------------------------------------------------------------
+// leveldatabase         204.4 KiB
+//   0x7FE70F2040A0      4.0 KiB       /Users/.../data_reduction_proxy_leveldb
+//   0x7FE70F530D80      188.4 KiB     /Users/.../Sync Data/LevelDB
+//   0x7FE71442F270      4.0 KiB       /Users/.../Sync App Settings/...
+//   0x7FE71471EC50      8.0 KiB       /Users/.../Extension State
+//
+class DBTracker::MemoryDumpProvider
+    : public base::trace_event::MemoryDumpProvider {
+ public:
+  bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
+                    base::trace_event::ProcessMemoryDump* pmd) override {
+    // Don't dump in background mode ("from the field") until whitelisted.
+    if (args.level_of_detail ==
+        base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+      return true;
+    }
+
+    auto db_visitor = [](const base::trace_event::MemoryDumpArgs& args,
+                         base::trace_event::ProcessMemoryDump* pmd,
+                         TrackedDB* db) {
+      std::string db_dump_name = DBTracker::GetMemoryDumpName(db);
+      auto* db_dump = pmd->CreateAllocatorDump(db_dump_name.c_str());
+
+      uint64_t db_memory_usage = 0;
+      {
+        std::string usage_string;
+        bool success = db->GetProperty("leveldb.approximate-memory-usage",
+                                       &usage_string) &&
+                       base::StringToUint64(usage_string, &db_memory_usage);
+        DCHECK(success);
+      }
+      db_dump->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                         base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                         db_memory_usage);
+
+      if (args.level_of_detail !=
+          base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+        db_dump->AddString("name", "", db->name());
+      }
+
+      const char* system_allocator_name =
+          base::trace_event::MemoryDumpManager::GetInstance()
+              ->system_allocator_pool_name();
+      if (system_allocator_name) {
+        pmd->AddSuballocation(db_dump->guid(), system_allocator_name);
+      }
+    };
+
+    DBTracker::GetInstance()->VisitDatabases(
+        base::BindRepeating(db_visitor, args, base::Unretained(pmd)));
+    return true;
+  }
+};
+
+DBTracker::DBTracker() : mdp_(new MemoryDumpProvider()) {
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      mdp_.get(), "LevelDB", nullptr);
+}
+
+DBTracker::~DBTracker() {
+  NOTREACHED();  // DBTracker is a singleton
+}
+
+DBTracker* DBTracker::GetInstance() {
+  static DBTracker* instance = new DBTracker();
+  return instance;
+}
+
+std::string DBTracker::GetMemoryDumpName(leveldb::DB* tracked_db) {
+  return base::StringPrintf("leveldatabase/0x%" PRIXPTR,
+                            reinterpret_cast<uintptr_t>(tracked_db));
+}
+
+leveldb::Status DBTracker::OpenDatabase(const leveldb::Options& options,
+                                        const std::string& name,
+                                        TrackedDB** dbptr) {
+  leveldb::DB* db = nullptr;
+  auto status = leveldb::DB::Open(options, name, &db);
+  // Enforce expectations: either we succeed, and get a valid object in |db|,
+  // or we fail, and |db| is still NULL.
+  CHECK((status.ok() && db) || (!status.ok() && !db));
+  if (status.ok()) {
+    // TrackedDBImpl ctor adds the instance to the tracker.
+    *dbptr = new TrackedDBImpl(GetInstance(), name, db);
+  }
+  return status;
+}
+
+void DBTracker::VisitDatabases(const DatabaseVisitor& visitor) {
+  base::AutoLock lock(databases_lock_);
+  for (auto* i = databases_.head(); i != databases_.end(); i = i->next()) {
+    visitor.Run(i->value());
+  }
+}
+
+void DBTracker::DatabaseOpened(TrackedDBImpl* database) {
+  base::AutoLock lock(databases_lock_);
+  databases_.Append(database);
+}
+
+void DBTracker::DatabaseDestroyed(TrackedDBImpl* database) {
+  base::AutoLock lock(databases_lock_);
+  database->RemoveFromList();
+}
+
+leveldb::Status OpenDB(const leveldb::Options& options,
+                       const std::string& name,
+                       std::unique_ptr<leveldb::DB>* dbptr) {
+  DBTracker::TrackedDB* tracked_db = nullptr;
+  leveldb::Status status =
+      DBTracker::GetInstance()->OpenDatabase(options, name, &tracked_db);
+  if (status.ok()) {
+    dbptr->reset(tracked_db);
+  }
+  return status;
 }
 
 }  // namespace leveldb_env

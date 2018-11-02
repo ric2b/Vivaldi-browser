@@ -133,6 +133,7 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
   // Returns true if |connection_state_| is a connected/connecting state.
   bool IsConnectedState() const;
   bool IsConnectingState() const;
+  bool IsConnectingOrConnected() const;
 
   // Returns true if |last_connection_state_| is connected, and
   // |connection_state_| is connecting.
@@ -239,14 +240,14 @@ class CHROMEOS_EXPORT NetworkState : public ManagedState {
 
   // Tether properties.
   std::string carrier_;
-  int battery_percentage_;
+  int battery_percentage_ = 0;
 
   // Whether the current device has already connected to the tether host device
   // providing the hotspot corresponding to this NetworkState.
   // Note: this means that the current device has already connected to the
   // tether host, but it does not necessarily mean that the current device has
   // connected to the Tether network corresponding to this NetworkState.
-  bool tether_has_connected_to_host_;
+  bool tether_has_connected_to_host_ = false;
 
   // TODO(pneubeck): Remove this once (Managed)NetworkConfigurationHandler
   // provides proxy configuration. crbug.com/241775

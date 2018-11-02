@@ -13,21 +13,6 @@ from telemetry.web_perf import timeline_based_measurement
 
 @benchmark.Enabled('android')
 @benchmark.Owner(emails=['perezju@chromium.org'])
-class PowerAndroidAcceptance(perf_benchmark.PerfBenchmark):
-  """Android power acceptance test."""
-  test = power.Power
-  page_set = page_sets.AndroidAcceptancePageSet
-
-  def SetExtraBrowserOptions(self, options):
-    options.full_performance_mode = False
-
-  @classmethod
-  def Name(cls):
-    return 'power.android_acceptance'
-
-
-@benchmark.Enabled('android')
-@benchmark.Owner(emails=['perezju@chromium.org'])
 class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
   """Android typical 10 mobile power test."""
   test = power.Power
@@ -50,6 +35,9 @@ class PowerTypical10Mobile(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'power.typical_10_mobile'
 
+  def GetExpectations(self):
+    return page_sets.Typical10MobileStoryExpectations()
+
 
 @benchmark.Enabled('mac')
 @benchmark.Owner(emails=['erikchen@chromium.org'])
@@ -61,6 +49,9 @@ class PowerScrollingTrivialPage(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.trivial_pages'
+
+  def GetExpectations(self):
+    return page_sets.TrivialStoryExpectations()
 
 
 @benchmark.Enabled('mac')
@@ -74,6 +65,9 @@ class PowerSteadyStatePages(perf_benchmark.PerfBenchmark):
   def Name(cls):
     return 'power.steady_state'
 
+  def GetExpectations(self):
+    return page_sets.IdleAfterLoadingStoryExpectations()
+
 
 class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
   """Idle platform benchmark.
@@ -82,7 +76,7 @@ class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
   Our power benchmarks are prone to noise caused by other things running on the
   system. This benchmark is intended to help find the sources of noise.
   """
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     options = timeline_based_measurement.Options(
         chrome_trace_category_filter.ChromeTraceCategoryFilter())
     options.config.enable_battor_trace = True
@@ -111,3 +105,6 @@ class IdlePlatformBenchmark(perf_benchmark.PerfBenchmark):
   @classmethod
   def Name(cls):
     return 'power.idle_platform'
+
+  def GetExpectations(self):
+    return page_sets.IdleStoryExpectations()

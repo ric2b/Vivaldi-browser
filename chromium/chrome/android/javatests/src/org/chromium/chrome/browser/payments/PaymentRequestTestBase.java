@@ -15,7 +15,6 @@ import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSecti
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.test.ChromeActivityTestCaseBase;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -164,16 +163,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mTestCommon.clickAndWait(resourceId, helper);
     }
 
-    /**
-     * Clicks on an element in the "Shipping summary" section of the payments UI. This section
-     * combines both shipping address and shipping option. It is replaced by "Shipping address" and
-     * "Shipping option" sections upon expanding the payments UI.
-     */
-    protected void clickInShippingSummaryAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
-        mTestCommon.clickInShippingSummaryAndWait(resourceId, helper);
-    }
-
     /** Clicks on an element in the "Shipping address" section of the payments UI. */
     protected void clickInShippingAddressAndWait(final int resourceId, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
@@ -217,7 +206,7 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
 
     /** Gets the button state for the shipping summary section. */
     protected int getSummarySectionButtonState() throws ExecutionException {
-        return mTestCommon.getSummarySectionButtonState();
+        return mTestCommon.getShippingAddressSectionButtonState();
     }
 
     /** Gets the button state for the contact details section. */
@@ -467,7 +456,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
         mTestCommon.onCardUnmaskPromptValidationDone(prompt);
     }
 
-
     /**
      * Installs a payment app for testing.
      *
@@ -507,12 +495,6 @@ abstract class PaymentRequestTestBase extends ChromeActivityTestCaseBase<ChromeT
     protected void installPaymentApp(
             String methodName, int instrumentPresence, int responseSpeed, int creationSpeed) {
         mTestCommon.installPaymentApp(methodName, instrumentPresence, responseSpeed, creationSpeed);
-    }
-
-    protected void installPaymentApp(final List<String> appMethodNames,
-            final int instrumentPresence, final int responseSpeed, final int creationSpeed) {
-        mTestCommon.installPaymentApp(
-                appMethodNames, instrumentPresence, responseSpeed, creationSpeed);
     }
 
     @Override

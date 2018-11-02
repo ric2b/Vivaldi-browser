@@ -12,9 +12,11 @@
 #include <string>
 #include <vector>
 
+#include "base/strings/utf_offset_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match_type.h"
 #include "components/search_engines/template_url.h"
+#include "components/url_formatter/url_formatter.h"
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
@@ -206,6 +208,14 @@ struct AutocompleteMatch {
                                  const AutocompleteInput& input,
                                  TemplateURLService* template_url_service,
                                  const base::string16& keyword);
+
+  // Gets the formatting flags used for display of suggestions. This method
+  // encapsulates the return of experimental flags too, so any URLs displayed
+  // as an Omnibox suggestion should use this method.
+  //
+  // This function returns flags that may destructively format the URL, and
+  // therefore should never be used for the |fill_into_edit| field.
+  static url_formatter::FormatUrlTypes GetFormatTypes(bool trim_scheme);
 
   // Computes the stripped destination URL (via GURLToStrippedGURL()) and
   // stores the result in |stripped_destination_url|.  |input| is used for the

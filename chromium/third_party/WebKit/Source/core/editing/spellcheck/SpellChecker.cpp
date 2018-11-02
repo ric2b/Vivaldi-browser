@@ -37,14 +37,17 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/EphemeralRange.h"
+#include "core/editing/FrameSelection.h"
 #include "core/editing/VisibleUnits.h"
 #include "core/editing/commands/CompositeEditCommand.h"
 #include "core/editing/commands/ReplaceSelectionCommand.h"
 #include "core/editing/commands/TypingCommand.h"
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/markers/DocumentMarkerController.h"
+#include "core/editing/markers/SpellCheckMarker.h"
 #include "core/editing/spellcheck/IdleSpellCheckCallback.h"
 #include "core/editing/spellcheck/SpellCheckRequester.h"
+#include "core/editing/spellcheck/SpellCheckerClient.h"
 #include "core/editing/spellcheck/TextCheckingParagraph.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
@@ -52,10 +55,11 @@
 #include "core/layout/LayoutTextControl.h"
 #include "core/loader/EmptyClients.h"
 #include "core/page/Page.h"
-#include "core/page/SpellCheckerClient.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/text/TextBreakIterator.h"
 #include "platform/text/TextCheckerClient.h"
+#include "public/platform/WebSpellCheckPanelHostClient.h"
+#include "public/platform/WebString.h"
 
 namespace blink {
 
@@ -108,6 +112,19 @@ SpellCheckerClient& SpellChecker::GetSpellCheckerClient() const {
   return GetEmptySpellCheckerClient();
 }
 
+static WebSpellCheckPanelHostClient& GetEmptySpellCheckPanelHostClient() {
+  DEFINE_STATIC_LOCAL(EmptySpellCheckPanelHostClient, client, ());
+  return client;
+}
+
+WebSpellCheckPanelHostClient& SpellChecker::SpellCheckPanelHostClient() const {
+  WebSpellCheckPanelHostClient* spell_check_panel_host_client =
+      GetFrame().Client()->SpellCheckPanelHostClient();
+  if (!spell_check_panel_host_client)
+    return GetEmptySpellCheckPanelHostClient();
+  return *spell_check_panel_host_client;
+}
+
 TextCheckerClient& SpellChecker::TextChecker() const {
   return GetFrame().Client()->GetTextCheckerClient();
 }
@@ -138,7 +155,7 @@ void SpellChecker::ToggleSpellCheckingEnabled() {
 }
 
 void SpellChecker::DidBeginEditing(Element* element) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     return;
 
   if (!IsSpellCheckingEnabled())
@@ -157,7 +174,7 @@ void SpellChecker::DidBeginEditing(Element* element) {
   TextControlElement* enclosing_text_control_element = nullptr;
   if (!IsTextControlElement(*element)) {
     enclosing_text_control_element =
-        EnclosingTextControl(Position::FirstPositionInNode(element));
+        EnclosingTextControl(Position::FirstPositionInNode(*element));
   }
   element =
       enclosing_text_control_element ? enclosing_text_control_element : element;
@@ -304,25 +321,25 @@ void SpellChecker::AdvanceToNextMisspelling(bool start_before_selection) {
                                             .SetBaseAndExtent(misspelling_range)
                                             .Build());
     GetFrame().Selection().RevealSelection();
-    GetSpellCheckerClient().UpdateSpellingUIWithMisspelledWord(misspelled_word);
-    GetFrame().GetDocument()->Markers().AddSpellingMarker(
-        misspelling_range.StartPosition(), misspelling_range.EndPosition());
+    SpellCheckPanelHostClient().UpdateSpellingUIWithMisspelledWord(
+        misspelled_word);
+    GetFrame().GetDocument()->Markers().AddSpellingMarker(misspelling_range);
   }
 }
 
 void SpellChecker::ShowSpellingGuessPanel() {
-  if (GetSpellCheckerClient().SpellingUIIsShowing()) {
-    GetSpellCheckerClient().ShowSpellingUI(false);
+  if (SpellCheckPanelHostClient().IsShowingSpellingUI()) {
+    SpellCheckPanelHostClient().ShowSpellingUI(false);
     return;
   }
 
   AdvanceToNextMisspelling(true);
-  GetSpellCheckerClient().ShowSpellingUI(true);
+  SpellCheckPanelHostClient().ShowSpellingUI(true);
 }
 
 void SpellChecker::MarkMisspellingsForMovingParagraphs(
     const VisibleSelection& moving_selection) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     return;
 
   // TODO(editing-dev): The use of updateStyleAndLayoutIgnorePendingStylesheets
@@ -357,7 +374,7 @@ void SpellChecker::MarkMisspellingsInternal(const VisibleSelection& selection) {
 
 void SpellChecker::MarkMisspellingsAfterApplyingCommand(
     const CompositeEditCommand& cmd) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     return;
 
   if (!IsSpellCheckingEnabled())
@@ -482,8 +499,8 @@ void SpellChecker::MarkMisspellingsAfterReplaceSelectionCommand(
   if (!node)
     return;
 
-  EphemeralRange paragraph_range(Position::FirstPositionInNode(node),
-                                 Position::LastPositionInNode(node));
+  EphemeralRange paragraph_range(Position::FirstPositionInNode(*node),
+                                 Position::LastPositionInNode(*node));
   TextCheckingParagraph text_to_check(inserted_range, paragraph_range);
   ChunkAndMarkAllMisspellings(text_to_check);
 }
@@ -537,7 +554,7 @@ static void AddMarker(Document* document,
                       DocumentMarker::MarkerType type,
                       int location,
                       int length,
-                      const String& description) {
+                      const Vector<String>& descriptions) {
   DCHECK(type == DocumentMarker::kSpelling || type == DocumentMarker::kGrammar)
       << type;
   DCHECK_GT(length, 0);
@@ -549,16 +566,20 @@ static void AddMarker(Document* document,
   if (!SpellChecker::IsSpellCheckingEnabledAt(range_to_mark.EndPosition()))
     return;
 
+  String description;
+  for (size_t i = 0; i < descriptions.size(); ++i) {
+    if (i != 0)
+      description.append('\n');
+    description.append(descriptions[i]);
+  }
+
   if (type == DocumentMarker::kSpelling) {
-    document->Markers().AddSpellingMarker(range_to_mark.StartPosition(),
-                                          range_to_mark.EndPosition(),
-                                          description);
+    document->Markers().AddSpellingMarker(range_to_mark, description);
     return;
   }
 
   DCHECK_EQ(type, DocumentMarker::kGrammar);
-  document->Markers().AddGrammarMarker(
-      range_to_mark.StartPosition(), range_to_mark.EndPosition(), description);
+  document->Markers().AddGrammarMarker(range_to_mark, description);
 }
 
 void SpellChecker::MarkAndReplaceFor(
@@ -604,7 +625,6 @@ void SpellChecker::MarkAndReplaceFor(
   // and should be rewritten.
   // Expand the range to encompass entire paragraphs, since text checking needs
   // that much context.
-  int selection_offset = 0;
   int ambiguous_boundary_offset = -1;
 
   if (GetFrame().Selection().ComputeVisibleSelectionInDOMTree().IsCaret()) {
@@ -612,8 +632,12 @@ void SpellChecker::MarkAndReplaceFor(
     // behavior and should be rewritten.
     // Attempt to save the caret position so we can restore it later if needed
     const Position& caret_position =
-        GetFrame().Selection().ComputeVisibleSelectionInDOMTree().end();
-    selection_offset = paragraph.OffsetTo(caret_position);
+        GetFrame().Selection().ComputeVisibleSelectionInDOMTree().End();
+    const Position& paragraph_start = checking_range.StartPosition();
+    const int selection_offset =
+        paragraph_start < caret_position
+            ? TextIterator::RangeLength(paragraph_start, caret_position)
+            : 0;
     if (selection_offset > 0 &&
         static_cast<unsigned>(selection_offset) <=
             paragraph.GetText().length() &&
@@ -644,7 +668,7 @@ void SpellChecker::MarkAndReplaceFor(
           continue;
         AddMarker(GetFrame().GetDocument(), paragraph.CheckingRange(),
                   DocumentMarker::kSpelling, result_location, result_length,
-                  result.replacement);
+                  result.replacements);
         continue;
 
       case kTextDecorationTypeGrammar:
@@ -660,7 +684,7 @@ void SpellChecker::MarkAndReplaceFor(
             continue;
           AddMarker(GetFrame().GetDocument(), paragraph.CheckingRange(),
                     DocumentMarker::kGrammar, result_location + detail.location,
-                    detail.length, result.replacement);
+                    detail.length, result.replacements);
         }
         continue;
     }
@@ -670,7 +694,7 @@ void SpellChecker::MarkAndReplaceFor(
 
 void SpellChecker::UpdateMarkersForWordsAffectedByEditing(
     bool do_not_remove_if_selection_at_word_boundary) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     return;
 
   DCHECK(GetFrame().Selection().IsAvailable());
@@ -782,7 +806,7 @@ void SpellChecker::DidEndEditingOnTextField(Element* e) {
 
   // Remove markers when deactivating a selection in an <input type="text"/>.
   // Prevent new ones from appearing too.
-  if (!RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (!RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     spell_check_requester_->CancelCheck();
   TextControlElement* text_control_element = ToTextControlElement(e);
   HTMLElement* inner_editor = text_control_element->InnerEditorElement();
@@ -805,51 +829,56 @@ void SpellChecker::RemoveSpellingAndGrammarMarkers(const HTMLElement& element,
   }
 }
 
+Optional<std::pair<Node*, SpellCheckMarker*>>
+SpellChecker::GetSpellCheckMarkerUnderSelection() {
+  const VisibleSelection& selection =
+      GetFrame().Selection().ComputeVisibleSelectionInDOMTree();
+  if (selection.IsNone())
+    return Optional<std::pair<Node*, SpellCheckMarker*>>();
+
+  const EphemeralRange& range_to_check = FirstEphemeralRangeOf(selection);
+
+  Node* const start_container =
+      range_to_check.StartPosition().ComputeContainerNode();
+  const unsigned start_offset =
+      range_to_check.StartPosition().ComputeOffsetInContainerNode();
+  Node* const end_container =
+      range_to_check.EndPosition().ComputeContainerNode();
+  const unsigned end_offset =
+      range_to_check.EndPosition().ComputeOffsetInContainerNode();
+
+  for (Node& node : range_to_check.Nodes()) {
+    const DocumentMarkerVector& markers_in_node =
+        GetFrame().GetDocument()->Markers().MarkersFor(
+            &node, DocumentMarker::MisspellingMarkers());
+    for (DocumentMarker* marker : markers_in_node) {
+      if (node == start_container && marker->EndOffset() <= start_offset)
+        continue;
+      if (node == end_container && marker->StartOffset() >= end_offset)
+        continue;
+
+      return std::make_pair(&node, &ToSpellCheckMarker(*marker));
+    }
+  }
+
+  // No marker found
+  return Optional<std::pair<Node*, SpellCheckMarker*>>();
+}
+
 void SpellChecker::ReplaceMisspelledRange(const String& text) {
-  EphemeralRange caret_range = GetFrame()
-                                   .Selection()
-                                   .ComputeVisibleSelectionInDOMTree()
-                                   .ToNormalizedEphemeralRange();
-  if (caret_range.IsNull())
+  const Optional<std::pair<Node*, SpellCheckMarker*>>& node_and_marker =
+      GetSpellCheckMarkerUnderSelection();
+  if (!node_and_marker)
     return;
 
-  Node* const caret_start_container =
-      caret_range.StartPosition().ComputeContainerNode();
-  Node* const caret_end_container =
-      caret_range.EndPosition().ComputeContainerNode();
-
-  // We don't currently support the case where a misspelling spans multiple
-  // nodes
-  if (caret_start_container != caret_end_container)
-    return;
-
-  const unsigned caret_start_offset =
-      caret_range.StartPosition().ComputeOffsetInContainerNode();
-  const unsigned caret_end_offset =
-      caret_range.EndPosition().ComputeOffsetInContainerNode();
-
-  const DocumentMarkerVector& markers_in_node =
-      GetFrame().GetDocument()->Markers().MarkersFor(
-          caret_start_container, DocumentMarker::MisspellingMarkers());
-
-  const auto marker_it =
-      std::find_if(markers_in_node.begin(), markers_in_node.end(),
-                   [=](const DocumentMarker* marker) {
-                     return marker->StartOffset() < caret_end_offset &&
-                            marker->EndOffset() > caret_start_offset;
-                   });
-  if (marker_it == markers_in_node.end())
-    return;
-
-  const DocumentMarker* found_marker = *marker_it;
-  EphemeralRange marker_range = EphemeralRange(
-      Position(caret_start_container, found_marker->StartOffset()),
-      Position(caret_start_container, found_marker->EndOffset()));
-  if (marker_range.IsNull())
-    return;
+  Node* const container_node = node_and_marker.value().first;
+  const SpellCheckMarker* const marker = node_and_marker.value().second;
 
   GetFrame().Selection().SetSelection(
-      SelectionInDOMTree::Builder().SetBaseAndExtent(marker_range).Build());
+      SelectionInDOMTree::Builder()
+          .Collapse(Position(container_node, marker->StartOffset()))
+          .Extend(Position(container_node, marker->EndOffset()))
+          .Build());
 
   Document& current_document = *GetFrame().GetDocument();
 
@@ -898,8 +927,8 @@ static bool ShouldCheckOldSelection(const Position& old_selection_start) {
 
 void SpellChecker::RespondToChangedSelection(
     const Position& old_selection_start,
-    FrameSelection::SetSelectionOptions options) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled()) {
+    TypingContinuation typing_continuation) {
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled()) {
     idle_spell_check_callback_->SetNeedsInvocation();
     return;
   }
@@ -918,7 +947,7 @@ void SpellChecker::RespondToChangedSelection(
     return;
   }
 
-  if (!(options & FrameSelection::kCloseTyping))
+  if (typing_continuation == TypingContinuation::kContinue)
     return;
   if (!ShouldCheckOldSelection(old_selection_start))
     return;
@@ -950,7 +979,7 @@ void SpellChecker::RespondToChangedSelection(
 
 void SpellChecker::RespondToChangedContents() {
   UpdateMarkersForWordsAffectedByEditing(true);
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     idle_spell_check_callback_->SetNeedsInvocation();
 }
 
@@ -968,7 +997,7 @@ void SpellChecker::RemoveSpellingMarkersUnderWords(
 }
 
 void SpellChecker::SpellCheckAfterBlur() {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     return;
 
   // TODO(editing-dev): Hoist updateStyleAndLayoutIgnorePendingStylesheets
@@ -1076,7 +1105,7 @@ void SpellChecker::CancelCheck() {
 }
 
 void SpellChecker::DocumentAttached(Document* document) {
-  if (RuntimeEnabledFeatures::idleTimeSpellCheckingEnabled())
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
     idle_spell_check_callback_->DocumentAttached(document);
 }
 
@@ -1088,6 +1117,8 @@ DEFINE_TRACE(SpellChecker) {
 
 void SpellChecker::PrepareForLeakDetection() {
   spell_check_requester_->PrepareForLeakDetection();
+  if (RuntimeEnabledFeatures::IdleTimeSpellCheckingEnabled())
+    idle_spell_check_callback_->Deactivate();
 }
 
 Vector<TextCheckingResult> SpellChecker::FindMisspellings(const String& text) {
@@ -1138,15 +1169,15 @@ std::pair<String, int> SpellChecker::FindFirstMisspelling(const Position& start,
   // needs that much context. Determine the character offset from the start of
   // the paragraph to the start of the original search range, since we will want
   // to ignore results in this area.
-  Position paragraph_start =
-      StartOfParagraph(CreateVisiblePosition(start)).ToParentAnchoredPosition();
-  Position paragraph_end = end;
-  int total_range_length =
-      TextIterator::RangeLength(paragraph_start, paragraph_end);
-  paragraph_end =
-      EndOfParagraph(CreateVisiblePosition(start)).ToParentAnchoredPosition();
+  EphemeralRange paragraph_range =
+      ExpandToParagraphBoundary(EphemeralRange(start, start));
+  Position paragraph_start = paragraph_range.StartPosition();
+  Position paragraph_end = paragraph_range.EndPosition();
 
-  int range_start_offset = TextIterator::RangeLength(paragraph_start, start);
+  const int total_range_length =
+      TextIterator::RangeLength(paragraph_start, end);
+  const int range_start_offset =
+      TextIterator::RangeLength(paragraph_start, start);
   int total_length_processed = 0;
 
   bool first_iteration = true;
@@ -1167,8 +1198,7 @@ std::pair<String, int> SpellChecker::FindFirstMisspelling(const Position& start,
       last_iteration = true;
     }
     if (current_start_offset < current_end_offset) {
-      String paragraph_string =
-          PlainText(EphemeralRange(paragraph_start, paragraph_end));
+      String paragraph_string = PlainText(paragraph_range);
       if (paragraph_string.length() > 0) {
         int spelling_location = 0;
 
@@ -1202,14 +1232,16 @@ std::pair<String, int> SpellChecker::FindFirstMisspelling(const Position& start,
     if (last_iteration ||
         total_length_processed + current_length >= total_range_length)
       break;
-    VisiblePosition new_paragraph_start =
-        StartOfNextParagraph(CreateVisiblePosition(paragraph_end));
+    Position new_paragraph_start =
+        StartOfNextParagraph(CreateVisiblePosition(paragraph_end))
+            .DeepEquivalent();
     if (new_paragraph_start.IsNull())
       break;
 
-    paragraph_start = new_paragraph_start.ToParentAnchoredPosition();
-    paragraph_end =
-        EndOfParagraph(new_paragraph_start).ToParentAnchoredPosition();
+    paragraph_range = ExpandToParagraphBoundary(
+        EphemeralRange(new_paragraph_start, new_paragraph_start));
+    paragraph_start = paragraph_range.StartPosition();
+    paragraph_end = paragraph_range.EndPosition();
     first_iteration = false;
     total_length_processed += current_length;
   }

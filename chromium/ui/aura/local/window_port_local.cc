@@ -4,10 +4,10 @@
 
 #include "ui/aura/local/window_port_local.h"
 
-#include "cc/surfaces/surface_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "ui/aura/client/cursor_client.h"
 #include "ui/aura/env.h"
-#include "ui/aura/local/compositor_frame_sink_local.h"
+#include "ui/aura/local/layer_tree_frame_sink_local.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_delegate.h"
 #include "ui/display/display.h"
@@ -82,6 +82,10 @@ void WindowPortLocal::OnVisibilityChanged(bool visible) {}
 void WindowPortLocal::OnDidChangeBounds(const gfx::Rect& old_bounds,
                                         const gfx::Rect& new_bounds) {}
 
+void WindowPortLocal::OnDidChangeTransform(
+    const gfx::Transform& old_transform,
+    const gfx::Transform& new_transform) {}
+
 std::unique_ptr<ui::PropertyData> WindowPortLocal::OnWillChangeProperty(
     const void* key) {
   return nullptr;
@@ -92,14 +96,14 @@ void WindowPortLocal::OnPropertyChanged(
     int64_t old_value,
     std::unique_ptr<ui::PropertyData> data) {}
 
-std::unique_ptr<cc::CompositorFrameSink>
-WindowPortLocal::CreateCompositorFrameSink() {
+std::unique_ptr<cc::LayerTreeFrameSink>
+WindowPortLocal::CreateLayerTreeFrameSink() {
   DCHECK(!frame_sink_id_.is_valid());
   auto* context_factory_private =
       aura::Env::GetInstance()->context_factory_private();
   frame_sink_id_ = context_factory_private->AllocateFrameSinkId();
-  auto frame_sink = base::MakeUnique<CompositorFrameSinkLocal>(
-      frame_sink_id_, context_factory_private->GetSurfaceManager());
+  auto frame_sink = base::MakeUnique<LayerTreeFrameSinkLocal>(
+      frame_sink_id_, context_factory_private->GetHostFrameSinkManager());
   frame_sink->SetSurfaceChangedCallback(base::Bind(
       &WindowPortLocal::OnSurfaceChanged, weak_factory_.GetWeakPtr()));
   if (window_->GetRootWindow())
@@ -107,8 +111,8 @@ WindowPortLocal::CreateCompositorFrameSink() {
   return std::move(frame_sink);
 }
 
-cc::SurfaceId WindowPortLocal::GetSurfaceId() const {
-  return cc::SurfaceId(frame_sink_id_, local_surface_id_);
+viz::SurfaceId WindowPortLocal::GetSurfaceId() const {
+  return viz::SurfaceId(frame_sink_id_, local_surface_id_);
 }
 
 void WindowPortLocal::OnWindowAddedToRootWindow() {
@@ -121,21 +125,19 @@ void WindowPortLocal::OnWillRemoveWindowFromRootWindow() {
     window_->layer()->GetCompositor()->RemoveFrameSink(frame_sink_id_);
 }
 
-void WindowPortLocal::OnSurfaceChanged(const cc::SurfaceId& surface_id,
+void WindowPortLocal::OnSurfaceChanged(const viz::SurfaceId& surface_id,
                                        const gfx::Size& surface_size) {
   DCHECK_EQ(surface_id.frame_sink_id(), frame_sink_id_);
   local_surface_id_ = surface_id.local_surface_id();
-  // The bounds must be updated before switching to the new surface, because
-  // the layer may be mirrored, in which case a surface change causes the
-  // mirror layer to update its surface using the latest bounds.
-  window_->layer()->SetBounds(
-      gfx::Rect(window_->layer()->bounds().origin(), surface_size));
-  window_->layer()->SetShowPrimarySurface(
-      cc::SurfaceInfo(surface_id, 1.0f, surface_size),
+  viz::SurfaceInfo surface_info(surface_id, 1.0f, surface_size);
+  scoped_refptr<viz::SurfaceReferenceFactory> reference_factory =
       aura::Env::GetInstance()
           ->context_factory_private()
-          ->GetSurfaceManager()
-          ->reference_factory());
+          ->GetFrameSinkManager()
+          ->surface_manager()
+          ->reference_factory();
+  window_->layer()->SetShowPrimarySurface(surface_info, reference_factory);
+  window_->layer()->SetFallbackSurface(surface_info);
 }
 
 }  // namespace aura

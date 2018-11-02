@@ -104,12 +104,20 @@ void Gradient::FillSkiaStops(ColorBuffer& colors, OffsetBuffer& pos) const {
     // 0.0 comes through cleanly and people aren't likely to want a gradient
     // with a stop at (0 + epsilon).
     pos.push_back(WebCoreFloatToSkScalar(0));
-    colors.push_back(MakeSkColor(stops_.front().color));
+    if (color_filter_) {
+      colors.push_back(
+          color_filter_->filterColor(MakeSkColor(stops_.front().color)));
+    } else {
+      colors.push_back(MakeSkColor(stops_.front().color));
+    }
   }
 
   for (const auto& stop : stops_) {
     pos.push_back(WebCoreFloatToSkScalar(stop.stop));
-    colors.push_back(MakeSkColor(stop.color));
+    if (color_filter_)
+      colors.push_back(color_filter_->filterColor(MakeSkColor(stop.color)));
+    else
+      colors.push_back(MakeSkColor(stop.color));
   }
 
   // Copy the last stop to 1.0 if needed. See comment above about this float
@@ -151,18 +159,20 @@ sk_sp<PaintShader> Gradient::CreateShaderInternal(
   uint32_t flags = color_interpolation_ == ColorInterpolation::kPremultiplied
                        ? SkGradientShader::kInterpolateColorsInPremul_Flag
                        : 0;
-  sk_sp<SkShader> shader = CreateShader(colors, pos, tile, flags, local_matrix);
-  if (!shader) {
-    // use last color, since our "geometry" was degenerate (e.g. radius==0)
-    shader = SkShader::MakeColorShader(colors.back());
-  }
+  sk_sp<PaintShader> shader =
+      CreateShader(colors, pos, tile, flags, local_matrix, colors.back());
+  DCHECK(shader);
 
-  return WrapSkShader(std::move(shader));
+  return shader;
 }
 
 void Gradient::ApplyToFlags(PaintFlags& flags, const SkMatrix& local_matrix) {
-  if (!cached_shader_ || local_matrix != cached_shader_->getLocalMatrix())
+  if (!cached_shader_ || local_matrix != cached_shader_->GetLocalMatrix() ||
+      flags.getColorFilter().get() != color_filter_.get()) {
+    color_filter_ = flags.getColorFilter();
+    flags.setColorFilter(nullptr);
     cached_shader_ = CreateShaderInternal(local_matrix);
+  }
 
   flags.setShader(cached_shader_);
 
@@ -183,15 +193,16 @@ class LinearGradient final : public Gradient {
         p1_(p1) {}
 
  protected:
-  sk_sp<SkShader> CreateShader(const ColorBuffer& colors,
-                               const OffsetBuffer& pos,
-                               SkShader::TileMode tile_mode,
-                               uint32_t flags,
-                               const SkMatrix& local_matrix) const override {
+  sk_sp<PaintShader> CreateShader(const ColorBuffer& colors,
+                                  const OffsetBuffer& pos,
+                                  SkShader::TileMode tile_mode,
+                                  uint32_t flags,
+                                  const SkMatrix& local_matrix,
+                                  SkColor fallback_color) const override {
     SkPoint pts[2] = {p0_.Data(), p1_.Data()};
-    return SkGradientShader::MakeLinear(pts, colors.data(), pos.data(),
-                                        static_cast<int>(colors.size()),
-                                        tile_mode, flags, &local_matrix);
+    return PaintShader::MakeLinearGradient(
+        pts, colors.data(), pos.data(), static_cast<int>(colors.size()),
+        tile_mode, flags, &local_matrix, fallback_color);
   }
 
  private:
@@ -216,11 +227,12 @@ class RadialGradient final : public Gradient {
         aspect_ratio_(aspect_ratio) {}
 
  protected:
-  sk_sp<SkShader> CreateShader(const ColorBuffer& colors,
-                               const OffsetBuffer& pos,
-                               SkShader::TileMode tile_mode,
-                               uint32_t flags,
-                               const SkMatrix& local_matrix) const override {
+  sk_sp<PaintShader> CreateShader(const ColorBuffer& colors,
+                                  const OffsetBuffer& pos,
+                                  SkShader::TileMode tile_mode,
+                                  uint32_t flags,
+                                  const SkMatrix& local_matrix,
+                                  SkColor fallback_color) const override {
     SkTCopyOnFirstWrite<SkMatrix> adjusted_local_matrix(local_matrix);
     if (aspect_ratio_ != 1) {
       // CSS3 elliptical gradients: apply the elliptical scaling at the
@@ -230,23 +242,14 @@ class RadialGradient final : public Gradient {
                                                  p0_.Y());
     }
 
-    // Since the two-point radial gradient is slower than the plain radial,
-    // only use it if we have to.
-    if (p0_ == p1_ && r0_ <= 0.0f) {
-      return SkGradientShader::MakeRadial(
-          p1_.Data(), r1_, colors.data(), pos.data(),
-          static_cast<int>(colors.size()), tile_mode, flags,
-          adjusted_local_matrix);
-    }
-
     // The radii we give to Skia must be positive. If we're given a
     // negative radius, ask for zero instead.
     const SkScalar radius0 = std::max(WebCoreFloatToSkScalar(r0_), 0.0f);
     const SkScalar radius1 = std::max(WebCoreFloatToSkScalar(r1_), 0.0f);
-    return SkGradientShader::MakeTwoPointConical(
+    return PaintShader::MakeTwoPointConicalGradient(
         p0_.Data(), radius0, p1_.Data(), radius1, colors.data(), pos.data(),
         static_cast<int>(colors.size()), tile_mode, flags,
-        adjusted_local_matrix);
+        adjusted_local_matrix, fallback_color);
   }
 
  private:
@@ -267,11 +270,12 @@ class ConicGradient final : public Gradient {
         angle_(angle) {}
 
  protected:
-  sk_sp<SkShader> CreateShader(const ColorBuffer& colors,
-                               const OffsetBuffer& pos,
-                               SkShader::TileMode tile_mode,
-                               uint32_t flags,
-                               const SkMatrix& local_matrix) const override {
+  sk_sp<PaintShader> CreateShader(const ColorBuffer& colors,
+                                  const OffsetBuffer& pos,
+                                  SkShader::TileMode tile_mode,
+                                  uint32_t flags,
+                                  const SkMatrix& local_matrix,
+                                  SkColor fallback_color) const override {
     DCHECK_NE(tile_mode, SkShader::kMirror_TileMode);
 
     // Skia's sweep gradient angles are relative to the x-axis, not the y-axis.
@@ -282,9 +286,10 @@ class ConicGradient final : public Gradient {
                                                   position_.Y());
     }
 
-    return SkGradientShader::MakeSweep(
+    return PaintShader::MakeSweepGradient(
         position_.X(), position_.Y(), colors.data(), pos.data(),
-        static_cast<int>(colors.size()), flags, adjusted_local_matrix);
+        static_cast<int>(colors.size()), flags, adjusted_local_matrix,
+        fallback_color);
   }
 
  private:

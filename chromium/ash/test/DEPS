@@ -1,5 +1,7 @@
 include_rules = [
   # In general files in this directory should not depend upon content.
+  "+cc/test",
+  "+components/viz/test",
   "+mojo/edk",
 ]
 
@@ -14,11 +16,5 @@ specific_include_rules = {
   "ash_test_helper\.cc": [
     "+ash/host",
     "+chromeos/cryptohome",
-  ],
-  "mirror_window_test_api\.cc": [
-    "+ash/host"
-  ],
-  "screen_orientation_controller_test_api.h": [
-    "+third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationLockType.h",
   ],
 }

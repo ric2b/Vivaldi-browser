@@ -21,16 +21,16 @@
 
 namespace ash {
 
-class TouchHudTestBase : public test::AshTestBase {
+class TouchHudTestBase : public AshTestBase {
  public:
   TouchHudTestBase() {}
   ~TouchHudTestBase() override {}
 
   void SetUp() override {
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
 
     // Initialize display infos. They should be initialized after Ash
-    // environment is set up, i.e., after test::AshTestBase::SetUp().
+    // environment is set up, i.e., after AshTestBase::SetUp().
     internal_display_id_ =
         display::test::DisplayManagerTestApi(Shell::Get()->display_manager())
             .SetFirstDisplayAsInternalDisplay();
@@ -130,43 +130,41 @@ class TouchHudTestBase : public test::AshTestBase {
   }
 
   aura::Window* GetInternalRootWindow() {
-    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(
-        internal_display_id_);
+    return Shell::GetRootWindowForDisplayId(internal_display_id_);
   }
 
   aura::Window* GetExternalRootWindow() {
-    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(
-        external_display_id_);
+    return Shell::GetRootWindowForDisplayId(external_display_id_);
   }
 
   aura::Window* GetPrimaryRootWindow() {
     const display::Display& display = GetPrimaryDisplay();
-    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(display.id());
+    return Shell::GetRootWindowForDisplayId(display.id());
   }
 
   aura::Window* GetSecondaryRootWindow() {
     const display::Display& display = display_manager()->GetSecondaryDisplay();
-    return GetWindowTreeHostManager()->GetRootWindowForDisplayId(display.id());
+    return Shell::GetRootWindowForDisplayId(display.id());
   }
 
   RootWindowController* GetInternalRootController() {
     aura::Window* root = GetInternalRootWindow();
-    return GetRootWindowController(root);
+    return RootWindowController::ForWindow(root);
   }
 
   RootWindowController* GetExternalRootController() {
     aura::Window* root = GetExternalRootWindow();
-    return GetRootWindowController(root);
+    return RootWindowController::ForWindow(root);
   }
 
   RootWindowController* GetPrimaryRootController() {
     aura::Window* root = GetPrimaryRootWindow();
-    return GetRootWindowController(root);
+    return RootWindowController::ForWindow(root);
   }
 
   RootWindowController* GetSecondaryRootController() {
     aura::Window* root = GetSecondaryRootWindow();
-    return GetRootWindowController(root);
+    return RootWindowController::ForWindow(root);
   }
 
   display::ManagedDisplayInfo CreateDisplayInfo(int64_t id,

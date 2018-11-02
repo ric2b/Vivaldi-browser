@@ -11,8 +11,8 @@
 
 #include "base/compiler_specific.h"
 #include "base/macros.h"
-#include "calendar_model_observer.h"
-#include "calendar_service.h"
+#include "calendar/calendar_model_observer.h"
+#include "calendar/calendar_service.h"
 
 class Profile;
 
@@ -20,7 +20,7 @@ namespace calendar {
 
 class CalendarModelLoadedObserver : public CalendarModelObserver {
  public:
-  explicit CalendarModelLoadedObserver();
+  CalendarModelLoadedObserver();
 
  private:
   void CalendarModelLoaded(CalendarService* service) override;

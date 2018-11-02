@@ -10,15 +10,14 @@
 #include "base/command_line.h"
 #include "base/feature_list.h"
 #include "content/browser/bad_message.h"
+#include "content/browser/notifications/notification_event_dispatcher_impl.h"
 #include "content/browser/notifications/notification_id_generator.h"
-#include "content/browser/notifications/page_notification_delegate.h"
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/common/platform_notification_messages.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
-#include "content/public/browser/desktop_notification_delegate.h"
 #include "content/public/browser/notification_database_data.h"
 #include "content/public/browser/platform_notification_service.h"
 #include "content/public/browser/render_process_host.h"
@@ -90,13 +89,14 @@ NotificationMessageFilter::NotificationMessageFilter(
     BrowserContext* browser_context)
     : BrowserMessageFilter(PlatformNotificationMsgStart),
       process_id_(process_id),
+      non_persistent__notification_shown_(false),
       notification_context_(notification_context),
       resource_context_(resource_context),
       service_worker_context_(service_worker_context),
       browser_context_(browser_context),
       weak_factory_io_(this) {}
 
-NotificationMessageFilter::~NotificationMessageFilter() {}
+NotificationMessageFilter::~NotificationMessageFilter() = default;
 
 void NotificationMessageFilter::DidCloseNotification(
     const std::string& notification_id) {
@@ -105,6 +105,12 @@ void NotificationMessageFilter::DidCloseNotification(
 }
 
 void NotificationMessageFilter::OnDestruct() const {
+  if (non_persistent__notification_shown_) {
+    NotificationEventDispatcherImpl* event_dispatcher =
+        content::NotificationEventDispatcherImpl::GetInstance();
+    DCHECK(event_dispatcher);
+    event_dispatcher->RendererGone(process_id_);
+  }
   BrowserThread::DeleteOnIOThread::Destruct(this);
 }
 
@@ -160,16 +166,16 @@ void NotificationMessageFilter::OnShowPlatformNotification(
       GetNotificationIdGenerator()->GenerateForNonPersistentNotification(
           origin, notification_data.tag, non_persistent_notification_id,
           process_id_);
-
-  std::unique_ptr<DesktopNotificationDelegate> delegate(
-      new PageNotificationDelegate(process_id_, non_persistent_notification_id,
-                                   notification_id));
+  NotificationEventDispatcherImpl* event_dispatcher =
+      content::NotificationEventDispatcherImpl::GetInstance();
+  non_persistent__notification_shown_ = true;
+  event_dispatcher->RegisterNonPersistentNotification(
+      notification_id, process_id_, non_persistent_notification_id);
 
   base::Closure close_closure;
   service->DisplayNotification(browser_context_, notification_id, origin,
                                SanitizeNotificationData(notification_data),
-                               notification_resources, std::move(delegate),
-                               &close_closure);
+                               notification_resources, &close_closure);
 
   if (!close_closure.is_null())
     close_closures_[notification_id] = close_closure;
@@ -184,7 +190,10 @@ void NotificationMessageFilter::OnShowPersistentNotification(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (GetPermissionForOriginOnIO(origin) !=
       blink::mojom::PermissionStatus::GRANTED) {
-    bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_SHOW);
+    // We can't assume that the renderer is compromised at this point because
+    // it's possible for the user to revoke an origin's permission between the
+    // time where a website requests the notification to be shown and the call
+    // arriving in the message filter.
     return;
   }
 
@@ -332,7 +341,6 @@ void NotificationMessageFilter::OnClosePersistentNotification(
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   if (GetPermissionForOriginOnIO(origin) !=
       blink::mojom::PermissionStatus::GRANTED) {
-    bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_CLOSE);
     return;
   }
 
@@ -384,11 +392,12 @@ bool NotificationMessageFilter::VerifyNotificationPermissionGranted(
   blink::mojom::PermissionStatus permission_status =
       service->CheckPermissionOnUIThread(browser_context_, origin, process_id_);
 
-  if (permission_status == blink::mojom::PermissionStatus::GRANTED)
-    return true;
+  // We can't assume that the renderer is compromised at this point because
+  // it's possible for the user to revoke an origin's permission between the
+  // time where a website requests the notification to be shown and the call
+  // arriving in the message filter.
 
-  bad_message::ReceivedBadMessage(this, bad_message::NMF_NO_PERMISSION_VERIFY);
-  return false;
+  return permission_status == blink::mojom::PermissionStatus::GRANTED;
 }
 
 NotificationIdGenerator* NotificationMessageFilter::GetNotificationIdGenerator()

@@ -27,7 +27,9 @@ Polymer({
      */
     signedInUser_: {
       type: Object,
-      value: function() { return null; }
+      value: function() {
+        return null;
+      }
     },
 
     /**
@@ -36,22 +38,16 @@ Polymer({
      */
     supervisedUsers_: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
     /**
      * Index of the selected supervised user.
      * @private {number}
      */
-    supervisedUserIndex_: {
-      type: Number,
-      value: NO_USER_SELECTED
-    }
-  },
-
-  /** override */
-  ready: function() {
-    this.$.dialog.lastFocusableNode = this.$.cancel;
+    supervisedUserIndex_: {type: Number, value: NO_USER_SELECTED}
   },
 
   /**
@@ -71,20 +67,16 @@ Polymer({
 
     this.signedInUser_ = signedInUser || null;
     if (this.signedInUser_)
-      this.$.dialog.open();
+      this.$.dialog.showModal();
   },
 
   /**
-   * param {number} supervisedUserIndex Index of the selected supervised user.
-   * @private
+   * @param {number} supervisedUserIndex Index of the selected supervised user.
    * @return {boolean} Whether the 'Import' button should be disabled.
+   * @private
    */
   isImportDisabled_: function(supervisedUserIndex) {
-    var disabled = supervisedUserIndex == NO_USER_SELECTED;
-    if (!disabled) {
-      this.$.dialog.lastFocusableNode = this.$.import;
-    }
-    return disabled;
+    return supervisedUserIndex == NO_USER_SELECTED;
   },
 
   /**
@@ -97,9 +89,15 @@ Polymer({
     if (this.signedInUser_ && supervisedUser) {
       this.$.dialog.close();
       // Event is caught by create-profile.
-      this.fire('import', {supervisedUser: supervisedUser,
-                           signedInUser: this.signedInUser_});
+      this.fire(
+          'import',
+          {supervisedUser: supervisedUser, signedInUser: this.signedInUser_});
     }
-  }
+  },
+
+  /** @private */
+  onCancelTap_: function() {
+    this.$.dialog.close();
+  },
 });
 })();

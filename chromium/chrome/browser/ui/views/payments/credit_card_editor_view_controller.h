@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/payments/editor_view_controller.h"
 #include "chrome/browser/ui/views/payments/validation_delegate.h"
 #include "ui/base/models/simple_combobox_model.h"
+#include "ui/views/controls/styled_label_listener.h"
 
 namespace autofill {
 class AutofillProfile;
@@ -28,7 +29,8 @@ class PaymentRequestState;
 class PaymentRequestDialogView;
 
 // Credit card editor screen of the Payment Request flow.
-class CreditCardEditorViewController : public EditorViewController {
+class CreditCardEditorViewController : public EditorViewController,
+                                       public views::StyledLabelListener {
  public:
   // Does not take ownership of the arguments (except for the |on_edited| and
   // |on_added| callbacks), which should outlive this object. Additionally,
@@ -51,9 +53,11 @@ class CreditCardEditorViewController : public EditorViewController {
   std::unique_ptr<views::View> CreateCustomFieldView(
       autofill::ServerFieldType type,
       views::View** focusable_field,
-      bool* valid) override;
+      bool* valid,
+      base::string16* error_message) override;
   std::unique_ptr<views::View> CreateExtraViewForField(
       autofill::ServerFieldType type) override;
+  bool IsEditingExistingItem() override;
   std::vector<EditorField> GetFieldDefinitions() override;
   base::string16 GetInitialValueForType(
       autofill::ServerFieldType type) override;
@@ -62,6 +66,11 @@ class CreditCardEditorViewController : public EditorViewController {
       const EditorField& field) override;
   std::unique_ptr<ui::ComboboxModel> GetComboboxModelForType(
       const autofill::ServerFieldType& type) override;
+
+  // views::StyledLabelListener:
+  void StyledLabelLinkClicked(views::StyledLabel* label,
+                              const gfx::Range& range,
+                              int event_flags) override;
 
   // Selects the icon in the UI corresponding to |basic_card_network| with
   // higher opacity. If empty string, selects none of them (all full opacity).
@@ -89,8 +98,10 @@ class CreditCardEditorViewController : public EditorViewController {
     // ValidationDelegate:
     bool ShouldFormat() override;
     base::string16 Format(const base::string16& text) override;
-    bool IsValidTextfield(views::Textfield* textfield) override;
-    bool IsValidCombobox(views::Combobox* combobox) override;
+    bool IsValidTextfield(views::Textfield* textfield,
+                          base::string16* error_message) override;
+    bool IsValidCombobox(views::Combobox* combobox,
+                         base::string16* error_message) override;
     bool TextfieldValueChanged(views::Textfield* textfield,
                                bool was_blurred) override;
     bool ComboboxValueChanged(views::Combobox* combobox) override;

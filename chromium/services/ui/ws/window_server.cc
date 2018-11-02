@@ -11,6 +11,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/stl_util.h"
 #include "services/ui/ws/display.h"
+#include "services/ui/ws/display_creation_config.h"
 #include "services/ui/ws/display_manager.h"
 #include "services/ui/ws/frame_generator.h"
 #include "services/ui/ws/gpu_host.h"
@@ -18,7 +19,6 @@
 #include "services/ui/ws/server_window.h"
 #include "services/ui/ws/server_window_compositor_frame_sink_manager.h"
 #include "services/ui/ws/user_activity_monitor.h"
-#include "services/ui/ws/window_coordinate_conversions.h"
 #include "services/ui/ws/window_manager_access_policy.h"
 #include "services/ui/ws/window_manager_display_root.h"
 #include "services/ui/ws/window_manager_state.h"
@@ -67,14 +67,10 @@ WindowServer::WindowServer(WindowServerDelegate* delegate)
       current_operation_(nullptr),
       in_destructor_(false),
       next_wm_change_id_(0),
-      gpu_host_(new GpuHost(this)),
       window_manager_window_tree_factory_set_(this, &user_id_tracker_),
-      frame_sink_manager_client_binding_(this) {
+      display_creation_config_(DisplayCreationConfig::UNKNOWN) {
   user_id_tracker_.AddObserver(this);
   OnUserIdAdded(user_id_tracker_.active_id());
-  gpu_host_->CreateFrameSinkManager(
-      mojo::MakeRequest(&frame_sink_manager_),
-      frame_sink_manager_client_binding_.CreateInterfacePtrAndBind());
 }
 
 WindowServer::~WindowServer() {
@@ -82,6 +78,11 @@ WindowServer::~WindowServer() {
 
   for (auto& pair : tree_map_)
     pair.second->PrepareForWindowServerShutdown();
+
+  // Shutdown GPU before destroying PlatformWindows for displays so that
+  // GLSurfaces corresponding to a windows AcceleratedWidget gets destroyed
+  // first.
+  gpu_host_.reset();
 
   // Destroys the window trees results in querying for the display. Tear down
   // the displays first so that the trees are notified of the display going
@@ -92,6 +93,26 @@ WindowServer::~WindowServer() {
     DestroyTree(tree_map_.begin()->second.get());
 
   display_manager_.reset();
+}
+
+void WindowServer::SetDisplayCreationConfig(DisplayCreationConfig config) {
+  DCHECK(tree_map_.empty());
+  DCHECK_EQ(DisplayCreationConfig::UNKNOWN, display_creation_config_);
+  display_creation_config_ = config;
+  display_manager_->OnDisplayCreationConfigSet();
+}
+
+void WindowServer::SetFrameSinkManager(
+    std::unique_ptr<cc::mojom::FrameSinkManager> frame_sink_manager) {
+  frame_sink_manager_ = std::move(frame_sink_manager);
+}
+
+void WindowServer::SetGpuHost(std::unique_ptr<GpuHost> gpu_host) {
+  gpu_host_ = std::move(gpu_host);
+}
+
+ThreadedImageCursorsFactory* WindowServer::GetThreadedImageCursorsFactory() {
+  return delegate()->GetThreadedImageCursorsFactory();
 }
 
 ServerWindow* WindowServer::CreateServerWindow(
@@ -150,6 +171,9 @@ WindowTree* WindowServer::CreateTreeForWindowManager(
     mojom::WindowTreeRequest window_tree_request,
     mojom::WindowTreeClientPtr window_tree_client,
     bool automatically_create_display_roots) {
+  delegate_->OnWillCreateTreeForWindowManager(
+      automatically_create_display_roots);
+
   std::unique_ptr<WindowTree> window_tree(new WindowTree(
       this, user_id, nullptr, base::WrapUnique(new WindowManagerAccessPolicy)));
   std::unique_ptr<WindowTreeBinding> window_tree_binding =
@@ -366,11 +390,21 @@ void WindowServer::ProcessWindowBoundsChanged(
     const ServerWindow* window,
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
-    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   for (auto& pair : tree_map_) {
     pair.second->ProcessWindowBoundsChanged(window, old_bounds, new_bounds,
                                             IsOperationSource(pair.first),
                                             local_surface_id);
+  }
+}
+
+void WindowServer::ProcessWindowTransformChanged(
+    const ServerWindow* window,
+    const gfx::Transform& old_transform,
+    const gfx::Transform& new_transform) {
+  for (auto& pair : tree_map_) {
+    pair.second->ProcessWindowTransformChanged(
+        window, old_transform, new_transform, IsOperationSource(pair.first));
   }
 }
 
@@ -534,8 +568,10 @@ void WindowServer::OnDisplayReady(Display* display, bool is_first) {
 }
 
 void WindowServer::OnDisplayDestroyed(Display* display) {
-  gpu_host_->OnAcceleratedWidgetDestroyed(
-      display->platform_display()->GetAcceleratedWidget());
+  if (gpu_host_) {
+    gpu_host_->OnAcceleratedWidgetDestroyed(
+        display->platform_display()->GetAcceleratedWidget());
+  }
 }
 
 void WindowServer::OnNoMoreDisplays() {
@@ -563,6 +599,10 @@ bool WindowServer::GetFrameDecorationsForUser(
   if (values && window_manager_state->got_frame_decoration_values())
     *values = window_manager_state->frame_decoration_values().Clone();
   return window_manager_state->got_frame_decoration_values();
+}
+
+int64_t WindowServer::GetInternalDisplayId() {
+  return display_manager_->GetInternalDisplayId();
 }
 
 bool WindowServer::GetAndClearInFlightWindowManagerChange(
@@ -599,8 +639,6 @@ void WindowServer::UpdateNativeCursorFromMouseLocation(ServerWindow* window) {
     EventDispatcher* event_dispatcher =
         display_root->window_manager_state()->event_dispatcher();
     event_dispatcher->UpdateCursorProviderByLastKnownLocation();
-    display_root->window_manager_state()->cursor_state().SetCurrentWindowCursor(
-        event_dispatcher->GetCurrentMouseCursor());
   }
 }
 
@@ -616,8 +654,6 @@ void WindowServer::UpdateNativeCursorIfOver(ServerWindow* window) {
     return;
 
   event_dispatcher->UpdateNonClientAreaForCurrentWindow();
-  display_root->window_manager_state()->cursor_state().SetCurrentWindowCursor(
-      event_dispatcher->GetCurrentMouseCursor());
 }
 
 bool WindowServer::IsUserInHighContrastMode(const UserId& user) const {
@@ -626,7 +662,7 @@ bool WindowServer::IsUserInHighContrastMode(const UserId& user) const {
 }
 
 void WindowServer::HandleTemporaryReferenceForNewSurface(
-    const cc::SurfaceId& surface_id,
+    const viz::SurfaceId& surface_id,
     ServerWindow* window) {
   // TODO(kylechar): Investigate adding tests for this.
   const ClientSpecificId window_client_id = window->id().client_id;
@@ -707,9 +743,17 @@ void WindowServer::OnWindowBoundsChanged(ServerWindow* window,
 
   ProcessWindowBoundsChanged(window, old_bounds, new_bounds,
                              window->current_local_surface_id());
-  if (!window->parent())
+  UpdateNativeCursorFromMouseLocation(window);
+}
+
+void WindowServer::OnWindowTransformChanged(
+    ServerWindow* window,
+    const gfx::Transform& old_transform,
+    const gfx::Transform& new_transform) {
+  if (in_destructor_)
     return;
 
+  ProcessWindowTransformChanged(window, old_transform, new_transform);
   UpdateNativeCursorFromMouseLocation(window);
 }
 
@@ -824,7 +868,7 @@ void WindowServer::OnGpuServiceInitialized() {
   delegate_->StartDisplayInit();
 }
 
-void WindowServer::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
+void WindowServer::OnSurfaceCreated(const viz::SurfaceInfo& surface_info) {
   WindowId window_id(
       WindowIdFromTransportId(surface_info.id().frame_sink_id().client_id()));
   ServerWindow* window = GetWindow(window_id);
@@ -856,12 +900,16 @@ void WindowServer::OnSurfaceCreated(const cc::SurfaceInfo& surface_info) {
 
   HandleTemporaryReferenceForNewSurface(surface_info.id(), window);
 
-  if (!window->parent())
-    return;
-
-  WindowTree* window_tree = GetTreeWithId(window->parent()->id().client_id);
+  // We always use the owner of the window's id (even for an embedded window),
+  // because an embedded window's id is allocated by the parent's window tree.
+  WindowTree* window_tree = GetTreeWithId(window->id().client_id);
   if (window_tree)
     window_tree->ProcessWindowSurfaceChanged(window, surface_info);
+}
+
+void WindowServer::OnClientConnectionClosed(
+    const viz::FrameSinkId& frame_sink_id) {
+  // TODO(kylechar): Notify observers
 }
 
 void WindowServer::OnActiveUserIdChanged(const UserId& previously_active_id,

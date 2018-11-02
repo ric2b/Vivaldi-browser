@@ -56,6 +56,7 @@ public class StandardNotificationBuilderTest {
         if (outContentAndDeleteIntents == null || outContentAndDeleteIntents.length != 2) {
             throw new IllegalArgumentException();
         }
+
         Context context = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
         Intent contentIntent = new Intent("contentIntent");

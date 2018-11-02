@@ -15,19 +15,25 @@ Polymer({
     /** @type {!Array<!SearchEngine>} */
     defaultEngines: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
     /** @type {!Array<!SearchEngine>} */
     otherEngines: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
     /** @type {!Array<!SearchEngine>} */
     extensions: {
       type: Array,
-      value: function() { return []; }
+      value: function() {
+        return [];
+      }
     },
 
     /**
@@ -36,7 +42,7 @@ Polymer({
      */
     subpageRoute: {
       type: Object,
-      value: settings.Route.SEARCH_ENGINES,
+      value: settings.routes.SEARCH_ENGINES,
     },
 
     /** @private {boolean} */
@@ -58,8 +64,9 @@ Polymer({
 
   /** @override */
   ready: function() {
-    settings.SearchEnginesBrowserProxyImpl.getInstance().
-        getSearchEnginesList().then(this.enginesChanged_.bind(this));
+    settings.SearchEnginesBrowserProxyImpl.getInstance()
+        .getSearchEnginesList()
+        .then(this.enginesChanged_.bind(this));
     this.addWebUIListener(
         'search-engines-changed', this.enginesChanged_.bind(this));
 
@@ -81,7 +88,13 @@ Polymer({
    */
   enginesChanged_: function(searchEnginesInfo) {
     this.defaultEngines = searchEnginesInfo['defaults'];
-    this.otherEngines = searchEnginesInfo['others'];
+
+    // Sort |otherEngines| in alphabetical order.
+    this.otherEngines = searchEnginesInfo['others'].sort(function(a, b) {
+      return a.name.toLocaleLowerCase().localeCompare(
+          b.name.toLocaleLowerCase());
+    });
+
     this.extensions = searchEnginesInfo['extensions'];
   },
 

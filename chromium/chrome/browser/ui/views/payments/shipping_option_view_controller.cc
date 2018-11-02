@@ -9,6 +9,8 @@
 #include "components/payments/content/payment_request_spec.h"
 #include "components/payments/content/payment_request_state.h"
 #include "components/payments/core/strings_util.h"
+#include "components/strings/grit/components_strings.h"
+#include "ui/base/l10n/l10n_util.h"
 #include "ui/views/layout/fill_layout.h"
 
 namespace payments {
@@ -27,17 +29,21 @@ class ShippingOptionItem : public PaymentRequestItemList::Item {
                                      state,
                                      parent_list,
                                      selected,
+                                     /*clickable=*/true,
                                      /*show_edit_button=*/false),
-        shipping_option_(shipping_option) {}
+        shipping_option_(shipping_option) {
+    Init();
+  }
   ~ShippingOptionItem() override {}
 
  private:
   // payments::PaymentRequestItemList::Item:
-  std::unique_ptr<views::View> CreateContentView() override {
+  std::unique_ptr<views::View> CreateContentView(
+      base::string16* accessible_content) override {
     return CreateShippingOptionLabel(
         shipping_option_,
         spec()->GetFormattedCurrencyAmount(shipping_option_->amount),
-        /*emphasize_label=*/true);
+        /*emphasize_label=*/true, accessible_content);
   }
 
   void SelectedStateChanged() override {
@@ -46,9 +52,8 @@ class ShippingOptionItem : public PaymentRequestItemList::Item {
     }
   }
 
-  bool IsEnabled() override {
-    // Shipping options are vetted by the website; none are disabled.
-    return true;
+  base::string16 GetNameForDataType() override {
+    return l10n_util::GetStringUTF16(IDS_PAYMENTS_SHIPPING_OPTION_LABEL);
   }
 
   bool CanBeSelected() override {
@@ -79,7 +84,7 @@ ShippingOptionViewController::ShippingOptionViewController(
     PaymentRequestDialogView* dialog)
     : PaymentRequestSheetController(spec, state, dialog) {
   spec->AddObserver(this);
-  for (const auto& option : spec->details().shipping_options) {
+  for (const auto& option : spec->GetShippingOptions()) {
     shipping_option_list_.AddItem(base::MakeUnique<ShippingOptionItem>(
         option.get(), spec, state, &shipping_option_list_, dialog,
         option.get() == spec->selected_shipping_option()));

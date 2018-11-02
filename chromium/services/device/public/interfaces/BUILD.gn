@@ -14,18 +14,35 @@ mojom("interfaces") {
     "power_monitor.mojom",
     "time_zone_monitor.mojom",
     "vibration_manager.mojom",
+    "wake_lock.mojom",
+    "wake_lock_context.mojom",
+    "wake_lock_provider.mojom",
   ]
 
   public_deps = [
     ":constants",
   ]
 
-  # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
-  use_once_callback = false
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  use_new_js_bindings = false
+}
+
+mojom("generic_sensor") {
+  sources = [
+    "sensor.mojom",
+    "sensor_provider.mojom",
+  ]
+
+  public_deps = [
+    ":constants",
+  ]
 }
 
 mojom("constants") {
   sources = [
     "constants.mojom",
   ]
+
+  # TODO(crbug.com/699569): Convert to use the new JS bindings.
+  js_bindings_mode = "both"
 }

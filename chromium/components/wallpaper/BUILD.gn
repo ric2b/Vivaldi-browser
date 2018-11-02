@@ -7,9 +7,11 @@ component("wallpaper") {
     "wallpaper_color_calculator.cc",
     "wallpaper_color_calculator.h",
     "wallpaper_color_calculator_observer.h",
+    "wallpaper_color_extraction_result.h",
+    "wallpaper_color_profile.h",
     "wallpaper_files_id.cc",
     "wallpaper_files_id.h",
-    "wallpaper_layout.h",
+    "wallpaper_info.h",
     "wallpaper_resizer.cc",
     "wallpaper_resizer.h",
     "wallpaper_resizer_observer.h",
@@ -49,6 +51,7 @@ source_set("unit_tests") {
   deps = [
     ":wallpaper",
     "//base/test:test_support",
+    "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx",
   ]

@@ -6,7 +6,6 @@
 #import <UIKit/UIKit.h>
 #import <XCTest/XCTest.h>
 
-#include "base/strings/sys_string_conversions.h"
 #include "ios/chrome/browser/ui/ui_util.h"
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
@@ -14,15 +13,14 @@
 #import "ios/chrome/test/app/tab_test_util.h"
 #include "ios/chrome/test/app/web_view_interaction_test_util.h"
 #import "ios/chrome/test/earl_grey/chrome_actions.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #import "ios/testing/wait_util.h"
 #import "ios/web/public/test/earl_grey/web_view_matchers.h"
-#import "ios/web/public/test/http_server.h"
-#import "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#import "ios/web/public/test/http_server/http_server_util.h"
 #include "url/gurl.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -99,7 +97,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
                                                           block:^BOOL {
                                                             return NO;
                                                           }];
-  [myCondition waitWithTimeout:1U];
+  [myCondition waitWithTimeout:1];
 
   chrome_test_util::SelectTabAtIndexInCurrentMode(index);
 }
@@ -129,7 +127,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   GURL imageURL = web::test::HttpServer::MakeUrl(kUrlChromiumLogoImg);
   web::test::SetUpFileBasedHttpServer();
   [ChromeEarlGrey loadURL:pageURL];
-  chrome_test_util::AssertMainTabCount(1U);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   LongPressElementAndTapOnButton(kChromiumImageID, OpenImageButton());
 
@@ -137,7 +135,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           imageURL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  chrome_test_util::AssertMainTabCount(1U);
+  [ChromeEarlGrey waitForMainTabCount:1];
 }
 
 // Tests that selecting "Open Image in New Tab" from the context menu properly
@@ -147,7 +145,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   GURL imageURL = web::test::HttpServer::MakeUrl(kUrlChromiumLogoImg);
   web::test::SetUpFileBasedHttpServer();
   [ChromeEarlGrey loadURL:pageURL];
-  chrome_test_util::AssertMainTabCount(1U);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   LongPressElementAndTapOnButton(kChromiumImageID, OpenImageInNewTabButton());
 
@@ -157,7 +155,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           imageURL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  chrome_test_util::AssertMainTabCount(2U);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests "Open in New Tab" on context menu.
@@ -174,7 +172,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
 
   web::test::SetUpSimpleHttpServer(responses);
   [ChromeEarlGrey loadURL:initialURL];
-  chrome_test_util::AssertMainTabCount(1U);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   LongPressElementAndTapOnButton(kDestinationLinkID, OpenLinkInNewTabButton());
 
@@ -184,7 +182,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  chrome_test_util::AssertMainTabCount(2U);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Tests "Open in New Tab" on context menu  on a link that requires scrolling
@@ -207,7 +205,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
 
   web::test::SetUpSimpleHttpServer(responses);
   [ChromeEarlGrey loadURL:initialURL];
-  chrome_test_util::AssertMainTabCount(1U);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   // Scroll down on the web view to make the link visible.
   // grey_swipeFastInDirecton will quickly scroll towards the bottom, and then
@@ -224,9 +222,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
                                    chrome_test_util::GetCurrentWebState())]
       performAction:grey_scrollToContentEdge(kGREYContentEdgeBottom)];
 
-  [[EarlGrey selectElementWithMatcher:chrome_test_util::WebViewContainingText(
-                                          kDestinationLinkID)]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:kDestinationLinkID];
 
   LongPressElementAndTapOnButton(kDestinationLinkID, OpenLinkInNewTabButton());
 
@@ -260,7 +256,7 @@ void SelectTabAtIndexInCurrentMode(NSUInteger index) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::OmniboxText(
                                           destinationURL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  chrome_test_util::AssertMainTabCount(2U);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 @end

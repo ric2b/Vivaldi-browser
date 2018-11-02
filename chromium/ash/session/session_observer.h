@@ -10,6 +10,7 @@
 #include "components/session_manager/session_manager_types.h"
 
 class AccountId;
+class PrefService;
 
 namespace ash {
 
@@ -37,6 +38,15 @@ class ASH_EXPORT SessionObserver {
 
   // Called when chrome is terminating.
   virtual void OnChromeTerminating() {}
+
+  // Called when the limit becomes available and when it changes.
+  virtual void OnSessionLengthLimitChanged() {}
+
+  // HACK for M61. This method was moved from ShellObserver to SessionObserver
+  // in trunk in https://chromium-review.googlesource.com/c/605027 but that CL
+  // is not safe to backport. Adding it here allows newer changes in trunk to
+  // be backported without modification.
+  virtual void OnActiveUserPrefServiceChanged(PrefService* pref_service) {}
 
  protected:
   virtual ~SessionObserver() {}

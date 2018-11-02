@@ -7,6 +7,7 @@
 #include <algorithm>
 
 #include "ash/ash_constants.h"
+#include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
@@ -15,6 +16,7 @@
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_container.h"
 #include "ash/system/tray/tray_event_filter.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/memory/ptr_util.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/compositor/layer.h"
@@ -30,6 +32,7 @@
 #include "ui/views/animation/ink_drop_mask.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/painter.h"
 #include "ui/wm/core/window_animations.h"
 
 namespace {
@@ -128,6 +131,26 @@ class TrayBackground : public views::Background {
   DISALLOW_COPY_AND_ASSIGN(TrayBackground);
 };
 
+// CloseBubbleObserver is used to delay closing the tray bubbles until the
+// animation completes.
+class CloseBubbleObserver : public ui::ImplicitAnimationObserver {
+ public:
+  explicit CloseBubbleObserver(TrayBackgroundView* tray_background_view)
+      : tray_background_view_(tray_background_view) {}
+
+  ~CloseBubbleObserver() override {}
+
+  void OnImplicitAnimationsCompleted() override {
+    tray_background_view_->CloseBubble();
+    delete this;
+  }
+
+ private:
+  TrayBackgroundView* tray_background_view_ = nullptr;
+
+  DISALLOW_COPY_AND_ASSIGN(CloseBubbleObserver);
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 // TrayBackgroundView
 
@@ -147,7 +170,8 @@ TrayBackgroundView::TrayBackgroundView(Shelf* shelf)
 
   SetLayoutManager(new views::FillLayout);
 
-  tray_container_->set_background(background_);
+  tray_container_->SetBackground(
+      std::unique_ptr<views::Background>(background_));
   AddChildView(tray_container_);
 
   tray_event_filter_.reset(new TrayEventFilter);
@@ -233,13 +257,12 @@ const char* TrayBackgroundView::GetClassName() const {
   return kViewClassName;
 }
 
-void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
-  PreferredSizeChanged();
-}
+void TrayBackgroundView::OnGestureEvent(ui::GestureEvent* event) {
+  if (drag_controller())
+    drag_controller_->ProcessGestureEvent(event, this);
 
-void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  ActionableView::GetAccessibleNodeData(node_data);
-  node_data->SetName(GetAccessibleNameForTray());
+  if (!event->handled())
+    ActionableView::OnGestureEvent(event);
 }
 
 void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
@@ -247,6 +270,15 @@ void TrayBackgroundView::AboutToRequestFocusFromTabTraversal(bool reverse) {
       StatusAreaWidgetDelegate::GetPrimaryInstance();
   if (delegate && delegate->ShouldFocusOut(reverse))
     Shell::Get()->system_tray_notifier()->NotifyFocusOut(reverse);
+}
+
+void TrayBackgroundView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
+  ActionableView::GetAccessibleNodeData(node_data);
+  node_data->SetName(GetAccessibleNameForTray());
+}
+
+void TrayBackgroundView::ChildPreferredSizeChanged(views::View* child) {
+  PreferredSizeChanged();
 }
 
 std::unique_ptr<views::InkDropRipple> TrayBackgroundView::CreateInkDropRipple()
@@ -276,9 +308,63 @@ TrayBackgroundView::CreateInkDropHighlight() const {
   return highlight;
 }
 
+void TrayBackgroundView::PaintButtonContents(gfx::Canvas* canvas) {
+  if (shelf()->GetBackgroundType() ==
+          ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT ||
+      !separator_visible_) {
+    return;
+  }
+  // In the given |canvas|, for a horizontal shelf draw a separator line to the
+  // right or left of the TrayBackgroundView when the system is LTR or RTL
+  // aligned, respectively. For a vertical shelf draw the separator line
+  // underneath the items instead.
+  const gfx::Rect local_bounds = GetLocalBounds();
+  const SkColor color = SkColorSetA(SK_ColorWHITE, 0x4D);
+
+  if (shelf_->IsHorizontalAlignment()) {
+    const gfx::PointF point(
+        base::i18n::IsRTL() ? 0 : (local_bounds.width() - kSeparatorWidth),
+        (kShelfSize - kTrayItemSize) / 2);
+    const gfx::Vector2dF vector(0, kTrayItemSize);
+    canvas->Draw1pxLine(point, point + vector, color);
+  } else {
+    const gfx::PointF point((kShelfSize - kTrayItemSize) / 2,
+                            local_bounds.height() - kSeparatorWidth);
+    const gfx::Vector2dF vector(kTrayItemSize, 0);
+    canvas->Draw1pxLine(point, point + vector, color);
+  }
+}
+
+void TrayBackgroundView::ProcessGestureEventForBubble(ui::GestureEvent* event) {
+  if (drag_controller())
+    drag_controller_->ProcessGestureEvent(event, this);
+}
+
+TrayBubbleView* TrayBackgroundView::GetBubbleView() {
+  return nullptr;
+}
+
+void TrayBackgroundView::CloseBubble() {}
+
+void TrayBackgroundView::ShowBubble() {}
+
 void TrayBackgroundView::UpdateAfterShelfAlignmentChange() {
   tray_container_->UpdateAfterShelfAlignmentChange();
+
+  // The tray itself expands to the right and bottom edge of the screen to make
+  // sure clicking on the edges brings up the popup. However, the focus border
+  // should be only around the container.
+  gfx::Rect paint_bounds(GetBackgroundBounds());
+  paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
+  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
+      kFocusBorderColor, kFocusBorderThickness,
+      GetLocalBounds().InsetsFrom(paint_bounds)));
 }
+
+void TrayBackgroundView::AnchorUpdated() {}
+
+void TrayBackgroundView::BubbleResized(
+    const views::TrayBubbleView* bubble_view) {}
 
 void TrayBackgroundView::OnImplicitAnimationsCompleted() {
   // If there is another animation in the queue, the reverse animation was
@@ -353,6 +439,45 @@ gfx::Insets TrayBackgroundView::GetBubbleAnchorInsets() const {
   }
 }
 
+aura::Window* TrayBackgroundView::GetBubbleWindowContainer() {
+  aura::Window* container = Shell::GetContainer(
+      tray_container()->GetWidget()->GetNativeWindow()->GetRootWindow(),
+      kShellWindowId_SettingBubbleContainer);
+
+  // Place the bubble in |container|, or in a window clipped to the work area
+  // in maximize mode, to avoid tray bubble and shelf overlap.
+  if (Shell::Get()
+          ->tablet_mode_controller()
+          ->IsTabletModeWindowManagerEnabled()) {
+    if (!clipping_window_.get()) {
+      clipping_window_ = base::MakeUnique<aura::Window>(nullptr);
+      clipping_window_->Init(ui::LAYER_NOT_DRAWN);
+      clipping_window_->layer()->SetMasksToBounds(true);
+      container->AddChild(clipping_window_.get());
+      clipping_window_->Show();
+    }
+    clipping_window_->SetBounds(shelf_->GetUserWorkAreaBounds());
+    return clipping_window_.get();
+  }
+  return container;
+}
+
+void TrayBackgroundView::AnimateToTargetBounds(const gfx::Rect& target_bounds,
+                                               bool close_bubble) {
+  const int kAnimationDurationMS = 200;
+
+  ui::ScopedLayerAnimationSettings settings(
+      GetBubbleView()->GetWidget()->GetNativeView()->layer()->GetAnimator());
+  settings.SetTransitionDuration(
+      base::TimeDelta::FromMilliseconds(kAnimationDurationMS));
+  settings.SetTweenType(gfx::Tween::EASE_OUT);
+  settings.SetPreemptionStrategy(
+      ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET);
+  if (close_bubble)
+    settings.AddObserver(new CloseBubbleObserver(this));
+  GetBubbleView()->GetWidget()->SetBounds(target_bounds);
+}
+
 std::unique_ptr<views::InkDropMask> TrayBackgroundView::CreateInkDropMask()
     const {
   return base::MakeUnique<views::RoundRectInkDropMask>(
@@ -376,44 +501,6 @@ void TrayBackgroundView::HandlePerformActionResult(bool action_performed,
   if (action_performed)
     return;
   ActionableView::HandlePerformActionResult(action_performed, event);
-}
-
-void TrayBackgroundView::OnPaintFocus(gfx::Canvas* canvas) {
-  // The tray itself expands to the right and bottom edge of the screen to make
-  // sure clicking on the edges brings up the popup. However, the focus border
-  // should be only around the container.
-  gfx::RectF paint_bounds(GetBackgroundBounds());
-  paint_bounds.Inset(gfx::Insets(-kFocusBorderThickness));
-  canvas->DrawSolidFocusRect(paint_bounds, kFocusBorderColor,
-                             kFocusBorderThickness);
-}
-
-void TrayBackgroundView::OnPaint(gfx::Canvas* canvas) {
-  ActionableView::OnPaint(canvas);
-  if (shelf()->GetBackgroundType() ==
-          ShelfBackgroundType::SHELF_BACKGROUND_DEFAULT ||
-      !separator_visible_) {
-    return;
-  }
-  // In the given |canvas|, for a horizontal shelf draw a separator line to the
-  // right or left of the TrayBackgroundView when the system is LTR or RTL
-  // aligned, respectively. For a vertical shelf draw the separator line
-  // underneath the items instead.
-  const gfx::Rect local_bounds = GetLocalBounds();
-  const SkColor color = SkColorSetA(SK_ColorWHITE, 0x4D);
-
-  if (shelf_->IsHorizontalAlignment()) {
-    const gfx::PointF point(
-        base::i18n::IsRTL() ? 0 : (local_bounds.width() - kSeparatorWidth),
-        (kShelfSize - kTrayItemSize) / 2);
-    const gfx::Vector2dF vector(0, kTrayItemSize);
-    canvas->Draw1pxLine(point, point + vector, color);
-  } else {
-    const gfx::PointF point((kShelfSize - kTrayItemSize) / 2,
-                            local_bounds.height() - kSeparatorWidth);
-    const gfx::Vector2dF vector(kTrayItemSize, 0);
-    canvas->Draw1pxLine(point, point + vector, color);
-  }
 }
 
 gfx::Insets TrayBackgroundView::GetBackgroundInsets() const {

@@ -17,8 +17,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/path.h"
 #include "ui/resources/grit/ui_resources.h"
-#include "ui/strings/grit/ui_strings.h"
-#include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/wm/core/coordinate_conversion.h"
@@ -448,7 +446,6 @@ TouchSelectionControllerImpl::TouchSelectionControllerImpl(
       dragging_handle_(nullptr) {
   selection_start_time_ = base::TimeTicks::Now();
   aura::Window* client_window = client_view_->GetNativeView();
-  client_window->AddObserver(this);
   client_widget_ = Widget::GetTopLevelWidgetForNativeView(client_window);
   if (client_widget_)
     client_widget_->AddObserver(this);
@@ -462,7 +459,6 @@ TouchSelectionControllerImpl::~TouchSelectionControllerImpl() {
   aura::Env::GetInstance()->RemovePreTargetHandler(this);
   if (client_widget_)
     client_widget_->RemoveObserver(this);
-  client_view_->GetNativeView()->RemoveObserver(this);
 }
 
 void TouchSelectionControllerImpl::SelectionChanged() {
@@ -643,12 +639,6 @@ void TouchSelectionControllerImpl::RunContextMenu() {
   const gfx::Rect rect = GetQuickMenuAnchorRect();
   const gfx::Point anchor(rect.CenterPoint().x(), rect.y());
   client_view_->OpenContextMenu(anchor);
-}
-
-void TouchSelectionControllerImpl::OnAncestorWindowTransformed(
-    aura::Window* window,
-    aura::Window* ancestor) {
-  client_view_->DestroyTouchSelection();
 }
 
 void TouchSelectionControllerImpl::OnWidgetClosing(Widget* widget) {

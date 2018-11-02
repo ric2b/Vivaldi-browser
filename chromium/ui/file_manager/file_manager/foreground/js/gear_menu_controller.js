@@ -41,6 +41,8 @@ function GearMenuController(
    */
   this.commandHandler_ = commandHandler;
 
+  gearMenu.volumeSpaceInfo.addEventListener(
+      'mouseover', this.onMouseOverVolumeSpaceInfo_.bind(this));
   gearButton.addEventListener('menushow', this.onShowGearMenu_.bind(this));
   gearButton.addEventListener('menuhide', this.onHideGearMenu_.bind(this));
   directoryModel.addEventListener(
@@ -49,6 +51,15 @@ function GearMenuController(
       this.onPreferencesChanged_.bind(this));
   this.onPreferencesChanged_();
 }
+
+/**
+ * Handles mouseover event and prevents any further action to execute.
+ * @param {Event} event The mouseover event.
+ * @private
+ */
+GearMenuController.prototype.onMouseOverVolumeSpaceInfo_ = function(event) {
+  event.stopPropagation();
+};
 
 /**
  * @private
@@ -83,8 +94,14 @@ GearMenuController.prototype.onDirectoryChanged_ = function(event) {
  * @param {boolean} showLoadingCaption Whether show loading caption or not.
  * @private
  */
-GearMenuController.prototype.refreshRemainingSpace_ =
-    function(showLoadingCaption) {
+GearMenuController.prototype.refreshRemainingSpace_ = function(
+    showLoadingCaption) {
+  var currentDirectory = this.directoryModel_.getCurrentDirEntry();
+  if (!currentDirectory || util.isRecentRoot(currentDirectory)) {
+    this.gearMenu_.setSpaceInfo(null, false);
+    return;
+  }
+
   var currentVolumeInfo = this.directoryModel_.getCurrentVolumeInfo();
   if (!currentVolumeInfo)
     return;

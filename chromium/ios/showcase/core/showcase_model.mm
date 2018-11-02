@@ -23,7 +23,7 @@
     },
     @{
       showcase::kClassForDisplayKey : @"MenuViewController",
-      showcase::kClassForInstantiationKey : @"MenuViewController",
+      showcase::kClassForInstantiationKey : @"SCToolsCoordinator",
       showcase::kUseCaseKey : @"Tools menu",
     },
     @{
@@ -85,6 +85,16 @@
       showcase::kClassForDisplayKey : @"SearchWidgetViewController",
       showcase::kClassForInstantiationKey : @"SCSearchWidgetCoordinator",
       showcase::kUseCaseKey : @"Search Widget",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"ContentWidgetViewController",
+      showcase::kClassForInstantiationKey : @"SCContentWidgetCoordinator",
+      showcase::kUseCaseKey : @"Content Widget",
+    },
+    @{
+      showcase::kClassForDisplayKey : @"TextBadgeView",
+      showcase::kClassForInstantiationKey : @"SCTextBadgeViewController",
+      showcase::kUseCaseKey : @"Text badge view",
     },
   ];
 }

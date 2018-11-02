@@ -4,6 +4,7 @@
 
 #include "headless/test/headless_browser_test.h"
 
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -23,6 +24,7 @@
 #include "headless/public/headless_web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gl/gl_switches.h"
 #include "url/gurl.h"
 
 namespace headless {
@@ -135,6 +137,18 @@ HeadlessBrowserTest::HeadlessBrowserTest() {
   CreateTestServer(headless_test_data);
 }
 
+void HeadlessBrowserTest::SetUp() {
+  // Enable GPU usage (i.e., SwiftShader, hardware GL on macOS) in all tests
+  // since that's the default configuration of --headless.
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      switches::kUseGpuInTests);
+  BrowserTestBase::SetUp();
+}
+
+void HeadlessBrowserTest::SetUpWithoutGPU() {
+  BrowserTestBase::SetUp();
+}
+
 HeadlessBrowserTest::~HeadlessBrowserTest() {}
 
 void HeadlessBrowserTest::PreRunTestOnMainThread() {
@@ -221,17 +235,20 @@ void HeadlessAsyncDevTooledBrowserTest::RunTest() {
   HeadlessBrowserContext::Builder builder =
       browser()->CreateBrowserContextBuilder();
   builder.SetProtocolHandlers(GetProtocolHandlers());
-  if (GetTabSocketType() != HeadlessWebContents::Builder::TabSocketType::NONE) {
+  if (GetAllowTabSockets()) {
     builder.EnableUnsafeNetworkAccessWithMojoBindings(true);
     builder.AddTabSocketMojoBindings();
   }
+  std::unique_ptr<net::ProxyConfig> proxy_config = GetProxyConfig();
+  if (proxy_config)
+    builder.SetProxyConfig(std::move(proxy_config));
   browser_context_ = builder.Build();
 
   browser()->SetDefaultBrowserContext(browser_context_);
   browser()->GetDevToolsTarget()->AttachClient(browser_devtools_client_.get());
 
   web_contents_ = browser_context_->CreateWebContentsBuilder()
-                      .SetTabSocketType(GetTabSocketType())
+                      .SetAllowTabSockets(GetAllowTabSockets())
                       .Build();
   web_contents_->AddObserver(this);
 
@@ -251,14 +268,18 @@ ProtocolHandlerMap HeadlessAsyncDevTooledBrowserTest::GetProtocolHandlers() {
   return ProtocolHandlerMap();
 }
 
-HeadlessWebContents::Builder::TabSocketType
-HeadlessAsyncDevTooledBrowserTest::GetTabSocketType() {
-  return HeadlessWebContents::Builder::TabSocketType::NONE;
+bool HeadlessAsyncDevTooledBrowserTest::GetAllowTabSockets() {
+  return false;
 }
 
 bool HeadlessAsyncDevTooledBrowserTest::
     GetCreateTabSocketOnlyForIsolatedWorld() {
   return false;
+}
+
+std::unique_ptr<net::ProxyConfig>
+HeadlessAsyncDevTooledBrowserTest::GetProxyConfig() {
+  return nullptr;
 }
 
 }  // namespace headless

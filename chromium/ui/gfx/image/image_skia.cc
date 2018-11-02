@@ -14,7 +14,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "build/build_config.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
@@ -74,15 +74,15 @@ ImageSkiaRep ScaleImageSkiaRep(const ImageSkiaRep& rep, float target_scale) {
 
 // A helper class such that ImageSkia can be cheaply copied. ImageSkia holds a
 // refptr instance of ImageSkiaStorage, which in turn holds all of ImageSkia's
-// information. Having both |base::RefCountedThreadSafe| and
-// |base::NonThreadSafe| may sound strange but is necessary to turn
-// the 'thread-non-safe modifiable ImageSkiaStorage' into
-// the 'thread-safe read-only ImageSkiaStorage'.
-class ImageSkiaStorage : public base::RefCountedThreadSafe<ImageSkiaStorage>,
-                         public base::NonThreadSafe {
+// information. Using a |base::SequenceChecker| on a
+// |base::RefCountedThreadSafe| subclass may sound strange but is necessary to
+// turn the 'thread-non-safe modifiable ImageSkiaStorage' into the 'thread-safe
+// read-only ImageSkiaStorage'.
+class ImageSkiaStorage : public base::RefCountedThreadSafe<ImageSkiaStorage> {
  public:
-  ImageSkiaStorage(ImageSkiaSource* source, const gfx::Size& size);
-  ImageSkiaStorage(ImageSkiaSource* source, float scale);
+  ImageSkiaStorage(std::unique_ptr<ImageSkiaSource> source,
+                   const gfx::Size& size);
+  ImageSkiaStorage(std::unique_ptr<ImageSkiaSource> source, float scale);
 
   bool has_source() const { return source_ != nullptr; }
   std::vector<gfx::ImageSkiaRep>& image_reps() { return image_reps_; }
@@ -91,7 +91,7 @@ class ImageSkiaStorage : public base::RefCountedThreadSafe<ImageSkiaStorage>,
 
   void DeleteSource();
   void SetReadOnly();
-  void DetachFromThread();
+  void DetachFromSequence();
 
   // Checks if the current thread can safely modify the storage.
   bool CanModify() const;
@@ -140,15 +140,19 @@ class ImageSkiaStorage : public base::RefCountedThreadSafe<ImageSkiaStorage>,
 
   bool read_only_;
 
+  base::SequenceChecker sequence_checker_;
+
   DISALLOW_COPY_AND_ASSIGN(ImageSkiaStorage);
 };
 
-ImageSkiaStorage::ImageSkiaStorage(ImageSkiaSource* source,
+ImageSkiaStorage::ImageSkiaStorage(std::unique_ptr<ImageSkiaSource> source,
                                    const gfx::Size& size)
-    : source_(source), size_(size), read_only_(false) {}
+    : source_(std::move(source)), size_(size), read_only_(false) {}
 
-ImageSkiaStorage::ImageSkiaStorage(ImageSkiaSource* source, float scale)
-    : source_(source), read_only_(false) {
+ImageSkiaStorage::ImageSkiaStorage(std::unique_ptr<ImageSkiaSource> source,
+                                   float scale)
+    : source_(std::move(source)), read_only_(false) {
+  DCHECK(source_);
   ImageSkia::ImageSkiaReps::iterator it = FindRepresentation(scale, true);
   if (it == image_reps_.end() || it->is_null())
     source_.reset();
@@ -164,16 +168,16 @@ void ImageSkiaStorage::SetReadOnly() {
   read_only_ = true;
 }
 
-void ImageSkiaStorage::DetachFromThread() {
-  base::NonThreadSafe::DetachFromThread();
+void ImageSkiaStorage::DetachFromSequence() {
+  sequence_checker_.DetachFromSequence();
 }
 
 bool ImageSkiaStorage::CanModify() const {
-  return !read_only_ && CalledOnValidThread();
+  return !read_only_ && sequence_checker_.CalledOnValidSequence();
 }
 
 bool ImageSkiaStorage::CanRead() const {
-  return (read_only_ && !source_) || CalledOnValidThread();
+  return (read_only_ && !source_) || sequence_checker_.CalledOnValidSequence();
 }
 
 void ImageSkiaStorage::AddRepresentation(const ImageSkiaRep& image) {
@@ -225,8 +229,9 @@ std::vector<ImageSkiaRep>::iterator ImageSkiaStorage::FindRepresentation(
   }
 
   if (fetch_new_image && source_.get()) {
-    DCHECK(CalledOnValidThread())
-        << "An ImageSkia with the source must be accessed by the same thread.";
+    DCHECK(sequence_checker_.CalledOnValidSequence())
+        << "An ImageSkia with the source must be accessed by the same "
+           "sequence.";
 
     ImageSkiaRep image;
     float resource_scale = scale;
@@ -268,37 +273,39 @@ std::vector<ImageSkiaRep>::iterator ImageSkiaStorage::FindRepresentation(
   return exact_iter != image_reps_.end() ? exact_iter : closest_iter;
 }
 
-ImageSkiaStorage::~ImageSkiaStorage() {
-  // We only care if the storage is modified by the same thread.  Don't blow up
-  // even if someone else deleted the ImageSkia.
-  DetachFromThread();
-}
+ImageSkiaStorage::~ImageSkiaStorage() = default;
 
 }  // internal
 
-ImageSkia::ImageSkia() : storage_(NULL) {
+ImageSkia::ImageSkia() {}
+
+ImageSkia::ImageSkia(std::unique_ptr<ImageSkiaSource> source,
+                     const gfx::Size& size)
+    : storage_(
+          base::MakeRefCounted<internal::ImageSkiaStorage>(std::move(source),
+                                                           size)) {
+  DCHECK(storage_->has_source());
+  // No other thread has reference to this, so it's safe to detach the sequence.
+  DetachStorageFromSequence();
+}
+
+ImageSkia::ImageSkia(std::unique_ptr<ImageSkiaSource> source, float scale)
+    : storage_(
+          base::MakeRefCounted<internal::ImageSkiaStorage>(std::move(source),
+                                                           scale)) {
+  if (!storage_->has_source())
+    storage_ = nullptr;
+  // No other thread has reference to this, so it's safe to detach the sequence.
+  DetachStorageFromSequence();
 }
 
 ImageSkia::ImageSkia(ImageSkiaSource* source, const gfx::Size& size)
-    : storage_(new internal::ImageSkiaStorage(source, size)) {
-  DCHECK(source);
-  // No other thread has reference to this, so it's safe to detach the thread.
-  DetachStorageFromThread();
-}
-
-ImageSkia::ImageSkia(ImageSkiaSource* source, float scale)
-    : storage_(new internal::ImageSkiaStorage(source, scale)) {
-  DCHECK(source);
-  if (!storage_->has_source())
-    storage_ = NULL;
-  // No other thread has reference to this, so it's safe to detach the thread.
-  DetachStorageFromThread();
-}
+    : ImageSkia(base::WrapUnique(source), size) {}
 
 ImageSkia::ImageSkia(const ImageSkiaRep& image_rep) {
   Init(image_rep);
-  // No other thread has reference to this, so it's safe to detach the thread.
-  DetachStorageFromThread();
+  // No other thread has reference to this, so it's safe to detach the sequence.
+  DetachStorageFromSequence();
 }
 
 ImageSkia::ImageSkia(const ImageSkia& other) : storage_(other.storage_) {
@@ -349,9 +356,9 @@ std::unique_ptr<ImageSkia> ImageSkia::DeepCopy() const {
     copy->AddRepresentation(*iter);
   }
   // The copy has its own storage. Detach the copy from the current
-  // thread so that other thread can use this.
+  // sequence so that other sequences can use this.
   if (!copy->isNull())
-    copy->storage_->DetachFromThread();
+    copy->storage_->DetachFromSequence();
   return base::WrapUnique(copy);
 }
 
@@ -422,7 +429,7 @@ const ImageSkiaRep& ImageSkia::GetRepresentation(float scale) const {
 void ImageSkia::SetReadOnly() {
   CHECK(storage_.get());
   storage_->SetReadOnly();
-  DetachStorageFromThread();
+  DetachStorageFromSequence();
 }
 
 void ImageSkia::MakeThreadSafe() {
@@ -472,9 +479,9 @@ std::vector<ImageSkiaRep> ImageSkia::image_reps() const {
 
 void ImageSkia::EnsureRepsForSupportedScales() const {
   DCHECK(g_supported_scales != NULL);
-  // Don't check ReadOnly because the source may generate images
-  // even for read only ImageSkia. Concurrent access will be protected
-  // by |DCHECK(CalledOnValidThread())| in FindRepresentation.
+  // Don't check ReadOnly because the source may generate images even for read
+  // only ImageSkia. Concurrent access will be protected by
+  // |DCHECK(sequence_checker_.CalledOnValidSequence())| in FindRepresentation.
   if (storage_.get() && storage_->has_source()) {
     for (std::vector<float>::const_iterator it = g_supported_scales->begin();
          it != g_supported_scales->end(); ++it)
@@ -528,9 +535,9 @@ bool ImageSkia::CanModify() const {
   return !storage_.get() || storage_->CanModify();
 }
 
-void ImageSkia::DetachStorageFromThread() {
+void ImageSkia::DetachStorageFromSequence() {
   if (storage_.get())
-    storage_->DetachFromThread();
+    storage_->DetachFromSequence();
 }
 
 }  // namespace gfx

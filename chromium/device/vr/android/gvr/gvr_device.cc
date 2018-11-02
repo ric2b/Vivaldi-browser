@@ -13,7 +13,8 @@
 #include "device/vr/android/gvr/gvr_delegate_provider.h"
 #include "device/vr/android/gvr/gvr_device_provider.h"
 #include "device/vr/vr_device_manager.h"
-#include "device/vr/vr_types.h"
+#include "device/vr/vr_display_impl.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/transform.h"
 #include "ui/gfx/transform_util.h"
 
@@ -26,15 +27,16 @@ GvrDevice::~GvrDevice() {}
 
 void GvrDevice::CreateVRDisplayInfo(
     const base::Callback<void(mojom::VRDisplayInfoPtr)>& on_created) {
-  GvrDelegate* delegate = GetGvrDelegate();
-  if (delegate) {
-    delegate->CreateVRDisplayInfo(on_created, id());
+  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  if (delegate_provider) {
+    delegate_provider->CreateVRDisplayInfo(on_created, id());
   } else {
     on_created.Run(nullptr);
   }
 }
 
 void GvrDevice::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
+                               mojom::VRPresentationProviderRequest request,
                                const base::Callback<void(bool)>& callback) {
   GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
   if (!delegate_provider)
@@ -42,7 +44,8 @@ void GvrDevice::RequestPresent(mojom::VRSubmitFrameClientPtr submit_client,
 
   // RequestWebVRPresent is async as we may trigger a DON flow that pauses
   // Chrome.
-  delegate_provider->RequestWebVRPresent(std::move(submit_client), callback);
+  delegate_provider->RequestWebVRPresent(std::move(submit_client),
+                                         std::move(request), callback);
 }
 
 void GvrDevice::SetSecureOrigin(bool secure_origin) {
@@ -59,36 +62,36 @@ void GvrDevice::ExitPresent() {
   OnExitPresent();
 }
 
-void GvrDevice::SubmitFrame(int16_t frame_index,
-                            const gpu::MailboxHolder& mailbox) {
-  GvrDelegate* delegate = GetGvrDelegate();
-  if (delegate) {
-    delegate->SubmitWebVRFrame(frame_index, mailbox);
-  }
-}
-
-void GvrDevice::UpdateLayerBounds(int16_t frame_index,
-                                  mojom::VRLayerBoundsPtr left_bounds_ptr,
-                                  mojom::VRLayerBoundsPtr right_bounds_ptr,
-                                  int16_t source_width,
-                                  int16_t source_height) {
-  GvrDelegate* delegate = GetGvrDelegate();
-  if (!delegate)
+void GvrDevice::GetNextMagicWindowPose(
+    VRDisplayImpl* display,
+    mojom::VRDisplay::GetNextMagicWindowPoseCallback callback) {
+  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  if (!delegate_provider) {
+    std::move(callback).Run(nullptr);
     return;
-
-  gfx::RectF left_bounds(left_bounds_ptr->left, left_bounds_ptr->top,
-                         left_bounds_ptr->width, left_bounds_ptr->height);
-  gfx::RectF right_bounds(right_bounds_ptr->left, right_bounds_ptr->top,
-                          right_bounds_ptr->width, right_bounds_ptr->height);
-  gfx::Size source_size(source_width, source_height);
-  delegate->UpdateWebVRTextureBounds(frame_index, left_bounds, right_bounds,
-                                     source_size);
+  }
+  delegate_provider->GetNextMagicWindowPose(display, std::move(callback));
 }
 
-void GvrDevice::GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) {
-  GvrDelegate* delegate = GetGvrDelegate();
-  if (delegate)
-    delegate->OnVRVsyncProviderRequest(std::move(request));
+void GvrDevice::OnDisplayAdded(VRDisplayImpl* display) {
+  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  if (!delegate_provider)
+    return;
+  delegate_provider->OnDisplayAdded(display);
+}
+
+void GvrDevice::OnDisplayRemoved(VRDisplayImpl* display) {
+  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  if (!delegate_provider)
+    return;
+  delegate_provider->OnDisplayRemoved(display);
+}
+
+void GvrDevice::OnListeningForActivateChanged(VRDisplayImpl* display) {
+  GvrDelegateProvider* delegate_provider = gvr_provider_->GetDelegateProvider();
+  if (!delegate_provider)
+    return;
+  delegate_provider->OnListeningForActivateChanged(display);
 }
 
 void GvrDevice::OnDelegateChanged() {

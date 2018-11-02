@@ -15,6 +15,15 @@
 
 namespace content {
 
+namespace {
+
+void OnMessageSent(bool success) {
+  DLOG_IF(ERROR, !success)
+      << "Target PresentationConnection failed to process message!";
+}
+
+}  // namespace
+
 PresentationConnectionProxy::PresentationConnectionProxy(
     blink::WebPresentationConnection* source_connection)
     : binding_(this),
@@ -25,16 +34,9 @@ PresentationConnectionProxy::PresentationConnectionProxy(
 
 PresentationConnectionProxy::~PresentationConnectionProxy() = default;
 
-void PresentationConnectionProxy::SendConnectionMessage(
-    PresentationConnectionMessage message,
-    const OnMessageCallback& callback) const {
-  DCHECK(target_connection_ptr_);
-  target_connection_ptr_->OnMessage(std::move(message), callback);
-}
-
 void PresentationConnectionProxy::OnMessage(
     PresentationConnectionMessage message,
-    const OnMessageCallback& callback) {
+    OnMessageCallback callback) {
   DCHECK(!callback.is_null());
 
   if (message.is_binary()) {
@@ -45,7 +47,7 @@ void PresentationConnectionProxy::OnMessage(
         blink::WebString::FromUTF8(*(message.message)));
   }
 
-  callback.Run(true);
+  std::move(callback).Run(true);
 }
 
 // TODO(crbug.com/588874): Ensure legal PresentationConnection state transitions
@@ -88,6 +90,37 @@ void PresentationConnectionProxy::NotifyTargetConnection(
   }
 }
 
+void PresentationConnectionProxy::SendTextMessage(
+    const blink::WebString& message) {
+  auto utf8_string = message.Utf8();
+  if (utf8_string.size() > kMaxPresentationConnectionMessageSize) {
+    // TODO(crbug.com/459008): Limit the size of individual messages to 64k
+    // for now. Consider throwing DOMException or splitting bigger messages
+    // into smaller chunks later.
+    LOG(WARNING) << "message size exceeded limit!";
+    return;
+  }
+  SendConnectionMessage(PresentationConnectionMessage(utf8_string));
+}
+
+void PresentationConnectionProxy::SendBinaryMessage(const uint8_t* data,
+                                                    size_t length) {
+  if (length > kMaxPresentationConnectionMessageSize) {
+    // TODO(crbug.com/459008): Same as in SendTextMessage().
+    LOG(WARNING) << "data size exceeded limit!";
+    return;
+  }
+  SendConnectionMessage(
+      PresentationConnectionMessage(std::vector<uint8_t>(data, data + length)));
+}
+
+void PresentationConnectionProxy::SendConnectionMessage(
+    PresentationConnectionMessage message) const {
+  DCHECK(target_connection_ptr_);
+  target_connection_ptr_->OnMessage(std::move(message),
+                                    base::BindOnce(&OnMessageSent));
+}
+
 ControllerConnectionProxy::ControllerConnectionProxy(
     blink::WebPresentationConnection* controller_connection)
     : PresentationConnectionProxy(controller_connection) {}
@@ -95,7 +128,9 @@ ControllerConnectionProxy::ControllerConnectionProxy(
 ControllerConnectionProxy::~ControllerConnectionProxy() = default;
 
 blink::mojom::PresentationConnectionPtr ControllerConnectionProxy::Bind() {
-  return binding_.CreateInterfacePtrAndBind();
+  blink::mojom::PresentationConnectionPtr connection;
+  binding_.Bind(mojo::MakeRequest(&connection));
+  return connection;
 }
 
 blink::mojom::PresentationConnectionRequest

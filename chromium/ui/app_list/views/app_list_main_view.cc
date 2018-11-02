@@ -11,6 +11,7 @@
 #include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/profiler/scoped_tracker.h"
 #include "base/strings/string_util.h"
 #include "ui/app_list/app_list_constants.h"
@@ -30,6 +31,7 @@
 #include "ui/app_list/views/search_box_view.h"
 #include "ui/app_list/views/search_result_page_view.h"
 #include "ui/app_list/views/start_page_view.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/controls/button/custom_button.h"
@@ -43,16 +45,15 @@ namespace app_list {
 ////////////////////////////////////////////////////////////////////////////////
 // AppListMainView:
 
-AppListMainView::AppListMainView(AppListViewDelegate* delegate)
+AppListMainView::AppListMainView(AppListViewDelegate* delegate,
+                                 AppListView* app_list_view)
     : delegate_(delegate),
       model_(delegate->GetModel()),
       search_box_view_(nullptr),
-      contents_view_(nullptr) {
+      contents_view_(nullptr),
+      app_list_view_(app_list_view) {
   SetLayoutManager(
-      features::IsAnswerCardEnabled()
-          ? static_cast<views::LayoutManager*>(new views::FillLayout)
-          : static_cast<views::LayoutManager*>(
-                new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0)));
+      new views::BoxLayout(views::BoxLayout::kVertical, gfx::Insets(), 0));
   model_->AddObserver(this);
 }
 
@@ -76,8 +77,7 @@ void AppListMainView::Init(gfx::NativeView parent,
 
 void AppListMainView::AddContentsViews() {
   DCHECK(search_box_view_);
-
-  contents_view_ = new ContentsView(this);
+  contents_view_ = new ContentsView(this, app_list_view_);
   contents_view_->Init(model_);
   AddChildView(contents_view_);
 
@@ -182,10 +182,17 @@ void AppListMainView::OnSearchEngineIsGoogleChanged(bool is_google) {
 
 void AppListMainView::ActivateApp(AppListItem* item, int event_flags) {
   // TODO(jennyz): Activate the folder via AppListModel notification.
-  if (item->GetItemType() == AppListFolderItem::kItemType)
+  if (item->GetItemType() == AppListFolderItem::kItemType) {
     contents_view_->ShowFolderContent(static_cast<AppListFolderItem*>(item));
-  else
+    UMA_HISTOGRAM_ENUMERATION(kAppListFolderOpenedHistogram, kOldFolders,
+                              kMaxFolderOpened);
+  } else {
     item->Activate(event_flags);
+    UMA_HISTOGRAM_BOOLEAN(features::IsFullscreenAppListEnabled()
+                              ? kAppListAppLaunchedFullscreen
+                              : kAppListAppLaunched,
+                          false /*not a suggested app*/);
+  }
 }
 
 void AppListMainView::CancelDragInActiveFolder() {

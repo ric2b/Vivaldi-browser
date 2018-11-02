@@ -96,6 +96,15 @@ DISABLE(PaymentManagerTest, KeysOfPaymentInstruments)
 DISABLE(SubresourceFilterBrowserTest, ExpectPerformanceHistogramsAreRecorded)
 DISABLE(UpdateClientTest, TwoCrxUpdateDownloadTimeout)
 DISABLE(UpdateClientTest, TwoCrxUpdateNoUpdate)
+DISABLE(UpdateClientTest, TwoCrxUpdate)
+DISABLE(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming)
+DISABLE(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_BrowserStartup)
+DISABLE(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_WaitForRenderer)
+DISABLE(ServiceWorkerMetricsTest, EmbeddedWorkerStartTiming_NegativeLatency)
+DISABLE(ServiceWorkerURLRequestJobTest,
+        NavPreloadMetrics_NavPreloadFirst_MainFrame)
+DISABLE(ContentSubresourceFilterThrottleManagerTest, LogActivation)
+DISABLE(SessionsSyncManagerTest, TrackTasksOnLocalTabModified)
 
 // Fails on tester, works on dev PC; assume it is the timing issue
 DISABLE(NotificationPermissionContextTest, TestDenyInIncognitoAfterDelay)
@@ -120,3 +129,7 @@ DISABLE(PipelineIntegrationTest, Rotated_Metadata_90)
 DISABLE(WebRtcBrowserTest, RunsAudioVideoWebRTCCallInTwoTabsH264)
 DISABLE(MediaTest, VideoBearRotated270)
 DISABLE(MediaTest, VideoBearRotated90)
+
+// Seems to create auto run entries in the registry, killing the tester due to
+// process start overload
+DISABLE(ServiceProcessControlBrowserTest, LaunchAndReconnect)

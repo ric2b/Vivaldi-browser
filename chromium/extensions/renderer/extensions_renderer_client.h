@@ -5,7 +5,11 @@
 #ifndef EXTENSIONS_RENDERER_EXTENSIONS_RENDERER_CLIENT_H_
 #define EXTENSIONS_RENDERER_EXTENSIONS_RENDERER_CLIENT_H_
 
+#include "extensions/common/extension_id.h"
+
 namespace extensions {
+class Extension;
+class Dispatcher;
 
 // Interface to allow the extensions module to make render-process-specific
 // queries of the embedder. Should be Set() once in the render process.
@@ -24,6 +28,14 @@ class ExtensionsRendererClient {
   // Must be greater than 0. See blink::WebFrame::executeScriptInIsolatedWorld
   // (third_party/WebKit/public/web/WebFrame.h) for additional context.
   virtual int GetLowestIsolatedWorldId() const = 0;
+
+  // Returns the associated Dispatcher.
+  virtual Dispatcher* GetDispatcher() = 0;
+
+  // Notifies the client when an extension is added or removed.
+  // TODO(devlin): Make a RendererExtensionRegistryObserver?
+  virtual void OnExtensionLoaded(const Extension& extension) {}
+  virtual void OnExtensionUnloaded(const ExtensionId& extension) {}
 
   // Returns the single instance of |this|.
   static ExtensionsRendererClient* Get();

@@ -16,7 +16,6 @@
 #include "chrome/browser/plugins/plugins_field_trial.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_chromium_strings.h"
@@ -130,8 +129,8 @@ const PermissionsUIInfo kPermissionsUIInfo[] = {
     // Autoplay is Android-only at the moment, and the Page Info popup on
     // Android ignores these block/allow icon pairs, so we can specify 0 there.
     {CONTENT_SETTINGS_TYPE_AUTOPLAY, IDS_PAGE_INFO_TYPE_AUTOPLAY, 0, 0},
-    {CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER, IDS_SUBRESOURCE_FILTER_HEADER,
-     IDR_ALLOWED_SUBRESOURCE_FILTER, IDR_BLOCKED_SUBRESOURCE_FILTER},
+    {CONTENT_SETTINGS_TYPE_ADS, IDS_PAGE_INFO_TYPE_ADS, IDR_BLOCKED_ADS,
+     IDR_ALLOWED_ADS},
 };
 
 std::unique_ptr<PageInfoUI::SecurityDescription> CreateSecurityDescription(
@@ -290,7 +289,7 @@ base::string16 PageInfoUI::PermissionActionToUIString(
   }
   // The subresource filter permission uses the user managed strings
   // (i.e. Allow / Block).
-  if (type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER)
+  if (type == CONTENT_SETTINGS_TYPE_ADS)
     button_text_ids = kPermissionButtonTextIDUserManaged;
   int button_text_id = button_text_ids[effective_setting];
   DCHECK_NE(button_text_id, kInvalidResourceID);
@@ -343,8 +342,8 @@ base::string16 PageInfoUI::PermissionDecisionReasonToUIString(
     }
   }
 
-  if (permission.type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER)
-    message_id = IDS_PAGE_INFO_PERMISSION_SUBRESOURCE_FILTER_SUBTITLE;
+  if (permission.type == CONTENT_SETTINGS_TYPE_ADS)
+    message_id = IDS_PAGE_INFO_PERMISSION_ADS_SUBTITLE;
 
   if (message_id == kInvalidResourceID)
     return base::string16();
@@ -451,4 +450,13 @@ const gfx::ImageSkia PageInfoUI::GetCertificateIcon() {
 bool PageInfoUI::ShouldShowCertificateLink() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kShowCertLink);
+}
+
+// static
+bool PageInfoUI::ContentSettingsTypeInPageInfo(ContentSettingsType type) {
+  for (const PermissionsUIInfo& info : kPermissionsUIInfo) {
+    if (info.type == type)
+      return true;
+  }
+  return false;
 }

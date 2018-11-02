@@ -5,6 +5,8 @@
 #ifndef IOS_CHROME_BROWSER_BROWSING_DATA_IOS_CHROME_BROWSING_DATA_REMOVER_H_
 #define IOS_CHROME_BROWSER_BROWSING_DATA_IOS_CHROME_BROWSING_DATA_REMOVER_H_
 
+#include <stdint.h>
+
 #include <memory>
 #include <set>
 
@@ -48,9 +50,8 @@ class IOSChromeBrowsingDataRemover {
     REMOVE_PASSWORDS = 1 << 8,
     REMOVE_WEBSQL = 1 << 9,
     REMOVE_CHANNEL_IDS = 1 << 10,
-    REMOVE_GOOGLE_APP_LAUNCHER_DATA = 1 << 11,
-    REMOVE_CACHE_STORAGE = 1 << 12,
-    REMOVE_VISITED_LINKS = 1 << 13,
+    REMOVE_CACHE_STORAGE = 1 << 11,
+    REMOVE_VISITED_LINKS = 1 << 12,
 
     // "Site data" includes cookies, appcache, file systems, indexedDBs, local
     // storage, webSQL, service workers, cache storage, plugin data, and web app
@@ -190,7 +191,7 @@ class IOSChromeBrowsingDataRemover {
   void OnClearedPasswords();
 
   // Callback for when Cookies has been deleted. Invokes NotifyAndDeleteIfDone.
-  void OnClearedCookies(int num_deleted);
+  void OnClearedCookies(uint32_t num_deleted);
 
   // Invoked on the IO thread to delete cookies.
   void ClearCookiesOnIOThread(

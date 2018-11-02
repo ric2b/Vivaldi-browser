@@ -52,7 +52,7 @@ class ResourceError;
 class ResourceRequest;
 class ResourceResponse;
 class WorkerGlobalScope;
-class WorkerLoaderProxy;
+class WorkerThreadLifecycleContext;
 struct CrossThreadResourceRequestData;
 struct CrossThreadResourceTimingInfoData;
 
@@ -141,7 +141,7 @@ class WorkerThreadableLoader final : public ThreadableLoader {
 
    public:
     static void CreateAndStart(WorkerThreadableLoader*,
-                               RefPtr<WorkerLoaderProxy>,
+                               ThreadableLoadingContext*,
                                RefPtr<WebTaskRunner>,
                                WorkerThreadLifecycleContext*,
                                std::unique_ptr<CrossThreadResourceRequestData>,
@@ -165,7 +165,6 @@ class WorkerThreadableLoader final : public ThreadableLoader {
     void DidFinishLoading(unsigned long identifier,
                           double finish_time) override;
     void DidFail(const ResourceError&) override;
-    void DidFailAccessControlCheck(const ResourceError&) override;
     void DidFailRedirectCheck() override;
     void DidReceiveResourceTiming(const ResourceTimingInfo&) override;
 
@@ -204,14 +203,12 @@ class WorkerThreadableLoader final : public ThreadableLoader {
   void DidReceiveCachedMetadata(std::unique_ptr<Vector<char>> data);
   void DidFinishLoading(unsigned long identifier, double finish_time);
   void DidFail(const ResourceError&);
-  void DidFailAccessControlCheck(const ResourceError&);
   void DidFailRedirectCheck();
   void DidDownloadData(int data_length);
   void DidReceiveResourceTiming(
       std::unique_ptr<CrossThreadResourceTimingInfoData>);
 
   Member<WorkerGlobalScope> worker_global_scope_;
-  RefPtr<WorkerLoaderProxy> worker_loader_proxy_;
   CrossThreadPersistent<ParentFrameTaskRunners> parent_frame_task_runners_;
   ThreadableLoaderClient* client_;
 

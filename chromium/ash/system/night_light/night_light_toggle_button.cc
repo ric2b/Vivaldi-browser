@@ -9,6 +9,7 @@
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_popup_item_style.h"
+#include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/paint_vector_icon.h"
@@ -36,6 +37,14 @@ gfx::ImageSkia GetNightLightDisabledStateIcon(bool night_light_enabled) {
                                kMenuIconColorDisabled);
 }
 
+base::string16 GetNightLightTooltipText(bool night_light_enabled) {
+  return l10n_util::GetStringFUTF16(
+      IDS_ASH_STATUS_TRAY_NIGHT_LIGHT,
+      l10n_util::GetStringUTF16(
+          night_light_enabled ? IDS_ASH_STATUS_TRAY_NIGHT_LIGHT_ON_STATE
+                              : IDS_ASH_STATUS_TRAY_NIGHT_LIGHT_OFF_STATE));
+}
+
 }  // namespace
 
 NightLightToggleButton::NightLightToggleButton(views::ButtonListener* listener)
@@ -46,10 +55,18 @@ NightLightToggleButton::NightLightToggleButton(views::ButtonListener* listener)
   Update();
 }
 
+void NightLightToggleButton::Toggle() {
+  DCHECK(NightLightController::IsFeatureEnabled());
+  Shell::Get()->night_light_controller()->Toggle();
+  Update();
+  NotifyAccessibilityEvent(ui::AX_EVENT_ARIA_ATTRIBUTE_CHANGED, true);
+}
+
 void NightLightToggleButton::Update() {
   const bool night_light_enabled =
       Shell::Get()->night_light_controller()->GetEnabled();
 
+  SetTooltipText(GetNightLightTooltipText(night_light_enabled));
   SetImage(views::Button::STATE_NORMAL,
            GetNightLightNormalStateIcon(night_light_enabled));
   SetImage(views::Button::STATE_DISABLED,
@@ -57,11 +74,12 @@ void NightLightToggleButton::Update() {
 }
 
 void NightLightToggleButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->SetName(
-      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NIGHT_LIGHT));
+  const bool is_enabled = Shell::Get()->night_light_controller()->GetEnabled();
+  node_data->SetName(GetNightLightTooltipText(is_enabled));
   node_data->role = ui::AX_ROLE_TOGGLE_BUTTON;
-  if (Shell::Get()->night_light_controller()->GetEnabled())
-    node_data->AddState(ui::AX_STATE_PRESSED);
+  node_data->AddIntAttribute(
+      ui::AX_ATTR_CHECKED_STATE,
+      is_enabled ? ui::AX_CHECKED_STATE_TRUE : ui::AX_CHECKED_STATE_FALSE);
 }
 
 }  // namespace ash

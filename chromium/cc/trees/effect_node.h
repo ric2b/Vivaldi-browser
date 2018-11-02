@@ -23,12 +23,17 @@ struct CC_EXPORT EffectNode {
   EffectNode();
   EffectNode(const EffectNode& other);
 
+  enum StableIdLabels { INVALID_STABLE_ID = 0 };
+
   // The node index of this node in the effect tree node vector.
   int id;
   // The node index of the parent node in the effect tree node vector.
   int parent_id;
-  // The layer id of the layer that owns this node.
-  int owning_layer_id;
+  // An opaque, unique, stable identifer for this effect that persists across
+  // frame commits. This id is used only for internal implementation
+  // details such as RenderSurface and RenderPass ids, and should not
+  // be assumed to have semantic meaning.
+  uint64_t stable_id;
 
   float opacity;
   float screen_space_opacity;
@@ -44,6 +49,7 @@ struct CC_EXPORT EffectNode {
   gfx::Size unscaled_mask_target_size;
 
   bool has_render_surface : 1;
+  bool cache_render_surface : 1;
   bool has_copy_request : 1;
   bool hidden_by_backface_visibility : 1;
   bool double_sided : 1;
@@ -78,6 +84,7 @@ struct CC_EXPORT EffectNode {
   // The layer id of the mask layer, if any, to apply to this effect
   // node's content when rendering to a surface.
   int mask_layer_id;
+  int closest_ancestor_with_cached_render_surface_id;
   int closest_ancestor_with_copy_request_id;
 
   bool operator==(const EffectNode& other) const;

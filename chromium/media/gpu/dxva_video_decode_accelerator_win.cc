@@ -496,10 +496,14 @@ DXVAVideoDecodeAccelerator::DXVAVideoDecodeAccelerator(
       decoder_thread_("DXVAVideoDecoderThread"),
       pending_flush_(false),
       enable_low_latency_(gpu_preferences.enable_low_latency_dxva),
-      share_nv12_textures_(gpu_preferences.enable_zero_copy_dxgi_video &&
-                           !workarounds.disable_dxgi_zero_copy_video),
-      copy_nv12_textures_(gpu_preferences.enable_nv12_dxgi_video &&
-                          !workarounds.disable_nv12_dxgi_video),
+      support_share_nv12_textures_(
+          gpu_preferences.enable_zero_copy_dxgi_video &&
+          !workarounds.disable_dxgi_zero_copy_video),
+      support_copy_nv12_textures_(gpu_preferences.enable_nv12_dxgi_video &&
+                                  !workarounds.disable_nv12_dxgi_video),
+      support_delayed_copy_nv12_textures_(
+          base::FeatureList::IsEnabled(kDelayCopyNV12Textures) &&
+          !workarounds.disable_delayed_copy_nv12),
       use_dx11_(false),
       use_keyed_mutex_(false),
       using_angle_device_(false),
@@ -543,8 +547,8 @@ bool DXVAVideoDecodeAccelerator::Initialize(const Config& config,
   if (!config.supported_output_formats.empty() &&
       !base::ContainsValue(config.supported_output_formats,
                            PIXEL_FORMAT_NV12)) {
-    share_nv12_textures_ = false;
-    copy_nv12_textures_ = false;
+    support_share_nv12_textures_ = false;
+    support_copy_nv12_textures_ = false;
   }
 
   bool profile_supported = false;
@@ -806,15 +810,19 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
   RETURN_ON_HR_FAILURE(hr, "MFCreateDXGIDeviceManager failed", false);
 
   angle_device_ = gl::QueryD3D11DeviceObjectFromANGLE();
-  if (!angle_device_)
-    copy_nv12_textures_ = false;
-  if (share_nv12_textures_) {
+  if (!angle_device_) {
+    support_copy_nv12_textures_ = false;
+  }
+  if (ShouldUseANGLEDevice()) {
     RETURN_ON_FAILURE(angle_device_.Get(), "Failed to get d3d11 device", false);
 
     using_angle_device_ = true;
-  }
+    DCHECK(!use_fp16_);
+    angle_device_->GetImmediateContext(d3d11_device_context_.GetAddressOf());
 
-  if (use_fp16_ || !share_nv12_textures_) {
+    hr = angle_device_.CopyTo(video_device_.GetAddressOf());
+    RETURN_ON_HR_FAILURE(hr, "Failed to get video device", false);
+  } else {
     // This array defines the set of DirectX hardware feature levels we support.
     // The ordering MUST be preserved. All applications are assumed to support
     // 9.1 unless otherwise stated by the application.
@@ -853,10 +861,10 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
 
     hr = d3d11_device_.CopyTo(video_device_.GetAddressOf());
     RETURN_ON_HR_FAILURE(hr, "Failed to get video device", false);
-
-    hr = d3d11_device_context_.CopyTo(video_context_.GetAddressOf());
-    RETURN_ON_HR_FAILURE(hr, "Failed to get video context", false);
   }
+
+  hr = d3d11_device_context_.CopyTo(video_context_.GetAddressOf());
+  RETURN_ON_HR_FAILURE(hr, "Failed to get video context", false);
 
   D3D11_FEATURE_DATA_D3D11_OPTIONS options;
   hr = D3D11Device()->CheckFeatureSupport(D3D11_FEATURE_D3D11_OPTIONS, &options,
@@ -866,7 +874,7 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
   // Need extended resource sharing so we can share the NV12 texture between
   // ANGLE and the decoder context.
   if (!options.ExtendedResourceSharing)
-    copy_nv12_textures_ = false;
+    support_copy_nv12_textures_ = false;
 
   UINT nv12_format_support = 0;
   hr =
@@ -874,7 +882,7 @@ bool DXVAVideoDecodeAccelerator::CreateDX11DevManager() {
   RETURN_ON_HR_FAILURE(hr, "Failed to check NV12 format support", false);
 
   if (!(nv12_format_support & D3D11_FORMAT_SUPPORT_VIDEO_PROCESSOR_OUTPUT))
-    copy_nv12_textures_ = false;
+    support_copy_nv12_textures_ = false;
 
   UINT fp16_format_support = 0;
   hr = D3D11Device()->CheckFormatSupport(DXGI_FORMAT_R16G16B16A16_FLOAT,
@@ -979,7 +987,7 @@ void DXVAVideoDecodeAccelerator::AssignPictureBuffers(
         // texture ids. This call just causes the texture manager to hold a
         // reference to the GLImage as long as either texture exists.
         bind_image_cb_.Run(client_id, GetTextureTarget(),
-                           picture_buffer->gl_image(), true);
+                           picture_buffer->gl_image(), false);
       }
     }
 
@@ -1040,6 +1048,16 @@ void DXVAVideoDecodeAccelerator::ReusePictureBuffer(int32_t picture_buffer_id) {
     RETURN_AND_NOTIFY_ON_FAILURE(it->second->ReusePictureBuffer(),
                                  "Failed to reuse picture buffer",
                                  PLATFORM_FAILURE, );
+    if (bind_image_cb_ && (GetPictureBufferMechanism() ==
+                           PictureBufferMechanism::DELAYED_COPY_TO_NV12)) {
+      // Unbind the image to ensure it will be copied again the next time it's
+      // needed.
+      for (uint32_t client_id :
+           it->second->picture_buffer().client_texture_ids()) {
+        bind_image_cb_.Run(client_id, GetTextureTarget(),
+                           it->second->gl_image(), false);
+      }
+    }
 
     ProcessPendingSamples();
     if (pending_flush_) {
@@ -1165,12 +1183,12 @@ void DXVAVideoDecodeAccelerator::Reset() {
 
   main_thread_task_runner_->PostTask(
       FROM_HERE,
-      base::Bind(&DXVAVideoDecodeAccelerator::NotifyResetDone, weak_ptr_));
-  main_thread_task_runner_->PostTask(
-      FROM_HERE,
       base::Bind(&DXVAVideoDecodeAccelerator::NotifyInputBuffersDropped,
                  weak_ptr_, std::move(pending_input_buffers_)));
   pending_input_buffers_.clear();
+  main_thread_task_runner_->PostTask(
+      FROM_HERE,
+      base::Bind(&DXVAVideoDecodeAccelerator::NotifyResetDone, weak_ptr_));
 
   RETURN_AND_NOTIFY_ON_FAILURE(StartDecoderThread(),
                                "Failed to start decoder thread.",
@@ -1220,13 +1238,11 @@ DXVAVideoDecodeAccelerator::GetSupportedProfiles(
         (supported_profile <= VP9PROFILE_MAX)) {
       continue;
     }
-    std::pair<int, int> min_resolution = GetMinResolution(supported_profile);
-    std::pair<int, int> max_resolution = GetMaxResolution(supported_profile);
 
     SupportedProfile profile;
     profile.profile = supported_profile;
-    profile.min_resolution.SetSize(min_resolution.first, min_resolution.second);
-    profile.max_resolution.SetSize(max_resolution.first, max_resolution.second);
+    profile.min_resolution = GetMinResolution(supported_profile);
+    profile.max_resolution = GetMaxResolution(supported_profile);
     profiles.push_back(profile);
   }
   return profiles;
@@ -1239,7 +1255,7 @@ void DXVAVideoDecodeAccelerator::PreSandboxInitialization() {
     ::LoadLibrary(mfdll);
   ::LoadLibrary(L"dxva2.dll");
 
-  if (base::win::GetVersion() > base::win::VERSION_WIN7) {
+  if (base::win::GetVersion() >= base::win::VERSION_WIN8) {
     LoadLibrary(L"msvproc.dll");
   } else {
 #if defined(ENABLE_DX11_FOR_WIN7)
@@ -1249,95 +1265,74 @@ void DXVAVideoDecodeAccelerator::PreSandboxInitialization() {
 }
 
 // static
-std::pair<int, int> DXVAVideoDecodeAccelerator::GetMinResolution(
+gfx::Size DXVAVideoDecodeAccelerator::GetMinResolution(
     VideoCodecProfile profile) {
   TRACE_EVENT0("gpu,startup", "DXVAVideoDecodeAccelerator::GetMinResolution");
-  std::pair<int, int> min_resolution;
+
+  // TODO(dalecurtis): These values are too low. We should only be using
+  // hardware decode for videos above ~360p, see http://crbug.com/684792.
+
   if (profile >= H264PROFILE_BASELINE && profile <= H264PROFILE_HIGH) {
     // Windows Media Foundation H.264 decoding does not support decoding videos
     // with any dimension smaller than 48 pixels:
     // http://msdn.microsoft.com/en-us/library/windows/desktop/dd797815
-    min_resolution = std::make_pair(48, 48);
-  } else {
-    // TODO(ananta)
-    // Detect this properly for VP8/VP9 profiles.
-    min_resolution = std::make_pair(16, 16);
+    return gfx::Size(48, 48);
   }
-  return min_resolution;
+
+  // TODO(dalecurtis): Detect this properly for VP8/VP9 profiles.
+  return gfx::Size(16, 16);
 }
 
 // static
-std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxResolution(
-    const VideoCodecProfile profile) {
+gfx::Size DXVAVideoDecodeAccelerator::GetMaxResolution(
+    VideoCodecProfile profile) {
   TRACE_EVENT0("gpu,startup", "DXVAVideoDecodeAccelerator::GetMaxResolution");
-  std::pair<int, int> max_resolution;
+
+  // Computes and caches the maximum resolution since it's expensive to
+  // determine and this function is called for every profile in
+  // kSupportedProfiles.
+
   if (profile >= H264PROFILE_BASELINE && profile <= H264PROFILE_HIGH) {
-    max_resolution = GetMaxH264Resolution();
-  } else {
-    // TODO(ananta)
-    // Detect this properly for VP8/VP9 profiles.
-    max_resolution = std::make_pair(4096, 2160);
+    const gfx::Size kDefaultMax = gfx::Size(1920, 1088);
+
+    // On Windows 7 the maximum resolution supported by media foundation is
+    // 1920 x 1088. We use 1088 to account for 16x16 macroblocks.
+    if (base::win::GetVersion() == base::win::VERSION_WIN7)
+      return kDefaultMax;
+
+    static const gfx::Size kCachedH264Resolution = GetMaxResolutionForGUIDs(
+        kDefaultMax, {DXVA2_ModeH264_E, DXVA2_Intel_ModeH264_E},
+        {gfx::Size(2560, 1440), gfx::Size(3840, 2160), gfx::Size(4096, 2160),
+         gfx::Size(4096, 2304)});
+    return kCachedH264Resolution;
   }
-  return max_resolution;
+
+  // Despite the name this is the GUID for VP8/VP9.
+  static const gfx::Size kCachedVPXResolution = GetMaxResolutionForGUIDs(
+      gfx::Size(4096, 2160), {D3D11_DECODER_PROFILE_VP9_VLD_PROFILE0},
+      {gfx::Size(4096, 2304), gfx::Size(7680, 4320)});
+  return kCachedVPXResolution;
 }
 
-std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxH264Resolution() {
+gfx::Size DXVAVideoDecodeAccelerator::GetMaxResolutionForGUIDs(
+    const gfx::Size& default_max,
+    const std::vector<GUID>& valid_guids,
+    const std::vector<gfx::Size>& resolutions_to_test) {
   TRACE_EVENT0("gpu,startup",
-               "DXVAVideoDecodeAccelerator::GetMaxH264Resolution");
-  // The H.264 resolution detection operation is expensive. This static flag
-  // allows us to run the detection once.
-  static bool resolution_detected = false;
-  // Use 1088 to account for 16x16 macroblocks.
-  static std::pair<int, int> max_resolution = std::make_pair(1920, 1088);
-  if (resolution_detected)
-    return max_resolution;
-
-  resolution_detected = true;
-
-  // On Windows 7 the maximum resolution supported by media foundation is
-  // 1920 x 1088.
-  if (base::win::GetVersion() == base::win::VERSION_WIN7)
-    return max_resolution;
+               "DXVAVideoDecodeAccelerator::GetMaxResolutionForGUIDs");
+  gfx::Size max_resolution = default_max;
 
   // To detect if a driver supports the desired resolutions, we try and create
   // a DXVA decoder instance for that resolution and profile. If that succeeds
   // we assume that the driver supports H/W H.264 decoding for that resolution.
   HRESULT hr = E_FAIL;
   base::win::ScopedComPtr<ID3D11Device> device;
-
   {
     TRACE_EVENT0("gpu,startup",
-                 "GetMaxH264Resolution. QueryDeviceObjectFromANGLE");
+                 "GetMaxResolutionForGUIDs. QueryDeviceObjectFromANGLE");
 
     device = gl::QueryD3D11DeviceObjectFromANGLE();
-    if (!device.Get())
-      return max_resolution;
-  }
-
-  base::win::ScopedComPtr<ID3D11VideoDevice> video_device;
-  hr = device.CopyTo(IID_PPV_ARGS(&video_device));
-  if (FAILED(hr))
-    return max_resolution;
-
-  GUID decoder_guid = {};
-
-  {
-    TRACE_EVENT0("gpu,startup",
-                 "GetMaxH264Resolution. H.264 guid search begin");
-    // Enumerate supported video profiles and look for the H264 profile.
-    bool found = false;
-    UINT profile_count = video_device->GetVideoDecoderProfileCount();
-    for (UINT profile_idx = 0; profile_idx < profile_count; profile_idx++) {
-      GUID profile_id = {};
-      hr = video_device->GetVideoDecoderProfile(profile_idx, &profile_id);
-      if (SUCCEEDED(hr) && (profile_id == DXVA2_ModeH264_E ||
-                            profile_id == DXVA2_Intel_ModeH264_E)) {
-        decoder_guid = profile_id;
-        found = true;
-        break;
-      }
-    }
-    if (!found)
+    if (!device)
       return max_resolution;
   }
 
@@ -1346,25 +1341,38 @@ std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxH264Resolution() {
   if (IsLegacyGPU(device.Get()))
     return max_resolution;
 
-  // We look for the following resolutions in the driver.
-  // TODO(ananta)
-  // Look into whether this list needs to be expanded.
-  static std::pair<int, int> resolution_array[] = {
-      // Use 1088 to account for 16x16 macroblocks.
-      std::make_pair(1920, 1088), std::make_pair(2560, 1440),
-      std::make_pair(3840, 2160), std::make_pair(4096, 2160),
-      std::make_pair(4096, 2304),
-  };
+  base::win::ScopedComPtr<ID3D11VideoDevice> video_device;
+  hr = device.CopyTo(IID_PPV_ARGS(&video_device));
+  if (FAILED(hr))
+    return max_resolution;
+
+  GUID decoder_guid = GUID_NULL;
+  {
+    TRACE_EVENT0("gpu,startup", "GetMaxResolutionForGUIDs. GUID search begin");
+    // Enumerate supported video profiles and look for the H264 profile.
+    UINT profile_count = video_device->GetVideoDecoderProfileCount();
+    for (UINT profile_idx = 0; profile_idx < profile_count; profile_idx++) {
+      GUID profile_id = {};
+      hr = video_device->GetVideoDecoderProfile(profile_idx, &profile_id);
+      if (SUCCEEDED(hr) && (std::find(valid_guids.begin(), valid_guids.end(),
+                                      profile_id) != valid_guids.end())) {
+        decoder_guid = profile_id;
+        break;
+      }
+    }
+    if (decoder_guid == GUID_NULL)
+      return max_resolution;
+  }
 
   {
     TRACE_EVENT0("gpu,startup",
-                 "GetMaxH264Resolution. Resolution search begin");
+                 "GetMaxResolutionForGUIDs. Resolution search begin");
 
-    for (size_t res_idx = 0; res_idx < arraysize(resolution_array); res_idx++) {
+    for (auto& res : resolutions_to_test) {
       D3D11_VIDEO_DECODER_DESC desc = {};
       desc.Guid = decoder_guid;
-      desc.SampleWidth = resolution_array[res_idx].first;
-      desc.SampleHeight = resolution_array[res_idx].second;
+      desc.SampleWidth = res.width();
+      desc.SampleHeight = res.height();
       desc.OutputFormat = DXGI_FORMAT_NV12;
       UINT config_count = 0;
       hr = video_device->GetVideoDecoderConfigCount(&desc, &config_count);
@@ -1379,12 +1387,13 @@ std::pair<int, int> DXVAVideoDecodeAccelerator::GetMaxH264Resolution() {
       base::win::ScopedComPtr<ID3D11VideoDecoder> video_decoder;
       hr = video_device->CreateVideoDecoder(&desc, &config,
                                             video_decoder.GetAddressOf());
-      if (!video_decoder.Get())
+      if (!video_decoder)
         return max_resolution;
 
-      max_resolution = resolution_array[res_idx];
+      max_resolution = res;
     }
   }
+
   return max_resolution;
 }
 
@@ -1590,8 +1599,8 @@ bool DXVAVideoDecodeAccelerator::InitDecoder(VideoCodecProfile profile) {
 
   if (use_fp16_) {
     // TODO(hubbe): Share/copy P010/P016 textures.
-    share_nv12_textures_ = false;
-    copy_nv12_textures_ = false;
+    support_share_nv12_textures_ = false;
+    support_copy_nv12_textures_ = false;
   }
 
   return SetDecoderMediaTypes();
@@ -1652,15 +1661,15 @@ bool DXVAVideoDecodeAccelerator::CheckDecoderDxvaSupport() {
       !gl::g_driver_egl.ext.b_EGL_KHR_stream ||
       !gl::g_driver_egl.ext.b_EGL_KHR_stream_consumer_gltexture ||
       !gl::g_driver_egl.ext.b_EGL_NV_stream_consumer_gltexture_yuv) {
-    share_nv12_textures_ = false;
-    copy_nv12_textures_ = false;
+    support_share_nv12_textures_ = false;
+    support_copy_nv12_textures_ = false;
   }
 
   // The MS VP9 MFT doesn't pass through the bind flags we specify, so
   // textures aren't created with D3D11_BIND_SHADER_RESOURCE and can't be used
   // from ANGLE.
   if (using_ms_vp9_mft_)
-    share_nv12_textures_ = false;
+    support_share_nv12_textures_ = false;
 
   return true;
 }
@@ -1719,7 +1728,7 @@ bool DXVAVideoDecodeAccelerator::SetDecoderOutputMediaType(
     const GUID& subtype) {
   bool result = SetTransformOutputType(decoder_.Get(), subtype, 0, 0);
 
-  if (share_nv12_textures_) {
+  if (GetPictureBufferMechanism() == PictureBufferMechanism::BIND) {
     base::win::ScopedComPtr<IMFAttributes> out_attributes;
     HRESULT hr =
         decoder_->GetOutputStreamAttributes(0, out_attributes.GetAddressOf());
@@ -1947,7 +1956,7 @@ void DXVAVideoDecodeAccelerator::ProcessPendingSamples() {
       index->second->set_bound();
       index->second->set_color_space(pending_sample->color_space);
 
-      if (share_nv12_textures_) {
+      if (index->second->CanBindSamples()) {
         main_thread_task_runner_->PostTask(
             FROM_HERE,
             base::Bind(&DXVAVideoDecodeAccelerator::BindPictureBufferToSample,
@@ -2073,6 +2082,9 @@ void DXVAVideoDecodeAccelerator::StopDecoderThread() {
     base::AutoLock lock(decoder_lock_);
     sample_count = pending_output_samples_.size();
   }
+  size_t stale_output_picture_buffers_size =
+      stale_output_picture_buffers_.size();
+  PictureBufferMechanism mechanism = GetPictureBufferMechanism();
 
   base::debug::Alias(&last_exception_code);
   base::debug::Alias(&last_unhandled_error);
@@ -2082,6 +2094,8 @@ void DXVAVideoDecodeAccelerator::StopDecoderThread() {
   base::debug::Alias(&perf_frequency.QuadPart);
   base::debug::Alias(&output_array_size);
   base::debug::Alias(&sample_count);
+  base::debug::Alias(&stale_output_picture_buffers_size);
+  base::debug::Alias(&mechanism);
   decoder_thread_.Stop();
 }
 
@@ -2118,7 +2132,8 @@ void DXVAVideoDecodeAccelerator::RequestPictureBuffers(int width, int height) {
     // per picture buffer, 1 for the Y channel and 1 for the UV channels.
     // They're shared to ANGLE using EGL_NV_stream_consumer_gltexture_yuv, so
     // they need to be GL_TEXTURE_EXTERNAL_OES.
-    bool provide_nv12_textures = share_nv12_textures_ || copy_nv12_textures_;
+    bool provide_nv12_textures =
+        GetPictureBufferMechanism() != PictureBufferMechanism::COPY_TO_RGB;
     client_->ProvidePictureBuffers(
         kNumPictureBuffers,
         provide_nv12_textures ? PIXEL_FORMAT_NV12 : PIXEL_FORMAT_UNKNOWN,
@@ -2598,7 +2613,7 @@ void DXVAVideoDecodeAccelerator::BindPictureBufferToSample(
 
   DCHECK(!output_picture_buffers_.empty());
 
-  bool result = picture_buffer->BindSampleToTexture(sample);
+  bool result = picture_buffer->BindSampleToTexture(this, sample);
   RETURN_AND_NOTIFY_ON_FAILURE(result, "Failed to complete copying surface",
                                PLATFORM_FAILURE, );
 
@@ -2856,7 +2871,9 @@ bool DXVAVideoDecodeAccelerator::InitializeID3D11VideoProcessor(
         d3d11_processor_.Get(), 0, false);
   }
 
-  if (copy_nv12_textures_) {
+  if (GetPictureBufferMechanism() == PictureBufferMechanism::COPY_TO_NV12 ||
+      GetPictureBufferMechanism() ==
+          PictureBufferMechanism::DELAYED_COPY_TO_NV12) {
     // If we're copying NV12 textures, make sure we set the same
     // color space on input and output.
     D3D11_VIDEO_PROCESSOR_COLOR_SPACE d3d11_color_space = {0};
@@ -3031,12 +3048,45 @@ void DXVAVideoDecodeAccelerator::ConfigChanged(const Config& config) {
 }
 
 uint32_t DXVAVideoDecodeAccelerator::GetTextureTarget() const {
-  bool provide_nv12_textures = share_nv12_textures_ || copy_nv12_textures_;
-  return provide_nv12_textures ? GL_TEXTURE_EXTERNAL_OES : GL_TEXTURE_2D;
+  switch (GetPictureBufferMechanism()) {
+    case PictureBufferMechanism::BIND:
+    case PictureBufferMechanism::DELAYED_COPY_TO_NV12:
+    case PictureBufferMechanism::COPY_TO_NV12:
+      return GL_TEXTURE_EXTERNAL_OES;
+    case PictureBufferMechanism::COPY_TO_RGB:
+      return GL_TEXTURE_2D;
+  }
+  NOTREACHED();
+  return 0;
 }
 
+DXVAVideoDecodeAccelerator::PictureBufferMechanism
+DXVAVideoDecodeAccelerator::GetPictureBufferMechanism() const {
+  if (use_fp16_)
+    return PictureBufferMechanism::COPY_TO_RGB;
+  if (support_share_nv12_textures_)
+    return PictureBufferMechanism::BIND;
+  if (support_delayed_copy_nv12_textures_ && support_copy_nv12_textures_)
+    return PictureBufferMechanism::DELAYED_COPY_TO_NV12;
+  if (support_copy_nv12_textures_)
+    return PictureBufferMechanism::COPY_TO_NV12;
+  return PictureBufferMechanism::COPY_TO_RGB;
+}
+
+bool DXVAVideoDecodeAccelerator::ShouldUseANGLEDevice() const {
+  switch (GetPictureBufferMechanism()) {
+    case PictureBufferMechanism::BIND:
+    case PictureBufferMechanism::DELAYED_COPY_TO_NV12:
+      return true;
+    case PictureBufferMechanism::COPY_TO_NV12:
+    case PictureBufferMechanism::COPY_TO_RGB:
+      return false;
+  }
+  NOTREACHED();
+  return false;
+}
 ID3D11Device* DXVAVideoDecodeAccelerator::D3D11Device() const {
-  return share_nv12_textures_ ? angle_device_.Get() : d3d11_device_.Get();
+  return ShouldUseANGLEDevice() ? angle_device_.Get() : d3d11_device_.Get();
 }
 
 }  // namespace media

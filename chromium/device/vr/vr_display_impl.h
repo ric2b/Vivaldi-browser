@@ -23,10 +23,11 @@ class VRServiceImpl;
 // from/to mojom::VRDisplayClient (the render process representation of a VR
 // device).
 // VRDisplayImpl objects are owned by their respective VRServiceImpl instances.
-class VRDisplayImpl : public mojom::VRDisplay {
+class DEVICE_VR_EXPORT VRDisplayImpl : public mojom::VRDisplay {
  public:
   VRDisplayImpl(device::VRDevice* device,
-                VRServiceImpl* service,
+                int render_frame_process_id,
+                int render_frame_routing_id,
                 mojom::VRServiceClient* service_client,
                 mojom::VRDisplayInfoPtr display_info);
   ~VRDisplayImpl() override;
@@ -39,32 +40,31 @@ class VRDisplayImpl : public mojom::VRDisplay {
                           const base::Callback<void(bool)>& on_handled);
   virtual void OnDeactivate(mojom::VRDisplayEventReason reason);
 
+  void SetListeningForActivate(bool listening);
+  bool ListeningForActivate() { return listening_for_activate_; }
+  int ProcessId() { return render_frame_process_id_; }
+  int RoutingId() { return render_frame_routing_id_; }
+
  private:
   friend class VRDisplayImplTest;
-  friend class VRServiceImpl;
 
   void RequestPresent(bool secure_origin,
                       mojom::VRSubmitFrameClientPtr submit_client,
-                      const RequestPresentCallback& callback) override;
+                      mojom::VRPresentationProviderRequest request,
+                      RequestPresentCallback callback) override;
   void ExitPresent() override;
-  void SubmitFrame(int16_t frame_index,
-                   const gpu::MailboxHolder& mailbox) override;
+  void GetNextMagicWindowPose(GetNextMagicWindowPoseCallback callback) override;
 
-  void UpdateLayerBounds(int16_t frame_index,
-                         mojom::VRLayerBoundsPtr left_bounds,
-                         mojom::VRLayerBoundsPtr right_bounds,
-                         int16_t source_width,
-                         int16_t source_height) override;
-  void GetVRVSyncProvider(mojom::VRVSyncProviderRequest request) override;
-
-  void RequestPresentResult(const RequestPresentCallback& callback,
+  void RequestPresentResult(RequestPresentCallback callback,
                             bool secure_origin,
                             bool success);
 
   mojo::Binding<mojom::VRDisplay> binding_;
   mojom::VRDisplayClientPtr client_;
   device::VRDevice* device_;
-  VRServiceImpl* service_;
+  const int render_frame_process_id_;
+  const int render_frame_routing_id_;
+  bool listening_for_activate_ = false;
 
   base::WeakPtrFactory<VRDisplayImpl> weak_ptr_factory_;
 };

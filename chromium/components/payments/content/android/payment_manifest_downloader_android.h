@@ -7,9 +7,49 @@
 
 #include <jni.h>
 
+#include "base/android/jni_android.h"
+#include "base/macros.h"
+#include "base/memory/ref_counted.h"
+#include "components/payments/content/payment_manifest_downloader.h"
+
+namespace net {
+class URLRequestContextGetter;
+}
+
 namespace payments {
 
-bool RegisterPaymentManifestDownloader(JNIEnv* env);
+// Android wrapper for the payment manifest downloader.
+class PaymentManifestDownloaderAndroid {
+ public:
+  explicit PaymentManifestDownloaderAndroid(
+      const scoped_refptr<net::URLRequestContextGetter>& context);
+  ~PaymentManifestDownloaderAndroid();
+
+  void DownloadPaymentMethodManifest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller,
+      const base::android::JavaParamRef<jobject>& juri,
+      const base::android::JavaParamRef<jobject>& jcallback);
+
+  void DownloadWebAppManifest(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jcaller,
+      const base::android::JavaParamRef<jobject>& juri,
+      const base::android::JavaParamRef<jobject>& jcallback);
+
+  // Deletes this object.
+  void Destroy(JNIEnv* env,
+               const base::android::JavaParamRef<jobject>& jcaller);
+
+  // Allows HTTP URLs. Should be used for testing only.
+  void AllowHttpForTest(JNIEnv* env,
+                        const base::android::JavaParamRef<jobject>& jcaller);
+
+ private:
+  PaymentManifestDownloader downloader_;
+
+  DISALLOW_COPY_AND_ASSIGN(PaymentManifestDownloaderAndroid);
+};
 
 }  // namespace payments
 

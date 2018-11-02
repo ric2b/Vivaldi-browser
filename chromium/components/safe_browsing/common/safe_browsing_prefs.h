@@ -8,21 +8,29 @@
 #define COMPONENTS_SAFE_BROWSING_COMMON_SAFE_BROWSING_PREFS_H_
 
 #include "base/feature_list.h"
+#include "base/values.h"
 
+class PrefRegistrySimple;
 class PrefService;
 
 namespace prefs {
+// Boolean that is true when SafeBrowsing is enabled.
+extern const char kSafeBrowsingEnabled[];
+
 // Boolean that tell us whether Safe Browsing extended reporting is enabled.
 extern const char kSafeBrowsingExtendedReportingEnabled[];
 
-// Boolean indicating whether Safe Browsing Scout reporting is enabled, which
-// collects data for malware detection.
-extern const char kSafeBrowsingScoutReportingEnabled[];
+// Boolean that tells us whether users are given the option to opt in to Safe
+// Browsing extended reporting. This is exposed as a preference that can be
+// overridden by enterprise policy.
+extern const char kSafeBrowsingExtendedReportingOptInAllowed[];
 
-// Boolean indicating whether the Scout reporting workflow is enabled. This
-// affects which of SafeBrowsingExtendedReporting or SafeBrowsingScoutReporting
-// is used.
-extern const char kSafeBrowsingScoutGroupSelected[];
+// A dictionary mapping incident types to a dict of incident key:digest pairs.
+extern const char kSafeBrowsingIncidentsSent[];
+
+// Boolean that is true when the SafeBrowsing interstitial should not allow
+// users to proceed anyway.
+extern const char kSafeBrowsingProceedAnywayDisabled[];
 
 // Boolean indicating whether the user has ever seen a security interstitial
 // containing the legacy Extended Reporting opt-in.
@@ -31,6 +39,15 @@ extern const char kSafeBrowsingSawInterstitialExtendedReporting[];
 // Boolean indicating whether the user has ever seen a security interstitial
 // containing the new Scout opt-in.
 extern const char kSafeBrowsingSawInterstitialScoutReporting[];
+
+// Boolean indicating whether the Scout reporting workflow is enabled. This
+// affects which of SafeBrowsingExtendedReporting or SafeBrowsingScoutReporting
+// is used.
+extern const char kSafeBrowsingScoutGroupSelected[];
+
+// Boolean indicating whether Safe Browsing Scout reporting is enabled, which
+// collects data for malware detection.
+extern const char kSafeBrowsingScoutReportingEnabled[];
 }
 
 namespace safe_browsing {
@@ -113,6 +130,10 @@ const char* GetExtendedReportingPrefName(const PrefService& prefs);
 // TODO: this is temporary (crbug.com/662944)
 void InitializeSafeBrowsingPrefs(PrefService* prefs);
 
+// Returns whether the user is able to modify the Safe Browsing Extended
+// Reporting opt-in.
+bool IsExtendedReportingOptInAllowed(const PrefService& prefs);
+
 // Returns whether Safe Browsing Extended Reporting is currently enabled.
 // This should be used to decide if any of the reporting preferences are set,
 // regardless of which specific one is set.
@@ -123,6 +144,9 @@ bool IsScout(const PrefService& prefs);
 
 // Updates UMA metrics about Safe Browsing Extended Reporting states.
 void RecordExtendedReportingMetrics(const PrefService& prefs);
+
+// Registers user preferences related to Safe Browsing.
+void RegisterProfilePrefs(PrefRegistrySimple* registry);
 
 // Sets the currently active Safe Browsing Extended Reporting preference to the
 // specified value. The |location| indicates the UI where the change was
@@ -145,6 +169,11 @@ void UpdateMetricsAfterSecurityInterstitial(const PrefService& prefs,
 // user. This may trigger the user to begin seeing the Scout opt-in text
 // depending on their experiment state.
 void UpdatePrefsBeforeSecurityInterstitial(PrefService* prefs);
+
+// Returns a list of preferences to be shown in chrome://safe-browsing. The
+// preferences are passed as an alternating sequence of preference names and
+// values represented as strings.
+base::ListValue GetSafeBrowsingPreferencesList(PrefService* prefs);
 
 }  // namespace safe_browsing
 

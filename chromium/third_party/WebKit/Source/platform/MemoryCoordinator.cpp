@@ -5,15 +5,23 @@
 #include "platform/MemoryCoordinator.h"
 
 #include "base/sys_info.h"
-#include "platform/fonts/FontCache.h"
+#include "build/build_config.h"
+#include "platform/WebTaskRunner.h"
+#include "platform/fonts/FontGlobalContext.h"
 #include "platform/graphics/ImageDecodingStore.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/allocator/Partitions.h"
+#include "public/platform/WebThread.h"
+
+#if defined(OS_ANDROID)
+#include "base/android/sys_utils.h"
+#endif
 
 namespace blink {
 
 // static
 bool MemoryCoordinator::is_low_end_device_ = false;
+int64_t MemoryCoordinator::physical_memory_mb_ = 0;
 
 // static
 bool MemoryCoordinator::IsLowEndDevice() {
@@ -21,8 +29,29 @@ bool MemoryCoordinator::IsLowEndDevice() {
 }
 
 // static
+int64_t MemoryCoordinator::GetPhysicalMemoryMB() {
+  return physical_memory_mb_;
+}
+
+// static
+void MemoryCoordinator::SetPhysicalMemoryMBForTesting(
+    int64_t physical_memory_mb) {
+  physical_memory_mb_ = physical_memory_mb;
+}
+
+// static
+bool MemoryCoordinator::IsCurrentlyLowMemory() {
+#if defined(OS_ANDROID)
+  return base::android::SysUtils::IsCurrentlyLowMemory();
+#else
+  return false;
+#endif
+}
+
+// static
 void MemoryCoordinator::Initialize() {
   is_low_end_device_ = ::base::SysInfo::IsLowEndDevice();
+  physical_memory_mb_ = ::base::SysInfo::AmountOfPhysicalMemoryMB();
 }
 
 // static
@@ -38,6 +67,13 @@ MemoryCoordinator& MemoryCoordinator::Instance() {
   return *external.Get();
 }
 
+void MemoryCoordinator::RegisterThread(WebThread* thread) {
+  MemoryCoordinator::Instance().web_threads_.insert(thread);
+}
+
+void MemoryCoordinator::UnregisterThread(WebThread* thread) {
+  MemoryCoordinator::Instance().web_threads_.erase(thread);
+}
 
 MemoryCoordinator::MemoryCoordinator() {}
 
@@ -76,6 +112,15 @@ void MemoryCoordinator::OnPurgeMemory() {
   // cache in purge+throttle.
   ImageDecodingStore::Instance().Clear();
   WTF::Partitions::DecommitFreeableMemory();
+
+  // Thread-specific data never issues a layout, so we are safe here.
+  for (auto thread : web_threads_) {
+    if (!thread->GetWebTaskRunner())
+      continue;
+
+    thread->GetWebTaskRunner()->PostTask(
+        FROM_HERE, WTF::Bind(MemoryCoordinator::ClearThreadSpecificMemory));
+  }
 }
 
 void MemoryCoordinator::ClearMemory() {
@@ -83,7 +128,11 @@ void MemoryCoordinator::ClearMemory() {
   // TODO(tasak|bashi): Make ImageDecodingStore and FontCache be
   // MemoryCoordinatorClients rather than clearing caches here.
   ImageDecodingStore::Instance().Clear();
-  FontCache::GetFontCache()->Invalidate();
+  FontGlobalContext::ClearMemory();
+}
+
+void MemoryCoordinator::ClearThreadSpecificMemory() {
+  FontGlobalContext::ClearMemory();
 }
 
 DEFINE_TRACE(MemoryCoordinator) {

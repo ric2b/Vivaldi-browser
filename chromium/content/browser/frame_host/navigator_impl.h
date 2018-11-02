@@ -23,7 +23,7 @@ namespace content {
 
 class NavigationControllerImpl;
 class NavigatorDelegate;
-class ResourceRequestBodyImpl;
+class ResourceRequestBody;
 struct LoadCommittedDetails;
 
 // This class is an implementation of Navigator, responsible for managing
@@ -64,16 +64,18 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                               bool is_same_document_history_load) override;
   bool NavigateNewChildFrame(RenderFrameHostImpl* render_frame_host,
                              const GURL& default_url) override;
-  void RequestOpenURL(RenderFrameHostImpl* render_frame_host,
-                      const GURL& url,
-                      bool uses_post,
-                      const scoped_refptr<ResourceRequestBodyImpl>& body,
-                      const std::string& extra_headers,
-                      const Referrer& referrer,
-                      WindowOpenDisposition disposition,
-                      bool force_new_process_for_new_contents,
-                      bool should_replace_current_entry,
-                      bool user_gesture) override;
+  void RequestOpenURL(
+      RenderFrameHostImpl* render_frame_host,
+      const GURL& url,
+      bool uses_post,
+      const scoped_refptr<ResourceRequestBody>& body,
+      const std::string& extra_headers,
+      const Referrer& referrer,
+      WindowOpenDisposition disposition,
+      bool force_new_process_for_new_contents,
+      bool should_replace_current_entry,
+      bool user_gesture,
+      blink::WebTriggeringEventInfo triggering_event_info) override;
   void RequestTransferURL(RenderFrameHostImpl* render_frame_host,
                           const GURL& url,
                           SiteInstance* source_site_instance,
@@ -83,7 +85,7 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                           const GlobalRequestID& transferred_global_request_id,
                           bool should_replace_current_entry,
                           const std::string& method,
-                          scoped_refptr<ResourceRequestBodyImpl> post_body,
+                          scoped_refptr<ResourceRequestBody> post_body,
                           const std::string& extra_headers) override;
   void OnBeforeUnloadACK(FrameTreeNode* frame_tree_node,
                          bool proceed,
@@ -118,25 +120,24 @@ class CONTENT_EXPORT NavigatorImpl : public Navigator {
                        bool is_same_document_history_load,
                        bool is_history_navigation_in_new_child,
                        bool is_pending_entry,
-                       const scoped_refptr<ResourceRequestBodyImpl>& post_body);
+                       const scoped_refptr<ResourceRequestBody>& post_body);
 
   bool ShouldAssignSiteForURL(const GURL& url);
 
   // PlzNavigate: if needed, sends a BeforeUnload IPC to the renderer to ask it
   // to execute the beforeUnload event. Otherwise, the navigation request will
   // be started.
-  void RequestNavigation(
-      FrameTreeNode* frame_tree_node,
-      const GURL& dest_url,
-      const Referrer& dest_referrer,
-      const FrameNavigationEntry& frame_entry,
-      const NavigationEntryImpl& entry,
-      ReloadType reload_type,
-      PreviewsState previews_state,
-      bool is_same_document_history_load,
-      bool is_history_navigation_in_new_child,
-      const scoped_refptr<ResourceRequestBodyImpl>& post_body,
-      base::TimeTicks navigation_start);
+  void RequestNavigation(FrameTreeNode* frame_tree_node,
+                         const GURL& dest_url,
+                         const Referrer& dest_referrer,
+                         const FrameNavigationEntry& frame_entry,
+                         const NavigationEntryImpl& entry,
+                         ReloadType reload_type,
+                         PreviewsState previews_state,
+                         bool is_same_document_history_load,
+                         bool is_history_navigation_in_new_child,
+                         const scoped_refptr<ResourceRequestBody>& post_body,
+                         base::TimeTicks navigation_start);
 
   void RecordNavigationMetrics(
       const LoadCommittedDetails& details,

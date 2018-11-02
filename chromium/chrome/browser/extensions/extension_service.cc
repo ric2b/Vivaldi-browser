@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <algorithm>
 #include <iterator>
 #include <memory>
 #include <set>
@@ -18,6 +17,7 @@
 #include "base/location.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/stl_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_tokenizer.h"
 #include "base/strings/stringprintf.h"
@@ -60,6 +60,7 @@
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/favicon_source.h"
 #include "chrome/browser/ui/webui/theme_source.h"
+#include "chrome/browser/upgrade_detector.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/crash_keys.h"
 #include "chrome/common/extensions/extension_constants.h"
@@ -73,12 +74,15 @@
 #include "content/public/browser/storage_partition.h"
 #include "extensions/browser/app_sorting.h"
 #include "extensions/browser/event_router.h"
+#include "extensions/browser/extension_file_task_runner.h"
 #include "extensions/browser/extension_host.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/browser/extension_system.h"
+#include "extensions/browser/extension_util.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/browser/external_install_info.h"
 #include "extensions/browser/install_flag.h"
+#include "extensions/browser/lazy_background_task_queue.h"
 #include "extensions/browser/renderer_startup_helper.h"
 #include "extensions/browser/runtime_data.h"
 #include "extensions/browser/uninstall_reason.h"
@@ -97,6 +101,7 @@
 #include "extensions/common/permissions/api_permission.h"
 #include "extensions/common/permissions/permission_message_provider.h"
 #include "extensions/common/permissions/permissions_data.h"
+#include "extensions/common/switches.h"
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
 #include "chrome/browser/supervised_user/supervised_user_service.h"
@@ -147,6 +152,8 @@ const int kUpdateIdleDelay = 5;
 // Comma-separated list of directories with extensions to load.
 // TODO(samuong): Remove this in M58 (see comment in ExtensionService::Init).
 const char kDeprecatedLoadComponentExtension[] = "load-component-extension";
+
+void DoNothingWithExtensionHost(extensions::ExtensionHost* host) {}
 
 }  // namespace
 
@@ -324,13 +331,6 @@ ExtensionService::ExtensionService(Profile* profile,
       install_directory_(install_directory),
       extensions_enabled_(extensions_enabled),
       ready_(ready),
-      // We should be able to interrupt any part of extension install process
-      // during shutdown. SKIP_ON_SHUTDOWN ensures that not extension install
-      // task will be stopped while it is running but that tasks that have not
-      // started running will be skipped on shutdown.
-      file_task_runner_(base::CreateSequencedTaskRunnerWithTraits(
-          {base::MayBlock(), base::TaskPriority::BACKGROUND,
-           base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN})),
       shared_module_service_(new extensions::SharedModuleService(profile_)),
       renderer_helper_(
           extensions::RendererStartupHelperFactory::GetForBrowserContext(
@@ -351,11 +351,11 @@ ExtensionService::ExtensionService(Profile* profile,
                  content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this, content::NOTIFICATION_RENDERER_PROCESS_TERMINATED,
                  content::NotificationService::AllBrowserContextsAndSources());
-  registrar_.Add(this, chrome::NOTIFICATION_UPGRADE_RECOMMENDED,
-                 content::NotificationService::AllBrowserContextsAndSources());
   registrar_.Add(this,
                  chrome::NOTIFICATION_PROFILE_DESTRUCTION_STARTED,
                  content::Source<Profile>(profile_));
+
+  UpgradeDetector::GetInstance()->AddObserver(this);
 
   extensions::ExtensionManagementFactory::GetForBrowserContext(profile_)
       ->AddObserver(this);
@@ -363,11 +363,15 @@ ExtensionService::ExtensionService(Profile* profile,
   // Set up the ExtensionUpdater.
   if (autoupdate_enabled) {
     int update_frequency = extensions::kDefaultUpdateFrequencySeconds;
-    if (command_line->HasSwitch(switches::kExtensionsUpdateFrequency)) {
+    bool is_extensions_update_frequency_switch_used =
+        command_line->HasSwitch(switches::kExtensionsUpdateFrequency);
+    if (is_extensions_update_frequency_switch_used) {
       base::StringToInt(command_line->GetSwitchValueASCII(
           switches::kExtensionsUpdateFrequency),
           &update_frequency);
     }
+    UMA_HISTOGRAM_BOOLEAN("Extensions.UpdateFrequencyCommandLineFlagIsUsed",
+                          is_extensions_update_frequency_switch_used);
     updater_.reset(new extensions::ExtensionUpdater(
         this,
         extension_prefs,
@@ -413,6 +417,7 @@ extensions::PendingExtensionManager*
 }
 
 ExtensionService::~ExtensionService() {
+  UpgradeDetector::GetInstance()->RemoveObserver(this);
   // No need to unload extensions here because they are profile-scoped, and the
   // profile is in the process of being deleted.
   for (const auto& provider : external_extension_providers_)
@@ -450,24 +455,20 @@ void ExtensionService::Init() {
   bool load_saved_extensions = true;
   bool load_command_line_extensions = extensions_enabled_;
 #if defined(OS_CHROMEOS)
-  if (chromeos::ProfileHelper::IsSigninProfile(profile_)) {
+  if (chromeos::ProfileHelper::IsSigninProfile(profile_) ||
+      chromeos::ProfileHelper::IsLockScreenAppProfile(profile_)) {
     load_saved_extensions = false;
     load_command_line_extensions = false;
   }
 #endif
-  if (load_saved_extensions) {
+  if (load_saved_extensions)
     extensions::InstalledLoader(this).LoadAllExtensions();
-  } else {
-    // InstalledLoader::LoadAllExtensions normally calls
-    // OnLoadedInstalledExtensions itself, but here we circumvent that path.
-    // Call OnLoadedInstalledExtensions directly.
-    // TODO(devlin): LoadInstalledExtensions() is synchronous - we can simplify
-    // this.
-    OnLoadedInstalledExtensions();
-  }
+
+  OnInstalledExtensionsLoaded();
+
   LoadExtensionsFromCommandLineFlag(switches::kDisableExtensionsExcept);
   if (load_command_line_extensions)
-    LoadExtensionsFromCommandLineFlag(switches::kLoadExtension);
+    LoadExtensionsFromCommandLineFlag(extensions::switches::kLoadExtension);
   // ChromeDriver has no way of determining the Chrome version until after
   // launch, so it needs to continue passing load-component-extension until it
   // stops supporting Chrome 56 (when M58 is released). These extensions are
@@ -933,11 +934,7 @@ void ExtensionService::EnableExtension(const std::string& extension_id) {
 
   NotifyExtensionLoaded(extension);
 
-  // Notify listeners that the extension was enabled.
-  content::NotificationService::current()->Notify(
-      extensions::NOTIFICATION_EXTENSION_ENABLED,
-      content::Source<Profile>(profile_),
-      content::Details<const Extension>(extension));
+  MaybeSpinUpLazyBackgroundPage(extension);
 }
 
 void ExtensionService::DisableExtension(const std::string& extension_id,
@@ -1025,7 +1022,7 @@ void ExtensionService::DisableUserExtensionsExcept(
             extensions::ManifestURL::GetUpdateURL(extension.get())))
       continue;
     const std::string& id = extension->id();
-    if (except_ids.end() == std::find(except_ids.begin(), except_ids.end(), id))
+    if (!base::ContainsValue(except_ids, id))
       DisableExtension(id, extensions::Extension::DISABLE_USER_ACTION);
   }
 }
@@ -1230,10 +1227,6 @@ content::BrowserContext* ExtensionService::GetBrowserContext() const {
 
 bool ExtensionService::is_ready() {
   return ready_->is_signaled();
-}
-
-base::SequencedTaskRunner* ExtensionService::GetFileTaskRunner() {
-  return file_task_runner_.get();
 }
 
 void ExtensionService::CheckManagementPolicy() {
@@ -1473,6 +1466,7 @@ void ExtensionService::ReloadExtensionsForTest() {
   UnloadAllExtensionsInternal();
   component_loader_->LoadAll();
   extensions::InstalledLoader(this).LoadAllExtensions();
+  OnInstalledExtensionsLoaded();
   // Don't call SetReadyAndNotifyListeners() since tests call this multiple
   // times.
 }
@@ -1488,25 +1482,6 @@ void ExtensionService::SetReadyAndNotifyListeners() {
       extensions::NOTIFICATION_EXTENSIONS_READY_DEPRECATED,
       content::Source<Profile>(profile_),
       content::NotificationService::NoDetails());
-}
-
-void ExtensionService::OnLoadedInstalledExtensions() {
-  if (updater_)
-    updater_->Start();
-
-  // Enable any Shared Modules that incorrectly got disabled previously.
-  // This is temporary code to fix incorrect behavior from previous versions of
-  // Chrome and can be removed after several releases (perhaps M60).
-  extensions::ExtensionList to_enable;
-  for (const auto& extension : registry_->disabled_extensions()) {
-    if (SharedModuleInfo::IsSharedModule(extension.get()))
-      to_enable.push_back(extension);
-  }
-  for (const auto& extension : to_enable) {
-    EnableExtension(extension->id());
-  }
-
-  OnBlacklistUpdated();
 }
 
 void ExtensionService::AddExtension(const Extension* extension) {
@@ -1625,11 +1600,10 @@ void ExtensionService::AddExtension(const Extension* extension) {
     NotifyExtensionLoaded(extension);
   }
 
-  // See Vivaldi Bug VB-3153.
   if (extension->id() == vivaldi::kVivaldiAppId) {
-    // Make sure the preferences are accessible by Vivaldi.
-    extension_prefs_->RegisterVivaldiForExtPrefs();
-    extension_prefs_->LoadExtPrefsForVivaldi(extension);
+    // Make sure the preferences are accessible by Vivaldi if added via
+    // |ComponentLoader|.
+    extension_prefs_->RegisterAndLoadExtPrefsForVivaldi();
   }
 
   system_->runtime_data()->SetBeingUpgraded(extension->id(), false);
@@ -1951,7 +1925,8 @@ void ExtensionService::OnExtensionManagementSettingsChanged() {
   for (const auto& extension : *all_extensions) {
     if (!settings->IsPermissionSetAllowed(
             extension.get(),
-            extension->permissions_data()->active_permissions())) {
+            extension->permissions_data()->active_permissions()) &&
+        CanBlockExtension(extension.get())) {
       extensions::PermissionsUpdater(profile()).RemovePermissionsUnsafe(
           extension.get(), *settings->GetBlockedPermissions(extension.get()));
     }
@@ -2049,11 +2024,6 @@ void ExtensionService::FinishInstallation(
 
   // Notify observers that need to know when an installation is complete.
   registry_->TriggerOnInstalled(extension, is_update);
-
-  if (extension->id() == vivaldi::kVivaldiAppId) {
-      // Make sure all the preferences is created for Vivaldi.
-      extension_prefs_->RegisterVivaldiForExtPrefs();
-  }
 
   // Check extensions that may have been delayed only because this shared module
   // was not available.
@@ -2302,12 +2272,6 @@ void ExtensionService::Observe(int type,
                          system_->info_map(), process->GetID()));
       break;
     }
-    case chrome::NOTIFICATION_UPGRADE_RECOMMENDED: {
-      // Notify observers that chrome update is available.
-      for (auto& observer : update_observers_)
-        observer.OnChromeUpdateAvailable();
-      break;
-    }
     case chrome::NOTIFICATION_PROFILE_DESTRUCTION_STARTED: {
       OnProfileDestructionStarted();
       break;
@@ -2411,6 +2375,12 @@ void ExtensionService::OnBlacklistUpdated() {
   blacklist_->GetBlacklistedIDs(
       registry_->GenerateInstalledExtensionsSet()->GetIDs(),
       base::Bind(&ExtensionService::ManageBlacklist, AsWeakPtr()));
+}
+
+void ExtensionService::OnUpgradeRecommended() {
+  // Notify observers that chrome update is available.
+  for (auto& observer : update_observers_)
+    observer.OnChromeUpdateAvailable();
 }
 
 void ExtensionService::ManageBlacklist(
@@ -2572,6 +2542,12 @@ void ExtensionService::UnregisterInstallGate(
   }
 }
 
+base::SequencedTaskRunner* ExtensionService::GetFileTaskRunner() {
+  // TODO(devlin): Update callers to use GetExtensionFileTaskRunner()
+  // directly.
+  return extensions::GetExtensionFileTaskRunner().get();
+}
+
 // Used only by test code.
 void ExtensionService::UnloadAllExtensionsInternal() {
   profile_->GetExtensionSpecialStoragePolicy()->RevokeRightsForAllExtensions();
@@ -2591,4 +2567,49 @@ void ExtensionService::OnProfileDestructionStarted() {
        ++it) {
     UnloadExtension(*it, UnloadedExtensionReason::PROFILE_SHUTDOWN);
   }
+}
+
+void ExtensionService::OnInstalledExtensionsLoaded() {
+  if (updater_)
+    updater_->Start();
+
+  // Enable any Shared Modules that incorrectly got disabled previously.
+  // This is temporary code to fix incorrect behavior from previous versions of
+  // Chrome and can be removed after several releases (perhaps M60).
+  extensions::ExtensionList to_enable;
+  for (const auto& extension : registry_->disabled_extensions()) {
+    if (SharedModuleInfo::IsSharedModule(extension.get()))
+      to_enable.push_back(extension);
+  }
+  for (const auto& extension : to_enable) {
+    EnableExtension(extension->id());
+  }
+
+  OnBlacklistUpdated();
+}
+
+void ExtensionService::MaybeSpinUpLazyBackgroundPage(
+    const Extension* extension) {
+  if (!extensions::BackgroundInfo::HasLazyBackgroundPage(extension))
+    return;
+
+  // For orphaned devtools, we will reconnect devtools to it later in
+  // DidCreateRenderViewForBackgroundPage().
+  OrphanedDevTools::iterator iter = orphaned_dev_tools_.find(extension->id());
+  bool has_orphaned_dev_tools = iter != orphaned_dev_tools_.end();
+
+  // Reloading component extension does not trigger install, so RuntimeAPI won't
+  // be able to detect its loading. Therefore, we need to spin up its lazy
+  // background page.
+  bool is_component_extension =
+      Manifest::IsComponentLocation(extension->location());
+
+  if (!has_orphaned_dev_tools && !is_component_extension)
+    return;
+
+  // Wake up the event page by posting a dummy task.
+  extensions::LazyBackgroundTaskQueue* queue =
+      extensions::LazyBackgroundTaskQueue::Get(profile_);
+  queue->AddPendingTask(profile_, extension->id(),
+                        base::Bind(&DoNothingWithExtensionHost));
 }

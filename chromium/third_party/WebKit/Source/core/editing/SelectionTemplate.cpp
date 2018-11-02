@@ -14,8 +14,6 @@ SelectionTemplate<Strategy>::SelectionTemplate(const SelectionTemplate& other)
     : base_(other.base_),
       extent_(other.extent_),
       affinity_(other.affinity_),
-      granularity_(other.granularity_),
-      has_trailing_whitespace_(other.has_trailing_whitespace_),
       is_directional_(other.is_directional_),
       is_handle_visible_(other.is_handle_visible_)
 #if DCHECK_IS_ON()
@@ -24,9 +22,6 @@ SelectionTemplate<Strategy>::SelectionTemplate(const SelectionTemplate& other)
 #endif
 {
   DCHECK(other.AssertValid());
-  if (!has_trailing_whitespace_)
-    return;
-  DCHECK_EQ(granularity_, kWordGranularity) << *this;
 }
 
 template <typename Strategy>
@@ -43,8 +38,7 @@ bool SelectionTemplate<Strategy>::operator==(
     return false;
   DCHECK_EQ(base_.GetDocument(), other.GetDocument()) << *this << ' ' << other;
   return base_ == other.base_ && extent_ == other.extent_ &&
-         affinity_ == other.affinity_ && granularity_ == other.granularity_ &&
-         has_trailing_whitespace_ == other.has_trailing_whitespace_ &&
+         affinity_ == other.affinity_ &&
          is_directional_ == other.is_directional_ &&
          is_handle_visible_ == other.is_handle_visible_;
 }
@@ -83,14 +77,12 @@ const PositionTemplate<Strategy>& SelectionTemplate<Strategy>::Extent() const {
 
 template <typename Strategy>
 bool SelectionTemplate<Strategy>::IsCaret() const {
-  return base_.IsNotNull() && base_ == extent_ &&
-         granularity_ == kCharacterGranularity;
+  return base_.IsNotNull() && base_ == extent_;
 }
 
 template <typename Strategy>
 bool SelectionTemplate<Strategy>::IsRange() const {
-  return base_ != extent_ ||
-         (base_.IsNotNull() && granularity_ != kCharacterGranularity);
+  return base_ != extent_;
 }
 
 template <typename Strategy>
@@ -160,11 +152,10 @@ SelectionTemplate<Strategy>::ComputeStartPosition() const {
 }
 
 template <typename Strategy>
-SelectionType SelectionTemplate<Strategy>::SelectionTypeWithLegacyGranularity()
-    const {
+SelectionType SelectionTemplate<Strategy>::Type() const {
   if (base_.IsNull())
     return kNoSelection;
-  if (base_ == extent_ && granularity_ == kCharacterGranularity)
+  if (base_ == extent_)
     return kCaretSelection;
   return kRangeSelection;
 }
@@ -305,22 +296,6 @@ SelectionTemplate<Strategy>::Builder::SetBaseAndExtentDeprecated(
   if (extent.IsNotNull())
     return Collapse(extent);
   return SetBaseAndExtent(EphemeralRangeTemplate<Strategy>());
-}
-
-template <typename Strategy>
-typename SelectionTemplate<Strategy>::Builder&
-SelectionTemplate<Strategy>::Builder::SetGranularity(
-    TextGranularity granularity) {
-  selection_.granularity_ = granularity;
-  return *this;
-}
-
-template <typename Strategy>
-typename SelectionTemplate<Strategy>::Builder&
-SelectionTemplate<Strategy>::Builder::SetHasTrailingWhitespace(
-    bool has_trailing_whitespace) {
-  selection_.has_trailing_whitespace_ = has_trailing_whitespace;
-  return *this;
 }
 
 template <typename Strategy>

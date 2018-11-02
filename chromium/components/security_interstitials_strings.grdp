@@ -49,14 +49,6 @@
     </message>
   </if>
 
-  <!-- Extended reporting strings -->
-  <message name="IDS_SAFE_BROWSING_PRIVACY_POLICY_URL" translateable="false">
-    https://www.google.com/chrome/browser/privacy/#safe-browsing-policies
-  </message>
-  <message name="IDS_SAFE_BROWSING_WHITEPAPER_URL" translateable="false">
-    https://www.google.com/chrome/browser/privacy/whitepaper.html#extendedreport
-  </message>
-
   <!-- SSL error page -->
   <message name="IDS_SSL_V2_TITLE" desc="The tab title for the SSL interstitial.">
     Privacy error
@@ -66,6 +58,24 @@
   </message>
   <message name="IDS_SSL_V2_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the SSL interstitial.">
     Attackers might be trying to steal your information from <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="SITE">$1<ex>google.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph> (for example, passwords, messages, or credit cards). <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Learn more<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph>
+  </message>
+
+  <!-- SSL error page: Superfish-specific -->
+  <message name="IDS_SSL_SUPERFISH_HEADING" desc="The large heading at the top of the Superfish-specific SSL interstitial.">
+    Software on your computer is stopping Chrome from safely connecting to the web
+  </message>
+  <message name="IDS_SSL_SUPERFISH_PRIMARY_PARAGRAPH" desc="The primary explanatory paragraph for the Superfish-specific SSL interstitial.">
+    <ph name="BEGIN_PARAGRAPH">&lt;p&gt;</ph>Follow these steps to temporarily disable the software so you can get on the web. You'll need administrator privileges.<ph name="END_PARAGRAPH">&lt;/p&gt;</ph>
+
+    <ph name="BEGIN_LIST">&lt;ol&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Click <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Start<ph name="END_BOLD">&lt;/strong&gt;</ph>, then search for and select <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>"View local services"<ph name="END_BOLD">&lt;/strong&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Select <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>VisualDiscovery<ph name="END_BOLD">&lt;/strong&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Under <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Startup type<ph name="END_BOLD">&lt;/strong&gt;</ph>, select <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Disabled<ph name="END_BOLD">&lt;/strong&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Under <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Service status<ph name="END_BOLD">&lt;/strong&gt;</ph>, click <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Stop<ph name="END_BOLD">&lt;/strong&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Click <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Apply<ph name="END_BOLD">&lt;/strong&gt;</ph>, then click <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>OK<ph name="END_BOLD">&lt;/strong&gt;</ph>
+    <ph name="LIST_ITEM">&lt;li&gt;</ph>Visit the <ph name="BEGIN_LEARN_MORE_LINK">&lt;a href="#" id="learn-more-link"&gt;</ph>Chrome help center<ph name="END_LEARN_MORE_LINK">&lt;/a&gt;</ph> to learn how to permanently remove the software from your computer
+    <ph name="END_LIST">&lt;/ol&gt;</ph>
+
   </message>
 
   <!-- SSL error page: overridable -->
@@ -218,16 +228,16 @@
 
   <!-- WebView Safe Browsing quiet interstitals medium sized -->
   <message name="IDS_MALWARE_WEBVIEW_HEADING" desc="The heading of the malware interstitial on medium sized Webview.">
-    Dangerous content blocked
+    Dangerous content blocked.
   </message>
   <message name="IDS_MALWARE_WEBVIEW_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page. Allows the user to proceed using a link.">
-    This content might try to install dangerous software on your device that steals or deletes your information. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>.
+    This content might try to install dangerous software on your device that steals or deletes your information. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
   <message name="IDS_PHISHING_WEBVIEW_HEADING" desc="The heading of the phishing interstitial on medium sized Webview.">
-    Deceptive content blocked
+    Deceptive content blocked.
   </message>
   <message name="IDS_PHISHING_WEBVIEW_EXPLANATION_PARAGRAPH" desc="The explanation of why Safe Browsing has blocked the page. Allows the user to proceed using a link.">
-    This content might try to trick you into installing software or revealing personal information. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>.
+    This content might try to trick you into installing software or revealing personal information. <ph name="BEGIN_LINK">&lt;a href="#" id="proceed-link"&gt;</ph>Show anyway<ph name="END_LINK">&lt;/a&gt;</ph>
   </message>
 
 </grit-part>

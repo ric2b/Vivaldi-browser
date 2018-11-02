@@ -34,11 +34,10 @@
 #include "core/css/MediaQueryEvaluator.h"
 #include "core/css/RuleSet.h"
 #include "core/css/StyleSheetContents.h"
-#include "core/dom/Fullscreen.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLHtmlElement.h"
 #include "core/layout/LayoutTheme.h"
-#include "platform/PlatformResourceLoader.h"
+#include "platform/DataResourceHelper.h"
 #include "platform/wtf/LeakAnnotations.h"
 
 namespace blink {
@@ -79,17 +78,26 @@ CSSDefaultStyleSheets::CSSDefaultStyleSheets() {
   default_quirks_style_ = RuleSet::Create();
 
   // Strict-mode rules.
-  String default_rules = LoadResourceAsASCIIString("html.css") +
+  String default_rules = GetDataResourceAsASCIIString("html.css") +
                          LayoutTheme::GetTheme().ExtraDefaultStyleSheet();
   default_style_sheet_ = ParseUASheet(default_rules);
   default_style_->AddRulesFromSheet(DefaultStyleSheet(), ScreenEval());
   default_print_style_->AddRulesFromSheet(DefaultStyleSheet(), PrintEval());
 
   // Quirks-mode rules.
-  String quirks_rules = LoadResourceAsASCIIString("quirks.css") +
+  String quirks_rules = GetDataResourceAsASCIIString("quirks.css") +
                         LayoutTheme::GetTheme().ExtraQuirksStyleSheet();
   quirks_style_sheet_ = ParseUASheet(quirks_rules);
   default_quirks_style_->AddRulesFromSheet(QuirksStyleSheet(), ScreenEval());
+
+#if DCHECK_IS_ON()
+  default_style_->CompactRulesIfNeeded();
+  default_print_style_->CompactRulesIfNeeded();
+  default_quirks_style_->CompactRulesIfNeeded();
+  DCHECK(default_style_->UniversalRules()->IsEmpty());
+  DCHECK(default_print_style_->UniversalRules()->IsEmpty());
+  DCHECK(default_quirks_style_->UniversalRules()->IsEmpty());
+#endif
 }
 
 RuleSet* CSSDefaultStyleSheets::DefaultViewSourceStyle() {
@@ -97,7 +105,7 @@ RuleSet* CSSDefaultStyleSheets::DefaultViewSourceStyle() {
     default_view_source_style_ = RuleSet::Create();
     // Loaded stylesheet is leaked on purpose.
     StyleSheetContents* stylesheet =
-        ParseUASheet(LoadResourceAsASCIIString("view-source.css"));
+        ParseUASheet(GetDataResourceAsASCIIString("view-source.css"));
     default_view_source_style_->AddRulesFromSheet(stylesheet, ScreenEval());
   }
   return default_view_source_style_;
@@ -105,24 +113,27 @@ RuleSet* CSSDefaultStyleSheets::DefaultViewSourceStyle() {
 
 StyleSheetContents*
 CSSDefaultStyleSheets::EnsureXHTMLMobileProfileStyleSheet() {
-  if (!xhtml_mobile_profile_style_sheet_)
+  if (!xhtml_mobile_profile_style_sheet_) {
     xhtml_mobile_profile_style_sheet_ =
-        ParseUASheet(LoadResourceAsASCIIString("xhtmlmp.css"));
+        ParseUASheet(GetDataResourceAsASCIIString("xhtmlmp.css"));
+  }
   return xhtml_mobile_profile_style_sheet_;
 }
 
 StyleSheetContents* CSSDefaultStyleSheets::EnsureMobileViewportStyleSheet() {
-  if (!mobile_viewport_style_sheet_)
+  if (!mobile_viewport_style_sheet_) {
     mobile_viewport_style_sheet_ =
-        ParseUASheet(LoadResourceAsASCIIString("viewportAndroid.css"));
+        ParseUASheet(GetDataResourceAsASCIIString("viewportAndroid.css"));
+  }
   return mobile_viewport_style_sheet_;
 }
 
 StyleSheetContents*
 CSSDefaultStyleSheets::EnsureTelevisionViewportStyleSheet() {
-  if (!television_viewport_style_sheet_)
+  if (!television_viewport_style_sheet_) {
     television_viewport_style_sheet_ =
-        ParseUASheet(LoadResourceAsASCIIString("viewportTelevision.css"));
+        ParseUASheet(GetDataResourceAsASCIIString("viewportTelevision.css"));
+  }
   return television_viewport_style_sheet_;
 }
 
@@ -131,7 +142,7 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
   bool changed_default_style = false;
   // FIXME: We should assert that the sheet only styles SVG elements.
   if (element.IsSVGElement() && !svg_style_sheet_) {
-    svg_style_sheet_ = ParseUASheet(LoadResourceAsASCIIString("svg.css"));
+    svg_style_sheet_ = ParseUASheet(GetDataResourceAsASCIIString("svg.css"));
     default_style_->AddRulesFromSheet(SvgStyleSheet(), ScreenEval());
     default_print_style_->AddRulesFromSheet(SvgStyleSheet(), PrintEval());
     changed_default_style = true;
@@ -140,7 +151,8 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
   // FIXME: We should assert that the sheet only styles MathML elements.
   if (element.namespaceURI() == MathMLNames::mathmlNamespaceURI &&
       !mathml_style_sheet_) {
-    mathml_style_sheet_ = ParseUASheet(LoadResourceAsASCIIString("mathml.css"));
+    mathml_style_sheet_ =
+        ParseUASheet(GetDataResourceAsASCIIString("mathml.css"));
     default_style_->AddRulesFromSheet(MathmlStyleSheet(), ScreenEval());
     default_print_style_->AddRulesFromSheet(MathmlStyleSheet(), PrintEval());
     changed_default_style = true;
@@ -150,7 +162,7 @@ bool CSSDefaultStyleSheets::EnsureDefaultStyleSheetsForElement(
   // <audio>.
   if (!media_controls_style_sheet_ &&
       (isHTMLVideoElement(element) || isHTMLAudioElement(element))) {
-    String media_rules = LoadResourceAsASCIIString("mediaControls.css") +
+    String media_rules = GetDataResourceAsASCIIString("mediaControls.css") +
                          LayoutTheme::GetTheme().ExtraMediaControlsStyleSheet();
     media_controls_style_sheet_ = ParseUASheet(media_rules);
     default_style_->AddRulesFromSheet(MediaControlsStyleSheet(), ScreenEval());
@@ -168,7 +180,7 @@ void CSSDefaultStyleSheets::EnsureDefaultStyleSheetForFullscreen() {
   if (fullscreen_style_sheet_)
     return;
 
-  String fullscreen_rules = LoadResourceAsASCIIString("fullscreen.css") +
+  String fullscreen_rules = GetDataResourceAsASCIIString("fullscreen.css") +
                             LayoutTheme::GetTheme().ExtraFullscreenStyleSheet();
   fullscreen_style_sheet_ = ParseUASheet(fullscreen_rules);
   default_style_->AddRulesFromSheet(FullscreenStyleSheet(), ScreenEval());

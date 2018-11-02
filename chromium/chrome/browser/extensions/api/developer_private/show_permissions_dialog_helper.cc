@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/apps/app_info_dialog.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/browser/api/device_permissions_manager.h"
+#include "extensions/browser/api/file_system/saved_file_entry.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/permissions/permissions_data.h"
@@ -46,8 +47,7 @@ void ShowPermissionsDialogHelper::Show(content::BrowserContext* browser_context,
                                 AppInfoLaunchSource::NUM_LAUNCH_SOURCES);
     }
 
-    ShowAppInfoInNativeDialog(web_contents, GetAppInfoNativeDialogSize(),
-                              profile, extension, on_complete);
+    ShowAppInfoInNativeDialog(web_contents, profile, extension, on_complete);
 
     return;  // All done.
   }
@@ -66,10 +66,10 @@ void ShowPermissionsDialogHelper::ShowPermissionsDialog(
   std::vector<base::FilePath> retained_file_paths;
   if (extension->permissions_data()->HasAPIPermission(
           APIPermission::kFileSystem)) {
-    std::vector<apps::SavedFileEntry> retained_file_entries =
-        apps::SavedFilesService::Get(profile_)
-            ->GetAllFileEntries(extension_id_);
-    for (const apps::SavedFileEntry& entry : retained_file_entries)
+    std::vector<SavedFileEntry> retained_file_entries =
+        apps::SavedFilesService::Get(profile_)->GetAllFileEntries(
+            extension_id_);
+    for (const SavedFileEntry& entry : retained_file_entries)
       retained_file_paths.push_back(entry.path);
   }
   std::vector<base::string16> retained_device_messages;

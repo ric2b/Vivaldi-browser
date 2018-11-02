@@ -13,15 +13,7 @@ using blink::WebFeaturePolicyFeature;
 namespace blink {
 
 HTMLIFrameElementAllow::HTMLIFrameElementAllow(HTMLIFrameElement* element)
-    : DOMTokenList(this), element_(element) {}
-
-HTMLIFrameElementAllow::~HTMLIFrameElementAllow() {}
-
-DEFINE_TRACE(HTMLIFrameElementAllow) {
-  visitor->Trace(element_);
-  DOMTokenList::Trace(visitor);
-  DOMTokenListObserver::Trace(visitor);
-}
+    : DOMTokenList(*element, HTMLNames::allowAttr) {}
 
 Vector<WebFeaturePolicyFeature>
 HTMLIFrameElementAllow::ParseAllowedFeatureNames(
@@ -29,18 +21,19 @@ HTMLIFrameElementAllow::ParseAllowedFeatureNames(
   Vector<WebFeaturePolicyFeature> feature_names;
   unsigned num_token_errors = 0;
   StringBuilder token_errors;
-  const SpaceSplitString& tokens = this->Tokens();
+  const SpaceSplitString& token_set = this->TokenSet();
 
   // Collects a list of valid feature names.
   const FeatureNameMap& feature_name_map = GetDefaultFeatureNameMap();
-  for (size_t i = 0; i < tokens.size(); ++i) {
-    if (!feature_name_map.Contains(tokens[i])) {
+  for (size_t i = 0; i < token_set.size(); ++i) {
+    const AtomicString& token = token_set[i];
+    if (!feature_name_map.Contains(token)) {
       token_errors.Append(token_errors.IsEmpty() ? "'" : ", '");
-      token_errors.Append(tokens[i]);
+      token_errors.Append(token);
       token_errors.Append("'");
       ++num_token_errors;
     } else {
-      feature_names.push_back(feature_name_map.at(tokens[i]));
+      feature_names.push_back(feature_name_map.at(token));
     }
   }
 
@@ -61,11 +54,6 @@ HTMLIFrameElementAllow::ParseAllowedFeatureNames(
 bool HTMLIFrameElementAllow::ValidateTokenValue(const AtomicString& token_value,
                                                 ExceptionState&) const {
   return GetDefaultFeatureNameMap().Contains(token_value.GetString());
-}
-
-void HTMLIFrameElementAllow::ValueWasSet() {
-  DCHECK(element_);
-  element_->AllowValueWasSet();
 }
 
 }  // namespace blink

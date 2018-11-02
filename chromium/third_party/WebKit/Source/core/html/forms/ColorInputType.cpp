@@ -34,10 +34,11 @@
 #include "bindings/core/v8/ScriptController.h"
 #include "core/CSSPropertyNames.h"
 #include "core/InputTypeNames.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLDataListElement.h"
 #include "core/html/HTMLDataListOptionsCollection.h"
 #include "core/html/HTMLDivElement.h"
@@ -47,7 +48,6 @@
 #include "core/layout/LayoutTheme.h"
 #include "core/page/ChromeClient.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/graphics/Color.h"
 #include "platform/wtf/text/WTFString.h"
 
@@ -98,7 +98,7 @@ InputType::ValueMode ColorInputType::GetValueMode() const {
 }
 
 void ColorInputType::CountUsage() {
-  CountUsageIfVisible(UseCounter::kInputTypeColor);
+  CountUsageIfVisible(WebFeature::kInputTypeColor);
 }
 
 const AtomicString& ColorInputType::FormControlType() const {

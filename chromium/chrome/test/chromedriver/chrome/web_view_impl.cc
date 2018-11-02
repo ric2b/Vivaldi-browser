@@ -437,13 +437,27 @@ Status WebViewImpl::DispatchKeyEvents(const std::list<KeyEvent>& events) {
   return Status(kOk);
 }
 
-Status WebViewImpl::GetCookies(std::unique_ptr<base::ListValue>* cookies) {
+Status WebViewImpl::GetCookies(std::unique_ptr<base::ListValue>* cookies,
+                               const std::string& current_page_url) {
   base::DictionaryValue params;
   std::unique_ptr<base::DictionaryValue> result;
-  Status status = client_->SendCommandAndGetResult(
-      "Page.getCookies", params, &result);
-  if (status.IsError())
-    return status;
+
+  if (browser_info_->build_no >= 3029 &&
+      browser_info_->browser_name != "webview") {
+    base::ListValue url_list;
+    url_list.AppendString(current_page_url);
+    params.Set("urls", base::MakeUnique<base::Value>(url_list));
+    Status status =
+        client_->SendCommandAndGetResult("Network.getCookies", params, &result);
+    if (status.IsError())
+      return status;
+  } else {
+    Status status =
+        client_->SendCommandAndGetResult("Page.getCookies", params, &result);
+    if (status.IsError())
+      return status;
+  }
+
   base::ListValue* cookies_tmp;
   if (!result->GetList("cookies", &cookies_tmp))
     return Status(kUnknownError, "DevTools didn't return cookies");
@@ -457,6 +471,26 @@ Status WebViewImpl::DeleteCookie(const std::string& name,
   params.SetString("cookieName", name);
   params.SetString("url", url);
   return client_->SendCommand("Page.deleteCookie", params);
+}
+
+Status WebViewImpl::AddCookie(const std::string& name,
+                              const std::string& url,
+                              const std::string& value,
+                              const std::string& domain,
+                              const std::string& path,
+                              bool secure,
+                              bool httpOnly,
+                              double expiry) {
+  base::DictionaryValue params;
+  params.SetString("name", name);
+  params.SetString("url", url);
+  params.SetString("value", value);
+  params.SetString("domain", domain);
+  params.SetString("path", path);
+  params.SetBoolean("secure", secure);
+  params.SetBoolean("httpOnly", httpOnly);
+  params.SetDouble("expirationDate", expiry);
+  return client_->SendCommand("Network.setCookie", params);
 }
 
 Status WebViewImpl::WaitForPendingNavigations(const std::string& frame_id,

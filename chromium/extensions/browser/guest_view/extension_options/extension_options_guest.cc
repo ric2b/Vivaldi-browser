@@ -56,10 +56,6 @@ GuestViewBase* ExtensionOptionsGuest::Create(WebContents* owner_web_contents) {
   return new ExtensionOptionsGuest(owner_web_contents);
 }
 
-bool ExtensionOptionsGuest::CanRunInDetachedState() const {
-  return true;
-}
-
 void ExtensionOptionsGuest::CreateWebContents(
     const base::DictionaryValue& create_params,
     const WebContentsCreatedCallback& callback) {
@@ -190,6 +186,7 @@ bool ExtensionOptionsGuest::HandleContextMenu(
 
 bool ExtensionOptionsGuest::ShouldCreateWebContents(
     content::WebContents* web_contents,
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     int32_t route_id,
     int32_t main_frame_route_id,

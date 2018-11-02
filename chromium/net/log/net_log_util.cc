@@ -11,6 +11,7 @@
 
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -264,7 +265,8 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
   // TODO(eroman): This is here for compatibility in loading new log files with
   // older builds of Chrome. Safe to remove this once M45 is on the stable
   // channel.
-  constants_dict->Set("logLevelType", new base::DictionaryValue());
+  constants_dict->Set("logLevelType",
+                      base::MakeUnique<base::DictionaryValue>());
 
   // Information about the relationship between address family enums and
   // their symbolic names.
@@ -301,21 +303,23 @@ std::unique_ptr<base::DictionaryValue> GetNetConstants() {
                               base::Int64ToString(tick_to_unix_time_ms));
   }
 
-  // "clientInfo" key is required for some WriteToFileNetLogObserver log
-  // readers. Provide a default empty value for compatibility.
-  constants_dict->Set("clientInfo", new base::DictionaryValue());
+  // TODO(eroman): Is this needed?
+  // "clientInfo" key is required for some log readers. Provide a default empty
+  // value for compatibility.
+  constants_dict->Set("clientInfo", base::MakeUnique<base::DictionaryValue>());
 
   // Add a list of active field experiments.
   {
     base::FieldTrial::ActiveGroups active_groups;
     base::FieldTrialList::GetActiveFieldTrialGroups(&active_groups);
-    base::ListValue* field_trial_groups = new base::ListValue();
+    auto field_trial_groups = base::MakeUnique<base::ListValue>();
     for (base::FieldTrial::ActiveGroups::const_iterator it =
              active_groups.begin();
          it != active_groups.end(); ++it) {
       field_trial_groups->AppendString(it->trial_name + ":" + it->group_name);
     }
-    constants_dict->Set("activeFieldTrialGroups", field_trial_groups);
+    constants_dict->Set("activeFieldTrialGroups",
+                        std::move(field_trial_groups));
   }
 
   return constants_dict;
@@ -325,7 +329,7 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     URLRequestContext* context,
     int info_sources) {
   // May only be called on the context's thread.
-  DCHECK(context->CalledOnValidThread());
+  context->AssertCalledOnValidThread();
 
   std::unique_ptr<base::DictionaryValue> net_info_dict(
       new base::DictionaryValue());
@@ -349,14 +353,14 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     const ProxyRetryInfoMap& bad_proxies_map =
         context->proxy_service()->proxy_retry_info();
 
-    base::ListValue* list = new base::ListValue();
+    auto list = base::MakeUnique<base::ListValue>();
 
     for (ProxyRetryInfoMap::const_iterator it = bad_proxies_map.begin();
          it != bad_proxies_map.end(); ++it) {
       const std::string& proxy_uri = it->first;
       const ProxyRetryInfo& retry_info = it->second;
 
-      std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+      auto dict = base::MakeUnique<base::DictionaryValue>();
       dict->SetString("proxy_uri", proxy_uri);
       dict->SetString("bad_until",
                       NetLog::TickCountToString(retry_info.bad_until));
@@ -364,7 +368,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
       list->Append(std::move(dict));
     }
 
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_BAD_PROXIES), list);
+    net_info_dict->Set(NetInfoSourceToString(NET_INFO_BAD_PROXIES),
+                       std::move(list));
   }
 
   if (info_sources & NET_INFO_HOST_RESOLVER) {
@@ -372,51 +377,24 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     DCHECK(host_resolver);
     HostCache* cache = host_resolver->GetHostCache();
     if (cache) {
-      std::unique_ptr<base::DictionaryValue> dict(new base::DictionaryValue());
+      auto dict = base::MakeUnique<base::DictionaryValue>();
       std::unique_ptr<base::Value> dns_config =
           host_resolver->GetDnsConfigAsValue();
       if (dns_config)
         dict->Set("dns_config", std::move(dns_config));
 
-      base::DictionaryValue* cache_info_dict = new base::DictionaryValue();
+      auto cache_info_dict = base::MakeUnique<base::DictionaryValue>();
+      auto cache_contents_list = base::MakeUnique<base::ListValue>();
 
       cache_info_dict->SetInteger("capacity",
                                   static_cast<int>(cache->max_entries()));
       cache_info_dict->SetInteger("network_changes", cache->network_changes());
 
-      base::ListValue* entry_list = new base::ListValue();
+      cache->GetAsListValue(cache_contents_list.get(),
+                            /*include_staleness=*/true);
+      cache_info_dict->Set("entries", std::move(cache_contents_list));
 
-      for (const auto& pair : cache->entries()) {
-        const HostCache::Key& key = pair.first;
-        const HostCache::Entry& entry = pair.second;
-
-        std::unique_ptr<base::DictionaryValue> entry_dict(
-            new base::DictionaryValue());
-
-        entry_dict->SetString("hostname", key.hostname);
-        entry_dict->SetInteger("address_family",
-                               static_cast<int>(key.address_family));
-        entry_dict->SetString("expiration",
-                              NetLog::TickCountToString(entry.expires()));
-        entry_dict->SetInteger("ttl", entry.ttl().InMilliseconds());
-        entry_dict->SetInteger("network_changes", entry.network_changes());
-
-        if (entry.error() != OK) {
-          entry_dict->SetInteger("error", entry.error());
-        } else {
-          const AddressList& addresses = entry.addresses();
-          // Append all of the resolved addresses.
-          base::ListValue* address_list = new base::ListValue();
-          for (size_t i = 0; i < addresses.size(); ++i)
-            address_list->AppendString(addresses[i].ToStringWithoutPort());
-          entry_dict->Set("addresses", address_list);
-        }
-
-        entry_list->Append(std::move(entry_dict));
-      }
-
-      cache_info_dict->Set("entries", entry_list);
-      dict->Set("cache", cache_info_dict);
+      dict->Set("cache", std::move(cache_info_dict));
       net_info_dict->Set(NetInfoSourceToString(NET_INFO_HOST_RESOLVER),
                          std::move(dict));
     }
@@ -436,7 +414,7 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
   }
 
   if (info_sources & NET_INFO_SPDY_STATUS) {
-    base::DictionaryValue* status_dict = new base::DictionaryValue();
+    auto status_dict = base::MakeUnique<base::DictionaryValue>();
 
     status_dict->SetBoolean("enable_http2",
                             http_network_session->params().enable_http2);
@@ -454,7 +432,7 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
     }
 
     net_info_dict->Set(NetInfoSourceToString(NET_INFO_SPDY_STATUS),
-                       status_dict);
+                       std::move(status_dict));
   }
 
   if (info_sources & NET_INFO_ALT_SVC_MAPPINGS) {
@@ -471,8 +449,8 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
   }
 
   if (info_sources & NET_INFO_HTTP_CACHE) {
-    base::DictionaryValue* info_dict = new base::DictionaryValue();
-    base::DictionaryValue* stats_dict = new base::DictionaryValue();
+    auto info_dict = base::MakeUnique<base::DictionaryValue>();
+    auto stats_dict = base::MakeUnique<base::DictionaryValue>();
 
     disk_cache::Backend* disk_cache = GetDiskCacheBackend(context);
 
@@ -485,9 +463,10 @@ NET_EXPORT std::unique_ptr<base::DictionaryValue> GetNetInfo(
                                                   stats[i].second);
       }
     }
-    info_dict->Set("stats", stats_dict);
+    info_dict->Set("stats", std::move(stats_dict));
 
-    net_info_dict->Set(NetInfoSourceToString(NET_INFO_HTTP_CACHE), info_dict);
+    net_info_dict->Set(NetInfoSourceToString(NET_INFO_HTTP_CACHE),
+                       std::move(info_dict));
   }
 
   if (info_sources & NET_INFO_SDCH) {
@@ -512,7 +491,7 @@ NET_EXPORT void CreateNetLogEntriesForActiveObjects(
   std::vector<const URLRequest*> requests;
   for (auto* context : contexts) {
     // May only be called on the context's thread.
-    DCHECK(context->CalledOnValidThread());
+    context->AssertCalledOnValidThread();
     // Contexts should all be using the same NetLog.
     DCHECK_EQ((*contexts.begin())->net_log(), context->net_log());
     for (auto* request : context->url_requests()) {

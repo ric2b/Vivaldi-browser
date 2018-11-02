@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//chrome/common/features.gni")
 import("//build/config/ui.gni")
 import("//testing/test.gni")
 
@@ -9,16 +10,26 @@ source_set("exo") {
   sources = [
     "buffer.cc",
     "buffer.h",
-    "compositor_frame_sink_holder.cc",
-    "compositor_frame_sink_holder.h",
+    "data_device.cc",
+    "data_device.h",
+    "data_device_delegate.h",
+    "data_offer.cc",
+    "data_offer.h",
+    "data_offer_delegate.h",
+    "data_offer_observer.h",
+    "data_source.cc",
+    "data_source.h",
+    "data_source_delegate.h",
     "display.cc",
     "display.h",
-    "gaming_seat.cc",
     "gaming_seat.h",
     "keyboard.cc",
     "keyboard.h",
     "keyboard_delegate.h",
     "keyboard_device_configuration_delegate.h",
+    "keyboard_observer.h",
+    "layer_tree_frame_sink_holder.cc",
+    "layer_tree_frame_sink_holder.h",
     "notification_surface.cc",
     "notification_surface.h",
     "notification_surface_manager.h",
@@ -35,6 +46,8 @@ source_set("exo") {
     "surface.h",
     "surface_delegate.h",
     "surface_observer.h",
+    "surface_tree_host.cc",
+    "surface_tree_host.h",
     "touch.cc",
     "touch.h",
     "touch_delegate.h",
@@ -68,10 +81,16 @@ source_set("exo") {
     "//ui/views",
     "//ui/views/mus",
     "//ui/wm",
+    "//ui/wm/public",
   ]
 
-  if (use_ozone) {
+  if (enable_exo_ozone_gamepad) {
+    defines = [ "USE_OZONE_GAMEPAD" ]
+    sources += [ "gaming_seat_ozone.cc" ]
     deps += [ "//ui/ozone" ]
+    deps += [ "//ui/events/ozone:events_ozone_evdev" ]
+  } else {
+    sources += [ "gaming_seat.cc" ]
   }
 
   if (is_chromeos) {
@@ -91,8 +110,8 @@ source_set("test_support") {
 
   deps = [
     ":exo",
+    "//ash:test_support_without_content",
     "//ash/public/cpp:ash_public_cpp",
-    "//ash/test:test_support_without_content",
     "//base",
     "//gpu",
     "//skia",
@@ -101,7 +120,7 @@ source_set("test_support") {
     "//ui/compositor",
     "//ui/gfx/geometry",
     "//ui/views",
-    "//ui/wm:wm",
+    "//ui/wm",
   ]
 }
 
@@ -110,8 +129,8 @@ source_set("unit_tests") {
 
   sources = [
     "buffer_unittest.cc",
+    "data_offer_unittest.cc",
     "display_unittest.cc",
-    "gaming_seat_unittest.cc",
     "keyboard_unittest.cc",
     "pointer_unittest.cc",
     "shared_memory_unittest.cc",
@@ -125,20 +144,22 @@ source_set("unit_tests") {
     ":exo",
     ":test_support",
     "//ash",
+    "//ash:test_support_without_content",
     "//ash/public/cpp:ash_public_cpp",
-    "//ash/test:test_support_without_content",
     "//base",
     "//base/test:test_support",
     "//cc",
     "//cc:test_support",
     "//cc/surfaces:surfaces",
     "//components/user_manager",
+    "//components/viz/service",
     "//device/gamepad:test_helpers",
     "//gpu/command_buffer/client:gles2_interface",
     "//skia",
     "//testing/gmock",
     "//testing/gtest",
     "//ui/aura",
+    "//ui/compositor:test_support",
     "//ui/events:dom_keycode_converter",
     "//ui/events:test_support",
     "//ui/gfx",
@@ -151,6 +172,14 @@ source_set("unit_tests") {
   if (use_ozone) {
     deps += [ "//ui/ozone" ]
   }
+
+  if (enable_exo_ozone_gamepad) {
+    sources += [
+      "../../ui/events/ozone/gamepad/gamepad_event.cc",
+      "gaming_seat_unittest.cc",
+    ]
+    deps += [ "//ui/events/ozone:events_ozone_evdev" ]
+  }
 }
 
 test("exo_unittests") {
@@ -162,10 +191,12 @@ test("exo_unittests") {
 
   deps = [
     ":unit_tests",
+    "//ash:test_support_without_content",
     "//ash/public/cpp:ash_public_cpp",
-    "//ash/test:test_support_without_content",
     "//base",
     "//base/test:test_support",
+    "//cc:test_support",
+    "//components/viz/test:test_support",
     "//device/gamepad:test_helpers",
     "//mojo/edk/embedder:headers",
     "//testing/gtest",

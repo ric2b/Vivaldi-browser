@@ -21,6 +21,12 @@
 #ifndef WTF_Vector_h
 #define WTF_Vector_h
 
+#include <string.h>
+#include <algorithm>
+#include <initializer_list>
+#include <iterator>
+#include <utility>
+#include "build/build_config.h"
 #include "platform/wtf/Alignment.h"
 #include "platform/wtf/ConditionalDestructor.h"
 #include "platform/wtf/ContainerAnnotations.h"
@@ -29,11 +35,6 @@
 #include "platform/wtf/StdLibExtras.h"
 #include "platform/wtf/VectorTraits.h"
 #include "platform/wtf/allocator/PartitionAllocator.h"
-#include <algorithm>
-#include <initializer_list>
-#include <iterator>
-#include <string.h>
-#include <utility>
 
 // For ASAN builds, disable inline buffers completely as they cause various
 // issues.
@@ -244,7 +245,7 @@ struct VectorFiller<true, T> {
   STATIC_ONLY(VectorFiller);
   static void UninitializedFill(T* dst, T* dst_end, const T& val) {
     static_assert(sizeof(T) == sizeof(char), "size of type should be one");
-#if COMPILER(GCC) && defined(_FORTIFY_SOURCE)
+#if defined(COMPILER_GCC) && defined(_FORTIFY_SOURCE)
     if (!__builtin_constant_p(dst_end - dst) || (!(dst_end - dst)))
       memset(dst, val, dst_end - dst);
 #else
@@ -1139,17 +1140,16 @@ class Vector
   // insert(position, value)
   //     Insert a single element at |position|.
   // insert(position, buffer, size)
-  // insert(position, vector)
+  // InsertVector(position, vector)
   //     Insert multiple elements represented by either |buffer| and |size|
   //     or |vector| at |position|. The elements will be copied.
-  //
-  // TODO(yutak): Why not insertVector()?
   template <typename U>
   void insert(size_t position, U&&);
   template <typename U>
   void insert(size_t position, const U*, size_t);
   template <typename U, size_t otherCapacity, typename OtherAllocator>
-  void insert(size_t position, const Vector<U, otherCapacity, OtherAllocator>&);
+  void InsertVector(size_t position,
+                    const Vector<U, otherCapacity, OtherAllocator>&);
 
   // Insertion to the front. All of these functions will take O(size())-time.
   // All of the elements in the vector will be moved to the new locations.
@@ -1797,7 +1797,7 @@ void Vector<T, inlineCapacity, Allocator>::insert(size_t position,
 
 template <typename T, size_t inlineCapacity, typename Allocator>
 template <typename U, size_t otherCapacity, typename OtherAllocator>
-inline void Vector<T, inlineCapacity, Allocator>::insert(
+inline void Vector<T, inlineCapacity, Allocator>::InsertVector(
     size_t position,
     const Vector<U, otherCapacity, OtherAllocator>& val) {
   insert(position, val.begin(), val.size());

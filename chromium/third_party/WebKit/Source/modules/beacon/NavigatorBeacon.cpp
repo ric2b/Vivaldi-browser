@@ -6,7 +6,6 @@
 
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/modules/v8/ArrayBufferViewOrBlobOrStringOrFormData.h"
-#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
@@ -15,6 +14,7 @@
 #include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "core/loader/PingLoader.h"
+#include "core/typed_arrays/DOMArrayBufferView.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/loader/fetch/FetchUtils.h"
 
@@ -120,11 +120,11 @@ bool NavigatorBeacon::SendBeaconImpl(
                                data.getAsArrayBufferView().View(), beacon_size);
   } else if (data.isBlob()) {
     Blob* blob = data.getAsBlob();
-    if (!FetchUtils::IsSimpleContentType(AtomicString(blob->type()))) {
+    if (!FetchUtils::IsCORSSafelistedContentType(AtomicString(blob->type()))) {
       UseCounter::Count(context,
-                        UseCounter::kSendBeaconWithNonSimpleContentType);
+                        WebFeature::kSendBeaconWithNonSimpleContentType);
       if (RuntimeEnabledFeatures::
-              sendBeaconThrowForBlobWithNonSimpleTypeEnabled()) {
+              SendBeaconThrowForBlobWithNonSimpleTypeEnabled()) {
         exception_state.ThrowSecurityError(
             "sendBeacon() with a Blob whose type is not any of the "
             "CORS-safelisted values for the Content-Type request header is "
@@ -146,7 +146,7 @@ bool NavigatorBeacon::SendBeaconImpl(
   }
 
   if (!allowed) {
-    UseCounter::Count(context, UseCounter::kSendBeaconQuotaExceeded);
+    UseCounter::Count(context, WebFeature::kSendBeaconQuotaExceeded);
     return false;
   }
 

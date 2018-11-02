@@ -42,6 +42,7 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/download_danger_type.h"
 #include "third_party/icu/source/common/unicode/uchar.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -57,7 +58,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/text_elider.h"
 #include "ui/gfx/text_utils.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/animation/flood_fill_ink_drop_ripple.h"
 #include "ui/views/animation/ink_drop_highlight.h"
 #include "ui/views/animation/ink_drop_impl.h"
@@ -173,13 +173,14 @@ DownloadItemView::DownloadItemView(DownloadItem* download_item,
       creation_time_(base::Time::Now()),
       time_download_warning_shown_(base::Time()),
       weak_ptr_factory_(this) {
-  SetInkDropMode(InkDropMode::ON);
+  SetInkDropMode(InkDropMode::ON_NO_GESTURE_HANDLER);
   DCHECK(download());
   download()->AddObserver(this);
   set_context_menu_controller(this);
 
   dropdown_button_->SetBorder(
       views::CreateEmptyBorder(gfx::Insets(kDropdownBorderWidth)));
+  dropdown_button_->set_has_ink_drop_action_on_click(false);
   AddChildView(dropdown_button_);
 
   LoadIcon();
@@ -487,10 +488,12 @@ bool DownloadItemView::GetTooltipText(const gfx::Point& p,
 void DownloadItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->SetName(accessible_name_);
   node_data->role = ui::AX_ROLE_BUTTON;
-  if (model_.IsDangerous())
-    node_data->AddState(ui::AX_STATE_DISABLED);
-  else
+  if (model_.IsDangerous()) {
+    node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
+                               ui::AX_RESTRICTION_DISABLED);
+  } else {
     node_data->AddState(ui::AX_STATE_HASPOPUP);
+  }
 }
 
 void DownloadItemView::OnThemeChanged() {
@@ -529,14 +532,15 @@ std::unique_ptr<views::InkDropRipple> DownloadItemView::CreateInkDropRipple()
 
 std::unique_ptr<views::InkDropHighlight>
 DownloadItemView::CreateInkDropHighlight() const {
-  if (IsShowingWarningDialog())
-    return nullptr;
-
   gfx::Size size = GetPreferredSize();
   return base::MakeUnique<views::InkDropHighlight>(
       size, kInkDropSmallCornerRadius,
       gfx::RectF(gfx::SizeF(size)).CenterPoint(),
       color_utils::DeriveDefaultIconColor(GetTextColor()));
+}
+
+void DownloadItemView::OnInkDropCreated() {
+  ConfigureInkDrop();
 }
 
 void DownloadItemView::OnGestureEvent(ui::GestureEvent* event) {
@@ -837,6 +841,8 @@ void DownloadItemView::ShowContextMenuImpl(const gfx::Rect& rect,
   static_cast<views::internal::RootView*>(GetWidget()->GetRootView())
       ->SetMouseHandler(nullptr);
 
+  AnimateInkDrop(views::InkDropState::HIDDEN, nullptr);
+
   if (!context_menu_.get())
     context_menu_.reset(new DownloadShelfContextMenuView(this));
   context_menu_->Run(GetWidget()->GetTopLevelWidget(), rect, source_type,
@@ -891,6 +897,16 @@ void DownloadItemView::SetDropdownState(State new_state) {
   SchedulePaint();
 }
 
+void DownloadItemView::ConfigureInkDrop() {
+  if (HasInkDrop())
+    GetInkDrop()->SetShowHighlightOnHover(!IsShowingWarningDialog());
+}
+
+void DownloadItemView::SetMode(Mode mode) {
+  mode_ = mode;
+  ConfigureInkDrop();
+}
+
 void DownloadItemView::ToggleWarningDialog() {
   if (model_.IsDangerous())
     ShowWarningDialog();
@@ -910,7 +926,7 @@ void DownloadItemView::ClearWarningDialog() {
          content::DOWNLOAD_DANGER_TYPE_USER_VALIDATED);
   DCHECK(IsShowingWarningDialog());
 
-  mode_ = NORMAL_MODE;
+  SetMode(NORMAL_MODE);
   dropdown_state_ = NORMAL;
 
   // ExperienceSampling: User proceeded through the warning.
@@ -934,7 +950,7 @@ void DownloadItemView::ClearWarningDialog() {
 }
 
 void DownloadItemView::ShowWarningDialog() {
-  DCHECK(mode_ != DANGEROUS_MODE && mode_ != MALICIOUS_MODE);
+  DCHECK(!IsShowingWarningDialog());
   time_download_warning_shown_ = base::Time::Now();
   content::DownloadDangerType danger_type = download()->GetDangerType();
   RecordDangerousDownloadWarningShown(danger_type);
@@ -944,7 +960,7 @@ void DownloadItemView::ShowWarningDialog() {
         danger_type);
   }
 #endif
-  mode_ = model_.MightBeMalicious() ? MALICIOUS_MODE : DANGEROUS_MODE;
+  SetMode(model_.MightBeMalicious() ? MALICIOUS_MODE : DANGEROUS_MODE);
 
   // ExperienceSampling: Dangerous or malicious download warning is being shown
   // to the user, so we start a new SamplingEvent and track it.
@@ -985,7 +1001,7 @@ gfx::ImageSkia DownloadItemView::GetWarningIcon() {
     case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
     case content::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
     case content::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE:
-      return gfx::CreateVectorIcon(ui::kWarningIcon, kWarningIconSize,
+      return gfx::CreateVectorIcon(vector_icons::kWarningIcon, kWarningIconSize,
                                    gfx::kGoogleRed700);
 
     case content::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS:

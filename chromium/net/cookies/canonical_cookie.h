@@ -47,8 +47,8 @@ class NET_EXPORT CanonicalCookie {
   // Supports the default copy constructor.
 
   // Creates a new |CanonicalCookie| from the |cookie_line| and the
-  // |creation_time|. Canonicalizes and validates inputs. May return NULL if
-  // an attribute value is invalid.
+  // |creation_time|.  Canonicalizes and validates inputs. May return NULL if
+  // an attribute value is invalid.  |creation_time| may not be null.
   static std::unique_ptr<CanonicalCookie> Create(
       const GURL& url,
       const std::string& cookie_line,
@@ -143,6 +143,26 @@ class NET_EXPORT CanonicalCookie {
   // FullCompare() is consistent with PartialCompare(): cookies sorted using
   // FullCompare() are also sorted with respect to PartialCompare().
   bool FullCompare(const CanonicalCookie& other) const;
+
+  // Return whether this object is a valid CanonicalCookie().  Invalid
+  // cookies may be constructed by the detailed constructor.
+  // A cookie is considered canonical if-and-only-if:
+  // * It can be created by CanonicalCookie::Create, or
+  // * It is identical to a cookie created by CanonicalCookie::Create except
+  //   that the creation time is null, or
+  // * It can be derived from a cookie created by CanonicalCookie::Create by
+  //   entry into and retrieval from a cookie store (specifically, this means
+  //   by the setting of an creation time in place of a null creation time, and
+  //   the setting of a last access time).
+  // An additional requirement on a CanonicalCookie is that if the last
+  // access time is non-null, the creation time must also be non-null and
+  // greater than the last access time.
+  bool IsCanonical() const;
+
+  // Sets the creation date of the cookie to the specified value.  It
+  // is only valid to call this method if the existing creation date
+  // is null.
+  void SetCreationDate(base::Time new_creation_date);
 
  private:
   FRIEND_TEST_ALL_PREFIXES(CanonicalCookieTest, TestPrefixHistograms);

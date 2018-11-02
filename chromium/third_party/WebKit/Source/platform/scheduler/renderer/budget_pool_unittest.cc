@@ -26,7 +26,7 @@
 namespace blink {
 namespace scheduler {
 
-class BudgetPoolTest : public testing::Test {
+class BudgetPoolTest : public ::testing::Test {
  public:
   BudgetPoolTest() {}
   ~BudgetPoolTest() override {}
@@ -133,8 +133,8 @@ TEST_F(BudgetPoolTest, WakeUpBudgetPool) {
   WakeUpBudgetPool* pool =
       task_queue_throttler_->CreateWakeUpBudgetPool("test");
 
-  scoped_refptr<TaskQueue> queue =
-      scheduler_->NewTimerTaskQueue(TaskQueue::QueueType::TEST);
+  scoped_refptr<TaskQueue> queue = scheduler_->NewTimerTaskQueue(
+      MainThreadTaskQueue::QueueType::FRAME_TIMER);
 
   pool->SetWakeUpRate(0.1);
   pool->SetWakeUpDuration(base::TimeDelta::FromMilliseconds(10));

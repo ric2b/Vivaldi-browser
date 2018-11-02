@@ -8,10 +8,10 @@
 
 #include "base/macros.h"
 #include "base/run_loop.h"
-#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/browser/payments/payment_app_content_unittest_base.h"
 #include "content/browser/payments/payment_app_provider_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -34,8 +34,9 @@ void GetAllPaymentAppsCallback(PaymentAppProvider::PaymentApps* out_apps,
   *out_apps = std::move(apps);
 }
 
-void InvokePaymentAppCallback(bool* called,
-                              payments::mojom::PaymentAppResponsePtr response) {
+void InvokePaymentAppCallback(
+    bool* called,
+    payments::mojom::PaymentHandlerResponsePtr response) {
   *called = true;
 }
 
@@ -65,10 +66,10 @@ class PaymentAppProviderTest : public PaymentAppContentUnitTestBase {
   }
 
   void InvokePaymentApp(int64_t registration_id,
-                        payments::mojom::PaymentAppRequestPtr app_request,
+                        payments::mojom::PaymentRequestEventDataPtr event_data,
                         PaymentAppProvider::InvokePaymentAppCallback callback) {
     PaymentAppProviderImpl::GetInstance()->InvokePaymentApp(
-        browser_context(), registration_id, std::move(app_request), callback);
+        browser_context(), registration_id, std::move(event_data), callback);
     base::RunLoop().RunUntilIdle();
   }
 
@@ -97,19 +98,18 @@ TEST_F(PaymentAppProviderTest, InvokePaymentAppTest) {
   GetAllPaymentApps(base::Bind(&GetAllPaymentAppsCallback, &apps));
   ASSERT_EQ(2U, apps.size());
 
-  payments::mojom::PaymentAppRequestPtr app_request =
-      payments::mojom::PaymentAppRequest::New();
-  app_request->method_data.push_back(payments::mojom::PaymentMethodData::New());
-  app_request->total = payments::mojom::PaymentItem::New();
-  app_request->total->amount = payments::mojom::PaymentCurrencyAmount::New();
+  payments::mojom::PaymentRequestEventDataPtr event_data =
+      payments::mojom::PaymentRequestEventData::New();
+  event_data->method_data.push_back(payments::mojom::PaymentMethodData::New());
+  event_data->total = payments::mojom::PaymentCurrencyAmount::New();
 
   bool called = false;
-  InvokePaymentApp(apps[GURL("https://hellopay.com/")][0]->registration_id,
-                   std::move(app_request),
+  InvokePaymentApp(apps[GURL("https://hellopay.com/")]->registration_id,
+                   std::move(event_data),
                    base::Bind(&InvokePaymentAppCallback, &called));
   ASSERT_TRUE(called);
 
-  EXPECT_EQ(apps[GURL("https://hellopay.com/")][0]->registration_id,
+  EXPECT_EQ(apps[GURL("https://hellopay.com/")]->registration_id,
             last_sw_registration_id());
 }
 
@@ -120,19 +120,27 @@ TEST_F(PaymentAppProviderTest, GetAllPaymentAppsTest) {
       GURL("https://bobpay.com/b"), GURL("https://bobpay.com/b/script.js"));
 
   PaymentHandlerStatus status;
-  SetPaymentInstrument(manager1, "test_key1", PaymentInstrument::New(),
+  PaymentInstrumentPtr instrument_1 = PaymentInstrument::New();
+  instrument_1->enabled_methods.push_back("hellopay");
+  SetPaymentInstrument(manager1, "test_key1", std::move(instrument_1),
                        base::Bind(&SetPaymentInstrumentCallback, &status));
-  SetPaymentInstrument(manager2, "test_key2", PaymentInstrument::New(),
+
+  PaymentInstrumentPtr instrument_2 = PaymentInstrument::New();
+  instrument_2->enabled_methods.push_back("hellopay");
+  SetPaymentInstrument(manager2, "test_key2", std::move(instrument_2),
                        base::Bind(&SetPaymentInstrumentCallback, &status));
-  SetPaymentInstrument(manager2, "test_key3", PaymentInstrument::New(),
+
+  PaymentInstrumentPtr instrument_3 = PaymentInstrument::New();
+  instrument_3->enabled_methods.push_back("bobpay");
+  SetPaymentInstrument(manager2, "test_key3", std::move(instrument_3),
                        base::Bind(&SetPaymentInstrumentCallback, &status));
 
   PaymentAppProvider::PaymentApps apps;
   GetAllPaymentApps(base::Bind(&GetAllPaymentAppsCallback, &apps));
 
   ASSERT_EQ(2U, apps.size());
-  ASSERT_EQ(1U, apps[GURL("https://hellopay.com/")].size());
-  ASSERT_EQ(2U, apps[GURL("https://bobpay.com/")].size());
+  ASSERT_EQ(1U, apps[GURL("https://hellopay.com/")]->enabled_methods.size());
+  ASSERT_EQ(2U, apps[GURL("https://bobpay.com/")]->enabled_methods.size());
 }
 
 }  // namespace content

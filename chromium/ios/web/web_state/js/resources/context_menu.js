@@ -76,8 +76,6 @@ goog.provide('__crWeb.contextMenu');
         continue;
       }
 
-      if (getComputedWebkitTouchCallout_(element) === 'none')
-        continue;
       // Also check element's ancestors. A bound on the level is used here to
       // avoid large overhead when no links or images are found.
       var level = 0;
@@ -94,46 +92,48 @@ goog.provide('__crWeb.contextMenu');
           return {};
         }
 
-        if (tagName === 'a' && element.href) {
-          // Found a link.
-          return {
-            href: element.href,
-            referrerPolicy: getReferrerPolicy_(element),
-            innerText: element.innerText
-          };
-        }
+       if (getComputedWebkitTouchCallout_(element) !== 'none') {
+          if (tagName === 'a' && element.href) {
+            // Found a link.
+            return {
+              href: element.href,
+              referrerPolicy: getReferrerPolicy_(element),
+              innerText: element.innerText
+            };
+          }
 
-        if (tagName === 'img' && element.src) {
-          // Found an image.
-          var result = {
-            src: element.src,
-            referrerPolicy: getReferrerPolicy_()
-          };
-          // Copy the title, if any.
-          if (element.title) {
-            result.title = element.title;
-          }
-          // Check if the image is also a link.
-          var parent = element.parentNode;
-          while (parent) {
-            if (parent.tagName &&
-                parent.tagName.toLowerCase() === 'a' &&
-                parent.href) {
-              // This regex identifies strings like void(0),
-              // void(0)  ;void(0);, ;;;;
-              // which result in a NOP when executed as JavaScript.
-              var regex = RegExp("^javascript:(?:(?:void\\(0\\)|;)\\s*)+$");
-              if (parent.href.match(regex)) {
-                parent = parent.parentNode;
-                continue;
-              }
-              result.href = parent.href;
-              result.referrerPolicy = getReferrerPolicy_(parent);
-              break;
+          if (tagName === 'img' && element.src) {
+            // Found an image.
+            var result = {
+              src: element.src,
+              referrerPolicy: getReferrerPolicy_()
+            };
+            // Copy the title, if any.
+            if (element.title) {
+              result.title = element.title;
             }
-            parent = parent.parentNode;
+            // Check if the image is also a link.
+            var parent = element.parentNode;
+            while (parent) {
+              if (parent.tagName &&
+                  parent.tagName.toLowerCase() === 'a' &&
+                  parent.href) {
+                // This regex identifies strings like void(0),
+                // void(0)  ;void(0);, ;;;;
+                // which result in a NOP when executed as JavaScript.
+                var regex = RegExp("^javascript:(?:(?:void\\(0\\)|;)\\s*)+$");
+                if (parent.href.match(regex)) {
+                  parent = parent.parentNode;
+                  continue;
+                }
+                result.href = parent.href;
+                result.referrerPolicy = getReferrerPolicy_(parent);
+                break;
+              }
+              parent = parent.parentNode;
+            }
+            return result;
           }
-          return result;
         }
         element = element.parentNode;
       }
@@ -215,9 +215,11 @@ goog.provide('__crWeb.contextMenu');
       }
       if (currentElement.tagName.toLowerCase() === 'iframe' ||
           currentElement.tagName.toLowerCase() === 'frame') {
-        // The following condition is true if the iframe is in a different
-        // domain; no further information is accessible.
-        if (typeof(currentElement.contentWindow.document) == 'undefined') {
+        // Check if the frame is in a different domain using only information
+        // visible to the current frame (i.e. currentElement.src) to avoid
+        // triggering a SecurityError in the console.
+        if (!__gCrWeb.common.isSameOrigin(
+            window.location.href, currentElement.src)) {
           return currentElement;
         }
         var framePosition = getPositionInWindow(currentElement);
@@ -277,10 +279,23 @@ goog.provide('__crWeb.contextMenu');
       }
     }
 
+    // Search for referrer meta tag.  WKWebView only supports a subset of values
+    // for referrer meta tags.  If it parses a referrer meta tag with an
+    // unsupported value, it will default to 'never'.
     var metaTags = document.getElementsByTagName('meta');
     for (var i = 0; i < metaTags.length; ++i) {
       if (metaTags[i].name.toLowerCase() == 'referrer') {
-        return metaTags[i].content.toLowerCase();
+        var referrerPolicy = metaTags[i].content.toLowerCase();
+        if (referrerPolicy == 'default' ||
+            referrerPolicy == 'always' ||
+            referrerPolicy == 'no-referrer' ||
+            referrerPolicy == 'origin' ||
+            referrerPolicy == 'no-referrer-when-downgrade' ||
+            referrerPolicy == 'unsafe-url') {
+          return referrerPolicy;
+        } else {
+          return 'never';
+        }
       }
     }
     return 'default';

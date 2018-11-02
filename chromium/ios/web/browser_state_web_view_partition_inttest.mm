@@ -13,9 +13,9 @@
 #import "base/test/ios/wait_util.h"
 #include "base/test/test_timeouts.h"
 #include "ios/web/public/browser_state.h"
-#import "ios/web/public/test/http_server.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#import "ios/web/public/test/http_server/string_response_provider.h"
 #import "ios/web/public/test/js_test_util.h"
-#import "ios/web/public/test/response_providers/string_response_provider.h"
 #import "ios/web/public/web_view_creation_util.h"
 #import "ios/web/test/web_int_test.h"
 #import "net/base/mac/url_conversions.h"
@@ -88,7 +88,7 @@ class BrowserStateWebViewPartitionTest : public web::WebIntTest {
                            WKWebView* web_view) {
     NSString* set_local_storage_item = [NSString
         stringWithFormat:@"localStorage.setItem('%@', '%@')", key, value];
-    NSError* unused_error = nil;
+    __unsafe_unretained NSError* unused_error = nil;
     web::ExecuteJavaScript(web_view, set_local_storage_item, &unused_error);
   }
 

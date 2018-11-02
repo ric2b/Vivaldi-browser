@@ -33,6 +33,7 @@
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
+namespace cssvalue {
 
 static bool SubimageIsPending(CSSValue* value) {
   if (value->IsImageValue())
@@ -66,8 +67,8 @@ static ImageResourceContent* CachedImageForCSSValue(CSSValue* value,
     return nullptr;
 
   if (value->IsImageValue()) {
-    StyleImage* style_image_resource =
-        ToCSSImageValue(value)->CacheImage(document);
+    StyleImage* style_image_resource = ToCSSImageValue(value)->CacheImage(
+        document, FetchParameters::kAllowPlaceholder);
     if (!style_image_resource)
       return nullptr;
 
@@ -219,12 +220,14 @@ void CSSCrossfadeValue::LoadSubimages(const Document& document) {
   crossfade_subimage_observer_.SetReady(true);
 }
 
-PassRefPtr<Image> CSSCrossfadeValue::GetImage(const LayoutObject& layout_object,
-                                              const IntSize& size) {
+PassRefPtr<Image> CSSCrossfadeValue::GetImage(
+    const ImageResourceObserver& client,
+    const Document& document,
+    const ComputedStyle&,
+    const IntSize& size) {
   if (size.IsEmpty())
     return nullptr;
 
-  const Document& document = layout_object.GetDocument();
   Image* from_image = RenderableImageForCSSValue(from_value_.Get(), document);
   Image* to_image = RenderableImageForCSSValue(to_value_.Get(), document);
 
@@ -249,14 +252,15 @@ PassRefPtr<Image> CSSCrossfadeValue::GetImage(const LayoutObject& layout_object,
 
 void CSSCrossfadeValue::CrossfadeChanged(const IntRect&) {
   for (const auto& curr : Clients()) {
-    LayoutObject* client = const_cast<LayoutObject*>(curr.key);
+    ImageResourceObserver* client =
+        const_cast<ImageResourceObserver*>(curr.key);
     client->ImageChanged(static_cast<WrappedImagePtr>(this));
   }
 }
 
 bool CSSCrossfadeValue::WillRenderImage() const {
   for (const auto& curr : Clients()) {
-    if (const_cast<LayoutObject*>(curr.key)->WillRenderImage())
+    if (const_cast<ImageResourceObserver*>(curr.key)->WillRenderImage())
       return true;
   }
   return false;
@@ -299,4 +303,5 @@ DEFINE_TRACE_AFTER_DISPATCH(CSSCrossfadeValue) {
   CSSImageGeneratorValue::TraceAfterDispatch(visitor);
 }
 
+}  // namespace cssvalue
 }  // namespace blink

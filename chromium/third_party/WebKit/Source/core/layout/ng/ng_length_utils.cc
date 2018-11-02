@@ -7,6 +7,7 @@
 #include "core/layout/ng/ng_constraint_space.h"
 #include "core/layout/ng/ng_constraint_space_builder.h"
 #include "core/layout/ng/ng_fragment.h"
+#include "core/layout/ng/ng_layout_result.h"
 #include "core/style/ComputedStyle.h"
 #include "platform/LayoutUnit.h"
 #include "platform/Length.h"
@@ -22,8 +23,11 @@ bool NeedMinMaxContentSize(const NGConstraintSpace& constraint_space,
   // This check is technically too broad (fill-available does not need intrinsic
   // size computation) but that's a rare case and only affects performance, not
   // correctness.
-  return constraint_space.IsShrinkToFit() ||
-         style.LogicalWidth().IsIntrinsic() ||
+  return constraint_space.IsShrinkToFit() || NeedMinMaxContentSize(style);
+}
+
+bool NeedMinMaxContentSize(const ComputedStyle& style) {
+  return style.LogicalWidth().IsIntrinsic() ||
          style.LogicalMinWidth().IsIntrinsic() ||
          style.LogicalMaxWidth().IsIntrinsic();
 }
@@ -424,6 +428,23 @@ LayoutUnit ConstrainByMinMax(LayoutUnit length,
   if (min && length < min.value())
     length = min.value();
   return length;
+}
+
+NGBoxStrut GetScrollbarSizes(const LayoutObject* layout_object) {
+  NGPhysicalBoxStrut sizes;
+  const ComputedStyle* style = layout_object->Style();
+  if (!style->IsOverflowVisible()) {
+    const LayoutBox* box = ToLayoutBox(layout_object);
+    LayoutUnit vertical = LayoutUnit(box->VerticalScrollbarWidth());
+    LayoutUnit horizontal = LayoutUnit(box->HorizontalScrollbarHeight());
+    sizes.bottom = horizontal;
+    if (style->ShouldPlaceBlockDirectionScrollbarOnLogicalLeft())
+      sizes.left = vertical;
+    else
+      sizes.right = vertical;
+  }
+  return sizes.ConvertToLogical(
+      FromPlatformWritingMode(style->GetWritingMode()), style->Direction());
 }
 
 }  // namespace blink

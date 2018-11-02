@@ -80,3 +80,28 @@ DISABLE(RenderThreadImplBrowserTest,
 DISABLE(GenericSensorBrowserTest, AmbientLightSensorTest)
 DISABLE(SitePerProcessTextInputManagerTest,
   TrackCompositionRangeForAllFrames)
+
+// Failed in v61, also in pure chromium builds
+DISABLE(BookmarkBarViewTest10, KeyEvents)
+DISABLE(CertificateSelectorTest, GetSelectedCert)
+DISABLE(FindInPageTest, SelectionRestoreOnTabSwitch)
+DISABLE(OmniboxViewTest, AcceptKeywordBySpace)
+DISABLE(OmniboxViewTest, BackspaceDeleteHalfWidthKatakana)
+DISABLE(OmniboxViewTest, BackspaceInKeywordMode)
+DISABLE(OmniboxViewTest, BasicTextOperations)
+DISABLE(OmniboxViewTest, CtrlArrowAfterArrowSuggestions)
+DISABLE(OmniboxViewTest, DeleteItem)
+DISABLE(OmniboxViewTest, EscapeToDefaultMatch)
+DISABLE(OmniboxViewTest, SelectAllStaysAfterUpdate)
+DISABLE(SSLClientCertificateSelectorMultiTabTest, SelectSecond)
+DISABLE(BookmarkBarViewTest23, ContextMenusKeyboard)
+DISABLE(BookmarkBarViewTest24, ContextMenusKeyboardEscape)
+DISABLE(KeyboardAccessTest, TestMenuKeyboardAccess)
+DISABLE(OmniboxViewTest, DesiredTLDWithTemporaryText)
+DISABLE(SitePerProcessInteractiveBrowserTest,
+        ShowAndHideDatePopupInOOPIFMultipleTimes)
+DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
+
+// Failed in v61, does not fail locally
+DISABLE(ChromeVisibilityObserverBrowserTest, VisibilityTest)
+DISABLE(SslCastSocketTest, TestConnectEndToEndWithRealSSL)

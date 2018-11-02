@@ -34,8 +34,6 @@ class VRDeviceManagerTest : public testing::Test {
 
   std::unique_ptr<VRServiceImpl> BindService();
 
-  bool HasServiceInstance() { return VRDeviceManager::HasInstance(); }
-
   VRDevice* GetDevice(unsigned int index) {
     return device_manager_->GetDevice(index);
   }
@@ -60,7 +58,7 @@ void VRDeviceManagerTest::SetUp() {
 std::unique_ptr<VRServiceImpl> VRDeviceManagerTest::BindService() {
   mojom::VRServiceClientPtr proxy;
   FakeVRServiceClient client(mojo::MakeRequest(&proxy));
-  auto service = base::WrapUnique(new VRServiceImpl());
+  auto service = base::WrapUnique(new VRServiceImpl(-1, -1));
   service->SetClient(std::move(proxy),
                      base::Bind(&VRDeviceManagerTest::onDisplaySynced,
                                 base::Unretained(this)));

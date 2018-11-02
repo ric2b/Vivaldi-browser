@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 
+#include "base/callback_forward.h"
 #include "base/compiler_specific.h"
 #include "base/files/file_path.h"
 #include "base/macros.h"
@@ -71,7 +72,7 @@ class MostVisitedSitesSupervisor {
   virtual bool IsBlocked(const GURL& url) = 0;
 
   // Explicitly-specified sites to show on NTP.
-  virtual std::vector<Whitelist> whitelists() = 0;
+  virtual std::vector<Whitelist> GetWhitelists() = 0;
 
   // If true, be conservative about suggesting sites from outside sources.
   virtual bool IsChildProfile() = 0;
@@ -95,10 +96,14 @@ class MostVisitedSites : public history::TopSitesObserver,
   // platform-specific implementation.
   class HomePageClient {
    public:
+    using TitleCallback =
+        base::OnceCallback<void(const base::Optional<base::string16>& title)>;
+
     virtual ~HomePageClient() = default;
     virtual bool IsHomePageEnabled() const = 0;
     virtual bool IsNewTabPageUsedAsHomePage() const = 0;
-    virtual GURL GetHomepageUrl() const = 0;
+    virtual GURL GetHomePageUrl() const = 0;
+    virtual void QueryHomePageTitle(TitleCallback title_callback) = 0;
   };
 
   // Construct a MostVisitedSites instance.
@@ -106,16 +111,6 @@ class MostVisitedSites : public history::TopSitesObserver,
   // |prefs| and |suggestions| are required and may not be null. |top_sites|,
   // |popular_sites|, |supervisor| and |home_page_client| are optional and if
   // null, the associated features will be disabled.
-  MostVisitedSites(PrefService* prefs,
-                   scoped_refptr<history::TopSites> top_sites,
-                   suggestions::SuggestionsService* suggestions,
-                   std::unique_ptr<PopularSites> popular_sites,
-                   std::unique_ptr<IconCacher> icon_cacher,
-                   std::unique_ptr<MostVisitedSitesSupervisor> supervisor,
-                   std::unique_ptr<HomePageClient> home_page_client);
-
-  // TODO(fhorschig): Adjust all factories and delete this.
-  // Constructs a MostVisitedSites instance without HomePageClient.
   MostVisitedSites(PrefService* prefs,
                    scoped_refptr<history::TopSites> top_sites,
                    suggestions::SuggestionsService* suggestions,
@@ -143,9 +138,17 @@ class MostVisitedSites : public history::TopSitesObserver,
   // must not be null.
   void SetMostVisitedURLsObserver(Observer* observer, size_t num_sites);
 
+  // Sets the client that provides platform-specific home page preferences.
+  // When used to replace an existing client, the new client will first be used
+  // during the construction of a new tile set.
+  void SetHomePageClient(std::unique_ptr<HomePageClient> client);
+
   // Requests an asynchronous refresh of the suggestions. Notifies the observer
   // if the request resulted in the set of tiles changing.
   void Refresh();
+
+  // Forces a rebuild of the current tiles to update the pinned home page.
+  void OnHomePageStateChanged();
 
   void AddOrRemoveBlacklistedUrl(const GURL& url, bool add_url);
   void ClearBlacklistedUrls();
@@ -195,10 +198,14 @@ class MostVisitedSites : public history::TopSitesObserver,
       const std::set<std::string>& used_hosts,
       size_t num_actual_tiles);
 
+  // Initiates a query for the home page tile if needed and calls
+  // |SaveTilesAndNotify| in the end.
+  void InitiateNotificationForNewTiles(NTPTilesVector new_tiles);
+
   // Takes the personal tiles, creates and merges in whitelist and popular tiles
   // if appropriate, and saves the new tiles. Notifies the observer if the tiles
   // were actually changed.
-  void SaveNewTilesAndNotify(NTPTilesVector personal_tiles);
+  void SaveTilesAndNotify(NTPTilesVector personal_tiles);
 
   void OnPopularSitesDownloaded(bool success);
 
@@ -213,7 +220,11 @@ class MostVisitedSites : public history::TopSitesObserver,
   // Adds the home page as first tile to |tiles| and returns them as new vector.
   // Drops existing tiles with the same host as the home page and tiles that
   // would exceed the maximum.
-  NTPTilesVector CreatePersonalTilesWithHomeTile(NTPTilesVector tiles) const;
+  NTPTilesVector InsertHomeTile(NTPTilesVector tiles,
+                                const base::string16& title) const;
+
+  void OnHomePageTitleDetermined(NTPTilesVector tiles,
+                                 const base::Optional<base::string16>& title);
 
   // Returns true if there is a valid home page that can be pinned as tile.
   bool ShouldAddHomeTile() const;
@@ -229,7 +240,7 @@ class MostVisitedSites : public history::TopSitesObserver,
   std::unique_ptr<PopularSites> const popular_sites_;
   std::unique_ptr<IconCacher> const icon_cacher_;
   std::unique_ptr<MostVisitedSitesSupervisor> supervisor_;
-  std::unique_ptr<HomePageClient> const home_page_client_;
+  std::unique_ptr<HomePageClient> home_page_client_;
 
   Observer* observer_;
 

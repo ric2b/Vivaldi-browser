@@ -13,6 +13,7 @@
 
 namespace blink {
 
+class CSSCustomPropertyDeclaration;
 class CSSParserTokenRange;
 class CSSPendingSubstitutionValue;
 class CSSVariableData;
@@ -26,30 +27,29 @@ class CSSVariableResolver {
   STACK_ALLOCATED();
 
  public:
-  static void ResolveVariableDefinitions(const StyleResolverState&);
-
-  // Shorthand properties are not supported.
-  static const CSSValue* ResolveVariableReferences(
-      const StyleResolverState&,
-      CSSPropertyID,
-      const CSSValue&,
-      bool disallow_animation_tainted);
-
-  static void ComputeRegisteredVariables(const StyleResolverState&);
-
- private:
   CSSVariableResolver(const StyleResolverState&);
 
-  static const CSSValue* ResolvePendingSubstitutions(
-      const StyleResolverState&,
+  RefPtr<CSSVariableData> ResolveCustomPropertyAnimationKeyframe(
+      const CSSCustomPropertyDeclaration& keyframe,
+      bool& cycle_detected);
+
+  void ResolveVariableDefinitions();
+
+  // Shorthand properties are not supported.
+  const CSSValue* ResolveVariableReferences(CSSPropertyID,
+                                            const CSSValue&,
+                                            bool disallow_animation_tainted);
+
+  void ComputeRegisteredVariables();
+
+ private:
+  const CSSValue* ResolvePendingSubstitutions(
       CSSPropertyID,
       const CSSPendingSubstitutionValue&,
       bool disallow_animation_tainted);
-  static const CSSValue* ResolveVariableReferences(
-      const StyleResolverState&,
-      CSSPropertyID,
-      const CSSVariableReferenceValue&,
-      bool disallow_animation_tainted);
+  const CSSValue* ResolveVariableReferences(CSSPropertyID,
+                                            const CSSVariableReferenceValue&,
+                                            bool disallow_animation_tainted);
 
   // These return false if we encounter a reference to an invalid variable with
   // no fallback.
@@ -58,20 +58,25 @@ class CSSVariableResolver {
   bool ResolveTokenRange(CSSParserTokenRange,
                          bool disallow_animation_tainted,
                          Vector<CSSParserToken>& result,
+                         Vector<String>& result_backing_strings,
                          bool& result_is_animation_tainted);
   // Resolves the fallback (if present) of a var() reference, starting from the
   // comma.
   bool ResolveFallback(CSSParserTokenRange,
                        bool disallow_animation_tainted,
                        Vector<CSSParserToken>& result,
+                       Vector<String>& result_backing_strings,
                        bool& result_is_animation_tainted);
   // Resolves the contents of a var() reference.
   bool ResolveVariableReference(CSSParserTokenRange,
                                 bool disallow_animation_tainted,
                                 Vector<CSSParserToken>& result,
+                                Vector<String>& result_backing_strings,
                                 bool& result_is_animation_tainted);
   // Consumes and resolves an @apply rule.
-  void ResolveApplyAtRule(CSSParserTokenRange&, Vector<CSSParserToken>& result);
+  void ResolveApplyAtRule(CSSParserTokenRange&,
+                          Vector<CSSParserToken>& result,
+                          Vector<String>& result_backing_strings);
 
   // These return null if the custom property is invalid.
 
@@ -80,8 +85,10 @@ class CSSVariableResolver {
   CSSVariableData* ValueForCustomProperty(AtomicString name);
   // Resolves the CSSVariableData from a custom property declaration.
   PassRefPtr<CSSVariableData> ResolveCustomProperty(AtomicString name,
-                                                    const CSSVariableData&);
+                                                    const CSSVariableData&,
+                                                    bool& cycle_detected);
 
+  const StyleResolverState& state_;
   StyleInheritedVariables* inherited_variables_;
   StyleNonInheritedVariables* non_inherited_variables_;
   Member<const PropertyRegistry> registry_;

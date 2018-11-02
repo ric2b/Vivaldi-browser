@@ -9,6 +9,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/values.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
@@ -66,7 +67,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (instancetype)initWithBrowserState:(ios::ChromeBrowserState*)browserState {
   DCHECK(browserState);
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     _browserState = browserState;
     HostContentSettingsMap* settingsMap =
@@ -278,7 +281,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
     // able to modify content settings with a secondary pattern other than the
     // wildcard pattern. So only show settings that the user is able to modify.
     if (entries[i].secondary_pattern == ContentSettingsPattern::Wildcard() &&
-        entries[i].setting == CONTENT_SETTING_ALLOW) {
+        entries[i].GetContentSetting() == CONTENT_SETTING_ALLOW) {
       _exceptions.AppendString(entries[i].primary_pattern.ToString());
     } else {
       LOG(ERROR) << "Secondary content settings patterns are not "

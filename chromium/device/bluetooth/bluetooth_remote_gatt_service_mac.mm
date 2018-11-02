@@ -9,6 +9,7 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/sys_string_conversions.h"
 #include "device/bluetooth/bluetooth_adapter_mac.h"
 #include "device/bluetooth/bluetooth_low_energy_device_mac.h"
 #include "device/bluetooth/bluetooth_remote_gatt_characteristic_mac.h"
@@ -25,11 +26,10 @@ BluetoothRemoteGattServiceMac::BluetoothRemoteGattServiceMac(
       is_primary_(is_primary),
       is_discovery_complete_(false),
       discovery_pending_count_(0) {
-  uuid_ = BluetoothAdapterMac::BluetoothUUIDWithCBUUID([service_.get() UUID]);
-  identifier_ =
+  uuid_ = BluetoothAdapterMac::BluetoothUUIDWithCBUUID([service_ UUID]);
+  identifier_ = base::SysNSStringToUTF8(
       [NSString stringWithFormat:@"%s-%p", uuid_.canonical_value().c_str(),
-                                 (void*)service_]
-          .UTF8String;
+                                 service_.get()]);
 }
 
 BluetoothRemoteGattServiceMac::~BluetoothRemoteGattServiceMac() {}
@@ -174,33 +174,6 @@ void BluetoothRemoteGattServiceMac::SendNotificationIfComplete() {
   }
 }
 
-void BluetoothRemoteGattServiceMac::DidUpdateValue(
-    CBCharacteristic* characteristic,
-    NSError* error) {
-  BluetoothRemoteGattCharacteristicMac* gatt_characteristic =
-      GetBluetoothRemoteGattCharacteristicMac(characteristic);
-  DCHECK(gatt_characteristic);
-  gatt_characteristic->DidUpdateValue(error);
-}
-
-void BluetoothRemoteGattServiceMac::DidWriteValue(
-    CBCharacteristic* characteristic,
-    NSError* error) {
-  BluetoothRemoteGattCharacteristicMac* gatt_characteristic =
-      GetBluetoothRemoteGattCharacteristicMac(characteristic);
-  DCHECK(gatt_characteristic);
-  gatt_characteristic->DidWriteValue(error);
-}
-
-void BluetoothRemoteGattServiceMac::DidUpdateNotificationState(
-    CBCharacteristic* characteristic,
-    NSError* error) {
-  BluetoothRemoteGattCharacteristicMac* gatt_characteristic =
-      GetBluetoothRemoteGattCharacteristicMac(characteristic);
-  DCHECK(gatt_characteristic);
-  gatt_characteristic->DidUpdateNotificationState(error);
-}
-
 bool BluetoothRemoteGattServiceMac::IsDiscoveryComplete() const {
   return is_discovery_complete_;
 }
@@ -214,25 +187,38 @@ CBPeripheral* BluetoothRemoteGattServiceMac::GetCBPeripheral() const {
 }
 
 CBService* BluetoothRemoteGattServiceMac::GetService() const {
-  return service_.get();
+  return service_;
 }
 
 BluetoothRemoteGattCharacteristicMac*
 BluetoothRemoteGattServiceMac::GetBluetoothRemoteGattCharacteristicMac(
-    CBCharacteristic* characteristic) const {
+    CBCharacteristic* cb_characteristic) const {
   auto found = std::find_if(
       gatt_characteristic_macs_.begin(), gatt_characteristic_macs_.end(),
-      [characteristic](
+      [cb_characteristic](
           const std::pair<
               const std::string,
               std::unique_ptr<BluetoothRemoteGattCharacteristicMac>>& pair) {
-        return pair.second->GetCBCharacteristic() == characteristic;
+        return pair.second->GetCBCharacteristic() == cb_characteristic;
       });
   if (found == gatt_characteristic_macs_.end()) {
     return nullptr;
   } else {
     return found->second.get();
   }
+}
+
+BluetoothRemoteGattDescriptorMac*
+BluetoothRemoteGattServiceMac::GetBluetoothRemoteGattDescriptorMac(
+    CBDescriptor* cb_descriptor) const {
+  CBCharacteristic* cb_characteristic = [cb_descriptor characteristic];
+  BluetoothRemoteGattCharacteristicMac* gatt_characteristic_mac =
+      GetBluetoothRemoteGattCharacteristicMac(cb_characteristic);
+  if (!gatt_characteristic_mac) {
+    return nullptr;
+  }
+  return gatt_characteristic_mac->GetBluetoothRemoteGattDescriptorMac(
+      cb_descriptor);
 }
 
 DEVICE_BLUETOOTH_EXPORT std::ostream& operator<<(

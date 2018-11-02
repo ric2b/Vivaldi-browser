@@ -58,7 +58,7 @@ Position InsertTextCommand::PositionInsideTextNode(
     InsertNodeAtTabSpanPosition(text_node, pos, editing_state);
     if (editing_state->IsAborted())
       return Position();
-    return Position::FirstPositionInNode(text_node);
+    return Position::FirstPositionInNode(*text_node);
   }
 
   // Prepare for text input by looking at the specified position.
@@ -68,7 +68,7 @@ Position InsertTextCommand::PositionInsideTextNode(
     InsertNodeAt(text_node, pos, editing_state);
     if (editing_state->IsAborted())
       return Position();
-    return Position::FirstPositionInNode(text_node);
+    return Position::FirstPositionInNode(*text_node);
   }
 
   return pos;
@@ -106,7 +106,7 @@ bool InsertTextCommand::PerformTrivialReplace(const String& text,
   if (select_inserted_text)
     return true;
   SetEndingSelection(SelectionInDOMTree::Builder()
-                         .Collapse(EndingSelection().end())
+                         .Collapse(EndingSelection().End())
                          .SetIsDirectional(EndingSelection().IsDirectional())
                          .Build());
   return true;
@@ -135,7 +135,7 @@ bool InsertTextCommand::PerformOverwrite(const String& text,
   if (select_inserted_text || EndingSelection().IsNone())
     return true;
   SetEndingSelection(SelectionInDOMTree::Builder()
-                         .Collapse(EndingSelection().end())
+                         .Collapse(EndingSelection().End())
                          .SetIsDirectional(EndingSelection().IsDirectional())
                          .Build());
   return true;
@@ -287,8 +287,8 @@ void InsertTextCommand::DoApply(EditingState* editing_state) {
     SelectionInDOMTree::Builder builder;
     builder.SetAffinity(EndingSelection().Affinity());
     builder.SetIsDirectional(EndingSelection().IsDirectional());
-    if (EndingSelection().end().IsNotNull())
-      builder.Collapse(EndingSelection().end());
+    if (EndingSelection().End().IsNotNull())
+      builder.Collapse(EndingSelection().End());
     SetEndingSelection(builder.Build());
   }
 }
@@ -335,7 +335,7 @@ Position InsertTextCommand::InsertTab(const Position& pos,
     return Position();
 
   // return the position following the new tab
-  return Position::LastPositionInNode(span_element);
+  return Position::LastPositionInNode(*span_element);
 }
 
 }  // namespace blink

@@ -26,13 +26,14 @@
 #include "base/sha1.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/threading/sequenced_worker_pool.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/safe_browsing/download_feedback_service.h"
 #include "chrome/browser/safe_browsing/incident_reporting/incident_reporting_service.h"
 #include "chrome/browser/safe_browsing/local_database_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
+#include "chrome/common/chrome_paths.h"
 #include "chrome/common/safe_browsing/binary_feature_extractor.h"
 #include "chrome/common/safe_browsing/file_type_policies_test_util.h"
 #include "chrome/test/base/testing_profile.h"
@@ -43,11 +44,13 @@
 #include "components/safe_browsing/csd.pb.h"
 #include "components/safe_browsing_db/database_manager.h"
 #include "components/safe_browsing_db/test_database_manager.h"
+#include "components/safe_browsing_db/v4_protocol_manager_util.h"
 #include "content/public/browser/download_danger_type.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/test/mock_download_item.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/test_utils.h"
+#include "content/public/test/web_contents_tester.h"
 #include "net/base/url_util.h"
 #include "net/cert/x509_certificate.h"
 #include "net/http/http_status_code.h"
@@ -233,7 +236,7 @@ ACTION_P(CheckDownloadUrlDone, threat_type) {
   LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck* check =
       new LocalSafeBrowsingDatabaseManager::SafeBrowsingCheck(
           arg0, std::vector<SBFullHash>(), arg1, BINURL,
-          std::vector<SBThreatType>(1, SB_THREAT_TYPE_BINARY_MALWARE_URL));
+          CreateSBThreatTypeSet({SB_THREAT_TYPE_URL_BINARY_MALWARE}));
   for (size_t i = 0; i < check->url_results.size(); ++i)
     check->url_results[i] = threat_type;
   BrowserThread::PostTask(
@@ -353,8 +356,9 @@ class DownloadProtectionServiceTest : public testing::Test {
 
   // Flushes any pending tasks in the message loops of all threads.
   void FlushThreadMessageLoops() {
-    BrowserThread::GetBlockingPool()->FlushForTesting();
+    base::TaskScheduler::GetInstance()->FlushForTesting();
     FlushMessageLoop(BrowserThread::IO);
+    FlushMessageLoop(BrowserThread::FILE);
     RunLoop().RunUntilIdle();
   }
 
@@ -1406,7 +1410,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadZip) {
                           base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
     ASSERT_TRUE(HasClientDownloadRequest());
-    EXPECT_EQ(1, GetClientDownloadRequest()->archived_binary_size());
+    EXPECT_EQ(2, GetClientDownloadRequest()->archived_binary_size());
     EXPECT_TRUE(GetClientDownloadRequest()->has_download_type());
     EXPECT_EQ(ClientDownloadRequest_DownloadType_ZIPPED_EXECUTABLE,
               GetClientDownloadRequest()->download_type());
@@ -1443,19 +1447,183 @@ TEST_F(DownloadProtectionServiceTest,
        CheckClientDownloadReportCorruptDmg) {
   CheckClientDownloadReportCorruptArchive(DMG);
 }
-#endif
+
+// Tests that signatures get recorded and uploaded for signed DMGs.
+TEST_F(DownloadProtectionServiceTest,
+       CheckClientDownloadReportDmgWithSignature) {
+  net::FakeURLFetcherFactory factory(NULL);
+  PrepareResponse(&factory, ClientDownloadResponse::SAFE, net::HTTP_OK,
+                  net::URLRequestStatus::SUCCESS);
+
+  base::FilePath signed_dmg;
+  EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &signed_dmg));
+  signed_dmg = signed_dmg.AppendASCII("safe_browsing")
+                   .AppendASCII("mach_o")
+                   .AppendASCII("signed-archive.dmg");
+
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItemWithFullPaths(
+      &item, {"http://www.evil.com/a.dmg"},                     // url_chain
+      "http://www.google.com/",                                 // referrer
+      signed_dmg,                                               // tmp_path
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("a.dmg")));  // final_path
+
+  RunLoop run_loop;
+  download_service_->CheckClientDownload(
+      &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                        base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  ASSERT_TRUE(HasClientDownloadRequest());
+  EXPECT_TRUE(GetClientDownloadRequest()->has_udif_code_signature());
+  EXPECT_EQ(2215u, GetClientDownloadRequest()->udif_code_signature().length());
+
+  base::FilePath signed_dmg_signature;
+  EXPECT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &signed_dmg_signature));
+  signed_dmg_signature = signed_dmg_signature.AppendASCII("safe_browsing")
+                             .AppendASCII("mach_o")
+                             .AppendASCII("signed-archive-signature.data");
+
+  std::string signature;
+  base::ReadFileToString(signed_dmg_signature, &signature);
+  EXPECT_EQ(2215u, signature.length());
+  EXPECT_EQ(signature, GetClientDownloadRequest()->udif_code_signature());
+
+  ClearClientDownloadRequest();
+
+  Mock::VerifyAndClearExpectations(sb_service_.get());
+  Mock::VerifyAndClearExpectations(binary_feature_extractor_.get());
+}
+
+// Tests that no signature gets recorded and uploaded for unsigned DMGs.
+TEST_F(DownloadProtectionServiceTest,
+       CheckClientDownloadReportDmgWithoutSignature) {
+  net::FakeURLFetcherFactory factory(NULL);
+  PrepareResponse(&factory, ClientDownloadResponse::SAFE, net::HTTP_OK,
+                  net::URLRequestStatus::SUCCESS);
+
+  base::FilePath unsigned_dmg;
+  EXPECT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &unsigned_dmg));
+  unsigned_dmg = unsigned_dmg.AppendASCII("chrome")
+                     .AppendASCII("safe_browsing_dmg")
+                     .AppendASCII("mach_o_in_dmg.dmg");
+
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItemWithFullPaths(
+      &item, {"http://www.evil.com/a.dmg"},                     // url_chain
+      "http://www.google.com/",                                 // referrer
+      unsigned_dmg,                                             // tmp_path
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("a.dmg")));  // final_path
+
+  RunLoop run_loop;
+  download_service_->CheckClientDownload(
+      &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                        base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  ASSERT_TRUE(HasClientDownloadRequest());
+  EXPECT_FALSE(GetClientDownloadRequest()->has_udif_code_signature());
+
+  ClearClientDownloadRequest();
+
+  Mock::VerifyAndClearExpectations(sb_service_.get());
+  Mock::VerifyAndClearExpectations(binary_feature_extractor_.get());
+}
+
+// Test that downloaded files with no disk image extension that have a 'koly'
+// trailer are treated as disk images and processed accordingly.
+TEST_F(DownloadProtectionServiceTest,
+       CheckClientDownloadReportDmgWithoutExtension) {
+  net::FakeURLFetcherFactory factory(NULL);
+  PrepareResponse(&factory, ClientDownloadResponse::SAFE, net::HTTP_OK,
+                  net::URLRequestStatus::SUCCESS);
+
+  base::FilePath test_data;
+  EXPECT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &test_data));
+  test_data = test_data.AppendASCII("chrome")
+                  .AppendASCII("safe_browsing_dmg")
+                  .AppendASCII("mach_o_in_dmg.txt");
+
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItemWithFullPaths(
+      &item, {"http://www.evil.com/a.dmg"},                     // url_chain
+      "http://www.google.com/",                                 // referrer
+      test_data,                                                // tmp_path
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("a.dmg")));  // final_path
+
+  RunLoop run_loop;
+  download_service_->CheckClientDownload(
+      &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                        base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  ASSERT_TRUE(HasClientDownloadRequest());
+  EXPECT_TRUE(GetClientDownloadRequest()->archive_valid());
+  ClearClientDownloadRequest();
+
+  Mock::VerifyAndClearExpectations(sb_service_.get());
+  Mock::VerifyAndClearExpectations(binary_feature_extractor_.get());
+}
+
+// Demonstrate that a .dmg file whose a) extension has been changed to .txt and
+// b) 'koly' signature has been removed is not processed as a disk image.
+TEST_F(DownloadProtectionServiceTest, CheckClientDownloadReportDmgWithoutKoly) {
+  net::FakeURLFetcherFactory factory(NULL);
+  PrepareResponse(&factory, ClientDownloadResponse::SAFE, net::HTTP_OK,
+                  net::URLRequestStatus::SUCCESS);
+
+  base::FilePath test_data;
+  EXPECT_TRUE(PathService::Get(chrome::DIR_GEN_TEST_DATA, &test_data));
+  test_data = test_data.AppendASCII("chrome")
+                  .AppendASCII("safe_browsing_dmg")
+                  .AppendASCII("mach_o_in_dmg_no_koly_signature.txt");
+
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItemWithFullPaths(
+      &item, {"http://www.evil.com/a.dmg"},                     // url_chain
+      "http://www.google.com/",                                 // referrer
+      test_data,                                                // tmp_path
+      temp_dir_.GetPath().Append(FILE_PATH_LITERAL("a.dmg")));  // final_path
+
+  RunLoop run_loop;
+  download_service_->CheckClientDownload(
+      &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
+                        base::Unretained(this), run_loop.QuitClosure()));
+  run_loop.Run();
+
+  ASSERT_TRUE(HasClientDownloadRequest());
+  EXPECT_FALSE(GetClientDownloadRequest()->archive_valid());
+  ClearClientDownloadRequest();
+
+  Mock::VerifyAndClearExpectations(sb_service_.get());
+  Mock::VerifyAndClearExpectations(binary_feature_extractor_.get());
+}
+
+#endif  // OS_MACOSX
 
 TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
   net::TestURLFetcherFactory factory;
 
+#if defined(OS_MACOSX)
+  std::string download_file_path("ftp://www.google.com/bla.dmg");
+#else
+  std::string download_file_path("ftp://www.google.com/bla.exe");
+#endif  //  OS_MACOSX
+
   NiceMockDownloadItem item;
+#if defined(OS_MACOSX)
   PrepareBasicDownloadItem(
-    &item,
-    {"http://www.google.com/",
-     "http://www.google.com/bla.exe"},  // url_chain
-    "http://www.google.com/",           // referrer
-    FILE_PATH_LITERAL("bla.tmp"),       // tmp_path
-    FILE_PATH_LITERAL("bla.exe"));      // final_path
+      &item, {"http://www.google.com/", download_file_path},  // url_chain
+      "http://www.google.com/",                               // referrer
+      FILE_PATH_LITERAL("bla.tmp"),                           // tmp_path
+      FILE_PATH_LITERAL("bla.dmg"));                          // final_path
+#else
+  PrepareBasicDownloadItem(
+      &item, {"http://www.google.com/", download_file_path},  // url_chain
+      "http://www.google.com/",                               // referrer
+      FILE_PATH_LITERAL("bla.tmp"),                           // tmp_path
+      FILE_PATH_LITERAL("bla.exe"));                          // final_path
+#endif  // OS_MACOSX
 
   std::string remote_address = "10.11.12.13";
   EXPECT_CALL(item, GetRemoteAddress()).WillRepeatedly(Return(remote_address));
@@ -1463,6 +1631,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
   EXPECT_CALL(*sb_service_->mock_database_manager(),
               MatchDownloadWhitelistUrl(_))
       .WillRepeatedly(Return(false));
+#if !defined(OS_MACOSX)
   EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _))
       .WillOnce(SetCertificateContents("dummy cert data"));
   EXPECT_CALL(
@@ -1470,6 +1639,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
       ExtractImageFeatures(tmp_path_, BinaryFeatureExtractor::kDefaultOptions,
                            _, _))
       .WillOnce(SetDosHeaderContents("dummy dos header"));
+#endif  // OS_MACOSX
   RunLoop run_loop;
   download_service_->CheckClientDownload(
       &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
@@ -1483,7 +1653,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
   ASSERT_TRUE(fetcher);
   ClientDownloadRequest request;
   EXPECT_TRUE(request.ParseFromString(fetcher->upload_data()));
-  EXPECT_EQ("http://www.google.com/bla.exe", request.url());
+  EXPECT_EQ(download_file_path, request.url());
   EXPECT_EQ(hash_, request.digests().sha256());
   EXPECT_EQ(item.GetReceivedBytes(), request.length());
   EXPECT_EQ(item.HasUserGesture(), request.user_initiated());
@@ -1494,9 +1664,9 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
                                       "http://www.google.com/", ""));
   EXPECT_TRUE(RequestContainsResource(request,
                                       ClientDownloadRequest::DOWNLOAD_URL,
-                                      "http://www.google.com/bla.exe",
-                                      referrer_.spec()));
+                                      download_file_path, referrer_.spec()));
   EXPECT_TRUE(request.has_signature());
+#if !defined(OS_MACOSX)
   ASSERT_EQ(1, request.signature().certificate_chain_size());
   const ClientDownloadRequest_CertificateChain& chain =
       request.signature().certificate_chain(0);
@@ -1508,6 +1678,7 @@ TEST_F(DownloadProtectionServiceTest, CheckClientDownloadValidateRequest) {
   EXPECT_TRUE(headers.has_pe_headers());
   EXPECT_TRUE(headers.pe_headers().has_dos_header());
   EXPECT_EQ("dummy dos header", headers.pe_headers().dos_header());
+#endif  // OS_MACOSX
 
   // Simulate the request finishing.
   base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -1522,25 +1693,40 @@ TEST_F(DownloadProtectionServiceTest,
        CheckClientDownloadValidateRequestNoSignature) {
   net::TestURLFetcherFactory factory;
 
+#if defined(OS_MACOSX)
+  std::string download_file_path("ftp://www.google.com/bla.dmg");
+#else
+  std::string download_file_path("ftp://www.google.com/bla.exe");
+#endif  // OS_MACOSX
+
   NiceMockDownloadItem item;
+#if defined(OS_MACOSX)
   PrepareBasicDownloadItem(
-    &item,
-    {"http://www.google.com/",
-     "ftp://www.google.com/bla.exe"},  // url_chain
-    "http://www.google.com/",          // referrer
-    FILE_PATH_LITERAL("bla.tmp"),      // tmp_path
-    FILE_PATH_LITERAL("bla.exe"));     // final_path
+      &item, {"http://www.google.com/", download_file_path},  // url_chain
+      "http://www.google.com/",                               // referrer
+      FILE_PATH_LITERAL("bla.tmp"),                           // tmp_path
+      FILE_PATH_LITERAL("bla.dmg"));                          // final_path
+#else
+  PrepareBasicDownloadItem(
+      &item, {"http://www.google.com/", download_file_path},  // url_chain
+      "http://www.google.com/",                               // referrer
+      FILE_PATH_LITERAL("bla.tmp"),                           // tmp_path
+      FILE_PATH_LITERAL("bla.exe"));                          // final_path
+#endif  // OS_MACOSX
+
   std::string remote_address = "10.11.12.13";
   EXPECT_CALL(item, GetRemoteAddress()).WillRepeatedly(Return(remote_address));
-
   EXPECT_CALL(*sb_service_->mock_database_manager(),
               MatchDownloadWhitelistUrl(_))
       .WillRepeatedly(Return(false));
+#if !defined(OS_MACOSX)
   EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _));
   EXPECT_CALL(*binary_feature_extractor_.get(),
               ExtractImageFeatures(tmp_path_,
                                    BinaryFeatureExtractor::kDefaultOptions,
                                    _, _));
+#endif  // OS_MACOSX
+
   RunLoop run_loop;
   download_service_->CheckClientDownload(
       &item, base::Bind(&DownloadProtectionServiceTest::CheckDoneCallback,
@@ -1554,7 +1740,7 @@ TEST_F(DownloadProtectionServiceTest,
   ASSERT_TRUE(fetcher);
   ClientDownloadRequest request;
   EXPECT_TRUE(request.ParseFromString(fetcher->upload_data()));
-  EXPECT_EQ("ftp://www.google.com/bla.exe", request.url());
+  EXPECT_EQ(download_file_path, request.url());
   EXPECT_EQ(hash_, request.digests().sha256());
   EXPECT_EQ(item.GetReceivedBytes(), request.length());
   EXPECT_EQ(item.HasUserGesture(), request.user_initiated());
@@ -1564,8 +1750,7 @@ TEST_F(DownloadProtectionServiceTest,
                                       "http://www.google.com/", ""));
   EXPECT_TRUE(RequestContainsResource(request,
                                       ClientDownloadRequest::DOWNLOAD_URL,
-                                      "ftp://www.google.com/bla.exe",
-                                      referrer_.spec()));
+                                      download_file_path, referrer_.spec()));
   EXPECT_TRUE(request.has_signature());
   EXPECT_EQ(0, request.signature().certificate_chain_size());
 
@@ -1797,7 +1982,7 @@ TEST_F(DownloadProtectionServiceTest, TestCheckDownloadUrl) {
   {
     EXPECT_CALL(*sb_service_->mock_database_manager(),
                 CheckDownloadUrl(ContainerEq(url_chain), NotNull()))
-        .WillOnce(DoAll(CheckDownloadUrlDone(SB_THREAT_TYPE_BINARY_MALWARE_URL),
+        .WillOnce(DoAll(CheckDownloadUrlDone(SB_THREAT_TYPE_URL_BINARY_MALWARE),
                         Return(false)));
     RunLoop run_loop;
     download_service_->CheckDownloadUrl(
@@ -1856,10 +2041,25 @@ TEST_F(DownloadProtectionServiceTest, TestDownloadItemDestroyed) {
     EXPECT_CALL(*sb_service_->mock_database_manager(),
                 MatchDownloadWhitelistUrl(_))
         .WillRepeatedly(Return(false));
+
+#if defined(OS_MACOSX)
+    // Expects that MockDownloadItem will go out of scope while asynchronous
+    // processing is parsing file metadata, and thus ExtractFileOrDmgFeatures()
+    // will return rather than continuing to process the download.
+    EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _))
+        .Times(0);
+    EXPECT_CALL(*binary_feature_extractor_.get(),
+                ExtractImageFeatures(
+                    tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _))
+        .Times(0);
+#else
+    // Expects synchronous processing that continues to extract features from
+    // download even after MockDownloadItem goes out of scope.
     EXPECT_CALL(*binary_feature_extractor_.get(), CheckSignature(tmp_path_, _));
     EXPECT_CALL(*binary_feature_extractor_.get(),
                 ExtractImageFeatures(
                     tmp_path_, BinaryFeatureExtractor::kDefaultOptions, _, _));
+#endif
 
     download_service_->CheckClientDownload(
         &item,
@@ -2267,6 +2467,37 @@ TEST_F(DownloadProtectionServiceTest, PPAPIDownloadRequest_Payload) {
   EXPECT_EQ(".txt", request.alternate_extensions(0));
   EXPECT_EQ(".abc", request.alternate_extensions(1));
   EXPECT_EQ(".sdF", request.alternate_extensions(2));
+}
+
+TEST_F(DownloadProtectionServiceTest,
+       VerifyReferrerChainWithEmptyNavigationHistory) {
+  // Setup a web_contents with "http://example.com" as its last committed url.
+  content::WebContents* web_contents =
+      content::WebContentsTester::CreateTestWebContents(profile_.get(),
+                                                        nullptr);
+  content::WebContentsTester* web_contents_tester =
+      content::WebContentsTester::For(web_contents);
+  web_contents_tester->SetLastCommittedURL(GURL("http://example.com"));
+
+  NiceMockDownloadItem item;
+  PrepareBasicDownloadItem(
+      &item, {"http://referrer.com", "http://www.evil.com/a.exe"},  // url_chain
+      "http://example.com/",                                        // referrer
+      FILE_PATH_LITERAL("a.tmp"),                                   // tmp_path
+      FILE_PATH_LITERAL("a.exe"));  // final_path
+  ON_CALL(item, GetWebContents()).WillByDefault(Return(web_contents));
+
+  std::unique_ptr<ReferrerChain> referrer_chain =
+      download_service_->IdentifyReferrerChain(item);
+
+  ASSERT_EQ(1, referrer_chain->size());
+  EXPECT_EQ(item.GetUrlChain().back(), referrer_chain->Get(0).url());
+  EXPECT_EQ(web_contents->GetLastCommittedURL().spec(),
+            referrer_chain->Get(0).referrer_url());
+  EXPECT_EQ(ReferrerChainEntry::EVENT_URL, referrer_chain->Get(0).type());
+  EXPECT_EQ(static_cast<int>(item.GetUrlChain().size()),
+            referrer_chain->Get(0).server_redirect_chain_size());
+  EXPECT_FALSE(referrer_chain->Get(0).is_retargeting());
 }
 
 // ------------ class DownloadProtectionServiceFlagTest ----------------

@@ -4,11 +4,13 @@
 
 #include "components/ntp_snippets/remote/remote_suggestions_scheduler_impl.h"
 
+#include <cfloat>
 #include <random>
 #include <string>
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
@@ -62,11 +64,23 @@ enum class FetchingInterval {
 // defined by the enum FetchingInterval. The default time intervals defined in
 // the arrays can be overridden using different variation parameters.
 const double kDefaultFetchingIntervalHoursRareNtpUser[] = {192.0, 96.0, 48.0,
-                                                           24.0,  12.0, 8.0};
-const double kDefaultFetchingIntervalHoursActiveNtpUser[] = {96.0, 48.0, 48.0,
-                                                             24.0, 12.0, 8.0};
+                                                           48.0,  10.0, 10.0};
+const double kDefaultFetchingIntervalHoursActiveNtpUser[] = {96.0, 48.0, 24.0,
+                                                             24.0, 10.0, 10.0};
 const double kDefaultFetchingIntervalHoursActiveSuggestionsConsumer[] = {
-    48.0, 24.0, 24.0, 6.0, 2.0, 1.0};
+    48.0, 24.0, 12.0, 12.0, 1.0, 1.0};
+
+// For a simple comparision: fetching intervals that emulate the state really
+// rolled out to 100% M58 Stable. Used for evaluation of later changes. DBL_MAX
+// values simulate this interval being disabled.
+// TODO(jkrcal): Remove when not needed any more, incl. the feature. Probably
+// after M62 when CH is launched.
+const double kM58FetchingIntervalHoursRareNtpUser[] = {48.0,    24.0, DBL_MAX,
+                                                       DBL_MAX, 4.0,  4.0};
+const double kM58FetchingIntervalHoursActiveNtpUser[] = {24.0,    8.0,  DBL_MAX,
+                                                         DBL_MAX, 10.0, 10.0};
+const double kM58FetchingIntervalHoursActiveSuggestionsConsumer[] = {
+    24.0, 6.0, DBL_MAX, DBL_MAX, 1.0, 1.0};
 
 // Variation parameters than can be used to override the default fetching
 // intervals. For backwards compatibility, we do not rename
@@ -102,6 +116,12 @@ static_assert(
         static_cast<unsigned int>(FetchingInterval::COUNT) ==
             arraysize(kDefaultFetchingIntervalHoursActiveSuggestionsConsumer) &&
         static_cast<unsigned int>(FetchingInterval::COUNT) ==
+            arraysize(kM58FetchingIntervalHoursRareNtpUser) &&
+        static_cast<unsigned int>(FetchingInterval::COUNT) ==
+            arraysize(kM58FetchingIntervalHoursActiveNtpUser) &&
+        static_cast<unsigned int>(FetchingInterval::COUNT) ==
+            arraysize(kM58FetchingIntervalHoursActiveSuggestionsConsumer) &&
+        static_cast<unsigned int>(FetchingInterval::COUNT) ==
             arraysize(kFetchingIntervalParamNameRareNtpUser) &&
         static_cast<unsigned int>(FetchingInterval::COUNT) ==
             arraysize(kFetchingIntervalParamNameActiveNtpUser) &&
@@ -109,6 +129,8 @@ static_assert(
             arraysize(kFetchingIntervalParamNameActiveSuggestionsConsumer),
     "Fill in all the info for fetching intervals.");
 
+// For backward compatibility "ntp_opened" value is kept and denotes the
+// SURFACE_OPENED trigger type.
 const char* kTriggerTypeNames[] = {"persistent_scheduler_wake_up", "ntp_opened",
                                    "browser_foregrounded",
                                    "browser_cold_start"};
@@ -132,20 +154,29 @@ base::TimeDelta GetDesiredFetchingInterval(
   const unsigned int index = static_cast<unsigned int>(interval);
   DCHECK(index < arraysize(kDefaultFetchingIntervalHoursRareNtpUser));
 
+  bool emulateM58 = base::FeatureList::IsEnabled(
+      kRemoteSuggestionsEmulateM58FetchingSchedule);
+
   double default_value_hours = 0.0;
   const char* param_name = nullptr;
   switch (user_class) {
     case UserClassifier::UserClass::RARE_NTP_USER:
-      default_value_hours = kDefaultFetchingIntervalHoursRareNtpUser[index];
+      default_value_hours =
+          emulateM58 ? kM58FetchingIntervalHoursRareNtpUser[index]
+                     : kDefaultFetchingIntervalHoursRareNtpUser[index];
       param_name = kFetchingIntervalParamNameRareNtpUser[index];
       break;
     case UserClassifier::UserClass::ACTIVE_NTP_USER:
-      default_value_hours = kDefaultFetchingIntervalHoursActiveNtpUser[index];
+      default_value_hours =
+          emulateM58 ? kM58FetchingIntervalHoursActiveNtpUser[index]
+                     : kDefaultFetchingIntervalHoursActiveNtpUser[index];
       param_name = kFetchingIntervalParamNameActiveNtpUser[index];
       break;
     case UserClassifier::UserClass::ACTIVE_SUGGESTIONS_CONSUMER:
       default_value_hours =
-          kDefaultFetchingIntervalHoursActiveSuggestionsConsumer[index];
+          emulateM58
+              ? kM58FetchingIntervalHoursActiveSuggestionsConsumer[index]
+              : kDefaultFetchingIntervalHoursActiveSuggestionsConsumer[index];
       param_name = kFetchingIntervalParamNameActiveSuggestionsConsumer[index];
       break;
   }
@@ -157,29 +188,62 @@ base::TimeDelta GetDesiredFetchingInterval(
   return base::TimeDelta::FromSecondsD(value_hours * 3600.0);
 }
 
-void ReportTimeUntilFirstSoftTrigger(UserClassifier::UserClass user_class,
-                                     base::TimeDelta time_until_first_trigger) {
+void ReportTimeUntilFirstShownTrigger(
+    UserClassifier::UserClass user_class,
+    base::TimeDelta time_until_first_shown_trigger) {
   switch (user_class) {
     case UserClassifier::UserClass::RARE_NTP_USER:
       UMA_HISTOGRAM_CUSTOM_TIMES(
-          "NewTabPage.ContentSuggestions.TimeUntilFirstSoftTrigger.RareNTPUser",
-          time_until_first_trigger, base::TimeDelta::FromSeconds(1),
+          "NewTabPage.ContentSuggestions.TimeUntilFirstShownTrigger."
+          "RareNTPUser",
+          time_until_first_shown_trigger, base::TimeDelta::FromSeconds(1),
           base::TimeDelta::FromDays(7),
           /*bucket_count=*/50);
       break;
     case UserClassifier::UserClass::ACTIVE_NTP_USER:
       UMA_HISTOGRAM_CUSTOM_TIMES(
-          "NewTabPage.ContentSuggestions.TimeUntilFirstSoftTrigger."
+          "NewTabPage.ContentSuggestions.TimeUntilFirstShownTrigger."
           "ActiveNTPUser",
-          time_until_first_trigger, base::TimeDelta::FromSeconds(1),
+          time_until_first_shown_trigger, base::TimeDelta::FromSeconds(1),
           base::TimeDelta::FromDays(7),
           /*bucket_count=*/50);
       break;
     case UserClassifier::UserClass::ACTIVE_SUGGESTIONS_CONSUMER:
       UMA_HISTOGRAM_CUSTOM_TIMES(
-          "NewTabPage.ContentSuggestions.TimeUntilFirstSoftTrigger."
+          "NewTabPage.ContentSuggestions.TimeUntilFirstShownTrigger."
           "ActiveSuggestionsConsumer",
-          time_until_first_trigger, base::TimeDelta::FromSeconds(1),
+          time_until_first_shown_trigger, base::TimeDelta::FromSeconds(1),
+          base::TimeDelta::FromDays(7),
+          /*bucket_count=*/50);
+      break;
+  }
+}
+
+void ReportTimeUntilFirstStartupTrigger(
+    UserClassifier::UserClass user_class,
+    base::TimeDelta time_until_first_startup_trigger) {
+  switch (user_class) {
+    case UserClassifier::UserClass::RARE_NTP_USER:
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "NewTabPage.ContentSuggestions.TimeUntilFirstStartupTrigger."
+          "RareNTPUser",
+          time_until_first_startup_trigger, base::TimeDelta::FromSeconds(1),
+          base::TimeDelta::FromDays(7),
+          /*bucket_count=*/50);
+      break;
+    case UserClassifier::UserClass::ACTIVE_NTP_USER:
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "NewTabPage.ContentSuggestions.TimeUntilFirstStartupTrigger."
+          "ActiveNTPUser",
+          time_until_first_startup_trigger, base::TimeDelta::FromSeconds(1),
+          base::TimeDelta::FromDays(7),
+          /*bucket_count=*/50);
+      break;
+    case UserClassifier::UserClass::ACTIVE_SUGGESTIONS_CONSUMER:
+      UMA_HISTOGRAM_CUSTOM_TIMES(
+          "NewTabPage.ContentSuggestions.TimeUntilFirstStartupTrigger."
+          "ActiveSuggestionsConsumer",
+          time_until_first_startup_trigger, base::TimeDelta::FromSeconds(1),
           base::TimeDelta::FromDays(7),
           /*bucket_count=*/50);
       break;
@@ -356,7 +420,7 @@ bool RemoteSuggestionsSchedulerImpl::FetchingSchedule::is_empty() const {
 // |kTriggerTypeNames| above.
 enum class RemoteSuggestionsSchedulerImpl::TriggerType {
   PERSISTENT_SCHEDULER_WAKE_UP = 0,
-  NTP_OPENED = 1,
+  SURFACE_OPENED = 1,
   BROWSER_FOREGROUNDED = 2,
   BROWSER_COLD_START = 3,
   COUNT
@@ -384,7 +448,8 @@ RemoteSuggestionsSchedulerImpl::RemoteSuggestionsSchedulerImpl(
           profile_prefs,
           RequestThrottler::RequestType::
               CONTENT_SUGGESTION_FETCHER_ACTIVE_SUGGESTIONS_CONSUMER),
-      time_until_first_trigger_reported_(false),
+      time_until_first_shown_trigger_reported_(false),
+      time_until_first_startup_trigger_reported_(false),
       eula_state_(base::MakeUnique<EulaState>(local_state_prefs, this)),
       profile_prefs_(profile_prefs),
       clock_(std::move(clock)),
@@ -454,8 +519,9 @@ void RemoteSuggestionsSchedulerImpl::OnHistoryCleared() {
   ClearLastFetchAttemptTime();
 }
 
-void RemoteSuggestionsSchedulerImpl::RescheduleFetching() {
-  // Force the reschedule by stopping and starting it again.
+void RemoteSuggestionsSchedulerImpl::OnBrowserUpgraded() {
+  // After browser upgrade, persistent schedule needs to get reset. Force the
+  // reschedule by stopping and starting it again.
   StopScheduling();
   StartScheduling();
 }
@@ -486,10 +552,10 @@ void RemoteSuggestionsSchedulerImpl::OnBrowserColdStart() {
   RefetchInTheBackgroundIfAppropriate(TriggerType::BROWSER_COLD_START);
 }
 
-void RemoteSuggestionsSchedulerImpl::OnNTPOpened() {
+void RemoteSuggestionsSchedulerImpl::OnSuggestionsSurfaceOpened() {
   // TODO(jkrcal): Consider that this is called whenever we open an NTP.
   // Therefore, keep work light for fast start up calls.
-  RefetchInTheBackgroundIfAppropriate(TriggerType::NTP_OPENED);
+  RefetchInTheBackgroundIfAppropriate(TriggerType::SURFACE_OPENED);
 }
 
 void RemoteSuggestionsSchedulerImpl::StartScheduling() {
@@ -589,21 +655,36 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
     return;
   }
 
+  if (net::NetworkChangeNotifier::IsOffline()) {
+    // Do not let a request fail due to lack of internet connection. Then, such
+    // a failure would get logged and further requests would be blocked for a
+    // while (even after becoming online).
+    return;
+  }
+
   if (BackgroundFetchesDisabled(trigger)) {
     return;
   }
 
-  bool is_soft = trigger != TriggerType::PERSISTENT_SCHEDULER_WAKE_UP;
   const base::Time last_fetch_attempt_time = base::Time::FromInternalValue(
       profile_prefs_->GetInt64(prefs::kSnippetLastFetchAttempt));
 
-  if (is_soft && !time_until_first_trigger_reported_) {
-    time_until_first_trigger_reported_ = true;
-    ReportTimeUntilFirstSoftTrigger(user_classifier_->GetUserClass(),
-                                    clock_->Now() - last_fetch_attempt_time);
+  if (trigger == TriggerType::SURFACE_OPENED &&
+      !time_until_first_shown_trigger_reported_) {
+    time_until_first_shown_trigger_reported_ = true;
+    ReportTimeUntilFirstShownTrigger(user_classifier_->GetUserClass(),
+                                     clock_->Now() - last_fetch_attempt_time);
   }
 
-  if (is_soft &&
+  if ((trigger == TriggerType::BROWSER_FOREGROUNDED ||
+       trigger == TriggerType::BROWSER_COLD_START) &&
+      !time_until_first_startup_trigger_reported_) {
+    time_until_first_startup_trigger_reported_ = true;
+    ReportTimeUntilFirstStartupTrigger(user_classifier_->GetUserClass(),
+                                       clock_->Now() - last_fetch_attempt_time);
+  }
+
+  if (trigger != TriggerType::PERSISTENT_SCHEDULER_WAKE_UP &&
       !ShouldRefetchInTheBackgroundNow(last_fetch_attempt_time, trigger)) {
     return;
   }
@@ -617,7 +698,7 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundIfAppropriate(
     case TriggerType::PERSISTENT_SCHEDULER_WAKE_UP:
       ReportTimeUntilPersistentFetch(user_classifier_->GetUserClass(), diff);
       break;
-    case TriggerType::NTP_OPENED:
+    case TriggerType::SURFACE_OPENED:
       ReportTimeUntilShownFetch(user_classifier_->GetUserClass(), diff);
       break;
     case TriggerType::BROWSER_FOREGROUNDED:
@@ -648,7 +729,7 @@ bool RemoteSuggestionsSchedulerImpl::ShouldRefetchInTheBackgroundNow(
   }
 
   base::Time first_allowed_fetch_time = last_fetch_attempt_time;
-  if (trigger == TriggerType::NTP_OPENED) {
+  if (trigger == TriggerType::SURFACE_OPENED) {
     first_allowed_fetch_time += (wifi ? schedule_.interval_shown_wifi
                                       : schedule_.interval_shown_fallback);
   } else {
@@ -707,7 +788,8 @@ void RemoteSuggestionsSchedulerImpl::RefetchInTheBackgroundFinished(
 void RemoteSuggestionsSchedulerImpl::OnFetchCompleted(Status fetch_status) {
   profile_prefs_->SetInt64(prefs::kSnippetLastFetchAttempt,
                            clock_->Now().ToInternalValue());
-  time_until_first_trigger_reported_ = false;
+  time_until_first_shown_trigger_reported_ = false;
+  time_until_first_startup_trigger_reported_ = false;
 
   // Reschedule after a fetch. The persistent schedule is applied only after a
   // successful fetch. After a failed fetch, we want to keep the previous
@@ -764,8 +846,9 @@ RemoteSuggestionsSchedulerImpl::GetEnabledTriggerTypes() {
 
 std::set<RemoteSuggestionsSchedulerImpl::TriggerType>
 RemoteSuggestionsSchedulerImpl::GetDefaultEnabledTriggerTypes() {
-  return {TriggerType::PERSISTENT_SCHEDULER_WAKE_UP, TriggerType::NTP_OPENED,
-          TriggerType::BROWSER_COLD_START, TriggerType::BROWSER_FOREGROUNDED};
+  return {TriggerType::PERSISTENT_SCHEDULER_WAKE_UP,
+          TriggerType::SURFACE_OPENED, TriggerType::BROWSER_COLD_START,
+          TriggerType::BROWSER_FOREGROUNDED};
 }
 
 }  // namespace ntp_snippets

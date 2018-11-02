@@ -5,11 +5,12 @@
 #include "ash/system/tiles/tiles_default_view.h"
 
 #include "ash/metrics/user_metrics_action.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/shutdown_controller.h"
+#include "ash/shutdown_reason.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/night_light/night_light_controller.h"
 #include "ash/system/night_light/night_light_toggle_button.h"
@@ -53,7 +54,7 @@ TilesDefaultView::~TilesDefaultView() = default;
 
 void TilesDefaultView::Init() {
   views::BoxLayout* box_layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 4, 0, 0);
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(0, 4));
   box_layout->set_main_axis_alignment(
       views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   box_layout->set_cross_axis_alignment(
@@ -117,24 +118,24 @@ void TilesDefaultView::ButtonPressed(views::Button* sender,
                                      const ui::Event& event) {
   DCHECK(sender);
   if (sender == settings_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_SETTINGS);
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_SETTINGS);
     Shell::Get()->system_tray_controller()->ShowSettings();
   } else if (sender == help_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_HELP);
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_HELP);
     Shell::Get()->system_tray_controller()->ShowHelp();
   } else if (NightLightController::IsFeatureEnabled() &&
              sender == night_light_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_NIGHT_LIGHT);
-    Shell::Get()->night_light_controller()->Toggle();
-    night_light_button_->Update();
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_NIGHT_LIGHT);
+    night_light_button_->Toggle();
   } else if (sender == lock_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_LOCK_SCREEN);
     chromeos::DBusThreadManager::Get()
         ->GetSessionManagerClient()
         ->RequestLockScreen();
   } else if (sender == power_button_) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
-    Shell::Get()->lock_state_controller()->RequestShutdown();
+    Shell::Get()->metrics()->RecordUserMetricsAction(UMA_TRAY_SHUT_DOWN);
+    Shell::Get()->lock_state_controller()->RequestShutdown(
+        ShutdownReason::TRAY_SHUT_DOWN_BUTTON);
   }
 }
 

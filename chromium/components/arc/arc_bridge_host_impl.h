@@ -59,6 +59,8 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   void OnIntentHelperInstanceReady(
       mojom::IntentHelperInstancePtr intent_helper_ptr) override;
   void OnKioskInstanceReady(mojom::KioskInstancePtr kiosk_ptr) override;
+  void OnLockScreenInstanceReady(
+      mojom::LockScreenInstancePtr lock_screen_ptr) override;
   void OnMetricsInstanceReady(mojom::MetricsInstancePtr metrics_ptr) override;
   void OnNetInstanceReady(mojom::NetInstancePtr net_ptr) override;
   void OnNotificationsInstanceReady(
@@ -78,6 +80,8 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
       mojom::VoiceInteractionArcHomeInstancePtr home_ptr) override;
   void OnVoiceInteractionFrameworkInstanceReady(
       mojom::VoiceInteractionFrameworkInstancePtr framework_ptr) override;
+  void OnVolumeMounterInstanceReady(
+      mojom::VolumeMounterInstancePtr volume_mounter_ptr) override;
   void OnWallpaperInstanceReady(
       mojom::WallpaperInstancePtr wallpaper_ptr) override;
 
@@ -94,7 +98,7 @@ class ArcBridgeHostImpl : public mojom::ArcBridgeHost {
   // Called if one of the established channels is closed.
   void OnChannelClosed(MojoChannel* channel);
 
-  base::ThreadChecker thread_checker_;
+  THREAD_CHECKER(thread_checker_);
 
   // Owned by ArcServiceManager.
   ArcBridgeService* const arc_bridge_service_;

@@ -27,8 +27,10 @@
 #include "net/quic/core/quic_flow_controller.h"
 #include "net/quic/core/quic_iovector.h"
 #include "net/quic/core/quic_packets.h"
+#include "net/quic/core/quic_stream_send_buffer.h"
 #include "net/quic/core/quic_stream_sequencer.h"
 #include "net/quic/core/quic_types.h"
+#include "net/quic/core/stream_notifier_interface.h"
 #include "net/quic/platform/api/quic_export.h"
 #include "net/quic/platform/api/quic_reference_counted.h"
 #include "net/quic/platform/api/quic_string_piece.h"
@@ -41,11 +43,11 @@ class QuicStreamPeer;
 
 class QuicSession;
 
-class QUIC_EXPORT_PRIVATE QuicStream {
+class QUIC_EXPORT_PRIVATE QuicStream : public StreamNotifierInterface {
  public:
   QuicStream(QuicStreamId id, QuicSession* session);
 
-  virtual ~QuicStream();
+  ~QuicStream() override;
 
   // Not in use currently.
   void SetFromConfig();
@@ -90,6 +92,12 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // this end.
   virtual void CloseConnectionWithDetails(QuicErrorCode error,
                                           const std::string& details);
+
+  // Returns true if this stream is still waiting for acks of sent data.
+  // This will return false if all data has been acked, or if the stream
+  // is no longer interested in data being acked (which happens when
+  // a stream is reset because of an error).
+  bool IsWaitingForAcks() const;
 
   QuicStreamId id() const { return id_; }
 
@@ -189,6 +197,23 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // Adds random padding after the fin is consumed for this stream.
   void AddRandomPaddingAfterFin();
 
+  // Save |data_length| of data starts at |iov_offset| in |iov| to send buffer.
+  void SaveStreamData(QuicIOVector iov,
+                      size_t iov_offset,
+                      QuicStreamOffset offset,
+                      QuicByteCount data_length);
+
+  // Write |data_length| of data starts at |offset| from send buffer.
+  bool WriteStreamData(QuicStreamOffset offset,
+                       QuicByteCount data_length,
+                       QuicDataWriter* writer);
+
+  // StreamNotifierInterface methods:
+  void OnStreamFrameAcked(const QuicStreamFrame& frame,
+                          QuicTime::Delta ack_delay_time) override;
+  void OnStreamFrameRetransmitted(const QuicStreamFrame& frame) override;
+  void OnStreamFrameDiscarded(const QuicStreamFrame& frame) override;
+
  protected:
   // Sends as many bytes in the first |count| buffers of |iov| to the connection
   // as the connection will consume.
@@ -224,6 +249,11 @@ class QUIC_EXPORT_PRIVATE QuicStream {
 
   void DisableConnectionFlowControlForThisStream() {
     stream_contributes_to_connection_flow_control_ = false;
+  }
+
+  void set_ack_listener(
+      QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
+    ack_listener_ = std::move(ack_listener);
   }
 
  private:
@@ -270,6 +300,8 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // framing, encryption overhead etc.
   uint64_t stream_bytes_read_;
   uint64_t stream_bytes_written_;
+  // Written bytes which are waiting to be acked.
+  uint64_t stream_bytes_outstanding_;
 
   // Stream error code received from a RstStreamFrame or error code sent by the
   // visitor or sequencer in the RstStreamFrame.
@@ -289,6 +321,8 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   bool fin_buffered_;
   // True if a FIN has been sent to the session.
   bool fin_sent_;
+  // True if a FIN is waiting to be acked.
+  bool fin_outstanding_;
 
   // True if this stream has received (and the sequencer has accepted) a
   // StreamFrame with the FIN set.
@@ -323,6 +357,14 @@ class QUIC_EXPORT_PRIVATE QuicStream {
   // Indicates whether paddings will be added after the fin is consumed for this
   // stream.
   bool add_random_padding_after_fin_;
+
+  // Ack listener of this stream, and it is notified when any of written bytes
+  // are acked.
+  QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener_;
+
+  // Send buffer of this stream. Send buffer is cleaned up when data gets acked
+  // or discarded.
+  QuicStreamSendBuffer send_buffer_;
 
   DISALLOW_COPY_AND_ASSIGN(QuicStream);
 };

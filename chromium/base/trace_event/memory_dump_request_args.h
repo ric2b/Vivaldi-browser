@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <map>
+#include <memory>
 #include <string>
 
 #include "base/base_export.h"
@@ -20,6 +21,8 @@
 
 namespace base {
 namespace trace_event {
+
+class ProcessMemoryDump;
 
 // Captures the reason why a memory dump is being requested. This is to allow
 // selective enabling of dumps, filtering and post-processing. Keep this
@@ -88,6 +91,7 @@ struct BASE_EXPORT MemoryDumpCallbackResult {
   };
   struct ChromeMemDump {
     uint32_t malloc_total_kb = 0;
+    uint32_t command_buffer_total_kb = 0;
     uint32_t partition_alloc_total_kb = 0;
     uint32_t blink_gc_total_kb = 0;
     uint32_t v8_total_kb = 0;
@@ -99,7 +103,7 @@ struct BASE_EXPORT MemoryDumpCallbackResult {
 
   // In some cases, OS stats can only be dumped from a privileged process to
   // get around to sandboxing/selinux restrictions (see crbug.com/461788).
-  std::map<ProcessId, OSMemDump> extra_processes_dump;
+  std::map<ProcessId, OSMemDump> extra_processes_dumps;
 
   MemoryDumpCallbackResult();
   MemoryDumpCallbackResult(const MemoryDumpCallbackResult&);
@@ -107,12 +111,16 @@ struct BASE_EXPORT MemoryDumpCallbackResult {
 };
 
 using GlobalMemoryDumpCallback =
-    Callback<void(uint64_t dump_guid, bool success)>;
+    Callback<void(bool success, uint64_t dump_guid)>;
 
+// TODO(ssid): This should just sent a single PMD once the support for multi
+// process dumps are removed from MemoryDumpManager.
+using ProcessMemoryDumpsMap =
+    std::map<ProcessId, std::unique_ptr<ProcessMemoryDump>>;
 using ProcessMemoryDumpCallback =
-    Callback<void(uint64_t dump_guid,
-                  bool success,
-                  const Optional<MemoryDumpCallbackResult>& result)>;
+    Callback<void(bool success,
+                  uint64_t dump_guid,
+                  const ProcessMemoryDumpsMap& process_dumps)>;
 
 BASE_EXPORT const char* MemoryDumpTypeToString(const MemoryDumpType& dump_type);
 

@@ -17,14 +17,6 @@
 #include "ui/gfx/image/image_skia_source.h"
 #include "ui/gfx/switches.h"
 
-// Duplicated from base/threading/non_thread_safe.h so that we can be
-// good citizens there and undef the macro.
-#if (!defined(NDEBUG) || defined(DCHECK_ALWAYS_ON))
-#define ENABLE_NON_THREAD_SAFE 1
-#else
-#define ENABLE_NON_THREAD_SAFE 0
-#endif
-
 namespace gfx {
 
 namespace {
@@ -355,7 +347,7 @@ TEST_F(ImageSkiaTest, BackedBySameObjectAs) {
   EXPECT_FALSE(copy.BackedBySameObjectAs(unrelated));
 }
 
-#if ENABLE_NON_THREAD_SAFE
+#if DCHECK_IS_ON()
 TEST_F(ImageSkiaTest, EmptyOnThreadTest) {
   ImageSkia empty;
   test::TestOnThread empty_on_thread(&empty);
@@ -378,7 +370,7 @@ TEST_F(ImageSkiaTest, StaticOnThreadTest) {
   EXPECT_FALSE(image.CanRead());
   EXPECT_FALSE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   // An image is accessed by this thread,
   // so other thread cannot read/modify it.
   image.image_reps();
@@ -389,7 +381,7 @@ TEST_F(ImageSkiaTest, StaticOnThreadTest) {
   EXPECT_TRUE(image.CanRead());
   EXPECT_TRUE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   std::unique_ptr<ImageSkia> deep_copy(image.DeepCopy());
   EXPECT_FALSE(deep_copy->IsThreadSafe());
   test::TestOnThread deepcopy_on_thread(deep_copy.get());
@@ -412,7 +404,7 @@ TEST_F(ImageSkiaTest, StaticOnThreadTest) {
   EXPECT_TRUE(deep_copy2->CanRead());
   EXPECT_TRUE(deep_copy2->CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   image.SetReadOnly();
   // A read-only ImageSkia with no source is thread safe.
   EXPECT_TRUE(image.IsThreadSafe());
@@ -423,7 +415,7 @@ TEST_F(ImageSkiaTest, StaticOnThreadTest) {
   EXPECT_TRUE(image.CanRead());
   EXPECT_FALSE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   image.MakeThreadSafe();
   EXPECT_TRUE(image.IsThreadSafe());
   test::TestOnThread threadsafe_on_thread(&image);
@@ -447,7 +439,7 @@ TEST_F(ImageSkiaTest, SourceOnThreadTest) {
   EXPECT_FALSE(image.CanRead());
   EXPECT_FALSE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   // An image is accessed by this thread,
   // so other thread cannot read/modify it.
   image.image_reps();
@@ -458,7 +450,7 @@ TEST_F(ImageSkiaTest, SourceOnThreadTest) {
   EXPECT_TRUE(image.CanRead());
   EXPECT_TRUE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   image.SetReadOnly();
   EXPECT_FALSE(image.IsThreadSafe());
   test::TestOnThread readonly_on_thread(&image);
@@ -468,7 +460,7 @@ TEST_F(ImageSkiaTest, SourceOnThreadTest) {
   EXPECT_FALSE(image.CanRead());
   EXPECT_FALSE(image.CanModify());
 
-  image.DetachStorageFromThread();
+  image.DetachStorageFromSequence();
   image.MakeThreadSafe();
   EXPECT_TRUE(image.IsThreadSafe());
   // Check if image reps are generated for supported scale factors.
@@ -481,10 +473,7 @@ TEST_F(ImageSkiaTest, SourceOnThreadTest) {
   EXPECT_TRUE(image.CanRead());
   EXPECT_FALSE(image.CanModify());
 }
-#endif  // ENABLE_NON_THREAD_SAFE
-
-// Just in case we ever get lumped together with other compilation units.
-#undef ENABLE_NON_THREAD_SAFE
+#endif  // DCHECK_IS_ON()
 
 TEST_F(ImageSkiaTest, Unscaled) {
   SkBitmap bitmap;

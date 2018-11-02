@@ -8,8 +8,10 @@
 #include <stdint.h>
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -25,6 +27,7 @@
 #include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/blocking_method_caller.h"
 #include "chromeos/dbus/cryptohome_client.h"
+#include "chromeos/dbus/login_manager/arc.pb.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "crypto/sha2.h"
 #include "dbus/bus.h"
@@ -141,6 +144,12 @@ void LogPolicyResponseUma(base::StringPiece method_name,
              login_manager::kSessionManagerRetrievePolicyForUser) {
     UMA_HISTOGRAM_ENUMERATION("Enterprise.RetrievePolicyResponse.User",
                               response, RetrievePolicyResponseType::COUNT);
+  } else if (method_name ==
+             login_manager::
+                 kSessionManagerRetrievePolicyForUserWithoutSession) {
+    UMA_HISTOGRAM_ENUMERATION(
+        "Enterprise.RetrievePolicyResponse.UserDuringLogin", response,
+        RetrievePolicyResponseType::COUNT);
   } else {
     LOG(ERROR) << "Invalid method_name: " << method_name;
   }
@@ -183,7 +192,7 @@ class SessionManagerClientImpl : public SessionManagerClient {
 
   void RestartJob(int socket_fd,
                   const std::vector<std::string>& argv,
-                  const VoidDBusMethodCallback& callback) override {
+                  VoidDBusMethodCallback callback) override {
     dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
                                  login_manager::kSessionManagerRestartJob);
     dbus::MessageWriter writer(&method_call);
@@ -192,7 +201,8 @@ class SessionManagerClientImpl : public SessionManagerClient {
     session_manager_proxy_->CallMethod(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&SessionManagerClientImpl::OnRestartJob,
-                   weak_ptr_factory_.GetWeakPtr(), callback));
+                   weak_ptr_factory_.GetWeakPtr(),
+                   base::Passed(std::move(callback))));
   }
 
   void StartSession(const cryptohome::Identification& cryptohome_id) override {
@@ -219,6 +229,17 @@ class SessionManagerClientImpl : public SessionManagerClient {
   void StartDeviceWipe() override {
     SimpleMethodCallToSessionManager(
         login_manager::kSessionManagerStartDeviceWipe);
+  }
+
+  void StartTPMFirmwareUpdate(const std::string& update_mode) override {
+    dbus::MethodCall method_call(
+        login_manager::kSessionManagerInterface,
+        login_manager::kSessionManagerStartTPMFirmwareUpdate);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(update_mode);
+    session_manager_proxy_->CallMethod(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        dbus::ObjectProxy::EmptyResponseCallback());
   }
 
   void RequestLockScreen() override {
@@ -307,6 +328,23 @@ class SessionManagerClientImpl : public SessionManagerClient {
     return BlockingRetrievePolicyByUsername(
         login_manager::kSessionManagerRetrievePolicyForUser, cryptohome_id.id(),
         policy_out);
+  }
+
+  void RetrievePolicyForUserWithoutSession(
+      const cryptohome::Identification& cryptohome_id,
+      const RetrievePolicyCallback& callback) override {
+    const std::string method_name =
+        login_manager::kSessionManagerRetrievePolicyForUserWithoutSession;
+    dbus::MethodCall method_call(login_manager::kSessionManagerInterface,
+                                 method_name);
+    dbus::MessageWriter writer(&method_call);
+    writer.AppendString(cryptohome_id.id());
+    session_manager_proxy_->CallMethodWithErrorCallback(
+        &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
+        base::Bind(&SessionManagerClientImpl::OnRetrievePolicySuccess,
+                   weak_ptr_factory_.GetWeakPtr(), method_name, callback),
+        base::Bind(&SessionManagerClientImpl::OnRetrievePolicyError,
+                   weak_ptr_factory_.GetWeakPtr(), method_name, callback));
   }
 
   void RetrieveDeviceLocalAccountPolicy(
@@ -401,17 +439,30 @@ class SessionManagerClientImpl : public SessionManagerClient {
                    weak_ptr_factory_.GetWeakPtr(), callback));
   }
 
-  void StartArcInstance(const cryptohome::Identification& cryptohome_id,
-                        bool disable_boot_completed_broadcast,
-                        bool enable_vendor_privileged,
+  void StartArcInstance(ArcStartupMode startup_mode,
+                        const cryptohome::Identification& cryptohome_id,
+                        bool skip_boot_completed_broadcast,
+                        bool scan_vendor_priv_app,
                         const StartArcInstanceCallback& callback) override {
     dbus::MethodCall method_call(
         login_manager::kSessionManagerInterface,
         login_manager::kSessionManagerStartArcInstance);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendString(cryptohome_id.id());
-    writer.AppendBool(disable_boot_completed_broadcast);
-    writer.AppendBool(enable_vendor_privileged);
+
+    login_manager::StartArcInstanceRequest request;
+    switch (startup_mode) {
+      case ArcStartupMode::FULL:
+        request.set_account_id(cryptohome_id.id());
+        request.set_skip_boot_completed_broadcast(
+            skip_boot_completed_broadcast);
+        request.set_scan_vendor_priv_app(scan_vendor_priv_app);
+        break;
+      case ArcStartupMode::LOGIN_SCREEN:
+        request.set_for_login_screen(true);
+        break;
+    }
+    writer.AppendProtoAsArrayOfBytes(request);
+
     session_manager_proxy_->CallMethodWithErrorCallback(
         &method_call, dbus::ObjectProxy::TIMEOUT_USE_DEFAULT,
         base::Bind(&SessionManagerClientImpl::OnStartArcInstanceSucceeded,
@@ -607,13 +658,12 @@ class SessionManagerClientImpl : public SessionManagerClient {
   }
 
   // Called when kSessionManagerRestartJob method is complete.
-  void OnRestartJob(const VoidDBusMethodCallback& callback,
-                    dbus::Response* response) {
+  void OnRestartJob(VoidDBusMethodCallback callback, dbus::Response* response) {
     LOG_IF(ERROR, !response)
         << "Failed to call "
         << login_manager::kSessionManagerRestartJob;
-    callback.Run(response ? DBUS_METHOD_CALL_SUCCESS
-                          : DBUS_METHOD_CALL_FAILURE);
+    std::move(callback).Run(response ? DBUS_METHOD_CALL_SUCCESS
+                                     : DBUS_METHOD_CALL_FAILURE);
   }
 
   // Called when kSessionManagerRetrieveActiveSessions method is complete.
@@ -879,12 +929,13 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
   void EmitLoginPromptVisible() override {}
   void RestartJob(int socket_fd,
                   const std::vector<std::string>& argv,
-                  const VoidDBusMethodCallback& callback) override {}
+                  VoidDBusMethodCallback callback) override {}
   void StartSession(const cryptohome::Identification& cryptohome_id) override {}
   void StopSession() override {}
   void NotifySupervisedUserCreationStarted() override {}
   void NotifySupervisedUserCreationFinished() override {}
   void StartDeviceWipe() override {}
+  void StartTPMFirmwareUpdate(const std::string& update_mode) override {}
   void RequestLockScreen() override {
     if (delegate_)
       delegate_->LockScreenForStub();
@@ -942,6 +993,11 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     *policy_out =
         GetFileContent(GetUserFilePath(cryptohome_id, kStubPolicyFile));
     return RetrievePolicyResponseType::SUCCESS;
+  }
+  void RetrievePolicyForUserWithoutSession(
+      const cryptohome::Identification& cryptohome_id,
+      const RetrievePolicyCallback& callback) override {
+    RetrievePolicyForUser(cryptohome_id, callback);
   }
   void RetrieveDeviceLocalAccountPolicy(
       const std::string& account_id,
@@ -1044,7 +1100,8 @@ class SessionManagerClientStubImpl : public SessionManagerClient {
     callback.Run(false);
   }
 
-  void StartArcInstance(const cryptohome::Identification& cryptohome_id,
+  void StartArcInstance(ArcStartupMode startup_mode,
+                        const cryptohome::Identification& cryptohome_id,
                         bool disable_boot_completed_broadcast,
                         bool enable_vendor_privileged,
                         const StartArcInstanceCallback& callback) override {

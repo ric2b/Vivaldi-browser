@@ -9,8 +9,8 @@
 #include "base/test/ios/wait_util.h"
 #import "ios/web/public/navigation_item.h"
 #import "ios/web/public/navigation_manager.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/public/test/web_view_interaction_test_util.h"
 #import "ios/web/public/web_state/web_state.h"
 #include "ios/web/public/web_state/web_state_observer.h"
@@ -222,7 +222,14 @@ TEST_F(WindowLocationTest, MAYBE_WindowLocationReload) {
 }
 
 // Tests that calling window.location.assign() creates a new NavigationItem.
-TEST_F(WindowLocationTest, WindowLocationSetToDOMString) {
+#if TARGET_IPHONE_SIMULATOR
+#define MAYBE_WindowLocationSetToDOMString WindowLocationSetToDOMString
+#else
+#define MAYBE_WindowLocationSetToDOMString DISABLED_WindowLocationSetToDOMString
+#endif
+// TODO(crbug.com/731740): This test is disabled because it occasionally times
+// out on device.
+TEST_F(WindowLocationTest, MAYBE_WindowLocationSetToDOMString) {
   // Navigate to about:blank so there is a forward entry to prune.
   GURL about_blank("about:blank");
   LoadUrl(about_blank);

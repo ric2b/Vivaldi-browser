@@ -84,12 +84,6 @@ void IndexedDBQuotaClient::GetOriginUsage(const GURL& origin_url,
     return;
   }
 
-  // No task runner means unit test; no cleanup necessary.
-  if (!indexed_db_context_->TaskRunner()) {
-    callback.Run(0);
-    return;
-  }
-
   base::PostTaskAndReplyWithResult(
       indexed_db_context_->TaskRunner(), FROM_HERE,
       base::Bind(&GetOriginUsageOnIndexedDBThread,
@@ -109,18 +103,13 @@ void IndexedDBQuotaClient::GetOriginsForType(
     return;
   }
 
-  // No task runner means unit test; no cleanup necessary.
-  if (!indexed_db_context_->TaskRunner()) {
-    callback.Run(std::set<GURL>());
-    return;
-  }
-
   std::set<GURL>* origins_to_return = new std::set<GURL>();
   indexed_db_context_->TaskRunner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&GetAllOriginsOnIndexedDBThread,
-                            base::RetainedRef(indexed_db_context_),
-                            base::Unretained(origins_to_return)),
-      base::Bind(&DidGetOrigins, callback, base::Owned(origins_to_return)));
+      FROM_HERE,
+      base::BindOnce(&GetAllOriginsOnIndexedDBThread,
+                     base::RetainedRef(indexed_db_context_),
+                     base::Unretained(origins_to_return)),
+      base::BindOnce(&DidGetOrigins, callback, base::Owned(origins_to_return)));
 }
 
 void IndexedDBQuotaClient::GetOriginsForHost(
@@ -136,18 +125,13 @@ void IndexedDBQuotaClient::GetOriginsForHost(
     return;
   }
 
-  // No task runner means unit test; no cleanup necessary.
-  if (!indexed_db_context_->TaskRunner()) {
-    callback.Run(std::set<GURL>());
-    return;
-  }
-
   std::set<GURL>* origins_to_return = new std::set<GURL>();
   indexed_db_context_->TaskRunner()->PostTaskAndReply(
-      FROM_HERE, base::Bind(&GetOriginsForHostOnIndexedDBThread,
-                            base::RetainedRef(indexed_db_context_), host,
-                            base::Unretained(origins_to_return)),
-      base::Bind(&DidGetOrigins, callback, base::Owned(origins_to_return)));
+      FROM_HERE,
+      base::BindOnce(&GetOriginsForHostOnIndexedDBThread,
+                     base::RetainedRef(indexed_db_context_), host,
+                     base::Unretained(origins_to_return)),
+      base::BindOnce(&DidGetOrigins, callback, base::Owned(origins_to_return)));
 }
 
 void IndexedDBQuotaClient::DeleteOriginData(const GURL& origin,
@@ -155,12 +139,6 @@ void IndexedDBQuotaClient::DeleteOriginData(const GURL& origin,
                                             const DeletionCallback& callback) {
   if (type != storage::kStorageTypeTemporary) {
     callback.Run(storage::kQuotaErrorNotSupported);
-    return;
-  }
-
-  // No task runner means unit test; no cleanup necessary.
-  if (!indexed_db_context_->TaskRunner()) {
-    callback.Run(storage::kQuotaStatusOk);
     return;
   }
 

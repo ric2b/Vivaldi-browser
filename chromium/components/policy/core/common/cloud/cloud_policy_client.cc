@@ -45,6 +45,43 @@ bool IsChromePolicy(const std::string& type) {
          type == dm_protocol::kChromeUserPolicyType;
 }
 
+LicenseType TranslateLicenseType(em::LicenseType type) {
+  switch (type.license_type()) {
+    case em::LicenseType::UNDEFINED:
+      LOG(ERROR) << "Unknown License type: " << type.license_type();
+      return LicenseType::UNKNOWN;
+    case em::LicenseType::CDM_PERPETUAL:
+      return LicenseType::PERPETUAL;
+    case em::LicenseType::CDM_ANNUAL:
+      return LicenseType::ANNUAL;
+    case em::LicenseType::KIOSK:
+      return LicenseType::KIOSK;
+  }
+  NOTREACHED();
+  return LicenseType::UNKNOWN;
+}
+
+void ExtractLicenseMap(const em::CheckDeviceLicenseResponse& license_response,
+                       CloudPolicyClient::LicenseMap& licenses) {
+  for (int i = 0; i < license_response.license_availability_size(); i++) {
+    const em::LicenseAvailability& license =
+        license_response.license_availability(i);
+    if (!license.has_license_type() || !license.has_available_licenses())
+      continue;
+    auto license_type = TranslateLicenseType(license.license_type());
+    if (license_type == LicenseType::UNKNOWN)
+      continue;
+    bool duplicate =
+        licenses
+            .insert(std::make_pair(license_type, license.available_licenses()))
+            .second;
+    if (duplicate) {
+      LOG(WARNING) << "Duplicate license type in response :"
+                   << static_cast<int>(license_type);
+    }
+  }
+}
+
 }  // namespace
 
 CloudPolicyClient::Observer::~Observer() {}
@@ -94,6 +131,7 @@ void CloudPolicyClient::SetClientId(const std::string& client_id) {
 
 void CloudPolicyClient::Register(em::DeviceRegisterRequest::Type type,
                                  em::DeviceRegisterRequest::Flavor flavor,
+                                 em::LicenseType::LicenseTypeEnum license_type,
                                  const std::string& auth_token,
                                  const std::string& client_id,
                                  const std::string& requisition,
@@ -124,6 +162,8 @@ void CloudPolicyClient::Register(em::DeviceRegisterRequest::Type type,
   if (!current_state_key.empty())
     request->set_server_backed_state_key(current_state_key);
   request->set_flavor(flavor);
+  if (license_type != em::LicenseType::UNDEFINED)
+    request->mutable_license_type()->set_license_type(license_type);
 
   policy_fetch_request_job_->SetRetryCallback(
       base::Bind(&CloudPolicyClient::OnRetryRegister,
@@ -137,6 +177,7 @@ void CloudPolicyClient::Register(em::DeviceRegisterRequest::Type type,
 void CloudPolicyClient::RegisterWithCertificate(
     em::DeviceRegisterRequest::Type type,
     em::DeviceRegisterRequest::Flavor flavor,
+    em::LicenseType::LicenseTypeEnum license_type,
     const std::string& pem_certificate_chain,
     const std::string& client_id,
     const std::string& requisition,
@@ -165,6 +206,8 @@ void CloudPolicyClient::RegisterWithCertificate(
   if (!current_state_key.empty())
     request->set_server_backed_state_key(current_state_key);
   request->set_flavor(flavor);
+  if (license_type != em::LicenseType::UNDEFINED)
+    request->mutable_license_type()->set_license_type(license_type);
 
   signing_service_->SignData(data.SerializeAsString(),
       base::Bind(&CloudPolicyClient::OnRegisterWithCertificateRequestSigned,
@@ -432,6 +475,27 @@ void CloudPolicyClient::UpdateDeviceAttributes(
   request_jobs_.back()->Start(job_callback);
 }
 
+void CloudPolicyClient::RequestAvailableLicenses(
+    const std::string& auth_token,
+    const LicenseRequestCallback& callback) {
+  DCHECK(!auth_token.empty());
+
+  std::unique_ptr<DeviceManagementRequestJob> request_job(service_->CreateJob(
+      DeviceManagementRequestJob::TYPE_REQUEST_LICENSE_TYPES,
+      GetRequestContext()));
+
+  request_job->SetOAuthToken(auth_token);
+
+  request_job->GetRequest()->mutable_check_device_license_request();
+
+  const DeviceManagementRequestJob::Callback job_callback =
+      base::Bind(&CloudPolicyClient::OnAvailableLicensesRequested,
+                 weak_ptr_factory_.GetWeakPtr(), request_job.get(), callback);
+
+  request_jobs_.push_back(std::move(request_job));
+  request_jobs_.back()->Start(job_callback);
+}
+
 void CloudPolicyClient::UpdateGcmId(
     const std::string& gcm_id,
     const CloudPolicyClient::StatusCallback& callback) {
@@ -629,7 +693,7 @@ void CloudPolicyClient::OnCertificateUploadCompleted(
     const CloudPolicyClient::StatusCallback& callback,
     DeviceManagementStatus status,
     int net_error,
-    const enterprise_management::DeviceManagementResponse& response) {
+    const em::DeviceManagementResponse& response) {
   bool success = true;
   status_ = status;
   if (status != DM_STATUS_SUCCESS) {
@@ -701,6 +765,44 @@ void CloudPolicyClient::OnDeviceAttributeUpdated(
   RemoveJob(job);
 }
 
+void CloudPolicyClient::OnAvailableLicensesRequested(
+    const DeviceManagementRequestJob* job,
+    const CloudPolicyClient::LicenseRequestCallback& callback,
+    DeviceManagementStatus status,
+    int net_error,
+    const em::DeviceManagementResponse& response) {
+  CloudPolicyClient::LicenseMap licenses;
+
+  if (status != DM_STATUS_SUCCESS) {
+    LOG(WARNING) << "Could not get available license types";
+    status_ = status;
+    callback.Run(false /* success */, licenses);
+    RemoveJob(job);
+    return;
+  }
+
+  if (!response.has_check_device_license_response()) {
+    LOG(WARNING) << "Invalid license request response.";
+    status_ = DM_STATUS_RESPONSE_DECODING_ERROR;
+    callback.Run(false /* success */, licenses);
+    RemoveJob(job);
+    return;
+  }
+
+  status_ = status;
+  const em::CheckDeviceLicenseResponse& license_response =
+      response.check_device_license_response();
+
+  if (license_response.has_license_selection_mode() &&
+      (license_response.license_selection_mode() ==
+       em::CheckDeviceLicenseResponse::USER_SELECTION)) {
+    ExtractLicenseMap(license_response, licenses);
+  }
+
+  callback.Run(true /* success */, licenses);
+  RemoveJob(job);
+}
+
 void CloudPolicyClient::RemoveJob(const DeviceManagementRequestJob* job) {
   for (auto it = request_jobs_.begin(); it != request_jobs_.end(); ++it) {
     if (it->get() == job) {
@@ -718,7 +820,7 @@ void CloudPolicyClient::OnStatusUploadCompleted(
     const CloudPolicyClient::StatusCallback& callback,
     DeviceManagementStatus status,
     int net_error,
-    const enterprise_management::DeviceManagementResponse& response) {
+    const em::DeviceManagementResponse& response) {
   status_ = status;
   if (status != DM_STATUS_SUCCESS)
     NotifyClientError();
@@ -733,8 +835,8 @@ void CloudPolicyClient::OnRemoteCommandsFetched(
     const RemoteCommandCallback& callback,
     DeviceManagementStatus status,
     int net_error,
-    const enterprise_management::DeviceManagementResponse& response) {
-  std::vector<enterprise_management::RemoteCommand> commands;
+    const em::DeviceManagementResponse& response) {
+  std::vector<em::RemoteCommand> commands;
   if (status == DM_STATUS_SUCCESS) {
     if (response.has_remote_command_response()) {
       for (const auto& command : response.remote_command_response().commands())
@@ -753,7 +855,7 @@ void CloudPolicyClient::OnGcmIdUpdated(
     const StatusCallback& callback,
     DeviceManagementStatus status,
     int net_error,
-    const enterprise_management::DeviceManagementResponse& response) {
+    const em::DeviceManagementResponse& response) {
   status_ = status;
   if (status != DM_STATUS_SUCCESS)
     NotifyClientError();

@@ -6,7 +6,13 @@
 
 #include "bindings/core/v8/ToV8ForCore.h"
 #include "bindings/core/v8/V8Blob.h"
-#include "bindings/core/v8/V8CompositorProxy.h"
+#include "bindings/core/v8/V8DOMMatrix.h"
+#include "bindings/core/v8/V8DOMMatrixReadOnly.h"
+#include "bindings/core/v8/V8DOMPoint.h"
+#include "bindings/core/v8/V8DOMPointReadOnly.h"
+#include "bindings/core/v8/V8DOMQuad.h"
+#include "bindings/core/v8/V8DOMRect.h"
+#include "bindings/core/v8/V8DOMRectReadOnly.h"
 #include "bindings/core/v8/V8File.h"
 #include "bindings/core/v8/V8FileList.h"
 #include "bindings/core/v8/V8ImageBitmap.h"
@@ -15,8 +21,15 @@
 #include "bindings/core/v8/V8OffscreenCanvas.h"
 #include "bindings/core/v8/V8SharedArrayBuffer.h"
 #include "bindings/core/v8/V8ThrowDOMException.h"
-#include "core/dom/DOMArrayBufferBase.h"
+#include "core/geometry/DOMMatrix.h"
+#include "core/geometry/DOMMatrixReadOnly.h"
+#include "core/geometry/DOMPoint.h"
+#include "core/geometry/DOMPointReadOnly.h"
+#include "core/geometry/DOMQuad.h"
+#include "core/geometry/DOMRect.h"
+#include "core/geometry/DOMRectReadOnly.h"
 #include "core/html/ImageData.h"
+#include "core/typed_arrays/DOMArrayBufferBase.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/DateMath.h"
@@ -187,24 +200,6 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     }
     return true;
   }
-  if (wrapper_type_info == &V8CompositorProxy::wrapperTypeInfo) {
-    DCHECK(RuntimeEnabledFeatures::compositorWorkerEnabled());
-    CompositorProxy* proxy = wrappable->ToImpl<CompositorProxy>();
-    if (!proxy->Connected()) {
-      exception_state.ThrowDOMException(kDataCloneError,
-                                        "A CompositorProxy object has been "
-                                        "disconnected, and could therefore not "
-                                        "be cloned.");
-      return false;
-    }
-    // TODO(jbroman): This seems likely to break in cross-process or
-    // persistent scenarios. Keeping as-is for now because the successor
-    // does not use this approach (and this feature is unshipped).
-    WriteTag(kCompositorProxyTag);
-    WriteUint64(proxy->ElementId());
-    WriteUint32(proxy->CompositorMutableProperties());
-    return true;
-  }
   if (wrapper_type_info == &V8File::wrapperTypeInfo) {
     WriteTag(blob_info_array_ ? kFileIndexTag : kFileTag);
     return WriteFile(wrappable->ToImpl<File>(), exception_state);
@@ -243,29 +238,149 @@ bool V8ScriptValueSerializer::WriteDOMObject(ScriptWrappable* wrappable,
     }
 
     // Otherwise, it must be fully serialized.
-    // Warning: using N32ColorType here is not portable (across CPU
-    // architectures, across platforms, etc.).
-    RefPtr<Uint8Array> pixels = image_bitmap->CopyBitmapData(
-        image_bitmap->IsPremultiplied() ? kPremultiplyAlpha
-                                        : kDontPremultiplyAlpha,
-        kN32ColorType);
     WriteTag(kImageBitmapTag);
+    SerializedColorParams color_params(image_bitmap->GetCanvasColorParams());
+    WriteUint32Enum(ImageSerializationTag::kCanvasColorSpaceTag);
+    WriteUint32Enum(color_params.GetSerializedColorSpace());
+    WriteUint32Enum(ImageSerializationTag::kCanvasPixelFormatTag);
+    WriteUint32Enum(color_params.GetSerializedPixelFormat());
+    WriteUint32Enum(ImageSerializationTag::kOriginClean);
     WriteUint32(image_bitmap->OriginClean());
+    WriteUint32Enum(ImageSerializationTag::kIsPremultiplied);
     WriteUint32(image_bitmap->IsPremultiplied());
+    WriteUint32Enum(ImageSerializationTag::kEndTag);
     WriteUint32(image_bitmap->width());
     WriteUint32(image_bitmap->height());
+    RefPtr<Uint8Array> pixels = image_bitmap->CopyBitmapData();
     WriteUint32(pixels->length());
     WriteRawBytes(pixels->Data(), pixels->length());
     return true;
   }
   if (wrapper_type_info == &V8ImageData::wrapperTypeInfo) {
     ImageData* image_data = wrappable->ToImpl<ImageData>();
-    DOMUint8ClampedArray* pixels = image_data->data();
     WriteTag(kImageDataTag);
+    SerializedColorParams color_params(image_data->GetCanvasColorParams(),
+                                       image_data->GetImageDataStorageFormat());
+    WriteUint32Enum(ImageSerializationTag::kCanvasColorSpaceTag);
+    WriteUint32Enum(color_params.GetSerializedColorSpace());
+    WriteUint32Enum(ImageSerializationTag::kImageDataStorageFormatTag);
+    WriteUint32Enum(color_params.GetSerializedImageDataStorageFormat());
+    WriteUint32Enum(ImageSerializationTag::kEndTag);
     WriteUint32(image_data->width());
     WriteUint32(image_data->height());
-    WriteUint32(pixels->length());
-    WriteRawBytes(pixels->Data(), pixels->length());
+    DOMArrayBufferBase* pixel_buffer = image_data->BufferBase();
+    WriteUint32(pixel_buffer->ByteLength());
+    WriteRawBytes(pixel_buffer->Data(), pixel_buffer->ByteLength());
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMPoint::wrapperTypeInfo) {
+    DOMPoint* point = wrappable->ToImpl<DOMPoint>();
+    WriteTag(kDOMPointTag);
+    WriteDouble(point->x());
+    WriteDouble(point->y());
+    WriteDouble(point->z());
+    WriteDouble(point->w());
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMPointReadOnly::wrapperTypeInfo) {
+    DOMPointReadOnly* point = wrappable->ToImpl<DOMPointReadOnly>();
+    WriteTag(kDOMPointReadOnlyTag);
+    WriteDouble(point->x());
+    WriteDouble(point->y());
+    WriteDouble(point->z());
+    WriteDouble(point->w());
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMRect::wrapperTypeInfo) {
+    DOMRect* rect = wrappable->ToImpl<DOMRect>();
+    WriteTag(kDOMRectTag);
+    WriteDouble(rect->x());
+    WriteDouble(rect->y());
+    WriteDouble(rect->width());
+    WriteDouble(rect->height());
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMRectReadOnly::wrapperTypeInfo) {
+    DOMRectReadOnly* rect = wrappable->ToImpl<DOMRectReadOnly>();
+    WriteTag(kDOMRectReadOnlyTag);
+    WriteDouble(rect->x());
+    WriteDouble(rect->y());
+    WriteDouble(rect->width());
+    WriteDouble(rect->height());
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMQuad::wrapperTypeInfo) {
+    DOMQuad* quad = wrappable->ToImpl<DOMQuad>();
+    WriteTag(kDOMQuadTag);
+    for (const DOMPoint* point :
+         {quad->p1(), quad->p2(), quad->p3(), quad->p4()}) {
+      WriteDouble(point->x());
+      WriteDouble(point->y());
+      WriteDouble(point->z());
+      WriteDouble(point->w());
+    }
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMMatrix::wrapperTypeInfo) {
+    DOMMatrix* matrix = wrappable->ToImpl<DOMMatrix>();
+    if (matrix->is2D()) {
+      WriteTag(kDOMMatrix2DTag);
+      WriteDouble(matrix->a());
+      WriteDouble(matrix->b());
+      WriteDouble(matrix->c());
+      WriteDouble(matrix->d());
+      WriteDouble(matrix->e());
+      WriteDouble(matrix->f());
+    } else {
+      WriteTag(kDOMMatrixTag);
+      WriteDouble(matrix->m11());
+      WriteDouble(matrix->m12());
+      WriteDouble(matrix->m13());
+      WriteDouble(matrix->m14());
+      WriteDouble(matrix->m21());
+      WriteDouble(matrix->m22());
+      WriteDouble(matrix->m23());
+      WriteDouble(matrix->m24());
+      WriteDouble(matrix->m31());
+      WriteDouble(matrix->m32());
+      WriteDouble(matrix->m33());
+      WriteDouble(matrix->m34());
+      WriteDouble(matrix->m41());
+      WriteDouble(matrix->m42());
+      WriteDouble(matrix->m43());
+      WriteDouble(matrix->m44());
+    }
+    return true;
+  }
+  if (wrapper_type_info == &V8DOMMatrixReadOnly::wrapperTypeInfo) {
+    DOMMatrixReadOnly* matrix = wrappable->ToImpl<DOMMatrixReadOnly>();
+    if (matrix->is2D()) {
+      WriteTag(kDOMMatrix2DReadOnlyTag);
+      WriteDouble(matrix->a());
+      WriteDouble(matrix->b());
+      WriteDouble(matrix->c());
+      WriteDouble(matrix->d());
+      WriteDouble(matrix->e());
+      WriteDouble(matrix->f());
+    } else {
+      WriteTag(kDOMMatrixReadOnlyTag);
+      WriteDouble(matrix->m11());
+      WriteDouble(matrix->m12());
+      WriteDouble(matrix->m13());
+      WriteDouble(matrix->m14());
+      WriteDouble(matrix->m21());
+      WriteDouble(matrix->m22());
+      WriteDouble(matrix->m23());
+      WriteDouble(matrix->m24());
+      WriteDouble(matrix->m31());
+      WriteDouble(matrix->m32());
+      WriteDouble(matrix->m33());
+      WriteDouble(matrix->m34());
+      WriteDouble(matrix->m41());
+      WriteDouble(matrix->m42());
+      WriteDouble(matrix->m43());
+      WriteDouble(matrix->m44());
+    }
     return true;
   }
   if (wrapper_type_info == &V8MessagePort::wrapperTypeInfo) {

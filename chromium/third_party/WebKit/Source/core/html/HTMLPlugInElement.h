@@ -26,13 +26,14 @@
 
 #include "core/CoreExport.h"
 #include "core/html/HTMLFrameOwnerElement.h"
+#include "platform/bindings/ActiveScriptWrappable.h"
 #include "platform/bindings/SharedPersistent.h"
 #include "v8/include/v8.h"
 
 namespace blink {
 
 class HTMLImageLoader;
-class LayoutPart;
+class LayoutEmbeddedContent;
 class LayoutEmbeddedItem;
 class PluginView;
 
@@ -41,23 +42,31 @@ enum PreferPlugInsForImagesOption {
   kShouldNotPreferPlugInsForImages
 };
 
-class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
+class CORE_EXPORT HTMLPlugInElement
+    : public HTMLFrameOwnerElement,
+      public ActiveScriptWrappable<HTMLPlugInElement> {
+  USING_GARBAGE_COLLECTED_MIXIN(HTMLPlugInElement);
+
  public:
   ~HTMLPlugInElement() override;
   DECLARE_VIRTUAL_TRACE();
+
+  bool HasPendingActivity() const final;
 
   void SetFocused(bool, WebFocusType) override;
   void ResetInstance();
   // TODO(dcheng): Consider removing this, since HTMLEmbedElementLegacyCall
   // and HTMLObjectElementLegacyCall usage is extremely low.
   v8::Local<v8::Object> PluginWrapper();
-  // TODO(joelhockey): Clean up PluginWidget and OwnedPlugin (maybe also
-  // PluginWrapper).  It would be good to remove and/or rename some of these.
-  // PluginWidget and OwnedPlugin both return the plugin that is stored as
-  // widget in HTMLFrameOwnerElement.  However PluginWidget will synchronously
-  // create the plugin if required by calling LayoutPartForJSBindings.
-  // Possibly the PluginWidget code can be inlined into PluginWrapper.
-  PluginView* PluginWidget() const;
+  // TODO(joelhockey): Clean up PluginEmbeddedContentView and
+  // OwnedEmbeddedContentView (maybe also PluginWrapper).  It would be good to
+  // remove and/or rename some of these. PluginEmbeddedContentView and
+  // OwnedPlugin both return the plugin that is stored as
+  // HTMLFrameOwnerElement::embedded_content_view_.  However
+  // PluginEmbeddedContentView will synchronously create the plugin if required
+  // by calling LayoutEmbeddedContentForJSBindings. Possibly the
+  // PluginEmbeddedContentView code can be inlined into PluginWrapper.
+  PluginView* PluginEmbeddedContentView() const;
   PluginView* OwnedPlugin() const;
   bool CanProcessDrag() const;
   const String& Url() const { return url_; }
@@ -74,6 +83,9 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   void RequestPluginCreationWithoutLayoutObjectIfPossible();
   void CreatePluginWithoutLayoutObject();
 
+  virtual Vector<WebParsedFeaturePolicyDeclaration> ConstructContainerPolicy()
+      const;
+
  protected:
   HTMLPlugInElement(const QualifiedName& tag_name,
                     Document&,
@@ -83,6 +95,7 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   // Node functions:
   void RemovedFrom(ContainerNode* insertion_point) override;
   void DidMoveToNewDocument(Document& old_document) override;
+  void AttachLayoutTree(AttachContext&) override;
 
   // Element functions:
   bool IsPresentationAttribute(const QualifiedName&) const override;
@@ -92,24 +105,15 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
 
   virtual bool HasFallbackContent() const;
   virtual bool UseFallbackContent() const;
-  // Create or update the LayoutPart and return it, triggering layout if
-  // necessary.
-  virtual LayoutPart* LayoutPartForJSBindings() const;
+  // Create or update the LayoutEmbeddedContent and return it, triggering layout
+  // if necessary.
+  virtual LayoutEmbeddedContent* LayoutEmbeddedContentForJSBindings() const;
 
   bool IsImageType();
-  bool ShouldPreferPlugInsForImages() const {
-    return should_prefer_plug_ins_for_images_;
-  }
   LayoutEmbeddedItem GetLayoutEmbeddedItem() const;
   bool AllowedToLoadFrameURL(const String& url);
-  bool RequestObject(const String& url,
-                     const String& mime_type,
-                     const Vector<String>& param_names,
+  bool RequestObject(const Vector<String>& param_names,
                      const Vector<String>& param_values);
-  bool ShouldUsePlugin(const KURL&,
-                       const String& mime_type,
-                       bool has_fallback,
-                       bool& use_fallback);
 
   void DispatchErrorEvent();
   bool IsErrorplaceholder();
@@ -130,7 +134,6 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   bool CanStartSelection() const override;
   bool WillRespondToMouseClickEvents() final;
   void DefaultEventHandler(Event*) final;
-  void AttachLayoutTree(const AttachContext& = AttachContext()) final;
   void DetachLayoutTree(const AttachContext& = AttachContext()) final;
   void FinishParsingChildren() final;
 
@@ -148,9 +151,9 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   // HTMLFrameOwnerElement overrides:
   void DisconnectContentFrame() override;
 
-  // Return any existing LayoutPart without triggering relayout, or 0 if it
-  // doesn't yet exist.
-  virtual LayoutPart* ExistingLayoutPart() const = 0;
+  // Return any existing LayoutEmbeddedContent without triggering relayout, or 0
+  // if it doesn't yet exist.
+  virtual LayoutEmbeddedContent* ExistingLayoutEmbeddedContent() const = 0;
   virtual void UpdatePluginInternal() = 0;
 
   bool LoadPlugin(const KURL&,
@@ -164,13 +167,18 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   bool AllowedToLoadPlugin(const KURL&, const String& mime_type);
   // Perform checks based on the URL and MIME-type of the object to load.
   bool AllowedToLoadObject(const KURL&, const String& mime_type);
-  bool WouldLoadAsNetscapePlugin(const String& url, const String& service_type);
+
+  enum class ObjectContentType {
+    kNone,
+    kImage,
+    kFrame,
+    kPlugin,
+  };
+  ObjectContentType GetObjectContentType();
 
   void SetPersistedPlugin(PluginView*);
 
-  bool RequestObjectInternal(const String& url,
-                             const String& mime_type,
-                             const Vector<String>& param_names,
+  bool RequestObjectInternal(const Vector<String>& param_names,
                              const Vector<String>& param_values);
 
   v8::Global<v8::Object> plugin_wrapper_;
@@ -181,11 +189,12 @@ class CORE_EXPORT HTMLPlugInElement : public HTMLFrameOwnerElement {
   // avoid accessing |layoutObject()| in layoutObjectIsFocusable().
   bool plugin_is_available_ = false;
 
-  // Normally the plugin is stored in HTMLFrameOwnerElement::widget_.
-  // However, plugins can persist even when not rendered. In order to
-  // prevent confusing code which may assume that OwnedWidget() != null
-  // means the frame is active, we save off widget_ here while
-  // the plugin is persisting but not being displayed.
+  // Normally the plugin is stored in
+  // HTMLFrameOwnerElement::embedded_content_view. However, plugins can persist
+  // even when not rendered. In order to prevent confusing code which may assume
+  // that OwnedEmbeddedContentView() != null means the frame is active, we save
+  // off embedded_content_view_ here while the plugin is persisting but not
+  // being displayed.
   Member<PluginView> persisted_plugin_;
 };
 

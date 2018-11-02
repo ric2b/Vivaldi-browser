@@ -173,7 +173,7 @@ void ExtensionPrinterHandler::StartGetCapability(
       ->DispatchGetCapabilityRequested(
           destination_id,
           base::Bind(&ExtensionPrinterHandler::WrapGetCapabilityCallback,
-                     weak_ptr_factory_.GetWeakPtr(), callback, destination_id));
+                     weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void ExtensionPrinterHandler::StartPrint(
@@ -300,9 +300,8 @@ void ExtensionPrinterHandler::WrapGetPrintersCallback(
 
 void ExtensionPrinterHandler::WrapGetCapabilityCallback(
     const PrinterHandler::GetCapabilityCallback& callback,
-    const std::string& destination_id,
     const base::DictionaryValue& capability) {
-  callback.Run(destination_id, capability);
+  callback.Run(capability);
 }
 
 void ExtensionPrinterHandler::WrapPrintCallback(
@@ -336,7 +335,7 @@ void ExtensionPrinterHandler::OnUsbDevicesEnumerated(
     const extensions::DevicePermissions* device_permissions =
         permissions_manager->GetForExtension(extension->id());
     for (const auto& device : devices) {
-      if (manifest_data->SupportsDevice(device)) {
+      if (manifest_data->SupportsDevice(*device)) {
         std::unique_ptr<extensions::UsbDevicePermission::CheckParam> param =
             extensions::UsbDevicePermission::CheckParam::ForUsbDevice(
                 extension.get(), device.get());

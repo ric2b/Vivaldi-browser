@@ -6,7 +6,7 @@
 
 #include <stddef.h>
 
-#include "base/feature_list.h"
+#include "base/bind.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -24,7 +24,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/browser_sync/profile_sync_service.h"
@@ -33,6 +32,8 @@
 #include "components/prefs/pref_service.h"
 #include "components/sync/driver/sync_service_utils.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/service_worker_context.h"
+#include "content/public/browser/storage_partition.h"
 #include "extensions/features/features.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 
@@ -40,9 +41,9 @@
 #include "chrome/browser/autocomplete/keyword_extensions_delegate_impl.h"
 #endif
 
-#if !defined(OS_ANDROID)
 namespace {
 
+#if !defined(OS_ANDROID)
 // This list should be kept in sync with chrome/common/url_constants.h.
 // Only include useful sub-pages, confirmation alerts are not useful.
 const char* const kChromeSettingsSubPages[] = {
@@ -60,9 +61,13 @@ const char* const kChromeSettingsSubPages[] = {
     chrome::kManageProfileSubPage,
 #endif
 };
+#endif  // !defined(OS_ANDROID)
+
+// A callback that does nothing, called after the search service worker is
+// started.
+void NoopCallback(content::StartServiceWorkerForNavigationHintResult) {}
 
 }  // namespace
-#endif  // !defined(OS_ANDROID)
 
 ChromeAutocompleteProviderClient::ChromeAutocompleteProviderClient(
     Profile* profile)
@@ -187,13 +192,6 @@ std::vector<base::string16> ChromeAutocompleteProviderClient::GetBuiltinURLs() {
     builtins.push_back(settings +
                        base::ASCIIToUTF16(kChromeSettingsSubPages[i]));
   }
-
-  if (!base::FeatureList::IsEnabled(features::kMaterialDesignSettings)) {
-    builtins.push_back(
-        settings +
-        base::ASCIIToUTF16(
-            chrome::kDeprecatedOptionsContentSettingsExceptionsSubPage));
-  }
 #endif
 
   return builtins;
@@ -291,6 +289,24 @@ void ChromeAutocompleteProviderClient::PrefetchImage(const GURL& url) {
         })");
 
   image_service->Prefetch(url, traffic_annotation);
+}
+
+void ChromeAutocompleteProviderClient::StartServiceWorker(
+    const GURL& destination_url) {
+  content::StoragePartition* partition =
+      content::BrowserContext::GetDefaultStoragePartition(profile_);
+  if (!partition)
+    return;
+
+  content::ServiceWorkerContext* context = partition->GetServiceWorkerContext();
+  if (!context)
+    return;
+
+  if (!SearchSuggestEnabled())
+    return;
+
+  context->StartServiceWorkerForNavigationHint(destination_url,
+                                               base::Bind(&NoopCallback));
 }
 
 void ChromeAutocompleteProviderClient::OnAutocompleteControllerResultReady(

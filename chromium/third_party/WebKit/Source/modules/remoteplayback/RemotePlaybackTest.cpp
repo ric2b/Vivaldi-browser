@@ -7,13 +7,16 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/V8BindingForTesting.h"
 #include "bindings/modules/v8/RemotePlaybackAvailabilityCallback.h"
-#include "core/dom/DocumentUserGestureToken.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/testing/DummyPageHolder.h"
+#include "modules/presentation/MockWebPresentationClient.h"
+#include "modules/presentation/PresentationController.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/testing/UnitTestHelpers.h"
+#include "public/platform/modules/presentation/WebPresentationClient.h"
+#include "public/platform/modules/presentation/WebPresentationConnectionCallbacks.h"
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackState.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -36,9 +39,9 @@ class MockFunction : public ScriptFunction {
       : ScriptFunction(script_state) {}
 };
 
-class MockEventListener : public EventListener {
+class MockEventListenerForRemotePlayback : public EventListener {
  public:
-  MockEventListener() : EventListener(kCPPEventListenerType) {}
+  MockEventListenerForRemotePlayback() : EventListener(kCPPEventListenerType) {}
 
   bool operator==(const EventListener& other) const final {
     return this == &other;
@@ -49,6 +52,24 @@ class MockEventListener : public EventListener {
 
 class RemotePlaybackTest : public ::testing::Test {
  protected:
+  void SetUp() override {
+    was_new_remote_playback_pipeline_enabled_ =
+        RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled();
+
+    was_remote_playback_backend_enabled_ =
+        RuntimeEnabledFeatures::RemotePlaybackBackendEnabled();
+    // Pretend the backend is enabled by default to test the API with backend
+    // implemented.
+    RuntimeEnabledFeatures::SetRemotePlaybackBackendEnabled(true);
+  }
+
+  void TearDown() override {
+    RuntimeEnabledFeatures::SetNewRemotePlaybackPipelineEnabled(
+        was_new_remote_playback_pipeline_enabled_);
+    RuntimeEnabledFeatures::SetRemotePlaybackBackendEnabled(
+        was_remote_playback_backend_enabled_);
+  }
+
   void CancelPrompt(RemotePlayback* remote_playback) {
     remote_playback->PromptCancelled();
   }
@@ -56,6 +77,18 @@ class RemotePlaybackTest : public ::testing::Test {
   void SetState(RemotePlayback* remote_playback, WebRemotePlaybackState state) {
     remote_playback->StateChanged(state);
   }
+
+  bool IsListening(RemotePlayback* remote_playback) {
+    return remote_playback->is_listening_;
+  }
+
+  // Has to outlive the page so that PresentationController doesn't crash trying
+  // to set it to null in ContextDestroyed().
+  MockWebPresentationClient presentation_client_;
+
+ private:
+  bool was_remote_playback_backend_enabled_;
+  bool was_new_remote_playback_pipeline_enabled_;
 };
 
 TEST_F(RemotePlaybackTest, PromptCancelledRejectsWithNotAllowedError) {
@@ -74,7 +107,7 @@ TEST_F(RemotePlaybackTest, PromptCancelledRejectsWithNotAllowedError) {
   EXPECT_CALL(*resolve, Call(::testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(::testing::_)).Times(1);
 
-  UserGestureIndicator indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator indicator(UserGestureToken::Create(
       &page_holder->GetDocument(), UserGestureToken::kNewGesture));
   remote_playback->prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
@@ -107,7 +140,7 @@ TEST_F(RemotePlaybackTest, PromptConnectedRejectsWhenCancelled) {
 
   SetState(remote_playback, WebRemotePlaybackState::kConnected);
 
-  UserGestureIndicator indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator indicator(UserGestureToken::Create(
       &page_holder->GetDocument(), UserGestureToken::kNewGesture));
   remote_playback->prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
@@ -140,7 +173,7 @@ TEST_F(RemotePlaybackTest, PromptConnectedResolvesWhenDisconnected) {
 
   SetState(remote_playback, WebRemotePlaybackState::kConnected);
 
-  UserGestureIndicator indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator indicator(UserGestureToken::Create(
       &page_holder->GetDocument(), UserGestureToken::kNewGesture));
   remote_playback->prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
@@ -166,9 +199,12 @@ TEST_F(RemotePlaybackTest, StateChangeEvents) {
   RemotePlayback* remote_playback =
       HTMLMediaElementRemotePlayback::remote(*element);
 
-  auto connecting_handler = new ::testing::StrictMock<MockEventListener>();
-  auto connect_handler = new ::testing::StrictMock<MockEventListener>();
-  auto disconnect_handler = new ::testing::StrictMock<MockEventListener>();
+  auto connecting_handler =
+      new ::testing::StrictMock<MockEventListenerForRemotePlayback>();
+  auto connect_handler =
+      new ::testing::StrictMock<MockEventListenerForRemotePlayback>();
+  auto disconnect_handler =
+      new ::testing::StrictMock<MockEventListenerForRemotePlayback>();
 
   remote_playback->addEventListener(EventTypeNames::connecting,
                                     connecting_handler);
@@ -214,7 +250,7 @@ TEST_F(RemotePlaybackTest,
   EXPECT_CALL(*resolve, Call(::testing::_)).Times(0);
   EXPECT_CALL(*reject, Call(::testing::_)).Times(1);
 
-  UserGestureIndicator indicator(DocumentUserGestureToken::Create(
+  UserGestureIndicator indicator(UserGestureToken::Create(
       &page_holder->GetDocument(), UserGestureToken::kNewGesture));
   remote_playback->prompt(scope.GetScriptState())
       .Then(resolve->Bind(), reject->Bind());
@@ -271,6 +307,148 @@ TEST_F(RemotePlaybackTest, DisableRemotePlaybackCancelsAvailabilityCallbacks) {
   ::testing::Mock::VerifyAndClear(resolve);
   ::testing::Mock::VerifyAndClear(reject);
   ::testing::Mock::VerifyAndClear(callback_function);
+}
+
+TEST_F(RemotePlaybackTest, PromptThrowsWhenBackendDisabled) {
+  RuntimeEnabledFeatures::SetRemotePlaybackBackendEnabled(false);
+  V8TestingScope scope;
+
+  auto page_holder = DummyPageHolder::Create();
+
+  HTMLMediaElement* element =
+      HTMLVideoElement::Create(page_holder->GetDocument());
+  RemotePlayback* remote_playback =
+      HTMLMediaElementRemotePlayback::remote(*element);
+
+  auto resolve = MockFunction::Create(scope.GetScriptState());
+  auto reject = MockFunction::Create(scope.GetScriptState());
+
+  EXPECT_CALL(*resolve, Call(::testing::_)).Times(0);
+  EXPECT_CALL(*reject, Call(::testing::_)).Times(1);
+
+  UserGestureIndicator indicator(UserGestureToken::Create(
+      &page_holder->GetDocument(), UserGestureToken::kNewGesture));
+  remote_playback->prompt(scope.GetScriptState())
+      .Then(resolve->Bind(), reject->Bind());
+
+  // Runs pending promises.
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+
+  // Verify mock expectations explicitly as the mock objects are garbage
+  // collected.
+  ::testing::Mock::VerifyAndClear(resolve);
+  ::testing::Mock::VerifyAndClear(reject);
+}
+
+TEST_F(RemotePlaybackTest, WatchAvailabilityWorksWhenBackendDisabled) {
+  RuntimeEnabledFeatures::SetRemotePlaybackBackendEnabled(false);
+  V8TestingScope scope;
+
+  auto page_holder = DummyPageHolder::Create();
+
+  HTMLMediaElement* element =
+      HTMLVideoElement::Create(page_holder->GetDocument());
+  RemotePlayback* remote_playback =
+      HTMLMediaElementRemotePlayback::remote(*element);
+
+  MockFunction* callback_function =
+      MockFunction::Create(scope.GetScriptState());
+  RemotePlaybackAvailabilityCallback* availability_callback =
+      RemotePlaybackAvailabilityCallback::Create(scope.GetScriptState(),
+                                                 callback_function->Bind());
+
+  // The initial call upon registering will not happen as it's posted on the
+  // message loop.
+  EXPECT_CALL(*callback_function, Call(::testing::_)).Times(0);
+
+  MockFunction* resolve = MockFunction::Create(scope.GetScriptState());
+  MockFunction* reject = MockFunction::Create(scope.GetScriptState());
+
+  EXPECT_CALL(*resolve, Call(::testing::_)).Times(1);
+  EXPECT_CALL(*reject, Call(::testing::_)).Times(0);
+
+  remote_playback
+      ->watchAvailability(scope.GetScriptState(), availability_callback)
+      .Then(resolve->Bind(), reject->Bind());
+
+  // Runs pending promises.
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+
+  // Verify mock expectations explicitly as the mock objects are garbage
+  // collected.
+  ::testing::Mock::VerifyAndClear(resolve);
+  ::testing::Mock::VerifyAndClear(reject);
+  ::testing::Mock::VerifyAndClear(callback_function);
+}
+
+TEST_F(RemotePlaybackTest, IsListening) {
+  RuntimeEnabledFeatures::SetNewRemotePlaybackPipelineEnabled(true);
+  V8TestingScope scope;
+
+  auto page_holder = DummyPageHolder::Create();
+
+  HTMLMediaElement* element =
+      HTMLVideoElement::Create(page_holder->GetDocument());
+  RemotePlayback* remote_playback =
+      HTMLMediaElementRemotePlayback::remote(*element);
+
+  PresentationController::ProvideTo(page_holder->GetFrame(),
+                                    &presentation_client_);
+
+  EXPECT_CALL(presentation_client_,
+              StartListening(::testing::Eq(remote_playback)))
+      .Times(2);
+  EXPECT_CALL(presentation_client_,
+              StopListening(::testing::Eq(remote_playback)))
+      .Times(2);
+
+  MockFunction* callback_function =
+      MockFunction::Create(scope.GetScriptState());
+  RemotePlaybackAvailabilityCallback* availability_callback =
+      RemotePlaybackAvailabilityCallback::Create(scope.GetScriptState(),
+                                                 callback_function->Bind());
+
+  // The initial call upon registering will not happen as it's posted on the
+  // message loop.
+  EXPECT_CALL(*callback_function, Call(::testing::_)).Times(2);
+
+  remote_playback->watchAvailability(scope.GetScriptState(),
+                                     availability_callback);
+
+  ASSERT_TRUE(remote_playback->Urls().empty());
+  ASSERT_FALSE(IsListening(remote_playback));
+
+  remote_playback->SourceChanged(
+      WebURL(KURL(kParsedURLString, "http://www.example.com")));
+  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  ASSERT_TRUE(IsListening(remote_playback));
+  remote_playback->AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
+
+  remote_playback->cancelWatchAvailability(scope.GetScriptState());
+  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  ASSERT_FALSE(IsListening(remote_playback));
+
+  remote_playback->watchAvailability(scope.GetScriptState(),
+                                     availability_callback);
+  ASSERT_EQ((size_t)1, remote_playback->Urls().size());
+  ASSERT_TRUE(IsListening(remote_playback));
+  remote_playback->AvailabilityChanged(mojom::ScreenAvailability::AVAILABLE);
+
+  remote_playback->SourceChanged(WebURL());
+  ASSERT_TRUE(remote_playback->Urls().empty());
+  ASSERT_FALSE(IsListening(remote_playback));
+
+  remote_playback->SourceChanged(WebURL(KURL(kParsedURLString, "@$@#@#")));
+  ASSERT_TRUE(remote_playback->Urls().empty());
+  ASSERT_FALSE(IsListening(remote_playback));
+
+  // Runs pending promises.
+  v8::MicrotasksScope::PerformCheckpoint(scope.GetIsolate());
+
+  // Verify mock expectations explicitly as the mock objects are garbage
+  // collected.
+  ::testing::Mock::VerifyAndClear(callback_function);
+  ::testing::Mock::VerifyAndClear(&presentation_client_);
 }
 
 }  // namespace blink

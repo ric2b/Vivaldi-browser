@@ -11,23 +11,23 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/logging.h"
-#include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/power_monitor/power_monitor.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/process/process_metrics.h"
 #include "base/system_monitor/system_monitor.h"
-#include "base/task_scheduler/initialization_util.h"
 #include "base/task_scheduler/scheduler_worker_pool_params.h"
 #include "base/task_scheduler/task_scheduler.h"
+#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #import "ios/web/net/cookie_notification_bridge.h"
 #include "ios/web/public/app/web_main_parts.h"
+#include "ios/web/public/global_state/ios_global_state.h"
 #import "ios/web/public/web_client.h"
+#include "ios/web/service_manager_context.h"
 #include "ios/web/web_thread_impl.h"
 #include "ios/web/webui/url_data_manager_ios.h"
-#include "net/base/network_change_notifier.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -35,46 +35,20 @@
 
 namespace web {
 
-namespace {
-
-std::unique_ptr<base::TaskScheduler::InitParams>
-GetDefaultTaskSchedulerInitParams() {
-  using StandbyThreadPolicy =
-      base::SchedulerWorkerPoolParams::StandbyThreadPolicy;
-  return base::MakeUnique<base::TaskScheduler::InitParams>(
-      base::SchedulerWorkerPoolParams(
-          StandbyThreadPolicy::ONE,
-          base::RecommendedMaxNumberOfThreadsInPool(2, 8, 0.1, 0),
-          base::TimeDelta::FromSeconds(30)),
-      base::SchedulerWorkerPoolParams(
-          StandbyThreadPolicy::ONE,
-          base::RecommendedMaxNumberOfThreadsInPool(2, 8, 0.1, 0),
-          base::TimeDelta::FromSeconds(30)),
-      base::SchedulerWorkerPoolParams(
-          StandbyThreadPolicy::ONE,
-          base::RecommendedMaxNumberOfThreadsInPool(3, 8, 0.3, 0),
-          base::TimeDelta::FromSeconds(30)),
-      base::SchedulerWorkerPoolParams(
-          StandbyThreadPolicy::ONE,
-          base::RecommendedMaxNumberOfThreadsInPool(3, 8, 0.3, 0),
-          base::TimeDelta::FromSeconds(60)));
-}
-
-}  // namespace
-
 // The currently-running WebMainLoop.  There can be one or zero.
 // TODO(rohitrao): Desktop uses this to implement
 // ImmediateShutdownAndExitProcess.  If we don't need that functionality, we can
 // remove this.
 WebMainLoop* g_current_web_main_loop = nullptr;
 
-WebMainLoop::WebMainLoop() : result_code_(0), created_threads_(false) {
+WebMainLoop::WebMainLoop()
+    : result_code_(0),
+      created_threads_(false),
+      destroy_message_loop_(base::Bind(&ios_global_state::DestroyMessageLoop)),
+      destroy_network_change_notifier_(
+          base::Bind(&ios_global_state::DestroyNetworkChangeNotifier)) {
   DCHECK(!g_current_web_main_loop);
   g_current_web_main_loop = this;
-
-  // Use an empty string as TaskScheduler name to match the suffix of browser
-  // process TaskScheduler histograms.
-  base::TaskScheduler::Create("");
 }
 
 WebMainLoop::~WebMainLoop() {
@@ -83,7 +57,7 @@ WebMainLoop::~WebMainLoop() {
 }
 
 void WebMainLoop::Init() {
-  parts_.reset(web::GetWebClient()->CreateWebMainParts());
+  parts_ = web::GetWebClient()->CreateWebMainParts();
 }
 
 void WebMainLoop::EarlyInitialization() {
@@ -98,11 +72,7 @@ void WebMainLoop::MainMessageLoopStart() {
     parts_->PreMainMessageLoopStart();
   }
 
-  // Create a MessageLoop if one does not already exist for the current thread.
-  if (!base::MessageLoop::current()) {
-    main_message_loop_.reset(new base::MessageLoopForUI);
-  }
-  base::MessageLoopForUI::current()->Attach();
+  ios_global_state::BuildMessageLoop();
 
   InitializeMainThread();
 
@@ -114,20 +84,22 @@ void WebMainLoop::MainMessageLoopStart() {
   std::unique_ptr<base::PowerMonitorSource> power_monitor_source(
       new base::PowerMonitorDeviceSource());
   power_monitor_.reset(new base::PowerMonitor(std::move(power_monitor_source)));
-  network_change_notifier_.reset(net::NetworkChangeNotifier::Create());
+
+  ios_global_state::CreateNetworkChangeNotifier();
 
   if (parts_) {
     parts_->PostMainMessageLoopStart();
   }
 }
 
-void WebMainLoop::CreateStartupTasks() {
+void WebMainLoop::CreateStartupTasks(
+    TaskSchedulerInitParamsCallback init_params_callback) {
   int result = 0;
   result = PreCreateThreads();
   if (result > 0)
     return;
 
-  result = CreateThreads();
+  result = CreateThreads(std::move(init_params_callback));
   if (result > 0)
     return;
 
@@ -148,18 +120,15 @@ int WebMainLoop::PreCreateThreads() {
   return result_code_;
 }
 
-int WebMainLoop::CreateThreads() {
-  {
-    auto task_scheduler_init_params =
-        GetWebClient()->GetTaskSchedulerInitParams();
-    if (!task_scheduler_init_params)
-      task_scheduler_init_params = GetDefaultTaskSchedulerInitParams();
-    DCHECK(task_scheduler_init_params);
-    base::TaskScheduler::GetInstance()->Start(
-        *task_scheduler_init_params.get());
+int WebMainLoop::CreateThreads(
+    TaskSchedulerInitParamsCallback init_params_callback) {
+  std::unique_ptr<base::TaskScheduler::InitParams> init_params;
+  if (!init_params_callback.is_null()) {
+    init_params = std::move(init_params_callback).Run();
   }
+  ios_global_state::StartTaskScheduler(init_params.get());
 
-  GetWebClient()->PerformExperimentalTaskSchedulerRedirections();
+  base::SequencedWorkerPool::EnableWithRedirectionToTaskSchedulerForProcess();
 
   base::Thread::Options io_message_loop_options;
   io_message_loop_options.message_loop_type = base::MessageLoop::TYPE_IO;
@@ -248,6 +217,8 @@ void WebMainLoop::ShutdownThreadsAndCleanUp() {
     parts_->PostMainMessageLoopRun();
   }
 
+  service_manager_context_.reset();
+
   // Must be size_t so we can subtract from it.
   for (size_t thread_id = WebThread::ID_COUNT - 1;
        thread_id >= (WebThread::UI + 1); --thread_id) {
@@ -314,6 +285,7 @@ void WebMainLoop::InitializeMainThread() {
 
 int WebMainLoop::WebThreadsStarted() {
   cookie_notification_bridge_.reset(new CookieNotificationBridge);
+  service_manager_context_ = base::MakeUnique<ServiceManagerContext>();
   return result_code_;
 }
 

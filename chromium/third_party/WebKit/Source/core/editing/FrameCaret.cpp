@@ -30,13 +30,13 @@
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionEditor.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/TextControlElement.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutTheme.h"
-#include "core/layout/api/LayoutPartItem.h"
+#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/page/Page.h"
 #include "public/platform/WebTraceLocation.h"
 
@@ -173,7 +173,7 @@ static IntRect AbsoluteBoundsForLocalRect(Node* node, const LayoutRect& rect) {
 
 IntRect FrameCaret::AbsoluteCaretBounds() const {
   DCHECK_NE(frame_->GetDocument()->Lifecycle().GetState(),
-            DocumentLifecycle::kInPaintInvalidation);
+            DocumentLifecycle::kInPrePaint);
   DCHECK(!frame_->GetDocument()->NeedsLayoutTreeUpdate());
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       frame_->GetDocument()->Lifecycle());
@@ -225,7 +225,7 @@ void FrameCaret::CaretBlinkTimerFired(TimerBase*) {
 }
 
 void FrameCaret::ScheduleVisualUpdateForPaintInvalidationIfNeeded() {
-  if (FrameView* frame_view = frame_->View())
+  if (LocalFrameView* frame_view = frame_->View())
     frame_view->ScheduleVisualUpdateForPaintInvalidationIfNeeded();
 }
 

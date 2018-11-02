@@ -24,6 +24,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/sequenced_worker_pool.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
@@ -39,6 +40,7 @@
 #include "net/http/http_auth_handler_factory.h"
 #include "net/http/http_auth_preferences.h"
 #include "net/http/http_cache.h"
+#include "net/http/http_network_session.h"
 #include "net/http/http_stream_factory.h"
 #include "net/log/net_log.h"
 #include "net/net_features.h"
@@ -83,7 +85,7 @@ void ApplyCmdlineOverridesToHostResolver(
 }
 
 void ApplyCmdlineOverridesToNetworkSessionParams(
-    net::URLRequestContextBuilder::HttpNetworkSessionParams* params) {
+    net::HttpNetworkSession::Params* params) {
   int value;
   const base::CommandLine& command_line =
       *base::CommandLine::ForCurrentProcess();
@@ -252,11 +254,10 @@ void AwURLRequestContextGetter::InitializeURLRequestContext() {
   cache_params.max_size = 20 * 1024 * 1024;  // 20M
   cache_params.path = cache_path_;
   builder.EnableHttpCache(cache_params);
-  builder.SetFileTaskRunner(
+  builder.SetCacheThreadTaskRunner(
       BrowserThread::GetTaskRunnerForThread(BrowserThread::CACHE));
 
-  net::URLRequestContextBuilder::HttpNetworkSessionParams
-      network_session_params;
+  net::HttpNetworkSession::Params network_session_params;
   ApplyCmdlineOverridesToNetworkSessionParams(&network_session_params);
   builder.set_http_network_session_params(network_session_params);
   builder.SetSpdyAndQuicEnabled(true, false);

@@ -23,6 +23,14 @@
         margin-left: 12px;
         @apply(--cr-icon-height-width);
       }
+
+      cr-policy-indicator {
+        padding: 0 var(--cr-controlled-by-spacing);
+      }
+
+      #note-taking-app-lock-screen-settings {
+        padding: 0 var(--settings-box-row-padding);
+      }
     </style>
 
     <div class="settings-box continuation">
@@ -32,13 +40,15 @@
       </settings-toggle-button>
     </div>
 
-    <div class="settings-box">
-      <settings-toggle-button class="start"
-          pref="{{prefs.settings.launch_palette_on_eject_event}}"
-          label="$i18n{stylusAutoOpenStylusTools}"
-          disabled="[[!prefs.settings.enable_stylus_tools.value]]">
-      </settings-toggle-button>
-    </div>
+    <template is="dom-if" if="[[hasInternalStylus_]]">
+      <div class="settings-box">
+        <settings-toggle-button class="start"
+            pref="{{prefs.settings.launch_palette_on_eject_event}}"
+            label="$i18n{stylusAutoOpenStylusTools}"
+            disabled="[[!prefs.settings.enable_stylus_tools.value]]">
+        </settings-toggle-button>
+      </div>
+    </template>
 
     <div class="settings-box">
       <div id="stylusNoteTakingAppLabel" class="start">
@@ -69,16 +79,6 @@
       </div>
     </div>
 
-    <template is="dom-if" if="[[supportsLockScreen_(selectedApp_)]]">
-      <div class="settings-box">
-        <settings-toggle-button id="enable-app-on-lock-screen-toggle"
-            class="start"
-            pref="{{prefs.settings.note_taking_app_enabled_on_lock_screen}}"
-            label="$i18n{stylusNoteTakingAppEnabledOnLockScreen}">
-        </settings-toggle-button>
-      </div>
-    </template>
-
     <!-- TODO(scottchen): Make a proper a[href].settings-box with
          icon-external (see: https://crbug.com/684005)-->
     <div class="settings-box two-line" on-tap="onFindAppsTap_" actionable
@@ -93,6 +93,42 @@
           aria-label="$i18n{stylusFindMoreAppsPrimary}"
           aria-describedby="stylusFindMoreAppsSecondary"></button>
     </div>
+
+    <template is="dom-if" if="[[supportsLockScreen_(selectedApp_)]]">
+      <div id="note-taking-app-lock-screen-settings">
+        <h2>$i18n{stylusNoteTakingAppLockScreenSettingsHeader}</h2>
+
+        <div class="settings-box first">
+          <div id="lock-screen-toggle-label" class="start"
+              actionable$="[[!disallowedOnLockScreenByPolicy_(selectedApp_)]]"
+              on-tap="toggleLockScreenSupport_">
+            $i18n{stylusNoteTakingAppEnabledOnLockScreen}
+          </div>
+          <template is="dom-if"
+              if="[[disallowedOnLockScreenByPolicy_(selectedApp_)]]">
+            <cr-policy-indicator
+                id="enable-app-on-lock-screen-policy-indicator"
+                indicator-type="[[userPolicyIndicator_]]">
+            </cr-policy-indicator>
+          </template>
+          <paper-toggle-button id="enable-app-on-lock-screen-toggle"
+              aria-labelledby="lock-screen-toggle-label"
+              disabled="[[disallowedOnLockScreenByPolicy_(selectedApp_)]]"
+              checked="[[lockScreenSupportEnabled_(selectedApp_)]]"
+              on-change="toggleLockScreenSupport_">
+          </paper-toggle-button>
+        </div>
+
+        <template is="dom-if" if="[[lockScreenSupportEnabled_(selectedApp_)]]">
+          <div class="settings-box">
+            <settings-toggle-button id="keep-last-note-on-lock-screen-toggle"
+                pref="{{prefs.settings.restore_last_lock_screen_note}}"
+                label="$i18n{stylusNoteTakingAppKeepsLastNoteOnLockScreen}">
+            </settings-toggle-button>
+          </div>
+        </template>
+      </div>
+    </template>
 
   </template>
   <script src="stylus.js"></script>

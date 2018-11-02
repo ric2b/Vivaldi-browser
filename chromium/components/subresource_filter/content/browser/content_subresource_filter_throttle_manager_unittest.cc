@@ -14,15 +14,16 @@
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
 #include "base/strings/stringprintf.h"
+#include "base/test/histogram_tester.h"
 #include "base/test/test_simple_task_runner.h"
 #include "components/subresource_filter/content/browser/async_document_subresource_filter.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_manager.h"
 #include "components/subresource_filter/content/common/subresource_filter_messages.h"
 #include "components/subresource_filter/core/common/activation_level.h"
 #include "components/subresource_filter/core/common/activation_state.h"
-#include "components/subresource_filter/core/common/proto/rules.pb.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
+#include "components/url_pattern_index/proto/rules.pb.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
 #include "content/public/browser/web_contents.h"
@@ -35,6 +36,8 @@
 #include "url/url_constants.h"
 
 namespace subresource_filter {
+
+namespace proto = url_pattern_index::proto;
 
 const char kTestURLWithActivation[] = "https://www.page-with-activation.com/";
 const char kTestURLWithActivation2[] =
@@ -122,8 +125,6 @@ class ContentSubresourceFilterThrottleManagerTest
 
     NavigateAndCommit(GURL("https://example.first"));
 
-    Observe(RenderViewHostTestHarness::web_contents());
-
     // Initialize the ruleset dealer.
     std::vector<proto::UrlRule> rules;
     rules.push_back(testing::CreateWhitelistRuleForDocument(
@@ -145,6 +146,7 @@ class ContentSubresourceFilterThrottleManagerTest
         base::MakeUnique<ContentSubresourceFilterThrottleManager>(
             this, dealer_handle_.get(),
             RenderViewHostTestHarness::web_contents());
+    Observe(RenderViewHostTestHarness::web_contents());
   }
 
   void TearDown() override {
@@ -674,6 +676,37 @@ TEST_P(ContentSubresourceFilterThrottleManagerTest,
   ExpectActivationSignalForFrame(child, false /* expect_activation */);
 
   EXPECT_EQ(0, disallowed_notification_count());
+}
+
+TEST_F(ContentSubresourceFilterThrottleManagerTest, LogActivation) {
+  base::HistogramTester tester;
+  const char kActivationStateHistogram[] =
+      "SubresourceFilter.PageLoad.ActivationState";
+  NavigateAndCommitMainFrame(GURL(kTestURLWithDryRun));
+  tester.ExpectBucketCount(kActivationStateHistogram,
+                           static_cast<int>(ActivationLevel::DRYRUN), 1);
+
+  NavigateAndCommitMainFrame(GURL(kTestURLWithNoActivation));
+  tester.ExpectBucketCount(kActivationStateHistogram,
+                           static_cast<int>(ActivationLevel::DISABLED), 1);
+
+  NavigateAndCommitMainFrame(GURL(kTestURLWithActivation));
+  tester.ExpectBucketCount(kActivationStateHistogram,
+                           static_cast<int>(ActivationLevel::ENABLED), 1);
+
+  // Navigate a subframe that is not filtered, but should still activate.
+  CreateSubframeWithTestNavigation(GURL("https://whitelist.com"), main_rfh());
+  SimulateStartAndExpectResult(content::NavigationThrottle::PROCEED);
+  content::RenderFrameHost* subframe1 =
+      SimulateCommitAndExpectResult(content::NavigationThrottle::PROCEED);
+  ExpectActivationSignalForFrame(subframe1, true /* expect_activation */);
+
+  tester.ExpectTotalCount(kActivationStateHistogram, 3);
+  // Only those with page level activation do ruleset lookups.
+  tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.WallDuration",
+                          2);
+  tester.ExpectTotalCount("SubresourceFilter.PageLoad.Activation.CPUDuration",
+                          2);
 }
 
 // TODO(csharrison): Make sure the following conditions are exercised in tests:

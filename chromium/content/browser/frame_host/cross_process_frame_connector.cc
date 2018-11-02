@@ -6,13 +6,14 @@
 
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_hittest.h"
-#include "cc/surfaces/surface_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/compositor/surface_utils.h"
 #include "content/browser/frame_host/frame_tree.h"
 #include "content/browser/frame_host/frame_tree_node.h"
 #include "content/browser/frame_host/render_frame_host_manager.h"
 #include "content/browser/frame_host/render_frame_proxy_host.h"
 #include "content/browser/frame_host/render_widget_host_view_child_frame.h"
+#include "content/browser/renderer_host/cursor_manager.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -44,6 +45,7 @@ bool CrossProcessFrameConnector::OnMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_HANDLER(FrameHostMsg_UpdateViewportIntersection,
                         OnUpdateViewportIntersection)
     IPC_MESSAGE_HANDLER(FrameHostMsg_VisibilityChanged, OnVisibilityChanged)
+    IPC_MESSAGE_HANDLER(FrameHostMsg_SetIsInert, OnSetIsInert)
     IPC_MESSAGE_HANDLER(FrameHostMsg_SatisfySequence, OnSatisfySequence)
     IPC_MESSAGE_HANDLER(FrameHostMsg_RequireSequence, OnRequireSequence)
     IPC_MESSAGE_UNHANDLED(handled = false)
@@ -56,6 +58,10 @@ void CrossProcessFrameConnector::set_view(
     RenderWidgetHostViewChildFrame* view) {
   // Detach ourselves from the previous |view_|.
   if (view_) {
+    RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
+    if (root_view && root_view->GetCursorManager())
+      root_view->GetCursorManager()->ViewBeingDestroyed(view_);
+
     // The RenderWidgetHostDelegate needs to be checked because set_view() can
     // be called during nested WebContents destruction. See
     // https://crbug.com/644306.
@@ -88,21 +94,21 @@ void CrossProcessFrameConnector::RenderProcessGone() {
 }
 
 void CrossProcessFrameConnector::SetChildFrameSurface(
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   frame_proxy_in_parent_renderer_->Send(new FrameMsg_SetChildFrameSurface(
       frame_proxy_in_parent_renderer_->GetRoutingID(), surface_info, sequence));
 }
 
 void CrossProcessFrameConnector::OnSatisfySequence(
-    const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->SatisfySequence(sequence);
+    const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
 }
 
 void CrossProcessFrameConnector::OnRequireSequence(
-    const cc::SurfaceId& id,
-    const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->RequireSequence(id, sequence);
+    const viz::SurfaceId& id,
+    const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->RequireSequence(id, sequence);
 }
 
 gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
@@ -111,13 +117,15 @@ gfx::Rect CrossProcessFrameConnector::ChildFrameRect() {
 
 void CrossProcessFrameConnector::UpdateCursor(const WebCursor& cursor) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
-  if (root_view)
-    root_view->UpdateCursor(cursor);
+  // UpdateCursor messages are ignored if the root view does not support
+  // cursors.
+  if (root_view && root_view->GetCursorManager())
+    root_view->GetCursorManager()->UpdateCursor(view_, cursor);
 }
 
 gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& surface_id) {
+    const viz::SurfaceId& surface_id) {
   gfx::Point transformed_point;
   TransformPointToCoordSpaceForView(point, GetRootRenderWidgetHostView(),
                                     surface_id, &transformed_point);
@@ -126,8 +134,8 @@ gfx::Point CrossProcessFrameConnector::TransformPointToRootCoordSpace(
 
 bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
     const gfx::Point& point,
-    const cc::SurfaceId& original_surface,
-    const cc::SurfaceId& local_surface_id,
+    const viz::SurfaceId& original_surface,
+    const viz::SurfaceId& local_surface_id,
     gfx::Point* transformed_point) {
   if (original_surface == local_surface_id) {
     *transformed_point = point;
@@ -138,7 +146,7 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
   // is necessary.
   *transformed_point =
       gfx::ConvertPointToPixel(view_->current_surface_scale_factor(), point);
-  cc::SurfaceHittest hittest(nullptr, GetSurfaceManager());
+  cc::SurfaceHittest hittest(nullptr, GetFrameSinkManager()->surface_manager());
   if (!hittest.TransformPointToTargetSurface(original_surface, local_surface_id,
                                              transformed_point))
     return false;
@@ -151,7 +159,7 @@ bool CrossProcessFrameConnector::TransformPointToLocalCoordSpace(
 bool CrossProcessFrameConnector::TransformPointToCoordSpaceForView(
     const gfx::Point& point,
     RenderWidgetHostViewBase* target_view,
-    const cc::SurfaceId& local_surface_id,
+    const viz::SurfaceId& local_surface_id,
     gfx::Point* transformed_point) {
   RenderWidgetHostViewBase* root_view = GetRootRenderWidgetHostView();
   if (!root_view)
@@ -182,7 +190,9 @@ void CrossProcessFrameConnector::ForwardProcessAckedTouchEvent(
 
 void CrossProcessFrameConnector::BubbleScrollEvent(
     const blink::WebGestureEvent& event) {
-  DCHECK(event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
+  DCHECK((view_->wheel_scroll_latching_enabled() &&
+          event.GetType() == blink::WebInputEvent::kGestureScrollBegin) ||
+         event.GetType() == blink::WebInputEvent::kGestureScrollUpdate ||
          event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
          event.GetType() == blink::WebInputEvent::kGestureFlingStart);
   auto* parent_view = GetParentRenderWidgetHostView();
@@ -201,14 +211,28 @@ void CrossProcessFrameConnector::BubbleScrollEvent(
   // See https://crbug.com/626020.
   resent_gesture_event.x += offset_from_parent.x();
   resent_gesture_event.y += offset_from_parent.y();
-  if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
-    is_scroll_bubbling_ = true;
-  } else if ((event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
-              event.GetType() == blink::WebInputEvent::kGestureFlingStart) &&
-             is_scroll_bubbling_) {
-    event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
-    is_scroll_bubbling_ = false;
+
+  if (view_->wheel_scroll_latching_enabled()) {
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollBegin) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = true;
+    } else if (is_scroll_bubbling_) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+    }
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+        event.GetType() == blink::WebInputEvent::kGestureFlingStart) {
+      is_scroll_bubbling_ = false;
+    }
+  } else {  // !view_->wheel_scroll_latching_enabled()
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = true;
+    } else if ((event.GetType() == blink::WebInputEvent::kGestureScrollEnd ||
+                event.GetType() == blink::WebInputEvent::kGestureFlingStart) &&
+               is_scroll_bubbling_) {
+      event_router->BubbleScrollEvent(parent_view, resent_gesture_event);
+      is_scroll_bubbling_ = false;
+    }
   }
 }
 
@@ -276,6 +300,12 @@ void CrossProcessFrameConnector::OnVisibilityChanged(bool visible) {
   } else if (!visible) {
     view_->Hide();
   }
+}
+
+void CrossProcessFrameConnector::OnSetIsInert(bool inert) {
+  is_inert_ = inert;
+  if (view_)
+    view_->SetIsInert();
 }
 
 void CrossProcessFrameConnector::SetRect(const gfx::Rect& frame_rect) {

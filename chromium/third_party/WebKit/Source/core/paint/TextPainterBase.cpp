@@ -41,11 +41,11 @@ void TextPainterBase::SetEmphasisMark(const AtomicString& emphasis_mark,
 
   if (!font_data || emphasis_mark.IsNull()) {
     emphasis_mark_offset_ = 0;
-  } else if (position == kTextEmphasisPositionOver) {
+  } else if (position == TextEmphasisPosition::kOver) {
     emphasis_mark_offset_ = -font_data->GetFontMetrics().Ascent() -
                             font_.EmphasisMarkDescent(emphasis_mark);
   } else {
-    DCHECK(position == kTextEmphasisPositionUnder);
+    DCHECK(position == TextEmphasisPosition::kUnder);
     emphasis_mark_offset_ = font_data->GetFontMetrics().Descent() +
                             font_.EmphasisMarkAscent(emphasis_mark);
   }
@@ -123,7 +123,7 @@ TextPainterBase::Style TextPainterBase::TextPaintingStyle(
 
     // Adjust text color when printing with a white background.
     DCHECK(document.Printing() == is_printing ||
-           RuntimeEnabledFeatures::printBrowserEnabled());
+           RuntimeEnabledFeatures::PrintBrowserEnabled());
     bool force_background_to_white =
         BoxPainter::ShouldForceWhiteBackgroundForPrintEconomy(document, style);
     if (force_background_to_white) {
@@ -199,9 +199,9 @@ static ResolvedUnderlinePosition ResolveUnderlinePosition(
   switch (baseline_type) {
     case kAlphabeticBaseline:
       switch (style.GetTextUnderlinePosition()) {
-        case kTextUnderlinePositionAuto:
+        case TextUnderlinePosition::kAuto:
           return ResolvedUnderlinePosition::kRoman;
-        case kTextUnderlinePositionUnder:
+        case TextUnderlinePosition::kUnder:
           return ResolvedUnderlinePosition::kUnder;
       }
       break;
@@ -219,9 +219,9 @@ static ResolvedUnderlinePosition ResolveUnderlinePosition(
 
 static bool ShouldSetDecorationAntialias(const ComputedStyle& style) {
   for (const auto& decoration : style.AppliedTextDecorations()) {
-    TextDecorationStyle decoration_style = decoration.Style();
-    if (decoration_style == kTextDecorationStyleDotted ||
-        decoration_style == kTextDecorationStyleDashed)
+    ETextDecorationStyle decoration_style = decoration.Style();
+    if (decoration_style == ETextDecorationStyle::kDotted ||
+        decoration_style == ETextDecorationStyle::kDashed)
       return true;
   }
   return false;

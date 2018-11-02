@@ -1,6 +1,7 @@
 include_rules = [
   "+chromeos",
   "+components/device_event_log",
+  "+device/udev_linux",
   "+grit/ui_chromeos_resources.h",
   "+grit/ui_chromeos_strings.h",
   "+third_party/cros_system_api",
@@ -17,3 +18,9 @@ include_rules = [
   "+ui/views",
   "+ui/wm",
 ]
+
+specific_include_rules = {
+  "run_all_unittests\.cc": [
+    "+mojo/edk/embedder",
+  ]
+}

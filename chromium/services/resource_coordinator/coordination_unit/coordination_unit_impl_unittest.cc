@@ -2,15 +2,17 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <memory>
-#include <utility>
-#include <vector>
+#include <string>
 
 #include "base/bind.h"
 #include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/values.h"
+#include "services/resource_coordinator/coordination_unit/coordination_unit_impl.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_impl_unittest_util.h"
 #include "services/resource_coordinator/coordination_unit/coordination_unit_provider_impl.h"
+#include "services/resource_coordinator/coordination_unit/mock_coordination_unit_graphs.h"
+#include "services/resource_coordinator/public/interfaces/coordination_unit.mojom.h"
 #include "services/service_manager/public/cpp/service_context_ref.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -57,7 +59,9 @@ class TestCoordinationUnit : public mojom::CoordinationPolicyCallback {
   }
 
   mojom::CoordinationPolicyCallbackPtr GetPolicyCallback() {
-    return binding_.CreateInterfacePtrAndBind();
+    mojom::CoordinationPolicyCallbackPtr callback_proxy;
+    binding_.Bind(mojo::MakeRequest(&callback_proxy));
+    return callback_proxy;
   }
 
   // The CU will always send policy updates on events (including parent events)
@@ -134,6 +138,35 @@ TEST_F(CoordinationUnitImplTest, AddChild) {
   }
 }
 
+TEST_F(CoordinationUnitImplTest, RemoveChild) {
+  auto parent_coordination_unit =
+      CreateCoordinationUnit(CoordinationUnitType::kFrame);
+  auto child_coordination_unit =
+      CreateCoordinationUnit(CoordinationUnitType::kFrame);
+
+  // Parent-child relationships have not been established yet.
+  EXPECT_EQ(0u, parent_coordination_unit->children().size());
+  EXPECT_EQ(0u, parent_coordination_unit->parents().size());
+  EXPECT_EQ(0u, child_coordination_unit->children().size());
+  EXPECT_EQ(0u, child_coordination_unit->parents().size());
+
+  parent_coordination_unit->AddChild(child_coordination_unit->id());
+
+  // Ensure correct Parent-child relationships have been established.
+  EXPECT_EQ(1u, parent_coordination_unit->children().size());
+  EXPECT_EQ(0u, parent_coordination_unit->parents().size());
+  EXPECT_EQ(0u, child_coordination_unit->children().size());
+  EXPECT_EQ(1u, child_coordination_unit->parents().size());
+
+  parent_coordination_unit->RemoveChild(child_coordination_unit->id());
+
+  // Parent-child relationships should no longer exist.
+  EXPECT_EQ(0u, parent_coordination_unit->children().size());
+  EXPECT_EQ(0u, parent_coordination_unit->parents().size());
+  EXPECT_EQ(0u, child_coordination_unit->children().size());
+  EXPECT_EQ(0u, child_coordination_unit->parents().size());
+}
+
 TEST_F(CoordinationUnitImplTest, CyclicGraphUnits) {
   TestCoordinationUnit parent_unit(
       provider(), CoordinationUnitType::kWebContents, std::string());
@@ -170,6 +203,122 @@ TEST_F(CoordinationUnitImplTest, CyclicGraphUnits) {
     parent_callback.Run();
     child_callback.Run();
   }
+}
+
+TEST_F(CoordinationUnitImplTest, GetSetProperty) {
+  auto coordination_unit =
+      CreateCoordinationUnit(CoordinationUnitType::kWebContents);
+
+  // An empty value should be returned if property is not found
+  EXPECT_EQ(base::Value(),
+            coordination_unit->GetProperty(mojom::PropertyType::kTest));
+
+  // Perform a valid storage property set
+  coordination_unit->SetProperty(mojom::PropertyType::kTest,
+                                 base::MakeUnique<base::Value>(41));
+  EXPECT_EQ(1u, coordination_unit->properties_for_testing().size());
+  EXPECT_EQ(base::Value(41),
+            coordination_unit->GetProperty(mojom::PropertyType::kTest));
+}
+
+TEST_F(CoordinationUnitImplTest,
+       GetAssociatedCoordinationUnitsForSingleTabInSingleProcess) {
+  MockSingleTabInSingleProcessCoordinationUnitGraph cu_graph;
+
+  auto tabs_associated_with_process =
+      cu_graph.process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(1u, tabs_associated_with_process.size());
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.tab.get()));
+
+  auto processes_associated_with_tab =
+      cu_graph.tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(1u, processes_associated_with_tab.size());
+  EXPECT_EQ(1u, processes_associated_with_tab.count(cu_graph.process.get()));
+}
+
+TEST_F(CoordinationUnitImplTest,
+       GetAssociatedCoordinationUnitsForMultipleTabsInSingleProcess) {
+  MockMultipleTabsInSingleProcessCoordinationUnitGraph cu_graph;
+
+  auto tabs_associated_with_process =
+      cu_graph.process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(2u, tabs_associated_with_process.size());
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.tab.get()));
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.other_tab.get()));
+
+  auto processes_associated_with_tab =
+      cu_graph.tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(1u, processes_associated_with_tab.size());
+  EXPECT_EQ(1u, processes_associated_with_tab.count(cu_graph.process.get()));
+
+  auto processes_associated_with_other_tab =
+      cu_graph.other_tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(1u, processes_associated_with_other_tab.size());
+  EXPECT_EQ(1u, processes_associated_with_tab.count(cu_graph.process.get()));
+}
+
+TEST_F(CoordinationUnitImplTest,
+       GetAssociatedCoordinationUnitsForSingleTabWithMultipleProcesses) {
+  MockSingleTabWithMultipleProcessesCoordinationUnitGraph cu_graph;
+
+  auto tabs_associated_with_process =
+      cu_graph.process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(1u, tabs_associated_with_process.size());
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.tab.get()));
+
+  auto tabs_associated_with_other_process =
+      cu_graph.other_process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(1u, tabs_associated_with_other_process.size());
+  EXPECT_EQ(1u, tabs_associated_with_other_process.count(cu_graph.tab.get()));
+
+  auto processes_associated_with_tab =
+      cu_graph.tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(2u, processes_associated_with_tab.size());
+  EXPECT_EQ(1u, processes_associated_with_tab.count(cu_graph.process.get()));
+  EXPECT_EQ(1u,
+            processes_associated_with_tab.count(cu_graph.other_process.get()));
+}
+
+TEST_F(CoordinationUnitImplTest,
+       GetAssociatedCoordinationUnitsForMultipleTabsWithMultipleProcesses) {
+  MockMultipleTabsWithMultipleProcessesCoordinationUnitGraph cu_graph;
+
+  auto tabs_associated_with_process =
+      cu_graph.process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(2u, tabs_associated_with_process.size());
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.tab.get()));
+  EXPECT_EQ(1u, tabs_associated_with_process.count(cu_graph.other_tab.get()));
+
+  auto tabs_associated_with_other_process =
+      cu_graph.other_process->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kWebContents);
+  EXPECT_EQ(1u, tabs_associated_with_other_process.size());
+  EXPECT_EQ(1u,
+            tabs_associated_with_other_process.count(cu_graph.other_tab.get()));
+
+  auto processes_associated_with_tab =
+      cu_graph.tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(1u, processes_associated_with_tab.size());
+  EXPECT_EQ(1u, processes_associated_with_tab.count(cu_graph.process.get()));
+
+  auto processes_associated_with_other_tab =
+      cu_graph.other_tab->GetAssociatedCoordinationUnitsOfType(
+          CoordinationUnitType::kProcess);
+  EXPECT_EQ(2u, processes_associated_with_other_tab.size());
+  EXPECT_EQ(1u,
+            processes_associated_with_other_tab.count(cu_graph.process.get()));
+  EXPECT_EQ(1u, processes_associated_with_other_tab.count(
+                    cu_graph.other_process.get()));
 }
 
 }  // namespace resource_coordinator

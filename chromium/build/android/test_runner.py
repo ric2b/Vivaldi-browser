@@ -41,6 +41,7 @@ from pylib.base import test_run_factory
 from pylib.results import json_results
 from pylib.results import report_results
 from pylib.utils import logdog_helper
+from pylib.utils import logging_utils
 
 from py_utils import contextlib_ext
 
@@ -99,7 +100,12 @@ def AddTracingOptions(parser):
   parser.add_argument(
       '--trace-output',
       metavar='FILENAME', type=os.path.realpath,
-      help='Path to save test_runner trace data to.')
+      help='Path to save test_runner trace json output to.')
+
+  parser.add_argument(
+      '--trace-all',
+      action='store_true',
+      help='Whether to trace all function calls.')
 
 
 def AddCommonOptions(parser):
@@ -187,7 +193,14 @@ def AddCommonOptions(parser):
 
 def ProcessCommonOptions(args):
   """Processes and handles all common options."""
-  run_tests_helper.SetLogLevel(args.verbose_count)
+  run_tests_helper.SetLogLevel(args.verbose_count, add_handler=False)
+  if args.verbose_count > 0:
+    handler = logging_utils.ColorStreamHandler()
+  else:
+    handler = logging.StreamHandler(sys.stdout)
+  handler.setFormatter(run_tests_helper.CustomFormatter())
+  logging.getLogger().addHandler(handler)
+
   constants.SetBuildType(args.build_type)
   if args.output_directory:
     constants.SetOutputDirectory(args.output_directory)
@@ -208,9 +221,9 @@ def AddDeviceOptions(parser):
       type=os.path.realpath,
       help='Device blacklist file.')
   parser.add_argument(
-      '-d', '--device',
-      dest='test_device',
-      help='Target device for the test suite to run on.')
+      '-d', '--device', nargs='+',
+      dest='test_devices',
+      help='Target device(s) for the test suite to run on.')
   parser.add_argument(
       '--enable-concurrent-adb',
       action='store_true',
@@ -376,15 +389,27 @@ def AddInstrumentationTestOptions(parser):
       dest='run_disabled', action='store_true',
       help='Also run disabled tests if applicable.')
   parser.add_argument(
-      '--regenerate-goldens',
-      action='store_true', dest='regenerate_goldens',
-      help='Causes the render tests to not fail when a check'
-           'fails or the golden image is missing but to render'
-           'the view and carry on.')
-  parser.add_argument(
       '--render-results-directory',
       dest='render_results_dir',
       help='Directory to pull render test result images off of the device to.')
+  def package_replacement(arg):
+    split_arg = arg.split(',')
+    if len(split_arg) != 2:
+      raise argparse.ArgumentError(
+          'Expected two comma-separated strings for --replace-system-package, '
+          'received %d' % len(split_arg))
+    PackageReplacement = collections.namedtuple('PackageReplacement',
+                                                ['package', 'replacement_apk'])
+    return PackageReplacement(package=split_arg[0],
+                              replacement_apk=os.path.realpath(split_arg[1]))
+  parser.add_argument(
+      '--replace-system-package',
+      type=package_replacement, default=None,
+      help='Specifies a system package to replace with a given APK for the '
+           'duration of the test. Given as a comma-separated pair of strings, '
+           'the first element being the package and the second the path to the '
+           'replacement APK. Only supports replacing one package. Example: '
+           '--replace-system-package com.example.app,path/to/some.apk')
   parser.add_argument(
       '--runtime-deps-path',
       dest='runtime_deps_path', type=os.path.realpath,
@@ -767,8 +792,9 @@ def RunTestsInPlatformMode(args):
       yield
     finally:
       if not args.logcat_output_file:
-        logging.critical('Cannot upload logcats file. '
-                        'File to save logcat is not specified.')
+        logging.critical('Cannot upload logcat file: no file specified.')
+      elif not os.path.exists(args.logcat_output_file):
+        logging.critical("Cannot upload logcat file: file doesn't exist.")
       else:
         with open(args.logcat_output_file) as src:
           dst = logdog_helper.open_text('unified_logcats')
@@ -926,6 +952,14 @@ def main():
       args.command_line_flags = unknown_args
     else:
       parser.error('unrecognized arguments: %s' % ' '.join(unknown_args))
+
+  # --replace-system-package has the potential to cause issues if
+  # --enable-concurrent-adb is set, so disallow that combination
+  if (hasattr(args, 'replace_system_package') and
+      hasattr(args, 'enable_concurrent_adb') and args.replace_system_package and
+      args.enable_concurrent_adb):
+    parser.error('--replace-system-package and --enable-concurrent-adb cannot '
+                 'be used together')
 
   try:
     return RunTestsCommand(args)

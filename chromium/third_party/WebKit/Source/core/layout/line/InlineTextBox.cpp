@@ -173,8 +173,8 @@ bool InlineTextBox::IsSelected(int start_pos, int end_pos) const {
 
 SelectionState InlineTextBox::GetSelectionState() const {
   SelectionState state = GetLineLayoutItem().GetSelectionState();
-  if (state == SelectionStart || state == SelectionEnd ||
-      state == SelectionBoth) {
+  if (state == SelectionState::kStart || state == SelectionState::kEnd ||
+      state == SelectionState::kStartAndEnd) {
     int start_pos, end_pos;
     std::tie(start_pos, end_pos) = GetLineLayoutItem().SelectionStartEnd();
     // The position after a hard line break is considered to be past its end.
@@ -187,38 +187,38 @@ SelectionState InlineTextBox::GetSelectionState() const {
                 LineBreak::kAfterWhiteSpace
             ? -1
             : 0;
-    bool start = (state != SelectionEnd && start_pos >= start_ &&
+    bool start = (state != SelectionState::kEnd && start_pos >= start_ &&
                   start_pos <= start_ + len_ +
                                    end_of_line_adjustment_for_css_line_break);
-    bool end = (state != SelectionStart && end_pos > start_ &&
+    bool end = (state != SelectionState::kStart && end_pos > start_ &&
                 end_pos <= last_selectable);
     if (start && end)
-      state = SelectionBoth;
+      state = SelectionState::kStartAndEnd;
     else if (start)
-      state = SelectionStart;
+      state = SelectionState::kStart;
     else if (end)
-      state = SelectionEnd;
-    else if ((state == SelectionEnd || start_pos < start_) &&
-             (state == SelectionStart || end_pos > last_selectable))
-      state = SelectionInside;
-    else if (state == SelectionBoth)
-      state = SelectionNone;
+      state = SelectionState::kEnd;
+    else if ((state == SelectionState::kEnd || start_pos < start_) &&
+             (state == SelectionState::kStart || end_pos > last_selectable))
+      state = SelectionState::kInside;
+    else if (state == SelectionState::kStartAndEnd)
+      state = SelectionState::kNone;
   }
 
   // If there are ellipsis following, make sure their selection is updated.
   if (truncation_ != kCNoTruncation && Root().GetEllipsisBox()) {
     EllipsisBox* ellipsis = Root().GetEllipsisBox();
-    if (state != SelectionNone) {
+    if (state != SelectionState::kNone) {
       int start, end;
       SelectionStartEnd(start, end);
       // The ellipsis should be considered to be selected if the end of the
       // selection is past the beginning of the truncation and the beginning of
       // the selection is before or at the beginning of the truncation.
       ellipsis->SetSelectionState(end >= truncation_ && start <= truncation_
-                                      ? SelectionInside
-                                      : SelectionNone);
+                                      ? SelectionState::kInside
+                                      : SelectionState::kNone);
     } else {
-      ellipsis->SetSelectionState(SelectionNone);
+      ellipsis->SetSelectionState(SelectionState::kNone);
     }
   }
 
@@ -229,7 +229,7 @@ bool InlineTextBox::HasWrappedSelectionNewline() const {
   DCHECK(!GetLineLayoutItem().NeedsLayout());
 
   SelectionState state = GetSelectionState();
-  if (state != SelectionStart && state != SelectionInside)
+  if (state != SelectionState::kStart && state != SelectionState::kInside)
     return false;
 
   // Checking last leaf child can be slow, so we make sure to do this
@@ -251,8 +251,9 @@ bool InlineTextBox::HasWrappedSelectionNewline() const {
   if (NextTextBox())
     return true;
   auto root_block = Root().Block();
-  if (root_block.IsInline() && root_block.GetSelectionState() != SelectionEnd &&
-      root_block.GetSelectionState() != SelectionBoth &&
+  if (root_block.IsInline() &&
+      root_block.GetSelectionState() != SelectionState::kEnd &&
+      root_block.GetSelectionState() != SelectionState::kStartAndEnd &&
       root_block.InlineBoxWrapper() &&
       ((is_ltr && root_block.InlineBoxWrapper()->NextOnLine()) ||
        (!is_ltr && root_block.InlineBoxWrapper()->PrevOnLine()))) {
@@ -268,7 +269,10 @@ float InlineTextBox::NewlineSpaceWidth() const {
   return style_to_use.GetFont().SpaceWidth();
 }
 
-LayoutRect InlineTextBox::LocalSelectionRect(int start_pos, int end_pos) const {
+LayoutRect InlineTextBox::LocalSelectionRect(
+    int start_pos,
+    int end_pos,
+    bool consider_current_selection) const {
   int s_pos = std::max(start_pos - start_, 0);
   int e_pos = std::min(end_pos - start_, (int)len_);
 
@@ -314,7 +318,7 @@ LayoutRect InlineTextBox::LocalSelectionRect(int start_pos, int end_pos) const {
     top_point = LayoutPoint(r.X(), sel_top);
     width = logical_width;
     height = sel_height;
-    if (HasWrappedSelectionNewline()) {
+    if (consider_current_selection && HasWrappedSelectionNewline()) {
       if (!IsLeftToRightDirection())
         top_point.SetX(LayoutUnit(top_point.X() - NewlineSpaceWidth()));
       width += NewlineSpaceWidth();
@@ -325,7 +329,7 @@ LayoutRect InlineTextBox::LocalSelectionRect(int start_pos, int end_pos) const {
     height = logical_width;
     // TODO(wkorman): RTL text embedded in top-to-bottom text can create
     // bottom-to-top situations. Add tests and ensure we handle correctly.
-    if (HasWrappedSelectionNewline())
+    if (consider_current_selection && HasWrappedSelectionNewline())
       height += NewlineSpaceWidth();
   }
 
@@ -367,9 +371,9 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
                                            LayoutUnit visible_right_edge,
                                            LayoutUnit ellipsis_width,
                                            LayoutUnit& truncated_width,
-                                           bool& found_box,
+                                           InlineBox** found_box,
                                            LayoutUnit logical_left_offset) {
-  if (found_box) {
+  if (*found_box) {
     SetTruncation(kCFullTruncation);
     return LayoutUnit(-1);
   }
@@ -391,7 +395,7 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
     // Too far.  Just set full truncation, but return -1 and let the ellipsis
     // just be placed at the edge of the box.
     SetTruncation(kCFullTruncation);
-    found_box = true;
+    *found_box = this;
     return LayoutUnit(-1);
   }
 
@@ -400,7 +404,7 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
   bool rtl_ellipsis_within_box =
       !flow_is_ltr && ellipsis_x > adjusted_logical_left;
   if (ltr_ellipsis_within_box || rtl_ellipsis_within_box) {
-    found_box = true;
+    *found_box = this;
 
     // OffsetForPosition() expects the position relative to the root box.
     ellipsis_x -= logical_left_offset;
@@ -438,7 +442,7 @@ LayoutUnit InlineTextBox::PlaceEllipsisBox(bool flow_is_ltr,
         ltr == flow_is_ltr ? start_ : start_ + offset,
         ltr == flow_is_ltr ? offset : len_ - offset, TextPos(),
         flow_is_ltr ? TextDirection::kLtr : TextDirection::kRtl,
-        IsFirstLineStyle()));
+        IsFirstLineStyle(), nullptr, nullptr, Expansion()));
 
     // The ellipsis needs to be placed just after the last visible character.
     // Where "after" is defined by the flow directionality, not the inline
@@ -490,12 +494,12 @@ bool InlineTextBox::GetEmphasisMarkPosition(
     TextEmphasisPosition& emphasis_position) const {
   // This function returns true if there are text emphasis marks and they are
   // suppressed by ruby text.
-  if (style.GetTextEmphasisMark() == kTextEmphasisMarkNone)
+  if (style.GetTextEmphasisMark() == TextEmphasisMark::kNone)
     return false;
 
   emphasis_position = style.GetTextEmphasisPosition();
   // Ruby text is always over, so it cannot suppress emphasis marks under.
-  if (emphasis_position == kTextEmphasisPositionUnder)
+  if (emphasis_position == TextEmphasisPosition::kUnder)
     return true;
 
   LineLayoutBox containing_block = GetLineLayoutItem().ContainingBlock();
@@ -524,14 +528,14 @@ void InlineTextBox::Paint(const PaintInfo& paint_info,
 
 void InlineTextBox::SelectionStartEnd(int& s_pos, int& e_pos) const {
   int start_pos, end_pos;
-  if (GetLineLayoutItem().GetSelectionState() == SelectionInside) {
+  if (GetLineLayoutItem().GetSelectionState() == SelectionState::kInside) {
     start_pos = 0;
     end_pos = GetLineLayoutItem().TextLength();
   } else {
     std::tie(start_pos, end_pos) = GetLineLayoutItem().SelectionStartEnd();
-    if (GetLineLayoutItem().GetSelectionState() == SelectionStart)
+    if (GetLineLayoutItem().GetSelectionState() == SelectionState::kStart)
       end_pos = GetLineLayoutItem().TextLength();
-    else if (GetLineLayoutItem().GetSelectionState() == SelectionEnd)
+    else if (GetLineLayoutItem().GetSelectionState() == SelectionState::kEnd)
       start_pos = 0;
   }
 
@@ -552,7 +556,7 @@ void InlineTextBox::PaintDocumentMarker(GraphicsContext& pt,
 void InlineTextBox::PaintTextMatchMarkerForeground(
     const PaintInfo& paint_info,
     const LayoutPoint& box_origin,
-    const DocumentMarker& marker,
+    const TextMatchMarker& marker,
     const ComputedStyle& style,
     const Font& font) const {
   InlineTextBoxPainter(*this).PaintTextMatchMarkerForeground(
@@ -562,7 +566,7 @@ void InlineTextBox::PaintTextMatchMarkerForeground(
 void InlineTextBox::PaintTextMatchMarkerBackground(
     const PaintInfo& paint_info,
     const LayoutPoint& box_origin,
-    const DocumentMarker& marker,
+    const TextMatchMarker& marker,
     const ComputedStyle& style,
     const Font& font) const {
   InlineTextBoxPainter(*this).PaintTextMatchMarkerBackground(

@@ -5,7 +5,9 @@
 #include "core/paint/FieldsetPainter.h"
 
 #include "core/layout/LayoutFieldset.h"
+#include "core/paint/BackgroundImageGeometry.h"
 #include "core/paint/BoxDecorationData.h"
+#include "core/paint/BoxModelObjectPainter.h"
 #include "core/paint/BoxPainter.h"
 #include "core/paint/LayoutObjectDrawingRecorder.h"
 #include "core/paint/PaintInfo.h"
@@ -51,10 +53,11 @@ void FieldsetPainter::PaintBoxDecorationBackground(
 
   BoxPainter::PaintNormalBoxShadow(paint_info, paint_rect,
                                    layout_fieldset_.StyleRef());
-  BoxPainter(layout_fieldset_)
+  BackgroundImageGeometry geometry(layout_fieldset_);
+  BoxModelObjectPainter(layout_fieldset_)
       .PaintFillLayers(paint_info, box_decoration_data.background_color,
-                       layout_fieldset_.Style()->BackgroundLayers(),
-                       paint_rect);
+                       layout_fieldset_.Style()->BackgroundLayers(), paint_rect,
+                       geometry);
   BoxPainter::PaintInsetBoxShadow(paint_info, paint_rect,
                                   layout_fieldset_.StyleRef());
 
@@ -87,7 +90,12 @@ void FieldsetPainter::PaintBoxDecorationBackground(
                             clip_width, legend->Size().Height()));
   }
 
-  BoxPainter::PaintBorder(layout_fieldset_, paint_info, paint_rect,
+  Node* node = nullptr;
+  const LayoutObject* layout_object = &layout_fieldset_;
+  for (; layout_object && !node; layout_object = layout_object->Parent())
+    node = layout_object->GeneratingNode();
+  BoxPainter::PaintBorder(layout_fieldset_, layout_fieldset_.GetDocument(),
+                          node, paint_info, paint_rect,
                           layout_fieldset_.StyleRef());
 }
 

@@ -8,7 +8,9 @@
 
 #include <vector>
 
+#include "ash/public/interfaces/constants.mojom.h"
 #include "base/command_line.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/profiler/scoped_tracker.h"
 #include "build/build_config.h"
@@ -24,7 +26,6 @@
 #include "chrome/browser/ui/app_list/launcher_page_event_dispatcher.h"
 #include "chrome/browser/ui/app_list/search/search_controller_factory.h"
 #include "chrome/browser/ui/app_list/search/search_resource_manager.h"
-#include "chrome/browser/ui/app_list/search_answer_web_contents_delegate.h"
 #include "chrome/browser/ui/app_list/start_page_service.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
 #include "chrome/browser/ui/ash/app_list/app_sync_ui_state_watcher.h"
@@ -39,12 +40,16 @@
 #include "content/public/browser/render_widget_host_view.h"
 #include "content/public/browser/speech_recognition_session_preamble.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_registry.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_constants.h"
 #include "extensions/common/manifest_handlers/launcher_page_info.h"
+#include "services/service_manager/public/cpp/connector.h"
+#include "ui/app_list/app_list_model.h"
 #include "ui/app_list/app_list_switches.h"
+#include "ui/app_list/app_list_view_delegate_observer.h"
 #include "ui/app_list/search_box_model.h"
 #include "ui/app_list/search_controller.h"
 #include "ui/app_list/speech_ui_model.h"
@@ -55,6 +60,34 @@
 namespace {
 
 const int kAutoLaunchDefaultTimeoutMilliSec = 50;
+
+// The UMA histogram that logs which state search results are opened from.
+const char kAppListSearchResultOpenSourceHistogram[] =
+    "Apps.AppListSearchResultOpenedSource";
+
+// The different sources from which a search result is displayed. These values
+// are written to logs.  New enum values can be added, but existing enums must
+// never be renumbered or deleted and reused.
+enum ApplistSearchResultOpenedSource {
+  kHalfClamshell = 0,
+  kFullscreenClamshell = 1,
+  kFullscreenTablet = 2,
+  kMaxApplistSearchResultOpenedSource = 3,
+};
+
+void RecordHistogram(bool is_tablet_mode,
+                     app_list::AppListView::AppListState state) {
+  ApplistSearchResultOpenedSource source;
+
+  if (is_tablet_mode) {
+    source = kFullscreenTablet;
+  } else {
+    source = state == app_list::AppListView::HALF ? kHalfClamshell
+                                                  : kFullscreenClamshell;
+  }
+  UMA_HISTOGRAM_ENUMERATION(kAppListSearchResultOpenSourceHistogram, source,
+                            kMaxApplistSearchResultOpenedSource);
+}
 
 // Gets a list of URLs of the custom launcher pages to show in the launcher.
 // Returns a URL for each installed launcher page. If --custom-launcher-page is
@@ -90,8 +123,7 @@ void GetCustomLauncherPageUrls(content::BrowserContext* browser_context,
   const extensions::ExtensionSet& enabled_extensions =
       extension_registry->enabled_extensions();
   for (extensions::ExtensionSet::const_iterator it = enabled_extensions.begin();
-       it != enabled_extensions.end();
-       ++it) {
+       it != enabled_extensions.end(); ++it) {
     const extensions::Extension* extension = it->get();
     extensions::LauncherPageInfo* info =
         extensions::LauncherPageHandler::GetInfo(extension);
@@ -106,9 +138,11 @@ void GetCustomLauncherPageUrls(content::BrowserContext* browser_context,
 
 AppListViewDelegate::AppListViewDelegate(AppListControllerDelegate* controller)
     : controller_(controller),
-      profile_(NULL),
-      model_(NULL),
-      template_url_service_observer_(this) {
+      profile_(nullptr),
+      model_(nullptr),
+      template_url_service_observer_(this),
+      observer_binding_(this),
+      weak_ptr_factory_(this) {
   CHECK(controller_);
   speech_ui_.reset(new app_list::SpeechUIModel);
 
@@ -125,9 +159,15 @@ AppListViewDelegate::AppListViewDelegate(AppListControllerDelegate* controller)
   speech_ui_->set_logo(*image);
 #endif
 
-  registrar_.Add(this,
-                 chrome::NOTIFICATION_APP_TERMINATING,
+  registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
                  content::NotificationService::AllSources());
+
+  content::ServiceManagerConnection::GetForProcess()
+      ->GetConnector()
+      ->BindInterface(ash::mojom::kServiceName, &wallpaper_controller_ptr_);
+  ash::mojom::WallpaperObserverAssociatedPtrInfo ptr_info;
+  observer_binding_.Bind(mojo::MakeRequest(&ptr_info));
+  wallpaper_controller_ptr_->AddObserver(std::move(ptr_info));
 }
 
 AppListViewDelegate::~AppListViewDelegate() {
@@ -154,7 +194,6 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
       start_page_service->RemoveObserver(this);
     app_sync_ui_state_watcher_.reset();
     model_ = NULL;
-    search_answer_delegate_.reset();
   }
 
   template_url_service_observer_.RemoveAll();
@@ -185,12 +224,14 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
     model_ = app_list::AppListSyncableServiceFactory::GetForProfile(profile_)
                  ->GetModel();
 
+    // After |model_| is initialized, make a GetWallpaperColors mojo call to set
+    // wallpaper colors for |model_|.
+    wallpaper_controller_ptr_->GetWallpaperColors(
+        base::Bind(&AppListViewDelegate::OnGetWallpaperColorsCallback,
+                   weak_ptr_factory_.GetWeakPtr()));
+
     app_sync_ui_state_watcher_.reset(
         new AppSyncUIStateWatcher(profile_, model_));
-
-    search_answer_delegate_ =
-        base::MakeUnique<app_list::SearchAnswerWebContentsDelegate>(profile_,
-                                                                    model_);
 
     SetUpSearchUI();
     SetUpCustomLauncherPages();
@@ -199,6 +240,11 @@ void AppListViewDelegate::SetProfile(Profile* new_profile) {
 
   // Clear search query.
   model_->search_box()->Update(base::string16(), false);
+}
+
+void AppListViewDelegate::OnGetWallpaperColorsCallback(
+    const std::vector<SkColor>& colors) {
+  OnWallpaperColorsChanged(colors);
 }
 
 void AppListViewDelegate::SetUpSearchUI() {
@@ -213,9 +259,7 @@ void AppListViewDelegate::SetUpSearchUI() {
                                         false);
 
   search_resource_manager_.reset(new app_list::SearchResourceManager(
-      profile_,
-      model_->search_box(),
-      speech_ui_.get()));
+      profile_, model_->search_box(), speech_ui_.get()));
 
   search_controller_ = CreateSearchController(profile_, model_, controller_);
 }
@@ -237,14 +281,24 @@ void AppListViewDelegate::SetUpCustomLauncherPages() {
 
   std::string first_launcher_page_app_id = custom_launcher_page_urls[0].host();
   const extensions::Extension* extension =
-      extensions::ExtensionRegistry::Get(profile_)
-          ->GetExtensionById(first_launcher_page_app_id,
-                             extensions::ExtensionRegistry::EVERYTHING);
+      extensions::ExtensionRegistry::Get(profile_)->GetExtensionById(
+          first_launcher_page_app_id,
+          extensions::ExtensionRegistry::EVERYTHING);
   model_->set_custom_launcher_page_name(extension->name());
   // Only the first custom launcher page gets events dispatched to it.
   launcher_page_event_dispatcher_.reset(
       new app_list::LauncherPageEventDispatcher(profile_,
                                                 first_launcher_page_app_id));
+}
+
+void AppListViewDelegate::OnWallpaperColorsChanged(
+    const std::vector<SkColor>& prominent_colors) {
+  if (wallpaper_prominent_colors_ == prominent_colors)
+    return;
+
+  wallpaper_prominent_colors_ = prominent_colors;
+  for (auto& observer : observers_)
+    observer.OnWallpaperColorsChanged();
 }
 
 void AppListViewDelegate::OnHotwordStateChanged(bool started) {
@@ -279,21 +333,16 @@ void AppListViewDelegate::StartSearch() {
     search_controller_->Start();
     controller_->OnSearchStarted();
   }
-  if (search_answer_delegate_)
-    search_answer_delegate_->Update();
 }
 
-void AppListViewDelegate::StopSearch() {
-  if (search_controller_)
-    search_controller_->Stop();
-}
-
-void AppListViewDelegate::OpenSearchResult(
-    app_list::SearchResult* result,
-    bool auto_launch,
-    int event_flags) {
+void AppListViewDelegate::OpenSearchResult(app_list::SearchResult* result,
+                                           bool auto_launch,
+                                           int event_flags) {
   if (auto_launch)
     base::RecordAction(base::UserMetricsAction("AppList_AutoLaunched"));
+
+  RecordHistogram(model_->tablet_mode(), model_->state_fullscreen());
+
   search_controller_->OpenResult(result, event_flags);
 }
 
@@ -330,7 +379,7 @@ void AppListViewDelegate::ViewInitialized() {
   }
 }
 
-void AppListViewDelegate::Dismiss()  {
+void AppListViewDelegate::Dismiss() {
   controller_->DismissView();
 }
 
@@ -415,8 +464,8 @@ void AppListViewDelegate::OnSpeechResult(const base::string16& result,
                                          bool is_final) {
   speech_ui_->SetSpeechResult(result, is_final);
   if (is_final) {
-    auto_launch_timeout_ = base::TimeDelta::FromMilliseconds(
-        kAutoLaunchDefaultTimeoutMilliSec);
+    auto_launch_timeout_ =
+        base::TimeDelta::FromMilliseconds(kAutoLaunchDefaultTimeoutMilliSec);
     model_->search_box()->Update(result, true);
   }
 }
@@ -434,9 +483,8 @@ void AppListViewDelegate::OnSpeechRecognitionStateChanged(
   // With the new hotword extension, we need to re-request hotwording after
   // speech recognition has stopped. Do not request hotwording after the app
   // list has already closed.
-  if (new_state == app_list::SPEECH_RECOGNITION_READY &&
-      service && service->HotwordEnabled() &&
-      controller_->GetAppListWindow()) {
+  if (new_state == app_list::SPEECH_RECOGNITION_READY && service &&
+      service->HotwordEnabled() && controller_->GetAppListWindow()) {
     HotwordService* hotword_service =
         HotwordServiceFactory::GetForProfile(profile_);
     if (hotword_service) {
@@ -459,8 +507,8 @@ views::View* AppListViewDelegate::CreateStartPageWebView(
     return NULL;
 
   DCHECK_EQ(profile_, web_contents->GetBrowserContext());
-  views::WebView* web_view = new views::WebView(
-      web_contents->GetBrowserContext());
+  views::WebView* web_view =
+      new views::WebView(web_contents->GetBrowserContext());
   web_view->SetPreferredSize(size);
   web_view->SetResizeBackgroundColor(SK_ColorTRANSPARENT);
   web_view->SetWebContents(web_contents);
@@ -495,10 +543,6 @@ std::vector<views::View*> AppListViewDelegate::CreateCustomPageWebViews(
   return web_views;
 }
 
-views::View* AppListViewDelegate::GetSearchAnswerWebView() {
-  return search_answer_delegate_->web_view();
-}
-
 void AppListViewDelegate::CustomLauncherPageAnimationChanged(double progress) {
   if (launcher_page_event_dispatcher_)
     launcher_page_event_dispatcher_->ProgressChanged(progress);
@@ -513,6 +557,21 @@ bool AppListViewDelegate::IsSpeechRecognitionEnabled() {
   app_list::StartPageService* service =
       app_list::StartPageService::Get(profile_);
   return service && service->GetSpeechRecognitionContents();
+}
+
+void AppListViewDelegate::GetWallpaperProminentColors(
+    std::vector<SkColor>* colors) {
+  *colors = wallpaper_prominent_colors_;
+}
+
+void AppListViewDelegate::AddObserver(
+    app_list::AppListViewDelegateObserver* observer) {
+  observers_.AddObserver(observer);
+}
+
+void AppListViewDelegate::RemoveObserver(
+    app_list::AppListViewDelegateObserver* observer) {
+  observers_.RemoveObserver(observer);
 }
 
 void AppListViewDelegate::OnTemplateURLServiceChanged() {

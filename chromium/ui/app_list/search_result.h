@@ -21,6 +21,10 @@ namespace ui {
 class MenuModel;
 }
 
+namespace views {
+class View;
+}
+
 namespace app_list {
 
 class SearchResultObserver;
@@ -39,9 +43,20 @@ class APP_LIST_EXPORT SearchResult {
     DISPLAY_LIST,
     DISPLAY_TILE,
     DISPLAY_RECOMMENDATION,
+    DISPLAY_CARD,
     // Add new values here.
 
     DISPLAY_TYPE_LAST,
+  };
+
+  // Type of the search result. This should be set in corresponding subclass's
+  // constructor.
+  enum ResultType {
+    RESULT_UNKNOWN,        // Unknown type.
+    RESULT_INSTALLED_APP,  // Installed apps.
+    RESULT_PLAYSTORE_APP,  // Uninstalled apps from playstore.
+    RESULT_INSTANT_APP,    // Instant apps.
+    // Add new values here.
   };
 
   // A tagged range in search result text.
@@ -49,10 +64,10 @@ class APP_LIST_EXPORT SearchResult {
     // Similar to ACMatchClassification::Style, the style values are not
     // mutually exclusive.
     enum Style {
-      NONE  = 0,
-      URL   = 1 << 0,
+      NONE = 0,
+      URL = 1 << 0,
       MATCH = 1 << 1,
-      DIM   = 1 << 2,
+      DIM = 1 << 2,
     };
 
     Tag(int styles, size_t start, size_t end)
@@ -108,7 +123,17 @@ class APP_LIST_EXPORT SearchResult {
   const Tags& details_tags() const { return details_tags_; }
   void set_details_tags(const Tags& tags) { details_tags_ = tags; }
 
+  float rating() const { return rating_; }
+  void SetRating(float rating);
+
+  const base::string16& formatted_price() const { return formatted_price_; }
+  void SetFormattedPrice(const base::string16& formatted_price);
+
+  views::View* view() const { return view_; }
+  void set_view(views::View* view) { view_ = view; }
+
   const std::string& id() const { return id_; }
+  const std::string& comparable_id() const { return comparable_id_; }
 
   double relevance() const { return relevance_; }
   void set_relevance(double relevance) { relevance_ = relevance; }
@@ -118,14 +143,15 @@ class APP_LIST_EXPORT SearchResult {
     display_type_ = display_type;
   }
 
+  ResultType result_type() const { return result_type_; }
+  void set_result_type(ResultType result_type) { result_type_ = result_type; }
+
   int distance_from_origin() { return distance_from_origin_; }
   void set_distance_from_origin(int distance) {
     distance_from_origin_ = distance;
   }
 
-  const Actions& actions() const {
-    return actions_;
-  }
+  const Actions& actions() const { return actions_; }
   void SetActions(const Actions& sets);
 
   // Whether the result can be automatically selected by a voice query.
@@ -138,6 +164,11 @@ class APP_LIST_EXPORT SearchResult {
 
   int percent_downloaded() const { return percent_downloaded_; }
   void SetPercentDownloaded(int percent_downloaded);
+
+  bool is_omnibox_search() const { return is_omnibox_search_; }
+  void set_is_omnibox_search(bool is_omnibox_search) {
+    is_omnibox_search_ = is_omnibox_search;
+  }
 
   // Returns the dimension at which this result's icon should be displayed.
   int GetPreferredIconDimension() const;
@@ -170,6 +201,9 @@ class APP_LIST_EXPORT SearchResult {
 
  protected:
   void set_id(const std::string& id) { id_ = id; }
+  void set_comparable_id(const std::string& comparable_id) {
+    comparable_id_ = comparable_id;
+  }
   void set_voice_result(bool voice_result) { voice_result_ = voice_result; }
 
  private:
@@ -187,19 +221,40 @@ class APP_LIST_EXPORT SearchResult {
   base::string16 details_;
   Tags details_tags_;
 
+  // Amount of the app's stars in play store. Not exist if set to negative.
+  float rating_ = -1.0f;
+
+  // Formatted price label of the app in play store. Not exist if set to empty.
+  base::string16 formatted_price_;
+
+  // Unowned pointer to a view containing a rendered result, or nullptr if there
+  // is no such view for the result.
+  // The view has set_owned_by_client() property set. It's a responsibility of
+  // SearchProvider to set this property and own this view.
+  views::View* view_ = nullptr;
+
   std::string id_;
-  double relevance_;
-  DisplayType display_type_;
+  // ID that can be compared across results from different providers to remove
+  // duplicates. May be empty, in which case |id_| will be used for comparison.
+  std::string comparable_id_;
+  double relevance_ = 0;
+  DisplayType display_type_ = DISPLAY_LIST;
+
+  ResultType result_type_ = RESULT_UNKNOWN;
 
   // The Manhattan distance from the origin of all search results to this
   // result. This is logged for UMA.
-  int distance_from_origin_;
+  int distance_from_origin_ = -1;
 
   Actions actions_;
-  bool voice_result_;
+  bool voice_result_ = false;
 
-  bool is_installing_;
-  int percent_downloaded_;
+  bool is_installing_ = false;
+  int percent_downloaded_ = 0;
+
+  // Indicates whether result is an omnibox non-url search result. Set by
+  // OmniboxResult subclass.
+  bool is_omnibox_search_ = false;
 
   base::ObserverList<SearchResultObserver> observers_;
 

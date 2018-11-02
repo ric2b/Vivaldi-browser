@@ -25,7 +25,7 @@
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/shadow/ElementShadow.h"
+#include "core/dom/ElementShadow.h"
 #include "core/editing/FrameSelection.h"
 #include "core/fileapi/FileList.h"
 #include "core/frame/LocalFrame.h"
@@ -65,7 +65,7 @@ namespace blink {
 using namespace HTMLNames;
 
 LayoutTheme& LayoutTheme::GetTheme() {
-  if (RuntimeEnabledFeatures::mobileLayoutThemeEnabled()) {
+  if (RuntimeEnabledFeatures::MobileLayoutThemeEnabled()) {
     DEFINE_STATIC_REF(LayoutTheme, layout_theme_mobile,
                       (LayoutThemeMobile::Create()));
     return *layout_theme_mobile;
@@ -255,10 +255,19 @@ void LayoutTheme::AdjustStyle(ComputedStyle& style, Element* e) {
 }
 
 String LayoutTheme::ExtraDefaultStyleSheet() {
-  StringBuilder runtime_css;
-  if (RuntimeEnabledFeatures::contextMenuEnabled())
-    runtime_css.Append("menu[type=\"context\" i] { display: none; }");
-  return runtime_css.ToString();
+  return g_empty_string;
+}
+
+String LayoutTheme::ExtraQuirksStyleSheet() {
+  return String();
+}
+
+String LayoutTheme::ExtraMediaControlsStyleSheet() {
+  return String();
+}
+
+String LayoutTheme::ExtraFullscreenStyleSheet() {
+  return String();
 }
 
 static String FormatChromiumMediaControlsTime(float time,
@@ -333,6 +342,18 @@ Color LayoutTheme::ActiveListBoxSelectionForegroundColor() const {
 
 Color LayoutTheme::InactiveListBoxSelectionForegroundColor() const {
   return PlatformInactiveListBoxSelectionForegroundColor();
+}
+
+Color LayoutTheme::PlatformSpellingMarkerUnderlineColor() const {
+  return Color(255, 0, 0);
+}
+
+Color LayoutTheme::PlatformGrammarMarkerUnderlineColor() const {
+  return Color(192, 192, 192);
+}
+
+Color LayoutTheme::PlatformActiveSpellingMarkerHighlightColor() const {
+  return Color(255, 0, 0, 102);
 }
 
 Color LayoutTheme::PlatformActiveSelectionBackgroundColor() const {
@@ -845,7 +866,7 @@ bool LayoutTheme::ShouldOpenPickerWithF4Key() const {
 }
 
 bool LayoutTheme::SupportsCalendarPicker(const AtomicString& type) const {
-  DCHECK(RuntimeEnabledFeatures::inputMultipleFieldsUIEnabled());
+  DCHECK(RuntimeEnabledFeatures::InputMultipleFieldsUIEnabled());
   return type == InputTypeNames::date || type == InputTypeNames::datetime ||
          type == InputTypeNames::datetime_local ||
          type == InputTypeNames::month || type == InputTypeNames::week;

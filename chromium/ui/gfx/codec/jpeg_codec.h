@@ -10,6 +10,8 @@
 #include <memory>
 #include <vector>
 
+#include "third_party/skia/include/core/SkImageInfo.h"
+#include "third_party/skia/include/core/SkPixmap.h"
 #include "ui/gfx/codec/codec_export.h"
 
 class SkBitmap;
@@ -23,10 +25,6 @@ namespace gfx {
 class CODEC_EXPORT JPEGCodec {
  public:
   enum ColorFormat {
-    // 3 bytes per pixel (packed), in RGB order regardless of endianness.
-    // This is the native JPEG format.
-    FORMAT_RGB,
-
     // 4 bytes per pixel, in RGBA order in mem regardless of endianness.
     FORMAT_RGBA,
 
@@ -39,28 +37,25 @@ class CODEC_EXPORT JPEGCodec {
     FORMAT_SkBitmap
   };
 
-  enum LibraryVariant {
-    SYSTEM_LIBJPEG = 0,
-    LIBJPEG_TURBO,
-    IJG_LIBJPEG,
-  };
-
-  // This method helps identify at run time which library chromium is using.
-  static LibraryVariant JpegLibraryVariant();
-
-  // Encodes the given raw 'input' data, with each pixel being represented as
-  // given in 'format'. The encoded JPEG data will be written into the supplied
-  // vector and true will be returned on success. On failure (false), the
-  // contents of the output buffer are undefined.
+  // Encodes the given raw 'input' pixmap, which includes a pointer to pixels
+  // as well as information describing the pixel format. The encoded JPEG data
+  // will be written into the supplied vector and true will be returned on
+  // success. On failure (false), the contents of the output buffer are
+  // undefined.
   //
-  // w, h: dimensions of the image
-  // row_byte_width: the width in bytes of each row. This may be greater than
-  //   w * bytes_per_pixel if there is extra padding at the end of each row
-  //   (often, each row is padded to the next machine word).
   // quality: an integer in the range 0-100, where 100 is the highest quality.
-  static bool Encode(const unsigned char* input, ColorFormat format,
-                     int w, int h, int row_byte_width,
-                     int quality, std::vector<unsigned char>* output);
+  static bool Encode(const SkPixmap& input,
+                     int quality,
+                     std::vector<unsigned char>* output);
+
+  // Encodes the 'input' bitmap.  The encoded JPEG data will be written into
+  // the supplied vector and true will be returned on success. On failure
+  // (false), the contents of the output buffer are undefined.
+  //
+  // quality: an integer in the range 0-100, where 100 is the highest quality.
+  static bool Encode(const SkBitmap& input,
+                     int quality,
+                     std::vector<unsigned char>* output);
 
   // Decodes the JPEG data contained in input of length input_size. The
   // decoded data will be placed in *output with the dimensions in *w and *h

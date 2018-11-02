@@ -8,7 +8,12 @@
 
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings.h"
+
+#if !defined(OS_IOS)
+#include "media/base/media_switches.h"
+#endif  // !defined(OS_IOS)
 
 namespace {
 
@@ -168,11 +173,20 @@ void WebsiteSettingsRegistry::Init() {
   // Set when an origin is activated for subresource filtering and the
   // associated UI is shown to the user. Cleared when a site is de-activated or
   // the first URL matching the origin is removed from history.
-  Register(
-      CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER_DATA, "subresource-filter-data",
-      nullptr, WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::NOT_LOSSY,
-      WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
-      DESKTOP | PLATFORM_ANDROID, WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
+  Register(CONTENT_SETTINGS_TYPE_ADS_DATA, "subresource-filter-data", nullptr,
+           WebsiteSettingsInfo::UNSYNCABLE, WebsiteSettingsInfo::NOT_LOSSY,
+           WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
+           DESKTOP | PLATFORM_ANDROID,
+           WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
+#if !defined(OS_IOS)
+  if (base::FeatureList::IsEnabled(media::kRecordMediaEngagementScores)) {
+    Register(CONTENT_SETTINGS_TYPE_MEDIA_ENGAGEMENT, "media-engagement",
+             nullptr, WebsiteSettingsInfo::SYNCABLE, WebsiteSettingsInfo::LOSSY,
+             WebsiteSettingsInfo::REQUESTING_ORIGIN_ONLY_SCOPE,
+             DESKTOP | PLATFORM_ANDROID,
+             WebsiteSettingsInfo::INHERIT_IN_INCOGNITO);
+  }
+#endif  //! defined(OS_IOS)
 }
 
 }  // namespace content_settings

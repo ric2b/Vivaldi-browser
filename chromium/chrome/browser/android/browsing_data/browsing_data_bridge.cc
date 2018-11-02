@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/android/browsing_data/browsing_data_bridge.h"
-
 #include <jni.h>
 #include <stddef.h>
 
@@ -16,6 +14,7 @@
 #include "base/android/jni_array.h"
 #include "base/android/jni_string.h"
 #include "base/android/jni_weak_ref.h"
+#include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/scoped_observer.h"
 #include "base/values.h"
@@ -26,8 +25,10 @@
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_features.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/browsing_data/core/history_notice_utils.h"
+#include "components/browsing_data/core/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -58,10 +59,6 @@ void OnBrowsingDataRemoverDone(
 }
 
 }  // namespace
-
-bool RegisterBrowsingDataBridge(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
 
 static void ClearBrowsingData(
     JNIEnv* env,

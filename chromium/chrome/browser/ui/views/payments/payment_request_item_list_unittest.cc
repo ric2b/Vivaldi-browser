@@ -23,19 +23,23 @@ class TestListItem : public PaymentRequestItemList::Item {
                                      nullptr,
                                      list,
                                      selected,
+                                     /*clickable=*/true,
                                      /*show_edit_button=*/false),
-        selected_state_changed_calls_count_(0) {}
+        selected_state_changed_calls_count_(0) {
+    Init();
+  }
 
   int selected_state_changed_calls_count() {
     return selected_state_changed_calls_count_;
   }
 
  private:
-  std::unique_ptr<views::View> CreateContentView() override {
+  std::unique_ptr<views::View> CreateContentView(
+      base::string16* accessible_content) override {
     return base::MakeUnique<views::View>();
   }
 
-  bool IsEnabled() override { return true; }
+  base::string16 GetNameForDataType() override { return base::string16(); }
 
   bool CanBeSelected() override { return true; }
 

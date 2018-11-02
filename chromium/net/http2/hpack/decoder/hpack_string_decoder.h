@@ -12,14 +12,14 @@
 #include <stddef.h>
 
 #include <algorithm>
-#include <string>
 
 #include "base/logging.h"
 #include "base/macros.h"
-#include "net/base/net_export.h"
 #include "net/http2/decoder/decode_buffer.h"
 #include "net/http2/decoder/decode_status.h"
 #include "net/http2/hpack/decoder/hpack_varint_decoder.h"
+#include "net/http2/platform/api/http2_export.h"
+#include "net/http2/platform/api/http2_string.h"
 
 namespace net {
 
@@ -37,7 +37,7 @@ namespace net {
 // experiment. Perflab experiments show it is generally fastest to call
 // StartSpecialCaseShort rather than StartOnly (~9% slower) or
 // StartAndDecodeLength (~10% slower).
-class NET_EXPORT_PRIVATE HpackStringDecoder {
+class HTTP2_EXPORT_PRIVATE HpackStringDecoder {
  public:
   enum StringDecoderState {
     kStartDecodingLength,
@@ -140,10 +140,10 @@ class NET_EXPORT_PRIVATE HpackStringDecoder {
     }
   }
 
-  std::string DebugString() const;
+  Http2String DebugString() const;
 
  private:
-  static std::string StateToString(StringDecoderState v);
+  static Http2String StateToString(StringDecoderState v);
 
   // Returns true if the length is fully decoded and the listener wants the
   // decoding to continue, false otherwise; status is set to the status from
@@ -229,8 +229,8 @@ class NET_EXPORT_PRIVATE HpackStringDecoder {
   bool huffman_encoded_ = false;
 };
 
-NET_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
-                                            const HpackStringDecoder& v);
+HTTP2_EXPORT_PRIVATE std::ostream& operator<<(std::ostream& out,
+                                              const HpackStringDecoder& v);
 
 }  // namespace net
 #endif  // NET_HTTP2_HPACK_DECODER_HPACK_STRING_DECODER_H_

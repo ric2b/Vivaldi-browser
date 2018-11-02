@@ -37,22 +37,31 @@ constexpr base::TimeDelta kHungTaskDetectionTimeout =
 // This must be safe to call on any thread. Returns nullptr on failure.
 std::unique_ptr<MediaCodecBridge> CreateMediaCodecInternal(
     scoped_refptr<CodecConfig> codec_config,
-    bool require_software_codec) {
+    bool requires_software_codec) {
   TRACE_EVENT0("media", "CreateMediaCodecInternal");
 
   jobject media_crypto =
       codec_config->media_crypto ? codec_config->media_crypto->obj() : nullptr;
 
-  // |needs_protected_surface| implies that it's an encrypted stream.
-  DCHECK(!codec_config->needs_protected_surface || media_crypto);
+  // |requires_secure_codec| implies that it's an encrypted stream.
+  DCHECK(!codec_config->requires_secure_codec || media_crypto);
+
+  CodecType codec_type = CodecType::kAny;
+  if (codec_config->requires_secure_codec && requires_software_codec) {
+    DVLOG(1) << "Secure software codec doesn't exist.";
+    return nullptr;
+  } else if (codec_config->requires_secure_codec) {
+    codec_type = CodecType::kSecure;
+  } else if (requires_software_codec) {
+    codec_type = CodecType::kSoftware;
+  }
 
   std::unique_ptr<MediaCodecBridge> codec(
       MediaCodecBridgeImpl::CreateVideoDecoder(
-          codec_config->codec, codec_config->needs_protected_surface,
+          codec_config->codec, codec_type,
           codec_config->initial_expected_coded_size,
           codec_config->surface_bundle->GetJavaSurface().obj(), media_crypto,
-          codec_config->csd0, codec_config->csd1, true,
-          require_software_codec));
+          codec_config->csd0, codec_config->csd1, true));
 
   return codec;
 }

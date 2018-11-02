@@ -15,10 +15,10 @@
 
 namespace {
 
-const base::FilePath::CharType kFeedbackReportFilenameWildcard[] =
+constexpr base::FilePath::CharType kFeedbackReportFilenameWildcard[] =
     FILE_PATH_LITERAL("Feedback Report.*");
 
-const char kFeedbackReportFilenamePrefix[] = "Feedback Report.";
+constexpr char kFeedbackReportFilenamePrefix[] = "Feedback Report.";
 
 void WriteReportOnBlockingPool(const base::FilePath reports_path,
                                const base::FilePath& file,
@@ -29,7 +29,7 @@ void WriteReportOnBlockingPool(const base::FilePath reports_path,
     if (!base::CreateDirectoryAndGetError(reports_path, &error))
       return;
   }
-  base::ImportantFileWriter::WriteFileAtomically(file, data);
+  base::ImportantFileWriter::WriteFileAtomically(file, data, "FeedbackReport");
 }
 
 }  // namespace

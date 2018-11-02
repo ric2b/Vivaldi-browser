@@ -2,31 +2,6 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-bundle_data("assets") {
-  sources = [
-    "resources/activity_services_print.xcassets/Contents.json",
-    "resources/activity_services_print.xcassets/activity_services_print.imageset/Contents.json",
-    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-60@2x.png",
-    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-60@3x.png",
-    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-76.png",
-    "resources/activity_services_print.xcassets/activity_services_print.imageset/activity_services_print-76@2x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
-
-bundle_data("resources") {
-  sources = [
-    "resources/activity_services_reading_list.png",
-    "resources/activity_services_reading_list@2x.png",
-    "resources/activity_services_reading_list@3x.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
-
 source_set("activity_services") {
   configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
@@ -51,8 +26,8 @@ source_set("activity_services") {
     "share_to_data_builder.mm",
   ]
   deps = [
-    ":assets",
-    ":resources",
+    "resources:activity_services_print",
+    "resources:activity_services_reading_list",
     "//base",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser",
@@ -85,7 +60,7 @@ source_set("unit_tests") {
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/browser_state:test_support",
     "//ios/chrome/browser/tabs",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",
     "//ui/base",
@@ -109,7 +84,8 @@ source_set("eg_tests") {
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/third_party/material_components_ios",
     "//ios/web:earl_grey_test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/http_server",
     "//ui/base",
   ]
   libs = [ "XCTest.framework" ]

@@ -703,56 +703,19 @@ RenderFrameHostImpl* RenderFrameHostManager::GetFrameHostForNavigation(
     const NavigationRequest& request) {
   CHECK(IsBrowserSideNavigationEnabled());
 
-  SiteInstance* current_site_instance = render_frame_host_->GetSiteInstance();
-
-  SiteInstance* candidate_site_instance =
-      speculative_render_frame_host_
-          ? speculative_render_frame_host_->GetSiteInstance()
-          : nullptr;
-
-  bool was_server_redirect = request.navigation_handle() &&
-                             request.navigation_handle()->WasServerRedirect();
-
-  scoped_refptr<SiteInstance> dest_site_instance = GetSiteInstanceForNavigation(
-      request.common_params().url, request.source_site_instance(),
-      request.dest_site_instance(), candidate_site_instance,
-      request.common_params().transition,
-      request.restore_type() != RestoreType::NONE, request.is_view_source(),
-      was_server_redirect);
-
   // The appropriate RenderFrameHost to commit the navigation.
   RenderFrameHostImpl* navigation_rfh = nullptr;
 
-  // Reuse the current RenderFrameHost if its SiteInstance matches the
-  // navigation's.
-  bool no_renderer_swap = current_site_instance == dest_site_instance.get();
+  // First compute the SiteInstance to use for the navigation.
+  SiteInstance* current_site_instance = render_frame_host_->GetSiteInstance();
+  scoped_refptr<SiteInstance> dest_site_instance =
+      GetSiteInstanceForNavigationRequest(request);
 
-  if (frame_tree_node_->IsMainFrame()) {
-    // Renderer-initiated main frame navigations that may require a
-    // SiteInstance swap are sent to the browser via the OpenURL IPC and are
-    // afterwards treated as browser-initiated navigations. NavigationRequests
-    // marked as renderer-initiated are created by receiving a BeginNavigation
-    // IPC, and will then proceed in the same renderer. In site-per-process
-    // mode, it is possible for renderer-intiated navigations to be allowed to
-    // go cross-process. Check it first.
-    bool can_renderer_initiate_transfer =
-        render_frame_host_->IsRenderFrameLive() &&
-        ShouldMakeNetworkRequestForURL(request.common_params().url) &&
-        IsRendererTransferNeededForNavigation(render_frame_host_.get(),
-                                              request.common_params().url);
-
-    no_renderer_swap |=
-        !request.may_transfer() && !can_renderer_initiate_transfer;
-  } else {
-    // Subframe navigations will use the current renderer, unless specifically
-    // allowed to swap processes.
-    no_renderer_swap |= !CanSubframeSwapProcess(
-        request.common_params().url, request.source_site_instance(),
-        request.dest_site_instance(), was_server_redirect);
-  }
+  // The SiteInstance determines whether to switch RenderFrameHost or not.
+  bool use_current_rfh = current_site_instance == dest_site_instance;
 
   bool notify_webui_of_rf_creation = false;
-  if (no_renderer_swap) {
+  if (use_current_rfh) {
     // GetFrameHostForNavigation will be called more than once during a
     // navigation (currently twice, on request and when it's about to commit in
     // the renderer). In the follow up calls an existing pending WebUI should
@@ -1078,30 +1041,10 @@ void RenderFrameHostManager::DeleteRenderFrameProxyHost(
 }
 
 bool RenderFrameHostManager::ShouldTransitionCrossSite() {
-  // The logic below is weaker than "are all sites isolated" -- it asks instead,
-  // "is any site isolated". That's appropriate here since we're just trying to
-  // figure out if we're in any kind of site isolated mode, and in which case,
-  // we ignore the kSingleProcess and kProcessPerTab settings.
-  //
-  // TODO(nick): Move all handling of kSingleProcess/kProcessPerTab into
-  // SiteIsolationPolicy so we have a consistent behavior around the interaction
-  // of the process model flags.
-  //
-  // TODO(creis, alexmos): This looks like it will break single-process and
-  // process-per-tab.  See https://crbug.com/688617.
-  if (SiteIsolationPolicy::AreCrossProcessFramesPossible())
-    return true;
-
-  // False in the single-process mode, as it makes RVHs to accumulate
-  // in swapped_out_hosts_.
-  // True if we are using process-per-site-instance (default) or
-  // process-per-site (kProcessPerSite).
-  // TODO(nick): Move handling of kSingleProcess and kProcessPerTab into
-  // SiteIsolationPolicy.
+  // False in single-process mode, which does not support cross-process
+  // navigations or OOPIFs.
   return !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kSingleProcess) &&
-         !base::CommandLine::ForCurrentProcess()->HasSwitch(
-             switches::kProcessPerTab);
+      switches::kSingleProcess);
 }
 
 bool RenderFrameHostManager::ShouldSwapBrowsingInstancesForNavigation(
@@ -1278,9 +1221,28 @@ RenderFrameHostManager::GetSiteInstanceForNavigation(
   if (force_swap)
     CHECK_NE(new_instance, current_instance);
 
+  if (new_instance == current_instance) {
+    // If we're navigating to the same site instance, we won't need to use any
+    // spare RenderProcessHost.
+    RenderProcessHostImpl::CleanupSpareRenderProcessHost();
+  }
+
   // Double-check that the new SiteInstance is associated with the right
   // BrowserContext.
   DCHECK_EQ(new_instance->GetBrowserContext(), browser_context);
+
+  // If |new_instance| is a new SiteInstance for a subframe with an isolated
+  // origin, set its process reuse policy so that such subframes are
+  // consolidated into existing processes for that isolated origin.
+  SiteInstanceImpl* new_instance_impl =
+      static_cast<SiteInstanceImpl*>(new_instance.get());
+  auto* policy = ChildProcessSecurityPolicyImpl::GetInstance();
+  if (!frame_tree_node_->IsMainFrame() && !new_instance_impl->HasProcess() &&
+      new_instance_impl->HasSite() &&
+      policy->IsIsolatedOrigin(url::Origin(new_instance_impl->GetSiteURL()))) {
+    new_instance_impl->set_process_reuse_policy(
+        SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);
+  }
 
   return new_instance;
 }
@@ -1346,20 +1308,6 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
     if (parent_site_instance->GetSiteURL().SchemeIs(kChromeUIScheme) &&
         dest_url.SchemeIs(kChromeUIScheme)) {
       return SiteInstanceDescriptor(parent_site_instance);
-    }
-    // TODO(alexmos, nick): Remove this once https://crbug.com/706169 is fixed.
-    if (parent_site_instance->GetSiteURL().SchemeIs(kChromeDevToolsScheme)) {
-      url::Origin origin(dest_url);
-      auto* policy = ChildProcessSecurityPolicy::GetInstance();
-      // Some non-devtools origins (e.g., devtools extensions) have special
-      // permission to stay in the devtools process.
-      bool is_origin_allowed_in_devtools_process =
-          policy->HasSpecificPermissionForOrigin(
-              parent_site_instance->GetProcess()->GetID(), origin);
-      if (origin.scheme() == kChromeDevToolsScheme ||
-          is_origin_allowed_in_devtools_process) {
-        return SiteInstanceDescriptor(parent_site_instance);
-      }
     }
   }
 
@@ -1532,18 +1480,8 @@ RenderFrameHostManager::DetermineSiteInstanceForURL(
     bool dest_url_requires_dedicated_process =
         SiteInstanceImpl::DoesSiteRequireDedicatedProcess(browser_context,
                                                           dest_url);
-    // Web iframes embedded in DevTools extensions should not reuse the parent
-    // SiteInstance, but DevTools extensions are currently kept in the DevTools
-    // SiteInstance, which is not considered to require a dedicated process.
-    // Work around this by also checking whether the parent's URL requires a
-    // dedicated process.
-    // TODO(alexmos, nick): Remove this once https://crbug.com/706169 is fixed.
-    bool parent_url_requires_dedicated_process =
-        SiteInstanceImpl::DoesSiteRequireDedicatedProcess(
-            browser_context, parent->last_successful_url());
     if (!parent->GetSiteInstance()->RequiresDedicatedProcess() &&
-        !dest_url_requires_dedicated_process &&
-        !parent_url_requires_dedicated_process) {
+        !dest_url_requires_dedicated_process) {
       return SiteInstanceDescriptor(parent->GetSiteInstance());
     }
   }
@@ -1565,21 +1503,6 @@ bool RenderFrameHostManager::IsRendererTransferNeededForNavigation(
   // We do not currently swap processes for navigations in webview tag guests.
   if (rfh->GetSiteInstance()->GetSiteURL().SchemeIs(kGuestScheme))
     return false;
-
-  // TODO(alexmos, nick): Remove this once https://crbug.com/706169 is fixed.
-  // Devtools pages and devtools extensions must stay in the devtools process.
-  // See https://crbug.com/564216.
-  if (rfh->GetSiteInstance()->GetSiteURL().SchemeIs(kChromeDevToolsScheme)) {
-    url::Origin origin(dest_url);
-    auto* policy = ChildProcessSecurityPolicy::GetInstance();
-    // Some non-devtools origins (e.g., devtools extensions) have special
-    // permission to stay in the devtools process.
-    bool is_origin_allowed_in_devtools_process =
-        policy->HasSpecificPermissionForOrigin(rfh->GetProcess()->GetID(),
-                                               origin);
-    return !(origin.scheme() == kChromeDevToolsScheme ||
-             is_origin_allowed_in_devtools_process);
-  }
 
   BrowserContext* context = rfh->GetSiteInstance()->GetBrowserContext();
   // TODO(nasko, nick): These following --site-per-process checks are
@@ -2018,6 +1941,62 @@ bool RenderFrameHostManager::InitRenderView(
     proxy->set_render_frame_proxy_created(true);
 
   return created;
+}
+
+scoped_refptr<SiteInstance>
+RenderFrameHostManager::GetSiteInstanceForNavigationRequest(
+    const NavigationRequest& request) {
+  // First, check if the navigation can switch SiteInstances. If not, the
+  // navigation should use the current SiteInstance.
+  SiteInstance* current_site_instance = render_frame_host_->GetSiteInstance();
+  bool no_renderer_swap_allowed = false;
+  bool was_server_redirect = request.navigation_handle() &&
+                             request.navigation_handle()->WasServerRedirect();
+
+  if (frame_tree_node_->IsMainFrame()) {
+    // Renderer-initiated main frame navigations that may require a
+    // SiteInstance swap are sent to the browser via the OpenURL IPC and are
+    // afterwards treated as browser-initiated navigations. NavigationRequests
+    // marked as renderer-initiated are created by receiving a BeginNavigation
+    // IPC, and will then proceed in the same renderer. In site-per-process
+    // mode, it is possible for renderer-intiated navigations to be allowed to
+    // go cross-process. Check it first.
+    bool can_renderer_initiate_transfer =
+        render_frame_host_->IsRenderFrameLive() &&
+        ShouldMakeNetworkRequestForURL(request.common_params().url) &&
+        IsRendererTransferNeededForNavigation(render_frame_host_.get(),
+                                              request.common_params().url);
+
+    no_renderer_swap_allowed |=
+        request.from_begin_navigation() && !can_renderer_initiate_transfer;
+  } else {
+    // Subframe navigations will use the current renderer, unless specifically
+    // allowed to swap processes.
+    no_renderer_swap_allowed |= !CanSubframeSwapProcess(
+        request.common_params().url, request.source_site_instance(),
+        request.dest_site_instance(), was_server_redirect);
+  }
+
+  if (no_renderer_swap_allowed)
+    return scoped_refptr<SiteInstance>(current_site_instance);
+
+  // If the navigation can swap SiteInstances, compute the SiteInstance it
+  // should use.
+  // TODO(clamy): We should also consider as a candidate SiteInstance the
+  // speculative SiteInstance that was computed on redirects.
+  SiteInstance* candidate_site_instance =
+      speculative_render_frame_host_
+          ? speculative_render_frame_host_->GetSiteInstance()
+          : nullptr;
+
+  scoped_refptr<SiteInstance> dest_site_instance = GetSiteInstanceForNavigation(
+      request.common_params().url, request.source_site_instance(),
+      request.dest_site_instance(), candidate_site_instance,
+      request.common_params().transition,
+      request.restore_type() != RestoreType::NONE, request.is_view_source(),
+      was_server_redirect);
+
+  return dest_site_instance;
 }
 
 bool RenderFrameHostManager::InitRenderFrame(

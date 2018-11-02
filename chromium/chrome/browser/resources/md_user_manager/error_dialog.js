@@ -15,10 +15,7 @@ Polymer({
      * The message shown in the dialog.
      * @private {string}
      */
-    message_: {
-      type: String,
-      value: ''
-    }
+    message_: {type: String, value: ''}
   },
 
   /**
@@ -27,7 +24,7 @@ Polymer({
    */
   show: function(message) {
     this.message_ = message;
-    this.$.dialog.open();
+    this.$.dialog.showModal();
   }
 });
 })();

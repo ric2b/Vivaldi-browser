@@ -20,7 +20,6 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
   ~AshWindowTreeHostMus() override;
 
   // AshWindowTreeHost:
-  void ToggleFullScreen() override;
   bool ConfineCursorToRootWindow() override;
   void UnConfineCursor() override;
   void SetRootWindowTransformer(
@@ -29,6 +28,11 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
   aura::WindowTreeHost* AsWindowTreeHost() override;
   void PrepareForShutdown() override;
   void RegisterMirroringHost(AshWindowTreeHost* mirroring_ash_host) override;
+#if defined(USE_OZONE)
+  void SetCursorConfig(const display::Display& display,
+                       display::Display::Rotation rotation) override;
+  void ClearCursorConfig() override;
+#endif
 
   // aura::WindowTreeHostMus:
   void SetRootTransform(const gfx::Transform& transform) override;
@@ -36,6 +40,7 @@ class AshWindowTreeHostMus : public AshWindowTreeHost,
   gfx::Transform GetInverseRootTransform() const override;
   void UpdateRootWindowSizeInPixels(
       const gfx::Size& host_size_in_pixels) override;
+  void OnCursorVisibilityChangedNative(bool show) override;
 
  private:
   std::unique_ptr<TransformerHelper> transformer_helper_;

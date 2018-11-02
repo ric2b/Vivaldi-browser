@@ -254,7 +254,7 @@ class Directory {
   // |report_unrecoverable_error_function| may be null.
   // Takes ownership of |store|.
   Directory(
-      DirectoryBackingStore* store,
+      std::unique_ptr<DirectoryBackingStore> store,
       const WeakHandle<UnrecoverableErrorHandler>& unrecoverable_error_handler,
       const base::Closure& report_unrecoverable_error_function,
       NigoriHandler* nigori_handler,
@@ -291,6 +291,10 @@ class Directory {
 
   // Adds memory statistics to |pmd| for chrome://tracing.
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd);
+
+  // Estimates memory usage of entries and corresponding indices of type
+  // |model_type|.
+  size_t EstimateMemoryUsageByType(ModelType model_type);
 
   // Gets/Increments transaction version of a model type. Must be called when
   // holding kernel mutex.
@@ -648,7 +652,7 @@ class Directory {
   // error on it.
   bool unrecoverable_error_set(const BaseTransaction* trans) const;
 
-  Kernel* kernel_;
+  std::unique_ptr<Kernel> kernel_;
 
   std::unique_ptr<DirectoryBackingStore> store_;
 

@@ -34,6 +34,7 @@
 #include "third_party/WebKit/public/platform/WebRect.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/web/WebLocalFrame.h"
+#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
 #include "third_party/WebKit/public/web/WebUserGestureIndicator.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -46,8 +47,8 @@ typedef std::map<int, RenderFrameProxy*> RoutingIDProxyMap;
 static base::LazyInstance<RoutingIDProxyMap>::DestructorAtExit
     g_routing_id_proxy_map = LAZY_INSTANCE_INITIALIZER;
 
-// Facilitates lookup of RenderFrameProxy by WebFrame.
-typedef std::map<blink::WebFrame*, RenderFrameProxy*> FrameMap;
+// Facilitates lookup of RenderFrameProxy by WebRemoteFrame.
+typedef std::map<blink::WebRemoteFrame*, RenderFrameProxy*> FrameMap;
 base::LazyInstance<FrameMap>::DestructorAtExit g_frame_map =
     LAZY_INSTANCE_INITIALIZER;
 
@@ -77,7 +78,7 @@ RenderFrameProxy* RenderFrameProxy::CreateProxyToReplaceFrame(
        frame_to_replace->GetWebFrame()->Parent()->IsWebLocalFrame())
           ? frame_to_replace->GetRenderWidget()
           : RenderFrameProxy::FromWebFrame(
-                frame_to_replace->GetWebFrame()->Parent())
+                frame_to_replace->GetWebFrame()->Parent()->ToWebRemoteFrame())
                 ->render_widget();
   proxy->Init(web_frame, frame_to_replace->render_view(), widget);
   return proxy.release();
@@ -107,9 +108,8 @@ RenderFrameProxy* RenderFrameProxy::CreateFrameProxy(
   if (!parent) {
     // Create a top level WebRemoteFrame.
     render_view = RenderViewImpl::FromRoutingID(render_view_routing_id);
-    web_frame = blink::WebRemoteFrame::Create(replicated_state.scope,
-                                              proxy.get(), opener);
-    render_view->webview()->SetMainFrame(web_frame);
+    web_frame = blink::WebRemoteFrame::CreateMainFrame(
+        render_view->GetWebView(), proxy.get(), opener);
     render_widget = render_view->GetWidget();
 
     // If the RenderView is reused by this proxy after having been used for a
@@ -157,13 +157,21 @@ RenderFrameProxy* RenderFrameProxy::FromRoutingID(int32_t routing_id) {
 }
 
 // static
-RenderFrameProxy* RenderFrameProxy::FromWebFrame(blink::WebFrame* web_frame) {
+RenderFrameProxy* RenderFrameProxy::FromWebFrame(
+    blink::WebRemoteFrame* web_frame) {
+  // TODO(dcheng): Turn this into a DCHECK() if it doesn't crash on canary.
+  CHECK(web_frame);
   FrameMap::iterator iter = g_frame_map.Get().find(web_frame);
   if (iter != g_frame_map.Get().end()) {
     RenderFrameProxy* proxy = iter->second;
     DCHECK_EQ(web_frame, proxy->web_frame());
     return proxy;
   }
+  // Reaching this is not expected: this implies that the |web_frame| in
+  // question is not managed by the content API, or the associated
+  // RenderFrameProxy is already deleted--in which case, it's not safe to touch
+  // |web_frame|.
+  NOTREACHED();
   return NULL;
 }
 
@@ -317,8 +325,8 @@ void RenderFrameProxy::OnChildFrameProcessGone() {
 }
 
 void RenderFrameProxy::OnSetChildFrameSurface(
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   // If this WebFrame has already been detached, its parent will be null. This
   // can happen when swapping a WebRemoteFrame with a WebLocalFrame, where this
   // message may arrive after the frame was removed from the frame tree, but
@@ -412,8 +420,6 @@ void RenderFrameProxy::OnSetHasReceivedUserGesture() {
 
 void RenderFrameProxy::FrameDetached(DetachType type) {
   if (type == DetachType::kRemove && web_frame_->Parent()) {
-    web_frame_->Parent()->RemoveChild(web_frame_);
-
     // Let the browser process know this subframe is removed, so that it is
     // destroyed in its current process.
     Send(new FrameHostMsg_Detach(routing_id_));
@@ -491,6 +497,7 @@ void RenderFrameProxy::Navigate(const blink::WebURLRequest& request,
   params.disposition = WindowOpenDisposition::CURRENT_TAB;
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = request.HasUserGesture();
+  params.triggering_event_info = blink::WebTriggeringEventInfo::kUnknown;
   Send(new FrameHostMsg_OpenURL(routing_id_, params));
 }
 
@@ -511,6 +518,10 @@ void RenderFrameProxy::UpdateRemoteViewportIntersection(
 
 void RenderFrameProxy::VisibilityChanged(bool visible) {
   Send(new FrameHostMsg_VisibilityChanged(routing_id_, visible));
+}
+
+void RenderFrameProxy::SetIsInert(bool inert) {
+  Send(new FrameHostMsg_SetIsInert(routing_id_, inert));
 }
 
 void RenderFrameProxy::DidChangeOpener(blink::WebFrame* opener) {

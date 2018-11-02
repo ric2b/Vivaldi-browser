@@ -70,6 +70,12 @@ ColorSpace ColorSpace::CreateSRGB() {
 }
 
 // static
+ColorSpace ColorSpace::CreateDisplayP3D65() {
+  return ColorSpace(PrimaryID::SMPTEST432_1, TransferID::IEC61966_2_1,
+                    MatrixID::RGB, RangeID::FULL);
+}
+
+// static
 ColorSpace ColorSpace::CreateExtendedSRGB() {
   return ColorSpace(PrimaryID::BT709, TransferID::IEC61966_2_1_HDR,
                     MatrixID::RGB, RangeID::FULL);
@@ -94,6 +100,21 @@ ColorSpace ColorSpace::CreateCustom(const SkMatrix44& to_XYZD50,
   result.custom_transfer_params_[5] = fn.fF;
   result.custom_transfer_params_[6] = fn.fG;
   // TODO(ccameron): Use enums for near matches to know color spaces.
+  return result;
+}
+
+// static
+ColorSpace ColorSpace::CreateCustom(const SkMatrix44& to_XYZD50,
+                                    ColorSpace::TransferID transfer_id) {
+  DCHECK_NE(transfer_id, ColorSpace::TransferID::CUSTOM);
+  DCHECK_NE(transfer_id, ColorSpace::TransferID::INVALID);
+  ColorSpace result(ColorSpace::PrimaryID::CUSTOM, transfer_id,
+                    ColorSpace::MatrixID::RGB, ColorSpace::RangeID::FULL);
+  for (int row = 0; row < 3; ++row) {
+    for (int col = 0; col < 3; ++col) {
+      result.custom_primary_matrix_[3 * row + col] = to_XYZD50.get(row, col);
+    }
+  }
   return result;
 }
 
@@ -156,6 +177,25 @@ bool ColorSpace::FullRangeEncodedValues() const {
          transfer_ == TransferID::IEC61966_2_1_HDR ||
          transfer_ == TransferID::BT1361_ECG ||
          transfer_ == TransferID::IEC61966_2_4;
+}
+
+bool ColorSpace::IsParametric() const {
+  return primaries_ != PrimaryID::ICC_BASED &&
+         transfer_ != TransferID::ICC_BASED;
+}
+
+ColorSpace ColorSpace::GetParametricApproximation() const {
+  // If this is parametric already, return it directly.
+  if (IsParametric())
+    return *this;
+
+  // Query the ICC profile, if available, for the parametric approximation.
+  ICCProfile icc_profile;
+  if (GetICCProfile(&icc_profile))
+    return icc_profile.GetParametricColorSpace();
+
+  // Fall back to sRGB if the ICC profile is no longer cached.
+  return CreateSRGB();
 }
 
 bool ColorSpace::operator!=(const ColorSpace& other) const {
@@ -451,6 +491,17 @@ void ColorSpace::GetPrimaryMatrix(SkMatrix44* to_XYZD50) const {
       primaries.fGY = 0.60498f;
       primaries.fBX = 0.15501f;
       primaries.fBY = 0.07701f;
+      primaries.fWX = 0.3127f;
+      primaries.fWY = 0.3290f;
+      break;
+
+    case ColorSpace::PrimaryID::WIDE_GAMUT_COLOR_SPIN:
+      primaries.fRX = 0.01f;
+      primaries.fRY = 0.98f;
+      primaries.fGX = 0.01f;
+      primaries.fGY = 0.01f;
+      primaries.fBX = 0.98f;
+      primaries.fBY = 0.01f;
       primaries.fWX = 0.3127f;
       primaries.fWY = 0.3290f;
       break;

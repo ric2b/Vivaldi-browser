@@ -12,7 +12,6 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/task_scheduler/post_task.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -52,13 +51,18 @@
 #include "components/signin/core/browser/signin_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/storage_partition.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/extension_system_provider.h"
 #include "extensions/browser/extensions_browser_client.h"
 #include "extensions/common/extension.h"
 #include "google_apis/drive/drive_api_url_generator.h"
+#include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "net/url_request/url_request_context_getter.h"
+#include "services/device/public/interfaces/constants.mojom.h"
+#include "services/device/public/interfaces/wake_lock_provider.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "storage/browser/blob/scoped_file.h"
 #include "storage/common/fileapi/file_system_util.h"
 
@@ -218,7 +222,6 @@ std::unique_ptr<SyncEngine> SyncEngine::CreateForBrowserContext(
 
   std::unique_ptr<drive_backend::SyncEngine> sync_engine(new SyncEngine(
       ui_task_runner.get(), worker_task_runner.get(), drive_task_runner.get(),
-      content::BrowserThread::GetBlockingPool(),
       GetSyncFileSystemDir(context->GetPath()), task_logger,
       notification_manager, extension_service, signin_manager, token_service,
       request_context.get(), base::MakeUnique<DriveServiceFactory>(),
@@ -266,6 +269,7 @@ void SyncEngine::Reset() {
 }
 
 void SyncEngine::Initialize() {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   Reset();
 
   if (!signin_manager_ || !signin_manager_->IsAuthenticated())
@@ -275,8 +279,17 @@ void SyncEngine::Initialize() {
   std::unique_ptr<drive::DriveServiceInterface> drive_service =
       drive_service_factory_->CreateDriveService(
           token_service_, request_context_.get(), drive_task_runner_.get());
+
+  device::mojom::WakeLockProviderPtr wake_lock_provider(nullptr);
+  DCHECK(content::ServiceManagerConnection::GetForProcess());
+  auto* connector =
+      content::ServiceManagerConnection::GetForProcess()->GetConnector();
+  connector->BindInterface(device::mojom::kServiceName,
+                           mojo::MakeRequest(&wake_lock_provider));
+
   std::unique_ptr<drive::DriveUploaderInterface> drive_uploader(
-      new drive::DriveUploader(drive_service.get(), drive_task_runner_.get()));
+      new drive::DriveUploader(drive_service.get(), drive_task_runner_.get(),
+                               std::move(wake_lock_provider)));
 
   InitializeInternal(std::move(drive_service), std::move(drive_uploader),
                      nullptr);
@@ -319,8 +332,7 @@ void SyncEngine::InitializeInternal(
                                 worker_task_runner_.get()));
   std::unique_ptr<SyncEngineContext> sync_engine_context(new SyncEngineContext(
       std::move(drive_service_on_worker), std::move(drive_uploader_on_worker),
-      task_logger_, ui_task_runner_.get(), worker_task_runner_.get(),
-      worker_pool_.get()));
+      task_logger_, ui_task_runner_.get(), worker_task_runner_.get()));
 
   worker_observer_.reset(new WorkerObserver(ui_task_runner_.get(),
                                             weak_ptr_factory_.GetWeakPtr()));
@@ -691,8 +703,7 @@ void SyncEngine::GoogleSigninFailed(const GoogleServiceAuthError& error) {
 }
 
 void SyncEngine::GoogleSigninSucceeded(const std::string& account_id,
-                                       const std::string& username,
-                                       const std::string& password) {
+                                       const std::string& username) {
   Initialize();
 }
 
@@ -707,7 +718,6 @@ SyncEngine::SyncEngine(
     const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& worker_task_runner,
     const scoped_refptr<base::SequencedTaskRunner>& drive_task_runner,
-    const scoped_refptr<base::SequencedWorkerPool>& worker_pool,
     const base::FilePath& sync_file_system_dir,
     TaskLogger* task_logger,
     drive::DriveNotificationManager* notification_manager,
@@ -720,7 +730,6 @@ SyncEngine::SyncEngine(
     : ui_task_runner_(ui_task_runner),
       worker_task_runner_(worker_task_runner),
       drive_task_runner_(drive_task_runner),
-      worker_pool_(worker_pool),
       sync_file_system_dir_(sync_file_system_dir),
       task_logger_(task_logger),
       notification_manager_(notification_manager),

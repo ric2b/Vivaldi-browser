@@ -4,6 +4,9 @@
 
 #include "chrome/common/importer/edge_importer_utils_win.h"
 
+#include <libxml/parser.h>
+#include <libxml/xpath.h>
+#include <libxml/xpathInternals.h>
 #include <Shlobj.h>
 
 #include "base/files/file.h"
@@ -14,9 +17,6 @@
 #include "base/win/registry.h"
 #include "base/win/windows_version.h"
 #include "chrome/common/importer/importer_test_registry_overrider_win.h"
-#include "libxml/parser.h"
-#include "libxml/xpath.h"
-#include "libxml/xpathInternals.h"
 
 namespace {
 

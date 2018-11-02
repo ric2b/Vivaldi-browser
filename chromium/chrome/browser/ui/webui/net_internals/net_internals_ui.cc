@@ -72,7 +72,6 @@
 #include "net/log/net_log_capture_mode.h"
 #include "net/log/net_log_entry.h"
 #include "net/log/net_log_util.h"
-#include "net/log/write_to_file_net_log_observer.h"
 #include "net/proxy/proxy_service.h"
 #include "net/url_request/url_request_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -86,7 +85,6 @@
 #include "chromeos/dbus/debug_daemon_client.h"
 #include "chromeos/network/onc/onc_certificate_importer_impl.h"
 #include "chromeos/network/onc/onc_utils.h"
-#include "components/user_manager/user.h"
 #endif
 
 using base::Value;
@@ -595,7 +593,7 @@ void NetInternalsMessageHandler::IOThreadImpl::Detach() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   // Unregister with network stack to observe events.
   if (net_log())
-    net_log()->DeprecatedRemoveObserver(this);
+    net_log()->RemoveObserver(this);
 }
 
 void NetInternalsMessageHandler::IOThreadImpl::OnWebUIDeleted() {
@@ -611,7 +609,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnRendererReady(
   // pending events, so they won't appear before the status events created for
   // currently active network objects below.
   if (net_log()) {
-    net_log()->DeprecatedRemoveObserver(this);
+    net_log()->RemoveObserver(this);
     PostPendingEntries();
   }
 
@@ -624,7 +622,7 @@ void NetInternalsMessageHandler::IOThreadImpl::OnRendererReady(
   PrePopulateEventList();
 
   // Register with network stack to observe events.
-  io_thread_->net_log()->DeprecatedAddObserver(
+  io_thread_->net_log()->AddObserver(
       this, net::NetLogCaptureMode::IncludeCookiesAndCredentials());
 }
 
@@ -1027,8 +1025,7 @@ void NetInternalsMessageHandler::IOThreadImpl::PrePopulateEventList() {
   std::set<net::URLRequestContext*> contexts;
   for (const auto& getter : context_getters_)
     contexts.insert(getter->GetURLRequestContext());
-  contexts.insert(io_thread_->globals()->proxy_script_fetcher_context.get());
-  contexts.insert(io_thread_->globals()->system_request_context.get());
+  contexts.insert(io_thread_->globals()->system_request_context);
 
   // Add entries for ongoing network objects.
   CreateNetLogEntriesForActiveObjects(contexts, this);

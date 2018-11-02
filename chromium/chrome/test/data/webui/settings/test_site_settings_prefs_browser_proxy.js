@@ -3,53 +3,38 @@
 // found in the LICENSE file.
 
 /**
+ * In the real (non-test) code, this data comes from the C++ handler.
  * Only used for tests.
- * @typedef {{
- *   auto_downloads: !Array<!RawSiteException>},
- *   background_sync: !Array<!RawSiteException>},
- *   camera: !Array<!RawSiteException>},
- *   cookies: !Array<!RawSiteException>},
- *   geolocation: !Array<!RawSiteException>},
- *   javascript: !Array<!RawSiteException>},
- *   mic: !Array<!RawSiteException>},
- *   midiDevices: !Array<!RawSiteException>},
- *   notifications: !Array<!RawSiteException>},
- *   plugins: !Array<!RawSiteException>},
- *   popups: !Array<!RawSiteException>},
- *   unsandboxed_plugins: !Array<!RawSiteException>},
- * }}
- */
-var ExceptionListPref;
-
-/**
- * In the real (non-test) code, these data come from the C++ handler.
- * Only used for tests.
- * @typedef {{defaults: CategoryDefaultsPref,
- *            exceptions: ExceptionListPref}}
+ * @typedef {{defaults: Map<string, !DefaultContentSetting>,
+ *            exceptions: !Map<string, !Array<!RawSiteException>>}}
  */
 var SiteSettingsPref;
 
 /**
  * An example empty pref.
+ * TODO(patricialor): Use the values from settings.ContentSettingsTypes (see
+ * site_settings/constants.js) as the keys for these instead.
  * @type {SiteSettingsPref}
  */
 var prefsEmpty = {
   defaults: {
-    auto_downloads: '',
-    background_sync: '',
-    camera: '',
-    cookies: '',
-    geolocation: '',
-    javascript: '',
-    mic: '',
-    midiDevices: '',
-    notifications: '',
-    plugins: '',
-    popups: '',
-    subresource_filter: '',
-    unsandboxed_plugins: '',
+    ads: {},
+    auto_downloads: {},
+    background_sync: {},
+    camera: {},
+    cookies: {},
+    geolocation: {},
+    javascript: {},
+    mic: {},
+    midiDevices: {},
+    notifications: {},
+    plugins: {},
+    images: {},
+    popups: {},
+    unsandboxed_plugins: {},
   },
   exceptions: {
+    ads: [],
     auto_downloads: [],
     background_sync: [],
     camera: [],
@@ -60,8 +45,8 @@ var prefsEmpty = {
     midiDevices: [],
     notifications: [],
     plugins: [],
+    images: [],
     popups: [],
-    subresource_filter: [],
     unsandboxed_plugins: [],
   },
 };
@@ -73,15 +58,16 @@ var prefsEmpty = {
  *
  * @constructor
  * @implements {settings.SiteSettingsPrefsBrowserProxy}
- * @extends {settings.TestBrowserProxy}
+ * @extends {TestBrowserProxy}
  */
 var TestSiteSettingsPrefsBrowserProxy = function() {
-  settings.TestBrowserProxy.call(this, [
+  TestBrowserProxy.call(this, [
     'fetchUsbDevices',
     'fetchZoomLevels',
     'getCookieDetails',
     'getDefaultValueForContentType',
     'getExceptionList',
+    'getOriginPermissions',
     'isPatternValid',
     'observeProtocolHandlers',
     'observeProtocolHandlersEnabledState',
@@ -120,7 +106,7 @@ var TestSiteSettingsPrefsBrowserProxy = function() {
 };
 
 TestSiteSettingsPrefsBrowserProxy.prototype = {
-  __proto__: settings.TestBrowserProxy.prototype,
+  __proto__: TestBrowserProxy.prototype,
 
   /**
    * Pretends an incognito session started or ended.
@@ -197,10 +183,13 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     this.methodCalled('getDefaultValueForContentType', contentType);
 
     var pref = undefined;
-    if (contentType == settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS) {
+    if (contentType == settings.ContentSettingsTypes.ADS) {
+      pref = this.prefs_.defaults.ads;
+    } else if (
+        contentType == settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS) {
       pref = this.prefs_.defaults.auto_downloads;
     } else if (contentType == settings.ContentSettingsTypes.BACKGROUND_SYNC) {
-      pref = this.prefs_.background_sync;
+      pref = this.prefs_.defaults.background_sync;
     } else if (contentType == settings.ContentSettingsTypes.CAMERA) {
       pref = this.prefs_.defaults.camera;
     } else if (contentType == settings.ContentSettingsTypes.COOKIES) {
@@ -226,9 +215,6 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     } else if (
         contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
       pref = this.prefs_.defaults.unsandboxed_plugins;
-    }
-    else if (contentType == settings.ContentSettingsTypes.SUBRESOURCE_FILTER) {
-      pref = this.prefs_.defaults.subresource_filter;
     } else {
       console.log('getDefault received unknown category: ' + contentType);
     }
@@ -242,7 +228,9 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     this.methodCalled('getExceptionList', contentType);
 
     var pref = undefined;
-    if (contentType == settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS)
+    if (contentType == settings.ContentSettingsTypes.ADS)
+      pref = this.prefs_.exceptions.ads;
+    else if (contentType == settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS)
       pref = this.prefs_.exceptions.auto_downloads;
     else if (contentType == settings.ContentSettingsTypes.BACKGROUND_SYNC)
       pref = this.prefs_.exceptions.background_sync;
@@ -272,9 +260,6 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
       pref = this.prefs_.exceptions.popups;
     else if (contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS)
       pref = this.prefs_.exceptions.unsandboxed_plugins;
-    else if (contentType == settings.ContentSettingsTypes.SUBRESOURCE_FILTER) {
-      pref = this.prefs_.exceptions.subresource_filter;
-    }
     else
       console.log('getExceptionList received unknown category: ' + contentType);
 
@@ -309,6 +294,55 @@ TestSiteSettingsPrefsBrowserProxy.prototype = {
     this.methodCalled('resetCategoryPermissionForOrigin',
         [primaryPattern, secondaryPattern, contentType, incognito]);
     return Promise.resolve();
+  },
+
+  /** @override */
+  getOriginPermissions: function(origin, contentTypes) {
+    this.methodCalled('getOriginPermissions', [origin, contentTypes]);
+
+    var exceptionList = [];
+    contentTypes.forEach(function(contentType) {
+      // Convert |contentType| to its corresponding pref name, if different.
+      if (contentType == settings.ContentSettingsTypes.GEOLOCATION) {
+        contentType = 'geolocation';
+      } else if (contentType == settings.ContentSettingsTypes.CAMERA) {
+        contentType = 'camera';
+      } else if (contentType == settings.ContentSettingsTypes.MIC) {
+        contentType = 'mic';
+      } else if (contentType == settings.ContentSettingsTypes.BACKGROUND_SYNC) {
+        contentType = 'background_sync';
+      } else if (
+          contentType == settings.ContentSettingsTypes.AUTOMATIC_DOWNLOADS) {
+        contentType = 'auto_downloads';
+      } else if (
+          contentType == settings.ContentSettingsTypes.UNSANDBOXED_PLUGINS) {
+        contentType = 'unsandboxed_plugins';
+      }
+
+      var setting;
+      var source;
+      this.prefs_.exceptions[contentType].some(function(originPrefs) {
+        if (originPrefs.origin == origin) {
+          setting = originPrefs.setting;
+          source = originPrefs.source;
+          return true;
+        }
+      });
+      assert(
+          settings !== undefined,
+          'There was no exception set for origin: ' + origin +
+              ' and contentType: ' + contentType);
+
+      exceptionList.push({
+        embeddingOrigin: '',
+        incognito: false,
+        origin: origin,
+        displayName: '',
+        setting: setting,
+        source: source,
+      })
+    }, this);
+    return Promise.resolve(exceptionList);
   },
 
   /** @override */

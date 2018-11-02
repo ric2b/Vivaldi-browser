@@ -13,6 +13,7 @@
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
 #include "base/single_thread_task_runner.h"
@@ -31,6 +32,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
+#include "ui/gfx/image/image_unittest_util.h"
 #include "url/gurl.h"
 
 namespace {
@@ -62,14 +64,8 @@ const char* kDownloadedWebApkPackageName = "party.unicode";
 // WebApkInstaller::InstallOrUpdateWebApkFromGooglePlay() are stubbed out.
 class TestWebApkInstaller : public WebApkInstaller {
  public:
-  TestWebApkInstaller(content::BrowserContext* browser_context,
-                      const ShortcutInfo& shortcut_info,
-                      const SkBitmap& primary_icon,
-                      const SkBitmap& badge_icon)
-      : WebApkInstaller(browser_context,
-                        shortcut_info,
-                        primary_icon,
-                        badge_icon) {}
+  explicit TestWebApkInstaller(content::BrowserContext* browser_context)
+      : WebApkInstaller(browser_context) {}
 
   void InstallOrUpdateWebApk(const std::string& package_name,
                              int version,
@@ -101,43 +97,46 @@ class WebApkInstallerRunner {
   ~WebApkInstallerRunner() {}
 
   void RunInstallWebApk() {
+    base::RunLoop run_loop;
+    on_completed_callback_ = run_loop.QuitClosure();
+
+    ShortcutInfo info((GURL()));
+    info.best_primary_icon_url = best_primary_icon_url_;
+    info.best_badge_icon_url = best_badge_icon_url_;
     WebApkInstaller::InstallAsyncForTesting(
-        CreateWebApkInstaller(), base::Bind(&WebApkInstallerRunner::OnCompleted,
-                                            base::Unretained(this)));
-    Run();
+        CreateWebApkInstaller(), info, SkBitmap(), SkBitmap(),
+        base::Bind(&WebApkInstallerRunner::OnCompleted,
+                   base::Unretained(this)));
+
+    run_loop.Run();
   }
 
-  void RunUpdateWebApk() {
-    const int kWebApkVersion = 1;
+  void RunUpdateWebApk(const std::string& serialized_proto) {
+    base::RunLoop run_loop;
+    on_completed_callback_ = run_loop.QuitClosure();
 
     std::map<std::string, std::string> icon_url_to_murmur2_hash{
         {best_primary_icon_url_.spec(), "0"},
         {best_badge_icon_url_.spec(), "0"}};
+    std::unique_ptr<std::vector<uint8_t>> serialized_proto_vector =
+        base::MakeUnique<std::vector<uint8_t>>(serialized_proto.begin(),
+                                               serialized_proto.end());
 
     WebApkInstaller::UpdateAsyncForTesting(
-        CreateWebApkInstaller(), kDownloadedWebApkPackageName, kWebApkVersion,
-        icon_url_to_murmur2_hash, false /* is_manifest_stale */,
+        CreateWebApkInstaller(), kDownloadedWebApkPackageName,
+        GURL() /* start_url */, base::string16() /* short_name */,
+        std::move(serialized_proto_vector),
         base::Bind(&WebApkInstallerRunner::OnCompleted,
                    base::Unretained(this)));
-    Run();
+
+    run_loop.Run();
   }
 
   WebApkInstaller* CreateWebApkInstaller() {
-    ShortcutInfo info(GURL::EmptyGURL());
-    info.best_primary_icon_url = best_primary_icon_url_;
-    info.best_badge_icon_url = best_badge_icon_url_;
-
     // WebApkInstaller owns itself.
-    WebApkInstaller* installer =
-        new TestWebApkInstaller(browser_context_, info, SkBitmap(), SkBitmap());
+    WebApkInstaller* installer = new TestWebApkInstaller(browser_context_);
     installer->SetTimeoutMs(100);
     return installer;
-  }
-
-  void Run() {
-    base::RunLoop run_loop;
-    on_completed_callback_ = run_loop.QuitClosure();
-    run_loop.Run();
   }
 
   WebApkInstallResult result() { return result_; }
@@ -186,9 +185,7 @@ std::unique_ptr<net::test_server::HttpResponse> BuildValidWebApkResponse(
 // Builds WebApk proto and blocks till done.
 class BuildProtoRunner {
  public:
-  explicit BuildProtoRunner(content::BrowserContext* browser_context)
-      : browser_context_(browser_context) {}
-
+  BuildProtoRunner() {}
   ~BuildProtoRunner() {}
 
   void BuildSync(
@@ -200,13 +197,13 @@ class BuildProtoRunner {
     info.best_primary_icon_url = best_primary_icon_url;
     info.best_badge_icon_url = best_badge_icon_url;
 
-    // WebApkInstaller owns itself.
-    WebApkInstaller* installer =
-        new TestWebApkInstaller(browser_context_, info, SkBitmap(), SkBitmap());
-    installer->BuildWebApkProtoInBackgroundForTesting(
+    SkBitmap primary_icon(gfx::test::CreateBitmap(144, 144));
+    SkBitmap badge_icon(gfx::test::CreateBitmap(72, 72));
+    WebApkInstaller::BuildProto(
+        info, primary_icon, badge_icon, "" /* package_name */, "" /* version */,
+        icon_url_to_murmur2_hash, is_manifest_stale,
         base::Bind(&BuildProtoRunner::OnBuiltWebApkProto,
-                   base::Unretained(this)),
-        icon_url_to_murmur2_hash, is_manifest_stale);
+                   base::Unretained(this)));
 
     base::RunLoop run_loop;
     on_completed_callback_ = run_loop.QuitClosure();
@@ -217,12 +214,13 @@ class BuildProtoRunner {
 
  private:
   // Called when the |webapk_request_| is populated.
-  void OnBuiltWebApkProto(std::unique_ptr<webapk::WebApk> webapk) {
-    webapk_request_ = std::move(webapk);
+  void OnBuiltWebApkProto(
+      std::unique_ptr<std::vector<uint8_t>> serialized_proto) {
+    webapk_request_ = base::MakeUnique<webapk::WebApk>();
+    webapk_request_->ParseFromArray(serialized_proto->data(),
+                                    serialized_proto->size());
     on_completed_callback_.Run();
   }
-
-  content::BrowserContext* browser_context_;
 
   // The populated webapk::WebApk.
   std::unique_ptr<webapk::WebApk> webapk_request_;
@@ -289,8 +287,7 @@ class WebApkInstallerTest : public ::testing::Test {
   }
 
   std::unique_ptr<BuildProtoRunner> CreateBuildProtoRunner() {
-    return std::unique_ptr<BuildProtoRunner>(
-        new BuildProtoRunner(profile_.get()));
+    return std::unique_ptr<BuildProtoRunner>(new BuildProtoRunner());
   }
 
   net::test_server::EmbeddedTestServer* test_server() { return &test_server_; }
@@ -390,7 +387,7 @@ TEST_F(WebApkInstallerTest, UnparsableCreateWebApkResponse) {
 // Test update succeeding.
 TEST_F(WebApkInstallerTest, UpdateSuccess) {
   std::unique_ptr<WebApkInstallerRunner> runner = CreateWebApkInstallerRunner();
-  runner->RunUpdateWebApk();
+  runner->RunUpdateWebApk("non-empty");
   EXPECT_EQ(WebApkInstallResult::SUCCESS, runner->result());
 }
 
@@ -405,13 +402,20 @@ TEST_F(WebApkInstallerTest, UpdateSuccessWithEmptyDownloadUrlInResponse) {
   SetWebApkResponseBuilder(base::Bind(&BuildValidWebApkResponse, ""));
 
   std::unique_ptr<WebApkInstallerRunner> runner = CreateWebApkInstallerRunner();
-  runner->RunUpdateWebApk();
+  runner->RunUpdateWebApk("non-empty");
   EXPECT_EQ(WebApkInstallResult::SUCCESS, runner->result());
 }
 
+// Test that an update fails if an empty proto is passed to UpdateAsync().
+TEST_F(WebApkInstallerTest, UpdateFailsEmptyProto) {
+  std::unique_ptr<WebApkInstallerRunner> runner = CreateWebApkInstallerRunner();
+  runner->RunUpdateWebApk("");
+  EXPECT_EQ(WebApkInstallResult::FAILURE, runner->result());
+}
+
 // When there is no Web Manifest available for a site, an empty
-// |best_primary_icon_url| is used to build a WebApk update request. Tests the
-// request can be built properly.
+// |best_primary_icon_url| and an empty |best_badge_icon_url| is used to build a
+// WebApk update request. Tests the request can be built properly.
 TEST_F(WebApkInstallerTest, BuildWebApkProtoWhenManifestIsObsolete) {
   std::string icon_url_1 = test_server()->GetURL("/icon1.png").spec();
   std::string icon_url_2 = test_server()->GetURL("/icon2.png").spec();
@@ -426,23 +430,27 @@ TEST_F(WebApkInstallerTest, BuildWebApkProtoWhenManifestIsObsolete) {
   ASSERT_NE(nullptr, webapk_request);
 
   webapk::WebAppManifest manifest = webapk_request->manifest();
-  ASSERT_EQ(3, manifest.icons_size());
+  ASSERT_EQ(4, manifest.icons_size());
 
-  webapk::Image icons[3];
-  for (int i = 0; i < 3; ++i)
+  webapk::Image icons[4];
+  for (int i = 0; i < 4; ++i)
     icons[i] = manifest.icons(i);
 
   EXPECT_EQ("", icons[0].src());
   EXPECT_FALSE(icons[0].has_hash());
   EXPECT_TRUE(icons[0].has_image_data());
 
-  EXPECT_EQ(icon_url_1, icons[1].src());
-  EXPECT_EQ(icon_url_to_murmur2_hash[icon_url_1], icons[1].hash());
-  EXPECT_FALSE(icons[1].has_image_data());
+  EXPECT_EQ("", icons[1].src());
+  EXPECT_FALSE(icons[1].has_hash());
+  EXPECT_TRUE(icons[1].has_image_data());
 
-  EXPECT_EQ(icon_url_2, icons[2].src());
-  EXPECT_EQ(icon_url_to_murmur2_hash[icon_url_2], icons[2].hash());
+  EXPECT_EQ(icon_url_1, icons[2].src());
+  EXPECT_EQ(icon_url_to_murmur2_hash[icon_url_1], icons[2].hash());
   EXPECT_FALSE(icons[2].has_image_data());
+
+  EXPECT_EQ(icon_url_2, icons[3].src());
+  EXPECT_EQ(icon_url_to_murmur2_hash[icon_url_2], icons[3].hash());
+  EXPECT_FALSE(icons[3].has_image_data());
 }
 
 // Tests a WebApk install or update request is built properly when the Chrome

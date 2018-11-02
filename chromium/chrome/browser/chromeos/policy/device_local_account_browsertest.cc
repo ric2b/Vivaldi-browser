@@ -43,7 +43,6 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/extensions/device_local_account_external_policy_loader.h"
 #include "chrome/browser/chromeos/extensions/external_cache.h"
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 #include "chrome/browser/chromeos/login/screens/base_screen.h"
 #include "chrome/browser/chromeos/login/session/user_session_manager.h"
@@ -144,6 +143,7 @@
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_descriptor.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/gfx/image/image_skia.h"
@@ -526,7 +526,7 @@ class DeviceLocalAccountTest : public DevicePolicyCrosBrowserTest,
 
     // This shuts down the login UI.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&chrome::AttemptExit));
+        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
     base::RunLoop().RunUntilIdle();
   }
 
@@ -1703,7 +1703,9 @@ IN_PROC_BROWSER_TEST_F(DeviceLocalAccountTest, NoRecommendedLocaleSwitch) {
           "domAutomationController.send(pod.classList.contains('advanced'));",
           account_id_1_.Serialize().c_str()),
       &advanced));
-  EXPECT_FALSE(advanced);
+  // Public session pods switch to advanced form immediately upon being
+  // clicked, instead of waiting for animation to end which were in the old UI.
+  EXPECT_TRUE(advanced);
 
   // Manually select a different locale.
   ASSERT_TRUE(content::ExecuteScript(

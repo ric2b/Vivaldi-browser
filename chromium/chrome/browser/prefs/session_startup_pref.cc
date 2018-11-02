@@ -52,7 +52,7 @@ void URLListToPref(const base::ListValue* url_list, SessionStartupPref* pref) {
 // static
 void SessionStartupPref::RegisterProfilePrefs(
     user_prefs::PrefRegistrySyncable* registry) {
-#if defined(OS_IOS) || defined(OS_ANDROID)
+#if defined(OS_ANDROID)
   uint32_t flags = PrefRegistry::NO_REGISTRATION_FLAGS;
 #else
   uint32_t flags = user_prefs::PrefRegistrySyncable::SYNCABLE_PREF;
@@ -109,7 +109,12 @@ void SessionStartupPref::SetStartupPref(PrefService* prefs,
 // static
 SessionStartupPref SessionStartupPref::GetStartupPref(Profile* profile) {
   DCHECK(profile);
-  return GetStartupPref(profile->GetPrefs());
+
+  // Guest sessions should not store any state, therefore they should never
+  // trigger a restore during startup.
+  return profile->IsGuestSession()
+             ? SessionStartupPref(SessionStartupPref::DEFAULT)
+             : GetStartupPref(profile->GetPrefs());
 }
 
 // static

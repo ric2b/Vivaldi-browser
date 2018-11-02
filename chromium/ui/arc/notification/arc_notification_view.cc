@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-#include "ui/arc/notification/arc_custom_notification_view.h"
+#include "ui/arc/notification/arc_notification_content_view_delegate.h"
 #include "ui/arc/notification/arc_notification_item.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_client.h"
@@ -89,6 +89,11 @@ void ArcNotificationView::UpdateControlButtonsVisibility() {
 void ArcNotificationView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   // This data is never used since this view is never focused when the content
   // view is focusable.
+}
+
+message_center::NotificationControlButtonsView*
+ArcNotificationView::GetControlButtonsView() const {
+  return contents_view_delegate_->GetControlButtonsView();
 }
 
 void ArcNotificationView::OnSlideChanged() {

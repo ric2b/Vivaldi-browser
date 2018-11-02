@@ -14,7 +14,7 @@
         "check_for_recommended": "Should the preference be tested when a recommended value is set for the policy? Defaults to |true| if not specified.",
         "note": "When |can_be_recommended| is |false|, the policy is never set to a recommended value so |check_for_recommended| has no effect.",
         "note": "The following entries should be specified if controlled setting indicators exist for |pref| in the settings UI.",
-        "indicator_test_url": "The URL to navigate to in order to test the indicators. Defaults to |chrome://settings-frame/| if not specified.",
+        "indicator_test_url": "The URL to navigate to in order to test the indicators. Defaults to |chrome://extensions-frame/| if not specified.",
         "indicator_test_setup_js": "Any JavaScript that should be executed before testing the indicators. This should be specified only if an explicit user action must be simulated (e.g. clicking a button).",
         "indicator_selector": "A CSS selector that locates all controlled setting indicators for |pref|. This is appended to the selector 'span.controlled-setting-indicator' and if not specified, defaults to '[pref=(the value of |pref|)', e.g. '[pref=homepage]'.",
         "note": "Any number of test cases may be specified in the following array.",
@@ -537,6 +537,24 @@
     "test_policy": { "MediaCacheSize": 200 },
     "pref_mappings": [
       { "pref": "browser.media_cache_size" }
+    ]
+  },
+
+  "DownloadRestrictions": {
+    "os": ["win", "mac", "linux", "chromeos"],
+    "can_be_recommended": true,
+    "test_policy": { "DownloadRestrictions": 3 },
+    "pref_mappings": [
+      { "pref": "download_restrictions" }
+    ]
+  },
+
+  "SafeBrowsingForTrustedSourcesEnabled": {
+    "os": ["win"],
+    "can_be_recommended": true,
+    "test_policy": { "SafeBrowsingForTrustedSourcesEnabled": false },
+    "pref_mappings": [
+      { "pref": "safebrowsing_for_trusted_sources_enabled" }
     ]
   },
 
@@ -1776,6 +1794,14 @@
     ]
   },
 
+  "PrintPreviewUseSystemDefaultPrinter": {
+    "os": ["win", "mac", "linux"],
+    "test_policy": { "PrintPreviewUseSystemDefaultPrinter": false },
+    "pref_mappings": [
+      { "pref": "printing.use_system_default_printer" }
+    ]
+  },
+
   "BackgroundModeEnabled": {
     "os": ["win", "linux"],
     "can_be_recommended": true,
@@ -2766,6 +2792,14 @@
     ]
   },
 
+  "EcryptfsMigrationStrategy": {
+    "os": ["chromeos"],
+    "test_policy": { "EcryptfsMigrationStrategy": 1 },
+    "pref_mappings": [
+      { "pref": "ecryptfs_migration_strategy" }
+    ]
+  },
+
   "----- Chrome OS device policies ---------------------------------------": {},
 
   "DevicePolicyRefreshRate": {
@@ -3078,9 +3112,9 @@
     ]
   },
 
-  "NetworkTimeQueriesEnabled": {
+  "BrowserNetworkTimeQueriesEnabled": {
     "os": ["win", "linux", "mac", "chromeos"],
-    "test_policy": { "NetworkTimeQueriesEnabled": true },
+    "test_policy": { "BrowserNetworkTimeQueriesEnabled": true },
     "pref_mappings": [
       { "pref": "network_time.network_time_queries_enabled",
         "local_state": true
@@ -3088,9 +3122,21 @@
     ]
   },
 
+  "DeviceSecondFactorAuthentication": {
+    "os": ["chromeos"]
+  },
+
   "DeviceEcryptfsMigrationStrategy": {
+    "note": "This policy is deprecated.",
+    "os": ["chromeos"]
+  },
+
+  "NoteTakingAppsLockScreenWhitelist": {
     "os": ["chromeos"],
-    "test_policy": { "DeviceEcryptfsMigrationStrategy": 1 }
+    "test_policy": { "NoteTakingAppsLockScreenWhitelist": [] },
+    "pref_mappings": [
+      {"pref": "settings.note_taking_apps_lock_screen_whitelist"}
+    ]
   },
 
   "----- Chrome Frame policies -------------------------------------------": {},

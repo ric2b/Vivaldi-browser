@@ -6,11 +6,9 @@
 
 #include "core/css/CSSImageValue.h"
 #include "core/css/CSSValue.h"
-#include "core/css/cssom/CSSCalcLength.h"
 #include "core/css/cssom/CSSKeywordValue.h"
-#include "core/css/cssom/CSSNumberValue.h"
+#include "core/css/cssom/CSSNumericValue.h"
 #include "core/css/cssom/CSSOMTypes.h"
-#include "core/css/cssom/CSSSimpleLength.h"
 #include "core/css/cssom/CSSStyleValue.h"
 #include "core/css/cssom/CSSStyleVariableReferenceValue.h"
 #include "core/css/cssom/CSSTransformValue.h"
@@ -22,15 +20,6 @@ namespace blink {
 
 namespace {
 
-CSSStyleValue* CreateStyleValueFromPrimitiveValue(
-    const CSSPrimitiveValue& primitive_value) {
-  if (primitive_value.IsNumber())
-    return CSSNumberValue::Create(primitive_value.GetDoubleValue());
-  if (primitive_value.IsLength() || primitive_value.IsPercentage())
-    return CSSSimpleLength::FromCSSValue(primitive_value);
-  return nullptr;
-}
-
 CSSStyleValue* CreateStyleValueWithPropertyInternal(CSSPropertyID property_id,
                                                     const CSSValue& value) {
   switch (property_id) {
@@ -40,13 +29,6 @@ CSSStyleValue* CreateStyleValueWithPropertyInternal(CSSPropertyID property_id,
       // TODO(meade): Implement other properties.
       break;
   }
-  if (value.IsPrimitiveValue() && ToCSSPrimitiveValue(value).IsCalculated()) {
-    // TODO(meade): Handle other calculated types, e.g. angles here.
-    if (CSSOMTypes::PropertyCanTakeType(property_id,
-                                        CSSStyleValue::kCalcLengthType)) {
-      return CSSCalcLength::FromCSSValue(ToCSSPrimitiveValue(value));
-    }
-  }
   return nullptr;
 }
 
@@ -55,7 +37,7 @@ CSSStyleValue* CreateStyleValue(const CSSValue& value) {
       value.IsCustomIdentValue())
     return CSSKeywordValue::FromCSSValue(value);
   if (value.IsPrimitiveValue())
-    return CreateStyleValueFromPrimitiveValue(ToCSSPrimitiveValue(value));
+    return CSSNumericValue::FromCSSValue(ToCSSPrimitiveValue(value));
   if (value.IsVariableReferenceValue())
     return CSSUnparsedValue::FromCSSValue(ToCSSVariableReferenceValue(value));
   if (value.IsImageValue()) {

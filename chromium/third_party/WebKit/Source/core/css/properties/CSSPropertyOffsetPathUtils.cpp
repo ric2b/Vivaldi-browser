@@ -41,11 +41,11 @@ CSSValue* ConsumePath(CSSParserTokenRange& range) {
   range = function_range;
   if (byte_stream->IsEmpty())
     return CSSIdentifierValue::Create(CSSValueNone);
-  return CSSPathValue::Create(std::move(byte_stream));
+  return cssvalue::CSSPathValue::Create(std::move(byte_stream));
 }
 
 CSSValue* ConsumeRay(CSSParserTokenRange& range,
-                     const CSSParserContext* context) {
+                     const CSSParserContext& context) {
   DCHECK_EQ(range.Peek().FunctionId(), CSSValueRay);
   CSSParserTokenRange function_range = range;
   CSSParserTokenRange function_args =
@@ -57,7 +57,7 @@ CSSValue* ConsumeRay(CSSParserTokenRange& range,
   while (!function_args.AtEnd()) {
     if (!angle) {
       angle = CSSPropertyParserHelpers::ConsumeAngle(
-          function_args, *context, WTF::Optional<UseCounter::Feature>());
+          function_args, context, WTF::Optional<WebFeature>());
       if (angle)
         continue;
     }
@@ -68,7 +68,7 @@ CSSValue* ConsumeRay(CSSParserTokenRange& range,
       if (size)
         continue;
     }
-    if (RuntimeEnabledFeatures::cssOffsetPathRayContainEnabled() && !contain) {
+    if (RuntimeEnabledFeatures::CSSOffsetPathRayContainEnabled() && !contain) {
       contain = CSSPropertyParserHelpers::ConsumeIdent<CSSValueContain>(
           function_args);
       if (contain)
@@ -86,9 +86,9 @@ CSSValue* ConsumeRay(CSSParserTokenRange& range,
 
 CSSValue* CSSPropertyOffsetPathUtils::ConsumeOffsetPath(
     CSSParserTokenRange& range,
-    const CSSParserContext* context) {
+    const CSSParserContext& context) {
   CSSValue* value = nullptr;
-  if (RuntimeEnabledFeatures::cssOffsetPathRayEnabled() &&
+  if (RuntimeEnabledFeatures::CSSOffsetPathRayEnabled() &&
       range.Peek().FunctionId() == CSSValueRay)
     value = ConsumeRay(range, context);
   else
@@ -96,7 +96,7 @@ CSSValue* CSSPropertyOffsetPathUtils::ConsumeOffsetPath(
 
   // Count when we receive a valid path other than 'none'.
   if (value && !value->IsIdentifierValue())
-    context->Count(UseCounter::kCSSOffsetInEffect);
+    context.Count(WebFeature::kCSSOffsetInEffect);
   return value;
 }
 

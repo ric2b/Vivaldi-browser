@@ -48,12 +48,14 @@
 #include "WebNavigatorContentUtilsClient.h"
 #include "WebSandboxFlags.h"
 #include "WebTextDirection.h"
+#include "WebTriggeringEventInfo.h"
 #include "public/platform/BlameContext.h"
 #include "public/platform/WebApplicationCacheHost.h"
 #include "public/platform/WebColor.h"
 #include "public/platform/WebCommon.h"
 #include "public/platform/WebContentSecurityPolicy.h"
 #include "public/platform/WebContentSecurityPolicyStruct.h"
+#include "public/platform/WebContentSettingsClient.h"
 #include "public/platform/WebEffectiveConnectionType.h"
 #include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebFileSystem.h"
@@ -66,12 +68,21 @@
 #include "public/platform/WebSourceLocation.h"
 #include "public/platform/WebStorageQuotaCallbacks.h"
 #include "public/platform/WebStorageQuotaType.h"
+#include "public/platform/WebSuddenTerminationDisablerType.h"
 #include "public/platform/WebURLError.h"
 #include "public/platform/WebURLLoader.h"
 #include "public/platform/WebURLRequest.h"
 #include "public/platform/WebWorkerFetchContext.h"
 #include "public/platform/modules/serviceworker/WebServiceWorkerProvider.h"
 #include "v8/include/v8.h"
+
+namespace service_manager {
+class InterfaceProvider;
+}
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace blink {
 
@@ -104,7 +115,6 @@ class WebString;
 class WebURL;
 class WebURLResponse;
 class WebUserMediaClient;
-class WebWorkerContentSettingsClientProxy;
 struct WebColorSuggestion;
 struct WebConsoleMessage;
 struct WebContextMenuData;
@@ -116,6 +126,12 @@ struct WebURLError;
 class BLINK_EXPORT WebFrameClient {
  public:
   virtual ~WebFrameClient() {}
+
+  // Initialization ------------------------------------------------------
+  // Called exactly once during construction to notify the client about the
+  // created WebLocalFrame. Guaranteed to be invoked before any other
+  // WebFrameClient callbacks.
+  virtual void BindToFrame(WebLocalFrame*) {}
 
   // Factory methods -----------------------------------------------------
 
@@ -148,8 +164,8 @@ class BLINK_EXPORT WebFrameClient {
   }
 
   // May return null.
-  virtual WebWorkerContentSettingsClientProxy*
-  CreateWorkerContentSettingsClientProxy() {
+  virtual std::unique_ptr<WebContentSettingsClient>
+  CreateWorkerContentSettingsClient() {
     return nullptr;
   }
 
@@ -176,6 +192,13 @@ class BLINK_EXPORT WebFrameClient {
 
   // Returns a blame context for attributing work belonging to this frame.
   virtual BlameContext* GetFrameBlameContext() { return nullptr; }
+
+  // Returns an InterfaceProvider the frame can use to request interfaces from
+  // the browser. This method may not return nullptr.
+  virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
+    NOTREACHED();
+    return nullptr;
+  }
 
   // General notifications -----------------------------------------------
 
@@ -289,10 +312,15 @@ class BLINK_EXPORT WebFrameClient {
 
   // Load commands -------------------------------------------------------
 
-  // The client should handle the navigation externally.
+  // The client should handle the request as a download.
+  virtual void DownloadURL(const WebURLRequest&,
+                           const WebString& download_name) {}
+
+  // The client should handle the navigation externally. Should not be used for
+  // processing the request as a download (See WebFrameClient::DownloadURL).
   virtual void LoadURLExternally(const WebURLRequest&,
                                  WebNavigationPolicy,
-                                 const WebString& download_name,
+                                 WebTriggeringEventInfo triggering_event_info,
                                  bool should_replace_current_entry) {}
 
   // The client should load an error page in the current frame.
@@ -317,6 +345,7 @@ class BLINK_EXPORT WebFrameClient {
     bool replaces_current_history_item;
     bool is_history_navigation_in_new_child_frame;
     bool is_client_redirect;
+    WebTriggeringEventInfo triggering_event_info;
     WebFormElement form;
     bool is_cache_disabled;
     WebSourceLocation source_location;
@@ -336,6 +365,7 @@ class BLINK_EXPORT WebFrameClient {
           replaces_current_history_item(false),
           is_history_navigation_in_new_child_frame(false),
           is_client_redirect(false),
+          triggering_event_info(WebTriggeringEventInfo::kUnknown),
           is_cache_disabled(false),
           should_check_main_world_content_security_policy(
               kWebContentSecurityPolicyDispositionCheck),
@@ -345,12 +375,6 @@ class BLINK_EXPORT WebFrameClient {
   virtual WebNavigationPolicy DecidePolicyForNavigation(
       const NavigationPolicyInfo& info) {
     return info.default_policy;
-  }
-
-  // During a history navigation, we may choose to load new subframes from
-  // history as well.  This returns such a history item if appropriate.
-  virtual WebHistoryItem HistoryItemForNewChildFrame() {
-    return WebHistoryItem();
   }
 
   // Asks the embedder whether the frame is allowed to navigate the main frame
@@ -476,6 +500,10 @@ class BLINK_EXPORT WebFrameClient {
   virtual WebEffectiveConnectionType GetEffectiveConnectionType() {
     return WebEffectiveConnectionType::kTypeUnknown;
   }
+
+  // Returns whether or not Client LoFi is enabled for the frame (and
+  // so any image requests may be replaced with a placeholder).
+  virtual bool IsClientLoFiActiveForFrame() { return false; }
 
   // Returns whether or not the requested image should be replaced with a
   // placeholder as part of the Client Lo-Fi previews feature.
@@ -642,6 +670,9 @@ class BLINK_EXPORT WebFrameClient {
   // notify that the <body> will be attached soon.
   virtual void WillInsertBody(WebLocalFrame*) {}
 
+  // Informs the browser that the draggable regions have been updated.
+  virtual void DraggableRegionsChanged() {}
+
   // Find-in-page notifications ------------------------------------------
 
   // Notifies how many matches have been found in this frame so far, for a
@@ -721,13 +752,12 @@ class BLINK_EXPORT WebFrameClient {
   virtual void PostAccessibilityEvent(const WebAXObject&, WebAXEvent) {}
 
   // Provides accessibility information about a find in page result.
-  virtual void HandleAccessibilityFindInPageResult(
-      int identifier,
-      int match_index,
-      const WebAXObject& start_object,
-      int start_offset,
-      const WebAXObject& end_object,
-      int end_offset) {}
+  virtual void HandleAccessibilityFindInPageResult(int identifier,
+                                                   int match_index,
+                                                   const WebNode& start_node,
+                                                   int start_offset,
+                                                   const WebNode& end_node,
+                                                   int end_offset) {}
 
   // Fullscreen ----------------------------------------------------------
 
@@ -743,13 +773,9 @@ class BLINK_EXPORT WebFrameClient {
   // Called when elements preventing the sudden termination of the frame
   // become present or stop being present. |type| is the type of element
   // (BeforeUnload handler, Unload handler).
-  enum SuddenTerminationDisablerType {
-    kBeforeUnloadHandler,
-    kUnloadHandler,
-  };
-  virtual void SuddenTerminationDisablerChanged(bool present,
-                                                SuddenTerminationDisablerType) {
-  }
+  virtual void SuddenTerminationDisablerChanged(
+      bool present,
+      WebSuddenTerminationDisablerType) {}
 
   // Navigator Content Utils  --------------------------------------------
 
@@ -798,7 +824,10 @@ class BLINK_EXPORT WebFrameClient {
   }
 
   // Loading --------------------------------------------------------------
-  virtual std::unique_ptr<blink::WebURLLoader> CreateURLLoader() {
+
+  virtual std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const WebURLRequest&,
+      base::SingleThreadTaskRunner*) {
     NOTREACHED();
     return nullptr;
   }

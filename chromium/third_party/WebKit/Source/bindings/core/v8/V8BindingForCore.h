@@ -40,8 +40,8 @@
 #include "bindings/core/v8/V8ScriptRunner.h"
 #include "bindings/core/v8/V8StringResource.h"
 #include "core/CoreExport.h"
-#include "core/dom/ArrayBufferViewHelpers.h"
 #include "core/dom/Node.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
 #include "platform/bindings/DOMDataStore.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/ScriptState.h"
@@ -168,6 +168,38 @@ inline void V8SetReturnValueFast(const CallbackInfo& callbackInfo,
                                  NotShared<T> notShared,
                                  const ScriptWrappable* wrappable) {
   V8SetReturnValueFast(callbackInfo, notShared.View(), wrappable);
+}
+
+// Specialized overload, used by interface indexed property handlers in their
+// descriptor callbacks, which need an actual V8 Object with the properties of
+// a property descriptor.
+template <typename CallbackInfo>
+inline void V8SetReturnValue(const CallbackInfo& callback_info,
+                             const v8::PropertyDescriptor& descriptor) {
+  DCHECK(descriptor.has_configurable());
+  DCHECK(descriptor.has_enumerable());
+  DCHECK(descriptor.has_value());
+  DCHECK(descriptor.has_writable());
+  v8::Local<v8::Object> desc = v8::Object::New(callback_info.GetIsolate());
+  desc->Set(callback_info.GetIsolate()->GetCurrentContext(),
+            V8String(callback_info.GetIsolate(), "configurable"),
+            ToV8(descriptor.configurable(), callback_info.Holder(),
+                 callback_info.GetIsolate()))
+      .ToChecked();
+  desc->Set(callback_info.GetIsolate()->GetCurrentContext(),
+            V8String(callback_info.GetIsolate(), "enumerable"),
+            ToV8(descriptor.enumerable(), callback_info.Holder(),
+                 callback_info.GetIsolate()))
+      .ToChecked();
+  desc->Set(callback_info.GetIsolate()->GetCurrentContext(),
+            V8String(callback_info.GetIsolate(), "value"), descriptor.value())
+      .ToChecked();
+  desc->Set(callback_info.GetIsolate()->GetCurrentContext(),
+            V8String(callback_info.GetIsolate(), "writable"),
+            ToV8(descriptor.writable(), callback_info.Holder(),
+                 callback_info.GetIsolate()))
+      .ToChecked();
+  callback_info.GetReturnValue().Set(desc);
 }
 
 // Conversion flags, used in toIntXX/toUIntXX.

@@ -4,7 +4,7 @@
 
 #include "content/browser/compositor/reflector_texture.h"
 
-#include "components/viz/display_compositor/gl_helper.h"
+#include "components/viz/common/gl_helper.h"
 #include "content/browser/compositor/owned_mailbox.h"
 #include "gpu/command_buffer/client/context_support.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
@@ -12,7 +12,7 @@
 
 namespace content {
 
-ReflectorTexture::ReflectorTexture(cc::ContextProvider* context_provider)
+ReflectorTexture::ReflectorTexture(viz::ContextProvider* context_provider)
     : texture_id_(0) {
   viz::GLHelper* shared_helper =
       ImageTransportFactory::GetInstance()->GetGLHelper();

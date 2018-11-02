@@ -47,9 +47,23 @@ class UserPolicySigninService : public UserPolicySigninServiceBase,
   // the user is not signed in yet (ProfileOAuth2TokenService does not have
   // any tokens yet to prevent services from using it until after we've fetched
   // policy).
-  void RegisterForPolicy(const std::string& username,
-                         const std::string& oauth2_login_token,
-                         const PolicyRegistrationCallback& callback);
+  void RegisterForPolicyWithLoginToken(
+      const std::string& username,
+      const std::string& oauth2_login_token,
+      const PolicyRegistrationCallback& callback);
+
+  // Registers a CloudPolicyClient for fetching policy for a user. |username| is
+  // explicitly passed because the user is not yet authenticated, but the token
+  // service has a refresh token available for |account_id|.
+  void RegisterForPolicyWithAccountId(
+      const std::string& username,
+      const std::string& account_id,
+      const PolicyRegistrationCallback& callback);
+
+  // SigninManagerBase::Observer implementation:
+  // UserPolicySigninService is already an observer of SigninManagerBase.
+  void GoogleSigninSucceeded(const std::string& account_id,
+                             const std::string& username) override;
 
   // OAuth2TokenService::Observer implementation:
   void OnRefreshTokenAvailable(const std::string& account_id) override;
@@ -82,6 +96,11 @@ class UserPolicySigninService : public UserPolicySigninServiceBase,
   // Helper routine which prohibits user signout if the user is registered for
   // cloud policy.
   void ProhibitSignoutIfNeeded();
+
+  // Helper method that attempts calls |InitializeForSignedInUser| only if
+  // |policy_manager| is not-nul. Expects that there is a refresh token for
+  // the primary account.
+  void TryInitializeForSignedInUser();
 
   // Invoked when a policy registration request is complete.
   void CallPolicyRegistrationCallback(std::unique_ptr<CloudPolicyClient> client,

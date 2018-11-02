@@ -31,13 +31,12 @@ class ExtensionGarbageCollectorChromeOSUnitTest;
 }
 
 namespace arc {
-class ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
+class ArcAuthServiceTest;
+class ArcSessionManagerTest;
 }
 
 namespace ash {
-namespace test {
 class MultiUserWindowManagerChromeOSTest;
-}  // namespace test
 }  // namespace ash
 
 namespace policy {
@@ -105,6 +104,19 @@ class ProfileHelper
   // construction of the signin Profile to determine if that Profile is the
   // signin Profile.
   static bool IsSigninProfile(const Profile* profile);
+
+  // Returns the path used for the lock screen apps profile - profile used
+  // for launching platform apps that can display windows on top of the lock
+  // screen.
+  static base::FilePath GetLockScreenAppProfilePath();
+
+  // Returns the name used for the lock screen app profile.
+  static std::string GetLockScreenAppProfileName();
+
+  // Returns whether |profile| is the lock screen app profile - the profile used
+  // for launching platform apps that can display a window on top of the lock
+  // screen.
+  static bool IsLockScreenAppProfile(const Profile* profile);
 
   // Returns true when |profile| corresponds to owner's profile.
   static bool IsOwnerProfile(const Profile* profile);
@@ -176,8 +188,9 @@ class ProfileHelper
   friend class ProfileHelperTest;
   friend class ProfileListChromeOSTest;
   friend class SystemTrayDelegateChromeOSTest;
-  friend class ash::test::MultiUserWindowManagerChromeOSTest;
-  friend class arc::ArcActiveDirectoryEnrollmentTokenFetcherBrowserTest;
+  friend class ash::MultiUserWindowManagerChromeOSTest;
+  friend class arc::ArcSessionManagerTest;
+  friend class arc::ArcAuthServiceTest;
   friend class ::ArcAppTest;
   friend class ::SessionControllerClientTest;
   friend class ::test::BrowserFinderChromeOSTest;

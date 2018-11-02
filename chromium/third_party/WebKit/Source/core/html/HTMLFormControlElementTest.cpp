@@ -6,7 +6,7 @@
 
 #include <memory>
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
@@ -18,10 +18,10 @@
 namespace blink {
 
 namespace {
-class MockValidationMessageClient
-    : public GarbageCollectedFinalized<MockValidationMessageClient>,
+class MockFormValidationMessageClient
+    : public GarbageCollectedFinalized<MockFormValidationMessageClient>,
       public ValidationMessageClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MockValidationMessageClient);
+  USING_GARBAGE_COLLECTED_MIXIN(MockFormValidationMessageClient);
 
  public:
   void ShowValidationMessage(const Element& anchor,
@@ -41,7 +41,6 @@ class MockValidationMessageClient
     return anchor_ == &anchor;
   }
 
-  void WillUnloadDocument(const Document&) override {}
   void DocumentDetached(const Document&) override {}
   void WillBeDestroyed() override {}
   DEFINE_INLINE_VIRTUAL_TRACE() {
@@ -128,7 +127,7 @@ TEST_F(HTMLFormControlElementTest, UpdateValidationMessageSkippedIfPrinting) {
       "<body><input required id=input></body>");
   GetDocument().View()->UpdateAllLifecyclePhases();
   ValidationMessageClient* validation_message_client =
-      new MockValidationMessageClient();
+      new MockFormValidationMessageClient();
   GetPage().SetValidationMessageClient(validation_message_client);
   Page::OrdinaryPages().insert(&GetPage());
 

@@ -16,13 +16,19 @@
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "build/build_config.h"
-#include "cc/output/renderer_settings.h"
-#include "cc/surfaces/frame_sink_id_allocator.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/surfaces/frame_sink_id_allocator.h"
+#include "components/viz/host/host_frame_sink_manager.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
 #include "ui/compositor/compositor.h"
 
+namespace base {
+class SingleThreadTaskRunner;
+}
+
 namespace cc {
+class ResourceSettings;
 class SingleThreadTaskGraphRunner;
 class SoftwareOutputDevice;
 class SurfaceManager;
@@ -35,24 +41,25 @@ class ContextProviderCommandBuffer;
 
 namespace content {
 class OutputDeviceBacking;
-class FrameSinkManagerHost;
 
 class GpuProcessTransportFactory : public ui::ContextFactory,
                                    public ui::ContextFactoryPrivate,
                                    public ImageTransportFactory {
  public:
-  GpuProcessTransportFactory();
+  explicit GpuProcessTransportFactory(
+      scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner);
 
   ~GpuProcessTransportFactory() override;
 
   // ui::ContextFactory implementation.
-  void CreateCompositorFrameSink(
+  void CreateLayerTreeFrameSink(
       base::WeakPtr<ui::Compositor> compositor) override;
-  scoped_refptr<cc::ContextProvider> SharedMainThreadContextProvider() override;
+  scoped_refptr<viz::ContextProvider> SharedMainThreadContextProvider()
+      override;
   double GetRefreshRate() const override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
   cc::TaskGraphRunner* GetTaskGraphRunner() override;
-  const cc::RendererSettings& GetRendererSettings() const override;
+  const viz::ResourceSettings& GetResourceSettings() const override;
   void AddObserver(ui::ContextFactoryObserver* observer) override;
   void RemoveObserver(ui::ContextFactoryObserver* observer) override;
 
@@ -61,7 +68,8 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
                                                  ui::Layer* target) override;
   void RemoveReflector(ui::Reflector* reflector) override;
   void RemoveCompositor(ui::Compositor* compositor) override;
-  cc::FrameSinkId AllocateFrameSinkId() override;
+  viz::FrameSinkId AllocateFrameSinkId() override;
+  viz::HostFrameSinkManager* GetHostFrameSinkManager() override;
   void SetDisplayVisible(ui::Compositor* compositor, bool visible) override;
   void ResizeDisplay(ui::Compositor* compositor,
                      const gfx::Size& size) override;
@@ -78,8 +86,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   // ImageTransportFactory implementation.
   ui::ContextFactory* GetContextFactory() override;
   ui::ContextFactoryPrivate* GetContextFactoryPrivate() override;
-  cc::SurfaceManager* GetSurfaceManager() override;
-  FrameSinkManagerHost* GetFrameSinkManagerHost() override;
+  viz::FrameSinkManagerImpl* GetFrameSinkManager() override;
   viz::GLHelper* GetGLHelper() override;
   void SetGpuChannelEstablishFactory(
       gpu::GpuChannelEstablishFactory* factory) override;
@@ -106,10 +113,7 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
   scoped_refptr<cc::VulkanInProcessContextProvider>
   SharedVulkanContextProvider();
 
-  // Manages creation and hierarchy of frame sinks.
-  std::unique_ptr<FrameSinkManagerHost> frame_sink_manager_host_;
-
-  cc::FrameSinkIdAllocator frame_sink_id_allocator_;
+  viz::FrameSinkIdAllocator frame_sink_id_allocator_;
 
 #if defined(OS_WIN)
   // Used by output surface, stored in PerCompositorData.
@@ -121,10 +125,11 @@ class GpuProcessTransportFactory : public ui::ContextFactory,
       PerCompositorDataMap;
   PerCompositorDataMap per_compositor_data_;
 
-  const cc::RendererSettings renderer_settings_;
+  const viz::RendererSettings renderer_settings_;
   scoped_refptr<ui::ContextProviderCommandBuffer> shared_main_thread_contexts_;
   std::unique_ptr<viz::GLHelper> gl_helper_;
   base::ObserverList<ui::ContextFactoryObserver> observer_list_;
+  scoped_refptr<base::SingleThreadTaskRunner> resize_task_runner_;
   std::unique_ptr<cc::SingleThreadTaskGraphRunner> task_graph_runner_;
   scoped_refptr<ui::ContextProviderCommandBuffer>
       shared_worker_context_provider_;

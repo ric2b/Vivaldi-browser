@@ -53,12 +53,17 @@
 namespace blink {
 
 ResourceLoader* ResourceLoader::Create(ResourceFetcher* fetcher,
+                                       ResourceLoadScheduler* scheduler,
                                        Resource* resource) {
-  return new ResourceLoader(fetcher, resource);
+  return new ResourceLoader(fetcher, scheduler, resource);
 }
 
-ResourceLoader::ResourceLoader(ResourceFetcher* fetcher, Resource* resource)
-    : fetcher_(fetcher),
+ResourceLoader::ResourceLoader(ResourceFetcher* fetcher,
+                               ResourceLoadScheduler* scheduler,
+                               Resource* resource)
+    : scheduler_client_id_(ResourceLoadScheduler::kInvalidClientId),
+      fetcher_(fetcher),
+      scheduler_(scheduler),
       resource_(resource),
       is_cache_aware_loading_activated_(false) {
   DCHECK(resource_);
@@ -71,11 +76,35 @@ ResourceLoader::~ResourceLoader() {}
 
 DEFINE_TRACE(ResourceLoader) {
   visitor->Trace(fetcher_);
+  visitor->Trace(scheduler_);
   visitor->Trace(resource_);
+  ResourceLoadSchedulerClient::Trace(visitor);
 }
 
-void ResourceLoader::Start(const ResourceRequest& request) {
-  DCHECK(!loader_);
+void ResourceLoader::Start() {
+  const ResourceRequest& request = resource_->GetResourceRequest();
+  ActivateCacheAwareLoadingIfNeeded(request);
+  loader_ = Context().CreateURLLoader(request);
+
+  // Synchronous requests should not work with a throttling. Also, tentatively
+  // disables throttling for fetch requests that could keep on holding an active
+  // connection until data is read by JavaScript.
+  ResourceLoadScheduler::ThrottleOption option =
+      (resource_->Options().synchronous_policy == kRequestSynchronously ||
+       request.GetRequestContext() == WebURLRequest::kRequestContextFetch)
+          ? ResourceLoadScheduler::ThrottleOption::kCanNotBeThrottled
+          : ResourceLoadScheduler::ThrottleOption::kCanBeThrottled;
+  DCHECK_EQ(ResourceLoadScheduler::kInvalidClientId, scheduler_client_id_);
+  scheduler_->Request(this, option, &scheduler_client_id_);
+}
+
+void ResourceLoader::Run() {
+  StartWith(resource_->GetResourceRequest());
+}
+
+void ResourceLoader::StartWith(const ResourceRequest& request) {
+  DCHECK_NE(ResourceLoadScheduler::kInvalidClientId, scheduler_client_id_);
+  DCHECK(loader_);
 
   if (resource_->Options().synchronous_policy == kRequestSynchronously &&
       Context().DefersLoading()) {
@@ -83,14 +112,14 @@ void ResourceLoader::Start(const ResourceRequest& request) {
     return;
   }
 
-  loader_ = fetcher_->Context().CreateURLLoader();
-  DCHECK(loader_);
   loader_->SetDefersLoading(Context().DefersLoading());
-  loader_->SetLoadingTaskRunner(Context().LoadingTaskRunner().Get());
+
+  if (request.GetKeepalive())
+    keepalive_ = this;
 
   if (is_cache_aware_loading_activated_) {
     // Override cache policy for cache-aware loading. If this request fails, a
-    // reload with original request will be triggered in didFail().
+    // reload with original request will be triggered in DidFail().
     ResourceRequest cache_aware_request(request);
     cache_aware_request.SetCachePolicy(WebCachePolicy::kReturnCacheDataIfValid);
     loader_->LoadAsynchronously(WrappedResourceRequest(cache_aware_request),
@@ -104,16 +133,23 @@ void ResourceLoader::Start(const ResourceRequest& request) {
     loader_->LoadAsynchronously(WrappedResourceRequest(request), this);
 }
 
+void ResourceLoader::Release(ResourceLoadScheduler::ReleaseOption option) {
+  DCHECK_NE(ResourceLoadScheduler::kInvalidClientId, scheduler_client_id_);
+  bool released = scheduler_->Release(scheduler_client_id_, option);
+  DCHECK(released);
+  scheduler_client_id_ = ResourceLoadScheduler::kInvalidClientId;
+}
+
 void ResourceLoader::Restart(const ResourceRequest& request) {
   CHECK_EQ(resource_->Options().synchronous_policy, kRequestAsynchronously);
 
-  loader_.reset();
-  Start(request);
+  keepalive_.Clear();
+  loader_ = Context().CreateURLLoader(request);
+  StartWith(request);
 }
 
 void ResourceLoader::SetDefersLoading(bool defers) {
   DCHECK(loader_);
-
   loader_->SetDefersLoading(defers);
 }
 
@@ -184,21 +220,21 @@ bool ResourceLoader::WillFollowRedirect(
       return false;
     }
 
-    if (resource_->Options().cors_enabled == kIsCORSEnabled) {
+    if (resource_->Options().cors_handling_by_resource_fetcher ==
+            kEnableCORSHandlingByResourceFetcher &&
+        resource_->GetResourceRequest().GetFetchRequestMode() ==
+            WebURLRequest::kFetchRequestModeCORS) {
       RefPtr<SecurityOrigin> source_origin =
           resource_->Options().security_origin;
       if (!source_origin.Get())
         source_origin = Context().GetSecurityOrigin();
 
       String error_message;
-      StoredCredentials with_credentials =
-          resource_->LastResourceRequest().AllowStoredCredentials()
-              ? kAllowStoredCredentials
-              : kDoNotAllowStoredCredentials;
       if (!CrossOriginAccessControl::HandleRedirect(
-              source_origin, new_request, redirect_response, with_credentials,
+              source_origin, new_request, redirect_response,
+              resource_->GetResourceRequest().GetFetchCredentialsMode(),
               resource_->MutableOptions(), error_message)) {
-        resource_->SetCORSFailed();
+        resource_->SetCORSStatus(CORSStatus::kFailed);
         Context().AddConsoleMessage(error_message);
         CancelForRedirectAccessCheckError(new_request.Url(),
                                           ResourceRequestBlockedReason::kOther);
@@ -218,18 +254,35 @@ bool ResourceLoader::WillFollowRedirect(
   fetcher_->RecordResourceTimingOnRedirect(resource_.Get(), redirect_response,
                                            cross_origin);
 
-  new_request.SetAllowStoredCredentials(
-      resource_->Options().allow_credentials == kAllowStoredCredentials);
+  if (resource_->Options().cors_handling_by_resource_fetcher ==
+          kEnableCORSHandlingByResourceFetcher &&
+      resource_->GetResourceRequest().GetFetchRequestMode() ==
+          WebURLRequest::kFetchRequestModeCORS) {
+    bool allow_stored_credentials = false;
+    switch (new_request.GetFetchCredentialsMode()) {
+      case WebURLRequest::kFetchCredentialsModeOmit:
+        break;
+      case WebURLRequest::kFetchCredentialsModeSameOrigin:
+        allow_stored_credentials = !resource_->Options().cors_flag;
+        break;
+      case WebURLRequest::kFetchCredentialsModeInclude:
+      case WebURLRequest::kFetchCredentialsModePassword:
+        allow_stored_credentials = true;
+        break;
+    }
+    new_request.SetAllowStoredCredentials(allow_stored_credentials);
+  }
+
   Context().PrepareRequest(new_request,
                            FetchContext::RedirectType::kForRedirect);
   Context().DispatchWillSendRequest(resource_->Identifier(), new_request,
                                     redirect_response,
                                     resource_->Options().initiator_info);
 
-  // ResourceFetcher::willFollowRedirect() may rewrite the URL to
+  // ResourceFetcher::WillFollowRedirect() may rewrite the URL to
   // something else not for rejecting redirect but for other reasons.
-  // E.g. WebFrameTestClient::willSendRequest() and
-  // RenderFrameImpl::willSendRequest(). We should reflect the
+  // E.g. WebFrameTestClient::WillSendRequest() and
+  // RenderFrameImpl::WillSendRequest(). We should reflect the
   // rewriting but currently we cannot. So, return false to make the
   // redirect fail.
   if (new_request.Url() != original_url) {
@@ -262,7 +315,8 @@ FetchContext& ResourceLoader::Context() const {
 
 ResourceRequestBlockedReason ResourceLoader::CanAccessResponse(
     Resource* resource,
-    const ResourceResponse& response) const {
+    const ResourceResponse& response,
+    const String& cors_error_message) const {
   // Redirects can change the response URL different from one of request.
   bool unused_preload = resource->IsUnusedPreload();
   ResourceRequestBlockedReason blocked_reason = Context().CanRequest(
@@ -275,45 +329,84 @@ ResourceRequestBlockedReason ResourceLoader::CanAccessResponse(
   if (blocked_reason != ResourceRequestBlockedReason::kNone)
     return blocked_reason;
 
-  SecurityOrigin* source_origin = resource->Options().security_origin.Get();
+  if (resource->IsSameOriginOrCORSSuccessful())
+    return ResourceRequestBlockedReason::kNone;
+
+  if (!resource_->IsUnusedPreload())
+    Context().AddConsoleMessage(cors_error_message);
+
+  return ResourceRequestBlockedReason::kOther;
+}
+
+CORSStatus ResourceLoader::DetermineCORSStatus(const ResourceResponse& response,
+                                               StringBuilder& error_msg) const {
+  // Service workers handle CORS separately.
+  if (response.WasFetchedViaServiceWorker()) {
+    switch (response.ServiceWorkerResponseType()) {
+      case kWebServiceWorkerResponseTypeBasic:
+      case kWebServiceWorkerResponseTypeCORS:
+      case kWebServiceWorkerResponseTypeDefault:
+      case kWebServiceWorkerResponseTypeError:
+        return CORSStatus::kServiceWorkerSuccessful;
+      case kWebServiceWorkerResponseTypeOpaque:
+      case kWebServiceWorkerResponseTypeOpaqueRedirect:
+        return CORSStatus::kServiceWorkerOpaque;
+        break;
+      default:
+        NOTREACHED();
+    }
+  }
+
+  if (resource_->GetType() == Resource::Type::kMainResource)
+    return CORSStatus::kNotApplicable;
+
+  SecurityOrigin* source_origin = resource_->Options().security_origin.Get();
+
   if (!source_origin)
     source_origin = Context().GetSecurityOrigin();
 
+  DCHECK(source_origin);
+
   if (source_origin->CanRequestNoSuborigin(response.Url()))
-    return ResourceRequestBlockedReason::kNone;
+    return CORSStatus::kSameOrigin;
+
+  if (resource_->Options().cors_handling_by_resource_fetcher !=
+          kEnableCORSHandlingByResourceFetcher ||
+      resource_->GetResourceRequest().GetFetchRequestMode() !=
+          WebURLRequest::kFetchRequestModeCORS)
+    return CORSStatus::kNotApplicable;
 
   // Use the original response instead of the 304 response for a successful
-  // revaldiation.
+  // revalidation.
   const ResourceResponse& response_for_access_control =
-      (resource->IsCacheValidator() && response.HttpStatusCode() == 304)
-          ? resource->GetResponse()
+      (resource_->IsCacheValidator() && response.HttpStatusCode() == 304)
+          ? resource_->GetResponse()
           : response;
 
   CrossOriginAccessControl::AccessStatus cors_status =
       CrossOriginAccessControl::CheckAccess(
-          response_for_access_control, resource->Options().allow_credentials,
+          response_for_access_control,
+          resource_->LastResourceRequest().GetFetchCredentialsMode(),
           source_origin);
-  if (cors_status != CrossOriginAccessControl::kAccessAllowed) {
-    resource->SetCORSFailed();
-    if (!unused_preload) {
-      String resource_type = Resource::ResourceTypeToString(
-          resource->GetType(), resource->Options().initiator_info.name);
-      StringBuilder builder;
-      builder.Append("Access to ");
-      builder.Append(resource_type);
-      builder.Append(" at '");
-      builder.Append(response.Url().GetString());
-      builder.Append("' from origin '");
-      builder.Append(source_origin->ToString());
-      builder.Append("' has been blocked by CORS policy: ");
-      CrossOriginAccessControl::AccessControlErrorString(
-          builder, cors_status, response_for_access_control, source_origin,
-          resource->LastResourceRequest().GetRequestContext());
-      Context().AddConsoleMessage(builder.ToString());
-    }
-    return ResourceRequestBlockedReason::kOther;
-  }
-  return ResourceRequestBlockedReason::kNone;
+
+  if (cors_status == CrossOriginAccessControl::AccessStatus::kAccessAllowed)
+    return CORSStatus::kSuccessful;
+
+  String resource_type = Resource::ResourceTypeToString(
+      resource_->GetType(), resource_->Options().initiator_info.name);
+  error_msg.Append("Access to ");
+  error_msg.Append(resource_type);
+  error_msg.Append(" at '");
+  error_msg.Append(response.Url().GetString());
+  error_msg.Append("' from origin '");
+  error_msg.Append(source_origin->ToString());
+  error_msg.Append("' has been blocked by CORS policy: ");
+
+  CrossOriginAccessControl::AccessControlErrorString(
+      error_msg, cors_status, response_for_access_control, source_origin,
+      resource_->LastResourceRequest().GetRequestContext());
+
+  return CORSStatus::kFailed;
 }
 
 void ResourceLoader::DidReceiveResponse(
@@ -323,8 +416,16 @@ void ResourceLoader::DidReceiveResponse(
 
   const ResourceResponse& response = web_url_response.ToResourceResponse();
 
+  // Later, CORS results should already be in the response we get from the
+  // browser at this point.
+  StringBuilder cors_error_msg;
+  resource_->SetCORSStatus(DetermineCORSStatus(response, cors_error_msg));
+
   if (response.WasFetchedViaServiceWorker()) {
-    if (resource_->Options().cors_enabled == kIsCORSEnabled &&
+    if (resource_->Options().cors_handling_by_resource_fetcher ==
+            kEnableCORSHandlingByResourceFetcher &&
+        resource_->GetResourceRequest().GetFetchRequestMode() ==
+            WebURLRequest::kFetchRequestModeCORS &&
         response.WasFallbackRequiredByServiceWorker()) {
       ResourceRequest request = resource_->LastResourceRequest();
       DCHECK_EQ(request.GetServiceWorkerMode(),
@@ -361,9 +462,12 @@ void ResourceLoader::DidReceiveResponse(
         return;
       }
     }
-  } else if (resource_->Options().cors_enabled == kIsCORSEnabled) {
+  } else if (resource_->Options().cors_handling_by_resource_fetcher ==
+                 kEnableCORSHandlingByResourceFetcher &&
+             resource_->GetResourceRequest().GetFetchRequestMode() ==
+                 WebURLRequest::kFetchRequestModeCORS) {
     ResourceRequestBlockedReason blocked_reason =
-        CanAccessResponse(resource_, response);
+        CanAccessResponse(resource_, response, cors_error_msg.ToString());
     if (blocked_reason != ResourceRequestBlockedReason::kNone) {
       HandleError(ResourceError::CancelledDueToAccessCheckError(
           response.Url(), blocked_reason));
@@ -426,6 +530,8 @@ void ResourceLoader::DidFinishLoading(double finish_time,
   resource_->SetEncodedBodyLength(encoded_body_length);
   resource_->SetDecodedBodyLength(decoded_body_length);
 
+  keepalive_.Clear();
+  Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 
   network_instrumentation::EndResourceLoad(
@@ -455,6 +561,8 @@ void ResourceLoader::HandleError(const ResourceError& error) {
     return;
   }
 
+  keepalive_.Clear();
+  Release(ResourceLoadScheduler::ReleaseOption::kReleaseAndSchedule);
   loader_.reset();
 
   network_instrumentation::EndResourceLoad(
@@ -493,7 +601,7 @@ void ResourceLoader::RequestSynchronously(const ResourceRequest& request) {
     return;
   DCHECK_GE(response_out.ToResourceResponse().EncodedBodyLength(), 0);
 
-  // Follow the async case convention of not calling didReceiveData or
+  // Follow the async case convention of not calling DidReceiveData or
   // appending data to m_resource if the response body is empty. Copying the
   // empty buffer is a noop in most cases, but is destructive in the case of
   // a 304, where it will overwrite the cached data we should be reusing.
@@ -508,6 +616,13 @@ void ResourceLoader::RequestSynchronously(const ResourceRequest& request) {
 
 void ResourceLoader::Dispose() {
   loader_ = nullptr;
+
+  // Release() should be called to release |scheduler_client_id_| beforehand in
+  // DidFinishLoading() or DidFail(), but when a timer to call Cancel() is
+  // ignored due to GC, this case happens. We just release here because we can
+  // not schedule another request safely. See crbug.com/675947.
+  if (scheduler_client_id_ != ResourceLoadScheduler::kInvalidClientId)
+    Release(ResourceLoadScheduler::ReleaseOption::kReleaseOnly);
 }
 
 void ResourceLoader::ActivateCacheAwareLoadingIfNeeded(
@@ -531,6 +646,10 @@ void ResourceLoader::ActivateCacheAwareLoadingIfNeeded(
     return;
 
   is_cache_aware_loading_activated_ = true;
+}
+
+bool ResourceLoader::GetKeepalive() const {
+  return resource_->GetResourceRequest().GetKeepalive();
 }
 
 }  // namespace blink

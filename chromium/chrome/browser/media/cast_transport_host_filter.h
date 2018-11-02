@@ -19,16 +19,16 @@
 #include "media/cast/logging/logging_defines.h"
 #include "media/cast/net/cast_transport.h"
 #include "media/cast/net/udp_transport.h"
-
-namespace device {
-class PowerSaveBlocker;
-}  // namespace device
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 
 namespace cast {
 
 class CastTransportHostFilter : public content::BrowserMessageFilter {
  public:
   CastTransportHostFilter();
+
+  // Used by unit test only.
+  void InitializeNoOpWakeLockForTesting();
 
  private:
   ~CastTransportHostFilter() override;
@@ -93,15 +93,18 @@ class CastTransportHostFilter : public content::BrowserMessageFilter {
       int32_t channel_id,
       const std::vector<media::cast::FrameEvent>& events);
 
+  device::mojom::WakeLock* GetWakeLock();
+
   IDMap<std::unique_ptr<media::cast::CastTransport>> id_map_;
 
   // Clock used by Cast transport.
   base::DefaultTickClock clock_;
 
-  // While |id_map_| is non-empty, hold an instance of
-  // device::PowerSaveBlocker.  This prevents Chrome from being suspended while
-  // remoting content.
-  std::unique_ptr<device::PowerSaveBlocker> power_save_blocker_;
+  // While |id_map_| is non-empty, we use |wake_lock_| to request and
+  // hold a wake lock. This prevents Chrome from being suspended while remoting
+  // content. If any wake lock is held upon destruction, it's implicitly
+  // canceled when this object is destroyed.
+  device::mojom::WakeLockPtr wake_lock_;
 
   // This map records all active remoting senders. It uses the unique RTP
   // stream ID as the key.

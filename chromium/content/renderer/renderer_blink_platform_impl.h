@@ -13,16 +13,17 @@
 #include "base/compiler_specific.h"
 #include "base/id_map.h"
 #include "base/macros.h"
+#include "base/time/time.h"
 #include "build/build_config.h"
 #include "cc/blink/web_compositor_support_impl.h"
+#include "components/viz/client/client_shared_bitmap_manager.h"
 #include "content/child/blink_platform_impl.h"
 #include "content/common/content_export.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/common/possibly_associated_interface_ptr.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/renderer/origin_trials/web_trial_token_validator_impl.h"
-#include "content/renderer/possibly_associated_interface_ptr.h"
 #include "content/renderer/top_level_blame_context.h"
 #include "content/renderer/webpublicsuffixlist_impl.h"
-#include "services/ui/public/cpp/bitmap/child_shared_bitmap_manager.h"
 #include "third_party/WebKit/public/platform/modules/indexeddb/WebIDBFactory.h"
 #include "third_party/WebKit/public/platform/modules/screen_orientation/WebScreenOrientationType.h"
 
@@ -93,12 +94,12 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       std::unique_ptr<blink::WebMessagePortChannel>* channel2) override;
   blink::WebPrescientNetworking* PrescientNetworking() override;
   void CacheMetadata(const blink::WebURL&,
-                     int64_t,
+                     base::Time,
                      const char*,
                      size_t) override;
   void CacheMetadataInCacheStorage(
       const blink::WebURL&,
-      int64_t,
+      base::Time,
       const char*,
       size_t,
       const blink::WebSecurityOrigin& cacheStorageOrigin,
@@ -121,7 +122,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
                            long long size) override;
   blink::WebString DatabaseCreateOriginIdentifier(
       const blink::WebSecurityOrigin& origin) override;
-  cc::FrameSinkId GenerateFrameSinkId() override;
+  viz::FrameSinkId GenerateFrameSinkId() override;
 
   void GetPluginList(bool refresh,
                      const blink::WebSecurityOrigin& mainFrameOrigin,
@@ -151,9 +152,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       const blink::WebString& input_device_id,
       const blink::WebSecurityOrigin& security_origin) override;
 
-  bool LoadAudioResource(blink::WebAudioBus* destination_bus,
-                         const char* audio_file_data,
-                         size_t data_size) override;
+  bool DecodeAudioFileData(blink::WebAudioBus* destination_bus,
+                           const char* audio_file_data,
+                           size_t data_size) override;
 
   std::unique_ptr<blink::WebMIDIAccessor> CreateMIDIAccessor(
       blink::WebMIDIAccessorClient* client) override;
@@ -181,6 +182,8 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
       blink::WebMediaPlayer* web_media_player) override;
   std::unique_ptr<blink::WebImageCaptureFrameGrabber>
   CreateImageCaptureFrameGrabber() override;
+  std::unique_ptr<blink::WebSocketHandshakeThrottle>
+  CreateWebSocketHandshakeThrottle() override;
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
   CreateOffscreenGraphicsContext3DProvider(
       const blink::Platform::ContextAttributes& attributes,
@@ -190,7 +193,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   std::unique_ptr<blink::WebGraphicsContext3DProvider>
   CreateSharedOffscreenGraphicsContext3DProvider() override;
   gpu::GpuMemoryBufferManager* GetGpuMemoryBufferManager() override;
-  std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
+  std::unique_ptr<viz::SharedBitmap> AllocateSharedBitmap(
       const blink::WebSize& size) override;
   blink::WebCompositorSupport* CompositorSupport() override;
   blink::WebString ConvertIDNToUnicode(const blink::WebString& host) override;
@@ -239,7 +242,9 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
     return web_database_observer_impl_.get();
   }
 
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override;
 
   void RequestPurgeMemory() override;
 
@@ -289,7 +294,7 @@ class CONTENT_EXPORT RendererBlinkPlatformImpl : public BlinkPlatformImpl {
   scoped_refptr<IPC::SyncMessageFilter> sync_message_filter_;
   scoped_refptr<ThreadSafeSender> thread_safe_sender_;
   scoped_refptr<QuotaMessageFilter> quota_message_filter_;
-  ui::ChildSharedBitmapManager* shared_bitmap_manager_;
+  viz::ClientSharedBitmapManager* shared_bitmap_manager_;
 
   std::unique_ptr<WebDatabaseObserverImpl> web_database_observer_impl_;
 

@@ -321,7 +321,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   void PositionSpannerDescendant(LayoutMultiColumnSpannerPlaceholder& child);
 
-  bool AvoidsFloats() const override;
+  bool CreatesNewFormattingContext() const override;
+  bool AvoidsFloats() const final;
 
   using LayoutBoxModelObject::MoveChildrenTo;
   void MoveChildrenTo(LayoutBoxModelObject* to_box_model_object,
@@ -407,6 +408,10 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
     is_self_collapsing_ = CheckIfIsSelfCollapsingBlock();
   }
 
+  // This function is only public so we can call it from NGBlockNode while we're
+  // still working on LayoutNG.
+  void AddOverflowFromFloats();
+
 #ifndef NDEBUG
   void ShowLineTreeAndMark(const InlineBox* = nullptr,
                            const char* = nullptr,
@@ -429,8 +434,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
 
   void UpdateBlockChildDirtyBitsBeforeLayout(bool relayout_children,
                                              LayoutBox&);
-
-  void AddOverflowFromFloats();
 
   void ComputeSelfHitTestRects(Vector<LayoutRect>&,
                                const LayoutPoint& layer_offset) const override;
@@ -477,8 +480,6 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                        IncludeBlockVisualOverflowOrNot) const override;
 
   bool PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const override;
-  PaintInvalidationReason DeprecatedInvalidatePaint(
-      const PaintInvalidationState&) override;
   void InvalidateDisplayItemClients(PaintInvalidationReason) const override;
 
   Node* NodeForHitTest() const final;
@@ -876,6 +877,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
   bool IsSelfCollapsingBlock() const override;
   bool CheckIfIsSelfCollapsingBlock() const;
 
+  bool ShouldTruncateOverflowingText(const LayoutBlockFlow*) const;
+
  protected:
   std::unique_ptr<LayoutBlockFlowRareData> rare_data_;
   std::unique_ptr<FloatingObjects> floating_objects_;
@@ -965,7 +968,8 @@ class CORE_EXPORT LayoutBlockFlow : public LayoutBlock {
                                          LayoutUnit block_right_edge,
                                          LayoutUnit block_left_edge,
                                          LayoutUnit width,
-                                         const AtomicString&);
+                                         const AtomicString&,
+                                         InlineBox*);
   void MarkLinesDirtyInBlockRange(LayoutUnit logical_top,
                                   LayoutUnit logical_bottom,
                                   RootInlineBox* highest = nullptr);

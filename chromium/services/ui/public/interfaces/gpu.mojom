@@ -6,6 +6,8 @@ module ui.mojom;
 
 import "gpu/ipc/common/gpu_info.mojom";
 import "gpu/ipc/common/sync_token.mojom";
+import "media/gpu/mojo/jpeg_decoder.mojom";
+import "media/mojo/interfaces/video_encode_accelerator.mojom";
 import "ui/gfx/geometry/mojo/geometry.mojom";
 import "ui/gfx/mojo/buffer_types.mojom";
 
@@ -14,9 +16,17 @@ interface Gpu {
   // client. The GPU service responds with client ID, IPC handle and
   // GPUInfo.
   [Sync]
-  EstablishGpuChannel(bool force_access_to_gpu) => (int32 client_id,
+  EstablishGpuChannel() => (int32 client_id,
                             handle<message_pipe>? channel_handle,
                             gpu.mojom.GpuInfo gpu_info);
+
+  SetForceAllowAccessToGpu(bool enable);
+
+  // Creates a new JpegDecodeAccelerator and binds it to |jda|.
+  CreateJpegDecodeAccelerator(media.mojom.GpuJpegDecodeAccelerator& jda);
+
+  // Creates a new VideoEncodeAccelerator and binds it to |vea|.
+  CreateVideoEncodeAccelerator(media.mojom.VideoEncodeAccelerator& vea);
 
   // Tells the GPU service to create a new GPU memory buffer.
   CreateGpuMemoryBuffer(gfx.mojom.GpuMemoryBufferId id,

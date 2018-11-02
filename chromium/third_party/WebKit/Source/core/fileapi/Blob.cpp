@@ -32,11 +32,11 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/DOMURL.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/BlobPropertyBag.h"
 #include "core/frame/UseCounter.h"
+#include "core/url/DOMURL.h"
 #include "platform/bindings/ScriptState.h"
 #include "platform/blob/BlobRegistry.h"
 #include "platform/blob/BlobURL.h"
@@ -74,8 +74,7 @@ URLRegistry& BlobURLRegistry::Registry() {
   // (This code assumes it is safe to register or unregister URLs on
   // BlobURLRegistry (that is implemented by the embedder) on
   // multiple threads.)
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(BlobURLRegistry, instance,
-                                  new BlobURLRegistry());
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(BlobURLRegistry, instance, ());
   return instance;
 }
 
@@ -97,7 +96,7 @@ Blob* Blob::Create(
   DCHECK(options.hasEndings());
   bool normalize_line_endings_to_native = options.endings() == "native";
   if (normalize_line_endings_to_native)
-    UseCounter::Count(context, UseCounter::kFileAPINativeLineEndings);
+    UseCounter::Count(context, WebFeature::kFileAPINativeLineEndings);
 
   std::unique_ptr<BlobData> blob_data = BlobData::Create();
   blob_data->SetContentType(NormalizeType(options.type()));

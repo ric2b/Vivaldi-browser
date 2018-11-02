@@ -4,8 +4,10 @@
 
 #include "chrome/browser/translate/chrome_translate_client.h"
 
+#include <memory>
 #include <vector>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/path_service.h"
 #include "base/strings/string_split.h"
@@ -14,7 +16,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/browser/translate/language_model_factory.h"
+#include "chrome/browser/sync/user_event_service_factory.h"
 #include "chrome/browser/translate/translate_accept_languages_factory.h"
 #include "chrome/browser/translate/translate_ranker_factory.h"
 #include "chrome/browser/translate/translate_service.h"
@@ -29,7 +31,9 @@
 #include "chrome/grit/theme_resources.h"
 #include "components/metrics/proto/translate_event.pb.h"
 #include "components/prefs/pref_service.h"
-#include "components/translate/core/browser/language_model.h"
+#include "components/sync/driver/sync_driver_switches.h"
+#include "components/sync/protocol/user_event_specifics.pb.h"
+#include "components/sync/user_events/user_event_service.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/page_translated_details.h"
 #include "components/translate/core/browser/translate_accept_languages.h"
@@ -38,30 +42,68 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/common/language_detection_details.h"
+#include "components/translate/core/common/language_detection_logging_helper.h"
+#include "components/translate/core/common/translation_logging_helper.h"
 #include "components/variations/service/variations_service.h"
+#include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
+#include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "url/gurl.h"
 
 namespace {
+using base::FeatureList;
+using metrics::TranslateEventProto;
 
-metrics::TranslateEventProto::EventType BubbleResultToTranslateEvent(
+TranslateEventProto::EventType BubbleResultToTranslateEvent(
     ShowTranslateBubbleResult result) {
   switch (result) {
     case ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID:
-      return metrics::TranslateEventProto::BROWSER_WINDOW_IS_INVALID;
+      return TranslateEventProto::BROWSER_WINDOW_IS_INVALID;
     case ShowTranslateBubbleResult::BROWSER_WINDOW_MINIMIZED:
-      return metrics::TranslateEventProto::BROWSER_WINDOW_IS_MINIMIZED;
+      return TranslateEventProto::BROWSER_WINDOW_IS_MINIMIZED;
     case ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_ACTIVE:
-      return metrics::TranslateEventProto::BROWSER_WINDOW_NOT_ACTIVE;
+      return TranslateEventProto::BROWSER_WINDOW_NOT_ACTIVE;
     case ShowTranslateBubbleResult::WEB_CONTENTS_NOT_ACTIVE:
-      return metrics::TranslateEventProto::WEB_CONTENTS_NOT_ACTIVE;
+      return TranslateEventProto::WEB_CONTENTS_NOT_ACTIVE;
     case ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE:
-      return metrics::TranslateEventProto::EDITABLE_FIELD_IS_ACTIVE;
+      return TranslateEventProto::EDITABLE_FIELD_IS_ACTIVE;
     default:
       NOTREACHED();
       return metrics::TranslateEventProto::UNKNOWN;
+  }
+}
+
+// ========== LOG TRANSLATE EVENT ==============
+
+void LogTranslateEvent(const content::WebContents* const web_contents,
+                       const metrics::TranslateEventProto& translate_event) {
+  if (!FeatureList::IsEnabled(switches::kSyncUserTranslationEvents))
+    return;
+  DCHECK(web_contents);
+  auto* const profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+
+  syncer::UserEventService* const user_event_service =
+      browser_sync::UserEventServiceFactory::GetForProfile(profile);
+
+  const auto* const entry =
+      web_contents->GetController().GetLastCommittedEntry();
+
+  // If entry is null, we don't record the page.
+  // The navigation entry can be null in situations like download or initial
+  // blank page.
+  if (entry == nullptr)
+    return;
+
+  auto specifics = base::MakeUnique<sync_pb::UserEventSpecifics>();
+  // We only log the event we care about.
+  const bool needs_logging = translate::ConstructTranslateEvent(
+      entry->GetTimestamp().ToInternalValue(), translate_event,
+      specifics.get());
+  if (needs_logging) {
+    user_event_service->RecordUserEvent(std::move(specifics));
   }
 }
 
@@ -77,8 +119,9 @@ ChromeTranslateClient::ChromeTranslateClient(content::WebContents* web_contents)
           translate::TranslateRankerFactory::GetForBrowserContext(
               web_contents->GetBrowserContext()),
           prefs::kAcceptLanguages)),
-      language_model_(LanguageModelFactory::GetInstance()->GetForBrowserContext(
-          web_contents->GetBrowserContext())) {
+      language_histogram_(
+          UrlLanguageHistogramFactory::GetInstance()->GetForBrowserContext(
+              web_contents->GetBrowserContext())) {
   translate_driver_.AddObserver(this);
   translate_driver_.set_translate_manager(translate_manager_.get());
 }
@@ -169,11 +212,19 @@ void ChromeTranslateClient::GetTranslateLanguages(
       translate::TranslateManager::GetTargetLanguage(translate_prefs.get());
 }
 
+void ChromeTranslateClient::RecordTranslateEvent(
+    const TranslateEventProto& translate_event) {
+  LogTranslateEvent(web_contents(), translate_event);
+}
+
 // static
 void ChromeTranslateClient::BindContentTranslateDriver(
-    content::RenderFrameHost* render_frame_host,
-    const service_manager::BindSourceInfo& source_info,
-    translate::mojom::ContentTranslateDriverRequest request) {
+    translate::mojom::ContentTranslateDriverRequest request,
+    content::RenderFrameHost* render_frame_host) {
+  // Only valid for the main frame.
+  if (render_frame_host->GetParent())
+    return;
+
   content::WebContents* web_contents =
       content::WebContents::FromRenderFrameHost(render_frame_host);
   if (!web_contents)
@@ -269,6 +320,32 @@ int ChromeTranslateClient::GetInfobarIconID() const {
 #endif
 }
 
+void ChromeTranslateClient::RecordLanguageDetectionEvent(
+    const translate::LanguageDetectionDetails& details) const {
+  if (!FeatureList::IsEnabled(switches::kSyncUserLanguageDetectionEvents))
+    return;
+
+  DCHECK(web_contents());
+  auto* const profile =
+      Profile::FromBrowserContext(web_contents()->GetBrowserContext());
+
+  syncer::UserEventService* const user_event_service =
+      browser_sync::UserEventServiceFactory::GetForProfile(profile);
+
+  const auto* const entry =
+      web_contents()->GetController().GetLastCommittedEntry();
+
+  // If entry is null, we don't record the page.
+  // The navigation entry can be null in situations like download or initial
+  // blank page.
+  if (entry != nullptr &&
+      TranslateService::IsTranslatableURL(entry->GetVirtualURL())) {
+    user_event_service->RecordUserEvent(
+        translate::ConstructLanguageDetectionEvent(
+            entry->GetTimestamp().ToInternalValue(), details));
+  }
+}
+
 bool ChromeTranslateClient::IsTranslatableURL(const GURL& url) {
   return TranslateService::IsTranslatableURL(url);
 }
@@ -309,10 +386,11 @@ void ChromeTranslateClient::OnLanguageDetermined(
       content::Source<content::WebContents>(web_contents()),
       content::Details<const translate::LanguageDetectionDetails>(&details));
 
+  RecordLanguageDetectionEvent(details);
   // Unless we have no language model (e.g., in incognito), notify the model
   // about detected language of every page visited.
-  if (language_model_ && details.is_cld_reliable)
-    language_model_->OnPageVisited(details.cld_language);
+  if (language_histogram_ && details.is_cld_reliable)
+    language_histogram_->OnPageVisited(details.cld_language);
 }
 
 void ChromeTranslateClient::OnPageTranslated(

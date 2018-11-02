@@ -14,9 +14,8 @@
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm_window.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/window_state.h"
 #include "base/command_line.h"
 #include "ui/app_list/app_list_constants.h"
 #include "ui/app_list/app_list_features.h"
@@ -28,6 +27,7 @@
 #include "ui/events/event.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 namespace {
@@ -36,11 +36,11 @@ namespace {
 // This calculation excludes the virtual keyboard area. If the height of the
 // display area is less than |minimum_height|, its bottom will be extended to
 // that height (so that the app list never starts above the top of the screen).
-gfx::Point GetCenterOfDisplayForWindow(WmWindow* window, int minimum_height) {
+gfx::Point GetCenterOfDisplayForWindow(aura::Window* window,
+                                       int minimum_height) {
   DCHECK(window);
-  gfx::Rect bounds =
-      ScreenUtil::GetDisplayBoundsWithShelf(window->aura_window());
-  bounds = window->GetRootWindow()->ConvertRectToScreen(bounds);
+  gfx::Rect bounds = ScreenUtil::GetDisplayBoundsWithShelf(window);
+  ::wm::ConvertRectToScreen(window->GetRootWindow(), &bounds);
 
   // If the virtual keyboard is active, subtract it from the display bounds, so
   // that the app list is centered in the non-keyboard area of the display.
@@ -58,6 +58,20 @@ gfx::Point GetCenterOfDisplayForWindow(WmWindow* window, int minimum_height) {
   return bounds.CenterPoint();
 }
 
+// Whether the shelf is oriented on the side, not on the bottom.
+bool IsSideShelf(aura::Window* root_window) {
+  Shelf* shelf = Shelf::ForWindow(root_window);
+  switch (shelf->alignment()) {
+    case SHELF_ALIGNMENT_BOTTOM:
+    case SHELF_ALIGNMENT_BOTTOM_LOCKED:
+      return false;
+    case SHELF_ALIGNMENT_LEFT:
+    case SHELF_ALIGNMENT_RIGHT:
+      return true;
+  }
+  return false;
+}
+
 }  // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -66,8 +80,12 @@ gfx::Point GetCenterOfDisplayForWindow(WmWindow* window, int minimum_height) {
 AppListPresenterDelegate::AppListPresenterDelegate(
     app_list::AppListPresenterImpl* presenter,
     app_list::AppListViewDelegateFactory* view_delegate_factory)
-    : presenter_(presenter), view_delegate_factory_(view_delegate_factory) {
+    : is_fullscreen_app_list_enabled_(
+          app_list::features::IsFullscreenAppListEnabled()),
+      presenter_(presenter),
+      view_delegate_factory_(view_delegate_factory) {
   Shell::Get()->AddShellObserver(this);
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
 AppListPresenterDelegate::~AppListPresenterDelegate() {
@@ -76,9 +94,9 @@ AppListPresenterDelegate::~AppListPresenterDelegate() {
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller)
     keyboard_controller->RemoveObserver(this);
+  if (Shell::Get()->tablet_mode_controller())
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
   Shell::Get()->RemovePreTargetHandler(this);
-  WmWindow* window = WmWindow::Get(view_->GetWidget()->GetNativeWindow());
-  window->GetRootWindowController()->GetShelf()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
 }
 
@@ -91,44 +109,43 @@ void AppListPresenterDelegate::Init(app_list::AppListView* view,
                                     int current_apps_page) {
   // App list needs to know the new shelf layout in order to calculate its
   // UI layout when AppListView visibility changes.
-  ash::Shell::GetPrimaryRootWindowController()
+  Shell::GetPrimaryRootWindowController()
       ->GetShelfLayoutManager()
       ->UpdateAutoHideState();
   view_ = view;
-  aura::Window* root_window =
-      ShellPort::Get()->GetRootWindowForDisplayId(display_id);
-  aura::Window* container = GetRootWindowController(root_window)
+  aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
+  aura::Window* container = RootWindowController::ForWindow(root_window)
                                 ->GetContainer(kShellWindowId_AppListContainer);
 
-  view->Initialize(container, current_apps_page);
+  view->Initialize(container, current_apps_page,
+                   Shell::Get()
+                       ->tablet_mode_controller()
+                       ->IsTabletModeWindowManagerEnabled(),
+                   IsSideShelf(root_window));
 
-  if (!app_list::features::IsFullscreenAppListEnabled()) {
+  if (!is_fullscreen_app_list_enabled_) {
     view->MaybeSetAnchorPoint(GetCenterOfDisplayForWindow(
-        WmWindow::Get(root_window), GetMinimumBoundsHeightForAppList(view)));
+        root_window, GetMinimumBoundsHeightForAppList(view)));
   }
+  wm::GetWindowState(view->GetWidget()->GetNativeWindow())
+      ->set_ignored_by_shelf(true);
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
   if (keyboard_controller)
     keyboard_controller->AddObserver(this);
   Shell::Get()->AddPreTargetHandler(this);
-  Shelf* shelf = Shelf::ForWindow(root_window);
-  shelf->AddObserver(this);
 
   // By setting us as DnD recipient, the app list knows that we can
   // handle items.
+  Shelf* shelf = Shelf::ForWindow(root_window);
   view->SetDragAndDropHostOfCurrentAppList(
       shelf->shelf_widget()->GetDragAndDropHostForAppList());
 }
 
 void AppListPresenterDelegate::OnShown(int64_t display_id) {
   is_visible_ = true;
-  // Update applist button status when app list visibility is changed.
-  aura::Window* root_window =
-      ShellPort::Get()->GetRootWindowForDisplayId(display_id);
-  AppListButton* app_list_button =
-      Shelf::ForWindow(root_window)->shelf_widget()->GetAppListButton();
-  if (app_list_button)
-    app_list_button->OnAppListShown();
+  aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
+  Shell::Get()->NotifyAppListVisibilityChanged(is_visible_, root_window);
 }
 
 void AppListPresenterDelegate::OnDismissed() {
@@ -136,12 +153,12 @@ void AppListPresenterDelegate::OnDismissed() {
   DCHECK(view_);
 
   is_visible_ = false;
+  aura::Window* root_window = Shell::GetRootWindowForDisplayId(
+      display::Screen::GetScreen()
+          ->GetDisplayNearestWindow(view_->GetWidget()->GetNativeWindow())
+          .id());
 
-  // Update applist button status when app list visibility is changed.
-  Shelf* shelf = Shelf::ForWindow(view_->GetWidget()->GetNativeWindow());
-  AppListButton* app_list_button = shelf->shelf_widget()->GetAppListButton();
-  if (app_list_button)
-    app_list_button->OnAppListDismissed();
+  Shell::Get()->NotifyAppListVisibilityChanged(is_visible_, root_window);
 }
 
 void AppListPresenterDelegate::UpdateBounds() {
@@ -149,20 +166,27 @@ void AppListPresenterDelegate::UpdateBounds() {
     return;
 
   view_->UpdateBounds();
-  view_->MaybeSetAnchorPoint(GetCenterOfDisplayForWindow(
-      WmWindow::Get(view_->GetWidget()->GetNativeWindow()),
-      GetMinimumBoundsHeightForAppList(view_)));
+  view_->MaybeSetAnchorPoint(
+      GetCenterOfDisplayForWindow(view_->GetWidget()->GetNativeWindow(),
+                                  GetMinimumBoundsHeightForAppList(view_)));
 }
 
 gfx::Vector2d AppListPresenterDelegate::GetVisibilityAnimationOffset(
     aura::Window* root_window) {
   DCHECK(Shell::HasInstance());
 
+  Shelf* shelf = Shelf::ForWindow(root_window);
+
   // App list needs to know the new shelf layout in order to calculate its
   // UI layout when AppListView visibility changes.
-  Shelf* shelf = Shelf::ForWindow(root_window);
-  shelf->UpdateAutoHideState();
+  if (is_fullscreen_app_list_enabled_) {
+    int app_list_y = view_->GetBoundsInScreen().y();
+    return gfx::Vector2d(0, IsSideShelf(root_window)
+                                ? 0
+                                : shelf->GetIdealBounds().y() - app_list_y);
+  }
 
+  shelf->UpdateAutoHideState();
   switch (shelf->alignment()) {
     case SHELF_ALIGNMENT_BOTTOM:
     case SHELF_ALIGNMENT_BOTTOM_LOCKED:
@@ -174,6 +198,21 @@ gfx::Vector2d AppListPresenterDelegate::GetVisibilityAnimationOffset(
   }
   NOTREACHED();
   return gfx::Vector2d();
+}
+
+base::TimeDelta AppListPresenterDelegate::GetVisibilityAnimationDuration(
+    aura::Window* root_window,
+    bool is_visible) {
+  if (is_fullscreen_app_list_enabled_) {
+    // If the view is below the shelf, just hide immediately.
+    if (view_->GetBoundsInScreen().y() >
+        Shelf::ForWindow(root_window)->GetIdealBounds().y())
+      return base::TimeDelta::FromMilliseconds(0);
+    return GetAnimationDurationFullscreen(IsSideShelf(root_window),
+                                          view_->is_fullscreen());
+  }
+  return is_visible ? base::TimeDelta::FromMilliseconds(0)
+                    : animation_duration();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -188,7 +227,7 @@ void AppListPresenterDelegate::ProcessLocatedEvent(ui::LocatedEvent* event) {
   aura::Window* target = static_cast<aura::Window*>(event->target());
   if (target) {
     RootWindowController* root_controller =
-        GetRootWindowController(target->GetRootWindow());
+        RootWindowController::ForWindow(target);
     if (root_controller) {
       aura::Window* menu_container =
           root_controller->GetContainer(kShellWindowId_MenuContainer);
@@ -217,7 +256,9 @@ void AppListPresenterDelegate::OnMouseEvent(ui::MouseEvent* event) {
 }
 
 void AppListPresenterDelegate::OnGestureEvent(ui::GestureEvent* event) {
-  if (event->type() == ui::ET_GESTURE_TAP_DOWN)
+  if (event->type() == ui::ET_GESTURE_TAP ||
+      event->type() == ui::ET_GESTURE_TWO_FINGER_TAP ||
+      event->type() == ui::ET_GESTURE_LONG_PRESS)
     ProcessLocatedEvent(event);
 }
 
@@ -239,11 +280,18 @@ void AppListPresenterDelegate::OnOverviewModeStarting() {
     presenter_->Dismiss();
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// AppListPresenterDelegate, ShelfObserver implementation:
+void AppListPresenterDelegate::OnTabletModeStarted() {
+  if (!is_fullscreen_app_list_enabled_)
+    return;
 
-void AppListPresenterDelegate::OnShelfIconPositionsChanged() {
-  UpdateBounds();
+  view_->OnTabletModeChanged(true);
+}
+
+void AppListPresenterDelegate::OnTabletModeEnded() {
+  if (!is_fullscreen_app_list_enabled_)
+    return;
+
+  view_->OnTabletModeChanged(false);
 }
 
 }  // namespace ash

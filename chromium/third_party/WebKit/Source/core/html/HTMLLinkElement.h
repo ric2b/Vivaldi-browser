@@ -44,8 +44,7 @@ class KURL;
 class LinkImport;
 
 class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
-                                          public LinkLoaderClient,
-                                          private DOMTokenListObserver {
+                                          public LinkLoaderClient {
   DEFINE_WRAPPERTYPEINFO();
   USING_GARBAGE_COLLECTED_MIXIN(HTMLLinkElement);
 
@@ -140,6 +139,7 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
       LoadedSheetErrorStatus) override;
   void StartLoadingDynamicSheet() override;
   void FinishParsingChildren() override;
+  bool HasActivationBehavior() const override;
 
   // From LinkLoaderClient
   void LinkLoaded() override;
@@ -149,9 +149,6 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   void DidSendLoadForLinkPrerender() override;
   void DidSendDOMContentLoadedForLinkPrerender() override;
   RefPtr<WebTaskRunner> GetLoadingTaskRunner() override;
-
-  // From DOMTokenListObserver
-  void ValueWasSet() final;
 
   Member<LinkResource> link_;
   Member<LinkLoader> link_loader_;

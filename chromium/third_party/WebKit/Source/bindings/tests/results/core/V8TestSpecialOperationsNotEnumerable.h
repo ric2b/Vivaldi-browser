@@ -40,7 +40,7 @@ class V8TestSpecialOperationsNotEnumerable {
     visitor->Trace(scriptWrappable->ToImpl<TestSpecialOperationsNotEnumerable>());
   }
   static void TraceWrappers(WrapperVisitor* visitor, ScriptWrappable* scriptWrappable) {
-    visitor->TraceWrappers(scriptWrappable->ToImpl<TestSpecialOperationsNotEnumerable>());
+    visitor->TraceWrappersWithManualWriteBarrier(scriptWrappable->ToImpl<TestSpecialOperationsNotEnumerable>());
   }
   static const int internalFieldCount = kV8DefaultWrapperInternalFieldCount + 0;
 
@@ -48,6 +48,14 @@ class V8TestSpecialOperationsNotEnumerable {
 
   CORE_EXPORT static void namedPropertyGetterCallback(v8::Local<v8::Name>, const v8::PropertyCallbackInfo<v8::Value>&);
   CORE_EXPORT static void indexedPropertyGetterCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void indexedPropertySetterCallback(uint32_t index, v8::Local<v8::Value>, const v8::PropertyCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void indexedPropertyDescriptorCallback(uint32_t index, const v8::PropertyCallbackInfo<v8::Value>&);
+  CORE_EXPORT static void indexedPropertyDefinerCallback(uint32_t index, const v8::PropertyDescriptor&, const v8::PropertyCallbackInfo<v8::Value>&);
+
+  static void InstallRuntimeEnabledFeaturesOnTemplate(
+      v8::Isolate*,
+      const DOMWrapperWorld&,
+      v8::Local<v8::FunctionTemplate> interface_template);
 };
 
 template <>

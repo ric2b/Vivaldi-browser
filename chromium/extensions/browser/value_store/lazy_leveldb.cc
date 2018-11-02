@@ -4,10 +4,11 @@
 
 #include "extensions/browser/value_store/lazy_leveldb.h"
 
-#include "base/files/file_util.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_util.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "base/threading/thread_restrictions.h"
 #include "content/public/browser/browser_thread.h"
 #include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/include/leveldb/iterator.h"
@@ -50,7 +51,7 @@ ValueStore::StatusCode LevelDbToValueStoreStatusCode(
 }
 
 leveldb::Status DeleteValue(leveldb::DB* db, const std::string& key) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   leveldb::WriteBatch batch;
   batch.Delete(key);
@@ -86,13 +87,12 @@ LazyLevelDb::LazyLevelDb(const std::string& uma_client_name,
 }
 
 LazyLevelDb::~LazyLevelDb() {
-  if (db_ && !BrowserThread::CurrentlyOn(BrowserThread::FILE))
-    BrowserThread::DeleteSoon(BrowserThread::FILE, FROM_HERE, db_.release());
+  base::ThreadRestrictions::AssertIOAllowed();
 }
 
 ValueStore::Status LazyLevelDb::Read(const std::string& key,
                                      std::unique_ptr<base::Value>* value) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   DCHECK(value);
 
   std::string value_as_json;
@@ -118,7 +118,7 @@ ValueStore::Status LazyLevelDb::Read(const std::string& key,
 }
 
 ValueStore::Status LazyLevelDb::Delete(const std::string& key) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   ValueStore::Status status = EnsureDbIsOpen();
   if (!status.ok())
@@ -154,7 +154,7 @@ ValueStore::BackingStoreRestoreStatus LazyLevelDb::LogRestoreStatus(
 
 ValueStore::BackingStoreRestoreStatus LazyLevelDb::FixCorruption(
     const std::string* key) {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
   leveldb::Status s;
   if (key && db_) {
     s = DeleteValue(db_.get(), *key);
@@ -181,24 +181,21 @@ ValueStore::BackingStoreRestoreStatus LazyLevelDb::FixCorruption(
   // RepairDB can drop an unbounded number of leveldb tables (key/value sets).
   s = leveldb::RepairDB(db_path_.AsUTF8Unsafe(), repair_options);
 
-  leveldb::DB* db = nullptr;
   if (s.ok()) {
     restore_status = ValueStore::DB_RESTORE_REPAIR_SUCCESS;
-    s = leveldb::DB::Open(open_options_, db_path_.AsUTF8Unsafe(), &db);
+    s = leveldb_env::OpenDB(open_options_, db_path_.AsUTF8Unsafe(), &db_);
   }
 
   if (!s.ok()) {
     if (DeleteDbFile()) {
       restore_status = ValueStore::DB_RESTORE_DELETE_SUCCESS;
-      s = leveldb::DB::Open(open_options_, db_path_.AsUTF8Unsafe(), &db);
+      s = leveldb_env::OpenDB(open_options_, db_path_.AsUTF8Unsafe(), &db_);
     } else {
       restore_status = ValueStore::DB_RESTORE_DELETE_FAILURE;
     }
   }
 
-  if (s.ok())
-    db_.reset(db);
-  else
+  if (!s.ok())
     db_unrecoverable_ = true;
 
   if (s.ok() && key) {
@@ -208,7 +205,7 @@ ValueStore::BackingStoreRestoreStatus LazyLevelDb::FixCorruption(
     } else if (s.IsIOError()) {
       restore_status = ValueStore::VALUE_RESTORE_DELETE_FAILURE;
     } else {
-      db_.reset(db);
+      db_.reset();
       if (!DeleteDbFile())
         db_unrecoverable_ = true;
       restore_status = ValueStore::DB_RESTORE_DELETE_FAILURE;
@@ -222,7 +219,7 @@ ValueStore::BackingStoreRestoreStatus LazyLevelDb::FixCorruption(
 }
 
 ValueStore::Status LazyLevelDb::EnsureDbIsOpen() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   if (db_)
     return ValueStore::Status();
@@ -233,14 +230,11 @@ ValueStore::Status LazyLevelDb::EnsureDbIsOpen() {
                               "Database corrupted");
   }
 
-  leveldb::DB* db = nullptr;
   leveldb::Status ldb_status =
-      leveldb::DB::Open(open_options_, db_path_.AsUTF8Unsafe(), &db);
+      leveldb_env::OpenDB(open_options_, db_path_.AsUTF8Unsafe(), &db_);
   open_histogram_->Add(leveldb_env::GetLevelDBStatusUMAValue(ldb_status));
   ValueStore::Status status = ToValueStoreError(ldb_status);
-  if (ldb_status.ok()) {
-    db_.reset(db);
-  } else if (ldb_status.IsCorruption()) {
+  if (ldb_status.IsCorruption()) {
     status.restore_status = FixCorruption(nullptr);
     if (status.restore_status != ValueStore::DB_RESTORE_DELETE_FAILURE) {
       status.code = ValueStore::OK;
@@ -268,10 +262,14 @@ ValueStore::Status LazyLevelDb::ToValueStoreError(
 }
 
 bool LazyLevelDb::DeleteDbFile() {
-  DCHECK_CURRENTLY_ON(BrowserThread::FILE);
-  db_.reset();  // release any lock on the directory
-  if (!base::DeleteFile(db_path_, true /* recursive */)) {
-    LOG(WARNING) << "Failed to delete leveldb database at " << db_path_.value();
+  base::ThreadRestrictions::AssertIOAllowed();
+  db_.reset();  // Close the database.
+
+  leveldb::Status s =
+      leveldb::DestroyDB(db_path_.AsUTF8Unsafe(), leveldb::Options());
+  if (!s.ok()) {
+    LOG(WARNING) << "Failed to destroy leveldb database at "
+                 << db_path_.value();
     return false;
   }
   return true;

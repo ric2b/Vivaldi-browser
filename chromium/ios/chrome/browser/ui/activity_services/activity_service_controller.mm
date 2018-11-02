@@ -40,7 +40,8 @@
 - (NSArray*)activityItemsForData:(ShareToData*)data;
 // Returns an array of UIActivity objects that can handle the given |data|.
 - (NSArray*)applicationActivitiesForData:(ShareToData*)data
-                              controller:(UIViewController*)controller;
+                              controller:(UIViewController*)controller
+                              dispatcher:(id<BrowserCommands>)dispatcher;
 // Processes |extensionItems| returned from App Extension invocation returning
 // the |activityType|. Calls shareDelegate_ with the processed returned items
 // and |result| of activity. Returns whether caller should reset UI.
@@ -91,6 +92,7 @@
 - (void)shareWithData:(ShareToData*)data
            controller:(UIViewController*)controller
          browserState:(ios::ChromeBrowserState*)browserState
+           dispatcher:(id<BrowserCommands>)dispatcher
       shareToDelegate:(id<ShareToDelegate>)delegate
              fromRect:(CGRect)fromRect
                inView:(UIView*)inView {
@@ -109,11 +111,12 @@
   activityViewController_ = [[UIActivityViewController alloc]
       initWithActivityItems:[self activityItemsForData:data]
       applicationActivities:[self applicationActivitiesForData:data
-                                                    controller:controller]];
+                                                    controller:controller
+                                                    dispatcher:dispatcher]];
 
   // Reading List and Print activities refer to iOS' version of these.
   // Chrome-specific implementations of these two activities are provided below
-  // in applicationActivitiesForData:controller:
+  // in applicationActivitiesForData:controller:dispatcher:
   NSArray* excludedActivityTypes = @[
     UIActivityTypeAddToReadingList, UIActivityTypePrint,
     UIActivityTypeSaveToCameraRoll
@@ -211,18 +214,19 @@
 }
 
 - (NSArray*)applicationActivitiesForData:(ShareToData*)data
-                              controller:(UIViewController*)controller {
+                              controller:(UIViewController*)controller
+                              dispatcher:(id<BrowserCommands>)dispatcher {
   NSMutableArray* applicationActivities = [NSMutableArray array];
   if (data.isPagePrintable) {
     PrintActivity* printActivity = [[PrintActivity alloc] init];
-    [printActivity setResponder:controller];
+    printActivity.dispatcher = dispatcher;
     [applicationActivities addObject:printActivity];
   }
   if (data.url.SchemeIsHTTPOrHTTPS()) {
     ReadingListActivity* readingListActivity =
         [[ReadingListActivity alloc] initWithURL:data.url
                                            title:data.title
-                                       responder:controller];
+                                      dispatcher:dispatcher];
     [applicationActivities addObject:readingListActivity];
   }
   return applicationActivities;
@@ -276,13 +280,21 @@
       activity_type_util::RecordMetricForActivity(type);
       message = activity_type_util::CompletionMessageForActivity(type);
     }
-    [shareToDelegate_ passwordAppExDidFinish:activityResult
-                                    username:username
-                                    password:password
-                           completionMessage:message];
-    // Controller state can be reset only after delegate has processed the
-    // item returned from the App Extension.
-    [self resetUserInterface];
+    // Password autofill uses JavaScript injection which must be executed on
+    // the main thread, however,
+    // loadItemForTypeIdentifier:options:completionHandler: documentation states
+    // that completion block "may  be executed on a background thread", so the
+    // code to do password filling must be re-dispatched back to main thread.
+    // Completion block intentionally retains |self|.
+    dispatch_async(dispatch_get_main_queue(), ^{
+      [shareToDelegate_ passwordAppExDidFinish:activityResult
+                                      username:username
+                                      password:password
+                             completionMessage:message];
+      // Controller state can be reset only after delegate has
+      // processed the item returned from the App Extension.
+      [self resetUserInterface];
+    });
   };
   [itemProvider loadItemForTypeIdentifier:(NSString*)kUTTypePropertyList
                                   options:nil

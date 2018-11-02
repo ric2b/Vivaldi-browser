@@ -18,20 +18,20 @@
 #include "build/build_config.h"
 #include "cc/resources/returned_resource.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "cc/surfaces/compositor_frame_sink_support_client.h"
-#include "cc/surfaces/surface_info.h"
-#include "cc/surfaces/surface_sequence.h"
+#include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/common/surfaces/surface_sequence.h"
+#include "components/viz/service/frame_sinks/compositor_frame_sink_support_client.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
-#include "content/browser/renderer_host/input/touch_selection_controller_client_manager.h"
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/content_export.h"
 #include "content/common/input/input_event_ack_state.h"
 #include "content/public/browser/readback_types.h"
+#include "content/public/browser/touch_selection_controller_client_manager.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 
-namespace cc {
+namespace viz {
 class CompositorFrameSinkSupport;
 class CopyOutputResult;
 }  // namespace cc
@@ -55,7 +55,7 @@ class TouchSelectionControllerClientChildFrame;
 class CONTENT_EXPORT RenderWidgetHostViewChildFrame
     : public RenderWidgetHostViewBase,
       public TouchSelectionControllerClientManager::Observer,
-      public NON_EXPORTED_BASE(cc::CompositorFrameSinkSupportClient) {
+      public NON_EXPORTED_BASE(viz::CompositorFrameSinkSupportClient) {
  public:
   static RenderWidgetHostViewChildFrame* Create(RenderWidgetHost* widget);
   ~RenderWidgetHostViewChildFrame() override;
@@ -116,12 +116,12 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void GestureEventAck(const blink::WebGestureEvent& event,
                        InputEventAckState ack_result) override;
   void DidCreateNewRendererCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink)
+      cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink)
       override;
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void OnDidNotProduceFrame(const cc::BeginFrameAck& ack) override;
-  void OnSurfaceChanged(const cc::SurfaceInfo& surface_info) override;
+  void OnSurfaceChanged(const viz::SurfaceInfo& surface_info) override;
   // Since the URL of content rendered by this class is not displayed in
   // the URL bar, this method does not need an implementation.
   void ClearCompositorFrame() override {}
@@ -130,7 +130,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                               InputEventAckState ack_result) override;
   bool LockMouse() override;
   void UnlockMouse() override;
-  cc::FrameSinkId GetFrameSinkId() override;
+  viz::FrameSinkId GetFrameSinkId() override;
   void ProcessKeyboardEvent(const NativeWebKeyboardEvent& event,
                             const ui::LatencyInfo& latency) override;
   void ProcessMouseEvent(const blink::WebMouseEvent& event,
@@ -143,7 +143,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
                            const ui::LatencyInfo& latency) override;
   gfx::Point TransformPointToRootCoordSpace(const gfx::Point& point) override;
   bool TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       const cc::SurfaceId& original_surface,
+                                       const viz::SurfaceId& original_surface,
                                        gfx::Point* transformed_point) override;
   bool TransformPointToCoordSpaceForView(
       const gfx::Point& point,
@@ -167,21 +167,24 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
   InputEventAckState FilterInputEvent(
       const blink::WebInputEvent& input_event) override;
-  void OnSetNeedsFlushInput() override;
+  InputEventAckState FilterChildGestureEvent(
+      const blink::WebGestureEvent& gesture_event) override;
   BrowserAccessibilityManager* CreateBrowserAccessibilityManager(
       BrowserAccessibilityDelegate* delegate, bool for_root_frame) override;
 
-  // cc::CompositorFrameSinkSupportClient implementation.
+  // viz::CompositorFrameSinkSupportClient implementation.
   void DidReceiveCompositorFrameAck(
-      const cc::ReturnedResourceArray& resources) override;
+      const std::vector<cc::ReturnedResource>& resources) override;
   void OnBeginFrame(const cc::BeginFrameArgs& args) override;
-  void ReclaimResources(const cc::ReturnedResourceArray& resources) override;
-  void WillDrawSurface(const cc::LocalSurfaceId& id,
+  void ReclaimResources(
+      const std::vector<cc::ReturnedResource>& resources) override;
+  void WillDrawSurface(const viz::LocalSurfaceId& id,
                        const gfx::Rect& damage_rect) override {}
+  void OnBeginFramePausedChanged(bool paused) override;
 
   // Exposed for tests.
   bool IsChildFrameForTesting() const override;
-  cc::SurfaceId SurfaceIdForTesting() const override;
+  viz::SurfaceId SurfaceIdForTesting() const override;
   CrossProcessFrameConnector* FrameConnectorForTesting() const {
     return frame_connector_;
   }
@@ -198,6 +201,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   void UnregisterFrameSinkId();
 
   void UpdateViewportIntersection(const gfx::Rect& viewport_intersection);
+
+  void SetIsInert();
 
   bool has_frame() { return has_frame_; }
 
@@ -217,7 +222,7 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   explicit RenderWidgetHostViewChildFrame(RenderWidgetHost* widget);
   void Init();
 
-  void ProcessCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void ProcessCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                               cc::CompositorFrame frame);
 
   void SendSurfaceInfoToEmbedder();
@@ -235,11 +240,11 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   RenderWidgetHostImpl* host_;
 
   // The ID for FrameSink associated with this view.
-  cc::FrameSinkId frame_sink_id_;
+  viz::FrameSinkId frame_sink_id_;
 
   // Surface-related state.
-  std::unique_ptr<cc::CompositorFrameSinkSupport> support_;
-  cc::LocalSurfaceId local_surface_id_;
+  std::unique_ptr<viz::CompositorFrameSinkSupport> support_;
+  viz::LocalSurfaceId local_surface_id_;
   uint32_t next_surface_sequence_;
   gfx::Size current_surface_size_;
   float current_surface_scale_factor_;
@@ -257,8 +262,8 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
 
  private:
   virtual void SendSurfaceInfoToEmbedderImpl(
-      const cc::SurfaceInfo& surface_info,
-      const cc::SurfaceSequence& sequence);
+      const viz::SurfaceInfo& surface_info,
+      const viz::SurfaceSequence& sequence);
 
   void SubmitSurfaceCopyRequest(const gfx::Rect& src_subrect,
                                 const gfx::Size& dst_size,
@@ -277,10 +282,10 @@ class CONTENT_EXPORT RenderWidgetHostViewChildFrame
   FrameSwappedCallbackList frame_swapped_callbacks_;
 
   // The surface client ID of the parent RenderWidgetHostView.  0 if none.
-  cc::FrameSinkId parent_frame_sink_id_;
+  viz::FrameSinkId parent_frame_sink_id_;
 
   bool has_frame_ = false;
-  cc::mojom::MojoCompositorFrameSinkClient* renderer_compositor_frame_sink_ =
+  cc::mojom::CompositorFrameSinkClient* renderer_compositor_frame_sink_ =
       nullptr;
 
   // The background color of the widget.

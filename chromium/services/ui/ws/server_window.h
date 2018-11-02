@@ -14,9 +14,10 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/observer_list.h"
+#include "cc/ipc/compositor_frame_sink.mojom.h"
 #include "cc/ipc/frame_sink_manager.mojom.h"
-#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
 #include "mojo/public/cpp/bindings/binding.h"
+#include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 #include "services/ui/ws/ids.h"
 #include "ui/gfx/geometry/insets.h"
@@ -62,19 +63,19 @@ class ServerWindow {
   // existing.
   void CreateRootCompositorFrameSink(
       gfx::AcceleratedWidget widget,
-      cc::mojom::MojoCompositorFrameSinkAssociatedRequest sink_request,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client,
+      cc::mojom::CompositorFrameSinkAssociatedRequest sink_request,
+      cc::mojom::CompositorFrameSinkClientPtr client,
       cc::mojom::DisplayPrivateAssociatedRequest display_request);
 
   void CreateCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkRequest request,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client);
+      cc::mojom::CompositorFrameSinkRequest request,
+      cc::mojom::CompositorFrameSinkClientPtr client);
 
   const WindowId& id() const { return id_; }
 
-  const cc::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
+  const viz::FrameSinkId& frame_sink_id() const { return frame_sink_id_; }
 
-  const base::Optional<cc::LocalSurfaceId>& current_local_surface_id() const {
+  const base::Optional<viz::LocalSurfaceId>& current_local_surface_id() const {
     return current_local_surface_id_;
   }
 
@@ -88,7 +89,7 @@ class ServerWindow {
   // Sets the bounds. If the size changes this implicitly resets the client
   // area to fill the whole bounds.
   void SetBounds(const gfx::Rect& bounds,
-                 const base::Optional<cc::LocalSurfaceId>& local_surface_id =
+                 const base::Optional<viz::LocalSurfaceId>& local_surface_id =
                      base::nullopt);
 
   const std::vector<gfx::Rect>& additional_client_areas() const {
@@ -181,11 +182,19 @@ class ServerWindow {
   // visible.
   bool IsDrawn() const;
 
-  const gfx::Insets& extended_hit_test_region() const {
-    return extended_hit_test_region_;
+  mojom::ShowState GetShowState() const;
+
+  const gfx::Insets& extended_mouse_hit_test_region() const {
+    return extended_mouse_hit_test_region_;
   }
-  void set_extended_hit_test_region(const gfx::Insets& insets) {
-    extended_hit_test_region_ = insets;
+  const gfx::Insets& extended_touch_hit_test_region() const {
+    return extended_touch_hit_test_region_;
+  }
+  void set_extended_hit_test_regions_for_children(
+      const gfx::Insets& mouse_insets,
+      const gfx::Insets& touch_insets) {
+    extended_mouse_hit_test_region_ = mouse_insets;
+    extended_touch_hit_test_region_ = touch_insets;
   }
 
   ServerWindowCompositorFrameSinkManager*
@@ -230,8 +239,8 @@ class ServerWindow {
 
   ServerWindowDelegate* delegate_;
   const WindowId id_;
-  cc::FrameSinkId frame_sink_id_;
-  base::Optional<cc::LocalSurfaceId> current_local_surface_id_;
+  viz::FrameSinkId frame_sink_id_;
+  base::Optional<viz::LocalSurfaceId> current_local_surface_id_;
 
   ServerWindow* parent_;
   Windows children_;
@@ -265,7 +274,8 @@ class ServerWindow {
 
   // The hit test for windows extends outside the bounds of the window by this
   // amount.
-  gfx::Insets extended_hit_test_region_;
+  gfx::Insets extended_mouse_hit_test_region_;
+  gfx::Insets extended_touch_hit_test_region_;
 
   // Mouse events outside the hit test mask don't hit the window. An empty mask
   // means all events miss the window. If null there is no mask.

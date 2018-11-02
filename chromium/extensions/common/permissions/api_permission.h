@@ -138,7 +138,7 @@ class APIPermission {
     kDeleted_InterceptAllKeys,
     kLauncherSearchProvider,
     kLocation,
-    kLogPrivate,
+    kDeleted_LogPrivate,
     kManagement,
     kMediaGalleries,
     kMediaPlayerPrivate,
@@ -246,6 +246,8 @@ class APIPermission {
     kVirtualKeyboard,
     kNetworkingCastPrivate,
     kMediaPerceptionPrivate,
+    kLockScreen,
+    kNewTabPageOverride,
 
     // vivaldi permissions
 

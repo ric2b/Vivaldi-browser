@@ -4,7 +4,7 @@
 
 #include "core/layout/LayoutObject.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "platform/json/JSONValues.h"
@@ -202,7 +202,6 @@ TEST_F(LayoutObjectTest, MutableForPaintingClearPaintFlags) {
   object->bitfields_.SetDescendantNeedsPaintPropertyUpdate(true);
   EXPECT_TRUE(object->DescendantNeedsPaintPropertyUpdate());
 
-  ScopedSlimmingPaintInvalidationForTest enable_sp_invalidation(true);
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInPrePaint);
   object->GetMutableForPainting().ClearPaintFlags();
 
@@ -223,7 +222,6 @@ TEST_F(LayoutObjectTest, SubtreeNeedsPaintPropertyUpdate) {
   EXPECT_TRUE(object->NeedsPaintPropertyUpdate());
   EXPECT_TRUE(object->Parent()->DescendantNeedsPaintPropertyUpdate());
 
-  ScopedSlimmingPaintInvalidationForTest enable_sp_invalidation(true);
   GetDocument().Lifecycle().AdvanceTo(DocumentLifecycle::kInPrePaint);
   object->GetMutableForPainting().ClearPaintFlags();
 

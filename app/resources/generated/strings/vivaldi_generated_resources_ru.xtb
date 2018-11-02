@@ -36,7 +36,7 @@
 <translation id="1580652505892042215">Контекст:</translation>
 <translation id="1588438908519853928">Обычный</translation>
 <translation id="1588870296199743671">Открыть ссылку в...</translation>
-<translation id="159359590073980872">Кеш изображений</translation>
+<translation id="159359590073980872">Кэш изображений</translation>
 <translation id="1601560923496285236">Применить</translation>
 <translation id="1603914832182249871">(Приватный)</translation>
 <translation id="1616206807336925449">Расширению не требуются особые разрешения.</translation>
@@ -114,7 +114,7 @@
 <translation id="2678063897982469759">Включить снова</translation>
 <translation id="2679385451463308372">Печать используя системное диалоговое окно…</translation>
 <translation id="2680208403056680091">Расширение изменило настройки прокси</translation>
-<translation id="2721037002783622288">Найти картинку на (<ph name="SEARCH_ENGINE" />)</translation>
+<translation id="2721037002783622288">Найти картинку в сети (<ph name="SEARCH_ENGINE" />)</translation>
 <translation id="2726934403674109201">(всего: <ph name="COUNT" />)</translation>
 <translation id="2785873697295365461">Дескрипторы файлов</translation>
 <translation id="2809586584051668049">и ещё <ph name="NUMBER_ADDITIONAL_DISABLED" /></translation>
@@ -133,7 +133,7 @@
 <translation id="2971033837577180453">&lt;span&gt;ID:&lt;/span&gt; <ph name="EXTENSION_ID" /></translation>
 <translation id="2972581237482394796">Повторить</translation>
 <translation id="299483336428448530">Установлено родителями.</translation>
-<translation id="3003623123441819449">Кеш CSS</translation>
+<translation id="3003623123441819449">Кэш CSS</translation>
 <translation id="3012631534724231212">(фрейм)</translation>
 <translation id="3021678814754966447">Просмотр кода фрейма</translation>
 <translation id="302620147503052030">Показать кнопку</translation>
@@ -207,7 +207,7 @@
 <translation id="3927932062596804919">Запретить</translation>
 <translation id="3936390757709632190">Открыть аудио в новой вкладке</translation>
 <translation id="3943582379552582368">Назад</translation>
-<translation id="3948116654032448504">Найти картинку на <ph name="SEARCH_ENGINE" /></translation>
+<translation id="3948116654032448504">Найти картинку в сети <ph name="SEARCH_ENGINE" /></translation>
 <translation id="3978267865113951599">(Прерван)</translation>
 <translation id="3979395879372752341">Добавлено новое расширение (<ph name="EXTENSION_NAME" />)</translation>
 <translation id="4021279097213088397">–</translation>
@@ -300,7 +300,7 @@
 <translation id="5311260548612583999">Файл закрытого ключа (опционально):</translation>
 <translation id="5317780077021120954">Сохранить</translation>
 <translation id="5329858601952122676">Удалить</translation>
-<translation id="5334142896108694079">Кеш скрипта</translation>
+<translation id="5334142896108694079">Кэш скрипта</translation>
 <translation id="5355926466126177564">Расширение "<ph name="EXTENSION_NAME" />" изменило поисковую систему по умолчанию в поле поиска.</translation>
 <translation id="5360150013186312835">Показать на панели</translation>
 <translation id="5362741141255528695">Выберите файл закрытого ключа.</translation>
@@ -353,7 +353,7 @@
 <translation id="6122081475643980456">Расширение изменило настройки прокси</translation>
 <translation id="6124650939968185064">От этого расширения зависят следующие:</translation>
 <translation id="6147020289383635445">Произошла ошибка предварительного просмотра печати.</translation>
-<translation id="6156863943908443225">Кеш скрипта</translation>
+<translation id="6156863943908443225">Кэш скрипта</translation>
 <translation id="6169666352732958425">Не удается транслировать рабочий стол.</translation>
 <translation id="6171948306033499786">Приостановить</translation>
 <translation id="6196854373336333322">Расширение "<ph name="EXTENSION_NAME" />" изменило настройки прокси. Теперь оно может отследить или изменить передаваемые вами данные, а также прервать интернет-соединение. Если вы не знали об этом, вам следует отключить расширение.</translation>
@@ -391,7 +391,6 @@
 <translation id="6639554308659482635">Память SQLite</translation>
 <translation id="6655190889273724601">Сборка для разработчиков</translation>
 <translation id="6691936601825168937">Вперёд</translation>
-<translation id="6700480081846086223">Трансляция <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Применение</translation>
 <translation id="6786747875388722282">Расширения</translation>
 <translation id="6787839852456839824">Быстрые клавиши</translation>
@@ -515,13 +514,13 @@
 <translation id="8512476990829870887">Завершить процесс</translation>
 <translation id="8523493869875972733">Сохранить изменения</translation>
 <translation id="8523849605371521713">Добавлено следуя корпоративной политике</translation>
-<translation id="8546306075665861288">Кеш изображений</translation>
+<translation id="8546306075665861288">Кэш изображений</translation>
 <translation id="8569682776816196752">Места назначения не найдены</translation>
 <translation id="8584280235376696778">Открыть видео на новой вкладке</translation>
 <translation id="8605428685123651449">Память SQLite</translation>
 <translation id="8615618338313291042">Приложение в приватном режиме: <ph name="APP_NAME" /></translation>
 <translation id="8627151598708688654">Выбор источника</translation>
-<translation id="862750493060684461">Кеш CSS</translation>
+<translation id="862750493060684461">Кэш CSS</translation>
 <translation id="8652487083013326477">переключатель диапазона страниц</translation>
 <translation id="8658595122208653918">Изменить настройки принтера...</translation>
 <translation id="8661290697478713397">Открыть ссылку в приватном окне</translation>

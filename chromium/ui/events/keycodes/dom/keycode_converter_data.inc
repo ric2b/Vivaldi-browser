@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This file has no header guard because it is explicily intended
+// This file has no header guard because it is explicitly intended
 // to be included more than once with different definitions of the
 // macros USB_KEYMAP and USB_KEYMAP_DECLARATION.
 
@@ -97,6 +97,9 @@ USB_KEYMAP_DECLARATION {
   USB_KEYMAP(0x000014, 0x0000, 0x0000, 0x0000, 0xffff, "Suspend", SUSPEND),
   USB_KEYMAP(0x000015, 0x0000, 0x0000, 0x0000, 0xffff, "Resume", RESUME),
   USB_KEYMAP(0x000016, 0x0000, 0x0000, 0x0000, 0xffff, "Turbo", TURBO),
+  // AL Context-aware desktop assistant, not in HID specification (yet?)
+  USB_KEYMAP(0x000017, 0x0247, 0x024f, 0x0000, 0xffff, "LaunchAssistant",
+             LAUNCH_ASSISTANT),
 
   // =========================================
   // USB Usage Page 0x01: Generic Desktop Page
@@ -519,7 +522,8 @@ USB_KEYMAP_DECLARATION {
   // USB#0x0c019e: AL Terminal Lock/Screensaver
   USB_KEYMAP(0x0c019e, 0x0098, 0x00a0, 0x0000, 0xffff, NULL, LOCK_SCREEN),
   // USB#0x0c019f AL Control Panel
-  USB_KEYMAP(0x0c019f, 0x0243, 0x024b, 0x0000, 0xffff, NULL, LAUNCH_CONTROL_PANEL),
+  USB_KEYMAP(0x0c019f, 0x0243, 0x024b, 0x0000, 0xffff, "LaunchControlPanel",
+             LAUNCH_CONTROL_PANEL),
   // USB#0x0c01a2: AL Select Task/Application
   USB_KEYMAP(0x0c01a2, 0x0244, 0x024c, 0x0000, 0xffff, "SelectTask", SELECT_TASK),
   // USB#0x0c01a7: AL_Documents

@@ -5,7 +5,7 @@
 #ifndef MediaControlVolumeSliderElement_h
 #define MediaControlVolumeSliderElement_h
 
-#include "core/html/shadow/MediaControlElementTypes.h"
+#include "modules/media_controls/elements/MediaControlInputElement.h"
 
 namespace blink {
 
@@ -22,6 +22,11 @@ class MediaControlVolumeSliderElement final : public MediaControlInputElement {
   // MediaControlInputElement overrides.
   bool WillRespondToMouseMoveEvents() override;
   bool WillRespondToMouseClickEvents() override;
+
+  void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(event); }
+
+ protected:
+  const char* GetNameForHistograms() const override;
 
  private:
   void DefaultEventHandler(Event*) override;

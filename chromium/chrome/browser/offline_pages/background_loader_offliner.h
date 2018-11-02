@@ -9,6 +9,7 @@
 
 #include "base/memory/weak_ptr.h"
 #include "base/values.h"
+#include "chrome/browser/offline_pages/resource_loading_observer.h"
 #include "components/offline_pages/content/background_loader/background_loader_contents.h"
 #include "components/offline_pages/core/background/load_termination_listener.h"
 #include "components/offline_pages/core/background/offliner.h"
@@ -25,12 +26,20 @@ namespace offline_pages {
 class OfflinerPolicy;
 class OfflinePageModel;
 
+struct RequestStats {
+  int requested;
+  int completed;
+
+  RequestStats() : requested(0), completed(0) {}
+};
+
 // An Offliner implementation that attempts client-side rendering and saving
 // of an offline page. It uses the BackgroundLoader to load the page and the
 // OfflinePageModel to save it. Only one request may be active at a time.
 class BackgroundLoaderOffliner : public Offliner,
                                  public content::WebContentsObserver,
-                                 public SnapshotController::Client {
+                                 public SnapshotController::Client,
+                                 public ResourceLoadingObserver {
  public:
   BackgroundLoaderOffliner(
       content::BrowserContext* browser_context,
@@ -63,7 +72,11 @@ class BackgroundLoaderOffliner : public Offliner,
 
   void SetSnapshotControllerForTest(
       std::unique_ptr<SnapshotController> controller);
-  void OnNetworkBytesChanged(int64_t bytes);
+
+  // ResourceLoadingObserver implemenation
+  void ObserveResourceLoading(ResourceLoadingObserver::ResourceDataType type,
+                              bool started) override;
+  void OnNetworkBytesChanged(int64_t bytes) override;
 
  protected:
   // Called to reset the loader.
@@ -71,9 +84,10 @@ class BackgroundLoaderOffliner : public Offliner,
 
  private:
   friend class TestBackgroundLoaderOffliner;
+  friend class BackgroundLoaderOfflinerTest;
 
   enum SaveState { NONE, SAVING, DELETE_AFTER_SAVE };
-  enum PageLoadState { SUCCESS, RETRIABLE, NONRETRIABLE, DELAY_RETRY };
+  enum PageLoadState { SUCCESS, RETRIABLE, NONRETRIABLE };
 
   // Called when the page has been saved.
   void OnPageSaved(SavePageResult save_result, int64_t offline_id);
@@ -92,6 +106,9 @@ class BackgroundLoaderOffliner : public Offliner,
 
   void DeleteOfflinePageCallback(const SavePageRequest& request,
                                  DeletePageResult result);
+
+  // Testing method to examine resource stats.
+  RequestStats* GetRequestStatsForTest() { return stats_; }
 
   std::unique_ptr<background_loader::BackgroundLoaderContents> loader_;
   // Not owned.
@@ -134,6 +151,9 @@ class BackgroundLoaderOffliner : public Offliner,
 
   // Callback for cancel.
   CancelCallback cancel_callback_;
+
+  // Holds stats for resource request status for resource types we track.
+  RequestStats stats_[ResourceDataType::RESOURCE_DATA_TYPE_COUNT];
 
   base::WeakPtrFactory<BackgroundLoaderOffliner> weak_ptr_factory_;
   DISALLOW_COPY_AND_ASSIGN(BackgroundLoaderOffliner);

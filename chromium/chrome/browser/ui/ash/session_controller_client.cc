@@ -11,30 +11,38 @@
 #include "ash/public/interfaces/constants.mojom.h"
 #include "base/bind.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/chromeos/login/ui/user_adding_screen.h"
 #include "chrome/browser/chromeos/login/user_flow.h"
 #include "chrome/browser/chromeos/login/users/chrome_user_manager.h"
 #include "chrome/browser/chromeos/login/users/multi_profile_user_controller.h"
+#include "chrome/browser/chromeos/profiles/multiprofiles_intro_dialog.h"
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/supervised_user/supervised_user_service.h"
 #include "chrome/browser/supervised_user/supervised_user_service_factory.h"
+#include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/multi_user/user_switch_util.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/grit/theme_resources.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "components/prefs/pref_change_registrar.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
+#include "components/user_manager/user_type.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/service_names.mojom.h"
 #include "mojo/public/cpp/bindings/equals_traits.h"
 #include "services/service_manager/public/cpp/connector.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/chromeos/resources/grit/ui_chromeos_resources.h"
 #include "ui/gfx/image/image_skia.h"
 
 using session_manager::Session;
@@ -45,6 +53,12 @@ using user_manager::User;
 using user_manager::UserList;
 
 namespace {
+
+// The minimum session length limit that can be set.
+const int kSessionLengthLimitMinMs = 30 * 1000;  // 30 seconds.
+
+// The maximum session length limit that can be set.
+const int kSessionLengthLimitMaxMs = 24 * 60 * 60 * 1000;  // 24 hours.
 
 SessionControllerClient* g_instance = nullptr;
 
@@ -67,20 +81,24 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
     return nullptr;
 
   ash::mojom::UserSessionPtr session = ash::mojom::UserSession::New();
+  Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(&user);
   session->session_id = user_session_id;
-  session->type = user.GetType();
-  session->account_id = user.GetAccountId();
-  session->display_name = base::UTF16ToUTF8(user.display_name());
-  session->display_email = user.display_email();
+  session->user_info = ash::mojom::UserInfo::New();
+  session->user_info->type = user.GetType();
+  session->user_info->account_id = user.GetAccountId();
+  session->user_info->display_name = base::UTF16ToUTF8(user.display_name());
+  session->user_info->display_email = user.display_email();
+  if (profile)
+    session->user_info->is_new_profile = profile->IsNewProfile();
 
-  session->avatar = user.GetImage();
-  if (session->avatar.isNull()) {
-    session->avatar = *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
-        IDR_PROFILE_PICTURE_LOADING);
+  session->user_info->avatar = user.GetImage();
+  if (session->user_info->avatar.isNull()) {
+    session->user_info->avatar =
+        *ResourceBundle::GetSharedInstance().GetImageSkiaNamed(
+            IDR_LOGIN_DEFAULT_USER);
   }
 
   if (user.IsSupervised()) {
-    Profile* profile = chromeos::ProfileHelper::Get()->GetProfileByUser(&user);
     if (profile) {
       SupervisedUserService* service =
           SupervisedUserServiceFactory::GetForProfile(profile);
@@ -101,6 +119,14 @@ ash::mojom::UserSessionPtr UserToUserSession(const User& user) {
 
 void DoSwitchUser(const AccountId& account_id) {
   UserManager::Get()->SwitchActiveUser(account_id);
+}
+
+// Callback for the dialog that warns the user about multi-profile, which has
+// a "never show again" checkbox.
+void OnAcceptMultiProfileIntro(bool never_show_again) {
+  PrefService* prefs = ProfileManager::GetActiveUserProfile()->GetPrefs();
+  prefs->SetBoolean(prefs::kMultiProfileNeverShowIntro, never_show_again);
+  chromeos::UserAddingScreen::Get()->Start();
 }
 
 }  // namespace
@@ -130,6 +156,17 @@ SessionControllerClient::SessionControllerClient()
   registrar_.Add(this, chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED,
                  content::NotificationService::AllSources());
 
+  local_state_registrar_ = base::MakeUnique<PrefChangeRegistrar>();
+  local_state_registrar_->Init(g_browser_process->local_state());
+  local_state_registrar_->Add(
+      prefs::kSessionStartTime,
+      base::Bind(&SessionControllerClient::SendSessionLengthLimit,
+                 base::Unretained(this)));
+  local_state_registrar_->Add(
+      prefs::kSessionLengthLimit,
+      base::Bind(&SessionControllerClient::SendSessionLengthLimit,
+                 base::Unretained(this)));
+
   DCHECK(!g_instance);
   g_instance = this;
 }
@@ -150,8 +187,11 @@ SessionControllerClient::~SessionControllerClient() {
 
 void SessionControllerClient::Init() {
   ConnectToSessionController();
-  session_controller_->SetClient(binding_.CreateInterfacePtrAndBind());
+  ash::mojom::SessionControllerClientPtr client;
+  binding_.Bind(mojo::MakeRequest(&client));
+  session_controller_->SetClient(std::move(client));
   SendSessionInfoIfChanged();
+  SendSessionLengthLimit();
   // User sessions and their order will be sent via UserSessionStateObserver
   // even for crash-n-restart.
 }
@@ -159,6 +199,10 @@ void SessionControllerClient::Init() {
 // static
 SessionControllerClient* SessionControllerClient::Get() {
   return g_instance;
+}
+
+void SessionControllerClient::PrepareForLock(base::OnceClosure callback) {
+  session_controller_->PrepareForLock(std::move(callback));
 }
 
 void SessionControllerClient::StartLock(StartLockCallback callback) {
@@ -185,6 +229,67 @@ void SessionControllerClient::SwitchActiveUser(const AccountId& account_id) {
 void SessionControllerClient::CycleActiveUser(
     ash::CycleUserDirection direction) {
   DoCycleActiveUser(direction);
+}
+
+void SessionControllerClient::ShowMultiProfileLogin() {
+  if (!IsMultiProfileEnabled())
+    return;
+
+  // Only regular non-supervised users could add other users to current session.
+  if (UserManager::Get()->GetActiveUser()->GetType() !=
+      user_manager::USER_TYPE_REGULAR) {
+    return;
+  }
+
+  if (UserManager::Get()->GetLoggedInUsers().size() >=
+      session_manager::kMaxmiumNumberOfUserSessions) {
+    return;
+  }
+
+  // Launch sign in screen to add another user to current session.
+  if (!UserManager::Get()->GetUsersAllowedForMultiProfile().empty()) {
+    // Don't show the dialog if any logged-in user in the multi-profile session
+    // dismissed it.
+    bool show_intro = true;
+    const user_manager::UserList logged_in_users =
+        UserManager::Get()->GetLoggedInUsers();
+    for (User* user : logged_in_users) {
+      show_intro &=
+          !multi_user_util::GetProfileFromAccountId(user->GetAccountId())
+               ->GetPrefs()
+               ->GetBoolean(prefs::kMultiProfileNeverShowIntro);
+      if (!show_intro)
+        break;
+    }
+    if (show_intro) {
+      base::Callback<void(bool)> on_accept =
+          base::Bind(&OnAcceptMultiProfileIntro);
+      chromeos::ShowMultiprofilesIntroDialog(on_accept);
+    } else {
+      chromeos::UserAddingScreen::Get()->Start();
+    }
+  }
+}
+
+// static
+bool SessionControllerClient::IsMultiProfileEnabled() {
+  if (!profiles::IsMultipleProfilesEnabled() || !UserManager::IsInitialized())
+    return false;
+  size_t admitted_users_to_be_added =
+      UserManager::Get()->GetUsersAllowedForMultiProfile().size();
+  size_t logged_in_users = UserManager::Get()->GetLoggedInUsers().size();
+  if (logged_in_users == 0) {
+    // The shelf gets created on the login screen and as such we have to create
+    // all multi profile items of the the system tray menu before the user logs
+    // in. For special cases like Kiosk mode and / or guest mode this isn't a
+    // problem since either the browser gets restarted and / or the flag is not
+    // allowed, but for an "ephermal" user (see crbug.com/312324) it is not
+    // decided yet if they could add other users to their session or not.
+    // TODO(skuhne): As soon as the issue above needs to be resolved, this logic
+    // should change.
+    logged_in_users = 1;
+  }
+  return (admitted_users_to_be_added + logged_in_users) > 1;
 }
 
 void SessionControllerClient::ActiveUserChanged(const User* active_user) {
@@ -393,8 +498,9 @@ void SessionControllerClient::OnLoginUserProfilePrepared(Profile* profile) {
   // Needed because the user-to-profile mapping isn't available until later,
   // which is needed in UserToUserSession().
   base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&SessionControllerClient::SendUserSessionForProfile,
-                            weak_ptr_factory_.GetWeakPtr(), profile));
+      FROM_HERE,
+      base::BindOnce(&SessionControllerClient::SendUserSessionForProfile,
+                     weak_ptr_factory_.GetWeakPtr(), profile));
 }
 
 void SessionControllerClient::SendUserSessionForProfile(Profile* profile) {
@@ -457,4 +563,25 @@ void SessionControllerClient::SendUserSessionOrder() {
   }
 
   session_controller_->SetUserSessionOrder(user_session_ids);
+}
+
+void SessionControllerClient::SendSessionLengthLimit() {
+  const PrefService* local_state = local_state_registrar_->prefs();
+  base::TimeDelta session_length_limit;
+  if (local_state->HasPrefPath(prefs::kSessionLengthLimit)) {
+    session_length_limit = base::TimeDelta::FromMilliseconds(
+        std::min(std::max(local_state->GetInteger(prefs::kSessionLengthLimit),
+                          kSessionLengthLimitMinMs),
+                 kSessionLengthLimitMaxMs));
+  }
+  base::TimeTicks session_start_time;
+  if (local_state->HasPrefPath(prefs::kSessionStartTime)) {
+    session_start_time = base::TimeTicks::FromInternalValue(
+        local_state->GetInt64(prefs::kSessionStartTime));
+  }
+
+  // Send even if both values are zero because enterprise policy could turn
+  // the feature off in the middle of the session.
+  session_controller_->SetSessionLengthLimit(session_length_limit,
+                                             session_start_time);
 }

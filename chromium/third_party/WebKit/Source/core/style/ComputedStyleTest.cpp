@@ -4,8 +4,10 @@
 
 #include "core/style/ComputedStyle.h"
 
+#include "build/build_config.h"
 #include "core/style/ClipPathOperation.h"
 #include "core/style/ShapeValue.h"
+#include "core/style/StyleDifference.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -46,7 +48,7 @@ TEST(ComputedStyleTest, ClipPathEqual) {
 TEST(ComputedStyleTest, FocusRingWidth) {
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
   style->SetEffectiveZoom(3.5);
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   style->SetOutlineStyle(EBorderStyle::kSolid);
   ASSERT_EQ(3, style->GetOutlineStrokeWidthForFocusRing());
 #else
@@ -61,7 +63,7 @@ TEST(ComputedStyleTest, FocusRingOutset) {
   style->SetOutlineStyle(EBorderStyle::kSolid);
   style->SetOutlineStyleIsAuto(kOutlineIsAutoOn);
   style->SetEffectiveZoom(4.75);
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   ASSERT_EQ(4, style->OutlineOutsetExtent());
 #else
   ASSERT_EQ(3, style->OutlineOutsetExtent());
@@ -70,11 +72,11 @@ TEST(ComputedStyleTest, FocusRingOutset) {
 
 TEST(ComputedStyleTest, Preserve3dForceStackingContext) {
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
-  style->SetTransformStyle3D(kTransformStyle3DPreserve3D);
+  style->SetTransformStyle3D(ETransformStyle3D::kPreserve3d);
   style->SetOverflowX(EOverflow::kHidden);
   style->SetOverflowY(EOverflow::kHidden);
   style->UpdateIsStackingContext(false, false);
-  EXPECT_EQ(kTransformStyle3DFlat, style->UsedTransformStyle3D());
+  EXPECT_EQ(ETransformStyle3D::kFlat, style->UsedTransformStyle3D());
   EXPECT_TRUE(style->IsStackingContext());
 }
 
@@ -96,7 +98,7 @@ TEST(ComputedStyleTest,
      UpdatePropertySpecificDifferencesRespectsTransformAnimation) {
   RefPtr<ComputedStyle> style = ComputedStyle::Create();
   RefPtr<ComputedStyle> other = ComputedStyle::Clone(*style);
-  other->SetHasCurrentTransformAnimation();
+  other->SetHasCurrentTransformAnimation(true);
   StyleDifference diff;
   style->UpdatePropertySpecificDifferences(*other, diff);
   EXPECT_TRUE(diff.TransformChanged());

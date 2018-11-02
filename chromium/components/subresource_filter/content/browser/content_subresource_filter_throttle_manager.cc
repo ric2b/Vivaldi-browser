@@ -9,6 +9,8 @@
 #include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
+#include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
 #include "base/trace_event/trace_event_argument.h"
 #include "components/subresource_filter/content/browser/activation_state_computing_navigation_throttle.h"
@@ -20,12 +22,22 @@
 #include "components/subresource_filter/core/browser/subresource_filter_constants.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/console_message_level.h"
 #include "net/base/net_errors.h"
 
 namespace subresource_filter {
+
+bool ContentSubresourceFilterThrottleManager::Delegate::
+    AllowStrongPopupBlocking() {
+  return false;
+}
+
+bool ContentSubresourceFilterThrottleManager::Delegate::AllowRulesetRules() {
+  return true;
+}
 
 ContentSubresourceFilterThrottleManager::
     ContentSubresourceFilterThrottleManager(
@@ -62,29 +74,45 @@ void ContentSubresourceFilterThrottleManager::RenderFrameDeleted(
 // of subframe navigations.
 void ContentSubresourceFilterThrottleManager::ReadyToCommitNavigation(
     content::NavigationHandle* navigation_handle) {
-  auto throttle = ongoing_activation_throttles_.find(navigation_handle);
-  if (throttle == ongoing_activation_throttles_.end())
+  if (navigation_handle->GetNetErrorCode() != net::OK)
+    return;
+
+  auto it = ongoing_activation_throttles_.find(navigation_handle);
+  if (it == ongoing_activation_throttles_.end())
+    return;
+
+  // TODO(crbug.com/736249): Remove CHECKs in this file when the root cause of
+  // the crash is found.
+  ActivationStateComputingNavigationThrottle* throttle = it->second;
+  CHECK_EQ(navigation_handle, throttle->navigation_handle());
+
+  // Main frame throttles with disabled page-level activation will not have
+  // associated filters.
+  AsyncDocumentSubresourceFilter* filter = throttle->filter();
+  if (!filter)
     return;
 
   // A filter with DISABLED activation indicates a corrupted ruleset.
-  AsyncDocumentSubresourceFilter* filter = throttle->second->filter();
-  if (!filter || navigation_handle->GetNetErrorCode() != net::OK ||
-      filter->activation_state().activation_level ==
-          ActivationLevel::DISABLED) {
+  ActivationLevel level = filter->activation_state().activation_level;
+  if (level == ActivationLevel::DISABLED)
     return;
-  }
 
   TRACE_EVENT1(
       TRACE_DISABLED_BY_DEFAULT("loading"),
       "ContentSubresourceFilterThrottleManager::ReadyToCommitNavigation",
       "activation_state", filter->activation_state().ToTracedValue());
 
-  throttle->second->WillSendActivationToRenderer();
-
-  content::RenderFrameHost* frame_host =
-      navigation_handle->GetRenderFrameHost();
-  frame_host->Send(new SubresourceFilterMsg_ActivateForNextCommittedLoad(
-      frame_host->GetRoutingID(), filter->activation_state()));
+  // Only send the IPC to the renderer if not actively ignoring rules from our
+  // ruleset. Note, if we ever want to do anything more complex in the renderer
+  // (other than just consume the rules), we will likely have to find a
+  // different solution here.
+  throttle->CouldSendActivationToRenderer();
+  if (delegate_->AllowRulesetRules()) {
+    content::RenderFrameHost* frame_host =
+        navigation_handle->GetRenderFrameHost();
+    frame_host->Send(new SubresourceFilterMsg_ActivateForNextCommittedLoad(
+        frame_host->GetRoutingID(), filter->activation_state()));
+  }
 }
 
 void ContentSubresourceFilterThrottleManager::DidFinishNavigation(
@@ -100,6 +128,7 @@ void ContentSubresourceFilterThrottleManager::DidFinishNavigation(
   auto throttle = ongoing_activation_throttles_.find(navigation_handle);
   std::unique_ptr<AsyncDocumentSubresourceFilter> filter;
   if (throttle != ongoing_activation_throttles_.end()) {
+    CHECK_EQ(navigation_handle, throttle->second->navigation_handle());
     filter = throttle->second->ReleaseFilter();
     ongoing_activation_throttles_.erase(throttle);
   }
@@ -119,14 +148,19 @@ void ContentSubresourceFilterThrottleManager::DidFinishNavigation(
                                         kActivationConsoleMessage);
       }
     }
+    ActivationLevel level = filter ? filter->activation_state().activation_level
+                                   : ActivationLevel::DISABLED;
+    UMA_HISTOGRAM_ENUMERATION("SubresourceFilter.PageLoad.ActivationState",
+                              level, ActivationLevel::LAST);
   }
 
   // Make sure |activated_frame_hosts_| is updated or cleaned up depending on
   // this navigation's activation state.
   if (filter) {
-    filter->set_first_disallowed_load_callback(base::Bind(
+    base::OnceClosure disallowed_callback(base::BindOnce(
         &ContentSubresourceFilterThrottleManager::MaybeCallFirstDisallowedLoad,
         weak_ptr_factory_.GetWeakPtr()));
+    filter->set_first_disallowed_load_callback(std::move(disallowed_callback));
     activated_frame_hosts_[frame_host] = std::move(filter);
   } else {
     activated_frame_hosts_.erase(frame_host);
@@ -186,24 +220,46 @@ void ContentSubresourceFilterThrottleManager::MaybeAppendNavigationThrottles(
           MaybeCreateSubframeNavigationFilteringThrottle(navigation_handle)) {
     throttles->push_back(std::move(filtering_throttle));
   }
+
+  CHECK(!base::ContainsKey(ongoing_activation_throttles_, navigation_handle));
   if (auto activation_throttle =
           MaybeCreateActivationStateComputingThrottle(navigation_handle)) {
     ongoing_activation_throttles_[navigation_handle] =
         activation_throttle.get();
+    activation_throttle->set_destruction_closure(base::BindOnce(
+        &ContentSubresourceFilterThrottleManager::OnActivationThrottleDestroyed,
+        weak_ptr_factory_.GetWeakPtr(), base::Unretained(navigation_handle)));
     throttles->push_back(std::move(activation_throttle));
   }
 }
 
-bool ContentSubresourceFilterThrottleManager::ShouldDisallowNewWindow() {
+// Blocking popups here should trigger the standard popup blocking UI, so don't
+// force the subresource filter specific UI.
+bool ContentSubresourceFilterThrottleManager::ShouldDisallowNewWindow(
+    const content::OpenURLParams* open_url_params) {
   auto it = activated_frame_hosts_.find(web_contents()->GetMainFrame());
   if (it == activated_frame_hosts_.end())
     return false;
   const ActivationState state = it->second->activation_state();
-  // This should trigger the standard popup blocking UI, so don't force the
-  // subresource filter specific UI here.
-  return state.activation_level == ActivationLevel::ENABLED &&
-         !state.filtering_disabled_for_document &&
-         !state.generic_blocking_rules_disabled;
+  if (state.activation_level != ActivationLevel::ENABLED ||
+      state.filtering_disabled_for_document ||
+      state.generic_blocking_rules_disabled ||
+      !delegate_->AllowStrongPopupBlocking()) {
+    return false;
+  }
+
+  // Block new windows from navigations whose triggering JS Event has an
+  // isTrusted bit set to false. This bit is set to true if the event is
+  // generated via a user action. See docs:
+  // https://developer.mozilla.org/en-US/docs/Web/API/Event/isTrusted
+  bool should_block = true;
+  if (open_url_params) {
+    should_block = open_url_params->triggering_event_info ==
+                   blink::WebTriggeringEventInfo::kFromUntrustedEvent;
+  }
+  if (should_block)
+    delegate_->OnFirstSubresourceLoadDisallowed();
+  return should_block;
 }
 
 std::unique_ptr<SubframeNavigationFilteringThrottle>
@@ -211,6 +267,8 @@ ContentSubresourceFilterThrottleManager::
     MaybeCreateSubframeNavigationFilteringThrottle(
         content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsInMainFrame())
+    return nullptr;
+  if (!delegate_->AllowRulesetRules())
     return nullptr;
   AsyncDocumentSubresourceFilter* parent_filter =
       GetParentFrameFilter(navigation_handle);
@@ -276,6 +334,12 @@ void ContentSubresourceFilterThrottleManager::OnDocumentLoadStatistics(
     const DocumentLoadStatistics& statistics) {
   if (statistics_)
     statistics_->OnDocumentLoadStatistics(statistics);
+}
+
+void ContentSubresourceFilterThrottleManager::OnActivationThrottleDestroyed(
+    content::NavigationHandle* navigation_handle) {
+  size_t num_erased = ongoing_activation_throttles_.erase(navigation_handle);
+  CHECK_EQ(0u, num_erased);
 }
 
 }  // namespace subresource_filter

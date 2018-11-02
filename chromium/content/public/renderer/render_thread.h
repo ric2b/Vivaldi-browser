@@ -22,10 +22,6 @@ namespace base {
 class WaitableEvent;
 }
 
-namespace cc {
-class SharedBitmapManager;
-}
-
 namespace IPC {
 class MessageFilter;
 class SyncChannel;
@@ -34,6 +30,10 @@ class SyncMessageFilter;
 
 namespace v8 {
 class Extension;
+}
+
+namespace viz {
+class SharedBitmapManager;
 }
 
 namespace content {
@@ -77,7 +77,7 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual std::unique_ptr<base::SharedMemory> HostAllocateSharedMemoryBuffer(
       size_t buffer_size) = 0;
 
-  virtual cc::SharedBitmapManager* GetSharedBitmapManager() = 0;
+  virtual viz::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
   // Registers the given V8 extension with WebKit.
   virtual void RegisterExtension(v8::Extension* extension) = 0;
@@ -111,10 +111,6 @@ class CONTENT_EXPORT RenderThread : virtual public ChildThread {
   virtual scoped_refptr<base::SingleThreadTaskRunner> GetTimerTaskRunner() = 0;
   virtual scoped_refptr<base::SingleThreadTaskRunner>
   GetLoadingTaskRunner() = 0;
-
-  // Tells the renderer that a field trial was activated.
-  virtual void SetFieldTrialGroup(const std::string& trial_name,
-                                  const std::string& group_name) = 0;
 };
 
 }  // namespace content

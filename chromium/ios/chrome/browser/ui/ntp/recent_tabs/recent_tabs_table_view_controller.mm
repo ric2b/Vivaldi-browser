@@ -182,6 +182,7 @@ enum CellType {
 }
 
 - (void)dealloc {
+  [_signinPromoViewMediator signinPromoViewRemoved];
   [self.tableView removeObserver:self forKeyPath:@"contentSize"];
 }
 
@@ -554,8 +555,10 @@ enum CellType {
                 withRowAnimation:UITableViewRowAnimationFade];
   [self.tableView endUpdates];
 
-  if (_sessionState != SessionsSyncUserState::USER_SIGNED_OUT)
+  if (_sessionState != SessionsSyncUserState::USER_SIGNED_OUT) {
+    [_signinPromoViewMediator signinPromoViewRemoved];
     _signinPromoViewMediator = nil;
+  }
 }
 
 - (NSInteger)numberOfSessionSections {
@@ -822,10 +825,11 @@ enum CellType {
       break;
     case CELL_OTHER_DEVICES_SIGNIN_PROMO: {
       if (!_signinPromoViewMediator) {
-        _signinPromoViewMediator = [[SigninPromoViewMediator alloc] init];
+        _signinPromoViewMediator = [[SigninPromoViewMediator alloc]
+            initWithBrowserState:_browserState
+                     accessPoint:signin_metrics::AccessPoint::
+                                     ACCESS_POINT_RECENT_TABS];
         _signinPromoViewMediator.consumer = self;
-        _signinPromoViewMediator.accessPoint =
-            signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS;
       }
       contentViewTopMargin = kSigninPromoViewTopMargin;
       SigninPromoView* signinPromoView =

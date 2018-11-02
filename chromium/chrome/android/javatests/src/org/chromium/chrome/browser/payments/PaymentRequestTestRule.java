@@ -10,6 +10,7 @@ import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 
 import org.chromium.base.test.util.CallbackHelper;
+import org.chromium.chrome.browser.ChromeFeatureList;
 import org.chromium.chrome.browser.ChromeTabbedActivity;
 import org.chromium.chrome.browser.autofill.CardUnmaskPrompt;
 import org.chromium.chrome.browser.payments.PaymentRequestTestCommon.PaymentRequestTestCommonCallback;
@@ -18,7 +19,6 @@ import org.chromium.chrome.browser.payments.ui.PaymentRequestSection.OptionSecti
 import org.chromium.chrome.browser.payments.ui.PaymentRequestUI;
 import org.chromium.chrome.test.ChromeActivityTestRule;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeoutException;
 
@@ -53,6 +53,10 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
 
     /** The billing address dropdown index for the first billing address. */
     public static final int FIRST_BILLING_ADDRESS = PaymentRequestTestCommon.FIRST_BILLING_ADDRESS;
+
+    /** Command line flag to enable payment details modifiers in tests. */
+    public static final String ENABLE_WEB_PAYMENTS_MODIFIERS =
+            "enable-features=" + ChromeFeatureList.WEB_PAYMENTS_MODIFIERS;
 
     private final PaymentRequestTestCommon mTestCommon;
     private final MainActivityStartCallback mCallback;
@@ -166,16 +170,6 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         mTestCommon.clickAndWait(resourceId, helper);
     }
 
-    /**
-     * Clicks on an element in the "Shipping summary" section of the payments UI. This section
-     * combines both shipping address and shipping option. It is replaced by "Shipping address" and
-     * "Shipping option" sections upon expanding the payments UI.
-     */
-    protected void clickInShippingSummaryAndWait(final int resourceId, CallbackHelper helper)
-            throws InterruptedException, TimeoutException {
-        mTestCommon.clickInShippingSummaryAndWait(resourceId, helper);
-    }
-
     /** Clicks on an element in the "Shipping address" section of the payments UI. */
     protected void clickInShippingAddressAndWait(final int resourceId, CallbackHelper helper)
             throws InterruptedException, TimeoutException {
@@ -218,8 +212,8 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     /** Gets the button state for the shipping summary section. */
-    protected int getSummarySectionButtonState() throws ExecutionException {
-        return mTestCommon.getSummarySectionButtonState();
+    protected int getShippingAddressSectionButtonState() throws ExecutionException {
+        return mTestCommon.getShippingAddressSectionButtonState();
     }
 
     /** Gets the button state for the contact details section. */
@@ -227,7 +221,7 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         return mTestCommon.getContactDetailsButtonState();
     }
 
-    /**  Returns the label corresponding to the payment instrument at the specified |index|. */
+    /** Returns the label corresponding to the payment instrument at the specified |index|. */
     protected String getPaymentInstrumentLabel(final int index) throws ExecutionException {
         return mTestCommon.getPaymentInstrumentLabel(index);
     }
@@ -237,37 +231,58 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         return mTestCommon.getSelectedPaymentInstrumentLabel();
     }
 
-    /**  Returns the total amount in order summary section. */
+    /** Returns the total amount in order summary section. */
     protected String getOrderSummaryTotal() throws ExecutionException {
         return mTestCommon.getOrderSummaryTotal();
     }
 
     /**
-     *  Returns the label corresponding to the contact detail suggestion at the specified
-     *  |suggestionIndex|.
+     * Returns the label corresponding to the contact detail suggestion at the specified
+     * |suggestionIndex|.
      */
     protected String getContactDetailsSuggestionLabel(final int suggestionIndex)
             throws ExecutionException {
         return mTestCommon.getContactDetailsSuggestionLabel(suggestionIndex);
     }
 
-    /**  Returns the number of payment instruments. */
+    /** Returns the number of payment instruments. */
     protected int getNumberOfPaymentInstruments() throws ExecutionException {
         return mTestCommon.getNumberOfPaymentInstruments();
     }
 
-    /**  Returns the number of contact detail suggestions. */
+    /** Returns the number of contact detail suggestions. */
     protected int getNumberOfContactDetailSuggestions() throws ExecutionException {
         return mTestCommon.getNumberOfContactDetailSuggestions();
     }
 
     /**
-     *  Returns the label corresponding to the shipping address suggestion at the specified
-     *  |suggestionIndex|.
+     * Returns the label corresponding to the shipping address suggestion at the specified
+     * |suggestionIndex|.
      */
     protected String getShippingAddressSuggestionLabel(final int suggestionIndex)
             throws ExecutionException {
         return mTestCommon.getShippingAddressSuggestionLabel(suggestionIndex);
+    }
+
+    /**
+     * Returns the summary text of the shipping address section.
+     */
+    protected String getShippingAddressSummaryLabel() throws ExecutionException {
+        return mTestCommon.getShippingAddressSummary();
+    }
+
+    /**
+     * Returns the summary text of the shipping option section.
+     */
+    protected String getShippingOptionSummaryLabel() throws ExecutionException {
+        return mTestCommon.getShippingOptionSummary();
+    }
+
+    /**
+     * Returns the cost text of the shipping option section on the bottom sheet.
+     */
+    protected String getShippingOptionCostSummaryLabelOnBottomSheet() throws ExecutionException {
+        return mTestCommon.getShippingOptionCostSummaryOnBottomSheet();
     }
 
     /** Returns the focused view in the card editor view. */
@@ -276,8 +291,8 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     /**
-     *  Clicks on the label corresponding to the shipping address suggestion at the specified
-     *  |suggestionIndex|.
+     * Clicks on the label corresponding to the shipping address suggestion at the specified
+     * |suggestionIndex|.
      * @throws InterruptedException
      */
     protected void clickOnShippingAddressSuggestionOptionAndWait(
@@ -287,8 +302,8 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     /**
-     *  Clicks on the label corresponding to the payment method suggestion at the specified
-     *  |suggestionIndex|.
+     * Clicks on the label corresponding to the payment method suggestion at the specified
+     * |suggestionIndex|.
      * @throws InterruptedException
      */
     protected void clickOnPaymentMethodSuggestionOptionAndWait(
@@ -298,8 +313,19 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     /**
-     *  Clicks on the edit icon corresponding to the payment method suggestion at the specified
-     *  |suggestionIndex|.
+     * Clicks on the label corresponding to the contact info suggestion at the specified
+     * |suggestionIndex|.
+     * @throws InterruptedException
+     */
+    protected void clickOnContactInfoSuggestionOptionAndWait(
+            final int suggestionIndex, CallbackHelper helper)
+            throws ExecutionException, TimeoutException, InterruptedException {
+        mTestCommon.clickOnContactInfoSuggestionOptionAndWait(suggestionIndex, helper);
+    }
+
+    /**
+     * Clicks on the edit icon corresponding to the payment method suggestion at the specified
+     * |suggestionIndex|.
      */
     protected void clickOnPaymentMethodSuggestionEditIconAndWait(
             final int suggestionIndex, CallbackHelper helper)
@@ -308,7 +334,7 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
     }
 
     /**
-     *  Returns the the number of shipping address suggestions.
+     * Returns the number of shipping address suggestions.
      */
     protected int getNumberOfShippingAddressSuggestions() throws ExecutionException {
         return mTestCommon.getNumberOfShippingAddressSuggestions();
@@ -386,22 +412,28 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         mTestCommon.setTextInExpiredCardUnmaskDialogAndWait(resourceIds, values, helper);
     }
 
+    /** Focues a view and hits the "submit" button on the software keyboard. */
+    /* package */ void hitSoftwareKeyboardSubmitButtonAndWait(int resourceId, CallbackHelper helper)
+            throws InterruptedException, TimeoutException {
+        mTestCommon.hitSoftwareKeyboardSubmitButtonAndWait(resourceId, helper);
+    }
+
     /** Verifies the contents of the test webpage. */
     protected void expectResultContains(final String[] contents) {
         mTestCommon.expectResultContains(contents);
     }
 
-    /**  Will fail if the OptionRow at |index| is not selected in Contact Details.*/
+    /** Will fail if the OptionRow at |index| is not selected in Contact Details.*/
     protected void expectContactDetailsRowIsSelected(final int index) {
         mTestCommon.expectContactDetailsRowIsSelected(index);
     }
 
-    /**  Will fail if the OptionRow at |index| is not selected in Shipping Address section.*/
+    /** Will fail if the OptionRow at |index| is not selected in Shipping Address section.*/
     protected void expectShippingAddressRowIsSelected(final int index) {
         mTestCommon.expectShippingAddressRowIsSelected(index);
     }
 
-    /**  Will fail if the OptionRow at |index| is not selected in PaymentMethod section.*/
+    /** Will fail if the OptionRow at |index| is not selected in PaymentMethod section.*/
     protected void expectPaymentMethodRowIsSelected(final int index) {
         mTestCommon.expectPaymentMethodRowIsSelected(index);
     }
@@ -520,12 +552,6 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         mTestCommon.installPaymentApp(methodName, instrumentPresence, responseSpeed, creationSpeed);
     }
 
-    protected void installPaymentApp(final List<String> appMethodNames,
-            final int instrumentPresence, final int responseSpeed, final int creationSpeed) {
-        mTestCommon.installPaymentApp(
-                appMethodNames, instrumentPresence, responseSpeed, creationSpeed);
-    }
-
     @Override
     public void onMainActivityStarted()
             throws InterruptedException, ExecutionException, TimeoutException {
@@ -545,7 +571,9 @@ public class PaymentRequestTestRule extends ChromeActivityTestRule<ChromeTabbedA
         }, description);
     }
 
+    /** The interface for being notified of the main activity startup. */
     public interface MainActivityStartCallback {
+        /** Called when the main activity has started up. */
         void onMainActivityStarted() throws
                 InterruptedException, ExecutionException, TimeoutException;
     }

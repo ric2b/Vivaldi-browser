@@ -25,7 +25,6 @@
 #include "chrome/browser/ui/android/tab_model/tab_model.h"
 #include "chrome/browser/ui/android/tab_model/tab_model_list.h"
 #include "chrome/common/chrome_content_client.h"
-#include "chrome/grit/browser_resources.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/android/devtools_auth.h"
 #include "content/public/browser/browser_thread.h"
@@ -169,10 +168,6 @@ void DevToolsServer::Stop() {
 
 bool DevToolsServer::IsStarted() const {
   return is_started_;
-}
-
-bool RegisterDevToolsServer(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 static jlong InitRemoteDebugging(

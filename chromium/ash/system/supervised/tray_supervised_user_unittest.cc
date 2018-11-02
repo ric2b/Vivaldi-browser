@@ -6,12 +6,12 @@
 
 #include "ash/login_status.h"
 #include "ash/session/session_controller.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
 #include "ash/system/tray/label_tray_view.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_session_controller_client.h"
-#include "ash/test/test_system_tray_delegate.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/message_center/message_center.h"
@@ -25,7 +25,7 @@ using message_center::NotificationList;
 namespace ash {
 
 // Tests handle creating their own sessions.
-class TraySupervisedUserTest : public test::NoSessionAshTestBase {
+class TraySupervisedUserTest : public NoSessionAshTestBase {
  public:
   TraySupervisedUserTest() {}
   ~TraySupervisedUserTest() override {}
@@ -57,7 +57,7 @@ TEST_F(TraySupervisedUserTest, SupervisedUserHasNotification) {
   ASSERT_FALSE(session->IsActiveUserSessionStarted());
 
   // Simulate a supervised user logging in.
-  test::TestSessionControllerClient* client = GetSessionControllerClient();
+  TestSessionControllerClient* client = GetSessionControllerClient();
   client->Reset();
   client->AddUserSession("child@test.com", user_manager::USER_TYPE_SUPERVISED);
   client->SetSessionState(session_manager::SessionState::ACTIVE);
@@ -99,7 +99,7 @@ TEST_F(TraySupervisedUserTest, SupervisedUserHasNotification) {
 // Verifies an item is created for a supervised user.
 TEST_F(TraySupervisedUserTest, CreateDefaultView) {
   TraySupervisedUser* tray =
-      GetPrimarySystemTray()->GetTraySupervisedUserForTesting();
+      SystemTrayTestApi(GetPrimarySystemTray()).tray_supervised_user();
   SessionController* session = Shell::Get()->session_controller();
   ASSERT_FALSE(session->IsActiveUserSessionStarted());
 
@@ -108,7 +108,7 @@ TEST_F(TraySupervisedUserTest, CreateDefaultView) {
   EXPECT_FALSE(tray->CreateDefaultView(unused));
 
   // Simulate a supervised user logging in.
-  test::TestSessionControllerClient* client = GetSessionControllerClient();
+  TestSessionControllerClient* client = GetSessionControllerClient();
   client->Reset();
   client->AddUserSession("child@test.com", user_manager::USER_TYPE_SUPERVISED);
   client->SetSessionState(session_manager::SessionState::ACTIVE);

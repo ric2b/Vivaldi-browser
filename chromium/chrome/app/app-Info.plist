@@ -327,7 +327,7 @@
 	<key>LSHasLocalizedDisplayName</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>10.9.0</string>
+	<string>${MACOSX_DEPLOYMENT_TARGET}</string>
 	<key>NSPrincipalClass</key>
 	<string>BrowserCrApplication</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
@@ -358,5 +358,7 @@
 	</array>
         <key>NSUserNotificationAlertStyle</key>
         <string>banner</string>
+	<key>NSSupportsAppNap</key>
+	<true/>
 </dict>
 </plist>

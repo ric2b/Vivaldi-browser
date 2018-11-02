@@ -6,7 +6,6 @@
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
-#include "cc/output/context_provider.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/ipc/client/command_buffer_proxy_impl.h"
 #include "gpu/ipc/client/gpu_channel_host.h"
@@ -22,11 +21,9 @@ StreamTextureProxy::StreamTextureProxy(std::unique_ptr<StreamTextureHost> host)
 StreamTextureProxy::~StreamTextureProxy() {}
 
 void StreamTextureProxy::Release() {
-  {
-    // Cannot call |received_frame_cb_| after returning from here.
-    base::AutoLock lock(lock_);
-    received_frame_cb_.Reset();
-  }
+  // Cannot call |received_frame_cb_| after returning from here.
+  ClearReceivedFrameCB();
+
   // Release is analogous to the destructor, so there should be no more external
   // calls to this object in Release. Therefore there is no need to acquire the
   // lock to access |task_runner_|.
@@ -34,6 +31,11 @@ void StreamTextureProxy::Release() {
       !task_runner_->DeleteSoon(FROM_HERE, this)) {
     delete this;
   }
+}
+
+void StreamTextureProxy::ClearReceivedFrameCB() {
+  base::AutoLock lock(lock_);
+  received_frame_cb_.Reset();
 }
 
 void StreamTextureProxy::BindToTaskRunner(

@@ -47,19 +47,19 @@ namespace blink {
 
 namespace {
 
-class ExtraDataContainer : public ResourceResponse::ExtraData {
+class URLResponseExtraDataContainer : public ResourceResponse::ExtraData {
  public:
-  static PassRefPtr<ExtraDataContainer> Create(
+  static PassRefPtr<URLResponseExtraDataContainer> Create(
       WebURLResponse::ExtraData* extra_data) {
-    return AdoptRef(new ExtraDataContainer(extra_data));
+    return AdoptRef(new URLResponseExtraDataContainer(extra_data));
   }
 
-  ~ExtraDataContainer() override {}
+  ~URLResponseExtraDataContainer() override {}
 
   WebURLResponse::ExtraData* GetExtraData() const { return extra_data_.get(); }
 
  private:
-  explicit ExtraDataContainer(WebURLResponse::ExtraData* extra_data)
+  explicit URLResponseExtraDataContainer(WebURLResponse::ExtraData* extra_data)
       : extra_data_(WTF::WrapUnique(extra_data)) {}
 
   std::unique_ptr<WebURLResponse::ExtraData> extra_data_;
@@ -134,8 +134,8 @@ void WebURLResponse::SetHTTPLoadInfo(const WebHTTPLoadInfo& value) {
   resource_response_->SetResourceLoadInfo(value);
 }
 
-void WebURLResponse::SetResponseTime(long long response_time) {
-  resource_response_->SetResponseTime(static_cast<int64_t>(response_time));
+void WebURLResponse::SetResponseTime(base::Time response_time) {
+  resource_response_->SetResponseTime(response_time);
 }
 
 WebString WebURLResponse::MimeType() const {
@@ -360,16 +360,37 @@ WebURLResponse::ExtraData* WebURLResponse::GetExtraData() const {
   RefPtr<ResourceResponse::ExtraData> data = resource_response_->GetExtraData();
   if (!data)
     return 0;
-  return static_cast<ExtraDataContainer*>(data.Get())->GetExtraData();
+  return static_cast<URLResponseExtraDataContainer*>(data.Get())
+      ->GetExtraData();
 }
 
 void WebURLResponse::SetExtraData(WebURLResponse::ExtraData* extra_data) {
-  if (extra_data != GetExtraData())
-    resource_response_->SetExtraData(ExtraDataContainer::Create(extra_data));
+  if (extra_data != GetExtraData()) {
+    resource_response_->SetExtraData(
+        URLResponseExtraDataContainer::Create(extra_data));
+  }
 }
 
 void WebURLResponse::AppendRedirectResponse(const WebURLResponse& response) {
   resource_response_->AppendRedirectResponse(response.ToResourceResponse());
+}
+
+WebString WebURLResponse::AlpnNegotiatedProtocol() const {
+  return resource_response_->AlpnNegotiatedProtocol();
+}
+
+void WebURLResponse::SetAlpnNegotiatedProtocol(
+    const WebString& alpn_negotiated_protocol) {
+  resource_response_->SetAlpnNegotiatedProtocol(alpn_negotiated_protocol);
+}
+
+net::HttpResponseInfo::ConnectionInfo WebURLResponse::ConnectionInfo() const {
+  return resource_response_->ConnectionInfo();
+}
+
+void WebURLResponse::SetConnectionInfo(
+    net::HttpResponseInfo::ConnectionInfo connection_info) {
+  resource_response_->SetConnectionInfo(connection_info);
 }
 
 WebURLResponse::WebURLResponse(ResourceResponse& r) : resource_response_(&r) {}

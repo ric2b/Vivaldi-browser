@@ -32,10 +32,20 @@
 #define WebViewImpl_h
 
 #include <memory>
+
+#include "build/build_config.h"
+#include "core/editing/spellcheck/SpellCheckerClientImpl.h"
+#include "core/exported/WebPagePopupImpl.h"
 #include "core/exported/WebViewBase.h"
 #include "core/frame/ResizeViewportAnchor.h"
+#include "core/page/ChromeClient.h"
+#include "core/page/ContextMenuClient.h"
 #include "core/page/ContextMenuProvider.h"
+#include "core/page/EditorClient.h"
 #include "core/page/EventWithHitTestResults.h"
+#include "core/page/PageWidgetDelegate.h"
+#include "modules/encryptedmedia/MediaKeysClient.h"
+#include "modules/storage/StorageClient.h"
 #include "platform/animation/CompositorAnimationTimeline.h"
 #include "platform/geometry/IntPoint.h"
 #include "platform/geometry/IntRect.h"
@@ -60,15 +70,7 @@
 #include "public/platform/WebVector.h"
 #include "public/web/WebNavigationPolicy.h"
 #include "public/web/WebPageImportanceSignals.h"
-#include "web/ChromeClientImpl.h"
-#include "web/ContextMenuClientImpl.h"
-#include "web/EditorClientImpl.h"
-#include "web/MediaKeysClientImpl.h"
-#include "web/PageWidgetDelegate.h"
-#include "web/SpellCheckerClientImpl.h"
-#include "web/StorageClientImpl.h"
 #include "web/WebExport.h"
-#include "web/WebPagePopupImpl.h"
 
 namespace blink {
 
@@ -82,10 +84,11 @@ class PageOverlay;
 class PageScaleConstraintsSet;
 class PaintLayerCompositor;
 class UserGestureToken;
+class ValidationMessageClient;
 class WebActiveGestureAnimation;
 class WebDevToolsAgentImpl;
 class WebElement;
-class WebInputMethodControllerImpl;
+class WebInputMethodController;
 class WebLayerTreeView;
 class WebLocalFrame;
 class WebLocalFrameBase;
@@ -99,7 +102,7 @@ class WEB_EXPORT WebViewImpl final
       NON_EXPORTED_BASE(public WebGestureCurveTarget),
       public PageWidgetEventHandler,
       public WebScheduler::InterventionReporter,
-      public WebViewScheduler::WebViewSchedulerSettings {
+      public WebViewScheduler::WebViewSchedulerDelegate {
  public:
   static WebViewBase* Create(WebViewClient*, WebPageVisibilityState);
 
@@ -116,7 +119,7 @@ class WEB_EXPORT WebViewImpl final
 
   void UpdateAllLifecyclePhases() override;
   void Paint(WebCanvas*, const WebRect&) override;
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   void PaintIgnoringCompositing(WebCanvas*, const WebRect&) override;
 #endif
   void LayoutAndPaintAsync(WebLayoutAndPaintAsyncCallback*) override;
@@ -143,20 +146,18 @@ class WEB_EXPORT WebViewImpl final
   bool SelectionTextDirection(WebTextDirection& start,
                               WebTextDirection& end) const override;
   bool IsSelectionAnchorFirst() const override;
-  WebRange CaretOrSelectionRange() override;
   void SetTextDirection(WebTextDirection) override;
   bool IsAcceleratedCompositingActive() const override;
   void WillCloseLayerTreeView() override;
   void DidAcquirePointerLock() override;
   void DidNotAcquirePointerLock() override;
   void DidLosePointerLock() override;
+  void ShowContextMenu(WebMenuSourceType) override;
 
   // WebView methods:
   virtual bool IsWebView() const { return true; }
-  void SetMainFrame(WebFrame*) override;
   void SetCredentialManagerClient(WebCredentialManagerClient*) override;
   void SetPrerendererClient(WebPrerendererClient*) override;
-  void SetSpellCheckClient(WebSpellCheckClient*) override;
   WebSettings* GetSettings() override;
   WebString PageEncoding() const override;
   bool TabsToLinks() const override;
@@ -172,8 +173,6 @@ class WEB_EXPORT WebViewImpl final
                                  float browser_controls_height,
                                  bool browser_controls_shrink_layout) override;
   WebFrame* MainFrame() override;
-  WebFrame* FindFrameByName(const WebString& name,
-                            WebFrame* relative_to_frame) override;
   WebLocalFrame* FocusedFrame() override;
   void SetFocusedFrame(WebFrame*) override;
   void FocusDocumentView(WebFrame*) override;
@@ -232,13 +231,11 @@ class WEB_EXPORT WebViewImpl final
   unsigned long CreateUniqueIdentifierForRequest() override;
   void EnableDeviceEmulation(const WebDeviceEmulationParams&) override;
   void DisableDeviceEmulation() override;
-  WebAXObject AccessibilityObject() override;
   void SetSelectionColors(unsigned active_background_color,
                           unsigned active_foreground_color,
                           unsigned inactive_background_color,
                           unsigned inactive_foreground_color) override;
   void PerformCustomContextMenuAction(unsigned action) override;
-  void ShowContextMenu() override;
   void DidCloseContextMenu() override;
   void HidePopups() override;
   void SetPageOverlayColor(WebColor) override;
@@ -256,12 +253,7 @@ class WEB_EXPORT WebViewImpl final
   // WebScheduler::InterventionReporter implementation:
   void ReportIntervention(const WebString& message) override;
 
-  // WebViewScheduler::WebViewSchedulerSettings implementation:
-  float ExpensiveBackgroundThrottlingCPUBudget() override;
-  float ExpensiveBackgroundThrottlingInitialBudget() override;
-  float ExpensiveBackgroundThrottlingMaxBudget() override;
-  float ExpensiveBackgroundThrottlingMaxDelay() override;
-
+  void RequestBeginMainFrameNotExpected(bool new_state) override;
   void DidUpdateFullscreenSize() override;
 
   float DefaultMinimumPageScaleFactor() const override;
@@ -297,18 +289,14 @@ class WEB_EXPORT WebViewImpl final
   // Returns the currently focused Element or null if no element has focus.
   Element* FocusedElement() const override;
 
-  static WebViewBase* FromPage(Page*);
-
   WebViewClient* Client() override { return client_; }
-
-  WebSpellCheckClient* SpellCheckClient() override {
-    return spell_check_client_;
-  }
 
   // Returns the page object associated with this view. This may be null when
   // the page is shutting down, but will be valid at all other times.
   Page* GetPage() const override { return page_.Get(); }
 
+  // Returns a ValidationMessageClient associated to the Page. This is nullable.
+  ValidationMessageClient* GetValidationMessageClient() const;
   WebDevToolsAgentImpl* MainFrameDevToolsAgentImpl();
 
   DevToolsEmulator* GetDevToolsEmulator() const override {
@@ -356,8 +344,8 @@ class WEB_EXPORT WebViewImpl final
   //   2) Calling updateAllLifecyclePhases() is a no-op.
   // After calling WebWidget::updateAllLifecyclePhases(), expect to get this
   // notification unless the view did not need a layout.
-  void LayoutUpdated(WebLocalFrameBase*) override;
-  void ResizeAfterLayout(WebLocalFrameBase*) override;
+  void LayoutUpdated() override;
+  void ResizeAfterLayout() override;
 
   void DidChangeContentsSize() override;
   void PageScaleFactorChanged() override;
@@ -386,9 +374,6 @@ class WEB_EXPORT WebViewImpl final
   // cases where the WebCore DOM event doesn't have the information we need.
   static const WebInputEvent* CurrentInputEvent() {
     return current_input_event_;
-  }
-  void SetCurrentInputEventForTest(const WebInputEvent* event) override {
-    current_input_event_ = event;
   }
 
   GraphicsLayer* RootGraphicsLayer() override;
@@ -449,7 +434,8 @@ class WEB_EXPORT WebViewImpl final
 
   void EnterFullscreen(LocalFrame&) override;
   void ExitFullscreen(LocalFrame&) override;
-  void FullscreenElementChanged(Element*, Element*) override;
+  void FullscreenElementChanged(Element* old_element,
+                                Element* new_element) override;
 
   // Exposed for the purpose of overriding device metrics.
   void SendResizeEventAndRepaint();
@@ -490,9 +476,6 @@ class WEB_EXPORT WebViewImpl final
   void ForceNextWebGLContextCreationToFail() override;
   void ForceNextDrawingBufferCreationToFail() override;
 
-  CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient() override;
-  AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient() override;
-
   IntSize MainFrameSize() override;
   WebDisplayMode DisplayMode() const override { return display_mode_; }
 
@@ -504,19 +487,23 @@ class WEB_EXPORT WebViewImpl final
     return last_frame_time_monotonic_;
   }
 
-  class ChromeClient& ChromeClient() const override {
-    return *chrome_client_impl_.Get();
+  class ChromeClient& GetChromeClient() const override {
+    return *chrome_client_.Get();
   }
 
   // Returns the currently active WebInputMethodController which is the one
   // corresponding to the focused frame. It will return nullptr if there is no
   // focused frame, or if the there is one but it belongs to a different local
   // root.
-  WebInputMethodControllerImpl* GetActiveWebInputMethodController() const;
+  WebInputMethodController* GetActiveWebInputMethodController() const;
 
   void SetLastHiddenPagePopup(WebPagePopupImpl* page_popup) override {
     last_hidden_page_popup_ = page_popup;
   }
+
+  void RequestDecode(
+      const PaintImage&,
+      std::unique_ptr<WTF::Function<void(bool)>> callback) override;
 
  private:
   void SetPageScaleFactorAndLocation(float, const FloatPoint&);
@@ -607,15 +594,15 @@ class WEB_EXPORT WebViewImpl final
   LocalFrame* FocusedLocalFrameAvailableForIme() const;
 
   CompositorMutatorImpl& Mutator();
+  CompositorMutatorImpl* CompositorMutator() override;
 
   WebViewClient* client_;  // Can be 0 (e.g. unittests, shared workers, etc.)
-  WebSpellCheckClient* spell_check_client_;
 
-  Persistent<ChromeClientImpl> chrome_client_impl_;
-  ContextMenuClientImpl context_menu_client_impl_;
-  EditorClientImpl editor_client_impl_;
+  Persistent<ChromeClient> chrome_client_;
+  ContextMenuClient context_menu_client_;
+  EditorClient editor_client_;
   SpellCheckerClientImpl spell_checker_client_impl_;
-  StorageClientImpl storage_client_impl_;
+  StorageClient storage_client_impl_;
 
   WebSize size_;
   // If true, automatically resize the layout view around its content.
@@ -699,7 +686,7 @@ class WEB_EXPORT WebViewImpl final
   bool matches_heuristics_for_gpu_rasterization_;
   static const WebInputEvent* current_input_event_;
 
-  MediaKeysClientImpl media_keys_client_impl_;
+  MediaKeysClient media_keys_client_impl_;
   std::unique_ptr<WebActiveGestureAnimation> gesture_animation_;
   WebPoint position_on_fling_start_;
   WebPoint global_position_on_fling_start_;

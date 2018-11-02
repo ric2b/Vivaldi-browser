@@ -6,13 +6,13 @@
 #import <EarlGrey/EarlGrey.h>
 #import <UIKit/UIKit.h>
 
-#import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #import "ios/chrome/app/main_controller.h"
 #include "ios/chrome/browser/chrome_switches.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/browser_view_controller.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
@@ -25,14 +25,19 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/base/scoped_block_swizzler.h"
+#import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
 #include "ios/shared/chrome/browser/ui/omnibox/location_bar_delegate.h"
-#include "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
 #import "ui/base/l10n/l10n_util.h"
 #import "ui/base/l10n/l10n_util_mac.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 using namespace chrome_test_util;
 using namespace qr_scanner;
@@ -107,12 +112,31 @@ id<GREYMatcher> DialogCancelButton() {
       grey_accessibilityTrait(UIAccessibilityTraitStaticText), nil);
 }
 
-// Opens the QR Scanner view using a command.
-// TODO(crbug.com/629776): Replace the command call with a UI action.
-void ShowQRScannerWithCommand() {
-  base::scoped_nsobject<GenericChromeCommand> command(
-      [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_QR_SCANNER]);
-  chrome_test_util::RunCommandWithActiveViewController(command);
+// Opens the QR Scanner view.
+void ShowQRScanner() {
+  // TODO(crbug.com/738106): only show the QR Scanner via the Keyboard Accessory
+  // View.
+  if (experimental_flags::IsKeyboardAccessoryViewWithCameraSearchEnabled()) {
+    // Tap the omnibox to get the keyboard accessory view to show up.
+    id<GREYMatcher> locationbarButton = grey_allOf(
+        grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
+        grey_minimumVisiblePercent(0.2), nil);
+    [[EarlGrey selectElementWithMatcher:locationbarButton]
+        assertWithMatcher:grey_text(@"Search or type URL")];
+    [[EarlGrey selectElementWithMatcher:locationbarButton]
+        performAction:grey_tap()];
+
+    // Tap the QR Code scanner button in the keyboard accessory view.
+    id<GREYMatcher> matcher =
+        grey_allOf(grey_accessibilityLabel(@"QR code Search"),
+                   grey_kindOfClass([UIButton class]), nil);
+
+    [[EarlGrey selectElementWithMatcher:matcher] performAction:grey_tap()];
+  } else {
+    GenericChromeCommand* command =
+        [[GenericChromeCommand alloc] initWithTag:IDC_SHOW_QR_SCANNER];
+    chrome_test_util::RunCommandWithActiveViewController(command);
+  }
 }
 
 // Taps the |button|.
@@ -247,7 +271,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
   [self assertModalOfClass:[UIAlertController class] isNotPresentedBy:bvc];
 
   [self addCameraControllerInitializationExpectations:mock];
-  ShowQRScannerWithCommand();
+  ShowQRScanner();
   [self waitForModalOfClass:[QRScannerViewController class] toAppearAbove:bvc];
   [self assertQRScannerUIIsVisibleWithTorch:NO];
   [self assertModalOfClass:[UIAlertController class]
@@ -274,14 +298,6 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 // Checks that the omnibox is visible and contains |text|.
 - (void)assertOmniboxIsVisibleWithText:(std::string)text {
   [[EarlGrey selectElementWithMatcher:OmniboxText(text)]
-      assertWithMatcher:grey_notNil()];
-}
-
-// Checks that the page that is currently loaded contains the |response|.
-- (void)assertTestURLIsLoaded:(std::string)response {
-  id<GREYMatcher> testURLResponseMatcher =
-      chrome_test_util::WebViewContainingText(response);
-  [[EarlGrey selectElementWithMatcher:testURLResponseMatcher]
       assertWithMatcher:grey_notNil()];
 }
 
@@ -396,13 +412,11 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
 - (void)swizzleCameraController:(id)cameraControllerMock {
   CameraController* (^swizzleCameraControllerBlock)(
       id<CameraControllerDelegate>) = ^(id<CameraControllerDelegate> delegate) {
-    // |initWithDelegate:| must return an object with a return count of 1
-    // because it is preceded by a call to |alloc|.
-    return [cameraControllerMock retain];
+    return cameraControllerMock;
   };
 
   camera_controller_swizzler_.reset(new ScopedBlockSwizzler(
-      [CameraController class], @selector(initWithDelegate:),
+      [CameraController class], @selector(cameraControllerWithDelegate:),
       swizzleCameraControllerBlock));
 }
 
@@ -638,7 +652,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
                 AVAuthorizationStatusDenied];
   [self swizzleCameraController:cameraControllerMock];
 
-  ShowQRScannerWithCommand();
+  ShowQRScanner();
   [self assertModalOfClass:[QRScannerViewController class]
           isNotPresentedBy:bvc];
   [self waitForModalOfClass:[UIAlertController class] toAppearAbove:bvc];
@@ -786,7 +800,7 @@ void TapKeyboardReturnKeyInOmniboxWithText(std::string text) {
   } else {
     TapKeyboardReturnKeyInOmniboxWithText(result);
   }
-  [self assertTestURLIsLoaded:response];
+  [ChromeEarlGrey waitForWebViewContainingText:response];
 
   // Press the back button to get back to the NTP.
   TapButton(WebToolbarBackButton());

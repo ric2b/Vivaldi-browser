@@ -14,6 +14,7 @@ import org.chromium.base.ActivityState;
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.ApplicationStatus;
 import org.chromium.base.Callback;
+import org.chromium.base.ContextUtils;
 import org.chromium.base.Log;
 import org.chromium.base.ObserverList;
 import org.chromium.base.Promise;
@@ -24,8 +25,9 @@ import org.chromium.base.metrics.RecordHistogram;
 import org.chromium.base.metrics.RecordUserAction;
 import org.chromium.chrome.browser.externalauth.ExternalAuthUtils;
 import org.chromium.chrome.browser.externalauth.UserRecoverableErrorHandler;
+import org.chromium.chrome.browser.sync.SyncController;
 import org.chromium.chrome.browser.sync.SyncUserDataWiper;
-import org.chromium.components.signin.AccountManagerHelper;
+import org.chromium.components.signin.AccountManagerFacade;
 import org.chromium.components.signin.ChromeSigninController;
 import org.chromium.components.sync.AndroidSyncSettings;
 
@@ -339,6 +341,11 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     public void signIn(
             Account account, @Nullable Activity activity, @Nullable SignInCallback callback) {
+        // TODO(https://crbug.com/761476): remove this as soon as race condition in Sync is fixed.
+        // SyncController has a race condition inside so it needs to be initialized before actually
+        // signin in.
+        SyncController.get(ContextUtils.getApplicationContext());
+
         if (account == null) {
             Log.w(TAG, "Ignoring sign-in request due to null account.");
             if (callback != null) callback.onSignInAborted();
@@ -368,7 +375,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
      */
     public void signIn(String accountName, @Nullable final Activity activity,
             @Nullable final SignInCallback callback) {
-        AccountManagerHelper.get().getAccountFromName(accountName, new Callback<Account>() {
+        AccountManagerFacade.get().getAccountFromName(accountName, new Callback<Account>() {
             @Override
             public void onResult(Account account) {
                 signIn(account, activity, callback);
@@ -540,7 +547,7 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         if (wipeData) {
             wipeProfileData(wipeDataHooks);
         } else {
-            onSignOutDone();
+            wipeGoogleServiceWorkerCaches(wipeDataHooks);
         }
 
         AccountTrackerService.get().invalidateAccountSeedStatus(true);
@@ -590,6 +597,12 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
         if (hooks != null) hooks.preWipeData();
         // This will call back to onProfileDataWiped().
         nativeWipeProfileData(mNativeSigninManagerAndroid, hooks);
+    }
+
+    private void wipeGoogleServiceWorkerCaches(WipeDataHooks hooks) {
+        if (hooks != null) hooks.preWipeData();
+        // This will call back to onProfileDataWiped().
+        nativeWipeGoogleServiceWorkerCaches(mNativeSigninManagerAndroid, hooks);
     }
 
     /**
@@ -679,6 +692,8 @@ public class SigninManager implements AccountTrackerService.OnSystemAccountsSeed
     private native void nativeSignOut(long nativeSigninManagerAndroid);
     private native String nativeGetManagementDomain(long nativeSigninManagerAndroid);
     private native void nativeWipeProfileData(long nativeSigninManagerAndroid, WipeDataHooks hooks);
+    private native void nativeWipeGoogleServiceWorkerCaches(
+            long nativeSigninManagerAndroid, WipeDataHooks hooks);
     private native void nativeClearLastSignedInUser(long nativeSigninManagerAndroid);
     private native void nativeLogInSignedInUser(long nativeSigninManagerAndroid);
     private native boolean nativeIsSignedInOnNative(long nativeSigninManagerAndroid);

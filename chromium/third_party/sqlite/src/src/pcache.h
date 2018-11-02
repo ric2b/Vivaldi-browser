@@ -10,7 +10,7 @@
 **
 *************************************************************************
 ** This header file defines the interface that the sqlite page cache
-** subsystem. 
+** subsystem.
 */
 
 #ifndef _PCACHE_H_
@@ -26,6 +26,7 @@ struct PgHdr {
   sqlite3_pcache_page *pPage;    /* Pcache object page handle */
   void *pData;                   /* Page data */
   void *pExtra;                  /* Extra content */
+  PCache *pCache;                /* PRIVATE: Cache that owns this page */
   PgHdr *pDirty;                 /* Transient list of dirty sorted by pgno */
   Pager *pPager;                 /* The pager this page is part of */
   Pgno pgno;                     /* Page number for this page */
@@ -35,12 +36,11 @@ struct PgHdr {
   u16 flags;                     /* PGHDR flags defined below */
 
   /**********************************************************************
-  ** Elements above are public.  All that follows is private to pcache.c
-  ** and should not be accessed by other modules.
+  ** Elements above, except pCache, are public.  All that follow are
+  ** private to pcache.c and should not be accessed by other modules.
+  ** pCache is grouped with the public elements for efficiency.
   */
   i16 nRef;                      /* Number of users of this page */
-  PCache *pCache;                /* Cache that owns this page */
-
   PgHdr *pDirtyNext;             /* Next element in list of dirty pages */
   PgHdr *pDirtyPrev;             /* Previous element in list of dirty pages */
 };
@@ -87,7 +87,7 @@ int sqlite3PcacheSetPageSize(PCache *, int);
 int sqlite3PcacheSize(void);
 
 /* One release per successful fetch.  Page is pinned until released.
-** Reference counted. 
+** Reference counted.
 */
 sqlite3_pcache_page *sqlite3PcacheFetch(PCache*, Pgno, int createFlag);
 int sqlite3PcacheFetchStress(PCache*, Pgno, sqlite3_pcache_page**);
@@ -131,7 +131,7 @@ int sqlite3PcachePagecount(PCache*);
 
 #if defined(SQLITE_CHECK_PAGES) || defined(SQLITE_DEBUG)
 /* Iterate through all dirty pages currently stored in the cache. This
-** interface is only available if SQLITE_CHECK_PAGES is defined when the 
+** interface is only available if SQLITE_CHECK_PAGES is defined when the
 ** library is built.
 */
 void sqlite3PcacheIterateDirty(PCache *pCache, void (*xIter)(PgHdr *));

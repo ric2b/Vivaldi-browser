@@ -11,6 +11,7 @@
 #include "base/metrics/user_metrics.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "components/guest_view/browser/guest_view_event.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
@@ -25,6 +26,8 @@
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/extensions/api/tab_capture/tab_capture_registry.h"
+#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
+#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -233,6 +236,8 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
     content::WebContents* source,
     const content::MediaStreamRequest& request,
     const content::MediaResponseCallback& callback) {
+  std::unique_ptr<content::MediaStreamUI> ui;
+
   // Vivaldi
   // If this is a TabCast request.
   if (request.video_type == content::MEDIA_TAB_VIDEO_CAPTURE ||
@@ -258,10 +263,16 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
         }
       }
 
+      if (!devices.empty()) {
+       ui = MediaCaptureDevicesDispatcher::GetInstance()
+                 ->GetMediaStreamCaptureIndicator()
+                 ->RegisterMediaStream(source, devices);
+      }
+
       callback.Run(devices,
                    devices.empty() ? content::MEDIA_DEVICE_INVALID_STATE
                                    : content::MEDIA_DEVICE_OK,
-                   std::unique_ptr<content::MediaStreamUI>(nullptr));
+                   std::move(ui));
       return;
     }
   }
@@ -506,7 +517,7 @@ int WebViewPermissionHelper::RequestPermission(
   pending_permission_requests_[request_id] =
       PermissionResponseInfo(callback, permission_type, allowed_by_default);
   std::unique_ptr<base::DictionaryValue> args(new base::DictionaryValue());
-  args->Set(webview::kRequestInfo, request_info.DeepCopy());
+  args->Set(webview::kRequestInfo, base::MakeUnique<base::Value>(request_info));
   args->SetInteger(webview::kRequestId, request_id);
   switch (permission_type) {
     case WEB_VIEW_PERMISSION_TYPE_NEW_WINDOW: {

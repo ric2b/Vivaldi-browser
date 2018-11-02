@@ -58,7 +58,6 @@ class BudgetManagerBrowserTest : public InProcessBrowserTest {
                                         std::string(), CONTENT_SETTING_ALLOW);
 
     LoadTestPage();
-    InProcessBrowserTest::SetUpOnMainThread();
     budget_manager_ = BudgetManagerFactory::GetForProfile(browser()->profile());
   }
 
@@ -67,7 +66,6 @@ class BudgetManagerBrowserTest : public InProcessBrowserTest {
     // TODO(harkness): Remove switch once Budget API ships. (crbug.com/617971)
     command_line->AppendSwitch(
         switches::kEnableExperimentalWebPlatformFeatures);
-    InProcessBrowserTest::SetUpCommandLine(command_line);
   }
 
   // Sets the absolute Site Engagement |score| for the testing origin, assuming
@@ -108,8 +106,8 @@ class BudgetManagerBrowserTest : public InProcessBrowserTest {
     budget_manager()->Consume(
         url::Origin(https_server_->GetURL(kTestURL)),
         blink::mojom::BudgetOperationType::SILENT_PUSH,
-        base::Bind(&BudgetManagerBrowserTest::DidConsume,
-                   base::Unretained(this), run_loop.QuitClosure()));
+        base::BindOnce(&BudgetManagerBrowserTest::DidConsume,
+                       base::Unretained(this), run_loop.QuitClosure()));
     run_loop.Run();
   }
 

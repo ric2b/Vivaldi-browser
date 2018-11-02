@@ -12,19 +12,23 @@ if (is_android) {
 
 declare_args() {
   # Denotes the type of Cast product. This is #defined as CAST_PRODUCT_TYPE in
-  # version.h. This is an integer in the range [0-5].
+  # version.h. See //components/metrics/proto/cast_logs.proto for valid values.
   if (is_android) {
-    cast_product_type = 4
+    if (is_android_things) {
+      cast_product_type = 6  # CAST_PRODUCT_TYPE_ANDROID_THINGS
+    } else {
+      cast_product_type = 4  # CAST_PRODUCT_TYPE_ANDROID_TV
+    }
   } else {
-    cast_product_type = 0
+    cast_product_type = 0  # CAST_PRODUCT_TYPE_UNKNOWN
   }
 }
 
 if (is_android) {
-  assert(cast_product_type == 4)
+  assert(cast_product_type == 4 || cast_product_type == 6)
 } else {
-  assert(cast_product_type >= 0 && cast_product_type <= 5 &&
-         cast_product_type != 4)
+  assert(cast_product_type >= 0 && cast_product_type <= 6 &&
+         cast_product_type != 4 && cast_product_type != 6)
 }
 
 source_set("base") {
@@ -38,6 +42,8 @@ source_set("base") {
     "bind_to_task_runner.h",
     "cast_constants.cc",
     "cast_constants.h",
+    "cast_features.cc",
+    "cast_features.h",
     "cast_paths.cc",
     "cast_paths.h",
     "cast_resource.cc",
@@ -51,6 +57,7 @@ source_set("base") {
     "error_codes.h",
     "file_utils.cc",
     "file_utils.h",
+    "observer.h",
     "path_utils.cc",
     "path_utils.h",
     "pref_names.cc",
@@ -126,8 +133,10 @@ test("cast_base_unittests") {
   sources = [
     "alarm_manager_unittest.cc",
     "bind_to_task_runner_unittest.cc",
+    "cast_features_unittest.cc",
     "device_capabilities_impl_unittest.cc",
     "error_codes_unittest.cc",
+    "observer_unittest.cc",
     "path_utils_unittest.cc",
     "process_utils_unittest.cc",
     "serializers_unittest.cc",
@@ -169,7 +178,7 @@ source_set("cast_sys_info") {
 
 # Target for OEM partners to override sys_info shared library, i.e.
 # libcast_sys_info_1.0.so.
-shared_library("libcast_sys_info_1.0") {
+cast_shared_library("libcast_sys_info_1.0") {
   sources = [
     "cast_sys_info_dummy.cc",
     "cast_sys_info_dummy.h",

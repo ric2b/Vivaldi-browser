@@ -5,8 +5,8 @@
 // https://wicg.github.io/BackgroundSync/spec/#sync-manager-interface
 
 [
-    Exposed=(Window,ServiceWorker),
-    RuntimeEnabled=BackgroundSync,
+    Exposed=(Window,Worker),
+    RuntimeEnabled=BackgroundSync
 ] interface SyncManager {
     [MeasureAs=BackgroundSyncRegister,CallWith=ScriptState,ImplementedAs=registerFunction] Promise<void> register(DOMString tag);
     [CallWith=ScriptState] Promise<sequence<DOMString>> getTags();

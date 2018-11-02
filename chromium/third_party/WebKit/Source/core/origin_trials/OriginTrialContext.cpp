@@ -31,9 +31,8 @@ namespace {
 static EnumerationHistogram& TokenValidationResultHistogram() {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, histogram,
-      new EnumerationHistogram(
-          "OriginTrials.ValidationResult",
-          static_cast<int>(WebOriginTrialTokenStatus::kLast)));
+      ("OriginTrials.ValidationResult",
+       static_cast<int>(WebOriginTrialTokenStatus::kLast)));
   return histogram;
 }
 
@@ -206,7 +205,7 @@ void OriginTrialContext::InitializePendingFeatures() {
 }
 
 bool OriginTrialContext::IsTrialEnabled(const String& trial_name) {
-  if (!RuntimeEnabledFeatures::originTrialsEnabled())
+  if (!RuntimeEnabledFeatures::OriginTrialsEnabled())
     return false;
 
   return enabled_trials_.Contains(trial_name);

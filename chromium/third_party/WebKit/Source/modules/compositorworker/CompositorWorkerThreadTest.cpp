@@ -7,16 +7,16 @@
 #include <memory>
 #include "bindings/core/v8/ScriptSourceCode.h"
 #include "bindings/core/v8/SourceLocation.h"
+#include "bindings/core/v8/V8CacheOptions.h"
 #include "bindings/core/v8/V8GCController.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
 #include "core/dom/CompositorWorkerProxyClient.h"
 #include "core/inspector/ConsoleMessage.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/InProcessWorkerObjectProxy.h"
 #include "core/workers/ParentFrameTaskRunners.h"
 #include "core/workers/WorkerBackingThread.h"
-#include "core/workers/WorkerLoaderProxy.h"
 #include "core/workers/WorkerOrWorkletGlobalScope.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "platform/CrossThreadFunctional.h"
 #include "platform/WaitableEvent.h"
 #include "platform/WebThreadSupportingGC.h"
@@ -49,7 +49,7 @@ class TestCompositorWorkerObjectProxy : public InProcessWorkerObjectProxy {
                             MessageLevel,
                             const String& message,
                             SourceLocation*) override {}
-  void PostMessageToPageInspector(const String&) override {}
+  void PostMessageToPageInspector(int session_id, const String&) override {}
   void DidCreateWorkerGlobalScope(WorkerOrWorkletGlobalScope*) override {}
   void DidEvaluateWorkerScript(bool success) override {}
   void DidCloseWorkerGlobalScope() override {}
@@ -73,9 +73,6 @@ class TestCompositorWorkerProxyClient
   void Dispose() override {}
   void SetGlobalScope(WorkerGlobalScope*) override {}
   void RequestAnimationFrame() override {}
-  CompositorProxyClient* GetCompositorProxyClient() override {
-    return nullptr;
-  };
 };
 
 class CompositorWorkerTestPlatform : public TestingPlatformSupport {
@@ -100,7 +97,7 @@ class CompositorWorkerThreadTest : public ::testing::Test {
  public:
   void SetUp() override {
     CompositorWorkerThread::CreateSharedBackingThreadForTest();
-    parent_frame_task_runners_ = ParentFrameTaskRunners::Create(nullptr);
+    parent_frame_task_runners_ = ParentFrameTaskRunners::Create();
     object_proxy_ = TestCompositorWorkerObjectProxy::Create(
         parent_frame_task_runners_.Get());
     security_origin_ =
@@ -113,17 +110,17 @@ class CompositorWorkerThreadTest : public ::testing::Test {
 
   std::unique_ptr<CompositorWorkerThread> CreateCompositorWorker() {
     std::unique_ptr<CompositorWorkerThread> worker_thread =
-        CompositorWorkerThread::Create(nullptr, *object_proxy_, 0);
+        CompositorWorkerThread::Create(nullptr, *object_proxy_);
     WorkerClients* clients = WorkerClients::Create();
     ProvideCompositorWorkerProxyClientTo(clients,
                                          new TestCompositorWorkerProxyClient);
     worker_thread->Start(
-        WorkerThreadStartupData::Create(
+        WTF::MakeUnique<GlobalScopeCreationParams>(
             KURL(kParsedURLString, "http://fake.url/"), "fake user agent",
             "//fake source code", nullptr, kDontPauseWorkerGlobalScopeOnStart,
             nullptr, "", security_origin_.Get(), clients, kWebAddressSpaceLocal,
-            nullptr, nullptr, WorkerV8Settings::Default()),
-        parent_frame_task_runners_.Get());
+            nullptr, nullptr, kV8CacheOptionsDefault),
+        WTF::nullopt, parent_frame_task_runners_.Get());
     return worker_thread;
   }
 
@@ -160,7 +157,8 @@ TEST_F(CompositorWorkerThreadTest, Basic) {
   std::unique_ptr<CompositorWorkerThread> compositor_worker =
       CreateCompositorWorker();
   CheckWorkerCanExecuteScript(compositor_worker.get());
-  compositor_worker->TerminateAndWait();
+  compositor_worker->Terminate();
+  compositor_worker->WaitForShutdownForTesting();
 }
 
 // Tests that the same WebThread is used for new workers if the WebThread is
@@ -195,7 +193,8 @@ TEST_F(CompositorWorkerThreadTest, CreateSecondAndTerminateFirst) {
   // Verify that the worker can still successfully execute script.
   CheckWorkerCanExecuteScript(second_worker.get());
 
-  second_worker->TerminateAndWait();
+  second_worker->Terminate();
+  second_worker->WaitForShutdownForTesting();
 }
 
 // Tests that a new WebThread is created if all existing workers are terminated
@@ -219,7 +218,8 @@ TEST_F(CompositorWorkerThreadTest, TerminateFirstAndCreateSecond) {
   EXPECT_EQ(first_thread, second_thread);
   CheckWorkerCanExecuteScript(compositor_worker.get());
 
-  compositor_worker->TerminateAndWait();
+  compositor_worker->Terminate();
+  compositor_worker->WaitForShutdownForTesting();
 }
 
 // Tests that v8::Isolate and WebThread are correctly set-up if a worker is
@@ -248,7 +248,8 @@ TEST_F(CompositorWorkerThreadTest, CreatingSecondDuringTerminationOfFirst) {
   // Verify that the isolate can run some scripts correctly in the second
   // worker.
   CheckWorkerCanExecuteScript(second_worker.get());
-  second_worker->TerminateAndWait();
+  second_worker->Terminate();
+  second_worker->WaitForShutdownForTesting();
 }
 
 }  // namespace blink

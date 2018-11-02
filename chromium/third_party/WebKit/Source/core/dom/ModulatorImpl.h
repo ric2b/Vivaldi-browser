@@ -18,6 +18,7 @@ class ExecutionContext;
 class ModuleMap;
 class ModuleScriptLoaderRegistry;
 class ModuleTreeLinkerRegistry;
+class ModuleTreeReachedUrlSet;
 class ResourceFetcher;
 class ScriptState;
 class WebTaskRunner;
@@ -51,6 +52,7 @@ class ModulatorImpl final : public Modulator {
   void FetchTreeInternal(const ModuleScriptFetchRequest&,
                          const AncestorList&,
                          ModuleGraphLevel,
+                         ModuleTreeReachedUrlSet*,
                          ModuleTreeClient*) override;
   void FetchSingle(const ModuleScriptFetchRequest&,
                    ModuleGraphLevel,
@@ -63,10 +65,12 @@ class ModulatorImpl final : public Modulator {
   ScriptModule CompileModule(const String& script,
                              const String& url_str,
                              AccessControlStatus,
-                             const TextPosition&) override;
+                             const TextPosition&,
+                             ExceptionState&) override;
   ScriptValue InstantiateModule(ScriptModule) override;
-  ScriptValue GetInstantiationError(const ModuleScript*) override;
-  Vector<String> ModuleRequestsFromScriptModule(ScriptModule) override;
+  ScriptModuleState GetRecordStatus(ScriptModule) override;
+  ScriptValue GetError(const ModuleScript*) override;
+  Vector<ModuleRequest> ModuleRequestsFromScriptModule(ScriptModule) override;
   void ExecuteModule(const ModuleScript*) override;
 
   ModulatorImpl(RefPtr<ScriptState>, ResourceFetcher*);
@@ -78,7 +82,7 @@ class ModulatorImpl final : public Modulator {
   Member<ResourceFetcher> fetcher_;
   TraceWrapperMember<ModuleMap> map_;
   Member<ModuleScriptLoaderRegistry> loader_registry_;
-  Member<ModuleTreeLinkerRegistry> tree_linker_registry_;
+  TraceWrapperMember<ModuleTreeLinkerRegistry> tree_linker_registry_;
   Member<ScriptModuleResolver> script_module_resolver_;
 };
 

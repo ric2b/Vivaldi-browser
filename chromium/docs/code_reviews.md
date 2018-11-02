@@ -14,9 +14,10 @@ touching. Any committer can review code, but an owner must provide a review
 for each directory you are touching. If you have doubts, look at the git blame
 for the file and the `OWNERS` files (see below).
 
-To indicate a positive review, the reviewer types "LGTM" (case insensitive)
-into a comment on the code review. This stands for "Looks Good To Me." The text
-"not LGTM" will cancel out a previous positive review.
+To indicate a positive review, the reviewer chooses "+1" in Code-Review field
+on Gerrit, or types "LGTM" (case insensitive) into a comment on Rietveld. This
+stands for "Looks Good To Me." "-1" in Code-Review field on Gerrit or the text
+"not LGTM" on Rietveld will cancel out a previous positive review.
 
 If you have multiple reviewers, make it clear in the message you send
 requesting review what you expect from each reviewer. Otherwise people might
@@ -43,8 +44,13 @@ get a positive review from an owner of each directory your change touches.
 
 Owners files are recursive, so each file also applies to its subdirectories.
 It's generally best to pick more specific owners. People listed in higher-level
-directories may have less experience with the code in question. More detail on
-the owners file format is provided in the "More information" section below.
+directories may have less experience with the code in question. For example,
+the reviewers in the `//chrome/browser/component_name/OWNERS` file will likely
+be more familiar with code in `//chrome/browser/component_name/sub_component`
+than reviewers in the higher-level `//chrome/OWNERS` file.
+
+More detail on the owners file format is provided in the "More information"
+section below.
 
 *Tip:* The `git cl owners` command can help find owners.
 
@@ -63,7 +69,7 @@ committer is sufficient.
 #### Expectations of owners
 
 The existing owners of a directory approve additions to the list. It is
-preferrable to have many directories, each with a smaller number of specific
+preferable to have many directories, each with a smaller number of specific
 owners rather than large directories with many owners. Owners must:
 
   * Demonstrate excellent judgment, teamwork and ability to uphold Chrome
@@ -96,8 +102,8 @@ only in cases where a review is unnecessary or as described below. The most
 common use of TBR is to revert patches that broke the build.
 
 TBR does not mean "no review." A reviewer TBR-ed on a change should still
-review the change. If there comments after landing the author is obligated to
-address them in a followup patch.
+review the change. If there are comments after landing, the author is obligated
+to address them in a followup patch.
 
 Do not use TBR just because a change is urgent or the reviewer is being slow.
 Contact the reviewer directly or find somebody.
@@ -109,27 +115,40 @@ Otherwise the reviewer won't know to review the patch.
     like normal.
 
   * Add a line "TBR=<reviewer's email>" to the bottom of the change list
-    description.
+    description. e.g. `TBR=reviewer1@chromium.org,reviewer2@chromium.org`
+
+  * Type a message so that the owners in the TBR list can understand who is
+    responsible for reviewing what, as part of their post-commit review
+    responsibility. e.g.
+    ```
+    TBRing reviewers:
+    reviewer1: Please review changes to foo/
+    reviewer2: Please review changes to bar/
+    ```
 
   * Push the "send mail" button.
 
 ### TBR-ing certain types of mechanical changes
 
 Sometimes you might do something that affects many callers in different
-directories. For example, adding a parameter to a common function in //base.
-If the updates to the callers is mechanical, you can:
+directories. For example, adding a parameter to a common function in
+`//base`, with callers in `//chrome/browser/foo`, `//net/bar`, and many other
+directories. If the updates to the callers is mechanical, you can:
 
-  * Get a normal owner of the lower-level directory you're changing (in this
-    example, `//base`) to do a proper review of those changes.
+  * Get a normal owner of the lower-level code you're changing (in this
+    example, the function in `//base`) to do a proper review of those changes.
 
-  * Get _somebody_ to review the downstream changes. This is often the same
-    person from the previous step but could be somebody else.
+  * Get _somebody_ to review the downstream changes made to the callers as a
+    result of the `//base` change. This is often the same person from the
+    previous step but could be somebody else.
 
-  * Add the owners of the affected downstream directories as TBR.
+  * Add the owners of the affected downstream directories as TBR. (In this
+    example, reviewers from `//chrome/browser/foo/OWNERS`, `//net/bar/OWNERS`,
+    etc.)
 
 This process ensures that all code is reviewed prior to checkin and that the
 concept of the change is reviewed by a qualified person, but you don't have to
-track down many individual owners for trivial changes to their directories.
+wait for many individual owners to review trivial changes to their directories.
 
 ### TBR-ing documentation updates
 
@@ -155,7 +174,7 @@ comments inside functions.
 ### OWNERS file details
 
 Refer to the [source code](https://chromium.googlesource.com/chromium/tools/depot_tools/+/master/owners.py)
-for all details on the file format. 
+for all details on the file format.
 
 This example indicates that two people are owners, in addition to any owners
 from the parent directory. `git cl owners` will list the comment after an
@@ -182,7 +201,7 @@ b@chromium.org
 ```
 
 The `per-file` directive allows owners to be added that apply only to files
-matching a pattern. In this example, owners from the parent directiory
+matching a pattern. In this example, owners from the parent directory
 apply, plus one person for some classes of files, and all committers are
 owners for the readme:
 ```

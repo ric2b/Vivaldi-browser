@@ -5,7 +5,7 @@
 #ifndef MediaControlTimelineElement_h
 #define MediaControlTimelineElement_h
 
-#include "core/html/shadow/MediaControlElementTypes.h"
+#include "modules/media_controls/elements/MediaControlInputElement.h"
 #include "modules/media_controls/elements/MediaControlTimelineMetrics.h"
 
 namespace blink {
@@ -26,6 +26,11 @@ class MediaControlTimelineElement final : public MediaControlInputElement {
   void SetDuration(double);
 
   void OnPlaying();
+
+  void OnMediaKeyboardEvent(Event* event) { DefaultEventHandler(event); }
+
+ protected:
+  const char* GetNameForHistograms() const override;
 
  private:
   void DefaultEventHandler(Event*) override;

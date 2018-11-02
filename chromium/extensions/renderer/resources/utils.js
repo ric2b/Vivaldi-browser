@@ -3,10 +3,21 @@
 // found in the LICENSE file.
 
 var nativeDeepCopy = requireNative('utils').deepCopy;
-var schemaRegistry = requireNative('schema_registry');
-var CHECK = requireNative('logging').CHECK;
-var DCHECK = requireNative('logging').DCHECK;
-var WARNING = requireNative('logging').WARNING;
+var logActivity = requireNative('activityLogger');
+var exceptionHandler = require('uncaught_exception_handler');
+
+var runCallbackWithLastError;
+if (bindingUtil) {
+  runCallbackWithLastError = function(name, message, stack, callback, args) {
+    bindingUtil.runCallbackWithLastError(message, function() {
+      $Function.apply(callback, null, args);
+    });
+  }
+} else {
+  var lastError = require('lastError');
+  if (lastError)  // lastError can be undefined in unittests.
+    runCallbackWithLastError = lastError.run;
+}
 
 /**
  * An object forEach. Calls |f| with each (key, value) pair of |obj|, using
@@ -41,26 +52,6 @@ function lookup(array_of_dictionaries, field, value) {
     throw new Error("Failed lookup of field '" + field + "' with value '" +
                     value + "'");
   }
-}
-
-function loadTypeSchema(typeName, defaultSchema) {
-  var parts = $String.split(typeName, '.');
-  if (parts.length == 1) {
-    if (defaultSchema == null) {
-      WARNING('Trying to reference "' + typeName + '" ' +
-              'with neither namespace nor default schema.');
-      return null;
-    }
-    var types = defaultSchema.types;
-  } else {
-    var schemaName = $Array.join($Array.slice(parts, 0, parts.length - 1), '.');
-    var types = schemaRegistry.GetSchema(schemaName).types;
-  }
-  for (var i = 0; i < types.length; ++i) {
-    if (types[i].id == typeName)
-      return types[i];
-  }
-  return null;
 }
 
 /**
@@ -202,42 +193,42 @@ function deepCopy(value) {
   return nativeDeepCopy(value);
 }
 
-/**
- * Wrap an asynchronous API call to a function |func| in a promise. The
- * remaining arguments will be passed to |func|. Returns a promise that will be
- * resolved to the result passed to the callback or rejected if an error occurs
- * (if chrome.runtime.lastError is set). If there are multiple results, the
- * promise will be resolved with an array containing those results.
- *
- * For example,
- * promise(chrome.storage.get, 'a').then(function(result) {
- *   // Use result.
- * }).catch(function(error) {
- *   // Report error.message.
- * });
- */
-function promise(func) {
-  var args = $Array.slice(arguments, 1);
-  DCHECK(typeof func == 'function');
-  return new Promise(function(resolve, reject) {
-    args.push(function() {
-      if (chrome.runtime.lastError) {
-        reject(new Error(chrome.runtime.lastError));
-        return;
-      }
-      if (arguments.length <= 1)
-        resolve(arguments[0]);
-      else
-        resolve($Array.slice(arguments));
+// DO NOT USE. This causes problems with safe builtins, and makes migration to
+// native bindings more difficult.
+function handleRequestWithPromiseDoNotUse(
+    binding, apiName, methodName, customizedFunction) {
+  var fullName = apiName + '.' + methodName;
+  var extensionId = requireNative('process').GetExtensionId();
+  binding.setHandleRequest(methodName, function() {
+    logActivity.LogAPICall(extensionId, fullName, $Array.slice(arguments));
+    var stack = exceptionHandler.getExtensionStackTrace();
+    var callback = arguments[arguments.length - 1];
+    var args = $Array.slice(arguments, 0, arguments.length - 1);
+    var keepAlivePromise = requireAsync('keep_alive').then(function(module) {
+      return module.createKeepAlive();
     });
-    $Function.apply(func, null, args);
+    $Function.apply(customizedFunction, this, args).then(function(result) {
+      if (callback) {
+        exceptionHandler.safeCallbackApply(
+            fullName, {__proto__: null, stack: stack}, callback, [result]);
+      }
+    }).catch(function(error) {
+      if (callback) {
+        var message = exceptionHandler.safeErrorToString(error, true);
+        runCallbackWithLastError(fullName, message, stack, callback);
+      }
+    }).then(function() {
+      keepAlivePromise.then(function(keepAlive) {
+        keepAlive.close();
+      });
+    });
   });
-}
+};
 
 exports.$set('forEach', forEach);
-exports.$set('loadTypeSchema', loadTypeSchema);
 exports.$set('lookup', lookup);
 exports.$set('defineProperty', defineProperty);
 exports.$set('expose', expose);
 exports.$set('deepCopy', deepCopy);
-exports.$set('promise', promise);
+exports.$set('handleRequestWithPromiseDoNotUse',
+             handleRequestWithPromiseDoNotUse);

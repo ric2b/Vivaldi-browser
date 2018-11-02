@@ -15,6 +15,7 @@
 #include "base/sequenced_task_runner.h"
 #include "base/stl_util.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_scheduler.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/sync_file_system/drive_backend/callback_helper.h"
 #include "chrome/browser/sync_file_system/drive_backend/drive_backend_constants.h"
@@ -92,8 +93,7 @@ class DriveBackendSyncTest : public testing::Test,
         content::BrowserThread::IO);
     worker_task_runner_ = base::CreateSequencedTaskRunnerWithTraits(
         {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
-    file_task_runner_ = content::BrowserThread::GetTaskRunnerForThread(
-        content::BrowserThread::FILE);
+    file_task_runner_ = io_task_runner_;
     scoped_refptr<base::SequencedTaskRunner> drive_task_runner =
         base::CreateSequencedTaskRunnerWithTraits(
             {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
@@ -109,7 +109,8 @@ class DriveBackendSyncTest : public testing::Test,
     ASSERT_TRUE(drive::test_util::SetUpTestEntries(drive_service.get()));
 
     std::unique_ptr<drive::DriveUploaderInterface> uploader(
-        new drive::DriveUploader(drive_service.get(), file_task_runner_.get()));
+        new drive::DriveUploader(drive_service.get(), file_task_runner_.get(),
+                                 nullptr));
 
     fake_drive_service_helper_.reset(new FakeDriveServiceHelper(
         drive_service.get(), uploader.get(),
@@ -117,8 +118,7 @@ class DriveBackendSyncTest : public testing::Test,
 
     remote_sync_service_.reset(new SyncEngine(
         base::ThreadTaskRunnerHandle::Get(),  // ui_task_runner
-        worker_task_runner_.get(), drive_task_runner.get(),
-        content::BrowserThread::GetBlockingPool(), base_dir_.GetPath(),
+        worker_task_runner_.get(), drive_task_runner.get(), base_dir_.GetPath(),
         nullptr,  // task_logger
         nullptr,  // notification_manager
         nullptr,  // extension_service
@@ -152,7 +152,7 @@ class DriveBackendSyncTest : public testing::Test,
     local_sync_service_.reset();
     remote_sync_service_.reset();
 
-    content::RunAllBlockingPoolTasksUntilIdle();
+    base::TaskScheduler::GetInstance()->FlushForTesting();
     RevokeSyncableFileSystem();
   }
 

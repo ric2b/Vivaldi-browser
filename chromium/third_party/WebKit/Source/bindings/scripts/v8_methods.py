@@ -139,10 +139,10 @@ def method_context(interface, method, is_visible=True):
 
     is_ce_reactions = 'CEReactions' in extended_attributes
     if is_ce_reactions:
-        includes.add('core/dom/custom/CEReactionsScope.h')
+        includes.add('core/html/custom/CEReactionsScope.h')
     is_custom_element_callbacks = 'CustomElementCallbacks' in extended_attributes
     if is_custom_element_callbacks:
-        includes.add('core/dom/custom/V0CustomElementProcessingStack.h')
+        includes.add('core/html/custom/V0CustomElementProcessingStack.h')
 
     is_raises_exception = 'RaisesException' in extended_attributes
     is_custom_call_prologue = has_extended_attribute_value(method, 'Custom', 'CallPrologue')
@@ -151,11 +151,17 @@ def method_context(interface, method, is_visible=True):
     if is_post_message:
         includes.add('bindings/core/v8/serialization/SerializedScriptValueFactory.h')
         includes.add('bindings/core/v8/serialization/Transferables.h')
-        includes.add('core/dom/DOMArrayBufferBase.h')
-        includes.add('core/frame/ImageBitmap.h')
+        includes.add('core/typed_arrays/DOMArrayBufferBase.h')
+        includes.add('core/imagebitmap/ImageBitmap.h')
 
     if 'LenientThis' in extended_attributes:
         raise Exception('[LenientThis] is not supported for operations.')
+
+    if 'RuntimeCallStatsCounter' in extended_attributes:
+        rcs_counter = 'k' + extended_attributes['RuntimeCallStatsCounter']
+        includes.add('platform/bindings/RuntimeCallStats.h')
+    else:
+        rcs_counter = ''
 
     argument_contexts = [
         argument_context(interface, method, argument, index, is_visible=is_visible)
@@ -220,6 +226,7 @@ def method_context(interface, method, is_visible=True):
         'origin_trial_feature_name': v8_utilities.origin_trial_feature_name(method),  # [OriginTrialEnabled]
         'property_attributes': property_attributes(interface, method),
         'returns_promise': method.returns_promise,
+        'rcs_counter': rcs_counter,
         'runtime_enabled_feature_name': v8_utilities.runtime_enabled_feature_name(method),  # [RuntimeEnabled]
         'secure_context_test': v8_utilities.secure_context(method, interface),  # [SecureContext]
         'use_output_parameter_for_result': idl_type.use_output_parameter_for_result,

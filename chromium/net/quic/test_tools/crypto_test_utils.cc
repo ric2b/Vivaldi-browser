@@ -399,6 +399,14 @@ int HandshakeWithFakeServer(QuicConfig* server_quic_config,
   TestQuicSpdyServerSession server_session(server_conn, *server_quic_config,
                                            &crypto_config,
                                            &compressed_certs_cache);
+  EXPECT_CALL(*server_session.helper(),
+              CanAcceptClientHello(testing::_, testing::_, testing::_))
+      .Times(testing::AnyNumber());
+  EXPECT_CALL(*server_session.helper(),
+              GenerateConnectionIdForReject(testing::_))
+      .Times(testing::AnyNumber());
+  EXPECT_CALL(*server_conn, OnCanWrite()).Times(testing::AnyNumber());
+  EXPECT_CALL(*client_conn, OnCanWrite()).Times(testing::AnyNumber());
 
   // The client's handshake must have been started already.
   CHECK_NE(0u, client_conn->encrypted_packets_.size());
@@ -439,6 +447,9 @@ int HandshakeWithFakeClient(MockQuicConnectionHelper* helper,
 
   EXPECT_CALL(client_session, OnProofValid(testing::_))
       .Times(testing::AnyNumber());
+  EXPECT_CALL(client_session, OnProofVerifyDetailsAvailable(testing::_))
+      .Times(testing::AnyNumber());
+  EXPECT_CALL(*client_conn, OnCanWrite()).Times(testing::AnyNumber());
   client_session.GetMutableCryptoStream()->CryptoConnect();
   CHECK_EQ(1u, client_conn->encrypted_packets_.size());
 
@@ -475,6 +486,15 @@ void SetupCryptoServerConfigForTest(const QuicClock* clock,
   options.token_binding_params = fake_options.token_binding_params;
   std::unique_ptr<CryptoHandshakeMessage> scfg(
       crypto_config->AddDefaultConfig(rand, clock, options));
+}
+
+void SendHandshakeMessageToStream(QuicCryptoStream* stream,
+                                  const CryptoHandshakeMessage& message,
+                                  Perspective perspective) {
+  const QuicData& data = message.GetSerialized(perspective);
+  QuicStreamFrame frame(kCryptoStreamId, false, stream->stream_bytes_read(),
+                        data.AsStringPiece());
+  stream->OnStreamFrame(frame);
 }
 
 void CommunicateHandshakeMessages(PacketSavingConnection* client_conn,
@@ -917,7 +937,10 @@ void MovePackets(PacketSavingConnection* source_conn,
   ASSERT_EQ(0u, crypto_framer.InputBytesRemaining());
 
   for (const CryptoHandshakeMessage& message : crypto_visitor.messages()) {
-    dest_stream->OnHandshakeMessage(message);
+    SendHandshakeMessageToStream(dest_stream, message,
+                                 dest_perspective == Perspective::IS_SERVER
+                                     ? Perspective::IS_CLIENT
+                                     : Perspective::IS_SERVER);
   }
   QuicConnectionPeer::SetCurrentPacket(dest_conn, QuicStringPiece(nullptr, 0));
 }

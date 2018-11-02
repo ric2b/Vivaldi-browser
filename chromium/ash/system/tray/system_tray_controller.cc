@@ -6,11 +6,9 @@
 
 #include "ash/root_window_controller.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/update/tray_update.h"
-#include "ash/wm_window.h"
 
 namespace ash {
 
@@ -168,7 +166,7 @@ void SystemTrayController::SetPrimaryTrayEnabled(bool enabled) {
   // SystemTray::SetEnabled(false) guarantees, that the menu will not be opened
   // until the UI is enabled again.
   if (!enabled && tray->HasSystemBubble())
-    tray->CloseSystemBubble();
+    tray->CloseBubble();
 
   tray->SetEnabled(enabled);
 }
@@ -193,12 +191,16 @@ void SystemTrayController::SetUse24HourClock(bool use_24_hour) {
   Shell::Get()->system_tray_notifier()->NotifyDateFormatChanged();
 }
 
-void SystemTrayController::SetEnterpriseDomain(
-    const std::string& enterprise_domain,
+void SystemTrayController::SetEnterpriseDisplayDomain(
+    const std::string& enterprise_display_domain,
     bool active_directory_managed) {
-  enterprise_domain_ = enterprise_domain;
+  enterprise_display_domain_ = enterprise_display_domain;
   active_directory_managed_ = active_directory_managed;
   Shell::Get()->system_tray_notifier()->NotifyEnterpriseDomainChanged();
+}
+
+void SystemTrayController::SetPerformanceTracingIconVisible(bool visible) {
+  Shell::Get()->system_tray_notifier()->NotifyTracingModeChanged(visible);
 }
 
 void SystemTrayController::ShowUpdateIcon(mojom::UpdateSeverity severity,
@@ -217,8 +219,8 @@ void SystemTrayController::ShowUpdateIcon(mojom::UpdateSeverity severity,
 
 void SystemTrayController::ShowUpdateOverCellularAvailableIcon() {
   // Show the icon on all displays.
-  for (WmWindow* root : ShellPort::Get()->GetAllRootWindows()) {
-    ash::SystemTray* tray = root->GetRootWindowController()->GetSystemTray();
+  for (auto* root_window_controller : Shell::GetAllRootWindowControllers()) {
+    ash::SystemTray* tray = root_window_controller->GetSystemTray();
     // External monitors might not have a tray yet.
     if (!tray)
       continue;

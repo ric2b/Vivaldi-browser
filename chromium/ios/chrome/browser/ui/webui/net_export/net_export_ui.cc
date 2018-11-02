@@ -17,12 +17,13 @@
 #include "base/values.h"
 #include "components/grit/components_resources.h"
 #include "components/net_log/chrome_net_log.h"
+#include "components/net_log/net_export_file_writer.h"
 #include "components/net_log/net_export_ui_constants.h"
-#include "components/net_log/net_log_file_writer.h"
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/ui/show_mail_composer_util.h"
+#include "ios/chrome/common/channel_info.h"
 #include "ios/chrome/grit/ios_strings.h"
 #include "ios/web/public/web_thread.h"
 #include "ios/web/public/web_ui_ios_data_source.h"
@@ -50,7 +51,7 @@ web::WebUIIOSDataSource* CreateNetExportHTMLSource() {
 class NetExportMessageHandler
     : public web::WebUIIOSMessageHandler,
       public base::SupportsWeakPtr<NetExportMessageHandler>,
-      public net_log::NetLogFileWriter::StateObserver {
+      public net_log::NetExportFileWriter::StateObserver {
  public:
   NetExportMessageHandler();
   ~NetExportMessageHandler() override;
@@ -64,7 +65,7 @@ class NetExportMessageHandler
   void OnStopNetLog(const base::ListValue* list);
   void OnSendNetLog(const base::ListValue* list);
 
-  // net_log::NetLogFileWriter::StateObserver implementation.
+  // net_log::NetExportFileWriter::StateObserver implementation.
   void OnNewState(const base::DictionaryValue& state) override;
 
  private:
@@ -74,12 +75,12 @@ class NetExportMessageHandler
   void NotifyUIWithState(
       std::unique_ptr<base::DictionaryValue> file_writer_state);
 
-  // Cache of GetApplicationContex()->GetNetLog()->net_log_file_writer(). This
-  // is owned by ChromeNetLog which is owned by BrowserProcessImpl.
-  net_log::NetLogFileWriter* file_writer_;
+  // Cache of GetApplicationContex()->GetNetLog()->net_export_file_writer().
+  // This is owned by ChromeNetLog which is owned by BrowserProcessImpl.
+  net_log::NetExportFileWriter* file_writer_;
 
-  ScopedObserver<net_log::NetLogFileWriter,
-                 net_log::NetLogFileWriter::StateObserver>
+  ScopedObserver<net_log::NetExportFileWriter,
+                 net_log::NetExportFileWriter::StateObserver>
       state_observer_manager_;
 
   base::WeakPtrFactory<NetExportMessageHandler> weak_ptr_factory_;
@@ -88,7 +89,8 @@ class NetExportMessageHandler
 };
 
 NetExportMessageHandler::NetExportMessageHandler()
-    : file_writer_(GetApplicationContext()->GetNetLog()->net_log_file_writer()),
+    : file_writer_(
+          GetApplicationContext()->GetNetLog()->net_export_file_writer()),
       state_observer_manager_(this),
       weak_ptr_factory_(this) {
   file_writer_->Initialize(
@@ -133,14 +135,26 @@ void NetExportMessageHandler::OnEnableNotifyUIWithState(
 
 void NetExportMessageHandler::OnStartNetLog(const base::ListValue* list) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
-  std::string capture_mode_string;
-  bool result = list->GetString(0, &capture_mode_string);
-  DCHECK(result);
 
-  net::NetLogCaptureMode capture_mode =
-      net_log::NetLogFileWriter::CaptureModeFromString(capture_mode_string);
+  const base::Value::ListStorage& params = list->GetList();
+
+  // Determine the capture mode.
+  net::NetLogCaptureMode capture_mode = net::NetLogCaptureMode::Default();
+  if (params.size() > 0 && params[0].is_string()) {
+    capture_mode = net_log::NetExportFileWriter::CaptureModeFromString(
+        params[0].GetString());
+  }
+
+  // Determine the max file size.
+  size_t max_log_file_size = net_log::NetExportFileWriter::kNoLimit;
+  if (params.size() > 1 && params[1].is_int() && params[1].GetInt() > 0) {
+    max_log_file_size = params[1].GetInt();
+  }
+
   file_writer_->StartNetLog(
-      base::FilePath(), capture_mode,
+      base::FilePath(), capture_mode, max_log_file_size,
+      base::CommandLine::ForCurrentProcess()->GetCommandLineString(),
+      GetChannelString(),
       {GetApplicationContext()->GetSystemURLRequestContext()});
 }
 

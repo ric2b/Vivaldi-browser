@@ -224,7 +224,7 @@ SupportsType MimeUtil::AreSupportedCodecs(
         mime_type_lower_case, parsed_codec.codec, video_profile, video_level,
         parsed_codec.video_color_space, is_encrypted);
     if (result == IsNotSupported) {
-      DVLOG(2) << __func__ << " Codec " << parsed_codec.codec
+      DVLOG(2) << __func__ << ": Codec " << parsed_codec.codec
                << " not supported by platform.";
       return IsNotSupported;
     }
@@ -530,6 +530,7 @@ bool MimeUtil::IsCodecSupportedOnAndroid(
     const std::string& mime_type_lower_case,
     bool is_encrypted,
     const PlatformInfo& platform_info) {
+  DVLOG(3) << __func__;
   DCHECK_NE(mime_type_lower_case, "");
 
   // Encrypted block support is never available without platform decoders.
@@ -574,8 +575,10 @@ bool MimeUtil::IsCodecSupportedOnAndroid(
         return true;
 
       // Otherwise, platform support is required.
-      if (!platform_info.supports_opus)
+      if (!platform_info.supports_opus) {
+        DVLOG(3) << "Platform does not support opus";
         return false;
+      }
 
       // MediaPlayer does not support Opus in ogg containers.
       if (base::EndsWith(mime_type_lower_case, "ogg",
@@ -843,6 +846,8 @@ SupportsType MimeUtil::IsCodecSupported(const std::string& mime_type_lower_case,
                                         uint8_t video_level,
                                         const VideoColorSpace& color_space,
                                         bool is_encrypted) const {
+  DVLOG(3) << __func__;
+
   DCHECK_EQ(base::ToLowerASCII(mime_type_lower_case), mime_type_lower_case);
   DCHECK_NE(codec, INVALID_CODEC);
 

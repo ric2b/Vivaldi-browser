@@ -4,22 +4,25 @@
 
 #include <stddef.h>
 
+#include <set>
+#include <vector>
+
 #include "ash/content/shell_content_state.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_environment_content.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/test_shell_delegate.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm/maximize_mode/maximize_mode_window_manager.h"
+#include "ash/test_shell_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_window_manager.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
-#include "ash/wm_window.h"
 #include "base/compiler_specific.h"
 #include "base/logging.h"
 #include "base/macros.h"
@@ -51,6 +54,7 @@
 #include "ui/aura/window.h"
 #include "ui/aura/window_event_dispatcher.h"
 #include "ui/base/ui_base_types.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/wm/core/window_modality_controller.h"
 #include "ui/wm/core/window_util.h"
 #include "ui/wm/public/activation_client.h"
@@ -109,16 +113,13 @@ class TestShellContentState : public ash::ShellContentState {
   DISALLOW_COPY_AND_ASSIGN(TestShellContentState);
 };
 
-class TestShellDelegateChromeOS : public ash::test::TestShellDelegate {
+class TestShellDelegateChromeOS : public ash::TestShellDelegate {
  public:
   TestShellDelegateChromeOS() {}
-  ash::test::TestSessionStateDelegate* CreateSessionStateDelegate() override {
-    return new ash::test::TestSessionStateDelegate;
-  }
 
-  bool CanShowWindowForUser(ash::WmWindow* window) const override {
+  bool CanShowWindowForUser(aura::Window* window) const override {
     return ::CanShowWindowForUser(
-        ash::WmWindow::GetAuraWindow(window),
+        window,
         base::Bind(&ash::ShellContentState::GetActiveBrowserContext,
                    base::Unretained(ash::ShellContentState::GetInstance())));
   }
@@ -141,7 +142,6 @@ std::unique_ptr<Browser> CreateTestBrowser(aura::Window* window,
 }  // namespace
 
 namespace ash {
-namespace test {
 
 // A test class for preparing the chrome::MultiUserWindowManager. It creates
 // various windows and instantiates the chrome::MultiUserWindowManager.
@@ -270,18 +270,17 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
     return chrome::UserSwitchAnimatorChromeOS::CoversScreen(window);
   }
 
-  // Create a maximize mode window manager.
-  MaximizeModeWindowManager* CreateMaximizeModeWindowManager() {
-    EXPECT_FALSE(maximize_mode_window_manager());
-    Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-        true);
-    return maximize_mode_window_manager();
+  // Create a tablet mode window manager.
+  TabletModeWindowManager* CreateTabletModeWindowManager() {
+    EXPECT_FALSE(tablet_mode_window_manager());
+    Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+    return tablet_mode_window_manager();
   }
 
-  MaximizeModeWindowManager* maximize_mode_window_manager() {
+  TabletModeWindowManager* tablet_mode_window_manager() {
     return Shell::Get()
-        ->maximize_mode_controller()
-        ->maximize_mode_window_manager_.get();
+        ->tablet_mode_controller()
+        ->tablet_mode_window_manager_.get();
   }
 
  private:
@@ -299,15 +298,15 @@ class MultiUserWindowManagerChromeOSTest : public AshTestBase {
   chromeos::ScopedUserManagerEnabler user_manager_enabler_;
 
   // The maximized window manager (if enabled).
-  std::unique_ptr<MaximizeModeWindowManager> maximize_mode_window_manager_;
+  std::unique_ptr<TabletModeWindowManager> tablet_mode_window_manager_;
 
   DISALLOW_COPY_AND_ASSIGN(MultiUserWindowManagerChromeOSTest);
 };
 
 void MultiUserWindowManagerChromeOSTest::SetUp() {
   ash_test_helper()->set_test_shell_delegate(new TestShellDelegateChromeOS);
-  ash::test::AshTestEnvironmentContent* test_environment =
-      static_cast<ash::test::AshTestEnvironmentContent*>(
+  ash::AshTestEnvironmentContent* test_environment =
+      static_cast<ash::AshTestEnvironmentContent*>(
           ash_test_helper()->ash_test_environment());
   test_environment->set_content_state(new ::TestShellContentState);
   AshTestBase::SetUp();
@@ -704,8 +703,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, ActiveWindowTests) {
   const AccountId account_id_B(AccountId::FromUserEmail("B"));
   const AccountId account_id_C(AccountId::FromUserEmail("C"));
 
-  aura::client::ActivationClient* activation_client =
-      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  ::wm::ActivationClient* activation_client =
+      ::wm::GetActivationClient(window(0)->GetRootWindow());
 
   // Set some windows to the active owner.
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
@@ -855,9 +854,9 @@ TEST_F(MultiUserWindowManagerChromeOSTest, PreserveInitialVisibility) {
   EXPECT_EQ("H[A,B], H[A,B], S[B,A], H[B,A]", GetStatus());
 }
 
-// Test that in case of an activated maximize mode, windows from other users get
+// Test that in case of an activated tablet mode, windows from other users get
 // maximized after a user switch.
-TEST_F(MultiUserWindowManagerChromeOSTest, MaximizeModeInteraction) {
+TEST_F(MultiUserWindowManagerChromeOSTest, TabletModeInteraction) {
   SetUpForThisManyWindows(2);
 
   const AccountId account_id_A(AccountId::FromUserEmail("A"));
@@ -869,7 +868,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, MaximizeModeInteraction) {
   EXPECT_FALSE(wm::GetWindowState(window(0))->IsMaximized());
   EXPECT_FALSE(wm::GetWindowState(window(1))->IsMaximized());
 
-  MaximizeModeWindowManager* manager = CreateMaximizeModeWindowManager();
+  TabletModeWindowManager* manager = CreateTabletModeWindowManager();
   ASSERT_TRUE(manager);
 
   EXPECT_TRUE(wm::GetWindowState(window(0))->IsMaximized());
@@ -1295,7 +1294,7 @@ TEST_F(MultiUserWindowManagerChromeOSTest, ShowForUserSwitchesDesktop) {
 class TestWindowObserver : public aura::WindowObserver {
  public:
   TestWindowObserver(): resize_calls_(0) {}
-  ~TestWindowObserver() override{};
+  ~TestWindowObserver() override {}
 
   void OnWindowBoundsChanged(aura::Window* window,
                              const gfx::Rect& old_bounds,
@@ -1314,6 +1313,10 @@ class TestWindowObserver : public aura::WindowObserver {
 // Test that switching between users with the shelf in the same place, the shelf
 // will get covered with a black bar instead being hidden and re-shown.
 TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
+  // We need to ensure this works for external connected monitors as well, so
+  // add a secondary display.
+  UpdateDisplay("500x500,500x500");
+
   SetUpForThisManyWindows(2);
 
   const AccountId account_id_A(AccountId::FromUserEmail("A"));
@@ -1321,27 +1324,46 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
 
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   multi_user_window_manager()->SetWindowOwner(window(1), account_id_B);
-  Shelf* shelf = GetPrimaryShelf();
+
+  // Move the second window to the second display and make sure it is not
+  // maximized for the first part of the test.
+  ASSERT_EQ(2u, display_manager()->GetNumDisplays());
+  window(1)->SetBoundsInScreen(gfx::Rect(0, 0, 100, 100),
+                               display_manager()->GetDisplayAt(1));
+
+  ASSERT_EQ(2u, Shell::GetAllRootWindowControllers().size());
+  Shelf* primary_shelf = Shell::GetAllRootWindowControllers()[0]->shelf();
+  Shelf* secondary_shelf = Shell::GetAllRootWindowControllers()[1]->shelf();
+  ShelfWidget* primary_shelf_widget = primary_shelf->shelf_widget();
+  ShelfWidget* secondary_shelf_widget = secondary_shelf->shelf_widget();
 
   // Turn the use of delays and animation on.
   multi_user_window_manager()->SetAnimationSpeedForTest(
       chrome::MultiUserWindowManagerChromeOS::ANIMATION_SPEED_FAST);
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
-  ShelfWidget* shelf_widget = shelf->shelf_widget();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
+            secondary_shelf->auto_hide_behavior());
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
 
   // First test that with no maximized window we show/hide the shelf.
   StartUserTransitionAnimation(account_id_B);
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
+  EXPECT_EQ(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
+            secondary_shelf->auto_hide_behavior());
 
   // Staring the next step should show the shelf again.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
 
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
-  shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  primary_shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
+  secondary_shelf->SetAutoHideBehavior(SHELF_AUTO_HIDE_BEHAVIOR_NEVER);
 
   // Now we maximize the windows which will cause the black overlay to show up.
   wm::GetWindowState(window(0))->Maximize();
@@ -1355,16 +1377,23 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TestBlackBarCover) {
   // Start the animation and see that the shelf gets hidden by the black bar,
   // and the AutoHide behavior remains as it was.
   StartUserTransitionAnimation(account_id_A);
-  EXPECT_TRUE(shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_TRUE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_TRUE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
+            secondary_shelf->auto_hide_behavior());
 
   // Starting the next step should show the shelf again.
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
-  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, shelf->auto_hide_behavior());
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN, primary_shelf->auto_hide_behavior());
+  EXPECT_NE(SHELF_AUTO_HIDE_ALWAYS_HIDDEN,
+            secondary_shelf->auto_hide_behavior());
 
   AdvanceUserTransitionAnimation();
-  EXPECT_FALSE(shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(primary_shelf_widget->IsShelfHiddenBehindBlackBar());
+  EXPECT_FALSE(secondary_shelf_widget->IsShelfHiddenBehindBlackBar());
   window(0)->RemoveObserver(&window_observer);
   window(1)->RemoveObserver(&window_observer);
   // No resize should have been done to the window.
@@ -1394,8 +1423,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TransientWindowActivationTest) {
   ::wm::AddTransientChild(window(1), window(2));
   window(2)->SetProperty(aura::client::kModalKey, ui::MODAL_TYPE_WINDOW);
 
-  aura::client::ActivationClient* activation_client =
-      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  ::wm::ActivationClient* activation_client =
+      ::wm::GetActivationClient(window(0)->GetRootWindow());
 
   // Activate window #0 will activate its deepest transient child window #2.
   activation_client->ActivateWindow(window(0));
@@ -1493,6 +1522,34 @@ TEST_F(MultiUserWindowManagerChromeOSTest, TeleportedWindowActivatableTests) {
   EXPECT_TRUE(::wm::CanActivateWindow(window(1)));
 }
 
+// Test that teleported window has the kAvatarIconKey window property.
+TEST_F(MultiUserWindowManagerChromeOSTest, TeleportedWindowAvatarProperty) {
+  SetUpForThisManyWindows(1);
+
+  const AccountId user1(AccountId::FromUserEmail("a@test.com"));
+  const AccountId user2(AccountId::FromUserEmail("b@test.com"));
+  AddTestUser(user1);
+  AddTestUser(user2);
+
+  multi_user_window_manager()->SetWindowOwner(window(0), user1);
+
+  user_manager()->SwitchActiveUser(user1);
+  multi_user_window_manager()->ActiveUserChanged(
+      user_manager()->FindUser(user1));
+
+  // Window #0 has no kAvatarIconKey property before teloporting.
+  EXPECT_FALSE(window(0)->GetProperty(aura::client::kAvatarIconKey));
+
+  // Teleport window #0 to user2 and kAvatarIconKey property is present.
+  multi_user_window_manager()->ShowWindowForUser(window(0), user2);
+  EXPECT_TRUE(window(0)->GetProperty(aura::client::kAvatarIconKey));
+
+  // Teloport window #0 back to its owner (user1) and kAvatarIconKey property is
+  // gone.
+  multi_user_window_manager()->ShowWindowForUser(window(0), user1);
+  EXPECT_FALSE(window(0)->GetProperty(aura::client::kAvatarIconKey));
+}
+
 // Tests that the window order is preserved when switching between users. Also
 // tests that the window's activation is restored correctly if one user's MRU
 // window list is empty.
@@ -1508,8 +1565,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, WindowsOrderPreservedTests) {
       user_manager()->FindUser(account_id_A));
 
   // Set the windows owner.
-  aura::client::ActivationClient* activation_client =
-      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  ::wm::ActivationClient* activation_client =
+      ::wm::GetActivationClient(window(0)->GetRootWindow());
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   multi_user_window_manager()->SetWindowOwner(window(1), account_id_A);
   multi_user_window_manager()->SetWindowOwner(window(2), account_id_A);
@@ -1559,8 +1616,8 @@ TEST_F(MultiUserWindowManagerChromeOSTest, GetActiveBrowserTest) {
   multi_user_window_manager()->ActiveUserChanged(
       user_manager()->FindUser(account_id_A));
 
-  aura::client::ActivationClient* activation_client =
-      aura::client::GetActivationClient(window(0)->GetRootWindow());
+  ::wm::ActivationClient* activation_client =
+      ::wm::GetActivationClient(window(0)->GetRootWindow());
   multi_user_window_manager()->SetWindowOwner(window(0), account_id_A);
   Profile* profile = multi_user_util::GetProfileFromAccountId(account_id_A);
   Browser::CreateParams params(profile, true);
@@ -1583,5 +1640,4 @@ TEST_F(MultiUserWindowManagerChromeOSTest, GetActiveBrowserTest) {
   EXPECT_EQ(nullptr, ChromeNewWindowClient::GetActiveBrowser());
 }
 
-}  // namespace test
 }  // namespace ash

@@ -9,17 +9,18 @@ var forEach = require('utils').forEach;
 var GetAvailability = requireNative('v8_context').GetAvailability;
 var exceptionHandler = require('uncaught_exception_handler');
 var lastError = require('lastError');
+var loadTypeSchema = require('json_schema').loadTypeSchema;
 var logActivity = requireNative('activityLogger');
 var logging = requireNative('logging');
 var process = requireNative('process');
 var schemaRegistry = requireNative('schema_registry');
 var schemaUtils = require('schemaUtils');
-var utils = require('utils');
 var sendRequestHandler = require('sendRequest');
 
 var contextType = process.GetContextType();
 var extensionId = process.GetExtensionId();
 var manifestVersion = process.GetManifestVersion();
+var platform = process.GetPlatform();
 var sendRequest = sendRequestHandler.sendRequest;
 
 // Stores the name and definition of each API function, with methods to
@@ -70,36 +71,6 @@ APIFunctions.prototype.setHandleRequest =
     });
 };
 
-APIFunctions.prototype.setHandleRequestWithPromise =
-    function(apiName, customizedFunction) {
-  var prefix = this.namespace;
-  return this.setHook_(apiName, 'handleRequest', function() {
-      var name = prefix + '.' + apiName;
-      logActivity.LogAPICall(extensionId, name, $Array.slice(arguments));
-      var stack = exceptionHandler.getExtensionStackTrace();
-      var callback = arguments[arguments.length - 1];
-      var args = $Array.slice(arguments, 0, arguments.length - 1);
-      var keepAlivePromise = requireAsync('keep_alive').then(function(module) {
-        return module.createKeepAlive();
-      });
-      $Function.apply(customizedFunction, this, args).then(function(result) {
-        if (callback) {
-          exceptionHandler.safeCallbackApply(name, {'stack': stack}, callback,
-                                             [result]);
-        }
-      }).catch(function(error) {
-        if (callback) {
-          var message = exceptionHandler.safeErrorToString(error, true);
-          lastError.run(name, message, stack, callback);
-        }
-      }).then(function() {
-        keepAlivePromise.then(function(keepAlive) {
-          keepAlive.close();
-        });
-      });
-    });
-};
-
 APIFunctions.prototype.setUpdateArgumentsPostValidate =
     function(apiName, customizedFunction) {
   return this.setHook_(
@@ -116,24 +87,6 @@ APIFunctions.prototype.setCustomCallback =
     function(apiName, customizedFunction) {
   return this.setHook_(apiName, 'customCallback', customizedFunction);
 };
-
-// Get the platform from navigator.appVersion.
-function getPlatform() {
-  var platforms = [
-    [/CrOS Touch/, "chromeos touch"],
-    [/CrOS/, "chromeos"],
-    [/Linux/, "linux"],
-    [/Mac/, "mac"],
-    [/Win/, "win"],
-  ];
-
-  for (var i = 0; i < platforms.length; i++) {
-    if ($RegExp.exec(platforms[i][0], navigator.appVersion)) {
-      return platforms[i][1];
-    }
-  }
-  return "unknown";
-}
 
 function isPlatformSupported(schemaNode, platform) {
   return !schemaNode.platforms ||
@@ -174,8 +127,6 @@ function createCustomType(type) {
   logging.CHECK(customType, jsModuleName + ' must export itself.');
   return customType;
 }
-
-var platform = getPlatform();
 
 function Binding(apiName) {
   this.apiName_ = apiName;
@@ -405,6 +356,7 @@ Binding.prototype = {
 
         mod[functionDef.name] = $Function.bind(function() {
           var args = $Array.slice(arguments);
+          $Object.setPrototypeOf(args, null);
           if (this.updateArgumentsPreValidate)
             args = $Function.apply(this.updateArgumentsPreValidate, this, args);
 
@@ -423,6 +375,7 @@ Binding.prototype = {
           } else {
             var optArgs = {
               __proto__: null,
+              forIOThread: functionDef.forIOThread,
               customCallback: this.customCallback
             };
             retval = sendRequest(this.name, args,
@@ -508,7 +461,7 @@ Binding.prototype = {
             value = value === 'true';
           } else if (propertyDef['$ref']) {
             var ref = propertyDef['$ref'];
-            var type = utils.loadTypeSchema(propertyDef['$ref'], schema);
+            var type = loadTypeSchema(propertyDef['$ref'], schema);
             logging.CHECK(type, 'Schema for $ref type ' + ref + ' not found');
             var constructor = createCustomType(type);
             var args = value;

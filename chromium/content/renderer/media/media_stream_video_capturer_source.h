@@ -32,10 +32,6 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   MediaStreamVideoCapturerSource(
       const SourceStoppedCallback& stop_callback,
       std::unique_ptr<media::VideoCapturerSource> source);
-  // TODO(guidou): Remove this constructor. http://crbug.com/706408
-  MediaStreamVideoCapturerSource(const SourceStoppedCallback& stop_callback,
-                                 const StreamDeviceInfo& device_info,
-                                 RenderFrame* render_frame);
   MediaStreamVideoCapturerSource(
       const SourceStoppedCallback& stop_callback,
       const StreamDeviceInfo& device_info,
@@ -52,26 +48,16 @@ class CONTENT_EXPORT MediaStreamVideoCapturerSource
   void RequestRefreshFrame() override;
   void OnHasConsumers(bool has_consumers) override;
   void OnCapturingLinkSecured(bool is_secure) override;
-  void GetCurrentSupportedFormats(
-      int max_requested_width,
-      int max_requested_height,
-      double max_requested_frame_rate,
-      const VideoCaptureDeviceFormatsCB& callback) override;
   void StartSourceImpl(
-      const media::VideoCaptureFormat& format,
-      const blink::WebMediaConstraints& constraints,
       const VideoCaptureDeliverFrameCB& frame_callback) override;
   void StopSourceImpl() override;
-  base::Optional<media::VideoCaptureFormat> GetCurrentFormatImpl()
-      const override;
+  base::Optional<media::VideoCaptureFormat> GetCurrentFormat() const override;
 
   // RenderFrameObserver implementation.
   void OnDestruct() final {}
 
   // Method to bind as RunningCallback in VideoCapturerSource::StartCapture().
   void OnRunStateChanged(bool is_running);
-
-  const char* GetPowerLineFrequencyForTesting() const;
 
   // The source that provides video frames.
   const std::unique_ptr<media::VideoCapturerSource> source_;

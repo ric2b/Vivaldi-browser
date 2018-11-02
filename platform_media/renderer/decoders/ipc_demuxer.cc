@@ -135,8 +135,8 @@ void IPCDemuxer::Seek(base::TimeDelta time, const PipelineStatusCB& status_cb) {
   DCHECK(task_runner_->BelongsToCurrentThread());
 
   if (stopping_) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " PIPELINE_ERROR_ABORT";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": PIPELINE_ERROR_ABORT";
     status_cb.Run(PIPELINE_ERROR_ABORT);
     return;
   }
@@ -257,15 +257,15 @@ void IPCDemuxer::OnInitialized(const PipelineStatusCB& callback,
   pipeline_stats::ReportStartResult(success, video_decoding_mode);
 
   if (stopping_) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " PIPELINE_ERROR_ABORT";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": PIPELINE_ERROR_ABORT";
     callback.Run(PIPELINE_ERROR_ABORT);
     return;
   }
 
   if (!success) {
-    LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " PIPELINE_ERROR_ABORT";
+    LOG(ERROR) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+               << ": PIPELINE_ERROR_INITIALIZATION_FAILED";
     callback.Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
     return;
   }

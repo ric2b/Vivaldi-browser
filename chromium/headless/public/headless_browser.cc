@@ -39,8 +39,14 @@ Options::Options(int argc, const char** argv)
       message_pump(nullptr),
       single_process_mode(false),
       disable_sandbox(false),
-#if !defined(OS_MACOSX)
+#if defined(USE_OZONE)
+      // TODO(skyostil): Implement SwiftShader backend for headless ozone.
       gl_implementation("osmesa"),
+#elif defined(OS_WIN)
+      // TODO(skyostil): Enable SwiftShader on Windows (crbug.com/729961).
+      gl_implementation("osmesa"),
+#elif !defined(OS_MACOSX)
+      gl_implementation("swiftshader-webgl"),
 #else
       gl_implementation("any"),
 #endif
@@ -93,8 +99,9 @@ Builder& Builder::SetMessagePump(base::MessagePump* message_pump) {
   return *this;
 }
 
-Builder& Builder::SetProxyServer(const net::HostPortPair& proxy_server) {
-  options_.proxy_server = proxy_server;
+Builder& Builder::SetProxyConfig(
+    std::unique_ptr<net::ProxyConfig> proxy_config) {
+  options_.proxy_config = std::move(proxy_config);
   return *this;
 }
 

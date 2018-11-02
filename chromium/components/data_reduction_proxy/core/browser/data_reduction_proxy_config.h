@@ -22,14 +22,11 @@
 #include "components/previews/core/previews_experiments.h"
 #include "net/base/net_errors.h"
 #include "net/base/network_change_notifier.h"
-#include "net/base/network_interfaces.h"
 #include "net/log/net_log_with_source.h"
 #include "net/nqe/effective_connection_type.h"
 #include "net/nqe/network_quality_estimator.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_retry_info.h"
-
-class GURL;
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -186,10 +183,6 @@ class DataReductionProxyConfig
   virtual bool ContainsDataReductionProxy(
       const net::ProxyConfig::ProxyRules& proxy_rules) const;
 
-  // Returns true if the Data Reduction Proxy promo may be shown. This is not
-  // tied to whether the Data Reduction Proxy is enabled.
-  bool promo_allowed() const;
-
   // Sets |lofi_off_| to true.
   void SetLoFiModeOff();
 
@@ -222,11 +215,6 @@ class DataReductionProxyConfig
   std::vector<DataReductionProxyServer> GetProxiesForHttp() const;
 
  protected:
-  // Virtualized for mocking. Returns the list of network interfaces in use.
-  // |interfaces| can be null.
-  virtual void GetNetworkList(net::NetworkInterfaceList* interfaces,
-                              int policy);
-
   // Virtualized for testing. Returns the list of intervals at which accuracy of
   // network quality prediction should be recorded.
   virtual const std::vector<base::TimeDelta>&
@@ -256,7 +244,8 @@ class DataReductionProxyConfig
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, WarmupURL);
   FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
                            ShouldAcceptServerLoFi);
-  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest, ShouldAcceptLitePages);
+  FRIEND_TEST_ALL_PREFIXES(DataReductionProxyConfigTest,
+                           ShouldAcceptServerPreview);
 
   // Values of the estimated network quality at the beginning of the most
   // recent query of the Network Quality Estimator.
@@ -275,11 +264,9 @@ class DataReductionProxyConfig
   // of either Lo-Fi enabled or Lo-Fi control field trial group.
   void PopulateAutoLoFiParams();
 
-  // Requests the given |secure_proxy_check_url|. Upon completion, returns the
-  // results to the caller via the |fetcher_callback|. Virtualized for unit
-  // testing.
-  virtual void SecureProxyCheck(const GURL& secure_proxy_check_url,
-                                FetcherResponseCallback fetcher_callback);
+  // Requests the secure proxy check URL. Upon completion, returns the results
+  // to the caller via the |fetcher_callback|. Virtualized for unit testing.
+  virtual void SecureProxyCheck(FetcherResponseCallback fetcher_callback);
 
   // Parses the secure proxy check responses and appropriately configures the
   // Data Reduction Proxy rules.
@@ -310,20 +297,11 @@ class DataReductionProxyConfig
       previews::PreviewsType previews_type) const;
 
   // Returns whether the client should report to the data reduction proxy that
-  // it is willing to accept the Server Lo-Fi optimization for |request|.
+  // it is willing to accept server previews for |request|.
   // |previews_decider| is used to check if |request| is locally blacklisted.
   // Should only be used if the kDataReductionProxyDecidesTransform feature is
   // enabled.
-  bool ShouldAcceptServerLoFi(
-      const net::URLRequest& request,
-      const previews::PreviewsDecider& previews_decider) const;
-
-  // Returns whether the client should report to the data reduction proxy that
-  // it is willing to accept a LitePage optimization for |request|.
-  // |previews_decider| is used to check if |request| is locally blacklisted.
-  // Should only be used if the kDataReductionProxyDecidesTransform feature is
-  // enabled.
-  bool ShouldAcceptLitePages(
+  bool ShouldAcceptServerPreview(
       const net::URLRequest& request,
       const previews::PreviewsDecider& previews_decider) const;
 

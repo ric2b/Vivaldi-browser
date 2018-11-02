@@ -67,7 +67,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 - (instancetype)initWithCreditCard:(const autofill::CreditCard&)creditCard
                personalDataManager:(autofill::PersonalDataManager*)dataManager {
-  self = [super initWithStyle:CollectionViewControllerStyleAppBar];
+  UICollectionViewLayout* layout = [[MDCCollectionViewFlowLayout alloc] init];
+  self =
+      [super initWithLayout:layout style:CollectionViewControllerStyleAppBar];
   if (self) {
     DCHECK(dataManager);
 
@@ -153,20 +155,21 @@ typedef NS_ENUM(NSInteger, ItemType) {
       toSectionWithIdentifier:SectionIdentifierFields];
 
   // Card number (PAN).
-  AutofillEditItem* cardNumberitem =
+  AutofillEditItem* cardNumberItem =
       [[AutofillEditItem alloc] initWithType:ItemTypeCardNumber];
-  cardNumberitem.textFieldName =
+  cardNumberItem.textFieldName =
       l10n_util::GetNSString(IDS_IOS_AUTOFILL_CARD_NUMBER);
   // Never show full card number for Wallet cards, even if copied locally.
-  cardNumberitem.textFieldValue =
+  cardNumberItem.textFieldValue =
       autofill::IsCreditCardLocal(_creditCard)
           ? base::SysUTF16ToNSString(_creditCard.number())
-          : base::SysUTF16ToNSString(_creditCard.LastFourDigits());
-  cardNumberitem.textFieldEnabled = isEditing;
-  cardNumberitem.autofillUIType = AutofillUITypeCreditCardNumber;
-  cardNumberitem.cardTypeIcon =
-      [self cardTypeIconFromCardNumber:cardNumberitem.textFieldValue];
-  [model addItem:cardNumberitem
+          : base::SysUTF16ToNSString(_creditCard.NetworkAndLastFourDigits());
+  cardNumberItem.textFieldEnabled = isEditing;
+  cardNumberItem.autofillUIType = AutofillUITypeCreditCardNumber;
+  cardNumberItem.keyboardType = UIKeyboardTypeNumberPad;
+  cardNumberItem.identifyingIcon =
+      [self cardTypeIconFromNetwork:_creditCard.network().c_str()];
+  [model addItem:cardNumberItem
       toSectionWithIdentifier:SectionIdentifierFields];
 
   // Expiration month.
@@ -178,6 +181,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [NSString stringWithFormat:@"%02d", _creditCard.expiration_month()];
   expirationMonthItem.textFieldEnabled = isEditing;
   expirationMonthItem.autofillUIType = AutofillUITypeCreditCardExpMonth;
+  expirationMonthItem.keyboardType = UIKeyboardTypeNumberPad;
   [model addItem:expirationMonthItem
       toSectionWithIdentifier:SectionIdentifierFields];
 
@@ -190,6 +194,8 @@ typedef NS_ENUM(NSInteger, ItemType) {
       [NSString stringWithFormat:@"%04d", _creditCard.expiration_year()];
   expirationYearItem.textFieldEnabled = isEditing;
   expirationYearItem.autofillUIType = AutofillUITypeCreditCardExpYear;
+  expirationYearItem.keyboardType = UIKeyboardTypeNumberPad;
+  expirationYearItem.returnKeyType = UIReturnKeyDone;
   [model addItem:expirationYearItem
       toSectionWithIdentifier:SectionIdentifierFields];
 
@@ -226,7 +232,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
     NSString* updatedText =
         [textField.text stringByReplacingCharactersInRange:range
                                                 withString:newText];
-    item.cardTypeIcon = [self cardTypeIconFromCardNumber:updatedText];
+    const char* network = autofill::CreditCard::GetCardNetwork(
+        base::SysNSStringToUTF16(updatedText));
+    item.identifyingIcon = [self cardTypeIconFromNetwork:network];
     // Update the cell.
     [self reconfigureCellsForItems:@[ item ]];
   }
@@ -262,28 +270,9 @@ typedef NS_ENUM(NSInteger, ItemType) {
   textFieldCell.textField.delegate = self;
   switch (itemType) {
     case ItemTypeCardholderName:
-      textFieldCell.textField.autocapitalizationType =
-          UITextAutocapitalizationTypeWords;
-      textFieldCell.textField.keyboardType = UIKeyboardTypeDefault;
-      textFieldCell.textField.returnKeyType = UIReturnKeyNext;
-      break;
     case ItemTypeCardNumber:
-      textFieldCell.textField.autocapitalizationType =
-          UITextAutocapitalizationTypeSentences;
-      textFieldCell.textField.keyboardType = UIKeyboardTypeNumberPad;
-      textFieldCell.textField.returnKeyType = UIReturnKeyNext;
-      break;
     case ItemTypeExpirationMonth:
-      textFieldCell.textField.autocapitalizationType =
-          UITextAutocapitalizationTypeSentences;
-      textFieldCell.textField.keyboardType = UIKeyboardTypeNumberPad;
-      textFieldCell.textField.returnKeyType = UIReturnKeyNext;
-      break;
     case ItemTypeExpirationYear:
-      textFieldCell.textField.autocapitalizationType =
-          UITextAutocapitalizationTypeSentences;
-      textFieldCell.textField.keyboardType = UIKeyboardTypeNumberPad;
-      textFieldCell.textField.returnKeyType = UIReturnKeyDone;
       break;
     case ItemTypeCopiedToChrome: {
       CopiedToChromeCell* copiedToChromeCell =
@@ -313,9 +302,7 @@ typedef NS_ENUM(NSInteger, ItemType) {
 
 #pragma mark - Helper Methods
 
-- (UIImage*)cardTypeIconFromCardNumber:(NSString*)cardNumber {
-  const char* network = autofill::CreditCard::GetCardNetwork(
-      base::SysNSStringToUTF16(cardNumber));
+- (UIImage*)cardTypeIconFromNetwork:(const char*)network {
   if (network != autofill::kGenericCard) {
     int resourceID =
         autofill::data_util::GetPaymentRequestData(network).icon_resource_id;

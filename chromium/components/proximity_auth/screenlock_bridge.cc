@@ -4,6 +4,9 @@
 
 #include "components/proximity_auth/screenlock_bridge.h"
 
+#include <utility>
+
+#include "base/memory/ptr_util.h"
 #include "base/strings/string16.h"
 #include "build/build_config.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -63,15 +66,14 @@ ScreenlockBridge::UserPodCustomIconOptions::~UserPodCustomIconOptions() {
 
 std::unique_ptr<base::DictionaryValue>
 ScreenlockBridge::UserPodCustomIconOptions::ToDictionaryValue() const {
-  std::unique_ptr<base::DictionaryValue> result(new base::DictionaryValue());
-  std::string icon_id = GetIdForIcon(icon_);
-  result->SetString("id", icon_id);
+  auto result = base::MakeUnique<base::DictionaryValue>();
+  result->SetString("id", GetIDString());
 
   if (!tooltip_.empty()) {
-    base::DictionaryValue* tooltip_options = new base::DictionaryValue();
+    auto tooltip_options = base::MakeUnique<base::DictionaryValue>();
     tooltip_options->SetString("text", tooltip_);
     tooltip_options->SetBoolean("autoshow", autoshow_tooltip_);
-    result->Set("tooltip", tooltip_options);
+    result->Set("tooltip", std::move(tooltip_options));
   }
 
   if (!aria_label_.empty())
@@ -111,6 +113,10 @@ void ScreenlockBridge::UserPodCustomIconOptions::SetTrialRun() {
   is_trial_run_ = true;
 }
 
+std::string ScreenlockBridge::UserPodCustomIconOptions::GetIDString() const {
+  return GetIdForIcon(icon_);
+}
+
 // static
 ScreenlockBridge* ScreenlockBridge::Get() {
   return g_screenlock_bridge_instance.Pointer();
@@ -132,12 +138,12 @@ void ScreenlockBridge::SetLockHandler(LockHandler* lock_handler) {
   else
     screen_type = lock_handler->GetScreenType();
 
-  focused_account_id_ = EmptyAccountId();
   lock_handler_ = lock_handler;
   if (lock_handler_) {
     for (auto& observer : observers_)
       observer.OnScreenDidLock(screen_type);
   } else {
+    focused_account_id_ = EmptyAccountId();
     for (auto& observer : observers_)
       observer.OnScreenDidUnlock(screen_type);
   }
@@ -146,7 +152,6 @@ void ScreenlockBridge::SetLockHandler(LockHandler* lock_handler) {
 void ScreenlockBridge::SetFocusedUser(const AccountId& account_id) {
   if (account_id == focused_account_id_)
     return;
-  PA_LOG(INFO) << "Focused user changed to " << account_id.Serialize();
   focused_account_id_ = account_id;
   for (auto& observer : observers_)
     observer.OnFocusedUserChanged(account_id);

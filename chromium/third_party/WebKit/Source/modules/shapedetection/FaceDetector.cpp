@@ -5,31 +5,43 @@
 #include "modules/shapedetection/FaceDetector.h"
 
 #include "core/dom/DOMException.h"
+#include "core/frame/LocalFrame.h"
 #include "core/geometry/DOMRect.h"
 #include "core/html/canvas/CanvasImageSource.h"
+#include "core/workers/WorkerThread.h"
 #include "modules/imagecapture/Point2D.h"
 #include "modules/shapedetection/DetectedFace.h"
 #include "modules/shapedetection/FaceDetectorOptions.h"
 #include "modules/shapedetection/Landmark.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 #include "services/shape_detection/public/interfaces/facedetection_provider.mojom-blink.h"
 
 namespace blink {
 
-FaceDetector* FaceDetector::Create(const FaceDetectorOptions& options) {
-  return new FaceDetector(options);
+FaceDetector* FaceDetector::Create(ExecutionContext* context,
+                                   const FaceDetectorOptions& options) {
+  return new FaceDetector(context, options);
 }
 
-FaceDetector::FaceDetector(const FaceDetectorOptions& options)
+FaceDetector::FaceDetector(ExecutionContext* context,
+                           const FaceDetectorOptions& options)
     : ShapeDetector() {
-  shape_detection::mojom::blink::FaceDetectorOptionsPtr face_detector_options =
+  auto face_detector_options =
       shape_detection::mojom::blink::FaceDetectorOptions::New();
   face_detector_options->max_detected_faces = options.maxDetectedFaces();
   face_detector_options->fast_mode = options.fastMode();
+
   shape_detection::mojom::blink::FaceDetectionProviderPtr provider;
-  Platform::Current()->GetInterfaceProvider()->GetInterface(
-      mojo::MakeRequest(&provider));
+  auto request = mojo::MakeRequest(&provider);
+  if (context->IsDocument()) {
+    LocalFrame* frame = ToDocument(context)->GetFrame();
+    if (frame)
+      frame->GetInterfaceProvider().GetInterface(std::move(request));
+  } else {
+    WorkerThread* thread = ToWorkerGlobalScope(context)->GetThread();
+    thread->GetInterfaceProvider().GetInterface(std::move(request));
+  }
   provider->CreateFaceDetection(mojo::MakeRequest(&face_service_),
                                 std::move(face_detector_options));
 
@@ -37,11 +49,8 @@ FaceDetector::FaceDetector(const FaceDetectorOptions& options)
       &FaceDetector::OnFaceServiceConnectionError, WrapWeakPersistent(this))));
 }
 
-ScriptPromise FaceDetector::DoDetect(
-    ScriptPromiseResolver* resolver,
-    mojo::ScopedSharedBufferHandle shared_buffer_handle,
-    int image_width,
-    int image_height) {
+ScriptPromise FaceDetector::DoDetect(ScriptPromiseResolver* resolver,
+                                     skia::mojom::blink::BitmapPtr bitmap) {
   ScriptPromise promise = resolver->Promise();
   if (!face_service_) {
     resolver->Reject(DOMException::Create(
@@ -49,8 +58,7 @@ ScriptPromise FaceDetector::DoDetect(
     return promise;
   }
   face_service_requests_.insert(resolver);
-  face_service_->Detect(std::move(shared_buffer_handle), image_width,
-                        image_height,
+  face_service_->Detect(std::move(bitmap),
                         ConvertToBaseCallback(WTF::Bind(
                             &FaceDetector::OnDetectFaces, WrapPersistent(this),
                             WrapPersistent(resolver))));
@@ -69,8 +77,8 @@ void FaceDetector::OnDetectFaces(
     HeapVector<Landmark> landmarks;
     for (const auto& landmark : face->landmarks) {
       Point2D location;
-      location.setX(landmark->location->x);
-      location.setY(landmark->location->y);
+      location.setX(landmark->location.x);
+      location.setY(landmark->location.y);
       Landmark web_landmark;
       web_landmark.setLocation(location);
       if (landmark->type == shape_detection::mojom::blink::LandmarkType::EYE) {
@@ -83,8 +91,8 @@ void FaceDetector::OnDetectFaces(
     }
 
     detected_faces.push_back(DetectedFace::Create(
-        DOMRect::Create(face->bounding_box->x, face->bounding_box->y,
-                        face->bounding_box->width, face->bounding_box->height),
+        DOMRect::Create(face->bounding_box.x, face->bounding_box.y,
+                        face->bounding_box.width, face->bounding_box.height),
         landmarks));
   }
 

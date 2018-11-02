@@ -38,11 +38,11 @@ class NotesCodec {
   // returned object. This is invoked to encode the contents of the notes
   // model and is currently a convenience to invoking Encode that takes the
   // notes node and other folder node.
-  base::Value* Encode(Notes_Model* model);
+  std::unique_ptr<base::Value> Encode(Notes_Model* model);
 
   // Encodes the notes folder returning the JSON value. It's
   // up to the caller to delete the returned object.
-  base::Value* Encode(const Notes_Node* notes_node,
+  std::unique_ptr<base::Value> Encode(const Notes_Node* notes_node,
                       const Notes_Node* other_notes_node,
                       const Notes_Node* trash_notes_node,
                       int64_t sync_transaction_version);

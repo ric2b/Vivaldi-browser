@@ -6,23 +6,14 @@
 
 #include <utility>
 
+#include "services/ui/display/screen_manager.h"
 #include "services/ui/ws/user_display_manager_delegate.h"
 #include "ui/display/display.h"
-#include "ui/display/screen.h"
+#include "ui/display/screen_base.h"
 #include "ui/display/types/display_constants.h"
 
 namespace ui {
 namespace ws {
-namespace {
-
-int64_t GetInternalDisplayId() {
-  if (!display::Display::HasInternalDisplay())
-    return display::kInvalidDisplayId;
-
-  return display::Display::InternalDisplayId();
-}
-
-}  // namespace
 
 UserDisplayManager::UserDisplayManager(UserDisplayManagerDelegate* delegate,
                                        const UserId& user_id)
@@ -32,6 +23,18 @@ UserDisplayManager::UserDisplayManager(UserDisplayManagerDelegate* delegate,
           delegate->GetFrameDecorationsForUser(user_id, nullptr)) {}
 
 UserDisplayManager::~UserDisplayManager() {}
+
+void UserDisplayManager::DisableAutomaticNotification() {
+  DCHECK(notify_automatically_);
+  notify_automatically_ = false;
+}
+
+void UserDisplayManager::CallOnDisplaysChanged() {
+  display_manager_observers_.ForAllPtrs(
+      [this](mojom::DisplayManagerObserver* observer) {
+        CallOnDisplaysChanged(observer);
+      });
+}
 
 void UserDisplayManager::OnFrameDecorationValuesChanged() {
   got_valid_frame_decorations_ = true;
@@ -83,7 +86,8 @@ mojom::WsDisplayPtr UserDisplayManager::ToWsDisplayPtr(
 }
 
 std::vector<mojom::WsDisplayPtr> UserDisplayManager::GetAllDisplays() {
-  const auto& displays = display::Screen::GetScreen()->GetAllDisplays();
+  const auto& displays =
+      display::ScreenManager::GetInstance()->GetScreen()->GetAllDisplays();
 
   std::vector<mojom::WsDisplayPtr> ws_display;
   ws_display.reserve(displays.size());
@@ -95,25 +99,27 @@ std::vector<mojom::WsDisplayPtr> UserDisplayManager::GetAllDisplays() {
 }
 
 bool UserDisplayManager::ShouldCallOnDisplaysChanged() const {
-  return got_valid_frame_decorations_ &&
-         !display::Screen::GetScreen()->GetAllDisplays().empty();
+  return got_valid_frame_decorations_ && !display::ScreenManager::GetInstance()
+                                              ->GetScreen()
+                                              ->GetAllDisplays()
+                                              .empty();
 }
 
 void UserDisplayManager::CallOnDisplaysChangedIfNecessary() {
-  if (!ShouldCallOnDisplaysChanged())
+  if (!notify_automatically_ || !ShouldCallOnDisplaysChanged())
     return;
 
-  display_manager_observers_.ForAllPtrs(
-      [this](mojom::DisplayManagerObserver* observer) {
-        CallOnDisplaysChanged(observer);
-      });
+  CallOnDisplaysChanged();
 }
 
 void UserDisplayManager::CallOnDisplaysChanged(
     mojom::DisplayManagerObserver* observer) {
-  observer->OnDisplaysChanged(
-      GetAllDisplays(), display::Screen::GetScreen()->GetPrimaryDisplay().id(),
-      GetInternalDisplayId());
+  observer->OnDisplaysChanged(GetAllDisplays(),
+                              display::ScreenManager::GetInstance()
+                                  ->GetScreen()
+                                  ->GetPrimaryDisplay()
+                                  .id(),
+                              delegate_->GetInternalDisplayId());
 }
 
 }  // namespace ws

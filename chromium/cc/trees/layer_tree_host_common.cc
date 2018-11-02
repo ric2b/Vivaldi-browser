@@ -153,12 +153,9 @@ LayerTreeHostCommon::CalcDrawPropsImplInputsForTesting::
                                         device_scale_factor,
                                         render_surface_list) {}
 
-LayerTreeHostCommon::ScrollUpdateInfo::ScrollUpdateInfo()
-    : layer_id(Layer::INVALID_ID) {}
-
 bool LayerTreeHostCommon::ScrollUpdateInfo::operator==(
     const LayerTreeHostCommon::ScrollUpdateInfo& other) const {
-  return layer_id == other.layer_id && scroll_delta == other.scroll_delta;
+  return element_id == other.element_id && scroll_delta == other.scroll_delta;
 }
 
 LayerTreeHostCommon::ScrollbarsUpdateInfo::ScrollbarsUpdateInfo()
@@ -304,6 +301,7 @@ static void AddSurfaceToRenderSurfaceList(
   // pixel-moving filters)
   const FilterOperations& filters = render_surface->Filters();
   bool is_occlusion_immune = render_surface->HasCopyRequest() ||
+                             render_surface->ShouldCacheRenderSurface() ||
                              filters.HasReferenceFilter() ||
                              filters.HasFilterThatMovesPixels();
   if (is_occlusion_immune) {
@@ -361,7 +359,11 @@ static void ComputeInitialRenderSurfaceList(
   // it's not already been added, and add their content rect to the target
   // surface's accumulated content rect.
   for (LayerImpl* layer : *layer_tree_impl) {
+    DCHECK(layer);
+    layer->EnsureValidPropertyTreeIndices();
+
     layer->set_contributes_to_drawn_render_surface(false);
+    layer->set_raster_even_if_not_drawn(false);
 
     bool is_root = layer_tree_impl->IsRootLayer(layer);
 
@@ -374,8 +376,8 @@ static void ComputeInitialRenderSurfaceList(
     bool skip_layer = !is_root && (skip_draw_properties_computation ||
                                    skip_for_invertibility);
 
-    layer->set_raster_even_if_not_in_rsll(skip_for_invertibility &&
-                                          !skip_draw_properties_computation);
+    layer->set_raster_even_if_not_drawn(skip_for_invertibility &&
+                                        !skip_draw_properties_computation);
     if (skip_layer)
       continue;
 

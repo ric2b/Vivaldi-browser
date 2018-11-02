@@ -28,6 +28,7 @@
 #include "chrome/browser/sync_file_system/sync_file_system_test_util.h"
 #include "google_apis/drive/drive_api_parser.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/leveldatabase/env_chromium.h"
 #include "third_party/leveldatabase/src/helpers/memenv/memenv.h"
 #include "third_party/leveldatabase/src/include/leveldb/db.h"
 #include "third_party/leveldatabase/src/include/leveldb/env.h"
@@ -104,8 +105,8 @@ void ExpectEquivalent(const std::map<Key, Value>& left,
 }
 
 template <typename Key, typename Value>
-void ExpectEquivalent(const base::hash_map<Key, Value>& left,
-                      const base::hash_map<Key, Value>& right) {
+void ExpectEquivalent(const std::unordered_map<Key, Value>& left,
+                      const std::unordered_map<Key, Value>& right) {
   // Convert from a hash container to an ordered container for comparison.
   ExpectEquivalentMaps(std::map<Key, Value>(left.begin(), left.end()),
                        std::map<Key, Value>(right.begin(), right.end()));
@@ -136,8 +137,8 @@ void ExpectEquivalent(const std::set<Value, Comparator>& left,
 }
 
 template <typename Value>
-void ExpectEquivalent(const base::hash_set<Value>& left,
-                      const base::hash_set<Value>& right) {
+void ExpectEquivalent(const std::unordered_set<Value>& left,
+                      const std::unordered_set<Value>& right) {
   // Convert from a hash container to an ordered container for comparison.
   return ExpectEquivalentSets(std::set<Value>(left.begin(), left.end()),
                               std::set<Value>(right.begin(), right.end()));
@@ -271,17 +272,16 @@ class MetadataDatabaseTest : public testing::TestWithParam<bool> {
   MetadataDatabase* metadata_database() { return metadata_database_.get(); }
 
   std::unique_ptr<LevelDBWrapper> InitializeLevelDB() {
-    leveldb::DB* db = nullptr;
+    std::unique_ptr<leveldb::DB> db;
     leveldb::Options options;
     options.create_if_missing = true;
     options.max_open_files = 0;  // Use minimum.
     options.env = in_memory_env_.get();
-    leveldb::Status status =
-        leveldb::DB::Open(options, database_dir_.GetPath().AsUTF8Unsafe(), &db);
+    leveldb::Status status = leveldb_env::OpenDB(
+        options, database_dir_.GetPath().AsUTF8Unsafe(), &db);
     EXPECT_TRUE(status.ok());
 
-    std::unique_ptr<LevelDBWrapper> wrapper(
-        new LevelDBWrapper(base::WrapUnique(db)));
+    std::unique_ptr<LevelDBWrapper> wrapper(new LevelDBWrapper(std::move(db)));
 
     wrapper->Put(kDatabaseVersionKey, base::Int64ToString(3));
     SetUpServiceMetadata(wrapper.get());

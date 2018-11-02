@@ -95,6 +95,16 @@ struct VerifyCertChainTest {
   // The Key Purpose to use when verifying the chain.
   KeyPurpose key_purpose = KeyPurpose::ANY_EKU;
 
+  InitialExplicitPolicy initial_explicit_policy = InitialExplicitPolicy::kFalse;
+
+  std::set<der::Input> user_initial_policy_set;
+
+  InitialPolicyMappingInhibit initial_policy_mapping_inhibit =
+      InitialPolicyMappingInhibit::kFalse;
+
+  InitialAnyPolicyInhibit initial_any_policy_inhibit =
+      InitialAnyPolicyInhibit::kFalse;
+
   // The expected errors/warnings from verification (as a string).
   std::string expected_errors;
 
@@ -116,6 +126,23 @@ bool ReadCertChainFromFile(const std::string& file_path_ascii,
 
 // Reads a data file relative to the src root directory.
 std::string ReadTestFileToString(const std::string& file_path_ascii);
+
+// Asserts that |actual_errors| matches |expected_errors_str|.
+//
+// This is a helper function to simplify rebasing the error expectations when
+// they originate from a test file.
+void VerifyCertPathErrors(const std::string& expected_errors_str,
+                          const CertPathErrors& actual_errors,
+                          const ParsedCertificateList& chain,
+                          const std::string& errors_file_path);
+
+// Asserts that |actual_errors| matches |expected_errors_str|.
+//
+// This is a helper function to simplify rebasing the error expectations when
+// they originate from a test file.
+void VerifyCertErrors(const std::string& expected_errors_str,
+                      const CertErrors& actual_errors,
+                      const std::string& errors_file_path);
 
 }  // namespace net
 

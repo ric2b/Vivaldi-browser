@@ -4,18 +4,17 @@
 
 import("../../../tools/bindings/mojom.gni")
 
-group("tests") {
+group("test_data_deps") {
   testonly = true
-  deps = [
-    ":test_interfaces",
-  ]
   data_deps = [
-    ":test_data",
-    ":test_data_list",
+    ":test_interfaces_js_data_deps",
+    ":test_associated_interfaces_js_data_deps",
+    ":validation_test_data",
+    ":validation_test_data_list",
   ]
 }
 
-copy("test_data") {
+copy("validation_test_data") {
   testonly = true
   sources = [
     "data/validation",
@@ -25,7 +24,7 @@ copy("test_data") {
   ]
 }
 
-action_foreach("test_data_list") {
+action_foreach("validation_test_data_list") {
   testonly = true
   script = "//mojo/public/tools/bindings/gen_data_files_list.py"
   sources = [
@@ -69,10 +68,11 @@ mojom("test_interfaces") {
     ":test_mojom_import",
     ":test_mojom_import2",
   ]
-  use_new_js_bindings = true
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
+
+  support_lazy_serialization = true
 }
 
 component("test_export_component") {
@@ -109,7 +109,6 @@ mojom("test_export") {
   if (!is_ios) {
     visibility_blink = [ ":test_export_blink_component" ]
   }
-  use_new_js_bindings = true
 }
 
 mojom("test_exported_import") {
@@ -127,7 +126,6 @@ mojom("test_exported_import") {
     overridden_deps_blink = [ ":test_export" ]
     component_deps_blink = [ ":test_export_blink_component" ]
   }
-  use_new_js_bindings = true
 }
 
 # Used to test that it is okay to call mojom::Foo::Serialize()/Deserialize()
@@ -153,7 +151,6 @@ mojom("test_export2") {
   export_define = "MOJO_TEST_IMPLEMENTATION=1"
   export_header = "mojo/public/cpp/bindings/tests/mojo_test_export.h"
   visibility = [ ":test_export_component2" ]
-  use_new_js_bindings = true
 }
 
 mojom("test_mojom_import") {
@@ -161,7 +158,6 @@ mojom("test_mojom_import") {
   sources = [
     "sample_import.mojom",
   ]
-  use_new_js_bindings = true
 }
 
 mojom("test_mojom_import_wrapper") {
@@ -187,7 +183,6 @@ mojom("test_mojom_import2") {
     ":test_mojom_import",
     ":test_mojom_import_wrapper_wrapper",
   ]
-  use_new_js_bindings = true
 }
 
 mojom("test_struct_traits_interfaces") {
@@ -196,10 +191,10 @@ mojom("test_struct_traits_interfaces") {
     "struct_with_traits.mojom",
   ]
 
-  use_new_js_bindings = true
-
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
+
+  support_lazy_serialization = true
 }
 
 mojom("test_associated_interfaces") {
@@ -215,8 +210,6 @@ mojom("test_associated_interfaces") {
     ":test_interfaces",
   ]
 
-  use_new_js_bindings = true
-
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
 }
@@ -226,7 +219,6 @@ mojom("versioning_test_service_interfaces") {
   sources = [
     "versioning_test_service.mojom",
   ]
-  use_new_js_bindings = true
 }
 
 mojom("versioning_test_client_interfaces") {
@@ -234,7 +226,6 @@ mojom("versioning_test_client_interfaces") {
   sources = [
     "versioning_test_client.mojom",
   ]
-  use_new_js_bindings = true
 }
 
 mojom("test_wtf_types") {
@@ -243,8 +234,6 @@ mojom("test_wtf_types") {
   sources = [
     "test_wtf_types.mojom",
   ]
-
-  use_new_js_bindings = true
 
   # TODO(crbug.com/714018): Convert the implementation to use OnceCallback.
   use_once_callback = false
@@ -262,7 +251,6 @@ mojom("echo") {
   testonly = true
   sources = [
     "echo.mojom",
-    "echo_import.mojom",
+    "echo_import/echo_import.mojom",
   ]
-  use_new_js_bindings = true
 }

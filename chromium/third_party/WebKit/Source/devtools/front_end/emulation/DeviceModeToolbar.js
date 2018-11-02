@@ -22,9 +22,6 @@ Emulation.DeviceModeToolbar = class {
     this._showUserAgentTypeSetting = Common.settings.createSetting('emulation.showUserAgentType', false);
     this._showUserAgentTypeSetting.addChangeListener(this._updateUserAgentTypeVisibility, this);
 
-    this._showNetworkConditionsSetting = Common.settings.createSetting('emulation.showNetworkConditions', false);
-    this._showNetworkConditionsSetting.addChangeListener(this._updateNetworkConditionsVisibility, this);
-
     /** @type {!Map<!Emulation.EmulatedDevice, !Emulation.EmulatedDevice.Mode>} */
     this._lastMode = new Map();
 
@@ -93,9 +90,8 @@ Emulation.DeviceModeToolbar = class {
    * @param {!UI.Toolbar} toolbar
    */
   _fillMainToolbar(toolbar) {
-    var widthInput = createElementWithClass('input', 'device-mode-size-input');
+    var widthInput = UI.createInput('device-mode-size-input', 'text');
     widthInput.maxLength = 4;
-    widthInput.type = 'text';
     widthInput.title = Common.UIString('Width');
     this._updateWidthInput =
         UI.bindInput(widthInput, this._applyWidth.bind(this), Emulation.DeviceModeModel.deviceSizeValidator, true);
@@ -108,9 +104,8 @@ Emulation.DeviceModeToolbar = class {
     this._xItem = this._wrapToolbarItem(xElement);
     toolbar.appendToolbarItem(this._xItem);
 
-    var heightInput = createElementWithClass('input', 'device-mode-size-input');
+    var heightInput = UI.createInput('device-mode-size-input', 'text');
     heightInput.maxLength = 4;
-    heightInput.type = 'text';
     heightInput.title = Common.UIString('Height (leave empty for full)');
     this._updateHeightInput = UI.bindInput(heightInput, this._applyHeight.bind(this), validateHeight, true);
     this._heightInput = heightInput;
@@ -171,6 +166,9 @@ Emulation.DeviceModeToolbar = class {
     this._uaItem.setGlyph('');
     this._uaItem.turnIntoSelect();
     toolbar.appendToolbarItem(this._uaItem);
+
+    this._throttlingConditionsItem = MobileThrottling.throttlingManager().createMobileThrottlingButton();
+    toolbar.appendToolbarItem(this._throttlingConditionsItem);
   }
 
   /**
@@ -188,12 +186,6 @@ Emulation.DeviceModeToolbar = class {
    * @param {!UI.Toolbar} toolbar
    */
   _fillOptionsToolbar(toolbar) {
-    this._networkConditionsItem = NetworkConditions.NetworkConditionsSelector.createToolbarMenuButton();
-    this._networkConditionsItem.setVisible(this._showNetworkConditionsSetting.get());
-    this._networkConditionsItem.setTitle(Common.UIString('Network throttling'));
-    this._networkConditionsItem.element.style.maxWidth = '140px';
-    toolbar.appendToolbarItem(this._networkConditionsItem);
-
     var moreOptionsButton = new UI.ToolbarMenuButton(this._appendOptionsMenuItems.bind(this));
     moreOptionsButton.setTitle(Common.UIString('More options'));
     toolbar.appendToolbarItem(moreOptionsButton);
@@ -302,9 +294,6 @@ Emulation.DeviceModeToolbar = class {
         Common.UIString('Add device pixel ratio'));
     appendToggleItem(
         this._showUserAgentTypeSetting, Common.UIString('Remove device type'), Common.UIString('Add device type'));
-    appendToggleItem(
-        this._showNetworkConditionsSetting, Common.UIString('Remove network throttling'),
-        Common.UIString('Add network throttling'));
     contextMenu.appendSeparator();
     contextMenu.appendItemsAtLocation('deviceModeMenu');
     contextMenu.appendSeparator();
@@ -329,7 +318,6 @@ Emulation.DeviceModeToolbar = class {
     this._showUserAgentTypeSetting.set(false);
     this._showMediaInspectorSetting.set(false);
     this._showRulersSetting.set(false);
-    this._showNetworkConditionsSetting.set(false);
     this._model.reset();
   }
 
@@ -442,10 +430,6 @@ Emulation.DeviceModeToolbar = class {
 
   _updateUserAgentTypeVisibility() {
     this._uaItem.setVisible(this._showUserAgentTypeSetting.get());
-  }
-
-  _updateNetworkConditionsVisibility() {
-    this._networkConditionsItem.setVisible(this._showNetworkConditionsSetting.get());
   }
 
   /**

@@ -23,6 +23,8 @@
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 
+using content::DesktopMediaID;
+
 namespace extensions {
 
 namespace {
@@ -56,11 +58,33 @@ class FakeDesktopMediaPicker : public DesktopMediaPicker {
             gfx::NativeWindow parent,
             const base::string16& app_name,
             const base::string16& target_name,
-            std::unique_ptr<DesktopMediaList> screen_list,
-            std::unique_ptr<DesktopMediaList> window_list,
-            std::unique_ptr<DesktopMediaList> tab_list,
+            std::vector<std::unique_ptr<DesktopMediaList>> source_lists,
             bool request_audio,
             const DoneCallback& done_callback) override {
+    bool show_screens = false;
+    bool show_windows = false;
+    bool show_tabs = false;
+
+    for (auto& source_list : source_lists) {
+      switch (source_list->GetMediaListType()) {
+        case DesktopMediaID::TYPE_NONE:
+          break;
+        case DesktopMediaID::TYPE_SCREEN:
+          show_screens = true;
+          break;
+        case DesktopMediaID::TYPE_WINDOW:
+          show_windows = true;
+          break;
+        case DesktopMediaID::TYPE_WEB_CONTENTS:
+          show_tabs = true;
+          break;
+      }
+    }
+    EXPECT_EQ(expectation_->expect_screens, show_screens);
+    EXPECT_EQ(expectation_->expect_windows, show_windows);
+    EXPECT_EQ(expectation_->expect_tabs, show_tabs);
+    EXPECT_EQ(expectation_->expect_audio, request_audio);
+
     if (!expectation_->cancelled) {
       // Post a task to call the callback asynchronously.
       base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -98,31 +122,6 @@ class FakeDesktopMediaPickerFactory :
     current_test_ = 0;
   }
 
-  // DesktopCaptureChooseDesktopMediaFunction::PickerFactory interface.
-  MediaListArray CreateModel(
-      bool show_screens,
-      bool show_windows,
-      bool show_tabs,
-      bool show_audio) override {
-    EXPECT_LE(current_test_, tests_count_);
-    MediaListArray media_lists;
-    if (current_test_ >= tests_count_) {
-      return media_lists;
-    }
-    EXPECT_EQ(test_flags_[current_test_].expect_screens, show_screens);
-    EXPECT_EQ(test_flags_[current_test_].expect_windows, show_windows);
-    EXPECT_EQ(test_flags_[current_test_].expect_tabs, show_tabs);
-    EXPECT_EQ(test_flags_[current_test_].expect_audio, show_audio);
-
-    media_lists[0] = std::unique_ptr<DesktopMediaList>(
-        show_screens ? new FakeDesktopMediaList() : nullptr);
-    media_lists[1] = std::unique_ptr<DesktopMediaList>(
-        show_windows ? new FakeDesktopMediaList() : nullptr);
-    media_lists[2] = std::unique_ptr<DesktopMediaList>(
-        show_tabs ? new FakeDesktopMediaList() : nullptr);
-    return media_lists;
-  }
-
   std::unique_ptr<DesktopMediaPicker> CreatePicker() override {
     EXPECT_LE(current_test_, tests_count_);
     if (current_test_ >= tests_count_)
@@ -130,6 +129,12 @@ class FakeDesktopMediaPickerFactory :
     ++current_test_;
     return std::unique_ptr<DesktopMediaPicker>(
         new FakeDesktopMediaPicker(test_flags_ + current_test_ - 1));
+  }
+
+  std::unique_ptr<DesktopMediaList> CreateMediaList(
+      DesktopMediaID::Type type) override {
+    EXPECT_LE(current_test_, tests_count_);
+    return std::unique_ptr<DesktopMediaList>(new FakeDesktopMediaList(type));
   }
 
  private:
@@ -171,7 +176,8 @@ class DesktopCaptureApiTest : public ExtensionApiTest {
 }  // namespace
 
 // Flaky on Windows: http://crbug.com/301887
-#if defined(OS_WIN)
+// Fails on Ozone Chrome OS: http://crbug.com/718512
+#if defined(OS_WIN) || (defined(OS_CHROMEOS) && defined(USE_OZONE))
 #define MAYBE_ChooseDesktopMedia DISABLED_ChooseDesktopMedia
 #else
 #define MAYBE_ChooseDesktopMedia ChooseDesktopMedia

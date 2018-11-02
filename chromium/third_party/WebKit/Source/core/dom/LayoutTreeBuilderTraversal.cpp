@@ -27,8 +27,8 @@
 #include "core/dom/LayoutTreeBuilderTraversal.h"
 
 #include "core/HTMLNames.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/PseudoElement.h"
-#include "core/dom/shadow/FlatTreeTraversal.h"
 #include "core/layout/LayoutObject.h"
 
 namespace blink {
@@ -44,7 +44,7 @@ static bool IsLayoutObjectReparented(const LayoutObject* layout_object) {
 }
 
 void LayoutTreeBuilderTraversal::ParentDetails::DidTraverseInsertionPoint(
-    const InsertionPoint* insertion_point) {
+    const V0InsertionPoint* insertion_point) {
   if (!insertion_point_) {
     insertion_point_ = insertion_point;
   }
@@ -302,6 +302,11 @@ Node* LayoutTreeBuilderTraversal::PreviousLayoutSibling(const Node& node,
   }
 
   return nullptr;
+}
+
+Node* LayoutTreeBuilderTraversal::FirstLayoutChild(const Node& node) {
+  int32_t limit = kTraverseAllSiblings;
+  return NextLayoutSiblingInternal(PseudoAwareFirstChild(node), limit);
 }
 
 LayoutObject* LayoutTreeBuilderTraversal::NextSiblingLayoutObject(

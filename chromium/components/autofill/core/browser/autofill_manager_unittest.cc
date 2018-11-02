@@ -17,7 +17,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
 #include "base/metrics/field_trial.h"
 #include "base/metrics/metrics_hashes.h"
 #include "base/run_loop.h"
@@ -160,7 +159,7 @@ class TestPersonalDataManager : public PersonalDataManager {
 
   std::string SaveImportedProfile(const AutofillProfile& profile) override {
     num_times_save_imported_profile_called_++;
-    AddProfile(base::MakeUnique<AutofillProfile>(profile));
+    AddProfile(profile);
     return profile.guid();
   }
 
@@ -180,9 +179,11 @@ class TestPersonalDataManager : public PersonalDataManager {
     return NULL;
   }
 
-  void AddProfile(std::unique_ptr<AutofillProfile> profile) {
-    profile->set_modification_date(AutofillClock::Now());
-    web_profiles_.push_back(std::move(profile));
+  void AddProfile(const AutofillProfile& profile) override {
+    std::unique_ptr<AutofillProfile> profile_ptr =
+        base::MakeUnique<AutofillProfile>(profile);
+    profile_ptr->set_modification_date(AutofillClock::Now());
+    web_profiles_.push_back(std::move(profile_ptr));
   }
 
   void AddCreditCard(const CreditCard& credit_card) override {
@@ -673,7 +674,7 @@ class TestAutofillManager : public AutofillManager {
   }
 
   void AddProfile(std::unique_ptr<AutofillProfile> profile) {
-    personal_data_->AddProfile(std::move(profile));
+    personal_data_->AddProfile(*profile);
   }
 
   void AddCreditCard(const CreditCard& credit_card) {
@@ -1163,7 +1164,7 @@ class AutofillManagerTest : public testing::Test {
 
  protected:
   base::test::ScopedTaskEnvironment scoped_task_environment_;
-  ukm::TestUkmRecorder test_ukm_recorder_;
+  ukm::TestAutoSetUkmRecorder test_ukm_recorder_;
   MockAutofillClient autofill_client_;
   std::unique_ptr<MockAutofillDriver> autofill_driver_;
   std::unique_ptr<TestAutofillManager> autofill_manager_;
@@ -4339,7 +4340,7 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndUnfocus_Upload) {
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
   // Simulate editing a field.
   autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
-                                          base::TimeTicks::Now());
+                                          gfx::RectF(), base::TimeTicks::Now());
 
   autofill_manager_->ResetRunLoop();
   // Simulate lost of focus on the form.
@@ -4392,7 +4393,7 @@ TEST_F(AutofillManagerTest, OnTextFieldDidChangeAndNavigation_Upload) {
   form.fields[2].value = ASCIIToUTF16("theking@gmail.com");
   // Simulate editing a field.
   autofill_manager_->OnTextFieldDidChange(form, form.fields.front(),
-                                          base::TimeTicks::Now());
+                                          gfx::RectF(), base::TimeTicks::Now());
 
   autofill_manager_->ResetRunLoop();
   // Simulate a navigation so that the pending form is uploaded.
@@ -7060,7 +7061,7 @@ TEST_F(AutofillManagerTest, SignInFormSubmission_Upload) {
   types.insert(EMAIL_ADDRESS);
   expected_types.push_back(types);
 
-  test::CreateTestFormField("Password", "pw", "secret", "password", &field);
+  test::CreateTestFormField("Password", "pw", "", "password", &field);
   form.fields.push_back(field);
   FormsSeen(std::vector<FormData>(1, form));
   types.clear();

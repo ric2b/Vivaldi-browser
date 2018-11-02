@@ -4,8 +4,11 @@
 
 #include "chrome/browser/chromeos/login/oobe_screen.h"
 
+#include "base/command_line.h"
 #include "base/logging.h"
 #include "base/macros.h"
+#include "base/strings/string_split.h"
+#include "chromeos/chromeos_switches.h"
 
 namespace chromeos {
 namespace {
@@ -44,11 +47,13 @@ const char* kScreenNames[] = {
     "userBoard",                       // SCREEN_USER_SELECTION
     // SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE
     "ad-password-change",
-    "encryption-migration",  // SCREEN_ENCRYPTION_MIGRATION
-    "login",                 // SCREEN_SPECIAL_LOGIN
-    "oobe",                  // SCREEN_SPECIAL_OOBE
-    "test:nowindow",         // SCREEN_TEST_NO_WINDOW
-    "unknown",               // SCREEN_UNKNOWN
+    "encryption-migration",          // SCREEN_ENCRYPTION_MIGRATION
+    "voice-interaction-value-prop",  // SCREEN_VOICE_INTERACTION_VALUE_PROP
+    "wait-for-container-ready",      // SCREEN_WAIT_FOR_CONTAINTER_READY
+    "login",                         // SCREEN_SPECIAL_LOGIN
+    "oobe",                          // SCREEN_SPECIAL_OOBE
+    "test:nowindow",                 // SCREEN_TEST_NO_WINDOW
+    "unknown",                       // SCREEN_UNKNOWN
 };
 
 static_assert(static_cast<size_t>(OobeScreen::SCREEN_UNKNOWN) ==
@@ -69,6 +74,18 @@ OobeScreen GetOobeScreenFromName(const std::string& name) {
   }
 
   return OobeScreen::SCREEN_UNKNOWN;
+}
+
+bool ForceShowOobeScreen(OobeScreen screen) {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (!command_line->HasSwitch(switches::kOobeForceShowScreen))
+    return false;
+  std::string option_str =
+      command_line->GetSwitchValueASCII(switches::kOobeForceShowScreen);
+  std::vector<std::string> screens = base::SplitString(
+      option_str, ",", base::TRIM_WHITESPACE, base::SPLIT_WANT_NONEMPTY);
+  std::string name = GetOobeScreenName(screen);
+  return std::find(screens.begin(), screens.end(), name) != screens.end();
 }
 
 }  // namespace chromeos

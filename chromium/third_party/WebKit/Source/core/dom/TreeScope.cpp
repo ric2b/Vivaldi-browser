@@ -31,17 +31,17 @@
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/IdTargetObserverRegistry.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
 #include "core/dom/TreeScopeAdopter.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/DOMSelection.h"
 #include "core/events/EventPath.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLAnchorElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
 #include "core/html/HTMLMapElement.h"
@@ -140,7 +140,7 @@ const HeapVector<Member<Element>>& TreeScope::GetAllElementsById(
 void TreeScope::AddElementById(const AtomicString& element_id,
                                Element* element) {
   if (!elements_by_id_)
-    elements_by_id_ = DocumentOrderedMap::Create();
+    elements_by_id_ = TreeOrderedMap::Create();
   elements_by_id_->Add(element_id, element);
   id_target_observer_registry_->NotifyObservers(element_id);
 }
@@ -171,7 +171,7 @@ void TreeScope::AddImageMap(HTMLMapElement* image_map) {
   if (!name)
     return;
   if (!image_maps_by_name_)
-    image_maps_by_name_ = DocumentOrderedMap::Create();
+    image_maps_by_name_ = TreeOrderedMap::Create();
   image_maps_by_name_->Add(name, image_map);
 }
 
@@ -200,7 +200,7 @@ static bool PointWithScrollAndZoomIfPossible(const Document& document,
   LocalFrame* frame = document.GetFrame();
   if (!frame)
     return false;
-  FrameView* frame_view = frame->View();
+  LocalFrameView* frame_view = frame->View();
   if (!frame_view)
     return false;
 

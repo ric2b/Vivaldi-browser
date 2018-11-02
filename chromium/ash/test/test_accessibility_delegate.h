@@ -10,8 +10,8 @@
 #include "ui/gfx/image/image_skia.h"
 
 namespace ash {
-namespace test {
 
+// TODO(jamescook): Move to //ash/accessibility.
 class TestAccessibilityDelegate : public DefaultAccessibilityDelegate {
  public:
   TestAccessibilityDelegate() {}
@@ -28,7 +28,6 @@ class TestAccessibilityDelegate : public DefaultAccessibilityDelegate {
   DISALLOW_COPY_AND_ASSIGN(TestAccessibilityDelegate);
 };
 
-}  // namespace test
 }  // namespace ash
 
 #endif  // ASH_TEST_TEST_ACCESSIBILITY_DELEGATE_H_

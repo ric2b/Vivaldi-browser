@@ -13,6 +13,10 @@
 #include "net/cookies/cookie_options.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace net {
 
 namespace {
@@ -80,7 +84,7 @@ void TestPersistentCookieStore::DeleteCookie(const net::CanonicalCookie& cc) {}
 
 void TestPersistentCookieStore::SetForceKeepSessionState() {}
 
-void TestPersistentCookieStore::Flush(const base::Closure& callback) {
+void TestPersistentCookieStore::Flush(base::OnceClosure callback) {
   flushed_ = true;
 }
 

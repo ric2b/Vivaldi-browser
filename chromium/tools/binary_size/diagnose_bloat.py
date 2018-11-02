@@ -29,12 +29,12 @@ import zipfile
 
 _COMMIT_COUNT_WARN_THRESHOLD = 15
 _ALLOWED_CONSECUTIVE_FAILURES = 2
-_DIFF_DETAILS_LINES_THRESHOLD = 100
 _SRC_ROOT = os.path.abspath(
     os.path.join(os.path.dirname(__file__), os.pardir, os.pardir))
-_DEFAULT_ARCHIVE_DIR = os.path.join(_SRC_ROOT, 'binary-size-bloat')
-_DEFAULT_OUT_DIR = os.path.join(_SRC_ROOT, 'out', 'diagnose-apk-bloat')
+_DEFAULT_ARCHIVE_DIR = os.path.join(_SRC_ROOT, 'out', 'binary-size-results')
+_DEFAULT_OUT_DIR = os.path.join(_SRC_ROOT, 'out', 'binary-size-build')
 _DEFAULT_ANDROID_TARGET = 'monochrome_public_apk'
+_BINARY_SIZE_DIR = os.path.join(_SRC_ROOT, 'tools', 'binary_size')
 
 
 _DiffResult = collections.namedtuple('DiffResult', ['name', 'value', 'units'])
@@ -49,10 +49,11 @@ class BaseDiff(object):
   def AppendResults(self, logfile):
     """Print and write diff results to an open |logfile|."""
     _PrintAndWriteToFile(logfile, self.banner)
-    _PrintAndWriteToFile(logfile, 'Summary:')
-    _PrintAndWriteToFile(logfile, self.Summary())
-    _PrintAndWriteToFile(logfile, '\nDetails:')
-    _PrintAndWriteToFile(logfile, self.DetailedResults())
+    for s in self.Summary():
+      print s
+    print
+    for s in self.DetailedResults():
+      logfile.write(s + '\n')
 
   @property
   def summary_stat(self):
@@ -77,7 +78,6 @@ class BaseDiff(object):
 
 
 class NativeDiff(BaseDiff):
-  _RE_SUMMARY = re.compile(r'Section Sizes .*?\n\n.*?(?=\n\n)', flags=re.DOTALL)
   _RE_SUMMARY_STAT = re.compile(
       r'Section Sizes \(Total=(?P<value>\d+) (?P<units>\w+)\)')
   _SUMMARY_STAT_NAME = 'Native Library Delta'
@@ -100,7 +100,7 @@ class NativeDiff(BaseDiff):
     return self._diff.splitlines()
 
   def Summary(self):
-    return NativeDiff._RE_SUMMARY.search(self._diff).group()
+    return self.DetailedResults()[:100]
 
   def ProduceDiff(self, before_dir, after_dir):
     before_size = os.path.join(before_dir, self._size_name)
@@ -112,6 +112,10 @@ class NativeDiff(BaseDiff):
 class ResourceSizesDiff(BaseDiff):
   _RESOURCE_SIZES_PATH = os.path.join(
       _SRC_ROOT, 'build', 'android', 'resource_sizes.py')
+  _SUMMARY_SECTIONS = ('Breakdown', 'Specifics')
+  # Sections where it makes sense to sum subsections into a section total.
+  _AGGREGATE_SECTIONS = (
+      'InstallBreakdown', 'Breakdown', 'MainLibInfo', 'Uncompressed')
 
   def __init__(self, apk_name, slow_options=False):
     self._apk_name = apk_name
@@ -121,23 +125,24 @@ class ResourceSizesDiff(BaseDiff):
 
   @property
   def summary_stat(self):
-    for s in self._diff:
-      if 'normalized' in s.name:
-        return s
+    for section_name, results in self._diff.iteritems():
+      for subsection_name, value, units in results:
+        if 'normalized' in subsection_name:
+          full_name = '{} {}'.format(section_name, subsection_name)
+          return _DiffResult(full_name, value, units)
     return None
 
   def DetailedResults(self):
-    return ['{:>+10,} {} {}'.format(value, units, name)
-            for name, value, units in self._diff]
+    return self._ResultLines()
 
   def Summary(self):
-    return 'Normalized APK size: {:+,} {}'.format(
-        self.summary_stat.value, self.summary_stat.units)
+    return self._ResultLines(
+        include_sections=ResourceSizesDiff._SUMMARY_SECTIONS)
 
   def ProduceDiff(self, before_dir, after_dir):
     before = self._RunResourceSizes(before_dir)
     after = self._RunResourceSizes(after_dir)
-    diff = []
+    self._diff = collections.defaultdict(list)
     for section, section_dict in after.iteritems():
       for subsection, v in section_dict.iteritems():
         # Ignore entries when resource_sizes.py chartjson format has changed.
@@ -148,12 +153,36 @@ class ResourceSizesDiff(BaseDiff):
               'Found differing dict structures for resource_sizes.py, '
               'skipping %s %s', section, subsection)
         else:
-          diff.append(
-              _DiffResult(
-                  '%s %s' % (section, subsection),
-                  v['value'] - before[section][subsection]['value'],
-                  v['units']))
-    self._diff = sorted(diff, key=lambda x: abs(x.value), reverse=True)
+          self._diff[section].append(_DiffResult(
+              subsection,
+              v['value'] - before[section][subsection]['value'],
+              v['units']))
+
+  def _ResultLines(self, include_sections=None):
+    """Generates diff lines for the specified sections (defaults to all)."""
+    ret = []
+    for section_name, section_results in self._diff.iteritems():
+      section_no_target = re.sub(r'^.*_', '', section_name)
+      if not include_sections or section_no_target in include_sections:
+        subsection_lines = []
+        section_sum = 0
+        units = ''
+        for name, value, units in section_results:
+          # Omit subsections with no changes for summaries.
+          if value == 0 and include_sections:
+            continue
+          section_sum += value
+          subsection_lines.append('{:>+10,} {} {}'.format(value, units, name))
+        section_header = section_name
+        if section_no_target in ResourceSizesDiff._AGGREGATE_SECTIONS:
+          section_header += ' ({:+,} {})'.format(section_sum, units)
+        # Omit sections with empty subsections.
+        if subsection_lines:
+          ret.append(section_header)
+          ret.extend(subsection_lines)
+    if not ret:
+      ret = ['Empty ' + self.name]
+    return ret
 
   def _RunResourceSizes(self, archive_dir):
     apk_path = os.path.join(archive_dir, self._apk_name)
@@ -161,9 +190,7 @@ class ResourceSizesDiff(BaseDiff):
     cmd = [self._RESOURCE_SIZES_PATH, apk_path,'--output-dir', archive_dir,
            '--no-output-dir', '--chartjson']
     if self._slow_options:
-      cmd += ['--estimate-patch-size']
-    else:
-      cmd += ['--no-static-initializer-check']
+      cmd += ['--estimate-patch-size', '--dump-static-initializers']
     _RunCmd(cmd)
     with open(chartjson_file) as f:
       chartjson = json.load(f)
@@ -268,7 +295,8 @@ class _BuildHelper(object):
 
   def Run(self):
     """Run GN gen/ninja build and return the process returncode."""
-    logging.info('Building: %s (this might take a while).', self.target)
+    logging.info('Building %s within %s (this might take a while).',
+                 self.target, os.path.relpath(self.output_directory))
     retcode = _RunCmd(
         self._GenGnCmd(), verbose=True, exit_on_failure=False)[1]
     if retcode:
@@ -373,7 +401,16 @@ class _DiffArchiveManager(object):
       with open(diff_path, 'a') as diff_file:
         for d in self.diffs:
           d.RunDiff(diff_file, before.dir, after.dir)
-        logging.info('See detailed diff results here: %s', diff_path)
+        logging.info('See detailed diff results here: %s',
+                     os.path.relpath(diff_path))
+        if len(self.build_archives) == 2:
+          supersize_path = os.path.join(_BINARY_SIZE_DIR, 'supersize')
+          size_paths = [os.path.join(a.dir, a.build.size_name)
+                        for a in self.build_archives]
+          logging.info('Enter supersize console via: %s console %s %s',
+                       os.path.relpath(supersize_path),
+                       os.path.relpath(size_paths[0]),
+                       os.path.relpath(size_paths[1]))
       metadata.Write()
       self._AddDiffSummaryStat(before, after)
 
@@ -505,7 +542,12 @@ def _SyncAndBuild(archive, build, subrepo):
   """Sync, build and return non 0 if any commands failed."""
   # Simply do a checkout if subrepo is used.
   retcode = 0
-  if subrepo != _SRC_ROOT:
+  if _CurrentGitHash(subrepo) == archive.rev:
+    if subrepo != _SRC_ROOT:
+      logging.info('Skipping git checkout since already at desired rev')
+    else:
+      logging.info('Skipping gclient sync since already at desired rev')
+  elif subrepo != _SRC_ROOT:
     _GitCmd(['checkout',  archive.rev], subrepo)
   else:
     # Move to a detached state since gclient sync doesn't work with local
@@ -642,17 +684,12 @@ def _ExtractFiles(to_extract, dst, z):
 
 
 def _PrintAndWriteToFile(logfile, s, *args, **kwargs):
-  """Write and print |s| thottling output if |s| is a large list."""
   if isinstance(s, basestring):
-    s = s.format(*args, **kwargs)
-    print s
-    logfile.write('%s\n' % s)
+    data = s.format(*args, **kwargs) + '\n'
   else:
-    for l in s[:_DIFF_DETAILS_LINES_THRESHOLD]:
-      print l
-    if len(s) > _DIFF_DETAILS_LINES_THRESHOLD:
-      print '\nOutput truncated, see %s for more.' % logfile.name
-    logfile.write('\n'.join(s))
+    data = '\n'.join(s) + '\n'
+  sys.stdout.write(data)
+  logfile.write(data)
 
 
 @contextmanager
@@ -663,10 +700,14 @@ def _TmpCopyBinarySizeDir():
   tmp_dir = tempfile.mkdtemp(dir=_SRC_ROOT)
   try:
     bs_dir = os.path.join(tmp_dir, 'binary_size')
-    shutil.copytree(os.path.join(_SRC_ROOT, 'tools', 'binary_size'), bs_dir)
+    shutil.copytree(_BINARY_SIZE_DIR, bs_dir)
     yield os.path.join(bs_dir, 'supersize')
   finally:
     shutil.rmtree(tmp_dir)
+
+
+def _CurrentGitHash(subrepo):
+  return _GitCmd(['rev-parse', 'HEAD'], subrepo)
 
 
 def _SetRestoreFunc(subrepo):

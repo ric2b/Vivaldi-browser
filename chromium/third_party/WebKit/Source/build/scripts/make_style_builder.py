@@ -78,23 +78,26 @@ class StyleBuilderWriter(css_properties.CSSProperties):
         for property in self._properties.values():
             apply_property_naming_defaults(property)
 
-    @template_expander.use_jinja('StyleBuilderFunctions.h.tmpl',
+    @template_expander.use_jinja('templates/StyleBuilderFunctions.h.tmpl',
                                  filters=filters)
     def generate_style_builder_functions_h(self):
         return {
+            'input_files': self._input_files,
             'properties': self._properties,
         }
 
-    @template_expander.use_jinja('StyleBuilderFunctions.cpp.tmpl',
+    @template_expander.use_jinja('templates/StyleBuilderFunctions.cpp.tmpl',
                                  filters=filters)
     def generate_style_builder_functions_cpp(self):
         return {
+            'input_files': self._input_files,
             'properties': self._properties,
         }
 
-    @template_expander.use_jinja('StyleBuilder.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/StyleBuilder.cpp.tmpl', filters=filters)
     def generate_style_builder(self):
         return {
+            'input_files': self._input_files,
             'properties': self._properties,
         }
 

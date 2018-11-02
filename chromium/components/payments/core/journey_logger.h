@@ -38,7 +38,7 @@ class JourneyLogger {
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: Section
   enum Section {
     SECTION_CONTACT_INFO = 0,
-    SECTION_CREDIT_CARDS = 1,
+    SECTION_PAYMENT_METHOD = 1,
     SECTION_SHIPPING_ADDRESS = 2,
     SECTION_MAX,
   };
@@ -106,7 +106,12 @@ class JourneyLogger {
     EVENT_PAY_CLICKED = 1 << 1,
     EVENT_RECEIVED_INSTRUMENT_DETAILS = 1 << 2,
     EVENT_SKIPPED_SHOW = 1 << 3,
-    EVENT_ENUM_MAX = 16,
+    EVENT_COMPLETED = 1 << 4,
+    EVENT_USER_ABORTED = 1 << 5,
+    EVENT_OTHER_ABORTED = 1 << 6,
+    EVENT_HAD_INITIAL_FORM_OF_PAYMENT = 1 << 7,
+    EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS = 1 << 8,
+    EVENT_ENUM_MAX = 512,
   };
 
   // The reason why the Payment Request was aborted.
@@ -127,7 +132,6 @@ class JourneyLogger {
     ABORT_REASON_MAX,
   };
 
-#ifdef OS_ANDROID
   // The reason why the Payment Request was not shown to the user.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.payments
   // GENERATED_JAVA_CLASS_NAME_OVERRIDE: NotShownReason
@@ -138,7 +142,6 @@ class JourneyLogger {
     NOT_SHOWN_REASON_OTHER = 3,
     NOT_SHOWN_REASON_MAX = 4,
   };
-#endif
 
   JourneyLogger(bool is_incognito,
                 const GURL& url,
@@ -155,7 +158,9 @@ class JourneyLogger {
   void IncrementSelectionEdits(Section section);
 
   // Sets the number of suggestions shown for the specified section.
-  void SetNumberOfSuggestionsShown(Section section, int number);
+  void SetNumberOfSuggestionsShown(Section section,
+                                   int number,
+                                   bool has_valid_suggestion);
 
   // Records the fact that the merchant called CanMakePayment and records it's
   // return value.
@@ -184,11 +189,9 @@ class JourneyLogger {
   // starts the logging of all the journey metrics.
   void SetAborted(AbortReason reason);
 
-#ifdef OS_ANDROID
   // Records that the Payment Request was not shown to the user, along with the
   // reason.
   void SetNotShown(NotShownReason reason);
-#endif
 
  private:
   static const int NUMBER_OF_SECTIONS = 3;
@@ -208,13 +211,15 @@ class JourneyLogger {
           number_selection_changes_(0),
           number_selection_edits_(0),
           number_suggestions_shown_(0),
-          is_requested_(false) {}
+          is_requested_(false),
+          has_complete_suggestion_(false) {}
 
     int number_selection_adds_;
     int number_selection_changes_;
     int number_selection_edits_;
     int number_suggestions_shown_;
     bool is_requested_;
+    bool has_complete_suggestion_;
   };
 
   // Records the histograms for all the sections that were requested by the
@@ -249,6 +254,10 @@ class JourneyLogger {
   // of the CanMakePaymentMethod.
   void RecordCanMakePaymentEffectOnCompletion(
       CompletionStatus completion_status);
+
+  // Records the metric about the different events that happened during the
+  // Payment Request.
+  void RecordEventsMetric(CompletionStatus completion_status);
 
   // Records the Payment Request Url Keyed Metrics.
   void RecordUrlKeyedMetrics(CompletionStatus completion_status);

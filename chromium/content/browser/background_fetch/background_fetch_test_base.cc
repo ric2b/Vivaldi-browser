@@ -22,6 +22,7 @@
 #include "content/browser/service_worker/service_worker_context_core.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/common/service_worker/service_worker_status_code.h"
+#include "content/common/service_worker/service_worker_types.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/download_item.h"
 #include "content/public/browser/download_url_parameters.h"
@@ -201,6 +202,8 @@ class BackgroundFetchTestBase::RespondingDownloadManager
 };
 
 BackgroundFetchTestBase::BackgroundFetchTestBase()
+    // Using REAL_IO_THREAD would give better coverage for thread safety, but
+    // at time of writing EmbeddedWorkerTestHelper didn't seem to support that.
     : thread_bundle_(TestBrowserThreadBundle::IO_MAINLOOP),
       origin_(GURL(kTestOrigin)) {}
 
@@ -240,7 +243,8 @@ bool BackgroundFetchTestBase::CreateRegistrationId(
   {
     base::RunLoop run_loop;
     embedded_worker_test_helper_.context()->RegisterServiceWorker(
-        origin_.GetURL(), script_url, nullptr /* provider_host */,
+        script_url, ServiceWorkerRegistrationOptions(origin_.GetURL()),
+        nullptr /* provider_host */,
         base::Bind(&DidRegisterServiceWorker, &service_worker_registration_id,
                    run_loop.QuitClosure()));
 

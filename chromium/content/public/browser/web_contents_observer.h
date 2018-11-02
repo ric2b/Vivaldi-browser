@@ -23,6 +23,10 @@
 #include "ui/base/page_transition_types.h"
 #include "ui/base/window_open_disposition.h"
 
+namespace gfx {
+class Size;
+}  // namespace gfx
+
 namespace content {
 
 class NavigationEntry;
@@ -407,14 +411,18 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   // be followed by MediaStoppedPlaying() after player teardown.  Observers must
   // release all stored copies of |id| when MediaStoppedPlaying() is received.
   struct MediaPlayerInfo {
-    explicit MediaPlayerInfo(bool in_has_video) : has_video(in_has_video) {}
+    MediaPlayerInfo(bool has_video, bool has_audio)
+        : has_video(has_video), has_audio(has_audio) {}
     bool has_video;
+    bool has_audio;
   };
   using MediaPlayerId = std::pair<RenderFrameHost*, int>;
   virtual void MediaStartedPlaying(const MediaPlayerInfo& video_type,
                                    const MediaPlayerId& id) {}
   virtual void MediaStoppedPlaying(const MediaPlayerInfo& video_type,
                                    const MediaPlayerId& id) {}
+  virtual void MediaResized(const gfx::Size& size, const MediaPlayerId& id) {}
+  virtual void MediaMutedStatusChanged(const MediaPlayerId& id, bool muted) {}
 
   // Invoked when the renderer process changes the page scale factor.
   virtual void OnPageScaleFactorChanged(float page_scale_factor) {}
@@ -423,11 +431,13 @@ class CONTENT_EXPORT WebContentsObserver : public IPC::Listener,
   virtual bool OnMessageReceived(const IPC::Message& message,
                                  RenderFrameHost* render_frame_host);
 
-  // Notification that |contents| has gained focus.
-  virtual void OnWebContentsFocused() {}
+  // Notification that the |render_widget_host| for this WebContents has gained
+  // focus.
+  virtual void OnWebContentsFocused(RenderWidgetHost* render_widget_host) {}
 
-  // Notification that |contents| has lost focus.
-  virtual void OnWebContentsLostFocus() {}
+  // Notification that the |render_widget_host| for this WebContents has lost
+  // focus.
+  virtual void OnWebContentsLostFocus(RenderWidgetHost* render_widget_host) {}
 
   // Notifes that a CompositorFrame was received from the renderer.
   virtual void DidReceiveCompositorFrame() {}

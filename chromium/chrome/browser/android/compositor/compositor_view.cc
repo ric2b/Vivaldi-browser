@@ -26,7 +26,6 @@
 #include "chrome/browser/android/compositor/scene_layer/scene_layer.h"
 #include "chrome/browser/android/compositor/tab_content_manager.h"
 #include "content/public/browser/android/compositor.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/child_process_data.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/process_type.h"
@@ -197,6 +196,7 @@ void CompositorView::SetOverlayVideoMode(JNIEnv* env,
   if (overlay_video_mode_ == enabled)
     return;
   overlay_video_mode_ = enabled;
+  compositor_->SetRequiresAlphaChannel(enabled);
   compositor_->SetHasTransparentBackground(enabled);
   SetNeedsComposite(env, object);
 }
@@ -269,11 +269,6 @@ void CompositorView::BrowserChildProcessCrashed(
     int exit_code) {
   // The Android TERMINATION_STATUS_OOM_PROTECTED hack causes us to never go
   // through here but through BrowserChildProcessHostDisconnected() instead.
-}
-
-// Register native methods
-bool RegisterCompositorView(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 }  // namespace android

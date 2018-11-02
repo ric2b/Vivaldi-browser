@@ -36,4 +36,4 @@ class OopifBasicPageSet(story.StorySet):
 
     for url in urls:
       for temp in cache_temperatures:
-        self.AddStory(page.Page(url, self, cache_temperature=temp))
+        self.AddStory(page.Page(url, self, cache_temperature=temp, name=url))

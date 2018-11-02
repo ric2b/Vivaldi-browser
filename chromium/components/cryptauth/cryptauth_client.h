@@ -10,6 +10,7 @@
 
 #include "base/callback_forward.h"
 #include "base/macros.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace cryptauth {
 class GetMyDevicesRequest;
@@ -24,6 +25,8 @@ class SetupEnrollmentRequest;
 class SetupEnrollmentResponse;
 class FinishEnrollmentRequest;
 class FinishEnrollmentResponse;
+class FindEligibleForPromotionRequest;
+class FindEligibleForPromotionResponse;
 }
 
 namespace cryptauth {
@@ -45,7 +48,9 @@ class CryptAuthClient {
       GetMyDevicesCallback;
   virtual void GetMyDevices(const GetMyDevicesRequest& request,
                             const GetMyDevicesCallback& callback,
-                            const ErrorCallback& error_callback) = 0;
+                            const ErrorCallback& error_callback,
+                            const net::PartialNetworkTrafficAnnotationTag&
+                                partial_traffic_annotation) = 0;
 
   // FindEligibleUnlockDevices
   typedef base::Callback<void(
@@ -56,13 +61,23 @@ class CryptAuthClient {
       const FindEligibleUnlockDevicesCallback& callback,
       const ErrorCallback& error_callback) = 0;
 
+  // FindEligibleForPromotion
+  typedef base::Callback<void(const FindEligibleForPromotionResponse&)>
+      FindEligibleForPromotionCallback;
+  virtual void FindEligibleForPromotion(
+      const FindEligibleForPromotionRequest& request,
+      const FindEligibleForPromotionCallback& callback,
+      const ErrorCallback& error_callback) = 0;
+
   // SendDeviceSyncTickle
   typedef base::Callback<void(const SendDeviceSyncTickleResponse&)>
       SendDeviceSyncTickleCallback;
   virtual void SendDeviceSyncTickle(
       const SendDeviceSyncTickleRequest& request,
       const SendDeviceSyncTickleCallback& callback,
-      const ErrorCallback& error_callback) = 0;
+      const ErrorCallback& error_callback,
+      const net::PartialNetworkTrafficAnnotationTag&
+          partial_traffic_annotation) = 0;
 
   // ToggleEasyUnlock
   typedef base::Callback<void(const ToggleEasyUnlockResponse&)>

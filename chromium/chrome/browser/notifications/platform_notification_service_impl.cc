@@ -16,9 +16,9 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/engagement/site_engagement_service.h"
+#include "chrome/browser/notifications/notification_common.h"
 #include "chrome/browser/notifications/notification_display_service_factory.h"
-#include "chrome/browser/notifications/notification_object_proxy.h"
-#include "chrome/browser/notifications/persistent_notification_delegate.h"
+#include "chrome/browser/notifications/web_notification_delegate.h"
 #include "chrome/browser/permissions/permission_decision_auto_blocker.h"
 #include "chrome/browser/permissions/permission_manager.h"
 #include "chrome/browser/permissions/permission_result.h"
@@ -29,6 +29,8 @@
 #include "chrome/browser/safe_browsing/ping_manager.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/chrome_features.h"
+#include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -36,7 +38,6 @@
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/desktop_notification_delegate.h"
 #include "content/public/browser/notification_event_dispatcher.h"
 #include "content/public/common/notification_resources.h"
 #include "content/public/common/platform_notification_data.h"
@@ -122,6 +123,7 @@ PlatformNotificationServiceImpl::PlatformNotificationServiceImpl()
 
 PlatformNotificationServiceImpl::~PlatformNotificationServiceImpl() {}
 
+// TODO(miguelg): Move this to PersistentNotificationHandler
 void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
     BrowserContext* browser_context,
     const std::string& notification_id,
@@ -167,6 +169,7 @@ void PlatformNotificationServiceImpl::OnPersistentNotificationClick(
               base::Unretained(this)));
 }
 
+// TODO(miguelg): Move this to PersistentNotificationHandler
 void PlatformNotificationServiceImpl::OnPersistentNotificationClose(
     BrowserContext* browser_context,
     const std::string& notification_id,
@@ -309,7 +312,6 @@ void PlatformNotificationServiceImpl::DisplayNotification(
     const GURL& origin,
     const content::PlatformNotificationData& notification_data,
     const content::NotificationResources& notification_resources,
-    std::unique_ptr<content::DesktopNotificationDelegate> delegate,
     base::Closure* cancel_callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
@@ -324,15 +326,15 @@ void PlatformNotificationServiceImpl::DisplayNotification(
   DCHECK_EQ(0u, notification_data.actions.size());
   DCHECK_EQ(0u, notification_resources.action_icons.size());
 
-  NotificationObjectProxy* proxy = new NotificationObjectProxy(
-      browser_context, notification_id, origin, std::move(delegate));
+  NotificationDelegate* notification_delegate = new WebNotificationDelegate(
+      NotificationCommon::NON_PERSISTENT, profile, notification_id, origin);
+
   Notification notification = CreateNotificationFromData(
       profile, GURL() /* service_worker_scope */, origin, notification_data,
-      notification_resources, proxy);
+      notification_resources, notification_delegate);
 
   GetNotificationDisplayService(profile)->Display(
-      NotificationCommon::NON_PERSISTENT, notification.delegate_id(),
-      notification);
+      NotificationCommon::NON_PERSISTENT, notification_id, notification);
   if (cancel_callback) {
 #if defined(OS_WIN)
     std::string profile_id =
@@ -340,9 +342,8 @@ void PlatformNotificationServiceImpl::DisplayNotification(
 #elif defined(OS_POSIX)
     std::string profile_id = profile->GetPath().BaseName().value();
 #endif
-    *cancel_callback =
-        base::Bind(&CancelNotification, notification.delegate_id(), profile_id,
-                   profile->IsOffTheRecord());
+    *cancel_callback = base::Bind(&CancelNotification, notification_id,
+                                  profile_id, profile->IsOffTheRecord());
   }
 }
 
@@ -364,11 +365,8 @@ void PlatformNotificationServiceImpl::DisplayPersistentNotification(
   Profile* profile = Profile::FromBrowserContext(browser_context);
   DCHECK(profile);
 
-  // The notification settings button will be appended after the developer-
-  // supplied buttons, available in |notification_data.actions|.
-  int settings_button_index = notification_data.actions.size();
-  PersistentNotificationDelegate* delegate = new PersistentNotificationDelegate(
-      browser_context, notification_id, origin, settings_button_index);
+  NotificationDelegate* delegate = new WebNotificationDelegate(
+      NotificationCommon::PERSISTENT, profile, notification_id, origin);
 
   Notification notification = CreateNotificationFromData(
       profile, service_worker_scope, origin, notification_data,

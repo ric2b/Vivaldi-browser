@@ -23,15 +23,16 @@
 
 #include "core/layout/LayoutFrame.h"
 
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLFrameElement.h"
 #include "core/input/EventHandler.h"
 #include "core/style/CursorData.h"
 
 namespace blink {
 
-LayoutFrame::LayoutFrame(HTMLFrameElement* frame) : LayoutPart(frame) {
+LayoutFrame::LayoutFrame(HTMLFrameElement* frame)
+    : LayoutEmbeddedContent(frame) {
   SetInline(false);
 }
 

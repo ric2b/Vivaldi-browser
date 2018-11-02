@@ -21,18 +21,22 @@
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/content/renderer/autofill_agent.h"
 #include "components/autofill/content/renderer/password_autofill_agent.h"
 #include "components/printing/renderer/print_web_view_helper.h"
+#include "components/safe_browsing/renderer/websocket_sb_handshake_throttle.h"
 #include "components/spellcheck/spellcheck_build_features.h"
 #include "components/supervised_user_error_page/gin_wrapper.h"
 #include "components/supervised_user_error_page/supervised_user_error_page_android.h"
 #include "components/visitedlink/renderer/visitedlink_slave.h"
 #include "components/web_restrictions/interfaces/web_restrictions.mojom.h"
 #include "content/public/child/child_thread.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/service_names.mojom.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/renderer/document_state.h"
@@ -43,6 +47,7 @@
 #include "net/base/escape.h"
 #include "net/base/net_errors.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
+#include "services/service_manager/public/cpp/connector.h"
 #include "services/service_manager/public/cpp/interface_provider.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURL.h"
@@ -297,6 +302,14 @@ void AwContentRendererClient::AddSupportedKeySystems(
   AwAddKeySystems(key_systems);
 }
 
+std::unique_ptr<blink::WebSocketHandshakeThrottle>
+AwContentRendererClient::CreateWebSocketHandshakeThrottle() {
+  if (!UsingSafeBrowsingMojoService())
+    return nullptr;
+  return base::MakeUnique<safe_browsing::WebSocketSBHandshakeThrottle>(
+      safe_browsing_.get());
+}
+
 bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
   // Android WebView needs to support codecs that Chrome does not, for these
   // cases we must force the usage of Android MediaPlayer instead of Chrome's
@@ -308,16 +321,49 @@ bool AwContentRendererClient::ShouldUseMediaPlayerForURL(const GURL& url) {
   //
   // Format list mirrors:
   // http://developer.android.com/guide/appendix/media-formats.html
+  //
+  // Enum and extension list are parallel arrays and must stay in sync. These
+  // enum values are written to logs. New enum values can be added, but existing
+  // enums must never be renumbered or deleted and reused.
+  enum MediaPlayerContainers {
+    CONTAINER_3GP = 0,
+    CONTAINER_TS = 1,
+    CONTAINER_MID = 2,
+    CONTAINER_XMF = 3,
+    CONTAINER_MXMF = 4,
+    CONTAINER_RTTTL = 5,
+    CONTAINER_RTX = 6,
+    CONTAINER_OTA = 7,
+    CONTAINER_IMY = 8,
+    MEDIA_PLAYER_CONTAINERS_COUNT,
+  };
   static const char* kMediaPlayerExtensions[] = {
-      ".3gp",  ".ts",    ".flac", ".mid", ".xmf",
-      ".mxmf", ".rtttl", ".rtx",  ".ota", ".imy"};
-  for (auto* extension : kMediaPlayerExtensions) {
-    if (base::EndsWith(url.path(), extension,
+      ".3gp", ".ts", ".mid", ".xmf", ".mxmf", ".rtttl", ".rtx", ".ota", ".imy"};
+  static_assert(arraysize(kMediaPlayerExtensions) ==
+                    MediaPlayerContainers::MEDIA_PLAYER_CONTAINERS_COUNT,
+                "Invalid enum or extension change.");
+
+  for (size_t i = 0; i < arraysize(kMediaPlayerExtensions); ++i) {
+    if (base::EndsWith(url.path(), kMediaPlayerExtensions[i],
                        base::CompareCase::INSENSITIVE_ASCII)) {
+      UMA_HISTOGRAM_ENUMERATION(
+          "Media.WebView.UnsupportedContainer",
+          static_cast<MediaPlayerContainers>(i),
+          MediaPlayerContainers::MEDIA_PLAYER_CONTAINERS_COUNT);
       return true;
     }
   }
   return false;
+}
+
+bool AwContentRendererClient::UsingSafeBrowsingMojoService() {
+  if (safe_browsing_)
+    return true;
+  if (!base::FeatureList::IsEnabled(features::kNetworkService))
+    return false;
+  RenderThread::Get()->GetConnector()->BindInterface(
+      content::mojom::kBrowserServiceName, &safe_browsing_);
+  return true;
 }
 
 }  // namespace android_webview

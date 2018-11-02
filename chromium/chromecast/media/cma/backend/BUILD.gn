@@ -8,8 +8,9 @@ import("//media/media_options.gni")
 
 source_set("backend") {
   sources = [
-    "media_pipeline_backend_factory.cc",
     "media_pipeline_backend_factory.h",
+    "media_pipeline_backend_factory_impl.cc",
+    "media_pipeline_backend_factory_impl.h",
     "media_pipeline_backend_manager.cc",
     "media_pipeline_backend_manager.h",
     "media_pipeline_backend_wrapper.cc",
@@ -28,19 +29,18 @@ source_set("backend") {
 
   if (is_android) {
     if (is_cast_using_cma_backend) {
-      # TODO(tsunghung): use the real implementation when it's done.
-      deps += [ ":default" ]
+      deps += [ "//chromecast/media/cma/backend/android:cast_media_android" ]
     } else {
-      deps += [ ":cast_media_android" ]
+      deps += [ ":cast_media_android_dummy" ]
     }
   } else {
     deps += [ ":libcast_media_1.0" ]
   }
 }
 
-source_set("cast_media_android") {
+source_set("cast_media_android_dummy") {
   sources = [
-    "cast_media_android.cc",
+    "cast_media_android_dummy.cc",
   ]
   deps = [
     "//base",
@@ -53,7 +53,7 @@ source_set("cast_media_android") {
 # Target for OEM partners to override media shared library, i.e.
 # libcast_media_1.0.so. This target is only used to build executables
 # with correct linkage information.
-shared_library("libcast_media_1.0") {
+cast_shared_library("libcast_media_1.0") {
   if (is_cast_desktop_build) {
     deps = [
       ":default",

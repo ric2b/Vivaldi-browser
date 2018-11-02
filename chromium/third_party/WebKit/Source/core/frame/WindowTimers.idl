@@ -31,12 +31,12 @@
     ImplementedAs=DOMWindowTimers,
     LegacyTreatAsPartialInterface,
     NoInterfaceObject, // Always used on target of 'implements'
-    Exposed=(Window,Worker),
+    Exposed=(Window,Worker)
 ] interface WindowTimers {
     // FIXME: would be clearer as a union type, like:
     // typedef (Function or DOMString) Handler
     // Needs spec update and better union support: http://crbug.com/240176
-    [CallWith=ScriptState] long setTimeout(Function handler, optional long timeout = 0, any... arguments);
+    [CallWith=ScriptState, RuntimeCallStatsCounter=WindowSetTimeout] long setTimeout(Function handler, optional long timeout = 0, any... arguments);
     [CallWith=ScriptState] long setTimeout(DOMString handler, optional long timeout = 0, any... arguments);
     void clearTimeout(optional long handle = 0);
     [CallWith=ScriptState] long setInterval(Function handler, optional long timeout = 0, any... arguments);

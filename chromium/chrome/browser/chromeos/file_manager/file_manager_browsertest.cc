@@ -132,7 +132,7 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
 
 // Flaky: crbug.com/715963
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_CreateNewFolder,
+    CreateNewFolder,
     FileManagerBrowserTest,
     ::testing::Values(
         TestParameter(NOT_IN_GUEST_MODE, "createNewFolderAfterSelectFile"),
@@ -177,9 +177,10 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "deleteOneItemFromToolbar")));
 
 WRAPPED_INSTANTIATE_TEST_CASE_P(
-    DISABLED_QuickView,
+    QuickView,
     FileManagerBrowserTest,
-    ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "openQuickView")));
+    ::testing::Values(TestParameter(NOT_IN_GUEST_MODE, "openQuickView"),
+                      TestParameter(NOT_IN_GUEST_MODE, "closeQuickView")));
 
 #if defined(DISABLE_SLOW_FILESAPP_TESTS)
 #define MAYBE_DirectoryTreeContextMenu DISABLED_DirectoryTreeContextMenu
@@ -251,7 +252,6 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
     MAYBE_DriveSpecific,
     FileManagerBrowserTest,
     ::testing::Values(
-        TestParameter(NOT_IN_GUEST_MODE, "openSidebarRecent"),
         TestParameter(NOT_IN_GUEST_MODE, "openSidebarOffline"),
         TestParameter(NOT_IN_GUEST_MODE, "openSidebarSharedWithMe"),
         TestParameter(NOT_IN_GUEST_MODE, "autocomplete"),
@@ -273,8 +273,6 @@ WRAPPED_INSTANTIATE_TEST_CASE_P(
         TestParameter(NOT_IN_GUEST_MODE, "transferFromDownloadsToDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "transferFromSharedToDownloads"),
         TestParameter(NOT_IN_GUEST_MODE, "transferFromSharedToDrive"),
-        TestParameter(NOT_IN_GUEST_MODE, "transferFromRecentToDownloads"),
-        TestParameter(NOT_IN_GUEST_MODE, "transferFromRecentToDrive"),
         TestParameter(NOT_IN_GUEST_MODE, "transferFromOfflineToDownloads"),
         TestParameter(NOT_IN_GUEST_MODE, "transferFromOfflineToDrive")));
 
@@ -676,8 +674,7 @@ IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest,
 // Flaky: crbug.com/715961.
 // Previously it was disabled via DISABLE_SLOW_FILESAPP_TESTS and in
 // OFFICIAL_BUILD, see http://crbug.com/429294.
-IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest,
-                       DISABLED_PRE_BasicDrive) {
+IN_PROC_BROWSER_TEST_F(MultiProfileFileManagerBrowserTest, PRE_BasicDrive) {
   AddAllUsers();
 }
 

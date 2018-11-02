@@ -31,7 +31,6 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/dom/Document.h"
-#include "core/dom/Range.h"
 #include "core/dom/Text.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/TextAffinity.h"
@@ -102,21 +101,21 @@ VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::Create(
 
 template <typename Strategy>
 VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::AfterNode(
-    Node* node) {
+    const Node& node) {
   return Create(PositionWithAffinityTemplate<Strategy>(
       PositionTemplate<Strategy>::AfterNode(node)));
 }
 
 template <typename Strategy>
 VisiblePositionTemplate<Strategy> VisiblePositionTemplate<Strategy>::BeforeNode(
-    Node* node) {
+    const Node& node) {
   return Create(PositionWithAffinityTemplate<Strategy>(
       PositionTemplate<Strategy>::BeforeNode(node)));
 }
 
 template <typename Strategy>
 VisiblePositionTemplate<Strategy>
-VisiblePositionTemplate<Strategy>::FirstPositionInNode(Node* node) {
+VisiblePositionTemplate<Strategy>::FirstPositionInNode(const Node& node) {
   return Create(PositionWithAffinityTemplate<Strategy>(
       PositionTemplate<Strategy>::FirstPositionInNode(node)));
 }
@@ -137,7 +136,7 @@ VisiblePositionTemplate<Strategy>::InParentBeforeNode(const Node& node) {
 
 template <typename Strategy>
 VisiblePositionTemplate<Strategy>
-VisiblePositionTemplate<Strategy>::LastPositionInNode(Node* node) {
+VisiblePositionTemplate<Strategy>::LastPositionInNode(const Node& node) {
   return Create(PositionWithAffinityTemplate<Strategy>(
       PositionTemplate<Strategy>::LastPositionInNode(node)));
 }

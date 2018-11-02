@@ -28,8 +28,11 @@
 
 #include "modules/accessibility/AXMediaControls.h"
 
+#include "core/html/HTMLInputElement.h"
 #include "core/layout/LayoutObject.h"
 #include "modules/accessibility/AXObjectCacheImpl.h"
+#include "modules/media_controls/elements/MediaControlElementsHelper.h"
+#include "modules/media_controls/elements/MediaControlTimeDisplayElement.h"
 #include "platform/text/PlatformLocale.h"
 
 namespace blink {
@@ -46,12 +49,13 @@ AccessibilityMediaControl::AccessibilityMediaControl(
     AXObjectCacheImpl& ax_object_cache)
     : AXLayoutObject(layout_object, ax_object_cache) {}
 
-AXObjectImpl* AccessibilityMediaControl::Create(
+AXObject* AccessibilityMediaControl::Create(
     LayoutObject* layout_object,
     AXObjectCacheImpl& ax_object_cache) {
   DCHECK(layout_object->GetNode());
 
-  switch (GetMediaControlElementType(layout_object->GetNode())) {
+  switch (MediaControlElementsHelper::GetMediaControlElementType(
+      layout_object->GetNode())) {
     case kMediaSlider:
       return AccessibilityMediaTimeline::Create(layout_object, ax_object_cache);
 
@@ -97,7 +101,8 @@ MediaControlElementType AccessibilityMediaControl::ControlType() const {
   if (!GetLayoutObject() || !GetLayoutObject()->GetNode())
     return kMediaTimelineContainer;  // Timeline container is not accessible.
 
-  return GetMediaControlElementType(GetLayoutObject()->GetNode());
+  return MediaControlElementsHelper::GetMediaControlElementType(
+      GetLayoutObject()->GetNode());
 }
 
 String AccessibilityMediaControl::TextAlternative(
@@ -276,9 +281,8 @@ AXMediaControlsContainer::AXMediaControlsContainer(
     AXObjectCacheImpl& ax_object_cache)
     : AccessibilityMediaControl(layout_object, ax_object_cache) {}
 
-AXObjectImpl* AXMediaControlsContainer::Create(
-    LayoutObject* layout_object,
-    AXObjectCacheImpl& ax_object_cache) {
+AXObject* AXMediaControlsContainer::Create(LayoutObject* layout_object,
+                                           AXObjectCacheImpl& ax_object_cache) {
   return new AXMediaControlsContainer(layout_object, ax_object_cache);
 }
 
@@ -322,7 +326,7 @@ AccessibilityMediaTimeline::AccessibilityMediaTimeline(
     AXObjectCacheImpl& ax_object_cache)
     : AXSlider(layout_object, ax_object_cache) {}
 
-AXObjectImpl* AccessibilityMediaTimeline::Create(
+AXObject* AccessibilityMediaTimeline::Create(
     LayoutObject* layout_object,
     AXObjectCacheImpl& ax_object_cache) {
   return new AccessibilityMediaTimeline(layout_object, ax_object_cache);
@@ -354,7 +358,7 @@ AccessibilityMediaTimeDisplay::AccessibilityMediaTimeDisplay(
     AXObjectCacheImpl& ax_object_cache)
     : AccessibilityMediaControl(layout_object, ax_object_cache) {}
 
-AXObjectImpl* AccessibilityMediaTimeDisplay::Create(
+AXObject* AccessibilityMediaTimeDisplay::Create(
     LayoutObject* layout_object,
     AXObjectCacheImpl& ax_object_cache) {
   return new AccessibilityMediaTimeDisplay(layout_object, ax_object_cache);

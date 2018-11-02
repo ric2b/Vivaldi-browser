@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//base/android/jni_generator/jni_exception_list.gni")
 import("//build/config/android/config.gni")
 import("//build/config/android/rules.gni")
 import("//third_party/icu/config.gni")
@@ -15,10 +16,18 @@ generate_jni("content_shell_jni_headers") {
   ]
 }
 
+generate_jni_registration("content_shell_jni_registration") {
+  testonly = true
+  target = ":content_shell_apk"
+  output = "$root_gen_dir/content/shell/android/${target_name}.h"
+  exception_files = jni_exception_files
+}
+
 shared_library("libcontent_shell_content_view") {
   testonly = true
   deps = [
     ":content_shell_jni_headers",
+    ":content_shell_jni_registration",
     "//build/config:exe_and_shlib_deps",
     "//components/crash/content/browser",
     "//content/shell:content_shell_lib",
@@ -26,6 +35,16 @@ shared_library("libcontent_shell_content_view") {
     "//media",
     "//skia",
   ]
+
+  # Explicit dependency required for JNI registration to be able to
+  # find the native side functions.
+  if (is_component_build) {
+    deps += [
+      "//device/gamepad",
+      "//device/sensors",
+      "//media/midi",
+    ]
+  }
   sources = [
     "shell_library_loader.cc",
   ]
@@ -80,6 +99,9 @@ android_resources("content_shell_apk_resources") {
 
 android_library("content_shell_apk_java") {
   testonly = true
+
+  srcjar_deps = [ ":content_javatests_aidl" ]
+
   deps = [
     ":content_shell_apk_resources",
     ":content_shell_java",
@@ -88,6 +110,7 @@ android_library("content_shell_apk_java") {
     "//content/public/android:content_java",
     "//media/capture/video/android:capture_java",
     "//net/android:net_java",
+    "//third_party/jsr-305:jsr_305_javalib",
     "//ui/android:ui_java",
   ]
 
@@ -99,6 +122,16 @@ android_library("content_shell_apk_java") {
     "shell_apk/src/org/chromium/content_shell_apk/ChildProcessLauncherTestUtils.java",
     "shell_apk/src/org/chromium/content_shell_apk/ContentShellActivity.java",
     "shell_apk/src/org/chromium/content_shell_apk/ContentShellApplication.java",
+    "shell_apk/src/org/chromium/content_shell_apk/TestChildProcessService.java",
+    "shell_apk/src/org/chromium/content_shell_apk/TestChildProcessService0.java",
+    "shell_apk/src/org/chromium/content_shell_apk/TestChildProcessService1.java",
+  ]
+}
+
+android_aidl("content_javatests_aidl") {
+  import_include = [ "shell_apk/src" ]
+  sources = [
+    "shell_apk/src/org/chromium/content_shell_apk/IChildProcessTest.aidl",
   ]
 }
 
@@ -133,6 +166,7 @@ android_apk("content_shell_apk") {
   android_manifest_dep = ":content_shell_manifest"
   shared_libraries = [ ":libcontent_shell_content_view" ]
   loadable_modules = [ "$root_out_dir/libosmesa.so" ]
+  command_line_flags_file = "content-shell-command-line"
 }
 
 android_library("content_shell_test_java") {
@@ -242,6 +276,7 @@ if (current_cpu != "x64") {
 
     deps = [
       ":linker_test_jni_headers",
+      ":linker_test_jni_registration",
       "//build/config:exe_and_shlib_deps",
       "//content/shell:content_shell_lib",
 
@@ -250,6 +285,16 @@ if (current_cpu != "x64") {
       "//skia",
       "//third_party/re2",
     ]
+
+    # Explicit dependency required for JNI registration to be able to
+    # find the native side functions.
+    if (is_component_build) {
+      deps += [
+        "//device/gamepad",
+        "//device/sensors",
+        "//media/midi",
+      ]
+    }
   }
 
   generate_jni("linker_test_jni_headers") {
@@ -258,6 +303,14 @@ if (current_cpu != "x64") {
     sources = [
       "linker_test_apk/src/org/chromium/chromium_linker_test_apk/LinkerTests.java",
     ]
+  }
+
+  generate_jni_registration("linker_test_jni_registration") {
+    testonly = true
+    target = ":chromium_linker_test_apk__apk"
+    output =
+        "$root_gen_dir/content/shell/android/linker_test_apk/${target_name}.h"
+    exception_files = jni_exception_files
   }
 }
 

@@ -20,7 +20,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/infobars/core/infobar.h"
 #include "content/public/browser/notification_source.h"
 #include "extensions/browser/extension_system.h"
@@ -145,7 +144,9 @@ bool ThemeInstalledInfoBarDelegate::Cancel() {
     const extensions::Extension* previous_theme =
         extension_service_->GetExtensionById(previous_theme_id_, true);
     if (previous_theme) {
-      theme_service_->SetTheme(previous_theme);
+      theme_service_->RevertToTheme(previous_theme);
+      // TODO(estade): while we're waiting to close, it would be nice to
+      // indicate that the theme is busy reverting.
       return false;  // The theme change will close us.
     }
   }

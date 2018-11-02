@@ -43,6 +43,7 @@
 #include "modules/indexeddb/IDBKeyPath.h"
 #include "modules/indexeddb/IDBMetadata.h"
 #include "modules/indexeddb/IDBObjectStore.h"
+#include "modules/indexeddb/IDBTestHelper.h"
 #include "modules/indexeddb/IDBValue.h"
 #include "modules/indexeddb/IDBValueWrapping.h"
 #include "modules/indexeddb/MockWebIDBDatabase.h"
@@ -82,7 +83,7 @@ class IDBTransactionTest : public ::testing::Test {
   void SetUp() override {
     url_loader_mock_factory_ = Platform::Current()->GetURLLoaderMockFactory();
     WebURLResponse response;
-    response.SetURL(KURL(KURL(), "blob:"));
+    response.SetURL(KURL(NullURL(), "blob:"));
     url_loader_mock_factory_->RegisterURLProtocol(WebString("blob"), response,
                                                   "");
   }
@@ -117,38 +118,6 @@ class IDBTransactionTest : public ::testing::Test {
   static constexpr int64_t kStoreId = 5678;
 };
 
-// The created value is an array of true. If create_wrapped_value is true, the
-// IDBValue's byte array will be wrapped in a Blob, otherwise it will not be.
-RefPtr<IDBValue> CreateIDBValue(v8::Isolate* isolate,
-                                bool create_wrapped_value) {
-  size_t element_count = create_wrapped_value ? 16 : 2;
-  v8::Local<v8::Array> v8_array = v8::Array::New(isolate, element_count);
-  for (size_t i = 0; i < element_count; ++i)
-    v8_array->Set(i, v8::True(isolate));
-
-  NonThrowableExceptionState non_throwable_exception_state;
-  IDBValueWrapper wrapper(isolate, v8_array,
-                          SerializedScriptValue::SerializeOptions::kSerialize,
-                          non_throwable_exception_state);
-  wrapper.WrapIfBiggerThan(create_wrapped_value ? 0 : 1024 * element_count);
-
-  std::unique_ptr<Vector<RefPtr<BlobDataHandle>>> blob_data_handles =
-      WTF::MakeUnique<Vector<RefPtr<BlobDataHandle>>>();
-  wrapper.ExtractBlobDataHandles(blob_data_handles.get());
-  Vector<WebBlobInfo>& blob_infos = wrapper.WrappedBlobInfo();
-  RefPtr<SharedBuffer> wrapped_marker_buffer = wrapper.ExtractWireBytes();
-  IDBKey* key = IDBKey::CreateNumber(42.0);
-  IDBKeyPath key_path(String("primaryKey"));
-
-  RefPtr<IDBValue> idb_value = IDBValue::Create(
-      wrapped_marker_buffer, std::move(blob_data_handles),
-      WTF::MakeUnique<Vector<WebBlobInfo>>(blob_infos), key, key_path);
-
-  DCHECK_EQ(create_wrapped_value,
-            IDBValueUnwrapper::IsWrapped(idb_value.Get()));
-  return idb_value;
-}
-
 TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
   V8TestingScope scope;
   std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
@@ -161,8 +130,10 @@ TEST_F(IDBTransactionTest, ContextDestroyedEarlyDeath) {
   ThreadState::Current()->CollectAllGarbage();
   EXPECT_EQ(1u, live_transactions.size());
 
-  Persistent<IDBRequest> request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  Persistent<IDBRequest> request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
+
   DeactivateNewTransactions(scope.GetIsolate());
 
   request.Clear();  // The transaction is holding onto the request.
@@ -192,12 +163,13 @@ TEST_F(IDBTransactionTest, ContextDestroyedAfterDone) {
   ThreadState::Current()->CollectAllGarbage();
   EXPECT_EQ(1U, live_transactions.size());
 
-  Persistent<IDBRequest> request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  Persistent<IDBRequest> request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
   // This response should result in an event being enqueued immediately.
-  request->HandleResponse(CreateIDBValue(scope.GetIsolate(), false));
+  request->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), false));
 
   request.Clear();  // The transaction is holding onto the request.
   ThreadState::Current()->CollectAllGarbage();
@@ -231,11 +203,12 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithQueuedResult) {
   ThreadState::Current()->CollectAllGarbage();
   EXPECT_EQ(1U, live_transactions.size());
 
-  Persistent<IDBRequest> request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  Persistent<IDBRequest> request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
-  request->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
+  request->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
 
   request.Clear();  // The transaction is holding onto the request.
   ThreadState::Current()->CollectAllGarbage();
@@ -266,14 +239,16 @@ TEST_F(IDBTransactionTest, ContextDestroyedWithTwoQueuedResults) {
   ThreadState::Current()->CollectAllGarbage();
   EXPECT_EQ(1U, live_transactions.size());
 
-  Persistent<IDBRequest> request1 = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
-  Persistent<IDBRequest> request2 = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  Persistent<IDBRequest> request1 =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
+  Persistent<IDBRequest> request2 =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
-  request1->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
-  request2->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
+  request1->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
+  request2->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
 
   request1.Clear();  // The transaction is holding onto the requests.
   request2.Clear();
@@ -309,14 +284,14 @@ TEST_F(IDBTransactionTest, DocumentShutdownWithQueuedAndBlockedResults) {
 
   Persistent<IDBRequest> request1 =
       IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
-                         transaction_.Get());
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   Persistent<IDBRequest> request2 =
       IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
-                         transaction_.Get());
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   DeactivateNewTransactions(scope.GetIsolate());
 
-  request1->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
-  request2->HandleResponse(CreateIDBValue(scope.GetIsolate(), false));
+  request1->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
+  request2->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), false));
 
   request1.Clear();  // The transaction is holding onto the requests.
   request2.Clear();

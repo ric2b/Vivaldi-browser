@@ -5,7 +5,7 @@
 #include "net/dns/dns_reloader.h"
 
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_OPENBSD) && \
-    !defined(OS_ANDROID)
+    !defined(OS_ANDROID) && !defined(OS_FUCHSIA)
 
 #include <resolv.h>
 
@@ -50,13 +50,13 @@ class DnsReloader : public NetworkChangeNotifier::DNSObserver {
   // NetworkChangeNotifier::DNSObserver:
   void OnDNSChanged() override {
     DCHECK(base::MessageLoopForIO::IsCurrent());
-    base::AutoLock l(lock_);
+    base::AutoLock lock(lock_);
     resolver_generation_++;
   }
 
   void MaybeReload() {
     ReloadState* reload_state = static_cast<ReloadState*>(tls_index_.Get());
-    base::AutoLock l(lock_);
+    base::AutoLock lock(lock_);
 
     if (!reload_state) {
       reload_state = new ReloadState();

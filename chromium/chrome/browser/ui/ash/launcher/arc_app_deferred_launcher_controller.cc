@@ -4,7 +4,7 @@
 
 #include "chrome/browser/ui/ash/launcher/arc_app_deferred_launcher_controller.h"
 
-#include "ash/shelf/shelf_model.h"
+#include "ash/public/cpp/shelf_model.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
@@ -116,7 +116,7 @@ void ArcAppDeferredLauncherController::Close(const std::string& app_id) {
   app_controller_map_.erase(it);
   if (need_close_item)
     owner_->CloseLauncherItem(shelf_id);
-  UpdateApp(safe_app_id);
+  UpdateShelfItemIcon(safe_app_id);
 }
 
 void ArcAppDeferredLauncherController::OnAppReadyChanged(
@@ -163,10 +163,9 @@ base::TimeDelta ArcAppDeferredLauncherController::GetActiveTime(
   return it->second->GetActiveTime();
 }
 
-void ArcAppDeferredLauncherController::UpdateApp(const std::string& app_id) {
-  AppIconLoader* icon_loader = owner_->GetAppIconLoaderForApp(app_id);
-  if (icon_loader)
-    icon_loader->UpdateImage(app_id);
+void ArcAppDeferredLauncherController::UpdateShelfItemIcon(
+    const std::string& app_id) {
+  owner_->UpdateLauncherItemImage(app_id);
 }
 
 void ArcAppDeferredLauncherController::UpdateApps() {
@@ -175,13 +174,14 @@ void ArcAppDeferredLauncherController::UpdateApps() {
 
   RegisterNextUpdate();
   for (const auto pair : app_controller_map_)
-    UpdateApp(pair.first);
+    UpdateShelfItemIcon(pair.first);
 }
 
 void ArcAppDeferredLauncherController::RegisterNextUpdate() {
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
-      FROM_HERE, base::Bind(&ArcAppDeferredLauncherController::UpdateApps,
-                            weak_ptr_factory_.GetWeakPtr()),
+      FROM_HERE,
+      base::BindOnce(&ArcAppDeferredLauncherController::UpdateApps,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromMilliseconds(kUpdateIconIntervalMs));
 }
 
@@ -191,10 +191,10 @@ void ArcAppDeferredLauncherController::RegisterDeferredLaunch(
   const arc::ArcSessionManager* arc_session_manager =
       arc::ArcSessionManager::Get();
   DCHECK(arc_session_manager);
-  DCHECK(arc_session_manager->state() !=
-         arc::ArcSessionManager::State::STOPPED);
-  DCHECK(arc_session_manager->state() !=
-         arc::ArcSessionManager::State::NOT_INITIALIZED);
+  DCHECK_NE(arc_session_manager->state(),
+            arc::ArcSessionManager::State::STOPPED);
+  DCHECK_NE(arc_session_manager->state(),
+            arc::ArcSessionManager::State::NOT_INITIALIZED);
 
   const ash::ShelfID shelf_id(app_id);
 

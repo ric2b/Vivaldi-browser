@@ -33,7 +33,6 @@
 #include "net/base/net_errors.h"
 #include "net/base/trace_constants.h"
 #include "net/cert/cert_verifier.h"
-#include "net/cert/ct_ev_whitelist.h"
 #include "net/cert/ct_policy_enforcer.h"
 #include "net/cert/ct_policy_status.h"
 #include "net/cert/ct_verifier.h"
@@ -320,7 +319,8 @@ class SSLClientSocketImpl::SSLContext {
     SSL_CTX_set_cert_cb(ssl_ctx_.get(), ClientCertRequestCallback, NULL);
 
     // The server certificate is verified after the handshake in DoVerifyCert.
-    SSL_CTX_i_promise_to_verify_certs_after_the_handshake(ssl_ctx_.get());
+    SSL_CTX_set_custom_verify(ssl_ctx_.get(), SSL_VERIFY_PEER,
+                              CertVerifyCallback);
 
     // Disable the internal session cache. Session caching is handled
     // externally (i.e. by SSLClientSessionCache).
@@ -382,6 +382,11 @@ class SSLClientSocketImpl::SSLContext {
     SSLClientSocketImpl* socket = GetInstance()->GetClientSocketFromSSL(ssl);
     DCHECK(socket);
     return socket->ClientCertRequestCallback(ssl);
+  }
+
+  static ssl_verify_result_t CertVerifyCallback(SSL* ssl, uint8_t* out_alert) {
+    // The certificate is verified after the handshake in DoVerifyCert.
+    return ssl_verify_ok;
   }
 
   static int NewSessionCallback(SSL* ssl, SSL_SESSION* session) {
@@ -492,6 +497,7 @@ SSLClientSocketImpl::SSLClientSocketImpl(
       transport_security_state_(context.transport_security_state),
       policy_enforcer_(context.ct_policy_enforcer),
       pkp_bypassed_(false),
+      connect_error_details_(SSLErrorDetails::kOther),
       net_log_(transport_->socket()->NetLog()),
       weak_factory_(this) {
   CHECK(cert_verifier_);
@@ -580,6 +586,10 @@ Error SSLClientSocketImpl::GetTokenBindingSignature(crypto::ECPrivateKey* key,
 
 crypto::ECPrivateKey* SSLClientSocketImpl::GetChannelIDKey() const {
   return channel_id_key_.get();
+}
+
+SSLErrorDetails SSLClientSocketImpl::GetConnectErrorDetails() const {
+  return connect_error_details_;
 }
 
 int SSLClientSocketImpl::ExportKeyingMaterial(const base::StringPiece& label,
@@ -917,6 +927,21 @@ int SSLClientSocketImpl::Init() {
     return ERR_UNEXPECTED;
   }
 
+  switch (ssl_config_.tls13_variant) {
+    case kTLS13VariantDraft:
+      SSL_set_tls13_variant(ssl_.get(), tls13_default);
+      break;
+    case kTLS13VariantExperiment:
+      SSL_set_tls13_variant(ssl_.get(), tls13_experiment);
+      break;
+    case kTLS13VariantRecordTypeExperiment:
+      SSL_set_tls13_variant(ssl_.get(), tls13_record_type_experiment);
+      break;
+    case kTLS13VariantNoSessionIDExperiment:
+      SSL_set_tls13_variant(ssl_.get(), tls13_no_session_id_experiment);
+      break;
+  }
+
   // OpenSSL defaults some options to on, others to off. To avoid ambiguity,
   // set everything we care about to an absolute value.
   SslSetClearMask options;
@@ -1067,6 +1092,38 @@ int SSLClientSocketImpl::DoHandshake() {
       // If not done, stay in this state
       next_handshake_state_ = STATE_HANDSHAKE;
       return ERR_IO_PENDING;
+    }
+
+    switch (net_error) {
+      case ERR_CONNECTION_CLOSED:
+        connect_error_details_ = SSLErrorDetails::kConnectionClosed;
+        break;
+      case ERR_CONNECTION_RESET:
+        connect_error_details_ = SSLErrorDetails::kConnectionReset;
+        break;
+      case ERR_SSL_PROTOCOL_ERROR: {
+        int lib = ERR_GET_LIB(error_info.error_code);
+        int reason = ERR_GET_REASON(error_info.error_code);
+        if (lib == ERR_LIB_SSL && reason == SSL_R_TLSV1_ALERT_ACCESS_DENIED) {
+          connect_error_details_ = SSLErrorDetails::kAccessDeniedAlert;
+        } else if (lib == ERR_LIB_SSL &&
+                   reason == SSL_R_APPLICATION_DATA_INSTEAD_OF_HANDSHAKE) {
+          connect_error_details_ =
+              SSLErrorDetails::kApplicationDataInsteadOfHandshake;
+        } else {
+          connect_error_details_ = SSLErrorDetails::kProtocolError;
+        }
+        break;
+      }
+      case ERR_SSL_BAD_RECORD_MAC_ALERT:
+        connect_error_details_ = SSLErrorDetails::kBadRecordMACAlert;
+        break;
+      case ERR_SSL_VERSION_OR_CIPHER_MISMATCH:
+        connect_error_details_ = SSLErrorDetails::kVersionOrCipherMismatch;
+        break;
+      default:
+        connect_error_details_ = SSLErrorDetails::kOther;
+        break;
     }
 
     LOG(ERROR) << "handshake failed; returned " << rv << ", SSL error code "
@@ -1538,35 +1595,20 @@ int SSLClientSocketImpl::VerifyCT() {
       &ct_verify_result_.scts, net_log_);
 
   ct_verify_result_.ct_policies_applied = true;
-  ct_verify_result_.ev_policy_compliance =
-      ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY;
 
   SCTList verified_scts =
       ct::SCTsMatchingStatus(ct_verify_result_.scts, ct::SCT_STATUS_OK);
 
-  if (server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV) {
-    scoped_refptr<ct::EVCertsWhitelist> ev_whitelist =
-        SSLConfigService::GetEVCertsWhitelist();
-    ct::EVPolicyCompliance ev_policy_compliance =
-        policy_enforcer_->DoesConformToCTEVPolicy(
-            server_cert_verify_result_.verified_cert.get(), ev_whitelist.get(),
-            verified_scts, net_log_);
-    ct_verify_result_.ev_policy_compliance = ev_policy_compliance;
-    if (ev_policy_compliance !=
-            ct::EVPolicyCompliance::EV_POLICY_DOES_NOT_APPLY &&
-        ev_policy_compliance !=
-            ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_WHITELIST &&
-        ev_policy_compliance !=
-            ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS) {
-      server_cert_verify_result_.cert_status |=
-          CERT_STATUS_CT_COMPLIANCE_FAILED;
-      server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
-    }
-  }
   ct_verify_result_.cert_policy_compliance =
       policy_enforcer_->DoesConformToCertPolicy(
           server_cert_verify_result_.verified_cert.get(), verified_scts,
           net_log_);
+  if ((server_cert_verify_result_.cert_status & CERT_STATUS_IS_EV) &&
+      (ct_verify_result_.cert_policy_compliance !=
+       ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS)) {
+    server_cert_verify_result_.cert_status |= CERT_STATUS_CT_COMPLIANCE_FAILED;
+    server_cert_verify_result_.cert_status &= ~CERT_STATUS_IS_EV;
+  }
 
   if (transport_security_state_->CheckCTRequirements(
           host_and_port_, server_cert_verify_result_.is_issued_by_known_root,
@@ -1826,6 +1868,19 @@ void SSLClientSocketImpl::MessageCallback(int is_write,
                    : NetLogEventType::SSL_HANDSHAKE_MESSAGE_RECEIVED,
           base::Bind(&NetLogSSLMessageCallback, !!is_write, buf, len));
       break;
+    case SSL3_RT_HEADER: {
+      if (is_write)
+        return;
+      if (len != 5) {
+        NOTREACHED();
+        return;
+      }
+      const uint8_t* buf_bytes = reinterpret_cast<const uint8_t*>(buf);
+      uint16_t record_len = (uint16_t(buf_bytes[3]) << 8) | buf_bytes[4];
+      // See RFC 5246 section 6.2.3 for the maximum record size in TLS.
+      UMA_HISTOGRAM_CUSTOM_COUNTS("Net.SSLRecordSizeRead", record_len, 1,
+                                  16384 + 2048, 50);
+    }
     default:
       return;
   }

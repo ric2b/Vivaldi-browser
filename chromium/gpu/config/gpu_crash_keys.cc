@@ -6,6 +6,7 @@
 
 namespace gpu {
 namespace crash_keys {
+
 #if !defined(OS_ANDROID)
 const char kGPUVendorID[] = "gpu-venid";
 const char kGPUDeviceID[] = "gpu-devid";
@@ -19,5 +20,7 @@ const char kGPUGLVersion[] = "gpu-glver";
 const char kGPUVendor[] = "gpu-gl-vendor";
 const char kGPURenderer[] = "gpu-gl-renderer";
 #endif
+const char kGPUGLContextIsVirtual[] = "gpu-gl-context-is-virtual";
+
 }  // namespace crash_keys
 }  // namespace gpu

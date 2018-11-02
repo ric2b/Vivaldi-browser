@@ -223,8 +223,8 @@ void InputHandlerManager::HandleInputEvent(
   InputHandlerProxy* proxy = it->second->input_handler_proxy();
   proxy->HandleInputEventWithLatencyInfo(
       std::move(input_event), latency_info,
-      base::Bind(&InputHandlerManager::DidHandleInputEventAndOverscroll,
-                 weak_ptr_factory_.GetWeakPtr(), callback));
+      base::BindOnce(&InputHandlerManager::DidHandleInputEventAndOverscroll,
+                     weak_ptr_factory_.GetWeakPtr(), callback));
 }
 
 void InputHandlerManager::QueueClosureForMainThreadEventQueue(
@@ -280,6 +280,12 @@ void InputHandlerManager::DispatchNonBlockingEventToMainThread(
   DCHECK(task_runner_->BelongsToCurrentThread());
   client_->DispatchNonBlockingEventToMainThread(routing_id, std::move(event),
                                                 latency_info);
+}
+
+void InputHandlerManager::SetWhiteListedTouchAction(
+    int routing_id,
+    cc::TouchAction touch_action) {
+  client_->SetWhiteListedTouchAction(routing_id, touch_action);
 }
 
 }  // namespace content

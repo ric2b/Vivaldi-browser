@@ -41,7 +41,9 @@
 #include "cc/blink/web_compositor_support_impl.h"
 #include "cc/test/ordered_simple_task_runner.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "platform/FontFamilyNames.h"
 #include "platform/HTTPNames.h"
+#include "platform/Language.h"
 #include "platform/heap/Heap.h"
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/network/mime/MockMimeRegistry.h"
@@ -190,16 +192,15 @@ WebURLLoaderMockFactory* TestingPlatformSupport::GetURLLoaderMockFactory() {
   return old_platform_ ? old_platform_->GetURLLoaderMockFactory() : nullptr;
 }
 
-std::unique_ptr<WebURLLoader> TestingPlatformSupport::CreateURLLoader() {
-  return old_platform_ ? old_platform_->CreateURLLoader() : nullptr;
+std::unique_ptr<WebURLLoader> TestingPlatformSupport::CreateURLLoader(
+    const WebURLRequest& request,
+    base::SingleThreadTaskRunner* runner) {
+  return old_platform_ ? old_platform_->CreateURLLoader(request, runner)
+                       : nullptr;
 }
 
-WebData TestingPlatformSupport::LoadResource(const char* name) {
-  return old_platform_ ? old_platform_->LoadResource(name) : WebData();
-}
-
-WebURLError TestingPlatformSupport::CancelledError(const WebURL& url) const {
-  return old_platform_ ? old_platform_->CancelledError(url) : WebURLError();
+WebData TestingPlatformSupport::GetDataResource(const char* name) {
+  return old_platform_ ? old_platform_->GetDataResource(name) : WebData();
 }
 
 InterfaceProvider* TestingPlatformSupport::GetInterfaceProvider() {
@@ -352,6 +353,9 @@ ScopedUnittestsEnvironmentSetup::ScopedUnittestsEnvironmentSetup(int argc,
                                                    nullptr);
   HTTPNames::init();
   FetchInitiatorTypeNames::init();
+
+  InitializePlatformLanguage();
+  FontFamilyNames::init();
 }
 
 ScopedUnittestsEnvironmentSetup::~ScopedUnittestsEnvironmentSetup() {}

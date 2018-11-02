@@ -5,9 +5,13 @@
 #ifndef COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_TYPES_H_
 #define COMPONENTS_OFFLINE_PAGES_CORE_PREFETCH_PREFETCH_TYPES_H_
 
+#include <string>
 #include <vector>
-#include "base/macros.h"
+
+#include "base/files/file_path.h"
 #include "base/time/time.h"
+#include "components/offline_pages/core/client_id.h"
+#include "url/gurl.h"
 
 namespace offline_pages {
 
@@ -103,7 +107,40 @@ enum class PrefetchItemErrorCode {
 // Callback invoked upon completion of a prefetch request.
 using PrefetchRequestFinishedCallback =
     base::Callback<void(PrefetchRequestStatus status,
+                        const std::string& operation_name,
                         const std::vector<RenderPageInfo>& pages)>;
+
+// Holds information about a suggested URL to be prefetched.
+struct PrefetchURL {
+  PrefetchURL(const std::string& id, const GURL& url) : id(id), url(url) {}
+
+  // Client provided ID to allow the matching of provided URLs to the respective
+  // work item in the prefetching system within that client's assigned
+  // namespace. It can be any string value and it will not be used internally
+  // for de-duplication.
+  std::string id;
+
+  // This URL will be prefetched by the service.
+  GURL url;
+};
+
+// Result of a completed download.
+struct PrefetchDownloadResult {
+  PrefetchDownloadResult();
+  PrefetchDownloadResult(const std::string& download_id,
+                         const base::FilePath& file_path,
+                         uint64_t file_size);
+  PrefetchDownloadResult(const PrefetchDownloadResult& other);
+
+  std::string download_id;
+  bool success = false;
+  base::FilePath file_path;
+  uint64_t file_size = 0u;
+};
+
+// Callback invoked upon completion of a download.
+using PrefetchDownloadCompletedCallback =
+    base::Callback<void(const PrefetchDownloadResult& result)>;
 
 }  // namespace offline_pages
 

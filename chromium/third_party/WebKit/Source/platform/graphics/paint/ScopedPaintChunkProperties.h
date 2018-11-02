@@ -43,9 +43,8 @@ class ScopedPaintChunkProperties {
     // We should not return to the previous id, because that may cause a new
     // chunk to use the same id as that of the previous chunk before this
     // ScopedPaintChunkProperties. The painter should create another scope of
-    // paint properties with new id, or the new chunk will have no id and will
-    // not match any old chunk and will be treated as fully invalidated for
-    // rasterization.
+    // paint properties with new id, or the new chunk will use the id of the
+    // first display item as its id.
     paint_controller_.UpdateCurrentPaintChunkProperties(nullptr,
                                                         previous_properties_);
   }

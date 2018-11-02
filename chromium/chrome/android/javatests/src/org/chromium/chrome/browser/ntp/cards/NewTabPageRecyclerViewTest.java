@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.ntp.snippets.KnownCategories;
 import org.chromium.chrome.browser.ntp.snippets.SnippetArticle;
 import org.chromium.chrome.browser.suggestions.ContentSuggestionsAdditionalAction;
 import org.chromium.chrome.browser.suggestions.FakeMostVisitedSites;
-import org.chromium.chrome.browser.suggestions.TileGroupDelegateImpl;
 import org.chromium.chrome.browser.suggestions.TileSource;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.test.ChromeActivityTestRule;
@@ -48,6 +47,7 @@ import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.browser.RecyclerViewTestUtils;
 import org.chromium.chrome.test.util.browser.suggestions.FakeSuggestionsSource;
+import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.content.browser.test.util.TestTouchUtils;
 import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
@@ -70,6 +70,9 @@ public class NewTabPageRecyclerViewTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
 
+    @Rule
+    public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
+
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
     private static final String[] FAKE_MOST_VISITED_TITLES = new String[] {"Simple"};
     private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS = new String[] {""};
@@ -82,7 +85,7 @@ public class NewTabPageRecyclerViewTest {
     // We currently mix the fake and the snippets bridge, resulting in crashes with unregistered
     // categories.
     @CategoryInt
-    private static final int TEST_CATEGORY = KnownCategories.BOOKMARKS;
+    private static final int TEST_CATEGORY = KnownCategories.ARTICLES;
 
     private Tab mTab;
     private NewTabPage mNtp;
@@ -95,12 +98,12 @@ public class NewTabPageRecyclerViewTest {
     public void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        mSiteSuggestionUrls = new String[] {mTestServer.getURL(TEST_PAGE)};
+        mSiteSuggestionUrls = mTestServer.getURLs(TEST_PAGE);
 
         mMostVisitedSites = new FakeMostVisitedSites();
         mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES, mSiteSuggestionUrls,
                 FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
-        TileGroupDelegateImpl.setMostVisitedSitesForTests(mMostVisitedSites);
+        mSuggestionsDeps.getFactory().mostVisitedSites = mMostVisitedSites;
 
         mSource = new FakeSuggestionsSource();
         mSource.setInfoForCategory(TEST_CATEGORY,
@@ -109,7 +112,7 @@ public class NewTabPageRecyclerViewTest {
                         ContentSuggestionsAdditionalAction.FETCH, /*showIfEmpty=*/true,
                         "noSuggestionsMessage"));
         mSource.setStatusForCategory(TEST_CATEGORY, CategoryStatus.INITIALIZING);
-        NewTabPage.setSuggestionsSourceForTests(mSource);
+        mSuggestionsDeps.getFactory().suggestionsSource = mSource;
 
         mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
         mTab = mActivityTestRule.getActivity().getActivityTab();
@@ -121,8 +124,6 @@ public class NewTabPageRecyclerViewTest {
 
     @After
     public void tearDown() throws Exception {
-        TileGroupDelegateImpl.setMostVisitedSitesForTests(null);
-        NewTabPage.setSuggestionsSourceForTests(null);
         mTestServer.stopAndDestroyServer();
 
     }
@@ -427,7 +428,7 @@ public class NewTabPageRecyclerViewTest {
             String url = mTestServer.getURL(TEST_PAGE) + "#" + i;
             suggestions.add(new SnippetArticle(TEST_CATEGORY, "id" + i, "title" + i,
                     "publisher" + i, "previewText" + i, url, FAKE_PUBLISH_TIMESTAMP + i,
-                    FAKE_SNIPPET_SCORE, FAKE_FETCH_TIMESTAMP));
+                    FAKE_SNIPPET_SCORE, FAKE_FETCH_TIMESTAMP, false));
         }
         return suggestions;
     }

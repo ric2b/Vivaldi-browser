@@ -65,14 +65,15 @@
 #include "components/sync/driver/async_directory_type_controller.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
-#include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/sequenced_model_worker.h"
 #include "components/sync/engine/ui_model_worker.h"
 #include "components/sync/user_events/user_event_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/sync_sessions_client.h"
 #include "content/public/browser/browser_thread.h"
+#include "extensions/browser/api/storage/backend_task_runner.h"
 #include "extensions/features/features.h"
 #include "ui/base/device_form_factor.h"
 
@@ -113,9 +114,9 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_util.h"
-#include "chrome/browser/chromeos/printing/printers_manager.h"
-#include "chrome/browser/chromeos/printing/printers_manager_factory.h"
 #include "chrome/browser/chromeos/printing/printers_sync_bridge.h"
+#include "chrome/browser/chromeos/printing/synced_printers_manager.h"
+#include "chrome/browser/chromeos/printing/synced_printers_manager_factory.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_sync_data_type_controller.h"
 #include "chrome/browser/ui/app_list/arc/arc_package_syncable_service.h"
 #include "components/sync_wifi/wifi_credential_syncable_service.h"
@@ -244,10 +245,6 @@ void ChromeSyncClient::Initialize() {
         token_service, url_request_context_getter, web_data_service_,
         password_store_);
   }
-}
-
-base::SequencedWorkerPool* ChromeSyncClient::GetBlockingPool() {
-  return content::BrowserThread::GetBlockingPool();
 }
 
 syncer::SyncService* ChromeSyncClient::GetSyncService() {
@@ -521,7 +518,8 @@ ChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
           web_data_service_.get());
 #if defined(OS_CHROMEOS)
     case syncer::PRINTERS:
-      return chromeos::PrintersManagerFactory::GetForBrowserContext(profile_)
+      return chromeos::SyncedPrintersManagerFactory::GetForBrowserContext(
+                 profile_)
           ->GetSyncBridge()
           ->AsWeakPtr();
 #endif  // defined(OS_CHROMEOS)
@@ -544,13 +542,18 @@ ChromeSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   switch (group) {
     case syncer::GROUP_DB:
-      return new syncer::BrowserThreadModelWorker(
+      return new syncer::SequencedModelWorker(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::DB),
           syncer::GROUP_DB);
+    // TODO(stanisc): crbug.com/731903: Rename GROUP_FILE to reflect that it is
+    // used only for app and extension settings.
     case syncer::GROUP_FILE:
-      return new syncer::BrowserThreadModelWorker(
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE),
-          syncer::GROUP_FILE);
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+      return new syncer::SequencedModelWorker(
+          extensions::GetBackendTaskRunner(), syncer::GROUP_FILE);
+#else
+      return nullptr;
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
     case syncer::GROUP_UI:
       return new syncer::UIModelWorker(
           BrowserThread::GetTaskRunnerForThread(BrowserThread::UI));

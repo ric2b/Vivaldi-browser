@@ -7,10 +7,12 @@
 #import <WebKit/WebKit.h>
 
 #include "base/numerics/safe_conversions.h"
+#include "base/stl_util.h"
 #include "base/strings/sys_string_conversions.h"
 #include "net/base/url_util.h"
 #include "url/gurl.h"
 #include "url/scheme_host_port.h"
+#include "url/url_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -27,8 +29,10 @@ bool IsOriginSecure(const GURL& url) {
     return true;
   }
 
-  std::string hostname = url.HostNoBrackets();
-  if (net::IsLocalhost(hostname))
+  if (base::ContainsValue(url::GetSecureSchemes(), url.scheme()))
+    return true;
+
+  if (net::IsLocalhost(url.HostNoBracketsPiece()))
     return true;
 
   return false;

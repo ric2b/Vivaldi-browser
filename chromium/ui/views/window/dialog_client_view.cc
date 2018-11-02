@@ -20,6 +20,7 @@
 #include "ui/views/layout/layout_provider.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/view_observer.h"
+#include "ui/views/view_tracker.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/dialog_delegate.h"
 
@@ -50,36 +51,6 @@ gfx::Size GetBoundingSizeForVerticalStack(const gfx::Size& size1,
   return gfx::Size(std::max(size1.width(), size2.width()),
                    size1.height() + size2.height());
 }
-
-// ViewDeletionObserver implements an observer to track the deletion of the
-// view in focus.
-class ViewDeletionObserver : public ViewObserver {
- public:
-  explicit ViewDeletionObserver(View* observed_view)
-      : observed_view_(observed_view) {
-    if (observed_view_)
-      observed_view_->AddObserver(this);
-  }
-
-  ~ViewDeletionObserver() override {
-    if (observed_view_)
-      observed_view_->RemoveObserver(this);
-  }
-
-  // ViewObserver:
-  void OnViewIsDeleting(View* observed_view) override {
-    DCHECK_EQ(observed_view, observed_view_);
-    observed_view_ = nullptr;
-    observed_view_->RemoveObserver(this);
-  }
-
-  View* observed_view() { return observed_view_; }
-
- private:
-  View* observed_view_ = nullptr;
-
-  DISALLOW_COPY_AND_ASSIGN(ViewDeletionObserver);
-};
 
 }  // namespace
 
@@ -249,8 +220,8 @@ void DialogClientView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   const DialogDelegate* dialog = GetDialogDelegate();
 
   if (dialog && !dialog->ShouldUseCustomFrame()) {
-    set_background(views::Background::CreateSolidBackground(GetNativeTheme()->
-        GetSystemColor(ui::NativeTheme::kColorId_DialogBackground)));
+    SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_DialogBackground)));
   }
 }
 
@@ -311,13 +282,8 @@ void DialogClientView::UpdateDialogButton(LabelButton** member,
                             (type != ui::DIALOG_BUTTON_CANCEL ||
                              PlatformStyle::kDialogDefaultButtonCanBeCancel);
 
-    // The default button is always blue in Harmony.
-    if (is_default && (ui::MaterialDesignController::IsSecondaryUiMaterial() ||
-                       delegate->ShouldDefaultButtonBeBlue())) {
-      button = MdTextButton::CreateSecondaryUiBlueButton(this, title);
-    } else {
-      button = MdTextButton::CreateSecondaryUiButton(this, title);
-    }
+    button = is_default ? MdTextButton::CreateSecondaryUiBlueButton(this, title)
+                        : MdTextButton::CreateSecondaryUiButton(this, title);
 
     const int minimum_width = LayoutProvider::Get()->GetDistanceMetric(
         views::DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH);
@@ -358,7 +324,7 @@ void DialogClientView::SetupLayout() {
   GridLayout* layout = new GridLayout(button_row_container_);
   layout->set_minimum_size(minimum_size_);
   FocusManager* focus_manager = GetFocusManager();
-  ViewDeletionObserver deletion_observer(focus_manager->GetFocusedView());
+  ViewTracker view_tracker(focus_manager->GetFocusedView());
 
   // Clobber any existing LayoutManager since it has weak references to child
   // Views which may be removed by SetupViews().
@@ -376,17 +342,6 @@ void DialogClientView::SetupLayout() {
   if (std::count(views.begin(), views.end(), nullptr) == kNumButtons)
     return;
 
-  gfx::Insets insets = button_row_insets_;
-  LayoutProvider* const layout_provider = LayoutProvider::Get();
-  // Support dialogs that clear |button_row_insets_| to do their own layout.
-  // They expect GetDialogRelatedControlVerticalSpacing() in this case.
-  if (insets.top() == 0 &&
-      !ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    const int top =
-        layout_provider->GetDistanceMetric(DISTANCE_RELATED_CONTROL_VERTICAL);
-    insets.Set(top, insets.left(), insets.bottom(), insets.right());
-  }
-
   // The |resize_percent| constants. There's only one stretchy column (padding
   // to the left of ok/cancel buttons).
   constexpr float kFixed = 0.f;
@@ -395,6 +350,7 @@ void DialogClientView::SetupLayout() {
   // Button row is [ extra <pad+stretchy> second <pad> third ]. Ensure the <pad>
   // column is zero width if there isn't a button on either side.
   // GetExtraViewSpacing() handles <pad+stretchy>.
+  LayoutProvider* const layout_provider = LayoutProvider::Get();
   const int button_spacing = (ok_button_ && cancel_button_)
                                  ? layout_provider->GetDistanceMetric(
                                        DISTANCE_RELATED_BUTTON_HORIZONTAL)
@@ -405,7 +361,7 @@ void DialogClientView::SetupLayout() {
 
   // Rather than giving |button_row_container_| a Border, incorporate the insets
   // into the layout. This simplifies min/max size calculations.
-  column_set->AddPaddingColumn(kFixed, insets.left());
+  column_set->AddPaddingColumn(kFixed, button_row_insets_.left());
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, kFixed,
                         GridLayout::USE_PREF, 0, 0);
   column_set->AddPaddingColumn(kStretchy, GetExtraViewSpacing());
@@ -414,14 +370,15 @@ void DialogClientView::SetupLayout() {
   column_set->AddPaddingColumn(kFixed, button_spacing);
   column_set->AddColumn(GridLayout::FILL, GridLayout::FILL, kFixed,
                         GridLayout::USE_PREF, 0, 0);
-  column_set->AddPaddingColumn(kFixed, insets.right());
+  column_set->AddPaddingColumn(kFixed, button_row_insets_.right());
 
   // Track which columns to link sizes under MD.
   constexpr int kViewToColumnIndex[] = {1, 3, 5};
   int link[] = {-1, -1, -1};
   size_t link_index = 0;
 
-  layout->StartRowWithPadding(kFixed, kButtonRowId, kFixed, insets.top());
+  layout->StartRowWithPadding(kFixed, kButtonRowId, kFixed,
+                              button_row_insets_.top());
   for (size_t view_index = 0; view_index < kNumButtons; ++view_index) {
     if (views[view_index]) {
       layout->AddView(views[view_index]);
@@ -445,11 +402,11 @@ void DialogClientView::SetupLayout() {
   else
     column_set->LinkColumnSizes(link[0], link[1], link[2], -1);
 
-  layout->AddPaddingRow(kFixed, insets.bottom());
+  layout->AddPaddingRow(kFixed, button_row_insets_.bottom());
 
   // The default focus is lost when child views are added back into the dialog.
   // This restores focus if the button is still available.
-  View* previously_focused_view = deletion_observer.observed_view();
+  View* previously_focused_view = view_tracker.view();
   if (previously_focused_view && !focus_manager->GetFocusedView() &&
       Contains(previously_focused_view)) {
     previously_focused_view->RequestFocus();

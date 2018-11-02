@@ -161,7 +161,7 @@ void HTMLFrameSetElement::ParseAttribute(
         EventTypeNames::focusout,
         CreateAttributeEventListener(GetDocument().GetFrame(), name, value,
                                      EventParameterName()));
-  } else if (RuntimeEnabledFeatures::orientationEventEnabled() &&
+  } else if (RuntimeEnabledFeatures::OrientationEventEnabled() &&
              name == onorientationchangeAttr) {
     GetDocument().SetWindowAttributeEventListener(
         EventTypeNames::orientationchange,
@@ -230,7 +230,7 @@ LayoutObject* HTMLFrameSetElement::CreateLayoutObject(
   return new LayoutFrameSet(this);
 }
 
-void HTMLFrameSetElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLFrameSetElement::AttachLayoutTree(AttachContext& context) {
   // Inherit default settings from parent frameset
   // FIXME: This is not dynamic.
   if (HTMLFrameSetElement* frameset =

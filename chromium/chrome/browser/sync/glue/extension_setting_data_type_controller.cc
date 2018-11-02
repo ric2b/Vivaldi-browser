@@ -10,10 +10,8 @@
 #include "chrome/browser/profiles/profile.h"
 #include "components/sync/driver/generic_change_processor.h"
 #include "components/sync/model/syncable_service.h"
-#include "content/public/browser/browser_thread.h"
+#include "extensions/browser/api/storage/backend_task_runner.h"
 #include "extensions/browser/extension_system.h"
-
-using content::BrowserThread;
 
 namespace browser_sync {
 
@@ -22,12 +20,11 @@ ExtensionSettingDataTypeController::ExtensionSettingDataTypeController(
     const base::Closure& dump_stack,
     syncer::SyncClient* sync_client,
     Profile* profile)
-    : AsyncDirectoryTypeController(
-          type,
-          dump_stack,
-          sync_client,
-          syncer::GROUP_FILE,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE)),
+    : AsyncDirectoryTypeController(type,
+                                   dump_stack,
+                                   sync_client,
+                                   syncer::GROUP_FILE,
+                                   extensions::GetBackendTaskRunner()),
       profile_(profile) {
   DCHECK(type == syncer::EXTENSION_SETTINGS || type == syncer::APP_SETTINGS);
 }

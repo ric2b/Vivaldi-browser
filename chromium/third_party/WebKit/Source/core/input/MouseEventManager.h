@@ -43,6 +43,8 @@ class CORE_EXPORT MouseEventManager final
   virtual ~MouseEventManager();
   DECLARE_TRACE();
 
+  enum FakeMouseMoveReason { kDuringScroll, kPerFrame };
+
   WebInputEventResult DispatchMouseEvent(EventTarget*,
                                          const AtomicString&,
                                          const WebMouseEvent&,
@@ -87,7 +89,7 @@ class CORE_EXPORT MouseEventManager final
   void FakeMouseMoveEventTimerFired(TimerBase*);
 
   void CancelFakeMouseMoveEvent();
-  void DispatchFakeMouseMoveEventSoon();
+  void DispatchFakeMouseMoveEventSoon(MouseEventManager::FakeMouseMoveReason);
   void DispatchFakeMouseMoveEventSoonInQuad(const FloatQuad&);
 
   void SetLastKnownMousePosition(const WebMouseEvent&);
@@ -126,7 +128,9 @@ class CORE_EXPORT MouseEventManager final
   // refactoring to be able to remove the dependency from EventHandler.
   Node* GetNodeUnderMouse();
   bool IsMousePositionUnknown();
+  // TODO(aelias): Make LastKnownMousePosition return FloatPoint.
   IntPoint LastKnownMousePosition();
+  FloatPoint LastKnownMousePositionGlobal();
 
   bool MousePressed();
   void SetMousePressed(bool);
@@ -145,6 +149,8 @@ class CORE_EXPORT MouseEventManager final
   void SetClickCount(int);
 
   bool MouseDownMayStartDrag();
+
+  bool FakeMouseMovePending() const;
 
  private:
   class MouseEventBoundaryEventDispatcher : public BoundaryEventDispatcher {
@@ -211,8 +217,8 @@ class CORE_EXPORT MouseEventManager final
 
   // The last mouse movement position this frame has seen in root frame
   // coordinates.
-  IntPoint last_known_mouse_position_;
-  IntPoint last_known_mouse_global_position_;
+  FloatPoint last_known_mouse_position_;
+  FloatPoint last_known_mouse_global_position_;
 
   unsigned is_mouse_position_unknown_ : 1;
   // Current button-press state for mouse/mouse-like-stylus.

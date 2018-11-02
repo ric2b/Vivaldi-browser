@@ -47,6 +47,7 @@ class StylePropertySerializer {
   String GetAlignmentShorthandValue(const StylePropertyShorthand&) const;
   String BorderPropertyValue() const;
   String GetLayeredShorthandValue(const StylePropertyShorthand&) const;
+  String Get2Values(const StylePropertyShorthand&) const;
   String Get4Values(const StylePropertyShorthand&) const;
   String BorderSpacingValue(const StylePropertyShorthand&) const;
   String GetShorthandValue(const StylePropertyShorthand&,
@@ -55,6 +56,7 @@ class StylePropertySerializer {
   String FontVariantValue() const;
   void AppendFontLonghandValueIfNotNormal(CSSPropertyID,
                                           StringBuilder& result) const;
+  String OffsetValue() const;
   String BackgroundRepeatPropertyValue() const;
   String GetPropertyText(CSSPropertyID,
                          const String& value,

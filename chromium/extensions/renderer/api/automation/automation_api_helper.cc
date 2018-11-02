@@ -10,7 +10,7 @@
 #include "third_party/WebKit/public/web/WebDocument.h"
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebExceptionCode.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebView.h"
 
@@ -47,8 +47,15 @@ void AutomationApiHelper::OnQuerySelector(int request_id,
         routing_id(), request_id, error, 0));
     return;
   }
-  blink::WebDocument document =
-      render_view()->GetWebView()->MainFrame()->GetDocument();
+
+  // ExtensionMsg_AutomationQuerySelector should only be sent to an active view.
+  DCHECK(render_view()->GetWebView()->MainFrame()->IsWebLocalFrame());
+
+  blink::WebDocument document = render_view()
+                                    ->GetWebView()
+                                    ->MainFrame()
+                                    ->ToWebLocalFrame()
+                                    ->GetDocument();
   if (document.IsNull()) {
     error.value = ExtensionHostMsg_AutomationQuerySelector_Error::kNoDocument;
     Send(new ExtensionHostMsg_AutomationQuerySelector_Result(
@@ -58,7 +65,7 @@ void AutomationApiHelper::OnQuerySelector(int request_id,
   blink::WebNode start_node = document;
   if (acc_obj_id > 0) {
     blink::WebAXObject start_acc_obj =
-        document.AccessibilityObjectFromID(acc_obj_id);
+        blink::WebAXObject::FromWebDocumentByID(document, acc_obj_id);
     if (start_acc_obj.IsNull()) {
       error.value =
           ExtensionHostMsg_AutomationQuerySelector_Error::kNodeDestroyed;
@@ -77,7 +84,7 @@ void AutomationApiHelper::OnQuerySelector(int request_id,
   blink::WebElement result_element = start_node.QuerySelector(web_selector);
   int result_acc_obj_id = 0;
   if (!result_element.IsNull()) {
-    blink::WebAXObject result_acc_obj = result_element.AccessibilityObject();
+    auto result_acc_obj = blink::WebAXObject::FromWebNode(result_element);
     if (!result_acc_obj.IsDetached()) {
       while (result_acc_obj.AccessibilityIsIgnored())
         result_acc_obj = result_acc_obj.ParentObject();

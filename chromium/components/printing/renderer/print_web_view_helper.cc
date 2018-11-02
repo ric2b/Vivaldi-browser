@@ -99,7 +99,7 @@ const char kPageLoadScriptFormat[] =
 
 const char kPageSetupScriptFormat[] = "setup(%s);";
 
-void ExecuteScript(blink::WebFrame* frame,
+void ExecuteScript(blink::WebLocalFrame* frame,
                    const char* script_format,
                    const base::Value& parameters) {
   std::string json;
@@ -565,7 +565,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
     blink::WebCanvas* canvas,
     int page_number,
     int total_pages,
-    const blink::WebFrame& source_frame,
+    const blink::WebLocalFrame& source_frame,
     float webkit_scale_factor,
     const PageSizeMargins& page_layout,
     const PrintMsg_Print_Params& params) {
@@ -590,11 +590,10 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
     }
   };
   HeaderAndFooterClient frame_client;
-  blink::WebLocalFrame* frame = blink::WebLocalFrame::Create(
-      blink::WebTreeScopeType::kDocument, &frame_client, nullptr, nullptr);
-  web_view->SetMainFrame(frame);
+  blink::WebLocalFrame* frame = blink::WebLocalFrame::CreateMainFrame(
+      web_view, &frame_client, nullptr, nullptr);
   blink::WebWidgetClient web_widget_client;
-  blink::WebFrameWidget::Create(&web_widget_client, web_view, frame);
+  blink::WebFrameWidget::Create(&web_widget_client, frame);
 
   base::Value html(
       base::UTF8ToUTF16(ResourceBundle::GetSharedInstance().GetRawDataResource(
@@ -628,7 +627,7 @@ void PrintWebViewHelper::PrintHeaderAndFooter(
 }
 
 // static - Not anonymous so that platform implementations can use it.
-float PrintWebViewHelper::RenderPageContent(blink::WebFrame* frame,
+float PrintWebViewHelper::RenderPageContent(blink::WebLocalFrame* frame,
                                             int page_number,
                                             const gfx::Rect& canvas_area,
                                             const gfx::Rect& content_area,
@@ -690,7 +689,9 @@ class PrepareFrameAndViewForPrint : public blink::WebViewClient,
       const blink::WebFrameOwnerProperties& frame_owner_properties) override;
   void FrameDetached(blink::WebLocalFrame* frame,
                      DetachType detach_type) override;
-  std::unique_ptr<blink::WebURLLoader> CreateURLLoader() override;
+  std::unique_ptr<blink::WebURLLoader> CreateURLLoader(
+      const blink::WebURLRequest& request,
+      base::SingleThreadTaskRunner* task_runner) override;
 
   void CallOnReady();
   void ResizeForPrinting();
@@ -769,8 +770,10 @@ void PrepareFrameAndViewForPrint::ResizeForPrinting() {
   // Backup size and offset if it's a local frame.
   blink::WebView* web_view = frame_.view();
   if (blink::WebFrame* web_frame = web_view->MainFrame()) {
+    // TODO(lukasza, weili): Support restoring scroll offset of a remote main
+    // frame - https://crbug.com/734815.
     if (web_frame->IsWebLocalFrame())
-      prev_scroll_offset_ = web_frame->GetScrollOffset();
+      prev_scroll_offset_ = web_frame->ToWebLocalFrame()->GetScrollOffset();
   }
   prev_view_size_ = web_view->Size();
 
@@ -815,10 +818,9 @@ void PrepareFrameAndViewForPrint::CopySelection(
       blink::WebView::Create(this, blink::kWebPageVisibilityStateVisible);
   owns_web_view_ = true;
   content::RenderView::ApplyWebPreferences(prefs, web_view);
-  blink::WebLocalFrame* main_frame = blink::WebLocalFrame::Create(
-      blink::WebTreeScopeType::kDocument, this, nullptr, nullptr);
-  web_view->SetMainFrame(main_frame);
-  blink::WebFrameWidget::Create(this, web_view, main_frame);
+  blink::WebLocalFrame* main_frame =
+      blink::WebLocalFrame::CreateMainFrame(web_view, this, nullptr, nullptr);
+  blink::WebFrameWidget::Create(this, main_frame);
   frame_.Reset(web_view->MainFrame()->ToWebLocalFrame());
   node_to_print_.Reset();
 
@@ -863,9 +865,11 @@ void PrepareFrameAndViewForPrint::FrameDetached(blink::WebLocalFrame* frame,
 }
 
 std::unique_ptr<blink::WebURLLoader>
-PrepareFrameAndViewForPrint::CreateURLLoader() {
+PrepareFrameAndViewForPrint::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   // TODO(yhirano): Stop using Platform::CreateURLLoader() here.
-  return blink::Platform::Current()->CreateURLLoader();
+  return blink::Platform::Current()->CreateURLLoader(request, task_runner);
 }
 
 void PrepareFrameAndViewForPrint::CallOnReady() {
@@ -879,8 +883,10 @@ void PrepareFrameAndViewForPrint::RestoreSize() {
   blink::WebView* web_view = frame_.GetFrame()->View();
   web_view->Resize(prev_view_size_);
   if (blink::WebFrame* web_frame = web_view->MainFrame()) {
+    // TODO(lukasza, weili): Support restoring scroll offset of a remote main
+    // frame - https://crbug.com/734815.
     if (web_frame->IsWebLocalFrame())
-      web_frame->SetScrollOffset(prev_scroll_offset_);
+      web_frame->ToWebLocalFrame()->SetScrollOffset(prev_scroll_offset_);
   }
 }
 
@@ -1181,13 +1187,10 @@ void PrintWebViewHelper::OnPrintPreview(const base::DictionaryValue& settings) {
   if (!UpdatePrintSettings(print_preview_context_.source_frame(),
                            print_preview_context_.source_node(), settings)) {
     if (print_preview_context_.last_error() != PREVIEW_ERROR_BAD_SETTING) {
-      Send(new PrintHostMsg_PrintPreviewInvalidPrinterSettings(
-          routing_id(), print_pages_params_
-                            ? print_pages_params_->params.document_cookie
-                            : 0));
-      notify_browser_of_print_failure_ = false;  // Already sent.
+      DidFinishPrinting(INVALID_SETTINGS);
+    } else {
+      DidFinishPrinting(FAIL_PREVIEW);
     }
-    DidFinishPrinting(FAIL_PREVIEW);
     return;
   }
 
@@ -1551,6 +1554,8 @@ void PrintWebViewHelper::Print(blink::WebLocalFrame* frame,
 #endif  // BUILDFLAG(ENABLE_BASIC_PRINTING)
 
 void PrintWebViewHelper::DidFinishPrinting(PrintingResult result) {
+  int cookie =
+      print_pages_params_ ? print_pages_params_->params.document_cookie : 0;
   switch (result) {
     case OK:
       break;
@@ -1561,22 +1566,26 @@ void PrintWebViewHelper::DidFinishPrinting(PrintingResult result) {
 
     case FAIL_PRINT:
       if (notify_browser_of_print_failure_ && print_pages_params_) {
-        int cookie = print_pages_params_->params.document_cookie;
         Send(new PrintHostMsg_PrintingFailed(routing_id(), cookie));
       }
       break;
 
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW)
     case FAIL_PREVIEW:
-      int cookie =
-          print_pages_params_ ? print_pages_params_->params.document_cookie : 0;
-      if (notify_browser_of_print_failure_) {
-        LOG(ERROR) << "CreatePreviewDocument failed";
-        Send(new PrintHostMsg_PrintPreviewFailed(routing_id(), cookie));
-      } else {
-        Send(new PrintHostMsg_PrintPreviewCancelled(routing_id(), cookie));
+      if (!is_print_ready_metafile_sent_) {
+        if (notify_browser_of_print_failure_) {
+          LOG(ERROR) << "CreatePreviewDocument failed";
+          Send(new PrintHostMsg_PrintPreviewFailed(routing_id(), cookie));
+        } else {
+          Send(new PrintHostMsg_PrintPreviewCancelled(routing_id(), cookie));
+        }
       }
       print_preview_context_.Failed(notify_browser_of_print_failure_);
+      break;
+    case INVALID_SETTINGS:
+      Send(new PrintHostMsg_PrintPreviewInvalidPrinterSettings(routing_id(),
+                                                               cookie));
+      print_preview_context_.Failed(false);
       break;
 #endif  // BUILDFLAG(ENABLE_PRINT_PREVIEW)
   }

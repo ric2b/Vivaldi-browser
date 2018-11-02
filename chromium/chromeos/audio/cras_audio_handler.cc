@@ -10,6 +10,8 @@
 #include <algorithm>
 #include <cmath>
 #include <set>
+#include <string>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/bind_helpers.h"
@@ -304,6 +306,15 @@ bool CrasAudioHandler::GetPrimaryActiveOutputDevice(AudioDevice* device) const {
     return false;
   *device = *active_device;
   return true;
+}
+
+const AudioDevice* CrasAudioHandler::GetDeviceByType(AudioDeviceType type) {
+  for (const auto& item : audio_devices_) {
+    const AudioDevice& device = item.second;
+    if (device.type == type)
+      return &device;
+  }
+  return nullptr;
 }
 
 void CrasAudioHandler::SetKeyboardMicActive(bool active) {
@@ -1023,6 +1034,16 @@ void CrasAudioHandler::SwitchToDevice(const AudioDevice& device,
     SetupAudioOutputState();
 
   SetActiveDevice(device, notify, activate_by);
+
+  // content::MediaStreamManager listens to
+  // base::SystemMonitor::DevicesChangedObserver for audio devices,
+  // and updates EnumerateDevices when OnDevicesChanged is called.
+  base::SystemMonitor* monitor = base::SystemMonitor::Get();
+  // In some unittest, |monitor| might be nullptr.
+  if (!monitor)
+    return;
+  monitor->ProcessDevicesChanged(
+      base::SystemMonitor::DeviceType::DEVTYPE_AUDIO);
 }
 
 bool CrasAudioHandler::HasDeviceChange(const AudioNodeList& new_nodes,
@@ -1335,6 +1356,16 @@ void CrasAudioHandler::UpdateDevicesAndSwitchActive(
   HandleAudioDeviceChange(true, input_devices_pq_, hotplug_input_nodes,
                           input_devices_changed, has_input_removed,
                           active_input_removed);
+
+  // content::MediaStreamManager listens to
+  // base::SystemMonitor::DevicesChangedObserver for audio devices,
+  // and updates EnumerateDevices when OnDevicesChanged is called.
+  base::SystemMonitor* monitor = base::SystemMonitor::Get();
+  // In some unittest, |monitor| might be nullptr.
+  if (!monitor)
+    return;
+  monitor->ProcessDevicesChanged(
+      base::SystemMonitor::DeviceType::DEVTYPE_AUDIO);
 }
 
 void CrasAudioHandler::HandleAudioDeviceChange(
@@ -1369,16 +1400,6 @@ void CrasAudioHandler::HandleAudioDeviceChange(
     // Typical user hotplug case.
     HandleHotPlugDevice(hotplug_nodes.top(), devices_pq);
   }
-
-  // content::MediaStreamManager listens to
-  // base::SystemMonitor::DevicesChangedObserver for audio devices,
-  // and updates EnumerateDevices when OnDevicesChanged is called.
-  base::SystemMonitor* monitor = base::SystemMonitor::Get();
-  // In some unittest, |monitor| might be nullptr.
-  if (!monitor)
-    return;
-  monitor->ProcessDevicesChanged(
-      base::SystemMonitor::DeviceType::DEVTYPE_AUDIO);
 }
 
 void CrasAudioHandler::HandleGetNodes(const chromeos::AudioNodeList& node_list,
@@ -1527,15 +1548,6 @@ const AudioDevice* CrasAudioHandler::GetMicForCamera(
       return GetDeviceByType(AUDIO_TYPE_REAR_MIC);
     default:
       NOTREACHED();
-  }
-  return nullptr;
-}
-
-const AudioDevice* CrasAudioHandler::GetDeviceByType(AudioDeviceType type) {
-  for (const auto& item : audio_devices_) {
-    const AudioDevice& device = item.second;
-    if (device.type == type)
-      return &device;
   }
   return nullptr;
 }

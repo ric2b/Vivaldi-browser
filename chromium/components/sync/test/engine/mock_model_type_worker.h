@@ -43,15 +43,15 @@ class MockModelTypeWorker : public CommitQueue {
   CommitRequestData GetLatestPendingCommitForHash(
       const std::string& tag_hash) const;
 
-  // Expect that the |n|th commit request list has one commit request for |tag|
+  // Verify that the |n|th commit request list has one commit request for |tag|
   // with |value| set.
-  void ExpectNthPendingCommit(size_t n,
+  void VerifyNthPendingCommit(size_t n,
                               const std::string& tag_hash,
                               const sync_pb::EntitySpecifics& specifics);
 
-  // For each hash in |tag_hashes|, expect a corresponding request list of
-  // length one.
-  void ExpectPendingCommits(const std::vector<std::string>& tag_hashes);
+  // Verify the pending commits each contain a single CommitRequestData and they
+  // have the same hashes in the same order as |tag_hashes|.
+  void VerifyPendingCommits(const std::vector<std::string>& tag_hashes);
 
   // Trigger an update from the server. See GenerateUpdateData for parameter
   // descriptions. |version_offset| defaults to 1 and |ekn| defaults to the
@@ -66,6 +66,7 @@ class MockModelTypeWorker : public CommitQueue {
                         const sync_pb::EntitySpecifics& specifics,
                         int64_t version_offset,
                         const std::string& ekn);
+  void UpdateFromServer(const UpdateResponseDataList& updates);
 
   // Returns an UpdateResponseData representing an update received from
   // the server. Updates server state accordingly.
@@ -80,6 +81,12 @@ class MockModelTypeWorker : public CommitQueue {
       const sync_pb::EntitySpecifics& specifics,
       int64_t version_offset,
       const std::string& ekn);
+
+  // Mostly same as GenerateUpdateData above, but set 1 as |version_offset|, and
+  // use model_type_state_.encryption_key_name() as |ekn|.
+  UpdateResponseData GenerateUpdateData(
+      const std::string& tag_hash,
+      const sync_pb::EntitySpecifics& specifics);
 
   // Triggers a server-side deletion of the entity with |tag_hash|; updates
   // server state accordingly.

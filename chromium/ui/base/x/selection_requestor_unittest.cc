@@ -22,23 +22,9 @@
 
 namespace ui {
 
-namespace {
-
-const char* kAtomsToCache[] = {
-    "STRING",
-    NULL
-};
-
-}  // namespace
-
 class SelectionRequestorTest : public testing::Test {
  public:
-  SelectionRequestorTest()
-      : x_display_(gfx::GetXDisplay()),
-        x_window_(None),
-        atom_cache_(gfx::GetXDisplay(), kAtomsToCache) {
-    atom_cache_.allow_uncached_atoms();
-  }
+  SelectionRequestorTest() : x_display_(gfx::GetXDisplay()), x_window_(None) {}
 
   ~SelectionRequestorTest() override {}
 
@@ -49,10 +35,8 @@ class SelectionRequestorTest : public testing::Test {
   void SendSelectionNotify(XAtom selection,
                            XAtom target,
                            const std::string& value) {
-    ui::SetStringProperty(x_window_,
-                          requestor_->x_property_,
-                          atom_cache_.GetAtom("STRING"),
-                          value);
+    ui::SetStringProperty(x_window_, requestor_->x_property_,
+                          gfx::GetAtom("STRING"), value);
 
     XEvent xev;
     xev.type = SelectionNotify;
@@ -104,7 +88,6 @@ class SelectionRequestorTest : public testing::Test {
   std::unique_ptr<SelectionRequestor> requestor_;
 
   base::MessageLoopForUI message_loop_;
-  X11AtomCache atom_cache_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(SelectionRequestorTest);
@@ -114,7 +97,6 @@ namespace {
 
 // Converts |selection| to |target| and checks the returned values.
 void PerformBlockingConvertSelection(SelectionRequestor* requestor,
-                                     X11AtomCache* atom_cache,
                                      XAtom selection,
                                      XAtom target,
                                      const std::string& expected_data) {
@@ -125,7 +107,7 @@ void PerformBlockingConvertSelection(SelectionRequestor* requestor,
       selection, target, &out_data, &out_data_items, &out_type));
   EXPECT_EQ(expected_data, ui::RefCountedMemoryToString(out_data));
   EXPECT_EQ(expected_data.size(), out_data_items);
-  EXPECT_EQ(atom_cache->GetAtom("STRING"), out_type);
+  EXPECT_EQ(gfx::GetAtom("STRING"), out_type);
 }
 
 }  // namespace
@@ -136,17 +118,16 @@ TEST_F(SelectionRequestorTest, NestedRequests) {
   // Assume that |selection| will have no owner. If there is an owner, the owner
   // will set the property passed into the XConvertSelection() request which is
   // undesirable.
-  XAtom selection = atom_cache_.GetAtom("FAKE_SELECTION");
+  XAtom selection = gfx::GetAtom("FAKE_SELECTION");
 
-  XAtom target1 = atom_cache_.GetAtom("TARGET1");
-  XAtom target2 = atom_cache_.GetAtom("TARGET2");
+  XAtom target1 = gfx::GetAtom("TARGET1");
+  XAtom target2 = gfx::GetAtom("TARGET2");
 
   base::MessageLoopForUI* loop = base::MessageLoopForUI::current();
   loop->task_runner()->PostTask(
-      FROM_HERE,
-      base::Bind(&PerformBlockingConvertSelection,
-                 base::Unretained(requestor_.get()),
-                 base::Unretained(&atom_cache_), selection, target2, "Data2"));
+      FROM_HERE, base::Bind(&PerformBlockingConvertSelection,
+                            base::Unretained(requestor_.get()), selection,
+                            target2, "Data2"));
   loop->task_runner()->PostTask(
       FROM_HERE,
       base::Bind(&SelectionRequestorTest::SendSelectionNotify,
@@ -155,8 +136,8 @@ TEST_F(SelectionRequestorTest, NestedRequests) {
       FROM_HERE,
       base::Bind(&SelectionRequestorTest::SendSelectionNotify,
                  base::Unretained(this), selection, target2, "Data2"));
-  PerformBlockingConvertSelection(
-      requestor_.get(), &atom_cache_, selection, target1, "Data1");
+  PerformBlockingConvertSelection(requestor_.get(), selection, target1,
+                                  "Data1");
 }
 
 }  // namespace ui

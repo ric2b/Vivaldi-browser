@@ -8,7 +8,6 @@
 #include "base/macros.h"
 #include "components/proximity_auth/proximity_auth_client.h"
 
-class PrefService;
 class Profile;
 
 namespace cryptauth {
@@ -26,7 +25,7 @@ class ChromeProximityAuthClient : public proximity_auth::ProximityAuthClient {
   std::string GetAuthenticatedUsername() const override;
   void UpdateScreenlockState(proximity_auth::ScreenlockState state) override;
   void FinalizeUnlock(bool success) override;
-  PrefService* GetPrefService() override;
+  proximity_auth::ProximityAuthPrefManager* GetPrefManager() override;
   std::unique_ptr<cryptauth::SecureMessageDelegate>
   CreateSecureMessageDelegate() override;
   std::unique_ptr<cryptauth::CryptAuthClientFactory>
@@ -42,6 +41,7 @@ class ChromeProximityAuthClient : public proximity_auth::ProximityAuthClient {
       const std::string& remote_public_key,
       const std::string& nonce,
       base::Callback<void(const std::string& challenge)> callback) override;
+  std::string GetLocalDevicePublicKey() override;
 
  private:
   cryptauth::CryptAuthService* GetCryptAuthService();

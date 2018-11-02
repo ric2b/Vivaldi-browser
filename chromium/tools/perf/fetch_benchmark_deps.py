@@ -5,9 +5,12 @@
 
 """This module fetches and prints the dependencies given a benchmark."""
 
+import argparse
+import optparse
 import os
 import sys
 
+from core import benchmark_finders
 from core import path_util
 
 path_util.AddPyUtilsToPath()
@@ -21,6 +24,9 @@ from chrome_telemetry_build import chromium_config
 
 def _FetchDependenciesIfNeeded(story_set):
   """ Download files needed by a user story set. """
+  if not story_set.wpr_archive_info:
+    return
+
   # Download files in serving_dirs.
   serving_dirs = story_set.serving_dirs
   for directory in serving_dirs:
@@ -57,24 +63,15 @@ def _EnumerateDependencies(story_set):
   return [dep[prefix_len:] for dep in deps if dep]
 
 
-def _show_usage():
-  print ('Usage: %s benchmark_name\n'
-         'Fetch the dependencies of benchmark_name.' % sys.argv[0])
-
-
-def main(output=sys.stdout):
-  config = chromium_config.ChromiumConfig(
-      top_level_dir=path_util.GetPerfDir(),
-      benchmark_dirs=[os.path.join(path_util.GetPerfDir(), 'benchmarks')])
-
-  name = sys.argv[1]
-  benchmark = benchmark_runner.GetBenchmarkByName(name, config)
-  if not benchmark:
-    raise ValueError('No such benchmark: %s' % name)
+def FetchDepsForBenchmark(benchmark, output):
+  # Create a dummy options object which hold default values that are expected
+  # by Benchmark.CreateStorySet(options) method.
+  parser = optparse.OptionParser()
+  benchmark.AddBenchmarkCommandLineArgs(parser)
+  options, _ = parser.parse_args([])
+  story_set = benchmark().CreateStorySet(options)
 
   # Download files according to specified benchmark.
-  story_set = benchmark().CreateStorySet(None)
-
   _FetchDependenciesIfNeeded(story_set)
 
   # Print files downloaded.
@@ -83,8 +80,36 @@ def main(output=sys.stdout):
     print >> output, dep
 
 
-if __name__ == '__main__':
-  if len(sys.argv) != 2 or sys.argv[1][0] == '-':
-    _show_usage()
+def main(args, output):
+  parser = argparse.ArgumentParser(
+         description='Fetch the dependencies of perf benchmark(s).')
+  parser.add_argument('benchmark_name', type=str, nargs='?')
+  parser.add_argument('--force', '-f',
+                      help=('Force fetching all the benchmarks when '
+                            'benchmark_name is not specified'),
+                      action='store_true', default=False)
+
+  options = parser.parse_args(args)
+
+  if options.benchmark_name:
+    perf_dir = path_util.GetPerfDir()
+    benchmark_dirs=[os.path.join(perf_dir, 'benchmarks'),
+                    os.path.join(perf_dir, 'contrib')]
+    config = chromium_config.ChromiumConfig(
+        top_level_dir=path_util.GetPerfDir(), benchmark_dirs=benchmark_dirs)
+    benchmark = benchmark_runner.GetBenchmarkByName(
+        options.benchmark_name, config)
+    if not benchmark:
+      raise ValueError('No such benchmark: %s' % options.benchmark_name)
+    FetchDepsForBenchmark(benchmark, output)
   else:
-    main()
+    if not options.force:
+      raw_input(
+          'No benchmark name is specified. Fetching all benchmark deps. '
+          'Press enter to continue...')
+    for b in benchmark_finders.GetAllPerfBenchmarks():
+      print >> output, ('Fetch dependencies for benchmark %s' % b.Name())
+      FetchDepsForBenchmark(b, output)
+
+if __name__ == '__main__':
+  main(sys.argv[1:], sys.stdout)

@@ -84,7 +84,7 @@ TEST_F(LoopbackServerTest, GetUpdateCommand) {
   EXPECT_EQ(sync_pb::SyncEnums::SUCCESS, response.error_code());
   ASSERT_TRUE(response.has_get_updates());
   // Expect to see the three top-level folders in this update already.
-  EXPECT_EQ(3, response.get_updates().entries_size());
+  EXPECT_EQ(3 + 1 /*trash-node*/, response.get_updates().entries_size());
 }
 
 TEST_F(LoopbackServerTest, ClearServerDataCommand) {
@@ -134,7 +134,7 @@ TEST_F(LoopbackServerTest, LoadSavedState) {
   EXPECT_EQ(sync_pb::SyncEnums::SUCCESS, response.error_code());
   ASSERT_TRUE(response.has_get_updates());
   // Expect to see the three top-level folders and the newly added bookmark!
-  EXPECT_EQ(4, response.get_updates().entries_size());
+  EXPECT_EQ(4 + 1 /*trash-node*/, response.get_updates().entries_size());
 }
 
 TEST_F(LoopbackServerTest, CommitCommandUpdate) {
@@ -160,7 +160,7 @@ TEST_F(LoopbackServerTest, CommitCommandUpdate) {
   EXPECT_EQ(sync_pb::SyncEnums::SUCCESS, response.error_code());
   ASSERT_TRUE(response.has_get_updates());
   // Expect to see the three top-level folders and the newly added bookmark!
-  EXPECT_EQ(4, response.get_updates().entries_size());
+  EXPECT_EQ(4 + 1 /*trash-node*/, response.get_updates().entries_size());
 
   ClientToServerMessage commit_msg_2 = CreateCommitMessage();
   auto* entry = commit_msg_2.mutable_commit()->mutable_entries()->Mutable(0);
@@ -179,7 +179,7 @@ TEST_F(LoopbackServerTest, CommitCommandUpdate) {
   EXPECT_EQ(sync_pb::SyncEnums::SUCCESS, response.error_code());
   ASSERT_TRUE(response.has_get_updates());
   // Expect to see no fifth bookmark!
-  EXPECT_EQ(4, response.get_updates().entries_size());
+  EXPECT_EQ(4 + 1 /*trash-node*/, response.get_updates().entries_size());
 }
 
 }  // namespace syncer

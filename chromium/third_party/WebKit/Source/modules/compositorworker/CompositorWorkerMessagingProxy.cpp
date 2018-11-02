@@ -4,7 +4,6 @@
 
 #include "modules/compositorworker/CompositorWorkerMessagingProxy.h"
 
-#include "core/workers/WorkerThreadStartupData.h"
 #include "modules/compositorworker/CompositorWorkerThread.h"
 #include <memory>
 
@@ -19,10 +18,15 @@ CompositorWorkerMessagingProxy::CompositorWorkerMessagingProxy(
 
 CompositorWorkerMessagingProxy::~CompositorWorkerMessagingProxy() {}
 
+WTF::Optional<WorkerBackingThreadStartupData>
+CompositorWorkerMessagingProxy::CreateBackingThreadStartupData(v8::Isolate*) {
+  return WTF::nullopt;
+}
+
 std::unique_ptr<WorkerThread>
-CompositorWorkerMessagingProxy::CreateWorkerThread(double origin_time) {
-  return CompositorWorkerThread::Create(LoaderProxy(), WorkerObjectProxy(),
-                                        origin_time);
+CompositorWorkerMessagingProxy::CreateWorkerThread() {
+  return CompositorWorkerThread::Create(CreateThreadableLoadingContext(),
+                                        WorkerObjectProxy());
 }
 
 }  // namespace blink

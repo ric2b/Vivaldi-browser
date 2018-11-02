@@ -25,19 +25,17 @@ typedef std::pair<bool, bool> SlimmingPaintAndRootLayerScrolling;
 class PrePaintTreeWalkTest
     : public ::testing::WithParamInterface<SlimmingPaintAndRootLayerScrolling>,
       private ScopedSlimmingPaintV2ForTest,
-      private ScopedSlimmingPaintInvalidationForTest,
       private ScopedRootLayerScrollingForTest,
       public RenderingTest {
  public:
   PrePaintTreeWalkTest()
       : ScopedSlimmingPaintV2ForTest(GetParam().second),
-        ScopedSlimmingPaintInvalidationForTest(true),
         ScopedRootLayerScrollingForTest(GetParam().first),
         RenderingTest(EmptyLocalFrameClient::Create()) {}
 
   const TransformPaintPropertyNode* FramePreTranslation() {
-    FrameView* frame_view = GetDocument().View();
-    if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    LocalFrameView* frame_view = GetDocument().View();
+    if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
       return frame_view->GetLayoutView()
           ->PaintProperties()
           ->PaintOffsetTranslation();
@@ -46,8 +44,8 @@ class PrePaintTreeWalkTest
   }
 
   const TransformPaintPropertyNode* FrameScrollTranslation() {
-    FrameView* frame_view = GetDocument().View();
-    if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+    LocalFrameView* frame_view = GetDocument().View();
+    if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
       return frame_view->GetLayoutView()
           ->PaintProperties()
           ->ScrollTranslation();
@@ -152,7 +150,7 @@ TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithCSSTransformInvalidation) {
 
 TEST_P(PrePaintTreeWalkTest, PropertyTreesRebuiltWithOpacityInvalidation) {
   // In SPv1 mode, we don't need or store property tree nodes for effects.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
   SetBodyInnerHTML(
       "<style>"
@@ -280,38 +278,6 @@ TEST_P(PrePaintTreeWalkTest, ClearSubsequenceCachingClipChangePosFixed) {
   EXPECT_TRUE(child_paint_layer->NeedsRepaint());
 }
 
-TEST_P(PrePaintTreeWalkTest, ClipRects) {
-  SetBodyInnerHTML(
-      "<div id='parent' style='isolation: isolate'>"
-      "  <div id='child' style='position: relative'>"
-      "    <div id='grandchild' style='isolation: isolate'>"
-      "      <div style='position: relative'></div>"
-      "    </div>"
-      "  </div>"
-      "</div>");
-
-  auto* parent = GetLayoutObjectByElementId("parent");
-  auto* child = GetLayoutObjectByElementId("child");
-  auto* grandchild = GetLayoutObjectByElementId("grandchild");
-
-  EXPECT_TRUE(
-      parent->GetMutableForPainting().FirstFragment()->PreviousClipRects());
-  EXPECT_FALSE(child->PaintProperties());
-  EXPECT_TRUE(
-      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
-
-  PrePaintTreeWalk::ClearPreviousClipRectsForTesting(*grandchild);
-  GetDocument().View()->UpdateAllLifecyclePhases();
-  // Still no rects, because the walk early-outed at the LayoutView.
-  EXPECT_FALSE(
-      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
-
-  grandchild->SetNeedsPaintPropertyUpdate();
-  GetDocument().View()->UpdateAllLifecyclePhases();
-  EXPECT_TRUE(
-      grandchild->GetMutableForPainting().FirstFragment()->PreviousClipRects());
-}
-
 TEST_P(PrePaintTreeWalkTest, VisualRectClipForceSubtree) {
   SetBodyInnerHTML(
       "<style>"
@@ -334,7 +300,7 @@ TEST_P(PrePaintTreeWalkTest, VisualRectClipForceSubtree) {
 
   // In SPv2 mode, VisualRects are in the space of the containing transform
   // node without applying any ancestor property nodes, including clip.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     EXPECT_EQ(200, grandchild->VisualRect().Height());
   else
     EXPECT_EQ(75, grandchild->VisualRect().Height());

@@ -30,7 +30,7 @@
 #include "core/css/CSSImageValue.h"
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
-#include "core/dom/shadow/FlatTreeTraversal.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLTableElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -59,7 +59,7 @@ void HTMLTablePartElement::CollectStyleForPresentationAttribute(
     if (!url.IsEmpty()) {
       UseCounter::Count(
           GetDocument(),
-          UseCounter::kHTMLTableElementPresentationAttributeBackground);
+          WebFeature::kHTMLTableElementPresentationAttributeBackground);
       CSSImageValue* image_value =
           CSSImageValue::Create(url, GetDocument().CompleteURL(url),
                                 Referrer(GetDocument().OutgoingReferrer(),

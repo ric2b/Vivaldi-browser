@@ -148,6 +148,7 @@ bool AVDACodecImage::SetSharedState(
   if (shared_state == shared_state_)
     return false;
   shared_state_ = shared_state;
+  most_recent_bounds_ = gfx::Rect();
   return true;
 }
 
@@ -229,6 +230,17 @@ void AVDACodecImage::GetTextureMatrix(float matrix[16]) {
     UpdateSurface(UpdateMode::RENDER_TO_FRONT_BUFFER);
   shared_state_->GetTransformMatrix(matrix);
   YInvertMatrix(matrix);
+}
+
+void AVDACodecImage::NotifyPromotionHint(bool promotion_hint,
+                                         int display_x,
+                                         int display_y) {
+  // TODO(liberato): this should just be given to us.
+  PromotionHintAggregator::Hint hint;
+  hint.x = display_x;
+  hint.y = display_y;
+  hint.is_promotable = promotion_hint;
+  shared_state_->GetPromotionHintCB().Run(hint);
 }
 
 bool AVDACodecImage::IsCodecBufferOutstanding() const {

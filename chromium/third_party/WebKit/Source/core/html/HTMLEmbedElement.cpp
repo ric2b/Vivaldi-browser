@@ -28,13 +28,13 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/html/HTMLImageLoader.h"
 #include "core/html/HTMLObjectElement.h"
 #include "core/html/PluginDocument.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/layout/LayoutPart.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/api/LayoutEmbeddedItem.h"
 
 namespace blink {
@@ -55,17 +55,18 @@ HTMLEmbedElement* HTMLEmbedElement::Create(Document& document,
   return element;
 }
 
-static inline LayoutPart* FindPartLayoutObject(const Node* n) {
+static inline LayoutEmbeddedContent* FindPartLayoutObject(const Node* n) {
   if (!n->GetLayoutObject())
     n = Traversal<HTMLObjectElement>::FirstAncestor(*n);
 
-  if (n && n->GetLayoutObject() && n->GetLayoutObject()->IsLayoutPart())
-    return ToLayoutPart(n->GetLayoutObject());
+  if (n && n->GetLayoutObject() &&
+      n->GetLayoutObject()->IsLayoutEmbeddedContent())
+    return ToLayoutEmbeddedContent(n->GetLayoutObject());
 
   return nullptr;
 }
 
-LayoutPart* HTMLEmbedElement::ExistingLayoutPart() const {
+LayoutEmbeddedContent* HTMLEmbedElement::ExistingLayoutEmbeddedContent() const {
   return FindPartLayoutObject(this);
 }
 
@@ -96,7 +97,7 @@ void HTMLEmbedElement::CollectStyleForPresentationAttribute(
 void HTMLEmbedElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == typeAttr) {
-    service_type_ = params.new_value.DeprecatedLower();
+    service_type_ = params.new_value.LowerASCII();
     size_t pos = service_type_.Find(";");
     if (pos != kNotFound)
       service_type_ = service_type_.Left(pos);
@@ -167,14 +168,14 @@ void HTMLEmbedElement::UpdatePluginInternal() {
 
   // Overwrites the URL and MIME type of a Flash embed to use an HTML5 embed.
   KURL overriden_url =
-      GetDocument().GetFrame()->Loader().Client()->OverrideFlashEmbedWithHTML(
+      GetDocument().GetFrame()->Client()->OverrideFlashEmbedWithHTML(
           GetDocument().CompleteURL(url_));
   if (!overriden_url.IsEmpty()) {
     url_ = overriden_url.GetString();
     service_type_ = "text/html";
   }
 
-  RequestObject(url_, service_type_, param_names, param_values);
+  RequestObject(param_names, param_values);
 }
 
 bool HTMLEmbedElement::LayoutObjectIsNeeded(const ComputedStyle& style) {

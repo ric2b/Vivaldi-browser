@@ -429,16 +429,17 @@ TEST_F(CorePageLoadMetricsObserverTest, Reload) {
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
 
-      {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
-       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+       0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
   };
 
   int64_t network_bytes = 0;
@@ -519,16 +520,17 @@ TEST_F(CorePageLoadMetricsObserverTest, ForwardBack) {
 
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
-       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+       0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
   };
 
   int64_t network_bytes = 0;
@@ -603,16 +605,17 @@ TEST_F(CorePageLoadMetricsObserverTest, NewNavigation) {
 
   page_load_metrics::ExtraRequestCompleteInfo resources[] = {
       // Cached request.
-      {GURL(), -1 /* frame_tree_node_id */, true /*was_cached*/,
-       1024 * 20 /* raw_body_bytes */, 0 /* original_network_content_length */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       true /*was_cached*/, 1024 * 20 /* raw_body_bytes */,
+       0 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
       // Uncached non-proxied request.
-      {GURL(), -1 /* frame_tree_node_id */, false /*was_cached*/,
-       1024 * 40 /* raw_body_bytes */,
+      {GURL(kResourceUrl), net::HostPortPair(), -1 /* frame_tree_node_id */,
+       false /*was_cached*/, 1024 * 40 /* raw_body_bytes */,
        1024 * 40 /* original_network_content_length */,
        nullptr /* data_reduction_proxy_data */,
-       content::ResourceType::RESOURCE_TYPE_MAIN_FRAME},
+       content::ResourceType::RESOURCE_TYPE_SCRIPT, 0},
   };
 
   int64_t network_bytes = 0;
@@ -706,36 +709,4 @@ TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaint) {
   histogram_tester().ExpectBucketCount(
       internal::kHistogramFirstMeaningfulPaintStatus,
       internal::FIRST_MEANINGFUL_PAINT_RECORDED, 1);
-}
-
-TEST_F(CorePageLoadMetricsObserverTest, FirstMeaningfulPaintAfterInteraction) {
-  page_load_metrics::mojom::PageLoadTiming timing;
-  page_load_metrics::InitPageLoadTimingForTest(&timing);
-  timing.navigation_start = base::Time::FromDoubleT(1);
-  timing.parse_timing->parse_start = base::TimeDelta::FromMilliseconds(5);
-  timing.paint_timing->first_paint = base::TimeDelta::FromMilliseconds(10);
-  PopulateRequiredTimingFields(&timing);
-
-  NavigateAndCommit(GURL(kDefaultTestUrl));
-  SimulateTimingUpdate(timing);
-
-  blink::WebMouseEvent mouse_event(blink::WebInputEvent::kMouseDown,
-                                   blink::WebInputEvent::kNoModifiers,
-                                   blink::WebInputEvent::kTimeStampForTesting);
-  SimulateInputEvent(mouse_event);
-
-  timing.paint_timing->first_meaningful_paint =
-      base::TimeDelta::FromMilliseconds(1000);
-  PopulateRequiredTimingFields(&timing);
-  SimulateTimingUpdate(timing);
-
-  NavigateAndCommit(GURL(kDefaultTestUrl2));
-
-  histogram_tester().ExpectTotalCount(
-      internal::kHistogramFirstMeaningfulPaint, 0);
-  histogram_tester().ExpectTotalCount(
-      internal::kHistogramParseStartToFirstMeaningfulPaint, 0);
-  histogram_tester().ExpectBucketCount(
-      internal::kHistogramFirstMeaningfulPaintStatus,
-      internal::FIRST_MEANINGFUL_PAINT_USER_INTERACTION_BEFORE_FMP, 1);
 }

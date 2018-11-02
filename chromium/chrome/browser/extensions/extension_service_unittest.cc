@@ -41,7 +41,6 @@
 #include "base/values.h"
 #include "base/version.h"
 #include "build/build_config.h"
-#include "chrome/browser/after_startup_task_utils.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/extensions/blacklist.h"
@@ -145,12 +144,6 @@
 #include "testing/platform_test.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/gurl.h"
-
-#if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/login/users/scoped_test_user_manager.h"
-#include "chrome/browser/chromeos/settings/cros_settings.h"
-#include "chrome/browser/chromeos/settings/device_settings_service.h"
-#endif
 
 // The blacklist tests rely on the safe-browsing database.
 #if defined(SAFE_BROWSING_DB_LOCAL)
@@ -528,13 +521,7 @@ class MockUpdateProviderVisitor : public MockProviderVisitor {
 class ExtensionServiceTest
     : public extensions::ExtensionServiceTestWithInstall {
  public:
-  ExtensionServiceTest() {
-    // The extension subsystem posts logging tasks to be done after
-    // browser startup. There's no StartupObserver as there normally
-    // would be since we're in a unit test, so we have to explicitly
-    // note tasks should be processed.
-    AfterStartupTaskUtils::SetBrowserStartupIsCompleteForTesting();
-  }
+  ExtensionServiceTest() = default;
 
   MockExternalProvider* AddMockExternalProvider(Manifest::Location location) {
     auto provider = base::MakeUnique<MockExternalProvider>(service(), location);
@@ -3653,6 +3640,45 @@ TEST_F(ExtensionServiceTest, ComponentExtensionWhitelisted) {
   EXPECT_TRUE(service()->GetExtensionById(good0, false));
 }
 
+// Tests that active permissions are not revoked from component extensions
+// by policy when the policy is updated. https://crbug.com/746017.
+TEST_F(ExtensionServiceTest, ComponentExtensionWhitelistedPermission) {
+  InitializeEmptyExtensionServiceWithTestingPrefs();
+
+  // Install a component extension.
+  base::FilePath path = data_dir()
+                            .AppendASCII("good")
+                            .AppendASCII("Extensions")
+                            .AppendASCII(good0)
+                            .AppendASCII("1.0.0.0");
+  std::string manifest;
+  ASSERT_TRUE(base::ReadFileToString(path.Append(extensions::kManifestFilename),
+                                     &manifest));
+  service()->component_loader()->Add(manifest, path);
+  service()->Init();
+
+  // Extension should have the "tabs" permission.
+  EXPECT_TRUE(service()
+                  ->GetExtensionById(good0, false)
+                  ->permissions_data()
+                  ->active_permissions()
+                  .HasAPIPermission(extensions::APIPermission::kTab));
+
+  // Component should not lose permissions on policy change.
+  {
+    ManagementPrefUpdater pref(profile_->GetTestingPrefService());
+    pref.AddBlockedPermission(good0, "tabs");
+  }
+
+  service()->OnExtensionManagementSettingsChanged();
+  content::RunAllBlockingPoolTasksUntilIdle();
+  EXPECT_TRUE(service()
+                  ->GetExtensionById(good0, false)
+                  ->permissions_data()
+                  ->active_permissions()
+                  .HasAPIPermission(extensions::APIPermission::kTab));
+}
+
 // Tests that policy-installed extensions are not blacklisted by policy.
 TEST_F(ExtensionServiceTest, PolicyInstalledExtensionsWhitelisted) {
   InitializeEmptyExtensionServiceWithTestingPrefs();
@@ -4635,14 +4661,14 @@ TEST_F(ExtensionServiceTest, ClearExtensionData) {
   EXPECT_TRUE(base::PathExists(lso_file_path));
 
   // Create indexed db. Similarly, it is enough to only simulate this by
-  // creating the directory on the disk.
+  // creating the directory on the disk, and resetting the caches of
+  // "known" origins.
   IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
                                       profile())->GetIndexedDBContext();
-  idb_context->SetTaskRunnerForTesting(
-      base::ThreadTaskRunnerHandle::Get().get());
   base::FilePath idb_path = idb_context->GetFilePathForTesting(ext_url);
   EXPECT_TRUE(base::CreateDirectory(idb_path));
   EXPECT_TRUE(base::DirectoryExists(idb_path));
+  idb_context->ResetCachesForTesting();
 
   // Uninstall the extension.
   base::RunLoop run_loop;
@@ -4756,14 +4782,14 @@ TEST_F(ExtensionServiceTest, ClearAppData) {
   EXPECT_TRUE(base::PathExists(lso_file_path));
 
   // Create indexed db. Similarly, it is enough to only simulate this by
-  // creating the directory on the disk.
+  // creating the directory on the disk, and resetting the caches of
+  // "known" origins.
   IndexedDBContext* idb_context = BrowserContext::GetDefaultStoragePartition(
                                       profile())->GetIndexedDBContext();
-  idb_context->SetTaskRunnerForTesting(
-      base::ThreadTaskRunnerHandle::Get().get());
   base::FilePath idb_path = idb_context->GetFilePathForTesting(origin1);
   EXPECT_TRUE(base::CreateDirectory(idb_path));
   EXPECT_TRUE(base::DirectoryExists(idb_path));
+  idb_context->ResetCachesForTesting();
 
   // Uninstall one of them, unlimited storage should still be granted
   // to the origin.
@@ -5019,7 +5045,7 @@ void ExtensionServiceTest::TestExternalProvider(MockExternalProvider* provider,
 
     // Should still be at 0.
     loaded_.clear();
-    extensions::InstalledLoader(service()).LoadAllExtensions();
+    service()->ReloadExtensionsForTest();
     content::RunAllBlockingPoolTasksUntilIdle();
     ASSERT_EQ(0u, loaded_.size());
     ValidatePrefKeyCount(1);
@@ -5564,12 +5590,6 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
   ExtensionErrorReporter::Init(false);  // no noisy errors
   ExtensionsReadyRecorder recorder;
   std::unique_ptr<TestingProfile> profile(new TestingProfile());
-#if defined OS_CHROMEOS
-  chromeos::ScopedTestDeviceSettingsService device_settings_service;
-  chromeos::ScopedTestCrosSettings cros_settings;
-  std::unique_ptr<chromeos::ScopedTestUserManager> user_manager(
-      new chromeos::ScopedTestUserManager);
-#endif
   std::unique_ptr<base::CommandLine> command_line;
   base::FilePath install_dir = profile->GetPath()
       .AppendASCII(extensions::kInstallDirectoryName);
@@ -5586,9 +5606,6 @@ TEST_F(ExtensionServiceTestSimple, Enabledness) {
   service->Init();
   content::RunAllBlockingPoolTasksUntilIdle();
   EXPECT_TRUE(recorder.ready());
-#if defined OS_CHROMEOS
-  user_manager.reset();
-#endif
 
   // If either the command line or pref is set, we are disabled.
   recorder.set_ready(false);
@@ -6372,6 +6389,35 @@ TEST_F(ExtensionServiceTest, MultipleExternalInstallErrors) {
   EXPECT_FALSE(GetError(extension_ids[0]));
   EXPECT_FALSE(GetError(extension_ids[1]));
   EXPECT_FALSE(GetError(extension_ids[2]));
+
+  EXPECT_FALSE(HasExternalInstallErrors(service_));
+}
+
+// Regression test for crbug.com/739142. Verifies that no UAF occurs when
+// ExternalInstallError needs to be deleted asynchronously.
+TEST_F(ExtensionServiceTest, InstallPromptAborted) {
+  FeatureSwitch::ScopedOverride prompt(
+      FeatureSwitch::prompt_for_external_extensions(), true);
+  InitializeEmptyExtensionService();
+
+  MockExternalProvider* reg_provider =
+      AddMockExternalProvider(Manifest::EXTERNAL_REGISTRY);
+
+  reg_provider->UpdateOrAddExtension(good_crx, "1.0.0.0",
+                                     data_dir().AppendASCII("good.crx"));
+  WaitForExternalExtensionInstalled();
+  EXPECT_EQ(
+      1u, service()->external_install_manager()->GetErrorsForTesting().size());
+  EXPECT_FALSE(service()->IsExtensionEnabled(good_crx));
+  EXPECT_TRUE(GetError(good_crx));
+
+  // Abort the extension install prompt. This should cause the
+  // ExternalInstallError to be deleted asynchronously.
+  GetError(good_crx)->OnInstallPromptDone(
+      ExtensionInstallPrompt::Result::ABORTED);
+  EXPECT_TRUE(GetError(good_crx));
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetError(good_crx));
 
   EXPECT_FALSE(HasExternalInstallErrors(service_));
 }

@@ -5,6 +5,7 @@
 #include "chrome/browser/component_updater/ssl_error_assistant_component_installer.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/bind.h"
 #include "base/files/file_util.h"
@@ -46,8 +47,8 @@ void LoadProtoFromDisk(const base::FilePath& pb_path) {
   }
   content::BrowserThread::PostTask(
       content::BrowserThread::UI, FROM_HERE,
-      base::Bind(&SSLErrorHandler::SetErrorAssistantProto,
-                 base::Passed(std::move(proto))));
+      base::BindOnce(&SSLErrorHandler::SetErrorAssistantProto,
+                     base::Passed(std::move(proto))));
 }
 
 }  // namespace
@@ -85,7 +86,7 @@ void SSLErrorAssistantComponentInstallerTraits::ComponentReady(
 
   base::PostTaskWithTraits(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BACKGROUND},
-      base::Bind(&LoadProtoFromDisk, GetInstalledPath(install_dir)));
+      base::BindOnce(&LoadProtoFromDisk, GetInstalledPath(install_dir)));
 }
 
 // Called during startup and installation before ComponentReady().

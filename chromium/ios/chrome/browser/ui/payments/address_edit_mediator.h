@@ -8,12 +8,15 @@
 #import "ios/chrome/browser/ui/payments/payment_request_edit_view_controller_data_source.h"
 #import "ios/chrome/browser/ui/payments/region_data_loader.h"
 
-class PaymentRequest;
 @protocol PaymentRequestEditConsumer;
 
 namespace autofill {
 class AutofillProfile;
 }  // namespace autofill
+
+namespace payments {
+class PaymentRequest;
+}  // namespace payments
 
 // Serves as data source for AddressEditViewController.
 @interface AddressEditMediator
@@ -30,14 +33,11 @@ class AutofillProfile;
 // The country code for the currently selected country, if any.
 @property(nonatomic, strong) NSString* selectedCountryCode;
 
-// The list of region names used for the autofill::ADDRESS_HOME_STATE field.
-@property(nonatomic, strong) NSArray<NSString*>* regions;
-
 // Initializes this object with an instance of PaymentRequest which has a copy
 // of web::PaymentRequest as provided by the page invoking the Payment Request
 // API as well as |address| which is the address to be edited, if any.
 // This object will not take ownership of |paymentRequest| or |address|.
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+- (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                                address:(autofill::AutofillProfile*)address
     NS_DESIGNATED_INITIALIZER;
 

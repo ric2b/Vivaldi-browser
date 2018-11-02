@@ -9,7 +9,7 @@
 
 #import "ios/chrome/browser/ui/toolbar/toolbar_owner.h"
 
-@protocol GoogleLandingDataSource;
+class ReadingListModel;
 
 // Header view for the Material Design NTP. The header view contains all views
 // that are displayed above the list of most visited sites, which includes the
@@ -19,18 +19,20 @@
 // Return the toolbar view;
 @property(nonatomic, readonly) UIView* toolBarView;
 
-// Creates a NewTabPageToolbarController using the given |toolbarDelegate|,
-// |focuser| and |readingListModel|, and adds the toolbar view to self.
-- (void)addToolbarWithDataSource:(id<GoogleLandingDataSource>)dataSource
-                      dispatcher:(id)dispatcher;
+// Creates a NewTabPageToolbarController using the given |dispatcher|,
+// |readingListModel|, and adds the toolbar view to self.
+- (void)addToolbarWithReadingListModel:(ReadingListModel*)readingListModel
+                            dispatcher:(id)dispatcher;
 
-// Changes the frame of |searchField| based on its |initialFrame| and the scroll
-// view's y |offset|. Also adjust the alpha values for |_searchBoxBorder| and
-// |_shadow| and the constant values for the |constraints|.
-- (void)updateSearchField:(UIView*)searchField
-         withInitialFrame:(CGRect)initialFrame
-       subviewConstraints:(NSArray*)constraints
-                forOffset:(CGFloat)offset;
+// Changes the constraints of searchField based on its initialFrame and the
+// scroll view's y |offset|. Also adjust the alpha values for |_searchBoxBorder|
+// and |_shadow| and the constant values for the |constraints|.
+- (void)updateSearchFieldWidth:(NSLayoutConstraint*)widthConstraint
+                        height:(NSLayoutConstraint*)heightConstraint
+                     topMargin:(NSLayoutConstraint*)topMarginConstraint
+            subviewConstraints:(NSArray*)constraints
+                 logoIsShowing:(BOOL)logoIsShowing
+                     forOffset:(CGFloat)offset;
 
 // Initializes |_searchBoxBorder| and |_shadow| and adds them to |searchField|.
 - (void)addViewsToSearchField:(UIView*)searchField;

@@ -32,7 +32,8 @@ var SavePageRequest;
 /**
  * @typedef {{
  *   modelIsLogging: boolean,
- *   queueIsLogging: boolean
+ *   queueIsLogging: boolean,
+ *   prefetchIsLogging: boolean
  * }}
  */
 var IsLogging;
@@ -85,6 +86,12 @@ cr.define('offlineInternals', function() {
     setRecordRequestQueue: function(shouldLog) {},
 
     /**
+     * Sets whether to record logs for prefetching.
+     * @param {boolean} shouldLog True if logging should be enabled.
+     */
+    setRecordPrefetchService: function(shouldLog) {},
+
+    /**
      * Gets the currently recorded logs.
      * @return {!Promise<!Array<string>>} A promise firing when the
      *     logs are retrieved.
@@ -124,6 +131,26 @@ cr.define('offlineInternals', function() {
      * @return {!Promise} A promise firing when the task has been cancelled.
      */
     cancelNwake: function() {},
+
+    /**
+     * Sends and processes a request to generate page bundle.
+     * @param {string} urls A list of comma-separated URLs.
+     * @return {!Promise<string>} A string describing the result.
+     */
+    generatePageBundle: function(urls) {},
+
+    /**
+     * Sends and processes a request to get operation.
+     * @param {string} name Name of operation.
+     * @return {!Promise<string>} A string describing the result.
+     */
+    getOperation: function(name) {},
+
+    /**
+     * Downloads an archive.
+     * @param {string} name Name of archive to download.
+     */
+    downloadArchive: function(name) {},
   };
 
   /**
@@ -165,6 +192,11 @@ cr.define('offlineInternals', function() {
     },
 
     /** @override */
+    setRecordPrefetchService: function(shouldLog) {
+      chrome.send('setRecordPrefetchService', [shouldLog]);
+    },
+
+    /** @override */
     getEventLogs: function() {
       return cr.sendWithPromise('getEventLogs');
     },
@@ -192,6 +224,21 @@ cr.define('offlineInternals', function() {
     /** @override */
     cancelNwake: function() {
       return cr.sendWithPromise('cancelNwake');
+    },
+
+    /** @override */
+    generatePageBundle: function(urls) {
+      return cr.sendWithPromise('generatePageBundle', urls);
+    },
+
+    /** @override */
+    getOperation: function(name) {
+      return cr.sendWithPromise('getOperation', name);
+    },
+
+    /** @override */
+    downloadArchive: function(name) {
+      chrome.send('downloadArchive', [name]);
     },
   };
 

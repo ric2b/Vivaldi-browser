@@ -92,7 +92,7 @@ content::ScreenInfo GetNSViewScreenInfo(NSView* view) {
 
   content::ScreenInfo results;
   results.device_scale_factor = static_cast<int>(display.device_scale_factor());
-  results.icc_profile = display.icc_profile();
+  results.color_space = display.color_space();
   results.depth = display.color_depth();
   results.depth_per_component = display.depth_per_component();
   results.is_monochrome = display.is_monochrome();
@@ -272,8 +272,8 @@ void WebContentsViewMac::UpdateDragCursor(WebDragOperation operation) {
   [cocoa_view_ setCurrentDragOperation: operation];
 }
 
-void WebContentsViewMac::GotFocus() {
-  web_contents_->NotifyWebContentsFocused();
+void WebContentsViewMac::GotFocus(RenderWidgetHostImpl* render_widget_host) {
+  web_contents_->NotifyWebContentsFocused(render_widget_host);
 }
 
 // This is called when the renderer asks us to take focus back (i.e., it has

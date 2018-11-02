@@ -23,7 +23,6 @@ class DictionaryValue;
 }
 
 namespace blink {
-class WebFrame;
 class WebInputEvent;
 class WebLocalFrame;
 class WebMediaStream;
@@ -35,13 +34,13 @@ class WebURLResponse;
 class WebView;
 }
 
-namespace cc {
-class SharedBitmapManager;
-}
-
 namespace device {
 class MotionData;
 class OrientationData;
+}
+
+namespace viz {
+class SharedBitmapManager;
 }
 
 namespace test_runner {
@@ -182,8 +181,8 @@ class WebTestDelegate {
   // Returns whether or not the use-zoom-for-dsf flag is enabled.
   virtual bool IsUseZoomForDSFEnabled() = 0;
 
-  // Change the device color profile while running a layout test.
-  virtual void SetDeviceColorProfile(const std::string& name) = 0;
+  // Change the device color space while running a layout test.
+  virtual void SetDeviceColorSpace(const std::string& name) = 0;
 
   // Set the bluetooth adapter while running a layout test, uses Mojo to
   // communicate with the browser.
@@ -269,7 +268,7 @@ class WebTestDelegate {
   virtual bool AddMediaStreamAudioSourceAndTrack(
       blink::WebMediaStream* stream) = 0;
 
-  virtual cc::SharedBitmapManager* GetSharedBitmapManager() = 0;
+  virtual viz::SharedBitmapManager* GetSharedBitmapManager() = 0;
 
   // Causes the beforeinstallprompt event to be sent to the renderer.
   // |event_platforms| are the platforms to be sent with the event. Once the
@@ -295,7 +294,7 @@ class WebTestDelegate {
 
   // Forces a text input state update for the client of WebFrameWidget
   // associated with |frame|.
-  virtual void ForceTextInputStateUpdate(blink::WebFrame* frame) = 0;
+  virtual void ForceTextInputStateUpdate(blink::WebLocalFrame* frame) = 0;
 
   // PlzNavigate
   // Indicates if the navigation was initiated by the browser or renderer.

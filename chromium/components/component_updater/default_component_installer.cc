@@ -11,7 +11,9 @@
 #include "base/files/file_enumerator.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
+#include "base/files/scoped_temp_dir.h"
 #include "base/location.h"
+#include "base/macros.h"
 #include "base/path_service.h"
 #include "base/sequenced_task_runner.h"
 #include "base/single_thread_task_runner.h"
@@ -39,8 +41,12 @@ using InstallError = update_client::InstallError;
 
 }  // namespace
 
-ComponentInstallerTraits::~ComponentInstallerTraits() {
-}
+ComponentInstallerTraits::~ComponentInstallerTraits() {}
+
+DefaultComponentInstaller::RegistrationInfo::RegistrationInfo()
+    : version(kNullVersion) {}
+
+DefaultComponentInstaller::RegistrationInfo::~RegistrationInfo() = default;
 
 DefaultComponentInstaller::DefaultComponentInstaller(
     std::unique_ptr<ComponentInstallerTraits> installer_traits)
@@ -63,12 +69,14 @@ void DefaultComponentInstaller::Register(
                << "has no installer traits.";
     return;
   }
+
+  auto registration_info = base::MakeRefCounted<RegistrationInfo>();
   task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(&DefaultComponentInstaller::StartRegistration,
-                 this, cus),
-      base::Bind(&DefaultComponentInstaller::FinishRegistration,
-                 this, cus, callback));
+      base::Bind(&DefaultComponentInstaller::StartRegistration, this,
+                 registration_info, cus),
+      base::Bind(&DefaultComponentInstaller::FinishRegistration, this,
+                 registration_info, cus, callback));
 }
 
 void DefaultComponentInstaller::OnUpdateError(int error) {
@@ -107,14 +115,20 @@ Result DefaultComponentInstaller::InstallHelper(
   return Result(InstallError::NONE);
 }
 
-Result DefaultComponentInstaller::Install(const base::DictionaryValue& manifest,
-                                          const base::FilePath& unpack_path) {
+Result DefaultComponentInstaller::Install(
+    std::unique_ptr<base::DictionaryValue> manifest,
+    const base::FilePath& unpack_path) {
   std::string manifest_version;
-  manifest.GetStringASCII("version", &manifest_version);
+  manifest->GetStringASCII("version", &manifest_version);
   base::Version version(manifest_version);
 
   VLOG(1) << "Install: version=" << version.GetString()
           << " current version=" << current_version_.GetString();
+
+  // Take the ownership of the |unpack_path| to enforce its deletion.
+  DCHECK(DirectoryExists(unpack_path));
+  base::ScopedTempDir unpack_path_owner;
+  ignore_result(unpack_path_owner.Set(unpack_path));
 
   if (!version.IsValid())
     return Result(InstallError::INVALID_VERSION);
@@ -129,22 +143,22 @@ Result DefaultComponentInstaller::Install(const base::DictionaryValue& manifest,
     if (!base::DeleteFile(install_path, true))
       return Result(InstallError::CLEAN_INSTALL_DIR_FAILED);
   }
-  const auto result = InstallHelper(manifest, unpack_path, install_path);
+  const auto result = InstallHelper(*manifest, unpack_path, install_path);
   if (result.error) {
     base::DeleteFile(install_path, true);
     return result;
   }
+
+  // If install has been successful, the installer has deleted the unpack path.
+  DCHECK(!base::PathExists(unpack_path));
+
   current_version_ = version;
   current_install_dir_ = install_path;
-  // TODO(ddorwin): Change parameter to std::unique_ptr<base::DictionaryValue>
-  // so we can avoid this DeepCopy.
-  current_manifest_.reset(manifest.DeepCopy());
-  std::unique_ptr<base::DictionaryValue> manifest_copy(
-      current_manifest_->DeepCopy());
+
   main_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&DefaultComponentInstaller::ComponentReady,
-                 this, base::Passed(&manifest_copy)));
+      FROM_HERE, base::Bind(&DefaultComponentInstaller::ComponentReady, this,
+                            base::Passed(std::move(manifest))));
+
   return result;
 }
 
@@ -166,7 +180,8 @@ bool DefaultComponentInstaller::Uninstall() {
 }
 
 bool DefaultComponentInstaller::FindPreinstallation(
-    const base::FilePath& root) {
+    const base::FilePath& root,
+    const scoped_refptr<RegistrationInfo>& registration_info) {
   base::FilePath path = root.Append(installer_traits_->GetRelativeInstallDir());
   if (!base::PathExists(path)) {
     DVLOG(1) << "Relative install dir does not exist: " << path.MaybeAsASCII();
@@ -201,32 +216,36 @@ bool DefaultComponentInstaller::FindPreinstallation(
           << " at " << path.MaybeAsASCII() << " with version " << version
           << ".";
 
-  current_install_dir_ = path;
-  current_manifest_ = std::move(manifest);
-  current_version_ = version;
+  registration_info->install_dir = path;
+  registration_info->version = version;
+  registration_info->manifest = std::move(manifest);
+
   return true;
 }
 
-void DefaultComponentInstaller::StartRegistration(ComponentUpdateService* cus) {
+void DefaultComponentInstaller::StartRegistration(
+    const scoped_refptr<RegistrationInfo>& registration_info,
+    ComponentUpdateService* cus) {
   VLOG(1) << __func__ << " for " << installer_traits_->GetName();
   DCHECK(task_runner_.get());
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   base::Version latest_version(kNullVersion);
 
   // First check for an installation set up alongside Chrome itself.
   base::FilePath root;
   if (PathService::Get(DIR_COMPONENT_PREINSTALLED, &root) &&
-      FindPreinstallation(root)) {
-    latest_version = current_version_;
+      FindPreinstallation(root, registration_info)) {
+    latest_version = registration_info->version;
   }
 
   // If there is a distinct alternate root, check there as well, and override
   // anything found in the basic root.
   base::FilePath root_alternate;
   if (PathService::Get(DIR_COMPONENT_PREINSTALLED_ALT, &root_alternate) &&
-      root != root_alternate && FindPreinstallation(root_alternate)) {
-    latest_version = current_version_;
+      root != root_alternate &&
+      FindPreinstallation(root_alternate, registration_info)) {
+    latest_version = registration_info->version;
   }
 
   // Then check for a higher-versioned user-wide installation.
@@ -291,13 +310,11 @@ void DefaultComponentInstaller::StartRegistration(ComponentUpdateService* cus) {
   }
 
   if (latest_manifest) {
-    current_version_ = latest_version;
-    current_manifest_ = std::move(latest_manifest);
-    current_install_dir_ = latest_path;
-    // TODO(ddorwin): Remove these members and pass them directly to
-    // FinishRegistration().
+    registration_info->version = latest_version;
+    registration_info->manifest = std::move(latest_manifest);
+    registration_info->install_dir = latest_path;
     base::ReadFileToString(latest_path.AppendASCII("manifest.fingerprint"),
-                           &current_fingerprint_);
+                           &registration_info->fingerprint);
   }
 
   // Remove older versions of the component. None should be in use during
@@ -308,7 +325,7 @@ void DefaultComponentInstaller::StartRegistration(ComponentUpdateService* cus) {
 
 void DefaultComponentInstaller::UninstallOnTaskRunner() {
   DCHECK(task_runner_.get());
-  DCHECK(task_runner_->RunsTasksOnCurrentThread());
+  DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
   // Only try to delete any files that are in our user-level install path.
   base::FilePath userInstallPath;
@@ -335,16 +352,21 @@ void DefaultComponentInstaller::UninstallOnTaskRunner() {
 
   // Delete the base directory if it's empty now.
   if (base::IsDirectoryEmpty(base_dir)) {
-    if (base::DeleteFile(base_dir, false))
+    if (!base::DeleteFile(base_dir, false))
       DLOG(ERROR) << "Couldn't delete " << base_dir.value();
   }
 }
 
 void DefaultComponentInstaller::FinishRegistration(
+    const scoped_refptr<RegistrationInfo>& registration_info,
     ComponentUpdateService* cus,
     const base::Closure& callback) {
   VLOG(1) << __func__ << " for " << installer_traits_->GetName();
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  current_install_dir_ = registration_info->install_dir;
+  current_version_ = registration_info->version;
+  current_fingerprint_ = registration_info->fingerprint;
 
   update_client::CrxComponent crx;
   installer_traits_->GetHash(&crx.pk_hash);
@@ -368,14 +390,12 @@ void DefaultComponentInstaller::FinishRegistration(
   if (!callback.is_null())
     callback.Run();
 
-  if (!current_manifest_) {
+  if (!registration_info->manifest) {
     DVLOG(1) << "No component found for " << installer_traits_->GetName();
     return;
   }
 
-  std::unique_ptr<base::DictionaryValue> manifest_copy(
-      current_manifest_->DeepCopy());
-  ComponentReady(std::move(manifest_copy));
+  ComponentReady(std::move(registration_info->manifest));
 }
 
 void DefaultComponentInstaller::ComponentReady(

@@ -4,7 +4,6 @@
 
 // Event management for GuestViewContainers.
 
-var EventBindings = require('event_bindings');
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var MessagingNatives = requireNative('messaging_natives');
 
@@ -12,9 +11,16 @@ var EventBindings;
 var CreateEvent = function(name) {
   if (bindingUtil) {
     return bindingUtil.createCustomEvent(name, null,
-                                         true /* supportsFilters */);
+                                         true /* supportsFilters */,
+                                         false /* supportsLazyListeners */);
   }
-  var eventOpts = {supportsListeners: true, supportsFilters: true};
+  var eventOpts = {
+    __proto__: null,
+    supportsListeners: true,
+    supportsFilters: true,
+    // GuestView-related events never support lazy listeners.
+    supportsLazyListeners: false,
+  };
   if (!EventBindings)
     EventBindings = require('event_bindings');
   return new EventBindings.Event(name, undefined, eventOpts);

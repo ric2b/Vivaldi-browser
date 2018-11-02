@@ -6,7 +6,6 @@
 
 #include <stddef.h>
 
-#include <memory>
 #include <utility>
 
 #include "base/command_line.h"
@@ -20,7 +19,6 @@
 #include "build/build_config.h"
 #include "cc/base/math_util.h"
 #include "cc/base/switches.h"
-#include "content/browser/gpu/browser_gpu_memory_buffer_manager.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
 #include "content/public/browser/gpu_utils.h"
 #include "content/public/common/content_features.h"
@@ -286,6 +284,10 @@ bool IsMainFrameBeforeActivationEnabled() {
 
 bool IsCheckerImagingEnabled() {
   if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          cc::switches::kDisableCheckerImaging))
+    return false;
+
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
           cc::switches::kEnableCheckerImaging))
     return true;
 
@@ -295,13 +297,13 @@ bool IsCheckerImagingEnabled() {
   return false;
 }
 
-base::DictionaryValue* GetFeatureStatus() {
+std::unique_ptr<base::DictionaryValue> GetFeatureStatus() {
   GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
   std::string gpu_access_blocked_reason;
   bool gpu_access_blocked =
       !manager->GpuAccessAllowed(&gpu_access_blocked_reason);
 
-  base::DictionaryValue* feature_status_dict = new base::DictionaryValue();
+  auto feature_status_dict = base::MakeUnique<base::DictionaryValue>();
 
   bool eof = false;
   for (size_t i = 0; !eof; ++i) {
@@ -356,23 +358,23 @@ base::DictionaryValue* GetFeatureStatus() {
   return feature_status_dict;
 }
 
-base::Value* GetProblems() {
+std::unique_ptr<base::ListValue> GetProblems() {
   GpuDataManagerImpl* manager = GpuDataManagerImpl::GetInstance();
   std::string gpu_access_blocked_reason;
   bool gpu_access_blocked =
       !manager->GpuAccessAllowed(&gpu_access_blocked_reason);
 
-  base::ListValue* problem_list = new base::ListValue();
-  manager->GetBlacklistReasons(problem_list);
+  auto problem_list = base::MakeUnique<base::ListValue>();
+  manager->GetBlacklistReasons(problem_list.get());
 
   if (gpu_access_blocked) {
     auto problem = base::MakeUnique<base::DictionaryValue>();
     problem->SetString("description",
         "GPU process was unable to boot: " + gpu_access_blocked_reason);
-    problem->Set("crBugs", new base::ListValue());
-    base::ListValue* disabled_features = new base::ListValue();
+    problem->Set("crBugs", base::MakeUnique<base::ListValue>());
+    auto disabled_features = base::MakeUnique<base::ListValue>();
     disabled_features->AppendString("all");
-    problem->Set("affectedGpuSettings", disabled_features);
+    problem->Set("affectedGpuSettings", std::move(disabled_features));
     problem->SetString("tag", "disabledFeatures");
     problem_list->Insert(0, std::move(problem));
   }
@@ -381,14 +383,13 @@ base::Value* GetProblems() {
   for (size_t i = 0; !eof; ++i) {
     const GpuFeatureInfo gpu_feature_info = GetGpuFeatureInfo(i, &eof);
     if (gpu_feature_info.disabled) {
-      std::unique_ptr<base::DictionaryValue> problem(
-          new base::DictionaryValue());
+      auto problem = base::MakeUnique<base::DictionaryValue>();
       problem->SetString(
           "description", gpu_feature_info.disabled_description);
-      problem->Set("crBugs", new base::ListValue());
-      base::ListValue* disabled_features = new base::ListValue();
+      problem->Set("crBugs", base::MakeUnique<base::ListValue>());
+      auto disabled_features = base::MakeUnique<base::ListValue>();
       disabled_features->AppendString(gpu_feature_info.name);
-      problem->Set("affectedGpuSettings", disabled_features);
+      problem->Set("affectedGpuSettings", std::move(disabled_features));
       problem->SetString("tag", "disabledFeatures");
       problem_list->Append(std::move(problem));
     }
@@ -398,6 +399,22 @@ base::Value* GetProblems() {
 
 std::vector<std::string> GetDriverBugWorkarounds() {
   return GpuDataManagerImpl::GetInstance()->GetDriverBugWorkarounds();
+}
+
+viz::BufferToTextureTargetMap CreateBufferToTextureTargetMap() {
+  viz::BufferToTextureTargetMap image_targets;
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      uint32_t target = gpu::GetImageTextureTarget(format, usage);
+      image_targets[std::make_pair(usage, format)] = target;
+    }
+  }
+  return image_targets;
 }
 
 }  // namespace content

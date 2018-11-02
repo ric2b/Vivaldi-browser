@@ -37,7 +37,6 @@ import org.chromium.chrome.browser.ChromeSwitches;
 import org.chromium.chrome.browser.ShortcutHelper;
 import org.chromium.chrome.browser.engagement.SiteEngagementService;
 import org.chromium.chrome.browser.infobar.AppBannerInfoBarAndroid;
-import org.chromium.chrome.browser.infobar.AppBannerInfoBarDelegateAndroid;
 import org.chromium.chrome.browser.infobar.InfoBar;
 import org.chromium.chrome.browser.infobar.InfoBarContainer;
 import org.chromium.chrome.browser.infobar.InfoBarContainer.InfoBarAnimationListener;
@@ -199,7 +198,7 @@ public class AppBannerManagerTest {
     public void setUp() throws Exception {
         mPackageManager = new TestPackageManager();
         AppBannerManager.setIsSupported(true);
-        AppBannerInfoBarDelegateAndroid.setPackageManagerForTesting(mPackageManager);
+        InstallerDelegate.setPackageManagerForTesting(mPackageManager);
         ShortcutHelper.setDelegateForTests(new ShortcutHelper.Delegate() {
             @Override
             public void addShortcutToHomescreen(String title, Bitmap icon, Intent shortcutIntent) {
@@ -246,7 +245,7 @@ public class AppBannerManagerTest {
                 AppBannerManager manager =
                         mActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
                 return mDetailsDelegate.mNumRetrieved == numExpected
-                        && !manager.isActiveForTesting();
+                        && !manager.isRunningForTesting();
             }
         });
     }
@@ -344,7 +343,7 @@ public class AppBannerManagerTest {
             public boolean isSatisfied() {
                 AppBannerManager manager =
                         mActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isActiveForTesting();
+                return !manager.isRunningForTesting();
             }
         });
         InfoBarUtil.waitUntilNoInfoBarsExist(mActivityTestRule.getInfoBars());
@@ -364,7 +363,7 @@ public class AppBannerManagerTest {
             public boolean isSatisfied() {
                 AppBannerManager manager =
                         mActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isActiveForTesting();
+                return !manager.isRunningForTesting();
             }
         });
         waitUntilAppBannerInfoBarAppears(expectedTitle);
@@ -656,7 +655,7 @@ public class AppBannerManagerTest {
             public boolean isSatisfied() {
                 AppBannerManager manager =
                         mActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isActiveForTesting();
+                return !manager.isRunningForTesting();
             }
         });
         waitUntilAppBannerInfoBarAppears(WEB_APP_TITLE);
@@ -678,7 +677,7 @@ public class AppBannerManagerTest {
             public boolean isSatisfied() {
                 AppBannerManager manager =
                         mActivityTestRule.getActivity().getActivityTab().getAppBannerManager();
-                return !manager.isActiveForTesting();
+                return !manager.isRunningForTesting();
             }
         });
         Assert.assertTrue(mActivityTestRule.getInfoBars().isEmpty());

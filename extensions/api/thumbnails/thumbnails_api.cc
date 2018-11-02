@@ -400,7 +400,7 @@ void ThumbnailsCaptureTabFunction::ScaleAndConvertImage(
   }
 
   if (!bitmap.installPixels(bitmap.info(), bitmap_buffer->memory(),
-                            bitmap.rowBytes(), NULL, &ReleaseSharedMemoryPixels,
+                            bitmap.rowBytes(), &ReleaseSharedMemoryPixels,
                             bitmap_buffer.get())) {
     DispatchError("Failed to capture tab: data could not be copied to bitmap");
     return;

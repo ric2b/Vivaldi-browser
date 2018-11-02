@@ -13,14 +13,14 @@
 #include "bindings/core/v8/V8Blob.h"
 #include "bindings/core/v8/V8FormData.h"
 #include "bindings/core/v8/V8URLSearchParams.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMArrayBufferView.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/URLSearchParams.h"
 #include "core/fileapi/Blob.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/FormData.h"
 #include "core/streams/ReadableStreamOperations.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMArrayBufferView.h"
+#include "core/url/URLSearchParams.h"
 #include "modules/fetch/BlobBytesConsumer.h"
 #include "modules/fetch/BodyStreamBuffer.h"
 #include "modules/fetch/FormDataBytesConsumer.h"
@@ -169,18 +169,18 @@ Response* Response::Create(ScriptState* script_state,
                    form_data->Boundary().data();
     body_buffer = new BodyStreamBuffer(
         script_state,
-        new FormDataBytesConsumer(execution_context, form_data.Release()));
+        new FormDataBytesConsumer(execution_context, std::move(form_data)));
   } else if (V8URLSearchParams::hasInstance(body, isolate)) {
     RefPtr<EncodedFormData> form_data =
         V8URLSearchParams::toImpl(body.As<v8::Object>())->ToEncodedFormData();
     body_buffer = new BodyStreamBuffer(
         script_state,
-        new FormDataBytesConsumer(execution_context, form_data.Release()));
+        new FormDataBytesConsumer(execution_context, std::move(form_data)));
     content_type = "application/x-www-form-urlencoded;charset=UTF-8";
   } else if (ReadableStreamOperations::IsReadableStream(script_state,
                                                         body_value)) {
     UseCounter::Count(execution_context,
-                      UseCounter::kFetchResponseConstructionWithStream);
+                      WebFeature::kFetchResponseConstructionWithStream);
     body_buffer = new BodyStreamBuffer(script_state, body_value);
   } else {
     String string = ToUSVString(isolate, body, exception_state);

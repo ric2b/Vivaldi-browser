@@ -6,10 +6,12 @@
 
 #include <stddef.h>
 
+#include "base/command_line.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/browser/signin/easy_unlock_app_manager.h"
 #include "components/proximity_auth/screenlock_bridge.h"
+#include "components/proximity_auth/switches.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 #if defined(OS_CHROMEOS)
@@ -117,7 +119,9 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
   };
 
   explicit TestLockHandler(const AccountId& account_id)
-      : state_(STATE_NONE), auth_type_(USER_CLICK), account_id_(account_id) {}
+      : state_(STATE_NONE),
+        auth_type_(proximity_auth::mojom::AuthType::USER_CLICK),
+        account_id_(account_id) {}
 
   ~TestLockHandler() override {}
 
@@ -130,7 +134,9 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
   }
 
   // Not using |SetAuthType| to make sure it's not called during tests.
-  void set_auth_type(AuthType value) { auth_type_ = value; }
+  void set_auth_type(proximity_auth::mojom::AuthType value) {
+    auth_type_ = value;
+  }
 
   // proximity_auth::ScreenlockBridge::LockHandler implementation:
   void ShowBannerMessage(const base::string16& message) override {
@@ -154,12 +160,13 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
   }
 
   void SetAuthType(const AccountId& account_id,
-                   AuthType auth_type,
+                   proximity_auth::mojom::AuthType auth_type,
                    const base::string16& auth_value) override {
     ADD_FAILURE() << "Should not be reached.";
   }
 
-  AuthType GetAuthType(const AccountId& account_id) const override {
+  proximity_auth::mojom::AuthType GetAuthType(
+      const AccountId& account_id) const override {
     return auth_type_;
   }
 
@@ -199,7 +206,7 @@ class TestLockHandler : public proximity_auth::ScreenlockBridge::LockHandler {
 
  private:
   AuthState state_;
-  AuthType auth_type_;
+  proximity_auth::mojom::AuthType auth_type_;
   const AccountId account_id_;
   std::string expected_secret_;
 
@@ -256,7 +263,7 @@ TEST_F(EasyUnlockAuthAttemptUnlockTest, StartWhenAuthTypeIsPassword) {
   ASSERT_EQ(TestLockHandler::STATE_ATTEMPTING_UNLOCK, lock_handler_->state());
 
   lock_handler_->set_auth_type(
-      proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD);
+      proximity_auth::mojom::AuthType::OFFLINE_PASSWORD);
 
   EXPECT_FALSE(auth_attempt_->Start());
 
@@ -266,6 +273,8 @@ TEST_F(EasyUnlockAuthAttemptUnlockTest, StartWhenAuthTypeIsPassword) {
 
 TEST_F(EasyUnlockAuthAttemptUnlockTest,
        StartWhenDispatchingAuthAttemptEventFails) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      proximity_auth::switches::kDisableBluetoothLowEnergyDiscovery);
   InitScreenLock();
   ASSERT_TRUE(proximity_auth::ScreenlockBridge::Get()->IsLocked());
   ASSERT_EQ(TestLockHandler::STATE_ATTEMPTING_UNLOCK, lock_handler_->state());
@@ -414,7 +423,7 @@ TEST_F(EasyUnlockAuthAttemptSigninTest, StartWhenAuthTypeIsPassword) {
   ASSERT_EQ(TestLockHandler::STATE_ATTEMPTING_SIGNIN, lock_handler_->state());
 
   lock_handler_->set_auth_type(
-      proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD);
+      proximity_auth::mojom::AuthType::OFFLINE_PASSWORD);
 
   EXPECT_FALSE(auth_attempt_->Start());
 
@@ -424,6 +433,8 @@ TEST_F(EasyUnlockAuthAttemptSigninTest, StartWhenAuthTypeIsPassword) {
 
 TEST_F(EasyUnlockAuthAttemptSigninTest,
        StartWhenDispatchingAuthAttemptEventFails) {
+  base::CommandLine::ForCurrentProcess()->AppendSwitch(
+      proximity_auth::switches::kDisableBluetoothLowEnergyDiscovery);
   InitScreenLock();
   ASSERT_TRUE(proximity_auth::ScreenlockBridge::Get()->IsLocked());
   ASSERT_EQ(TestLockHandler::STATE_ATTEMPTING_SIGNIN, lock_handler_->state());

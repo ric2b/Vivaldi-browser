@@ -25,7 +25,9 @@ class Scheduler::Sequence {
 
   SequenceId sequence_id() const { return sequence_id_; }
 
-  const SchedulingState& scheduling_state() const { return scheduling_state_; }
+  const scoped_refptr<SyncPointOrderData>& order_data() const {
+    return order_data_;
+  }
 
   bool enabled() const { return enabled_; }
 
@@ -37,21 +39,26 @@ class Scheduler::Sequence {
   // by wait fences.
   bool IsRunnable() const;
 
+  // Returns true if this sequence's scheduling state changed and it needs to be
+  // reinserted into the scheduling queue.
   bool NeedsRescheduling() const;
 
-  void UpdateSchedulingState();
+  // Returns true if this sequence should yield to another sequence. Uses the
+  // cached scheduling state for comparison.
+  bool ShouldYieldTo(const Sequence* other) const;
 
-  // If this sequence runs before the other sequence.
-  bool RunsBefore(const Sequence* other) const;
-
+  // Enables or disables the sequence.
   void SetEnabled(bool enabled);
 
-  // Sets running state to SCHEDULED.
-  void SetScheduled();
+  // Sets running state to SCHEDULED. Returns scheduling state for this sequence
+  // used for inserting in the scheduling queue.
+  SchedulingState SetScheduled();
 
-  // Called before running the next task on the sequence. Returns the closure
-  // for the task. Sets running state to RUNNING.
-  base::OnceClosure BeginTask();
+  // Update cached scheduling priority while running.
+  void UpdateRunningPriority();
+
+  // Returns the next order number and closure. Sets running state to RUNNING.
+  uint32_t BeginTask(base::OnceClosure* closure);
 
   // Called after running the closure returned by BeginTask. Sets running state
   // to IDLE.
@@ -102,8 +109,8 @@ class Scheduler::Sequence {
 
   RunningState running_state_ = IDLE;
 
-  // Cached scheduling state used for comparison with other sequences using
-  // |RunsBefore|. Updated in |UpdateSchedulingState|.
+  // Cached scheduling state used for comparison with other sequences while
+  // running. Updated in |SetScheduled| and |UpdateRunningPriority|.
   SchedulingState scheduling_state_;
 
   const SequenceId sequence_id_;
@@ -156,6 +163,12 @@ Scheduler::Sequence::~Sequence() {
   order_data_->Destroy();
 }
 
+SchedulingPriority Scheduler::Sequence::GetSchedulingPriority() const {
+  if (!release_fences_.empty())
+    return std::min(priority_, SchedulingPriority::kHigh);
+  return priority_;
+}
+
 bool Scheduler::Sequence::NeedsRescheduling() const {
   return running_state_ != IDLE &&
          scheduling_state_.priority != GetSchedulingPriority();
@@ -167,14 +180,10 @@ bool Scheduler::Sequence::IsRunnable() const {
           wait_fences_.front().order_num > tasks_.front().order_num);
 }
 
-SchedulingPriority Scheduler::Sequence::GetSchedulingPriority() const {
-  if (!release_fences_.empty())
-    return std::min(priority_, SchedulingPriority::kHigh);
-  return priority_;
-}
-
-bool Scheduler::Sequence::RunsBefore(const Scheduler::Sequence* other) const {
-  return scheduling_state_.RunsBefore(other->scheduling_state());
+bool Scheduler::Sequence::ShouldYieldTo(const Sequence* other) const {
+  if (!running() || !other->scheduled())
+    return false;
+  return other->scheduling_state_.RunsBefore(scheduling_state_);
 }
 
 void Scheduler::Sequence::SetEnabled(bool enabled) {
@@ -184,29 +193,29 @@ void Scheduler::Sequence::SetEnabled(bool enabled) {
   enabled_ = enabled;
 }
 
-void Scheduler::Sequence::SetScheduled() {
+Scheduler::SchedulingState Scheduler::Sequence::SetScheduled() {
+  DCHECK(IsRunnable());
   DCHECK_NE(running_state_, RUNNING);
-  running_state_ = SCHEDULED;
-  UpdateSchedulingState();
-}
 
-void Scheduler::Sequence::UpdateSchedulingState() {
+  running_state_ = SCHEDULED;
+
   scheduling_state_.sequence_id = sequence_id_;
   scheduling_state_.priority = GetSchedulingPriority();
+  scheduling_state_.order_num = tasks_.front().order_num;
 
-  uint32_t order_num = UINT32_MAX;  // IDLE
-  if (running_state_ == SCHEDULED) {
-    DCHECK(!tasks_.empty());
-    order_num = tasks_.front().order_num;
-  } else if (running_state_ == RUNNING) {
-    order_num = order_data_->current_order_num();
-  }
-  scheduling_state_.order_num = order_num;
+  return scheduling_state_;
+}
+
+void Scheduler::Sequence::UpdateRunningPriority() {
+  DCHECK_EQ(running_state_, RUNNING);
+  scheduling_state_.priority = GetSchedulingPriority();
 }
 
 void Scheduler::Sequence::ContinueTask(base::OnceClosure closure) {
   DCHECK_EQ(running_state_, RUNNING);
-  tasks_.push_front({std::move(closure), order_data_->current_order_num()});
+  uint32_t order_num = order_data_->current_order_num();
+  tasks_.push_front({std::move(closure), order_num});
+  order_data_->PauseProcessingOrderNumber(order_num);
 }
 
 uint32_t Scheduler::Sequence::ScheduleTask(base::OnceClosure closure) {
@@ -215,33 +224,23 @@ uint32_t Scheduler::Sequence::ScheduleTask(base::OnceClosure closure) {
   return order_num;
 }
 
-base::OnceClosure Scheduler::Sequence::BeginTask() {
+uint32_t Scheduler::Sequence::BeginTask(base::OnceClosure* closure) {
+  DCHECK(closure);
   DCHECK(!tasks_.empty());
-
   DCHECK_EQ(running_state_, SCHEDULED);
+
   running_state_ = RUNNING;
 
-  base::OnceClosure closure = std::move(tasks_.front().closure);
+  *closure = std::move(tasks_.front().closure);
   uint32_t order_num = tasks_.front().order_num;
   tasks_.pop_front();
 
-  order_data_->BeginProcessingOrderNumber(order_num);
-
-  UpdateSchedulingState();
-
-  return closure;
+  return order_num;
 }
 
 void Scheduler::Sequence::FinishTask() {
   DCHECK_EQ(running_state_, RUNNING);
   running_state_ = IDLE;
-  uint32_t order_num = order_data_->current_order_num();
-  if (!tasks_.empty() && tasks_.front().order_num == order_num) {
-    order_data_->PauseProcessingOrderNumber(order_num);
-  } else {
-    order_data_->FinishProcessingOrderNumber(order_num);
-  }
-  UpdateSchedulingState();
 }
 
 void Scheduler::Sequence::AddWaitFence(const SyncToken& sync_token,
@@ -341,7 +340,7 @@ void Scheduler::ScheduleTask(SequenceId sequence_id,
     if (!release_sequence)
       continue;
     if (sync_point_manager_->Wait(
-            sync_token, order_num,
+            sync_token, sequence_id, order_num,
             base::Bind(&Scheduler::SyncTokenFenceReleased,
                        weak_factory_.GetWeakPtr(), sync_token, order_num,
                        release_id, sequence_id))) {
@@ -367,26 +366,20 @@ bool Scheduler::ShouldYield(SequenceId sequence_id) {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock auto_lock(lock_);
 
-  Sequence* sequence = GetSequence(sequence_id);
-  DCHECK(sequence);
-  DCHECK(sequence->running());
-
-  if (should_yield_)
-    return true;
-
   RebuildSchedulingQueue();
 
-  sequence->UpdateSchedulingState();
+  if (scheduling_queue_.empty())
+    return false;
 
-  if (!scheduling_queue_.empty()) {
-    Sequence* next_sequence =
-        GetSequence(scheduling_queue_.front().sequence_id);
-    DCHECK(next_sequence);
-    if (next_sequence->RunsBefore(sequence))
-      should_yield_ = true;
-  }
+  Sequence* running_sequence = GetSequence(sequence_id);
+  DCHECK(running_sequence);
+  DCHECK(running_sequence->running());
 
-  return should_yield_;
+  Sequence* next_sequence = GetSequence(scheduling_queue_.front().sequence_id);
+  DCHECK(next_sequence);
+  DCHECK(next_sequence->scheduled());
+
+  return running_sequence->ShouldYieldTo(next_sequence);
 }
 
 void Scheduler::SyncTokenFenceReleased(const SyncToken& sync_token,
@@ -409,24 +402,27 @@ void Scheduler::SyncTokenFenceReleased(const SyncToken& sync_token,
 void Scheduler::TryScheduleSequence(Sequence* sequence) {
   lock_.AssertAcquired();
 
-  if (sequence->running())
-    return;
-
-  if (sequence->NeedsRescheduling()) {
+  if (sequence->running()) {
+    // Update priority of running sequence because of sync token releases.
+    DCHECK(running_);
+    sequence->UpdateRunningPriority();
+  } else if (sequence->NeedsRescheduling()) {
+    // Rebuild scheduling queue if priority changed for a scheduled sequence.
+    DCHECK(running_);
     DCHECK(sequence->IsRunnable());
     rebuild_scheduling_queue_ = true;
   } else if (!sequence->scheduled() && sequence->IsRunnable()) {
-    sequence->SetScheduled();
-    scheduling_queue_.push_back(sequence->scheduling_state());
+    // Insert into scheduling queue if sequence isn't already scheduled.
+    SchedulingState scheduling_state = sequence->SetScheduled();
+    scheduling_queue_.push_back(scheduling_state);
     std::push_heap(scheduling_queue_.begin(), scheduling_queue_.end(),
                    &SchedulingState::Comparator);
-  }
-
-  if (!running_) {
-    TRACE_EVENT_ASYNC_BEGIN0("gpu", "Scheduler::Running", this);
-    running_ = true;
-    task_runner_->PostTask(FROM_HERE, base::Bind(&Scheduler::RunNextTask,
-                                                 weak_factory_.GetWeakPtr()));
+    if (!running_) {
+      TRACE_EVENT_ASYNC_BEGIN0("gpu", "Scheduler::Running", this);
+      running_ = true;
+      task_runner_->PostTask(FROM_HERE, base::Bind(&Scheduler::RunNextTask,
+                                                   weak_factory_.GetWeakPtr()));
+    }
   }
 }
 
@@ -443,8 +439,8 @@ void Scheduler::RebuildSchedulingQueue() {
     Sequence* sequence = kv.second.get();
     if (!sequence->IsRunnable() || sequence->running())
       continue;
-    sequence->SetScheduled();
-    scheduling_queue_.push_back(sequence->scheduling_state());
+    SchedulingState scheduling_state = sequence->SetScheduled();
+    scheduling_queue_.push_back(scheduling_state);
   }
 
   std::make_heap(scheduling_queue_.begin(), scheduling_queue_.end(),
@@ -454,8 +450,6 @@ void Scheduler::RebuildSchedulingQueue() {
 void Scheduler::RunNextTask() {
   DCHECK(thread_checker_.CalledOnValidThread());
   base::AutoLock auto_lock(lock_);
-
-  should_yield_ = false;
 
   RebuildSchedulingQueue();
 
@@ -472,21 +466,31 @@ void Scheduler::RunNextTask() {
 
   TRACE_EVENT1("gpu", "Scheduler::RunNextTask", "state", state.AsValue());
 
-  DCHECK(GetSequence(state.sequence_id));
-  base::OnceClosure closure = GetSequence(state.sequence_id)->BeginTask();
+  Sequence* sequence = GetSequence(state.sequence_id);
+  DCHECK(sequence);
 
+  base::OnceClosure closure;
+  uint32_t order_num = sequence->BeginTask(&closure);
+  DCHECK_EQ(order_num, state.order_num);
+
+  // Begin/FinishProcessingOrderNumber must be called with the lock released
+  // because they can renter the scheduler in Enable/DisableSequence.
+  scoped_refptr<SyncPointOrderData> order_data = sequence->order_data();
   {
     base::AutoUnlock auto_unlock(lock_);
+    order_data->BeginProcessingOrderNumber(order_num);
     std::move(closure).Run();
+    if (order_data->IsProcessingOrderNumber())
+      order_data->FinishProcessingOrderNumber(order_num);
   }
 
   // Check if sequence hasn't been destroyed.
-  Sequence* sequence = GetSequence(state.sequence_id);
+  sequence = GetSequence(state.sequence_id);
   if (sequence) {
     sequence->FinishTask();
     if (sequence->IsRunnable()) {
-      sequence->SetScheduled();
-      scheduling_queue_.push_back(sequence->scheduling_state());
+      SchedulingState scheduling_state = sequence->SetScheduled();
+      scheduling_queue_.push_back(scheduling_state);
       std::push_heap(scheduling_queue_.begin(), scheduling_queue_.end(),
                      &SchedulingState::Comparator);
     }

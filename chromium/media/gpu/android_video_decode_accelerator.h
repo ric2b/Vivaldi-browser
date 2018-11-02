@@ -22,6 +22,7 @@
 #include "media/base/android/media_drm_bridge_cdm_context.h"
 #include "media/base/android_overlay_mojo_factory.h"
 #include "media/base/content_decryption_module.h"
+#include "media/gpu/android/device_info.h"
 #include "media/gpu/android_video_surface_chooser.h"
 #include "media/gpu/avda_codec_allocator.h"
 #include "media/gpu/avda_picture_buffer_manager.h"
@@ -34,6 +35,7 @@
 
 namespace media {
 class SharedMemoryRegion;
+class PromotionHintAggregator;
 
 // A VideoDecodeAccelerator implementation for Android. This class decodes the
 // encoded input stream using Android's MediaCodec. It handles the work of
@@ -47,28 +49,13 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   static VideoDecodeAccelerator::Capabilities GetCapabilities(
       const gpu::GpuPreferences& gpu_preferences);
 
-  // Various things that we normally ask the platform for, mostly for testing.
-  struct PlatformConfig {
-    int sdk_int = base::android::SDK_VERSION_MARSHMALLOW;
-
-    // Is SetSurface supported?  This is not the same as >= M, since we
-    // blacklist some devices.
-    bool allow_setsurface = true;
-
-    // For testing.
-    bool force_deferred_surface_creation = false;
-
-    // Create a default value that's appropriate for use in production.
-    static PlatformConfig CreateDefault();
-  };
-
   AndroidVideoDecodeAccelerator(
       AVDACodecAllocator* codec_allocator,
       std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser,
       const MakeGLContextCurrentCallback& make_context_current_cb,
       const GetGLES2DecoderCallback& get_gles2_decoder_cb,
       const AndroidOverlayMojoFactoryCB& overlay_factory_cb,
-      const PlatformConfig& platform_config);
+      DeviceInfo* device_info);
 
   ~AndroidVideoDecodeAccelerator() override;
 
@@ -79,9 +66,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   void ReusePictureBuffer(int32_t picture_buffer_id) override;
   void Flush() override;
   void Reset() override;
-  void SetSurface(
-      int32_t surface_id,
-      const base::Optional<base::UnguessableToken>& routing_token) override;
+  void SetOverlayInfo(const OverlayInfo& overlay_info) override;
   void Destroy() override;
   bool TryToSetupDecodeOnSeparateThread(
       const base::WeakPtr<Client>& decode_client,
@@ -96,6 +81,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // failure.  If deferred init is pending, then we'll fail deferred init.
   // Otherwise, we'll signal errors normally.
   void NotifyError(Error error) override;
+  PromotionHintAggregator::NotifyPromotionHintCB GetPromotionHintCB() override;
 
   // AVDACodecAllocatorClient implementation:
   void OnCodecConfigured(
@@ -203,7 +189,7 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
   // Called after the CDM obtains a MediaCrypto object.
   void OnMediaCryptoReady(MediaDrmBridgeCdmContext::JavaObjectPtr media_crypto,
-                          bool needs_protected_surface);
+                          bool requires_secure_video_codec);
 
   // Called when a new key is added to the CDM.
   void OnKeyAdded();
@@ -269,6 +255,9 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
   // the right thing to do unless you're planning to re-use the bundle with
   // another codec.  Normally, one doesn't.
   void ReleaseCodecAndBundle();
+
+  // Send a |hint| to |promotion_hint_aggregator_|.
+  void NotifyPromotionHint(const PromotionHintAggregator::Hint& hint);
 
   // Used to DCHECK that we are called on the correct thread.
   base::ThreadChecker thread_checker_;
@@ -399,10 +388,16 @@ class MEDIA_GPU_EXPORT AndroidVideoDecodeAccelerator
 
   std::unique_ptr<AndroidVideoSurfaceChooser> surface_chooser_;
 
-  PlatformConfig platform_config_;
+  DeviceInfo* device_info_;
+
+  bool force_defer_surface_creation_for_testing_;
+
+  AndroidVideoSurfaceChooser::State chooser_state_;
 
   // Optional factory to produce mojo AndroidOverlay instances.
   AndroidOverlayMojoFactoryCB overlay_factory_cb_;
+
+  std::unique_ptr<PromotionHintAggregator> promotion_hint_aggregator_;
 
   // WeakPtrFactory for posting tasks back to |this|.
   base::WeakPtrFactory<AndroidVideoDecodeAccelerator> weak_this_factory_;

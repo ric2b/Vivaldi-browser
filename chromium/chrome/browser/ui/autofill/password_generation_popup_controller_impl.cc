@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/autofill/content/browser/content_autofill_driver.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/password_generator.h"
@@ -63,9 +62,9 @@ PasswordGenerationPopupControllerImpl::GetOrCreate(
     previous->Hide();
 
   PasswordGenerationPopupControllerImpl* controller =
-      new PasswordGenerationPopupControllerImpl(
-          bounds, form, max_length, password_manager, driver, observer,
-          web_contents, container_view);
+      new PasswordGenerationPopupControllerImpl(bounds, form, max_length,
+                                                driver, observer, web_contents,
+                                                container_view);
   return controller->GetWeakPtr();
 }
 
@@ -73,14 +72,12 @@ PasswordGenerationPopupControllerImpl::PasswordGenerationPopupControllerImpl(
     const gfx::RectF& bounds,
     const PasswordForm& form,
     int max_length,
-    password_manager::PasswordManager* password_manager,
     password_manager::PasswordManagerDriver* driver,
     PasswordGenerationPopupObserver* observer,
     content::WebContents* web_contents,
     gfx::NativeView container_view)
     : view_(NULL),
       form_(form),
-      password_manager_(password_manager),
       driver_(driver),
       observer_(observer),
       generator_(new PasswordGenerator(max_length)),
@@ -149,7 +146,6 @@ void PasswordGenerationPopupControllerImpl::PasswordAccepted() {
     return;
 
   driver_->GeneratedPasswordAccepted(current_password_);
-  password_manager_->SetHasGeneratedPasswordForForm(driver_, form_, true);
   Hide();
 }
 

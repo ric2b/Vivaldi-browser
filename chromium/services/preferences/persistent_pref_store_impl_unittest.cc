@@ -32,7 +32,12 @@ class PrefStoreObserverMock : public PrefStore::Observer {
 
 class PersistentPrefStoreMock : public InMemoryPrefStore {
  public:
-  MOCK_METHOD0(CommitPendingWrite, void());
+  void CommitPendingWrite(base::OnceClosure callback) override {
+    CommitPendingWriteMock();
+    InMemoryPrefStore::CommitPendingWrite(std::move(callback));
+  }
+
+  MOCK_METHOD0(CommitPendingWriteMock, void());
   MOCK_METHOD0(SchedulePendingLossyWrites, void());
   MOCK_METHOD0(ClearMutableValues, void());
 
@@ -49,56 +54,6 @@ void ExpectPrefChange(PrefStore* pref_store, base::StringPiece key) {
   run_loop.Run();
   pref_store->RemoveObserver(&observer);
 }
-
-class InitializationMockPersistentPrefStore : public InMemoryPrefStore {
- public:
-  InitializationMockPersistentPrefStore(
-      bool success,
-      PersistentPrefStore::PrefReadError error,
-      bool read_only)
-      : success_(success), read_error_(error), read_only_(read_only) {}
-
-  bool IsInitializationComplete() const override {
-    return initialized_ && success_;
-  }
-
-  void AddObserver(PrefStore::Observer* observer) override {
-    observers_.AddObserver(observer);
-  }
-
-  void RemoveObserver(PrefStore::Observer* observer) override {
-    observers_.RemoveObserver(observer);
-  }
-
-  void ReadPrefsAsync(ReadErrorDelegate* error_delegate) override {
-    DCHECK(!error_delegate);
-    DCHECK(!initialized_);
-    base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::Bind(&InitializationMockPersistentPrefStore::CompleteRead, this));
-  }
-
-  void CompleteRead() {
-    initialized_ = true;
-    for (auto& observer : observers_) {
-      observer.OnInitializationCompleted(success_);
-    }
-  }
-
-  PersistentPrefStore::PrefReadError GetReadError() const override {
-    return read_error_;
-  }
-  bool ReadOnly() const override { return read_only_; }
-
- private:
-  ~InitializationMockPersistentPrefStore() override = default;
-
-  bool initialized_ = false;
-  bool success_;
-  PersistentPrefStore::PrefReadError read_error_;
-  bool read_only_;
-  base::ObserverList<PrefStore::Observer, true> observers_;
-};
 
 constexpr char kKey[] = "path.to.key";
 constexpr char kOtherKey[] = "path.to.other_key";
@@ -146,37 +101,27 @@ class PersistentPrefStoreImplTest : public testing::Test {
   DISALLOW_COPY_AND_ASSIGN(PersistentPrefStoreImplTest);
 };
 
-TEST_F(PersistentPrefStoreImplTest, InitializationSuccess) {
-  auto backing_pref_store =
-      make_scoped_refptr(new InitializationMockPersistentPrefStore(
-          true, PersistentPrefStore::PREF_READ_ERROR_NONE, false));
-  CreateImpl(backing_pref_store);
-  EXPECT_TRUE(pref_store()->IsInitializationComplete());
-  EXPECT_EQ(PersistentPrefStore::PREF_READ_ERROR_NONE,
-            pref_store()->GetReadError());
-  EXPECT_FALSE(pref_store()->ReadOnly());
-}
-
-TEST_F(PersistentPrefStoreImplTest, InitializationFailure) {
-  auto backing_pref_store =
-      make_scoped_refptr(new InitializationMockPersistentPrefStore(
-          false, PersistentPrefStore::PREF_READ_ERROR_JSON_PARSE, true));
-  CreateImpl(backing_pref_store);
-  EXPECT_FALSE(pref_store()->IsInitializationComplete());
-  EXPECT_EQ(PersistentPrefStore::PREF_READ_ERROR_JSON_PARSE,
-            pref_store()->GetReadError());
-  EXPECT_TRUE(pref_store()->ReadOnly());
-}
-
 TEST_F(PersistentPrefStoreImplTest, InitialValue) {
+  constexpr char kUnregisteredKey[] = "path.to.unregistered_key";
+  constexpr char kUnregisteredTopLevelKey[] = "unregistered_key";
+  constexpr char kUnregisteredPrefixKey[] = "p";
   auto backing_pref_store = make_scoped_refptr(new InMemoryPrefStore());
   const base::Value value("value");
   backing_pref_store->SetValue(kKey, value.CreateDeepCopy(), 0);
+  backing_pref_store->SetValue(kUnregisteredKey, value.CreateDeepCopy(), 0);
+  backing_pref_store->SetValue(kUnregisteredPrefixKey, value.CreateDeepCopy(),
+                               0);
+  backing_pref_store->SetValue(kUnregisteredTopLevelKey, value.CreateDeepCopy(),
+                               0);
   CreateImpl(backing_pref_store);
   EXPECT_TRUE(pref_store()->IsInitializationComplete());
   const base::Value* output = nullptr;
   ASSERT_TRUE(pref_store()->GetValue(kKey, &output));
   EXPECT_TRUE(value.Equals(output));
+
+  EXPECT_FALSE(pref_store()->GetValue(kUnregisteredKey, nullptr));
+  EXPECT_FALSE(pref_store()->GetValue(kUnregisteredTopLevelKey, nullptr));
+  EXPECT_FALSE(pref_store()->GetValue(kUnregisteredPrefixKey, nullptr));
 }
 
 TEST_F(PersistentPrefStoreImplTest, InitialValueWithoutPathExpansion) {
@@ -200,7 +145,7 @@ TEST_F(PersistentPrefStoreImplTest, WriteObservedByOtherClient) {
   EXPECT_TRUE(other_pref_store->IsInitializationComplete());
 
   const base::Value value("value");
-  pref_store()->SetValueSilently(kKey, value.CreateDeepCopy(), 0);
+  pref_store()->SetValue(kKey, value.CreateDeepCopy(), 0);
 
   ExpectPrefChange(other_pref_store.get(), kKey);
   const base::Value* output = nullptr;
@@ -303,10 +248,8 @@ TEST_F(PersistentPrefStoreImplTest, CommitPendingWrite) {
   auto backing_store = make_scoped_refptr(new PersistentPrefStoreMock);
   CreateImpl(backing_store);
   base::RunLoop run_loop;
-  EXPECT_CALL(*backing_store, CommitPendingWrite())
-      .Times(2)
-      .WillOnce(WithoutArgs(Invoke([&run_loop]() { run_loop.Quit(); })));
-  pref_store()->CommitPendingWrite();
+  EXPECT_CALL(*backing_store, CommitPendingWriteMock()).Times(2);
+  pref_store()->CommitPendingWrite(run_loop.QuitClosure());
   run_loop.Run();
 }
 
@@ -316,7 +259,7 @@ TEST_F(PersistentPrefStoreImplTest, SchedulePendingLossyWrites) {
   base::RunLoop run_loop;
   EXPECT_CALL(*backing_store, SchedulePendingLossyWrites())
       .WillOnce(WithoutArgs(Invoke([&run_loop]() { run_loop.Quit(); })));
-  EXPECT_CALL(*backing_store, CommitPendingWrite()).Times(1);
+  EXPECT_CALL(*backing_store, CommitPendingWriteMock()).Times(1);
   pref_store()->SchedulePendingLossyWrites();
   run_loop.Run();
 }
@@ -327,7 +270,7 @@ TEST_F(PersistentPrefStoreImplTest, ClearMutableValues) {
   base::RunLoop run_loop;
   EXPECT_CALL(*backing_store, ClearMutableValues())
       .WillOnce(WithoutArgs(Invoke([&run_loop]() { run_loop.Quit(); })));
-  EXPECT_CALL(*backing_store, CommitPendingWrite()).Times(1);
+  EXPECT_CALL(*backing_store, CommitPendingWriteMock()).Times(1);
   pref_store()->ClearMutableValues();
   run_loop.Run();
 }

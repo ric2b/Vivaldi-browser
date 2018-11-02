@@ -1,6 +1,10 @@
 <?xml version="1.0" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="el">
-<translation id="1244738926941663606">Απαιτείται πρόγραμμα περιήγησης στον ιστό για την εκτέλεση του ιστοτόπου <ph name="WEBAPK_SITE" /></translation>
-<translation id="8307642646779885758">Επιλέξτε το πρόγραμμα περιήγησης που θέλετε να χρησιμοποιήσετε για να εκτελέσετε το <ph name="WEBAPK_SITE" /></translation>
+<translation id="1700971771753530690">Το <ph name="APP_NAME" /> απαιτεί την εξής εφαρμογή:</translation>
+<translation id="2697679025356221813">Το <ph name="APP_NAME" /> απαιτεί πρόγραμμα περιήγησης στον ιστό</translation>
+<translation id="3858759029325727987">Επιλέξτε ένα πρόγραμμα περιήγησης που υποστηρίζει αυτήν την εφαρμογή:</translation>
+<translation id="6377677440246641805"><ph name="BROWSER_NAME" />\nΔεν υποστηρίζεται</translation>
+<translation id="7671141431838911305">ΕΓΚΑΤΑΣΤΑΣΗ</translation>
+<translation id="8252328707312954493">ΚΛΕΙΣΙΜΟ</translation>
 </translationbundle>

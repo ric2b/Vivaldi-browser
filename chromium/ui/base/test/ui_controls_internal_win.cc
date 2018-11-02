@@ -139,14 +139,36 @@ void InputDispatcher::NotifyTask() {
 
 // Private functions ----------------------------------------------------------
 
+// Whether scan code should be used for |key|.
+// When sending keyboard events by SendInput() function, Windows does not
+// "smartly" add scan code if virtual key-code is used. So these key events
+// won't have scan code or DOM UI Event code string.
+// But we cannot blindly send all events with scan code. For some layout
+// dependent keys, the Windows may not translate them to what they used to be,
+// because the test cases are usually running in headless environment with
+// default keyboard layout. So fall back to use virtual key code for these keys.
+bool ShouldSendThroughScanCode(ui::KeyboardCode key) {
+  const DWORD native_code = ui::WindowsKeyCodeForKeyboardCode(key);
+  const DWORD scan_code = MapVirtualKey(native_code, MAPVK_VK_TO_VSC);
+  return native_code == MapVirtualKey(scan_code, MAPVK_VSC_TO_VK);
+}
+
 // Populate the INPUT structure with the appropriate keyboard event
 // parameters required by SendInput
 bool FillKeyboardInput(ui::KeyboardCode key, INPUT* input, bool key_up) {
   memset(input, 0, sizeof(INPUT));
   input->type = INPUT_KEYBOARD;
   input->ki.wVk = ui::WindowsKeyCodeForKeyboardCode(key);
-  input->ki.dwFlags = key_up ? KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP :
-                               KEYEVENTF_EXTENDEDKEY;
+  if (ShouldSendThroughScanCode(key)) {
+    input->ki.wScan = MapVirtualKey(input->ki.wVk, MAPVK_VK_TO_VSC);
+    // When KEYEVENTF_SCANCODE is used, ki.wVk is ignored, so we do not need to
+    // clear it.
+    input->ki.dwFlags = KEYEVENTF_SCANCODE;
+    if ((input->ki.wScan & 0xFF00) != 0)
+      input->ki.dwFlags |= KEYEVENTF_EXTENDEDKEY;
+  }
+  if (key_up)
+    input->ki.dwFlags |= KEYEVENTF_KEYUP;
 
   return true;
 }
@@ -326,6 +348,82 @@ bool SendMouseEventsImpl(MouseButton type, int state,
 
   if (dispatcher.get())
     dispatcher->AddRef();
+
+  return true;
+}
+
+bool SendTouchEventsImpl(int action, int num, int x, int y) {
+  const int kTouchesLengthCap = 16;
+  DCHECK_LE(num, kTouchesLengthCap);
+
+  using InitializeTouchInjectionFn = BOOL(WINAPI*)(UINT32, DWORD);
+  static InitializeTouchInjectionFn initialize_touch_injection =
+      reinterpret_cast<InitializeTouchInjectionFn>(GetProcAddress(
+          GetModuleHandleA("user32.dll"), "InitializeTouchInjection"));
+  if (!initialize_touch_injection ||
+      !initialize_touch_injection(num, TOUCH_FEEDBACK_INDIRECT)) {
+    return false;
+  }
+
+  using InjectTouchInputFn = BOOL(WINAPI*)(UINT32, POINTER_TOUCH_INFO*);
+  static InjectTouchInputFn inject_touch_input =
+      reinterpret_cast<InjectTouchInputFn>(
+          GetProcAddress(GetModuleHandleA("user32.dll"), "InjectTouchInput"));
+  if (!inject_touch_input)
+    return false;
+
+  POINTER_TOUCH_INFO pointer_touch_info[kTouchesLengthCap];
+  for (int i = 0; i < num; i++) {
+    POINTER_TOUCH_INFO& contact = pointer_touch_info[i];
+    memset(&contact, 0, sizeof(POINTER_TOUCH_INFO));
+    contact.pointerInfo.pointerType = PT_TOUCH;
+    contact.pointerInfo.pointerId = i;
+    contact.pointerInfo.ptPixelLocation.y = y;
+    contact.pointerInfo.ptPixelLocation.x = x + 10 * i;
+
+    contact.touchFlags = TOUCH_FLAG_NONE;
+    contact.touchMask =
+        TOUCH_MASK_CONTACTAREA | TOUCH_MASK_ORIENTATION | TOUCH_MASK_PRESSURE;
+    contact.orientation = 90;
+    contact.pressure = 32000;
+
+    // defining contact area
+    contact.rcContact.top = contact.pointerInfo.ptPixelLocation.y - 2;
+    contact.rcContact.bottom = contact.pointerInfo.ptPixelLocation.y + 2;
+    contact.rcContact.left = contact.pointerInfo.ptPixelLocation.x - 2;
+    contact.rcContact.right = contact.pointerInfo.ptPixelLocation.x + 2;
+
+    contact.pointerInfo.pointerFlags =
+        POINTER_FLAG_DOWN | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT;
+  }
+  // Injecting the touch down on screen
+  if (!inject_touch_input(num, pointer_touch_info))
+    return false;
+
+  // Injecting the touch move on screen
+  if (action & MOVE) {
+    for (int i = 0; i < num; i++) {
+      POINTER_TOUCH_INFO& contact = pointer_touch_info[i];
+      contact.pointerInfo.ptPixelLocation.y = y + 10;
+      contact.pointerInfo.ptPixelLocation.x = x + 10 * i + 30;
+      contact.pointerInfo.pointerFlags =
+          POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT;
+    }
+    if (!inject_touch_input(num, pointer_touch_info))
+      return false;
+  }
+
+  // Injecting the touch up on screen
+  if (action & RELEASE) {
+    for (int i = 0; i < num; i++) {
+      POINTER_TOUCH_INFO& contact = pointer_touch_info[i];
+      contact.pointerInfo.ptPixelLocation.y = y + 10;
+      contact.pointerInfo.ptPixelLocation.x = x + 10 * i + 30;
+      contact.pointerInfo.pointerFlags = POINTER_FLAG_UP | POINTER_FLAG_INRANGE;
+    }
+    if (!inject_touch_input(num, pointer_touch_info))
+      return false;
+  }
 
   return true;
 }

@@ -35,6 +35,7 @@
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/loader/BaseFetchContext.h"
 #include "platform/heap/Handle.h"
+#include "platform/loader/fetch/ClientHintsPreferences.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
 #include "platform/loader/fetch/ResourceRequest.h"
@@ -51,15 +52,19 @@ class LocalFrame;
 class LocalFrameClient;
 class ResourceError;
 class ResourceResponse;
+class Settings;
+class WebTaskRunner;
 
 class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
  public:
   static ResourceFetcher* CreateFetcherFromDocumentLoader(
       DocumentLoader* loader) {
-    return ResourceFetcher::Create(new FrameFetchContext(loader, nullptr));
+    auto* context = new FrameFetchContext(loader, nullptr);
+    return ResourceFetcher::Create(context, context->GetTaskRunner());
   }
   static ResourceFetcher* CreateFetcherFromDocument(Document* document) {
-    return ResourceFetcher::Create(new FrameFetchContext(nullptr, document));
+    auto* context = new FrameFetchContext(nullptr, document);
+    return ResourceFetcher::Create(context, context->GetTaskRunner());
   }
 
   static void ProvideDocumentToContext(FetchContext&, Document*);
@@ -120,6 +125,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   bool AllowImage(bool images_enabled, const KURL&) const override;
   bool IsControlledByServiceWorker() const override;
   int64_t ServiceWorkerID() const override;
+  int ApplicationCacheHostID() const override;
 
   bool IsMainFrame() const override;
   bool DefersLoading() const override;
@@ -129,6 +135,7 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void SendImagePing(const KURL&) override;
   void AddConsoleMessage(const String&,
                          LogMessageType = kLogErrorMessage) const override;
+  SecurityOrigin* GetSecurityOrigin() const override;
 
   void PopulateResourceRequest(const KURL&,
                                Resource::Type,
@@ -144,16 +151,22 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   void AddClientHintsIfNecessary(const ClientHintsPreferences&,
                                  const FetchParameters::ResourceWidth&,
                                  ResourceRequest&);
+  static float ClientHintsDeviceMemory(int64_t physical_memory_mb);
 
   MHTMLArchive* Archive() const override;
 
-  RefPtr<WebTaskRunner> LoadingTaskRunner() const override;
+  std::unique_ptr<WebURLLoader> CreateURLLoader(
+      const ResourceRequest&) override;
 
-  std::unique_ptr<WebURLLoader> CreateURLLoader() override;
+  bool IsDetached() const override { return frozen_state_; }
+
+  FetchContext* Detach() override;
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
+  struct FrozenState;
+
   FrameFetchContext(DocumentLoader*, Document*);
 
   // m_documentLoader is null when loading resources from an HTML import
@@ -162,30 +175,56 @@ class CORE_EXPORT FrameFetchContext final : public BaseFetchContext {
   // relevant document loader or frame in either cases without null-checks.
   // TODO(kinuko): Remove constness, these return non-const members.
   DocumentLoader* MasterDocumentLoader() const;
-  Document* GetDocument() const;
   LocalFrame* GetFrame() const;
   LocalFrameClient* GetLocalFrameClient() const;
   LocalFrame* FrameOfImportsController() const;
+  RefPtr<WebTaskRunner> GetTaskRunner() const;
+
+  // FetchContext overrides:
+  WebFrameScheduler* GetFrameScheduler() override;
 
   // BaseFetchContext overrides:
-  ContentSettingsClient* GetContentSettingsClient() const override;
-  Settings* GetSettings() const override;
+  KURL GetFirstPartyForCookies() const override;
+  bool AllowScriptFromSource(const KURL&) const override;
   SubresourceFilter* GetSubresourceFilter() const override;
-  SecurityContext* GetParentSecurityContext() const override;
   bool ShouldBlockRequestByInspector(const ResourceRequest&) const override;
   void DispatchDidBlockRequest(const ResourceRequest&,
                                const FetchInitiatorInfo&,
                                ResourceRequestBlockedReason) const override;
   bool ShouldBypassMainWorldCSP() const override;
   bool IsSVGImageChromeClient() const override;
-  void CountUsage(UseCounter::Feature) const override;
-  void CountDeprecation(UseCounter::Feature) const override;
+  void CountUsage(WebFeature) const override;
+  void CountDeprecation(WebFeature) const override;
   bool ShouldBlockFetchByMixedContentCheck(
       const ResourceRequest&,
       const KURL&,
       SecurityViolationReportingPolicy) const override;
+  bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
+                                                 const KURL&) const override;
+
+  ReferrerPolicy GetReferrerPolicy() const override;
+  String GetOutgoingReferrer() const override;
+  const KURL& Url() const override;
+  const SecurityOrigin* GetParentSecurityOrigin() const override;
+  Optional<WebAddressSpace> GetAddressSpace() const override;
+  const ContentSecurityPolicy* GetContentSecurityPolicy() const override;
+  void AddConsoleMessage(ConsoleMessage*) const override;
+
+  ContentSettingsClient* GetContentSettingsClient() const;
+  Settings* GetSettings() const;
+  String GetUserAgent() const;
+  RefPtr<SecurityOrigin> GetRequestorOrigin();
+  RefPtr<SecurityOrigin> GetRequestorOriginForFrameLoading();
+  ClientHintsPreferences GetClientHintsPreferences() const;
+  float GetDevicePixelRatio() const;
+  bool ShouldSendClientHint(WebClientHintsType,
+                            const ClientHintsPreferences&) const;
 
   Member<DocumentLoader> document_loader_;
+  Member<Document> document_;
+
+  // Non-null only when detached.
+  Member<const FrozenState> frozen_state_;
 };
 
 }  // namespace blink

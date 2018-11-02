@@ -5,7 +5,6 @@
 #include "chrome/browser/ui/webui/settings_utils.h"
 
 #include <windows.h>
-#include <cryptuiapi.h>
 #include <shellapi.h>
 
 #include "base/bind.h"
@@ -14,15 +13,16 @@
 #include "base/macros.h"
 #include "base/path_service.h"
 #include "base/single_thread_task_runner.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/browser_process.h"
-#include "content/public/browser/browser_thread.h"
+#include "chrome/browser/ui/cryptuiapi_shim.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/platform_font_win.h"
 #include "ui/shell_dialogs/base_shell_dialog_win.h"
 #include "ui/views/win/hwnd_util.h"
-
-using content::BrowserThread;
 
 namespace settings_utils {
 
@@ -96,10 +96,9 @@ void OpenConnectionDialogCallback() {
 }
 
 void ShowNetworkProxySettings(content::WebContents* web_contents) {
-  DCHECK(BrowserThread::IsMessageLoopValid(BrowserThread::FILE));
-  BrowserThread::PostTask(BrowserThread::FILE,
-                          FROM_HERE,
-                          base::Bind(&OpenConnectionDialogCallback));
+  base::PostTaskWithTraits(FROM_HERE,
+                           {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+                           base::Bind(&OpenConnectionDialogCallback));
 }
 
 void ShowManageSSLCertificates(content::WebContents* web_contents) {
@@ -110,6 +109,15 @@ void ShowManageSSLCertificates(content::WebContents* web_contents) {
   dialog->Show(
       parent,
       base::Bind(&base::DeletePointer<ManageCertificatesDialog>, dialog));
+}
+
+std::string MaybeGetLocalizedFontName(const std::string& font_name_or_list) {
+  std::string font_name = ResolveFontList(font_name_or_list);
+  if (font_name.empty())
+    return font_name;
+  gfx::Font font(font_name, 12);  // dummy font size
+  return static_cast<gfx::PlatformFontWin*>(font.platform_font())
+      ->GetLocalizedFontName();
 }
 
 }  // namespace settings_utils

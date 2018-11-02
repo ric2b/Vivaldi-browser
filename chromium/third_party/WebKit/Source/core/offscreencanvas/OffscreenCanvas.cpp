@@ -8,12 +8,12 @@
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/fileapi/Blob.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/html/ImageData.h"
 #include "core/html/canvas/CanvasAsyncBlobCreator.h"
 #include "core/html/canvas/CanvasContextCreationAttributes.h"
 #include "core/html/canvas/CanvasRenderingContext.h"
 #include "core/html/canvas/CanvasRenderingContextFactory.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "platform/graphics/Image.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/OffscreenCanvasFrameDispatcherImpl.h"
@@ -69,6 +69,7 @@ void OffscreenCanvas::SetSize(const IntSize& size) {
         context_->Reshape(size.Width(), size.Height());
     } else if (context_->Is2d()) {
       context_->Reset();
+      origin_clean_ = true;
     }
   }
   size_ = size;
@@ -129,7 +130,7 @@ PassRefPtr<Image> OffscreenCanvas::GetSourceImageForCanvas(
   } else {
     *status = kNormalSourceImageStatus;
   }
-  return image.Release();
+  return image;
 }
 
 IntSize OffscreenCanvas::BitmapSourceSize() const {
@@ -163,9 +164,11 @@ bool OffscreenCanvas::IsOpaque() const {
 }
 
 CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
-    ScriptState* script_state,
+    ExecutionContext* execution_context,
     const String& id,
     const CanvasContextCreationAttributes& attributes) {
+  execution_context_ = execution_context;
+
   CanvasRenderingContext::ContextType context_type =
       CanvasRenderingContext::ContextTypeFromId(id);
 
@@ -185,7 +188,7 @@ CanvasRenderingContext* OffscreenCanvas::GetCanvasRenderingContext(
       return nullptr;
     }
   } else {
-    context_ = factory->Create(script_state, this, attributes);
+    context_ = factory->Create(this, attributes);
   }
 
   return context_.Get();
@@ -250,7 +253,7 @@ ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
     OpacityMode opacity_mode =
         context_->CreationAttributes().hasAlpha() ? kNonOpaque : kOpaque;
     std::unique_ptr<ImageBufferSurface> surface;
-    if (RuntimeEnabledFeatures::accelerated2dCanvasEnabled()) {
+    if (RuntimeEnabledFeatures::Accelerated2dCanvasEnabled()) {
       surface.reset(
           new AcceleratedImageBufferSurface(surface_size, opacity_mode));
     }
@@ -272,6 +275,7 @@ ImageBuffer* OffscreenCanvas::GetOrCreateImageBuffer() {
 }
 
 ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
+                                      const SkIRect& damage_rect,
                                       bool is_web_gl_software_rendering,
                                       ScriptState* script_state,
                                       ExceptionState& exception_state) {
@@ -295,6 +299,8 @@ ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
     if (image) {
       // We defer the submission of commit frames at the end of JS task
       current_frame_ = std::move(image);
+      // union of rects is necessary in case some frames are skipped.
+      current_frame_damage_rect_.join(damage_rect);
       current_frame_is_web_gl_software_rendering_ =
           is_web_gl_software_rendering;
       context_->NeedsFinalizeFrame();
@@ -306,6 +312,7 @@ ScriptPromise OffscreenCanvas::Commit(RefPtr<StaticBitmapImage> image,
     // 2. The current frame has been dispatched but the promise is not
     // resolved yet. (m_currentFrame==nullptr)
     current_frame_ = std::move(image);
+    current_frame_damage_rect_.join(damage_rect);
     current_frame_is_web_gl_software_rendering_ = is_web_gl_software_rendering;
   }
 
@@ -316,17 +323,18 @@ void OffscreenCanvas::FinalizeFrame() {
   if (current_frame_) {
     // TODO(eseckler): OffscreenCanvas shouldn't dispatch CompositorFrames
     // without a prior BeginFrame.
-    DoCommit(std::move(current_frame_),
-             current_frame_is_web_gl_software_rendering_);
+    DoCommit();
   }
 }
 
-void OffscreenCanvas::DoCommit(RefPtr<StaticBitmapImage> image,
-                               bool is_web_gl_software_rendering) {
+void OffscreenCanvas::DoCommit() {
   TRACE_EVENT0("blink", "OffscreenCanvas::DoCommit");
   double commit_start_time = WTF::MonotonicallyIncreasingTime();
+  DCHECK(current_frame_);
   GetOrCreateFrameDispatcher()->DispatchFrame(
-      std::move(image), commit_start_time, is_web_gl_software_rendering);
+      std::move(current_frame_), commit_start_time, current_frame_damage_rect_,
+      current_frame_is_web_gl_software_rendering_);
+  current_frame_damage_rect_ = SkIRect::MakeEmpty();
 }
 
 void OffscreenCanvas::BeginFrame() {
@@ -338,8 +346,7 @@ void OffscreenCanvas::BeginFrame() {
     // first and save the promise resolution for later.
     // Then we need to wait for one more frame time to resolve the existing
     // promise.
-    DoCommit(std::move(current_frame_),
-             current_frame_is_web_gl_software_rendering_);
+    DoCommit();
   } else if (commit_promise_resolver_) {
     commit_promise_resolver_->Resolve();
     commit_promise_resolver_.Clear();

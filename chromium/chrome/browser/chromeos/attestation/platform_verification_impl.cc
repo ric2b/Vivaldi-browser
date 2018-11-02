@@ -19,7 +19,6 @@ using media::mojom::PlatformVerification;
 // static
 void PlatformVerificationImpl::Create(
     content::RenderFrameHost* render_frame_host,
-    const service_manager::BindSourceInfo& source_info,
     media::mojom::PlatformVerificationRequest request) {
   DVLOG(2) << __FUNCTION__;
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
@@ -41,7 +40,7 @@ PlatformVerificationImpl::~PlatformVerificationImpl() {
 void PlatformVerificationImpl::ChallengePlatform(
     const std::string& service_id,
     const std::string& challenge,
-    const ChallengePlatformCallback& callback) {
+    ChallengePlatformCallback callback) {
   DVLOG(2) << __FUNCTION__;
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -50,12 +49,13 @@ void PlatformVerificationImpl::ChallengePlatform(
 
   platform_verification_flow_->ChallengePlatformKey(
       content::WebContents::FromRenderFrameHost(render_frame_host_), service_id,
-      challenge, base::Bind(&PlatformVerificationImpl::OnPlatformChallenged,
-                            weak_factory_.GetWeakPtr(), callback));
+      challenge,
+      base::Bind(&PlatformVerificationImpl::OnPlatformChallenged,
+                 weak_factory_.GetWeakPtr(), base::Passed(&callback)));
 }
 
 void PlatformVerificationImpl::OnPlatformChallenged(
-    const ChallengePlatformCallback& callback,
+    ChallengePlatformCallback callback,
     Result result,
     const std::string& signed_data,
     const std::string& signature,
@@ -68,14 +68,15 @@ void PlatformVerificationImpl::OnPlatformChallenged(
     DCHECK(signature.empty());
     DCHECK(platform_key_certificate.empty());
     LOG(ERROR) << "Platform verification failed.";
-    callback.Run(false, "", "", "");
+    std::move(callback).Run(false, "", "", "");
     return;
   }
 
   DCHECK(!signed_data.empty());
   DCHECK(!signature.empty());
   DCHECK(!platform_key_certificate.empty());
-  callback.Run(true, signed_data, signature, platform_key_certificate);
+  std::move(callback).Run(true, signed_data, signature,
+                          platform_key_certificate);
 }
 
 }  // namespace attestation

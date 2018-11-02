@@ -7,7 +7,6 @@
 #include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/actionable_view.h"
 #include "ash/system/tray/system_tray.h"
@@ -15,10 +14,11 @@
 #include "ash/system/tray/tray_popup_item_style.h"
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/display/display.h"
+#include "ui/display/manager/display_manager.h"
 #include "ui/display/manager/managed_display_info.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/controls/image_view.h"
@@ -29,23 +29,14 @@ namespace ash {
 
 namespace {
 
-bool IsMaximizeModeWindowManagerEnabled() {
+bool IsTabletModeWindowManagerEnabled() {
   return Shell::Get()
-      ->maximize_mode_controller()
-      ->IsMaximizeModeWindowManagerEnabled();
+      ->tablet_mode_controller()
+      ->IsTabletModeWindowManagerEnabled();
 }
 
 bool IsUserRotationLocked() {
   return Shell::Get()->screen_orientation_controller()->user_rotation_locked();
-}
-
-bool IsCurrentRotationPortrait() {
-  display::Display::Rotation current_rotation =
-      ShellPort::Get()
-          ->GetDisplayInfo(display::Display::InternalDisplayId())
-          .GetActiveRotation();
-  return current_rotation == display::Display::ROTATE_90 ||
-         current_rotation == display::Display::ROTATE_270;
 }
 
 }  // namespace
@@ -53,7 +44,7 @@ bool IsCurrentRotationPortrait() {
 namespace tray {
 
 class RotationLockDefaultView : public ActionableView,
-                                public ShellObserver,
+                                public TabletModeObserver,
                                 public ScreenOrientationController::Observer {
  public:
   explicit RotationLockDefaultView(SystemTrayItem* owner);
@@ -70,9 +61,9 @@ class RotationLockDefaultView : public ActionableView,
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
   bool PerformAction(const ui::Event& event) override;
 
-  // ShellObserver:
-  void OnMaximizeModeStarted() override;
-  void OnMaximizeModeEnded() override;
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
   // ScreenOrientationController::Obsever:
   void OnUserRotationLockChanged() override;
@@ -100,27 +91,36 @@ RotationLockDefaultView::RotationLockDefaultView(SystemTrayItem* owner)
 
   SetInkDropMode(InkDropHostView::InkDropMode::ON);
 
-  SetVisible(IsMaximizeModeWindowManagerEnabled());
-  Shell::Get()->AddShellObserver(this);
-  if (IsMaximizeModeWindowManagerEnabled())
+  SetVisible(IsTabletModeWindowManagerEnabled());
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
+  if (IsTabletModeWindowManagerEnabled())
     Shell::Get()->screen_orientation_controller()->AddObserver(this);
 }
 
 RotationLockDefaultView::~RotationLockDefaultView() {
   StopObservingRotation();
-  Shell::Get()->RemoveShellObserver(this);
+  // TODO(sammiequon): Add test for shutdown procedure.
+  if (Shell::Get()->tablet_mode_controller())
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
 }
 
 void RotationLockDefaultView::Update() {
   TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::DEFAULT_VIEW_LABEL);
   base::string16 label;
   if (IsUserRotationLocked()) {
-    icon_->SetImage(gfx::CreateVectorIcon(
-        IsCurrentRotationPortrait() ? kSystemMenuRotationLockPortraitIcon
-                                    : kSystemMenuRotationLockLandscapeIcon,
-        kMenuIconSize, style.GetIconColor()));
+    // If user rotation is locked, display the icon and text of the preferred
+    // orientation.
+    bool is_user_locked_orientation_portrait =
+        Shell::Get()
+            ->screen_orientation_controller()
+            ->IsUserLockedOrientationPortrait();
+    icon_->SetImage(
+        gfx::CreateVectorIcon(is_user_locked_orientation_portrait
+                                  ? kSystemMenuRotationLockPortraitIcon
+                                  : kSystemMenuRotationLockLandscapeIcon,
+                              kMenuIconSize, style.GetIconColor()));
     label = l10n_util::GetStringUTF16(
-        IsCurrentRotationPortrait()
+        is_user_locked_orientation_portrait
             ? IDS_ASH_STATUS_TRAY_ROTATION_LOCK_PORTRAIT
             : IDS_ASH_STATUS_TRAY_ROTATION_LOCK_LANDSCAPE);
   } else {
@@ -153,13 +153,13 @@ bool RotationLockDefaultView::PerformAction(const ui::Event& event) {
   return true;
 }
 
-void RotationLockDefaultView::OnMaximizeModeStarted() {
+void RotationLockDefaultView::OnTabletModeStarted() {
   Update();
   SetVisible(true);
   Shell::Get()->screen_orientation_controller()->AddObserver(this);
 }
 
-void RotationLockDefaultView::OnMaximizeModeEnded() {
+void RotationLockDefaultView::OnTabletModeEnded() {
   SetVisible(false);
   StopObservingRotation();
 }
@@ -174,11 +174,12 @@ TrayRotationLock::TrayRotationLock(SystemTray* system_tray)
     : TrayImageItem(system_tray,
                     kSystemTrayRotationLockLockedIcon,
                     UMA_ROTATION_LOCK) {
-  Shell::Get()->AddShellObserver(this);
+  Shell::Get()->tablet_mode_controller()->AddObserver(this);
 }
 
 TrayRotationLock::~TrayRotationLock() {
-  Shell::Get()->RemoveShellObserver(this);
+  if (Shell::Get()->tablet_mode_controller())
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
 }
 
 void TrayRotationLock::OnUserRotationLockChanged() {
@@ -191,21 +192,22 @@ views::View* TrayRotationLock::CreateDefaultView(LoginStatus status) {
   return nullptr;
 }
 
-void TrayRotationLock::OnMaximizeModeStarted() {
+void TrayRotationLock::OnTabletModeStarted() {
   tray_view()->SetVisible(ShouldBeVisible());
   UpdateTrayImage();
   Shell::Get()->screen_orientation_controller()->AddObserver(this);
 }
 
-void TrayRotationLock::OnMaximizeModeEnded() {
+void TrayRotationLock::OnTabletModeEnded() {
   tray_view()->SetVisible(false);
   StopObservingRotation();
 }
 
-void TrayRotationLock::DestroyTrayView() {
+void TrayRotationLock::OnTrayViewDestroyed() {
   StopObservingRotation();
-  Shell::Get()->RemoveShellObserver(this);
-  TrayImageItem::DestroyTrayView();
+  if (Shell::Get()->tablet_mode_controller())
+    Shell::Get()->tablet_mode_controller()->RemoveObserver(this);
+  TrayImageItem::OnTrayViewDestroyed();
 }
 
 bool TrayRotationLock::GetInitialVisibility() {
@@ -219,7 +221,7 @@ void TrayRotationLock::UpdateTrayImage() {
 }
 
 bool TrayRotationLock::ShouldBeVisible() {
-  return OnPrimaryDisplay() && IsMaximizeModeWindowManagerEnabled();
+  return OnPrimaryDisplay() && IsTabletModeWindowManagerEnabled();
 }
 
 bool TrayRotationLock::OnPrimaryDisplay() const {

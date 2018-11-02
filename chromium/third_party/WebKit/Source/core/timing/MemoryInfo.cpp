@@ -68,8 +68,7 @@ class HeapSizeCache {
 
   static HeapSizeCache& ForCurrentThread() {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<HeapSizeCache>,
-                                    heap_size_cache,
-                                    new ThreadSpecific<HeapSizeCache>);
+                                    heap_size_cache, ());
     return *heap_size_cache;
   }
 
@@ -150,7 +149,7 @@ size_t QuantizeMemorySize(size_t size) {
 }
 
 MemoryInfo::MemoryInfo() {
-  if (RuntimeEnabledFeatures::preciseMemoryInfoEnabled())
+  if (RuntimeEnabledFeatures::PreciseMemoryInfoEnabled())
     GetHeapSize(info_);
   else
     HeapSizeCache::ForCurrentThread().GetCachedHeapSize(info_);

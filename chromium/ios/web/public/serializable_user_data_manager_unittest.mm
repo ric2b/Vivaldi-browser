@@ -4,10 +4,13 @@
 
 #import "ios/web/public/serializable_user_data_manager.h"
 
-#import "base/mac/scoped_nsobject.h"
 #import "ios/web/public/test/fakes/test_web_state.h"
 #import "testing/gtest_mac.h"
 #include "testing/platform_test.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 // User Data and Key to use for tests.
@@ -40,15 +43,15 @@ TEST_F(SerializableUserDataManagerTest, EncodeDecode) {
       manager()->CreateSerializableUserData();
 
   // Archive the serializable user data.
-  base::scoped_nsobject<NSMutableData> data([[NSMutableData alloc] init]);
-  base::scoped_nsobject<NSKeyedArchiver> archiver(
-      [[NSKeyedArchiver alloc] initForWritingWithMutableData:data]);
+  NSMutableData* data = [[NSMutableData alloc] init];
+  NSKeyedArchiver* archiver =
+      [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
   user_data->Encode(archiver);
   [archiver finishEncoding];
 
   // Create a new SerializableUserData by unarchiving.
-  base::scoped_nsobject<NSKeyedUnarchiver> unarchiver(
-      [[NSKeyedUnarchiver alloc] initForReadingWithData:data]);
+  NSKeyedUnarchiver* unarchiver =
+      [[NSKeyedUnarchiver alloc] initForReadingWithData:data];
   std::unique_ptr<web::SerializableUserData> decoded_data =
       web::SerializableUserData::Create();
   decoded_data->Decode(unarchiver);
@@ -61,4 +64,32 @@ TEST_F(SerializableUserDataManagerTest, EncodeDecode) {
   id decoded_value =
       decoded_manager->GetValueForSerializationKey(kTestUserDataKey);
   EXPECT_NSEQ(decoded_value, kTestUserData);
+}
+
+// Check that if serialized data does not include user data, then restored
+// SerializableUserDataManager still allow reading and writing user data
+// (see http://crbug.com/699249 for details).
+TEST_F(SerializableUserDataManagerTest, DecodeNoData) {
+  NSMutableData* data = [[NSMutableData alloc] init];
+  NSKeyedArchiver* archiver =
+      [[NSKeyedArchiver alloc] initForWritingWithMutableData:data];
+  [archiver finishEncoding];
+
+  std::unique_ptr<web::SerializableUserData> user_data =
+      web::SerializableUserData::Create();
+  NSKeyedUnarchiver* unarchiver =
+      [[NSKeyedUnarchiver alloc] initForReadingWithData:data];
+  user_data->Decode(unarchiver);
+
+  web::TestWebState web_state;
+  web::SerializableUserDataManager* user_data_manager =
+      web::SerializableUserDataManager::FromWebState(&web_state);
+  user_data_manager->AddSerializableUserData(user_data.get());
+
+  id value = user_data_manager->GetValueForSerializationKey(kTestUserDataKey);
+  EXPECT_NSEQ(nil, value);
+
+  user_data_manager->AddSerializableData(kTestUserData, kTestUserDataKey);
+  value = user_data_manager->GetValueForSerializationKey(kTestUserDataKey);
+  EXPECT_NSEQ(kTestUserData, value);
 }

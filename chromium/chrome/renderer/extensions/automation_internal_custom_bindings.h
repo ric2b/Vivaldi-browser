@@ -5,6 +5,9 @@
 #ifndef CHROME_RENDERER_EXTENSIONS_AUTOMATION_INTERNAL_CUSTOM_BINDINGS_H_
 #define CHROME_RENDERER_EXTENSIONS_AUTOMATION_INTERNAL_CUSTOM_BINDINGS_H_
 
+#include <map>
+#include <vector>
+
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "chrome/common/extensions/api/automation.h"
@@ -159,7 +162,9 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   void OnNodeDataWillChange(ui::AXTree* tree,
                             const ui::AXNodeData& old_node_data,
                             const ui::AXNodeData& new_node_data) override;
-  void OnTreeDataChanged(ui::AXTree* tree) override;
+  void OnTreeDataChanged(ui::AXTree* tree,
+                         const ui::AXTreeData& old_tree_data,
+                         const ui::AXTreeData& new_tree_data) override;
   void OnNodeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
   void OnSubtreeWillBeDeleted(ui::AXTree* tree, ui::AXNode* node) override;
   void OnNodeWillBeReparented(ui::AXTree* tree, ui::AXNode* node) override;
@@ -176,8 +181,8 @@ class AutomationInternalCustomBindings : public ObjectBackedNativeHandler,
   void SendChildTreeIDEvent(ui::AXTree* tree, ui::AXNode* node);
   void SendNodesRemovedEvent(ui::AXTree* tree, const std::vector<int>& ids);
 
-  base::hash_map<int, TreeCache*> tree_id_to_tree_cache_map_;
-  base::hash_map<ui::AXTree*, TreeCache*> axtree_to_tree_cache_map_;
+  std::map<int, TreeCache*> tree_id_to_tree_cache_map_;
+  std::map<ui::AXTree*, TreeCache*> axtree_to_tree_cache_map_;
   scoped_refptr<AutomationMessageFilter> message_filter_;
   bool is_active_profile_;
   std::vector<TreeChangeObserver> tree_change_observers_;

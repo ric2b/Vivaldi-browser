@@ -10,14 +10,12 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
-#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/values.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
@@ -33,6 +31,7 @@
 #include "content/public/browser/web_ui_message_handler.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/chromeos/events/keyboard_layout_util.h"
 #include "ui/chromeos/events/pref_names.h"
 #include "ui/display/manager/display_manager.h"
 
@@ -67,6 +66,14 @@ struct I18nContentToMessage {
   const char* i18n_content;
   int message;
 } kI18nContentToMessage[] = {
+    {"keyboardOverlayAssistantKeyLabel",
+     IDS_KEYBOARD_OVERLAY_ASSISTANT_KEY_LABEL},
+    {"keyboardOverlayPlayPauseKeyLabel",
+     IDS_KEYBOARD_OVERLAY_PLAY_PAUSE_KEY_LABEL},
+    {"keyboardOverlaySystemMenuKeyLabel",
+     IDS_KEYBOARD_OVERLAY_SYSTEM_MENU_KEY_LABEL},
+    {"keyboardOverlayLauncherKeyLabel",
+     IDS_KEYBOARD_OVERLAY_LAUNCHER_KEY_LABEL},
     {"keyboardOverlayLearnMore", IDS_KEYBOARD_OVERLAY_LEARN_MORE},
     {"keyboardOverlayTitle", IDS_KEYBOARD_OVERLAY_TITLE},
     {"keyboardOverlayEscKeyLabel", IDS_KEYBOARD_OVERLAY_ESC_KEY_LABEL},
@@ -97,7 +104,6 @@ struct I18nContentToMessage {
     {"keyboardOverlayRightKeyLabel", IDS_KEYBOARD_OVERLAY_RIGHT_KEY_LABEL},
     {"keyboardOverlayUpKeyLabel", IDS_KEYBOARD_OVERLAY_UP_KEY_LABEL},
     {"keyboardOverlayDownKeyLabel", IDS_KEYBOARD_OVERLAY_DOWN_KEY_LABEL},
-    {"keyboardOverlayInstructions", IDS_KEYBOARD_OVERLAY_INSTRUCTIONS},
     {"keyboardOverlayInstructionsHide", IDS_KEYBOARD_OVERLAY_INSTRUCTIONS_HIDE},
     {"keyboardOverlayActivateLastShelfItem",
      IDS_KEYBOARD_OVERLAY_ACTIVATE_LAST_SHELF_ITEM},
@@ -277,7 +283,8 @@ struct I18nContentToMessage {
     {"keyboardOverlayZoomOut", IDS_KEYBOARD_OVERLAY_ZOOM_OUT},
     {"keyboardOverlayZoomScreenIn", IDS_KEYBOARD_OVERLAY_ZOOM_SCREEN_IN},
     {"keyboardOverlayZoomScreenOut", IDS_KEYBOARD_OVERLAY_ZOOM_SCREEN_OUT},
-};
+    {"keyboardOverlayVoiceInteraction",
+     IDS_KEYBOARD_OVERLAY_VOICE_INTERACTION}};
 
 bool TopRowKeysAreFunctionKeys(Profile* profile) {
   if (!profile)
@@ -305,6 +312,14 @@ content::WebUIDataSource* CreateKeyboardOverlayUIHTMLSource(Profile* profile) {
                                kI18nContentToMessage[i].message);
   }
 
+  // |kI18nContentToMessage| is a static array initialized before it's possible
+  // to call ui::DeviceUsesKeyboardLayout2(), so we add the
+  // |keyboardOverlayInstructions| string at runtime here.
+  source->AddLocalizedString("keyboardOverlayInstructions",
+                             ui::DeviceUsesKeyboardLayout2()
+                                 ? IDS_KEYBOARD_OVERLAY_INSTRUCTIONS_LAYOUT2
+                                 : IDS_KEYBOARD_OVERLAY_INSTRUCTIONS);
+
   source->AddString("keyboardOverlayLearnMoreURL",
                     base::UTF8ToUTF16(kLearnMoreURL));
   source->AddBoolean("keyboardOverlayHasChromeOSDiamondKey",
@@ -312,13 +327,14 @@ content::WebUIDataSource* CreateKeyboardOverlayUIHTMLSource(Profile* profile) {
                          chromeos::switches::kHasChromeOSDiamondKey));
   source->AddBoolean("keyboardOverlayTopRowKeysAreFunctionKeys",
                      TopRowKeysAreFunctionKeys(profile));
+  source->AddBoolean("voiceInteractionEnabled",
+                     chromeos::switches::IsVoiceInteractionEnabled());
+  source->AddBoolean("keyboardOverlayUsesLayout2",
+                     ui::DeviceUsesKeyboardLayout2());
   ash::Shell* shell = ash::Shell::Get();
   display::DisplayManager* display_manager = shell->display_manager();
   source->AddBoolean("keyboardOverlayIsDisplayUIScalingEnabled",
                      display_manager->IsDisplayUIScalingEnabled());
-  source->AddBoolean(
-      "backspaceGoesBackFeatureEnabled",
-      base::FeatureList::IsEnabled(features::kBackspaceGoesBackFeature));
   source->SetJsonPath("strings.js");
   source->AddResourcePath("keyboard_overlay.js", IDR_KEYBOARD_OVERLAY_JS);
   source->SetDefaultResource(IDR_KEYBOARD_OVERLAY_HTML);

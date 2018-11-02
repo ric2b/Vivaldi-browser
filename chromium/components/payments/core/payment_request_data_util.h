@@ -10,10 +10,10 @@
 #include <vector>
 
 #include "base/strings/string16.h"
+#include "components/autofill/core/browser/credit_card.h"
 
 namespace autofill {
 class AutofillProfile;
-class CreditCard;
 }  // namespace autofill
 
 namespace payments {
@@ -38,8 +38,10 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
     const autofill::AutofillProfile& billing_profile,
     const std::string& app_locale);
 
-// Parse the supported card networks from supportedMethods and  "basic-card"'s
-// supportedNetworks. |out_supported_networks| is filled with list of networks
+// Parse all the supported payment methods from the merchant including 1) the
+// supported card networks from supportedMethods and  "basic-card"'s
+// supportedNetworks and 2) the url-based payment method identifiers.
+// |out_supported_networks| is filled with a list of networks
 // in the order that they were specified by the merchant.
 // |out_basic_card_supported_networks| is a subset of |out_supported_networks|
 // that includes all networks that were specified as part of "basic-card". This
@@ -47,10 +49,21 @@ BasicCardResponse GetBasicCardResponseFromAutofillCreditCard(
 // "basic-card" in the PaymentResponse. |method_data.supported_networks| is
 // expected to only contain basic-card card network names (the list is at
 // https://www.w3.org/Payments/card-network-ids).
-void ParseBasicCardSupportedNetworks(
+// |out_url_payment_method_identifiers| is filled with a list of all the
+// payment method identifiers specicied by the merchant that are URL-based.
+void ParseSupportedMethods(
     const std::vector<PaymentMethodData>& method_data,
     std::vector<std::string>* out_supported_networks,
-    std::set<std::string>* out_basic_card_supported_networks);
+    std::set<std::string>* out_basic_card_supported_networks,
+    std::vector<std::string>* out_url_payment_method_identifiers);
+
+// Parses the supported card types (e.g., credit, debit, prepaid) from
+// supportedTypes. |out_supported_card_types_set| is expected to be empty. It
+// will always contain autofill::CreditCard::CARD_TYPE_UNKNOWN after the call.
+// Also, it gets filled with all of the card types if supportedTypes is empty.
+void ParseSupportedCardTypes(
+    const std::vector<PaymentMethodData>& method_data,
+    std::set<autofill::CreditCard::CardType>* out_supported_card_types_set);
 
 // Returns the phone number from the given |profile| formatted for display.
 base::string16 GetFormattedPhoneNumberForDisplay(
@@ -70,6 +83,11 @@ std::string FormatPhoneForDisplay(const std::string& phone_number,
 // (https://w3c.github.io/browser-payment-api/#paymentrequest-updated-algorithm)
 std::string FormatPhoneForResponse(const std::string& phone_number,
                                    const std::string& country_code);
+
+// Formats |card_number| for display. For example, "4111111111111111" is
+// formatted into "4111 1111 1111 1111". This method does not format masked card
+// numbers, which start with a letter.
+base::string16 FormatCardNumberForDisplay(const base::string16& card_number);
 
 // Returns a country code to be used when validating this profile. If the
 // profile has a valid country code set, it is returned. If not, a country code

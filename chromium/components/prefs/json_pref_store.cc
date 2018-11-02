@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/bind_helpers.h"
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -143,13 +144,13 @@ scoped_refptr<base::SequencedTaskRunner> JsonPrefStore::GetTaskRunnerForFile(
 
 JsonPrefStore::JsonPrefStore(
     const base::FilePath& pref_filename,
-    scoped_refptr<base::SequencedTaskRunner> sequenced_task_runner,
+    scoped_refptr<base::SequencedTaskRunner> file_task_runner,
     std::unique_ptr<PrefFilter> pref_filter)
     : path_(pref_filename),
-      sequenced_task_runner_(std::move(sequenced_task_runner)),
+      file_task_runner_(std::move(file_task_runner)),
       prefs_(new base::DictionaryValue()),
       read_only_(false),
-      writer_(pref_filename, sequenced_task_runner_),
+      writer_(pref_filename, file_task_runner_),
       pref_filter_(std::move(pref_filter)),
       initialized_(false),
       filtering_in_progress_(false),
@@ -162,7 +163,7 @@ JsonPrefStore::JsonPrefStore(
 
 bool JsonPrefStore::GetValue(const std::string& key,
                              const base::Value** result) const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   base::Value* tmp = nullptr;
   if (!prefs_->Get(key, &tmp))
@@ -178,32 +179,32 @@ std::unique_ptr<base::DictionaryValue> JsonPrefStore::GetValues() const {
 }
 
 void JsonPrefStore::AddObserver(PrefStore::Observer* observer) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   observers_.AddObserver(observer);
 }
 
 void JsonPrefStore::RemoveObserver(PrefStore::Observer* observer) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   observers_.RemoveObserver(observer);
 }
 
 bool JsonPrefStore::HasObservers() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return observers_.might_have_observers();
 }
 
 bool JsonPrefStore::IsInitializationComplete() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return initialized_;
 }
 
 bool JsonPrefStore::GetMutableValue(const std::string& key,
                                     base::Value** result) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return prefs_->Get(key, result);
 }
@@ -211,7 +212,7 @@ bool JsonPrefStore::GetMutableValue(const std::string& key,
 void JsonPrefStore::SetValue(const std::string& key,
                              std::unique_ptr<base::Value> value,
                              uint32_t flags) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DCHECK(value);
   base::Value* old_value = nullptr;
@@ -225,7 +226,7 @@ void JsonPrefStore::SetValue(const std::string& key,
 void JsonPrefStore::SetValueSilently(const std::string& key,
                                      std::unique_ptr<base::Value> value,
                                      uint32_t flags) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DCHECK(value);
   base::Value* old_value = nullptr;
@@ -237,7 +238,7 @@ void JsonPrefStore::SetValueSilently(const std::string& key,
 }
 
 void JsonPrefStore::RemoveValue(const std::string& key, uint32_t flags) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (prefs_->RemovePath(key, nullptr))
     ReportValueChanged(key, flags);
@@ -245,26 +246,26 @@ void JsonPrefStore::RemoveValue(const std::string& key, uint32_t flags) {
 
 void JsonPrefStore::RemoveValueSilently(const std::string& key,
                                         uint32_t flags) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   prefs_->RemovePath(key, nullptr);
   ScheduleWrite(flags);
 }
 
 bool JsonPrefStore::ReadOnly() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return read_only_;
 }
 
 PersistentPrefStore::PrefReadError JsonPrefStore::GetReadError() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   return read_error_;
 }
 
 PersistentPrefStore::PrefReadError JsonPrefStore::ReadPrefs() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   OnFileRead(ReadPrefsFromDisk(path_));
   return filtering_in_progress_ ? PREF_READ_ERROR_ASYNCHRONOUS_TASK_INCOMPLETE
@@ -272,20 +273,19 @@ PersistentPrefStore::PrefReadError JsonPrefStore::ReadPrefs() {
 }
 
 void JsonPrefStore::ReadPrefsAsync(ReadErrorDelegate* error_delegate) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   initialized_ = false;
   error_delegate_.reset(error_delegate);
 
   // Weakly binds the read task so that it doesn't kick in during shutdown.
   base::PostTaskAndReplyWithResult(
-      sequenced_task_runner_.get(), FROM_HERE,
-      base::Bind(&ReadPrefsFromDisk, path_),
+      file_task_runner_.get(), FROM_HERE, base::Bind(&ReadPrefsFromDisk, path_),
       base::Bind(&JsonPrefStore::OnFileRead, AsWeakPtr()));
 }
 
-void JsonPrefStore::CommitPendingWrite() {
-  DCHECK(CalledOnValidThread());
+void JsonPrefStore::CommitPendingWrite(base::OnceClosure done_callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // Schedule a write for any lossy writes that are outstanding to ensure that
   // they get flushed when this function is called.
@@ -293,6 +293,15 @@ void JsonPrefStore::CommitPendingWrite() {
 
   if (writer_.HasPendingWrite() && !read_only_)
     writer_.DoScheduledWrite();
+
+  if (done_callback) {
+    // Since disk operations occur on |file_task_runner_|, the reply of a task
+    // posted to |file_task_runner_| will run after currently pending disk
+    // operations. Also, by definition of PostTaskAndReply(), the reply will run
+    // on the current sequence.
+    file_task_runner_->PostTaskAndReply(
+        FROM_HERE, base::BindOnce(&base::DoNothing), std::move(done_callback));
+  }
 }
 
 void JsonPrefStore::SchedulePendingLossyWrites() {
@@ -301,7 +310,7 @@ void JsonPrefStore::SchedulePendingLossyWrites() {
 }
 
 void JsonPrefStore::ReportValueChanged(const std::string& key, uint32_t flags) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (pref_filter_)
     pref_filter_->FilterUpdate(key);
@@ -314,7 +323,7 @@ void JsonPrefStore::ReportValueChanged(const std::string& key, uint32_t flags) {
 
 void JsonPrefStore::RunOrScheduleNextSuccessfulWriteCallback(
     bool write_success) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   has_pending_write_reply_ = false;
   if (!on_next_successful_write_reply_.is_null()) {
@@ -345,7 +354,7 @@ void JsonPrefStore::PostWriteCallback(
 
 void JsonPrefStore::RegisterOnNextSuccessfulWriteReply(
     const base::Closure& on_next_successful_write_reply) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(on_next_successful_write_reply_.is_null());
 
   on_next_successful_write_reply_ = on_next_successful_write_reply;
@@ -367,7 +376,7 @@ void JsonPrefStore::RegisterOnNextSuccessfulWriteReply(
 
 void JsonPrefStore::RegisterOnNextWriteSynchronousCallbacks(
     OnWriteCallbackPair callbacks) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   has_pending_write_reply_ = true;
 
@@ -385,7 +394,7 @@ void JsonPrefStore::ClearMutableValues() {
 }
 
 void JsonPrefStore::OnFileRead(std::unique_ptr<ReadResult> read_result) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   DCHECK(read_result);
 
@@ -441,11 +450,12 @@ void JsonPrefStore::OnFileRead(std::unique_ptr<ReadResult> read_result) {
 }
 
 JsonPrefStore::~JsonPrefStore() {
-  CommitPendingWrite();
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  CommitPendingWrite(base::OnceClosure());
 }
 
 bool JsonPrefStore::SerializeData(std::string* output) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   pending_lossy_write_ = false;
 
@@ -472,7 +482,7 @@ void JsonPrefStore::FinalizeFileRead(
     bool initialization_successful,
     std::unique_ptr<base::DictionaryValue> prefs,
     bool schedule_write) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   filtering_in_progress_ = false;
 

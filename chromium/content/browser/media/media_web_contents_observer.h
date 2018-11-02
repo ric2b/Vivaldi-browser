@@ -15,7 +15,7 @@
 #include "content/browser/media/session/media_session_controllers_manager.h"
 #include "content/common/content_export.h"
 #include "content/public/browser/web_contents_observer.h"
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 
 #if defined(OS_ANDROID)
 #include "ui/android/view_android.h"
@@ -24,6 +24,10 @@
 namespace media {
 enum class MediaContentType;
 }  // namespace media
+
+namespace gfx {
+class Size;
+}  // namespace size
 
 namespace content {
 
@@ -84,15 +88,21 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
                       bool has_audio,
                       bool is_remote,
                       media::MediaContentType media_content_type);
-  void OnMediaEffectivelyFullscreenChange(RenderFrameHost* render_frame_host,
-                                          int delegate_id,
-                                          bool is_fullscreen);
+  void OnMediaEffectivelyFullscreenChanged(RenderFrameHost* render_frame_host,
+                                           int delegate_id,
+                                           bool is_fullscreen);
+  void OnMediaSizeChanged(RenderFrameHost* render_frame_host,
+                          int delegate_id,
+                          const gfx::Size& size);
+  void OnMediaMutedStatusChanged(RenderFrameHost* render_frame_host,
+                                 int delegate_id,
+                                 bool muted);
 
   // Clear |render_frame_host|'s tracking entry for its WakeLocks.
   void ClearWakeLocks(RenderFrameHost* render_frame_host);
 
-  device::mojom::WakeLockService* GetAudioWakeLock();
-  device::mojom::WakeLockService* GetVideoWakeLock();
+  device::mojom::WakeLock* GetAudioWakeLock();
+  device::mojom::WakeLock* GetVideoWakeLock();
 
   void LockAudio();
   void LockVideo();
@@ -115,11 +125,14 @@ class CONTENT_EXPORT MediaWebContentsObserver : public WebContentsObserver {
                                    ActiveMediaPlayerMap* player_map,
                                    std::set<MediaPlayerId>* removed_players);
 
+  // Convenience method that casts web_contents() to a WebContentsImpl*.
+  WebContentsImpl* web_contents_impl() const;
+
   // Tracking variables and associated wake locks for media playback.
   ActiveMediaPlayerMap active_audio_players_;
   ActiveMediaPlayerMap active_video_players_;
-  device::mojom::WakeLockServicePtr audio_wake_lock_;
-  device::mojom::WakeLockServicePtr video_wake_lock_;
+  device::mojom::WakeLockPtr audio_wake_lock_;
+  device::mojom::WakeLockPtr video_wake_lock_;
   base::Optional<MediaPlayerId> fullscreen_player_;
   bool has_audio_wake_lock_for_testing_;
   bool has_video_wake_lock_for_testing_;

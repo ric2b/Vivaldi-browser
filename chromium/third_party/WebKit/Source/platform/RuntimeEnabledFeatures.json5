@@ -6,21 +6,26 @@
 
   parameters: {
     // Each feature can be assigned a "status":
-    // status=stable -> Enable this in all Blink configurations.  We are committed to these APIs indefinitely.
-    // status=experimental -> In-progress features, Web Developers might play with, but are not on by default in stable.
-    // status=test -> Enabled in ContentShell for testing, otherwise off.
+    // * status=stable: Enable this in all Blink configurations. We are
+    //   committed to these APIs indefinitely.
+    // * status=experimental: In-progress features, Web Developers might play
+    //   with, but are not on by default in stable.
+    // * status=test: Enabled in ContentShell for testing, otherwise off.
     // Features without a status are not enabled anywhere by default.
+    //
+    // "stable" features listed here should be rare, as anything which we've
+    // shipped stable can have its runtime flag removed soon after.
     status: {
       valid_values: ["stable", "experimental", "test"],
     },
 
     // "implied_by" or "depends_on" specifies relationship to other features:
-    // implied_by: ["feature1","feature2",...] -> The feature is automatically enabled if any implied_by features is enabled;
-    // depends_on: ["feature1","feature2",...] -> The feature is enabled only if all depends_on features are enabled.
+    // * implied_by: ["feature1","feature2",...]
+    //   The feature is automatically enabled if any implied_by features is
+    //   enabled;
+    // * depends_on: ["feature1","feature2",...]
+    //   The feature is enabled only if all depends_on features are enabled.
     // Only one of "implied_by" and "depends_on" can be specified.
-    //
-    // "stable" features listed here should be rare, as anything which we've shipped stable
-    // can have its runtime flag removed soon after.
     implied_by: {
       default: [],
       valid_type: "list",
@@ -30,12 +35,13 @@
       valid_type: "list",
     },
 
-    // origin_trial_feature_name: "FEATURE_NAME" is used to integrate the feature with
-    // the Origin Trials framework. The framework allows the feature to be enabled
-    // at runtime on a per-page basis through a signed token for the corresponding
-    // feature name. Declaring the origin_trial_feature_name will cause a static
-    // method to be generated in OriginTrials.h/cpp. This static method allows the
-    // feature implementation to check if it is enabled for the current context.
+    // origin_trial_feature_name: "FEATURE_NAME" is used to integrate the
+    // feature with the Origin Trials framework. The framework allows the
+    // feature to be enabled at runtime on a per-page basis through a signed
+    // token for the corresponding feature name. Declaring the
+    // origin_trial_feature_name will cause a static method to be generated in
+    // OriginTrials.h/cpp. This static method allows the feature implementation
+    // to check if it is enabled for the current context.
     origin_trial_feature_name: {
     },
     origin_trial_os: {
@@ -43,8 +49,8 @@
       valid_type: "list",
     },
 
-    // settable_from_internals specifies whether a feature can be set from internals.runtimeFlags, with the default
-    // being false.
+    // settable_from_internals specifies whether a feature can be set from
+    // internals.runtimeFlags, with the default being false.
     settable_from_internals: {
       valid_type: "bool",
     },
@@ -72,6 +78,10 @@
     {
       name: "AllowContentInitiatedDataUrlNavigations",
       status: "stable",
+    },
+    {
+      name: "AsyncClipboard",
+      status: "experimental",
     },
     {
       name: "AudioOutputDevices",
@@ -106,8 +116,7 @@
       status: "stable",
     },
     {
-      name: "BackspaceDefaultHandler",
-      status: "test",
+      name: "BlinkRuntimeCallStats",
     },
     {
       name: "BlockCredentialedSubresources",
@@ -151,15 +160,17 @@
       status: "stable",
     },
     {
+      name: "ClientPlaceholdersForServerLoFi",
+    },
+    {
       name: "CoalescedEvents",
       status: "stable",
     },
     {
-      name: "ColorCorrectRendering",
-      status: "experimental",
+      name: "ColorCanvasExtensions",
     },
     {
-      name: "ColorCorrectRenderingDefaultMode",
+      name: "ColorCorrectRendering",
       status: "experimental",
     },
     {
@@ -174,6 +185,10 @@
       name: "CompositeOpaqueScrollers",
       settable_from_internals: true,
       status: "stable",
+    },
+    {
+      name: "CompositorTouchAction",
+      status: "test",
     },
     {
       name: "CompositorWorker",
@@ -234,7 +249,6 @@
     },
     {
       name: "CSSGridLayout",
-      settable_from_internals: true,
       status: "stable",
     },
     {
@@ -275,7 +289,7 @@
     },
     {
       name: "CSSOMSmoothScroll",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "CSSPaintAPI",
@@ -285,6 +299,10 @@
     {
       name: "CSSPaintAPIArguments",
       depends_on: ["CSSPaintAPI"],
+      status: "experimental",
+    },
+    {
+      name: "CSSScrollBoundaryBehavior",
       status: "experimental",
     },
     {
@@ -328,10 +346,6 @@
       status: "test",
     },
     {
-      name: "CustomElementsV1",
-      status: "stable",
-    },
-    {
       name: "CustomSchemeHandler",
       depends_on: ["NavigatorContentUtils"],
       status: "experimental",
@@ -347,6 +361,10 @@
     {
       name: "DesktopCaptureDisableLocalEchoControl",
       status: "experimental",
+    },
+    {
+      name: "DeviceMemoryHeader",
+      status: "stable",
     },
     {
       name: "DisplayList2dCanvas",
@@ -378,7 +396,11 @@
     },
     {
       name: "EmbedderCSPEnforcement",
-      status: "experimental",
+      status: "stable",
+    },
+    {
+      name: "EncryptedMediaHdcpPolicyCheck",
+      status: "test",
     },
     {
       name: "ExecCommandInJavaScript",
@@ -386,7 +408,7 @@
     },
     {
       name: "ExpensiveBackgroundTimerThrottling",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "ExperimentalCanvasFeatures",
@@ -411,7 +433,7 @@
       name: "FeaturePolicyExperimentalFeatures",
     },
     {
-      name:"FetchRequestCache",
+      name: "FetchRequestCache",
       status: "experimental",
     },
     {
@@ -464,7 +486,7 @@
     {
       name: "FullscreenUnprefixed",
       settable_from_internals: true,
-      status: "test",
+      status: "experimental",
     },
     {
       name: "GamepadExtensions",
@@ -474,7 +496,7 @@
     {
       name: "GeometryInterfaces",
       implied_by: ["CompositorWorker"],
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "GetUserMedia",
@@ -490,7 +512,12 @@
     },
     {
       name: "HideNonceContentAttribute",
-      status: "experimental",
+      status: "stable",
+    },
+    // https://crbug.com/523952 for testing disabling the feature.
+    {
+      name: "HTMLImportsStyleApplication",
+      status: "stable",
     },
     {
       name: "IDBObserver",
@@ -518,10 +545,6 @@
       status: "experimental",
     },
     {
-      name: "InertTopControls",
-      status: "stable",
-    },
-    {
       name: "InputEvent",
       status: "stable",
     },
@@ -543,6 +566,10 @@
       status: "stable",
     },
     {
+      name: "JSImageDecode",
+      status: "test",
+    },
+    {
       name: "KeyboardLock",
       status: "test",
     },
@@ -551,6 +578,10 @@
     },
     {
       name: "LayoutNG",
+    },
+    {
+      name: "LazyInitializeMediaControls",
+      // This is enabled by features::kLazyInitializeMediaControls.
     },
     {
       name: "LazyParseCSS",
@@ -563,9 +594,6 @@
     },
     {
       name: "LoadingWithMojo",
-    },
-    {
-      name: "LocationHardReload",
     },
     {
       name: "LongTaskObserver",
@@ -589,6 +617,10 @@
     {
       name: "MediaCaptureFromVideo",
       status: "experimental",
+    },
+    // Set to reflect the MediaCastOverlayButton feature.
+    {
+      name: "MediaCastOverlayButton",
     },
     {
       name: "MediaControlsOverlayPlayButton",
@@ -648,10 +680,19 @@
     },
     {
       name: "ModuleScripts",
-      status: "experimental",
+      status: "stable",
+    },
+    {
+      name: "MojoBlobs",
     },
     {
       name: "MojoJS",
+      status: "test",
+    },
+    // MojoJSTest is used exclusively in testing environments, whereas MojoJS
+    // may also be used elsewhere.
+    {
+      name: "MojoJSTest",
       status: "test",
     },
     {
@@ -663,7 +704,7 @@
     },
     {
       name: "NetInfoDownlink",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "NetInfoDownlinkMax",
@@ -671,14 +712,10 @@
     },
     {
       name: "NetInfoEffectiveType",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "NetInfoRtt",
-      status: "experimental",
-    },
-    {
-      name: "NetworkInformation",
       status: "stable",
     },
     // Not a web exposed feature, enabled from the command line.
@@ -707,6 +744,10 @@
       status: "stable",
     },
     {
+      name: "NullableDocumentDomain",
+      status: "experimental",
+    },
+    {
       name: "OffMainThreadFetch",
     },
     {
@@ -720,13 +761,16 @@
       name: "OriginTrials",
       status: "stable",
     },
-    // Define a sample API for testing integration with the Origin Trials Framework.
-    // The sample API is used in both unit and layout tests for the Origin Trials
-    // Framework. Do not change this flag to stable, as it exists solely to generate
-    // code used by the sample API implementation.
+    // Define a sample API for testing integration with the Origin Trials
+    // Framework. The sample API is used in both unit and layout tests for the
+    // Origin Trials Framework. Do not change this flag to stable, as it exists
+    // solely to generate code used by the sample API implementation.
     {
       name: "OriginTrialsSampleAPI",
       origin_trial_feature_name: "Frobulate",
+    },
+    {
+      name: "OutOfBlinkCORS",
     },
     {
       name: "OverlayScrollbars",
@@ -752,10 +796,6 @@
       status: "experimental",
     },
     {
-      name: "PaymentDetailsError",
-      status: "stable",
-    },
-    {
       name: "PaymentDetailsModifierData",
       status: "experimental",
     },
@@ -766,10 +806,6 @@
     },
     {
       name: "PaymentRequestBasicCard",
-      status: "stable",
-    },
-    {
-      name: "PaymentRequestPayerName",
       status: "stable",
     },
     {
@@ -795,10 +831,6 @@
     {
       name: "PermissionsRequestRevoke",
       status: "experimental",
-    },
-    {
-      name: "PointerEvent",
-      status: "stable",
     },
     {
       name: "PreciseMemoryInfo",
@@ -835,6 +867,13 @@
       name: "RemotePlayback",
       status: "stable",
     },
+    // Whether or not the Remote Playback API backend is implemented.
+    // Not web-exposed, set per platform. For LayoutTests, disabled by
+    // default.
+    {
+      name: "RemotePlaybackBackend",
+      settable_from_internals: true,
+    },
     {
       name: "RenderingPipelineThrottling",
       status: "stable",
@@ -852,8 +891,12 @@
       status: "experimental",
     },
     {
-      name: "RestrictCanRequestURLCharacterSet",
+      name: "ResourceLoadScheduler",
       status: "experimental",
+    },
+    {
+      name: "RestrictCanRequestURLCharacterSet",
+      status: "stable",
     },
     // Handles frame scrolling via the root PaintLayer instead of the FrameView.
     // crbug.com/417782 tracks enabling this by default.
@@ -881,7 +924,7 @@
     // as per the spec, matching other Web engines.
     {
       name: "ScrollTopLeftInterop",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "SendBeaconThrowForBlobWithNonSimpleType",
@@ -904,6 +947,9 @@
       status: "stable",
     },
     {
+      name: "ServiceWorkerScriptStreaming",
+    },
+    {
       name: "SetRootScroller",
       status: "experimental",
     },
@@ -924,9 +970,8 @@
       status: "stable",
     },
     {
-      name: "SlimmingPaintInvalidation",
-      implied_by: ["SlimmingPaintV2"],
-      status: "stable",
+      name: "SkipCompositingSmallScrollers",
+      status: "test",
     },
     {
       name: "SlimmingPaintStrictCullRectClipping",
@@ -935,11 +980,15 @@
       name: "SlimmingPaintV2",
     },
     {
-      name: "smil",
+      name: "SMIL",
       status: "stable",
     },
-    // Used as argument in attribute of stable-release functions/interfaces where
-    // a runtime-enabled feature name is required for correct IDL syntax.
+    {
+      name: "SmoothScrollJSIntervention",
+      status: "stable",
+    },
+    // Used as argument in attribute of stable-release functions/interfaces
+    // where a runtime-enabled feature name is required for correct IDL syntax.
     // This is a global flag; do not change its status.
     {
       name: "StableBlinkFeatures",
@@ -951,11 +1000,11 @@
     },
     {
       name: "StorageEstimate",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "StyleSharing",
-      status: "stable",
+      status: "experimental",
     },
     {
       name: "Suborigins",
@@ -997,7 +1046,15 @@
       status: "experimental",
     },
     {
+      name: "UpdateHoverPostLayout",
+      status: "experimental",
+    },
+    {
       name: "V8IdleTasks",
+    },
+    {
+      name: "ValidationBubbleInRenderer",
+      status: "experimental",
     },
     {
       name: "VibrateRequiresUserGesture",
@@ -1014,7 +1071,7 @@
     },
     {
       name: "VisualViewportAPI",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "WakeLock",
@@ -1068,16 +1125,14 @@
       name: "WebNFC",
       status: "experimental",
     },
+    // WebShare is enabled by default on Android.
     {
       name: "WebShare",
-      origin_trial_feature_name: "WebShare",
-      origin_trial_os: ["android"],
       status: "experimental",
     },
     {
       name: "WebUSB",
-      origin_trial_feature_name: "WebUSB2",
-      status: "experimental",
+      status: "stable",
     },
     {
       name: "WebVR",

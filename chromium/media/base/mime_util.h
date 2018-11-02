@@ -18,13 +18,6 @@ namespace media {
 // supported/recognized MIME types.
 MEDIA_EXPORT bool IsSupportedMediaMimeType(const std::string& mime_type);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-// Check to see if a particular MIME type is in the list of partially
-// supported/recognized MIME types.
-MEDIA_EXPORT bool IsPartiallySupportedMediaMimeType(
-    const std::string& mime_type);
-#endif
-
 // Splits various codecs into |codecs_out|, conditionally stripping the profile
 // and level info when |strip| == true. For example, passed "aaa.b.c,dd.eee", if
 // |strip| == true |codecs_out| will contain {"aaa", "dd"}, if |strip| == false

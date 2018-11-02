@@ -11,7 +11,6 @@
 #include <vector>
 
 #include "base/bind.h"
-#include "base/debug/dump_without_crashing.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/proto/autofill_sync.pb.h"
@@ -26,12 +25,10 @@
 
 using base::Optional;
 using base::Time;
-using base::debug::DumpWithoutCrashing;
 using sync_pb::AutofillSpecifics;
 using syncer::EntityChange;
 using syncer::EntityChangeList;
 using syncer::EntityData;
-using syncer::EntityDataMap;
 using syncer::MetadataChangeList;
 using syncer::ModelError;
 using syncer::ModelTypeChangeProcessor;
@@ -284,12 +281,10 @@ void AutocompleteSyncBridge::CreateForWebDataServiceAndBackend(
     AutofillWebDataService* web_data_service,
     AutofillWebDataBackend* web_data_backend) {
   web_data_service->GetDBUserData()->SetUserData(
-      UserDataKey(),
-      base::MakeUnique<AutocompleteSyncBridge>(
-          web_data_backend,
-          base::BindRepeating(
-              &ModelTypeChangeProcessor::Create,
-              base::BindRepeating(base::IgnoreResult(&DumpWithoutCrashing)))));
+      UserDataKey(), base::MakeUnique<AutocompleteSyncBridge>(
+                         web_data_backend,
+                         base::BindRepeating(&ModelTypeChangeProcessor::Create,
+                                             base::RepeatingClosure())));
 }
 
 // static
@@ -326,14 +321,14 @@ AutocompleteSyncBridge::CreateMetadataChangeList() {
 
 Optional<syncer::ModelError> AutocompleteSyncBridge::MergeSyncData(
     std::unique_ptr<MetadataChangeList> metadata_change_list,
-    EntityDataMap entity_data_map) {
+    EntityChangeList entity_data) {
   DCHECK(thread_checker_.CalledOnValidThread());
 
   SyncDifferenceTracker tracker(GetAutofillTable());
-  for (auto kv : entity_data_map) {
-    DCHECK(kv.second->specifics.has_autofill());
+  for (const auto& change : entity_data) {
+    DCHECK(change.data().specifics.has_autofill());
     RETURN_IF_ERROR(tracker.IncorporateRemoteSpecifics(
-        kv.first, kv.second->specifics.autofill()));
+        change.storage_key(), change.data().specifics.autofill()));
   }
 
   RETURN_IF_ERROR(tracker.FlushToLocal(web_data_backend_));

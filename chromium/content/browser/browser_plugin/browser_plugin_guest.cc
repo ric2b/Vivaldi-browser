@@ -16,8 +16,8 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
-#include "cc/surfaces/surface_info.h"
-#include "cc/surfaces/surface_manager.h"
+#include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/browser_plugin/browser_plugin_embedder.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -63,6 +63,20 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 
 namespace content {
+
+namespace {
+
+std::vector<ui::CompositionUnderline> ConvertToUiUnderline(
+    const std::vector<blink::WebCompositionUnderline>& underlines) {
+  std::vector<ui::CompositionUnderline> ui_underlines;
+  for (const auto& underline : underlines) {
+    ui_underlines.emplace_back(ui::CompositionUnderline(
+        underline.start_offset, underline.end_offset, underline.color,
+        underline.thick, underline.background_color));
+  }
+  return ui_underlines;
+}
+};  // namespace
 
 class BrowserPluginGuest::EmbedderVisibilityObserver
     : public WebContentsObserver {
@@ -203,12 +217,6 @@ void BrowserPluginGuest::Init() {
     return;
   initialized_ = true;
 
-  // TODO(fsamuel): Initiailization prior to attachment should be behind a
-  // command line flag once we introduce experimental guest types that rely on
-  // this functionality.
-  if (!delegate_->CanRunInDetachedState())
-    return;
-
   WebContentsImpl* owner_web_contents = static_cast<WebContentsImpl*>(
       delegate_->GetOwnerWebContents());
   owner_web_contents->CreateBrowserPluginEmbedderIfNecessary();
@@ -240,7 +248,7 @@ void BrowserPluginGuest::SetFocus(RenderWidgetHost* rwh,
     static_cast<RenderViewHostImpl*>(RenderViewHost::From(rwh))
         ->SetInitialFocus(focus_type == blink::kWebFocusTypeBackward);
   }
-  rwh->Send(new InputMsg_SetFocus(rwh->GetRoutingID(), focused));
+  RenderWidgetHostImpl::From(rwh)->GetWidgetInputHandler()->SetFocus(focused);
   if (!focused && mouse_locked_)
     OnUnlockMouse();
 
@@ -431,8 +439,8 @@ void BrowserPluginGuest::PointerLockPermissionResponse(bool allow) {
 }
 
 void BrowserPluginGuest::SetChildFrameSurface(
-    const cc::SurfaceInfo& surface_info,
-    const cc::SurfaceSequence& sequence) {
+    const viz::SurfaceInfo& surface_info,
+    const viz::SurfaceSequence& sequence) {
   has_attached_since_surface_set_ = false;
   SendMessageToEmbedder(base::MakeUnique<BrowserPluginMsg_SetChildFrameSurface>(
       browser_plugin_instance_id(), surface_info, sequence));
@@ -440,15 +448,15 @@ void BrowserPluginGuest::SetChildFrameSurface(
 
 void BrowserPluginGuest::OnSatisfySequence(
     int instance_id,
-    const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->SatisfySequence(sequence);
+    const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
 }
 
 void BrowserPluginGuest::OnRequireSequence(
     int instance_id,
-    const cc::SurfaceId& id,
-    const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->RequireSequence(id, sequence);
+    const viz::SurfaceId& id,
+    const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->RequireSequence(id, sequence);
 }
 
 void BrowserPluginGuest::ResendEventToEmbedder(
@@ -695,7 +703,9 @@ void BrowserPluginGuest::RenderViewReady() {
   RenderViewHost* rvh = GetWebContents()->GetRenderViewHost();
   // TODO(fsamuel): Investigate whether it's possible to update state earlier
   // here (see http://crbug.com/158151).
-  Send(new InputMsg_SetFocus(routing_id(), focused_));
+  RenderWidgetHostImpl::From(rvh->GetWidget())
+      ->GetWidgetInputHandler()
+      ->SetFocus(focused_);
   UpdateVisibility();
 
   // In case we've created a new guest render process after a crash, let the
@@ -927,20 +937,26 @@ void BrowserPluginGuest::OnDragStatusUpdate(int browser_plugin_instance_id,
 
 void BrowserPluginGuest::OnExecuteEditCommand(int browser_plugin_instance_id,
                                               const std::string& name) {
-  RenderFrameHost* focused_frame = web_contents()->GetFocusedFrame();
+  RenderFrameHostImpl* focused_frame =
+      static_cast<RenderFrameHostImpl*>(web_contents()->GetFocusedFrame());
   if (!focused_frame)
     return;
 
-  focused_frame->Send(new InputMsg_ExecuteNoValueEditCommand(
-      focused_frame->GetRoutingID(), name));
+  focused_frame->GetFrameInputHandler()->ExecuteEditCommand(name,
+                                                            base::nullopt);
 }
 
 void BrowserPluginGuest::OnImeSetComposition(
     int browser_plugin_instance_id,
     const BrowserPluginHostMsg_SetComposition_Params& params) {
-  Send(new InputMsg_ImeSetComposition(
-      routing_id(), params.text, params.underlines, params.replacement_range,
-      params.selection_start, params.selection_end));
+  std::vector<ui::CompositionUnderline> ui_underlines =
+      ConvertToUiUnderline(params.underlines);
+  GetWebContents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->GetWidgetInputHandler()
+      ->ImeSetComposition(params.text, ui_underlines, params.replacement_range,
+                          params.selection_start, params.selection_end);
 }
 
 void BrowserPluginGuest::OnImeCommitText(
@@ -949,15 +965,25 @@ void BrowserPluginGuest::OnImeCommitText(
     const std::vector<blink::WebCompositionUnderline>& underlines,
     const gfx::Range& replacement_range,
     int relative_cursor_pos) {
-  Send(new InputMsg_ImeCommitText(routing_id(), text, underlines,
-                                  replacement_range, relative_cursor_pos));
+  std::vector<ui::CompositionUnderline> ui_underlines =
+      ConvertToUiUnderline(underlines);
+  GetWebContents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->GetWidgetInputHandler()
+      ->ImeCommitText(text, ui_underlines, replacement_range,
+                      relative_cursor_pos);
 }
 
 void BrowserPluginGuest::OnImeFinishComposingText(
     int browser_plugin_instance_id,
     bool keep_selection) {
   DCHECK_EQ(browser_plugin_instance_id_, browser_plugin_instance_id);
-  Send(new InputMsg_ImeFinishComposingText(routing_id(), keep_selection));
+  GetWebContents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->GetWidgetInputHandler()
+      ->ImeFinishComposingText(keep_selection);
 }
 
 void BrowserPluginGuest::OnExtendSelectionAndDelete(
@@ -967,11 +993,10 @@ void BrowserPluginGuest::OnExtendSelectionAndDelete(
   RenderFrameHostImpl* rfh = static_cast<RenderFrameHostImpl*>(
       web_contents()->GetFocusedFrame());
   if (rfh)
-    rfh->ExtendSelectionAndDelete(before, after);
+    rfh->GetFrameInputHandler()->ExtendSelectionAndDelete(before, after);
 }
 
 void BrowserPluginGuest::OnLockMouse(bool user_gesture,
-                                     bool last_unlocked_by_target,
                                      bool privileged) {
   if (pending_lock_request_) {
     // Immediately reject the lock because only one pointerLock may be active
@@ -982,9 +1007,12 @@ void BrowserPluginGuest::OnLockMouse(bool user_gesture,
 
   pending_lock_request_ = true;
 
+  RenderWidgetHostImpl* owner = GetOwnerRenderWidgetHost();
+  bool is_last_unlocked_by_target =
+      owner ? owner->is_last_unlocked_by_target() : false;
+
   delegate_->RequestPointerLockPermission(
-      user_gesture,
-      last_unlocked_by_target,
+      user_gesture, is_last_unlocked_by_target,
       base::Bind(&BrowserPluginGuest::PointerLockPermissionResponse,
                  weak_ptr_factory_.GetWeakPtr()));
 }
@@ -1008,8 +1036,11 @@ void BrowserPluginGuest::OnSetFocus(int browser_plugin_instance_id,
 void BrowserPluginGuest::OnSetEditCommandsForNextKeyEvent(
     int browser_plugin_instance_id,
     const std::vector<EditCommand>& edit_commands) {
-  Send(new InputMsg_SetEditCommandsForNextKeyEvent(routing_id(),
-                                                   edit_commands));
+  GetWebContents()
+      ->GetRenderViewHost()
+      ->GetWidget()
+      ->GetWidgetInputHandler()
+      ->SetEditCommandsForNextKeyEvent(edit_commands);
 }
 
 void BrowserPluginGuest::OnSetVisibility(int browser_plugin_instance_id,

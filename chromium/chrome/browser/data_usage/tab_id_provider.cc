@@ -49,7 +49,7 @@ class TabIdProvider::CallbackRunner {
 
   // Runs all the callbacks in the order that they were added. This method must
   // not be called more than once.
-  void RunAll(int32_t tab_id) {
+  void RunAll(int32_t tab_info) {
     DCHECK(thread_checker_.CalledOnValidThread());
     DCHECK(!is_done_);
     is_done_ = true;
@@ -57,7 +57,7 @@ class TabIdProvider::CallbackRunner {
     // |callbacks_| can no longer be modified at this point, so it's impossible
     // for one of the |callbacks_| to add more callbacks to this CallbackRunner.
     for (const auto& callback : callbacks_)
-      callback.Run(tab_id);
+      callback.Run(tab_info);
     callbacks_.clear();
   }
 
@@ -78,7 +78,7 @@ class TabIdProvider::CallbackRunner {
 TabIdProvider::TabIdProvider(base::TaskRunner* task_runner,
                              const tracked_objects::Location& from_here,
                              const TabIdGetter& tab_id_getter)
-    : is_tab_id_ready_(false), tab_id_(-1), weak_ptr_factory_(this) {
+    : is_tab_info_ready_(false), tab_info_(-1), weak_ptr_factory_(this) {
   std::unique_ptr<CallbackRunner> callback_runner(new CallbackRunner());
   weak_callback_runner_ = callback_runner->GetWeakPtr();
   callback_runner->AddCallback(
@@ -98,8 +98,8 @@ TabIdProvider::~TabIdProvider() {}
 
 void TabIdProvider::ProvideTabId(const TabIdCallback& callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  if (is_tab_id_ready_) {
-    callback.Run(tab_id_);
+  if (is_tab_info_ready_) {
+    callback.Run(tab_info_);
     return;
   }
   if (weak_callback_runner_) {
@@ -118,14 +118,14 @@ base::WeakPtr<TabIdProvider> TabIdProvider::GetWeakPtr() {
 }
 
 // static
-const void* TabIdProvider::kUserDataKey =
-    static_cast<void*>(&TabIdProvider::kUserDataKey);
+const void* const TabIdProvider::kTabIdProviderUserDataKey =
+    "TabIdProviderUserDataKey";
 
-void TabIdProvider::OnTabIdReady(int32_t tab_id) {
+void TabIdProvider::OnTabIdReady(int32_t tab_info) {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(!is_tab_id_ready_);
-  tab_id_ = tab_id;
-  is_tab_id_ready_ = true;
+  DCHECK(!is_tab_info_ready_);
+  tab_info_ = tab_info;
+  is_tab_info_ready_ = true;
 }
 
 }  // namespace chrome_browser_data_usage

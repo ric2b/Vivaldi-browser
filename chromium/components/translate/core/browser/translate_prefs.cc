@@ -5,11 +5,13 @@
 #include "components/translate/core/browser/translate_prefs.h"
 
 #include <set>
+#include <utility>
 
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
+#include "base/values.h"
 #include "build/build_config.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
@@ -42,6 +44,13 @@ const char TranslatePrefs::kPrefTranslateTooOftenDeniedForLanguage[] =
 const char kTranslateUI2016Q2TrialName[] = "TranslateUI2016Q2";
 const char kAlwaysTranslateOfferThreshold[] =
     "always_translate_offer_threshold";
+
+#if defined(OS_ANDROID)
+const char TranslatePrefs::kPrefTranslateAutoAlwaysCount[] =
+    "translate_auto_always_count";
+const char TranslatePrefs::kPrefTranslateAutoNeverCount[] =
+    "translate_auto_never_count";
+#endif
 
 // For reading ULP prefs.
 const char kConfidence[] = "confidence";
@@ -123,13 +132,13 @@ base::ListValue* DenialTimeUpdate::GetDenialTimes() {
   bool has_list = has_value && denial_value->GetAsList(&time_list_);
 
   if (!has_list) {
-    time_list_ = new base::ListValue();
+    auto time_list = base::MakeUnique<base::ListValue>();
     double oldest_denial_time = 0;
     bool has_old_style =
         has_value && denial_value->GetAsDouble(&oldest_denial_time);
     if (has_old_style)
-      time_list_->AppendDouble(oldest_denial_time);
-    denial_time_dict->Set(language_, base::WrapUnique(time_list_));
+      time_list->AppendDouble(oldest_denial_time);
+    time_list_ = denial_time_dict->SetList(language_, std::move(time_list));
   }
   return time_list_;
 }
@@ -177,16 +186,14 @@ void TranslatePrefs::ResetToDefaults() {
   ClearBlockedLanguages();
   ClearBlacklistedSites();
   ClearWhitelistedLanguagePairs();
+  prefs_->ClearPref(kPrefTranslateDeniedCount);
+  prefs_->ClearPref(kPrefTranslateIgnoredCount);
+  prefs_->ClearPref(kPrefTranslateAcceptedCount);
 
-  std::vector<std::string> languages;
-  GetLanguageList(&languages);
-  for (std::vector<std::string>::const_iterator it = languages.begin();
-       it != languages.end(); ++it) {
-    const std::string& language = *it;
-    ResetTranslationAcceptedCount(language);
-    ResetTranslationDeniedCount(language);
-    ResetTranslationIgnoredCount(language);
-  }
+#if defined(OS_ANDROID)
+  prefs_->ClearPref(kPrefTranslateAutoAlwaysCount);
+  prefs_->ClearPref(kPrefTranslateAutoNeverCount);
+#endif
 
   prefs_->ClearPref(kPrefTranslateLastDeniedTimeForLanguage);
   prefs_->ClearPref(kPrefTranslateTooOftenDeniedForLanguage);
@@ -360,6 +367,54 @@ void TranslatePrefs::ResetTranslationAcceptedCount(
   update.Get()->SetInteger(language, 0);
 }
 
+#if defined(OS_ANDROID)
+int TranslatePrefs::GetTranslationAutoAlwaysCount(
+    const std::string& language) const {
+  const base::DictionaryValue* dict =
+      prefs_->GetDictionary(kPrefTranslateAutoAlwaysCount);
+  int count = 0;
+  return dict->GetInteger(language, &count) ? count : 0;
+}
+
+void TranslatePrefs::IncrementTranslationAutoAlwaysCount(
+    const std::string& language) {
+  DictionaryPrefUpdate update(prefs_, kPrefTranslateAutoAlwaysCount);
+  base::DictionaryValue* dict = update.Get();
+  int count = 0;
+  dict->GetInteger(language, &count);
+  dict->SetInteger(language, count + 1);
+}
+
+void TranslatePrefs::ResetTranslationAutoAlwaysCount(
+    const std::string& language) {
+  DictionaryPrefUpdate update(prefs_, kPrefTranslateAutoAlwaysCount);
+  update.Get()->SetInteger(language, 0);
+}
+
+int TranslatePrefs::GetTranslationAutoNeverCount(
+    const std::string& language) const {
+  const base::DictionaryValue* dict =
+      prefs_->GetDictionary(kPrefTranslateAutoNeverCount);
+  int count = 0;
+  return dict->GetInteger(language, &count) ? count : 0;
+}
+
+void TranslatePrefs::IncrementTranslationAutoNeverCount(
+    const std::string& language) {
+  DictionaryPrefUpdate update(prefs_, kPrefTranslateAutoNeverCount);
+  base::DictionaryValue* dict = update.Get();
+  int count = 0;
+  dict->GetInteger(language, &count);
+  dict->SetInteger(language, count + 1);
+}
+
+void TranslatePrefs::ResetTranslationAutoNeverCount(
+    const std::string& language) {
+  DictionaryPrefUpdate update(prefs_, kPrefTranslateAutoNeverCount);
+  update.Get()->SetInteger(language, 0);
+}
+#endif  // defined(OS_ANDROID)
+
 void TranslatePrefs::UpdateLastDeniedTime(const std::string& language) {
   if (IsTooOftenDenied(language))
     return;
@@ -494,6 +549,14 @@ void TranslatePrefs::RegisterProfilePrefs(
   registry->RegisterDictionaryPref(
       kPrefLanguageProfile,
       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+#if defined(OS_ANDROID)
+  registry->RegisterDictionaryPref(
+      kPrefTranslateAutoAlwaysCount,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterDictionaryPref(
+      kPrefTranslateAutoNeverCount,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+#endif
 }
 
 // static

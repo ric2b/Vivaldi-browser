@@ -7,11 +7,12 @@
 #ifndef CHROME_BROWSER_CHROME_BROWSER_MAIN_WIN_H_
 #define CHROME_BROWSER_CHROME_BROWSER_MAIN_WIN_H_
 
+#include <memory>
+
 #include "base/files/file_path_watcher.h"
 #include "base/macros.h"
 #include "chrome/browser/chrome_browser_main.h"
 
-class DidRunUpdater;
 class ModuleWatcher;
 
 namespace base {
@@ -70,10 +71,7 @@ class ChromeBrowserMainPartsWin : public ChromeBrowserMainParts {
   static void SetupInstallerUtilStrings();
 
  private:
-#if defined(GOOGLE_CHROME_BUILD)
-  std::unique_ptr<DidRunUpdater> did_run_updater_;
-#endif
-
+  // Watches module load events and forwards them to the ModuleDatabase.
   std::unique_ptr<ModuleWatcher> module_watcher_;
 
   DISALLOW_COPY_AND_ASSIGN(ChromeBrowserMainPartsWin);

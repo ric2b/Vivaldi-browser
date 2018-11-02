@@ -119,7 +119,14 @@ media::PlatformVideoConfig TestPipelineHost::video_config() const {
 
 void TestPipelineHost::SeekDone(const media::PipelineStatusCB& status_cb,
                                 bool success) {
-  status_cb.Run(success ? media::PIPELINE_OK : media::PIPELINE_ERROR_ABORT);
+  if(success) {
+    status_cb.Run(media::PIPELINE_OK);
+    return;
+  }
+
+  LOG(ERROR) << " PROPMEDIA(TEST) : " << __FUNCTION__
+             << ": PIPELINE_ERROR_ABORT";
+  status_cb.Run(media::PIPELINE_ERROR_ABORT);
 }
 
 void TestPipelineHost::Initialized(

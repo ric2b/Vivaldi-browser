@@ -6,6 +6,7 @@
 #define IOS_CHROME_TEST_APP_CHROME_TEST_UTIL_H_
 
 #import "base/ios/block_types.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/web/public/web_state/web_state.h"
 
 namespace ios {
@@ -40,6 +41,13 @@ ios::ChromeBrowserState* GetCurrentIncognitoBrowserState();
 
 // Returns the number of key commands currently registered with the main BVC.
 NSUInteger GetRegisteredKeyCommandsCount();
+
+// Returns the dispatcher for the main BVC.
+// TODO(crbug.com/738881): Use DispatcherForActiveViewController() instead.
+id<BrowserCommands> BrowserCommandDispatcherForMainBVC();
+
+// Returns the dispatcher for the active view controller.
+id<BrowserCommands> DispatcherForActiveViewController();
 
 // Runs |command| using the active view controller.
 void RunCommandWithActiveViewController(GenericChromeCommand* command);

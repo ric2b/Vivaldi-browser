@@ -7,8 +7,19 @@
 gfx::Insets HarmonyLayoutProvider::GetInsetsMetric(int metric) const {
   DCHECK_LT(metric, views::VIEWS_INSETS_MAX);
   switch (metric) {
+    case views::INSETS_BUBBLE_CONTENTS:
+    case views::INSETS_DIALOG_CONTENTS:
+      return gfx::Insets(kHarmonyLayoutUnit, kHarmonyLayoutUnit);
+    case views::INSETS_CHECKBOX_RADIO_BUTTON: {
+      gfx::Insets insets = ChromeLayoutProvider::GetInsetsMetric(metric);
+      // Material Design requires that checkboxes and radio buttons are aligned
+      // flush to the left edge.
+      return gfx::Insets(insets.top(), 0, insets.bottom(), insets.right());
+    }
     case views::INSETS_VECTOR_IMAGE_BUTTON:
       return gfx::Insets(kHarmonyLayoutUnit / 4);
+    case INSETS_TOAST:
+      return gfx::Insets(0, kHarmonyLayoutUnit);
     default:
       return ChromeLayoutProvider::GetInsetsMetric(metric);
   }
@@ -17,10 +28,7 @@ gfx::Insets HarmonyLayoutProvider::GetInsetsMetric(int metric) const {
 int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
   DCHECK_GE(metric, views::VIEWS_INSETS_MAX);
   switch (metric) {
-    case views::DISTANCE_BUBBLE_CONTENTS_HORIZONTAL_MARGIN:
-    case views::DISTANCE_BUBBLE_CONTENTS_VERTICAL_MARGIN:
-    case views::DISTANCE_DIALOG_CONTENTS_HORIZONTAL_MARGIN:
-    case views::DISTANCE_DIALOG_CONTENTS_VERTICAL_MARGIN:
+    case views::DISTANCE_BUBBLE_BUTTON_TOP_MARGIN:
       return kHarmonyLayoutUnit;
     case DISTANCE_CONTROL_LIST_VERTICAL:
       return kHarmonyLayoutUnit * 3 / 4;
@@ -30,6 +38,8 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       // margin we need to subtract out the padding.
       return kVisibleMargin - kHarmonyLayoutUnit / 4;
     }
+    case DISTANCE_CONTROL_TOTAL_VERTICAL_TEXT_PADDING:
+      return kHarmonyLayoutUnit / 2;
     case views::DISTANCE_RELATED_BUTTON_HORIZONTAL:
       return kHarmonyLayoutUnit / 2;
     case views::DISTANCE_RELATED_CONTROL_HORIZONTAL:
@@ -42,8 +52,6 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       return kHarmonyLayoutUnit / 2;
     case views::DISTANCE_DIALOG_BUTTON_BOTTOM_MARGIN:
       return kHarmonyLayoutUnit;
-    case DISTANCE_DIALOG_BUTTON_TOP:
-      return kHarmonyLayoutUnit;
     case views::DISTANCE_DIALOG_BUTTON_MINIMUM_WIDTH:
     case DISTANCE_BUTTON_MINIMUM_WIDTH:
       // Minimum label size plus padding.
@@ -55,19 +63,21 @@ int HarmonyLayoutProvider::GetDistanceMetric(int metric) const {
       return kHarmonyLayoutUnit * 7;
     case DISTANCE_RELATED_LABEL_HORIZONTAL:
       return kHarmonyLayoutUnit;
+    case DISTANCE_RELATED_LABEL_HORIZONTAL_LIST:
+      return kHarmonyLayoutUnit / 2;
     case DISTANCE_SUBSECTION_HORIZONTAL_INDENT:
       return 0;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL:
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_HORIZONTAL_LARGE:
       return kHarmonyLayoutUnit;
-    case DISTANCE_UNRELATED_CONTROL_VERTICAL:
+    case views::DISTANCE_UNRELATED_CONTROL_VERTICAL:
       return kHarmonyLayoutUnit;
     case DISTANCE_UNRELATED_CONTROL_VERTICAL_LARGE:
       return kHarmonyLayoutUnit;
+    default:
+      return ChromeLayoutProvider::GetDistanceMetric(metric);
   }
-  NOTREACHED();
-  return 0;
 }
 
 views::GridLayout::Alignment

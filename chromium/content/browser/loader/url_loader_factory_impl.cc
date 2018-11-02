@@ -7,9 +7,10 @@
 #include "base/memory/ptr_util.h"
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_requester_info.h"
-#include "content/common/resource_request.h"
-#include "content/common/url_loader.mojom.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/url_loader.mojom.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace content {
 
@@ -52,10 +53,13 @@ void URLLoaderFactoryImpl::CreateLoaderAndStart(
     int32_t request_id,
     uint32_t options,
     const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client) {
+    mojom::URLLoaderClientPtr client,
+    const net::MutableNetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK_EQ(options, mojom::kURLLoadOptionNone);
-  CreateLoaderAndStart(requester_info_.get(), std::move(request), routing_id,
-                       request_id, url_request, std::move(client));
+  CreateLoaderAndStart(
+      requester_info_.get(), std::move(request), routing_id, request_id,
+      url_request, std::move(client),
+      static_cast<net::NetworkTrafficAnnotationTag>(traffic_annotation));
 }
 
 void URLLoaderFactoryImpl::SyncLoad(int32_t routing_id,
@@ -73,7 +77,8 @@ void URLLoaderFactoryImpl::CreateLoaderAndStart(
     int32_t routing_id,
     int32_t request_id,
     const ResourceRequest& url_request,
-    mojom::URLLoaderClientPtr client) {
+    mojom::URLLoaderClientPtr client,
+    const net::NetworkTrafficAnnotationTag& traffic_annotation) {
   DCHECK(ResourceDispatcherHostImpl::Get()
              ->io_thread_task_runner()
              ->BelongsToCurrentThread());
@@ -81,7 +86,7 @@ void URLLoaderFactoryImpl::CreateLoaderAndStart(
   ResourceDispatcherHostImpl* rdh = ResourceDispatcherHostImpl::Get();
   rdh->OnRequestResourceWithMojo(requester_info, routing_id, request_id,
                                  url_request, std::move(request),
-                                 std::move(client));
+                                 std::move(client), traffic_annotation);
 }
 
 // static

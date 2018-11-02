@@ -24,6 +24,7 @@
 #include "base/stl_util.h"
 #include "base/strings/string_util.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/thread_checker.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/timer/timer.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -32,6 +33,7 @@
 #include "build/build_config.h"
 #include "gpu/command_buffer/common/mailbox.h"
 #include "gpu/command_buffer/service/image_factory.h"
+#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/mailbox_manager.h"
 #include "gpu/command_buffer/service/preemption_flag.h"
 #include "gpu/command_buffer/service/scheduler.h"
@@ -242,6 +244,8 @@ class GPU_EXPORT GpuChannelMessageFilter : public IPC::MessageFilter {
   scoped_refptr<GpuChannelMessageQueue> message_queue_;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
 
+  base::ThreadChecker io_thread_checker_;
+
   DISALLOW_COPY_AND_ASSIGN(GpuChannelMessageFilter);
 };
 
@@ -270,6 +274,9 @@ GpuChannelMessageQueue::~GpuChannelMessageQueue() = default;
 void GpuChannelMessageQueue::Destroy() {
   // There's no need to reply to sync messages here because the channel is being
   // destroyed and the client Sends will fail.
+  base::AutoLock lock(channel_lock_);
+  channel_ = nullptr;
+
   sync_point_order_data_->Destroy();
 
   if (preempting_flag_)
@@ -279,8 +286,6 @@ void GpuChannelMessageQueue::Destroy() {
   io_task_runner_->PostTask(
       FROM_HERE, base::Bind([](std::unique_ptr<base::OneShotTimer>) {},
                             base::Passed(&timer_)));
-
-  channel_ = nullptr;
 }
 
 bool GpuChannelMessageQueue::IsScheduled() const {
@@ -441,7 +446,7 @@ void GpuChannelMessageQueue::UpdateStateChecking() {
       timer_->Start(
           FROM_HERE,
           base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs) - time_elapsed,
-          this, &GpuChannelMessageQueue::UpdatePreemptionState);
+          base::Bind(&GpuChannelMessageQueue::UpdatePreemptionState, this));
     } else {
       timer_->Stop();
       if (!scheduled_)
@@ -523,9 +528,9 @@ void GpuChannelMessageQueue::TransitionToWaiting() {
 
   preemption_state_ = WAITING;
 
-  timer_->Start(FROM_HERE,
-                base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs), this,
-                &GpuChannelMessageQueue::UpdatePreemptionState);
+  timer_->Start(
+      FROM_HERE, base::TimeDelta::FromMilliseconds(kPreemptWaitTimeMs),
+      base::Bind(&GpuChannelMessageQueue::UpdatePreemptionState, this));
 }
 
 void GpuChannelMessageQueue::TransitionToChecking() {
@@ -554,8 +559,9 @@ void GpuChannelMessageQueue::TransitionToPreempting() {
 
   DCHECK_LE(max_preemption_time_,
             base::TimeDelta::FromMilliseconds(kMaxPreemptTimeMs));
-  timer_->Start(FROM_HERE, max_preemption_time_, this,
-                &GpuChannelMessageQueue::UpdatePreemptionState);
+  timer_->Start(
+      FROM_HERE, max_preemption_time_,
+      base::Bind(&GpuChannelMessageQueue::UpdatePreemptionState, this));
 }
 
 void GpuChannelMessageQueue::TransitionToWouldPreemptDescheduled() {
@@ -578,7 +584,9 @@ GpuChannelMessageFilter::GpuChannelMessageFilter(
     : gpu_channel_(gpu_channel),
       scheduler_(scheduler),
       message_queue_(std::move(message_queue)),
-      main_task_runner_(std::move(main_task_runner)) {}
+      main_task_runner_(std::move(main_task_runner)) {
+  io_thread_checker_.DetachFromThread();
+}
 
 GpuChannelMessageFilter::~GpuChannelMessageFilter() {
   DCHECK(!gpu_channel_);
@@ -605,6 +613,7 @@ void GpuChannelMessageFilter::RemoveRoute(int32_t route_id) {
 }
 
 void GpuChannelMessageFilter::OnFilterAdded(IPC::Channel* channel) {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   DCHECK(!ipc_channel_);
   ipc_channel_ = channel;
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_)
@@ -612,6 +621,7 @@ void GpuChannelMessageFilter::OnFilterAdded(IPC::Channel* channel) {
 }
 
 void GpuChannelMessageFilter::OnFilterRemoved() {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_)
     filter->OnFilterRemoved();
   ipc_channel_ = nullptr;
@@ -619,6 +629,7 @@ void GpuChannelMessageFilter::OnFilterRemoved() {
 }
 
 void GpuChannelMessageFilter::OnChannelConnected(int32_t peer_pid) {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   DCHECK(peer_pid_ == base::kNullProcessId);
   peer_pid_ = peer_pid;
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_)
@@ -626,17 +637,20 @@ void GpuChannelMessageFilter::OnChannelConnected(int32_t peer_pid) {
 }
 
 void GpuChannelMessageFilter::OnChannelError() {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_)
     filter->OnChannelError();
 }
 
 void GpuChannelMessageFilter::OnChannelClosing() {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   for (scoped_refptr<IPC::MessageFilter>& filter : channel_filters_)
     filter->OnChannelClosing();
 }
 
 void GpuChannelMessageFilter::AddChannelFilter(
     scoped_refptr<IPC::MessageFilter> filter) {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   channel_filters_.push_back(filter);
   if (ipc_channel_)
     filter->OnFilterAdded(ipc_channel_);
@@ -646,16 +660,15 @@ void GpuChannelMessageFilter::AddChannelFilter(
 
 void GpuChannelMessageFilter::RemoveChannelFilter(
     scoped_refptr<IPC::MessageFilter> filter) {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   if (ipc_channel_)
     filter->OnFilterRemoved();
   base::Erase(channel_filters_, filter);
 }
 
 bool GpuChannelMessageFilter::OnMessageReceived(const IPC::Message& message) {
+  DCHECK(io_thread_checker_.CalledOnValidThread());
   DCHECK(ipc_channel_);
-
-  if (!gpu_channel_)
-    return MessageErrorHandler(message, "Channel destroyed");
 
   if (message.should_unblock() || message.is_reply())
     return MessageErrorHandler(message, "Unexpected message type");
@@ -755,10 +768,7 @@ GpuChannel::GpuChannel(
     GpuChannelManager* gpu_channel_manager,
     Scheduler* scheduler,
     SyncPointManager* sync_point_manager,
-    GpuWatchdogThread* watchdog,
     scoped_refptr<gl::GLShareGroup> share_group,
-    scoped_refptr<gles2::MailboxManager> mailbox_manager,
-    ServiceDiscardableManager* discardable_manager,
     scoped_refptr<PreemptionFlag> preempting_flag,
     scoped_refptr<PreemptionFlag> preempted_flag,
     scoped_refptr<base::SingleThreadTaskRunner> task_runner,
@@ -776,14 +786,11 @@ GpuChannel::GpuChannel(
       task_runner_(task_runner),
       io_task_runner_(io_task_runner),
       share_group_(share_group),
-      mailbox_manager_(mailbox_manager),
-      watchdog_(watchdog),
-      discardable_manager_(std::move(discardable_manager)),
+      image_manager_(new gles2::ImageManager()),
       is_gpu_host_(is_gpu_host),
       weak_factory_(this) {
   DCHECK(gpu_channel_manager_);
   DCHECK(client_id_);
-  DCHECK(discardable_manager_);
 
   if (!scheduler_) {
     message_queue_ = new GpuChannelMessageQueue(
@@ -820,6 +827,12 @@ void GpuChannel::Init(std::unique_ptr<FilteredSender> channel) {
 void GpuChannel::SetUnhandledMessageListener(IPC::Listener* listener) {
   unhandled_message_listener_ = listener;
 }
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+void GpuChannel::SetProprietaryMediaMessageListener(IPC::Listener* listener) {
+  proprietary_media_message_listener_ = listener;
+}
+#endif
 
 base::WeakPtr<GpuChannel> GpuChannel::AsWeakPtr() {
   return weak_factory_.GetWeakPtr();
@@ -884,6 +897,18 @@ GpuCommandBufferStub* GpuChannel::LookupCommandBuffer(int32_t route_id) {
   return it->second.get();
 }
 
+bool GpuChannel::HasActiveWebGLContext() const {
+  for (auto& kv : stubs_) {
+    gles2::ContextType context_type =
+        kv.second->GetFeatureInfo()->context_type();
+    if (context_type == gles2::CONTEXT_TYPE_WEBGL1 ||
+        context_type == gles2::CONTEXT_TYPE_WEBGL2) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void GpuChannel::LoseAllContexts() {
   gpu_channel_manager_->LoseAllContexts();
 }
@@ -919,10 +944,6 @@ bool GpuChannel::OnControlMessageReceived(const IPC::Message& msg) {
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
-}
-
-SequenceId GpuChannel::GetSequenceId() {
-    return message_queue_->sequence_id();
 }
 
 void GpuChannel::HandleMessage(const IPC::Message& msg) {
@@ -991,6 +1012,11 @@ void GpuChannel::HandleMessageHelper(const IPC::Message& msg) {
 
   if (!handled && unhandled_message_listener_)
     handled = unhandled_message_listener_->OnMessageReceived(msg);
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  if (!handled && proprietary_media_message_listener_)
+    handled = proprietary_media_message_listener_->OnMessageReceived(msg);
+#endif
 
   // Respond to sync messages even if router failed to route.
   if (!handled && msg.is_sync()) {

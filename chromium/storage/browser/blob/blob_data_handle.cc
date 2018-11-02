@@ -76,12 +76,10 @@ BlobDataHandle::BlobDataHandleShared::BlobDataHandleShared(
 }
 
 std::unique_ptr<BlobReader> BlobDataHandle::CreateReader(
-    FileSystemContext* file_system_context,
-    base::SequencedTaskRunner* file_task_runner) const {
+    FileSystemContext* file_system_context) const {
   return std::unique_ptr<BlobReader>(new BlobReader(
       this, std::unique_ptr<BlobReader::FileStreamReaderProvider>(
-                new FileStreamReaderProviderImpl(file_system_context)),
-      file_task_runner));
+                new FileStreamReaderProviderImpl(file_system_context))));
 }
 
 BlobDataHandle::BlobDataHandleShared::~BlobDataHandleShared() {
@@ -144,6 +142,15 @@ void BlobDataHandle::RunOnConstructionComplete(const BlobStatusCallback& done) {
     return;
   }
   shared_->context_->RunOnConstructionComplete(shared_->uuid_, done);
+}
+
+void BlobDataHandle::RunOnConstructionBegin(const BlobStatusCallback& done) {
+  DCHECK(io_task_runner_->RunsTasksInCurrentSequence());
+  if (!shared_->context_.get()) {
+    done.Run(BlobStatus::ERR_INVALID_CONSTRUCTION_ARGUMENTS);
+    return;
+  }
+  shared_->context_->RunOnConstructionBegin(shared_->uuid_, done);
 }
 
 std::unique_ptr<BlobDataSnapshot> BlobDataHandle::CreateSnapshot() const {

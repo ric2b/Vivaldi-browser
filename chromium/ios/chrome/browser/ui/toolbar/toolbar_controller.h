@@ -18,6 +18,8 @@
 #include "ios/chrome/browser/ui/ui_util.h"
 #import "ios/chrome/browser/ui/util/relaxed_bounds_constraints_hittest.h"
 
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 class ReadingListModel;
 @class ToolsMenuConfiguration;
 
@@ -134,8 +136,17 @@ extern const CGRect kToolbarFrame[INTERFACE_IDIOM_COUNT];
 // The reading list model reflected by the toolbar.
 @property(nonatomic, readwrite, assign) ReadingListModel* readingListModel;
 
-// Designated initializer.  |style| determines how the toolbar draws itself.
+// The command dispatcher this and any subordinate objects should use.
+@property(nonatomic, readonly, weak) id<ApplicationCommands, BrowserCommands>
+    dispatcher;
+
+// Designated initializer.
+//   |style| determines how the toolbar draws itself.
+//   |dispatcher| is is the dispatcher for calling methods handled in other
+//     parts of the app.
 - (instancetype)initWithStyle:(ToolbarControllerStyle)style
+                   dispatcher:
+                       (id<ApplicationCommands, BrowserCommands>)dispatcher
     NS_DESIGNATED_INITIALIZER;
 
 - (instancetype)init NS_UNAVAILABLE;

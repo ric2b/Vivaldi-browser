@@ -89,7 +89,7 @@ class CCSerializationPerfTest : public testing::Test {
                            single_sqs == UseSingleSharedQuadState::YES
                                ? "_per_render_pass_shared_quad_state"
                                : "_per_quad_shared_quad_state",
-                           test_name, count, "", true);
+                           test_name, count, "runs/s", true);
   }
 
   static void RunSerializationTestParamTraits(
@@ -133,7 +133,7 @@ class CCSerializationPerfTest : public testing::Test {
                            single_sqs == UseSingleSharedQuadState::YES
                                ? "_per_render_pass_shared_quad_state"
                                : "_per_quad_shared_quad_state",
-                           test_name, count, "", true);
+                           test_name, count, "runs/s", true);
   }
 
   static void RunDeserializationTestStructTraits(
@@ -180,7 +180,7 @@ class CCSerializationPerfTest : public testing::Test {
         single_sqs == UseSingleSharedQuadState::YES
             ? "_per_render_pass_shared_quad_state"
             : "_per_quad_shared_quad_state",
-        test_name, count, "", true);
+        test_name, count, "runs/s", true);
   }
 
   static void RunSerializationTestStructTraits(
@@ -224,13 +224,13 @@ class CCSerializationPerfTest : public testing::Test {
                            single_sqs == UseSingleSharedQuadState::YES
                                ? "_per_render_pass_shared_quad_state"
                                : "_per_quad_shared_quad_state",
-                           test_name, count, "", true);
+                           test_name, count, "runs/s", true);
   }
 
   static void RunComplexCompositorFrameTest(const std::string& test_name) {
     CompositorFrame frame;
 
-    TransferableResourceArray& resource_list = frame.resource_list;
+    std::vector<TransferableResource>& resource_list = frame.resource_list;
     for (uint32_t i = 0; i < 80; ++i) {
       TransferableResource arbitrary_resource;
       resource_list.push_back(arbitrary_resource);
@@ -303,7 +303,8 @@ class CCSerializationPerfTest : public testing::Test {
     std::unique_ptr<RenderPass> pass_in = RenderPass::Create();
     pass_in->SetAll(root_id, arbitrary_rect1, arbitrary_rect2,
                     arbitrary_matrix1, arbitrary_filters2, arbitrary_filters1,
-                    arbitrary_color_space, arbitrary_bool1);
+                    arbitrary_color_space, arbitrary_bool1, arbitrary_bool1,
+                    arbitrary_bool1);
 
     // Texture quads
     for (uint32_t i = 0; i < 10; ++i) {

@@ -38,18 +38,6 @@ namespace views {
 
 namespace {
 
-const char* kAtomsToCache[] = {
-  "XdndActionCopy",
-  "XdndDrop",
-  "XdndEnter",
-  "XdndFinished",
-  "XdndLeave",
-  "XdndPosition",
-  "XdndStatus",
-  "XdndTypeList",
-  NULL
-};
-
 class TestDragDropClient;
 
 // Collects messages which would otherwise be sent to |xid_| via
@@ -195,8 +183,6 @@ class TestDragDropClient : public SimpleTestDragDropClient {
   // for that window.
   std::map< ::Window, ClientMessageEventCollector*> collectors_;
 
-  ui::X11AtomCache atom_cache_;
-
   DISALLOW_COPY_AND_ASSIGN(TestDragDropClient);
 };
 
@@ -310,20 +296,18 @@ TestDragDropClient::TestDragDropClient(
     aura::Window* window,
     DesktopNativeCursorManager* cursor_manager)
     : SimpleTestDragDropClient(window, cursor_manager),
-      source_xid_(window->GetHost()->GetAcceleratedWidget()),
-      atom_cache_(gfx::GetXDisplay(), kAtomsToCache) {
-}
+      source_xid_(window->GetHost()->GetAcceleratedWidget()) {}
 
 TestDragDropClient::~TestDragDropClient() {
 }
 
 Atom TestDragDropClient::GetAtom(const char* name) {
-  return atom_cache_.GetAtom(name);
+  return gfx::GetAtom(name);
 }
 
 bool TestDragDropClient::MessageHasType(const XClientMessageEvent& event,
                                         const char* type) {
-  return event.message_type == atom_cache_.GetAtom(type);
+  return event.message_type == GetAtom(type);
 }
 
 void TestDragDropClient::SetEventCollectorFor(
@@ -339,7 +323,7 @@ void TestDragDropClient::OnStatus(XID target_window,
                                   bool will_accept_drop,
                                   ::Atom accepted_action) {
   XClientMessageEvent event;
-  event.message_type = atom_cache_.GetAtom("XdndStatus");
+  event.message_type = GetAtom("XdndStatus");
   event.format = 32;
   event.window = source_xid_;
   event.data.l[0] = target_window;
@@ -354,7 +338,7 @@ void TestDragDropClient::OnFinished(XID target_window,
                                     bool accepted_drop,
                                     ::Atom performed_action) {
   XClientMessageEvent event;
-  event.message_type = atom_cache_.GetAtom("XdndFinished");
+  event.message_type = GetAtom("XdndFinished");
   event.format = 32;
   event.window = source_xid_;
   event.data.l[0] = target_window;

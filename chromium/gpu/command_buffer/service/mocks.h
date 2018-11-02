@@ -30,7 +30,8 @@ class CommandBufferServiceBase;
 // Mocks an AsyncAPIInterface, using GMock.
 class AsyncAPIMock : public AsyncAPIInterface {
  public:
-  explicit AsyncAPIMock(bool default_do_commands);
+  explicit AsyncAPIMock(bool default_do_commands,
+                        CommandBufferServiceBase* command_buffer_service);
   virtual ~AsyncAPIMock();
 
   error::Error FakeDoCommands(unsigned int num_commands,
@@ -76,12 +77,6 @@ class AsyncAPIMock : public AsyncAPIInterface {
 
   base::StringPiece GetLogPrefix() override { return "None"; }
 
-  // Sets the engine, to forward SetToken commands to it.
-  void set_command_buffer_service(
-      CommandBufferServiceBase* command_buffer_service) {
-    command_buffer_service_ = command_buffer_service;
-  }
-
   // Forwards the SetToken commands to the engine.
   void SetToken(unsigned int command,
                 unsigned int arg_count,
@@ -125,24 +120,26 @@ class MockProgramCache : public ProgramCache {
   MockProgramCache();
   virtual ~MockProgramCache();
 
-  MOCK_METHOD7(LoadLinkedProgram, ProgramLoadResult(
-      GLuint program,
-      Shader* shader_a,
-      Shader* shader_b,
-      const LocationMap* bind_attrib_location_map,
-      const std::vector<std::string>& transform_feedback_varyings,
-      GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& callback));
+  MOCK_METHOD7(LoadLinkedProgram,
+               ProgramLoadResult(
+                   GLuint program,
+                   Shader* shader_a,
+                   Shader* shader_b,
+                   const LocationMap* bind_attrib_location_map,
+                   const std::vector<std::string>& transform_feedback_varyings,
+                   GLenum transform_feedback_buffer_mode,
+                   GLES2DecoderClient* client));
 
-  MOCK_METHOD7(SaveLinkedProgram, void(
-      GLuint program,
-      const Shader* shader_a,
-      const Shader* shader_b,
-      const LocationMap* bind_attrib_location_map,
-      const std::vector<std::string>& transform_feedback_varyings,
-      GLenum transform_feedback_buffer_mode,
-      const ShaderCacheCallback& callback));
-  MOCK_METHOD1(LoadProgram, void(const std::string&));
+  MOCK_METHOD7(SaveLinkedProgram,
+               void(GLuint program,
+                    const Shader* shader_a,
+                    const Shader* shader_b,
+                    const LocationMap* bind_attrib_location_map,
+                    const std::vector<std::string>& transform_feedback_varyings,
+                    GLenum transform_feedback_buffer_mode,
+                    GLES2DecoderClient* client));
+  MOCK_METHOD2(LoadProgram, void(const std::string&, const std::string&));
+  MOCK_METHOD1(Trim, size_t(size_t));
 
  private:
   MOCK_METHOD0(ClearBackend, void());

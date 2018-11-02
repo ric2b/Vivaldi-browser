@@ -49,13 +49,14 @@ class OffscreenBrowserCompositorOutputSurface
   void SwapBuffers(cc::OutputSurfaceFrame frame) override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
+  gfx::BufferFormat GetOverlayBufferFormat() const override;
   bool SurfaceIsSuspendForRecycle() const override;
   uint32_t GetFramebufferCopyTextureFormat() override;
 
   // BrowserCompositorOutputSurface implementation.
   void OnReflectorChanged() override;
 #if defined(OS_MACOSX)
-  void SetSurfaceSuspendedForRecycle(bool suspended) override {};
+  void SetSurfaceSuspendedForRecycle(bool suspended) override {}
 #endif
 
   void OnSwapBuffersComplete(const std::vector<ui::LatencyInfo>& latency_info);

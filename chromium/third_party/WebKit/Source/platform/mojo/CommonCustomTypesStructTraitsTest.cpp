@@ -21,15 +21,15 @@ class TestString16Impl : public mojo::common::test::blink::TestString16 {
 
   // TestString16 implementation:
   void BounceString16(const String& in,
-                      const BounceString16Callback& callback) override {
-    callback.Run(in);
+                      BounceString16Callback callback) override {
+    std::move(callback).Run(in);
   }
 
  private:
   mojo::Binding<mojo::common::test::blink::TestString16> binding_;
 };
 
-class CommonCustomTypesStructTraitsTest : public testing::Test {
+class CommonCustomTypesStructTraitsTest : public ::testing::Test {
  protected:
   CommonCustomTypesStructTraitsTest() {}
   ~CommonCustomTypesStructTraitsTest() override {}

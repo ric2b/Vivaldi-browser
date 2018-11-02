@@ -4,6 +4,8 @@
 
 #include "components/autofill/content/renderer/form_autofill_util.h"
 
+#include <algorithm>
+#include <limits>
 #include <map>
 #include <memory>
 #include <set>
@@ -43,9 +45,9 @@ using blink::WebElement;
 using blink::WebElementCollection;
 using blink::WebFormControlElement;
 using blink::WebFormElement;
-using blink::WebFrame;
 using blink::WebInputElement;
 using blink::WebLabelElement;
+using blink::WebLocalFrame;
 using blink::WebNode;
 using blink::WebOptionElement;
 using blink::WebSelectElement;
@@ -109,9 +111,7 @@ bool IsElementInControlElementSet(
     return false;
   const WebFormControlElement form_control_element =
       element.ToConst<WebFormControlElement>();
-  return std::find(control_elements.begin(),
-                   control_elements.end(),
-                   form_control_element) != control_elements.end();
+  return base::ContainsValue(control_elements, form_control_element);
 }
 
 bool IsElementInsideFormOrFieldSet(const WebElement& element) {
@@ -1194,7 +1194,7 @@ bool ExtractFormData(const WebFormElement& form_element, FormData* data) {
       data, NULL);
 }
 
-bool IsFormVisible(blink::WebFrame* frame,
+bool IsFormVisible(blink::WebLocalFrame* frame,
                    const blink::WebFormElement& form_element,
                    const GURL& canonical_action,
                    const GURL& canonical_origin,
@@ -1473,7 +1473,7 @@ bool WebFormElementToFormData(
     ExtractMask extract_mask,
     FormData* form,
     FormFieldData* field) {
-  const WebFrame* frame = form_element.GetDocument().GetFrame();
+  const WebLocalFrame* frame = form_element.GetDocument().GetFrame();
   if (!frame)
     return false;
 
@@ -1762,7 +1762,7 @@ bool ClearPreviewedFormWithElement(const WebFormControlElement& element,
   return true;
 }
 
-bool IsWebpageEmpty(const blink::WebFrame* frame) {
+bool IsWebpageEmpty(const blink::WebLocalFrame* frame) {
   blink::WebDocument document = frame->GetDocument();
 
   return IsWebElementEmpty(document.Head()) &&

@@ -32,11 +32,11 @@ extern const char kChromeUIOfflineURL[];
 extern const char kChromeUIPhysicalWebURL[];
 extern const char kChromeUIPopularSitesInternalsURL[];
 extern const char kChromeUISettingsURL[];
+extern const char kChromeUISuggestionsURL[];
 extern const char kChromeUITermsURL[];
 extern const char kChromeUIVersionURL[];
 
 // URL components for Chrome on iOS.
-extern const char kChromeUIAppleFlagsHost[];
 extern const char kChromeUIBookmarksHost[];
 extern const char kChromeUIBrowserCrashHost[];
 extern const char kChromeUIChromeURLsHost[];
@@ -57,6 +57,7 @@ extern const char kChromeUIPhysicalWebHost[];
 extern const char kChromeUIPopularSitesInternalsHost[];
 extern const char kChromeUIPolicyHost[];
 extern const char kChromeUISignInInternalsHost[];
+extern const char kChromeUISuggestionsHost[];
 extern const char kChromeUISyncInternalsHost[];
 extern const char kChromeUITermsHost[];
 extern const char kChromeUIVersionHost[];

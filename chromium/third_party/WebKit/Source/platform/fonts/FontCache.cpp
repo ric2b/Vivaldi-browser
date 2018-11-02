@@ -30,7 +30,9 @@
 #include "platform/fonts/FontCache.h"
 
 #include <memory>
+
 #include "base/trace_event/process_memory_dump.h"
+#include "build/build_config.h"
 #include "platform/FontFamilyNames.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
@@ -40,6 +42,7 @@
 #include "platform/fonts/FontCacheKey.h"
 #include "platform/fonts/FontDataCache.h"
 #include "platform/fonts/FontDescription.h"
+#include "platform/fonts/FontGlobalContext.h"
 #include "platform/fonts/FontPlatformData.h"
 #include "platform/fonts/FontSmoothingMode.h"
 #include "platform/fonts/SimpleFontData.h"
@@ -59,52 +62,30 @@
 #include "public/platform/Platform.h"
 #include "ui/gfx/font_list.h"
 
-using namespace WTF;
-
 namespace blink {
 
-#if !OS(WIN) && !OS(LINUX)
+#if !defined(OS_WIN) && !defined(OS_LINUX)
 FontCache::FontCache() : purge_prevent_count_(0), font_manager_(nullptr) {}
-#endif  // !OS(WIN) && !OS(LINUX)
-
-typedef HashMap<unsigned,
-                std::unique_ptr<FontPlatformData>,
-                WTF::IntHash<unsigned>,
-                WTF::UnsignedWithZeroKeyHashTraits<unsigned>>
-    SizedFontPlatformDataSet;
-typedef HashMap<FontCacheKey,
-                SizedFontPlatformDataSet,
-                FontCacheKeyHash,
-                FontCacheKeyTraits>
-    FontPlatformDataCache;
-typedef HashMap<FallbackListCompositeKey,
-                std::unique_ptr<ShapeCache>,
-                FallbackListCompositeKeyHash,
-                FallbackListCompositeKeyTraits>
-    FallbackListShaperCache;
-
-static FontPlatformDataCache* g_font_platform_data_cache = nullptr;
-static FallbackListShaperCache* g_fallback_list_shaper_cache = nullptr;
+#endif  // !defined(OS_WIN) && !defined(OS_LINUX)
 
 SkFontMgr* FontCache::static_font_manager_ = nullptr;
 
-#if OS(WIN)
+#if defined(OS_WIN)
 bool FontCache::antialiased_text_enabled_ = false;
 bool FontCache::lcd_text_enabled_ = false;
 float FontCache::device_scale_factor_ = 1.0;
 bool FontCache::use_skia_font_fallback_ = false;
-#endif  // OS(WIN)
+#endif  // defined(OS_WIN)
 
 FontCache* FontCache::GetFontCache() {
-  DEFINE_STATIC_LOCAL(FontCache, global_font_cache, ());
-  return &global_font_cache;
+  return &FontGlobalContext::GetFontCache();
 }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
 FontPlatformData* FontCache::SystemFontPlatformData(
     const FontDescription& font_description) {
   const AtomicString& family = FontCache::SystemFontFamily();
-#if OS(LINUX)
+#if defined(OS_LINUX)
   if (family.IsEmpty() || family == FontFamilyNames::system_ui)
     return nullptr;
 #else
@@ -119,12 +100,12 @@ FontPlatformData* FontCache::GetFontPlatformData(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     AlternateFontName alternate_font_name) {
-  if (!g_font_platform_data_cache) {
-    g_font_platform_data_cache = new FontPlatformDataCache;
+  if (!platform_init_) {
+    platform_init_ = true;
     PlatformInit();
   }
 
-#if !OS(MACOSX)
+#if !defined(OS_MACOSX)
   if (creation_params.CreationType() == kCreateFontByFamily &&
       creation_params.Family() == FontFamilyNames::system_ui) {
     return SystemFontPlatformData(font_description);
@@ -138,7 +119,7 @@ FontPlatformData* FontCache::GetFontPlatformData(
   // Remove the font size from the cache key, and handle the font size
   // separately in the inner HashMap. So that different size of FontPlatformData
   // can share underlying SkTypeface.
-  if (RuntimeEnabledFeatures::fontCacheScalingEnabled())
+  if (RuntimeEnabledFeatures::FontCacheScalingEnabled())
     key.ClearFontSize();
 
   FontPlatformData* result;
@@ -148,7 +129,7 @@ FontPlatformData* FontCache::GetFontPlatformData(
     // addResult's scope must end before we recurse for alternate family names
     // below, to avoid trigering its dtor hash-changed asserts.
     SizedFontPlatformDataSet* sized_fonts =
-        &g_font_platform_data_cache->insert(key, SizedFontPlatformDataSet())
+        &font_platform_data_cache_.insert(key, SizedFontPlatformDataSet())
              .stored_value->value;
     bool was_empty = sized_fonts->IsEmpty();
 
@@ -188,7 +169,7 @@ FontPlatformData* FontCache::GetFontPlatformData(
     if (result) {
       // Cache the result under the old name.
       auto adding =
-          &g_font_platform_data_cache->insert(key, SizedFontPlatformDataSet())
+          &font_platform_data_cache_.insert(key, SizedFontPlatformDataSet())
                .stored_value->value;
       adding->Set(rounded_size, WTF::WrapUnique(new FontPlatformData(*result)));
     }
@@ -202,7 +183,7 @@ std::unique_ptr<FontPlatformData> FontCache::ScaleFontPlatformData(
     const FontDescription& font_description,
     const FontFaceCreationParams& creation_params,
     float font_size) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   return CreateFontPlatformData(font_description, creation_params, font_size);
 #else
   return WTF::MakeUnique<FontPlatformData>(font_platform_data, font_size);
@@ -210,32 +191,17 @@ std::unique_ptr<FontPlatformData> FontCache::ScaleFontPlatformData(
 }
 
 ShapeCache* FontCache::GetShapeCache(const FallbackListCompositeKey& key) {
-  if (!g_fallback_list_shaper_cache)
-    g_fallback_list_shaper_cache = new FallbackListShaperCache;
-
-  FallbackListShaperCache::iterator it =
-      g_fallback_list_shaper_cache->find(key);
+  FallbackListShaperCache::iterator it = fallback_list_shaper_cache_.find(key);
   ShapeCache* result = nullptr;
-  if (it == g_fallback_list_shaper_cache->end()) {
+  if (it == fallback_list_shaper_cache_.end()) {
     result = new ShapeCache();
-    g_fallback_list_shaper_cache->Set(key, WTF::WrapUnique(result));
+    fallback_list_shaper_cache_.Set(key, WTF::WrapUnique(result));
   } else {
     result = it->value.get();
   }
 
   DCHECK(result);
   return result;
-}
-
-typedef HashMap<FontCache::FontFileKey,
-                RefPtr<OpenTypeVerticalData>,
-                IntHash<FontCache::FontFileKey>,
-                UnsignedWithZeroKeyHashTraits<FontCache::FontFileKey>>
-    FontVerticalDataCache;
-
-FontVerticalDataCache& FontVerticalDataCacheInstance() {
-  DEFINE_STATIC_LOCAL(FontVerticalDataCache, font_vertical_data_cache, ());
-  return font_vertical_data_cache;
 }
 
 void FontCache::SetFontManager(sk_sp<SkFontMgr> font_manager) {
@@ -247,7 +213,7 @@ PassRefPtr<OpenTypeVerticalData> FontCache::GetVerticalData(
     const FontFileKey& key,
     const FontPlatformData& platform_data) {
   FontVerticalDataCache& font_vertical_data_cache =
-      FontVerticalDataCacheInstance();
+      FontGlobalContext::GetFontVerticalDataCache();
   FontVerticalDataCache::iterator result = font_vertical_data_cache.find(key);
   if (result != font_vertical_data_cache.end())
     return result.Get()->value;
@@ -264,8 +230,6 @@ void FontCache::AcceptLanguagesChanged(const String& accept_languages) {
   AcceptLanguagesResolver::AcceptLanguagesChanged(accept_languages);
   GetFontCache()->InvalidateShapeCache();
 }
-
-static FontDataCache* g_font_data_cache = 0;
 
 PassRefPtr<SimpleFontData> FontCache::GetFontData(
     const FontDescription& font_description,
@@ -288,16 +252,14 @@ PassRefPtr<SimpleFontData> FontCache::FontDataFromFontPlatformData(
     const FontPlatformData* platform_data,
     ShouldRetain should_retain,
     bool subpixel_ascent_descent) {
-  if (!g_font_data_cache)
-    g_font_data_cache = new FontDataCache;
 
 #if DCHECK_IS_ON()
   if (should_retain == kDoNotRetain)
     DCHECK(purge_prevent_count_);
 #endif
 
-  return g_font_data_cache->Get(platform_data, should_retain,
-                                subpixel_ascent_descent);
+  return font_data_cache_.Get(platform_data, should_retain,
+                              subpixel_ascent_descent);
 }
 
 bool FontCache::IsPlatformFamilyMatchAvailable(
@@ -332,35 +294,30 @@ SimpleFontData* FontCache::GetNonRetainedLastResortFallbackFont(
 }
 
 void FontCache::ReleaseFontData(const SimpleFontData* font_data) {
-  DCHECK(g_font_data_cache);
-
-  g_font_data_cache->Release(font_data);
+  font_data_cache_.Release(font_data);
 }
 
-static inline void PurgePlatformFontDataCache() {
-  if (!g_font_platform_data_cache)
-    return;
-
+void FontCache::PurgePlatformFontDataCache() {
   Vector<FontCacheKey> keys_to_remove;
-  keys_to_remove.ReserveInitialCapacity(g_font_platform_data_cache->size());
-  for (auto& sized_fonts : *g_font_platform_data_cache) {
+  keys_to_remove.ReserveInitialCapacity(font_platform_data_cache_.size());
+  for (auto& sized_fonts : font_platform_data_cache_) {
     Vector<unsigned> sizes_to_remove;
     sizes_to_remove.ReserveInitialCapacity(sized_fonts.value.size());
     for (const auto& platform_data : sized_fonts.value) {
       if (platform_data.value &&
-          !g_font_data_cache->Contains(platform_data.value.get()))
+          !font_data_cache_.Contains(platform_data.value.get()))
         sizes_to_remove.push_back(platform_data.key);
     }
     sized_fonts.value.RemoveAll(sizes_to_remove);
     if (sized_fonts.value.IsEmpty())
       keys_to_remove.push_back(sized_fonts.key);
   }
-  g_font_platform_data_cache->RemoveAll(keys_to_remove);
+  font_platform_data_cache_.RemoveAll(keys_to_remove);
 }
 
-static inline void PurgeFontVerticalDataCache() {
+void FontCache::PurgeFontVerticalDataCache() {
   FontVerticalDataCache& font_vertical_data_cache =
-      FontVerticalDataCacheInstance();
+      FontGlobalContext::GetFontVerticalDataCache();
   if (!font_vertical_data_cache.IsEmpty()) {
     // Mark & sweep unused verticalData
     FontVerticalDataCache::iterator vertical_data_end =
@@ -372,7 +329,7 @@ static inline void PurgeFontVerticalDataCache() {
         vertical_data->value->SetInFontCache(false);
     }
 
-    g_font_data_cache->MarkAllVerticalData();
+    font_data_cache_.MarkAllVerticalData();
 
     Vector<FontCache::FontFileKey> keys_to_remove;
     keys_to_remove.ReserveInitialCapacity(font_vertical_data_cache.size());
@@ -386,18 +343,16 @@ static inline void PurgeFontVerticalDataCache() {
   }
 }
 
-static inline void PurgeFallbackListShaperCache() {
+void FontCache::PurgeFallbackListShaperCache() {
   unsigned items = 0;
-  if (g_fallback_list_shaper_cache) {
-    FallbackListShaperCache::iterator iter;
-    for (iter = g_fallback_list_shaper_cache->begin();
-         iter != g_fallback_list_shaper_cache->end(); ++iter) {
-      items += iter->value->size();
-    }
-    g_fallback_list_shaper_cache->clear();
+  FallbackListShaperCache::iterator iter;
+  for (iter = fallback_list_shaper_cache_.begin();
+       iter != fallback_list_shaper_cache_.end(); ++iter) {
+    items += iter->value->size();
   }
-  DEFINE_STATIC_LOCAL(CustomCountHistogram, shape_cache_histogram,
-                      ("Blink.Fonts.ShapeCache", 1, 1000000, 50));
+  fallback_list_shaper_cache_.clear();
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, shape_cache_histogram,
+                                  ("Blink.Fonts.ShapeCache", 1, 1000000, 50));
   shape_cache_histogram.Count(items);
 }
 
@@ -412,7 +367,7 @@ void FontCache::Purge(PurgeSeverity purge_severity) {
   if (purge_prevent_count_)
     return;
 
-  if (!g_font_data_cache || !g_font_data_cache->Purge(purge_severity))
+  if (!font_data_cache_.Purge(purge_severity))
     return;
 
   PurgePlatformFontDataCache();
@@ -420,44 +375,27 @@ void FontCache::Purge(PurgeSeverity purge_severity) {
   PurgeFallbackListShaperCache();
 }
 
-static bool g_invalidate_font_cache = false;
-
-HeapHashSet<WeakMember<FontCacheClient>>& FontCacheClients() {
-  DEFINE_STATIC_LOCAL(HeapHashSet<WeakMember<FontCacheClient>>, clients,
-                      (new HeapHashSet<WeakMember<FontCacheClient>>));
-  g_invalidate_font_cache = true;
-  return clients;
-}
-
 void FontCache::AddClient(FontCacheClient* client) {
   CHECK(client);
-  DCHECK(!FontCacheClients().Contains(client));
-  FontCacheClients().insert(client);
+  if (!font_cache_clients_) {
+    font_cache_clients_ = new HeapHashSet<WeakMember<FontCacheClient>>();
+  }
+  DCHECK(!font_cache_clients_->Contains(client));
+  font_cache_clients_->insert(client);
 }
 
-static unsigned short g_generation = 0;
-
 unsigned short FontCache::Generation() {
-  return g_generation;
+  return generation_;
 }
 
 void FontCache::Invalidate() {
-  if (!g_invalidate_font_cache) {
-    DCHECK(!g_font_platform_data_cache);
-    return;
+  font_platform_data_cache_.clear();
+  generation_++;
+
+  if (font_cache_clients_) {
+    for (const auto& client : *font_cache_clients_)
+      client->FontCacheInvalidated();
   }
-
-  if (g_font_platform_data_cache) {
-    delete g_font_platform_data_cache;
-    g_font_platform_data_cache = new FontPlatformDataCache;
-  }
-
-  g_generation++;
-
-  HeapVector<Member<FontCacheClient>> clients;
-  CopyToVector(FontCacheClients(), clients);
-  for (const auto& client : clients)
-    client->FontCacheInvalidated();
 
   Purge(kForcePurge);
 }
@@ -473,11 +411,11 @@ void FontCache::CrashWithFontInfo(const FontDescription* font_description) {
   }
 
   FontDescription font_description_copy = *font_description;
-  debug::Alias(&font_description_copy);
+  WTF::debug::Alias(&font_description_copy);
 
-  debug::Alias(&font_cache);
-  debug::Alias(&font_mgr);
-  debug::Alias(&num_families);
+  WTF::debug::Alias(&font_cache);
+  WTF::debug::Alias(&font_mgr);
+  WTF::debug::Alias(&num_families);
 
   CHECK(false);
 }
@@ -485,12 +423,10 @@ void FontCache::CrashWithFontInfo(const FontDescription* font_description) {
 void FontCache::DumpFontPlatformDataCache(
     base::trace_event::ProcessMemoryDump* memory_dump) {
   DCHECK(IsMainThread());
-  if (!g_font_platform_data_cache)
-    return;
   base::trace_event::MemoryAllocatorDump* dump =
       memory_dump->CreateAllocatorDump("font_caches/font_platform_data_cache");
   size_t font_platform_data_objects_size =
-      g_font_platform_data_cache->size() * sizeof(FontPlatformData);
+      font_platform_data_cache_.size() * sizeof(FontPlatformData);
   dump->AddScalar("size", "bytes", font_platform_data_objects_size);
   memory_dump->AddSuballocation(dump->guid(),
                                 WTF::Partitions::kAllocatedObjectPoolName);
@@ -499,15 +435,12 @@ void FontCache::DumpFontPlatformDataCache(
 void FontCache::DumpShapeResultCache(
     base::trace_event::ProcessMemoryDump* memory_dump) {
   DCHECK(IsMainThread());
-  if (!g_fallback_list_shaper_cache) {
-    return;
-  }
   base::trace_event::MemoryAllocatorDump* dump =
       memory_dump->CreateAllocatorDump("font_caches/shape_caches");
   size_t shape_result_cache_size = 0;
   FallbackListShaperCache::iterator iter;
-  for (iter = g_fallback_list_shaper_cache->begin();
-       iter != g_fallback_list_shaper_cache->end(); ++iter) {
+  for (iter = fallback_list_shaper_cache_.begin();
+       iter != fallback_list_shaper_cache_.end(); ++iter) {
     shape_result_cache_size += iter->value->ByteSize();
   }
   dump->AddScalar("size", "bytes", shape_result_cache_size);

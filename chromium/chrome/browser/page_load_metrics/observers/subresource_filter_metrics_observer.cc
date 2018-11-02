@@ -4,10 +4,13 @@
 
 #include "chrome/browser/page_load_metrics/observers/subresource_filter_metrics_observer.h"
 
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
 #include "components/subresource_filter/core/common/activation_decision.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 
 using subresource_filter::ContentSubresourceFilterDriverFactory;
@@ -113,6 +116,10 @@ const char kHistogramSubresourceFilterActivationDecision[] =
 const char kHistogramSubresourceFilterActivationDecisionReload[] =
     "PageLoad.Clients.SubresourceFilter.ActivationDecision.LoadType.Reload";
 
+const char kUkmSubresourceFilterName[] = "SubresourceFilter";
+const char kUkmSubresourceFilterActivationDecision[] = "ActivationDecision";
+const char kUkmSubresourceFilterDryRun[] = "DryRun";
+
 }  // namespace internal
 
 namespace {
@@ -135,6 +142,28 @@ void LogActivationDecisionMetrics(content::NavigationHandle* navigation_handle,
 
 }  // namespace
 
+SubresourceFilterMetricsObserver::SubresourceFilterMetricsObserver()
+    : scoped_observer_(this) {}
+SubresourceFilterMetricsObserver::~SubresourceFilterMetricsObserver() = default;
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+SubresourceFilterMetricsObserver::OnStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url,
+    bool started_in_foreground) {
+  navigation_handle_ = navigation_handle;
+  auto* observer_manager =
+      subresource_filter::SubresourceFilterObserverManager::FromWebContents(
+          navigation_handle->GetWebContents());
+  // |observer_manager| isn't constructed if the feature for subresource
+  // filtering isn't enabled.
+  if (observer_manager) {
+    scoped_observer_.Add(observer_manager);
+    return CONTINUE_OBSERVING;
+  }
+  return STOP_OBSERVING;
+}
+
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SubresourceFilterMetricsObserver::FlushMetricsOnAppEnterBackground(
     const page_load_metrics::mojom::PageLoadTiming& timing,
@@ -150,14 +179,34 @@ SubresourceFilterMetricsObserver::FlushMetricsOnAppEnterBackground(
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SubresourceFilterMetricsObserver::OnCommit(
-    content::NavigationHandle* navigation_handle) {
-  const auto* subres_filter =
-      ContentSubresourceFilterDriverFactory::FromWebContents(
-          navigation_handle->GetWebContents());
-  if (subres_filter)
-    LogActivationDecisionMetrics(
-        navigation_handle,
-        subres_filter->GetActivationDecisionForLastCommittedPageLoad());
+    content::NavigationHandle* navigation_handle,
+    ukm::SourceId source_id) {
+  // Just in case OnSubresourceFilterGoingAway is called before this point.
+  if (!activation_decision_) {
+    DCHECK(!scoped_observer_.IsObservingSources());
+    return STOP_OBSERVING;
+  }
+
+  did_commit_ = true;
+  navigation_handle_ = nullptr;
+  DCHECK(scoped_observer_.IsObservingSources());
+  LogActivationDecisionMetrics(navigation_handle, *activation_decision_);
+  scoped_observer_.RemoveAll();
+
+  ukm::UkmRecorder* ukm_recorder = g_browser_process->ukm_recorder();
+  if (ukm_recorder) {
+    std::unique_ptr<ukm::UkmEntryBuilder> builder =
+        ukm_recorder->GetEntryBuilder(source_id,
+                                      internal::kUkmSubresourceFilterName);
+    builder->AddMetric(internal::kUkmSubresourceFilterActivationDecision,
+                       static_cast<int64_t>(*activation_decision_));
+    if (*activation_level_ == subresource_filter::ActivationLevel::DRYRUN) {
+      DCHECK_EQ(subresource_filter::ActivationDecision::ACTIVATED,
+                *activation_decision_);
+      builder->AddMetric(internal::kUkmSubresourceFilterDryRun, true);
+    }
+  }
+
   return CONTINUE_OBSERVING;
 }
 
@@ -295,6 +344,26 @@ void SubresourceFilterMetricsObserver::MediaStartedPlaying(
     const content::WebContentsObserver::MediaPlayerInfo& video_type,
     bool is_in_main_frame) {
   played_media_ = true;
+}
+
+void SubresourceFilterMetricsObserver::OnSubresourceFilterGoingAway() {
+  scoped_observer_.RemoveAll();
+}
+
+void SubresourceFilterMetricsObserver::OnPageActivationComputed(
+    content::NavigationHandle* navigation_handle,
+    subresource_filter::ActivationDecision activation_decision,
+    const subresource_filter::ActivationState& activation_state) {
+  // Make sure we don't get notifications from subsequent navigations.
+  if (navigation_handle != navigation_handle_)
+    return;
+  // Ensure this will always be called at most once before commit.
+  DCHECK(!did_commit_);
+  DCHECK(!activation_decision_);
+  activation_decision_ = activation_decision;
+
+  DCHECK(!activation_level_);
+  activation_level_ = activation_state.activation_level;
 }
 
 void SubresourceFilterMetricsObserver::OnGoingAway(

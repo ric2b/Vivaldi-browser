@@ -4,6 +4,7 @@
 
 #include <map>
 #include <memory>
+#include <sstream>
 #include <string>
 
 #include "base/bind.h"
@@ -14,9 +15,12 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
+#include "base/strings/pattern.h"
+#include "base/strings/string16.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/test/histogram_tester.h"
 #include "base/test/simple_test_clock.h"
 #include "chrome/browser/browser_process.h"
@@ -59,13 +63,17 @@
 #include "components/subresource_filter/core/common/scoped_timers.h"
 #include "components/subresource_filter/core/common/test_ruleset_creator.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
+#include "components/url_pattern_index/proto/rules.pb.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/notification_types.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/referrer.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
@@ -78,6 +86,8 @@
 #include "url/gurl.h"
 
 namespace {
+
+namespace proto = url_pattern_index::proto;
 
 // The path to a multi-frame document used for tests.
 static constexpr const char kTestFrameSetPath[] =
@@ -205,12 +215,13 @@ class SubresourceFilterBrowserTest : public InProcessBrowserTest {
 
  protected:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(
-        switches::kEnableFeatures,
-        base::JoinString(
-            {kSafeBrowsingSubresourceFilter.name, "SafeBrowsingV4OnlyEnabled",
-             kSafeBrowsingSubresourceFilterExperimentalUI.name},
-            ","));
+    command_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                    base::JoinString(RequiredFeatures(), ","));
+  }
+
+  std::vector<base::StringPiece> RequiredFeatures() const {
+    return {kSafeBrowsingSubresourceFilter.name, "SafeBrowsingV4OnlyEnabled",
+            kSafeBrowsingSubresourceFilterExperimentalUI.name};
   }
 
   void SetUp() override {
@@ -249,8 +260,13 @@ class SubresourceFilterBrowserTest : public InProcessBrowserTest {
     PathService::Get(chrome::DIR_TEST_DATA, &test_data_dir);
     embedded_test_server()->ServeFilesFromDirectory(test_data_dir);
     host_resolver()->AddSimulatedFailure("host-with-dns-lookup-failure");
+
     host_resolver()->AddRule("*", "127.0.0.1");
     content::SetupCrossSiteRedirector(embedded_test_server());
+
+    // Add content/test/data for cross_site_iframe_factory.html
+    embedded_test_server()->ServeFilesFromSourceDirectory("content/test/data");
+
     ASSERT_TRUE(embedded_test_server()->Start());
     ResetConfigurationToEnableOnPhishingSites();
 
@@ -462,6 +478,41 @@ class SubresourceFilterWebSocketBrowserTest
   std::unique_ptr<net::SpawnedTestServer> websocket_test_server_;
 };
 
+enum class OffMainThreadFetchPolicy {
+  kEnabled,
+  kDisabled,
+};
+
+class SubresourceFilterWorkerFetchBrowserTest
+    : public SubresourceFilterBrowserTest,
+      public ::testing::WithParamInterface<OffMainThreadFetchPolicy> {
+ public:
+  SubresourceFilterWorkerFetchBrowserTest() {}
+  ~SubresourceFilterWorkerFetchBrowserTest() override {}
+
+ protected:
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    std::vector<base::StringPiece> features =
+        SubresourceFilterBrowserTest::RequiredFeatures();
+    if (GetParam() == OffMainThreadFetchPolicy::kEnabled) {
+      features.push_back(features::kOffMainThreadFetch.name);
+    } else {
+      command_line->AppendSwitchASCII(switches::kDisableFeatures,
+                                      features::kOffMainThreadFetch.name);
+    }
+    command_line->AppendSwitchASCII(switches::kEnableFeatures,
+                                    base::JoinString(features, ","));
+  }
+
+  void ClearTitle() {
+    ASSERT_TRUE(content::ExecuteScript(web_contents()->GetMainFrame(),
+                                       "document.title = \"\";"));
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SubresourceFilterWorkerFetchBrowserTest);
+};
+
 // Tests -----------------------------------------------------------------------
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, MainFrameActivation) {
@@ -543,6 +594,12 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
+  std::ostringstream message_filter;
+  message_filter << kDisallowSubframeConsoleMessagePrefix << "*";
+  content::ConsoleObserverDelegate console_observer(web_contents(),
+                                                    message_filter.str());
+  web_contents()->SetDelegate(&console_observer);
+
   GURL url(GetTestUrl(kTestFrameSetPath));
   ConfigureAsPhishingURL(url);
   ASSERT_NO_FATAL_FAILURE(
@@ -557,6 +614,61 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, SubFrameActivation) {
 
   tester.ExpectBucketCount(kSubresourceFilterActionsHistogram, kActionUIShown,
                            1);
+
+  // Console message for subframe blocking should be displayed.
+  std::ostringstream result;
+  result << kDisallowSubframeConsoleMessagePrefix << "*included_script.js*";
+  EXPECT_TRUE(base::MatchPattern(console_observer.message(), result.str()));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       ActivationDisabled_NoConsoleMessage) {
+  std::ostringstream message_filter;
+  message_filter << kDisallowSubframeConsoleMessageSuffix << "*";
+  content::ConsoleObserverDelegate console_observer(web_contents(),
+                                                    message_filter.str());
+  web_contents()->SetDelegate(&console_observer);
+
+  Configuration config(
+      subresource_filter::ActivationLevel::DISABLED,
+      subresource_filter::ActivationScope::ACTIVATION_LIST,
+      subresource_filter::ActivationList::PHISHING_INTERSTITIAL);
+  ResetConfiguration(std::move(config));
+
+  GURL url(GetTestUrl(kTestFrameSetPath));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Console message for subframe blocking should not be displayed as filtering
+  // is disabled.
+  EXPECT_TRUE(console_observer.message().empty());
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       ActivationDryRun_NoConsoleMessage) {
+  std::ostringstream message_filter;
+  message_filter << kDisallowSubframeConsoleMessageSuffix << "*";
+  content::ConsoleObserverDelegate console_observer(web_contents(),
+                                                    message_filter.str());
+  web_contents()->SetDelegate(&console_observer);
+
+  Configuration config(
+      subresource_filter::ActivationLevel::DRYRUN,
+      subresource_filter::ActivationScope::ACTIVATION_LIST,
+      subresource_filter::ActivationList::PHISHING_INTERSTITIAL);
+  ResetConfiguration(std::move(config));
+
+  GURL url(GetTestUrl(kTestFrameSetPath));
+  ConfigureAsPhishingURL(url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  ui_test_utils::NavigateToURL(browser(), url);
+
+  // Console message for subframe blocking should not be displayed as filtering
+  // is enabled in dryrun mode.
+  EXPECT_TRUE(console_observer.message().empty());
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
@@ -626,6 +738,67 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
     EXPECT_EQ(allowed_empty_subdocument_url, frame->GetLastCommittedURL());
     ExpectFramesIncludedInLayout(kSubframeNames, kExpectFirstAndSecondSubframe);
   }
+}
+
+// Tests that navigations to special URLs (e.g. about:blank, data URLs, etc)
+// which do not trigger ReadyToCommitNavigation (and therefore our activation
+// IPC), properly inherit the activation of their parent frame.
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       NavigationsWithNoIPC_HaveActivation) {
+  const GURL url(GetTestUrl("subresource_filter/frame_set_special_urls.html"));
+  const std::vector<const char*> subframe_names{"blank", "js", "data",
+                                                "srcdoc"};
+  ConfigureAsPhishingURL(url);
+
+  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
+      subframe_names, {true, true, true, true}));
+
+  // Disallow included_script.js, and all frames should filter it in subsequent
+  // navigations.
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  ui_test_utils::NavigateToURL(browser(), url);
+  ASSERT_NO_FATAL_FAILURE(ExpectParsedScriptElementLoadedStatusInFrames(
+      subframe_names, {false, false, false, false}));
+}
+
+// Navigate to a site with site hierarchy a(b(c)). Let a navigate c to a data
+// URL, and expect that the resulting frame has activation. We expect to fail in
+// --site-per-process because c is navigated to a's process. Therefore we can't
+// sniff b's activation state from c. See crbug.com/739777.
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       NavigateCrossProcessDataUrl_MaintainsActivation) {
+  const GURL main_url(embedded_test_server()->GetURL(
+      "a.com", "/cross_site_iframe_factory.html?a(b(c))"));
+  ConfigureAsPhishingURL(main_url);
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
+  const GURL included_url(embedded_test_server()->GetURL(
+      "a.com", "/subresource_filter/included_script.js"));
+
+  ui_test_utils::NavigateToURL(browser(), main_url);
+
+  // The root node will initiate the navigation; its grandchild node will be the
+  // target of the navigation.
+  content::TestNavigationObserver navigation_observer(web_contents(), 1);
+  EXPECT_TRUE(content::ExecuteScript(
+      web_contents()->GetMainFrame(),
+      base::StringPrintf(
+          "var data_url = 'data:text/html,<script src=\"%s\"></script>';"
+          "window.frames[0][0].location.href = data_url;",
+          included_url.spec().c_str())));
+  navigation_observer.Wait();
+
+  content::RenderFrameHost* target = content::FrameMatchingPredicate(
+      web_contents(), base::Bind([](content::RenderFrameHost* rfh) {
+        return rfh->GetLastCommittedURL().scheme_piece() == url::kDataScheme;
+      }));
+  ASSERT_NE(target, nullptr);
+  EXPECT_TRUE(target->GetLastCommittedOrigin().unique());
+
+  EXPECT_EQ(content::AreAllSitesIsolatedForTesting(),
+            WasParsedScriptElementLoaded(target));
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
@@ -855,34 +1028,6 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   receiver.ExpectReceivedOnce(ActivationState(ActivationLevel::DISABLED));
 }
 
-// Schemes 'about:' and 'chrome-native:' are loaded synchronously as empty
-// documents in Blink, so there is no chance (or need) to send an activation
-// IPC message. Make sure that histograms are not polluted with these loads.
-IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, NoActivationOnAboutBlank) {
-  GURL url(GetTestUrl("subresource_filter/frame_set_sync_loads.html"));
-  ASSERT_NO_FATAL_FAILURE(
-      SetRulesetToDisallowURLsWithPathSuffix("included_script.js"));
-  ConfigureAsPhishingURL(url);
-
-  base::HistogramTester histogram_tester;
-  ui_test_utils::NavigateToURL(browser(), url);
-
-  content::RenderFrameHost* frame = FindFrameByName("initially_blank");
-  ASSERT_TRUE(frame);
-  EXPECT_FALSE(WasParsedScriptElementLoaded(frame));
-
-  // Support both pre-/post-PersistentHistograms worlds. The latter is enabled
-  // through field trials, so the former is still used on offical builders.
-  content::FetchHistogramsFromChildProcesses();
-  SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-
-  // The only frames where filtering was (even considered to be) activated
-  // should be the main frame, and the child that was navigated to an HTTP URL.
-  histogram_tester.ExpectUniqueSample(
-      kDocumentLoadActivationLevel,
-      static_cast<base::Histogram::Sample>(ActivationLevel::ENABLED), 2);
-}
-
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, PageLoadMetrics) {
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsPhishingURL(url);
@@ -973,7 +1118,65 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
       std::vector<const char*>{"b", "d"}, {false, true});
 }
 
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       RendererDebugURL_NoLeakedThrottlePtrs) {
+  // We have checks in the throttle manager that we don't improperly leak
+  // activation state throttles. It would be nice to test things directly but it
+  // isn't very feasible right now without exposing a bunch of internal guts of
+  // the throttle manager.
+  //
+  // This test should crash the *browser process* with CHECK failures if the
+  // component is faulty. The CHECK assumes that the crash URL and other
+  // renderer debug URLs do not create a navigation throttle. See
+  // crbug.com/736658.
+  content::WindowedNotificationObserver observer(
+      content::NOTIFICATION_WEB_CONTENTS_DISCONNECTED,
+      content::NotificationService::AllSources());
+  browser()->OpenURL(content::OpenURLParams(
+      GURL(content::kChromeUICrashURL), content::Referrer(),
+      WindowOpenDisposition::CURRENT_TAB, ui::PAGE_TRANSITION_TYPED, false));
+  observer.Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       DisableRuleset_SubresourceAllowed) {
+  Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
+  config.activation_options.should_disable_ruleset_rules = true;
+  ResetConfiguration(std::move(config));
+
+  GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
+  ConfigureAsPhishingURL(url);
+  ui_test_utils::NavigateToURL(browser(), url);
+  EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       NoConfiguration_AllowCreatingNewWindows) {
+  base::HistogramTester tester;
+  const char kWindowOpenPath[] = "/subresource_filter/window_open.html";
+  GURL a_url(embedded_test_server()->GetURL("a.com", kWindowOpenPath));
+  // Only configure |a_url| as a phishing URL.
+  ConfigureAsPhishingURL(a_url);
+
+  // Only necessary so we have a valid ruleset.
+  ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(std::vector<proto::UrlRule>()));
+
+  // Navigate to a_url, should not trigger the popup blocker.
+  ui_test_utils::NavigateToURL(browser(), a_url);
+  bool opened_window = false;
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(web_contents, "openWindow()",
+                                                   &opened_window));
+  EXPECT_TRUE(opened_window);
+  EXPECT_FALSE(TabSpecificContentSettings::FromWebContents(web_contents)
+                   ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
+}
+
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, BlockCreatingNewWindows) {
+  Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
+  config.activation_options.should_strengthen_popup_blocker = true;
+  ResetConfiguration(std::move(config));
   base::HistogramTester tester;
   const char kWindowOpenPath[] = "/subresource_filter/window_open.html";
   GURL a_url(embedded_test_server()->GetURL("a.com", kWindowOpenPath));
@@ -992,10 +1195,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, BlockCreatingNewWindows) {
   EXPECT_TRUE(content::ExecuteScriptAndExtractBool(web_contents, "openWindow()",
                                                    &opened_window));
   EXPECT_FALSE(opened_window);
-  // Do not force the UI if the popup was the only thing disallowed. The popup
-  // UI is good enough.
   tester.ExpectBucketCount(kSubresourceFilterActionsHistogram, kActionUIShown,
-                           0);
+                           1);
   // Make sure the popup UI was shown.
   EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)
                   ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
@@ -1007,6 +1208,96 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, BlockCreatingNewWindows) {
                                                    &opened_window));
   EXPECT_TRUE(opened_window);
   // Popup UI should not be shown.
+  EXPECT_FALSE(TabSpecificContentSettings::FromWebContents(web_contents)
+                   ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest, BlockOpenURLFromTab) {
+  Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
+  config.activation_options.should_strengthen_popup_blocker = true;
+  ResetConfiguration(std::move(config));
+  base::HistogramTester tester;
+  const char kWindowOpenPath[] =
+      "/subresource_filter/window_open_spoof_click.html";
+  GURL a_url(embedded_test_server()->GetURL("a.com", kWindowOpenPath));
+  GURL b_url(embedded_test_server()->GetURL("b.com", kWindowOpenPath));
+  // Only configure |a_url| as a phishing URL.
+  ConfigureAsPhishingURL(a_url);
+
+  // Only necessary so we have a valid ruleset.
+  ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(std::vector<proto::UrlRule>()));
+
+  // Navigate to a_url, should trigger the popup blocker.
+  ui_test_utils::NavigateToURL(browser(), a_url);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "openWindow()"));
+  tester.ExpectBucketCount(kSubresourceFilterActionsHistogram, kActionUIShown,
+                           1);
+
+  EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)
+                  ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
+
+  // Navigate to |b_url|, which should successfully open the popup.
+
+  ui_test_utils::NavigateToURL(browser(), b_url);
+
+  content::TestNavigationObserver navigation_observer(nullptr, 1);
+  navigation_observer.StartWatchingNewWebContents();
+  EXPECT_TRUE(content::ExecuteScript(web_contents, "openWindow()"));
+  navigation_observer.Wait();
+
+  // Popup UI should not be shown.
+  EXPECT_FALSE(TabSpecificContentSettings::FromWebContents(web_contents)
+                   ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       BlockOpenURLFromTabInIframe) {
+  Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
+  config.activation_options.should_strengthen_popup_blocker = true;
+  ResetConfiguration(std::move(config));
+  const char popup_path[] = "/subresource_filter/iframe_spoof_click_popup.html";
+  GURL a_url(embedded_test_server()->GetURL("a.com", popup_path));
+  // Only configure |a_url| as a phishing URL.
+  ConfigureAsPhishingURL(a_url);
+
+  // Only necessary so we have a valid ruleset.
+  ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(std::vector<proto::UrlRule>()));
+
+  // Navigate to a_url, should not trigger the popup blocker.
+  ui_test_utils::NavigateToURL(browser(), a_url);
+  bool sent_open = false;
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(web_contents, "openWindow()",
+                                                   &sent_open));
+  EXPECT_TRUE(sent_open);
+  EXPECT_TRUE(TabSpecificContentSettings::FromWebContents(web_contents)
+                  ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
+}
+
+IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
+                       TraditionalWindowOpen_NotBlocked) {
+  Configuration config = Configuration::MakePresetForLiveRunOnPhishingSites();
+  config.activation_options.should_strengthen_popup_blocker = true;
+  ResetConfiguration(std::move(config));
+  GURL url(GetTestUrl("/title2.html"));
+  ConfigureAsPhishingURL(url);
+  ui_test_utils::NavigateToURL(browser(), GetTestUrl("/title1.html"));
+
+  // Only necessary so we have a valid ruleset.
+  ASSERT_NO_FATAL_FAILURE(SetRulesetWithRules(std::vector<proto::UrlRule>()));
+
+  // Should not trigger the popup blocker because internally opens the tab with
+  // a user gesture.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_NAVIGATION);
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
   EXPECT_FALSE(TabSpecificContentSettings::FromWebContents(web_contents)
                    ->IsContentBlocked(CONTENT_SETTINGS_TYPE_POPUPS));
 }
@@ -1029,8 +1320,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
-      std::string(), CONTENT_SETTING_ALLOW);
+      url, url, ContentSettingsType::CONTENT_SETTINGS_TYPE_ADS, std::string(),
+      CONTENT_SETTING_ALLOW);
 
   ui_test_utils::NavigateToURL(browser(), url);
   EXPECT_TRUE(WasParsedScriptElementLoaded(web_contents()->GetMainFrame()));
@@ -1054,8 +1345,8 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(browser()->profile());
   settings_map->SetContentSettingDefaultScope(
-      url, url, ContentSettingsType::CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
-      std::string(), CONTENT_SETTING_BLOCK);
+      url, url, ContentSettingsType::CONTENT_SETTINGS_TYPE_ADS, std::string(),
+      CONTENT_SETTING_BLOCK);
 
   // Setting the site to "allow" should not activate filtering.
   ui_test_utils::NavigateToURL(browser(), url);
@@ -1219,6 +1510,52 @@ INSTANTIATE_TEST_CASE_P(
     SubresourceFilterWebSocketBrowserTest,
     ::testing::Values(WebSocketCreationPolicy::IN_WORKER,
                       WebSocketCreationPolicy::IN_MAIN_FRAME));
+
+IN_PROC_BROWSER_TEST_P(SubresourceFilterWorkerFetchBrowserTest, WorkerFetch) {
+  const base::string16 fetch_succeeded_title =
+      base::ASCIIToUTF16("FetchSucceeded");
+  const base::string16 fetch_failed_title = base::ASCIIToUTF16("FetchFailed");
+  GURL url(GetTestUrl("subresource_filter/worker_fetch.html"));
+  ConfigureAsPhishingURL(url);
+
+  ASSERT_NO_FATAL_FAILURE(SetRulesetToDisallowURLsWithPathSuffix(
+      "suffix-that-does-not-match-anything"));
+  {
+    content::TitleWatcher title_watcher(
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        fetch_succeeded_title);
+    title_watcher.AlsoWaitForTitle(fetch_failed_title);
+    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_EQ(fetch_succeeded_title, title_watcher.WaitAndGetTitle());
+  }
+  ClearTitle();
+  ASSERT_NO_FATAL_FAILURE(
+      SetRulesetToDisallowURLsWithPathSuffix("worker_fetch_data.txt"));
+  {
+    content::TitleWatcher title_watcher(
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        fetch_succeeded_title);
+    title_watcher.AlsoWaitForTitle(fetch_failed_title);
+    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_EQ(fetch_failed_title, title_watcher.WaitAndGetTitle());
+  }
+  ClearTitle();
+  // The main frame document should never be filtered.
+  SetRulesetToDisallowURLsWithPathSuffix("worker_fetch.html");
+  {
+    content::TitleWatcher title_watcher(
+        browser()->tab_strip_model()->GetActiveWebContents(),
+        fetch_succeeded_title);
+    title_watcher.AlsoWaitForTitle(fetch_failed_title);
+    ui_test_utils::NavigateToURL(browser(), url);
+    EXPECT_EQ(fetch_succeeded_title, title_watcher.WaitAndGetTitle());
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(/* no prefix */,
+                        SubresourceFilterWorkerFetchBrowserTest,
+                        ::testing::Values(OffMainThreadFetchPolicy::kEnabled,
+                                          OffMainThreadFetchPolicy::kDisabled));
 
 // Tests checking how histograms are recorded. ---------------------------------
 
@@ -1390,7 +1727,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 }
 
 IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
-                       WhiteliseSiteOnReload_ActivationDisabledOnReload) {
+                       WhitelistSiteOnReload_ActivationDisabledOnReload) {
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsPhishingURL(url);
   ASSERT_NO_FATAL_FAILURE(
@@ -1426,7 +1763,7 @@ IN_PROC_BROWSER_TEST_F(SubresourceFilterBrowserTest,
 
 IN_PROC_BROWSER_TEST_F(
     SubresourceFilterBrowserTest,
-    WhiteliseSiteOnReload_ActivationDisabledOnReloadFromScript) {
+    WhitelistSiteOnReload_ActivationDisabledOnReloadFromScript) {
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsPhishingURL(url);
   ASSERT_NO_FATAL_FAILURE(
@@ -1464,7 +1801,7 @@ IN_PROC_BROWSER_TEST_F(
 
 IN_PROC_BROWSER_TEST_F(
     SubresourceFilterBrowserTest,
-    WhiteliseSiteOnReload_ActivationDisabledOnNavigationToSameURL) {
+    WhitelistSiteOnReload_ActivationDisabledOnNavigationToSameURL) {
   GURL url(GetTestUrl("subresource_filter/frame_with_included_script.html"));
   ConfigureAsPhishingURL(url);
   ASSERT_NO_FATAL_FAILURE(

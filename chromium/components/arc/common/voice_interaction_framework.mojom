@@ -2,14 +2,21 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 //
-// Next MinVersion: 4
+// Next MinVersion: 11
 
 module arc.mojom;
 
 import "screen_rect.mojom";
 
+[Extensible]
+enum VoiceInteractionState {
+  NOT_READY = 0,
+  STOPPED,
+  RUNNING
+};
+
 // Handles voice interaction queries from Android.
-// Next method ID: 4
+// Next method ID: 6
 interface VoiceInteractionFrameworkHost {
   // Returns a screenshot of currently focused window or empty array if
   // no window is focused. |data| represents the image encoded in JPEG
@@ -25,15 +32,36 @@ interface VoiceInteractionFrameworkHost {
 
   // Enables/disables screenshot taking.
   [MinVersion=3]SetMetalayerEnabled@3(bool enabled);
+
+  // Notifies Chrome whether voice interaction session is running.
+  [MinVersion=6]SetVoiceInteractionRunning@4(bool running);
+
+  // Notifies Chrome the state of voice interaction session.
+  [MinVersion=8]SetVoiceInteractionState@5(VoiceInteractionState state);
+};
+
+// Indicates voice interaction configuration status.
+struct VoiceInteractionStatus {
+  // Whether voice interaction is configured during OOBE flow. |false| if
+  // OOBE flow has been skipped.
+  bool configured;
+  // Whether voice interaction service is enabled.
+  bool voice_interaction_enabled;
+  // Whether allow voice interaction service to request screenshot
+  // and screen context.
+  bool context_enabled;
 };
 
 // Connects with Android system server.
-// Next method ID: 4
+// Next method ID: 10
 interface VoiceInteractionFrameworkInstance {
   Init@0(VoiceInteractionFrameworkHost host_ptr);
 
   // Starts the voice interaction session in container.
   StartVoiceInteractionSession@1();
+
+  // Starts or stops voice interaction session based on current state.
+  [MinVersion=9] ToggleVoiceInteractionSession@8();
 
   // Starts the voice interaction session in container, with a screen region
   // selected.
@@ -41,4 +69,22 @@ interface VoiceInteractionFrameworkInstance {
 
   // Shows/hides the metalayer in the container.
   [MinVersion=1] SetMetalayerVisibility@3([MinVersion=2] bool visible);
+
+  // Turns on / off voice interaction in container.
+  [MinVersion=4] SetVoiceInteractionEnabled@4(bool enable);
+
+  // Turns on / off context for voice interaction in container. This function
+  // controls whether screenshot and view hierarchy information should be sent
+  // to container.
+  [MinVersion=4] SetVoiceInteractionContextEnabled@5(bool enable);
+
+  // Starts the voice interaction setup wizard in container.
+  [MinVersion=5] StartVoiceInteractionSetupWizard@6();
+
+  // Starts the voice interaction setup wizard in container.
+  [MinVersion=10] ShowVoiceInteractionSettings@9();
+
+  // Queries voice interaction settings status.
+  [MinVersion=7] GetVoiceInteractionSettings@7() =>
+    (VoiceInteractionStatus status);
 };

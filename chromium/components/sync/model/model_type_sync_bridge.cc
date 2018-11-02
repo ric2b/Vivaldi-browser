@@ -8,6 +8,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "components/sync/model/metadata_batch.h"
+#include "components/sync/model/metadata_change_list.h"
 
 namespace syncer {
 
@@ -19,6 +20,10 @@ ModelTypeSyncBridge::ModelTypeSyncBridge(
       change_processor_(change_processor_factory_.Run(type_, this)) {}
 
 ModelTypeSyncBridge::~ModelTypeSyncBridge() {}
+
+bool ModelTypeSyncBridge::SupportsGetStorageKey() const {
+  return true;
+}
 
 ConflictResolution ModelTypeSyncBridge::ResolveConflict(
     const EntityData& local_data,

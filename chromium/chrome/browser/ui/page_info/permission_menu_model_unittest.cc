@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/ui/page_info/permission_menu_model.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -64,13 +63,6 @@ TEST_F(PermissionMenuModelTest, TestDefaultMediaHttp) {
   }
 }
 
-TEST_F(PermissionMenuModelTest, TestAllowBlock) {
-  TestCallback callback;
-  PermissionMenuModel model(profile(), GURL("http://www.google.com"),
-                            CONTENT_SETTING_ALLOW, callback.callback());
-  EXPECT_EQ(2, model.GetItemCount());
-}
-
 TEST_F(PermissionMenuModelTest, TestIncognitoNotifications) {
   TestCallback callback;
   PageInfoUI::PermissionInfo permission;
@@ -92,7 +84,7 @@ TEST_F(PermissionMenuModelTest, TestIncognitoNotifications) {
 TEST_F(PermissionMenuModelTest, TestSubresourceFilter) {
   TestCallback callback;
   PageInfoUI::PermissionInfo permission;
-  permission.type = CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER;
+  permission.type = CONTENT_SETTINGS_TYPE_ADS;
   permission.setting = CONTENT_SETTING_BLOCK;
   permission.default_setting = CONTENT_SETTING_BLOCK;
   permission.is_incognito = false;

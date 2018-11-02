@@ -12,8 +12,8 @@
 #include "content/renderer/render_view_impl.h"
 #include "gin/handle.h"
 #include "gin/object_template_builder.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
 #include "third_party/WebKit/public/web/WebKit.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 
 namespace content {
 
@@ -22,7 +22,7 @@ gin::WrapperInfo DomAutomationController::kWrapperInfo = {
 
 // static
 void DomAutomationController::Install(RenderFrame* render_frame,
-                                      blink::WebFrame* frame) {
+                                      blink::WebLocalFrame* frame) {
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = frame->MainWorldScriptContext();
@@ -42,7 +42,7 @@ void DomAutomationController::Install(RenderFrame* render_frame,
 }
 
 DomAutomationController::DomAutomationController(RenderFrame* render_frame)
-    : RenderFrameObserver(render_frame), automation_id_(MSG_ROUTING_NONE) {}
+    : RenderFrameObserver(render_frame) {}
 
 DomAutomationController::~DomAutomationController() {}
 
@@ -84,9 +84,6 @@ bool DomAutomationController::SendMsg(const gin::Arguments& args) {
   if (!render_frame())
     return false;
 
-  if (automation_id_ == MSG_ROUTING_NONE)
-    return false;
-
   std::string json;
   JSONStringValueSerializer serializer(&json);
   std::unique_ptr<base::Value> value;
@@ -112,7 +109,6 @@ bool DomAutomationController::SendMsg(const gin::Arguments& args) {
   bool succeeded = Send(new FrameHostMsg_DomOperationResponse(
       routing_id(), json));
 
-  automation_id_ = MSG_ROUTING_NONE;
   return succeeded;
 }
 
@@ -120,12 +116,9 @@ bool DomAutomationController::SendJSON(const std::string& json) {
   if (!render_frame())
     return false;
 
-  if (automation_id_ == MSG_ROUTING_NONE)
-    return false;
   bool result = Send(new FrameHostMsg_DomOperationResponse(
       routing_id(), json));
 
-  automation_id_ = MSG_ROUTING_NONE;
   return result;
 }
 
@@ -138,7 +131,6 @@ bool DomAutomationController::SendWithId(int automation_id,
 }
 
 bool DomAutomationController::SetAutomationId(int automation_id) {
-  automation_id_ = automation_id;
   return true;
 }
 

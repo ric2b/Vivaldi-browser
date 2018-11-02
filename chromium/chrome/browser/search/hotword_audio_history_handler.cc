@@ -39,8 +39,8 @@ void HotwordAudioHistoryHandler::UpdateAudioHistoryState() {
   // Set the function to update in a day.
   task_runner_->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&HotwordAudioHistoryHandler::UpdateAudioHistoryState,
-                 weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&HotwordAudioHistoryHandler::UpdateAudioHistoryState,
+                     weak_ptr_factory_.GetWeakPtr()),
       base::TimeDelta::FromHours(kHoursUntilNextAudioHistoryCheck));
 }
 
@@ -54,37 +54,48 @@ void HotwordAudioHistoryHandler::UpdateLocalPreference(
 
 void HotwordAudioHistoryHandler::GetAudioHistoryEnabled(
     const HotwordAudioHistoryCallback& callback) {
+// Please add network traffic annotation if you want to remove this #if.
+#if defined(OS_CHROMEOS)
   history::WebHistoryService* web_history = GetWebHistory();
   if (web_history) {
     web_history->GetAudioHistoryEnabled(
         base::Bind(&HotwordAudioHistoryHandler::GetAudioHistoryComplete,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   callback));
+                   weak_ptr_factory_.GetWeakPtr(), callback),
+        NO_PARTIAL_TRAFFIC_ANNOTATION_YET);
   } else {
     // If web_history is null, the user is not signed in. Set the opt-in value
     // to the last known value and run the callback with false for success.
     PrefService* prefs = profile_->GetPrefs();
     callback.Run(false, prefs->GetBoolean(prefs::kHotwordAudioLoggingEnabled));
   }
+#else
+  NOTREACHED()
+      << ": This functions is supposed to be called only in Chrome OS.";
+#endif  // defined(OS_CHROMEOS)
 }
 
 void HotwordAudioHistoryHandler::SetAudioHistoryEnabled(
     const bool enabled,
     const HotwordAudioHistoryCallback& callback) {
+// Please add network traffic annotation if you want to remove this #if.
+#if defined(OS_CHROMEOS)
   history::WebHistoryService* web_history = GetWebHistory();
   if (web_history) {
     web_history->SetAudioHistoryEnabled(
         enabled,
         base::Bind(&HotwordAudioHistoryHandler::SetAudioHistoryComplete,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   enabled,
-                   callback));
+                   weak_ptr_factory_.GetWeakPtr(), enabled, callback),
+        NO_PARTIAL_TRAFFIC_ANNOTATION_YET);
   } else {
     // If web_history is null, run the callback with false for success
     // and return the last known value for the opt-in pref.
     PrefService* prefs = profile_->GetPrefs();
     callback.Run(false, prefs->GetBoolean(prefs::kHotwordAudioLoggingEnabled));
   }
+#else
+  NOTREACHED()
+      << ": This functions is supposed to be called only in Chrome OS.";
+#endif  // defined(OS_CHROMEOS)
 }
 
 void HotwordAudioHistoryHandler::GetAudioHistoryComplete(

@@ -9,6 +9,7 @@ include_rules = [
   "+cc",
   "-cc/blink",
 
+  "+components/autofill/android",
   "+components/autofill/content/browser",
   "+components/autofill/core/browser",
   "+components/autofill/core/common",
@@ -28,6 +29,9 @@ include_rules = [
   "+components/url_formatter",
   "+components/user_prefs",
   "+components/visitedlink/browser",
+  "+components/viz/common",
+  "+components/viz/service/display",
+  "+components/viz/service/frame_sinks",
   "+components/webdata/common",
 
   "+content/public/browser",

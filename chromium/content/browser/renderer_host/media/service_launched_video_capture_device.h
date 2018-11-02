@@ -14,14 +14,13 @@ namespace content {
 // service.
 class ServiceLaunchedVideoCaptureDevice : public LaunchedVideoCaptureDevice {
  public:
-  explicit ServiceLaunchedVideoCaptureDevice(
-      video_capture::mojom::DevicePtr device);
+  ServiceLaunchedVideoCaptureDevice(video_capture::mojom::DevicePtr device,
+                                    base::OnceClosure connection_lost_cb);
   ~ServiceLaunchedVideoCaptureDevice() override;
 
   // LaunchedVideoCaptureDevice implementation.
-  void GetPhotoCapabilities(
-      media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback)
-      const override;
+  void GetPhotoState(
+      media::VideoCaptureDevice::GetPhotoStateCallback callback) const override;
   void SetPhotoOptions(
       media::mojom::PhotoSettingsPtr settings,
       media::VideoCaptureDevice::SetPhotoOptionsCallback callback) override;
@@ -38,8 +37,18 @@ class ServiceLaunchedVideoCaptureDevice : public LaunchedVideoCaptureDevice {
 
  private:
   void OnLostConnectionToDevice();
+  void OnGetPhotoStateResponse(
+      media::VideoCaptureDevice::GetPhotoStateCallback callback,
+      media::mojom::PhotoStatePtr capabilities) const;
+  void OnSetPhotoOptionsResponse(
+      media::VideoCaptureDevice::SetPhotoOptionsCallback callback,
+      bool success);
+  void OnTakePhotoResponse(
+      media::VideoCaptureDevice::TakePhotoCallback callback,
+      media::mojom::BlobPtr blob);
 
   video_capture::mojom::DevicePtr device_;
+  base::OnceClosure connection_lost_cb_;
   base::SequenceChecker sequence_checker_;
 };
 

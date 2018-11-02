@@ -12,6 +12,7 @@
 #include "content/public/browser/download_url_parameters.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/http/http_request_headers.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "net/url_request/url_request_test_util.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -29,7 +30,7 @@ class DownloadRequestCoreTest : public testing::Test {
       const std::string& url) const {
     GURL gurl(url);
     return base::MakeUnique<DownloadUrlParameters>(
-        gurl, request_context_getter_.get());
+        gurl, request_context_getter_.get(), TRAFFIC_ANNOTATION_FOR_TESTS);
   }
 
   void CheckRequestHeaders(const std::string& name,

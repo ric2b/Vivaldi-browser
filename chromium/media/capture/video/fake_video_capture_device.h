@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 
+#include "base/threading/thread_checker.h"
 #include "media/capture/video/video_capture_device.h"
 
 namespace media {
@@ -64,7 +65,7 @@ class FakeVideoCaptureDevice : public VideoCaptureDevice {
   void AllocateAndStart(const VideoCaptureParams& params,
                         std::unique_ptr<Client> client) override;
   void StopAndDeAllocate() override;
-  void GetPhotoCapabilities(GetPhotoCapabilitiesCallback callback) override;
+  void GetPhotoState(GetPhotoStateCallback callback) override;
   void SetPhotoOptions(mojom::PhotoSettingsPtr settings,
                        SetPhotoOptionsCallback callback) override;
   void TakePhoto(TakePhotoCallback callback) override;
@@ -120,21 +121,36 @@ class FrameDelivererFactory {
   const FakeDeviceState* device_state_ = nullptr;
 };
 
+struct FakePhotoDeviceConfig {
+  FakePhotoDeviceConfig()
+      : should_fail_get_photo_capabilities(false),
+        should_fail_set_photo_options(false),
+        should_fail_take_photo(false) {}
+
+  bool should_fail_get_photo_capabilities;
+  bool should_fail_set_photo_options;
+  bool should_fail_take_photo;
+};
+
 // Implements the photo functionality of a FakeVideoCaptureDevice
 class FakePhotoDevice {
  public:
   FakePhotoDevice(std::unique_ptr<PacmanFramePainter> sk_n32_painter,
-                  const FakeDeviceState* fake_device_state);
+                  const FakeDeviceState* fake_device_state,
+                  const FakePhotoDeviceConfig& config);
   ~FakePhotoDevice();
 
-  void GetPhotoCapabilities(
-      VideoCaptureDevice::GetPhotoCapabilitiesCallback callback);
+  void GetPhotoState(VideoCaptureDevice::GetPhotoStateCallback callback);
+  void SetPhotoOptions(mojom::PhotoSettingsPtr settings,
+                       VideoCaptureDevice::SetPhotoOptionsCallback callback,
+                       FakeDeviceState* device_state_write_access);
   void TakePhoto(VideoCaptureDevice::TakePhotoCallback callback,
                  base::TimeDelta elapsed_time);
 
  private:
   const std::unique_ptr<PacmanFramePainter> sk_n32_painter_;
   const FakeDeviceState* const fake_device_state_;
+  const FakePhotoDeviceConfig config_;
 };
 
 }  // namespace media

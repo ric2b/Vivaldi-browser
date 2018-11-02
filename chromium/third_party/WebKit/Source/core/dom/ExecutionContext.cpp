@@ -30,7 +30,6 @@
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/V8BindingForCore.h"
-#include "core/dom/ExecutionContextTask.h"
 #include "core/dom/SuspendableObject.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/ErrorEvent.h"
@@ -216,7 +215,9 @@ void ExecutionContext::ParseAndSetReferrerPolicy(const String& policies,
                  ? "'always', 'default', 'never', 'origin-when-crossorigin', "
                  : "") +
             "'no-referrer', 'no-referrer-when-downgrade', 'origin', "
-            "'origin-when-cross-origin', or 'unsafe-url'. The referrer policy "
+            "'origin-when-cross-origin', 'same-origin', 'strict-origin', "
+            "'strict-origin-when-cross-origin', or 'unsafe-url'. The referrer "
+            "policy "
             "has been left unchanged."));
     return;
   }
@@ -227,9 +228,9 @@ void ExecutionContext::ParseAndSetReferrerPolicy(const String& policies,
 void ExecutionContext::SetReferrerPolicy(ReferrerPolicy referrer_policy) {
   // When a referrer policy has already been set, the latest value takes
   // precedence.
-  UseCounter::Count(this, UseCounter::kSetReferrerPolicy);
+  UseCounter::Count(this, WebFeature::kSetReferrerPolicy);
   if (referrer_policy_ != kReferrerPolicyDefault)
-    UseCounter::Count(this, UseCounter::kResetReferrerPolicy);
+    UseCounter::Count(this, WebFeature::kResetReferrerPolicy);
 
   referrer_policy_ = referrer_policy;
 }

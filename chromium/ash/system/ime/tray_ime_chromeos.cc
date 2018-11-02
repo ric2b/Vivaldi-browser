@@ -4,16 +4,15 @@
 
 #include "ash/system/ime/tray_ime_chromeos.h"
 
+#include <memory>
 #include <vector>
 
+#include "ash/ime/ime_controller.h"
 #include "ash/resources/vector_icons/vector_icons.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_controller.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/system_tray_notifier.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_details_view.h"
@@ -25,6 +24,7 @@
 #include "ash/system/tray/tri_view.h"
 #include "ash/system/tray_accessibility.h"
 #include "base/logging.h"
+#include "base/metrics/user_metrics.h"
 #include "base/strings/utf_string_conversions.h"
 #include "ui/accessibility/ax_enums.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -75,21 +75,24 @@ class IMEDefaultView : public TrayItemMore {
 // enterprise-controlled icon).
 class IMEDetailedView : public ImeListView {
  public:
-  explicit IMEDetailedView(SystemTrayItem* owner)
-      : ImeListView(owner), settings_button_(nullptr) {}
+  IMEDetailedView(SystemTrayItem* owner, ImeController* ime_controller)
+      : ImeListView(owner), ime_controller_(ime_controller) {
+    DCHECK(ime_controller_);
+  }
 
   ~IMEDetailedView() override {}
 
-  void SetImeManagedMessage(base::string16 ime_managed_message) {
-    ime_managed_message_ = ime_managed_message;
+  views::ImageView* controlled_setting_icon() {
+    return controlled_setting_icon_;
   }
 
-  void Update(const IMEInfoList& list,
-              const IMEPropertyInfoList& property_list,
+  void Update(const std::string& current_ime_id,
+              const std::vector<mojom::ImeInfo>& list,
+              const std::vector<mojom::ImeMenuItem>& property_list,
               bool show_keyboard_toggle,
               SingleImeBehavior single_ime_behavior) override {
-    ImeListView::Update(list, property_list, show_keyboard_toggle,
-                        single_ime_behavior);
+    ImeListView::Update(current_ime_id, list, property_list,
+                        show_keyboard_toggle, single_ime_behavior);
     CreateTitleRow(IDS_ASH_STATUS_TRAY_IME);
   }
 
@@ -110,11 +113,12 @@ class IMEDetailedView : public ImeListView {
   }
 
   void CreateExtraTitleRowButtons() override {
-    if (!ime_managed_message_.empty()) {
+    if (ime_controller_->managed_by_policy()) {
       controlled_setting_icon_ = TrayPopupUtils::CreateMainImageView();
       controlled_setting_icon_->SetImage(
           gfx::CreateVectorIcon(kSystemMenuBusinessIcon, kMenuIconColor));
-      controlled_setting_icon_->SetTooltipText(ime_managed_message_);
+      controlled_setting_icon_->SetTooltipText(
+          l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_IME_MANAGED));
       tri_view()->AddView(TriView::Container::END, controlled_setting_icon_);
     }
 
@@ -124,20 +128,19 @@ class IMEDetailedView : public ImeListView {
   }
 
   void ShowSettings() {
-    ShellPort::Get()->RecordUserMetricsAction(
-        UMA_STATUS_AREA_IME_SHOW_DETAILED);
+    base::RecordAction(base::UserMetricsAction("StatusArea_IME_Detailed"));
     Shell::Get()->system_tray_controller()->ShowIMESettings();
     if (owner()->system_tray())
-      owner()->system_tray()->CloseSystemBubble();
+      owner()->system_tray()->CloseBubble();
   }
 
-  views::Button* settings_button_;
+  ImeController* const ime_controller_;
+
+  // Gear icon that takes the user to IME settings.
+  views::Button* settings_button_ = nullptr;
 
   // This icon says that the IMEs are managed by policy.
-  views::ImageView* controlled_setting_icon_;
-  // If non-empty, a controlled setting icon should be displayed with this
-  // string as tooltip.
-  base::string16 ime_managed_message_;
+  views::ImageView* controlled_setting_icon_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(IMEDetailedView);
 };
@@ -146,11 +149,13 @@ class IMEDetailedView : public ImeListView {
 
 TrayIME::TrayIME(SystemTray* system_tray)
     : SystemTrayItem(system_tray, UMA_IME),
-      tray_label_(NULL),
-      default_(NULL),
-      detailed_(NULL),
+      ime_controller_(Shell::Get()->ime_controller()),
+      tray_label_(nullptr),
+      default_(nullptr),
+      detailed_(nullptr),
       keyboard_suppressed_(false),
       is_visible_(true) {
+  DCHECK(ime_controller_);
   SystemTrayNotifier* tray_notifier = Shell::Get()->system_tray_notifier();
   tray_notifier->AddVirtualKeyboardObserver(this);
   tray_notifier->AddAccessibilityObserver(this);
@@ -175,19 +180,21 @@ void TrayIME::OnAccessibilityModeChanged(
 }
 
 void TrayIME::Update() {
-  UpdateTrayLabel(current_ime_, ime_list_.size());
+  size_t ime_count = ime_controller_->available_imes().size();
+  UpdateTrayLabel(ime_controller_->current_ime(), ime_count);
   if (default_) {
     default_->SetVisible(ShouldDefaultViewBeVisible());
-    default_->UpdateLabel(GetDefaultViewLabel(ime_list_.size() > 1));
+    default_->UpdateLabel(GetDefaultViewLabel(ime_count > 1));
   }
   if (detailed_) {
-    detailed_->SetImeManagedMessage(ime_managed_message_);
-    detailed_->Update(ime_list_, property_list_, ShouldShowKeyboardToggle(),
-                      GetSingleImeBehavior());
+    detailed_->Update(ime_controller_->current_ime().id,
+                      ime_controller_->available_imes(),
+                      ime_controller_->current_ime_menu_items(),
+                      ShouldShowKeyboardToggle(), GetSingleImeBehavior());
   }
 }
 
-void TrayIME::UpdateTrayLabel(const IMEInfo& current, size_t count) {
+void TrayIME::UpdateTrayLabel(const mojom::ImeInfo& current, size_t count) {
   if (tray_label_) {
     bool visible = ShouldShowImeTrayItem(count) && is_visible_;
     tray_label_->SetVisible(visible);
@@ -211,9 +218,7 @@ bool TrayIME::ShouldShowKeyboardToggle() {
 
 base::string16 TrayIME::GetDefaultViewLabel(bool show_ime_label) {
   if (show_ime_label) {
-    IMEInfo current;
-    Shell::Get()->system_tray_delegate()->GetCurrentIME(&current);
-    return current.name;
+    return ime_controller_->current_ime().name;
   } else {
     // Display virtual keyboard status instead.
     int id = keyboard::IsKeyboardEnabled()
@@ -224,7 +229,7 @@ base::string16 TrayIME::GetDefaultViewLabel(bool show_ime_label) {
 }
 
 views::View* TrayIME::CreateTrayView(LoginStatus status) {
-  CHECK(tray_label_ == NULL);
+  CHECK(tray_label_ == nullptr);
   tray_label_ = new TrayItemView(this);
   tray_label_->CreateLabel();
   SetupLabelForTray(tray_label_->label());
@@ -235,62 +240,51 @@ views::View* TrayIME::CreateTrayView(LoginStatus status) {
 }
 
 views::View* TrayIME::CreateDefaultView(LoginStatus status) {
-  CHECK(default_ == NULL);
+  CHECK(default_ == nullptr);
   default_ = new tray::IMEDefaultView(
-      this, GetDefaultViewLabel(ShouldShowImeTrayItem(ime_list_.size())));
+      this, GetDefaultViewLabel(ShouldShowImeTrayItem(
+                ime_controller_->available_imes().size())));
   default_->SetVisible(ShouldDefaultViewBeVisible());
   return default_;
 }
 
 views::View* TrayIME::CreateDetailedView(LoginStatus status) {
-  CHECK(detailed_ == NULL);
-  detailed_ = new tray::IMEDetailedView(this);
-  detailed_->SetImeManagedMessage(ime_managed_message_);
+  CHECK(detailed_ == nullptr);
+  detailed_ = new tray::IMEDetailedView(this, ime_controller_);
   detailed_->Init(ShouldShowKeyboardToggle(), GetSingleImeBehavior());
   return detailed_;
 }
 
-void TrayIME::DestroyTrayView() {
-  tray_label_ = NULL;
+void TrayIME::OnTrayViewDestroyed() {
+  tray_label_ = nullptr;
 }
 
-void TrayIME::DestroyDefaultView() {
-  default_ = NULL;
+void TrayIME::OnDefaultViewDestroyed() {
+  default_ = nullptr;
 }
 
-void TrayIME::DestroyDetailedView() {
-  detailed_ = NULL;
+void TrayIME::OnDetailedViewDestroyed() {
+  detailed_ = nullptr;
 }
 
 void TrayIME::OnIMERefresh() {
-  // Caches the current ime state.
-  SystemTrayDelegate* delegate = Shell::Get()->system_tray_delegate();
-  ime_list_.clear();
-  property_list_.clear();
-  delegate->GetCurrentIME(&current_ime_);
-  delegate->GetAvailableIMEList(&ime_list_);
-  delegate->GetCurrentIMEProperties(&property_list_);
-  ime_managed_message_ = delegate->GetIMEManagedMessage();
-
   Update();
 }
 
 void TrayIME::OnIMEMenuActivationChanged(bool is_active) {
   is_visible_ = !is_active;
-  if (is_visible_)
-    OnIMERefresh();
-  else
-    Update();
+  Update();
 }
 
 bool TrayIME::IsIMEManaged() {
-  return !ime_managed_message_.empty();
+  return ime_controller_->managed_by_policy();
 }
 
 bool TrayIME::ShouldDefaultViewBeVisible() {
   return is_visible_ &&
-         (ShouldShowImeTrayItem(ime_list_.size()) ||
-          property_list_.size() > 1 || ShouldShowKeyboardToggle());
+         (ShouldShowImeTrayItem(ime_controller_->available_imes().size()) ||
+          ime_controller_->current_ime_menu_items().size() > 1 ||
+          ShouldShowKeyboardToggle());
 }
 
 bool TrayIME::ShouldShowImeTrayItem(size_t ime_count) {
@@ -304,6 +298,10 @@ ImeListView::SingleImeBehavior TrayIME::GetSingleImeBehavior() {
   // If managed, we also want to show a single IME.
   return IsIMEManaged() ? ImeListView::SHOW_SINGLE_IME
                         : ImeListView::HIDE_SINGLE_IME;
+}
+
+views::View* TrayIME::GetControlledSettingIconForTesting() {
+  return detailed_ ? detailed_->controlled_setting_icon() : nullptr;
 }
 
 }  // namespace ash

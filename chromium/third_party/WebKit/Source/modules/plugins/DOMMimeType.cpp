@@ -19,33 +19,33 @@
 
 #include "modules/plugins/DOMMimeType.h"
 
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Navigator.h"
 #include "core/loader/FrameLoader.h"
 #include "core/page/Page.h"
 #include "modules/plugins/DOMPlugin.h"
+#include "modules/plugins/DOMPluginArray.h"
+#include "modules/plugins/NavigatorPlugins.h"
 #include "platform/wtf/text/StringBuilder.h"
 
 namespace blink {
 
-DOMMimeType::DOMMimeType(PassRefPtr<PluginData> plugin_data,
-                         LocalFrame* frame,
-                         unsigned index)
-    : ContextClient(frame),
-      plugin_data_(std::move(plugin_data)),
-      index_(index) {}
-
-DOMMimeType::~DOMMimeType() {}
+DOMMimeType::DOMMimeType(LocalFrame* frame,
+                         const MimeClassInfo& mime_class_info)
+    : ContextClient(frame), mime_class_info_(&mime_class_info) {}
 
 DEFINE_TRACE(DOMMimeType) {
   ContextClient::Trace(visitor);
+  visitor->Trace(mime_class_info_);
 }
 
 const String& DOMMimeType::type() const {
-  return GetMimeClassInfo().type;
+  return mime_class_info_->Type();
 }
 
 String DOMMimeType::suffixes() const {
-  const Vector<String>& extensions = GetMimeClassInfo().extensions;
+  const Vector<String>& extensions = mime_class_info_->Extensions();
 
   StringBuilder builder;
   for (size_t i = 0; i < extensions.size(); ++i) {
@@ -57,7 +57,7 @@ String DOMMimeType::suffixes() const {
 }
 
 const String& DOMMimeType::description() const {
-  return GetMimeClassInfo().desc;
+  return mime_class_info_->Description();
 }
 
 DOMPlugin* DOMMimeType::enabledPlugin() const {
@@ -68,8 +68,8 @@ DOMPlugin* DOMMimeType::enabledPlugin() const {
       !GetFrame()->Loader().AllowPlugins(kNotAboutToInstantiatePlugin))
     return nullptr;
 
-  return DOMPlugin::Create(plugin_data_.Get(), GetFrame(),
-                           plugin_data_->MimePluginIndices()[index_]);
+  return NavigatorPlugins::plugins(*GetFrame()->DomWindow()->navigator())
+      ->namedItem(AtomicString(mime_class_info_->Plugin()->Name()));
 }
 
 }  // namespace blink

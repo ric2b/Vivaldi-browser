@@ -4,7 +4,7 @@
 
 #include "core/frame/RootFrameViewport.h"
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/ScrollAlignment.h"
 #include "core/layout/ScrollAnchor.h"
 #include "platform/geometry/DoubleRect.h"
@@ -38,12 +38,12 @@ ScrollableArea& RootFrameViewport::LayoutViewport() const {
 }
 
 LayoutRect RootFrameViewport::RootContentsToLayoutViewportContents(
-    FrameView& root_frame_view,
+    LocalFrameView& root_frame_view,
     const LayoutRect& rect) const {
   LayoutRect ret(rect);
 
-  // If the root FrameView is the layout viewport then coordinates in the
-  // root FrameView's content space are already in the layout viewport's
+  // If the root LocalFrameView is the layout viewport then coordinates in the
+  // root LocalFrameView's content space are already in the layout viewport's
   // content space.
   if (root_frame_view.LayoutViewportScrollableArea() == &LayoutViewport())
     return ret;
@@ -72,11 +72,11 @@ void RootFrameViewport::RestoreToAnchor(const ScrollOffset& target_offset) {
 
   delta = target_offset - GetScrollOffset();
 
-  // Since the main thread FrameView has integer scroll offsets, scroll it to
-  // the next pixel and then we'll scroll the visual viewport again to
+  // Since the main thread LocalFrameView has integer scroll offsets, scroll it
+  // to the next pixel and then we'll scroll the visual viewport again to
   // compensate for the sub-pixel offset. We need this "overscroll" to ensure
   // the pixel of which we want to be partially in appears fully inside the
-  // FrameView since the VisualViewport is bounded by the FrameView.
+  // LocalFrameView since the VisualViewport is bounded by the LocalFrameView.
   IntSize layout_delta = IntSize(
       delta.Width() < 0 ? floor(delta.Width()) : ceil(delta.Width()),
       delta.Height() < 0 ? floor(delta.Height()) : ceil(delta.Height()));
@@ -91,7 +91,7 @@ void RootFrameViewport::RestoreToAnchor(const ScrollOffset& target_offset) {
 }
 
 void RootFrameViewport::DidUpdateVisualViewport() {
-  if (RuntimeEnabledFeatures::scrollAnchoringEnabled()) {
+  if (RuntimeEnabledFeatures::ScrollAnchoringEnabled()) {
     if (ScrollAnchor* anchor = LayoutViewport().GetScrollAnchor())
       anchor->Clear();
   }
@@ -209,7 +209,9 @@ ScrollBehavior RootFrameViewport::ScrollBehaviorStyle() const {
 LayoutRect RootFrameViewport::ScrollIntoView(const LayoutRect& rect_in_content,
                                              const ScrollAlignment& align_x,
                                              const ScrollAlignment& align_y,
-                                             ScrollType scroll_type) {
+                                             bool is_smooth,
+                                             ScrollType scroll_type,
+                                             bool is_for_scroll_sequence) {
   // We want to move the rect into the viewport that excludes the scrollbars so
   // we intersect the visual viewport with the scrollbar-excluded frameView
   // content rect. However, we don't use visibleContentRect directly since it
@@ -229,12 +231,21 @@ LayoutRect RootFrameViewport::ScrollIntoView(const LayoutRect& rect_in_content,
   LayoutRect target_viewport = ScrollAlignment::GetRectToExpose(
       view_rect_in_content, rect_in_content, align_x, align_y);
   if (target_viewport != view_rect_in_content) {
-    SetScrollOffset(ScrollOffset(target_viewport.X(), target_viewport.Y()),
-                    scroll_type);
+    ScrollOffset target_offset(target_viewport.X(), target_viewport.Y());
+    if (is_for_scroll_sequence) {
+      DCHECK(scroll_type == kProgrammaticScroll);
+      ScrollBehavior behavior =
+          is_smooth ? kScrollBehaviorSmooth : kScrollBehaviorInstant;
+      GetSmoothScrollSequencer()->QueueAnimation(this, target_offset, behavior);
+    } else {
+      SetScrollOffset(target_offset, scroll_type);
+    }
   }
 
   // RootFrameViewport only changes the viewport relative to the document so we
   // can't change the input rect's location relative to the document origin.
+  // TODO(szager): PaintLayerScrollableArea::ScrollIntoView clips the return
+  // value to the visible content rect, but this does not.
   return rect_in_content;
 }
 
@@ -269,6 +280,10 @@ void RootFrameViewport::DistributeScrollBetweenViewports(
   ScrollOffset target_offset = primary.ClampScrollOffset(
       primary.GetScrollAnimator().CurrentOffset() + delta);
 
+  // DistributeScrollBetweenViewports can be called from SetScrollOffset,
+  // so we assume that aborting sequenced smooth scrolls has been handled.
+  // It can also be called from inside an animation to set the offset in
+  // each frame. In that case, we shouldn't abort sequenced smooth scrolls.
   primary.SetScrollOffset(target_offset, scroll_type, behavior);
 
   // Scroll the secondary viewport if all of the scroll was not applied to the
@@ -400,6 +415,8 @@ ScrollResult RootFrameViewport::UserScroll(ScrollGranularity granularity,
   }
 
   CancelProgrammaticScrollAnimation();
+  if (SmoothScrollSequencer* sequencer = GetSmoothScrollSequencer())
+    sequencer->AbortAnimations();
 
   // TODO(bokan): Why do we call userScroll on the animators directly and
   // not through the ScrollableAreas?
@@ -429,6 +446,10 @@ bool RootFrameViewport::ScrollAnimatorEnabled() const {
 
 PlatformChromeClient* RootFrameViewport::GetChromeClient() const {
   return LayoutViewport().GetChromeClient();
+}
+
+SmoothScrollSequencer* RootFrameViewport::GetSmoothScrollSequencer() const {
+  return LayoutViewport().GetSmoothScrollSequencer();
 }
 
 void RootFrameViewport::ServiceScrollAnimations(double monotonic_time) {

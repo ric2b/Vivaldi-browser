@@ -28,7 +28,6 @@ class SetAsDefaultBrowserUIBrowserTestWithFirstRun
     : public InProcessBrowserTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
     command_line->AppendSwitch(switches::kForceFirstRun);
   }
 
@@ -40,8 +39,8 @@ class SetAsDefaultBrowserUIBrowserTestWithFirstRun
 
 IN_PROC_BROWSER_TEST_F(SetAsDefaultBrowserUIBrowserTestWithFirstRun, Test) {
   // Windows 8 only test case.
-  if (base::win::GetVersion() <= base::win::VERSION_WIN7 ||
-      base::win::GetVersion() >= base::win::VERSION_WIN10) {
+  if (base::win::GetVersion() != base::win::VERSION_WIN8 &&
+      base::win::GetVersion() != base::win::VERSION_WIN8_1) {
     return;
   }
   ASSERT_FALSE(IsBrowserVisible(browser()));

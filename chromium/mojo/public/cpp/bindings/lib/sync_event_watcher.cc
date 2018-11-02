@@ -16,19 +16,19 @@ SyncEventWatcher::SyncEventWatcher(base::WaitableEvent* event,
       destroyed_(new base::RefCountedData<bool>(false)) {}
 
 SyncEventWatcher::~SyncEventWatcher() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (registered_)
-    registry_->UnregisterEvent(event_);
+    registry_->UnregisterEvent(event_, callback_);
   destroyed_->data = true;
 }
 
 void SyncEventWatcher::AllowWokenUpBySyncWatchOnSameThread() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   IncrementRegisterCount();
 }
 
 bool SyncEventWatcher::SyncWatch(const bool* should_stop) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   IncrementRegisterCount();
   if (!registered_) {
     DecrementRegisterCount();
@@ -51,15 +51,17 @@ bool SyncEventWatcher::SyncWatch(const bool* should_stop) {
 
 void SyncEventWatcher::IncrementRegisterCount() {
   register_request_count_++;
-  if (!registered_)
-    registered_ = registry_->RegisterEvent(event_, callback_);
+  if (!registered_) {
+    registry_->RegisterEvent(event_, callback_);
+    registered_ = true;
+  }
 }
 
 void SyncEventWatcher::DecrementRegisterCount() {
   DCHECK_GT(register_request_count_, 0u);
   register_request_count_--;
   if (register_request_count_ == 0 && registered_) {
-    registry_->UnregisterEvent(event_);
+    registry_->UnregisterEvent(event_, callback_);
     registered_ = false;
   }
 }

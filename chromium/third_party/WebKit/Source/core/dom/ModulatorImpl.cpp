@@ -30,8 +30,10 @@ ModulatorImpl::ModulatorImpl(RefPtr<ScriptState> script_state,
       fetcher_(fetcher),
       map_(this, ModuleMap::Create(this)),
       loader_registry_(ModuleScriptLoaderRegistry::Create()),
-      tree_linker_registry_(ModuleTreeLinkerRegistry::Create()),
-      script_module_resolver_(ScriptModuleResolverImpl::Create(this)) {
+      tree_linker_registry_(this, ModuleTreeLinkerRegistry::Create()),
+      script_module_resolver_(ScriptModuleResolverImpl::Create(
+          this,
+          ExecutionContext::From(script_state_.Get()))) {
   DCHECK(script_state_);
   DCHECK(task_runner_);
   DCHECK(fetcher_);
@@ -61,7 +63,7 @@ void ModulatorImpl::FetchTree(const ModuleScriptFetchRequest& request,
 
   AncestorList empty_ancestor_list;
   FetchTreeInternal(request, empty_ancestor_list,
-                    ModuleGraphLevel::kTopLevelModuleFetch, client);
+                    ModuleGraphLevel::kTopLevelModuleFetch, nullptr, client);
 
   // Step 2. When the internal module script graph fetching procedure
   // asynchronously completes with result, asynchronously complete this
@@ -72,12 +74,14 @@ void ModulatorImpl::FetchTree(const ModuleScriptFetchRequest& request,
 void ModulatorImpl::FetchTreeInternal(const ModuleScriptFetchRequest& request,
                                       const AncestorList& ancestor_list,
                                       ModuleGraphLevel level,
+                                      ModuleTreeReachedUrlSet* reached_url_set,
                                       ModuleTreeClient* client) {
   // We ensure module-related code is not executed without the flag.
   // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::moduleScriptsEnabled());
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
 
-  tree_linker_registry_->Fetch(request, ancestor_list, level, this, client);
+  tree_linker_registry_->Fetch(request, ancestor_list, level, this,
+                               reached_url_set, client);
 }
 
 void ModulatorImpl::FetchDescendantsForInlineScript(ModuleScript* module_script,
@@ -91,7 +95,7 @@ void ModulatorImpl::FetchSingle(const ModuleScriptFetchRequest& request,
                                 SingleModuleClient* client) {
   // We ensure module-related code is not executed without the flag.
   // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::moduleScriptsEnabled());
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
 
   map_->FetchSingleModuleScript(request, level, client);
 }
@@ -102,7 +106,7 @@ void ModulatorImpl::FetchNewSingleModule(
     ModuleScriptLoaderClient* client) {
   // We ensure module-related code is not executed without the flag.
   // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::moduleScriptsEnabled());
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
 
   loader_registry_->Fetch(request, level, this, fetcher_.Get(), client);
 }
@@ -119,8 +123,9 @@ ScriptModule ModulatorImpl::CompileModule(
     const String& provided_source,
     const String& url_str,
     AccessControlStatus access_control_status,
-    const TextPosition& position) {
-  // Implements Steps 3-6 of
+    const TextPosition& position,
+    ExceptionState& exception_state) {
+  // Implements Steps 3-5 of
   // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-module-script
 
   // Step 3. Let realm be the provided environment settings object's Realm.
@@ -134,12 +139,10 @@ ScriptModule ModulatorImpl::CompileModule(
     script_source = provided_source;
 
   // Step 5. Let result be ParseModule(script source, realm, script).
-  // Step 6. If result is a List of errors, report the exception given by the
-  // first element of result for script, return null, and abort these steps.
-  // Note: reporting is routed via V8Initializer::messageHandlerInMainThread.
   ScriptState::Scope scope(script_state_.Get());
   return ScriptModule::Compile(script_state_->GetIsolate(), script_source,
-                               url_str, access_control_status, position);
+                               url_str, access_control_status, position,
+                               exception_state);
 }
 
 ScriptValue ModulatorImpl::InstantiateModule(ScriptModule script_module) {
@@ -147,18 +150,44 @@ ScriptValue ModulatorImpl::InstantiateModule(ScriptModule script_module) {
   return script_module.Instantiate(script_state_.Get());
 }
 
-ScriptValue ModulatorImpl::GetInstantiationError(
-    const ModuleScript* module_script) {
+ScriptModuleState ModulatorImpl::GetRecordStatus(ScriptModule script_module) {
   ScriptState::Scope scope(script_state_.Get());
-  return ScriptValue(script_state_.Get(),
-                     module_script->CreateInstantiationErrorInternal(
-                         script_state_->GetIsolate()));
+  return script_module.Status(script_state_.Get());
 }
 
-Vector<String> ModulatorImpl::ModuleRequestsFromScriptModule(
+ScriptValue ModulatorImpl::GetError(const ModuleScript* module_script) {
+  DCHECK(module_script);
+  ScriptState::Scope scope(script_state_.Get());
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-module-script-error
+  // "When a module script is errored, ..." [spec text]
+
+  // "we say that its error is either its pre-instantiation error, when its
+  // module record is null, ..." [spec text]
+  ScriptModule record = module_script->Record();
+  if (record.IsNull()) {
+    return ScriptValue(script_state_.Get(), module_script->CreateErrorInternal(
+                                                script_state_->GetIsolate()));
+  }
+
+  // "or its module record's [[ErrorCompletion]] field's [[Value]] field,
+  // otherwise." [spec text]
+  return ScriptValue(script_state_.Get(),
+                     record.ErrorCompletion(script_state_.Get()));
+}
+
+Vector<Modulator::ModuleRequest> ModulatorImpl::ModuleRequestsFromScriptModule(
     ScriptModule script_module) {
   ScriptState::Scope scope(script_state_.Get());
-  return script_module.ModuleRequests(script_state_.Get());
+  Vector<String> specifiers = script_module.ModuleRequests(script_state_.Get());
+  Vector<TextPosition> positions =
+      script_module.ModuleRequestPositions(script_state_.Get());
+  DCHECK_EQ(specifiers.size(), positions.size());
+  Vector<ModuleRequest> requests;
+  requests.ReserveInitialCapacity(specifiers.size());
+  for (size_t i = 0; i < specifiers.size(); ++i) {
+    requests.emplace_back(specifiers[i], positions[i]);
+  }
+  return requests;
 }
 
 inline ExecutionContext* ModulatorImpl::GetExecutionContext() const {
@@ -170,45 +199,42 @@ void ModulatorImpl::ExecuteModule(const ModuleScript* module_script) {
 
   // We ensure module-related code is not executed without the flag.
   // https://crbug.com/715376
-  CHECK(RuntimeEnabledFeatures::moduleScriptsEnabled());
+  CHECK(RuntimeEnabledFeatures::ModuleScriptsEnabled());
 
-  // 1. "Let settings be the settings object of s."
+  // Step 1. "Let settings be the settings object of s." [spec text]
   // The settings object is |this|.
 
-  // 2. "Check if we can run script with settings.
-  //     If this returns "do not run" then abort these steps."
+  // Step 2. "Check if we can run script with settings.
+  //          If this returns "do not run" then abort these steps." [spec text]
   if (!GetExecutionContext()->CanExecuteScripts(kAboutToExecuteScript))
     return;
 
-  // 6. "Prepare to run script given settings."
+  // Step 4. "Prepare to run script given settings." [spec text]
   // This is placed here to also cover ScriptModule::ReportException().
   ScriptState::Scope scope(script_state_.Get());
 
-  // 3. "If s's instantiation state is "errored", then report the exception
-  //     given by s's instantiation error for s and abort these steps."
-  ModuleInstantiationState instantiationState =
-      module_script->InstantiationState();
-  if (instantiationState == ModuleInstantiationState::kErrored) {
-    v8::Isolate* isolate = script_state_->GetIsolate();
-    ScriptModule::ReportException(
-        script_state_.Get(),
-        module_script->CreateInstantiationErrorInternal(isolate),
-        module_script->BaseURL().GetString());
+  // Step 3. "If s is errored, then report the exception given by s's error for
+  // s and abort these steps." [spec text]
+  if (module_script->IsErrored()) {
+    ScriptValue error = GetError(module_script);
+    ScriptModule::ReportException(script_state_.Get(), error.V8Value(),
+                                  module_script->BaseURL().GetString(),
+                                  module_script->StartPosition());
     return;
   }
 
-  // 4. "Assert: s's instantiation state is "instantiated" (and thus its
-  //     module record is not null)."
-  CHECK_EQ(instantiationState, ModuleInstantiationState::kInstantiated);
-
-  // 5. "Let record be s's module record."
+  // Step 5. "Let record be s's module record." [spec text]
   const ScriptModule& record = module_script->Record();
   CHECK(!record.IsNull());
 
-  // Steps 7 and 8.
+  // Step 6. "Let evaluationStatus be record.ModuleEvaluation()." [spec text]
   record.Evaluate(script_state_.Get());
 
-  // 9. "Clean up after running script with settings."
+  // Step 7. "If evaluationStatus is an abrupt completion, then report the
+  // exception given by evaluationStatus.[[Value]] for s." [spec text]
+  // TODO(kouhei): Implement this.
+
+  // Step 8. "Clean up after running script with settings." [spec text]
   // Implemented as the ScriptState::Scope destructor.
 }
 
@@ -223,6 +249,7 @@ DEFINE_TRACE(ModulatorImpl) {
 
 DEFINE_TRACE_WRAPPERS(ModulatorImpl) {
   visitor->TraceWrappers(map_);
+  visitor->TraceWrappers(tree_linker_registry_);
 }
 
 }  // namespace blink

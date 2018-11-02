@@ -16,7 +16,6 @@
 #include "base/macros.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/views/widget/widget.h"
 
 namespace aura {
 class Window;
@@ -39,6 +38,7 @@ class WindowTreeHost;
 namespace views {
 class MenuModelAdapter;
 class MenuRunner;
+class Widget;
 }
 
 namespace wm {
@@ -79,7 +79,7 @@ class RootWindowLayoutManager;
 // indirectly owned and deleted by |WindowTreeHostManager|.
 // The RootWindowController for particular root window is stored in
 // its property (RootWindowSettings) and can be obtained using
-// |GetRootWindowController(aura::WindowEventDispatcher*)| function.
+// |RootWindowController::ForWindow(aura::Window*)| function.
 class ASH_EXPORT RootWindowController : public ShellObserver {
  public:
   // Enumerates the type of display. If there is only a single display then
@@ -106,14 +106,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
                                     : std::vector<RootWindowController*>();
   }
 
-  // Configures |init_params| prior to initializing |widget|.
-  // |shell_container_id| is the id of the container to parent |widget| to.
-  // TODO(sky): remove this, http://crbug.com/671246.
-  void ConfigureWidgetInitParamsForContainer(
-      views::Widget* widget,
-      int shell_container_id,
-      views::Widget::InitParams* init_params);
-
   // TODO(sky): move these to a separate class or use AshWindowTreeHost in
   // mash. http://crbug.com/671246.
   AshWindowTreeHost* ash_host() { return ash_host_.get(); }
@@ -124,13 +116,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   aura::Window* GetRootWindow();
   const aura::Window* GetRootWindow() const;
 
-  // TODO(sky): remove these. http://crbug.com/671246.
-  WmWindow* GetWindow() {
-    return const_cast<WmWindow*>(
-        const_cast<const RootWindowController*>(this)->GetWindow());
-  }
-  const WmWindow* GetWindow() const;
-
   WorkspaceController* workspace_controller() {
     return workspace_controller_.get();
   }
@@ -138,8 +123,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
   wm::WorkspaceWindowState GetWorkspaceWindowState();
 
   Shelf* shelf() const { return shelf_.get(); }
-  // TODO(jamescook): Eliminate in favor of shelf().
-  Shelf* GetShelf() const { return shelf_.get(); }
 
   // Initializes the shelf for this root window and notifies observers.
   void InitializeShelf();
@@ -207,14 +190,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   aura::Window* GetContainer(int container_id);
   const aura::Window* GetContainer(int container_id) const;
-
-  // TODO(sky): remove these. http://crbug.com/671246.
-  WmWindow* GetWmContainer(int container_id) {
-    return const_cast<WmWindow*>(
-        const_cast<const RootWindowController*>(this)->GetWmContainer(
-            container_id));
-  }
-  const WmWindow* GetWmContainer(int container_id) const;
 
   WallpaperWidgetController* wallpaper_widget_controller() {
     return wallpaper_widget_controller_.get();
@@ -297,7 +272,7 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   void InitLayoutManagers();
 
-  // Creates the containers (WmWindows) used by the shell.
+  // Creates the containers (aura::Windows) used by the shell.
   void CreateContainers();
 
   // Initializes |system_wallpaper_| and possibly also |boot_splash_screen_|.
@@ -375,12 +350,6 @@ class ASH_EXPORT RootWindowController : public ShellObserver {
 
   DISALLOW_COPY_AND_ASSIGN(RootWindowController);
 };
-
-// On classic ash, returns the RootWindowController for the given |root_window|.
-// On mus ash, returns the RootWindowController for the primary display.
-// See RootWindowController class comment above.
-ASH_EXPORT RootWindowController* GetRootWindowController(
-    const aura::Window* root_window);
 
 }  // namespace ash
 

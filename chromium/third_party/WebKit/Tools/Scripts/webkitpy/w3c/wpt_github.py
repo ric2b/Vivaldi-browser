@@ -6,28 +6,33 @@ import base64
 import json
 import logging
 import urllib2
-
 from collections import namedtuple
-from webkitpy.w3c.common import WPT_GH_ORG, WPT_GH_REPO_NAME
-from webkitpy.common.memoized import memoized
 
+from webkitpy.common.memoized import memoized
+from webkitpy.w3c.common import WPT_GH_ORG, WPT_GH_REPO_NAME, EXPORT_PR_LABEL
 
 _log = logging.getLogger(__name__)
 API_BASE = 'https://api.github.com'
-EXPORT_LABEL = 'chromium-export'
 
 
 class WPTGitHub(object):
+    """An interface to GitHub for interacting with the web-platform-tests repo.
 
-    def __init__(self, host, user, token, pr_history_window=30):
+    This class contains methods for sending requests to the GitHub API.
+    """
+
+    def __init__(self, host, user=None, token=None, pr_history_window=100):
         self.host = host
         self.user = user
         self.token = token
-        assert self.user and self.token
 
         self._pr_history_window = pr_history_window
 
+    def has_credentials(self):
+        return self.user and self.token
+
     def auth_token(self):
+        assert self.has_credentials()
         return base64.b64encode('{}:{}'.format(self.user, self.token))
 
     def request(self, path, method, body=None):
@@ -36,14 +41,16 @@ class WPTGitHub(object):
         if body:
             body = json.dumps(body)
 
+        headers = {'Accept': 'application/vnd.github.v3+json'}
+
+        if self.has_credentials():
+            headers['Authorization'] = 'Basic {}'.format(self.auth_token())
+
         response = self.host.web.request(
             method=method,
             url=API_BASE + path,
             data=body,
-            headers={
-                'Accept': 'application/vnd.github.v3+json',
-                'Authorization': 'Basic {}'.format(self.auth_token()),
-            },
+            headers=headers
         )
 
         status_code = response.getcode()
@@ -102,20 +109,35 @@ class WPTGitHub(object):
 
         return data
 
-    def add_label(self, number):
+    def add_label(self, number, label):
         path = '/repos/%s/%s/issues/%d/labels' % (
             WPT_GH_ORG,
             WPT_GH_REPO_NAME,
             number
         )
-        body = [EXPORT_LABEL]
+        body = [label]
         return self.request(path, method='POST', body=body)
+
+    def remove_label(self, number, label):
+        path = '/repos/%s/%s/issues/%d/labels/%s' % (
+            WPT_GH_ORG,
+            WPT_GH_REPO_NAME,
+            number,
+            urllib2.quote(label),
+        )
+
+        _, status_code = self.request(path, method='DELETE')
+        # The GitHub API documentation claims that this endpoint returns a 204
+        # on success. However in reality it returns a 200.
+        # https://developer.github.com/v3/issues/labels/#remove-a-label-from-an-issue
+        if status_code not in (200, 204):
+            raise GitHubError('Received non-200 status code attempting to delete label: {}'.format(status_code))
 
     def in_flight_pull_requests(self):
         path = '/search/issues?q=repo:{}/{}%20is:open%20type:pr%20label:{}'.format(
             WPT_GH_ORG,
             WPT_GH_REPO_NAME,
-            EXPORT_LABEL
+            EXPORT_PR_LABEL
         )
         data, status_code = self.request(path, method='GET')
         if status_code == 200:
@@ -124,11 +146,13 @@ class WPTGitHub(object):
             raise Exception('Non-200 status code (%s): %s' % (status_code, data))
 
     def make_pr_from_item(self, item):
+        labels = [label['name'] for label in item['labels']]
         return PullRequest(
             title=item['title'],
             number=item['number'],
             body=item['body'],
-            state=item['state'])
+            state=item['state'],
+            labels=labels)
 
     @memoized
     def all_pull_requests(self):
@@ -142,9 +166,10 @@ class WPTGitHub(object):
         ).format(
             WPT_GH_ORG,
             WPT_GH_REPO_NAME,
-            EXPORT_LABEL,
+            EXPORT_PR_LABEL,
             self._pr_history_window
         )
+
         data, status_code = self.request(path, method='GET')
         if status_code == 200:
             return [self.make_pr_from_item(item) for item in data['items']]
@@ -198,10 +223,20 @@ class WPTGitHub(object):
         data, status_code = self.request(path, method='DELETE')
 
         if status_code != 204:
-            # TODO(jeffcarp): Raise more specific exception (create MergeError class?)
-            raise Exception('Received non-204 status code attempting to delete remote branch: {}'.format(status_code))
+            raise GitHubError('Received non-204 status code attempting to delete remote branch: {}'.format(status_code))
 
         return data
+
+    def pr_for_chromium_commit(self, chromium_commit):
+        """Returns a PR corresponding to the given ChromiumCommit, or None."""
+        pull_request = self.pr_with_change_id(chromium_commit.change_id())
+        if pull_request:
+            return pull_request
+        # The Change ID can't be used for commits made via Rietveld,
+        # so we fall back to trying to use commit position here, although
+        # commit position is not correct sometimes (https://crbug.com/737178).
+        # TODO(qyearsley): Remove this fallback after full Gerrit migration.
+        return self.pr_with_position(chromium_commit.position)
 
     def pr_with_change_id(self, target_change_id):
         for pull_request in self.all_pull_requests():
@@ -224,7 +259,6 @@ class WPTGitHub(object):
         return None
 
 
-
 class MergeError(Exception):
     """An error specifically for when a PR cannot be merged.
 
@@ -233,4 +267,10 @@ class MergeError(Exception):
     """
     pass
 
-PullRequest = namedtuple('PullRequest', ['title', 'number', 'body', 'state'])
+
+class GitHubError(Exception):
+    """Raised when an GitHub returns a non-OK response status for a request."""
+    pass
+
+
+PullRequest = namedtuple('PullRequest', ['title', 'number', 'body', 'state', 'labels'])

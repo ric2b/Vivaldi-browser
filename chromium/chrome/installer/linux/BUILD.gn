@@ -2,6 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//build/config/c++/c++.gni")
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/sanitizers/sanitizers.gni")
@@ -81,6 +82,7 @@ copy("common_packaging_files") {
     "common/wrapper",
     "//vivaldi/installer/linux/common/vivaldi.info",
     "//vivaldi/installer/linux/common/xfce-helper.template",
+    "//vivaldi/installer/linux/common/appdata.xml.template",
   ]
 
   if (is_chrome_branded) {
@@ -95,11 +97,7 @@ copy("common_packaging_files") {
     ]
   }
 
-  if (current_cpu == "x86") {
-    sources += [ "//build/linux/bin/eu-strip" ]
-  } else if (current_cpu == "x64") {
-    sources += [ "/usr/bin/eu-strip" ]
-  }
+  sources += [ "//third_party/eu-strip/bin/eu-strip" ]
 
   outputs = [
     "$root_out_dir/installer/common/{{source_file_part}}",
@@ -208,8 +206,9 @@ group("installer_deps") {
   if (!is_chromeos) {
     public_deps += [ ":rpm_packaging_files" ]
   }
-  if (use_custom_libcxx) {
-    public_deps += [ "//buildtools/third_party/libc++" ]
+
+  if (!libcpp_is_static && use_custom_libcxx) {
+    public_deps += [ "//buildtools/third_party/libc++:libc++" ]
   }
 }
 
@@ -257,7 +256,7 @@ template("linux_package") {
     ]
   }
 
-  if (use_custom_libcxx) {
+  if (!libcpp_is_static && use_custom_libcxx) {
     packaging_files_binaries += [ "$root_out_dir/libc++.so" ]
   }
 

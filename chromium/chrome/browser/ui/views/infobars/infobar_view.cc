@@ -14,9 +14,9 @@
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/infobars/infobar_background.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/infobars/core/infobar_delegate.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/effects/SkGradientShader.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -26,7 +26,6 @@
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/common_theme.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/button/label_button_border.h"
@@ -38,7 +37,6 @@
 #include "ui/views/controls/menu/menu_runner.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
-
 
 // Helpers --------------------------------------------------------------------
 
@@ -65,8 +63,8 @@ InfoBarView::InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate)
       icon_(nullptr),
       close_button_(nullptr) {
   set_owned_by_client();  // InfoBar deletes itself at the appropriate time.
-  set_background(
-      new InfoBarBackground(infobars::InfoBar::delegate()->GetInfoBarType()));
+  SetBackground(base::MakeUnique<InfoBarBackground>(
+      infobars::InfoBar::delegate()->GetInfoBarType()));
   SetEventTargeter(base::MakeUnique<views::ViewTargeter>(this));
 
   AddChildView(child_container_);
@@ -76,8 +74,8 @@ InfoBarView::InfoBarView(std::unique_ptr<infobars::InfoBarDelegate> delegate)
 
   child_container_->SetPaintToLayer();
   child_container_->layer()->SetMasksToBounds(true);
-  child_container_->set_background(views::Background::CreateSolidBackground(
-      infobars::InfoBar::GetBackgroundColor(
+  child_container_->SetBackground(
+      views::CreateSolidBackground(infobars::InfoBar::GetBackgroundColor(
           infobars::InfoBar::delegate()->GetInfoBarType())));
 }
 
@@ -169,7 +167,7 @@ void InfoBarView::ViewHierarchyChanged(
     }
 
     close_button_ = views::CreateVectorImageButton(this);
-    views::SetImageFromVectorIcon(close_button_, ui::kCloseIcon,
+    views::SetImageFromVectorIcon(close_button_, vector_icons::kCloseIcon,
                                   GetInfobarTextColor());
     close_button_->SetAccessibleName(
         l10n_util::GetStringUTF16(IDS_ACCNAME_CLOSE));
@@ -281,7 +279,7 @@ void InfoBarView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
           ? IDS_ACCNAME_INFOBAR_WARNING
           : IDS_ACCNAME_INFOBAR_PAGE_ACTION));
   node_data->role = ui::AX_ROLE_ALERT;
-  node_data->AddStringAttribute(ui::AX_ATTR_SHORTCUT, "Alt+Shift+A");
+  node_data->AddStringAttribute(ui::AX_ATTR_KEY_SHORTCUTS, "Alt+Shift+A");
 }
 
 gfx::Size InfoBarView::CalculatePreferredSize() const {

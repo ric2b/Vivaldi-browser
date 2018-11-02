@@ -4,6 +4,7 @@
 
 #include "core/layout/ng/inline/ng_inline_item.h"
 
+#include "core/layout/LayoutInline.h"
 #include "core/layout/LayoutObject.h"
 #include "platform/fonts/CharacterRange.h"
 #include "platform/fonts/shaping/ShapeResultBuffer.h"
@@ -111,16 +112,16 @@ LayoutUnit NGInlineItem::InlineSize(unsigned start, unsigned end) const {
                         .Width());
 }
 
-void NGInlineItem::GetFallbackFonts(
-    HashSet<const SimpleFontData*>* fallback_fonts,
-    unsigned start,
-    unsigned end) const {
-  DCHECK_GE(start, StartOffset());
-  DCHECK_LE(start, end);
-  DCHECK_LE(end, EndOffset());
+bool NGInlineItem::HasStartEdge() const {
+  DCHECK(Type() == kOpenTag || Type() == kCloseTag);
+  // TODO(kojii): Should use break token when NG has its own tree building.
+  return !GetLayoutObject()->IsInlineElementContinuation();
+}
 
-  // TODO(kojii): Implement |start| and |end|.
-  shape_result_->FallbackFonts(fallback_fonts);
+bool NGInlineItem::HasEndEdge() const {
+  DCHECK(Type() == kOpenTag || Type() == kCloseTag);
+  // TODO(kojii): Should use break token when NG has its own tree building.
+  return !ToLayoutInline(GetLayoutObject())->Continuation();
 }
 
 NGInlineItemRange::NGInlineItemRange(Vector<NGInlineItem>* items,

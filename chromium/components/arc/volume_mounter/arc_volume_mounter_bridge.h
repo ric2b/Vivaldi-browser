@@ -1,0 +1,66 @@
+// Copyright 2017 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#ifndef COMPONENTS_ARC_VOLUME_MOUNTER_ARC_VOLUME_MOUNTER_BRIDGE_H_
+#define COMPONENTS_ARC_VOLUME_MOUNTER_ARC_VOLUME_MOUNTER_BRIDGE_H_
+
+#include <string>
+
+#include "base/macros.h"
+#include "chromeos/disks/disk_mount_manager.h"
+#include "components/arc/common/volume_mounter.mojom.h"
+#include "components/arc/instance_holder.h"
+#include "components/keyed_service/core/keyed_service.h"
+#include "mojo/public/cpp/bindings/binding.h"
+
+namespace content {
+class BrowserContext;
+}  // namespace content
+
+namespace arc {
+
+class ArcBridgeService;
+
+// This class handles Volume mount/unmount requests from cros-disks and
+// send them to Android.
+class ArcVolumeMounterBridge
+    : public KeyedService,
+      public chromeos::disks::DiskMountManager::Observer,
+      public InstanceHolder<mojom::VolumeMounterInstance>::Observer {
+ public:
+  // Returns singleton instance for the given BrowserContext,
+  // or nullptr if the browser |context| is not allowed to use ARC.
+  static ArcVolumeMounterBridge* GetForBrowserContext(
+      content::BrowserContext* context);
+
+  ArcVolumeMounterBridge(content::BrowserContext* context,
+                         ArcBridgeService* bridge_service);
+  ~ArcVolumeMounterBridge() override;
+
+  // InstanceHolder<mojom::VolumeMounterInstance>::Observer overrides:
+  void OnInstanceReady() override;
+
+  // chromeos::disks::DiskMountManager::Observer overrides:
+  void OnDiskEvent(
+      chromeos::disks::DiskMountManager::DiskEvent event,
+      const chromeos::disks::DiskMountManager::Disk* disk) override;
+  void OnDeviceEvent(chromeos::disks::DiskMountManager::DeviceEvent event,
+                     const std::string& device_path) override;
+  void OnMountEvent(chromeos::disks::DiskMountManager::MountEvent event,
+                    chromeos::MountError error_code,
+                    const chromeos::disks::DiskMountManager::MountPointInfo&
+                        mount_info) override;
+  void OnFormatEvent(chromeos::disks::DiskMountManager::FormatEvent event,
+                     chromeos::FormatError error_code,
+                     const std::string& device_path) override;
+
+ private:
+  ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
+
+  DISALLOW_COPY_AND_ASSIGN(ArcVolumeMounterBridge);
+};
+
+}  // namespace arc
+
+#endif  // COMPONENTS_ARC_VOLUME_MOUNTER_ARC_VOLUME_MOUNTER_BRIDGE_H_

@@ -40,16 +40,13 @@ namespace blink {
 class MockBaseFetchContext final : public BaseFetchContext {
  public:
   explicit MockBaseFetchContext(ExecutionContext* execution_context)
-      : BaseFetchContext(execution_context) {}
+      : execution_context_(execution_context) {}
   ~MockBaseFetchContext() override {}
 
   // BaseFetchContext overrides:
-  ContentSettingsClient* GetContentSettingsClient() const override {
-    return nullptr;
-  }
-  Settings* GetSettings() const override { return nullptr; }
+  KURL GetFirstPartyForCookies() const override { return KURL(); }
+  bool AllowScriptFromSource(const KURL&) const { return false; }
   SubresourceFilter* GetSubresourceFilter() const override { return nullptr; }
-  SecurityContext* GetParentSecurityContext() const override { return nullptr; }
   bool ShouldBlockRequestByInspector(const ResourceRequest&) const override {
     return false;
   }
@@ -58,14 +55,52 @@ class MockBaseFetchContext final : public BaseFetchContext {
                                ResourceRequestBlockedReason) const override {}
   bool ShouldBypassMainWorldCSP() const override { return false; }
   bool IsSVGImageChromeClient() const override { return false; }
-  void CountUsage(UseCounter::Feature) const override {}
-  void CountDeprecation(UseCounter::Feature) const override {}
+  void CountUsage(WebFeature) const override {}
+  void CountDeprecation(WebFeature) const override {}
   bool ShouldBlockFetchByMixedContentCheck(
       const ResourceRequest&,
       const KURL&,
       SecurityViolationReportingPolicy) const override {
     return false;
   }
+  bool ShouldBlockFetchAsCredentialedSubresource(const ResourceRequest&,
+                                                 const KURL&) const override {
+    return false;
+  }
+  ReferrerPolicy GetReferrerPolicy() const override {
+    return execution_context_->GetReferrerPolicy();
+  }
+  String GetOutgoingReferrer() const override {
+    return execution_context_->OutgoingReferrer();
+  }
+  const KURL& Url() const override { return execution_context_->Url(); }
+
+  SecurityOrigin* GetSecurityOrigin() const override {
+    return execution_context_->GetSecurityOrigin();
+  }
+  const SecurityOrigin* GetParentSecurityOrigin() const override {
+    return nullptr;
+  }
+  Optional<WebAddressSpace> GetAddressSpace() const override {
+    return WTF::make_optional(
+        execution_context_->GetSecurityContext().AddressSpace());
+  }
+  const ContentSecurityPolicy* GetContentSecurityPolicy() const override {
+    return execution_context_->GetContentSecurityPolicy();
+  }
+  void AddConsoleMessage(ConsoleMessage*) const override {}
+
+  DEFINE_INLINE_TRACE() {
+    visitor->Trace(execution_context_);
+    BaseFetchContext::Trace(visitor);
+  }
+
+  bool IsDetached() const override { return is_detached_; }
+  void SetIsDetached(bool is_detached) { is_detached_ = is_detached; }
+
+ private:
+  Member<ExecutionContext> execution_context_;
+  bool is_detached_ = false;
 };
 
 class BaseFetchContextTest : public ::testing::Test {
@@ -78,7 +113,7 @@ class BaseFetchContextTest : public ::testing::Test {
   }
 
   Persistent<ExecutionContext> execution_context_;
-  Persistent<BaseFetchContext> fetch_context_;
+  Persistent<MockBaseFetchContext> fetch_context_;
 };
 
 TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
@@ -98,7 +133,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
 
       {"http://localhost/", true},         {"http://127.0.0.1/", true},
       {"http://127.0.0.1:8000/", true}};
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(false);
   for (const auto& test : cases) {
     SCOPED_TRACE(test.url);
     ResourceRequest main_request(test.url);
@@ -111,7 +146,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPublicContext) {
     EXPECT_FALSE(sub_request.IsExternalRequest());
   }
 
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(true);
   for (const auto& test : cases) {
     SCOPED_TRACE(test.url);
     ResourceRequest main_request(test.url);
@@ -144,7 +179,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
 
       {"http://localhost/", true},         {"http://127.0.0.1/", true},
       {"http://127.0.0.1:8000/", true}};
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(false);
   for (const auto& test : cases) {
     SCOPED_TRACE(test.url);
     ResourceRequest main_request(test.url);
@@ -157,7 +192,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForPrivateContext) {
     EXPECT_FALSE(sub_request.IsExternalRequest());
   }
 
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(true);
   for (const auto& test : cases) {
     SCOPED_TRACE(test.url);
     ResourceRequest main_request(test.url);
@@ -191,7 +226,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForLocalContext) {
       {"http://localhost/", false},        {"http://127.0.0.1/", false},
       {"http://127.0.0.1:8000/", false}};
 
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(false);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(false);
   for (const auto& test : cases) {
     ResourceRequest main_request(test.url);
     fetch_context_->AddAdditionalRequestHeaders(main_request,
@@ -203,7 +238,7 @@ TEST_F(BaseFetchContextTest, SetIsExternalRequestForLocalContext) {
     EXPECT_FALSE(sub_request.IsExternalRequest());
   }
 
-  RuntimeEnabledFeatures::setCorsRFC1918Enabled(true);
+  RuntimeEnabledFeatures::SetCorsRFC1918Enabled(true);
   for (const auto& test : cases) {
     ResourceRequest main_request(test.url);
     fetch_context_->AddAdditionalRequestHeaders(main_request,
@@ -227,15 +262,20 @@ TEST_F(BaseFetchContextTest, RedirectChecksReportedAndEnforcedCSP) {
   policy->DidReceiveHeader("script-src https://bar.test",
                            kContentSecurityPolicyHeaderTypeReport,
                            kContentSecurityPolicyHeaderSourceHTTP);
-  KURL url(KURL(), "http://baz.test");
+
+  KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
-  EXPECT_EQ(
-      ResourceRequestBlockedReason::CSP,
-      fetch_context_->CanFollowRedirect(
-          Resource::kScript, resource_request, url, ResourceLoaderOptions(),
-          SecurityViolationReportingPolicy::kReport,
-          FetchParameters::kUseDefaultOriginRestrictionForType));
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
+
+  ResourceLoaderOptions options;
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kCSP,
+            fetch_context_->CanFollowRedirect(
+                Resource::kScript, resource_request, url, options,
+                SecurityViolationReportingPolicy::kReport,
+                FetchParameters::kUseDefaultOriginRestrictionForType));
   EXPECT_EQ(2u, policy->violation_reports_sent_.size());
 }
 
@@ -249,13 +289,52 @@ TEST_F(BaseFetchContextTest, AllowResponseChecksReportedAndEnforcedCSP) {
   policy->DidReceiveHeader("script-src https://bar.test",
                            kContentSecurityPolicyHeaderTypeReport,
                            kContentSecurityPolicyHeaderSourceHTTP);
-  KURL url(KURL(), "http://baz.test");
+
+  KURL url(NullURL(), "http://baz.test");
   ResourceRequest resource_request(url);
   resource_request.SetRequestContext(WebURLRequest::kRequestContextScript);
-  EXPECT_EQ(ResourceRequestBlockedReason::CSP,
+  resource_request.SetFetchCredentialsMode(
+      WebURLRequest::kFetchCredentialsModeOmit);
+
+  ResourceLoaderOptions options;
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kCSP,
             fetch_context_->AllowResponse(Resource::kScript, resource_request,
-                                          url, ResourceLoaderOptions()));
+                                          url, options));
   EXPECT_EQ(2u, policy->violation_reports_sent_.size());
+}
+
+TEST_F(BaseFetchContextTest, CanRequestWhenDetached) {
+  KURL url(NullURL(), "http://www.example.com/");
+  ResourceRequest request(url);
+  ResourceRequest keepalive_request(url);
+  keepalive_request.SetKeepalive(true);
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction));
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction));
+
+  fetch_context_->SetIsDetached(true);
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kOther,
+            fetch_context_->CanRequest(
+                Resource::kRaw, request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction));
+
+  EXPECT_EQ(ResourceRequestBlockedReason::kNone,
+            fetch_context_->CanRequest(
+                Resource::kRaw, keepalive_request, url, ResourceLoaderOptions(),
+                SecurityViolationReportingPolicy::kSuppressReporting,
+                FetchParameters::kNoOriginRestriction));
 }
 
 }  // namespace blink

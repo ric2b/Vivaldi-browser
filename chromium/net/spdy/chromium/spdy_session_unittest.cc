@@ -161,22 +161,16 @@ class SpdySessionTest : public PlatformTest {
     spdy_session_pool_ = http_session_->spdy_session_pool();
   }
 
-  void CreateInsecureSpdySession() {
-    DCHECK(!session_);
-    session_ = ::net::CreateInsecureSpdySession(http_session_.get(), key_,
-                                                log_.bound());
-  }
-
   void AddSSLSocketData() {
     ssl_.cert = ImportCertFromFile(GetTestCertsDirectory(), "spdy_pooling.pem");
     ASSERT_TRUE(ssl_.cert);
     session_deps_.socket_factory->AddSSLSocketDataProvider(&ssl_);
   }
 
-  void CreateSecureSpdySession() {
+  void CreateSpdySession() {
     DCHECK(!session_);
     session_ =
-        ::net::CreateSecureSpdySession(http_session_.get(), key_, log_.bound());
+        ::net::CreateSpdySession(http_session_.get(), key_, log_.bound());
   }
 
   void StallSessionSend() {
@@ -283,7 +277,7 @@ TEST_F(SpdySessionTest, PendingStreamCancellingAnother) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Create the maximum number of concurrent streams.
   for (size_t i = 0; i < kInitialMaxConcurrentStreams; ++i) {
@@ -330,7 +324,7 @@ TEST_F(SpdySessionTest, GoAwayWithNoActiveStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key_));
 
@@ -388,7 +382,7 @@ TEST_F(SpdySessionTest, GoAwayWithActiveStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -458,7 +452,7 @@ TEST_F(SpdySessionTest, GoAwayWithActiveAndCreatedStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -519,7 +513,7 @@ TEST_F(SpdySessionTest, GoAwayTwice) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -588,7 +582,7 @@ TEST_F(SpdySessionTest, GoAwayWithActiveStreamsThenClose) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -676,7 +670,7 @@ TEST_F(SpdySessionTest, GoAwayWhileDraining) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -717,7 +711,7 @@ TEST_F(SpdySessionTest, CreateStreamAfterGoAway) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -777,7 +771,7 @@ TEST_F(SpdySessionTest, HeadersAfterGoAway) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -827,7 +821,7 @@ TEST_F(SpdySessionTest, NetworkChangeWithActiveStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -889,7 +883,7 @@ TEST_F(SpdySessionTest, ClientPing) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -942,7 +936,7 @@ TEST_F(SpdySessionTest, ServerPing) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -987,7 +981,7 @@ TEST_F(SpdySessionTest, PingAndWriteLoop) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -1051,7 +1045,7 @@ TEST_F(SpdySessionTest, StreamIdSpaceExhausted) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Fix stream_hi_water_mark_ to allow for two stream activations.
   session_->stream_hi_water_mark_ = kLastStreamId - 2;
@@ -1175,7 +1169,7 @@ TEST_F(SpdySessionTest, MaxConcurrentStreamsZero) {
 
   // Create session.
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Receive SETTINGS frame that sets max_concurrent_streams to zero.
   base::RunLoop().RunUntilIdle();
@@ -1239,7 +1233,7 @@ TEST_F(SpdySessionTest, UnstallRacesWithStreamCreation) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Fix max_concurrent_streams to allow for one open stream.
   session_->max_concurrent_streams_ = 1;
@@ -1326,7 +1320,7 @@ TEST_F(SpdySessionTest, CancelPushAfterSessionGoesAway) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Process the principal request, and the first push stream request & body.
   base::WeakPtr<SpdyStream> spdy_stream =
@@ -1418,7 +1412,7 @@ TEST_F(SpdySessionTest, CancelPushAfterExpired) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Process the principal request, and the first push stream request & body.
   base::WeakPtr<SpdyStream> spdy_stream =
@@ -1511,7 +1505,7 @@ TEST_F(SpdySessionTest, CancelPushBeforeClaimed) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Process the principal request, and the first push stream request & body.
   base::WeakPtr<SpdyStream> spdy_stream =
@@ -1602,7 +1596,7 @@ TEST_F(SpdySessionTest, DeleteExpiredPushStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Process the principal request, and the first push stream request & body.
   base::WeakPtr<SpdyStream> spdy_stream =
@@ -1701,7 +1695,7 @@ TEST_F(SpdySessionTest, MetricsCollectionOnPushStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Process the principal request, and the first push stream request & body.
   base::WeakPtr<SpdyStream> spdy_stream =
@@ -1776,7 +1770,7 @@ TEST_F(SpdySessionTest, FailedPing) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -1841,7 +1835,7 @@ TEST_F(SpdySessionTest, OnSettings) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Create the maximum number of concurrent streams.
   for (size_t i = 0; i < kInitialMaxConcurrentStreams; ++i) {
@@ -1888,7 +1882,7 @@ TEST_F(SpdySessionTest, CancelPendingCreateStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Leave room for only one more stream to be created.
   for (size_t i = 0; i < kInitialMaxConcurrentStreams - 1; ++i) {
@@ -1938,7 +1932,7 @@ TEST_F(SpdySessionTest, Initialize) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key_));
 
   // Flush the read completion task.
@@ -1977,7 +1971,7 @@ TEST_F(SpdySessionTest, NetLogOnSessionGoaway) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key_));
 
   // Flush the read completion task.
@@ -2034,7 +2028,7 @@ TEST_F(SpdySessionTest, NetLogOnSessionEOF) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   EXPECT_TRUE(HasSpdySession(spdy_session_pool_, key_));
 
   // Flush the read completion task.
@@ -2077,7 +2071,7 @@ TEST_F(SpdySessionTest, HeadersCompressionHistograms) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2136,7 +2130,7 @@ TEST_F(SpdySessionTest, OutOfOrderHeaders) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream_lowest =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2198,7 +2192,7 @@ TEST_F(SpdySessionTest, CancelStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2259,7 +2253,7 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoCreatedSelfClosingStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -2313,7 +2307,7 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoCreatedMutuallyClosingStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -2381,7 +2375,7 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoActivatedSelfClosingStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2454,7 +2448,7 @@ TEST_F(SpdySessionTest, CloseSessionWithTwoActivatedMutuallyClosingStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2551,7 +2545,7 @@ TEST_F(SpdySessionTest, CloseActivatedStreamThatClosesSession) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2593,7 +2587,7 @@ TEST_F(SpdySessionTest, VerifyDomainAuthentication) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_TRUE(session_->VerifyDomainAuthentication("www.example.org"));
   EXPECT_TRUE(session_->VerifyDomainAuthentication("mail.example.org"));
@@ -2611,7 +2605,7 @@ TEST_F(SpdySessionTest, ConnectionPooledWithTlsChannelId) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_TRUE(session_->VerifyDomainAuthentication("www.example.org"));
   EXPECT_TRUE(session_->VerifyDomainAuthentication("mail.example.org"));
@@ -2673,7 +2667,7 @@ TEST_F(SpdySessionTest, CloseTwoStalledCreateStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Read the settings frame.
   base::RunLoop().RunUntilIdle();
@@ -2780,7 +2774,7 @@ TEST_F(SpdySessionTest, CancelTwoStalledCreateStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Leave room for only one more stream to be created.
   for (size_t i = 0; i < kInitialMaxConcurrentStreams - 1; ++i) {
@@ -2896,7 +2890,7 @@ TEST_F(SpdySessionTest, ReadDataWithoutYielding) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -2958,7 +2952,7 @@ TEST_F(SpdySessionTest, TestYieldingSlowReads) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3028,7 +3022,7 @@ TEST_F(SpdySessionTest, TestYieldingSlowSynchronousReads) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3110,7 +3104,7 @@ TEST_F(SpdySessionTest, TestYieldingDuringReadData) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3218,7 +3212,7 @@ TEST_F(SpdySessionTest, TestYieldingDuringAsyncReadData) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3282,7 +3276,7 @@ TEST_F(SpdySessionTest, GoAwayWhileInDoReadLoop) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3354,7 +3348,7 @@ TEST_F(SpdySessionTest, CloseOneIdleConnection) {
           HttpNetworkSession::NORMAL_SOCKET_POOL);
 
   // Create an idle SPDY session.
-  CreateSecureSpdySession();
+  CreateSpdySession();
   EXPECT_FALSE(pool->IsStalled());
 
   // Trying to create a new connection should cause the pool to be stalled, and
@@ -3414,8 +3408,8 @@ TEST_F(SpdySessionTest, CloseOneIdleConnectionWithAlias) {
   // Create an idle SPDY session.
   SpdySessionKey key1(HostPortPair("www.example.org", 80),
                       ProxyServer::Direct(), PRIVACY_MODE_DISABLED);
-  base::WeakPtr<SpdySession> session1 = ::net::CreateSecureSpdySession(
-      http_session_.get(), key1, NetLogWithSource());
+  base::WeakPtr<SpdySession> session1 =
+      ::net::CreateSpdySession(http_session_.get(), key1, NetLogWithSource());
   EXPECT_FALSE(pool->IsStalled());
 
   // Set up an alias for the idle SPDY session, increasing its ref count to 2.
@@ -3497,7 +3491,7 @@ TEST_F(SpdySessionTest, CloseSessionOnIdleWhenPoolStalled) {
           HttpNetworkSession::NORMAL_SOCKET_POOL);
 
   // Create a SPDY session.
-  CreateSecureSpdySession();
+  CreateSpdySession();
   EXPECT_FALSE(pool->IsStalled());
 
   // Create a stream using the session, and send a request.
@@ -3628,7 +3622,7 @@ TEST_F(SpdySessionTest, CreateStreamOnStreamReset) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3692,7 +3686,7 @@ TEST_F(SpdySessionTest, UpdateStreamsSendWindowSize) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
                                 MEDIUM, NetLogWithSource());
@@ -3747,7 +3741,7 @@ TEST_F(SpdySessionTest, AdjustRecvWindowSize) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_EQ(initial_window_size, session_->session_recv_window_size_);
   EXPECT_EQ(0, session_->session_unacked_recv_window_bytes_);
@@ -3824,7 +3818,7 @@ TEST_F(SpdySessionTest, SessionFlowControlInactiveStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_EQ(kDefaultInitialWindowSize, session_->session_recv_window_size_);
   EXPECT_EQ(0, session_->session_unacked_recv_window_bytes_);
@@ -3858,7 +3852,7 @@ TEST_F(SpdySessionTest, SessionFlowControlPadding) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   EXPECT_EQ(kDefaultInitialWindowSize, session_->session_recv_window_size_);
   EXPECT_EQ(0, session_->session_unacked_recv_window_bytes_);
@@ -3906,7 +3900,7 @@ TEST_F(SpdySessionTest, StreamFlowControlTooMuchData) {
       stream_max_recv_window_size;
   CreateNetworkSession();
 
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -3978,7 +3972,7 @@ TEST_F(SpdySessionTest, SessionFlowControlTooMuchDataTwoDataFrames) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   // Setting session level receiving window size to smaller than initial is not
   // possible via SpdySessionPoolPeer.
   session_->session_recv_window_size_ = session_max_recv_window_size;
@@ -4044,7 +4038,7 @@ TEST_F(SpdySessionTest, StreamFlowControlTooMuchDataTwoDataFrames) {
       stream_max_recv_window_size;
   CreateNetworkSession();
 
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4131,7 +4125,7 @@ TEST_F(SpdySessionTest, SessionFlowControlNoReceiveLeaks) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -4196,7 +4190,7 @@ TEST_F(SpdySessionTest, SessionFlowControlNoSendLeaks) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -4279,7 +4273,7 @@ TEST_F(SpdySessionTest, SessionFlowControlEndToEnd) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream =
       CreateStreamSynchronously(SPDY_BIDIRECTIONAL_STREAM, session_, test_url_,
@@ -4377,7 +4371,7 @@ void SpdySessionTest::RunResumeAfterUnstallTest(
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4503,7 +4497,7 @@ TEST_F(SpdySessionTest, ResumeByPriorityAfterSendWindowSizeIncrease) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4636,7 +4630,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedStreams) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4770,7 +4764,7 @@ TEST_F(SpdySessionTest, SendWindowSizeIncreaseWithDeletedSession) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4863,7 +4857,7 @@ TEST_F(SpdySessionTest, GoAwayOnSessionFlowControlError) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -4923,7 +4917,7 @@ TEST_F(SpdySessionTest, PushedStreamShouldNotCountToClientConcurrencyLimit) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   // Read the settings frame.
   base::RunLoop().RunUntilIdle();
@@ -5009,7 +5003,7 @@ TEST_F(SpdySessionTest, RejectPushedStreamExceedingConcurrencyLimit) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   session_->set_max_concurrent_pushed_streams(1);
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
@@ -5106,7 +5100,7 @@ TEST_F(SpdySessionTest, TrustedSpdyProxy) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -5185,7 +5179,7 @@ TEST_F(SpdySessionTest, TrustedSpdyProxyNotSet) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -5222,6 +5216,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
   SpdySerializedFrame push_a(spdy_util_.ConstructSpdyPush(
       nullptr, 0, 2, 1, "https://www.example.org/a.dat"));
   SpdyHeaderBlock push_headers;
+  push_headers[":method"] = "GET";
   spdy_util_.AddUrlToHeaderBlock("https://www.example.org/b.dat",
                                  &push_headers);
   SpdySerializedFrame push_b(
@@ -5254,7 +5249,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
   session_->set_max_concurrent_pushed_streams(1);
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
@@ -5316,6 +5311,7 @@ TEST_F(SpdySessionTest, IgnoreReservedRemoteStreamsCount) {
 TEST_F(SpdySessionTest, CancelReservedStreamOnHeadersReceived) {
   const char kPushedUrl[] = "https://www.example.org/a.dat";
   SpdyHeaderBlock push_headers;
+  push_headers[":method"] = "GET";
   spdy_util_.AddUrlToHeaderBlock(kPushedUrl, &push_headers);
   SpdySerializedFrame push_promise(
       spdy_util_.ConstructInitialSpdyPushFrame(std::move(push_headers), 2, 1));
@@ -5344,7 +5340,7 @@ TEST_F(SpdySessionTest, CancelReservedStreamOnHeadersReceived) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -5416,7 +5412,7 @@ TEST_F(SpdySessionTest, RejectInvalidUnknownFrames) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   session_->stream_hi_water_mark_ = 5;
   // Low client (odd) ids are fine.
@@ -5485,7 +5481,7 @@ TEST_P(SpdySessionReadIfReadyTest, ReadIfReady) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream =
       CreateStreamSynchronously(SPDY_REQUEST_RESPONSE_STREAM, session_,
@@ -5511,11 +5507,15 @@ class SendInitialSettingsOnNewSpdySessionTest : public SpdySessionTest {
 
     MockRead reads[] = {MockRead(SYNCHRONOUS, ERR_IO_PENDING)};
 
+    SpdySerializedFrame preface(const_cast<char*>(kHttp2ConnectionHeaderPrefix),
+                                kHttp2ConnectionHeaderPrefixSize,
+                                /* owns_buffer = */ false);
     SpdySerializedFrame settings_frame(
         spdy_util_.ConstructSpdySettings(expected_settings));
-    MockWrite writes[] = {MockWrite(ASYNC, kHttp2ConnectionHeaderPrefix,
-                                    kHttp2ConnectionHeaderPrefixSize),
-                          CreateMockWrite(settings_frame)};
+
+    SpdySerializedFrame combined_frame =
+        CombineFrames({&preface, &settings_frame});
+    MockWrite writes[] = {CreateMockWrite(combined_frame, 0)};
 
     StaticSocketDataProvider data(reads, arraysize(reads), writes,
                                   arraysize(writes));
@@ -5527,7 +5527,7 @@ class SendInitialSettingsOnNewSpdySessionTest : public SpdySessionTest {
     SpdySessionPoolPeer pool_peer(spdy_session_pool_);
     pool_peer.SetEnableSendingInitialData(true);
 
-    CreateSecureSpdySession();
+    CreateSpdySession();
 
     base::RunLoop().RunUntilIdle();
     EXPECT_TRUE(data.AllWriteDataConsumed());
@@ -5609,9 +5609,9 @@ class AltSvcFrameTest : public SpdySessionTest {
     session_deps_.socket_factory->AddSocketDataProvider(data_.get());
   }
 
-  void CreateSecureSpdySession() {
-    session_ = ::net::CreateSecureSpdySession(http_session_.get(), key_,
-                                              NetLogWithSource());
+  void CreateSpdySession() {
+    session_ =
+        ::net::CreateSpdySession(http_session_.get(), key_, NetLogWithSource());
   }
 
   SpdyAltSvcWireFormat::AlternativeService alternative_service_;
@@ -5631,7 +5631,7 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrame) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 
@@ -5648,32 +5648,42 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrame) {
   ASSERT_EQ(1u, altsvc_info_vector.size());
   AlternativeService alternative_service(kProtoQUIC, "alternative.example.org",
                                          443u);
-  EXPECT_EQ(alternative_service, altsvc_info_vector[0].alternative_service);
+  EXPECT_EQ(alternative_service, altsvc_info_vector[0].alternative_service());
 }
 
-TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnInsecureSession) {
+// Regression test for https://crbug.com/736063.
+TEST_F(AltSvcFrameTest, IgnoreQuicAltSvcWithUnsupportedVersion) {
   const char origin[] = "https://mail.example.org";
   SpdyAltSvcIR altsvc_ir(/* stream_id = */ 0);
-  altsvc_ir.add_altsvc(alternative_service_);
+  SpdyAltSvcWireFormat::AlternativeService quic_alternative_service(
+      "quic", "alternative.example.org", 443, 86400,
+      SpdyAltSvcWireFormat::VersionVector());
+  // TODO(zhongyi): SpdyAltSvcWireFormat::ParseHeaderFieldValue expects positve
+  // versions while VersionVector allows nonnegative verisons.
+  // Fix the parse function and change the hardcoded invalid version to
+  // QUIC_VERSION_UNSUPPORTED.
+  quic_alternative_service.version.push_back(/* invalid QUIC version */ 1);
+  altsvc_ir.add_altsvc(quic_alternative_service);
   altsvc_ir.set_origin(origin);
   AddSocketData(altsvc_ir);
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateInsecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 
   const url::SchemeHostPort session_origin("https", test_url_.host(),
                                            test_url_.EffectiveIntPort());
-  ASSERT_TRUE(spdy_session_pool_->http_server_properties()
-                  ->GetAlternativeServiceInfos(session_origin)
-                  .empty());
+  AlternativeServiceInfoVector altsvc_info_vector =
+      spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
+          session_origin);
+  ASSERT_TRUE(altsvc_info_vector.empty());
 
-  ASSERT_TRUE(
-      spdy_session_pool_->http_server_properties()
-          ->GetAlternativeServiceInfos(url::SchemeHostPort(GURL(origin)))
-          .empty());
+  altsvc_info_vector =
+      spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
+          url::SchemeHostPort(GURL(origin)));
+  ASSERT_EQ(0u, altsvc_info_vector.size());
 }
 
 TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameForOriginNotCoveredByCert) {
@@ -5685,7 +5695,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameForOriginNotCoveredByCert) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 
@@ -5710,7 +5720,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameWithEmptyOriginOnStreamZero) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 
@@ -5732,7 +5742,7 @@ TEST_F(AltSvcFrameTest,
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 
@@ -5767,7 +5777,7 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 = CreateStreamSynchronously(
       SPDY_REQUEST_RESPONSE_STREAM, session_, GURL(request_origin), MEDIUM,
@@ -5791,10 +5801,10 @@ TEST_F(AltSvcFrameTest, ProcessAltSvcFrameOnActiveStream) {
       spdy_session_pool_->http_server_properties()->GetAlternativeServiceInfos(
           url::SchemeHostPort(GURL(request_origin)));
   ASSERT_EQ(1u, altsvc_info_vector.size());
-  EXPECT_EQ(kProtoQUIC, altsvc_info_vector[0].alternative_service.protocol);
+  EXPECT_EQ(kProtoQUIC, altsvc_info_vector[0].alternative_service().protocol);
   EXPECT_EQ("alternative.example.org",
-            altsvc_info_vector[0].alternative_service.host);
-  EXPECT_EQ(443u, altsvc_info_vector[0].alternative_service.port);
+            altsvc_info_vector[0].alternative_service().host);
+  EXPECT_EQ(443u, altsvc_info_vector[0].alternative_service().port);
 }
 
 TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnStreamWithInsecureOrigin) {
@@ -5821,7 +5831,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnStreamWithInsecureOrigin) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::WeakPtr<SpdyStream> spdy_stream1 = CreateStreamSynchronously(
       SPDY_REQUEST_RESPONSE_STREAM, session_, GURL(request_origin), MEDIUM,
@@ -5854,7 +5864,7 @@ TEST_F(AltSvcFrameTest, DoNotProcessAltSvcFrameOnNonExistentStream) {
   AddSSLSocketData();
 
   CreateNetworkSession();
-  CreateSecureSpdySession();
+  CreateSpdySession();
 
   base::RunLoop().RunUntilIdle();
 

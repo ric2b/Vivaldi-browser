@@ -679,6 +679,128 @@ TEST_F(TouchEventConverterEvdevTest, ShouldRemoveContactsWhenDisabled) {
   EXPECT_EQ(2u, size());
 }
 
+TEST_F(TouchEventConverterEvdevTest, PalmShouldCancelTouch) {
+  ui::MockTouchEventConverterEvdev* dev = device();
+
+  EventDeviceInfo devinfo;
+  EXPECT_TRUE(CapabilitiesToDeviceInfo(kLinkWithToolTypeTouchscreen, &devinfo));
+
+  timeval time;
+  time = {1429651083, 686882};
+  int major_max = devinfo.GetAbsMaximum(ABS_MT_TOUCH_MAJOR);
+  struct input_event mock_kernel_queue_max_major[] = {
+      {time, EV_ABS, ABS_MT_SLOT, 0},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, 0},
+      {time, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER},
+      {time, EV_ABS, ABS_MT_POSITION_X, 1003},
+      {time, EV_ABS, ABS_MT_POSITION_Y, 749},
+      {time, EV_ABS, ABS_MT_PRESSURE, 50},
+      {time, EV_ABS, ABS_MT_TOUCH_MAJOR, 116},
+      {time, EV_ABS, ABS_MT_SLOT, 1},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, 1},
+      {time, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER},
+      {time, EV_ABS, ABS_MT_POSITION_X, 1103},
+      {time, EV_ABS, ABS_MT_POSITION_Y, 649},
+      {time, EV_ABS, ABS_MT_PRESSURE, 50},
+      {time, EV_ABS, ABS_MT_TOUCH_MAJOR, 116},
+      {time, EV_KEY, BTN_TOUCH, 1},
+      {time, EV_ABS, ABS_X, 1003},
+      {time, EV_ABS, ABS_Y, 749},
+      {time, EV_ABS, ABS_PRESSURE, 50},
+      {time, EV_SYN, SYN_REPORT, 0},
+      {time, EV_ABS, ABS_MT_SLOT, 0},
+      {time, EV_ABS, ABS_MT_TOUCH_MAJOR, major_max},
+      {time, EV_SYN, SYN_REPORT, 0},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, -1},
+      {time, EV_ABS, ABS_MT_SLOT, 1},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, -1},
+      {time, EV_SYN, SYN_REPORT, 0},
+  };
+  struct input_event mock_kernel_queue_tool_palm[] = {
+      {time, EV_ABS, ABS_MT_SLOT, 0},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, 2},
+      {time, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER},
+      {time, EV_ABS, ABS_MT_POSITION_X, 1003},
+      {time, EV_ABS, ABS_MT_POSITION_Y, 749},
+      {time, EV_ABS, ABS_MT_PRESSURE, 50},
+      {time, EV_ABS, ABS_MT_TOUCH_MAJOR, 116},
+      {time, EV_ABS, ABS_MT_SLOT, 1},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, 3},
+      {time, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_FINGER},
+      {time, EV_ABS, ABS_MT_POSITION_X, 1103},
+      {time, EV_ABS, ABS_MT_POSITION_Y, 649},
+      {time, EV_ABS, ABS_MT_PRESSURE, 50},
+      {time, EV_ABS, ABS_MT_TOUCH_MAJOR, 116},
+      {time, EV_KEY, BTN_TOUCH, 1},
+      {time, EV_ABS, ABS_X, 1003},
+      {time, EV_ABS, ABS_Y, 749},
+      {time, EV_ABS, ABS_PRESSURE, 50},
+      {time, EV_SYN, SYN_REPORT, 0},
+      {time, EV_ABS, ABS_MT_SLOT, 0},
+      {time, EV_ABS, ABS_MT_TOOL_TYPE, MT_TOOL_PALM},
+      {time, EV_SYN, SYN_REPORT, 0},
+      {time, EV_ABS, ABS_MT_TRACKING_ID, -1},
+      {time, EV_SYN, SYN_REPORT, 0},
+  };
+
+  // Initialize the device.
+  dev->Initialize(devinfo);
+
+  dev->ConfigureReadMock(mock_kernel_queue_max_major,
+                         arraysize(mock_kernel_queue_max_major), 0);
+  dev->ReadNow();
+  EXPECT_EQ(4u, size());
+
+  ui::TouchEventParams ev1_1 = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, ev1_1.type);
+  EXPECT_EQ(0, ev1_1.slot);
+  EXPECT_EQ(1003, ev1_1.location.x());
+  EXPECT_EQ(749, ev1_1.location.y());
+
+  ui::TouchEventParams ev1_2 = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_PRESSED, ev1_2.type);
+  EXPECT_EQ(1, ev1_2.slot);
+  EXPECT_EQ(1103, ev1_2.location.x());
+  EXPECT_EQ(649, ev1_2.location.y());
+
+  ui::TouchEventParams ev1_3 = dispatched_touch_event(2);
+  EXPECT_EQ(ET_TOUCH_CANCELLED, ev1_3.type);
+  EXPECT_EQ(0, ev1_3.slot);
+
+  // We expect both touches to be cancelled even though
+  // just one reported major at max value.
+  ui::TouchEventParams ev1_4 = dispatched_touch_event(3);
+  EXPECT_EQ(ET_TOUCH_CANCELLED, ev1_4.type);
+  EXPECT_EQ(1, ev1_4.slot);
+
+  dev->ConfigureReadMock(mock_kernel_queue_tool_palm,
+                         arraysize(mock_kernel_queue_tool_palm), 0);
+  dev->ReadNow();
+  EXPECT_EQ(8u, size());
+
+  ui::TouchEventParams ev2_1 = dispatched_touch_event(4);
+  EXPECT_EQ(ET_TOUCH_PRESSED, ev2_1.type);
+  EXPECT_EQ(0, ev2_1.slot);
+  EXPECT_EQ(1003, ev2_1.location.x());
+  EXPECT_EQ(749, ev2_1.location.y());
+
+  ui::TouchEventParams ev2_2 = dispatched_touch_event(5);
+  EXPECT_EQ(ET_TOUCH_PRESSED, ev2_2.type);
+  EXPECT_EQ(1, ev2_2.slot);
+  EXPECT_EQ(1103, ev2_2.location.x());
+  EXPECT_EQ(649, ev2_2.location.y());
+
+  ui::TouchEventParams ev2_3 = dispatched_touch_event(6);
+  EXPECT_EQ(ET_TOUCH_CANCELLED, ev2_3.type);
+  EXPECT_EQ(0, ev2_3.slot);
+
+  // We expect both touches to be cancelled even though
+  // just one reported MT_TOOL_PALM.
+  ui::TouchEventParams ev2_4 = dispatched_touch_event(7);
+  EXPECT_EQ(ET_TOUCH_CANCELLED, ev2_4.type);
+  EXPECT_EQ(1, ev2_4.slot);
+}
+
 // crbug.com/477695
 TEST_F(TouchEventConverterEvdevTest, ShouldUseLeftButtonIfNoTouchButton) {
   ui::MockTouchEventConverterEvdev* dev = device();
@@ -1114,6 +1236,116 @@ TEST_F(TouchEventConverterEvdevTest, ActiveStylusMotion) {
   EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
             event.pointer_details.pointer_type);
   EXPECT_EQ(0.f / 1024, event.pointer_details.force);
+}
+
+TEST_F(TouchEventConverterEvdevTest, ActiveStylusBarrelButtonWhileHovering) {
+  ui::MockTouchEventConverterEvdev* dev = device();
+  EventDeviceInfo devinfo;
+  EXPECT_TRUE(CapabilitiesToDeviceInfo(kEveStylus, &devinfo));
+  dev->Initialize(devinfo);
+
+  struct input_event mock_kernel_queue[]{
+      // Hover
+      {{0, 0}, EV_KEY, BTN_TOOL_PEN, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Button pressed
+      {{0, 0}, EV_KEY, BTN_STYLUS, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Touching down
+      {{0, 0}, EV_KEY, BTN_TOUCH, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Releasing touch
+      {{0, 0}, EV_KEY, BTN_TOUCH, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Releasing button
+      {{0, 0}, EV_KEY, BTN_STYLUS, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Leaving hover
+      {{0, 0}, EV_KEY, BTN_TOOL_PEN, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+  };
+
+  dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
+  dev->ReadNow();
+  EXPECT_EQ(2u, size());
+
+  auto down_event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, down_event.type);
+  EXPECT_TRUE(down_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            down_event.pointer_details.pointer_type);
+
+  auto up_event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_RELEASED, up_event.type);
+  EXPECT_TRUE(down_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            up_event.pointer_details.pointer_type);
+}
+
+TEST_F(TouchEventConverterEvdevTest, ActiveStylusBarrelButton) {
+  ui::MockTouchEventConverterEvdev* dev = device();
+  EventDeviceInfo devinfo;
+  EXPECT_TRUE(CapabilitiesToDeviceInfo(kEveStylus, &devinfo));
+  dev->Initialize(devinfo);
+
+  struct input_event mock_kernel_queue[]{
+      // Hover
+      {{0, 0}, EV_KEY, BTN_TOOL_PEN, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Touching down
+      {{0, 0}, EV_KEY, BTN_TOUCH, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Button pressed
+      {{0, 0}, EV_KEY, BTN_STYLUS, 1},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Releasing button
+      {{0, 0}, EV_KEY, BTN_STYLUS, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Releasing touch
+      {{0, 0}, EV_KEY, BTN_TOUCH, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+
+      // Leaving hover
+      {{0, 0}, EV_KEY, BTN_TOOL_PEN, 0},
+      {{0, 0}, EV_SYN, SYN_REPORT, 0},
+  };
+
+  dev->ConfigureReadMock(mock_kernel_queue, arraysize(mock_kernel_queue), 0);
+  dev->ReadNow();
+  EXPECT_EQ(4u, size());
+
+  auto down_event = dispatched_touch_event(0);
+  EXPECT_EQ(ET_TOUCH_PRESSED, down_event.type);
+  EXPECT_FALSE(down_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            down_event.pointer_details.pointer_type);
+
+  auto button_down_event = dispatched_touch_event(1);
+  EXPECT_EQ(ET_TOUCH_MOVED, button_down_event.type);
+  EXPECT_TRUE(button_down_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            button_down_event.pointer_details.pointer_type);
+
+  auto button_up_event = dispatched_touch_event(2);
+  EXPECT_EQ(ET_TOUCH_MOVED, button_up_event.type);
+  EXPECT_FALSE(button_up_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            button_up_event.pointer_details.pointer_type);
+
+  auto up_event = dispatched_touch_event(3);
+  EXPECT_EQ(ET_TOUCH_RELEASED, up_event.type);
+  EXPECT_FALSE(down_event.flags & ui::EventFlags::EF_LEFT_MOUSE_BUTTON);
+  EXPECT_EQ(EventPointerType::POINTER_TYPE_PEN,
+            up_event.pointer_details.pointer_type);
 }
 
 }  // namespace ui

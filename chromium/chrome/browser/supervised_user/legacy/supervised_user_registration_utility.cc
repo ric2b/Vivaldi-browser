@@ -10,6 +10,7 @@
 #include "base/base64.h"
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/feature_list.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/rand_util.h"
@@ -27,6 +28,7 @@
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service.h"
 #include "chrome/browser/supervised_user/legacy/supervised_user_sync_service_factory.h"
 #include "chrome/browser/supervised_user/supervised_user_constants.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "components/prefs/pref_service.h"
@@ -151,6 +153,8 @@ ScopedTestingSupervisedUserRegistrationUtility::
 // static
 std::unique_ptr<SupervisedUserRegistrationUtility>
 SupervisedUserRegistrationUtility::Create(Profile* profile) {
+  DCHECK(base::FeatureList::IsEnabled(features::kSupervisedUserCreation));
+
   if (g_instance_for_tests) {
     SupervisedUserRegistrationUtility* result = g_instance_for_tests;
     g_instance_for_tests = NULL;

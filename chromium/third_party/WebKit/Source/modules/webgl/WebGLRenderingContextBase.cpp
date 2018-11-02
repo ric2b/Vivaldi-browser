@@ -26,17 +26,14 @@
 #include "modules/webgl/WebGLRenderingContextBase.h"
 
 #include <memory>
+
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/modules/v8/HTMLCanvasElementOrOffscreenCanvas.h"
 #include "bindings/modules/v8/WebGLAny.h"
-#include "core/dom/ArrayBufferViewHelpers.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMTypedArray.h"
+#include "build/build_config.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/FlexibleArrayBufferView.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/Settings.h"
@@ -44,11 +41,15 @@
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/ImageData.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutBox.h"
-#include "core/loader/FrameLoader.h"
 #include "core/origin_trials/OriginTrials.h"
 #include "core/probe/CoreProbes.h"
+#include "core/typed_arrays/ArrayBufferViewHelpers.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMTypedArray.h"
+#include "core/typed_arrays/FlexibleArrayBufferView.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "modules/webgl/ANGLEInstancedArrays.h"
 #include "modules/webgl/EXTBlendMinMax.h"
@@ -115,11 +116,11 @@ const double kSecondsBetweenRestoreAttempts = 1.0;
 const int kMaxGLErrorsAllowedToConsole = 256;
 const unsigned kMaxGLActiveContextsOnWorker = 4;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
 const unsigned kMaxGLActiveContexts = 8;
-#else   // OS(ANDROID)
+#else   // defined(OS_ANDROID)
 const unsigned kMaxGLActiveContexts = 16;
-#endif  // OS(ANDROID)
+#endif  // defined(OS_ANDROID)
 
 unsigned CurrentMaxGLContexts() {
   return IsMainThread() ? kMaxGLActiveContexts : kMaxGLActiveContextsOnWorker;
@@ -128,9 +129,8 @@ unsigned CurrentMaxGLContexts() {
 using WebGLRenderingContextBaseSet =
     PersistentHeapHashSet<WeakMember<WebGLRenderingContextBase>>;
 WebGLRenderingContextBaseSet& ActiveContexts() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      ThreadSpecific<WebGLRenderingContextBaseSet>, active_contexts,
-      new ThreadSpecific<WebGLRenderingContextBaseSet>());
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<WebGLRenderingContextBaseSet>,
+                                  active_contexts, ());
   if (!active_contexts.IsSet())
     active_contexts->RegisterAsStaticReference();
   return *active_contexts;
@@ -139,9 +139,8 @@ WebGLRenderingContextBaseSet& ActiveContexts() {
 using WebGLRenderingContextBaseMap =
     PersistentHeapHashMap<WeakMember<WebGLRenderingContextBase>, int>;
 WebGLRenderingContextBaseMap& ForciblyEvictedContexts() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      ThreadSpecific<WebGLRenderingContextBaseMap>, forcibly_evicted_contexts,
-      new ThreadSpecific<WebGLRenderingContextBaseMap>());
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(ThreadSpecific<WebGLRenderingContextBaseMap>,
+                                  forcibly_evicted_contexts, ());
   if (!forcibly_evicted_contexts.IsSet())
     forcibly_evicted_contexts->RegisterAsStaticReference();
   return *forcibly_evicted_contexts;
@@ -627,8 +626,8 @@ bool WebGLRenderingContextBase::SupportOwnOffscreenSurface(
   //
   // At this time, treat this as an experimental rendering optimization
   // that needs a separate opt-in. See crbug.com/691102 for details.
-  if (RuntimeEnabledFeatures::webVRExperimentalRenderingEnabled()) {
-    if (RuntimeEnabledFeatures::webVREnabled() ||
+  if (RuntimeEnabledFeatures::WebVRExperimentalRenderingEnabled()) {
+    if (RuntimeEnabledFeatures::WebVREnabled() ||
         OriginTrials::webVREnabled(execution_context)) {
       DVLOG(1) << "Requesting supportOwnOffscreenSurface";
       return true;
@@ -639,25 +638,20 @@ bool WebGLRenderingContextBase::SupportOwnOffscreenSurface(
 
 std::unique_ptr<WebGraphicsContext3DProvider>
 WebGLRenderingContextBase::CreateContextProviderInternal(
-    HTMLCanvasElement* canvas,
-    ScriptState* script_state,
+    CanvasRenderingContextHost* host,
     const CanvasContextCreationAttributes& attributes,
     unsigned web_gl_version) {
-  // Exactly one of these must be provided.
-  DCHECK_EQ(!canvas, !!script_state);
-  // The canvas is only given on the main thread.
-  DCHECK(!canvas || IsMainThread());
+  DCHECK(host);
+  ExecutionContext* execution_context = host->GetTopExecutionContext();
+  DCHECK(execution_context);
 
-  auto execution_context = canvas ? canvas->GetDocument().GetExecutionContext()
-                                  : ExecutionContext::From(script_state);
   Platform::ContextAttributes context_attributes = ToPlatformContextAttributes(
       attributes, web_gl_version,
       SupportOwnOffscreenSurface(execution_context));
 
   Platform::GraphicsInfo gl_info;
   std::unique_ptr<WebGraphicsContext3DProvider> context_provider;
-  const auto& url = canvas ? canvas->GetDocument().TopDocument().Url()
-                           : ExecutionContext::From(script_state)->Url();
+  const auto& url = execution_context->Url();
   if (IsMainThread()) {
     context_provider =
         Platform::Current()->CreateOffscreenGraphicsContext3DProvider(
@@ -673,19 +667,17 @@ WebGLRenderingContextBase::CreateContextProviderInternal(
   }
   if (!context_provider || g_should_fail_context_creation_for_testing) {
     g_should_fail_context_creation_for_testing = false;
-    if (canvas)
-      canvas->DispatchEvent(WebGLContextEvent::Create(
-          EventTypeNames::webglcontextcreationerror, false, true,
-          ExtractWebGLContextCreationError(gl_info)));
+    host->HostDispatchEvent(WebGLContextEvent::Create(
+        EventTypeNames::webglcontextcreationerror, false, true,
+        ExtractWebGLContextCreationError(gl_info)));
     return nullptr;
   }
   gpu::gles2::GLES2Interface* gl = context_provider->ContextGL();
   if (!String(gl->GetString(GL_EXTENSIONS))
            .Contains("GL_OES_packed_depth_stencil")) {
-    if (canvas)
-      canvas->DispatchEvent(WebGLContextEvent::Create(
-          EventTypeNames::webglcontextcreationerror, false, true,
-          "OES_packed_depth_stencil support is required."));
+    host->HostDispatchEvent(WebGLContextEvent::Create(
+        EventTypeNames::webglcontextcreationerror, false, true,
+        "OES_packed_depth_stencil support is required."));
     return nullptr;
   }
   return context_provider;
@@ -693,41 +685,17 @@ WebGLRenderingContextBase::CreateContextProviderInternal(
 
 std::unique_ptr<WebGraphicsContext3DProvider>
 WebGLRenderingContextBase::CreateWebGraphicsContext3DProvider(
-    HTMLCanvasElement* canvas,
+    CanvasRenderingContextHost* host,
     const CanvasContextCreationAttributes& attributes,
     unsigned web_gl_version) {
-  Document& document = canvas->GetDocument();
-  LocalFrame* frame = document.GetFrame();
-  if (!frame) {
-    canvas->DispatchEvent(WebGLContextEvent::Create(
-        EventTypeNames::webglcontextcreationerror, false, true,
-        "Web page was not allowed to create a WebGL context."));
-    return nullptr;
-  }
-  Settings* settings = frame->GetSettings();
-
-  // The LocalFrameClient might block creation of a new WebGL context despite
-  // the page settings; in particular, if WebGL contexts were lost one or more
-  // times via the GL_ARB_robustness extension.
-  if (!frame->Loader().Client()->AllowWebGL(settings &&
-                                            settings->GetWebGLEnabled())) {
-    canvas->DispatchEvent(WebGLContextEvent::Create(
+  if (!host->IsWebGLAllowed()) {
+    host->HostDispatchEvent(WebGLContextEvent::Create(
         EventTypeNames::webglcontextcreationerror, false, true,
         "Web page was not allowed to create a WebGL context."));
     return nullptr;
   }
 
-  return CreateContextProviderInternal(canvas, nullptr, attributes,
-                                       web_gl_version);
-}
-
-std::unique_ptr<WebGraphicsContext3DProvider>
-WebGLRenderingContextBase::CreateWebGraphicsContext3DProvider(
-    ScriptState* script_state,
-    const CanvasContextCreationAttributes& attributes,
-    unsigned web_gl_version) {
-  return CreateContextProviderInternal(nullptr, script_state, attributes,
-                                       web_gl_version);
+  return CreateContextProviderInternal(host, attributes, web_gl_version);
 }
 
 void WebGLRenderingContextBase::ForceNextWebGLContextCreationToFail() {
@@ -736,8 +704,7 @@ void WebGLRenderingContextBase::ForceNextWebGLContextCreationToFail() {
 
 ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
     ScriptState* script_state) {
-  UseCounter::Feature feature =
-      UseCounter::kOffscreenCanvasTransferToImageBitmapWebGL;
+  WebFeature feature = WebFeature::kOffscreenCanvasTransferToImageBitmapWebGL;
   UseCounter::Count(ExecutionContext::From(script_state), feature);
   if (!GetDrawingBuffer())
     return nullptr;
@@ -747,18 +714,19 @@ ImageBitmap* WebGLRenderingContextBase::TransferToImageBitmapBase(
 ScriptPromise WebGLRenderingContextBase::commit(
     ScriptState* script_state,
     ExceptionState& exception_state) {
-  UseCounter::Feature feature = UseCounter::kOffscreenCanvasCommitWebGL;
+  WebFeature feature = WebFeature::kOffscreenCanvasCommitWebGL;
   UseCounter::Count(ExecutionContext::From(script_state), feature);
+  int width = GetDrawingBuffer()->Size().Width();
+  int height = GetDrawingBuffer()->Size().Height();
   if (!GetDrawingBuffer()) {
     bool is_web_gl_software_rendering = false;
-    return host()->Commit(nullptr, is_web_gl_software_rendering, script_state,
+    return host()->Commit(nullptr, SkIRect::MakeWH(width, height),
+                          is_web_gl_software_rendering, script_state,
                           exception_state);
   }
 
   RefPtr<StaticBitmapImage> image;
   if (CreationAttributes().preserveDrawingBuffer()) {
-    int width = GetDrawingBuffer()->Size().Width();
-    int height = GetDrawingBuffer()->Size().Height();
     SkImageInfo image_info =
         SkImageInfo::Make(width, height, kRGBA_8888_SkColorType,
                           CreationAttributes().alpha() ? kPremul_SkAlphaType
@@ -769,7 +737,7 @@ ScriptPromise WebGLRenderingContextBase::commit(
   }
 
   return host()->Commit(
-      std::move(image),
+      std::move(image), SkIRect::MakeWH(width, height),
       GetDrawingBuffer()->ContextProvider()->IsSoftwareRendering(),
       script_state, exception_state);
 }
@@ -900,9 +868,9 @@ static const GLenum kSupportedInternalFormatsTexImageES3[] = {
 };
 
 // Exposed by EXT_color_buffer_float
-static const GLenum kSupportedInternalFormatsFloatES3[] = {
-    GL_R16F,    GL_R32F,    GL_RG16F,         GL_RG32F,
-    GL_RGBA16F, GL_RGBA32F, GL_R11F_G11F_B10F};
+static const GLenum kSupportedInternalFormatsCopyTexImageFloatES3[] = {
+    GL_R16F,   GL_R32F,    GL_RG16F,   GL_RG32F,         GL_RGB16F,
+    GL_RGB32F, GL_RGBA16F, GL_RGBA32F, GL_R11F_G11F_B10F};
 
 // ES3 enums supported by TexImageSource
 static const GLenum kSupportedInternalFormatsTexImageSourceES3[] = {
@@ -1053,10 +1021,7 @@ WebGLRenderingContextBase::WebGLRenderingContextBase(
     return;
   }
 
-  drawing_buffer_ = buffer.Release();
-  drawing_buffer_->AddNewMailboxCallback(
-      WTF::Bind(&WebGLRenderingContextBase::NotifyCanvasContextChanged,
-                WrapWeakPersistent(this)));
+  drawing_buffer_ = std::move(buffer);
   GetDrawingBuffer()->Bind(GL_FRAMEBUFFER);
   SetupFlags();
 
@@ -1317,7 +1282,6 @@ void WebGLRenderingContextBase::DestroyContext() {
       ConvertToBaseCallback(std::move(null_closure)));
   GetDrawingBuffer()->ContextProvider()->SetErrorMessageCallback(
       ConvertToBaseCallback(std::move(null_function)));
-  GetDrawingBuffer()->AddNewMailboxCallback(nullptr);
 
   DCHECK(GetDrawingBuffer());
   drawing_buffer_->BeginDestruction();
@@ -1358,13 +1322,6 @@ void WebGLRenderingContextBase::OnErrorMessage(const char* message,
   if (synthesized_errors_to_console_)
     PrintGLErrorToConsole(message);
   probe::didFireWebGLErrorOrWarning(canvas(), message);
-}
-
-void WebGLRenderingContextBase::NotifyCanvasContextChanged() {
-  if (!canvas())
-    return;
-
-  canvas()->NotifyListenersCanvasChanged();
 }
 
 WebGLRenderingContextBase::HowToClear
@@ -2120,7 +2077,7 @@ bool WebGLRenderingContextBase::ValidateCopyTexFormat(const char* function_name,
   if (!is_ext_color_buffer_float_formats_added_ &&
       ExtensionEnabled(kEXTColorBufferFloatName)) {
     ADD_VALUES_TO_SET(supported_internal_formats_copy_tex_image_,
-                      kSupportedInternalFormatsFloatES3);
+                      kSupportedInternalFormatsCopyTexImageFloatES3);
     is_ext_color_buffer_float_formats_added_ = true;
   }
 
@@ -2563,9 +2520,10 @@ void WebGLRenderingContextBase::framebufferRenderbuffer(
                       "invalid target");
     return;
   }
-  if (buffer && !buffer->Validate(ContextGroup(), this)) {
+  if (buffer && (!buffer->HasEverBeenBound() ||
+                 !buffer->Validate(ContextGroup(), this))) {
     SynthesizeGLError(GL_INVALID_OPERATION, "framebufferRenderbuffer",
-                      "no buffer or buffer not from this context");
+                      "buffer never bound or buffer not from this context");
     return;
   }
   // Don't allow the default framebuffer to be mutated; all current
@@ -2812,7 +2770,7 @@ bool WebGLRenderingContextBase::ExtensionTracker::MatchesNameWithPrefixes(
 bool WebGLRenderingContextBase::ExtensionSupportedAndAllowed(
     const ExtensionTracker* tracker) {
   if (tracker->Draft() &&
-      !RuntimeEnabledFeatures::webGLDraftExtensionsEnabled())
+      !RuntimeEnabledFeatures::WebGLDraftExtensionsEnabled())
     return false;
   if (!tracker->Supported(this))
     return false;
@@ -4869,10 +4827,11 @@ void WebGLRenderingContextBase::TexImageHelperHTMLImageElement(
   RefPtr<Image> image_for_render = image->CachedImage()->GetImage();
   if (image_for_render && image_for_render->IsSVGImage()) {
     if (canvas()) {
-      UseCounter::Count(canvas()->GetDocument(), UseCounter::kSVGInWebGL);
+      UseCounter::Count(canvas()->GetDocument(), WebFeature::kSVGInWebGL);
     }
-    image_for_render = DrawImageIntoBuffer(
-        image_for_render.Release(), image->width(), image->height(), func_name);
+    image_for_render =
+        DrawImageIntoBuffer(std::move(image_for_render), image->width(),
+                            image->height(), func_name);
   }
 
   TexImageFunctionType function_type;
@@ -4910,7 +4869,7 @@ void WebGLRenderingContextBase::texImage2D(ExecutionContext* execution_context,
 
 bool WebGLRenderingContextBase::CanUseTexImageByGPU(GLenum format,
                                                     GLenum type) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // RGB5_A1 is not color-renderable on NVIDIA Mac, see crbug.com/676209.
   // Though, glCopyTextureCHROMIUM can handle RGB5_A1 internalformat by doing a
   // fallback path, but it doesn't know the type info. So, we still cannot do
@@ -4919,15 +4878,8 @@ bool WebGLRenderingContextBase::CanUseTexImageByGPU(GLenum format,
   if (type == GL_UNSIGNED_SHORT_5_5_5_1)
     return false;
 #endif
-  // TODO(kbr): bugs were observed when using CopyTextureCHROMIUM to
-  // copy hardware-accelerated video textures to red-channel textures.
-  // These bugs were seen on macOS but may indicate more general
-  // problems. Investigate the root cause of this and fix it.
-  // crbug.com/710673
-  if (format == GL_RED || format == GL_RED_INTEGER)
-    return false;
 
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   // TODO(kbr): bugs were seen on Android devices with NVIDIA GPUs
   // when copying hardware-accelerated video textures to
   // floating-point textures. Investigate the root cause of this and
@@ -6385,7 +6337,8 @@ void WebGLRenderingContextBase::DrawingBufferClientRestoreMaskAndClearValues() {
   ContextGL()->ClearStencil(clear_stencil_);
 }
 
-void WebGLRenderingContextBase::DrawingBufferClientRestorePixelPackAlignment() {
+void WebGLRenderingContextBase::
+    DrawingBufferClientRestorePixelPackParameters() {
   if (!ContextGL())
     return;
   ContextGL()->PixelStorei(GL_PACK_ALIGNMENT, pack_alignment_);
@@ -6413,6 +6366,8 @@ void WebGLRenderingContextBase::DrawingBufferClientRestoreFramebufferBinding() {
 
 void WebGLRenderingContextBase::
     DrawingBufferClientRestorePixelUnpackBufferBinding() {}
+void WebGLRenderingContextBase::
+    DrawingBufferClientRestorePixelPackBufferBinding() {}
 
 ScriptValue WebGLRenderingContextBase::GetBooleanParameter(
     ScriptState* script_state,
@@ -7484,8 +7439,7 @@ void WebGLRenderingContextBase::MaybeRestoreContext(TimerBase*) {
 
     Settings* settings = frame->GetSettings();
 
-    if (!frame->Loader().Client()->AllowWebGL(settings &&
-                                              settings->GetWebGLEnabled()))
+    if (!frame->Client()->AllowWebGL(settings && settings->GetWebGLEnabled()))
       return;
   }
 
@@ -7532,11 +7486,7 @@ void WebGLRenderingContextBase::MaybeRestoreContext(TimerBase*) {
     return;
   }
 
-  drawing_buffer_ = buffer.Release();
-  drawing_buffer_->AddNewMailboxCallback(
-      WTF::Bind(&WebGLRenderingContextBase::NotifyCanvasContextChanged,
-                WrapWeakPersistent(this)));
-
+  drawing_buffer_ = std::move(buffer);
   GetDrawingBuffer()->Bind(GL_FRAMEBUFFER);
   lost_context_errors_.clear();
   context_lost_mode_ = kNotLostContext;
@@ -7778,7 +7728,7 @@ DEFINE_TRACE_WRAPPERS(WebGLRenderingContextBase) {
     visitor->TraceWrappers(unit.texture3d_binding_);
     visitor->TraceWrappers(unit.texture2d_array_binding_);
   }
-  for (ExtensionTracker* tracker : extensions_) {
+  for (auto tracker : extensions_) {
     visitor->TraceWrappers(tracker);
   }
   CanvasRenderingContext::TraceWrappers(visitor);

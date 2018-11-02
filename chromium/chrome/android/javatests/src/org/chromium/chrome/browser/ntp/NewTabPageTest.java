@@ -34,7 +34,6 @@ import org.chromium.chrome.browser.ntp.cards.NewTabPageRecyclerView;
 import org.chromium.chrome.browser.omnibox.LocationBarLayout;
 import org.chromium.chrome.browser.omnibox.UrlBar;
 import org.chromium.chrome.browser.suggestions.FakeMostVisitedSites;
-import org.chromium.chrome.browser.suggestions.TileGroupDelegateImpl;
 import org.chromium.chrome.browser.suggestions.TileSource;
 import org.chromium.chrome.browser.tab.EmptyTabObserver;
 import org.chromium.chrome.browser.tab.Tab;
@@ -44,7 +43,8 @@ import org.chromium.chrome.test.ChromeTabbedActivityTestRule;
 import org.chromium.chrome.test.util.ChromeTabUtils;
 import org.chromium.chrome.test.util.NewTabPageTestUtils;
 import org.chromium.chrome.test.util.OmniboxTestUtils;
-import org.chromium.chrome.test.util.RenderUtils.ViewRenderer;
+import org.chromium.chrome.test.util.RenderTestRule;
+import org.chromium.chrome.test.util.browser.suggestions.SuggestionsDependenciesRule;
 import org.chromium.content.browser.test.util.Criteria;
 import org.chromium.content.browser.test.util.CriteriaHelper;
 import org.chromium.content.browser.test.util.KeyUtils;
@@ -53,6 +53,7 @@ import org.chromium.content.browser.test.util.TouchCommon;
 import org.chromium.content_public.browser.LoadUrlParams;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.net.test.util.TestWebServer;
+import org.chromium.policy.test.annotations.Policies;
 import org.chromium.ui.base.PageTransition;
 
 import java.io.IOException;
@@ -73,12 +74,21 @@ import java.util.concurrent.TimeUnit;
 public class NewTabPageTest {
     @Rule
     public ChromeTabbedActivityTestRule mActivityTestRule = new ChromeTabbedActivityTestRule();
+    @Rule
+    public SuggestionsDependenciesRule mSuggestionsDeps = new SuggestionsDependenciesRule();
+
+    @Rule
+    public RenderTestRule mRenderTestRule =
+            new RenderTestRule("chrome/test/data/android/render_tests");
 
     private static final String TEST_PAGE = "/chrome/test/data/android/navigate/simple.html";
 
-    private static final String[] FAKE_MOST_VISITED_TITLES = new String[] { "Simple" };
-    private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS = new String[] { "" };
-    private static final int[] FAKE_MOST_VISITED_SOURCES = new int[] {TileSource.TOP_SITES};
+    private static final String[] FAKE_MOST_VISITED_TITLES =
+            new String[] {"TOP_SITES", "WHITELIST"};
+    private static final String[] FAKE_MOST_VISITED_WHITELIST_ICON_PATHS =
+            new String[] {"", "/test.png"};
+    private static final int[] FAKE_MOST_VISITED_SOURCES =
+            new int[] {TileSource.TOP_SITES, TileSource.WHITELIST};
 
     private Tab mTab;
     private NewTabPage mNtp;
@@ -92,12 +102,17 @@ public class NewTabPageTest {
     public void setUp() throws Exception {
         mTestServer = EmbeddedTestServer.createAndStartServer(
                 InstrumentationRegistry.getInstrumentation().getContext());
-        mSiteSuggestionUrls = new String[] {mTestServer.getURL(TEST_PAGE)};
+
+        // The URLs may not contain duplicates.
+        mSiteSuggestionUrls = new String[FAKE_MOST_VISITED_TITLES.length];
+        for (int i = 0; i < mSiteSuggestionUrls.length; i++) {
+            mSiteSuggestionUrls[i] = mTestServer.getURL(TEST_PAGE) + "#" + i;
+        }
 
         mMostVisitedSites = new FakeMostVisitedSites();
         mMostVisitedSites.setTileSuggestions(FAKE_MOST_VISITED_TITLES, mSiteSuggestionUrls,
                 FAKE_MOST_VISITED_WHITELIST_ICON_PATHS, FAKE_MOST_VISITED_SOURCES);
-        TileGroupDelegateImpl.setMostVisitedSitesForTests(mMostVisitedSites);
+        mSuggestionsDeps.getFactory().mostVisitedSites = mMostVisitedSites;
         mActivityTestRule.startMainActivityWithURL(UrlConstants.NTP_URL);
         mTab = mActivityTestRule.getActivity().getActivityTab();
         NewTabPageTestUtils.waitForNtpLoaded(mTab);
@@ -112,18 +127,15 @@ public class NewTabPageTest {
     @After
     public void tearDown() throws Exception {
         mTestServer.stopAndDestroyServer();
-        TileGroupDelegateImpl.setMostVisitedSitesForTests(null);
     }
 
     @Test
     @MediumTest
     @Feature({"NewTabPage", "RenderTest"})
     public void testRender() throws IOException {
-        ViewRenderer viewRenderer = new ViewRenderer(mActivityTestRule.getActivity(),
-                "chrome/test/data/android/render_tests", "NewTabPageTest");
-        viewRenderer.renderAndCompare(mTileGridLayout, "most_visited");
-        viewRenderer.renderAndCompare(mFakebox, "fakebox");
-        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page");
+        mRenderTestRule.render(mTileGridLayout, "most_visited");
+        mRenderTestRule.render(mFakebox, "fakebox");
+        mRenderTestRule.render(mNtp.getView().getRootView(), "new_tab_page");
 
         // Scroll to search bar
         final NewTabPageRecyclerView recyclerView = mNtp.getNewTabPageView().getRecyclerView();
@@ -142,7 +154,7 @@ public class NewTabPageTest {
             }
         });
 
-        viewRenderer.renderAndCompare(mNtp.getView().getRootView(), "new_tab_page_scrolled");
+        mRenderTestRule.render(mNtp.getView().getRootView(), "new_tab_page_scrolled");
     }
 
     @Test
@@ -390,16 +402,16 @@ public class NewTabPageTest {
     @Test
     @SmallTest
     @Feature({"NewTabPage"})
-    public void testSetSearchProviderHasLogo() throws Throwable {
+    public void testSetSearchProviderInfo() throws Throwable {
         mActivityTestRule.runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 NewTabPageView ntpView = mNtp.getNewTabPageView();
                 View logoView = ntpView.findViewById(R.id.search_provider_logo);
                 Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
-                ntpView.setSearchProviderHasLogo(false);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ false, /* isGoogle */ true);
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
-                ntpView.setSearchProviderHasLogo(true);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ true, /* isGoogle */ true);
                 Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
             }
         });
@@ -412,16 +424,16 @@ public class NewTabPageTest {
     @SmallTest
     @Feature({"NewTabPage"})
     @CommandLineFlags.Add("enable-features=NTPCondensedLayout")
-    public void testSetSearchProviderHasLogoCondensedUi() throws Throwable {
+    public void testSetSearchProviderInfoCondensedUi() throws Throwable {
         mActivityTestRule.runOnUiThread(new Runnable() {
             @Override
             public void run() {
                 NewTabPageView ntpView = mNtp.getNewTabPageView();
                 View logoView = ntpView.findViewById(R.id.search_provider_logo);
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
-                ntpView.setSearchProviderHasLogo(false);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ false, /* isGoogle */ true);
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
-                ntpView.setSearchProviderHasLogo(true);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ true, /* isGoogle */ true);
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
             }
         });
@@ -443,7 +455,7 @@ public class NewTabPageTest {
         // and the placeholder has not been inflated yet.
         Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
         Assert.assertEquals(View.VISIBLE, searchBoxView.getVisibility());
-        Assert.assertEquals(1, mTileGridLayout.getChildCount());
+        Assert.assertEquals(2, mTileGridLayout.getChildCount());
         Assert.assertNull(ntpView.getPlaceholder());
 
         // When the search provider has no logo and there are no tile suggestions, the placeholder
@@ -451,7 +463,7 @@ public class NewTabPageTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ntpView.setSearchProviderHasLogo(false);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ false, /* isGoogle */ true);
                 Assert.assertEquals(View.GONE, logoView.getVisibility());
                 Assert.assertEquals(View.GONE, searchBoxView.getVisibility());
             }
@@ -461,7 +473,7 @@ public class NewTabPageTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ntpView.getTileGroup().onSwitchToForeground(); // Force the tiles to be refreshed.
+                ntpView.getTileGroup().onSwitchToForeground(false); // Force tile refresh.
             }
         });
         CriteriaHelper.pollUiThread(new Criteria("The tile grid was not updated.") {
@@ -478,12 +490,36 @@ public class NewTabPageTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                ntpView.setSearchProviderHasLogo(true);
+                ntpView.setSearchProviderInfo(/* hasLogo = */ true, /* isGoogle */ true);
                 Assert.assertEquals(View.VISIBLE, logoView.getVisibility());
                 Assert.assertEquals(View.VISIBLE, searchBoxView.getVisibility());
                 Assert.assertEquals(View.GONE, ntpView.getPlaceholder().getVisibility());
             }
         });
+    }
+
+    @Test
+    @SmallTest
+    public void testRemoteSuggestionsEnabledByDefault() {
+        Assert.assertTrue(
+                mNtp.getManagerForTesting().getSuggestionsSource().areRemoteSuggestionsEnabled());
+    }
+
+    @Test
+    @SmallTest
+    @CommandLineFlags.Add("disable-features=NTPArticleSuggestions")
+    public void testRemoteSuggestionsEnabledWhenFeatureDisabled() {
+        // Verifies crash from https://crbug.com/742056.
+        Assert.assertFalse(
+                mNtp.getManagerForTesting().getSuggestionsSource().areRemoteSuggestionsEnabled());
+    }
+
+    @Test
+    @SmallTest
+    @Policies.Add(@Policies.Item(key = "NTPContentSuggestionsEnabled", string = "false"))
+    public void testRemoteSuggestionsEnabledWhenDisabledByPolicy() {
+        Assert.assertFalse(
+                mNtp.getManagerForTesting().getSuggestionsSource().areRemoteSuggestionsEnabled());
     }
 
     private void assertThumbnailInvalidAndRecapture() {

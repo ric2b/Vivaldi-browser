@@ -14,6 +14,7 @@
 #include "base/macros.h"
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
+#include "components/prefs/pref_value_store.h"
 #include "components/sync_preferences/pref_model_associator.h"
 #include "components/sync_preferences/synced_pref_observer.h"
 
@@ -51,7 +52,8 @@ class PrefServiceSyncable : public PrefService {
   // whose changes will not be persisted by the returned incognito pref service.
   PrefServiceSyncable* CreateIncognitoPrefService(
       PrefStore* incognito_extension_pref_store,
-      const std::vector<const char*>& overlay_pref_names);
+      const std::vector<const char*>& overlay_pref_names,
+      std::unique_ptr<PrefValueStore::Delegate> delegate);
 
   // Returns true if preferences state has synchronized with the remote
   // preferences. If true is returned it can be assumed the local preferences

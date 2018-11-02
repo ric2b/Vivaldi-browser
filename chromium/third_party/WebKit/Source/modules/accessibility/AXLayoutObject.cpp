@@ -34,7 +34,7 @@
 #include "core/dom/AccessibleNode.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/Range.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/RenderedPosition.h"
@@ -43,9 +43,8 @@
 #include "core/editing/iterators/CharacterIterator.h"
 #include "core/editing/iterators/TextIterator.h"
 #include "core/frame/FrameOwner.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLCanvasElement.h"
 #include "core/html/HTMLFrameOwnerElement.h"
@@ -59,6 +58,7 @@
 #include "core/html/ImageData.h"
 #include "core/html/LabelsNodeList.h"
 #include "core/html/shadow/ShadowElementNames.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/HitTestResult.h"
 #include "core/layout/LayoutFileUploadControl.h"
@@ -319,7 +319,7 @@ void AXLayoutObject::Detach() {
 // Check object role or purpose.
 //
 
-static bool IsLinkable(const AXObjectImpl& object) {
+static bool IsLinkable(const AXObject& object) {
   if (!object.GetLayoutObject())
     return false;
 
@@ -342,7 +342,7 @@ bool AXLayoutObject::IsEditable() const {
     Document& document = GetLayoutObject()->GetDocument();
     HTMLElement* body = document.body();
     if (body && HasEditableStyle(*body)) {
-      AXObjectImpl* ax_body = AxObjectCache().GetOrCreate(body);
+      AXObject* ax_body = AxObjectCache().GetOrCreate(body);
       return ax_body && ax_body != ax_body->AriaHiddenRoot();
     }
 
@@ -362,7 +362,7 @@ bool AXLayoutObject::IsRichlyEditable() const {
     Document& document = layout_object_->GetDocument();
     HTMLElement* body = document.body();
     if (body && HasRichlyEditableStyle(*body)) {
-      AXObjectImpl* ax_body = AxObjectCache().GetOrCreate(body);
+      AXObject* ax_body = AxObjectCache().GetOrCreate(body);
       return ax_body && ax_body != ax_body->AriaHiddenRoot();
     }
 
@@ -391,27 +391,10 @@ bool AXLayoutObject::IsOffScreen() const {
   DCHECK(layout_object_);
   IntRect content_rect =
       PixelSnappedIntRect(layout_object_->AbsoluteVisualRect());
-  FrameView* view = layout_object_->GetFrame()->View();
+  LocalFrameView* view = layout_object_->GetFrame()->View();
   IntRect view_rect = view->VisibleContentRect();
   view_rect.Intersect(content_rect);
   return view_rect.IsEmpty();
-}
-
-bool AXLayoutObject::IsReadOnly() const {
-  DCHECK(layout_object_);
-
-  if (IsWebArea()) {
-    Document& document = layout_object_->GetDocument();
-    HTMLElement* body = document.body();
-    if (body && HasEditableStyle(*body)) {
-      AXObjectImpl* ax_body = AxObjectCache().GetOrCreate(body);
-      return !ax_body || ax_body == ax_body->AriaHiddenRoot();
-    }
-
-    return !HasEditableStyle(document);
-  }
-
-  return AXNodeObject::IsReadOnly();
 }
 
 bool AXLayoutObject::IsVisited() const {
@@ -433,7 +416,7 @@ bool AXLayoutObject::IsFocused() const {
   Element* focused_element = GetDocument()->FocusedElement();
   if (!focused_element)
     return false;
-  AXObjectImpl* focused_object = AxObjectCache().GetOrCreate(focused_element);
+  AXObject* focused_object = AxObjectCache().GetOrCreate(focused_element);
   if (!focused_object || !focused_object->IsAXLayoutObject())
     return false;
 
@@ -463,11 +446,11 @@ bool AXLayoutObject::IsSelected() const {
   // Selection follows focus, but ONLY in single selection containers,
   // and only if aria-selected was not present to override
 
-  AXObjectImpl* container = ContainerWidget();
+  AXObject* container = ContainerWidget();
   if (!container || container->IsMultiSelectable())
     return false;
 
-  AXObjectImpl* focused_object = AxObjectCache().FocusedObject();
+  AXObject* focused_object = AxObjectCache().FocusedObject();
   return focused_object == this ||
          (focused_object && focused_object->ActiveDescendant() == this);
 }
@@ -498,7 +481,7 @@ AXObjectInclusion AXLayoutObject::DefaultObjectInclusion(
     return kIgnoreObject;
   }
 
-  return AXObjectImpl::DefaultObjectInclusion(ignored_reasons);
+  return AXObject::DefaultObjectInclusion(ignored_reasons);
 }
 
 bool AXLayoutObject::ComputeAccessibilityIsIgnored(
@@ -539,7 +522,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
 
   if (HasInheritedPresentationalRole()) {
     if (ignored_reasons) {
-      const AXObjectImpl* inherits_from = InheritsPresentationalRoleFrom();
+      const AXObject* inherits_from = InheritsPresentationalRoleFrom();
       if (inherits_from == this)
         ignored_reasons->push_back(IgnoredReason(kAXPresentationalRole));
       else
@@ -550,16 +533,16 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   }
 
   // An ARIA tree can only have tree items and static text as children.
-  if (AXObjectImpl* tree_ancestor = TreeAncestorDisallowingChild()) {
+  if (AXObject* tree_ancestor = TreeAncestorDisallowingChild()) {
     if (ignored_reasons)
       ignored_reasons->push_back(
           IgnoredReason(kAXAncestorDisallowsChild, tree_ancestor));
     return true;
   }
 
-  // A LayoutPart is an iframe element or embedded object element or something
-  // like that. We don't want to ignore those.
-  if (layout_object_->IsLayoutPart())
+  // A LayoutEmbeddedContent is an iframe element or embedded object element or
+  // something like that. We don't want to ignore those.
+  if (layout_object_->IsLayoutEmbeddedContent())
     return false;
 
   // Make sure renderers with layers stay in the tree.
@@ -569,13 +552,13 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
 
   // Find out if this element is inside of a label element.  If so, it may be
   // ignored because it's the label for a checkbox or radio button.
-  AXObjectImpl* control_object = CorrespondingControlForLabelElement();
+  AXObject* control_object = CorrespondingControlForLabelElement();
   if (control_object && control_object->IsCheckboxOrRadio() &&
       control_object->NameFromLabelElement()) {
     if (ignored_reasons) {
       HTMLLabelElement* label = LabelElementContainer();
       if (label && label != GetNode()) {
-        AXObjectImpl* label_ax_object = AxObjectCache().GetOrCreate(label);
+        AXObject* label_ax_object = AxObjectCache().GetOrCreate(label);
         ignored_reasons->push_back(
             IgnoredReason(kAXLabelContainer, label_ax_object));
       }
@@ -597,7 +580,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   if (layout_object_->IsText()) {
     // Static text beneath MenuItems and MenuButtons are just reported along
     // with the menu item, so it's ignored on an individual level.
-    AXObjectImpl* parent = ParentObjectUnignored();
+    AXObject* parent = ParentObjectUnignored();
     if (parent && (parent->AriaRoleAttribute() == kMenuItemRole ||
                    parent->AriaRoleAttribute() == kMenuButtonRole)) {
       if (ignored_reasons)
@@ -613,7 +596,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
     }
 
     // Don't ignore static text in editable text controls.
-    for (AXObjectImpl* parent = ParentObject(); parent;
+    for (AXObject* parent = ParentObject(); parent;
          parent = parent->ParentObject()) {
       if (parent->RoleValue() == kTextFieldRole)
         return false;
@@ -806,7 +789,7 @@ RGBA32 AXLayoutObject::ComputeBackgroundColor() const {
   // Color::blend should be called like this: background.blend(foreground).
   for (LayoutObject* layout_object = GetLayoutObject(); layout_object;
        layout_object = layout_object->Parent()) {
-    const AXObjectImpl* ax_parent = AxObjectCache().GetOrCreate(layout_object);
+    const AXObject* ax_parent = AxObjectCache().GetOrCreate(layout_object);
     if (ax_parent && ax_parent != this) {
       Color parent_color = ax_parent->BackgroundColor();
       blended_color = parent_color.Blend(blended_color);
@@ -827,7 +810,7 @@ RGBA32 AXLayoutObject::ComputeBackgroundColor() const {
 
   // If we still have some transparency, blend in the document base color.
   if (blended_color.HasAlpha()) {
-    FrameView* view = DocumentFrameView();
+    LocalFrameView* view = DocumentFrameView();
     if (view) {
       Color document_base_color = view->BaseBackgroundColor();
       blended_color = document_base_color.Blend(blended_color);
@@ -1077,13 +1060,13 @@ void AXLayoutObject::LoadInlineTextBoxes() {
   }
 }
 
-AXObjectImpl* AXLayoutObject::NextOnLine() const {
+AXObject* AXLayoutObject::NextOnLine() const {
   if (!GetLayoutObject())
     return nullptr;
 
-  AXObjectImpl* result = nullptr;
+  AXObject* result = nullptr;
   if (GetLayoutObject()->IsListMarker()) {
-    AXObjectImpl* next_sibling = RawNextSibling();
+    AXObject* next_sibling = RawNextSibling();
     if (!next_sibling || !next_sibling->Children().size())
       return nullptr;
     result = next_sibling->Children()[0].Get();
@@ -1116,7 +1099,7 @@ AXObjectImpl* AXLayoutObject::NextOnLine() const {
   return result;
 }
 
-AXObjectImpl* AXLayoutObject::PreviousOnLine() const {
+AXObject* AXLayoutObject::PreviousOnLine() const {
   if (!GetLayoutObject())
     return nullptr;
 
@@ -1129,7 +1112,7 @@ AXObjectImpl* AXLayoutObject::PreviousOnLine() const {
   if (!inline_box)
     return nullptr;
 
-  AXObjectImpl* result = nullptr;
+  AXObject* result = nullptr;
   for (InlineBox* prev = inline_box->PrevOnLine(); prev;
        prev = prev->PrevOnLine()) {
     LayoutObject* layout_object =
@@ -1258,20 +1241,26 @@ String AXLayoutObject::TextAlternative(bool recursive,
 //
 
 void AXLayoutObject::AriaOwnsElements(AXObjectVector& owns) const {
-  AccessibilityChildrenFromAttribute(aria_ownsAttr, owns);
+  AccessibilityChildrenFromAOMProperty(AOMRelationListProperty::kOwns, owns);
 }
 
 void AXLayoutObject::AriaDescribedbyElements(
     AXObjectVector& describedby) const {
-  AccessibilityChildrenFromAttribute(aria_describedbyAttr, describedby);
+  AccessibilityChildrenFromAOMProperty(AOMRelationListProperty::kDescribedBy,
+                                       describedby);
 }
 
 void AXLayoutObject::AriaLabelledbyElements(AXObjectVector& labelledby) const {
-  AccessibilityChildrenFromAttribute(aria_labelledbyAttr, labelledby);
+  AccessibilityChildrenFromAOMProperty(AOMRelationListProperty::kLabeledBy,
+                                       labelledby);
 }
 
 bool AXLayoutObject::AriaHasPopup() const {
-  return ElementAttributeValue(aria_haspopupAttr);
+  const AtomicString& has_popup =
+      GetAOMPropertyOrARIAAttribute(AOMStringProperty::kHasPopUp);
+
+  return !has_popup.IsNull() && !has_popup.IsEmpty() &&
+         !EqualIgnoringASCIICase(has_popup, "false");
 }
 
 bool AXLayoutObject::AriaRoleHasPresentationalChildren() const {
@@ -1288,10 +1277,9 @@ bool AXLayoutObject::AriaRoleHasPresentationalChildren() const {
   }
 }
 
-AXObjectImpl* AXLayoutObject::AncestorForWhichThisIsAPresentationalChild()
-    const {
+AXObject* AXLayoutObject::AncestorForWhichThisIsAPresentationalChild() const {
   // Walk the parent chain looking for a parent that has presentational children
-  AXObjectImpl* parent = ParentObjectIfExists();
+  AXObject* parent = ParentObjectIfExists();
   while (parent) {
     if (parent->AriaRoleHasPresentationalChildren())
       break;
@@ -1347,7 +1335,6 @@ const AtomicString& AXLayoutObject::LiveRegionStatus() const {
   // These roles have implicit live region status.
   if (live_region_status.IsEmpty()) {
     switch (RoleValue()) {
-      case kAlertDialogRole:
       case kAlertRole:
         return live_region_status_assertive;
       case kLogRole:
@@ -1395,8 +1382,7 @@ bool AXLayoutObject::LiveRegionBusy() const {
 // Hit testing.
 //
 
-AXObjectImpl* AXLayoutObject::AccessibilityHitTest(
-    const IntPoint& point) const {
+AXObject* AXLayoutObject::AccessibilityHitTest(const IntPoint& point) const {
   if (!layout_object_ || !layout_object_->HasLayer())
     return nullptr;
 
@@ -1423,7 +1409,7 @@ AXObjectImpl* AXLayoutObject::AccessibilityHitTest(
   if (!obj)
     return nullptr;
 
-  AXObjectImpl* result = AxObjectCache().GetOrCreate(obj);
+  AXObject* result = AxObjectCache().GetOrCreate(obj);
   result->UpdateChildrenIfNecessary();
 
   // Allow the element to perform any hit-testing it might need to do to reach
@@ -1433,7 +1419,7 @@ AXObjectImpl* AXLayoutObject::AccessibilityHitTest(
     // If this element is the label of a control, a hit test should return the
     // control.
     if (result->IsAXLayoutObject()) {
-      AXObjectImpl* control_object =
+      AXObject* control_object =
           ToAXLayoutObject(result)->CorrespondingControlForLabelElement();
       if (control_object && control_object->NameFromLabelElement())
         return control_object;
@@ -1445,19 +1431,19 @@ AXObjectImpl* AXLayoutObject::AccessibilityHitTest(
   return result;
 }
 
-AXObjectImpl* AXLayoutObject::ElementAccessibilityHitTest(
+AXObject* AXLayoutObject::ElementAccessibilityHitTest(
     const IntPoint& point) const {
   if (IsSVGImage())
     return RemoteSVGElementHitTest(point);
 
-  return AXObjectImpl::ElementAccessibilityHitTest(point);
+  return AXObject::ElementAccessibilityHitTest(point);
 }
 
 //
 // High-level accessibility tree access.
 //
 
-AXObjectImpl* AXLayoutObject::ComputeParent() const {
+AXObject* AXLayoutObject::ComputeParent() const {
   DCHECK(!IsDetached());
   if (!layout_object_)
     return 0;
@@ -1468,7 +1454,7 @@ AXObjectImpl* AXLayoutObject::ComputeParent() const {
   // menuButton and its corresponding menu are DOM siblings, but Accessibility
   // needs them to be parent/child.
   if (AriaRoleAttribute() == kMenuRole) {
-    AXObjectImpl* parent = MenuButtonForMenu();
+    AXObject* parent = MenuButtonForMenu();
     if (parent)
       return parent;
   }
@@ -1486,7 +1472,7 @@ AXObjectImpl* AXLayoutObject::ComputeParent() const {
   return 0;
 }
 
-AXObjectImpl* AXLayoutObject::ComputeParentIfExists() const {
+AXObject* AXLayoutObject::ComputeParentIfExists() const {
   if (!layout_object_)
     return 0;
 
@@ -1496,7 +1482,7 @@ AXObjectImpl* AXLayoutObject::ComputeParentIfExists() const {
   // menuButton and its corresponding menu are DOM siblings, but Accessibility
   // needs them to be parent/child.
   if (AriaRoleAttribute() == kMenuRole) {
-    AXObjectImpl* parent = MenuButtonForMenu();
+    AXObject* parent = MenuButtonForMenu();
     if (parent)
       return parent;
   }
@@ -1519,7 +1505,7 @@ AXObjectImpl* AXLayoutObject::ComputeParentIfExists() const {
 // accessibility module.
 //
 
-AXObjectImpl* AXLayoutObject::RawFirstChild() const {
+AXObject* AXLayoutObject::RawFirstChild() const {
   if (!layout_object_)
     return 0;
 
@@ -1531,7 +1517,7 @@ AXObjectImpl* AXLayoutObject::RawFirstChild() const {
   return AxObjectCache().GetOrCreate(first_child);
 }
 
-AXObjectImpl* AXLayoutObject::RawNextSibling() const {
+AXObject* AXLayoutObject::RawNextSibling() const {
   if (!layout_object_)
     return 0;
 
@@ -1599,10 +1585,10 @@ void AXLayoutObject::AddChildren() {
   if (!CanHaveChildren())
     return;
 
-  HeapVector<Member<AXObjectImpl>> owned_children;
+  HeapVector<Member<AXObject>> owned_children;
   ComputeAriaOwnsChildren(owned_children);
 
-  for (AXObjectImpl* obj = RawFirstChild(); obj; obj = obj->RawNextSibling()) {
+  for (AXObject* obj = RawFirstChild(); obj; obj = obj->RawNextSibling()) {
     if (!AxObjectCache().IsAriaOwned(obj)) {
       obj->SetParent(this);
       AddChild(obj);
@@ -1637,11 +1623,11 @@ void AXLayoutObject::UpdateChildrenIfNecessary() {
   if (NeedsToUpdateChildren())
     ClearChildren();
 
-  AXObjectImpl::UpdateChildrenIfNecessary();
+  AXObject::UpdateChildrenIfNecessary();
 }
 
 void AXLayoutObject::ClearChildren() {
-  AXObjectImpl::ClearChildren();
+  AXObject::ClearChildren();
   children_dirty_ = false;
 }
 
@@ -1675,11 +1661,11 @@ Document* AXLayoutObject::GetDocument() const {
   return &GetLayoutObject()->GetDocument();
 }
 
-FrameView* AXLayoutObject::DocumentFrameView() const {
+LocalFrameView* AXLayoutObject::DocumentFrameView() const {
   if (!GetLayoutObject())
     return nullptr;
 
-  // this is the LayoutObject's Document's LocalFrame's FrameView
+  // this is the LayoutObject's Document's LocalFrame's LocalFrameView
   return GetLayoutObject()->GetDocument().View();
 }
 
@@ -1728,7 +1714,7 @@ Element* AXLayoutObject::AnchorElement() const {
 // Functions that retrieve the current selection.
 //
 
-AXObjectImpl::AXRange AXLayoutObject::Selection() const {
+AXObject::AXRange AXLayoutObject::Selection() const {
   AXRange text_selection = TextControlSelection();
   if (text_selection.IsValid())
     return text_selection;
@@ -1755,7 +1741,7 @@ AXObjectImpl::AXRange AXLayoutObject::Selection() const {
   DCHECK(anchor_node);
 
   AXLayoutObject* anchor_object = nullptr;
-  // Find the closest node that has a corresponding AXObjectImpl.
+  // Find the closest node that has a corresponding AXObject.
   // This is because some nodes may be aria hidden or might not even have
   // a layout object if they are part of the shadow DOM.
   while (anchor_node) {
@@ -1798,7 +1784,7 @@ AXObjectImpl::AXRange AXLayoutObject::Selection() const {
 // Gets only the start and end offsets of the selection computed using the
 // current object as the starting point. Returns a null selection if there is
 // no selection in the subtree rooted at this object.
-AXObjectImpl::AXRange AXLayoutObject::SelectionUnderObject() const {
+AXObject::AXRange AXLayoutObject::SelectionUnderObject() const {
   AXRange text_selection = TextControlSelection();
   if (text_selection.IsValid())
     return text_selection;
@@ -1832,7 +1818,7 @@ AXObjectImpl::AXRange AXLayoutObject::SelectionUnderObject() const {
   return AXRange(start, end);
 }
 
-AXObjectImpl::AXRange AXLayoutObject::TextControlSelection() const {
+AXObject::AXRange AXLayoutObject::TextControlSelection() const {
   if (!GetLayoutObject())
     return AXRange();
 
@@ -1849,7 +1835,7 @@ AXObjectImpl::AXRange AXLayoutObject::TextControlSelection() const {
   if (!layout)
     return AXRange();
 
-  AXObjectImpl* ax_object = AxObjectCache().GetOrCreate(layout);
+  AXObject* ax_object = AxObjectCache().GetOrCreate(layout);
   if (!ax_object || !ax_object->IsAXLayoutObject())
     return AXRange();
 
@@ -1894,7 +1880,7 @@ AXLayoutObject* AXLayoutObject::GetUnignoredObjectFromNode(Node& node) const {
   if (IsDetached())
     return nullptr;
 
-  AXObjectImpl* ax_object = AxObjectCache().GetOrCreate(&node);
+  AXObject* ax_object = AxObjectCache().GetOrCreate(&node);
   if (!ax_object)
     return nullptr;
 
@@ -1909,7 +1895,7 @@ AXLayoutObject* AXLayoutObject::GetUnignoredObjectFromNode(Node& node) const {
 //
 
 // Convert from an accessible object and offset to a VisiblePosition.
-static VisiblePosition ToVisiblePosition(AXObjectImpl* obj, int offset) {
+static VisiblePosition ToVisiblePosition(AXObject* obj, int offset) {
   if (!obj->GetNode())
     return VisiblePosition();
 
@@ -1935,7 +1921,7 @@ static VisiblePosition ToVisiblePosition(AXObjectImpl* obj, int offset) {
         static_cast<unsigned>(offset) > (obj->Children().size() - 1)
             ? offset - 1
             : offset;
-    AXObjectImpl* child_obj = obj->Children()[clamped_offset];
+    AXObject* child_obj = obj->Children()[clamped_offset];
     Node* child_node = child_obj->GetNode();
     if (!child_node || !child_node->parentNode())
       return VisiblePosition();
@@ -1968,9 +1954,9 @@ void AXLayoutObject::SetSelection(const AXRange& selection) {
   if (!GetLayoutObject() || !selection.IsValid())
     return;
 
-  AXObjectImpl* anchor_object =
+  AXObject* anchor_object =
       selection.anchor_object ? selection.anchor_object.Get() : this;
-  AXObjectImpl* focus_object =
+  AXObject* focus_object =
       selection.focus_object ? selection.focus_object.Get() : this;
 
   if (!IsValidSelectionBound(anchor_object) ||
@@ -2022,8 +2008,7 @@ void AXLayoutObject::SetSelection(const AXRange& selection) {
           .Build());
 }
 
-bool AXLayoutObject::IsValidSelectionBound(
-    const AXObjectImpl* bound_object) const {
+bool AXLayoutObject::IsValidSelectionBound(const AXObject* bound_object) const {
   return GetLayoutObject() && bound_object && !bound_object->IsDetached() &&
          bound_object->IsAXLayoutObject() && bound_object->GetLayoutObject() &&
          bound_object->GetLayoutObject()->GetFrame() ==
@@ -2054,7 +2039,7 @@ void AXLayoutObject::HandleActiveDescendantChanged() {
   if (!GetLayoutObject())
     return;
 
-  AXObjectImpl* focused_object = AxObjectCache().FocusedObject();
+  AXObject* focused_object = AxObjectCache().FocusedObject();
   if (focused_object == this && SupportsActiveDescendant()) {
     AxObjectCache().PostNotification(
         GetLayoutObject(), AXObjectCacheImpl::kAXActiveDescendantChanged);
@@ -2063,7 +2048,7 @@ void AXLayoutObject::HandleActiveDescendantChanged() {
 
 void AXLayoutObject::HandleAriaExpandedChanged() {
   // Find if a parent of this object should handle aria-expanded changes.
-  AXObjectImpl* container_parent = this->ParentObject();
+  AXObject* container_parent = this->ParentObject();
   while (container_parent) {
     bool found_parent = false;
 
@@ -2183,7 +2168,7 @@ void AXLayoutObject::AddInlineTextBoxChildren(bool force) {
   for (RefPtr<AbstractInlineTextBox> box =
            layout_text->FirstAbstractInlineTextBox();
        box.Get(); box = box->NextInlineTextBox()) {
-    AXObjectImpl* ax_object = AxObjectCache().GetOrCreate(box.Get());
+    AXObject* ax_object = AxObjectCache().GetOrCreate(box.Get());
     if (!ax_object->AccessibilityIsIgnored())
       children_.push_back(ax_object);
   }
@@ -2216,11 +2201,11 @@ void AXLayoutObject::LineBreaks(Vector<int>& line_breaks) const {
 // Private.
 //
 
-AXObjectImpl* AXLayoutObject::TreeAncestorDisallowingChild() const {
+AXObject* AXLayoutObject::TreeAncestorDisallowingChild() const {
   // Determine if this is in a tree. If so, we apply special behavior to make it
   // work like an AXOutline.
-  AXObjectImpl* ax_obj = ParentObject();
-  AXObjectImpl* tree_ancestor = 0;
+  AXObject* ax_obj = ParentObject();
+  AXObject* tree_ancestor = 0;
   while (ax_obj) {
     if (ax_obj->IsTree()) {
       tree_ancestor = ax_obj;
@@ -2250,21 +2235,23 @@ bool AXLayoutObject::IsTabItemSelected() const {
   // The ARIA spec says a tab item can also be selected if it is aria-labeled by
   // a tabpanel that has keyboard focus inside of it, or if a tabpanel in its
   // aria-controls list has KB focus inside of it.
-  AXObjectImpl* focused_element = AxObjectCache().FocusedObject();
+  AXObject* focused_element = AxObjectCache().FocusedObject();
   if (!focused_element)
     return false;
 
   HeapVector<Member<Element>> elements;
-  ElementsFromAttribute(elements, aria_controlsAttr);
+  if (!HasAOMPropertyOrARIAAttribute(AOMRelationListProperty::kControls,
+                                     elements))
+    return false;
 
   for (const auto& element : elements) {
-    AXObjectImpl* tab_panel = AxObjectCache().GetOrCreate(element);
+    AXObject* tab_panel = AxObjectCache().GetOrCreate(element);
 
     // A tab item should only control tab panels.
     if (!tab_panel || tab_panel->RoleValue() != kTabPanelRole)
       continue;
 
-    AXObjectImpl* check_focus_element = focused_element;
+    AXObject* check_focus_element = focused_element;
     // Check if the focused element is a descendant of the element controlled by
     // the tab item.
     while (check_focus_element) {
@@ -2277,13 +2264,13 @@ bool AXLayoutObject::IsTabItemSelected() const {
   return false;
 }
 
-AXObjectImpl* AXLayoutObject::AccessibilityImageMapHitTest(
+AXObject* AXLayoutObject::AccessibilityImageMapHitTest(
     HTMLAreaElement* area,
     const IntPoint& point) const {
   if (!area)
     return 0;
 
-  AXObjectImpl* parent = AxObjectCache().GetOrCreate(area->ImageElement());
+  AXObject* parent = AxObjectCache().GetOrCreate(area->ImageElement());
   if (!parent)
     return 0;
 
@@ -2361,9 +2348,8 @@ AXSVGRoot* AXLayoutObject::RemoteSVGRootElement() const {
   return 0;
 }
 
-AXObjectImpl* AXLayoutObject::RemoteSVGElementHitTest(
-    const IntPoint& point) const {
-  AXObjectImpl* remote = RemoteSVGRootElement();
+AXObject* AXLayoutObject::RemoteSVGElementHitTest(const IntPoint& point) const {
+  AXObject* remote = RemoteSVGRootElement();
   if (!remote)
     return 0;
 
@@ -2377,7 +2363,7 @@ AXObjectImpl* AXLayoutObject::RemoteSVGElementHitTest(
 // coordinates only.
 void AXLayoutObject::OffsetBoundingBoxForRemoteSVGElement(
     LayoutRect& rect) const {
-  for (AXObjectImpl* parent = ParentObject(); parent;
+  for (AXObject* parent = ParentObject(); parent;
        parent = parent->ParentObject()) {
     if (parent->IsAXSVGRoot()) {
       rect.MoveBy(
@@ -2416,7 +2402,7 @@ void AXLayoutObject::AddHiddenChildren() {
   for (Node& child : NodeTraversal::ChildrenOf(*node)) {
     if (child.GetLayoutObject()) {
       // Find out where the last layout sibling is located within m_children.
-      if (AXObjectImpl* child_object =
+      if (AXObject* child_object =
               AxObjectCache().Get(child.GetLayoutObject())) {
         if (child_object->AccessibilityIsIgnored()) {
           const auto& children = child_object->Children();
@@ -2471,7 +2457,7 @@ void AXLayoutObject::AddImageMapChildren() {
   for (HTMLAreaElement& area :
        Traversal<HTMLAreaElement>::DescendantsOf(*map)) {
     // add an <area> element for this child if it has a link
-    AXObjectImpl* obj = AxObjectCache().GetOrCreate(&area);
+    AXObject* obj = AxObjectCache().GetOrCreate(&area);
     if (obj) {
       AXImageMapLink* area_object = ToAXImageMapLink(obj);
       area_object->SetParent(this);
@@ -2499,8 +2485,7 @@ void AXLayoutObject::AddCanvasChildren() {
 void AXLayoutObject::AddPopupChildren() {
   if (!isHTMLInputElement(GetNode()))
     return;
-  if (AXObjectImpl* ax_popup =
-          ToAXObjectImpl(toHTMLInputElement(GetNode())->PopupRootAXObject()))
+  if (AXObject* ax_popup = toHTMLInputElement(GetNode())->PopupRootAXObject())
     children_.push_back(ax_popup);
 }
 

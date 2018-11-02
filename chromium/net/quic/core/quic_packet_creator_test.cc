@@ -13,6 +13,7 @@
 #include "net/quic/core/crypto/null_encrypter.h"
 #include "net/quic/core/crypto/quic_decrypter.h"
 #include "net/quic/core/crypto/quic_encrypter.h"
+#include "net/quic/core/quic_data_writer.h"
 #include "net/quic/core/quic_pending_retransmission.h"
 #include "net/quic/core/quic_simple_buffer_allocator.h"
 #include "net/quic/core/quic_utils.h"
@@ -41,21 +42,25 @@ const QuicStreamId kGetNthClientInitiatedStreamId1 = kHeadersStreamId + 2;
 struct TestParams {
   TestParams(QuicVersion version,
              bool version_serialization,
-             QuicConnectionIdLength length)
+             QuicConnectionIdLength length,
+             bool framer_has_data_producer)
       : version(version),
         connection_id_length(length),
-        version_serialization(version_serialization) {}
+        version_serialization(version_serialization),
+        framer_has_data_producer(framer_has_data_producer) {}
 
   friend std::ostream& operator<<(std::ostream& os, const TestParams& p) {
     os << "{ client_version: " << QuicVersionToString(p.version)
        << " connection id length: " << p.connection_id_length
-       << " include version: " << p.version_serialization << " }";
+       << " include version: " << p.version_serialization
+       << " framer_has_data_producer: " << p.framer_has_data_producer << " }";
     return os;
   }
 
   QuicVersion version;
   QuicConnectionIdLength connection_id_length;
   bool version_serialization;
+  bool framer_has_data_producer;
 };
 
 // Constructs various test permutations.
@@ -63,30 +68,21 @@ std::vector<TestParams> GetTestParams() {
   std::vector<TestParams> params;
   constexpr QuicConnectionIdLength kMax = PACKET_8BYTE_CONNECTION_ID;
   QuicVersionVector all_supported_versions = AllSupportedVersions();
-  for (size_t i = 0; i < all_supported_versions.size(); ++i) {
-    params.push_back(TestParams(all_supported_versions[i], true, kMax));
-    params.push_back(TestParams(all_supported_versions[i], false, kMax));
+  for (bool framer_has_data_producer : {true, false}) {
+    for (size_t i = 0; i < all_supported_versions.size(); ++i) {
+      params.push_back(TestParams(all_supported_versions[i], true, kMax,
+                                  framer_has_data_producer));
+      params.push_back(TestParams(all_supported_versions[i], false, kMax,
+                                  framer_has_data_producer));
+    }
+    params.push_back(TestParams(all_supported_versions[0], true,
+                                PACKET_0BYTE_CONNECTION_ID,
+                                framer_has_data_producer));
+    params.push_back(TestParams(all_supported_versions[0], true, kMax,
+                                framer_has_data_producer));
   }
-  params.push_back(
-      TestParams(all_supported_versions[0], true, PACKET_0BYTE_CONNECTION_ID));
-  params.push_back(TestParams(all_supported_versions[0], true, kMax));
   return params;
 }
-
-class MockDelegate : public QuicPacketCreator::DelegateInterface {
- public:
-  MockDelegate() {}
-  ~MockDelegate() override {}
-
-  MOCK_METHOD1(OnSerializedPacket, void(SerializedPacket* packet));
-  MOCK_METHOD3(OnUnrecoverableError,
-               void(QuicErrorCode,
-                    const string&,
-                    ConnectionCloseSource source));
-
- private:
-  DISALLOW_COPY_AND_ASSIGN(MockDelegate);
-};
 
 class QuicPacketCreatorTest : public QuicTestWithParam<TestParams> {
  public:
@@ -136,6 +132,9 @@ class QuicPacketCreatorTest : public QuicTestWithParam<TestParams> {
                           new NullEncrypter(Perspective::IS_CLIENT));
     client_framer_.set_visitor(&framer_visitor_);
     server_framer_.set_visitor(&framer_visitor_);
+    if (GetParam().framer_has_data_producer) {
+      client_framer_.set_data_producer(&producer_);
+    }
   }
 
   ~QuicPacketCreatorTest() override {
@@ -165,8 +164,19 @@ class QuicPacketCreatorTest : public QuicTestWithParam<TestParams> {
     EXPECT_EQ(STREAM_FRAME, frame.type);
     ASSERT_TRUE(frame.stream_frame);
     EXPECT_EQ(stream_id, frame.stream_frame->stream_id);
-    EXPECT_EQ(data, QuicStringPiece(frame.stream_frame->data_buffer,
-                                    frame.stream_frame->data_length));
+    if (client_framer_.HasDataProducer()) {
+      char buf[kMaxPacketSize];
+      QuicDataWriter writer(kMaxPacketSize, buf, Perspective::IS_CLIENT,
+                            HOST_BYTE_ORDER);
+      if (frame.stream_frame->data_length > 0) {
+        producer_.WriteStreamData(stream_id, frame.stream_frame->offset,
+                                  frame.stream_frame->data_length, &writer);
+      }
+      EXPECT_EQ(data, QuicStringPiece(buf, frame.stream_frame->data_length));
+    } else {
+      EXPECT_EQ(data, QuicStringPiece(frame.stream_frame->data_buffer,
+                                      frame.stream_frame->data_length));
+    }
     EXPECT_EQ(offset, frame.stream_frame->offset);
     EXPECT_EQ(fin, frame.stream_frame->fin);
   }
@@ -216,13 +226,14 @@ class QuicPacketCreatorTest : public QuicTestWithParam<TestParams> {
   QuicFramer server_framer_;
   QuicFramer client_framer_;
   StrictMock<MockFramerVisitor> framer_visitor_;
-  StrictMock<MockDelegate> delegate_;
+  StrictMock<MockPacketCreatorDelegate> delegate_;
   QuicConnectionId connection_id_;
   string data_;
   struct iovec iov_;
   SimpleBufferAllocator buffer_allocator_;
   QuicPacketCreator creator_;
   SerializedPacket serialized_packet_;
+  SimpleDataProducer producer_;
 };
 
 // Run all packet creator tests with all supported versions of QUIC, and with

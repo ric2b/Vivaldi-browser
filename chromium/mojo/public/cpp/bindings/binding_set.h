@@ -71,16 +71,16 @@ class BindingSetBase {
   using RequestType = typename Traits::RequestType;
   using ImplPointerType = typename Traits::ImplPointerType;
 
-  BindingSetBase() {}
+  BindingSetBase() : weak_ptr_factory_(this) {}
 
-  void set_connection_error_handler(const base::Closure& error_handler) {
-    error_handler_ = error_handler;
+  void set_connection_error_handler(base::RepeatingClosure error_handler) {
+    error_handler_ = std::move(error_handler);
     error_with_reason_handler_.Reset();
   }
 
   void set_connection_error_with_reason_handler(
-      const ConnectionErrorWithReasonCallback& error_handler) {
-    error_with_reason_handler_ = error_handler;
+      RepeatingConnectionErrorWithReasonCallback error_handler) {
+    error_with_reason_handler_ = std::move(error_handler);
     error_handler_.Reset();
   }
 
@@ -123,21 +123,11 @@ class BindingSetBase {
     return true;
   }
 
-  // Returns a proxy bound to one end of a pipe whose other end is bound to
-  // |this|. If |id_storage| is not null, |*id_storage| will be set to the ID
-  // of the added binding.
-  ProxyType CreateInterfacePtrAndBind(ImplPointerType impl,
-                                      BindingId* id_storage = nullptr) {
-    ProxyType proxy;
-    BindingId id = AddBinding(std::move(impl), Traits::MakeRequest(&proxy));
-    if (id_storage)
-      *id_storage = id;
-    return proxy;
-  }
-
   void CloseAllBindings() { bindings_.clear(); }
 
   bool empty() const { return bindings_.empty(); }
+
+  size_t size() const { return bindings_.size(); }
 
   // Implementations may call this when processing a dispatched message or
   // error. During the extent of message or error dispatch, this will return the
@@ -150,11 +140,51 @@ class BindingSetBase {
     return *dispatch_context_;
   }
 
+  // Implementations may call this when processing a dispatched message or
+  // error. During the extent of message or error dispatch, this will return the
+  // BindingId of the specific binding which received the message or error.
+  BindingId dispatch_binding() const {
+    DCHECK(dispatch_context_);
+    return dispatch_binding_;
+  }
+
+  // Reports the currently dispatching Message as bad and closes the binding the
+  // message was received from. Note that this is only legal to call from
+  // directly within the stack frame of a message dispatch. If you need to do
+  // asynchronous work before you can determine the legitimacy of a message, use
+  // GetBadMessageCallback() and retain its result until you're ready to invoke
+  // or discard it.
+  void ReportBadMessage(const std::string& error) {
+    GetBadMessageCallback().Run(error);
+  }
+
+  // Acquires a callback which may be run to report the currently dispatching
+  // Message as bad and close the binding the message was received from. Note
+  // that this is only legal to call from directly within the stack frame of a
+  // message dispatch, but the returned callback may be called exactly once any
+  // time thereafter as long as the binding set itself hasn't been destroyed yet
+  // to report the message as bad. This may only be called once per message.
+  // The returned callback must be called on the BindingSet's own sequence.
+  ReportBadMessageCallback GetBadMessageCallback() {
+    DCHECK(dispatch_context_);
+    return base::Bind(
+        [](const ReportBadMessageCallback& error_callback,
+           base::WeakPtr<BindingSetBase> binding_set, BindingId binding_id,
+           const std::string& error) {
+          error_callback.Run(error);
+          if (binding_set)
+            binding_set->RemoveBinding(binding_id);
+        },
+        mojo::GetBadMessageCallback(), weak_ptr_factory_.GetWeakPtr(),
+        dispatch_binding());
+  }
+
   void FlushForTesting() {
     DCHECK(!is_flushing_);
     is_flushing_ = true;
     for (auto& binding : bindings_)
-      binding.second->FlushForTesting();
+      if (binding.second)
+        binding.second->FlushForTesting();
     is_flushing_ = false;
     // Clean up any bindings that were destroyed.
     for (auto it = bindings_.begin(); it != bindings_.end();) {
@@ -179,10 +209,9 @@ class BindingSetBase {
           binding_set_(binding_set),
           binding_id_(binding_id),
           context_(std::move(context)) {
-      if (ContextTraits::SupportsContext())
-        binding_.AddFilter(base::MakeUnique<DispatchFilter>(this));
+      binding_.AddFilter(base::MakeUnique<DispatchFilter>(this));
       binding_.set_connection_error_with_reason_handler(
-          base::Bind(&Entry::OnConnectionError, base::Unretained(this)));
+          base::BindOnce(&Entry::OnConnectionError, base::Unretained(this)));
     }
 
     void FlushForTesting() { binding_.FlushForTesting(); }
@@ -206,14 +235,12 @@ class BindingSetBase {
     };
 
     void WillDispatch() {
-      DCHECK(ContextTraits::SupportsContext());
-      binding_set_->SetDispatchContext(&context_);
+      binding_set_->SetDispatchContext(&context_, binding_id_);
     }
 
     void OnConnectionError(uint32_t custom_reason,
                            const std::string& description) {
-      if (ContextTraits::SupportsContext())
-        WillDispatch();
+      WillDispatch();
       binding_set_->OnConnectionError(binding_id_, custom_reason, description);
     }
 
@@ -225,9 +252,9 @@ class BindingSetBase {
     DISALLOW_COPY_AND_ASSIGN(Entry);
   };
 
-  void SetDispatchContext(const Context* context) {
-    DCHECK(ContextTraits::SupportsContext());
+  void SetDispatchContext(const Context* context, BindingId binding_id) {
     dispatch_context_ = context;
+    dispatch_binding_ = binding_id;
     if (!pre_dispatch_handler_.is_null())
       pre_dispatch_handler_.Run(*context);
   }
@@ -254,19 +281,22 @@ class BindingSetBase {
     if (!is_flushing_)
       bindings_.erase(it);
 
-    if (!error_handler_.is_null())
+    if (error_handler_) {
       error_handler_.Run();
-    else if (!error_with_reason_handler_.is_null())
+    } else if (error_with_reason_handler_) {
       error_with_reason_handler_.Run(custom_reason, description);
+    }
   }
 
-  base::Closure error_handler_;
-  ConnectionErrorWithReasonCallback error_with_reason_handler_;
+  base::RepeatingClosure error_handler_;
+  RepeatingConnectionErrorWithReasonCallback error_with_reason_handler_;
   PreDispatchCallback pre_dispatch_handler_;
   BindingId next_binding_id_ = 0;
   std::map<BindingId, std::unique_ptr<Entry>> bindings_;
   bool is_flushing_ = false;
   const Context* dispatch_context_ = nullptr;
+  BindingId dispatch_binding_;
+  base::WeakPtrFactory<BindingSetBase> weak_ptr_factory_;
 
   DISALLOW_COPY_AND_ASSIGN(BindingSetBase);
 };

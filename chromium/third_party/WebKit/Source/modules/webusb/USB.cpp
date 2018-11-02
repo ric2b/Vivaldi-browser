@@ -9,17 +9,17 @@
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "device/usb/public/interfaces/device.mojom-blink.h"
 #include "modules/EventTargetModules.h"
 #include "modules/webusb/USBConnectionEvent.h"
 #include "modules/webusb/USBDevice.h"
 #include "modules/webusb/USBDeviceFilter.h"
 #include "modules/webusb/USBDeviceRequestOptions.h"
-#include "platform/UserGestureIndicator.h"
+#include "platform/feature_policy/FeaturePolicy.h"
 #include "platform/mojo/MojoHelper.h"
 #include "platform/wtf/Functional.h"
-#include "public/platform/InterfaceProvider.h"
-#include "public/platform/Platform.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 using device::mojom::blink::UsbDeviceFilterPtr;
 using device::mojom::blink::UsbDeviceInfoPtr;
@@ -82,7 +82,7 @@ ScriptPromise USB::getDevices(ScriptState* script_state) {
         script_state, DOMException::Create(kNotSupportedError));
   }
 
-  if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
+  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
     if (!frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb)) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
@@ -111,7 +111,7 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
         script_state, DOMException::Create(kNotSupportedError));
   }
 
-  if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
+  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
     if (!frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb)) {
       return ScriptPromise::RejectWithDOMException(
           script_state,
@@ -123,7 +123,7 @@ ScriptPromise USB::requestDevice(ScriptState* script_state,
   }
 
   if (!chooser_service_) {
-    GetFrame()->GetInterfaceProvider()->GetInterface(
+    GetFrame()->GetInterfaceProvider().GetInterface(
         mojo::MakeRequest(&chooser_service_));
     chooser_service_.set_connection_error_handler(
         ConvertToBaseCallback(WTF::Bind(&USB::OnChooserServiceConnectionError,
@@ -257,7 +257,7 @@ void USB::AddedEventListener(const AtomicString& event_type,
   if (!frame)
     return;
 
-  if (RuntimeEnabledFeatures::featurePolicyEnabled()) {
+  if (IsSupportedInFeaturePolicy(WebFeaturePolicyFeature::kUsb)) {
     if (frame->IsFeatureEnabled(WebFeaturePolicyFeature::kUsb))
       EnsureDeviceManagerConnection();
   } else if (frame->IsMainFrame()) {
@@ -270,13 +270,16 @@ void USB::EnsureDeviceManagerConnection() {
     return;
 
   DCHECK(GetFrame());
-  GetFrame()->GetInterfaceProvider()->GetInterface(
+  GetFrame()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&device_manager_));
   device_manager_.set_connection_error_handler(ConvertToBaseCallback(WTF::Bind(
       &USB::OnDeviceManagerConnectionError, WrapWeakPersistent(this))));
 
   DCHECK(!client_binding_.is_bound());
-  device_manager_->SetClient(client_binding_.CreateInterfacePtrAndBind());
+
+  device::mojom::blink::UsbDeviceManagerClientPtr client;
+  client_binding_.Bind(mojo::MakeRequest(&client));
+  device_manager_->SetClient(std::move(client));
 }
 
 DEFINE_TRACE(USB) {

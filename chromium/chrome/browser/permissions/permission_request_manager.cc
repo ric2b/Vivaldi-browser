@@ -14,6 +14,7 @@
 #include "chrome/browser/permissions/permission_request.h"
 #include "chrome/browser/permissions/permission_uma_util.h"
 #include "chrome/browser/ui/permission_bubble/permission_prompt.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "content/public/browser/browser_thread.h"
@@ -26,11 +27,19 @@ class CancelledRequest : public PermissionRequest {
  public:
   explicit CancelledRequest(PermissionRequest* cancelled)
       : icon_(cancelled->GetIconId()),
+#if defined(OS_ANDROID)
+        message_(cancelled->GetMessageText()),
+#endif
         message_fragment_(cancelled->GetMessageTextFragment()),
-        origin_(cancelled->GetOrigin()) {}
+        origin_(cancelled->GetOrigin()),
+        request_type_(cancelled->GetPermissionRequestType()) {
+  }
   ~CancelledRequest() override {}
 
   IconId GetIconId() const override { return icon_; }
+#if defined(OS_ANDROID)
+  base::string16 GetMessageText() const override { return message_; }
+#endif
   base::string16 GetMessageTextFragment() const override {
     return message_fragment_;
   }
@@ -43,10 +52,18 @@ class CancelledRequest : public PermissionRequest {
 
   void RequestFinished() override { delete this; }
 
+  PermissionRequestType GetPermissionRequestType() const override {
+    return request_type_;
+  }
+
  private:
   IconId icon_;
+#if defined(OS_ANDROID)
+  base::string16 message_;
+#endif
   base::string16 message_fragment_;
   GURL origin_;
+  PermissionRequestType request_type_;
 };
 
 bool IsMessageTextEqual(PermissionRequest* a,
@@ -57,6 +74,27 @@ bool IsMessageTextEqual(PermissionRequest* a,
       a->GetOrigin() == b->GetOrigin()) {
     return true;
   }
+  return false;
+}
+
+// We only group together media requests. We don't display grouped requests for
+// any other permissions at present.
+bool ShouldGroupRequests(PermissionRequest* a, PermissionRequest* b) {
+  if (a->GetOrigin() != b->GetOrigin())
+    return false;
+
+  if (a->GetPermissionRequestType() ==
+      PermissionRequestType::PERMISSION_MEDIASTREAM_MIC) {
+    return b->GetPermissionRequestType() ==
+           PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA;
+  }
+
+  if (a->GetPermissionRequestType() ==
+      PermissionRequestType::PERMISSION_MEDIASTREAM_CAMERA) {
+    return b->GetPermissionRequestType() ==
+           PermissionRequestType::PERMISSION_MEDIASTREAM_MIC;
+  }
+
   return false;
 }
 
@@ -80,30 +118,24 @@ PermissionRequestManager::PermissionRequestManager(
       view_factory_(base::Bind(&PermissionPrompt::Create)),
       view_(nullptr),
       main_frame_has_fully_loaded_(false),
+      tab_can_show_prompts_(false),
       persist_(true),
       auto_response_for_test_(NONE),
       weak_factory_(this) {
 #if defined(OS_ANDROID)
-  view_ = view_factory_.Run(web_contents);
-  view_->SetDelegate(this);
+  tab_can_show_prompts_ = true;
 #endif
 }
 
 PermissionRequestManager::~PermissionRequestManager() {
-  if (view_ != NULL)
-    view_->SetDelegate(NULL);
-
-  for (PermissionRequest* request : requests_)
-    request->RequestFinished();
-  for (PermissionRequest* request : queued_requests_)
-    request->RequestFinished();
-  for (PermissionRequest* request : queued_frame_requests_)
-    request->RequestFinished();
-  for (const auto& entry : duplicate_requests_)
-    entry.second->RequestFinished();
+  DCHECK(requests_.empty());
+  DCHECK(duplicate_requests_.empty());
+  DCHECK(queued_requests_.empty());
 }
 
 void PermissionRequestManager::AddRequest(PermissionRequest* request) {
+  DCHECK(!vr::VrTabHelper::IsInVr(web_contents()));
+
   // TODO(tsergeant): change the UMA to no longer mention bubbles.
   base::RecordAction(base::UserMetricsAction("PermissionBubbleRequest"));
 
@@ -138,12 +170,11 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
       base::RecordAction(
           base::UserMetricsAction("PermissionBubbleRequestQueued"));
     }
-    queued_requests_.push_back(request);
   } else {
     base::RecordAction(
         base::UserMetricsAction("PermissionBubbleIFrameRequestQueued"));
-    queued_frame_requests_.push_back(request);
   }
+  queued_requests_.push_back(request);
 
   if (!IsBubbleVisible())
     ScheduleShowBubble();
@@ -152,57 +183,37 @@ void PermissionRequestManager::AddRequest(PermissionRequest* request) {
 void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
   // First look in the queued requests, where we can simply finish the request
   // and go on.
-  std::vector<PermissionRequest*>::iterator requests_iter;
-  for (requests_iter = queued_requests_.begin();
-       requests_iter != queued_requests_.end();
-       requests_iter++) {
-    if (*requests_iter == request) {
-      RequestFinishedIncludingDuplicates(*requests_iter);
-      queued_requests_.erase(requests_iter);
-      return;
-    }
-  }
-  for (requests_iter = queued_frame_requests_.begin();
-       requests_iter != queued_frame_requests_.end(); requests_iter++) {
-    if (*requests_iter == request) {
-      RequestFinishedIncludingDuplicates(*requests_iter);
-      queued_frame_requests_.erase(requests_iter);
+  std::deque<PermissionRequest*>::iterator queued_requests_iter;
+  for (queued_requests_iter = queued_requests_.begin();
+       queued_requests_iter != queued_requests_.end(); queued_requests_iter++) {
+    if (*queued_requests_iter == request) {
+      RequestFinishedIncludingDuplicates(*queued_requests_iter);
+      queued_requests_.erase(queued_requests_iter);
       return;
     }
   }
 
-  std::vector<bool>::iterator accepts_iter = accept_states_.begin();
-  for (requests_iter = requests_.begin(), accepts_iter = accept_states_.begin();
-       requests_iter != requests_.end();
-       requests_iter++, accepts_iter++) {
-    if (*requests_iter != request)
-      continue;
+  if (!requests_.empty() && requests_[0] == request) {
+    // Grouped (mic+camera) requests are currently never cancelled.
+    // TODO(timloh): We should fix this at some point.
+    DCHECK_EQ(static_cast<size_t>(1), requests_.size());
 
-    // We can simply erase the current entry in the request table if we aren't
-    // showing the dialog, or if we are showing it and it can accept the update.
-    bool can_erase = !view_ || view_->CanAcceptRequestUpdate();
-    if (can_erase) {
-      RequestFinishedIncludingDuplicates(*requests_iter);
-      requests_.erase(requests_iter);
-      accept_states_.erase(accepts_iter);
-
-      if (view_) {
-        view_->Hide();
-        // Will redraw the bubble if it is being shown.
-        DequeueRequestsAndShowBubble();
-      }
+    // We can finalize the prompt if we aren't showing the dialog (because we
+    // switched tabs with an active prompt), or if we are showing it and it
+    // can accept the update.
+    if (!view_ || view_->CanAcceptRequestUpdate()) {
+      FinalizeBubble(PermissionAction::IGNORED);
       return;
     }
 
     // Cancel the existing request and replace it with a dummy.
-    PermissionRequest* cancelled_request =
-        new CancelledRequest(*requests_iter);
-    RequestFinishedIncludingDuplicates(*requests_iter);
-    *requests_iter = cancelled_request;
+    PermissionRequest* cancelled_request = new CancelledRequest(request);
+    RequestFinishedIncludingDuplicates(request);
+    requests_[0] = cancelled_request;
     return;
   }
 
-  // Since |request| wasn't found in queued_requests_, queued_frame_requests_ or
+  // Since |request| wasn't found in queued_requests_ or
   // requests_ it must have been marked as a duplicate. We can't search
   // duplicate_requests_ by value, so instead use GetExistingRequest to find the
   // key (request it was duped against), and iterate through duplicates of that.
@@ -220,22 +231,14 @@ void PermissionRequestManager::CancelRequest(PermissionRequest* request) {
 }
 
 void PermissionRequestManager::HideBubble() {
-  // Disengage from the existing view if there is one and it doesn't manage
-  // its own visibility.
-  if (!view_ || view_->HidesAutomatically())
-    return;
+  tab_can_show_prompts_ = false;
 
-  view_->SetDelegate(nullptr);
-  view_->Hide();
-  view_.reset();
+  if (view_)
+    DeleteBubble();
 }
 
 void PermissionRequestManager::DisplayPendingRequests() {
-  if (IsBubbleVisible())
-    return;
-
-  view_ = view_factory_.Run(web_contents());
-  view_->SetDelegate(this);
+  tab_can_show_prompts_ = true;
 
   if (!main_frame_has_fully_loaded_)
     return;
@@ -280,8 +283,7 @@ void PermissionRequestManager::DidFinishNavigation(
     return;
   }
 
-  CancelPendingQueues();
-  FinalizeBubble();
+  CleanUpRequests();
   main_frame_has_fully_loaded_ = false;
 }
 
@@ -302,8 +304,7 @@ void PermissionRequestManager::DocumentLoadedInFrame(
 
 void PermissionRequestManager::WebContentsDestroyed() {
   // If the web contents has been destroyed, treat the bubble as cancelled.
-  CancelPendingQueues();
-  FinalizeBubble();
+  CleanUpRequests();
 
   // The WebContents is going away; be aggressively paranoid and delete
   // ourselves lest other parts of the system attempt to add permission bubbles
@@ -317,57 +318,46 @@ const std::vector<PermissionRequest*>& PermissionRequestManager::Requests() {
   return requests_;
 }
 
-const std::vector<bool>& PermissionRequestManager::AcceptStates() {
-  return accept_states_;
-}
-
-void PermissionRequestManager::ToggleAccept(int request_index, bool new_value) {
-  DCHECK(request_index < static_cast<int>(accept_states_.size()));
-  accept_states_[request_index] = new_value;
-}
-
 void PermissionRequestManager::TogglePersist(bool new_value) {
   persist_ = new_value;
 }
 
 void PermissionRequestManager::Accept() {
-  PermissionUmaUtil::PermissionPromptAccepted(requests_, accept_states_);
-
+  DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
-  std::vector<bool>::iterator accepts_iter = accept_states_.begin();
-  for (requests_iter = requests_.begin(), accepts_iter = accept_states_.begin();
-       requests_iter != requests_.end();
-       requests_iter++, accepts_iter++) {
-    if (*accepts_iter) {
-      PermissionGrantedIncludingDuplicates(*requests_iter);
-    } else {
-      PermissionDeniedIncludingDuplicates(*requests_iter);
-    }
+  for (requests_iter = requests_.begin(); requests_iter != requests_.end();
+       requests_iter++) {
+    PermissionGrantedIncludingDuplicates(*requests_iter);
   }
-  FinalizeBubble();
+  FinalizeBubble(PermissionAction::GRANTED);
 }
 
 void PermissionRequestManager::Deny() {
-  DCHECK_EQ(1u, requests_.size());
-  PermissionUmaUtil::PermissionPromptDenied(requests_);
-
+  DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
        requests_iter++) {
     PermissionDeniedIncludingDuplicates(*requests_iter);
   }
-  FinalizeBubble();
+  FinalizeBubble(PermissionAction::DENIED);
 }
 
 void PermissionRequestManager::Closing() {
+#if defined(OS_MACOSX)
+  // Mac calls this whenever you press Esc.
+  if (!view_)
+    return;
+#endif
+
+  DCHECK(view_);
   std::vector<PermissionRequest*>::iterator requests_iter;
   for (requests_iter = requests_.begin();
        requests_iter != requests_.end();
        requests_iter++) {
     CancelledIncludingDuplicates(*requests_iter);
   }
-  FinalizeBubble();
+  FinalizeBubble(PermissionAction::DISMISSED);
 }
 
 void PermissionRequestManager::ScheduleShowBubble() {
@@ -383,32 +373,33 @@ void PermissionRequestManager::ScheduleShowBubble() {
 }
 
 void PermissionRequestManager::DequeueRequestsAndShowBubble() {
-  if (!view_)
+  if (view_)
     return;
-  if (!requests_.empty())
+  if (!main_frame_has_fully_loaded_ || !tab_can_show_prompts_)
     return;
-  if (!main_frame_has_fully_loaded_)
-    return;
-  if (queued_requests_.empty() && queued_frame_requests_.empty())
+  if (queued_requests_.empty())
     return;
 
-  if (queued_requests_.size())
-    requests_.swap(queued_requests_);
-  else
-    requests_.swap(queued_frame_requests_);
+  DCHECK(requests_.empty());
+  requests_.push_back(queued_requests_.front());
+  queued_requests_.pop_front();
 
-  // Sets the default value for each request to be 'accept'.
-  accept_states_.resize(requests_.size(), true);
+  if (!queued_requests_.empty() &&
+      ShouldGroupRequests(requests_.front(), queued_requests_.front())) {
+    requests_.push_back(queued_requests_.front());
+    queued_requests_.pop_front();
+  }
 
   ShowBubble();
 }
 
 void PermissionRequestManager::ShowBubble() {
-  DCHECK(view_);
+  DCHECK(!view_);
   DCHECK(!requests_.empty());
   DCHECK(main_frame_has_fully_loaded_);
+  DCHECK(tab_can_show_prompts_);
 
-  view_->Show();
+  view_ = view_factory_.Run(web_contents(), this);
   PermissionUmaUtil::PermissionPromptShown(requests_);
   NotifyBubbleAdded();
 
@@ -417,9 +408,20 @@ void PermissionRequestManager::ShowBubble() {
     DoAutoResponseForTesting();
 }
 
-void PermissionRequestManager::FinalizeBubble() {
-  if (view_ && !view_->HidesAutomatically())
-    view_->Hide();
+void PermissionRequestManager::DeleteBubble() {
+  DCHECK(view_);
+  view_.reset();
+}
+
+void PermissionRequestManager::FinalizeBubble(
+    PermissionAction permission_action) {
+  DCHECK(!requests_.empty());
+
+  if (view_)
+    DeleteBubble();
+
+  PermissionUmaUtil::PermissionPromptResolved(requests_, web_contents(),
+                                              permission_action);
 
   std::vector<PermissionRequest*>::iterator requests_iter;
   for (requests_iter = requests_.begin();
@@ -428,25 +430,21 @@ void PermissionRequestManager::FinalizeBubble() {
     RequestFinishedIncludingDuplicates(*requests_iter);
   }
   requests_.clear();
-  accept_states_.clear();
-  if (queued_requests_.size() || queued_frame_requests_.size())
+  if (queued_requests_.size())
     DequeueRequestsAndShowBubble();
 }
 
-void PermissionRequestManager::CancelPendingQueues() {
-  std::vector<PermissionRequest*>::iterator requests_iter;
+void PermissionRequestManager::CleanUpRequests() {
+  std::deque<PermissionRequest*>::iterator requests_iter;
   for (requests_iter = queued_requests_.begin();
        requests_iter != queued_requests_.end();
        requests_iter++) {
     RequestFinishedIncludingDuplicates(*requests_iter);
   }
-  for (requests_iter = queued_frame_requests_.begin();
-       requests_iter != queued_frame_requests_.end();
-       requests_iter++) {
-    RequestFinishedIncludingDuplicates(*requests_iter);
-  }
   queued_requests_.clear();
-  queued_frame_requests_.clear();
+
+  if (view_)
+    FinalizeBubble(PermissionAction::IGNORED);
 }
 
 PermissionRequest* PermissionRequestManager::GetExistingRequest(
@@ -455,9 +453,6 @@ PermissionRequest* PermissionRequestManager::GetExistingRequest(
     if (IsMessageTextEqual(existing_request, request))
       return existing_request;
   for (PermissionRequest* existing_request : queued_requests_)
-    if (IsMessageTextEqual(existing_request, request))
-      return existing_request;
-  for (PermissionRequest* existing_request : queued_frame_requests_)
     if (IsMessageTextEqual(existing_request, request))
       return existing_request;
   return nullptr;
@@ -478,7 +473,7 @@ void PermissionRequestManager::PermissionGrantedIncludingDuplicates(
 void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(request, GetExistingRequest(request))
-      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+      << "Only requests in [queued_]requests_ can have duplicates";
   request->set_persist(persist_);
   request->PermissionDenied();
   auto range = duplicate_requests_.equal_range(request);
@@ -490,7 +485,7 @@ void PermissionRequestManager::PermissionDeniedIncludingDuplicates(
 void PermissionRequestManager::CancelledIncludingDuplicates(
     PermissionRequest* request) {
   DCHECK_EQ(request, GetExistingRequest(request))
-      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+      << "Only requests in [queued_]requests_ can have duplicates";
   request->Cancelled();
   auto range = duplicate_requests_.equal_range(request);
   for (auto it = range.first; it != range.second; ++it)
@@ -499,13 +494,11 @@ void PermissionRequestManager::CancelledIncludingDuplicates(
 void PermissionRequestManager::RequestFinishedIncludingDuplicates(
     PermissionRequest* request) {
   // We can't call GetExistingRequest here, because other entries in requests_,
-  // queued_requests_ or queued_frame_requests_ might already have been deleted.
+  // queued_requests_ might already have been deleted.
   DCHECK_EQ(1, std::count(requests_.begin(), requests_.end(), request) +
-               std::count(queued_requests_.begin(), queued_requests_.end(),
-                          request) +
-               std::count(queued_frame_requests_.begin(),
-                          queued_frame_requests_.end(), request))
-      << "Only requests in [queued_[frame_]]requests_ can have duplicates";
+                   std::count(queued_requests_.begin(), queued_requests_.end(),
+                              request))
+      << "Only requests in [queued_]requests_ can have duplicates";
   request->RequestFinished();
   // Beyond this point, |request| has probably been deleted.
   auto range = duplicate_requests_.equal_range(request);
@@ -534,14 +527,7 @@ void PermissionRequestManager::DoAutoResponseForTesting() {
       Accept();
       break;
     case DENY_ALL:
-      // Deny() assumes there is only 1 request.
-      if (accept_states_.size() == 1) {
-        Deny();
-      } else {
-        for (size_t i = 0; i < accept_states_.size(); ++i)
-          accept_states_[i] = false;
-        Accept();
-      }
+      Deny();
       break;
     case DISMISS:
       Closing();

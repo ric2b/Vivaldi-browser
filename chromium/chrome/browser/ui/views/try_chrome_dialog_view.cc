@@ -14,7 +14,6 @@
 #include "chrome/browser/process_singleton.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "chrome/install_static/install_util.h"
 #include "chrome/installer/util/user_experiment.h"
@@ -100,8 +99,8 @@ TryChromeDialogView::Result TryChromeDialogView::ShowDialog(
 
   views::View* root_view = popup_->GetRootView();
   // The window color is a tiny bit off-white.
-  root_view->set_background(
-      views::Background::CreateSolidBackground(0xfc, 0xfc, 0xfc));
+  root_view->SetBackground(
+      views::CreateSolidBackground(SkColorSetRGB(0xfc, 0xfc, 0xfc)));
 
   views::GridLayout* layout = views::GridLayout::CreatePanel(root_view);
   views::ColumnSet* columns;
@@ -112,7 +111,7 @@ TryChromeDialogView::Result TryChromeDialogView::ShowDialog(
   const int unrelated_space_horiz =
       provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL);
   const int unrelated_space_vert =
-      provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_VERTICAL);
+      provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
   const int button_spacing_horiz =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL);
 

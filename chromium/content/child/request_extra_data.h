@@ -12,7 +12,7 @@
 #include "content/child/web_url_loader_impl.h"
 #include "content/common/content_export.h"
 #include "content/common/navigation_params.h"
-#include "content/common/url_loader_factory.mojom.h"
+#include "content/public/common/url_loader_throttle.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/platform/WebString.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -168,11 +168,12 @@ class CONTENT_EXPORT RequestExtraData
     navigation_initiated_by_renderer_ = navigation_by_renderer;
   }
 
-  mojom::URLLoaderFactory* url_loader_factory_override() const {
-    return url_loader_factory_override_;
+  std::vector<std::unique_ptr<URLLoaderThrottle>> TakeURLLoaderThrottles() {
+    return std::move(url_loader_throttles_);
   }
-  void set_url_loader_factory_override(mojom::URLLoaderFactory* factory) {
-    url_loader_factory_override_ = factory;
+  void set_url_loader_throttles(
+      std::vector<std::unique_ptr<URLLoaderThrottle>> throttles) {
+    url_loader_throttles_ = std::move(throttles);
   }
 
   void CopyToResourceRequest(ResourceRequest* request) const;
@@ -199,7 +200,7 @@ class CONTENT_EXPORT RequestExtraData
   bool download_to_network_cache_only_;
   bool block_mixed_plugin_content_;
   bool navigation_initiated_by_renderer_;
-  mojom::URLLoaderFactory* url_loader_factory_override_;
+  std::vector<std::unique_ptr<URLLoaderThrottle>> url_loader_throttles_;
 
   DISALLOW_COPY_AND_ASSIGN(RequestExtraData);
 };

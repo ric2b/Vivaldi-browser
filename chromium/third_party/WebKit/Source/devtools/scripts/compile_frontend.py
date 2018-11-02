@@ -110,10 +110,10 @@ sys.excepthook = error_excepthook
 application_descriptors = [
     'inspector.json',
     'toolbox.json',
+    'integration_test_runner.json',
     'unit_test_runner.json',
     'formatter_worker.json',
     'heap_snapshot_worker.json',
-    'utility_shared_worker.json',
 ]
 
 skipped_namespaces = {
@@ -314,7 +314,7 @@ def generate_namespace_externs(modules_by_name):
     namespace_externs_file = tempfile.NamedTemporaryFile(mode='wt', delete=False)
     try:
         for namespace in namespaces:
-            namespace_externs_file.write('/** @type {!Object} */\n')
+            namespace_externs_file.write('/** @const */\n')
             namespace_externs_file.write('var %s = {};\n' % namespace)
     finally:
         namespace_externs_file.close()

@@ -23,11 +23,16 @@ PaintWorkletGlobalScope* PaintWorkletGlobalScope::Create(
     const KURL& url,
     const String& user_agent,
     PassRefPtr<SecurityOrigin> security_origin,
-    v8::Isolate* isolate) {
+    v8::Isolate* isolate,
+    PaintWorkletPendingGeneratorRegistry* pending_generator_registry) {
   PaintWorkletGlobalScope* paint_worklet_global_scope =
       new PaintWorkletGlobalScope(frame, url, user_agent,
-                                  std::move(security_origin), isolate);
-  paint_worklet_global_scope->ScriptController()->InitializeContextIfNeeded();
+                                  std::move(security_origin), isolate,
+                                  pending_generator_registry);
+  // TODO(xidachen): When we implement two PaintWorkletGlobalScope, we should
+  // change the last parameter.
+  paint_worklet_global_scope->ScriptController()->InitializeContextIfNeeded(
+      "Paint Worklet");
   MainThreadDebugger::Instance()->ContextCreated(
       paint_worklet_global_scope->ScriptController()->GetScriptState(),
       paint_worklet_global_scope->GetFrame(),
@@ -40,37 +45,37 @@ PaintWorkletGlobalScope::PaintWorkletGlobalScope(
     const KURL& url,
     const String& user_agent,
     PassRefPtr<SecurityOrigin> security_origin,
-    v8::Isolate* isolate)
+    v8::Isolate* isolate,
+    PaintWorkletPendingGeneratorRegistry* pending_generator_registry)
     : MainThreadWorkletGlobalScope(frame,
                                    url,
                                    user_agent,
                                    std::move(security_origin),
-                                   isolate) {}
+                                   isolate),
+      pending_generator_registry_(pending_generator_registry) {}
 
 PaintWorkletGlobalScope::~PaintWorkletGlobalScope() {}
 
 void PaintWorkletGlobalScope::Dispose() {
   MainThreadDebugger::Instance()->ContextWillBeDestroyed(
       ScriptController()->GetScriptState());
-  // Explicitly clear the paint defininitions to break a reference cycle
-  // between them and this global scope.
-  paint_definitions_.clear();
 
+  pending_generator_registry_ = nullptr;
   WorkletGlobalScope::Dispose();
 }
 
 void PaintWorkletGlobalScope::registerPaint(const String& name,
                                             const ScriptValue& ctor_value,
                                             ExceptionState& exception_state) {
+  if (name.IsEmpty()) {
+    exception_state.ThrowTypeError("The empty string is not a valid name.");
+    return;
+  }
+
   if (paint_definitions_.Contains(name)) {
     exception_state.ThrowDOMException(
         kNotSupportedError,
         "A class with name:'" + name + "' is already registered.");
-    return;
-  }
-
-  if (name.IsEmpty()) {
-    exception_state.ThrowTypeError("The empty string is not a valid name.");
     return;
   }
 
@@ -110,7 +115,7 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
   // Get input argument types. Parse the argument type values only when
   // cssPaintAPIArguments is enabled.
   Vector<CSSSyntaxDescriptor> input_argument_types;
-  if (RuntimeEnabledFeatures::cssPaintAPIArgumentsEnabled()) {
+  if (RuntimeEnabledFeatures::CSSPaintAPIArgumentsEnabled()) {
     v8::Local<v8::Value> input_argument_type_values;
     if (!constructor->Get(context, V8String(isolate, "inputArguments"))
              .ToLocal(&input_argument_type_values))
@@ -192,18 +197,9 @@ void PaintWorkletGlobalScope::registerPaint(const String& name,
       ScriptController()->GetScriptState(), constructor, paint,
       native_invalidation_properties, custom_invalidation_properties,
       input_argument_types, has_alpha);
-  paint_definitions_.Set(name, definition);
-
-  // Set the definition on any pending generators.
-  GeneratorHashSet* set = pending_generators_.at(name);
-  if (set) {
-    for (const auto& generator : *set) {
-      if (generator) {
-        generator->SetDefinition(definition);
-      }
-    }
-  }
-  pending_generators_.erase(name);
+  paint_definitions_.Set(
+      name, TraceWrapperMember<CSSPaintDefinition>(this, definition));
+  pending_generator_registry_->SetDefinition(name, definition);
 }
 
 CSSPaintDefinition* PaintWorkletGlobalScope::FindDefinition(
@@ -211,20 +207,16 @@ CSSPaintDefinition* PaintWorkletGlobalScope::FindDefinition(
   return paint_definitions_.at(name);
 }
 
-void PaintWorkletGlobalScope::AddPendingGenerator(
-    const String& name,
-    CSSPaintImageGeneratorImpl* generator) {
-  Member<GeneratorHashSet>& set =
-      pending_generators_.insert(name, nullptr).stored_value->value;
-  if (!set)
-    set = new GeneratorHashSet;
-  set->insert(generator);
-}
-
 DEFINE_TRACE(PaintWorkletGlobalScope) {
   visitor->Trace(paint_definitions_);
-  visitor->Trace(pending_generators_);
+  visitor->Trace(pending_generator_registry_);
   MainThreadWorkletGlobalScope::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(PaintWorkletGlobalScope) {
+  for (auto definition : paint_definitions_)
+    visitor->TraceWrappers(definition.value);
+  MainThreadWorkletGlobalScope::TraceWrappers(visitor);
 }
 
 }  // namespace blink

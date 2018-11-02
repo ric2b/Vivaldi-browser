@@ -14,9 +14,9 @@
 #include <vector>
 
 #include "build/build_config.h"
-#include "cc/surfaces/surface_id.h"
-#include "cc/surfaces/surface_info.h"
-#include "cc/surfaces/surface_sequence.h"
+#include "components/viz/common/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_info.h"
+#include "components/viz/common/surfaces/surface_sequence.h"
 #include "content/common/content_export.h"
 #include "content/common/content_param_traits.h"
 #include "content/common/content_security_policy/csp_context.h"
@@ -34,6 +34,7 @@
 #include "content/public/common/common_param_traits.h"
 #include "content/public/common/console_message_level.h"
 #include "content/public/common/context_menu_params.h"
+#include "content/public/common/favicon_url.h"
 #include "content/public/common/file_chooser_file_info.h"
 #include "content/public/common/file_chooser_params.h"
 #include "content/public/common/frame_navigate_params.h"
@@ -53,10 +54,12 @@
 #include "third_party/WebKit/public/platform/WebFeaturePolicy.h"
 #include "third_party/WebKit/public/platform/WebFocusType.h"
 #include "third_party/WebKit/public/platform/WebInsecureRequestPolicy.h"
+#include "third_party/WebKit/public/platform/WebSuddenTerminationDisablerType.h"
 #include "third_party/WebKit/public/web/WebFindOptions.h"
 #include "third_party/WebKit/public/web/WebFrameOwnerProperties.h"
 #include "third_party/WebKit/public/web/WebFrameSerializerCacheControlPolicy.h"
 #include "third_party/WebKit/public/web/WebTreeScopeType.h"
+#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/ipc/gfx_param_traits.h"
@@ -104,6 +107,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFrameOwnerProperties::ScrollingMode,
                           blink::WebFrameOwnerProperties::ScrollingMode::kLast)
 IPC_ENUM_TRAITS_MAX_VALUE(content::StopFindAction,
                           content::STOP_FIND_ACTION_LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(content::FaviconURL::IconType,
+                          content::FaviconURL::IconType::kMax)
 IPC_ENUM_TRAITS(blink::WebSandboxFlags)  // Bitmask.
 IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTreeScopeType,
                           blink::WebTreeScopeType::kLast)
@@ -116,6 +121,8 @@ IPC_ENUM_TRAITS_MAX_VALUE(blink::WebFeaturePolicyFeature,
                           blink::WebFeaturePolicyFeature::LAST_FEATURE)
 IPC_ENUM_TRAITS_MAX_VALUE(content::CSPDisposition,
                           content::CSPDisposition::LAST)
+IPC_ENUM_TRAITS_MAX_VALUE(blink::WebTriggeringEventInfo,
+                          blink::WebTriggeringEventInfo::kLast)
 
 IPC_STRUCT_TRAITS_BEGIN(blink::WebFindOptions)
   IPC_STRUCT_TRAITS_MEMBER(forward)
@@ -170,6 +177,12 @@ IPC_STRUCT_TRAITS_BEGIN(content::CustomContextMenuContext)
   IPC_STRUCT_TRAITS_MEMBER(request_id)
   IPC_STRUCT_TRAITS_MEMBER(render_widget_id)
   IPC_STRUCT_TRAITS_MEMBER(link_followed)
+IPC_STRUCT_TRAITS_END()
+
+IPC_STRUCT_TRAITS_BEGIN(content::FaviconURL)
+  IPC_STRUCT_TRAITS_MEMBER(icon_url)
+  IPC_STRUCT_TRAITS_MEMBER(icon_type)
+  IPC_STRUCT_TRAITS_MEMBER(icon_sizes)
 IPC_STRUCT_TRAITS_END()
 
 IPC_STRUCT_TRAITS_BEGIN(content::FrameOwnerProperties)
@@ -391,6 +404,7 @@ IPC_STRUCT_TRAITS_BEGIN(content::RequestNavigationParams)
   IPC_STRUCT_TRAITS_MEMBER(redirects)
   IPC_STRUCT_TRAITS_MEMBER(redirect_response)
   IPC_STRUCT_TRAITS_MEMBER(redirect_infos)
+  IPC_STRUCT_TRAITS_MEMBER(post_content_type)
   IPC_STRUCT_TRAITS_MEMBER(original_url)
   IPC_STRUCT_TRAITS_MEMBER(original_method)
   IPC_STRUCT_TRAITS_MEMBER(can_load_local_resources)
@@ -440,7 +454,7 @@ IPC_STRUCT_TRAITS_END()
 IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(GURL, url)
   IPC_STRUCT_MEMBER(bool, uses_post)
-  IPC_STRUCT_MEMBER(scoped_refptr<content::ResourceRequestBodyImpl>,
+  IPC_STRUCT_MEMBER(scoped_refptr<content::ResourceRequestBody>,
                     resource_request_body)
   IPC_STRUCT_MEMBER(std::string, extra_headers)
   IPC_STRUCT_MEMBER(content::Referrer, referrer)
@@ -448,6 +462,7 @@ IPC_STRUCT_BEGIN(FrameHostMsg_OpenURL_Params)
   IPC_STRUCT_MEMBER(bool, should_replace_current_entry)
   IPC_STRUCT_MEMBER(bool, user_gesture)
   IPC_STRUCT_MEMBER(bool, is_history_navigation_in_new_child)
+  IPC_STRUCT_MEMBER(blink::WebTriggeringEventInfo, triggering_event_info)
 IPC_STRUCT_END()
 
 IPC_STRUCT_BEGIN(FrameHostMsg_DownloadUrl_Params)
@@ -512,6 +527,9 @@ IPC_STRUCT_BEGIN(FrameMsg_SerializeAsMHTML_Params)
   // Whether to remove popup overlay while serializing.
   IPC_STRUCT_MEMBER(bool, mhtml_popup_overlay_removal)
 
+  // Whether to detect problems while serializing.
+  IPC_STRUCT_MEMBER(bool, mhtml_problem_detection)
+
   // Frame to content-id map.
   // Keys are routing ids of either RenderFrames or RenderFrameProxies.
   // Values are MHTML content-ids - see WebFrameSerializer::generateMHTMLParts.
@@ -534,7 +552,7 @@ IPC_STRUCT_END()
 // to perform hittesting on the browser process.
 IPC_STRUCT_BEGIN(FrameHostMsg_HittestData_Params)
   // |surface_id| represents the surface used by this remote frame.
-  IPC_STRUCT_MEMBER(cc::SurfaceId, surface_id)
+  IPC_STRUCT_MEMBER(viz::SurfaceId, surface_id)
 
   // If |ignored_for_hittest| then this surface should be ignored during
   // hittesting.
@@ -681,6 +699,9 @@ IPC_MESSAGE_ROUTED4(FrameHostMsg_ShowCreatedWindow,
                     gfx::Rect /* initial_rect */,
                     bool /* opened_by_user_gesture */)
 
+// Let the browser know a StreamHandle has been consumed and can be released.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_StreamHandleConsumed, GURL /* stream_url */)
+
 #if BUILDFLAG(ENABLE_PLUGINS)
 IPC_STRUCT_TRAITS_BEGIN(content::PepperRendererInstanceData)
   IPC_STRUCT_TRAITS_MEMBER(render_process_id)
@@ -695,8 +716,8 @@ IPC_STRUCT_TRAITS_END()
 // Messages sent from the browser to the renderer.
 
 IPC_MESSAGE_ROUTED2(FrameMsg_SetChildFrameSurface,
-                    cc::SurfaceInfo /* surface_info */,
-                    cc::SurfaceSequence /* sequence */)
+                    viz::SurfaceInfo /* surface_info */,
+                    viz::SurfaceSequence /* sequence */)
 
 // Notifies the embedding frame that the process rendering the child frame's
 // contents has terminated.
@@ -757,6 +778,11 @@ IPC_MESSAGE_ROUTED0(FrameMsg_SwapIn)
 
 // Instructs the frame to stop the load in progress, if any.
 IPC_MESSAGE_ROUTED0(FrameMsg_Stop)
+
+// PlzNavigate
+// Informs the renderer that the browser stopped processing a renderer-initiated
+// navigation. It does not stop ongoing loads in the current page.
+IPC_MESSAGE_ROUTED0(FrameMsg_DroppedNavigation)
 
 // A message sent to RenderFrameProxy to indicate that its corresponding
 // RenderFrame has started loading a document.
@@ -988,6 +1014,12 @@ IPC_MESSAGE_ROUTED1(FrameMsg_SetFrameOwnerProperties,
 IPC_MESSAGE_ROUTED2(FrameMsg_AdvanceFocus,
                     blink::WebFocusType /* type */,
                     int32_t /* source_routing_id */)
+
+// Tells the RenderFrame to advance the focus to next input node in the form by
+// moving in specified direction if the currently focused node is a Text node
+// (textfield, text area or content editable nodes).
+IPC_MESSAGE_ROUTED1(FrameMsg_AdvanceFocusInForm,
+                    blink::WebFocusType /* direction for advancing focus */)
 
 // Sent when the user wants to search for a word on the page (find-in-page).
 IPC_MESSAGE_ROUTED3(FrameMsg_Find,
@@ -1416,13 +1448,13 @@ IPC_MESSAGE_CONTROL3(FrameHostMsg_PluginInstanceThrottleStateChange,
 
 // Satisfies a Surface destruction dependency associated with |sequence|.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_SatisfySequence,
-                    cc::SurfaceSequence /* sequence */)
+                    viz::SurfaceSequence /* sequence */)
 
 // Creates a destruction dependency for the Surface specified by the given
 // |surface_id|.
 IPC_MESSAGE_ROUTED2(FrameHostMsg_RequireSequence,
-                    cc::SurfaceId /* surface_id */,
-                    cc::SurfaceSequence /* sequence */)
+                    viz::SurfaceId /* surface_id */,
+                    viz::SurfaceSequence /* sequence */)
 
 // Provides the result from handling BeforeUnload.  |proceed| matches the return
 // value of the frame's beforeunload handler: true if the user decided to
@@ -1446,6 +1478,9 @@ IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateViewportIntersection,
 
 // Informs the child that the frame has changed visibility.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_VisibilityChanged, bool /* visible */)
+
+// Sets or unsets the inert bit on a remote frame.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_SetIsInert, bool /* inert */)
 
 // Indicates that this frame recieved a user gesture, so that the state can be
 // propagated to any remote frames.
@@ -1569,6 +1604,12 @@ IPC_MESSAGE_ROUTED3(FrameHostMsg_SmartClipDataExtracted,
 // See the comment in chrome/browser/ui/browser.h for more details.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_ToggleFullscreen, bool /* enter_fullscreen */)
 
+// Sent when a new sudden termination disabler condition is either introduced or
+// removed.
+IPC_MESSAGE_ROUTED2(FrameHostMsg_SuddenTerminationDisablerChanged,
+                    bool /* present */,
+                    blink::WebSuddenTerminationDisablerType /* disabler_type */)
+
 // Dispatch a load event for this frame in the iframe element of an
 // out-of-process parent frame.
 IPC_MESSAGE_ROUTED0(FrameHostMsg_DispatchLoad)
@@ -1660,6 +1701,10 @@ IPC_MESSAGE_ROUTED0(FrameHostMsg_RequestOverlayRoutingToken)
 // Asks the browser to display the file chooser.  The result is returned in a
 // FrameMsg_RunFileChooserResponse message.
 IPC_MESSAGE_ROUTED1(FrameHostMsg_RunFileChooser, content::FileChooserParams)
+
+// Notification that the urls for the favicon of a site has been determined.
+IPC_MESSAGE_ROUTED1(FrameHostMsg_UpdateFaviconURL,
+                    std::vector<content::FaviconURL> /* candidates */)
 
 #if BUILDFLAG(USE_EXTERNAL_POPUP_MENU)
 

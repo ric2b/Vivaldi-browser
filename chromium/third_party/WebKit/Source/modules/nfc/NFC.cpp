@@ -7,19 +7,19 @@
 #include "bindings/core/v8/ScriptPromiseResolver.h"
 #include "bindings/core/v8/V8ArrayBuffer.h"
 #include "bindings/core/v8/V8StringResource.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/nfc/NFCError.h"
 #include "modules/nfc/NFCMessage.h"
 #include "modules/nfc/NFCPushOptions.h"
 #include "modules/nfc/NFCWatchOptions.h"
 #include "platform/mojo/MojoHelper.h"
-#include "public/platform/InterfaceProvider.h"
 #include "public/platform/Platform.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace {
 const char kJsonMimePostfix[] = "+json";
@@ -28,6 +28,7 @@ const char kJsonMimeType[] = "application/json";
 const char kOpaqueMimeType[] = "application/octet-stream";
 const char kPlainTextMimeType[] = "text/plain";
 const char kPlainTextMimePrefix[] = "text/";
+const char kProtocolHttps[] = "https";
 const char kCharSetUTF8[] = ";charset=UTF-8";
 }  // anonymous namespace
 
@@ -265,9 +266,9 @@ struct TypeConverter<NFCMessagePtr, blink::NFCMessage> {
   static NFCMessagePtr Convert(const blink::NFCMessage& message) {
     NFCMessagePtr messagePtr = NFCMessage::New();
     messagePtr->url = message.url();
-    messagePtr->data.resize(message.data().size());
-    for (size_t i = 0; i < message.data().size(); ++i) {
-      NFCRecordPtr record = NFCRecord::From(message.data()[i]);
+    messagePtr->data.resize(message.records().size());
+    for (size_t i = 0; i < message.records().size(); ++i) {
+      NFCRecordPtr record = NFCRecord::From(message.records()[i]);
       if (record.is_null())
         return nullptr;
 
@@ -386,8 +387,7 @@ ScriptPromise RejectIfInvalidTextRecord(ScriptState* script_state,
   }
 
   if (record.hasMediaType() &&
-      !record.mediaType().StartsWith(kPlainTextMimePrefix,
-                                     kTextCaseUnicodeInsensitive)) {
+      !record.mediaType().StartsWithIgnoringASCIICase(kPlainTextMimePrefix)) {
     return RejectWithDOMException(script_state, kSyntaxError,
                                   "Invalid media type for 'text' record.");
   }
@@ -403,7 +403,8 @@ ScriptPromise RejectIfInvalidURLRecord(ScriptState* script_state,
   }
 
   blink::V8StringResource<> string_resource = record.data().V8Value();
-  if (!string_resource.Prepare() || !KURL(KURL(), string_resource).IsValid()) {
+  if (!string_resource.Prepare() ||
+      !KURL(NullURL(), string_resource).IsValid()) {
     return RejectWithDOMException(script_state, kSyntaxError,
                                   "Cannot parse data for 'url' record.");
   }
@@ -423,10 +424,8 @@ ScriptPromise RejectIfInvalidJSONRecord(ScriptState* script_state,
   // start with "application/" and end with "+json".
   if (record.hasMediaType() &&
       (record.mediaType() != kJsonMimeType &&
-       !(record.mediaType().StartsWith(kJsonMimePrefix,
-                                       kTextCaseASCIIInsensitive) &&
-         record.mediaType().EndsWith(kJsonMimePostfix,
-                                     kTextCaseASCIIInsensitive)))) {
+       !(record.mediaType().StartsWithIgnoringASCIICase(kJsonMimePrefix) &&
+         record.mediaType().EndsWithIgnoringASCIICase(kJsonMimePostfix)))) {
     return RejectWithDOMException(script_state, kSyntaxError,
                                   "Invalid media type for 'json' record.");
   }
@@ -510,14 +509,14 @@ ScriptPromise RejectIfInvalidNFCPushMessage(
 
   if (push_message.isNFCMessage()) {
     // https://w3c.github.io/web-nfc/#the-push-method
-    // If NFCMessage.data is empty, reject promise with TypeError
+    // If NFCMessage.records is empty, reject promise with TypeError
     const NFCMessage& message = push_message.getAsNFCMessage();
-    if (!message.hasData() || message.data().IsEmpty()) {
+    if (!message.hasRecords() || message.records().IsEmpty()) {
       return RejectWithTypeError(script_state,
                                  "Empty NFCMessage was provided.");
     }
 
-    return RejectIfInvalidNFCRecordArray(script_state, message.data());
+    return RejectIfInvalidNFCRecordArray(script_state, message.records());
   }
 
   return ScriptPromise();
@@ -618,7 +617,7 @@ NFCMessage ToNFCMessage(ScriptState* script_state,
   blink::HeapVector<NFCRecord> records;
   for (size_t i = 0; i < message->data.size(); ++i)
     records.push_back(ToNFCRecord(script_state, message->data[i]));
-  nfc_message.setData(records);
+  nfc_message.setRecords(records);
   return nfc_message;
 }
 
@@ -636,17 +635,19 @@ size_t GetNFCMessageSize(const device::mojom::blink::NFCMessagePtr& message) {
 NFC::NFC(LocalFrame* frame)
     : PageVisibilityObserver(frame->GetPage()),
       ContextLifecycleObserver(frame->GetDocument()),
-      client_(this) {
+      client_binding_(this) {
   String error_message;
 
   // Only connect to NFC if we are in a context that supports it.
   if (!IsSupportedInContext(GetExecutionContext(), error_message))
     return;
 
-  frame->GetInterfaceProvider()->GetInterface(mojo::MakeRequest(&nfc_));
+  frame->GetInterfaceProvider().GetInterface(mojo::MakeRequest(&nfc_));
   nfc_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&NFC::OnConnectionError, WrapWeakPersistent(this))));
-  nfc_->SetClient(client_.CreateInterfacePtrAndBind());
+  device::mojom::blink::NFCClientPtr client;
+  client_binding_.Bind(mojo::MakeRequest(&client));
+  nfc_->SetClient(std::move(client));
 }
 
 NFC* NFC::Create(LocalFrame* frame) {
@@ -661,7 +662,7 @@ NFC::~NFC() {
 }
 
 void NFC::Dispose() {
-  client_.Close();
+  client_binding_.Close();
 }
 
 void NFC::ContextDestroyed(ExecutionContext*) {
@@ -747,6 +748,15 @@ ScriptPromise NFC::watch(ScriptState* script_state,
   ScriptPromise promise = RejectIfNotSupported(script_state);
   if (!promise.IsEmpty())
     return promise;
+
+  // https://w3c.github.io/web-nfc/#dom-nfc-watch (Step 9)
+  if (options.hasURL() && !options.url().IsEmpty()) {
+    KURL pattern_url(kParsedURLString, options.url());
+    if (!pattern_url.IsValid() || pattern_url.Protocol() != kProtocolHttps) {
+      return RejectWithDOMException(script_state, kSyntaxError,
+                                    "Invalid URL pattern was provided.");
+    }
+  }
 
   callback->SetScriptState(script_state);
   ScriptPromiseResolver* resolver = ScriptPromiseResolver::Create(script_state);

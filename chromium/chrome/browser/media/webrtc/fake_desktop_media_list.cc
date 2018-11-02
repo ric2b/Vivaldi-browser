@@ -8,12 +8,15 @@
 #include "chrome/browser/media/webrtc/desktop_media_list_observer.h"
 #include "ui/gfx/skia_util.h"
 
-FakeDesktopMediaList::FakeDesktopMediaList() : observer_(NULL) {}
+using content::DesktopMediaID;
+
+FakeDesktopMediaList::FakeDesktopMediaList(DesktopMediaID::Type type)
+    : observer_(NULL), type_(type) {}
 FakeDesktopMediaList::~FakeDesktopMediaList() {}
 
 void FakeDesktopMediaList::AddSource(int id) {
   AddSourceByFullMediaID(
-      content::DesktopMediaID(content::DesktopMediaID::TYPE_WINDOW, id));
+      content::DesktopMediaID(DesktopMediaID::TYPE_WINDOW, id));
 }
 
 void FakeDesktopMediaList::AddSourceByFullMediaID(
@@ -69,4 +72,8 @@ int FakeDesktopMediaList::GetSourceCount() const { return sources_.size(); }
 const DesktopMediaList::Source& FakeDesktopMediaList::GetSource(
     int index) const {
   return sources_[index];
+}
+
+DesktopMediaID::Type FakeDesktopMediaList::GetMediaListType() const {
+  return type_;
 }

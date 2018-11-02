@@ -24,7 +24,7 @@
 #include "base/timer/timer.h"
 #include "build/build_config.h"
 #include "cc/input/browser_controls_state.h"
-#include "cc/resources/shared_bitmap.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "content/common/content_export.h"
 #include "content/common/frame_message_enums.h"
 #include "content/common/navigation_gesture.h"
@@ -50,7 +50,6 @@
 #include "third_party/WebKit/public/web/WebElement.h"
 #include "third_party/WebKit/public/web/WebFrameWidget.h"
 #include "third_party/WebKit/public/web/WebHistoryItem.h"
-#include "third_party/WebKit/public/web/WebIconURL.h"
 #include "third_party/WebKit/public/web/WebNavigationType.h"
 #include "third_party/WebKit/public/web/WebNode.h"
 #include "third_party/WebKit/public/web/WebViewClient.h"
@@ -74,7 +73,6 @@ namespace blink {
 class WebDataSource;
 class WebDateTimeChooserCompletion;
 class WebGestureEvent;
-class WebIconURL;
 class WebMouseEvent;
 class WebSpeechRecognizer;
 class WebStorageNamespace;
@@ -88,7 +86,7 @@ struct WebWindowFeatures;
 }  // namespace blink
 
 namespace gfx {
-class ICCProfile;
+class ColorSpace;
 }
 
 namespace content {
@@ -99,7 +97,6 @@ class RenderViewImplTest;
 class RenderViewObserver;
 class RenderViewTest;
 class SpeechRecognitionDispatcher;
-struct FaviconURL;
 struct FileChooserParams;
 struct ResizeParams;
 
@@ -236,7 +233,7 @@ class CONTENT_EXPORT RenderViewImpl
   void SetDeviceScaleFactorForTesting(float factor);
 
   // Change the device ICC color profile while running a layout test.
-  void SetDeviceColorProfileForTesting(const gfx::ICCProfile& icc_profile);
+  void SetDeviceColorSpaceForTesting(const gfx::ColorSpace& color_space);
 
   // Used to force the size of a window when running layout tests.
   void ForceResizeForTesting(const gfx::Size& new_size);
@@ -289,7 +286,8 @@ class CONTENT_EXPORT RenderViewImpl
                              const blink::WebWindowFeatures& features,
                              const blink::WebString& frame_name,
                              blink::WebNavigationPolicy policy,
-                             bool suppress_opener) override;
+                             bool suppress_opener,
+                             blink::WebSandboxFlags sandbox_flags) override;
   blink::WebWidget* CreatePopupMenu(blink::WebPopupType popup_type) override;
   blink::WebStorageNamespace* CreateSessionStorageNamespace() override;
   void PrintPage(blink::WebLocalFrame* frame) override;
@@ -307,7 +305,6 @@ class CONTENT_EXPORT RenderViewImpl
                              blink::WebTextDirection hint) override;
   void HideValidationMessage() override;
   void MoveValidationMessage(const blink::WebRect& anchor_in_viewport) override;
-  void SetStatusText(const blink::WebString& text) override;
   void SetMouseOverURL(const blink::WebURL& url) override;
   void SetKeyboardFocusURL(const blink::WebURL& url) override;
   bool AcceptsLoadDrops() override;
@@ -331,7 +328,6 @@ class CONTENT_EXPORT RenderViewImpl
   void PageScaleFactorChanged() override;
   virtual double zoomLevelToZoomFactor(double zoom_level) const;
   virtual double zoomFactorToZoomLevel(double factor) const;
-  void DraggableRegionsChanged() override;
   void PageImportanceSignalsChanged() override;
   void DidAutoResize(const blink::WebSize& newSize) override;
   blink::WebRect RootWindowRect() override;
@@ -382,10 +378,10 @@ class CONTENT_EXPORT RenderViewImpl
     return weak_ptr_factory_.GetWeakPtr();
   }
 
-  InputEventAckState HandleInputEvent(
-      const blink::WebCoalescedInputEvent& input_event,
-      const ui::LatencyInfo& latency_info,
-      InputEventDispatchType dispatch_type) override;
+  void HandleInputEvent(const blink::WebCoalescedInputEvent& input_event,
+                        const ui::LatencyInfo& latency_info,
+                        HandledEventCallback callback) override;
+  void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
 
  protected:
   // RenderWidget overrides:
@@ -494,8 +490,6 @@ class CONTENT_EXPORT RenderViewImpl
   // still live here and are called from RenderFrameImpl. These implementations
   // are to be moved to RenderFrameImpl <http://crbug.com/361761>.
 
-  void didChangeIcon(blink::WebLocalFrame*, blink::WebIconURL::Type);
-
   static Referrer GetReferrerFromRequest(
       blink::WebFrame* frame,
       const blink::WebURLRequest& request);
@@ -512,15 +506,11 @@ class CONTENT_EXPORT RenderViewImpl
   // The documentation for these functions should be in
   // content/common/*_messages.h for the message that the function is handling.
   void OnExecuteEditCommand(const std::string& name, const std::string& value);
-  void OnMoveCaret(const gfx::Point& point);
-  void OnScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
   void OnAllowScriptToClose(bool script_can_close);
   void OnCancelDownload(int32_t download_id);
   void OnClosePage();
   void OnClose();
 
-  void OnShowContextMenu(ui::MenuSourceType source_type,
-                         const gfx::Point& location);
   void OnLoadImageAt(int x, int y);
   void OnDeterminePageLanguage();
   void OnDisableScrollbarsForSmallWindows(
@@ -535,7 +525,7 @@ class CONTENT_EXPORT RenderViewImpl
   void OnPluginActionAt(const gfx::Point& location,
                         const blink::WebPluginAction& action);
   void OnMoveOrResizeStarted();
-  void OnReleaseDisambiguationPopupBitmap(const cc::SharedBitmapId& id);
+  void OnReleaseDisambiguationPopupBitmap(const viz::SharedBitmapId& id);
   void OnResolveTapDisambiguation(double timestamp_seconds,
                                   gfx::Point tap_viewport_offset,
                                   bool is_long_press);
@@ -598,13 +588,6 @@ class CONTENT_EXPORT RenderViewImpl
   // Update the target url and tell the browser that the target URL has changed.
   // If |url| is empty, show |fallback_url|.
   void UpdateTargetURL(const GURL& url, const GURL& fallback_url);
-
-  // Tells the browser what the new list of favicons for the webpage is.
-  void SendUpdateFaviconURL(const std::vector<FaviconURL>& urls);
-
-  // Invoked from DidStopLoading(). Sends the current list of loaded favicons to
-  // the browser.
-  void DidStopLoadingIcons();
 
   // Coordinate conversion -----------------------------------------------------
 
@@ -817,7 +800,7 @@ class CONTENT_EXPORT RenderViewImpl
   // constructors call the AddObservers method of RenderViewImpl.
   std::unique_ptr<StatsCollectionObserver> stats_collection_observer_;
 
-  typedef std::map<cc::SharedBitmapId, cc::SharedBitmap*> BitmapMap;
+  typedef std::map<viz::SharedBitmapId, viz::SharedBitmap*> BitmapMap;
   BitmapMap disambiguation_bitmaps_;
 
   std::unique_ptr<IdleUserDetector> idle_user_detector_;

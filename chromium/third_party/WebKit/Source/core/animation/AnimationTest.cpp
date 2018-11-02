@@ -32,8 +32,8 @@
 
 #include <memory>
 #include "core/animation/AnimationClock.h"
-#include "core/animation/AnimationTimeline.h"
 #include "core/animation/CompositorPendingAnimations.h"
+#include "core/animation/DocumentTimeline.h"
 #include "core/animation/ElementAnimations.h"
 #include "core/animation/KeyframeEffect.h"
 #include "core/dom/DOMNodeIds.h"
@@ -63,7 +63,7 @@ class AnimationAnimationTest : public RenderingTest {
     page_holder = DummyPageHolder::Create();
     document = &page_holder->GetDocument();
     document->GetAnimationClock().ResetTimeForTesting();
-    timeline = AnimationTimeline::Create(document.Get());
+    timeline = DocumentTimeline::Create(document.Get());
     timeline->ResetForTesting();
     animation = timeline->Play(0);
     animation->setStartTime(0, false);
@@ -92,7 +92,7 @@ class AnimationAnimationTest : public RenderingTest {
   }
 
   Persistent<Document> document;
-  Persistent<AnimationTimeline> timeline;
+  Persistent<DocumentTimeline> timeline;
   Persistent<Animation> animation;
   std::unique_ptr<DummyPageHolder> page_holder;
 };
@@ -807,8 +807,8 @@ TEST_F(AnimationAnimationTest, NoCompositeWithoutCompositedElementId) {
   Optional<CompositorElementIdSet> composited_element_ids =
       CompositorElementIdSet();
   CompositorElementId expected_compositor_element_id =
-      CompositorElementIdFromPaintLayerId(
-          ToLayoutBoxModelObject(object_composited)->Layer()->UniqueId(),
+      CompositorElementIdFromLayoutObjectId(
+          ToLayoutBoxModelObject(object_composited)->UniqueId(),
           CompositorElementIdNamespace::kPrimary);
   composited_element_ids->insert(expected_compositor_element_id);
 
@@ -824,10 +824,14 @@ TEST_F(AnimationAnimationTest, NoCompositeWithoutCompositedElementId) {
       timeline->Play(keyframe_effect_not_composited);
 
   SimulateFrame(0, composited_element_ids);
-  EXPECT_TRUE(animation_composited->CanStartAnimationOnCompositor(
-      composited_element_ids));
-  EXPECT_FALSE(animation_not_composited->CanStartAnimationOnCompositor(
-      composited_element_ids));
+  EXPECT_TRUE(
+      animation_composited
+          ->CheckCanStartAnimationOnCompositorInternal(composited_element_ids)
+          .Ok());
+  EXPECT_FALSE(
+      animation_not_composited
+          ->CheckCanStartAnimationOnCompositorInternal(composited_element_ids)
+          .Ok());
 }
 
 }  // namespace blink

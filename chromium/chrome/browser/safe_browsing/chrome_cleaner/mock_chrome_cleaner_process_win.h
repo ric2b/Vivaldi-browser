@@ -7,7 +7,6 @@
 
 #include <set>
 #include <string>
-#include <vector>
 
 #include "base/callback.h"
 #include "base/command_line.h"
@@ -44,8 +43,8 @@ class MockChromeCleanerProcess {
     kNumCrashPoints,
   };
 
-  static constexpr int kInternalTestFailureExitCode = -1;
-  static constexpr int kDeliberateCrashExitCode = -2;
+  static constexpr int kInternalTestFailureExitCode = 100001;
+  static constexpr int kDeliberateCrashExitCode = 100002;
   static constexpr int kNothingFoundExitCode = 2;
   static constexpr int kDeclinedExitCode = 44;
   static constexpr int kRebootRequiredExitCode = 15;
@@ -64,9 +63,6 @@ class MockChromeCleanerProcess {
     void AddSwitchesToCommandLine(base::CommandLine* command_line) const;
 
     void SetDoFindUws(bool do_find_uws);
-    const std::vector<chrome_cleaner::mojom::UwSPtr>& found_uws() const {
-      return found_uws_;
-    }
     const std::set<base::FilePath>& files_to_delete() const {
       return files_to_delete_;
     }
@@ -79,14 +75,24 @@ class MockChromeCleanerProcess {
     void set_crash_point(CrashPoint crash_point) { crash_point_ = crash_point; }
     CrashPoint crash_point() const { return crash_point_; }
 
+    void set_expected_user_response(
+        chrome_cleaner::mojom::PromptAcceptance expected_user_response) {
+      expected_user_response_ = expected_user_response;
+    }
+
+    chrome_cleaner::mojom::PromptAcceptance expected_user_response() const {
+      return expected_user_response_;
+    }
+
     int ExpectedExitCode(chrome_cleaner::mojom::PromptAcceptance
                              received_prompt_acceptance) const;
 
    private:
-    std::vector<chrome_cleaner::mojom::UwSPtr> found_uws_;
     std::set<base::FilePath> files_to_delete_;
     bool reboot_required_ = false;
     CrashPoint crash_point_ = CrashPoint::kNone;
+    chrome_cleaner::mojom::PromptAcceptance expected_user_response_ =
+        chrome_cleaner::mojom::PromptAcceptance::UNSPECIFIED;
   };
 
   MockChromeCleanerProcess(const Options& options,

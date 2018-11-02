@@ -12,7 +12,6 @@
 #include "chrome/common/thumbnail_capturer.mojom.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace gfx {
 class Size;
@@ -55,17 +54,17 @@ class ChromeRenderFrameObserver
   void RequestThumbnailForContextNode(
       int32_t thumbnail_min_area_pixels,
       const gfx::Size& thumbnail_max_size_pixels,
+      chrome::mojom::ImageFormat image_format,
       const RequestThumbnailForContextNodeCallback& callback) override;
 
   // Mojo handlers.
   void OnImageContextMenuRendererRequest(
-      const service_manager::BindSourceInfo& source_info,
       chrome::mojom::ImageContextMenuRendererRequest request);
   void OnThumbnailCapturerRequest(
-      const service_manager::BindSourceInfo& source_info,
       chrome::mojom::ThumbnailCapturerRequest request);
 
   // IPC handlers
+  void OnGetWebApplicationInfo();
   void OnSetIsPrerendering(prerender::PrerenderMode mode);
   void OnRequestThumbnailForContextNode(
       int thumbnail_min_area_pixels,

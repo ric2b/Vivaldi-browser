@@ -7,6 +7,7 @@
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
 #include "cc/base/switches.h"
+#include "components/viz/common/gpu/context_provider.h"
 #include "services/ui/public/cpp/gpu/gpu.h"
 #include "ui/aura/mus/window_port_mus.h"
 #include "ui/aura/window_tree_host.h"
@@ -18,13 +19,28 @@
 
 namespace aura {
 
+namespace {
+viz::BufferToTextureTargetMap CreateBufferToTextureTargetMap() {
+  viz::BufferToTextureTargetMap image_targets;
+  for (int usage_idx = 0; usage_idx <= static_cast<int>(gfx::BufferUsage::LAST);
+       ++usage_idx) {
+    gfx::BufferUsage usage = static_cast<gfx::BufferUsage>(usage_idx);
+    for (int format_idx = 0;
+         format_idx <= static_cast<int>(gfx::BufferFormat::LAST);
+         ++format_idx) {
+      gfx::BufferFormat format = static_cast<gfx::BufferFormat>(format_idx);
+      // TODO(sad): http://crbug.com/675431
+      image_targets[std::make_pair(usage, format)] = GL_TEXTURE_2D;
+    }
+  }
+  return image_targets;
+}
+}  // namespace
+
 MusContextFactory::MusContextFactory(ui::Gpu* gpu)
     : gpu_(gpu),
-      renderer_settings_(ui::CreateRendererSettings(
-          [](gfx::BufferFormat format, gfx::BufferUsage usage) -> uint32_t {
-            // TODO(sad): http://crbug.com/675431
-            return GL_TEXTURE_2D;
-          })),
+      renderer_settings_(
+          ui::CreateRendererSettings(CreateBufferToTextureTargetMap())),
       weak_ptr_factory_(this) {}
 
 MusContextFactory::~MusContextFactory() {}
@@ -38,21 +54,27 @@ void MusContextFactory::OnEstablishedGpuChannel(
       WindowTreeHost::GetForAcceleratedWidget(compositor->widget());
   WindowPortMus* window_port = WindowPortMus::Get(host->window());
   DCHECK(window_port);
-  std::unique_ptr<cc::CompositorFrameSink> compositor_frame_sink =
-      window_port->RequestCompositorFrameSink(
-          gpu_->CreateContextProvider(std::move(gpu_channel)),
-          gpu_->gpu_memory_buffer_manager());
-  compositor->SetCompositorFrameSink(std::move(compositor_frame_sink));
+
+  scoped_refptr<viz::ContextProvider> context_provider =
+      gpu_->CreateContextProvider(std::move(gpu_channel));
+  // If the binding fails, then we need to return early since the compositor
+  // expects a successfully initialized/bound provider.
+  if (!context_provider->BindToCurrentThread())
+    return;
+  std::unique_ptr<cc::LayerTreeFrameSink> layer_tree_frame_sink =
+      window_port->RequestLayerTreeFrameSink(std::move(context_provider),
+                                             gpu_->gpu_memory_buffer_manager());
+  compositor->SetLayerTreeFrameSink(std::move(layer_tree_frame_sink));
 }
 
-void MusContextFactory::CreateCompositorFrameSink(
+void MusContextFactory::CreateLayerTreeFrameSink(
     base::WeakPtr<ui::Compositor> compositor) {
   gpu_->EstablishGpuChannel(
       base::Bind(&MusContextFactory::OnEstablishedGpuChannel,
                  weak_ptr_factory_.GetWeakPtr(), compositor));
 }
 
-scoped_refptr<cc::ContextProvider>
+scoped_refptr<viz::ContextProvider>
 MusContextFactory::SharedMainThreadContextProvider() {
   if (!shared_main_thread_context_provider_) {
     scoped_refptr<gpu::GpuChannelHost> gpu_channel =
@@ -81,8 +103,8 @@ cc::TaskGraphRunner* MusContextFactory::GetTaskGraphRunner() {
   return raster_thread_helper_.task_graph_runner();
 }
 
-const cc::RendererSettings& MusContextFactory::GetRendererSettings() const {
-  return renderer_settings_;
+const viz::ResourceSettings& MusContextFactory::GetResourceSettings() const {
+  return renderer_settings_.resource_settings;
 }
 
 }  // namespace aura

@@ -20,6 +20,7 @@
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_controller.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/content_paths.h"
@@ -33,7 +34,6 @@
 #include "mojo/public/cpp/bindings/binding.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 
 namespace content {
@@ -133,8 +133,7 @@ class PingTestWebUIController : public TestWebUIController {
                    base::Unretained(this)));
   }
 
-  void CreateHandler(const service_manager::BindSourceInfo& source_info,
-                     mojom::BrowserTargetRequest request) {
+  void CreateHandler(mojom::BrowserTargetRequest request) {
     browser_target_ =
         base::MakeUnique<BrowserTargetImpl>(run_loop_, std::move(request));
   }
@@ -158,6 +157,8 @@ class TestWebUIControllerFactory : public WebUIControllerFactory {
   }
   WebUI::TypeID GetWebUIType(BrowserContext* browser_context,
                              const GURL& url) const override {
+    if (!web_ui_enabled_)
+      return WebUI::kNoWebUI;
     return reinterpret_cast<WebUI::TypeID>(1);
   }
   bool UseWebUIForURL(BrowserContext* browser_context,
@@ -169,8 +170,11 @@ class TestWebUIControllerFactory : public WebUIControllerFactory {
     return true;
   }
 
+  void set_web_ui_enabled(bool enabled) { web_ui_enabled_ = enabled; }
+
  private:
   base::RunLoop* run_loop_;
+  bool web_ui_enabled_ = true;
 
   DISALLOW_COPY_AND_ASSIGN(TestWebUIControllerFactory);
 };
@@ -198,7 +202,7 @@ bool IsGeneratedResourceAvailable(const std::string& resource_path) {
   // files. If the bindings file doesn't exist assume we're on such a bot and
   // pass.
   // TODO(sky): remove this conditional when isolates support copying from gen.
-  base::ThreadRestrictions::ScopedAllowIO allow_io_for_file_existance_check;
+  base::ThreadRestrictions::ScopedAllowIO allow_io_for_file_existence_check;
   const base::FilePath test_file_path(GetFilePathForJSResource(resource_path));
   if (base::PathExists(test_file_path))
     return true;
@@ -235,6 +239,31 @@ IN_PROC_BROWSER_TEST_F(WebUIMojoTest, EndToEndPing) {
   EXPECT_TRUE(g_got_message);
   EXPECT_EQ(shell()->web_contents()->GetRenderProcessHost(),
             other_shell->web_contents()->GetRenderProcessHost());
+}
+
+IN_PROC_BROWSER_TEST_F(WebUIMojoTest, NativeMojoAvailable) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL kTestWebUIUrl("chrome://mojo-web-ui/web_ui_mojo_native.html");
+  NavigateToURL(shell(), kTestWebUIUrl);
+
+  bool is_native_mojo_available = false;
+  const std::string kTestScript("isNativeMojoAvailable()");
+  ASSERT_TRUE(ExecuteScriptAndExtractBool(
+      shell()->web_contents(),
+      "domAutomationController.send(" + kTestScript + ")",
+      &is_native_mojo_available));
+  EXPECT_TRUE(is_native_mojo_available);
+
+  // Now navigate again with WebUI disabled and ensure the native bindings are
+  // not available.
+  factory()->set_web_ui_enabled(false);
+  const std::string kTestNonWebUIUrl("/web_ui_mojo_native.html");
+  NavigateToURL(shell(), embedded_test_server()->GetURL(kTestNonWebUIUrl));
+  ASSERT_TRUE(ExecuteScriptAndExtractBool(
+      shell()->web_contents(),
+      "domAutomationController.send(" + kTestScript + ")",
+      &is_native_mojo_available));
+  EXPECT_FALSE(is_native_mojo_available);
 }
 
 }  // namespace

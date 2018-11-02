@@ -44,7 +44,9 @@
 #include "platform/loader/fetch/CrossOriginAccessControl.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceError.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/network/HTTPParsers.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/HashSet.h"
 #include "platform/wtf/PtrUtil.h"
 #include "platform/wtf/text/WTFString.h"
@@ -95,6 +97,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
       WebAssociatedURLLoaderImpl*,
       WebAssociatedURLLoaderClient*,
       const WebAssociatedURLLoaderOptions&,
+      WebURLRequest::FetchRequestMode,
       RefPtr<WebTaskRunner>);
 
   // ThreadableLoaderClient
@@ -137,6 +140,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   ClientAdapter(WebAssociatedURLLoaderImpl*,
                 WebAssociatedURLLoaderClient*,
                 const WebAssociatedURLLoaderOptions&,
+                WebURLRequest::FetchRequestMode,
                 RefPtr<WebTaskRunner>);
 
   void NotifyError(TimerBase*);
@@ -144,6 +148,7 @@ class WebAssociatedURLLoaderImpl::ClientAdapter final
   WebAssociatedURLLoaderImpl* loader_;
   WebAssociatedURLLoaderClient* client_;
   WebAssociatedURLLoaderOptions options_;
+  WebURLRequest::FetchRequestMode fetch_request_mode_;
   WebURLError error_;
 
   TaskRunnerTimer<ClientAdapter> error_timer_;
@@ -156,19 +161,22 @@ WebAssociatedURLLoaderImpl::ClientAdapter::Create(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
     const WebAssociatedURLLoaderOptions& options,
+    WebURLRequest::FetchRequestMode fetch_request_mode,
     RefPtr<WebTaskRunner> task_runner) {
-  return WTF::WrapUnique(
-      new ClientAdapter(loader, client, options, task_runner));
+  return WTF::WrapUnique(new ClientAdapter(loader, client, options,
+                                           fetch_request_mode, task_runner));
 }
 
 WebAssociatedURLLoaderImpl::ClientAdapter::ClientAdapter(
     WebAssociatedURLLoaderImpl* loader,
     WebAssociatedURLLoaderClient* client,
     const WebAssociatedURLLoaderOptions& options,
+    WebURLRequest::FetchRequestMode fetch_request_mode,
     RefPtr<WebTaskRunner> task_runner)
     : loader_(loader),
       client_(client),
       options_(options),
+      fetch_request_mode_(fetch_request_mode),
       error_timer_(std::move(task_runner), this, &ClientAdapter::NotifyError),
       enable_error_notifications_(false),
       did_fail_(false) {
@@ -207,20 +215,22 @@ void WebAssociatedURLLoaderImpl::ClientAdapter::DidReceiveResponse(
     return;
 
   if (options_.expose_all_response_headers ||
-      options_.cross_origin_request_policy !=
-          WebAssociatedURLLoaderOptions::
-              kCrossOriginRequestPolicyUseAccessControl) {
+      (fetch_request_mode_ != WebURLRequest::kFetchRequestModeCORS &&
+       fetch_request_mode_ !=
+           WebURLRequest::kFetchRequestModeCORSWithForcedPreflight)) {
     // Use the original ResourceResponse.
     client_->DidReceiveResponse(WrappedResourceResponse(response));
     return;
   }
 
   HTTPHeaderSet exposed_headers;
-  ExtractCorsExposedHeaderNamesList(response, exposed_headers);
+  CrossOriginAccessControl::ExtractCorsExposedHeaderNamesList(response,
+                                                              exposed_headers);
   HTTPHeaderSet blocked_headers;
   for (const auto& header : response.HttpHeaderFields()) {
     if (FetchUtils::IsForbiddenResponseHeaderName(header.key) ||
-        (!IsOnAccessControlResponseHeaderWhitelist(header.key) &&
+        (!CrossOriginAccessControl::IsOnAccessControlResponseHeaderWhitelist(
+             header.key) &&
          !exposed_headers.Contains(header.key)))
       blocked_headers.insert(header.key);
   }
@@ -347,23 +357,8 @@ WebAssociatedURLLoaderImpl::~WebAssociatedURLLoaderImpl() {
   Cancel();
 }
 
-#define STATIC_ASSERT_ENUM(a, b)                            \
-  static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                "mismatching enum: " #a)
-
-STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyDeny,
-                   kDenyCrossOriginRequests);
-STATIC_ASSERT_ENUM(
-    WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyUseAccessControl,
-    kUseAccessControl);
-STATIC_ASSERT_ENUM(
-    WebAssociatedURLLoaderOptions::kCrossOriginRequestPolicyAllow,
-    kAllowCrossOriginRequests);
-
 STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kConsiderPreflight,
                    kConsiderPreflight);
-STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kForcePreflight,
-                   kForcePreflight);
 STATIC_ASSERT_ENUM(WebAssociatedURLLoaderOptions::kPreventPreflight,
                    kPreventPreflight);
 
@@ -381,7 +376,7 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
   if (options_.untrusted_http) {
     WebString method = new_request.HttpMethod();
     allow_load = observer_ && IsValidHTTPToken(method) &&
-                 FetchUtils::IsUsefulMethod(method);
+                 !FetchUtils::IsForbiddenMethod(method);
     if (allow_load) {
       new_request.SetHTTPMethod(FetchUtils::NormalizeMethod(method));
       HTTPRequestHeaderValidator validator;
@@ -394,20 +389,16 @@ void WebAssociatedURLLoaderImpl::LoadAsynchronously(
       TaskType::kUnspecedLoading,
       observer_ ? ToDocument(observer_->LifecycleContext()) : nullptr);
   client_ = client;
-  client_adapter_ =
-      ClientAdapter::Create(this, client, options_, std::move(task_runner));
+  client_adapter_ = ClientAdapter::Create(this, client, options_,
+                                          request.GetFetchRequestMode(),
+                                          std::move(task_runner));
 
   if (allow_load) {
     ThreadableLoaderOptions options;
     options.preflight_policy =
         static_cast<PreflightPolicy>(options_.preflight_policy);
-    options.cross_origin_request_policy = static_cast<CrossOriginRequestPolicy>(
-        options_.cross_origin_request_policy);
 
     ResourceLoaderOptions resource_loader_options;
-    resource_loader_options.allow_credentials =
-        options_.allow_credentials ? kAllowStoredCredentials
-                                   : kDoNotAllowStoredCredentials;
     resource_loader_options.data_buffering_policy = kDoNotBufferData;
 
     const ResourceRequest& webcore_request = new_request.ToResourceRequest();

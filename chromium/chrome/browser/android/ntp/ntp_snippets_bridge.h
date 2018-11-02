@@ -5,8 +5,6 @@
 #ifndef CHROME_BROWSER_ANDROID_NTP_NTP_SNIPPETS_BRIDGE_H_
 #define CHROME_BROWSER_ANDROID_NTP_NTP_SNIPPETS_BRIDGE_H_
 
-#include <jni.h>
-
 #include "base/android/scoped_java_ref.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observer.h"
@@ -53,6 +51,10 @@ class NTPSnippetsBridge
       const base::android::JavaParamRef<jobject>& obj,
       jint j_category_id);
 
+  jboolean AreRemoteSuggestionsEnabled(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj);
+
   void FetchSuggestionImage(
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
@@ -73,7 +75,8 @@ class NTPSnippetsBridge
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj,
       jint j_category_id,
-      const base::android::JavaParamRef<jobjectArray>& j_displayed_suggestions);
+      const base::android::JavaParamRef<jobjectArray>& j_displayed_suggestions,
+      const base::android::JavaParamRef<jobject>& j_callback);
 
   void FetchContextualSuggestions(
       JNIEnv* env,
@@ -101,8 +104,6 @@ class NTPSnippetsBridge
       JNIEnv* env,
       const base::android::JavaParamRef<jobject>& obj);
 
-  static bool Register(JNIEnv* env);
-
  private:
   ~NTPSnippetsBridge() override;
 
@@ -119,6 +120,7 @@ class NTPSnippetsBridge
   void OnImageFetched(base::android::ScopedJavaGlobalRef<jobject> callback,
                       const gfx::Image& image);
   void OnSuggestionsFetched(
+      const base::android::ScopedJavaGlobalRef<jobject>& callback,
       ntp_snippets::Category category,
       ntp_snippets::Status status,
       std::vector<ntp_snippets::ContentSuggestion> suggestions);

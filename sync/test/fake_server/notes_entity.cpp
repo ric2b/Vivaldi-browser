@@ -11,11 +11,10 @@
 #include "base/guid.h"
 #include "components/sync/base/model_type.h"
 #include "components/sync/protocol/sync.pb.h"
-#include "components/sync/test/fake_server/fake_server_entity.h"
 
 using std::string;
 
-namespace fake_server {
+namespace syncer {
 
 namespace {
 
@@ -26,21 +25,21 @@ bool IsNotes(const sync_pb::SyncEntity& client_entity) {
 
 }  // namespace
 
-NotesEntity::~NotesEntity() {}
+PersistentNotesEntity::~PersistentNotesEntity() {}
 
 // static
-std::unique_ptr<FakeServerEntity> NotesEntity::CreateNew(
+std::unique_ptr<LoopbackServerEntity> PersistentNotesEntity::CreateNew(
     const sync_pb::SyncEntity& client_entity,
     const string& parent_id,
     const string& client_guid) {
   CHECK(client_entity.version() == 0) << "New entities must have version = 0.";
   CHECK(IsNotes(client_entity)) << "The given entity must be a notes.";
 
-  string id = FakeServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
+  string id = LoopbackServerEntity::CreateId(syncer::NOTES, base::GenerateGUID());
   string originator_cache_guid = client_guid;
   string originator_client_item_id = client_entity.id_string();
 
-  return std::unique_ptr<FakeServerEntity>(new NotesEntity(
+  return std::unique_ptr<LoopbackServerEntity>(new PersistentNotesEntity(
       id, client_entity.version(), client_entity.name(), originator_cache_guid,
       originator_client_item_id, client_entity.unique_position(),
       client_entity.specifics(), client_entity.folder(), parent_id,
@@ -48,21 +47,21 @@ std::unique_ptr<FakeServerEntity> NotesEntity::CreateNew(
 }
 
 // static
-std::unique_ptr<FakeServerEntity> NotesEntity::CreateUpdatedVersion(
+std::unique_ptr<LoopbackServerEntity> PersistentNotesEntity::CreateUpdatedVersion(
     const sync_pb::SyncEntity& client_entity,
-    const FakeServerEntity& current_server_entity,
+    const LoopbackServerEntity& current_server_entity,
     const string& parent_id) {
   CHECK(client_entity.version() != 0) << "Existing entities must not have a "
                                       << "version = 0.";
   CHECK(IsNotes(client_entity)) << "The given entity must be a notes.";
 
-  const NotesEntity* current_notes_entity =
-      static_cast<const NotesEntity*>(&current_server_entity);
+  const PersistentNotesEntity* current_notes_entity =
+      static_cast<const PersistentNotesEntity*>(&current_server_entity);
   string originator_cache_guid = current_notes_entity->originator_cache_guid_;
   string originator_client_item_id =
       current_notes_entity->originator_client_item_id_;
 
-  return std::unique_ptr<FakeServerEntity>(new NotesEntity(
+  return std::unique_ptr<LoopbackServerEntity>(new PersistentNotesEntity(
       client_entity.id_string(), client_entity.version(), client_entity.name(),
       originator_cache_guid, originator_client_item_id,
       client_entity.unique_position(), client_entity.specifics(),
@@ -70,7 +69,22 @@ std::unique_ptr<FakeServerEntity> NotesEntity::CreateUpdatedVersion(
       client_entity.mtime()));
 }
 
-NotesEntity::NotesEntity(const string& id,
+// static
+std::unique_ptr<LoopbackServerEntity>
+PersistentNotesEntity::CreateFromEntity(
+  const sync_pb::SyncEntity& client_entity) {
+  CHECK(IsNotes(client_entity)) << "The given entity must be a notes.";
+
+  return std::unique_ptr<LoopbackServerEntity>(new PersistentNotesEntity(
+    client_entity.id_string(), client_entity.version(), client_entity.name(),
+    client_entity.originator_cache_guid(),
+    client_entity.originator_client_item_id(),
+    client_entity.unique_position(), client_entity.specifics(),
+    client_entity.folder(), client_entity.parent_id_string(),
+    client_entity.ctime(), client_entity.mtime()));
+}
+
+PersistentNotesEntity::PersistentNotesEntity(const string& id,
                          int64_t version,
                          const string& name,
                          const string& originator_cache_guid,
@@ -81,29 +95,35 @@ NotesEntity::NotesEntity(const string& id,
                          const string& parent_id,
                          int64_t creation_time,
                          int64_t last_modified_time)
-    : FakeServerEntity(id, string(), syncer::NOTES, version, name),
+    : LoopbackServerEntity(id, syncer::NOTES, version, name),
       originator_cache_guid_(originator_cache_guid),
       originator_client_item_id_(originator_client_item_id),
       unique_position_(unique_position),
-      specifics_(specifics),
       is_folder_(is_folder),
       parent_id_(parent_id),
       creation_time_(creation_time),
-      last_modified_time_(last_modified_time) {}
+      last_modified_time_(last_modified_time) {
+  SetSpecifics(specifics);
+}
 
-bool NotesEntity::RequiresParentId() const {
+bool PersistentNotesEntity::RequiresParentId() const {
   return true;
 }
 
-string NotesEntity::GetParentId() const {
+string PersistentNotesEntity::GetParentId() const {
   return parent_id_;
 }
 
-void NotesEntity::SerializeAsProto(sync_pb::SyncEntity* sync_entity) const {
-  FakeServerEntity::SerializeBaseProtoFields(sync_entity);
+sync_pb::LoopbackServerEntity_Type
+PersistentNotesEntity::GetLoopbackServerEntityType() const {
+  return sync_pb::LoopbackServerEntity_Type_NOTES;
+}
 
-  sync_pb::EntitySpecifics* specifics = sync_entity->mutable_specifics();
-  specifics->CopyFrom(specifics_);
+
+
+void PersistentNotesEntity::SerializeAsProto(
+      sync_pb::SyncEntity* sync_entity) const {
+  LoopbackServerEntity::SerializeBaseProtoFields(sync_entity);
 
   sync_entity->set_originator_cache_guid(originator_cache_guid_);
   sync_entity->set_originator_client_item_id(originator_client_item_id_);
@@ -117,11 +137,11 @@ void NotesEntity::SerializeAsProto(sync_pb::SyncEntity* sync_entity) const {
   unique_position->CopyFrom(unique_position_);
 }
 
-bool NotesEntity::IsDeleted() const {
+bool PersistentNotesEntity::IsDeleted() const {
   return false;
 }
 
-bool NotesEntity::IsFolder() const {
+bool PersistentNotesEntity::IsFolder() const {
   return is_folder_;
 }
 

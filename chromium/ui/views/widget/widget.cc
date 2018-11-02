@@ -28,7 +28,6 @@
 #include "ui/views/event_monitor.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/focus/focus_manager_factory.h"
-#include "ui/views/focus/view_storage.h"
 #include "ui/views/focus/widget_focus_manager.h"
 #include "ui/views/views_delegate.h"
 #include "ui/views/widget/native_widget_private.h"
@@ -427,7 +426,6 @@ void Widget::ViewHierarchyChanged(
     FocusManager* focus_manager = GetFocusManager();
     if (focus_manager)
       focus_manager->ViewRemoved(details.child);
-    ViewStorage::GetInstance()->ViewRemoved(details.child);
     native_widget_->ViewRemoved(details.child);
   }
 }
@@ -1072,7 +1070,7 @@ void Widget::OnNativeWidgetVisibilityChanged(bool visible) {
 
 void Widget::OnNativeWidgetCreated(bool desktop_widget) {
   if (is_top_level())
-    focus_manager_.reset(FocusManagerFactory::Create(this, desktop_widget));
+    focus_manager_ = FocusManagerFactory::Create(this, desktop_widget);
 
   native_widget_->InitModalType(widget_delegate_->GetModalType());
 

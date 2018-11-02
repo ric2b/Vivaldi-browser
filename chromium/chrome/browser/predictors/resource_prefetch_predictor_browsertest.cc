@@ -2,9 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include <stddef.h>
-
 #include <algorithm>
+#include <cstddef>
 #include <set>
 
 #include "base/command_line.h"
@@ -12,10 +11,11 @@
 #include "base/strings/string_util.h"
 #include "base/test/histogram_tester.h"
 #include "chrome/browser/browsing_data/browsing_data_helper.h"
-
+#include "chrome/browser/predictors/loading_data_collector.h"
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
-#include "chrome/browser/predictors/resource_prefetch_predictor_test_util.h"
+#include "chrome/browser/predictors/loading_stats_collector.h"
+#include "chrome/browser/predictors/loading_test_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -23,6 +23,7 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "content/public/browser/browsing_data_remover.h"
+#include "content/public/test/test_utils.h"
 #include "net/base/host_port_pair.h"
 #include "net/base/url_util.h"
 #include "net/dns/mock_host_resolver.h"
@@ -89,7 +90,7 @@ struct ResourceSummary {
     request.before_first_contentful_paint = true;
   }
 
-  ResourcePrefetchPredictor::URLRequestSummary request;
+  URLRequestSummary request;
   // Allows to update HTTP ETag.
   size_t version;
   // True iff "Cache-control: no-store" header is present.
@@ -150,9 +151,6 @@ class BrowsingDataRemoverObserver
 
   DISALLOW_COPY_AND_ASSIGN(BrowsingDataRemoverObserver);
 };
-
-using PageRequestSummary = ResourcePrefetchPredictor::PageRequestSummary;
-using URLRequestSummary = ResourcePrefetchPredictor::URLRequestSummary;
 
 void RemoveDuplicateSubresources(std::vector<URLRequestSummary>* subresources) {
   std::stable_sort(subresources->begin(), subresources->end(),
@@ -240,8 +238,6 @@ GURL GetRequestURL(const net::test_server::HttpRequest& request) {
 // ResourcePrefetchPredictor works as expected.
 class LearningObserver : public TestObserver {
  public:
-  using PageRequestSummary = ResourcePrefetchPredictor::PageRequestSummary;
-
   LearningObserver(ResourcePrefetchPredictor* predictor,
                    const size_t expected_url_visit_count,
                    const PageRequestSummary& expected_summary,
@@ -288,22 +284,14 @@ class LearningObserver : public TestObserver {
 // Helper class to track and allow waiting for a single OnPrefetchingFinished
 // event. Checks also that {Start,Stop}Prefetching are called with the right
 // argument.
-class PrefetchingObserver : public TestObserver {
+class PrefetchingObserver : public TestLoadingObserver {
  public:
-  PrefetchingObserver(ResourcePrefetchPredictor* predictor,
-                      const GURL& expected_main_frame_url,
-                      bool is_learning_allowed)
-      : TestObserver(predictor),
-        main_frame_url_(expected_main_frame_url),
-        is_learning_allowed_(is_learning_allowed) {}
+  PrefetchingObserver(LoadingPredictor* predictor,
+                      const GURL& expected_main_frame_url)
+      : TestLoadingObserver(predictor),
+        main_frame_url_(expected_main_frame_url) {}
 
-  // TestObserver:
-  void OnNavigationLearned(size_t url_visit_count,
-                           const PageRequestSummary& summary) override {
-    if (!is_learning_allowed_)
-      ADD_FAILURE() << "Prefetching shouldn't activate learning";
-  }
-
+  // LoadingTestObserver:
   void OnPrefetchingStarted(const GURL& main_frame_url) override {
     EXPECT_EQ(main_frame_url_, main_frame_url);
   }
@@ -317,28 +305,26 @@ class PrefetchingObserver : public TestObserver {
     run_loop_.Quit();
   }
 
+  // TODO(alexilin): Consider checking that prefetching does not activate
+  // learning here.
+
   void Wait() { run_loop_.Run(); }
 
  private:
   base::RunLoop run_loop_;
   GURL main_frame_url_;
-  bool is_learning_allowed_;
 
   DISALLOW_COPY_AND_ASSIGN(PrefetchingObserver);
 };
 
 class ResourcePrefetchPredictorBrowserTest : public InProcessBrowserTest {
  protected:
-  using URLRequestSummary = ResourcePrefetchPredictor::URLRequestSummary;
+  using URLRequestSummary = URLRequestSummary;
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII("force-fieldtrials", "trial/group");
-    std::string parameter = base::StringPrintf(
-        "trial.group:%s/%s", kModeParamName, kExternalPrefetchingMode);
-    command_line->AppendSwitchASCII("force-fieldtrial-params", parameter);
-    std::string enabled_feature = base::StringPrintf(
-        "%s<trial", kSpeculativeResourcePrefetchingFeatureName);
-    command_line->AppendSwitchASCII("enable-features", enabled_feature);
+    content::EnableFeatureWithParam(kSpeculativeResourcePrefetchingFeature,
+                                    kModeParamName, kExternalPrefetchingMode,
+                                    command_line);
   }
 
   void SetUpOnMainThread() override {
@@ -368,13 +354,13 @@ class ResourcePrefetchPredictorBrowserTest : public InProcessBrowserTest {
     ASSERT_TRUE(predictor_);
     resource_prefetch_predictor_ = predictor_->resource_prefetch_predictor();
     // URLs from the test server contain a port number.
-    ResourcePrefetchPredictor::SetAllowPortInUrlsForTesting(true);
+    LoadingDataCollector::SetAllowPortInUrlsForTesting(true);
     EnsurePredictorInitialized();
     histogram_tester_.reset(new base::HistogramTester());
   }
 
   void TearDownOnMainThread() override {
-    ResourcePrefetchPredictor::SetAllowPortInUrlsForTesting(false);
+    LoadingDataCollector::SetAllowPortInUrlsForTesting(false);
   }
 
   void TestLearningAndPrefetching(
@@ -446,8 +432,7 @@ class ResourcePrefetchPredictorBrowserTest : public InProcessBrowserTest {
   }
 
   void NavigateToURLAndCheckPrefetching(const GURL& main_frame_url) {
-    PrefetchingObserver observer(resource_prefetch_predictor_, main_frame_url,
-                                 true);
+    PrefetchingObserver observer(predictor_, main_frame_url);
     ui_test_utils::NavigateToURL(browser(), main_frame_url);
     observer.Wait();
     for (auto& kv : resources_) {
@@ -457,8 +442,7 @@ class ResourcePrefetchPredictorBrowserTest : public InProcessBrowserTest {
   }
 
   void PrefetchURL(const GURL& main_frame_url) {
-    PrefetchingObserver observer(resource_prefetch_predictor_, main_frame_url,
-                                 false);
+    PrefetchingObserver observer(predictor_, main_frame_url);
     predictor_->PrepareForPageLoad(main_frame_url, HintOrigin::EXTERNAL);
     observer.Wait();
     for (auto& kv : resources_) {
@@ -483,6 +467,7 @@ class ResourcePrefetchPredictorBrowserTest : public InProcessBrowserTest {
     resource->request.resource_type = resource_type;
     resource->request.priority = priority;
     resource->request.has_validators = true;
+    resource->request.request_url = resource_url;
     return resource;
   }
 

@@ -34,7 +34,6 @@ in the layout test infrastructure.
 
 import collections
 import errno
-import functools
 import json
 import logging
 import optparse
@@ -108,8 +107,6 @@ class Port(object):
         'android': ['kitkat'],
     }
 
-    DEFAULT_BUILD_DIRECTORIES = ('out',)
-
     FALLBACK_PATHS = {}
 
     SUPPORTED_VERSIONS = []
@@ -123,25 +120,6 @@ class Port(object):
     @classmethod
     def latest_platform_fallback_path(cls):
         return cls.FALLBACK_PATHS[cls.SUPPORTED_VERSIONS[-1]]
-
-    @classmethod
-    def _static_build_path(cls, filesystem, build_directory, chromium_base, target, comps):
-        if build_directory:
-            return filesystem.join(build_directory, target, *comps)
-
-        hits = []
-        for directory in cls.DEFAULT_BUILD_DIRECTORIES:
-            base_dir = filesystem.join(chromium_base, directory, target)
-            path = filesystem.join(base_dir, *comps)
-            if filesystem.exists(path):
-                hits.append((filesystem.mtime(path), path))
-
-        if hits:
-            hits.sort(reverse=True)
-            return hits[0][1]  # Return the newest file found.
-
-        # We have to default to something, so pick the last one.
-        return filesystem.join(base_dir, *comps)
 
     @classmethod
     def determine_full_port_name(cls, host, options, port_name):
@@ -196,7 +174,15 @@ class Port(object):
 
     def additional_driver_flag(self):
         if self.driver_name() == self.CONTENT_SHELL_NAME:
-            return ['--run-layout-test']
+            # This is the fingerprint of wpt's certificate found in thirdparty/wpt/certs. Use
+            #
+            #   openssl x509 -noout -pubkey -in 127.0.0.1.pem |
+            #   openssl pkey -pubin -outform der |
+            #   openssl dgst -sha256 -binary |
+            #   base64
+            #
+            # to regenerate.
+            return ['--run-layout-test', '--ignore-certificate-errors-spki-list=Nxvaj3+bY3oVrTc+Jp7m3E3sB1n3lXtnMDCyBsqEXiY=']
         return []
 
     def supports_per_test_timeout(self):
@@ -257,6 +243,12 @@ class Port(object):
         baseline_search_paths = self.baseline_search_path()
         return baseline_search_paths[0]
 
+    def baseline_flag_specific_dir(self):
+        """If --additional-driver-flag is specified, returns the absolute path to the flag-specific
+           platform-independent results. Otherwise returns None."""
+        flag_specific_path = self._flag_specific_baseline_search_path()
+        return flag_specific_path[-1] if flag_specific_path else None
+
     def virtual_baseline_search_path(self, test_name):
         suite = self.lookup_virtual_suite(test_name)
         if not suite:
@@ -308,30 +300,25 @@ class Port(object):
         return True
 
     def check_build(self, needs_http, printer):
-        result = True
+        if not self._check_file_exists(self._path_to_driver(), 'test driver'):
+            return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
-        dump_render_tree_binary_path = self._path_to_driver()
-        result = self._check_file_exists(dump_render_tree_binary_path,
-                                         'test driver') and result
-        if not result and self.get_option('build'):
-            result = self._check_driver_build_up_to_date(
-                self.get_option('configuration'))
-        else:
-            _log.error('')
+        if not self._check_driver_build_up_to_date(self.get_option('configuration')):
+            return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
-        if self.get_option('pixel_tests'):
-            result = self.check_image_diff() and result
+        if self.get_option('pixel_tests') and not self.check_image_diff():
+            return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
         # It's okay if pretty patch isn't available, but we will at least log messages.
         self._pretty_patch_available = self.check_pretty_patch()
 
-        if self._dump_reader:
-            result = self._dump_reader.check_is_functional() and result
+        if self._dump_reader and not self._dump_reader.check_is_functional():
+            return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
-        if needs_http:
-            result = self.check_httpd() and result
+        if needs_http and not self.check_httpd():
+            return exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
 
-        return exit_codes.OK_EXIT_STATUS if result else exit_codes.UNEXPECTED_ERROR_EXIT_STATUS
+        return exit_codes.OK_EXIT_STATUS
 
     def _check_driver(self):
         driver_path = self._path_to_driver()
@@ -679,22 +666,43 @@ class Port(object):
         return reftest_list
 
     def tests(self, paths):
-        """Returns the list of tests found matching paths."""
+        """Returns all tests or tests matching supplied paths.
+
+        Args:
+            paths: Array of paths to match. If supplied, this function will only
+                return tests matching at least one path in paths.
+
+        Returns:
+            An array of test paths and test names. The latter are web platform
+            tests that don't correspond to file paths but are valid tests,
+            for instance a file path test.any.js could correspond to two test
+            names: test.any.html and test.any.worker.html.
+        """
         tests = self.real_tests(paths)
 
         suites = self.virtual_test_suites()
         if paths:
             tests.extend(self._virtual_tests_matching_paths(paths, suites))
+            tests.extend(self._wpt_test_urls_matching_paths(paths))
         else:
             tests.extend(self._all_virtual_tests(suites))
+            tests.extend(['external/wpt' + test for test in self._wpt_manifest().all_urls()])
+
         return tests
 
     def real_tests(self, paths):
         # When collecting test cases, skip these directories.
-        skipped_directories = set(['platform', 'resources', 'support', 'script-tests', 'reference', 'reftest'])
-        files = find_files.find(self._filesystem, self.layout_tests_dir(), paths,
-                                skipped_directories, functools.partial(Port.is_test_file, self), self.test_key)
-        return self._convert_wpt_file_paths_to_url_paths([self.relative_test_filename(f) for f in files])
+        skipped_directories = set([
+            'platform', 'resources', 'support', 'script-tests',
+            'reference', 'reftest', 'external'
+        ])
+        is_non_wpt_real_test_file = lambda fs, dirname, filename: (
+            self.is_test_file(fs, dirname, filename)
+            and not re.search(r'[/\\]external[/\\]wpt([/\\].*)?$', dirname)
+        )
+        files = find_files.find(self._filesystem, self.layout_tests_dir(), paths, skipped_directories,
+                                is_non_wpt_real_test_file, self.test_key)
+        return [self.relative_test_filename(f) for f in files]
 
     @staticmethod
     # If any changes are made here be sure to update the isUsedInReftest method in old-run-webkit-tests as well.
@@ -727,22 +735,25 @@ class Port(object):
             else:
                 path_in_wpt = filename
             return self._wpt_manifest().is_test_file(path_in_wpt)
+        extension = filesystem.splitext(filename)[1]
+        if 'inspector-protocol' in dirname and extension == '.js':
+            return True
+        if 'devtools' in dirname and extension == '.js':
+            return True
         if 'inspector-unit' in dirname:
-            return filesystem.splitext(filename)[1] == '.js'
+            return extension == '.js'
         return Port._has_supported_extension(
             filesystem, filename) and not Port.is_reference_html_file(filesystem, dirname, filename)
 
-    def _convert_wpt_file_paths_to_url_paths(self, files):
+    def _convert_wpt_file_path_to_url_paths(self, file_path):
         tests = []
-        for file_path in files:
-            # Path separators are normalized by relative_test_filename().
-            match = re.search(r'external/wpt/(.*)$', file_path)
-            if not match:
-                tests.append(file_path)
-                continue
-            urls = self._wpt_manifest().file_path_to_url_paths(match.group(1))
-            for url in urls:
-                tests.append(file_path[0:match.start(1)] + url)
+        # Path separators are normalized by relative_test_filename().
+        match = re.search(r'external/wpt/(.*)$', file_path)
+        if not match:
+            return [file_path]
+        urls = self._wpt_manifest().file_path_to_url_paths(match.group(1))
+        for url in urls:
+            tests.append(file_path[0:match.start(1)] + url)
         return tests
 
     @memoized
@@ -838,7 +849,7 @@ class Port(object):
         """Returns True if the test name refers to an existing test or baseline."""
         # Used by test_expectations.py to determine if an entry refers to a
         # valid test and by printing.py to determine if baselines exist.
-        return self.test_isfile(test_name) or self.test_isdir(test_name)
+        return self.is_wpt_test(test_name) or self.test_isfile(test_name) or self.test_isdir(test_name)
 
     def split_test(self, test_name):
         """Splits a test name into the 'directory' part and the 'basename' part."""
@@ -872,10 +883,10 @@ class Port(object):
 
     # TODO(qyearsley): Update callers to create a finder and call it instead
     # of these next two routines (which should be protected).
-    def path_from_chromium_base(self, *comps):
+    def _path_from_chromium_base(self, *comps):
         return self._path_finder.path_from_chromium_base(*comps)
 
-    def perf_tests_dir(self):
+    def _perf_tests_dir(self):
         return self._path_finder.perf_tests_dir()
 
     def layout_tests_dir(self):
@@ -938,13 +949,13 @@ class Port(object):
 
     @memoized
     def skipped_perf_tests(self):
-        return self._expectations_from_skipped_files([self.perf_tests_dir()])
+        return self._expectations_from_skipped_files([self._perf_tests_dir()])
 
     def skips_perf_test(self, test_name):
         for test_or_category in self.skipped_perf_tests():
             if test_or_category == test_name:
                 return True
-            category = self._filesystem.join(self.perf_tests_dir(), test_or_category)
+            category = self._filesystem.join(self._perf_tests_dir(), test_or_category)
             if self._filesystem.isdir(category) and test_name.startswith(test_or_category):
                 return True
         return False
@@ -1021,6 +1032,9 @@ class Port(object):
     def inspector_build_directory(self):
         return self._build_path('resources', 'inspector')
 
+    def generated_sources_directory(self):
+        return self._build_path('gen')
+
     def apache_config_directory(self):
         return self._path_finder.path_from_tools_scripts('apache_config')
 
@@ -1073,6 +1087,7 @@ class Port(object):
                 'LD_LIBRARY_PATH',
                 'DBUS_SESSION_BUS_ADDRESS',
                 'XDG_DATA_DIRS',
+                'XDG_RUNTIME_DIR'
             ]
             clean_env['DISPLAY'] = self.host.environ.get('DISPLAY', ':1')
         if self.host.platform.is_mac():
@@ -1326,7 +1341,7 @@ class Port(object):
 
     def repository_path(self):
         """Returns the repository path for the chromium code base."""
-        return self.path_from_chromium_base('build')
+        return self._path_from_chromium_base('build')
 
     # This is a class variable so we can test error output easily.
     _pretty_patch_error_html = 'Failed to run PrettyPatch, see error log.'
@@ -1441,14 +1456,15 @@ class Port(object):
             # Running the symbolizer script can take a lot of memory, so we need to
             # serialize access to it across all the concurrently running drivers.
 
-            llvm_symbolizer_path = self.path_from_chromium_base(
+            llvm_symbolizer_path = self._path_from_chromium_base(
                 'third_party', 'llvm-build', 'Release+Asserts', 'bin', 'llvm-symbolizer')
             if self._filesystem.exists(llvm_symbolizer_path):
                 env = self.host.environ.copy()
                 env['LLVM_SYMBOLIZER_PATH'] = llvm_symbolizer_path
             else:
                 env = None
-            sanitizer_filter_path = self.path_from_chromium_base('tools', 'valgrind', 'asan', 'asan_symbolize.py')
+            sanitizer_filter_path = self._path_from_chromium_base(
+                'tools', 'valgrind', 'asan', 'asan_symbolize.py')
             sanitizer_strip_path_prefix = 'Release/../../'
             if self._filesystem.exists(sanitizer_filter_path):
                 stderr = self._executive.run_command(
@@ -1523,9 +1539,42 @@ class Port(object):
                     tests.append(test)
         return tests
 
+    def _wpt_test_urls_matching_paths(self, paths):
+        tests = []
+
+        for test_url_path in self._wpt_manifest().all_urls():
+            if test_url_path[0] == '/':
+                test_url_path = test_url_path[1:]
+
+            full_test_url_path = 'external/wpt/' + test_url_path
+
+            for path in paths:
+                if 'external' not in path:
+                    continue
+
+                wpt_path = path.replace('external/wpt/', '')
+
+                # When `test_url_path` is test.any.html or test.any.worker.html and path is test.any.js
+                matches_any_js_test = (
+                    self._wpt_manifest().is_test_file(wpt_path)
+                    and test_url_path.startswith(re.sub(r'\.js$', '', wpt_path))
+                )
+
+                # Get a list of directories for both paths, filter empty strings
+                full_test_url_directories = filter(None, full_test_url_path.split(self._filesystem.sep))
+                path_directories = filter(None, path.split(self._filesystem.sep))
+
+                # For all other path matches within WPT
+                if matches_any_js_test or path_directories == full_test_url_directories[0:len(path_directories)]:
+                    wpt_file_paths = self._convert_wpt_file_path_to_url_paths(test_url_path)
+                    tests.extend('external/wpt/' + wpt_file_path for wpt_file_path in wpt_file_paths)
+
+        return tests
+
     def _populate_virtual_suite(self, suite):
         if not suite.tests:
             base_tests = self.real_tests([suite.base])
+            base_tests.extend(self._wpt_test_urls_matching_paths([suite.base]))
             suite.tests = {}
             for test in base_tests:
                 suite.tests[test.replace(suite.base, suite.name, 1)] = test
@@ -1584,14 +1633,15 @@ class Port(object):
             directory) for directory in self._options.image_first_tests)
 
     def _build_path(self, *comps):
+        """Returns a path from the build directory."""
         return self._build_path_with_target(self._options.target, *comps)
 
     def _build_path_with_target(self, target, *comps):
-        # Note that we don't do the option caching that the base class does,
-        # because finding the right directory is relatively fast.
         target = target or self.get_option('target')
-        return self._static_build_path(self._filesystem, self.get_option('build_directory'),
-                                       self.path_from_chromium_base(), target, comps)
+        return self._filesystem.join(
+            self._path_from_chromium_base(),
+            self.get_option('build_directory') or 'out',
+            target, *comps)
 
     def _check_driver_build_up_to_date(self, target):
         # FIXME: We should probably get rid of this check altogether as it has

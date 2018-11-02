@@ -15,8 +15,10 @@
 #import "chrome/browser/certificate_viewer.h"
 #include "chrome/browser/infobars/infobar_service.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/cocoa/browser_dialogs_views_mac.h"
 #import "chrome/browser/ui/cocoa/browser_window_controller.h"
+#include "chrome/browser/ui/cocoa/bubble_anchor_helper.h"
 #import "chrome/browser/ui/cocoa/info_bubble_view.h"
 #import "chrome/browser/ui/cocoa/info_bubble_window.h"
 #import "chrome/browser/ui/cocoa/location_bar/location_bar_decoration.h"
@@ -25,8 +27,6 @@
 #include "chrome/browser/ui/page_info/permission_menu_model.h"
 #import "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
 #include "chrome/grit/theme_resources.h"
 #include "components/strings/grit/components_chromium_strings.h"
 #include "components/strings/grit/components_strings.h"
@@ -131,16 +131,9 @@ bool g_is_bubble_showing = false;
 // proper anchor point for the bubble. The returned point is in screen
 // coordinates.
 NSPoint AnchorPointForWindow(NSWindow* parent) {
-  BrowserWindowController* controller = [parent windowController];
-  NSPoint origin = NSZeroPoint;
-  if ([controller isKindOfClass:[BrowserWindowController class]]) {
-    LocationBarViewMac* location_bar = [controller locationBarBridge];
-    if (location_bar) {
-      NSPoint bubble_point = location_bar->GetPageInfoBubblePoint();
-      origin = ui::ConvertPointFromWindowToScreen(parent, bubble_point);
-    }
-  }
-  return origin;
+  Browser* browser = chrome::FindBrowserWithWindow(parent);
+  DCHECK(browser);
+  return GetPageInfoAnchorPointForBrowser(browser);
 }
 
 }  // namespace
@@ -548,11 +541,7 @@ bool IsInternalURL(const GURL& url) {
 - (void)showSiteSettingsData:(id)sender {
   DCHECK(webContents_);
   DCHECK(presenter_);
-  presenter_->RecordPageInfoAction(PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED);
-  webContents_->OpenURL(content::OpenURLParams(
-      GURL(chrome::kChromeUIContentSettingsURL), content::Referrer(),
-      WindowOpenDisposition::NEW_FOREGROUND_TAB, ui::PAGE_TRANSITION_LINK,
-      false));
+  presenter_->OpenSiteSettingsView();
 }
 
 // TODO(lgarron): Move some of this to the presenter for separation of concerns
@@ -1288,14 +1277,8 @@ void PageInfoUIBridge::Show(gfx::NativeWindow parent,
                             const GURL& virtual_url,
                             const security_state::SecurityInfo& security_info) {
   if (ui::MaterialDesignController::IsSecondaryUiMaterial()) {
-    BrowserWindowController* controller =
-        [BrowserWindowController browserWindowControllerForWindow:parent];
-    LocationBarViewMac* location_bar = [controller locationBarBridge];
-    LocationBarDecoration* decoration =
-        location_bar ? location_bar->GetPageInfoDecoration() : nullptr;
-    chrome::ShowPageInfoBubbleViewsAtPoint(
-        gfx::ScreenPointFromNSPoint(AnchorPointForWindow(parent)), profile,
-        web_contents, virtual_url, security_info, decoration);
+    chrome::ShowPageInfoBubbleViews(parent, profile, web_contents, virtual_url,
+                                    security_info);
     return;
   }
 

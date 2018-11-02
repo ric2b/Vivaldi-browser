@@ -12,34 +12,33 @@
 #import "ios/third_party/material_components_ios/src/components/NavigationBar/src/MaterialNavigationBar.h"
 #import "ios/third_party/material_components_ios/src/components/ShadowElevations/src/MaterialShadowElevations.h"
 #import "ios/third_party/material_components_ios/src/components/ShadowLayer/src/MaterialShadowLayer.h"
+#import "remoting/ios/app/host_collection_header_view.h"
+
+#include "remoting/base/string_resources.h"
+#include "ui/base/l10n/l10n_util.h"
 
 static NSString* const kReusableIdentifierItem =
     @"remotingHostCollectionViewControllerItem";
 
 static CGFloat kHostCollectionViewControllerCellHeight = 70.f;
-static CGFloat kHostCollectionViewControllerDefaultHeaderHeight = 100.f;
-static CGFloat kHostCollectionViewControllerSmallHeaderHeight = 60.f;
-static UIColor* kBackgroundColor =
-    [UIColor colorWithRed:0.f green:0.67f blue:0.55f alpha:1.f];
-
-@interface HostCollectionViewController () {
-  MDCInkTouchController* _inkTouchController;
-}
-@end
+static CGFloat kHostCollectionHeaderViewHeight = 25.f;
 
 @implementation HostCollectionViewController
 
 @synthesize delegate = _delegate;
-@synthesize flexHeaderContainerViewController =
-    _flexHeaderContainerViewController;
+@synthesize scrollViewDelegate = _scrollViewDelegate;
 
 - (instancetype)initWithCollectionViewLayout:(UICollectionViewLayout*)layout {
   self = [super initWithCollectionViewLayout:layout];
   if (self) {
-    self.collectionView.backgroundColor = [UIColor whiteColor];
+    self.collectionView.backgroundColor = [UIColor clearColor];
     [self.collectionView registerClass:[HostCollectionViewCell class]
             forCellWithReuseIdentifier:NSStringFromClass(
                                            [HostCollectionViewCell class])];
+
+    [self.collectionView registerClass:[HostCollectionHeaderView class]
+            forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
+                   withReuseIdentifier:UICollectionElementKindSectionHeader];
   }
   return self;
 }
@@ -48,10 +47,8 @@ static UIColor* kBackgroundColor =
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.styler.cellStyle = MDCCollectionViewCellStyleCard;
-  self.styler.cellLayoutType = MDCCollectionViewCellLayoutTypeGrid;
-  self.styler.gridPadding = 0;
-  self.styler.gridColumnCount = 1;
+  self.styler.cellStyle = MDCCollectionViewCellStyleDefault;
+  self.styler.cellLayoutType = MDCCollectionViewCellLayoutTypeList;
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
@@ -85,6 +82,19 @@ static UIColor* kBackgroundColor =
   return cell;
 }
 
+- (UICollectionReusableView*)collectionView:(UICollectionView*)collectionView
+          viewForSupplementaryElementOfKind:(NSString*)kind
+                                atIndexPath:(NSIndexPath*)indexPath {
+  HostCollectionHeaderView* supplementaryView =
+      [collectionView dequeueReusableSupplementaryViewOfKind:kind
+                                         withReuseIdentifier:kind
+                                                forIndexPath:indexPath];
+  if ([kind isEqualToString:UICollectionElementKindSectionHeader]) {
+    supplementaryView.text = l10n_util::GetNSString(IDS_REMOTE_DEVICES_TITLE);
+  }
+  return supplementaryView;
+}
+
 #pragma mark - UICollectionViewDelegate
 
 - (void)collectionView:(UICollectionView*)collectionView
@@ -107,46 +117,17 @@ static UIColor* kBackgroundColor =
 #pragma mark - UIScrollViewDelegate
 
 - (void)scrollViewDidScroll:(UIScrollView*)scrollView {
-  [self.flexHeaderContainerViewController.headerViewController
-      scrollViewDidScroll:scrollView];
+  [_scrollViewDelegate scrollViewDidScroll:scrollView];
 }
 
-#pragma mark - Private
+#pragma mark - UICollectionViewDelegateFlowLayout
 
-- (UIView*)hostsHeaderView {
-  CGRect headerFrame =
-      _flexHeaderContainerViewController.headerViewController.headerView.bounds;
-  UIView* hostsHeaderView = [[UIView alloc] initWithFrame:headerFrame];
-  hostsHeaderView.backgroundColor = kBackgroundColor;
-  hostsHeaderView.layer.masksToBounds = YES;
-  hostsHeaderView.autoresizingMask =
-      (UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight);
-
-  _inkTouchController =
-      [[MDCInkTouchController alloc] initWithView:hostsHeaderView];
-  [_inkTouchController addInkView];
-
-  return hostsHeaderView;
-}
-
-- (void)setflexHeaderContainerViewController:
-    (MDCFlexibleHeaderContainerViewController*)
-        flexHeaderContainerViewController {
-  _flexHeaderContainerViewController = flexHeaderContainerViewController;
-  MDCFlexibleHeaderView* headerView =
-      _flexHeaderContainerViewController.headerViewController.headerView;
-  headerView.trackingScrollView = self.collectionView;
-  headerView.maximumHeight = kHostCollectionViewControllerDefaultHeaderHeight;
-  headerView.minimumHeight = kHostCollectionViewControllerSmallHeaderHeight;
-  [headerView addSubview:[self hostsHeaderView]];
-
-  // Use a custom shadow under the flexible header.
-  MDCShadowLayer* shadowLayer = [MDCShadowLayer layer];
-  [headerView setShadowLayer:shadowLayer
-      intensityDidChangeBlock:^(CALayer* layer, CGFloat intensity) {
-        CGFloat elevation = MDCShadowElevationAppBar * intensity;
-        [(MDCShadowLayer*)layer setElevation:elevation];
-      }];
+- (CGSize)collectionView:(UICollectionView*)collectionView
+                             layout:
+                                 (UICollectionViewLayout*)collectionViewLayout
+    referenceSizeForHeaderInSection:(NSInteger)section {
+  return CGSizeMake(collectionView.bounds.size.width,
+                    kHostCollectionHeaderViewHeight);
 }
 
 @end

@@ -33,6 +33,7 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "bindings/core/v8/HTMLElementOrLong.h"
 #include "bindings/core/v8/HTMLOptionElementOrHTMLOptGroupElement.h"
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Attribute.h"
@@ -44,19 +45,19 @@
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/NodeListsNodeData.h"
 #include "core/dom/NodeTraversal.h"
-#include "core/dom/TaskRunnerHelper.h"
 #include "core/events/GestureEvent.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/FormData.h"
 #include "core/html/HTMLFormElement.h"
 #include "core/html/HTMLHRElement.h"
 #include "core/html/HTMLOptGroupElement.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/forms/FormController.h"
+#include "core/html/forms/PopupMenu.h"
 #include "core/input/EventHandler.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -69,7 +70,7 @@
 #include "core/page/ChromeClient.h"
 #include "core/page/Page.h"
 #include "core/page/SpatialNavigation.h"
-#include "platform/PopupMenu.h"
+#include "core/paint/PaintLayerScrollableArea.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/text/PlatformLocale.h"
 
@@ -891,30 +892,43 @@ void HTMLSelectElement::ScrollToOption(HTMLOptionElement* option) {
     return;
   if (UsesMenuList())
     return;
-  bool has_pending_task = option_to_scroll_to_;
-  // We'd like to keep an HTMLOptionElement reference rather than the index of
-  // the option because the task should work even if unselected option is
-  // inserted before executing scrollToOptionTask().
+  if (GetLayoutObject()) {
+    if (GetDocument().Lifecycle().GetState() >=
+        DocumentLifecycle::kLayoutClean) {
+      ToLayoutListBox(GetLayoutObject())->ScrollToRect(option->BoundingBox());
+      return;
+    }
+    // Make sure the LayoutObject will be laid out.
+    GetLayoutObject()->SetNeedsLayout(
+        LayoutInvalidationReason::kMenuOptionsChanged);
+  }
   option_to_scroll_to_ = option;
-  if (!has_pending_task)
-    TaskRunnerHelper::Get(TaskType::kUserInteraction, &GetDocument())
-        ->PostTask(BLINK_FROM_HERE,
-                   WTF::Bind(&HTMLSelectElement::ScrollToOptionTask,
-                             WrapPersistent(this)));
+  // ScrollToOptionAfterLayout() should be called if this element is rendered.
 }
 
-void HTMLSelectElement::ScrollToOptionTask() {
+void HTMLSelectElement::ScrollToOptionAfterLayout(
+    PaintLayerScrollableArea& scrollable_area) {
   HTMLOptionElement* option = option_to_scroll_to_.Release();
-  if (!option || !isConnected())
+  if (!option || UsesMenuList())
     return;
-  // optionRemoved() makes sure m_optionToScrollTo doesn't have an option with
-  // another owner.
-  DCHECK_EQ(option->OwnerSelectElement(), this);
-  GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
-  if (!GetLayoutObject() || !GetLayoutObject()->IsListBox())
+  LayoutBox* option_box = option->GetLayoutBox();
+  if (!option_box)
     return;
-  LayoutRect bounds = option->BoundingBox();
-  ToLayoutListBox(GetLayoutObject())->ScrollToRect(bounds);
+
+  // We can't use PaintLayerScrollableArea::ScrollIntoView(), which needs
+  // absolute coordinate. We are unable to compute absolute positions because
+  // ancestors' layout aren't fixed yet.
+  LayoutSize option_offset;
+  for (LayoutObject* container = option_box; container != GetLayoutObject();
+       container = container->Container()) {
+    if (!container->Container())
+      return;
+    option_offset += container->OffsetFromContainer(container->Container());
+  }
+  scrollable_area.ScrollLocalRectIntoView(
+      LayoutRect(LayoutPoint() + option_offset, option_box->Size()),
+      ScrollAlignment::kAlignToEdgeIfNeeded,
+      ScrollAlignment::kAlignToEdgeIfNeeded, false);
 }
 
 void HTMLSelectElement::OptionSelectionStateChanged(HTMLOptionElement* option,
@@ -1496,7 +1510,7 @@ void HTMLSelectElement::ListBoxDefaultEventHandler(Event* event) {
     MouseEvent* mouse_event = ToMouseEvent(event);
     if (HTMLOptionElement* option = EventTargetOption(*mouse_event)) {
       if (!option->IsDisabledFormControl()) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
         UpdateSelectedState(option, mouse_event->metaKey(),
                             mouse_event->shiftKey());
 #else
@@ -1552,8 +1566,10 @@ void HTMLSelectElement::ListBoxDefaultEventHandler(Event* event) {
                  static_cast<short>(WebPointerProperties::Button::kLeft) &&
              GetLayoutObject()) {
     if (GetDocument().GetPage() &&
-        GetDocument().GetPage()->GetAutoscrollController().AutoscrollInProgress(
-            ToLayoutBox(GetLayoutObject())))
+        GetDocument()
+            .GetPage()
+            ->GetAutoscrollController()
+            .AutoscrollInProgressFor(ToLayoutBox(GetLayoutObject())))
       GetDocument().GetPage()->GetAutoscrollController().StopAutoscroll();
     else
       HandleMouseRelease();

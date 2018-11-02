@@ -327,9 +327,9 @@ Request* Request::CreateRequestWithRequestOrString(
   r->request_->HeaderList()->ClearList();
   // "If |r|'s request's mode is "no-cors", run these substeps:
   if (r->GetRequest()->Mode() == WebURLRequest::kFetchRequestModeNoCORS) {
-    // "If |r|'s request's method is not a simple method, throw a
+    // "If |r|'s request's method is not a CORS-safelisted method, throw a
     // TypeError."
-    if (!FetchUtils::IsSimpleMethod(r->GetRequest()->Method())) {
+    if (!FetchUtils::IsCORSSafelistedMethod(r->GetRequest()->Method())) {
       exception_state.ThrowTypeError("'" + r->GetRequest()->Method() +
                                      "' is unsupported in no-cors mode.");
       return nullptr;
@@ -609,9 +609,12 @@ String Request::getReferrerPolicy() const {
       return "origin";
     case kReferrerPolicyOriginWhenCrossOrigin:
       return "origin-when-cross-origin";
+    case kReferrerPolicySameOrigin:
+      return "same-origin";
+    case kReferrerPolicyStrictOrigin:
+      return "strict-origin";
     case kReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin:
-      DCHECK(RuntimeEnabledFeatures::reducedReferrerGranularityEnabled());
-      return "no-referrer-when-downgrade-origin-when-cross-origin";
+      return "strict-origin-when-cross-origin";
   }
   NOTREACHED();
   return String();
@@ -726,6 +729,7 @@ void Request::PopulateWebServiceWorkerRequest(
   web_request.SetCredentialsMode(request_->Credentials());
   web_request.SetCacheMode(request_->CacheMode());
   web_request.SetRedirectMode(request_->Redirect());
+  web_request.SetIntegrity(request_->Integrity());
   web_request.SetRequestContext(request_->Context());
 
   // Strip off the fragment part of URL. So far, all users of

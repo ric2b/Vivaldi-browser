@@ -21,17 +21,19 @@
 #include "chrome/browser/ui/view_ids.h"
 #include "chrome/browser/ui/views/find_bar_host.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/ime/input_method.h"
 #include "ui/base/ime/text_input_flags.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/theme_provider.h"
 #include "ui/events/event.h"
 #include "ui/gfx/color_palette.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_border.h"
@@ -41,19 +43,11 @@
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/painter.h"
+#include "ui/views/view_properties.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/widget/widget.h"
 
 namespace {
-
-// These layout constants are all in dp.
-// The horizontal and vertical insets for the bar.
-const int kInteriorPadding = 8;
-// Default spacing between child views.
-const int kInterChildSpacing = 4;
-// Additional spacing around the separator.
-const int kSeparatorLeftSpacing = 12 - kInterChildSpacing;
-const int kSeparatorRightSpacing = 8 - kInterChildSpacing;
 
 // The default number of average characters that the text box will be.
 const int kDefaultCharWidth = 30;
@@ -160,15 +154,56 @@ FindBarView::FindBarView(FindBarHost* host)
       base::MakeUnique<views::ViewTargeter>(this));
   AddChildViewAt(match_count_text_, 1);
 
-  separator_->SetBorder(views::CreateEmptyBorder(0, kSeparatorLeftSpacing, 0,
-                                                 kSeparatorRightSpacing));
+  ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
+
   AddChildViewAt(separator_, 2);
+
+  // Normally we could space objects horizontally by simply passing a constant
+  // value to BoxLayout for between-child spacing.  But for the vector image
+  // buttons, we want the spacing to apply between the inner "glyph" portions
+  // of the buttons, ignoring the surrounding borders.  BoxLayout has no way
+  // to dynamically adjust for this, so instead of using between-child spacing,
+  // we place views directly adjacent, with horizontal margins on each view
+  // that will add up to the right spacing amounts.
+
+  const gfx::Insets horizontal_margin(
+      0,
+      provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_HORIZONTAL) / 2);
+  const gfx::Insets vector_button =
+      provider->GetInsetsMetric(views::INSETS_VECTOR_IMAGE_BUTTON);
+  const gfx::Insets vector_button_horizontal_margin(
+      0, horizontal_margin.left() - vector_button.left(), 0,
+      horizontal_margin.right() - vector_button.right());
+  const gfx::Insets toast_control_vertical_margin(
+      provider->GetDistanceMetric(DISTANCE_TOAST_CONTROL_VERTICAL), 0);
+  const gfx::Insets toast_label_vertical_margin(
+      provider->GetDistanceMetric(DISTANCE_TOAST_LABEL_VERTICAL), 0);
+  find_previous_button_->SetProperty(
+      views::kMarginsKey, new gfx::Insets(toast_control_vertical_margin +
+                                          vector_button_horizontal_margin));
+  find_next_button_->SetProperty(
+      views::kMarginsKey, new gfx::Insets(toast_control_vertical_margin +
+                                          vector_button_horizontal_margin));
+  close_button_->SetProperty(views::kMarginsKey,
+                             new gfx::Insets(toast_control_vertical_margin +
+                                             vector_button_horizontal_margin));
+  separator_->SetProperty(
+      views::kMarginsKey,
+      new gfx::Insets(toast_control_vertical_margin + horizontal_margin));
+  find_text_->SetProperty(
+      views::kMarginsKey,
+      new gfx::Insets(toast_control_vertical_margin + horizontal_margin));
+  match_count_text_->SetProperty(
+      views::kMarginsKey,
+      new gfx::Insets(toast_label_vertical_margin + horizontal_margin));
 
   find_text_->SetBorder(views::NullBorder());
 
-  views::BoxLayout* manager =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, kInteriorPadding,
-                           kInteriorPadding, kInterChildSpacing);
+  views::BoxLayout* manager = new views::BoxLayout(
+      views::BoxLayout::kHorizontal,
+      gfx::Insets(provider->GetInsetsMetric(INSETS_TOAST) - horizontal_margin),
+      0);
+
   SetLayoutManager(manager);
   manager->SetFlexForView(find_text_, 1);
 }
@@ -405,7 +440,7 @@ void FindBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   auto border = base::MakeUnique<views::BubbleBorder>(
       views::BubbleBorder::NONE, views::BubbleBorder::SMALL_SHADOW,
       bg_color);
-  set_background(new views::BubbleBackground(border.get()));
+  SetBackground(base::MakeUnique<views::BubbleBackground>(border.get()));
   SetBorder(std::move(border));
 
   match_count_text_->SetBackgroundColor(bg_color);
@@ -420,5 +455,6 @@ void FindBarView::OnNativeThemeChanged(const ui::NativeTheme* theme) {
                                 base_icon_color);
   views::SetImageFromVectorIcon(find_next_button_, kCaretDownIcon,
                                 base_icon_color);
-  views::SetImageFromVectorIcon(close_button_, ui::kCloseIcon, base_icon_color);
+  views::SetImageFromVectorIcon(close_button_, vector_icons::kCloseIcon,
+                                base_icon_color);
 }

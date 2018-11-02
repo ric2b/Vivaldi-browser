@@ -27,11 +27,14 @@ namespace gfx {
 class ColorSpace;
 }
 
+namespace viz {
+class RendererSettings;
+}
+
 namespace cc {
 class DrawPolygon;
 class OutputSurface;
 class RenderPass;
-class RendererSettings;
 class ResourceProvider;
 class ScopedResource;
 
@@ -41,7 +44,7 @@ class ScopedResource;
 // for reference).
 class CC_EXPORT DirectRenderer {
  public:
-  DirectRenderer(const RendererSettings* settings,
+  DirectRenderer(const viz::RendererSettings* settings,
                  OutputSurface* output_surface,
                  ResourceProvider* resource_provider);
   virtual ~DirectRenderer();
@@ -140,12 +143,13 @@ class CC_EXPORT DirectRenderer {
                      const gfx::Rect& render_pass_scissor,
                      bool use_render_pass_scissor);
 
-  const FilterOperations* FiltersForPass(int render_pass_id) const;
-  const FilterOperations* BackgroundFiltersForPass(int render_pass_id) const;
+  const FilterOperations* FiltersForPass(RenderPassId render_pass_id) const;
+  const FilterOperations* BackgroundFiltersForPass(
+      RenderPassId render_pass_id) const;
 
   // Private interface implemented by subclasses for use by DirectRenderer.
   virtual bool CanPartialSwap() = 0;
-  virtual ResourceFormat BackbufferFormat() const = 0;
+  virtual viz::ResourceFormat BackbufferFormat() const = 0;
   virtual void BindFramebufferToOutputSurface() = 0;
   virtual bool BindFramebufferToTexture(const ScopedResource* resource) = 0;
   virtual void SetScissorTestRect(const gfx::Rect& scissor_rect) = 0;
@@ -176,7 +180,7 @@ class CC_EXPORT DirectRenderer {
     return reshape_surface_size_;
   }
 
-  const RendererSettings* const settings_;
+  const viz::RendererSettings* const settings_;
   OutputSurface* const output_surface_;
   ResourceProvider* const resource_provider_;
   // This can be replaced by test implementations.
@@ -199,14 +203,16 @@ class CC_EXPORT DirectRenderer {
   int frames_since_using_dc_layers_ = 0;
 
   // A map from RenderPass id to the texture used to draw the RenderPass from.
-  base::flat_map<int, std::unique_ptr<ScopedResource>> render_pass_textures_;
+  base::flat_map<RenderPassId, std::unique_ptr<ScopedResource>>
+      render_pass_textures_;
   // A map from RenderPass id to the single quad present in and replacing the
   // RenderPass.
-  base::flat_map<int, TileDrawQuad> render_pass_bypass_quads_;
+  base::flat_map<RenderPassId, TileDrawQuad> render_pass_bypass_quads_;
 
   // A map from RenderPass id to the filters used when drawing the RenderPass.
-  base::flat_map<int, FilterOperations*> render_pass_filters_;
-  base::flat_map<int, FilterOperations*> render_pass_background_filters_;
+  base::flat_map<RenderPassId, FilterOperations*> render_pass_filters_;
+  base::flat_map<RenderPassId, FilterOperations*>
+      render_pass_background_filters_;
 
   bool visible_ = false;
   bool disable_color_checks_for_testing_ = false;

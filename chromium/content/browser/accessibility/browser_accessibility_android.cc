@@ -14,8 +14,14 @@
 #include "content/common/accessibility_messages.h"
 #include "content/public/common/content_client.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/accessibility/ax_role_properties.h"
 #include "ui/accessibility/platform/ax_android_constants.h"
 #include "ui/accessibility/platform/ax_snapshot_node_android_platform.h"
+
+namespace aria_strings {
+const char kAriaLivePolite[] = "polite";
+const char kAriaLiveAssertive[] = "assertive";
+}
 
 namespace {
 
@@ -140,28 +146,12 @@ bool BrowserAccessibilityAndroid::PlatformIsLeaf() const {
 }
 
 bool BrowserAccessibilityAndroid::IsCheckable() const {
-  bool checkable = false;
-  bool is_aria_pressed_defined;
-  bool is_mixed;
-  GetAriaTristate("aria-pressed", &is_aria_pressed_defined, &is_mixed);
-  if (GetRole() == ui::AX_ROLE_CHECK_BOX ||
-      GetRole() == ui::AX_ROLE_RADIO_BUTTON ||
-      GetRole() == ui::AX_ROLE_MENU_ITEM_CHECK_BOX ||
-      GetRole() == ui::AX_ROLE_MENU_ITEM_RADIO ||
-      is_aria_pressed_defined) {
-    checkable = true;
-  }
-  // TODO(aleventhal) does this ever happen when checkable is not true yet?
-  if (HasIntAttribute(ui::AX_ATTR_CHECKED_STATE))
-    checkable = true;
-  return checkable;
+  return HasIntAttribute(ui::AX_ATTR_CHECKED_STATE);
 }
 
 bool BrowserAccessibilityAndroid::IsChecked() const {
-  const auto checked_state = static_cast<ui::AXCheckedState>(
-      GetIntAttribute(ui::AX_ATTR_CHECKED_STATE));
-  return (checked_state == ui::AX_CHECKED_STATE_TRUE ||
-          HasState(ui::AX_STATE_PRESSED));
+  return GetIntAttribute(ui::AX_ATTR_CHECKED_STATE) ==
+         ui::AX_CHECKED_STATE_TRUE;
 }
 
 bool BrowserAccessibilityAndroid::IsClickable() const {
@@ -179,8 +169,9 @@ bool BrowserAccessibilityAndroid::IsCollapsed() const {
   return HasState(ui::AX_STATE_COLLAPSED);
 }
 
+// TODO(dougt) Move to ax_role_properties?
 bool BrowserAccessibilityAndroid::IsCollection() const {
-  return (IsTableLikeRole() || GetRole() == ui::AX_ROLE_LIST ||
+  return (ui::IsTableLikeRole(GetRole()) || GetRole() == ui::AX_ROLE_LIST ||
           GetRole() == ui::AX_ROLE_LIST_BOX ||
           GetRole() == ui::AX_ROLE_DESCRIPTION_LIST ||
           GetRole() == ui::AX_ROLE_TREE);
@@ -197,8 +188,9 @@ bool BrowserAccessibilityAndroid::IsCollectionItem() const {
 }
 
 bool BrowserAccessibilityAndroid::IsContentInvalid() const {
-  std::string invalid;
-  return GetHtmlAttribute("aria-invalid", &invalid);
+  return HasIntAttribute(ui::AX_ATTR_INVALID_STATE) &&
+         GetIntAttribute(ui::AX_ATTR_INVALID_STATE) !=
+             ui::AX_INVALID_STATE_FALSE;
 }
 
 bool BrowserAccessibilityAndroid::IsDismissable() const {
@@ -210,7 +202,8 @@ bool BrowserAccessibilityAndroid::IsEditableText() const {
 }
 
 bool BrowserAccessibilityAndroid::IsEnabled() const {
-  return !HasState(ui::AX_STATE_DISABLED);
+  return GetIntAttribute(ui::AX_ATTR_RESTRICTION) !=
+         ui::AX_RESTRICTION_DISABLED;
 }
 
 bool BrowserAccessibilityAndroid::IsExpanded() const {
@@ -300,7 +293,7 @@ bool BrowserAccessibilityAndroid::IsInterestingOnAndroid() const {
     return true;
 
   // If it's not focusable but has a control role, then it's interesting.
-  if (IsControl())
+  if (ui::IsControl(GetRole()))
     return true;
 
   // Otherwise, the interesting nodes are leaf nodes with non-whitespace text.
@@ -1155,7 +1148,7 @@ int BrowserAccessibilityAndroid::AndroidRangeType() const {
 }
 
 int BrowserAccessibilityAndroid::RowCount() const {
-  if (IsTableLikeRole()) {
+  if (ui::IsTableLikeRole(GetRole())) {
     return CountChildrenWithRole(ui::AX_ROLE_ROW);
   }
 
@@ -1170,7 +1163,7 @@ int BrowserAccessibilityAndroid::RowCount() const {
 }
 
 int BrowserAccessibilityAndroid::ColumnCount() const {
-  if (IsTableLikeRole()) {
+  if (ui::IsTableLikeRole(GetRole())) {
     return CountChildrenWithRole(ui::AX_ROLE_COLUMN);
   }
   return 0;

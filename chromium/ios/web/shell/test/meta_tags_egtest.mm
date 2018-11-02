@@ -6,8 +6,8 @@
 
 #include "base/strings/stringprintf.h"
 #import "base/test/ios/wait_util.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/shell/test/earl_grey/shell_earl_grey.h"
 #import "ios/web/shell/test/earl_grey/shell_matchers.h"
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
@@ -35,7 +35,6 @@ const char kRefreshMetaPageTemplate[] =
 
 using web::test::HttpServer;
 using web::AddressFieldText;
-using web::WebViewContainingText;
 
 // META tag test cases for the web shell.
 @interface MetaTagsTestCase : WebShellTestCase
@@ -75,8 +74,7 @@ using web::WebViewContainingText;
   // Verify that redirect happened.
   [[EarlGrey selectElementWithMatcher:AddressFieldText(destinationURL.spec())]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kDestinationPage)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kDestinationPage];
 }
 
 @end

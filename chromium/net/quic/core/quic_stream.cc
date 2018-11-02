@@ -54,12 +54,14 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
       session_(session),
       stream_bytes_read_(0),
       stream_bytes_written_(0),
+      stream_bytes_outstanding_(0),
       stream_error_(QUIC_STREAM_NO_ERROR),
       connection_error_(QUIC_NO_ERROR),
       read_side_closed_(false),
       write_side_closed_(false),
       fin_buffered_(false),
       fin_sent_(false),
+      fin_outstanding_(false),
       fin_received_(false),
       rst_sent_(false),
       rst_received_(false),
@@ -74,11 +76,22 @@ QuicStream::QuicStream(QuicStreamId id, QuicSession* session)
       connection_flow_controller_(session_->flow_controller()),
       stream_contributes_to_connection_flow_control_(true),
       busy_counter_(0),
-      add_random_padding_after_fin_(false) {
+      add_random_padding_after_fin_(false),
+      ack_listener_(nullptr),
+      send_buffer_(session->connection()->helper()->GetBufferAllocator()) {
   SetFromConfig();
 }
 
-QuicStream::~QuicStream() {}
+QuicStream::~QuicStream() {
+  if (session_ != nullptr && session_->use_stream_notifier() &&
+      IsWaitingForAcks()) {
+    QUIC_DVLOG(1)
+        << ENDPOINT << "Stream " << id_
+        << " gets destroyed while waiting for acks. stream_bytes_outstanding = "
+        << stream_bytes_outstanding_
+        << ", fin_outstanding: " << fin_outstanding_;
+  }
+}
 
 void QuicStream::SetFromConfig() {}
 
@@ -321,6 +334,7 @@ QuicConsumedData QuicStream::WritevData(
       WritevDataInner(QuicIOVector(iov, iov_count, write_length),
                       stream_bytes_written_, fin, std::move(ack_listener));
   stream_bytes_written_ += consumed_data.bytes_consumed;
+  stream_bytes_outstanding_ += consumed_data.bytes_consumed;
 
   AddBytesSent(consumed_data.bytes_consumed);
 
@@ -336,6 +350,7 @@ QuicConsumedData QuicStream::WritevData(
     }
     if (fin && consumed_data.fin_consumed) {
       fin_sent_ = true;
+      fin_outstanding_ = true;
       if (fin_received_) {
         session_->StreamDraining(id_);
       }
@@ -490,6 +505,59 @@ void QuicStream::UpdateSendWindowOffset(QuicStreamOffset new_window) {
 
 void QuicStream::AddRandomPaddingAfterFin() {
   add_random_padding_after_fin_ = true;
+}
+
+void QuicStream::OnStreamFrameAcked(const QuicStreamFrame& frame,
+                                    QuicTime::Delta ack_delay_time) {
+  OnStreamFrameDiscarded(frame);
+  if (ack_listener_ != nullptr) {
+    ack_listener_->OnPacketAcked(frame.data_length, ack_delay_time);
+  }
+}
+
+void QuicStream::OnStreamFrameRetransmitted(const QuicStreamFrame& frame) {
+  if (ack_listener_ != nullptr) {
+    ack_listener_->OnPacketRetransmitted(frame.data_length);
+  }
+}
+
+void QuicStream::OnStreamFrameDiscarded(const QuicStreamFrame& frame) {
+  DCHECK_EQ(id_, frame.stream_id);
+  if (stream_bytes_outstanding_ < frame.data_length ||
+      (!fin_outstanding_ && frame.fin)) {
+    CloseConnectionWithDetails(QUIC_INTERNAL_ERROR,
+                               "Trying to discard unsent data.");
+    return;
+  }
+  stream_bytes_outstanding_ -= frame.data_length;
+  if (frame.fin) {
+    fin_outstanding_ = false;
+  }
+  if (session_->streams_own_data() && frame.data_length > 0) {
+    send_buffer_.RemoveStreamFrame(frame.offset, frame.data_length);
+  }
+  if (!IsWaitingForAcks()) {
+    session_->OnStreamDoneWaitingForAcks(id_);
+  }
+}
+
+bool QuicStream::IsWaitingForAcks() const {
+  return stream_bytes_outstanding_ || fin_outstanding_;
+}
+
+void QuicStream::SaveStreamData(QuicIOVector iov,
+                                size_t iov_offset,
+                                QuicStreamOffset offset,
+                                QuicByteCount data_length) {
+  DCHECK_LT(0u, data_length);
+  send_buffer_.SaveStreamData(iov, iov_offset, offset, data_length);
+}
+
+bool QuicStream::WriteStreamData(QuicStreamOffset offset,
+                                 QuicByteCount data_length,
+                                 QuicDataWriter* writer) {
+  DCHECK_LT(0u, data_length);
+  return send_buffer_.WriteStreamData(offset, data_length, writer);
 }
 
 }  // namespace net

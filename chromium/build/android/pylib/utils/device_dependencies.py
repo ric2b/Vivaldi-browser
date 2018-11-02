@@ -16,9 +16,6 @@ _BLACKLIST = [
   re.compile(r'.*\.py'),  # Some test_support targets include python deps.
   re.compile(r'.*\.stamp'),  # Stamp files should never be included.
 
-  # Some test_support targets include python deps.
-  re.compile(r'.*\.mojom\.js'),
-
   # Chrome external extensions config file.
   re.compile(r'.*external_extensions\.json'),
 

@@ -9,7 +9,7 @@
       }
 
       iron-icon.policy {
-        -webkit-margin-end: 12px;
+        -webkit-margin-end: var(--cr-controlled-by-spacing);
       }
 
       paper-input-container {
@@ -22,16 +22,12 @@
         margin-top: -9px;
       }
 
-      .button-container {
-        align-items: center;
-        display: flex;
+      .settings-box.indented {
+        -webkit-margin-start: var(--settings-box-row-padding);
       }
 
-      .button-container paper-button {
-        /* Align text edge with trailing margin (12px button padding) */
-        -webkit-margin-end: -12px;
-        /* 8px spacing between highlight edges. */
-        -webkit-margin-start: calc(12px + 8px);
+      .settings-box.stretch {
+        align-items: stretch;
       }
 
       .title {

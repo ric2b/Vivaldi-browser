@@ -28,13 +28,14 @@
 #include "core/CoreExport.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/AnimationWorkletProxyClient.h"
+#include "core/dom/SandboxFlags.h"
+#include "core/html/forms/PopupMenu.h"
 #include "core/inspector/ConsoleTypes.h"
 #include "core/loader/FrameLoader.h"
 #include "core/loader/NavigationPolicy.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/Cursor.h"
 #include "platform/PlatformChromeClient.h"
-#include "platform/PopupMenu.h"
 #include "platform/graphics/TouchAction.h"
 #include "platform/heap/Handle.h"
 #include "platform/scroll/ScrollTypes.h"
@@ -51,10 +52,8 @@
 
 namespace blink {
 
-class AXObject;
 class ColorChooser;
 class ColorChooserClient;
-class CompositorWorkerProxyClient;
 class CompositorAnimationTimeline;
 class DateTimeChooser;
 class DateTimeChooserClient;
@@ -83,6 +82,7 @@ class WebLayer;
 class WebLayerTreeView;
 class WebLocalFrameBase;
 class WebRemoteFrameBase;
+class WebViewBase;
 
 struct CompositedSelection;
 struct DateTimeChooserParameters;
@@ -91,7 +91,7 @@ struct ViewportDescription;
 struct WebCursorInfo;
 struct WebPoint;
 struct WebScreenInfo;
-struct WindowFeatures;
+struct WebWindowFeatures;
 
 class CORE_EXPORT ChromeClient : public PlatformChromeClient {
  public:
@@ -131,11 +131,10 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   // request could be fulfilled. The ChromeClient should not load the request.
   virtual Page* CreateWindow(LocalFrame*,
                              const FrameLoadRequest&,
-                             const WindowFeatures&,
-                             NavigationPolicy) = 0;
-  virtual void Show(NavigationPolicy = kNavigationPolicyIgnore) = 0;
-
-  void SetWindowFeatures(const WindowFeatures&);
+                             const WebWindowFeatures&,
+                             NavigationPolicy,
+                             SandboxFlags) = 0;
+  virtual void Show(NavigationPolicy) = 0;
 
   // All the parameters should be in viewport space. That is, if an event
   // scrolls by 10 px, but due to a 2X page scale we apply a 5px scroll to the
@@ -145,20 +144,6 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                              const FloatSize& accumulated_overscroll,
                              const FloatPoint& position_in_viewport,
                              const FloatSize& velocity_in_viewport) = 0;
-
-  virtual void SetToolbarsVisible(bool) = 0;
-  virtual bool ToolbarsVisible() = 0;
-
-  virtual void SetStatusbarVisible(bool) = 0;
-  virtual bool StatusbarVisible() = 0;
-
-  virtual void SetScrollbarsVisible(bool) = 0;
-  virtual bool ScrollbarsVisible() = 0;
-
-  virtual void SetMenubarVisible(bool) = 0;
-  virtual bool MenubarVisible() = 0;
-
-  virtual void SetResizable(bool) = 0;
 
   virtual bool ShouldReportDetailedMessageForSource(LocalFrame&,
                                                     const String& source) = 0;
@@ -183,10 +168,9 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                             const String& message,
                             const String& default_value,
                             String& result);
-  virtual void SetStatusbarText(const String&) = 0;
   virtual bool TabsToLinks() = 0;
 
-  virtual void* WebView() const = 0;
+  virtual WebViewBase* GetWebView() const = 0;
 
   // Methods used by PlatformChromeClient.
   virtual WebScreenInfo GetScreenInfo() const = 0;
@@ -194,6 +178,11 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   // End methods used by PlatformChromeClient.
 
   virtual void SetCursorOverridden(bool) = 0;
+
+  virtual void AutoscrollStart(WebFloatPoint position, LocalFrame*) {}
+  virtual void AutoscrollFling(WebFloatSize velocity, LocalFrame*) {}
+  virtual void AutoscrollEnd(LocalFrame*) {}
+
   virtual Cursor LastSetCursorForTesting() const = 0;
   Node* LastSetTooltipNodeForTesting() const {
     return last_mouse_over_node_.Get();
@@ -215,8 +204,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
     return scale;
   }
   virtual void MainFrameScrollOffsetChanged() const {}
-  virtual void ResizeAfterLayout(LocalFrame*) const {}
-  virtual void LayoutUpdated(LocalFrame*) const {}
+  virtual void ResizeAfterLayout() const {}
+  virtual void LayoutUpdated() const {}
 
   void MouseDidMoveOverElement(LocalFrame&, const HitTestResult&);
   virtual void SetToolTip(LocalFrame&, const String&, TextDirection) = 0;
@@ -224,26 +213,24 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   bool Print(LocalFrame*);
 
-  virtual void AnnotatedRegionsChanged() = 0;
-
   virtual ColorChooser* OpenColorChooser(LocalFrame*,
                                          ColorChooserClient*,
                                          const Color&) = 0;
 
   // This function is used for:
-  //  - Mandatory date/time choosers if !ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //  - Mandatory date/time choosers if InputMultipleFieldsUI flag is not set
   //  - Date/time choosers for types for which
-  //    LayoutTheme::supportsCalendarPicker returns true, if
-  //    ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //    LayoutTheme::SupportsCalendarPicker returns true, if
+  //    InputMultipleFieldsUI flag is set
   //  - <datalist> UI for date/time input types regardless of
-  //    ENABLE(INPUT_MULTIPLE_FIELDS_UI)
+  //    InputMultipleFieldsUI flag
   virtual DateTimeChooser* OpenDateTimeChooser(
       DateTimeChooserClient*,
       const DateTimeChooserParameters&) = 0;
 
   virtual void OpenTextDataListChooser(HTMLInputElement&) = 0;
 
-  virtual void OpenFileChooser(LocalFrame*, PassRefPtr<FileChooser>) = 0;
+  virtual void OpenFileChooser(LocalFrame*, RefPtr<FileChooser>) = 0;
 
   // Asychronous request to enumerate all files in a directory chosen by the
   // user.
@@ -251,13 +238,13 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   // Pass nullptr as the GraphicsLayer to detach the root layer.
   // This sets the graphics layer for the LocalFrame's WebWidget, if it has
-  // one. Otherwise it sets it for the WebViewImpl.
+  // one. Otherwise it sets it for the WebViewBase.
   virtual void AttachRootGraphicsLayer(GraphicsLayer*,
                                        LocalFrame* local_root) = 0;
 
   // Pass nullptr as the WebLayer to detach the root layer.
   // This sets the WebLayer for the LocalFrame's WebWidget, if it has
-  // one. Otherwise it sets it for the WebViewImpl.
+  // one. Otherwise it sets it for the WebViewBase.
   virtual void AttachRootLayer(WebLayer*, LocalFrame* local_root) = 0;
 
   virtual void AttachCompositorAnimationTimeline(CompositorAnimationTimeline*,
@@ -267,7 +254,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual void EnterFullscreen(LocalFrame&) {}
   virtual void ExitFullscreen(LocalFrame&) {}
-  virtual void FullscreenElementChanged(Element*, Element*) {}
+  virtual void FullscreenElementChanged(Element* old_element,
+                                        Element* new_element) {}
 
   virtual void ClearCompositedSelection(LocalFrame*) {}
   virtual void UpdateCompositedSelection(LocalFrame*,
@@ -281,6 +269,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
       WebEventListenerClass) const = 0;
   virtual void UpdateEventRectsForSubframeIfNecessary(LocalFrame*) = 0;
   virtual void SetHasScrollEventHandlers(LocalFrame*, bool) = 0;
+  virtual void SetNeedsLowLatencyInput(LocalFrame*, bool) = 0;
+  virtual const WebInputEvent* GetCurrentInputEvent() const { return nullptr; }
 
   virtual void SetTouchAction(LocalFrame*, TouchAction) = 0;
 
@@ -291,8 +281,8 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void ClosePagePopup(PagePopup*) = 0;
   virtual DOMWindow* PagePopupWindowForTesting() const = 0;
 
-  virtual void PostAccessibilityNotification(AXObject*,
-                                             AXObjectCache::AXNotification) {}
+  virtual void SetBrowserControlsState(float height, bool shrinks_layout){};
+
   virtual String AcceptLanguages() = 0;
 
   enum DialogType {
@@ -342,11 +332,6 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   virtual void UnregisterPopupOpeningObserver(PopupOpeningObserver*) = 0;
   virtual void NotifyPopupOpeningObservers() const = 0;
 
-  virtual CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient(
-      LocalFrame*) = 0;
-  virtual AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient(
-      LocalFrame*) = 0;
-
   virtual FloatSize ElasticOverscroll() const { return FloatSize(); }
 
   // Called when observed XHR, fetch, and other fetch request with non-GET
@@ -361,7 +346,11 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
   // any, and 0.0 otherwise.
   virtual double LastFrameTimeMonotonic() const { return 0.0; }
 
-  virtual void InstallSupplements(LocalFrame&) {}
+  using SupplementInstallCallback = void (*)(LocalFrame&);
+  // Allows for the registration of a callback that is used to install
+  // supplements on a specified LocalFrame.
+  static void RegisterSupplementInstallCallback(SupplementInstallCallback);
+  virtual void InstallSupplements(LocalFrame&);
 
   virtual WebLayerTreeView* GetWebLayerTreeView(LocalFrame*) { return nullptr; }
 
@@ -371,6 +360,13 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
 
   virtual WebRemoteFrameBase* GetWebRemoteFrameBase(RemoteFrame&) {
     return nullptr;
+  }
+
+  virtual void RequestDecode(
+      LocalFrame*,
+      const PaintImage& image,
+      std::unique_ptr<WTF::Function<void(bool)>> callback) {
+    (*callback)(false);
   }
 
   DECLARE_TRACE();
@@ -389,6 +385,9 @@ class CORE_EXPORT ChromeClient : public PlatformChromeClient {
                                             const String& default_value,
                                             String& result) = 0;
   virtual void PrintDelegate(LocalFrame*) = 0;
+
+ protected:
+  static SupplementInstallCallback supplement_install_callback_;
 
  private:
   bool CanOpenModalIfDuringPageDismissal(Frame& main_frame,

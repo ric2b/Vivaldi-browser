@@ -38,6 +38,7 @@
 #include "platform/HTTPNames.h"
 #include "platform/json/JSONParser.h"
 #include "platform/loader/fetch/ResourceResponse.h"
+#include "platform/network/HeaderFieldTokenizer.h"
 #include "platform/weborigin/Suborigin.h"
 #include "platform/wtf/DateMath.h"
 #include "platform/wtf/MathExtras.h"
@@ -48,8 +49,6 @@
 #include "platform/wtf/text/StringUTF8Adaptor.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/WebString.h"
-
-using namespace WTF;
 
 namespace blink {
 
@@ -74,7 +73,7 @@ bool IsWhitespace(UChar chr) {
 // if |matcher| is nullptr, isWhitespace() is used.
 inline bool SkipWhiteSpace(const String& str,
                            unsigned& pos,
-                           CharacterMatchFunctionPtr matcher = nullptr) {
+                           WTF::CharacterMatchFunctionPtr matcher = nullptr) {
   unsigned len = str.length();
 
   if (matcher) {
@@ -221,6 +220,27 @@ const UChar* ParseSuboriginPolicyOption(const UChar* begin,
   return position + 1;
 }
 
+// Parse a number with ignoring trailing [0-9.].
+// Returns NaN if the source contains invalid characters.
+double ParseRefreshTime(const String& source) {
+  int full_stop_count = 0;
+  unsigned number_end = source.length();
+  for (unsigned i = 0; i < source.length(); ++i) {
+    UChar ch = source[i];
+    if (ch == kFullstopCharacter) {
+      // TODO(tkent): According to the HTML specification, we should support
+      // only integers. However we support fractional numbers.
+      if (++full_stop_count == 2)
+        number_end = i;
+    } else if (!IsASCIIDigit(ch)) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+  }
+  bool ok;
+  double time = source.Left(number_end).ToDouble(&ok);
+  return ok ? time : std::numeric_limits<double>::quiet_NaN();
+}
+
 }  // namespace
 
 bool IsValidHTTPHeaderValue(const String& name) {
@@ -229,32 +249,6 @@ bool IsValidHTTPHeaderValue(const String& name) {
 
   return name.ContainsOnlyLatin1() && !name.Contains('\r') &&
          !name.Contains('\n') && !name.Contains('\0');
-}
-
-// See RFC 7230, Section 3.2.
-// Checks whether |value| matches field-content in RFC 7230.
-// link: http://tools.ietf.org/html/rfc7230#section-3.2
-bool IsValidHTTPFieldContentRFC7230(const String& value) {
-  if (value.IsEmpty())
-    return false;
-
-  UChar first_character = value[0];
-  if (first_character == ' ' || first_character == '\t')
-    return false;
-
-  UChar last_character = value[value.length() - 1];
-  if (last_character == ' ' || last_character == '\t')
-    return false;
-
-  for (unsigned i = 0; i < value.length(); ++i) {
-    UChar c = value[i];
-    // TODO(mkwst): Extract this character class to a central location,
-    // https://crbug.com/527324.
-    if (c == 0x7F || c > 0xFF || (c < 0x20 && c != '\t'))
-      return false;
-  }
-
-  return true;
 }
 
 // See RFC 7230, Section 3.2.6.
@@ -275,8 +269,9 @@ bool IsContentDispositionAttachment(const String& content_disposition) {
   return net::HttpContentDisposition(string, std::string()).is_attachment();
 }
 
+// https://html.spec.whatwg.org/multipage/semantics.html#attr-meta-http-equiv-refresh
 bool ParseHTTPRefresh(const String& refresh,
-                      CharacterMatchFunctionPtr matcher,
+                      WTF::CharacterMatchFunctionPtr matcher,
                       double& delay,
                       String& url) {
   unsigned len = refresh.length();
@@ -292,13 +287,11 @@ bool ParseHTTPRefresh(const String& refresh,
 
   if (pos == len) {  // no URL
     url = String();
-    bool ok;
-    delay = refresh.StripWhiteSpace().ToDouble(&ok);
-    return ok;
+    delay = ParseRefreshTime(refresh.StripWhiteSpace());
+    return std::isfinite(delay);
   } else {
-    bool ok;
-    delay = refresh.Left(pos).StripWhiteSpace().ToDouble(&ok);
-    if (!ok)
+    delay = ParseRefreshTime(refresh.Left(pos).StripWhiteSpace());
+    if (!std::isfinite(delay))
       return false;
 
     SkipWhiteSpace(refresh, pos, matcher);
@@ -387,64 +380,6 @@ AtomicString ExtractMIMETypeFromMediaType(const AtomicString& media_type) {
 
   return AtomicString(
       media_type.GetString().Substring(type_start, type_end - type_start));
-}
-
-String ExtractCharsetFromMediaType(const String& media_type) {
-  unsigned pos, len;
-  FindCharsetInMediaType(media_type, pos, len);
-  return media_type.Substring(pos, len);
-}
-
-void FindCharsetInMediaType(const String& media_type,
-                            unsigned& charset_pos,
-                            unsigned& charset_len,
-                            unsigned start) {
-  charset_pos = start;
-  charset_len = 0;
-
-  size_t pos = start;
-  unsigned length = media_type.length();
-
-  while (pos < length) {
-    pos = media_type.FindIgnoringASCIICase("charset", pos);
-    if (pos == kNotFound || !pos) {
-      charset_len = 0;
-      return;
-    }
-
-    // is what we found a beginning of a word?
-    if (media_type[pos - 1] > ' ' && media_type[pos - 1] != ';') {
-      pos += 7;
-      continue;
-    }
-
-    pos += 7;
-
-    // skip whitespace
-    while (pos != length && media_type[pos] <= ' ')
-      ++pos;
-
-    if (media_type[pos++] !=
-        '=')  // this "charset" substring wasn't a parameter
-              // name, but there may be others
-      continue;
-
-    while (pos != length && (media_type[pos] <= ' ' || media_type[pos] == '"' ||
-                             media_type[pos] == '\''))
-      ++pos;
-
-    // we don't handle spaces within quoted parameter values, because charset
-    // names cannot have any
-    unsigned endpos = pos;
-    while (pos != length && media_type[endpos] > ' ' &&
-           media_type[endpos] != '"' && media_type[endpos] != '\'' &&
-           media_type[endpos] != ';')
-      ++endpos;
-
-    charset_pos = pos;
-    charset_len = endpos - pos;
-    return;
-  }
 }
 
 ReflectedXSSDisposition ParseXSSProtectionHeader(const String& header,
@@ -890,41 +825,6 @@ bool ParseContentRangeHeaderFor206(const String& content_range,
       last_byte_position, instance_length);
 }
 
-template <typename CharType>
-inline bool IsNotServerTimingHeaderDelimiter(CharType c) {
-  return c != '=' && c != ';' && c != ',';
-}
-
-const LChar* ParseServerTimingToken(const LChar* begin,
-                                    const LChar* end,
-                                    String& result) {
-  const LChar* position = begin;
-  skipWhile<LChar, IsNotServerTimingHeaderDelimiter>(position, end);
-  result = String(begin, position - begin).StripWhiteSpace();
-  return position;
-}
-
-String CheckDoubleQuotedString(const String& value) {
-  if (value.length() < 2 || value[0] != '"' ||
-      value[value.length() - 1] != '"') {
-    return value;
-  }
-
-  StringBuilder out;
-  unsigned pos = 1;                   // Begin after the opening DQUOTE.
-  unsigned len = value.length() - 1;  // End before the closing DQUOTE.
-
-  // Skip past backslashes, but include everything else.
-  while (pos < len) {
-    if (value[pos] == '\\')
-      pos++;
-    if (pos < len)
-      out.Append(value[pos++]);
-  }
-
-  return out.ToString();
-}
-
 std::unique_ptr<ServerTimingHeaderVector> ParseServerTimingHeader(
     const String& headerValue) {
   std::unique_ptr<ServerTimingHeaderVector> headers =
@@ -933,21 +833,31 @@ std::unique_ptr<ServerTimingHeaderVector> ParseServerTimingHeader(
   if (!headerValue.IsNull()) {
     DCHECK(headerValue.Is8Bit());
 
-    const LChar* position = headerValue.Characters8();
-    const LChar* end = position + headerValue.length();
-    while (position < end) {
-      String metric, value, description = "";
-      position = ParseServerTimingToken(position, end, metric);
-      if (position != end && *position == '=') {
-        position = ParseServerTimingToken(position + 1, end, value);
+    HeaderFieldTokenizer tokenizer(headerValue);
+    while (!tokenizer.IsConsumed()) {
+      StringView metric;
+      if (!tokenizer.ConsumeToken(Mode::kNormal, metric)) {
+        break;
       }
-      if (position != end && *position == ';') {
-        position = ParseServerTimingToken(position + 1, end, description);
+
+      double value = 0.0;
+      String description = "";
+      if (tokenizer.Consume('=')) {
+        StringView valueOutput;
+        if (tokenizer.ConsumeToken(Mode::kNormal, valueOutput)) {
+          value = valueOutput.ToString().ToDouble();
+        }
       }
-      position++;
+      if (tokenizer.Consume(';')) {
+        tokenizer.ConsumeTokenOrQuotedString(Mode::kNormal, description);
+      }
 
       headers->push_back(WTF::MakeUnique<ServerTimingHeader>(
-          metric, value.ToDouble(), CheckDoubleQuotedString(description)));
+          metric.ToString(), value, description));
+
+      if (!tokenizer.Consume(',')) {
+        break;
+      }
     }
   }
   return headers;

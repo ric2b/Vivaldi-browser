@@ -4,7 +4,6 @@
 
 #include "chrome/browser/extensions/api/feedback_private/feedback_private_api.h"
 
-#include <memory>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,6 +29,7 @@
 #include "components/feedback/tracing_manager.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/strings/grit/components_strings.h"
+#include "content/public/common/browser_side_navigation_policy.h"
 #include "extensions/browser/event_router.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -37,6 +37,7 @@
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/extensions/api/feedback_private/log_source_access_manager.h"
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
@@ -72,9 +73,10 @@ namespace extensions {
 
 namespace feedback_private = api::feedback_private;
 
-using feedback_private::SystemInformation;
 using feedback_private::FeedbackInfo;
 using feedback_private::FeedbackFlow;
+using feedback_private::LogSource;
+using feedback_private::SystemInformation;
 
 using SystemInformationList =
     std::vector<api::feedback_private::SystemInformation>;
@@ -89,21 +91,31 @@ FeedbackPrivateAPI::GetFactoryInstance() {
 }
 
 FeedbackPrivateAPI::FeedbackPrivateAPI(content::BrowserContext* context)
-    : browser_context_(context), service_(new FeedbackService()) {
+    : browser_context_(context),
+#if !defined(OS_CHROMEOS)
+      service_(new FeedbackService()) {
+#else
+      service_(new FeedbackService()),
+      log_source_access_manager_(new LogSourceAccessManager(context)){
+#endif  // defined(OS_CHROMEOS)
 }
 
-FeedbackPrivateAPI::~FeedbackPrivateAPI() {
-  delete service_;
-  service_ = NULL;
-}
+FeedbackPrivateAPI::~FeedbackPrivateAPI() {}
 
 FeedbackService* FeedbackPrivateAPI::GetService() const {
-  return service_;
+  return service_.get();
 }
+
+#if defined(OS_CHROMEOS)
+LogSourceAccessManager* FeedbackPrivateAPI::GetLogSourceAccessManager() const {
+  return log_source_access_manager_.get();
+}
+#endif
 
 void FeedbackPrivateAPI::RequestFeedback(
     const std::string& description_template,
     const std::string& category_tag,
+    const std::string& extra_diagnostics,
     const GURL& page_url) {
 #if defined(OS_WIN)
   // Show prompt for Software Removal Tool if the Reporter component has found
@@ -111,18 +123,20 @@ void FeedbackPrivateAPI::RequestFeedback(
   if (base::FeatureList::IsEnabled(kSrtPromptOnFeedbackForm) &&
       safe_browsing::ReporterFoundUws() &&
       !safe_browsing::UserHasRunCleaner()) {
-    RequestFeedbackForFlow(description_template, category_tag, page_url,
+    RequestFeedbackForFlow(description_template, category_tag,
+                           extra_diagnostics, page_url,
                            FeedbackFlow::FEEDBACK_FLOW_SHOWSRTPROMPT);
     return;
   }
 #endif
-  RequestFeedbackForFlow(description_template, category_tag, page_url,
-                         FeedbackFlow::FEEDBACK_FLOW_REGULAR);
+  RequestFeedbackForFlow(description_template, category_tag, extra_diagnostics,
+                         page_url, FeedbackFlow::FEEDBACK_FLOW_REGULAR);
 }
 
 void FeedbackPrivateAPI::RequestFeedbackForFlow(
     const std::string& description_template,
     const std::string& category_tag,
+    const std::string& extra_diagnostics,
     const GURL& page_url,
     api::feedback_private::FeedbackFlow flow) {
   if (browser_context_ && EventRouter::Get(browser_context_)) {
@@ -130,10 +144,19 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
     info.description = description_template;
     info.category_tag = base::MakeUnique<std::string>(category_tag);
     info.page_url = base::MakeUnique<std::string>(page_url.spec());
-    info.system_information.reset(new SystemInformationList);
+    info.system_information = base::MakeUnique<SystemInformationList>();
+
+    // Any extra diagnostics information should be added to the sys info.
+    if (!extra_diagnostics.empty()) {
+      SystemInformation extra_info;
+      extra_info.key = "EXTRA_DIAGNOSTICS";
+      extra_info.value = extra_diagnostics;
+      info.system_information->emplace_back(std::move(extra_info));
+    }
+
     // The manager is only available if tracing is enabled.
     if (TracingManager* manager = TracingManager::Get()) {
-      info.trace_id.reset(new int(manager->RequestTrace()));
+      info.trace_id = base::MakeUnique<int>(manager->RequestTrace());
     }
     info.flow = flow;
 #if defined(OS_MACOSX)
@@ -152,9 +175,22 @@ void FeedbackPrivateAPI::RequestFeedbackForFlow(
         feedback_private::OnFeedbackRequested::kEventName, std::move(args),
         browser_context_);
 
-    EventRouter::Get(browser_context_)
-        ->DispatchEventToExtension(extension_misc::kFeedbackExtensionId,
-                                   std::move(event));
+    if (content::IsBrowserSideNavigationEnabled()) {
+      // LoginFeedbackTest.Basic times out when this flag is enabled if we are
+      // using DispatchEventWithLazyListener(). It is a temporary solution to
+      // fix the test failure. Please track crbug.com/765289 for further
+      // investigation.
+      EventRouter::Get(browser_context_)
+          ->DispatchEventToExtension(extension_misc::kFeedbackExtensionId,
+                                     std::move(event));
+    } else {
+      // TODO(weidongg/754329): Using DispatchEventWithLazyListener() is a
+      // temporary fix to the bug. Investigate a better solution that applies to
+      // all scenarios.
+      EventRouter::Get(browser_context_)
+          ->DispatchEventWithLazyListener(extension_misc::kFeedbackExtensionId,
+                                          std::move(event));
+    }
   }
 }
 
@@ -264,6 +300,38 @@ void FeedbackPrivateGetSystemInformationFunction::OnCompleted(
   Respond(ArgumentList(
       feedback_private::GetSystemInformation::Results::Create(sys_info_list)));
 }
+
+ExtensionFunction::ResponseAction FeedbackPrivateReadLogSourceFunction::Run() {
+#if defined(OS_CHROMEOS)
+  using Params = feedback_private::ReadLogSource::Params;
+  std::unique_ptr<Params> api_params = Params::Create(*args_);
+
+  LogSourceAccessManager* log_source_manager =
+      FeedbackPrivateAPI::GetFactoryInstance()
+          ->Get(browser_context())
+          ->GetLogSourceAccessManager();
+
+  if (!log_source_manager->FetchFromSource(
+          api_params->params, extension_id(),
+          base::Bind(&FeedbackPrivateReadLogSourceFunction::OnCompleted,
+                     this))) {
+    return RespondNow(Error("Unable to initiate fetch from log source."));
+  }
+
+  return RespondLater();
+#else
+  NOTREACHED() << "API function is not supported on this platform.";
+  return RespondNow(Error("API function is not supported on this platform."));
+#endif  // defined(OS_CHROMEOS)
+}
+
+#if defined(OS_CHROMEOS)
+void FeedbackPrivateReadLogSourceFunction::OnCompleted(
+    const feedback_private::ReadLogSourceResult& result) {
+  Respond(
+      ArgumentList(feedback_private::ReadLogSource::Results::Create(result)));
+}
+#endif  // defined(OS_CHROMEOS)
 
 bool FeedbackPrivateSendFeedbackFunction::RunAsync() {
   std::unique_ptr<feedback_private::SendFeedback::Params> params(

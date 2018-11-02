@@ -51,8 +51,9 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   friend class GraphicsContext;
 
  public:
-  static PassRefPtr<BitmapImage> Create(ImageObserver* observer = 0) {
-    return AdoptRef(new BitmapImage(observer));
+  static PassRefPtr<BitmapImage> Create(ImageObserver* observer = 0,
+                                        bool is_multipart = false) {
+    return AdoptRef(new BitmapImage(observer, is_multipart));
   }
 
   ~BitmapImage() override;
@@ -66,7 +67,7 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   bool GetHotSpot(IntPoint&) const override;
   String FilenameExtension() const override;
 
-  SizeAvailability SetData(PassRefPtr<SharedBuffer> data,
+  SizeAvailability SetData(RefPtr<SharedBuffer> data,
                            bool all_data_received) override;
   SizeAvailability DataChanged(bool all_data_received) override;
 
@@ -88,6 +89,7 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   bool CurrentFrameKnownToBeOpaque(MetadataMode = kUseCurrentMetadata) override;
   bool CurrentFrameIsComplete() override;
   bool CurrentFrameIsLazyDecoded() override;
+  size_t FrameCount() override;
 
   ImageOrientation CurrentFrameOrientation();
 
@@ -108,7 +110,7 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
   };
 
   BitmapImage(const SkBitmap&, ImageObserver* = 0);
-  BitmapImage(ImageObserver* = 0);
+  BitmapImage(ImageObserver* = 0, bool is_multi_part = false);
 
   void Draw(PaintCanvas*,
             const PaintFlags&,
@@ -118,11 +120,10 @@ class PLATFORM_EXPORT BitmapImage final : public Image {
             ImageClampingMode) override;
 
   size_t CurrentFrame() const { return current_frame_; }
-  size_t FrameCount();
 
   sk_sp<SkImage> FrameAtIndex(size_t);
 
-  bool FrameIsCompleteAtIndex(size_t) const;
+  bool FrameIsReceivedAtIndex(size_t) const;
   float FrameDurationAtIndex(size_t) const;
   bool FrameHasAlphaAtIndex(size_t);
   ImageOrientation FrameOrientationAtIndex(size_t);

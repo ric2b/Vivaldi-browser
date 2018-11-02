@@ -5,8 +5,11 @@
 #include "ash/system/network/tray_network.h"
 
 #include "ash/login_status.h"
+#include "ash/public/cpp/config.h"
+#include "ash/shell.h"
 #include "ash/system/network/network_list.h"
 #include "ash/system/tray/system_tray.h"
+#include "ash/system/tray/system_tray_test_api.h"
 #include "ash/test/ash_test_base.h"
 #include "base/macros.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -19,7 +22,7 @@ using message_center::MessageCenter;
 namespace ash {
 namespace {
 
-class TrayNetworkTest : public test::AshTestBase {
+class TrayNetworkTest : public AshTestBase {
  public:
   TrayNetworkTest() = default;
   ~TrayNetworkTest() override = default;
@@ -29,17 +32,23 @@ class TrayNetworkTest : public test::AshTestBase {
     chromeos::DBusThreadManager::Initialize();
     // Initializing NetworkHandler before ash is more like production.
     chromeos::NetworkHandler::Initialize();
-    test::AshTestBase::SetUp();
-    chromeos::NetworkHandler::Get()->InitializePrefServices(&profile_prefs_,
-                                                            &local_state_);
+    AshTestBase::SetUp();
+    // Mash doesn't do this yet, so don't do it in tests either.
+    // http://crbug.com/718072
+    if (Shell::GetAshConfig() != Config::MASH) {
+      chromeos::NetworkHandler::Get()->InitializePrefServices(&profile_prefs_,
+                                                              &local_state_);
+    }
     // Networking stubs may have asynchronous initialization.
     RunAllPendingInMessageLoop();
   }
 
   void TearDown() override {
     // This roughly matches production shutdown order.
-    chromeos::NetworkHandler::Get()->ShutdownPrefServices();
-    test::AshTestBase::TearDown();
+    if (Shell::GetAshConfig() != Config::MASH) {
+      chromeos::NetworkHandler::Get()->ShutdownPrefServices();
+    }
+    AshTestBase::TearDown();
     chromeos::NetworkHandler::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
   }
@@ -59,7 +68,7 @@ TEST_F(TrayNetworkTest, Basics) {
   RunAllPendingInMessageLoop();
 
   // Show network details.
-  TrayNetwork* tray_network = system_tray->GetTrayNetworkForTesting();
+  TrayNetwork* tray_network = SystemTrayTestApi(system_tray).tray_network();
   const int close_delay_in_seconds = 0;
   bool activate = true;
   system_tray->ShowDetailedView(tray_network, close_delay_in_seconds, activate,
@@ -74,7 +83,7 @@ TEST_F(TrayNetworkTest, Basics) {
 // Verifies that toggling Wi-Fi (usually via keyboard) shows a notification.
 TEST_F(TrayNetworkTest, ToggleWifi) {
   TrayNetwork* tray_network =
-      GetPrimarySystemTray()->GetTrayNetworkForTesting();
+      SystemTrayTestApi(GetPrimarySystemTray()).tray_network();
 
   // No notifications at startup.
   ASSERT_EQ(0u, MessageCenter::Get()->NotificationCount());

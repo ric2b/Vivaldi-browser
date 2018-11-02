@@ -290,7 +290,7 @@ bool HeapCompact::ShouldCompact(ThreadState* state,
 #if !ENABLE_HEAP_COMPACTION
   return false;
 #else
-  if (!RuntimeEnabledFeatures::heapCompactionEnabled())
+  if (!RuntimeEnabledFeatures::HeapCompactionEnabled())
     return false;
 
   LOG_HEAP_COMPACTION("shouldCompact(): gc=%s count=%zu free=%zu\n",
@@ -336,7 +336,7 @@ bool HeapCompact::ShouldCompact(ThreadState* state,
 }
 
 void HeapCompact::Initialize(ThreadState* state) {
-  DCHECK(RuntimeEnabledFeatures::heapCompactionEnabled());
+  DCHECK(RuntimeEnabledFeatures::HeapCompactionEnabled());
   LOG_HEAP_COMPACTION("Compacting: free=%zu\n", free_list_size_);
   do_compact_ = true;
   freed_pages_ = 0;
@@ -384,7 +384,7 @@ void HeapCompact::UpdateHeapResidency(ThreadState* thread_state) {
     if (!arena_size)
       continue;
     // Mark the arena as compactable.
-    compactable_arenas_ |= (0x1u << (BlinkGC::kVector1ArenaIndex + i));
+    compactable_arenas_ |= 0x1u << i;
   }
   LOG_HEAP_FREELIST("}\nTotal = %zu, Free = %zu\n", total_arena_size,
                     total_free_list_size);
@@ -431,15 +431,13 @@ void HeapCompact::FinishThreadCompaction() {
       WTF::CurrentTimeMS() - start_compaction_time_ms_;
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, time_for_heap_compaction_histogram,
-      new CustomCountHistogram("BlinkGC.TimeForHeapCompaction", 1, 10 * 1000,
-                               50));
+      ("BlinkGC.TimeForHeapCompaction", 1, 10 * 1000, 50));
   time_for_heap_compaction_histogram.Count(time_for_heap_compaction);
   start_compaction_time_ms_ = 0;
 
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, object_size_freed_by_heap_compaction,
-      new CustomCountHistogram("BlinkGC.ObjectSizeFreedByHeapCompaction", 1,
-                               4 * 1024 * 1024, 50));
+      ("BlinkGC.ObjectSizeFreedByHeapCompaction", 1, 4 * 1024 * 1024, 50));
   object_size_freed_by_heap_compaction.Count(freed_size_ / 1024);
 
 #if DEBUG_LOG_HEAP_COMPACTION_RUNNING_TIME

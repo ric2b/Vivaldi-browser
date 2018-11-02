@@ -18,17 +18,17 @@ goog.provide('cvox.ChromeVoxHTMLMediaWidget');
  * @param {Element} mediaElem The media widget element.
  * @param {cvox.TtsInterface} tts The TTS object from ChromeVox.
  */
-cvox.ChromeVoxHTMLMediaWidget = function(mediaElem, tts){
+cvox.ChromeVoxHTMLMediaWidget = function(mediaElem, tts) {
   var self = this;
   this.mediaElem_ = mediaElem;
   this.mediaTts_ = tts;
 
   this.keyListener_ = function(evt) {
     self.eventHandler_(evt);
-  }
+  };
   this.blurListener_ = function(evt) {
     self.shutdown();
-  }
+  };
 
   this.mediaElem_.addEventListener('keydown', this.keyListener_, false);
   this.mediaElem_.addEventListener('keyup', this.keyListener_, false);
@@ -71,20 +71,20 @@ cvox.ChromeVoxHTMLMediaWidget.prototype.eventHandler_ = function(evt) {
   if (evt.type == 'keydown') {
     // Space/Enter for play/pause toggle.
     if ((evt.keyCode == 13) || (evt.keyCode == 32)) {
-      if (this.mediaElem_.paused){
+      if (this.mediaElem_.paused) {
         this.mediaElem_.play();
       } else {
         this.mediaElem_.pause();
       }
-    } else if (evt.keyCode == 39) { // Right - FF
+    } else if (evt.keyCode == 39) {  // Right - FF
       this.jumpToTime_(
-          this.mediaElem_.currentTime + (this.mediaElem_.duration/10));
-    } else if (evt.keyCode == 37) { // Left - REW
+          this.mediaElem_.currentTime + (this.mediaElem_.duration / 10));
+    } else if (evt.keyCode == 37) {  // Left - REW
       this.jumpToTime_(
-          this.mediaElem_.currentTime - (this.mediaElem_.duration/10));
-    } else if (evt.keyCode == 38) { // Up - Vol. Up
+          this.mediaElem_.currentTime - (this.mediaElem_.duration / 10));
+    } else if (evt.keyCode == 38) {  // Up - Vol. Up
       this.setVolume_(this.mediaElem_.volume + .1);
-    } else if (evt.keyCode == 40) { // Down - Vol. Down
+    } else if (evt.keyCode == 40) {  // Down - Vol. Down
       this.setVolume_(this.mediaElem_.volume - .1);
     }
   }

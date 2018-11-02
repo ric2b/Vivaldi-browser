@@ -29,25 +29,7 @@
 #include "components/version_info/version_info.h"
 #include "content/public/browser/notification_service.h"
 
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 using content::BrowserThread;
-
-namespace {
-
-base::StackSamplingProfiler::SamplingParams GetJankTimeBombSamplingParams() {
-  base::StackSamplingProfiler::SamplingParams params;
-  params.initial_delay = base::TimeDelta::FromMilliseconds(0);
-  params.bursts = 1;
-  // 5 seconds at 10Hz.
-  params.samples_per_burst = 50;
-  params.sampling_interval = base::TimeDelta::FromMilliseconds(100);
-  return params;
-}
-
-}  // namespace
 
 // ThreadWatcher methods and members.
 ThreadWatcher::ThreadWatcher(const WatchingParams& params)
@@ -467,14 +449,6 @@ void ThreadWatcherList::ParseCommandLine(
   } else if (channel == version_info::Channel::BETA) {
     *unresponsive_threshold *= 2;
   }
-
-#if defined(OS_WIN)
-  // For Windows XP (old systems), double the unresponsive_threshold to give
-  // the OS a chance to schedule UI/IO threads a time slice to respond with a
-  // pong message (to get around limitations with the OS).
-  if (base::win::GetVersion() <= base::win::VERSION_XP)
-    *unresponsive_threshold *= 2;
-#endif
 
   uint32_t crash_seconds = *unresponsive_threshold * kUnresponsiveSeconds;
   std::string crash_on_hang_thread_names;
@@ -929,47 +903,6 @@ void StartupTimeBomb::DisarmStartupTimeBomb() {
     g_startup_timebomb_->Disarm();
 }
 
-// JankTimeBomb methods and members.
-//
-JankTimeBomb::JankTimeBomb(base::TimeDelta duration,
-                           metrics::CallStackProfileParams::Thread thread)
-    : thread_(thread), weak_ptr_factory_(this) {
-  if (IsEnabled()) {
-    WatchDogThread::PostDelayedTask(
-        FROM_HERE,
-        base::Bind(&JankTimeBomb::Alarm,
-                   weak_ptr_factory_.GetWeakPtr(),
-                   base::PlatformThread::CurrentId()),
-        duration);
-  }
-}
-
-JankTimeBomb::~JankTimeBomb() {
-}
-
-bool JankTimeBomb::IsEnabled() const {
-  version_info::Channel channel = chrome::GetChannel();
-  return channel == version_info::Channel::UNKNOWN ||
-      channel == version_info::Channel::CANARY ||
-      channel == version_info::Channel::DEV;
-}
-
-void JankTimeBomb::Alarm(base::PlatformThreadId thread_id) {
-  DCHECK(WatchDogThread::CurrentlyOnWatchDogThread());
-  sampling_profiler_.reset(new base::StackSamplingProfiler(
-      thread_id,
-      GetJankTimeBombSamplingParams(),
-      metrics::CallStackProfileMetricsProvider::GetProfilerCallback(
-          metrics::CallStackProfileParams(
-              metrics::CallStackProfileParams::BROWSER_PROCESS,
-              thread_,
-              metrics::CallStackProfileParams::JANKY_TASK,
-              metrics::CallStackProfileParams::PRESERVE_ORDER))));
-  // Use synchronous profiler. It will automatically stop collection when
-  // destroyed.
-  sampling_profiler_->Start();
-}
-
 // ShutdownWatcherHelper methods and members.
 //
 // ShutdownWatcherHelper is a wrapper class for detecting hangs during
@@ -1003,12 +936,6 @@ void ShutdownWatcherHelper::Arm(const base::TimeDelta& duration) {
   } else {
     actual_duration *= 2;
   }
-
-#if defined(OS_WIN)
-  // On Windows XP, give twice the time for shutdown.
-  if (base::win::GetVersion() <= base::win::VERSION_XP)
-    actual_duration *= 2;
-#endif
 
   shutdown_watchdog_ = new ShutdownWatchDogThread(actual_duration);
   shutdown_watchdog_->Arm();

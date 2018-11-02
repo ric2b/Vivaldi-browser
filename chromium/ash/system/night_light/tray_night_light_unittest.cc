@@ -11,7 +11,7 @@
 #include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
-#include "ash/test/test_shell_delegate.h"
+#include "ash/test_shell_delegate.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "components/prefs/testing_pref_service.h"
@@ -22,21 +22,21 @@ namespace {
 
 constexpr char kFakeUserEmail[] = "fake_user@nightlight";
 
-class TrayNightLightTest : public test::AshTestBase {
+class TrayNightLightTest : public AshTestBase {
  public:
   TrayNightLightTest() = default;
   ~TrayNightLightTest() override = default;
 
-  // ash::test::AshTestBase:
+  // AshTestBase:
   void SetUp() override {
     // Explicitly enable the NightLight feature for the tests.
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         ash::switches::kAshEnableNightLight);
 
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
     GetSessionControllerClient()->Reset();
     GetSessionControllerClient()->AddUserSession(kFakeUserEmail);
-    Shell::RegisterPrefs(pref_service_.registry());
+    Shell::RegisterProfilePrefs(pref_service_.registry());
 
     ash_test_helper()->test_shell_delegate()->set_active_user_pref_service(
         &pref_service_);
@@ -53,11 +53,6 @@ class TrayNightLightTest : public test::AshTestBase {
 // Tests that when NightLight is active, its tray icon in the System Tray is
 // visible.
 TEST_F(TrayNightLightTest, TestNightLightTrayVisibility) {
-  if (Shell::GetAshConfig() == Config::MASH) {
-    // PrefChangeRegistrar doesn't work on mash. crbug.com/721961.
-    return;
-  }
-
   SystemTray* tray = GetPrimarySystemTray();
   TrayNightLight* tray_night_light = tray->tray_night_light();
   NightLightController* controller = Shell::Get()->night_light_controller();

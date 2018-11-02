@@ -14,10 +14,10 @@ cr.define('bookmarks.util', function() {
    * @return {!Array<string>}
    */
   function getDisplayedList(state) {
-    if (!isShowingSearch(state))
-      return assert(state.nodes[state.selectedFolder].children);
+    if (isShowingSearch(state))
+      return assert(state.search.results);
 
-    return state.search.results;
+    return assert(state.nodes[state.selectedFolder].children);
   }
 
   /**
@@ -68,12 +68,16 @@ cr.define('bookmarks.util', function() {
   function createEmptyState() {
     return {
       nodes: {},
-      selectedFolder: '0',
+      selectedFolder: BOOKMARKS_BAR_ID,
       closedFolders: new Set(),
+      prefs: {
+        canEdit: true,
+        incognitoAvailability: IncognitoAvailability.ENABLED,
+      },
       search: {
         term: '',
         inProgress: false,
-        results: [],
+        results: null,
       },
       selection: {
         items: new Set(),
@@ -87,7 +91,34 @@ cr.define('bookmarks.util', function() {
    * @return {boolean}
    */
   function isShowingSearch(state) {
-    return !!state.search.term && !state.search.inProgress;
+    return state.search.results != null;
+  }
+
+  /**
+   * Returns true if the node with ID |itemId| is modifiable, allowing
+   * the node to be renamed, moved or deleted. Note that if a node is
+   * uneditable, it may still have editable children (for example, the top-level
+   * folders).
+   * @param {BookmarksPageState} state
+   * @param {string} itemId
+   * @return {boolean}
+   */
+  function canEditNode(state, itemId) {
+    return itemId != ROOT_NODE_ID &&
+        state.nodes[itemId].parentId != ROOT_NODE_ID &&
+        !state.nodes[itemId].unmodifiable && state.prefs.canEdit;
+  }
+
+  /**
+   * Returns true if it is possible to modify the children list of the node with
+   * ID |itemId|. This includes rearranging the children or adding new ones.
+   * @param {BookmarksPageState} state
+   * @param {string} itemId
+   * @return {boolean}
+   */
+  function canReorderChildren(state, itemId) {
+    return itemId != ROOT_NODE_ID && !state.nodes[itemId].unmodifiable &&
+        state.prefs.canEdit;
   }
 
   /**
@@ -163,6 +194,8 @@ cr.define('bookmarks.util', function() {
   }
 
   return {
+    canEditNode: canEditNode,
+    canReorderChildren: canReorderChildren,
     createEmptyState: createEmptyState,
     getDescendants: getDescendants,
     getDisplayedList: getDisplayedList,

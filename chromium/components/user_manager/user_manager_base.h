@@ -111,6 +111,7 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
       const User& user,
       const gfx::ImageSkia& profile_image) override;
   void ChangeUserChildStatus(User* user, bool is_child) override;
+  void ResetProfileEverInitialized(const AccountId& account_id) override;
   void Initialize() override;
 
   // This method updates "User was added to the device in this session nad is
@@ -131,6 +132,10 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   // Returns true if trusted device policies have successfully been retrieved
   // and ephemeral users are enabled.
   virtual bool AreEphemeralUsersEnabled() const = 0;
+
+  void AddUserRecordForTesting(User* user) {
+    return AddUserRecord(user);
+  }
 
  protected:
   // Adds |user| to users list, and adds it to front of LRU list. It is assumed

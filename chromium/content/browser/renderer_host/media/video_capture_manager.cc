@@ -355,6 +355,15 @@ void VideoCaptureManager::OnDeviceLaunchAborted() {
   ProcessDeviceStartRequestQueue();
 }
 
+void VideoCaptureManager::OnDeviceConnectionLost(
+    VideoCaptureController* controller) {
+  const std::string log_message = base::StringPrintf(
+      "Lost connection to device %d.", controller->serial_id());
+  DLOG(WARNING) << log_message;
+  controller->OnLog(log_message);
+  controller->OnError();
+}
+
 void VideoCaptureManager::ConnectClient(
     media::VideoCaptureSessionId session_id,
     const media::VideoCaptureParams& params,
@@ -587,9 +596,9 @@ void VideoCaptureManager::MaybePostDesktopCaptureWindowId(
   notification_window_ids_.erase(window_id_it);
 }
 
-void VideoCaptureManager::GetPhotoCapabilities(
+void VideoCaptureManager::GetPhotoState(
     int session_id,
-    media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) {
+    media::VideoCaptureDevice::GetPhotoStateCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   const VideoCaptureController* controller =
@@ -597,13 +606,13 @@ void VideoCaptureManager::GetPhotoCapabilities(
   if (!controller)
     return;
   if (controller->IsDeviceAlive()) {
-    controller->GetPhotoCapabilities(std::move(callback));
+    controller->GetPhotoState(std::move(callback));
     return;
   }
   // Queue up a request for later.
   photo_request_queue_.emplace_back(
       session_id,
-      base::Bind(&VideoCaptureController::GetPhotoCapabilities,
+      base::Bind(&VideoCaptureController::GetPhotoState,
                  base::Unretained(controller), base::Passed(&callback)));
 }
 

@@ -18,7 +18,6 @@
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/button/label_button_border.h"
 #include "ui/views/drag_utils.h"
-#include "ui/views/resources/grit/views_resources.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -60,7 +59,7 @@ void SetDragImage(const GURL& url,
     button.SetTextShadows(gfx::ShadowValues(
         10, gfx::ShadowValue(gfx::Vector2d(0, 0), 2.0f, bg_color)));
   } else {
-    button.set_background(views::Background::CreateSolidBackground(bg_color));
+    button.SetBackground(views::CreateSolidBackground(bg_color));
     button.SetBorder(button.CreateDefaultBorder());
   }
   button.SetMaxSize(gfx::Size(kLinkDragImageMaxWidth, 0));

@@ -15,7 +15,6 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "jni/CreditCardScannerBridge_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -38,11 +37,6 @@ std::unique_ptr<CreditCardScannerView> CreditCardScannerView::Create(
     content::WebContents* web_contents) {
   return base::WrapUnique(
       new CreditCardScannerViewAndroid(delegate, web_contents));
-}
-
-// static
-bool CreditCardScannerViewAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 CreditCardScannerViewAndroid::CreditCardScannerViewAndroid(

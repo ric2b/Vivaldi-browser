@@ -18,7 +18,6 @@
 #include "headless/public/headless_browser_context.h"
 #include "headless/public/headless_export.h"
 #include "headless/public/headless_web_contents.h"
-#include "net/base/host_port_pair.h"
 #include "net/base/ip_endpoint.h"
 #include "ui/gfx/geometry/size.h"
 
@@ -71,10 +70,6 @@ class HEADLESS_EXPORT HeadlessBrowser {
   virtual void SetDefaultBrowserContext(
       HeadlessBrowserContext* browser_context) = 0;
   virtual HeadlessBrowserContext* GetDefaultBrowserContext() = 0;
-
-  // Returns a task runner for submitting work to the browser file thread.
-  virtual scoped_refptr<base::SingleThreadTaskRunner> BrowserFileThread()
-      const = 0;
 
   // Returns a task runner for submitting work to the browser io thread.
   virtual scoped_refptr<base::SingleThreadTaskRunner> BrowserIOThread()
@@ -156,9 +151,8 @@ struct HEADLESS_EXPORT HeadlessBrowser::Options {
   std::string product_name_and_version;
   std::string user_agent;
 
-  // Address of the HTTP/HTTPS proxy server to use. The system proxy settings
-  // are used by default.
-  net::HostPortPair proxy_server;
+  // The ProxyConfig to use. The system proxy settings are used by default.
+  std::unique_ptr<net::ProxyConfig> proxy_config;
 
   // Comma-separated list of rules that control how hostnames are mapped. See
   // chrome::switches::kHostRules for a description for the format.
@@ -222,7 +216,7 @@ class HEADLESS_EXPORT HeadlessBrowser::Options::Builder {
   Builder& SetProductNameAndVersion(
       const std::string& product_name_and_version);
   Builder& SetUserAgent(const std::string& user_agent);
-  Builder& SetProxyServer(const net::HostPortPair& proxy_server);
+  Builder& SetProxyConfig(std::unique_ptr<net::ProxyConfig> proxy_config);
   Builder& SetHostResolverRules(const std::string& host_resolver_rules);
   Builder& SetWindowSize(const gfx::Size& window_size);
   Builder& SetUserDataDir(const base::FilePath& user_data_dir);

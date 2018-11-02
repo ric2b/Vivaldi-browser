@@ -67,6 +67,7 @@ class MODULES_EXPORT IDBValueWrapper {
       v8::Local<v8::Value>,
       SerializedScriptValue::SerializeOptions::WasmSerializationPolicy,
       ExceptionState&);
+  ~IDBValueWrapper();
 
   // Creates a clone of the serialized value.
   //
@@ -120,7 +121,11 @@ class MODULES_EXPORT IDBValueWrapper {
   // storage for IndexedDB, was not designed with large values in mind. At the
   // very least, large values will slow down compaction, causing occasional I/O
   // spikes.
-  static constexpr unsigned kWrapThreshold = 64 * 1024;
+  //
+  // TODO(crbug.com/756754): 128MB is the maximum IPC size, so this threshold
+  // effectively disables wrapping. Set the threshold back to 64 * 1024 after
+  // the Blob leak issue is fixed.
+  static constexpr unsigned kWrapThreshold = 128 * 1024 * 1024;
 
   // MIME type used for Blobs that wrap IDBValues.
   static constexpr const char* kWrapMimeType =
@@ -190,14 +195,7 @@ class MODULES_EXPORT IDBValueUnwrapper {
   bool ReadVarint(unsigned& value);
 
   // Resets the parsing state.
-  inline bool Reset() {
-#if DCHECK_IS_ON()
-    blob_handle_.Clear();
-    current_ = nullptr;
-    end_ = nullptr;
-#endif  // DCHECK_IS_ON()
-    return false;
-  }
+  bool Reset();
 
   // Deserialization cursor in the SharedBuffer of the IDBValue being unwrapped.
   const uint8_t* current_;

@@ -52,6 +52,13 @@ std::unique_ptr<DisplayListObserverLock> DisplayList::SuspendObserverUpdates() {
   return base::WrapUnique(new DisplayListObserverLock(this));
 }
 
+void DisplayList::AddOrUpdateDisplay(const Display& display, Type type) {
+  if (FindDisplayById(display.id()) == displays_.end())
+    AddDisplay(display, type);
+  else
+    UpdateDisplay(display, type);
+}
+
 uint32_t DisplayList::UpdateDisplay(const Display& display) {
   return UpdateDisplay(display, GetTypeByDisplayId(display.id()));
 }
@@ -85,6 +92,10 @@ uint32_t DisplayList::UpdateDisplay(const Display& display, Type type) {
   if (local_display->device_scale_factor() != display.device_scale_factor()) {
     local_display->set_device_scale_factor(display.device_scale_factor());
     changed_values |= DisplayObserver::DISPLAY_METRIC_DEVICE_SCALE_FACTOR;
+  }
+  if (local_display->color_space() != display.color_space()) {
+    local_display->set_color_space(display.color_space());
+    changed_values |= DisplayObserver::DISPLAY_METRIC_COLOR_SPACE;
   }
   if (should_notify_observers()) {
     for (DisplayObserver& observer : observers_)

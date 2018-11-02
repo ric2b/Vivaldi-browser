@@ -8,15 +8,14 @@
 #include <string>
 
 #include "base/macros.h"
-#include "base/memory/ref_counted.h"
-#include "components/arc/arc_service.h"
 #include "components/arc/common/crash_collector.mojom.h"
 #include "components/arc/instance_holder.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/binding.h"
 
-namespace base {
-class TaskRunner;
-}  // namespace base
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 namespace arc {
 
@@ -24,12 +23,18 @@ class ArcBridgeService;
 
 // Relays dumps for non-native ARC crashes to the crash reporter in Chrome OS.
 class ArcCrashCollectorBridge
-    : public ArcService,
+    : public KeyedService,
       public InstanceHolder<mojom::CrashCollectorInstance>::Observer,
       public mojom::CrashCollectorHost {
  public:
-  ArcCrashCollectorBridge(ArcBridgeService* bridge,
-                          scoped_refptr<base::TaskRunner> blocking_task_runner);
+  // Returns singleton instance for the given BrowserContext,
+  // or nullptr if the browser |context| is not allowed to use ARC.
+  static ArcCrashCollectorBridge* GetForBrowserContext(
+      content::BrowserContext* context);
+
+  ArcCrashCollectorBridge(content::BrowserContext* context,
+                          ArcBridgeService* bridge);
+
   ~ArcCrashCollectorBridge() override;
 
   // InstanceHolder<mojom::CrashCollectorInstance>::Observer overrides.
@@ -43,7 +48,7 @@ class ArcCrashCollectorBridge
                           const std::string& cpu_abi) override;
 
  private:
-  scoped_refptr<base::TaskRunner> blocking_task_runner_;
+  ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
 
   mojo::Binding<mojom::CrashCollectorHost> binding_;
 

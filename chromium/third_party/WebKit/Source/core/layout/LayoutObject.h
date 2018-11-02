@@ -32,6 +32,7 @@
 #include "core/dom/DocumentLifecycle.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/PositionWithAffinity.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutObjectChildList.h"
 #include "core/layout/MapCoordinatesFlags.h"
 #include "core/layout/ScrollAlignment.h"
@@ -44,6 +45,7 @@
 #include "core/paint/PaintPhase.h"
 #include "core/paint/RarePaintData.h"
 #include "core/style/ComputedStyle.h"
+#include "core/style/StyleDifference.h"
 #include "platform/geometry/FloatQuad.h"
 #include "platform/geometry/LayoutRect.h"
 #include "platform/geometry/TransformState.h"
@@ -69,7 +71,6 @@ class LayoutMultiColumnSpannerPlaceholder;
 class LayoutView;
 class PropertyTreeState;
 class ObjectPaintProperties;
-class PaintInvalidationState;
 class PaintLayer;
 class PseudoStyleRequest;
 
@@ -279,7 +280,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       const ScrollAlignment& align_x = ScrollAlignment::kAlignCenterIfNeeded,
       const ScrollAlignment& align_y = ScrollAlignment::kAlignCenterIfNeeded,
       ScrollType = kProgrammaticScroll,
-      bool make_visible_in_visual_viewport = true);
+      bool make_visible_in_visual_viewport = true,
+      ScrollBehavior = kScrollBehaviorAuto);
 
   // Convenience function for getting to the nearest enclosing box of a
   // LayoutObject.
@@ -395,20 +397,22 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Sets the parent of this object but doesn't add it as a child of the parent.
   void SetDangerousOneWayParent(LayoutObject*);
 
-  // For SlimmingPaintInvalidation/SPv2 only.
   // The ObjectPaintProperties structure holds references to the property tree
   // nodes that are created by the layout object. The property nodes should only
   // be updated during InPrePaint phase of the document lifecycle.
   const ObjectPaintProperties* PaintProperties() const {
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
     return rare_paint_data_ ? rare_paint_data_->PaintProperties() : nullptr;
+  }
+
+  LayoutObjectId UniqueId() const {
+    DCHECK(rare_paint_data_);
+    return rare_paint_data_ ? rare_paint_data_->UniqueId() : 0;
   }
 
   // The complete set of property nodes that should be used as a starting point
   // to paint this LayoutObject. See also the comment for
   // RarePaintData::local_border_box_properties_.
   const PropertyTreeState* LocalBorderBoxProperties() const {
-    DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
     if (rare_paint_data_)
       return rare_paint_data_->LocalBorderBoxProperties();
     return nullptr;
@@ -568,7 +572,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   virtual bool IsLayoutBlockFlow() const { return false; }
   virtual bool IsLayoutFlowThread() const { return false; }
   virtual bool IsLayoutInline() const { return false; }
-  virtual bool IsLayoutPart() const { return false; }
+  virtual bool IsLayoutEmbeddedContent() const { return false; }
 
   bool IsDocumentElement() const {
     return GetDocument().documentElement() == node_;
@@ -578,7 +582,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return GetNode() && GetNode()->HasTagName(HTMLNames::bodyTag);
   }
   bool IsHR() const;
-  bool IsLegend() const;
 
   bool IsTablePart() const {
     return IsTableCell() || IsLayoutTableCol() || IsTableCaption() ||
@@ -595,6 +598,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool HasCounterNodeMap() const { return bitfields_.HasCounterNodeMap(); }
   void SetHasCounterNodeMap(bool has_counter_node_map) {
     bitfields_.SetHasCounterNodeMap(has_counter_node_map);
+  }
+
+  bool IsTruncated() const { return bitfields_.IsTruncated(); }
+  void SetIsTruncated(bool is_truncated) {
+    bitfields_.SetIsTruncated(is_truncated);
   }
 
   bool EverHadLayout() const { return bitfields_.EverHadLayout(); }
@@ -855,7 +863,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   bool HasClipPath() const { return Style() && Style()->ClipPath(); }
   bool HasHiddenBackface() const {
     return Style() &&
-           Style()->BackfaceVisibility() == kBackfaceVisibilityHidden;
+           Style()->BackfaceVisibility() == EBackfaceVisibility::kHidden;
   }
   bool HasBackdropFilter() const {
     return Style() && Style()->HasBackdropFilter();
@@ -884,7 +892,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       const ComputedStyle* parent_style = nullptr) const;
 
   LayoutView* View() const { return GetDocument().GetLayoutView(); }
-  FrameView* GetFrameView() const { return GetDocument().View(); }
+  LocalFrameView* GetFrameView() const { return GetDocument().View(); }
 
   bool IsRooted() const;
 
@@ -913,7 +921,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     return nullptr;
   }
   bool IsColumnSpanAll() const {
-    return Style()->GetColumnSpan() == kColumnSpanAll && SpannerPlaceholder();
+    return Style()->GetColumnSpan() == EColumnSpan::kAll &&
+           SpannerPlaceholder();
   }
 
   // We include isLayoutButton() in this check, because buttons are
@@ -1388,11 +1397,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   LayoutRect InvalidatePaintRectangle(const LayoutRect&,
                                       DisplayItemClient* = nullptr) const;
 
-  // Walk the tree after layout issuing paint invalidations for layoutObjects
-  // that have changed or moved, updating bounds that have changed, and clearing
-  // paint invalidation state.
-  virtual void DeprecatedInvalidateTree(const PaintInvalidationState&);
-
   void SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
 
   // Returns the rect that should have paint invalidated whenever this object
@@ -1437,13 +1441,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       TransformState&,
       VisualRectFlags = kDefaultVisualRectFlags) const;
 
-  // Allows objects to adjust |visualEffect|, which is in the space of the
-  // paint invalidation container, for any special raster effects that might
-  // expand the rastered pixel area. Returns true if the rect is expanded.
-  virtual bool AdjustVisualRectForRasterEffects(LayoutRect& visual_rect) const {
-    return false;
-  }
-
   // Return the offset to the column in which the specified point (in
   // flow-thread coordinates) lives. This is used to convert a flow-thread point
   // to a point in the containing coordinate space.
@@ -1484,7 +1481,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   virtual bool CanBeSelectionLeaf() const { return false; }
   bool HasSelectedChildren() const {
-    return GetSelectionState() != SelectionNone;
+    return GetSelectionState() != SelectionState::kNone;
   }
 
   bool IsSelectable() const;
@@ -1516,8 +1513,8 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // While the destroy() method is virtual, this should only be overriden in
   // very rare circumstances.
   // You want to override willBeDestroyed() instead unless you explicitly need
-  // to stop this object from being destroyed (for example, LayoutPart
-  // overrides destroy() for this purpose).
+  // to stop this object from being destroyed (for example,
+  // LayoutEmbeddedContent overrides destroy() for this purpose).
   virtual void Destroy();
 
   // Virtual function helpers for the deprecated Flexible Box Layout (display:
@@ -1539,12 +1536,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
 
   // ImageResourceClient override.
   void ImageChanged(ImageResourceContent*, const IntRect* = nullptr) final;
+  void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) override {}
   bool WillRenderImage() final;
   bool GetImageAnimationPolicy(ImageAnimationPolicy&) final;
-
-  // Sub-classes that have an associated image need to override this function
-  // to get notified of any image change.
-  virtual void ImageChanged(WrappedImagePtr, const IntRect* = nullptr) {}
 
   std::pair<int, int> SelectionStartEnd() const;
 
@@ -1700,9 +1694,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   }
   void SetShouldInvalidateSelection();
 
-  bool ShouldCheckForPaintInvalidationWithPaintInvalidationState(
-      const PaintInvalidationState&) const;
-
   bool ShouldCheckForPaintInvalidation() const {
     return MayNeedPaintInvalidation() || ShouldDoFullPaintInvalidation();
   }
@@ -1766,7 +1757,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     // pre-paint tree walk. TODO(wangxianzhu): Add check of lifecycle states.
     void SetVisualRect(const LayoutRect& r) { layout_object_.SetVisualRect(r); }
     void SetPaintOffset(const LayoutPoint& p) {
-      DCHECK(RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
       DCHECK_EQ(layout_object_.GetDocument().Lifecycle().GetState(),
                 DocumentLifecycle::kInPrePaint);
       layout_object_.paint_offset_ = p;
@@ -1807,9 +1797,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     friend class PaintPropertyTreeBuilder;
     friend class PrePaintTreeWalk;
     FRIEND_TEST_ALL_PREFIXES(AnimationCompositorAnimationsTest,
-                             canStartAnimationOnCompositorTransformSPv2);
+                             canStartElementOnCompositorTransformSPv2);
     FRIEND_TEST_ALL_PREFIXES(AnimationCompositorAnimationsTest,
-                             canStartAnimationOnCompositorEffectSPv2);
+                             canStartElementOnCompositorEffectSPv2);
     FRIEND_TEST_ALL_PREFIXES(PrePaintTreeWalkTest, ClipRects);
 
     // The following non-const functions for ObjectPaintProperties should only
@@ -1968,7 +1958,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     kLayoutObjectLayoutInline,
     kLayoutObjectLayoutMultiColumnSet,
     kLayoutObjectLayoutMultiColumnSpannerPlaceholder,
-    kLayoutObjectLayoutPart,
+    kLayoutObjectLayoutEmbeddedContent,
     kLayoutObjectLayoutReplaced,
     kLayoutObjectLayoutScrollbarPart,
     kLayoutObjectLayoutView,
@@ -2079,23 +2069,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // Called before paint invalidation.
   virtual void EnsureIsReadyForPaintInvalidation() { DCHECK(!NeedsLayout()); }
 
-  // This function walks the descendants of |this|, following a
-  // layout ordering.
-  //
-  // The ordering is important for PaintInvalidationState, as it requires to be
-  // called following a descendant/container relationship.
-  //
-  // The function is overridden to handle special children (e.g. percentage
-  // height descendants or reflections).
-  virtual void DeprecatedInvalidatePaintOfSubtrees(
-      const PaintInvalidationState& child_paint_invalidation_state);
-
-  // This function generates the invalidation for this object only.
-  // It doesn't recurse into other object, as this is handled by
-  // DeprecatedInvalidatePaintOfSubtrees.
-  virtual PaintInvalidationReason DeprecatedInvalidatePaint(
-      const PaintInvalidationState&);
-
   void SetIsBackgroundAttachmentFixedObject(bool);
 
   void ClearSelfNeedsOverflowRecalcAfterStyleChange() {
@@ -2168,9 +2141,6 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   inline void SetNeedsPaintOffsetAndVisualRectUpdate();
 
   inline void InvalidateContainerPreferredLogicalWidths();
-
-  void InvalidatePaintIncludingNonSelfPaintingLayerDescendantsInternal(
-      const LayoutBoxModelObject& paint_invalidation_container);
 
   LayoutObject* ContainerForAbsolutePosition(AncestorSkipInfo* = nullptr) const;
 
@@ -2301,8 +2271,9 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
           background_changed_since_last_paint_invalidation_(false),
           outline_may_be_affected_by_descendants_(false),
           previous_outline_may_be_affected_by_descendants_(false),
+          is_truncated_(false),
           positioned_state_(kIsStaticallyPositioned),
-          selection_state_(SelectionNone),
+          selection_state_(static_cast<unsigned>(SelectionState::kNone)),
           background_obscuration_state_(kBackgroundObscurationStatusInvalid),
           full_paint_invalidation_reason_(
               static_cast<unsigned>(PaintInvalidationReason::kNone)) {}
@@ -2500,9 +2471,11 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
     ADD_BOOLEAN_BITFIELD(previous_outline_may_be_affected_by_descendants_,
                          PreviousOutlineMayBeAffectedByDescendants);
 
+    ADD_BOOLEAN_BITFIELD(is_truncated_, IsTruncated);
+
    protected:
     // Use protected to avoid warning about unused variable.
-    unsigned unused_bits_ : 4;
+    unsigned unused_bits_ : 3;
 
    private:
     // This is the cached 'position' value of this object
@@ -2566,7 +2539,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
       return static_cast<SelectionState>(selection_state_);
     }
     ALWAYS_INLINE void SetSelectionState(SelectionState selection_state) {
-      selection_state_ = selection_state;
+      selection_state_ = static_cast<unsigned>(selection_state);
     }
 
     ALWAYS_INLINE BackgroundObscurationState
@@ -2623,7 +2596,7 @@ class CORE_EXPORT LayoutObject : public ImageResourceObserver,
   // building. It is relative to the containing transform space. It is the same
   // offset that will be used to paint the object on SPv2. It's used to detect
   // paint offset change for paint invalidation on SPv2, and partial paint
-  // property tree update for SlimmingPaintInvalidation on SPv1 and SPv2.
+  // property tree update on SPv1 and SPv2.
   LayoutPoint paint_offset_;
 
   std::unique_ptr<RarePaintData> rare_paint_data_;
@@ -2795,33 +2768,32 @@ inline void MakeMatrixRenderable(TransformationMatrix& matrix,
 }
 
 inline int AdjustForAbsoluteZoom(int value, LayoutObject* layout_object) {
-  return AdjustForAbsoluteZoom(value, layout_object->Style());
+  DCHECK(layout_object);
+  return AdjustForAbsoluteZoom(value, layout_object->StyleRef());
 }
 
 inline LayoutUnit AdjustLayoutUnitForAbsoluteZoom(LayoutUnit value,
                                                   LayoutObject& layout_object) {
-  DCHECK(layout_object.Style());
-  return AdjustLayoutUnitForAbsoluteZoom(value, *layout_object.Style());
+  return AdjustLayoutUnitForAbsoluteZoom(value, layout_object.StyleRef());
 }
 
 inline void AdjustFloatQuadForAbsoluteZoom(FloatQuad& quad,
                                            LayoutObject& layout_object) {
-  float zoom = layout_object.Style()->EffectiveZoom();
+  float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     quad.Scale(1 / zoom, 1 / zoom);
 }
 
 inline void AdjustFloatRectForAbsoluteZoom(FloatRect& rect,
                                            LayoutObject& layout_object) {
-  float zoom = layout_object.Style()->EffectiveZoom();
+  float zoom = layout_object.StyleRef().EffectiveZoom();
   if (zoom != 1)
     rect.Scale(1 / zoom, 1 / zoom);
 }
 
 inline double AdjustScrollForAbsoluteZoom(double value,
                                           LayoutObject& layout_object) {
-  DCHECK(layout_object.Style());
-  return AdjustScrollForAbsoluteZoom(value, *layout_object.Style());
+  return AdjustScrollForAbsoluteZoom(value, layout_object.StyleRef());
 }
 
 #define DEFINE_LAYOUT_OBJECT_TYPE_CASTS(thisType, predicate)           \

@@ -21,6 +21,7 @@
 #include "ui/keyboard/content/keyboard_constants.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
 
@@ -56,7 +57,7 @@ class VirtualKeyboardWebContentTest : public InProcessBrowserTest {
     input_method->ShowImeIfNeeded();
     // Mock window.resizeTo that is expected to be called after navigate to a
     // new virtual keyboard.
-    ui()->GetKeyboardWindow()->SetBounds(init_bounds);
+    ui()->GetContentsWindow()->SetBounds(init_bounds);
   }
 
   void FocusNonEditableNode() {
@@ -71,7 +72,7 @@ class VirtualKeyboardWebContentTest : public InProcessBrowserTest {
     keyboard::KeyboardController::GetInstance()->Reload();
     // Mock window.resizeTo that is expected to be called after navigate to a
     // new virtual keyboard.
-    ui()->GetKeyboardWindow()->SetBounds(init_bounds);
+    ui()->GetContentsWindow()->SetBounds(init_bounds);
   }
 
   bool IsKeyboardVisible() const {
@@ -129,7 +130,7 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardWebContentTest,
             keyboard_bounds.height() + keyboard_bounds.y());
   controller->SetKeyboardMode(keyboard::FLOATING);
   // Move keyboard to a random place.
-  ui()->GetKeyboardWindow()->SetBounds(gfx::Rect(50, 50, 50, 50));
+  ui()->GetContentsWindow()->SetBounds(gfx::Rect(50, 50, 50, 50));
   EXPECT_EQ(gfx::Rect(50, 50, 50, 50),
             controller->GetContainerWindow()->bounds());
 
@@ -200,10 +201,10 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardAppWindowTest,
   keyboard::KeyboardController* controller =
       keyboard::KeyboardController::GetInstance();
   controller->ShowKeyboard(true);
-  controller->ui()->GetKeyboardWindow()->SetBounds(test_bounds);
+  controller->ui()->GetContentsWindow()->SetBounds(test_bounds);
   gfx::Rect keyboard_bounds = controller->GetContainerWindow()->bounds();
   // Starts overscroll.
-  controller->NotifyKeyboardBoundsChanging(keyboard_bounds);
+  controller->NotifyContentsBoundsChanging(keyboard_bounds);
 
   // Non ime window should have smaller visible view port due to overlap with
   // virtual keyboard.
@@ -218,4 +219,65 @@ IN_PROC_BROWSER_TEST_F(VirtualKeyboardAppWindowTest,
                 ->GetVisibleViewportSize()
                 .height(),
             ime_window_visible_height);
+}
+
+class VirtualKeyboardStateTest : public InProcessBrowserTest {
+ public:
+  VirtualKeyboardStateTest() {}
+  ~VirtualKeyboardStateTest() override {}
+
+  // Ensure that the virtual keyboard is enabled.
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(keyboard::switches::kEnableVirtualKeyboard);
+  }
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(VirtualKeyboardStateTest);
+};
+
+IN_PROC_BROWSER_TEST_F(VirtualKeyboardStateTest, OpenTwice) {
+  auto* controller = keyboard::KeyboardController::GetInstance();
+
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+  // Call ShowKeyboard twice. The second call should has no effect.
+  controller->ShowKeyboard(false);
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+  controller->ShowKeyboard(false);
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+
+  WaitControllerStateChangesTo(keyboard::KeyboardControllerState::SHOWN);
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::SHOWN);
+}
+
+IN_PROC_BROWSER_TEST_F(VirtualKeyboardStateTest, StateResolvesAfterPreload) {
+  auto* controller = keyboard::KeyboardController::GetInstance();
+
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+  WaitControllerStateChangesTo(keyboard::KeyboardControllerState::HIDDEN);
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::HIDDEN);
+}
+
+IN_PROC_BROWSER_TEST_F(VirtualKeyboardStateTest, OpenAndCloseAndOpen) {
+  auto* controller = keyboard::KeyboardController::GetInstance();
+
+  controller->ShowKeyboard(false);
+  // Need to wait the extension to be loaded. Hence LOADING_EXTENSION.
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::LOADING_EXTENSION);
+  WaitControllerStateChangesTo(keyboard::KeyboardControllerState::SHOWN);
+
+  controller->HideKeyboard(keyboard::KeyboardController::HIDE_REASON_AUTOMATIC);
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::HIDDEN);
+
+  controller->ShowKeyboard(false);
+  // The extension already has been loaded. Hence SHOWING.
+  EXPECT_EQ(controller->GetStateForTest(),
+            keyboard::KeyboardControllerState::SHOWN);
 }

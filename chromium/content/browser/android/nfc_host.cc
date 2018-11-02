@@ -7,7 +7,6 @@
 #include <utility>
 
 #include "base/atomic_sequence_num.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/common/service_manager_connection.h"
 #include "jni/NfcHost_jni.h"
 #include "services/device/public/interfaces/constants.mojom.h"
@@ -18,7 +17,7 @@ namespace content {
 
 namespace {
 
-base::StaticAtomicSequenceNumber g_unique_id;
+base::AtomicSequenceNumber g_unique_id;
 
 }  // namespace
 

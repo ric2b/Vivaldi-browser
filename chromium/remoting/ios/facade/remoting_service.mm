@@ -12,17 +12,19 @@
 #import <Security/Security.h>
 
 #import "base/mac/bind_objc_block.h"
+#import "ios/third_party/material_components_ios/src/components/Snackbar/src/MaterialSnackbar.h"
 #import "remoting/ios/domain/host_info.h"
 #import "remoting/ios/domain/user_info.h"
 #import "remoting/ios/facade/host_info.h"
 #import "remoting/ios/facade/host_list_fetcher.h"
 #import "remoting/ios/facade/ios_client_runtime_delegate.h"
 #import "remoting/ios/facade/remoting_authentication.h"
-#import "remoting/ios/facade/remoting_service.h"
 #import "remoting/ios/keychain_wrapper.h"
 
+#include "base/i18n/time_formatting.h"
 #include "base/logging.h"
 #include "base/strings/sys_string_conversions.h"
+#include "net/http/http_status_code.h"
 #include "net/url_request/url_request_context_getter.h"
 #include "remoting/base/oauth_token_getter.h"
 #include "remoting/base/oauth_token_getter_impl.h"
@@ -30,13 +32,13 @@
 static NSString* const kCRDAuthenticatedUserEmailKey =
     @"kCRDAuthenticatedUserEmailKey";
 
-NSString* const kHostsDidUpdate = @"kHostsDidUpdate";
+NSString* const kHostListStateDidChange = @"kHostListStateDidChange";
 
 NSString* const kUserDidUpdate = @"kUserDidUpdate";
 NSString* const kUserInfo = @"kUserInfo";
 
 @interface RemotingService ()<RemotingAuthenticationDelegate> {
-  std::unique_ptr<remoting::OAuthTokenGetter> _tokenGetter;
+  id<RemotingAuthentication> _authentication;
   remoting::HostListFetcher* _hostListFetcher;
   remoting::IosClientRuntimeDelegate* _clientRuntimeDelegate;
 }
@@ -44,11 +46,11 @@ NSString* const kUserInfo = @"kUserInfo";
 
 @implementation RemotingService
 
-@synthesize authentication = _authentication;
 @synthesize hosts = _hosts;
+@synthesize hostListState = _hostListState;
 
 // RemotingService is a singleton.
-+ (RemotingService*)SharedInstance {
++ (RemotingService*)instance {
   static RemotingService* sharedInstance = nil;
   static dispatch_once_t guard;
   dispatch_once(&guard, ^{
@@ -60,10 +62,10 @@ NSString* const kUserInfo = @"kUserInfo";
 - (instancetype)init {
   self = [super init];
   if (self) {
-    _authentication = [[RemotingAuthentication alloc] init];
-    _authentication.delegate = self;
     _hosts = nil;
     _hostListFetcher = nil;
+    // TODO(yuweih): Maybe better to just cancel the previous request.
+    _hostListState = HostListStateNotFetched;
     // TODO(nicholss): This might need a pointer back to the service.
     _clientRuntimeDelegate =
         new remoting::IosClientRuntimeDelegate();
@@ -75,13 +77,25 @@ NSString* const kUserInfo = @"kUserInfo";
 #pragma mark - RemotingService Implementation
 
 - (void)startHostListFetchWith:(NSString*)accessToken {
+  if (_hostListState == HostListStateFetching) {
+    return;
+  }
+  [self setHostListState:HostListStateFetching];
   if (!_hostListFetcher) {
     _hostListFetcher = new remoting::HostListFetcher(
         remoting::ChromotingClientRuntime::GetInstance()->url_requester());
   }
   _hostListFetcher->RetrieveHostlist(
       base::SysNSStringToUTF8(accessToken),
-      base::BindBlockArc(^(const std::vector<remoting::HostInfo>& hostlist) {
+      base::BindBlockArc(^(int responseCode,
+                           const std::vector<remoting::HostInfo>& hostlist) {
+
+        if (responseCode == net::HTTP_UNAUTHORIZED) {
+          [[RemotingService instance].authentication logout];
+        }
+        // TODO(nicholss): There are more |responseCode|s that we might want to
+        // trigger on, look into that later.
+
         NSMutableArray<HostInfo*>* hosts =
             [NSMutableArray arrayWithCapacity:hostlist.size()];
         std::string status;
@@ -109,30 +123,36 @@ NSString* const kUserInfo = @"kUserInfo";
           host.jabberId = base::SysUTF8ToNSString(host_info.host_jid);
           host.publicKey = base::SysUTF8ToNSString(host_info.public_key);
           host.status = base::SysUTF8ToNSString(status);
+          host.updatedTime = base::SysUTF16ToNSString(
+              base::TimeFormatShortDateAndTime(host_info.updated_time));
           [hosts addObject:host];
         }
         _hosts = hosts;
-        [self hostListUpdated];
+        [self setHostListState:HostListStateFetched];
       }));
 }
 
-#pragma mark - Notifications
-
-- (void)hostListUpdated {
-  [[NSNotificationCenter defaultCenter] postNotificationName:kHostsDidUpdate
-                                                      object:self
-                                                    userInfo:nil];
+- (void)setHostListState:(HostListState)state {
+  if (state == _hostListState) {
+    return;
+  }
+  _hostListState = state;
+  [[NSNotificationCenter defaultCenter]
+      postNotificationName:kHostListStateDidChange
+                    object:self
+                  userInfo:nil];
 }
 
 #pragma mark - RemotingAuthenticationDelegate
 
 - (void)userDidUpdate:(UserInfo*)user {
   NSDictionary* userInfo = nil;
+  [self setHostListState:HostListStateNotFetched];
   if (user) {
     userInfo = [NSDictionary dictionaryWithObject:user forKey:kUserInfo];
+    [self requestHostListFetch];
   } else {
     _hosts = nil;
-    [self hostListUpdated];
   }
   [[NSNotificationCenter defaultCenter] postNotificationName:kUserDidUpdate
                                                       object:self
@@ -156,13 +176,38 @@ NSString* const kUserInfo = @"kUserInfo";
 
 - (void)requestHostListFetch {
   [_authentication
-      callbackWithAccessToken:base::BindBlockArc(^(
-                                  remoting::OAuthTokenGetter::Status status,
-                                  const std::string& user_email,
-                                  const std::string& access_token) {
-        NSString* accessToken = base::SysUTF8ToNSString(access_token);
-        [self startHostListFetchWith:accessToken];
-      })];
+      callbackWithAccessToken:^(RemotingAuthenticationStatus status,
+                                NSString* userEmail, NSString* accessToken) {
+        switch (status) {
+          case RemotingAuthenticationStatusSuccess:
+            [self startHostListFetchWith:accessToken];
+            break;
+          case RemotingAuthenticationStatusNetworkError:
+            [MDCSnackbarManager
+                showMessage:
+                    [MDCSnackbarMessage
+                        messageWithText:@"[Network Error] Please try again."]];
+            break;
+          case RemotingAuthenticationStatusAuthError:
+            [MDCSnackbarManager
+                showMessage:
+                    [MDCSnackbarMessage
+                        messageWithText:
+                            @"[Authentication Failed] Please login again."]];
+            break;
+        }
+      }];
+}
+
+- (void)setAuthentication:(id<RemotingAuthentication>)authentication {
+  DCHECK(_authentication == nil);
+  authentication.delegate = self;
+  _authentication = authentication;
+}
+
+- (id<RemotingAuthentication>)authentication {
+  DCHECK(_authentication != nil);
+  return _authentication;
 }
 
 @end

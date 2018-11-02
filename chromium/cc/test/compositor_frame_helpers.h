@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "cc/resources/transferable_resource.h"
-#include "cc/surfaces/surface_id.h"
+#include "components/viz/common/surfaces/surface_id.h"
 
 namespace cc {
 
@@ -24,9 +24,9 @@ CompositorFrame MakeCompositorFrame();
 CompositorFrame MakeEmptyCompositorFrame();
 
 CompositorFrame MakeCompositorFrame(
-    std::vector<SurfaceId> activation_dependencies,
-    std::vector<SurfaceId> referenced_surfaces,
-    TransferableResourceArray resource_list);
+    std::vector<viz::SurfaceId> activation_dependencies,
+    std::vector<viz::SurfaceId> referenced_surfaces,
+    std::vector<TransferableResource> resource_list);
 
 }  // namespace test
 }  // namespace cc

@@ -4,8 +4,9 @@
 
 #include "content/child/request_extra_data.h"
 
-#include "content/common/resource_request.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/common/resource_request.h"
+#include "content/public/common/service_worker_modes.h"
 #include "ipc/ipc_message.h"
 
 using blink::WebString;
@@ -29,8 +30,7 @@ RequestExtraData::RequestExtraData()
       is_prefetch_(false),
       download_to_network_cache_only_(false),
       block_mixed_plugin_content_(false),
-      navigation_initiated_by_renderer_(false),
-      url_loader_factory_override_(nullptr) {}
+      navigation_initiated_by_renderer_(false) {}
 
 RequestExtraData::~RequestExtraData() {
 }

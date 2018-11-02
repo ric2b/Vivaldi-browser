@@ -1,0 +1,8 @@
+include_rules = [
+  "+cc",
+  "+components/viz/service",
+  "+third_party/skia",
+  "+ui/gfx",
+  "+ui/gfx/geometry",
+  "+ui/latency",
+]

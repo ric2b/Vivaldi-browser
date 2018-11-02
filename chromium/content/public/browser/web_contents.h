@@ -23,6 +23,7 @@
 #include "content/public/browser/save_page_type.h"
 #include "content/public/browser/screen_orientation_delegate.h"
 #include "content/public/browser/site_instance.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_ui.h"
 #include "content/public/common/stop_find_action.h"
 #include "ipc/ipc_sender.h"
@@ -376,7 +377,8 @@ class WebContents : public PageNavigator,
 
   // Returns whether this WebContents is loading and and the load is to a
   // different top-level document (rather than being a navigation within the
-  // same document). This being true implies that IsLoading() is also true.
+  // same document) in the main frame. This being true implies that IsLoading()
+  // is also true.
   virtual bool IsLoadingToDifferentDocument() const = 0;
 
   // Returns whether this WebContents is waiting for a first-response for the
@@ -444,6 +446,11 @@ class WebContents : public PageNavigator,
   // Invoked when the WebContents becomes shown/hidden.
   virtual void WasShown() = 0;
   virtual void WasHidden() = 0;
+
+  // Whether the WebContents is visible. This can return true even if the page
+  // is still loading, as opposed to RenderWidgetHostView::IsShowing(), which
+  // always returns false when the page is still loading.
+  virtual bool IsVisible() const = 0;
 
   // Returns true if the before unload and unload listeners need to be
   // fired. The value of this changes over time. For example, if true and the
@@ -565,8 +572,12 @@ class WebContents : public PageNavigator,
   // Various other systems need to know about our interstitials.
   virtual bool ShowingInterstitialPage() const = 0;
 
-  // Returns the currently showing interstitial, nullptr if no interstitial is
-  // showing.
+  // Returns the currently visible interstitial, nullptr if no interstitial is
+  // visible. Note: This returns nullptr from the time the interstitial page has
+  // Show() called on it until the interstitial content is ready and the
+  // interstitial is displayed.
+  //
+  // Compare to InterstitialPage::GetInterstitialPage.
   virtual InterstitialPage* GetInterstitialPage() const = 0;
 
   // Misc state & callbacks ----------------------------------------------------
@@ -592,7 +603,7 @@ class WebContents : public PageNavigator,
   // Saves the given frame's URL to the local filesystem. The headers, if
   // provided, is used to make a request to the URL rather than using cache.
   // Format of |headers| is a new line separated list of key value pairs:
-  // "<key1>: <value1>\n<key2>: <value2>".
+  // "<key1>: <value1>\r\n<key2>: <value2>".
   virtual void SaveFrameWithHeaders(const GURL& url,
                                     const Referrer& referrer,
                                     const std::string& headers) = 0;
@@ -651,7 +662,7 @@ class WebContents : public PageNavigator,
   // Gets the preferred size of the contents.
   virtual gfx::Size GetPreferredSize() const = 0;
 
-  // Called when the reponse to a pending mouse lock request has arrived.
+  // Called when the response to a pending mouse lock request has arrived.
   // Returns true if |allowed| is true and the mouse has been successfully
   // locked.
   virtual bool GotResponseToLockMouseRequest(bool allowed) = 0;
@@ -672,7 +683,7 @@ class WebContents : public PageNavigator,
   virtual bool HasOpener() const = 0;
 
   // Returns the opener if HasOpener() is true, or nullptr otherwise.
-  virtual WebContents* GetOpener() const = 0;
+  virtual RenderFrameHost* GetOpener() const = 0;
 
   // Returns true if this WebContents was opened by another WebContents, even
   // if the opener was suppressed. In contrast to HasOpener/GetOpener, the
@@ -682,7 +693,7 @@ class WebContents : public PageNavigator,
 
   // Returns the original opener if HasOriginalOpener() is true, or nullptr
   // otherwise.
-  virtual WebContents* GetOriginalOpener() const = 0;
+  virtual RenderFrameHost* GetOriginalOpener() const = 0;
 
   // Returns the WakeLockContext accociated with this WebContents.
   virtual device::mojom::WakeLockContext* GetWakeLockContext() = 0;
@@ -781,6 +792,11 @@ class WebContents : public PageNavigator,
   virtual void SetIsOverlayContent(bool is_overlay_content) = 0;
 
   virtual int GetCurrentlyPlayingVideoCount() = 0;
+
+  // Returns a map containing the sizes of all currently playing videos.
+  using VideoSizeMap =
+      base::flat_map<WebContentsObserver::MediaPlayerId, gfx::Size>;
+  virtual const VideoSizeMap& GetCurrentlyPlayingVideoSizes() = 0;
   virtual bool IsFullscreen() = 0;
 
   // Tells the renderer to clear the focused element (if any).
@@ -788,6 +804,12 @@ class WebContents : public PageNavigator,
 
   // Returns true if the current focused element is editable.
   virtual bool IsFocusedElementEditable() = 0;
+
+  // Returns true if a context menu is showing on the page.
+  virtual bool IsShowingContextMenu() const = 0;
+
+  // Tells the WebContents whether the context menu is showing.
+  virtual void SetShowingContextMenu(bool showing) = 0;
 
 #if defined(OS_ANDROID)
   CONTENT_EXPORT static WebContents* FromJavaWebContents(
@@ -819,6 +841,9 @@ class WebContents : public PageNavigator,
 
   // Returns true if other views are allowed, false otherwise.
   virtual bool GetAllowOtherViews() = 0;
+
+  // Returns true if the WebContents has completed its first meaningful paint.
+  virtual bool CompletedFirstVisuallyNonEmptyPaint() const = 0;
 #endif  // OS_ANDROID
 
  private:

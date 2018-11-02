@@ -57,7 +57,7 @@ class FullscreenMouseLockDispatcher : public MouseLockDispatcher {
 
  private:
   // MouseLockDispatcher implementation.
-  void SendLockMouseRequest(bool unlocked_by_target) override;
+  void SendLockMouseRequest() override;
   void SendUnlockMouseRequest() override;
 
   RenderWidgetFullscreenPepper* widget_;
@@ -114,10 +114,8 @@ FullscreenMouseLockDispatcher::FullscreenMouseLockDispatcher(
 FullscreenMouseLockDispatcher::~FullscreenMouseLockDispatcher() {
 }
 
-void FullscreenMouseLockDispatcher::SendLockMouseRequest(
-    bool unlocked_by_target) {
-  widget_->Send(new ViewHostMsg_LockMouse(widget_->routing_id(), false,
-                                          unlocked_by_target, true));
+void FullscreenMouseLockDispatcher::SendLockMouseRequest() {
+  widget_->Send(new ViewHostMsg_LockMouse(widget_->routing_id(), false, true));
 }
 
 void FullscreenMouseLockDispatcher::SendUnlockMouseRequest() {
@@ -255,12 +253,14 @@ RenderWidgetFullscreenPepper* RenderWidgetFullscreenPepper::Create(
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
-    const ScreenInfo& screen_info) {
+    const ScreenInfo& screen_info,
+    mojom::WidgetRequest widget_request) {
   DCHECK_NE(MSG_ROUTING_NONE, routing_id);
   DCHECK(!show_callback.is_null());
   scoped_refptr<RenderWidgetFullscreenPepper> widget(
       new RenderWidgetFullscreenPepper(routing_id, compositor_deps, plugin,
-                                       active_url, screen_info));
+                                       active_url, screen_info,
+                                       std::move(widget_request)));
   widget->Init(show_callback, new PepperWidget(widget.get()));
   widget->AddRef();
   return widget.get();
@@ -271,14 +271,16 @@ RenderWidgetFullscreenPepper::RenderWidgetFullscreenPepper(
     CompositorDependencies* compositor_deps,
     PepperPluginInstanceImpl* plugin,
     const GURL& active_url,
-    const ScreenInfo& screen_info)
+    const ScreenInfo& screen_info,
+    mojom::WidgetRequest widget_request)
     : RenderWidget(routing_id,
                    compositor_deps,
                    blink::kWebPopupTypeNone,
                    screen_info,
                    false,
                    false,
-                   false),
+                   false,
+                   std::move(widget_request)),
       active_url_(active_url),
       plugin_(plugin),
       layer_(NULL),

@@ -116,11 +116,17 @@ found in the LICENSE file.
           <td class="value" jsdisplay="source == 1">SUGGESTIONS_SERVICE</td>
           <td class="value" jsdisplay="source == 2">POPULAR</td>
           <td class="value" jsdisplay="source == 3">WHITELIST</td>
-          <td class="value" jsdisplay="source &gt; 3">???</td>
+          <td class="value" jsdisplay="source == 4">HOMEPAGE</td>
+          <td class="value" jsdisplay="source &gt; 4">???</td>
         </tr>
         <tr>
           <td class="detail">URL</td>
           <td class="value"><a jsvalues="href:url" jscontent="url"></a></td>
+        </tr>
+        <tr jsselect="icons">
+          <td class="detail" jscontent="type"></td>
+          <td class="value"><a jsvalues="href:url"
+              jscontent="url + ' (' + width + 'x' + height + ')'"></a></td>
         </tr>
       </tbody>
     </table>

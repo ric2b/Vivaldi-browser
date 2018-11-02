@@ -14,7 +14,6 @@ namespace blink {
 struct PaintInfo;
 
 class Color;
-class CompositionUnderline;
 class ComputedStyle;
 class DocumentMarker;
 class Font;
@@ -23,6 +22,8 @@ class InlineTextBox;
 class LayoutObject;
 class LayoutPoint;
 class LayoutTextCombine;
+class StyleableMarker;
+class TextMatchMarker;
 
 enum class DocumentMarkerPaintPhase { kForeground, kBackground };
 
@@ -47,12 +48,12 @@ class InlineTextBoxPainter {
                            bool grammar);
   void PaintTextMatchMarkerForeground(const PaintInfo&,
                                       const LayoutPoint& box_origin,
-                                      const DocumentMarker&,
+                                      const TextMatchMarker&,
                                       const ComputedStyle&,
                                       const Font&);
   void PaintTextMatchMarkerBackground(const PaintInfo&,
                                       const LayoutPoint& box_origin,
-                                      const DocumentMarker&,
+                                      const TextMatchMarker&,
                                       const ComputedStyle&,
                                       const Font&);
 
@@ -61,18 +62,13 @@ class InlineTextBoxPainter {
  private:
   enum class PaintOptions { kNormal, kCombinedText };
 
-  void PaintCompositionBackgrounds(GraphicsContext&,
-                                   const LayoutPoint& box_origin,
-                                   const ComputedStyle&,
-                                   const Font&,
-                                   bool use_custom_underlines);
-  void PaintSingleCompositionBackgroundRun(GraphicsContext&,
-                                           const LayoutPoint& box_origin,
-                                           const ComputedStyle&,
-                                           const Font&,
-                                           Color background_color,
-                                           int start_pos,
-                                           int end_pos);
+  void PaintSingleMarkerBackgroundRun(GraphicsContext&,
+                                      const LayoutPoint& box_origin,
+                                      const ComputedStyle&,
+                                      const Font&,
+                                      Color background_color,
+                                      int start_pos,
+                                      int end_pos);
   template <PaintOptions>
   void PaintSelection(GraphicsContext&,
                       const LayoutRect& box_rect,
@@ -81,11 +77,11 @@ class InlineTextBoxPainter {
                       Color text_color,
                       LayoutTextCombine* = nullptr);
 
-  void PaintCompositionUnderline(GraphicsContext&,
-                                 const LayoutPoint& box_origin,
-                                 const CompositionUnderline&);
-  unsigned UnderlinePaintStart(const CompositionUnderline&);
-  unsigned UnderlinePaintEnd(const CompositionUnderline&);
+  void PaintStyleableMarkerUnderline(GraphicsContext&,
+                                     const LayoutPoint& box_origin,
+                                     const StyleableMarker&);
+  unsigned MarkerPaintStart(const DocumentMarker&);
+  unsigned MarkerPaintEnd(const DocumentMarker&);
   bool ShouldPaintTextBox(const PaintInfo&);
   void ExpandToIncludeNewlineForSelection(LayoutRect&);
   LayoutObject& InlineLayoutObject() const;

@@ -20,11 +20,13 @@
 #include "base/optional.h"
 #include "base/time/clock.h"
 #include "base/time/time.h"
-#include "components/image_fetcher/core/image_fetcher_delegate.h"
 #include "components/ntp_snippets/category.h"
 #include "components/ntp_snippets/category_status.h"
 #include "components/ntp_snippets/content_suggestion.h"
 #include "components/ntp_snippets/content_suggestions_provider.h"
+#include "components/ntp_snippets/remote/cached_image_fetcher.h"
+#include "components/ntp_snippets/remote/json_to_categories.h"
+#include "components/ntp_snippets/remote/prefetched_pages_tracker.h"
 #include "components/ntp_snippets/remote/remote_suggestion.h"
 #include "components/ntp_snippets/remote/remote_suggestions_fetcher.h"
 #include "components/ntp_snippets/remote/remote_suggestions_provider.h"
@@ -35,13 +37,8 @@
 class PrefRegistrySimple;
 class PrefService;
 
-namespace gfx {
-class Image;
-}  // namespace gfx
-
 namespace image_fetcher {
 class ImageFetcher;
-struct RequestMetadata;
 }  // namespace image_fetcher
 
 namespace ntp_snippets {
@@ -49,58 +46,6 @@ namespace ntp_snippets {
 class CategoryRanker;
 class RemoteSuggestionsDatabase;
 class RemoteSuggestionsScheduler;
-
-// CachedImageFetcher takes care of fetching images from the network and caching
-// them in the database.
-// TODO(tschumann): Move into a separate library and inject the
-// CachedImageFetcher into the RemoteSuggestionsProvider. This allows us to get
-// rid of exposing this member for testing and lets us test the caching logic
-// separately.
-class CachedImageFetcher : public image_fetcher::ImageFetcherDelegate {
- public:
-  // |pref_service| and |database| need to outlive the created image fetcher
-  // instance.
-  CachedImageFetcher(std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
-                     PrefService* pref_service,
-                     RemoteSuggestionsDatabase* database);
-  ~CachedImageFetcher() override;
-
-  // Fetches the image for a suggestion. The fetcher will first issue a lookup
-  // to the underlying cache with a fallback to the network.
-  void FetchSuggestionImage(const ContentSuggestion::ID& suggestion_id,
-                            const GURL& image_url,
-                            const ImageFetchedCallback& callback);
-
- private:
-  // image_fetcher::ImageFetcherDelegate implementation.
-  void OnImageDataFetched(const std::string& id_within_category,
-                          const std::string& image_data) override;
-
-  void OnImageDecodingDone(const ImageFetchedCallback& callback,
-                           const std::string& id_within_category,
-                           const gfx::Image& image,
-                           const image_fetcher::RequestMetadata& metadata);
-  void OnImageFetchedFromDatabase(
-      const ImageFetchedCallback& callback,
-      const ContentSuggestion::ID& suggestion_id,
-      const GURL& image_url,
-      // SnippetImageCallback requires by-value (not const ref).
-      std::string data);
-  void OnImageDecodedFromDatabase(const ImageFetchedCallback& callback,
-                                  const ContentSuggestion::ID& suggestion_id,
-                                  const GURL& url,
-                                  const gfx::Image& image);
-  void FetchImageFromNetwork(const ContentSuggestion::ID& suggestion_id,
-                             const GURL& url,
-                             const ImageFetchedCallback& callback);
-
-  std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher_;
-  RemoteSuggestionsDatabase* database_;
-  // Request throttler for limiting requests to thumbnail images.
-  RequestThrottler thumbnail_requests_throttler_;
-
-  DISALLOW_COPY_AND_ASSIGN(CachedImageFetcher);
-};
 
 // Retrieves fresh content data (articles) from the server, stores them and
 // provides them as content suggestions.
@@ -122,7 +67,8 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
       std::unique_ptr<RemoteSuggestionsFetcher> suggestions_fetcher,
       std::unique_ptr<image_fetcher::ImageFetcher> image_fetcher,
       std::unique_ptr<RemoteSuggestionsDatabase> database,
-      std::unique_ptr<RemoteSuggestionsStatusService> status_service);
+      std::unique_ptr<RemoteSuggestionsStatusService> status_service,
+      std::unique_ptr<PrefetchedPagesTracker> prefetched_pages_tracker);
 
   ~RemoteSuggestionsProviderImpl() override;
 
@@ -147,6 +93,8 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   GURL GetUrlWithFavicon(
       const ContentSuggestion::ID& suggestion_id) const override;
+
+  bool IsDisabled() const override;
 
   // ContentSuggestionsProvider implementation.
   CategoryStatus GetCategoryStatus(Category category) override;
@@ -333,8 +281,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
   void SanitizeReceivedSuggestions(const RemoteSuggestion::PtrVector& dismissed,
                                    RemoteSuggestion::PtrVector* suggestions);
 
-  // Adds newly available suggestions to |content|.
-  void IntegrateSuggestions(CategoryContent* content,
+  // Adds newly available suggestions to |content| corresponding to |category|.
+  void IntegrateSuggestions(Category category,
+                            CategoryContent* content,
                             RemoteSuggestion::PtrVector new_suggestions);
 
   // Dismisses a suggestion within a given category content.
@@ -462,6 +411,9 @@ class RemoteSuggestionsProviderImpl final : public RemoteSuggestionsProvider {
 
   // A clock for getting the time. This allows to inject a clock in tests.
   std::unique_ptr<base::Clock> clock_;
+
+  // Prefetched pages tracker to query which urls have been prefetched.
+  std::unique_ptr<PrefetchedPagesTracker> prefetched_pages_tracker_;
 
   DISALLOW_COPY_AND_ASSIGN(RemoteSuggestionsProviderImpl);
 };

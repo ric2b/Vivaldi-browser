@@ -36,14 +36,14 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
 
 [
     Constructor(),
-    ConstructorCallWith=Document,
+    ConstructorCallWith=Document
 ] interface Document : Node {
     [SameObject] readonly attribute DOMImplementation implementation;
     [ImplementedAs=urlForBinding] readonly attribute DOMString URL;
     // FIXME: documentURI should not be nullable.
     [ImplementedAs=urlForBinding] readonly attribute DOMString? documentURI;
     [MeasureAs=DocumentOrigin] readonly attribute DOMString origin;
-    [RuntimeEnabled=suborigins] readonly attribute DOMString suborigin;
+    [RuntimeEnabled=Suborigins] readonly attribute DOMString suborigin;
     readonly attribute DOMString compatMode;
 
     readonly attribute DOMString characterSet;
@@ -57,10 +57,8 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     HTMLCollection getElementsByTagNameNS(DOMString? namespaceURI, DOMString localName);
     HTMLCollection getElementsByClassName(DOMString classNames);
 
-    // TODO(dominicc): Remove CallWith= when crbug/648179 is fixed.
-    [CallWith=EnteredWindow, NewObject, DoNotTestNewObject, CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName);
-    // TODO(dominicc): Remove CallWith= when crbug/648179 is fixed.
-    [CallWith=EnteredWindow, NewObject, DoNotTestNewObject, CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName);
+    [NewObject, DoNotTestNewObject, CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName);
+    [NewObject, DoNotTestNewObject, CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName);
     [NewObject] DocumentFragment createDocumentFragment();
     [NewObject] Text createTextNode(DOMString data);
     [NewObject, RaisesException] CDATASection createCDATASection(DOMString data);
@@ -97,7 +95,7 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [PutForwards=href, Unforgeable] readonly attribute Location? location;
     [RaisesException=Setter] attribute DOMString domain;
     readonly attribute DOMString referrer;
-    [RaisesException] attribute DOMString cookie;
+    [RaisesException, RuntimeCallStatsCounter=DocumentCookie] attribute DOMString cookie;
     readonly attribute DOMString lastModified;
     readonly attribute DocumentReadyState readyState;
 
@@ -180,10 +178,8 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [CallWith=ScriptState, CustomElementCallbacks, RaisesException, MeasureAs=DocumentRegisterElement] CustomElementConstructor registerElement(DOMString type, optional ElementRegistrationOptions options);
     // https://w3c.github.io/webcomponents/spec/custom/#extensions-to-document-interface-to-instantiate
     // FIXME: The typeExtension arguments should not be nullable.
-    // TODO(dominicc): Remove CallWith= when crbug/648179 is fixed.
-    [CallWith=EnteredWindow, CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName, (DOMString or Dictionary)? options);
-    // TODO(dominicc): Remove CallWith= when crbug/648179 is fixed.
-    [CallWith=EnteredWindow, CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName, (DOMString or Dictionary)? options);
+    [CustomElementCallbacks, PerWorldBindings, RaisesException] Element createElement(DOMString localName, (DOMString or Dictionary)? options);
+    [CustomElementCallbacks, RaisesException] Element createElementNS(DOMString? namespaceURI, DOMString qualifiedName, (DOMString or Dictionary)? options);
 
     // Page Visibility
     // https://w3c.github.io/page-visibility/#extensions-to-the-document-interface
@@ -214,7 +210,6 @@ typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
     [RuntimeEnabled=ExperimentalContentSecurityPolicyFeatures] attribute EventHandler onsecuritypolicyviolation;
     attribute EventHandler onselectionchange;
     attribute EventHandler onselectstart;
-    attribute EventHandler onwheel;
 };
 
 Document implements GlobalEventHandlers;

@@ -20,8 +20,8 @@
 #include "content/browser/service_worker/service_worker_provider_host.h"
 #include "content/browser/service_worker/service_worker_registration.h"
 #include "content/browser/service_worker/service_worker_test_utils.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/common/service_worker/service_worker_utils.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/test/mock_resource_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "net/base/io_buffer.h"
@@ -286,17 +286,18 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
         mock_protocol_handler_(nullptr) {}
   ~ServiceWorkerWriteToCacheJobTest() override {}
 
-  void CreateHostForVersion(
+  base::WeakPtr<ServiceWorkerProviderHost> CreateHostForVersion(
       int process_id,
       int provider_id,
       const scoped_refptr<ServiceWorkerVersion>& version) {
     std::unique_ptr<ServiceWorkerProviderHost> host =
         CreateProviderHostForServiceWorkerContext(
             process_id, provider_id, true /* is_parent_frame_secure */,
-            context()->AsWeakPtr());
+            context()->AsWeakPtr(), &remote_endpoint_);
     base::WeakPtr<ServiceWorkerProviderHost> provider_host = host->AsWeakPtr();
     context()->AddProviderHost(std::move(host));
     provider_host->running_hosted_version_ = version;
+    return provider_host;
   }
 
   void SetUpScriptRequest(int process_id, int provider_id) {
@@ -321,9 +322,9 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
         request_.get(), context_wrapper(), &blob_storage_context_, process_id,
         provider_id, false, FETCH_REQUEST_MODE_NO_CORS,
         FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        RESOURCE_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_TYPE_SERVICE_WORKER,
-        REQUEST_CONTEXT_FRAME_TYPE_NONE,
-        scoped_refptr<ResourceRequestBodyImpl>());
+        std::string() /* integrity */, RESOURCE_TYPE_SERVICE_WORKER,
+        REQUEST_CONTEXT_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_FRAME_TYPE_NONE,
+        scoped_refptr<ResourceRequestBody>());
   }
 
   int NextProviderId() { return next_provider_id_++; }
@@ -334,14 +335,15 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
     helper_.reset(new EmbeddedWorkerTestHelper(base::FilePath()));
 
     // A new unstored registration/version.
-    registration_ =
-        new ServiceWorkerRegistration(scope_, 1L, context()->AsWeakPtr());
+    registration_ = new ServiceWorkerRegistration(
+        ServiceWorkerRegistrationOptions(scope_), 1L, context()->AsWeakPtr());
     version_ =
         new ServiceWorkerVersion(registration_.get(), script_url_,
                                  NextVersionId(), context()->AsWeakPtr());
-    CreateHostForVersion(helper_->mock_render_process_id(), provider_id,
-                         version_);
-    SetUpScriptRequest(helper_->mock_render_process_id(), provider_id);
+    base::WeakPtr<ServiceWorkerProviderHost> host = CreateHostForVersion(
+        helper_->mock_render_process_id(), provider_id, version_);
+    ASSERT_TRUE(host);
+    SetUpScriptRequest(helper_->mock_render_process_id(), host->provider_id());
 
     context()->storage()->LazyInitialize(base::Bind(&EmptyCallback));
     base::RunLoop().RunUntilIdle();
@@ -394,10 +396,10 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
         new ServiceWorkerVersion(registration_.get(), script_url_,
                                  NextVersionId(), context()->AsWeakPtr());
     new_version->set_pause_after_download(true);
-    CreateHostForVersion(helper_->mock_render_process_id(), provider_id,
-                         new_version);
+    base::WeakPtr<ServiceWorkerProviderHost> host = CreateHostForVersion(
+        helper_->mock_render_process_id(), provider_id, new_version);
 
-    SetUpScriptRequest(helper_->mock_render_process_id(), provider_id);
+    SetUpScriptRequest(helper_->mock_render_process_id(), host->provider_id());
     mock_protocol_handler_->SetCreateJobCallback(
         base::Bind(&CreateResponseJob, response));
     request_->Start();
@@ -441,6 +443,7 @@ class ServiceWorkerWriteToCacheJobTest : public testing::Test {
 
   storage::BlobStorageContext blob_storage_context_;
   content::MockResourceContext resource_context_;
+  ServiceWorkerRemoteProviderEndpoint remote_endpoint_;
 
   net::TestDelegate url_request_delegate_;
   int next_provider_id_ = 1;

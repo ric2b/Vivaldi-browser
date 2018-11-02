@@ -15,6 +15,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
+#include "base/sys_info.h"
 #include "base/threading/sequenced_task_runner_handle.h"
 #include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_manager.h"
@@ -61,19 +62,15 @@ bool LevelDB::InitWithOptions(const base::FilePath& database_dir,
 
   std::string path = database_dir.AsUTF8Unsafe();
 
-  leveldb::DB* db = NULL;
-  leveldb::Status status = leveldb::DB::Open(options, path, &db);
+  leveldb::Status status = leveldb_env::OpenDB(options, path, &db_);
   if (open_histogram_)
     open_histogram_->Add(leveldb_env::GetLevelDBStatusUMAValue(status));
   if (status.IsCorruption()) {
     base::DeleteFile(database_dir, true);
-    status = leveldb::DB::Open(options, path, &db);
+    status = leveldb_env::OpenDB(options, path, &db_);
   }
 
   if (status.ok()) {
-    CHECK(db);
-    db_.reset(db);
-
     base::trace_event::MemoryDumpManager::GetInstance()
         ->RegisterDumpProviderWithSequencedTaskRunner(
             this, "LevelDB", base::SequencedTaskRunnerHandle::Get(),
@@ -86,16 +83,33 @@ bool LevelDB::InitWithOptions(const base::FilePath& database_dir,
   return false;
 }
 
+static size_t DefaultBlockCacheSize() {
+  if (base::SysInfo::IsLowEndDevice())
+    return 512 * 1024;  // 512KB
+  else
+    return 8 * 1024 * 1024;  // 8MB
+}
+
 bool LevelDB::Init(const leveldb_proto::Options& options) {
   leveldb::Options leveldb_options;
   leveldb_options.create_if_missing = true;
   leveldb_options.max_open_files = 0;  // Use minimum.
   leveldb_options.reuse_logs = leveldb_env::kDefaultLogReuseOptionValue;
+
+  static leveldb::Cache* default_block_cache =
+      leveldb::NewLRUCache(DefaultBlockCacheSize());
+
   if (options.write_buffer_size != 0)
     leveldb_options.write_buffer_size = options.write_buffer_size;
   if (options.read_cache_size != 0) {
     custom_block_cache_.reset(leveldb::NewLRUCache(options.read_cache_size));
     leveldb_options.block_cache = custom_block_cache_.get();
+  } else {
+    // By default, allocate a single block cache to be shared across
+    // all LevelDB instances created via this method.
+    // See also content/browser/indexed_db/leveldb/leveldb_database.cc,
+    // which has its own shared block cache for IndexedDB databases.
+    leveldb_options.block_cache = default_block_cache;
   }
   if (options.database_dir.empty()) {
     env_.reset(leveldb::NewMemEnv(leveldb::Env::Default()));
@@ -205,12 +219,10 @@ bool LevelDB::OnMemoryDump(const base::trace_event::MemoryDumpArgs& dump_args,
     dump->AddString("client_name", "", client_name_);
   }
 
-  // Memory is allocated from system allocator (malloc).
-  const char* system_allocator_pool_name =
-      base::trace_event::MemoryDumpManager::GetInstance()
-          ->system_allocator_pool_name();
-  if (system_allocator_pool_name)
-    pmd->AddSuballocation(dump->guid(), system_allocator_pool_name);
+  // All leveldb databases are already dumped by leveldb_env::DBTracker. Add
+  // an edge to avoid double counting.
+  pmd->AddSuballocation(dump->guid(),
+                        leveldb_env::DBTracker::GetMemoryDumpName(db_.get()));
 
   return true;
 }

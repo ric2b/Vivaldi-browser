@@ -4,15 +4,15 @@
 
 #include "modules/media_controls/MediaControlsRotateToFullscreenDelegate.h"
 
-#include "core/dom/DocumentUserGestureToken.h"
 #include "core/dom/ElementVisibilityObserver.h"
-#include "core/dom/Fullscreen.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/page/ChromeClient.h"
 #include "modules/media_controls/MediaControlsImpl.h"
-#include "platform/UserGestureIndicator.h"
+#include "public/platform/Platform.h"
 #include "public/platform/WebScreenInfo.h"
 
 namespace blink {
@@ -141,7 +141,7 @@ void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
 
   // Don't enter/exit fullscreen if some other element is fullscreen.
   Element* fullscreen_element =
-      Fullscreen::CurrentFullScreenElementFrom(video_element_->GetDocument());
+      Fullscreen::FullscreenElementFrom(video_element_->GetDocument());
   if (fullscreen_element && fullscreen_element != video_element_)
     return;
 
@@ -176,14 +176,19 @@ void MediaControlsRotateToFullscreenDelegate::OnScreenOrientationChange() {
 
   {
     UserGestureIndicator gesture(
-        DocumentUserGestureToken::Create(&video_element_->GetDocument()));
+        UserGestureToken::Create(&video_element_->GetDocument()));
 
     bool should_be_fullscreen =
         current_screen_orientation_ == video_orientation;
-    if (should_be_fullscreen && !video_element_->IsFullscreen())
+    if (should_be_fullscreen && !video_element_->IsFullscreen()) {
+      Platform::Current()->RecordAction(
+          UserMetricsAction("Media.Video.RotateToFullscreen.Enter"));
       media_controls.EnterFullscreen();
-    else if (!should_be_fullscreen && video_element_->IsFullscreen())
+    } else if (!should_be_fullscreen && video_element_->IsFullscreen()) {
+      Platform::Current()->RecordAction(
+          UserMetricsAction("Media.Video.RotateToFullscreen.Exit"));
       media_controls.ExitFullscreen();
+    }
   }
 }
 

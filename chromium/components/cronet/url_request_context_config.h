@@ -7,16 +7,19 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
-#include "base/memory/scoped_vector.h"
+#include "base/optional.h"
 #include "base/time/time.h"
+#include "base/values.h"
 #include "net/base/hash_value.h"
 #include "net/cert/cert_verifier.h"
+#include "net/http/http_network_session.h"
+#include "net/nqe/effective_connection_type.h"
 
 namespace base {
-class DictionaryValue;
 class SequencedTaskRunner;
 }  // namespace base
 
@@ -30,6 +33,8 @@ namespace cronet {
 
 // Common configuration parameters used by Cronet to configure
 // URLRequestContext.
+// TODO(mgersh): This shouldn't be a struct, and experimental option parsing
+// should be kept more separate from applying the configuration.
 struct URLRequestContextConfig {
   // Type of HTTP cache.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.net.impl
@@ -139,18 +144,11 @@ struct URLRequestContextConfig {
   const std::string storage_path;
   // User-Agent request header field.
   const std::string user_agent;
-  // Experimental options encoded as a string in a JSON format containing
-  // experiments and their corresponding configuration options. The format
-  // is a JSON object with the name of the experiment as the key, and the
-  // configuration options as the value. An example:
-  //   {"experiment1": {"option1": "option_value1", "option2": "option_value2",
-  //    ...}, "experiment2: {"option3", "option_value3", ...}, ...}
-  const std::string experimental_options;
 
   // Certificate verifier for testing.
   std::unique_ptr<net::CertVerifier> mock_cert_verifier;
 
-  // Enable network quality estimator.
+  // Enable Network Quality Estimator (NQE).
   const bool enable_network_quality_estimator;
 
   // Enable public key pinning bypass for local trust anchors.
@@ -160,15 +158,48 @@ struct URLRequestContextConfig {
   const std::string cert_verifier_data;
 
   // App-provided list of servers that support QUIC.
-  ScopedVector<QuicHint> quic_hints;
+  std::vector<std::unique_ptr<QuicHint>> quic_hints;
 
   // The list of public key pins.
-  ScopedVector<Pkp> pkp_list;
+  std::vector<std::unique_ptr<Pkp>> pkp_list;
+
+  // Enable DNS cache persistence.
+  bool enable_host_cache_persistence = false;
+
+  // Minimum time in milliseconds between writing the HostCache contents to
+  // prefs. Only relevant when |enable_host_cache_persistence| is true.
+  int host_cache_persistence_delay_ms = 60000;
 
   // Experimental options that are recognized by the config parser.
-  std::unique_ptr<base::DictionaryValue> effective_experimental_options;
+  std::unique_ptr<base::DictionaryValue> effective_experimental_options =
+      nullptr;
+
+  // Enable reading of the network quality from the prefs.
+  bool nqe_persistent_caching_enabled;
+
+  // If set, forces NQE to return the set value as the effective connection
+  // type.
+  base::Optional<net::EffectiveConnectionType>
+      nqe_forced_effective_connection_type;
 
  private:
+  // Parses experimental options and makes appropriate changes to settings in
+  // the URLRequestContextConfig and URLRequestContextBuilder.
+  void ParseAndSetExperimentalOptions(
+      net::URLRequestContextBuilder* context_builder,
+      net::HttpNetworkSession::Params* session_params,
+      net::NetLog* net_log,
+      const scoped_refptr<base::SequencedTaskRunner>& file_task_runner);
+
+  // Experimental options encoded as a string in a JSON format containing
+  // experiments and their corresponding configuration options. The format
+  // is a JSON object with the name of the experiment as the key, and the
+  // configuration options as the value. An example:
+  //   {"experiment1": {"option1": "option_value1", "option2":
+  //   "option_value2",
+  //    ...}, "experiment2: {"option3", "option_value3", ...}, ...}
+  const std::string experimental_options;
+
   DISALLOW_COPY_AND_ASSIGN(URLRequestContextConfig);
 };
 

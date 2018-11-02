@@ -4,8 +4,11 @@
 
 #include "ash/wm/window_cycle_controller.h"
 
+#include "ash/metrics/task_switch_metrics_recorder.h"
 #include "ash/metrics/task_switch_source.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
+#include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -14,7 +17,6 @@
 #include "ash/wm/window_cycle_event_filter.h"
 #include "ash/wm/window_cycle_list.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/metrics/histogram_macros.h"
 
 namespace ash {
@@ -71,7 +73,8 @@ void WindowCycleController::StartCycling() {
     return !state->IsUserPositionable() || state->is_dragged() ||
            window->GetRootWindow()
                ->GetChildById(kShellWindowId_AppListContainer)
-               ->Contains(window);
+               ->Contains(window) ||
+           !window->GetProperty(kShowInOverviewKey);
   };
   window_list.erase(std::remove_if(window_list.begin(), window_list.end(),
                                    window_is_ineligible),
@@ -82,7 +85,7 @@ void WindowCycleController::StartCycling() {
   window_cycle_list_.reset(new WindowCycleList(window_list));
   event_filter_ = ShellPort::Get()->CreateWindowCycleEventFilter();
   cycle_start_time_ = base::Time::Now();
-  ShellPort::Get()->RecordUserMetricsAction(UMA_WINDOW_CYCLE);
+  Shell::Get()->metrics()->RecordUserMetricsAction(UMA_WINDOW_CYCLE);
   UMA_HISTOGRAM_COUNTS_100("Ash.WindowCycleController.Items",
                            window_list.size());
 }
@@ -119,7 +122,7 @@ void WindowCycleController::StopCycling() {
 
   if (active_window_after_window_cycle != nullptr &&
       active_window_before_window_cycle_ != active_window_after_window_cycle) {
-    ShellPort::Get()->RecordTaskSwitchMetric(
+    Shell::Get()->metrics()->task_switch_metrics_recorder().OnTaskSwitch(
         TaskSwitchSource::WINDOW_CYCLE_CONTROLLER);
   }
   active_window_before_window_cycle_ = nullptr;

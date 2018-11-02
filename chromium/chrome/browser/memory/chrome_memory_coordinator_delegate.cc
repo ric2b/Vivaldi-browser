@@ -6,7 +6,7 @@
 
 #include "base/memory/ptr_util.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 
 namespace memory {
 
@@ -20,21 +20,14 @@ ChromeMemoryCoordinatorDelegate::ChromeMemoryCoordinatorDelegate() {}
 
 ChromeMemoryCoordinatorDelegate::~ChromeMemoryCoordinatorDelegate() {}
 
-bool ChromeMemoryCoordinatorDelegate::CanSuspendBackgroundedRenderer(
-    int render_process_id) {
-#if defined(OS_ANDROID)
-  // TODO(bashi): Implement
-  return true;
-#else
-  return g_browser_process->GetTabManager()->CanSuspendBackgroundedRenderer(
-      render_process_id);
-#endif
-}
-
-void ChromeMemoryCoordinatorDelegate::DiscardTab() {
+void ChromeMemoryCoordinatorDelegate::DiscardTab(bool skip_unload_handlers) {
 #if !defined(OS_ANDROID)
-  if (g_browser_process->GetTabManager())
-    g_browser_process->GetTabManager()->DiscardTab();
+  if (g_browser_process->GetTabManager()) {
+    g_browser_process->GetTabManager()->DiscardTab(
+        skip_unload_handlers
+            ? resource_coordinator::TabManager::kUrgentShutdown
+            : resource_coordinator::TabManager::kProactiveShutdown);
+  }
 #endif
 }
 

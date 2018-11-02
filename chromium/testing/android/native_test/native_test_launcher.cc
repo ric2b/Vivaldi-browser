@@ -14,7 +14,6 @@
 #include <signal.h>
 #include <string.h>
 
-#include "base/android/base_jni_registrar.h"
 #include "base/android/jni_string.h"
 #include "base/android/scoped_java_ref.h"
 #include "base/at_exit.h"
@@ -111,6 +110,9 @@ static void RunTests(JNIEnv* env,
                stdout_file_path.value().c_str(), strerror(errno));
     exit(EXIT_FAILURE);
   }
+  // TODO(jbudorick): Remove this after resolving crbug.com/726880
+  AndroidLog(ANDROID_LOG_INFO, "Redirecting stdout to file: %s\n",
+             stdout_file_path.value().c_str());
   dup2(STDOUT_FILENO, STDERR_FILENO);
 
   if (command_line.HasSwitch(switches::kWaitForDebugger)) {
@@ -129,8 +131,6 @@ static void RunTests(JNIEnv* env,
 }
 
 bool RegisterNativeTestJNI(JNIEnv* env) {
-  if (!base::android::RegisterJni(env))
-    return false;
   if (!RegisterMainRunnerJni(env))
     return false;
   return RegisterNativesImpl(env);

@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#import "base/mac/scoped_nsobject.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
@@ -16,9 +15,12 @@
 #include "ios/web/test/mojo_test.mojom.h"
 #include "ios/web/web_state/web_state_impl.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 #import "testing/gtest_mac.h"
 #import "third_party/ocmock/OCMock/OCMock.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace web {
 
@@ -28,9 +30,9 @@ namespace {
 std::string GetJson(id object) {
   NSData* json_as_data =
       [NSJSONSerialization dataWithJSONObject:object options:0 error:nil];
-  base::scoped_nsobject<NSString> json_as_string([[NSString alloc]
-      initWithData:json_as_data
-          encoding:NSUTF8StringEncoding]);
+  NSString* json_as_string =
+      [[NSString alloc] initWithData:json_as_data
+                            encoding:NSUTF8StringEncoding];
   return base::SysNSStringToUTF8(json_as_string);
 }
 
@@ -52,128 +54,93 @@ class MojoFacadeTest : public WebTest {
     interface_provider_ = base::MakeUnique<WebStateInterfaceProvider>();
     interface_provider_->registry()->AddInterface(base::Bind(
         &MojoFacadeTest::BindTestUIHandlerMojoRequest, base::Unretained(this)));
-    evaluator_.reset([[OCMockObject
-        mockForProtocol:@protocol(CRWJSInjectionEvaluator)] retain]);
-    facade_.reset(new MojoFacade(
+    evaluator_ =
+        [OCMockObject mockForProtocol:@protocol(CRWJSInjectionEvaluator)];
+    facade_ = base::MakeUnique<MojoFacade>(
         interface_provider_.get(),
-        static_cast<id<CRWJSInjectionEvaluator>>(evaluator_.get())));
+        static_cast<id<CRWJSInjectionEvaluator>>(evaluator_));
   }
 
-  OCMockObject* evaluator() { return evaluator_.get(); }
+  OCMockObject* evaluator() { return evaluator_; }
   MojoFacade* facade() { return facade_.get(); }
 
+  void CreateMessagePipe(uint32_t* handle0, uint32_t* handle1) {
+    NSDictionary* create = @{
+      @"name" : @"Mojo.createMessagePipe",
+      @"args" : @{},
+    };
+    std::string response_as_string =
+        facade()->HandleMojoMessage(GetJson(create));
+
+    // Verify handles.
+    ASSERT_FALSE(response_as_string.empty());
+    NSDictionary* response_as_dict = GetObject(response_as_string);
+    ASSERT_TRUE([response_as_dict isKindOfClass:[NSDictionary class]]);
+    ASSERT_EQ(MOJO_RESULT_OK, [response_as_dict[@"result"] unsignedIntValue]);
+    *handle0 = [response_as_dict[@"handle0"] unsignedIntValue];
+    *handle1 = [response_as_dict[@"handle1"] unsignedIntValue];
+  }
+
+  void CloseHandle(uint32_t handle) {
+    NSDictionary* close = @{
+      @"name" : @"MojoHandle.close",
+      @"args" : @{
+        @"handle" : @(handle),
+      },
+    };
+    std::string result = facade()->HandleMojoMessage(GetJson(close));
+    EXPECT_TRUE(result.empty());
+  }
+
  private:
-  void BindTestUIHandlerMojoRequest(
-      const service_manager::BindSourceInfo& source_info,
-      TestUIHandlerMojoRequest request) {}
+  void BindTestUIHandlerMojoRequest(TestUIHandlerMojoRequest request) {}
 
   std::unique_ptr<WebStateInterfaceProvider> interface_provider_;
-  base::scoped_nsobject<OCMockObject> evaluator_;
+  OCMockObject* evaluator_;
   std::unique_ptr<MojoFacade> facade_;
 };
 
-// Tests connecting to existing interface and closing the handle.
-TEST_F(MojoFacadeTest, GetInterfaceAndCloseHandle) {
-  // Bind to the interface.
+// Tests binding an interface.
+TEST_F(MojoFacadeTest, BindInterface) {
+  uint32_t handle0 = 0;
+  uint32_t handle1 = 0;
+  CreateMessagePipe(&handle0, &handle1);
+
+  // Pass handle0 as interface request.
   NSDictionary* connect = @{
-    @"name" : @"interface_provider.getInterface",
+    @"name" : @"Mojo.bindInterface",
     @"args" : @{
       @"interfaceName" : @"::TestUIHandlerMojo",
+      @"requestHandle" : @(handle0),
     },
   };
 
   std::string handle_as_string = facade()->HandleMojoMessage(GetJson(connect));
-  EXPECT_FALSE(handle_as_string.empty());
-  int handle = 0;
-  EXPECT_TRUE(base::StringToInt(handle_as_string, &handle));
+  EXPECT_TRUE(handle_as_string.empty());
 
-  // Close the handle.
-  NSDictionary* close = @{
-    @"name" : @"core.close",
-    @"args" : @{
-      @"handle" : @(handle),
-    },
-  };
-  std::string result_as_string = facade()->HandleMojoMessage(GetJson(close));
-  EXPECT_FALSE(result_as_string.empty());
-  int result = 0;
-  EXPECT_TRUE(base::StringToInt(result_as_string, &result));
-  EXPECT_EQ(MOJO_RESULT_OK, static_cast<MojoResult>(result));
+  CloseHandle(handle1);
 }
 
-// Tests creating a message pipe without options.
-TEST_F(MojoFacadeTest, CreateMessagePipeWithoutOptions) {
-  // Create a message pipe.
-  NSDictionary* create = @{
-    @"name" : @"core.createMessagePipe",
-    @"args" : @{
-      @"optionsDict" : [NSNull null],
-    },
-  };
-  std::string response_as_string = facade()->HandleMojoMessage(GetJson(create));
+// Tests creating a message pipe.
+TEST_F(MojoFacadeTest, CreateMessagePipe) {
+  uint32_t handle0, handle1;
+  CreateMessagePipe(&handle0, &handle1);
 
-  // Verify handles.
-  EXPECT_FALSE(response_as_string.empty());
-  NSDictionary* response_as_dict = GetObject(response_as_string);
-  EXPECT_TRUE([response_as_dict isKindOfClass:[NSDictionary class]]);
-  id handle0 = response_as_dict[@"handle0"];
-  EXPECT_TRUE(handle0);
-  id handle1 = response_as_dict[@"handle1"];
-  EXPECT_TRUE(handle1);
-
-  // Close handle0.
-  NSDictionary* close0 = @{
-    @"name" : @"core.close",
-    @"args" : @{
-      @"handle" : handle0,
-    },
-  };
-  std::string result0_as_string = facade()->HandleMojoMessage(GetJson(close0));
-  EXPECT_FALSE(result0_as_string.empty());
-  int result0 = 0;
-  EXPECT_TRUE(base::StringToInt(result0_as_string, &result0));
-  EXPECT_EQ(MOJO_RESULT_OK, static_cast<MojoResult>(result0));
-
-  // Close handle1.
-  NSDictionary* close1 = @{
-    @"name" : @"core.close",
-    @"args" : @{
-      @"handle" : handle1,
-    },
-  };
-  std::string result1_as_string = facade()->HandleMojoMessage(GetJson(close1));
-  EXPECT_FALSE(result1_as_string.empty());
-  int result1 = 0;
-  EXPECT_TRUE(base::StringToInt(result1_as_string, &result1));
-  EXPECT_EQ(MOJO_RESULT_OK, static_cast<MojoResult>(result1));
+  CloseHandle(handle0);
+  CloseHandle(handle1);
 }
 
 // Tests watching the pipe.
 TEST_F(MojoFacadeTest, Watch) {
-  // Create a message pipe.
-  NSDictionary* create = @{
-    @"name" : @"core.createMessagePipe",
-    @"args" : @{
-      @"optionsDict" : [NSNull null],
-    },
-  };
-  std::string response_as_string = facade()->HandleMojoMessage(GetJson(create));
-
-  // Verify handles.
-  EXPECT_FALSE(response_as_string.empty());
-  NSDictionary* response_as_dict = GetObject(response_as_string);
-  EXPECT_TRUE([response_as_dict isKindOfClass:[NSDictionary class]]);
-  id handle0 = response_as_dict[@"handle0"];
-  EXPECT_TRUE(handle0);
-  id handle1 = response_as_dict[@"handle1"];
-  EXPECT_TRUE(handle1);
+  uint32_t handle0, handle1;
+  CreateMessagePipe(&handle0, &handle1);
 
   // Start watching one end of the pipe.
   int callback_id = 99;
   NSDictionary* watch = @{
-    @"name" : @"support.watch",
+    @"name" : @"MojoHandle.watch",
     @"args" : @{
-      @"handle" : handle0,
+      @"handle" : @(handle0),
       @"signals" : @(MOJO_HANDLE_SIGNAL_READABLE),
       @"callbackId" : @(callback_id),
     },
@@ -186,15 +153,16 @@ TEST_F(MojoFacadeTest, Watch) {
   // Start waiting for the watch callback.
   __block bool callback_received = false;
   NSString* expected_script =
-      [NSString stringWithFormat:@"__crWeb.mojo.signalWatch(%d, %d)",
-                                 callback_id, MOJO_RESULT_OK];
+      [NSString stringWithFormat:
+                    @"Mojo.internal.watchCallbacksHolder.callCallback(%d, %d)",
+                    callback_id, MOJO_RESULT_OK];
   [[[evaluator() expect] andDo:^(NSInvocation*) {
     callback_received = true;
 
     // Cancel the watch immediately to ensure there are no additional
     // notifications.
     NSDictionary* cancel_watch = @{
-      @"name" : @"support.cancelWatch",
+      @"name" : @"MojoWatcher.cancel",
       @"args" : @{
         @"watchId" : @(watch_id),
       },
@@ -206,13 +174,9 @@ TEST_F(MojoFacadeTest, Watch) {
 
   // Write to the other end of the pipe.
   NSDictionary* write = @{
-    @"name" : @"core.writeMessage",
-    @"args" : @{
-      @"handle" : handle1,
-      @"handles" : @[],
-      @"flags" : @(MOJO_WRITE_MESSAGE_FLAG_NONE),
-      @"buffer" : @{@"0" : @0}
-    },
+    @"name" : @"MojoHandle.writeMessage",
+    @"args" :
+        @{@"handle" : @(handle1), @"handles" : @[], @"buffer" : @{@"0" : @0}},
   };
   std::string result_as_string = facade()->HandleMojoMessage(GetJson(write));
   EXPECT_FALSE(result_as_string.empty());
@@ -225,35 +189,22 @@ TEST_F(MojoFacadeTest, Watch) {
         return callback_received;
       },
       true, base::TimeDelta());
+
+  CloseHandle(handle0);
+  CloseHandle(handle1);
 }
 
 // Tests reading the message from the pipe.
 TEST_F(MojoFacadeTest, ReadWrite) {
-  // Create a message pipe.
-  NSDictionary* create = @{
-    @"name" : @"core.createMessagePipe",
-    @"args" : @{
-      @"optionsDict" : [NSNull null],
-    },
-  };
-  std::string response_as_string = facade()->HandleMojoMessage(GetJson(create));
-
-  // Verify handles.
-  EXPECT_FALSE(response_as_string.empty());
-  NSDictionary* response_as_dict = GetObject(response_as_string);
-  EXPECT_TRUE([response_as_dict isKindOfClass:[NSDictionary class]]);
-  id handle0 = response_as_dict[@"handle0"];
-  EXPECT_TRUE(handle0);
-  id handle1 = response_as_dict[@"handle1"];
-  EXPECT_TRUE(handle1);
+  uint32_t handle0, handle1;
+  CreateMessagePipe(&handle0, &handle1);
 
   // Write to the other end of the pipe.
   NSDictionary* write = @{
-    @"name" : @"core.writeMessage",
+    @"name" : @"MojoHandle.writeMessage",
     @"args" : @{
-      @"handle" : handle1,
+      @"handle" : @(handle1),
       @"handles" : @[],
-      @"flags" : @(MOJO_WRITE_MESSAGE_FLAG_NONE),
       @"buffer" : @{@"0" : @9, @"1" : @2, @"2" : @2008}
     },
   };
@@ -265,10 +216,9 @@ TEST_F(MojoFacadeTest, ReadWrite) {
 
   // Read the message from the pipe.
   NSDictionary* read = @{
-    @"name" : @"core.readMessage",
+    @"name" : @"MojoHandle.readMessage",
     @"args" : @{
-      @"handle" : handle0,
-      @"flags" : @(MOJO_READ_MESSAGE_FLAG_NONE),
+      @"handle" : @(handle0),
     },
   };
   NSDictionary* message = GetObject(facade()->HandleMojoMessage(GetJson(read)));
@@ -278,6 +228,9 @@ TEST_F(MojoFacadeTest, ReadWrite) {
   EXPECT_NSEQ(expected_message, message[@"buffer"]);
   EXPECT_FALSE([message[@"handles"] count]);
   EXPECT_EQ(MOJO_RESULT_OK, [message[@"result"] unsignedIntValue]);
+
+  CloseHandle(handle0);
+  CloseHandle(handle1);
 }
 
 }  // namespace web

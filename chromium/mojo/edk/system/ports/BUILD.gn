@@ -8,8 +8,6 @@ source_set("ports") {
   sources = [
     "event.cc",
     "event.h",
-    "message.cc",
-    "message.h",
     "message_filter.h",
     "message_queue.cc",
     "message_queue.h",
@@ -20,14 +18,24 @@ source_set("ports") {
     "node_delegate.h",
     "port.cc",
     "port.h",
+    "port_locker.cc",
+    "port_locker.h",
     "port_ref.cc",
     "port_ref.h",
     "user_data.h",
+    "user_message.cc",
+    "user_message.h",
   ]
 
   public_deps = [
     "//base",
   ]
+
+  if (!is_nacl) {
+    deps = [
+      "//crypto",
+    ]
+  }
 }
 
 source_set("tests") {

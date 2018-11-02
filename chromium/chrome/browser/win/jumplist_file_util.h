@@ -1,4 +1,4 @@
-// Copyright (c) 2017 The Chromium Authors. All rights reserved.
+// Copyright 2017 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -33,12 +33,6 @@ void DeleteDirectoryContent(const base::FilePath& path, int max_file_deleted);
 // This method firstly calls DeleteDirectoryContent() to delete the contents in
 // |path|. If |path| is empty after the call, it is removed.
 void DeleteDirectory(const base::FilePath& path, int max_file_deleted);
-
-// Deletes the content in the folder at |path| and records the runtime to UMA.
-// TODO(chengx): Remove this method and use DeleteDirectoryContent after fixing
-// http://crbug.com/40407.
-void DeleteDirectoryContentAndLogRuntime(const base::FilePath& path,
-                                         int max_file_deleted);
 
 // Returns true if the directory at |path| has more than |max_files| files.
 // Sub-directories are not taken into account here.

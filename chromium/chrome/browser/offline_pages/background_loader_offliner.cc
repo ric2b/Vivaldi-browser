@@ -6,13 +6,17 @@
 
 #include "base/bind.h"
 #include "base/json/json_writer.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/sys_info.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
-#include "chrome/browser/android/offline_pages/offliner_helper.h"
+#include "chrome/browser/loader/chrome_navigation_data.h"
+#include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
+#include "chrome/browser/offline_pages/offliner_helper.h"
+#include "chrome/browser/offline_pages/offliner_user_data.h"
 #include "chrome/browser/profiles/profile.h"
+#include "components/data_reduction_proxy/core/browser/data_reduction_proxy_data.h"
 #include "components/offline_pages/core/background/offliner_policy.h"
 #include "components/offline_pages/core/background/save_page_request.h"
 #include "components/offline_pages/core/client_namespace_constants.h"
@@ -24,6 +28,8 @@
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "content/public/common/previews_state.h"
+#include "net/http/http_response_headers.h"
 
 namespace offline_pages {
 
@@ -32,28 +38,6 @@ const char kContentType[] = "text/plain";
 const char kContentTransferEncodingBinary[] =
     "Content-Transfer-Encoding: binary";
 const char kXHeaderForSignals[] = "X-Chrome-Loading-Metrics-Data: 1";
-
-class OfflinerData : public content::WebContentsUserData<OfflinerData> {
- public:
-  static void AddToWebContents(content::WebContents* webcontents,
-                               BackgroundLoaderOffliner* offliner) {
-    DCHECK(offliner);
-    webcontents->SetUserData(UserDataKey(), std::unique_ptr<OfflinerData>(
-                                                new OfflinerData(offliner)));
-  }
-
-  explicit OfflinerData(BackgroundLoaderOffliner* offliner) {
-    offliner_ = offliner;
-  }
-  BackgroundLoaderOffliner* offliner() { return offliner_; }
-
- private:
-  // The offliner that the WebContents is attached to. The offliner owns the
-  // Delegate which owns the WebContents that this data is attached to.
-  // Therefore, its lifetime should exceed that of the WebContents, so this
-  // should always be non-null.
-  BackgroundLoaderOffliner* offliner_;
-};
 
 std::string AddHistogramSuffix(const ClientId& client_id,
                                const char* histogram_name) {
@@ -66,11 +50,37 @@ std::string AddHistogramSuffix(const ClientId& client_id,
   return adjusted_histogram_name;
 }
 
-void RecordErrorCauseUMA(const ClientId& client_id, net::Error error_code) {
+void RecordErrorCauseUMA(const ClientId& client_id, int error_code) {
   UMA_HISTOGRAM_SPARSE_SLOWLY(
       AddHistogramSuffix(client_id,
-                         "OfflinePages.Background.BackgroundLoadingFailedCode"),
-      std::abs(error_code));
+                         "OfflinePages.Background.LoadingErrorStatusCode"),
+      error_code);
+}
+
+void RecordOffliningPreviewsUMA(const ClientId& client_id,
+                                ChromeNavigationData* navigation_data) {
+  content::PreviewsState previews_state = content::PreviewsTypes::PREVIEWS_OFF;
+  if (navigation_data)
+    previews_state = navigation_data->previews_state();
+
+  int is_previews_enabled = 0;
+  bool lite_page_received = false;
+  data_reduction_proxy::DataReductionProxyData* data_reduction_proxy_data =
+      nullptr;
+  if (navigation_data)
+    data_reduction_proxy_data = navigation_data->GetDataReductionProxyData();
+  if (data_reduction_proxy_data)
+    lite_page_received = data_reduction_proxy_data->lite_page_received();
+
+  if ((previews_state != content::PreviewsTypes::PREVIEWS_OFF &&
+       previews_state != content::PreviewsTypes::PREVIEWS_NO_TRANSFORM) ||
+      lite_page_received)
+    is_previews_enabled = 1;
+
+  base::UmaHistogramBoolean(
+      AddHistogramSuffix(client_id,
+                         "OfflinePages.Background.OffliningPreviewStatus"),
+      is_previews_enabled);
 }
 
 void HandleLoadTerminationCancel(
@@ -99,7 +109,16 @@ BackgroundLoaderOffliner::BackgroundLoaderOffliner(
       weak_ptr_factory_(this) {
   DCHECK(offline_page_model_);
   DCHECK(browser_context_);
-  load_termination_listener_->set_offliner(this);
+  // When the offliner is created for test harness runs, the
+  // |load_termination_listener_| will be set to nullptr, in order to prevent
+  // crashing, adding a check here.
+  if (load_termination_listener_)
+    load_termination_listener_->set_offliner(this);
+
+  for (int i = 0; i < ResourceDataType::RESOURCE_DATA_TYPE_COUNT; ++i) {
+    stats_[i].requested = 0;
+    stats_[i].completed = 0;
+  }
 }
 
 BackgroundLoaderOffliner::~BackgroundLoaderOffliner() {}
@@ -107,9 +126,11 @@ BackgroundLoaderOffliner::~BackgroundLoaderOffliner() {}
 // static
 BackgroundLoaderOffliner* BackgroundLoaderOffliner::FromWebContents(
     content::WebContents* contents) {
-  OfflinerData* data = OfflinerData::FromWebContents(contents);
-  if (data)
-    return data->offliner();
+  Offliner* offliner = OfflinerUserData::OfflinerFromWebContents(contents);
+  // Today we only have one kind of offliner that uses OfflinerUserData.  If we
+  // add other types, revisit this cast.
+  if (offliner)
+    return static_cast<BackgroundLoaderOffliner*>(offliner);
   return nullptr;
 }
 
@@ -302,20 +323,51 @@ void BackgroundLoaderOffliner::DidFinishNavigation(
   // Mark as error page. Resetting here causes RecordNavigationMetrics to crash.
   if (navigation_handle->IsErrorPage()) {
     RecordErrorCauseUMA(pending_request_->client_id(),
-                        navigation_handle->GetNetErrorCode());
-    switch (navigation_handle->GetNetErrorCode()) {
-      case net::ERR_INTERNET_DISCONNECTED:
-        page_load_state_ = DELAY_RETRY;
-        break;
-      default:
-        page_load_state_ = RETRIABLE;
+                        static_cast<int>(navigation_handle->GetNetErrorCode()));
+    page_load_state_ = RETRIABLE;
+  } else {
+    int status_code = 200;  // Default to OK.
+    // No response header can imply intermediate navigation state.
+    if (navigation_handle->GetResponseHeaders())
+      status_code = navigation_handle->GetResponseHeaders()->response_code();
+    // 2XX and 3XX are ok because they indicate success or redirection.
+    // We track 301 because it's MOVED_PERMANENTLY and usually accompanies an
+    // error page with new address.
+    // 400+ codes are client and server errors.
+    // We skip 418 because it's a teapot.
+    if (status_code == 301 || (status_code >= 400 && status_code != 418)) {
+      RecordErrorCauseUMA(pending_request_->client_id(), status_code);
+      page_load_state_ = RETRIABLE;
     }
   }
+
+  // Record UMA if we are offlining a previvew instead of an unmodified page.
+  // As documented in content/public/browser/navigation_handle.h, this
+  // NavigationData is a clone of the NavigationData instance returned from
+  // ResourceDispatcherHostDelegate::GetNavigationData during commit.
+  // Because ChromeResourceDispatcherHostDelegate always returns a
+  // ChromeNavigationData, it is safe to static_cast here.
+  ChromeNavigationData* navigation_data = static_cast<ChromeNavigationData*>(
+      navigation_handle->GetNavigationData());
+
+  RecordOffliningPreviewsUMA(pending_request_->client_id(), navigation_data);
 }
 
 void BackgroundLoaderOffliner::SetSnapshotControllerForTest(
     std::unique_ptr<SnapshotController> controller) {
   snapshot_controller_ = std::move(controller);
+}
+
+void BackgroundLoaderOffliner::ObserveResourceLoading(
+    ResourceLoadingObserver::ResourceDataType type,
+    bool started) {
+  // Add the signal to extra data, and use for tracking.
+
+  RequestStats& found_stats = stats_[type];
+  if (started)
+    ++found_stats.requested;
+  else
+    ++found_stats.completed;
 }
 
 void BackgroundLoaderOffliner::OnNetworkBytesChanged(int64_t bytes) {
@@ -345,9 +397,6 @@ void BackgroundLoaderOffliner::StartSnapshot() {
       case NONRETRIABLE:
         status = Offliner::RequestStatus::LOADING_FAILED_NO_RETRY;
         break;
-      case DELAY_RETRY:
-        status = Offliner::RequestStatus::LOADING_FAILED_NO_NEXT;
-        break;
       default:
         // We should've already checked for Success before entering here.
         NOTREACHED();
@@ -366,6 +415,18 @@ void BackgroundLoaderOffliner::StartSnapshot() {
   // Add loading signal into the MHTML that will be generated if the command
   // line flag is set for it.
   if (IsOfflinePagesLoadSignalCollectingEnabled()) {
+    // Write resource percentage signal data into extra data before emitting it
+    // to the MHTML.
+    RequestStats& image_stats = stats_[ResourceDataType::IMAGE];
+    signal_data_.SetDouble("StartedImages", image_stats.requested);
+    signal_data_.SetDouble("CompletedImages", image_stats.completed);
+    RequestStats& css_stats = stats_[ResourceDataType::TEXT_CSS];
+    signal_data_.SetDouble("StartedCSS", css_stats.requested);
+    signal_data_.SetDouble("CompletedCSS", css_stats.completed);
+    RequestStats& xhr_stats = stats_[ResourceDataType::XHR];
+    signal_data_.SetDouble("StartedXHR", xhr_stats.requested);
+    signal_data_.SetDouble("CompletedXHR", xhr_stats.completed);
+
     // Stash loading signals for writing when we write out the MHTML.
     std::string headers = base::StringPrintf(
         "%s\r\n%s\r\n\r\n", kContentTransferEncodingBinary, kXHeaderForSignals);
@@ -393,6 +454,7 @@ void BackgroundLoaderOffliner::StartSnapshot() {
   params.proposed_offline_id = request.request_id();
   params.is_background = true;
   params.use_page_problem_detectors = true;
+  params.request_origin = request.request_origin();
 
   // Pass in the original URL if it's different from last committed
   // when redirects occur.
@@ -453,13 +515,25 @@ void BackgroundLoaderOffliner::DeleteOfflinePageCallback(
 
 void BackgroundLoaderOffliner::ResetState() {
   pending_request_.reset();
-  snapshot_controller_.reset();
+  // Stop snapshot controller from triggering any more events.
+  snapshot_controller_->Stop();
+  // Delete the snapshot controller after stack unwinds, so we don't
+  // corrupt stack in some edge cases. Deleting it soon should be safe because
+  // we check against pending_request_ with every action, and snapshot
+  // controller is configured to only call StartSnapshot once for BGL.
+  base::ThreadTaskRunnerHandle::Get()->DeleteSoon(
+      FROM_HERE, snapshot_controller_.release());
   page_load_state_ = SUCCESS;
   network_bytes_ = 0LL;
   is_low_bar_met_ = false;
   did_snapshot_on_last_retry_ = false;
   content::WebContentsObserver::Observe(nullptr);
   loader_.reset();
+
+  for (int i = 0; i < ResourceDataType::RESOURCE_DATA_TYPE_COUNT; ++i) {
+    stats_[i].requested = 0;
+    stats_[i].completed = 0;
+  }
 }
 
 void BackgroundLoaderOffliner::ResetLoader() {
@@ -470,7 +544,7 @@ void BackgroundLoaderOffliner::ResetLoader() {
 void BackgroundLoaderOffliner::AttachObservers() {
   content::WebContents* contents = loader_->web_contents();
   content::WebContentsObserver::Observe(contents);
-  OfflinerData::AddToWebContents(contents, this);
+  OfflinerUserData::AddToWebContents(contents, this);
 }
 
 void BackgroundLoaderOffliner::AddLoadingSignal(const char* signal_name) {
@@ -485,5 +559,3 @@ void BackgroundLoaderOffliner::AddLoadingSignal(const char* signal_name) {
 }
 
 }  // namespace offline_pages
-
-DEFINE_WEB_CONTENTS_USER_DATA_KEY(offline_pages::OfflinerData);

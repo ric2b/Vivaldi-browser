@@ -33,8 +33,12 @@ namespace service_manager {
 class Identity;
 }
 
+namespace resource_coordinator {
+class ResourceCoordinatorInterface;
+}
+
 namespace viz {
-class HostSharedBitmapManagerClient;
+class SharedBitmapAllocationNotifierImpl;
 }
 
 namespace content {
@@ -42,6 +46,7 @@ class BrowserContext;
 class BrowserMessageFilter;
 class RenderProcessHostObserver;
 class RenderWidgetHost;
+class RendererAudioOutputStreamFactoryContext;
 class StoragePartition;
 struct GlobalRequestID;
 
@@ -122,10 +127,13 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual void WidgetHidden() = 0;
   virtual int VisibleWidgetCount() const = 0;
 
-  // Called when an audio stream is added or removed and used to determine if
-  // the process should be backgrounded or not.
-  virtual void OnAudioStreamAdded() = 0;
-  virtual void OnAudioStreamRemoved() = 0;
+  virtual RendererAudioOutputStreamFactoryContext*
+  GetRendererAudioOutputStreamFactoryContext() = 0;
+
+  // Called when a video capture stream or an audio stream is added or removed
+  // and used to determine if the process should be backgrounded or not.
+  virtual void OnMediaStreamAdded() = 0;
+  virtual void OnMediaStreamRemoved() = 0;
 
   // Indicates whether the current RenderProcessHost is exclusively hosting
   // guest RenderFrames. Not all guest RenderFrames are created equal.  A guest,
@@ -145,10 +153,14 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   virtual bool Shutdown(int exit_code, bool wait) = 0;
 
   // Try to shut down the associated renderer process as fast as possible.
-  // If this renderer has any RenderViews with unload handlers, then this
-  // function does nothing.
-  // Returns true if it was able to do fast shutdown.
-  virtual bool FastShutdownIfPossible() = 0;
+  // If a non-zero |page_count| value is provided, then a fast shutdown will
+  // only happen if the count matches the active view count. If
+  // |skip_unload_handlers| is false and this renderer has any RenderViews with
+  // unload handlers, then this function does nothing. Otherwise, the function
+  // will ingnore checking for those handlers. Returns true if it was able to do
+  // fast shutdown.
+  virtual bool FastShutdownIfPossible(size_t page_count = 0,
+                                      bool skip_unload_handlers = false) = 0;
 
   // Returns true if fast shutdown was started for the renderer.
   virtual bool FastShutdownStarted() const = 0;
@@ -198,9 +210,6 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
 
   // Adds a message filter to the IPC channel.
   virtual void AddFilter(BrowserMessageFilter* filter) = 0;
-
-  // Try to shutdown the associated render process as fast as possible.
-  virtual bool FastShutdownForPageCount(size_t count) = 0;
 
   // Sets whether input events should be ignored for this process.
   virtual void SetIgnoreInputEvents(bool ignore_input_events) = 0;
@@ -351,10 +360,36 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // MockRenderProcessHost usage in tests.
   virtual mojom::Renderer* GetRendererInterface() = 0;
 
+  // Acquires the interface to the Global Resource Coordinator for this process.
+  virtual resource_coordinator::ResourceCoordinatorInterface*
+  GetProcessResourceCoordinator() = 0;
+
   // Whether this process is locked out from ever being reused for sites other
   // than the ones it currently has.
   virtual void SetIsNeverSuitableForReuse() = 0;
   virtual bool MayReuseHost() = 0;
+
+  // Indicates whether this RenderProcessHost is "unused".  This starts out as
+  // true for new processes and becomes false after one of the following:
+  // (1) This process commits any page.
+  // (2) This process is given to a SiteInstance that already has a site
+  //     assigned.
+  // Note that a process hosting ServiceWorkers will be implicitly handled by
+  // (2) during ServiceWorker initialization, and SharedWorkers will be handled
+  // by (1) since a page needs to commit before it can create a SharedWorker.
+  //
+  // While a process is unused, it is still suitable to host a URL that
+  // requires a dedicated process.
+  virtual bool IsUnused() = 0;
+  virtual void SetIsUsed() = 0;
+
+  // Return true if the host has not been used. This is stronger than IsUnused()
+  // in that it checks if this RPH has ever been used to render at all, rather
+  // than just no being suitable to host a URL that requires a dedicated
+  // process.
+  // TODO(alexmos): can this be unified with IsUnused()? See also
+  // crbug.com/738634.
+  virtual bool HostHasNotBeenUsed() = 0;
 
   // Returns the current number of active views in this process.  Excludes
   // any RenderViewHosts that are swapped out.
@@ -370,10 +405,27 @@ class CONTENT_EXPORT RenderProcessHost : public IPC::Sender,
   // Returns the SharedBitmapAllocationNotifier associated with this process.
   // SharedBitmapAllocationNotifier manages viz::SharedBitmaps created by this
   // process and can notify observers when a new SharedBitmap is allocated.
-  virtual viz::HostSharedBitmapManagerClient*
+  virtual viz::SharedBitmapAllocationNotifierImpl*
   GetSharedBitmapAllocationNotifier() = 0;
 
   // Static management functions -----------------------------------------------
+
+  // Possibly start an unbound, spare RenderProcessHost. A subsequent creation
+  // of a RenderProcessHost with a matching browser_context may use this
+  // preinitialized RenderProcessHost, improving performance.
+  //
+  // It is safe to call this multiple times or when it is not certain that the
+  // spare renderer will be used, although calling this too eagerly may reduce
+  // performance as unnecessary RenderProcessHosts are created. The spare
+  // renderer will only be used if it using the default StoragePartition of a
+  // matching BrowserContext.
+  //
+  // The spare RenderProcessHost is meant to be created in a situation where a
+  // navigation is imminent and it is unlikely an existing RenderProcessHost
+  // will be used, for example in a cross-site navigation when a Service Worker
+  // will need to be started.
+  static void WarmupSpareRenderProcessHost(
+      content::BrowserContext* browser_context);
 
   // Flag to run the renderer in process.  This is primarily
   // for debugging purposes.  When running "in process", the

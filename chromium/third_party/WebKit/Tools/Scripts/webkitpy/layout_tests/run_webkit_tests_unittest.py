@@ -47,13 +47,11 @@ from webkitpy.layout_tests.models import test_run_results
 from webkitpy.layout_tests.port import test
 
 
-def parse_args(extra_args=None, tests_included=False, new_results=False):
+def parse_args(extra_args=None, tests_included=False):
     extra_args = extra_args or []
     args = []
     if not '--platform' in extra_args:
         args.extend(['--platform', 'test'])
-    if new_results:
-        args.append('--new-test-results')
 
     if not '--child-processes' in extra_args:
         args.extend(['--child-processes', 1])
@@ -83,10 +81,9 @@ def passing_run(extra_args=None, port_obj=None, tests_included=False, host=None,
     return run_details.exit_code == 0
 
 
-def logging_run(extra_args=None, port_obj=None, tests_included=False, host=None, new_results=False, shared_port=True):
+def logging_run(extra_args=None, port_obj=None, tests_included=False, host=None, shared_port=True):
     options, parsed_args = parse_args(extra_args=extra_args,
-                                      tests_included=tests_included,
-                                      new_results=new_results)
+                                      tests_included=tests_included)
     host = host or MockHost()
     if not port_obj:
         port_obj = host.port_factory.get(port_name=options.platform, options=options)
@@ -256,15 +253,14 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         # Exceptions raised in a separate process are re-packaged into
         # WorkerExceptions (a subclass of BaseException), which have a string capture of the stack which can
         # be printed, but don't display properly in the unit test exception handlers.
-        self.assertRaises(BaseException, logging_run,
-                          ['failures/expected/exception.html', '--child-processes', '1'], tests_included=True)
+        with self.assertRaises(BaseException):
+            logging_run(['failures/expected/exception.html', '--child-processes', '1'], tests_included=True)
 
-        self.assertRaises(
-            BaseException,
-            logging_run,
-            ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'],
-            tests_included=True,
-            shared_port=False)
+        with self.assertRaises(BaseException):
+            logging_run(
+                ['--child-processes', '2', '--skipped=ignore', 'failures/expected/exception.html', 'passes/text.html'],
+                tests_included=True,
+                shared_port=False)
 
     def test_device_failure(self):
         # Test that we handle a device going offline during a test properly.
@@ -398,6 +394,16 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         tests_run = get_tests_run(['--repeat-each', '2', '--order', 'natural'] + tests_to_run)
         self.assertEqual(tests_run, ['passes/image.html', 'passes/image.html', 'passes/text.html', 'passes/text.html'])
 
+    def test_gtest_repeat(self):
+        tests_to_run = ['passes/image.html', 'passes/text.html']
+        tests_run = get_tests_run(['--gtest_repeat', '2', '--order', 'natural'] + tests_to_run)
+        self.assertEqual(tests_run, ['passes/image.html', 'passes/image.html', 'passes/text.html', 'passes/text.html'])
+
+    def test_gtest_repeat_overrides_repeat_each(self):
+        tests_to_run = ['passes/image.html', 'passes/text.html']
+        tests_run = get_tests_run(['--repeat-each', '4', '--gtest_repeat', '2', '--order', 'natural'] + tests_to_run)
+        self.assertEqual(tests_run, ['passes/image.html', 'passes/image.html', 'passes/text.html', 'passes/text.html'])
+
     def test_ignore_flag(self):
         # Note that passes/image.html is expected to be run since we specified it directly.
         tests_run = get_tests_run(['-i', 'passes', 'passes/image.html'])
@@ -520,9 +526,12 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertEqual(tests_run, ['perf/foo/test.html'])
 
     def test_sharding_incorrect_arguments(self):
-        self.assertRaises(ValueError, get_tests_run, ['--shard-index', '3'])
-        self.assertRaises(ValueError, get_tests_run, ['--total-shards', '3'])
-        self.assertRaises(ValueError, get_tests_run, ['--shard-index', '3', '--total-shards', '3'])
+        with self.assertRaises(ValueError):
+            get_tests_run(['--shard-index', '3'])
+        with self.assertRaises(ValueError):
+            get_tests_run(['--total-shards', '3'])
+        with self.assertRaises(ValueError):
+            get_tests_run(['--shard-index', '3', '--total-shards', '3'])
 
     def test_sharding_environ(self):
         tests_to_run = ['passes/error.html', 'passes/image.html', 'passes/platform_image.html', 'passes/text.html']
@@ -609,7 +618,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         host = MockHost()
 
         # Both tests have failing checksum. We include only the first in pixel tests so only that should fail.
-        args = ['--pixel-tests', '--retry-failures', '--pixel-test-directory', 'failures/unexpected/pixeldir',
+        args = ['--retry-failures', '--pixel-test-directory', 'failures/unexpected/pixeldir',
                 'failures/unexpected/pixeldir/image_in_pixeldir.html',
                 'failures/unexpected/image_not_in_pixeldir.html']
         details, _, _ = logging_run(extra_args=args, host=host, tests_included=True)
@@ -953,7 +962,7 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
 
     def test_output_diffs(self):
         host = MockHost()
-        logging_run(['--pixel-tests', 'failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
+        logging_run(['failures/unexpected/text-image-checksum.html'], tests_included=True, host=host)
         written_files = host.filesystem.written_files
         self.assertTrue(any(path.endswith('-diff.txt') for path in written_files.keys()))
         self.assertTrue(any(path.endswith('-pretty-diff.html') for path in written_files.keys()))
@@ -969,15 +978,20 @@ class RunTest(unittest.TestCase, StreamTestingMixin):
         self.assertTrue('unsupported platform' in stderr.getvalue())
 
     def test_build_check(self):
-        # By using a port_name for a different platform than the one we're running on, the build check should always fail.
+        # By using a port_name for a different platform than the one
+        # we're running on, the build check should always fail because
+        # the binary should not be present.
         if sys.platform == 'darwin':
             port_name = 'linux-trusty'
         else:
             port_name = 'mac-mac10.11'
-        out = StringIO.StringIO()
-        err = StringIO.StringIO()
-        self.assertEqual(run_webkit_tests.main(
-            ['--platform', port_name, 'fast/harness/results.html'], out, err), exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
+        stdout = StringIO.StringIO()
+        stderr = StringIO.StringIO()
+        self.assertEqual(
+            run_webkit_tests.main(['--platform', port_name, 'fast/harness/results.html'], stdout, stderr),
+            exit_codes.UNEXPECTED_ERROR_EXIT_STATUS)
+        self.assertIn('Checking build ...', stderr.getvalue())
+        self.assertIn('Build check failed', stderr.getvalue())
 
     def test_verbose_in_child_processes(self):
         # When we actually run multiple processes, we may have to reconfigure logging in the
@@ -1088,104 +1102,206 @@ class EndToEndTest(unittest.TestCase):
 
 
 class RebaselineTest(unittest.TestCase, StreamTestingMixin):
+    """Tests for flags which cause new baselines to be written.
 
-    def assert_baselines(self, file_list, file_base, extensions, err):
-        'assert that the file_list contains the baselines.'''
-        for ext in extensions:
-            baseline = file_base + '-expected' + ext
-            baseline_msg = 'Writing new expected result "%s"\n' % baseline
-            self.assertTrue(any(baseline in f for f in file_list))
-            self.assert_contains(err, baseline_msg)
+    When running layout tests, there are several flags which write new
+    baselines. This is separate from the "webkit-patch rebaseline" commands,
+    which fetch new baselines from elsewhere rather than generating them.
+    """
 
-    # FIXME: Add tests to ensure that we're *not* writing baselines when we're not
-    # supposed to be.
+    def assert_baselines(self, file_list, log_stream, expected_file_base, expected_extensions):
+        """Asserts that the file_list contains baselines for one test.
 
-    def test_reset_results(self):
-        # Test that we update expectations in place. If the expectation
-        # is missing, update the expected generic location.
+        Args:
+            file_list: List of written files, from FileSystem.written_files.
+            log_stream: The log stream from the run.
+            expected_file_base: Relative path to the baseline,
+                without the extension, from the layout test directory.
+            expected_extensions: Expected extensions which should be written.
+        """
+        for ext in expected_extensions:
+            baseline = '%s-expected%s' % (expected_file_base, ext)
+            baseline_full_path = '%s/%s' % (test.LAYOUT_TEST_DIR, baseline)
+            self.assertIn(baseline_full_path, file_list)
+            baseline_message = 'Writing new expected result "%s"\n' % baseline
+            self.assert_contains(log_stream, baseline_message)
+        # Assert that baselines with other extensions were not written.
+        for ext in ({'.png', '.txt', '.wav'} - set(expected_extensions)):
+            baseline = '%s-expected%s' % (expected_file_base, ext)
+            baseline_full_path = '%s/%s' % (test.LAYOUT_TEST_DIR, baseline)
+            self.assertNotIn(baseline_full_path, file_list)
+
+    def test_reset_results_basic(self):
+        # Test that we update baselines in place when the test fails
+        # (text and image mismatch).
         host = MockHost()
-        details, err, _ = logging_run(
-            ['--pixel-tests', '--reset-results', 'passes/image.html'],
-            tests_included=True, host=host, new_results=True)
+        details, log_stream, _ = logging_run(
+            ['--reset-results', 'failures/unexpected/text-image-checksum.html'],
+            tests_included=True, host=host)
+        file_list = host.filesystem.written_files.keys()
+        # The run exit code is 0, indicating success; since we're resetting
+        # baselines, it's OK for actual results to not match baselines.
+        self.assertEqual(details.exit_code, 0)
+        self.assertEqual(len(file_list), 7)
+        self.assert_baselines(
+            file_list, log_stream,
+            'failures/unexpected/text-image-checksum',
+            expected_extensions=['.txt', '.png'])
+
+    def test_no_baselines_are_written_with_no_reset_results_flag(self):
+        # This test checks that we're *not* writing baselines when we're not
+        # supposed to be (when there's no --reset-results flag).
+        host = MockHost()
+        details, log_stream, _ = logging_run(
+            ['failures/unexpected/text-image-checksum.html'],
+            tests_included=True, host=host)
+        file_list = host.filesystem.written_files.keys()
+        # In a normal test run where actual results don't match baselines, the
+        # exit code indicates failure.
+        self.assertEqual(details.exit_code, 1)
+        self.assert_baselines(
+            file_list, log_stream, 'failures/unexpected/text-image-checksum',
+            expected_extensions=[])
+
+    def test_reset_results_missing_results(self):
+        # Test that we create new baselines at the generic location for
+        # if we are missing baselines.
+        host = MockHost()
+        details, log_stream, _ = logging_run(
+            [
+                '--reset-results',
+                'failures/unexpected/missing_text.html',
+                'failures/unexpected/missing_image.html',
+                'failures/unexpected/missing_render_tree_dump.html'
+            ],
+            tests_included=True, host=host)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
         self.assertEqual(len(file_list), 8)
-        self.assert_baselines(file_list, 'passes/image', ['.txt', '.png'], err)
+        self.assert_baselines(
+            file_list, log_stream,
+            'failures/unexpected/missing_text', ['.txt'])
+        self.assert_baselines(
+            file_list, log_stream,
+            'failures/unexpected/missing_image', ['.png'])
+        self.assert_baselines(
+            file_list, log_stream,
+            'failures/unexpected/missing_render_tree_dump',
+            expected_extensions=['.txt'])
 
-    def test_missing_results(self):
-        # Test that we update expectations in place. If the expectation
-        # is missing, update the expected generic location.
+    def test_reset_results_add_platform_exceptions(self):
+        # Test that we update the baselines in the version-specific directories
+        # if the new baseline is different from the fallback baseline.
         host = MockHost()
-        details, err, _ = logging_run(['--no-show-results',
-                                       'failures/unexpected/missing_text.html',
-                                       'failures/unexpected/missing_image.html',
-                                       'failures/unexpected/missing_render_tree_dump.html'],
-                                      tests_included=True, host=host, new_results=True)
-        file_list = host.filesystem.written_files.keys()
-        self.assertEqual(details.exit_code, 3)
-        self.assertEqual(len(file_list), 12)
-        self.assert_baselines(file_list, 'failures/unexpected/missing_text', ['.txt'], err)
-        self.assert_baselines(file_list, 'platform/test/failures/unexpected/missing_image', ['.png'], err)
-        self.assert_baselines(file_list, 'platform/test/failures/unexpected/missing_render_tree_dump', ['.txt'], err)
-
-    def test_new_baseline(self):
-        # Test that we update the platform expectations in the version-specific directories
-        # for both existing and new baselines.
-        host = MockHost()
-        details, err, _ = logging_run(
-            ['--pixel-tests', '--new-baseline', 'passes/image.html'],
-            tests_included=True, host=host, new_results=True)
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR +
+            '/failures/unexpected/text-image-checksum-expected.txt',
+            # This value is the same as actual text result of the test defined
+            # in webkitpy.layout_tests.port.test. This is added so that we also
+            # check that the text baseline isn't written if it matches.
+            'text-image-checksum_fail-txt')
+        details, log_stream, _ = logging_run(
+            [
+                '--reset-results', '--add-platform-exceptions',
+                'failures/unexpected/text-image-checksum.html'
+            ],
+            tests_included=True, host=host)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
-        self.assertEqual(len(file_list), 8)
-        self.assert_baselines(file_list,
-                              'platform/test-mac-mac10.10/passes/image', ['.txt', '.png'], err)
+        self.assertEqual(len(file_list), 7)
+        self.assert_baselines(
+            file_list, log_stream,
+            'platform/test-mac-mac10.10/failures/unexpected/text-image-checksum',
+            expected_extensions=['.png'])
 
-    def test_reftest_reset_results(self):
-        # Test rebaseline of reftests.
-        # Should ignore reftests without text expectations.
+    def test_reset_results_reftest(self):
+        # Test rebaseline of reference tests.
+        # Reference tests don't have baselines, so they should be ignored.
         host = MockHost()
-        details, err, _ = logging_run(['--reset-results', 'passes/reftest.html'], tests_included=True, host=host)
+        details, log_stream, _ = logging_run(
+            ['--reset-results', 'passes/reftest.html'],
+            tests_included=True, host=host)
+        file_list = host.filesystem.written_files.keys()
+        self.assertEqual(details.exit_code, 0)
+        self.assertEqual(len(file_list), 5)
+        self.assert_baselines(
+            file_list, log_stream, 'passes/reftest', expected_extensions=[])
+
+    def test_reset_results_reftest_with_baseline_present(self):
+        # In this case, there is a text baseline present; a new baseline is
+        # written even though this is a reference test.
+        host = MockHost()
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR + '/passes/reftest-expected.txt', '')
+        details, log_stream, _ = logging_run(
+            ['--reset-results', 'passes/reftest.html'],
+            tests_included=True, host=host)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
         self.assertEqual(len(file_list), 6)
-        self.assert_baselines(file_list, '', [], err)
+        self.assert_baselines(
+            file_list, log_stream, 'passes/reftest',
+            expected_extensions=['.txt'])
 
-        host.filesystem.write_text_file(test.LAYOUT_TEST_DIR + '/passes/reftest-expected.txt', '')
-        host.filesystem.clear_written_files()
-        details, err, _ = logging_run(['--reset-results', 'passes/reftest.html'], tests_included=True, host=host)
-        file_list = host.filesystem.written_files.keys()
-        self.assertEqual(details.exit_code, 0)
-        self.assertEqual(len(file_list), 6)
-        self.assert_baselines(file_list, 'passes/reftest', ['.txt'], err)
-
-    def test_reftest_new_baseline(self):
-        # Test rebaseline of reftests.
-        # Should ignore reftests without text expectations.
+    def test_new_flag_specific_baseline(self):
+        # Test writing new baselines under flag-specific directory if the actual
+        # results are different from the current baselines.
         host = MockHost()
-        details, err, _ = logging_run(['--new-baseline', 'passes/reftest.html'], tests_included=True, host=host)
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR +
+            '/failures/unexpected/text-image-checksum-expected.txt',
+            # This value is the same as actual text result of the test defined
+            # in webkitpy.layout_tests.port.test. This is added so that we also
+            # check that the text baseline isn't written if it matches.
+            'text-image-checksum_fail-txt')
+        details, log_stream, _ = logging_run(
+            ['--additional-driver-flag=--flag',
+             '--new-flag-specific-baseline',
+             'failures/unexpected/text-image-checksum.html'],
+            tests_included=True, host=host)
         file_list = host.filesystem.written_files.keys()
         self.assertEqual(details.exit_code, 0)
-        self.assertEqual(len(file_list), 6)
-        self.assert_baselines(file_list, '', [], err)
+        self.assertEqual(len(file_list), 7)
+        # We should create new image baseline only.
+        self.assert_baselines(
+            file_list, log_stream,
+            'flag-specific/flag/failures/unexpected/text-image-checksum',
+            expected_extensions=['.png'])
 
-        host.filesystem.write_text_file(test.LAYOUT_TEST_DIR + '/passes/reftest-expected.txt', '')
-        host.filesystem.clear_written_files()
-        details, err, _ = logging_run(['--new-baseline', 'passes/reftest.html'], tests_included=True, host=host)
-        file_list = host.filesystem.written_files.keys()
+    def test_new_flag_specific_baseline_optimize(self):
+        # Test removing existing baselines under flag-specific directory if the
+        # actual results are the same as the fallback baselines.
+        host = MockHost()
+        host.filesystem.write_text_file(
+            test.LAYOUT_TEST_DIR +
+            '/failures/unexpected/text-image-checksum-expected.txt',
+            # This value is the same as actual text result of the test defined
+            # in webkitpy.layout_tests.port.test. This is added so that we check
+            # that the flag-specific text baseline is removed if the actual
+            # result is the same as this fallback baseline.
+            'text-image-checksum_fail-txt')
+        flag_specific_baseline_txt = (
+            test.LAYOUT_TEST_DIR +
+            '/flag-specific/flag/failures/unexpected/text-image-checksum-expected.txt')
+        host.filesystem.write_text_file(
+            flag_specific_baseline_txt, 'existing-baseline-different-from-fallback')
+
+        details, log_stream, _ = logging_run(
+            ['--additional-driver-flag=--flag',
+             '--new-flag-specific-baseline',
+             'failures/unexpected/text-image-checksum.html'],
+            tests_included=True, host=host)
         self.assertEqual(details.exit_code, 0)
-        self.assertEqual(len(file_list), 6)
-        self.assert_baselines(file_list, 'platform/test-mac-mac10.10/passes/reftest', ['.txt'], err)
-
-
-class PortTest(unittest.TestCase):
-
-    def assert_mock_port_works(self, port_name):
-        self.assertTrue(passing_run(['--platform', 'mock-' + port_name,
-                                     'fast/harness/results.html'], tests_included=True, host=Host()))
-
-    def disabled_test_mac_lion(self):
-        self.assert_mock_port_works('mac-lion')
+        self.assertFalse(host.filesystem.exists(flag_specific_baseline_txt))
+        file_list = host.filesystem.written_files.keys()
+        # Exclude the removed file.
+        file_list.remove(flag_specific_baseline_txt)
+        self.assertEqual(len(file_list), 7)
+        # We should create new image baseline only.
+        self.assert_baselines(
+            file_list, log_stream,
+            'flag-specific/flag/failures/unexpected/text-image-checksum',
+            expected_extensions=['.png'])
 
 
 class MainTest(unittest.TestCase):

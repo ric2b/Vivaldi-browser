@@ -35,9 +35,12 @@ namespace blink {
 inline SVGScriptElement::SVGScriptElement(Document& document,
                                           bool was_inserted_by_parser,
                                           bool already_started)
-    : SVGElement(SVGNames::scriptTag, document), SVGURIReference(this) {
-  InitializeScriptLoader(was_inserted_by_parser, already_started, false);
-}
+    : SVGElement(SVGNames::scriptTag, document),
+      SVGURIReference(this),
+      loader_(this,
+              InitializeScriptLoader(was_inserted_by_parser,
+                                     already_started,
+                                     false)) {}
 
 SVGScriptElement* SVGScriptElement::Create(Document& document,
                                            bool inserted_by_parser) {
@@ -114,10 +117,6 @@ String SVGScriptElement::TextFromChildren() {
   return Element::TextFromChildren();
 }
 
-String SVGScriptElement::TextContent() const {
-  return Node::textContent();
-}
-
 bool SVGScriptElement::HasSourceAttribute() const {
   return href()->IsSpecified();
 }
@@ -138,9 +137,11 @@ const AtomicString& SVGScriptElement::GetNonceForElement() const {
 bool SVGScriptElement::AllowInlineScriptForCSP(
     const AtomicString& nonce,
     const WTF::OrdinalNumber& context_line,
-    const String& script_content) {
+    const String& script_content,
+    ContentSecurityPolicy::InlineType inline_type) {
   return GetDocument().GetContentSecurityPolicy()->AllowInlineScript(
-      this, GetDocument().Url(), nonce, context_line, script_content);
+      this, GetDocument().Url(), nonce, context_line, script_content,
+      inline_type);
 }
 
 AtomicString SVGScriptElement::InitiatorName() const {
@@ -179,9 +180,15 @@ bool SVGScriptElement::IsAnimatableAttribute(const QualifiedName& name) const {
 #endif
 
 DEFINE_TRACE(SVGScriptElement) {
+  visitor->Trace(loader_);
   SVGElement::Trace(visitor);
   SVGURIReference::Trace(visitor);
   ScriptElementBase::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(SVGScriptElement) {
+  visitor->TraceWrappers(loader_);
+  SVGElement::TraceWrappers(visitor);
 }
 
 }  // namespace blink

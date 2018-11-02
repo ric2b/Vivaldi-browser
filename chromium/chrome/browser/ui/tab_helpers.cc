@@ -22,6 +22,7 @@
 #include "chrome/browser/history/history_tab_helper.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/infobars/infobar_service.h"
+#include "chrome/browser/installable/installable_manager.h"
 #include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/metrics/desktop_session_duration/desktop_session_duration_observer.h"
 #include "chrome/browser/metrics/renderer_uptime_web_contents_observer.h"
@@ -56,6 +57,7 @@
 #include "chrome/browser/ui/search_engines/search_engine_tab_helper.h"
 #include "chrome/browser/ui/tab_contents/core_tab_helper.h"
 #include "chrome/browser/ui/tab_dialogs.h"
+#include "chrome/browser/vr/vr_tab_helper.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
@@ -64,8 +66,10 @@
 #include "components/dom_distiller/core/dom_distiller_switches.h"
 #include "components/history/content/browser/web_contents_top_sites_observer.h"
 #include "components/history/core/browser/top_sites.h"
+#include "components/offline_pages/features/features.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
+#include "components/subresource_filter/core/browser/subresource_filter_features.h"
 #include "components/tracing/common/tracing_switches.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/browser_side_navigation_policy.h"
@@ -75,16 +79,8 @@
 #if defined(OS_ANDROID)
 #include "chrome/browser/android/banners/app_banner_manager_android.h"
 #include "chrome/browser/android/data_usage/data_use_tab_helper.h"
-#include "chrome/browser/android/offline_pages/offline_page_tab_helper.h"
-#include "chrome/browser/android/offline_pages/recent_tab_helper.h"
 #include "chrome/browser/android/search_geolocation/search_geolocation_disclosure_tab_helper.h"
 #include "chrome/browser/android/voice_search_tab_helper.h"
-
-#include "device/vr/features/features.h"  // nogncheck
-#if BUILDFLAG(ENABLE_VR)
-#include "chrome/browser/android/vr_shell/vr_tab_helper.h"
-#endif  // BUILDFLAG(ENABLE_VR)
-
 #include "chrome/browser/android/webapps/single_tab_mode_tab_helper.h"
 #include "chrome/browser/ui/android/context_menu_helper.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
@@ -103,6 +99,11 @@
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/zoom_controller.h"
 #endif  // defined(OS_ANDROID)
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+#include "chrome/browser/offline_pages/offline_page_tab_helper.h"
+#include "chrome/browser/offline_pages/recent_tab_helper.h"
+#endif
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
 #include "chrome/browser/captive_portal/captive_portal_tab_helper.h"
@@ -142,9 +143,7 @@ const char kTabContentsAttachedTabHelpersUserDataKey[] =
 }  // namespace
 
 // static
-void TabHelpers::AttachTabHelpers(
-    WebContents* web_contents,
-    const base::Optional<WebContents::CreateParams>& create_params) {
+void TabHelpers::AttachTabHelpers(WebContents* web_contents) {
   // If already adopted, nothing to be done.
   base::SupportsUserData::Data* adoption_tag =
       web_contents->GetUserData(&kTabContentsAttachedTabHelpersUserDataKey);
@@ -188,7 +187,10 @@ void TabHelpers::AttachTabHelpers(
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       web_contents,
       autofill::ChromeAutofillClient::FromWebContents(web_contents));
-  ChromeSubresourceFilterClient::CreateForWebContents(web_contents);
+  if (base::FeatureList::IsEnabled(
+          subresource_filter::kSafeBrowsingSubresourceFilter)) {
+    ChromeSubresourceFilterClient::CreateForWebContents(web_contents);
+  }
   if (!vivaldi::IsVivaldiRunning()) {
   ChromeTranslateClient::CreateForWebContents(web_contents);
   }
@@ -204,6 +206,7 @@ void TabHelpers::AttachTabHelpers(
                             web_contents->GetBrowserContext())).get());
   HistoryTabHelper::CreateForWebContents(web_contents);
   InfoBarService::CreateForWebContents(web_contents);
+  InstallableManager::CreateForWebContents(web_contents);
   metrics::RendererUptimeWebContentsObserver::CreateForWebContents(
       web_contents);
   if (content::IsBrowserSideNavigationEnabled())
@@ -213,7 +216,7 @@ void TabHelpers::AttachTabHelpers(
   if (!vivaldi::IsVivaldiRunning()) {
     // NOTE(pettern@vivald.com): Disable due to VB-11435, consider enabling
     // it when the page no longer fire OnLoad when attached.
-  chrome::InitializePageLoadMetricsForWebContents(web_contents, create_params);
+  chrome::InitializePageLoadMetricsForWebContents(web_contents);
   }
   PermissionRequestManager::CreateForWebContents(web_contents);
   PopupBlockerTabHelper::CreateForWebContents(web_contents);
@@ -236,6 +239,7 @@ void TabHelpers::AttachTabHelpers(
   // TODO(vabr): Remove TabSpecificContentSettings from here once their function
   // is taken over by ChromeContentSettingsClient. http://crbug.com/387075
   TabSpecificContentSettings::CreateForWebContents(web_contents);
+  vr::VrTabHelper::CreateForWebContents(web_contents);
 
   // NO! Do not just add your tab helper here. This is a large alphabetized
   // block; please insert your tab helper above in alphabetical order.
@@ -247,18 +251,10 @@ void TabHelpers::AttachTabHelpers(
   ContextMenuHelper::CreateForWebContents(web_contents);
   DataUseTabHelper::CreateForWebContents(web_contents);
 
-  offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
-  offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
-
   SearchGeolocationDisclosureTabHelper::CreateForWebContents(web_contents);
   SingleTabModeTabHelper::CreateForWebContents(web_contents);
   ViewAndroidHelper::CreateForWebContents(web_contents);
   VoiceSearchTabHelper::CreateForWebContents(web_contents);
-
-#if BUILDFLAG(ENABLE_VR)
-  vr_shell::VrTabHelper::CreateForWebContents(web_contents);
-#endif
-
 #else
   BookmarkTabHelper::CreateForWebContents(web_contents);
   extensions::ChromeExtensionWebContentsObserver::CreateForWebContents(
@@ -293,6 +289,11 @@ void TabHelpers::AttachTabHelpers(
 #endif
 
 // --- Feature tab helpers behind flags ---
+
+#if BUILDFLAG(ENABLE_OFFLINE_PAGES)
+offline_pages::OfflinePageTabHelper::CreateForWebContents(web_contents);
+offline_pages::RecentTabHelper::CreateForWebContents(web_contents);
+#endif
 
 #if BUILDFLAG(ENABLE_CAPTIVE_PORTAL_DETECTION)
   CaptivePortalTabHelper::CreateForWebContents(web_contents);

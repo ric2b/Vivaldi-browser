@@ -7,6 +7,7 @@
 
 #include <list>
 
+#include "base/android/jni_array.h"
 #include "base/android/jni_weak_ref.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
@@ -18,10 +19,21 @@ class Layer;
 }
 
 namespace ui {
+class DragEventAndroid;
 class EventForwarder;
 class MotionEventAndroid;
 class ViewClient;
 class WindowAndroid;
+
+// View-related parameters from frame updates.
+struct FrameInfo {
+  gfx::SizeF viewport_size;  // In CSS pixels.
+  float page_scale;
+
+  // Content offset from the top. Used to translate snapshots to
+  // the correct part of the view. In CSS pixels.
+  float content_offset;
+};
 
 // A simple container for a UI layer.
 // At the root of the hierarchy is a WindowAndroid, when attached.
@@ -63,7 +75,8 @@ class UI_ANDROID_EXPORT ViewAndroid {
   };
 
   // Layout parameters used to set the view's position and size.
-  // Position is in parent's coordinate space.
+  // Position is in parent's coordinate space, and all the values
+  // are in CSS pixel.
   struct LayoutParams {
     static LayoutParams MatchParent() { return {true, 0, 0, 0, 0}; }
     static LayoutParams Normal(int x, int y, int width, int height) {
@@ -92,15 +105,10 @@ class UI_ANDROID_EXPORT ViewAndroid {
   ViewAndroid();
   virtual ~ViewAndroid();
 
-  // The content offset is in CSS pixels, and is used to translate
-  // snapshots to the correct part of the view.
-  void set_content_offset(const gfx::Vector2dF& content_offset) {
-    content_offset_ = content_offset;
-  }
-
-  gfx::Vector2dF content_offset() const {
-    return content_offset_;
-  }
+  void UpdateFrameInfo(const FrameInfo& frame_info);
+  float content_offset() const { return frame_info_.content_offset; }
+  float page_scale() const { return frame_info_.page_scale; }
+  gfx::SizeF viewport_size() const { return frame_info_.viewport_size; }
 
   // Returns the window at the root of this hierarchy, or |null|
   // if disconnected.
@@ -149,6 +157,9 @@ class UI_ANDROID_EXPORT ViewAndroid {
   // This may return null.
   base::android::ScopedJavaLocalRef<jobject> GetContainerView();
 
+  // Return the location of the container view in physical pixels.
+  gfx::Point GetLocationOfContainerViewOnScreen();
+
   float GetDipScale();
 
  protected:
@@ -158,25 +169,35 @@ class UI_ANDROID_EXPORT ViewAndroid {
   friend class EventForwarder;
   friend class ViewAndroidBoundsTest;
 
-  using ViewClientCallback =
-      const base::Callback<bool(ViewClient*, const MotionEventAndroid&)>;
-
+  bool OnDragEvent(const DragEventAndroid& event);
   bool OnTouchEvent(const MotionEventAndroid& event, bool for_touch_handle);
   bool OnMouseEvent(const MotionEventAndroid& event);
   bool OnMouseWheelEvent(const MotionEventAndroid& event);
 
   void RemoveChild(ViewAndroid* child);
 
-  bool HitTest(ViewClientCallback send_to_client,
-               const MotionEventAndroid& event);
+  template <typename E>
+  using ViewClientCallback =
+      const base::Callback<bool(ViewClient*, const E&, const gfx::PointF&)>;
 
+  template <typename E>
+  bool HitTest(ViewClientCallback<E> send_to_client,
+               const E& event,
+               const gfx::PointF& point);
+
+  static bool SendDragEventToClient(ViewClient* client,
+                                    const DragEventAndroid& event,
+                                    const gfx::PointF& point);
   static bool SendTouchEventToClient(bool for_touch_handle,
                                      ViewClient* client,
-                                     const MotionEventAndroid& event);
+                                     const MotionEventAndroid& event,
+                                     const gfx::PointF& point);
   static bool SendMouseEventToClient(ViewClient* client,
-                                     const MotionEventAndroid& event);
+                                     const MotionEventAndroid& event,
+                                     const gfx::PointF& point);
   static bool SendMouseWheelEventToClient(ViewClient* client,
-                                          const MotionEventAndroid& event);
+                                          const MotionEventAndroid& event,
+                                          const gfx::PointF& point);
 
   bool has_event_forwarder() const { return !!event_forwarder_; }
 
@@ -203,9 +224,11 @@ class UI_ANDROID_EXPORT ViewAndroid {
   // the passed events should be processed by the view.
   LayoutParams layout_params_;
 
+  // In physical pixel.
   gfx::Size physical_size_;
 
-  gfx::Vector2dF content_offset_;  // in CSS pixel.
+  FrameInfo frame_info_;
+
   std::unique_ptr<EventForwarder> event_forwarder_;
 
   DISALLOW_COPY_AND_ASSIGN(ViewAndroid);

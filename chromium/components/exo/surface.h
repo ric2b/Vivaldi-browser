@@ -16,7 +16,7 @@
 #include "base/observer_list.h"
 #include "cc/resources/transferable_resource.h"
 #include "cc/scheduler/begin_frame_source.h"
-#include "components/exo/compositor_frame_sink_holder.h"
+#include "components/exo/layer_tree_frame_sink_holder.h"
 #include "third_party/skia/include/core/SkBlendMode.h"
 #include "third_party/skia/include/core/SkRegion.h"
 #include "ui/aura/window.h"
@@ -68,10 +68,10 @@ class Surface : public ui::ContextFactoryObserver,
 
   aura::Window* window() { return window_.get(); }
 
-  cc::SurfaceId GetSurfaceId() const;
+  viz::SurfaceId GetSurfaceId() const;
 
-  CompositorFrameSinkHolder* compositor_frame_sink_holder() {
-    return compositor_frame_sink_holder_.get();
+  LayerTreeFrameSinkHolder* layer_tree_frame_sink_holder() {
+    return layer_tree_frame_sink_holder_.get();
   }
 
   // Set a buffer as the content of this surface. A buffer can only be attached
@@ -193,12 +193,8 @@ class Surface : public ui::ContextFactoryObserver,
   // Called when the begin frame source has changed.
   void SetBeginFrameSource(cc::BeginFrameSource* begin_frame_source);
 
-  // Check whether this Surface and its children need to create new cc::Surface
-  // IDs for their contents next time they get new buffer contents.
-  void CheckIfSurfaceHierarchyNeedsCommitToNewSurfaces();
-
   // Returns the active contents size.
-  gfx::Size content_size() const { return content_size_; }
+  const gfx::Size& content_size() const { return content_size_; }
 
   // Returns true if the associated window is in 'stylus-only' mode.
   bool IsStylusOnly();
@@ -266,13 +262,6 @@ class Surface : public ui::ContextFactoryObserver,
     return needs_commit_surface_hierarchy_;
   }
 
-  // Returns true if this surface or any child surface needs a commit and has
-  // has_pending_layer_changes_ true.
-  bool HasLayerHierarchyChanged() const;
-
-  // Sets that all children must create new cc::SurfaceIds for their contents.
-  void SetSurfaceHierarchyNeedsCommitToNewSurfaces();
-
   // Set SurfaceLayer contents to the current buffer.
   void SetSurfaceLayerContents(ui::Layer* layer);
 
@@ -300,11 +289,6 @@ class Surface : public ui::ContextFactoryObserver,
   // buffer with the same size as the old shouldn't set this to true.
   bool has_pending_layer_changes_ = true;
 
-  // This is true if the next commit to this surface should put its contents
-  // into a new cc::SurfaceId. This allows for synchronization between Surface
-  // and layer changes.
-  bool needs_commit_to_new_surface_ = true;
-
   // This is the size of the last committed contents.
   gfx::Size content_size_;
 
@@ -318,10 +302,7 @@ class Surface : public ui::ContextFactoryObserver,
   // The device scale factor sent in CompositorFrames.
   float device_scale_factor_ = 1.0f;
 
-  std::unique_ptr<CompositorFrameSinkHolder> compositor_frame_sink_holder_;
-
-  // The next resource id the buffer will be attached to.
-  int next_resource_id_ = 1;
+  std::unique_ptr<LayerTreeFrameSinkHolder> layer_tree_frame_sink_holder_;
 
   // The damage region to schedule paint for when Commit() is called.
   SkRegion pending_damage_;

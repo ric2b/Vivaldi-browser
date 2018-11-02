@@ -5,8 +5,10 @@
 #include "components/login/screens/screen_context.h"
 
 #include <memory>
+#include <utility>
 
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 
 namespace login {
 
@@ -29,6 +31,7 @@ ScreenContext::ScreenContext() {
 }
 
 ScreenContext::~ScreenContext() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 }
 
 bool ScreenContext::SetBoolean(const KeyType& key, bool value) {
@@ -131,17 +134,17 @@ void ScreenContext::CopyFrom(ScreenContext& context) {
 }
 
 bool ScreenContext::HasKey(const KeyType& key) const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return storage_.HasKey(key);
 }
 
 bool ScreenContext::HasChanges() const {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return !changes_.empty();
 }
 
 void ScreenContext::GetChangesAndReset(base::DictionaryValue* diff) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(diff);
   changes_.Swap(diff);
   changes_.Clear();
@@ -149,7 +152,7 @@ void ScreenContext::GetChangesAndReset(base::DictionaryValue* diff) {
 
 void ScreenContext::ApplyChanges(const base::DictionaryValue& diff,
                                  std::vector<std::string>* keys) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!HasChanges());
   if (keys) {
     keys->clear();
@@ -165,7 +168,7 @@ void ScreenContext::ApplyChanges(const base::DictionaryValue& diff,
 }
 
 bool ScreenContext::Set(const KeyType& key, base::Value* value) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(value);
   std::unique_ptr<base::Value> new_value(value);
 
@@ -176,8 +179,8 @@ bool ScreenContext::Set(const KeyType& key, base::Value* value) {
   if (in_storage && new_value->Equals(current_value))
     return false;
 
-  changes_.Set(key, new_value->DeepCopy());
-  storage_.Set(key, new_value.release());
+  changes_.Set(key, base::MakeUnique<base::Value>(*new_value));
+  storage_.Set(key, std::move(new_value));
   return true;
 }
 

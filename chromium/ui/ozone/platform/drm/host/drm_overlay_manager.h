@@ -17,6 +17,7 @@
 
 namespace ui {
 class DrmWindowHostManager;
+class OverlaySurfaceCandidate;
 
 class DrmOverlayManager : public OverlayManagerOzone {
  public:
@@ -28,12 +29,16 @@ class DrmOverlayManager : public OverlayManagerOzone {
   std::unique_ptr<OverlayCandidatesOzone> CreateOverlayCandidates(
       gfx::AcceleratedWidget w) override;
 
+  // Invoked on changes to the window (aka display) that require re-populating
+  // the cache from the DRM thread.
   void ResetCache();
 
   // Communication-free implementations of actions performed in response to
   // messages from the GPU thread.
-  void GpuSentOverlayResult(gfx::AcceleratedWidget widget,
-                            const std::vector<OverlayCheck_Params>& params);
+  void GpuSentOverlayResult(
+      gfx::AcceleratedWidget widget,
+      const std::vector<OverlayCheck_Params>& params,
+      const std::vector<OverlayCheckReturn_Params>& returns);
 
   // Service method for DrmOverlayCandidatesHost
   void CheckOverlaySupport(
@@ -41,19 +46,30 @@ class DrmOverlayManager : public OverlayManagerOzone {
       gfx::AcceleratedWidget widget);
 
  private:
+  // Value for the request cache, that keeps track of how many times a
+  // specific validation has been requested, if there is a GPU validation
+  // in flight, and at last the result of the validation.
+  struct OverlayValidationCacheValue {
+    OverlayValidationCacheValue();
+    OverlayValidationCacheValue(const OverlayValidationCacheValue&);
+    ~OverlayValidationCacheValue();
+    int request_num = 0;
+    std::vector<OverlayCheckReturn_Params> returns;
+  };
+
   void SendOverlayValidationRequest(
       const std::vector<OverlayCheck_Params>& new_params,
       gfx::AcceleratedWidget widget) const;
-  bool CanHandleCandidate(
-      const OverlayCandidatesOzone::OverlaySurfaceCandidate& candidate,
-      gfx::AcceleratedWidget widget) const;
+  bool CanHandleCandidate(const OverlaySurfaceCandidate& candidate,
+                          gfx::AcceleratedWidget widget) const;
 
   GpuThreadAdapter* proxy_;               // Not owned.
   DrmWindowHostManager* window_manager_;  // Not owned.
 
-  // List of all OverlayCheck_Params which have been validated in GPU side.
-  // Value is set to true if we are waiting for validation results from GPU.
-  base::MRUCache<std::vector<OverlayCheck_Params>, bool> cache_;
+  // List of all OverlayCheck_Params instances which have been requested
+  // for validation and/or validated.
+  base::MRUCache<std::vector<OverlayCheck_Params>, OverlayValidationCacheValue>
+      cache_;
 
   DISALLOW_COPY_AND_ASSIGN(DrmOverlayManager);
 };

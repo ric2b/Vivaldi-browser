@@ -6,12 +6,44 @@
 
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/region_data_loader.h"
+#include "components/payments/core/payments_profile_comparator.h"
+#include "components/prefs/pref_service.h"
 #include "ios/web/public/payments/payment_request.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
 #endif
 
-autofill::RegionDataLoader* TestPaymentRequest::GetRegionDataLoader() {
-  return region_data_loader_;
+namespace payments {
+
+void TestPaymentRequest::ClearShippingProfiles() {
+  shipping_profiles_.clear();
 }
+
+void TestPaymentRequest::ClearContactProfiles() {
+  contact_profiles_.clear();
+}
+
+void TestPaymentRequest::ClearPaymentMethods() {
+  payment_methods_.clear();
+}
+
+autofill::RegionDataLoader* TestPaymentRequest::GetRegionDataLoader() {
+  if (region_data_loader_)
+    return region_data_loader_;
+  return PaymentRequest::GetRegionDataLoader();
+}
+
+PrefService* TestPaymentRequest::GetPrefService() {
+  if (pref_service_)
+    return pref_service_;
+  return PaymentRequest::GetPrefService();
+}
+
+PaymentsProfileComparator* TestPaymentRequest::profile_comparator() {
+  if (profile_comparator_)
+    return profile_comparator_;
+  return PaymentRequest::profile_comparator();
+}
+
+}  // namespace payments

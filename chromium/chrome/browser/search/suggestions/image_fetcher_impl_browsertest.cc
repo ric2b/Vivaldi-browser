@@ -42,7 +42,7 @@ class TestImageFetcherDelegate : public ImageFetcherDelegate {
   TestImageFetcherDelegate()
     : num_delegate_valid_called_(0),
       num_delegate_null_called_(0) {}
-  ~TestImageFetcherDelegate() override{};
+  ~TestImageFetcherDelegate() override {}
 
   // Perform additional tasks when an image has been fetched.
   void OnImageFetched(const std::string& id, const gfx::Image& image) override {
@@ -72,7 +72,6 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
 
   void SetUpInProcessBrowserTestFixture() override {
     ASSERT_TRUE(test_server_.Start());
-    InProcessBrowserTest::SetUpInProcessBrowserTestFixture();
   }
 
   ImageFetcherImpl* CreateImageFetcher() {
@@ -113,6 +112,7 @@ class ImageFetcherImplBrowserTest : public InProcessBrowserTest {
   net::EmbeddedTestServer test_server_;
   TestImageFetcherDelegate delegate_;
 
+ private:
   DISALLOW_COPY_AND_ASSIGN(ImageFetcherImplBrowserTest);
 };
 

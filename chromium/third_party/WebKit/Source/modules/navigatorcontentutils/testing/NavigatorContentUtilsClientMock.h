@@ -33,7 +33,9 @@ class NavigatorContentUtilsClientMock final
   virtual void UnregisterProtocolHandler(const String& scheme, const KURL&);
 
  private:
-  NavigatorContentUtilsClientMock() {}
+  // TODO(sashab): Make NavigatorContentUtilsClientMock non-virtual and test it
+  // using a WebFrameClient mock.
+  NavigatorContentUtilsClientMock() : NavigatorContentUtilsClient(nullptr) {}
 
   typedef struct {
     String scheme;

@@ -115,8 +115,9 @@ void DevtoolsConnectorAPI::SendOnUndockedEvent(
     // Set defaults in prefs, based on DevToolsWindow::CreateDevToolsBrowser
     DictionaryPrefUpdate update(prefs, prefs::kAppWindowPlacement);
     base::DictionaryValue* wp_prefs = update.Get();
-    base::DictionaryValue* dev_tools_defaults = new base::DictionaryValue;
-    wp_prefs->Set(DevToolsWindow::kDevToolsApp, dev_tools_defaults);
+    std::unique_ptr<base::DictionaryValue>
+          dev_tools_defaults(new base::DictionaryValue);
+    wp_prefs->Set(DevToolsWindow::kDevToolsApp, std::move(dev_tools_defaults));
     dev_tools_defaults->SetInteger("left", 100);
     dev_tools_defaults->SetInteger("top", 100);
     dev_tools_defaults->SetInteger("right", 740);
@@ -195,17 +196,16 @@ void DevtoolsConnectorItem::WebContentsCreated(
     int opener_render_frame_id,
     const std::string& frame_name,
     const GURL& target_url,
-    content::WebContents* new_contents,
-    const base::Optional<content::WebContents::CreateParams>& create_params) {
+    content::WebContents* new_contents) {
   if (devtools_delegate_) {
     devtools_delegate_->WebContentsCreated(
         source_contents, opener_render_process_id, opener_render_frame_id,
-        frame_name, target_url, new_contents, create_params);
+        frame_name, target_url, new_contents);
   }
   if (guest_delegate_) {
     guest_delegate_->WebContentsCreated(
       source_contents, opener_render_process_id, opener_render_frame_id,
-      frame_name, target_url, new_contents, create_params);
+      frame_name, target_url, new_contents);
   }
 }
 

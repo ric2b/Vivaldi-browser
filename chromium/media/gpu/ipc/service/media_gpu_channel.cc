@@ -72,7 +72,7 @@ class MediaGpuChannelFilter : public IPC::MessageFilter {
   }
 
  private:
-  ~MediaGpuChannelFilter() override {}
+  ~MediaGpuChannelFilter() override = default;
 
   IPC::Channel* channel_;
   base::UnguessableToken channel_token_;

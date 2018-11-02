@@ -13,6 +13,7 @@
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/gamma_ramp_rgb_entry.h"
 #include "ui/gfx/native_widget_types.h"
+#include "ui/ozone/platform/drm/common/display_types.h"
 #include "ui/ozone/platform/drm/gpu/inter_thread_messaging_proxy.h"
 
 namespace base {
@@ -28,8 +29,8 @@ class Rect;
 namespace ui {
 class DrmThread;
 struct DisplayMode_Params;
-struct DisplaySnapshot_Params;
 struct OverlayCheck_Params;
+struct OverlayCheckReturn_Params;
 
 class DrmThreadMessageProxy : public IPC::MessageFilter,
                               public InterThreadMessagingProxy {
@@ -80,9 +81,9 @@ class DrmThreadMessageProxy : public IPC::MessageFilter,
 
   void OnCheckOverlayCapabilitiesCallback(
       gfx::AcceleratedWidget widget,
-      const std::vector<OverlayCheck_Params>& overlays) const;
-  void OnRefreshNativeDisplaysCallback(
-      const std::vector<DisplaySnapshot_Params>& displays) const;
+      const std::vector<OverlayCheck_Params>& overlays,
+      const std::vector<OverlayCheckReturn_Params>& returns) const;
+  void OnRefreshNativeDisplaysCallback(MovableDisplaySnapshots displays) const;
   void OnConfigureNativeDisplayCallback(int64_t display_id, bool success) const;
   void OnDisableNativeDisplayCallback(int64_t display_id, bool success) const;
   void OnTakeDisplayControlCallback(bool success) const;

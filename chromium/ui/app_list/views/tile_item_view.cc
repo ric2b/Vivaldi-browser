@@ -4,8 +4,14 @@
 
 #include "ui/app_list/views/tile_item_view.h"
 
+#include <utility>
+
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/views/app_list_main_view.h"
+#include "ui/gfx/canvas.h"
+#include "ui/gfx/image/canvas_image_source.h"
+#include "ui/gfx/image/image_skia_operations.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -13,9 +19,37 @@
 
 namespace {
 
-const int kTopPadding = 5;
-const int kTileSize = 90;
-const int kIconTitleSpacing = 6;
+constexpr int kTopPadding = 5;
+constexpr int kTileSize = 90;
+constexpr int kIconTitleSpacing = 6;
+
+constexpr int kIconSelectedSize = 56;
+constexpr int kIconSelectedCornerRadius = 4;
+// Icon selected color, #000 8%.
+constexpr int kIconSelectedColor = SkColorSetARGBMacro(0x14, 0x00, 0x00, 0x00);
+
+// The background image source for badge.
+class BadgeBackgroundImageSource : public gfx::CanvasImageSource {
+ public:
+  explicit BadgeBackgroundImageSource(int size)
+      : CanvasImageSource(gfx::Size(size, size), false),
+        radius_(static_cast<float>(size / 2)) {}
+  ~BadgeBackgroundImageSource() override = default;
+
+ private:
+  // gfx::CanvasImageSource overrides:
+  void Draw(gfx::Canvas* canvas) override {
+    cc::PaintFlags flags;
+    flags.setColor(SK_ColorWHITE);
+    flags.setAntiAlias(true);
+    flags.setStyle(cc::PaintFlags::kFill_Style);
+    canvas->DrawCircle(gfx::PointF(radius_, radius_), radius_, flags);
+  }
+
+  const float radius_;
+
+  DISALLOW_COPY_AND_ASSIGN(BadgeBackgroundImageSource);
+};
 
 }  // namespace
 
@@ -25,8 +59,9 @@ TileItemView::TileItemView()
     : views::CustomButton(this),
       parent_background_color_(SK_ColorTRANSPARENT),
       icon_(new views::ImageView),
+      badge_(nullptr),
       title_(new views::Label),
-      selected_(false) {
+      is_fullscreen_app_list_enabled_(features::IsFullscreenAppListEnabled()) {
   // Prevent the icon view from interfering with our mouse events.
   icon_->set_can_process_events_within_subtree(false);
   icon_->SetVerticalAlignment(views::ImageView::LEADING);
@@ -39,11 +74,16 @@ TileItemView::TileItemView()
   title_->SetHandlesTooltips(false);
 
   AddChildView(icon_);
+  if (features::IsPlayStoreAppSearchEnabled()) {
+    badge_ = new views::ImageView();
+    badge_->set_can_process_events_within_subtree(false);
+    badge_->SetVerticalAlignment(views::ImageView::LEADING);
+    AddChildView(badge_);
+  }
   AddChildView(title_);
 }
 
-TileItemView::~TileItemView() {
-}
+TileItemView::~TileItemView() = default;
 
 void TileItemView::SetSelected(bool selected) {
   if (selected == selected_)
@@ -84,6 +124,31 @@ void TileItemView::SetIcon(const gfx::ImageSkia& icon) {
   icon_->SetImage(icon);
 }
 
+void TileItemView::SetBadgeIcon(const gfx::ImageSkia& badge_icon) {
+  if (!badge_)
+    return;
+
+  if (badge_icon.isNull()) {
+    badge_->SetVisible(false);
+    return;
+  }
+
+  const int size = kBadgeBackgroundRadius * 2;
+  gfx::ImageSkia background(new BadgeBackgroundImageSource(size),
+                            gfx::Size(size, size));
+  gfx::ImageSkia icon_with_background =
+      gfx::ImageSkiaOperations::CreateSuperimposedImage(background, badge_icon);
+
+  gfx::ShadowValues shadow_values;
+  shadow_values.push_back(
+      gfx::ShadowValue(gfx::Vector2d(0, 1), 0, SkColorSetARGB(0x33, 0, 0, 0)));
+  shadow_values.push_back(
+      gfx::ShadowValue(gfx::Vector2d(0, 1), 2, SkColorSetARGB(0x33, 0, 0, 0)));
+  badge_->SetImage(gfx::ImageSkiaOperations::CreateImageWithDropShadow(
+      icon_with_background, shadow_values));
+  badge_->SetVisible(true);
+}
+
 void TileItemView::SetTitle(const base::string16& title) {
   title_->SetText(title);
   SetAccessibleName(title);
@@ -91,6 +156,28 @@ void TileItemView::SetTitle(const base::string16& title) {
 
 void TileItemView::StateChanged(ButtonState old_state) {
   UpdateBackgroundColor();
+}
+
+void TileItemView::PaintButtonContents(gfx::Canvas* canvas) {
+  if (!is_fullscreen_app_list_enabled_ || !selected_)
+    return;
+
+  gfx::Rect rect(GetContentsBounds());
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setStyle(cc::PaintFlags::kFill_Style);
+  if (is_recommendation_) {
+    rect.Inset((rect.width() - kGridSelectedSize) / 2,
+               (rect.height() - kGridSelectedSize) / 2);
+    flags.setColor(kGridSelectedColor);
+    canvas->DrawRoundRect(gfx::RectF(rect), kGridSelectedCornerRadius, flags);
+  } else {
+    const int kLeftRightPadding = (rect.width() - kIconSelectedSize) / 2;
+    rect.Inset(kLeftRightPadding, 0);
+    rect.set_height(kIconSelectedSize);
+    flags.setColor(kIconSelectedColor);
+    canvas->DrawRoundRect(gfx::RectF(rect), kIconSelectedCornerRadius, flags);
+  }
 }
 
 void TileItemView::Layout() {
@@ -113,32 +200,6 @@ void TileItemView::ImageShadowAnimationProgressed(
   icon_->SetImage(animator->shadow_image());
 }
 
-void TileItemView::UpdateBackgroundColor() {
-  views::Background* background = nullptr;
-  SkColor background_color = parent_background_color_;
-
-  if (selected_) {
-    background_color = kSelectedColor;
-    background = views::Background::CreateSolidBackground(background_color);
-  } else if (image_shadow_animator_) {
-    if (state() == STATE_HOVERED || state() == STATE_PRESSED)
-      image_shadow_animator_->animation()->Show();
-    else
-      image_shadow_animator_->animation()->Hide();
-  } else if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
-    background_color = kHighlightedColor;
-    background = views::Background::CreateSolidBackground(background_color);
-  }
-
-  // Tell the label what color it will be drawn onto. It will use whether the
-  // background color is opaque or transparent to decide whether to use subpixel
-  // rendering. Does not actually set the label's background color.
-  title_->SetBackgroundColor(background_color);
-
-  set_background(background);
-  SchedulePaint();
-}
-
 gfx::Size TileItemView::CalculatePreferredSize() const {
   return gfx::Size(kTileSize, kTileSize);
 }
@@ -153,6 +214,38 @@ bool TileItemView::GetTooltipText(const gfx::Point& p,
   bool handled = title_->GetTooltipText(p, tooltip);
   title_->SetHandlesTooltips(false);
   return handled;
+}
+
+void TileItemView::UpdateBackgroundColor() {
+  SkColor background_color = parent_background_color_;
+
+  // Tell the label what color it will be drawn onto. It will use whether the
+  // background color is opaque or transparent to decide whether to use subpixel
+  // rendering. Does not actually set the label's background color.
+  title_->SetBackgroundColor(background_color);
+
+  if (is_fullscreen_app_list_enabled_) {
+    SetBackground(nullptr);
+    SchedulePaint();
+    return;
+  }
+
+  std::unique_ptr<views::Background> background;
+  if (selected_) {
+    background_color = kSelectedColor;
+    background = views::CreateSolidBackground(background_color);
+  } else if (image_shadow_animator_) {
+    if (state() == STATE_HOVERED || state() == STATE_PRESSED)
+      image_shadow_animator_->animation()->Show();
+    else
+      image_shadow_animator_->animation()->Hide();
+  } else if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
+    background_color = kHighlightedColor;
+    background = views::CreateSolidBackground(background_color);
+  }
+
+  SetBackground(std::move(background));
+  SchedulePaint();
 }
 
 }  // namespace app_list

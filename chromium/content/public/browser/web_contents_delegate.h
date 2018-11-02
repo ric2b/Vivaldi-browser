@@ -16,8 +16,8 @@
 #include "content/common/content_export.h"
 #include "content/public/browser/bluetooth_chooser.h"
 #include "content/public/browser/invalidate_type.h"
-#include "content/public/browser/web_contents.h"
 #include "content/public/common/media_stream_request.h"
+#include "content/public/common/previews_state.h"
 #include "content/public/common/window_container_type.mojom.h"
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "third_party/WebKit/public/platform/WebDragOperation.h"
@@ -46,6 +46,7 @@ class RenderFrameHost;
 class RenderWidgetHost;
 class SessionStorageNamespace;
 class SiteInstance;
+class WebContents;
 class WebContentsImpl;
 struct ColorSuggestion;
 struct ContextMenuParams;
@@ -355,6 +356,7 @@ class CONTENT_EXPORT WebContentsDelegate {
   //       RenderViewHost in |source_site_instance| with |route_id|.
   virtual bool ShouldCreateWebContents(
       WebContents* web_contents,
+      RenderFrameHost* opener,
       SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,
@@ -368,14 +370,12 @@ class CONTENT_EXPORT WebContentsDelegate {
 
   // Notifies the delegate about the creation of a new WebContents. This
   // typically happens when popups are created.
-  virtual void WebContentsCreated(
-      WebContents* source_contents,
-      int opener_render_process_id,
-      int opener_render_frame_id,
-      const std::string& frame_name,
-      const GURL& target_url,
-      WebContents* new_contents,
-      const base::Optional<WebContents::CreateParams>& create_params) {}
+  virtual void WebContentsCreated(WebContents* source_contents,
+                                  int opener_render_process_id,
+                                  int opener_render_frame_id,
+                                  const std::string& frame_name,
+                                  const GURL& target_url,
+                                  WebContents* new_contents) {}
 
   // Notification that the tab is hung.
   virtual void RendererUnresponsive(
@@ -612,6 +612,10 @@ class CONTENT_EXPORT WebContentsDelegate {
                                                  bool allowed_per_prefs,
                                                  const url::Origin& origin,
                                                  const GURL& resource_url);
+
+  // Give WebContentsDelegates the opportunity to adjust the previews state.
+  virtual void AdjustPreviewsStateForNavigation(PreviewsState* previews_state) {
+  }
 
  protected:
   virtual ~WebContentsDelegate();

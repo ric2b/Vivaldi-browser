@@ -50,6 +50,7 @@
 <translation id="2378982052244864789">Selecione o diretório da extensão.</translation>
 <translation id="241082044617551207">Plugin desconhecido</translation>
 <translation id="2423578206845792524">&amp;Salvar imagem como...</translation>
+<translation id="2439110203301358333">Outro programa em seu computador adicionou uma extensão que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="2445081178310039857">O diretório raiz da extensão é obrigatório.</translation>
 <translation id="2501797496290880632">Digite um atalho</translation>
 <translation id="253557089021624350">Manutenção de atividade</translation>
@@ -69,6 +70,7 @@
 <translation id="3021678814754966447">Exibir código &amp;fonte do frame</translation>
 <translation id="302620147503052030">Exibir Botão</translation>
 <translation id="3031601332414921114">Continuar Impressão</translation>
+<translation id="3080207940057008665">Outro programa em seu computador adicionou um tema que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="3084548735795614657">Solte para instalar</translation>
 <translation id="3122464029669770682">CPU</translation>
 <translation id="3124111068741548686">Handles do USER</translation>
@@ -102,11 +104,13 @@
 <translation id="3943582379552582368">&amp;Voltar</translation>
 <translation id="3948116654032448504">Pes&amp;quisar imagem no <ph name="SEARCH_ENGINE" /></translation>
 <translation id="4021279097213088397">–</translation>
+<translation id="4022426551683927403">&amp;Adicionar ao dicionário</translation>
 <translation id="4087089424473531098">A extensão foi compactada em:
 
 <ph name="EXTENSION_FILE" /></translation>
 <translation id="4089192115462111328">No Vivaldi</translation>
 <translation id="4090535558450035482">(Esta extensão é gerenciada e não pode ser removida)</translation>
+<translation id="4100839878934973028">Outro programa em seu computador adicionou um aplicativo que pode modificar a forma como o Vivaldi funciona.</translation>
 <translation id="411666854932687641">Memória Privada</translation>
 <translation id="4176463684765177261">Desativada</translation>
 <translation id="4200983522494130825">Nova &amp;guia</translation>
@@ -189,7 +193,6 @@
 <translation id="6639554308659482635">Memória SQLite</translation>
 <translation id="6655190889273724601">Modo de desenvolvedor</translation>
 <translation id="6691936601825168937">&amp;Avançar</translation>
-<translation id="6700480081846086223">Transmitir <ph name="HOST_NAME" /></translation>
 <translation id="6706210727756204531">Escopo</translation>
 <translation id="6786747875388722282">Extensões</translation>
 <translation id="6787839852456839824">Atalhos de teclado</translation>

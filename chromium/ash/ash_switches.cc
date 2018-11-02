@@ -40,12 +40,15 @@ const char kAshDisableTouchExplorationMode[] =
 const char kAshEnableMagnifierKeyScroller[] =
     "ash-enable-magnifier-key-scroller";
 
-// Enables the NightLight feature.
+// Enable the Night Light feature.
 const char kAshEnableNightLight[] = "ash-enable-night-light";
 
 // Enables the palette on every display, instead of only the internal one.
 const char kAshEnablePaletteOnAllDisplays[] =
     "ash-enable-palette-on-all-displays";
+
+// Enables the split view on tablet mode.
+const char kAshEnableTabletSplitView[] = "enable-tablet-splitview";
 
 // Enables the observation of accelerometer events to enter touch-view mode.
 const char kAshEnableTouchView[] = "enable-touchview";
@@ -105,6 +108,37 @@ const char kAshTouchHud[] = "ash-touch-hud";
 // lock the screen or shutdown the system immediately in response to a press
 // instead of displaying an interactive animation.
 const char kAuraLegacyPowerButton[] = "aura-legacy-power-button";
+
+// Forces non-tablet-style power button behavior even if the device has a
+// convertible form factor.
+const char kForceClamshellPowerButton[] = "force-clamshell-power-button";
+
+// Whether this device has an internal stylus.
+const char kHasInternalStylus[] = "has-internal-stylus";
+
+// Number of recent accelerometer samples to examine to determine if a power
+// button event was spurious.
+const char kSpuriousPowerButtonWindow[] = "spurious-power-button-window";
+
+// Number of recent acceleration samples that must meet or exceed the threshold
+// in order for a power button event to be considered spurious.
+const char kSpuriousPowerButtonAccelCount[] =
+    "spurious-power-button-accel-count";
+
+// Threshold (in m/s^2, disregarding gravity) that screen acceleration must meet
+// or exceed for a power button event to be considered spurious.
+const char kSpuriousPowerButtonScreenAccel[] =
+    "spurious-power-button-screen-accel";
+
+// Threshold (in m/s^2, disregarding gravity) that keyboard acceleration must
+// meet or exceed for a power button event to be considered spurious.
+const char kSpuriousPowerButtonKeyboardAccel[] =
+    "spurious-power-button-keyboard-accel";
+
+// Change in lid angle (i.e. hinge between keyboard and screen) that must be
+// exceeded for a power button event to be considered spurious.
+const char kSpuriousPowerButtonLidAngleChange[] =
+    "spurious-power-button-lid-angle-change";
 
 // By default we use classic IME (i.e. InputMethodChromeOS) in kMus. This flag
 // enables the IME service (i.e. InputMethodMus) instead.

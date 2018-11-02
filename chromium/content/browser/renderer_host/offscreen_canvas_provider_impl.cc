@@ -10,8 +10,10 @@
 namespace content {
 
 OffscreenCanvasProviderImpl::OffscreenCanvasProviderImpl(
+    viz::HostFrameSinkManager* host_frame_sink_manager,
     uint32_t renderer_client_id)
-    : renderer_client_id_(renderer_client_id) {}
+    : host_frame_sink_manager_(host_frame_sink_manager),
+      renderer_client_id_(renderer_client_id) {}
 
 OffscreenCanvasProviderImpl::~OffscreenCanvasProviderImpl() = default;
 
@@ -21,8 +23,8 @@ void OffscreenCanvasProviderImpl::Add(
 }
 
 void OffscreenCanvasProviderImpl::CreateOffscreenCanvasSurface(
-    const cc::FrameSinkId& parent_frame_sink_id,
-    const cc::FrameSinkId& frame_sink_id,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    const viz::FrameSinkId& frame_sink_id,
     blink::mojom::OffscreenCanvasSurfaceClientPtr client,
     blink::mojom::OffscreenCanvasSurfaceRequest request) {
   // TODO(kylechar): Kill the renderer too.
@@ -40,14 +42,14 @@ void OffscreenCanvasProviderImpl::CreateOffscreenCanvasSurface(
       base::Unretained(this), frame_sink_id);
 
   canvas_map_[frame_sink_id] = base::MakeUnique<OffscreenCanvasSurfaceImpl>(
-      parent_frame_sink_id, frame_sink_id, std::move(client),
-      std::move(request), std::move(destroy_callback));
+      host_frame_sink_manager_, parent_frame_sink_id, frame_sink_id,
+      std::move(client), std::move(request), std::move(destroy_callback));
 }
 
 void OffscreenCanvasProviderImpl::CreateCompositorFrameSink(
-    const cc::FrameSinkId& frame_sink_id,
-    cc::mojom::MojoCompositorFrameSinkClientPtr client,
-    cc::mojom::MojoCompositorFrameSinkRequest request) {
+    const viz::FrameSinkId& frame_sink_id,
+    cc::mojom::CompositorFrameSinkClientPtr client,
+    cc::mojom::CompositorFrameSinkRequest request) {
   // TODO(kylechar): Kill the renderer too.
   if (frame_sink_id.client_id() != renderer_client_id_) {
     DLOG(ERROR) << "Invalid client id " << frame_sink_id;
@@ -65,7 +67,7 @@ void OffscreenCanvasProviderImpl::CreateCompositorFrameSink(
 }
 
 void OffscreenCanvasProviderImpl::DestroyOffscreenCanvasSurface(
-    cc::FrameSinkId frame_sink_id) {
+    viz::FrameSinkId frame_sink_id) {
   canvas_map_.erase(frame_sink_id);
 }
 

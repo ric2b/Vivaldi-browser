@@ -32,13 +32,13 @@
 #include "core/css/SelectorChecker.h"
 #include "core/css/parser/CSSParser.h"
 #include "core/dom/Document.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/Node.h"
 #include "core/dom/NthIndexCache.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StaticNodeList.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "platform/wtf/PtrUtil.h"
 
 // Uncomment to run the SelectorQueryTests for stats in a release build.
@@ -550,9 +550,9 @@ SelectorQuery* SelectorQueryCache::Add(const AtomicString& selectors,
     return it->value.get();
 
   CSSSelectorList selector_list = CSSParser::ParseSelector(
-      CSSParserContext::Create(document, document.BaseURL(),
-                               document.GetReferrerPolicy(), g_empty_string,
-                               CSSParserContext::kStaticProfile),
+      CSSParserContext::Create(
+          document, document.BaseURL(), document.GetReferrerPolicy(),
+          WTF::TextEncoding(), CSSParserContext::kStaticProfile),
       nullptr, selectors);
 
   if (!selector_list.First()) {

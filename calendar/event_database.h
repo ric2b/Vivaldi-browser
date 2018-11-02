@@ -12,7 +12,7 @@
 #include <stddef.h>
 
 #include "base/macros.h"
-#include "calendar/calendar_types.h"
+#include "calendar/event_type.h"
 #include "sql/statement.h"
 
 namespace sql {
@@ -35,17 +35,19 @@ class EventDatabase {
   // happening to avoid thread-safety problems.
   virtual ~EventDatabase();
 
-  bool CreateCalendarEvent(calendar::EventRow ev);
+  EventID CreateCalendarEvent(calendar::EventRow ev);
 
   bool CreateEventTable();
   bool GetAllCalendarEvents(EventRows* events);
 
   bool GetRowForEvent(calendar::EventID event_id, EventRow* out_event);
   bool UpdateEventRow(const EventRow& event);
+  bool DeleteEvent(calendar::EventID event_id);
 
  protected:
   virtual sql::Connection& GetDB() = 0;
   void FillEventRow(sql::Statement& statement, EventRow* event);
+
  private:
   DISALLOW_COPY_AND_ASSIGN(EventDatabase);
 };
@@ -54,10 +56,9 @@ class EventDatabase {
 // the macro if you want to put this in the middle of an otherwise constant
 // string, it will save time doing string appends. If you have to build a SQL
 // string dynamically anyway, use the constant, it will save space.
-#define CALENDAR_EVENT_ROW_FIELDS                 \
-  " events.id, events.calendar_id, events.title, " \
-  " events.description, "                         \
-  " events.start, events.end "
+#define CALENDAR_EVENT_ROW_FIELDS                                         \
+  " id, calendar_id, alarm_id, title, description, start, end, all_day, " \
+  "is_recurring, start_recurring, end_recurring, location, url "
 
 }  // namespace calendar
 

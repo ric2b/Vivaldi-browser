@@ -60,9 +60,9 @@ Polymer({
    * @private
    */
   onSliderChanged_: function() {
-    var sliderValue = isNaN(this.$.slider.immediateValue)
-                         ? this.$.slider.value
-                         : this.$.slider.immediateValue;
+    var sliderValue = isNaN(this.$.slider.immediateValue) ?
+        this.$.slider.value :
+        this.$.slider.immediateValue;
 
     var newValue;
     if (this.tickValues && this.tickValues.length > 0)
@@ -147,5 +147,14 @@ Polymer({
 
     assert(typeof closestIndex != 'undefined');
     return closestIndex;
+  },
+
+  /**
+   * TODO(scottchen): temporary fix until polymer gesture bug resolved. See:
+   * https://github.com/PolymerElements/paper-slider/issues/186
+   * @private
+   */
+  resetTrackLock_: function() {
+    Polymer.Gestures.gestures.tap.reset();
   },
 });

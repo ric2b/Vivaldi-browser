@@ -16,8 +16,11 @@
 
 @interface TabCollectionViewController ()<UICollectionViewDelegate,
                                           SessionCellDelegate>
+// Collection view of tabs.
 @property(nonatomic, readwrite) UICollectionView* tabs;
+// The model backing the collection view.
 @property(nonatomic, readwrite) NSMutableArray<TabCollectionItem*>* items;
+// Selected index of tab collection.
 @property(nonatomic, assign) int selectedIndex;
 @end
 
@@ -25,6 +28,7 @@
 @synthesize tabs = _tabs;
 @synthesize items = _items;
 @synthesize selectedIndex = _selectedIndex;
+@synthesize snapshotCache = _snapshotCache;
 
 #pragma mark - UIViewController
 
@@ -50,11 +54,25 @@
     [self.tabs.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
   ]];
 
-  [self selectItemAtIndex:self.selectedIndex];
+  [self.tabs
+      selectItemAtIndexPath:[NSIndexPath indexPathForItem:self.selectedIndex
+                                                inSection:0]
+                   animated:NO
+             scrollPosition:UICollectionViewScrollPositionNone];
 }
 
 - (UIStatusBarStyle)preferredStatusBarStyle {
   return UIStatusBarStyleLightContent;
+}
+
+#pragma mark - Setters
+
+- (void)setSelectedIndex:(int)selectedIndex {
+  [self.tabs selectItemAtIndexPath:[NSIndexPath indexPathForItem:selectedIndex
+                                                       inSection:0]
+                          animated:YES
+                    scrollPosition:UICollectionViewScrollPositionNone];
+  _selectedIndex = selectedIndex;
 }
 
 #pragma mark - Required subclass override
@@ -101,9 +119,7 @@
   [cell setSessionType:TabSwitcherSessionType::REGULAR_SESSION];
   DCHECK_LE(indexPath.item, INT_MAX);
   int index = static_cast<int>(indexPath.item);
-  [cell setAppearanceForTabTitle:self.items[index].title
-                         favicon:nil
-                        cellSize:CGSizeZero];
+  [cell configureCell:self.items[index] snapshotCache:self.snapshotCache];
   return cell;
 }
 
@@ -118,7 +134,7 @@
 #pragma mark - SessionCellDelegate
 
 - (TabSwitcherCache*)tabSwitcherCache {
-  // PLACEHOLDER: return image cache.
+  // PLACEHOLDER: SnapshotCache will be passed into the cell.
   return nil;
 }
 
@@ -138,47 +154,64 @@
 
 #pragma mark - TabCollectionConsumer methods
 
-- (void)insertItem:(TabCollectionItem*)item atIndex:(int)index {
+- (void)insertItem:(TabCollectionItem*)item
+           atIndex:(int)index
+     selectedIndex:(int)selectedIndex {
+  DCHECK(item);
+  DCHECK_GE(index, 0);
   DCHECK_LE(static_cast<NSUInteger>(index), self.items.count);
   [self.items insertObject:item atIndex:index];
-  [self.tabs insertItemsAtIndexPaths:@[ [self indexPathForIndex:index] ]];
+  [self.tabs insertItemsAtIndexPaths:@[ [NSIndexPath indexPathForItem:index
+                                                            inSection:0] ]];
+  self.selectedIndex = selectedIndex;
 }
 
-- (void)deleteItemAtIndex:(int)index {
+- (void)deleteItemAtIndex:(int)index selectedIndex:(int)selectedIndex {
+  DCHECK_GE(index, 0);
   DCHECK_LT(static_cast<NSUInteger>(index), self.items.count);
   [self.items removeObjectAtIndex:index];
-  [self.tabs deleteItemsAtIndexPaths:@[ [self indexPathForIndex:index] ]];
+  [self.tabs deleteItemsAtIndexPaths:@[ [NSIndexPath indexPathForItem:index
+                                                            inSection:0] ]];
+  self.selectedIndex = selectedIndex;
 }
 
-- (void)moveItemFromIndex:(int)fromIndex toIndex:(int)toIndex {
+- (void)moveItemFromIndex:(int)fromIndex
+                  toIndex:(int)toIndex
+            selectedIndex:(int)selectedIndex {
   TabCollectionItem* item = self.items[fromIndex];
   [self.items removeObjectAtIndex:fromIndex];
   [self.items insertObject:item atIndex:toIndex];
-  [self.tabs moveItemAtIndexPath:[self indexPathForIndex:fromIndex]
-                     toIndexPath:[self indexPathForIndex:toIndex]];
+  [self.tabs
+      moveItemAtIndexPath:[NSIndexPath indexPathForItem:fromIndex inSection:0]
+              toIndexPath:[NSIndexPath indexPathForItem:toIndex inSection:0]];
+  self.selectedIndex = selectedIndex;
 }
 
 - (void)replaceItemAtIndex:(int)index withItem:(TabCollectionItem*)item {
-  [self.items removeObjectAtIndex:index];
-  [self.items insertObject:item atIndex:index];
+  DCHECK(item);
+  DCHECK_GE(index, 0);
+  DCHECK_LT(static_cast<NSUInteger>(index), self.items.count);
+  self.items[index] = item;
+  TabCollectionTabCell* cell = base::mac::ObjCCastStrict<TabCollectionTabCell>(
+      [self.tabs cellForItemAtIndexPath:[NSIndexPath indexPathForItem:index
+                                                            inSection:0]]);
+  [cell configureCell:self.items[index] snapshotCache:self.snapshotCache];
 }
 
-- (void)selectItemAtIndex:(int)index {
-  self.selectedIndex = index;
-  [self.tabs selectItemAtIndexPath:[self indexPathForIndex:index]
-                          animated:YES
-                    scrollPosition:UITableViewScrollPositionNone];
-}
-
-- (void)populateItems:(NSArray<TabCollectionItem*>*)items {
+- (void)populateItems:(NSArray<TabCollectionItem*>*)items
+        selectedIndex:(int)selectedIndex {
   self.items = [items mutableCopy];
-  [self.tabs reloadData];
+  [self.tabs reloadItemsAtIndexPaths:[self.tabs indexPathsForVisibleItems]];
+  self.selectedIndex = selectedIndex;
 }
 
-#pragma mark - Private
-
-- (NSIndexPath*)indexPathForIndex:(int)index {
-  return [NSIndexPath indexPathForItem:index inSection:0];
+- (void)updateSnapshotAtIndex:(int)index {
+  DCHECK_GE(index, 0);
+  DCHECK_LT(static_cast<NSUInteger>(index), self.items.count);
+  TabCollectionTabCell* cell = base::mac::ObjCCastStrict<TabCollectionTabCell>(
+      [self.tabs cellForItemAtIndexPath:[NSIndexPath indexPathForItem:index
+                                                            inSection:0]]);
+  [cell configureCell:self.items[index] snapshotCache:self.snapshotCache];
 }
 
 @end

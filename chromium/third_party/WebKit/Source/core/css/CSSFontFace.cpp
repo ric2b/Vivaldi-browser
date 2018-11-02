@@ -101,7 +101,7 @@ PassRefPtr<SimpleFontData> CSSFontFace::GetFontData(
         SetLoadStatus(FontFace::kLoading);
       if (LoadStatus() == FontFace::kLoading && source->IsLoaded())
         SetLoadStatus(FontFace::kLoaded);
-      return result.Release();
+      return result;
     }
     sources_.pop_front();
   }
@@ -181,9 +181,10 @@ void CSSFontFace::SetLoadStatus(FontFace::LoadStatusType new_status) {
   else
     font_face_->SetLoadStatus(new_status);
 
-  if (!segmented_font_face_)
+  if (!segmented_font_face_ || !font_face_->GetExecutionContext() ||
+      !font_face_->GetExecutionContext()->IsDocument())
     return;
-  Document* document = segmented_font_face_->FontSelector()->GetDocument();
+  Document* document = ToDocument(font_face_->GetExecutionContext());
   if (document && new_status == FontFace::kLoading)
     FontFaceSet::From(*document)->BeginFontLoading(font_face_);
 }

@@ -94,8 +94,6 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     /** @type {!Map.<number, !Element>} */
     this._valueWidgets = new Map();
     this.onBindingChanged();
-    Bindings.debuggerWorkspaceBinding.addEventListener(
-        Bindings.DebuggerWorkspaceBinding.Events.SourceMappingChanged, this._onSourceMappingChanged, this);
     /** @type {?Map<!Object, !Function>} */
     this._continueToLocationDecorations = null;
   }
@@ -293,7 +291,7 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
           !Bindings.blackboxManager.isBlackboxedUISourceCode(this._debuggerSourceCode)) {
         if (this._scriptFileForDebuggerModel.size) {
           var scriptFile = this._scriptFileForDebuggerModel.valuesArray()[0];
-          var addSourceMapURLLabel = Common.UIString.capitalize('Add ^source ^map\u2026');
+          var addSourceMapURLLabel = Common.UIString('Add source map\u2026');
           contextMenu.appendItem(addSourceMapURLLabel, addSourceMapURL.bind(null, scriptFile));
           contextMenu.appendSeparator();
         }
@@ -459,7 +457,8 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
           return false;
         var evaluationText = this.textEditor.line(lineNumber).substring(startHighlight, endHighlight + 1);
         var resolvedText = await Sources.SourceMapNamesResolver.resolveExpression(
-            selectedCallFrame, evaluationText, this._debuggerSourceCode, lineNumber, startHighlight, endHighlight);
+            /** @type {!SDK.DebuggerModel.CallFrame} */ (selectedCallFrame), evaluationText, this._debuggerSourceCode,
+            lineNumber, startHighlight, endHighlight);
         var remoteObject = await selectedCallFrame.evaluatePromise(
             resolvedText || evaluationText, 'popover', false, true, false, false);
         if (!remoteObject)
@@ -625,9 +624,9 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     labelElement.createTextChild(
         Common.UIString('The breakpoint on line %d will stop only if this expression is true:', lineNumber + 1));
 
-    var editorElement = conditionElement.createChild('input', 'monospace');
+    var editorElement = UI.createInput('monospace', 'text');
+    conditionElement.appendChild(editorElement);
     editorElement.id = 'source-frame-breakpoint-condition';
-    editorElement.type = 'text';
     this._conditionEditorElement = editorElement;
 
     return conditionElement;
@@ -695,6 +694,10 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     }
     var start = localScope.startLocation();
     var end = localScope.endLocation();
+    if (!start || !end) {
+      this._clearContinueToLocationsNoRestore();
+      return;
+    }
     var debuggerModel = callFrame.debuggerModel;
     debuggerModel.getPossibleBreakpoints(start, end, true)
         .then(locations => this.textEditor.operation(renderLocations.bind(this, locations)));
@@ -864,7 +867,7 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     var functionUILocation = Bindings.debuggerWorkspaceBinding.rawLocationToUILocation(
         /** @type {!SDK.DebuggerModel.Location} */ (callFrame.functionLocation()));
     var executionUILocation = Bindings.debuggerWorkspaceBinding.rawLocationToUILocation(callFrame.location());
-    if (functionUILocation.uiSourceCode !== this._debuggerSourceCode ||
+    if (!functionUILocation || !executionUILocation || functionUILocation.uiSourceCode !== this._debuggerSourceCode ||
         executionUILocation.uiSourceCode !== this._debuggerSourceCode) {
       this._clearValueWidgets();
       return;
@@ -1351,21 +1354,13 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     this._debuggerSourceCode = binding ? binding.network : this.uiSourceCode();
   }
 
-  /**
-   * @param {!Common.Event} event
-   */
-  _onSourceMappingChanged(event) {
-    var data = /** @type {{debuggerModel: !SDK.DebuggerModel, uiSourceCode: !Workspace.UISourceCode}} */ (event.data);
-    if (this._debuggerSourceCode !== data.uiSourceCode)
-      return;
-    this._updateScriptFile(data.debuggerModel);
-    this._updateLinesWithoutMappingHighlight();
-  }
-
   _updateLinesWithoutMappingHighlight() {
+    var isSourceMapSource = !!Bindings.CompilerScriptMapping.uiSourceCodeOrigin(this._debuggerSourceCode);
+    if (!isSourceMapSource)
+      return;
     var linesCount = this.textEditor.linesCount;
     for (var i = 0; i < linesCount; ++i) {
-      var lineHasMapping = Bindings.debuggerWorkspaceBinding.uiLineHasMapping(this._debuggerSourceCode, i);
+      var lineHasMapping = Bindings.CompilerScriptMapping.uiLineHasMapping(this._debuggerSourceCode, i);
       if (!lineHasMapping)
         this._hasLineWithoutMapping = true;
       if (this._hasLineWithoutMapping)
@@ -1573,14 +1568,17 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
     }
   }
 
-  toggleBreakpointOnCurrentLine() {
+  /**
+   * @param {boolean} onlyDisable
+   */
+  toggleBreakpointOnCurrentLine(onlyDisable) {
     if (this._muted)
       return;
 
     var selection = this.textEditor.selection();
     if (!selection)
       return;
-    this._toggleBreakpoint(selection.startLine, false);
+    this._toggleBreakpoint(selection.startLine, onlyDisable);
   }
 
   /**
@@ -1590,7 +1588,7 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
    * @param {boolean} enabled
    */
   _setBreakpoint(lineNumber, columnNumber, condition, enabled) {
-    if (!Bindings.debuggerWorkspaceBinding.uiLineHasMapping(this._debuggerSourceCode, lineNumber))
+    if (!Bindings.CompilerScriptMapping.uiLineHasMapping(this._debuggerSourceCode, lineNumber))
       return;
 
     this._breakpointManager.setBreakpoint(this._debuggerSourceCode, lineNumber, columnNumber, condition, enabled);
@@ -1610,8 +1608,6 @@ Sources.JavaScriptSourceFrame = class extends SourceFrame.UISourceCodeFrame {
    * @override
    */
   dispose() {
-    Bindings.debuggerWorkspaceBinding.removeEventListener(
-        Bindings.DebuggerWorkspaceBinding.Events.SourceMappingChanged, this._onSourceMappingChanged, this);
     this._breakpointManager.removeEventListener(
         Bindings.BreakpointManager.Events.BreakpointAdded, this._breakpointAdded, this);
     this._breakpointManager.removeEventListener(

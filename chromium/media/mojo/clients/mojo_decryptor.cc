@@ -102,8 +102,7 @@ void MojoDecryptor::InitializeAudioDecoder(const AudioDecoderConfig& config,
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  remote_decryptor_->InitializeAudioDecoder(
-      mojom::AudioDecoderConfig::From(config), init_cb);
+  remote_decryptor_->InitializeAudioDecoder(config, init_cb);
 }
 
 void MojoDecryptor::InitializeVideoDecoder(const VideoDecoderConfig& config,
@@ -111,8 +110,7 @@ void MojoDecryptor::InitializeVideoDecoder(const VideoDecoderConfig& config,
   DVLOG(1) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  remote_decryptor_->InitializeVideoDecoder(
-      mojom::VideoDecoderConfig::From(config), init_cb);
+  remote_decryptor_->InitializeVideoDecoder(config, init_cb);
 }
 
 void MojoDecryptor::DecryptAndDecodeAudio(
@@ -224,27 +222,20 @@ void MojoDecryptor::OnAudioDecoded(
 
 void MojoDecryptor::OnVideoDecoded(const VideoDecodeCB& video_decode_cb,
                                    Status status,
-                                   mojom::VideoFramePtr video_frame,
+                                   const scoped_refptr<VideoFrame>& video_frame,
                                    mojom::FrameResourceReleaserPtr releaser) {
-  DVLOG_IF(1, status != kSuccess) << __func__ << "(" << status << ")";
+  DVLOG_IF(1, status != kSuccess) << __func__ << ": status = " << status;
   DVLOG_IF(3, status == kSuccess) << __func__;
   DCHECK(thread_checker_.CalledOnValidThread());
 
-  if (video_frame.is_null()) {
-    video_decode_cb.Run(status, nullptr);
-    return;
-  }
-
-  scoped_refptr<VideoFrame> frame(video_frame.To<scoped_refptr<VideoFrame>>());
-
   // If using shared memory, ensure that |releaser| is closed when
   // |frame| is destroyed.
-  if (releaser) {
-    frame->AddDestructionObserver(
+  if (video_frame && releaser) {
+    video_frame->AddDestructionObserver(
         base::Bind(&ReleaseFrameResource, base::Passed(&releaser)));
   }
 
-  video_decode_cb.Run(status, frame);
+  video_decode_cb.Run(status, video_frame);
 }
 
 }  // namespace media

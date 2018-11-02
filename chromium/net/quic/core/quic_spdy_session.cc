@@ -110,14 +110,11 @@ class QuicSpdySession::SpdyFramerVisitor
     return &header_list_;
   }
 
-  void OnHeaderFrameEnd(SpdyStreamId /* stream_id */,
-                        bool end_headers) override {
-    if (end_headers) {
-      if (session_->IsConnected()) {
-        session_->OnHeaderList(header_list_);
-      }
-      header_list_.Clear();
+  void OnHeaderFrameEnd(SpdyStreamId /* stream_id */) override {
+    if (session_->IsConnected()) {
+      session_->OnHeaderList(header_list_);
     }
+    header_list_.Clear();
   }
 
   void OnStreamFrameData(SpdyStreamId stream_id,
@@ -359,6 +356,9 @@ QuicSpdySession::~QuicSpdySession() {
   // to null to avoid subsequent use of this session.
   for (auto& stream : *closed_streams()) {
     static_cast<QuicSpdyStream*>(stream.get())->ClearSession();
+  }
+  for (auto const& kv : zombie_streams()) {
+    static_cast<QuicSpdyStream*>(kv.second.get())->ClearSession();
   }
   for (auto const& kv : dynamic_streams()) {
     static_cast<QuicSpdyStream*>(kv.second.get())->ClearSession();
@@ -625,7 +625,8 @@ void QuicSpdySession::OnConfigNegotiated() {
     DisableHpackDynamicTable();
   }
   const QuicVersion version = connection()->version();
-  if (FLAGS_quic_reloadable_flag_quic_enable_force_hol_blocking &&
+  if (!use_stream_notifier() &&
+      FLAGS_quic_reloadable_flag_quic_enable_force_hol_blocking &&
       version == QUIC_VERSION_36 && config()->ForceHolBlocking(perspective())) {
     force_hol_blocking_ = true;
     // Since all streams are tunneled through the headers stream, it

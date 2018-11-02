@@ -4,13 +4,13 @@
 
 #include "components/download/internal/test/test_store.h"
 
+#include "base/memory/ptr_util.h"
 #include "components/download/internal/entry.h"
 
 namespace download {
 namespace test {
 
-TestStore::TestStore()
-    : ready_(false), init_called_(false), destroy_called_(false) {}
+TestStore::TestStore() : ready_(false), init_called_(false) {}
 
 TestStore::~TestStore() {}
 
@@ -21,24 +21,39 @@ bool TestStore::IsInitialized() {
 void TestStore::Initialize(InitCallback callback) {
   init_called_ = true;
   init_callback_ = std::move(callback);
+
+  if (automatic_callback_response_.has_value())
+    TriggerInit(automatic_callback_response_.value(),
+                base::MakeUnique<std::vector<Entry>>());
 }
 
-void TestStore::Destroy(StoreCallback callback) {
-  destroy_called_ = true;
-  destroy_callback_ = std::move(callback);
+void TestStore::HardRecover(StoreCallback callback) {
+  hard_recover_callback_ = std::move(callback);
+
+  if (automatic_callback_response_.has_value())
+    TriggerHardRecover(automatic_callback_response_.value());
 }
 
 void TestStore::Update(const Entry& entry, StoreCallback callback) {
   updated_entries_.push_back(entry);
   update_callback_ = std::move(callback);
+
+  if (automatic_callback_response_.has_value())
+    TriggerUpdate(automatic_callback_response_.value());
 }
 
 void TestStore::Remove(const std::string& guid, StoreCallback callback) {
   removed_entries_.push_back(guid);
   remove_callback_ = std::move(callback);
+
+  if (automatic_callback_response_.has_value())
+    TriggerRemove(automatic_callback_response_.value());
 }
 
-// Callback trigger methods.
+void TestStore::AutomaticallyTriggerAllFutureCallbacks(bool success) {
+  automatic_callback_response_ = success;
+}
+
 void TestStore::TriggerInit(bool success,
                             std::unique_ptr<std::vector<Entry>> entries) {
   ready_ = success;
@@ -46,9 +61,9 @@ void TestStore::TriggerInit(bool success,
   std::move(init_callback_).Run(success, std::move(entries));
 }
 
-void TestStore::TriggerDestroy(bool success) {
-  DCHECK(destroy_callback_);
-  std::move(destroy_callback_).Run(success);
+void TestStore::TriggerHardRecover(bool success) {
+  DCHECK(hard_recover_callback_);
+  std::move(hard_recover_callback_).Run(success);
 }
 
 void TestStore::TriggerUpdate(bool success) {

@@ -469,11 +469,11 @@
       initial: false,
     },
 
-    // Experiment to have all APIs reflect the layout viewport.
-    // crbug.com/489206 tracks the experiment.
+    // Setting to have all APIs reflect the layout viewport.
+    // crbug.com/489206 tracks the reason for this flag's existence.
     {
       name: "inertVisualViewport",
-      initial: false,
+      initial: true,
     },
 
     // The rubber-band overscroll effect is implemented in Blink and is being moved
@@ -557,6 +557,7 @@
     {
       name: "pluginsEnabled",
       initial: false,
+      invalidate: "Plugins",
     },
 
     {
@@ -940,5 +941,32 @@
       type: "AutoplayPolicy::Type",
       initial: "AutoplayPolicy::Type::kNoUserGestureRequired",
     },
+
+    //
+    // High contrast mode
+    //
+    {
+      name: "highContrastMode",
+      initial: "HighContrastMode::kOff",
+      type: "HighContrastMode",
+    },
+    {
+      name: "highContrastGrayscale",
+      initial: false,
+    },
+    {
+      name: "highContrastContrast",
+      initial: 0,
+      type: "double",
+    },
+    {
+      name: "highContrastImagePolicy",
+      initial: "HighContrastImagePolicy::kFilterAll",
+      type: "HighContrastImagePolicy",
+    },
+    {
+      name: "forceDisplayList2dCanvasEnabled",
+      initial: false,
+    }
   ],
 }

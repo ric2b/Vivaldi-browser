@@ -10,8 +10,8 @@
 
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "device/power_save_blocker/power_save_blocker.h"
 #include "remoting/host/host_status_observer.h"
+#include "services/device/wake_lock/power_save_blocker/power_save_blocker.h"
 
 namespace base {
 
@@ -28,7 +28,7 @@ class HostStatusMonitor;
 class HostPowerSaveBlocker : public HostStatusObserver {
  public:
   HostPowerSaveBlocker(
-      base::WeakPtr<HostStatusMonitor> monitor,
+      scoped_refptr<HostStatusMonitor> monitor,
       const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
       const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner);
 
@@ -40,7 +40,8 @@ class HostPowerSaveBlocker : public HostStatusObserver {
  private:
   friend class HostPowerSaveBlockerTest;
 
-  base::WeakPtr<HostStatusMonitor> monitor_;
+  scoped_refptr<HostStatusMonitor> monitor_;
+
   scoped_refptr<base::SequencedTaskRunner> ui_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> file_task_runner_;
   std::unique_ptr<device::PowerSaveBlocker> blocker_;

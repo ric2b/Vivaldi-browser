@@ -18,7 +18,6 @@
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "ui/base/cursor/ozone/bitmap_cursor_factory_ozone.h"
 #include "ui/base/ui_features.h"
@@ -107,13 +106,15 @@ class OzonePlatformGbm : public OzonePlatform {
   std::unique_ptr<SystemInputInjector> CreateSystemInputInjector() override {
     return event_factory_ozone_->CreateSystemInputInjector();
   }
-  void AddInterfaces(service_manager::BinderRegistry* registry) override {
+  void AddInterfaces(
+      service_manager::BinderRegistryWithArgs<
+          const service_manager::BindSourceInfo&>* registry) override {
     registry->AddInterface<ozone::mojom::DeviceCursor>(
         base::Bind(&OzonePlatformGbm::Create, base::Unretained(this)),
         gpu_task_runner_);
   }
-  void Create(const service_manager::BindSourceInfo& source_info,
-              ozone::mojom::DeviceCursorRequest request) {
+  void Create(ozone::mojom::DeviceCursorRequest request,
+              const service_manager::BindSourceInfo& source_info) {
     if (drm_thread_proxy_)
       drm_thread_proxy_->AddBinding(std::move(request));
     else
@@ -124,8 +125,6 @@ class OzonePlatformGbm : public OzonePlatform {
       const gfx::Rect& bounds) override {
     GpuThreadAdapter* adapter = gpu_platform_support_host_.get();
     if (using_mojo_ || single_process_) {
-      DCHECK(drm_thread_proxy_)
-          << "drm_thread_proxy_ should exist (and be running) here.";
       adapter = mus_thread_proxy_.get();
     }
 
@@ -176,27 +175,25 @@ class OzonePlatformGbm : public OzonePlatform {
       gl_api_loader_.reset(new GlApiLoader());
 
     if (using_mojo_) {
-      DCHECK(args.connector);
-      mus_thread_proxy_.reset(new MusThreadProxy());
+      mus_thread_proxy_ =
+          base::MakeUnique<MusThreadProxy>(cursor_.get(), args.connector);
       adapter = mus_thread_proxy_.get();
-      cursor_->SetDrmCursorProxy(new CursorProxyMojo(args.connector));
     } else if (single_process_) {
-      mus_thread_proxy_.reset(new MusThreadProxy());
+      mus_thread_proxy_ =
+          base::MakeUnique<MusThreadProxy>(cursor_.get(), nullptr);
       adapter = mus_thread_proxy_.get();
-      cursor_->SetDrmCursorProxy(
-          new CursorProxyThread(mus_thread_proxy_.get()));
     } else {
       gpu_platform_support_host_.reset(
           new DrmGpuPlatformSupportHost(cursor_.get()));
       adapter = gpu_platform_support_host_.get();
     }
 
-    display_manager_.reset(
-        new DrmDisplayHostManager(adapter, device_manager_.get(),
-                                  event_factory_ozone_->input_controller()));
-    cursor_factory_ozone_.reset(new BitmapCursorFactoryOzone);
     overlay_manager_.reset(
         new DrmOverlayManager(adapter, window_manager_.get()));
+    display_manager_.reset(new DrmDisplayHostManager(
+        adapter, device_manager_.get(), overlay_manager_.get(),
+        event_factory_ozone_->input_controller()));
+    cursor_factory_ozone_.reset(new BitmapCursorFactoryOzone);
 
     if (using_mojo_ || single_process_) {
       mus_thread_proxy_->ProvideManagers(display_manager_.get(),

@@ -247,7 +247,7 @@ DesktopNativeWidgetAura::DesktopNativeWidgetAura(
       widget_type_(Widget::InitParams::TYPE_WINDOW),
       close_widget_factory_(this) {
   aura::client::SetFocusChangeObserver(content_window_, this);
-  aura::client::SetActivationChangeObserver(content_window_, this);
+  wm::SetActivationChangeObserver(content_window_, this);
 }
 
 DesktopNativeWidgetAura::~DesktopNativeWidgetAura() {
@@ -293,7 +293,7 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   tooltip_manager_.reset();
   if (tooltip_controller_.get()) {
     host_->window()->RemovePreTargetHandler(tooltip_controller_.get());
-    aura::client::SetTooltipClient(host_->window(), NULL);
+    wm::SetTooltipClient(host_->window(), NULL);
     tooltip_controller_.reset();
   }
 
@@ -309,7 +309,7 @@ void DesktopNativeWidgetAura::OnHostClosed() {
   // have been destroyed.
   host_->window()->RemovePreTargetHandler(focus_client_.get());
   aura::client::SetFocusClient(host_->window(), NULL);
-  aura::client::SetActivationClient(host_->window(), NULL);
+  wm::SetActivationClient(host_->window(), NULL);
   focus_client_.reset();
 
   host_->RemoveObserver(this);
@@ -348,8 +348,8 @@ void DesktopNativeWidgetAura::OnDesktopWindowTreeHostDestroyed(
 
 void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
   native_widget_delegate_->OnNativeWidgetActivationChanged(active);
-  aura::client::ActivationClient* activation_client =
-      aura::client::GetActivationClient(host_->window());
+  wm::ActivationClient* activation_client =
+      wm::GetActivationClient(host_->window());
   if (!activation_client)
     return;
   if (active) {
@@ -364,11 +364,18 @@ void DesktopNativeWidgetAura::HandleActivationChanged(bool active) {
       if (!view_for_activation) {
         view_for_activation = GetWidget()->GetRootView();
       } else if (view_for_activation == focus_manager->GetStoredFocusView()) {
-        focus_manager->RestoreFocusedView();
-        // Set to false if desktop native widget has activated activation
-        // change, so that aura window activation change focus restore operation
-        // can be ignored.
-        restore_focus_on_activate_ = false;
+        // When desktop native widget has modal transient child, we don't
+        // restore focused view here, as the modal transient child window will
+        // get activated and focused. Thus, we are not left with multiple
+        // focuses. For aura child widgets, since their views are managed by
+        // |focus_manager|, we then allow restoring focused view.
+        if (!wm::GetModalTransient(GetWidget()->GetNativeView())) {
+          focus_manager->RestoreFocusedView();
+          // Set to false if desktop native widget has activated activation
+          // change, so that aura window activation change focus restore
+          // operation can be ignored.
+          restore_focus_on_activate_ = false;
+        }
       }
       activation_client->ActivateWindow(
           view_for_activation->GetWidget()->GetNativeView());
@@ -403,13 +410,6 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   name_ = params.name;
 
   NativeWidgetAura::RegisterNativeWidgetForWindow(this, content_window_);
-  // Animations on TYPE_WINDOW are handled by the OS. Additionally if we animate
-  // these windows the size of the window gets augmented, effecting restore
-  // bounds and maximized windows in bad ways.
-  if (params.type == Widget::InitParams::TYPE_WINDOW &&
-      !params.remove_standard_frame) {
-    content_window_->SetProperty(aura::client::kAnimationsDisabledKey, true);
-  }
   content_window_->SetType(GetAuraWindowTypeForWidgetType(params.type));
   content_window_->Init(params.layer_type);
   wm::SetShadowElevation(content_window_, wm::ShadowElevation::NONE);
@@ -482,7 +482,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
       new wm::FocusController(new DesktopFocusRules(content_window_));
   focus_client_.reset(focus_controller);
   aura::client::SetFocusClient(host_->window(), focus_controller);
-  aura::client::SetActivationClient(host_->window(), focus_controller);
+  wm::SetActivationClient(host_->window(), focus_controller);
   host_->window()->AddPreTargetHandler(focus_controller);
 
   position_client_.reset(new DesktopScreenPositionClient(host_->window()));
@@ -493,8 +493,8 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   if (drag_drop_client_)
     aura::client::SetDragDropClient(host_->window(), drag_drop_client_.get());
 
-  static_cast<aura::client::FocusClient*>(focus_client_.get())->
-      FocusWindow(content_window_);
+  wm::SetActivationDelegate(content_window_, this);
+  aura::client::GetFocusClient(content_window_)->FocusWindow(content_window_);
 
   OnHostResized(host());
 
@@ -510,8 +510,7 @@ void DesktopNativeWidgetAura::InitNativeWidget(
     tooltip_controller_.reset(
         new corewm::TooltipController(
             desktop_window_tree_host_->CreateTooltip()));
-    aura::client::SetTooltipClient(host_->window(),
-                                   tooltip_controller_.get());
+    wm::SetTooltipClient(host_->window(), tooltip_controller_.get());
     host_->window()->AddPreTargetHandler(tooltip_controller_.get());
   }
 
@@ -531,12 +530,8 @@ void DesktopNativeWidgetAura::InitNativeWidget(
   event_client_.reset(new DesktopEventClient);
   aura::client::SetEventClient(host_->window(), event_client_.get());
 
-  aura::client::GetFocusClient(content_window_)->FocusWindow(content_window_);
-
-  aura::client::SetActivationDelegate(content_window_, this);
-
-  shadow_controller_.reset(new wm::ShadowController(
-      aura::client::GetActivationClient(host_->window())));
+  shadow_controller_.reset(
+      new wm::ShadowController(wm::GetActivationClient(host_->window())));
 
   OnSizeConstraintsChanged();
 
@@ -1078,18 +1073,17 @@ void DesktopNativeWidgetAura::OnGestureEvent(ui::GestureEvent* event) {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// DesktopNativeWidgetAura, aura::client::ActivationDelegate implementation:
+// DesktopNativeWidgetAura, wm::ActivationDelegate implementation:
 
 bool DesktopNativeWidgetAura::ShouldActivate() const {
   return native_widget_delegate_->CanActivate();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// DesktopNativeWidgetAura, aura::client::ActivationChangeObserver
-//    implementation:
+// DesktopNativeWidgetAura, wmActivationChangeObserver implementation:
 
 void DesktopNativeWidgetAura::OnWindowActivated(
-    aura::client::ActivationChangeObserver::ActivationReason reason,
+    wm::ActivationChangeObserver::ActivationReason reason,
     aura::Window* gained_active,
     aura::Window* lost_active) {
   DCHECK(content_window_ == gained_active || content_window_ == lost_active);

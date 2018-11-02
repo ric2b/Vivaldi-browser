@@ -32,11 +32,14 @@
 
 #include <algorithm>
 #include <memory>
-#include "cc/resources/shared_bitmap.h"
+
+#include "build/build_config.h"
+#include "components/viz/common/quads/shared_bitmap.h"
 #include "gpu/GLES2/gl2extchromium.h"
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/common/capabilities.h"
+#include "gpu/command_buffer/common/gpu_memory_buffer_support.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/graphics/AcceleratedStaticBitmapImage.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -74,7 +77,7 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::Create(
     bool want_stencil_buffer,
     bool want_antialiasing,
     PreserveDrawingBuffer preserve,
-    WebGLVersion web_gl_version,
+    WebGLVersion webgl_version,
     ChromiumImageUsage chromium_image_usage,
     const CanvasColorParams& color_params) {
   DCHECK(context_provider);
@@ -117,13 +120,13 @@ PassRefPtr<DrawingBuffer> DrawingBuffer::Create(
   RefPtr<DrawingBuffer> drawing_buffer = AdoptRef(new DrawingBuffer(
       std::move(context_provider), std::move(extensions_util), client,
       discard_framebuffer_supported, want_alpha_channel, premultiplied_alpha,
-      preserve, web_gl_version, want_depth_buffer, want_stencil_buffer,
+      preserve, webgl_version, want_depth_buffer, want_stencil_buffer,
       chromium_image_usage, color_params));
   if (!drawing_buffer->Initialize(size, multisample_supported)) {
     drawing_buffer->BeginDestruction();
     return PassRefPtr<DrawingBuffer>();
   }
-  return drawing_buffer.Release();
+  return drawing_buffer;
 }
 
 void DrawingBuffer::ForceNextDrawingBufferCreationToFail() {
@@ -138,14 +141,14 @@ DrawingBuffer::DrawingBuffer(
     bool want_alpha_channel,
     bool premultiplied_alpha,
     PreserveDrawingBuffer preserve,
-    WebGLVersion web_gl_version,
+    WebGLVersion webgl_version,
     bool want_depth,
     bool want_stencil,
     ChromiumImageUsage chromium_image_usage,
     const CanvasColorParams& color_params)
     : client_(client),
       preserve_drawing_buffer_(preserve),
-      web_gl_version_(web_gl_version),
+      webgl_version_(webgl_version),
       context_provider_(WTF::WrapUnique(new WebGraphicsContext3DProviderWrapper(
           std::move(context_provider)))),
       gl_(this->ContextProvider()->ContextGL()),
@@ -232,7 +235,7 @@ bool DrawingBuffer::DefaultBufferRequiresAlphaChannelToBePreserved() {
   return !want_alpha_channel_ && rgb_emulation;
 }
 
-std::unique_ptr<cc::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
+std::unique_ptr<viz::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
   auto it = std::remove_if(
       recycled_bitmaps_.begin(), recycled_bitmaps_.end(),
       [this](const RecycledBitmap& bitmap) { return bitmap.size != size_; });
@@ -249,7 +252,7 @@ std::unique_ptr<cc::SharedBitmap> DrawingBuffer::CreateOrRecycleBitmap() {
 }
 
 bool DrawingBuffer::PrepareTextureMailbox(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   ScopedStateRestorer scoped_state_restorer(this);
   bool force_gpu_result = false;
@@ -258,7 +261,7 @@ bool DrawingBuffer::PrepareTextureMailbox(
 }
 
 bool DrawingBuffer::PrepareTextureMailboxInternal(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback,
     bool force_gpu_result) {
   DCHECK(state_restorer_);
@@ -282,9 +285,6 @@ bool DrawingBuffer::PrepareTextureMailboxInternal(
 
   TRACE_EVENT0("blink,rail", "DrawingBuffer::prepareMailbox");
 
-  if (new_mailbox_callback_)
-    (*new_mailbox_callback_)();
-
   // Resolve the multisampled buffer into m_backColorBuffer texture.
   ResolveIfNeeded();
 
@@ -297,10 +297,10 @@ bool DrawingBuffer::PrepareTextureMailboxInternal(
 }
 
 bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
-  std::unique_ptr<cc::SharedBitmap> bitmap = CreateOrRecycleBitmap();
+  std::unique_ptr<viz::SharedBitmap> bitmap = CreateOrRecycleBitmap();
   if (!bitmap)
     return false;
 
@@ -318,7 +318,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
                         op);
   }
 
-  *out_mailbox = cc::TextureMailbox(bitmap.get(), size_);
+  *out_mailbox = viz::TextureMailbox(bitmap.get(), size_);
   out_mailbox->set_color_space(color_space_);
 
   // This holds a ref on the DrawingBuffer that will keep it alive until the
@@ -338,10 +338,10 @@ bool DrawingBuffer::FinishPrepareTextureMailboxSoftware(
 }
 
 bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
-    cc::TextureMailbox* out_mailbox,
+    viz::TextureMailbox* out_mailbox,
     std::unique_ptr<cc::SingleReleaseCallback>* out_release_callback) {
   DCHECK(state_restorer_);
-  if (web_gl_version_ > kWebGL1) {
+  if (webgl_version_ > kWebGL1) {
     state_restorer_->SetPixelUnpackBufferBindingDirty();
     gl_->BindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
   }
@@ -384,7 +384,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
         color_buffer_for_mailbox->parameters.target,
         color_buffer_for_mailbox->mailbox.name);
     const GLuint64 fence_sync = gl_->InsertFenceSyncCHROMIUM();
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
     gl_->DescheduleUntilFinishedCHROMIUM();
 #endif
     gl_->Flush();
@@ -396,7 +396,7 @@ bool DrawingBuffer::FinishPrepareTextureMailboxGpu(
   {
     bool is_overlay_candidate = color_buffer_for_mailbox->image_id != 0;
     bool secure_output_only = false;
-    *out_mailbox = cc::TextureMailbox(
+    *out_mailbox = viz::TextureMailbox(
         color_buffer_for_mailbox->mailbox,
         color_buffer_for_mailbox->produce_sync_token,
         color_buffer_for_mailbox->parameters.target, gfx::Size(size_),
@@ -450,7 +450,7 @@ void DrawingBuffer::MailboxReleasedGpu(RefPtr<ColorBuffer> color_buffer,
 }
 
 void DrawingBuffer::MailboxReleasedSoftware(
-    std::unique_ptr<cc::SharedBitmap> bitmap,
+    std::unique_ptr<viz::SharedBitmap> bitmap,
     const IntSize& size,
     const gpu::SyncToken& sync_token,
     bool lost_resource) {
@@ -469,7 +469,7 @@ PassRefPtr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
   // grContext().
   GrContext* gr_context = ContextProvider()->GetGrContext();
 
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   bool success = false;
   if (gr_context) {
@@ -526,7 +526,7 @@ PassRefPtr<StaticBitmapImage> DrawingBuffer::TransferToStaticBitmapImage() {
 
 DrawingBuffer::ColorBufferParameters
 DrawingBuffer::GpuMemoryBufferColorBufferParameters() {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   // A CHROMIUM_image backed texture requires a specialized set of parameters
   // on OSX.
   ColorBufferParameters parameters;
@@ -579,9 +579,11 @@ DrawingBuffer::CreateOrRecycleColorBuffer() {
 }
 
 DrawingBuffer::ScopedRGBEmulationForBlitFramebuffer::
-    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer* drawing_buffer)
+    ScopedRGBEmulationForBlitFramebuffer(DrawingBuffer* drawing_buffer,
+                                         bool is_user_draw_framebuffer_bound)
     : drawing_buffer_(drawing_buffer) {
-  doing_work_ = drawing_buffer->SetupRGBEmulationForBlitFramebuffer();
+  doing_work_ = drawing_buffer->SetupRGBEmulationForBlitFramebuffer(
+      is_user_draw_framebuffer_bound);
 }
 
 DrawingBuffer::ScopedRGBEmulationForBlitFramebuffer::
@@ -672,7 +674,7 @@ bool DrawingBuffer::Initialize(const IntSize& size, bool use_multisampling) {
   // textures only if ScreenSpaceAntialiasing is enabled, because
   // ScreenSpaceAntialiasing is much faster with storage textures.
   storage_texture_supported_ =
-      (web_gl_version_ > kWebGL1 ||
+      (webgl_version_ > kWebGL1 ||
        extensions_util_->SupportsExtension("GL_EXT_texture_storage")) &&
       anti_aliasing_mode_ == kScreenSpaceAntialiasing;
   sample_count_ = std::min(4, max_sample_count);
@@ -1039,11 +1041,12 @@ void DrawingBuffer::RestoreFramebufferBindings() {
 void DrawingBuffer::RestoreAllState() {
   client_->DrawingBufferClientRestoreScissorTest();
   client_->DrawingBufferClientRestoreMaskAndClearValues();
-  client_->DrawingBufferClientRestorePixelPackAlignment();
+  client_->DrawingBufferClientRestorePixelPackParameters();
   client_->DrawingBufferClientRestoreTexture2DBinding();
   client_->DrawingBufferClientRestoreRenderbufferBinding();
   client_->DrawingBufferClientRestoreFramebufferBinding();
   client_->DrawingBufferClientRestorePixelUnpackBufferBinding();
+  client_->DrawingBufferClientRestorePixelPackBufferBinding();
 }
 
 bool DrawingBuffer::Multisample() const {
@@ -1107,8 +1110,16 @@ void DrawingBuffer::ReadBackFramebuffer(unsigned char* pixels,
                                         ReadbackOrder readback_order,
                                         WebGLImageConversion::AlphaOp op) {
   DCHECK(state_restorer_);
-  state_restorer_->SetPixelPackAlignmentDirty();
+  state_restorer_->SetPixelPackParametersDirty();
   gl_->PixelStorei(GL_PACK_ALIGNMENT, 1);
+  if (webgl_version_ > kWebGL1) {
+    gl_->PixelStorei(GL_PACK_SKIP_ROWS, 0);
+    gl_->PixelStorei(GL_PACK_SKIP_PIXELS, 0);
+    gl_->PixelStorei(GL_PACK_ROW_LENGTH, 0);
+
+    state_restorer_->SetPixelPackBufferBindingDirty();
+    gl_->BindBuffer(GL_PIXEL_PACK_BUFFER, 0);
+  }
   gl_->ReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels);
 
   size_t buffer_size = 4 * width * height;
@@ -1170,14 +1181,18 @@ RefPtr<DrawingBuffer::ColorBuffer> DrawingBuffer::CreateColorBuffer(
       buffer_format = gfx::BufferFormat::RGBA_8888;
       gl_format = GL_RGBA;
     } else {
-      buffer_format = gfx::BufferFormat::BGRX_8888;
+      buffer_format = gfx::BufferFormat::RGBX_8888;
+      if (gpu::IsImageFromGpuMemoryBufferFormatSupported(
+              gfx::BufferFormat::BGRX_8888,
+              ContextProvider()->GetCapabilities()))
+        buffer_format = gfx::BufferFormat::BGRX_8888;
       gl_format = GL_RGB;
     }
     gpu_memory_buffer = gpu_memory_buffer_manager->CreateGpuMemoryBuffer(
         gfx::Size(size), buffer_format, gfx::BufferUsage::SCANOUT,
         gpu::kNullSurfaceHandle);
     if (gpu_memory_buffer) {
-      if (RuntimeEnabledFeatures::colorCorrectRenderingEnabled())
+      if (RuntimeEnabledFeatures::ColorCorrectRenderingEnabled())
         gpu_memory_buffer->SetColorSpaceForScanout(color_space_);
       image_id =
           gl_->CreateImageCHROMIUM(gpu_memory_buffer->AsClientBuffer(),
@@ -1281,14 +1296,21 @@ GLenum DrawingBuffer::GetMultisampledRenderbufferFormat() {
   return GL_RGB8_OES;
 }
 
-bool DrawingBuffer::SetupRGBEmulationForBlitFramebuffer() {
+bool DrawingBuffer::SetupRGBEmulationForBlitFramebuffer(
+    bool is_user_draw_framebuffer_bound) {
   // We only need to do this work if:
+  //  - We are blitting to the default framebuffer
   //  - The user has selected alpha:false and antialias:false
   //  - We are using CHROMIUM_image with RGB emulation
   // macOS is the only platform on which this is necessary.
 
-  if (want_alpha_channel_ || anti_aliasing_mode_ != kNone)
+  if (is_user_draw_framebuffer_bound) {
     return false;
+  }
+
+  if (want_alpha_channel_ || anti_aliasing_mode_ != kNone) {
+    return false;
+  }
 
   if (!(ShouldUseChromiumImage() &&
         ContextProvider()->GetCapabilities().chromium_image_rgb_emulation))
@@ -1372,8 +1394,8 @@ DrawingBuffer::ScopedStateRestorer::~ScopedStateRestorer() {
     client->DrawingBufferClientRestoreScissorTest();
     client->DrawingBufferClientRestoreMaskAndClearValues();
   }
-  if (pixel_pack_alignment_dirty_)
-    client->DrawingBufferClientRestorePixelPackAlignment();
+  if (pixel_pack_parameters_dirty_)
+    client->DrawingBufferClientRestorePixelPackParameters();
   if (texture_binding_dirty_)
     client->DrawingBufferClientRestoreTexture2DBinding();
   if (renderbuffer_binding_dirty_)
@@ -1382,10 +1404,12 @@ DrawingBuffer::ScopedStateRestorer::~ScopedStateRestorer() {
     client->DrawingBufferClientRestoreFramebufferBinding();
   if (pixel_unpack_buffer_binding_dirty_)
     client->DrawingBufferClientRestorePixelUnpackBufferBinding();
+  if (pixel_pack_buffer_binding_dirty_)
+    client->DrawingBufferClientRestorePixelPackBufferBinding();
 }
 
 bool DrawingBuffer::ShouldUseChromiumImage() {
-  return RuntimeEnabledFeatures::webGLImageChromiumEnabled() &&
+  return RuntimeEnabledFeatures::WebGLImageChromiumEnabled() &&
          chromium_image_usage_ == kAllowChromiumImage;
 }
 

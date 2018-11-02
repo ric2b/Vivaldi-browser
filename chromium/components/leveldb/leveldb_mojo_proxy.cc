@@ -8,7 +8,6 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
-#include "base/single_thread_task_runner.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
 #include "mojo/public/cpp/bindings/sync_call_restrictions.h"
 
@@ -28,9 +27,9 @@ struct LevelDBMojoProxy::OpaqueDir {
 };
 
 LevelDBMojoProxy::LevelDBMojoProxy(
-    scoped_refptr<base::SingleThreadTaskRunner> task_runner)
+    scoped_refptr<base::SequencedTaskRunner> task_runner)
     : task_runner_(std::move(task_runner)), outstanding_opaque_dirs_(0) {
-  DCHECK(!task_runner_->BelongsToCurrentThread());
+  DCHECK(!task_runner_->RunsTasksInCurrentSequence());
 }
 
 LevelDBMojoProxy::OpaqueDir* LevelDBMojoProxy::RegisterDirectory(
@@ -144,7 +143,7 @@ LevelDBMojoProxy::~LevelDBMojoProxy() {
 }
 
 void LevelDBMojoProxy::RunInternal(const base::Closure& task) {
-  if (task_runner_->BelongsToCurrentThread()) {
+  if (task_runner_->RunsTasksInCurrentSequence()) {
     task.Run();
   } else {
     base::WaitableEvent done_event(
@@ -291,7 +290,7 @@ void LevelDBMojoProxy::RenameFileImpl(OpaqueDir* dir,
                                       const std::string& new_path,
                                       filesystem::mojom::FileError* out_error) {
   mojo::SyncCallRestrictions::ScopedAllowSyncCall allow_sync;
-  bool completed = dir->directory->Rename(old_path, new_path, out_error);
+  bool completed = dir->directory->Replace(old_path, new_path, out_error);
   DCHECK(completed);
 }
 

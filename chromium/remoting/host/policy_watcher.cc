@@ -141,7 +141,7 @@ bool VerifyWellformedness(const base::DictionaryValue& changed_policies) {
 void PolicyWatcher::StartWatching(
     const PolicyUpdatedCallback& policy_updated_callback,
     const PolicyErrorCallback& policy_error_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!policy_updated_callback.is_null());
   DCHECK(!policy_error_callback.is_null());
   DCHECK(policy_updated_callback_.is_null());
@@ -207,6 +207,7 @@ PolicyWatcher::PolicyWatcher(
 }
 
 PolicyWatcher::~PolicyWatcher() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // Stop observing |policy_service_| if StartWatching() has been called.
   if (!policy_updated_callback_.is_null()) {
     policy_service_->RemoveObserver(policy::POLICY_DOMAIN_CHROME, this);
@@ -383,17 +384,15 @@ std::unique_ptr<PolicyWatcher> PolicyWatcher::CreateFromPolicyLoader(
       std::move(policy_provider), std::move(schema_registry)));
 }
 
-std::unique_ptr<PolicyWatcher> PolicyWatcher::Create(
-    policy::PolicyService* policy_service,
-    const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner) {
-#if defined(OS_CHROMEOS)
-  // On Chrome OS the PolicyService is owned by the browser.
+std::unique_ptr<PolicyWatcher> PolicyWatcher::CreateWithPolicyService(
+    policy::PolicyService* policy_service) {
   DCHECK(policy_service);
   return base::WrapUnique(new PolicyWatcher(policy_service, nullptr, nullptr,
                                             CreateSchemaRegistry()));
-#else  // !defined(OS_CHROMEOS)
-  DCHECK(!policy_service);
+}
 
+std::unique_ptr<PolicyWatcher> PolicyWatcher::CreateWithTaskRunner(
+    const scoped_refptr<base::SingleThreadTaskRunner>& file_task_runner) {
   // Create platform-specific PolicyLoader. Always read the Chrome policies
   // (even on Chromium) so that policy enforcement can't be bypassed by running
   // Chromium.
@@ -421,12 +420,14 @@ std::unique_ptr<PolicyWatcher> PolicyWatcher::Create(
   return base::WrapUnique(new PolicyWatcher(
       owned_policy_service.get(), std::move(owned_policy_service), nullptr,
       CreateSchemaRegistry()));
+#elif defined(OS_CHROMEOS)
+  NOTREACHED() << "CreateWithPolicyService() should be used on ChromeOS.";
+  return nullptr;
 #else
 #error OS that is not yet supported by PolicyWatcher code.
 #endif
 
   return PolicyWatcher::CreateFromPolicyLoader(std::move(policy_loader));
-#endif  // !(OS_CHROMEOS)
 }
 
 std::unique_ptr<PolicyWatcher> PolicyWatcher::CreateFromPolicyLoaderForTesting(

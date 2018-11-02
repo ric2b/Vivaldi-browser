@@ -16,14 +16,14 @@ void PaintPropertyTreeBuilderTest::LoadTestData(const char* file_name) {
   String full_path = testing::BlinkRootDir();
   full_path.append("/Source/core/paint/test_data/");
   full_path.append(file_name);
-  RefPtr<SharedBuffer> input_buffer = testing::ReadFromFile(full_path);
-  SetBodyInnerHTML(String(input_buffer->Data(), input_buffer->size()));
+  const Vector<char> input_buffer = testing::ReadFromFile(full_path)->Copy();
+  SetBodyInnerHTML(String(input_buffer.data(), input_buffer.size()));
 }
 
 const TransformPaintPropertyNode*
 PaintPropertyTreeBuilderTest::FramePreTranslation() {
-  FrameView* frame_view = GetDocument().View();
-  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+  LocalFrameView* frame_view = GetDocument().View();
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return frame_view->GetLayoutView()
         ->PaintProperties()
         ->PaintOffsetTranslation();
@@ -32,24 +32,24 @@ PaintPropertyTreeBuilderTest::FramePreTranslation() {
 
 const TransformPaintPropertyNode*
 PaintPropertyTreeBuilderTest::FrameScrollTranslation() {
-  FrameView* frame_view = GetDocument().View();
-  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+  LocalFrameView* frame_view = GetDocument().View();
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return frame_view->GetLayoutView()->PaintProperties()->ScrollTranslation();
   return frame_view->ScrollTranslation();
 }
 
 const ClipPaintPropertyNode* PaintPropertyTreeBuilderTest::FrameContentClip() {
-  FrameView* frame_view = GetDocument().View();
-  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+  LocalFrameView* frame_view = GetDocument().View();
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return frame_view->GetLayoutView()->PaintProperties()->OverflowClip();
   return frame_view->ContentClip();
 }
 
 const ScrollPaintPropertyNode* PaintPropertyTreeBuilderTest::FrameScroll(
-    FrameView* frame_view) {
+    LocalFrameView* frame_view) {
   if (!frame_view)
     frame_view = GetDocument().View();
-  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     const auto* scroll_translation =
         frame_view->GetLayoutView()->PaintProperties()->ScrollTranslation();
     return scroll_translation ? scroll_translation->ScrollNode() : nullptr;
@@ -87,7 +87,7 @@ void PaintPropertyTreeBuilderTest::TearDown() {
       source.MoveBy((source_object)->PaintOffset());                           \
       auto contents_properties = (ancestor)->ContentsProperties();             \
       FloatClipRect actual_float_rect((FloatRect(source)));                    \
-      GeometryMapper::SourceToDestinationVisualRect(                           \
+      GeometryMapper::LocalToAncestorVisualRect(                               \
           *(source_object)->LocalBorderBoxProperties(), contents_properties,   \
           actual_float_rect);                                                  \
       LayoutRect actual(actual_float_rect.Rect());                             \
@@ -131,7 +131,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FixedPosition) {
       GetDocument().getElementById("transformedScroll");
   transformed_scroll->setScrollTop(5);
 
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->UpdateAllLifecyclePhases();
 
   // target1 is a fixed-position element inside an absolute-position scrolling
@@ -194,7 +194,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionAndScroll) {
 
   Element* scroller = GetDocument().getElementById("scroller");
   scroller->scrollTo(0, 100);
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->UpdateAllLifecyclePhases();
   const ObjectPaintProperties* scroller_properties =
       scroller->GetLayoutObject()->PaintProperties();
@@ -206,7 +206,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionAndScroll) {
             scroller_properties->OverflowClip()->LocalTransformSpace());
   const auto* scroll = scroller_properties->ScrollTranslation()->ScrollNode();
   EXPECT_EQ(FrameScroll(), scroll->Parent());
-  EXPECT_EQ(FloatSize(413, 317), scroll->Clip());
+  EXPECT_EQ(FloatSize(413, 317), scroll->ContainerBounds());
   EXPECT_EQ(FloatSize(660, 10200), scroll->Bounds());
   EXPECT_FALSE(scroll->UserScrollableHorizontal());
   EXPECT_TRUE(scroll->UserScrollableVertical());
@@ -259,7 +259,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FrameScrollingTraditional) {
 
   GetDocument().domWindow()->scrollTo(0, 100);
 
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->UpdateAllLifecyclePhases();
   EXPECT_EQ(TransformationMatrix(), FramePreTranslation()->Matrix());
   EXPECT_TRUE(FramePreTranslation()->Parent()->IsRoot());
@@ -271,7 +271,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FrameScrollingTraditional) {
   EXPECT_EQ(FloatRoundedRect(0, 0, 800, 600), FrameContentClip()->ClipRect());
   EXPECT_TRUE(FrameContentClip()->Parent()->IsRoot());
 
-  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled()) {
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled()) {
     // No scroll properties should be present.
     EXPECT_EQ(nullptr, frame_view->GetLayoutView()->PaintProperties());
   }
@@ -1168,7 +1168,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesAcrossSubframes) {
       "</style>"
       "<div id='innerDivWithTransform'></div>");
 
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->UpdateAllLifecyclePhases();
 
   LayoutObject* div_with_transform =
@@ -1237,7 +1237,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TransformNodesInTransformedSubframes) {
       "  }"
       "</style>"
       "<div id='transform'></div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->UpdateAllLifecyclePhases();
 
   // Assert that we have the following tree structure:
@@ -1300,7 +1300,7 @@ TEST_P(PaintPropertyTreeBuilderTest, TreeContextClipByNonStackingContext) {
       "      style='position:relative; width:100px; height: 200px;'></div>"
       "  <div style='height:10000px;'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* scroller =
       GetDocument().getElementById("scroller")->GetLayoutObject();
@@ -1634,7 +1634,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FractionalPaintOffset) {
       "<div id='a'>"
       "  <div id='b'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   LayoutPoint a_paint_offset = LayoutPoint(FloatPoint(0.1, 0.3));
@@ -1680,7 +1680,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetWithBasicPixelSnapping) {
       "    <div id='c'></div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
   const ObjectPaintProperties* b_properties = b->PaintProperties();
@@ -1736,7 +1736,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
       "    <div id='c'></div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
   const ObjectPaintProperties* b_properties = b->PaintProperties();
@@ -1797,7 +1797,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
       "    <div id='c'></div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
   const ObjectPaintProperties* b_properties = b->PaintProperties();
@@ -1864,7 +1864,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
       "    </div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
   const ObjectPaintProperties* b_properties = b->PaintProperties();
@@ -1945,7 +1945,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PaintOffsetWithPixelSnappingWithFixedPos) {
       "    </div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
   const ObjectPaintProperties* b_properties = b->PaintProperties();
@@ -2068,7 +2068,7 @@ TEST_P(PaintPropertyTreeBuilderTest, Preserve3DCreatesSharedRenderingContext) {
       "  <div id='b'"
       "      style='transform: translateZ(0); width: 20px; height: 10px'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   const ObjectPaintProperties* a_properties = a->PaintProperties();
@@ -2105,7 +2105,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FlatTransformStyleEndsRenderingContext) {
       "    <div id='b'></div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   const ObjectPaintProperties* a_properties = a->PaintProperties();
@@ -2137,7 +2137,7 @@ TEST_P(PaintPropertyTreeBuilderTest, NestedRenderingContexts) {
       "    </div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   const ObjectPaintProperties* a_properties = a->PaintProperties();
@@ -2202,7 +2202,7 @@ TEST_P(PaintPropertyTreeBuilderTest, FlatTransformStylePropagatesToChildren) {
       "<div id='a'>"
       "  <div id='b'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
@@ -2240,7 +2240,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
       "<div id='a'>"
       "  <div id='b'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
@@ -2269,7 +2269,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PerspectiveIsNotFlattened) {
       "  <div id='b'"
       "      style='transform: translateZ(0); width: 10px; height: 20px'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
@@ -2298,7 +2298,7 @@ TEST_P(PaintPropertyTreeBuilderTest,
       "  <div id='b'"
       "      style='transform: translateZ(0); width: 10px; height: 20px'></div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   LayoutObject* a = GetDocument().getElementById("a")->GetLayoutObject();
   LayoutObject* b = GetDocument().getElementById("b")->GetLayoutObject();
@@ -2327,7 +2327,7 @@ TEST_P(PaintPropertyTreeBuilderTest, CachedProperties) {
       "        height: 20px'>C<div>"
       "  </div>"
       "</div>");
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
 
   Element* a = GetDocument().getElementById("a");
   const ObjectPaintProperties* a_properties =
@@ -2669,6 +2669,7 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowHiddenScrollProperties) {
       "    overflow: hidden;"
       "    width: 5px;"
       "    height: 3px;"
+      "    border: 1px solid black;"
       "  }"
       "  .forceScroll {"
       "    height: 79px;"
@@ -2693,8 +2694,9 @@ TEST_P(PaintPropertyTreeBuilderTest, OverflowHiddenScrollProperties) {
   EXPECT_TRUE(overflow_hidden_scroll_node->Parent()->IsRoot());
   EXPECT_EQ(TransformationMatrix().Translate(0, -37),
             scroll_translation->Matrix());
-  // This should match the overflow's dimensions.
-  EXPECT_EQ(IntSize(5, 3), overflow_hidden_scroll_node->Clip());
+  // This should match the overflow's dimensions and should not include the
+  // box's border.
+  EXPECT_EQ(IntSize(5, 3), overflow_hidden_scroll_node->ContainerBounds());
   // The scrolling content's bounds should include both the overflow's
   // dimensions (5x3) and the 0x79 "forceScroll" object.
   EXPECT_EQ(IntSize(5, 79), overflow_hidden_scroll_node->Bounds());
@@ -2748,7 +2750,7 @@ TEST_P(PaintPropertyTreeBuilderTest, NestedScrollProperties) {
   EXPECT_TRUE(overflow_a_scroll_node->Parent()->IsRoot());
   EXPECT_EQ(TransformationMatrix().Translate(0, -37),
             scroll_a_translation->Matrix());
-  EXPECT_EQ(IntSize(5, 3), overflow_a_scroll_node->Clip());
+  EXPECT_EQ(IntSize(5, 3), overflow_a_scroll_node->ContainerBounds());
   // 107 is the forceScroll element plus the height of the overflow scroll child
   // (overflowB).
   EXPECT_EQ(IntSize(9, 107), overflow_a_scroll_node->Bounds());
@@ -2765,7 +2767,7 @@ TEST_P(PaintPropertyTreeBuilderTest, NestedScrollProperties) {
   EXPECT_EQ(overflow_a_scroll_node, overflow_b_scroll_node->Parent());
   EXPECT_EQ(TransformationMatrix().Translate(0, -41),
             scroll_b_translation->Matrix());
-  EXPECT_EQ(IntSize(9, 7), overflow_b_scroll_node->Clip());
+  EXPECT_EQ(IntSize(9, 7), overflow_b_scroll_node->ContainerBounds());
   EXPECT_EQ(IntSize(9, 100), overflow_b_scroll_node->Bounds());
   EXPECT_TRUE(overflow_b_scroll_node->UserScrollableHorizontal());
   EXPECT_TRUE(overflow_b_scroll_node->UserScrollableVertical());
@@ -2834,7 +2836,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionedScrollerIsNotNested) {
       overflow_scroll_properties->ScrollTranslation()->ScrollNode()->Parent());
   EXPECT_EQ(TransformationMatrix().Translate(0, -37),
             scroll_translation->Matrix());
-  EXPECT_EQ(IntSize(5, 3), overflow_scroll_node->Clip());
+  EXPECT_EQ(IntSize(5, 3), overflow_scroll_node->ContainerBounds());
   // The height should be 4000px because the (dom-order) overflow children are
   // positioned and do not contribute to the height. Only the 4000px
   // "forceScroll" height is present.
@@ -2850,7 +2852,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionedScrollerIsNotNested) {
   EXPECT_EQ(FrameScroll(), abspos_overflow_scroll_node->Parent());
   EXPECT_EQ(TransformationMatrix().Translate(0, -41),
             abspos_scroll_translation->Matrix());
-  EXPECT_EQ(IntSize(9, 7), abspos_overflow_scroll_node->Clip());
+  EXPECT_EQ(IntSize(9, 7), abspos_overflow_scroll_node->ContainerBounds());
   EXPECT_EQ(IntSize(9, 4000), abspos_overflow_scroll_node->Bounds());
 
   const ObjectPaintProperties* fixed_overflow_scroll_properties =
@@ -2863,7 +2865,7 @@ TEST_P(PaintPropertyTreeBuilderTest, PositionedScrollerIsNotNested) {
   EXPECT_TRUE(fixed_overflow_scroll_node->Parent()->IsRoot());
   EXPECT_EQ(TransformationMatrix().Translate(0, -43),
             fixed_scroll_translation->Matrix());
-  EXPECT_EQ(IntSize(13, 11), fixed_overflow_scroll_node->Clip());
+  EXPECT_EQ(IntSize(13, 11), fixed_overflow_scroll_node->ContainerBounds());
   EXPECT_EQ(IntSize(13, 4000), fixed_overflow_scroll_node->Bounds());
 }
 
@@ -2917,7 +2919,7 @@ TEST_P(PaintPropertyTreeBuilderTest, NestedPositionedScrollProperties) {
   EXPECT_TRUE(overflow_a_scroll_node->Parent()->IsRoot());
   EXPECT_EQ(TransformationMatrix().Translate(0, -37),
             scroll_a_translation->Matrix());
-  EXPECT_EQ(IntSize(20, 20), overflow_a_scroll_node->Clip());
+  EXPECT_EQ(IntSize(20, 20), overflow_a_scroll_node->ContainerBounds());
   // 100 is the forceScroll element's height because the overflow child does not
   // contribute to the height.
   EXPECT_EQ(IntSize(20, 100), overflow_a_scroll_node->Bounds());
@@ -2934,7 +2936,7 @@ TEST_P(PaintPropertyTreeBuilderTest, NestedPositionedScrollProperties) {
   EXPECT_EQ(overflow_a_scroll_node, overflow_b_scroll_node->Parent());
   EXPECT_EQ(TransformationMatrix().Translate(0, -41),
             scroll_b_translation->Matrix());
-  EXPECT_EQ(IntSize(5, 3), overflow_b_scroll_node->Clip());
+  EXPECT_EQ(IntSize(5, 3), overflow_b_scroll_node->ContainerBounds());
   EXPECT_EQ(IntSize(5, 100), overflow_b_scroll_node->Bounds());
   EXPECT_TRUE(overflow_b_scroll_node->UserScrollableHorizontal());
   EXPECT_TRUE(overflow_b_scroll_node->UserScrollableVertical());

@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">Պահանջվում է վավերացում</translation>
 <translation id="2166378884831602661">Այս կայքը չի կարող ապահովել անվտանգ միացում</translation>
 <translation id="2230458221926704099">Շտկեք Ձեր միացումն՝ օգտագործելով <ph name="BEGIN_LINK" />ախտորոշման հավելվածը<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Որոնել Google-ում «<ph name="LINK" />»</translation>
 <translation id="2292556288342944218">Ձեր մուտքն ինտերնետ արգելափակված է</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />-ը պահանջում է օգտվողի անուն և գաղտնաբառ։</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />Աշխատեցնել ցանցային ախտորոշումը<ph name="END_LINK" /></translation>
@@ -55,7 +54,6 @@
 <translation id="3630155396527302611">Եթե ծրագիրն ընդգրկված է այն ծրագրերի ցանկում, որոնց թույլատրված է ցանցից օգտվել,
 փորձեք հեռացնել այն այդ ցանկից և կրկին ավելացնել։</translation>
 <translation id="3658742229777143148">Վերստուգում</translation>
-<translation id="3693415264595406141">Գաղտնաբառ.</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Ստուգել պրոքսին, հրապատը և DNS-ի կոնֆիգուրացիան<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Եթե Դուք օգտագործում եք պրոքսի սերվեր…</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />-ն արգելափակված է</translation>
@@ -67,7 +65,6 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Ստուգել հրապատի և հակավիրուսային ծրագրի կոնֆիգուրացիաները<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />Փորձեք աշխատեցնել ցանցային ախտորոշումը<ph name="END_LINK" />։</translation>
 <translation id="4304224509867189079">Մուտք</translation>
-<translation id="4381091992796011497">Օգտվողի անուն.</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />-ը չի ընդունել Ձեր մուտքի հավաստագիրը կամ այդպիսին չի տրամադրվել։</translation>
 <translation id="4506599922270137252">Կապվել համակարգի ադմինիստրատորի հետ</translation>
 <translation id="4522570452068850558">Մանրամասներ</translation>

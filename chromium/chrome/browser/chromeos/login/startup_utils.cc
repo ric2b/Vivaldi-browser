@@ -4,12 +4,17 @@
 
 #include "chrome/browser/chromeos/login/startup_utils.h"
 
+#include <utility>
+
 #include "base/bind.h"
+#include "base/callback.h"
 #include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/sys_info.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_restrictions.h"
+#include "base/time/time.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/common/chrome_paths.h"
@@ -18,10 +23,7 @@
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 #include "components/web_resource/web_resource_pref_names.h"
-#include "content/public/browser/browser_thread.h"
 #include "ui/base/l10n/l10n_util.h"
-
-using content::BrowserThread;
 
 namespace {
 
@@ -36,14 +38,6 @@ void SaveBoolPreferenceForced(const char* pref_name, bool value) {
 void SaveIntegerPreferenceForced(const char* pref_name, int value) {
   PrefService* prefs = g_browser_process->local_state();
   prefs->SetInteger(pref_name, value);
-  prefs->CommitPendingWrite();
-}
-
-// Saves 64 bit signed integer "Local State" preference and forces its
-// persistence to disk.
-void SaveInt64PreferenceForced(const char* pref_name, int64_t value) {
-  PrefService* prefs = g_browser_process->local_state();
-  prefs->SetInt64(pref_name, value);
   prefs->CommitPendingWrite();
 }
 
@@ -98,8 +92,6 @@ void StartupUtils::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterStringPref(prefs::kInitialLocale, "en-US");
   registry->RegisterBooleanPref(prefs::kIsBootstrappingSlave, false);
   registry->RegisterBooleanPref(prefs::kOobeControllerDetected, false);
-  registry->RegisterInt64Pref(prefs::kOobeTimeOfLastUpdateCheckWithoutUpdate,
-                              0);
 }
 
 // static
@@ -151,10 +143,9 @@ bool StartupUtils::IsDeviceRegistered() {
       g_browser_process->local_state()->GetInteger(prefs::kDeviceRegistered);
   if (value > 0) {
     // Recreate flag file in case it was lost.
-    BrowserThread::PostTask(
-        BrowserThread::FILE,
-        FROM_HERE,
-        base::Bind(&CreateOobeCompleteFlagFile));
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                             base::BindOnce(&CreateOobeCompleteFlagFile));
     return true;
   } else if (value == 0) {
     return false;
@@ -170,19 +161,16 @@ bool StartupUtils::IsDeviceRegistered() {
 }
 
 // static
-void StartupUtils::MarkDeviceRegistered(const base::Closure& done_callback) {
+void StartupUtils::MarkDeviceRegistered(base::OnceClosure done_callback) {
   SaveIntegerPreferenceForced(prefs::kDeviceRegistered, 1);
   if (done_callback.is_null()) {
-    BrowserThread::PostTask(
-        BrowserThread::FILE,
-        FROM_HERE,
-        base::Bind(&CreateOobeCompleteFlagFile));
+    base::PostTaskWithTraits(FROM_HERE,
+                             {base::TaskPriority::BACKGROUND, base::MayBlock()},
+                             base::BindOnce(&CreateOobeCompleteFlagFile));
   } else {
-    BrowserThread::PostTaskAndReply(
-        BrowserThread::FILE,
-        FROM_HERE,
-        base::Bind(&CreateOobeCompleteFlagFile),
-        done_callback);
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {base::TaskPriority::BACKGROUND, base::MayBlock()},
+        base::BindOnce(&CreateOobeCompleteFlagFile), std::move(done_callback));
   }
 }
 
@@ -206,26 +194,6 @@ void StartupUtils::SetInitialLocale(const std::string& locale) {
     SaveStringPreferenceForced(prefs::kInitialLocale, locale);
   else
     NOTREACHED();
-}
-
-// static
-void StartupUtils::SaveTimeOfLastUpdateCheckWithoutUpdate(base::Time time) {
-  SaveInt64PreferenceForced(prefs::kOobeTimeOfLastUpdateCheckWithoutUpdate,
-                            time.ToInternalValue());
-}
-
-// static
-void StartupUtils::ClearTimeOfLastUpdateCheckWithoutUpdate() {
-  PrefService* prefs = g_browser_process->local_state();
-  prefs->ClearPref(prefs::kOobeTimeOfLastUpdateCheckWithoutUpdate);
-  prefs->CommitPendingWrite();
-}
-
-// static
-base::Time StartupUtils::GetTimeOfLastUpdateCheckWithoutUpdate() {
-  return base::Time::FromInternalValue(
-      g_browser_process->local_state()->GetInt64(
-          prefs::kOobeTimeOfLastUpdateCheckWithoutUpdate));
 }
 
 }  // namespace chromeos

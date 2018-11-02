@@ -4,14 +4,13 @@
 
 #include "ash/system/web_notification/web_notification_tray.h"
 
-#include "ash/public/cpp/shell_window_ids.h"
+#include "ash/accessibility_delegate.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_constants.h"
 #include "ash/shell.h"
-#include "ash/strings/grit/ash_strings.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/system_tray_delegate.h"
@@ -35,7 +34,6 @@
 #include "ui/message_center/views/message_center_bubble.h"
 #include "ui/message_center/views/message_popup_collection.h"
 #include "ui/strings/grit/ui_strings.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/bubble/tray_bubble_view.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
@@ -84,12 +82,19 @@ class WebNotificationBubbleWrapper {
                                TrayBackgroundView* anchor_tray,
                                message_center::MessageBubbleBase* bubble) {
     bubble_.reset(bubble);
-    views::TrayBubbleView::AnchorAlignment anchor_alignment =
-        tray->GetAnchorAlignment();
-    views::TrayBubbleView::InitParams init_params =
-        bubble->GetInitParams(anchor_alignment);
-    views::TrayBubbleView* bubble_view = views::TrayBubbleView::Create(
-        anchor_tray->GetBubbleAnchor(), tray, &init_params);
+    views::TrayBubbleView::InitParams init_params;
+    init_params.delegate = tray;
+    init_params.parent_window = anchor_tray->GetBubbleWindowContainer();
+    init_params.anchor_view = anchor_tray->GetBubbleAnchor();
+    init_params.anchor_alignment = tray->GetAnchorAlignment();
+    const int width = message_center::kNotificationWidth +
+                      message_center::kMarginBetweenItems * 2;
+    init_params.min_width = width;
+    init_params.max_width = width;
+    init_params.max_height = bubble->max_height();
+    init_params.bg_color = message_center::kBackgroundDarkColor;
+
+    views::TrayBubbleView* bubble_view = new views::TrayBubbleView(init_params);
     bubble_view->set_anchor_view_insets(anchor_tray->GetBubbleAnchorInsets());
     bubble_wrapper_.reset(new TrayBubbleWrapper(tray, bubble_view));
     bubble->InitializeContents(bubble_view);
@@ -299,6 +304,9 @@ WebNotificationTray::WebNotificationTray(Shelf* shelf,
   OnMessageCenterTrayChanged();
 
   tray_container()->SetMargin(kTrayMainAxisInset, kTrayCrossAxisInset);
+
+  if (!drag_controller())
+    set_drag_controller(base::MakeUnique<TrayDragController>(shelf));
 }
 
 WebNotificationTray::~WebNotificationTray() {
@@ -393,11 +401,6 @@ bool WebNotificationTray::IsMessageCenterBubbleVisible() const {
           message_center_bubble()->bubble()->IsVisible());
 }
 
-void WebNotificationTray::ShowMessageCenterBubble() {
-  if (!IsMessageCenterBubbleVisible())
-    message_center_tray_->ShowMessageCenterBubble();
-}
-
 void WebNotificationTray::UpdateAfterLoginStatusChange(
     LoginStatus login_status) {
   message_center()->SetLockedState(login_status == LoginStatus::LOCKED);
@@ -414,7 +417,13 @@ void WebNotificationTray::UpdateAfterShelfAlignmentChange() {
 void WebNotificationTray::AnchorUpdated() {
   if (message_center_bubble()) {
     message_center_bubble()->bubble_view()->UpdateBubble();
-    UpdateBubbleViewArrow(message_center_bubble()->bubble_view());
+    // Should check |message_center_bubble_| again here. Since UpdateBubble
+    // above set the bounds of the bubble which will stop the current
+    // animation. If web notification bubble is during animation to close,
+    // CloseBubbleObserver in TrayBackgroundView will close the bubble if
+    // animation finished.
+    if (message_center_bubble())
+      UpdateBubbleViewArrow(message_center_bubble()->bubble_view());
   }
 }
 
@@ -432,14 +441,6 @@ void WebNotificationTray::HideBubbleWithView(
   }
 }
 
-bool WebNotificationTray::PerformAction(const ui::Event& event) {
-  if (message_center_bubble())
-    message_center_tray_->HideMessageCenterBubble();
-  else
-    message_center_tray_->ShowMessageCenterBubble();
-  return true;
-}
-
 void WebNotificationTray::BubbleViewDestroyed() {
   if (message_center_bubble())
     message_center_bubble()->bubble()->BubbleViewDestroyed();
@@ -453,14 +454,8 @@ base::string16 WebNotificationTray::GetAccessibleNameForBubble() {
   return GetAccessibleNameForTray();
 }
 
-void WebNotificationTray::OnBeforeBubbleWidgetInit(
-    views::Widget* anchor_widget,
-    views::Widget* bubble_widget,
-    views::Widget::InitParams* params) const {
-  // Place the bubble in the same root window as |anchor_widget|.
-  RootWindowController::ForWindow(anchor_widget->GetNativeWindow())
-      ->ConfigureWidgetInitParamsForContainer(
-          bubble_widget, kShellWindowId_SettingBubbleContainer, params);
+bool WebNotificationTray::ShouldEnableExtraKeyboardAccessibility() {
+  return Shell::Get()->accessibility_delegate()->IsSpokenFeedbackEnabled();
 }
 
 void WebNotificationTray::HideBubble(const views::TrayBubbleView* bubble_view) {
@@ -588,6 +583,28 @@ void WebNotificationTray::ClickedOutsideBubble() {
     return;
 
   message_center_tray_->HideMessageCenterBubble();
+}
+
+bool WebNotificationTray::PerformAction(const ui::Event& event) {
+  if (message_center_bubble())
+    message_center_tray_->HideMessageCenterBubble();
+  else
+    message_center_tray_->ShowMessageCenterBubble();
+  return true;
+}
+
+void WebNotificationTray::CloseBubble() {
+  message_center_tray_->HideMessageCenterBubble();
+}
+
+void WebNotificationTray::ShowBubble() {
+  if (!IsMessageCenterBubbleVisible())
+    message_center_tray_->ShowMessageCenterBubble();
+}
+
+views::TrayBubbleView* WebNotificationTray::GetBubbleView() {
+  return message_center_bubble_ ? message_center_bubble_->bubble_view()
+                                : nullptr;
 }
 
 message_center::MessageCenter* WebNotificationTray::message_center() const {

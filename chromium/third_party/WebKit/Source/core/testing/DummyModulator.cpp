@@ -15,9 +15,10 @@ class EmptyScriptModuleResolver final : public ScriptModuleResolver {
  public:
   EmptyScriptModuleResolver() {}
 
-  // We ignore RegisterModuleScript() calls caused by
+  // We ignore {Unr,R}egisterModuleScript() calls caused by
   // ModuleScript::CreateForTest().
   void RegisterModuleScript(ModuleScript*) override {}
+  void UnregisterModuleScript(ModuleScript*) override {}
 
   ScriptModule Resolve(const String& specifier,
                        const ScriptModule& referrer,
@@ -70,6 +71,7 @@ void DummyModulator::FetchTree(const ModuleScriptFetchRequest&,
 void DummyModulator::FetchTreeInternal(const ModuleScriptFetchRequest&,
                                        const AncestorList&,
                                        ModuleGraphLevel,
+                                       ModuleTreeReachedUrlSet*,
                                        ModuleTreeClient*) {
   NOTREACHED();
 };
@@ -103,7 +105,8 @@ bool DummyModulator::HasValidContext() {
 ScriptModule DummyModulator::CompileModule(const String& script,
                                            const String& url_str,
                                            AccessControlStatus,
-                                           const TextPosition&) {
+                                           const TextPosition&,
+                                           ExceptionState&) {
   NOTREACHED();
   return ScriptModule();
 }
@@ -113,14 +116,20 @@ ScriptValue DummyModulator::InstantiateModule(ScriptModule) {
   return ScriptValue();
 }
 
-ScriptValue DummyModulator::GetInstantiationError(const ModuleScript*) {
+ScriptModuleState DummyModulator::GetRecordStatus(ScriptModule) {
+  NOTREACHED();
+  return ScriptModuleState::kErrored;
+}
+
+ScriptValue DummyModulator::GetError(const ModuleScript*) {
   NOTREACHED();
   return ScriptValue();
 }
 
-Vector<String> DummyModulator::ModuleRequestsFromScriptModule(ScriptModule) {
+Vector<Modulator::ModuleRequest> DummyModulator::ModuleRequestsFromScriptModule(
+    ScriptModule) {
   NOTREACHED();
-  return Vector<String>();
+  return Vector<ModuleRequest>();
 }
 
 void DummyModulator::ExecuteModule(const ModuleScript*) {

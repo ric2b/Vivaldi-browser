@@ -15,8 +15,7 @@ Printer::Printer() : source_(SRC_USER_PREFS) {
   id_ = base::GenerateGUID();
 }
 
-Printer::Printer(const std::string& id, const base::Time& last_updated)
-    : id_(id), source_(SRC_USER_PREFS), last_updated_(last_updated) {
+Printer::Printer(const std::string& id) : id_(id), source_(SRC_USER_PREFS) {
   if (id_.empty())
     id_ = base::GenerateGUID();
 }
@@ -56,6 +55,13 @@ Printer::PrinterProtocol Printer::GetProtocol() const {
     return PrinterProtocol::kLpd;
 
   return PrinterProtocol::kUnknown;
+}
+
+bool Printer::PpdReference::operator==(
+    const Printer::PpdReference& other) const {
+  return user_supplied_ppd_url == other.user_supplied_ppd_url &&
+         effective_make_and_model == other.effective_make_and_model &&
+         autoconf == other.autoconf;
 }
 
 }  // namespace chromeos

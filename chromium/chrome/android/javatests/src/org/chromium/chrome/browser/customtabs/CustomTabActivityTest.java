@@ -6,9 +6,9 @@ package org.chromium.chrome.browser.customtabs;
 
 import static org.chromium.base.test.util.Restriction.RESTRICTION_TYPE_NON_LOW_END_DEVICE;
 import static org.chromium.chrome.browser.customtabs.CustomTabActivityTestRule.LONG_TIMEOUT_MS;
+import static org.chromium.chrome.browser.customtabs.CustomTabIntentDataProvider.CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER;
 
 import android.app.Activity;
-import android.app.Application;
 import android.app.Instrumentation;
 import android.app.Instrumentation.ActivityMonitor;
 import android.app.Instrumentation.ActivityResult;
@@ -205,18 +205,13 @@ public class CustomTabActivityTest {
         LibraryLoader.get(LibraryProcessType.PROCESS_BROWSER).ensureInitialized();
         mWebServer = TestWebServer.start();
 
-        CustomTabsConnection connection =
-                CustomTabsConnection.getInstance((Application) appContext);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
         connection.setForcePrerender(true);
     }
 
     @After
     public void tearDown() throws Exception {
-        Context appContext = InstrumentationRegistry.getInstrumentation()
-                                     .getTargetContext()
-                                     .getApplicationContext();
-        CustomTabsConnection connection =
-                CustomTabsConnection.getInstance((Application) appContext);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
         connection.setForcePrerender(false);
 
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
@@ -543,7 +538,7 @@ public class CustomTabActivityTest {
         Assert.assertFalse(menu.findItem(R.id.share_row_menu_id).isEnabled());
         Assert.assertNotNull(menu.findItem(R.id.find_in_page_id));
         Assert.assertNotNull(menu.findItem(R.id.add_to_homescreen_id));
-        Assert.assertNotNull(menu.findItem(R.id.request_desktop_site_id));
+        Assert.assertNotNull(menu.findItem(R.id.request_desktop_site_row_menu_id));
     }
 
     /**
@@ -554,7 +549,8 @@ public class CustomTabActivityTest {
     @RetryOnFailure
     public void testAppMenuForMediaViewer() throws InterruptedException {
         Intent intent = createMinimalCustomTabIntent();
-        intent.putExtra(CustomTabIntentDataProvider.EXTRA_IS_MEDIA_VIEWER, true);
+        intent.putExtra(
+                CustomTabIntentDataProvider.EXTRA_UI_TYPE, CUSTOM_TABS_UI_TYPE_MEDIA_VIEWER);
         IntentHandler.addTrustedIntentExtras(intent);
         mCustomTabActivityTestRule.startCustomTabActivityWithIntent(intent);
 
@@ -568,7 +564,7 @@ public class CustomTabActivityTest {
         Assert.assertEquals(expectedMenuSize, actualMenuSize);
         Assert.assertFalse(menu.findItem(R.id.find_in_page_id).isVisible());
         Assert.assertFalse(menu.findItem(R.id.add_to_homescreen_id).isVisible());
-        Assert.assertFalse(menu.findItem(R.id.request_desktop_site_id).isVisible());
+        Assert.assertFalse(menu.findItem(R.id.request_desktop_site_row_menu_id).isVisible());
         Assert.assertFalse(menu.findItem(R.id.open_in_browser_id).isVisible());
     }
 
@@ -1012,7 +1008,7 @@ public class CustomTabActivityTest {
         final Intent intent = CustomTabsTestUtils.createMinimalCustomTabIntent(context, mTestPage2);
         final CustomTabsSessionToken session = warmUpAndLaunchUrlWithSession(intent);
         Assert.assertEquals(getActivity().getIntentDataProvider().getSession(), session);
-        CustomTabsConnection connection = CustomTabsConnection.getInstance((Application) context);
+        CustomTabsConnection connection = CustomTabsConnection.getInstance();
         String packageName = context.getPackageName();
         final String referrer =
                 IntentHandler.constructValidReferrerForAuthority(packageName).getUrl();
@@ -2191,8 +2187,7 @@ public class CustomTabActivityTest {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
                                   .getApplicationContext();
-        final CustomTabsConnection connection =
-                CustomTabsConnection.getInstance((Application) context);
+        final CustomTabsConnection connection = CustomTabsConnection.getInstance();
         CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
         connection.newSession(token);
 
@@ -2681,8 +2676,7 @@ public class CustomTabActivityTest {
         Context context = InstrumentationRegistry.getInstrumentation()
                                   .getTargetContext()
                                   .getApplicationContext();
-        CustomTabsConnection connection =
-                CustomTabsTestUtils.setUpConnection((Application) context);
+        CustomTabsConnection connection = CustomTabsTestUtils.setUpConnection();
         CustomTabsSessionToken token = CustomTabsSessionToken.createDummySessionTokenForTesting();
         connection.newSession(token);
         Bundle extras = null;
@@ -2704,11 +2698,7 @@ public class CustomTabActivityTest {
     }
 
     private CustomTabsConnection warmUpAndWait() {
-        final Context context = InstrumentationRegistry.getInstrumentation()
-                                        .getTargetContext()
-                                        .getApplicationContext();
-        CustomTabsConnection connection =
-                CustomTabsTestUtils.setUpConnection((Application) context);
+        CustomTabsConnection connection = CustomTabsTestUtils.setUpConnection();
         final CallbackHelper startupCallbackHelper = new CallbackHelper();
         Assert.assertTrue(connection.warmup(0));
         ThreadUtils.runOnUiThread(new Runnable() {
@@ -2933,7 +2923,7 @@ public class CustomTabActivityTest {
         ThreadUtils.runOnUiThreadBlocking(new Runnable() {
             @Override
             public void run() {
-                BrowsingHistoryBridge historyService = new BrowsingHistoryBridge();
+                BrowsingHistoryBridge historyService = new BrowsingHistoryBridge(false);
                 historyService.setObserver(historyObserver);
                 String historyQueryFilter = "";
                 int historyQueryTimeout = 0;

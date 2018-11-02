@@ -5,9 +5,8 @@
 # Build instructions on Linux:
 
 ./chromium/build/install-build-deps.sh --no-syms --no-arm --no-chromeos-fonts --no-nacl --no-prompt
-git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git
-export PATH="$PATH":$PWD/depot_tools
+export PATH="$PATH":$PWD/chromium/third_party/depot_tools/
 # Uncomment for proprietary media codecs support.
-#export GYP_DEFINES="ffmpeg_branding=Chrome"
+#export GN_DEFINES="ffmpeg_branding=Chrome"
 python scripts/runhooks.py
 ninja -C out/Release vivaldi

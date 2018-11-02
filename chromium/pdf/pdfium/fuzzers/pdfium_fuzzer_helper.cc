@@ -192,8 +192,8 @@ void PDFiumFuzzerHelper::RenderPdf(const char* pBuf, size_t len) {
   FORM_DoDocumentAAction(form.get(), FPDFDOC_AACTION_WC);
 }
 
-bool PDFiumFuzzerHelper::RenderPage(const FPDF_DOCUMENT& doc,
-                                    const FPDF_FORMHANDLE& form,
+bool PDFiumFuzzerHelper::RenderPage(FPDF_DOCUMENT doc,
+                                    FPDF_FORMHANDLE form,
                                     const int page_index) {
   std::unique_ptr<void, FPDFPageDeleter> page(FPDF_LoadPage(doc, page_index));
   if (!page)
@@ -222,8 +222,12 @@ bool PDFiumFuzzerHelper::RenderPage(const FPDF_DOCUMENT& doc,
 // Initialize the library once for all runs of the fuzzer.
 struct TestCase {
   TestCase() {
+#ifdef V8_USE_EXTERNAL_STARTUP_DATA
     InitializeV8ForPDFium(ProgramPath(), "", &natives_blob, &snapshot_blob,
                           &platform);
+#else
+    InitializeV8ForPDFium(ProgramPath(), &platform);
+#endif
 
     memset(&config, '\0', sizeof(config));
     config.version = 2;

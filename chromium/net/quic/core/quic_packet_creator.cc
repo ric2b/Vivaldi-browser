@@ -16,6 +16,7 @@
 #include "net/quic/platform/api/quic_flag_utils.h"
 #include "net/quic/platform/api/quic_flags.h"
 #include "net/quic/platform/api/quic_logging.h"
+#include "net/quic/platform/api/quic_ptr_util.h"
 #include "net/quic/platform/api/quic_string_piece.h"
 
 using std::string;
@@ -130,22 +131,17 @@ bool QuicPacketCreator::ConsumeData(QuicStreamId id,
   }
   CreateStreamFrame(id, iov, iov_offset, offset, fin, frame);
   // Explicitly disallow multi-packet CHLOs.
-  if (id == kCryptoStreamId &&
-      frame->stream_frame->data_length >= sizeof(kCHLO) &&
-      strncmp(frame->stream_frame->data_buffer,
-              reinterpret_cast<const char*>(&kCHLO), sizeof(kCHLO)) == 0) {
-    DCHECK_EQ(0u, iov_offset);
-    if (FLAGS_quic_enforce_single_packet_chlo &&
-        frame->stream_frame->data_length < iov.iov->iov_len) {
-      const string error_details = "Client hello won't fit in a single packet.";
-      QUIC_BUG << error_details << " Constructed stream frame length: "
-               << frame->stream_frame->data_length
-               << " CHLO length: " << iov.iov->iov_len;
-      delegate_->OnUnrecoverableError(QUIC_CRYPTO_CHLO_TOO_LARGE, error_details,
-                                      ConnectionCloseSource::FROM_SELF);
-      delete frame->stream_frame;
-      return false;
-    }
+  if (StreamFrameStartsWithChlo(iov, iov_offset, *frame->stream_frame) &&
+      FLAGS_quic_enforce_single_packet_chlo &&
+      frame->stream_frame->data_length < iov.iov->iov_len) {
+    const string error_details = "Client hello won't fit in a single packet.";
+    QUIC_BUG << error_details << " Constructed stream frame length: "
+             << frame->stream_frame->data_length
+             << " CHLO length: " << iov.iov->iov_len;
+    delegate_->OnUnrecoverableError(QUIC_CRYPTO_CHLO_TOO_LARGE, error_details,
+                                    ConnectionCloseSource::FROM_SELF);
+    delete frame->stream_frame;
+    return false;
   }
   if (!AddFrame(*frame, /*save_retransmittable_frames=*/true)) {
     // Fails if we try to write unencrypted stream data.
@@ -211,64 +207,19 @@ void QuicPacketCreator::CreateStreamFrame(QuicStreamId id,
       std::min<size_t>(BytesFree() - min_frame_size, data_size);
 
   bool set_fin = fin && bytes_consumed == data_size;  // Last frame.
-  UniqueStreamBuffer buffer =
-      NewStreamBuffer(buffer_allocator_, bytes_consumed);
-  CopyToBuffer(iov, iov_offset, bytes_consumed, buffer.get());
-  *frame = QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed,
-                                         std::move(buffer)));
-}
-
-// static
-void QuicPacketCreator::CopyToBuffer(QuicIOVector iov,
-                                     size_t iov_offset,
-                                     size_t length,
-                                     char* buffer) {
-  int iovnum = 0;
-  while (iovnum < iov.iov_count && iov_offset >= iov.iov[iovnum].iov_len) {
-    iov_offset -= iov.iov[iovnum].iov_len;
-    ++iovnum;
-  }
-  DCHECK_LE(iovnum, iov.iov_count);
-  DCHECK_LE(iov_offset, iov.iov[iovnum].iov_len);
-  if (iovnum >= iov.iov_count || length == 0) {
+  if (framer_->HasDataProducer()) {
+    *frame =
+        QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed));
+    if (bytes_consumed > 0) {
+      framer_->SaveStreamData(id, iov, iov_offset, offset, bytes_consumed);
+    }
     return;
   }
-
-  // Unroll the first iteration that handles iov_offset.
-  const size_t iov_available = iov.iov[iovnum].iov_len - iov_offset;
-  size_t copy_len = std::min(length, iov_available);
-
-  // Try to prefetch the next iov if there is at least one more after the
-  // current. Otherwise, it looks like an irregular access that the hardware
-  // prefetcher won't speculatively prefetch. Only prefetch one iov because
-  // generally, the iov_offset is not 0, input iov consists of 2K buffers and
-  // the output buffer is ~1.4K.
-  if (copy_len == iov_available && iovnum + 1 < iov.iov_count) {
-    // TODO(ckrasic) - this is unused without prefetch()
-    // char* next_base = static_cast<char*>(iov.iov[iovnum + 1].iov_base);
-    // char* next_base = static_cast<char*>(iov.iov[iovnum + 1].iov_base);
-    // Prefetch 2 cachelines worth of data to get the prefetcher started; leave
-    // it to the hardware prefetcher after that.
-    // TODO(ckrasic) - investigate what to do about prefetch directives.
-    // prefetch(next_base, PREFETCH_HINT_T0);
-    if (iov.iov[iovnum + 1].iov_len >= 64) {
-      // TODO(ckrasic) - investigate what to do about prefetch directives.
-      // prefetch(next_base + CACHELINE_SIZE, PREFETCH_HINT_T0);
-    }
-  }
-
-  const char* src = static_cast<char*>(iov.iov[iovnum].iov_base) + iov_offset;
-  while (true) {
-    memcpy(buffer, src, copy_len);
-    length -= copy_len;
-    buffer += copy_len;
-    if (length == 0 || ++iovnum >= iov.iov_count) {
-      break;
-    }
-    src = static_cast<char*>(iov.iov[iovnum].iov_base);
-    copy_len = std::min(length, iov.iov[iovnum].iov_len);
-  }
-  QUIC_BUG_IF(length > 0) << "Failed to copy entire length to buffer.";
+  UniqueStreamBuffer buffer =
+      NewStreamBuffer(buffer_allocator_, bytes_consumed);
+  QuicUtils::CopyToBuffer(iov, iov_offset, bytes_consumed, buffer.get());
+  *frame = QuicFrame(new QuicStreamFrame(id, set_fin, offset, bytes_consumed,
+                                         std::move(buffer)));
 }
 
 void QuicPacketCreator::ReserializeAllFrames(
@@ -385,11 +336,22 @@ void QuicPacketCreator::CreateAndSerializeStreamFrame(
       std::min<size_t>(available_size, remaining_data_size);
 
   const bool set_fin = fin && (bytes_consumed == remaining_data_size);
-  UniqueStreamBuffer stream_buffer =
-      NewStreamBuffer(buffer_allocator_, bytes_consumed);
-  CopyToBuffer(iov, iov_offset, bytes_consumed, stream_buffer.get());
-  std::unique_ptr<QuicStreamFrame> frame(new QuicStreamFrame(
-      id, set_fin, stream_offset, bytes_consumed, std::move(stream_buffer)));
+  std::unique_ptr<QuicStreamFrame> frame;
+  if (framer_->HasDataProducer()) {
+    frame = QuicMakeUnique<QuicStreamFrame>(id, set_fin, stream_offset,
+                                            bytes_consumed);
+    if (bytes_consumed > 0) {
+      framer_->SaveStreamData(id, iov, iov_offset, stream_offset,
+                              bytes_consumed);
+    }
+  } else {
+    UniqueStreamBuffer stream_buffer =
+        NewStreamBuffer(buffer_allocator_, bytes_consumed);
+    QuicUtils::CopyToBuffer(iov, iov_offset, bytes_consumed,
+                            stream_buffer.get());
+    frame = QuicMakeUnique<QuicStreamFrame>(
+        id, set_fin, stream_offset, bytes_consumed, std::move(stream_buffer));
+  }
   QUIC_DVLOG(1) << ENDPOINT << "Adding frame: " << *frame;
 
   // TODO(ianswett): AppendTypeByte and AppendStreamFrame could be optimized
@@ -660,6 +622,32 @@ bool QuicPacketCreator::IncludeNonceInPublicHeader() {
 
 void QuicPacketCreator::AddPendingPadding(QuicByteCount size) {
   pending_padding_bytes_ += size;
+}
+
+bool QuicPacketCreator::StreamFrameStartsWithChlo(
+    QuicIOVector iov,
+    size_t iov_offset,
+    const QuicStreamFrame& frame) const {
+  if (!framer_->HasDataProducer()) {
+    return frame.stream_id == kCryptoStreamId &&
+           frame.data_length >= sizeof(kCHLO) &&
+           strncmp(frame.data_buffer, reinterpret_cast<const char*>(&kCHLO),
+                   sizeof(kCHLO)) == 0;
+  }
+
+  if (framer_->perspective() == Perspective::IS_SERVER ||
+      frame.stream_id != kCryptoStreamId || iov_offset != 0 ||
+      frame.data_length < sizeof(kCHLO)) {
+    return false;
+  }
+
+  if (iov.iov[0].iov_len < sizeof(kCHLO)) {
+    QUIC_BUG << "iov length " << iov.iov[0].iov_len << " is less than "
+             << sizeof(kCHLO);
+    return false;
+  }
+  return strncmp(reinterpret_cast<const char*>(iov.iov[0].iov_base),
+                 reinterpret_cast<const char*>(&kCHLO), sizeof(kCHLO)) == 0;
 }
 
 }  // namespace net

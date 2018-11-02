@@ -7,6 +7,7 @@
 
 #include "core/CoreExport.h"
 #include "core/animation/AnimationEffectReadOnly.h"
+#include "core/animation/CompositorAnimations.h"
 #include "core/animation/EffectModel.h"
 
 namespace blink {
@@ -58,13 +59,13 @@ class CORE_EXPORT KeyframeEffectReadOnly : public AnimationEffectReadOnly {
 
   void NotifySampledEffectRemovedFromEffectStack();
 
-  bool IsCandidateForAnimationOnCompositor(
+  CompositorAnimations::FailureCode CheckCanStartAnimationOnCompositor(
       double animation_playback_rate) const;
   // Must only be called once.
-  bool MaybeStartAnimationOnCompositor(int group,
-                                       double start_time,
-                                       double time_offset,
-                                       double animation_playback_rate);
+  void StartAnimationOnCompositor(int group,
+                                  double start_time,
+                                  double time_offset,
+                                  double animation_playback_rate);
   bool HasActiveAnimationsOnCompositor() const;
   bool HasActiveAnimationsOnCompositor(const PropertyHandle&) const;
   bool CancelAnimationOnCompositor();

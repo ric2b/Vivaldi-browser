@@ -275,6 +275,10 @@ void NetworkState::GetStateProperties(base::DictionaryValue* dictionary) const {
                                                tether_has_connected_to_host());
     dictionary->SetIntegerWithoutPathExpansion(kTetherSignalStrength,
                                                signal_strength());
+
+    // Tether networks do not share some of the wireless/mobile properties added
+    // below; exit early to avoid having these properties applied.
+    return;
   }
 
   // Wireless properties
@@ -382,6 +386,11 @@ bool NetworkState::IsConnectedState() const {
 
 bool NetworkState::IsConnectingState() const {
   return visible() && StateIsConnecting(connection_state_);
+}
+
+bool NetworkState::IsConnectingOrConnected() const {
+  return visible() && (StateIsConnecting(connection_state_) ||
+                       StateIsConnected(connection_state_));
 }
 
 bool NetworkState::IsReconnecting() const {

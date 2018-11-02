@@ -11,8 +11,7 @@
 #include <utility>
 #include <vector>
 
-#include "ash/accelerators/accelerator_controller_delegate_aura.h"
-#include "base/base_switches.h"
+#include "ash/accelerators/accelerator_controller_delegate_classic.h"
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/callback.h"
@@ -33,9 +32,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/test/test_file_util.h"
-#include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/values.h"
@@ -64,7 +61,6 @@
 #include "chrome/browser/media/router/media_router_feature.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/media/webrtc/media_stream_devices_controller.h"
-#include "chrome/browser/metrics/variations/chrome_variations_service_client.h"
 #include "chrome/browser/net/prediction_options.h"
 #include "chrome/browser/net/url_request_mock_util.h"
 #include "chrome/browser/permissions/permission_request_manager.h"
@@ -88,6 +84,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/location_bar/location_bar.h"
+#include "chrome/browser/ui/permission_bubble/mock_permission_prompt_factory.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
@@ -133,7 +130,6 @@
 #include "components/update_client/url_request_post_interceptor.h"
 #include "components/user_prefs/user_prefs.h"
 #include "components/variations/service/variations_service.h"
-#include "components/variations/variations_switches.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
@@ -179,6 +175,7 @@
 #include "extensions/common/extension_set.h"
 #include "extensions/common/features/feature_channel.h"
 #include "extensions/common/manifest_handlers/shared_module_info.h"
+#include "extensions/common/switches.h"
 #include "media/media_features.h"
 #include "net/base/net_errors.h"
 #include "net/base/url_util.h"
@@ -206,12 +203,13 @@
 #include "ash/accelerators/accelerator_controller.h"
 #include "ash/accelerators/accelerator_table.h"
 #include "ash/accessibility_types.h"
-#include "ash/aura/shell_port_classic.h"
 #include "ash/shell.h"
+#include "ash/shell_port_classic.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
 #include "chrome/browser/chromeos/arc/arc_session_manager.h"
 #include "chrome/browser/chromeos/login/test/js_checker.h"
+#include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/system/timezone_resolver_manager.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/chrome_screenshot_grabber.h"
@@ -308,9 +306,8 @@ void RedirectHostsToTestData(const char* const urls[], size_t size) {
   for (size_t i = 0; i < size; ++i) {
     const GURL url(urls[i]);
     EXPECT_TRUE(url.is_valid());
-    filter->AddUrlInterceptor(url,
-                              URLRequestMockHTTPJob::CreateInterceptor(
-                                  base_path, BrowserThread::GetBlockingPool()));
+    filter->AddUrlInterceptor(
+        url, URLRequestMockHTTPJob::CreateInterceptor(base_path));
   }
 }
 
@@ -496,7 +493,7 @@ void FlushBlacklistPolicy() {
   // Updates of the URLBlacklist are done on IO, after building the blacklist
   // on the blocking pool, which is initiated from IO.
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
-  BrowserThread::GetBlockingPool()->FlushForTesting();
+  content::RunAllBlockingPoolTasksUntilIdle();
   content::RunAllPendingInMessageLoop(BrowserThread::IO);
 }
 
@@ -659,8 +656,7 @@ class PolicyTest : public InProcessBrowserTest {
     PathService::Get(content::DIR_TEST_DATA, &root_http);
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::BindOnce(URLRequestMockHTTPJob::AddUrlHandlers, root_http,
-                       make_scoped_refptr(BrowserThread::GetBlockingPool())),
+        base::BindOnce(URLRequestMockHTTPJob::AddUrlHandlers, root_http),
         base::MessageLoop::current()->QuitWhenIdleClosure());
     content::RunMessageLoop();
   }
@@ -827,7 +823,6 @@ class PolicyTest : public InProcessBrowserTest {
     content::WebContents* web_contents =
         browser()->tab_strip_model()->GetActiveWebContents();
     content::TestNavigationObserver observer(web_contents);
-    chrome::FocusLocationBar(browser());
     LocationBar* location_bar = browser()->window()->GetLocationBar();
     ui_test_utils::SendToOmniboxAndSubmit(location_bar, "http://google.com/");
     OmniboxEditModel* model = location_bar->GetOmniboxView()->model();
@@ -2408,6 +2403,39 @@ IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklist) {
   }
 }
 
+IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistAndWhitelist) {
+  // Regression test for http://crbug.com/755256. Blacklisting * and
+  // whitelisting an origin should work.
+
+  // Filter |kURLS| on IO thread, so that requests to those hosts end up
+  // as URLRequestMockHTTPJobs.
+  const char* kURLS[] = {
+      "http://aaa.com/empty.html",
+  };
+  {
+    base::RunLoop loop;
+    BrowserThread::PostTaskAndReply(
+        BrowserThread::IO, FROM_HERE,
+        base::BindOnce(RedirectHostsToTestData, kURLS, arraysize(kURLS)),
+        loop.QuitClosure());
+    loop.Run();
+  }
+
+  base::ListValue blacklist;
+  blacklist.AppendString("*");
+  PolicyMap policies;
+  policies.Set(key::kURLBlacklist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, blacklist.CreateDeepCopy(), nullptr);
+
+  base::ListValue whitelist;
+  whitelist.AppendString("aaa.com");
+  policies.Set(key::kURLWhitelist, POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+               POLICY_SOURCE_CLOUD, whitelist.CreateDeepCopy(), nullptr);
+  UpdateProviderPolicy(policies);
+  FlushBlacklistPolicy();
+  CheckCanOpenURL(browser(), kURLS[0]);
+}
+
 IN_PROC_BROWSER_TEST_F(PolicyTest, URLBlacklistSubresources) {
   // Checks that an image with a blacklisted URL is loaded, but an iframe with a
   // blacklisted URL is not.
@@ -3165,14 +3193,31 @@ class MediaStreamDevicesControllerBrowserTest
       : request_url_allowed_via_whitelist_(false),
         request_url_("https://www.example.com/foo") {
     policy_value_ = GetParam();
-    prompt_delegate_.set_response_type(PermissionRequestManager::ACCEPT_ALL);
   }
   virtual ~MediaStreamDevicesControllerBrowserTest() {}
 
   void SetUpOnMainThread() override {
     PolicyTest::SetUpOnMainThread();
     ui_test_utils::NavigateToURL(browser(), request_url_);
+
+    // Testing both the new (PermissionManager) and old code-paths is not simple
+    // since we are already using WithParamInterface. We only test whichever one
+    // is enabled in chrome_features.cc since we won't keep the old path around
+    // for long once we flip the flag.
+    if (base::FeatureList::IsEnabled(
+            features::kUsePermissionManagerForMediaRequests)) {
+      PermissionRequestManager* manager =
+          PermissionRequestManager::FromWebContents(
+              browser()->tab_strip_model()->GetActiveWebContents());
+      prompt_factory_.reset(new MockPermissionPromptFactory(manager));
+      prompt_factory_->set_response_type(PermissionRequestManager::ACCEPT_ALL);
+      manager->DisplayPendingRequests();
+    } else {
+      prompt_delegate_.set_response_type(PermissionRequestManager::ACCEPT_ALL);
+    }
   }
+
+  void TearDownOnMainThread() override { prompt_factory_.reset(); }
 
   content::MediaStreamRequest CreateRequest(
       content::MediaStreamType audio_request_type,
@@ -3260,6 +3305,7 @@ class MediaStreamDevicesControllerBrowserTest
   }
 
   TestPermissionPromptDelegate prompt_delegate_;
+  std::unique_ptr<MockPermissionPromptFactory> prompt_factory_;
   bool policy_value_;
   bool request_url_allowed_via_whitelist_;
   GURL request_url_;
@@ -3869,10 +3915,17 @@ update_client::CrxComponent ComponentUpdaterPolicyTest::MakeCrxComponent(
    public:
     MockInstaller() {}
 
+    // gMock does not support mocking functions with parameters which have
+    // move semantics. This function is a shim to work around it.
+    Result Install(std::unique_ptr<base::DictionaryValue> manifest,
+                   const base::FilePath& unpack_path) {
+      return Install_(manifest, unpack_path);
+    }
+
     MOCK_METHOD1(OnUpdateError, void(int error));
-    MOCK_METHOD2(Install,
+    MOCK_METHOD2(Install_,
                  update_client::CrxInstaller::Result(
-                     const base::DictionaryValue& manifest,
+                     const std::unique_ptr<base::DictionaryValue>& manifest,
                      const base::FilePath& unpack_path));
     MOCK_METHOD2(GetInstalledFile,
                  bool(const std::string& file, base::FilePath* installed_file));
@@ -4061,6 +4114,10 @@ IN_PROC_BROWSER_TEST_F(ComponentUpdaterPolicyTest, EnabledComponentUpdates) {
 // started.
 class PolicyVariationsServiceTest : public PolicyTest {
  public:
+  PolicyVariationsServiceTest() {
+    variations::VariationsService::EnableForTesting();
+  }
+
   void SetUpInProcessBrowserTestFixture() override {
     PolicyTest::SetUpInProcessBrowserTestFixture();
     PolicyMap policies;
@@ -4075,15 +4132,9 @@ IN_PROC_BROWSER_TEST_F(PolicyVariationsServiceTest, VariationsURLIsValid) {
   const std::string default_variations_url =
       variations::VariationsService::GetDefaultVariationsServerURLForTesting();
 
-  // g_browser_process->variations_service() is null by default in Chromium
-  // builds, so construct a VariationsService locally instead.
-  std::unique_ptr<variations::VariationsService> service =
-      variations::VariationsService::CreateForTesting(
-          base::MakeUnique<ChromeVariationsServiceClient>(),
-          g_browser_process->local_state());
-
-  const GURL url = service->GetVariationsServerURL(
-      g_browser_process->local_state(), std::string());
+  const GURL url =
+      g_browser_process->variations_service()->GetVariationsServerURL(
+          g_browser_process->local_state(), std::string());
   EXPECT_TRUE(base::StartsWith(url.spec(), default_variations_url,
                                base::CompareCase::SENSITIVE));
   std::string value;
@@ -4359,167 +4410,14 @@ IN_PROC_BROWSER_TEST_F(ArcPolicyTest, ArcLocationServiceEnabled) {
   }
 }
 
-namespace {
-const char kTestUser1[] = "test1@domain.com";
-}  // anonymous namespace
-
-class ChromeOSPolicyTest : public PolicyTest {
- public:
-  ChromeOSPolicyTest() {}
-
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    PolicyTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginUser,
-                                    cryptohome_id1_.id());
-    command_line->AppendSwitchASCII(chromeos::switches::kLoginProfile, "hash");
-    command_line->AppendSwitch(
-        chromeos::switches::kAllowFailedPolicyFetchForTest);
-  }
-
- protected:
-  const AccountId test_account_id1_ = AccountId::FromUserEmail(kTestUser1);
-  const cryptohome::Identification cryptohome_id1_ =
-      cryptohome::Identification(test_account_id1_);
-
-  // Logs in |account_id|.
-  void LogIn(const AccountId& account_id, const std::string& user_id_hash) {
-    user_manager::UserManager::Get()->UserLoggedIn(account_id, user_id_hash,
-                                                   false);
-    base::RunLoop().RunUntilIdle();
-  }
-
-  void NavigateToUrl(const GURL& url) {
-    ui_test_utils::NavigateToURL(browser(), url);
-    base::RunLoop().RunUntilIdle();
-  }
-
-  void CheckSystemTimezoneAutomaticDetectionPolicyUnset() {
-    PrefService* local_state = g_browser_process->local_state();
-    EXPECT_FALSE(local_state->IsManagedPreference(
-        prefs::kSystemTimezoneAutomaticDetectionPolicy));
-    EXPECT_EQ(0, local_state->GetInteger(
-                     prefs::kSystemTimezoneAutomaticDetectionPolicy));
-  }
-
-  void SetAndTestSystemTimezoneAutomaticDetectionPolicy(int policy_value) {
-    PolicyMap policies;
-    policies.Set(key::kSystemTimezoneAutomaticDetection, POLICY_LEVEL_MANDATORY,
-                 POLICY_SCOPE_MACHINE, POLICY_SOURCE_CLOUD,
-                 base::MakeUnique<base::Value>(policy_value), nullptr);
-    UpdateProviderPolicy(policies);
-
-    PrefService* local_state = g_browser_process->local_state();
-
-    EXPECT_TRUE(local_state->IsManagedPreference(
-        prefs::kSystemTimezoneAutomaticDetectionPolicy));
-    EXPECT_EQ(policy_value,
-              local_state->GetInteger(
-                  prefs::kSystemTimezoneAutomaticDetectionPolicy));
-  }
-
-  void SetEmptyPolicy() { UpdateProviderPolicy(PolicyMap()); }
-
-  bool CheckResolveTimezoneByGeolocation(bool checked, bool disabled) {
-    checker.set_web_contents(
-        browser()->tab_strip_model()->GetActiveWebContents());
-    const std::string expression = base::StringPrintf(
-        "(function () {\n"
-        "  var checkbox = "
-        "document.getElementById('resolve-timezone-by-geolocation');\n"
-        "  if (!checkbox) {\n"
-        "    console.log('resolve-timezone-by-geolocation not found.');\n"
-        "    return false;\n"
-        "  }\n"
-        "  var expected_checked = %s;\n"
-        "  var expected_disabled = %s;\n"
-        "  var checked = checkbox.checked;\n"
-        "  var disabled = checkbox.disabled;\n"
-        "  if (checked != expected_checked)\n"
-        "    console.log('ERROR: expected_checked=' + expected_checked + ' != "
-        "checked=' + checked);\n"
-        "\n"
-        "  if (disabled != expected_disabled)\n"
-        "    console.log('ERROR: expected_disabled=' + expected_disabled + ' "
-        "!= disabled=' + disabled);\n"
-        "\n"
-        "  return (checked == expected_checked && disabled == "
-        "expected_disabled);\n"
-        "})()",
-        checked ? "true" : "false", disabled ? "true" : "false");
-    return checker.GetBool(expression);
-  }
-
- private:
-  chromeos::test::JSChecker checker;
-
-  DISALLOW_COPY_AND_ASSIGN(ChromeOSPolicyTest);
-};
-
-IN_PROC_BROWSER_TEST_F(ChromeOSPolicyTest, SystemTimezoneAutomaticDetection) {
-  base::test::ScopedFeatureList disable_md_settings;
-  disable_md_settings.InitAndDisableFeature(features::kMaterialDesignSettings);
-
-  ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings"));
-  chromeos::system::TimeZoneResolverManager* manager =
-      g_browser_process->platform_part()->GetTimezoneResolverManager();
-
-  // Policy not set.
-  CheckSystemTimezoneAutomaticDetectionPolicyUnset();
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  int policy_value = 0 /* USERS_DECIDE */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  policy_value = 1 /* DISABLED */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(false, true));
-  EXPECT_FALSE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  policy_value = 2 /* IP_ONLY */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, true));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  policy_value = 3 /* SEND_WIFI_ACCESS_POINTS */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, true));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  policy_value = 4 /* SEND_ALL_LOCATION_INFO */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, true));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  policy_value = 1 /* DISABLED */;
-  SetAndTestSystemTimezoneAutomaticDetectionPolicy(policy_value);
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(false, true));
-  EXPECT_FALSE(manager->TimeZoneResolverShouldBeRunningForTests());
-
-  SetEmptyPolicy();
-  // Policy not set.
-  CheckSystemTimezoneAutomaticDetectionPolicyUnset();
-  EXPECT_TRUE(CheckResolveTimezoneByGeolocation(true, false));
-  EXPECT_TRUE(manager->TimeZoneResolverShouldBeRunningForTests());
-}
 #endif  // defined(OS_CHROMEOS)
 
 class NetworkTimePolicyTest : public PolicyTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(
-        switches::kEnableFeatures,
-        std::string(network_time::kNetworkTimeServiceQuerying.name) +
-            "<SSLNetworkTimeBrowserTestFieldTrial");
-    command_line->AppendSwitchASCII(
-        switches::kForceFieldTrials,
-        "SSLNetworkTimeBrowserTestFieldTrial/Enabled/");
-    command_line->AppendSwitchASCII(
-        variations::switches::kForceFieldTrialParams,
-        "SSLNetworkTimeBrowserTestFieldTrial.Enabled:FetchBehavior/"
-        "on-demand-only");
+    content::EnableFeatureWithParam(network_time::kNetworkTimeServiceQuerying,
+                                    "FetchBehavior", "on-demand-only",
+                                    command_line);
   }
 
   // A request handler that returns a dummy response and counts the number of
@@ -4547,7 +4445,7 @@ class NetworkTimePolicyTest : public PolicyTest {
 IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
   // Set a policy to disable network time queries.
   PolicyMap policies;
-  policies.Set(key::kNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
+  policies.Set(key::kBrowserNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(false), nullptr);
   UpdateProviderPolicy(policies);
@@ -4573,7 +4471,7 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
   EXPECT_EQ(0u, num_requests());
 
   // Now enable the policy and check that a network time query is sent.
-  policies.Set(key::kNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
+  policies.Set(key::kBrowserNetworkTimeQueriesEnabled, POLICY_LEVEL_MANDATORY,
                POLICY_SCOPE_USER, POLICY_SOURCE_CLOUD,
                base::MakeUnique<base::Value>(true), nullptr);
   UpdateProviderPolicy(policies);
@@ -4582,5 +4480,106 @@ IN_PROC_BROWSER_TEST_F(NetworkTimePolicyTest, NetworkTimeQueriesDisabled) {
   ASSERT_TRUE(interstitial_page);
   EXPECT_EQ(1u, num_requests());
 }
+
+#if defined(OS_CHROMEOS)
+
+class NoteTakingOnLockScreenPolicyTest : public PolicyTest {
+ public:
+  NoteTakingOnLockScreenPolicyTest() = default;
+  ~NoteTakingOnLockScreenPolicyTest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    // An app requires lockScreen permission to be enabled as a lock screen app.
+    // This permission is protected by a whitelist, so the test app has to be
+    // whitelisted as well.
+    command_line->AppendSwitchASCII(
+        extensions::switches::kWhitelistedExtensionID, kTestAppId);
+    PolicyTest::SetUpCommandLine(command_line);
+  }
+
+  void SetUserLevelPrefValue(const std::string& app_id,
+                             bool enabled_on_lock_screen) {
+    chromeos::NoteTakingHelper* helper = chromeos::NoteTakingHelper::Get();
+    ASSERT_TRUE(helper);
+
+    helper->SetPreferredApp(browser()->profile(), app_id);
+    helper->SetPreferredAppEnabledOnLockScreen(browser()->profile(),
+                                               enabled_on_lock_screen);
+  }
+
+  void SetPolicyValue(std::unique_ptr<base::Value> value) {
+    PolicyMap policies;
+    if (value) {
+      policies.Set(key::kNoteTakingAppsLockScreenWhitelist,
+                   POLICY_LEVEL_MANDATORY, POLICY_SCOPE_USER,
+                   POLICY_SOURCE_CLOUD, std::move(value), nullptr);
+    }
+    UpdateProviderPolicy(policies);
+  }
+
+  chromeos::NoteTakingLockScreenSupport GetAppLockScreenStatus(
+      const std::string& app_id) {
+    std::unique_ptr<chromeos::NoteTakingAppInfo> info =
+        chromeos::NoteTakingHelper::Get()->GetPreferredChromeAppInfo(
+            browser()->profile());
+    if (!info || info->app_id != app_id)
+      return chromeos::NoteTakingLockScreenSupport::kNotSupported;
+    return info->lock_screen_support;
+  }
+
+  // The test app ID.
+  static const char kTestAppId[];
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(NoteTakingOnLockScreenPolicyTest);
+};
+
+const char NoteTakingOnLockScreenPolicyTest::kTestAppId[] =
+    "cadfeochfldmbdgoccgbeianhamecbae";
+
+IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
+                       DisableLockScreenNoteTakingByPolicy) {
+  scoped_refptr<const extensions::Extension> app =
+      LoadUnpackedExtension("lock_screen_apps/app_launch");
+  ASSERT_TRUE(app);
+  ASSERT_EQ(kTestAppId, app->id());
+
+  SetUserLevelPrefValue(app->id(), true);
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kEnabled,
+            GetAppLockScreenStatus(app->id()));
+
+  SetPolicyValue(base::MakeUnique<base::ListValue>());
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kNotAllowedByPolicy,
+            GetAppLockScreenStatus(app->id()));
+
+  SetPolicyValue(nullptr);
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kEnabled,
+            GetAppLockScreenStatus(app->id()));
+}
+
+IN_PROC_BROWSER_TEST_F(NoteTakingOnLockScreenPolicyTest,
+                       WhitelistLockScreenNoteTakingAppByPolicy) {
+  scoped_refptr<const extensions::Extension> app =
+      LoadUnpackedExtension("lock_screen_apps/app_launch");
+  ASSERT_TRUE(app);
+  ASSERT_EQ(kTestAppId, app->id());
+
+  SetUserLevelPrefValue(app->id(), false);
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kSupported,
+            GetAppLockScreenStatus(app->id()));
+
+  auto policy = base::MakeUnique<base::ListValue>();
+  policy->GetList().emplace_back(base::Value(kTestAppId));
+  SetPolicyValue(std::move(policy));
+
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kSupported,
+            GetAppLockScreenStatus(app->id()));
+
+  SetUserLevelPrefValue(app->id(), true);
+  EXPECT_EQ(chromeos::NoteTakingLockScreenSupport::kEnabled,
+            GetAppLockScreenStatus(app->id()));
+}
+
+#endif  // defined(OS_CHROMEOS)
 
 }  // namespace policy

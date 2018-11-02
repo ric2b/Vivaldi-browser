@@ -7,8 +7,7 @@
  * 'settings-setup-pin-dialog' is the settings page for choosing a PIN.
  *
  * Example:
- *
- * <settings-setup-pin-dialog set-modes="[[quickUnlockSetModes]]">
+ * * <settings-setup-pin-dialog set-modes="[[quickUnlockSetModes]]">
  * </settings-setup-pin-dialog>
  */
 
@@ -27,10 +26,7 @@ var MessageType = {
 };
 
 /** @enum {string} */
-var ProblemType = {
-  WARNING: 'warning',
-  ERROR: 'error'
-};
+var ProblemType = {WARNING: 'warning', ERROR: 'error'};
 
 Polymer({
   is: 'settings-setup-pin-dialog',
@@ -76,36 +72,44 @@ Polymer({
      */
     writeUma_: {
       type: Object,
-      value: function() { return settings.recordLockScreenProgress; }
+      value: function() {
+        return settings.recordLockScreenProgress;
+      }
     },
 
     /**
      * The current step/subpage we are on.
      * @private
      */
-    isConfirmStep_: {
-      type: Boolean,
-      value: false
-    },
+    isConfirmStep_: {type: Boolean, value: false},
 
     /**
      * Interface for chrome.quickUnlockPrivate calls. May be overriden by tests.
      * @private
      */
-    quickUnlockPrivate_: {
-      type: Object,
-      value: chrome.quickUnlockPrivate
-    },
+    quickUnlockPrivate_: {type: Object, value: chrome.quickUnlockPrivate},
+
+    /**
+     * |pinHasPassedMinimumLength_| tracks whether a user has passed the minimum
+     * length threshold at least once, and all subsequent PIN too short messages
+     * will be displayed as errors. They will be displayed as warnings prior to
+     * this.
+     * @private
+     */
+    pinHasPassedMinimumLength_: {type: Boolean, value: false},
   },
 
   /** @override */
   attached: function() {
     this.resetState_();
-  },
-
-  open: function() {
     this.$.dialog.showModal();
     this.$.pinKeyboard.focus();
+
+    // Show the pin is too short error when first displaying the PIN dialog.
+    this.problemClass_ = ProblemType.WARNING;
+    this.quickUnlockPrivate_.getCredentialRequirements(
+        chrome.quickUnlockPrivate.QuickUnlockMode.PIN,
+        this.processPinRequirements_.bind(this, MessageType.TOO_SHORT));
   },
 
   close: function() {
@@ -181,8 +185,8 @@ Polymer({
         this.processPinRequirements_.bind(this, messageId));
     this.problemClass_ = problemClass;
     this.updateStyles();
-    this.enableSubmit_ = problemClass != ProblemType.ERROR &&
-        messageId != MessageType.MISMATCH;
+    this.enableSubmit_ =
+        problemClass != ProblemType.ERROR && messageId != MessageType.TOO_SHORT;
   },
 
   /** @private */
@@ -202,11 +206,19 @@ Polymer({
     if (!message.errors.length && !message.warnings.length) {
       this.hideProblem_();
       this.enableSubmit_ = true;
+      this.pinHasPassedMinimumLength_ = true;
       return;
     }
 
+    if (!message.errors.length ||
+        message.errors[0] !=
+            chrome.quickUnlockPrivate.CredentialProblem.TOO_SHORT) {
+      this.pinHasPassedMinimumLength_ = true;
+    }
+
     if (message.warnings.length) {
-      assert(message.warnings[0] ==
+      assert(
+          message.warnings[0] ==
           chrome.quickUnlockPrivate.CredentialProblem.TOO_WEAK);
       this.showProblem_(MessageType.TOO_WEAK, ProblemType.WARNING);
     }
@@ -214,7 +226,10 @@ Polymer({
     if (message.errors.length) {
       switch (message.errors[0]) {
         case chrome.quickUnlockPrivate.CredentialProblem.TOO_SHORT:
-          this.showProblem_(MessageType.TOO_SHORT, ProblemType.ERROR);
+          this.showProblem_(
+              MessageType.TOO_SHORT,
+              this.pinHasPassedMinimumLength_ ? ProblemType.ERROR :
+                                                ProblemType.WARNING);
           break;
         case chrome.quickUnlockPrivate.CredentialProblem.TOO_LONG:
           this.showProblem_(MessageType.TOO_LONG, ProblemType.ERROR);
@@ -227,7 +242,6 @@ Polymer({
           break;
       }
     }
-
   },
 
   /** @private */
@@ -236,19 +250,16 @@ Polymer({
       if (this.pinKeyboardValue_) {
         this.quickUnlockPrivate_.checkCredential(
             chrome.quickUnlockPrivate.QuickUnlockMode.PIN,
-            this.pinKeyboardValue_,
-            this.processPinProblems_.bind(this));
+            this.pinKeyboardValue_, this.processPinProblems_.bind(this));
       }
       return;
     }
 
+    this.hideProblem_();
     if (this.canSubmit_()) {
-      this.hideProblem_();
       this.enableSubmit_ = true;
       return;
     }
-
-    this.showProblem_(MessageType.MISMATCH, ProblemType.WARNING);
   },
 
   /** @private */
@@ -276,14 +287,13 @@ Polymer({
       }
 
       this.resetState_();
-      this.fire('done');
+      if (this.$.dialog.open)
+        this.$.dialog.close();
     }
 
     this.setModes.call(
-      null,
-      [chrome.quickUnlockPrivate.QuickUnlockMode.PIN],
-      [this.pinKeyboardValue_],
-      onSetModesCompleted.bind(this));
+        null, [chrome.quickUnlockPrivate.QuickUnlockMode.PIN],
+        [this.pinKeyboardValue_], onSetModesCompleted.bind(this));
     this.writeUma_(LockScreenProgress.CONFIRM_PIN);
   },
 
@@ -303,8 +313,9 @@ Polymer({
    * @return {string}
    */
   getTitleMessage_: function(isConfirmStep) {
-    return this.i18n(isConfirmStep ? 'configurePinConfirmPinTitle' :
-                                     'configurePinChoosePinTitle');
+    return this.i18n(
+        isConfirmStep ? 'configurePinConfirmPinTitle' :
+                        'configurePinChoosePinTitle');
   },
 
   /**

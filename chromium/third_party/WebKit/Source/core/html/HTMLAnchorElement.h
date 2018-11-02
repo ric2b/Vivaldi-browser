@@ -26,9 +26,9 @@
 
 #include "core/CoreExport.h"
 #include "core/HTMLNames.h"
-#include "core/dom/DOMURLUtils.h"
 #include "core/dom/Document.h"
 #include "core/html/HTMLElement.h"
+#include "core/url/DOMURLUtils.h"
 #include "platform/LinkHash.h"
 
 namespace blink {
@@ -108,6 +108,7 @@ class CORE_EXPORT HTMLAnchorElement : public HTMLElement, public DOMURLUtils {
   bool IsMouseFocusable() const override;
   bool IsKeyboardFocusable() const override;
   void DefaultEventHandler(Event*) final;
+  bool HasActivationBehavior() const override;
   void SetActive(bool = true) final;
   void AccessKeyAction(bool send_mouse_events) final;
   bool IsURLAttribute(const Attribute&) const final;

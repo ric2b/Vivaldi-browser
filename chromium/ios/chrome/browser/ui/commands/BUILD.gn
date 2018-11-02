@@ -7,17 +7,19 @@ source_set("commands") {
   sources = [
     "UIKit+ChromeExecuteCommand.h",
     "UIKit+ChromeExecuteCommand.mm",
+    "application_commands.h",
+    "browser_commands.h",
     "clear_browsing_data_command.h",
     "clear_browsing_data_command.mm",
     "generic_chrome_command.h",
     "generic_chrome_command.mm",
     "ios_command_ids.h",
+    "open_new_tab_command.h",
+    "open_new_tab_command.mm",
     "open_url_command.h",
     "open_url_command.mm",
     "reading_list_add_command.h",
     "reading_list_add_command.mm",
-    "set_up_for_testing_command.h",
-    "set_up_for_testing_command.mm",
     "show_mail_composer_command.h",
     "show_mail_composer_command.mm",
     "show_signin_command.h",
@@ -27,22 +29,9 @@ source_set("commands") {
     "//base",
     "//components/browsing_data/core",
     "//components/signin/core/browser",
+    "//ios/shared/chrome/browser/ui/commands",
     "//ios/web",
     "//net",
-    "//url",
-  ]
-}
-
-source_set("unit_tests") {
-  configs += [ "//build/config/compiler:enable_arc" ]
-  testonly = true
-  sources = [
-    "set_up_for_testing_command_unittest.mm",
-  ]
-  deps = [
-    ":commands",
-    "//base",
-    "//testing/gtest",
     "//url",
   ]
 }

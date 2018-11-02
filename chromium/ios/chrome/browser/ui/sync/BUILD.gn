@@ -5,21 +5,26 @@
 import("//ios/public/provider/chrome/browser/build_config.gni")
 
 source_set("sync") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "sync_error_infobar_delegate.h",
     "sync_error_infobar_delegate.mm",
     "sync_util.h",
     "sync_util.mm",
+    "synced_sessions_bridge.h",
+    "synced_sessions_bridge.mm",
   ]
   deps = [
     "//base",
     "//components/browser_sync",
     "//components/infobars/core",
+    "//components/signin/core/browser",
     "//components/strings",
     "//components/sync",
     "//google_apis",
     "//ios/chrome/app/strings",
     "//ios/chrome/browser/browser_state",
+    "//ios/chrome/browser/signin",
     "//ios/chrome/browser/sync",
     "//ios/chrome/browser/tabs",
     "//ios/chrome/browser/ui/commands",
@@ -30,6 +35,7 @@ source_set("sync") {
 }
 
 source_set("eg_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "sync_fake_server_egtest.mm",
@@ -52,7 +58,7 @@ source_set("eg_tests") {
     "//ios/public/provider/chrome/browser/signin:test_support",
     "//ios/testing:ios_test_support",
     "//ios/third_party/earl_grey",
-    "//ios/web:test_support",
+    "//ios/web/public/test/http_server",
     "//net",
     "//ui/base",
     "//url",

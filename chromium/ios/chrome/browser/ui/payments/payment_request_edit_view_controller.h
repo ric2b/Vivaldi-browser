@@ -21,6 +21,18 @@ extern NSString* const kWarningMessageAccessibilityID;
 // Delegate protocol for PaymentRequestEditViewController.
 @protocol PaymentRequestEditViewControllerDelegate<NSObject>
 
+// Notifies the delegate that the user has finished editing the editor fields.
+- (void)paymentRequestEditViewController:
+            (PaymentRequestEditViewController*)controller
+                  didFinishEditingFields:(NSArray<EditorField*>*)fields;
+
+// Notifies the delegate that the user has chosen to discard entries in the
+// editor fields and return to the previous screen.
+- (void)paymentRequestEditViewControllerDidCancel:
+    (PaymentRequestEditViewController*)controller;
+
+@optional
+
 // Notifies the delegate that the user has selected |field|.
 - (void)paymentRequestEditViewController:
             (PaymentRequestEditViewController*)controller

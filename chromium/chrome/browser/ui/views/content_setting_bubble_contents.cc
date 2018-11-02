@@ -213,7 +213,7 @@ void ContentSettingBubbleContents::Init() {
   const int related_control_vertical_spacing =
       provider->GetDistanceMetric(views::DISTANCE_RELATED_CONTROL_VERTICAL);
   const int unrelated_control_vertical_spacing =
-      provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_VERTICAL);
+      provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL);
 
   const int kSingleColumnSetId = 0;
   views::ColumnSet* column_set = layout->AddColumnSet(kSingleColumnSetId);
@@ -243,7 +243,9 @@ void ContentSettingBubbleContents::Init() {
 
   if (!bubble_content.message.empty()) {
     views::Label* message_label = new views::Label(bubble_content.message);
-    layout->AddPaddingRow(0, unrelated_control_vertical_spacing);
+    // For bubble's without titles there is no need for padding.
+    if (!bubble_content.title.empty())
+      layout->AddPaddingRow(0, unrelated_control_vertical_spacing);
     message_label->SetMultiLine(true);
     message_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     layout->StartRow(0, kSingleColumnSetId);
@@ -315,14 +317,6 @@ void ContentSettingBubbleContents::Init() {
       views::RadioButton* radio = new views::RadioButton(*i, 0);
       radio->SetEnabled(bubble_content.radio_group_enabled);
       radio->set_listener(this);
-      if (provider->IsHarmonyMode()) {
-        std::unique_ptr<views::LabelButtonBorder> border =
-            radio->CreateDefaultBorder();
-        gfx::Insets insets = border->GetInsets();
-        border->set_insets(
-            gfx::Insets(insets.top(), 0, insets.bottom(), insets.right()));
-        radio->SetBorder(std::move(border));
-      }
       radio_group_.push_back(radio);
       layout->StartRow(0, indented_kSingleColumnSetId);
       layout->AddView(radio);

@@ -27,7 +27,7 @@ AVDASharedState::AVDASharedState(
   // overlay's surface is destroyed.
   if (overlay()) {
     overlay()->AddSurfaceDestroyedCallback(base::Bind(
-        &AVDASharedState::OnSurfaceDestroyed, weak_this_factory_.GetWeakPtr()));
+        &AVDASharedState::ClearOverlay, weak_this_factory_.GetWeakPtr()));
   }
 }
 
@@ -61,9 +61,19 @@ void AVDASharedState::ClearReleaseTime() {
     surface_texture()->IgnorePendingRelease();
 }
 
-void AVDASharedState::OnSurfaceDestroyed(AndroidOverlay* overlay_raw) {
+void AVDASharedState::ClearOverlay(AndroidOverlay* overlay_raw) {
   if (surface_bundle_ && overlay() == overlay_raw)
     surface_bundle_ = nullptr;
+}
+
+void AVDASharedState::SetPromotionHintCB(
+    PromotionHintAggregator::NotifyPromotionHintCB cb) {
+  promotion_hint_cb_ = cb;
+}
+
+const PromotionHintAggregator::NotifyPromotionHintCB&
+AVDASharedState::GetPromotionHintCB() {
+  return promotion_hint_cb_;
 }
 
 }  // namespace media

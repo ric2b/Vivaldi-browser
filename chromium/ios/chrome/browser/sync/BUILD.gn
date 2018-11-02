@@ -11,6 +11,8 @@ source_set("sync") {
     "ios_chrome_sync_client.mm",
     "ios_chrome_synced_tab_delegate.h",
     "ios_chrome_synced_tab_delegate.mm",
+    "ios_user_event_service_factory.cc",
+    "ios_user_event_service_factory.h",
     "sync_observer_bridge.h",
     "sync_observer_bridge.mm",
     "sync_setup_service.cc",
@@ -76,8 +78,6 @@ source_set("sync") {
 source_set("test_support") {
   testonly = true
   sources = [
-    "fake_sync_service_factory.cc",
-    "fake_sync_service_factory.h",
     "ios_chrome_profile_sync_test_util.cc",
     "ios_chrome_profile_sync_test_util.h",
     "sync_setup_service_mock.cc",
@@ -114,7 +114,7 @@ source_set("unit_tests") {
     "//components/browser_sync",
     "//components/sync",
     "//ios/chrome/browser/browser_state:test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
   ]
 }

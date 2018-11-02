@@ -44,9 +44,9 @@
 #include "core/dom/Element.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/ProcessingInstruction.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/ShadowTreeStyleSheetCollection.h"
 #include "core/dom/StyleChangeReason.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/html/HTMLLinkElement.h"
@@ -139,10 +139,24 @@ StyleEngine::StyleSheetsForStyleSheetList(TreeScope& tree_scope) {
   return collection.StyleSheetsForStyleSheetList();
 }
 
-void StyleEngine::InjectAuthorSheet(StyleSheetContents* author_sheet) {
-  injected_author_style_sheets_.push_back(TraceWrapperMember<CSSStyleSheet>(
-      this, CSSStyleSheet::Create(author_sheet, *document_)));
+WebStyleSheetId StyleEngine::InjectAuthorSheet(
+    StyleSheetContents* author_sheet) {
+  injected_author_style_sheets_.push_back(std::make_pair(
+      ++injected_author_sheets_id_count_,
+      TraceWrapperMember<CSSStyleSheet>(
+          this, CSSStyleSheet::Create(author_sheet, *document_))));
+
   MarkDocumentDirty();
+  return injected_author_sheets_id_count_;
+}
+
+void StyleEngine::RemoveInjectedAuthorSheet(WebStyleSheetId author_sheet_id) {
+  for (size_t i = 0; i < injected_author_style_sheets_.size(); ++i) {
+    if (injected_author_style_sheets_[i].first == author_sheet_id) {
+      injected_author_style_sheets_.erase(i);
+      MarkDocumentDirty();
+    }
+  }
 }
 
 CSSStyleSheet& StyleEngine::EnsureInspectorStyleSheet() {
@@ -292,6 +306,9 @@ void StyleEngine::MediaQueryAffectingValueChanged() {
 void StyleEngine::UpdateActiveStyleSheetsInImport(
     StyleEngine& master_engine,
     DocumentStyleSheetCollector& parent_collector) {
+  if (!RuntimeEnabledFeatures::HTMLImportsStyleApplicationEnabled())
+    return;
+
   DCHECK(!IsMaster());
   HeapVector<Member<StyleSheet>> sheets_for_list;
   ImportedDocumentStyleSheetCollector subcollector(parent_collector,
@@ -530,7 +547,7 @@ void StyleEngine::MarkTreeScopeDirty(TreeScope& scope) {
 void StyleEngine::MarkDocumentDirty() {
   document_scope_dirty_ = true;
   document_style_sheet_collection_->MarkSheetListDirty();
-  if (RuntimeEnabledFeatures::cssViewportEnabled())
+  if (RuntimeEnabledFeatures::CSSViewportEnabled())
     ViewportRulesChanged();
   if (GetDocument().ImportLoader())
     GetDocument()
@@ -587,8 +604,8 @@ CSSStyleSheet* StyleEngine::ParseSheet(Element& element,
                                        const String& text,
                                        TextPosition start_position) {
   CSSStyleSheet* style_sheet = nullptr;
-  style_sheet = CSSStyleSheet::CreateInline(element, KURL(), start_position,
-                                            GetDocument().characterSet());
+  style_sheet = CSSStyleSheet::CreateInline(element, NullURL(), start_position,
+                                            GetDocument().Encoding());
   style_sheet->Contents()->ParseStringAtPosition(text, start_position);
   return style_sheet;
 }
@@ -1208,8 +1225,8 @@ DEFINE_TRACE(StyleEngine) {
 }
 
 DEFINE_TRACE_WRAPPERS(StyleEngine) {
-  for (auto sheet : injected_author_style_sheets_) {
-    visitor->TraceWrappers(sheet);
+  for (const auto& sheet : injected_author_style_sheets_) {
+    visitor->TraceWrappers(sheet.second);
   }
   visitor->TraceWrappers(document_style_sheet_collection_);
 }

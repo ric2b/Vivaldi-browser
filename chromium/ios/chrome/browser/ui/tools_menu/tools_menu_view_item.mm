@@ -5,9 +5,15 @@
 #import "ios/chrome/browser/ui/tools_menu/tools_menu_view_item.h"
 
 #include "base/i18n/rtl.h"
-#include "base/mac/objc_property_releaser.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#include "base/logging.h"
+#import "ios/chrome/browser/ui/commands/application_commands.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 #include "ui/base/l10n/l10n_util.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 const CGFloat kToolsMenuItemHorizontalMargin = 16;
@@ -16,20 +22,17 @@ const CGFloat kToolsMenuItemHorizontalMarginRTL = 25;
 static NSString* const kMenuItemCellID = @"MenuItemCellID";
 }
 
-@implementation ToolsMenuViewItem {
-  base::mac::ObjCPropertyReleaser _propertyReleaser_ToolsMenuViewItem;
-}
-
+@implementation ToolsMenuViewItem
 @synthesize accessibilityIdentifier = _accessibilityIdentifier;
 @synthesize active = _active;
 @synthesize title = _title;
 @synthesize tag = _tag;
+@synthesize selector = _selector;
 @synthesize tableViewCell = _tableViewCell;
 
 - (id)init {
   self = [super init];
   if (self) {
-    _propertyReleaser_ToolsMenuViewItem.Init(self, [ToolsMenuViewItem class]);
     _active = YES;
   }
 
@@ -46,22 +49,34 @@ static NSString* const kMenuItemCellID = @"MenuItemCellID";
 
 + (instancetype)menuItemWithTitle:(NSString*)title
           accessibilityIdentifier:(NSString*)accessibilityIdentifier
+                         selector:(SEL)selector
                           command:(int)commandID {
-  ToolsMenuViewItem* menuItem = [[[self alloc] init] autorelease];
+  // Only commandIDs < 0 should have associated selectors.
+  DCHECK(selector == nullptr || commandID < 0);
+  ToolsMenuViewItem* menuItem = [[self alloc] init];
   [menuItem setAccessibilityLabel:title];
   [menuItem setAccessibilityIdentifier:accessibilityIdentifier];
   [menuItem setTag:commandID];
+  [menuItem setSelector:selector];
   [menuItem setTitle:title];
 
   return menuItem;
 }
 
-@end
-
-@implementation ToolsMenuViewCell {
-  base::mac::ObjCPropertyReleaser _propertyReleaser_ToolsMenuViewCell;
+- (void)executeCommandWithDispatcher:
+    (id<ApplicationCommands, BrowserCommands>)dispatcher {
+  DCHECK(self.selector);
+  DCHECK([dispatcher respondsToSelector:self.selector]);
+// TODO(crbug.com/738881): Find a better way to call these methods.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+  [dispatcher performSelector:self.selector];
+#pragma clang diagnostic pop
 }
 
+@end
+
+@implementation ToolsMenuViewCell
 @synthesize title = _title;
 @synthesize horizontalMargin = _horizontalMargin;
 
@@ -82,7 +97,6 @@ static NSString* const kMenuItemCellID = @"MenuItemCellID";
 }
 
 - (void)commonInitialization {
-  _propertyReleaser_ToolsMenuViewCell.Init(self, [ToolsMenuViewCell class]);
   _horizontalMargin = !base::i18n::IsRTL() ? kToolsMenuItemHorizontalMargin
                                            : kToolsMenuItemHorizontalMarginRTL;
   [self setBackgroundColor:[UIColor whiteColor]];
@@ -99,7 +113,7 @@ static NSString* const kMenuItemCellID = @"MenuItemCellID";
 - (void)initializeTitleView {
   _title = [[UILabel alloc] initWithFrame:self.bounds];
   [_title setTranslatesAutoresizingMaskIntoConstraints:NO];
-  [_title setFont:[[MDFRobotoFontLoader sharedInstance] regularFontOfSize:16]];
+  [_title setFont:[[MDCTypography fontLoader] regularFontOfSize:16]];
   [_title setBackgroundColor:[self backgroundColor]];
   [_title setTextAlignment:(base::i18n::IsRTL() ? NSTextAlignmentRight
                                                 : NSTextAlignmentLeft)];

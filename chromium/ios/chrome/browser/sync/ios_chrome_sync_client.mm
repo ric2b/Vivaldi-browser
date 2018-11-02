@@ -35,9 +35,10 @@
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/driver/sync_api_component_factory.h"
 #include "components/sync/driver/sync_util.h"
-#include "components/sync/engine/browser_thread_model_worker.h"
 #include "components/sync/engine/passive_model_worker.h"
+#include "components/sync/engine/sequenced_model_worker.h"
 #include "components/sync/engine/ui_model_worker.h"
+#include "components/sync/user_events/user_event_service.h"
 #include "components/sync_preferences/pref_service_syncable.h"
 #include "components/sync_sessions/favicon_cache.h"
 #include "components/sync_sessions/local_session_event_router.h"
@@ -59,6 +60,7 @@
 #include "ios/chrome/browser/signin/oauth2_token_service_factory.h"
 #include "ios/chrome/browser/sync/glue/sync_start_util.h"
 #include "ios/chrome/browser/sync/ios_chrome_profile_sync_service_factory.h"
+#include "ios/chrome/browser/sync/ios_user_event_service_factory.h"
 #include "ios/chrome/browser/sync/sessions/ios_chrome_local_session_event_router.h"
 #include "ios/chrome/browser/tabs/tab_model_synced_window_delegate_getter.h"
 #include "ios/chrome/browser/undo/bookmark_undo_service_factory.h"
@@ -178,10 +180,6 @@ void IOSChromeSyncClient::Initialize() {
         token_service, url_request_context_getter, web_data_service_,
         password_store_));
   }
-}
-
-base::SequencedWorkerPool* IOSChromeSyncClient::GetBlockingPool() {
-  return web::WebThread::GetBlockingPool();
 }
 
 syncer::SyncService* IOSChromeSyncClient::GetSyncService() {
@@ -368,6 +366,10 @@ IOSChromeSyncClient::GetSyncBridgeForModelType(syncer::ModelType type) {
       // TODO(gangwu):implement TypedURLSyncBridge and return real
       // TypedURLSyncBridge here.
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
+    case syncer::USER_EVENTS:
+      return IOSUserEventServiceFactory::GetForBrowserState(browser_state_)
+          ->GetSyncBridge()
+          ->AsWeakPtr();
     default:
       NOTREACHED();
       return base::WeakPtr<syncer::ModelTypeSyncBridge>();
@@ -379,13 +381,12 @@ IOSChromeSyncClient::CreateModelWorkerForGroup(syncer::ModelSafeGroup group) {
   DCHECK_CURRENTLY_ON(web::WebThread::UI);
   switch (group) {
     case syncer::GROUP_DB:
-      return new syncer::BrowserThreadModelWorker(
+      return new syncer::SequencedModelWorker(
           web::WebThread::GetTaskRunnerForThread(web::WebThread::DB),
           syncer::GROUP_DB);
     case syncer::GROUP_FILE:
-      return new syncer::BrowserThreadModelWorker(
-          web::WebThread::GetTaskRunnerForThread(web::WebThread::FILE),
-          syncer::GROUP_FILE);
+      // Not supported on iOS.
+      return nullptr;
     case syncer::GROUP_UI:
       return new syncer::UIModelWorker(
           web::WebThread::GetTaskRunnerForThread(web::WebThread::UI));

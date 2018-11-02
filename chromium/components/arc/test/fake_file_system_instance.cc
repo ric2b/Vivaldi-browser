@@ -64,8 +64,9 @@ FakeFileSystemInstance::File::File(const File& that) = default;
 
 FakeFileSystemInstance::File::File(const std::string& url,
                                    const std::string& content,
+                                   const std::string& mime_type,
                                    Seekable seekable)
-    : url(url), content(content), seekable(seekable) {}
+    : url(url), content(content), mime_type(mime_type), seekable(seekable) {}
 
 FakeFileSystemInstance::File::~File() = default;
 
@@ -95,21 +96,21 @@ FakeFileSystemInstance::FakeFileSystemInstance() {
 }
 
 FakeFileSystemInstance::~FakeFileSystemInstance() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 }
 
 bool FakeFileSystemInstance::InitCalled() {
-  return host_;
+  return host_.is_bound();
 }
 
 void FakeFileSystemInstance::AddFile(const File& file) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK_EQ(0u, files_.count(std::string(file.url)));
   files_.insert(std::make_pair(std::string(file.url), file));
 }
 
 void FakeFileSystemInstance::AddDocument(const Document& document) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DocumentKey key(document.authority, document.document_id);
   DCHECK_EQ(0u, documents_.count(key));
   documents_.insert(std::make_pair(key, document));
@@ -121,11 +122,18 @@ void FakeFileSystemInstance::AddDocument(const Document& document) {
   }
 }
 
+void FakeFileSystemInstance::AddRecentDocument(const std::string& root_id,
+                                               const Document& document) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  RootKey key(document.authority, root_id);
+  recent_documents_[key].push_back(document);
+}
+
 void FakeFileSystemInstance::TriggerWatchers(
     const std::string& authority,
     const std::string& document_id,
     storage::WatcherManager::ChangeType type) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   if (!host_) {
     LOG(ERROR) << "FileSystemHost is not available.";
     return;
@@ -141,7 +149,7 @@ void FakeFileSystemInstance::TriggerWatchers(
 void FakeFileSystemInstance::AddWatcher(const std::string& authority,
                                         const std::string& document_id,
                                         const AddWatcherCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DocumentKey key(authority, document_id);
   auto iter = documents_.find(key);
   if (iter == documents_.end()) {
@@ -158,7 +166,7 @@ void FakeFileSystemInstance::AddWatcher(const std::string& authority,
 
 void FakeFileSystemInstance::GetFileSize(const std::string& url,
                                          const GetFileSizeCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto iter = files_.find(url);
   if (iter == files_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
@@ -170,10 +178,24 @@ void FakeFileSystemInstance::GetFileSize(const std::string& url,
       FROM_HERE, base::Bind(callback, file.content.size()));
 }
 
+void FakeFileSystemInstance::GetMimeType(const std::string& url,
+                                         const GetMimeTypeCallback& callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto iter = files_.find(url);
+  if (iter == files_.end()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, base::nullopt));
+    return;
+  }
+  const File& file = iter->second;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(callback, file.mime_type));
+}
+
 void FakeFileSystemInstance::OpenFileToRead(
     const std::string& url,
     const OpenFileToReadCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto iter = files_.find(url);
   if (iter == files_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -199,7 +221,7 @@ void FakeFileSystemInstance::OpenFileToRead(
 void FakeFileSystemInstance::GetDocument(const std::string& authority,
                                          const std::string& document_id,
                                          const GetDocumentCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto iter = documents_.find(DocumentKey(authority, document_id));
   if (iter == documents_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
@@ -215,7 +237,8 @@ void FakeFileSystemInstance::GetChildDocuments(
     const std::string& authority,
     const std::string& parent_document_id,
     const GetChildDocumentsCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  ++get_child_documents_count_;
   auto child_iter =
       child_documents_.find(DocumentKey(authority, parent_document_id));
   if (child_iter == child_documents_.end()) {
@@ -235,8 +258,27 @@ void FakeFileSystemInstance::GetChildDocuments(
                  base::Passed(base::make_optional(std::move(children)))));
 }
 
+void FakeFileSystemInstance::GetRecentDocuments(
+    const std::string& authority,
+    const std::string& root_id,
+    const GetRecentDocumentsCallback& callback) {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  auto recent_iter = recent_documents_.find(RootKey(authority, root_id));
+  if (recent_iter == recent_documents_.end()) {
+    base::ThreadTaskRunnerHandle::Get()->PostTask(
+        FROM_HERE, base::BindOnce(callback, base::nullopt));
+    return;
+  }
+  std::vector<mojom::DocumentPtr> recents;
+  for (const Document& document : recent_iter->second)
+    recents.emplace_back(MakeDocument(document));
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE,
+      base::BindOnce(callback, base::make_optional(std::move(recents))));
+}
+
 void FakeFileSystemInstance::Init(mojom::FileSystemHostPtr host) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   DCHECK(host);
   DCHECK(!host_);
   host_ = std::move(host);
@@ -245,7 +287,7 @@ void FakeFileSystemInstance::Init(mojom::FileSystemHostPtr host) {
 void FakeFileSystemInstance::RemoveWatcher(
     int64_t watcher_id,
     const RemoveWatcherCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   auto iter = watcher_to_document_.find(watcher_id);
   if (iter == watcher_to_document_.end()) {
     base::ThreadTaskRunnerHandle::Get()->PostTask(FROM_HERE,
@@ -260,7 +302,7 @@ void FakeFileSystemInstance::RemoveWatcher(
 
 void FakeFileSystemInstance::RequestMediaScan(
     const std::vector<std::string>& paths) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   // Do nothing and pretend we scaned them.
 }
 

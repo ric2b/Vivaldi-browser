@@ -56,8 +56,6 @@ class TemplateURLParserTest : public testing::Test {
 
   void SetUp() override;
 
-  bool is_disabled() const;
-
   // Parses the OpenSearch description document at file_name (relative to the
   // data dir). The TemplateURL is placed in |template_url_|.
   void ParseFile(const std::string& file_name,
@@ -67,7 +65,7 @@ class TemplateURLParserTest : public testing::Test {
   std::unique_ptr<TemplateURL> template_url_;
 
  private:
-  base::FilePath full_path_;
+  base::FilePath osdd_dir_;
 };
 
 TemplateURLParserTest::TemplateURLParserTest() {
@@ -77,26 +75,18 @@ TemplateURLParserTest::~TemplateURLParserTest() {
 }
 
 void TemplateURLParserTest::SetUp() {
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &full_path_));
-  full_path_ = full_path_.AppendASCII("osdd");
-  if (!base::PathExists(full_path_)) {
-    LOG(ERROR) <<
-        "This test can't be run without some non-redistributable data";
-    full_path_ = base::FilePath();
-  }
-}
-
-bool TemplateURLParserTest::is_disabled() const {
-  return full_path_.empty();
+  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &osdd_dir_));
+  // TODO(https://crbug.com/739331): Rename the path to "osdd" after most
+  // developers have synced over the removal of the old osdd directory from the
+  // internal repository.
+  osdd_dir_ = osdd_dir_.AppendASCII("osdd_new");
+  ASSERT_TRUE(base::PathExists(osdd_dir_));
 }
 
 void TemplateURLParserTest::ParseFile(
     const std::string& file_name,
     TemplateURLParser::ParameterFilter* filter) {
-  base::FilePath full_path;
-  ASSERT_TRUE(PathService::Get(chrome::DIR_TEST_DATA, &full_path));
-  full_path = full_path.AppendASCII("osdd");
-  full_path = full_path.AppendASCII(file_name);
+  base::FilePath full_path = osdd_dir_.AppendASCII(file_name);
   ASSERT_TRUE(base::PathExists(full_path));
 
   std::string contents;
@@ -105,35 +95,26 @@ void TemplateURLParserTest::ParseFile(
                                            contents.length(), filter);
 }
 
-
 // Actual tests ---------------------------------------------------------------
 
 TEST_F(TemplateURLParserTest, FailOnBogusURL) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("bogus.xml", NULL));
-  EXPECT_FALSE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("bogus.xml", nullptr));
+  EXPECT_FALSE(template_url_);
 }
 
 TEST_F(TemplateURLParserTest, PassOnHTTPS) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("https.xml", NULL));
-  EXPECT_TRUE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("https.xml", nullptr));
+  EXPECT_TRUE(template_url_);
 }
 
 TEST_F(TemplateURLParserTest, FailOnPost) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("post.xml", NULL));
-  EXPECT_FALSE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("post.xml", nullptr));
+  EXPECT_FALSE(template_url_);
 }
 
 TEST_F(TemplateURLParserTest, TestDictionary) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("dictionary.xml", NULL));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("dictionary.xml", nullptr));
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Dictionary.com"), template_url_->short_name());
   EXPECT_EQ(GURL("http://cache.lexico.com/g/d/favicon.ico"),
             template_url_->favicon_url());
@@ -143,10 +124,8 @@ TEST_F(TemplateURLParserTest, TestDictionary) {
 }
 
 TEST_F(TemplateURLParserTest, TestMSDN) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("msdn.xml", NULL));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("msdn.xml", nullptr));
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Search \" MSDN"), template_url_->short_name());
   EXPECT_EQ(GURL("http://search.msdn.microsoft.com/search/favicon.ico"),
             template_url_->favicon_url());
@@ -157,10 +136,8 @@ TEST_F(TemplateURLParserTest, TestMSDN) {
 }
 
 TEST_F(TemplateURLParserTest, TestWikipedia) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("wikipedia.xml", NULL));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_NO_FATAL_FAILURE(ParseFile("wikipedia.xml", nullptr));
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Wikipedia (English)"), template_url_->short_name());
   EXPECT_EQ(GURL("http://en.wikipedia.org/favicon.ico"),
             template_url_->favicon_url());
@@ -179,19 +156,15 @@ TEST_F(TemplateURLParserTest, TestWikipedia) {
 }
 
 TEST_F(TemplateURLParserTest, NoCrashOnEmptyAttributes) {
-  if (is_disabled())
-    return;
-  ASSERT_NO_FATAL_FAILURE(ParseFile("url_with_no_attributes.xml", NULL));
+  ASSERT_NO_FATAL_FAILURE(ParseFile("url_with_no_attributes.xml", nullptr));
 }
 
 TEST_F(TemplateURLParserTest, TestFirefoxEbay) {
-  if (is_disabled())
-    return;
   // This file uses the Parameter extension
   // (see http://www.opensearch.org/Specifications/OpenSearch/Extensions/Parameter/1.0)
   ParamFilterImpl filter("ebay", "ebay");
   ASSERT_NO_FATAL_FAILURE(ParseFile("firefox_ebay.xml", &filter));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("eBay"), template_url_->short_name());
   EXPECT_TRUE(template_url_->url_ref().SupportsReplacement(SearchTermsData()));
   EXPECT_EQ("http://search.ebay.com/search/search.dll?query={searchTerms}&"
@@ -205,12 +178,10 @@ TEST_F(TemplateURLParserTest, TestFirefoxEbay) {
 }
 
 TEST_F(TemplateURLParserTest, TestFirefoxWebster) {
-  if (is_disabled())
-    return;
   // This XML file uses a namespace.
   ParamFilterImpl filter(std::string(), "Mozilla");
   ASSERT_NO_FATAL_FAILURE(ParseFile("firefox_webster.xml", &filter));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Webster"), template_url_->short_name());
   EXPECT_TRUE(template_url_->url_ref().SupportsReplacement(SearchTermsData()));
   EXPECT_EQ("http://www.webster.com/cgi-bin/dictionary?va={searchTerms}",
@@ -222,12 +193,10 @@ TEST_F(TemplateURLParserTest, TestFirefoxWebster) {
 }
 
 TEST_F(TemplateURLParserTest, TestFirefoxYahoo) {
-  if (is_disabled())
-    return;
   // This XML file uses a namespace.
   ParamFilterImpl filter(std::string(), "Mozilla");
   ASSERT_NO_FATAL_FAILURE(ParseFile("firefox_yahoo.xml", &filter));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Yahoo"), template_url_->short_name());
   EXPECT_TRUE(template_url_->url_ref().SupportsReplacement(SearchTermsData()));
   EXPECT_EQ("http://ff.search.yahoo.com/gossip?"
@@ -244,12 +213,10 @@ TEST_F(TemplateURLParserTest, TestFirefoxYahoo) {
 // Make sure we ignore POST suggestions (this is the same XML file as
 // firefox_yahoo.xml, the suggestion method was just changed to POST).
 TEST_F(TemplateURLParserTest, TestPostSuggestion) {
-  if (is_disabled())
-    return;
   // This XML file uses a namespace.
   ParamFilterImpl filter(std::string(), "Mozilla");
   ASSERT_NO_FATAL_FAILURE(ParseFile("post_suggestion.xml", &filter));
-  ASSERT_TRUE(template_url_.get());
+  ASSERT_TRUE(template_url_);
   EXPECT_EQ(ASCIIToUTF16("Yahoo"), template_url_->short_name());
   EXPECT_TRUE(template_url_->url_ref().SupportsReplacement(SearchTermsData()));
   EXPECT_TRUE(template_url_->suggestions_url().empty());
@@ -259,4 +226,25 @@ TEST_F(TemplateURLParserTest, TestPostSuggestion) {
   EXPECT_EQ("UTF-8", template_url_->input_encodings()[0]);
   EXPECT_EQ(GURL("http://search.yahoo.com/favicon.ico"),
             template_url_->favicon_url());
+}
+
+// <Alias> tags are parsed and used as keyword for the template URL.
+TEST_F(TemplateURLParserTest, TestKeyword) {
+  ASSERT_NO_FATAL_FAILURE(ParseFile("keyword.xml", nullptr));
+  ASSERT_TRUE(template_url_);
+  EXPECT_EQ(ASCIIToUTF16("Example"), template_url_->short_name());
+  EXPECT_EQ("https://www.example.com/search?q={searchTerms}",
+            template_url_->url());
+  EXPECT_EQ(ASCIIToUTF16("moose"), template_url_->keyword());
+}
+
+// Empty <Alias> tags are ignored and the default keyword is used instead
+// (because empty keywords are not allowed).
+TEST_F(TemplateURLParserTest, TestEmptyKeyword) {
+  ASSERT_NO_FATAL_FAILURE(ParseFile("empty_keyword.xml", nullptr));
+  ASSERT_TRUE(template_url_);
+  EXPECT_EQ(ASCIIToUTF16("Example"), template_url_->short_name());
+  EXPECT_EQ("https://www.example.com/search?q={searchTerms}",
+            template_url_->url());
+  EXPECT_EQ(ASCIIToUTF16("example.com"), template_url_->keyword());
 }

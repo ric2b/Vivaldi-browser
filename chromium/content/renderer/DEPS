@@ -7,8 +7,8 @@ include_rules = [
   "+components/payments",
   "+components/scheduler",
   "+components/url_formatter",
-  "+components/variations",
-
+  "+components/viz/client",
+  "+components/viz/common",
   "+cc/blink",
   "+content/public/child",
   "+content/public/renderer",

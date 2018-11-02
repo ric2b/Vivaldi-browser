@@ -31,6 +31,7 @@
 
 #include <memory>
 
+#include "base/macros.h"
 #include "bindings/core/v8/ScriptValue.h"
 #include "core/dom/DOMStringList.h"
 #include "core/dom/SuspendableObject.h"
@@ -47,6 +48,7 @@
 #include "platform/heap/Handle.h"
 #include "platform/wtf/HashMap.h"
 #include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
 #include "public/platform/WebBlobInfo.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 #include "public/platform/modules/indexeddb/WebIDBTypes.h"
@@ -66,7 +68,97 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   USING_GARBAGE_COLLECTED_MIXIN(IDBRequest);
 
  public:
-  static IDBRequest* Create(ScriptState*, IDBAny* source, IDBTransaction*);
+  // Container for async tracing state.
+  //
+  // The documentation for TRACE_EVENT_ASYNC_{BEGIN,END} suggests identifying
+  // trace events by using pointers or a counter that is always incremented on
+  // the same thread. This is not viable for IndexedDB, because the same object
+  // can result in multiple trace events (requests associated with cursors), and
+  // IndexedDB can be used from multiple threads in the same renderer (workers).
+  // Furthermore, we want to record the beginning event of an async trace right
+  // when we start serving an IDB API call, before the IDBRequest object is
+  // created, so we can't rely on information in an IDBRequest.
+  //
+  // This class solves the ID uniqueness problem by relying on an atomic counter
+  // to generating unique IDs in a threadsafe manner. The atomic machinery is
+  // used when tracing is enabled. The recording problem is solved by having
+  // instances of this class store the information needed to record async trace
+  // end events (via TRACE_EVENT_ASYNC_END).
+  //
+  // From a mechanical perspective, creating an AsyncTraceState instance records
+  // the beginning event of an async trace. The instance is then moved into an
+  // IDBRequest, which records the async trace's end event at the right time.
+  class MODULES_EXPORT AsyncTraceState {
+   public:
+    // Creates an empty instance, which does not produce any tracing events.
+    //
+    // This is used for internal requests that should not show up in an
+    // application's trace. Examples of internal requests are the requests
+    // issued by DevTools, and the requests used to populate indexes.
+    explicit AsyncTraceState() {}
+
+    // Creates an instance that produces begin/end events with the given name.
+    //
+    // The string pointed to by tracing_name argument must live for the entire
+    // application. The easiest way to meet this requirement is to have it be a
+    // string literal.
+    explicit AsyncTraceState(const char* trace_event_name);
+    ~AsyncTraceState();
+
+    // Used to transfer the trace end event state to an IDBRequest.
+    AsyncTraceState(AsyncTraceState&& other) {
+      DCHECK(IsEmpty());
+      this->trace_event_name_ = other.trace_event_name_;
+      this->id_ = other.id_;
+      other.trace_event_name_ = nullptr;
+    }
+    AsyncTraceState& operator=(AsyncTraceState&& rhs) {
+      DCHECK(IsEmpty());
+      this->trace_event_name_ = rhs.trace_event_name_;
+      this->id_ = rhs.id_;
+      rhs.trace_event_name_ = nullptr;
+      return *this;
+    }
+
+    // True if this instance does not store information for a tracing end event.
+    //
+    // An instance is cleared when RecordAndReset() is called on it, or when its
+    // state is moved into a different instance. Empty instances are also
+    // produced by the AsyncStateTrace() constructor.
+    bool IsEmpty() const { return !trace_event_name_; }
+
+    // Records the trace end event whose information is stored in this instance.
+    //
+    // The method results in the completion of the async trace tracked by this
+    // instance, so the instance is cleared.
+    void RecordAndReset();
+
+   protected:  // For testing
+    const char* trace_event_name() const { return trace_event_name_; }
+    size_t id() const { return id_; }
+
+    // Populates the instance with state for a new async trace.
+    //
+    // The method uses the given even name and generates a new unique ID. The
+    // newly generated unique ID is returned.
+    size_t PopulateForNewEvent(const char* trace_event_name);
+
+   private:
+    // The name of the async trace events tracked by this instance.
+    //
+    // Null is used to signal that the instance is empty, so the event name
+    // cannot be null.
+    const char* trace_event_name_ = nullptr;
+    // Uniquely generated ID that ties an async trace's begin and end events.
+    size_t id_;
+
+    DISALLOW_COPY_AND_ASSIGN(AsyncTraceState);
+  };
+
+  static IDBRequest* Create(ScriptState*,
+                            IDBAny* source,
+                            IDBTransaction*,
+                            AsyncTraceState);
   ~IDBRequest() override;
   DECLARE_VIRTUAL_TRACE();
 
@@ -218,8 +310,13 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   inline IDBRequestQueueItem* QueueItem() const { return queue_item_; }
 #endif  // DCHECK_IS_ON()
 
+  void AssignNewMetrics(AsyncTraceState metrics) {
+    DCHECK(metrics_.IsEmpty());
+    metrics_ = std::move(metrics);
+  }
+
  protected:
-  IDBRequest(ScriptState*, IDBAny* source, IDBTransaction*);
+  IDBRequest(ScriptState*, IDBAny* source, IDBTransaction*, AsyncTraceState);
   void EnqueueEvent(Event*);
   void DequeueEvent(Event*);
   virtual bool ShouldEnqueueEvent() const;
@@ -243,6 +340,8 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   // registered against it.
   v8::Isolate* isolate_;
 
+  AsyncTraceState metrics_;
+
  private:
   // Calls EnqueueResponse().
   friend class IDBRequestQueueItem;
@@ -264,6 +363,8 @@ class MODULES_EXPORT IDBRequest : public EventTargetWithInlineData,
   void EnqueueResponse(RefPtr<IDBValue>&&);
   void EnqueueResponse(const Vector<RefPtr<IDBValue>>&);
   void EnqueueResponse();
+
+  void ClearPutOperationBlobs() { transit_blob_handles_.clear(); }
 
   Member<IDBAny> source_;
   Member<IDBAny> result_;

@@ -5,7 +5,6 @@
 import("//build/config/chrome_build.gni")
 import("//build/config/features.gni")
 import("//build/config/ui.gni")
-import("//extensions/features/features.gni")
 import("//printing/features/features.gni")
 import("//rlz/features/features.gni")
 import("//testing/test.gni")
@@ -40,10 +39,6 @@ if (is_ios) {
 # no tests will run) and add a reference here. You can add more than one unit
 # test target if convenient.
 test("components_unittests") {
-  sources = [
-    "test/run_all_unittests.cc",
-  ]
-
   if (is_android || is_linux || is_mac || is_win) {
     data = [
       "test/data/",
@@ -86,6 +81,7 @@ test("components_unittests") {
     "//components/download:unit_tests",
     "//components/favicon/core:unit_tests",
     "//components/favicon_base:unit_tests",
+    "//components/feature_engagement_tracker:unit_tests",
     "//components/flags_ui:unit_tests",
     "//components/gcm_driver:unit_tests",
     "//components/gcm_driver/crypto:unit_tests",
@@ -96,14 +92,16 @@ test("components_unittests") {
     "//components/image_fetcher/core:unit_tests",
     "//components/json_schema:unit_tests",
     "//components/keyed_service/core:unit_tests",
+    "//components/language/core/browser:unit_tests",
     "//components/language_usage_metrics:unit_tests",
     "//components/leveldb_proto:unit_tests",
     "//components/login:unit_tests",
+    "//components/machine_intelligence:unit_tests",
     "//components/metrics:unit_tests",
     "//components/mime_util:unit_tests",
     "//components/navigation_metrics:unit_tests",
     "//components/net_log:unit_tests",
-    "//components/network_session_configurator:unit_tests",
+    "//components/network_session_configurator/browser:unit_tests",
     "//components/network_time:unit_tests",
     "//components/ntp_snippets:unit_tests",
     "//components/ntp_tiles:unit_tests",
@@ -117,7 +115,6 @@ test("components_unittests") {
     "//components/payments/core:unit_tests",
     "//components/physical_web/data_source:unit_tests",
     "//components/physical_web/eddystone:unit_tests",
-    "//components/precache/core:unit_tests",
     "//components/prefs:unit_tests",
     "//components/previews/core:unit_tests",
     "//components/proxy_config:unit_tests",
@@ -141,7 +138,7 @@ test("components_unittests") {
     "//components/sync_preferences:unit_tests",
     "//components/sync_sessions:unit_tests",
     "//components/task_scheduler_util/common:unit_tests",
-    "//components/test:test_support",
+    "//components/test:run_all_unittests",
     "//components/translate/core/browser:unit_tests",
     "//components/translate/core/common:unit_tests",
     "//components/translate/core/language_detection:unit_tests",
@@ -151,18 +148,19 @@ test("components_unittests") {
     "//components/upload_list:unit_tests",
     "//components/url_formatter:unit_tests",
     "//components/url_matcher:unit_tests",
+    "//components/url_pattern_index:unit_tests",
     "//components/variations:unit_tests",
     "//components/variations/service:unit_tests",
     "//components/web_resource:unit_tests",
     "//components/webdata/common:unit_tests",
   ]
 
-  if (enable_nacl) {
-    deps += [ "//components/nacl/browser:unit_tests" ]
+  if (toolkit_views && use_aura) {
+    deps += [ "//components/ui_devtools/views:unit_tests" ]
   }
 
-  if (enable_extensions) {
-    deps += [ "//components/guest_view/browser:unit_tests" ]
+  if (enable_nacl) {
+    deps += [ "//components/nacl/browser:unit_tests" ]
   }
 
   if (is_ios) {
@@ -177,6 +175,7 @@ test("components_unittests") {
       "//components/autofill/content/common:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/cast_certificate:unit_tests",
+      "//components/cast_channel:unit_tests",
       "//components/certificate_reporting:unit_tests",
       "//components/certificate_transparency:unit_tests",
       "//components/contextual_search:unit_tests",
@@ -200,22 +199,20 @@ test("components_unittests") {
       "//components/link_header_util:unit_tests",
       "//components/navigation_interception:unit_tests",
       "//components/network_hints/renderer:unit_tests",
-      "//components/offline_pages/content:unit_tests",
       "//components/offline_pages/content/background_loader:unit_tests",
       "//components/offline_pages/core:unit_tests",
       "//components/offline_pages/core/background:unit_tests",
       "//components/offline_pages/core/downloads:unit_tests",
+      "//components/offline_pages/core/prefetch:unit_tests",
       "//components/offline_pages/core/request_header:unit_tests",
-      "//components/packed_ct_ev_whitelist:unit_tests",
       "//components/password_manager/content/browser:unit_tests",
       "//components/payments/content:unit_tests",
       "//components/payments/content/utility:unit_tests",
       "//components/policy/core/browser:unit_tests",
       "//components/policy/core/common:unit_tests",
-      "//components/precache/content:unit_tests",
       "//components/safe_browsing/common:unit_tests",
       "//components/safe_browsing/password_protection:password_protection_unittest",
-      "//components/safe_browsing_db:unit_tests",
+      "//components/safe_browsing/triggers:unit_tests",
       "//components/safe_json:unit_tests",
       "//components/security_state/content:unit_tests",
       "//components/spellcheck/browser:unit_tests",
@@ -224,8 +221,8 @@ test("components_unittests") {
       "//components/subresource_filter/content/common:unit_tests",
       "//components/subresource_filter/content/renderer:unit_tests",
       "//components/tracing:unit_tests",
+      "//components/translate/content/renderer:unit_tests",
       "//components/visitedlink/test:unit_tests",
-      "//components/viz/display_compositor:unit_tests",
       "//components/wallpaper:unit_tests",
       "//components/web_cache/browser:unit_tests",
       "//components/webcrypto:unit_tests",
@@ -249,7 +246,6 @@ test("components_unittests") {
   if (is_android) {
     deps += [
       "//components/cdm/browser:unit_tests",
-      "//components/feature_engagement_tracker:unit_tests",
       "//components/gcm_driver/instance_id:test_support",
       "//components/gcm_driver/instance_id/android:instance_id_driver_java",
       "//components/gcm_driver/instance_id/android:instance_id_driver_test_support_java",
@@ -281,6 +277,10 @@ test("components_unittests") {
     deps += [
       "//components/cryptauth:unit_tests",
       "//components/feedback:unit_tests",
+
+      # See comment in components/guest_view/browser/BUILD.gn for why
+      # guest_view is currently non-mobile.
+      "//components/guest_view/browser:unit_tests",
       "//components/proximity_auth:unit_tests",
       "//components/storage_monitor:unit_tests",
       "//components/web_modal:unit_tests",
@@ -319,7 +319,9 @@ test("components_unittests") {
     ]
   }
 
-  if (safe_browsing_mode == 2) {
+  if (safe_browsing_mode == 1) {
+    deps += [ "//components/safe_browsing_db:unit_tests_desktop" ]
+  } else if (safe_browsing_mode == 2) {
     deps += [ "//components/safe_browsing_db:unit_tests_mobile" ]
   }
 

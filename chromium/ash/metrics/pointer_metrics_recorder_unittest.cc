@@ -4,13 +4,14 @@
 
 #include "ash/metrics/pointer_metrics_recorder.h"
 
+#include "ash/public/cpp/app_types.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/shared/app_types.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
-#include "ash/wm_window.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/test/histogram_tester.h"
+#include "ui/aura/client/aura_constants.h"
+#include "ui/aura/window.h"
 #include "ui/events/event.h"
 #include "ui/views/pointer_watcher.h"
 #include "ui/views/widget/widget.h"
@@ -25,12 +26,12 @@ const char kInputHistogramName[] = "Event.DownEventCount.PerInput";
 const char kDestinationHistogramName[] = "Event.DownEventCount.PerDestination";
 
 // Test fixture for the PointerMetricsRecorder class.
-class PointerMetricsRecorderTest : public test::AshTestBase {
+class PointerMetricsRecorderTest : public AshTestBase {
  public:
   PointerMetricsRecorderTest();
   ~PointerMetricsRecorderTest() override;
 
-  // test::AshTestBase:
+  // AshTestBase:
   void SetUp() override;
   void TearDown() override;
 
@@ -50,14 +51,14 @@ PointerMetricsRecorderTest::PointerMetricsRecorderTest() {}
 PointerMetricsRecorderTest::~PointerMetricsRecorderTest() {}
 
 void PointerMetricsRecorderTest::SetUp() {
-  test::AshTestBase::SetUp();
+  AshTestBase::SetUp();
   pointer_metrics_recorder_.reset(new PointerMetricsRecorder());
   histogram_tester_.reset(new base::HistogramTester());
 }
 
 void PointerMetricsRecorderTest::TearDown() {
   pointer_metrics_recorder_.reset();
-  test::AshTestBase::TearDown();
+  AshTestBase::TearDown();
 }
 
 }  // namespace
@@ -72,7 +73,7 @@ TEST_F(PointerMetricsRecorderTest, NonDownEventsInAllPointerHistogram) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
 
   histogram_tester_->ExpectTotalCount(kFormFactorHistogramName, 0);
   histogram_tester_->ExpectTotalCount(kInputHistogramName, 0);
@@ -89,7 +90,7 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerInput) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_UNKNOWN, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(unknown_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kInputHistogramName, 0, 1);
 
   const ui::PointerEvent mouse_event(
@@ -97,7 +98,7 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerInput) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(mouse_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kInputHistogramName, 1, 1);
 
   const ui::PointerEvent stylus_event(
@@ -105,7 +106,7 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerInput) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_PEN, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(stylus_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kInputHistogramName, 2, 1);
 
   const ui::PointerEvent stylus_event2(
@@ -113,7 +114,7 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerInput) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_ERASER, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(stylus_event2, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kInputHistogramName, 2, 2);
 
   const ui::PointerEvent touch_event(
@@ -121,7 +122,7 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerInput) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_TOUCH, 0),
       base::TimeTicks());
   pointer_metrics_recorder_->OnPointerEventObserved(touch_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kInputHistogramName, 3, 1);
 }
 
@@ -134,18 +135,16 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerFormFactor) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE),
       base::TimeTicks());
 
-  // Enable maximize mode
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+  // Enable tablet mode
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kFormFactorHistogramName, 1, 1);
 
-  // Disable maximize mode
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      false);
+  // Disable tablet mode
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(false);
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kFormFactorHistogramName, 0, 1);
 }
 
@@ -158,27 +157,31 @@ TEST_F(PointerMetricsRecorderTest, DownEventPerDestination) {
       ui::PointerDetails(ui::EventPointerType::POINTER_TYPE_MOUSE, 0),
       base::TimeTicks());
 
-  WmWindow* window = WmWindow::Get(target->GetNativeWindow());
+  aura::Window* window = target->GetNativeWindow();
   CHECK(window);
 
-  window->SetAppType(static_cast<int>(AppType::OTHERS));
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(AppType::OTHERS));
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kDestinationHistogramName, 0, 1);
 
-  window->SetAppType(static_cast<int>(AppType::BROWSER));
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(AppType::BROWSER));
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kDestinationHistogramName, 1, 1);
 
-  window->SetAppType(static_cast<int>(AppType::CHROME_APP));
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(AppType::CHROME_APP));
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kDestinationHistogramName, 2, 1);
 
-  window->SetAppType(static_cast<int>(AppType::ARC_APP));
+  window->SetProperty(aura::client::kAppType,
+                      static_cast<int>(AppType::ARC_APP));
   pointer_metrics_recorder_->OnPointerEventObserved(pointer_event, gfx::Point(),
-                                                    target.get());
+                                                    target->GetNativeView());
   histogram_tester_->ExpectBucketCount(kDestinationHistogramName, 3, 1);
 }
 

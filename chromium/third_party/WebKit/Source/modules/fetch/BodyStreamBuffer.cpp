@@ -6,12 +6,12 @@
 
 #include <memory>
 #include "bindings/core/v8/ExceptionState.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMTypedArray.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/streams/ReadableStreamController.h"
 #include "core/streams/ReadableStreamOperations.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMTypedArray.h"
 #include "modules/fetch/Body.h"
 #include "modules/fetch/ReadableStreamBytesConsumer.h"
 #include "platform/bindings/ScriptState.h"
@@ -19,6 +19,7 @@
 #include "platform/bindings/V8ThrowException.h"
 #include "platform/blob/BlobData.h"
 #include "platform/network/EncodedFormData.h"
+#include "platform/wtf/AutoReset.h"
 
 namespace blink {
 
@@ -149,7 +150,7 @@ PassRefPtr<BlobDataHandle> BodyStreamBuffer::DrainAsBlobDataHandle(
       consumer_->DrainAsBlobDataHandle(policy);
   if (blob_data_handle) {
     CloseAndLockAndDisturb();
-    return blob_data_handle.Release();
+    return blob_data_handle;
   }
   return nullptr;
 }
@@ -166,7 +167,7 @@ PassRefPtr<EncodedFormData> BodyStreamBuffer::DrainAsFormData() {
   RefPtr<EncodedFormData> form_data = consumer_->DrainAsFormData();
   if (form_data) {
     CloseAndLockAndDisturb();
-    return form_data.Release();
+    return form_data;
   }
   return nullptr;
 }
@@ -209,7 +210,8 @@ ScriptPromise BodyStreamBuffer::pull(ScriptState* script_state) {
   if (stream_needs_more_)
     return ScriptPromise::CastUndefined(script_state);
   stream_needs_more_ = true;
-  ProcessData();
+  if (!in_process_data_)
+    ProcessData();
   return ScriptPromise::CastUndefined(script_state);
 }
 
@@ -311,6 +313,9 @@ void BodyStreamBuffer::CancelConsumer() {
 
 void BodyStreamBuffer::ProcessData() {
   DCHECK(consumer_);
+  DCHECK(!in_process_data_);
+
+  AutoReset<bool> auto_reset(&in_process_data_, true);
   while (stream_needs_more_) {
     const char* buffer = nullptr;
     size_t available = 0;

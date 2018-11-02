@@ -33,23 +33,27 @@ bool MediaControlFullscreenButtonElement::WillRespondToMouseClickEvents() {
 }
 
 WebLocalizedString::Name
-MediaControlFullscreenButtonElement::GetOverflowStringName() {
+MediaControlFullscreenButtonElement::GetOverflowStringName() const {
   if (MediaElement().IsFullscreen())
     return WebLocalizedString::kOverflowMenuExitFullscreen;
   return WebLocalizedString::kOverflowMenuEnterFullscreen;
 }
 
-bool MediaControlFullscreenButtonElement::HasOverflowButton() {
+bool MediaControlFullscreenButtonElement::HasOverflowButton() const {
   return true;
+}
+
+const char* MediaControlFullscreenButtonElement::GetNameForHistograms() const {
+  return IsOverflowElement() ? "FullscreenOverflowButton" : "FullscreenButton";
 }
 
 void MediaControlFullscreenButtonElement::DefaultEventHandler(Event* event) {
   if (event->type() == EventTypeNames::click) {
     RecordClickMetrics();
     if (MediaElement().IsFullscreen())
-      static_cast<MediaControlsImpl&>(GetMediaControls()).ExitFullscreen();
+      GetMediaControls().ExitFullscreen();
     else
-      static_cast<MediaControlsImpl&>(GetMediaControls()).EnterFullscreen();
+      GetMediaControls().EnterFullscreen();
     event->SetDefaultHandled();
   }
   MediaControlInputElement::DefaultEventHandler(event);

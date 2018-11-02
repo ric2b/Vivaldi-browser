@@ -50,8 +50,6 @@ class GURL;
 // very intertwined. We should streamline the logic to jump between classes
 // less, then remove any delegate method that becomes unneccessary as a result.
 
-// Called when the page is reloaded.
-- (void)webWillReload;
 // Called when a page is loaded using loadWithParams.
 - (void)webDidUpdateSessionForLoadWithParams:
             (const web::NavigationManager::WebLoadParams&)params
@@ -71,15 +69,6 @@ class GURL;
 // cannot be presented by CRWWebController.
 - (BOOL)webController:(CRWWebController*)webController
     shouldOpenExternalURL:(const GURL&)URL;
-
-// Called when |URL| is deemed suitable to be opened in a matching native app.
-// Needs to return whether |URL| was opened in a matching native app.
-// Also triggering user action |linkClicked| is passed to use it when needed.
-// The return value indicates if the native app was launched, not if a native
-// app was found.
-- (BOOL)urlTriggersNativeAppLaunch:(const GURL&)URL
-                         sourceURL:(const GURL&)sourceURL
-                       linkClicked:(BOOL)linkClicked;
 
 // Called to ask the delegate for a controller to display the given url,
 // which contained content that the UIWebView couldn't display. Returns

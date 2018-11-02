@@ -12,11 +12,13 @@
 #include "base/macros.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/string_tokenizer.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_offset_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_local_storage.h"
 #include "components/url_formatter/idn_spoof_checker.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "third_party/icu/source/common/unicode/uidna.h"
 #include "third_party/icu/source/common/unicode/utypes.h"
 #include "url/gurl.h"
@@ -50,14 +52,60 @@ class AppendComponentTransform {
 
 class HostComponentTransform : public AppendComponentTransform {
  public:
-  HostComponentTransform() {}
+  HostComponentTransform(bool trim_trivial_subdomains)
+      : trim_trivial_subdomains_(trim_trivial_subdomains) {}
 
  private:
   base::string16 Execute(
       const std::string& component_text,
       base::OffsetAdjuster::Adjustments* adjustments) const override {
-    return IDNToUnicodeWithAdjustments(component_text, adjustments);
+    if (!trim_trivial_subdomains_)
+      return IDNToUnicodeWithAdjustments(component_text, adjustments);
+
+    // Exclude the registry and domain from trivial subdomain stripping.
+    // To get the adjustment offset calculations correct, we need to transform
+    // the registry and domain portion of the host as well.
+    std::string domain_and_registry =
+        net::registry_controlled_domains::GetDomainAndRegistry(
+            component_text,
+            net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+
+    base::OffsetAdjuster::Adjustments trivial_subdomains_adjustments;
+    base::StringTokenizer tokenizer(
+        component_text.begin(),
+        component_text.end() - domain_and_registry.length(), ".");
+    tokenizer.set_options(base::StringTokenizer::RETURN_DELIMS);
+
+    std::string transformed_subdomain;
+    while (tokenizer.GetNext()) {
+      // Append delimiters and non-trivial subdomains to the new subdomain part.
+      if (tokenizer.token_is_delim() ||
+          (tokenizer.token() != "m" && tokenizer.token() != "www")) {
+        transformed_subdomain += tokenizer.token();
+        continue;
+      }
+
+      // We found a trivial subdomain, so we add an adjustment accounting for
+      // the subdomain and the following consumed delimiter.
+      size_t trivial_subdomain_begin =
+          tokenizer.token_begin() - component_text.begin();
+      trivial_subdomains_adjustments.push_back(base::OffsetAdjuster::Adjustment(
+          trivial_subdomain_begin, tokenizer.token().length() + 1, 0));
+
+      // Consume the next token, which must be a delimiter.
+      bool next_delimiter_found = tokenizer.GetNext();
+      DCHECK(next_delimiter_found);
+      DCHECK(tokenizer.token_is_delim());
+    }
+
+    base::string16 unicode_result = IDNToUnicodeWithAdjustments(
+        transformed_subdomain + domain_and_registry, adjustments);
+    base::OffsetAdjuster::MergeSequentialAdjustments(
+        trivial_subdomains_adjustments, adjustments);
+    return unicode_result;
   }
+
+  bool trim_trivial_subdomains_;
 };
 
 class NonHostComponentTransform : public AppendComponentTransform {
@@ -360,6 +408,9 @@ const FormatUrlType kFormatUrlOmitTrailingSlashOnBareHostname = 1 << 2;
 const FormatUrlType kFormatUrlOmitAll =
     kFormatUrlOmitUsernamePassword | kFormatUrlOmitHTTP |
     kFormatUrlOmitTrailingSlashOnBareHostname;
+const FormatUrlType kFormatUrlExperimentalElideAfterHost = 1 << 3;
+const FormatUrlType kFormatUrlExperimentalOmitHTTPS = 1 << 4;
+const FormatUrlType kFormatUrlExperimentalOmitTrivialSubdomains = 1 << 5;
 
 base::string16 FormatUrl(const GURL& url,
                          FormatUrlTypes format_types,
@@ -367,14 +418,13 @@ base::string16 FormatUrl(const GURL& url,
                          url::Parsed* new_parsed,
                          size_t* prefix_end,
                          size_t* offset_for_adjustment) {
-  std::vector<size_t> offsets;
-  if (offset_for_adjustment)
-    offsets.push_back(*offset_for_adjustment);
-  base::string16 result =
-      FormatUrlWithOffsets(url, format_types, unescape_rules, new_parsed,
-                           prefix_end, &offsets);
-  if (offset_for_adjustment)
-    *offset_for_adjustment = offsets[0];
+  base::OffsetAdjuster::Adjustments adjustments;
+  base::string16 result = FormatUrlWithAdjustments(
+      url, format_types, unescape_rules, new_parsed, prefix_end, &adjustments);
+  if (offset_for_adjustment) {
+    base::OffsetAdjuster::AdjustOffset(adjustments, offset_for_adjustment,
+                                       result.length());
+  }
   return result;
 }
 
@@ -386,16 +436,11 @@ base::string16 FormatUrlWithOffsets(
     size_t* prefix_end,
     std::vector<size_t>* offsets_for_adjustment) {
   base::OffsetAdjuster::Adjustments adjustments;
-  const base::string16& format_url_return_value =
-      FormatUrlWithAdjustments(url, format_types, unescape_rules, new_parsed,
-                               prefix_end, &adjustments);
-  base::OffsetAdjuster::AdjustOffsets(adjustments, offsets_for_adjustment);
-  if (offsets_for_adjustment) {
-    std::for_each(
-        offsets_for_adjustment->begin(), offsets_for_adjustment->end(),
-        base::LimitOffset<std::string>(format_url_return_value.length()));
-  }
-  return format_url_return_value;
+  const base::string16& result = FormatUrlWithAdjustments(
+      url, format_types, unescape_rules, new_parsed, prefix_end, &adjustments);
+  base::OffsetAdjuster::AdjustOffsets(adjustments, offsets_for_adjustment,
+                                      result.length());
+  return result;
 }
 
 base::string16 FormatUrlWithAdjustments(
@@ -405,7 +450,7 @@ base::string16 FormatUrlWithAdjustments(
     url::Parsed* new_parsed,
     size_t* prefix_end,
     base::OffsetAdjuster::Adjustments* adjustments) {
-  DCHECK(adjustments != NULL);
+  DCHECK(adjustments);
   adjustments->clear();
   url::Parsed parsed_temp;
   if (!new_parsed)
@@ -431,22 +476,10 @@ base::string16 FormatUrlWithAdjustments(
   const url::Parsed& parsed = url.parsed_for_possibly_invalid_spec();
 
   // Scheme & separators.  These are ASCII.
+  const size_t scheme_size = static_cast<size_t>(parsed.CountCharactersBefore(
+      url::Parsed::USERNAME, true /* include_delimiter */));
   base::string16 url_string;
-  url_string.insert(
-      url_string.end(), spec.begin(),
-      spec.begin() + parsed.CountCharactersBefore(url::Parsed::USERNAME, true));
-  const char kHTTP[] = "http://";
-  const char kFTP[] = "ftp.";
-  // url_formatter::FixupURL() treats "ftp.foo.com" as ftp://ftp.foo.com.  This
-  // means that if we trim "http://" off a URL whose host starts with "ftp." and
-  // the user inputs this into any field subject to fixup (which is basically
-  // all input fields), the meaning would be changed.  (In fact, often the
-  // formatted URL is directly pre-filled into an input field.)  For this reason
-  // we avoid stripping "http://" in this case.
-  bool omit_http =
-      (format_types & kFormatUrlOmitHTTP) &&
-      base::EqualsASCII(url_string, kHTTP) &&
-      !base::StartsWith(url.host(), kFTP, base::CompareCase::SENSITIVE);
+  url_string.insert(url_string.end(), spec.begin(), spec.begin() + scheme_size);
   new_parsed->scheme = parsed.scheme;
 
   // Username & password.
@@ -491,7 +524,10 @@ base::string16 FormatUrlWithAdjustments(
     *prefix_end = static_cast<size_t>(url_string.length());
 
   // Host.
-  AppendFormattedComponent(spec, parsed.host, HostComponentTransform(),
+  bool trim_trivial_subdomains =
+      (format_types & kFormatUrlExperimentalOmitTrivialSubdomains) != 0;
+  AppendFormattedComponent(spec, parsed.host,
+                           HostComponentTransform(trim_trivial_subdomains),
                            &url_string, &new_parsed->host, adjustments);
 
   // Port.
@@ -506,44 +542,83 @@ base::string16 FormatUrlWithAdjustments(
   }
 
   // Path & query.  Both get the same general unescape & convert treatment.
-  if (!(format_types & kFormatUrlOmitTrailingSlashOnBareHostname) ||
-      !CanStripTrailingSlash(url)) {
-    AppendFormattedComponent(spec, parsed.path,
-                             NonHostComponentTransform(unescape_rules),
-                             &url_string, &new_parsed->path, adjustments);
-  } else {
+  if ((format_types & kFormatUrlOmitTrailingSlashOnBareHostname) &&
+      CanStripTrailingSlash(url)) {
+    // Omit the path, which is a single trailing slash. There's no query or ref.
     if (parsed.path.len > 0) {
       adjustments->push_back(base::OffsetAdjuster::Adjustment(
           parsed.path.begin, parsed.path.len, 0));
     }
+  } else if ((format_types & kFormatUrlExperimentalElideAfterHost) &&
+             url.IsStandard() && !url.SchemeIsFile() &&
+             !url.SchemeIsFileSystem()) {
+    // Replace everything after the host with a forward slash and ellipsis.
+    url_string.push_back('/');
+    constexpr base::char16 kEllipsisUTF16[] = {0x2026, 0};
+    url_string.append(kEllipsisUTF16);
+
+    // Compute the length of everything we're replacing. For the path, we are
+    // removing everything but the first slash.
+    size_t old_length = parsed.path.len - 1;
+
+    // We're also removing any query, plus the delimiting '?'.
+    if (parsed.query.is_valid())
+      old_length += parsed.query.len + 1;
+
+    // We're also removing any ref, plus the delimiting '#'.
+    if (parsed.ref.is_valid())
+      old_length += parsed.ref.len + 1;
+
+    // We're replacing all of these with a single character (an ellipsis). The
+    // adjustment begins after the forward slash at the beginning of the path.
+    adjustments->push_back(
+        base::OffsetAdjuster::Adjustment(parsed.path.begin + 1, old_length, 1));
+  } else {
+    // Append the formatted path, query, and ref.
+    AppendFormattedComponent(spec, parsed.path,
+                             NonHostComponentTransform(unescape_rules),
+                             &url_string, &new_parsed->path, adjustments);
+
+    if (parsed.query.is_valid())
+      url_string.push_back('?');
+    AppendFormattedComponent(spec, parsed.query,
+                             NonHostComponentTransform(unescape_rules),
+                             &url_string, &new_parsed->query, adjustments);
+
+    // Ref.  This is valid, unescaped UTF-8, so we can just convert.
+    if (parsed.ref.is_valid())
+      url_string.push_back('#');
+    AppendFormattedComponent(spec, parsed.ref,
+                             NonHostComponentTransform(net::UnescapeRule::NONE),
+                             &url_string, &new_parsed->ref, adjustments);
   }
-  if (parsed.query.is_valid())
-    url_string.push_back('?');
-  AppendFormattedComponent(spec, parsed.query,
-                           NonHostComponentTransform(unescape_rules),
-                           &url_string, &new_parsed->query, adjustments);
 
-  // Ref.  This is valid, unescaped UTF-8, so we can just convert.
-  if (parsed.ref.is_valid())
-    url_string.push_back('#');
-  AppendFormattedComponent(spec, parsed.ref,
-                           NonHostComponentTransform(net::UnescapeRule::NONE),
-                           &url_string, &new_parsed->ref, adjustments);
+  // url_formatter::FixupURL() treats "ftp.foo.com" as ftp://ftp.foo.com.  This
+  // means that if we trim the scheme off a URL whose host starts with "ftp."
+  // and the user inputs this into any field subject to fixup (which is
+  // basically all input fields), the meaning would be changed.  (In fact, often
+  // the formatted URL is directly pre-filled into an input field.)  For this
+  // reason we avoid stripping schemes in this case.
+  const char kFTP[] = "ftp.";
+  bool strip_scheme =
+      !base::StartsWith(url.host(), kFTP, base::CompareCase::SENSITIVE) &&
+      (((format_types & kFormatUrlOmitHTTP) &&
+        url.SchemeIs(url::kHttpScheme)) ||
+       ((format_types & kFormatUrlExperimentalOmitHTTPS) &&
+        url.SchemeIs(url::kHttpsScheme)));
 
-  // If we need to strip out http do it after the fact.
-  if (omit_http && base::StartsWith(url_string, base::ASCIIToUTF16(kHTTP),
-                                    base::CompareCase::SENSITIVE)) {
-    const size_t kHTTPSize = arraysize(kHTTP) - 1;
-    url_string = url_string.substr(kHTTPSize);
+  // If we need to strip out schemes do it after the fact.
+  if (strip_scheme) {
+    url_string.erase(0, scheme_size);
     // Because offsets in the |adjustments| are already calculated with respect
     // to the string with the http:// prefix in it, those offsets remain correct
     // after stripping the prefix.  The only thing necessary is to add an
     // adjustment to reflect the stripped prefix.
     adjustments->insert(adjustments->begin(),
-                        base::OffsetAdjuster::Adjustment(0, kHTTPSize, 0));
+                        base::OffsetAdjuster::Adjustment(0, scheme_size, 0));
 
     if (prefix_end)
-      *prefix_end -= kHTTPSize;
+      *prefix_end -= scheme_size;
 
     // Adjust new_parsed.
     DCHECK(new_parsed->scheme.is_valid());
@@ -565,7 +640,7 @@ bool CanStripTrailingSlash(const GURL& url) {
 void AppendFormattedHost(const GURL& url, base::string16* output) {
   AppendFormattedComponent(
       url.possibly_invalid_spec(), url.parsed_for_possibly_invalid_spec().host,
-      HostComponentTransform(), output, NULL, NULL);
+      HostComponentTransform(false), output, nullptr, nullptr);
 }
 
 base::string16 IDNToUnicode(base::StringPiece host) {

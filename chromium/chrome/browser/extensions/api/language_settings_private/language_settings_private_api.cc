@@ -14,6 +14,7 @@
 
 #include "base/i18n/rtl.h"
 #include "base/memory/ptr_util.h"
+#include "base/stl_util.h"
 #include "base/strings/string16.h"
 #include "base/strings/string_split.h"
 #include "base/strings/string_util.h"
@@ -37,10 +38,10 @@
 #include "ui/base/l10n/l10n_util_collator.h"
 
 #if defined(OS_CHROMEOS)
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "ui/base/ime/chromeos/component_extension_ime_manager.h"
 #include "ui/base/ime/chromeos/extension_ime_util.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #endif
 
 namespace extensions {
@@ -138,8 +139,7 @@ std::vector<std::string> GetSortedExtensionIMEs(
     auto it = descriptors.begin();
     while (it != descriptors.end() && descriptors.size()) {
       if (extension_ime_set.count(it->id()) &&
-          std::find(it->language_codes().begin(), it->language_codes().end(),
-                    language) != it->language_codes().end()) {
+          base::ContainsValue(it->language_codes(), language)) {
         extension_ime_list.push_back(it->id());
         // Remove the added descriptor from the candidate list.
         it = descriptors.erase(it);
@@ -266,8 +266,7 @@ LanguageSettingsPrivateEnableLanguageFunction::Run() {
   std::vector<std::string> languages;
   translate_prefs->GetLanguageList(&languages);
 
-  if (std::find(languages.begin(), languages.end(), language_code) !=
-      languages.end()) {
+  if (base::ContainsValue(languages, language_code)) {
     LOG(ERROR) << "Language " << language_code << " already enabled";
     return RespondNow(NoArguments());
   }

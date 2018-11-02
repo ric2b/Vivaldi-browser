@@ -1000,6 +1000,11 @@ bool NavigationControllerImpl::RendererDidNavigate(
 
   NotifyNavigationEntryCommitted(details);
 
+  if (active_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+    UMA_HISTOGRAM_BOOLEAN("Navigation.SecureSchemeHasSSLStatus",
+                          !!active_entry->GetSSL().certificate);
+  }
+
   if (overriding_user_agent_changed)
     delegate_->UpdateOverridingUserAgent();
 
@@ -1159,6 +1164,12 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
       // only tildes. Until we understand that better, don't copy the cert in
       // this case.
       new_entry->GetSSL() = SSLStatus();
+
+      if (new_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus.NewPageInPageOriginMismatch",
+            !!new_entry->GetSSL().certificate);
+      }
     }
 
     // We expect |frame_entry| to be owned by |new_entry|.  This should never
@@ -1166,6 +1177,11 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
     CHECK(frame_entry->HasOneRef());
 
     update_virtual_url = new_entry->update_virtual_url_with_url();
+
+    if (new_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      UMA_HISTOGRAM_BOOLEAN("Navigation.SecureSchemeHasSSLStatus.NewPageInPage",
+                            !!new_entry->GetSSL().certificate);
+    }
   }
 
   // Only make a copy of the pending entry if it is appropriate for the new page
@@ -1185,6 +1201,12 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
 
     update_virtual_url = new_entry->update_virtual_url_with_url();
     new_entry->GetSSL() = handle->ssl_status();
+
+    if (new_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      UMA_HISTOGRAM_BOOLEAN(
+          "Navigation.SecureSchemeHasSSLStatus.NewPagePendingEntryMatches",
+          !!new_entry->GetSSL().certificate);
+    }
   }
 
   // For non-in-page commits with no matching pending entry, create a new entry.
@@ -1206,6 +1228,12 @@ void NavigationControllerImpl::RendererDidNavigateToNewPage(
     // the URL.
     update_virtual_url = needs_update;
     new_entry->GetSSL() = handle->ssl_status();
+
+    if (new_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      UMA_HISTOGRAM_BOOLEAN(
+          "Navigation.SecureSchemeHasSSLStatus.NewPageNoMatchingEntry",
+          !!new_entry->GetSSL().certificate);
+    }
   }
 
   // Don't use the page type from the pending entry. Some interstitial page
@@ -1278,6 +1306,21 @@ void NavigationControllerImpl::RendererDidNavigateToExistingPage(
     // NavigationHandle so don't overwrite the existing entry's SSLStatus.
     if (!is_same_document)
       entry->GetSSL() = handle->ssl_status();
+
+    if (entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      bool has_cert = !!entry->GetSSL().certificate;
+      if (is_same_document) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageSameDocumentIntendedAsNew",
+            has_cert);
+      } else {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageDifferentDocumentIntendedAsNew",
+            has_cert);
+      }
+    }
   } else if (params.nav_entry_id) {
     // This is a browser-initiated navigation (back/forward/reload).
     entry = GetEntryWithUniqueID(params.nav_entry_id);
@@ -1302,6 +1345,30 @@ void NavigationControllerImpl::RendererDidNavigateToExistingPage(
       if (was_restored)
         entry->GetSSL() = handle->ssl_status();
     }
+
+    if (entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      bool has_cert = !!entry->GetSSL().certificate;
+      if (is_same_document && was_restored) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageSameDocumentRestoredBrowserInitiated",
+            has_cert);
+      } else if (is_same_document && !was_restored) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageSameDocumentBrowserInitiated",
+            has_cert);
+      } else if (!is_same_document && was_restored) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageRestoredBrowserInitiated",
+            has_cert);
+      } else {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus.ExistingPageBrowserInitiated",
+            has_cert);
+      }
+    }
   } else {
     // This is renderer-initiated. The only kinds of renderer-initated
     // navigations that are EXISTING_PAGE are reloads and location.replace,
@@ -1312,6 +1379,21 @@ void NavigationControllerImpl::RendererDidNavigateToExistingPage(
     // NavigationHandle so don't overwrite the existing entry's SSLStatus.
     if (!is_same_document)
       entry->GetSSL() = handle->ssl_status();
+
+    if (entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+      bool has_cert = !!entry->GetSSL().certificate;
+      if (is_same_document) {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageSameDocumentRendererInitiated",
+            has_cert);
+      } else {
+        UMA_HISTOGRAM_BOOLEAN(
+            "Navigation.SecureSchemeHasSSLStatus."
+            "ExistingPageDifferentDocumentRendererInitiated",
+            has_cert);
+      }
+    }
   }
   DCHECK(entry);
 
@@ -1389,6 +1471,11 @@ void NavigationControllerImpl::RendererDidNavigateToSamePage(
   // update the SSL status.
   existing_entry->GetSSL() = handle->ssl_status();
 
+  if (existing_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+    UMA_HISTOGRAM_BOOLEAN("Navigation.SecureSchemeHasSSLStatus.SamePage",
+                          !!existing_entry->GetSSL().certificate);
+  }
+
   // The extra headers may have changed due to reloading with different headers.
   existing_entry->set_extra_headers(pending_entry_->extra_headers());
 
@@ -1427,6 +1514,11 @@ void NavigationControllerImpl::RendererDidNavigateNewSubframe(
       GetLastCommittedEntry()->CloneAndReplace(
           frame_entry.get(), is_same_document, rfh->frame_tree_node(),
           delegate_->GetFrameTree()->root());
+
+  if (new_entry->GetURL().SchemeIs(url::kHttpsScheme)) {
+    UMA_HISTOGRAM_BOOLEAN("Navigation.SecureSchemeHasSSLStatus.NewSubFrame",
+                          !!new_entry->GetSSL().certificate);
+  }
 
   // TODO(creis): Update this to add the frame_entry if we can't find the one
   // to replace, which can happen due to a unique name change.  See
@@ -1568,8 +1660,8 @@ bool NavigationControllerImpl::IsURLInPageNavigation(
   return is_same_origin && renderer_says_in_page;
 }
 
-void NavigationControllerImpl::CopyStateFrom(
-    const NavigationController& temp) {
+void NavigationControllerImpl::CopyStateFrom(const NavigationController& temp,
+                                             bool needs_reload) {
   const NavigationControllerImpl& source =
       static_cast<const NavigationControllerImpl&>(temp);
   // Verify that we look new.
@@ -1578,7 +1670,7 @@ void NavigationControllerImpl::CopyStateFrom(
   if (source.GetEntryCount() == 0)
     return;  // Nothing new to do.
 
-  needs_reload_ = true;
+  needs_reload_ = needs_reload;
   InsertEntriesFrom(source, source.GetEntryCount());
 
   for (SessionStorageNamespaceMap::const_iterator it =
@@ -1880,10 +1972,18 @@ void NavigationControllerImpl::NavigateToPendingEntry(ReloadType reload_type) {
       pending_entry_->GetTransitionType() & ui::PAGE_TRANSITION_FORWARD_BACK) {
     delegate_->Stop();
 
-    // If an interstitial page is showing, we want to close it to get back
-    // to what was showing before.
-    if (delegate_->GetInterstitialPage())
-      delegate_->GetInterstitialPage()->DontProceed();
+    // If an interstitial page is showing, we want to close it to get back to
+    // what was showing before.
+    //
+    // There are two ways to get the interstitial page given a WebContents.
+    // Because WebContents::GetInterstitialPage() returns null between the
+    // interstitial's Show() method being called and the interstitial becoming
+    // visible, while InterstitialPage::GetInterstitialPage() returns the
+    // interstitial during that time, use the latter.
+    InterstitialPage* interstitial =
+        InterstitialPage::GetInterstitialPage(GetWebContents());
+    if (interstitial)
+      interstitial->DontProceed();
 
     DiscardNonCommittedEntries();
     return;

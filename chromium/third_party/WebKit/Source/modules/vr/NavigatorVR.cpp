@@ -9,7 +9,6 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
-#include "core/dom/Fullscreen.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Navigator.h"
@@ -73,10 +72,10 @@ ScriptPromise NavigatorVR::getVRDisplays(ScriptState* script_state) {
     return promise;
   }
 
-  UseCounter::Count(*GetDocument(), UseCounter::kVRGetDisplays);
+  UseCounter::Count(*GetDocument(), WebFeature::kVRGetDisplays);
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
   if (!execution_context->IsSecureContext())
-    UseCounter::Count(*GetDocument(), UseCounter::kVRGetDisplaysInsecureOrigin);
+    UseCounter::Count(*GetDocument(), WebFeature::kVRGetDisplaysInsecureOrigin);
 
   Platform::Current()->RecordRapporURL("VR.WebVR.GetDisplays",
                                        GetDocument()->Url());

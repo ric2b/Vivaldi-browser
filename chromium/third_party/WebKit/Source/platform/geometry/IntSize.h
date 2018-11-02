@@ -28,12 +28,13 @@
 #ifndef IntSize_h
 #define IntSize_h
 
+#include "build/build_config.h"
 #include "platform/PlatformExport.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "public/platform/WebCommon.h"
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
 typedef struct CGSize CGSize;
 
 #ifdef __OBJC__
@@ -107,14 +108,9 @@ class PLATFORM_EXPORT IntSize {
 
   IntSize TransposedSize() const { return IntSize(height_, width_); }
 
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   explicit IntSize(const CGSize&);  // don't do this implicitly since it's lossy
   operator CGSize() const;
-
-#if defined(__OBJC__) && !defined(NSGEOMETRY_TYPES_SAME_AS_CGGEOMETRY_TYPES)
-  explicit IntSize(const NSSize&);  // don't do this implicitly since it's lossy
-  operator NSSize() const;
-#endif
 #endif
 
   operator gfx::Size() const;

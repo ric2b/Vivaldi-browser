@@ -25,13 +25,14 @@
 #include "base/time/time.h"
 #include "base/timer/elapsed_timer.h"
 #include "build/build_config.h"
-#include "cc/ipc/mojo_compositor_frame_sink.mojom.h"
-#include "cc/resources/shared_bitmap.h"
-#include "cc/surfaces/frame_sink_id.h"
-#include "components/viz/display_compositor/host_shared_bitmap_manager.h"
+#include "cc/ipc/compositor_frame_sink.mojom.h"
+#include "components/viz/common/quads/shared_bitmap.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
+#include "components/viz/service/display_embedder/shared_bitmap_allocation_notifier_impl.h"
 #include "content/browser/renderer_host/event_with_latency_info.h"
 #include "content/browser/renderer_host/input/input_ack_handler.h"
 #include "content/browser/renderer_host/input/input_router_client.h"
+#include "content/browser/renderer_host/input/legacy_ipc_widget_input_handler.h"
 #include "content/browser/renderer_host/input/render_widget_host_latency_tracker.h"
 #include "content/browser/renderer_host/input/synthetic_gesture.h"
 #include "content/browser/renderer_host/input/synthetic_gesture_controller.h"
@@ -40,6 +41,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/common/drag_event_source_info.h"
 #include "content/common/input/input_event_ack_state.h"
+#include "content/common/input/input_handler.mojom.h"
 #include "content/common/input/synthetic_gesture_packet.h"
 #include "content/common/render_widget_surface_properties.h"
 #include "content/common/view_message_enums.h"
@@ -51,12 +53,13 @@
 #include "third_party/WebKit/public/platform/WebDisplayMode.h"
 #include "ui/base/ime/text_input_mode.h"
 #include "ui/base/ime/text_input_type.h"
+#include "ui/base/ui_base_types.h"
 #include "ui/events/gesture_detection/gesture_provider_config_helper.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/latency/latency_info.h"
 
 #if defined(OS_MACOSX)
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #endif
 
 class SkBitmap;
@@ -67,7 +70,6 @@ struct ViewHostMsg_UpdateRect_Params;
 namespace blink {
 class WebInputEvent;
 class WebMouseEvent;
-struct WebCompositionUnderline;
 }
 
 namespace cc {
@@ -77,6 +79,7 @@ struct BeginFrameAck;
 namespace gfx {
 class Image;
 class Range;
+class Vector2dF;
 }
 
 namespace content {
@@ -102,7 +105,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       public InputAckHandler,
       public TouchEmulatorClient,
       public NON_EXPORTED_BASE(SyntheticGestureController::Delegate),
-      public NON_EXPORTED_BASE(cc::mojom::MojoCompositorFrameSink),
+      public NON_EXPORTED_BASE(cc::mojom::CompositorFrameSink),
       public NON_EXPORTED_BASE(viz::SharedBitmapAllocationObserver),
       public IPC::Listener {
  public:
@@ -148,7 +151,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   RenderWidgetHostOwnerDelegate* owner_delegate() { return owner_delegate_; }
 
-  cc::FrameSinkId AllocateFrameSinkId(bool is_guest_view_hack);
+  viz::FrameSinkId AllocateFrameSinkId(bool is_guest_view_hack);
 
   // RenderWidgetHost implementation.
   void UpdateTextDirection(blink::WebTextDirection direction) override;
@@ -209,6 +212,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void DragSourceSystemDragEnded() override;
   void FilterDropData(DropData* drop_data) override;
   void SetCursor(const CursorInfo& cursor_info) override;
+  mojom::WidgetInputHandler* GetWidgetInputHandler();
 
   // Notification that the screen info has changed.
   void NotifyScreenInfoChanged();
@@ -276,6 +280,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Called to notify the RenderWidget that its associated native window
   // got/lost focused.
   void GotFocus();
+  void LostFocus();
   void LostCapture();
 
   // Indicates whether the RenderWidgetHost thinks it is focused.
@@ -297,6 +302,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // Notifies the RenderWidget that it lost the mouse lock.
   void SendMouseLockLost();
+
+  bool is_last_unlocked_by_target() const {
+    return is_last_unlocked_by_target_;
+  }
 
   // Noifies the RenderWidget of the current mouse cursor visibility state.
   void SendCursorVisibilityState(bool is_visible);
@@ -379,7 +388,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void ForwardEmulatedTouchEvent(
       const blink::WebTouchEvent& touch_event) override;
   void SetCursor(const WebCursor& cursor) override;
-  void ShowContextMenuAtPoint(const gfx::Point& point) override;
+  void ShowContextMenuAtPoint(const gfx::Point& point,
+                              const ui::MenuSourceType source_type) override;
 
   // Queues a synthetic gesture for testing purposes.  Invokes the on_complete
   // callback when the gesture is finished running.
@@ -406,7 +416,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // * when markedText of NSTextInput is called (on Mac).
   void ImeSetComposition(
       const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
+      const std::vector<ui::CompositionUnderline>& underlines,
       const gfx::Range& replacement_range,
       int selection_start,
       int selection_end);
@@ -418,11 +428,10 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   //   (on Windows);
   // * when it receives a "commit" signal of GtkIMContext (on Linux);
   // * when insertText of NSTextInput is called (on Mac).
-  void ImeCommitText(
-      const base::string16& text,
-      const std::vector<blink::WebCompositionUnderline>& underlines,
-      const gfx::Range& replacement_range,
-      int relative_cursor_pos);
+  void ImeCommitText(const base::string16& text,
+                     const std::vector<ui::CompositionUnderline>& underlines,
+                     const gfx::Range& replacement_range,
+                     int relative_cursor_pos);
 
   // Finishes an ongoing composition.
   // A browser should call this function or ImeCommitText:
@@ -447,19 +456,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Set the RenderView background transparency.
   void SetBackgroundOpaque(bool opaque);
 
-  // Executes the edit command.
-  void ExecuteEditCommand(const std::string& command,
-                          const std::string& value);
-
-  // Tells the renderer to scroll the currently focused node into rect only if
-  // the currently focused node is a Text node (textfield, text area or content
-  // editable divs).
-  void ScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
-
-  // Requests the renderer to move the caret selection towards the point.
-  void MoveCaret(const gfx::Point& point);
-
-  // Called when the reponse to a pending mouse lock request has arrived.
+  // Called when the response to a pending mouse lock request has arrived.
   // Returns true if |allowed| is true and the mouse has been successfully
   // locked.
   bool GotResponseToLockMouseRequest(bool allowed);
@@ -479,8 +476,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
 
   // Update the renderer's cache of the screen rect of the view and window.
   void SendScreenRects();
-
-  void OnBeginFrame();
 
   // Indicates whether the renderer drives the RenderWidgetHosts's size or the
   // other way around.
@@ -574,25 +569,25 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // renderer unless it is for an immediate request.
   void RequestCompositionUpdates(bool immediate_request, bool monitor_updates);
 
-  void RequestMojoCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkRequest request,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client);
+  void RequestCompositorFrameSink(
+      cc::mojom::CompositorFrameSinkRequest request,
+      cc::mojom::CompositorFrameSinkClientPtr client);
 
   const cc::CompositorFrameMetadata& last_frame_metadata() {
     return last_frame_metadata_;
   }
 
-  // SyntheticGestureController::Delegate:
-  void RequestBeginFrameForSynthesizedInput(
-      base::OnceClosure begin_frame_callback) override;
   bool HasGestureStopped() override;
 
-  // cc::mojom::MojoCompositorFrameSink implementation.
+  // cc::mojom::CompositorFrameSink implementation.
   void SetNeedsBeginFrame(bool needs_begin_frame) override;
-  void SubmitCompositorFrame(const cc::LocalSurfaceId& local_surface_id,
+  void SubmitCompositorFrame(const viz::LocalSurfaceId& local_surface_id,
                              cc::CompositorFrame frame) override;
   void DidNotProduceFrame(const cc::BeginFrameAck& ack) override;
-  void EvictCurrentSurface() override {}
+
+  // Signals that a frame with token |frame_token| was finished processing. If
+  // there are any queued messages belonging to it, they will be processed.
+  void DidProcessFrame(uint32_t frame_token);
 
  protected:
   // ---------------------------------------------------------------------------
@@ -656,6 +651,9 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnUpdateRect(const ViewHostMsg_UpdateRect_Params& params);
   void OnQueueSyntheticGesture(const SyntheticGesturePacket& gesture_packet);
   void OnSetCursor(const WebCursor& cursor);
+  void OnAutoscrollStart(const gfx::PointF& position);
+  void OnAutoscrollFling(const gfx::Vector2dF& velocity);
+  void OnAutoscrollEnd();
   void OnTextInputStateChanged(const TextInputState& params);
 
   void OnImeCompositionRangeChanged(
@@ -663,12 +661,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       const std::vector<gfx::Rect>& character_bounds);
   void OnImeCancelComposition();
   void OnLockMouse(bool user_gesture,
-                   bool last_unlocked_by_target,
                    bool privileged);
   void OnUnlockMouse();
   void OnShowDisambiguationPopup(const gfx::Rect& rect_pixels,
                                  const gfx::Size& size,
-                                 const cc::SharedBitmapId& id);
+                                 const viz::SharedBitmapId& id);
   void OnSelectionBoundsChanged(
       const ViewHostMsg_SelectionBounds_Params& params);
   void OnSetNeedsBeginFrames(bool needs_begin_frames);
@@ -703,6 +700,8 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   void OnHasTouchEventHandlers(bool has_handlers) override;
   void DidOverscroll(const ui::DidOverscrollParams& params) override;
   void DidStopFlinging() override;
+  void OnSetWhiteListedTouchAction(
+      cc::TouchAction white_listed_touch_action) override {}
 
   // Dispatch input events with latency information
   void DispatchInputEventWithLatencyInfo(const blink::WebInputEvent& event,
@@ -755,10 +754,6 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // Used for UMA logging how long the renderer was unresponsive.
   void LogHangMonitorUnresponsive();
 
-  // Signals that a frame with token |frame_token| was finished processing. If
-  // there are any queued messages belonging to it, they will be processed.
-  void DidProcessFrame(uint32_t frame_token);
-
   // Once both the frame and its swap messages arrive, we call this method to
   // process the messages. Virtual for tests.
   virtual void ProcessSwapMessages(std::vector<IPC::Message> messages);
@@ -768,7 +763,7 @@ class CONTENT_EXPORT RenderWidgetHostImpl
       uint32_t last_shared_bitmap_sequence_number) override;
 
 #if defined(OS_MACOSX)
-  device::mojom::WakeLockService* GetWakeLockService();
+  device::mojom::WakeLock* GetWakeLock();
 #endif
 
   // true if a renderer has once been valid. We use this flag to display a sad
@@ -890,6 +885,11 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   bool pending_mouse_lock_request_;
   bool allow_privileged_mouse_lock_;
 
+  // Used when locking to indicate when a target application has voluntarily
+  // unlocked and desires to relock the mouse. If the mouse is unlocked due
+  // to ESC being pressed by the user, this will be false.
+  bool is_last_unlocked_by_target_;
+
   // Keeps track of whether the webpage has any touch event handler. If it does,
   // then touch events are sent to the renderer. Otherwise, the touch events are
   // not sent to the renderer.
@@ -968,18 +968,17 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   uint32_t last_received_content_source_id_ = 0;
 
 #if defined(OS_MACOSX)
-  device::mojom::WakeLockServicePtr wake_lock_;
+  device::mojom::WakeLockPtr wake_lock_;
 #endif
 
   // These information are used to verify that the renderer does not misbehave
   // when it comes to allocating LocalSurfaceIds. If surface properties change,
   // a new LocalSurfaceId must be created.
-  cc::LocalSurfaceId last_local_surface_id_;
+  viz::LocalSurfaceId last_local_surface_id_;
   RenderWidgetSurfaceProperties last_surface_properties_;
 
-  mojo::Binding<cc::mojom::MojoCompositorFrameSink>
-      compositor_frame_sink_binding_;
-  cc::mojom::MojoCompositorFrameSinkClientPtr renderer_compositor_frame_sink_;
+  mojo::Binding<cc::mojom::CompositorFrameSink> compositor_frame_sink_binding_;
+  cc::mojom::CompositorFrameSinkClientPtr renderer_compositor_frame_sink_;
 
   cc::CompositorFrameMetadata last_frame_metadata_;
 
@@ -994,12 +993,12 @@ class CONTENT_EXPORT RenderWidgetHostImpl
   // If a CompositorFrame is submitted that references SharedBitmaps that don't
   // exist yet, we keep it here until they are available.
   struct {
-    cc::LocalSurfaceId local_surface_id;
+    viz::LocalSurfaceId local_surface_id;
     cc::CompositorFrame frame;
     uint32_t max_shared_bitmap_sequence_number = 0;
   } saved_frame_;
 
-  base::OnceClosure begin_frame_callback_;
+  std::unique_ptr<LegacyIPCWidgetInputHandler> legacy_widget_input_handler_;
 
   base::WeakPtrFactory<RenderWidgetHostImpl> weak_factory_;
 

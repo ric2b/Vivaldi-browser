@@ -35,10 +35,6 @@
         --about-page-image-space: 10px;
       }
 
-      .copyable {
-        -webkit-user-select: text;
-      }
-
       .info-section {
         margin-bottom: 12px;
       }
@@ -68,7 +64,7 @@
       }
 
       iron-icon[icon='settings:error'] {
-        fill: var(--paper-red-600);
+        fill: var(--google-red-700);
       }
 
       .settings-box .start {
@@ -124,7 +120,7 @@
                     $i18n{learnMore}
                   </a>
                 </span>
-                <div class="secondary copyable">$i18n{aboutBrowserVersion}</div>
+                <div class="secondary">$i18n{aboutBrowserVersion}</div>
               </div>
               <div class="separator" hidden="[[!showButtonContainer_]]"></div>
               <span id="buttonContainer" hidden="[[!showButtonContainer_]]">
@@ -203,7 +199,7 @@
       </settings-section>
 
       <settings-section>
-        <div class="settings-box padded block copyable">
+        <div class="settings-box padded block">
           <div class="info-section">
             <div class="secondary">$i18n{aboutProductTitle}</div>
             <div class="secondary">$i18n{aboutProductCopyright}</div>

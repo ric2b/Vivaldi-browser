@@ -62,7 +62,7 @@ std::string GetStringFromDict(const base::DictionaryValue* dict,
 MediaRoute CreateRoute() {
   MediaRoute::Id route_id("routeId123");
   MediaSink::Id sink_id("sinkId123");
-  MediaSink sink(sink_id, "The sink", MediaSink::IconType::CAST);
+  MediaSink sink(sink_id, "The sink", SinkIconType::CAST);
   std::string description("This is a route");
   bool is_local = true;
   bool is_for_display = true;
@@ -76,7 +76,7 @@ MediaSinkWithCastModes CreateMediaSinkWithCastMode(const std::string& sink_id,
                                                    MediaCastMode cast_mode) {
   std::string sink_name("The sink");
   MediaSinkWithCastModes media_sink_with_cast_modes(
-      MediaSink(sink_id, sink_name, MediaSink::IconType::CAST));
+      MediaSink(sink_id, sink_name, SinkIconType::CAST));
   media_sink_with_cast_modes.cast_modes.insert(cast_mode);
 
   return media_sink_with_cast_modes;
@@ -336,7 +336,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   std::vector<MediaRoute::Id> joinable_route_ids = {route.media_route_id()};
   std::unordered_map<MediaRoute::Id, MediaCastMode> current_cast_modes;
   current_cast_modes.insert(
-      std::make_pair(route.media_route_id(), MediaCastMode::DEFAULT));
+      std::make_pair(route.media_route_id(), MediaCastMode::PRESENTATION));
 
   EXPECT_CALL(*mock_media_router_ui_, GetRouteProviderExtensionId()).WillOnce(
       ReturnRef(provider_extension_id()));
@@ -349,7 +349,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutes) {
   EXPECT_EQ(route.description(), GetStringFromDict(route_value, "description"));
   EXPECT_EQ(route.is_local(), GetBooleanFromDict(route_value, "isLocal"));
   EXPECT_TRUE(GetBooleanFromDict(route_value, "canJoin"));
-  EXPECT_EQ(MediaCastMode::DEFAULT,
+  EXPECT_EQ(MediaCastMode::PRESENTATION,
             GetIntegerFromDict(route_value, "currentCastMode"));
   std::string expected_path = base::StringPrintf("%s://%s/%s",
                                   extensions::kExtensionScheme,
@@ -385,9 +385,11 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateRoutesIncognito) {
 }
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, SetCastModesList) {
-  CastModeSet cast_modes({MediaCastMode::DEFAULT, MediaCastMode::TAB_MIRROR,
+  CastModeSet cast_modes({MediaCastMode::PRESENTATION,
+                          MediaCastMode::TAB_MIRROR,
                           MediaCastMode::DESKTOP_MIRROR});
-  handler_->UpdateCastModes(cast_modes, "www.host.com", MediaCastMode::DEFAULT);
+  handler_->UpdateCastModes(cast_modes, "www.host.com",
+                            MediaCastMode::PRESENTATION);
   const base::ListValue* set_cast_mode_list =
       ExtractListFromCallArg("media_router.ui.setCastModeList");
 
@@ -399,7 +401,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, SetCastModesList) {
     EXPECT_EQ(MediaCastModeToDescription(*i, "www.host.com"),
               GetStringFromDict(cast_mode, "description"));
     EXPECT_EQ("www.host.com", GetStringFromDict(cast_mode, "host"));
-    EXPECT_EQ(*i == MediaCastMode::DEFAULT,
+    EXPECT_EQ(*i == MediaCastMode::PRESENTATION,
               GetBooleanFromDict(cast_mode, "isForced"));
   }
 }
@@ -410,7 +412,7 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateMediaRouteStatus) {
   status.description = "test description";
   status.can_play_pause = true;
   status.can_set_volume = true;
-  status.is_paused = true;
+  status.play_state = MediaStatus::PlayState::BUFFERING;
   status.duration = base::TimeDelta::FromSeconds(90);
   status.current_time = base::TimeDelta::FromSeconds(80);
   status.volume = 0.9;
@@ -427,7 +429,8 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateMediaRouteStatus) {
   EXPECT_EQ(status.can_set_volume,
             GetBooleanFromDict(status_value, "canSetVolume"));
   EXPECT_EQ(status.can_seek, GetBooleanFromDict(status_value, "canSeek"));
-  EXPECT_EQ(status.is_paused, GetBooleanFromDict(status_value, "isPaused"));
+  EXPECT_EQ(static_cast<int>(status.play_state),
+            GetIntegerFromDict(status_value, "playState"));
   EXPECT_EQ(status.is_muted, GetBooleanFromDict(status_value, "isMuted"));
   EXPECT_EQ(status.duration.InSeconds(),
             GetIntegerFromDict(status_value, "duration"));
@@ -538,9 +541,9 @@ TEST_F(MediaRouterWebUIMessageHandlerTest, UpdateIssue) {
 
 TEST_F(MediaRouterWebUIMessageHandlerTest, RecordCastModeSelection) {
   base::ListValue args;
-  args.AppendInteger(MediaCastMode::DEFAULT);
+  args.AppendInteger(MediaCastMode::PRESENTATION);
   EXPECT_CALL(*mock_media_router_ui_,
-              RecordCastModeSelection(MediaCastMode::DEFAULT))
+              RecordCastModeSelection(MediaCastMode::PRESENTATION))
       .Times(1);
   handler_->OnReportSelectedCastMode(&args);
 

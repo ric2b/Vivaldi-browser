@@ -26,6 +26,11 @@ class IOSChromeProfileSyncServiceFactoryTest : public testing::Test {
     chrome_browser_state_ = browser_state_builder.Build();
   }
 
+  void SetUp() override {
+    // Some services will only be created if there is a WebDataService.
+    chrome_browser_state_->CreateWebDataService();
+  }
+
  protected:
   // Returns the collection of default datatypes.
   std::vector<syncer::ModelType> DefaultDatatypes() {
@@ -48,6 +53,7 @@ class IOSChromeProfileSyncServiceFactoryTest : public testing::Test {
     datatypes.push_back(syncer::SESSIONS);
     datatypes.push_back(syncer::PROXY_TABS);
     datatypes.push_back(syncer::TYPED_URLS);
+    datatypes.push_back(syncer::USER_EVENTS);
 
     return datatypes;
   }

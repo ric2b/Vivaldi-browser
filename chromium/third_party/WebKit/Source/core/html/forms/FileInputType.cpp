@@ -25,8 +25,9 @@
 #include "bindings/core/v8/ExceptionState.h"
 #include "core/HTMLNames.h"
 #include "core/InputTypeNames.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/Event.h"
 #include "core/fileapi/File.h"
 #include "core/fileapi/FileList.h"
@@ -39,7 +40,6 @@
 #include "core/page/DragData.h"
 #include "platform/FileMetadata.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/text/PlatformLocale.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/WTFString.h"
@@ -146,7 +146,7 @@ void FileInputType::HandleDOMActivateEvent(Event* event) {
     settings.accept_file_extensions = input.AcceptFileExtensions();
     settings.selected_files = file_list_->PathsForUserVisibleFiles();
     settings.use_media_capture =
-        RuntimeEnabledFeatures::mediaCaptureEnabled() &&
+        RuntimeEnabledFeatures::MediaCaptureEnabled() &&
         input.FastHasAttribute(captureAttr);
     chrome_client->OpenFileChooser(input.GetDocument().GetFrame(),
                                    NewFileChooser(settings));
@@ -252,9 +252,9 @@ FileList* FileInputType::CreateFileList(
 void FileInputType::CountUsage() {
   Document* document = &GetElement().GetDocument();
   if (document->IsSecureContext())
-    UseCounter::Count(*document, UseCounter::kInputTypeFileInsecureOrigin);
+    UseCounter::Count(*document, WebFeature::kInputTypeFileInsecureOrigin);
   else
-    UseCounter::Count(*document, UseCounter::kInputTypeFileSecureOrigin);
+    UseCounter::Count(*document, WebFeature::kInputTypeFileSecureOrigin);
 }
 
 void FileInputType::CreateShadowSubtree() {

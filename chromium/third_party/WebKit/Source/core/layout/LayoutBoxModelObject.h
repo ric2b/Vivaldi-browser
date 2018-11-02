@@ -291,10 +291,21 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
                              BorderLeft());
   }
 
+  virtual LayoutRectOutsets PaddingOutsets() const {
+    return LayoutRectOutsets(PaddingTop(), PaddingRight(), PaddingBottom(),
+                             PaddingLeft());
+  }
+
   // Insets from the border box to the inside of the border.
   LayoutRectOutsets BorderInsets() const {
     return LayoutRectOutsets(-BorderTop(), -BorderRight(), -BorderBottom(),
                              -BorderLeft());
+  }
+
+  LayoutRectOutsets BorderPaddingInsets() const {
+    return LayoutRectOutsets(
+        -(PaddingTop() + BorderTop()), -(PaddingRight() + BorderRight()),
+        -(PaddingBottom() + BorderBottom()), -(PaddingLeft() + BorderLeft()));
   }
 
   bool HasBorderOrPadding() const {
@@ -427,8 +438,6 @@ class CORE_EXPORT LayoutBoxModelObject : public LayoutObject {
   virtual bool BackgroundIsKnownToBeOpaqueInRect(const LayoutRect&) const {
     return false;
   }
-
-  void DeprecatedInvalidateTree(const PaintInvalidationState&) override;
 
   // http://www.w3.org/TR/css3-background/#body-background
   // <html> root element with no background steals background from its first

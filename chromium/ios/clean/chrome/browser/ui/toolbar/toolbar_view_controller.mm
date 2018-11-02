@@ -5,9 +5,10 @@
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_view_controller.h"
 
 #import "base/mac/foundation_util.h"
-#import "ios/clean/chrome/browser/ui/actions/tab_strip_actions.h"
+#import "ios/chrome/browser/ui/uikit_ui_util.h"
 #import "ios/clean/chrome/browser/ui/commands/navigation_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tab_grid_commands.h"
+#import "ios/clean/chrome/browser/ui/commands/tab_strip_commands.h"
 #import "ios/clean/chrome/browser/ui/commands/tools_menu_commands.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_button+factory.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_component_options.h"
@@ -57,11 +58,18 @@
   return self;
 }
 
+- (instancetype)initWithDispatcher:(id<NavigationCommands,
+                                       TabGridCommands,
+                                       TabStripCommands,
+                                       ToolsMenuCommands>)dispatcher {
+  _dispatcher = dispatcher;
+  return [self init];
+}
+
 #pragma mark - View lifecyle
 
 - (void)viewDidLoad {
-  self.view.backgroundColor =
-      [UIColor colorWithWhite:kToolbarBackgroundBrightness alpha:1.0];
+  self.view.backgroundColor = UIColorFromRGB(kToolbarBackgroundColor);
   [self addChildViewController:self.locationBarViewController
                      toSubview:self.locationBarContainer];
   [self setUpToolbarStackView];
@@ -135,8 +143,8 @@
   [buttonConstraints
       addObject:[self.backButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.backButton addTarget:self
-                      action:@selector(goBack:)
+  [self.backButton addTarget:self.dispatcher
+                      action:@selector(goBack)
             forControlEvents:UIControlEventTouchUpInside];
 
   // Forward button.
@@ -147,8 +155,8 @@
   [buttonConstraints
       addObject:[self.forwardButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.forwardButton addTarget:self
-                         action:@selector(goForward:)
+  [self.forwardButton addTarget:self.dispatcher
+                         action:@selector(goForward)
                forControlEvents:UIControlEventTouchUpInside];
 
   // Tab switcher Strip button.
@@ -159,9 +167,15 @@
   [buttonConstraints
       addObject:[self.tabSwitchStripButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.tabSwitchStripButton addTarget:nil
-                                action:@selector(showTabStrip:)
+  [self.tabSwitchStripButton addTarget:self.dispatcher
+                                action:@selector(showTabStrip)
                       forControlEvents:UIControlEventTouchUpInside];
+  [self.tabSwitchStripButton
+      setTitleColor:UIColorFromRGB(kToolbarButtonTitleNormalColor)
+           forState:UIControlStateNormal];
+  [self.tabSwitchStripButton
+      setTitleColor:UIColorFromRGB(kToolbarButtonTitleHighlightedColor)
+           forState:UIControlStateHighlighted];
 
   // Tab switcher Grid button.
   self.tabSwitchGridButton = [ToolbarButton tabSwitcherGridToolbarButton];
@@ -171,8 +185,8 @@
   [buttonConstraints
       addObject:[self.tabSwitchGridButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.tabSwitchGridButton addTarget:self
-                               action:@selector(showTabGrid:)
+  [self.tabSwitchGridButton addTarget:self.dispatcher
+                               action:@selector(showTabGrid)
                      forControlEvents:UIControlEventTouchUpInside];
   self.tabSwitchGridButton.hiddenInCurrentState = YES;
 
@@ -183,8 +197,8 @@
   [buttonConstraints
       addObject:[self.toolsMenuButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.toolsMenuButton addTarget:self
-                           action:@selector(showToolsMenu:)
+  [self.toolsMenuButton addTarget:self.dispatcher
+                           action:@selector(showToolsMenu)
                  forControlEvents:UIControlEventTouchUpInside];
 
   // Share button.
@@ -193,8 +207,10 @@
   [buttonConstraints
       addObject:[self.shareButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
+  // TODO(crbug.com/740793): Remove alert once share is implemented.
+  self.shareButton.titleLabel.text = @"Share";
   [self.shareButton addTarget:self
-                       action:@selector(showShareMenu:)
+                       action:@selector(showAlert:)
              forControlEvents:UIControlEventTouchUpInside];
 
   // Reload button.
@@ -203,8 +219,8 @@
   [buttonConstraints
       addObject:[self.reloadButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.reloadButton addTarget:self
-                        action:@selector(reload:)
+  [self.reloadButton addTarget:self.dispatcher
+                        action:@selector(reloadPage)
               forControlEvents:UIControlEventTouchUpInside];
 
   // Stop button.
@@ -213,11 +229,11 @@
   [buttonConstraints
       addObject:[self.stopButton.widthAnchor
                     constraintEqualToConstant:kToolbarButtonWidth]];
-  [self.stopButton addTarget:self
-                      action:@selector(stop:)
+  [self.stopButton addTarget:self.dispatcher
+                      action:@selector(stopLoadingPage)
             forControlEvents:UIControlEventTouchUpInside];
 
-  // // Set the buttons constraints priority to UILayoutPriorityDefaultHigh so
+  // Set the button constraint priority to UILayoutPriorityDefaultHigh so
   // these are not broken when being hidden by the StackView.
   [self activateConstraints:buttonConstraints
                withPriority:UILayoutPriorityDefaultHigh];
@@ -229,8 +245,7 @@
   locationBarContainer.backgroundColor = [UIColor whiteColor];
   locationBarContainer.layer.borderWidth = kLocationBarBorderWidth;
   locationBarContainer.layer.borderColor =
-      [UIColor colorWithWhite:kLocationBarBorderColorBrightness alpha:1.0]
-          .CGColor;
+      UIColorFromRGB(kLocationBarBorderColor).CGColor;
   locationBarContainer.layer.shadowRadius = kLocationBarShadowRadius;
   locationBarContainer.layer.shadowOpacity = kLocationBarShadowOpacity;
   locationBarContainer.layer.shadowOffset = CGSizeMake(0.0f, 0.5f);
@@ -319,8 +334,48 @@
   [self updateAllButtonsVisibility];
 }
 
-- (void)setLoadingProgress:(double)progress {
+- (void)setLoadingProgressFraction:(double)progress {
   [self.progressBar setProgress:progress animated:YES completion:nil];
+}
+
+- (void)setTabStripVisible:(BOOL)visible {
+  self.tabSwitchStripButton.hiddenInCurrentState = visible;
+  self.tabSwitchGridButton.hiddenInCurrentState = !visible;
+  [self updateAllButtonsVisibility];
+}
+
+- (void)setTabCount:(int)tabCount {
+  // Return if tabSwitchStripButton wasn't initialized.
+  if (!self.tabSwitchStripButton)
+    return;
+
+  // Update the text shown in the |self.tabSwitchStripButton|. Note that the
+  // button's title may be empty or contain an easter egg, but the accessibility
+  // value will always be equal to |tabCount|.
+  NSString* tabStripButtonValue = [NSString stringWithFormat:@"%d", tabCount];
+  NSString* tabStripButtonTitle;
+  if (tabCount <= 0) {
+    tabStripButtonTitle = @"";
+  } else if (tabCount > kShowTabStripButtonMaxTabCount) {
+    // As an easter egg, show a smiley face instead of the count if the user has
+    // more than 99 tabs open.
+    tabStripButtonTitle = @":)";
+    [[self.tabSwitchStripButton titleLabel]
+        setFont:[UIFont boldSystemFontOfSize:kFontSizeFewerThanTenTabs]];
+  } else {
+    tabStripButtonTitle = tabStripButtonValue;
+    if (tabCount < 10) {
+      [[self.tabSwitchStripButton titleLabel]
+          setFont:[UIFont boldSystemFontOfSize:kFontSizeFewerThanTenTabs]];
+    } else {
+      [[self.tabSwitchStripButton titleLabel]
+          setFont:[UIFont boldSystemFontOfSize:kFontSizeTenTabsOrMore]];
+    }
+  }
+
+  [self.tabSwitchStripButton setTitle:tabStripButtonTitle
+                             forState:UIControlStateNormal];
+  [self.tabSwitchStripButton setAccessibilityValue:tabStripButtonValue];
 }
 
 #pragma mark - ZoomTransitionDelegate
@@ -328,54 +383,6 @@
 - (CGRect)rectForZoomWithKey:(NSObject*)key inView:(UIView*)view {
   return [view convertRect:self.toolsMenuButton.bounds
                   fromView:self.toolsMenuButton];
-}
-
-#pragma mark - Private Methods
-
-- (void)showToolsMenu:(id)sender {
-  [self.dispatcher showToolsMenu];
-}
-
-- (void)closeToolsMenu:(id)sender {
-  [self.dispatcher closeToolsMenu];
-}
-
-- (void)showShareMenu:(id)sender {
-  [self.dispatcher showShareMenu];
-}
-
-- (void)goBack:(id)sender {
-  [self.dispatcher goBack];
-}
-
-- (void)goForward:(id)sender {
-  [self.dispatcher goForward];
-}
-
-- (void)stop:(id)sender {
-  [self.dispatcher stopLoadingPage];
-}
-
-- (void)reload:(id)sender {
-  [self.dispatcher reloadPage];
-}
-
-- (void)showTabGrid:(id)sender {
-  [self.dispatcher showTabGrid];
-}
-
-#pragma mark - TabStripEvents
-
-- (void)tabStripDidShow:(id)sender {
-  self.tabSwitchStripButton.hiddenInCurrentState = YES;
-  self.tabSwitchGridButton.hiddenInCurrentState = NO;
-  [self updateAllButtonsVisibility];
-}
-
-- (void)tabStripDidHide:(id)sender {
-  self.tabSwitchStripButton.hiddenInCurrentState = NO;
-  self.tabSwitchGridButton.hiddenInCurrentState = YES;
-  [self updateAllButtonsVisibility];
 }
 
 #pragma mark - Helper Methods
@@ -397,6 +404,22 @@
     constraint.priority = priority;
   }
   [NSLayoutConstraint activateConstraints:constraintsArray];
+}
+
+// TODO(crbug.com/740793): Remove this method once no item is using it.
+- (void)showAlert:(UIButton*)sender {
+  UIAlertController* alertController =
+      [UIAlertController alertControllerWithTitle:sender.titleLabel.text
+                                          message:nil
+                                   preferredStyle:UIAlertControllerStyleAlert];
+  UIAlertAction* action =
+      [UIAlertAction actionWithTitle:@"Done"
+                               style:UIAlertActionStyleCancel
+                             handler:nil];
+  [alertController addAction:action];
+  [self.parentViewController presentViewController:alertController
+                                          animated:YES
+                                        completion:nil];
 }
 
 @end

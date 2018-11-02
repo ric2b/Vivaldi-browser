@@ -40,13 +40,14 @@
 #include "modules/indexeddb/IDBMetadata.h"
 #include "modules/indexeddb/IDBObjectStore.h"
 #include "modules/indexeddb/IDBOpenDBRequest.h"
+#include "modules/indexeddb/IDBTestHelper.h"
 #include "modules/indexeddb/IDBTransaction.h"
 #include "modules/indexeddb/IDBValue.h"
 #include "modules/indexeddb/IDBValueWrapping.h"
 #include "modules/indexeddb/MockWebIDBDatabase.h"
 #include "platform/SharedBuffer.h"
 #include "platform/bindings/ScriptState.h"
-#include "platform/wtf/PassRefPtr.h"
+#include "platform/wtf/RefPtr.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/dtoa/utils.h"
 #include "public/platform/Platform.h"
@@ -64,7 +65,7 @@ class IDBRequestTest : public ::testing::Test {
   void SetUp() override {
     url_loader_mock_factory_ = Platform::Current()->GetURLLoaderMockFactory();
     WebURLResponse response;
-    response.SetURL(KURL(KURL(), "blob:"));
+    response.SetURL(KURL(NullURL(), "blob:"));
     url_loader_mock_factory_->RegisterURLProtocol(WebString("blob"), response,
                                                   "");
   }
@@ -99,38 +100,6 @@ class IDBRequestTest : public ::testing::Test {
   static constexpr int64_t kStoreId = 5678;
 };
 
-// The created value is an array of true. If create_wrapped_value is true, the
-// IDBValue's byte array will be wrapped in a Blob, otherwise it will not be.
-RefPtr<IDBValue> CreateIDBValue(v8::Isolate* isolate,
-                                bool create_wrapped_value) {
-  size_t element_count = create_wrapped_value ? 16 : 2;
-  v8::Local<v8::Array> v8_array = v8::Array::New(isolate, element_count);
-  for (size_t i = 0; i < element_count; ++i)
-    v8_array->Set(i, v8::True(isolate));
-
-  NonThrowableExceptionState non_throwable_exception_state;
-  IDBValueWrapper wrapper(isolate, v8_array,
-                          SerializedScriptValue::SerializeOptions::kSerialize,
-                          non_throwable_exception_state);
-  wrapper.WrapIfBiggerThan(create_wrapped_value ? 0 : 1024 * element_count);
-
-  std::unique_ptr<Vector<RefPtr<BlobDataHandle>>> blob_data_handles =
-      WTF::MakeUnique<Vector<RefPtr<BlobDataHandle>>>();
-  wrapper.ExtractBlobDataHandles(blob_data_handles.get());
-  Vector<WebBlobInfo>& blob_infos = wrapper.WrappedBlobInfo();
-  RefPtr<SharedBuffer> wrapped_marker_buffer = wrapper.ExtractWireBytes();
-  IDBKey* key = IDBKey::CreateNumber(42.0);
-  IDBKeyPath key_path(String("primaryKey"));
-
-  RefPtr<IDBValue> idb_value = IDBValue::Create(
-      wrapped_marker_buffer, std::move(blob_data_handles),
-      WTF::MakeUnique<Vector<WebBlobInfo>>(blob_infos), key, key_path);
-
-  DCHECK_EQ(create_wrapped_value,
-            IDBValueUnwrapper::IsWrapped(idb_value.Get()));
-  return idb_value;
-}
-
 void EnsureIDBCallbacksDontThrow(IDBRequest* request,
                                  ExceptionState& exception_state) {
   ASSERT_TRUE(request->transaction());
@@ -159,8 +128,10 @@ TEST_F(IDBRequestTest, EventsAfterEarlyDeathStop) {
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(transaction_);
 
-  IDBRequest* request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  IDBRequest* request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
+
   EXPECT_EQ(request->readyState(), "pending");
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(request->transaction());
@@ -178,11 +149,12 @@ TEST_F(IDBRequestTest, EventsAfterDoneStop) {
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(transaction_);
 
-  IDBRequest* request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  IDBRequest* request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(request->transaction());
-  request->HandleResponse(CreateIDBValue(scope.GetIsolate(), false));
+  request->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), false));
   scope.GetExecutionContext()->NotifyContextDestroyed();
 
   EnsureIDBCallbacksDontThrow(request, scope.GetExceptionState());
@@ -197,12 +169,13 @@ TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithQueuedResult) {
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(transaction_);
 
-  IDBRequest* request = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  IDBRequest* request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   EXPECT_EQ(request->readyState(), "pending");
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(request->transaction());
-  request->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
+  request->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
   scope.GetExecutionContext()->NotifyContextDestroyed();
 
   EnsureIDBCallbacksDontThrow(request, scope.GetExceptionState());
@@ -219,17 +192,19 @@ TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithTwoQueuedResults) {
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(transaction_);
 
-  IDBRequest* request1 = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
-  IDBRequest* request2 = IDBRequest::Create(
-      scope.GetScriptState(), IDBAny::Create(store_.Get()), transaction_.Get());
+  IDBRequest* request1 =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
+  IDBRequest* request2 =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction_.Get(), IDBRequest::AsyncTraceState());
   EXPECT_EQ(request1->readyState(), "pending");
   EXPECT_EQ(request2->readyState(), "pending");
   ASSERT_TRUE(!scope.GetExceptionState().HadException());
   ASSERT_TRUE(request1->transaction());
   ASSERT_TRUE(request2->transaction());
-  request1->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
-  request2->HandleResponse(CreateIDBValue(scope.GetIsolate(), true));
+  request1->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
+  request2->HandleResponse(CreateIDBValueForTesting(scope.GetIsolate(), true));
   scope.GetExecutionContext()->NotifyContextDestroyed();
 
   EnsureIDBCallbacksDontThrow(request1, scope.GetExceptionState());
@@ -242,8 +217,9 @@ TEST_F(IDBRequestTest, EventsAfterEarlyDeathStopWithTwoQueuedResults) {
 TEST_F(IDBRequestTest, AbortErrorAfterAbort) {
   V8TestingScope scope;
   IDBTransaction* transaction = nullptr;
-  IDBRequest* request = IDBRequest::Create(
-      scope.GetScriptState(),  IDBAny::Create(store_.Get()), transaction);
+  IDBRequest* request =
+      IDBRequest::Create(scope.GetScriptState(), IDBAny::Create(store_.Get()),
+                         transaction, IDBRequest::AsyncTraceState());
   EXPECT_EQ(request->readyState(), "pending");
 
   // Simulate the IDBTransaction having received OnAbort from back end and
@@ -272,7 +248,8 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping) {
     std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
     EXPECT_CALL(*backend, Close()).Times(1);
     IDBOpenDBRequest* request = IDBOpenDBRequest::Create(
-        scope.GetScriptState(), callbacks, kTransactionId, kVersion);
+        scope.GetScriptState(), callbacks, kTransactionId, kVersion,
+        IDBRequest::AsyncTraceState());
     EXPECT_EQ(request->readyState(), "pending");
     std::unique_ptr<WebIDBCallbacks> callbacks = request->CreateWebCallbacks();
 
@@ -285,13 +262,93 @@ TEST_F(IDBRequestTest, ConnectionsAfterStopping) {
     std::unique_ptr<MockWebIDBDatabase> backend = MockWebIDBDatabase::Create();
     EXPECT_CALL(*backend, Close()).Times(1);
     IDBOpenDBRequest* request = IDBOpenDBRequest::Create(
-        scope.GetScriptState(), callbacks, kTransactionId, kVersion);
+        scope.GetScriptState(), callbacks, kTransactionId, kVersion,
+        IDBRequest::AsyncTraceState());
     EXPECT_EQ(request->readyState(), "pending");
     std::unique_ptr<WebIDBCallbacks> callbacks = request->CreateWebCallbacks();
 
     scope.GetExecutionContext()->NotifyContextDestroyed();
     callbacks->OnSuccess(backend.release(), metadata);
   }
+}
+
+// Expose private state for testing.
+class AsyncTraceStateForTesting : public IDBRequest::AsyncTraceState {
+ public:
+  AsyncTraceStateForTesting() : IDBRequest::AsyncTraceState() {}
+  AsyncTraceStateForTesting(AsyncTraceStateForTesting&& other)
+      : IDBRequest::AsyncTraceState(std::move(other)) {}
+  AsyncTraceStateForTesting& operator=(AsyncTraceStateForTesting&& rhs) {
+    AsyncTraceState::operator=(std::move(rhs));
+    return *this;
+  }
+
+  const char* trace_event_name() const {
+    return IDBRequest::AsyncTraceState::trace_event_name();
+  }
+  size_t id() const { return IDBRequest::AsyncTraceState::id(); }
+
+  size_t PopulateForNewEvent(const char* trace_event_name) {
+    return IDBRequest::AsyncTraceState::PopulateForNewEvent(trace_event_name);
+  }
+};
+
+TEST(IDBRequestAsyncTraceStateTest, EmptyConstructor) {
+  AsyncTraceStateForTesting state;
+
+  EXPECT_EQ(nullptr, state.trace_event_name());
+  EXPECT_TRUE(state.IsEmpty());
+}
+
+TEST(IDBRequestAsyncTraceStateTest, PopulateForNewEvent) {
+  AsyncTraceStateForTesting state1, state2, state3;
+
+  const char* name1 = "event1";
+  size_t id1 = state1.PopulateForNewEvent(name1);
+  const char* name2 = "event2";
+  size_t id2 = state2.PopulateForNewEvent(name2);
+  const char* name3 = "event3";
+  size_t id3 = state3.PopulateForNewEvent(name3);
+
+  EXPECT_EQ(name1, state1.trace_event_name());
+  EXPECT_EQ(name2, state2.trace_event_name());
+  EXPECT_EQ(name3, state3.trace_event_name());
+  EXPECT_EQ(id1, state1.id());
+  EXPECT_EQ(id2, state2.id());
+  EXPECT_EQ(id3, state3.id());
+
+  EXPECT_NE(id1, id2);
+  EXPECT_NE(id1, id3);
+  EXPECT_NE(id2, id3);
+
+  EXPECT_TRUE(!state1.IsEmpty());
+  EXPECT_TRUE(!state2.IsEmpty());
+  EXPECT_TRUE(!state3.IsEmpty());
+}
+
+TEST(IDBRequestAsyncTraceStateTest, MoveConstructor) {
+  AsyncTraceStateForTesting source_state;
+  const char* event_name = "event_name";
+  size_t id = source_state.PopulateForNewEvent(event_name);
+
+  AsyncTraceStateForTesting state(std::move(source_state));
+  EXPECT_EQ(event_name, state.trace_event_name());
+  EXPECT_EQ(id, state.id());
+  EXPECT_TRUE(source_state.IsEmpty());
+}
+
+TEST(IDBRequestAsyncTraceStateTest, MoveAssignment) {
+  AsyncTraceStateForTesting source_state;
+  const char* event_name = "event_name";
+  size_t id = source_state.PopulateForNewEvent(event_name);
+
+  AsyncTraceStateForTesting state;
+
+  EXPECT_TRUE(state.IsEmpty());
+  state = std::move(source_state);
+  EXPECT_EQ(event_name, state.trace_event_name());
+  EXPECT_EQ(id, state.id());
+  EXPECT_TRUE(source_state.IsEmpty());
 }
 
 }  // namespace

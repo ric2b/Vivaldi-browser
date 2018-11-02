@@ -11,9 +11,8 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/custom/CustomElementRegistry.h"
 #include "core/frame/LocalDOMWindow.h"
-#include "platform/RuntimeEnabledFeatures.h"
+#include "core/html/custom/CustomElementRegistry.h"
 #include "platform/bindings/DOMWrapperWorld.h"
 #include "platform/bindings/V8BindingMacros.h"
 #include "platform/bindings/V8DOMWrapper.h"
@@ -40,8 +39,7 @@ void V8HTMLConstructor::HtmlConstructor(
     return;
   }
 
-  if (!RuntimeEnabledFeatures::customElementsV1Enabled() ||
-      !script_state->World().IsMainWorld()) {
+  if (!script_state->World().IsMainWorld()) {
     V8ThrowException::ThrowTypeError(isolate, "Illegal constructor");
     return;
   }

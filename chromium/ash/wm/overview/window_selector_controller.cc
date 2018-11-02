@@ -6,6 +6,7 @@
 
 #include <vector>
 
+#include "ash/public/cpp/window_properties.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
@@ -13,7 +14,6 @@
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/screen_pinning_controller.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/metrics/histogram_macros.h"
 
 namespace ash {
@@ -50,7 +50,23 @@ bool WindowSelectorController::ToggleOverview() {
       return false;
 
     auto windows = Shell::Get()->mru_window_tracker()->BuildMruWindowList();
-    auto end =
+
+    // System modal windows will be hidden in overview.
+    std::vector<aura::Window*> hide_windows;
+    for (auto* window : windows) {
+      if (!window->GetProperty(ash::kShowInOverviewKey))
+        hide_windows.push_back(window);
+    }
+
+    auto end = std::remove_if(
+        windows.begin(), windows.end(), [&hide_windows](aura::Window* window) {
+          return std::find(hide_windows.begin(), hide_windows.end(), window) !=
+                 hide_windows.end();
+        });
+    windows.resize(end - windows.begin());
+
+    // Other non-selectable windows will be ignored in overview.
+    end =
         std::remove_if(windows.begin(), windows.end(),
                        std::not1(std::ptr_fun(&WindowSelector::IsSelectable)));
     windows.resize(end - windows.begin());
@@ -61,7 +77,7 @@ bool WindowSelectorController::ToggleOverview() {
 
     Shell::Get()->NotifyOverviewModeStarting();
     window_selector_.reset(new WindowSelector(this));
-    window_selector_->Init(windows);
+    window_selector_->Init(windows, hide_windows);
     OnSelectionStarted();
   }
   return true;

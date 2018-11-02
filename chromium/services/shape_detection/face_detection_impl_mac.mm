@@ -14,15 +14,9 @@ namespace shape_detection {
 
 namespace {
 
-void RunCallbackWithFaces(
-    const shape_detection::mojom::FaceDetection::DetectCallback& callback,
-    std::vector<shape_detection::mojom::FaceDetectionResultPtr> results) {
-  callback.Run(std::move(results));
-}
-
 void RunCallbackWithNoFaces(
-    const shape_detection::mojom::FaceDetection::DetectCallback& callback) {
-  callback.Run(std::vector<shape_detection::mojom::FaceDetectionResultPtr>());
+    shape_detection::mojom::FaceDetection::DetectCallback callback) {
+  std::move(callback).Run({});
 }
 
 }  // anonymous namespace
@@ -47,20 +41,17 @@ FaceDetectionImplMac::FaceDetectionImplMac(
 
 FaceDetectionImplMac::~FaceDetectionImplMac() {}
 
-void FaceDetectionImplMac::Detect(mojo::ScopedSharedBufferHandle frame_data,
-                                  uint32_t width,
-                                  uint32_t height,
-                                  const DetectCallback& callback) {
+void FaceDetectionImplMac::Detect(const SkBitmap& bitmap,
+                                  DetectCallback callback) {
   media::ScopedResultCallback<DetectCallback> scoped_callback(
-      base::Bind(&RunCallbackWithFaces, callback),
-      base::Bind(&RunCallbackWithNoFaces));
+      std::move(callback), base::Bind(&RunCallbackWithNoFaces));
 
-  base::scoped_nsobject<CIImage> ci_image =
-      CreateCIImageFromSharedMemory(std::move(frame_data), width, height);
+  base::scoped_nsobject<CIImage> ci_image = CreateCIImageFromSkBitmap(bitmap);
   if (!ci_image)
     return;
 
   NSArray* const features = [detector_ featuresInImage:ci_image];
+  const int height = bitmap.height();
 
   std::vector<mojom::FaceDetectionResultPtr> results;
   for (CIFaceFeature* const f in features) {

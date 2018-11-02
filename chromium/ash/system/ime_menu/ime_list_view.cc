@@ -4,16 +4,15 @@
 
 #include "ash/system/ime_menu/ime_list_view.h"
 
+#include "ash/ime/ime_controller.h"
 #include "ash/ime/ime_switch_type.h"
-#include "ash/resources/grit/ash_resources.h"
+#include "ash/public/interfaces/ime_info.mojom.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shell.h"
 #include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/actionable_view.h"
-#include "ash/system/tray/ime_info.h"
 #include "ash/system/tray/system_menu_button.h"
-#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/tray/tray_details_view.h"
 #include "ash/system/tray/tray_popup_header_button.h"
@@ -21,8 +20,8 @@
 #include "ash/system/tray/tray_popup_utils.h"
 #include "ash/system/tray/tri_view.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/metrics/user_metrics.h"
 #include "ui/accessibility/ax_node_data.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/color_palette.h"
@@ -37,8 +36,6 @@
 #include "ui/views/painter.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
-
-using chromeos::input_method::InputMethodManager;
 
 namespace ash {
 namespace {
@@ -196,16 +193,15 @@ ImeListView::~ImeListView() {}
 
 void ImeListView::Init(bool show_keyboard_toggle,
                        SingleImeBehavior single_ime_behavior) {
-  SystemTrayDelegate* delegate = Shell::Get()->system_tray_delegate();
-  IMEInfoList list;
-  delegate->GetAvailableIMEList(&list);
-  IMEPropertyInfoList property_list;
-  delegate->GetCurrentIMEProperties(&property_list);
-  Update(list, property_list, show_keyboard_toggle, single_ime_behavior);
+  ImeController* ime_controller = Shell::Get()->ime_controller();
+  Update(ime_controller->current_ime().id, ime_controller->available_imes(),
+         ime_controller->current_ime_menu_items(), show_keyboard_toggle,
+         single_ime_behavior);
 }
 
-void ImeListView::Update(const IMEInfoList& list,
-                         const IMEPropertyInfoList& property_list,
+void ImeListView::Update(const std::string& current_ime_id,
+                         const std::vector<mojom::ImeInfo>& list,
+                         const std::vector<mojom::ImeMenuItem>& property_items,
                          bool show_keyboard_toggle,
                          SingleImeBehavior single_ime_behavior) {
   ResetImeListView();
@@ -214,7 +210,7 @@ void ImeListView::Update(const IMEInfoList& list,
   CreateScrollableList();
 
   if (single_ime_behavior == ImeListView::SHOW_SINGLE_IME || list.size() > 1)
-    AppendImeListAndProperties(list, property_list);
+    AppendImeListAndProperties(current_ime_id, list, property_items);
 
   if (show_keyboard_toggle)
     PrependKeyboardStatusRow();
@@ -250,21 +246,23 @@ void ImeListView::CloseImeListView() {
 }
 
 void ImeListView::AppendImeListAndProperties(
-    const IMEInfoList& list,
-    const IMEPropertyInfoList& property_list) {
+    const std::string& current_ime_id,
+    const std::vector<mojom::ImeInfo>& list,
+    const std::vector<mojom::ImeMenuItem>& property_list) {
   DCHECK(ime_map_.empty());
   for (size_t i = 0; i < list.size(); i++) {
+    const bool selected = current_ime_id == list[i].id;
     views::View* ime_view =
         new ImeListItemView(owner(), this, list[i].short_name, list[i].name,
-                            list[i].selected, gfx::kGoogleGreen700);
+                            selected, gfx::kGoogleGreen700);
     scroll_content()->AddChildView(ime_view);
     ime_map_[ime_view] = list[i].id;
 
-    if (list[i].selected)
+    if (selected)
       current_ime_view_ = ime_view;
 
     // Add the properties, if any, of the currently-selected IME.
-    if (list[i].selected && !property_list.empty()) {
+    if (selected && !property_list.empty()) {
       // Adds a separator on the top of property items.
       scroll_content()->AddChildView(
           TrayPopupUtils::CreateListItemSeparator(true));
@@ -272,8 +270,8 @@ void ImeListView::AppendImeListAndProperties(
       // Adds the property items.
       for (size_t i = 0; i < property_list.size(); i++) {
         ImeListItemView* property_view = new ImeListItemView(
-            owner(), this, base::string16(), property_list[i].name,
-            property_list[i].selected, kMenuIconColor);
+            owner(), this, base::string16(), property_list[i].label,
+            property_list[i].checked, kMenuIconColor);
         scroll_content()->AddChildView(property_view);
         property_map_[property_view] = property_list[i].key;
       }
@@ -295,13 +293,13 @@ void ImeListView::PrependKeyboardStatusRow() {
 }
 
 void ImeListView::HandleViewClicked(views::View* view) {
+  ImeController* ime_controller = Shell::Get()->ime_controller();
   std::map<views::View*, std::string>::const_iterator ime = ime_map_.find(view);
   if (ime != ime_map_.end()) {
-    ShellPort::Get()->RecordUserMetricsAction(UMA_STATUS_AREA_IME_SWITCH_MODE);
+    base::RecordAction(base::UserMetricsAction("StatusArea_IME_SwitchMode"));
     std::string ime_id = ime->second;
     last_selected_item_id_ = ime_id;
-    InputMethodManager::Get()->GetActiveIMEState()->ChangeInputMethod(
-        ime_id, false /* show_message */);
+    ime_controller->SwitchImeById(ime_id, false /* show_message */);
     UMA_HISTOGRAM_ENUMERATION("InputMethod.ImeSwitch", ImeSwitchType::kTray,
                               ImeSwitchType::kCount);
 
@@ -312,7 +310,7 @@ void ImeListView::HandleViewClicked(views::View* view) {
       return;
     const std::string key = property->second;
     last_selected_item_id_ = key;
-    InputMethodManager::Get()->ActivateInputMethodMenuItem(key);
+    ime_controller->ActivateImeMenuItem(key);
   }
 
   if (!should_focus_ime_after_selection_with_keyboard_ ||

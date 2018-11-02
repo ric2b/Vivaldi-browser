@@ -8,7 +8,6 @@
 #import <UIKit/UIKit.h>
 
 #include "base/logging.h"
-#include "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
@@ -18,6 +17,10 @@
 #import "ios/chrome/browser/ui/infobars/infobar_view_delegate.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/gfx/image/image.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace {
 
@@ -75,7 +78,7 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   DCHECK_EQ(0, component);
   UILabel* label = [view isKindOfClass:[UILabel class]]
                        ? (UILabel*)view
-                       : [[[UILabel alloc] init] autorelease];
+                       : [[UILabel alloc] init];
   [label setText:base::SysUTF16ToNSString(
                      _translateInfoBarDelegate->language_name_at(row))];
   [label setTextAlignment:NSTextAlignmentCenter];
@@ -111,17 +114,17 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   translate::TranslateInfoBarDelegate* _translateInfoBarDelegate;  // weak
   // A fullscreen view that catches all touch events and contains a UIPickerView
   // and a UINavigationBar.
-  base::scoped_nsobject<UIView> _languageSelectionView;
+  UIView* _languageSelectionView;
   // Stores whether the user is currently choosing in the UIPickerView the
   // original language, or the target language.
   NSUInteger _languageSelectionType;
   // The language picker.
-  base::scoped_nsobject<UIPickerView> _languagePicker;
+  UIPickerView* _languagePicker;
   // Navigation bar associated with the picker with "Done" and "Cancel" buttons.
-  base::scoped_nsobject<UINavigationBar> _navigationBar;
+  UINavigationBar* _navigationBar;
   // The controller of the languagePicker. Needs to be an ivar because
   // |_languagePicker| does not retain it.
-  base::scoped_nsobject<LanguagePickerController> _languagePickerController;
+  LanguagePickerController* _languagePickerController;
 }
 
 #pragma mark -
@@ -129,10 +132,10 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
 
 - (InfoBarView*)viewForDelegate:(infobars::InfoBarDelegate*)delegate
                           frame:(CGRect)frame {
-  base::scoped_nsobject<InfoBarView> infoBarView;
+  InfoBarView* infoBarView;
   _translateInfoBarDelegate = delegate->AsTranslateInfoBarDelegate();
-  infoBarView.reset(
-      [[InfoBarView alloc] initWithFrame:frame delegate:self.delegate]);
+  infoBarView =
+      [[InfoBarView alloc] initWithFrame:frame delegate:self.delegate];
   // Icon
   gfx::Image icon = _translateInfoBarDelegate->GetIcon();
   if (!icon.IsEmpty())
@@ -154,7 +157,7 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
                      tag2:TranslateInfoBarIOSTag::BEFORE_DENY
                    target:self
                    action:@selector(infoBarButtonDidPress:)];
-  return [[infoBarView retain] autorelease];
+  return infoBarView;
 }
 
 - (void)updateInfobarLabelOnView:(InfoBarView*)view {
@@ -172,9 +175,11 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   NSString* label =
       l10n_util::GetNSStringF(IDS_TRANSLATE_INFOBAR_BEFORE_MESSAGE_IOS,
                               originalLanguageWithLink, targetLanguageWithLink);
+
+  __weak BeforeTranslateInfoBarController* weakSelf = self;
   [view addLabel:label
           action:^(NSUInteger tag) {
-            [self infobarLinkDidPress:tag];
+            [weakSelf infobarLinkDidPress:tag];
           }];
 }
 
@@ -206,7 +211,7 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   // delegate.
   [_languagePicker setDataSource:nil];
   [_languagePicker setDelegate:nil];
-  _languagePickerController.reset();
+  _languagePickerController = nil;
   // Animate the picker away.
   CGRect languagePickerFrame = [_languagePicker frame];
   CGRect navigationBarFrame = [_navigationBar frame];
@@ -214,16 +219,16 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
       languagePickerFrame.size.height + navigationBarFrame.size.height;
   languagePickerFrame.origin.y += animationHeight;
   navigationBarFrame.origin.y += animationHeight;
-  auto blockLanguagePicker(_languagePicker);
-  auto blockNavigationBar(_navigationBar);
-  _languagePicker.reset();
-  _navigationBar.reset();
+  UIPickerView* blockLanguagePicker = _languagePicker;
+  UINavigationBar* blockNavigationBar = _navigationBar;
+  _languagePicker = nil;
+  _navigationBar = nil;
   void (^animations)(void) = ^{
-    blockLanguagePicker.get().frame = languagePickerFrame;
-    blockNavigationBar.get().frame = navigationBarFrame;
+    blockLanguagePicker.frame = languagePickerFrame;
+    blockNavigationBar.frame = navigationBarFrame;
   };
-  auto blockSelectionView(_languageSelectionView);
-  _languageSelectionView.reset();
+  UIView* blockSelectionView = _languageSelectionView;
+  _languageSelectionView = nil;
   void (^completion)(BOOL finished) = ^(BOOL finished) {
     [blockSelectionView removeFromSuperview];
   };
@@ -269,8 +274,8 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   CGRect languageSelectionViewFrame =
       CGRectMake(0, parentFrame.size.height - totalPickerHeight,
                  parentFrame.size.width, totalPickerHeight);
-  _languageSelectionView.reset(
-      [[UIView alloc] initWithFrame:languageSelectionViewFrame]);
+  _languageSelectionView =
+      [[UIView alloc] initWithFrame:languageSelectionViewFrame];
   [_languageSelectionView
       setAutoresizingMask:UIViewAutoresizingFlexibleWidth |
                           UIViewAutoresizingFlexibleTopMargin];
@@ -288,21 +293,20 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   CGRect initialNavigationBarFrame = finalNavigationBarFrame;
   initialNavigationBarFrame.origin.y += totalPickerHeight;
 
-  _navigationBar.reset(
-      [[UINavigationBar alloc] initWithFrame:initialNavigationBarFrame]);
+  _navigationBar =
+      [[UINavigationBar alloc] initWithFrame:initialNavigationBarFrame];
   const UIViewAutoresizing resizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
   [_navigationBar setAutoresizingMask:resizingMask];
-  base::scoped_nsobject<UIBarButtonItem> doneButton([[UIBarButtonItem alloc]
+  UIBarButtonItem* doneButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                            target:self
-                           action:@selector(languageSelectionDone)]);
-  base::scoped_nsobject<UIBarButtonItem> cancelButton([[UIBarButtonItem alloc]
+                           action:@selector(languageSelectionDone)];
+  UIBarButtonItem* cancelButton = [[UIBarButtonItem alloc]
       initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
                            target:self
-                           action:@selector(dismissLanguageSelectionView)]);
-  base::scoped_nsobject<UINavigationItem> item(
-      [[UINavigationItem alloc] initWithTitle:@""]);
+                           action:@selector(dismissLanguageSelectionView)];
+  UINavigationItem* item = [[UINavigationItem alloc] initWithTitle:@""];
   [item setRightBarButtonItem:doneButton];
   [item setLeftBarButtonItem:cancelButton];
   [item setHidesBackButton:YES];
@@ -335,12 +339,11 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
     selectedRow = targetLanguageIndex;
     disabledRow = originalLanguageIndex;
   }
-  _languagePickerController.reset([[LanguagePickerController alloc]
+  _languagePickerController = [[LanguagePickerController alloc]
       initWithDelegate:_translateInfoBarDelegate
             initialRow:selectedRow
-           disabledRow:disabledRow]);
-  _languagePicker.reset(
-      [[UIPickerView alloc] initWithFrame:initialPickerFrame]);
+           disabledRow:disabledRow];
+  _languagePicker = [[UIPickerView alloc] initWithFrame:initialPickerFrame];
   [_languagePicker setAutoresizingMask:resizingMask];
   [_languagePicker setShowsSelectionIndicator:YES];
   [_languagePicker setDataSource:_languagePickerController];
@@ -349,12 +352,12 @@ NSTimeInterval kPickerAnimationDurationInSeconds = 0.2;
   [_languagePicker setBackgroundColor:[self.view backgroundColor]];
   [_languagePicker selectRow:selectedRow inComponent:0 animated:NO];
 
-  auto blockLanguagePicker(_languagePicker);
-  auto blockNavigationBar(_navigationBar);
+  UIPickerView* blockLanguagePicker = _languagePicker;
+  UINavigationBar* blockNavigationBar = _navigationBar;
   [UIView animateWithDuration:kPickerAnimationDurationInSeconds
                    animations:^{
-                     blockLanguagePicker.get().frame = finalPickerFrame;
-                     blockNavigationBar.get().frame = finalNavigationBarFrame;
+                     blockLanguagePicker.frame = finalPickerFrame;
+                     blockNavigationBar.frame = finalNavigationBarFrame;
                    }];
 
   // Add the subviews.

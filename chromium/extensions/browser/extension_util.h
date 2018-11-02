@@ -7,7 +7,7 @@
 
 #include <string>
 
-class GURL;
+#include "url/gurl.h"
 
 namespace content {
 class BrowserContext;
@@ -16,16 +16,12 @@ class StoragePartition;
 
 namespace extensions {
 class Extension;
-struct ExtensionInfo;
 
 namespace util {
 
 // TODO(benwells): Move functions from
 // chrome/browser/extensions/extension_util.h/cc that are only dependent on
 // extensions/ here.
-
-// Returns true if the extension has isolated storage.
-bool HasIsolatedStorage(const ExtensionInfo& info);
 
 // Returns true if the site URL corresponds to an extension or app and has
 // isolated storage.
@@ -38,6 +34,11 @@ bool CanBeIncognitoEnabled(const Extension* extension);
 // Returns true if |extension_id| can run in an incognito window.
 bool IsIncognitoEnabled(const std::string& extension_id,
                         content::BrowserContext* context);
+
+// Returns the site of the |extension_id|, given the associated |context|.
+// Suitable for use with BrowserContext::GetStoragePartitionForSite().
+GURL GetSiteForExtensionId(const std::string& extension_id,
+                           content::BrowserContext* context);
 
 content::StoragePartition* GetStoragePartitionForExtensionId(
     const std::string& extension_id,

@@ -7,6 +7,7 @@
 #include "ash/shell/example_app_list_presenter.h"
 #include "ash/shell/example_session_controller_client.h"
 #include "ash/shell/shell_delegate_impl.h"
+#include "ash/shell/shell_views_delegate.h"
 #include "ash/shell/window_type_launcher.h"
 #include "ash/shell/window_watcher.h"
 #include "ash/shell_observer.h"
@@ -21,7 +22,6 @@
 #include "ui/app_list/presenter/app_list.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_tree_host.h"
-#include "ui/display/screen.h"
 #include "ui/views/examples/examples_window.h"
 
 namespace ash {
@@ -53,10 +53,6 @@ class ShellInit : public shell::ShellDelegateImpl, public ShellObserver {
     Shell::Get()->AddShellObserver(this);
   }
 
-  void PreShutdown() override {
-    display::Screen::GetScreen()->RemoveObserver(window_watcher_.get());
-  }
-
   // ShellObserver:
   void OnShellInitialized() override {
     Shell::Get()->RemoveShellObserver(this);
@@ -69,7 +65,6 @@ class ShellInit : public shell::ShellDelegateImpl, public ShellObserver {
     example_session_controller_client_->Initialize();
 
     window_watcher_ = base::MakeUnique<shell::WindowWatcher>();
-    display::Screen::GetScreen()->AddObserver(window_watcher_.get());
     shell::InitWindowTypeLauncher(base::Bind(&ShowViewsExamples));
 
     // Initialize the example app list presenter.
@@ -97,6 +92,7 @@ class ShellInit : public shell::ShellDelegateImpl, public ShellObserver {
 }  // namespace ash
 
 MojoResult ServiceMain(MojoHandle service_request_handle) {
+  ash::shell::ShellViewsDelegate shell_views_delegate;
   const bool show_primary_host_on_connect = false;
   std::unique_ptr<ash::ShellInit> shell_init_ptr =
       base::MakeUnique<ash::ShellInit>();

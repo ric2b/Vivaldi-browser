@@ -7,11 +7,14 @@
 #import <objc/runtime.h>
 
 #include "base/logging.h"
-#import "base/mac/scoped_nsobject.h"
 #include "base/strings/sys_string_conversions.h"
 #import "ios/web/public/web_client.h"
 #import "ios/web/web_state/ui/crw_context_menu_controller.h"
 #import "ios/web/web_state/ui/wk_web_view_configuration_provider.h"
+
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
 
 namespace web {
 
@@ -36,7 +39,7 @@ void VerifyWKWebViewCreationPreConditions(
 WKWebView* BuildWKWebView(CGRect frame,
                           WKWebViewConfiguration* configuration,
                           BrowserState* browser_state,
-                          BOOL use_desktop_user_agent,
+                          UserAgentType user_agent_type,
                           id<CRWContextMenuDelegate> context_menu_delegate) {
   VerifyWKWebViewCreationPreConditions(browser_state, configuration);
 
@@ -44,11 +47,11 @@ WKWebView* BuildWKWebView(CGRect frame,
   WKWebView* web_view =
       [[WKWebView alloc] initWithFrame:frame configuration:configuration];
 
-  // Set the user agent.
-  UserAgentType user_agent_type =
-      use_desktop_user_agent ? UserAgentType::DESKTOP : UserAgentType::MOBILE;
-  web_view.customUserAgent = base::SysUTF8ToNSString(
-      web::GetWebClient()->GetUserAgent(user_agent_type));
+  // Set the user agent type.
+  if (user_agent_type != web::UserAgentType::NONE) {
+    web_view.customUserAgent = base::SysUTF8ToNSString(
+        web::GetWebClient()->GetUserAgent(user_agent_type));
+  }
 
   // By default the web view uses a very sluggish scroll speed. Set it to a more
   // reasonable value.
@@ -61,33 +64,32 @@ WKWebView* BuildWKWebView(CGRect frame,
   web_view.allowsLinkPreview = NO;
 
   if (context_menu_delegate) {
-    base::scoped_nsobject<CRWContextMenuController> context_menu_controller(
-        [[CRWContextMenuController alloc]
-               initWithWebView:web_view
-            injectionEvaluator:nil
-                      delegate:context_menu_delegate]);
-    objc_setAssociatedObject(web_view, context_menu_controller.get(),
-                             context_menu_controller.get(),
+    CRWContextMenuController* context_menu_controller = [
+        [CRWContextMenuController alloc] initWithWebView:web_view
+                                      injectionEvaluator:nil
+                                                delegate:context_menu_delegate];
+    void* associated_object_key = (__bridge void*)context_menu_controller;
+    objc_setAssociatedObject(web_view, associated_object_key,
+                             context_menu_controller,
                              OBJC_ASSOCIATION_RETAIN_NONATOMIC);
   }
 
-  return [web_view autorelease];
+  return web_view;
 }
 
 WKWebView* BuildWKWebView(CGRect frame,
                           WKWebViewConfiguration* configuration,
                           BrowserState* browser_state,
-                          BOOL use_desktop_user_agent) {
-  return BuildWKWebView(frame, configuration, browser_state,
-                        use_desktop_user_agent, nil);
+                          UserAgentType user_agent_type) {
+  return BuildWKWebView(frame, configuration, browser_state, user_agent_type,
+                        nil);
 }
 
 WKWebView* BuildWKWebView(CGRect frame,
                           WKWebViewConfiguration* configuration,
                           BrowserState* browser_state) {
-  BOOL use_desktop_user_agent = NO;
   return BuildWKWebView(frame, configuration, browser_state,
-                        use_desktop_user_agent);
+                        UserAgentType::MOBILE);
 }
 
 }  // namespace web

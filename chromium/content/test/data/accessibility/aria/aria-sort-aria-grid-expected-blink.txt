@@ -1,0 +1,151 @@
+rootWebArea
+++grid
+++++row selectable
+++++++columnHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++row selectable
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++columnHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++row selectable
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++columnHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++row selectable
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++columnHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++row selectable
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++columnHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++row selectable
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++rowHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++column
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++rowHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++column
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++rowHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++column
+++++column
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++rowHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++++cell selectable name='B'
+++++++++staticText name='B'
+++++++++++inlineTextBox name='B'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++column
+++++column
+++++column
+++++tableHeaderContainer
+++grid
+++++row selectable
+++++++rowHeader selectable name='Alphabet'
+++++++++staticText name='Alphabet'
+++++++++++inlineTextBox name='Alphabet'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++++cell selectable name='A'
+++++++++staticText name='A'
+++++++++++inlineTextBox name='A'
+++++column
+++++column
+++++column
+++++tableHeaderContainer

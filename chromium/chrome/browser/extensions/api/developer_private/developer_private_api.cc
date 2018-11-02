@@ -30,7 +30,6 @@
 #include "chrome/browser/extensions/extension_ui_util.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/install_verifier.h"
-#include "chrome/browser/extensions/path_util.h"
 #include "chrome/browser/extensions/scripting_permissions_modifier.h"
 #include "chrome/browser/extensions/shared_module_service.h"
 #include "chrome/browser/extensions/unpacked_installer.h"
@@ -69,6 +68,7 @@
 #include "extensions/browser/file_highlighter.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/browser/path_util.h"
 #include "extensions/browser/warning_service.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_set.h"
@@ -78,7 +78,6 @@
 #include "extensions/common/manifest_handlers/options_page_info.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "extensions/common/permissions/permissions_data.h"
-#include "extensions/grit/extensions_browser_resources.h"
 #include "storage/browser/fileapi/external_mount_points.h"
 #include "storage/browser/fileapi/file_system_context.h"
 #include "storage/browser/fileapi/file_system_operation.h"
@@ -724,10 +723,11 @@ DeveloperPrivateUpdateExtensionConfigurationFunction::Run() {
     }
     modifier.SetAllowedOnAllUrls(*update.run_on_all_urls);
   }
+
   if (update.show_action_button) {
-    ExtensionActionAPI::Get(browser_context())->SetBrowserActionVisibility(
-        extension->id(),
-        *update.show_action_button);
+    ExtensionActionAPI::Get(browser_context())
+        ->SetBrowserActionVisibility(extension->id(),
+                                     *update.show_action_button);
   }
 
   return RespondNow(NoArguments());

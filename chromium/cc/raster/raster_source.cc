@@ -23,18 +23,11 @@
 
 namespace cc {
 
-scoped_refptr<RasterSource> RasterSource::CreateFromRecordingSource(
-    const RecordingSource* other,
-    bool can_use_lcd_text) {
-  return make_scoped_refptr(new RasterSource(other, can_use_lcd_text));
-}
-
-RasterSource::RasterSource(const RecordingSource* other, bool can_use_lcd_text)
+RasterSource::RasterSource(const RecordingSource* other)
     : display_list_(other->display_list_),
       painter_reported_memory_usage_(other->painter_reported_memory_usage_),
       background_color_(other->background_color_),
       requires_clear_(other->requires_clear_),
-      can_use_lcd_text_(can_use_lcd_text),
       is_solid_color_(other->is_solid_color_),
       solid_color_(other->solid_color_),
       recorded_viewport_(other->recorded_viewport_),
@@ -43,23 +36,7 @@ RasterSource::RasterSource(const RecordingSource* other, bool can_use_lcd_text)
       slow_down_raster_scale_factor_for_debug_(
           other->slow_down_raster_scale_factor_for_debug_),
       image_decode_cache_(nullptr) {}
-
-RasterSource::RasterSource(const RasterSource* other, bool can_use_lcd_text)
-    : display_list_(other->display_list_),
-      painter_reported_memory_usage_(other->painter_reported_memory_usage_),
-      background_color_(other->background_color_),
-      requires_clear_(other->requires_clear_),
-      can_use_lcd_text_(can_use_lcd_text),
-      is_solid_color_(other->is_solid_color_),
-      solid_color_(other->solid_color_),
-      recorded_viewport_(other->recorded_viewport_),
-      size_(other->size_),
-      clear_canvas_with_debug_color_(other->clear_canvas_with_debug_color_),
-      slow_down_raster_scale_factor_for_debug_(
-          other->slow_down_raster_scale_factor_for_debug_),
-      image_decode_cache_(other->image_decode_cache_) {}
-
-RasterSource::~RasterSource() {}
+RasterSource::~RasterSource() = default;
 
 void RasterSource::PlaybackToCanvas(
     SkCanvas* raster_canvas,
@@ -234,25 +211,15 @@ sk_sp<SkPicture> RasterSource::GetFlattenedPicture() {
 size_t RasterSource::GetMemoryUsage() const {
   if (!display_list_)
     return 0;
-  return display_list_->ApproximateMemoryUsage() +
-         painter_reported_memory_usage_;
+  return display_list_->BytesUsed() + painter_reported_memory_usage_;
 }
 
-bool RasterSource::PerformSolidColorAnalysis(const gfx::Rect& content_rect,
-                                             float contents_scale,
+bool RasterSource::PerformSolidColorAnalysis(gfx::Rect layer_rect,
                                              SkColor* color) const {
   TRACE_EVENT0("cc", "RasterSource::PerformSolidColorAnalysis");
 
-  gfx::Rect layer_rect =
-      gfx::ScaleToEnclosingRect(content_rect, 1.f / contents_scale);
-
   layer_rect.Intersect(gfx::Rect(size_));
-  skia::AnalysisCanvas canvas(layer_rect.width(), layer_rect.height());
-  canvas.translate(-layer_rect.x(), -layer_rect.y());
-  // Note that because no color conversion is applied to solid color analysis,
-  // the resulting solid color will be known to be sRGB.
-  RasterCommon(&canvas, &canvas);
-  return canvas.GetColorIfSolid(color);
+  return display_list_->GetColorIfSolidInRect(layer_rect, color);
 }
 
 void RasterSource::GetDiscardableImagesInRect(
@@ -261,14 +228,14 @@ void RasterSource::GetDiscardableImagesInRect(
     const gfx::ColorSpace& target_color_space,
     std::vector<DrawImage>* images) const {
   DCHECK_EQ(0u, images->size());
-  display_list_->GetDiscardableImagesInRect(layer_rect, contents_scale,
-                                            target_color_space, images);
+  display_list_->discardable_image_map().GetDiscardableImagesInRect(
+      layer_rect, contents_scale, target_color_space, images);
 }
 
 gfx::Rect RasterSource::GetRectForImage(PaintImage::Id image_id) const {
   if (!display_list_)
     return gfx::Rect();
-  return display_list_->GetRectForImage(image_id);
+  return display_list_->discardable_image_map().GetRectForImage(image_id);
 }
 
 bool RasterSource::CoversRect(const gfx::Rect& layer_rect) const {
@@ -310,19 +277,11 @@ void RasterSource::DidBeginTracing() {
     display_list_->EmitTraceSnapshot();
 }
 
-bool RasterSource::CanUseLCDText() const {
-  return can_use_lcd_text_;
-}
-
-scoped_refptr<RasterSource> RasterSource::CreateCloneWithoutLCDText() const {
-  bool can_use_lcd_text = false;
-  return scoped_refptr<RasterSource>(new RasterSource(this, can_use_lcd_text));
-}
-
 RasterSource::PlaybackSettings::PlaybackSettings()
     : playback_to_shared_canvas(false),
       skip_images(false),
-      use_image_hijack_canvas(true) {}
+      use_image_hijack_canvas(true),
+      use_lcd_text(true) {}
 
 RasterSource::PlaybackSettings::PlaybackSettings(const PlaybackSettings&) =
     default;

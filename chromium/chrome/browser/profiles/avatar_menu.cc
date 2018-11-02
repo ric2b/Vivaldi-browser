@@ -26,7 +26,6 @@
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/features.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/signin/core/common/profile_management_switches.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/notification_service.h"
@@ -113,7 +112,6 @@ void AvatarMenu::SwitchToProfile(size_t index,
   // Don't open a browser window for signed-out profiles.
   if (item.signin_required) {
     UserManager::Show(item.profile_path,
-                      profiles::USER_MANAGER_NO_TUTORIAL,
                       profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
     return;
   }

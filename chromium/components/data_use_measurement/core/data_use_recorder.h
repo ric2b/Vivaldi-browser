@@ -7,9 +7,12 @@
 
 #include <stdint.h>
 
-#include "base/containers/hash_tables.h"
+#include <map>
+#include <vector>
+
 #include "base/macros.h"
 #include "base/supports_user_data.h"
+#include "base/time/time.h"
 #include "components/data_use_measurement/core/data_use.h"
 #include "net/base/net_export.h"
 
@@ -25,14 +28,29 @@ namespace data_use_measurement {
 // tracked by exactly one DataUseRecorder.
 class DataUseRecorder {
  public:
+  // Stores network data used by a URLRequest.
+  struct URLRequestDataUse {
+    URLRequestDataUse()
+        : bytes_received(0),
+          bytes_sent(0),
+          started_time(base::TimeTicks::Now()) {}
+
+    int64_t bytes_received;
+    int64_t bytes_sent;
+
+    // Time the request started and associated with the DataUseRecorder.
+    base::TimeTicks started_time;
+
+   private:
+    DISALLOW_COPY_AND_ASSIGN(URLRequestDataUse);
+  };
+
   explicit DataUseRecorder(DataUse::TrafficType traffic_type);
   virtual ~DataUseRecorder();
 
   // Returns the actual data used by the entity being tracked.
   DataUse& data_use() { return data_use_; }
-  const base::hash_set<net::URLRequest*>& pending_url_requests() const {
-    return pending_url_requests_;
-  }
+
   const net::URLRequest* main_url_request() const { return main_url_request_; }
 
   void set_main_url_request(const net::URLRequest* request) {
@@ -53,33 +71,25 @@ class DataUseRecorder {
   // by the entity tracked by this recorder. For example,
   bool IsDataUseComplete();
 
+  // Populate the pending requests to |requests|.
+  // Reference to the map is not returned since other member functions that
+  // modify/erase could be called while iterating.
+  void GetPendingURLRequests(std::vector<net::URLRequest*>* requests) const;
+
   // Adds |request| to the list of pending URLRequests that ascribe data use to
   // this recorder.
   void AddPendingURLRequest(net::URLRequest* request);
 
+  // Moves pending |request| from |this| recorder to |other| recorder, and
+  // updates the data use for the recorders.
+  void MovePendingURLRequestTo(DataUseRecorder* other,
+                               net::URLRequest* request);
+
+  base::TimeTicks GetPendingURLRequestStartTime(net::URLRequest* request);
+
   // Clears the list of pending URLRequests that ascribe data use to this
   // recorder.
   void RemoveAllPendingURLRequests();
-
-  // Returns whether there are any pending URLRequests whose data use is tracked
-  // by this DataUseRecorder.
-  bool HasPendingURLRequest(net::URLRequest* request);
-
-  // Merge another DataUseRecorder to this instance.
-  void MergeFrom(DataUseRecorder* other);
-
- private:
-  friend class DataUseAscriber;
-
-  // Methods for tracking data use sources. These sources can initiate
-  // URLRequests directly or indirectly. The entity whose data use is being
-  // tracked by this recorder may comprise of sub-entities each of which use
-  // network data. These helper methods help track these sub-entities.
-  // A recorder will not be marked as having completed data use as long as it
-  // has pending data sources.
-  void AddPendingDataSource(void* source);
-  bool HasPendingDataSource(void* source);
-  void RemovePendingDataSource(void* source);
 
   // Network Delegate methods:
   void OnBeforeUrlRequest(net::URLRequest* request);
@@ -87,12 +97,14 @@ class DataUseRecorder {
   void OnNetworkBytesSent(net::URLRequest* request, int64_t bytes_sent);
   void OnNetworkBytesReceived(net::URLRequest* request, int64_t bytes_received);
 
-  // Pending URLRequests whose data is being tracked by this DataUseRecorder.
-  base::hash_set<net::URLRequest*> pending_url_requests_;
+ private:
+  // Updates the network data use for the url request.
+  void UpdateNetworkByteCounts(net::URLRequest* request,
+                               int64_t bytes_received,
+                               int64_t bytes_sent);
 
-  // Data sources other than URLRequests, whose data is being tracked by this
-  // DataUseRecorder.
-  base::hash_set<const void*> pending_data_sources_;
+  // Pending URLRequests whose data is being tracked by this DataUseRecorder.
+  std::map<net::URLRequest*, URLRequestDataUse> pending_url_requests_;
 
   // The main frame URLRequest for page loads. Null if this is not tracking a
   // page load.

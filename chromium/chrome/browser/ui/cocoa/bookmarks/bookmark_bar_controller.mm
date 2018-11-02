@@ -76,7 +76,6 @@
 #include "ui/gfx/image/image.h"
 #include "ui/gfx/image/image_skia_util_mac.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/resources/grit/ui_resources.h"
 
 using base::UserMetricsAction;
 using bookmarks::BookmarkBarLayout;
@@ -345,7 +344,7 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
 
   // viewDidLoad became part of the API in 10.10.
   if (!base::mac::IsAtLeastOS10_10())
-    [self viewDidLoad];
+    [self viewDidLoadImpl];
 }
 
 - (BookmarkButton*)findAncestorButtonOnBarForNode:(const BookmarkNode*)node {
@@ -460,6 +459,12 @@ bool operator!=(const BookmarkBarLayout& lhs, const BookmarkBarLayout& rhs) {
 }
 
 - (void)viewDidLoad {
+  // This indirection allows the viewDidLoad implementation to be called from
+  // elsewhere without triggering an availability warning.
+  [self viewDidLoadImpl];
+}
+
+- (void)viewDidLoadImpl {
   // We are enabled by default.
   barIsEnabled_ = YES;
 
@@ -1833,7 +1838,7 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
     xOffset += NSWidth([appsPageShortcutButton_ frame]) +
                bookmarks::kBookmarkHorizontalPadding;
   }
-  if (!managedBookmarkService_->managed_node()->empty()) {
+  if ([self shouldShowManagedBookmarksButton]) {
     layout.visible_elements |=
         bookmarks::kVisibleElementsMaskManagedBookmarksButton;
     layout.managed_bookmarks_button_offset = xOffset;
@@ -2689,6 +2694,13 @@ static BOOL ValueInRangeInclusive(CGFloat low, CGFloat value, CGFloat high) {
 // For testing.
 - (const BookmarkBarLayout&)currentLayout {
   return layout_;
+}
+
+- (BOOL)shouldShowManagedBookmarksButton {
+  PrefService* prefs = browser_->profile()->GetPrefs();
+  bool prefIsSet =
+      prefs->GetBoolean(bookmarks::prefs::kShowManagedBookmarksInBookmarkBar);
+  return prefIsSet && !managedBookmarkService_->managed_node()->empty();
 }
 
 @end

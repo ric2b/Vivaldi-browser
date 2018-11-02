@@ -1,4 +1,4 @@
-// Copyright 2015-2016 Vivaldi Technologies AS. All rights reserved.
+// Copyright 2015-2017 Vivaldi Technologies AS. All rights reserved.
 
 #ifndef EXTENSIONS_API_EXTENSION_ACTION_UTILS_EXTENSION_ACTION_UTILS_API_H_
 #define EXTENSIONS_API_EXTENSION_ACTION_UTILS_EXTENSION_ACTION_UTILS_API_H_
@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/toolbar/component_action_delegate.h"
+#include "chrome/browser/ui/toolbar/toolbar_action_view_controller.h"
 #include "chrome/browser/ui/toolbar/toolbar_action_view_delegate.h"
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "extensions/browser/extension_icon_image.h"
@@ -55,6 +56,7 @@ class ExtensionActionUtil
       public extensions::ExtensionActionAPI::Observer,
       public extensions::ExtensionRegistryObserver,
       public TabStripModelObserver,
+      public ComponentActionDelegate,
       public ToolbarActionViewDelegate {
   friend struct base::DefaultSingletonTraits<ExtensionActionUtil>;
   Profile* profile_;
@@ -69,6 +71,11 @@ class ExtensionActionUtil
   void OnImageLoaded(const std::string& extension_id, const gfx::Image& image);
 
   content::WebContents* current_webcontents_ = nullptr;
+
+  // This is only the bundled Chrome cast extension being shown when a cast
+  // action is active.
+  std::set<std::string> component_extension_actions_;
+  std::unique_ptr<ToolbarActionViewController> media_router_component_action_;
 
  public:
   explicit ExtensionActionUtil(Profile*);
@@ -112,8 +119,13 @@ class ExtensionActionUtil
                         int index,
                         int reason) override;
 
-  // ToolbarActionViewDelegate
+  // ToolbarActionViewDelegate:
   content::WebContents* GetCurrentWebContents() const override;
+
+  // ComponentActionDelegate:
+  void AddComponentAction(const std::string& action_id) override;
+  void RemoveComponentAction(const std::string& action_id) override;
+  bool HasComponentAction(const std::string& action_id) const override;
 
   // Updates the view to reflect current state.
   void UpdateState() override;
@@ -127,6 +139,11 @@ class ExtensionActionUtil
       vivaldi::extension_action_utils::ExtensionInfo* info,
       ExtensionAction* action,
       int tab_id,
+      Profile* profile);
+
+  bool FillInfoFromComponentExtension(
+      const std::string* action_id,
+      vivaldi::extension_action_utils::ExtensionInfo* info,
       Profile* profile);
 
   static void FillInfoFromManifest(
@@ -143,6 +160,13 @@ class ExtensionActionUtil
     current_webcontents_ = contents;
   }
 
+  std::set<std::string> component_extension_actions() {
+    return component_extension_actions_;
+  }
+
+  ToolbarActionViewController* media_router_component_action() {
+    return media_router_component_action_.get();
+  }
  private:
   ~ExtensionActionUtil() override;
 

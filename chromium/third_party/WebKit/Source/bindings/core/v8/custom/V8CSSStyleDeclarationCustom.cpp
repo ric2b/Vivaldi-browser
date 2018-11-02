@@ -39,8 +39,8 @@
 #include "core/css/CSSStyleDeclaration.h"
 #include "core/css/CSSValue.h"
 #include "core/css/parser/CSSParser.h"
-#include "core/dom/custom/CEReactionsScope.h"
 #include "core/events/EventTarget.h"
+#include "core/html/custom/CEReactionsScope.h"
 #include "platform/wtf/ASCIICType.h"
 #include "platform/wtf/PassRefPtr.h"
 #include "platform/wtf/RefPtr.h"
@@ -48,8 +48,6 @@
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/StringBuilder.h"
 #include "platform/wtf/text/StringConcatenate.h"
-
-using namespace WTF;
 
 namespace blink {
 
@@ -161,7 +159,7 @@ void V8CSSStyleDeclaration::namedPropertyEnumeratorCustom(
         property_names.push_back(getJSPropertyName(property_id));
     }
     std::sort(property_names.begin(), property_names.end(),
-              CodePointCompareLessThan);
+              WTF::CodePointCompareLessThan);
     property_names_length = property_names.size();
   }
 

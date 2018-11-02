@@ -35,6 +35,8 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_controller_win.h"
+#include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_dialog_controller_impl_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/chrome_cleaner_fetcher_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_client_info_win.h"
 #include "chrome/browser/safe_browsing/chrome_cleaner/srt_field_trial_win.h"
@@ -483,7 +485,8 @@ void RecordReporterStepHistogram(SwReporterUmaValue value) {
   uma.RecordReporterStep(value);
 }
 
-void DisplaySRTPrompt(base::FilePath download_path, int http_response_code) {
+void DisplaySRTPrompt(base::FilePath download_path,
+                      ChromeCleanerFetchStatus fetch_status) {
   // As long as the fetch didn't fail due to HTTP_NOT_FOUND, show a prompt
   // (either offering the tool directly or pointing to the download page).
   // If the fetch failed to find the file, don't prompt the user since the
@@ -491,8 +494,10 @@ void DisplaySRTPrompt(base::FilePath download_path, int http_response_code) {
   // TODO(csharp): In the event the browser is closed before the prompt
   //               displays, we will wait until the next scanner run to
   //               re-display it.  Improve this. http://crbug.com/460295
-  if (http_response_code == net::HTTP_NOT_FOUND) {
+  if (fetch_status == ChromeCleanerFetchStatus::kNotFoundOnServer) {
     RecordSRTPromptHistogram(SRT_PROMPT_DOWNLOAD_UNAVAILABLE);
+    RecordPromptNotShownWithReasonHistogram(
+        NO_PROMPT_REASON_CLEANER_DOWNLOAD_FAILED);
     return;
   }
 
@@ -501,8 +506,11 @@ void DisplaySRTPrompt(base::FilePath download_path, int http_response_code) {
   // reporter. We can't use other ways of finding a browser because we don't
   // have a profile.
   Browser* browser = chrome::FindLastActive();
-  if (!browser)
+  if (!browser) {
+    RecordPromptNotShownWithReasonHistogram(
+        NO_PROMPT_REASON_BROWSER_NOT_AVAILABLE);
     return;
+  }
 
   Profile* profile = browser->profile();
   DCHECK(profile);
@@ -571,17 +579,67 @@ int LaunchAndWaitForExitOnBackgroundThread(
 }  // namespace
 
 void DisplaySRTPromptForTesting(const base::FilePath& download_path) {
-  DisplaySRTPrompt(download_path, net::HTTP_OK);
+  DisplaySRTPrompt(download_path, ChromeCleanerFetchStatus::kSuccess);
 }
 
 namespace {
+
+// Scans and shows the Chrome Cleaner UI if the user has not already been
+// prompted in the current prompt wave.
+void MaybeScanAndPrompt(const SwReporterInvocation& reporter_invocation) {
+  ChromeCleanerController* cleaner_controller =
+      ChromeCleanerController::GetInstance();
+
+  if (cleaner_controller->state() != ChromeCleanerController::State::kIdle) {
+    RecordPromptNotShownWithReasonHistogram(NO_PROMPT_REASON_NOT_ON_IDLE_STATE);
+    return;
+  }
+
+  Browser* browser = chrome::FindLastActive();
+  if (!browser) {
+    RecordReporterStepHistogram(SW_REPORTER_NO_BROWSER);
+    return;
+  }
+
+  Profile* profile = browser->profile();
+  DCHECK(profile);
+  PrefService* prefs = profile->GetPrefs();
+  DCHECK(prefs);
+
+  // Don't show the prompt again if it's been shown before for this profile and
+  // for the current variations seed.
+  const std::string incoming_seed = GetIncomingSRTSeed();
+  const std::string old_seed = prefs->GetString(prefs::kSwReporterPromptSeed);
+  if (!incoming_seed.empty() && incoming_seed == old_seed) {
+    RecordReporterStepHistogram(SW_REPORTER_ALREADY_PROMPTED);
+    RecordPromptNotShownWithReasonHistogram(NO_PROMPT_REASON_ALREADY_PROMPTED);
+    return;
+  }
+
+  if (!incoming_seed.empty() && incoming_seed != old_seed)
+    prefs->SetString(prefs::kSwReporterPromptSeed, incoming_seed);
+
+  if (g_testing_delegate_) {
+    g_testing_delegate_->TriggerPrompt();
+    return;
+  }
+
+  cleaner_controller->Scan(reporter_invocation);
+  DCHECK_EQ(ChromeCleanerController::State::kScanning,
+            cleaner_controller->state());
+
+  // The dialog controller manages its own lifetime. If the controller enters
+  // the kInfected state, the dialog controller will show the chrome cleaner
+  // dialog to the user.
+  new ChromeCleanerDialogControllerImpl(cleaner_controller);
+}
 
 // Try to fetch the SRT, and on success, show the prompt to run it.
 void MaybeFetchSRT(Browser* browser, const base::Version& reporter_version) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
   if (g_testing_delegate_) {
-    g_testing_delegate_->TriggerPrompt(browser, reporter_version.GetString());
+    g_testing_delegate_->TriggerPrompt();
     return;
   }
   Profile* profile = browser->profile();
@@ -599,6 +657,7 @@ void MaybeFetchSRT(Browser* browser, const base::Version& reporter_version) {
       local_state && local_state->GetBoolean(prefs::kSwReporterPendingPrompt);
   if (!incoming_seed.empty() && incoming_seed == old_seed && !pending_prompt) {
     RecordReporterStepHistogram(SW_REPORTER_ALREADY_PROMPTED);
+    RecordPromptNotShownWithReasonHistogram(NO_PROMPT_REASON_ALREADY_PROMPTED);
     return;
   }
 
@@ -746,19 +805,33 @@ class ReporterRunner : public chrome::BrowserListObserver {
 
     if (!finished_invocation.BehaviourIsSupported(
             SwReporterInvocation::BEHAVIOUR_TRIGGER_PROMPT)) {
+      RecordPromptNotShownWithReasonHistogram(
+          NO_PROMPT_REASON_BEHAVIOUR_NOT_SUPPORTED);
       return;
     }
 
-    if (!IsInSRTPromptFieldTrialGroups()) {
+    if (!base::FeatureList::IsEnabled(kInBrowserCleanerUIFeature) &&
+        !IsInSRTPromptFieldTrialGroups()) {
       // Knowing about disabled field trial is more important than reporter not
       // finding anything to remove, so check this case first.
       RecordReporterStepHistogram(SW_REPORTER_NO_PROMPT_FIELD_TRIAL);
+      RecordPromptNotShownWithReasonHistogram(
+          NO_PROMPT_REASON_FEATURE_NOT_ENABLED);
       return;
     }
 
     if (exit_code != chrome_cleaner::kSwReporterPostRebootCleanupNeeded &&
         exit_code != chrome_cleaner::kSwReporterCleanupNeeded) {
       RecordReporterStepHistogram(SW_REPORTER_NO_PROMPT_NEEDED);
+      RecordPromptNotShownWithReasonHistogram(NO_PROMPT_REASON_NOTHING_FOUND);
+      return;
+    }
+
+    // The kInBrowserCleanerUI feature takes precedence over the
+    // SRTPromptFieldTrial. If it is enabled, no attempt will be made to show
+    // the old SRT prompt.
+    if (base::FeatureList::IsEnabled(kInBrowserCleanerUIFeature)) {
+      MaybeScanAndPrompt(finished_invocation);
       return;
     }
 

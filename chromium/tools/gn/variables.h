@@ -171,10 +171,6 @@ extern const char kConfigs[];
 extern const char kConfigs_HelpShort[];
 extern const char kConfigs_Help[];
 
-extern const char kConsole[];
-extern const char kConsole_HelpShort[];
-extern const char kConsole_Help[];
-
 extern const char kData[];
 extern const char kData_HelpShort[];
 extern const char kData_Help[];
@@ -194,6 +190,10 @@ extern const char kDepfile_Help[];
 extern const char kDeps[];
 extern const char kDeps_HelpShort[];
 extern const char kDeps_Help[];
+
+extern const char kXcodeExtraAttributes[];
+extern const char kXcodeExtraAttributes_HelpShort[];
+extern const char kXcodeExtraAttributes_Help[];
 
 extern const char kIncludeDirs[];
 extern const char kIncludeDirs_HelpShort[];
@@ -235,6 +235,10 @@ extern const char kOutputs[];
 extern const char kOutputs_HelpShort[];
 extern const char kOutputs_Help[];
 
+extern const char kPool[];
+extern const char kPool_HelpShort[];
+extern const char kPool_Help[];
+
 extern const char kPrecompiledHeader[];
 extern const char kPrecompiledHeader_HelpShort[];
 extern const char kPrecompiledHeader_Help[];
@@ -274,6 +278,10 @@ extern const char kScript_Help[];
 extern const char kSources[];
 extern const char kSources_HelpShort[];
 extern const char kSources_Help[];
+
+extern const char kXcodeTestApplicationName[];
+extern const char kXcodeTestApplicationName_HelpShort[];
+extern const char kXcodeTestApplicationName_Help[];
 
 extern const char kTestonly[];
 extern const char kTestonly_HelpShort[];

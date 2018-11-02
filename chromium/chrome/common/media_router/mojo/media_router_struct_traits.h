@@ -157,53 +157,43 @@ struct StructTraits<media_router::mojom::CastMediaSinkDataView,
 
 template <>
 struct StructTraits<media_router::mojom::RouteMessageDataView,
-                    media_router::RouteMessage> {
+                    content::PresentationConnectionMessage> {
   static media_router::mojom::RouteMessage::Type type(
-      const media_router::RouteMessage& msg) {
-    switch (msg.type) {
-      case media_router::RouteMessage::TEXT:
-        return media_router::mojom::RouteMessage::Type::TEXT;
-      case media_router::RouteMessage::BINARY:
-        return media_router::mojom::RouteMessage::Type::BINARY;
-    }
+      const content::PresentationConnectionMessage& msg) {
+    if (msg.message)
+      return media_router::mojom::RouteMessage::Type::TEXT;
+    else if (msg.data)
+      return media_router::mojom::RouteMessage::Type::BINARY;
     NOTREACHED();
     return media_router::mojom::RouteMessage::Type::TEXT;
   }
 
   static const base::Optional<std::string>& message(
-      const media_router::RouteMessage& msg) {
-    return msg.text;
+      const content::PresentationConnectionMessage& msg) {
+    return msg.message;
   }
 
   static const base::Optional<std::vector<uint8_t>>& data(
-      const media_router::RouteMessage& msg) {
-    return msg.binary;
+      const content::PresentationConnectionMessage& msg) {
+    return msg.data;
   }
 
   static bool Read(media_router::mojom::RouteMessageDataView data,
-                   media_router::RouteMessage* out) {
+                   content::PresentationConnectionMessage* out) {
     media_router::mojom::RouteMessage::Type type;
     if (!data.ReadType(&type))
       return false;
     switch (type) {
       case media_router::mojom::RouteMessage::Type::TEXT: {
-        out->type = media_router::RouteMessage::TEXT;
-        base::Optional<std::string> text;
-        if (!data.ReadMessage(&text) || !text)
+        if (!data.ReadMessage(&out->message) || !out->message)
           return false;
-        out->text = std::move(text);
         break;
       }
       case media_router::mojom::RouteMessage::Type::BINARY: {
-        out->type = media_router::RouteMessage::BINARY;
-        base::Optional<std::vector<uint8_t>> binary;
-        if (!data.ReadData(&binary) || !binary)
+        if (!data.ReadData(&out->data) || !out->data)
           return false;
-        out->binary = std::move(binary);
         break;
       }
-      default:
-        return false;
     }
     return true;
   }
@@ -258,48 +248,53 @@ struct StructTraits<media_router::mojom::IssueDataView,
 // MediaSink
 
 template <>
-struct EnumTraits<media_router::mojom::MediaSink::IconType,
-                  media_router::MediaSink::IconType> {
-  static media_router::mojom::MediaSink::IconType ToMojom(
-      media_router::MediaSink::IconType icon_type) {
+struct EnumTraits<media_router::mojom::SinkIconType,
+                  media_router::SinkIconType> {
+  static media_router::mojom::SinkIconType ToMojom(
+      media_router::SinkIconType icon_type) {
     switch (icon_type) {
-      case media_router::MediaSink::CAST:
-        return media_router::mojom::MediaSink::IconType::CAST;
-      case media_router::MediaSink::CAST_AUDIO:
-        return media_router::mojom::MediaSink::IconType::CAST_AUDIO;
-      case media_router::MediaSink::CAST_AUDIO_GROUP:
-        return media_router::mojom::MediaSink::IconType::CAST_AUDIO_GROUP;
-      case media_router::MediaSink::HANGOUT:
-        return media_router::mojom::MediaSink::IconType::HANGOUT;
-      case media_router::MediaSink::MEETING:
-        return media_router::mojom::MediaSink::IconType::MEETING;
-      case media_router::MediaSink::GENERIC:
-        return media_router::mojom::MediaSink::IconType::GENERIC;
+      case media_router::SinkIconType::CAST:
+        return media_router::mojom::SinkIconType::CAST;
+      case media_router::SinkIconType::CAST_AUDIO_GROUP:
+        return media_router::mojom::SinkIconType::CAST_AUDIO_GROUP;
+      case media_router::SinkIconType::CAST_AUDIO:
+        return media_router::mojom::SinkIconType::CAST_AUDIO;
+      case media_router::SinkIconType::MEETING:
+        return media_router::mojom::SinkIconType::MEETING;
+      case media_router::SinkIconType::HANGOUT:
+        return media_router::mojom::SinkIconType::HANGOUT;
+      case media_router::SinkIconType::EDUCATION:
+        return media_router::mojom::SinkIconType::EDUCATION;
+      case media_router::SinkIconType::GENERIC:
+        return media_router::mojom::SinkIconType::GENERIC;
     }
     NOTREACHED() << "Unknown sink icon type " << static_cast<int>(icon_type);
-    return media_router::mojom::MediaSink::IconType::GENERIC;
+    return media_router::mojom::SinkIconType::GENERIC;
   }
 
-  static bool FromMojom(media_router::mojom::MediaSink::IconType input,
-                        media_router::MediaSink::IconType* output) {
+  static bool FromMojom(media_router::mojom::SinkIconType input,
+                        media_router::SinkIconType* output) {
     switch (input) {
-      case media_router::mojom::MediaSink::IconType::CAST:
-        *output = media_router::MediaSink::CAST;
+      case media_router::mojom::SinkIconType::CAST:
+        *output = media_router::SinkIconType::CAST;
         return true;
-      case media_router::mojom::MediaSink::IconType::CAST_AUDIO:
-        *output = media_router::MediaSink::CAST_AUDIO;
+      case media_router::mojom::SinkIconType::CAST_AUDIO_GROUP:
+        *output = media_router::SinkIconType::CAST_AUDIO_GROUP;
         return true;
-      case media_router::mojom::MediaSink::IconType::CAST_AUDIO_GROUP:
-        *output = media_router::MediaSink::CAST_AUDIO_GROUP;
+      case media_router::mojom::SinkIconType::CAST_AUDIO:
+        *output = media_router::SinkIconType::CAST_AUDIO;
         return true;
-      case media_router::mojom::MediaSink::IconType::HANGOUT:
-        *output = media_router::MediaSink::HANGOUT;
+      case media_router::mojom::SinkIconType::MEETING:
+        *output = media_router::SinkIconType::MEETING;
         return true;
-      case media_router::mojom::MediaSink::IconType::MEETING:
-        *output = media_router::MediaSink::MEETING;
+      case media_router::mojom::SinkIconType::HANGOUT:
+        *output = media_router::SinkIconType::HANGOUT;
         return true;
-      case media_router::mojom::MediaSink::IconType::GENERIC:
-        *output = media_router::MediaSink::GENERIC;
+      case media_router::mojom::SinkIconType::EDUCATION:
+        *output = media_router::SinkIconType::EDUCATION;
+        return true;
+      case media_router::mojom::SinkIconType::GENERIC:
+        *output = media_router::SinkIconType::GENERIC;
         return true;
     }
     return false;
@@ -332,7 +327,7 @@ struct StructTraits<media_router::mojom::MediaSinkDataView,
     return sink_internal.sink().domain();
   }
 
-  static media_router::MediaSink::IconType icon_type(
+  static media_router::SinkIconType icon_type(
       const media_router::MediaSinkInternal& sink_internal) {
     return sink_internal.sink().icon_type();
   }
@@ -383,6 +378,11 @@ struct StructTraits<media_router::mojom::MediaRouteDataView,
     return route.custom_controller_path().empty()
                ? base::Optional<std::string>()
                : base::make_optional(route.custom_controller_path());
+  }
+
+  static bool supports_media_route_controller(
+      const media_router::MediaRoute& route) {
+    return route.supports_media_route_controller();
   }
 
   static bool for_display(const media_router::MediaRoute& route) {

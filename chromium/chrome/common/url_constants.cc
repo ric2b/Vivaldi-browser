@@ -9,6 +9,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "chrome/common/features.h"
+#include "components/safe_browsing/web_ui/constants.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/features/features.h"
 #include "media/media_features.h"
@@ -52,7 +53,6 @@ const char kChromeUIDownloadsURL[] = "chrome://downloads/";
 const char kChromeUIExtensionIconURL[] = "chrome://extension-icon/";
 const char kChromeUIExtensionsFrameURL[] = "chrome://extensions-frame/";
 const char kChromeUIExtensionsURL[] = "chrome://extensions/";
-const char kChromeUIFallbackIconURL[] = "chrome://fallback-icon/";
 const char kChromeUIFaviconURL[] = "chrome://favicon/";
 const char kChromeUIFeedbackURL[] = "chrome://feedback/";
 const char kChromeUIFlagsURL[] = "chrome://flags/";
@@ -67,7 +67,6 @@ const char kChromeUIInspectURL[] = "chrome://inspect/";
 const char kChromeUIInstantURL[] = "chrome://instant/";
 const char kChromeUIInterstitialURL[] = "chrome://interstitials/";
 const char kChromeUIInvalidationsURL[] = "chrome://invalidations/";
-const char kChromeUILargeIconURL[] = "chrome://large-icon/";
 const char kChromeUIMdPolicyURL[] = "chrome://md-policy/";
 const char kChromeUIMdSettingsURL[] = "chrome://md-settings/";
 const char kChromeUINaClURL[] = "chrome://nacl/";
@@ -83,7 +82,8 @@ const char kChromeUIQuitURL[] = "chrome://quit/";
 const char kChromeUIRestartURL[] = "chrome://restart/";
 const char kChromeUISettingsURL[] = "chrome://settings/";
 const char kChromeUIContentSettingsURL[] = "chrome://settings/content";
-const char kChromeUISettingsFrameURL[] = "chrome://settings-frame/";
+const char kChromeUISiteDetailsPrefixURL[] =
+    "chrome://settings/content/siteDetails?site=";
 const char kChromeUISigninEmailConfirmationURL[] =
     "chrome://signin-email-confirmation";
 const char kChromeUISigninErrorURL[] = "chrome://signin-error/";
@@ -138,16 +138,21 @@ const char kChromeUIUserImageURL[] = "chrome://userimage/";
 // TODO(xdai): Change it to chrome://settings/cupsPrinters after M56 since MD
 // settings is going to launch in Chrome OS in M57.
 const char kChromeUIMdCupsSettingsURL[] = "chrome://md-settings/cupsPrinters";
+const char kCupsPrintLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=chromebook_printing";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
-const char kChromeUICleanupToolURL[] = "chrome://cleanup/";
 const char kChromeUIMetroFlowURL[] = "chrome://make-metro/";
 #endif
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 const char kChromeUITabModalConfirmDialogURL[] =
     "chrome://tab-modal-confirm-dialog/";
+#endif
+
+#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
+extern const char kChromeUIMemoryInternalsURL[] = "chrome://memory-internals/";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -160,7 +165,6 @@ const char kChromeUICastURL[] = "chrome://cast/";
 #endif
 
 #if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
-const char kChromeUIDiscardsHost[] = "discards";
 const char kChromeUIDiscardsURL[] = "chrome://discards/";
 #endif
 
@@ -199,7 +203,6 @@ const char kChromeUIDriveInternalsHost[] = "drive-internals";
 const char kChromeUIExtensionIconHost[] = "extension-icon";
 const char kChromeUIExtensionsFrameHost[] = "extensions-frame";
 const char kChromeUIExtensionsHost[] = "extensions";
-const char kChromeUIFallbackIconHost[] = "fallback-icon";
 const char kChromeUIFaviconHost[] = "favicon";
 const char kChromeUIFeedbackHost[] = "feedback";
 const char kChromeUIFlagsHost[] = "flags";
@@ -221,6 +224,7 @@ const char kChromeUILargeIconHost[] = "large-icon";
 const char kChromeUILocalStateHost[] = "local-state";
 const char kChromeUIMdPolicyHost[] = "md-policy";
 const char kChromeUIMdSettingsHost[] = "md-settings";
+const char kChromeUIMediaEngagementHost[] = "media-engagement";
 const char kChromeUINaClHost[] = "nacl";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINetInternalsHost[] = "net-internals";
@@ -240,7 +244,6 @@ const char kChromeUIQuotaInternalsHost[] = "quota-internals";
 const char kChromeUIQuitHost[] = "quit";
 const char kChromeUIRestartHost[] = "restart";
 const char kChromeUISettingsHost[] = "settings";
-const char kChromeUISettingsFrameHost[] = "settings-frame";
 const char kChromeUIShorthangHost[] = "shorthang";
 const char kChromeUISigninEmailConfirmationHost[] = "signin-email-confirmation";
 const char kChromeUISigninErrorHost[] = "signin-error";
@@ -276,6 +279,14 @@ const char kChromeUIWorkersHost[] = "workers";
 const char kChromeUIPrintHost[] = "print";
 #endif  // ENABLE_PRINT_PREVIEW
 
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+const char kChromeUISigninDiceInternalsHost[] = "signin-dice-internals";
+#endif
+
+#if defined(OS_WIN) || defined(OS_MACOSX) || defined(OS_LINUX)
+const char kChromeUIDiscardsHost[] = "discards";
+#endif
+
 #if defined(OS_POSIX) && !defined(OS_MACOSX) && !defined(OS_ANDROID)
 const char kChromeUILinuxProxyConfigHost[] = "linux-proxy-config";
 #endif
@@ -288,7 +299,6 @@ const char kChromeUISandboxHost[] = "sandbox";
 const char kChromeUIContextualSearchPromoHost[] = "contextual-search-promo";
 const char kChromeUIOfflineInternalsHost[] = "offline-internals";
 const char kChromeUIPhysicalWebDiagnosticsHost[] = "physical-web-diagnostics";
-const char kChromeUIPopularSitesInternalsHost[] = "popular-sites-internals";
 const char kChromeUISnippetsInternalsHost[] = "snippets-internals";
 const char kChromeUIWebApksHost[] = "webapks";
 #endif
@@ -333,12 +343,15 @@ const char kChromeOSAssetPath[] = "/usr/share/chromeos-assets/";
 #endif  // defined(OS_CHROMEOS)
 
 #if defined(OS_WIN)
-const char kChromeUICleanupToolHost[] = "cleanup";
 const char kChromeUIMetroFlowHost[] = "make-metro";
 #endif
 
 #if (defined(OS_LINUX) && defined(TOOLKIT_VIEWS)) || defined(USE_AURA)
 const char kChromeUITabModalConfirmDialogHost[] = "tab-modal-confirm-dialog";
+#endif
+
+#if BUILDFLAG(ENABLE_OOP_HEAP_PROFILING)
+extern const char kChromeUIMemoryInternalsHost[] = "memory-internals";
 #endif
 
 #if BUILDFLAG(ENABLE_WEBRTC)
@@ -376,7 +389,6 @@ const char kTriggeredResetProfileSettingsSubPage[] =
 const char kAccessibilitySubPage[] = "accessibility";
 const char kBluetoothSubPage[] = "bluetoothDevices";
 const char kDateTimeSubPage[] = "dateTime";
-const char kDeprecatedOptionsSearchSubPage[] = "search";
 const char kDisplaySubPage[] = "display";
 const char kHelpSubPage[] = "help";
 const char kInternetSubPage[] = "internet";
@@ -621,6 +633,8 @@ const char kLearnMoreEnterpriseURL[] =
     "https://support.google.com/chromebook/?p=managed";
 const char kAndroidAppsLearnMoreURL[] =
     "https://support.google.com/chromebook/?p=playapps";
+const char kInstantTetheringLearnMoreURL[] =
+    "https://support.google.com/chromebook?p=instant_tethering";
 #endif
 
 const char kRemoveNonCWSExtensionURL[] =
@@ -629,6 +643,9 @@ const char kRemoveNonCWSExtensionURL[] =
 #if defined(OS_WIN)
 const char kNotificationsHelpURL[] =
     "https://support.google.com/chrome/?p=ui_notifications";
+
+const char kChromeCleanerLearnMoreURL[] =
+    "https://support.google.com/chrome/?p=chrome_cleanup_tool";
 #endif
 
 const char kNotificationWelcomeLearnMoreURL[] =
@@ -654,6 +671,7 @@ const char* const kChromeHostURLs[] = {
     kChromeUIHistoryHost,
     kChromeUIInvalidationsHost,
     kChromeUILocalStateHost,
+    kChromeUIMediaEngagementHost,
     kChromeUINetExportHost,
     kChromeUINetInternalsHost,
     kChromeUINewTabHost,
@@ -666,6 +684,7 @@ const char* const kChromeHostURLs[] = {
     kChromeUISignInInternalsHost,
     kChromeUISiteEngagementHost,
     kChromeUINTPTilesInternalsHost,
+    safe_browsing::kChromeUISafeBrowsingHost,
     kChromeUISuggestionsHost,
     kChromeUISupervisedUserInternalsHost,
     kChromeUISyncInternalsHost,
@@ -706,7 +725,6 @@ const char* const kChromeHostURLs[] = {
 #if defined(OS_ANDROID)
     kChromeUINetExportHost,
     kChromeUIOfflineInternalsHost,
-    kChromeUIPopularSitesInternalsHost,
     kChromeUISnippetsInternalsHost,
     kChromeUIWebApksHost,
 #endif

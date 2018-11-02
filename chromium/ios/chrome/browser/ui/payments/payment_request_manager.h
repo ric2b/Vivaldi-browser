@@ -7,6 +7,8 @@
 
 #import <UIKit/UIKit.h>
 
+class ToolbarModelIOS;
+
 namespace ios {
 class ChromeBrowserState;
 }  // namespace ios
@@ -22,14 +24,13 @@ class WebState;
 // interface.
 @interface PaymentRequestManager : NSObject
 
-// YES if Payment Request is enabled on the current web state.
-@property(readonly) BOOL enabled;
+// IOS specific version of ToolbarModel that is used for grabbing security
+// info.
+@property(nonatomic, assign) ToolbarModelIOS* toolbarModel;
 
-// The current web state being observed for PaymentRequest invocations.
-@property(nonatomic, assign) web::WebState* webState;
-
-// The ios::ChromeBrowserState instance passed to the initializer.
-@property(nonatomic, assign) ios::ChromeBrowserState* browserState;
+// The WebState being observed for invocations of the Payment Request API.
+// Should outlive this instance. May be nullptr.
+@property(nonatomic, assign) web::WebState* activeWebState;
 
 // Designated initializer.
 - (instancetype)initWithBaseViewController:(UIViewController*)viewController
@@ -39,18 +40,19 @@ class WebState;
 
 - (instancetype)init NS_UNAVAILABLE;
 
-// Sets the WebState to be observed for invocations of the Payment Request API.
-// |webState|'s lifetime should be greater than the receiver's. |webState| can
-// be nil.
-- (void)setWebState:(web::WebState*)webState;
+// Stops tracking instances of payments::PaymentRequest for |webState|. This is
+// called before the tab |webState| is associated with is removed.
+- (void)stopTrackingWebState:(web::WebState*)webState;
 
-// Enables or disables the Payment Request API for the current webState. If
+// Enables or disables the Payment Request API for the active webState. If
 // |enabled| is YES, the API may still not be enabled if the flag is not set;
 // the -enabled property will indicate the current status. This method functions
 // asynchronously.
 - (void)enablePaymentRequest:(BOOL)enabled;
 
-// Cancels the pending request and dismiss the UI.
+// If there is a pending request, cancels it and dismisses the UI. This must be
+// called if the pending request has to be terminated, e.g., when the active
+// webState changes.
 - (void)cancelRequest;
 
 // Destroys the receiver. Any following call is not supported.

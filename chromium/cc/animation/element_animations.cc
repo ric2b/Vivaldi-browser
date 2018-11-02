@@ -15,6 +15,7 @@
 #include "cc/animation/animation_host.h"
 #include "cc/animation/animation_player.h"
 #include "cc/animation/keyframed_animation_curve.h"
+#include "cc/animation/transform_operations.h"
 #include "cc/base/filter_operations.h"
 #include "cc/trees/mutator_host_client.h"
 #include "ui/gfx/geometry/box_f.h"
@@ -194,25 +195,6 @@ void ElementAnimations::NotifyAnimationAborted(const AnimationEvent& event) {
   UpdateClientAnimationState();
 }
 
-void ElementAnimations::NotifyAnimationPropertyUpdate(
-    const AnimationEvent& event) {
-  DCHECK(!event.is_impl_only);
-  bool notify_active_elements = true;
-  bool notify_pending_elements = true;
-  switch (event.target_property) {
-    case TargetProperty::OPACITY:
-      NotifyClientOpacityAnimated(event.opacity, notify_active_elements,
-                                  notify_pending_elements);
-      break;
-    case TargetProperty::TRANSFORM:
-      NotifyClientTransformAnimated(event.transform, notify_active_elements,
-                                    notify_pending_elements);
-      break;
-    default:
-      NOTREACHED();
-  }
-}
-
 bool ElementAnimations::HasFilterAnimationThatInflatesBounds() const {
   for (auto& player : players_list_) {
     if (player.HasFilterAnimationThatInflatesBounds())
@@ -314,43 +296,39 @@ void ElementAnimations::SetNeedsUpdateImplClientState() {
   SetNeedsPushProperties();
 }
 
-void ElementAnimations::NotifyClientOpacityAnimated(
-    float opacity,
-    bool notify_active_elements,
-    bool notify_pending_elements) {
-  if (notify_active_elements && has_element_in_active_list())
+void ElementAnimations::NotifyClientOpacityAnimated(float opacity,
+                                                    Animation* animation) {
+  if (AnimationAffectsActiveElements(animation))
     OnOpacityAnimated(ElementListType::ACTIVE, opacity);
-  if (notify_pending_elements && has_element_in_pending_list())
+  if (AnimationAffectsPendingElements(animation))
     OnOpacityAnimated(ElementListType::PENDING, opacity);
-}
-
-void ElementAnimations::NotifyClientTransformAnimated(
-    const gfx::Transform& transform,
-    bool notify_active_elements,
-    bool notify_pending_elements) {
-  if (notify_active_elements && has_element_in_active_list())
-    OnTransformAnimated(ElementListType::ACTIVE, transform);
-  if (notify_pending_elements && has_element_in_pending_list())
-    OnTransformAnimated(ElementListType::PENDING, transform);
 }
 
 void ElementAnimations::NotifyClientFilterAnimated(
     const FilterOperations& filters,
-    bool notify_active_elements,
-    bool notify_pending_elements) {
-  if (notify_active_elements && has_element_in_active_list())
+    Animation* animation) {
+  if (AnimationAffectsActiveElements(animation))
     OnFilterAnimated(ElementListType::ACTIVE, filters);
-  if (notify_pending_elements && has_element_in_pending_list())
+  if (AnimationAffectsPendingElements(animation))
     OnFilterAnimated(ElementListType::PENDING, filters);
+}
+
+void ElementAnimations::NotifyClientTransformOperationsAnimated(
+    const TransformOperations& operations,
+    Animation* animation) {
+  gfx::Transform transform = operations.Apply();
+  if (AnimationAffectsActiveElements(animation))
+    OnTransformAnimated(ElementListType::ACTIVE, transform);
+  if (AnimationAffectsPendingElements(animation))
+    OnTransformAnimated(ElementListType::PENDING, transform);
 }
 
 void ElementAnimations::NotifyClientScrollOffsetAnimated(
     const gfx::ScrollOffset& scroll_offset,
-    bool notify_active_elements,
-    bool notify_pending_elements) {
-  if (notify_active_elements && has_element_in_active_list())
+    Animation* animation) {
+  if (AnimationAffectsActiveElements(animation))
     OnScrollOffsetAnimated(ElementListType::ACTIVE, scroll_offset);
-  if (notify_pending_elements && has_element_in_pending_list())
+  if (AnimationAffectsPendingElements(animation))
     OnScrollOffsetAnimated(ElementListType::PENDING, scroll_offset);
 }
 
@@ -492,6 +470,24 @@ gfx::ScrollOffset ElementAnimations::ScrollOffsetForAnimation() const {
   }
 
   return gfx::ScrollOffset();
+}
+
+bool ElementAnimations::AnimationAffectsActiveElements(
+    Animation* animation) const {
+  // When we force an animation update due to a notification, we do not have an
+  // Animation instance. In this case, we force an update of active elements.
+  if (!animation)
+    return true;
+  return animation->affects_active_elements() && has_element_in_active_list();
+}
+
+bool ElementAnimations::AnimationAffectsPendingElements(
+    Animation* animation) const {
+  // When we force an animation update due to a notification, we do not have an
+  // Animation instance. In this case, we force an update of pending elements.
+  if (!animation)
+    return true;
+  return animation->affects_pending_elements() && has_element_in_pending_list();
 }
 
 }  // namespace cc

@@ -29,10 +29,11 @@
 
 """Webkit-patch is a tool with multiple sub-commands with different purposes.
 
-Historically, it had commands related to dealing with bugzilla, and posting
-and comitting patches to WebKit. More recently, it has commands for printing
-expectations, fetching new test baselines, starting a commit-announcer IRC bot,
-etc. These commands don't necessarily have anything to do with each other.
+Historically, it had commands related to dealing with bugzilla and posting
+and committing patches to WebKit. More recently, it has commands for printing
+expectations, fetching new test baselines, etc.
+
+These commands don't necessarily have anything to do with each other.
 """
 
 import logging
@@ -41,8 +42,8 @@ import sys
 
 from webkitpy.common.host import Host
 from webkitpy.tool.commands.analyze_baselines import AnalyzeBaselines
-from webkitpy.tool.commands.auto_rebaseline import AutoRebaseline
 from webkitpy.tool.commands.command import HelpPrintingOptionParser
+from webkitpy.tool.commands.copy_existing_baselines import CopyExistingBaselines
 from webkitpy.tool.commands.flaky_tests import FlakyTests
 from webkitpy.tool.commands.help_command import HelpCommand
 from webkitpy.tool.commands.layout_tests_server import LayoutTestsServer
@@ -51,12 +52,11 @@ from webkitpy.tool.commands.pretty_diff import PrettyDiff
 from webkitpy.tool.commands.queries import CrashLog
 from webkitpy.tool.commands.queries import PrintBaselines
 from webkitpy.tool.commands.queries import PrintExpectations
-from webkitpy.tool.commands.rebaseline import CopyExistingBaselinesInternal
 from webkitpy.tool.commands.rebaseline import Rebaseline
 from webkitpy.tool.commands.rebaseline import RebaselineExpectations
-from webkitpy.tool.commands.rebaseline import RebaselineTest
 from webkitpy.tool.commands.rebaseline_cl import RebaselineCL
 from webkitpy.tool.commands.rebaseline_server import RebaselineServer
+from webkitpy.tool.commands.rebaseline_test import RebaselineTest
 
 
 _log = logging.getLogger(__name__)
@@ -80,8 +80,7 @@ class WebKitPatch(Host):
         self._path = path
         self.commands = [
             AnalyzeBaselines(),
-            AutoRebaseline(),
-            CopyExistingBaselinesInternal(),
+            CopyExistingBaselines(),
             CrashLog(),
             FlakyTests(),
             LayoutTestsServer(),
@@ -111,11 +110,6 @@ class WebKitPatch(Host):
 
         command.set_option_parser(option_parser)
         (options, args) = command.parse_args(args)
-
-        (should_execute, failure_reason) = self._should_execute_command(command)
-        if not should_execute:
-            _log.error(failure_reason)
-            return 0  # FIXME: Should this really be 0?
 
         result = command.check_arguments_and_execute(options, args, self)
         return result
@@ -147,22 +141,11 @@ class WebKitPatch(Host):
         for option in global_options:
             option_parser.add_option(option)
 
-    def _should_execute_command(self, command):
-        if command.requires_local_commits and not self.git().supports_local_commits():
-            failure_reason = '%s requires local commits using %s in %s.' % (
-                command.name, self.git().display_name(), self.git().checkout_root)
-            return (False, failure_reason)
-        return (True, None)
-
     def name(self):
         return optparse.OptionParser().get_prog_name()
 
     def should_show_in_main_help(self, command):
-        if not command.show_in_main_help:
-            return False
-        if command.requires_local_commits:
-            return self.git().supports_local_commits()
-        return True
+        return command.show_in_main_help
 
     def command_by_name(self, command_name):
         for command in self.commands:

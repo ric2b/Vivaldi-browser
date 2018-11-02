@@ -7,6 +7,8 @@
 #ifndef MEDIA_BASE_LIMITS_H_
 #define MEDIA_BASE_LIMITS_H_
 
+#include "build/build_config.h"
+
 namespace media {
 
 namespace limits {
@@ -42,6 +44,10 @@ enum {
   // This limit is used by ParamTraits<VideoCaptureParams>.
   kMaxFramesPerSecond = 1000,
 
+  // The minimum elapsed amount of time (in seconds) for a playback to be
+  // considered as having active engagement.
+  kMinimumElapsedWatchTimeSecs = 7,
+
   // Maximum lengths for various EME API parameters. These are checks to
   // prevent unnecessarily large parameters from being passed around, and the
   // lengths are somewhat arbitrary as the EME spec doesn't specify any limits.
@@ -54,6 +60,17 @@ enum {
   kMaxInitDataLength = 64 * 1024,         // 64 KB
   kMaxSessionResponseLength = 64 * 1024,  // 64 KB
   kMaxKeySystemLength = 256,
+
+// Minimum and maximum buffer sizes for certain audio platforms.
+#if defined(OS_MACOSX)
+  kMinAudioBufferSize = 128,
+  kMaxAudioBufferSize = 4096,
+#elif defined(USE_CRAS)
+  // Though CRAS has different per-board defaults, allow explicitly requesting
+  // this buffer size on any board.
+  kMinAudioBufferSize = 256,
+  kMaxAudioBufferSize = 8192,
+#endif
 };
 
 }  // namespace limits

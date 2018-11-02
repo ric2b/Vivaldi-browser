@@ -5,16 +5,11 @@
 #import "ios/chrome/browser/ui/payments/payment_items_display_coordinator.h"
 
 #include "base/mac/foundation_util.h"
-#include "base/memory/ptr_util.h"
 #include "base/test/ios/wait_util.h"
-#include "components/autofill/core/browser/autofill_profile.h"
-#include "components/autofill/core/browser/credit_card.h"
-#include "components/autofill/core/browser/test_personal_data_manager.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #include "ios/chrome/browser/payments/payment_request_test_util.h"
 #import "ios/chrome/browser/ui/payments/payment_items_display_view_controller.h"
-#include "ios/web/public/payments/payment_request.h"
-#include "testing/gtest/include/gtest/gtest.h"
+#import "ios/chrome/browser/ui/payments/payment_request_unittest_base.h"
 #include "testing/platform_test.h"
 #include "third_party/ocmock/OCMock/OCMock.h"
 #include "third_party/ocmock/gtest_support.h"
@@ -23,16 +18,17 @@
 #error "This file requires ARC support."
 #endif
 
-class PaymentRequestPaymentItemsDisplayCoordinatorTest : public PlatformTest {
+class PaymentRequestPaymentItemsDisplayCoordinatorTest
+    : public PaymentRequestUnitTestBase,
+      public PlatformTest {
  protected:
-  PaymentRequestPaymentItemsDisplayCoordinatorTest() {
-    payment_request_ = base::MakeUnique<PaymentRequest>(
-        payment_request_test_util::CreateTestWebPaymentRequest(),
-        &personal_data_manager_);
+  void SetUp() override {
+    PaymentRequestUnitTestBase::SetUp();
+
+    CreateTestPaymentRequest();
   }
 
-  autofill::TestPersonalDataManager personal_data_manager_;
-  std::unique_ptr<PaymentRequest> payment_request_;
+  void TearDown() override { PaymentRequestUnitTestBase::TearDown(); }
 };
 
 // Tests that invoking start and stop on the coordinator presents and dismisses
@@ -46,17 +42,17 @@ TEST_F(PaymentRequestPaymentItemsDisplayCoordinatorTest, StartAndStop) {
   PaymentItemsDisplayCoordinator* coordinator =
       [[PaymentItemsDisplayCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 
   [coordinator stop];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 }
@@ -73,7 +69,7 @@ TEST_F(PaymentRequestPaymentItemsDisplayCoordinatorTest, DidConfirm) {
   PaymentItemsDisplayCoordinator* coordinator =
       [[PaymentItemsDisplayCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -84,7 +80,7 @@ TEST_F(PaymentRequestPaymentItemsDisplayCoordinatorTest, DidConfirm) {
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 
@@ -109,7 +105,7 @@ TEST_F(PaymentRequestPaymentItemsDisplayCoordinatorTest, DidReturn) {
   PaymentItemsDisplayCoordinator* coordinator =
       [[PaymentItemsDisplayCoordinator alloc]
           initWithBaseViewController:base_view_controller];
-  [coordinator setPaymentRequest:payment_request_.get()];
+  [coordinator setPaymentRequest:payment_request()];
 
   // Mock the coordinator delegate.
   id delegate = [OCMockObject
@@ -120,7 +116,7 @@ TEST_F(PaymentRequestPaymentItemsDisplayCoordinatorTest, DidReturn) {
   EXPECT_EQ(1u, navigation_controller.viewControllers.count);
 
   [coordinator start];
-  // Short delay to allow animation to complete.
+  // Spin the run loop to trigger the animation.
   base::test::ios::SpinRunLoopWithMaxDelay(base::TimeDelta::FromSecondsD(1.0));
   EXPECT_EQ(2u, navigation_controller.viewControllers.count);
 

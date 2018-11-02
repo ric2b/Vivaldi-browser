@@ -104,6 +104,26 @@ RasterTaskCompletionStatsAsValue(const RasterTaskCompletionStats& stats);
 // should no longer have any memory assigned to them. Tile objects are "owned"
 // by layers; they automatically register with the manager when they are
 // created, and unregister from the manager when they are deleted.
+//
+// The TileManager coordinates scheduling of prioritized raster and decode work
+// across 2 different subsystems, namely the TaskGraphRunner used primarily for
+// raster work and images which must be decoded before rasterization of a tile
+// can proceed, and the CheckerImageTracker used for images decoded
+// asynchronously from raster using the |image_worker_task_runner|. The order in
+// which work is scheduled across these systems is as follows:
+//
+// 1) RequiredForActivation/Draw Tiles: These are the highest priority tiles
+// which block scheduling of any decode work for checkered-images.
+//
+// 2) Pre-paint Tiles: These are offscreen tiles which fall within the
+// pre-raster distance. The work for these tiles continues in parallel with the
+// decode work for checkered images from visible/pre-paint tiles.
+//
+// 3) Pre-decode Tiles: These are offscreen tiles which are outside the
+// pre-raster distance but have their images pre-decoded and locked. Finishing
+// work for these tiles on the TaskGraph blocks starting decode work for
+// checker-imaged pre-decode tiles.
+
 class CC_EXPORT TileManager : CheckerImageTrackerClient {
  public:
   TileManager(TileManagerClient* client,
@@ -146,7 +166,8 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   std::unique_ptr<Tile> CreateTile(const Tile::CreateInfo& info,
                                    int layer_id,
                                    int source_frame_number,
-                                   int flags);
+                                   int flags,
+                                   bool can_use_lcd_text);
 
   bool IsReadyToActivate() const;
   bool IsReadyToDraw() const;
@@ -243,6 +264,10 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
     return num_of_tiles_with_checker_images_;
   }
 
+  CheckerImageTracker& checker_image_tracker() {
+    return checker_image_tracker_;
+  }
+
  protected:
   friend class Tile;
   // Must be called by tile during destruction.
@@ -255,7 +280,8 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
     MemoryUsage();
     MemoryUsage(size_t memory_bytes, size_t resource_count);
 
-    static MemoryUsage FromConfig(const gfx::Size& size, ResourceFormat format);
+    static MemoryUsage FromConfig(const gfx::Size& size,
+                                  viz::ResourceFormat format);
     static MemoryUsage FromTile(const Tile* tile);
 
     MemoryUsage& operator+=(const MemoryUsage& other);
@@ -318,7 +344,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   void MarkTilesOutOfMemory(
       std::unique_ptr<RasterTilePriorityQueue> queue) const;
 
-  ResourceFormat DetermineResourceFormat(const Tile* tile) const;
+  viz::ResourceFormat DetermineResourceFormat(const Tile* tile) const;
   bool DetermineResourceRequiresSwizzle(const Tile* tile) const;
 
   void DidFinishRunningTileTasksRequiredForActivation();
@@ -328,7 +354,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   scoped_refptr<TileTask> CreateTaskSetFinishedTask(
       void (TileManager::*callback)());
   PrioritizedWorkToSchedule AssignGpuMemoryToTiles();
-  void ScheduleTasks(const PrioritizedWorkToSchedule& work_to_schedule);
+  void ScheduleTasks(PrioritizedWorkToSchedule work_to_schedule);
 
   void PartitionImagesForCheckering(const PrioritizedTile& prioritized_tile,
                                     const gfx::ColorSpace& raster_color_space,
@@ -337,6 +363,7 @@ class CC_EXPORT TileManager : CheckerImageTrackerClient {
   void AddCheckeredImagesToDecodeQueue(
       const PrioritizedTile& prioritized_tile,
       const gfx::ColorSpace& raster_color_space,
+      CheckerImageTracker::DecodeType decode_type,
       CheckerImageTracker::ImageDecodeQueue* image_decode_queue);
 
   std::unique_ptr<base::trace_event::ConvertableToTraceFormat>

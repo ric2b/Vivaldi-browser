@@ -21,8 +21,6 @@ PermissionsBrowserTest::PermissionsBrowserTest(const std::string& test_url)
 PermissionsBrowserTest::~PermissionsBrowserTest() {}
 
 void PermissionsBrowserTest::SetUpOnMainThread() {
-  InProcessBrowserTest::SetUpOnMainThread();
-
   PermissionRequestManager* manager = PermissionRequestManager::FromWebContents(
       browser()->tab_strip_model()->GetActiveWebContents());
   prompt_factory_.reset(new MockPermissionPromptFactory(manager));
@@ -36,8 +34,6 @@ void PermissionsBrowserTest::SetUpOnMainThread() {
 
 void PermissionsBrowserTest::TearDownOnMainThread() {
   prompt_factory_.reset();
-
-  InProcessBrowserTest::TearDownOnMainThread();
 }
 
 bool PermissionsBrowserTest::RunScriptReturnBool(const std::string& script) {

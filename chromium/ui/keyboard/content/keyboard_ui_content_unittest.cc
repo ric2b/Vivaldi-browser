@@ -22,7 +22,6 @@ class TestKeyboardUIContent : public KeyboardUIContent {
   ~TestKeyboardUIContent() override {}
 
   ui::InputMethod* GetInputMethod() override { return nullptr; }
-  void SetUpdateInputType(ui::TextInputType type) override {}
   void RequestAudioInput(
       content::WebContents* web_contents,
       const content::MediaStreamRequest& request,
@@ -57,9 +56,9 @@ TEST_F(KeyboardUIContentTest, DoesNotCrashWhenParentDoesNotExist) {
   content::WebContents* contents = CreateTestWebContents();
   TestKeyboardUIContent keyboard_ui(contents->GetBrowserContext(), contents);
 
-  EXPECT_FALSE(keyboard_ui.HasKeyboardWindow());
-  aura::Window* view = keyboard_ui.GetKeyboardWindow();
-  EXPECT_TRUE(keyboard_ui.HasKeyboardWindow());
+  EXPECT_FALSE(keyboard_ui.HasContentsWindow());
+  aura::Window* view = keyboard_ui.GetContentsWindow();
+  EXPECT_TRUE(keyboard_ui.HasContentsWindow());
 
   EXPECT_FALSE(view->parent());
 

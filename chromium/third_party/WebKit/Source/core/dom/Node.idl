@@ -21,7 +21,7 @@
 // https://dom.spec.whatwg.org/#interface-node
 
 [
-    DependentLifetime,
+    DependentLifetime
 ] interface Node : EventTarget {
     const unsigned short ELEMENT_NODE = 1;
     const unsigned short ATTRIBUTE_NODE = 2;
@@ -75,7 +75,7 @@
     boolean isDefaultNamespace(DOMString? namespaceURI);
 
     [CEReactions, CustomElementCallbacks, PerWorldBindings, RaisesException] Node insertBefore(Node node, Node? child);
-    [CEReactions, CustomElementCallbacks, PerWorldBindings, RaisesException] Node appendChild(Node node);
+    [CEReactions, CustomElementCallbacks, PerWorldBindings, RaisesException, RuntimeCallStatsCounter=NodeAppendChild] Node appendChild(Node node);
     [CEReactions, CustomElementCallbacks, PerWorldBindings, RaisesException] Node replaceChild(Node node, Node child);
-    [CEReactions, CustomElementCallbacks, RaisesException] Node removeChild(Node child);
+    [CEReactions, CustomElementCallbacks, RaisesException, RuntimeCallStatsCounter=NodeRemoveChild] Node removeChild(Node child);
 };

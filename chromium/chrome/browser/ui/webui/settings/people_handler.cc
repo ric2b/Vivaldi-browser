@@ -29,12 +29,14 @@
 #include "chrome/browser/sync/sync_ui_util.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/singleton_tabs.h"
 #include "chrome/browser/ui/user_manager.h"
 #include "chrome/browser/ui/webui/profile_helper.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/chrome_switches.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/autofill/core/common/autofill_constants.h"
 #include "components/autofill/core/common/autofill_pref_names.h"
@@ -162,6 +164,8 @@ std::string GetSyncErrorAction(sync_ui_util::ActionType action_type) {
       return "upgradeClient";
     case sync_ui_util::ENTER_PASSPHRASE:
       return "enterPassphrase";
+    case sync_ui_util::CONFIRM_SYNC_SETTINGS:
+      return "confirmSyncSettings";
     default:
       return "noAction";
   }
@@ -194,6 +198,7 @@ PeopleHandler::~PeopleHandler() {
 }
 
 void PeopleHandler::RegisterMessages() {
+  InitializeSyncBlocker();
   web_ui()->RegisterMessageCallback(
       "SyncSetupDidClosePage",
       base::Bind(&PeopleHandler::OnDidClosePage, base::Unretained(this)));
@@ -557,7 +562,7 @@ void PeopleHandler::HandleGetSyncStatus(const base::ListValue* args) {
 }
 
 void PeopleHandler::HandleManageOtherPeople(const base::ListValue* /* args */) {
-  UserManager::Show(base::FilePath(), profiles::USER_MANAGER_NO_TUTORIAL,
+  UserManager::Show(base::FilePath(),
                     profiles::USER_MANAGER_SELECT_PROFILE_NO_ACTION);
 }
 
@@ -623,7 +628,7 @@ void PeopleHandler::OpenSyncSetup() {
   GetLoginUIService()->SetLoginUI(this);
 
   ProfileSyncService* service = GetSyncService();
-  if (service)
+  if (service && !sync_blocker_)
     sync_blocker_ = service->GetSetupInProgressHandle();
 
   // There are several different UI flows that can bring the user here:
@@ -684,6 +689,20 @@ void PeopleHandler::OpenSyncSetup() {
   PushSyncPrefs();
 }
 
+void PeopleHandler::InitializeSyncBlocker() {
+  if (!web_ui())
+    return;
+  WebContents* web_contents = web_ui()->GetWebContents();
+  if (web_contents) {
+    ProfileSyncService* service = GetSyncService();
+    const GURL current_url = web_contents->GetVisibleURL();
+    if (service &&
+        current_url == chrome::GetSettingsUrl(chrome::kSyncSetupSubPage)) {
+      sync_blocker_ = service->GetSetupInProgressHandle();
+    }
+  }
+}
+
 void PeopleHandler::FocusUI() {
   WebContents* web_contents = web_ui()->GetWebContents();
   web_contents->GetDelegate()->ActivateContents(web_contents);
@@ -695,8 +714,7 @@ void PeopleHandler::CloseUI() {
 }
 
 void PeopleHandler::GoogleSigninSucceeded(const std::string& /* account_id */,
-                                          const std::string& /* username */,
-                                          const std::string& /* password */) {
+                                          const std::string& /* username */) {
   UpdateSyncStatus();
 }
 

@@ -25,16 +25,16 @@
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
 #include "core/editing/FrameSelection.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLIFrameElement.h"
 #include "core/layout/HitTestResult.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/LayoutGeometryMap.h"
-#include "core/layout/LayoutPart.h"
 #include "core/layout/ViewFragmentationContext.h"
 #include "core/layout/api/LayoutAPIShim.h"
-#include "core/layout/api/LayoutPartItem.h"
+#include "core/layout/api/LayoutEmbeddedContentItem.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
@@ -140,11 +140,11 @@ bool LayoutView::HitTestNoLifecycleUpdate(HitTestResult& result) {
   } else {
     hit_layer = Layer()->HitTest(result);
 
-    // FrameView scrollbars are not the same as Layer scrollbars tested by
-    // Layer::hitTestOverflowControls, so we need to test FrameView scrollbars
-    // separately here. Note that it's important we do this after the hit test
-    // above, because that may overwrite the entire HitTestResult when it finds
-    // a hit.
+    // LocalFrameView scrollbars are not the same as Layer scrollbars tested by
+    // Layer::hitTestOverflowControls, so we need to test LocalFrameView
+    // scrollbars separately here. Note that it's important we do this after the
+    // hit test above, because that may overwrite the entire HitTestResult when
+    // it finds a hit.
     IntPoint frame_point = GetFrameView()->ContentsToFrame(
         result.GetHitTestLocation().RoundedPoint());
     if (Scrollbar* frame_scrollbar =
@@ -164,6 +164,12 @@ bool LayoutView::HitTestNoLifecycleUpdate(HitTestResult& result) {
       if (scrollable_area && scrollable_area->GetLayoutBox() &&
           scrollable_area->GetLayoutBox()->GetNode()) {
         Node* node = scrollable_area->GetLayoutBox()->GetNode();
+
+        // If scrollbar belongs to Document, we should set innerNode to the
+        // <html> element to match other browser.
+        if (node->IsDocumentNode())
+          node = node->GetDocument().documentElement();
+
         result.SetInnerNode(node);
         result.SetURLElement(node->EnclosingLinkEventParentOrSelf());
       }
@@ -182,7 +188,7 @@ bool LayoutView::HitTestNoLifecycleUpdate(HitTestResult& result) {
 
 void LayoutView::ClearHitTestCache() {
   hit_test_cache_->Clear();
-  LayoutPartItem frame_layout_item = GetFrame()->OwnerLayoutItem();
+  LayoutEmbeddedContentItem frame_layout_item = GetFrame()->OwnerLayoutItem();
   if (!frame_layout_item.IsNull())
     frame_layout_item.View().ClearHitTestCache();
 }
@@ -207,7 +213,7 @@ bool LayoutView::CanHaveChildren() const {
   FrameOwner* owner = GetFrame()->Owner();
   if (!owner)
     return true;
-  if (!RuntimeEnabledFeatures::displayNoneIFrameCreatesNoLayoutObjectEnabled())
+  if (!RuntimeEnabledFeatures::DisplayNoneIFrameCreatesNoLayoutObjectEnabled())
     return true;
   return !owner->IsDisplayNone();
 }
@@ -253,7 +259,7 @@ void LayoutView::UpdateLayout() {
   // TODO(wangxianzhu): Move this into ViewPaintInvalidator when
   // rootLayerScrolling is permanently enabled.
   IncludeScrollbarsInRect include_scrollbars =
-      RuntimeEnabledFeatures::rootLayerScrollingEnabled() ? kIncludeScrollbars
+      RuntimeEnabledFeatures::RootLayerScrollingEnabled() ? kIncludeScrollbars
                                                           : kExcludeScrollbars;
   SetShouldDoFullPaintInvalidationOnResizeIfNeeded(
       OffsetWidth() != GetLayoutSize(include_scrollbars).Width(),
@@ -318,11 +324,7 @@ void LayoutView::UpdateLayout() {
 LayoutRect LayoutView::VisualOverflowRect() const {
   // In root layer scrolling mode, the LayoutView performs overflow clipping
   // like a regular scrollable div.
-  if (RuntimeEnabledFeatures::rootLayerScrollingEnabled())
-    return LayoutBlockFlow::VisualOverflowRect();
-
-  // Ditto when not in compositing mode.
-  if (!UsesCompositing())
+  if (RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return LayoutBlockFlow::VisualOverflowRect();
 
   // In normal compositing mode, LayoutView doesn't actually apply clipping
@@ -360,7 +362,8 @@ void LayoutView::MapLocalToAncestor(const LayoutBoxModelObject* ancestor,
     return;
 
   if (mode & kTraverseDocumentBoundaries) {
-    LayoutPartItem parent_doc_layout_item = GetFrame()->OwnerLayoutItem();
+    LayoutEmbeddedContentItem parent_doc_layout_item =
+        GetFrame()->OwnerLayoutItem();
     if (!parent_doc_layout_item.IsNull()) {
       if (!(mode & kInputIsInFrameCoordinates)) {
         transform_state.Move(
@@ -387,8 +390,9 @@ const LayoutObject* LayoutView::PushMappingToContainer(
   LayoutObject* container = nullptr;
 
   if (geometry_map.GetMapCoordinatesFlags() & kTraverseDocumentBoundaries) {
-    if (LayoutPart* parent_doc_layout_object = ToLayoutPart(
-            LayoutAPIShim::LayoutObjectFrom(GetFrame()->OwnerLayoutItem()))) {
+    if (LayoutEmbeddedContent* parent_doc_layout_object =
+            ToLayoutEmbeddedContent(LayoutAPIShim::LayoutObjectFrom(
+                GetFrame()->OwnerLayoutItem()))) {
       offset = -LayoutSize(frame_view_->GetScrollOffset());
       offset += parent_doc_layout_object->ContentBoxOffset();
       container = parent_doc_layout_object;
@@ -416,8 +420,9 @@ void LayoutView::MapAncestorToLocal(const LayoutBoxModelObject* ancestor,
                                     TransformState& transform_state,
                                     MapCoordinatesFlags mode) const {
   if (this != ancestor && (mode & kTraverseDocumentBoundaries)) {
-    if (LayoutPart* parent_doc_layout_object = ToLayoutPart(
-            LayoutAPIShim::LayoutObjectFrom(GetFrame()->OwnerLayoutItem()))) {
+    if (LayoutEmbeddedContent* parent_doc_layout_object =
+            ToLayoutEmbeddedContent(LayoutAPIShim::LayoutObjectFrom(
+                GetFrame()->OwnerLayoutItem()))) {
       // A LayoutView is a containing block for fixed-position elements, so
       // don't carry this state across frames.
       parent_doc_layout_object->MapAncestorToLocal(ancestor, transform_state,
@@ -469,7 +474,7 @@ static void SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(
 }
 
 void LayoutView::SetShouldDoFullPaintInvalidationForViewAndAllDescendants() {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     SetShouldDoFullPaintInvalidationIncludingNonCompositingDescendants();
   else
     SetShouldDoFullPaintInvalidationForViewAndAllDescendantsInternal(this);
@@ -669,8 +674,8 @@ void LayoutView::CalculateScrollbarModes(ScrollbarMode& h_mode,
       RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
   }
 
-  if (FrameView* frameView = GetFrameView()) {
-    // Scrollbars can be disabled by FrameView::setCanHaveScrollbars.
+  if (LocalFrameView* frameView = GetFrameView()) {
+    // Scrollbars can be disabled by LocalFrameView::setCanHaveScrollbars.
     if (!frameView->CanHaveScrollbars())
       RETURN_SCROLLBAR_MODE(kScrollbarAlwaysOff);
   }
@@ -764,13 +769,13 @@ int LayoutView::ViewLogicalHeight(
 }
 
 int LayoutView::ViewLogicalWidthForBoxSizing() const {
-  return ViewLogicalWidth(RuntimeEnabledFeatures::rootLayerScrollingEnabled()
+  return ViewLogicalWidth(RuntimeEnabledFeatures::RootLayerScrollingEnabled()
                               ? kIncludeScrollbars
                               : kExcludeScrollbars);
 }
 
 int LayoutView::ViewLogicalHeightForBoxSizing() const {
-  return ViewLogicalHeight(RuntimeEnabledFeatures::rootLayerScrollingEnabled()
+  return ViewLogicalHeight(RuntimeEnabledFeatures::RootLayerScrollingEnabled()
                                ? kIncludeScrollbars
                                : kExcludeScrollbars);
 }
@@ -785,19 +790,28 @@ float LayoutView::ZoomFactor() const {
   return frame_view_->GetFrame().PageZoomFactor();
 }
 
+const LayoutBox& LayoutView::RootBox() const {
+  Element* document_element = GetDocument().documentElement();
+  DCHECK(document_element);
+  DCHECK(document_element->GetLayoutObject());
+  DCHECK(document_element->GetLayoutObject()->IsBox());
+  return ToLayoutBox(*document_element->GetLayoutObject());
+}
+
 void LayoutView::UpdateAfterLayout() {
   // Unlike every other layer, the root PaintLayer takes its size from the
   // layout viewport size.  The call to AdjustViewSize() will update the
   // frame's contents size, which will also update the page's minimum scale
   // factor.  The call to ResizeAfterLayout() will calculate the layout viewport
-  // size based on the page minimum scale factor, and then update the FrameView
-  // with the new size.
+  // size based on the page minimum scale factor, and then update the
+  // LocalFrameView with the new size.
   if (HasOverflowClip())
     GetScrollableArea()->ClampScrollOffsetAfterOverflowChange();
   LocalFrame& frame = GetFrameView()->GetFrame();
   if (!GetDocument().Printing())
     GetFrameView()->AdjustViewSize();
-  frame.GetChromeClient().ResizeAfterLayout(&frame);
+  if (frame.IsMainFrame())
+    frame.GetChromeClient().ResizeAfterLayout();
   LayoutBlockFlow::UpdateAfterLayout();
 }
 
@@ -828,13 +842,6 @@ PaintLayerCompositor* LayoutView::Compositor() {
 void LayoutView::SetIsInWindow(bool is_in_window) {
   if (compositor_)
     compositor_->SetIsInWindow(is_in_window);
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-  // We don't invalidate layers during Document::detachLayoutTree(), so must
-  // clear the should-keep-alive DisplayItemClients which may be deleted before
-  // the layers being subsequence owners.
-  if (!is_in_window && Layer())
-    Layer()->EndShouldKeepAliveAllClientsRecursive();
-#endif
 }
 
 IntervalArena* LayoutView::GetIntervalArena() {
@@ -874,7 +881,7 @@ void LayoutView::UpdateFromStyle() {
 }
 
 bool LayoutView::AllowsOverflowClip() const {
-  return RuntimeEnabledFeatures::rootLayerScrollingEnabled();
+  return RuntimeEnabledFeatures::RootLayerScrollingEnabled();
 }
 
 ScrollResult LayoutView::Scroll(ScrollGranularity granularity,
@@ -903,9 +910,16 @@ LayoutRect LayoutView::DebugRect() const {
   return rect;
 }
 
+bool LayoutView::UpdateLogicalWidthAndColumnWidth() {
+  bool relayout_children = LayoutBlockFlow::UpdateLogicalWidthAndColumnWidth();
+  // When we're printing, the size of LayoutView is changed outside of layout,
+  // so we'll fail to detect any changes here. Just return true.
+  return relayout_children || ShouldUsePrintingLayout();
+}
+
 bool LayoutView::PaintedOutputOfObjectHasNoEffectRegardlessOfSize() const {
   // Frame scroll corner is painted using LayoutView as the display item client.
-  if (!RuntimeEnabledFeatures::rootLayerScrollingEnabled() &&
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled() &&
       (GetFrameView()->HorizontalScrollbar() ||
        GetFrameView()->VerticalScrollbar()))
     return false;

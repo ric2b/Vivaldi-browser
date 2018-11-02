@@ -54,9 +54,7 @@
 #include "chrome/common/features.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/locale_settings.h"
 #include "chrome/grit/options_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
 #include "components/strings/grit/components_strings.h"
@@ -85,6 +83,7 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chrome/browser/chromeos/policy/browser_policy_connector_chromeos.h"
 #include "chrome/browser/chromeos/system/pointer_device_observer.h"
+#include "chrome/browser/ui/webui/chromeos/user_image_source.h"
 #include "chrome/browser/ui/webui/options/chromeos/accounts_options_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/bluetooth_options_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/change_picture_options_handler.h"
@@ -101,7 +100,6 @@
 #include "chrome/browser/ui/webui/options/chromeos/proxy_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/stats_options_handler.h"
 #include "chrome/browser/ui/webui/options/chromeos/storage_manager_handler.h"
-#include "chrome/browser/ui/webui/options/chromeos/user_image_source.h"
 #endif
 
 #if defined(USE_NSS_CERTS)
@@ -232,7 +230,11 @@ OptionsUIHTMLSource::OptionsUIHTMLSource(
 }
 
 std::string OptionsUIHTMLSource::GetSource() const {
-  return chrome::kChromeUISettingsFrameHost;
+  // TODO(stevenjb): Remove this file. Because everything in this directory
+  // depends on this, we will remove the entire directory at once after
+  // the old CrOS oobe/login UI dependencies are removed. crbug.com/748164.
+  NOTREACHED();
+  return "settings-frame";
 }
 
 void OptionsUIHTMLSource::StartDataRequest(
@@ -540,8 +542,8 @@ OptionsUI::OptionsUI(content::WebUI* web_ui)
 
 #if defined(OS_CHROMEOS)
   // Set up the chrome://userimage/ source.
-  chromeos::options::UserImageSource* user_image_source =
-      new chromeos::options::UserImageSource();
+  chromeos::UserImageSource* user_image_source =
+      new chromeos::UserImageSource();
   content::URLDataSource::Add(profile, user_image_source);
 
   pointer_device_observer_.reset(
@@ -593,8 +595,7 @@ void OptionsUI::ReadyToCommitNavigation(
   load_start_time_ = base::Time::Now();
   if (navigation_handle->GetRenderFrameHost()->GetRenderViewHost() ==
           web_ui()->GetWebContents()->GetRenderViewHost() &&
-      navigation_handle->GetURL().host_piece() ==
-          chrome::kChromeUISettingsFrameHost) {
+      navigation_handle->GetURL().host_piece() == "settings-frame") {
     for (size_t i = 0; i < handlers_.size(); ++i)
       handlers_[i]->PageLoadStarted();
   }

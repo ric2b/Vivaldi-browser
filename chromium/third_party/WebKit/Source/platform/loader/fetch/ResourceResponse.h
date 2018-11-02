@@ -36,6 +36,7 @@
 #include "platform/weborigin/KURL.h"
 #include "platform/wtf/RefCounted.h"
 #include "platform/wtf/RefPtr.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
 #include "platform/wtf/text/CString.h"
 #include "public/platform/WebURLResponse.h"
@@ -45,18 +46,27 @@ namespace blink {
 
 struct CrossThreadResourceResponseData;
 
+// A ResourceResponse is a "response" object used in blink. Conceptually
+// it is https://fetch.spec.whatwg.org/#concept-response, but it contains
+// a lot of blink specific fields. WebURLResponse is the "public version"
+// of this class and public classes (i.e., classes in public/platform) use it.
+//
+// There are cases where we need to copy a response across threads, and
+// CrossThreadResourceResponseData is a struct for the purpose. When you add a
+// member variable to this class, do not forget to add the corresponding
+// one in CrossThreadResourceResponseData and write copying logic.
 class PLATFORM_EXPORT ResourceResponse final {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
 
  public:
-  enum HTTPVersion {
+  enum HTTPVersion : uint8_t {
     kHTTPVersionUnknown,
     kHTTPVersion_0_9,
     kHTTPVersion_1_0,
     kHTTPVersion_1_1,
     kHTTPVersion_2_0
   };
-  enum SecurityStyle {
+  enum SecurityStyle : uint8_t {
     kSecurityStyleUnknown,
     kSecurityStyleUnauthenticated,
     kSecurityStyleAuthenticationBroken,
@@ -212,10 +222,10 @@ class PLATFORM_EXPORT ResourceResponse final {
   void SetWasCached(bool);
 
   ResourceLoadTiming* GetResourceLoadTiming() const;
-  void SetResourceLoadTiming(PassRefPtr<ResourceLoadTiming>);
+  void SetResourceLoadTiming(RefPtr<ResourceLoadTiming>);
 
-  PassRefPtr<ResourceLoadInfo> GetResourceLoadInfo() const;
-  void SetResourceLoadInfo(PassRefPtr<ResourceLoadInfo>);
+  RefPtr<ResourceLoadInfo> GetResourceLoadInfo() const;
+  void SetResourceLoadInfo(RefPtr<ResourceLoadInfo>);
 
   HTTPVersion HttpVersion() const { return http_version_; }
   void SetHTTPVersion(HTTPVersion version) { http_version_ = version; }
@@ -328,10 +338,8 @@ class PLATFORM_EXPORT ResourceResponse final {
     did_service_worker_navigation_preload_ = value;
   }
 
-  int64_t ResponseTime() const { return response_time_; }
-  void SetResponseTime(int64_t response_time) {
-    response_time_ = response_time;
-  }
+  Time ResponseTime() const { return response_time_; }
+  void SetResponseTime(Time response_time) { response_time_ = response_time; }
 
   const AtomicString& RemoteIPAddress() const { return remote_ip_address_; }
   void SetRemoteIPAddress(const AtomicString& value) {
@@ -340,6 +348,22 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   unsigned short RemotePort() const { return remote_port_; }
   void SetRemotePort(unsigned short value) { remote_port_ = value; }
+
+  const AtomicString& AlpnNegotiatedProtocol() const {
+    return alpn_negotiated_protocol_;
+  }
+  void SetAlpnNegotiatedProtocol(const AtomicString& value) {
+    alpn_negotiated_protocol_ = value;
+  }
+
+  net::HttpResponseInfo::ConnectionInfo ConnectionInfo() const {
+    return connection_info_;
+  }
+  void SetConnectionInfo(net::HttpResponseInfo::ConnectionInfo value) {
+    connection_info_ = value;
+  }
+
+  AtomicString ConnectionInfoString() const;
 
   long long EncodedDataLength() const { return encoded_data_length_; }
   void SetEncodedDataLength(long long value);
@@ -355,7 +379,7 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   // Extra data associated with this response.
   ExtraData* GetExtraData() const { return extra_data_.Get(); }
-  void SetExtraData(PassRefPtr<ExtraData> extra_data) {
+  void SetExtraData(RefPtr<ExtraData> extra_data) {
     extra_data_ = std::move(extra_data);
   }
 
@@ -382,32 +406,53 @@ class PLATFORM_EXPORT ResourceResponse final {
   AtomicString mime_type_;
   long long expected_content_length_;
   AtomicString text_encoding_name_;
+  unsigned connection_id_;
   int http_status_code_;
   AtomicString http_status_text_;
   HTTPHeaderMap http_header_fields_;
+
+  // Remote IP address of the socket which fetched this resource.
+  AtomicString remote_ip_address_;
+
+  // Remote port number of the socket which fetched this resource.
+  unsigned short remote_port_;
+
   bool was_cached_ : 1;
-  unsigned connection_id_;
   bool connection_reused_ : 1;
-  RefPtr<ResourceLoadTiming> resource_load_timing_;
-  RefPtr<ResourceLoadInfo> resource_load_info_;
-
   bool is_null_ : 1;
-
-  mutable CacheControlHeader cache_control_header_;
-
   mutable bool have_parsed_age_header_ : 1;
   mutable bool have_parsed_date_header_ : 1;
   mutable bool have_parsed_expires_header_ : 1;
   mutable bool have_parsed_last_modified_header_ : 1;
 
-  mutable double age_;
-  mutable double date_;
-  mutable double expires_;
-  mutable double last_modified_;
-
   // True if the resource was retrieved by the embedder in spite of
   // certificate errors.
-  bool has_major_certificate_errors_;
+  bool has_major_certificate_errors_ : 1;
+
+  // Was the resource fetched over SPDY.  See http://dev.chromium.org/spdy
+  bool was_fetched_via_spdy_ : 1;
+
+  // Was the resource fetched over an explicit proxy (HTTP, SOCKS, etc).
+  bool was_fetched_via_proxy_ : 1;
+
+  // Was the resource fetched over a ServiceWorker.
+  bool was_fetched_via_service_worker_ : 1;
+
+  // Was the resource fetched using a foreign fetch service worker.
+  bool was_fetched_via_foreign_fetch_ : 1;
+
+  // Was the fallback request with skip service worker flag required.
+  bool was_fallback_required_by_service_worker_ : 1;
+
+  // True if service worker navigation preload was performed due to
+  // the request for this resource.
+  bool did_service_worker_navigation_preload_ : 1;
+
+  // The type of the response which was fetched by the ServiceWorker.
+  WebServiceWorkerResponseType service_worker_response_type_;
+
+  // HTTP version used in the response, if known.
+  HTTPVersion http_version_;
 
   // The security style of the resource.
   // This only contains a valid value when the DevTools Network domain is
@@ -419,8 +464,15 @@ class PLATFORM_EXPORT ResourceResponse final {
   // valid data.
   SecurityDetails security_details_;
 
-  // HTTP version used in the response, if known.
-  HTTPVersion http_version_;
+  RefPtr<ResourceLoadTiming> resource_load_timing_;
+  RefPtr<ResourceLoadInfo> resource_load_info_;
+
+  mutable CacheControlHeader cache_control_header_;
+
+  mutable double age_;
+  mutable double date_;
+  mutable double expires_;
+  mutable double last_modified_;
 
   // The id of the appcache this response was retrieved from, or zero if
   // the response was not retrieved from an appcache.
@@ -432,24 +484,6 @@ class PLATFORM_EXPORT ResourceResponse final {
 
   // The multipart boundary of this response.
   Vector<char> multipart_boundary_;
-
-  // Was the resource fetched over SPDY.  See http://dev.chromium.org/spdy
-  bool was_fetched_via_spdy_;
-
-  // Was the resource fetched over an explicit proxy (HTTP, SOCKS, etc).
-  bool was_fetched_via_proxy_;
-
-  // Was the resource fetched over a ServiceWorker.
-  bool was_fetched_via_service_worker_;
-
-  // Was the resource fetched using a foreign fetch service worker.
-  bool was_fetched_via_foreign_fetch_;
-
-  // Was the fallback request with skip service worker flag required.
-  bool was_fallback_required_by_service_worker_;
-
-  // The type of the response which was fetched by the ServiceWorker.
-  WebServiceWorkerResponseType service_worker_response_type_;
 
   // The URL list of the response which was fetched by the ServiceWorker.
   // This is empty if the response was created inside the ServiceWorker.
@@ -463,19 +497,15 @@ class PLATFORM_EXPORT ResourceResponse final {
   // to be set if the response was fetched by a ServiceWorker.
   Vector<String> cors_exposed_header_names_;
 
-  // True if service worker navigation preload was performed due to
-  // the request for this resource.
-  bool did_service_worker_navigation_preload_;
-
   // The time at which the response headers were received.  For cached
   // responses, this time could be "far" in the past.
-  int64_t response_time_;
+  Time response_time_;
 
-  // Remote IP address of the socket which fetched this resource.
-  AtomicString remote_ip_address_;
+  // ALPN negotiated protocol of the socket which fetched this resource.
+  AtomicString alpn_negotiated_protocol_;
 
-  // Remote port number of the socket which fetched this resource.
-  unsigned short remote_port_;
+  // Information about the type of connection used to fetch this resource.
+  net::HttpResponseInfo::ConnectionInfo connection_info_;
 
   // Size of the response in bytes prior to decompression.
   long long encoded_data_length_;
@@ -509,6 +539,14 @@ inline bool operator!=(const ResourceResponse& a, const ResourceResponse& b) {
   return !(a == b);
 }
 
+// This class is needed to copy a ResourceResponse across threads, because it
+// has some members which cannot be transferred across threads (AtomicString
+// for example).
+// There are some rules / restrictions:
+//  - This struct cannot contain an object that cannot be transferred across
+//    threads (e.g., AtomicString)
+//  - Non-simple members need explicit copying (e.g., String::IsolatedCopy,
+//    KURL::Copy) rather than the copy constructor or the assignment operator.
 struct CrossThreadResourceResponseData {
   WTF_MAKE_NONCOPYABLE(CrossThreadResourceResponseData);
   USING_FAST_MALLOC(CrossThreadResourceResponseData);
@@ -542,7 +580,7 @@ struct CrossThreadResourceResponseData {
   Vector<KURL> url_list_via_service_worker_;
   String cache_storage_cache_name_;
   bool did_service_worker_navigation_preload_;
-  int64_t response_time_;
+  Time response_time_;
   String remote_ip_address_;
   unsigned short remote_port_;
   long long encoded_data_length_;

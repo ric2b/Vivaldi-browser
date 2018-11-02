@@ -8,16 +8,18 @@
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/common/types.h"
-#include "services/ui/public/cpp/client_compositor_frame_sink.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 
 namespace cc {
-class CompositorFrameSink;
-class ContextProvider;
+class LayerTreeFrameSink;
 }
 
 namespace gpu {
 class GpuMemoryBufferManager;
+}
+
+namespace viz {
+class ContextProvider;
 }
 
 namespace content {
@@ -41,21 +43,21 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
 
   void Bind(ui::mojom::WindowTreeClientRequest request);
 
-  using CompositorFrameSinkCallback =
-      base::Callback<void(std::unique_ptr<cc::CompositorFrameSink>)>;
-  void RequestCompositorFrameSink(
-      scoped_refptr<cc::ContextProvider> context_provider,
+  using LayerTreeFrameSinkCallback =
+      base::Callback<void(std::unique_ptr<cc::LayerTreeFrameSink>)>;
+  void RequestLayerTreeFrameSink(
+      scoped_refptr<viz::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const CompositorFrameSinkCallback& callback);
+      const LayerTreeFrameSinkCallback& callback);
 
  private:
   explicit RendererWindowTreeClient(int routing_id);
   ~RendererWindowTreeClient() override;
 
-  void RequestCompositorFrameSinkInternal(
-      scoped_refptr<cc::ContextProvider> context_provider,
+  void RequestLayerTreeFrameSinkInternal(
+      scoped_refptr<viz::ContextProvider> context_provider,
       gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      const CompositorFrameSinkCallback& callback);
+      const LayerTreeFrameSinkCallback& callback);
 
   void DestroySelf();
 
@@ -71,24 +73,27 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
       int64_t display_id,
       ui::Id focused_window_id,
       bool drawn,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void OnEmbeddedAppDisconnected(ui::Id window_id) override;
   void OnUnembed(ui::Id window_id) override;
   void OnCaptureChanged(ui::Id new_capture_window_id,
                         ui::Id old_capture_window_id) override;
   void OnFrameSinkIdAllocated(ui::Id window_id,
-                              const cc::FrameSinkId& frame_sink_id) override;
+                              const viz::FrameSinkId& frame_sink_id) override;
   void OnTopLevelCreated(
       uint32_t change_id,
       ui::mojom::WindowDataPtr data,
       int64_t display_id,
       bool drawn,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id) override;
   void OnWindowBoundsChanged(
       ui::Id window_id,
       const gfx::Rect& old_bounds,
       const gfx::Rect& new_bounds,
-      const base::Optional<cc::LocalSurfaceId>& local_frame_id) override;
+      const base::Optional<viz::LocalSurfaceId>& local_frame_id) override;
+  void OnWindowTransformChanged(ui::Id window_id,
+                                const gfx::Transform& old_transform,
+                                const gfx::Transform& new_transform) override;
   void OnClientAreaChanged(
       uint32_t window_id,
       const gfx::Insets& new_client_area,
@@ -126,7 +131,7 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
   void OnWindowFocused(ui::Id focused_window_id) override;
   void OnWindowCursorChanged(ui::Id window_id, ui::CursorData cursor) override;
   void OnWindowSurfaceChanged(ui::Id window_id,
-                              const cc::SurfaceInfo& surface_info) override;
+                              const viz::SurfaceInfo& surface_info) override;
   void OnDragDropStart(
       const std::unordered_map<std::string, std::vector<uint8_t>>& mime_data)
       override;
@@ -158,9 +163,9 @@ class RendererWindowTreeClient : public ui::mojom::WindowTreeClient {
 
   const int routing_id_;
   ui::Id root_window_id_;
-  scoped_refptr<cc::ContextProvider> pending_context_provider_;
+  scoped_refptr<viz::ContextProvider> pending_context_provider_;
   gpu::GpuMemoryBufferManager* pending_gpu_memory_buffer_manager_ = nullptr;
-  CompositorFrameSinkCallback pending_compositor_frame_sink_callback_;
+  LayerTreeFrameSinkCallback pending_layer_tree_frame_sink_callback_;
   ui::mojom::WindowTreePtr tree_;
   mojo::Binding<ui::mojom::WindowTreeClient> binding_;
 

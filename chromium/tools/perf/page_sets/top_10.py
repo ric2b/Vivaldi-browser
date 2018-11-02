@@ -8,6 +8,8 @@ from telemetry import story
 
 class SimplePage(page_module.Page):
   def __init__(self, url, page_set, credentials='', name=''):
+    if name == '':
+      name = url
     super(SimplePage, self).__init__(
         url, page_set=page_set, name=name,
         credentials_path='data/credentials.json',
@@ -124,28 +126,4 @@ class Top10PageSet(story.StorySet):
     self.AddStory(SimplePage('http://www.bing.com/', self))
 
     # #20 Alexa
-    self.AddStory(SimplePage('http://www.ask.com/', self))
-
-
-# TODO(skyostil): Replace this with Top10PageSet once the power metric can deal
-# with pages that don't become quiescent. See crbug.com/662381.
-class Top10QuiescentPageSet(story.StorySet):
-  """10 pages that reach network quiesence chosen from Alexa top sites"""
-
-  def __init__(self):
-    super(Top10QuiescentPageSet, self).__init__(
-      archive_data_file='data/top_10.json',
-      cloud_storage_bucket=story.PARTNER_BUCKET)
-    self.AddStory(Google(self))
-    # TODO(dominikg): fix crbug.com/386152
-    #self.AddStory(Gmail(self))
-    self.AddStory(GoogleCalendar(self))
-    self.AddStory(Youtube(self))
-    # crbug.com/662381.
-    #self.AddStory(Facebook(self))
-    self.AddStory(SimplePage('http://en.wikipedia.org/wiki/Wikipedia',
-                                  self, name='Wikipedia'))
-    self.AddStory(SimplePage('http://www.amazon.com', self))
-    self.AddStory(SimplePage('http://www.yahoo.com/', self))
-    self.AddStory(SimplePage('http://www.bing.com/', self))
     self.AddStory(SimplePage('http://www.ask.com/', self))

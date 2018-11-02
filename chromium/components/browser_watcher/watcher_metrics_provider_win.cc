@@ -14,6 +14,7 @@
 
 #include "base/bind.h"
 #include "base/feature_list.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_macros.h"
@@ -22,6 +23,8 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/win/registry.h"
 #include "components/browser_watcher/features.h"
 #include "components/browser_watcher/postmortem_report_collector.h"
@@ -161,6 +164,14 @@ void LogCollectionInitStatus(CollectionInitializationStatus status) {
                             INIT_STATUS_MAX);
 }
 
+// Returns a task runner appropriate for running background tasks that perform
+// file I/O.
+scoped_refptr<base::TaskRunner> CreateBackgroundTaskRunner() {
+  return base::CreateSequencedTaskRunnerWithTraits(
+      {base::MayBlock(), base::TaskPriority::BACKGROUND,
+       base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN});
+}
+
 }  // namespace
 
 const char WatcherMetricsProviderWin::kBrowserExitCodeHistogramName[] =
@@ -170,18 +181,15 @@ WatcherMetricsProviderWin::WatcherMetricsProviderWin(
     const base::string16& registry_path,
     const base::FilePath& user_data_dir,
     const base::FilePath& crash_dir,
-    const GetExecutableDetailsCallback& exe_details_cb,
-    base::TaskRunner* io_task_runner)
+    const GetExecutableDetailsCallback& exe_details_cb)
     : recording_enabled_(false),
       cleanup_scheduled_(false),
       registry_path_(registry_path),
       user_data_dir_(user_data_dir),
       crash_dir_(crash_dir),
       exe_details_cb_(exe_details_cb),
-      io_task_runner_(io_task_runner),
-      weak_ptr_factory_(this) {
-  DCHECK(io_task_runner_);
-}
+      task_runner_(CreateBackgroundTaskRunner()),
+      weak_ptr_factory_(this) {}
 
 WatcherMetricsProviderWin::~WatcherMetricsProviderWin() {
 }
@@ -194,9 +202,10 @@ void WatcherMetricsProviderWin::OnRecordingDisabled() {
   if (!recording_enabled_ && !cleanup_scheduled_) {
     // When metrics reporting is disabled, the providers get an
     // OnRecordingDisabled notification at startup. Use that first notification
-    // to issue the cleanup task.
-    io_task_runner_->PostTask(
-        FROM_HERE, base::Bind(&DeleteExitCodeRegistryKey, registry_path_));
+    // to issue the cleanup task. Runs in the background because interacting
+    // with the registry can block.
+    task_runner_->PostTask(
+        FROM_HERE, base::BindOnce(&DeleteExitCodeRegistryKey, registry_path_));
 
     cleanup_scheduled_ = true;
   }
@@ -215,43 +224,55 @@ void WatcherMetricsProviderWin::ProvideStabilityMetrics(
 
 void WatcherMetricsProviderWin::CollectPostmortemReports(
     const base::Closure& done_callback) {
-  io_task_runner_->PostTaskAndReply(
+  task_runner_->PostTaskAndReply(
       FROM_HERE,
-      base::Bind(
-          &WatcherMetricsProviderWin::CollectPostmortemReportsOnBlockingPool,
-          weak_ptr_factory_.GetWeakPtr()),
+      base::BindOnce(&WatcherMetricsProviderWin::CollectPostmortemReportsImpl,
+                     weak_ptr_factory_.GetWeakPtr()),
       done_callback);
 }
 
-void WatcherMetricsProviderWin::CollectPostmortemReportsOnBlockingPool() {
-  // Note: the feature controls both instrumentation and collection.
+// TODO(manzagop): consider mechanisms for partial collection if this is to be
+//     used on a critical path.
+void WatcherMetricsProviderWin::CollectPostmortemReportsImpl() {
+  SCOPED_UMA_HISTOGRAM_TIMER("ActivityTracker.Collect.TotalTime");
+
   bool is_stability_debugging_on =
       base::FeatureList::IsEnabled(browser_watcher::kStabilityDebuggingFeature);
   if (!is_stability_debugging_on) {
-    // TODO(manzagop): delete possible leftover data.
-    return;
+    return;  // TODO(manzagop): scan for possible data to delete?
   }
 
-  SCOPED_UMA_HISTOGRAM_TIMER("ActivityTracker.Collect.TotalTime");
-
   if (user_data_dir_.empty() || crash_dir_.empty()) {
-    LOG(ERROR) << "User data directory or crash directory is unknown.";
     LogCollectionInitStatus(UNKNOWN_DIR);
     return;
   }
 
-  // Determine the stability directory and the stability file for the current
-  // process.
+  // Determine which files to harvest.
   base::FilePath stability_dir = GetStabilityDir(user_data_dir_);
+
   base::FilePath current_stability_file;
   if (!GetStabilityFileForProcess(base::Process::Current(), user_data_dir_,
                                   &current_stability_file)) {
-    LOG(ERROR) << "Failed to get the current stability file.";
     LogCollectionInitStatus(GET_STABILITY_FILE_PATH_FAILED);
     return;
   }
-  const std::set<base::FilePath>& excluded_debug_files = {
+  const std::set<base::FilePath>& excluded_stability_files = {
       current_stability_file};
+
+  std::vector<base::FilePath> stability_files = GetStabilityFiles(
+      stability_dir, GetStabilityFilePattern(), excluded_stability_files);
+  UMA_HISTOGRAM_COUNTS_100("ActivityTracker.Collect.StabilityFileCount",
+                           stability_files.size());
+
+  // If postmortem collection is disabled, delete the files.
+  const bool should_collect = base::GetFieldTrialParamByFeatureAsBool(
+      browser_watcher::kStabilityDebuggingFeature,
+      browser_watcher::kCollectPostmortemParam, false);
+  if (!should_collect) {
+    PostmortemDeleter deleter;
+    deleter.Process(stability_files);
+    return;
+  }
 
   // Create a database. Note: Chrome already has a g_database in crashpad.cc but
   // it has internal linkage. Create a new one.
@@ -273,10 +294,8 @@ void WatcherMetricsProviderWin::CollectPostmortemReportsOnBlockingPool() {
   SystemSessionAnalyzer analyzer(kSystemSessionsToInspect);
   PostmortemReportCollector collector(
       base::UTF16ToUTF8(product_name), base::UTF16ToUTF8(version_number),
-      base::UTF16ToUTF8(channel_name), &analyzer);
-  collector.CollectAndSubmitAllPendingReports(
-      stability_dir, GetStabilityFilePattern(), excluded_debug_files,
-      crashpad_database.get());
+      base::UTF16ToUTF8(channel_name), crashpad_database.get(), &analyzer);
+  collector.Process(stability_files);
 }
 
 }  // namespace browser_watcher

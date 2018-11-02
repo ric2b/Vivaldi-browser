@@ -6,7 +6,7 @@
 #define ScriptCustomElementDefinitionBuilder_h
 
 #include "core/CoreExport.h"
-#include "core/dom/custom/CustomElementDefinitionBuilder.h"
+#include "core/html/custom/CustomElementDefinitionBuilder.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/HashSet.h"
@@ -35,18 +35,18 @@ class CORE_EXPORT ScriptCustomElementDefinitionBuilder
       CustomElementRegistry*,
       const ScriptValue& constructor_script_value,
       ExceptionState&);
-  ~ScriptCustomElementDefinitionBuilder();
+  ~ScriptCustomElementDefinitionBuilder() = default;
 
   bool CheckConstructorIntrinsics() override;
   bool CheckConstructorNotRegistered() override;
   bool CheckPrototype() override;
   bool RememberOriginalProperties() override;
-  CustomElementDefinition* Build(const CustomElementDescriptor&) override;
+  CustomElementDefinition* Build(const CustomElementDescriptor&,
+                                 CustomElementDefinition::Id) override;
 
  private:
   static ScriptCustomElementDefinitionBuilder* stack_;
 
-  ScriptCustomElementDefinitionBuilder* prev_;
   RefPtr<ScriptState> script_state_;
   Member<CustomElementRegistry> registry_;
   v8::Local<v8::Value> constructor_value_;
@@ -59,11 +59,20 @@ class CORE_EXPORT ScriptCustomElementDefinitionBuilder
   HashSet<AtomicString> observed_attributes_;
   ExceptionState& exception_state_;
 
-  bool ValueForName(const v8::Local<v8::Object>&,
+  bool ValueForName(v8::Isolate*,
+                    v8::Local<v8::Context>&,
+                    const v8::TryCatch&,
+                    const v8::Local<v8::Object>&,
                     const StringView&,
                     v8::Local<v8::Value>&) const;
-  bool CallableForName(const StringView&, v8::Local<v8::Function>&) const;
-  bool RetrieveObservedAttributes();
+  bool CallableForName(v8::Isolate*,
+                       v8::Local<v8::Context>&,
+                       const v8::TryCatch&,
+                       const StringView&,
+                       v8::Local<v8::Function>&) const;
+  bool RetrieveObservedAttributes(v8::Isolate*,
+                                  v8::Local<v8::Context>&,
+                                  const v8::TryCatch&);
 };
 
 }  // namespace blink

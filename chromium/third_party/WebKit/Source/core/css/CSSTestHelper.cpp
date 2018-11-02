@@ -34,7 +34,7 @@
 #include "core/css/RuleSet.h"
 #include "core/css/StyleSheetContents.h"
 #include "core/dom/Document.h"
-#include "platform/wtf/text/WTFString.h"
+#include "platform/wtf/text/TextEncoding.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace blink {
@@ -44,8 +44,8 @@ CSSTestHelper::~CSSTestHelper() {}
 CSSTestHelper::CSSTestHelper() {
   document_ = Document::Create();
   TextPosition position;
-  style_sheet_ =
-      CSSStyleSheet::CreateInline(*document_, KURL(), position, "UTF-8");
+  style_sheet_ = CSSStyleSheet::CreateInline(*document_, NullURL(), position,
+                                             UTF8Encoding());
 }
 
 CSSRuleList* CSSTestHelper::CssRules() {

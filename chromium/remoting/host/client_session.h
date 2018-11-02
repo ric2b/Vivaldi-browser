@@ -12,8 +12,8 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
+#include "base/sequence_checker.h"
 #include "base/sequenced_task_runner_helpers.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "remoting/host/client_session_control.h"
@@ -26,6 +26,7 @@
 #include "remoting/protocol/clipboard_filter.h"
 #include "remoting/protocol/clipboard_stub.h"
 #include "remoting/protocol/connection_to_client.h"
+#include "remoting/protocol/data_channel_manager.h"
 #include "remoting/protocol/host_stub.h"
 #include "remoting/protocol/input_event_tracker.h"
 #include "remoting/protocol/input_filter.h"
@@ -50,8 +51,7 @@ class VideoLayout;
 
 // A ClientSession keeps a reference to a connection to a client, and maintains
 // per-client state.
-class ClientSession : public base::NonThreadSafe,
-                      public protocol::HostStub,
+class ClientSession : public protocol::HostStub,
                       public protocol::ConnectionToClient::EventHandler,
                       public protocol::VideoStream::Observer,
                       public ClientSessionControl,
@@ -90,13 +90,14 @@ class ClientSession : public base::NonThreadSafe,
 
   // |event_handler| and |desktop_environment_factory| must outlive |this|.
   // All |HostExtension|s in |extensions| must outlive |this|.
-  ClientSession(EventHandler* event_handler,
-                std::unique_ptr<protocol::ConnectionToClient> connection,
-                DesktopEnvironmentFactory* desktop_environment_factory,
-                const DesktopEnvironmentOptions& desktop_environment_options,
-                const base::TimeDelta& max_duration,
-                scoped_refptr<protocol::PairingRegistry> pairing_registry,
-                const std::vector<HostExtension*>& extensions);
+  ClientSession(
+      EventHandler* event_handler,
+      std::unique_ptr<protocol::ConnectionToClient> connection,
+      DesktopEnvironmentFactory* desktop_environment_factory,
+      const DesktopEnvironmentOptions& desktop_environment_options,
+      const base::TimeDelta& max_duration,
+      scoped_refptr<protocol::PairingRegistry> pairing_registry,
+      const std::vector<HostExtension*>& extensions);
   ~ClientSession() override;
 
   // Returns the set of capabilities negotiated between client and host.
@@ -120,6 +121,9 @@ class ClientSession : public base::NonThreadSafe,
   void OnConnectionClosed(protocol::ErrorCode error) override;
   void OnRouteChange(const std::string& channel_name,
                      const protocol::TransportRoute& route) override;
+  void OnIncomingDataChannel(
+      const std::string& channel_name,
+      std::unique_ptr<protocol::MessagePipe> pipe) override;
 
   // ClientSessionControl interface.
   const std::string& client_jid() const override;
@@ -138,6 +142,11 @@ class ClientSession : public base::NonThreadSafe,
   const std::string* client_capabilities() const {
     return client_capabilities_.get();
   }
+
+  // Registers a DataChannelManager callback for testing.
+  void RegisterCreateHandlerCallbackForTesting(
+      const std::string& prefix,
+      protocol::DataChannelManager::CreateHandlerCallback constructor);
 
   void SetEventTimestampsSourceForTests(
       scoped_refptr<protocol::InputEventTimestampsSource>
@@ -228,6 +237,9 @@ class ClientSession : public base::NonThreadSafe,
   // Used to manage extension functionality.
   std::unique_ptr<HostExtensionSessionManager> extension_manager_;
 
+  // Used to dispatch new data channels to factory methods.
+  protocol::DataChannelManager data_channel_manager_;
+
   // Set to true if the client was authenticated successfully.
   bool is_authenticated_ = false;
 
@@ -247,6 +259,8 @@ class ClientSession : public base::NonThreadSafe,
       event_timestamp_source_for_tests_;
 
   HostExperimentSessionPlugin host_experiment_session_plugin_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   // Used to disable callbacks to |this| once DisconnectSession() has been
   // called.

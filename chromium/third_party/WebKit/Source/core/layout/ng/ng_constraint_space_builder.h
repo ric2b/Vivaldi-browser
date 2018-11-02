@@ -53,10 +53,15 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 
   NGConstraintSpaceBuilder& SetMarginStrut(const NGMarginStrut& margin_strut);
 
-  NGConstraintSpaceBuilder& SetBfcOffset(const NGLogicalOffset& offset);
+  NGConstraintSpaceBuilder& SetBfcOffset(const NGLogicalOffset& bfc_offset);
+  NGConstraintSpaceBuilder& SetFloatsBfcOffset(
+      const WTF::Optional<NGLogicalOffset>& floats_bfc_offset);
 
   NGConstraintSpaceBuilder& SetClearanceOffset(
       const WTF::Optional<LayoutUnit>& clearance_offset);
+
+  void AddBaselineRequests(const Vector<NGBaselineRequest>&);
+  NGConstraintSpaceBuilder& AddBaselineRequest(const NGBaselineRequest&);
 
   // Creates a new constraint space. This may be called multiple times, for
   // example the constraint space will be different for a child which:
@@ -73,6 +78,7 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
   NGLogicalSize available_size_;
   // Relative to parent_writing_mode_.
   NGLogicalSize percentage_resolution_size_;
+  Optional<NGLogicalSize> parent_percentage_resolution_size_;
   NGPhysicalSize initial_containing_block_size_;
   LayoutUnit fragmentainer_space_available_;
 
@@ -89,9 +95,11 @@ class CORE_EXPORT NGConstraintSpaceBuilder final {
 
   NGMarginStrut margin_strut_;
   NGLogicalOffset bfc_offset_;
+  WTF::Optional<NGLogicalOffset> floats_bfc_offset_;
   std::shared_ptr<NGExclusions> exclusions_;
   WTF::Optional<LayoutUnit> clearance_offset_;
   Vector<RefPtr<NGUnpositionedFloat>> unpositioned_floats_;
+  Vector<NGBaselineRequest> baseline_requests_;
 };
 
 }  // namespace blink

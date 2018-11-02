@@ -12,7 +12,15 @@
 #include "components/safe_browsing/base_ui_manager.h"
 #include "content/public/browser/web_contents.h"
 
+class PrefService;
+
+namespace safe_browsing {
+class BasePingManager;
+class SafeBrowsingURLRequestContextGetter;
+}  // namespace
+
 namespace android_webview {
+class AwURLRequestContextGetter;
 
 class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
  public:
@@ -28,12 +36,21 @@ class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
   };
 
   // Construction needs to happen on the UI thread.
-  AwSafeBrowsingUIManager();
-
-  void DisplayBlockingPage(const UnsafeResource& resource) override;
+  explicit AwSafeBrowsingUIManager(
+      AwURLRequestContextGetter* browser_url_request_context_getter,
+      PrefService* pref_service);
 
   // Gets the correct ErrorUiType for the web contents
   int GetErrorUiType(const UnsafeResource& resource) const;
+
+  // BaseUIManager methods:
+  void DisplayBlockingPage(const UnsafeResource& resource) override;
+
+  // Called on the IO thread by the ThreatDetails with the serialized
+  // protocol buffer, so the service can send it over.
+  void SendSerializedThreatDetails(const std::string& serialized) override;
+
+  void SetExtendedReportingAllowed(bool allowed);
 
  protected:
   ~AwSafeBrowsingUIManager() override;
@@ -41,6 +58,17 @@ class AwSafeBrowsingUIManager : public safe_browsing::BaseUIManager {
   void ShowBlockingPageForResource(const UnsafeResource& resource) override;
 
  private:
+  // Provides phishing and malware statistics. Accessed on IO thread.
+  std::unique_ptr<safe_browsing::BasePingManager> ping_manager_;
+
+  // The SafeBrowsingURLRequestContextGetter used to access
+  // |url_request_context_|. Accessed on UI thread.
+  scoped_refptr<safe_browsing::SafeBrowsingURLRequestContextGetter>
+      url_request_context_getter_;
+
+  // non-owning
+  PrefService* pref_service_;
+
   DISALLOW_COPY_AND_ASSIGN(AwSafeBrowsingUIManager);
 };
 

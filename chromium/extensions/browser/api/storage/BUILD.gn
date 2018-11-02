@@ -2,8 +2,15 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
+import("//extensions/features/features.gni")
+
+assert(enable_extensions,
+       "Cannot depend on extensions because enable_extensions=false.")
+
 source_set("storage") {
   sources = [
+    "backend_task_runner.cc",
+    "backend_task_runner.h",
     "local_value_store_cache.cc",
     "local_value_store_cache.h",
     "settings_namespace.cc",

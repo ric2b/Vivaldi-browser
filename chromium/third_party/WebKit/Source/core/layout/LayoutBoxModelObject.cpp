@@ -25,10 +25,9 @@
 
 #include "core/layout/LayoutBoxModelObject.h"
 
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLBodyElement.h"
-#include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutBlock.h"
 #include "core/layout/LayoutFlexibleBox.h"
 #include "core/layout/LayoutGeometryMap.h"
@@ -62,6 +61,8 @@ StickyPositionScrollingConstraints* StickyConstraintsForLayoutObject(
 
   PaintLayerScrollableArea* scrollable_area =
       ancestor_overflow_layer->GetScrollableArea();
+  if (!scrollable_area)
+    return nullptr;
   auto it = scrollable_area->GetStickyConstraintsMap().find(obj->Layer());
   if (it == scrollable_area->GetStickyConstraintsMap().end())
     return nullptr;
@@ -74,7 +75,7 @@ LayoutBoxModelObject* FindFirstStickyBetween(LayoutObject* from,
                                              LayoutObject* to) {
   LayoutObject* maybe_sticky_ancestor = from;
   while (maybe_sticky_ancestor && maybe_sticky_ancestor != to) {
-    if (maybe_sticky_ancestor->IsStickyPositioned()) {
+    if (maybe_sticky_ancestor->Style()->HasStickyConstrainedPosition()) {
       return ToLayoutBoxModelObject(maybe_sticky_ancestor);
     }
 
@@ -117,12 +118,15 @@ typedef HashMap<const LayoutBoxModelObject*, LayoutBoxModelObject*>
 static ContinuationMap* g_continuation_map = nullptr;
 
 void LayoutBoxModelObject::SetSelectionState(SelectionState state) {
-  if (state == SelectionInside && GetSelectionState() != SelectionNone)
+  if (state == SelectionState::kInside &&
+      GetSelectionState() != SelectionState::kNone)
     return;
 
-  if ((state == SelectionStart && GetSelectionState() == SelectionEnd) ||
-      (state == SelectionEnd && GetSelectionState() == SelectionStart))
-    LayoutObject::SetSelectionState(SelectionBoth);
+  if ((state == SelectionState::kStart &&
+       GetSelectionState() == SelectionState::kEnd) ||
+      (state == SelectionState::kEnd &&
+       GetSelectionState() == SelectionState::kStart))
+    LayoutObject::SetSelectionState(SelectionState::kStartAndEnd);
   else
     LayoutObject::SetSelectionState(state);
 
@@ -239,8 +243,6 @@ LayoutBoxModelObject::~LayoutBoxModelObject() {
 }
 
 void LayoutBoxModelObject::WillBeDestroyed() {
-  ImageQualityController::Remove(*this);
-
   // A continuation of this LayoutObject should be destroyed at subclasses.
   DCHECK(!Continuation());
 
@@ -248,8 +250,9 @@ void LayoutBoxModelObject::WillBeDestroyed() {
     // Don't use this->view() because the document's layoutView has been set to
     // 0 during destruction.
     if (LocalFrame* frame = this->GetFrame()) {
-      if (FrameView* frame_view = frame->View()) {
-        if (Style()->HasViewportConstrainedPosition())
+      if (LocalFrameView* frame_view = frame->View()) {
+        if (Style()->HasViewportConstrainedPosition() ||
+            Style()->HasStickyConstrainedPosition())
           frame_view->RemoveViewportConstrainedObject(*this);
       }
     }
@@ -269,7 +272,7 @@ void LayoutBoxModelObject::StyleWillChange(StyleDifference diff,
   // PaintLayerCompositor::paintInvalidationOnCompositingChange() doesn't work
   // for the case because we can only see the new paintInvalidationContainer
   // during compositing update.
-  if (Style() &&
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled() && Style() &&
       Style()->IsStackingContext() != new_style.IsStackingContext() &&
       // InvalidatePaintIncludingNonCompositingDescendants() requires this.
       IsRooted()) {
@@ -283,11 +286,8 @@ void LayoutBoxModelObject::StyleWillChange(StyleDifference diff,
 
   FloatStateForStyleChange::SetWasFloating(this, IsFloating());
 
-  if (HasLayer() && diff.CssClipChanged()) {
-    Layer()
-        ->Clipper(PaintLayer::kDoNotUseGeometryMapper)
-        .ClearClipRectsIncludingDescendants();
-  }
+  if (HasLayer() && diff.CssClipChanged())
+    Layer()->ClearClipRects();
 
   LayoutObject::StyleWillChange(diff, new_style);
 }
@@ -360,18 +360,15 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     }
   }
 
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled()) {
-    if ((old_style && old_style->GetPosition() != StyleRef().GetPosition()) ||
-        had_layer != HasLayer()) {
-      // This may affect paint properties of the current object, and descendants
-      // even if paint properties of the current object won't change. E.g. the
-      // stacking context and/or containing block of descendants may change.
-      SetSubtreeNeedsPaintPropertyUpdate();
-    } else if (had_transform_related_property !=
-               HasTransformRelatedProperty()) {
-      // This affects whether to create transform node.
-      SetNeedsPaintPropertyUpdate();
-    }
+  if ((old_style && old_style->GetPosition() != StyleRef().GetPosition()) ||
+      had_layer != HasLayer()) {
+    // This may affect paint properties of the current object, and descendants
+    // even if paint properties of the current object won't change. E.g. the
+    // stacking context and/or containing block of descendants may change.
+    SetSubtreeNeedsPaintPropertyUpdate();
+  } else if (had_transform_related_property != HasTransformRelatedProperty()) {
+    // This affects whether to create transform node.
+    SetNeedsPaintPropertyUpdate();
   }
 
   if (Layer()) {
@@ -400,7 +397,8 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
   // gets the same layout after changing position property, although no
   // re-raster (rect-based invalidation) is needed, display items should
   // still update their paint offset.
-  if (old_style) {
+  // For SPv2, invalidation for paint offset change is done during PrePaint.
+  if (old_style && !RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     bool new_style_is_fixed_position =
         Style()->GetPosition() == EPosition::kFixed;
     bool old_style_is_fixed_position =
@@ -433,14 +431,14 @@ void LayoutBoxModelObject::StyleDidChange(StyleDifference diff,
     }
   }
 
-  if (FrameView* frame_view = View()->GetFrameView()) {
+  if (LocalFrameView* frame_view = View()->GetFrameView()) {
     bool new_style_is_viewport_constained =
         Style()->GetPosition() == EPosition::kFixed;
     bool old_style_is_viewport_constrained =
         old_style && old_style->GetPosition() == EPosition::kFixed;
-    bool new_style_is_sticky = Style()->GetPosition() == EPosition::kSticky;
+    bool new_style_is_sticky = Style()->HasStickyConstrainedPosition();
     bool old_style_is_sticky =
-        old_style && old_style->GetPosition() == EPosition::kSticky;
+        old_style && old_style->HasStickyConstrainedPosition();
 
     if (new_style_is_sticky != old_style_is_sticky) {
       if (new_style_is_sticky) {
@@ -502,9 +500,11 @@ void LayoutBoxModelObject::InvalidateStickyConstraints() {
   // previous frame.
   DisableCompositingQueryAsserts disabler;
   if (const PaintLayer* ancestor_overflow_layer =
-          enclosing->AncestorOverflowLayer())
-    ancestor_overflow_layer->GetScrollableArea()
-        ->InvalidateAllStickyConstraints();
+          enclosing->AncestorOverflowLayer()) {
+    if (PaintLayerScrollableArea* ancestor_scrollable_area =
+            ancestor_overflow_layer->GetScrollableArea())
+      ancestor_scrollable_area->InvalidateAllStickyConstraints();
+  }
 }
 
 void LayoutBoxModelObject::CreateLayerAfterStyleChange() {
@@ -550,51 +550,6 @@ void LayoutBoxModelObject::AddLayerHitTestRects(
     LayoutObject::AddLayerHitTestRects(rects, current_layer, layer_offset,
                                        container_rect);
   }
-}
-
-DISABLE_CFI_PERF
-void LayoutBoxModelObject::DeprecatedInvalidateTree(
-    const PaintInvalidationState& paint_invalidation_state) {
-  DCHECK(!RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled());
-  EnsureIsReadyForPaintInvalidation();
-
-  PaintInvalidationState new_paint_invalidation_state(paint_invalidation_state,
-                                                      *this);
-  if (!ShouldCheckForPaintInvalidationWithPaintInvalidationState(
-          new_paint_invalidation_state))
-    return;
-
-  if (MayNeedPaintInvalidationSubtree())
-    new_paint_invalidation_state
-        .SetForceSubtreeInvalidationCheckingWithinContainer();
-
-  ObjectPaintInvalidator paint_invalidator(*this);
-  LayoutRect previous_visual_rect = VisualRect();
-  LayoutPoint previous_location = paint_invalidator.LocationInBacking();
-  PaintInvalidationReason reason =
-      DeprecatedInvalidatePaint(new_paint_invalidation_state);
-
-  if (previous_location != paint_invalidator.LocationInBacking()) {
-    new_paint_invalidation_state
-        .SetForceSubtreeInvalidationCheckingWithinContainer();
-  }
-
-  // TODO(wangxianzhu): This is a workaround for crbug.com/490725. We don't have
-  // enough saved information to do accurate check of clipping change. Will
-  // remove when we remove rect-based paint invalidation.
-  if (previous_visual_rect != VisualRect() &&
-      !UsesCompositedScrolling()
-      // Note that isLayoutView() below becomes unnecessary after the launch of
-      // root layer scrolling.
-      && (HasOverflowClip() || IsLayoutView())) {
-    new_paint_invalidation_state
-        .SetForceSubtreeInvalidationRectUpdateWithinContainer();
-  }
-
-  new_paint_invalidation_state.UpdateForChildren(reason);
-  DeprecatedInvalidatePaintOfSubtrees(new_paint_invalidation_state);
-
-  ClearPaintInvalidationFlags();
 }
 
 void LayoutBoxModelObject::AddOutlineRectsForNormalChildren(
@@ -877,8 +832,6 @@ LayoutSize LayoutBoxModelObject::RelativePositionOffset() const {
 void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
   const FloatSize constraining_size = ComputeStickyConstrainingRect().Size();
 
-  PaintLayerScrollableArea* scrollable_area =
-      Layer()->AncestorOverflowLayer()->GetScrollableArea();
   StickyPositionScrollingConstraints constraints;
   FloatSize skipped_containers_offset;
   LayoutBlock* containing_block = this->ContainingBlock();
@@ -1067,6 +1020,10 @@ void LayoutBoxModelObject::UpdateStickyPositionConstraints() const {
     constraints.AddAnchorEdge(
         StickyPositionScrollingConstraints::kAnchorEdgeBottom);
   }
+  // At least one edge should be anchored if we are calculating constraints.
+  DCHECK(constraints.GetAnchorEdges());
+  PaintLayerScrollableArea* scrollable_area =
+      Layer()->AncestorOverflowLayer()->GetScrollableArea();
   scrollable_area->GetStickyConstraintsMap().Set(Layer(), constraints);
 }
 

@@ -10,36 +10,59 @@ if (is_android) {
 static_library("internal") {
   visibility = [
     ":*",
-    "//components/download",
-    "//components/download/content",
+    "//components/download/content/factory",
+    "//components/download/content/internal",
     "//components/download/internal/test:test_support",
   ]
 
   sources = [
+    "client_set.cc",
+    "client_set.h",
     "config.cc",
     "config.h",
+    "controller.h",
+    "controller_impl.cc",
+    "controller_impl.h",
     "download_driver.h",
     "download_service_impl.cc",
     "download_service_impl.h",
+    "download_store.cc",
+    "download_store.h",
     "driver_entry.cc",
     "driver_entry.h",
     "entry.cc",
     "entry.h",
+    "entry_utils.cc",
+    "entry_utils.h",
+    "file_monitor.h",
+    "file_monitor_impl.cc",
+    "file_monitor_impl.h",
     "model.h",
     "model_impl.cc",
     "model_impl.h",
-    "noop_store.cc",
-    "noop_store.h",
-    "scheduler/battery_listener.cc",
-    "scheduler/battery_listener.h",
-    "scheduler/network_listener.cc",
-    "scheduler/network_listener.h",
+    "proto_conversions.cc",
+    "proto_conversions.h",
+    "scheduler/device_status.cc",
+    "scheduler/device_status.h",
+    "scheduler/device_status_listener.cc",
+    "scheduler/device_status_listener.h",
+    "scheduler/scheduler.h",
+    "scheduler/scheduler_impl.cc",
+    "scheduler/scheduler_impl.h",
+    "service_config_impl.cc",
+    "service_config_impl.h",
+    "startup_status.cc",
+    "startup_status.h",
+    "stats.cc",
+    "stats.h",
     "store.h",
   ]
 
   deps = [
     "//base",
+    "//components/download/internal/proto",
     "//components/download/public",
+    "//components/leveldb_proto",
     "//net",
   ]
 }
@@ -47,18 +70,26 @@ static_library("internal") {
 source_set("unit_tests") {
   testonly = true
 
-  visibility = [ "//components/download:unit_tests" ]
-
   sources = [
+    "client_set_unittest.cc",
+    "controller_impl_unittest.cc",
+    "download_service_impl_unittest.cc",
+    "download_store_unittest.cc",
+    "entry_utils_unittest.cc",
+    "file_monitor_unittest.cc",
     "model_impl_unittest.cc",
-    "scheduler/battery_listener_unittest.cc",
-    "scheduler/network_listener_unittest.cc",
+    "proto_conversions_unittest.cc",
+    "scheduler/device_status_listener_unittest.cc",
+    "scheduler/scheduler_impl_unittest.cc",
+    "service_config_impl_unittest.cc",
   ]
 
   deps = [
     ":internal",
     "//base/test:test_support",
+    "//components/download/internal/proto",
     "//components/download/internal/test:test_support",
+    "//components/leveldb_proto:test_support",
     "//testing/gmock",
     "//testing/gtest",
   ]

@@ -68,10 +68,24 @@ const int kTextBreakDone = -1;
 
 enum class LineBreakType {
   kNormal,
-  kBreakAll,  // word-break:break-all allows breaks between letters/numbers
-  kKeepAll,   // word-break:keep-all doesn't allow breaks between all kind of
-              // letters/numbers except some south east asians'.
+
+  // word-break:break-all allows breaks between letters/numbers, but prohibits
+  // break before/after certain punctuation.
+  kBreakAll,
+
+  // Allows breaks at every grapheme cluster boundary.
+  // Terminal style line breaks described in UAX#14: Examples of Customization
+  // http://unicode.org/reports/tr14/#Examples
+  // CSS is discussing to add this feature crbug.com/720205
+  // Used internally for word-break:break-word.
+  kBreakCharacter,
+
+  // word-break:keep-all doesn't allow breaks between all kind of
+  // letters/numbers except some south east asians'.
+  kKeepAll,
 };
+
+PLATFORM_EXPORT std::ostream& operator<<(std::ostream&, LineBreakType);
 
 class PLATFORM_EXPORT LazyLineBreakIterator final {
   STACK_ALLOCATED();
@@ -193,27 +207,35 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
     ReleaseIterator();
   }
 
+  LineBreakType BreakType() const { return break_type_; }
   void SetBreakType(LineBreakType break_type) { break_type_ = break_type; }
+
+  // By default, this class breaks before spaces. This is a specialized
+  // optimization for CSS, where leading/trailing spaces in each line are
+  // removed, and thus breaking before spaces can save computing hanging spaces.
+  //
+  // When 'white-space:pre-wrap', or when in editing, leaging/trailing spaces
+  // need to be preserved, and this optimization needs to be disabled. This mode
+  // is compatible with UAX#14/ICU. http://unicode.org/reports/tr14/
+  void SetBreakAfterSpace(bool break_after_space) {
+    break_after_space_ = break_after_space;
+  }
 
   inline bool IsBreakable(int pos,
                           int& next_breakable,
                           LineBreakType line_break_type) const {
     if (pos > next_breakable) {
-      switch (line_break_type) {
-        case LineBreakType::kBreakAll:
-          next_breakable = NextBreakablePositionBreakAll(pos);
-          break;
-        case LineBreakType::kKeepAll:
-          next_breakable = NextBreakablePositionKeepAll(pos);
-          break;
-        default:
-          next_breakable = NextBreakablePositionIgnoringNBSP(pos);
-      }
+      next_breakable = NextBreakablePosition(pos, line_break_type);
     }
     return pos == next_breakable;
   }
 
   inline bool IsBreakable(int pos, int& next_breakable) const {
+    return IsBreakable(pos, next_breakable, break_type_);
+  }
+
+  inline bool IsBreakable(int pos) const {
+    int next_breakable = -1;
     return IsBreakable(pos, next_breakable, break_type_);
   }
 
@@ -232,9 +254,14 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
     cached_prior_context_length_ = 0;
   }
 
-  int NextBreakablePositionIgnoringNBSP(int pos) const;
-  int NextBreakablePositionBreakAll(int pos) const;
-  int NextBreakablePositionKeepAll(int pos) const;
+  template <typename CharacterType, LineBreakType, bool>
+  int NextBreakablePosition(int pos, const CharacterType* str) const;
+  template <typename CharacterType, LineBreakType>
+  int NextBreakablePosition(int pos, const CharacterType* str) const;
+  template <LineBreakType>
+  int NextBreakablePosition(int pos) const;
+  int NextBreakablePositionBreakCharacter(int pos) const;
+  int NextBreakablePosition(int pos, LineBreakType) const;
 
   static const unsigned kPriorContextCapacity = 2;
   String string_;
@@ -244,6 +271,7 @@ class PLATFORM_EXPORT LazyLineBreakIterator final {
   mutable const UChar* cached_prior_context_;
   mutable unsigned cached_prior_context_length_;
   LineBreakType break_type_;
+  bool break_after_space_ = false;
 };
 
 // Iterates over "extended grapheme clusters", as defined in UAX #29.

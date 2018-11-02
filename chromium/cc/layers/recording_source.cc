@@ -12,6 +12,7 @@
 #include "cc/base/region.h"
 #include "cc/layers/content_layer_client.h"
 #include "cc/paint/display_item_list.h"
+#include "cc/paint/solid_color_analyzer.h"
 #include "cc/raster/raster_source.h"
 #include "skia/ext/analysis_canvas.h"
 
@@ -22,6 +23,10 @@ const bool kDefaultClearCanvasSetting = false;
 #else
 const bool kDefaultClearCanvasSetting = true;
 #endif
+
+// We don't perform per-layer solid color analysis when there are too many skia
+// operations.
+const int kMaxOpsToAnalyzeForLayer = 10;
 
 }  // namespace
 
@@ -131,10 +136,8 @@ const DisplayItemList* RecordingSource::GetDisplayItemList() {
   return display_list_.get();
 }
 
-scoped_refptr<RasterSource> RecordingSource::CreateRasterSource(
-    bool can_use_lcd_text) const {
-  return scoped_refptr<RasterSource>(
-      RasterSource::CreateFromRecordingSource(this, can_use_lcd_text));
+scoped_refptr<RasterSource> RecordingSource::CreateRasterSource() const {
+  return scoped_refptr<RasterSource>(new RasterSource(this));
 }
 
 void RecordingSource::DetermineIfSolidColor() {
@@ -142,15 +145,13 @@ void RecordingSource::DetermineIfSolidColor() {
   is_solid_color_ = false;
   solid_color_ = SK_ColorTRANSPARENT;
 
-  if (!display_list_->ShouldBeAnalyzedForSolidColor())
+  if (display_list_->op_count() > kMaxOpsToAnalyzeForLayer)
     return;
 
   TRACE_EVENT1("cc", "RecordingSource::DetermineIfSolidColor", "opcount",
-               display_list_->OpCount());
-  gfx::Size layer_size = GetSize();
-  skia::AnalysisCanvas canvas(layer_size.width(), layer_size.height());
-  display_list_->Raster(&canvas);
-  is_solid_color_ = canvas.GetColorIfSolid(&solid_color_);
+               display_list_->op_count());
+  is_solid_color_ = display_list_->GetColorIfSolidInRect(
+      gfx::Rect(GetSize()), &solid_color_, kMaxOpsToAnalyzeForLayer);
 }
 
 }  // namespace cc

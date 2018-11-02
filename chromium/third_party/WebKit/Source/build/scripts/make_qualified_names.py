@@ -27,6 +27,7 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+import copy
 import sys
 
 import hasher
@@ -58,6 +59,7 @@ class MakeQualifiedNamesWriter(json5_generator.Writer):
 
     def __init__(self, json5_file_paths):
         super(MakeQualifiedNamesWriter, self).__init__(None)
+        self._input_files = copy.copy(json5_file_paths)
         assert len(json5_file_paths) <= 2, 'MakeQualifiedNamesWriter requires at most 2 in files, got %d.' % len(json5_file_paths)
 
         if len(json5_file_paths) == 2:
@@ -82,6 +84,7 @@ class MakeQualifiedNamesWriter(json5_generator.Writer):
         self._template_context = {
             'attrs': self.attrs_json5_file.name_dictionaries,
             'export': self._metadata('export'),
+            'input_files': self._input_files,
             'namespace': self.namespace,
             'namespace_prefix': namespace_prefix,
             'namespace_uri': namespace_uri,
@@ -95,11 +98,11 @@ class MakeQualifiedNamesWriter(json5_generator.Writer):
             assert metadata == self.tags_json5_file.metadata[name].strip('"'), 'Both files must have the same %s.' % name
         return metadata
 
-    @template_expander.use_jinja('MakeQualifiedNames.h.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/MakeQualifiedNames.h.tmpl', filters=filters)
     def generate_header(self):
         return self._template_context
 
-    @template_expander.use_jinja('MakeQualifiedNames.cpp.tmpl', filters=filters)
+    @template_expander.use_jinja('templates/MakeQualifiedNames.cpp.tmpl', filters=filters)
     def generate_implementation(self):
         return self._template_context
 

@@ -152,6 +152,9 @@ std::string ChangeToDescription(const Change& change,
       return base::StringPrintf("SurfaceCreated window_id=%s surface_id=%s",
                                 WindowIdToString(change.window_id).c_str(),
                                 change.surface_id.ToString().c_str());
+    case CHANGE_TYPE_TRANSFORM_CHANGED:
+      return base::StringPrintf("TransformChanged window_id=%s",
+                                WindowIdToString(change.window_id).c_str());
   }
   return std::string();
 }
@@ -262,13 +265,20 @@ void TestChangeTracker::OnWindowBoundsChanged(
     Id window_id,
     const gfx::Rect& old_bounds,
     const gfx::Rect& new_bounds,
-    const base::Optional<cc::LocalSurfaceId>& local_surface_id) {
+    const base::Optional<viz::LocalSurfaceId>& local_surface_id) {
   Change change;
   change.type = CHANGE_TYPE_NODE_BOUNDS_CHANGED;
   change.window_id = window_id;
   change.bounds = old_bounds;
   change.bounds2 = new_bounds;
   change.local_surface_id = local_surface_id;
+  AddChange(change);
+}
+
+void TestChangeTracker::OnWindowTransformChanged(Id window_id) {
+  Change change;
+  change.type = CHANGE_TYPE_TRANSFORM_CHANGED;
+  change.window_id = window_id;
   AddChange(change);
 }
 
@@ -308,7 +318,7 @@ void TestChangeTracker::OnCaptureChanged(Id new_capture_window_id,
 
 void TestChangeTracker::OnFrameSinkIdAllocated(
     Id window_id,
-    const cc::FrameSinkId& frame_sink_id) {
+    const viz::FrameSinkId& frame_sink_id) {
   Change change;
   change.type = CHANGE_TYPE_FRAME_SINK_ID_ALLOCATED;
   change.window_id = window_id;
@@ -447,7 +457,7 @@ void TestChangeTracker::OnTopLevelCreated(uint32_t change_id,
 
 void TestChangeTracker::OnWindowSurfaceChanged(
     Id window_id,
-    const cc::SurfaceInfo& surface_info) {
+    const viz::SurfaceInfo& surface_info) {
   Change change;
   change.type = CHANGE_TYPE_SURFACE_CHANGED;
   change.window_id = window_id;

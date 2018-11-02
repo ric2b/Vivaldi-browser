@@ -238,7 +238,6 @@ IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest, HandlesRelativeImages) {
               HasSubstr("src=\"http://www.google.com/absoluteimage.png\""));
 }
 
-
 IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest, HandlesRelativeVideos) {
   DistillerPageWebContents distiller_page(
       shell()->web_contents()->GetBrowserContext(),
@@ -314,7 +313,7 @@ IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest,
-                       DISABLED_UsingCurrentWebContentsNotFinishedLoadingYet) {
+                       UsingCurrentWebContentsNotFinishedLoadingYet) {
   std::string url(kSimpleArticlePath);
   bool expect_new_web_contents = false;
   bool setup_main_frame_observer = true;
@@ -326,7 +325,7 @@ IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest,
 }
 
 IN_PROC_BROWSER_TEST_F(DistillerPageWebContentsTest,
-                       DISABLED_UsingCurrentWebContentsReadyForDistillation) {
+                       UsingCurrentWebContentsReadyForDistillation) {
   std::string url(kSimpleArticlePath);
   bool expect_new_web_contents = false;
   bool setup_main_frame_observer = true;

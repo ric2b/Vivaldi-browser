@@ -35,9 +35,9 @@
 #include "chrome/browser/extensions/tab_helper.h"
 #include "chrome/browser/extensions/window_controller.h"
 #include "chrome/browser/extensions/window_controller_list.h"
-#include "chrome/browser/memory/tab_manager.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/sessions/session_tab_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/apps/chrome_app_delegate.h"
@@ -250,6 +250,38 @@ bool IsValidStateForWindowsCreateFunction(
   }
   NOTREACHED();
   return true;
+}
+
+ui::PageTransition HistoryExtensionTransitionToUiTransition(
+    extensions::api::history::TransitionType transition) {
+  switch (transition) {
+    case extensions::api::history::TRANSITION_TYPE_LINK:
+      return ui::PAGE_TRANSITION_LINK;
+    case extensions::api::history::TRANSITION_TYPE_TYPED:
+      return ui::PAGE_TRANSITION_TYPED;
+    case extensions::api::history::TRANSITION_TYPE_AUTO_BOOKMARK:
+      return ui::PAGE_TRANSITION_AUTO_BOOKMARK;
+    case extensions::api::history::TRANSITION_TYPE_AUTO_SUBFRAME:
+      return ui::PAGE_TRANSITION_AUTO_SUBFRAME;
+    case extensions::api::history::TRANSITION_TYPE_MANUAL_SUBFRAME:
+      return ui::PAGE_TRANSITION_MANUAL_SUBFRAME;
+    case extensions::api::history::TRANSITION_TYPE_GENERATED:
+      return ui::PAGE_TRANSITION_GENERATED;
+    case extensions::api::history::TRANSITION_TYPE_AUTO_TOPLEVEL:
+      return ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
+    case extensions::api::history::TRANSITION_TYPE_FORM_SUBMIT:
+      return ui::PAGE_TRANSITION_FORM_SUBMIT;
+    case extensions::api::history::TRANSITION_TYPE_RELOAD:
+      return ui::PAGE_TRANSITION_RELOAD;
+    case extensions::api::history::TRANSITION_TYPE_KEYWORD:
+      return ui::PAGE_TRANSITION_KEYWORD;
+    case extensions::api::history::TRANSITION_TYPE_KEYWORD_GENERATED:
+      return ui::PAGE_TRANSITION_KEYWORD_GENERATED;
+    default:
+      NOTREACHED();
+  }
+  // We have to return something
+  return ui::PAGE_TRANSITION_LINK;
 }
 
 }  // namespace
@@ -578,9 +610,17 @@ ExtensionFunction::ResponseAction WindowsCreateFunction::Run() {
 
   Browser* new_window = new Browser(create_params);
 
+  ui::PageTransition transition = ui::PAGE_TRANSITION_LINK;
+  if (vivaldi::IsVivaldiApp(extension()->id())) {
+    // Vivaldi-specific properties, no extension are allowed to
+    // set them.
+    transition =
+        HistoryExtensionTransitionToUiTransition(create_data->transition);
+  }
+
   for (const GURL& url : urls) {
     chrome::NavigateParams navigate_params(new_window, url,
-                                           ui::PAGE_TRANSITION_LINK);
+                                           transition);
     navigate_params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
 
     // The next 2 statements put the new contents in the same BrowsingInstance
@@ -904,7 +944,8 @@ ExtensionFunction::ResponseAction TabsQueryFunction::Run() {
     TabStripModel* tab_strip = browser->tab_strip_model();
     for (int i = 0; i < tab_strip->count(); ++i) {
       WebContents* web_contents = tab_strip->GetWebContentsAt(i);
-      memory::TabManager* tab_manager = g_browser_process->GetTabManager();
+      resource_coordinator::TabManager* tab_manager =
+          g_browser_process->GetTabManager();
 
       if (index > -1 && i != index)
         continue;
@@ -1000,6 +1041,14 @@ ExtensionFunction::ResponseAction TabsCreateFunction::Run() {
   AssignOptionalValue(params->create_properties.pinned, options.pinned);
   AssignOptionalValue(params->create_properties.index, options.index);
   AssignOptionalValue(params->create_properties.url, options.url);
+
+  if (vivaldi::IsVivaldiApp(extension()->id())) {
+    // Vivaldi-specific properties, no extension are allowed to
+    // set them.
+    options.transition.reset(
+        new ui::PageTransition(HistoryExtensionTransitionToUiTransition(
+            params->create_properties.transition)));
+  }
 
   std::string error;
   std::unique_ptr<base::DictionaryValue> result(
@@ -1252,8 +1301,11 @@ bool TabsUpdateFunction::RunAsync() {
 
   if (params->update_properties.opener_tab_id.get()) {
     int opener_id = *params->update_properties.opener_tab_id;
-
     WebContents* opener_contents = NULL;
+    if (opener_id == tab_id) {
+      error_ = "Cannot set a tab's opener to itself.";
+      return false;
+    }
     if (!ExtensionTabUtil::GetTabById(opener_id, browser_context(),
                                       include_incognito(), nullptr, nullptr,
                                       &opener_contents, nullptr))

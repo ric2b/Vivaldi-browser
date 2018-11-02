@@ -23,6 +23,8 @@
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payments_profile_comparator.h"
 #include "components/payments/core/strings_util.h"
+#include "components/strings/grit/components_strings.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/default_style.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -32,7 +34,6 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/native_theme/native_theme.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/button.h"
@@ -54,14 +55,17 @@ namespace {
 // |s1|, |s2|, and |s3| are lines identifying the profile. |s1| is the
 // "headline" which may be emphasized depending on |type|. If |enabled| is
 // false, the labels will look disabled.
-std::unique_ptr<views::View> GetBaseProfileLabel(AddressStyleType type,
-                                                 const base::string16& s1,
-                                                 const base::string16& s2,
-                                                 const base::string16& s3,
-                                                 bool enabled = true) {
+std::unique_ptr<views::View> GetBaseProfileLabel(
+    AddressStyleType type,
+    const base::string16& s1,
+    const base::string16& s2,
+    const base::string16& s3,
+    base::string16* accessible_content,
+    bool enabled = true) {
+  DCHECK(accessible_content);
   std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
-  std::unique_ptr<views::BoxLayout> layout =
-      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 0, 0, 0);
+  std::unique_ptr<views::BoxLayout> layout = base::MakeUnique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(), 0);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
   container->SetLayoutManager(layout.release());
@@ -102,6 +106,10 @@ std::unique_ptr<views::View> GetBaseProfileLabel(AddressStyleType type,
     }
     container->AddChildView(label.release());
   }
+
+  *accessible_content = l10n_util::GetStringFUTF16(
+      IDS_PAYMENTS_PROFILE_LABELS_ACCESSIBLE_FORMAT, s1, s2, s3);
+
   return container;
 }
 
@@ -111,7 +119,9 @@ std::unique_ptr<views::View> GetShippingAddressLabel(
     AddressStyleType type,
     const std::string& locale,
     const autofill::AutofillProfile& profile,
+    base::string16* accessible_content,
     bool enabled) {
+  DCHECK(accessible_content);
   base::string16 name =
       profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), locale);
 
@@ -121,7 +131,8 @@ std::unique_ptr<views::View> GetShippingAddressLabel(
   base::string16 phone =
       data_util::GetFormattedPhoneNumberForDisplay(profile, locale);
 
-  return GetBaseProfileLabel(type, name, address, phone, enabled);
+  return GetBaseProfileLabel(type, name, address, phone, accessible_content,
+                             enabled);
 }
 
 std::unique_ptr<views::Label> GetLabelForMissingInformation(
@@ -202,19 +213,22 @@ std::unique_ptr<views::View> CreateSheetHeaderView(
     layout->SkipColumns(1);
   } else {
     views::ImageButton* back_arrow = views::CreateVectorImageButton(listener);
-    views::SetImageFromVectorIcon(back_arrow, ui::kBackArrowIcon);
+    views::SetImageFromVectorIcon(back_arrow, vector_icons::kBackArrowIcon);
     constexpr int kBackArrowSize = 16;
     back_arrow->SetSize(gfx::Size(kBackArrowSize, kBackArrowSize));
     back_arrow->SetFocusBehavior(views::View::FocusBehavior::ALWAYS);
     back_arrow->set_tag(
         static_cast<int>(PaymentRequestCommonTags::BACK_BUTTON_TAG));
     back_arrow->set_id(static_cast<int>(DialogViewID::BACK_BUTTON));
+    back_arrow->SetAccessibleName(l10n_util::GetStringUTF16(IDS_PAYMENTS_BACK));
     layout->AddView(back_arrow);
   }
 
   views::Label* title_label =
       new views::Label(title, views::style::CONTEXT_DIALOG_TITLE);
   title_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  title_label->set_id(static_cast<int>(DialogViewID::SHEET_TITLE));
+  title_label->SetFocusBehavior(views::View::FocusBehavior::ACCESSIBLE_ONLY);
   layout->AddView(title_label);
 
   return container;
@@ -241,7 +255,7 @@ std::unique_ptr<views::View> CreateProductLogoFooterView() {
   std::unique_ptr<views::View> content_view = base::MakeUnique<views::View>();
 
   views::BoxLayout* layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0, 0);
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(), 0);
   layout->set_main_axis_alignment(views::BoxLayout::MAIN_AXIS_ALIGNMENT_START);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
@@ -265,14 +279,19 @@ std::unique_ptr<views::View> GetShippingAddressLabelWithMissingInfo(
     const std::string& locale,
     const autofill::AutofillProfile& profile,
     const PaymentsProfileComparator& comp,
+    base::string16* accessible_content,
     bool enabled) {
-  std::unique_ptr<views::View> base_label =
-      GetShippingAddressLabel(type, locale, profile, enabled);
+  DCHECK(accessible_content);
+  std::unique_ptr<views::View> base_label = GetShippingAddressLabel(
+      type, locale, profile, accessible_content, enabled);
 
   base::string16 missing = comp.GetStringForMissingShippingFields(profile);
   if (!missing.empty()) {
     base_label->AddChildView(GetLabelForMissingInformation(missing).release());
+    *accessible_content = l10n_util::GetStringFUTF16(
+        IDS_PAYMENTS_ACCESSIBLE_LABEL_WITH_ERROR, *accessible_content, missing);
   }
+
   return base_label;
 }
 
@@ -282,7 +301,9 @@ std::unique_ptr<views::View> GetContactInfoLabel(
     const std::string& locale,
     const autofill::AutofillProfile& profile,
     const PaymentOptionsProvider& options,
-    const PaymentsProfileComparator& comp) {
+    const PaymentsProfileComparator& comp,
+    base::string16* accessible_content) {
+  DCHECK(accessible_content);
   base::string16 name =
       options.request_payer_name()
           ? profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL), locale)
@@ -300,11 +321,13 @@ std::unique_ptr<views::View> GetContactInfoLabel(
           : base::string16();
 
   std::unique_ptr<views::View> base_label =
-      GetBaseProfileLabel(type, name, phone, email);
+      GetBaseProfileLabel(type, name, phone, email, accessible_content);
 
   base::string16 missing = comp.GetStringForMissingContactFields(profile);
   if (!missing.empty()) {
     base_label->AddChildView(GetLabelForMissingInformation(missing).release());
+    *accessible_content = l10n_util::GetStringFUTF16(
+        IDS_PAYMENTS_ACCESSIBLE_LABEL_WITH_ERROR, *accessible_content, missing);
   }
   return base_label;
 }
@@ -331,14 +354,25 @@ std::unique_ptr<views::Label> CreateMediumLabel(const base::string16& text) {
   return label;
 }
 
+std::unique_ptr<views::Label> CreateHintLabel(
+    const base::string16& text,
+    gfx::HorizontalAlignment alignment) {
+  std::unique_ptr<views::Label> label = base::MakeUnique<views::Label>(
+      text, views::style::CONTEXT_LABEL, STYLE_HINT);
+  label->SetHorizontalAlignment(alignment);
+  return label;
+}
+
 std::unique_ptr<views::View> CreateShippingOptionLabel(
     payments::mojom::PaymentShippingOption* shipping_option,
     const base::string16& formatted_amount,
-    bool emphasize_label) {
+    bool emphasize_label,
+    base::string16* accessible_content) {
+  DCHECK(accessible_content);
   std::unique_ptr<views::View> container = base::MakeUnique<views::View>();
 
-  std::unique_ptr<views::BoxLayout> layout =
-      base::MakeUnique<views::BoxLayout>(views::BoxLayout::kVertical, 0, 0, 0);
+  std::unique_ptr<views::BoxLayout> layout = base::MakeUnique<views::BoxLayout>(
+      views::BoxLayout::kVertical, gfx::Insets(), 0);
   layout->set_cross_axis_alignment(
       views::BoxLayout::CROSS_AXIS_ALIGNMENT_START);
   container->SetLayoutManager(layout.release());
@@ -348,7 +382,11 @@ std::unique_ptr<views::View> CreateShippingOptionLabel(
     std::unique_ptr<views::Label> shipping_label =
         emphasize_label ? CreateMediumLabel(text)
                         : base::MakeUnique<views::Label>(text);
-    shipping_label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    // Strings from the website may not match the locale of the device, so align
+    // them according to the language of the text. This will result, for
+    // example, in "he" labels being right-aligned in a browser that's using
+    // "en" locale.
+    shipping_label->SetHorizontalAlignment(gfx::ALIGN_TO_HEAD);
     shipping_label->set_id(
         static_cast<int>(DialogViewID::SHIPPING_OPTION_DESCRIPTION));
     container->AddChildView(shipping_label.release());
@@ -359,6 +397,10 @@ std::unique_ptr<views::View> CreateShippingOptionLabel(
     amount_label->set_id(
         static_cast<int>(DialogViewID::SHIPPING_OPTION_AMOUNT));
     container->AddChildView(amount_label.release());
+
+    *accessible_content = l10n_util::GetStringFUTF16(
+        IDS_PAYMENTS_PROFILE_LABELS_ACCESSIBLE_FORMAT, text, formatted_amount,
+        base::string16());
   }
 
   return container;

@@ -20,14 +20,10 @@
 #include "chrome/browser/metrics/metrics_reporting_state.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/browser_resources.h"
 #include "chrome/grit/chromium_strings.h"
-#include "chrome/grit/generated_resources.h"
 #include "components/crash/core/browser/crashes_ui_util.h"
 #include "components/grit/components_resources.h"
 #include "components/grit/components_scaled_resources.h"
-#include "components/strings/grit/components_chromium_strings.h"
-#include "components/strings/grit/components_strings.h"
 #include "components/version_info/version_info.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_ui.h"
@@ -70,8 +66,7 @@ content::WebUIDataSource* CreateCrashesUIHTMLSource() {
 ////////////////////////////////////////////////////////////////////////////////
 
 // The handler for Javascript messages for the chrome://crashes/ page.
-class CrashesDOMHandler : public WebUIMessageHandler,
-                          public CrashUploadList::Delegate {
+class CrashesDOMHandler : public WebUIMessageHandler {
  public:
   CrashesDOMHandler();
   ~CrashesDOMHandler() override;
@@ -79,10 +74,9 @@ class CrashesDOMHandler : public WebUIMessageHandler,
   // WebUIMessageHandler implementation.
   void RegisterMessages() override;
 
-  // CrashUploadList::Delegate implemenation.
-  void OnUploadListAvailable() override;
-
  private:
+  void OnUploadListAvailable();
+
   // Asynchronously fetches the list of crashes. Called from JS.
   void HandleRequestCrashes(const base::ListValue* args);
 
@@ -97,7 +91,7 @@ class CrashesDOMHandler : public WebUIMessageHandler,
   // Asynchronously requests a user triggered upload. Called from JS.
   void HandleRequestSingleCrashUpload(const base::ListValue* args);
 
-  scoped_refptr<CrashUploadList> upload_list_;
+  scoped_refptr<UploadList> upload_list_;
   bool list_available_;
   bool first_load_;
 
@@ -106,15 +100,16 @@ class CrashesDOMHandler : public WebUIMessageHandler,
 
 CrashesDOMHandler::CrashesDOMHandler()
     : list_available_(false), first_load_(true) {
-  upload_list_ = CreateCrashUploadList(this);
+  upload_list_ = CreateCrashUploadList();
 }
 
 CrashesDOMHandler::~CrashesDOMHandler() {
-  upload_list_->ClearDelegate();
+  upload_list_->CancelCallback();
 }
 
 void CrashesDOMHandler::RegisterMessages() {
-  upload_list_->LoadUploadListAsynchronously();
+  upload_list_->Load(base::BindOnce(&CrashesDOMHandler::OnUploadListAvailable,
+                                    base::Unretained(this)));
   web_ui()->RegisterMessageCallback(
       crash::kCrashesUIRequestCrashList,
       base::Bind(&CrashesDOMHandler::HandleRequestCrashes,
@@ -140,7 +135,8 @@ void CrashesDOMHandler::HandleRequestCrashes(const base::ListValue* args) {
       UpdateUI();
   } else {
     list_available_ = false;
-    upload_list_->LoadUploadListAsynchronously();
+    upload_list_->Load(base::BindOnce(&CrashesDOMHandler::OnUploadListAvailable,
+                                      base::Unretained(this)));
   }
 }
 
@@ -219,7 +215,7 @@ void CrashesDOMHandler::HandleRequestSingleCrashUpload(
       IsMetricsReportingPolicyManaged()) {
     return;
   }
-  upload_list_->RequestSingleCrashUploadAsync(local_id);
+  upload_list_->RequestSingleUploadAsync(local_id);
 }
 
 }  // namespace

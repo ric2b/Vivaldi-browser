@@ -8,6 +8,7 @@
 // A class that implements the stateless methods used by the GetHashUpdate and
 // GetFullHash stubby calls made by Chrome using the SafeBrowsing V4 protocol.
 
+#include <initializer_list>
 #include <memory>
 #include <ostream>
 #include <string>
@@ -15,6 +16,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/strings/string_piece.h"
 #include "components/safe_browsing_db/safebrowsing.pb.h"
@@ -75,6 +77,8 @@ struct V4ProtocolConfig {
 
 // Different types of threats that SafeBrowsing protects against. This is the
 // type that's returned to the clients of SafeBrowsing in Chromium.
+// GENERATED_JAVA_ENUM_PACKAGE: org.chromium.components.safe_browsing
+// GENERATED_JAVA_PREFIX_TO_STRIP: SB_THREAT_TYPE_
 enum SBThreatType {
   // This type can be used for lists that can be checked synchronously so a
   // client callback isn't required, or for whitelists.
@@ -93,18 +97,18 @@ enum SBThreatType {
   SB_THREAT_TYPE_URL_UNWANTED,
 
   // The download URL is malware.
-  SB_THREAT_TYPE_BINARY_MALWARE_URL,
+  SB_THREAT_TYPE_URL_BINARY_MALWARE,
 
   // Url detected by the client-side phishing model.  Note that unlike the
   // above values, this does not correspond to a downloaded list.
-  SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL,
+  SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING,
 
   // The Chrome extension or app (given by its ID) is malware.
   SB_THREAT_TYPE_EXTENSION,
 
   // Url detected by the client-side malware IP list. This IP list is part
   // of the client side detection model.
-  SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL,
+  SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE,
 
   // Url leads to a blacklisted resource script. Note that no warnings should be
   // shown on this threat type, but an incident report might be sent.
@@ -115,7 +119,27 @@ enum SBThreatType {
 
   // Activation patterns for the Subresource Filter.
   SB_THREAT_TYPE_SUBRESOURCE_FILTER,
+
+  // CSD Phishing whitelist.  This "threat" means a URL matched the whitelist.
+  SB_THREAT_TYPE_CSD_WHITELIST,
+
+  // Url detected by password protection service.
+  SB_THREAT_TYPE_URL_PASSWORD_PROTECTION_PHISHING,
 };
+
+using SBThreatTypeSet = base::flat_set<SBThreatType>;
+
+// Return true if |set| only contains types that are valid for CheckBrowseUrl().
+// Intended for use in DCHECK().
+bool SBThreatTypeSetIsValidForCheckBrowseUrl(const SBThreatTypeSet& set);
+
+// Shorthand for creating an SBThreatTypeSet from a list of SBThreatTypes. Use
+// like CreateSBThreatTypeSet({SB_THREAT_TYPE_URL_PHISHING,
+//                             SB_THREAT_TYPE_URL_MALWARE})
+inline SBThreatTypeSet CreateSBThreatTypeSet(
+    std::initializer_list<SBThreatType> set) {
+  return SBThreatTypeSet(set, base::KEEP_FIRST_OF_DUPES);
+}
 
 // The information required to uniquely identify each list the client is
 // interested in maintaining and downloading from the SafeBrowsing servers.
@@ -162,6 +186,9 @@ ListIdentifier GetUrlMalwareId();
 ListIdentifier GetUrlSocEngId();
 ListIdentifier GetUrlSubresourceFilterId();
 ListIdentifier GetUrlUwsId();
+
+// Returns the basename of the store file, without the ".store" extension.
+std::string GetUmaSuffixForStore(const base::FilePath& file_path);
 
 // Represents the state of each store.
 using StoreStateMap = std::unordered_map<ListIdentifier, std::string>;

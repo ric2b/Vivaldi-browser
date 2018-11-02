@@ -35,7 +35,7 @@ class Notes_Node : public ui::TreeNode<Notes_Node> {
   explicit Notes_Node(int64_t id);
   ~Notes_Node() override;
 
-  base::Value* Encode(
+  std::unique_ptr<base::Value> Encode(
       NotesCodec* checksummer,
       const std::vector<const Notes_Node*>* extra_nodes = NULL) const;
   bool Decode(const base::DictionaryValue& input,

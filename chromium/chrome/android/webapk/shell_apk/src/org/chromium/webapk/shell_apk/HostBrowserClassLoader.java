@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.os.Looper;
 import android.util.Log;
 
+import org.chromium.webapk.lib.common.WebApkConstants;
 import org.chromium.webapk.lib.common.WebApkVersionUtils;
 
 import java.io.File;
@@ -19,12 +20,10 @@ import java.util.Scanner;
  * Creates ClassLoader for WebAPK-specific dex file in Chrome APK's assets.
  */
 public class HostBrowserClassLoader {
-    private static final String TAG = "cr_HostBrowserClassLoader";
+    /** Directory for storing cached dex files. */
+    public static final String DEX_DIR_NAME = "dex";
 
-    /**
-     * Name of the shared preferences file.
-     */
-    private static final String PREF_PACKAGE = "org.chromium.webapk.shell_apk";
+    private static final String TAG = "cr_HostBrowserClassLoader";
 
     /**
      * Name of the shared preference for Chrome's version code.
@@ -77,14 +76,14 @@ public class HostBrowserClassLoader {
     public static ClassLoader createClassLoader(
             Context context, Context remoteContext, DexLoader dexLoader, String canaryClassName) {
         SharedPreferences preferences =
-                context.getSharedPreferences(PREF_PACKAGE, Context.MODE_PRIVATE);
+                context.getSharedPreferences(WebApkConstants.PREF_PACKAGE, Context.MODE_PRIVATE);
 
         int runtimeDexVersion = preferences.getInt(RUNTIME_DEX_VERSION_PREF, -1);
         int newRuntimeDexVersion = checkForNewRuntimeDexVersion(preferences, remoteContext);
         if (newRuntimeDexVersion == -1) {
             newRuntimeDexVersion = runtimeDexVersion;
         }
-        File localDexDir = context.getDir("dex", Context.MODE_PRIVATE);
+        File localDexDir = context.getDir(DEX_DIR_NAME, Context.MODE_PRIVATE);
         if (newRuntimeDexVersion != runtimeDexVersion) {
             Log.w(TAG, "Delete cached dex files.");
             dexLoader.deleteCachedDexes(localDexDir);
@@ -92,7 +91,7 @@ public class HostBrowserClassLoader {
 
         String dexAssetName = WebApkVersionUtils.getRuntimeDexName(newRuntimeDexVersion);
         File remoteDexFile =
-                new File(remoteContext.getDir("dex", Context.MODE_PRIVATE), dexAssetName);
+                new File(remoteContext.getDir(DEX_DIR_NAME, Context.MODE_PRIVATE), dexAssetName);
         return dexLoader.load(
                 remoteContext, dexAssetName, canaryClassName, remoteDexFile, localDexDir);
     }
@@ -104,7 +103,7 @@ public class HostBrowserClassLoader {
         // WebAPK may still be running when the host browser gets upgraded. Prevent ClassLoader from
         // getting reused in this scenario.
         SharedPreferences preferences =
-                context.getSharedPreferences(PREF_PACKAGE, Context.MODE_PRIVATE);
+                context.getSharedPreferences(WebApkConstants.PREF_PACKAGE, Context.MODE_PRIVATE);
         int cachedRemoteVersionCode = preferences.getInt(REMOTE_VERSION_CODE_PREF, -1);
         int remoteVersionCode = getVersionCode(remoteContext);
         return remoteVersionCode == cachedRemoteVersionCode;

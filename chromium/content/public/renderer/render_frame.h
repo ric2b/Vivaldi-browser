@@ -17,8 +17,10 @@
 #include "ipc/ipc_listener.h"
 #include "ipc/ipc_sender.h"
 #include "ppapi/features/features.h"
+#include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/WebKit/public/platform/WebPageVisibilityState.h"
 #include "third_party/WebKit/public/web/WebNavigationPolicy.h"
+#include "third_party/WebKit/public/web/WebTriggeringEventInfo.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -38,7 +40,6 @@ class Size;
 }
 
 namespace service_manager {
-class BinderRegistry;
 class InterfaceProvider;
 }
 
@@ -93,8 +94,8 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
     RECORD_DECISION = 1
   };
 
-  // Returns the RenderFrame given a WebFrame.
-  static RenderFrame* FromWebFrame(blink::WebFrame* web_frame);
+  // Returns the RenderFrame given a WebLocalFrame.
+  static RenderFrame* FromWebFrame(blink::WebLocalFrame* web_frame);
 
   // Returns the RenderFrame given a routing id.
   static RenderFrame* FromRoutingID(int routing_id);
@@ -148,8 +149,10 @@ class CONTENT_EXPORT RenderFrame : public IPC::Listener,
       std::unique_ptr<PluginInstanceThrottler> throttler) = 0;
 
   // The client should handle the navigation externally.
-  virtual void LoadURLExternally(const blink::WebURLRequest& request,
-                                 blink::WebNavigationPolicy policy) = 0;
+  virtual void LoadURLExternally(
+      const blink::WebURLRequest& request,
+      blink::WebNavigationPolicy policy,
+      blink::WebTriggeringEventInfo triggering_event_info) = 0;
 
   // Execute a string of JavaScript in this frame's context.
   virtual void ExecuteJavaScript(const base::string16& javascript) = 0;

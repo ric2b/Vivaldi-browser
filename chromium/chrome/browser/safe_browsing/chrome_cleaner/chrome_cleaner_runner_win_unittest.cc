@@ -38,7 +38,6 @@ using ::testing::Bool;
 using ::testing::Combine;
 using ::testing::Values;
 using ChromeMetricsStatus = ChromeCleanerRunner::ChromeMetricsStatus;
-using CleanerLogsStatus = ChromeCleanerRunner::CleanerLogsStatus;
 
 enum class ReporterEngine {
   kUnspecified,
@@ -55,14 +54,11 @@ enum class ReporterEngine {
 // Parameters:
 // - metrics_status (ChromeMetricsStatus): whether Chrome metrics reporting is
 //       enabled
-// - logs_upload_status (CleanerLogsStatus): whether logs upload in the Cleaner
-//       process should be enabled.
 // - reporter_engine (ReporterEngine): the type of Cleaner engine specified in
 //       the SwReporterInvocation.
 class ChromeCleanerRunnerSimpleTest
     : public testing::TestWithParam<
           std::tuple<ChromeCleanerRunner::ChromeMetricsStatus,
-                     ChromeCleanerRunner::CleanerLogsStatus,
                      ReporterEngine>>,
       public ChromeCleanerRunnerTestDelegate {
  public:
@@ -70,8 +66,7 @@ class ChromeCleanerRunnerSimpleTest
       : command_line_(base::CommandLine::NO_PROGRAM) {}
 
   void SetUp() override {
-    std::tie(metrics_status_, logs_upload_status_, reporter_engine_) =
-        GetParam();
+    std::tie(metrics_status_, reporter_engine_) = GetParam();
 
     SetChromeCleanerRunnerTestDelegateForTesting(this);
     scoped_feature_list_.InitAndEnableFeature(kInBrowserCleanerUIFeature);
@@ -95,7 +90,7 @@ class ChromeCleanerRunnerSimpleTest
 
     ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
         base::FilePath(FILE_PATH_LITERAL("cleaner.exe")), reporter_invocation,
-        metrics_status_, logs_upload_status_,
+        metrics_status_,
         base::BindOnce(&ChromeCleanerRunnerSimpleTest::OnPromptUser,
                        base::Unretained(this)),
         base::BindOnce(&ChromeCleanerRunnerSimpleTest::OnConnectionClosed,
@@ -115,6 +110,9 @@ class ChromeCleanerRunnerSimpleTest
     return base::Process();
   }
 
+  void OnCleanerProcessDone(
+      const ChromeCleanerRunner::ProcessStatus& process_status) override {}
+
   // IPC callbacks.
 
   void OnPromptUser(std::unique_ptr<std::set<base::FilePath>> files_to_delete,
@@ -122,9 +120,9 @@ class ChromeCleanerRunnerSimpleTest
 
   void OnConnectionClosed() {}
 
-  void OnProcessDone(ChromeCleanerRunner::LaunchStatus launch_status) {
+  void OnProcessDone(ChromeCleanerRunner::ProcessStatus process_status) {
     on_process_done_called_ = true;
-    launch_status_ = launch_status;
+    process_status_ = process_status;
     run_loop_.QuitWhenIdle();
   }
 
@@ -134,7 +132,6 @@ class ChromeCleanerRunnerSimpleTest
 
   // Test fixture parameters.
   ChromeCleanerRunner::ChromeMetricsStatus metrics_status_;
-  ChromeCleanerRunner::CleanerLogsStatus logs_upload_status_;
   ReporterEngine reporter_engine_;
 
   // Set by LaunchTestProcess.
@@ -142,7 +139,7 @@ class ChromeCleanerRunnerSimpleTest
 
   // Variables set by OnProcessDone().
   bool on_process_done_called_ = false;
-  ChromeCleanerRunner::LaunchStatus launch_status_;
+  ChromeCleanerRunner::ProcessStatus process_status_;
 
   base::RunLoop run_loop_;
 };
@@ -176,10 +173,6 @@ TEST_P(ChromeCleanerRunnerSimpleTest, LaunchParams) {
   EXPECT_EQ(
       metrics_status_ == ChromeMetricsStatus::kEnabled,
       command_line_.HasSwitch(chrome_cleaner::kEnableCrashReportingSwitch));
-
-  EXPECT_EQ(
-      logs_upload_status_ == CleanerLogsStatus::kUploadEnabled,
-      command_line_.HasSwitch(chrome_cleaner::kEnableCleanerLoggingSwitch));
 }
 
 INSTANTIATE_TEST_CASE_P(
@@ -187,8 +180,6 @@ INSTANTIATE_TEST_CASE_P(
     ChromeCleanerRunnerSimpleTest,
     Combine(Values(ChromeCleanerRunner::ChromeMetricsStatus::kEnabled,
                    ChromeCleanerRunner::ChromeMetricsStatus::kDisabled),
-            Values(ChromeCleanerRunner::CleanerLogsStatus::kUploadEnabled,
-                   ChromeCleanerRunner::CleanerLogsStatus::kUploadDisabled),
             Values(ReporterEngine::kUnspecified,
                    ReporterEngine::kOldEngine,
                    ReporterEngine::kNewEngine)));
@@ -235,6 +226,8 @@ class ChromeCleanerRunnerTest
     cleaner_process_options_.set_reboot_required(
         uws_found_state == UwsFoundState::kUwsFoundRebootRequired);
     cleaner_process_options_.set_crash_point(crash_point);
+    cleaner_process_options_.set_expected_user_response(
+        prompt_acceptance_to_send);
     prompt_acceptance_to_send_ = prompt_acceptance_to_send;
 
     SetChromeCleanerRunnerTestDelegateForTesting(this);
@@ -245,7 +238,6 @@ class ChromeCleanerRunnerTest
     ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
         base::FilePath(FILE_PATH_LITERAL("cleaner.exe")),
         SwReporterInvocation(), ChromeMetricsStatus::kDisabled,
-        CleanerLogsStatus::kUploadDisabled,
         base::BindOnce(&ChromeCleanerRunnerTest::OnPromptUser,
                        base::Unretained(this)),
         base::BindOnce(&ChromeCleanerRunnerTest::OnConnectionClosed,
@@ -278,6 +270,9 @@ class ChromeCleanerRunnerTest
     return std::move(result.process);
   }
 
+  void OnCleanerProcessDone(
+      const ChromeCleanerRunner::ProcessStatus& process_status) override {}
+
   // IPC callbacks.
 
   // Will receive the main Mojo message from the Mock Chrome Cleaner process.
@@ -300,9 +295,9 @@ class ChromeCleanerRunnerTest
     QuitTestRunLoopIfCommunicationDone();
   }
 
-  void OnProcessDone(ChromeCleanerRunner::LaunchStatus launch_status) {
+  void OnProcessDone(ChromeCleanerRunner::ProcessStatus process_status) {
     on_process_done_called_ = true;
-    launch_status_ = launch_status;
+    process_status_ = process_status;
     QuitTestRunLoopIfCommunicationDone();
   }
 
@@ -316,7 +311,8 @@ class ChromeCleanerRunnerTest
   PromptAcceptance prompt_acceptance_to_send_ = PromptAcceptance::UNSPECIFIED;
 
   // Set by OnProcessDone().
-  ChromeCleanerRunner::LaunchStatus launch_status_ = {false, -1};
+  ChromeCleanerRunner::ProcessStatus process_status_;
+
   // Set by OnPromptUser().
   std::unique_ptr<std::set<base::FilePath>> received_files_to_delete_;
 
@@ -358,14 +354,17 @@ TEST_P(ChromeCleanerRunnerTest, WithMockCleanerProcess) {
              cleaner_process_options_.crash_point() ==
                  MockChromeCleanerProcess::CrashPoint::kAfterResponseReceived));
 
-  if (on_prompt_user_called_ && !cleaner_process_options_.found_uws().empty()) {
+  if (on_prompt_user_called_ &&
+      !cleaner_process_options_.files_to_delete().empty()) {
     EXPECT_EQ(*received_files_to_delete_,
               cleaner_process_options_.files_to_delete());
   }
 
-  EXPECT_TRUE(launch_status_.process_ok);
-  EXPECT_EQ(launch_status_.exit_code, cleaner_process_options_.ExpectedExitCode(
-                                          prompt_acceptance_to_send_));
+  EXPECT_EQ(process_status_.launch_status,
+            ChromeCleanerRunner::LaunchStatus::kSuccess);
+  EXPECT_EQ(
+      process_status_.exit_code,
+      cleaner_process_options_.ExpectedExitCode(prompt_acceptance_to_send_));
 }
 
 INSTANTIATE_TEST_CASE_P(

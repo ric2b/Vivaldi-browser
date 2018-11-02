@@ -60,12 +60,10 @@ class ServiceManagerTestClient : public test::ServiceTestClient,
   void OnBindInterface(const BindSourceInfo& source_info,
                        const std::string& interface_name,
                        mojo::ScopedMessagePipeHandle interface_pipe) override {
-    registry_.BindInterface(source_info, interface_name,
-                            std::move(interface_pipe));
+    registry_.BindInterface(interface_name, std::move(interface_pipe));
   }
 
-  void Create(const BindSourceInfo& source_info,
-              test::mojom::CreateInstanceTestRequest request) {
+  void Create(test::mojom::CreateInstanceTestRequest request) {
     binding_.Bind(std::move(request));
   }
 
@@ -150,7 +148,9 @@ class ServiceManagerTest : public test::ServiceTest,
     connector()->BindInterface(service_manager::mojom::kServiceName,
                                &service_manager);
 
-    service_manager->AddListener(binding_.CreateInterfacePtrAndBind());
+    mojom::ServiceManagerListenerPtr listener;
+    binding_.Bind(mojo::MakeRequest(&listener));
+    service_manager->AddListener(std::move(listener));
 
     wait_for_instances_loop_ = base::MakeUnique<base::RunLoop>();
     wait_for_instances_loop_->Run();
@@ -190,6 +190,13 @@ class ServiceManagerTest : public test::ServiceTest,
   void set_service_failed_to_start_callback(
       const ServiceFailedToStartCallback& callback) {
     service_failed_to_start_callback_ = callback;
+  }
+
+  using ServicePIDReceivedCallback =
+      base::Callback<void(const service_manager::Identity&, uint32_t pid)>;
+  void set_service_pid_received_callback(
+      const ServicePIDReceivedCallback& callback) {
+    service_pid_received_callback_ = callback;
   }
 
   void WaitForInstanceToStart(const Identity& identity) {
@@ -309,6 +316,11 @@ class ServiceManagerTest : public test::ServiceTest,
       }
     }
   }
+  void OnServicePIDReceived(const service_manager::Identity& identity,
+                            uint32_t pid) override {
+    if (!service_pid_received_callback_.is_null())
+      service_pid_received_callback_.Run(identity, pid);
+  }
 
   void OnConnectionCompleted(mojom::ConnectResult, const Identity&) {}
 
@@ -319,6 +331,7 @@ class ServiceManagerTest : public test::ServiceTest,
   std::unique_ptr<base::RunLoop> wait_for_instances_loop_;
   ServiceStartedCallback service_started_callback_;
   ServiceFailedToStartCallback service_failed_to_start_callback_;
+  ServicePIDReceivedCallback service_pid_received_callback_;
   base::Process target_;
 
   DISALLOW_COPY_AND_ASSIGN(ServiceManagerTest);
@@ -371,6 +384,16 @@ void OnServiceFailedToStartCallback(
   continuation.Run();
 }
 
+void OnServicePIDReceivedCallback(std::string* service_name,
+                                  uint32_t* serivce_pid,
+                                  const base::Closure& continuation,
+                                  const service_manager::Identity& identity,
+                                  uint32_t pid) {
+  *service_name = identity.name();
+  *serivce_pid = pid;
+  continuation.Run();
+}
+
 // Tests that creating connecting to a singleton packaged service work.
 TEST_F(ServiceManagerTest, CreatePackagedSingletonInstance) {
   AddListenerAndWaitForApplications();
@@ -413,6 +436,28 @@ TEST_F(ServiceManagerTest, CreatePackagedSingletonInstance) {
     EXPECT_FALSE(failed_to_start);
     EXPECT_EQ(1, start_count);
     EXPECT_EQ("service_manager_unittest_singleton", service_name);
+  }
+}
+
+TEST_F(ServiceManagerTest, PIDReceivedCallback) {
+  AddListenerAndWaitForApplications();
+
+  {
+    base::RunLoop loop;
+    std::string service_name;
+    uint32_t pid = 0u;
+    set_service_pid_received_callback(
+        base::BindRepeating(&OnServicePIDReceivedCallback, &service_name, &pid,
+                            loop.QuitClosure()));
+    bool failed_to_start = false;
+    set_service_failed_to_start_callback(base::BindRepeating(
+        &OnServiceFailedToStartCallback, &failed_to_start, loop.QuitClosure()));
+
+    connector()->StartService("service_manager_unittest_embedder");
+    loop.Run();
+    EXPECT_FALSE(failed_to_start);
+    EXPECT_EQ("service_manager_unittest_embedder", service_name);
+    EXPECT_NE(pid, 0u);
   }
 }
 

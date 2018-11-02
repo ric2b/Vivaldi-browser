@@ -36,14 +36,14 @@
 #include "core/css/resolver/StyleResolverStats.h"
 #include "core/dom/ContainerNode.h"
 #include "core/dom/Document.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/Node.h"
 #include "core/dom/NodeComputedStyle.h"
 #include "core/dom/QualifiedName.h"
 #include "core/dom/SpaceSplitString.h"
 #include "core/dom/StyleEngine.h"
-#include "core/dom/shadow/ElementShadow.h"
-#include "core/dom/shadow/InsertionPoint.h"
+#include "core/dom/V0InsertionPoint.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLImageElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -221,7 +221,7 @@ bool SharedStyleFinder::SharingCandidateAssignedToSameSlot(
 
 bool SharedStyleFinder::SharingCandidateDistributedToSameInsertionPoint(
     Element& candidate) const {
-  HeapVector<Member<InsertionPoint>, 8> insertion_points,
+  HeapVector<Member<V0InsertionPoint>, 8> insertion_points,
       candidate_insertion_points;
   CollectDestinationInsertionPoints(GetElement(), insertion_points);
   CollectDestinationInsertionPoints(candidate, candidate_insertion_points);

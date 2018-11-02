@@ -4,11 +4,39 @@
 
 #include "core/css/cssom/CSSSkew.h"
 
+#include "bindings/core/v8/ExceptionState.h"
 #include "core/css/CSSFunctionValue.h"
 #include "core/css/CSSPrimitiveValue.h"
-#include "core/css/cssom/CSSAngleValue.h"
+#include "core/css/cssom/CSSNumericValue.h"
+#include "core/css/cssom/CSSStyleValue.h"
+#include "core/css/cssom/CSSUnitValue.h"
+#include "core/geometry/DOMMatrix.h"
 
 namespace blink {
+
+void CSSSkew::setAx(CSSNumericValue* value, ExceptionState& exception_state) {
+  if (value->GetType() != CSSStyleValue::StyleValueType::kAngleType) {
+    exception_state.ThrowTypeError("Must specify an angle unit");
+    return;
+  }
+  if (value->IsCalculated()) {
+    exception_state.ThrowTypeError("Calculated angles are not supported yet");
+    return;
+  }
+  ax_ = value;
+}
+
+void CSSSkew::setAy(CSSNumericValue* value, ExceptionState& exception_state) {
+  if (value->GetType() != CSSStyleValue::StyleValueType::kAngleType) {
+    exception_state.ThrowTypeError("Must specify an angle unit");
+    return;
+  }
+  if (value->IsCalculated()) {
+    exception_state.ThrowTypeError("Calculated angles are not supported yet");
+    return;
+  }
+  ay_ = value;
+}
 
 CSSSkew* CSSSkew::FromCSSValue(const CSSFunctionValue& value) {
   const CSSPrimitiveValue& x_value = ToCSSPrimitiveValue(value.Item(0));
@@ -26,30 +54,47 @@ CSSSkew* CSSSkew::FromCSSValue(const CSSFunctionValue& value) {
           return nullptr;
         }
         DCHECK(y_value.IsAngle());
-        return CSSSkew::Create(CSSAngleValue::FromCSSValue(x_value),
-                               CSSAngleValue::FromCSSValue(y_value));
+        return CSSSkew::Create(CSSNumericValue::FromCSSValue(x_value),
+                               CSSNumericValue::FromCSSValue(y_value));
       }
     // Else fall through; skew(ax) == skewX(ax).
     case CSSValueSkewX:
       DCHECK_EQ(value.length(), 1U);
       return CSSSkew::Create(
-          CSSAngleValue::FromCSSValue(x_value),
-          CSSAngleValue::Create(0, CSSPrimitiveValue::UnitType::kDegrees));
+          CSSNumericValue::FromCSSValue(x_value),
+          CSSUnitValue::Create(0, CSSPrimitiveValue::UnitType::kDegrees));
     case CSSValueSkewY:
       DCHECK_EQ(value.length(), 1U);
       return CSSSkew::Create(
-          CSSAngleValue::Create(0, CSSPrimitiveValue::UnitType::kDegrees),
-          CSSAngleValue::FromCSSValue(x_value));
+          CSSUnitValue::Create(0, CSSPrimitiveValue::UnitType::kDegrees),
+          CSSNumericValue::FromCSSValue(x_value));
     default:
       NOTREACHED();
       return nullptr;
   }
 }
 
+const DOMMatrix* CSSSkew::AsMatrix() const {
+  CSSUnitValue* ax = ax_->to(CSSPrimitiveValue::UnitType::kRadians);
+  CSSUnitValue* ay = ay_->to(CSSPrimitiveValue::UnitType::kRadians);
+  DCHECK(ax);
+  DCHECK(ay);
+  DOMMatrix* result = DOMMatrix::Create();
+  result->setM12(std::tan(ay->value()));
+  result->setM21(std::tan(ax->value()));
+  return result;
+}
+
 CSSFunctionValue* CSSSkew::ToCSSValue() const {
+  // TDOO(meade): Handle calc angles here.
+  CSSUnitValue* ax = ToCSSUnitValue(ax_);
+  CSSUnitValue* ay = ToCSSUnitValue(ay_);
+
   CSSFunctionValue* result = CSSFunctionValue::Create(CSSValueSkew);
-  result->Append(*CSSPrimitiveValue::Create(ax_->Value(), ax_->Unit()));
-  result->Append(*CSSPrimitiveValue::Create(ay_->Value(), ay_->Unit()));
+  result->Append(
+      *CSSPrimitiveValue::Create(ax->value(), ax->GetInternalUnit()));
+  result->Append(
+      *CSSPrimitiveValue::Create(ay->value(), ay->GetInternalUnit()));
   return result;
 }
 

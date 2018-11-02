@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/optional.h"
 #include "content/common/content_export.h"
 #include "content/common/content_security_policy/content_security_policy.h"
 #include "content/common/content_security_policy_header.h"
@@ -24,6 +25,18 @@ struct CSPViolationParams;
 // is in content/browser/frame_host/render_frame_host_impl.h
 class CONTENT_EXPORT CSPContext {
  public:
+  // This enum represents what set of policies should be checked by
+  // IsAllowedByCsp().
+  enum CheckCSPDisposition {
+    // Only check report-only policies.
+    CHECK_REPORT_ONLY_CSP,
+    // Only check enforced policies. (Note that enforced policies can still
+    // trigger reports.)
+    CHECK_ENFORCED_CSP,
+    // Check all policies.
+    CHECK_ALL_CSP,
+  };
+
   CSPContext();
   virtual ~CSPContext();
 
@@ -36,17 +49,28 @@ class CONTENT_EXPORT CSPContext {
   bool IsAllowedByCsp(CSPDirective::Name directive_name,
                       const GURL& url,
                       bool is_redirect,
-                      const SourceLocation& source_location);
+                      const SourceLocation& source_location,
+                      CheckCSPDisposition check_csp_disposition);
+
+  // Returns true if the request URL needs to be modified (e.g. upgraded to
+  // HTTPS) according to the CSP. If true, |new_url| will contain the new URL
+  // that should be used instead of |url|.
+  bool ShouldModifyRequestUrlForCsp(const GURL& url,
+                                    bool is_suresource_or_form_submssion,
+                                    GURL* new_url);
 
   void SetSelf(const url::Origin origin);
-  bool AllowSelf(const GURL& url);
-  bool ProtocolIsSelf(const GURL& url);
-  const std::string& GetSelfScheme();
+
+  // When a CSPSourceList contains 'self', the url is allowed when it match the
+  // CSPSource returned by this function.
+  // Sometimes there is no 'self' source. It means that the current origin is
+  // unique and no urls will match 'self' whatever they are.
+  // Note: When there is a 'self' source, its scheme is guaranteed to be
+  // non-empty.
+  const base::Optional<CSPSource>& self_source() { return self_source_; }
 
   virtual void ReportContentSecurityPolicyViolation(
       const CSPViolationParams& violation_params);
-
-  bool SelfSchemeShouldBypassCsp();
 
   void ResetContentSecurityPolicies() { policies_.clear(); }
   void AddContentSecurityPolicy(const ContentSecurityPolicy& policy) {
@@ -70,10 +94,7 @@ class CONTENT_EXPORT CSPContext {
       SourceLocation* source_location) const;
 
  private:
-  bool has_self_ = false;
-  std::string self_scheme_;
-  CSPSource self_source_;
-
+  base::Optional<CSPSource> self_source_;
   std::vector<ContentSecurityPolicy> policies_;
 
   DISALLOW_COPY_AND_ASSIGN(CSPContext);

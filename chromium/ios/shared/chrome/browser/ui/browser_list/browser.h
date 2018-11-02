@@ -8,10 +8,12 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/supports_user_data.h"
 
 class WebStateList;
 class WebStateListDelegate;
 
+@class ChromeBroadcaster;
 @class CommandDispatcher;
 
 namespace ios {
@@ -20,10 +22,10 @@ class ChromeBrowserState;
 
 // Browser holds the state backing a collection of Tabs and the attached
 // UI elements (Tab strip, ...).
-class Browser {
+class Browser : public base::SupportsUserData {
  public:
   explicit Browser(ios::ChromeBrowserState* browser_state);
-  ~Browser();
+  ~Browser() override;
 
   WebStateList& web_state_list() { return *web_state_list_.get(); }
   const WebStateList& web_state_list() const { return *web_state_list_.get(); }
@@ -32,7 +34,10 @@ class Browser {
 
   ios::ChromeBrowserState* browser_state() const { return browser_state_; }
 
+  ChromeBroadcaster* broadcaster() { return broadcaster_; }
+
  private:
+  __strong ChromeBroadcaster* broadcaster_;
   __strong CommandDispatcher* dispatcher_;
   ios::ChromeBrowserState* browser_state_;
   std::unique_ptr<WebStateListDelegate> web_state_list_delegate_;

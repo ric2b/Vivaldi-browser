@@ -7,6 +7,7 @@
 #include <map>
 
 #include "ui/app_list/app_list_constants.h"
+#include "ui/app_list/app_list_features.h"
 #include "ui/app_list/search/tokenized_string.h"
 #include "ui/app_list/search/tokenized_string_match.h"
 #include "ui/app_list/search_result_observer.h"
@@ -24,21 +25,13 @@ SearchResult::Action::Action(const gfx::ImageSkia& base_image,
 
 SearchResult::Action::Action(const base::string16& label_text,
                              const base::string16& tooltip_text)
-    : tooltip_text(tooltip_text),
-      label_text(label_text) {}
+    : tooltip_text(tooltip_text), label_text(label_text) {}
 
 SearchResult::Action::Action(const Action& other) = default;
 
-SearchResult::Action::~Action() {}
+SearchResult::Action::~Action() = default;
 
-SearchResult::SearchResult()
-    : relevance_(0),
-      display_type_(DISPLAY_LIST),
-      distance_from_origin_(-1),
-      voice_result_(false),
-      is_installing_(false),
-      percent_downloaded_(0) {
-}
+SearchResult::SearchResult() = default;
 
 SearchResult::~SearchResult() {
   for (auto& observer : observers_)
@@ -55,6 +48,18 @@ void SearchResult::SetBadgeIcon(const gfx::ImageSkia& badge_icon) {
   badge_icon_ = badge_icon;
   for (auto& observer : observers_)
     observer.OnBadgeIconChanged();
+}
+
+void SearchResult::SetRating(float rating) {
+  rating_ = rating;
+  for (auto& observer : observers_)
+    observer.OnRatingChanged();
+}
+
+void SearchResult::SetFormattedPrice(const base::string16& formatted_price) {
+  formatted_price_ = formatted_price;
+  for (auto& observer : observers_)
+    observer.OnFormattedPriceChanged();
 }
 
 void SearchResult::SetActions(const Actions& sets) {
@@ -87,8 +92,10 @@ int SearchResult::GetPreferredIconDimension() const {
     case DISPLAY_TILE:
       return kTileIconSize;
     case DISPLAY_LIST:
-      return kListIconSize;
+      return features::IsFullscreenAppListEnabled() ? kListIconSizeFullscreen
+                                                    : kListIconSize;
     case DISPLAY_NONE:
+    case DISPLAY_CARD:
       return 0;
     case DISPLAY_TYPE_LAST:
       break;
@@ -124,11 +131,9 @@ void SearchResult::UpdateFromMatch(const TokenizedString& title,
   set_relevance(match.relevance());
 }
 
-void SearchResult::Open(int event_flags) {
-}
+void SearchResult::Open(int event_flags) {}
 
-void SearchResult::InvokeAction(int action_index, int event_flags) {
-}
+void SearchResult::InvokeAction(int action_index, int event_flags) {}
 
 ui::MenuModel* SearchResult::GetContextMenuModel() {
   return NULL;

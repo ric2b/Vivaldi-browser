@@ -1,0 +1,7 @@
+include_rules = [
+  "+chromeos/dbus",
+  "+dbus",
+  "+jni",
+  "+ui/android",
+  "+ui/gfx",
+]

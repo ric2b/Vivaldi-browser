@@ -32,8 +32,8 @@
 
 #include <memory>
 #include "core/editing/Editor.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLDialogElement.h"
 #include "core/layout/HitTestLocation.h"
@@ -50,6 +50,8 @@
 #include "core/layout/line/InlineTextBox.h"
 #include "core/layout/line/LineWidth.h"
 #include "core/layout/ng/layout_ng_block_flow.h"
+#include "core/layout/ng/ng_layout_result.h"
+#include "core/layout/ng/ng_unpositioned_float.h"
 #include "core/layout/shapes/ShapeOutsideInfo.h"
 #include "core/paint/BlockFlowPaintInvalidator.h"
 #include "core/paint/PaintLayer.h"
@@ -257,7 +259,7 @@ LayoutBlockFlow::LayoutBlockFlow(ContainerNode* node) : LayoutBlock(node) {
 LayoutBlockFlow::~LayoutBlockFlow() {}
 
 LayoutBlockFlow* LayoutBlockFlow::CreateAnonymous(Document* document) {
-  LayoutBlockFlow* layout_block_flow = RuntimeEnabledFeatures::layoutNGEnabled()
+  LayoutBlockFlow* layout_block_flow = RuntimeEnabledFeatures::LayoutNGEnabled()
                                            ? new LayoutNGBlockFlow(nullptr)
                                            : new LayoutBlockFlow(nullptr);
   layout_block_flow->SetDocumentForAnonymous(document);
@@ -357,8 +359,8 @@ bool LayoutBlockFlow::CheckIfIsSelfCollapsingBlock() const {
 
   if (LogicalHeight() > LayoutUnit() || BorderAndPaddingLogicalHeight() ||
       Style()->LogicalMinHeight().IsPositive() ||
-      Style()->MarginBeforeCollapse() == kMarginCollapseSeparate ||
-      Style()->MarginAfterCollapse() == kMarginCollapseSeparate)
+      Style()->MarginBeforeCollapse() == EMarginCollapse::kSeparate ||
+      Style()->MarginAfterCollapse() == EMarginCollapse::kSeparate)
     return false;
 
   Length logical_height_length = Style()->LogicalHeight();
@@ -502,6 +504,16 @@ void LayoutBlockFlow::ResetLayout() {
     SetChildrenInline(true);
   SetContainsInlineWithOutlineAndContinuation(false);
 
+  // Text truncation kicks in if overflow isn't visible and text-overflow isn't
+  // 'clip'. If this is an anonymous block, we have to examine the parent.
+  // FIXME: CSS3 says that descendants that are clipped must also know how to
+  // truncate. This is insanely difficult to figure out in general (especially
+  // in the middle of doing layout), so we only handle the simple case of an
+  // anonymous block truncating when its parent is clipped.
+  // Walk all the lines and delete our ellipsis line boxes if they exist.
+  if (ChildrenInline() && ShouldTruncateOverflowingText(this))
+    DeleteEllipsisLineBoxes();
+
   RebuildFloatsFromIntruding();
 
   // We use four values, maxTopPos, maxTopNeg, maxBottomPos, and maxBottomNeg,
@@ -638,8 +650,8 @@ void LayoutBlockFlow::DetermineLogicalLeftPositionForChild(LayoutBox& child) {
     // edge or any positive margin push it out.
     // If the child is being centred then the margin calculated to do that has
     // factored in any offset required to avoid floats, so use it if necessary.
-    if (Style()->GetTextAlign() == ETextAlign::kWebkitCenter ||
-        child.Style()->MarginStartUsing(Style()).IsAuto())
+    if (StyleRef().GetTextAlign() == ETextAlign::kWebkitCenter ||
+        child.Style()->MarginStartUsing(StyleRef()).IsAuto())
       new_position =
           std::max(new_position, position_to_avoid_floats + child_margin_start);
     else if (position_to_avoid_floats > initial_start_position)
@@ -1047,7 +1059,7 @@ LayoutUnit LayoutBlockFlow::AdjustFloatLogicalTopForPagination(
     } else {
       // Even if we didn't break before the border box to the next
       // fragmentainer, we need to check if we can fit the margin before it.
-      if (PageLogicalHeightForOffset(logical_top_margin_edge)) {
+      if (IsPageLogicalHeightKnown()) {
         LayoutUnit remaining_space = PageRemainingLogicalHeightForOffset(
             logical_top_margin_edge, kAssociateWithLatterPage);
         if (remaining_space <= margin_before) {
@@ -1130,11 +1142,12 @@ void LayoutBlockFlow::AdjustLinePositionForPagination(RootInlineBox& line_box,
   logical_offset += delta;
   line_box.SetPaginationStrut(LayoutUnit());
   line_box.SetIsFirstAfterPageBreak(false);
-  if (!View()->GetLayoutState()->IsPaginated())
+  LayoutState* layout_state = View()->GetLayoutState();
+  if (!layout_state->IsPaginated())
+    return;
+  if (!IsPageLogicalHeightKnown())
     return;
   LayoutUnit page_logical_height = PageLogicalHeightForOffset(logical_offset);
-  if (!page_logical_height)
-    return;
   LayoutUnit remaining_logical_height = PageRemainingLogicalHeightForOffset(
       logical_offset, kAssociateWithLatterPage);
   int line_index = LineCount(&line_box);
@@ -1194,14 +1207,22 @@ void LayoutBlockFlow::AdjustLinePositionForPagination(RootInlineBox& line_box,
     // up in the next column or page. Setting a strut on the block is also
     // important when it comes to satisfying orphan requirements.
     if (ShouldSetStrutOnBlock(*this, line_box, logical_offset, line_index,
-                              page_logical_height))
-      strut_to_propagate = logical_offset;
+                              page_logical_height)) {
+      DCHECK(!IsTableCell());
+      strut_to_propagate =
+          logical_offset + layout_state->HeightOffsetForTableHeaders();
+    } else if (LayoutUnit pagination_strut =
+                   layout_state->HeightOffsetForTableHeaders()) {
+      delta += pagination_strut;
+      line_box.SetPaginationStrut(pagination_strut);
+    }
   } else if (line_box == FirstRootBox() && AllowsPaginationStrut()) {
     // This is the first line in the block. The block may still start in the
     // previous column or page, and if that's the case, attempt to pull it over
     // to where this line is, so that we don't split the top border or padding.
-    LayoutUnit strut =
-        remaining_logical_height + logical_offset - page_logical_height;
+    LayoutUnit strut = remaining_logical_height + logical_offset +
+                       layout_state->HeightOffsetForTableHeaders() -
+                       page_logical_height;
     if (strut > LayoutUnit()) {
       // The block starts in a previous column or page. Set a strut on the block
       // if there's room for the top border, padding and the line in one column
@@ -1233,8 +1254,7 @@ LayoutUnit LayoutBlockFlow::AdjustForUnsplittableChild(
   if (child.IsFloating())
     child_logical_height +=
         MarginBeforeForChild(child) + MarginAfterForChild(child);
-  LayoutUnit page_logical_height = PageLogicalHeightForOffset(logical_offset);
-  if (!page_logical_height)
+  if (!IsPageLogicalHeightKnown())
     return logical_offset;
   LayoutUnit remaining_logical_height = PageRemainingLogicalHeightForOffset(
       logical_offset, kAssociateWithLatterPage);
@@ -1243,7 +1263,7 @@ LayoutUnit LayoutBlockFlow::AdjustForUnsplittableChild(
   LayoutUnit pagination_strut = CalculatePaginationStrutToFitContent(
       logical_offset, remaining_logical_height, child_logical_height);
   if (pagination_strut == remaining_logical_height &&
-      remaining_logical_height == page_logical_height) {
+      remaining_logical_height == PageLogicalHeightForOffset(logical_offset)) {
     // Don't break if we were at the top of a page, and we failed to fit the
     // content completely. No point in leaving a page completely blank.
     return logical_offset;
@@ -1536,7 +1556,7 @@ MarginInfo::MarginInfo(LayoutBlockFlow* block_flow,
 
   can_collapse_margin_before_with_children_ =
       can_collapse_with_children_ && !before_border_padding &&
-      block_style.MarginBeforeCollapse() != kMarginCollapseSeparate;
+      block_style.MarginBeforeCollapse() != EMarginCollapse::kSeparate;
 
   // If any height other than auto is specified in CSS, then we don't collapse
   // our bottom margins with our children's margins. To do otherwise would be to
@@ -1547,7 +1567,7 @@ MarginInfo::MarginInfo(LayoutBlockFlow* block_flow,
       can_collapse_with_children_ && !after_border_padding &&
       (block_style.LogicalHeight().IsAuto() &&
        !block_style.LogicalHeight().Value()) &&
-      block_style.MarginAfterCollapse() != kMarginCollapseSeparate;
+      block_style.MarginAfterCollapse() != EMarginCollapse::kSeparate;
 
   quirk_container_ = block_flow->IsTableCell() || block_flow->IsBody();
 
@@ -1980,7 +2000,7 @@ LayoutUnit LayoutBlockFlow::ClearFloatsIfNeeded(LayoutBox& child,
     // In case the child discarded the before margin of the block we need to
     // reset the mustDiscardMarginBefore flag to the initial value.
     SetMustDiscardMarginBefore(Style()->MarginBeforeCollapse() ==
-                               kMarginCollapseDiscard);
+                               EMarginCollapse::kDiscard);
   }
 
   return y_pos + height_increase;
@@ -2028,13 +2048,13 @@ void LayoutBlockFlow::MarginBeforeEstimateForChild(
   // FIXME: Use writing mode independent accessor for marginBeforeCollapse.
   if ((GetDocument().InQuirksMode() && HasMarginBeforeQuirk(&child) &&
        (IsTableCell() || IsBody())) ||
-      child.Style()->MarginBeforeCollapse() == kMarginCollapseSeparate)
+      child.Style()->MarginBeforeCollapse() == EMarginCollapse::kSeparate)
     return;
 
   // The margins are discarded by a child that specified
   // -webkit-margin-collapse: discard.
   // FIXME: Use writing mode independent accessor for marginBeforeCollapse.
-  if (child.Style()->MarginBeforeCollapse() == kMarginCollapseDiscard) {
+  if (child.Style()->MarginBeforeCollapse() == EMarginCollapse::kDiscard) {
     positive_margin_before = LayoutUnit();
     negative_margin_before = LayoutUnit();
     discard_margin_before = true;
@@ -2249,7 +2269,7 @@ void LayoutBlockFlow::HandleAfterSideOfBlock(LayoutBox* last_child,
 }
 
 void LayoutBlockFlow::SetMustDiscardMarginBefore(bool value) {
-  if (Style()->MarginBeforeCollapse() == kMarginCollapseDiscard) {
+  if (Style()->MarginBeforeCollapse() == EMarginCollapse::kDiscard) {
     DCHECK(value);
     return;
   }
@@ -2264,7 +2284,7 @@ void LayoutBlockFlow::SetMustDiscardMarginBefore(bool value) {
 }
 
 void LayoutBlockFlow::SetMustDiscardMarginAfter(bool value) {
-  if (Style()->MarginAfterCollapse() == kMarginCollapseDiscard) {
+  if (Style()->MarginAfterCollapse() == EMarginCollapse::kDiscard) {
     DCHECK(value);
     return;
   }
@@ -2279,28 +2299,30 @@ void LayoutBlockFlow::SetMustDiscardMarginAfter(bool value) {
 }
 
 bool LayoutBlockFlow::MustDiscardMarginBefore() const {
-  return Style()->MarginBeforeCollapse() == kMarginCollapseDiscard ||
+  return Style()->MarginBeforeCollapse() == EMarginCollapse::kDiscard ||
          (rare_data_ && rare_data_->discard_margin_before_);
 }
 
 bool LayoutBlockFlow::MustDiscardMarginAfter() const {
-  return Style()->MarginAfterCollapse() == kMarginCollapseDiscard ||
+  return Style()->MarginAfterCollapse() == EMarginCollapse::kDiscard ||
          (rare_data_ && rare_data_->discard_margin_after_);
 }
 
 bool LayoutBlockFlow::MustDiscardMarginBeforeForChild(
     const LayoutBox& child) const {
   DCHECK(!child.SelfNeedsLayout());
-  if (!child.IsWritingModeRoot())
+  if (!child.IsWritingModeRoot()) {
     return child.IsLayoutBlockFlow()
                ? ToLayoutBlockFlow(&child)->MustDiscardMarginBefore()
                : (child.Style()->MarginBeforeCollapse() ==
-                  kMarginCollapseDiscard);
-  if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode())
+                  EMarginCollapse::kDiscard);
+  }
+  if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode()) {
     return child.IsLayoutBlockFlow()
                ? ToLayoutBlockFlow(&child)->MustDiscardMarginAfter()
                : (child.Style()->MarginAfterCollapse() ==
-                  kMarginCollapseDiscard);
+                  EMarginCollapse::kDiscard);
+  }
 
   // FIXME: We return false here because the implementation is not geometrically
   // complete. We have values only for before/after, not start/end.
@@ -2312,16 +2334,18 @@ bool LayoutBlockFlow::MustDiscardMarginBeforeForChild(
 bool LayoutBlockFlow::MustDiscardMarginAfterForChild(
     const LayoutBox& child) const {
   DCHECK(!child.SelfNeedsLayout());
-  if (!child.IsWritingModeRoot())
+  if (!child.IsWritingModeRoot()) {
     return child.IsLayoutBlockFlow()
                ? ToLayoutBlockFlow(&child)->MustDiscardMarginAfter()
                : (child.Style()->MarginAfterCollapse() ==
-                  kMarginCollapseDiscard);
-  if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode())
+                  EMarginCollapse::kDiscard);
+  }
+  if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode()) {
     return child.IsLayoutBlockFlow()
                ? ToLayoutBlockFlow(&child)->MustDiscardMarginBefore()
                : (child.Style()->MarginBeforeCollapse() ==
-                  kMarginCollapseDiscard);
+                  EMarginCollapse::kDiscard);
+  }
 
   // FIXME: See |mustDiscardMarginBeforeForChild| above.
   return false;
@@ -2354,9 +2378,9 @@ bool LayoutBlockFlow::MustSeparateMarginBeforeForChild(
   DCHECK(!child.SelfNeedsLayout());
   const ComputedStyle& child_style = child.StyleRef();
   if (!child.IsWritingModeRoot())
-    return child_style.MarginBeforeCollapse() == kMarginCollapseSeparate;
+    return child_style.MarginBeforeCollapse() == EMarginCollapse::kSeparate;
   if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode())
-    return child_style.MarginAfterCollapse() == kMarginCollapseSeparate;
+    return child_style.MarginAfterCollapse() == EMarginCollapse::kSeparate;
 
   // FIXME: See |mustDiscardMarginBeforeForChild| above.
   return false;
@@ -2367,9 +2391,9 @@ bool LayoutBlockFlow::MustSeparateMarginAfterForChild(
   DCHECK(!child.SelfNeedsLayout());
   const ComputedStyle& child_style = child.StyleRef();
   if (!child.IsWritingModeRoot())
-    return child_style.MarginAfterCollapse() == kMarginCollapseSeparate;
+    return child_style.MarginAfterCollapse() == EMarginCollapse::kSeparate;
   if (child.IsHorizontalWritingMode() == IsHorizontalWritingMode())
-    return child_style.MarginBeforeCollapse() == kMarginCollapseSeparate;
+    return child_style.MarginBeforeCollapse() == EMarginCollapse::kSeparate;
 
   // FIXME: See |mustDiscardMarginBeforeForChild| above.
   return false;
@@ -2384,13 +2408,13 @@ LayoutUnit LayoutBlockFlow::ApplyForcedBreak(LayoutUnit logical_offset,
   // next fragmentainer of the fragmentation context we're in. However, we may
   // want to find the next left or right page - even if we're inside a multicol
   // container when printing.
-  LayoutUnit page_logical_height = PageLogicalHeightForOffset(logical_offset);
-  if (!page_logical_height)
-    return logical_offset;  // Page height is still unknown, so we cannot insert
-                            // forced breaks.
+  if (!IsPageLogicalHeightKnown()) {
+    // Page height is still unknown, so we cannot insert forced breaks.
+    return logical_offset;
+  }
   LayoutUnit remaining_logical_height = PageRemainingLogicalHeightForOffset(
       logical_offset, kAssociateWithLatterPage);
-  if (remaining_logical_height == page_logical_height)
+  if (remaining_logical_height == PageLogicalHeightForOffset(logical_offset))
     return logical_offset;  // Don't break if we're already at the block start
                             // of a fragmentainer.
 
@@ -2594,18 +2618,7 @@ int LayoutBlockFlow::FirstLineBoxBaseline() const {
 
 int LayoutBlockFlow::InlineBlockBaseline(
     LineDirectionMode line_direction) const {
-  // CSS2.1 states that the baseline of an 'inline-block' is:
-  // the baseline of the last line box in the normal flow, unless it has
-  // either no in-flow line boxes or if its 'overflow' property has a computed
-  // value other than 'visible', in which case the baseline is the bottom
-  // margin edge.
-  // We likewise avoid using the last line box in the case of size containment,
-  // where the block's contents shouldn't be considered when laying out its
-  // ancestors or siblings.
-
-  if ((!Style()->IsOverflowVisible() &&
-       !ShouldIgnoreOverflowPropertyForInlineBlockBaseline()) ||
-      Style()->ContainsSize()) {
+  if (UseLogicalBottomMarginEdgeForInlineBlockBaseline()) {
     // We are not calling baselinePosition here because the caller should add
     // the margin-top/margin-right, not us.
     return (line_direction == kHorizontalLine ? Size().Height() + MarginBottom()
@@ -2926,7 +2939,7 @@ void LayoutBlockFlow::StyleDidChange(StyleDifference diff,
     CreateOrDestroyMultiColumnFlowThreadIfNeeded(old_style);
   if (old_style) {
     if (LayoutMultiColumnFlowThread* flow_thread = MultiColumnFlowThread()) {
-      if (!Style()->ColumnRuleEquivalent(old_style)) {
+      if (!Style()->ColumnRuleEquivalent(*old_style)) {
         // Column rules are painted by anonymous column set children of the
         // multicol container. We need to notify them.
         flow_thread->ColumnRuleStyleDidChange();
@@ -3008,7 +3021,7 @@ void LayoutBlockFlow::AddChild(LayoutObject* new_child,
   //   <div id=container>Hello!<oof></oof></div>
   //   Legacy Layout: oof is in inline context.
   //   LayoutNG: oof is in inline context.
-  bool layout_ng_enabled = RuntimeEnabledFeatures::layoutNGEnabled();
+  bool layout_ng_enabled = RuntimeEnabledFeatures::LayoutNGEnabled();
   if (new_child->IsFloatingOrOutOfFlowPositioned())
     child_is_block_level = layout_ng_enabled && !FirstChild();
 
@@ -4151,23 +4164,21 @@ void LayoutBlockFlow::UpdateAncestorShouldPaintFloatingObject(
       break;
 
     FloatingObject& floating_object = **it;
-    // This repeats the logic in addOverhangingFloats() about shouldPaint
-    // flag:
-    // - The nearest enclosing block in which the float doesn't overhang
-    //   paints the float;
-    // - Or even if the float overhangs, if the ancestor block has
-    //   self-painting layer, it paints the float.
-    LayoutBlockFlow* parent_block =
-        ToLayoutBlockFlow(floating_object.GetLayoutObject()->Parent());
-    bool is_overhanging_float =
-        parent_block && parent_block->IsOverhangingFloat(floating_object);
-    bool should_paint =
-        !float_box_is_self_painting_layer &&
-        (ancestor_block->HasSelfPaintingLayer() || !is_overhanging_float);
-    floating_object.SetShouldPaint(should_paint);
-
-    if (floating_object.ShouldPaint())
-      return;
+    if (!float_box_is_self_painting_layer) {
+      // This repeats the logic in addOverhangingFloats() about shouldPaint
+      // flag:
+      // - The nearest enclosing block in which the float doesn't overhang
+      //   paints the float;
+      // - Or even if the float overhangs, if the ancestor block has
+      //   self-painting layer, it paints the float.
+      if (ancestor_block->HasSelfPaintingLayer() ||
+          !ancestor_block->IsOverhangingFloat(floating_object)) {
+        floating_object.SetShouldPaint(true);
+        return;
+      }
+    } else {
+      floating_object.SetShouldPaint(false);
+    }
   }
 }
 
@@ -4246,13 +4257,58 @@ void LayoutBlockFlow::PositionSpannerDescendant(
   DetermineLogicalLeftPositionForChild(spanner);
 }
 
+DISABLE_CFI_PERF
+bool LayoutBlockFlow::CreatesNewFormattingContext() const {
+  if (IsInline() || IsFloatingOrOutOfFlowPositioned() || HasOverflowClip() ||
+      IsFlexItemIncludingDeprecated() || IsTableCell() || IsTableCaption() ||
+      IsFieldset() || IsDocumentElement() || IsGridItem() ||
+      IsWritingModeRoot() || Style()->Display() == EDisplay::kFlowRoot ||
+      Style()->ContainsPaint() || Style()->ContainsLayout() ||
+      Style()->SpecifiesColumns() ||
+      Style()->GetColumnSpan() == EColumnSpan::kAll) {
+    // The specs require this object to establish a new formatting context.
+    return true;
+  }
+
+  // The remaining checks here are not covered by any spec, but we still need to
+  // establish new formatting contexts in some cases, for various reasons.
+
+  if (IsRubyText()) {
+    // Ruby text objects are pushed around after layout, to become flush with
+    // the associated ruby base. As such, we cannot let floats leak out from
+    // ruby text objects.
+    return true;
+  }
+
+  if (IsLayoutFlowThread()) {
+    // The spec requires multicol containers to establish new formatting
+    // contexts. Blink uses an anonymous flow thread child of the multicol
+    // container to actually perform layout inside. Therefore we need to
+    // propagate the BFCness down to the flow thread, so that floats are fully
+    // contained by the flow thread, and thereby the multicol container.
+    return true;
+  }
+
+  if (IsRenderedLegend())
+    return true;
+
+  if (IsTextControl()) {
+    // INPUT and other replaced elements rendered by Blink itself should be
+    // completely contained.
+    return true;
+  }
+
+  if (IsSVGForeignObject()) {
+    // This is the root of a foreign object. Don't let anything inside it escape
+    // to our ancestors.
+    return true;
+  }
+
+  return false;
+}
+
 bool LayoutBlockFlow::AvoidsFloats() const {
-  // Floats can't intrude into our box if we have a non-auto column count or
-  // width.
-  // Note: we need to use LayoutBox::avoidsFloats here since
-  // LayoutBlock::avoidsFloats is always true.
-  return LayoutBox::AvoidsFloats() || !Style()->HasAutoColumnCount() ||
-         !Style()->HasAutoColumnWidth();
+  return ShouldBeConsideredAsReplaced() || CreatesNewFormattingContext();
 }
 
 void LayoutBlockFlow::MoveChildrenTo(LayoutBoxModelObject* to_box_model_object,
@@ -4325,7 +4381,7 @@ LayoutMultiColumnFlowThread* LayoutBlockFlow::CreateMultiColumnFlowThread(
                                                           StyleRef());
     case kPagedFlowThread:
       // Paged overflow is currently done using the multicol implementation.
-      UseCounter::Count(GetDocument(), UseCounter::kCSSOverflowPaged);
+      UseCounter::Count(GetDocument(), WebFeature::kCSSOverflowPaged);
       return LayoutPagedFlowThread::CreateAnonymous(GetDocument(), StyleRef());
     default:
       NOTREACHED();
@@ -4418,7 +4474,7 @@ void LayoutBlockFlow::PositionDialog() {
     return;
   }
 
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   LayoutUnit top = LayoutUnit((Style()->GetPosition() == EPosition::kFixed)
                                   ? 0
                                   : frame_view->ScrollOffsetInt().Height());
@@ -4686,14 +4742,6 @@ void LayoutBlockFlow::AddOutlineRects(
             (inline_element_continuation->ContainingBlock()->Location() -
              Location()),
         include_block_overflows);
-}
-
-PaintInvalidationReason LayoutBlockFlow::DeprecatedInvalidatePaint(
-    const PaintInvalidationState& paint_invalidation_state) {
-  if (ContainsFloats())
-    paint_invalidation_state.PaintingLayer().SetNeedsPaintPhaseFloat();
-
-  return LayoutBlock::DeprecatedInvalidatePaint(paint_invalidation_state);
 }
 
 void LayoutBlockFlow::InvalidateDisplayItemClients(

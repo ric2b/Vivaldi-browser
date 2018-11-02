@@ -28,6 +28,7 @@ namespace device {
 
 class BluetoothAdapterMac;
 class BluetoothRemoteGattServiceMac;
+class BluetoothRemoteGattCharacteristicMac;
 class BluetoothRemoteGattDescriptorMac;
 
 class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
@@ -129,11 +130,15 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothLowEnergyDeviceMac
   CBPeripheral* GetPeripheral();
 
   // Returns BluetoothRemoteGattServiceMac based on the CBService.
-  BluetoothRemoteGattServiceMac* GetBluetoothRemoteGattService(
+  BluetoothRemoteGattServiceMac* GetBluetoothRemoteGattServiceMac(
       CBService* service) const;
 
+  // Returns BluetoothRemoteGattCharacteristicMac based on the CBCharacteristic.
+  BluetoothRemoteGattCharacteristicMac* GetBluetoothRemoteGattCharacteristicMac(
+      CBCharacteristic* cb_characteristic) const;
+
   // Returns BluetoothRemoteGattDescriptorMac based on the CBDescriptor.
-  BluetoothRemoteGattDescriptorMac* GetBluetoothRemoteGattDescriptor(
+  BluetoothRemoteGattDescriptorMac* GetBluetoothRemoteGattDescriptorMac(
       CBDescriptor* cb_descriptor) const;
 
   // Callback used when the CoreBluetooth Peripheral is disconnected.

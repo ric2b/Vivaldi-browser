@@ -39,24 +39,24 @@
 #include "bindings/core/v8/V8EventListener.h"
 #include "bindings/core/v8/V8HTMLCollection.h"
 #include "bindings/core/v8/V8Node.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/MessagePort.h"
 #include "core/frame/Deprecation.h"
 #include "core/frame/FrameOwner.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/ImageBitmap.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Location.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDocument.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/loader/FrameLoader.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "platform/LayoutTestSupport.h"
 #include "platform/bindings/V8PrivateProperty.h"
 #include "platform/wtf/Assertions.h"
@@ -211,7 +211,7 @@ void V8Window::postMessageMethodCustom(
   LocalDOMWindow* source = CurrentDOMWindow(info.GetIsolate());
 
   DCHECK(window);
-  UseCounter::Count(window->GetFrame(), UseCounter::kWindowPostMessage);
+  UseCounter::Count(source->GetFrame(), WebFeature::kWindowPostMessage);
 
   // If called directly by WebCore we don't have a calling context.
   if (!source) {
@@ -312,8 +312,8 @@ void V8Window::namedPropertyGetterCustom(
   // https://html.spec.whatwg.org/multipage/browsers.html#document-tree-child-browsing-context-name-property-set
   Frame* child = frame->Tree().ScopedChild(name);
   if (child) {
-    UseCounter::Count(window->GetFrame(),
-                      UseCounter::kNamedAccessOnWindow_ChildBrowsingContext);
+    UseCounter::Count(CurrentExecutionContext(info.GetIsolate()),
+                      WebFeature::kNamedAccessOnWindow_ChildBrowsingContext);
 
     // step 3. Remove each browsing context from childBrowsingContexts whose
     // active document's origin is not same origin with activeDocument's origin
@@ -326,8 +326,8 @@ void V8Window::namedPropertyGetterCustom(
     }
 
     UseCounter::Count(
-        window->GetFrame(),
-        UseCounter::
+        CurrentExecutionContext(info.GetIsolate()),
+        WebFeature::
             kNamedAccessOnWindow_ChildBrowsingContext_CrossOriginNameMismatch);
     // In addition to the above spec'ed case, we return the child window
     // regardless of step 3 due to crbug.com/701489 for the time being.
@@ -361,14 +361,14 @@ void V8Window::namedPropertyGetterCustom(
 
   if (!has_named_item && has_id_item &&
       !doc->ContainsMultipleElementsWithId(name)) {
-    UseCounter::Count(doc, UseCounter::kDOMClobberedVariableAccessed);
+    UseCounter::Count(doc, WebFeature::kDOMClobberedVariableAccessed);
     V8SetReturnValueFast(info, doc->getElementById(name), window);
     return;
   }
 
   HTMLCollection* items = doc->WindowNamedItems(name);
   if (!items->IsEmpty()) {
-    UseCounter::Count(doc, UseCounter::kDOMClobberedVariableAccessed);
+    UseCounter::Count(doc, WebFeature::kDOMClobberedVariableAccessed);
 
     // TODO(esprehn): Firefox doesn't return an HTMLCollection here if there's
     // multiple with the same name, but Chrome and Safari does. What's the

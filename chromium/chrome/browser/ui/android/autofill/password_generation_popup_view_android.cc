@@ -12,7 +12,6 @@
 #include "base/logging.h"
 #include "chrome/browser/ui/android/view_android_helper.h"
 #include "chrome/browser/ui/autofill/password_generation_popup_controller.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "jni/PasswordGenerationPopupBridge_jni.h"
 #include "ui/android/view_android.h"
 #include "ui/android/window_android.h"
@@ -49,11 +48,6 @@ void PasswordGenerationPopupViewAndroid::PasswordSelected(
     const JavaParamRef<jobject>& object) {
   if (controller_)
     controller_->PasswordAccepted();
-}
-
-// static
-bool PasswordGenerationPopupViewAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 PasswordGenerationPopupViewAndroid::~PasswordGenerationPopupViewAndroid() {}

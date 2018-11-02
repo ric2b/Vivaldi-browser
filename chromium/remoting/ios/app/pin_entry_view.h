@@ -20,8 +20,14 @@
 // passcode.
 @interface PinEntryView : UIView
 
+// Clears the pin entry view.
+- (void)clearPinEntry;
+
 // This delegate will handle interactions on the cells in the collection.
 @property(weak, nonatomic) id<PinEntryDelegate> delegate;
+
+// |supportsPairing| false will hide the remember pin checkbox.
+@property(nonatomic) BOOL supportsPairing;
 
 @end
 

@@ -126,9 +126,7 @@ std::unique_ptr<ATCodecHelper> CreateCodecHelper(AudioCodec codec) {
     case kCodecAAC:
       return base::WrapUnique(new ATAACHelper);
     case kCodecMP3:
-      return TURN_ON_MSE_VIVALDI
-                 ? base::WrapUnique(new ATMP3Helper)
-                 : nullptr;
+      return base::WrapUnique(new ATMP3Helper);
     default:
       LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
                 << " Unsupported codec : " << GetCodecName(codec);
@@ -287,7 +285,7 @@ void ATAudioDecoder::Decode(const scoped_refptr<DecoderBuffer>& buffer,
 
   if (status == media::DecodeStatus::DECODE_ERROR) {
     LOG(WARNING) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-                 << " ProcessBuffer failed";
+                 << " ProcessBuffer failed : DECODE_ERROR";
   }
 
   task_runner_->PostTask(FROM_HERE, base::Bind(decode_cb, status));

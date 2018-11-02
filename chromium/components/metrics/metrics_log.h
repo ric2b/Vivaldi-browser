@@ -25,11 +25,12 @@ namespace base {
 class HistogramSamples;
 }
 
-namespace variations {
-struct ActiveGroupId;
-}
-
 namespace metrics {
+
+namespace internal {
+extern const int kOmniboxEventLimit;
+extern const int kUserActionEventLimit;
+}
 
 class MetricsProvider;
 class MetricsServiceClient;
@@ -39,6 +40,7 @@ class MetricsLog {
   enum LogType {
     INITIAL_STABILITY_LOG,  // The initial log containing stability stats.
     ONGOING_LOG,            // Subsequent logs in a session.
+    INDEPENDENT_LOG,        // An independent log from a previous session.
   };
 
   // Creates a new metrics log of the specified type.
@@ -96,9 +98,13 @@ class MetricsLog {
   // current environment is returned serialized as a string.
   std::string RecordEnvironment(
       const std::vector<std::unique_ptr<MetricsProvider>>& metrics_providers,
-      const std::vector<variations::ActiveGroupId>& synthetic_trials,
       int64_t install_date,
       int64_t metrics_reporting_enabled_date);
+
+  // Loads a saved system profile and the associated metrics into the log.
+  // Returns true on success. Keep calling it with fresh logs until it returns
+  // false.
+  bool LoadIndependentMetrics(MetricsProvider* metrics_provider);
 
   // Loads the environment proto that was saved by the last RecordEnvironment()
   // call from prefs. On success, returns true and |app_version| contains the
@@ -128,6 +134,10 @@ class MetricsLog {
   // None of the Record* methods can be called after this is called.
   void CloseLog();
 
+  // Truncate some of the fields within the log that we want to restrict in
+  // size due to bandwidth concerns.
+  void TruncateEvents();
+
   // Fills |encoded_log| with the serialized protobuf representation of the
   // record.  Must only be called after CloseLog() has been called.
   void GetEncodedLog(std::string* encoded_log);
@@ -136,20 +146,10 @@ class MetricsLog {
     return creation_time_;
   }
 
-  int num_events() const {
-    return uma_proto_.omnibox_event_size() +
-           uma_proto_.user_action_event_size();
-  }
-
   LogType log_type() const { return log_type_; }
 
  protected:
   // Exposed for the sake of mocking/accessing in test code.
-
-  // Fills |field_trial_ids| with the list of initialized field trials name and
-  // group ids.
-  virtual void GetFieldTrialIds(
-      std::vector<variations::ActiveGroupId>* field_trial_ids) const;
 
   ChromeUserMetricsExtension* uma_proto() { return &uma_proto_; }
 

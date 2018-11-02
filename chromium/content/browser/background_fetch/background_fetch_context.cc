@@ -10,7 +10,6 @@
 #include "content/browser/background_fetch/background_fetch_job_controller.h"
 #include "content/browser/background_fetch/background_fetch_registration_id.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -36,64 +35,57 @@ void RecordRegistrationDeletedError(blink::mojom::BackgroundFetchError error) {
 
 BackgroundFetchContext::BackgroundFetchContext(
     BrowserContext* browser_context,
-    StoragePartitionImpl* storage_partition,
     scoped_refptr<ServiceWorkerContextWrapper> service_worker_context)
     : browser_context_(browser_context),
       data_manager_(
           base::MakeUnique<BackgroundFetchDataManager>(browser_context)),
       event_dispatcher_(base::MakeUnique<BackgroundFetchEventDispatcher>(
-          std::move(service_worker_context))) {
+          std::move(service_worker_context))),
+      weak_factory_(this) {
+  // Although this lives only on the IO thread, it is constructed on UI thread.
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
 }
 
 BackgroundFetchContext::~BackgroundFetchContext() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
 }
 
 void BackgroundFetchContext::InitializeOnIOThread(
     scoped_refptr<net::URLRequestContextGetter> request_context_getter) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   request_context_getter_ = request_context_getter;
-}
-
-void BackgroundFetchContext::Shutdown() {
-  DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  BrowserThread::PostTask(
-      BrowserThread::IO, FROM_HERE,
-      base::Bind(&BackgroundFetchContext::ShutdownOnIO, this));
-}
-
-void BackgroundFetchContext::ShutdownOnIO() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  active_fetches_.clear();
 }
 
 void BackgroundFetchContext::StartFetch(
     const BackgroundFetchRegistrationId& registration_id,
     const std::vector<ServiceWorkerFetchRequest>& requests,
     const BackgroundFetchOptions& options,
-    const blink::mojom::BackgroundFetchService::FetchCallback& callback) {
+    blink::mojom::BackgroundFetchService::FetchCallback callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   data_manager_->CreateRegistration(
       registration_id, requests, options,
-      base::BindOnce(&BackgroundFetchContext::DidCreateRegistration, this,
-                     registration_id, options, callback));
+      base::BindOnce(&BackgroundFetchContext::DidCreateRegistration,
+                     weak_factory_.GetWeakPtr(), registration_id, options,
+                     std::move(callback)));
 }
 
 void BackgroundFetchContext::DidCreateRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     const BackgroundFetchOptions& options,
-    const blink::mojom::BackgroundFetchService::FetchCallback& callback,
-    blink::mojom::BackgroundFetchError error,
-    std::vector<scoped_refptr<BackgroundFetchRequestInfo>> initial_requests) {
+    blink::mojom::BackgroundFetchService::FetchCallback callback,
+    blink::mojom::BackgroundFetchError error) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   RecordRegistrationCreatedError(error);
   if (error != blink::mojom::BackgroundFetchError::NONE) {
-    callback.Run(error, base::nullopt /* registration */);
+    std::move(callback).Run(error, base::nullopt /* registration */);
     return;
   }
 
   // Create the BackgroundFetchJobController, which will do the actual fetching.
-  CreateController(registration_id, options, std::move(initial_requests));
+  CreateController(registration_id, options);
 
   // Create the BackgroundFetchRegistration the renderer process will receive,
   // which enables it to resolve the promise telling the developer it worked.
@@ -103,13 +95,16 @@ void BackgroundFetchContext::DidCreateRegistration(
   registration.title = options.title;
   registration.total_download_size = options.total_download_size;
 
-  callback.Run(blink::mojom::BackgroundFetchError::NONE, registration);
+  std::move(callback).Run(blink::mojom::BackgroundFetchError::NONE,
+                          registration);
 }
 
 std::vector<std::string>
 BackgroundFetchContext::GetActiveTagsForServiceWorkerRegistration(
     int64_t service_worker_registration_id,
     const url::Origin& origin) const {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   std::vector<std::string> tags;
   for (const auto& pair : active_fetches_) {
     const BackgroundFetchRegistrationId& registration_id =
@@ -145,20 +140,22 @@ BackgroundFetchJobController* BackgroundFetchContext::GetActiveFetch(
 
 void BackgroundFetchContext::CreateController(
     const BackgroundFetchRegistrationId& registration_id,
-    const BackgroundFetchOptions& options,
-    std::vector<scoped_refptr<BackgroundFetchRequestInfo>> initial_requests) {
+    const BackgroundFetchOptions& options) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   std::unique_ptr<BackgroundFetchJobController> controller =
       base::MakeUnique<BackgroundFetchJobController>(
           registration_id, options, data_manager_.get(), browser_context_,
           request_context_getter_,
-          base::BindOnce(&BackgroundFetchContext::DidCompleteJob, this));
+          base::BindOnce(&BackgroundFetchContext::DidCompleteJob,
+                         weak_factory_.GetWeakPtr()));
 
   // TODO(peter): We should actually be able to use Background Fetch in layout
   // tests. That requires a download manager and a request context.
   if (request_context_getter_) {
-    // Start fetching the |initial_requests| immediately. At some point in the
+    // Start fetching the first few requests immediately. At some point in the
     // future we may want a more elaborate scheduling mechanism here.
-    controller->Start(std::move(initial_requests));
+    controller->Start();
   }
 
   active_fetches_.insert(
@@ -167,6 +164,8 @@ void BackgroundFetchContext::CreateController(
 
 void BackgroundFetchContext::DidCompleteJob(
     BackgroundFetchJobController* controller) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   const BackgroundFetchRegistrationId& registration_id =
       controller->registration_id();
 
@@ -175,15 +174,15 @@ void BackgroundFetchContext::DidCompleteJob(
     case BackgroundFetchJobController::State::ABORTED:
       event_dispatcher_->DispatchBackgroundFetchAbortEvent(
           registration_id,
-          base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
-                     registration_id,
+          base::Bind(&BackgroundFetchContext::DeleteRegistration,
+                     weak_factory_.GetWeakPtr(), registration_id,
                      std::vector<std::unique_ptr<BlobHandle>>()));
       return;
     case BackgroundFetchJobController::State::COMPLETED:
       data_manager_->GetSettledFetchesForRegistration(
           registration_id,
-          base::BindOnce(&BackgroundFetchContext::DidGetSettledFetches, this,
-                         registration_id));
+          base::BindOnce(&BackgroundFetchContext::DidGetSettledFetches,
+                         weak_factory_.GetWeakPtr(), registration_id));
       return;
     case BackgroundFetchJobController::State::INITIALIZED:
     case BackgroundFetchJobController::State::FETCHING:
@@ -200,6 +199,8 @@ void BackgroundFetchContext::DidGetSettledFetches(
     bool background_fetch_succeeded,
     std::vector<BackgroundFetchSettledFetch> settled_fetches,
     std::vector<std::unique_ptr<BlobHandle>> blob_handles) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+
   if (error != blink::mojom::BackgroundFetchError::NONE) {
     DeleteRegistration(registration_id, std::move(blob_handles));
     return;
@@ -211,19 +212,22 @@ void BackgroundFetchContext::DidGetSettledFetches(
   if (background_fetch_succeeded) {
     event_dispatcher_->DispatchBackgroundFetchedEvent(
         registration_id, std::move(settled_fetches),
-        base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
-                   registration_id, std::move(blob_handles)));
+        base::Bind(&BackgroundFetchContext::DeleteRegistration,
+                   weak_factory_.GetWeakPtr(), registration_id,
+                   std::move(blob_handles)));
   } else {
     event_dispatcher_->DispatchBackgroundFetchFailEvent(
         registration_id, std::move(settled_fetches),
-        base::Bind(&BackgroundFetchContext::DeleteRegistration, this,
-                   registration_id, std::move(blob_handles)));
+        base::Bind(&BackgroundFetchContext::DeleteRegistration,
+                   weak_factory_.GetWeakPtr(), registration_id,
+                   std::move(blob_handles)));
   }
 }
 
 void BackgroundFetchContext::DeleteRegistration(
     const BackgroundFetchRegistrationId& registration_id,
     const std::vector<std::unique_ptr<BlobHandle>>& blob_handles) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK_GT(active_fetches_.count(registration_id), 0u);
 
   // Delete all persistent information associated with the |registration_id|.

@@ -3,14 +3,17 @@
 // found in the LICENSE file.
 
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/content_browser_test.h"
 #include "content/public/test/content_browser_test_utils.h"
+#include "content/public/test/test_utils.h"
 #include "content/shell/browser/shell.h"
 #include "storage/browser/blob/blob_memory_controller.h"
 #include "storage/browser/blob/blob_storage_context.h"
@@ -99,8 +102,39 @@ IN_PROC_BROWSER_TEST_F(BlobStorageBrowserTest, BlobCombinations) {
 
   // Make sure we run all file / io tasks.
   base::RunLoop().RunUntilIdle();
-  BrowserThread::GetBlockingPool()->FlushForTesting();
+  RunAllBlockingPoolTasksUntilIdle();
+}
+
+class MojoBlobStorageBrowserTest : public BlobStorageBrowserTest {
+ public:
+  void SetUp() override {
+    scoped_feature_list_.InitAndEnableFeature(features::kMojoBlobs);
+    BlobStorageBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
+};
+
+IN_PROC_BROWSER_TEST_F(MojoBlobStorageBrowserTest, BlobCombinations) {
+  SetBlobLimits();
+  SimpleTest(GetTestUrl("blob_storage", "blob_creation_and_slicing.html"));
+  storage::BlobMemoryController* memory_controller = GetMemoryController();
+  ASSERT_TRUE(memory_controller);
+  // Our exact usages depend on IPC message ordering & garbage collection.
+  // Since this is basically random, we just check bounds.
+  EXPECT_LT(0u, memory_controller->memory_usage());
+  EXPECT_LT(0ul, memory_controller->disk_usage());
+  EXPECT_GT(memory_controller->disk_usage(),
+            static_cast<uint64_t>(memory_controller->memory_usage()));
+  EXPECT_GT(limits_.max_blob_in_memory_space,
+            memory_controller->memory_usage());
+  EXPECT_GT(limits_.effective_max_disk_space, memory_controller->disk_usage());
+  shell()->Close();
+
+  // Make sure we run all file / io tasks.
   base::RunLoop().RunUntilIdle();
+  RunAllBlockingPoolTasksUntilIdle();
 }
 
 }  // namespace content

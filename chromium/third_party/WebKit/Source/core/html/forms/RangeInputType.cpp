@@ -37,7 +37,7 @@
 #include "core/InputTypeNames.h"
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/NodeComputedStyle.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/events/KeyboardEvent.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
@@ -92,11 +92,12 @@ InputType::ValueMode RangeInputType::GetValueMode() const {
 }
 
 void RangeInputType::CountUsage() {
-  CountUsageIfVisible(UseCounter::kInputTypeRange);
+  CountUsageIfVisible(WebFeature::kInputTypeRange);
   if (const ComputedStyle* style = GetElement().GetComputedStyle()) {
-    if (style->Appearance() == kSliderVerticalPart)
+    if (style->Appearance() == kSliderVerticalPart) {
       UseCounter::Count(GetElement().GetDocument(),
-                        UseCounter::kInputTypeRangeVerticalAppearance);
+                        WebFeature::kInputTypeRangeVerticalAppearance);
+    }
   }
 }
 

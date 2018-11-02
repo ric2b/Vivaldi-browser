@@ -105,12 +105,13 @@ PictureLayerImpl::PictureLayerImpl(LayerTreeImpl* tree_impl,
       raster_source_scale_(0.f),
       raster_contents_scale_(0.f),
       low_res_raster_contents_scale_(0.f),
+      mask_type_(mask_type),
       was_screen_space_transform_animating_(false),
       only_used_low_res_last_append_quads_(false),
-      mask_type_(mask_type),
       nearest_neighbor_(false),
       use_transformed_rasterization_(false),
-      is_directly_composited_image_(false) {
+      is_directly_composited_image_(false),
+      can_use_lcd_text_(true) {
   layer_tree_impl()->RegisterPictureLayerImpl(this);
 }
 
@@ -180,6 +181,10 @@ void PictureLayerImpl::PushPropertiesTo(LayerImpl* base_layer) {
   layer_impl->raster_contents_scale_ = raster_contents_scale_;
   layer_impl->low_res_raster_contents_scale_ = low_res_raster_contents_scale_;
   layer_impl->is_directly_composited_image_ = is_directly_composited_image_;
+  // Simply push the value to the active tree without any extra invalidations,
+  // since the pending tree tiles would have this handled. This is here to
+  // ensure the state is consistent for future raster.
+  layer_impl->can_use_lcd_text_ = can_use_lcd_text_;
 
   layer_impl->SanityCheckTilingState();
 
@@ -219,10 +224,13 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
   float max_contents_scale = MaximumTilingContentsScale();
   PopulateScaledSharedQuadState(shared_quad_state, max_contents_scale,
                                 max_contents_scale);
-  Occlusion scaled_occlusion =
-      draw_properties()
-          .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
-              shared_quad_state->quad_to_target_transform);
+  Occlusion scaled_occlusion;
+  if (mask_type_ == Layer::LayerMaskType::NOT_MASK) {
+    scaled_occlusion =
+        draw_properties()
+            .occlusion_in_content_space.GetOcclusionWithGivenDrawTransform(
+                shared_quad_state->quad_to_target_transform);
+  }
 
   if (current_draw_mode_ == DRAW_MODE_RESOURCELESS_SOFTWARE) {
     AppendDebugBorderQuad(
@@ -256,7 +264,7 @@ void PictureLayerImpl::AppendQuads(RenderPass* render_pass,
         render_pass->CreateAndAppendDrawQuad<PictureDrawQuad>();
     quad->SetNew(shared_quad_state, geometry_rect, opaque_rect,
                  visible_geometry_rect, texture_rect, texture_size,
-                 nearest_neighbor_, RGBA_8888, quad_content_rect,
+                 nearest_neighbor_, viz::RGBA_8888, quad_content_rect,
                  max_contents_scale, raster_source_);
     ValidateQuadResources(quad);
     return;
@@ -515,9 +523,13 @@ bool PictureLayerImpl::UpdateTiles() {
   // The reason for this is that we should be able to activate sooner and get a
   // more up to date recording, so we don't run out of recording on the active
   // tree.
-  bool can_require_tiles_for_activation =
-      !only_used_low_res_last_append_quads_ || RequiresHighResToDraw() ||
-      !layer_tree_impl()->SmoothnessTakesPriority();
+  // A layer must be a drawing layer for it to require tiles for activation.
+  bool can_require_tiles_for_activation = false;
+  if (contributes_to_drawn_render_surface()) {
+    can_require_tiles_for_activation =
+        !only_used_low_res_last_append_quads_ || RequiresHighResToDraw() ||
+        !layer_tree_impl()->SmoothnessTakesPriority();
+  }
 
   static const Occlusion kEmptyOcclusion;
   const Occlusion& occlusion_in_content_space =
@@ -631,36 +643,23 @@ void PictureLayerImpl::UpdateRasterSource(
   }
 }
 
-void PictureLayerImpl::UpdateCanUseLCDTextAfterCommit() {
-  // This function is only allowed to be called after commit, due to it not
-  // being smart about sharing tiles and because otherwise it would cause
-  // flashes by switching out tiles in place that may be currently on screen.
+bool PictureLayerImpl::UpdateCanUseLCDTextAfterCommit() {
   DCHECK(layer_tree_impl()->IsSyncTree());
 
-  // Don't allow the LCD text state to change once disabled.
-  if (!RasterSourceUsesLCDText())
-    return;
-  if (CanUseLCDText() == RasterSourceUsesLCDText())
-    return;
+  // Once we disable lcd text, we don't re-enable it.
+  if (!can_use_lcd_text_)
+    return false;
 
-  // Raster sources are considered const, so in order to update the state
-  // a new one must be created and all tiles recreated.
-  scoped_refptr<RasterSource> new_raster_source =
-      raster_source_->CreateCloneWithoutLCDText();
-  raster_source_.swap(new_raster_source);
+  if (can_use_lcd_text_ == CanUseLCDText())
+    return false;
 
+  can_use_lcd_text_ = CanUseLCDText();
   // Synthetically invalidate everything.
   gfx::Rect bounds_rect(bounds());
   invalidation_ = Region(bounds_rect);
-  tilings_->UpdateRasterSourceDueToLCDChange(raster_source_, invalidation_);
+  tilings_->Invalidate(invalidation_);
   SetUpdateRect(bounds_rect);
-
-  DCHECK(!RasterSourceUsesLCDText());
-}
-
-bool PictureLayerImpl::RasterSourceUsesLCDText() const {
-  return raster_source_ ? raster_source_->CanUseLCDText()
-                        : layer_tree_impl()->settings().can_use_lcd_text;
+  return true;
 }
 
 void PictureLayerImpl::NotifyTileStateChanged(const Tile* tile) {
@@ -722,7 +721,8 @@ std::unique_ptr<Tile> PictureLayerImpl::CreateTile(
     flags |= Tile::IS_OPAQUE;
 
   return layer_tree_impl()->tile_manager()->CreateTile(
-      info, id(), layer_tree_impl()->source_frame_number(), flags);
+      info, id(), layer_tree_impl()->source_frame_number(), flags,
+      can_use_lcd_text_);
 }
 
 const Region* PictureLayerImpl::GetPendingInvalidation() {
@@ -1015,11 +1015,16 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
 
   // Don't change the raster scale if any of the following are true:
   //  - We have an animating transform.
-  //  - We have a will-change transform hint.
   //  - The raster scale is already ideal.
   if (draw_properties().screen_space_transform_is_animating ||
-      has_will_change_transform_hint() ||
       raster_source_scale_ == ideal_source_scale_) {
+    return false;
+  }
+
+  // Don't update will-change: transform layers if the raster contents scale is
+  // at least the native scale (otherwise, we'd need to clamp it).
+  if (has_will_change_transform_hint() &&
+      raster_contents_scale_ >= raster_page_scale_ * raster_device_scale_) {
     return false;
   }
 
@@ -1158,6 +1163,15 @@ void PictureLayerImpl::RecalculateRasterScales() {
       raster_contents_scale_ = maximum_scale;
     else
       raster_contents_scale_ = 1.f * ideal_page_scale_ * ideal_device_scale_;
+  }
+
+  // Clamp will-change: transform layers to be at least the native scale.
+  if (has_will_change_transform_hint()) {
+    float min_desired_scale = raster_device_scale_ * raster_page_scale_;
+    if (raster_contents_scale_ < min_desired_scale) {
+      raster_contents_scale_ = min_desired_scale;
+      raster_page_scale_ = 1.f;
+    }
   }
 
   raster_contents_scale_ =
@@ -1458,8 +1472,8 @@ bool PictureLayerImpl::IsOnActiveOrPendingTree() const {
 }
 
 bool PictureLayerImpl::HasValidTilePriorities() const {
-  return IsOnActiveOrPendingTree() && (contributes_to_drawn_render_surface() ||
-                                       raster_even_if_not_in_rsll());
+  return IsOnActiveOrPendingTree() &&
+         (contributes_to_drawn_render_surface() || raster_even_if_not_drawn());
 }
 
 void PictureLayerImpl::InvalidateRegionForImages(
@@ -1479,7 +1493,7 @@ void PictureLayerImpl::InvalidateRegionForImages(
   }
 
   invalidation_.Union(invalidation);
-  tilings_->UpdateTilingsForImplSideInvalidation(invalidation);
+  tilings_->Invalidate(invalidation);
   SetNeedsPushProperties();
   TRACE_EVENT_END1("cc", "PictureLayerImpl::InvalidateRegionForImages",
                    "Invalidation", invalidation.ToString());

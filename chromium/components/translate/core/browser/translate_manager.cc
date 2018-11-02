@@ -267,7 +267,7 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
           TranslateBrowserMetrics::INITIATION_STATUS_AUTO_BY_CONFIG);
       translate_event_->set_modified_target_language(auto_target_lang);
       RecordTranslateEvent(
-          metrics::TranslateEventProto::AUTOMATICALLY_TRANSLATED);
+          metrics::TranslateEventProto::AUTO_TRANSLATION_BY_PREF);
       TranslatePage(language_code, auto_target_lang, false);
       return;
     }
@@ -280,7 +280,7 @@ void TranslateManager::InitiateTranslation(const std::string& page_lang) {
         TranslateBrowserMetrics::INITIATION_STATUS_AUTO_BY_LINK);
     translate_event_->set_modified_target_language(auto_translate_to);
     RecordTranslateEvent(
-        metrics::TranslateEventProto::AUTOMATICALLY_TRANSLATED);
+        metrics::TranslateEventProto::AUTO_TRANSLATION_BY_LINK);
     TranslatePage(language_code, auto_translate_to, false);
     return;
   }
@@ -336,6 +336,10 @@ void TranslateManager::TranslatePage(const std::string& original_source_lang,
     NOTREACHED();
     return;
   }
+
+  // Log the source and target languages of the translate request.
+  TranslateBrowserMetrics::ReportTranslateSourceLanguage(original_source_lang);
+  TranslateBrowserMetrics::ReportTranslateTargetLanguage(target_lang);
 
   // Translation can be kicked by context menu against unsupported languages.
   // Unsupported language strings should be replaced with
@@ -427,8 +431,11 @@ void TranslateManager::NotifyTranslateError(TranslateErrors::Type error_type) {
 void TranslateManager::PageTranslated(const std::string& source_lang,
                                       const std::string& target_lang,
                                       TranslateErrors::Type error_type) {
-  language_state_.SetCurrentLanguage(target_lang);
+  if (error_type == TranslateErrors::NONE)
+    language_state_.SetCurrentLanguage(target_lang);
+
   language_state_.set_translation_pending(false);
+  language_state_.set_translation_error(error_type != TranslateErrors::NONE);
 
   if ((error_type == TranslateErrors::NONE) &&
       source_lang != translate::kUnknownLanguageCode &&
@@ -572,6 +579,7 @@ void TranslateManager::InitTranslateEvent(const std::string& src_lang,
 void TranslateManager::RecordTranslateEvent(int event_type) {
   translate_ranker_->RecordTranslateEvent(
       event_type, translate_driver_->GetVisibleURL(), translate_event_.get());
+  translate_client_->RecordTranslateEvent(*translate_event_.get());
 }
 
 bool TranslateManager::ShouldOverrideDecision(int event_type) {
@@ -591,6 +599,9 @@ bool TranslateManager::ShouldSuppressBubbleUI(
       !language_state_.HasLanguageChanged() &&
       !ShouldOverrideDecision(
           metrics::TranslateEventProto::MATCHES_PREVIOUS_LANGUAGE)) {
+    TranslateBrowserMetrics::ReportInitiationStatus(
+        TranslateBrowserMetrics::
+            INITIATION_STATUS_ABORTED_BY_MATCHES_PREVIOUS_LANGUAGE);
     return true;
   }
 
@@ -601,6 +612,8 @@ bool TranslateManager::ShouldSuppressBubbleUI(
           source_language) &&
       !ShouldOverrideDecision(
           metrics::TranslateEventProto::LANGUAGE_DISABLED_BY_AUTO_BLACKLIST)) {
+    TranslateBrowserMetrics::ReportInitiationStatus(
+        TranslateBrowserMetrics::INITIATION_STATUS_ABORTED_BY_TOO_OFTEN_DENIED);
     return true;
   }
 

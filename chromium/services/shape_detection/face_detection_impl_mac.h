@@ -7,6 +7,7 @@
 
 #include "base/mac/scoped_nsobject.h"
 #include "services/shape_detection/public/interfaces/facedetection.mojom.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 
 @class CIDetector;
 
@@ -18,11 +19,9 @@ class FaceDetectionImplMac : public shape_detection::mojom::FaceDetection {
       shape_detection::mojom::FaceDetectorOptionsPtr options);
   ~FaceDetectionImplMac() override;
 
-  void Detect(mojo::ScopedSharedBufferHandle frame_data,
-              uint32_t width,
-              uint32_t height,
-              const shape_detection::mojom::FaceDetection::DetectCallback&
-                  callback) override;
+  void Detect(
+      const SkBitmap& bitmap,
+      shape_detection::mojom::FaceDetection::DetectCallback callback) override;
 
  private:
   base::scoped_nsobject<CIDetector> detector_;

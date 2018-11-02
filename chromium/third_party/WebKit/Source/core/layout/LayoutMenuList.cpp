@@ -26,15 +26,15 @@
 
 #include "core/layout/LayoutMenuList.h"
 
+#include <math.h>
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/NodeComputedStyle.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/html/HTMLOptionElement.h"
 #include "core/html/HTMLSelectElement.h"
 #include "core/layout/LayoutText.h"
 #include "core/layout/LayoutTheme.h"
 #include "platform/text/PlatformLocale.h"
-#include <math.h>
 
 namespace blink {
 
@@ -127,8 +127,7 @@ void LayoutMenuList::AdjustInnerStyle() {
   }
 
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-    SetNeedsPaintPropertyUpdate();
+  SetNeedsPaintPropertyUpdate();
 }
 
 HTMLSelectElement* LayoutMenuList::SelectElement() const {
@@ -144,8 +143,7 @@ void LayoutMenuList::AddChild(LayoutObject* new_child,
     cache->ChildrenChanged(this);
 
   // LayoutMenuList::ControlClipRect() depends on inner_block_->ContentsSize().
-  if (RuntimeEnabledFeatures::slimmingPaintInvalidationEnabled())
-    SetNeedsPaintPropertyUpdate();
+  SetNeedsPaintPropertyUpdate();
 }
 
 void LayoutMenuList::RemoveChild(LayoutObject* old_child) {

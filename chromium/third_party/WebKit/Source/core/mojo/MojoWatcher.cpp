@@ -43,9 +43,7 @@ MojoWatcher* MojoWatcher::Create(mojo::Handle handle,
   return watcher;
 }
 
-MojoWatcher::~MojoWatcher() {
-  DCHECK(!handle_.is_valid());
-}
+MojoWatcher::~MojoWatcher() {}
 
 MojoResult MojoWatcher::cancel() {
   if (!watcher_handle_.is_valid())
@@ -92,6 +90,7 @@ MojoResult MojoWatcher::Watch(mojo::Handle handle,
   DCHECK_EQ(MOJO_RESULT_OK, result);
 
   result = MojoWatch(watcher_handle_.get().value(), handle.value(), signals,
+                     MOJO_WATCH_CONDITION_SATISFIED,
                      reinterpret_cast<uintptr_t>(this));
   if (result != MOJO_RESULT_OK)
     return result;

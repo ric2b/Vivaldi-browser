@@ -39,9 +39,9 @@
 
 namespace blink {
 
-using testing::AtLeast;
-using testing::Return;
-using testing::_;
+using ::testing::AtLeast;
+using ::testing::Return;
+using ::testing::_;
 
 static double g_mocked_time = 0.0;
 
@@ -139,8 +139,8 @@ class TestScrollAnimator : public ScrollAnimator {
  public:
   TestScrollAnimator(ScrollableArea* scrollable_area,
                      WTF::TimeFunction timing_function)
-      : ScrollAnimator(scrollable_area, timing_function){};
-  ~TestScrollAnimator() override{};
+      : ScrollAnimator(scrollable_area, timing_function) {}
+  ~TestScrollAnimator() override {}
 
   void SetShouldSendToCompositor(bool send) {
     should_send_to_compositor_ = send;

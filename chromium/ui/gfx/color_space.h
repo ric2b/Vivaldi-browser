@@ -12,7 +12,7 @@
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "third_party/skia/include/core/SkColorSpace.h"
-#include "ui/gfx/gfx_export.h"
+#include "ui/gfx/color_space_export.h"
 
 namespace IPC {
 template <class P>
@@ -26,7 +26,7 @@ class ICCProfile;
 // Used to represet a color space for the purpose of color conversion.
 // This is designed to be safe and compact enough to send over IPC
 // between any processes.
-class GFX_EXPORT ColorSpace {
+class COLOR_SPACE_EXPORT ColorSpace {
  public:
   enum class PrimaryID : uint8_t {
     INVALID,
@@ -45,6 +45,8 @@ class GFX_EXPORT ColorSpace {
     // Corresponds the the primaries of the "Generic RGB" profile used in the
     // Apple ColorSync application, used by layout tests on Mac.
     APPLE_GENERIC_RGB,
+    // A very wide gamut space with rotated primaries. Used by layout tests.
+    WIDE_GAMUT_COLOR_SPIN,
     // Primaries defined by the primary matrix |custom_primary_matrix_|.
     CUSTOM,
     // For color spaces defined by an ICC profile which cannot be represented
@@ -131,6 +133,9 @@ class GFX_EXPORT ColorSpace {
   bool IsValid() const;
 
   static ColorSpace CreateSRGB();
+  static ColorSpace CreateDisplayP3D65();
+  static ColorSpace CreateCustom(const SkMatrix44& to_XYZD50,
+                                 TransferID transfer_id);
   static ColorSpace CreateCustom(const SkMatrix44& to_XYZD50,
                                  const SkColorSpaceTransferFn& fn);
   static ColorSpace CreateXYZD50();
@@ -157,6 +162,12 @@ class GFX_EXPORT ColorSpace {
   bool IsHDR() const;
   // Returns true if the encoded values can be outside of the 0.0-1.0 range.
   bool FullRangeEncodedValues() const;
+
+  // Returns true if this color space can be represented parametrically.
+  bool IsParametric() const;
+  // Return a parametric approximation of this color space (if it is not already
+  // parametric).
+  gfx::ColorSpace GetParametricApproximation() const;
 
   // Return this color space with any range adjust or YUV to RGB conversion
   // stripped off.
@@ -210,8 +221,8 @@ class GFX_EXPORT ColorSpace {
 };
 
 // Stream operator so ColorSpace can be used in assertion statements.
-GFX_EXPORT std::ostream& operator<<(std::ostream& out,
-                                    const ColorSpace& color_space);
+COLOR_SPACE_EXPORT std::ostream& operator<<(std::ostream& out,
+                                            const ColorSpace& color_space);
 
 }  // namespace gfx
 

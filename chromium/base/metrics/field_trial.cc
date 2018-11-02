@@ -11,10 +11,11 @@
 #include "base/build_time.h"
 #include "base/command_line.h"
 #include "base/debug/activity_tracker.h"
-#include "base/debug/crash_logging.h"
 #include "base/logging.h"
 #include "base/metrics/field_trial_param_associator.h"
 #include "base/process/memory.h"
+#include "base/process/process_handle.h"
+#include "base/process/process_info.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
@@ -714,6 +715,7 @@ void FieldTrialList::GetActiveFieldTrialGroupsFromString(
 void FieldTrialList::GetInitiallyActiveFieldTrials(
     const base::CommandLine& command_line,
     FieldTrial::ActiveGroups* active_groups) {
+  DCHECK(global_);
   DCHECK(global_->create_trials_from_command_line_called_);
 
   if (!global_->field_trial_allocator_) {
@@ -779,16 +781,14 @@ void FieldTrialList::CreateTrialsFromCommandLine(
     int fd_key) {
   global_->create_trials_from_command_line_called_ = true;
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
   if (cmd_line.HasSwitch(field_trial_handle_switch)) {
     std::string switch_value =
         cmd_line.GetSwitchValueASCII(field_trial_handle_switch);
     bool result = CreateTrialsFromSwitchValue(switch_value);
     DCHECK(result);
   }
-#endif
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
+#elif defined(OS_POSIX) && !defined(OS_NACL)
   // On POSIX, we check if the handle is valid by seeing if the browser process
   // sent over the switch (we don't care about the value). Invalid handles
   // occur in some browser tests which don't initialize the allocator.
@@ -826,7 +826,7 @@ void FieldTrialList::CreateFeaturesFromCommandLine(
       global_->field_trial_allocator_.get());
 }
 
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
 // static
 void FieldTrialList::AppendFieldTrialHandleIfNeeded(
     HandlesToInheritVector* handles) {
@@ -838,9 +838,7 @@ void FieldTrialList::AppendFieldTrialHandleIfNeeded(
       handles->push_back(global_->readonly_allocator_handle_.GetHandle());
   }
 }
-#endif
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
+#elif defined(OS_POSIX) && !defined(OS_NACL)
 // static
 SharedMemoryHandle FieldTrialList::GetFieldTrialHandle() {
   if (global_ && kUseSharedMemoryForFieldTrials) {
@@ -1121,6 +1119,8 @@ std::string FieldTrialList::SerializeSharedMemoryHandleMetadata(
   // Tell the child process the name of the inherited HANDLE.
   uintptr_t uintptr_handle = reinterpret_cast<uintptr_t>(shm.GetHandle());
   ss << uintptr_handle << ",";
+#elif defined(OS_FUCHSIA)
+  ss << shm.GetHandle() << ",";
 #elif !defined(OS_POSIX)
 #error Unsupported OS
 #endif
@@ -1131,10 +1131,10 @@ std::string FieldTrialList::SerializeSharedMemoryHandleMetadata(
   return ss.str();
 }
 
-#if defined(OS_WIN)
-// static
-SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
-    const std::string& switch_value) {
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
+
+template <class RawHandle>
+SharedMemoryHandle DeserializeImpl(const std::string& switch_value) {
   std::vector<base::StringPiece> tokens = base::SplitStringPiece(
       switch_value, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
 
@@ -1144,7 +1144,18 @@ SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
   int field_trial_handle = 0;
   if (!base::StringToInt(tokens[0], &field_trial_handle))
     return SharedMemoryHandle();
-  HANDLE handle = reinterpret_cast<HANDLE>(field_trial_handle);
+  RawHandle handle = reinterpret_cast<RawHandle>(field_trial_handle);
+#if defined(OS_WIN)
+  if (base::IsCurrentProcessElevated()) {
+    // base::LaunchElevatedProcess doesn't have a way to duplicate the handle,
+    // but this process can since by definition it's not sandboxed.
+    base::ProcessId parent_pid = base::GetParentProcessId(GetCurrentProcess());
+    HANDLE parent_handle = OpenProcess(PROCESS_ALL_ACCESS, FALSE, parent_pid);
+    DuplicateHandle(parent_handle, handle, GetCurrentProcess(), &handle, 0,
+                    FALSE, DUPLICATE_SAME_ACCESS);
+    CloseHandle(parent_handle);
+  }
+#endif
 
   base::UnguessableToken guid;
   if (!DeserializeGUIDFromStringPieces(tokens[1], tokens[2], &guid))
@@ -1156,9 +1167,19 @@ SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
 
   return SharedMemoryHandle(handle, static_cast<size_t>(size), guid);
 }
-#endif  // defined(OS_WIN)
 
-#if defined(OS_POSIX) && !defined(OS_NACL)
+// static
+SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
+    const std::string& switch_value) {
+#if defined(OS_WIN)
+  return DeserializeImpl<HANDLE>(switch_value);
+#else
+  return DeserializeImpl<mx_handle_t>(switch_value);
+#endif
+}
+
+#elif defined(OS_POSIX) && !defined(OS_NACL)
+
 // static
 SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
     int fd,
@@ -1180,9 +1201,10 @@ SharedMemoryHandle FieldTrialList::DeserializeSharedMemoryHandleMetadata(
   return SharedMemoryHandle(FileDescriptor(fd, true), static_cast<size_t>(size),
                             guid);
 }
-#endif  // defined(OS_POSIX) && !defined(OS_NACL)
 
-#if defined(OS_WIN)
+#endif
+
+#if defined(OS_WIN) || defined(OS_FUCHSIA)
 // static
 bool FieldTrialList::CreateTrialsFromSwitchValue(
     const std::string& switch_value) {
@@ -1191,9 +1213,7 @@ bool FieldTrialList::CreateTrialsFromSwitchValue(
     return false;
   return FieldTrialList::CreateTrialsFromSharedMemoryHandle(shm);
 }
-#endif  // defined(OS_WIN)
-
-#if defined(OS_POSIX) && !defined(OS_NACL)
+#elif defined(OS_POSIX) && !defined(OS_NACL)
 // static
 bool FieldTrialList::CreateTrialsFromDescriptor(
     int fd_key,
@@ -1280,25 +1300,11 @@ void FieldTrialList::InstantiateFieldTrialAllocatorIfNeeded() {
 #endif
 
   std::unique_ptr<SharedMemory> shm(new SharedMemory());
-  if (!shm->Create(options)) {
-#if !defined(OS_NACL)
-    // Temporary for http://crbug.com/703649.
-    base::debug::ScopedCrashKey crash_key(
-        "field_trial_shmem_create_error",
-        base::IntToString(static_cast<int>(shm->get_last_error())));
-#endif
+  if (!shm->Create(options))
     OnOutOfMemory(kFieldTrialAllocationSize);
-  }
 
-  if (!shm->Map(kFieldTrialAllocationSize)) {
-#if !defined(OS_NACL)
-    // Temporary for http://crbug.com/703649.
-    base::debug::ScopedCrashKey crash_key(
-        "field_trial_shmem_map_error",
-        base::IntToString(static_cast<int>(shm->get_last_error())));
-#endif
+  if (!shm->Map(kFieldTrialAllocationSize))
     OnOutOfMemory(kFieldTrialAllocationSize);
-  }
 
   global_->field_trial_allocator_.reset(
       new FieldTrialAllocator(std::move(shm), 0, kAllocatorName, false));

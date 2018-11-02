@@ -10,9 +10,9 @@
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/path_service.h"
-#include "cc/output/context_provider.h"
-#include "cc/surfaces/frame_sink_id_allocator.h"
 #include "cc/surfaces/surface_manager.h"
+#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/surfaces/frame_sink_id_allocator.h"
 #include "ui/aura/env.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/ui_base_paths.h"
@@ -43,7 +43,7 @@ void MashTestSuite::Initialize() {
   resources = resources.Append(FILE_PATH_LITERAL("ash_mus_resources.pak"));
   ui::ResourceBundle::InitSharedInstanceWithPakPath(resources);
 
-  ash::test::AshTestHelper::config_ = ash::Config::MASH;
+  ash::AshTestHelper::config_ = ash::Config::MASH;
 
   base::DiscardableMemoryAllocator::SetInstance(&discardable_memory_allocator_);
   env_ = aura::Env::CreateInstance(aura::Env::Mode::MUS);

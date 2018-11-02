@@ -31,7 +31,7 @@ class KeyboardController;
 namespace ui {
 class ImplicitAnimationObserver;
 class MouseEvent;
-}
+}  // namespace ui
 
 namespace ash {
 
@@ -51,12 +51,16 @@ class ShelfWidget;
 // On mus, widget bounds management is handled by the window manager.
 class ASH_EXPORT ShelfLayoutManager
     : public ShellObserver,
-      public aura::client::ActivationChangeObserver,
+      public ::wm::ActivationChangeObserver,
       public keyboard::KeyboardControllerObserver,
       public LockStateObserver,
       public wm::WmSnapToPixelLayoutManager,
       public SessionObserver {
  public:
+  // The snapping threshold for dragging app list from shelf in tablet mode. App
+  // list should snap to fullscreen if the drag amount exceeds this value.
+  static constexpr int kAppListDragDistanceThreshold = 320;
+
   ShelfLayoutManager(ShelfWidget* shelf_widget, Shelf* shelf);
   ~ShelfLayoutManager() override;
 
@@ -64,7 +68,6 @@ class ASH_EXPORT ShelfLayoutManager
 
   // Clears internal data for shutdown process.
   void PrepareForShutdown();
-
   // Returns whether the shelf and its contents (shelf, status) are visible
   // on the screen.
   bool IsVisible() const;
@@ -98,16 +101,20 @@ class ASH_EXPORT ShelfLayoutManager
   // Invoked by the shelf when the auto-hide state may have changed.
   void UpdateAutoHideState();
 
-  // Updates the auto-hide state for certain events.
   // TODO(mash): Add similar event handling support for mash.
+  // Updates the auto-hide state for mouse events.
   void UpdateAutoHideForMouseEvent(ui::MouseEvent* event, aura::Window* target);
-  void UpdateAutoHideForGestureEvent(ui::GestureEvent* event,
-                                     aura::Window* target);
+
+  // Process the gesture events on |target|.
+  void ProcessGestureEventOnWindow(ui::GestureEvent* event,
+                                   aura::Window* target);
 
   ShelfVisibilityState visibility_state() const {
     return state_.visibility_state;
   }
   ShelfAutoHideState auto_hide_state() const { return state_.auto_hide_state; }
+
+  int chromevox_panel_height() const { return chromevox_panel_height_; }
 
   ShelfWidget* shelf_widget() { return shelf_widget_; }
 
@@ -122,7 +129,7 @@ class ASH_EXPORT ShelfLayoutManager
   // Processes a gesture event and updates the status of the shelf when
   // appropriate. Returns true if the gesture has been handled and it should not
   // be processed any further, false otherwise.
-  bool ProcessGestureEvent(const ui::GestureEvent& event);
+  bool ProcessGestureEvent(const ui::GestureEvent& event_in_screen);
 
   // Set an animation duration override for the show / hide animation of the
   // shelf. Specifying 0 leads to use the default.
@@ -134,12 +141,14 @@ class ASH_EXPORT ShelfLayoutManager
                       const gfx::Rect& requested_bounds) override;
 
   // Overridden from ShellObserver:
-  void OnShelfAutoHideBehaviorChanged(WmWindow* root_window) override;
+  void OnShelfAutoHideBehaviorChanged(aura::Window* root_window) override;
   void OnPinnedStateChanged(aura::Window* pinned_window) override;
   void OnVirtualKeyboardStateChanged(bool activated,
                                      aura::Window* root_window) override;
+  void OnAppListVisibilityChanged(bool shown,
+                                  aura::Window* root_window) override;
 
-  // Overridden from aura::client::ActivationChangeObserver:
+  // Overridden from wm::ActivationChangeObserver:
   void OnWindowActivated(ActivationReason reason,
                          aura::Window* gained_active,
                          aura::Window* lost_active) override;
@@ -273,6 +282,9 @@ class ASH_EXPORT ShelfLayoutManager
   // Returns true if |window| is a descendant of the shelf.
   bool IsShelfWindow(aura::Window* window);
 
+  // Returns true if |window| is a descendant of the status area.
+  bool IsStatusAreaWindow(aura::Window* window);
+
   int GetWorkAreaInsets(const State& state, int size) const;
 
   // Called when the LoginUI changes from visible to invisible.
@@ -290,10 +302,17 @@ class ASH_EXPORT ShelfLayoutManager
   bool IsShelfAutoHideForFullscreenMaximized() const;
 
   // Gesture related functions:
-  void StartGestureDrag(const ui::GestureEvent& gesture);
-  void UpdateGestureDrag(const ui::GestureEvent& gesture);
-  void CompleteGestureDrag(const ui::GestureEvent& gesture);
+  void StartGestureDrag(const ui::GestureEvent& gesture_in_screen);
+  void UpdateGestureDrag(const ui::GestureEvent& gesture_in_screen);
+  void CompleteGestureDrag(const ui::GestureEvent& gesture_in_screen);
+  void CompleteAppListDrag(const ui::GestureEvent& gesture_in_screen);
   void CancelGestureDrag();
+  bool CanStartFullscreenAppListDrag(float scroll_y_hint) const;
+  float GetAppListBackgroundOpacityOnShelfOpacity();
+
+  // Returns true if the gesture is swiping up on a hidden shelf or swiping down
+  // on a visible shelf; other gestures should not change shelf visibility.
+  bool IsSwipingCorrectDirection();
 
   // True when inside UpdateBoundsAndOpacity() method. Used to prevent calling
   // UpdateBoundsAndOpacity() again from SetChildBounds().
@@ -313,6 +332,10 @@ class ASH_EXPORT ShelfLayoutManager
   // Do any windows overlap the shelf? This is maintained by WorkspaceManager.
   bool window_overlaps_shelf_;
 
+  // Whether the app list is visible. This is maintained by
+  // OnAppListVisibilityChanged.
+  bool is_app_list_visible_ = false;
+
   base::OneShotTimer auto_hide_timer_;
 
   // Whether the mouse was over the shelf when the auto hide timer started.
@@ -322,15 +345,18 @@ class ASH_EXPORT ShelfLayoutManager
   base::ObserverList<ShelfLayoutManagerObserver> observers_;
 
   // The shelf reacts to gesture-drags, and can be set to auto-hide for certain
-  // gestures. Some shelf behaviour (e.g. visibility state, background color
-  // etc.) are affected by various stages of the drag. The enum keeps track of
-  // the present status of the gesture drag.
+  // gestures. Swiping up from the shelf in tablet mode can open the
+  // fullscreen app list. Some shelf behaviour (e.g. visibility state,
+  // background color etc.) are affected by various stages of the drag. The enum
+  // keeps track of the present status of the gesture drag.
   enum GestureDragStatus {
     GESTURE_DRAG_NONE,
     GESTURE_DRAG_IN_PROGRESS,
     GESTURE_DRAG_CANCEL_IN_PROGRESS,
-    GESTURE_DRAG_COMPLETE_IN_PROGRESS
+    GESTURE_DRAG_COMPLETE_IN_PROGRESS,
+    GESTURE_DRAG_APPLIST_IN_PROGRESS,
   };
+
   GestureDragStatus gesture_drag_status_;
 
   // Tracks the amount of the drag. The value is only valid when
@@ -356,6 +382,9 @@ class ASH_EXPORT ShelfLayoutManager
 
   // The show hide animation duration override or 0 for default.
   int duration_override_in_ms_;
+
+  // Whether background blur is enabled.
+  const bool is_background_blur_enabled_;
 
   // The current shelf background. Should not be assigned to directly, use
   // MaybeUpdateShelfBackground() instead.

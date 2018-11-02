@@ -46,6 +46,8 @@ enum class OobeScreen : unsigned int {
   SCREEN_USER_SELECTION,
   SCREEN_ACTIVE_DIRECTORY_PASSWORD_CHANGE,
   SCREEN_ENCRYPTION_MIGRATION,
+  SCREEN_VOICE_INTERACTION_VALUE_PROP,
+  SCREEN_WAIT_FOR_CONTAINER_READY,
 
   // Special "first screen" that initiates login flow.
   SCREEN_SPECIAL_LOGIN,
@@ -62,6 +64,9 @@ std::string GetOobeScreenName(OobeScreen screen);
 
 // Converts the JS name for the given sreen into a Screen instance.
 OobeScreen GetOobeScreenFromName(const std::string& name);
+
+// Returns true if a command line argument requests |screen| to always be shown.
+bool ForceShowOobeScreen(OobeScreen screen);
 
 }  // namespace chromeos
 

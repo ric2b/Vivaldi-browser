@@ -21,6 +21,8 @@
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "content/browser/browser_thread_impl.h"
 #include "content/browser/child_process_security_policy_impl.h"
@@ -40,7 +42,6 @@
 #include "content/common/child_process_host_impl.h"
 #include "content/common/navigation_params.h"
 #include "content/common/resource_messages.h"
-#include "content/common/resource_request.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/render_process_host.h"
@@ -54,6 +55,7 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/child_process_host.h"
 #include "content/public/common/process_type.h"
+#include "content/public/common/resource_request.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
@@ -1155,7 +1157,9 @@ void ResourceDispatcherHostTest::MakeTestRequestWithRenderFrame(
     ResourceType type) {
   ResourceRequest request = CreateResourceRequest("GET", type, url);
   request.render_frame_id = render_frame_id;
-  ResourceHostMsg_RequestResource msg(render_view_id, request_id, request);
+  ResourceHostMsg_RequestResource msg(
+      render_view_id, request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg, filter_.get());
   KickOffRequest();
 }
@@ -1167,7 +1171,9 @@ void ResourceDispatcherHostTest::MakeTestRequestWithResourceType(
     const GURL& url,
     ResourceType type) {
   ResourceRequest request = CreateResourceRequest("GET", type, url);
-  ResourceHostMsg_RequestResource msg(render_view_id, request_id, request);
+  ResourceHostMsg_RequestResource msg(
+      render_view_id, request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg, filter);
   KickOffRequest();
 }
@@ -1187,7 +1193,8 @@ void ResourceDispatcherHostTest::
   request.origin_pid = web_contents_->GetRenderProcessHost()->GetID();
   request.render_frame_id = web_contents_->GetMainFrame()->GetRoutingID();
   ResourceHostMsg_RequestResource msg(
-      web_contents_->GetRenderViewHost()->GetRoutingID(), request_id, request);
+      web_contents_->GetRenderViewHost()->GetRoutingID(), request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg, web_contents_filter_.get());
   KickOffRequest();
 }
@@ -1209,7 +1216,9 @@ void ResourceDispatcherHostTest::MakeTestRequestWithPriorityAndRenderFrame(
       "GET", RESOURCE_TYPE_SUB_RESOURCE, GURL("http://example.com/priority"));
   request.render_frame_id = render_frame_id;
   request.priority = priority;
-  ResourceHostMsg_RequestResource msg(render_view_id, request_id, request);
+  ResourceHostMsg_RequestResource msg(
+      render_view_id, request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg, filter_.get());
 }
 
@@ -1435,7 +1444,9 @@ TEST_F(ResourceDispatcherHostTest, DownloadToNetworkCache) {
   ResourceRequest request_to_cache = CreateResourceRequest(
       "GET", RESOURCE_TYPE_IMAGE, net::URLRequestTestJob::test_url_3());
   request_to_cache.download_to_network_cache_only = true;
-  ResourceHostMsg_RequestResource msg_to_cache(0, 2, request_to_cache);
+  ResourceHostMsg_RequestResource msg_to_cache(
+      0, 2, request_to_cache,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg_to_cache, filter_.get());
 
   KickOffRequest();
@@ -1578,9 +1589,13 @@ TEST_F(ResourceDispatcherHostTest, DeletedFilterDetached) {
   ResourceRequest request_ping = CreateResourceRequest(
       "GET", RESOURCE_TYPE_PING, net::URLRequestTestJob::test_url_3());
 
-  ResourceHostMsg_RequestResource msg_prefetch(0, 1, request_prefetch);
+  ResourceHostMsg_RequestResource msg_prefetch(
+      0, 1, request_prefetch,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg_prefetch, filter_.get());
-  ResourceHostMsg_RequestResource msg_ping(0, 2, request_ping);
+  ResourceHostMsg_RequestResource msg_ping(
+      0, 2, request_ping,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg_ping, filter_.get());
 
   // Remove the filter before processing the requests by simulating channel
@@ -1626,7 +1641,9 @@ TEST_F(ResourceDispatcherHostTest, DeletedFilterDetachedRedirect) {
       "GET", RESOURCE_TYPE_PREFETCH,
       net::URLRequestTestJob::test_url_redirect_to_url_2());
 
-  ResourceHostMsg_RequestResource msg(0, 1, request);
+  ResourceHostMsg_RequestResource msg(
+      0, 1, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(msg, filter_.get());
 
   // Remove the filter before processing the request by simulating channel
@@ -2736,7 +2753,8 @@ TEST_F(ResourceDispatcherHostTest, TransferNavigationHtml) {
   request.transferred_request_request_id = request_id;
 
   ResourceHostMsg_RequestResource transfer_request_msg(
-      new_render_view_id, new_request_id, request);
+      new_render_view_id, new_request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(transfer_request_msg, second_filter.get());
   content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -2805,7 +2823,8 @@ TEST_F(ResourceDispatcherHostTest, TransferTwoNavigationsHtml) {
   request.transferred_request_request_id = request_id;
 
   ResourceHostMsg_RequestResource transfer_request_msg(
-      new_render_view_id, new_request_id, request);
+      new_render_view_id, new_request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(transfer_request_msg, second_filter.get());
   content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -2817,7 +2836,8 @@ TEST_F(ResourceDispatcherHostTest, TransferTwoNavigationsHtml) {
   request.transferred_request_request_id = second_request_id;
 
   ResourceHostMsg_RequestResource second_transfer_request_msg(
-      new_render_view_id, new_second_request_id, second_request);
+      new_render_view_id, new_second_request_id, second_request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(second_transfer_request_msg, second_filter.get());
   content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -2887,7 +2907,8 @@ TEST_F(ResourceDispatcherHostTest, TransferNavigationText) {
   request.transferred_request_request_id = request_id;
 
   ResourceHostMsg_RequestResource transfer_request_msg(
-      new_render_view_id, new_request_id, request);
+      new_render_view_id, new_request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(transfer_request_msg, second_filter.get());
   content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -2933,7 +2954,8 @@ TEST_F(ResourceDispatcherHostTest, TransferNavigationWithProcessCrash) {
         "GET", RESOURCE_TYPE_MAIN_FRAME, GURL("http://example.com/blah"));
 
     ResourceHostMsg_RequestResource first_request_msg(
-        render_view_id, request_id, first_request);
+        render_view_id, request_id, first_request,
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
     OnMessageReceived(first_request_msg, first_filter.get());
     content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -2971,7 +2993,8 @@ TEST_F(ResourceDispatcherHostTest, TransferNavigationWithProcessCrash) {
   // For cleanup.
   child_ids_.insert(second_filter->child_id());
   ResourceHostMsg_RequestResource transfer_request_msg(
-      new_render_view_id, new_request_id, request);
+      new_render_view_id, new_request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(transfer_request_msg, second_filter.get());
   content::RunAllBlockingPoolTasksUntilIdle();
 
@@ -3048,7 +3071,8 @@ TEST_F(ResourceDispatcherHostTest, TransferNavigationWithTwoRedirects) {
   // For cleanup.
   child_ids_.insert(second_filter->child_id());
   ResourceHostMsg_RequestResource transfer_request_msg(
-      new_render_view_id, new_request_id, request);
+      new_render_view_id, new_request_id, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(transfer_request_msg, second_filter.get());
 
   // Verify that we update the ResourceRequestInfo.
@@ -3279,7 +3303,8 @@ TEST_F(ResourceDispatcherHostTest, RegisterDownloadedTempFile) {
   scoped_refptr<ShareableFileReference> deletable_file =
       ShareableFileReference::GetOrCreate(
           file_path, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
+          base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()})
+              .get());
 
   // Not readable.
   EXPECT_FALSE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
@@ -3325,7 +3350,8 @@ TEST_F(ResourceDispatcherHostTest, RegisterDownloadedTempFileWithMojo) {
   scoped_refptr<ShareableFileReference> deletable_file =
       ShareableFileReference::GetOrCreate(
           file_path, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
+          base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()})
+              .get());
 
   // Not readable.
   EXPECT_FALSE(ChildProcessSecurityPolicyImpl::GetInstance()->CanReadFile(
@@ -3374,7 +3400,8 @@ TEST_F(ResourceDispatcherHostTest, ReleaseTemporiesOnProcessExit) {
   scoped_refptr<ShareableFileReference> deletable_file =
       ShareableFileReference::GetOrCreate(
           file_path, ShareableFileReference::DELETE_ON_FINAL_RELEASE,
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::FILE).get());
+          base::CreateSingleThreadTaskRunnerWithTraits({base::MayBlock()})
+              .get());
 
   // Register it for a resource request.
   host_.RegisterDownloadedTempFile(filter_->child_id(), kRequestID, file_path);
@@ -3399,7 +3426,9 @@ TEST_F(ResourceDispatcherHostTest, DownloadToFile) {
   ResourceRequest request = CreateResourceRequest(
       "GET", RESOURCE_TYPE_SUB_RESOURCE, net::URLRequestTestJob::test_url_1());
   request.download_to_file = true;
-  ResourceHostMsg_RequestResource request_msg(0, 1, request);
+  ResourceHostMsg_RequestResource request_msg(
+      0, 1, request,
+      net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
   OnMessageReceived(request_msg, filter_.get());
 
   // Running the message loop until idle does not work because

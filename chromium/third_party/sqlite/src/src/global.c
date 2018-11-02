@@ -15,7 +15,7 @@
 #include "sqliteInt.h"
 
 /* An array to map all upper-case characters into their corresponding
-** lower-case character. 
+** lower-case character.
 **
 ** SQLite only considers US-ASCII (or EBCDIC) characters.  We do not
 ** handle case conversions for the UTF character set since the tables
@@ -82,7 +82,7 @@ const unsigned char sqlite3UpperToLower[] = {
 ** The equivalent of tolower() is implemented using the sqlite3UpperToLower[]
 ** array. tolower() is used more often than toupper() by SQLite.
 **
-** Bit 0x40 is set if the character is non-alphanumeric and can be used in an 
+** Bit 0x40 is set if the character is non-alphanumeric and can be used in an
 ** SQLite identifier.  Identifiers are alphanumerics, "_", "$", and any
 ** non-ASCII UTF character. Hence the test for whether or not a character is
 ** part of an identifier is 0x46.
@@ -137,9 +137,16 @@ const unsigned char sqlite3CtypeMap[256] = {
 ** EVIDENCE-OF: R-43642-56306 By default, URI handling is globally
 ** disabled. The default value may be changed by compiling with the
 ** SQLITE_USE_URI symbol defined.
+**
+** URI filenames are enabled by default if SQLITE_HAS_CODEC is
+** enabled.
 */
 #ifndef SQLITE_USE_URI
-# define  SQLITE_USE_URI 0
+# ifdef SQLITE_HAS_CODEC
+#  define SQLITE_USE_URI 1
+# else
+#  define SQLITE_USE_URI 0
+# endif
 #endif
 
 /* EVIDENCE-OF: R-38720-18127 The default setting is determined by the
@@ -165,7 +172,7 @@ const unsigned char sqlite3CtypeMap[256] = {
 ** if journal_mode=MEMORY or if temp_store=MEMORY, regardless of this
 ** setting.)
 */
-#ifndef SQLITE_STMTJRNL_SPILL 
+#ifndef SQLITE_STMTJRNL_SPILL
 # define SQLITE_STMTJRNL_SPILL (64*1024)
 #endif
 
@@ -281,7 +288,7 @@ int sqlite3PendingByte = 0x40000000;
 ** Properties of opcodes.  The OPFLG_INITIALIZER macro is
 ** created by mkopcodeh.awk during compilation.  Data is obtained
 ** from the comments following the "case OP_xxxx:" statements in
-** the vdbe.c file.  
+** the vdbe.c file.
 */
 const unsigned char sqlite3OpcodeProperty[] = OPFLG_INITIALIZER;
 

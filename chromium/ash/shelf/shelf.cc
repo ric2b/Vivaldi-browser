@@ -6,17 +6,16 @@
 
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shelf_item_delegate.h"
+#include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf_bezel_event_handler.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_layout_manager.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/shelf/shelf_observer.h"
 #include "ash/shelf/shelf_widget.h"
 #include "ash/shell.h"
-#include "ash/wm_window.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "ui/display/types/display_constants.h"
@@ -34,7 +33,7 @@ void NoopCallback(ShelfAction,
 
 // Shelf::AutoHideEventHandler -----------------------------------------------
 
-// Forwards mouse and gesture events to ShelfLayoutManager for auto-hide.
+// Forwards mouse and gesture events to ShelfLayoutManager.
 // TODO(mash): Add similar event handling support for mash.
 class Shelf::AutoHideEventHandler : public ui::EventHandler {
  public:
@@ -46,13 +45,13 @@ class Shelf::AutoHideEventHandler : public ui::EventHandler {
     Shell::Get()->RemovePreTargetHandler(this);
   }
 
-  // Overridden from ui::EventHandler:
+  // ui::EventHandler:
   void OnMouseEvent(ui::MouseEvent* event) override {
     shelf_layout_manager_->UpdateAutoHideForMouseEvent(
         event, static_cast<aura::Window*>(event->target()));
   }
   void OnGestureEvent(ui::GestureEvent* event) override {
-    shelf_layout_manager_->UpdateAutoHideForGestureEvent(
+    shelf_layout_manager_->ProcessGestureEventOnWindow(
         event, static_cast<aura::Window*>(event->target()));
   }
 
@@ -74,7 +73,7 @@ Shelf::~Shelf() {}
 
 // static
 Shelf* Shelf::ForWindow(aura::Window* window) {
-  return GetRootWindowController(window->GetRootWindow())->GetShelf();
+  return RootWindowController::ForWindow(window)->shelf();
 }
 
 // static
@@ -105,10 +104,10 @@ bool Shelf::CanChangeShelfAlignment() {
   return false;
 }
 
-void Shelf::CreateShelfWidget(WmWindow* root) {
+void Shelf::CreateShelfWidget(aura::Window* root) {
   DCHECK(!shelf_widget_);
-  WmWindow* shelf_container =
-      root->GetChildByShellWindowId(kShellWindowId_ShelfContainer);
+  aura::Window* shelf_container =
+      root->GetChildById(kShellWindowId_ShelfContainer);
   shelf_widget_.reset(new ShelfWidget(shelf_container, this));
 
   DCHECK(!shelf_layout_manager_);
@@ -118,8 +117,8 @@ void Shelf::CreateShelfWidget(WmWindow* root) {
   // Must occur after |shelf_widget_| is constructed because the system tray
   // constructors call back into Shelf::shelf_widget().
   DCHECK(!shelf_widget_->status_area_widget());
-  WmWindow* status_container =
-      root->GetChildByShellWindowId(kShellWindowId_StatusContainer);
+  aura::Window* status_container =
+      root->GetChildById(kShellWindowId_StatusContainer);
   shelf_widget_->CreateStatusAreaWidget(status_container);
 }
 
@@ -138,12 +137,14 @@ void Shelf::NotifyShelfInitialized() {
   Shell::Get()->shelf_controller()->NotifyShelfInitialized(this);
 }
 
-WmWindow* Shelf::GetWindow() {
-  return WmWindow::Get(shelf_widget_->GetNativeWindow());
+aura::Window* Shelf::GetWindow() {
+  return shelf_widget_->GetNativeWindow();
 }
 
 void Shelf::SetAlignment(ShelfAlignment alignment) {
-  DCHECK(shelf_layout_manager_);
+  // Checks added for http://crbug.com/738011.
+  CHECK(shelf_widget_);
+  CHECK(shelf_layout_manager_);
 
   if (alignment_ == alignment)
     return;
@@ -227,6 +228,11 @@ ShelfVisibilityState Shelf::GetVisibilityState() const {
                                : SHELF_HIDDEN;
 }
 
+int Shelf::GetAccessibilityPanelHeight() const {
+  return shelf_layout_manager_ ? shelf_layout_manager_->chromevox_panel_height()
+                               : 0;
+}
+
 gfx::Rect Shelf::GetIdealBounds() {
   return shelf_layout_manager_->GetIdealBounds();
 }
@@ -236,11 +242,11 @@ gfx::Rect Shelf::GetUserWorkAreaBounds() const {
                                : gfx::Rect();
 }
 
-void Shelf::UpdateIconPositionForPanel(WmWindow* panel) {
+void Shelf::UpdateIconPositionForPanel(aura::Window* panel) {
   shelf_widget_->UpdateIconPositionForPanel(panel);
 }
 
-gfx::Rect Shelf::GetScreenBoundsOfItemIconForWindow(WmWindow* window) {
+gfx::Rect Shelf::GetScreenBoundsOfItemIconForWindow(aura::Window* window) {
   if (!shelf_widget_)
     return gfx::Rect();
   return shelf_widget_->GetScreenBoundsOfItemIconForWindow(window);
@@ -274,13 +280,18 @@ void Shelf::LaunchShelfItem(int item_index) {
 
 // static
 void Shelf::ActivateShelfItem(int item_index) {
+  ActivateShelfItemOnDisplay(item_index, display::kInvalidDisplayId);
+}
+
+// static
+void Shelf::ActivateShelfItemOnDisplay(int item_index, int64_t display_id) {
   ShelfModel* shelf_model = Shell::Get()->shelf_model();
   const ShelfItem& item = shelf_model->items()[item_index];
   ShelfItemDelegate* item_delegate = shelf_model->GetShelfItemDelegate(item.id);
   std::unique_ptr<ui::Event> event = base::MakeUnique<ui::KeyEvent>(
       ui::ET_KEY_RELEASED, ui::VKEY_UNKNOWN, ui::EF_NONE);
-  item_delegate->ItemSelected(std::move(event), display::kInvalidDisplayId,
-                              LAUNCH_FROM_UNKNOWN, base::Bind(&NoopCallback));
+  item_delegate->ItemSelected(std::move(event), display_id, LAUNCH_FROM_UNKNOWN,
+                              base::Bind(&NoopCallback));
 }
 
 bool Shelf::ProcessGestureEvent(const ui::GestureEvent& event) {

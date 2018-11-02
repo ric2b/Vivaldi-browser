@@ -12,7 +12,7 @@ function requestAutocompleteActionPredictorDb() {
 /**
  * Callback from backend with the database contents. Sets up some globals and
  * calls to create the UI.
- * @param {Dictionary} database Information about AutocompleteActionPredictor
+ * @param {Object} database Information about AutocompleteActionPredictor
  *     including the database as a flattened list, a boolean indicating if the
  *     system is enabled and the current hit weight.
  */
@@ -30,7 +30,7 @@ function updateAutocompleteActionPredictorDb(database) {
 
 /**
  * Updates the table from the database.
- * @param {Dictionary} database Information about AutocompleteActionPredictor
+ * @param {Object} database Information about AutocompleteActionPredictor
  *     including the database as a flattened list, a boolean indicating if the
  *     system is enabled and the current hit weight.
  */
@@ -54,9 +54,10 @@ function updateAutocompleteActionPredictorDbView(database) {
 
     if (!filter.checked || entry.confidence > 0) {
       var row = document.createElement('tr');
-      row.className = (entry.confidence > 0.8 ? 'action-prerender' :
-                          (entry.confidence > 0.5 ? 'action-preconnect' :
-                              'action-none'));
+      row.className =
+          (entry.confidence > 0.8 ?
+               'action-prerender' :
+               (entry.confidence > 0.5 ? 'action-preconnect' : 'action-none'));
 
       row.appendChild(document.createElement('td')).textContent =
           entry.user_text;
@@ -74,5 +75,5 @@ function updateAutocompleteActionPredictorDbView(database) {
   $('countBanner').textContent = 'Entries: ' + databaseSection.children.length;
 }
 
-document.addEventListener('DOMContentLoaded',
-                          requestAutocompleteActionPredictorDb);
+document.addEventListener(
+    'DOMContentLoaded', requestAutocompleteActionPredictorDb);

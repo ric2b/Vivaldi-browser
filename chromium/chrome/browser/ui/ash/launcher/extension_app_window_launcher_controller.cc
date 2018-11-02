@@ -4,13 +4,13 @@
 
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_controller.h"
 
+#include "ash/public/cpp/shelf_model.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/public/cpp/window_properties.h"
-#include "ash/shelf/shelf_model.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
+#include "chrome/browser/chromeos/ash_config.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/ash/launcher/chrome_launcher_controller.h"
 #include "chrome/browser/ui/ash/launcher/extension_app_window_launcher_item_controller.h"
@@ -76,22 +76,9 @@ void ExtensionAppWindowLauncherController::AdditionalUserAddedToSession(
   registry_.insert(registry);
 }
 
-void ExtensionAppWindowLauncherController::OnAppWindowIconChanged(
-    AppWindow* app_window) {
-  const ash::ShelfID shelf_id = GetShelfId(app_window);
-  AppControllerMap::iterator iter = app_controller_map_.find(shelf_id);
-  if (iter == app_controller_map_.end())
-    return;
-
-  // Check if the window actually overrides its default icon. Otherwise use app
-  // icon loader provided by owner.
-  if (!app_window->HasCustomIcon() || app_window->app_icon().IsEmpty())
-    return;
-
-  ExtensionAppWindowLauncherItemController* controller = iter->second;
-  controller->set_image_set_by_controller(true);
-  owner()->SetLauncherItemImage(controller->shelf_id(),
-                                app_window->app_icon().AsImageSkia());
+void ExtensionAppWindowLauncherController::OnAppWindowAdded(
+    extensions::AppWindow* app_window) {
+  RegisterApp(app_window);
 }
 
 void ExtensionAppWindowLauncherController::OnAppWindowShown(
@@ -118,10 +105,14 @@ void ExtensionAppWindowLauncherController::OnWindowDestroying(
 }
 
 void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
+  aura::Window* window = app_window->GetNativeWindow();
   const ash::ShelfID shelf_id = GetShelfId(app_window);
   DCHECK(!shelf_id.IsNull());
-  aura::Window* window = app_window->GetNativeWindow();
+
   window->SetProperty(ash::kShelfIDKey, new std::string(shelf_id.Serialize()));
+  window->SetProperty<int>(
+      ash::kShelfItemTypeKey,
+      app_window->window_type_is_panel() ? ash::TYPE_APP_PANEL : ash::TYPE_APP);
 
   // Windows created by IME extension should be treated the same way as the
   // virtual keyboard window, which does not register itself in launcher.
@@ -150,21 +141,18 @@ void ExtensionAppWindowLauncherController::RegisterApp(AppWindow* app_window) {
     std::unique_ptr<ExtensionAppWindowLauncherItemController> controller =
         base::MakeUnique<ExtensionAppWindowLauncherItemController>(shelf_id);
     app_controller_map_[shelf_id] = controller.get();
-    controller->AddAppWindow(app_window);
 
     // Check for any existing pinned shelf item with a matching |shelf_id|.
     if (!owner()->GetItem(shelf_id)) {
       owner()->CreateAppLauncherItem(std::move(controller), status);
-      // Restore any existing app icon and flag as set.
-      if (app_window->HasCustomIcon() && !app_window->app_icon().IsEmpty()) {
-        owner()->SetLauncherItemImage(shelf_id,
-                                      app_window->app_icon().AsImageSkia());
-        app_controller_map_[shelf_id]->set_image_set_by_controller(true);
-      }
     } else {
       owner()->shelf_model()->SetShelfItemDelegate(shelf_id,
                                                    std::move(controller));
     }
+
+    // Register the window after a shelf item is created to let the controller
+    // set the shelf icon property.
+    app_controller_map_[shelf_id]->AddAppWindow(app_window);
   }
 
   owner()->SetItemStatus(shelf_id, status);

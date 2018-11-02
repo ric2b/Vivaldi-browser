@@ -39,14 +39,13 @@
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/RefCounted.h"
 #include "public/platform/WebAddressSpace.h"
+#include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 
 namespace blink {
 
-enum class WebCachePolicy;
-
 enum class ResourceRequestBlockedReason {
-  CSP,
+  kCSP,
   kMixedContent,
   kOrigin,
   kInspector,
@@ -55,7 +54,7 @@ enum class ResourceRequestBlockedReason {
   kNone
 };
 
-enum InputToLoadPerfMetricReportPolicy {
+enum InputToLoadPerfMetricReportPolicy : uint8_t {
   kNoReport,    // Don't report metrics for this ResourceRequest.
   kReportLink,  // Report metrics for this request as initiated by a link click.
   kReportIntent,  // Report metrics for this request as initiated by an intent.
@@ -63,11 +62,21 @@ enum InputToLoadPerfMetricReportPolicy {
 
 struct CrossThreadResourceRequestData;
 
+// A ResourceRequest is a "request" object for ResourceLoader. Conceptually
+// it is https://fetch.spec.whatwg.org/#concept-request, but it contains
+// a lot of blink specific fields. WebURLRequest is the "public version"
+// of this class and WebURLLoader needs it. See WebURLRequest and
+// WrappedResourceRequest.
+//
+// There are cases where we need to copy a request across threads, and
+// CrossThreadResourceRequestData is a struct for the purpose. When you add a
+// member variable to this class, do not forget to add the corresponding
+// one in CrossThreadResourceRequestData and write copying logic.
 class PLATFORM_EXPORT ResourceRequest final {
   DISALLOW_NEW();
 
  public:
-  enum class RedirectStatus { kFollowedRedirect, kNoRedirect };
+  enum class RedirectStatus : uint8_t { kFollowedRedirect, kNoRedirect };
 
   class ExtraData : public RefCounted<ExtraData> {
    public:
@@ -101,8 +110,8 @@ class PLATFORM_EXPORT ResourceRequest final {
   const KURL& FirstPartyForCookies() const;
   void SetFirstPartyForCookies(const KURL&);
 
-  PassRefPtr<SecurityOrigin> RequestorOrigin() const;
-  void SetRequestorOrigin(PassRefPtr<SecurityOrigin>);
+  RefPtr<SecurityOrigin> RequestorOrigin() const;
+  void SetRequestorOrigin(RefPtr<SecurityOrigin>);
 
   const AtomicString& HttpMethod() const;
   void SetHTTPMethod(const AtomicString&);
@@ -156,10 +165,10 @@ class PLATFORM_EXPORT ResourceRequest final {
   }
 
   EncodedFormData* HttpBody() const;
-  void SetHTTPBody(PassRefPtr<EncodedFormData>);
+  void SetHTTPBody(RefPtr<EncodedFormData>);
 
   EncodedFormData* AttachedCredential() const;
-  void SetAttachedCredential(PassRefPtr<EncodedFormData>);
+  void SetAttachedCredential(RefPtr<EncodedFormData>);
 
   bool AllowStoredCredentials() const;
   void SetAllowStoredCredentials(bool allow_credentials);
@@ -217,6 +226,10 @@ class PLATFORM_EXPORT ResourceRequest final {
     use_stream_on_response_ = use_stream_on_response;
   }
 
+  // True if the request can work after the fetch group is terminated.
+  bool GetKeepalive() const { return keepalive_; }
+  void SetKeepalive(bool keepalive) { keepalive_ = keepalive; }
+
   // The service worker mode indicating which service workers should get events
   // for this request.
   WebURLRequest::ServiceWorkerMode GetServiceWorkerMode() const {
@@ -235,7 +248,7 @@ class PLATFORM_EXPORT ResourceRequest final {
 
   // Extra data associated with this request.
   ExtraData* GetExtraData() const { return extra_data_.Get(); }
-  void SetExtraData(PassRefPtr<ExtraData> extra_data) {
+  void SetExtraData(RefPtr<ExtraData> extra_data) {
     extra_data_ = std::move(extra_data);
   }
 
@@ -272,6 +285,11 @@ class PLATFORM_EXPORT ResourceRequest final {
     fetch_redirect_mode_ = redirect;
   }
 
+  const String& GetFetchIntegrity() const { return fetch_integrity_; }
+  void SetFetchIntegrity(const String& integrity) {
+    fetch_integrity_ = integrity;
+  }
+
   WebURLRequest::PreviewsState GetPreviewsState() const {
     return previews_state_;
   }
@@ -295,7 +313,7 @@ class PLATFORM_EXPORT ResourceRequest final {
     ui_start_time_ = ui_start_time_seconds;
   }
 
-  // https://mikewest.github.io/cors-rfc1918/#external-request
+  // https://wicg.github.io/cors-rfc1918/#external-request
   bool IsExternalRequest() const { return is_external_request_; }
   void SetExternalRequestStateFromRequestorAddressSpace(WebAddressSpace);
 
@@ -331,7 +349,6 @@ class PLATFORM_EXPORT ResourceRequest final {
   bool NeedsHTTPOrigin() const;
 
   KURL url_;
-  WebCachePolicy cache_policy_;
   double timeout_interval_;  // 0 is a magic value for platform default on
                              // platforms that have one.
   KURL first_party_for_cookies_;
@@ -346,20 +363,23 @@ class PLATFORM_EXPORT ResourceRequest final {
   bool has_user_gesture_ : 1;
   bool download_to_file_ : 1;
   bool use_stream_on_response_ : 1;
+  bool keepalive_ : 1;
   bool should_reset_app_cache_ : 1;
+  WebCachePolicy cache_policy_;
   WebURLRequest::ServiceWorkerMode service_worker_mode_;
   ResourceLoadPriority priority_;
   int intra_priority_value_;
   int requestor_id_;
   int requestor_process_id_;
   int app_cache_host_id_;
+  WebURLRequest::PreviewsState previews_state_;
   RefPtr<ExtraData> extra_data_;
   WebURLRequest::RequestContext request_context_;
   WebURLRequest::FrameType frame_type_;
   WebURLRequest::FetchRequestMode fetch_request_mode_;
   WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
-  WebURLRequest::PreviewsState previews_state_;
+  String fetch_integrity_;
   ReferrerPolicy referrer_policy_;
   bool did_set_http_referrer_;
   bool check_for_browser_side_navigation_;
@@ -368,16 +388,23 @@ class PLATFORM_EXPORT ResourceRequest final {
   WebURLRequest::LoadingIPCType loading_ipc_type_;
   bool is_same_document_navigation_;
   InputToLoadPerfMetricReportPolicy input_perf_metric_report_policy_;
+  RedirectStatus redirect_status_;
 
   mutable CacheControlHeader cache_control_header_cache_;
 
   static double default_timeout_interval_;
 
-  RedirectStatus redirect_status_;
-
   double navigation_start_ = 0;
 };
 
+// This class is needed to copy a ResourceRequest across threads, because it
+// has some members which cannot be transferred across threads (AtomicString
+// for example).
+// There are some rules / restrictions:
+//  - This struct cannot contain an object that cannot be transferred across
+//    threads (e.g., AtomicString)
+//  - Non-simple members need explicit copying (e.g., String::IsolatedCopy,
+//    KURL::Copy) rather than the copy constructor or the assignment operator.
 struct CrossThreadResourceRequestData {
   WTF_MAKE_NONCOPYABLE(CrossThreadResourceRequestData);
   USING_FAST_MALLOC(CrossThreadResourceRequestData);
@@ -401,6 +428,7 @@ struct CrossThreadResourceRequestData {
   bool download_to_file_;
   WebURLRequest::ServiceWorkerMode service_worker_mode_;
   bool use_stream_on_response_;
+  bool keepalive_;
   bool should_reset_app_cache_;
   ResourceLoadPriority priority_;
   int intra_priority_value_;
@@ -412,6 +440,7 @@ struct CrossThreadResourceRequestData {
   WebURLRequest::FetchRequestMode fetch_request_mode_;
   WebURLRequest::FetchCredentialsMode fetch_credentials_mode_;
   WebURLRequest::FetchRedirectMode fetch_redirect_mode_;
+  String fetch_integrity_;
   WebURLRequest::PreviewsState previews_state_;
   ReferrerPolicy referrer_policy_;
   bool did_set_http_referrer_;

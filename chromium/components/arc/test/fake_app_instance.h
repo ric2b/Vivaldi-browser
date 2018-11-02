@@ -79,7 +79,7 @@ class FakeAppInstance : public mojom::AppInstance {
   ~FakeAppInstance() override;
 
   // mojom::AppInstance overrides:
-  void Init(mojom::AppHostPtr host_ptr) override {}
+  void Init(mojom::AppHostPtr host_ptr) override;
   void RefreshAppList() override;
   void LaunchApp(const std::string& package_name,
                  const std::string& activity,
@@ -112,6 +112,11 @@ class FakeAppInstance : public mojom::AppInstance {
   void SetNotificationsEnabled(const std::string& package_name,
                                bool enabled) override;
   void InstallPackage(mojom::ArcPackageInfoPtr arcPackageInfo) override;
+  void GetRecentAndSuggestedAppsFromPlayStore(
+      const std::string& query,
+      int32_t max_results,
+      const GetRecentAndSuggestedAppsFromPlayStoreCallback& callback) override;
+  void StartPaiFlow() override;
 
   // Methods to reply messages.
   void SendRefreshAppList(const std::vector<mojom::AppInfo>& apps);
@@ -140,6 +145,7 @@ class FakeAppInstance : public mojom::AppInstance {
   void SendRefreshPackageList(
       const std::vector<mojom::ArcPackageInfo>& packages);
   void SendPackageAdded(const mojom::ArcPackageInfo& package);
+  void SendPackageModified(const mojom::ArcPackageInfo& package);
   void SendPackageUninstalled(const std::string& pacakge_name);
 
   void SendInstallationStarted(const std::string& package_name);
@@ -147,6 +153,8 @@ class FakeAppInstance : public mojom::AppInstance {
                                 bool success);
 
   int refresh_app_list_count() const { return refresh_app_list_count_; }
+
+  int start_pai_request_count() const { return start_pai_request_count_; }
 
   const std::vector<std::unique_ptr<Request>>& launch_requests() const {
     return launch_requests_;
@@ -171,6 +179,8 @@ class FakeAppInstance : public mojom::AppInstance {
   mojom::AppHost* app_host_;
   // Number of RefreshAppList calls.
   int refresh_app_list_count_ = 0;
+  // Number of requests to start PAI flows.
+  int start_pai_request_count_ = 0;
   // Keeps information about launch requests.
   std::vector<std::unique_ptr<Request>> launch_requests_;
   // Keeps information about launch intents.

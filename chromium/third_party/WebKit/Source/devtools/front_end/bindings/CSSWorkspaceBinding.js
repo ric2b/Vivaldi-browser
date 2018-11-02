@@ -179,9 +179,9 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
    */
   _disposeLocation(location) {
     if (location._header)
-      this._locations.remove(location._header, location);
+      this._locations.delete(location._header, location);
     else
-      this._unboundLocations.remove(location._url, location);
+      this._unboundLocations.delete(location._url, location);
   }
 
   /**
@@ -205,7 +205,7 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
       this._locations.set(header, location);
       location.update();
     }
-    this._unboundLocations.removeAll(header.sourceURL);
+    this._unboundLocations.deleteAll(header.sourceURL);
   }
 
   /**
@@ -218,7 +218,7 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
       this._unboundLocations.set(location._url, location);
       location.update();
     }
-    this._locations.removeAll(header);
+    this._locations.deleteAll(header);
   }
 
   /**
@@ -229,6 +229,7 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
     var uiLocation = null;
     uiLocation = uiLocation || this._sassSourceMapping.rawLocationToUILocation(rawLocation);
     uiLocation = uiLocation || this._stylesSourceMapping.rawLocationToUILocation(rawLocation);
+    uiLocation = uiLocation || Bindings.resourceMapping.cssLocationToUILocation(rawLocation);
     return uiLocation;
   }
 
@@ -242,7 +243,6 @@ Bindings.CSSWorkspaceBinding.ModelInfo = class {
       return rawLocations;
     return this._stylesSourceMapping.uiLocationToRawLocations(uiLocation);
   }
-
 
   _dispose() {
     Common.EventTarget.removeEventListeners(this._eventListeners);

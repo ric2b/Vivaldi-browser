@@ -7,16 +7,18 @@
 
 #include "core/CoreExport.h"
 #include "core/clipboard/DataObject.h"
-#include "platform/UserGestureIndicator.h"
+#include "core/dom/UserGestureIndicator.h"
+#include "platform/graphics/paint/PaintImage.h"
+#include "platform/heap/Handle.h"
 #include "platform/wtf/Assertions.h"
+#include "public/platform/WebCoalescedInputEvent.h"
 #include "public/platform/WebDragData.h"
 #include "public/web/WebFrameWidget.h"
 
 namespace blink {
 
-class AnimationWorkletProxyClient;
 class CompositorAnimationHost;
-class CompositorWorkerProxyClient;
+class CompositorMutatorImpl;
 class GraphicsLayer;
 class WebImage;
 class WebLayer;
@@ -26,17 +28,21 @@ class HitTestResult;
 struct WebPoint;
 
 class CORE_EXPORT WebFrameWidgetBase
-    : public NON_EXPORTED_BASE(WebFrameWidget) {
+    : public GarbageCollectedFinalized<WebFrameWidgetBase>,
+      public NON_EXPORTED_BASE(WebFrameWidget) {
  public:
+  virtual ~WebFrameWidgetBase() {}
+
   virtual bool ForSubframe() const = 0;
   virtual void ScheduleAnimation() = 0;
-  virtual CompositorWorkerProxyClient* CreateCompositorWorkerProxyClient() = 0;
-  virtual AnimationWorkletProxyClient* CreateAnimationWorkletProxyClient() = 0;
+  virtual CompositorMutatorImpl* CompositorMutator() = 0;
+
   virtual WebWidgetClient* Client() const = 0;
 
   // Sets the root graphics layer. |GraphicsLayer| can be null when detaching
   // the root layer.
   virtual void SetRootGraphicsLayer(GraphicsLayer*) = 0;
+  virtual GraphicsLayer* RootGraphicsLayer() const = 0;
 
   // Sets the root layer. |WebLayer| can be null when detaching the root layer.
   virtual void SetRootLayer(WebLayer*) = 0;
@@ -82,6 +88,13 @@ class CORE_EXPORT WebFrameWidgetBase
   void DidAcquirePointerLock() override;
   void DidNotAcquirePointerLock() override;
   void DidLosePointerLock() override;
+  void ShowContextMenu(WebMenuSourceType) override;
+
+  // Image decode functionality.
+  void RequestDecode(const PaintImage&,
+                     std::unique_ptr<WTF::Function<void(bool)>> callback);
+
+  DECLARE_VIRTUAL_TRACE();
 
  protected:
   enum DragAction { kDragEnter, kDragOver };
@@ -103,8 +116,11 @@ class CORE_EXPORT WebFrameWidgetBase
   // the page is shutting down, but will be valid at all other times.
   Page* GetPage() const;
 
+  // Helper function to process events while pointer locked.
+  void PointerLockMouseEvent(const WebCoalescedInputEvent&);
+
   // A copy of the web drop data object we received from the browser.
-  Persistent<DataObject> current_drag_data_;
+  Member<DataObject> current_drag_data_;
 
   bool doing_drag_and_drop_ = false;
 
@@ -116,11 +132,9 @@ class CORE_EXPORT WebFrameWidgetBase
   // current drop target in this WebView (the drop target can accept the drop).
   WebDragOperation drag_operation_ = kWebDragOperationNone;
 
-  // Helper function to process events while pointer locked.
-  void PointerLockMouseEvent(const WebInputEvent&);
-
  private:
   void CancelDrag();
+  LocalFrame* FocusedLocalFrameInWidget() const;
 
   static bool ignore_input_events_;
   RefPtr<UserGestureToken> pointer_lock_gesture_token_;

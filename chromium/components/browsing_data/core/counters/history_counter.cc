@@ -23,22 +23,19 @@ HistoryCounter::HistoryCounter(
     syncer::SyncService* sync_service)
     : history_service_(history_service),
       web_history_service_callback_(callback),
-      sync_service_(sync_service),
+      sync_tracker_(this, sync_service),
       has_synced_visits_(false),
       local_counting_finished_(false),
       web_counting_finished_(false),
-      history_sync_enabled_(false),
-      weak_ptr_factory_(this) {}
-
-HistoryCounter::~HistoryCounter() {
-  if (sync_service_)
-    sync_service_->RemoveObserver(this);
+      weak_ptr_factory_(this) {
+  DCHECK(history_service_);
 }
 
+HistoryCounter::~HistoryCounter() {}
+
 void HistoryCounter::OnInitialized() {
-  if (sync_service_)
-    sync_service_->AddObserver(this);
-  history_sync_enabled_ = !!web_history_service_callback_.Run();
+  sync_tracker_.OnInitialized(base::Bind(&HistoryCounter::IsHistorySyncEnabled,
+                                         base::Unretained(this)));
 }
 
 bool HistoryCounter::HasTrackedTasks() {
@@ -49,6 +46,12 @@ const char* HistoryCounter::GetPrefName() const {
   return GetTab() == ClearBrowsingDataTab::BASIC
              ? browsing_data::prefs::kDeleteBrowsingHistoryBasic
              : browsing_data::prefs::kDeleteBrowsingHistory;
+}
+
+history::WebHistoryService* HistoryCounter::GetWebHistoryService() {
+  if (web_history_service_callback_)
+    return web_history_service_callback_.Run();
+  return nullptr;
 }
 
 void HistoryCounter::Count() {
@@ -69,8 +72,7 @@ void HistoryCounter::Count() {
       &cancelable_task_tracker_);
 
   // If the history sync is enabled, test if there is at least one synced item.
-  history::WebHistoryService* web_history =
-      web_history_service_callback_.Run();
+  history::WebHistoryService* web_history = GetWebHistoryService();
 
   if (!web_history) {
     web_counting_finished_ = true;
@@ -87,10 +89,34 @@ void HistoryCounter::Count() {
   options.max_count = 1;
   options.begin_time = GetPeriodStart();
   options.end_time = base::Time::Max();
+  net::PartialNetworkTrafficAnnotationTag partial_traffic_annotation =
+      net::DefinePartialNetworkTrafficAnnotation("web_history_counter",
+                                                 "web_history_service",
+                                                 R"(
+        semantics {
+          description:
+            "If history sync is enabled, this queries history.google.com to "
+            "determine if there is any synced history. This information is "
+            "displayed in the Clear Browsing Data dialog."
+          trigger:
+            "Checking the 'Browsing history' option in the Clear Browsing Data "
+            "dialog, or enabling history sync while the dialog is open."
+          data:
+            "A version info token to resolve transaction conflicts, and an "
+            "OAuth2 token authenticating the user."
+        }
+        policy {
+          chrome_policy {
+            SyncDisabled {
+              SyncDisabled: true
+            }
+          }
+        })");
   web_history_request_ = web_history->QueryHistory(
       base::string16(), options,
       base::Bind(&HistoryCounter::OnGetWebHistoryCount,
-                 weak_ptr_factory_.GetWeakPtr()));
+                 weak_ptr_factory_.GetWeakPtr()),
+      partial_traffic_annotation);
 
   // TODO(msramek): Include web history count when there is an API for it.
 }
@@ -151,18 +177,12 @@ void HistoryCounter::MergeResults() {
     return;
 
   ReportResult(base::MakeUnique<HistoryResult>(
-      this, local_result_, history_sync_enabled_, has_synced_visits_));
+      this, local_result_, sync_tracker_.IsSyncActive(), has_synced_visits_));
 }
 
-void HistoryCounter::OnStateChanged(syncer::SyncService* sync) {
-  bool history_sync_enabled_new_state = !!web_history_service_callback_.Run();
-
-  // If the history sync was just enabled or disabled, restart the counter
-  // so that we update the result accordingly.
-  if (history_sync_enabled_ != history_sync_enabled_new_state) {
-    history_sync_enabled_ = history_sync_enabled_new_state;
-    Restart();
-  }
+bool HistoryCounter::IsHistorySyncEnabled(
+    const syncer::SyncService* sync_service) {
+  return !!GetWebHistoryService();
 }
 
 HistoryCounter::HistoryResult::HistoryResult(const HistoryCounter* source,

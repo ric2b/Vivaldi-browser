@@ -69,7 +69,7 @@ do_test fts2o-2.5 {
     CREATE TABLE t1_segdir(a, b, c);
     ALTER TABLE fts_t1 RENAME to t1;
   }
-} {1 {SQL logic error or missing database}}
+} {1 {SQL logic error}}
 do_test fts2o-2.6 {
   execsql { SELECT rowid, snippet(fts_t1) FROM fts_t1 WHERE a MATCH 'four'; }
 } {1 {one three <b>four</b>}}
@@ -89,7 +89,7 @@ do_test fts2o-2.9 {
   catchsql {
     ALTER TABLE fts_t1 RENAME to t1;
   }
-} {1 {SQL logic error or missing database}}
+} {1 {SQL logic error}}
 do_test fts2o-2.10 {
   execsql { SELECT rowid, snippet(fts_t1) FROM fts_t1 WHERE a MATCH 'four'; }
 } {1 {one three <b>four</b>}}
@@ -105,7 +105,7 @@ do_test fts2o-2.12 {
 } {{one three four} {one four} {one four two}}
 
 #-------------------------------------------------------------------
-# Close, delete and reopen the database. The following test should 
+# Close, delete and reopen the database. The following test should
 # be run on an initially empty db.
 #
 db close
@@ -131,7 +131,7 @@ do_test fts2o-3.2 {
 } {{one three four} {one four} {one two} {one three four} {one four} {one two}}
 
 #---------------------------------------------------------------------
-# Test that it is possible to rename an fts2 table in an attached 
+# Test that it is possible to rename an fts2 table in an attached
 # database.
 #
 forcedelete test2.db test2.db-journal

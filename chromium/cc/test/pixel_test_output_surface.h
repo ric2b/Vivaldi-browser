@@ -13,7 +13,7 @@ namespace cc {
 class PixelTestOutputSurface : public OutputSurface {
  public:
   explicit PixelTestOutputSurface(
-      scoped_refptr<ContextProvider> context_provider,
+      scoped_refptr<viz::ContextProvider> context_provider,
       bool flipped_output_surface);
   explicit PixelTestOutputSurface(
       std::unique_ptr<SoftwareOutputDevice> software_device);
@@ -36,6 +36,7 @@ class PixelTestOutputSurface : public OutputSurface {
   OverlayCandidateValidator* GetOverlayCandidateValidator() const override;
   bool IsDisplayedAsOverlayPlane() const override;
   unsigned GetOverlayTextureId() const override;
+  gfx::BufferFormat GetOverlayBufferFormat() const override;
   bool SurfaceIsSuspendForRecycle() const override;
   uint32_t GetFramebufferCopyTextureFormat() override;
 

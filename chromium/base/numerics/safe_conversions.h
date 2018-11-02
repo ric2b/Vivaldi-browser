@@ -13,65 +13,51 @@
 
 #include "base/numerics/safe_conversions_impl.h"
 
-namespace base {
+#if !defined(__native_client__) && (defined(__ARMEL__) || defined(__arch64__))
+#include "base/numerics/safe_conversions_arm_impl.h"
+#define BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS (1)
+#else
+#define BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS (0)
+#endif
 
-// The following are helper constexpr template functions and classes for safely
-// performing a range of conversions, assignments, and tests:
-//
-//  checked_cast<> - Analogous to static_cast<> for numeric types, except
-//      that it CHECKs that the specified numeric conversion will not overflow
-//      or underflow. NaN source will always trigger a CHECK.
-//      The default CHECK triggers a crash, but the handler can be overriden.
-//  saturated_cast<> - Analogous to static_cast<> for numeric types, except
-//      that it returns a saturated result when the specified numeric conversion
-//      would otherwise overflow or underflow. An NaN source returns 0 by
-//      default, but can be overridden to return a different result.
-//  strict_cast<> - Analogous to static_cast<> for numeric types, except that
-//      it will cause a compile failure if the destination type is not large
-//      enough to contain any value in the source type. It performs no runtime
-//      checking and thus introduces no runtime overhead.
-//  IsValueInRangeForNumericType<>() - A convenience function that returns true
-//      if the type supplied to the template parameter can represent the value
-//      passed as an argument to the function.
-//  IsValueNegative<>() - A convenience function that will accept any arithmetic
-//      type as an argument and will return whether the value is less than zero.
-//      Unsigned types always return false.
-//  SafeUnsignedAbs() - Returns the absolute value of the supplied integer
-//      parameter as an unsigned result (thus avoiding an overflow if the value
-//      is the signed, two's complement minimum).
-//  StrictNumeric<> - A wrapper type that performs assignments and copies via
-//      the strict_cast<> template, and can perform valid arithmetic comparisons
-//      across any range of arithmetic types. StrictNumeric is the return type
-//      for values extracted from a CheckedNumeric class instance. The raw
-//      arithmetic value is extracted via static_cast to the underlying type.
-//  MakeStrictNum() - Creates a new StrictNumeric from the underlying type of
-//      the supplied arithmetic or StrictNumeric type.
+namespace base {
+namespace internal {
+
+#if !BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS
+template <typename Dst, typename Src>
+struct SaturateFastAsmOp {
+  static const bool is_supported = false;
+  static constexpr Dst Do(Src) {
+    // Force a compile failure if instantiated.
+    return CheckOnFailure::template HandleFailure<Dst>();
+  }
+};
+
+template <typename Dst, typename Src>
+struct IsValueInRangeFastOp {
+  static const bool is_supported = false;
+  static constexpr bool Do(Src) {
+    // Force a compile failure if instantiated.
+    return CheckOnFailure::template HandleFailure<bool>();
+  }
+};
+#endif  // BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS
+#undef BASE_HAS_OPTIMIZED_SAFE_CONVERSIONS
 
 // Convenience function that returns true if the supplied value is in range
 // for the destination type.
 template <typename Dst, typename Src>
 constexpr bool IsValueInRangeForNumericType(Src value) {
-  return internal::DstRangeRelationToSrcRange<Dst>(value).IsValid();
+  return internal::IsValueInRangeFastOp<Dst, Src>::is_supported
+             ? internal::IsValueInRangeFastOp<Dst, Src>::Do(value)
+             : internal::DstRangeRelationToSrcRange<Dst>(value).IsValid();
 }
-
-// Forces a crash, like a CHECK(false). Used for numeric boundary errors.
-struct CheckOnFailure {
-  template <typename T>
-  static T HandleFailure() {
-#if defined(__GNUC__) || defined(__clang__)
-    __builtin_trap();
-#else
-    ((void)(*(volatile char*)0 = 0));
-#endif
-    return T();
-  }
-};
 
 // checked_cast<> is analogous to static_cast<> for numeric types,
 // except that it CHECKs that the specified numeric conversion will not
 // overflow or underflow. NaN source will always trigger a CHECK.
 template <typename Dst,
-          class CheckHandler = CheckOnFailure,
+          class CheckHandler = internal::CheckOnFailure,
           typename Src>
 constexpr Dst checked_cast(Src value) {
   // This throws a compile-time error on evaluating the constexpr if it can be
@@ -83,28 +69,28 @@ constexpr Dst checked_cast(Src value) {
 }
 
 // Default boundaries for integral/float: max/infinity, lowest/-infinity, 0/NaN.
+// You may provide your own limits (e.g. to saturated_cast) so long as you
+// implement all of the static constexpr member functions in the class below.
 template <typename T>
-struct SaturationDefaultHandler {
+struct SaturationDefaultLimits : public std::numeric_limits<T> {
   static constexpr T NaN() {
     return std::numeric_limits<T>::has_quiet_NaN
                ? std::numeric_limits<T>::quiet_NaN()
                : T();
   }
-  static constexpr T max() { return std::numeric_limits<T>::max(); }
+  using std::numeric_limits<T>::max;
   static constexpr T Overflow() {
     return std::numeric_limits<T>::has_infinity
                ? std::numeric_limits<T>::infinity()
                : std::numeric_limits<T>::max();
   }
-  static constexpr T lowest() { return std::numeric_limits<T>::lowest(); }
+  using std::numeric_limits<T>::lowest;
   static constexpr T Underflow() {
     return std::numeric_limits<T>::has_infinity
                ? std::numeric_limits<T>::infinity() * -1
                : std::numeric_limits<T>::lowest();
   }
 };
-
-namespace internal {
 
 template <typename Dst, template <typename> class S, typename Src>
 constexpr Dst saturated_cast_impl(Src value, RangeCheck constraint) {
@@ -124,14 +110,19 @@ constexpr Dst saturated_cast_impl(Src value, RangeCheck constraint) {
 // overflow or underflow, and NaN assignment to an integral will return 0.
 // All boundary condition behaviors can be overriden with a custom handler.
 template <typename Dst,
-          template <typename>
-          class SaturationHandler = SaturationDefaultHandler,
+          template <typename> class SaturationHandler = SaturationDefaultLimits,
           typename Src>
 constexpr Dst saturated_cast(Src value) {
   using SrcType = typename UnderlyingType<Src>::type;
-  return saturated_cast_impl<Dst, SaturationHandler, SrcType>(
-      value,
-      DstRangeRelationToSrcRange<Dst, SaturationHandler, SrcType>(value));
+  return !IsCompileTimeConstant(value) &&
+                 SaturateFastAsmOp<Dst, SrcType>::is_supported &&
+                 std::is_same<SaturationHandler<Dst>,
+                              SaturationDefaultLimits<Dst>>::value
+             ? SaturateFastAsmOp<Dst, SrcType>::Do(value)
+             : saturated_cast_impl<Dst, SaturationHandler, SrcType>(
+                   value,
+                   DstRangeRelationToSrcRange<Dst, SaturationHandler, SrcType>(
+                       value));
 }
 
 // strict_cast<> is analogous to static_cast<> for numeric types, except that
@@ -238,30 +229,34 @@ std::ostream& operator<<(std::ostream& os, const StrictNumeric<T>& value) {
   return os;
 }
 
-#define STRICT_COMPARISON_OP(NAME, OP)                               \
-  template <typename L, typename R,                                  \
-            typename std::enable_if<                                 \
-                internal::IsStrictOp<L, R>::value>::type* = nullptr> \
-  constexpr bool operator OP(const L lhs, const R rhs) {             \
-    return SafeCompare<NAME, typename UnderlyingType<L>::type,       \
-                       typename UnderlyingType<R>::type>(lhs, rhs);  \
+#define BASE_NUMERIC_COMPARISON_OPERATORS(CLASS, NAME, OP)              \
+  template <typename L, typename R,                                     \
+            typename std::enable_if<                                    \
+                internal::Is##CLASS##Op<L, R>::value>::type* = nullptr> \
+  constexpr bool operator OP(const L lhs, const R rhs) {                \
+    return SafeCompare<NAME, typename UnderlyingType<L>::type,          \
+                       typename UnderlyingType<R>::type>(lhs, rhs);     \
   }
 
-STRICT_COMPARISON_OP(IsLess, <);
-STRICT_COMPARISON_OP(IsLessOrEqual, <=);
-STRICT_COMPARISON_OP(IsGreater, >);
-STRICT_COMPARISON_OP(IsGreaterOrEqual, >=);
-STRICT_COMPARISON_OP(IsEqual, ==);
-STRICT_COMPARISON_OP(IsNotEqual, !=);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsLess, <);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsLessOrEqual, <=);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsGreater, >);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsGreaterOrEqual, >=);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsEqual, ==);
+BASE_NUMERIC_COMPARISON_OPERATORS(Strict, IsNotEqual, !=);
 
-#undef STRICT_COMPARISON_OP
-};
+};  // namespace internal
 
+using internal::as_signed;
+using internal::as_unsigned;
+using internal::checked_cast;
 using internal::strict_cast;
 using internal::saturated_cast;
 using internal::SafeUnsignedAbs;
 using internal::StrictNumeric;
 using internal::MakeStrictNum;
+using internal::IsValueInRangeForNumericType;
+using internal::IsTypeInRangeForNumericType;
 using internal::IsValueNegative;
 
 // Explicitly make a shorter size_t alias for convenience.

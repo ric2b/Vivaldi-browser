@@ -11,18 +11,14 @@
 
 #include "cc/base/resource_id.h"
 #include "cc/cc_export.h"
-#include "cc/resources/resource_format.h"
+#include "components/viz/common/quads/resource_format.h"
 #include "gpu/command_buffer/common/mailbox_holder.h"
 #include "ui/gfx/buffer_types.h"
 #include "ui/gfx/color_space.h"
 #include "ui/gfx/geometry/size.h"
 
 namespace cc {
-
 struct ReturnedResource;
-typedef std::vector<ReturnedResource> ReturnedResourceArray;
-struct TransferableResource;
-typedef std::vector<TransferableResource> TransferableResourceArray;
 
 struct CC_EXPORT TransferableResource {
   TransferableResource();
@@ -30,12 +26,12 @@ struct CC_EXPORT TransferableResource {
   ~TransferableResource();
 
   ReturnedResource ToReturnedResource() const;
-  static void ReturnResources(const TransferableResourceArray& input,
-                              ReturnedResourceArray* output);
+  static std::vector<ReturnedResource> ReturnResources(
+      const std::vector<TransferableResource>& input);
 
   ResourceId id;
   // Refer to ResourceProvider::Resource for the meaning of the following data.
-  ResourceFormat format;
+  viz::ResourceFormat format;
   gfx::BufferFormat buffer_format;
   uint32_t filter;
   gfx::Size size;

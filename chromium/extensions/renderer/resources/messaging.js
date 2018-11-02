@@ -7,7 +7,6 @@
 
   // TODO(kalman): factor requiring chrome out of here.
   var chrome = requireNative('chrome').GetChrome();
-  var lastError = require('lastError');
   var logActivity = requireNative('activityLogger');
   var logging = requireNative('logging');
   var messagingNatives = requireNative('messaging_natives');
@@ -25,10 +24,12 @@
   var jsEvent;
   function createAnonymousEvent(schema) {
     if (bindingUtil) {
-      // Native custom events ignore schema.
       var supportsFilters = false;
+      var supportsLazyListeners = false;
+      // Native custom events ignore schema.
       return bindingUtil.createCustomEvent(undefined, undefined,
-                                           supportsFilters);
+                                           supportsFilters,
+                                           supportsLazyListeners);
     }
     var options = {
       __proto__: null,
@@ -44,6 +45,28 @@
       bindingUtil.invalidateEvent(event);
     else
       privates(event).impl.destroy_();
+  }
+
+  var jsLastError = bindingUtil ? undefined : require('lastError');
+  function setLastError(name, error) {
+    if (bindingUtil)
+      bindingUtil.setLastError(error);
+    else
+      jsLastError.set(name, error, null, chrome);
+  }
+
+  function clearLastError() {
+    if (bindingUtil)
+      bindingUtil.clearLastError();
+    else
+      jsLastError.clear(chrome);
+  }
+
+  function hasLastError() {
+    if (bindingUtil)
+      return bindingUtil.hasLastError();
+    else
+      return jsLastError.hasError(chrome);
   }
 
   // Map of port IDs to port object.
@@ -88,7 +111,7 @@
       //
       // TODO(kalman/mpcomplete): it would be better to do the same validation
       // here that we do for runtime.sendMessage (and variants), i.e. throw an
-      // schema validation Error, but just maintain the old behaviour until
+      // schema validation Error, but just maintain the old behavior until
       // there's a good reason not to (http://crbug.com/263077).
       console.error('Illegal argument to Port.postMessage');
       return;
@@ -152,7 +175,7 @@
     if (sourceUrl)
       errorMsg += ' for URL ' + sourceUrl;
     errorMsg += ').';
-    lastError.set(eventName, errorMsg, null, chrome);
+    setLastError(eventName, errorMsg);
   }
 
   // Helper function for dispatchOnConnect
@@ -247,6 +270,34 @@
                              targetExtensionId,
                              sourceUrl,
                              tlsChannelId) {
+    var wasPortUsed = dispatchOnConnectImpl(portId, channelName, sourceTab,
+                                            sourceFrameId, guestProcessId,
+                                            guestRenderFrameRoutingId,
+                                            sourceExtensionId,
+                                            targetExtensionId, sourceUrl,
+                                            tlsChannelId);
+    if (!wasPortUsed) {
+      // Since the JS to dispatch the connect event can (in rare cases) be
+      // executed asynchronously from when we check if there are associated
+      // listeners in the native code, it's possible that the listeners have
+      // since been removed. If that's the case (though unlikely), remove the
+      // port.
+      messagingNatives.CloseChannel(portId, false /* force_close */);
+    }
+  }
+
+  // Helper function to dispatchOnConnect that returns true if the new port
+  // was used.
+  function dispatchOnConnectImpl(portId,
+                                 channelName,
+                                 sourceTab,
+                                 sourceFrameId,
+                                 guestProcessId,
+                                 guestRenderFrameRoutingId,
+                                 sourceExtensionId,
+                                 targetExtensionId,
+                                 sourceUrl,
+                                 tlsChannelId) {
     // Only create a new Port if someone is actually listening for a connection.
     // In addition to being an optimization, this also fixes a bug where if 2
     // channels were opened to and from the same process, closing one would
@@ -320,12 +371,12 @@
     if (port) {
       delete ports[portId];
       if (errorMessage)
-        lastError.set('Port', errorMessage, null, chrome);
+        setLastError('Port', errorMessage);
       try {
         port.onDisconnect.dispatch(port);
       } finally {
         privates(port).impl.destroy_();
-        lastError.clear(chrome);
+        clearLastError();
       }
     }
   };
@@ -378,16 +429,16 @@
       if (!responseCallback)
         return;
 
-      if (lastError.hasError(chrome)) {
+      if (hasLastError()) {
         sendResponseAndClearCallback();
       } else {
-        lastError.set(
-            port.name, 'The message port closed before a reponse was received.',
-            null, chrome);
+        setLastError(
+            port.name,
+            'The message port closed before a response was received.');
         try {
           sendResponseAndClearCallback();
         } finally {
-          lastError.clear(chrome);
+          clearLastError();
         }
       }
     }

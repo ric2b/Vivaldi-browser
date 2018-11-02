@@ -38,7 +38,8 @@
     DoNotCheckConstants,
     ImplementedAs=TestInterfaceImplementation,
     RuntimeEnabled=FeatureName,
-    Exposed=(Worker,Window),
+    ContextEnabled=FeatureName,
+    Exposed=(Worker,Window)
 ] interface TestInterface : TestInterfaceEmpty {
     // members needed to test [ImplementedAs], as this affect attribute
     // configuration and method configuration

@@ -26,11 +26,6 @@
 #include "third_party/WebKit/public/web/WebSandboxFlags.h"
 #include "url/url_constants.h"
 
-// For fine-grained suppression on flaky tests.
-#if defined(OS_WIN)
-#include "base/win/windows_version.h"
-#endif
-
 namespace content {
 
 namespace {
@@ -135,7 +130,8 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, FrameTreeAfterCrash) {
   RenderProcessHostWatcher crash_observer(
       shell()->web_contents(),
       RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
-  NavigateToURL(shell(), GURL(kChromeUICrashURL));
+  ASSERT_TRUE(
+      shell()->web_contents()->GetMainFrame()->GetProcess()->Shutdown(0, true));
   crash_observer.Wait();
 
   // The frame tree should be cleared.
@@ -167,11 +163,6 @@ IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, FrameTreeAfterCrash) {
 #define MAYBE_NavigateWithLeftoverFrames NavigateWithLeftoverFrames
 #endif
 IN_PROC_BROWSER_TEST_F(FrameTreeBrowserTest, MAYBE_NavigateWithLeftoverFrames) {
-#if defined(OS_WIN)
-  // Flaky on XP bot http://crbug.com/468713
-  if (base::win::GetVersion() <= base::win::VERSION_XP)
-    return;
-#endif
   GURL base_url = embedded_test_server()->GetURL("A.com", "/site_isolation/");
 
   NavigateToURL(shell(),

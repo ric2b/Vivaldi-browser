@@ -10,12 +10,12 @@
 #include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #import "components/autofill/ios/browser/credit_card_util.h"
+#include "components/payments/core/payment_request_data_util.h"
+#include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
-#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/payments/payment_request.h"
 #import "ios/chrome/browser/payments/payment_request_util.h"
 #import "ios/chrome/browser/ui/autofill/autofill_ui_type.h"
-#import "ios/chrome/browser/ui/autofill/autofill_ui_type_util.h"
 #import "ios/chrome/browser/ui/payments/cells/accepted_payment_methods_item.h"
 #import "ios/chrome/browser/ui/payments/cells/payment_method_item.h"
 #import "ios/chrome/browser/ui/payments/payment_request_edit_consumer.h"
@@ -28,7 +28,6 @@
 #endif
 
 namespace {
-using ::AutofillUITypeFromAutofillType;
 using ::autofill::data_util::GetIssuerNetworkForBasicCardIssuerNetwork;
 using ::autofill::data_util::GetPaymentRequestData;
 using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
@@ -39,11 +38,22 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 // The PaymentRequest object owning an instance of web::PaymentRequest as
 // provided by the page invoking the Payment Request API. This is a weak
 // pointer and should outlive this class.
-@property(nonatomic, assign) PaymentRequest* paymentRequest;
+@property(nonatomic, assign) payments::PaymentRequest* paymentRequest;
 
 // The credit card to be edited, if any. This pointer is not owned by this class
 // and should outlive it.
 @property(nonatomic, assign) autofill::CreditCard* creditCard;
+
+// The map of autofill types to the cached editor fields. Helps reuse the editor
+// fields and therefore maintain their existing values when the billing address
+// changes and the fields get updated.
+@property(nonatomic, strong)
+    NSMutableDictionary<NSNumber*, EditorField*>* fieldsMap;
+
+// The reference to the expiration date field that combines the values for
+// autofill::CREDIT_CARD_EXP_MONTH and autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR
+// field types. This is nil when editing a server card.
+@property(nonatomic, strong) EditorField* creditCardExpDateField;
 
 @end
 
@@ -51,10 +61,13 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 
 @synthesize state = _state;
 @synthesize consumer = _consumer;
+@synthesize billingProfile = _billingProfile;
 @synthesize paymentRequest = _paymentRequest;
 @synthesize creditCard = _creditCard;
+@synthesize fieldsMap = _fieldsMap;
+@synthesize creditCardExpDateField = _creditCardExpDateField;
 
-- (instancetype)initWithPaymentRequest:(PaymentRequest*)paymentRequest
+- (instancetype)initWithPaymentRequest:(payments::PaymentRequest*)paymentRequest
                             creditCard:(autofill::CreditCard*)creditCard {
   self = [super init];
   if (self) {
@@ -62,6 +75,13 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
     _creditCard = creditCard;
     _state = _creditCard ? EditViewControllerStateEdit
                          : EditViewControllerStateCreate;
+    _billingProfile =
+        _creditCard && !_creditCard->billing_address_id().empty()
+            ? autofill::PersonalDataManager::GetProfileFromProfilesByGUID(
+                  _creditCard->billing_address_id(),
+                  _paymentRequest->billing_profiles())
+            : nil;
+    _fieldsMap = [[NSMutableDictionary alloc] init];
   }
   return self;
 }
@@ -70,10 +90,24 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 
 - (void)setConsumer:(id<PaymentRequestEditConsumer>)consumer {
   _consumer = consumer;
+
+  [self.consumer setEditorFields:[self createEditorFields]];
+  if (self.creditCardExpDateField)
+    [self loadMonthsAndYears];
+}
+
+- (void)setBillingProfile:(autofill::AutofillProfile*)billingProfile {
+  _billingProfile = billingProfile;
   [self.consumer setEditorFields:[self createEditorFields]];
 }
 
-#pragma mark - CreditCardEditViewControllerDataSource
+#pragma mark - PaymentRequestEditViewControllerDataSource
+
+- (NSString*)title {
+  // TODO(crbug.com/602666): Title varies depending on the missing fields.
+  return _creditCard ? l10n_util::GetNSString(IDS_PAYMENTS_EDIT_CARD)
+                     : l10n_util::GetNSString(IDS_PAYMENTS_ADD_CARD_LABEL);
+}
 
 - (CollectionViewItem*)headerItem {
   if (_creditCard && !autofill::IsCreditCardLocal(*_creditCard)) {
@@ -108,7 +142,8 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
   AcceptedPaymentMethodsItem* acceptedMethodsItem =
       [[AcceptedPaymentMethodsItem alloc] init];
   acceptedMethodsItem.message =
-      l10n_util::GetNSString(IDS_PAYMENTS_ACCEPTED_CARDS_LABEL);
+      base::SysUTF16ToNSString(payments::GetAcceptedCardTypesText(
+          _paymentRequest->supported_card_types_set()));
   acceptedMethodsItem.methodTypeIcons = issuerNetworkIcons;
   return acceptedMethodsItem;
 }
@@ -118,9 +153,21 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
   return !_creditCard || autofill::IsCreditCardLocal(*_creditCard);
 }
 
-- (UIImage*)cardTypeIconFromCardNumber:(NSString*)cardNumber {
+- (void)formatValueForEditorField:(EditorField*)field {
+  if (field.autofillUIType == AutofillUITypeCreditCardNumber) {
+    field.value = base::SysUTF16ToNSString(
+        payments::data_util::FormatCardNumberForDisplay(
+            base::SysNSStringToUTF16(field.value)));
+  }
+}
+
+- (UIImage*)iconIdentifyingEditorField:(EditorField*)field {
+  // Early return if the field is not the credit card number field.
+  if (field.autofillUIType != AutofillUITypeCreditCardNumber)
+    return nil;
+
   const char* issuerNetwork = autofill::CreditCard::GetCardNetwork(
-      base::SysNSStringToUTF16(cardNumber));
+      base::SysNSStringToUTF16(field.value));
   // This should not happen in Payment Request.
   if (issuerNetwork == autofill::kGenericCard)
     return nil;
@@ -133,93 +180,162 @@ using ::payment_request_util::GetBillingAddressLabelFromAutofillProfile;
 
 #pragma mark - Helper methods
 
-// Returns the billing address label from an autofill profile with the given
-// guid. Returns nil if the profile does not have an address.
-- (NSString*)billingAddressLabelForProfileWithGUID:(NSString*)profileGUID {
-  DCHECK(profileGUID);
-  autofill::AutofillProfile* profile =
-      autofill::PersonalDataManager::GetProfileFromProfilesByGUID(
-          base::SysNSStringToUTF8(profileGUID),
-          _paymentRequest->billing_profiles());
-  DCHECK(profile);
-  return GetBillingAddressLabelFromAutofillProfile(*profile);
+// Queries the month and year numbers and informs the consumer.
+- (void)loadMonthsAndYears {
+  NSMutableArray<NSString*>* months = [[NSMutableArray alloc] init];
+
+  for (int month = 1; month <= 12; month++) {
+    NSString* monthString = [NSString stringWithFormat:@"%02d", month];
+    [months addObject:monthString];
+  }
+
+  NSMutableArray<NSString*>* years = [[NSMutableArray alloc] init];
+
+  NSDateComponents* dateComponents =
+      [[NSCalendar currentCalendar] components:NSCalendarUnitYear
+                                      fromDate:[NSDate date]];
+
+  int currentYear = [dateComponents year];
+  int cardExpYear = _creditCard ? _creditCard->expiration_year() : currentYear;
+  bool foundCardExpirationYear = false;
+  for (int year = currentYear; year < currentYear + 10; year++) {
+    if (year == cardExpYear)
+      foundCardExpirationYear = true;
+    [years addObject:[NSString stringWithFormat:@"%04d", year]];
+  }
+
+  // Ensure that the expiration year on a saved card is always available as one
+  // of the options to select from. This is useful in case of an expired card.
+  if (!foundCardExpirationYear) {
+    [years insertObject:[NSString stringWithFormat:@"%04d", cardExpYear]
+                atIndex:0];
+  }
+
+  // Notify the view controller asynchronously to allow for the view to update.
+  __weak CreditCardEditViewControllerMediator* weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [weakSelf.consumer setOptions:@[ months, years ]
+                   forEditorField:weakSelf.creditCardExpDateField];
+  });
 }
 
 - (NSArray<EditorField*>*)createEditorFields {
-  NSString* billingAddressGUID =
-      _creditCard && !_creditCard->billing_address_id().empty()
-          ? base::SysUTF8ToNSString(_creditCard->billing_address_id())
-          : nil;
-  NSString* billingAddressLabel =
-      billingAddressGUID
-          ? [self billingAddressLabelForProfileWithGUID:billingAddressGUID]
-          : nil;
-  EditorField* billingAddressEditorField = [[EditorField alloc]
-      initWithAutofillUIType:AutofillUITypeCreditCardBillingAddress
-                   fieldType:EditorFieldTypeSelector
-                       label:l10n_util::GetNSString(
-                                 IDS_PAYMENTS_BILLING_ADDRESS)
-                       value:billingAddressGUID
-                    required:YES];
-  [billingAddressEditorField setDisplayValue:billingAddressLabel];
+  NSMutableArray<EditorField*>* fields = [[NSMutableArray alloc] init];
 
-  // For server cards, only the billing address can be edited.
+  // Billing address field.
+  NSNumber* fieldKey =
+      [NSNumber numberWithInt:AutofillUITypeCreditCardBillingAddress];
+  EditorField* billingAddressField = self.fieldsMap[fieldKey];
+  if (!billingAddressField) {
+    billingAddressField = [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardBillingAddress
+                     fieldType:EditorFieldTypeSelector
+                         label:l10n_util::GetNSString(
+                                   IDS_PAYMENTS_BILLING_ADDRESS)
+                         value:nil
+                      required:YES];
+    [self.fieldsMap setObject:billingAddressField forKey:fieldKey];
+  }
+  billingAddressField.value =
+      self.billingProfile ? base::SysUTF8ToNSString(self.billingProfile->guid())
+                          : nil;
+  billingAddressField.displayValue =
+      self.billingProfile
+          ? GetBillingAddressLabelFromAutofillProfile(*self.billingProfile)
+          : nil;
+
+  // Early return if editing a server card. For server cards, only the billing
+  // address can be edited.
   if (_creditCard && !autofill::IsCreditCardLocal(*_creditCard))
-    return @[ billingAddressEditorField ];
+    return @[ billingAddressField ];
 
+  // Credit Card number field.
   NSString* creditCardNumber =
-      _creditCard ? base::SysUTF16ToNSString(_creditCard->number()) : nil;
-
-  NSString* creditCardName =
-      _creditCard
-          ? autofill::GetCreditCardName(
-                *_creditCard, GetApplicationContext()->GetApplicationLocale())
-          : nil;
-
-  NSString* creditCardExpMonth =
-      _creditCard
-          ? [NSString stringWithFormat:@"%02d", _creditCard->expiration_month()]
-          : nil;
-
-  NSString* creditCardExpYear =
-      _creditCard
-          ? [NSString stringWithFormat:@"%04d", _creditCard->expiration_year()]
-          : nil;
-
-  NSMutableArray* editorFields = [[NSMutableArray alloc] init];
-  [editorFields addObjectsFromArray:@[
-    [[EditorField alloc]
-        initWithAutofillUIType:AutofillUITypeFromAutofillType(
-                                   autofill::CREDIT_CARD_NUMBER)
+      _creditCard ? base::SysUTF16ToNSString(
+                        payments::data_util::FormatCardNumberForDisplay(
+                            _creditCard->number()))
+                  : nil;
+  fieldKey = [NSNumber numberWithInt:AutofillUITypeCreditCardNumber];
+  EditorField* creditCardNumberField = self.fieldsMap[fieldKey];
+  if (!creditCardNumberField) {
+    creditCardNumberField = [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardNumber
                      fieldType:EditorFieldTypeTextField
                          label:l10n_util::GetNSString(IDS_PAYMENTS_CARD_NUMBER)
                          value:creditCardNumber
-                      required:YES],
-    [[EditorField alloc]
-        initWithAutofillUIType:AutofillUITypeFromAutofillType(
-                                   autofill::CREDIT_CARD_NAME_FULL)
+                      required:YES];
+    creditCardNumberField.keyboardType = UIKeyboardTypeNumberPad;
+    [self.fieldsMap setObject:creditCardNumberField forKey:fieldKey];
+  }
+  [fields addObject:creditCardNumberField];
+
+  // Card holder name field.
+  NSString* creditCardName =
+      _creditCard ? autofill::GetCreditCardName(
+                        *_creditCard, _paymentRequest->GetApplicationLocale())
+                  : nil;
+  fieldKey = [NSNumber numberWithInt:AutofillUITypeCreditCardHolderFullName];
+  EditorField* creditCardNameField = self.fieldsMap[fieldKey];
+  if (!creditCardNameField) {
+    creditCardNameField = [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardHolderFullName
                      fieldType:EditorFieldTypeTextField
                          label:l10n_util::GetNSString(IDS_PAYMENTS_NAME_ON_CARD)
                          value:creditCardName
-                      required:YES],
-    [[EditorField alloc]
-        initWithAutofillUIType:AutofillUITypeFromAutofillType(
-                                   autofill::CREDIT_CARD_EXP_MONTH)
+                      required:YES];
+    [self.fieldsMap setObject:creditCardNameField forKey:fieldKey];
+  }
+  [fields addObject:creditCardNameField];
+
+  NSDateComponents* dateComponents = [[NSCalendar currentCalendar]
+      components:NSCalendarUnitMonth | NSCalendarUnitYear
+        fromDate:[NSDate date]];
+
+  // Expiration date field.
+  int currentMonth = [dateComponents month];
+  NSString* expMonth =
+      _creditCard
+          ? [NSString stringWithFormat:@"%02d", _creditCard->expiration_month()]
+          : [NSString stringWithFormat:@"%02d", currentMonth];
+  int currentYear = [dateComponents year];
+  NSString* expYear =
+      _creditCard
+          ? [NSString stringWithFormat:@"%04d", _creditCard->expiration_year()]
+          : [NSString stringWithFormat:@"%04d", currentYear];
+  NSString* expDate = [NSString stringWithFormat:@"%@ / %@", expMonth, expYear];
+  fieldKey = [NSNumber numberWithInt:AutofillUITypeCreditCardExpDate];
+  EditorField* expirationDateField = self.fieldsMap[fieldKey];
+  if (!expirationDateField) {
+    expirationDateField = [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardExpDate
                      fieldType:EditorFieldTypeTextField
-                         label:l10n_util::GetNSString(IDS_PAYMENTS_EXP_MONTH)
-                         value:creditCardExpMonth
-                      required:YES],
-    [[EditorField alloc]
-        initWithAutofillUIType:AutofillUITypeFromAutofillType(
-                                   autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR)
-                     fieldType:EditorFieldTypeTextField
-                         label:l10n_util::GetNSString(IDS_PAYMENTS_EXP_YEAR)
-                         value:creditCardExpYear
-                      required:YES]
-  ]];
-  // The billing address field goes at the end.
-  [editorFields addObject:billingAddressEditorField];
-  return editorFields;
+                         label:l10n_util::GetNSString(IDS_PAYMENTS_EXP_DATE)
+                         value:expDate
+                      required:YES];
+    [self.fieldsMap setObject:expirationDateField forKey:fieldKey];
+  }
+  self.creditCardExpDateField = expirationDateField;
+  [fields addObject:expirationDateField];
+
+  // The billing address field appears after the expiration year field.
+  [fields addObject:billingAddressField];
+
+  // Save credit card field.
+  fieldKey = [NSNumber numberWithInt:AutofillUITypeCreditCardSaveToChrome];
+  EditorField* saveToChromeField = self.fieldsMap[fieldKey];
+  if (!saveToChromeField) {
+    saveToChromeField = [[EditorField alloc]
+        initWithAutofillUIType:AutofillUITypeCreditCardSaveToChrome
+                     fieldType:EditorFieldTypeSwitch
+                         label:l10n_util::GetNSString(
+                                   IDS_PAYMENTS_SAVE_CARD_TO_DEVICE_CHECKBOX)
+                         value:@"YES"
+                      required:YES];
+    [self.fieldsMap setObject:saveToChromeField forKey:fieldKey];
+  }
+  [fields addObject:saveToChromeField];
+
+  return fields;
 }
 
 @end

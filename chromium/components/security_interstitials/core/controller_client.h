@@ -9,8 +9,8 @@
 #include <string>
 
 #include "base/macros.h"
+#include "url/gurl.h"
 
-class GURL;
 class PrefService;
 
 namespace security_interstitials {
@@ -61,8 +61,13 @@ class ControllerClient {
 
   // Handle the user's reporting preferences.
   void SetReportingPreference(bool report);
-  void OpenExtendedReportingPrivacyPolicy();
-  void OpenExtendedReportingWhitepaper();
+
+  void OpenExtendedReportingPrivacyPolicy(bool open_links_in_new_tab);
+  void OpenExtendedReportingWhitepaper(bool open_links_in_new_tab);
+
+  // Helper method which either opens a URL in a new tab or a the current tab
+  // based on the display options setting.
+  void OpenURL(bool open_links_in_new_tab, const GURL& url);
 
   // If available, open the operating system's date/time settings.
   virtual bool CanLaunchDateAndTimeSettings() = 0;
@@ -89,15 +94,23 @@ class ControllerClient {
 
   virtual void OpenUrlInCurrentTab(const GURL& url) = 0;
 
+  virtual void OpenUrlInNewForegroundTab(const GURL& url) = 0;
+
   virtual PrefService* GetPrefService() = 0;
 
   virtual const std::string& GetApplicationLocale() const = 0;
+
+  GURL GetBaseHelpCenterUrl() const;
+
+  void SetBaseHelpCenterUrlForTesting(const GURL& test_url);
 
  protected:
   virtual const std::string GetExtendedReportingPrefName() const = 0;
 
  private:
   std::unique_ptr<MetricsHelper> metrics_helper_;
+  // Link to the help center.
+  GURL help_center_url_;
 
   DISALLOW_COPY_AND_ASSIGN(ControllerClient);
 };

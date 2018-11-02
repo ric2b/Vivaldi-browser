@@ -27,9 +27,9 @@ class MockBatteryMonitor : public device::mojom::BatteryMonitor {
   MockBatteryMonitor() : binding_(this) {}
   ~MockBatteryMonitor() override = default;
 
-  void Bind(const service_manager::BindSourceInfo& source_info,
-            const std::string& interface_name,
-            mojo::ScopedMessagePipeHandle handle) {
+  void Bind(const std::string& interface_name,
+            mojo::ScopedMessagePipeHandle handle,
+            const service_manager::BindSourceInfo& source_info) {
     DCHECK(!binding_.is_bound());
     binding_.Bind(device::mojom::BatteryMonitorRequest(std::move(handle)));
   }
@@ -44,22 +44,20 @@ class MockBatteryMonitor : public device::mojom::BatteryMonitor {
 
  private:
   // mojom::BatteryMonitor methods:
-  void QueryNextStatus(const QueryNextStatusCallback& callback) override {
+  void QueryNextStatus(QueryNextStatusCallback callback) override {
     if (!callback_.is_null()) {
       DVLOG(1) << "Overlapped call to QueryNextStatus!";
       binding_.Close();
       return;
     }
-    callback_ = callback;
+    callback_ = std::move(callback);
 
     if (status_to_report_)
       ReportStatus();
   }
 
   void ReportStatus() {
-    callback_.Run(status_.Clone());
-    callback_.Reset();
-
+    std::move(callback_).Run(status_.Clone());
     status_to_report_ = false;
   }
 

@@ -10,11 +10,12 @@ import("//ui/ozone/ozone.gni")
 import("//testing/test.gni")
 
 declare_args() {
-  enable_swiftshader = (is_win || (is_linux && !is_chromeos && use_x11)) &&
+  enable_swiftshader = (is_win || (is_linux && use_x11) ||
+                        (is_chromeos && ozone_platform_x11)) &&
                        (target_cpu == "x86" || target_cpu == "x64")
 }
 
-use_egl = is_win || is_android || is_linux
+use_egl = is_win || is_android || is_linux || is_fuchsia
 use_glx = use_x11 || ozone_platform_x11
 
 if (is_android) {
@@ -117,8 +118,11 @@ component("gl") {
     "gl_surface_stub.h",
     "gl_switches.cc",
     "gl_switches.h",
+    "gl_utils.cc",
+    "gl_utils.h",
     "gl_version_info.cc",
     "gl_version_info.h",
+    "gl_workarounds.h",
     "gpu_switching_manager.cc",
     "gpu_switching_manager.h",
     "gpu_timing.cc",
@@ -153,6 +157,10 @@ component("gl") {
     "//ui/gfx/geometry",
   ]
 
+  data_deps = []
+  if (enable_swiftshader) {
+    data_deps += [ "//third_party/swiftshader" ]
+  }
   if (use_egl) {
     sources += [
       "angle_platform_impl.cc",
@@ -198,7 +206,7 @@ component("gl") {
 
     deps += [ "//ui/base/x" ]
 
-    data_deps = [
+    data_deps += [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
     ]
@@ -250,7 +258,7 @@ component("gl") {
     libs = [ "dwmapi.lib" ]
     ldflags = [ "/DELAYLOAD:dwmapi.dll" ]
 
-    data_deps = [
+    data_deps += [
       "//third_party/angle:libEGL",
       "//third_party/angle:libGLESv2",
       "//third_party/mesa:osmesa",
@@ -416,8 +424,11 @@ test("gl_unittests") {
     "//testing/gmock",
     "//testing/gtest",
     "//ui/gfx",
+    "//ui/gfx:test_support",
     "//ui/gfx/geometry",
     "//ui/gl/init",
+    "//ui/platform_window",
+    "//ui/platform_window:platform_impls",
   ]
 
   data_deps = [

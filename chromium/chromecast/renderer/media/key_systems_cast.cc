@@ -9,6 +9,7 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "build/build_config.h"
+#include "chromecast/chromecast_features.h"
 #include "chromecast/media/base/key_systems_common.h"
 #include "components/cdm/renderer/android_key_systems.h"
 #include "components/cdm/renderer/widevine_key_system_properties.h"
@@ -30,7 +31,7 @@ namespace media {
 namespace {
 
 #if defined(PLAYREADY_CDM_AVAILABLE) || \
-    (defined(WIDEVINE_CDM_AVAILABLE) && !defined(OS_ANDROID))
+    (BUILDFLAG(IS_CAST_USING_CMA_BACKEND) && defined(WIDEVINE_CDM_AVAILABLE))
 SupportedCodecs GetCastEmeSupportedCodecs() {
   SupportedCodecs codecs =
       ::media::EME_CODEC_MP4_AAC | ::media::EME_CODEC_MP4_AVC1 |
@@ -54,7 +55,7 @@ SupportedCodecs GetCastEmeSupportedCodecs() {
 
   return codecs;
 }
-#endif
+#endif  // defined(PLAYREADY_CDM_AVAILABLE) || ...
 
 #if defined(PLAYREADY_CDM_AVAILABLE)
 class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
@@ -77,8 +78,17 @@ class PlayReadyKeySystemProperties : public ::media::KeySystemProperties {
   EmeConfigRule GetRobustnessConfigRule(
       EmeMediaType media_type,
       const std::string& requested_robustness) const override {
-    return requested_robustness.empty() ? EmeConfigRule::SUPPORTED
-                                        : EmeConfigRule::NOT_SUPPORTED;
+    if (requested_robustness.empty()) {
+#if defined(OS_ANDROID)
+      return EmeConfigRule::HW_SECURE_CODECS_REQUIRED;
+#else
+      return EmeConfigRule::SUPPORTED;
+#endif
+    }
+
+    // Cast-specific PlayReady implementation does not currently recognize or
+    // support non-empty robustness strings.
+    return EmeConfigRule::NOT_SUPPORTED;
   }
 
   EmeSessionTypeSupport GetPersistentLicenseSessionSupport() const override {
@@ -122,7 +132,7 @@ void AddChromecastKeySystems(
 #endif  // defined(PLAYREADY_CDM_AVAILABLE)
 
 #if defined(WIDEVINE_CDM_AVAILABLE)
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
   cdm::AddAndroidWidevine(key_systems_properties);
 #else
   using Robustness = cdm::WidevineKeySystemProperties::Robustness;
@@ -140,7 +150,7 @@ void AddChromecastKeySystems(
       // Note: On Chromecast, all CDMs may have persistent state.
       EmeFeatureSupport::ALWAYS_ENABLED,    // Persistent state.
       EmeFeatureSupport::ALWAYS_ENABLED));  // Distinctive identifier.
-#endif  // defined(OS_ANDROID)
+#endif  // defined(OS_ANDROID) && !BUILDFLAG(IS_CAST_USING_CMA_BACKEND)
 #endif  // defined(WIDEVINE_CDM_AVAILABLE)
 }
 

@@ -18,11 +18,9 @@
 #include "chrome/browser/subresource_filter/subresource_filter_content_settings_manager.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context.h"
 #include "chrome/browser/subresource_filter/subresource_filter_profile_context_factory.h"
-#include "chrome/browser/ui/android/content_settings/subresource_filter_infobar_delegate.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/safe_browsing_db/database_manager.h"
-#include "components/safe_browsing_db/v4_feature_list.h"
 #include "components/subresource_filter/content/browser/content_ruleset_service.h"
 #include "components/subresource_filter/content/browser/content_subresource_filter_driver_factory.h"
 #include "components/subresource_filter/content/browser/subresource_filter_safe_browsing_activation_throttle.h"
@@ -33,7 +31,26 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
 
+#if defined(OS_ANDROID)
+#include "chrome/browser/ui/android/content_settings/ads_blocked_infobar_delegate.h"
+#endif
+
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(ChromeSubresourceFilterClient);
+
+namespace {
+
+scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> GetDatabaseManager() {
+  safe_browsing::SafeBrowsingService* safe_browsing_service =
+      g_browser_process->safe_browsing_service();
+  bool has_supported_manager =
+      safe_browsing_service &&
+      safe_browsing_service->database_manager()->IsSupported() &&
+      safe_browsing_service->database_manager()->CanCheckSubresourceFilter();
+  return has_supported_manager ? safe_browsing_service->database_manager()
+                               : nullptr;
+}
+
+}  // namespace
 
 ChromeSubresourceFilterClient::ChromeSubresourceFilterClient(
     content::WebContents* web_contents)
@@ -52,30 +69,14 @@ ChromeSubresourceFilterClient::~ChromeSubresourceFilterClient() {}
 void ChromeSubresourceFilterClient::MaybeAppendNavigationThrottles(
     content::NavigationHandle* navigation_handle,
     std::vector<std::unique_ptr<content::NavigationThrottle>>* throttles) {
-  // Don't add any throttles if the feature isn't enabled at all.
-  if (!base::FeatureList::IsEnabled(
-          subresource_filter::kSafeBrowsingSubresourceFilter)) {
-    return;
-  }
-
   if (navigation_handle->IsInMainFrame()) {
-    safe_browsing::SafeBrowsingService* safe_browsing_service =
-        g_browser_process->safe_browsing_service();
-    scoped_refptr<safe_browsing::SafeBrowsingDatabaseManager> database_manager;
-    if (safe_browsing_service &&
-        safe_browsing_service->database_manager()->IsSupported() &&
-        safe_browsing::V4FeatureList::GetV4UsageStatus() ==
-            safe_browsing::V4FeatureList::V4UsageStatus::V4_ONLY) {
-      database_manager = safe_browsing_service->database_manager();
-    }
-
     throttles->push_back(
         base::MakeUnique<subresource_filter::
                              SubresourceFilterSafeBrowsingActivationThrottle>(
             navigation_handle, this,
             content::BrowserThread::GetTaskRunnerForThread(
                 content::BrowserThread::IO),
-            std::move(database_manager)));
+            GetDatabaseManager()));
   }
 
   auto* driver_factory =
@@ -117,12 +118,11 @@ void ChromeSubresourceFilterClient::ToggleNotificationVisibility(
 #if defined(OS_ANDROID)
     InfoBarService* infobar_service =
         InfoBarService::FromWebContents(web_contents_);
-    SubresourceFilterInfobarDelegate::Create(infobar_service);
+    AdsBlockedInfobarDelegate::Create(infobar_service);
 #endif
     TabSpecificContentSettings* content_settings =
         TabSpecificContentSettings::FromWebContents(web_contents_);
-    content_settings->OnContentBlocked(
-        CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER);
+    content_settings->OnContentBlocked(CONTENT_SETTINGS_TYPE_ADS);
 
     LogAction(kActionUIShown);
     did_show_ui_for_navigation_ = true;

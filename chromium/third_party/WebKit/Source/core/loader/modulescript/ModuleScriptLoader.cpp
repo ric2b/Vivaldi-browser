@@ -4,12 +4,15 @@
 
 #include "core/loader/modulescript/ModuleScriptLoader.h"
 
+#include "core/dom/ExecutionContext.h"
 #include "core/dom/Modulator.h"
 #include "core/dom/ModuleScript.h"
+#include "core/inspector/ConsoleMessage.h"
 #include "core/loader/modulescript/ModuleScriptLoaderClient.h"
 #include "core/loader/modulescript/ModuleScriptLoaderRegistry.h"
 #include "platform/loader/fetch/FetchUtils.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "platform/loader/fetch/ResourceLoadingLog.h"
 #include "platform/network/mime/MIMETypeRegistry.h"
 #include "platform/weborigin/SecurityPolicy.h"
@@ -92,6 +95,17 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
   // parser metadata is parser state,
   ResourceLoaderOptions options;
   options.parser_disposition = module_request.ParserState();
+  // As initiator for module script fetch is not specified in HTML spec,
+  // we specity "" as initiator per:
+  // https://fetch.spec.whatwg.org/#concept-request-initiator
+  options.initiator_info.name = g_empty_atom;
+
+  if (level == ModuleGraphLevel::kDependentModuleFetch) {
+    options.initiator_info.imported_module_referrer =
+        module_request.GetReferrer();
+    options.initiator_info.position = module_request.GetReferrerPosition();
+  }
+
   // referrer is referrer,
   if (!module_request.GetReferrer().IsNull()) {
     resource_request.SetHTTPReferrer(SecurityPolicy::GenerateReferrer(
@@ -100,12 +114,7 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
   }
   // and client is fetch client settings object. -> set by ResourceFetcher
 
-  // As initiator for module script fetch is not specified in HTML spec,
-  // we specity "" as initiator per:
-  // https://fetch.spec.whatwg.org/#concept-request-initiator
-  const AtomicString& initiator_name = g_empty_atom;
-
-  FetchParameters fetch_params(resource_request, initiator_name, options);
+  FetchParameters fetch_params(resource_request, options);
   // ... cryptographic nonce metadata is cryptographic nonce, ...
   fetch_params.SetContentSecurityPolicyNonce(module_request.Nonce());
   // Note: The fetch request's "origin" isn't specified in
@@ -114,18 +123,16 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
   // https://fetch.spec.whatwg.org/#concept-request-origin
   // ... mode is "cors", ...
   // ... credentials mode is credentials mode, ...
-  // TODO(tyoshino): FetchCredentialsMode should be used to communicate CORS
-  // mode.
-  CrossOriginAttributeValue cross_origin =
-      module_request.CredentialsMode() ==
-              WebURLRequest::kFetchCredentialsModeInclude
-          ? kCrossOriginAttributeUseCredentials
-          : kCrossOriginAttributeAnonymous;
   fetch_params.SetCrossOriginAccessControl(modulator_->GetSecurityOrigin(),
-                                           cross_origin);
+                                           module_request.CredentialsMode());
 
   // Module scripts are always async.
   fetch_params.SetDefer(FetchParameters::kLazyLoad);
+
+  // Use UTF-8, according to Step 8:
+  // "Let source text be the result of UTF-8 decoding response's body."
+  fetch_params.SetDecoderOptions(
+      TextResourceDecoderOptions::CreateAlwaysUseUTF8ForText());
 
   // Step 6. If the caller specified custom steps to perform the fetch,
   // perform them on request, setting the is top-level flag if the top-level
@@ -156,7 +163,10 @@ void ModuleScriptLoader::Fetch(const ModuleScriptFetchRequest& module_request,
   SetResource(resource);
 }
 
-bool ModuleScriptLoader::WasModuleLoadSuccessful(Resource* resource) {
+namespace {
+
+bool WasModuleLoadSuccessful(Resource* resource,
+                             ConsoleMessage** error_message = nullptr) {
   // Implements conditions in Step 7 of
   // https://html.spec.whatwg.org/#fetch-a-single-module-script
 
@@ -179,11 +189,25 @@ bool ModuleScriptLoader::WasModuleLoadSuccessful(Resource* resource) {
   // We use ResourceResponse::httpContentType() instead of mimeType(), as
   // mimeType() may be rewritten by mime sniffer.
   if (!MIMETypeRegistry::IsSupportedJavaScriptMIMEType(
-          response.HttpContentType()))
+          response.HttpContentType())) {
+    if (error_message) {
+      String message =
+          "Failed to load module script: The server responded with a "
+          "non-JavaScript MIME type of \"" +
+          response.HttpContentType() +
+          "\". Strict MIME type checking is enforced for module scripts per "
+          "HTML spec.";
+      *error_message = ConsoleMessage::CreateForRequest(
+          kJSMessageSource, kErrorMessageLevel, message,
+          response.Url().GetString(), resource->Identifier());
+    }
     return false;
+  }
 
   return true;
 }
+
+}  // namespace
 
 // ScriptResourceClient callback handler
 void ModuleScriptLoader::NotifyFinished(Resource*) {
@@ -192,7 +216,13 @@ void ModuleScriptLoader::NotifyFinished(Resource*) {
   // Step 7. If any of the following conditions are met, set moduleMap[url] to
   // null, asynchronously complete this algorithm with null, and abort these
   // steps.
-  if (!WasModuleLoadSuccessful(GetResource())) {
+  ConsoleMessage* error_message = nullptr;
+  if (!WasModuleLoadSuccessful(GetResource(), &error_message)) {
+    if (error_message) {
+      ExecutionContext::From(modulator_->GetScriptState())
+          ->AddConsoleMessage(error_message);
+    }
+
     AdvanceState(State::kFinished);
     return;
   }
@@ -201,8 +231,7 @@ void ModuleScriptLoader::NotifyFinished(Resource*) {
   String source_text = GetResource()->SourceText();
 
   AccessControlStatus access_control_status =
-      GetResource()->CalculateAccessControlStatus(
-          modulator_->GetSecurityOrigin());
+      GetResource()->CalculateAccessControlStatus();
 
   // Step 9. Let module script be the result of creating a module script given
   // source text, module map settings object, response's url, cryptographic

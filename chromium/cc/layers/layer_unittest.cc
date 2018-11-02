@@ -324,8 +324,9 @@ TEST_F(LayerTest, LayerPropertyChangedForSubtree) {
   // Should be a different size than previous call, to ensure it marks tree
   // changed.
   gfx::Size arbitrary_size = gfx::Size(111, 222);
-  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(1);
+  EXPECT_CALL(*layer_tree_host_, SetNeedsCommit()).Times(2);
   EXECUTE_AND_VERIFY_SUBTREE_CHANGED(root->SetBounds(arbitrary_size));
+  EXECUTE_AND_VERIFY_SUBTREE_CHANGED(dummy_layer1->SetBounds(arbitrary_size));
   EXECUTE_AND_VERIFY_SUBTREE_CHANGES_RESET(
       root->PushPropertiesTo(root_impl.get());
       child->PushPropertiesTo(child_impl.get());
@@ -912,8 +913,7 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetContentsOpaque(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetPosition(gfx::PointF(4.f, 9.f)));
   // We can use any layer pointer here since we aren't syncing for real.
-  EXPECT_SET_NEEDS_COMMIT(1,
-                          test_layer->SetScrollClipLayerId(test_layer->id()));
+  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetScrollable(gfx::Size(1, 1)));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetUserScrollable(true, false));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetScrollOffset(
       gfx::ScrollOffset(10, 10)));
@@ -925,8 +925,10 @@ TEST_F(LayerTest, CheckPropertyChangeCausesCorrectBehavior) {
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetTransform(
       gfx::Transform(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetDoubleSided(false));
-  EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetTouchEventHandlerRegion(
-      gfx::Rect(10, 10)));
+  TouchActionRegion touch_action_region;
+  touch_action_region.Union(kTouchActionNone, gfx::Rect(10, 10));
+  EXPECT_SET_NEEDS_COMMIT(
+      1, test_layer->SetTouchActionRegion(std::move(touch_action_region)));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetForceRenderSurfaceForTesting(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetHideLayerAndSubtree(true));
   EXPECT_SET_NEEDS_COMMIT(1, test_layer->SetElementId(ElementId(2)));
@@ -1323,11 +1325,11 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // Create identical requests without the source being set, and expect the
   // layer does not abort either one.
   std::unique_ptr<CopyOutputRequest> request = CopyOutputRequest::CreateRequest(
-      base::Bind(&ReceiveCopyOutputResult, &result_count));
+      base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
   request = CopyOutputRequest::CreateRequest(
-      base::Bind(&ReceiveCopyOutputResult, &result_count));
+      base::BindOnce(&ReceiveCopyOutputResult, &result_count));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, result_count);
 
@@ -1342,27 +1344,27 @@ TEST_F(LayerTest, DedupesCopyOutputRequestsBySource) {
   // the first request using |kArbitrarySourceId1| aborts immediately when
   // the second request using |kArbitrarySourceId1| is made.
   int did_receive_first_result_from_this_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::Bind(
+  request = CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_first_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_first_result_from_this_source);
   // Make a request from a different source.
   int did_receive_result_from_different_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::Bind(
+  request = CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_result_from_different_source));
   request->set_source(kArbitrarySourceId2);
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_different_source);
   // Make a request without specifying the source.
   int did_receive_result_from_anonymous_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::Bind(
+  request = CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_result_from_anonymous_source));
   layer->RequestCopyOfOutput(std::move(request));
   EXPECT_EQ(0, did_receive_result_from_anonymous_source);
   // Make the second request from |kArbitrarySourceId1|.
   int did_receive_second_result_from_this_source = 0;
-  request = CopyOutputRequest::CreateRequest(base::Bind(
+  request = CopyOutputRequest::CreateRequest(base::BindOnce(
       &ReceiveCopyOutputResult, &did_receive_second_result_from_this_source));
   request->set_source(kArbitrarySourceId1);
   layer->RequestCopyOfOutput(

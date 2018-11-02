@@ -1,6 +1,9 @@
-<link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/html/polymer.html">
+
 <link rel="import" href="chrome://resources/cr_elements/cr_toolbar/cr_toolbar.html">
+<link rel="import" href="chrome://resources/cr_elements/hidden_style_css.html">
+<link rel="import" href="chrome://resources/cr_elements/paper_button_style_css.html">
+<link rel="import" href="chrome://resources/html/cr.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-styles/color.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/paper-toggle-button/paper-toggle-button.html">
 <link rel="import" href="chrome://extensions/icons.html">
@@ -8,20 +11,15 @@
 
 <dom-module id="extensions-toolbar">
   <template>
-    <style>
+    <style include="cr-hidden-style paper-button-style">
       :host {
         --toolbar-width: 580px;
         --toolbar-color: var(--md-toolbar-color);
       }
 
-      [hidden] {
-        display: none !important;
-      }
-
       cr-toolbar {
         --cr-toolbar-field-width: var(--toolbar-width);
         background: var(--toolbar-color);
-        font-size: 13px;
       }
 
       .dev-controls {
@@ -32,6 +30,7 @@
       }
 
       #button-strip {
+        margin-bottom: 4px;
         /* We left-align the text of the left button with the left edge of the
            search field. Since the buttons have 12px padding, add 24px to the
            width of the button strip (12px each side) to make centering easy. */
@@ -40,10 +39,7 @@
 
       #button-strip paper-button {
         -webkit-margin-end: 16px;
-        -webkit-margin-start: 0;
         color: white;
-        font-size: 13px;
-        padding: 12px 9px;
       }
 
       .more-actions {

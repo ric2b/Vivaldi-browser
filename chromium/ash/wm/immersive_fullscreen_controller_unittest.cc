@@ -2,16 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "ash/shared/immersive_fullscreen_controller.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller.h"
 
 #include "ash/public/cpp/config.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller_delegate.h"
+#include "ash/public/cpp/immersive/immersive_fullscreen_controller_test_api.h"
 #include "ash/public/cpp/shelf_types.h"
 #include "ash/root_window_controller.h"
-#include "ash/shared/immersive_fullscreen_controller_delegate.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/immersive_fullscreen_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client.h"
@@ -104,7 +104,7 @@ class ConsumeEventHandler : public ui::test::TestEventHandler {
 
 /////////////////////////////////////////////////////////////////////////////
 
-class ImmersiveFullscreenControllerTest : public ash::test::AshTestBase {
+class ImmersiveFullscreenControllerTest : public AshTestBase {
  public:
   enum Modality {
     MODALITY_MOUSE,
@@ -138,9 +138,9 @@ class ImmersiveFullscreenControllerTest : public ash::test::AshTestBase {
     return controller_->mouse_x_when_hit_top_in_screen_;
   }
 
-  // ash::test::AshTestBase overrides:
+  // AshTestBase:
   void SetUp() override {
-    ash::test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
 
     widget_ = new views::Widget();
     views::Widget::InitParams params;

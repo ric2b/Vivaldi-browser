@@ -39,10 +39,11 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/IdTargetObserver.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/StyleChangeReason.h"
+#include "core/dom/SyncReattachContext.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/shadow/InsertionPoint.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/V0InsertionPoint.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/spellcheck/SpellChecker.h"
 #include "core/events/BeforeTextInsertedEvent.h"
@@ -50,8 +51,8 @@
 #include "core/events/MouseEvent.h"
 #include "core/events/ScopedEventQueue.h"
 #include "core/frame/Deprecation.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
 #include "core/html/HTMLCollection.h"
 #include "core/html/HTMLDataListElement.h"
@@ -135,6 +136,10 @@ DEFINE_TRACE(HTMLInputElement) {
   visitor->Trace(list_attribute_target_observer_);
   visitor->Trace(image_loader_);
   TextControlElement::Trace(visitor);
+}
+
+bool HTMLInputElement::HasPendingActivity() const {
+  return ImageLoader() && ImageLoader()->HasPendingActivity();
 }
 
 HTMLImageLoader& HTMLInputElement::EnsureImageLoader() {
@@ -764,29 +769,29 @@ void HTMLInputElement::ParseAttribute(
         EventTypeNames::search,
         CreateAttributeEventListener(this, name, value, EventParameterName()));
   } else if (name == incrementalAttr) {
-    UseCounter::Count(GetDocument(), UseCounter::kIncrementalAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kIncrementalAttribute);
   } else if (name == minAttr) {
     input_type_view_->MinOrMaxAttributeChanged();
     input_type_->SanitizeValueInResponseToMinOrMaxAttributeChange();
     input_type_->InRangeChanged();
     SetNeedsValidityCheck();
-    UseCounter::Count(GetDocument(), UseCounter::kMinAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kMinAttribute);
   } else if (name == maxAttr) {
     input_type_view_->MinOrMaxAttributeChanged();
     input_type_->SanitizeValueInResponseToMinOrMaxAttributeChange();
     input_type_->InRangeChanged();
     SetNeedsValidityCheck();
-    UseCounter::Count(GetDocument(), UseCounter::kMaxAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kMaxAttribute);
   } else if (name == multipleAttr) {
     input_type_view_->MultipleAttributeChanged();
     SetNeedsValidityCheck();
   } else if (name == stepAttr) {
     input_type_view_->StepAttributeChanged();
     SetNeedsValidityCheck();
-    UseCounter::Count(GetDocument(), UseCounter::kStepAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kStepAttribute);
   } else if (name == patternAttr) {
     SetNeedsValidityCheck();
-    UseCounter::Count(GetDocument(), UseCounter::kPatternAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kPatternAttribute);
   } else if (name == readonlyAttr) {
     TextControlElement::ParseAttribute(params);
     input_type_view_->ReadonlyAttributeChanged();
@@ -796,10 +801,10 @@ void HTMLInputElement::ParseAttribute(
       ResetListAttributeTargetObserver();
       ListAttributeTargetChanged();
     }
-    UseCounter::Count(GetDocument(), UseCounter::kListAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kListAttribute);
   } else if (name == webkitdirectoryAttr) {
     TextControlElement::ParseAttribute(params);
-    UseCounter::Count(GetDocument(), UseCounter::kPrefixedDirectoryAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kPrefixedDirectoryAttribute);
   } else {
     if (name == formactionAttr)
       LogUpdateAttributeIfIsolatedWorldAndInDocument("input", params);
@@ -835,7 +840,8 @@ LayoutObject* HTMLInputElement::CreateLayoutObject(const ComputedStyle& style) {
   return input_type_view_->CreateLayoutObject(style);
 }
 
-void HTMLInputElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLInputElement::AttachLayoutTree(AttachContext& context) {
+  SyncReattachContext reattach_context(context);
   TextControlElement::AttachLayoutTree(context);
   if (GetLayoutObject()) {
     input_type_->OnAttachWithLayoutObject();
@@ -1295,6 +1301,10 @@ void HTMLInputElement::DefaultEventHandler(Event* evt) {
 
   if (!call_base_class_early && !evt->DefaultHandled())
     TextControlElement::DefaultEventHandler(evt);
+}
+
+bool HTMLInputElement::HasActivationBehavior() const {
+  return true;
 }
 
 bool HTMLInputElement::WillRespondToMouseClickEvents() {
@@ -1813,7 +1823,7 @@ bool HTMLInputElement::SetupDateTimeChooserParameters(
   parameters.minimum = Minimum();
   parameters.maximum = Maximum();
   parameters.required = IsRequired();
-  if (!RuntimeEnabledFeatures::langAttributeAwareFormControlUIEnabled()) {
+  if (!RuntimeEnabledFeatures::LangAttributeAwareFormControlUIEnabled()) {
     parameters.locale = DefaultLanguage();
   } else {
     AtomicString computed_locale = ComputeInheritedLanguage();

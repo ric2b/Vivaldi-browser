@@ -4,7 +4,6 @@
 
 #include "chrome/browser/safe_browsing/certificate_reporting_service.h"
 
-#include "base/base_switches.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/test/histogram_tester.h"
@@ -20,12 +19,12 @@
 #include "chrome/browser/ssl/certificate_reporting_test_utils.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
-#include "chrome/common/pref_names.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/certificate_reporting/error_report.h"
 #include "components/prefs/pref_service.h"
-#include "components/variations/variations_switches.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
+#include "components/variations/variations_params_manager.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -88,7 +87,6 @@ class CertificateReportingServiceBrowserTest : public InProcessBrowserTest {
         ->SetServiceResetCallbackForTesting(
             base::Bind(&CertificateReportingServiceObserver::OnServiceReset,
                        base::Unretained(&service_observer_)));
-    InProcessBrowserTest::SetUpOnMainThread();
   }
 
   void TearDownOnMainThread() override {
@@ -109,13 +107,10 @@ class CertificateReportingServiceBrowserTest : public InProcessBrowserTest {
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
-    command_line->AppendSwitchASCII(
-        switches::kForceFieldTrials,
-        "ReportCertificateErrors/ShowAndPossiblySend/");
     // Setting the sending threshold to 1.0 ensures reporting is enabled.
-    command_line->AppendSwitchASCII(
-        variations::switches::kForceFieldTrialParams,
-        "ReportCertificateErrors.ShowAndPossiblySend:sendingThreshold/1.0");
+    variations::testing::VariationParamsManager::AppendVariationParams(
+        "ReportCertificateErrors", "ShowAndPossiblySend",
+        {{"sendingThreshold", "1.0"}}, command_line);
   }
 
   CertificateReportingServiceTestHelper* test_helper() { return &test_helper_; }
@@ -388,15 +383,9 @@ IN_PROC_BROWSER_TEST_F(CertificateReportingServiceBrowserTest,
       ReportExpectation::Successful({{"report1", RetryStatus::RETRIED}}));
 }
 
-// Failing on some Win and Mac buildbots.  See crbug.com/719138.
-#if defined(OS_WIN) || defined(OS_MACOSX)
-#define MAYBE_DontSendOldReports DISABLED_DontSendOldReports
-#else
-#define MAYBE_DontSendOldReports DontSendOldReports
-#endif
 // CertificateReportingService should ignore reports older than the report TTL.
 IN_PROC_BROWSER_TEST_F(CertificateReportingServiceBrowserTest,
-                       MAYBE_DontSendOldReports) {
+                       DontSendOldReports) {
   SetExpectedHistogramCountOnTeardown(5);
 
   base::SimpleTestClock* clock = new base::SimpleTestClock();
@@ -456,6 +445,15 @@ IN_PROC_BROWSER_TEST_F(CertificateReportingServiceBrowserTest,
   // Send pending reports. report2 should be discarded since it's too old. No
   // other reports remain. If any report is sent, test teardown will catch it.
   SendPendingReports();
+
+  // Let all reports succeed and send a single report. This is to make sure
+  // that any (incorrectly) pending reports are dropped before the test tear
+  // down.
+  test_helper()->SetFailureMode(certificate_reporting_test_utils::
+                                    ReportSendingResult::REPORTS_SUCCESSFUL);
+  SendReport("report3");
+  test_helper()->WaitForRequestsDestroyed(
+      ReportExpectation::Successful({{"report3", RetryStatus::NOT_RETRIED}}));
 }
 
 // CertificateReportingService should drop old reports from its pending report

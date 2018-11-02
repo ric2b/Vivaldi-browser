@@ -119,6 +119,10 @@ WebContents* RenderWidgetHostDelegate::GetAsWebContents() {
   return nullptr;
 }
 
+bool RenderWidgetHostDelegate::IsShowingContextMenuOnPage() const {
+  return false;
+}
+
 bool RenderWidgetHostDelegate::HasFocusedGuests() {
   return false;
 }

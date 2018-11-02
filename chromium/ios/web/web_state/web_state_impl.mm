@@ -7,14 +7,18 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "base/bind.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/sys_string_conversions.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #import "ios/web/interstitials/web_interstitial_impl.h"
 #import "ios/web/navigation/crw_session_controller.h"
+#import "ios/web/navigation/legacy_navigation_manager_impl.h"
 #import "ios/web/navigation/navigation_item_impl.h"
 #import "ios/web/navigation/session_storage_builder.h"
+#import "ios/web/navigation/wk_based_navigation_manager_impl.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/crw_session_storage.h"
 #import "ios/web/public/java_script_dialog_presenter.h"
@@ -34,9 +38,11 @@
 #import "ios/web/web_state/session_certificate_policy_cache_impl.h"
 #import "ios/web/web_state/ui/crw_web_controller.h"
 #import "ios/web/web_state/ui/crw_web_controller_container_view.h"
+#import "ios/web/web_state/ui/crw_web_view_navigation_proxy.h"
 #include "ios/web/webui/web_ui_ios_controller_factory_registry.h"
 #include "ios/web/webui/web_ui_ios_impl.h"
 #include "net/http/http_response_headers.h"
+#include "ui/gfx/image/image.h"
 
 namespace web {
 
@@ -76,11 +82,16 @@ WebStateImpl::WebStateImpl(const CreateParams& params,
       created_with_opener_(params.created_with_opener),
       weak_factory_(this) {
   // Create or deserialize the NavigationManager.
+  if (web::GetWebClient()->IsSlimNavigationManagerEnabled()) {
+    navigation_manager_ = base::MakeUnique<WKBasedNavigationManagerImpl>();
+  } else {
+    navigation_manager_ = base::MakeUnique<LegacyNavigationManagerImpl>();
+  }
+
   if (session_storage) {
     SessionStorageBuilder session_storage_builder;
     session_storage_builder.ExtractSessionState(this, session_storage);
   } else {
-    navigation_manager_ = base::MakeUnique<NavigationManagerImpl>();
     certificate_policy_cache_ =
         base::MakeUnique<SessionCertificatePolicyCacheImpl>();
   }
@@ -670,6 +681,23 @@ bool WebStateImpl::HasOpener() const {
   return created_with_opener_;
 }
 
+void WebStateImpl::TakeSnapshot(const SnapshotCallback& callback,
+                                CGSize target_size) const {
+  UIView* view = [web_controller_ view];
+  UIImage* snapshot = nil;
+  if (view && !CGRectIsEmpty(view.bounds)) {
+    CGFloat scaled_height =
+        view.bounds.size.height * target_size.width / view.bounds.size.width;
+    CGRect scaled_rect = CGRectMake(0, 0, target_size.width, scaled_height);
+    UIGraphicsBeginImageContextWithOptions(target_size, YES, 0);
+    [view drawViewHierarchyInRect:scaled_rect afterScreenUpdates:NO];
+    snapshot = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+  }
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::Bind(callback, gfx::Image(snapshot)));
+}
+
 void WebStateImpl::OnNavigationStarted(web::NavigationContext* context) {
   for (auto& observer : observers_)
     observer.DidStartNavigation(context);
@@ -713,6 +741,10 @@ void WebStateImpl::OnNavigationItemCommitted(
 
 WebState* WebStateImpl::GetWebState() {
   return this;
+}
+
+id<CRWWebViewNavigationProxy> WebStateImpl::GetWebViewNavigationProxy() const {
+  return [web_controller_ webViewNavigationProxy];
 }
 
 }  // namespace web

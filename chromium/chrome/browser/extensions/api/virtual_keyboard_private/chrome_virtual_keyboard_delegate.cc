@@ -83,8 +83,8 @@ void ChromeVirtualKeyboardDelegate::GetKeyboardConfig(
     OnKeyboardSettingsCallback on_settings_callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   media::AudioSystem::Get()->HasInputDevices(
-      base::Bind(&ChromeVirtualKeyboardDelegate::OnHasInputDevices, weak_this_,
-                 std::move(on_settings_callback)));
+      base::BindOnce(&ChromeVirtualKeyboardDelegate::OnHasInputDevices,
+                     weak_this_, std::move(on_settings_callback)));
 }
 
 bool ChromeVirtualKeyboardDelegate::HideKeyboard() {
@@ -93,10 +93,6 @@ bool ChromeVirtualKeyboardDelegate::HideKeyboard() {
       keyboard::KeyboardController::GetInstance();
   if (!controller)
     return false;
-
-  UMA_HISTOGRAM_ENUMERATION("VirtualKeyboard.KeyboardControlEvent",
-                            keyboard::KEYBOARD_CONTROL_HIDE_USER,
-                            keyboard::KEYBOARD_CONTROL_MAX);
 
   // Pass HIDE_REASON_MANUAL since calls to HideKeyboard as part of this API
   // would be user generated.
@@ -191,7 +187,7 @@ bool ChromeVirtualKeyboardDelegate::SetRequestedKeyboardState(int state_enum) {
   if (is_enabled)
     ash::Shell::Get()->CreateKeyboard();
   else
-    ash::Shell::Get()->DeactivateKeyboard();
+    ash::Shell::Get()->DestroyKeyboard();
   return true;
 }
 

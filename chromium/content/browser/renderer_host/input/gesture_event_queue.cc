@@ -89,6 +89,13 @@ bool GestureEventQueue::ShouldForwardForBounceReduction(
       debouncing_deferral_queue_.clear();
       return true;
 
+    case WebInputEvent::kGestureFlingStart:
+      // GestureFlingStart shouldn't be debounced because it is a discrete event
+      // signalling the end of a scroll
+      debounce_deferring_timer_.Stop();
+      GestureEventQueue::SendScrollEndingEventsNow();
+      return true;
+
     case WebInputEvent::kGesturePinchBegin:
     case WebInputEvent::kGesturePinchEnd:
     case WebInputEvent::kGesturePinchUpdate:
@@ -116,7 +123,8 @@ bool GestureEventQueue::ShouldForwardForTapSuppression(
       if (gesture_event.event.source_device ==
           blink::kWebGestureDeviceTouchscreen)
         touchscreen_tap_suppression_controller_.GestureFlingCancel();
-      else
+      else if (gesture_event.event.source_device ==
+               blink::kWebGestureDeviceTouchpad)
         touchpad_tap_suppression_controller_.GestureFlingCancel();
       return true;
     case WebInputEvent::kGestureTapDown:
@@ -243,7 +251,8 @@ void GestureEventQueue::ProcessGestureAck(InputEventAckState ack_result,
     if (event_with_latency.event.source_device ==
         blink::kWebGestureDeviceTouchscreen)
       touchscreen_tap_suppression_controller_.GestureFlingCancelAck(processed);
-    else
+    else if (event_with_latency.event.source_device ==
+             blink::kWebGestureDeviceTouchpad)
       touchpad_tap_suppression_controller_.GestureFlingCancelAck(processed);
   }
   DCHECK_LT(event_index, coalesced_gesture_events_.size());

@@ -92,9 +92,7 @@ void DumpPluginProcessOnIOThread(const std::set<int>& child_ids) {
   // Wait a bit to let dump finish (if requested) before rebooting the device.
   const int kDumpWaitSeconds = 10;
   content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(&RebootDevice),
+      content::BrowserThread::UI, FROM_HERE, base::BindOnce(&RebootDevice),
       base::TimeDelta::FromSeconds(dump_requested ? kDumpWaitSeconds : 0));
 }
 
@@ -117,31 +115,38 @@ class AppSession::AppWindowHandler : public AppWindowRegistry::Observer {
  private:
   // extensions::AppWindowRegistry::Observer overrides:
   void OnAppWindowAdded(AppWindow* app_window) override {
+    if (app_window->extension_id() != app_id_)
+      return;
+
     app_session_->OnAppWindowAdded(app_window);
+    app_window_created_ = true;
   }
 
   void OnAppWindowRemoved(AppWindow* app_window) override {
-    if (window_registry_->GetAppWindowsForApp(app_id_).empty()) {
-      if (DemoAppLauncher::IsDemoAppSession(user_manager::UserManager::Get()
-                                                ->GetActiveUser()
-                                                ->GetAccountId())) {
-        // If we were in demo mode, we disabled all our network technologies,
-        // re-enable them.
-        NetworkStateHandler* handler =
-            NetworkHandler::Get()->network_state_handler();
-        handler->SetTechnologyEnabled(
-            NetworkTypePattern::NonVirtual(),
-            true,
-            chromeos::network_handler::ErrorCallback());
-      }
-      app_session_->OnLastAppWindowClosed();
-      window_registry_->RemoveObserver(this);
+    if (!app_window_created_ ||
+        !window_registry_->GetAppWindowsForApp(app_id_).empty()) {
+      return;
     }
+
+    if (DemoAppLauncher::IsDemoAppSession(user_manager::UserManager::Get()
+                                              ->GetActiveUser()
+                                              ->GetAccountId())) {
+      // If we were in demo mode, we disabled all our network technologies,
+      // re-enable them.
+      NetworkStateHandler* handler =
+          NetworkHandler::Get()->network_state_handler();
+      handler->SetTechnologyEnabled(NetworkTypePattern::NonVirtual(), true,
+                                    chromeos::network_handler::ErrorCallback());
+    }
+
+    app_session_->OnLastAppWindowClosed();
+    window_registry_->RemoveObserver(this);
   }
 
   AppSession* const app_session_;
   AppWindowRegistry* window_registry_ = nullptr;
   std::string app_id_;
+  bool app_window_created_ = false;
 
   DISALLOW_COPY_AND_ASSIGN(AppWindowHandler);
 };
@@ -169,9 +174,9 @@ class AppSession::BrowserWindowHandler : public chrome::BrowserListObserver {
   void OnBrowserAdded(Browser* browser) override {
     base::ThreadTaskRunnerHandle::Get()->PostTask(
         FROM_HERE,
-        base::Bind(&BrowserWindowHandler::HandleBrowser,
-                   base::Unretained(this),  // LazyInstance, always valid
-                   browser));
+        base::BindOnce(&BrowserWindowHandler::HandleBrowser,
+                       base::Unretained(this),  // LazyInstance, always valid
+                       browser));
   }
 
   DISALLOW_COPY_AND_ASSIGN(BrowserWindowHandler);
@@ -266,7 +271,7 @@ void AppSession::OnPluginHung(const std::set<int>& hung_plugins) {
   LOG(ERROR) << "Plugin hung detected. Dump and reboot.";
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&DumpPluginProcessOnIOThread, hung_plugins));
+      base::BindOnce(&DumpPluginProcessOnIOThread, hung_plugins));
 }
 
 }  // namespace chromeos

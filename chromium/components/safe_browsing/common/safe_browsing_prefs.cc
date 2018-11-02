@@ -7,6 +7,8 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/pref_registry/pref_registry_syncable.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
 
 namespace {
@@ -139,16 +141,22 @@ void RecordExtendedReportingPrefChanged(
 }  // namespace
 
 namespace prefs {
+const char kSafeBrowsingEnabled[] = "safebrowsing.enabled";
 const char kSafeBrowsingExtendedReportingEnabled[] =
     "safebrowsing.extended_reporting_enabled";
-const char kSafeBrowsingScoutReportingEnabled[] =
-    "safebrowsing.scout_reporting_enabled";
-const char kSafeBrowsingScoutGroupSelected[] =
-    "safebrowsing.scout_group_selected";
+const char kSafeBrowsingExtendedReportingOptInAllowed[] =
+    "safebrowsing.extended_reporting_opt_in_allowed";
+const char kSafeBrowsingIncidentsSent[] = "safebrowsing.incidents_sent";
+const char kSafeBrowsingProceedAnywayDisabled[] =
+    "safebrowsing.proceed_anyway_disabled";
 const char kSafeBrowsingSawInterstitialExtendedReporting[] =
     "safebrowsing.saw_interstitial_sber1";
 const char kSafeBrowsingSawInterstitialScoutReporting[] =
     "safebrowsing.saw_interstitial_sber2";
+const char kSafeBrowsingScoutGroupSelected[] =
+    "safebrowsing.scout_group_selected";
+const char kSafeBrowsingScoutReportingEnabled[] =
+    "safebrowsing.scout_reporting_enabled";
 }  // namespace prefs
 
 namespace safe_browsing {
@@ -156,7 +164,7 @@ namespace safe_browsing {
 const char kSwitchForceScoutGroup[] = "force-scout-group";
 
 const base::Feature kCanShowScoutOptIn{"CanShowScoutOptIn",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kOnlyShowScoutOptIn{"OnlyShowScoutOptIn",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
@@ -294,6 +302,10 @@ void InitializeSafeBrowsingPrefs(PrefService* prefs) {
   }
 }
 
+bool IsExtendedReportingOptInAllowed(const PrefService& prefs) {
+  return prefs.GetBoolean(prefs::kSafeBrowsingExtendedReportingOptInAllowed);
+}
+
 bool IsExtendedReportingEnabled(const PrefService& prefs) {
   return prefs.GetBoolean(GetExtendedReportingPrefName(prefs));
 }
@@ -343,6 +355,26 @@ void RecordExtendedReportingMetrics(const PrefService& prefs) {
         GetPrefValueOrNull(prefs, prefs::kSafeBrowsingScoutReportingEnabled),
         MAX_NULLABLE_BOOLEAN);
   }
+}
+
+void RegisterProfilePrefs(PrefRegistrySimple* registry) {
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingExtendedReportingEnabled,
+                                false);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutReportingEnabled,
+                                false);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingScoutGroupSelected, false);
+  registry->RegisterBooleanPref(
+      prefs::kSafeBrowsingSawInterstitialExtendedReporting, false);
+  registry->RegisterBooleanPref(
+      prefs::kSafeBrowsingSawInterstitialScoutReporting, false);
+  registry->RegisterBooleanPref(
+      prefs::kSafeBrowsingExtendedReportingOptInAllowed, true);
+  registry->RegisterBooleanPref(
+      prefs::kSafeBrowsingEnabled, true,
+      user_prefs::PrefRegistrySyncable::SYNCABLE_PREF);
+  registry->RegisterBooleanPref(prefs::kSafeBrowsingProceedAnywayDisabled,
+                                false);
+  registry->RegisterDictionaryPref(prefs::kSafeBrowsingIncidentsSent);
 }
 
 void SetExtendedReportingPrefAndMetric(
@@ -436,6 +468,26 @@ void UpdatePrefsBeforeSecurityInterstitial(PrefService* prefs) {
                         ? prefs::kSafeBrowsingSawInterstitialScoutReporting
                         : prefs::kSafeBrowsingSawInterstitialExtendedReporting,
                     true);
+}
+
+base::ListValue GetSafeBrowsingPreferencesList(PrefService* prefs) {
+  base::ListValue preferences_list;
+
+  const char* safe_browsing_preferences[] = {
+      prefs::kSafeBrowsingEnabled,
+      prefs::kSafeBrowsingExtendedReportingOptInAllowed,
+      prefs::kSafeBrowsingExtendedReportingEnabled,
+      prefs::kSafeBrowsingScoutReportingEnabled};
+
+  // Add the status of the preferences if they are Enabled or Disabled for the
+  // user.
+  for (const char* preference : safe_browsing_preferences) {
+    preferences_list.GetList().push_back(base::Value(preference));
+    bool enabled = prefs->GetBoolean(preference);
+    preferences_list.GetList().push_back(
+        base::Value(enabled ? "Enabled" : "Disabled"));
+  }
+  return preferences_list;
 }
 
 }  // namespace safe_browsing

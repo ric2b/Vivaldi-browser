@@ -13,6 +13,7 @@
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/harmony/chrome_layout_provider.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/grit/locale_settings.h"
@@ -22,6 +23,7 @@
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/box_layout.h"
@@ -64,13 +66,6 @@ void ConflictingModuleView::MaybeShow(Browser* browser,
   if (done_checking)
     return;  // Only show the bubble once per launch.
 
-  auto* model = EnumerateModulesModel::GetInstance();
-  GURL url = model->GetConflictUrl();
-  if (!url.is_valid()) {
-    done_checking = true;
-    return;
-  }
-
   // A pref that counts how often the Sideload Wipeout bubble has been shown.
   IntegerPrefMember bubble_shown;
   bubble_shown.Init(prefs::kModuleConflictBubbleShown,
@@ -87,8 +82,8 @@ void ConflictingModuleView::MaybeShow(Browser* browser,
   DCHECK(anchor_view);
   DCHECK(anchor_view->GetWidget());
 
-  ConflictingModuleView* bubble_delegate =
-      new ConflictingModuleView(anchor_view, browser, url);
+  ConflictingModuleView* bubble_delegate = new ConflictingModuleView(
+      anchor_view, browser, GURL(chrome::kChromeUIConflictsURL));
   views::BubbleDialogDelegateView::CreateBubble(bubble_delegate);
   bubble_delegate->ShowBubble();
 
@@ -109,6 +104,10 @@ void ConflictingModuleView::ShowBubble() {
       prefs::kModuleConflictBubbleShown,
       browser_->profile()->GetPrefs());
   bubble_shown.SetValue(bubble_shown.GetValue() + 1);
+}
+
+ui::AXRole ConflictingModuleView::GetAccessibleWindowRole() const {
+  return ui::AX_ROLE_ALERT_DIALOG;
 }
 
 void ConflictingModuleView::OnWidgetClosing(views::Widget* widget) {
@@ -137,9 +136,9 @@ void ConflictingModuleView::Init() {
   ui::ResourceBundle& rb = ui::ResourceBundle::GetSharedInstance();
 
   SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
-      ChromeLayoutProvider::Get()->GetDistanceMetric(
-          DISTANCE_RELATED_LABEL_HORIZONTAL)));
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
+                           ChromeLayoutProvider::Get()->GetDistanceMetric(
+                               DISTANCE_RELATED_LABEL_HORIZONTAL)));
 
   views::ImageView* icon = new views::ImageView();
   icon->SetImage(rb.GetImageSkiaNamed(IDR_INPUT_ALERT_MENU));
@@ -159,10 +158,6 @@ void ConflictingModuleView::Init() {
   UMA_HISTOGRAM_ENUMERATION("ConflictingModule.UserSelection",
       EnumerateModulesModel::ACTION_BUBBLE_SHOWN,
       EnumerateModulesModel::ACTION_BOUNDARY);
-}
-
-void ConflictingModuleView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_ALERT_DIALOG;
 }
 
 void ConflictingModuleView::OnConflictsAcknowledged() {

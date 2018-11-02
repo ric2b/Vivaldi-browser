@@ -9,27 +9,20 @@ Polymer({
     /**
      * The number of pages the document contains.
      */
-    docLength: {
-      type: Number,
-      value: 1,
-      observer: 'docLengthChanged'
-    },
+    docLength: {type: Number, value: 1, observer: 'docLengthChanged_'},
 
     /**
      * The current page being viewed (1-based). A change to pageNo is mirrored
      * immediately to the input field. A change to the input field is not
      * mirrored back until pageNoCommitted() is called and change-page is fired.
      */
-    pageNo: {
-      type: Number,
-      value: 1
-    },
+    pageNo: {type: Number, value: 1},
 
     strings: Object,
   },
 
   pageNoCommitted: function() {
-    var page = parseInt(this.$.input.value);
+    var page = parseInt(this.$.input.value, 10);
 
     if (!isNaN(page) && page <= this.docLength && page > 0)
       this.fire('change-page', {page: page - 1});
@@ -38,7 +31,8 @@ Polymer({
     this.$.input.blur();
   },
 
-  docLengthChanged: function() {
+  /** @private */
+  docLengthChanged_: function() {
     var numDigits = this.docLength.toString().length;
     this.$.pageselector.style.width = numDigits + 'ch';
     // Set both sides of the slash to the same width, so that the layout is

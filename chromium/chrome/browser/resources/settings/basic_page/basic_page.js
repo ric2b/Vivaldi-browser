@@ -9,7 +9,7 @@
 Polymer({
   is: 'settings-basic-page',
 
-  behaviors: [MainPageBehavior],
+  behaviors: [MainPageBehavior, WebUIListenerBehavior],
 
   properties: {
     /** Preferences state. */
@@ -18,7 +18,24 @@ Polymer({
       notify: true,
     },
 
+    // <if expr="chromeos">
     showAndroidApps: Boolean,
+
+    showMultidevice: Boolean,
+
+    havePlayStoreApp: Boolean,
+    // </if>
+
+    /** @type {!AndroidAppsInfo|undefined} */
+    androidAppsInfo: Object,
+
+    showChromeCleanup: {
+      type: Boolean,
+      value: function() {
+        return loadTimeData.valueExists('chromeCleanupEnabled') &&
+            loadTimeData.getBoolean('chromeCleanupEnabled');
+      },
+    },
 
     /**
      * Dictionary defining page visibility.
@@ -26,7 +43,9 @@ Polymer({
      */
     pageVisibility: {
       type: Object,
-      value: function() { return {}; },
+      value: function() {
+        return {};
+      },
     },
 
     advancedToggleExpanded: {
@@ -56,7 +75,7 @@ Polymer({
       },
     },
 
-// <if expr="chromeos">
+    // <if expr="chromeos">
     /**
      * Whether the user is a secondary user. Computed so that it is calculated
      * correctly after loadTimeData is available.
@@ -66,7 +85,7 @@ Polymer({
       type: Boolean,
       computed: 'computeShowSecondaryUserBanner_(hasExpandedSection_)',
     },
-// </if>
+    // </if>
 
     /** @private {!settings.Route|undefined} */
     currentRoute_: Object,
@@ -79,6 +98,17 @@ Polymer({
   /** @override */
   attached: function() {
     this.currentRoute_ = settings.getCurrentRoute();
+
+    this.addEventListener('chrome-cleanup-dismissed', function(e) {
+      this.showChromeCleanup = false;
+    }.bind(this));
+
+    if (settings.AndroidAppsBrowserProxyImpl) {
+      cr.addWebUIListener(
+          'android-apps-info-update', this.androidAppsInfoUpdate_.bind(this));
+      settings.AndroidAppsBrowserProxyImpl.getInstance()
+          .requestAndroidAppsInfo();
+    }
   },
 
   /**
@@ -89,7 +119,7 @@ Polymer({
   currentRouteChanged: function(newRoute, oldRoute) {
     this.currentRoute_ = newRoute;
 
-    if (settings.Route.ADVANCED.contains(newRoute))
+    if (settings.routes.ADVANCED && settings.routes.ADVANCED.contains(newRoute))
       this.advancedToggleExpanded = true;
 
     if (oldRoute && oldRoute.isSubpage()) {
@@ -126,8 +156,8 @@ Polymer({
     ];
 
     if (this.pageVisibility.advancedSettings !== false) {
-      whenSearchDone.push(this.$$('#advancedPageTemplate').get().then(
-          function(advancedPage) {
+      whenSearchDone.push(
+          this.$$('#advancedPageTemplate').get().then(function(advancedPage) {
             return settings.getSearchManager().search(query, advancedPage);
           }));
     }
@@ -135,7 +165,9 @@ Polymer({
     return Promise.all(whenSearchDone).then(function(requests) {
       // Combine the SearchRequests results to a single SearchResult object.
       return {
-        canceled: requests.some(function(r) { return r.canceled; }),
+        canceled: requests.some(function(r) {
+          return r.canceled;
+        }),
         didFindMatches: requests.some(function(r) {
           return r.didFindMatches();
         }),
@@ -146,7 +178,7 @@ Polymer({
     });
   },
 
-// <if expr="chromeos">
+  // <if expr="chromeos">
   /**
    * @return {boolean}
    * @private
@@ -155,11 +187,19 @@ Polymer({
     return !this.hasExpandedSection_ &&
         loadTimeData.getBoolean('isSecondaryUser');
   },
-// </if>
+  // </if>
 
   /** @private */
   onResetProfileBannerClosed_: function() {
     this.showResetProfileBanner_ = false;
+  },
+
+  /**
+   * @param {!AndroidAppsInfo} info
+   * @private
+   */
+  androidAppsInfoUpdate_: function(info) {
+    this.androidAppsInfo = info;
   },
 
   /**
@@ -169,7 +209,28 @@ Polymer({
   shouldShowAndroidApps_: function() {
     var visibility = /** @type {boolean|undefined} */ (
         this.get('pageVisibility.androidApps'));
-    return this.showAndroidApps && this.showPage_(visibility);
+    if (!this.showAndroidApps || !this.showPage_(visibility)) {
+      return false;
+    }
+
+    // Section is invisible in case we don't have the Play Store app and
+    // settings app is not yet available.
+    if (!this.havePlayStoreApp &&
+        (!this.androidAppsInfo || !this.androidAppsInfo.settingsAppAvailable)) {
+      return false;
+    }
+
+    return true;
+  },
+
+  /**
+   * @return {boolean} Whether to show the multidevice settings page.
+   * @private
+   */
+  shouldShowMultidevice_: function() {
+    var visibility = /** @type {boolean|undefined} */ (
+        this.get('pageVisibility.multidevice'));
+    return this.showMultidevice && this.showPage_(visibility);
   },
 
   /**
@@ -211,7 +272,7 @@ Polymer({
    * @private
    */
   showBasicPage_: function(currentRoute, inSearchMode, hasExpandedSection) {
-    return !hasExpandedSection || settings.Route.BASIC.contains(currentRoute);
+    return !hasExpandedSection || settings.routes.BASIC.contains(currentRoute);
   },
 
   /**
@@ -226,7 +287,8 @@ Polymer({
   showAdvancedPage_: function(
       currentRoute, inSearchMode, hasExpandedSection, advancedToggleExpanded) {
     return hasExpandedSection ?
-        settings.Route.ADVANCED.contains(currentRoute) :
+        (settings.routes.ADVANCED &&
+         settings.routes.ADVANCED.contains(currentRoute)) :
         advancedToggleExpanded || inSearchMode;
   },
 

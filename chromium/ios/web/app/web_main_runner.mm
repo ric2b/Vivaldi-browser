@@ -4,15 +4,14 @@
 
 #include "ios/web/public/app/web_main_runner.h"
 
-#include "base/at_exit.h"
-#include "base/command_line.h"
 #include "base/i18n/icu_util.h"
 #include "base/logging.h"
 #include "base/macros.h"
-#include "base/metrics/statistics_recorder.h"
 #include "ios/web/app/web_main_loop.h"
+#include "ios/web/public/global_state/ios_global_state.h"
 #include "ios/web/public/url_schemes.h"
 #import "ios/web/public/web_client.h"
+#include "mojo/edk/embedder/embedder.h"
 #include "ui/base/ui_base_paths.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -35,22 +34,25 @@ class WebMainRunnerImpl : public WebMainRunner {
     }
   }
 
-  int Initialize(const WebMainParams& params) override {
+  int Initialize(WebMainParams params) override {
     ////////////////////////////////////////////////////////////////////////
     // ContentMainRunnerImpl::Initialize()
     //
     is_initialized_ = true;
     delegate_ = params.delegate;
 
-    if (params.register_exit_manager) {
-      exit_manager_.reset(new base::AtExitManager);
-    }
+    ios_global_state::CreateParams create_params;
+    create_params.install_at_exit_manager = params.register_exit_manager;
+    create_params.argc = params.argc;
+    create_params.argv = params.argv;
+    ios_global_state::Create(create_params);
 
-    base::CommandLine::Init(params.argc, params.argv);
     if (delegate_) {
       delegate_->BasicStartupComplete();
     }
     completed_basic_startup_ = true;
+
+    mojo::edk::Init();
 
     // TODO(rohitrao): Should we instead require that all embedders call
     // SetWebClient()?
@@ -64,13 +66,13 @@ class WebMainRunnerImpl : public WebMainRunner {
 
     ////////////////////////////////////////////////////////////
     //  BrowserMainRunnerImpl::Initialize()
-    base::StatisticsRecorder::Initialize();
 
     main_loop_.reset(new WebMainLoop());
     main_loop_->Init();
     main_loop_->EarlyInitialization();
     main_loop_->MainMessageLoopStart();
-    main_loop_->CreateStartupTasks();
+    main_loop_->CreateStartupTasks(
+        std::move(params.get_task_scheduler_init_params_callback));
     int result_code = main_loop_->GetResultCode();
     if (result_code > 0)
       return result_code;
@@ -95,7 +97,8 @@ class WebMainRunnerImpl : public WebMainRunner {
       delegate_->ProcessExiting();
     }
 
-    exit_manager_.reset(nullptr);
+    ios_global_state::DestroyAtExitManager();
+
     delegate_ = nullptr;
     is_shutdown_ = true;
   }
@@ -116,7 +119,6 @@ class WebMainRunnerImpl : public WebMainRunner {
   // Used if the embedder doesn't set one.
   WebClient empty_web_client_;
 
-  std::unique_ptr<base::AtExitManager> exit_manager_;
   std::unique_ptr<WebMainLoop> main_loop_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMainRunnerImpl);

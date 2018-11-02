@@ -6,13 +6,13 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/ElementVisibilityObserver.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/ContentSettingsClient.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLMediaElement.h"
 #include "core/html/media/AutoplayUmaHelper.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "public/platform/WebMediaPlayer.h"
 
 namespace blink {
@@ -39,8 +39,8 @@ bool IsDocumentWhitelisted(const Document& document) {
 }
 
 // Return true if and only if the document settings specifies media playback
-// requires user gesture.
-bool ComputeLockedPendingUserGesture(const Document& document) {
+// requires user gesture on the element.
+bool ComputeLockPendingUserGestureRequired(const Document& document) {
   switch (AutoplayPolicy::GetAutoplayPolicyForDocument(document)) {
     case AutoplayPolicy::Type::kNoUserGestureRequired:
       return false;
@@ -48,6 +48,11 @@ bool ComputeLockedPendingUserGesture(const Document& document) {
       return IsDocumentCrossOrigin(document);
     case AutoplayPolicy::Type::kUserGestureRequired:
       return true;
+    // kDocumentUserActivationRequired policy does not imply that a user gesture
+    // is required on the element but instead requires a user gesture on the
+    // document, therefore the element is not locked.
+    case AutoplayPolicy::Type::kDocumentUserActivationRequired:
+      return false;
   }
 
   NOTREACHED();
@@ -68,6 +73,14 @@ AutoplayPolicy::Type AutoplayPolicy::GetAutoplayPolicyForDocument(
   return document.GetSettings()->GetAutoplayPolicy();
 }
 
+// static
+bool AutoplayPolicy::IsDocumentAllowedToPlay(const Document& document) {
+  if (!document.GetFrame())
+    return false;
+  return document.GetFrame()->HasReceivedUserGesture() ||
+         document.GetFrame()->HasReceivedUserGestureBeforeNavigation();
+}
+
 AutoplayPolicy::AutoplayPolicy(HTMLMediaElement* element)
     : locked_pending_user_gesture_(false),
       locked_pending_user_gesture_if_cross_origin_experiment_enabled_(true),
@@ -75,7 +88,7 @@ AutoplayPolicy::AutoplayPolicy(HTMLMediaElement* element)
       autoplay_visibility_observer_(nullptr),
       autoplay_uma_helper_(AutoplayUmaHelper::Create(element)) {
   locked_pending_user_gesture_ =
-      ComputeLockedPendingUserGesture(element->GetDocument());
+      ComputeLockPendingUserGestureRequired(element->GetDocument());
   locked_pending_user_gesture_if_cross_origin_experiment_enabled_ =
       IsDocumentCrossOrigin(element->GetDocument());
 }
@@ -88,9 +101,9 @@ void AutoplayPolicy::DidMoveToNewDocument(Document& old_document) {
   // If any experiment is enabled, then we want to enable a user gesture by
   // default, otherwise the experiment does nothing.
   bool old_document_requires_user_gesture =
-      ComputeLockedPendingUserGesture(old_document);
+      ComputeLockPendingUserGestureRequired(old_document);
   bool new_document_requires_user_gesture =
-      ComputeLockedPendingUserGesture(element_->GetDocument());
+      ComputeLockPendingUserGestureRequired(element_->GetDocument());
   if (new_document_requires_user_gesture && !old_document_requires_user_gesture)
     locked_pending_user_gesture_ = true;
 
@@ -103,7 +116,7 @@ void AutoplayPolicy::DidMoveToNewDocument(Document& old_document) {
 
 bool AutoplayPolicy::IsEligibleForAutoplayMuted() const {
   return element_->IsHTMLVideoElement() && element_->muted() &&
-         RuntimeEnabledFeatures::autoplayMutedVideosEnabled();
+         RuntimeEnabledFeatures::AutoplayMutedVideosEnabled();
 }
 
 void AutoplayPolicy::StartAutoplayMutedWhenVisible() {
@@ -206,15 +219,28 @@ bool AutoplayPolicy::IsAutoplayingMuted() const {
 }
 
 bool AutoplayPolicy::IsAutoplayingMutedInternal(bool muted) const {
+  return !element_->paused() && IsOrWillBeAutoplayingMutedInternal(muted);
+}
+
+bool AutoplayPolicy::IsOrWillBeAutoplayingMuted() const {
+  return IsOrWillBeAutoplayingMutedInternal(element_->muted());
+}
+
+bool AutoplayPolicy::IsOrWillBeAutoplayingMutedInternal(bool muted) const {
   if (!element_->IsHTMLVideoElement() ||
-      !RuntimeEnabledFeatures::autoplayMutedVideosEnabled()) {
+      !RuntimeEnabledFeatures::AutoplayMutedVideosEnabled()) {
     return false;
   }
 
-  return !element_->paused() && muted && IsLockedPendingUserGesture();
+  return muted && IsLockedPendingUserGesture();
 }
 
 bool AutoplayPolicy::IsLockedPendingUserGesture() const {
+  if (GetAutoplayPolicyForDocument(element_->GetDocument()) ==
+      AutoplayPolicy::Type::kDocumentUserActivationRequired) {
+    return !IsDocumentAllowedToPlay(element_->GetDocument());
+  }
+
   return locked_pending_user_gesture_;
 }
 
@@ -231,7 +257,7 @@ void AutoplayPolicy::UnlockUserGesture() {
 }
 
 bool AutoplayPolicy::IsGestureNeededForPlayback() const {
-  if (!locked_pending_user_gesture_)
+  if (!IsLockedPendingUserGesture())
     return false;
 
   return IsGestureNeededForPlaybackIfPendingUserGestureIsLocked();
@@ -248,7 +274,7 @@ bool AutoplayPolicy::IsGestureNeededForPlaybackIfPendingUserGestureIsLocked()
   // - Preload was not disabled (low end devices);
   // - Autoplay is enabled in settings;
   if (element_->IsHTMLVideoElement() && element_->muted() &&
-      RuntimeEnabledFeatures::autoplayMutedVideosEnabled() &&
+      RuntimeEnabledFeatures::AutoplayMutedVideosEnabled() &&
       !(element_->GetDocument().GetSettings() &&
         element_->GetDocument().GetSettings()->GetDataSaverEnabled()) &&
       !(element_->GetDocument().GetSettings() &&

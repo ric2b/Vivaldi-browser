@@ -106,7 +106,13 @@ IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest, Pause) {
   MakeTypicalCall("testPauseAndRecorderState();", kMediaRecorderHtmlFile);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest, PauseStop) {
+// TODO(crbug.com/571389): Flaky on TSAN bots.
+#if defined(OS_LINUX)
+#define MAYBE_PauseStop DISABLED_PauseStop
+#else
+#define MAYBE_PauseStop PauseStop
+#endif
+IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest, MAYBE_PauseStop) {
   MakeTypicalCall("testPauseStopAndRecorderState();", kMediaRecorderHtmlFile);
 }
 
@@ -116,7 +122,14 @@ IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest,
                   kMediaRecorderHtmlFile);
 }
 
-IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest, IllegalPauseThrowsDOMError) {
+// TODO (crbug.com/736268): Flaky on Linux TSan bots.
+#if defined(OS_LINUX)
+#define MAYBE_IllegalPauseThrowsDOMError DISABLED_IllegalPauseThrowsDOMError
+#else
+#define MAYBE_IllegalPauseThrowsDOMError IllegalPauseThrowsDOMError
+#endif
+IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest,
+                       MAYBE_IllegalPauseThrowsDOMError) {
   MakeTypicalCall("testIllegalPauseThrowsDOMError();", kMediaRecorderHtmlFile);
 }
 
@@ -147,8 +160,15 @@ IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest,
                   kMediaRecorderHtmlFile);
 }
 
+// Flaky on Linux Tsan (crbug.com/736268)
+#if defined(OS_LINUX)
+#define MAYBE_IllegalRequestDataThrowsDOMError \
+  DISABLED_IllegalRequestDataThrowsDOMError
+#else
+#define MAYBE_IllegalRequestDataThrowsDOMError IllegalRequestDataThrowsDOMError
+#endif
 IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest,
-                       IllegalRequestDataThrowsDOMError) {
+                       MAYBE_IllegalRequestDataThrowsDOMError) {
   MakeTypicalCall("testIllegalRequestDataThrowsDOMError();",
                   kMediaRecorderHtmlFile);
 }
@@ -174,8 +194,16 @@ IN_PROC_BROWSER_TEST_P(WebRtcMediaRecorderTest, MAYBE_PeerConnection) {
                   kMediaRecorderHtmlFile);
 }
 
+// Flaky on Linux Tsan (crbug.com/736268)
+#if defined(OS_LINUX)
+#define MAYBE_AddingTrackToMediaStreamFiresErrorEvent \
+  DISABLED_AddingTrackToMediaStreamFiresErrorEvent
+#else
+#define MAYBE_AddingTrackToMediaStreamFiresErrorEvent \
+  AddingTrackToMediaStreamFiresErrorEvent
+#endif
 IN_PROC_BROWSER_TEST_F(WebRtcMediaRecorderTest,
-                       AddingTrackToMediaStreamFiresErrorEvent) {
+                       MAYBE_AddingTrackToMediaStreamFiresErrorEvent) {
   MakeTypicalCall("testAddingTrackToMediaStreamFiresErrorEvent();",
                   kMediaRecorderHtmlFile);
 }

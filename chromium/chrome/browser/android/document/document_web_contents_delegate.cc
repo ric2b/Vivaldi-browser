@@ -27,10 +27,6 @@ void DocumentWebContentsDelegate::AttachContents(
   web_contents->SetDelegate(this);
 }
 
-bool DocumentWebContentsDelegate::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
 void DocumentWebContentsDelegate::AddNewContents(
     content::WebContents* source,
     content::WebContents* new_contents,
@@ -47,6 +43,7 @@ void DocumentWebContentsDelegate::CloseContents(content::WebContents* source) {
 
 bool DocumentWebContentsDelegate::ShouldCreateWebContents(
     content::WebContents* web_contents,
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     int32_t route_id,
     int32_t main_frame_route_id,

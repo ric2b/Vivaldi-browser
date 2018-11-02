@@ -20,4 +20,8 @@ bool LayoutTestContentClient::CanSendWhileSwappedOut(
   }
 }
 
+bool LayoutTestContentClient::IsSupplementarySiteIsolationModeEnabled() {
+  return true;
+}
+
 }  // namespace content

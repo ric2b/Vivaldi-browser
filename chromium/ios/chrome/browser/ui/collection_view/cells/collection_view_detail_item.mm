@@ -7,7 +7,7 @@
 #include <algorithm>
 
 #import "ios/third_party/material_components_ios/src/components/Palettes/src/MaterialPalettes.h"
-#import "ios/third_party/material_roboto_font_loader_ios/src/src/MaterialRobotoFontLoader.h"
+#import "ios/third_party/material_components_ios/src/components/Typography/src/MaterialTypography.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -18,6 +18,9 @@ namespace {
 // Padding used on the leading and trailing edges of the cell and between the
 // two labels.
 const CGFloat kHorizontalPadding = 16;
+
+// Padding used on the top and bottom edges of the cell.
+const CGFloat kVerticalPadding = 16;
 
 // Minimum proportion of the available width to guarantee to the main and detail
 // labels.
@@ -69,8 +72,7 @@ const CGFloat kMinDetailTextWidthRatio = 0.25f;
     _textLabel.backgroundColor = [UIColor clearColor];
     [contentView addSubview:_textLabel];
 
-    _textLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] mediumFontOfSize:14];
+    _textLabel.font = [[MDCTypography fontLoader] mediumFontOfSize:14];
     _textLabel.textColor = [[MDCPalette greyPalette] tint900];
 
     _detailTextLabel = [[UILabel alloc] init];
@@ -78,8 +80,7 @@ const CGFloat kMinDetailTextWidthRatio = 0.25f;
     _detailTextLabel.backgroundColor = [UIColor clearColor];
     [contentView addSubview:_detailTextLabel];
 
-    _detailTextLabel.font =
-        [[MDFRobotoFontLoader sharedInstance] regularFontOfSize:14];
+    _detailTextLabel.font = [[MDCTypography fontLoader] regularFontOfSize:14];
     _detailTextLabel.textColor = [[MDCPalette greyPalette] tint500];
 
     // Set up the width constraints. They are activated here and updated in
@@ -98,10 +99,12 @@ const CGFloat kMinDetailTextWidthRatio = 0.25f;
           constraintEqualToAnchor:contentView.trailingAnchor
                          constant:-kHorizontalPadding],
 
-      // Center the text label vertically and align the baselines of the two
-      // text labels.
-      [_textLabel.centerYAnchor
-          constraintEqualToAnchor:contentView.centerYAnchor],
+      // Set up the top and bottom constraints for |_textLabel| and align the
+      // baselines of the two text labels.
+      [_textLabel.topAnchor constraintEqualToAnchor:contentView.topAnchor
+                                           constant:kVerticalPadding],
+      [_textLabel.bottomAnchor constraintEqualToAnchor:contentView.bottomAnchor
+                                              constant:-kVerticalPadding],
       [_detailTextLabel.firstBaselineAnchor
           constraintEqualToAnchor:_textLabel.firstBaselineAnchor],
 

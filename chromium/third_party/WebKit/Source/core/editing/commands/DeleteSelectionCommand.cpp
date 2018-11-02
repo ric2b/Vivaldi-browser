@@ -47,9 +47,10 @@ namespace blink {
 using namespace HTMLNames;
 
 static bool IsTableCellEmpty(Node* cell) {
+  DCHECK(cell);
   DCHECK(IsTableCell(cell)) << cell;
-  return VisiblePosition::FirstPositionInNode(cell).DeepEquivalent() ==
-         VisiblePosition::LastPositionInNode(cell).DeepEquivalent();
+  return VisiblePosition::FirstPositionInNode(*cell).DeepEquivalent() ==
+         VisiblePosition::LastPositionInNode(*cell).DeepEquivalent();
 }
 
 static bool IsTableRowEmpty(Node* row) {
@@ -121,15 +122,15 @@ void DeleteSelectionCommand::InitializeStartEnd(Position& start,
   HTMLElement* end_special_container = nullptr;
 
   start = selection_to_delete_.Start();
-  end = selection_to_delete_.end();
+  end = selection_to_delete_.End();
 
   // For HRs, we'll get a position at (HR,1) when hitting delete from the
   // beginning of the previous line, or (HR,0) when forward deleting, but in
   // these cases, we want to delete it, so manually expand the selection
   if (isHTMLHRElement(*start.AnchorNode()))
-    start = Position::BeforeNode(start.AnchorNode());
+    start = Position::BeforeNode(*start.AnchorNode());
   else if (isHTMLHRElement(*end.AnchorNode()))
-    end = Position::AfterNode(end.AnchorNode());
+    end = Position::AfterNode(*end.AnchorNode());
 
   // FIXME: This is only used so that moveParagraphs can avoid the bugs in
   // special element expansion.
@@ -394,11 +395,12 @@ void DeleteSelectionCommand::SaveTypingStyleState() {
   // of start(). We'll use this later in computeTypingStyleAfterDelete if we end
   // up outside of a Mail blockquote
   if (EnclosingNodeOfType(selection_to_delete_.Start(),
-                          IsMailHTMLBlockquoteElement))
+                          IsMailHTMLBlockquoteElement)) {
     delete_into_blockquote_style_ =
-        EditingStyle::Create(selection_to_delete_.end());
-  else
-    delete_into_blockquote_style_ = nullptr;
+        EditingStyle::Create(selection_to_delete_.End());
+    return;
+  }
+  delete_into_blockquote_style_ = nullptr;
 }
 
 bool DeleteSelectionCommand::HandleSpecialCaseBRDelete(
@@ -430,9 +432,9 @@ bool DeleteSelectionCommand::HandleSpecialCaseBRDelete(
   if (upstream_start_is_br && downstream_start_is_br) {
     GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
     if (!(IsStartOfBlock(
-              VisiblePosition::BeforeNode(node_after_upstream_start)) &&
+              VisiblePosition::BeforeNode(*node_after_upstream_start)) &&
           IsEndOfBlock(
-              VisiblePosition::AfterNode(node_after_upstream_start)))) {
+              VisiblePosition::AfterNode(*node_after_upstream_start)))) {
       starts_at_empty_line_ = true;
       ending_position_ = downstream_end_;
     }
@@ -512,13 +514,13 @@ void DeleteSelectionCommand::RemoveNode(
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
   if (node == start_block_) {
     VisiblePosition previous = PreviousPositionOf(
-        VisiblePosition::FirstPositionInNode(start_block_.Get()));
+        VisiblePosition::FirstPositionInNode(*start_block_.Get()));
     if (previous.IsNotNull() && !IsEndOfBlock(previous))
       need_placeholder_ = true;
   }
   if (node == end_block_) {
     VisiblePosition next =
-        NextPositionOf(VisiblePosition::LastPositionInNode(end_block_.Get()));
+        NextPositionOf(VisiblePosition::LastPositionInNode(*end_block_.Get()));
     if (next.IsNotNull() && !IsStartOfBlock(next))
       need_placeholder_ = true;
   }
@@ -1073,7 +1075,7 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
   GetDocument().UpdateStyleAndLayoutIgnorePendingStylesheets();
 
   Position downstream_end =
-      MostForwardCaretPosition(selection_to_delete_.end());
+      MostForwardCaretPosition(selection_to_delete_.End());
   bool root_will_stay_open_without_placeholder =
       downstream_end.ComputeContainerNode() ==
           RootEditableElement(*downstream_end.ComputeContainerNode()) ||
@@ -1094,7 +1096,7 @@ void DeleteSelectionCommand::DoApply(EditingState* editing_state) {
     // open empty cells, but that's handled elsewhere).
     if (Element* table =
             TableElementJustAfter(selection_to_delete_.VisibleStart())) {
-      if (selection_to_delete_.end().AnchorNode()->IsDescendantOf(table))
+      if (selection_to_delete_.End().AnchorNode()->IsDescendantOf(table))
         need_placeholder_ = false;
     }
   }

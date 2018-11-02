@@ -145,9 +145,11 @@
 // <include src="quick_view_uma.js">
 // <include src="scan_controller.js">
 // <include src="search_controller.js">
+// <include src="selection_menu_controller.js">
 // <include src="share_client.js">
 // <include src="spinner_controller.js">
 // <include src="task_controller.js">
+// <include src="task_history.js">
 // <include src="toolbar_controller.js">
 // <include src="thumbnail_loader.js">
 // <include src="list_thumbnail_loader.js">
@@ -166,6 +168,7 @@
 // <include src="ui/file_list_selection_model.js">
 // <include src="ui/file_table.js">
 // <include src="ui/file_table_list.js">
+// <include src="ui/file_tap_handler.js">
 // <include src="ui/files_alert_dialog.js">
 // <include src="ui/files_confirm_dialog.js">
 // <include src="ui/files_menu.js">

@@ -85,7 +85,8 @@ class InterstitialPageImpl::InterstitialPageRVHDelegateView
                      const DragEventSourceInfo& event_info,
                      RenderWidgetHostImpl* source_rwh) override;
   void UpdateDragCursor(WebDragOperation operation) override;
-  void GotFocus() override;
+  void GotFocus(RenderWidgetHostImpl* render_widget_host) override;
+  void LostFocus(RenderWidgetHostImpl* render_widget_host) override;
   void TakeFocus(bool reverse) override;
   virtual void OnFindReply(int request_id,
                            int number_of_matches,
@@ -289,27 +290,17 @@ void InterstitialPageImpl::Hide() {
     old_view->Show();
   }
 
-  // If the focus was on the interstitial, let's keep it to the page.
-  // (Note that in unit-tests the RVH may not have a view).
-  if (render_view_host_->GetWidget()->GetView() &&
-      render_view_host_->GetWidget()->GetView()->HasFocus() &&
-      controller_->delegate()->GetRenderViewHost()->GetWidget()->GetView()) {
-    controller_->delegate()
-        ->GetRenderViewHost()
-        ->GetWidget()
-        ->GetView()
-        ->Focus();
-  }
-
   // Delete this and call Shutdown on the RVH asynchronously, as we may have
   // been called from a RVH delegate method, and we can't delete the RVH out
   // from under itself.
   base::ThreadTaskRunnerHandle::Get()->PostNonNestableTask(
       FROM_HERE, base::Bind(&InterstitialPageImpl::Shutdown,
                             weak_ptr_factory_.GetWeakPtr()));
+  bool has_focus = render_view_host_->GetWidget()->GetView() &&
+                   render_view_host_->GetWidget()->GetView()->HasFocus();
   render_view_host_ = NULL;
   frame_tree_->root()->ResetForNewProcess();
-  controller_->delegate()->DetachInterstitialPage();
+  controller_->delegate()->DetachInterstitialPage(has_focus);
   // Let's revert to the original title if necessary.
   NavigationEntry* entry = controller_->GetVisibleEntry();
   if (entry && !new_navigation_ && should_revert_web_contents_title_)
@@ -451,9 +442,20 @@ void InterstitialPageImpl::Cut() {
   if (!focused_node)
     return;
 
-  focused_node->current_frame_host()->Send(
-      new InputMsg_Cut(focused_node->current_frame_host()->GetRoutingID()));
+  focused_node->current_frame_host()->GetFrameInputHandler()->Cut();
   RecordAction(base::UserMetricsAction("Cut"));
+}
+
+void InterstitialPageImpl::ExecuteEditCommand(
+    const std::string& command,
+    const base::Optional<base::string16>& value) {
+  FrameTreeNode* focused_node = frame_tree_->GetFocusedFrame();
+  if (!focused_node)
+    return;
+
+  focused_node->current_frame_host()
+      ->GetFrameInputHandler()
+      ->ExecuteEditCommand(command, value);
 }
 
 void InterstitialPageImpl::Copy() {
@@ -461,8 +463,7 @@ void InterstitialPageImpl::Copy() {
   if (!focused_node)
     return;
 
-  focused_node->current_frame_host()->Send(
-      new InputMsg_Copy(focused_node->current_frame_host()->GetRoutingID()));
+  focused_node->current_frame_host()->GetFrameInputHandler()->Copy();
   RecordAction(base::UserMetricsAction("Copy"));
 }
 
@@ -471,8 +472,7 @@ void InterstitialPageImpl::Paste() {
   if (!focused_node)
     return;
 
-  focused_node->current_frame_host()->Send(
-      new InputMsg_Paste(focused_node->current_frame_host()->GetRoutingID()));
+  focused_node->current_frame_host()->GetFrameInputHandler()->Paste();
   RecordAction(base::UserMetricsAction("Paste"));
 }
 
@@ -481,8 +481,7 @@ void InterstitialPageImpl::SelectAll() {
   if (!focused_node)
     return;
 
-  focused_node->current_frame_host()->Send(new InputMsg_SelectAll(
-      focused_node->current_frame_host()->GetRoutingID()));
+  focused_node->current_frame_host()->GetFrameInputHandler()->SelectAll();
   RecordAction(base::UserMetricsAction("SelectAll"));
 }
 
@@ -788,12 +787,14 @@ void InterstitialPageImpl::SetFocusedFrame(FrameTreeNode* node,
 
 void InterstitialPageImpl::CreateNewWidget(int32_t render_process_id,
                                            int32_t route_id,
+                                           mojom::WidgetPtr widget,
                                            blink::WebPopupType popup_type) {
   NOTREACHED() << "InterstitialPage does not support showing drop-downs.";
 }
 
 void InterstitialPageImpl::CreateNewFullscreenWidget(int32_t render_process_id,
-                                                     int32_t route_id) {
+                                                     int32_t route_id,
+                                                     mojom::WidgetPtr widget) {
   NOTREACHED()
       << "InterstitialPage does not support showing full screen popups.";
 }
@@ -948,10 +949,22 @@ void InterstitialPageImpl::InterstitialPageRVHDelegateView::UpdateDragCursor(
   NOTREACHED() << "InterstitialPage does not support dragging yet.";
 }
 
-void InterstitialPageImpl::InterstitialPageRVHDelegateView::GotFocus() {
+void InterstitialPageImpl::InterstitialPageRVHDelegateView::GotFocus(
+    RenderWidgetHostImpl* render_widget_host) {
   WebContents* web_contents = interstitial_page_->web_contents();
-  if (web_contents)
-    static_cast<WebContentsImpl*>(web_contents)->NotifyWebContentsFocused();
+  if (web_contents) {
+    static_cast<WebContentsImpl*>(web_contents)
+        ->NotifyWebContentsFocused(render_widget_host);
+  }
+}
+
+void InterstitialPageImpl::InterstitialPageRVHDelegateView::LostFocus(
+    RenderWidgetHostImpl* render_widget_host) {
+  WebContents* web_contents = interstitial_page_->web_contents();
+  if (web_contents) {
+    static_cast<WebContentsImpl*>(web_contents)
+        ->NotifyWebContentsLostFocus(render_widget_host);
+  }
 }
 
 void InterstitialPageImpl::InterstitialPageRVHDelegateView::TakeFocus(

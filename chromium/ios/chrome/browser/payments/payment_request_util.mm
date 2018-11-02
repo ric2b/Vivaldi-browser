@@ -9,8 +9,12 @@
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/autofill/core/browser/autofill_profile.h"
+#include "components/autofill/core/browser/credit_card.h"
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "components/autofill/core/browser/validation.h"
+#include "components/payments/core/payment_instrument.h"
+#include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/strings_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "ios/chrome/browser/application_context.h"
@@ -26,9 +30,10 @@ namespace payment_request_util {
 
 NSString* GetNameLabelFromAutofillProfile(
     const autofill::AutofillProfile& profile) {
-  return base::SysUTF16ToNSString(
+  base::string16 label =
       profile.GetInfo(autofill::AutofillType(autofill::NAME_FULL),
-                      GetApplicationContext()->GetApplicationLocale()));
+                      GetApplicationContext()->GetApplicationLocale());
+  return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
 }
 
 NSString* GetShippingAddressLabelFromAutofillProfile(
@@ -47,13 +52,32 @@ NSString* GetBillingAddressLabelFromAutofillProfile(
 
 NSString* GetPhoneNumberLabelFromAutofillProfile(
     const autofill::AutofillProfile& profile) {
-  base::string16 label = profile.GetRawInfo(autofill::PHONE_HOME_WHOLE_NUMBER);
+  base::string16 label = payments::data_util::GetFormattedPhoneNumberForDisplay(
+      profile, GetApplicationContext()->GetApplicationLocale());
   return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
 }
 
 NSString* GetEmailLabelFromAutofillProfile(
     const autofill::AutofillProfile& profile) {
-  base::string16 label = profile.GetRawInfo(autofill::EMAIL_ADDRESS);
+  base::string16 label =
+      profile.GetInfo(autofill::AutofillType(autofill::EMAIL_ADDRESS),
+                      GetApplicationContext()->GetApplicationLocale());
+  return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
+}
+
+NSString* GetAddressNotificationLabelFromAutofillProfile(
+    const payments::PaymentRequest& payment_request,
+    const autofill::AutofillProfile& profile) {
+  base::string16 label =
+      payment_request.profile_comparator()->GetStringForMissingShippingFields(
+          profile);
+  return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
+}
+
+NSString* GetPaymentMethodNotificationLabelFromPaymentMethod(
+    const payments::PaymentInstrument& payment_method,
+    const std::vector<autofill::AutofillProfile*>& billing_profiles) {
+  base::string16 label = payment_method.GetMissingInfoLabel();
   return !label.empty() ? base::SysUTF16ToNSString(label) : nil;
 }
 
@@ -72,7 +96,7 @@ NSString* GetShippingSectionTitle(payments::PaymentShippingType shipping_type) {
 }
 
 NSString* GetShippingAddressSelectorErrorMessage(
-    const PaymentRequest& payment_request) {
+    const payments::PaymentRequest& payment_request) {
   if (!payment_request.payment_details().error.empty())
     return base::SysUTF16ToNSString(payment_request.payment_details().error);
 
@@ -90,7 +114,7 @@ NSString* GetShippingAddressSelectorErrorMessage(
 }
 
 NSString* GetShippingOptionSelectorErrorMessage(
-    const PaymentRequest& payment_request) {
+    const payments::PaymentRequest& payment_request) {
   if (!payment_request.payment_details().error.empty())
     return base::SysUTF16ToNSString(payment_request.payment_details().error);
 
@@ -105,6 +129,15 @@ NSString* GetShippingOptionSelectorErrorMessage(
       NOTREACHED();
       return nil;
   }
+}
+
+NSString* GetContactNotificationLabelFromAutofillProfile(
+    const payments::PaymentRequest& payment_request,
+    const autofill::AutofillProfile& profile) {
+  const base::string16 notification =
+      payment_request.profile_comparator()->GetStringForMissingContactFields(
+          profile);
+  return !notification.empty() ? base::SysUTF16ToNSString(notification) : nil;
 }
 
 }  // namespace payment_request_util

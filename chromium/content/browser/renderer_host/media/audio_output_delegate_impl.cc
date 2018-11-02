@@ -92,18 +92,20 @@ std::unique_ptr<media::AudioOutputDelegate> AudioOutputDelegateImpl::Create(
     int render_process_id,
     const media::AudioParameters& params,
     const std::string& output_device_id) {
-  auto reader = AudioSyncReader::Create(params);
+  auto socket = base::MakeUnique<base::CancelableSyncSocket>();
+  auto reader = AudioSyncReader::Create(params, socket.get());
   if (!reader)
     return nullptr;
 
   return base::MakeUnique<AudioOutputDelegateImpl>(
-      std::move(reader), handler, audio_manager, std::move(audio_log),
-      mirroring_manager, media_observer, stream_id, render_frame_id,
-      render_process_id, params, output_device_id);
+      std::move(reader), std::move(socket), handler, audio_manager,
+      std::move(audio_log), mirroring_manager, media_observer, stream_id,
+      render_frame_id, render_process_id, params, output_device_id);
 }
 
 AudioOutputDelegateImpl::AudioOutputDelegateImpl(
     std::unique_ptr<AudioSyncReader> reader,
+    std::unique_ptr<base::CancelableSyncSocket> foreign_socket,
     EventHandler* handler,
     media::AudioManager* audio_manager,
     std::unique_ptr<media::AudioLog> audio_log,
@@ -117,6 +119,7 @@ AudioOutputDelegateImpl::AudioOutputDelegateImpl(
     : subscriber_(handler),
       audio_log_(std::move(audio_log)),
       reader_(std::move(reader)),
+      foreign_socket_(std::move(foreign_socket)),
       mirroring_manager_(mirroring_manager),
       stream_id_(stream_id),
       render_frame_id_(render_frame_id),
@@ -133,7 +136,6 @@ AudioOutputDelegateImpl::AudioOutputDelegateImpl(
   // safe.
   controller_event_handler_ = base::MakeUnique<ControllerEventHandler>(
       weak_factory_.GetWeakPtr(), stream_id_);
-  audio_log_->OnCreated(stream_id, params, output_device_id);
   controller_ = media::AudioOutputController::Create(
       audio_manager, controller_event_handler_.get(), params, output_device_id,
       reader_.get());
@@ -203,7 +205,7 @@ void AudioOutputDelegateImpl::OnSetVolume(double volume) {
 void AudioOutputDelegateImpl::SendCreatedNotification() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   subscriber_->OnStreamCreated(stream_id_, reader_->shared_memory(),
-                               reader_->TakeForeignSocket());
+                               std::move(foreign_socket_));
 }
 
 void AudioOutputDelegateImpl::UpdatePlayingState(bool playing) {

@@ -12,9 +12,9 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
-#include "extensions/browser/api/api_resource_manager.h"
+#include "components/cast_channel/cast_channel_enum.h"
+#include "components/cast_channel/cast_socket.h"
 #include "extensions/browser/api/async_api_function.h"
-#include "extensions/browser/api/cast_channel/cast_socket.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/common/api/cast_channel.h"
 
@@ -28,17 +28,13 @@ namespace net {
 class IPEndPoint;
 }
 
+namespace cast_channel {
+class CastSocketService;
+}  // namespace cast_channel
+
 namespace extensions {
 
 struct Event;
-
-namespace api {
-namespace cast_channel {
-class Logger;
-}  // namespace cast_channel
-}  // namespace api
-
-namespace cast_channel = api::cast_channel;
 
 class CastChannelAPI : public BrowserContextKeyedAPI,
                        public base::SupportsWeakPtr<CastChannelAPI> {
@@ -49,14 +45,6 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<CastChannelAPI>* GetFactoryInstance();
-
-  // Returns a pointer to the Logger member variable.
-  // TODO(imcheng): Consider whether it is possible for this class to own the
-  // CastSockets and make this class the sole owner of Logger.
-  // Alternatively,
-  // consider making Logger not ref-counted by passing a weak
-  // reference of Logger to the CastSockets instead.
-  scoped_refptr<cast_channel::Logger> GetLogger();
 
   // Sets the CastSocket instance to be used for testing.
   void SetSocketForTest(
@@ -69,20 +57,51 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
   // Returns the API browser context.
   content::BrowserContext* GetBrowserContext() const;
 
-  // Sets injected ping timeout timer for testing.
-  void SetPingTimeoutTimerForTest(std::unique_ptr<base::Timer> timer);
-
-  // Gets the injected ping timeout timer, if set.
-  // Returns a null scoped ptr if there is no injected timer.
-  std::unique_ptr<base::Timer> GetInjectedTimeoutTimerForTest();
-
   // Sends an event to the extension's EventRouter, if it exists.
   void SendEvent(const std::string& extension_id, std::unique_ptr<Event> event);
+
+  // Registers |extension_id| with |observer_| and returns |observer_|.
+  cast_channel::CastSocket::Observer* GetObserver(
+      const std::string& extension_id,
+      scoped_refptr<cast_channel::Logger> logger);
 
  private:
   friend class BrowserContextKeyedAPIFactory<CastChannelAPI>;
   friend class ::CastChannelAPITest;
   friend class CastTransportDelegate;
+
+  // Defines a callback used to send events to the extension's
+  // EventRouter.
+  //     Parameter #0 is a unique pointer to the event payload.
+  using EventDispatchCallback = base::Callback<void(std::unique_ptr<Event>)>;
+
+  // Receives incoming messages and errors and provides additional API context.
+  class CastMessageHandler : public cast_channel::CastSocket::Observer {
+   public:
+    CastMessageHandler(const EventDispatchCallback& ui_dispatch_cb,
+                       scoped_refptr<cast_channel::Logger> logger);
+    ~CastMessageHandler() override;
+
+    // CastSocket::Observer implementation.
+    void OnError(const cast_channel::CastSocket& socket,
+                 cast_channel::ChannelError error_state) override;
+    void OnMessage(const cast_channel::CastSocket& socket,
+                   const cast_channel::CastMessage& message) override;
+
+    void RegisterExtensionId(const std::string& extension_id);
+
+   private:
+    // Callback for sending events to the extension.
+    // Should be bound to a weak pointer, to prevent any use-after-free
+    // conditions.
+    EventDispatchCallback const ui_dispatch_cb_;
+    // Logger object for reporting error details.
+    scoped_refptr<cast_channel::Logger> logger_;
+
+    THREAD_CHECKER(thread_checker_);
+
+    DISALLOW_COPY_AND_ASSIGN(CastMessageHandler);
+  };
 
   ~CastChannelAPI() override;
 
@@ -90,9 +109,10 @@ class CastChannelAPI : public BrowserContextKeyedAPI,
   static const char* service_name() { return "CastChannelAPI"; }
 
   content::BrowserContext* const browser_context_;
-  scoped_refptr<cast_channel::Logger> logger_;
   std::unique_ptr<cast_channel::CastSocket> socket_for_test_;
-  std::unique_ptr<base::Timer> injected_timeout_timer_;
+  // Created and destroyed on the IO thread.
+  std::unique_ptr<CastMessageHandler, content::BrowserThread::DeleteOnIOThread>
+      observer_;
 
   DISALLOW_COPY_AND_ASSIGN(CastChannelAPI);
 };
@@ -102,27 +122,11 @@ class CastChannelAsyncApiFunction : public AsyncApiFunction {
   CastChannelAsyncApiFunction();
 
  protected:
-  typedef ApiResourceManager<cast_channel::CastSocket>::ApiResourceData
-      SocketData;
-
   ~CastChannelAsyncApiFunction() override;
 
   // AsyncApiFunction:
   bool PrePrepare() override;
   bool Respond() override;
-
-  // Returns the socket corresponding to |channel_id| if one exists.  Otherwise,
-  // sets the function result with CHANNEL_ERROR_INVALID_CHANNEL_ID, completes
-  // the function, and returns null.
-  cast_channel::CastSocket* GetSocketOrCompleteWithError(int channel_id);
-
-  // Adds |socket| to |manager_| and returns the new channel_id.  |manager_|
-  // assumes ownership of |socket|.
-  int AddSocket(cast_channel::CastSocket* socket);
-
-  // Removes the CastSocket corresponding to |channel_id| from the resource
-  // manager.
-  void RemoveSocket(int channel_id);
 
   // Sets the function result to a ChannelInfo obtained from the state of
   // |socket|.
@@ -130,18 +134,17 @@ class CastChannelAsyncApiFunction : public AsyncApiFunction {
 
   // Sets the function result to a ChannelInfo populated with |channel_id| and
   // |error|.
-  void SetResultFromError(int channel_id, cast_channel::ChannelError error);
+  void SetResultFromError(int channel_id,
+                          api::cast_channel::ChannelError error);
 
-  // Returns the socket corresponding to |channel_id| if one exists, or null
-  // otherwise.
-  cast_channel::CastSocket* GetSocket(int channel_id) const;
+  // Raw pointer of leaky singleton CastSocketService, which manages creating
+  // and removing Cast sockets.
+  cast_channel::CastSocketService* cast_socket_service_;
 
  private:
   // Sets the function result from |channel_info|.
-  void SetResultFromChannelInfo(const cast_channel::ChannelInfo& channel_info);
-
-  // The collection of CastSocket API resources.
-  scoped_refptr<SocketData> sockets_;
+  void SetResultFromChannelInfo(
+      const api::cast_channel::ChannelInfo& channel_info);
 };
 
 class CastChannelOpenFunction : public CastChannelAsyncApiFunction {
@@ -159,52 +162,16 @@ class CastChannelOpenFunction : public CastChannelAsyncApiFunction {
  private:
   DECLARE_EXTENSION_FUNCTION("cast.channel.open", CAST_CHANNEL_OPEN)
 
-  // Defines a callback used to send events to the extension's
-  // EventRouter.
-  //     Parameter #0 is the extension's ID.
-  //     Parameter #1 is a scoped pointer to the event payload.
-  using EventDispatchCallback =
-      base::Callback<void(const std::string&, std::unique_ptr<Event>)>;
-
-  // Receives incoming messages and errors and provides additional API and
-  // origin socket context.
-  class CastMessageHandler : public cast_channel::CastTransport::Delegate {
-   public:
-    CastMessageHandler(const EventDispatchCallback& ui_dispatch_cb,
-                       cast_channel::CastSocket* socket,
-                       scoped_refptr<api::cast_channel::Logger> logger);
-    ~CastMessageHandler() override;
-
-    // CastTransport::Delegate implementation.
-    void OnError(cast_channel::ChannelError error_state) override;
-    void OnMessage(const cast_channel::CastMessage& message) override;
-    void Start() override;
-
-   private:
-    // Callback for sending events to the extension.
-    // Should be bound to a weak pointer, to prevent any use-after-free
-    // conditions.
-    EventDispatchCallback const ui_dispatch_cb_;
-    cast_channel::CastSocket* const socket_;
-    // Logger object for reporting error details.
-    scoped_refptr<api::cast_channel::Logger> logger_;
-
-    DISALLOW_COPY_AND_ASSIGN(CastMessageHandler);
-  };
-
   // Validates that |connect_info| represents a valid IP end point and returns a
   // new IPEndPoint if so.  Otherwise returns nullptr.
   static net::IPEndPoint* ParseConnectInfo(
-      const cast_channel::ConnectInfo& connect_info);
+      const api::cast_channel::ConnectInfo& connect_info);
 
-  void OnOpen(cast_channel::ChannelError result);
+  void OnOpen(int channel_id, cast_channel::ChannelError result);
 
-  std::unique_ptr<cast_channel::Open::Params> params_;
-  // The id of the newly opened socket.
-  int new_channel_id_;
+  std::unique_ptr<api::cast_channel::Open::Params> params_;
   CastChannelAPI* api_;
   std::unique_ptr<net::IPEndPoint> ip_endpoint_;
-  cast_channel::ChannelAuthType channel_auth_;
   base::TimeDelta liveness_timeout_;
   base::TimeDelta ping_interval_;
 
@@ -228,7 +195,7 @@ class CastChannelSendFunction : public CastChannelAsyncApiFunction {
 
   void OnSend(int result);
 
-  std::unique_ptr<cast_channel::Send::Params> params_;
+  std::unique_ptr<api::cast_channel::Send::Params> params_;
 
   DISALLOW_COPY_AND_ASSIGN(CastChannelSendFunction);
 };
@@ -250,7 +217,7 @@ class CastChannelCloseFunction : public CastChannelAsyncApiFunction {
 
   void OnClose(int result);
 
-  std::unique_ptr<cast_channel::Close::Params> params_;
+  std::unique_ptr<api::cast_channel::Close::Params> params_;
   CastChannelAPI* api_;
 
   DISALLOW_COPY_AND_ASSIGN(CastChannelCloseFunction);

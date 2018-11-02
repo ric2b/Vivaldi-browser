@@ -4,12 +4,15 @@
 
 #include "modules/indexeddb/IDBRequestQueueItem.h"
 
+#include <memory>
+
 #include "core/dom/DOMException.h"
 #include "modules/indexeddb/IDBKey.h"
 #include "modules/indexeddb/IDBRequest.h"
 #include "modules/indexeddb/IDBRequestLoader.h"
 #include "modules/indexeddb/IDBValue.h"
 #include "platform/wtf/PtrUtil.h"
+#include "platform/wtf/RefPtr.h"
 #include "public/platform/modules/indexeddb/WebIDBCursor.h"
 
 namespace blink {
@@ -70,7 +73,7 @@ IDBRequestQueueItem::IDBRequestQueueItem(
 
 IDBRequestQueueItem::IDBRequestQueueItem(
     IDBRequest* request,
-    PassRefPtr<IDBValue> value,
+    RefPtr<IDBValue> value,
     bool attach_loader,
     std::unique_ptr<WTF::Closure> on_result_load_complete)
     : request_(request),
@@ -106,7 +109,7 @@ IDBRequestQueueItem::IDBRequestQueueItem(
     IDBRequest* request,
     IDBKey* key,
     IDBKey* primary_key,
-    PassRefPtr<IDBValue> value,
+    RefPtr<IDBValue> value,
     bool attach_loader,
     std::unique_ptr<WTF::Closure> on_result_load_complete)
     : request_(request),
@@ -128,7 +131,7 @@ IDBRequestQueueItem::IDBRequestQueueItem(
     std::unique_ptr<WebIDBCursor> cursor,
     IDBKey* key,
     IDBKey* primary_key,
-    PassRefPtr<IDBValue> value,
+    RefPtr<IDBValue> value,
     bool attach_loader,
     std::unique_ptr<WTF::Closure> on_result_load_complete)
     : request_(request),
@@ -179,6 +182,13 @@ void IDBRequestQueueItem::StartLoading() {
     // The backing store can get the result back to the request after it's been
     // aborted due to a transaction abort. In this case, we can't rely on
     // IDBRequest::Abort() to call CancelLoading().
+
+    // Setting loader_ to null here makes sure we don't call Cancel() on a
+    // IDBRequestLoader that hasn't been Start()ed. The current implementation
+    // behaves well even if Cancel() is called without Start() being called, but
+    // this reset makes the IDBRequestLoader lifecycle easier to reason about.
+    loader_.reset();
+
     CancelLoading();
     return;
   }
@@ -195,7 +205,11 @@ void IDBRequestQueueItem::CancelLoading() {
 
   if (loader_) {
     loader_->Cancel();
-    loader_ = nullptr;
+    loader_.reset();
+
+    // IDBRequestLoader::Cancel() should not call any of the EnqueueResponse
+    // variants.
+    DCHECK(!ready_);
   }
 
   // Mark this item as ready so the transaction's result queue can be drained.

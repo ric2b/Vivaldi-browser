@@ -206,7 +206,9 @@ blink::WebThemeEngine* PpapiBlinkPlatformImpl::ThemeEngine() {
   return NULL;
 }
 
-std::unique_ptr<blink::WebURLLoader> PpapiBlinkPlatformImpl::CreateURLLoader() {
+std::unique_ptr<blink::WebURLLoader> PpapiBlinkPlatformImpl::CreateURLLoader(
+    const blink::WebURLRequest& request,
+    base::SingleThreadTaskRunner* task_runner) {
   NOTREACHED();
   return NULL;
 }
@@ -218,7 +220,7 @@ void PpapiBlinkPlatformImpl::GetPluginList(
   NOTREACHED();
 }
 
-blink::WebData PpapiBlinkPlatformImpl::LoadResource(const char* name) {
+blink::WebData PpapiBlinkPlatformImpl::GetDataResource(const char* name) {
   NOTREACHED();
   return blink::WebData();
 }

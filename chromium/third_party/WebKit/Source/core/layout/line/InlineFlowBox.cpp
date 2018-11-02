@@ -133,7 +133,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
           should_clear_descendants_have_same_line_height_and_baseline = true;
       }
       if (child_style.HasTextCombine() ||
-          child_style.GetTextEmphasisMark() != kTextEmphasisMarkNone)
+          child_style.GetTextEmphasisMark() != TextEmphasisMark::kNone)
         should_clear_descendants_have_same_line_height_and_baseline = true;
     } else {
       if (child->GetLineLayoutItem().IsBR()) {
@@ -166,7 +166,7 @@ void InlineFlowBox::AddToLine(InlineBox* child) {
       const ComputedStyle& child_style =
           child->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
       if (child_style.LetterSpacing() < 0 || child_style.TextShadow() ||
-          child_style.GetTextEmphasisMark() != kTextEmphasisMarkNone ||
+          child_style.GetTextEmphasisMark() != TextEmphasisMark::kNone ||
           child_style.TextStrokeWidth())
         child->ClearKnownToHaveNoOverflow();
     } else if (child->GetLineLayoutItem().IsAtomicInlineLevel()) {
@@ -794,7 +794,7 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
         // been done as line layout and not done using inline-block.
         if (GetLineLayoutItem().Style()->IsFlippedLinesWritingMode() ==
             (curr->GetLineLayoutItem().Style()->GetRubyPosition() ==
-             kRubyPositionAfter))
+             RubyPosition::kAfter))
           has_annotations_before = true;
         else
           has_annotations_after = true;
@@ -824,7 +824,7 @@ void InlineFlowBox::PlaceBoxesInBlockDirection(
                 curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle()),
                 emphasis_mark_position)) {
           bool emphasis_mark_is_over =
-              emphasis_mark_position == kTextEmphasisPositionOver;
+              emphasis_mark_position == TextEmphasisPosition::kOver;
           if (emphasis_mark_is_over != curr->GetLineLayoutItem()
                                            .Style(IsFirstLineStyle())
                                            ->IsFlippedLinesWritingMode())
@@ -1047,11 +1047,11 @@ inline void InlineFlowBox::AddTextBoxVisualOverflow(
   float right_glyph_overflow = stroke_overflow + right_glyph_edge;
 
   TextEmphasisPosition emphasis_mark_position;
-  if (style.GetTextEmphasisMark() != kTextEmphasisMarkNone &&
+  if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone &&
       text_box->GetEmphasisMarkPosition(style, emphasis_mark_position)) {
     float emphasis_mark_height =
         style.GetFont().EmphasisMarkHeight(style.TextEmphasisMarkString());
-    if ((emphasis_mark_position == kTextEmphasisPositionOver) ==
+    if ((emphasis_mark_position == TextEmphasisPosition::kOver) ==
         (!style.IsFlippedLinesWritingMode()))
       top_glyph_overflow = std::min(top_glyph_overflow, -emphasis_mark_height);
     else
@@ -1066,10 +1066,11 @@ inline void InlineFlowBox::AddTextBoxVisualOverflow(
       std::min(0.0f, style.GetFont().GetFontDescription().LetterSpacing());
 
   LayoutRectOutsets text_shadow_logical_outsets;
-  if (ShadowList* text_shadow = style.TextShadow())
+  if (ShadowList* text_shadow = style.TextShadow()) {
     text_shadow_logical_outsets =
         LayoutRectOutsets(text_shadow->RectOutsetsIncludingOriginal())
             .LogicalOutsets(style.GetWritingMode());
+  }
 
   // FIXME: This code currently uses negative values for expansion of the top
   // and left edges. This should be cleaned up.
@@ -1201,9 +1202,9 @@ void InlineFlowBox::ComputeOverflow(
   // invalidations for ourselves. Self-painting layers are ignored.
   // Layout overflow is used to determine scrolling extent, so it still includes
   // child layers and also factors in transforms, relative positioning, etc.
-  LayoutRect logical_layout_overflow(
+  LayoutRect logical_layout_overflow;
+  LayoutRect logical_visual_overflow(
       LogicalFrameRectIncludingLineHeight(line_top, line_bottom));
-  LayoutRect logical_visual_overflow(logical_layout_overflow);
 
   AddBoxShadowVisualOverflow(logical_visual_overflow);
   AddBorderOutsetVisualOverflow(logical_visual_overflow);
@@ -1437,7 +1438,7 @@ InlineBox* InlineFlowBox::LastLeafChild() const {
 }
 
 SelectionState InlineFlowBox::GetSelectionState() const {
-  return SelectionNone;
+  return SelectionState::kNone;
 }
 
 bool InlineFlowBox::CanAccommodateEllipsis(bool ltr,
@@ -1455,7 +1456,7 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
                                            LayoutUnit block_right_edge,
                                            LayoutUnit ellipsis_width,
                                            LayoutUnit& truncated_width,
-                                           bool& found_box,
+                                           InlineBox** found_box,
                                            LayoutUnit logical_left_offset) {
   LayoutUnit result(-1);
   // We iterate over all children, the foundBox variable tells us when we've
@@ -1464,6 +1465,11 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
   // If our flow is ltr then iterate over the boxes from left to right,
   // otherwise iterate from right to left. Varying the order allows us to
   // correctly hide the boxes following the ellipsis.
+  LayoutUnit relative_offset =
+      BoxModelObject().IsInline()
+          ? BoxModelObject().RelativePositionLogicalOffset().Width()
+          : LayoutUnit();
+  logical_left_offset += relative_offset;
   InlineBox* box = ltr ? FirstChild() : LastChild();
 
   // NOTE: these will cross after foundBox = true.
@@ -1471,9 +1477,12 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
   LayoutUnit visible_right_edge = block_right_edge;
 
   while (box) {
+    bool had_found_box = *found_box;
     LayoutUnit curr_result = box->PlaceEllipsisBox(
         ltr, visible_left_edge, visible_right_edge, ellipsis_width,
         truncated_width, found_box, logical_left_offset);
+    if (IsRootInlineBox() && *found_box && !had_found_box)
+      *found_box = box;
     if (curr_result != -1 && result == -1)
       result = curr_result;
 
@@ -1490,7 +1499,7 @@ LayoutUnit InlineFlowBox::PlaceEllipsisBox(bool ltr,
       box = box->PrevOnLine();
     }
   }
-  return result;
+  return result + relative_offset;
 }
 
 void InlineFlowBox::ClearTruncation() {
@@ -1513,7 +1522,7 @@ LayoutUnit InlineFlowBox::ComputeOverAnnotationAdjustment(
     if (curr->GetLineLayoutItem().IsAtomicInlineLevel() &&
         curr->GetLineLayoutItem().IsRubyRun() &&
         curr->GetLineLayoutItem().Style()->GetRubyPosition() ==
-            kRubyPositionBefore) {
+            RubyPosition::kBefore) {
       LineLayoutRubyRun ruby_run = LineLayoutRubyRun(curr->GetLineLayoutItem());
       LineLayoutRubyText ruby_text = ruby_run.RubyText();
       if (!ruby_text)
@@ -1546,10 +1555,10 @@ LayoutUnit InlineFlowBox::ComputeOverAnnotationAdjustment(
       const ComputedStyle& style =
           curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
       TextEmphasisPosition emphasis_mark_position;
-      if (style.GetTextEmphasisMark() != kTextEmphasisMarkNone &&
+      if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone &&
           ToInlineTextBox(curr)->GetEmphasisMarkPosition(
               style, emphasis_mark_position) &&
-          emphasis_mark_position == kTextEmphasisPositionOver) {
+          emphasis_mark_position == TextEmphasisPosition::kOver) {
         if (!style.IsFlippedLinesWritingMode()) {
           int top_of_emphasis_mark =
               (curr->LogicalTop() - style.GetFont().EmphasisMarkHeight(
@@ -1584,7 +1593,7 @@ LayoutUnit InlineFlowBox::ComputeUnderAnnotationAdjustment(
     if (curr->GetLineLayoutItem().IsAtomicInlineLevel() &&
         curr->GetLineLayoutItem().IsRubyRun() &&
         curr->GetLineLayoutItem().Style()->GetRubyPosition() ==
-            kRubyPositionAfter) {
+            RubyPosition::kAfter) {
       LineLayoutRubyRun ruby_run = LineLayoutRubyRun(curr->GetLineLayoutItem());
       LineLayoutRubyText ruby_text = ruby_run.RubyText();
       if (!ruby_text)
@@ -1616,8 +1625,8 @@ LayoutUnit InlineFlowBox::ComputeUnderAnnotationAdjustment(
     if (curr->IsInlineTextBox()) {
       const ComputedStyle& style =
           curr->GetLineLayoutItem().StyleRef(IsFirstLineStyle());
-      if (style.GetTextEmphasisMark() != kTextEmphasisMarkNone &&
-          style.GetTextEmphasisPosition() == kTextEmphasisPositionUnder) {
+      if (style.GetTextEmphasisMark() != TextEmphasisMark::kNone &&
+          style.GetTextEmphasisPosition() == TextEmphasisPosition::kUnder) {
         if (!style.IsFlippedLinesWritingMode()) {
           LayoutUnit bottom_of_emphasis_mark =
               curr->LogicalBottom() + style.GetFont().EmphasisMarkHeight(

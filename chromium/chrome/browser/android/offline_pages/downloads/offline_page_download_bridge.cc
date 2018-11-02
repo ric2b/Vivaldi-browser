@@ -14,12 +14,12 @@
 #include "chrome/browser/android/download/download_controller_base.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_infobar_delegate.h"
 #include "chrome/browser/android/offline_pages/downloads/offline_page_notification_bridge.h"
-#include "chrome/browser/android/offline_pages/offline_page_mhtml_archiver.h"
-#include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
-#include "chrome/browser/android/offline_pages/offline_page_utils.h"
-#include "chrome/browser/android/offline_pages/recent_tab_helper.h"
-#include "chrome/browser/android/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/android/tab_android.h"
+#include "chrome/browser/offline_pages/offline_page_mhtml_archiver.h"
+#include "chrome/browser/offline_pages/offline_page_model_factory.h"
+#include "chrome/browser/offline_pages/offline_page_utils.h"
+#include "chrome/browser/offline_pages/recent_tab_helper.h"
+#include "chrome/browser/offline_pages/request_coordinator_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_android.h"
 #include "components/offline_pages/core/background/request_coordinator.h"
@@ -37,6 +37,7 @@
 #include "content/public/browser/web_contents.h"
 #include "jni/OfflinePageDownloadBridge_jni.h"
 #include "net/base/filename_util.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 #include "url/gurl.h"
 
 using base::android::AttachCurrentThread;
@@ -308,7 +309,7 @@ void OnAcquireFileAccessPermissionDone(
       web_contents->GetBrowserContext());
   std::unique_ptr<content::DownloadUrlParameters> dl_params(
       content::DownloadUrlParameters::CreateForWebContentsMainFrame(
-          web_contents, url));
+          web_contents, url, NO_TRAFFIC_ANNOTATION_YET));
 
   content::NavigationEntry* entry =
       web_contents->GetController().GetLastCommittedEntry();
@@ -339,11 +340,6 @@ OfflinePageDownloadBridge::OfflinePageDownloadBridge(
 }
 
 OfflinePageDownloadBridge::~OfflinePageDownloadBridge() {}
-
-// static
-bool OfflinePageDownloadBridge::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
 
 void OfflinePageDownloadBridge::Destroy(JNIEnv* env,
                                         const JavaParamRef<jobject>&) {

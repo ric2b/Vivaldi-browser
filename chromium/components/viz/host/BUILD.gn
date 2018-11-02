@@ -1,0 +1,62 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//components/viz/viz.gni")
+
+viz_component("host") {
+  defines = [ "VIZ_HOST_IMPLEMENTATION" ]
+
+  sources = [
+    "frame_sink_observer.h",
+    "host_frame_sink_manager.cc",
+    "host_frame_sink_manager.h",
+    "server_gpu_memory_buffer_manager.cc",
+    "server_gpu_memory_buffer_manager.h",
+    "viz_host_export.h",
+  ]
+
+  deps = [
+    "//base",
+    "//cc/ipc:interfaces",
+    "//cc/surfaces",
+    "//gpu/ipc/client",
+    "//gpu/ipc/common",
+    "//services/ui/gpu/interfaces",
+
+    # TODO(kylechar): This is temporary and will be removed when all host to
+    # service communication is over Mojo.
+    "//components/viz/service",
+  ]
+
+  public_deps = [
+    "//gpu/command_buffer/client",
+    "//gpu/ipc/host",
+  ]
+}
+
+viz_source_set("unit_tests") {
+  testonly = true
+
+  sources = [
+    "host_frame_sink_manager_unittests.cc",
+    "server_gpu_memory_buffer_manager_unittest.cc",
+  ]
+
+  deps = [
+    ":host",
+    "//base",
+    "//base/test:test_support",
+    "//cc/ipc:interfaces",
+    "//cc/surfaces",
+    "//gpu/ipc/host",
+    "//mojo/public/cpp/bindings",
+    "//services/ui/gpu/interfaces",
+    "//testing/gmock",
+    "//testing/gtest",
+
+    # TODO(kylechar): This is temporary and will be removed when all host to
+    # service communication is over Mojo.
+    "//components/viz/service",
+  ]
+}

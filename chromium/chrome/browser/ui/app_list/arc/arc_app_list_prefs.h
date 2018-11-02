@@ -205,7 +205,7 @@ class ArcAppListPrefs
       ui::ScaleFactor scale_factor) const;
 
   // Sets last launched time for the requested app.
-  void SetLastLaunchTime(const std::string& app_id, const base::Time& time);
+  void SetLastLaunchTime(const std::string& app_id);
 
   // Calls RequestIcon if no request is recorded.
   void MaybeRequestIcon(const std::string& app_id,
@@ -408,6 +408,12 @@ class ArcAppListPrefs
   // Dispatches OnAppReadyChanged event to observers.
   void NotifyAppReadyChanged(const std::string& app_id, bool ready);
 
+  // Marks app icons as invalidated and request icons updated.
+  void InvalidateAppIcons(const std::string& app_id);
+
+  // Marks package icons as invalidated and request icons updated.
+  void InvalidatePackageIcons(const std::string& package_name);
+
   Profile* const profile_;
 
   // Owned by the BrowserContext.
@@ -439,8 +445,10 @@ class ArcAppListPrefs
   bool is_initialized_ = false;
   // True if apps were restored.
   bool apps_restored_ = false;
-  // True is ARC package list has been refreshed once.
+  // True is ARC package list has been successfully refreshed.
   bool package_list_initial_refreshed_ = false;
+  // Used to detect first ARC app launch request.
+  bool first_launch_app_request_ = true;
   // Play Store does not have publicly available observers for default app
   // installations. This timeout is for validating default app availability.
   // Default apps should be either already installed or their installations
@@ -448,6 +456,8 @@ class ArcAppListPrefs
   base::OneShotTimer detect_default_app_availability_timeout_;
   // Set of currently installing default apps_.
   std::unordered_set<std::string> default_apps_installations_;
+  // Mask of scale factors for which the app's icon needs invalidation.
+  uint32_t invalidated_icon_scale_factor_mask_;
 
   arc::ArcPackageSyncableService* sync_service_ = nullptr;
 

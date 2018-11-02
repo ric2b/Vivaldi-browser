@@ -2,8 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// This Polymer element contains the entire media router interface. It handles
-// hiding and showing specific components.
+/**
+ * This Polymer element contains the entire media router interface. It handles
+ * hiding and showing specific components.
+ * @implements {MediaRouterContainerInterface}
+ */
 Polymer({
   is: 'media-router-container',
 
@@ -297,14 +300,13 @@ Polymer({
     },
 
     /**
-     * Whether the search input should be padded as if it were at the bottom of
-     * the dialog.
-     * @type {boolean}
+     * The selected cast mode menu item. The item with this index is bolded in
+     * the cast mode menu.
+     * @private {number|undefined}
      */
-    searchUseBottomPadding: {
-      type: Boolean,
-      reflectToAttribute: true,
-      value: true,
+    selectedCastModeMenuItem_: {
+      type: Number,
+      observer: 'updateSelectedCastModeMenuItem_',
     },
 
     /**
@@ -434,13 +436,17 @@ Polymer({
           that.putSearchAtBottom_();
         }
       };
-      this.importHref('chrome://resources/polymer/v1_0/neon-animation/' +
-          'web-animations.html', onload);
-      this.importHref(this.resolveUrl(
-          '../issue_banner/issue_banner.html'), onload);
-      this.importHref(this.resolveUrl(
-          '../media_router_search_highlighter/' +
-              'media_router_search_highlighter.html'), onload);
+      this.importHref(
+          'chrome://resources/polymer/v1_0/neon-animation/' +
+              'web-animations.html',
+          onload);
+      this.importHref(
+          this.resolveUrl('../issue_banner/issue_banner.html'), onload);
+      this.importHref(
+          this.resolveUrl(
+              '../media_router_search_highlighter/' +
+              'media_router_search_highlighter.html'),
+          onload);
 
       // If this is not on a Mac platform, remove the placeholder. See
       // onFocus_() for more details. ready() is only called once, so no need
@@ -484,7 +490,8 @@ Polymer({
     // Only set |userOptedIntoCloudServices| if the user was shown the cloud
     // services preferences option.
     var userOptedIntoCloudServices = this.showFirstRunFlowCloudPref ?
-        this.$$('#first-run-cloud-checkbox').checked : undefined;
+        this.$$('#first-run-cloud-checkbox').checked :
+        undefined;
     this.fire('acknowledge-first-run-flow', {
       optedIntoCloudServices: userOptedIntoCloudServices,
     });
@@ -519,6 +526,19 @@ Polymer({
 
   get header() {
     return this.$['container-header'];
+  },
+
+  /**
+   * Calls all the functions to set the UI to a given cast mode.
+   * @param {!media_router.CastMode} castMode The cast mode to set things to.
+   * @private
+   */
+  castModeSelected_(castMode) {
+    this.selectCastMode(castMode.type);
+    this.fire('cast-mode-selected', {castModeType: castMode.type});
+    this.showSinkList_();
+    this.maybeReportUserFirstAction(
+        media_router.MediaRouterUserAction.CHANGE_MODE);
   },
 
   /**
@@ -629,7 +649,8 @@ Polymer({
       return forcedMode;
 
     var allCastModes = this.allSinks.reduce(function(castModesSoFar, sink) {
-      return castModesSoFar | sink.castModes;
+      // Ignore pseudo sinks in the cast mode computation.
+      return castModesSoFar | (sink.isPseudoSink ? 0 : sink.castModes);
     }, 0);
 
     // This checks whether |castModes| does not consist of exactly 1 cast mode.
@@ -661,12 +682,14 @@ Polymer({
    */
   computeCastModeIcon_: function(castMode) {
     switch (castMode.type) {
-      case media_router.CastModeType.DEFAULT:
+      case media_router.CastModeType.PRESENTATION:
         return 'media-router:web';
       case media_router.CastModeType.TAB_MIRROR:
         return 'media-router:tab';
       case media_router.CastModeType.DESKTOP_MIRROR:
         return 'media-router:laptop';
+      case media_router.CastModeType.LOCAL_FILE:
+        return 'media-router:folder';
       default:
         return '';
     }
@@ -674,13 +697,14 @@ Polymer({
 
   /**
    * @param {!Array<!media_router.CastMode>} castModeList The current list of
-   *      cast modes.
-   * @return {!Array<!media_router.CastMode>} The list of default cast modes.
+   *     cast modes.
+   * @return {!Array<!media_router.CastMode>} The list of PRESENTATION cast
+   *     modes.
    * @private
    */
-  computeDefaultCastModeList_: function(castModeList) {
+  computePresentationCastModeList_: function(castModeList) {
     return castModeList.filter(function(mode) {
-      return mode.type == media_router.CastModeType.DEFAULT;
+      return mode.type == media_router.CastModeType.PRESENTATION;
     });
   },
 
@@ -713,8 +737,8 @@ Polymer({
    */
   computeHeaderHidden_: function(view, issue) {
     return view == media_router.MediaRouterView.ROUTE_DETAILS ||
-        (view == media_router.MediaRouterView.SINK_LIST &&
-         !!issue && issue.isBlocking);
+        (view == media_router.MediaRouterView.SINK_LIST && !!issue &&
+         issue.isBlocking);
   },
 
   /**
@@ -731,7 +755,8 @@ Polymer({
         return this.i18n('issueHeaderText');
       case media_router.MediaRouterView.ROUTE_DETAILS:
         return this.currentRoute_ && this.sinkMap_[this.currentRoute_.sinkId] ?
-            this.sinkMap_[this.currentRoute_.sinkId].name : '';
+            this.sinkMap_[this.currentRoute_.sinkId].name :
+            '';
       case media_router.MediaRouterView.SINK_LIST:
       case media_router.MediaRouterView.FILTER:
         return this.headerText;
@@ -776,9 +801,11 @@ Polymer({
    * @private
    */
   computeIssueBannerShown_: function(view, issue) {
-    return !!issue && (view == media_router.MediaRouterView.SINK_LIST ||
-                       view == media_router.MediaRouterView.FILTER ||
-                       view == media_router.MediaRouterView.ISSUE);
+    return !!issue &&
+        (view == media_router.MediaRouterView.CAST_MODE_LIST ||
+         view == media_router.MediaRouterView.SINK_LIST ||
+         view == media_router.MediaRouterView.FILTER ||
+         view == media_router.MediaRouterView.ISSUE);
   },
 
   /**
@@ -791,19 +818,33 @@ Polymer({
    */
   computeNoMatchesHidden_: function(searchResultsToShow, isSearchListHidden) {
     return isSearchListHidden || this.searchInputText_.length == 0 ||
-           searchResultsToShow.length != 0;
+        searchResultsToShow.length != 0;
   },
 
   /**
    * @param {!Array<!media_router.CastMode>} castModeList The current list of
    *     cast modes.
-   * @return {!Array<!media_router.CastMode>} The list of non-default cast
+   * @return {!Array<!media_router.CastMode>} The list of non-PRESENTATION cast
+   *     modes. Also excludes LOCAL_FILE.
+   * @private
+   */
+  computeShareScreenCastModeList_: function(castModeList) {
+    return castModeList.filter(function(mode) {
+      return mode.type == media_router.CastModeType.DESKTOP_MIRROR ||
+          mode.type == media_router.CastModeType.TAB_MIRROR;
+    });
+  },
+
+  /**
+   * @param {!Array<!media_router.CastMode>} castModeList The current list of
+   *     cast modes.
+   * @return {!Array<!media_router.CastMode>} The list of local media cast
    *     modes.
    * @private
    */
-  computeNonDefaultCastModeList_: function(castModeList) {
+  computeLocalMediaCastModeList_: function(castModeList) {
     return castModeList.filter(function(mode) {
-      return mode.type != media_router.CastModeType.DEFAULT;
+      return mode.type == media_router.CastModeType.LOCAL_FILE;
     });
   },
 
@@ -863,8 +904,8 @@ Polymer({
    * @return {boolean} Whether the search results list should be hidden.
    * @private
    */
-  computeSearchResultsHidden_: function(searchResultsToShow,
-                                        isSearchListHidden) {
+  computeSearchResultsHidden_: function(
+      searchResultsToShow, isSearchListHidden) {
     return isSearchListHidden || searchResultsToShow.length == 0;
   },
 
@@ -875,7 +916,17 @@ Polymer({
    * @private
    */
   computeShareScreenSubheadingHidden_: function(castModeList) {
-    return this.computeNonDefaultCastModeList_(castModeList).length == 0;
+    return this.computeShareScreenCastModeList_(castModeList).length == 0;
+  },
+
+  /**
+   * @param {!Array<!media_router.CastMode>} castModeList The current list of
+   *     cast modes.
+   * @return {boolean} Whether or not to hide the local media subheading text.
+   * @private
+   */
+  computeLocalMediaSubheadingHidden_: function(castModeList) {
+    return this.computeLocalMediaCastModeList_(castModeList).length == 0;
   },
 
   /**
@@ -898,16 +949,18 @@ Polymer({
     switch (sink.iconType) {
       case media_router.SinkIconType.CAST:
         return 'media-router:chromecast';
-      case media_router.SinkIconType.CAST_AUDIO:
-        return 'media-router:speaker';
       case media_router.SinkIconType.CAST_AUDIO_GROUP:
         return 'media-router:speaker-group';
-      case media_router.SinkIconType.GENERIC:
-        return 'media-router:tv';
-      case media_router.SinkIconType.HANGOUT:
-        return 'media-router:hangout';
+      case media_router.SinkIconType.CAST_AUDIO:
+        return 'media-router:speaker';
       case media_router.SinkIconType.MEETING:
         return 'media-router:meeting';
+      case media_router.SinkIconType.HANGOUT:
+        return 'media-router:hangout';
+      case media_router.SinkIconType.EDUCATION:
+        return 'media-router:education';
+      case media_router.SinkIconType.GENERIC:
+        return 'media-router:tv';
       default:
         return 'media-router:tv';
     }
@@ -1068,8 +1121,8 @@ Polymer({
   computeTotalSearchHeight_: function(
       deviceMissing, noMatches, results, searchOffsetHeight, maxHeight) {
     var contentHeight = deviceMissing.offsetHeight +
-        ((noMatches.hasAttribute('hidden')) ?
-         results.offsetHeight : noMatches.offsetHeight);
+        ((noMatches.hasAttribute('hidden')) ? results.offsetHeight :
+                                              noMatches.offsetHeight);
     return Math.min(contentHeight, maxHeight) + searchOffsetHeight;
   },
 
@@ -1080,14 +1133,22 @@ Polymer({
    * filter action here.
    * @param {?media_router.MediaRouterView} currentView The current view of the
    *     dialog.
+   * @param {?media_router.MediaRouterView} previousView The previous
+   *     |currentView|.
    * @private
    */
-  currentViewChanged_: function(currentView) {
+  currentViewChanged_: function(currentView, previousView) {
     if (currentView == media_router.MediaRouterView.FILTER) {
       this.reportFilterOnInput_ = true;
       this.maybeReportFilter_();
     }
     this.updateElementPositioning_();
+
+    if (previousView == media_router.MediaRouterView.ROUTE_DETAILS) {
+      media_router.browserApi.onMediaControllerClosed();
+      if (this.$$('route-details'))
+        this.$$('route-details').onClosed();
+    }
   },
 
   /**
@@ -1107,13 +1168,12 @@ Polymer({
     var searchResultsToShow = [];
     for (var i = 0; i < this.sinksToShow_.length; ++i) {
       var matchSubstrings = this.computeSearchMatches_(
-          searchInputText,
-          this.sinksToShow_[i].name);
+          searchInputText, this.sinksToShow_[i].name);
       if (!matchSubstrings) {
         continue;
       }
-      searchResultsToShow.push({sinkItem: this.sinksToShow_[i],
-                                substrings: matchSubstrings});
+      searchResultsToShow.push(
+          {sinkItem: this.sinksToShow_[i], substrings: matchSubstrings});
     }
     searchResultsToShow.sort(this.compareSearchMatches_);
 
@@ -1130,17 +1190,24 @@ Polymer({
     // the pseudo sink for the search will be treated like a real sink because
     // it will actually be in |sinksToShow_| until a real sink is returned by
     // search. So the filter here shouldn't treat it like a pseudo sink.
-    searchResultsToShow = this.pseudoSinks_.filter(function(pseudoSink) {
-      return (!pendingPseudoSink || pseudoSink.id != pendingPseudoSink.id) &&
-          !searchResultsToShow.find(function(searchResult) {
-            return searchResult.sinkItem.name == searchInputText &&
-                   searchResult.sinkItem.iconType == pseudoSink.iconType;
-          });
-    }).map(function(pseudoSink) {
-      pseudoSink.name = searchInputText;
-      return {sinkItem: pseudoSink,
-              substrings: [[0, searchInputText.length - 1]]};
-    }).concat(searchResultsToShow);
+    searchResultsToShow =
+        this.pseudoSinks_
+            .filter(function(pseudoSink) {
+              return (!pendingPseudoSink ||
+                      pseudoSink.id != pendingPseudoSink.id) &&
+                  !searchResultsToShow.find(function(searchResult) {
+                    return searchResult.sinkItem.name == searchInputText &&
+                        searchResult.sinkItem.iconType == pseudoSink.iconType;
+                  });
+            })
+            .map(function(pseudoSink) {
+              pseudoSink.name = searchInputText;
+              return {
+                sinkItem: pseudoSink,
+                substrings: [[0, searchInputText.length - 1]]
+              };
+            })
+            .concat(searchResultsToShow);
     this.searchResultsToShow_ = searchResultsToShow;
   },
 
@@ -1151,6 +1218,7 @@ Polymer({
    * @param {number} castModeType Type of cast mode to look for.
    * @return {media_router.CastMode|undefined} CastMode object with the given
    *     type in castModeList, or undefined if not found.
+   * @private
    */
   findCastModeByType_: function(castModeType) {
     return this.castModeList.find(function(element, index, array) {
@@ -1159,10 +1227,28 @@ Polymer({
   },
 
   /**
+   * Helper function to locate the position in the |castModeList| of the
+   * CastMode object with the given type.
+   *
+   * @param {number} castModeType Type of cast mode to look for.
+   * @return {number} index of the given type, or -1 if not found.
+   * @private
+   */
+  findCastModeIndexByType_: function(castModeType) {
+    return this.castModeList
+        .map(function(element) {
+          return element.type;
+        })
+        .indexOf(castModeType);
+  },
+
+
+  /**
    * Helper function to return a forced CastMode, if any.
    *
    * @return {media_router.CastMode|undefined} CastMode object with
    *     isForced = true, or undefined if not found.
+   * @private
    */
   findForcedCastMode_: function() {
     return this.castModeList &&
@@ -1177,8 +1263,10 @@ Polymer({
    */
   getElementVerticalPadding_: function(element) {
     var style = window.getComputedStyle(element);
-    return [parseInt(style.getPropertyValue('padding-bottom'), 10) || 0,
-            parseInt(style.getPropertyValue('padding-top'), 10) || 0];
+    return [
+      parseInt(style.getPropertyValue('padding-bottom'), 10) || 0,
+      parseInt(style.getPropertyValue('padding-top'), 10) || 0
+    ];
   },
 
   /**
@@ -1189,7 +1277,8 @@ Polymer({
    */
   getFirstRunFlowCloudPrefText_: function() {
     return loadTimeData.valueExists('firstRunFlowCloudPrefText') ?
-        this.i18n('firstRunFlowCloudPrefText') : '';
+        this.i18n('firstRunFlowCloudPrefText') :
+        '';
   },
 
   /**
@@ -1277,11 +1366,11 @@ Polymer({
         // Make space for the non-blocking issue in the sink list.
         this.updateElementPositioning_();
       }
-    } else {
-      // Switch back to the sink list if the issue was cleared. If the previous
-      // issue was non-blocking, this would be a no-op. It is expected that
-      // the only way to clear an issue is by user action; the IssueManager
-      // (C++ side) does not clear issues in the UI.
+    } else if (this.currentView_ == media_router.MediaRouterView.ISSUE) {
+      // Switch back to the sink list if the issue was cleared and it was
+      // showing an issue. It is expected that the only way to clear an issue is
+      // by user action; the IssueManager (C++ side) does not clear issues in
+      // the UI.
       this.showSinkList_();
     }
 
@@ -1374,7 +1463,6 @@ Polymer({
         this.getElementVerticalPadding_(search);
     var searchPadding = searchInitialPaddingBottom + searchInitialPaddingTop;
     var searchHeight = search.offsetHeight - searchPadding;
-    this.searchUseBottomPadding = true;
     var searchFinalPaddingBottom, searchFinalPaddingTop;
     [searchFinalPaddingBottom, searchFinalPaddingTop] =
         this.getElementVerticalPadding_(search);
@@ -1408,34 +1496,55 @@ Polymer({
     // This GroupEffect does the reverse of |moveSearchToTop_|. It fades the
     // sink list in while sliding the search input and search results list down.
     // The dialog height is also adjusted smoothly to the sink list height.
-    var deviceMissingEffect = new KeyframeEffect(deviceMissing,
-        [{'marginBottom': searchInitialOffsetHeight},
-         {'marginBottom': searchFinalOffsetHeight}],
+    var deviceMissingEffect = new KeyframeEffect(
+        deviceMissing,
+        [
+          {'marginBottom': searchInitialOffsetHeight},
+          {'marginBottom': searchFinalOffsetHeight}
+        ],
         timing);
-    var listEffect = new KeyframeEffect(list,
-        [{'opacity': '0'}, {'opacity': '1'}],
+    var listEffect =
+        new KeyframeEffect(list, [{'opacity': '0'}, {'opacity': '1'}], timing);
+    var resultsEffect = new KeyframeEffect(
+        resultsContainer,
+        [
+          {
+            'top': resultsInitialTop + 'px',
+            'paddingTop': resultsContainer.style['padding-top']
+          },
+          {'top': '100%', 'paddingTop': '0px'}
+        ],
         timing);
-    var resultsEffect = new KeyframeEffect(resultsContainer,
-        [{'top': resultsInitialTop + 'px',
-          'paddingTop': resultsContainer.style['padding-top']},
-         {'top': '100%', 'paddingTop': '0px'}],
+    var searchEffect = new KeyframeEffect(
+        search,
+        [
+          {
+            'top': searchInitialTop + 'px',
+            'marginTop': '0px',
+            'paddingBottom': searchInitialPaddingBottom + 'px',
+            'paddingTop': searchInitialPaddingTop + 'px'
+          },
+          {
+            'top': '100%',
+            'marginTop': '-' + searchFinalOffsetHeight + 'px',
+            'paddingBottom': searchFinalPaddingBottom + 'px',
+            'paddingTop': searchFinalPaddingTop + 'px'
+          }
+        ],
         timing);
-    var searchEffect = new KeyframeEffect(search,
-        [{'top': searchInitialTop + 'px', 'marginTop': '0px',
-          'paddingBottom': searchInitialPaddingBottom + 'px',
-          'paddingTop': searchInitialPaddingTop + 'px'},
-         {'top': '100%', 'marginTop': '-' + searchFinalOffsetHeight + 'px',
-          'paddingBottom': searchFinalPaddingBottom + 'px',
-          'paddingTop': searchFinalPaddingTop + 'px'}],
+    var viewEffect = new KeyframeEffect(
+        view,
+        [
+          {'height': initialHeight + 'px', 'paddingBottom': '0px'}, {
+            'height': finalHeight + 'px',
+            'paddingBottom': searchFinalOffsetHeight + 'px'
+          }
+        ],
         timing);
-    var viewEffect = new KeyframeEffect(view,
-        [{'height': initialHeight + 'px', 'paddingBottom': '0px'},
-         {'height': finalHeight + 'px',
-          'paddingBottom': searchFinalOffsetHeight + 'px'}],
-        timing);
-    var player = document.timeline.play(new GroupEffect(hasList ?
-          [listEffect, resultsEffect, searchEffect, viewEffect] :
-          [deviceMissingEffect, resultsEffect, searchEffect, viewEffect]));
+    var player = document.timeline.play(new GroupEffect(
+        hasList ?
+            [listEffect, resultsEffect, searchEffect, viewEffect] :
+            [deviceMissingEffect, resultsEffect, searchEffect, viewEffect]));
 
     var that = this;
     var finalizeAnimation = function() {
@@ -1472,6 +1581,9 @@ Polymer({
     var search = this.$$('#sink-search');
     var view = this.$['sink-list-view'];
 
+    // Set the max height for the results list before it's shown.
+    results.style.maxHeight = this.sinkListMaxHeight_ + 'px';
+
     // Saves current search container |offsetHeight| which includes bottom
     // padding.
     var searchInitialOffsetHeight = search.offsetHeight;
@@ -1485,8 +1597,6 @@ Polymer({
         this.getElementVerticalPadding_(search);
     var searchPadding = searchInitialPaddingBottom + searchInitialPaddingTop;
     var searchHeight = search.offsetHeight - searchPadding;
-    this.searchUseBottomPadding =
-        this.shouldSearchUseBottomPadding_(deviceMissing);
     var searchFinalPaddingBottom, searchFinalPaddingTop;
     [searchFinalPaddingBottom, searchFinalPaddingTop] =
         this.getElementVerticalPadding_(search);
@@ -1511,34 +1621,55 @@ Polymer({
     // This GroupEffect will cause the sink list to fade out while the search
     // input and search results list slide up. The dialog will also resize
     // smoothly to the new search result list height.
-    var deviceMissingEffect = new KeyframeEffect(deviceMissing,
-        [{'marginBottom': searchInitialOffsetHeight},
-         {'marginBottom': searchFinalOffsetHeight}],
+    var deviceMissingEffect = new KeyframeEffect(
+        deviceMissing,
+        [
+          {'marginBottom': searchInitialOffsetHeight},
+          {'marginBottom': searchFinalOffsetHeight}
+        ],
         timing);
-    var listEffect = new KeyframeEffect(list,
-        [{'opacity': '1'}, {'opacity': '0'}],
+    var listEffect =
+        new KeyframeEffect(list, [{'opacity': '1'}, {'opacity': '0'}], timing);
+    var resultsEffect = new KeyframeEffect(
+        resultsContainer,
+        [
+          {'top': '100%', 'paddingTop': '0px'}, {
+            'top': searchFinalTop + 'px',
+            'paddingTop': searchFinalOffsetHeight + 'px'
+          }
+        ],
         timing);
-    var resultsEffect = new KeyframeEffect(resultsContainer,
-        [{'top': '100%', 'paddingTop': '0px'},
-         {'top': searchFinalTop + 'px',
-          'paddingTop': searchFinalOffsetHeight + 'px'}],
+    var searchEffect = new KeyframeEffect(
+        search,
+        [
+          {
+            'top': '100%',
+            'marginTop': '-' + searchInitialOffsetHeight + 'px',
+            'paddingBottom': searchInitialPaddingBottom + 'px',
+            'paddingTop': searchInitialPaddingTop + 'px'
+          },
+          {
+            'top': searchFinalTop + 'px',
+            'marginTop': '0px',
+            'paddingBottom': searchFinalPaddingBottom + 'px',
+            'paddingTop': searchFinalPaddingTop + 'px'
+          }
+        ],
         timing);
-    var searchEffect = new KeyframeEffect(search,
-        [{'top': '100%', 'marginTop': '-' + searchInitialOffsetHeight + 'px',
-          'paddingBottom': searchInitialPaddingBottom + 'px',
-          'paddingTop': searchInitialPaddingTop + 'px'},
-         {'top': searchFinalTop + 'px', 'marginTop': '0px',
-          'paddingBottom': searchFinalPaddingBottom + 'px',
-          'paddingTop': searchFinalPaddingTop + 'px'}],
+    var viewEffect = new KeyframeEffect(
+        view,
+        [
+          {
+            'height': initialHeight + 'px',
+            'paddingBottom': searchInitialOffsetHeight + 'px'
+          },
+          {'height': finalHeight + 'px', 'paddingBottom': '0px'}
+        ],
         timing);
-    var viewEffect = new KeyframeEffect(view,
-        [{'height': initialHeight + 'px',
-          'paddingBottom': searchInitialOffsetHeight + 'px'},
-         {'height': finalHeight + 'px', 'paddingBottom': '0px'}],
-        timing);
-    var player = document.timeline.play(new GroupEffect(hasList ?
-          [listEffect, resultsEffect, searchEffect, viewEffect] :
-          [deviceMissingEffect, resultsEffect, searchEffect, viewEffect]));
+    var player = document.timeline.play(new GroupEffect(
+        hasList ?
+            [listEffect, resultsEffect, searchEffect, viewEffect] :
+            [deviceMissingEffect, resultsEffect, searchEffect, viewEffect]));
 
     var that = this;
     var finalizeAnimation = function() {
@@ -1575,20 +1706,25 @@ Polymer({
    * @private
    */
   onCastModeClick_: function(event) {
-    // The clicked cast mode can come from one of two lists,
-    // defaultCastModeList and nonDefaultCastModeList.
+    // The clicked cast mode can come from one of three lists,
+    // presentationCastModeList, shareScreenCastModeList, and
+    // localMediaCastModeList.
     var clickedMode =
-        this.$$('#defaultCastModeList').itemForElement(event.target) ||
-            this.$$('#nonDefaultCastModeList').itemForElement(event.target);
+        this.$$('#presentationCastModeList').itemForElement(event.target) ||
+        this.$$('#shareScreenCastModeList').itemForElement(event.target) ||
+        this.$$('#localMediaCastModeList').itemForElement(event.target);
 
     if (!clickedMode)
       return;
 
-    this.selectCastMode(clickedMode.type);
-    this.fire('cast-mode-selected', {castModeType: clickedMode.type});
-    this.showSinkList_();
-    this.maybeReportUserFirstAction(
-        media_router.MediaRouterUserAction.CHANGE_MODE);
+    // If the user selects LOCAL_FILE, some additional steps are required
+    // (selecting the file), before the cast mode has been officially
+    // selected.
+    if (clickedMode.type == media_router.CastModeType.LOCAL_FILE) {
+      this.selectLocalMediaFile_();
+    } else {
+      this.castModeSelected_(clickedMode);
+    }
   },
 
   /**
@@ -1662,9 +1798,9 @@ Polymer({
 
     // Regardless of whether the route is for display, it was resolved
     // successfully.
-    this.fire('report-resolved-route', {
-      outcome: media_router.MediaRouterRouteCreationOutcome.SUCCESS
-    });
+    this.fire(
+        'report-resolved-route',
+        {outcome: media_router.MediaRouterRouteCreationOutcome.SUCCESS});
 
     if (isForDisplay) {
       this.showRouteDetails_(route);
@@ -1673,6 +1809,26 @@ Polymer({
     } else {
       this.pendingCreatedRouteId_ = route.id;
     }
+  },
+
+  /**
+   * Sets up the LOCAL_FILE cast mode for display after a specific file has been
+   * selected.
+   *
+   * @param {string} fileName The name of the file that has been selected.
+   */
+  onFileDialogSuccess(fileName) {
+    /** @const */ var mode =
+        this.findCastModeByType_(media_router.CastModeType.LOCAL_FILE);
+
+    if (!mode)
+      return;
+
+    this.castModeSelected_(mode);
+    this.headerText =
+        loadTimeData.getStringF('castLocalMediaSelectedFileTitle', fileName);
+
+    this.updateSelectedCastModeMenuItem_();
   },
 
   /**
@@ -1710,8 +1866,8 @@ Polymer({
     // handled on the C++ side instead of the JS side on non-mac platforms,
     // which uses toolkit-views. Handle the expected behavior on all platforms
     // here.
-    if (e.key == media_router.KEY_ESC && !e.shiftKey &&
-        !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if (e.key == media_router.KEY_ESC && !e.shiftKey && !e.ctrlKey &&
+        !e.altKey && !e.metaKey) {
       // When searching, allow ESC as a mechanism to leave the filter view.
       if (this.currentView_ == media_router.MediaRouterView.FILTER) {
         // If the user tabbed to an item in the search results, or otherwise has
@@ -1767,6 +1923,17 @@ Polymer({
   },
 
   /**
+   * Called when the connection to the route controller is invalidated. Switches
+   * from route details view to the sink list view.
+   */
+  onRouteControllerInvalidated: function() {
+    if (this.currentView_ == media_router.MediaRouterView.ROUTE_DETAILS) {
+      this.currentRoute_ = null;
+      this.showSinkList_();
+    }
+  },
+
+  /**
    * Called when a sink is clicked.
    *
    * @param {!Event} event The event object.
@@ -1796,7 +1963,6 @@ Polymer({
     var list = this.$$('#sink-list');
     var resultsContainer = this.$$('#search-results-container');
     var view = this.$['sink-list-view'];
-    this.searchUseBottomPadding = true;
     search.style['top'] = '';
     if (resultsContainer) {
       resultsContainer.style['position'] = '';
@@ -1810,7 +1976,9 @@ Polymer({
       view.style['padding-bottom'] = search.offsetHeight + 'px';
       list.style['opacity'] = '';
     } else {
-      deviceMissing.style['margin-bottom'] = search.offsetHeight + 'px';
+      var bottomMargin = 12;
+      deviceMissing.style['margin-bottom'] =
+          (search.offsetHeight + bottomMargin) + 'px';
       search.style['margin-top'] = '';
       view.style['padding-bottom'] = '';
     }
@@ -1840,21 +2008,29 @@ Polymer({
     var search = this.$$('#sink-search');
     var view = this.$['sink-list-view'];
 
+    // Set the max height for the results list before it's shown.
+    results.style.maxHeight = this.sinkListMaxHeight_ + 'px';
+
     // If there is a height mismatch between where the animation calculated the
     // height should be and where it is now because the search results changed
     // during the animation, correct it with... another animation.
-    this.searchUseBottomPadding =
-        this.shouldSearchUseBottomPadding_(deviceMissing);
     var resultsPadding = this.computeElementVerticalPadding_(results);
-    var finalHeight = this.computeTotalSearchHeight_(deviceMissing, noMatches,
-        results, search.offsetHeight, this.sinkListMaxHeight_ + resultsPadding);
+    var finalHeight = this.computeTotalSearchHeight_(
+        deviceMissing, noMatches, results, search.offsetHeight,
+        this.sinkListMaxHeight_ + resultsPadding);
     if (finalHeight != view.offsetHeight) {
-      var viewEffect = new KeyframeEffect(view,
-          [{'height': view.offsetHeight + 'px'},
-           {'height': finalHeight + 'px'}],
-          {duration:
-              this.computeAnimationDuration_(finalHeight - view.offsetHeight),
-           easing: 'ease-in-out', fill: 'forwards'});
+      var viewEffect = new KeyframeEffect(
+          view,
+          [
+            {'height': view.offsetHeight + 'px'},
+            {'height': finalHeight + 'px'}
+          ],
+          {
+            duration:
+                this.computeAnimationDuration_(finalHeight - view.offsetHeight),
+            easing: 'ease-in-out',
+            fill: 'forwards'
+          });
       var player = document.timeline.play(viewEffect);
       if (this.heightAdjustmentPlayer_) {
         this.heightAdjustmentPlayer_.cancel();
@@ -1988,6 +2164,7 @@ Polymer({
     var updatedSinkList = this.allSinks.filter(function(sink) {
       return !sink.isPseudoSink;
     }, this);
+
     if (this.pseudoSinkSearchState_) {
       var pendingPseudoSink = this.pseudoSinkSearchState_.getPseudoSink();
       // Here we will treat the pseudo sink that launched the search as a real
@@ -2012,7 +2189,7 @@ Polymer({
     if (this.shownCastModeValue_ != media_router.CastModeType.AUTO) {
       updatedSinkList = updatedSinkList.filter(function(element) {
         return (element.castModes & this.shownCastModeValue_) ||
-              this.sinkToRouteMap_[element.id];
+            this.sinkToRouteMap_[element.id];
       }, this);
     }
 
@@ -2023,7 +2200,8 @@ Polymer({
     if (this.sinksToShow_) {
       for (var i = this.sinksToShow_.length - 1; i >= 0; i--) {
         var index = updatedSinkList.findIndex(function(updatedSink) {
-            return this.sinksToShow_[i].id == updatedSink.id; }.bind(this));
+          return this.sinksToShow_[i].id == updatedSink.id;
+        }.bind(this));
         if (index < 0) {
           // Remove any sinks that are no longer discovered.
           this.sinksToShow_.splice(i, 1);
@@ -2086,6 +2264,7 @@ Polymer({
    * indicating whether or not route creation was successful.
    * Clearing |currentLaunchingSinkId_| hides the spinner indicating there is
    * a route creation in progress and show the device icon instead.
+   * @param {boolean} creationSuccess Whether route creation succeeded.
    *
    * @private
    */
@@ -2093,6 +2272,12 @@ Polymer({
     this.pseudoSinkSearchState_ = null;
     this.currentLaunchingSinkId_ = '';
     this.pendingCreatedRouteId_ = '';
+    // If it was a search that failed we need to refresh the filtered sinks now
+    // that |pseudoSinkSearchState_| is null.
+    if (!creationSuccess &&
+        this.currentView_ == media_router.MediaRouterView.FILTER) {
+      this.filterSinks_(this.searchInputText_);
+    }
 
     this.fire('report-route-creation', {success: creationSuccess});
   },
@@ -2152,6 +2337,15 @@ Polymer({
   },
 
   /**
+   * Fires the command to open a file dialog.
+   *
+   * @private
+   */
+  selectLocalMediaFile_() {
+    this.fire('select-local-media-file');
+  },
+
+  /**
    * Sets various focus and blur event handlers to handle showing search results
    * when the search input is focused.
    * @private
@@ -2200,16 +2394,6 @@ Polymer({
   },
 
   /**
-   * @param {?Element} deviceMissing Device missing message element.
-   * @return {boolean} Whether the search input should use vertical padding as
-   *     if it were the lowest (at the very bottom) item in the dialog.
-   * @private
-   */
-  shouldSearchUseBottomPadding_: function(deviceMissing) {
-    return !deviceMissing.hasAttribute('hidden');
-  },
-
-  /**
    * Shows the cast mode list.
    *
    * @private
@@ -2236,7 +2420,8 @@ Polymer({
       // Allow one launch at a time.
       var selectedCastModeValue =
           this.shownCastModeValue_ == media_router.CastModeType.AUTO ?
-              sink.castModes & -sink.castModes : this.shownCastModeValue_;
+          sink.castModes & -sink.castModes :
+          this.shownCastModeValue_;
       if (sink.isPseudoSink) {
         this.pseudoSinkSearchState_ = new PseudoSinkSearchState(sink);
         this.fire('search-sinks-and-create-route', {
@@ -2278,6 +2463,12 @@ Polymer({
   showRouteDetails_: function(route) {
     this.currentRoute_ = route;
     this.currentView_ = media_router.MediaRouterView.ROUTE_DETAILS;
+    if (route.supportsWebUiController) {
+      media_router.browserApi.onMediaControllerAvailable(route.id);
+    }
+    if (this.$$('route-details')) {
+      this.$$('route-details').onOpened();
+    }
   },
 
   /**
@@ -2349,11 +2540,13 @@ Polymer({
       // element can have a fractional height. So we use getBoundingClientRect()
       // to avoid rounding errors.
       var firstRunFlowHeight = this.$$('#first-run-flow') &&
-          this.$$('#first-run-flow').style.display != 'none' ?
-              this.$$('#first-run-flow').getBoundingClientRect().height : 0;
+              this.$$('#first-run-flow').style.display != 'none' ?
+          this.$$('#first-run-flow').getBoundingClientRect().height :
+          0;
       var issueHeight = this.$$('#issue-banner') &&
-          this.$$('#issue-banner').style.display != 'none' ?
-              this.$$('#issue-banner').offsetHeight : 0;
+              this.$$('#issue-banner').style.display != 'none' ?
+          this.$$('#issue-banner').offsetHeight :
+          0;
       var search = this.$$('#sink-search');
       var hasSearch = this.hasConditionalElement_(search);
       var searchHeight = hasSearch ? search.offsetHeight : 0;
@@ -2365,23 +2558,20 @@ Polymer({
           firstRunFlowHeight + headerHeight + 'px';
 
       var sinkList = this.$$('#sink-list');
-      if (hasSearch && sinkList) {
-        // This would need to be reset to '' if search could be disabled again,
-        // but once it's enabled it can't be disabled again.
-        this.$$('#sink-list-paper-menu').style.paddingBottom = '0';
-      }
       var sinkListPadding =
           sinkList ? this.computeElementVerticalPadding_(sinkList) : 0;
 
       this.sinkListMaxHeight_ = this.dialogHeight_ - headerHeight -
           firstRunFlowHeight - issueHeight - searchHeight + searchPadding -
           sinkListPadding;
-      if (sinkList) {
+
+      // Limit the height of the dialog to five items, including search.
+      var sinkItemHeight = 41;
+      var maxSinkItems = hasSearch ? 4 : 5;
+      this.sinkListMaxHeight_ =
+          Math.min(sinkItemHeight * maxSinkItems, this.sinkListMaxHeight_);
+      if (sinkList)
         sinkList.style.maxHeight = this.sinkListMaxHeight_ + 'px';
-        var searchResults = this.$$('#search-results');
-        if (searchResults)
-          searchResults.style.maxHeight = this.sinkListMaxHeight_ + 'px';
-      }
     });
   },
 
@@ -2393,5 +2583,17 @@ Polymer({
   updateMaxDialogHeight: function(height) {
     this.dialogHeight_ = height;
     this.updateElementPositioning_();
+  },
+
+  /**
+   * Sets the selected cast mode menu item to be in sync with the current cast
+   * mode.
+   * @private
+   */
+  updateSelectedCastModeMenuItem_: function() {
+    /** @const */ var curIndex =
+        this.findCastModeIndexByType_(this.shownCastModeValue_);
+    if (this.selectedCastModeMenuItem_ != curIndex)
+      this.selectedCastModeMenuItem_ = curIndex;
   },
 });

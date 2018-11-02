@@ -18,7 +18,6 @@
 #include "components/payments/content/utility/payment_manifest_parser.h"
 #include "components/safe_json/utility/safe_json_parser_mojo_impl.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/service_info.h"
 #include "content/public/common/service_manager_connection.h"
 #include "content/public/common/simple_connection_filter.h"
 #include "content/public/utility/utility_thread.h"
@@ -27,6 +26,7 @@
 #include "extensions/features/features.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
 #include "printing/features/features.h"
+#include "services/service_manager/embedder/embedded_service_info.h"
 #include "services/service_manager/public/cpp/binder_registry.h"
 #include "third_party/zlib/google/zip.h"
 
@@ -34,7 +34,7 @@
 #include "chrome/common/resource_usage_reporter.mojom.h"
 #include "chrome/utility/media_router/dial_device_description_parser_impl.h"
 #include "chrome/utility/profile_import_handler.h"
-#include "net/proxy/mojo_proxy_resolver_factory_impl.h"
+#include "net/proxy/mojo_proxy_resolver_factory_impl.h"  // nogncheck
 #include "net/proxy/proxy_resolver_v8.h"
 #endif  // !defined(OS_ANDROID)
 
@@ -43,7 +43,6 @@
 #endif
 
 #if defined(OS_WIN)
-#include "chrome/utility/ipc_shell_handler_win.h"
 #include "chrome/utility/shell_handler_impl_win.h"
 #endif
 
@@ -63,8 +62,8 @@
 #endif
 
 #if defined(FULL_SAFE_BROWSING)
-#include "chrome/common/safe_archive_analyzer.mojom.h"
 #include "chrome/common/safe_browsing/archive_analyzer_results.h"
+#include "chrome/common/safe_browsing/safe_archive_analyzer.mojom.h"
 #include "chrome/common/safe_browsing/zip_analyzer.h"
 #if defined(OS_MACOSX)
 #include "chrome/utility/safe_browsing/mac/dmg_analyzer.h"
@@ -78,8 +77,7 @@ class FilePatcherImpl : public chrome::mojom::FilePatcher {
   FilePatcherImpl() = default;
   ~FilePatcherImpl() override = default;
 
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     chrome::mojom::FilePatcherRequest request) {
+  static void Create(chrome::mojom::FilePatcherRequest request) {
     mojo::MakeStrongBinding(base::MakeUnique<FilePatcherImpl>(),
                             std::move(request));
   }
@@ -121,8 +119,7 @@ class ZipFileCreatorImpl : public chrome::mojom::ZipFileCreator {
   ZipFileCreatorImpl() = default;
   ~ZipFileCreatorImpl() override = default;
 
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     chrome::mojom::ZipFileCreatorRequest request) {
+  static void Create(chrome::mojom::ZipFileCreatorRequest request) {
     mojo::MakeStrongBinding(base::MakeUnique<ZipFileCreatorImpl>(),
                             std::move(request));
   }
@@ -156,8 +153,7 @@ class SafeArchiveAnalyzerImpl : public chrome::mojom::SafeArchiveAnalyzer {
   SafeArchiveAnalyzerImpl() = default;
   ~SafeArchiveAnalyzerImpl() override = default;
 
-  static void Create(const service_manager::BindSourceInfo& source_info,
-                     chrome::mojom::SafeArchiveAnalyzerRequest request) {
+  static void Create(chrome::mojom::SafeArchiveAnalyzerRequest request) {
     mojo::MakeStrongBinding(base::MakeUnique<SafeArchiveAnalyzerImpl>(),
                             std::move(request));
   }
@@ -194,7 +190,6 @@ class SafeArchiveAnalyzerImpl : public chrome::mojom::SafeArchiveAnalyzer {
 
 #if !defined(OS_ANDROID)
 void CreateProxyResolverFactory(
-    const service_manager::BindSourceInfo& source_info,
     net::interfaces::ProxyResolverFactoryRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<net::MojoProxyResolverFactoryImpl>(),
                           std::move(request));
@@ -222,7 +217,6 @@ class ResourceUsageReporterImpl : public chrome::mojom::ResourceUsageReporter {
 };
 
 void CreateResourceUsageReporter(
-    const service_manager::BindSourceInfo& source_info,
     chrome::mojom::ResourceUsageReporterRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<ResourceUsageReporterImpl>(),
                           std::move(request));
@@ -240,10 +234,6 @@ ChromeContentUtilityClient::ChromeContentUtilityClient()
 #if BUILDFLAG(ENABLE_PRINT_PREVIEW) || \
     (BUILDFLAG(ENABLE_BASIC_PRINTING) && defined(OS_WIN))
   handlers_.push_back(base::MakeUnique<printing::PrintingHandler>());
-#endif
-
-#if defined(OS_WIN)
-  handlers_.push_back(base::MakeUnique<IPCShellHandler>());
 #endif
 }
 
@@ -329,7 +319,7 @@ bool ChromeContentUtilityClient::OnMessageReceived(
 void ChromeContentUtilityClient::RegisterServices(
     ChromeContentUtilityClient::StaticServiceMap* services) {
 #if BUILDFLAG(ENABLE_PRINTING)
-  content::ServiceInfo pdf_compositor_info;
+  service_manager::EmbeddedServiceInfo pdf_compositor_info;
   pdf_compositor_info.factory =
       base::Bind(&printing::CreatePdfCompositorService, GetUserAgent());
   services->emplace(printing::mojom::kServiceName, pdf_compositor_info);

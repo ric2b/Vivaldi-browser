@@ -24,18 +24,17 @@ source_set("network_sources") {
     ":network",
     "//content",  # For the component build.
     "//content/app:*",
+    "//content/public/network/*",
     "//content/utility:utility",
   ]
 
   sources = [
     "cache_url_loader.cc",
     "cache_url_loader.h",
-    "net_adapters.cc",
-    "net_adapters.h",
     "network_context.cc",
     "network_context.h",
-    "network_service.cc",
-    "network_service.h",
+    "network_service_impl.cc",
+    "network_service_impl.h",
     "network_service_url_loader_factory_impl.cc",
     "network_service_url_loader_factory_impl.h",
     "url_loader_impl.cc",
@@ -46,6 +45,7 @@ source_set("network_sources") {
 
   deps = [
     "//base",
+    "//components/network_session_configurator/common",
     "//content:export",
     "//content/common",
     "//content/common:mojo_bindings",

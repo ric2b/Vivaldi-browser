@@ -4,20 +4,35 @@
 
 #include "chrome/browser/page_load_metrics/observers/service_worker_page_load_metrics_observer.h"
 
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/page_load_metrics/observers/from_gws_page_load_metrics_observer.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_util.h"
+#include "net/http/http_response_headers.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/WebKit/public/platform/WebLoadingBehaviorFlag.h"
 
 namespace internal {
 
 const char kHistogramServiceWorkerParseStart[] =
     "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart";
+const char kHistogramServiceWorkerParseStartForwardBack[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart."
+    "LoadType.ForwardBackNavigation";
+const char kHistogramServiceWorkerParseStartForwardBackNoStore[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart."
+    "LoadType.ForwardBackNavigation.NoStore";
 const char kBackgroundHistogramServiceWorkerParseStart[] =
     "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart."
     "Background";
 const char kHistogramServiceWorkerFirstContentfulPaint[] =
     "PageLoad.Clients.ServiceWorker.PaintTiming."
     "NavigationToFirstContentfulPaint";
+const char kHistogramServiceWorkerFirstContentfulPaintForwardBack[] =
+    "PageLoad.Clients.ServiceWorker.PaintTiming."
+    "NavigationToFirstContentfulPaint.LoadType.ForwardBackNavigation";
+const char kHistogramServiceWorkerFirstContentfulPaintForwardBackNoStore[] =
+    "PageLoad.Clients.ServiceWorker.PaintTiming."
+    "NavigationToFirstContentfulPaint.LoadType.ForwardBackNavigation.NoStore";
 const char kBackgroundHistogramServiceWorkerFirstContentfulPaint[] =
     "PageLoad.Clients.ServiceWorker.PaintTiming."
     "NavigationToFirstContentfulPaint.Background";
@@ -36,6 +51,8 @@ const char kHistogramServiceWorkerDomContentLoaded[] =
 const char kHistogramServiceWorkerLoad[] =
     "PageLoad.Clients.ServiceWorker.DocumentTiming.NavigationToLoadEventFired";
 
+const char kHistogramServiceWorkerParseStartInbox[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart.inbox";
 const char kHistogramServiceWorkerFirstContentfulPaintInbox[] =
     "PageLoad.Clients.ServiceWorker.PaintTiming."
     "NavigationToFirstContentfulPaint.inbox";
@@ -55,6 +72,8 @@ const char kHistogramServiceWorkerLoadInbox[] =
     "PageLoad.Clients.ServiceWorker.DocumentTiming.NavigationToLoadEventFired."
     "inbox";
 
+const char kHistogramServiceWorkerParseStartSearch[] =
+    "PageLoad.Clients.ServiceWorker.ParseTiming.NavigationToParseStart.search";
 const char kHistogramServiceWorkerFirstContentfulPaintSearch[] =
     "PageLoad.Clients.ServiceWorker.PaintTiming."
     "NavigationToFirstContentfulPaint.search";
@@ -93,6 +112,10 @@ const char kHistogramNoServiceWorkerLoadSearch[] =
     "PageLoad.Clients.NoServiceWorker.DocumentTiming."
     "NavigationToLoadEventFired.search";
 
+// UKM (URL-keyed metrics) entry identifier, recorded for pages (main frame
+// loads) controlled by a service worker.
+const char kUkmServiceWorkerName[] = "PageLoad.ServiceWorkerControlled";
+
 }  // namespace internal
 
 namespace {
@@ -108,9 +131,27 @@ bool IsInboxSite(const GURL& url) {
   return url.host_piece() == "inbox.google.com";
 }
 
+bool IsForwardBackLoad(ui::PageTransition transition) {
+  return transition & ui::PAGE_TRANSITION_FORWARD_BACK;
+}
+
 }  // namespace
 
 ServiceWorkerPageLoadMetricsObserver::ServiceWorkerPageLoadMetricsObserver() {}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+ServiceWorkerPageLoadMetricsObserver::OnCommit(
+    content::NavigationHandle* navigation_handle,
+    ukm::SourceId source_id) {
+  transition_ = navigation_handle->GetPageTransition();
+  const net::HttpResponseHeaders* headers =
+      navigation_handle->GetResponseHeaders();
+  if (headers) {
+    was_no_store_main_resource_ =
+        headers->HasHeaderValue("cache-control", "no-store");
+  }
+  return CONTINUE_OBSERVING;
+}
 
 void ServiceWorkerPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     const page_load_metrics::mojom::PageLoadTiming& timing,
@@ -118,7 +159,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
   if (!IsServiceWorkerControlled(info)) {
     if (!WasStartedInForegroundOptionalEventInForeground(
             timing.paint_timing->first_contentful_paint, info) ||
-        !FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url)) {
+        !page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
       return;
     }
     PAGE_LOAD_HISTOGRAM(
@@ -145,6 +186,18 @@ void ServiceWorkerPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
       timing.paint_timing->first_contentful_paint.value() -
           timing.parse_timing->parse_start.value());
 
+  if (IsForwardBackLoad(transition_)) {
+    PAGE_LOAD_HISTOGRAM(
+        internal::kHistogramServiceWorkerFirstContentfulPaintForwardBack,
+        timing.paint_timing->first_contentful_paint.value());
+    if (was_no_store_main_resource_) {
+      PAGE_LOAD_HISTOGRAM(
+          internal::
+              kHistogramServiceWorkerFirstContentfulPaintForwardBackNoStore,
+          timing.paint_timing->first_contentful_paint.value());
+    }
+  }
+
   if (IsInboxSite(info.url)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerFirstContentfulPaintInbox,
@@ -153,7 +206,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnFirstContentfulPaintInPage(
         internal::kHistogramServiceWorkerParseStartToFirstContentfulPaintInbox,
         timing.paint_timing->first_contentful_paint.value() -
             timing.parse_timing->parse_start.value());
-  } else if (FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url)) {
+  } else if (page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerFirstContentfulPaintSearch,
         timing.paint_timing->first_contentful_paint.value());
@@ -173,7 +226,7 @@ void ServiceWorkerPageLoadMetricsObserver::
     return;
   }
   if (!IsServiceWorkerControlled(info)) {
-    if (!FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url))
+    if (!page_load_metrics::IsGoogleSearchResultUrl(info.url))
       return;
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramNoServiceWorkerFirstMeaningfulPaintSearch,
@@ -200,7 +253,7 @@ void ServiceWorkerPageLoadMetricsObserver::
         internal::kHistogramServiceWorkerParseStartToFirstMeaningfulPaintInbox,
         timing.paint_timing->first_meaningful_paint.value() -
             timing.parse_timing->parse_start.value());
-  } else if (FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url)) {
+  } else if (page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerFirstMeaningfulPaintSearch,
         timing.paint_timing->first_meaningful_paint.value());
@@ -219,7 +272,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnDomContentLoadedEventStart(
     return;
   }
   if (!IsServiceWorkerControlled(info)) {
-    if (!FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url))
+    if (!page_load_metrics::IsGoogleSearchResultUrl(info.url))
       return;
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramNoServiceWorkerDomContentLoadedSearch,
@@ -233,7 +286,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnDomContentLoadedEventStart(
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerDomContentLoadedInbox,
         timing.document_timing->dom_content_loaded_event_start.value());
-  } else if (FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url)) {
+  } else if (page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
     PAGE_LOAD_HISTOGRAM(
         internal::kHistogramServiceWorkerDomContentLoadedSearch,
         timing.document_timing->dom_content_loaded_event_start.value());
@@ -247,7 +300,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnLoadEventStart(
           timing.document_timing->load_event_start, info))
     return;
   if (!IsServiceWorkerControlled(info)) {
-    if (!FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url))
+    if (!page_load_metrics::IsGoogleSearchResultUrl(info.url))
       return;
     PAGE_LOAD_HISTOGRAM(internal::kHistogramNoServiceWorkerLoadSearch,
                         timing.document_timing->load_event_start.value());
@@ -258,7 +311,7 @@ void ServiceWorkerPageLoadMetricsObserver::OnLoadEventStart(
   if (IsInboxSite(info.url)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerLoadInbox,
                         timing.document_timing->load_event_start.value());
-  } else if (FromGWSPageLoadMetricsLogger::IsGoogleSearchResultUrl(info.url)) {
+  } else if (page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerLoadSearch,
                         timing.document_timing->load_event_start.value());
   }
@@ -273,8 +326,38 @@ void ServiceWorkerPageLoadMetricsObserver::OnParseStart(
           timing.parse_timing->parse_start, info)) {
     PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerParseStart,
                         timing.parse_timing->parse_start.value());
+
+    if (IsInboxSite(info.url)) {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerParseStartInbox,
+                          timing.parse_timing->parse_start.value());
+    } else if (page_load_metrics::IsGoogleSearchResultUrl(info.url)) {
+      PAGE_LOAD_HISTOGRAM(internal::kHistogramServiceWorkerParseStartSearch,
+                          timing.parse_timing->parse_start.value());
+    }
+    if (IsForwardBackLoad(transition_)) {
+      PAGE_LOAD_HISTOGRAM(
+          internal::kHistogramServiceWorkerParseStartForwardBack,
+          timing.parse_timing->parse_start.value());
+      if (was_no_store_main_resource_) {
+        PAGE_LOAD_HISTOGRAM(
+            internal::kHistogramServiceWorkerParseStartForwardBackNoStore,
+            timing.parse_timing->parse_start.value());
+      }
+    }
   } else {
     PAGE_LOAD_HISTOGRAM(internal::kBackgroundHistogramServiceWorkerParseStart,
                         timing.parse_timing->parse_start.value());
+  }
+}
+
+void ServiceWorkerPageLoadMetricsObserver::OnLoadingBehaviorObserved(
+    const page_load_metrics::PageLoadExtraInfo& info) {
+  if (!IsServiceWorkerControlled(info) || logged_ukm_event_)
+    return;
+  ukm::UkmRecorder* ukm_recorder = g_browser_process->ukm_recorder();
+  if (ukm_recorder) {
+    ukm_recorder->GetEntryBuilder(info.source_id,
+                                  internal::kUkmServiceWorkerName);
+    logged_ukm_event_ = true;
   }
 }

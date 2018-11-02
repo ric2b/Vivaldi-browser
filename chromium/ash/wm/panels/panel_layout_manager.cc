@@ -14,14 +14,12 @@
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/window_animation_types.h"
 #include "ash/wm/window_parenting_utils.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/auto_reset.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "third_party/skia/include/core/SkPath.h"
@@ -200,7 +198,7 @@ class PanelCalloutWidget : public views::Widget {
       callout_bounds.set_height(kArrowWidth);
     }
     Window* parent = window->parent();
-    // It's important this go through WmWindow and not Widget. Going through
+    // It's important this go through Window and not Widget. Going through
     // Widget means it may move do a different screen, we don't want that.
     window->SetBounds(callout_bounds);
     // Setting the bounds should not trigger changing the parent.
@@ -222,15 +220,15 @@ class PanelCalloutWidget : public views::Widget {
     params.bounds.set_width(kArrowWidth);
     params.bounds.set_height(kArrowHeight);
     params.accept_events = false;
-    RootWindowController::ForWindow(parent)
-        ->ConfigureWidgetInitParamsForContainer(this, parent->id(), &params);
+    params.parent = parent;
     set_focus_on_creation(false);
     Init(params);
     Window* widget_window = this->GetNativeWindow();
     DCHECK_EQ(widget_window->GetRootWindow(), parent->GetRootWindow());
     views::View* content_view = new views::View;
     background_ = new CalloutWidgetBackground;
-    content_view->set_background(background_);
+    content_view->SetBackground(
+        std::unique_ptr<views::Background>(background_));
     SetContentsView(content_view);
     widget_window->layer()->SetOpacity(0);
   }
@@ -260,7 +258,7 @@ PanelLayoutManager::PanelLayoutManager(Window* panel_container)
       weak_factory_(this) {
   DCHECK(panel_container);
   Shell::Get()->activation_client()->AddObserver(this);
-  ShellPort::Get()->AddDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->AddObserver(this);
   Shell::Get()->AddShellObserver(this);
 }
 
@@ -290,7 +288,7 @@ void PanelLayoutManager::Shutdown() {
   }
   panel_windows_.clear();
   Shell::Get()->activation_client()->RemoveObserver(this);
-  ShellPort::Get()->RemoveDisplayObserver(this);
+  Shell::Get()->window_tree_host_manager()->RemoveObserver(this);
   Shell::Get()->RemoveShellObserver(this);
 }
 
@@ -453,8 +451,8 @@ void PanelLayoutManager::OnOverviewModeEnded() {
   Relayout();
 }
 
-void PanelLayoutManager::OnShelfAlignmentChanged(WmWindow* root_window) {
-  if (root_window_controller_->GetWindow() == root_window)
+void PanelLayoutManager::OnShelfAlignmentChanged(aura::Window* root_window) {
+  if (root_window_controller_->GetRootWindow() == root_window)
     Relayout();
 }
 
@@ -502,7 +500,7 @@ void PanelLayoutManager::OnPostWindowStateTypeChange(
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PanelLayoutManager, aura::client::ActivationChangeObserver implementation:
+// PanelLayoutManager, wm::ActivationChangeObserver implementation:
 
 void PanelLayoutManager::OnWindowActivated(ActivationReason reason,
                                            Window* gained_active,
@@ -517,7 +515,7 @@ void PanelLayoutManager::OnWindowActivated(ActivationReason reason,
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// PanelLayoutManager, WmDisplayObserver::Observer implementation:
+// PanelLayoutManager, WindowTreeHostManager::Observer implementation:
 
 void PanelLayoutManager::OnDisplayConfigurationChanged() {
   Relayout();
@@ -652,8 +650,7 @@ void PanelLayoutManager::Relayout() {
       continue;
     }
 
-    gfx::Rect icon_bounds =
-        shelf_->GetScreenBoundsOfItemIconForWindow(WmWindow::Get(panel));
+    gfx::Rect icon_bounds = shelf_->GetScreenBoundsOfItemIconForWindow(panel);
 
     // If both the icon width and height are 0 then there is no icon in the
     // shelf. If the shelf is hidden, one of the height or width will be
@@ -832,8 +829,7 @@ void PanelLayoutManager::UpdateCallouts() {
     gfx::Rect current_bounds = panel->GetBoundsInScreen();
     gfx::Rect bounds = panel->GetTargetBounds();
     ::wm::ConvertRectToScreen(panel->parent(), &bounds);
-    gfx::Rect icon_bounds =
-        shelf_->GetScreenBoundsOfItemIconForWindow(WmWindow::Get(panel));
+    gfx::Rect icon_bounds = shelf_->GetScreenBoundsOfItemIconForWindow(panel);
     if (icon_bounds.IsEmpty() || !panel->layer()->GetTargetVisibility() ||
         panel == dragged_panel_ || !show_callout_widgets_) {
       callout_widget->Hide();

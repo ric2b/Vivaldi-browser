@@ -242,6 +242,7 @@ class URLDatabase {
   // the favicon couldn't be updated.
   bool MigrateFromVersion11ToVersion12();
 
+#include "components/history/url_database.h.inc"
  protected:
   friend class VisitDatabase;
 

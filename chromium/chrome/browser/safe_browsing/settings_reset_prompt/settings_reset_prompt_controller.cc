@@ -24,7 +24,6 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/url_formatter/elide_url.h"
 #include "content/public/browser/browser_thread.h"
@@ -107,6 +106,36 @@ void MaybeShowSettingsResetPrompt(
   DefaultSettingsFetcher::FetchDefaultSettings(
       base::Bind(&TryToShowSettingsResetPrompt, base::Passed(&model)));
 }
+
+class SettingsResetPromptDelegateImpl : public SettingsResetPromptDelegate {
+ public:
+  SettingsResetPromptDelegateImpl();
+  ~SettingsResetPromptDelegateImpl() override;
+
+  void ShowSettingsResetPromptWithDelay() const override;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(SettingsResetPromptDelegateImpl);
+};
+
+SettingsResetPromptDelegateImpl::SettingsResetPromptDelegateImpl() = default;
+
+SettingsResetPromptDelegateImpl::~SettingsResetPromptDelegateImpl() = default;
+
+void SettingsResetPromptDelegateImpl::ShowSettingsResetPromptWithDelay() const {
+  std::unique_ptr<SettingsResetPromptConfig> config =
+      SettingsResetPromptConfig::Create();
+  if (!config)
+    return;
+
+  base::TimeDelta delay = config->delay_before_prompt();
+  content::BrowserThread::PostDelayedTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(MaybeShowSettingsResetPrompt, base::Passed(&config)),
+      delay);
+}
+
+SettingsResetPromptDelegate* g_settings_reset_prompt_delegate = nullptr;
 
 }  // namespace.
 
@@ -258,16 +287,19 @@ void SettingsResetPromptController::OnInteractionDone() {
 }
 
 void MaybeShowSettingsResetPromptWithDelay() {
-  std::unique_ptr<SettingsResetPromptConfig> config =
-      SettingsResetPromptConfig::Create();
-  if (!config)
-    return;
+  if (g_settings_reset_prompt_delegate) {
+    g_settings_reset_prompt_delegate->ShowSettingsResetPromptWithDelay();
+  } else {
+    SettingsResetPromptDelegateImpl().ShowSettingsResetPromptWithDelay();
+  }
+}
 
-  base::TimeDelta delay = config->delay_before_prompt();
-  content::BrowserThread::PostDelayedTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::BindOnce(MaybeShowSettingsResetPrompt, base::Passed(&config)),
-      delay);
+SettingsResetPromptDelegate::SettingsResetPromptDelegate() = default;
+
+SettingsResetPromptDelegate::~SettingsResetPromptDelegate() = default;
+
+void SetSettingsResetPromptDelegate(SettingsResetPromptDelegate* delegate) {
+  g_settings_reset_prompt_delegate = delegate;
 }
 
 }  // namespace safe_browsing

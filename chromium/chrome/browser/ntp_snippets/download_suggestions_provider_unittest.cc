@@ -88,7 +88,7 @@ std::ostream& operator<<(std::ostream& os, const CategoryStatus& value) {
 
 namespace {
 
-const int kDefaultMaxDownloadAgeHours = 6 * 7 * 24;
+const int kDefaultMaxDownloadAgeHours = 24;
 
 base::Time CalculateDummyNowTime() {
   base::Time now;
@@ -190,7 +190,7 @@ std::vector<std::unique_ptr<FakeDownloadItem>> CreateDummyAssetDownloads(
   base::Time current_time = base::Time::Now();
   for (int id : ids) {
     result.push_back(CreateDummyAssetDownload(id, current_time));
-    current_time -= base::TimeDelta::FromDays(1);
+    current_time -= base::TimeDelta::FromMinutes(1);
   }
   return result;
 }
@@ -324,7 +324,9 @@ class DownloadSuggestionsProviderTest : public testing::Test {
 
   void FireOfflinePageDeleted(const OfflinePageItem& item) {
     DCHECK(provider_);
-    provider_->OfflinePageDeleted(item.offline_id, item.client_id);
+    offline_pages::OfflinePageModel::DeletedPageInfo info(
+        item.offline_id, item.client_id, item.request_origin);
+    provider_->OfflinePageDeleted(info);
   }
 
   void FireDownloadCreated(DownloadItem* item) {

@@ -5,13 +5,13 @@
 #ifndef TextResource_h
 #define TextResource_h
 
-#include "core/CoreExport.h"
-#include "platform/loader/fetch/Resource.h"
 #include <memory>
+#include "core/CoreExport.h"
+#include "core/html/parser/TextResourceDecoder.h"
+#include "platform/loader/fetch/Resource.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 
 namespace blink {
-
-class TextResourceDecoder;
 
 class CORE_EXPORT TextResource : public Resource {
  public:
@@ -19,16 +19,18 @@ class CORE_EXPORT TextResource : public Resource {
   // call time.
   String DecodedText() const;
 
-  void SetEncoding(const String&) override;
-  String Encoding() const override;
+  WTF::TextEncoding Encoding() const override;
+
+  void SetEncodingForTest(const String& encoding) { SetEncoding(encoding); }
 
  protected:
   TextResource(const ResourceRequest&,
                Type,
                const ResourceLoaderOptions&,
-               const String& mime_type,
-               const String& charset);
+               const TextResourceDecoderOptions&);
   ~TextResource() override;
+
+  void SetEncoding(const String&) override;
 
  private:
   std::unique_ptr<TextResourceDecoder> decoder_;

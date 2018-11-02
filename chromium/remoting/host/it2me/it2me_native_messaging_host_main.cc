@@ -40,10 +40,29 @@
 #include <commctrl.h>
 
 #include "remoting/host/switches.h"
-#include "remoting/host/win/elevation_helpers.h"
 #endif  // defined(OS_WIN)
 
 namespace remoting {
+
+namespace {
+
+#if defined(OS_WIN) && defined(OFFICIAL_BUILD)
+bool CurrentProcessHasUiAccess() {
+  HANDLE process_token;
+  OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &process_token);
+
+  DWORD size;
+  DWORD uiaccess_value = 0;
+  if (!GetTokenInformation(process_token, TokenUIAccess, &uiaccess_value,
+                           sizeof(uiaccess_value), &size)) {
+    PLOG(ERROR) << "GetTokenInformation() failed";
+  }
+  CloseHandle(process_token);
+  return uiaccess_value != 0;
+}
+#endif  // defined(OS_WIN) && defined(OFFICIAL_BUILD)
+
+}  // namespace
 
 // Creates a It2MeNativeMessagingHost instance, attaches it to stdin/stdout and
 // runs the message loop until It2MeNativeMessagingHost signals shutdown.
@@ -188,7 +207,7 @@ int It2MeNativeMessagingHostMain(int argc, char** argv) {
       ChromotingHostContext::Create(new remoting::AutoThreadTaskRunner(
           message_loop.task_runner(), run_loop.QuitClosure()));
   std::unique_ptr<PolicyWatcher> policy_watcher =
-      PolicyWatcher::Create(nullptr, context->file_task_runner());
+      PolicyWatcher::CreateWithTaskRunner(context->file_task_runner());
   std::unique_ptr<extensions::NativeMessageHost> host(
       new It2MeNativeMessagingHost(needs_elevation, std::move(policy_watcher),
                                    std::move(context), std::move(factory)));

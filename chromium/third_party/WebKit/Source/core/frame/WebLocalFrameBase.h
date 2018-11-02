@@ -14,8 +14,8 @@ namespace blink {
 
 class ContentSettingsClient;
 class FrameOwner;
-class FrameView;
 class LocalFrame;
+class LocalFrameView;
 class Node;
 class Page;
 class SharedWorkerRepositoryClientImpl;
@@ -27,8 +27,6 @@ class WebFrameClient;
 class WebFrameWidgetBase;
 class WebTextCheckClient;
 class WebViewBase;
-
-struct FrameLoadRequest;
 
 // WebLocalFrameBase is a temporary class the provides a layer of abstraction
 // for WebLocalFrameImpl. Mehtods that are declared public in WebLocalFrameImpl
@@ -51,7 +49,7 @@ class WebLocalFrameBase : public GarbageCollectedFinalized<WebLocalFrameBase>,
   virtual void SetContextMenuNode(Node*) = 0;
   virtual void ClearContextMenuNode() = 0;
   virtual LocalFrame* GetFrame() const = 0;
-  virtual FrameView* GetFrameView() const = 0;
+  virtual LocalFrameView* GetFrameView() const = 0;
   virtual void InitializeCoreFrame(Page&,
                                    FrameOwner*,
                                    const AtomicString& name) = 0;
@@ -69,15 +67,16 @@ class WebLocalFrameBase : public GarbageCollectedFinalized<WebLocalFrameBase>,
                        HistoryCommitType) = 0;
   virtual void DidFinish() = 0;
   virtual void CreateFrameView() = 0;
-  virtual LocalFrame* CreateChildFrame(const FrameLoadRequest&,
-                                       const AtomicString& name,
+  virtual LocalFrame* CreateChildFrame(const AtomicString& name,
                                        HTMLFrameOwnerElement*) = 0;
   virtual ContentSettingsClient& GetContentSettingsClient() = 0;
   virtual SharedWorkerRepositoryClientImpl* SharedWorkerRepositoryClient()
       const = 0;
   virtual TextCheckerClient& GetTextCheckerClient() const = 0;
   virtual TextFinder* GetTextFinder() const = 0;
-  virtual void SetInputEventsTransformForEmulation(const IntSize&, float) = 0;
+  virtual void SetInputEventsScaleForEmulation(float) = 0;
+
+  virtual WebFrameWidgetBase* LocalRootFrameWidget() = 0;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {}
 

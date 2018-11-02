@@ -173,8 +173,10 @@ public class SectionListTest {
         List<SnippetArticle> newSuggestions1 = createDummySuggestions(2, CATEGORY1, "new");
         List<SnippetArticle> newSuggestions2 = createDummySuggestions(2, CATEGORY2, "new");
 
-        sectionList.onMoreSuggestions(CATEGORY1, newSuggestions1.subList(0, 1));
-        sectionList.onMoreSuggestions(CATEGORY2, newSuggestions2);
+        sectionList.getSectionForTesting(CATEGORY1).appendSuggestions(
+                newSuggestions1.subList(0, 1), /*keepSectionSize=*/false);
+        sectionList.getSectionForTesting(CATEGORY2).appendSuggestions(
+                newSuggestions2, /*keepSectionSize=*/false);
 
         bindViewHolders(sectionList, 3, sectionList.getItemCount());
 
@@ -207,7 +209,8 @@ public class SectionListTest {
         assertThat(newSuggestions2.get(1).getPerSectionRank(), equalTo(5));
 
         // Add one more suggestions1
-        sectionList.onMoreSuggestions(CATEGORY1, newSuggestions1.subList(1, 2));
+        sectionList.getSectionForTesting(CATEGORY1).appendSuggestions(
+                newSuggestions1.subList(1, 2), /*keepSectionSize=*/false);
         bindViewHolders(sectionList);
 
         // After the changes we should have:

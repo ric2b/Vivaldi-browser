@@ -5,56 +5,40 @@
 #ifndef CSSMatrixComponent_h
 #define CSSMatrixComponent_h
 
-#include <memory>
 #include "core/css/cssom/CSSTransformComponent.h"
 #include "core/geometry/DOMMatrix.h"
-#include "platform/transforms/TransformationMatrix.h"
+#include "core/geometry/DOMMatrixReadOnly.h"
 
 namespace blink {
 
-class DOMMatrixReadOnly;
+class CSSMatrixComponentOptions;
 
+// Represents a matrix value in a CSSTransformValue used for properties like
+// "transform".
+// See CSSMatrixComponent.idl for more information about this class.
 class CORE_EXPORT CSSMatrixComponent final : public CSSTransformComponent {
   WTF_MAKE_NONCOPYABLE(CSSMatrixComponent);
   DEFINE_WRAPPERTYPEINFO();
 
  public:
-  static CSSMatrixComponent* Create(DOMMatrixReadOnly*);
+  // Constructors defined in the IDL.
+  static CSSMatrixComponent* Create(DOMMatrixReadOnly*,
+                                    const CSSMatrixComponentOptions&);
 
+  // Blink-internal ways of creating CSSMatrixComponents.
   static CSSMatrixComponent* FromCSSValue(const CSSFunctionValue& value) {
+    // TODO(meade): Implement.
     return nullptr;
   }
 
-  DOMMatrix* matrix() const { return matrix_; }
-
+  // Getters and setters for attributes defined in the IDL.
+  DOMMatrix* matrix() { return matrix_.Get(); }
   void setMatrix(DOMMatrix* matrix) { matrix_ = matrix; }
 
-  TransformComponentType GetType() const override {
-    return is2d_ ? kMatrixType : kMatrix3DType;
-  }
-
-  // Bindings require a non const return value.
-  CSSMatrixComponent* asMatrix() const override {
-    return const_cast<CSSMatrixComponent*>(this);
-  }
-
-  CSSFunctionValue* ToCSSValue() const override;
-
-  static CSSMatrixComponent* Perspective(double length);
-
-  static CSSMatrixComponent* Rotate(double angle);
-  static CSSMatrixComponent* Rotate3d(double angle,
-                                      double x,
-                                      double y,
-                                      double z);
-
-  static CSSMatrixComponent* Scale(double x, double y);
-  static CSSMatrixComponent* Scale3d(double x, double y, double z);
-
-  static CSSMatrixComponent* Skew(double x, double y);
-
-  static CSSMatrixComponent* Translate(double x, double y);
-  static CSSMatrixComponent* Translate3d(double x, double y, double z);
+  // Internal methods - from CSSTransformComponent.
+  TransformComponentType GetType() const final { return kMatrixType; }
+  const DOMMatrix* AsMatrix() const final;
+  CSSFunctionValue* ToCSSValue() const final;
 
   DEFINE_INLINE_VIRTUAL_TRACE() {
     visitor->Trace(matrix_);
@@ -62,11 +46,10 @@ class CORE_EXPORT CSSMatrixComponent final : public CSSTransformComponent {
   }
 
  private:
-  CSSMatrixComponent(DOMMatrixReadOnly*);
-  CSSMatrixComponent(DOMMatrixReadOnly*, TransformComponentType);
+  CSSMatrixComponent(DOMMatrixReadOnly* matrix, bool is2D)
+      : CSSTransformComponent(is2D), matrix_(DOMMatrix::Create(matrix)) {}
 
   Member<DOMMatrix> matrix_;
-  bool is2d_;
 };
 
 }  // namespace blink

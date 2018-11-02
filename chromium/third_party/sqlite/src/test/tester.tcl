@@ -700,8 +700,8 @@ proc output2_if_no_verbose {args} {
   }
 }
 
-# Override the [puts] command so that if no channel is explicitly 
-# specified the string is written to both stdout and to the file 
+# Override the [puts] command so that if no channel is explicitly
+# specified the string is written to both stdout and to the file
 # specified by "--output=", if any.
 #
 proc puts_override {args} {
@@ -1302,7 +1302,7 @@ proc explain_i {sql {db db}} {
   # Set up colors for the different opcodes. Scheme is as follows:
   #
   #   Red:   Opcodes that write to a b-tree.
-  #   Blue:  Opcodes that reposition or seek a cursor. 
+  #   Blue:  Opcodes that reposition or seek a cursor.
   #   Green: The ResultRow opcode.
   #
   if { [catch {fconfigure stdout -mode}]==0 } {
@@ -1346,7 +1346,7 @@ proc explain_i {sql {db db}} {
       }
     }
 
-    if {$opcode=="Next"  || $opcode=="Prev" 
+    if {$opcode=="Next"  || $opcode=="Prev"
      || $opcode=="VNext" || $opcode=="VPrev"
      || $opcode=="SorterNext" || $opcode=="NextIfOpen"
     } {
@@ -1533,6 +1533,7 @@ proc crashsql {args} {
   set tclbody {}
   set crashfile ""
   set dc ""
+  set dfltvfs 0
   set sql [lindex $args end]
 
   for {set ii 0} {$ii < [llength $args]-1} {incr ii 2} {
@@ -1546,7 +1547,8 @@ proc crashsql {args} {
     elseif {$n>1 && [string first $z -file]==0}      {set crashfile $z2}  \
     elseif {$n>1 && [string first $z -tclbody]==0}   {set tclbody $z2}  \
     elseif {$n>1 && [string first $z -blocksize]==0} {set blocksize "-s $z2" } \
-    elseif {$n>1 && [string first $z -characteristics]==0} {set dc "-c {$z2}" } \
+    elseif {$n>1 && [string first $z -characteristics]==0} {set dc "-c {$z2}" }\
+    elseif {$n>1 && [string first $z -dfltvfs]==0} {set dfltvfs $z2 }\
     else   { error "Unrecognized option: $z" }
   }
 
@@ -1560,7 +1562,7 @@ proc crashsql {args} {
   set cfile [string map {\\ \\\\} [file nativename [file join [get_pwd] $crashfile]]]
 
   set f [open crash.tcl w]
-  puts $f "sqlite3_crash_enable 1"
+  puts $f "sqlite3_crash_enable 1 $dfltvfs"
   puts $f "sqlite3_crashparams $blocksize $dc $crashdelay $cfile"
   puts $f "sqlite3_test_control_pending_byte $::sqlite_pending_byte"
 
@@ -1568,7 +1570,7 @@ proc crashsql {args} {
   # pages. This is done in case the build is configured to omit
   # "PRAGMA cache_size".
   if {$opendb!=""} {
-    puts $f $opendb 
+    puts $f $opendb
     puts $f {db eval {SELECT * FROM sqlite_master;}}
     puts $f {set bt [btree_from_db db]}
     puts $f {btree_set_cache_size $bt 10}
@@ -2192,7 +2194,7 @@ proc db_delete_and_reopen {{file test.db}} {
 
 # Close any connections named [db], [db2] or [db3]. Then use sqlite3_config
 # to configure the size of the PAGECACHE allocation using the parameters
-# provided to this command. Save the old PAGECACHE parameters in a global 
+# provided to this command. Save the old PAGECACHE parameters in a global
 # variable so that [test_restore_config_pagecache] can restore the previous
 # configuration.
 #
@@ -2223,7 +2225,7 @@ proc test_restore_config_pagecache {} {
 
   sqlite3_shutdown
   eval sqlite3_config_pagecache $::old_pagecache_config
-  unset ::old_pagecache_config 
+  unset ::old_pagecache_config
   sqlite3_initialize
   autoinstall_test_functions
   sqlite3 db test.db
@@ -2272,7 +2274,7 @@ set AUTOVACUUM $sqlite_options(default_autovacuum)
 set sqlite_fts3_enable_parentheses 0
 
 # During testing, assume that all database files are well-formed.  The
-# few test cases that deliberately corrupt database files should rescind 
+# few test cases that deliberately corrupt database files should rescind
 # this setting by invoking "database_can_be_corrupt"
 #
 database_never_corrupt

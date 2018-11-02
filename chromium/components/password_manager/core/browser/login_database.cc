@@ -26,7 +26,7 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "components/autofill/core/common/password_form.h"
-#include "components/password_manager/core/browser/affiliation_utils.h"
+#include "components/password_manager/core/browser/android_affiliation/affiliation_utils.h"
 #include "components/password_manager/core/browser/password_manager_client.h"
 #include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "components/password_manager/core/browser/password_manager_util.h"
@@ -361,6 +361,7 @@ void InitializeBuilder(SQLTableBuilder* builder) {
   builder->AddColumn("date_created", "INTEGER NOT NULL");
   builder->AddColumn("blacklisted_by_user", "INTEGER NOT NULL");
   builder->AddColumn("scheme", "INTEGER NOT NULL");
+  builder->AddIndex("logins_signon", {"signon_realm"});
   builder->SealVersion();
   unsigned version = builder->SealVersion();
   DCHECK_EQ(1u, version);
@@ -521,8 +522,7 @@ std::string GeneratePlaceholders(size_t count) {
 }  // namespace
 
 LoginDatabase::LoginDatabase(const base::FilePath& db_path)
-    : db_path_(db_path), clear_password_values_(false) {
-}
+    : db_path_(db_path) {}
 
 LoginDatabase::~LoginDatabase() {
 }
@@ -568,7 +568,7 @@ bool LoginDatabase::Init() {
     return false;
   }
 
-  SQLTableBuilder builder;
+  SQLTableBuilder builder("logins");
   InitializeBuilder(&builder);
   InitializeStatementStrings(builder);
 
@@ -814,9 +814,8 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
   if (!DoesMatchConstraints(form))
     return list;
   std::string encrypted_password;
-  if (EncryptedString(
-          clear_password_values_ ? base::string16() : form.password_value,
-          &encrypted_password) != ENCRYPTION_RESULT_SUCCESS)
+  if (EncryptedString(form.password_value, &encrypted_password) !=
+      ENCRYPTION_RESULT_SUCCESS)
     return list;
 
   DCHECK(!add_statement_.empty());
@@ -844,9 +843,8 @@ PasswordStoreChangeList LoginDatabase::AddLogin(const PasswordForm& form) {
 
 PasswordStoreChangeList LoginDatabase::UpdateLogin(const PasswordForm& form) {
   std::string encrypted_password;
-  if (EncryptedString(
-          clear_password_values_ ? base::string16() : form.password_value,
-          &encrypted_password) != ENCRYPTION_RESULT_SUCCESS)
+  if (EncryptedString(form.password_value, &encrypted_password) !=
+      ENCRYPTION_RESULT_SUCCESS)
     return PasswordStoreChangeList();
 
 #if defined(OS_IOS)

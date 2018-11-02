@@ -983,16 +983,14 @@ class WebGL2RenderingContextBase : public WebGLRenderingContextBase {
   friend class WebGLGetBufferSubDataAsync;
 
   WebGL2RenderingContextBase(
-      HTMLCanvasElement*,
-      std::unique_ptr<WebGraphicsContext3DProvider>,
-      const CanvasContextCreationAttributes& requested_attributes);
-  WebGL2RenderingContextBase(
-      OffscreenCanvas*,
+      CanvasRenderingContextHost*,
       std::unique_ptr<WebGraphicsContext3DProvider>,
       const CanvasContextCreationAttributes& requested_attributes);
 
   // DrawingBuffer::Client implementation.
   void DrawingBufferClientRestorePixelUnpackBufferBinding() override;
+  void DrawingBufferClientRestorePixelPackBufferBinding() override;
+  void DrawingBufferClientRestorePixelPackParameters() override;
 
   // Helper function to validate target and the attachment combination for
   // getFramebufferAttachmentParameters.  Generate GL error and return false if

@@ -16,6 +16,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/payments/content/payment_response_helper.h"
 #include "components/payments/core/autofill_payment_instrument.h"
+#include "components/payments/core/journey_logger.h"
 #include "components/payments/core/payment_instrument.h"
 #include "components/payments/core/payment_request_data_util.h"
 #include "components/payments/core/payment_request_delegate.h"
@@ -27,13 +28,15 @@ PaymentRequestState::PaymentRequestState(
     Delegate* delegate,
     const std::string& app_locale,
     autofill::PersonalDataManager* personal_data_manager,
-    PaymentRequestDelegate* payment_request_delegate)
+    PaymentRequestDelegate* payment_request_delegate,
+    JourneyLogger* journey_logger)
     : is_ready_to_pay_(false),
       is_waiting_for_merchant_validation_(false),
       app_locale_(app_locale),
       spec_(spec),
       delegate_(delegate),
       personal_data_manager_(personal_data_manager),
+      journey_logger_(journey_logger),
       selected_shipping_profile_(nullptr),
       selected_shipping_option_error_profile_(nullptr),
       selected_contact_profile_(nullptr),
@@ -77,11 +80,10 @@ void PaymentRequestState::OnSpecUpdated() {
 }
 
 bool PaymentRequestState::CanMakePayment() const {
-  for (const std::unique_ptr<PaymentInstrument>& instrument :
-       available_instruments_) {
+  for (const auto& instrument : available_instruments_) {
     if (instrument->IsValidForCanMakePayment()) {
       // AddAutofillPaymentInstrument() filters out available instruments based
-      // on supported card networks.
+      // on supported card networks (visa, amex) and types (credit, debit).
       DCHECK(spec_->supported_card_networks_set().find(
                  instrument->method_name()) !=
              spec_->supported_card_networks_set().end());
@@ -144,15 +146,26 @@ void PaymentRequestState::AddAutofillPaymentInstrument(
   std::string basic_card_network =
       autofill::data_util::GetPaymentRequestData(card.network())
           .basic_card_issuer_network;
-  if (!spec_->supported_card_networks_set().count(basic_card_network))
+  if (!spec_->supported_card_networks_set().count(basic_card_network) ||
+      !spec_->supported_card_types_set().count(card.card_type())) {
     return;
+  }
+
+  // The total number of card types: credit, debit, prepaid, unknown.
+  constexpr size_t kTotalNumberOfCardTypes = 4U;
+
+  // Whether the card type (credit, debit, prepaid) matches thetype that the
+  // merchant has requested exactly. This should be false for unknown card
+  // types, if the merchant cannot accept some card types.
+  bool matches_merchant_card_type_exactly =
+      card.card_type() != autofill::CreditCard::CARD_TYPE_UNKNOWN ||
+      spec_->supported_card_types_set().size() == kTotalNumberOfCardTypes;
 
   // AutofillPaymentInstrument makes a copy of |card| so it is effectively
   // owned by this object.
-  std::unique_ptr<PaymentInstrument> instrument =
-      base::MakeUnique<AutofillPaymentInstrument>(
-          basic_card_network, card, shipping_profiles_, app_locale_,
-          payment_request_delegate_);
+  auto instrument = base::MakeUnique<AutofillPaymentInstrument>(
+      basic_card_network, card, matches_merchant_card_type_exactly,
+      shipping_profiles_, app_locale_, payment_request_delegate_);
   available_instruments_.push_back(std::move(instrument));
 
   if (selected)
@@ -241,6 +254,10 @@ bool PaymentRequestState::IsPaymentAppInvoked() const {
   return !!response_helper_;
 }
 
+AddressNormalizer* PaymentRequestState::GetAddressNormalizer() {
+  return payment_request_delegate_->GetAddressNormalizer();
+}
+
 void PaymentRequestState::PopulateProfileCache() {
   std::vector<autofill::AutofillProfile*> profiles =
       personal_data_manager_->GetProfilesToSuggest();
@@ -262,12 +279,43 @@ void PaymentRequestState::PopulateProfileCache() {
   shipping_profiles_ = profile_comparator()->FilterProfilesForShipping(
       raw_profiles_for_filtering);
 
+  // Set the number of suggestions shown for the sections requested by the
+  // merchant.
+  if (spec_->request_payer_name() || spec_->request_payer_phone() ||
+      spec_->request_payer_email()) {
+    bool has_complete_contact =
+        contact_profiles_.empty()
+            ? false
+            : profile_comparator()->IsContactInfoComplete(contact_profiles_[0]);
+    journey_logger_->SetNumberOfSuggestionsShown(
+        JourneyLogger::Section::SECTION_CONTACT_INFO, contact_profiles_.size(),
+        has_complete_contact);
+  }
+  if (spec_->request_shipping()) {
+    bool has_complete_shipping =
+        shipping_profiles_.empty()
+            ? false
+            : profile_comparator()->IsShippingComplete(shipping_profiles_[0]);
+    journey_logger_->SetNumberOfSuggestionsShown(
+        JourneyLogger::Section::SECTION_SHIPPING_ADDRESS,
+        shipping_profiles_.size(), has_complete_shipping);
+  }
+
   // Create the list of available instruments. A copy of each card will be made
   // by their respective AutofillPaymentInstrument.
   const std::vector<autofill::CreditCard*>& cards =
       personal_data_manager_->GetCreditCardsToSuggest();
   for (autofill::CreditCard* card : cards)
     AddAutofillPaymentInstrument(/*selected=*/false, *card);
+
+  bool has_complete_instrument =
+      available_instruments().empty()
+          ? false
+          : available_instruments()[0]->IsCompleteForPayment();
+
+  journey_logger_->SetNumberOfSuggestionsShown(
+      JourneyLogger::Section::SECTION_PAYMENT_METHOD,
+      available_instruments().size(), has_complete_instrument);
 }
 
 void PaymentRequestState::SetDefaultProfileSelections() {
@@ -293,7 +341,8 @@ void PaymentRequestState::SetDefaultProfileSelections() {
   auto first_complete_instrument =
       std::find_if(instruments.begin(), instruments.end(),
                    [](const std::unique_ptr<PaymentInstrument>& instrument) {
-                     return instrument->IsCompleteForPayment();
+                     return instrument->IsCompleteForPayment() &&
+                            instrument->IsExactlyMatchingMerchantRequest();
                    });
   selected_instrument_ = first_complete_instrument == instruments.end()
                              ? nullptr

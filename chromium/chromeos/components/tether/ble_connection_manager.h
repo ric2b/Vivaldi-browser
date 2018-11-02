@@ -12,6 +12,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/clock.h"
 #include "base/timer/timer.h"
 #include "chromeos/components/tether/ble_advertisement_device_queue.h"
 #include "chromeos/components/tether/ble_advertiser.h"
@@ -21,13 +22,14 @@
 #include "components/cryptauth/secure_channel.h"
 
 namespace cryptauth {
-class BluetoothThrottler;
 class CryptAuthService;
 }  // namespace cryptauth
 
 namespace chromeos {
 
 namespace tether {
+
+class TimerFactory;
 
 // Manages connections to remote devices. When a device is registered,
 // BleConnectionManager intiates a connection to that device. If the connection
@@ -64,14 +66,18 @@ class BleConnectionManager : public BleScanner::Observer {
 
     virtual void OnMessageReceived(const cryptauth::RemoteDevice& remote_device,
                                    const std::string& payload) = 0;
+
+    // Called when a message has been sent successfully; |sequence_number|
+    // corresponds to the value returned by an earlier call to SendMessage().
+    virtual void OnMessageSent(int sequence_number) = 0;
   };
 
   BleConnectionManager(
       cryptauth::CryptAuthService* cryptauth_service,
       scoped_refptr<device::BluetoothAdapter> adapter,
-      const LocalDeviceDataProvider* local_device_data_provider,
-      const cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-      cryptauth::BluetoothThrottler* bluetooth_throttler);
+      BleAdvertisementDeviceQueue* ble_advertisement_device_queue,
+      BleAdvertiser* ble_advertiser,
+      BleScanner* ble_scanner);
   virtual ~BleConnectionManager();
 
   // Registers |remote_device| for |connection_reason|. Once registered, this
@@ -89,9 +95,12 @@ class BleConnectionManager : public BleScanner::Observer {
       const MessageType& connection_reason);
 
   // Sends |message| to |remote_device|. This function can only be called if the
-  // given device is authenticated.
-  virtual void SendMessage(const cryptauth::RemoteDevice& remote_device,
-                           const std::string& message);
+  // given device is authenticated. This function returns a sequence number for
+  // the message; if this message is sent successfully, observers will be
+  // notified and provided this number. Note that -1 is returned when the
+  // message cannot be sent.
+  virtual int SendMessage(const cryptauth::RemoteDevice& remote_device,
+                          const std::string& message);
 
   // Gets |remote_device|'s status and stores it to |status|, returning whether
   // |remote_device| is registered. If this function returns |false|, no value
@@ -106,29 +115,16 @@ class BleConnectionManager : public BleScanner::Observer {
   // BleScanner::Observer:
   void OnReceivedAdvertisementFromDevice(
       const std::string& device_address,
-      cryptauth::RemoteDevice remote_device) override;
+      const cryptauth::RemoteDevice& remote_device) override;
 
  protected:
-  class TimerFactory {
-   public:
-    virtual std::unique_ptr<base::Timer> CreateTimer();
-  };
-
-  BleConnectionManager(
-      cryptauth::CryptAuthService* cryptauth_service,
-      scoped_refptr<device::BluetoothAdapter> adapter,
-      std::unique_ptr<BleScanner> ble_scanner,
-      std::unique_ptr<BleAdvertiser> ble_advertiser,
-      std::unique_ptr<BleAdvertisementDeviceQueue> device_queue,
-      std::unique_ptr<TimerFactory> timer_factory,
-      cryptauth::BluetoothThrottler* bluetooth_throttler);
-
-  void SendMessageReceivedEvent(const cryptauth::RemoteDevice& remote_device,
-                                const std::string& payload);
+  void SendMessageReceivedEvent(cryptauth::RemoteDevice remote_device,
+                                std::string payload);
   void SendSecureChannelStatusChangeEvent(
-      const cryptauth::RemoteDevice& remote_device,
-      const cryptauth::SecureChannel::Status& old_status,
-      const cryptauth::SecureChannel::Status& new_status);
+      cryptauth::RemoteDevice remote_device,
+      cryptauth::SecureChannel::Status old_status,
+      cryptauth::SecureChannel::Status new_status);
+  void SendMessageSentEvent(int sequence_number);
 
  private:
   friend class BleConnectionManagerTest;
@@ -144,7 +140,7 @@ class BleConnectionManager : public BleScanner::Observer {
   class ConnectionMetadata : public cryptauth::SecureChannel::Observer {
    public:
     ConnectionMetadata(const cryptauth::RemoteDevice remote_device,
-                       std::shared_ptr<base::Timer> timer,
+                       std::unique_ptr<base::Timer> timer,
                        base::WeakPtr<BleConnectionManager> manager);
     ~ConnectionMetadata();
 
@@ -159,7 +155,7 @@ class BleConnectionManager : public BleScanner::Observer {
     bool HasSecureChannel();
     void SetSecureChannel(
         std::unique_ptr<cryptauth::SecureChannel> secure_channel);
-    void SendMessage(const std::string& payload);
+    int SendMessage(const std::string& payload);
 
     // cryptauth::SecureChannel::Observer:
     void OnSecureChannelStatusChanged(
@@ -169,6 +165,8 @@ class BleConnectionManager : public BleScanner::Observer {
     void OnMessageReceived(cryptauth::SecureChannel* secure_channel,
                            const std::string& feature,
                            const std::string& payload) override;
+    void OnMessageSent(cryptauth::SecureChannel* secure_channel,
+                       int sequence_number) override;
 
    private:
     friend class BleConnectionManagerTest;
@@ -177,17 +175,16 @@ class BleConnectionManager : public BleScanner::Observer {
 
     cryptauth::RemoteDevice remote_device_;
     std::set<MessageType> active_connection_reasons_;
-    std::shared_ptr<cryptauth::SecureChannel> secure_channel_;
-    std::shared_ptr<base::Timer> connection_attempt_timeout_timer_;
+    std::unique_ptr<cryptauth::SecureChannel> secure_channel_;
+    std::unique_ptr<base::Timer> connection_attempt_timeout_timer_;
     base::WeakPtr<BleConnectionManager> manager_;
 
     base::WeakPtrFactory<ConnectionMetadata> weak_ptr_factory_;
   };
 
-
-  std::shared_ptr<ConnectionMetadata> GetConnectionMetadata(
+  ConnectionMetadata* GetConnectionMetadata(
       const cryptauth::RemoteDevice& remote_device) const;
-  std::shared_ptr<ConnectionMetadata> AddMetadataForDevice(
+  ConnectionMetadata* AddMetadataForDevice(
       const cryptauth::RemoteDevice& remote_device);
 
   void UpdateConnectionAttempts();
@@ -203,17 +200,30 @@ class BleConnectionManager : public BleScanner::Observer {
       const cryptauth::SecureChannel::Status& old_status,
       const cryptauth::SecureChannel::Status& new_status);
 
+  void SetTestDoubles(std::unique_ptr<base::Clock> test_clock,
+                      std::unique_ptr<TimerFactory> test_timer_factory);
+
+  // Record various operation durations. These need to be separate methods
+  // because internally they use a macro which maintains a static state that
+  // does not tolerate different histogram names being passed to it.
+  void RecordAdvertisementToConnectionDuration(const std::string device_id);
+  void RecordConnectionToAuthenticationDuration(const std::string device_id);
+
   cryptauth::CryptAuthService* cryptauth_service_;
   scoped_refptr<device::BluetoothAdapter> adapter_;
-  std::unique_ptr<BleScanner> ble_scanner_;
-  std::unique_ptr<BleAdvertiser> ble_advertiser_;
-  std::unique_ptr<BleAdvertisementDeviceQueue> device_queue_;
+  BleAdvertisementDeviceQueue* ble_advertisement_device_queue_;
+  BleAdvertiser* ble_advertiser_;
+  BleScanner* ble_scanner_;
+
   std::unique_ptr<TimerFactory> timer_factory_;
-  cryptauth::BluetoothThrottler* bluetooth_throttler_;
+  std::unique_ptr<base::Clock> clock_;
 
   bool has_registered_observer_;
-  std::map<cryptauth::RemoteDevice, std::shared_ptr<ConnectionMetadata>>
+  std::map<cryptauth::RemoteDevice, std::unique_ptr<ConnectionMetadata>>
       device_to_metadata_map_;
+
+  std::map<std::string, base::Time> device_id_to_advertising_start_time_map_;
+  std::map<std::string, base::Time> device_id_to_status_connected_time_map_;
 
   base::ObserverList<Observer> observer_list_;
   base::WeakPtrFactory<BleConnectionManager> weak_ptr_factory_;

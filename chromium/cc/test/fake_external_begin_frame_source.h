@@ -9,7 +9,7 @@
 
 #include "base/cancelable_callback.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "cc/output/begin_frame_args.h"
 #include "cc/scheduler/begin_frame_source.h"
 
@@ -19,9 +19,7 @@ class SimpleTestTickClock;
 
 namespace cc {
 
-class FakeExternalBeginFrameSource
-    : public BeginFrameSource,
-      public NON_EXPORTED_BASE(base::NonThreadSafe) {
+class FakeExternalBeginFrameSource : public BeginFrameSource {
  public:
   class Client {
    public:
@@ -39,8 +37,7 @@ class FakeExternalBeginFrameSource
   // BeginFrameSource implementation.
   void AddObserver(BeginFrameObserver* obs) override;
   void RemoveObserver(BeginFrameObserver* obs) override;
-  void DidFinishFrame(BeginFrameObserver* obs,
-                      const BeginFrameAck& ack) override;
+  void DidFinishFrame(BeginFrameObserver* obs) override;
   bool IsThrottled() const override;
 
   BeginFrameArgs CreateBeginFrameArgs(
@@ -53,10 +50,6 @@ class FakeExternalBeginFrameSource
 
   size_t num_observers() const { return observers_.size(); }
 
-  const BeginFrameAck& LastAckForObserver(BeginFrameObserver* obs) {
-    return last_acks_[obs];
-  }
-
  private:
   void PostTestOnBeginFrame();
 
@@ -68,7 +61,9 @@ class FakeExternalBeginFrameSource
   uint64_t next_begin_frame_number_ = BeginFrameArgs::kStartingFrameNumber;
   std::set<BeginFrameObserver*> observers_;
   base::CancelableCallback<void(const BeginFrameArgs&)> begin_frame_task_;
-  std::unordered_map<BeginFrameObserver*, BeginFrameAck> last_acks_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
+
   base::WeakPtrFactory<FakeExternalBeginFrameSource> weak_ptr_factory_;
 };
 

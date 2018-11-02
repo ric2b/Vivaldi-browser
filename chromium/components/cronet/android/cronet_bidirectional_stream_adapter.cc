@@ -322,10 +322,11 @@ void CronetBidirectionalStreamAdapter::OnFailed(int error) {
   DCHECK(context_->IsOnNetworkThread());
   stream_failed_ = true;
   JNIEnv* env = base::android::AttachCurrentThread();
-  // TODO(mgersh): Add support for NetErrorDetails (http://crbug.com/624942)
+  net::NetErrorDetails net_error_details;
+  bidi_stream_->PopulateNetErrorDetails(&net_error_details);
   cronet::Java_CronetBidirectionalStream_onError(
       env, owner_.obj(), NetErrorToUrlRequestError(error), error,
-      net::QUIC_NO_ERROR,
+      net_error_details.quic_connection_error,
       ConvertUTF8ToJavaString(env, net::ErrorToString(error)).obj(),
       bidi_stream_->GetTotalReceivedBytes());
 }
@@ -398,15 +399,9 @@ void CronetBidirectionalStreamAdapter::WritevDataOnNetworkThread(
 
   pending_write_data_ = std::move(pending_write_data);
   bool end_of_stream = pending_write_data_->jwrite_end_of_stream == JNI_TRUE;
-  if (pending_write_data_->write_buffer_list.size() == 1) {
-    bidi_stream_->SendData(pending_write_data_->write_buffer_list[0],
-                           pending_write_data_->write_buffer_len_list[0],
-                           end_of_stream);
-  } else {
-    bidi_stream_->SendvData(pending_write_data_->write_buffer_list,
-                            pending_write_data_->write_buffer_len_list,
-                            end_of_stream);
-  }
+  bidi_stream_->SendvData(pending_write_data_->write_buffer_list,
+                          pending_write_data_->write_buffer_len_list,
+                          end_of_stream);
 }
 
 void CronetBidirectionalStreamAdapter::DestroyOnNetworkThread(

@@ -48,10 +48,16 @@ const char kHeartbeatResultTag[] = "heartbeat-result";
 const char kSetIntervalTag[] = "set-interval";
 const char kExpectedSequenceIdTag[] = "expected-sequence-id";
 
-const int64_t kDefaultHeartbeatIntervalMs = 5 * 60 * 1000;  // 5 minutes.
-const int64_t kResendDelayMs = 10 * 1000;                   // 10 seconds.
-const int64_t kResendDelayOnHostNotFoundMs = 10 * 1000;     // 10 seconds.
+constexpr base::TimeDelta kDefaultHeartbeatInterval =
+    base::TimeDelta::FromMinutes(5);
+constexpr base::TimeDelta kHeartbeatResponseTimeout =
+    base::TimeDelta::FromSeconds(30);
+constexpr base::TimeDelta kResendDelay = base::TimeDelta::FromSeconds(10);
+constexpr base::TimeDelta kResendDelayOnHostNotFound =
+    base::TimeDelta::FromSeconds(10);
+
 const int kMaxResendOnHostNotFoundCount = 12;  // 2 minutes (12 x 10 seconds).
+const int kMaxHeartbeatTimeouts = 2;
 
 }  // namespace
 
@@ -68,12 +74,7 @@ HeartbeatSender::HeartbeatSender(
       signal_strategy_(signal_strategy),
       host_key_pair_(host_key_pair),
       directory_bot_jid_(directory_bot_jid),
-      interval_ms_(kDefaultHeartbeatIntervalMs),
-      sequence_id_(0),
-      sequence_id_was_set_(false),
-      sequence_id_recent_set_num_(0),
-      heartbeat_succeeded_(false),
-      failed_startup_heartbeat_count_(0) {
+      interval_(kDefaultHeartbeatInterval) {
   DCHECK(signal_strategy_);
   DCHECK(host_key_pair_.get());
   DCHECK(thread_checker_.CalledOnValidThread());
@@ -92,15 +93,13 @@ HeartbeatSender::~HeartbeatSender() {
 void HeartbeatSender::OnSignalStrategyStateChange(SignalStrategy::State state) {
   DCHECK(thread_checker_.CalledOnValidThread());
   if (state == SignalStrategy::CONNECTED) {
-    iq_sender_.reset(new IqSender(signal_strategy_));
-    SendStanza();
-    timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(interval_ms_),
-                 this, &HeartbeatSender::SendStanza);
+    DCHECK(!iq_sender_);
+    iq_sender_ = base::MakeUnique<IqSender>(signal_strategy_);
+    SendHeartbeat();
   } else if (state == SignalStrategy::DISCONNECTED) {
     request_.reset();
     iq_sender_.reset();
     timer_.Stop();
-    timer_resend_.Stop();
   }
 }
 
@@ -124,13 +123,7 @@ void HeartbeatSender::OnHostOfflineReasonAck() {
   DCHECK(host_offline_reason_timeout_timer_.IsRunning());
   host_offline_reason_timeout_timer_.Stop();
 
-  // Run the ACK callback under a clean stack via PostTask() (because the
-  // callback can end up deleting |this| HeartbeatSender [i.e. when used from
-  // HostSignalingManager]).
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE,
-      base::Bind(base::ResetAndReturn(&host_offline_reason_ack_callback_),
-                 true));
+  base::ResetAndReturn(&host_offline_reason_ack_callback_).Run(true);
 }
 
 void HeartbeatSender::SetHostOfflineReason(
@@ -139,78 +132,138 @@ void HeartbeatSender::SetHostOfflineReason(
     const base::Callback<void(bool success)>& ack_callback) {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(host_offline_reason_ack_callback_.is_null());
+
   host_offline_reason_ = host_offline_reason;
   host_offline_reason_ack_callback_ = ack_callback;
   host_offline_reason_timeout_timer_.Start(
       FROM_HERE, timeout, this, &HeartbeatSender::OnHostOfflineReasonTimeout);
   if (signal_strategy_->GetState() == SignalStrategy::CONNECTED) {
-    DoSendStanza();
+    // Drop timer or pending heartbeat and send a new heartbeat immediately.
+    request_.reset();
+    timer_.Stop();
+
+    SendHeartbeat();
   }
 }
 
-void HeartbeatSender::SendStanza() {
-  // Make sure we don't send another heartbeat before the heartbeat interval
-  // has expired.
-  timer_resend_.Stop();
-  DoSendStanza();
-}
-
-void HeartbeatSender::ResendStanza() {
-  // Make sure we don't send another heartbeat before the heartbeat interval
-  // has expired.
-  timer_.Reset();
-  DoSendStanza();
-}
-
-void HeartbeatSender::DoSendStanza() {
+void HeartbeatSender::SendHeartbeat() {
   DCHECK(thread_checker_.CalledOnValidThread());
-  DCHECK(signal_strategy_->GetState() == SignalStrategy::CONNECTED);
+  DCHECK_EQ(signal_strategy_->GetState(), SignalStrategy::CONNECTED);
   VLOG(1) << "Sending heartbeat stanza to " << directory_bot_jid_;
 
   request_ = iq_sender_->SendIq(
       buzz::STR_SET, directory_bot_jid_, CreateHeartbeatMessage(),
-      base::Bind(&HeartbeatSender::ProcessResponse,
-                 base::Unretained(this),
-                 !host_offline_reason_.empty()));
+      base::Bind(&HeartbeatSender::OnResponse, base::Unretained(this)));
+  request_->SetTimeout(kHeartbeatResponseTimeout);
   ++sequence_id_;
 }
 
-void HeartbeatSender::ProcessResponse(
-    bool is_offline_heartbeat_response,
-    IqRequest* request,
-    const XmlElement* response) {
+void HeartbeatSender::OnResponse(IqRequest* request,
+                                 const buzz::XmlElement* response) {
   DCHECK(thread_checker_.CalledOnValidThread());
+
+  HeartbeatResult result = ProcessResponse(response);
+
+  if (result == HeartbeatResult::SUCCESS) {
+    heartbeat_succeeded_ = true;
+    failed_heartbeat_count_ = 0;
+
+    // Notify listener of the first successful heartbeat.
+    if (!on_heartbeat_successful_callback_.is_null()) {
+      base::ResetAndReturn(&on_heartbeat_successful_callback_).Run();
+    }
+
+    // Notify caller of SetHostOfflineReason that we got an ack and don't
+    // schedule another heartbeat.
+    if (!host_offline_reason_.empty()) {
+      OnHostOfflineReasonAck();
+      return;
+    }
+  } else {
+    failed_heartbeat_count_++;
+  }
+
+  if (result == HeartbeatResult::TIMEOUT) {
+    timed_out_heartbeats_count_++;
+    if (timed_out_heartbeats_count_ >= kMaxHeartbeatTimeouts) {
+      LOG(ERROR) << "Heartbeat timed out. Reconnecting XMPP.";
+      timed_out_heartbeats_count_ = 0;
+      // SignalingConnector will reconnect SignalStrategy.
+      signal_strategy_->Disconnect();
+      return;
+    }
+
+    LOG(ERROR) << "Heartbeat timed out.";
+  } else {
+    timed_out_heartbeats_count_ = 0;
+  }
+
+  // If the host was registered immediately before it sends a heartbeat,
+  // then server-side latency may prevent the server recognizing the
+  // host ID in the heartbeat. So even if all of the first few heartbeats
+  // get a "host ID not found" error, that's not a good enough reason to
+  // exit.
+  if (result == HeartbeatResult::INVALID_HOST_ID &&
+      (heartbeat_succeeded_ ||
+       (failed_heartbeat_count_ > kMaxResendOnHostNotFoundCount))) {
+    on_unknown_host_id_error_.Run();
+    return;
+  }
+
+  // Response can be received only while signaling connection is active, so we
+  // should be able to schedule next message.
+  DCHECK_EQ(signal_strategy_->GetState(), SignalStrategy::CONNECTED);
+
+  // Calculate delay before sending the next message.
+  base::TimeDelta delay;
+  switch (result) {
+    case HeartbeatResult::SUCCESS:
+      delay = interval_;
+      break;
+
+    case HeartbeatResult::INVALID_HOST_ID:
+      delay = kResendDelayOnHostNotFound;
+      break;
+
+    case HeartbeatResult::SET_SEQUENCE_ID:
+      if (failed_heartbeat_count_ == 1 && !heartbeat_succeeded_) {
+        // Send next heartbeat immediately after receiving the first
+        // set-sequence-id response. Repeated set-sequence-id responses are
+        // unexpected, and therefore are handled as errors to avoid overloading
+        // the server when it malfunctions.
+        delay = base::TimeDelta();
+        break;
+      }
+    // Fall through to handle other cases as errors.
+
+    case HeartbeatResult::TIMEOUT:
+    case HeartbeatResult::ERROR:
+      delay = pow(2.0, failed_heartbeat_count_) * (1 + base::RandDouble()) *
+              kResendDelay;
+      break;
+  }
+
+  timer_.Start(FROM_HERE, delay, this, &HeartbeatSender::SendHeartbeat);
+}
+
+HeartbeatSender::HeartbeatResult HeartbeatSender::ProcessResponse(
+    const buzz::XmlElement* response) {
+  if (!response)
+    return HeartbeatResult::TIMEOUT;
 
   std::string type = response->Attr(buzz::QN_TYPE);
   if (type == buzz::STR_ERROR) {
     const XmlElement* error_element =
         response->FirstNamed(QName(buzz::NS_CLIENT, kErrorTag));
-    if (error_element) {
-      if (error_element->FirstNamed(QName(buzz::NS_STANZA, kNotFoundTag))) {
-        LOG(ERROR) << "Received error: Host ID not found";
-        // If the host was registered immediately before it sends a heartbeat,
-        // then server-side latency may prevent the server recognizing the
-        // host ID in the heartbeat. So even if all of the first few heartbeats
-        // get a "host ID not found" error, that's not a good enough reason to
-        // exit.
-        failed_startup_heartbeat_count_++;
-        if (!heartbeat_succeeded_ && (failed_startup_heartbeat_count_ <=
-                kMaxResendOnHostNotFoundCount)) {
-          timer_resend_.Start(FROM_HERE,
-                              base::TimeDelta::FromMilliseconds(
-                                  kResendDelayOnHostNotFoundMs),
-                              this,
-                              &HeartbeatSender::ResendStanza);
-          return;
-        }
-        on_unknown_host_id_error_.Run();
-        return;
-      }
+    if (error_element &&
+        error_element->FirstNamed(QName(buzz::NS_STANZA, kNotFoundTag))) {
+      LOG(ERROR) << "Received error: Host ID not found";
+      return HeartbeatResult::INVALID_HOST_ID;
     }
-
     LOG(ERROR) << "Received error in response to heartbeat: "
                << response->Str();
-    return;
+
+    return HeartbeatResult::ERROR;
   }
 
   // This method must only be called for error or result stanzas.
@@ -224,16 +277,16 @@ void HeartbeatSender::ProcessResponse(
                                          kSetIntervalTag));
     if (set_interval_element) {
       const std::string& interval_str = set_interval_element->BodyText();
-      int interval;
-      if (!base::StringToInt(interval_str, &interval) || interval <= 0) {
+      int interval_seconds;
+      if (!base::StringToInt(interval_str, &interval_seconds) ||
+          interval_seconds <= 0) {
         LOG(ERROR) << "Received invalid set-interval: "
                    << set_interval_element->Str();
       } else {
-        SetInterval(interval * base::Time::kMillisecondsPerSecond);
+        interval_ = base::TimeDelta::FromSeconds(interval_seconds);
       }
     }
 
-    bool did_set_sequence_id = false;
     const XmlElement* expected_sequence_id_element =
         result_element->FirstNamed(QName(kChromotingXmlNamespace,
                                          kExpectedSequenceIdTag));
@@ -246,64 +299,16 @@ void HeartbeatSender::ProcessResponse(
       if (!base::StringToInt(expected_sequence_id_str, &expected_sequence_id)) {
         LOG(ERROR) << "Received invalid " << kExpectedSequenceIdTag << ": " <<
             expected_sequence_id_element->Str();
-      } else {
-        SetSequenceId(expected_sequence_id);
-        sequence_id_recent_set_num_++;
-        did_set_sequence_id = true;
-      }
-    }
-    if (!did_set_sequence_id) {
-      // It seems the bot accepted our signature and our message.
-      sequence_id_recent_set_num_ = 0;
 
-      // Notify listener of the first successful heartbeat.
-      if (!heartbeat_succeeded_) {
-        on_heartbeat_successful_callback_.Run();
+        return HeartbeatResult::ERROR;
       }
-      heartbeat_succeeded_ = true;
 
-      // Notify caller of SetHostOfflineReason that we got an ack.
-      if (is_offline_heartbeat_response) {
-        OnHostOfflineReasonAck();
-      }
+      sequence_id_ = expected_sequence_id;
+      return HeartbeatResult::SET_SEQUENCE_ID;
     }
   }
-}
 
-void HeartbeatSender::SetInterval(int interval) {
-  if (interval != interval_ms_) {
-    interval_ms_ = interval;
-
-    // Restart the timer with the new interval.
-    if (timer_.IsRunning()) {
-      timer_.Stop();
-      timer_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(interval_ms_),
-                   this, &HeartbeatSender::SendStanza);
-    }
-  }
-}
-
-void HeartbeatSender::SetSequenceId(int sequence_id) {
-  sequence_id_ = sequence_id;
-  // Setting the sequence ID may be a symptom of a temporary server-side
-  // problem, which would affect many hosts, so don't send a new heartbeat
-  // immediately, as many hosts doing so may overload the server.
-  // But the server will usually set the sequence ID when it receives the first
-  // heartbeat from a host. In that case, we can send a new heartbeat
-  // immediately, as that only happens once per host instance.
-  if (!sequence_id_was_set_) {
-    ResendStanza();
-  } else {
-    HOST_LOG << "The heartbeat sequence ID has been set more than once: "
-              << "the new value is " << sequence_id;
-    double delay = pow(2.0, sequence_id_recent_set_num_) *
-        (1 + base::RandDouble()) * kResendDelayMs;
-    if (delay <= interval_ms_) {
-      timer_resend_.Start(FROM_HERE, base::TimeDelta::FromMilliseconds(delay),
-                          this, &HeartbeatSender::ResendStanza);
-    }
-  }
-  sequence_id_was_set_ = true;
+  return HeartbeatResult::SUCCESS;
 }
 
 std::unique_ptr<XmlElement> HeartbeatSender::CreateHeartbeatMessage() {

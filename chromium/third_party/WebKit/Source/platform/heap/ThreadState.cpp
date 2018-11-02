@@ -31,11 +31,15 @@
 #include "platform/heap/ThreadState.h"
 
 #include <v8.h>
+
 #include <memory>
+
 #include "base/trace_event/process_memory_dump.h"
+#include "build/build_config.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/ScriptForbiddenScope.h"
+#include "platform/bindings/RuntimeCallStats.h"
 #include "platform/heap/BlinkGCMemoryDumpProvider.h"
 #include "platform/heap/CallbackStack.h"
 #include "platform/heap/Handle.h"
@@ -58,7 +62,7 @@
 #include "public/platform/WebThread.h"
 #include "public/platform/WebTraceLocation.h"
 
-#if OS(WIN)
+#if defined(OS_WIN)
 #include <stddef.h>
 #include <windows.h>
 #include <winnt.h>
@@ -68,7 +72,7 @@
 #include <sanitizer/msan_interface.h>
 #endif
 
-#if OS(FREEBSD)
+#if defined(OS_FREEBSD)
 #include <pthread_np.h>
 #endif
 
@@ -616,6 +620,9 @@ void ThreadState::PerformIdleLazySweep(double deadline_seconds) {
   // the check just in case.
   if (SweepForbidden())
     return;
+
+  RUNTIME_CALL_TIMER_SCOPE_IF_ISOLATE_EXISTS(
+      GetIsolate(), RuntimeCallStats::CounterId::kPerformIdleLazySweep);
 
   TRACE_EVENT1("blink_gc,devtools.timeline",
                "ThreadState::performIdleLazySweep", "idleDeltaInSeconds",
@@ -1437,12 +1444,17 @@ void ThreadState::CollectGarbage(BlinkGC::StackState stack_state,
   CHECK(!IsGCForbidden());
   CompleteSweep();
 
+  RUNTIME_CALL_TIMER_SCOPE_IF_ISOLATE_EXISTS(
+      GetIsolate(), RuntimeCallStats::CounterId::kCollectGarbage);
+
   GCForbiddenScope gc_forbidden_scope(this);
 
   {
-    // Access to the CrossThreadPersistentRegion has to be prevented while in
-    // the marking phase because otherwise other threads may allocate or free
-    // PersistentNodes and we can't handle that.
+    // Access to the CrossThreadPersistentRegion has to be prevented
+    // while in the marking phase because otherwise other threads may
+    // allocate or free PersistentNodes and we can't handle
+    // that. Grabbing this lock also prevents non-attached threads
+    // from accessing any GCed heap while a GC runs.
     CrossThreadPersistentRegion::LockScope persistent_lock(
         ProcessHeap::GetCrossThreadPersistentRegion());
     {
@@ -1520,24 +1532,21 @@ void ThreadState::CollectGarbage(BlinkGC::StackState stack_state,
 
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, marking_time_histogram,
-          new CustomCountHistogram("BlinkGC.CollectGarbage", 0, 10 * 1000, 50));
+          ("BlinkGC.CollectGarbage", 0, 10 * 1000, 50));
       marking_time_histogram.Count(marking_time_in_milliseconds);
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, total_object_space_histogram,
-          new CustomCountHistogram("BlinkGC.TotalObjectSpace", 0,
-                                   4 * 1024 * 1024, 50));
+          ("BlinkGC.TotalObjectSpace", 0, 4 * 1024 * 1024, 50));
       total_object_space_histogram.Count(
           ProcessHeap::TotalAllocatedObjectSize() / 1024);
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           CustomCountHistogram, total_allocated_space_histogram,
-          new CustomCountHistogram("BlinkGC.TotalAllocatedSpace", 0,
-                                   4 * 1024 * 1024, 50));
+          ("BlinkGC.TotalAllocatedSpace", 0, 4 * 1024 * 1024, 50));
       total_allocated_space_histogram.Count(ProcessHeap::TotalAllocatedSpace() /
                                             1024);
       DEFINE_THREAD_SAFE_STATIC_LOCAL(
           EnumerationHistogram, gc_reason_histogram,
-          new EnumerationHistogram("BlinkGC.GCReason",
-                                   BlinkGC::kLastGCReason + 1));
+          ("BlinkGC.GCReason", BlinkGC::kLastGCReason + 1));
       gc_reason_histogram.Count(reason);
 
       Heap().last_gc_reason_ = reason;

@@ -4,8 +4,9 @@
 
 module ash.mojom;
 
+import "ash/public/interfaces/user_info.mojom";
 import "components/signin/public/interfaces/account_id.mojom";
-import "ui/gfx/image/mojo/image.mojom";
+import "mojo/common/time.mojom";
 
 // Matches session_manager::SessionState.
 enum SessionState {
@@ -37,34 +38,6 @@ enum SessionState {
   LOGIN_SECONDARY,
 };
 
-// Matches user_manager::UserType.
-enum UserType {
-  // Regular user, has a user name and password.
-  REGULAR,
-
-  // Guest user, logs in without authentication.
-  GUEST,
-
-  // Public account user, logs in without authentication. Available only if
-  // enabled through policy.
-  PUBLIC_ACCOUNT,
-
-  // Supervised user, logs in only with local authentication.
-  SUPERVISED,
-
-  // Kiosk app robot, logs in without authentication.
-  KIOSK,
-
-  // Child user, with supervised options.
-  CHILD,
-
-  // Android app in kiosk mode, logs in without authentication.
-  ARC_KIOSK,
-
-  // Active Directory user. Authenticates against Active Directory server.
-  ACTIVE_DIRECTORY,
-};
-
 // Matches ash::CycleUserDirection.
 enum CycleUserDirection {
   NEXT,  // Cycle to the next user.
@@ -80,11 +53,9 @@ struct UserSession {
   // and incremented by one for each subsequent user session.
   uint32 session_id;
 
-  UserType type;
-  signin.mojom.AccountId account_id;
-  string display_name;
-  string display_email;
-  gfx.mojom.ImageSkia avatar;
+  // Contains general user information state, like the account id, display name,
+  // and avatar.
+  UserInfo user_info;
 
   // For supervised users only, the email address of the custodian account.
   // Empty for non-supervised users. Available after profile is loaded.
@@ -152,6 +123,11 @@ interface SessionController {
   // active user session.
   SetUserSessionOrder(array<uint32> user_session_ids);
 
+  // Prepares ash for lock screen. Currently this ensures the current active
+  // window could not be used to mimic the lock screen. Lock screen is created
+  // after this call returns.
+  PrepareForLock() => ();
+
   // Runs the pre-lock animation to start locking ash. When the call returns,
   // |locked| == true means that the ash post-lock animation is finished and ash
   // is fully locked. Otherwise |locked| is false, which means something is
@@ -171,6 +147,15 @@ interface SessionController {
 
   // Notifies that chrome is terminating.
   NotifyChromeTerminating();
+
+  // Adds a countdown timer to the system tray menu and creates or updates a
+  // notification saying the session length is limited (e.g. a public session in
+  // a library). Setting |length_limit| to zero removes the notification.
+  // NOTE: Chrome enforces the limit, not ash. Ash could enforce it if local
+  // state prefs and user activity monitoring were available under mustash.
+  // http://crbug.com/729808
+  SetSessionLengthLimit(mojo.common.mojom.TimeDelta length_limit,
+                        mojo.common.mojom.TimeTicks start_time);
 };
 
 // Interface for ash to request session service from its client (e.g. Chrome).
@@ -184,4 +169,7 @@ interface SessionControllerClient {
 
   // Switch the active user to the next or previous user.
   CycleActiveUser(CycleUserDirection direction);
+
+  // Show the multi-profile login UI to add another user to this session.
+  ShowMultiProfileLogin();
 };

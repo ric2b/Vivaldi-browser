@@ -70,7 +70,6 @@ class SingleScrollbarAnimationControllerThinningTest : public testing::Test {
     scroll_layer->SetElementId(
         LayerIdToElementIdForTesting(scroll_layer->id()));
     clip_layer_ = clip.get();
-    scroll_layer->SetScrollClipLayer(clip_layer_->id());
     LayerImpl* scroll_layer_ptr = scroll_layer.get();
 
     const int kId = 2;
@@ -96,6 +95,7 @@ class SingleScrollbarAnimationControllerThinningTest : public testing::Test {
     scrollbar_layer_->test_properties()->opacity_can_animate = true;
     clip_layer_->SetBounds(gfx::Size(100, 100));
     scroll_layer_ptr->SetBounds(gfx::Size(200, 200));
+    host_impl_.active_tree()->UpdateScrollbarGeometries();
     host_impl_.active_tree()->BuildLayerListAndPropertyTreesForTesting();
 
     scrollbar_controller_ = SingleScrollbarAnimationControllerThinning::Create(

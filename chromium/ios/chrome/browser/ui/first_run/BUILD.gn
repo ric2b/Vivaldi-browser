@@ -2,25 +2,7 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-bundle_data("assets") {
-  sources = [
-    "resources/FirstRun.xcassets/checkbox.imageset/Contents.json",
-    "resources/FirstRun.xcassets/checkbox.imageset/checkbox.png",
-    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@2x.png",
-    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@2x~ipad.png",
-    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@3x.png",
-    "resources/FirstRun.xcassets/checkbox.imageset/checkbox~ipad.png",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/Contents.json",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked.png",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@2x.png",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@2x~ipad.png",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@3x.png",
-    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked~ipad.png",
-  ]
-  outputs = [
-    "{{bundle_resources_dir}}/{{source_file_part}}",
-  ]
-}
+import("//build/config/ios/imageset.gni")
 
 source_set("first_run") {
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -38,7 +20,8 @@ source_set("first_run") {
     "welcome_to_chrome_view_controller.mm",
   ]
   deps = [
-    ":assets",
+    ":checkbox",
+    ":checkbox_checked",
     "//base",
     "//base:i18n",
     "//components/metrics",
@@ -92,7 +75,7 @@ source_set("unit_tests") {
     "//ios/chrome/browser/ui",
     "//ios/chrome/browser/ui/fancy_ui",
     "//ios/chrome/test:test_support",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
     "//testing/gtest",
     "//third_party/ocmock",
   ]
@@ -107,6 +90,7 @@ source_set("eg_tests") {
   deps = [
     ":first_run",
     "//base",
+    "//base/test:test_support",
     "//components/metrics",
     "//components/prefs",
     "//components/signin/core/browser",
@@ -120,8 +104,31 @@ source_set("eg_tests") {
     "//ios/chrome/test/app:test_support",
     "//ios/chrome/test/earl_grey:test_support",
     "//ios/public/provider/chrome/browser/signin:test_support",
+    "//ios/testing:ios_test_support",
     "//ios/third_party/earl_grey",
     "//ui/base",
   ]
   libs = [ "XCTest.framework" ]
+}
+
+imageset("checkbox") {
+  sources = [
+    "resources/FirstRun.xcassets/checkbox.imageset/Contents.json",
+    "resources/FirstRun.xcassets/checkbox.imageset/checkbox.png",
+    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@2x.png",
+    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@2x~ipad.png",
+    "resources/FirstRun.xcassets/checkbox.imageset/checkbox@3x.png",
+    "resources/FirstRun.xcassets/checkbox.imageset/checkbox~ipad.png",
+  ]
+}
+
+imageset("checkbox_checked") {
+  sources = [
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/Contents.json",
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked.png",
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@2x.png",
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@2x~ipad.png",
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked@3x.png",
+    "resources/FirstRun.xcassets/checkbox_checked.imageset/checkbox_checked~ipad.png",
+  ]
 }

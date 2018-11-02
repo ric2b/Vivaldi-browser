@@ -11,16 +11,12 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/files/file_util.h"
-#include "base/files/important_file_writer.h"
-#include "base/files/scoped_temp_dir.h"
 #include "base/json/json_writer.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/optional.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
-#include "base/test/sequenced_worker_pool_owner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/values.h"
 #include "build/build_config.h"
@@ -61,7 +57,7 @@ using TestPopularSiteVector = std::vector<TestPopularSite>;
 }
 
 size_t GetNumberOfDefaultPopularSitesForPlatform() {
-#if defined(OS_ANDROID)
+#if defined(OS_ANDROID) || defined(OS_IOS)
   return 8ul;
 #else
   return 0ul;
@@ -86,14 +82,11 @@ class PopularSitesTest : public ::testing::Test {
             {kUrl, "https://www.chromium.org/"},
             {kFaviconUrl, "https://www.chromium.org/favicon.ico"},
         },
-        worker_pool_owner_(2, "PopularSitesTest."),
         prefs_(new sync_preferences::TestingPrefServiceSyncable()),
         url_fetcher_factory_(nullptr) {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         switches::kEnableNTPPopularSites);
     PopularSitesImpl::RegisterProfilePrefs(prefs_->registry());
-    CHECK(scoped_cache_dir_.CreateUniqueTempDir());
-    cache_dir_ = scoped_cache_dir_.GetPath();
   }
 
   void SetCountryAndVersion(const std::string& country,
@@ -162,9 +155,9 @@ class PopularSitesTest : public ::testing::Test {
   std::unique_ptr<PopularSites> CreatePopularSites(
       net::URLRequestContextGetter* context) {
     return base::MakeUnique<PopularSitesImpl>(
-        worker_pool_owner_.pool().get(), prefs_.get(),
+        prefs_.get(),
         /*template_url_service=*/nullptr,
-        /*variations_service=*/nullptr, context, cache_dir_,
+        /*variations_service=*/nullptr, context,
         base::Bind(JsonUnsafeParser::Parse));
   }
 
@@ -173,9 +166,6 @@ class PopularSitesTest : public ::testing::Test {
   const TestPopularSite kChromium;
 
   base::MessageLoopForUI ui_loop_;
-  base::SequencedWorkerPoolOwner worker_pool_owner_;
-  base::ScopedTempDir scoped_cache_dir_;
-  base::FilePath cache_dir_;
   std::unique_ptr<sync_preferences::TestingPrefServiceSyncable> prefs_;
   net::FakeURLFetcherFactory url_fetcher_factory_;
 };
@@ -266,7 +256,7 @@ TEST_F(PopularSitesTest, AddsIconResourcesToDefaultPages) {
   std::unique_ptr<PopularSites> popular_sites =
       CreatePopularSites(url_request_context.get());
 
-#if defined(GOOGLE_CHROME_BUILD) && defined(OS_ANDROID)
+#if defined(GOOGLE_CHROME_BUILD) && (defined(OS_ANDROID) || defined(OS_IOS))
   ASSERT_FALSE(popular_sites->sites().empty());
   for (const auto& site : popular_sites->sites()) {
     EXPECT_THAT(site.default_icon_resource, Gt(0));
@@ -308,22 +298,6 @@ TEST_F(PopularSitesTest, ProvidesDefaultSitesUntilCallbackReturns) {
   EXPECT_TRUE(save_success.value());
   // The 1 fetched site should replace the default sites.
   EXPECT_THAT(popular_sites->sites().size(), Eq(1ul));
-}
-
-TEST_F(PopularSitesTest, ClearsCacheFileFromOldVersions) {
-  SetCountryAndVersion("ZZ", "9");
-  RespondWithJSON(
-      "https://www.gstatic.com/chrome/ntp/suggested_sites_ZZ_9.json",
-      {kWikipedia});
-
-  PopularSites::SitesVector sites;
-  const base::FilePath old_cache_path =
-      cache_dir_.AppendASCII("suggested_sites.json");
-  CHECK(base::ImportantFileWriter::WriteFileAtomically(old_cache_path,
-                                                       "Old cache"));
-  FetchPopularSites(/*force_download=*/false, &sites);
-  worker_pool_owner_.pool()->FlushForTesting();
-  EXPECT_FALSE(base::PathExists(old_cache_path));
 }
 
 TEST_F(PopularSitesTest, UsesCachedJson) {

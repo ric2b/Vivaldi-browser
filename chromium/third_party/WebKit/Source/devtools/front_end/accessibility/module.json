@@ -20,12 +20,14 @@
         "ARIAAttributesView.js",
         "ARIAMetadata.js",
         "ARIAConfig.js",
-        "AXTreePane.js"
+        "AXBreadcrumbsPane.js"
     ],
     "skip_compilation": [
         "ARIAConfig.js"
     ],
     "resources": [
-        "accessibilityNode.css"
+        "accessibilityNode.css",
+        "accessibilityProperties.css",
+        "axBreadcrumbs.css"
     ]
 }

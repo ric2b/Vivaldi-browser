@@ -21,6 +21,8 @@
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_mock.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
+#include "gpu/command_buffer/service/image_manager.h"
+#include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/query_manager.h"
 #include "gpu/command_buffer/service/renderbuffer_manager.h"
@@ -45,10 +47,18 @@ namespace gles2 {
 
 class MemoryTracker;
 
-class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
+class GLES2DecoderTestBase : public ::testing::TestWithParam<bool>,
+                             public GLES2DecoderClient {
  public:
   GLES2DecoderTestBase();
-  virtual ~GLES2DecoderTestBase();
+  ~GLES2DecoderTestBase() override;
+
+  void OnConsoleMessage(int32_t id, const std::string& message) override;
+  void CacheShader(const std::string& key, const std::string& shader) override;
+  void OnFenceSyncRelease(uint64_t release) override;
+  bool OnWaitSyncToken(const gpu::SyncToken&) override;
+  void OnDescheduleUntilFinished() override;
+  void OnRescheduleAfterFinished() override;
 
   // Template to call glGenXXX functions.
   template <typename T>
@@ -172,7 +182,9 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
     return decoder_->GetFramebufferManager();
   }
 
-  ImageManager* GetImageManager() { return decoder_->GetImageManager(); }
+  ImageManager* GetImageManagerForTest() {
+    return decoder_->GetImageManagerForTest();
+  }
 
   void DoCreateProgram(GLuint client_id, GLuint service_id);
   void DoCreateShader(GLenum shader_type, GLuint client_id, GLuint service_id);
@@ -282,7 +294,8 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
                                                 GLenum internal_format,
                                                 GLenum gl_format,
                                                 GLsizei width,
-                                                GLsizei height);
+                                                GLsizei height,
+                                                bool expect_bind);
   void RestoreRenderbufferBindings();
   void EnsureRenderbufferBound(bool expect_bind);
   void DoBindTexture(GLenum target, GLuint client_id, GLuint service_id);
@@ -654,6 +667,7 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   std::unique_ptr<::testing::StrictMock<::gl::MockGLInterface>> gl_;
   scoped_refptr<gl::GLSurfaceStub> surface_;
   scoped_refptr<GLContextMock> context_;
+  std::unique_ptr<FakeCommandBufferServiceBase> command_buffer_service_;
   std::unique_ptr<MockGLES2Decoder> mock_decoder_;
   std::unique_ptr<GLES2Decoder> decoder_;
   MemoryTracker* memory_tracker_;
@@ -753,8 +767,11 @@ class GLES2DecoderTestBase : public ::testing::TestWithParam<bool> {
   void SetupInitStateManualExpectations(bool es3_capable);
   void SetupInitStateManualExpectationsForDoLineWidth(GLfloat width);
 
-  std::unique_ptr<FakeCommandBufferServiceBase> command_buffer_service_;
   GpuPreferences gpu_preferences_;
+  MailboxManagerImpl mailbox_manager_;
+  ShaderTranslatorCache shader_translator_cache_;
+  FramebufferCompletenessCache framebuffer_completeness_cache_;
+  ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
   scoped_refptr<ContextGroup> group_;
   MockGLStates gl_states_;

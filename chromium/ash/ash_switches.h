@@ -26,6 +26,7 @@ ASH_EXPORT extern const char kAshEnableMagnifierKeyScroller[];
 ASH_EXPORT extern const char kAshEnableNightLight[];
 ASH_EXPORT extern const char kAshEnablePaletteOnAllDisplays[];
 ASH_EXPORT extern const char kAshEnableScaleSettingsTray[];
+ASH_EXPORT extern const char kAshEnableTabletSplitView[];
 ASH_EXPORT extern const char kAshEnableTouchView[];
 ASH_EXPORT extern const char kAshEnableMirroredScreen[];
 ASH_EXPORT extern const char kAshEstimatedPresentationDelay[];
@@ -47,6 +48,13 @@ ASH_EXPORT extern const char kAshShelfColorSchemeDarkMuted[];
 ASH_EXPORT extern const char kAshShelfColorSchemeDarkVibrant[];
 ASH_EXPORT extern const char kAshTouchHud[];
 ASH_EXPORT extern const char kAuraLegacyPowerButton[];
+ASH_EXPORT extern const char kForceClamshellPowerButton[];
+ASH_EXPORT extern const char kHasInternalStylus[];
+ASH_EXPORT extern const char kSpuriousPowerButtonWindow[];
+ASH_EXPORT extern const char kSpuriousPowerButtonAccelCount[];
+ASH_EXPORT extern const char kSpuriousPowerButtonScreenAccel[];
+ASH_EXPORT extern const char kSpuriousPowerButtonKeyboardAccel[];
+ASH_EXPORT extern const char kSpuriousPowerButtonLidAngleChange[];
 ASH_EXPORT extern const char kUseIMEService[];
 
 // True if the pointer (cursor) position should be kept inside root windows.

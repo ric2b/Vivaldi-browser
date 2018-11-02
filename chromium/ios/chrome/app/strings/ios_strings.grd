@@ -195,23 +195,8 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_APPLICATION_SHORTCUT_VOICE_SEARCH_TITLE" desc="Message when opening a Voice Search from springboard force touch static shortcuts. [Length: unlimited] [iOS only]." meaning="3D Touch entry to trigger a voice search.">
         Voice Search
       </message>
-      <message name="IDS_IOS_APP_LAUNCHER_INSTALL_APP_BUTTON_LABEL" desc="Label of a button to install an application. [Length: 10em] [iOS only]">
-        Install
-      </message>
-      <message name="IDS_IOS_APP_LAUNCHER_OPEN_ALWAYS_BUTTON" desc="Label of a button to choose to launch an application always, as opposed to once. [Length: 12em] [iOS only]">
-        Always
-      </message>
       <message name="IDS_IOS_APP_LAUNCHER_OPEN_APP_BUTTON_LABEL" desc="Label of a button to open an application. [Length: 10em] [iOS only]">
         Open
-      </message>
-      <message name="IDS_IOS_APP_LAUNCHER_OPEN_IN_APP_QUESTION_MESSAGE" desc="Message in the infobar asking the user if they want to open the current page in an external app. [Length: 40em] [iOS only]">
-        Open this page in the <ph name="APP_NAME">$1<ex>Google Maps</ex></ph> app?
-      </message>
-      <message name="IDS_IOS_APP_LAUNCHER_OPEN_IN_LABEL" desc="Label in the infobar to launch an application. [Length: 20em] [iOS only]">
-        Open in <ph name="APP_NAME">$1<ex>Google Maps</ex></ph>
-      </message>
-      <message name="IDS_IOS_APP_LAUNCHER_OPEN_ONCE_BUTTON" desc="Label of a button to choose to launch an application once, as opposed to always. [Length: 12em] [iOS only]">
-          Just once
       </message>
       <message name="IDS_IOS_AUTOFILL" desc="Title for the view in Settings for enabling/disabling Autofill. [Length: 15em] [iOS only]">
         Autofill Forms
@@ -543,11 +528,17 @@ locale.  The strings in this file are specific to iOS.
       <message name="IDS_IOS_CONTENT_CONTEXT_SAVEIMAGE" desc="The name of the Save Image As command in the content area context menu">
         Save Image
       </message>
-      <message name="IDS_IOS_CONTENT_SUGGESTIONS_DELETE" desc="The name of the Delete command in the Content Suggestions articles context menu">
-        Delete
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_LABEL_SUGGESTION" desc="The accessibility label of a suggestion. Summarizes fields in the reading list entry (title, publisher informations, status and informations). Read by Text-to-Speech.">
+        <ph name="TITLE"><ex>Learn about the new Chromium Projects</ex>$1</ph>, <ph name="PUBLISHER_INFORMATION"><ex>The Chromium organization</ex>$2</ph>, <ph name="PUBLICATION_DATE"><ex>January 1 2017</ex>$3</ph>, <ph name="STATE"><ex>Available offline</ex>$4</ph>
+      </message>
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_ACCESSIBILITY_AVAILABLE_OFFLINE" desc="Accessibility label to indicate that the suggestion is available offline. Read by Text-to-Speech.">
+        Available offline
       </message>
       <message name="IDS_IOS_CONTENT_SUGGESTIONS_FOOTER_TITLE" desc="The title of the footer of the sections of Content Suggestions">
         More
+      </message>
+      <message name="IDS_IOS_CONTENT_SUGGESTIONS_REMOVE" desc="The name of the Remove command in the Content Suggestions articles context menu">
+        Remove
       </message>
       <message name="IDS_IOS_CONTENT_SETTINGS_TITLE" desc="Title for content settings dialog [Length: 29em] [iOS only]">
         Content Settings
@@ -573,10 +564,7 @@ To adjust your search term, long press to select. To refine your search, slide t
         Touch to Search
       </message>
       <message name="IDS_IOS_CONTEXT_MENU_SEARCHWEBFORIMAGE" desc="Context menu text for option to perform a search for image [Length: 25em] [iOS only]">
-        Search <ph name="SEARCH_ENGINE">$1<ex>Google</ex></ph> For This Image
-      </message>
-      <message name="IDS_IOS_COPY_URL" desc="The 'Copy URL' option in context menu which is shown if there is currently a search query shown in the omnibox and will put the URL for the search into the pasteboard. [Length: 10em] [iOS only]">
-        Copy URL
+        Search <ph name="SEARCH_ENGINE">$1<ex>Google</ex></ph> for This Image
       </message>
       <message name="IDS_IOS_COPY_VERSION_HINT" desc="The accessibility hint for the label showing the Chrome version. [iOS only]">
         Double tap to copy.
@@ -695,6 +683,12 @@ To adjust your search term, long press to select. To refine your search, slide t
       <message name="IDS_IOS_JAVA_SCRIPT_DIALOG_BLOCKING_BUTTON_TEXT" desc="The text used for the button added to JavaScript dialogs to prevent a page from spamming the user with endless alerts. [Length:27em]">
         Suppress Dialogs
       </message>
+      <message name="IDS_IOS_KEYBOARD_ACCESSORY_VIEW_QR_CODE_SEARCH" desc="Accessibility label for a button that starts scanning QR Codes [iOS only].">
+        QR code Search
+      </message>
+      <message name="IDS_IOS_KEYBOARD_ACCESSORY_VIEW_VOICE_SEARCH" desc="Accessibility label for a button that starts a Voice Search [iOS only]">
+        Voice Search
+      </message>
       <message name="IDS_IOS_KEYBOARD_BOOKMARK_THIS_PAGE" desc="In Title Case: Title of the keyboard shortcut that bookmarks the current page. [Length: 20 em] [iOS only]">
         Bookmark This Page...
       </message>
@@ -748,6 +742,9 @@ To adjust your search term, long press to select. To refine your search, slide t
       </message>
       <message name="IDS_IOS_NEW_TAB_BOOKMARKS_PAGE_TITLE_MOBILE" desc="The 'Bookmarks' title on the new tab page [Length: 10em]">
         Bookmarks
+      </message>
+      <message name="IDS_IOS_NEW_TAB_HOME" desc="Title for the Home panel of the new tab page. [Length: 10em] [iOS only]">
+        Home
       </message>
       <message name="IDS_IOS_NEW_TAB_INCOGNITO" desc="Title for the Incognito panel of the new tab page.">
         Incognito
@@ -1083,6 +1080,9 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SAFE_MODE_UNKNOWN_CAUSE" desc="The message indicating that Chrome crashed for an unknown reason. [Length: 140em]">
         Something went really wrong. We'll work on that.
       </message>
+      <message name="IDS_IOS_SAVE_IMAGE_NO_INTERNET_CONNECTION" desc="Message informing the user that the image could not be saved because the device has no internet connection.">
+        No internet connection.
+      </message>
       <message name="IDS_IOS_SAVE_IMAGE_PRIVACY_ALERT_GO_TO_SETTINGS" desc="Title for a button to go to System settings app. [Length: 25em] [iOS only].">
         Settings
       </message>
@@ -1107,19 +1107,31 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SETTINGS_SITE_COPY_BUTTON" desc="Button that the user can press to copy the site to clipboard. [Length: 12em]">
         Copy
       </message>
+      <message name="IDS_IOS_SETTINGS_SITE_COPY_MENU_ITEM" desc="Context menu item available on the cell showing the site/URL with a passwords origin, in the detailed view of a stored credential. The user can select it to copy the site to clipboard. [Length: should be one short word, is under 5em in English]">
+        Copy
+      </message>
       <message name="IDS_IOS_SETTINGS_USERNAME_COPY_BUTTON" desc="Button that the user can press to copy the username to clipboard. [Length: 12em]">
+        Copy
+      </message>
+      <message name="IDS_IOS_SETTINGS_USERNAME_COPY_MENU_ITEM" desc="Context menu item available on the username cell in the detailed view of a stored credential. The user can select it to copy the username to clipboard. [Length: should be one short word, is under 5em in English]">
         Copy
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_COPY_BUTTON" desc="Button that the user can press to copy the password to clipboard. [Length: 12em]">
         Copy
       </message>
-      <message name="IDS_IOS_SETTINGS_PASSWORD_DELETE_BUTTON" desc="Button that the user can press to delete the saved password. [Length: 31em]">
-        Delete Saved Password
+      <message name="IDS_IOS_SETTINGS_PASSWORD_COPY_MENU_ITEM" desc="Context menu item available on the password cell in detailed view of a stored credential. The user can select it to copy the password to clipboard. [Length: should be one short word, is under 5em in English]">
+        Copy
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORD_DELETE_BUTTON" desc="Button that the user can press to delete a saved password or a site-bound exception preventing saving passwords. [Length: single line available]">
+        Delete
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_HIDDEN_LABEL" desc="Accessibility label stating that the element is displaying a hidden password.">
         Hidden, Password
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_HIDE_BUTTON" desc="Button that the user can press to change the way the password is displayed from plain text to obscured form (i.e. from plain text to dots). [Length: 12em]">
+        Hide
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORD_HIDE_MENU_ITEM" desc="Context menu item available on the password cell in detailed view of a stored password. The user can select it to hide the password to clipboard. [Length: should be one short word, is under 5em in English]">
         Hide
       </message>
       <message name="IDS_IOS_SETTINGS_PASSWORD_REAUTH_REASON_COPY" desc="Message explaining that the reason why we are requiring the user to re-authenticate is to be able to copy the password. This is shown by iOS in the Touch ID reauthentication system dialogue, right under the OS string 'Touch ID for $BROWSER_NAME'. [Length: 22em]">
@@ -1131,17 +1143,20 @@ Handoff must also be enabled in the General section of Settings, and your device
       <message name="IDS_IOS_SETTINGS_PASSWORD_SHOW_BUTTON" desc="Button that the user can press in order to have the password displayed in plain text. [Length: 12em]">
         Show
       </message>
-      <message name="IDS_IOS_SETTINGS_SITE_WAS_COPIED_MESSAGE" desc="Confirmation that the site URL of a saved credential was copied. This is shown alone in an infobar at the bottom of the screen. [Length: 40em]">
-        The site URL was copied.
+      <message name="IDS_IOS_SETTINGS_PASSWORD_SHOW_MENU_ITEM" desc="Context menu item available on the password cell in detailed view of a stored password. The user can select it to show the password to clipboard. [Length: should be one short word, is under 5em in English]">
+        Show
       </message>
-      <message name="IDS_IOS_SETTINGS_USERNAME_WAS_COPIED_MESSAGE" desc="Confirmation that the username was copied. This is shown alone in an infobar at the bottom of the screen. [Length: 40em]">
-        Your username was copied.
+      <message name="IDS_IOS_SETTINGS_SITE_WAS_COPIED_MESSAGE" desc="Confirmation that the site URL of a saved credential was copied. This is shown alone in an infobar at the bottom of the screen. [Length: one line]">
+        Site address copied
       </message>
-      <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE" desc="Confirmation that the password was copied. This is shown alone in an infobar at the bottom of the screen after the user successfully reauthenticates with Touch ID or PIN. [Length: 40em]">
-        Your password was copied.
+      <message name="IDS_IOS_SETTINGS_USERNAME_WAS_COPIED_MESSAGE" desc="Confirmation that the username was copied. This is shown alone in an infobar at the bottom of the screen. [Length: one line]">
+        Username copied
       </message>
-      <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_NOT_COPIED_MESSAGE" desc="Message informing the user that the password was not copied because the authentication failed. This is shown alone in an infobar at the bottom of the screen after the user tries to reauthenticate with Touch ID or PIN to copy the password and fails. [Length: 53em]">
-        Authentication failed. Your password was not copied.
+      <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_COPIED_MESSAGE" desc="Confirmation that the password was copied. This is shown alone in an infobar at the bottom of the screen after the user successfully reauthenticates with Touch ID or PIN. [Length: one line]">
+        Password copied
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORD_WAS_NOT_COPIED_MESSAGE" desc="Message informing the user that the password was not copied because the authentication failed. This is shown alone in an infobar at the bottom of the screen after the user tries to reauthenticate with Touch ID or PIN to copy the password and fails. [Length: one line]">
+        Can't verify your identity. Password not copied.
       </message>
       <message name="IDS_IOS_SETTINGS_TITLE" desc="Title for the settings panel [iOS].">
         Settings
@@ -1205,6 +1220,21 @@ Handoff must also be enabled in the General section of Settings, and your device
       </message>
       <message name="IDS_IOS_SHOW_PASSWORD_VIEW_USERNAME" desc="Label indicating that the text displayed below is the username to which a saved password corresponds. The password is displayed in the same view, but under a diferent label. [Length: 20em] [iOS only]">
         Username
+      </message>
+      <message name="IDS_IOS_SHOW_PASSWORD_VIEW_FEDERATION" desc="Label indicating that the text displayed below is the hostname of the identity provider used for the displayed credential. [Length: to fit on one line] [iOS only]">
+        Signed In With
+      </message>
+      <message name="IDS_IOS_CANCEL_PASSWORD_DELETION" desc="Label of a confirmation dialogue button which allows the user to cancel deletion of a stored password. [Length: one line] [iOS only]">
+        Cancel
+      </message>
+      <message name="IDS_IOS_CONFIRM_PASSWORD_DELETION" desc="Label of a confirmation dialogue button which allows the user to confirm deletion of a stored password. [Length: one line] [iOS only]">
+        Delete
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_SAVED_HEADING" desc="The title for a list of username/site/password items. These items are already saved by the browser and can be deleted/edited. [Length: one line] [iOS only]">
+      Saved Passwords
+      </message>
+      <message name="IDS_IOS_SETTINGS_PASSWORDS_EXCEPTIONS_HEADING" desc="The title for a list of sites where passwords will not be saved. These items are already saved by the browser and can only be deleted. [Length: one line] [iOS only]">
+      Never Saved
       </message>
       <message name="IDS_IOS_SIGNED_IN_ACCOUNTS_VIEW_OK_BUTTON" desc="The title of the OK button of the Signed In Accounts view [iOS only] [20em]">
         OK, Got It
@@ -1420,6 +1450,9 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       <message name="IDS_IOS_TOOLBAR_SHOW_TABS" desc="The accessibility label for the toolbar show tabs button [iOS only].">
         Show Tabs
       </message>
+      <message name="IDS_IOS_TOOLBAR_SHOW_TAB_GRID" desc="The accessibility label for the toolbar show tab grid button [iOS only].">
+        Show Tab Grid
+      </message>
       <message name="IDS_IOS_TOOLS_MENU" desc="The accessibility label for the iOS tools menu [iOS only]">
         Tools Menu
       </message>
@@ -1473,9 +1506,6 @@ Your data was encrypted with your sync passphrase on <ph name="TIME">$2<ex>Sept 
       </message>
       <message name="IDS_IOS_TOOLS_MENU_SHARE" desc="The iOS menu item for sharing the current URL [Length: 15em] [iOS only]">
         Share...
-      </message>
-      <message name="IDS_IOS_TOOLS_MENU_SUGGESTIONS" desc="The iOS menu item for displaying the Suggestions UI [Length: 15em] [iOS only]">
-        Suggestions
       </message>
       <message name="IDS_IOS_TRANSLATE_SETTING" desc="Title for the view and option in Settings for Translate. [Length: 25em] [iOS only]">
         Google Translate

@@ -49,9 +49,17 @@ class POLICY_EXPORT CloudPolicyClient {
       std::map<std::pair<std::string, std::string>,
                std::unique_ptr<enterprise_management::PolicyFetchResponse>>;
 
+  // Maps a license type to number of available licenses.
+  using LicenseMap = std::map<LicenseType, int>;
+
   // A callback which receives boolean status of an operation.  If the operation
   // succeeded, |status| is true.
   using StatusCallback = base::Callback<void(bool status)>;
+
+  // A callback for available licenses request. If the operation succeeded,
+  // |success| is true, and |map| contains available licenses.
+  using LicenseRequestCallback =
+      base::Callback<void(bool success, const LicenseMap& map)>;
 
   // A callback which receives fetched remote commands.
   using RemoteCommandCallback = base::Callback<void(
@@ -105,6 +113,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void Register(
       enterprise_management::DeviceRegisterRequest::Type registration_type,
       enterprise_management::DeviceRegisterRequest::Flavor flavor,
+      enterprise_management::LicenseType::LicenseTypeEnum license_type,
       const std::string& auth_token,
       const std::string& client_id,
       const std::string& requisition,
@@ -116,6 +125,7 @@ class POLICY_EXPORT CloudPolicyClient {
   virtual void RegisterWithCertificate(
       enterprise_management::DeviceRegisterRequest::Type registration_type,
       enterprise_management::DeviceRegisterRequest::Flavor flavor,
+      enterprise_management::LicenseType::LicenseTypeEnum license_type,
       const std::string& pem_certificate_chain,
       const std::string& client_id,
       const std::string& requisition,
@@ -187,6 +197,12 @@ class POLICY_EXPORT CloudPolicyClient {
                               const std::string& asset_id,
                               const std::string& location,
                               const StatusCallback& callback);
+
+  // Requests a list of licenses available for enrollment. Uses OAuth2 token
+  // |auth_token| to identify user who issues the request, the |callback| will
+  // be called when the operation completes.
+  void RequestAvailableLicenses(const std::string& auth_token,
+                                const LicenseRequestCallback& callback);
 
   // Sends a GCM id update request to the DM server. The server will
   // associate the DM token in authorization header with |gcm_id|, and
@@ -346,6 +362,14 @@ class POLICY_EXPORT CloudPolicyClient {
   void OnDeviceAttributeUpdated(
       const DeviceManagementRequestJob* job,
       const StatusCallback& callback,
+      DeviceManagementStatus status,
+      int net_error,
+      const enterprise_management::DeviceManagementResponse& response);
+
+  // Callback for available license types request.
+  void OnAvailableLicensesRequested(
+      const DeviceManagementRequestJob* job,
+      const LicenseRequestCallback& callback,
       DeviceManagementStatus status,
       int net_error,
       const enterprise_management::DeviceManagementResponse& response);

@@ -95,8 +95,17 @@ IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest,
 // Tests that we don't override events when bindings are re-injected.
 // Regression test for http://crbug.com/269149.
 // Regression test for http://crbug.com/436593.
-IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, EventOverriding) {
+// Flaky on Mac. http://crbug.com/733064.
+#if defined(OS_MACOSX)
+#define MAYBE_EventOverriding DISABLED_EventOverriding
+#else
+#define MAYBE_EventOverriding EventOverriding
+#endif
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, MAYBE_EventOverriding) {
   ASSERT_TRUE(RunExtensionTest("bindings/event_overriding")) << message_;
+  // The extension test removes a window and, during window removal, sends the
+  // success message. Make sure we flush all pending tasks.
+  base::RunLoop().RunUntilIdle();
 }
 
 // Tests the effectiveness of the 'nocompile' feature file property.
@@ -282,6 +291,28 @@ IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, TestEventFilterParsing) {
   ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("example.com", "/title1.html"));
   ASSERT_TRUE(catcher.GetNextResult()) << catcher.message();
+}
+
+// crbug.com/733337
+IN_PROC_BROWSER_TEST_F(ExtensionBindingsApiTest, ValidationInterception) {
+  // We need to create runtime bindings in the web page. An extension that's
+  // externally connectable will do that for us.
+  ASSERT_TRUE(
+      LoadExtension(test_data_dir_.AppendASCII("bindings")
+                        .AppendASCII("externally_connectable_everywhere")));
+
+  content::WebContents* web_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ui_test_utils::NavigateToURL(
+      browser(),
+      embedded_test_server()->GetURL(
+          "/extensions/api_test/bindings/validation_interception.html"));
+  content::WaitForLoadStop(web_contents);
+  ASSERT_FALSE(web_contents->IsCrashed());
+  bool caught = false;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractBool(
+      web_contents, "domAutomationController.send(caught)", &caught));
+  EXPECT_TRUE(caught);
 }
 
 }  // namespace

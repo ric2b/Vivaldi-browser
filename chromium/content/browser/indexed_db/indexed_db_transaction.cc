@@ -9,10 +9,9 @@
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
-#include "base/single_thread_task_runner.h"
 #include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/threading/thread_task_runner_handle.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "content/browser/indexed_db/indexed_db_backing_store.h"
 #include "content/browser/indexed_db/indexed_db_cursor.h"
 #include "content/browser/indexed_db/indexed_db_database.h"
@@ -113,7 +112,7 @@ IndexedDBTransaction::IndexedDBTransaction(
     : id_(id),
       object_store_ids_(object_store_ids),
       mode_(mode),
-      connection_(std::move(connection)),
+      connection_(connection),
       transaction_(backing_store_transaction),
       ptr_factory_(this) {
   IDB_ASYNC_TRACE_BEGIN("IndexedDBTransaction::lifetime", this);
@@ -146,10 +145,10 @@ void IndexedDBTransaction::ScheduleTask(blink::WebIDBTaskType type,
   timeout_timer_.Stop();
   used_ = true;
   if (type == blink::kWebIDBTaskTypeNormal) {
-    task_queue_.push(task);
+    task_queue_.push(std::move(task));
     ++diagnostics_.tasks_scheduled;
   } else {
-    preemptive_task_queue_.push(task);
+    preemptive_task_queue_.push(std::move(task));
   }
   RunTasksIfStarted();
 }
@@ -172,14 +171,9 @@ void IndexedDBTransaction::RunTasksIfStarted() {
     return;
 
   should_process_queue_ = true;
-  base::ThreadTaskRunnerHandle::Get()->PostTask(
-      FROM_HERE, base::Bind(&IndexedDBTransaction::ProcessTaskQueue,
-                            ptr_factory_.GetWeakPtr()));
-}
-
-void IndexedDBTransaction::Abort() {
-  Abort(IndexedDBDatabaseError(blink::kWebIDBDatabaseExceptionUnknownError,
-                               "Internal error (unknown cause)"));
+  base::SequencedTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, base::BindOnce(&IndexedDBTransaction::ProcessTaskQueue,
+                                ptr_factory_.GetWeakPtr()));
 }
 
 void IndexedDBTransaction::Abort(const IndexedDBDatabaseError& error) {
@@ -259,8 +253,8 @@ void IndexedDBTransaction::Start() {
       // The transaction has never had requests issued against it, but the
       // front-end previously requested a commit; do the commit now, but not
       // re-entrantly as that may renter the coordinator.
-      base::ThreadTaskRunnerHandle::Get()->PostTask(
-          FROM_HERE, base::Bind(&CommitUnused, ptr_factory_.GetWeakPtr()));
+      base::SequencedTaskRunnerHandle::Get()->PostTask(
+          FROM_HERE, base::BindOnce(&CommitUnused, ptr_factory_.GetWeakPtr()));
     }
     return;
   }
@@ -491,7 +485,7 @@ void IndexedDBTransaction::ProcessTaskQueue() {
   while (!task_queue->empty() && state_ != FINISHED) {
     DCHECK_EQ(state_, STARTED);
     Operation task(task_queue->pop());
-    leveldb::Status result = task.Run(this);
+    leveldb::Status result = std::move(task).Run(this);
     if (!pending_preemptive_events_) {
       DCHECK(diagnostics_.tasks_completed < diagnostics_.tasks_scheduled);
       ++diagnostics_.tasks_completed;

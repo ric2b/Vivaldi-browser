@@ -133,11 +133,12 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
       bool first_line,
       LineDirectionMode,
       LinePositionMode = kPositionOnContainingLine) const override;
+  bool UseLogicalBottomMarginEdgeForInlineBlockBaseline() const;
 
   LayoutUnit MinLineHeightForReplacedObject(bool is_first_line,
                                             LayoutUnit replaced_height) const;
 
-  bool CreatesNewFormattingContext() const;
+  virtual bool CreatesNewFormattingContext() const { return true; }
 
   const char* GetName() const override;
 
@@ -471,8 +472,6 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   // Returns true if the positioned movement-only layout succeeded.
   bool TryLayoutDoingPositionedMovementOnly();
 
-  bool AvoidsFloats() const override { return true; }
-
   bool IsInSelfHitTestingPhase(HitTestAction hit_test_action) const final {
     return hit_test_action == kHitTestBlockBackground ||
            hit_test_action == kHitTestChildBlockBackground;
@@ -565,7 +564,7 @@ class CORE_EXPORT LayoutBlock : public LayoutBox {
   friend class NGBlockNode;
 
  public:
-  // TODO(lunalu): Temporary in order to ensure compatibility with existing
+  // TODO(loonybear): Temporary in order to ensure compatibility with existing
   // layout test results.
   virtual void AdjustChildDebugRect(LayoutRect&) const {}
 };

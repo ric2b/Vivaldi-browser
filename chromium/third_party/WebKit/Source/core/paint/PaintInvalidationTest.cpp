@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "core/layout/LayoutView.h"
 #include "core/paint/PaintLayer.h"
@@ -72,7 +72,7 @@ TEST_P(PaintInvalidationTest, RecalcOverflowInvalidatesBackground) {
 
 TEST_P(PaintInvalidationTest, UpdateVisualRectOnFrameBorderWidthChange) {
   // TODO(wangxianzhu): enable for SPv2.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(
@@ -143,9 +143,10 @@ TEST_P(PaintInvalidationTest, InvisibleTransformUnderFixedOnScroll) {
   EXPECT_TRUE(fixed_object.MayNeedPaintInvalidation());
   EXPECT_EQ(LayoutRect(0, 0, 120, 130), fixed_object.LayoutOverflowRect());
 
-  // We should not repaint anything because all contents are invisible.
   GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint();
-  EXPECT_FALSE(fixed_layer.NeedsRepaint());
+  // Invalidation is still needed for invisible transformed content, because it
+  // may end up composited (in SPv2 mode) and move on screen.
+  EXPECT_TRUE(fixed_layer.NeedsRepaint());
   GetDocument().View()->UpdateAllLifecyclePhases();
 
   // The following ensures normal paint invalidation still works.

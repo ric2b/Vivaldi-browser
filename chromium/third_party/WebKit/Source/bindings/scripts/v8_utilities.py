@@ -44,6 +44,7 @@ ACRONYMS = [
     'HTML',
     'IME',
     'JS',
+    'SMIL',
     'SVG',
     'URL',
     'WOFF',
@@ -114,18 +115,7 @@ def uncapitalize(name):
 
 def runtime_enabled_function(name):
     """Returns a function call of a runtime enabled feature."""
-    return 'RuntimeEnabledFeatures::%sEnabled()' % uncapitalize(name)
-
-
-def unique_by(dict_list, key):
-    """Returns elements from a list of dictionaries with unique values for the named key."""
-    keys_seen = set()
-    filtered_list = []
-    for item in dict_list:
-        if item.get(key) not in keys_seen:
-            filtered_list.append(item)
-            keys_seen.add(item.get(key))
-    return filtered_list
+    return 'RuntimeEnabledFeatures::%sEnabled()' % name
 
 
 ################################################################################
@@ -321,8 +311,8 @@ def exposed(member, interface):
       => context->isDocument()
 
     EXAMPLE: [Exposed(Window Feature1, Window Feature2)]
-      => context->isDocument() && RuntimeEnabledFeatures::feature1Enabled() ||
-         context->isDocument() && RuntimeEnabledFeatures::feature2Enabled()
+      => context->isDocument() && RuntimeEnabledFeatures::Feature1Enabled() ||
+         context->isDocument() && RuntimeEnabledFeatures::Feature2Enabled()
     """
     exposure_set = ExposureSet(
         extended_attribute_value_as_list(member, 'Exposed'))
@@ -435,6 +425,11 @@ def origin_trial_enabled_function_name(definition_or_member):
 def origin_trial_feature_name(definition_or_member):
     extended_attributes = definition_or_member.extended_attributes
     return extended_attributes.get('OriginTrialEnabled') or extended_attributes.get('FeaturePolicy')
+
+
+# [ContextEnabled]
+def context_enabled_feature_name(definition_or_member):
+    return definition_or_member.extended_attributes.get('ContextEnabled')
 
 
 # [RuntimeEnabled]

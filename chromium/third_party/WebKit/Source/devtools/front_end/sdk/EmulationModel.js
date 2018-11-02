@@ -22,6 +22,11 @@ SDK.EmulationModel = class extends SDK.SDKModel {
     if (disableJavascriptSetting.get())
       this._emulationAgent.setScriptExecutionDisabled(true);
 
+    var mediaSetting = Common.moduleSetting('emulatedCSSMedia');
+    mediaSetting.addChangeListener(() => this._emulateCSSMedia(mediaSetting.get()));
+    if (mediaSetting.get())
+      this._emulateCSSMedia(mediaSetting.get());
+
     this._touchEnabled = false;
     this._touchMobile = false;
     this._customTouchEnabled = false;
@@ -51,26 +56,6 @@ SDK.EmulationModel = class extends SDK.SDKModel {
       return this._emulationAgent.invoke_setDeviceMetricsOverride(metrics);
     else
       return this._emulationAgent.clearDeviceMetricsOverride();
-  }
-
-  /**
-   * @param {number} width
-   * @param {number} height
-   * @return {!Promise}
-   */
-  setVisibleSize(width, height) {
-    return this._emulationAgent.setVisibleSize(width, height);
-  }
-
-  /**
-   * @param {{x: number, y: number, scale: number}|null} viewport
-   * @return {!Promise}
-   */
-  forceViewport(viewport) {
-    if (viewport)
-      return this._emulationAgent.forceViewport(viewport.x, viewport.y, viewport.scale);
-    else
-      return this._emulationAgent.resetViewport();
   }
 
   /**
@@ -110,10 +95,10 @@ SDK.EmulationModel = class extends SDK.SDKModel {
   }
 
   /**
-   * @param {?string} media
+   * @param {string} media
    */
-  emulateCSSMedia(media) {
-    this._emulationAgent.setEmulatedMedia(media || '');
+  _emulateCSSMedia(media) {
+    this._emulationAgent.setEmulatedMedia(media);
     if (this._cssModel)
       this._cssModel.mediaQueryResultChanged();
   }

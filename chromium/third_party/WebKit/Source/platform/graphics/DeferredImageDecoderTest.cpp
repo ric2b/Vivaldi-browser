@@ -233,18 +233,18 @@ TEST_F(DeferredImageDecoderTest, decodeOnOtherThread) {
 TEST_F(DeferredImageDecoderTest, singleFrameImageLoading) {
   status_ = ImageFrame::kFramePartial;
   lazy_decoder_->SetData(data_, false);
-  EXPECT_FALSE(lazy_decoder_->FrameIsCompleteAtIndex(0));
+  EXPECT_FALSE(lazy_decoder_->FrameIsReceivedAtIndex(0));
   sk_sp<SkImage> image = lazy_decoder_->CreateFrameAtIndex(0);
   ASSERT_TRUE(image);
   unsigned first_id = image->uniqueID();
-  EXPECT_FALSE(lazy_decoder_->FrameIsCompleteAtIndex(0));
+  EXPECT_FALSE(lazy_decoder_->FrameIsReceivedAtIndex(0));
   EXPECT_TRUE(actual_decoder_);
 
   status_ = ImageFrame::kFrameComplete;
   data_->Append(" ", 1u);
   lazy_decoder_->SetData(data_, true);
   EXPECT_FALSE(actual_decoder_);
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(0));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(0));
 
   image = lazy_decoder_->CreateFrameAtIndex(0);
   ASSERT_TRUE(image);
@@ -263,7 +263,7 @@ TEST_F(DeferredImageDecoderTest, multiFrameImageLoading) {
   sk_sp<SkImage> image = lazy_decoder_->CreateFrameAtIndex(0);
   ASSERT_TRUE(image);
   unsigned first_id = image->uniqueID();
-  EXPECT_FALSE(lazy_decoder_->FrameIsCompleteAtIndex(0));
+  EXPECT_FALSE(lazy_decoder_->FrameIsReceivedAtIndex(0));
   EXPECT_EQ(10.0f, lazy_decoder_->FrameDurationAtIndex(0));
 
   frame_count_ = 2;
@@ -276,8 +276,8 @@ TEST_F(DeferredImageDecoderTest, multiFrameImageLoading) {
   ASSERT_TRUE(image);
   unsigned second_id = image->uniqueID();
   EXPECT_NE(first_id, second_id);
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(0));
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(1));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(0));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(1));
   EXPECT_EQ(20.0f, lazy_decoder_->FrameDurationAtIndex(1));
   EXPECT_TRUE(actual_decoder_);
 
@@ -286,9 +286,9 @@ TEST_F(DeferredImageDecoderTest, multiFrameImageLoading) {
   status_ = ImageFrame::kFrameComplete;
   lazy_decoder_->SetData(data_, true);
   EXPECT_FALSE(actual_decoder_);
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(0));
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(1));
-  EXPECT_TRUE(lazy_decoder_->FrameIsCompleteAtIndex(2));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(0));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(1));
+  EXPECT_TRUE(lazy_decoder_->FrameIsReceivedAtIndex(2));
   EXPECT_EQ(10.0f, lazy_decoder_->FrameDurationAtIndex(0));
   EXPECT_EQ(20.0f, lazy_decoder_->FrameDurationAtIndex(1));
   EXPECT_EQ(30.0f, lazy_decoder_->FrameDurationAtIndex(2));
@@ -383,14 +383,16 @@ TEST_F(DeferredImageDecoderTest, respectActualDecoderSizeOnCreate) {
 }
 
 TEST_F(DeferredImageDecoderTest, data) {
-  RefPtr<SharedBuffer> original_data =
+  RefPtr<SharedBuffer> original_buffer =
       SharedBuffer::Create(data_->Data(), data_->size());
-  EXPECT_EQ(original_data->size(), data_->size());
-  lazy_decoder_->SetData(original_data, false);
-  RefPtr<SharedBuffer> new_data = lazy_decoder_->Data();
-  EXPECT_EQ(original_data->size(), new_data->size());
-  EXPECT_EQ(0, std::memcmp(original_data->Data(), new_data->Data(),
-                           new_data->size()));
+  EXPECT_EQ(original_buffer->size(), data_->size());
+  lazy_decoder_->SetData(original_buffer, false);
+  RefPtr<SharedBuffer> new_buffer = lazy_decoder_->Data();
+  EXPECT_EQ(original_buffer->size(), new_buffer->size());
+  const Vector<char> original_data = original_buffer->Copy();
+  const Vector<char> new_data = new_buffer->Copy();
+  EXPECT_EQ(0, std::memcmp(original_data.data(), new_data.data(),
+                           new_buffer->size()));
 }
 
 }  // namespace blink

@@ -9,11 +9,14 @@
 #include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/rand_util.h"
 #include "build/build_config.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "content/browser/renderer_host/render_widget_host_delegate.h"
+#include "content/public/browser/browser_thread.h"
 #include "content/public/browser/content_browser_client.h"
 #include "content/public/common/content_client.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
 #include "ui/events/blink/web_input_event_traits.h"
 #include "ui/latency/latency_histogram_macros.h"
 
@@ -26,6 +29,8 @@ using ui::LatencyInfo;
 
 namespace content {
 namespace {
+
+constexpr int kSamplingInterval = 10;
 
 std::string WebInputEventTypeToInputModalityString(WebInputEvent::Type type) {
   if (type == blink::WebInputEvent::kMouseWheel) {
@@ -73,16 +78,85 @@ void AddLatencyInfoComponentIds(LatencyInfo* latency,
   }
 }
 
+void RecordEQTAccuracy(base::TimeDelta queueing_time,
+                       base::TimeDelta expected_queueing_time) {
+  float expected_queueing_time_ms = expected_queueing_time.InMillisecondsF();
+
+  if (expected_queueing_time_ms < 10) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_LessThan.10ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms < 150) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_LessThan.150ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms < 300) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_LessThan.300ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms < 450) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_LessThan.450ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms > 10) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_GreaterThan.10ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms > 150) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_GreaterThan.150ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms > 300) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_GreaterThan.300ms",
+        queueing_time);
+  }
+
+  if (expected_queueing_time_ms > 450) {
+    UMA_HISTOGRAM_TIMES(
+        "RendererScheduler."
+        "QueueingDurationWhenExpectedQueueingTime_GreaterThan.450ms",
+        queueing_time);
+  }
+}
+
 }  // namespace
 
-RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker()
-    : last_event_id_(0),
+RenderWidgetHostLatencyTracker::RenderWidgetHostLatencyTracker(
+    bool metric_sampling)
+    : ukm_source_id_(-1),
+      last_event_id_(0),
       latency_component_id_(0),
       device_scale_factor_(1),
       has_seen_first_gesture_scroll_update_(false),
       active_multi_finger_gesture_(false),
       touch_start_default_prevented_(false),
-      render_widget_host_delegate_(nullptr) {}
+      metric_sampling_(metric_sampling),
+      metric_sampling_events_since_last_sample_(-1),
+      render_widget_host_delegate_(nullptr) {
+  if (metric_sampling)
+    metric_sampling_events_since_last_sample_ =
+        base::RandUint64() % kSamplingInterval;
+}
 
 RenderWidgetHostLatencyTracker::~RenderWidgetHostLatencyTracker() {}
 
@@ -164,6 +238,10 @@ void RenderWidgetHostLatencyTracker::ComputeInputLatencyHistograms(
       UMA_HISTOGRAM_INPUT_LATENCY_MILLISECONDS(
           "Event.Latency.QueueingTime." + event_name + default_action_status,
           rwh_component, main_component);
+
+      RecordEQTAccuracy(
+          main_component.last_event_time - rwh_component.first_event_time,
+          latency.expected_queueing_time_on_dispatch());
     }
   }
 
@@ -191,6 +269,10 @@ void RenderWidgetHostLatencyTracker::OnInputEvent(
     const blink::WebInputEvent& event,
     LatencyInfo* latency) {
   DCHECK(latency);
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
+  static uint64_t global_trace_id = 0;
+  latency->set_trace_id(++global_trace_id);
 
   if (event.GetType() == WebInputEvent::kTouchStart) {
     const WebTouchEvent& touch_event =
@@ -325,4 +407,41 @@ void RenderWidgetHostLatencyTracker::ReportRapporScrollLatency(
   }
 }
 
+ukm::SourceId RenderWidgetHostLatencyTracker::GetUkmSourceId() {
+  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+  if (ukm_recorder && ukm_source_id_ == -1 && render_widget_host_delegate_) {
+    ukm_source_id_ = ukm_recorder->GetNewSourceID();
+    render_widget_host_delegate_->UpdateUrlForUkmSource(ukm_recorder,
+                                                        ukm_source_id_);
+  }
+  return ukm_source_id_;
+}
+
+void RenderWidgetHostLatencyTracker::ReportUkmScrollLatency(
+    const std::string& event_name,
+    const std::string& metric_name,
+    const LatencyInfo::LatencyComponent& start_component,
+    const LatencyInfo::LatencyComponent& end_component) {
+  CONFIRM_VALID_TIMING(start_component, end_component)
+
+  // Only report a subset of this metric as the volume is too high.
+  if (event_name == "Event.ScrollUpdate.Touch") {
+    metric_sampling_events_since_last_sample_++;
+    metric_sampling_events_since_last_sample_ %= kSamplingInterval;
+    if (metric_sampling_ && metric_sampling_events_since_last_sample_)
+      return;
+  }
+
+  ukm::SourceId ukm_source_id = GetUkmSourceId();
+  ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
+
+  if (ukm_source_id == -1 || !ukm_recorder)
+    return;
+
+  std::unique_ptr<ukm::UkmEntryBuilder> builder =
+      ukm_recorder->GetEntryBuilder(ukm_source_id, event_name.c_str());
+  builder->AddMetric(metric_name.c_str(), (end_component.last_event_time -
+                                           start_component.first_event_time)
+                                              .InMicroseconds());
+}
 }  // namespace content

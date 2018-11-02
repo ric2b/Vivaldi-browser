@@ -42,6 +42,7 @@ class HTMLCollection;
 class NameNodeList;
 using StaticElementList = StaticNodeTypeList<Element>;
 class RadioNodeList;
+class WhitespaceAttacher;
 
 enum DynamicRestyleFlags {
   kChildrenOrSiblingsAffectedByFocus = 1 << 0,
@@ -117,6 +118,10 @@ class CORE_EXPORT ContainerNode : public Node {
                      ExceptionState& = ASSERT_NO_EXCEPTION);
   Node* RemoveChild(Node* child, ExceptionState& = ASSERT_NO_EXCEPTION);
   Node* AppendChild(Node* new_child, ExceptionState& = ASSERT_NO_EXCEPTION);
+  bool EnsurePreInsertionValidity(const Node& new_child,
+                                  const Node* next,
+                                  const Node* old_child,
+                                  ExceptionState&) const;
 
   Element* getElementById(const AtomicString& id) const;
   HTMLCollection* getElementsByTagName(const AtomicString&);
@@ -139,7 +144,7 @@ class CORE_EXPORT ContainerNode : public Node {
 
   void CloneChildNodes(ContainerNode* clone);
 
-  void AttachLayoutTree(const AttachContext& = AttachContext()) override;
+  void AttachLayoutTree(AttachContext&) override;
   void DetachLayoutTree(const AttachContext& = AttachContext()) override;
   LayoutRect BoundingBox() const final;
   void SetFocused(bool, WebFocusType) override;
@@ -256,8 +261,8 @@ class CORE_EXPORT ContainerNode : public Node {
                                    Node* node_before_change,
                                    Node* node_after_change);
   void RecalcDescendantStyles(StyleRecalcChange);
-  void RebuildChildrenLayoutTrees(Text*& next_text_sibling);
-  void RebuildLayoutTreeForChild(Node* child, Text*& next_text_sibling);
+  void RebuildChildrenLayoutTrees(WhitespaceAttacher&);
+  void RebuildLayoutTreeForChild(Node* child, WhitespaceAttacher&);
 
   bool ChildrenSupportStyleSharing() const { return !HasRestyleFlags(); }
 
@@ -412,19 +417,12 @@ class CORE_EXPORT ContainerNode : public Node {
   bool HasRestyleFlagInternal(DynamicRestyleFlags) const;
   bool HasRestyleFlagsInternal() const;
 
-  bool CollectChildrenAndRemoveFromOldParentWithCheck(const Node* next,
-                                                      const Node* old_child,
-                                                      Node& new_child,
-                                                      NodeVector&,
-                                                      ExceptionState&) const;
-  inline bool CheckAcceptChildGuaranteedNodeTypes(const Node& new_child,
-                                                  const Node* old_child,
-                                                  ExceptionState&) const;
-  inline bool CheckAcceptChild(const Node* new_child,
-                               const Node* old_child,
-                               ExceptionState&) const;
+  bool RecheckNodeInsertionStructuralPrereq(const NodeVector&,
+                                            const Node* next,
+                                            ExceptionState&);
   inline bool CheckParserAcceptChild(const Node& new_child) const;
-  inline bool ContainsConsideringHostElements(const Node&) const;
+  inline bool IsHostIncludingInclusiveAncestorOfThis(const Node&,
+                                                     ExceptionState&) const;
   inline bool IsChildTypeAllowed(const Node& child) const;
 
   bool GetUpperLeftCorner(FloatPoint&) const;

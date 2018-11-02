@@ -34,8 +34,11 @@
 #include "platform/loader/fetch/MemoryCache.h"
 #include "platform/loader/fetch/ResourceClientWalker.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 #include "platform/weborigin/SecurityPolicy.h"
 #include "platform/wtf/CurrentTime.h"
+#include "platform/wtf/text/TextEncoding.h"
 
 namespace blink {
 
@@ -53,20 +56,24 @@ CSSStyleSheetResource* CSSStyleSheetResource::Fetch(FetchParameters& params,
 }
 
 CSSStyleSheetResource* CSSStyleSheetResource::CreateForTest(
-    const ResourceRequest& request,
-    const String& charset) {
-  return new CSSStyleSheetResource(request, ResourceLoaderOptions(), charset);
+    const KURL& url,
+    const WTF::TextEncoding& encoding) {
+  ResourceRequest request(url);
+  request.SetFetchCredentialsMode(WebURLRequest::kFetchCredentialsModeOmit);
+  ResourceLoaderOptions options;
+  TextResourceDecoderOptions decoder_options(
+      TextResourceDecoderOptions::kCSSContent, encoding);
+  return new CSSStyleSheetResource(request, options, decoder_options);
 }
 
 CSSStyleSheetResource::CSSStyleSheetResource(
     const ResourceRequest& resource_request,
     const ResourceLoaderOptions& options,
-    const String& charset)
+    const TextResourceDecoderOptions& decoder_options)
     : StyleSheetResource(resource_request,
                          kCSSStyleSheet,
                          options,
-                         "text/css",
-                         charset),
+                         decoder_options),
       did_notify_first_data_(false) {}
 
 CSSStyleSheetResource::~CSSStyleSheetResource() {}
@@ -146,6 +153,8 @@ void CSSStyleSheetResource::AppendData(const char* data, size_t length) {
 }
 
 void CSSStyleSheetResource::CheckNotify() {
+  TriggerNotificationForFinishObservers();
+
   // Decode the data to find out the encoding and cache the decoded sheet text.
   if (Data())
     SetDecodedSheetText(DecodedText());

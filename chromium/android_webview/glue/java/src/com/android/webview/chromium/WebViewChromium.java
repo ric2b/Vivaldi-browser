@@ -57,6 +57,7 @@ import org.chromium.android_webview.AwSettings;
 import org.chromium.android_webview.ResourcesContextWrapperFactory;
 import org.chromium.base.ThreadUtils;
 import org.chromium.base.annotations.SuppressFBWarnings;
+import org.chromium.components.autofill.AutofillProvider;
 import org.chromium.content.browser.SmartClipProvider;
 import org.chromium.content_public.browser.NavigationHistory;
 
@@ -94,14 +95,12 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
     private ContentSettingsAdapter mWebSettings;
     // The WebView wrapper for ContentViewCore and required browser compontents.
     AwContents mAwContents;
-    // Non-null if this webview is using the GL accelerated draw path.
-    private DrawGLFunctor mGLfunctor;
 
     private final WebView.HitTestResult mHitTestResult;
 
     private final int mAppTargetSdkVersion;
 
-    private WebViewChromiumFactoryProvider mFactory;
+    protected WebViewChromiumFactoryProvider mFactory;
 
     private final boolean mShouldDisableThreadChecking;
 
@@ -230,7 +229,14 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
 
         mAwContents = new AwContents(mFactory.getBrowserContextOnUiThread(), mWebView, mContext,
                 new InternalAccessAdapter(), new WebViewNativeDrawGLFunctorFactory(),
-                mContentsClientAdapter, mWebSettings.getAwSettings());
+                mContentsClientAdapter, mWebSettings.getAwSettings(),
+                new AwContents.DependencyFactory() {
+                    @Override
+                    public AutofillProvider createAutofillProvider(
+                            Context context, ViewGroup containerView) {
+                        return mFactory.createAutofillProvider(context, mWebView);
+                    }
+                });
 
         if (mAppTargetSdkVersion >= Build.VERSION_CODES.KITKAT) {
             // On KK and above, favicons are automatically downloaded as the method
@@ -253,7 +259,7 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
                 "Calling View methods on another thread than the UI thread.");
     }
 
-    private boolean checkNeedsPost() {
+    protected boolean checkNeedsPost() {
         boolean needsPost = !mFactory.hasStarted() || !ThreadUtils.runningOnUiThread();
         if (!needsPost && mAwContents == null) {
             throw new IllegalStateException("AwContents must be created if we are not posting!");
@@ -1476,6 +1482,24 @@ class WebViewChromium implements WebViewProvider, WebViewProvider.ScrollDelegate
     public View findHierarchyView(String className, int hashCode) {
         // Intentional no-op
         return null;
+    }
+
+    @Override
+    public void setRendererPriorityPolicy(
+            int rendererRequestedPriority, boolean waivedWhenNotVisible) {
+        // TODO(paulmiller): Unfork O APIs
+    }
+
+    @Override
+    public int getRendererRequestedPriority() {
+        // TODO(paulmiller): Unfork O APIs
+        return 0;
+    }
+
+    @Override
+    public boolean getRendererPriorityWaivedWhenNotVisible() {
+        // TODO(paulmiller): Unfork O APIs
+        return false;
     }
 
     // WebViewProvider glue methods ---------------------------------------------------------------

@@ -14,13 +14,10 @@ class CONTENT_EXPORT MemoryCoordinatorDelegate {
  public:
   virtual ~MemoryCoordinatorDelegate() {}
 
-  // Returns true when a given backgrounded renderer process can be suspended.
-  virtual bool CanSuspendBackgroundedRenderer(int render_process_id) = 0;
-
   // Requests to discard one tab. An implementation should select a low priority
   // tab to discard. If there is no tab that can be discarded, this doesn't take
   // effect.
-  virtual void DiscardTab() {}
+  virtual void DiscardTab(bool skip_unload_handlers) {}
 };
 
 }  // namespace content

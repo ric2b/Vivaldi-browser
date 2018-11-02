@@ -9,11 +9,11 @@
 #include <memory>
 
 #include "ash/ash_export.h"
+#include "ash/display/window_tree_host_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/shelf/shelf_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/wm/window_state_observer.h"
-#include "ash/wm_display_observer.h"
 #include "base/compiler_specific.h"
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
@@ -53,8 +53,8 @@ class RootWindowController;
 class ASH_EXPORT PanelLayoutManager
     : public aura::LayoutManager,
       public wm::WindowStateObserver,
-      public aura::client::ActivationChangeObserver,
-      public WmDisplayObserver,
+      public ::wm::ActivationChangeObserver,
+      public WindowTreeHostManager::Observer,
       public ShellObserver,
       public aura::WindowObserver,
       public keyboard::KeyboardControllerObserver,
@@ -96,7 +96,7 @@ class ASH_EXPORT PanelLayoutManager
 
   // ShellObserver:
   void OnOverviewModeEnded() override;
-  void OnShelfAlignmentChanged(WmWindow* root_window) override;
+  void OnShelfAlignmentChanged(aura::Window* root_window) override;
   void OnVirtualKeyboardStateChanged(bool activated,
                                      aura::Window* root_window) override;
 
@@ -109,10 +109,11 @@ class ASH_EXPORT PanelLayoutManager
   void OnPostWindowStateTypeChange(wm::WindowState* window_state,
                                    wm::WindowStateType old_type) override;
 
-  // aura::client::ActivationChangeObserver:
-  void OnWindowActivated(ActivationReason reason,
-                         aura::Window* gained_active,
-                         aura::Window* lost_active) override;
+  // wm::ActivationChangeObserver:
+  void OnWindowActivated(
+      ::wm::ActivationChangeObserver::ActivationReason reason,
+      aura::Window* gained_active,
+      aura::Window* lost_active) override;
 
   // WindowTreeHostManager::Observer:
   void OnDisplayConfigurationChanged() override;

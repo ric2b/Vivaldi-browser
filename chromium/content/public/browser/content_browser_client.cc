@@ -15,13 +15,15 @@
 #include "content/public/browser/navigation_ui_data.h"
 #include "content/public/browser/vpn_service_proxy.h"
 #include "content/public/common/sandbox_type.h"
+#include "content/public/common/url_loader_throttle.h"
 #include "media/audio/audio_manager.h"
 #include "media/base/cdm_factory.h"
 #include "media/media_features.h"
-#include "net/cert/x509_certificate.h"
+#include "net/ssl/client_cert_identity.h"
 #include "storage/browser/quota/quota_manager.h"
 #include "ui/gfx/image/image_skia.h"
 #include "url/gurl.h"
+#include "url/origin.h"
 
 namespace content {
 
@@ -138,6 +140,11 @@ bool ContentBrowserClient::ShouldAssignSiteForURL(const GURL& url) {
   return true;
 }
 
+std::vector<url::Origin>
+ContentBrowserClient::GetOriginsRequiringDedicatedProcess() {
+  return std::vector<url::Origin>();
+}
+
 std::string ContentBrowserClient::GetApplicationLocale() {
   return "en-US";
 }
@@ -149,6 +156,10 @@ std::string ContentBrowserClient::GetAcceptLangs(BrowserContext* context) {
 const gfx::ImageSkia* ContentBrowserClient::GetDefaultFavicon() {
   static gfx::ImageSkia* empty = new gfx::ImageSkia();
   return empty;
+}
+
+base::FilePath ContentBrowserClient::GetLoggingFileName() {
+  return base::FilePath();
 }
 
 bool ContentBrowserClient::AllowAppCache(const GURL& manifest_url,
@@ -223,9 +234,9 @@ QuotaPermissionContext* ContentBrowserClient::CreateQuotaPermissionContext() {
 void ContentBrowserClient::GetQuotaSettings(
     BrowserContext* context,
     StoragePartition* partition,
-    const storage::OptionalQuotaSettingsCallback& callback) {
+    storage::OptionalQuotaSettingsCallback callback) {
   // By default, no quota is provided, embedders should override.
-  callback.Run(storage::GetNoQuotaSettings());
+  std::move(callback).Run(storage::GetNoQuotaSettings());
 }
 
 void ContentBrowserClient::AllowCertificateError(
@@ -244,7 +255,7 @@ void ContentBrowserClient::AllowCertificateError(
 void ContentBrowserClient::SelectClientCertificate(
     WebContents* web_contents,
     net::SSLCertRequestInfo* cert_request_info,
-    net::CertificateList client_certs,
+    net::ClientCertIdentityList client_certs,
     std::unique_ptr<ClientCertificateDelegate> delegate) {}
 
 net::URLRequestContext* ContentBrowserClient::OverrideRequestContextForURL(
@@ -411,6 +422,10 @@ void ContentBrowserClient::OpenURL(
   callback.Run(nullptr);
 }
 
+std::string ContentBrowserClient::GetMetricSuffixForURL(const GURL& url) {
+  return std::string();
+}
+
 std::vector<std::unique_ptr<NavigationThrottle>>
 ContentBrowserClient::CreateThrottlesForNavigation(
     NavigationHandle* navigation_handle) {
@@ -457,21 +472,15 @@ ContentBrowserClient::GetMemoryCoordinatorDelegate() {
   return nullptr;
 }
 
-::ukm::UkmRecorder* ContentBrowserClient::GetUkmRecorder() {
-  return nullptr;
-}
-
 std::unique_ptr<base::TaskScheduler::InitParams>
 ContentBrowserClient::GetTaskSchedulerInitParams() {
   return nullptr;
 }
 
-bool ContentBrowserClient::ShouldRedirectDOMStorageTaskRunner() {
-  return false;
-}
-
-bool ContentBrowserClient::RedirectNonUINonIOBrowserThreadsToTaskScheduler() {
-  return false;
+std::vector<std::unique_ptr<URLLoaderThrottle>>
+ContentBrowserClient::CreateURLLoaderThrottles(
+    const base::Callback<WebContents*()>& wc_getter) {
+  return std::vector<std::unique_ptr<URLLoaderThrottle>>();
 }
 
 }  // namespace content

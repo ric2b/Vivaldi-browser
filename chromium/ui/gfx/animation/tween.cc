@@ -58,8 +58,14 @@ double Tween::CalculateValue(Tween::Type type, double state) {
     case FAST_OUT_SLOW_IN:
       return gfx::CubicBezier(0.4, 0, 0.2, 1).Solve(state);
 
+    case FAST_OUT_SLOW_IN_2:
+      return gfx::CubicBezier(0.2, 0, 0.2, 1).Solve(state);
+
     case LINEAR_OUT_SLOW_IN:
       return gfx::CubicBezier(0, 0, .2, 1).Solve(state);
+
+    case SLOW_OUT_LINEAR_IN:
+      return gfx::CubicBezier(0, 0, 1, .2).Solve(state);
 
     case FAST_OUT_LINEAR_IN:
       return gfx::CubicBezier(0.4, 0, 1, 1).Solve(state);
@@ -195,6 +201,15 @@ gfx::Transform Tween::TransformValueBetween(
   to_return.Blend(start_transform, value);
 
   return to_return;
+}
+
+gfx::SizeF Tween::SizeValueBetween(double value,
+                                   const gfx::SizeF& start_size,
+                                   const gfx::SizeF& target_size) {
+  return gfx::SizeF(
+      Tween::FloatValueBetween(value, start_size.width(), target_size.width()),
+      Tween::FloatValueBetween(value, start_size.height(),
+                               target_size.height()));
 }
 
 }  // namespace gfx

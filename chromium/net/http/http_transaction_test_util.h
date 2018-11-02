@@ -83,7 +83,10 @@ struct MockTransaction {
   int ssl_connection_status;
   // Value returned by MockNetworkTransaction::Start (potentially
   // asynchronously if |!(test_mode & TEST_MODE_SYNC_NET_START)|.)
-  Error return_code;
+  Error start_return_code;
+  // Value returned by MockNetworkTransaction::Read (potentially
+  // asynchronously if |!(test_mode & TEST_MODE_SYNC_NET_START)|.)
+  Error read_return_code;
 };
 
 extern const MockTransaction kSimpleGET_Transaction;
@@ -189,8 +192,8 @@ class MockNetworkTransaction
 
   int RestartIgnoringLastError(const CompletionCallback& callback) override;
 
-  int RestartWithCertificate(X509Certificate* client_cert,
-                             SSLPrivateKey* client_private_key,
+  int RestartWithCertificate(scoped_refptr<X509Certificate> client_cert,
+                             scoped_refptr<SSLPrivateKey> client_private_key,
                              const CompletionCallback& callback) override;
 
   int RestartWithAuth(const AuthCredentials& credentials,
@@ -241,6 +244,7 @@ class MockNetworkTransaction
   CreateHelper* websocket_handshake_stream_create_helper() {
     return websocket_handshake_stream_create_helper_;
   }
+
   RequestPriority priority() const { return priority_; }
   const HttpRequestInfo* request() const { return request_; }
 
@@ -279,6 +283,8 @@ class MockNetworkTransaction
   unsigned int socket_log_id_;
 
   bool done_reading_called_;
+
+  CompletionCallback resume_start_callback_;  // used for pause and restart.
 
   base::WeakPtrFactory<MockNetworkTransaction> weak_factory_;
 

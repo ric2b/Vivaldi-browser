@@ -29,7 +29,7 @@
 #define PluginView_h
 
 #include "core/CoreExport.h"
-#include "core/frame/FrameOrPlugin.h"
+#include "core/frame/EmbeddedContentView.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/scroll/ScrollTypes.h"
 #include "platform/wtf/text/WTFString.h"
@@ -41,19 +41,18 @@ namespace blink {
 class Event;
 class ResourceResponse;
 class WebLayer;
-class WebPluginContainerBase;
+class WebPluginContainerImpl;
 
 // TODO(joelhockey): Remove this class.
 // The only implementation of this class is web/WebPluginContainerImpl.
 // It can be used directly.
-class CORE_EXPORT PluginView : public FrameOrPlugin {
+class CORE_EXPORT PluginView : public EmbeddedContentView {
  public:
   virtual ~PluginView() {}
 
   bool IsPluginView() const override { return true; }
 
   virtual void SetFocused(bool, WebFocusType) = 0;
-  virtual void GeometryMayHaveChanged() = 0;
   virtual void HandleEvent(Event*) = 0;
   virtual void EventListenersRemoved() = 0;
   virtual bool IsPluginContainer() const { return false; }
@@ -73,16 +72,16 @@ class CORE_EXPORT PluginView : public FrameOrPlugin {
 
   virtual void UpdateAllLifecyclePhases() {}
   virtual void InvalidatePaint() {}
-  virtual WebPluginContainerBase* GetWebPluginContainerBase() const {
+  virtual WebPluginContainerImpl* GetWebPluginContainer() const {
     return nullptr;
   }
 };
 
 DEFINE_TYPE_CASTS(PluginView,
-                  FrameOrPlugin,
-                  frame_or_plugin,
-                  frame_or_plugin->IsPluginView(),
-                  frame_or_plugin.IsPluginView());
+                  EmbeddedContentView,
+                  embedded_content_view,
+                  embedded_content_view->IsPluginView(),
+                  embedded_content_view.IsPluginView());
 
 }  // namespace blink
 

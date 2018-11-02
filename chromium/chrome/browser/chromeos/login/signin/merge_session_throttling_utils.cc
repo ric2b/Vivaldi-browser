@@ -10,7 +10,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/memory/singleton.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/time/time.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager.h"
 #include "chrome/browser/chromeos/login/signin/oauth2_login_manager_factory.h"
@@ -32,16 +32,18 @@ namespace {
 const int64_t kMaxSessionRestoreTimeInSec = 60;
 
 // The set of blocked profiles.
-class ProfileSet : public base::NonThreadSafe, public std::set<Profile*> {
+class ProfileSet : public std::set<Profile*> {
  public:
   ProfileSet() {}
 
-  virtual ~ProfileSet() {}
+  virtual ~ProfileSet() { DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_); }
 
   static ProfileSet* Get();
 
  private:
   friend struct ::base::LazyInstanceTraitsBase<ProfileSet>;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(ProfileSet);
 };
@@ -60,7 +62,7 @@ ProfileSet* ProfileSet::Get() {
 // even be even added to new requests. Value of 0 (initial) means that we
 // probably have some profiles to restore, while 1 means that all known
 // profiles are restored.
-base::AtomicRefCount g_all_profiles_restored_ = 0;
+base::AtomicRefCount g_all_profiles_restored_(0);
 
 }  // namespace
 
@@ -69,7 +71,7 @@ bool ShouldAttachNavigationThrottle() {
 }
 
 bool AreAllSessionMergedAlready() {
-  return !base::AtomicRefCountIsZero(&g_all_profiles_restored_);
+  return !g_all_profiles_restored_.IsZero();
 }
 
 void BlockProfile(Profile* profile) {
@@ -83,7 +85,7 @@ void BlockProfile(Profile* profile) {
     // Since a new profile just got blocked, we can not assume that
     // all sessions are merged anymore.
     if (AreAllSessionMergedAlready()) {
-      base::AtomicRefCountDec(&g_all_profiles_restored_);
+      g_all_profiles_restored_.Decrement();
       DVLOG(1) << "Marking all sessions unmerged!";
     }
   }
@@ -98,8 +100,9 @@ void UnblockProfile(Profile* profile) {
 
   // Check if there is any other profile to block on.
   if (ProfileSet::Get()->size() == 0) {
-    base::AtomicRefCountInc(&g_all_profiles_restored_);
-    DVLOG(1) << "All profiles merged " << g_all_profiles_restored_;
+    g_all_profiles_restored_.Increment();
+    DVLOG(1) << "All profiles merged "
+             << g_all_profiles_restored_.SubtleRefCountForDebug();
   }
 }
 
@@ -113,7 +116,7 @@ bool ShouldDelayRequestForProfile(Profile* profile) {
     // This is not a regular user session, let's remove the throttle
     // permanently.
     if (!AreAllSessionMergedAlready())
-      base::AtomicRefCountInc(&g_all_profiles_restored_);
+      g_all_profiles_restored_.Increment();
 
     return false;
   }

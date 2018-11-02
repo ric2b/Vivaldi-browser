@@ -5,10 +5,14 @@
 package org.chromium.content.browser;
 
 import android.content.ComponentName;
+import android.content.Context;
 import android.os.Bundle;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -21,7 +25,9 @@ import org.mockito.MockitoAnnotations;
 import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowLooper;
 
-import org.chromium.base.process_launcher.ChildProcessCreationParams;
+import org.chromium.base.process_launcher.ChildConnectionAllocator;
+import org.chromium.base.process_launcher.ChildProcessConnection;
+import org.chromium.base.test.TestChildProcessConnection;
 import org.chromium.base.test.util.Feature;
 import org.chromium.testing.local.LocalRobolectricTestRunner;
 
@@ -30,37 +36,45 @@ import org.chromium.testing.local.LocalRobolectricTestRunner;
 @RunWith(LocalRobolectricTestRunner.class)
 public class SpareChildConnectionTest {
     @Mock
-    private ChildProcessConnection.StartCallback mStartCallback;
+    private ChildProcessConnection.ServiceCallback mServiceCallback;
 
-    static class TestConnectionFactory implements SpareChildConnection.ConnectionFactory {
-        public ChildProcessConnection connection;
-        public ChildProcessConnection.StartCallback startCallback;
+    // A connection allocator not used to create connections.
+    private final ChildConnectionAllocator mWrongConnectionAllocator =
+            ChildConnectionAllocator.createForTest("org.chromium.test", "TestServiceName",
+                    3 /* serviceCount */, false /* bindToCaller */,
+                    false /* bindAsExternalService */, false /* useStrongBinding */);
+
+    // The allocator used to allocate the actual connection.
+    private ChildConnectionAllocator mConnectionAllocator;
+
+    private static class TestConnectionFactory
+            implements ChildConnectionAllocator.ConnectionFactory {
+        private TestChildProcessConnection mConnection;
 
         @Override
-        public ChildProcessConnection allocateBoundConnection(ChildSpawnData spawnData,
-                ChildProcessConnection.StartCallback startCallback, boolean queueIfNoneAvailable) {
-            this.startCallback = startCallback;
-            ComponentName serviceName = new ComponentName(
-                    spawnData.getCreationParams().getPackageNameForSandboxedService(),
-                    "TestSpareChild");
-            connection =
-                    ChildProcessConnection.createUnboundConnectionForTesting(spawnData.getContext(),
-                            null /* deathCallback */, serviceName, true /* bindAsExternalService */,
-                            null /* childProcessCommonParameters */, spawnData.getCreationParams());
-            return connection;
+        public ChildProcessConnection createConnection(Context context, ComponentName serviceName,
+                boolean bindToCaller, boolean bindAsExternalService, Bundle serviceBundle) {
+            // We expect to create only one connection in these tests.
+            assert mConnection == null;
+            mConnection = new TestChildProcessConnection(
+                    serviceName, bindToCaller, bindAsExternalService, serviceBundle);
+            return mConnection;
         }
-    }
 
-    private final TestConnectionFactory mTestConnectionfactory = new TestConnectionFactory();
+        public void simulateConnectionBindingSuccessfully() {
+            mConnection.getServiceCallback().onChildStarted();
+        }
 
-    // Arguments used when creating the spare connection.
-    private static final boolean SANDBOXED = true;
-    private static final boolean ALWAYS_IN_FOREGROUND = true;
-    // For some reason creating ChildProcessCreationParams from a static context makes the launcher
-    // unhappy. (some Dalvik native library is not found when initializing a SparseArray)
-    private final ChildProcessCreationParams mCreationParams = new ChildProcessCreationParams(
-            "org.chromium.test,.spare_connection", true /* isExternalService */,
-            0 /* libraryProcessType */, true /* bindToCallerCheck */);
+        public void simulateConnectionFailingToBind() {
+            mConnection.getServiceCallback().onChildStartFailed();
+        }
+
+        public void simulateConnectionDied() {
+            mConnection.getServiceCallback().onChildProcessDied(mConnection);
+        }
+    };
+
+    private final TestConnectionFactory mTestConnectionFactory = new TestConnectionFactory();
 
     private SpareChildConnection mSpareConnection;
 
@@ -72,8 +86,13 @@ public class SpareChildConnectionTest {
         // asserts are not triggered.
         LauncherThread.setCurrentThreadAsLauncherThread();
 
-        mSpareConnection = new SpareChildConnection(null /* context */, mTestConnectionfactory,
-                new Bundle() /* serviceBundle */, SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams);
+        mConnectionAllocator =
+                ChildConnectionAllocator.createForTest("org.chromium.test.spare_connection",
+                        "TestServiceName", 5 /* serviceCount */, false /* bindToCaller */,
+                        false /* bindAsExternalService */, false /* useStrongBinding */);
+        mConnectionAllocator.setConnectionFactoryForTesting(mTestConnectionFactory);
+        mSpareConnection = new SpareChildConnection(
+                null /* context */, mConnectionAllocator, null /* serviceBundle */);
     }
 
     @After
@@ -85,87 +104,86 @@ public class SpareChildConnectionTest {
     @Test
     @Feature({"ProcessManagement"})
     public void testCreateAndGet() {
-        // Tests retrieving the connection with the wrong parameters.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                !SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        // Tests retrieving the connection with the wrong allocator.
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mWrongConnectionAllocator, mServiceCallback);
         assertNull(connection);
 
-        connection = mSpareConnection.getConnection(null /* context */, SANDBOXED,
-                !ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
-        assertNull(connection);
-
-        connection = mSpareConnection.getConnection(null /* context */, SANDBOXED,
-                ALWAYS_IN_FOREGROUND, null /* creationParams */, mStartCallback);
-        assertNull(connection);
-
-        // And with the right ones.
-        connection = mSpareConnection.getConnection(null /* context */, SANDBOXED,
-                ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        // And with the right one.
+        connection = mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
 
         // The connection has been used, subsequent calls should return null.
-        connection = mSpareConnection.getConnection(null /* context */, SANDBOXED,
-                ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        connection = mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNull(connection);
     }
 
     @Test
     @Feature({"ProcessManagement"})
     public void testCallbackNotCalledWhenNoConnection() {
-        // Simulate the connection getting bound.
-        mTestConnectionfactory.startCallback.onChildStarted();
+        mTestConnectionFactory.simulateConnectionBindingSuccessfully();
 
         // Retrieve the wrong connection, no callback should be fired.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                !SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mWrongConnectionAllocator, mServiceCallback);
         assertNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        verify(mStartCallback, times(0)).onChildStarted();
-        verify(mStartCallback, times(0)).onChildStartFailed();
+        ShadowLooper.runUiThreadTasks();
+        verify(mServiceCallback, times(0)).onChildStarted();
+        verify(mServiceCallback, times(0)).onChildStartFailed();
+        verify(mServiceCallback, times(0)).onChildProcessDied(any());
     }
 
     @Test
     @Feature({"ProcessManagement"})
     public void testCallbackCalledConnectionReady() {
-        // Simulate the connection getting bound.
-        mTestConnectionfactory.startCallback.onChildStarted();
+        mTestConnectionFactory.simulateConnectionBindingSuccessfully();
+
+        assertFalse(mSpareConnection.isEmpty());
 
         // Now retrieve the connection, the callback should be invoked.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        verify(mStartCallback, times(1)).onChildStarted();
-        verify(mStartCallback, times(0)).onChildStartFailed();
+
+        // No more connections are available.
+        assertTrue(mSpareConnection.isEmpty());
+
+        ShadowLooper.runUiThreadTasks();
+        verify(mServiceCallback, times(1)).onChildStarted();
+        verify(mServiceCallback, times(0)).onChildStartFailed();
     }
 
     @Test
     @Feature({"ProcessManagement"})
     public void testCallbackCalledConnectionNotReady() {
+        assertFalse(mSpareConnection.isEmpty());
+
         // Retrieve the connection before it's bound.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        ShadowLooper.runUiThreadTasks();
         // No callbacks are called.
-        verify(mStartCallback, times(0)).onChildStarted();
-        verify(mStartCallback, times(0)).onChildStartFailed();
+        verify(mServiceCallback, times(0)).onChildStarted();
+        verify(mServiceCallback, times(0)).onChildStartFailed();
+
+        // No more connections are available.
+        assertTrue(mSpareConnection.isEmpty());
 
         // Simulate the connection getting bound, it should trigger the callback.
-        mTestConnectionfactory.startCallback.onChildStarted();
-        verify(mStartCallback, times(1)).onChildStarted();
-        verify(mStartCallback, times(0)).onChildStartFailed();
+        mTestConnectionFactory.simulateConnectionBindingSuccessfully();
+        verify(mServiceCallback, times(1)).onChildStarted();
+        verify(mServiceCallback, times(0)).onChildStartFailed();
     }
 
     @Test
     @Feature({"ProcessManagement"})
     public void testUnretrievedConnectionFailsToBind() {
-        // Simulate the connection not binding.
-        mTestConnectionfactory.startCallback.onChildStartFailed();
+        mTestConnectionFactory.simulateConnectionFailingToBind();
 
         // We should not have a spare connection.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNull(connection);
     }
 
@@ -173,25 +191,42 @@ public class SpareChildConnectionTest {
     @Feature({"ProcessManagement"})
     public void testRetrievedConnectionFailsToBind() {
         // Retrieve the spare connection before it's bound.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNotNull(connection);
 
-        // Now simulate a binding failure.
-        mTestConnectionfactory.startCallback.onChildStartFailed();
+        mTestConnectionFactory.simulateConnectionFailingToBind();
 
         // We should get a failure callback.
-        verify(mStartCallback, times(0)).onChildStarted();
-        verify(mStartCallback, times(1)).onChildStartFailed();
+        verify(mServiceCallback, times(0)).onChildStarted();
+        verify(mServiceCallback, times(1)).onChildStartFailed();
+    }
+
+    @Test
+    @Feature({"ProcessManagement"})
+    public void testRetrievedConnectionStops() {
+        // Retrieve the spare connection before it's bound.
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
+        assertNotNull(connection);
+
+        mTestConnectionFactory.simulateConnectionDied();
+
+        // We should get a failure callback.
+        verify(mServiceCallback, times(0)).onChildStarted();
+        verify(mServiceCallback, times(0)).onChildStartFailed();
+        verify(mServiceCallback, times(1)).onChildProcessDied(connection);
     }
 
     @Test
     @Feature({"ProcessManagement"})
     public void testConnectionFreeing() {
-        mSpareConnection.onConnectionFreed(mTestConnectionfactory.connection);
-        // Connection has been freed, it should be gone.
-        ChildProcessConnection connection = mSpareConnection.getConnection(null /* context */,
-                SANDBOXED, ALWAYS_IN_FOREGROUND, mCreationParams, mStartCallback);
+        // Simulate the connection dying.
+        mTestConnectionFactory.simulateConnectionDied();
+
+        // Connection should be gone.
+        ChildProcessConnection connection =
+                mSpareConnection.getConnection(mConnectionAllocator, mServiceCallback);
         assertNull(connection);
     }
 }

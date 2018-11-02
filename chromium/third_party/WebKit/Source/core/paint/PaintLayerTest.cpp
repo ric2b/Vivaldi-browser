@@ -71,7 +71,7 @@ TEST_P(PaintLayerTest, CompositedBoundsAbsPosGrandchild) {
 
 TEST_P(PaintLayerTest, CompositedBoundsTransformedChild) {
   // TODO(chrishtr): fix this test for SPv2
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(
@@ -91,10 +91,32 @@ TEST_P(PaintLayerTest, CompositedBoundsTransformedChild) {
 TEST_P(PaintLayerTest, RootLayerCompositedBounds) {
   SetBodyInnerHTML(
       "<style> body { width: 1000px; height: 1000px; margin: 0 } </style>");
-  EXPECT_EQ(RuntimeEnabledFeatures::rootLayerScrollingEnabled()
+  EXPECT_EQ(RuntimeEnabledFeatures::RootLayerScrollingEnabled()
                 ? LayoutRect(0, 0, 800, 600)
                 : LayoutRect(0, 0, 1000, 1000),
             GetLayoutView().Layer()->BoundingBoxForCompositing());
+}
+
+TEST_P(PaintLayerTest, RootLayerScrollBounds) {
+  if (!RuntimeEnabledFeatures::RootLayerScrollingEnabled())
+    return;
+  RuntimeEnabledFeatures::SetOverlayScrollbarsEnabled(false);
+
+  SetBodyInnerHTML(
+      "<style> body { width: 1000px; height: 1000px; margin: 0 } </style>");
+  PaintLayerScrollableArea* plsa = GetLayoutView().Layer()->GetScrollableArea();
+
+  int scrollbarThickness = plsa->VerticalScrollbarWidth();
+  EXPECT_EQ(scrollbarThickness, plsa->HorizontalScrollbarHeight());
+  EXPECT_GT(scrollbarThickness, 0);
+
+  EXPECT_EQ(ScrollOffset(200 + scrollbarThickness, 400 + scrollbarThickness),
+            plsa->MaximumScrollOffset());
+
+  EXPECT_EQ(IntRect(0, 0, 800 - scrollbarThickness, 600 - scrollbarThickness),
+            plsa->VisibleContentRect());
+  EXPECT_EQ(IntRect(0, 0, 800, 600),
+            plsa->VisibleContentRect(kIncludeScrollbars));
 }
 
 TEST_P(PaintLayerTest, PaintingExtentReflection) {
@@ -140,8 +162,8 @@ TEST_P(PaintLayerTest, ScrollsWithViewportFixedPosition) {
 TEST_P(PaintLayerTest, ScrollsWithViewportFixedPositionInsideTransform) {
   // We don't intend to launch SPv2 without root layer scrolling, so skip this
   // test in that configuration because it's broken.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled() &&
-      !RuntimeEnabledFeatures::rootLayerScrollingEnabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled() &&
+      !RuntimeEnabledFeatures::RootLayerScrollingEnabled())
     return;
   SetBodyInnerHTML(
       "<div style='transform: translateZ(0)'>"
@@ -162,7 +184,7 @@ TEST_P(PaintLayerTest,
 
   // In SPv2 mode, we correctly determine that the frame doesn't scroll at all,
   // and so return true.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     EXPECT_TRUE(layer->FixedToViewport());
   else
     EXPECT_FALSE(layer->FixedToViewport());
@@ -213,7 +235,7 @@ TEST_P(PaintLayerTest, SticksToScrollerStickyPositionInsideScroller) {
 }
 
 TEST_P(PaintLayerTest, CompositedScrollingNoNeedsRepaint) {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   EnableCompositing();
@@ -501,7 +523,7 @@ TEST_P(PaintLayerTest, DescendantDependentFlagsStopsAtThrottledFrames) {
 }
 
 TEST_P(PaintLayerTest, PaintInvalidationOnNonCompositedScroll) {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(
@@ -572,7 +594,7 @@ TEST_P(PaintLayerTest, CompositingContainerStackedFloatUnderStackingInline) {
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -597,7 +619,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(span,
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -621,7 +643,7 @@ TEST_P(PaintLayerTest, CompositingContainerNonStackedFloatUnderStackingInline) {
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -646,7 +668,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -672,7 +694,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -699,7 +721,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(span,
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -726,7 +748,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -753,7 +775,7 @@ TEST_P(PaintLayerTest,
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(GetPaintLayerByElementId("compositedContainer"),
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -949,8 +971,8 @@ TEST_P(PaintLayerTest, CompositingContainerFloatingIframe) {
   PaintLayer* target = GetPaintLayerByElementId("target");
 
   // A non-positioned iframe still gets a PaintLayer because PaintLayers are
-  // forced for all LayoutPart objects. However, such PaintLayers are not
-  // stacked.
+  // forced for all LayoutEmbeddedContent objects. However, such PaintLayers are
+  // not stacked.
   PaintLayer* containing_block = GetPaintLayerByElementId("containingBlock");
   EXPECT_EQ(containing_block, target->CompositingContainer());
   PaintLayer* composited_container =
@@ -958,7 +980,7 @@ TEST_P(PaintLayerTest, CompositingContainerFloatingIframe) {
 
   // enclosingLayerWithCompositedLayerMapping is not needed or applicable to
   // SPv2.
-  if (!RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (!RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
     EXPECT_EQ(composited_container,
               target->EnclosingLayerWithCompositedLayerMapping(kExcludeSelf));
   }
@@ -1028,7 +1050,7 @@ TEST_P(PaintLayerTest, PaintLayerTransformUpdatedOnStyleTransformAnimation) {
   RefPtr<ComputedStyle> old_style =
       ComputedStyle::Clone(target_object->StyleRef());
   ComputedStyle* new_style = target_object->MutableStyle();
-  new_style->SetHasCurrentTransformAnimation();
+  new_style->SetHasCurrentTransformAnimation(true);
   target_paint_layer->UpdateTransform(old_style.Get(), *new_style);
 
   EXPECT_NE(nullptr, target_paint_layer->Transform());

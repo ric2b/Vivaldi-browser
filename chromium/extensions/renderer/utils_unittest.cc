@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include "base/strings/stringprintf.h"
+#include "extensions/common/feature_switch.h"
 #include "extensions/grit/extensions_renderer_resources.h"
 #include "extensions/renderer/module_system_test.h"
 #include "gin/dictionary.h"
@@ -11,7 +12,7 @@ namespace extensions {
 namespace {
 
 class UtilsUnittest : public ModuleSystemTest {
- private:
+ public:
   void SetUp() override {
     ModuleSystemTest::SetUp();
 
@@ -24,10 +25,36 @@ class UtilsUnittest : public ModuleSystemTest {
                                  "exports.$set('DCHECK', function() {});\n"
                                  "exports.$set('WARNING', function() {});");
     env()->OverrideNativeHandler("v8_context", "");
+
+    // Native bindings set up the chrome.runtime accessor, so we don't need to
+    // stub it out.
+    if (FeatureSwitch::native_crx_bindings()->IsEnabled())
+      return;
+
     gin::Dictionary chrome(env()->isolate(), env()->CreateGlobal("chrome"));
     gin::Dictionary chrome_runtime(
         gin::Dictionary::CreateEmpty(env()->isolate()));
     chrome.Set("runtime", chrome_runtime);
+  }
+
+  void RunTest(const std::string& test_name) { RunTestImpl(test_name, false); }
+
+  void RunTestWithPromises(const std::string& test_name) {
+    RunTestImpl(test_name, true);
+  }
+
+ private:
+  void RunTestImpl(const std::string& test_name, bool run_promises) {
+    ModuleSystem::NativesEnabledScope natives_enabled_scope(
+        env()->module_system());
+    ASSERT_FALSE(env()
+                     ->module_system()
+                     ->Require("utils_unittest")
+                     .ToLocalChecked()
+                     .IsEmpty());
+    env()->module_system()->CallModuleMethodSafe("utils_unittest", test_name);
+    if (run_promises)
+      RunResolvedPromises();
   }
 };
 
@@ -36,42 +63,7 @@ TEST_F(UtilsUnittest, TestNothing) {
 }
 
 TEST_F(UtilsUnittest, SuperClass) {
-  ModuleSystem::NativesEnabledScope natives_enabled_scope(
-      env()->module_system());
-  env()->module_system()->CallModuleMethodSafe("utils_unittest",
-                                               "testSuperClass");
-}
-
-TEST_F(UtilsUnittest, PromiseNoResult) {
-  ModuleSystem::NativesEnabledScope natives_enabled_scope(
-      env()->module_system());
-  env()->module_system()->CallModuleMethodSafe("utils_unittest",
-                                               "testPromiseNoResult");
-  RunResolvedPromises();
-}
-
-TEST_F(UtilsUnittest, PromiseOneResult) {
-  ModuleSystem::NativesEnabledScope natives_enabled_scope(
-      env()->module_system());
-  env()->module_system()->CallModuleMethodSafe("utils_unittest",
-                                               "testPromiseOneResult");
-  RunResolvedPromises();
-}
-
-TEST_F(UtilsUnittest, PromiseTwoResults) {
-  ModuleSystem::NativesEnabledScope natives_enabled_scope(
-      env()->module_system());
-  env()->module_system()->CallModuleMethodSafe("utils_unittest",
-                                               "testPromiseTwoResults");
-  RunResolvedPromises();
-}
-
-TEST_F(UtilsUnittest, PromiseError) {
-  ModuleSystem::NativesEnabledScope natives_enabled_scope(
-      env()->module_system());
-  env()->module_system()->CallModuleMethodSafe("utils_unittest",
-                                               "testPromiseError");
-  RunResolvedPromises();
+  RunTest("testSuperClass");
 }
 
 }  // namespace

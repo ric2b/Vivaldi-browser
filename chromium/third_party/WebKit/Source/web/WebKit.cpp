@@ -34,15 +34,11 @@
 
 #include "bindings/core/v8/V8BindingForCore.h"
 #include "bindings/core/v8/V8GCController.h"
-#include "bindings/core/v8/V8Initializer.h"
-#include "core/animation/AnimationClock.h"
 #include "core/layout/LayoutTheme.h"
 #include "core/page/Page.h"
 #include "core/workers/WorkerBackingThread.h"
 #include "gin/public/v8_platform.h"
-#include "modules/ModulesInitializer.h"
 #include "platform/LayoutTestSupport.h"
-#include "platform/bindings/Microtask.h"
 #include "platform/heap/Heap.h"
 #include "platform/wtf/Assertions.h"
 #include "platform/wtf/PtrUtil.h"
@@ -50,47 +46,8 @@
 #include "platform/wtf/allocator/Partitions.h"
 #include "platform/wtf/text/AtomicString.h"
 #include "platform/wtf/text/TextEncoding.h"
-#include "public/platform/Platform.h"
-#include "public/platform/WebThread.h"
-#include "v8/include/v8.h"
 
 namespace blink {
-
-namespace {
-
-class EndOfTaskRunner : public WebThread::TaskObserver {
- public:
-  void WillProcessTask() override { AnimationClock::NotifyTaskStart(); }
-  void DidProcessTask() override {
-    Microtask::PerformCheckpoint(MainThreadIsolate());
-    V8Initializer::ReportRejectedPromisesOnMainThread();
-  }
-};
-
-}  // namespace
-
-static WebThread::TaskObserver* g_end_of_task_runner = nullptr;
-
-static ModulesInitializer& GetModulesInitializer() {
-  DEFINE_STATIC_LOCAL(std::unique_ptr<ModulesInitializer>, initializer,
-                      (WTF::WrapUnique(new ModulesInitializer)));
-  return *initializer;
-}
-
-void Initialize(Platform* platform) {
-  Platform::Initialize(platform);
-
-  V8Initializer::InitializeMainThread();
-
-  GetModulesInitializer().Initialize();
-
-  // currentThread is null if we are running on a thread without a message loop.
-  if (WebThread* current_thread = platform->CurrentThread()) {
-    DCHECK(!g_end_of_task_runner);
-    g_end_of_task_runner = new EndOfTaskRunner;
-    current_thread->AddTaskObserver(g_end_of_task_runner);
-  }
-}
 
 v8::Isolate* MainThreadIsolate() {
   return V8PerIsolateData::MainThreadIsolate();
@@ -123,6 +80,7 @@ bool FontAntialiasingEnabledForTest() {
 void ResetPluginCache(bool reload_pages) {
   DCHECK(!reload_pages);
   Page::RefreshPlugins();
+  Page::ResetPluginData();
 }
 
 void DecommitFreeableMemory() {
@@ -136,6 +94,12 @@ void MemoryPressureNotificationToWorkerThreadIsolates(
 
 void SetRAILModeOnWorkerThreadIsolates(v8::RAILMode rail_mode) {
   WorkerBackingThread::SetRAILModeOnWorkerThreadIsolates(rail_mode);
+}
+
+void LogRuntimeCallStats() {
+  LOG(INFO)
+      << "\n"
+      << RuntimeCallStats::From(MainThreadIsolate())->ToString().Utf8().data();
 }
 
 }  // namespace blink

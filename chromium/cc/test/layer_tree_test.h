@@ -16,6 +16,10 @@
 #include "cc/trees/layer_tree_host_impl.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+namespace viz {
+class TestLayerTreeFrameSink;
+}
+
 namespace cc {
 
 class AnimationHost;
@@ -23,10 +27,9 @@ class AnimationPlayer;
 class LayerImpl;
 class LayerTreeHost;
 class LayerTreeHostForTesting;
-class LayerTreeTestCompositorFrameSinkClient;
+class LayerTreeTestLayerTreeFrameSinkClient;
 class Proxy;
 class TestContextProvider;
-class TestCompositorFrameSink;
 class TestTaskGraphRunner;
 
 // Creates the virtual viewport layer hierarchy under the given root_layer.
@@ -75,7 +78,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   void PostAddLongAnimationToMainThreadPlayer(
       AnimationPlayer* player_to_receive_animation);
   void PostSetLocalSurfaceIdToMainThread(
-      const LocalSurfaceId& local_surface_id);
+      const viz::LocalSurfaceId& local_surface_id);
   void PostSetDeferCommitsToMainThread(bool defer_commits);
   void PostSetNeedsCommitToMainThread();
   void PostSetNeedsUpdateLayersToMainThread();
@@ -98,8 +101,8 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   void RealEndTest();
 
-  std::unique_ptr<CompositorFrameSink>
-  ReleaseCompositorFrameSinkOnLayerTreeHost();
+  std::unique_ptr<LayerTreeFrameSink>
+  ReleaseLayerTreeFrameSinkOnLayerTreeHost();
   void SetVisibleOnLayerTreeHost(bool visible);
 
   virtual void AfterTest() = 0;
@@ -124,7 +127,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   bool TestEnded() const { return ended_; }
 
   LayerTreeHost* layer_tree_host();
-  SharedBitmapManager* shared_bitmap_manager() const {
+  viz::SharedBitmapManager* shared_bitmap_manager() const {
     return shared_bitmap_manager_.get();
   }
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() {
@@ -134,20 +137,22 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   void DestroyLayerTreeHost();
 
   // By default, output surface recreation is synchronous.
-  void RequestNewCompositorFrameSink() override;
-  // Override this and call the base class to change what ContextProviders will
-  // be used (such as for pixel tests). Or override it and create your own
-  // TestCompositorFrameSink to control how it is created.
-  virtual std::unique_ptr<TestCompositorFrameSink> CreateCompositorFrameSink(
-      scoped_refptr<ContextProvider> compositor_context_provider,
-      scoped_refptr<ContextProvider> worker_context_provider);
-  // Override this and call the base class to change what ContextProvider will
-  // be used, such as to prevent sharing the context with the
-  // CompositorFrameSink. Or override it and create your own OutputSurface to
+  void RequestNewLayerTreeFrameSink() override;
+  // Override this and call the base class to change what viz::ContextProviders
+  // will be used (such as for pixel tests). Or override it and create your own
+  // TestLayerTreeFrameSink to control how it is created.
+  virtual std::unique_ptr<viz::TestLayerTreeFrameSink> CreateLayerTreeFrameSink(
+      const viz::RendererSettings& renderer_settings,
+      double refresh_rate,
+      scoped_refptr<viz::ContextProvider> compositor_context_provider,
+      scoped_refptr<viz::ContextProvider> worker_context_provider);
+  // Override this and call the base class to change what viz::ContextProvider
+  // will be used, such as to prevent sharing the context with the
+  // LayerTreeFrameSink. Or override it and create your own OutputSurface to
   // change what type of OutputSurface is used, such as a real OutputSurface for
   // pixel tests or a software-compositing OutputSurface.
   std::unique_ptr<OutputSurface> CreateDisplayOutputSurfaceOnThread(
-      scoped_refptr<ContextProvider> compositor_context_provider) override;
+      scoped_refptr<viz::ContextProvider> compositor_context_provider) override;
 
   gfx::Vector2dF ScrollDelta(LayerImpl* layer_impl);
 
@@ -159,7 +164,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
   virtual void DispatchAddAnimationToPlayer(
       AnimationPlayer* player_to_receive_animation,
       double animation_duration);
-  void DispatchSetLocalSurfaceId(const LocalSurfaceId& local_surface_id);
+  void DispatchSetLocalSurfaceId(const viz::LocalSurfaceId& local_surface_id);
   void DispatchSetDeferCommits(bool defer_commits);
   void DispatchSetNeedsCommit();
   void DispatchSetNeedsUpdateLayers();
@@ -188,13 +193,13 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   int timeout_seconds_ = false;
 
-  std::unique_ptr<LayerTreeTestCompositorFrameSinkClient>
-      compositor_frame_sink_client_;
+  std::unique_ptr<LayerTreeTestLayerTreeFrameSinkClient>
+      layer_tree_frame_sink_client_;
   scoped_refptr<base::SingleThreadTaskRunner> main_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> impl_task_runner_;
   std::unique_ptr<base::Thread> impl_thread_;
   std::unique_ptr<base::Thread> image_worker_;
-  std::unique_ptr<SharedBitmapManager> shared_bitmap_manager_;
+  std::unique_ptr<viz::SharedBitmapManager> shared_bitmap_manager_;
   std::unique_ptr<TestGpuMemoryBufferManager> gpu_memory_buffer_manager_;
   std::unique_ptr<TestTaskGraphRunner> task_graph_runner_;
   base::CancelableClosure timeout_;

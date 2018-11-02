@@ -27,7 +27,7 @@
 #include "chromeos/cryptohome/system_salt_getter.h"
 #endif
 
-#if BUILDFLAG(ENABLE_RLZ)
+#if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
 #include "rlz/lib/machine_id.h"
 #endif
 
@@ -45,7 +45,7 @@ const uint32_t kSaltLength = 32;
 
 void GetMachineIDAsync(
     const base::Callback<void(const std::string&)>& callback) {
-#if defined(OS_WIN) && BUILDFLAG(ENABLE_RLZ)
+#if defined(OS_WIN) && (BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD))
   std::string result;
   rlz_lib::GetMachineId(&result);
   callback.Run(result);

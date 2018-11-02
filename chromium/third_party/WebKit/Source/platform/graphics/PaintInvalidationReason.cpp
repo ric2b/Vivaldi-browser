@@ -50,6 +50,14 @@ const char* PaintInvalidationReasonToString(PaintInvalidationReason reason) {
       return "DocumentMarker change";
     case PaintInvalidationReason::kImage:
       return "image";
+    case PaintInvalidationReason::kChunkUncacheable:
+      return "chunk uncacheable";
+    case PaintInvalidationReason::kChunkReordered:
+      return "chunk reordered";
+    case PaintInvalidationReason::kFullLayer:
+      return "full layer";
+    case PaintInvalidationReason::kPaintProperty:
+      return "paint property change";
     case PaintInvalidationReason::kForTesting:
       return "for testing";
     case PaintInvalidationReason::kDelayedFull:

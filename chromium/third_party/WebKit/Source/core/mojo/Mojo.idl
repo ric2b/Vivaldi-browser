@@ -7,7 +7,9 @@
 typedef unsigned long MojoResult;
 
 [
-    RuntimeEnabled=MojoJS,
+    ContextEnabled=MojoJS,
+    Exposed=(Window,Worker),
+    RuntimeEnabled=MojoJS
 ] interface Mojo {
     const MojoResult RESULT_OK = 0;
     const MojoResult RESULT_CANCELLED = 1;
@@ -31,4 +33,6 @@ typedef unsigned long MojoResult;
     static MojoCreateMessagePipeResult createMessagePipe();
     static MojoCreateDataPipeResult createDataPipe(MojoCreateDataPipeOptions options);
     static MojoCreateSharedBufferResult createSharedBuffer(unsigned long numBytes);
+
+    [CallWith=ScriptState] static void bindInterface(DOMString interfaceName, MojoHandle request_handle);
 };

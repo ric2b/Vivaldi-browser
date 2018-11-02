@@ -9,9 +9,10 @@
 #include "core/dom/FrameRequestCallback.h"
 #include "core/dom/ScriptedAnimationController.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/frame/FrameView.h"
-#include "core/frame/ImageBitmap.h"
+#include "core/dom/UserGestureIndicator.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/UseCounter.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/inspector/ConsoleMessage.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
@@ -29,7 +30,6 @@
 #include "modules/vr/VRStageParameters.h"
 #include "modules/webgl/WebGLRenderingContextBase.h"
 #include "platform/Histogram.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/instrumentation/tracing/TraceEvent.h"
 #include "platform/wtf/AutoReset.h"
 #include "platform/wtf/Time.h"
@@ -50,21 +50,58 @@ VREye StringToVREye(const String& which_eye) {
   return kVREyeNone;
 }
 
+class VRDisplayFrameRequestCallback : public FrameRequestCallback {
+ public:
+  explicit VRDisplayFrameRequestCallback(VRDisplay* vr_display)
+      : vr_display_(vr_display) {}
+  ~VRDisplayFrameRequestCallback() override {}
+  void handleEvent(double high_res_time_ms) override {
+    double monotonic_time;
+    if (!vr_display_->GetDocument() || !vr_display_->GetDocument()->Loader()) {
+      monotonic_time = WTF::MonotonicallyIncreasingTime();
+    } else {
+      // Convert document-zero time back to monotonic time.
+      double reference_monotonic_time = vr_display_->GetDocument()
+                                            ->Loader()
+                                            ->GetTiming()
+                                            .ReferenceMonotonicTime();
+      monotonic_time = (high_res_time_ms / 1000.0) + reference_monotonic_time;
+    }
+    vr_display_->OnMagicWindowVSync(monotonic_time);
+  }
+
+  DEFINE_INLINE_VIRTUAL_TRACE() {
+    visitor->Trace(vr_display_);
+
+    FrameRequestCallback::Trace(visitor);
+  }
+
+  Member<VRDisplay> vr_display_;
+};
+
 }  // namespace
 
 VRDisplay::VRDisplay(NavigatorVR* navigator_vr,
                      device::mojom::blink::VRDisplayPtr display,
                      device::mojom::blink::VRDisplayClientRequest request)
-    : ContextLifecycleObserver(navigator_vr->GetDocument()),
+    : SuspendableObject(navigator_vr->GetDocument()),
       navigator_vr_(navigator_vr),
       capabilities_(new VRDisplayCapabilities()),
       eye_parameters_left_(new VREyeParameters()),
       eye_parameters_right_(new VREyeParameters()),
       display_(std::move(display)),
       submit_frame_client_binding_(this),
-      display_client_binding_(this, std::move(request)) {}
+      display_client_binding_(this, std::move(request)) {
+  SuspendIfNeeded();  // Initialize SuspendabaleObject.
+}
 
 VRDisplay::~VRDisplay() {}
+
+void VRDisplay::Suspend() {}
+
+void VRDisplay::Resume() {
+  RequestVSync();
+}
 
 VRController* VRDisplay::Controller() {
   return navigator_vr_->Controller();
@@ -134,6 +171,30 @@ void VRDisplay::RequestVSync() {
            << " start: pending_vrdisplay_raf_=" << pending_vrdisplay_raf_
            << " in_animation_frame_=" << in_animation_frame_
            << " did_submit_this_frame_=" << did_submit_this_frame_;
+  if (!pending_vrdisplay_raf_)
+    return;
+  Document* doc = navigator_vr_->GetDocument();
+  if (!doc || !display_)
+    return;
+  // If we've switched from magic window to presenting, cancel the Document rAF
+  // and start the VrPresentationProvider VSync.
+  if (is_presenting_ && pending_vsync_id_ != -1) {
+    doc->CancelAnimationFrame(pending_vsync_id_);
+    pending_vsync_ = false;
+    pending_vsync_id_ = -1;
+  }
+  if (display_blurred_ || pending_vsync_)
+    return;
+
+  if (!is_presenting_) {
+    display_->GetNextMagicWindowPose(ConvertToBaseCallback(
+        WTF::Bind(&VRDisplay::OnMagicWindowPose, WrapWeakPersistent(this))));
+    pending_vsync_ = true;
+    pending_vsync_id_ =
+        doc->RequestAnimationFrame(new VRDisplayFrameRequestCallback(this));
+    return;
+  }
+  DCHECK(vr_presentation_provider_.is_bound());
 
   // The logic here is a bit subtle. We get called from one of the following
   // four contexts:
@@ -156,18 +217,11 @@ void VRDisplay::RequestVSync() {
   // before rAF (b), after rAF (c), or not at all (d). If rAF isn't called at
   // all, there won't be future frames.
 
-  if (!vr_v_sync_provider_.is_bound()) {
-    ConnectVSyncProvider();
-  } else if (!display_blurred_ && !pending_vsync_) {
-    pending_vsync_ = true;
-    vr_v_sync_provider_->GetVSync(ConvertToBaseCallback(
-        WTF::Bind(&VRDisplay::OnVSync, WrapWeakPersistent(this))));
-  }
+  pending_vsync_ = true;
+  vr_presentation_provider_->GetVSync(ConvertToBaseCallback(
+      WTF::Bind(&VRDisplay::OnPresentingVSync, WrapWeakPersistent(this))));
 
-  DVLOG(2) << __FUNCTION__ << " done:"
-           << " vr_v_sync_provider_.is_bound()="
-           << vr_v_sync_provider_.is_bound()
-           << " pending_vsync_=" << pending_vsync_;
+  DVLOG(2) << __FUNCTION__ << " done: pending_vsync_=" << pending_vsync_;
 }
 
 int VRDisplay::requestAnimationFrame(FrameRequestCallback* callback) {
@@ -198,7 +252,6 @@ void VRDisplay::cancelAnimationFrame(int id) {
 void VRDisplay::OnBlur() {
   DVLOG(1) << __FUNCTION__;
   display_blurred_ = true;
-  vr_v_sync_provider_.reset();
   navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
       EventTypeNames::vrdisplayblur, true, false, this, ""));
 }
@@ -206,7 +259,8 @@ void VRDisplay::OnBlur() {
 void VRDisplay::OnFocus() {
   DVLOG(1) << __FUNCTION__;
   display_blurred_ = false;
-  ConnectVSyncProvider();
+  RequestVSync();
+
   navigator_vr_->EnqueueVREvent(VRDisplayEvent::Create(
       EventTypeNames::vrdisplayfocus, true, false, this, ""));
 }
@@ -226,10 +280,10 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
                                         const HeapVector<VRLayer>& layers) {
   DVLOG(1) << __FUNCTION__;
   ExecutionContext* execution_context = ExecutionContext::From(script_state);
-  UseCounter::Count(execution_context, UseCounter::kVRRequestPresent);
+  UseCounter::Count(execution_context, WebFeature::kVRRequestPresent);
   if (!execution_context->IsSecureContext()) {
     UseCounter::Count(execution_context,
-                      UseCounter::kVRRequestPresentInsecureOrigin);
+                      WebFeature::kVRRequestPresentInsecureOrigin);
   }
 
   ReportPresentationResult(PresentationResult::kRequested);
@@ -327,6 +381,28 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
     return promise;
   }
 
+  for (float value : layer_.leftBounds()) {
+    if (std::isnan(value)) {
+      ForceExitPresent();
+      DOMException* exception = DOMException::Create(
+          kInvalidStateError, "Layer bounds must not contain NAN values");
+      resolver->Reject(exception);
+      ReportPresentationResult(PresentationResult::kInvalidLayerBounds);
+      return promise;
+    }
+  }
+
+  for (float value : layer_.rightBounds()) {
+    if (std::isnan(value)) {
+      ForceExitPresent();
+      DOMException* exception = DOMException::Create(
+          kInvalidStateError, "Layer bounds must not contain NAN values");
+      resolver->Reject(exception);
+      ReportPresentationResult(PresentationResult::kInvalidLayerBounds);
+      return promise;
+    }
+  }
+
   if (!pending_present_resolvers_.IsEmpty()) {
     // If we are waiting on the results of a previous requestPresent call don't
     // fire a new request, just cache the resolver and resolve it when the
@@ -344,12 +420,18 @@ ScriptPromise VRDisplay::requestPresent(ScriptState* script_state,
     }
 
     pending_present_resolvers_.push_back(resolver);
+    device::mojom::blink::VRSubmitFrameClientPtr submit_frame_client;
     submit_frame_client_binding_.Close();
+    submit_frame_client_binding_.Bind(mojo::MakeRequest(&submit_frame_client));
     display_->RequestPresent(
-        secure_context,
-        submit_frame_client_binding_.CreateInterfacePtrAndBind(),
+        secure_context, std::move(submit_frame_client),
+        mojo::MakeRequest(&vr_presentation_provider_),
         ConvertToBaseCallback(
             WTF::Bind(&VRDisplay::OnPresentComplete, WrapPersistent(this))));
+    vr_presentation_provider_.set_connection_error_handler(
+        ConvertToBaseCallback(
+            WTF::Bind(&VRDisplay::OnPresentationProviderConnectionError,
+                      WrapWeakPersistent(this))));
     pending_present_request_ = true;
   } else {
     UpdateLayerBounds();
@@ -444,8 +526,15 @@ void VRDisplay::BeginPresent() {
     Platform::Current()->RecordRapporURL("VR.WebVR.PresentSuccess",
                                          WebURL(doc->Url()));
   }
-
+  if (!FocusedOrPresenting() && display_blurred_) {
+    // Presentation doesn't care about focus, so if we're blurred because of
+    // focus, then unblur.
+    OnFocus();
+  }
   is_presenting_ = true;
+  // Call RequestVSync to switch from the (internal) document rAF to the
+  // VrPresentationProvider VSync.
+  RequestVSync();
   ReportPresentationResult(PresentationResult::kSuccess);
 
   UpdateLayerBounds();
@@ -479,43 +568,20 @@ void VRDisplay::UpdateLayerBounds() {
   if (!display_)
     return;
 
-  // Set up the texture bounds for the provided layer
-  device::mojom::blink::VRLayerBoundsPtr left_bounds =
-      device::mojom::blink::VRLayerBounds::New();
-  device::mojom::blink::VRLayerBoundsPtr right_bounds =
-      device::mojom::blink::VRLayerBounds::New();
-
-  if (layer_.leftBounds().size() == 4) {
-    left_bounds->left = layer_.leftBounds()[0];
-    left_bounds->top = layer_.leftBounds()[1];
-    left_bounds->width = layer_.leftBounds()[2];
-    left_bounds->height = layer_.leftBounds()[3];
-  } else {
-    // Left eye defaults
-    left_bounds->left = 0.0f;
-    left_bounds->top = 0.0f;
-    left_bounds->width = 0.5f;
-    left_bounds->height = 1.0f;
+  // Left eye defaults
+  if (layer_.leftBounds().size() != 4)
     layer_.setLeftBounds({0.0f, 0.0f, 0.5f, 1.0f});
-  }
-
-  if (layer_.rightBounds().size() == 4) {
-    right_bounds->left = layer_.rightBounds()[0];
-    right_bounds->top = layer_.rightBounds()[1];
-    right_bounds->width = layer_.rightBounds()[2];
-    right_bounds->height = layer_.rightBounds()[3];
-  } else {
-    // Right eye defaults
-    right_bounds->left = 0.5f;
-    right_bounds->top = 0.0f;
-    right_bounds->width = 0.5f;
-    right_bounds->height = 1.0f;
+  // Right eye defaults
+  if (layer_.rightBounds().size() != 4)
     layer_.setRightBounds({0.5f, 0.0f, 0.5f, 1.0f});
-  }
 
-  display_->UpdateLayerBounds(vr_frame_id_, std::move(left_bounds),
-                              std::move(right_bounds), source_width_,
-                              source_height_);
+  const Vector<float>& left = layer_.leftBounds();
+  const Vector<float>& right = layer_.rightBounds();
+
+  vr_presentation_provider_->UpdateLayerBounds(
+      vr_frame_id_, WebFloatRect(left[0], left[1], left[2], left[3]),
+      WebFloatRect(right[0], right[1], right[2], right[3]),
+      WebSize(source_width_, source_height_));
 }
 
 HeapVector<VRLayer> VRDisplay::getLayers() {
@@ -661,14 +727,16 @@ void VRDisplay::submitFrame() {
   pending_submit_frame_ = true;
 
   TRACE_EVENT_BEGIN0("gpu", "VRDisplay::SubmitFrame");
-  display_->SubmitFrame(vr_frame_id_,
-                        gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D));
+  vr_presentation_provider_->SubmitFrame(
+      vr_frame_id_, gpu::MailboxHolder(mailbox, sync_token, GL_TEXTURE_2D));
   TRACE_EVENT_END0("gpu", "VRDisplay::SubmitFrame");
 
   did_submit_this_frame_ = true;
+  // Reset our frame id, since anything we'd want to do (resizing/etc) can
+  // no-longer happen to this frame.
+  vr_frame_id_ = -1;
   // If we were deferring a rAF-triggered vsync request, do this now.
-  if (pending_vrdisplay_raf_)
-    RequestVSync();
+  RequestVSync();
 
   // If preserveDrawingBuffer is false, must clear now. Normally this
   // happens as part of compositing, but that's not active while
@@ -748,11 +816,11 @@ void VRDisplay::StopPresenting() {
 }
 
 void VRDisplay::OnActivate(device::mojom::blink::VRDisplayEventReason reason,
-                           const OnActivateCallback& on_handled) {
+                           OnActivateCallback on_handled) {
   AutoReset<bool> activating(&in_display_activate_, true);
   navigator_vr_->DispatchVREvent(VRDisplayEvent::Create(
       EventTypeNames::vrdisplayactivate, true, false, this, reason));
-  on_handled.Run(!pending_present_request_ && !is_presenting_);
+  std::move(on_handled).Run(!pending_present_request_ && !is_presenting_);
 }
 
 void VRDisplay::OnDeactivate(
@@ -801,6 +869,12 @@ void VRDisplay::ProcessScheduledAnimations(double timestamp) {
     return;
   }
 
+  if (doc->IsContextSuspended()) {
+    // We are currently suspended - try ProcessScheduledAnimations again later
+    // when we resume.
+    return;
+  }
+
   TRACE_EVENT1("gpu", "VRDisplay::OnVSync", "frame", vr_frame_id_);
 
   if (pending_vrdisplay_raf_ && scripted_animation_controller_) {
@@ -816,11 +890,12 @@ void VRDisplay::ProcessScheduledAnimations(double timestamp) {
       RequestVSync();
     }
   }
+  if (pending_pose_)
+    frame_pose_ = std::move(pending_pose_);
 
   // Sanity check: If pending_vrdisplay_raf_ is true and the vsync provider
   // is connected, we must now have a pending vsync.
-  DCHECK(!pending_vrdisplay_raf_ || !vr_v_sync_provider_.is_bound() ||
-         pending_vsync_);
+  DCHECK(!pending_vrdisplay_raf_ || pending_vsync_);
 
   // For GVR, we shut down normal vsync processing during VR presentation.
   // Trigger any callbacks on window.rAF manually so that they run after
@@ -832,26 +907,19 @@ void VRDisplay::ProcessScheduledAnimations(double timestamp) {
   }
 }
 
-void VRDisplay::OnVSync(device::mojom::blink::VRPosePtr pose,
-                        mojo::common::mojom::blink::TimeDeltaPtr time,
-                        int16_t frame_id,
-                        device::mojom::blink::VRVSyncProvider::Status error) {
+void VRDisplay::OnPresentingVSync(
+    device::mojom::blink::VRPosePtr pose,
+    WTF::TimeDelta time_delta,
+    int16_t frame_id,
+    device::mojom::blink::VRPresentationProvider::VSyncStatus status) {
   DVLOG(2) << __FUNCTION__;
-  v_sync_connection_failed_ = false;
-  switch (error) {
-    case device::mojom::blink::VRVSyncProvider::Status::SUCCESS:
+  switch (status) {
+    case device::mojom::blink::VRPresentationProvider::VSyncStatus::SUCCESS:
       break;
-    case device::mojom::blink::VRVSyncProvider::Status::CLOSING:
+    case device::mojom::blink::VRPresentationProvider::VSyncStatus::CLOSING:
       return;
   }
   pending_vsync_ = false;
-
-  WTF::TimeDelta time_delta =
-      WTF::TimeDelta::FromMicroseconds(time->microseconds);
-  // Ensure a consistent timebase with document rAF.
-  if (timebase_ < 0) {
-    timebase_ = WTF::MonotonicallyIncreasingTime() - time_delta.InSecondsF();
-  }
 
   frame_pose_ = std::move(pose);
   vr_frame_id_ = frame_id;
@@ -867,28 +935,32 @@ void VRDisplay::OnVSync(device::mojom::blink::VRPosePtr pose,
   Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
       BLINK_FROM_HERE,
       WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
-                WrapWeakPersistent(this), timebase_ + time_delta.InSecondsF()));
+                WrapWeakPersistent(this), time_delta.InSecondsF()));
 }
 
-void VRDisplay::ConnectVSyncProvider() {
-  if (!FocusedOrPresenting() || vr_v_sync_provider_.is_bound())
-    return;
-  display_->GetVRVSyncProvider(mojo::MakeRequest(&vr_v_sync_provider_));
-  vr_v_sync_provider_.set_connection_error_handler(ConvertToBaseCallback(
-      WTF::Bind(&VRDisplay::OnVSyncConnectionError, WrapWeakPersistent(this))));
-  if (pending_vrdisplay_raf_ && !display_blurred_) {
-    pending_vsync_ = true;
-    vr_v_sync_provider_->GetVSync(ConvertToBaseCallback(
-        WTF::Bind(&VRDisplay::OnVSync, WrapWeakPersistent(this))));
+void VRDisplay::OnMagicWindowVSync(double timestamp) {
+  DVLOG(2) << __FUNCTION__;
+  pending_vsync_ = false;
+  pending_vsync_id_ = -1;
+  vr_frame_id_ = -1;
+  Platform::Current()->CurrentThread()->GetWebTaskRunner()->PostTask(
+      BLINK_FROM_HERE, WTF::Bind(&VRDisplay::ProcessScheduledAnimations,
+                                 WrapWeakPersistent(this), timestamp));
+}
+
+void VRDisplay::OnMagicWindowPose(device::mojom::blink::VRPosePtr pose) {
+  if (!in_animation_frame_) {
+    frame_pose_ = std::move(pose);
+  } else {
+    pending_pose_ = std::move(pose);
   }
 }
 
-void VRDisplay::OnVSyncConnectionError() {
-  vr_v_sync_provider_.reset();
-  if (v_sync_connection_failed_)
-    return;
-  ConnectVSyncProvider();
-  v_sync_connection_failed_ = true;
+void VRDisplay::OnPresentationProviderConnectionError() {
+  vr_presentation_provider_.reset();
+  ForceExitPresent();
+  pending_vsync_ = false;
+  RequestVSync();
 }
 
 ScriptedAnimationController& VRDisplay::EnsureScriptedAnimationController(
@@ -901,7 +973,7 @@ ScriptedAnimationController& VRDisplay::EnsureScriptedAnimationController(
 
 void VRDisplay::Dispose() {
   display_client_binding_.Close();
-  vr_v_sync_provider_.reset();
+  vr_presentation_provider_.reset();
 }
 
 ExecutionContext* VRDisplay::GetExecutionContext() const {
@@ -912,7 +984,8 @@ const AtomicString& VRDisplay::InterfaceName() const {
   return EventTargetNames::VRDisplay;
 }
 
-void VRDisplay::ContextDestroyed(ExecutionContext*) {
+void VRDisplay::ContextDestroyed(ExecutionContext* context) {
+  SuspendableObject::ContextDestroyed(context);
   ForceExitPresent();
   scripted_animation_controller_.Clear();
 }
@@ -924,15 +997,18 @@ bool VRDisplay::HasPendingActivity() const {
 }
 
 void VRDisplay::FocusChanged() {
-  // TODO(mthiesse): Blur/focus the display.
   DVLOG(1) << __FUNCTION__;
-  vr_v_sync_provider_.reset();
-  ConnectVSyncProvider();
+  if (navigator_vr_->IsFocused()) {
+    OnFocus();
+  } else if (!is_presenting_) {
+    OnBlur();
+  }
 }
 
 bool VRDisplay::FocusedOrPresenting() {
-  // TODO(mthiesse, crbug.com/687411): Focused state should be determined
-  // browser-side to correctly track which display should be receiving input.
+  // The browser can't track focus for frames, so we still need to check for
+  // focus in the renderer, even if the browser is checking focus before
+  // sending input.
   return navigator_vr_->IsFocused() || is_presenting_;
 }
 

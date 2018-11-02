@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_set.h"
 #include "base/macros.h"
 #include "build/build_config.h"
 #include "content/browser/devtools/devtools_agent_host_impl.h"
@@ -25,7 +26,7 @@ class CompositorFrameMetadata;
 }
 
 #if defined(OS_ANDROID)
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #endif
 
 namespace content {
@@ -34,6 +35,7 @@ class BrowserContext;
 class DevToolsFrameTraceRecorder;
 class FrameTreeNode;
 class NavigationHandle;
+class NavigationHandleImpl;
 class NavigationThrottle;
 class RenderFrameHostImpl;
 struct BeginNavigationParams;
@@ -51,7 +53,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
                                         RenderFrameHost* current);
   static void OnBeforeNavigation(RenderFrameHost* current,
                                  RenderFrameHost* pending);
-  static void OnBeforeNavigation(NavigationHandle* navigation_handle);
   static void OnFailedNavigation(RenderFrameHost* host,
                                  const CommonNavigationParams& common_params,
                                  const BeginNavigationParams& begin_params,
@@ -100,6 +101,7 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
       const std::string& message) override;
 
   // WebContentsObserver overrides.
+  void DidStartNavigation(NavigationHandle* navigation_handle) override;
   void ReadyToCommitNavigation(NavigationHandle* navigation_handle) override;
   void DidFinishNavigation(NavigationHandle* navigation_handle) override;
   void RenderFrameHostChanged(RenderFrameHost* old_host,
@@ -117,12 +119,6 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   void AboutToNavigateRenderFrame(RenderFrameHost* old_host,
                                   RenderFrameHost* new_host);
-  void AboutToNavigate(NavigationHandle* navigation_handle);
-  void OnFailedNavigation(const CommonNavigationParams& common_params,
-                          const BeginNavigationParams& begin_params,
-                          net::Error error_code);
-
-  void DispatchBufferedProtocolMessagesIfNecessary();
 
   void SetPending(RenderFrameHostImpl* host);
   void CommitPending();
@@ -131,8 +127,8 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
 
   bool IsChildFrame();
 
-  void OnClientAttached();
-  void OnClientDetached();
+  void OnClientsAttached();
+  void OnClientsDetached();
 
   void RenderFrameCrashed();
   void OnSwapCompositorFrame(const IPC::Message& message);
@@ -143,9 +139,16 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   void DestroyOnRenderFrameGone();
 
   bool CheckConsistency();
+  void UpdateFrameHost(RenderFrameHostImpl* frame_host);
+  void MaybeReattachToRenderFrame();
+  void GrantPolicy(RenderFrameHostImpl* host);
+  void RevokePolicy(RenderFrameHostImpl* host);
+
+  // TODO(dgozman): remove together with old navigation code.
+  DevToolsSession* SingleSession();
 
 #if defined(OS_ANDROID)
-  device::mojom::WakeLockService* GetWakeLockService();
+  device::mojom::WakeLock* GetWakeLock();
 #endif
 
   void SynchronousSwapCompositorFrame(
@@ -157,30 +160,30 @@ class CONTENT_EXPORT RenderFrameDevToolsAgentHost
   std::unique_ptr<FrameHostHolder> pending_;
 
   // Stores per-host state between DisconnectWebContents and ConnectWebContents.
-  std::unique_ptr<FrameHostHolder> disconnected_;
+  std::string disconnected_cookie_;
 
   std::unique_ptr<DevToolsFrameTraceRecorder> frame_trace_recorder_;
 #if defined(OS_ANDROID)
-  device::mojom::WakeLockServicePtr wake_lock_;
+  device::mojom::WakeLockPtr wake_lock_;
 #endif
   RenderFrameHostImpl* handlers_frame_host_;
   bool current_frame_crashed_;
 
   // PlzNavigate
 
-  // Handle that caused the setting of pending_.
-  NavigationHandle* pending_handle_;
+  // The active host we are talking to.
+  RenderFrameHostImpl* frame_host_ = nullptr;
+  base::flat_set<NavigationHandleImpl*> navigation_handles_;
+  bool render_frame_alive_ = false;
 
-  // List of handles currently navigating.
-  std::set<NavigationHandle*> navigating_handles_;
-
-  struct PendingMessage {
-    int session_id;
+  // These messages were queued after suspending, not sent to the agent,
+  // and will be sent after resuming.
+  struct Message {
+    int call_id;
     std::string method;
     std::string message;
   };
-  // <call_id> -> PendingMessage
-  std::map<int, PendingMessage> in_navigation_protocol_message_buffer_;
+  std::map<int, std::vector<Message>> suspended_messages_by_session_id_;
 
   // The FrameTreeNode associated with this agent.
   FrameTreeNode* frame_tree_node_;

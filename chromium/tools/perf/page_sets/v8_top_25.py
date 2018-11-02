@@ -70,4 +70,4 @@ class V8Top25StorySet(story.StorySet):
         cloud_storage_bucket=story.INTERNAL_BUCKET)
 
     for url in urls_list:
-      self.AddStory(V8Top25(url, self))
+      self.AddStory(V8Top25(url, self, url))

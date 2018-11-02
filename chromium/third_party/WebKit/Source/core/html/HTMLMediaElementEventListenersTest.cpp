@@ -4,15 +4,14 @@
 
 #include "core/html/HTMLMediaElement.h"
 
-#include "core/dom/DocumentUserGestureToken.h"
-#include "core/dom/Fullscreen.h"
+#include "core/dom/UserGestureIndicator.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLVideoElement.h"
 #include "core/html/media/MediaControls.h"
 #include "core/html/media/MediaCustomControlsFullscreenDetector.h"
 #include "core/loader/EmptyClients.h"
 #include "core/testing/DummyPageHolder.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/UnitTestHelpers.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -27,9 +26,11 @@ class MockWebMediaPlayer final : public EmptyWebMediaPlayer {
   MOCK_METHOD1(SetIsEffectivelyFullscreen, void(bool));
 };
 
-class StubLocalFrameClient : public EmptyLocalFrameClient {
+class MediaStubLocalFrameClient : public EmptyLocalFrameClient {
  public:
-  static StubLocalFrameClient* Create() { return new StubLocalFrameClient; }
+  static MediaStubLocalFrameClient* Create() {
+    return new MediaStubLocalFrameClient;
+  }
 
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
@@ -48,7 +49,7 @@ class HTMLMediaElementEventListenersTest : public ::testing::Test {
  protected:
   void SetUp() override {
     page_holder_ = DummyPageHolder::Create(IntSize(800, 600), nullptr,
-                                           StubLocalFrameClient::Create());
+                                           MediaStubLocalFrameClient::Create());
   }
 
   Document& GetDocument() { return page_holder_->GetDocument(); }
@@ -137,9 +138,9 @@ TEST_F(HTMLMediaElementEventListenersTest,
 TEST_F(HTMLMediaElementEventListenersTest,
        FullscreenDetectorTimerCancelledOnContextDestroy) {
   bool original_video_fullscreen_detection_enabled =
-      RuntimeEnabledFeatures::videoFullscreenDetectionEnabled();
+      RuntimeEnabledFeatures::VideoFullscreenDetectionEnabled();
 
-  RuntimeEnabledFeatures::setVideoFullscreenDetectionEnabled(true);
+  RuntimeEnabledFeatures::SetVideoFullscreenDetectionEnabled(true);
 
   EXPECT_EQ(Video(), nullptr);
   GetDocument().body()->setInnerHTML("<body><video></video</body>");
@@ -153,7 +154,7 @@ TEST_F(HTMLMediaElementEventListenersTest,
   EXPECT_NE(Video(), nullptr);
   SimulateReadyState(HTMLMediaElement::kHaveMetadata);
   UserGestureIndicator gesture_indicator(
-      DocumentUserGestureToken::Create(&GetDocument()));
+      UserGestureToken::Create(&GetDocument()));
   Fullscreen::RequestFullscreen(*Video());
   Fullscreen::From(GetDocument()).DidEnterFullscreen();
 
@@ -182,7 +183,7 @@ TEST_F(HTMLMediaElementEventListenersTest,
   EXPECT_EQ(1u, observed_results.size());
   EXPECT_FALSE(observed_results[0]);
 
-  RuntimeEnabledFeatures::setVideoFullscreenDetectionEnabled(
+  RuntimeEnabledFeatures::SetVideoFullscreenDetectionEnabled(
       original_video_fullscreen_detection_enabled);
 }
 

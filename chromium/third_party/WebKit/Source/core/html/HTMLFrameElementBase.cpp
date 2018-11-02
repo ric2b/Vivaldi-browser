@@ -30,9 +30,9 @@
 #include "core/HTMLNames.h"
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/RemoteFrame.h"
 #include "core/frame/RemoteFrameView.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
@@ -188,6 +188,9 @@ void HTMLFrameElementBase::SetNameAndOpenURL() {
 Node::InsertionNotificationRequest HTMLFrameElementBase::InsertedInto(
     ContainerNode* insertion_point) {
   HTMLFrameOwnerElement::InsertedInto(insertion_point);
+  // We should never have a content frame at the point where we got inserted
+  // into a tree.
+  SECURITY_CHECK(!ContentFrame());
   return kInsertionShouldCallDidNotifySubtreeInsertions;
 }
 
@@ -198,24 +201,17 @@ void HTMLFrameElementBase::DidNotifySubtreeInsertionsToDocument() {
   if (!SubframeLoadingDisabler::CanLoadFrame(*this))
     return;
 
-  // We should never have a content frame at the point where we got inserted
-  // into a tree.
-  SECURITY_CHECK(!ContentFrame());
-
-  SetNameAndOpenURL();
+  // It's possible that we already have ContentFrame(). Arbitrary user code can
+  // run between InsertedInto() and DidNotifySubtreeInsertionsToDocument().
+  if (!ContentFrame())
+    SetNameAndOpenURL();
 }
 
-void HTMLFrameElementBase::AttachLayoutTree(const AttachContext& context) {
+void HTMLFrameElementBase::AttachLayoutTree(AttachContext& context) {
   HTMLFrameOwnerElement::AttachLayoutTree(context);
 
-  if (GetLayoutPart()) {
-    if (Frame* frame = ContentFrame()) {
-      if (frame->IsLocalFrame())
-        SetWidget(ToLocalFrame(frame)->View());
-      else if (frame->IsRemoteFrame())
-        SetWidget(ToRemoteFrame(frame)->View());
-    }
-  }
+  if (GetLayoutEmbeddedContent() && ContentFrame())
+    SetEmbeddedContentView(ContentFrame()->View());
 }
 
 void HTMLFrameElementBase::SetLocation(const String& str) {

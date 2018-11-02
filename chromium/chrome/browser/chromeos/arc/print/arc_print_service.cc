@@ -8,13 +8,15 @@
 
 #include "ash/shell.h"
 #include "ash/shell_delegate.h"
-#include "base/files/file.h"
+#include "base/bind.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
-#include "base/optional.h"
-#include "base/threading/thread_checker.h"
+#include "base/memory/singleton.h"
+#include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_traits.h"
+#include "base/threading/thread_restrictions.h"
 #include "components/arc/arc_bridge_service.h"
-#include "content/public/browser/browser_thread.h"
+#include "components/arc/arc_browser_context_keyed_service_factory_base.h"
 #include "mojo/edk/embedder/embedder.h"
 #include "net/base/filename_util.h"
 #include "url/gurl.h"
@@ -22,7 +24,7 @@
 namespace {
 
 base::Optional<base::FilePath> SavePdf(base::File file) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::FILE);
+  base::ThreadRestrictions::AssertIOAllowed();
 
   base::FilePath file_path;
   base::CreateTemporaryFile(&file_path);
@@ -42,34 +44,62 @@ base::Optional<base::FilePath> SavePdf(base::File file) {
   return file_path;
 }
 
-void OpenPdf(base::Optional<base::FilePath> file_path) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (!file_path)
-    return;
-
-  GURL gurl = net::FilePathToFileURL(file_path.value());
-  ash::Shell::Get()->shell_delegate()->OpenUrlFromArc(gurl);
-  // TODO(poromov) Delete file after printing. (http://crbug.com/629843)
-}
-
 }  // namespace
 
 namespace arc {
+namespace {
 
-ArcPrintService::ArcPrintService(ArcBridgeService* bridge_service)
-    : ArcService(bridge_service), binding_(this) {
-  arc_bridge_service()->print()->AddObserver(this);
+// Singleton factory for ArcPrintService.
+class ArcPrintServiceFactory
+    : public internal::ArcBrowserContextKeyedServiceFactoryBase<
+          ArcPrintService,
+          ArcPrintServiceFactory> {
+ public:
+  // Factory name used by ArcBrowserContextKeyedServiceFactoryBase.
+  static constexpr const char* kName = "ArcPrintServiceFactory";
+
+  static ArcPrintServiceFactory* GetInstance() {
+    return base::Singleton<ArcPrintServiceFactory>::get();
+  }
+
+ private:
+  friend base::DefaultSingletonTraits<ArcPrintServiceFactory>;
+  ArcPrintServiceFactory() = default;
+  ~ArcPrintServiceFactory() override = default;
+};
+
+}  // namespace
+
+// static
+ArcPrintService* ArcPrintService::GetForBrowserContext(
+    content::BrowserContext* context) {
+  return ArcPrintServiceFactory::GetForBrowserContext(context);
+}
+
+ArcPrintService::ArcPrintService(content::BrowserContext* context,
+                                 ArcBridgeService* bridge_service)
+    : arc_bridge_service_(bridge_service),
+      binding_(this),
+      weak_ptr_factory_(this) {
+  arc_bridge_service_->print()->AddObserver(this);
 }
 
 ArcPrintService::~ArcPrintService() {
-  arc_bridge_service()->print()->RemoveObserver(this);
+  // TODO(hidehiko): Currently, the lifetime of ArcBridgeService and
+  // BrowserContextKeyedService is not nested.
+  // If ArcServiceManager::Get() returns nullptr, it is already destructed,
+  // so do not touch it.
+  if (ArcServiceManager::Get())
+    arc_bridge_service_->print()->RemoveObserver(this);
 }
 
 void ArcPrintService::OnInstanceReady() {
   mojom::PrintInstance* print_instance =
-      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service()->print(), Init);
+      ARC_GET_INSTANCE_FOR_METHOD(arc_bridge_service_->print(), Init);
   DCHECK(print_instance);
-  print_instance->Init(binding_.CreateInterfacePtrAndBind());
+  mojom::PrintHostPtr host_proxy;
+  binding_.Bind(mojo::MakeRequest(&host_proxy));
+  print_instance->Init(std::move(host_proxy));
 }
 
 void ArcPrintService::Print(mojo::ScopedHandle pdf_data) {
@@ -88,9 +118,21 @@ void ArcPrintService::Print(mojo::ScopedHandle pdf_data) {
 
   base::File file(scoped_platform_handle.release().handle);
 
-  content::BrowserThread::PostTaskAndReplyWithResult(
-      content::BrowserThread::FILE, FROM_HERE,
-      base::Bind(&SavePdf, base::Passed(&file)), base::Bind(&OpenPdf));
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(&SavePdf, base::Passed(&file)),
+      base::BindOnce(&ArcPrintService::OpenPdf,
+                     weak_ptr_factory_.GetWeakPtr()));
+}
+
+void ArcPrintService::OpenPdf(base::Optional<base::FilePath> file_path) const {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  if (!file_path)
+    return;
+
+  GURL gurl = net::FilePathToFileURL(file_path.value());
+  ash::Shell::Get()->shell_delegate()->OpenUrlFromArc(gurl);
+  // TODO(poromov) Delete file after printing. (http://crbug.com/629843)
 }
 
 }  // namespace arc

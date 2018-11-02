@@ -91,7 +91,7 @@ class FakeCursorShapeStub : public protocol::CursorShapeStub {
   ~FakeCursorShapeStub() override {}
 
   // protocol::CursorShapeStub interface.
-  void SetCursorShape(const protocol::CursorShapeInfo& cursor_shape) override{};
+  void SetCursorShape(const protocol::CursorShapeInfo& cursor_shape) override {}
 };
 
 }  // namespace
@@ -318,7 +318,7 @@ class ProtocolPerfTest
             host_pin_hash, nullptr);
     host_->SetAuthenticatorFactory(std::move(auth_factory));
 
-    host_->AddStatusObserver(this);
+    host_->status_monitor()->AddStatusObserver(this);
     host_->Start(kHostOwner);
 
     message_loop_.task_runner()->PostTask(

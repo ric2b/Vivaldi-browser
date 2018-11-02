@@ -18,6 +18,7 @@
 #include "base/numerics/safe_math.h"
 #include "base/strings/sys_string_conversions.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/post_task.h"
 #include "base/threading/thread.h"
 #include "build/build_config.h"
 #include "content/browser/blob_storage/chrome_blob_storage_context.h"
@@ -67,10 +68,6 @@
 #include "url/gurl.h"
 #include "url/origin.h"
 
-#if defined(OS_MACOSX)
-#include "content/common/mac/font_descriptor.h"
-#endif
-
 #if defined(OS_WIN)
 #include "content/common/font_cache_dispatcher_win.h"
 #endif
@@ -80,6 +77,7 @@
 #endif
 
 #if defined(OS_MACOSX)
+#include "content/common/mac/font_loader.h"
 #include "ui/accelerated_widget_mac/window_resize_helper_mac.h"
 #endif
 
@@ -198,46 +196,39 @@ void RenderMessageFilter::GenerateRoutingID(
 
 void RenderMessageFilter::CreateNewWidget(int32_t opener_id,
                                           blink::WebPopupType popup_type,
+                                          mojom::WidgetPtr widget,
                                           CreateNewWidgetCallback callback) {
   int route_id = MSG_ROUTING_NONE;
-  render_widget_helper_->CreateNewWidget(opener_id, popup_type, &route_id);
+  render_widget_helper_->CreateNewWidget(opener_id, popup_type,
+                                         std::move(widget), &route_id);
   std::move(callback).Run(route_id);
 }
 
 void RenderMessageFilter::CreateFullscreenWidget(
     int opener_id,
+    mojom::WidgetPtr widget,
     CreateFullscreenWidgetCallback callback) {
   int route_id = 0;
-  render_widget_helper_->CreateNewFullscreenWidget(opener_id, &route_id);
+  render_widget_helper_->CreateNewFullscreenWidget(opener_id, std::move(widget),
+                                                   &route_id);
   std::move(callback).Run(route_id);
 }
 
 #if defined(OS_MACOSX)
 
 void RenderMessageFilter::OnLoadFont(const FontDescriptor& font,
-                                          IPC::Message* reply_msg) {
-  FontLoader::Result* result = new FontLoader::Result;
-
-  BrowserThread::PostTaskAndReply(
-      BrowserThread::FILE, FROM_HERE,
-      base::Bind(&FontLoader::LoadFont, font, result),
-      base::Bind(&RenderMessageFilter::SendLoadFontReply, this, reply_msg,
-                 base::Owned(result)));
+                                     IPC::Message* reply_msg) {
+  FontLoader::LoadFont(
+      font,
+      base::BindOnce(&RenderMessageFilter::SendLoadFontReply, this, reply_msg));
 }
 
 void RenderMessageFilter::SendLoadFontReply(IPC::Message* reply,
-                                                 FontLoader::Result* result) {
-  base::SharedMemoryHandle handle;
-  if (result->font_data_size == 0 || result->font_id == 0) {
-    result->font_data_size = 0;
-    result->font_id = 0;
-  } else {
-    handle = result->font_data.handle().Duplicate();
-    result->font_data.Unmap();
-    result->font_data.Close();
-  }
-  RenderProcessHostMsg_LoadFont::WriteReplyParams(
-      reply, result->font_data_size, handle, result->font_id);
+                                            uint32_t data_size,
+                                            base::SharedMemoryHandle handle,
+                                            uint32_t font_id) {
+  RenderProcessHostMsg_LoadFont::WriteReplyParams(reply, data_size, handle,
+                                                  font_id);
   Send(reply);
 }
 
@@ -265,10 +256,13 @@ void RenderMessageFilter::SetThreadPriorityOnFileThread(
 
 void RenderMessageFilter::OnSetThreadPriority(base::PlatformThreadId ns_tid,
                                               base::ThreadPriority priority) {
-  BrowserThread::PostTask(
-      BrowserThread::FILE_USER_BLOCKING, FROM_HERE,
-      base::Bind(&RenderMessageFilter::SetThreadPriorityOnFileThread, this,
-                 ns_tid, priority));
+  constexpr base::TaskTraits kTraits = {
+      base::MayBlock(), base::TaskPriority::USER_BLOCKING,
+      base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN};
+  base::PostTaskWithTraits(
+      FROM_HERE, kTraits,
+      base::BindOnce(&RenderMessageFilter::SetThreadPriorityOnFileThread, this,
+                     ns_tid, priority));
 }
 #endif
 

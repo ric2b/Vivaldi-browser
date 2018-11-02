@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/compiler_specific.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "content/browser/devtools/devtools_io_context.h"
 #include "content/common/content_export.h"
@@ -43,8 +44,8 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   void DisconnectWebContents() override;
   void ConnectWebContents(WebContents* wc) override;
 
+  void AttachMultiClient(DevToolsAgentHostClient* client);
   bool Inspect();
-  void SendMessageToClient(int session_id, const std::string& message);
 
  protected:
   DevToolsAgentHostImpl(const std::string& id);
@@ -60,26 +61,28 @@ class CONTENT_EXPORT DevToolsAgentHostImpl : public DevToolsAgentHost {
   virtual void InspectElement(DevToolsSession* session, int x, int y);
 
   void NotifyCreated();
-  void ForceDetach(bool replaced);
+  void ForceDetachAllClients(bool replaced);
   DevToolsIOContext* GetIOContext() { return &io_context_; }
 
-  // TODO(dgozman): remove this accessor.
-  DevToolsSession* session() { return session_; }
+  base::flat_set<DevToolsSession*>& sessions() { return sessions_; }
+  DevToolsSession* SessionById(int session_id);
 
  private:
   friend class DevToolsAgentHost; // for static methods
   friend class DevToolsSession;
-  bool InnerAttachClient(DevToolsAgentHostClient* client, bool force);
-  void InnerDetachClient();
+  void InnerAttachClient(DevToolsAgentHostClient* client);
+  void InnerDetachClient(DevToolsAgentHostClient* client);
   void NotifyAttached();
   void NotifyDetached();
   void NotifyDestroyed();
+  DevToolsSession* SessionByClient(DevToolsAgentHostClient* client);
 
   const std::string id_;
   int last_session_id_;
-  // TODO(dgozman): remove this together with accessor above.
-  DevToolsSession* session_;
-  base::flat_set<std::unique_ptr<DevToolsSession>> sessions_;
+  base::flat_set<DevToolsSession*> sessions_;
+  base::flat_map<int, DevToolsSession*> session_by_id_;
+  base::flat_map<DevToolsAgentHostClient*, std::unique_ptr<DevToolsSession>>
+      session_by_client_;
   DevToolsIOContext io_context_;
   static int s_attached_count_;
   static int s_force_creation_count_;
@@ -91,10 +94,11 @@ class DevToolsMessageChunkProcessor {
   explicit DevToolsMessageChunkProcessor(const SendMessageCallback& callback);
   ~DevToolsMessageChunkProcessor();
 
-  std::string state_cookie() const { return state_cookie_; }
+  const std::string& state_cookie() const { return state_cookie_; }
   void set_state_cookie(const std::string& cookie) { state_cookie_ = cookie; }
   int last_call_id() const { return last_call_id_; }
   bool ProcessChunkedMessageFromAgent(const DevToolsMessageChunk& chunk);
+  void Reset();
 
  private:
   SendMessageCallback callback_;

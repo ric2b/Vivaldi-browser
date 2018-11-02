@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/favicon/core/favicon_util.h"
@@ -16,6 +17,7 @@
 #include "components/favicon_base/favicon_util.h"
 #include "components/image_fetcher/core/image_decoder.h"
 #include "components/image_fetcher/core/image_fetcher.h"
+#include "components/ntp_tiles/constants.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/gfx/geometry/size.h"
@@ -31,8 +33,11 @@ constexpr int kDesiredFrameSize = 128;
 // TODO(jkrcal): Make the size in dip and the scale factor be passed as
 // arguments from the UI so that we desire for the right size on a given device.
 // See crbug.com/696563.
-constexpr int kTileIconMinSizePx = 48;
-constexpr int kTileIconDesiredSizePx = 96;
+constexpr int kDefaultTileIconMinSizePx = 1;
+constexpr int kDefaultTileIconDesiredSizePx = 96;
+
+constexpr char kTileIconMinSizePxFieldParam[] = "min_size";
+constexpr char kTileIconDesiredSizePxFieldParam[] = "desired_size";
 
 favicon_base::IconType IconType(const PopularSites::Site& site) {
   return site.large_icon_url.is_valid() ? favicon_base::TOUCH_ICON
@@ -50,6 +55,18 @@ bool HasResultDefaultBackgroundColor(
     return false;
   }
   return result.fallback_icon_style->is_default_background_color;
+}
+
+int GetMinimumFetchingSizeForChromeSuggestionsFaviconsFromServer() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kNtpMostLikelyFaviconsFromServerFeature, kTileIconMinSizePxFieldParam,
+      kDefaultTileIconMinSizePx);
+}
+
+int GetDesiredFetchingSizeForChromeSuggestionsFaviconsFromServer() {
+  return base::GetFieldTrialParamByFeatureAsInt(
+      kNtpMostLikelyFaviconsFromServerFeature, kTileIconDesiredSizePxFieldParam,
+      kDefaultTileIconDesiredSizePx);
 }
 
 }  // namespace
@@ -200,7 +217,8 @@ void IconCacherImpl::StartFetchMostLikely(const GURL& page_url,
   // Desired size 0 means that we do not want the service to resize the image
   // (as we will not use it anyway).
   large_icon_service_->GetLargeIconOrFallbackStyle(
-      page_url, kTileIconMinSizePx, /*desired_size_in_pixel=*/0,
+      page_url, GetMinimumFetchingSizeForChromeSuggestionsFaviconsFromServer(),
+      /*desired_size_in_pixel=*/0,
       base::Bind(&IconCacherImpl::OnGetLargeIconOrFallbackStyleFinished,
                  weak_ptr_factory_.GetWeakPtr(), page_url),
       &tracker_);
@@ -210,24 +228,60 @@ void IconCacherImpl::OnGetLargeIconOrFallbackStyleFinished(
     const GURL& page_url,
     const favicon_base::LargeIconResult& result) {
   if (!HasResultDefaultBackgroundColor(result)) {
-    // We should only fetch for default "gray" tiles so that we never overrite
-    // any favicon of any size.
+    // There is already an icon, there is nothing to do. (We should only fetch
+    // for default "gray" tiles so that we never overwrite any favicon of any
+    // size.)
     FinishRequestAndNotifyIconAvailable(page_url, /*newly_available=*/false);
+    // Update the time when the icon was last requested - postpone thus the
+    // automatic eviction of the favicon from the favicon database.
+    large_icon_service_->TouchIconFromGoogleServer(result.bitmap.icon_url);
     return;
   }
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("icon_catcher_get_large_icon", R"(
+        semantics {
+          sender: "Favicon Component"
+          description:
+            "Sends a request to a Google server to retrieve the favicon bitmap "
+            "for a server-suggested most visited tile on the new tab page."
+          trigger:
+            "A request can be sent if Chrome does not have a favicon for a "
+            "particular page and history sync is enabled."
+          data: "Page URL and desired icon size."
+          destination: GOOGLE_OWNED_SERVICE
+        }
+        policy {
+          cookies_allowed: false
+          setting:
+            "Users can disable this feature via 'History' setting under "
+            "'Advanced sync settings'."
+          chrome_policy {
+            SyncDisabled {
+              policy_options {mode: MANDATORY}
+              SyncDisabled: true
+            }
+          }
+        })");
   large_icon_service_
       ->GetLargeIconOrFallbackStyleFromGoogleServerSkippingLocalCache(
-          page_url, kTileIconMinSizePx, kTileIconDesiredSizePx,
-          /*may_page_url_be_private=*/true,
+          page_url,
+          GetMinimumFetchingSizeForChromeSuggestionsFaviconsFromServer(),
+          GetDesiredFetchingSizeForChromeSuggestionsFaviconsFromServer(),
+          /*may_page_url_be_private=*/true, traffic_annotation,
           base::Bind(&IconCacherImpl::OnMostLikelyFaviconDownloaded,
                      weak_ptr_factory_.GetWeakPtr(), page_url));
 }
 
-void IconCacherImpl::OnMostLikelyFaviconDownloaded(const GURL& request_url,
-                                                   bool success) {
-  UMA_HISTOGRAM_BOOLEAN("NewTabPage.TileFaviconFetchSuccess.Server", success);
-  FinishRequestAndNotifyIconAvailable(request_url, success);
+void IconCacherImpl::OnMostLikelyFaviconDownloaded(
+    const GURL& request_url,
+    favicon_base::GoogleFaviconServerRequestStatus status) {
+  UMA_HISTOGRAM_ENUMERATION(
+      "NewTabPage.TileFaviconFetchStatus.Server", status,
+      favicon_base::GoogleFaviconServerRequestStatus::COUNT);
+  FinishRequestAndNotifyIconAvailable(
+      request_url,
+      status == favicon_base::GoogleFaviconServerRequestStatus::SUCCESS);
 }
 
 bool IconCacherImpl::StartRequest(const GURL& request_url,

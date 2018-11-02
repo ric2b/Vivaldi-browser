@@ -9,6 +9,7 @@
 #include <memory>
 
 #include "base/macros.h"
+#include "base/stl_util.h"
 #include "base/strings/utf_string_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/events/event.h"
@@ -165,6 +166,29 @@ TEST_F(CharacterComposerTest, FullyMatchingSequences) {
   ExpectDeadKeyFiltered(kCombiningAcute);
   ExpectUnicodeKeyComposed(VKEY_E, DomCode::US_E, EF_NONE, 0x03B5,
                            base::string16(1, 0x03AD));
+
+  // Windows-style sequences.
+  // LATIN SMALL LETTER A WITH ACUTE
+  ExpectDeadKeyFiltered('\'');
+  ExpectUnicodeKeyComposed(VKEY_A, DomCode::US_A, EF_NONE, 'a',
+                           base::string16(1, 0x00E1));
+  // LATIN SMALL LETTER C WITH CEDILLA
+  ExpectDeadKeyFiltered('\'');
+  ExpectUnicodeKeyComposed(VKEY_C, DomCode::US_C, EF_NONE, 'c',
+                           base::string16(1, 0x00E7));
+  // APOSTROPHE
+  ExpectDeadKeyFiltered('\'');
+  ExpectUnicodeKeyComposed(VKEY_SPACE, DomCode::SPACE, EF_NONE, ' ',
+                           base::string16(1, '\''));
+  // Unmatched composition with printable character.
+  static constexpr base::char16 kApostropheS[] = {'\'', 's'};
+  ExpectDeadKeyFiltered('\'');
+  ExpectUnicodeKeyComposed(VKEY_S, DomCode::US_S, EF_NONE, 's',
+                           base::string16(kApostropheS, 2));
+  // Unmatched composition with dead key.
+  static constexpr base::char16 kApostropheApostrophe[] = {'\'', '\''};
+  ExpectDeadKeyFiltered('\'');
+  ExpectDeadKeyComposed('\'', base::string16(kApostropheApostrophe, 2));
 }
 
 TEST_F(CharacterComposerTest, FullyMatchingSequencesAfterMatchingFailure) {
@@ -249,8 +273,7 @@ TEST_F(CharacterComposerTest, MainTableIsCorrectlyOrdered) {
           EXPECT_LT(previous_key, key) << index;
         previous_key = key;
         // Verify that the internal link is valid.
-        const auto it = std::find(subtrees.begin(), subtrees.end(), value);
-        EXPECT_FALSE(subtrees.end() == it) << index;
+        EXPECT_TRUE(base::ContainsValue(subtrees, value)) << index;
         index += 2;
       }
       // Check the leaf subtable.

@@ -33,6 +33,7 @@
 
 #include "core/CoreExport.h"
 #include "core/loader/resource/TextResource.h"
+#include "platform/loader/fetch/TextResourceDecoderOptions.h"
 
 namespace blink {
 
@@ -45,9 +46,8 @@ class CORE_EXPORT StyleSheetResource : public TextResource {
   StyleSheetResource(const ResourceRequest& request,
                      Type type,
                      const ResourceLoaderOptions& options,
-                     const String& mime_type,
-                     const String& charset)
-      : TextResource(request, type, options, mime_type, charset) {}
+                     const TextResourceDecoderOptions& decoder_options)
+      : TextResource(request, type, options, decoder_options) {}
 };
 
 }  // namespace blink

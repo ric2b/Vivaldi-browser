@@ -31,14 +31,15 @@
 #include "modules/crypto/SubtleCrypto.h"
 
 #include "bindings/core/v8/Dictionary.h"
-#include "core/dom/DOMArrayBuffer.h"
-#include "core/dom/DOMArrayBufferView.h"
-#include "core/dom/DOMArrayPiece.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/frame/Deprecation.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
+#include "core/typed_arrays/DOMArrayBufferView.h"
+#include "core/typed_arrays/DOMArrayPiece.h"
 #include "modules/crypto/CryptoHistograms.h"
 #include "modules/crypto/CryptoKey.h"
 #include "modules/crypto/CryptoResultImpl.h"
+#include "modules/crypto/CryptoUtilities.h"
 #include "modules/crypto/NormalizeAlgorithm.h"
 #include "platform/json/JSONValues.h"
 #include "public/platform/Platform.h"
@@ -152,11 +153,6 @@ static bool ParseJsonWebKey(const Dictionary& dict,
   String json = json_object->ToJSONString();
   json_utf8 = WebVector<uint8_t>(json.Utf8().data(), json.Utf8().length());
   return true;
-}
-
-static WebVector<uint8_t> CopyBytes(const DOMArrayPiece& source) {
-  return WebVector<uint8_t>(static_cast<uint8_t*>(source.Data()),
-                            source.ByteLength());
 }
 
 SubtleCrypto::SubtleCrypto() {}

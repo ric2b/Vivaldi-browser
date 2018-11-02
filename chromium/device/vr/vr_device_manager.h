@@ -43,10 +43,6 @@ class VRDeviceManager {
 
   DEVICE_VR_EXPORT unsigned int GetNumberOfConnectedDevices();
 
-  void ListeningForActivateChanged(bool listening, VRServiceImpl* service);
-
-  bool IsMostRecentlyListeningForActivate(VRServiceImpl* service);
-
  private:
   friend class VRDeviceManagerTest;
   friend class VRDisplayImplTest;
@@ -59,15 +55,8 @@ class VRDeviceManager {
 
   DEVICE_VR_EXPORT VRDevice* GetDevice(unsigned int index);
 
-  static void SetInstance(VRDeviceManager* service);
-  static bool HasInstance();
-
   void InitializeProviders();
   void RegisterProvider(std::unique_ptr<VRDeviceProvider> provider);
-
-  void SchedulePollEvents();
-  void PollEvents();
-  void StopSchedulingPollEvents();
 
   using ProviderList = std::vector<std::unique_ptr<VRDeviceProvider>>;
   ProviderList providers_;
@@ -76,21 +65,14 @@ class VRDeviceManager {
   using DeviceMap = std::map<unsigned int, VRDevice*>;
   DeviceMap devices_;
 
-  bool vr_initialized_;
+  bool vr_initialized_ = false;
 
   std::set<VRServiceImpl*> services_;
-  VRServiceImpl* most_recently_listening_for_activate_ = nullptr;
 
   // For testing. If true will not delete self when consumer count reaches 0.
   bool keep_alive_;
 
-  bool has_scheduled_poll_;
-
-  bool has_activate_listeners_;
-
   base::ThreadChecker thread_checker_;
-
-  base::RepeatingTimer timer_;
 
   DISALLOW_COPY_AND_ASSIGN(VRDeviceManager);
 };

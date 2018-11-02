@@ -17,9 +17,11 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/time/time.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 
 class AccountId;
+class PrefService;
 
 namespace ash {
 
@@ -27,12 +29,15 @@ class SessionObserver;
 
 // Implements mojom::SessionController to cache session related info such as
 // session state, meta data about user sessions to support synchronous
-// queries for ash. It is targeted as a replacement for SessionStateDelegate.
+// queries for ash.
 class ASH_EXPORT SessionController
     : NON_EXPORTED_BASE(public mojom::SessionController) {
  public:
   SessionController();
   ~SessionController() override;
+
+  base::TimeDelta session_length_limit() const { return session_length_limit_; }
+  base::TimeTicks session_start_time() const { return session_start_time_; }
 
   // Binds the mojom::SessionControllerRequest to this object.
   void BindRequest(mojom::SessionControllerRequest request);
@@ -84,12 +89,27 @@ class ASH_EXPORT SessionController
   // nullptr if no user session is found for the index.
   const mojom::UserSession* GetUserSession(UserIndex index) const;
 
+  // Gets the primary user session.
+  const mojom::UserSession* GetPrimaryUserSession() const;
+
   // Returns true if the current user is supervised: has legacy supervised
   // account or kid account.
   bool IsUserSupervised() const;
 
   // Returns true if the current user is a child account.
   bool IsUserChild() const;
+
+  // Returns the type of the current user, or empty if there is no current user
+  // logged in.
+  base::Optional<user_manager::UserType> GetUserType() const;
+
+  // Returns true if the current user is the primary user in a multi-profile
+  // scenario. This always return true if there is only one user logged in.
+  bool IsUserPrimary() const;
+
+  // Returns true if the current user has the profile newly created on the
+  // device (i.e. first time login on the device).
+  bool IsUserFirstLogin() const;
 
   // Returns true if the current user session is a kiosk session (either
   // chrome app kiosk or ARC kiosk).
@@ -106,6 +126,9 @@ class ASH_EXPORT SessionController
   // ordering as user sessions are created.
   void CycleActiveUser(CycleUserDirection direction);
 
+  // Show the multi-profile login UI to add another user to this session.
+  void ShowMultiProfileLogin();
+
   void AddObserver(SessionObserver* observer);
   void RemoveObserver(SessionObserver* observer);
 
@@ -120,15 +143,21 @@ class ASH_EXPORT SessionController
   void UpdateUserSession(mojom::UserSessionPtr user_session) override;
   void SetUserSessionOrder(
       const std::vector<uint32_t>& user_session_order) override;
+  void PrepareForLock(PrepareForLockCallback callback) override;
   void StartLock(StartLockCallback callback) override;
   void NotifyChromeLockAnimationsComplete() override;
   void RunUnlockAnimation(RunUnlockAnimationCallback callback) override;
   void NotifyChromeTerminating() override;
+  void SetSessionLengthLimit(base::TimeDelta length_limit,
+                             base::TimeTicks start_time) override;
 
   // Test helpers.
   void ClearUserSessionsForTest();
   void FlushMojoForTest();
   void LockScreenAndFlushForTest();
+
+  // HACK for M61. See SessionObserver comment.
+  void NotifyActiveUserPrefServiceChanged(PrefService* prefs);
 
  private:
   void SetSessionState(session_manager::SessionState state);
@@ -170,6 +199,10 @@ class ASH_EXPORT SessionController
   // to detect first active user session.
   uint32_t active_session_id_ = 0u;
 
+  // The user session id of the primary user session. The primary user session
+  // is the very first user session of the current ash session.
+  uint32_t primary_session_id_ = 0u;
+
   // Last known login status. Used to track login status changes.
   LoginStatus login_status_ = LoginStatus::NOT_LOGGED_IN;
 
@@ -179,6 +212,14 @@ class ASH_EXPORT SessionController
 
   // Pending callback for the StartLock request.
   base::OnceCallback<void(bool)> start_lock_callback_;
+
+  // The session length limit; set to zero if there is no limit.
+  base::TimeDelta session_length_limit_;
+
+  // The session start time, set at login or on the first user activity; set to
+  // null if there is no session length limit. This value is also stored in a
+  // pref in case of a crash during the session.
+  base::TimeTicks session_start_time_;
 
   base::ObserverList<ash::SessionObserver> observers_;
 

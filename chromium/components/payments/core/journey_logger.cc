@@ -8,8 +8,8 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
-#include "components/ukm/public/ukm_entry_builder.h"
-#include "components/ukm/public/ukm_recorder.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace payments {
 
@@ -36,8 +36,8 @@ std::string GetHistogramNameSuffix(
     case JourneyLogger::SECTION_CONTACT_INFO:
       name_suffix = "ContactInfo.";
       break;
-    case JourneyLogger::SECTION_CREDIT_CARDS:
-      name_suffix = "CreditCards.";
+    case JourneyLogger::SECTION_PAYMENT_METHOD:
+      name_suffix = "PaymentMethod.";
       break;
     default:
       break;
@@ -91,10 +91,13 @@ void JourneyLogger::IncrementSelectionEdits(Section section) {
   sections_[section].number_selection_edits_++;
 }
 
-void JourneyLogger::SetNumberOfSuggestionsShown(Section section, int number) {
+void JourneyLogger::SetNumberOfSuggestionsShown(Section section,
+                                                int number,
+                                                bool has_complete_suggestion) {
   DCHECK_LT(section, SECTION_MAX);
   sections_[section].number_suggestions_shown_ = number;
   sections_[section].is_requested_ = true;
+  sections_[section].has_complete_suggestion_ = has_complete_suggestion;
 }
 
 void JourneyLogger::SetCanMakePaymentValue(bool value) {
@@ -105,34 +108,6 @@ void JourneyLogger::SetCanMakePaymentValue(bool value) {
 void JourneyLogger::SetShowCalled() {
   was_show_called_ = true;
 }
-
-void JourneyLogger::SetCompleted() {
-  UMA_HISTOGRAM_BOOLEAN("PaymentRequest.CheckoutFunnel.Completed", true);
-
-  RecordJourneyStatsHistograms(COMPLETION_STATUS_COMPLETED);
-}
-
-void JourneyLogger::SetAborted(AbortReason reason) {
-  base::UmaHistogramEnumeration("PaymentRequest.CheckoutFunnel.Aborted", reason,
-                                ABORT_REASON_MAX);
-
-  if (reason == ABORT_REASON_ABORTED_BY_USER ||
-      reason == ABORT_REASON_USER_NAVIGATION)
-    RecordJourneyStatsHistograms(COMPLETION_STATUS_USER_ABORTED);
-  else
-    RecordJourneyStatsHistograms(COMPLETION_STATUS_OTHER_ABORTED);
-}
-
-#ifdef OS_ANDROID
-void JourneyLogger::SetNotShown(NotShownReason reason) {
-  base::UmaHistogramEnumeration("PaymentRequest.CheckoutFunnel.NoShow", reason,
-                                NOT_SHOWN_REASON_MAX);
-
-  // Record that that Payment Request was initiated here, because nothing else
-  // will be recorded for a Payment Request that was not shown to the user.
-  UMA_HISTOGRAM_BOOLEAN("PaymentRequest.CheckoutFunnel.Initiated", true);
-}
-#endif
 
 void JourneyLogger::SetEventOccurred(Event event) {
   events_ |= event;
@@ -157,24 +132,51 @@ void JourneyLogger::SetRequestedInformation(bool requested_shipping,
       (requested_name ? REQUESTED_INFORMATION_NAME : 0);
 }
 
+void JourneyLogger::SetCompleted() {
+  UMA_HISTOGRAM_BOOLEAN("PaymentRequest.CheckoutFunnel.Completed", true);
+
+  RecordJourneyStatsHistograms(COMPLETION_STATUS_COMPLETED);
+}
+
+void JourneyLogger::SetAborted(AbortReason reason) {
+  // Don't log abort reasons if the Payment Request was not shown to the user.
+  if (was_show_called_) {
+    base::UmaHistogramEnumeration("PaymentRequest.CheckoutFunnel.Aborted",
+                                  reason, ABORT_REASON_MAX);
+  }
+
+  if (reason == ABORT_REASON_ABORTED_BY_USER ||
+      reason == ABORT_REASON_USER_NAVIGATION)
+    RecordJourneyStatsHistograms(COMPLETION_STATUS_USER_ABORTED);
+  else
+    RecordJourneyStatsHistograms(COMPLETION_STATUS_OTHER_ABORTED);
+}
+
+void JourneyLogger::SetNotShown(NotShownReason reason) {
+  base::UmaHistogramEnumeration("PaymentRequest.CheckoutFunnel.NoShow", reason,
+                                NOT_SHOWN_REASON_MAX);
+
+  // Record that that Payment Request was initiated here, because nothing else
+  // will be recorded for a Payment Request that was not shown to the user.
+  UMA_HISTOGRAM_BOOLEAN("PaymentRequest.CheckoutFunnel.Initiated", true);
+}
+
 void JourneyLogger::RecordJourneyStatsHistograms(
     CompletionStatus completion_status) {
   DCHECK(!has_recorded_);
   has_recorded_ = true;
 
   RecordCheckoutFlowMetrics();
-
-  RecordPaymentMethodMetric();
-
-  RecordRequestedInformationMetrics();
-
-  RecordSectionSpecificStats(completion_status);
-
-  // Record the CanMakePayment metrics based on whether the transaction was
-  // completed or aborted by the user (UserAborted) or otherwise (OtherAborted).
   RecordCanMakePaymentStats(completion_status);
-
   RecordUrlKeyedMetrics(completion_status);
+  RecordEventsMetric(completion_status);
+
+  // These following metrics only make sense if the UI was shown to the user.
+  if (was_show_called_) {
+    RecordPaymentMethodMetric();
+    RecordRequestedInformationMetrics();
+    RecordSectionSpecificStats(completion_status);
+  }
 }
 
 void JourneyLogger::RecordCheckoutFlowMetrics() {
@@ -200,6 +202,7 @@ void JourneyLogger::RecordPaymentMethodMetric() {
 }
 
 void JourneyLogger::RecordRequestedInformationMetrics() {
+  DCHECK(requested_information_ != REQUESTED_INFORMATION_MAX);
   UMA_HISTOGRAM_ENUMERATION("PaymentRequest.RequestedInformation",
                             requested_information_, REQUESTED_INFORMATION_MAX);
 }
@@ -208,6 +211,10 @@ void JourneyLogger::RecordSectionSpecificStats(
     CompletionStatus completion_status) {
   // Record whether the user had suggestions for each requested information.
   bool user_had_all_requested_information = true;
+
+  // Record whether the user had at least one complete suggestion for each
+  // requested section.
+  bool user_had_complete_suggestions_ = true;
 
   for (int i = 0; i < NUMBER_OF_SECTIONS; ++i) {
     std::string name_suffix = GetHistogramNameSuffix(i, completion_status);
@@ -233,6 +240,9 @@ void JourneyLogger::RecordSectionSpecificStats(
 
       if (sections_[i].number_suggestions_shown_ == 0) {
         user_had_all_requested_information = false;
+        user_had_complete_suggestions_ = false;
+      } else if (!sections_[i].has_complete_suggestion_) {
+        user_had_complete_suggestions_ = false;
       }
     }
   }
@@ -247,6 +257,20 @@ void JourneyLogger::RecordSectionSpecificStats(
   } else {
     base::UmaHistogramEnumeration(
         "PaymentRequest.UserDidNotHaveSuggestionsForEverything."
+        "EffectOnCompletion",
+        completion_status, COMPLETION_STATUS_MAX);
+  }
+
+  // Record metrics about completion based on whether the user had complete
+  // suggestions for each requested information.
+  if (user_had_complete_suggestions_) {
+    base::UmaHistogramEnumeration(
+        "PaymentRequest.UserHadCompleteSuggestionsForEverything."
+        "EffectOnCompletion",
+        completion_status, COMPLETION_STATUS_MAX);
+  } else {
+    base::UmaHistogramEnumeration(
+        "PaymentRequest.UserDidNotHaveCompleteSuggestionsForEverything."
         "EffectOnCompletion",
         completion_status, COMPLETION_STATUS_MAX);
   }
@@ -300,6 +324,44 @@ void JourneyLogger::RecordCanMakePaymentEffectOnCompletion(
 
   base::UmaHistogramEnumeration(histogram_name, completion_status,
                                 COMPLETION_STATUS_MAX);
+}
+
+void JourneyLogger::RecordEventsMetric(CompletionStatus completion_status) {
+  // Add the completion status to the events.
+  switch (completion_status) {
+    case COMPLETION_STATUS_COMPLETED:
+      events_ |= EVENT_COMPLETED;
+      break;
+    case COMPLETION_STATUS_USER_ABORTED:
+      events_ |= EVENT_USER_ABORTED;
+      break;
+    case COMPLETION_STATUS_OTHER_ABORTED:
+      events_ |= EVENT_OTHER_ABORTED;
+      break;
+    default:
+      NOTREACHED();
+  }
+
+  // Add the whether the user had complete suggestions for all requested
+  // sections to the events.
+  bool user_had_complete_suggestions_for_requested_information = true;
+  for (int i = 0; i < NUMBER_OF_SECTIONS; ++i) {
+    if (sections_[i].is_requested_) {
+      if (sections_[i].number_suggestions_shown_ == 0 ||
+          !sections_[i].has_complete_suggestion_) {
+        user_had_complete_suggestions_for_requested_information = false;
+      }
+    }
+  }
+  if (user_had_complete_suggestions_for_requested_information)
+    events_ |= EVENT_HAD_NECESSARY_COMPLETE_SUGGESTIONS;
+
+  // Add whether the user had and initial form of payment to the events.
+  if (sections_[SECTION_PAYMENT_METHOD].number_suggestions_shown_ > 0)
+    events_ |= EVENT_HAD_INITIAL_FORM_OF_PAYMENT;
+
+  // Record the events.
+  UMA_HISTOGRAM_SPARSE_SLOWLY("PaymentRequest.Events", events_);
 }
 
 void JourneyLogger::RecordUrlKeyedMetrics(CompletionStatus completion_status) {

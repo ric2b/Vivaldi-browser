@@ -105,8 +105,7 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
                           config.GetInitialRoundTripTimeUsToSend())));
   }
   // Configure congestion control.
-  if (FLAGS_quic_reloadable_flag_quic_allow_new_bbr &&
-      config.HasClientRequestedIndependentOption(kTBBR, perspective_)) {
+  if (config.HasClientRequestedIndependentOption(kTBBR, perspective_)) {
     SetSendAlgorithm(kBBR);
   }
   if (config.HasClientRequestedIndependentOption(kRENO, perspective_)) {
@@ -117,18 +116,15 @@ void QuicSentPacketManager::SetFromConfig(const QuicConfig& config) {
     }
   } else if (config.HasClientRequestedIndependentOption(kBYTE, perspective_)) {
     SetSendAlgorithm(kCubic);
+  } else if (FLAGS_quic_reloadable_flag_quic_default_to_bbr &&
+             config.HasClientRequestedIndependentOption(kQBIC, perspective_)) {
+    SetSendAlgorithm(kCubicBytes);
   } else if (FLAGS_quic_reloadable_flag_quic_enable_pcc &&
              config.HasClientRequestedIndependentOption(kTPCC, perspective_)) {
     SetSendAlgorithm(kPCC);
   }
 
-  // The PCCSender implements its own version of pacing through the
-  // SendAlgorithm::TimeUntilSend() function.  Do not wrap a
-  // PacingSender around it, since wrapping a PacingSender around an
-  // already paced SendAlgorithm produces a DCHECK.  TODO(fayang):
-  // Change this if/when the PCCSender uses the PacingSender.
-  using_pacing_ = !FLAGS_quic_disable_pacing_for_perf_tests &&
-                  send_algorithm_->GetCongestionControlType() != kPCC;
+  using_pacing_ = !FLAGS_quic_disable_pacing_for_perf_tests;
 
   if (config.HasClientSentConnectionOption(k1CON, perspective_)) {
     send_algorithm_->SetNumEmulatedConnections(1);
@@ -464,6 +460,7 @@ void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
   // The AckListener needs to be notified about the most recent
   // transmission, since that's the one only one it tracks.
   if (newest_transmission == packet_number) {
+    unacked_packets_.NotifyStreamFramesAcked(*info, ack_delay_time);
     unacked_packets_.NotifyAndClearListeners(&info->ack_listeners,
                                              ack_delay_time);
   } else {
@@ -478,6 +475,8 @@ void QuicSentPacketManager::MarkPacketHandled(QuicPacketNumber packet_number,
     // only handle nullptr encrypted packets in a special way.
     const QuicTransmissionInfo& newest_transmission_info =
         unacked_packets_.GetTransmissionInfo(newest_transmission);
+    unacked_packets_.NotifyStreamFramesAcked(newest_transmission_info,
+                                             ack_delay_time);
     if (HasCryptoHandshake(newest_transmission_info)) {
       unacked_packets_.RemoveFromInFlight(newest_transmission);
     }
@@ -960,6 +959,11 @@ void QuicSentPacketManager::OnApplicationLimited() {
 
 const SendAlgorithmInterface* QuicSentPacketManager::GetSendAlgorithm() const {
   return send_algorithm_.get();
+}
+
+void QuicSentPacketManager::SetStreamNotifier(
+    StreamNotifierInterface* stream_notifier) {
+  unacked_packets_.SetStreamNotifier(stream_notifier);
 }
 
 }  // namespace net

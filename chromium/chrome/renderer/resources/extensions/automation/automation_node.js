@@ -135,6 +135,14 @@ var GetState = requireNative('automationInternal').GetState;
 /**
  * @param {number} axTreeID The id of the accessibility tree.
  * @param {number} nodeID The id of a node.
+ * @return {string} The restriction, one of
+ * "disabled", "readOnly" or undefined if enabled or other object not disabled
+ */
+var GetRestriction = requireNative('automationInternal').GetRestriction;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
  * @return {string} The checked state, as undefined, "true", "false" or "mixed".
  */
 var GetChecked = requireNative('automationInternal').GetChecked;
@@ -238,6 +246,42 @@ var GetHtmlAttribute = requireNative('automationInternal').GetHtmlAttribute;
  */
 var GetNameFrom = requireNative('automationInternal').GetNameFrom;
 
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {boolean}
+ */
+var GetBold = requireNative('automationInternal').GetBold;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {boolean}
+ */
+var GetItalic = requireNative('automationInternal').GetItalic;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {boolean}
+ */
+var GetUnderline = requireNative('automationInternal').GetUnderline;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {boolean}
+ */
+var GetLineThrough = requireNative('automationInternal').GetLineThrough;
+
+/**
+ * @param {number} axTreeID The id of the accessibility tree.
+ * @param {number} nodeID The id of a node.
+ * @return {?Array.<automation.CustomAction>} List of custom actions of the
+ *     node.
+ */
+var GetCustomActions = requireNative('automationInternal').GetCustomActions;
+
 var lastError = require('lastError');
 var logging = requireNative('logging');
 var utils = require('utils');
@@ -288,6 +332,10 @@ AutomationNodeImpl.prototype = {
 
   get role() {
     return GetRole(this.treeID, this.id);
+  },
+
+  get restriction() {
+    return GetRestriction(this.treeID, this.id);
   },
 
   get checked() {
@@ -380,6 +428,26 @@ AutomationNodeImpl.prototype = {
     return GetNameFrom(this.treeID, this.id);
   },
 
+  get bold() {
+    return GetBold(this.treeID, this.id);
+  },
+
+  get italic() {
+    return GetItalic(this.treeID, this.id);
+  },
+
+  get underline() {
+    return GetUnderline(this.treeID, this.id);
+  },
+
+  get lineThrough() {
+    return GetLineThrough(this.treeID, this.id);
+  },
+
+  get customActions() {
+    return GetCustomActions(this.treeID, this.id);
+  },
+
   doDefault: function() {
     this.performAction_('doDefault');
   },
@@ -405,6 +473,10 @@ AutomationNodeImpl.prototype = {
 
   makeVisible: function() {
     this.performAction_('makeVisible');
+  },
+
+  performCustomAction: function(customActionId) {
+    this.performAction_('customAction', { customActionID: customActionId });
   },
 
   resumeMedia: function() {
@@ -711,12 +783,12 @@ var stringAttributes = [
     'liveStatus',
     'name',
     'placeholder',
+    'roleDescription',
     'textInputType',
     'url',
     'value'];
 
 var boolAttributes = [
-    'ariaReadonly',
     'containerLiveAtomic',
     'containerLiveBusy',
     'liveAtomic',
@@ -1106,6 +1178,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
     'hitTest',
     'makeVisible',
     'matches',
+    'performCustomAction',
     'resumeMedia',
     'setSelection',
     'setSequentialFocusNavigationStartingPoint',
@@ -1129,6 +1202,7 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       'isRootNode',
       'role',
       'checked',
+      'restriction',
       'state',
       'location',
       'indexInParent',
@@ -1136,6 +1210,11 @@ utils.expose(AutomationNode, AutomationNodeImpl, {
       'root',
       'htmlAttributes',
       'nameFrom',
+      'bold',
+      'italic',
+      'underline',
+      'lineThrough',
+      'customActions',
   ]),
 });
 

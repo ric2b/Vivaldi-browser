@@ -27,13 +27,14 @@
 #ifndef SQLiteDatabase_h
 #define SQLiteDatabase_h
 
+#include "build/build_config.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/ThreadingPrimitives.h"
 #include "platform/wtf/text/CString.h"
 #include "platform/wtf/text/WTFString.h"
 
-#if COMPILER(MSVC)
+#if defined(COMPILER_MSVC)
 #pragma warning(disable : 4800)
 #endif
 
@@ -95,7 +96,9 @@ class SQLiteDatabase {
   const char* LastErrorMsg();
 
   sqlite3* Sqlite3Handle() const {
+#if DCHECK_IS_ON()
     DCHECK_EQ(sharable_ || CurrentThread(), opening_thread_ || !db_);
+#endif
     return db_;
   }
 
@@ -137,7 +140,9 @@ class SQLiteDatabase {
   int page_size_;
 
   bool transaction_in_progress_;
+#if DCHECK_IS_ON()
   bool sharable_;
+#endif
 
   Mutex authorizer_lock_;
   CrossThreadPersistent<DatabaseAuthorizer> authorizer_;

@@ -18,6 +18,8 @@ shared_library("clearkeycdm") {
     "external_clear_key/clear_key_cdm.cc",
     "external_clear_key/clear_key_cdm.h",
     "external_clear_key/clear_key_cdm_common.h",
+    "external_clear_key/clear_key_persistent_session_cdm.cc",
+    "external_clear_key/clear_key_persistent_session_cdm.h",
   ]
 
   # TODO(jschuh): crbug.com/167187 fix size_t to int truncations.
@@ -29,8 +31,8 @@ shared_library("clearkeycdm") {
     "//base",
     "//build/config:exe_and_shlib_deps",
     "//media",  # For media::AudioTimestampHelper
-    "//media:cdm_api",  # For content_decryption_module.h
     "//media:shared_memory_support",  # For media::AudioBus.
+    "//media/cdm:cdm_api",  # For content_decryption_module.h
     "//url",
   ]
 
@@ -63,7 +65,10 @@ ppapi_cdm_adapter("clearkeycdmadapter") {
   output_dir = "$root_out_dir/$clearkey_cdm_path"
 
   # Check whether the plugin's origin URL is valid.
-  defines = [ "CHECK_DOCUMENT_URL" ]
+  defines = [
+    "CHECK_DOCUMENT_URL",
+    "SUPPORT_EXPERIMENTAL_CDM_INTERFACE",
+  ]
   deps = [
     ":clearkeycdm",
     ":clearkeycdmadapter_resources",

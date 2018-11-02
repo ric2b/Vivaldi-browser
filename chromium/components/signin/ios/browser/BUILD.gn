@@ -3,6 +3,7 @@
 # found in the LICENSE file.
 
 source_set("browser") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   sources = [
     "account_consistency_service.h",
     "account_consistency_service.mm",
@@ -48,6 +49,7 @@ source_set("test_support") {
 }
 
 source_set("unit_tests") {
+  configs += [ "//build/config/compiler:enable_arc" ]
   testonly = true
   sources = [
     "account_consistency_service_unittest.mm",
@@ -62,7 +64,8 @@ source_set("unit_tests") {
     "//components/signin/core/common",
     "//components/sync_preferences:test_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test",
+    "//ios/web/public/test/fakes",
     "//third_party/ocmock",
   ]
 }

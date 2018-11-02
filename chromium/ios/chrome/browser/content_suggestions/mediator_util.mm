@@ -6,9 +6,6 @@
 
 #include "base/strings/sys_string_conversions.h"
 #include "components/ntp_snippets/category.h"
-#include "components/ntp_tiles/metrics.h"
-#include "components/rappor/rappor_service_impl.h"
-#include "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/content_suggestions/content_suggestions_category_wrapper.h"
 #import "ios/chrome/browser/ui/collection_view/cells/collection_view_text_item.h"
 #import "ios/chrome/browser/ui/content_suggestions/cells/content_suggestions_item.h"
@@ -43,14 +40,13 @@ ContentSuggestionsSectionID SectionIDForCategory(
   return ContentSuggestionsSectionUnknown;
 }
 
-CollectionViewItem<SuggestedContent>* ConvertSuggestion(
+ContentSuggestionsItem* ConvertSuggestion(
     const ntp_snippets::ContentSuggestion& contentSuggestion,
     ContentSuggestionsSectionInformation* sectionInfo,
     ntp_snippets::Category category) {
   ContentSuggestionsItem* suggestion = [[ContentSuggestionsItem alloc]
       initWithType:0
              title:base::SysUTF16ToNSString(contentSuggestion.title())
-          subtitle:base::SysUTF16ToNSString(contentSuggestion.snippet_text())
                url:contentSuggestion.url()];
 
   suggestion.publisher =
@@ -65,6 +61,8 @@ CollectionViewItem<SuggestedContent>* ConvertSuggestion(
   if (category.IsKnownCategory(ntp_snippets::KnownCategories::READING_LIST)) {
     suggestion.availableOffline =
         contentSuggestion.reading_list_suggestion_extra()->distilled;
+    suggestion.faviconURL =
+        contentSuggestion.reading_list_suggestion_extra()->favicon_page_url;
   }
   if (category.IsKnownCategory(ntp_snippets::KnownCategories::ARTICLES)) {
     suggestion.hasImage = YES;
@@ -100,6 +98,18 @@ ntp_snippets::ContentSuggestion::ID SuggestionIDForSectionID(
   return ntp_snippets::ContentSuggestion::ID(category.category, id_in_category);
 }
 
+ContentSuggestionsSectionInformation* LogoSectionInformation() {
+  ContentSuggestionsSectionInformation* sectionInfo =
+      [[ContentSuggestionsSectionInformation alloc]
+          initWithSectionID:ContentSuggestionsSectionLogo];
+  sectionInfo.title = nil;
+  sectionInfo.footerTitle = nil;
+  sectionInfo.showIfEmpty = YES;
+  sectionInfo.layout = ContentSuggestionsSectionLayoutCustom;
+
+  return sectionInfo;
+}
+
 ContentSuggestionsSectionInformation* MostVisitedSectionInformation() {
   ContentSuggestionsSectionInformation* sectionInfo =
       [[ContentSuggestionsSectionInformation alloc]
@@ -112,16 +122,6 @@ ContentSuggestionsSectionInformation* MostVisitedSectionInformation() {
   return sectionInfo;
 }
 
-void RecordPageImpression(const ntp_tiles::NTPTilesVector& mostVisited) {
-  std::vector<ntp_tiles::metrics::TileImpression> tiles;
-  for (const ntp_tiles::NTPTile& ntpTile : mostVisited) {
-    tiles.emplace_back(ntpTile.source, ntp_tiles::UNKNOWN_TILE_TYPE,
-                       ntpTile.url);
-  }
-  ntp_tiles::metrics::RecordPageImpression(
-      tiles, GetApplicationContext()->GetRapporServiceImpl());
-}
-
 ContentSuggestionsMostVisitedItem* ConvertNTPTile(
     const ntp_tiles::NTPTile& tile,
     ContentSuggestionsSectionInformation* sectionInfo) {
@@ -130,6 +130,7 @@ ContentSuggestionsMostVisitedItem* ConvertNTPTile(
 
   suggestion.title = base::SysUTF16ToNSString(tile.title);
   suggestion.URL = tile.url;
+  suggestion.source = tile.source;
 
   suggestion.suggestionIdentifier = [[ContentSuggestionIdentifier alloc] init];
   suggestion.suggestionIdentifier.IDInSection = tile.url.spec();

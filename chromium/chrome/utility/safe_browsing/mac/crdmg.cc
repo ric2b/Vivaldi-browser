@@ -17,6 +17,7 @@
 
 #include "base/files/file.h"
 #include "base/logging.h"
+#include "base/mac/availability.h"
 #include "base/macros.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/strings/stringprintf.h"
@@ -25,14 +26,6 @@
 #include "chrome/utility/safe_browsing/mac/read_stream.h"
 #include "chrome/utility/safe_browsing/mac/udif.h"
 #include "sandbox/mac/seatbelt.h"
-
-// This executable only works on 10.10+, so unconditionally use these functions
-// to make sandboxing easier.
-extern "C" {
-int mkdirat(int, const char *, mode_t);
-int openat(int, const char *, int, ...);
-int unlinkat(int, const char *, int);
-}
 
 namespace {
 
@@ -61,7 +54,7 @@ class SafeDMG {
   bool EnableSandbox();
 
   // Performs the actual DMG operation.
-  bool ParseDMG();
+  API_AVAILABLE(macos(10.10)) bool ParseDMG();
 
   base::File dmg_file_;
 
@@ -99,8 +92,13 @@ int SafeDMG::Main(int argc, const char* argv[]) {
   if (!EnableSandbox())
     return EXIT_FAILURE;
 
-  if (!ParseDMG())
+  if (__builtin_available(macOS 10.10, *)) {
+    if (!ParseDMG())
+      return EXIT_FAILURE;
+  } else {
+    LOG(ERROR) << "Requires 10.10 or higher";
     return EXIT_FAILURE;
+  }
 
   return EXIT_SUCCESS;
 }

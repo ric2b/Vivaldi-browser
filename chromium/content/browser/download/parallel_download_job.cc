@@ -14,6 +14,7 @@
 #include "content/browser/download/parallel_download_utils.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/storage_partition.h"
+#include "net/traffic_annotation/network_traffic_annotation.h"
 
 namespace content {
 namespace {
@@ -34,10 +35,12 @@ ParallelDownloadJob::ParallelDownloadJob(
 
 ParallelDownloadJob::~ParallelDownloadJob() = default;
 
-void ParallelDownloadJob::Start() {
-  DownloadJobImpl::Start();
-
-  BuildParallelRequestAfterDelay();
+void ParallelDownloadJob::OnDownloadFileInitialized(
+    const DownloadFile::InitializeCallback& callback,
+    DownloadInterruptReason result) {
+  DownloadJobImpl::OnDownloadFileInitialized(callback, result);
+  if (result == DOWNLOAD_INTERRUPT_REASON_NONE)
+    BuildParallelRequestAfterDelay();
 }
 
 void ParallelDownloadJob::Cancel(bool user_cancel) {
@@ -50,7 +53,7 @@ void ParallelDownloadJob::Cancel(bool user_cancel) {
   }
 
   for (auto& worker : workers_)
-    worker.second->Cancel();
+    worker.second->Cancel(user_cancel);
 }
 
 void ParallelDownloadJob::Pause() {
@@ -101,7 +104,7 @@ void ParallelDownloadJob::CancelRequestWithOffset(int64_t offset) {
 
   auto it = workers_.find(offset);
   DCHECK(it != workers_.end());
-  it->second->Cancel();
+  it->second->Cancel(false);
 }
 
 void ParallelDownloadJob::BuildParallelRequestAfterDelay() {
@@ -124,7 +127,7 @@ void ParallelDownloadJob::OnByteStreamReady(
   if (!success) {
     VLOG(kVerboseLevel)
         << "Byte stream arrived after download file is released.";
-    worker->Cancel();
+    worker->Cancel(false);
   }
 }
 
@@ -209,10 +212,33 @@ void ParallelDownloadJob::CreateRequest(int64_t offset, int64_t length) {
       BrowserContext::GetStoragePartitionForSite(
           download_item_->GetBrowserContext(), download_item_->GetSiteUrl());
 
+  net::NetworkTrafficAnnotationTag traffic_annotation =
+      net::DefineNetworkTrafficAnnotation("parallel_download_job", R"(
+        semantics {
+          sender: "Parallel Download"
+          description:
+            "Chrome makes parallel request to speed up download of a file."
+          trigger:
+            "When user starts a download request, if it would be technically "
+            "possible, Chrome starts parallel downloading."
+          data: "None."
+          destination: WEBSITE
+        }
+        policy {
+          cookies_allowed: true
+          cookies_store: "user"
+          setting: "This feature cannot be disabled in settings."
+          chrome_policy {
+            DownloadRestrictions {
+              DownloadRestrictions: 3
+            }
+          }
+        })");
   // The parallel requests only use GET method.
   std::unique_ptr<DownloadUrlParameters> download_params(
       new DownloadUrlParameters(download_item_->GetURL(),
-                                storage_partition->GetURLRequestContext()));
+                                storage_partition->GetURLRequestContext(),
+                                traffic_annotation));
   download_params->set_file_path(download_item_->GetFullPath());
   download_params->set_last_modified(download_item_->GetLastModifiedTime());
   download_params->set_etag(download_item_->GetETag());

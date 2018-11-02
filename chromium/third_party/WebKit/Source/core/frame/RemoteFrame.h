@@ -8,13 +8,13 @@
 #include "core/CoreExport.h"
 #include "core/dom/RemoteSecurityContext.h"
 #include "core/frame/Frame.h"
+#include "core/frame/RemoteFrameView.h"
 #include "public/platform/WebFocusType.h"
 
 namespace blink {
 
 class LocalFrame;
 class RemoteFrameClient;
-class RemoteFrameView;
 class WebLayer;
 struct FrameLoadRequest;
 
@@ -38,6 +38,7 @@ class CORE_EXPORT RemoteFrame final : public Frame {
   void PrintNavigationWarning(const String&) override {}
   bool PrepareForCommit() override;
   bool ShouldClose() override;
+  void SetIsInert(bool) override;
 
   void SetWebLayer(WebLayer*);
   WebLayer* GetWebLayer() const { return web_layer_; }
@@ -47,7 +48,7 @@ class CORE_EXPORT RemoteFrame final : public Frame {
   void SetView(RemoteFrameView*);
   void CreateView();
 
-  RemoteFrameView* View() const;
+  RemoteFrameView* View() const override;
 
   RemoteFrameClient* Client() const;
 

@@ -9,7 +9,7 @@
 #include <string>
 #include <vector>
 
-#include "net/base/hash_value.h"
+#include "base/time/time.h"
 #include "net/base/net_export.h"
 #include "net/cert/internal/parse_certificate.h"
 #include "net/cert/internal/signature_algorithm.h"
@@ -147,7 +147,7 @@ struct NET_EXPORT OCSPResponseData {
   struct ResponderID {
     ResponderType type;
     der::Input name;
-    HashValue key_hash;
+    der::Input key_hash;
   };
 
   OCSPResponseData();

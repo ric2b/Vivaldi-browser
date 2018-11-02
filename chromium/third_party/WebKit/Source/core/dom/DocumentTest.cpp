@@ -35,7 +35,7 @@
 #include "core/dom/NodeWithIndex.h"
 #include "core/dom/SynchronousMutationObserver.h"
 #include "core/dom/Text.h"
-#include "core/frame/FrameView.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLHeadElement.h"
 #include "core/html/HTMLInputElement.h"
@@ -249,20 +249,54 @@ DEFINE_TRACE(TestSynchronousMutationObserver) {
   SynchronousMutationObserver::Trace(visitor);
 }
 
-class MockValidationMessageClient
-    : public GarbageCollectedFinalized<MockValidationMessageClient>,
-      public ValidationMessageClient {
-  USING_GARBAGE_COLLECTED_MIXIN(MockValidationMessageClient);
+class TestDocumentShutdownObserver
+    : public GarbageCollectedFinalized<TestDocumentShutdownObserver>,
+      public DocumentShutdownObserver {
+  USING_GARBAGE_COLLECTED_MIXIN(TestDocumentShutdownObserver);
 
  public:
-  MockValidationMessageClient() { Reset(); }
+  TestDocumentShutdownObserver(Document&);
+  virtual ~TestDocumentShutdownObserver() = default;
+
+  int CountContextDestroyedCalled() const {
+    return context_destroyed_called_counter_;
+  }
+
+  DECLARE_TRACE();
+
+ private:
+  // Implement |DocumentShutdownObserver| member functions.
+  void ContextDestroyed(Document*) final;
+
+  int context_destroyed_called_counter_ = 0;
+
+  DISALLOW_COPY_AND_ASSIGN(TestDocumentShutdownObserver);
+};
+
+TestDocumentShutdownObserver::TestDocumentShutdownObserver(Document& document) {
+  SetContext(&document);
+}
+
+void TestDocumentShutdownObserver::ContextDestroyed(Document*) {
+  ++context_destroyed_called_counter_;
+}
+
+DEFINE_TRACE(TestDocumentShutdownObserver) {
+  DocumentShutdownObserver::Trace(visitor);
+}
+
+class MockDocumentValidationMessageClient
+    : public GarbageCollectedFinalized<MockDocumentValidationMessageClient>,
+      public ValidationMessageClient {
+  USING_GARBAGE_COLLECTED_MIXIN(MockDocumentValidationMessageClient);
+
+ public:
+  MockDocumentValidationMessageClient() { Reset(); }
   void Reset() {
     show_validation_message_was_called = false;
-    will_unload_document_was_called = false;
     document_detached_was_called = false;
   }
   bool show_validation_message_was_called;
-  bool will_unload_document_was_called;
   bool document_detached_was_called;
 
   // ValidationMessageClient functions.
@@ -276,9 +310,6 @@ class MockValidationMessageClient
   void HideValidationMessage(const Element& anchor) override {}
   bool IsValidationMessageVisible(const Element& anchor) override {
     return true;
-  }
-  void WillUnloadDocument(const Document&) override {
-    will_unload_document_was_called = true;
   }
   void DocumentDetached(const Document&) override {
     document_detached_was_called = true;
@@ -307,6 +338,32 @@ class MockWebApplicationCacheHost
 };
 
 }  // anonymous namespace
+
+TEST_F(DocumentTest, DomTreeVersionForRemoval) {
+  // ContainerNode::CollectChildrenAndRemoveFromOldParentWithCheck assumes this
+  // behavior.
+  Document& doc = GetDocument();
+  {
+    DocumentFragment* fragment = DocumentFragment::Create(doc);
+    fragment->appendChild(Element::Create(HTMLNames::divTag, &doc));
+    fragment->appendChild(Element::Create(HTMLNames::spanTag, &doc));
+    uint64_t original_version = doc.DomTreeVersion();
+    fragment->RemoveChildren();
+    EXPECT_EQ(original_version + 1, doc.DomTreeVersion())
+        << "RemoveChildren() should increase DomTreeVersion by 1.";
+  }
+
+  {
+    DocumentFragment* fragment = DocumentFragment::Create(doc);
+    Node* child = Element::Create(HTMLNames::divTag, &doc);
+    child->appendChild(Element::Create(HTMLNames::spanTag, &doc));
+    fragment->appendChild(child);
+    uint64_t original_version = doc.DomTreeVersion();
+    fragment->removeChild(child);
+    EXPECT_EQ(original_version + 1, doc.DomTreeVersion())
+        << "removeChild() should increase DomTreeVersion by 1.";
+  }
+}
 
 // This tests that we properly resize and re-layout pages for printing in the
 // presence of media queries effecting elements in a subtree layout boundary
@@ -440,6 +497,10 @@ TEST_F(DocumentTest, referrerPolicyParsing) {
       {"origin", kReferrerPolicyOrigin, false},
       {"origin-when-crossorigin", kReferrerPolicyOriginWhenCrossOrigin, true},
       {"origin-when-cross-origin", kReferrerPolicyOriginWhenCrossOrigin, false},
+      {"same-origin", kReferrerPolicySameOrigin, false},
+      {"strict-origin", kReferrerPolicyStrictOrigin, false},
+      {"strict-origin-when-cross-origin",
+       kReferrerPolicyNoReferrerWhenDowngradeOriginWhenCrossOrigin, false},
       {"unsafe-url", kReferrerPolicyAlways},
   };
 
@@ -459,14 +520,16 @@ TEST_F(DocumentTest, referrerPolicyParsing) {
 }
 
 TEST_F(DocumentTest, OutgoingReferrer) {
-  GetDocument().SetURL(KURL(KURL(), "https://www.example.com/hoge#fuga?piyo"));
+  GetDocument().SetURL(
+      KURL(NullURL(), "https://www.example.com/hoge#fuga?piyo"));
   GetDocument().SetSecurityOrigin(
-      SecurityOrigin::Create(KURL(KURL(), "https://www.example.com/")));
+      SecurityOrigin::Create(KURL(NullURL(), "https://www.example.com/")));
   EXPECT_EQ("https://www.example.com/hoge", GetDocument().OutgoingReferrer());
 }
 
 TEST_F(DocumentTest, OutgoingReferrerWithUniqueOrigin) {
-  GetDocument().SetURL(KURL(KURL(), "https://www.example.com/hoge#fuga?piyo"));
+  GetDocument().SetURL(
+      KURL(NullURL(), "https://www.example.com/hoge#fuga?piyo"));
   GetDocument().SetSecurityOrigin(SecurityOrigin::CreateUnique());
   EXPECT_EQ(String(), GetDocument().OutgoingReferrer());
 }
@@ -702,6 +765,17 @@ TEST_F(DocumentTest, SynchronousMutationNotifierUpdateCharacterData) {
   EXPECT_EQ(3u, observer.UpdatedCharacterDataRecords()[3]->new_length_);
 }
 
+TEST_F(DocumentTest, DocumentShutdownNotifier) {
+  auto& observer = *new TestDocumentShutdownObserver(GetDocument());
+
+  EXPECT_EQ(GetDocument(), observer.LifecycleContext());
+  EXPECT_EQ(0, observer.CountContextDestroyedCalled());
+
+  GetDocument().Shutdown();
+  EXPECT_EQ(nullptr, observer.LifecycleContext());
+  EXPECT_EQ(1, observer.CountContextDestroyedCalled());
+}
+
 // This tests that meta-theme-color can be found correctly
 TEST_F(DocumentTest, ThemeColor) {
   {
@@ -724,7 +798,8 @@ TEST_F(DocumentTest, ThemeColor) {
 TEST_F(DocumentTest, ValidationMessageCleanup) {
   ValidationMessageClient* original_client =
       &GetPage().GetValidationMessageClient();
-  MockValidationMessageClient* mock_client = new MockValidationMessageClient();
+  MockDocumentValidationMessageClient* mock_client =
+      new MockDocumentValidationMessageClient();
   GetDocument().GetSettings()->SetScriptEnabled(true);
   GetPage().SetValidationMessageClient(mock_client);
   // ImplicitOpen()-CancelParsing() makes Document.loadEventFinished()
@@ -749,7 +824,6 @@ TEST_F(DocumentTest, ValidationMessageCleanup) {
 
   // prepareForCommit() unloads the document, and shutdown.
   GetDocument().GetFrame()->PrepareForCommit();
-  EXPECT_TRUE(mock_client->will_unload_document_was_called);
   EXPECT_TRUE(mock_client->document_detached_was_called);
   // Unload handler tried to show a validation message, but it should fail.
   EXPECT_FALSE(mock_client->show_validation_message_was_called);
@@ -763,13 +837,13 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
   GetDocument().SetSecurityOrigin(origin);
   SandboxFlags mask = kSandboxOrigin;
   GetDocument().EnforceSandboxFlags(mask);
-  GetDocument().SetURL(KURL(KURL(), "https://test.com/foobar/document"));
+  GetDocument().SetURL(KURL(NullURL(), "https://test.com/foobar/document"));
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
   appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
-      KURL(KURL(), "https://test.com/foobar/manifest"));
+      KURL(NullURL(), "https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
       static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
   EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
@@ -777,20 +851,20 @@ TEST_F(DocumentTest, SandboxDisablesAppCache) {
 }
 
 TEST_F(DocumentTest, SuboriginDisablesAppCache) {
-  RuntimeEnabledFeatures::setSuboriginsEnabled(true);
+  RuntimeEnabledFeatures::SetSuboriginsEnabled(true);
   RefPtr<SecurityOrigin> origin =
       SecurityOrigin::CreateFromString("https://test.com");
   Suborigin suborigin;
   suborigin.SetName("foobar");
   origin->AddSuborigin(suborigin);
   GetDocument().SetSecurityOrigin(origin);
-  GetDocument().SetURL(KURL(KURL(), "https://test.com/foobar/document"));
+  GetDocument().SetURL(KURL(NullURL(), "https://test.com/foobar/document"));
 
   ApplicationCacheHost* appcache_host =
       GetDocument().Loader()->GetApplicationCacheHost();
   appcache_host->host_ = WTF::MakeUnique<MockWebApplicationCacheHost>();
   appcache_host->SelectCacheWithManifest(
-      KURL(KURL(), "https://test.com/foobar/manifest"));
+      KURL(NullURL(), "https://test.com/foobar/manifest"));
   MockWebApplicationCacheHost* mock_web_host =
       static_cast<MockWebApplicationCacheHost*>(appcache_host->host_.get());
   EXPECT_FALSE(mock_web_host->with_manifest_was_called_);
@@ -840,6 +914,26 @@ TEST_F(DocumentTest,
       GetDocument().getElementById("stickyChild"));
   EXPECT_EQ(DocumentLifecycle::kCompositingInputsClean,
             GetDocument().Lifecycle().GetState());
+}
+
+// Tests that the difference in computed style of direction on the html and body
+// elements does not trigger a style recalc for viewport style propagation when
+// the computed style for another element in the document is recalculated.
+TEST_F(DocumentTest, ViewportPropagationNoRecalc) {
+  SetHtmlInnerHTML(
+      "<body style='direction:rtl'>"
+      "  <div id=recalc></div>"
+      "</body>");
+
+  int old_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
+
+  Element* div = GetDocument().getElementById("recalc");
+  div->setAttribute("style", "color:green");
+  GetDocument().UpdateStyleAndLayoutTree();
+
+  int new_element_count = GetDocument().GetStyleEngine().StyleForElementCount();
+
+  EXPECT_EQ(1, new_element_count - old_element_count);
 }
 
 }  // namespace blink

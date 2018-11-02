@@ -145,7 +145,7 @@ void LoadablePluginPlaceholder::UpdateMessage() {
     return;
   std::string script =
       "window.setMessage(" + base::GetQuotedJSONString(message_) + ")";
-  plugin()->web_view()->MainFrame()->ExecuteScript(
+  plugin()->main_frame()->ExecuteScript(
       blink::WebScriptSource(blink::WebString::FromUTF8(script)));
 }
 
@@ -252,7 +252,7 @@ void LoadablePluginPlaceholder::OnUnobscuredRectUpdate(
     std::string script = base::StringPrintf(
         "window.resizePoster('%dpx', '%dpx', '%dpx', '%dpx')", x, y, width,
         height);
-    plugin()->web_view()->MainFrame()->ExecuteScript(
+    plugin()->main_frame()->ExecuteScript(
         blink::WebScriptSource(blink::WebString::FromUTF8(script)));
   }
 }
@@ -343,13 +343,11 @@ void LoadablePluginPlaceholder::DidFinishIconRepositionForTestingCallback() {
   blink::WebElement element = plugin()->Container()->GetElement();
   element.SetAttribute("placeholderReady", "true");
 
-  std::unique_ptr<content::V8ValueConverter> converter(
-      content::V8ValueConverter::create());
   base::Value value("placeholderReady");
   blink::WebSerializedScriptValue message_data =
       blink::WebSerializedScriptValue::Serialize(
           blink::MainThreadIsolate(),
-          converter->ToV8Value(
+          content::V8ValueConverter::Create()->ToV8Value(
               &value,
               element.GetDocument().GetFrame()->MainWorldScriptContext()));
   blink::WebDOMMessageEvent msg_event(message_data);

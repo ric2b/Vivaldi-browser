@@ -6,18 +6,17 @@
 #define SERVICES_PREFERENCES_TRACKED_TRACKED_PERSISTENT_PREF_STORE_FACTORY_H_
 
 #include <utility>
-#include "services/preferences/public/interfaces/preferences_configuration.mojom.h"
+#include "services/preferences/public/interfaces/preferences.mojom.h"
 
 namespace base {
 class DictionaryValue;
-class SequencedWorkerPool;
 }
 
 class PersistentPrefStore;
 
 PersistentPrefStore* CreateTrackedPersistentPrefStore(
     prefs::mojom::TrackedPersistentPrefStoreConfigurationPtr config,
-    base::SequencedWorkerPool* worker_pool);
+    scoped_refptr<base::SequencedTaskRunner> io_task_runner);
 
 // TODO(sammc): This should move somewhere more appropriate in the longer term.
 void InitializeMasterPrefsTracking(

@@ -38,9 +38,10 @@ class VibrationTest : public ContentBrowserTest,
                    base::Unretained(this)));
   }
 
-  void BindVibrationManager(const service_manager::BindSourceInfo& source_info,
-                            const std::string& interface_name,
-                            mojo::ScopedMessagePipeHandle handle) {
+  void BindVibrationManager(
+      const std::string& interface_name,
+      mojo::ScopedMessagePipeHandle handle,
+      const service_manager::BindSourceInfo& source_info) {
     binding_.Bind(device::mojom::VibrationManagerRequest(std::move(handle)));
   }
 
@@ -60,12 +61,12 @@ class VibrationTest : public ContentBrowserTest,
 
  private:
   // device::mojom::VibrationManager:
-  void Vibrate(int64_t milliseconds, const VibrateCallback& callback) override {
+  void Vibrate(int64_t milliseconds, VibrateCallback callback) override {
     vibrate_milliseconds_ = milliseconds;
-    callback.Run();
+    std::move(callback).Run();
     vibrate_done_.Run();
   }
-  void Cancel(const CancelCallback& callback) override { callback.Run(); }
+  void Cancel(CancelCallback callback) override { std::move(callback).Run(); }
 
   int64_t vibrate_milliseconds_ = -1;
   base::Closure vibrate_done_;

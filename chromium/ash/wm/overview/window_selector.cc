@@ -13,12 +13,11 @@
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
 #include "ash/metrics/user_metrics_action.h"
+#include "ash/metrics/user_metrics_recorder.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/root_window_controller.h"
 #include "ash/screen_util.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector_delegate.h"
@@ -27,10 +26,10 @@
 #include "ash/wm/switchable_windows.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/auto_reset.h"
 #include "base/command_line.h"
 #include "base/metrics/histogram_macros.h"
+#include "components/vector_icons/vector_icons.h"
 #include "third_party/skia/include/core/SkPath.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/compositor/layer.h"
@@ -38,9 +37,9 @@
 #include "ui/display/screen.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/skia_util.h"
-#include "ui/vector_icons/vector_icons.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
@@ -165,9 +164,7 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   params.bounds = GetTextFilterPosition(root_window);
   params.name = "OverviewModeTextFilter";
   *text_filter_bottom = params.bounds.bottom() + kTextFieldBottomMargin;
-  RootWindowController::ForWindow(root_window)
-      ->ConfigureWidgetInitParamsForContainer(
-          widget, kShellWindowId_StatusContainer, &params);
+  params.parent = root_window->GetChildById(kShellWindowId_StatusContainer);
   widget->Init(params);
 
   // Use |container| to specify the padding surrounding the text and to give
@@ -181,8 +178,9 @@ views::Widget* CreateTextFilter(views::TextfieldController* controller,
   DCHECK(text_height);
   const int vertical_padding = (params.bounds.height() - text_height) / 2;
   views::BoxLayout* layout = new views::BoxLayout(
-      views::BoxLayout::kHorizontal, kTextFilterHorizontalPadding,
-      vertical_padding, kTextFilterHorizontalPadding);
+      views::BoxLayout::kHorizontal,
+      gfx::Insets(vertical_padding, kTextFilterHorizontalPadding),
+      kTextFilterHorizontalPadding);
   container->SetLayoutManager(layout);
 
   views::Textfield* textfield = new views::Textfield;
@@ -241,7 +239,10 @@ WindowSelector::~WindowSelector() {
 // NOTE: The work done in Init() is not done in the constructor because it may
 // cause other, unrelated classes, (ie PanelLayoutManager) to make indirect
 // calls to restoring_minimized_windows() on a partially constructed object.
-void WindowSelector::Init(const WindowList& windows) {
+void WindowSelector::Init(const WindowList& windows,
+                          const WindowList& hide_windows) {
+  hide_overview_windows_ =
+      base::MakeUnique<ScopedHideOverviewWindows>(std::move(hide_windows));
   if (restore_focus_window_)
     restore_focus_window_->AddObserver(this);
 
@@ -296,8 +297,8 @@ void WindowSelector::Init(const WindowList& windows) {
       window_grid->PositionWindows(true);
     }
 
-    search_image_ = gfx::CreateVectorIcon(ui::kSearchIcon, kTextFilterIconSize,
-                                          kTextFilterIconColor);
+    search_image_ = gfx::CreateVectorIcon(
+        vector_icons::kSearchIcon, kTextFilterIconSize, kTextFilterIconColor);
     aura::Window* root_window = Shell::GetPrimaryRootWindow();
     text_filter_widget_.reset(CreateTextFilter(this, root_window, search_image_,
                                                &text_filter_bottom_));
@@ -309,7 +310,7 @@ void WindowSelector::Init(const WindowList& windows) {
   Shell::Get()->activation_client()->AddObserver(this);
 
   display::Screen::GetScreen()->AddObserver(this);
-  ShellPort::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
+  Shell::Get()->metrics()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW);
   // Send an a11y alert.
   Shell::Get()->accessibility_delegate()->TriggerAccessibilityAlert(
       A11Y_ALERT_WINDOW_OVERVIEW_MODE_ENTERED);
@@ -427,7 +428,7 @@ void WindowSelector::SelectWindow(WindowSelectorItem* item) {
     // a window other than the window that was active prior to entering overview
     // mode (i.e., the window at the front of the MRU list).
     if (window_list[0] != window) {
-      ShellPort::Get()->RecordUserMetricsAction(
+      Shell::Get()->metrics()->RecordUserMetricsAction(
           UMA_WINDOW_OVERVIEW_ACTIVE_WINDOW_CHANGED);
     }
     const auto it = std::find(window_list.begin(), window_list.end(), window);
@@ -480,7 +481,8 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
         // Allow the textfield to handle 'W' key when not used with Ctrl.
         return false;
       }
-      ShellPort::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW_CLOSE_KEY);
+      Shell::Get()->metrics()->RecordUserMetricsAction(
+          UMA_WINDOW_OVERVIEW_CLOSE_KEY);
       grid_list_[selected_grid_index_]->SelectedWindow()->CloseWindow();
       break;
     case ui::VKEY_RETURN:
@@ -492,7 +494,8 @@ bool WindowSelector::HandleKeyEvent(views::Textfield* sender,
       UMA_HISTOGRAM_CUSTOM_COUNTS("Ash.WindowSelector.KeyPressesOverItemsRatio",
                                   (num_key_presses_ * 100) / num_items_, 1, 300,
                                   30);
-      ShellPort::Get()->RecordUserMetricsAction(UMA_WINDOW_OVERVIEW_ENTER_KEY);
+      Shell::Get()->metrics()->RecordUserMetricsAction(
+          UMA_WINDOW_OVERVIEW_ENTER_KEY);
       SelectWindow(grid_list_[selected_grid_index_]->SelectedWindow());
       break;
     default:

@@ -12,15 +12,17 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/location.h"
+#include "base/threading/thread_restrictions.h"
 #include "media/base/audio_bus.h"
 #include "media/base/data_source.h"
 #include "media/base/decoder_buffer.h"
 #include "media/base/demuxer_stream.h"
 #include "media/base/media_switches.h"
-#include "platform_media/common/platform_mime_util.h"
 #include "media/base/sample_format.h"
 #include "media/filters/ffmpeg_glue.h"
+
 #include "platform_media/common/platform_logging_util.h"
+#include "platform_media/common/platform_mime_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/renderer/pipeline/protocol_sniffer.h"
 
@@ -173,6 +175,8 @@ IPCAudioDecoder::~IPCAudioDecoder() {
   if (!ipc_media_pipeline_host_)
     return;
 
+  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+
   PostTaskAndWait(g_media_task_runner, FROM_HERE,
                   base::Bind(&IPCMediaPipelineHost::Stop,
                              base::Unretained(ipc_media_pipeline_host_.get())));
@@ -215,6 +219,8 @@ void IPCAudioDecoder::Preinitialize(
 bool IPCAudioDecoder::Initialize() {
   DCHECK(thread_checker_.CalledOnValidThread());
   DCHECK(g_media_task_runner) << "Must call Preinitialize() first";
+
+  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
 
   PostTaskAndWait(g_main_task_runner, FROM_HERE,
                   base::Bind(&RunCreatorOnMainThread, data_source_.get(),
@@ -268,6 +274,8 @@ int IPCAudioDecoder::Read(
 
   decoded_audio_packets_ = decoded_audio_packets;
 
+  base::ThreadRestrictions::ScopedAllowWait scoped_wait;
+
   g_media_task_runner->PostTask(
       FROM_HERE,
       base::Bind(&IPCAudioDecoder::ReadInternal, base::Unretained(this)));
@@ -311,37 +319,40 @@ void IPCAudioDecoder::DataReady(DemuxerStream::Status status,
 
       const int frame_count = std::min(frames_in_buffer, frames_still_pending);
 
-      decoded_audio_packets_->emplace_back(
-          AudioBus::Create(channels_, frame_count));
-      AudioBus* audio_bus = decoded_audio_packets_->back().get();
+      if (frame_count > 0) {
 
-      // Deinterleave each channel. The final format should be 32bit
-      // floating-point planar.
-      if (sample_format_ == kSampleFormatF32) {
-        const float* decoded_audio_data =
-            reinterpret_cast<const float*>(buffer->data());
-        for (int channel_index = 0; channel_index < channels_;
-             ++channel_index) {
-          float* bus_data = audio_bus->channel(channel_index);
-          for (int frame_index = 0, channel_offset = channel_index;
-               frame_index < frame_count;
-               ++frame_index, channel_offset += channels_) {
-            bus_data[frame_index] = decoded_audio_data[channel_offset];
+        decoded_audio_packets_->emplace_back(
+            AudioBus::Create(channels_, frame_count));
+        AudioBus *audio_bus = decoded_audio_packets_->back().get();
+
+        // Deinterleave each channel. The final format should be 32bit
+        // floating-point planar.
+        if (sample_format_ == kSampleFormatF32) {
+          const float *decoded_audio_data =
+              reinterpret_cast<const float *>(buffer->data());
+          for (int channel_index = 0; channel_index < channels_;
+               ++channel_index) {
+            float *bus_data = audio_bus->channel(channel_index);
+            for (int frame_index = 0, channel_offset = channel_index;
+                 frame_index < frame_count;
+                 ++frame_index, channel_offset += channels_) {
+              bus_data[frame_index] = decoded_audio_data[channel_offset];
+            }
           }
+        } else if (sample_format_ == kSampleFormatPlanarF32) {
+          const int channel_size = buffer->data_size() / channels_;
+          for (int channel_index = 0; channel_index < channels_;
+               ++channel_index) {
+            memcpy(audio_bus->channel(channel_index),
+                   buffer->data() + channel_index * channel_size,
+                   sizeof(float) * frame_count);
+          }
+        } else {
+          NOTREACHED();
         }
-      } else if (sample_format_ == kSampleFormatPlanarF32) {
-        const int channel_size = buffer->data_size() / channels_;
-        for (int channel_index = 0; channel_index < channels_;
-             ++channel_index) {
-          memcpy(audio_bus->channel(channel_index),
-                 buffer->data() + channel_index * channel_size,
-                 sizeof(float) * frame_count);
-        }
-      } else {
-        NOTREACHED();
-      }
 
-      frames_read_ += frame_count;
+        frames_read_ += frame_count;
+      }
 
       ReadInternal();
       break;

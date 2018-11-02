@@ -345,10 +345,6 @@ int WebViewGuest::GetOrGenerateRulesRegistryID(
   return rules_registry_id;
 }
 
-bool WebViewGuest::CanRunInDetachedState() const {
-  return true;
-}
-
 void WebViewGuest::CreateWebContents(
     const base::DictionaryValue& create_params,
     const WebContentsCreatedCallback& callback) {
@@ -438,7 +434,7 @@ void WebViewGuest::CreateWebContents(
         new_contents = WebContents::Create(params);
         new_contents->SetExtData(tabstrip_contents->GetExtData());
         new_contents->GetController().CopyStateFrom(
-            tabstrip_contents->GetController());
+            tabstrip_contents->GetController(), false);
         TabStripModel* tab_strip = browser->tab_strip_model();
         new_contents->SetDelegate(this);
         tab_strip->ReplaceWebContentsAt(tab_index, new_contents);
@@ -1334,17 +1330,13 @@ content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
 
 void WebViewGuest::NavigateGuest(const std::string& src,
                                  bool force_navigation,
-                                 bool wasTyped,
+                                 ui::PageTransition transition_type,
                                  content::Referrer* referrer,
                                  content::OpenURLParams* params) {
   if (src.empty())
     return;
 
   GURL url = ResolveURL(src);
-
-  ui::PageTransition transition_type = wasTyped ?
-                                       ui::PAGE_TRANSITION_TYPED :
-                                       ui::PAGE_TRANSITION_AUTO_TOPLEVEL;
 
   // We wait for all the content scripts to load and then navigate the guest
   // if the navigation is embedder-initiated. For browser-initiated navigations,
@@ -1461,7 +1453,7 @@ void WebViewGuest::ApplyAttributes(const base::DictionaryValue& params) {
       if (new_window_info.changed || !web_contents()->HasOpener()) {
         NavigateGuest(new_window_info.url.spec(),
                       false /* force_navigation */,
-                      false /*  was_typed */,
+                      ui::PAGE_TRANSITION_AUTO_TOPLEVEL,
                       new_window_info.referrer,
                       new_window_info.params);
       }
@@ -1689,14 +1681,12 @@ WebContents* WebViewGuest::OpenURLFromTab(
   return nullptr;
 }
 
-void WebViewGuest::WebContentsCreated(
-    WebContents* source_contents,
-    int opener_render_process_id,
-    int opener_render_frame_id,
-    const std::string& frame_name,
-    const GURL& target_url,
-    WebContents* new_contents,
-    const base::Optional<content::WebContents::CreateParams>& create_params) {
+void WebViewGuest::WebContentsCreated(WebContents* source_contents,
+                                      int opener_render_process_id,
+                                      int opener_render_frame_id,
+                                      const std::string& frame_name,
+                                      const GURL& target_url,
+                                      WebContents* new_contents) {
   auto* guest = WebViewGuest::FromWebContents(new_contents);
   CHECK(guest);
   guest->SetOpener(this);
@@ -1792,6 +1782,8 @@ void WebViewGuest::LoadURLWithParams(
     return;
 
   GURL validated_url(url);
+  // If the embedder is Vivaldi do not filter the url, we want to open all urls.
+  if (!IsVivaldiApp(owner_host()))
   web_contents()->GetRenderProcessHost()->FilterURL(false, &validated_url);
   // As guests do not swap processes on navigation, only navigations to
   // normal web URLs are supported.  No protocol handlers are installed for

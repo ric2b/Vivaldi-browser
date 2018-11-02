@@ -46,7 +46,6 @@ proximity_auth::ScreenlockBridge::UserPodCustomIcon GetIconForState(
     case ScreenlockState::INACTIVE:
       return proximity_auth::ScreenlockBridge::USER_POD_CUSTOM_ICON_NONE;
     case ScreenlockState::PASSWORD_REAUTH:
-    case ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN:
       return proximity_auth::ScreenlockBridge::USER_POD_CUSTOM_ICON_HARDLOCKED;
   }
 
@@ -83,8 +82,6 @@ size_t GetTooltipResourceId(ScreenlockState state) {
       return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_INSTRUCTIONS;
     case ScreenlockState::PASSWORD_REAUTH:
       return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PASSWORD_REAUTH;
-    case ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN:
-      return IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PASSWORD_REQUIRED_FOR_LOGIN;
   }
 
   NOTREACHED();
@@ -97,8 +94,7 @@ bool TooltipContainsDeviceType(ScreenlockState state) {
           state == ScreenlockState::NO_BLUETOOTH ||
           state == ScreenlockState::PHONE_UNSUPPORTED ||
           state == ScreenlockState::RSSI_TOO_LOW ||
-          state == ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW ||
-          state == ScreenlockState::PASSWORD_REQUIRED_FOR_LOGIN);
+          state == ScreenlockState::PHONE_LOCKED_AND_RSSI_TOO_LOW);
 }
 
 // Returns true iff the |state| corresponds to a locked remote device.
@@ -152,7 +148,7 @@ void EasyUnlockScreenlockStateHandler::ChangeState(ScreenlockState new_state) {
 
   // Do nothing when auth type is online.
   if (screenlock_bridge_->lock_handler()->GetAuthType(account_id_) ==
-      proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN) {
+      proximity_auth::mojom::AuthType::ONLINE_SIGN_IN) {
     return;
   }
 
@@ -271,18 +267,14 @@ void EasyUnlockScreenlockStateHandler::ShowHardlockUI() {
     return;
 
   // Do not override online signin.
-  const proximity_auth::ScreenlockBridge::LockHandler::AuthType
-      existing_auth_type =
-          screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
-  if (existing_auth_type ==
-      proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN)
+  const proximity_auth::mojom::AuthType existing_auth_type =
+      screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
+  if (existing_auth_type == proximity_auth::mojom::AuthType::ONLINE_SIGN_IN)
     return;
 
-  if (existing_auth_type !=
-      proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD) {
+  if (existing_auth_type != proximity_auth::mojom::AuthType::OFFLINE_PASSWORD) {
     screenlock_bridge_->lock_handler()->SetAuthType(
-        account_id_,
-        proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD,
+        account_id_, proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
         base::string16());
   }
 
@@ -314,15 +306,19 @@ void EasyUnlockScreenlockStateHandler::ShowHardlockUI() {
     tooltip = l10n_util::GetStringFUTF16(
         IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_USER, device_name);
   } else if (hardlock_state_ == PAIRING_CHANGED) {
-    tooltip = l10n_util::GetStringUTF16(
-        IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_PAIRING_CHANGED);
+    tooltip = l10n_util::GetStringFUTF16(
+        IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_PAIRING_CHANGED,
+        device_name);
   } else if (hardlock_state_ == PAIRING_ADDED) {
     tooltip = l10n_util::GetStringFUTF16(
-        IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_PAIRING_ADDED, device_name,
-        device_name);
+        IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_HARDLOCK_PAIRING_ADDED, device_name);
   } else if (hardlock_state_ == LOGIN_FAILED) {
     tooltip = l10n_util::GetStringUTF16(
         IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_LOGIN_FAILURE);
+  } else if (hardlock_state_ == PASSWORD_REQUIRED_FOR_LOGIN) {
+    tooltip = l10n_util::GetStringFUTF16(
+        IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_PASSWORD_REQUIRED_FOR_LOGIN,
+        device_name);
   } else {
     LOG(ERROR) << "Unknown hardlock state " << hardlock_state_;
   }
@@ -377,26 +373,22 @@ void EasyUnlockScreenlockStateHandler::UpdateScreenlockAuthType() {
     return;
 
   // Do not override online signin.
-  const proximity_auth::ScreenlockBridge::LockHandler::AuthType
-      existing_auth_type =
-          screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
-  DCHECK_NE(proximity_auth::ScreenlockBridge::LockHandler::ONLINE_SIGN_IN,
+  const proximity_auth::mojom::AuthType existing_auth_type =
+      screenlock_bridge_->lock_handler()->GetAuthType(account_id_);
+  DCHECK_NE(proximity_auth::mojom::AuthType::ONLINE_SIGN_IN,
             existing_auth_type);
 
   if (state_ == ScreenlockState::AUTHENTICATED) {
-    if (existing_auth_type !=
-        proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK) {
+    if (existing_auth_type != proximity_auth::mojom::AuthType::USER_CLICK) {
       screenlock_bridge_->lock_handler()->SetAuthType(
-          account_id_,
-          proximity_auth::ScreenlockBridge::LockHandler::USER_CLICK,
+          account_id_, proximity_auth::mojom::AuthType::USER_CLICK,
           l10n_util::GetStringUTF16(
               IDS_EASY_UNLOCK_SCREENLOCK_USER_POD_AUTH_VALUE));
     }
   } else if (existing_auth_type !=
-             proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD) {
+             proximity_auth::mojom::AuthType::OFFLINE_PASSWORD) {
     screenlock_bridge_->lock_handler()->SetAuthType(
-        account_id_,
-        proximity_auth::ScreenlockBridge::LockHandler::OFFLINE_PASSWORD,
+        account_id_, proximity_auth::mojom::AuthType::OFFLINE_PASSWORD,
         base::string16());
   }
 }

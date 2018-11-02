@@ -11,13 +11,11 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/window_user_data.h"
 #include "ash/wm/window_dimmer.h"
-#include "ash/wm_window.h"
 #include "base/memory/ptr_util.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/compositor/layer.h"
 
 namespace ash {
-namespace test {
 
 class ScreenDimmerTest : public AshTestBase {
  public:
@@ -134,5 +132,4 @@ class ScreenDimmerShellDestructionTest : public AshTestBase {
 TEST_F(ScreenDimmerShellDestructionTest, DontCrashIfScreenDimmerOutlivesShell) {
 }
 
-}  // namespace test
 }  // namespace ash

@@ -25,6 +25,7 @@
 
 #include "core/layout/LayoutTableCell.h"
 
+#include "build/build_config.h"
 #include "core/layout/LayoutTestHelper.h"
 
 namespace blink {
@@ -59,7 +60,7 @@ TEST_F(LayoutTableCellDeathTest, CanSetColumnToMaxColumnIndex) {
 // See: https://bugs.webkit.org/show_bug.cgi?id=74089
 // TODO(dgrogan): These tests started flaking on Mac try bots around 2016-07-28.
 // https://crbug.com/632816
-#if !OS(ANDROID) && !OS(MACOSX)
+#if !defined(OS_ANDROID) && !defined(OS_MACOSX)
 
 TEST_F(LayoutTableCellDeathTest, CrashIfColumnOverflowOnSetting) {
   ASSERT_DEATH(cell_->SetAbsoluteColumnIndex(kMaxColumnIndex + 1), "");
@@ -73,11 +74,11 @@ TEST_F(LayoutTableCellDeathTest, CrashIfSettingUnsetColumnIndex) {
 
 class LayoutTableCellTest : public RenderingTest {
  protected:
-  bool HasStartBorderAdjoiningTable(const LayoutTableCell* cell) {
-    return cell->HasStartBorderAdjoiningTable();
+  bool IsInStartColumn(const LayoutTableCell* cell) {
+    return cell->IsInStartColumn();
   }
-  bool HasEndBorderAdjoiningTable(const LayoutTableCell* cell) {
-    return cell->HasEndBorderAdjoiningTable();
+  bool IsInEndColumn(const LayoutTableCell* cell) {
+    return cell->IsInEndColumn();
   }
   LayoutRect LocalVisualRect(const LayoutTableCell* cell) {
     return cell->LocalVisualRect();
@@ -90,12 +91,12 @@ class LayoutTableCellTest : public RenderingTest {
 
 TEST_F(LayoutTableCellTest, ResetColspanIfTooBig) {
   SetBodyInnerHTML("<table><td id='cell' colspan='14000'></td></table>");
-  ASSERT_EQ(GetCellByElementId("cell")->ColSpan(), 8190U);
+  ASSERT_EQ(GetCellByElementId("cell")->ColSpan(), 1000U);
 }
 
 TEST_F(LayoutTableCellTest, DoNotResetColspanJustBelowBoundary) {
-  SetBodyInnerHTML("<table><td id='cell' colspan='8190'></td></table>");
-  ASSERT_EQ(GetCellByElementId("cell")->ColSpan(), 8190U);
+  SetBodyInnerHTML("<table><td id='cell' colspan='1000'></td></table>");
+  ASSERT_EQ(GetCellByElementId("cell")->ColSpan(), 1000U);
 }
 
 TEST_F(LayoutTableCellTest, ResetRowspanIfTooBig) {
@@ -145,7 +146,7 @@ TEST_F(LayoutTableCellTest, RepaintContentInTableCell) {
   EXPECT_EQ(LayoutRect(-1, -1, 24, 24), rect);
 }
 
-TEST_F(LayoutTableCellTest, HasBorderAdjoiningTable) {
+TEST_F(LayoutTableCellTest, IsInStartAndEndColumn) {
   SetBodyInnerHTML(
       "<table id='table'>"
       "  <tr>"
@@ -173,27 +174,27 @@ TEST_F(LayoutTableCellTest, HasBorderAdjoiningTable) {
   const auto* cell31 = GetCellByElementId("cell31");
   const auto* cell32 = GetCellByElementId("cell32");
 
-  EXPECT_TRUE(HasStartBorderAdjoiningTable(cell11));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell11));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell12));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell12));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell13));
-  EXPECT_TRUE(HasEndBorderAdjoiningTable(cell13));
+  EXPECT_TRUE(IsInStartColumn(cell11));
+  EXPECT_FALSE(IsInEndColumn(cell11));
+  EXPECT_FALSE(IsInStartColumn(cell12));
+  EXPECT_FALSE(IsInEndColumn(cell12));
+  EXPECT_FALSE(IsInStartColumn(cell13));
+  EXPECT_TRUE(IsInEndColumn(cell13));
 
-  EXPECT_TRUE(HasStartBorderAdjoiningTable(cell21));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell21));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell22));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell22));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell23));
-  EXPECT_TRUE(HasEndBorderAdjoiningTable(cell23));
+  EXPECT_TRUE(IsInStartColumn(cell21));
+  EXPECT_FALSE(IsInEndColumn(cell21));
+  EXPECT_FALSE(IsInStartColumn(cell22));
+  EXPECT_FALSE(IsInEndColumn(cell22));
+  EXPECT_FALSE(IsInStartColumn(cell23));
+  EXPECT_TRUE(IsInEndColumn(cell23));
 
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell31));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell31));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell32));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell32));
+  EXPECT_FALSE(IsInStartColumn(cell31));
+  EXPECT_FALSE(IsInEndColumn(cell31));
+  EXPECT_FALSE(IsInStartColumn(cell32));
+  EXPECT_FALSE(IsInEndColumn(cell32));
 }
 
-TEST_F(LayoutTableCellTest, HasBorderAdjoiningTableRTL) {
+TEST_F(LayoutTableCellTest, IsInStartAndEndColumnRTL) {
   SetBodyInnerHTML(
       "<style>"
       "  table { direction: rtl }"
@@ -225,27 +226,27 @@ TEST_F(LayoutTableCellTest, HasBorderAdjoiningTableRTL) {
   const auto* cell31 = GetCellByElementId("cell31");
   const auto* cell32 = GetCellByElementId("cell32");
 
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell11));
-  EXPECT_TRUE(HasEndBorderAdjoiningTable(cell11));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell12));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell12));
-  EXPECT_TRUE(HasStartBorderAdjoiningTable(cell13));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell13));
+  EXPECT_TRUE(IsInStartColumn(cell11));
+  EXPECT_FALSE(IsInEndColumn(cell11));
+  EXPECT_FALSE(IsInStartColumn(cell12));
+  EXPECT_FALSE(IsInEndColumn(cell12));
+  EXPECT_FALSE(IsInStartColumn(cell13));
+  EXPECT_TRUE(IsInEndColumn(cell13));
 
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell21));
-  EXPECT_TRUE(HasEndBorderAdjoiningTable(cell21));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell22));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell22));
-  EXPECT_TRUE(HasStartBorderAdjoiningTable(cell23));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell23));
+  EXPECT_TRUE(IsInStartColumn(cell21));
+  EXPECT_FALSE(IsInEndColumn(cell21));
+  EXPECT_FALSE(IsInStartColumn(cell22));
+  EXPECT_FALSE(IsInEndColumn(cell22));
+  EXPECT_FALSE(IsInStartColumn(cell23));
+  EXPECT_TRUE(IsInEndColumn(cell23));
 
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell31));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell31));
-  EXPECT_FALSE(HasStartBorderAdjoiningTable(cell32));
-  EXPECT_FALSE(HasEndBorderAdjoiningTable(cell32));
+  EXPECT_FALSE(IsInStartColumn(cell31));
+  EXPECT_FALSE(IsInEndColumn(cell31));
+  EXPECT_FALSE(IsInStartColumn(cell32));
+  EXPECT_FALSE(IsInEndColumn(cell32));
 }
 
-TEST_F(LayoutTableCellTest, LocalVisualRectWithCollapsedBorders) {
+TEST_F(LayoutTableCellTest, BorderWidthsWithCollapsedBorders) {
   SetBodyInnerHTML(
       "<style>"
       "  table { border-collapse: collapse }"
@@ -273,19 +274,55 @@ TEST_F(LayoutTableCellTest, LocalVisualRectWithCollapsedBorders) {
   EXPECT_EQ(2, cell2->BorderTop());
   EXPECT_EQ(1, cell2->BorderBottom());
 
-  LayoutRect expected_visual_rect1 = cell1->BorderBoxRect();
-  // Expand top, left for outline, right and bottom for collapsed border.
-  expected_visual_rect1.ExpandEdges(LayoutUnit(3), LayoutUnit(8), LayoutUnit(5),
-                                    LayoutUnit(3));
-  EXPECT_EQ(expected_visual_rect1, LocalVisualRect(cell1));
+  EXPECT_EQ(0u, cell1->CollapsedInnerBorderStart());
+  EXPECT_EQ(7u, cell1->CollapsedInnerBorderEnd());
+  EXPECT_EQ(0u, cell1->CollapsedInnerBorderBefore());
+  EXPECT_EQ(5u, cell1->CollapsedInnerBorderAfter());
+  EXPECT_EQ(8u, cell2->CollapsedInnerBorderStart());
+  EXPECT_EQ(7u, cell2->CollapsedInnerBorderEnd());
+  EXPECT_EQ(2u, cell2->CollapsedInnerBorderBefore());
+  EXPECT_EQ(1u, cell2->CollapsedInnerBorderAfter());
 
-  LayoutRect expected_visual_rect2 = cell2->BorderBoxRect();
-  // Expand outer half border width at each side. For the bottom side, expand
-  // more because the left border is lengthened to cover the joint with the
-  // bottom border of the cell to the left.
-  expected_visual_rect2.ExpandEdges(LayoutUnit(1), LayoutUnit(8), LayoutUnit(5),
-                                    LayoutUnit(7));
-  EXPECT_EQ(expected_visual_rect2, LocalVisualRect(cell2));
+  EXPECT_EQ(0u, cell1->CollapsedOuterBorderStart());
+  EXPECT_EQ(8u, cell1->CollapsedOuterBorderEnd());
+  EXPECT_EQ(0u, cell1->CollapsedOuterBorderBefore());
+  EXPECT_EQ(5u, cell1->CollapsedOuterBorderAfter());
+  EXPECT_EQ(7u, cell2->CollapsedOuterBorderStart());
+  EXPECT_EQ(8u, cell2->CollapsedOuterBorderEnd());
+  EXPECT_EQ(1u, cell2->CollapsedOuterBorderBefore());
+  EXPECT_EQ(2u, cell2->CollapsedOuterBorderAfter());
+
+  ToElement(cell1->Table()->GetNode())
+      ->setAttribute(HTMLNames::styleAttr,
+                     "writing-mode: vertical-rl; direction: rtl");
+  GetDocument().View()->UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(5, cell1->BorderLeft());
+  EXPECT_EQ(0, cell1->BorderRight());
+  EXPECT_EQ(8, cell1->BorderTop());
+  EXPECT_EQ(0, cell1->BorderBottom());
+  EXPECT_EQ(2, cell2->BorderLeft());
+  EXPECT_EQ(1, cell2->BorderRight());
+  EXPECT_EQ(8, cell2->BorderTop());
+  EXPECT_EQ(7, cell2->BorderBottom());
+
+  EXPECT_EQ(0u, cell1->CollapsedInnerBorderStart());
+  EXPECT_EQ(8u, cell1->CollapsedInnerBorderEnd());
+  EXPECT_EQ(0u, cell1->CollapsedInnerBorderBefore());
+  EXPECT_EQ(5u, cell1->CollapsedInnerBorderAfter());
+  EXPECT_EQ(7u, cell2->CollapsedInnerBorderStart());
+  EXPECT_EQ(8u, cell2->CollapsedInnerBorderEnd());
+  EXPECT_EQ(1u, cell2->CollapsedInnerBorderBefore());
+  EXPECT_EQ(2u, cell2->CollapsedInnerBorderAfter());
+
+  EXPECT_EQ(0u, cell1->CollapsedOuterBorderStart());
+  EXPECT_EQ(7u, cell1->CollapsedOuterBorderEnd());
+  EXPECT_EQ(0u, cell1->CollapsedOuterBorderBefore());
+  EXPECT_EQ(5u, cell1->CollapsedOuterBorderAfter());
+  EXPECT_EQ(8u, cell2->CollapsedOuterBorderStart());
+  EXPECT_EQ(7u, cell2->CollapsedOuterBorderEnd());
+  EXPECT_EQ(2u, cell2->CollapsedOuterBorderBefore());
+  EXPECT_EQ(1u, cell2->CollapsedOuterBorderAfter());
 }
 
 }  // namespace blink

@@ -9,6 +9,10 @@
 #include "base/logging.h"
 #include "components/metrics/metrics_provider.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 namespace ios {
 
 namespace {
@@ -27,7 +31,10 @@ ChromeBrowserProvider* GetChromeBrowserProvider() {
 
 ChromeBrowserProvider::ChromeBrowserProvider() {}
 
-ChromeBrowserProvider::~ChromeBrowserProvider() {}
+ChromeBrowserProvider::~ChromeBrowserProvider() {
+  for (auto& observer : observer_list_)
+    observer.OnChromeBrowserProviderWillBeDestroyed();
+}
 
 void ChromeBrowserProvider::AppendSwitchesFromExperimentalSettings(
     NSUserDefaults* experimental_settings,
@@ -101,17 +108,28 @@ SpotlightProvider* ChromeBrowserProvider::GetSpotlightProvider() const {
   return nullptr;
 }
 
+void ChromeBrowserProvider::CheckForFirstPartyApps() const {}
+
 BrandedImageProvider* ChromeBrowserProvider::GetBrandedImageProvider() const {
   return nullptr;
-}
-
-id<NativeAppWhitelistManager>
-ChromeBrowserProvider::GetNativeAppWhitelistManager() const {
-  return nil;
 }
 
 void ChromeBrowserProvider::HideModalViewStack() const {}
 
 void ChromeBrowserProvider::LogIfModalViewsArePresented() const {}
+
+void ChromeBrowserProvider::AddObserver(Observer* observer) {
+  observer_list_.AddObserver(observer);
+}
+
+void ChromeBrowserProvider::RemoveObserver(Observer* observer) {
+  observer_list_.RemoveObserver(observer);
+}
+
+void ChromeBrowserProvider::FireChromeIdentityServiceDidChange(
+    ChromeIdentityService* new_service) {
+  for (auto& observer : observer_list_)
+    observer.OnChromeIdentityServiceDidChange(new_service);
+}
 
 }  // namespace ios

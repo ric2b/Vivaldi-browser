@@ -35,18 +35,15 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
   ~ArcFileSystemOperationRunnerTest() override = default;
 
   void SetUp() override {
-    arc_service_manager_ = base::MakeUnique<ArcServiceManager>(nullptr);
+    arc_service_manager_ = base::MakeUnique<ArcServiceManager>();
+    runner_ = ArcFileSystemOperationRunner::CreateForTesting(
+        arc_service_manager_->arc_bridge_service());
     arc_service_manager_->arc_bridge_service()->file_system()->SetInstance(
         &file_system_instance_);
-    arc_service_manager_->AddService(
-        ArcFileSystemOperationRunner::CreateForTesting(
-            arc_service_manager_->arc_bridge_service()));
 
     // Run the message loop until FileSystemInstance::Init() is called.
     base::RunLoop().RunUntilIdle();
     ASSERT_TRUE(file_system_instance_.InitCalled());
-
-    runner_ = arc_service_manager_->GetService<ArcFileSystemOperationRunner>();
   }
 
  protected:
@@ -79,6 +76,21 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
     runner_->GetFileSize(
         GURL(kUrl),
         base::Bind([](int* counter, int64_t size) { ++*counter; }, counter));
+    runner_->GetMimeType(
+        GURL(kUrl),
+        base::Bind(
+            [](int* counter, const base::Optional<std::string>& mime_type) {
+              ++*counter;
+            },
+            counter));
+    runner_->GetRecentDocuments(
+        kAuthority, kDocumentId,
+        base::Bind(
+            [](int* counter,
+               base::Optional<std::vector<mojom::DocumentPtr>> documents) {
+              ++*counter;
+            },
+            counter));
     runner_->OpenFileToRead(
         GURL(kUrl),
         base::Bind([](int* counter, mojo::ScopedHandle handle) { ++*counter; },
@@ -93,8 +105,7 @@ class ArcFileSystemOperationRunnerTest : public testing::Test {
   content::TestBrowserThreadBundle thread_bundle_;
   FakeFileSystemInstance file_system_instance_;
   std::unique_ptr<ArcServiceManager> arc_service_manager_;
-  // Owned by |arc_service_manager_|.
-  ArcFileSystemOperationRunner* runner_;
+  std::unique_ptr<ArcFileSystemOperationRunner> runner_;
 
  private:
   DISALLOW_COPY_AND_ASSIGN(ArcFileSystemOperationRunnerTest);
@@ -105,7 +116,7 @@ TEST_F(ArcFileSystemOperationRunnerTest, RunImmediately) {
   CallSetShouldDefer(false);
   CallAllFunctions(&counter);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(6, counter);
+  EXPECT_EQ(8, counter);
 }
 
 TEST_F(ArcFileSystemOperationRunnerTest, DeferAndRun) {
@@ -117,7 +128,7 @@ TEST_F(ArcFileSystemOperationRunnerTest, DeferAndRun) {
 
   CallSetShouldDefer(false);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(6, counter);
+  EXPECT_EQ(8, counter);
 }
 
 TEST_F(ArcFileSystemOperationRunnerTest, DeferAndDiscard) {
@@ -140,7 +151,7 @@ TEST_F(ArcFileSystemOperationRunnerTest, FileInstanceUnavailable) {
   CallSetShouldDefer(false);
   CallAllFunctions(&counter);
   base::RunLoop().RunUntilIdle();
-  EXPECT_EQ(6, counter);
+  EXPECT_EQ(8, counter);
 }
 
 }  // namespace arc

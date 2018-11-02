@@ -48,8 +48,8 @@ class CORE_EXPORT WorkerReportingProxy {
  public:
   virtual ~WorkerReportingProxy() {}
 
-  virtual void CountFeature(UseCounter::Feature) {}
-  virtual void CountDeprecation(UseCounter::Feature) {}
+  virtual void CountFeature(WebFeature) {}
+  virtual void CountDeprecation(WebFeature) {}
   virtual void ReportException(const String& error_message,
                                std::unique_ptr<SourceLocation>,
                                int exception_id) {}
@@ -57,28 +57,34 @@ class CORE_EXPORT WorkerReportingProxy {
                                     MessageLevel,
                                     const String& message,
                                     SourceLocation*) {}
-  virtual void PostMessageToPageInspector(const String&) {}
+  virtual void PostMessageToPageInspector(int session_id, const String&) {}
 
-  // Invoked when the new WorkerGlobalScope is created. This is called after
-  // didLoadWorkerScript().
+  // Invoked when the new WorkerGlobalScope is created on
+  // WorkerThread::InitializeOnWorkerThread.
   virtual void DidCreateWorkerGlobalScope(WorkerOrWorkletGlobalScope*) {}
 
-  // Invoked when the WorkerGlobalScope is initialized. This is called after
-  // didCreateWorkerGlobalScope().
+  // Invoked when the WorkerGlobalScope is initialized on
+  // WorkerThread::InitializeOnWorkerThread.
   virtual void DidInitializeWorkerContext() {}
 
-  // Invoked when the worker script is about to be evaluated. This is called
-  // after didInitializeWorkerContext().
+  // Invoked when the worker's main script is loaded on
+  // WorkerThread::InitializeOnWorkerThread. Only invoked when the script was
+  // loaded on the worker thread, i.e., via InstalledScriptsManager rather than
+  // via ResourceLoader.
+  virtual void DidLoadInstalledScript() {}
+
+  // Invoked when the worker script is about to be evaluated on
+  // WorkerThread::InitializeOnWorkerThread.
   virtual void WillEvaluateWorkerScript(size_t script_size,
                                         size_t cached_metadata_size) {}
 
-  // Invoked when an imported script is about to be evaluated. This is called
-  // after willEvaluateWorkerScript().
+  // Invoked when an imported script is about to be evaluated.
   virtual void WillEvaluateImportedScript(size_t script_size,
                                           size_t cached_metadata_size) {}
 
-  // Invoked when the worker script is evaluated. |success| is true if the
-  // evaluation completed with no uncaught exception.
+  // Invoked when the worker script is evaluated on
+  // WorkerThread::InitializeOnWorkerThread. |success| is true if the evaluation
+  // completed with no uncaught exception.
   virtual void DidEvaluateWorkerScript(bool success) {}
 
   // Invoked when close() is invoked on the worker context.

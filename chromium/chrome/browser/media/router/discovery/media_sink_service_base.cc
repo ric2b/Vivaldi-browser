@@ -37,6 +37,8 @@ void MediaSinkServiceBase::OnFetchCompleted() {
   sink_discovery_callback_.Run(std::vector<MediaSinkInternal>(
       current_sinks_.begin(), current_sinks_.end()));
   mrp_sinks_ = current_sinks_;
+
+  RecordDeviceCounts();
 }
 
 void MediaSinkServiceBase::StartTimer() {
@@ -49,6 +51,16 @@ void MediaSinkServiceBase::StartTimer() {
   finish_timer_->Start(FROM_HERE, finish_delay,
                        base::Bind(&MediaSinkServiceBase::OnFetchCompleted,
                                   base::Unretained(this)));
+}
+
+void MediaSinkServiceBase::StopTimer() {
+  finish_timer_.reset();
+}
+
+void MediaSinkServiceBase::RestartTimer() {
+  if (!finish_timer_ || finish_timer_->IsRunning())
+    return;
+  StartTimer();
 }
 
 }  // namespace media_router

@@ -29,7 +29,6 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "cc/base/switches.h"
-#include "components/variations/variations_associated_data.h"
 #include "content/browser/bad_message.h"
 #include "content/browser/child_process_security_policy_impl.h"
 #include "content/browser/dom_storage/session_storage_namespace_impl.h"
@@ -88,9 +87,9 @@
 #include "ui/display/display_switches.h"
 #include "ui/gfx/animation/animation.h"
 #include "ui/gfx/color_space.h"
+#include "ui/gfx/color_space_switches.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/native_widget_types.h"
-#include "ui/gfx/switches.h"
 #include "ui/native_theme/native_theme_features.h"
 #include "url/url_constants.h"
 
@@ -334,15 +333,18 @@ bool RenderViewHostImpl::CreateRenderView(
     force_srgb_image_decode_color_space = true;
   // When color correct rendering is enabled, the image_decode_color_space
   // parameter should not be used (and all users of it should be using sRGB).
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          switches::kEnableColorCorrectRendering)) {
+  if (base::FeatureList::IsEnabled(features::kColorCorrectRendering))
     force_srgb_image_decode_color_space = true;
-  }
   if (force_srgb_image_decode_color_space) {
     gfx::ColorSpace::CreateSRGB().GetICCProfile(
         &params->image_decode_color_space);
   } else {
-    params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
+    if (display::Display::HasForceColorProfile()) {
+      display::Display::GetForcedColorProfile().GetICCProfile(
+          &params->image_decode_color_space);
+    } else {
+      params->image_decode_color_space = gfx::ICCProfile::FromBestMonitor();
+    }
   }
 
   GetWidget()->GetResizeParams(&params->initial_size);
@@ -375,23 +377,6 @@ void RenderViewHostImpl::SyncRendererPrefs() {
   GetPlatformSpecificPrefs(&renderer_preferences);
   Send(new ViewMsg_SetRendererPrefs(GetRoutingID(), renderer_preferences));
 }
-
-namespace {
-
-void SetFloatParameterFromMap(
-    const std::map<std::string, std::string>& settings,
-    const std::string& setting_name,
-    float* value) {
-  const auto& find_it = settings.find(setting_name);
-  if (find_it == settings.end())
-    return;
-  double parsed_value;
-  if (!base::StringToDouble(find_it->second, &parsed_value))
-    return;
-  *value = parsed_value;
-}
-
-}  // namespace
 
 WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   TRACE_EVENT0("browser", "RenderViewHostImpl::GetWebkitPrefs");
@@ -445,9 +430,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       atoi(command_line.GetSwitchValueASCII(
       switches::kAcceleratedCanvas2dMSAASampleCount).c_str());
 
-  prefs.inert_visual_viewport =
-      command_line.HasSwitch(switches::kInertVisualViewport);
-
   prefs.use_solid_color_scrollbars = false;
 
   prefs.history_entry_requires_user_gesture =
@@ -468,6 +450,11 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
   } else if (autoplay_policy ==
              switches::autoplay::kUserGestureRequiredForCrossOriginPolicy) {
     prefs.autoplay_policy = AutoplayPolicy::kUserGestureRequiredForCrossOrigin;
+  } else if (autoplay_policy ==
+             switches::autoplay::kDocumentUserActivationRequiredPolicy) {
+    prefs.autoplay_policy = AutoplayPolicy::kDocumentUserActivationRequired;
+  } else {
+    NOTREACHED();
   }
 
   const std::string touch_enabled_switch =
@@ -528,11 +515,7 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
       command_line.HasSwitch(switches::kMainFrameResizesAreOrientationChanges);
 
   prefs.color_correct_rendering_enabled =
-      command_line.HasSwitch(switches::kEnableColorCorrectRendering);
-
-  prefs.color_correct_rendering_default_mode_enabled =
-      command_line.HasSwitch(
-          switches::kEnableColorCorrectRenderingDefaultMode);
+      base::FeatureList::IsEnabled(features::kColorCorrectRendering);
 
   prefs.spatial_navigation_enabled = command_line.HasSwitch(
       switches::kEnableSpatialNavigation);
@@ -570,27 +553,6 @@ WebPreferences RenderViewHostImpl::ComputeWebkitPrefs() {
 
   prefs.background_video_track_optimization_enabled =
       base::FeatureList::IsEnabled(media::kBackgroundVideoTrackOptimization);
-
-  // TODO(servolk, asvitkine): Query the value directly when it is available in
-  // the renderer process. See https://crbug.com/681160.
-  prefs.enable_instant_source_buffer_gc =
-      variations::GetVariationParamByFeatureAsBool(
-          media::kMemoryPressureBasedSourceBufferGC,
-          "enable_instant_source_buffer_gc", false);
-
-  std::map<std::string, std::string> expensive_background_throttling_prefs;
-  variations::GetVariationParamsByFeature(
-      features::kExpensiveBackgroundTimerThrottling,
-      &expensive_background_throttling_prefs);
-  SetFloatParameterFromMap(expensive_background_throttling_prefs, "cpu_budget",
-                           &prefs.expensive_background_throttling_cpu_budget);
-  SetFloatParameterFromMap(
-      expensive_background_throttling_prefs, "initial_budget",
-      &prefs.expensive_background_throttling_initial_budget);
-  SetFloatParameterFromMap(expensive_background_throttling_prefs, "max_budget",
-                           &prefs.expensive_background_throttling_max_budget);
-  SetFloatParameterFromMap(expensive_background_throttling_prefs, "max_delay",
-                           &prefs.expensive_background_throttling_max_delay);
 
   GetContentClient()->browser()->OverrideWebkitPrefs(this, &prefs);
   return prefs;
@@ -678,13 +640,13 @@ void RenderViewHostImpl::SetWebUIProperty(const std::string& name,
 void RenderViewHostImpl::RenderWidgetGotFocus() {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
-    view->GotFocus();
+    view->GotFocus(GetWidget());
 }
 
 void RenderViewHostImpl::RenderWidgetLostFocus() {
   RenderViewHostDelegateView* view = delegate_->GetDelegateView();
   if (view)
-    view->LostFocus();
+    view->LostFocus(GetWidget());
 }
 
 void RenderViewHostImpl::SetInitialFocus(bool reverse) {
@@ -790,12 +752,16 @@ void RenderViewHostImpl::ShutdownAndDestroy() {
 }
 
 void RenderViewHostImpl::CreateNewWidget(int32_t route_id,
+                                         mojom::WidgetPtr widget,
                                          blink::WebPopupType popup_type) {
-  delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, popup_type);
+  delegate_->CreateNewWidget(GetProcess()->GetID(), route_id, std::move(widget),
+                             popup_type);
 }
 
-void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id) {
-  delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id);
+void RenderViewHostImpl::CreateNewFullscreenWidget(int32_t route_id,
+                                                   mojom::WidgetPtr widget) {
+  delegate_->CreateNewFullscreenWidget(GetProcess()->GetID(), route_id,
+                                       std::move(widget));
 }
 
 void RenderViewHostImpl::OnShowWidget(int route_id,

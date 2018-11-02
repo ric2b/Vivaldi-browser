@@ -11,7 +11,8 @@
 #include "cc/output/output_surface_client.h"
 #include "cc/output/output_surface_frame.h"
 #include "cc/resources/resource_provider.h"
-#include "components/viz/display_compositor/compositor_overlay_candidate_validator.h"
+#include "components/viz/common/resources/resource_format_utils.h"
+#include "components/viz/service/display_embedder/compositor_overlay_candidate_validator.h"
 #include "content/browser/compositor/reflector_impl.h"
 #include "content/browser/compositor/reflector_texture.h"
 #include "content/browser/renderer_host/render_widget_host_impl.h"
@@ -26,7 +27,7 @@ using gpu::gles2::GLES2Interface;
 
 namespace content {
 
-static cc::ResourceFormat kFboTextureFormat = cc::RGBA_8888;
+static viz::ResourceFormat kFboTextureFormat = viz::RGBA_8888;
 
 OffscreenBrowserCompositorOutputSurface::
     OffscreenBrowserCompositorOutputSurface(
@@ -172,6 +173,11 @@ bool OffscreenBrowserCompositorOutputSurface::IsDisplayedAsOverlayPlane()
 
 unsigned OffscreenBrowserCompositorOutputSurface::GetOverlayTextureId() const {
   return 0;
+}
+
+gfx::BufferFormat
+OffscreenBrowserCompositorOutputSurface::GetOverlayBufferFormat() const {
+  return gfx::BufferFormat::RGBX_8888;
 }
 
 bool OffscreenBrowserCompositorOutputSurface::SurfaceIsSuspendForRecycle()

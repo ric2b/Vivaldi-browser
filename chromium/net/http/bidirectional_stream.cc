@@ -120,12 +120,12 @@ BidirectionalStream::BidirectionalStream(
   http_request_info.url = request_info_->url;
   http_request_info.method = request_info_->method;
   http_request_info.extra_headers = request_info_->extra_headers;
-  stream_request_.reset(
+  stream_request_ =
       session->http_stream_factory()->RequestBidirectionalStreamImpl(
           http_request_info, request_info_->priority, server_ssl_config,
           server_ssl_config, this,
           /* enable_ip_based_pooling = */ true,
-          /* enable_alternative_services = */ true, net_log_));
+          /* enable_alternative_services = */ true, net_log_);
   // Check that this call cannot fail to set a non-NULL |stream_request_|.
   DCHECK(stream_request_);
   // Check that HttpStreamFactory does not invoke OnBidirectionalStreamImplReady
@@ -165,21 +165,6 @@ int BidirectionalStream::ReadData(IOBuffer* buf, int buf_len) {
                       NetLog::IntCallback("rv", rv));
   }
   return rv;
-}
-
-void BidirectionalStream::SendData(const scoped_refptr<IOBuffer>& data,
-                                   int length,
-                                   bool end_stream) {
-  DCHECK(stream_impl_);
-  DCHECK(write_buffer_list_.empty());
-  DCHECK(write_buffer_len_list_.empty());
-
-  if (net_log_.IsCapturing()) {
-    net_log_.AddEvent(NetLogEventType::BIDIRECTIONAL_STREAM_SEND_DATA);
-  }
-  stream_impl_->SendData(data, length, end_stream);
-  write_buffer_list_.push_back(data);
-  write_buffer_len_list_.push_back(length);
 }
 
 void BidirectionalStream::SendvData(
@@ -226,6 +211,12 @@ int64_t BidirectionalStream::GetTotalSentBytes() const {
 void BidirectionalStream::GetLoadTimingInfo(
     LoadTimingInfo* load_timing_info) const {
   *load_timing_info = load_timing_info_;
+}
+
+void BidirectionalStream::PopulateNetErrorDetails(NetErrorDetails* details) {
+  DCHECK(details);
+  if (stream_impl_)
+    stream_impl_->PopulateNetErrorDetails(details);
 }
 
 void BidirectionalStream::OnStreamReady(bool request_headers_sent) {
@@ -328,18 +319,18 @@ void BidirectionalStream::OnFailed(int status) {
 
 void BidirectionalStream::OnStreamReady(const SSLConfig& used_ssl_config,
                                         const ProxyInfo& used_proxy_info,
-                                        HttpStream* stream) {
+                                        std::unique_ptr<HttpStream> stream) {
   NOTREACHED();
 }
 
 void BidirectionalStream::OnBidirectionalStreamImplReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    BidirectionalStreamImpl* stream) {
+    std::unique_ptr<BidirectionalStreamImpl> stream) {
   DCHECK(!stream_impl_);
 
   stream_request_.reset();
-  stream_impl_.reset(stream);
+  stream_impl_ = std::move(stream);
   stream_impl_->Start(request_info_.get(), net_log_,
                       send_request_headers_automatically_, this,
                       std::move(timer_));
@@ -348,7 +339,7 @@ void BidirectionalStream::OnBidirectionalStreamImplReady(
 void BidirectionalStream::OnWebSocketHandshakeStreamReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    WebSocketHandshakeStreamBase* stream) {
+    std::unique_ptr<WebSocketHandshakeStreamBase> stream) {
   NOTREACHED();
 }
 
@@ -425,10 +416,10 @@ void BidirectionalStream::UpdateHistograms() {
     UMA_HISTOGRAM_TIMES(
         "Net.BidirectionalStream.TimeToSendEnd.HTTP2",
         load_timing_info_.send_end - load_timing_info_.request_start);
-    UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.ReceivedBytes.HTTP2",
-                         stream_impl_->GetTotalReceivedBytes());
-    UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.SentBytes.HTTP2",
-                         stream_impl_->GetTotalSentBytes());
+    UMA_HISTOGRAM_COUNTS_1M("Net.BidirectionalStream.ReceivedBytes.HTTP2",
+                            stream_impl_->GetTotalReceivedBytes());
+    UMA_HISTOGRAM_COUNTS_1M("Net.BidirectionalStream.SentBytes.HTTP2",
+                            stream_impl_->GetTotalSentBytes());
   } else if (GetProtocol() == kProtoQUIC) {
     UMA_HISTOGRAM_TIMES("Net.BidirectionalStream.TimeToReadStart.QUIC",
                         load_timing_info_.receive_headers_end -
@@ -441,10 +432,10 @@ void BidirectionalStream::UpdateHistograms() {
     UMA_HISTOGRAM_TIMES(
         "Net.BidirectionalStream.TimeToSendEnd.QUIC",
         load_timing_info_.send_end - load_timing_info_.request_start);
-    UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.ReceivedBytes.QUIC",
-                         stream_impl_->GetTotalReceivedBytes());
-    UMA_HISTOGRAM_COUNTS("Net.BidirectionalStream.SentBytes.QUIC",
-                         stream_impl_->GetTotalSentBytes());
+    UMA_HISTOGRAM_COUNTS_1M("Net.BidirectionalStream.ReceivedBytes.QUIC",
+                            stream_impl_->GetTotalReceivedBytes());
+    UMA_HISTOGRAM_COUNTS_1M("Net.BidirectionalStream.SentBytes.QUIC",
+                            stream_impl_->GetTotalSentBytes());
   }
 }
 

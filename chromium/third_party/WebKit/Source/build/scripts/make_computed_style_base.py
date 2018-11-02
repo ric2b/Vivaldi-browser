@@ -4,7 +4,6 @@
 # found in the LICENSE file.
 
 import math
-import sys
 
 import json5_generator
 import template_expander
@@ -12,9 +11,8 @@ import make_style_builder
 
 from name_utilities import (
     enum_for_css_keyword, enum_type_name, enum_value_name, class_member_name, method_name,
-    class_name, join_name
+    class_name, join_names
 )
-from collections import defaultdict, OrderedDict
 from itertools import chain
 
 # Heuristic ordering of types from largest to smallest, used to sort fields by their alignment sizes.
@@ -24,12 +22,24 @@ from itertools import chain
 # https://codereview.chromium.org/2841413002
 # TODO(shend): Put alignment sizes into code form, rather than linking to a CL which may disappear.
 ALIGNMENT_ORDER = [
-    'double',
-    'AtomicString', 'RefPtr', 'Persistent', 'Font', 'FillLayer', 'NinePieceImage',  # Aligns like a pointer (can be 32 or 64 bits)
-    'LengthBox', 'LengthSize', 'Length', 'TextSizeAdjust', 'TabSize', 'float',
-    'StyleColor', 'Color', 'LayoutUnit', 'unsigned', 'int',
-    'short',
-    'uint8_t', 'char',
+    # Aligns like double
+    'ScaleTransformOperation', 'RotateTransformOperation', 'TranslateTransformOperation', 'double',
+    # Aligns like a pointer (can be 32 or 64 bits)
+    'NamedGridLinesMap', 'OrderedNamedGridLines', 'NamedGridAreaMap', 'TransformOperations',
+    'Vector<CSSPropertyID>', 'Vector<GridTrackSize>', 'GridPosition', 'AtomicString',
+    'RefPtr', 'Persistent', 'std::unique_ptr',
+    'Vector<String>', 'Font', 'FillLayer', 'NinePieceImage',
+    # Aligns like float
+    'StyleOffsetRotation', 'TransformOrigin', 'ScrollPadding', 'ScrollSnapMargin', 'LengthBox',
+    'LengthSize', 'FloatSize', 'LengthPoint', 'Length', 'TextSizeAdjust', 'TabSize', 'float',
+    # Aligns like int
+    'ScrollSnapType', 'ScrollSnapAlign', 'BorderValue', 'StyleColor', 'Color', 'LayoutUnit',
+    'LineClampValue', 'OutlineValue', 'unsigned', 'size_t', 'int',
+    # Aligns like short
+    'unsigned short', 'short',
+    # Aligns like char
+    'StyleSelfAlignmentData', 'StyleContentAlignmentData', 'uint8_t', 'char',
+    # Aligns like bool
     'bool'
 ]
 
@@ -59,19 +69,50 @@ class Group(object):
         name: The name of the group as a string.
         subgroups: List of Group instances that are stored as subgroups under this group.
         fields: List of Field instances stored directly under this group.
+        parent: The parent group, or None if this is the root group.
     """
     def __init__(self, name, subgroups, fields):
         self.name = name
         self.subgroups = subgroups
         self.fields = fields
-        self.type_name = class_name(join_name('style', name, 'data'))
-        self.member_name = class_member_name(join_name(name, 'data'))
+        self.parent = None
+
+        self.type_name = class_name(['style', name, 'data'])
+        self.member_name = class_member_name([name, 'data'])
         self.num_32_bit_words_for_bit_fields = _num_32_bit_words_for_bit_fields(
             field for field in fields if field.is_bit_field
         )
 
         # Recursively get all the fields in the subgroups as well
         self.all_fields = _flatten_list(subgroup.all_fields for subgroup in subgroups) + fields
+
+        # Ensure that all fields/subgroups on this group link to it
+        for field in fields:
+            field.group = self
+
+        for subgroup in subgroups:
+            subgroup.parent = self
+
+    def path_without_root(self):
+        """Return list of ancestor groups, excluding the root group.
+
+        The first item is the current group, second item is the parent, third is the grandparent
+        and so on.
+        """
+        group_path = []
+        current_group = self
+        while current_group.name:
+            group_path.insert(0, current_group)
+            current_group = current_group.parent
+        return group_path
+
+
+class Enum(object):
+    """Represents a generated enum in ComputedStyleBaseConstants."""
+    def __init__(self, type_name, keywords, is_set):
+        self.type_name = type_name
+        self.values = [enum_value_name(keyword) for keyword in keywords]
+        self.is_set = is_set
 
 
 class DiffGroup(object):
@@ -82,9 +123,10 @@ class DiffGroup(object):
         subgroups: List of DiffGroup instances that are stored as subgroups under this group.
         expressions: List of expression that are on this group that need to be diffed.
     """
-    def __init__(self, group_name):
-        self.group_name = group_name
+    def __init__(self, group):
+        self.group = group
         self.subgroups = []
+        self.fields = []
         self.expressions = []
         self.predicates = []
 
@@ -114,14 +156,13 @@ class Field(object):
         wrapper_pointer_name: Name of the pointer type that wraps this field (e.g. RefPtr).
         field_template: Determines the interface generated for the field. Can be one of:
            keyword, flag, or monotonic_flag.
-        field_group: The name of the group that this field is inside.
         size: Number of bits needed for storage.
         default_value: Default value for this field when it is first initialized.
     """
 
     def __init__(self, field_role, name_for_methods, property_name, type_name, wrapper_pointer_name,
-                 field_template, field_group, size, default_value, has_custom_compare_and_copy,
-                 getter_method_name, setter_method_name, initial_method_name, **kwargs):
+                 field_template, size, default_value, custom_copy, custom_compare, mutable,
+                 getter_method_name, setter_method_name, initial_method_name, default_generated_functions, **kwargs):
         """Creates a new field."""
         self.name = class_member_name(name_for_methods)
         self.property_name = property_name
@@ -129,11 +170,12 @@ class Field(object):
         self.wrapper_pointer_name = wrapper_pointer_name
         self.alignment_type = self.wrapper_pointer_name or self.type_name
         self.field_template = field_template
-        self.group_name = field_group
-        self.group_member_name = class_member_name(join_name(field_group, 'data')) if field_group else None
         self.size = size
         self.default_value = default_value
-        self.has_custom_compare_and_copy = has_custom_compare_and_copy
+        self.custom_copy = custom_copy
+        self.custom_compare = custom_compare
+        self.mutable = mutable
+        self.group = None
 
         # Field role: one of these must be true
         self.is_property = field_role == 'property'
@@ -146,22 +188,18 @@ class Field(object):
             self.is_independent = kwargs.pop('independent')
             assert self.is_inherited or not self.is_independent, 'Only inherited fields can be independent'
 
-            self.is_inherited_method_name = method_name(join_name(name_for_methods, 'is inherited'))
+            self.is_inherited_method_name = method_name([name_for_methods, 'is inherited'])
 
         # Method names
         # TODO(nainar): Method name generation is inconsistent. Fix.
         self.getter_method_name = getter_method_name
         self.setter_method_name = setter_method_name
-        self.internal_getter_method_name = method_name(join_name(self.name, 'Internal'))
-        self.internal_mutable_method_name = method_name(join_name('Mutable', name_for_methods, 'Internal'))
-        self.internal_setter_method_name = method_name(join_name(setter_method_name, 'Internal'))
+        self.internal_getter_method_name = method_name([self.name, 'internal'])
+        self.internal_mutable_method_name = method_name(['mutable', name_for_methods, 'internal'])
+        self.internal_setter_method_name = method_name([setter_method_name, 'internal'])
         self.initial_method_name = initial_method_name
-        self.resetter_method_name = method_name(join_name('Reset', name_for_methods))
-        if self.group_name:
-            self.getter_expression = self.group_member_name + '->' + class_member_name(self.name)
-        else:
-            self.getter_expression = class_member_name(self.name)
-
+        self.resetter_method_name = method_name(['reset', name_for_methods])
+        self.default_generated_functions = default_generated_functions
         # If the size of the field is not None, it means it is a bit field
         self.is_bit_field = self.size is not None
 
@@ -174,25 +212,58 @@ def _get_include_paths(properties):
     """
     include_paths = set()
     for property_ in properties:
-        if property_['field_type_path'] is not None:
-            include_paths.add(property_['field_type_path'] + '.h')
+        include_paths.update(property_['include_paths'])
     return list(sorted(include_paths))
 
 
-def _group_fields(fields):
-    """Groups a list of fields by their group_name and returns the root group."""
-    groups = defaultdict(list)
-    for field in fields:
-        groups[field.group_name].append(field)
+def _create_groups(properties):
+    """Create a tree of groups from a list of properties.
 
-    no_group = groups.pop(None)
-    subgroups = [Group(group_name, [], _reorder_fields(fields)) for group_name, fields in groups.items()]
-    return Group('', subgroups=subgroups, fields=_reorder_fields(no_group))
+    Returns:
+        Group: The root group of the tree. The name of the group is set to None.
+    """
+    # We first convert properties into a dictionary structure. Each dictionary
+    # represents a group. The None key corresponds to the fields directly stored
+    # on that group. The other keys map from group name to another dictionary.
+    # For example:
+    # {
+    #   None: [field1, field2, ...]
+    #   'groupA': { None: [field3] },
+    #   'groupB': {
+    #      None: [],
+    #      'groupC': { None: [field4] },
+    #   },
+    # }
+    #
+    # We then recursively convert this dictionary into a tree of Groups.
+    # TODO(shend): Skip the first step by changing Group attributes into methods.
+    def _dict_to_group(name, group_dict):
+        fields_in_current_group = group_dict.pop(None)
+        subgroups = [_dict_to_group(subgroup_name, subgroup_dict) for subgroup_name, subgroup_dict in group_dict.items()]
+        return Group(name, subgroups, _reorder_fields(fields_in_current_group))
+
+    root_group_dict = {None: []}
+    for property_ in properties:
+        current_group_dict = root_group_dict
+        if property_['field_group']:
+            for group_name in property_['field_group'].split('->'):
+                current_group_dict[group_name] = current_group_dict.get(group_name, {None: []})
+                current_group_dict = current_group_dict[group_name]
+        current_group_dict[None].extend(_create_fields(property_))
+
+    return _dict_to_group(None, root_group_dict)
 
 
 def _create_diff_groups_map(diff_function_inputs, root_group):
     diff_functions_map = {}
+
     for entry in diff_function_inputs:
+        # error handling
+        field_names = entry['fields_to_diff'] + _list_field_dependencies(entry['methods_to_diff'] + entry['predicates_to_test'])
+        for name in field_names:
+            assert name in [field.property_name for field in root_group.all_fields], \
+                ("The field '" + name + "' isn't a defined field on ComputedStyle. "
+                 "Please check that there's an entry for '" + name + "' in CSSProperties.json5 or ComputedStyleExtraFields.json5")
         diff_functions_map[entry['name']] = _create_diff_groups(entry['fields_to_diff'],
                                                                 entry['methods_to_diff'], entry['predicates_to_test'], root_group)
     return diff_functions_map
@@ -206,46 +277,52 @@ def _list_field_dependencies(entries_with_field_dependencies):
 
 
 def _create_diff_groups(fields_to_diff, methods_to_diff, predicates_to_test, root_group):
-    diff_group = DiffGroup(root_group.member_name)
+    diff_group = DiffGroup(root_group)
     field_dependencies = _list_field_dependencies(methods_to_diff + predicates_to_test)
     for subgroup in root_group.subgroups:
         if any(field.property_name in (fields_to_diff + field_dependencies) for field in subgroup.all_fields):
             diff_group.subgroups.append(_create_diff_groups(fields_to_diff, methods_to_diff, predicates_to_test, subgroup))
-    for field in root_group.fields:
-        if not field.is_inherited_flag:
-            if field.property_name in fields_to_diff:
-                diff_group.expressions.append(field.getter_expression)
-            for entry in methods_to_diff:
-                if field.property_name in entry['field_dependencies']:
-                    diff_group.expressions.append(entry['method'])
-            for entry in predicates_to_test:
-                if field.property_name in entry['field_dependencies']:
-                    diff_group.predicates.append(entry['predicate'])
+    for entry in fields_to_diff:
+        for field in root_group.fields:
+            if not field.is_inherited_flag and entry == field.property_name:
+                diff_group.fields.append(field)
+    for entry in methods_to_diff:
+        for field in root_group.fields:
+            if (not field.is_inherited_flag and field.property_name in entry['field_dependencies']
+                    and entry['method'] not in diff_group.expressions):
+                diff_group.expressions.append(entry['method'])
+    for entry in predicates_to_test:
+        for field in root_group.fields:
+            if (not field.is_inherited_flag and field.property_name in entry['field_dependencies']
+                    and entry['predicate'] not in diff_group.predicates):
+                diff_group.predicates.append(entry['predicate'])
     return diff_group
 
 
 def _create_enums(properties):
-    """
-    Returns an OrderedDict of enums to be generated, enum name -> [list of enum values]
-    """
+    """Returns a list of Enums to be generated"""
     enums = {}
     for property_ in properties:
-        # Only generate enums for keyword properties that use the default field_type_path.
-        if property_['field_template'] == 'keyword' and property_['field_type_path'] is None:
-            enum_name = property_['type_name']
-            enum_values = [enum_value_name(k) for k in property_['keywords']]
+        # Only generate enums for keyword properties that do not require includes.
+        if property_['field_template'] in ('keyword', 'multi_keyword') and len(property_['include_paths']) == 0:
+            enum = Enum(property_['type_name'], property_['keywords'],
+                        is_set=(property_['field_template'] == 'multi_keyword'))
 
-            if enum_name in enums:
+            if property_['field_template'] == 'multi_keyword':
+                assert property_['keywords'][0] == 'none', \
+                    "First keyword in a 'multi_keyword' field must be 'none' in '{}'.".format(property_['name'])
+
+            if enum.type_name in enums:
                 # There's an enum with the same name, check if the enum values are the same
-                assert set(enums[enum_name]) == set(enum_values), \
-                    ("'" + property_['name'] + "' can't have type_name '" + enum_name + "' "
+                assert set(enums[enum.type_name].values) == set(enum.values), \
+                    ("'" + property_['name'] + "' can't have type_name '" + enum.type_name + "' "
                      "because it was used by a previous property, but with a different set of keywords. "
                      "Either give it a different name or ensure the keywords are the same.")
 
-            enums[enum_name] = enum_values
+            enums[enum.type_name] = enum
 
-    # Return the enums sorted by key (enum name)
-    return OrderedDict(sorted(enums.items(), key=lambda t: t[0]))
+    # Return the enums sorted by type name
+    return list(sorted(enums.values(), key=lambda e: e.type_name))
 
 
 def _create_property_field(property_):
@@ -261,12 +338,28 @@ def _create_property_field(property_):
     if property_['field_template'] == 'keyword':
         type_name = property_['type_name']
         default_value = type_name + '::' + enum_value_name(property_['default_value'])
+        assert property_['field_size'] is None, \
+            ("'" + property_['name'] + "' is a keyword field, "
+             "so it should not specify a field_size")
         size = int(math.ceil(math.log(len(property_['keywords']), 2)))
+    elif property_['field_template'] == 'multi_keyword':
+        type_name = property_['type_name']
+        default_value = type_name + '::' + enum_value_name(property_['default_value'])
+        size = len(property_['keywords']) - 1  # Subtract 1 for 'none' keyword
     elif property_['field_template'] == 'storage_only':
-        # 'storage_only' fields need to specify a size, type_name and default_value
         type_name = property_['type_name']
         default_value = property_['default_value']
-        size = property_['field_size']
+        size = None
+        if type_name == 'bool':
+            size = 1
+        elif len(property_["keywords"]) > 0 and len(property_["include_paths"]) == 0:
+            # Assume that no property will ever have one keyword.
+            assert len(property_['keywords']) > 1, "There must be more than 1 keywords in a CSS property"
+            # Each keyword is represented as a number and the number of bit
+            # to represent the maximum number is calculated here
+            size = int(math.ceil(math.log(len(property_['keywords']), 2)))
+        else:
+            size = property_["field_size"]
     elif property_['field_template'] == 'external':
         type_name = property_['type_name']
         default_value = property_['default_value']
@@ -275,6 +368,16 @@ def _create_property_field(property_):
         type_name = property_['type_name']
         default_value = property_['default_value']
         size = 1 if type_name == 'bool' else None  # pack bools with 1 bit.
+    elif property_['field_template'] == 'pointer':
+        type_name = property_['type_name']
+        default_value = property_['default_value']
+        size = None
+    elif property_['field_template'] == '<length>':
+        property_['field_template'] = 'external'
+        property_['type_name'] = type_name = 'Length'
+        default_value = property_['default_value']
+        property_['include_paths'] = ["platform/Length.h"]
+        size = None
     else:
         assert property_['field_template'] in ('monotonic_flag',)
         type_name = 'bool'
@@ -282,8 +385,9 @@ def _create_property_field(property_):
         size = 1
 
     if property_['wrapper_pointer_name']:
-        assert property_['field_template'] == 'storage_only'
-        type_name = '{}<{}>'.format(property_['wrapper_pointer_name'], type_name)
+        assert property_['field_template'] in ['storage_only', 'pointer']
+        if property_['field_template'] == 'storage_only':
+            type_name = '{}<{}>'.format(property_['wrapper_pointer_name'], type_name)
 
     return Field(
         'property',
@@ -294,13 +398,15 @@ def _create_property_field(property_):
         type_name=type_name,
         wrapper_pointer_name=property_['wrapper_pointer_name'],
         field_template=property_['field_template'],
-        field_group=property_['field_group'],
         size=size,
         default_value=default_value,
-        has_custom_compare_and_copy=property_['has_custom_compare_and_copy'],
+        custom_copy=property_['custom_copy'],
+        custom_compare=property_['custom_compare'],
+        mutable=property_['mutable'],
         getter_method_name=property_['getter'],
         setter_method_name=property_['setter'],
         initial_method_name=property_['initial'],
+        default_generated_functions=property_['default_generated_functions'],
     )
 
 
@@ -309,7 +415,7 @@ def _create_inherited_flag_field(property_):
     Create the field used for an inheritance fast path from an independent CSS property,
     and return the Field object.
     """
-    name_for_methods = join_name(property_['name_for_methods'], 'is inherited')
+    name_for_methods = join_names(property_['name_for_methods'], 'is', 'inherited')
     return Field(
         'inherited_flag',
         name_for_methods,
@@ -317,30 +423,31 @@ def _create_inherited_flag_field(property_):
         type_name='bool',
         wrapper_pointer_name=None,
         field_template='primitive',
-        field_group=property_['field_group'],
         size=1,
         default_value='true',
-        has_custom_compare_and_copy=False,
+        custom_copy=False,
+        custom_compare=False,
+        mutable=False,
         getter_method_name=method_name(name_for_methods),
-        setter_method_name=method_name(join_name('set', name_for_methods)),
-        initial_method_name=method_name(join_name('initial', name_for_methods)),
+        setter_method_name=method_name(['set', name_for_methods]),
+        initial_method_name=method_name(['initial', name_for_methods]),
+        default_generated_functions=property_["default_generated_functions"]
     )
 
 
-def _create_fields(properties):
+def _create_fields(property_):
     """
-    Create ComputedStyle fields from properties and return a list of Field objects.
+    Create ComputedStyle fields from a property and return a list of Field objects.
     """
     fields = []
-    for property_ in properties:
-        # Only generate properties that have a field template
-        if property_['field_template'] is not None:
-            # If the property is independent, add the single-bit sized isInherited flag
-            # to the list of Fields as well.
-            if property_['independent']:
-                fields.append(_create_inherited_flag_field(property_))
+    # Only generate properties that have a field template
+    if property_['field_template'] is not None:
+        # If the property is independent, add the single-bit sized isInherited flag
+        # to the list of Fields as well.
+        if property_['independent']:
+            fields.append(_create_inherited_flag_field(property_))
 
-            fields.append(_create_property_field(property_))
+        fields.append(_create_property_field(property_))
 
     return fields
 
@@ -397,7 +504,7 @@ def _reorder_fields(fields):
 
 class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
     def __init__(self, json5_file_paths):
-        # Read CSS properties
+        # Read CSSProperties.json5
         super(ComputedStyleBaseWriter, self).__init__([json5_file_paths[0]])
 
         # Ignore shorthand properties
@@ -409,32 +516,30 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
         css_properties = [value for value in self._properties.values() if not value['longhands']]
 
         for property_ in css_properties:
-            # All CSS properties that are generated do not have custom comparison and copy logic.
-            property_['has_custom_compare_and_copy'] = False
+            # Set default values for extra parameters in ComputedStyleExtraFields.json5.
+            property_['custom_copy'] = False
+            property_['custom_compare'] = False
+            property_['mutable'] = False
 
-        # Read extra fields using the parameter specification from the CSS properties file.
+        # Read ComputedStyleExtraFields.json5 using the parameter specification from the CSS properties file.
         extra_fields = json5_generator.Json5File.load_from_files(
             [json5_file_paths[1]],
             default_parameters=self.json5_file.parameters
         ).name_dictionaries
 
         for property_ in extra_fields:
+            if property_['mutable']:
+                assert property_['field_template'] == 'monotonic_flag', \
+                    'mutable keyword only implemented for monotonic_flag'
             make_style_builder.apply_property_naming_defaults(property_)
 
         all_properties = css_properties + extra_fields
 
-        # Override the type name when field_type_path is specified
-        for property_ in all_properties:
-            if property_['field_type_path']:
-                property_['type_name'] = property_['field_type_path'].split('/')[-1]
-
         self._generated_enums = _create_enums(all_properties)
-
-        all_fields = _create_fields(all_properties)
 
         # Organise fields into a tree structure where the root group
         # is ComputedStyleBase.
-        self._root_group = _group_fields(all_fields)
+        self._root_group = _create_groups(all_properties)
         self._diff_functions_map = _create_diff_groups_map(json5_generator.Json5File.load_from_files(
             [json5_file_paths[2]]
         ).name_dictionaries, self._root_group)
@@ -442,12 +547,14 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
         self._include_paths = _get_include_paths(all_properties)
         self._outputs = {
             'ComputedStyleBase.h': self.generate_base_computed_style_h,
+            'ComputedStyleBase.cpp': self.generate_base_computed_style_cpp,
             'ComputedStyleBaseConstants.h': self.generate_base_computed_style_constants,
         }
 
-    @template_expander.use_jinja('ComputedStyleBase.h.tmpl', tests={'in': lambda a, b: a in b})
+    @template_expander.use_jinja('templates/ComputedStyleBase.h.tmpl', tests={'in': lambda a, b: a in b})
     def generate_base_computed_style_h(self):
         return {
+            'input_files': self._input_files,
             'properties': self._properties,
             'enums': self._generated_enums,
             'include_paths': self._include_paths,
@@ -455,9 +562,21 @@ class ComputedStyleBaseWriter(make_style_builder.StyleBuilderWriter):
             'diff_functions_map': self._diff_functions_map,
         }
 
-    @template_expander.use_jinja('ComputedStyleBaseConstants.h.tmpl')
+    @template_expander.use_jinja('templates/ComputedStyleBase.cpp.tmpl', tests={'in': lambda a, b: a in b})
+    def generate_base_computed_style_cpp(self):
+        return {
+            'input_files': self._input_files,
+            'properties': self._properties,
+            'enums': self._generated_enums,
+            'include_paths': self._include_paths,
+            'computed_style': self._root_group,
+            'diff_functions_map': self._diff_functions_map,
+        }
+
+    @template_expander.use_jinja('templates/ComputedStyleBaseConstants.h.tmpl')
     def generate_base_computed_style_constants(self):
         return {
+            'input_files': self._input_files,
             'properties': self._properties,
             'enums': self._generated_enums,
         }

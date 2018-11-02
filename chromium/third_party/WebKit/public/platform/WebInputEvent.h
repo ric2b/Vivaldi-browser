@@ -180,6 +180,14 @@ class WebInputEvent {
     kTouchScrollStarted,
     kTouchTypeLast = kTouchScrollStarted,
 
+    // WebPointerEvent: work in progress
+    kPointerDown,
+    kPointerTypeFirst = kPointerDown,
+    kPointerUp,
+    kPointerMove,
+    kPointerCancel,
+    kPointerTypeLast = kPointerCancel,
+
     kTypeLast = kTouchTypeLast
   };
 
@@ -234,14 +242,17 @@ class WebInputEvent {
     kBackButtonDown = 1 << 20,
     kForwardButtonDown = 1 << 21,
 
+    // Represents movement as a result of content changing under the cursor,
+    // not actual physical movement of the pointer
+    kRelativeMotionEvent = 1 << 22,
+
     // The set of non-stateful modifiers that specifically change the
     // interpretation of the key being pressed. For example; IsLeft,
     // IsRight, IsComposing don't change the meaning of the key
     // being pressed. NumLockOn, ScrollLockOn, CapsLockOn are stateful
     // and don't indicate explicit depressed state.
     kKeyModifiers = kSymbolKey | kFnKey | kAltGrKey | kMetaKey | kAltKey |
-                    kControlKey |
-                    kShiftKey,
+                    kControlKey | kShiftKey,
     kNoModifiers = 0,
   };
 
@@ -264,6 +275,8 @@ class WebInputEvent {
     // was forced to be non-blocking due to the main thread being
     // unresponsive.
     kListenersForcedNonBlockingDueToMainThreadResponsiveness,
+    kLastDispatchType =
+        kListenersForcedNonBlockingDueToMainThreadResponsiveness,
   };
 
   // The rail mode for a wheel event specifies the axis on which scrolling is
@@ -300,6 +313,11 @@ class WebInputEvent {
     return kGestureTypeFirst <= type && type <= kGestureTypeLast;
   }
 
+  // Returns true if the WebInputEvent |type| is a pointer event.
+  static bool IsPointerEventType(WebInputEvent::Type type) {
+    return kPointerTypeFirst <= type && type <= kPointerTypeLast;
+  }
+
   bool IsSameEventClass(const WebInputEvent& other) const {
     if (IsMouseEventType(type_))
       return IsMouseEventType(other.type_);
@@ -309,6 +327,8 @@ class WebInputEvent {
       return IsTouchEventType(other.type_);
     if (IsKeyboardEventType(type_))
       return IsKeyboardEventType(other.type_);
+    if (IsPointerEventType(type_))
+      return IsPointerEventType(other.type_);
     return type_ == other.type_;
   }
 
@@ -356,11 +376,14 @@ class WebInputEvent {
       CASE_TYPE(TouchEnd);
       CASE_TYPE(TouchCancel);
       CASE_TYPE(TouchScrollStarted);
-      default:
-        NOTREACHED();
-        return "";
+      CASE_TYPE(PointerDown);
+      CASE_TYPE(PointerUp);
+      CASE_TYPE(PointerMove);
+      CASE_TYPE(PointerCancel);
     }
 #undef CASE_TYPE
+    NOTREACHED();
+    return "";
   }
 
   float FrameScale() const { return frame_scale_; }

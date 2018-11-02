@@ -48,8 +48,6 @@ const char* MemoryConditionToString(MemoryCondition condition) {
   switch (condition) {
     case MemoryCondition::NORMAL:
       return "normal";
-    case MemoryCondition::WARNING:
-      return "warning";
     case MemoryCondition::CRITICAL:
       return "critical";
   }
@@ -147,11 +145,12 @@ MemoryCoordinatorImpl::MemoryCoordinatorImpl(
 }
 
 MemoryCoordinatorImpl::~MemoryCoordinatorImpl() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   base::MemoryCoordinatorProxy::SetMemoryCoordinator(nullptr);
 }
 
 void MemoryCoordinatorImpl::Start() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(last_state_change_.is_null());
 
   notification_registrar_.Add(
@@ -212,6 +211,10 @@ bool MemoryCoordinatorImpl::SetChildMemoryState(int render_process_id,
   if (memory_state == MemoryState::UNKNOWN)
     return false;
 
+  // SUSPENDED state isn't supported yet.
+  if (memory_state == MemoryState::SUSPENDED)
+    return false;
+
   // Can't send a message to a child that doesn't exist.
   auto iter = children_.find(render_process_id);
   if (iter == children_.end())
@@ -226,11 +229,6 @@ bool MemoryCoordinatorImpl::SetChildMemoryState(int render_process_id,
   // A nop doesn't need to be sent, but is considered successful.
   if (iter->second.memory_state == memory_state)
     return true;
-
-  // Can't suspend the given renderer.
-  if (memory_state == MemoryState::SUSPENDED &&
-      !CanSuspendRenderer(render_process_id))
-    return false;
 
   // Update the internal state and send the message.
   iter->second.memory_state = memory_state;
@@ -275,11 +273,6 @@ bool MemoryCoordinatorImpl::TryToPurgeMemoryFromChild(int render_process_id) {
   return true;
 }
 
-void MemoryCoordinatorImpl::RecordMemoryPressure(
-    base::MemoryPressureMonitor::MemoryPressureLevel level) {
-  // TODO(bashi): Record memory pressure level.
-}
-
 MemoryState MemoryCoordinatorImpl::GetCurrentMemoryState() const {
   return browser_memory_state_;
 }
@@ -304,7 +297,7 @@ void MemoryCoordinatorImpl::Observe(int type,
 
 MemoryState MemoryCoordinatorImpl::GetStateForProcess(
     base::ProcessHandle handle) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (handle == base::kNullProcessHandle)
     return MemoryState::UNKNOWN;
   if (handle == base::GetCurrentProcessHandle())
@@ -320,11 +313,9 @@ MemoryState MemoryCoordinatorImpl::GetStateForProcess(
 
 void MemoryCoordinatorImpl::UpdateConditionIfNeeded(
     MemoryCondition next_condition) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (next_condition == MemoryCondition::WARNING)
-    policy_->OnWarningCondition();
-  else if (next_condition == MemoryCondition::CRITICAL)
+  if (next_condition == MemoryCondition::CRITICAL)
     policy_->OnCriticalCondition();
 
   if (suppress_condition_change_until_ > tick_clock_->NowTicks() ||
@@ -339,9 +330,9 @@ void MemoryCoordinatorImpl::UpdateConditionIfNeeded(
   memory_condition_ = next_condition;
 }
 
-void MemoryCoordinatorImpl::DiscardTab() {
+void MemoryCoordinatorImpl::DiscardTab(bool skip_unload_handlers) {
   if (delegate_)
-    delegate_->DiscardTab();
+    delegate_->DiscardTab(skip_unload_handlers);
 }
 
 RenderProcessHost* MemoryCoordinatorImpl::GetRenderProcessHost(
@@ -353,6 +344,11 @@ void MemoryCoordinatorImpl::SetDelegateForTesting(
     std::unique_ptr<MemoryCoordinatorDelegate> delegate) {
   CHECK(!delegate_);
   delegate_ = std::move(delegate);
+}
+
+void MemoryCoordinatorImpl::SetPolicyForTesting(
+    std::unique_ptr<Policy> policy) {
+  policy_ = std::move(policy);
 }
 
 void MemoryCoordinatorImpl::AddChildForTesting(
@@ -373,18 +369,6 @@ void MemoryCoordinatorImpl::SetTickClockForTesting(
 
 void MemoryCoordinatorImpl::OnConnectionError(int render_process_id) {
   children_.erase(render_process_id);
-}
-
-bool MemoryCoordinatorImpl::CanSuspendRenderer(int render_process_id) {
-  auto* render_process_host = GetRenderProcessHost(render_process_id);
-  if (!render_process_host || !render_process_host->IsProcessBackgrounded())
-    return false;
-  if (render_process_host->GetWorkerRefCount() > 0)
-    return false;
-  // Assumes that we can't suspend renderers if there is no delegate.
-  if (!delegate_)
-    return false;
-  return delegate_->CanSuspendBackgroundedRenderer(render_process_id);
 }
 
 void MemoryCoordinatorImpl::OnChildAdded(int render_process_id) {

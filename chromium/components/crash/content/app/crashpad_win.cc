@@ -151,33 +151,14 @@ base::FilePath PlatformCrashpadInitialization(bool initial_client,
   return database_path;
 }
 
-// TODO(scottmg): http://crbug.com/546288 These exported functions are for
-// compatibility with how Breakpad worked, but it seems like there's no need to
-// do the CreateRemoteThread() dance with a minor extension of the Crashpad API
-// (to just pass the pid we want a dump for). We should add that and then modify
-// hang_crash_dump_win.cc to work in a more direct manner.
-
-// Used for dumping a process state when there is no crash.
-extern "C" void __declspec(dllexport) __cdecl DumpProcessWithoutCrash() {
-  CRASHPAD_SIMULATE_CRASH();
-}
-
 namespace {
 
-// We need to prevent ICF from folding DumpForHangDebuggingThread(),
-// DumpProcessForHungInputThread(), DumpProcessForHungInputNoCrashKeysThread()
-// and DumpProcessWithoutCrashThread() together, since that makes them
+// We need to prevent ICF from folding DumpProcessForHungInputThread(),
+// DumpProcessForHungInputNoCrashKeysThread() together, since that makes them
 // indistinguishable in crash dumps. We do this by making the function
 // bodies unique, and prevent optimization from shuffling things around.
 MSVC_DISABLE_OPTIMIZE()
 MSVC_PUSH_DISABLE_WARNING(4748)
-
-// Note that this function must be in a namespace for the [Renderer hang]
-// annotations to work on the crash server.
-DWORD WINAPI DumpProcessWithoutCrashThread(void*) {
-  DumpProcessWithoutCrash();
-  return 0;
-}
 
 // TODO(dtapuska): Remove when enough information is gathered where the crash
 // reports without crash keys come from.
@@ -190,7 +171,7 @@ DWORD WINAPI DumpProcessForHungInputThread(void* crash_keys_str) {
       base::debug::SetCrashKeyValue(crash_key.first, crash_key.second);
     }
   }
-  DumpProcessWithoutCrash();
+  DumpWithoutCrashing();
   return 0;
 }
 
@@ -203,15 +184,7 @@ DWORD WINAPI DumpProcessForHungInputNoCrashKeysThread(void* reason) {
       "hung-reason", base::IntToString(reinterpret_cast<int>(reason)));
 #pragma warning(pop)
 
-  DumpProcessWithoutCrash();
-  return 0;
-}
-
-// TODO(yzshen): Remove when enough information is collected and the hang rate
-// of pepper/renderer processes is reduced.
-DWORD WINAPI DumpForHangDebuggingThread(void*) {
-  DumpProcessWithoutCrash();
-  VLOG(1) << "dumped for hang debugging";
+  DumpWithoutCrashing();
   return 0;
 }
 
@@ -238,15 +211,6 @@ int __declspec(dllexport) CrashForException(
 }
 
 // Injects a thread into a remote process to dump state when there is no crash.
-HANDLE __declspec(dllexport) __cdecl InjectDumpProcessWithoutCrash(
-    HANDLE process) {
-  return CreateRemoteThread(
-      process, nullptr, 0,
-      crash_reporter::internal::DumpProcessWithoutCrashThread, nullptr, 0,
-      nullptr);
-}
-
-// Injects a thread into a remote process to dump state when there is no crash.
 // |serialized_crash_keys| is a nul terminated string that represents serialized
 // crash keys sent from the browser. Keys and values are separated by ':', and
 // key/value pairs are separated by ','. All keys should be previously
@@ -270,13 +234,6 @@ HANDLE __declspec(dllexport) __cdecl InjectDumpForHungInputNoCrashKeys(
       process, nullptr, 0,
       crash_reporter::internal::DumpProcessForHungInputNoCrashKeysThread,
       reinterpret_cast<void*>(reason), 0, nullptr);
-}
-
-HANDLE __declspec(dllexport) __cdecl InjectDumpForHangDebugging(
-    HANDLE process) {
-  return CreateRemoteThread(
-      process, nullptr, 0, crash_reporter::internal::DumpForHangDebuggingThread,
-      0, 0, nullptr);
 }
 
 #if defined(ARCH_CPU_X86_64)

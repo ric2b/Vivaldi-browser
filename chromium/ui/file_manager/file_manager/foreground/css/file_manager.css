@@ -202,6 +202,7 @@ div.splitter {
   background: -webkit-image-set(
       url(../images/files/ui/eject.png) 1x,
       url(../images/files/ui/2x/eject.png) 2x) no-repeat center;
+  border-style: none;
   cursor: pointer;
   flex: none;
   height: 40px;
@@ -350,13 +351,13 @@ body.check-select #search-button > .icon {
       url(../images/files/ui/2x/search.png) 2x);
 }
 
-#share-button > .icon {
+#share-menu-button > .icon {
   background-image: -webkit-image-set(
       url(../images/files/ui/share_white.png) 1x,
       url(../images/files/ui/2x/share_white.png) 2x);
 }
 
-body.check-select #share-button > .icon {
+body.check-select #share-menu-button > .icon {
   background-image: -webkit-image-set(
       url(../images/files/ui/share.png) 1x,
       url(../images/files/ui/2x/share.png) 2x);
@@ -417,6 +418,16 @@ body.check-select #sort-button {
 }
 
 body.check-select #gear-button {
+  display: none;
+}
+
+#selection-menu-button > .icon {
+  background-image: -webkit-image-set(
+      url(../images/files/ui/menu.png) 1x,
+      url(../images/files/ui/2x/menu.png) 2x);
+}
+
+body:not(.check-select) #selection-menu-button {
   display: none;
 }
 
@@ -567,6 +578,7 @@ body.check-select #files-selected-label {
 }
 
 #cancel-selection-button {
+  display: flex;
   text-transform: none;
 }
 
@@ -583,6 +595,7 @@ body.check-select #files-selected-label {
       url(../images/files/ui/2x/back.png) 2x);
   background-position: center;
   background-repeat: no-repeat;
+  flex: none;
   height: 16px;
   width: 16px;
 }
@@ -594,6 +607,13 @@ body.check-select #files-selected-label {
 
 #cancel-selection-button > iron-icon {
   -webkit-margin-end: 6px;
+}
+
+#cancel-selection-label {
+  flex: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 body.check-select #cancel-selection-button-wrapper {
@@ -1626,9 +1646,16 @@ body.check-select #list-container list li[selected] .detail-thumbnail
   opacity: 0;
 }
 
+#share-menu cr-menu-item,
 #tasks-menu cr-menu-item:not(.change-default) {
   background-position: left 10px center;
   padding-left: 32px;
+}
+
+#share-menu cr-menu-item[command='#share'] {
+  background-image: -webkit-image-set(
+      url(../images/files/ui/person_add.png) 1x,
+      url(../images/files/ui/2x/person_add.png) 2x);
 }
 
 .detail-name > * {
@@ -1707,6 +1734,10 @@ cr-menu#file-context-menu {
 
 cr-menu#file-context-menu > :not(hr) {
   -webkit-padding-end: 8px;
+}
+
+cr-menu#file-context-menu.toolbar-menu > .hide-on-toolbar {
+  display: none;
 }
 
 cr-menu.chrome-menu hr {
@@ -1914,6 +1945,7 @@ list.autocomplete-suggestions > [lead] {
 }
 
 #gear-menu,
+#share-menu,
 #sort-menu,
 #tasks-menu {
   margin-top: 2px;

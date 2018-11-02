@@ -3,37 +3,39 @@
 // found in the LICENSE file.
 
 #include "content/browser/appcache/appcache_url_loader_request.h"
+#include "content/public/common/resource_type.h"
 #include "net/url_request/url_request.h"
 
 namespace content {
 
 // static
 std::unique_ptr<AppCacheURLLoaderRequest> AppCacheURLLoaderRequest::Create(
-    std::unique_ptr<ResourceRequest> request) {
+    const ResourceRequest& request) {
   return std::unique_ptr<AppCacheURLLoaderRequest>(
-      new AppCacheURLLoaderRequest(std::move(request)));
+      new AppCacheURLLoaderRequest(request));
 }
 
 AppCacheURLLoaderRequest::~AppCacheURLLoaderRequest() {}
 
 const GURL& AppCacheURLLoaderRequest::GetURL() const {
-  return request_->url;
+  return request_.url;
 }
 
 const std::string& AppCacheURLLoaderRequest::GetMethod() const {
-  return request_->method;
+  return request_.method;
 }
 
 const GURL& AppCacheURLLoaderRequest::GetFirstPartyForCookies() const {
-  return request_->first_party_for_cookies;
+  return request_.first_party_for_cookies;
 }
 
 const GURL AppCacheURLLoaderRequest::GetReferrer() const {
-  return request_->referrer;
+  return request_.referrer;
 }
 
 bool AppCacheURLLoaderRequest::IsSuccess() const {
-  return false;
+  int response_code = GetResponseCode();
+  return (response_code >= 200 && response_code <= 226);
 }
 
 bool AppCacheURLLoaderRequest::IsCancelled() const {
@@ -45,6 +47,8 @@ bool AppCacheURLLoaderRequest::IsError() const {
 }
 
 int AppCacheURLLoaderRequest::GetResponseCode() const {
+  if (response_.headers)
+    return response_.headers->response_code();
   return 0;
 }
 
@@ -54,11 +58,15 @@ std::string AppCacheURLLoaderRequest::GetResponseHeaderByName(
 }
 
 ResourceRequest* AppCacheURLLoaderRequest::GetResourceRequest() {
-  return request_.get();
+  return &request_;
+}
+
+AppCacheURLLoaderRequest* AppCacheURLLoaderRequest::AsURLLoaderRequest() {
+  return this;
 }
 
 AppCacheURLLoaderRequest::AppCacheURLLoaderRequest(
-    std::unique_ptr<ResourceRequest> request)
-    : request_(std::move(request)) {}
+    const ResourceRequest& request)
+    : request_(request) {}
 
 }  // namespace content

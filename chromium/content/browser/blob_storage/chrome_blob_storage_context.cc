@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
@@ -14,15 +15,16 @@
 #include "base/memory/ptr_util.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
+#include "base/supports_user_data.h"
 #include "base/task_runner.h"
 #include "base/task_scheduler/post_task.h"
 #include "content/browser/resource_context_impl.h"
-#include "content/common/resource_request_body_impl.h"
 #include "content/public/browser/blob_handle.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/common/content_features.h"
+#include "content/public/common/resource_request_body.h"
 #include "storage/browser/blob/blob_data_builder.h"
-#include "storage/browser/blob/blob_data_handle.h"
 #include "storage/browser/blob/blob_memory_controller.h"
 #include "storage/browser/blob/blob_storage_context.h"
 
@@ -78,6 +80,8 @@ ChromeBlobStorageContext::ChromeBlobStorageContext() {}
 
 ChromeBlobStorageContext* ChromeBlobStorageContext::GetFor(
     BrowserContext* context) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+
   if (!context->GetUserData(kBlobStorageContextKeyName)) {
     scoped_refptr<ChromeBlobStorageContext> blob =
         new ChromeBlobStorageContext();
@@ -197,26 +201,26 @@ storage::BlobStorageContext* GetBlobStorageContext(
   return blob_storage_context->context();
 }
 
-void AttachRequestBodyBlobDataHandles(ResourceRequestBodyImpl* body,
-                                      ResourceContext* resource_context) {
+bool GetBodyBlobDataHandles(ResourceRequestBody* body,
+                            ResourceContext* resource_context,
+                            BlobHandles* blob_handles) {
+  blob_handles->clear();
+
   storage::BlobStorageContext* blob_context = GetBlobStorageContext(
       GetChromeBlobStorageContextForResourceContext(resource_context));
 
   DCHECK(blob_context);
   for (size_t i = 0; i < body->elements()->size(); ++i) {
-    const ResourceRequestBodyImpl::Element& element = (*body->elements())[i];
-    if (element.type() != ResourceRequestBodyImpl::Element::TYPE_BLOB)
+    const ResourceRequestBody::Element& element = (*body->elements())[i];
+    if (element.type() != ResourceRequestBody::Element::TYPE_BLOB)
       continue;
     std::unique_ptr<storage::BlobDataHandle> handle =
         blob_context->GetBlobDataFromUUID(element.blob_uuid());
-    DCHECK(handle);
     if (!handle)
-      continue;
-    // Ensure the blob and any attached shareable files survive until
-    // upload completion. The |body| takes ownership of |handle|.
-    const void* key = handle.get();
-    body->SetUserData(key, std::move(handle));
+      return false;
+    blob_handles->push_back(std::move(handle));
   }
+  return true;
 }
 
 }  // namespace content

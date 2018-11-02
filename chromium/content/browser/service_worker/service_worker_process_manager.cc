@@ -12,12 +12,9 @@
 #include "content/browser/renderer_host/render_process_host_impl.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/common/service_worker/embedded_worker_settings.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/content_browser_client.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/common/child_process_host.h"
-#include "content/public/common/content_client.h"
 #include "url/gurl.h"
 
 namespace content {
@@ -69,6 +66,13 @@ ServiceWorkerProcessManager::~ServiceWorkerProcessManager() {
   // Temporary checks to verify that ServiceWorkerProcessManager doesn't prevent
   // render process hosts from shutting down: crbug.com/639193
   CHECK(instance_info_.empty());
+}
+
+BrowserContext* ServiceWorkerProcessManager::browser_context() {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
+  // This is safe because reading |browser_context_| on the UI thread doesn't
+  // need locking (while modifying does).
+  return browser_context_;
 }
 
 void ServiceWorkerProcessManager::Shutdown() {
@@ -154,49 +158,30 @@ bool ServiceWorkerProcessManager::PatternHasProcessToRun(
   return !it->second.empty();
 }
 
-void ServiceWorkerProcessManager::AllocateWorkerProcess(
+ServiceWorkerStatusCode ServiceWorkerProcessManager::AllocateWorkerProcess(
     int embedded_worker_id,
     const GURL& pattern,
     const GURL& script_url,
     bool can_use_existing_process,
-    const base::Callback<void(ServiceWorkerStatusCode,
-                              int process_id,
-                              bool is_new_process,
-                              const EmbeddedWorkerSettings&)>& callback) {
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI, FROM_HERE,
-        base::Bind(&ServiceWorkerProcessManager::AllocateWorkerProcess,
-                   weak_this_, embedded_worker_id, pattern, script_url,
-                   can_use_existing_process, callback));
-    return;
-  }
+    AllocatedProcessInfo* out_info) {
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
 
-  // This |EmbeddedWorkerSettings| only populates |data_saver_enabled|,
-  // but in general, this function will populate settings from prefs, while
-  // the caller will be responsible for populating settings from other sources,
-  // such as command line switches.
-  EmbeddedWorkerSettings settings;
-  settings.data_saver_enabled =
-      GetContentClient()->browser()->IsDataSaverEnabled(browser_context_);
+  out_info->process_id = ChildProcessHost::kInvalidUniqueID;
+  out_info->start_situation = ServiceWorkerMetrics::StartSituation::UNKNOWN;
 
   if (process_id_for_test_ != ChildProcessHost::kInvalidUniqueID) {
     // Let tests specify the returned process ID. Note: We may need to be able
     // to specify the error code too.
     int result = can_use_existing_process ? process_id_for_test_
                                           : new_process_id_for_test_;
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback, SERVICE_WORKER_OK, result,
-                                       false /* is_new_process */, settings));
-    return;
+    out_info->process_id = result;
+    out_info->start_situation =
+        ServiceWorkerMetrics::StartSituation::EXISTING_READY_PROCESS;
+    return SERVICE_WORKER_OK;
   }
 
   if (IsShutdown()) {
-    BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                            base::Bind(callback, SERVICE_WORKER_ERROR_ABORT,
-                                       ChildProcessHost::kInvalidUniqueID,
-                                       false /* is_new_process */, settings));
-    return;
+    return SERVICE_WORKER_ERROR_ABORT;
   }
 
   DCHECK(!base::ContainsKey(instance_info_, embedded_worker_id))
@@ -208,11 +193,10 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
       RenderProcessHost::FromID(process_id)->IncrementServiceWorkerRefCount();
       instance_info_.insert(
           std::make_pair(embedded_worker_id, ProcessInfo(process_id)));
-      BrowserThread::PostTask(
-          BrowserThread::IO, FROM_HERE,
-          base::Bind(callback, SERVICE_WORKER_OK, process_id,
-                     false /* is_new_process */, settings));
-      return;
+      out_info->process_id = process_id;
+      out_info->start_situation =
+          ServiceWorkerMetrics::StartSituation::EXISTING_READY_PROCESS;
+      return SERVICE_WORKER_OK;
     }
   }
 
@@ -224,45 +208,49 @@ void ServiceWorkerProcessManager::AllocateWorkerProcess(
   // SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE.
   scoped_refptr<SiteInstanceImpl> site_instance =
       SiteInstanceImpl::CreateForURL(browser_context_, script_url);
+  site_instance->set_is_for_service_worker();
+  DCHECK(site_instance->process_reuse_policy() ==
+             SiteInstanceImpl::ProcessReusePolicy::DEFAULT ||
+         site_instance->process_reuse_policy() ==
+             SiteInstanceImpl::ProcessReusePolicy::PROCESS_PER_SITE);
   if (can_use_existing_process) {
     site_instance->set_process_reuse_policy(
         SiteInstanceImpl::ProcessReusePolicy::REUSE_PENDING_OR_COMMITTED_SITE);
   }
+
   RenderProcessHost* rph = site_instance->GetProcess();
+  ServiceWorkerMetrics::StartSituation start_situation;
+  if (!rph->HasConnection()) {
+    // HasConnection() is false means that Init() has not been called or the
+    // process has been killed.
+    start_situation = ServiceWorkerMetrics::StartSituation::NEW_PROCESS;
+  } else if (!rph->IsReady()) {
+    start_situation =
+        ServiceWorkerMetrics::StartSituation::EXISTING_UNREADY_PROCESS;
+  } else {
+    start_situation =
+        ServiceWorkerMetrics::StartSituation::EXISTING_READY_PROCESS;
+  }
 
   // This Init() call posts a task to the IO thread that adds the RPH's
   // ServiceWorkerDispatcherHost to the
   // EmbeddedWorkerRegistry::process_sender_map_.
   if (!rph->Init()) {
     LOG(ERROR) << "Couldn't start a new process!";
-    BrowserThread::PostTask(
-        BrowserThread::IO, FROM_HERE,
-        base::Bind(callback, SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND,
-                   ChildProcessHost::kInvalidUniqueID,
-                   false /* is_new_process */, settings));
-    return;
+    return SERVICE_WORKER_ERROR_PROCESS_NOT_FOUND;
   }
 
   instance_info_.insert(
       std::make_pair(embedded_worker_id, ProcessInfo(site_instance)));
 
   rph->IncrementServiceWorkerRefCount();
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(callback, SERVICE_WORKER_OK, rph->GetID(),
-                                     true /* is_new_process */, settings));
+  out_info->process_id = rph->GetID();
+  out_info->start_situation = start_situation;
+  return SERVICE_WORKER_OK;
 }
 
 void ServiceWorkerProcessManager::ReleaseWorkerProcess(int embedded_worker_id) {
-  if (!BrowserThread::CurrentlyOn(BrowserThread::UI)) {
-    BrowserThread::PostTask(
-        BrowserThread::UI,
-        FROM_HERE,
-        base::Bind(&ServiceWorkerProcessManager::ReleaseWorkerProcess,
-                   weak_this_,
-                   embedded_worker_id));
-    return;
-  }
-
+  DCHECK_CURRENTLY_ON(BrowserThread::UI);
   if (process_id_for_test_ != ChildProcessHost::kInvalidUniqueID) {
     // Unittests don't increment or decrement the worker refcount of a
     // RenderProcessHost.
@@ -283,7 +271,7 @@ void ServiceWorkerProcessManager::ReleaseWorkerProcess(int embedded_worker_id) {
   if (info == instance_info_.end())
     return;
 
-  RenderProcessHost* rph = NULL;
+  RenderProcessHost* rph = nullptr;
   if (info->second.site_instance.get()) {
     rph = info->second.site_instance->GetProcess();
     DCHECK_EQ(info->second.process_id, rph->GetID())

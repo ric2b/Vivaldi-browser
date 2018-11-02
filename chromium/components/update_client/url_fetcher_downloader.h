@@ -9,16 +9,13 @@
 
 #include <memory>
 
+#include "base/files/file_path.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/threading/thread_checker.h"
 #include "base/time/time.h"
 #include "components/update_client/crx_downloader.h"
 #include "net/url_request/url_fetcher_delegate.h"
-
-namespace base {
-class SequencedTaskRunner;
-}
 
 namespace net {
 class URLFetcher;
@@ -32,10 +29,8 @@ class UrlFetcherDownloader : public CrxDownloader,
                              public net::URLFetcherDelegate {
  protected:
   friend class CrxDownloader;
-  UrlFetcherDownloader(
-      std::unique_ptr<CrxDownloader> successor,
-      net::URLRequestContextGetter* context_getter,
-      const scoped_refptr<base::SequencedTaskRunner>& task_runner);
+  UrlFetcherDownloader(std::unique_ptr<CrxDownloader> successor,
+                       net::URLRequestContextGetter* context_getter);
   ~UrlFetcherDownloader() override;
 
  private:
@@ -48,15 +43,22 @@ class UrlFetcherDownloader : public CrxDownloader,
                                   int64_t current,
                                   int64_t total,
                                   int64_t current_network_bytes) override;
+
+  void CreateDownloadDir();
+  void StartURLFetch(const GURL& url);
+
+  THREAD_CHECKER(thread_checker_);
+
   std::unique_ptr<net::URLFetcher> url_fetcher_;
-  net::URLRequestContextGetter* context_getter_;
+  net::URLRequestContextGetter* context_getter_ = nullptr;
+
+  // Contains a temporary download directory for the downloaded file.
+  base::FilePath download_dir_;
 
   base::TimeTicks download_start_time_;
 
-  int64_t downloaded_bytes_;
-  int64_t total_bytes_;
-
-  base::ThreadChecker thread_checker_;
+  int64_t downloaded_bytes_ = -1;
+  int64_t total_bytes_ = -1;
 
   DISALLOW_COPY_AND_ASSIGN(UrlFetcherDownloader);
 };

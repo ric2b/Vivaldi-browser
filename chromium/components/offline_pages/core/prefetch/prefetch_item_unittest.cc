@@ -16,17 +16,17 @@ TEST(PrefetchItemTest, OperatorEqualsAndCopyConstructor) {
   EXPECT_EQ(item1, PrefetchItem());
   EXPECT_EQ(item1, PrefetchItem(item1));
 
+  item1.offline_id = 77L;
+  EXPECT_NE(item1, PrefetchItem());
+  EXPECT_EQ(item1, PrefetchItem(item1));
+  item1 = PrefetchItem();
+
   item1.guid = "A";
   EXPECT_NE(item1, PrefetchItem());
   EXPECT_EQ(item1, PrefetchItem(item1));
   item1 = PrefetchItem();
 
-  item1.client_name_space = "B";
-  EXPECT_NE(item1, PrefetchItem());
-  EXPECT_EQ(item1, PrefetchItem(item1));
-  item1 = PrefetchItem();
-
-  item1.client_id = "C";
+  item1.client_id = ClientId("B", "C");
   EXPECT_NE(item1, PrefetchItem());
   EXPECT_EQ(item1, PrefetchItem(item1));
   item1 = PrefetchItem();

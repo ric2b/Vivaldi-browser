@@ -11,6 +11,7 @@
 #include "base/rand_util.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/stringprintf.h"
+#include "base/task_runner_util.h"
 #include "base/task_scheduler/post_task.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
@@ -485,14 +486,10 @@ void IsHandledBySafePlugin(content::ResourceContext* resource_context,
     // The GetPlugins call causes the plugin list to be refreshed. Once that's
     // done we can retry the GetPluginInfo call. We break out of this cycle
     // after a single retry in order to avoid retrying indefinitely.
-    plugin_service->GetPlugins(
-        base::Bind(&InvokeClosureAfterGetPluginCallback,
-                   base::Bind(&IsHandledBySafePlugin,
-                              resource_context,
-                              url,
-                              mime_type,
-                              IGNORE_IF_STALE_PLUGIN_LIST,
-                              callback)));
+    plugin_service->GetPlugins(base::BindOnce(
+        &InvokeClosureAfterGetPluginCallback,
+        base::Bind(&IsHandledBySafePlugin, resource_context, url, mime_type,
+                   IGNORE_IF_STALE_PLUGIN_LIST, callback)));
     return;
   }
   // In practice, we assume that retrying once is enough.
@@ -566,8 +563,11 @@ DownloadTargetDeterminer::Result
     return CONTINUE;
   }
 
-  base::PostTaskWithTraitsAndReplyWithResult(
-      FROM_HERE, {base::MayBlock()}, base::Bind(&::IsAdobeReaderUpToDate),
+  // IsAdobeReaderUpToDate() needs to be run with COM as it makes COM calls via
+  // AssocQueryString() in IsAdobeReaderDefaultPDFViewer().
+  base::PostTaskAndReplyWithResult(
+      base::CreateCOMSTATaskRunnerWithTraits({base::MayBlock()}).get(),
+      FROM_HERE, base::Bind(&::IsAdobeReaderUpToDate),
       base::Bind(&DownloadTargetDeterminer::DetermineIfAdobeReaderUpToDateDone,
                  weak_ptr_factory_.GetWeakPtr()));
   return QUIT_DOLOOP;

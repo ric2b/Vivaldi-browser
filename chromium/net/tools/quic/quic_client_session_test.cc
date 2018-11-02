@@ -153,6 +153,7 @@ TEST_P(QuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
   // Now create a second session using the same crypto config.
   Initialize();
 
+  EXPECT_CALL(*connection_, OnCanWrite());
   // Starting the handshake should move immediately to encryption
   // established and will allow streams to be created.
   session_->CryptoConnect();
@@ -168,7 +169,8 @@ TEST_P(QuicClientSessionTest, NoEncryptionAfterInitialEncryption) {
   CryptoHandshakeMessage rej;
   crypto_test_utils::FillInDummyReject(&rej, /* stateless */ false);
   EXPECT_TRUE(session_->IsEncryptionEstablished());
-  session_->GetMutableCryptoStream()->OnHandshakeMessage(rej);
+  crypto_test_utils::SendHandshakeMessageToStream(
+      session_->GetMutableCryptoStream(), rej, Perspective::IS_CLIENT);
   EXPECT_FALSE(session_->IsEncryptionEstablished());
   EXPECT_EQ(ENCRYPTION_NONE,
             QuicPacketCreatorPeer::GetEncryptionLevel(
@@ -346,9 +348,8 @@ TEST_P(QuicClientSessionTest, InvalidPacketReceived) {
   // Verify that a non-decryptable packet doesn't close the connection.
   QuicConnectionId connection_id = session_->connection()->connection_id();
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructEncryptedPacket(
-      GetPeerInMemoryConnectionId(connection_id), false, false, 100, "data",
-      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, nullptr,
-      Perspective::IS_SERVER));
+      connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
+      PACKET_6BYTE_PACKET_NUMBER, nullptr, Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   // Change the last byte of the encrypted data.
@@ -372,9 +373,8 @@ TEST_P(QuicClientSessionTest, InvalidFramedPacketReceived) {
   QuicConnectionId connection_id = session_->connection()->connection_id();
   QuicVersionVector versions = {GetParam()};
   std::unique_ptr<QuicEncryptedPacket> packet(ConstructMisFramedEncryptedPacket(
-      GetPeerInMemoryConnectionId(connection_id), false, false, 100, "data",
-      PACKET_8BYTE_CONNECTION_ID, PACKET_6BYTE_PACKET_NUMBER, &versions,
-      Perspective::IS_SERVER));
+      connection_id, false, false, 100, "data", PACKET_8BYTE_CONNECTION_ID,
+      PACKET_6BYTE_PACKET_NUMBER, &versions, Perspective::IS_SERVER));
   std::unique_ptr<QuicReceivedPacket> received(
       ConstructReceivedPacket(*packet, QuicTime::Zero()));
   EXPECT_CALL(*connection_, CloseConnection(_, _, _)).Times(1);
@@ -516,6 +516,8 @@ TEST_P(QuicClientSessionTest, IsClosedTrueAfterResetPromisedAlreadyOpen) {
   CompleteCryptoHandshake();
 
   session_->GetOrCreateStream(promised_stream_id_);
+  EXPECT_CALL(*connection_,
+              SendRstStream(promised_stream_id_, QUIC_REFUSED_STREAM, 0));
   session_->ResetPromised(promised_stream_id_, QUIC_REFUSED_STREAM);
   EXPECT_TRUE(session_->IsClosedStream(promised_stream_id_));
 }
@@ -524,6 +526,8 @@ TEST_P(QuicClientSessionTest, IsClosedTrueAfterResetPromisedNonexistant) {
   // Initialize crypto before the client session will create a stream.
   CompleteCryptoHandshake();
 
+  EXPECT_CALL(*connection_,
+              SendRstStream(promised_stream_id_, QUIC_REFUSED_STREAM, 0));
   session_->ResetPromised(promised_stream_id_, QUIC_REFUSED_STREAM);
   EXPECT_TRUE(session_->IsClosedStream(promised_stream_id_));
 }

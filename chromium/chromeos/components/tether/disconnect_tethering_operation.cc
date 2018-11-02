@@ -4,6 +4,8 @@
 
 #include "chromeos/components/tether/disconnect_tethering_operation.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "base/time/default_clock.h"
 #include "chromeos/components/tether/message_wrapper.h"
 #include "chromeos/components/tether/proto/tether.pb.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -48,8 +50,9 @@ DisconnectTetheringOperation::DisconnectTetheringOperation(
     : MessageTransferOperation(
           std::vector<cryptauth::RemoteDevice>{device_to_connect},
           connection_manager),
-      device_id_(device_to_connect.GetDeviceId()),
-      has_authenticated_(false) {}
+      remote_device_(device_to_connect),
+      has_sent_message_(false),
+      clock_(base::MakeUnique<base::DefaultClock>()) {}
 
 DisconnectTetheringOperation::~DisconnectTetheringOperation() {}
 
@@ -64,26 +67,46 @@ void DisconnectTetheringOperation::RemoveObserver(Observer* observer) {
 void DisconnectTetheringOperation::NotifyObserversOperationFinished(
     bool success) {
   for (auto& observer : observer_list_) {
-    observer.OnOperationFinished(device_id_, success);
+    observer.OnOperationFinished(remote_device_.GetDeviceId(), success);
   }
 }
 
 void DisconnectTetheringOperation::OnDeviceAuthenticated(
     const cryptauth::RemoteDevice& remote_device) {
   DCHECK(remote_devices().size() == 1u && remote_devices()[0] == remote_device);
-  has_authenticated_ = true;
 
-  SendMessageToDevice(remote_device, base::MakeUnique<MessageWrapper>(
-                                         DisconnectTetheringRequest()));
-  UnregisterDevice(remote_device);
+  disconnect_message_sequence_number_ = SendMessageToDevice(
+      remote_device,
+      base::MakeUnique<MessageWrapper>(DisconnectTetheringRequest()));
+  disconnect_start_time_ = clock_->Now();
 }
 
 void DisconnectTetheringOperation::OnOperationFinished() {
-  NotifyObserversOperationFinished(has_authenticated_);
+  NotifyObserversOperationFinished(has_sent_message_);
 }
 
 MessageType DisconnectTetheringOperation::GetMessageTypeForConnection() {
   return MessageType::DISCONNECT_TETHERING_REQUEST;
+}
+
+void DisconnectTetheringOperation::OnMessageSent(int sequence_number) {
+  if (sequence_number != disconnect_message_sequence_number_)
+    return;
+
+  has_sent_message_ = true;
+
+  DCHECK(!disconnect_start_time_.is_null());
+  UMA_HISTOGRAM_TIMES(
+      "InstantTethering.Performance.DisconnectTetheringRequestDuration",
+      clock_->Now() - disconnect_start_time_);
+  disconnect_start_time_ = base::Time();
+
+  UnregisterDevice(remote_device_);
+}
+
+void DisconnectTetheringOperation::SetClockForTest(
+    std::unique_ptr<base::Clock> clock_for_test) {
+  clock_ = std::move(clock_for_test);
 }
 
 }  // namespace tether

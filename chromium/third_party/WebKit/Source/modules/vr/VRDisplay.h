@@ -7,6 +7,7 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/FrameRequestCallback.h"
+#include "core/dom/SuspendableObject.h"
 #include "core/events/EventTarget.h"
 #include "device/vr/vr_service.mojom-blink.h"
 #include "modules/vr/VRDisplayCapabilities.h"
@@ -39,7 +40,7 @@ enum VREye { kVREyeNone, kVREyeLeft, kVREyeRight };
 
 class VRDisplay final : public EventTargetWithInlineData,
                         public ActiveScriptWrappable<VRDisplay>,
-                        public ContextLifecycleObserver,
+                        public SuspendableObject,
                         public device::mojom::blink::VRDisplayClient,
                         public device::mojom::blink::VRSubmitFrameClient {
   DEFINE_WRAPPERTYPEINFO();
@@ -89,7 +90,13 @@ class VRDisplay final : public EventTargetWithInlineData,
   // ScriptWrappable implementation.
   bool HasPendingActivity() const final;
 
+  // SuspendableObject:
+  void Suspend() override;
+  void Resume() override;
+
   void FocusChanged();
+
+  void OnMagicWindowVSync(double timestamp);
 
   DECLARE_VIRTUAL_TRACE();
 
@@ -131,15 +138,17 @@ class VRDisplay final : public EventTargetWithInlineData,
   void OnBlur() override;
   void OnFocus() override;
   void OnActivate(device::mojom::blink::VRDisplayEventReason,
-                  const OnActivateCallback& on_handled) override;
+                  OnActivateCallback on_handled) override;
   void OnDeactivate(device::mojom::blink::VRDisplayEventReason) override;
 
-  void OnVSync(device::mojom::blink::VRPosePtr,
-               mojo::common::mojom::blink::TimeDeltaPtr,
-               int16_t frame_id,
-               device::mojom::blink::VRVSyncProvider::Status);
-  void ConnectVSyncProvider();
-  void OnVSyncConnectionError();
+  void OnPresentingVSync(
+      device::mojom::blink::VRPosePtr,
+      WTF::TimeDelta,
+      int16_t frame_id,
+      device::mojom::blink::VRPresentationProvider::VSyncStatus);
+  void OnPresentationProviderConnectionError();
+
+  void OnMagicWindowPose(device::mojom::blink::VRPosePtr);
 
   bool FocusedOrPresenting();
 
@@ -165,6 +174,7 @@ class VRDisplay final : public EventTargetWithInlineData,
   Member<VREyeParameters> eye_parameters_left_;
   Member<VREyeParameters> eye_parameters_right_;
   device::mojom::blink::VRPosePtr frame_pose_;
+  device::mojom::blink::VRPosePtr pending_pose_;
 
   // This frame ID is vr-specific and is used to track when frames arrive at the
   // VR compositor so that it knows which poses to use, when to apply bounds
@@ -191,14 +201,13 @@ class VRDisplay final : public EventTargetWithInlineData,
   Member<ScriptedAnimationController> scripted_animation_controller_;
   bool pending_vrdisplay_raf_ = false;
   bool pending_vsync_ = false;
+  int pending_vsync_id_ = -1;
   bool in_animation_frame_ = false;
   bool did_submit_this_frame_ = false;
   bool in_display_activate_ = false;
   bool display_blurred_ = false;
-  double timebase_ = -1;
   bool pending_previous_frame_render_ = false;
   bool pending_submit_frame_ = false;
-  bool v_sync_connection_failed_ = false;
   bool pending_present_request_ = false;
 
   device::mojom::blink::VRDisplayPtr display_;
@@ -206,7 +215,7 @@ class VRDisplay final : public EventTargetWithInlineData,
   mojo::Binding<device::mojom::blink::VRSubmitFrameClient>
       submit_frame_client_binding_;
   mojo::Binding<device::mojom::blink::VRDisplayClient> display_client_binding_;
-  device::mojom::blink::VRVSyncProviderPtr vr_v_sync_provider_;
+  device::mojom::blink::VRPresentationProviderPtr vr_presentation_provider_;
 
   HeapDeque<Member<ScriptPromiseResolver>> pending_present_resolvers_;
 };

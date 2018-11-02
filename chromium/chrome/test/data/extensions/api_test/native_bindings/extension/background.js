@@ -17,19 +17,16 @@ var portNumber;
 // methods, etc). If any of these stages failed, the test itself would also
 // fail.
 var tests = [
-  function idleApi() {
-    chrome.test.assertTrue(!!chrome.idle);
-    chrome.test.assertTrue(!!chrome.idle.IdleState);
-    chrome.test.assertTrue(!!chrome.idle.IdleState.IDLE);
-    chrome.test.assertTrue(!!chrome.idle.IdleState.ACTIVE);
-    chrome.test.assertTrue(!!chrome.idle.queryState);
-    chrome.idle.queryState(1000, function(state) {
-      // Depending on the machine, this could come back as either idle or
-      // active. However, all we're curious about is the bindings themselves
-      // (not the API implementation), so as long as it's a possible response,
-      // it's a success for our purposes.
-      chrome.test.assertTrue(state == chrome.idle.IdleState.IDLE ||
-                             state == chrome.idle.IdleState.ACTIVE);
+  function historyApi() {
+    chrome.test.assertTrue(!!chrome.history);
+    chrome.test.assertTrue(!!chrome.history.TransitionType);
+    chrome.test.assertTrue(!!chrome.history.TransitionType.LINK);
+    chrome.test.assertTrue(!!chrome.history.TransitionType.TYPED);
+    chrome.test.assertTrue(!!chrome.history.getVisits);
+    chrome.history.getVisits({url: 'http://example.com'}, function(visits) {
+      // We're just testing the bindings, not the history API, so we don't
+      // care about the response.
+      chrome.test.assertTrue(!!visits);
       chrome.test.succeed();
     });
   },
@@ -60,6 +57,7 @@ var tests = [
   },
   function testMessaging() {
     var tabId;
+
     var createPort = function() {
       chrome.test.assertTrue(!!tabId);
       var port = chrome.tabs.connect(tabId);
@@ -67,16 +65,22 @@ var tests = [
       port.onMessage.addListener(message => {
         chrome.test.assertEq('content script', message);
         port.disconnect();
-        chrome.test.succeed();
+        chrome.tabs.sendMessage(tabId, 'async bounce', function(response) {
+          chrome.test.assertEq('bounced', response);
+          chrome.test.succeed();
+        });
       });
       port.postMessage('background page');
     };
 
-    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    chrome.runtime.onMessage.addListener(function listener(
+        message, sender, sendResponse) {
       chrome.test.assertEq('startFlow', message);
       createPort();
       sendResponse('started');
+      chrome.runtime.onMessage.removeListener(listener);
     });
+
     var url = 'http://localhost:' + portNumber +
               '/native_bindings/extension/messaging_test.html';
     chrome.tabs.create({url: url}, function(tab) {
@@ -120,7 +124,11 @@ var tests = [
   },
   function testLastError() {
     chrome.runtime.setUninstallURL('chrome://newtab', function() {
-      chrome.test.assertLastError('Invalid URL: "chrome://newtab".');
+      var expectedError = 'Invalid URL: "chrome://newtab".';
+      chrome.test.assertLastError(expectedError);
+      // Explicitly also test the old extension.lastError property.
+      chrome.test.assertTrue(!!chrome.extension.lastError);
+      chrome.test.assertEq(expectedError, chrome.extension.lastError.message);
       chrome.test.succeed();
     });
   },
@@ -296,21 +304,13 @@ var tests = [
 
     // The fullscreen setting is deprecated.
     var fullscreen = chrome.contentSettings.fullscreen;
-    caught = false;
-    try {
-      // Trying to set the fullscreen setting to anything but 'allow' should
-      // fail.
-      fullscreen.set({primaryPattern: pattern, setting: 'block'});
-    } catch (e) {
-      caught = true;
-    }
-    chrome.test.assertTrue(caught);
-
     var deprecatedSettingTest = new Promise(function(resolve, reject) {
       fullscreen.get({primaryUrl: url}, (details) => {
         chrome.test.assertTrue(!!details);
         chrome.test.assertEq('allow', details.setting);
-        fullscreen.set({primaryPattern: pattern, setting: 'allow'}, () => {
+        // Trying to set the fullscreen setting to anything but 'allow' should
+        // silently fail.
+        fullscreen.set({primaryPattern: pattern, setting: 'block'}, () => {
           fullscreen.get({primaryUrl: url}, (details) => {
             chrome.test.assertTrue(!!details);
             chrome.test.assertEq('allow', details.setting);

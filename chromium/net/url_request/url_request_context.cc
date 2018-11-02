@@ -58,6 +58,7 @@ URLRequestContext::URLRequestContext()
 }
 
 URLRequestContext::~URLRequestContext() {
+  DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
   AssertNoURLRequests();
   base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
       this);
@@ -99,6 +100,17 @@ const HttpNetworkSession::Params* URLRequestContext::GetNetworkSessionParams(
   if (!network_session)
     return nullptr;
   return &network_session->params();
+}
+
+const HttpNetworkSession::Context* URLRequestContext::GetNetworkSessionContext()
+    const {
+  HttpTransactionFactory* transaction_factory = http_transaction_factory();
+  if (!transaction_factory)
+    return nullptr;
+  HttpNetworkSession* network_session = transaction_factory->GetSession();
+  if (!network_session)
+    return nullptr;
+  return &network_session->context();
 }
 
 std::unique_ptr<URLRequest> URLRequestContext::CreateRequest(

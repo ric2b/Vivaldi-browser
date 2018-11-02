@@ -11,7 +11,7 @@ namespace blink {
 
 class EditingUtilitiesTest : public EditingTestBase {};
 
-TEST_F(EditingUtilitiesTest, directionOfEnclosingBlock) {
+TEST_F(EditingUtilitiesTest, DirectionOfEnclosingBlockOf) {
   const char* body_content =
       "<p id='host'><b id='one'></b><b id='two'>22</b></p>";
   const char* shadow_content =
@@ -21,9 +21,9 @@ TEST_F(EditingUtilitiesTest, directionOfEnclosingBlock) {
   SetShadowContent(shadow_content, "host");
   Node* one = GetDocument().getElementById("one");
 
-  EXPECT_EQ(TextDirection::kLtr, DirectionOfEnclosingBlock(Position(one, 0)));
+  EXPECT_EQ(TextDirection::kLtr, DirectionOfEnclosingBlockOf(Position(one, 0)));
   EXPECT_EQ(TextDirection::kRtl,
-            DirectionOfEnclosingBlock(PositionInFlatTree(one, 0)));
+            DirectionOfEnclosingBlockOf(PositionInFlatTree(one, 0)));
 }
 
 TEST_F(EditingUtilitiesTest, firstEditablePositionAfterPositionInRoot) {
@@ -55,16 +55,16 @@ TEST_F(EditingUtilitiesTest, firstEditablePositionAfterPositionInRoot) {
                 .DeepEquivalent());
 
   EXPECT_EQ(
-      Position::FirstPositionInNode(host),
+      Position::FirstPositionInNode(*host),
       FirstEditablePositionAfterPositionInRoot(Position(three, 0), *host));
   EXPECT_EQ(
       Position(one->firstChild(), 0),
       FirstEditableVisiblePositionAfterPositionInRoot(Position(three, 0), *host)
           .DeepEquivalent());
-  EXPECT_EQ(PositionInFlatTree::AfterNode(host),
+  EXPECT_EQ(PositionInFlatTree::AfterNode(*host),
             FirstEditablePositionAfterPositionInRoot(
                 PositionInFlatTree(three, 0), *host));
-  EXPECT_EQ(PositionInFlatTree::LastPositionInNode(host),
+  EXPECT_EQ(PositionInFlatTree::LastPositionInNode(*host),
             FirstEditableVisiblePositionAfterPositionInRoot(
                 PositionInFlatTree(three, 0), *host)
                 .DeepEquivalent());
@@ -131,28 +131,28 @@ TEST_F(EditingUtilitiesTest, tableElementJustBefore) {
   Node* host = GetDocument().getElementById("host");
   Node* table = GetDocument().getElementById("table");
 
-  EXPECT_EQ(table, TableElementJustBefore(VisiblePosition::AfterNode(table)));
+  EXPECT_EQ(table, TableElementJustBefore(VisiblePosition::AfterNode(*table)));
   EXPECT_EQ(table, TableElementJustBefore(
-                       VisiblePositionInFlatTree::AfterNode(table)));
+                       VisiblePositionInFlatTree::AfterNode(*table)));
 
-  EXPECT_EQ(table,
-            TableElementJustBefore(VisiblePosition::LastPositionInNode(table)));
+  EXPECT_EQ(table, TableElementJustBefore(
+                       VisiblePosition::LastPositionInNode(*table)));
   EXPECT_EQ(table, TableElementJustBefore(CreateVisiblePosition(
-                       PositionInFlatTree::LastPositionInNode(table))));
+                       PositionInFlatTree::LastPositionInNode(*table))));
 
   EXPECT_EQ(nullptr,
             TableElementJustBefore(CreateVisiblePosition(Position(host, 2))));
   EXPECT_EQ(table, TableElementJustBefore(
                        CreateVisiblePosition(PositionInFlatTree(host, 2))));
 
-  EXPECT_EQ(nullptr, TableElementJustBefore(VisiblePosition::AfterNode(host)));
-  EXPECT_EQ(nullptr,
-            TableElementJustBefore(VisiblePositionInFlatTree::AfterNode(host)));
+  EXPECT_EQ(nullptr, TableElementJustBefore(VisiblePosition::AfterNode(*host)));
+  EXPECT_EQ(nullptr, TableElementJustBefore(
+                         VisiblePositionInFlatTree::AfterNode(*host)));
 
   EXPECT_EQ(nullptr,
-            TableElementJustBefore(VisiblePosition::LastPositionInNode(host)));
+            TableElementJustBefore(VisiblePosition::LastPositionInNode(*host)));
   EXPECT_EQ(table, TableElementJustBefore(CreateVisiblePosition(
-                       PositionInFlatTree::LastPositionInNode(host))));
+                       PositionInFlatTree::LastPositionInNode(*host))));
 }
 
 TEST_F(EditingUtilitiesTest, lastEditablePositionBeforePositionInRoot) {
@@ -184,13 +184,13 @@ TEST_F(EditingUtilitiesTest, lastEditablePositionBeforePositionInRoot) {
                 .DeepEquivalent());
 
   EXPECT_EQ(
-      Position::FirstPositionInNode(host),
+      Position::FirstPositionInNode(*host),
       LastEditablePositionBeforePositionInRoot(Position(three, 0), *host));
   EXPECT_EQ(
       Position(one->firstChild(), 0),
       LastEditableVisiblePositionBeforePositionInRoot(Position(three, 0), *host)
           .DeepEquivalent());
-  EXPECT_EQ(PositionInFlatTree::FirstPositionInNode(host),
+  EXPECT_EQ(PositionInFlatTree::FirstPositionInNode(*host),
             LastEditablePositionBeforePositionInRoot(
                 PositionInFlatTree(three, 0), *host));
   EXPECT_EQ(PositionInFlatTree(two->firstChild(), 0),

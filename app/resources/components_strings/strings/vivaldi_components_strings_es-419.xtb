@@ -12,9 +12,11 @@
 <translation id="1559528461873125649">El archivo o directorio no existe</translation>
 <translation id="1640244768702815859">Intenta <ph name="BEGIN_LINK" />visitar la página principal del sitio<ph name="END_LINK" />.</translation>
 <translation id="1645368109819982629">Protocolo no admitido</translation>
+<translation id="1676269943528358898"><ph name="SITE" /> normalmente  encripta los datos para proteger su información.  Cuando Vivaldi ha intentado esta vez conectar con <ph name="SITE" /> el sitio web ha devuelto unas credenciales incorrectas e inusuales. Esto puede ocurrir cuando un atacante está pretendiendo ser <ph name="SITE" />, o cuando una petición de contraseña  Wi-Fi ha interrumpido su conexión. Su información se mantiene segura porque Vivaldi ha detenido la conexión antes de que se intercambiara ningún dato.</translation>
 <translation id="1710259589646384581">SO</translation>
 <translation id="1728677426644403582">Estás viendo el código de fuente de una página web</translation>
 <translation id="1734878702283171397">Intenta contactar con el administrador del sistema.</translation>
+<translation id="1768211456781949159"><ph name="BEGIN_LINK" />Trate de ejecutar diagnósticos de Red de Windows<ph name="END_LINK" />.</translation>
 <translation id="194030505837763158">Ir a <ph name="LINK" /></translation>
 <translation id="1974060860693918893">Avanzada</translation>
 <translation id="2030481566774242610">¿Quisiste decir: <ph name="LINK" />?</translation>
@@ -22,13 +24,14 @@
 <translation id="2065985942032347596">Se requiere la autenticación</translation>
 <translation id="2166378884831602661">Este sitio no puede proporcionar una conexión segura</translation>
 <translation id="2230458221926704099">Corrija su conexión con la <ph name="BEGIN_LINK" />aplicación de diagnóstico<ph name="END_LINK" /></translation>
-<translation id="224482879335890159">Busca <ph name="LINK" /> en Vivaldi</translation>
 <translation id="2292556288342944218">Se bloqueó tu acceso a Internet</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> requiere un nombre de usuario y su contraseña.</translation>
+<translation id="2467694685043708798"><ph name="BEGIN_LINK" />Ejecutando diagnóstico de Red<ph name="END_LINK" /></translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> envió una respuesta no válida.</translation>
 <translation id="2609632851001447353">Variaciones</translation>
 <translation id="2650446666397867134">Se denegó el acceso al archivo</translation>
 <translation id="2705137772291741111">La copia guardada (en caché) de este sitio es ilegible.</translation>
+<translation id="2730326759066348565"><ph name="BEGIN_LINK" />Ejecutando diagnósticos de conectividad<ph name="END_LINK" /></translation>
 <translation id="2784949926578158345">Se ha restablecido la conexión.</translation>
 <translation id="2856444702002559011">Es posible que algunos atacantes intenten robar tu información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (p. ej., contraseñas, mensajes o tarjetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Más información<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Se detectó un cambio de red.</translation>
@@ -37,6 +40,7 @@
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="3093245981617870298">Estás offline.</translation>
 <translation id="3109728660330352905">No tienes autorización para ver esta página.</translation>
+<translation id="31207688938192855"><ph name="BEGIN_LINK" />Intente ejecutar los diagnósticos de conectividad<ph name="END_LINK" />.</translation>
 <translation id="3176929007561373547">Comprueba la configuración del proxy o comunícate con tu
           administrador de red para asegurarte de que el 
           servidor proxy esté funcionando. Si consideras
@@ -51,7 +55,6 @@
 <translation id="3630155396527302611">Si ya está incluido como un programa con permiso para acceder a la red, intenta
       quitarlo de la lista y agregarlo de nuevo.</translation>
 <translation id="3658742229777143148">Revisión</translation>
-<translation id="3693415264595406141">Contraseña:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />Comprobar la configuración del proxy, firewall y DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">Si utilizas un servidor proxy...</translation>
 <translation id="3973234410852337861">Se bloqueó <ph name="HOST_NAME" /></translation>
@@ -61,16 +64,17 @@
 <translation id="4130226655945681476">Comprobar los cables de red, el módem y el router</translation>
 <translation id="4165986682804962316">Configuración del sitio</translation>
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />Comprobar las configuraciones de firewall y antivirus<ph name="END_LINK" /></translation>
-<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Pruebe a ejecutar diagnósticos de red<ph name="END_LINK" /></translation>
+<translation id="4226937834893929579"><ph name="BEGIN_LINK" />Pruebe a ejecutar diagnósticos de red<ph name="END_LINK" />.</translation>
 <translation id="4304224509867189079">Iniciar sesión</translation>
-<translation id="4381091992796011497">Nombre de usuario:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> no aceptó tu certificado de acceso o es posible que no se haya proporcionado.</translation>
 <translation id="4506599922270137252">Contactar con el administrador del sistema</translation>
 <translation id="4522570452068850558">Detalles</translation>
 <translation id="4558551763791394412">Prueba deshabilitando tus extensiones.</translation>
 <translation id="4708268264240856090">Se interrumpió la conexión</translation>
+<translation id="4722547256916164131"><ph name="BEGIN_LINK" />Ejecutando diagnósticos de Red de Windows<ph name="END_LINK" /></translation>
 <translation id="4744603770635761495">Ruta ejecutable</translation>
 <translation id="4764776831041365478">Es posible que la página web en <ph name="URL" /> no funcione temporalmente o se haya trasladado de manera permanente a una nueva dirección web.</translation>
+<translation id="4807049035289105102">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web ha enviado unas credenciales codificadas que Vivaldi no puede procesar. Los ataques y los errores de red suelen ser temporales, así que esta página posiblemente le funcione más tarde.</translation>
 <translation id="5023310440958281426">Consulte las políticas del administrador</translation>
 <translation id="5070335125961472645"><ph name="BEGIN_LINK" />Comprobar la dirección de proxy<ph name="END_LINK" /></translation>
 <translation id="5115563688576182185">(64 bits)</translation>

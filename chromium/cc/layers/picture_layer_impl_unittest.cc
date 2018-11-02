@@ -18,13 +18,12 @@
 #include "cc/base/math_util.h"
 #include "cc/layers/append_quads_data.h"
 #include "cc/layers/picture_layer.h"
-#include "cc/output/buffer_to_texture_target_map.h"
 #include "cc/quads/draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/test/begin_frame_args_test.h"
-#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_content_layer_client.h"
 #include "cc/test/fake_impl_task_runner_provider.h"
+#include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_layer_tree_host_client.h"
 #include "cc/test/fake_layer_tree_host_impl.h"
@@ -39,6 +38,7 @@
 #include "cc/tiles/tiling_set_raster_queue_all.h"
 #include "cc/tiles/tiling_set_raster_queue_required.h"
 #include "cc/trees/layer_tree_impl.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/gfx/geometry/size_conversions.h"
@@ -81,13 +81,13 @@ class PictureLayerImplTest : public TestLayerTreeHostBase {
     LayerTreeSettings settings;
     settings.layer_transforms_should_scale_layer_contents = true;
     settings.create_low_res_tiling = true;
-    settings.renderer_settings.buffer_to_texture_target_map =
-        DefaultBufferToTextureTargetMapForTesting();
+    settings.resource_settings.buffer_to_texture_target_map =
+        viz::DefaultBufferToTextureTargetMapForTesting();
     return settings;
   }
 
-  std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() override {
-    return FakeCompositorFrameSink::Create3dForGpuRasterization();
+  std::unique_ptr<LayerTreeFrameSink> CreateLayerTreeFrameSink() override {
+    return FakeLayerTreeFrameSink::Create3dForGpuRasterization();
   }
 
   void SetupDefaultTreesWithFixedTileSize(const gfx::Size& layer_bounds,
@@ -308,8 +308,7 @@ TEST_F(PictureLayerImplTest, ExternalViewportRectForPrioritizingTiles) {
 
   host_impl()->SetExternalTilePriorityConstraints(
       viewport_rect_for_tile_priority, transform_for_tile_priority);
-  bool update_lcd_text = false;
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
 
   gfx::Rect viewport_rect_for_tile_priority_in_view_space =
       viewport_rect_for_tile_priority;
@@ -337,7 +336,7 @@ TEST_F(PictureLayerImplTest, ExternalViewportRectForPrioritizingTiles) {
   transform_for_tile_priority.Rotate(45);
   host_impl()->SetExternalTilePriorityConstraints(
       viewport_rect_for_tile_priority, transform_for_tile_priority);
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
 
   gfx::Transform screen_to_view(gfx::Transform::kSkipInitialization);
   bool success = transform_for_tile_priority.GetInverse(&screen_to_view);
@@ -378,8 +377,7 @@ TEST_F(PictureLayerImplTest, ViewportRectForTilePriorityIsCached) {
 
   host_impl()->SetExternalTilePriorityConstraints(
       viewport_rect_for_tile_priority, transform_for_tile_priority);
-  bool update_lcd_text = false;
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
 
   EXPECT_EQ(viewport_rect_for_tile_priority,
             active_layer()->viewport_rect_for_tile_priority_in_content_space());
@@ -394,7 +392,7 @@ TEST_F(PictureLayerImplTest, ViewportRectForTilePriorityIsCached) {
   // should remain to be the previously cached value.
   EXPECT_EQ(viewport_rect_for_tile_priority,
             active_layer()->viewport_rect_for_tile_priority_in_content_space());
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
 
   // Now the UpdateDrawProperties is called. The viewport rect for tile
   // priority should be the latest value.
@@ -1174,7 +1172,7 @@ TEST_F(PictureLayerImplTest, DontAddLowResForSmallLayers) {
   pending_layer()->test_properties()->SetMaskLayer(std::move(mask));
   pending_layer()->test_properties()->force_render_surface = true;
   RebuildPropertyTreesOnPendingTree();
-  host_impl()->pending_tree()->UpdateDrawProperties(false);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   FakePictureLayerImpl* mask_raw = static_cast<FakePictureLayerImpl*>(
       pending_layer()->test_properties()->mask_layer);
@@ -1209,8 +1207,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   FakePictureLayerImpl* pending_mask = static_cast<FakePictureLayerImpl*>(
       pending_layer()->test_properties()->mask_layer);
@@ -1259,7 +1256,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   pending_mask->SetRasterSourceOnPending(huge_raster_source, Region());
 
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   // The mask tiling gets scaled down.
   EXPECT_LT(pending_mask->HighResTiling()->contents_scale_key(), 1.f);
@@ -1317,7 +1314,7 @@ TEST_F(PictureLayerImplTest, HugeMasksGetScaledDown) {
   EXPECT_FALSE(pending_mask->CanHaveTilings());
 
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   EXPECT_EQ(0u, pending_mask->num_tilings());
 }
@@ -1343,8 +1340,7 @@ TEST_F(PictureLayerImplTest, ScaledMaskLayer) {
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   FakePictureLayerImpl* pending_mask = static_cast<FakePictureLayerImpl*>(
       pending_layer()->test_properties()->mask_layer);
@@ -1445,8 +1441,7 @@ TEST_F(PictureLayerImplTest, ClampTilesToMaxTileSize) {
   std::unique_ptr<TestWebGraphicsContext3D> context =
       TestWebGraphicsContext3D::Create();
   context->set_max_texture_size(140);
-  ResetCompositorFrameSink(
-      FakeCompositorFrameSink::Create3d(std::move(context)));
+  ResetLayerTreeFrameSink(FakeLayerTreeFrameSink::Create3d(std::move(context)));
 
   SetupDrawPropertiesAndUpdateTiles(pending_layer(), 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -1481,8 +1476,7 @@ TEST_F(PictureLayerImplTest, ClampSingleTileToToMaxTileSize) {
   std::unique_ptr<TestWebGraphicsContext3D> context =
       TestWebGraphicsContext3D::Create();
   context->set_max_texture_size(140);
-  ResetCompositorFrameSink(
-      FakeCompositorFrameSink::Create3d(std::move(context)));
+  ResetLayerTreeFrameSink(FakeLayerTreeFrameSink::Create3d(std::move(context)));
 
   SetupDrawPropertiesAndUpdateTiles(active_layer(), 1.f, 1.f, 1.f, 1.f, 0.f,
                                     false);
@@ -1659,7 +1653,7 @@ TEST_F(NoLowResPictureLayerImplTest, MarkRequiredOffscreenTiles) {
   int num_offscreen = 0;
 
   std::unique_ptr<TilingSetRasterQueueAll> queue(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   for (; !queue->IsEmpty(); queue->Pop()) {
     const PrioritizedTile& prioritized_tile = queue->Top();
     DCHECK(prioritized_tile.tile());
@@ -1696,8 +1690,7 @@ TEST_F(NoLowResPictureLayerImplTest,
   host_impl()->SetExternalTilePriorityConstraints(
       external_viewport_for_tile_priority, transform_for_tile_priority);
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   // Set visible content rect that is different from
   // external_viewport_for_tile_priority.
@@ -1737,7 +1730,7 @@ TEST_F(NoLowResPictureLayerImplTest,
 
   // Activate and draw active layer.
   host_impl()->ActivateSyncTree();
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
   active_layer()->draw_properties().visible_layer_rect = visible_layer_rect;
 
   std::unique_ptr<RenderPass> render_pass = RenderPass::Create();
@@ -2330,7 +2323,6 @@ TEST_F(PictureLayerImplTest, SyncTilingAfterGpuRasterizationToggles) {
   EXPECT_EQ(0u, active_layer()->release_resources_count());
   // Toggling the gpu rasterization clears all tilings on both trees.
   host_impl()->SetHasGpuRasterizationTrigger(true);
-  host_impl()->SetContentIsSuitableForGpuRasterization(true);
   host_impl()->CommitComplete();
   EXPECT_EQ(1u, pending_layer()->release_tile_resources_count());
   EXPECT_EQ(1u, active_layer()->release_tile_resources_count());
@@ -2341,6 +2333,7 @@ TEST_F(PictureLayerImplTest, SyncTilingAfterGpuRasterizationToggles) {
   EXPECT_TRUE(pending_layer()->tilings()->FindTilingWithScaleKey(1.f));
   EXPECT_EQ(0u, active_layer()->tilings()->num_tilings());
 
+  host_impl()->NotifyReadyToActivate();
   ActivateTree();
   EXPECT_TRUE(active_layer()->tilings()->FindTilingWithScaleKey(1.f));
 
@@ -2357,9 +2350,9 @@ TEST_F(PictureLayerImplTest, SyncTilingAfterGpuRasterizationToggles) {
   EXPECT_EQ(2u, active_layer()->release_tile_resources_count());
   EXPECT_EQ(2u, pending_layer()->release_resources_count());
   EXPECT_EQ(2u, active_layer()->release_resources_count());
+  host_impl()->NotifyReadyToActivate();
 
   host_impl()->SetHasGpuRasterizationTrigger(true);
-  host_impl()->SetContentIsSuitableForGpuRasterization(false);
   host_impl()->CommitComplete();
   EXPECT_EQ(GpuRasterizationStatus::ON,
             host_impl()->gpu_rasterization_status());
@@ -2417,7 +2410,6 @@ TEST_F(PictureLayerImplTest, NoLowResTilingWithGpuRasterization) {
                          default_tile_size.height() * 4);
 
   host_impl()->SetHasGpuRasterizationTrigger(true);
-  host_impl()->SetContentIsSuitableForGpuRasterization(true);
   host_impl()->CommitComplete();
 
   SetupDefaultTrees(layer_bounds);
@@ -2431,7 +2423,6 @@ TEST_F(PictureLayerImplTest, NoLowResTilingWithGpuRasterization) {
 
 TEST_F(PictureLayerImplTest, RequiredTilesWithGpuRasterization) {
   host_impl()->SetHasGpuRasterizationTrigger(true);
-  host_impl()->SetContentIsSuitableForGpuRasterization(true);
   host_impl()->CommitComplete();
 
   gfx::Size viewport_size(1000, 1000);
@@ -2753,7 +2744,7 @@ TEST_F(PictureLayerImplTest, TilingSetRasterQueue) {
   int high_res_tile_count = 0u;
   int high_res_now_tiles = 0u;
   std::unique_ptr<TilingSetRasterQueueAll> queue(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     TilePriority priority = prioritized_tile.priority();
@@ -2824,7 +2815,7 @@ TEST_F(PictureLayerImplTest, TilingSetRasterQueue) {
   unique_tiles.clear();
   high_res_tile_count = 0u;
   queue.reset(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     TilePriority priority = prioritized_tile.priority();
@@ -2861,7 +2852,7 @@ TEST_F(PictureLayerImplTest, TilingSetRasterQueue) {
   }
 
   queue.reset(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), true));
+      pending_layer()->picture_layer_tiling_set(), true, false));
   EXPECT_TRUE(queue->IsEmpty());
 }
 
@@ -2961,8 +2952,9 @@ TEST_F(PictureLayerImplTest, TilingSetEvictionQueue) {
   EXPECT_GT(number_of_unmarked_tiles, 1u);
 
   // Tiles don't have resources yet.
-  std::unique_ptr<TilingSetEvictionQueue> queue(
-      new TilingSetEvictionQueue(pending_layer()->picture_layer_tiling_set()));
+  std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
+      pending_layer()->picture_layer_tiling_set(),
+      pending_layer()->contributes_to_drawn_render_surface()));
   EXPECT_TRUE(queue->IsEmpty());
 
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(
@@ -2975,8 +2967,9 @@ TEST_F(PictureLayerImplTest, TilingSetEvictionQueue) {
   PrioritizedTile last_tile;
   size_t distance_decreasing = 0;
   size_t distance_increasing = 0;
-  queue.reset(
-      new TilingSetEvictionQueue(pending_layer()->picture_layer_tiling_set()));
+  queue.reset(new TilingSetEvictionQueue(
+      pending_layer()->picture_layer_tiling_set(),
+      pending_layer()->contributes_to_drawn_render_surface()));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     Tile* tile = prioritized_tile.tile();
@@ -3115,7 +3108,7 @@ TEST_F(PictureLayerImplTest, RasterScaleChangeWithoutAnimation) {
   ResetTilingsAndRasterScales();
 
   float contents_scale = 2.f;
-  float device_scale = 1.f;
+  float device_scale = 1.5f;
   float page_scale = 1.f;
   float maximum_animation_scale = 1.f;
   float starting_animation_scale = 0.f;
@@ -3142,26 +3135,28 @@ TEST_F(PictureLayerImplTest, RasterScaleChangeWithoutAnimation) {
                                starting_animation_scale, animating_transform);
   EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 0.5f);
 
-  // However, if the layer has a will-change property, then the raster scale
-  // will get fixed at the last value.
+  // If we change the layer contents scale after setting will change
+  // will, then it will be updated if it's below the minimum scale (page scale *
+  // device scale).
   active_layer()->SetHasWillChangeTransformHint(true);
   pending_layer()->SetHasWillChangeTransformHint(true);
 
-  contents_scale = 3.f;
+  contents_scale = 0.75f;
 
   SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
                                maximum_animation_scale,
                                starting_animation_scale, animating_transform);
-  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 0.5f);
+  // The scale is clamped to the native scale.
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 1.5f);
 
   // Further changes to the source scale will no longer be reflected in the
   // contents scale.
-  contents_scale = 1.f;
+  contents_scale = 2.f;
 
   SetContentsScaleOnBothLayers(contents_scale, device_scale, page_scale,
                                maximum_animation_scale,
                                starting_animation_scale, animating_transform);
-  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 0.5f);
+  EXPECT_BOTH_EQ(HighResTiling()->contents_scale_key(), 1.5f);
 
   // Disabling the will-change hint will once again make the raster scale update
   // with the ideal scale.
@@ -3420,8 +3415,11 @@ TEST_F(NoLowResPictureLayerImplTest, CleanUpTilings) {
   float low_res_factor = host_impl()->settings().low_res_contents_scale_factor;
   EXPECT_LT(low_res_factor, 1.f);
 
-  float device_scale = 1.7f;
-  float page_scale = 3.2f;
+  // Set the device scale and page scale so that the minimum that we would clamp
+  // to is small. This test isn't testing the clamping. See
+  // RasterScaleChangeWithoutAnimation for this test.
+  float device_scale = 0.5f;
+  float page_scale = 1.f;
   float scale = 1.f;
 
   active_layer()->SetHasWillChangeTransformHint(true);
@@ -3591,8 +3589,8 @@ TEST_F(PictureLayerImplTest, SharedQuadStateContainsMaxTilingScale) {
 
 class PictureLayerImplTestWithDelegatingRenderer : public PictureLayerImplTest {
  public:
-  std::unique_ptr<CompositorFrameSink> CreateCompositorFrameSink() override {
-    return FakeCompositorFrameSink::Create3d();
+  std::unique_ptr<LayerTreeFrameSink> CreateLayerTreeFrameSink() override {
+    return FakeLayerTreeFrameSink::Create3d();
   }
 };
 
@@ -3608,8 +3606,7 @@ TEST_F(PictureLayerImplTestWithDelegatingRenderer,
   SetupPendingTree(pending_raster_source);
   pending_layer()->SetBounds(layer_bounds);
   ActivateTree();
-  bool update_lcd_text = false;
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
   std::vector<Tile*> tiles =
       active_layer()->HighResTiling()->AllTilesForTesting();
   host_impl()->tile_manager()->InitializeTilesWithResourcesForTesting(tiles);
@@ -3660,8 +3657,9 @@ class OcclusionTrackingPictureLayerImplTest : public PictureLayerImplTest {
     size_t occluded_tile_count = 0u;
     PrioritizedTile last_tile;
 
-    std::unique_ptr<TilingSetEvictionQueue> queue(
-        new TilingSetEvictionQueue(layer->picture_layer_tiling_set()));
+    std::unique_ptr<TilingSetEvictionQueue> queue(new TilingSetEvictionQueue(
+        layer->picture_layer_tiling_set(),
+        layer->contributes_to_drawn_render_surface()));
     while (!queue->IsEmpty()) {
       PrioritizedTile prioritized_tile = queue->Top();
       Tile* tile = prioritized_tile.tile();
@@ -3715,7 +3713,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   // No occlusion.
   int unoccluded_tile_count = 0;
   std::unique_ptr<TilingSetRasterQueueAll> queue(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     Tile* tile = prioritized_tile.tile();
@@ -3744,12 +3742,11 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   unoccluded_tile_count = 0;
   queue.reset(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     Tile* tile = prioritized_tile.tile();
@@ -3770,11 +3767,11 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   unoccluded_tile_count = 0;
   queue.reset(new TilingSetRasterQueueAll(
-      pending_layer()->picture_layer_tiling_set(), false));
+      pending_layer()->picture_layer_tiling_set(), false, false));
   while (!queue->IsEmpty()) {
     PrioritizedTile prioritized_tile = queue->Top();
     Tile* tile = prioritized_tile.tile();
@@ -3840,8 +3837,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
@@ -3879,7 +3875,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
 
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(200));
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   for (size_t i = 0; i < pending_layer()->num_tilings(); ++i) {
     PictureLayerTiling* tiling = pending_layer()->tilings()->tiling_at(i);
@@ -3957,8 +3953,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest, OcclusionForDifferentScales) {
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   // UpdateDrawProperties with the occluding layer.
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   EXPECT_EQ(5u, pending_layer()->num_tilings());
 
@@ -4141,8 +4136,7 @@ TEST_F(OcclusionTrackingPictureLayerImplTest,
   RebuildPropertyTreesOnPendingTree();
   host_impl()->AdvanceToNextFrame(base::TimeDelta::FromMilliseconds(1));
   // UpdateDrawProperties with the occluding layer.
-  bool update_lcd_text = false;
-  host_impl()->pending_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->pending_tree()->UpdateDrawProperties();
 
   float dest_scale = std::max(active_layer()->MaximumTilingContentsScale(),
                               pending_layer()->MaximumTilingContentsScale());
@@ -4323,7 +4317,7 @@ void PictureLayerImplTest::TestQuadsForSolidColor(bool test_for_solid,
                                      layer_bounds);
 
   scoped_refptr<RasterSource> pending_raster_source =
-      recording_source->CreateRasterSource(true);
+      recording_source->CreateRasterSource();
 
   SetupPendingTreeWithFixedTileSize(pending_raster_source, tile_size, Region());
   ActivateTree();
@@ -4406,12 +4400,11 @@ TEST_F(PictureLayerImplTest, NonSolidToSolidNoTilings) {
                                      layer_bounds);
 
   scoped_refptr<RasterSource> raster_source1 =
-      recording_source->CreateRasterSource(true);
+      recording_source->CreateRasterSource();
 
   SetupPendingTree(raster_source1);
   ActivateTree();
-  bool update_lcd_text = false;
-  host_impl()->active_tree()->UpdateDrawProperties(update_lcd_text);
+  host_impl()->active_tree()->UpdateDrawProperties();
 
   // We've started with a solid layer that contains some tilings.
   ASSERT_TRUE(active_layer()->tilings());
@@ -4426,7 +4419,7 @@ TEST_F(PictureLayerImplTest, NonSolidToSolidNoTilings) {
                                      layer_bounds);
 
   scoped_refptr<RasterSource> raster_source2 =
-      recording_source->CreateRasterSource(true);
+      recording_source->CreateRasterSource();
 
   SetupPendingTree(raster_source2);
   ActivateTree();
@@ -4610,7 +4603,7 @@ TEST_F(PictureLayerImplTest, ScrollPropagatesToPending) {
   SetupDefaultTrees(layer_bounds);
 
   active_layer()->SetCurrentScrollOffset(gfx::ScrollOffset(0.0, 50.0));
-  host_impl()->active_tree()->UpdateDrawProperties(false);
+  host_impl()->active_tree()->UpdateDrawProperties();
   EXPECT_EQ("0,50 100x100", active_layer()
                                 ->HighResTiling()
                                 ->GetCurrentVisibleRectForTesting()
@@ -4620,7 +4613,7 @@ TEST_F(PictureLayerImplTest, ScrollPropagatesToPending) {
                                ->HighResTiling()
                                ->GetCurrentVisibleRectForTesting()
                                .ToString());
-  host_impl()->pending_tree()->UpdateDrawProperties(false);
+  host_impl()->pending_tree()->UpdateDrawProperties();
   EXPECT_EQ("0,50 100x100", pending_layer()
                                 ->HighResTiling()
                                 ->GetCurrentVisibleRectForTesting()
@@ -4641,31 +4634,21 @@ TEST_F(PictureLayerImplTest, UpdateLCDInvalidatesPendingTree) {
       FakeRasterSource::CreateFilledLCD(layer_bounds);
   SetupPendingTreeWithFixedTileSize(pending_raster_source, tile_size, Region());
 
-  EXPECT_TRUE(pending_layer()->RasterSourceUsesLCDText());
+  EXPECT_TRUE(pending_layer()->RasterSourceUsesLCDTextForTesting());
   EXPECT_TRUE(pending_layer()->HighResTiling()->has_tiles());
   std::vector<Tile*> tiles =
       pending_layer()->HighResTiling()->AllTilesForTesting();
-  auto prioritized_tiles = pending_layer()
-                               ->HighResTiling()
-                               ->UpdateAndGetAllPrioritizedTilesForTesting();
-
-  for (Tile* tile : tiles)
-    EXPECT_EQ(pending_layer()->raster_source(),
-              prioritized_tiles[tile].raster_source());
 
   pending_layer()->SetContentsOpaque(false);
   pending_layer()->UpdateCanUseLCDTextAfterCommit();
 
-  EXPECT_FALSE(pending_layer()->RasterSourceUsesLCDText());
-  EXPECT_NE(pending_raster_source.get(), pending_layer()->raster_source());
+  EXPECT_FALSE(pending_layer()->RasterSourceUsesLCDTextForTesting());
   EXPECT_TRUE(pending_layer()->HighResTiling()->has_tiles());
-  tiles = pending_layer()->HighResTiling()->AllTilesForTesting();
-  prioritized_tiles = pending_layer()
-                          ->HighResTiling()
-                          ->UpdateAndGetAllPrioritizedTilesForTesting();
-  for (Tile* tile : tiles)
-    EXPECT_EQ(pending_layer()->raster_source(),
-              prioritized_tiles[tile].raster_source());
+  std::vector<Tile*> new_tiles =
+      pending_layer()->HighResTiling()->AllTilesForTesting();
+  ASSERT_EQ(tiles.size(), new_tiles.size());
+  for (size_t i = 0; i < tiles.size(); ++i)
+    EXPECT_NE(tiles[i], new_tiles[i]);
 }
 
 TEST_F(PictureLayerImplTest, TilingAllTilesDone) {
@@ -4732,11 +4715,11 @@ TEST_F(TileSizeTest, TileSizes) {
   host_impl()->SetViewportSize(gfx::Size(1000, 1000));
   gfx::Size result;
 
-  host_impl()->SetContentIsSuitableForGpuRasterization(true);
   host_impl()->SetHasGpuRasterizationTrigger(false);
   host_impl()->CommitComplete();
   EXPECT_EQ(host_impl()->gpu_rasterization_status(),
             GpuRasterizationStatus::OFF_VIEWPORT);
+  host_impl()->NotifyReadyToActivate();
 
   // Default tile-size for large layers.
   result = layer->CalculateTileSize(gfx::Size(10000, 10000));
@@ -4760,6 +4743,7 @@ TEST_F(TileSizeTest, TileSizes) {
   EXPECT_EQ(host_impl()->gpu_rasterization_status(),
             GpuRasterizationStatus::ON);
   host_impl()->SetViewportSize(gfx::Size(2000, 2000));
+  host_impl()->NotifyReadyToActivate();
 
   layer->set_gpu_raster_max_texture_size(host_impl()->device_viewport_size());
   result = layer->CalculateTileSize(gfx::Size(10000, 10000));

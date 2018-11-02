@@ -3,3 +3,8 @@
 post_process_target("//chrome:browser_dependencies") {
   public_deps += [ "//vivaldi/extraparts" ]
 }
+
+
+post_process_target("//chrome/browser:browser") {
+  public_deps += [ "//vivaldi/extraparts" ]
+}

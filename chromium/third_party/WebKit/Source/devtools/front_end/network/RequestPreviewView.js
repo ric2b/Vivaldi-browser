@@ -28,164 +28,68 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/**
- * @unrestricted
- */
-Network.RequestPreviewView = class extends Network.RequestContentView {
+Network.RequestPreviewView = class extends Network.RequestResponseView {
   /**
    * @param {!SDK.NetworkRequest} request
-   * @param {!UI.Widget} responseView
    */
-  constructor(request, responseView) {
+  constructor(request) {
     super(request);
-    this._responseView = responseView;
-    /** @type {?UI.Widget} */
-    this._previewView = null;
   }
 
   /**
    * @override
+   * @protected
+   * @return {!Promise<?UI.Widget>}
    */
-  contentLoaded() {
-    if (!this.request.content && !this.request.contentError()) {
-      if (!this._emptyWidget) {
-        this._emptyWidget = this._createEmptyWidget();
-        this._emptyWidget.show(this.element);
-        this._previewView = this._emptyWidget;
-      }
-      return;
-    }
-    if (this._emptyWidget) {
-      this._emptyWidget.detach();
-      delete this._emptyWidget;
-      this._previewView = null;
-    }
-
-    if (!this._previewView)
-      this._createPreviewView(handlePreviewView.bind(this));
-    else
-      this._previewView.show(this.element);
-
-    /**
-     * @param {!UI.Widget} view
-     * @this {Network.RequestPreviewView}
-     */
-    function handlePreviewView(view) {
-      this._previewView = view;
-      view.show(this.element);
-      if (view instanceof UI.SimpleView) {
-        var toolbar = new UI.Toolbar('network-item-preview-toolbar', this.element);
-        for (var item of /** @type {!UI.SimpleView} */ (this._previewView).syncToolbarItems())
-          toolbar.appendToolbarItem(item);
-      }
-      this._previewViewHandledForTest(view);
-    }
+  async showPreview() {
+    var view = await super.showPreview();
+    if (!(view instanceof UI.SimpleView))
+      return view;
+    var toolbar = new UI.Toolbar('network-item-preview-toolbar', this.element);
+    for (var item of view.syncToolbarItems())
+      toolbar.appendToolbarItem(item);
+    return view;
   }
 
   /**
-   * @param {!UI.Widget} view
+   * @return {!Promise<?UI.Widget>}
    */
-  _previewViewHandledForTest(view) {
-  }
+  async _htmlErrorPreview() {
+    var contentData = await this.request.contentData();
+    if (contentData.error)
+      return new UI.EmptyWidget(Common.UIString('Failed to load response data'));
 
-  /**
-   * @return {!UI.EmptyWidget}
-   */
-  _createEmptyWidget() {
-    return this._createMessageView(Common.UIString('This request has no preview available.'));
-  }
-
-  /**
-   * @param {string} message
-   * @return {!UI.EmptyWidget}
-   */
-  _createMessageView(message) {
-    return new UI.EmptyWidget(message);
-  }
-
-  /**
-   * @return {string}
-   */
-  _requestContent() {
-    var content = this.request.content;
-    return this.request.contentEncoded ? window.atob(content || '') : (content || '');
-  }
-
-  /**
-   * @param {?Network.ParsedJSON} parsedJSON
-   * @return {?UI.SearchableView}
-   */
-  _jsonView(parsedJSON) {
-    if (!parsedJSON || typeof parsedJSON.data !== 'object')
-      return null;
-    return Network.JSONView.createSearchableView(/** @type {!Network.ParsedJSON} */ (parsedJSON));
-  }
-
-  /**
-   * @return {?UI.SearchableView}
-   */
-  _xmlView() {
-    var parsedXML = Network.XMLView.parseXML(this._requestContent(), this.request.mimeType);
-    return parsedXML ? Network.XMLView.createSearchableView(parsedXML) : null;
-  }
-
-  /**
-   * @return {?Network.RequestHTMLView}
-   */
-  _htmlErrorPreview() {
-    var whitelist = ['text/html', 'text/plain', 'application/xhtml+xml'];
-    if (whitelist.indexOf(this.request.mimeType) === -1)
+    // We can assume the status code has been set already because fetching contentData should wait for request to be
+    // finished.
+    if (!this.request.hasErrorStatusCode() && this.request.resourceType() !== Common.resourceTypes.XHR)
       return null;
 
-    var dataURL = this.request.asDataURL();
-    if (dataURL === null)
+    var whitelist = new Set(['text/html', 'text/plain', 'application/xhtml+xml']);
+    if (!whitelist.has(this.request.mimeType))
       return null;
 
-    return new Network.RequestHTMLView(this.request, dataURL);
+    var dataURL = Common.ContentProvider.contentAsDataURL(
+        contentData.content, this.request.mimeType, contentData.encoded, contentData.encoded ? 'utf-8' : null);
+    return dataURL ? new Network.RequestHTMLView(dataURL) : null;
   }
 
   /**
-   * @param {function(!UI.Widget)} callback
+   * @override
+   * @return {!Promise<!UI.Widget>}
    */
-  _createPreviewView(callback) {
-    if (this.request.contentError()) {
-      callback(this._createMessageView(Common.UIString('Failed to load response data')));
-      return;
-    }
+  async createPreview() {
+    var htmlErrorPreview = await this._htmlErrorPreview();
+    if (htmlErrorPreview)
+      return htmlErrorPreview;
 
-    var xmlView = this._xmlView();
-    if (xmlView) {
-      callback(xmlView);
-      return;
-    }
+    // Try provider before the source view - so JSON and XML are not shown in generic editor
+    var provided = await SourceFrame.PreviewFactory.createPreview(this.request, this.request.mimeType);
+    if (provided)
+      return provided;
 
-    Network.JSONView.parseJSON(this._requestContent()).then(chooseView.bind(this)).then(callback);
-
-    /**
-     * @this {Network.RequestPreviewView}
-     * @param {?Network.ParsedJSON} jsonData
-     * @return {!UI.Widget}
-     */
-    function chooseView(jsonData) {
-      if (jsonData) {
-        var jsonView = this._jsonView(jsonData);
-        if (jsonView)
-          return jsonView;
-      }
-
-      if (this.request.hasErrorStatusCode() || this.request.resourceType() === Common.resourceTypes.XHR) {
-        var htmlErrorPreview = this._htmlErrorPreview();
-        if (htmlErrorPreview)
-          return htmlErrorPreview;
-      }
-
-      if (this._responseView.sourceView)
-        return this._responseView.sourceView;
-
-      if (this.request.resourceType() === Common.resourceTypes.Other)
-        return this._createEmptyWidget();
-
-      return Network.RequestView.nonSourceViewForRequest(this.request);
-    }
+    var sourceView = await Network.RequestResponseView.sourceViewForRequest(this.request);
+    if (sourceView)
+      return sourceView;
+    return new UI.EmptyWidget(Common.UIString('Preview not available'));
   }
 };

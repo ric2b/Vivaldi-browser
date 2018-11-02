@@ -57,8 +57,8 @@ This will produce several generated source files, some of which are relevant to
 C++ bindings. Two of these files are:
 
 ```
-out/gen/services/business/public/interfaces/factory.mojom.cc
-out/gen/services/business/public/interfaces/factory.mojom.h
+out/gen/services/db/public/interfaces/db.mojom.cc
+out/gen/services/db/public/interfaces/db.mojom.h
 ```
 
 You can include the above generated header in your sources in order to use the
@@ -177,15 +177,15 @@ This second snippet is equivalent to the first one.
 type, which is a generated alias for `mojo::InterfacePtrInfo<Logger>`. This is
 similar to an `InterfaceRequest<T>` in that it merely holds onto a pipe handle
 and cannot actually read or write messages on the pipe. Both this type and
-`InterfaceRequest<T>` are safe to move freely from thread to thread, whereas a
-bound `InterfacePtr<T>` is bound to a single thread.
+`InterfaceRequest<T>` are safe to move freely from sequence to sequence, whereas
+a bound `InterfacePtr<T>` is bound to a single sequence.
 
 An `InterfacePtr<T>` may be unbound by calling its `PassInterface()` method,
 which returns a new `InterfacePtrInfo<T>`. Conversely, an `InterfacePtr<T>` may
 bind (and thus take ownership of) an `InterfacePtrInfo<T>` so that interface
 calls can be made on the pipe.
 
-The thread-bound nature of `InterfacePtr<T>` is necessary to support safe
+The sequence-bound nature of `InterfacePtr<T>` is necessary to support safe
 dispatch of its [message responses](#Receiving-Responses) and
 [connection error notifications](#Connection-Errors).
 ***
@@ -251,7 +251,7 @@ class LoggerImpl : public sample::mojom::Logger {
 
 Now we can construct a `LoggerImpl` over our pending `LoggerRequest`, and the
 previously queued `Log` message will be dispatched ASAP on the `LoggerImpl`'s
-thread:
+sequence:
 
 ``` cpp
 LoggerImpl impl(std::move(request));
@@ -366,10 +366,18 @@ parameters.
 
 ### Connection Errors
 
-If there are no remaining messages available on a pipe and the remote end has
-been closed, a connection error will be triggered on the local end. Connection
-errors may also be triggered by automatic forced local pipe closure due to
-*e.g.* a validation error when processing a received message.
+If a pipe is disconnected, both endpoints will be able to observe the connection
+error (unless the disconnection is caused by closing/destroying an endpoint, in
+which case that endpoint won't get such a notification). If there are remaining
+incoming messages for an endpoint on disconnection, the connection error won't
+be triggered until the messages are drained.
+
+Pipe disconnecition may be caused by:
+* Mojo system-level causes: process terminated, resource exhausted, etc.
+* The bindings close the pipe due to a validation error when processing a
+  received message.
+* The peer endpoint is closed. For example, the remote side is a bound
+  `mojo::InterfacePtr<T>` and it is destroyed.
 
 Regardless of the underlying cause, when a connection error is encountered on
 a binding endpoint, that endpoint's **connection error handler** (if set) is
@@ -389,7 +397,7 @@ invocation:
 ``` cpp
 sample::mojom::LoggerPtr logger;
 LoggerImpl impl(mojo::MakeRequest(&logger));
-impl.set_connection_error_handler(base::Bind([] { LOG(ERROR) << "Bye."; }));
+impl.set_connection_error_handler(base::BindOnce([] { LOG(ERROR) << "Bye."; }));
 logger->Log("OK cool");
 logger.reset();  // Closes the client end.
 ```
@@ -406,7 +414,7 @@ handler within its constructor:
 LoggerImpl::LoggerImpl(sample::mojom::LoggerRequest request)
     : binding_(this, std::move(request)) {
   binding_.set_connection_error_handler(
-      base::Bind(&LoggerImpl::OnError, base::Unretained(this)));
+      base::BindOnce(&LoggerImpl::OnError, base::Unretained(this)));
 }
 
 void LoggerImpl::OnError() {
@@ -461,7 +469,7 @@ module business.mojom;
 
 enum Department {
   kEngineering,
-  kMarketng,
+  kMarketing,
   kSales,
 };
 ```
@@ -1303,6 +1311,7 @@ class StructTraits
 Generated `ReadFoo` methods always convert `multi_word_field_name` fields to
 `ReadMultiWordFieldName` methods.
 
+<a name="Blink-Type-Mapping"></a>
 ### Variants
 
 By now you may have noticed that additional C++ sources are generated when a
@@ -1352,8 +1361,8 @@ out/gen/sample/db.mojom-shared-internal.h
 ```
 
 Including either variant's header (`db.mojom.h` or `db.mojom-blink.h`)
-implicitly includes the shared header, but you have on some occasions wish to
-include *only* the shared header in some instances.
+implicitly includes the shared header, but may wish to include *only* the shared
+header in some instances.
 
 Finally, note that for `mojom` GN targets, there is implicitly a corresponding
 `mojom_{variant}` target defined for any supported bindings configuration. So

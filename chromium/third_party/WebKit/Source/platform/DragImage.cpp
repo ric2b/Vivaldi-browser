@@ -51,6 +51,7 @@
 #include "platform/wtf/text/WTFString.h"
 #include "skia/ext/image_operations.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColorSpaceXformCanvas.h"
 #include "third_party/skia/include/core/SkImage.h"
 #include "third_party/skia/include/core/SkMatrix.h"
 #include "third_party/skia/include/core/SkSurface.h"
@@ -113,11 +114,18 @@ PaintImage DragImage::ResizeAndOrientImage(
                              : kHigh_SkFilterQuality);
 
   SkCanvas* canvas = surface->getCanvas();
+  std::unique_ptr<SkCanvas> color_transform_canvas;
+  if (RuntimeEnabledFeatures::ColorCorrectRenderingEnabled()) {
+    color_transform_canvas =
+        SkCreateColorSpaceXformCanvas(canvas, SkColorSpace::MakeSRGB());
+    canvas = color_transform_canvas.get();
+  }
   canvas->concat(AffineTransformToSkMatrix(transform));
   canvas->drawImage(image.sk_image(), 0, 0, &paint);
 
   return PaintImage(image.stable_id(), surface->makeImageSnapshot(),
-                    image.animation_type(), image.completion_state());
+                    image.animation_type(), image.completion_state(),
+                    image.frame_count());
 }
 
 FloatSize DragImage::ClampedImageScale(const IntSize& image_size,

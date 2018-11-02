@@ -48,7 +48,7 @@ class LoginScreenPolicyTest : public policy::DevicePolicyCrosBrowserTest {
   void TearDownOnMainThread() override {
     // This shuts down the login UI.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE, base::Bind(&chrome::AttemptExit));
+        FROM_HERE, base::BindOnce(&chrome::AttemptExit));
     base::RunLoop().RunUntilIdle();
   }
 };
@@ -99,6 +99,29 @@ IN_PROC_BROWSER_TEST_F(LoginScreenPolicyTest, RestrictInputMethods) {
   // Remove the policy again
   proto.mutable_login_screen_input_methods()
       ->clear_login_screen_input_methods();
+  RefreshDevicePolicyAndWaitForSettingChange(
+      chromeos::kDeviceLoginScreenInputMethods);
+
+  ASSERT_EQ(0U, imm->GetActiveIMEState()->GetAllowedInputMethods().size());
+}
+
+IN_PROC_BROWSER_TEST_F(LoginScreenPolicyTest, PolicyInputMethodsListEmpty) {
+  content::WindowedNotificationObserver(
+      chrome::NOTIFICATION_LOGIN_OR_LOCK_WEBUI_VISIBLE,
+      content::NotificationService::AllSources())
+      .Wait();
+
+  input_method::InputMethodManager* imm =
+      input_method::InputMethodManager::Get();
+  ASSERT_TRUE(imm);
+
+  ASSERT_EQ(0U, imm->GetActiveIMEState()->GetAllowedInputMethods().size());
+
+  em::ChromeDeviceSettingsProto& proto(device_policy()->payload());
+  proto.mutable_login_screen_input_methods()->Clear();
+  EXPECT_TRUE(proto.has_login_screen_input_methods());
+  EXPECT_EQ(
+      0, proto.login_screen_input_methods().login_screen_input_methods_size());
   RefreshDevicePolicyAndWaitForSettingChange(
       chromeos::kDeviceLoginScreenInputMethods);
 

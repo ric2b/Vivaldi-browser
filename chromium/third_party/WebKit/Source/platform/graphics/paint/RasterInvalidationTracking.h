@@ -25,6 +25,8 @@ struct RasterInvalidationInfo {
   // died.
   const DisplayItemClient* client = nullptr;
   String client_debug_name;
+  // For SPv2, this is set in PaintArtifactCompositor when converting chunk
+  // raster invalidations to cc raster invalidations.
   IntRect rect;
   PaintInvalidationReason reason = PaintInvalidationReason::kFull;
 };
@@ -34,7 +36,7 @@ inline bool operator==(const RasterInvalidationInfo& a,
   return a.rect == b.rect;
 }
 
-struct UnderRasterInvalidation {
+struct RasterUnderInvalidation {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
   int x;
   int y;
@@ -46,11 +48,35 @@ struct PLATFORM_EXPORT RasterInvalidationTracking {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
   Vector<RasterInvalidationInfo> invalidations;
 
-  // The following fields are for under-raster-invalidation detection.
+  // The following fields are for raster under-invalidation detection.
   sk_sp<PaintRecord> last_painted_record;
   IntRect last_interest_rect;
   Region invalidation_region_since_last_paint;
-  Vector<UnderRasterInvalidation> under_invalidations;
+  Vector<RasterUnderInvalidation> under_invalidations;
+  // Records under-invalidated pixels in dark red, accumulated.
+  sk_sp<PaintRecord> under_invalidation_record;
+
+  void AddInvalidation(const DisplayItemClient* client,
+                       const String& debug_name,
+                       const IntRect& rect,
+                       PaintInvalidationReason reason) {
+    RasterInvalidationInfo info;
+    info.client = client;
+    info.client_debug_name = debug_name;
+    info.rect = rect;
+    info.reason = reason;
+    invalidations.push_back(info);
+    invalidation_region_since_last_paint.Unite(info.rect);
+  }
+
+  // Compares the last recording against |new_record|, by rastering both into
+  // bitmaps. If there are any differences outside of invalidated regions,
+  // the corresponding pixels in under_invalidation_record will be drawn in
+  // dark red. The caller can overlay under_invalidation_record onto the
+  // original drawings to show the under raster invalidations.
+  void CheckUnderInvalidations(const String& layer_debug_name,
+                               sk_sp<PaintRecord> new_record,
+                               const IntRect& new_interest_rect);
 
   void AsJSON(JSONObject*);
 };
@@ -86,6 +112,8 @@ class PLATFORM_EXPORT RasterInvalidationTrackingMap {
       InvalidationTrackingMap;
   InvalidationTrackingMap map_;
 };
+
+void ResetTrackedRasterInvalidations();
 
 }  // namespace blink
 

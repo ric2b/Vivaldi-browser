@@ -43,6 +43,7 @@
 #include "chrome/browser/ui/page_info/page_info_ui.h"
 #include "chrome/browser/usb/usb_chooser_context.h"
 #include "chrome/browser/usb/usb_chooser_context_factory.h"
+#include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/theme_resources.h"
@@ -50,6 +51,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/content_settings.h"
 #include "components/content_settings/core/common/content_settings_pattern.h"
+#include "components/content_settings/core/common/content_settings_utils.h"
 #include "components/rappor/public/rappor_utils.h"
 #include "components/rappor/rappor_service_impl.h"
 #include "components/ssl_errors/error_info.h"
@@ -66,6 +68,7 @@
 #include "net/ssl/ssl_connection_status_flags.h"
 #include "third_party/boringssl/src/include/openssl/ssl.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "url/origin.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/policy_cert_service.h"
@@ -107,7 +110,7 @@ ContentSettingsType kPermissionType[] = {
     CONTENT_SETTINGS_TYPE_IMAGES,
 #endif
     CONTENT_SETTINGS_TYPE_POPUPS,
-    CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
+    CONTENT_SETTINGS_TYPE_ADS,
     CONTENT_SETTINGS_TYPE_BACKGROUND_SYNC,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_AUTOPLAY,
@@ -125,7 +128,7 @@ bool ShouldShowPermission(ContentSettingsType type,
     return false;
 #endif
 
-  if (type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER) {
+  if (type == CONTENT_SETTINGS_TYPE_ADS) {
     if (!base::FeatureList::IsEnabled(
             subresource_filter::kSafeBrowsingSubresourceFilterExperimentalUI)) {
       return false;
@@ -134,8 +137,8 @@ bool ShouldShowPermission(ContentSettingsType type,
     // The setting for subresource filtering should not show up if the site is
     // not activated, both on android and desktop platforms.
     return content_settings->GetWebsiteSetting(
-               site_url, GURL(), CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER_DATA,
-               std::string(), nullptr) != nullptr;
+               site_url, GURL(), CONTENT_SETTINGS_TYPE_ADS_DATA, std::string(),
+               nullptr) != nullptr;
   }
 
   return true;
@@ -164,8 +167,8 @@ void CheckContentStatus(security_state::ContentStatus content_status,
 // If the |security_info| indicates that mixed content or certificate errors
 // were present, update |connection_status| and |connection_details|.
 void ReportAnyInsecureContent(const security_state::SecurityInfo& security_info,
-                              PageInfo::SiteConnectionStatus& connection_status,
-                              base::string16& connection_details) {
+                              PageInfo::SiteConnectionStatus* connection_status,
+                              base::string16* connection_details) {
   bool displayed_insecure_content = false;
   bool ran_insecure_content = false;
   CheckContentStatus(security_info.mixed_content_status,
@@ -183,27 +186,27 @@ void ReportAnyInsecureContent(const security_state::SecurityInfo& security_info,
 
   // Only one insecure content warning is displayed; show the most severe.
   if (ran_insecure_content) {
-    connection_status =
+    *connection_status =
         PageInfo::SITE_CONNECTION_STATUS_INSECURE_ACTIVE_SUBRESOURCE;
-    connection_details.assign(l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, connection_details,
+    connection_details->assign(l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, *connection_details,
         l10n_util::GetStringUTF16(
             IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_INSECURE_CONTENT_ERROR)));
     return;
   }
   if (security_info.contained_mixed_form) {
-    connection_status = PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION;
-    connection_details.assign(l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, connection_details,
+    *connection_status = PageInfo::SITE_CONNECTION_STATUS_INSECURE_FORM_ACTION;
+    connection_details->assign(l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, *connection_details,
         l10n_util::GetStringUTF16(
             IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_INSECURE_FORM_WARNING)));
     return;
   }
   if (displayed_insecure_content) {
-    connection_status =
+    *connection_status =
         PageInfo::SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE;
-    connection_details.assign(l10n_util::GetStringFUTF16(
-        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, connection_details,
+    connection_details->assign(l10n_util::GetStringFUTF16(
+        IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_SENTENCE_LINK, *connection_details,
         l10n_util::GetStringUTF16(
             IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTED_INSECURE_CONTENT_WARNING)));
   }
@@ -421,9 +424,34 @@ void PageInfo::OnRevokeSSLErrorBypassButtonPressed() {
   did_revoke_user_ssl_decisions_ = true;
 }
 
+void PageInfo::OpenSiteSettingsView() {
+  // By default, this opens the general Content Settings pane. If the
+  // |kSiteSettings| and/or |kSiteDetails| flags are enabled this opens a
+  // settings page specific to the current origin of the page. crbug.com/655876
+  url::Origin site_origin = url::Origin(site_url());
+  std::string link_destination(chrome::kChromeUIContentSettingsURL);
+  if ((base::CommandLine::ForCurrentProcess()->HasSwitch(
+           switches::kEnableSiteSettings) ||
+       base::FeatureList::IsEnabled(features::kSiteDetails)) &&
+      !site_origin.unique()) {
+    std::string origin_string = site_origin.Serialize();
+    url::RawCanonOutputT<char> percent_encoded_origin;
+    url::EncodeURIComponent(origin_string.c_str(), origin_string.length(),
+                            &percent_encoded_origin);
+    link_destination = chrome::kChromeUISiteDetailsPrefixURL +
+                       std::string(percent_encoded_origin.data(),
+                                   percent_encoded_origin.length());
+  }
+  web_contents()->OpenURL(
+      content::OpenURLParams(GURL(link_destination), content::Referrer(),
+                             WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                             ui::PAGE_TRANSITION_LINK, false));
+  RecordPageInfoAction(PageInfo::PAGE_INFO_SITE_SETTINGS_OPENED);
+}
+
 void PageInfo::Init(const GURL& url,
                     const security_state::SecurityInfo& security_info) {
-#if !defined(OS_ANDROID) && !defined(OS_IOS)
+#if !defined(OS_ANDROID)
   // On desktop, internal URLs aren't handled by this class. Instead, a
   // custom and simpler bubble is shown.
   DCHECK(!url.SchemeIs(content::kChromeUIScheme) &&
@@ -432,9 +460,9 @@ void PageInfo::Init(const GURL& url,
          !url.SchemeIs(content_settings::kExtensionScheme));
 #endif
 
-  bool isChromeUINativeScheme = false;
+  bool is_chrome_ui_native_scheme = false;
 #if defined(OS_ANDROID)
-  isChromeUINativeScheme = url.SchemeIs(chrome::kChromeUINativeScheme);
+  is_chrome_ui_native_scheme = url.SchemeIs(chrome::kChromeUINativeScheme);
 #endif
 
   security_level_ = security_info.security_level;
@@ -452,7 +480,7 @@ void PageInfo::Init(const GURL& url,
     return;
   }
 
-  if (url.SchemeIs(content::kChromeUIScheme) || isChromeUINativeScheme) {
+  if (url.SchemeIs(content::kChromeUIScheme) || is_chrome_ui_native_scheme) {
     site_identity_status_ = SITE_IDENTITY_STATUS_INTERNAL_PAGE;
     site_identity_details_ =
         l10n_util::GetStringUTF16(IDS_PAGE_INFO_INTERNAL_PAGE);
@@ -620,8 +648,8 @@ void PageInfo::Init(const GURL& url,
           subject_name));
     }
 
-    ReportAnyInsecureContent(security_info, site_connection_status_,
-                             site_connection_details_);
+    ReportAnyInsecureContent(security_info, &site_connection_status_,
+                             &site_connection_details_);
   }
 
   uint16_t cipher_suite =
@@ -658,12 +686,6 @@ void PageInfo::Init(const GURL& url,
       site_connection_details_ += l10n_util::GetStringFUTF16(
           IDS_PAGE_INFO_SECURITY_TAB_ENCRYPTION_DETAILS, ASCIIToUTF16(cipher),
           ASCIIToUTF16(mac), ASCIIToUTF16(key_exchange));
-    }
-
-    if (ssl_version == net::SSL_CONNECTION_VERSION_SSL3 &&
-        site_connection_status_ <
-            SITE_CONNECTION_STATUS_INSECURE_PASSIVE_SUBRESOURCE) {
-      site_connection_status_ = SITE_CONNECTION_STATUS_ENCRYPTED_ERROR;
     }
   }
 

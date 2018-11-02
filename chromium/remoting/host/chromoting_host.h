@@ -13,7 +13,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "base/threading/thread.h"
 #include "net/base/backoff_entry.h"
 #include "remoting/host/client_session.h"
@@ -62,9 +62,7 @@ class DesktopEnvironmentFactory;
 //    all pending tasks to complete. After all of that completed we
 //    return to the idle state. We then go to step (2) if there a new
 //    incoming connection.
-class ChromotingHost : public base::NonThreadSafe,
-                       public ClientSession::EventHandler,
-                       public HostStatusMonitor {
+class ChromotingHost : public ClientSession::EventHandler {
  public:
   typedef std::vector<std::unique_ptr<ClientSession>> ClientSessions;
 
@@ -86,9 +84,7 @@ class ChromotingHost : public base::NonThreadSafe,
   // This method can only be called once during the lifetime of this object.
   void Start(const std::string& host_owner);
 
-  // HostStatusMonitor interface.
-  void AddStatusObserver(HostStatusObserver* observer) override;
-  void RemoveStatusObserver(HostStatusObserver* observer) override;
+  scoped_refptr<HostStatusMonitor> status_monitor() { return status_monitor_; }
 
   // Registers a host extension.
   void AddExtension(std::unique_ptr<HostExtension> extension);
@@ -134,10 +130,6 @@ class ChromotingHost : public base::NonThreadSafe,
 
   const ClientSessions& client_sessions_for_tests() { return clients_; }
 
-  base::WeakPtr<ChromotingHost> AsWeakPtr() {
-    return weak_factory_.GetWeakPtr();
-  }
-
   scoped_refptr<protocol::TransportContext> transport_context_for_tests() {
     return transport_context_;
   }
@@ -155,14 +147,13 @@ class ChromotingHost : public base::NonThreadSafe,
   scoped_refptr<base::SingleThreadTaskRunner> audio_task_runner_;
   scoped_refptr<base::SingleThreadTaskRunner> video_encode_task_runner_;
 
-  // Must be used on the network thread only.
-  base::ObserverList<HostStatusObserver> status_observers_;
+  scoped_refptr<HostStatusMonitor> status_monitor_;
 
   // The connections to remote clients.
   ClientSessions clients_;
 
   // True if the host has been started.
-  bool started_;
+  bool started_ = false;
 
   // Login backoff state.
   net::BackoffEntry login_backoff_;
@@ -178,6 +169,8 @@ class ChromotingHost : public base::NonThreadSafe,
 
   // List of host extensions.
   std::vector<std::unique_ptr<HostExtension>> extensions_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   base::WeakPtrFactory<ChromotingHost> weak_factory_;
 

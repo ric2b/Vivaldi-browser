@@ -63,26 +63,6 @@
             ]
         },
         {
-            "type": "setting",
-            "category": "Network",
-            "storageType": "session",
-            "title": "Preserve log",
-            "settingName": "network.preserve-log",
-            "settingType": "boolean",
-            "defaultValue": false,
-            "tags": "preserve, clear, reset",
-            "options": [
-                {
-                    "value": true,
-                    "title": "Do not preserve log on page reload / navigation"
-                },
-                {
-                    "value": false,
-                    "title": "Preserve log on page reload / navigation"
-                }
-            ]
-        },
-        {
             "type": "@UI.ActionDelegate",
             "actionId": "network.toggle-recording",
             "iconClass": "largeicon-start-recording",
@@ -139,18 +119,17 @@
         "perf_ui",
         "cookie_table",
         "data_grid",
-        "network_conditions",
-        "object_ui",
         "network_log",
-        "product_registry"
+        "product_registry",
+        "mobile_throttling",
+        "har_importer",
+        "network_priorities"
     ],
     "scripts": [
         "BlockedURLsPane.js",
         "EventSourceMessagesView.js",
         "FilterSuggestionBuilder.js",
         "HARWriter.js",
-        "JSONView.js",
-        "RequestView.js",
         "NetworkConfigView.js",
         "NetworkDataGridNode.js",
         "NetworkItemView.js",
@@ -164,12 +143,11 @@
         "RequestCookiesView.js",
         "RequestHeadersView.js",
         "RequestHTMLView.js",
-        "RequestPreviewView.js",
         "RequestResponseView.js",
+        "RequestPreviewView.js",
         "RequestTimingView.js",
         "ResourceWebSocketFrameView.js",
-        "NetworkPanel.js",
-        "XMLView.js"
+        "NetworkPanel.js"
     ],
     "resources": [
         "blockedURLsPane.css",
@@ -183,8 +161,6 @@
         "requestCookiesView.css",
         "requestHeadersTree.css",
         "requestHeadersView.css",
-        "webSocketFrameView.css",
-        "xmlTree.css",
-        "xmlView.css"
+        "webSocketFrameView.css"
     ]
 }

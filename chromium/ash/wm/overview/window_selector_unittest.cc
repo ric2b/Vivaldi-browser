@@ -7,32 +7,33 @@
 
 #include "ash/accessibility_delegate.h"
 #include "ash/accessibility_types.h"
+#include "ash/app_list/test_app_list_view_presenter_impl.h"
 #include "ash/drag_drop/drag_drop_controller.h"
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/window_properties.h"
 #include "ash/shelf/shelf.h"
+#include "ash/shelf/shelf_view_test_api.h"
 #include "ash/shell.h"
+#include "ash/shell_test_api.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/shelf_view_test_api.h"
-#include "ash/test/shell_test_api.h"
-#include "ash/test/test_app_list_view_presenter_impl.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/overview/window_grid.h"
 #include "ash/wm/overview/window_selector.h"
 #include "ash/wm/overview/window_selector_controller.h"
 #include "ash/wm/overview/window_selector_item.h"
 #include "ash/wm/panels/panel_layout_manager.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace/workspace_window_resizer.h"
-#include "ash/wm_window.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/user_action_tester.h"
+#include "ui/app_list/app_list_constants.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/focus_client.h"
+#include "ui/aura/client/window_types.h"
 #include "ui/aura/test/test_windows.h"
 #include "ui/aura/window.h"
 #include "ui/base/hit_test.h"
@@ -64,8 +65,7 @@ static const int kHeaderHeight = 32;
 const char kActiveWindowChangedFromOverview[] =
     "WindowSelector_ActiveWindowChanged";
 
-class NonActivatableActivationDelegate
-    : public aura::client::ActivationDelegate {
+class NonActivatableActivationDelegate : public ::wm::ActivationDelegate {
  public:
   bool ShouldActivate() const override { return false; }
 };
@@ -89,16 +89,16 @@ float GetItemScale(const gfx::Rect& source,
 
 // TODO(bruthig): Move all non-simple method definitions out of class
 // declaration.
-class WindowSelectorTest : public test::AshTestBase {
+class WindowSelectorTest : public AshTestBase {
  public:
   WindowSelectorTest() {}
   ~WindowSelectorTest() override {}
 
   void SetUp() override {
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
 
-    shelf_view_test_.reset(new test::ShelfViewTestAPI(
-        GetPrimaryShelf()->GetShelfViewForTesting()));
+    shelf_view_test_.reset(
+        new ShelfViewTestAPI(GetPrimaryShelf()->GetShelfViewForTesting()));
     shelf_view_test_->SetAnimationDuration(1);
     ScopedTransformOverviewWindow::SetImmediateCloseForTests();
   }
@@ -118,8 +118,7 @@ class WindowSelectorTest : public test::AshTestBase {
   }
   aura::Window* CreateNonActivatableWindow(const gfx::Rect& bounds) {
     aura::Window* window = CreateWindow(bounds);
-    aura::client::SetActivationDelegate(window,
-                                        &non_activatable_activation_delegate_);
+    ::wm::SetActivationDelegate(window, &non_activatable_activation_delegate_);
     EXPECT_FALSE(wm::CanActivateWindow(window));
     return window;
   }
@@ -136,10 +135,9 @@ class WindowSelectorTest : public test::AshTestBase {
     params.ownership = views::Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
     widget->Init(params);
     widget->Show();
-    WmWindow* window = WmWindow::Get(widget->GetNativeWindow());
-    window->aura_window()->SetProperty(aura::client::kTopViewInset,
-                                       kHeaderHeight);
-    ParentWindowInPrimaryRootWindow(widget->GetNativeWindow());
+    aura::Window* window = widget->GetNativeWindow();
+    window->SetProperty(aura::client::kTopViewInset, kHeaderHeight);
+    ParentWindowInPrimaryRootWindow(window);
     return widget;
   }
 
@@ -149,6 +147,7 @@ class WindowSelectorTest : public test::AshTestBase {
     static int id = 0;
     std::string shelf_id(ShelfID(base::IntToString(id++)).Serialize());
     window->SetProperty(kShelfIDKey, new std::string(shelf_id));
+    window->SetProperty<int>(kShelfItemTypeKey, TYPE_APP_PANEL);
     window->SetProperty(aura::client::kTopViewInset, kHeaderHeight);
     shelf_view_test()->RunMessageLoopUntilAnimationsDone();
     return window;
@@ -322,7 +321,7 @@ class WindowSelectorTest : public test::AshTestBase {
     window_selector()->ContentsChanged(nullptr, base::UTF8ToUTF16(pattern));
   }
 
-  test::ShelfViewTestAPI* shelf_view_test() { return shelf_view_test_.get(); }
+  ShelfViewTestAPI* shelf_view_test() { return shelf_view_test_.get(); }
 
   views::Widget* text_filter_widget() {
     return window_selector()->text_filter_widget_.get();
@@ -331,7 +330,7 @@ class WindowSelectorTest : public test::AshTestBase {
  private:
   aura::test::TestWindowDelegate delegate_;
   NonActivatableActivationDelegate non_activatable_activation_delegate_;
-  std::unique_ptr<test::ShelfViewTestAPI> shelf_view_test_;
+  std::unique_ptr<ShelfViewTestAPI> shelf_view_test_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowSelectorTest);
 };
@@ -462,8 +461,7 @@ TEST_F(WindowSelectorTest, ActivateMinimized) {
 
   EXPECT_FALSE(window->IsVisible());
   EXPECT_EQ(0.f, window->layer()->GetTargetOpacity());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_MINIMIZED,
-            wm::GetWindowState(window.get())->GetStateType());
+  EXPECT_EQ(wm::WINDOW_STATE_TYPE_MINIMIZED, window_state->GetStateType());
   aura::Window* window_for_minimized_window =
       GetOverviewWindowForMinimizedState(0, window.get());
   EXPECT_TRUE(window_for_minimized_window);
@@ -478,8 +476,7 @@ TEST_F(WindowSelectorTest, ActivateMinimized) {
 
   EXPECT_TRUE(window->IsVisible());
   EXPECT_EQ(1.f, window->layer()->GetTargetOpacity());
-  EXPECT_EQ(wm::WINDOW_STATE_TYPE_NORMAL,
-            wm::GetWindowState(window.get())->GetStateType());
+  EXPECT_EQ(wm::WINDOW_STATE_TYPE_NORMAL, window_state->GetStateType());
 }
 
 // Tests that entering overview mode with an App-list active properly focuses
@@ -492,7 +489,9 @@ TEST_F(WindowSelectorTest, TextFilterActive) {
   EXPECT_TRUE(wm::IsActiveWindow(window1.get()));
   EXPECT_EQ(window1.get(), wm::GetFocusedWindow());
 
-  Shell::Get()->ToggleAppList();
+  // Pass an enum to satisfy the function, it is arbitrary and will not effect
+  // histograms.
+  Shell::Get()->ToggleAppList(app_list::kShelfButton);
 
   // Activating overview cancels the App-list which normally would activate the
   // previously active |window1|. Overview mode should properly transfer focus
@@ -793,7 +792,7 @@ TEST_F(WindowSelectorTest, CloseButton) {
 }
 
 // Tests minimizing/unminimizing in overview mode.
-TEST_F(WindowSelectorTest, MinimizeUnminimizei) {
+TEST_F(WindowSelectorTest, MinimizeUnminimize) {
   std::unique_ptr<views::Widget> widget =
       CreateWindowWidget(gfx::Rect(0, 0, 400, 400));
   aura::Window* window = widget->GetNativeWindow();
@@ -834,9 +833,8 @@ TEST_F(WindowSelectorTest, CloseButtonOnMultipleDisplay) {
   params.parent = window1->parent();
   widget->Init(params);
   widget->Show();
-  WmWindow* window = WmWindow::Get(widget->GetNativeWindow());
-  window->aura_window()->SetProperty(aura::client::kTopViewInset,
-                                     kHeaderHeight);
+  aura::Window* window = widget->GetNativeWindow();
+  window->SetProperty(aura::client::kTopViewInset, kHeaderHeight);
 
   ASSERT_EQ(root_windows[1], window1->GetRootWindow());
 
@@ -887,15 +885,32 @@ TEST_F(WindowSelectorTest, FullscreenWindow) {
   EXPECT_TRUE(wm::GetWindowState(window1.get())->IsFullscreen());
 }
 
-// Tests that entering overview when a fullscreen window is active in maximized
-// mode correctly applies the transformations to the window and correctly
-// updates the window bounds on exiting overview mode: http://crbug.com/401664.
-TEST_F(WindowSelectorTest, FullscreenWindowMaximizeMode) {
+TEST_F(WindowSelectorTest, SkipOverviewWindow) {
   gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
-  Shell::Get()->maximize_mode_controller()->EnableMaximizeModeWindowManager(
-      true);
+
+  window2->SetProperty(ash::kShowInOverviewKey, false);
+
+  // Enter overview.
+  ToggleOverview();
+  EXPECT_TRUE(window1->IsVisible());
+  EXPECT_FALSE(window2->IsVisible());
+
+  // Exit overview.
+  ToggleOverview();
+  EXPECT_TRUE(window1->IsVisible());
+  EXPECT_TRUE(window2->IsVisible());
+}
+
+// Tests that entering overview when a fullscreen window is active in maximized
+// mode correctly applies the transformations to the window and correctly
+// updates the window bounds on exiting overview mode: http://crbug.com/401664.
+TEST_F(WindowSelectorTest, FullscreenWindowTabletMode) {
+  gfx::Rect bounds(0, 0, 400, 400);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
   wm::ActivateWindow(window2.get());
   wm::ActivateWindow(window1.get());
   gfx::Rect normal_window_bounds(window1->bounds());
@@ -938,7 +953,7 @@ TEST_F(WindowSelectorTest, SelectingHidesAppList) {
   std::unique_ptr<aura::Window> window2(CreateWindow(bounds));
 
   // The tested behavior relies on the app list presenter delegate.
-  test::TestAppListViewPresenterImpl app_list_presenter_impl;
+  TestAppListViewPresenterImpl app_list_presenter_impl;
 
   app_list_presenter_impl.Show(
       display::Screen::GetScreen()->GetPrimaryDisplay().id());
@@ -949,31 +964,27 @@ TEST_F(WindowSelectorTest, SelectingHidesAppList) {
   ToggleOverview();
 }
 
-// Tests that a minimized window's visibility and layer visibility is correctly
-// changed when entering overview and restored when leaving overview mode.
-// Crashes after the skia roll in http://crrev.com/274114.
-// http://crbug.com/379570
-TEST_F(WindowSelectorTest, DISABLED_MinimizedWindowVisibility) {
+// Tests that a minimized window's visibility and layer visibility
+// stay invisible (A minimized window is cloned during overview),
+// and ignored_by_shelf state is restored upon exit.
+TEST_F(WindowSelectorTest, MinimizedWindowState) {
   gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window1(CreateWindow(bounds));
   wm::WindowState* window_state = wm::GetWindowState(window1.get());
   window_state->Minimize();
   EXPECT_FALSE(window1->IsVisible());
   EXPECT_FALSE(window1->layer()->GetTargetVisibility());
-  {
-    ui::ScopedAnimationDurationScaleMode test_duration_mode(
-        ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-    ToggleOverview();
-    EXPECT_TRUE(window1->IsVisible());
-    EXPECT_TRUE(window1->layer()->GetTargetVisibility());
-  }
-  {
-    ui::ScopedAnimationDurationScaleMode test_duration_mode(
-        ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
-    ToggleOverview();
-    EXPECT_FALSE(window1->IsVisible());
-    EXPECT_FALSE(window1->layer()->GetTargetVisibility());
-  }
+  EXPECT_FALSE(window_state->ignored_by_shelf());
+
+  ToggleOverview();
+  EXPECT_FALSE(window1->IsVisible());
+  EXPECT_FALSE(window1->layer()->GetTargetVisibility());
+  EXPECT_TRUE(window_state->ignored_by_shelf());
+
+  ToggleOverview();
+  EXPECT_FALSE(window1->IsVisible());
+  EXPECT_FALSE(window1->layer()->GetTargetVisibility());
+  EXPECT_FALSE(window_state->ignored_by_shelf());
 }
 
 // Tests that it is safe to destroy a window while the overview header animation
@@ -1147,6 +1158,10 @@ TEST_F(WindowSelectorTest, ClickModalWindowParent) {
 // Tests that windows remain on the display they are currently on in overview
 // mode, and that the close buttons are on matching displays.
 TEST_F(WindowSelectorTest, MultipleDisplays) {
+  // TODO: Crashes in bounds_animator.cc in mash: http://crbug.com/730759
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
   UpdateDisplay("600x400,600x400");
   aura::Window::Windows root_windows = Shell::GetAllRootWindows();
   gfx::Rect bounds1(0, 0, 400, 400);
@@ -1251,6 +1266,41 @@ TEST_F(WindowSelectorTest, RemoveDisplay) {
   EXPECT_FALSE(IsSelecting());
 }
 
+// Tests removing a display during overview with NON_ZERO_DURATION animation.
+TEST_F(WindowSelectorTest, RemoveDisplayWithAnimation) {
+  // TODO: hits CHECK in stl as order of |ShelfModel::items_| is wrong.
+  // http://crbug.com/698878.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
+  UpdateDisplay("400x400,400x400");
+  gfx::Rect bounds1(0, 0, 100, 100);
+  gfx::Rect bounds2(450, 0, 100, 100);
+  std::unique_ptr<aura::Window> window1(CreateWindow(bounds1));
+  std::unique_ptr<aura::Window> window2(CreateWindow(bounds2));
+  std::unique_ptr<aura::Window> window3(CreatePanelWindow(bounds1));
+  std::unique_ptr<aura::Window> window4(CreatePanelWindow(bounds2));
+
+  aura::Window::Windows root_windows = Shell::GetAllRootWindows();
+  EXPECT_EQ(root_windows[0], window1->GetRootWindow());
+  EXPECT_EQ(root_windows[1], window2->GetRootWindow());
+  EXPECT_EQ(root_windows[0], window3->GetRootWindow());
+  EXPECT_EQ(root_windows[1], window4->GetRootWindow());
+
+  wm::ActivateWindow(window4.get());
+  wm::ActivateWindow(window3.get());
+  wm::ActivateWindow(window2.get());
+  wm::ActivateWindow(window1.get());
+
+  ToggleOverview();
+  EXPECT_TRUE(IsSelecting());
+
+  ui::ScopedAnimationDurationScaleMode test_duration_mode(
+      ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
+  UpdateDisplay("400x400");
+  EXPECT_FALSE(IsSelecting());
+}
+
 // Tests starting overview during a drag and drop tracking operation.
 // TODO(flackr): Fix memory corruption crash when running locally (not failing
 // on bots). See http://crbug.com/342528.
@@ -1258,7 +1308,7 @@ TEST_F(WindowSelectorTest, DISABLED_DragDropInProgress) {
   bool drag_canceled_by_test = false;
   gfx::Rect bounds(0, 0, 400, 400);
   std::unique_ptr<aura::Window> window(CreateWindow(bounds));
-  test::ShellTestApi shell_test_api(Shell::Get());
+  ShellTestApi shell_test_api(Shell::Get());
   DragDropController* drag_drop_controller =
       shell_test_api.drag_drop_controller();
   ui::OSExchangeData data;
@@ -1846,9 +1896,8 @@ TEST_F(WindowSelectorTest, TransformedRectIsCenteredWithInset) {
 TEST_F(WindowSelectorTest, OverviewWhileDragging) {
   const gfx::Rect bounds(10, 10, 100, 100);
   std::unique_ptr<aura::Window> window(CreateWindow(bounds));
-  std::unique_ptr<WindowResizer> resizer(
-      CreateWindowResizer(window.get(), gfx::Point(), HTCAPTION,
-                          aura::client::WINDOW_MOVE_SOURCE_MOUSE));
+  std::unique_ptr<WindowResizer> resizer(CreateWindowResizer(
+      window.get(), gfx::Point(), HTCAPTION, ::wm::WINDOW_MOVE_SOURCE_MOUSE));
   ASSERT_TRUE(resizer.get());
   gfx::Point location = resizer->GetInitialLocation();
   location.Offset(20, 20);

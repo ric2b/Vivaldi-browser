@@ -15,15 +15,13 @@ BLOB_CATEGORY = 'Blob'
 TIMELINE_REQUIRED_CATEGORY = 'blink.console'
 
 
-# http://crbug.com/499325
-# http://crbug.com/595069
-@benchmark.Disabled('android', 'win')
+@benchmark.Disabled('android')  # crbug.com/739214
 class BlobStorage(perf_benchmark.PerfBenchmark):
   """Timeline based measurement benchmark for Blob Storage."""
 
   page_set = page_sets.BlobWorkshopPageSet
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     cat_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter()
     cat_filter.AddIncludedCategory(BLOB_CATEGORY)
     cat_filter.AddIncludedCategory(TIMELINE_REQUIRED_CATEGORY)
@@ -46,3 +44,6 @@ class BlobStorage(perf_benchmark.PerfBenchmark):
         'blob-reads' not in value.name):
       return False
     return value.values != None
+
+  def GetExpectations(self):
+    return page_sets.BlobWorkshopStoryExpectations()

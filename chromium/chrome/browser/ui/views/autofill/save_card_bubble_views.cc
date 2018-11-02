@@ -18,6 +18,7 @@
 #include "components/strings/grit/components_strings.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_frame_view.h"
 #include "ui/views/controls/button/blue_button.h"
@@ -85,8 +86,7 @@ views::View* SaveCardBubbleViews::CreateFootnoteView() {
 
   // Use BoxLayout to provide insets around the label.
   View* view = new View();
-  view->SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+  view->SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
 
   // Add a StyledLabel for each line of the legal message.
   for (const LegalMessageLine& line : controller_->GetLegalMessageLines())
@@ -132,21 +132,11 @@ bool SaveCardBubbleViews::Close() {
   return true;
 }
 
-int SaveCardBubbleViews::GetDialogButtons() const {
-  // This is the default for BubbleDialogDelegateView, but it's not the default
-  // for LocationBarBubbleDelegateView.
-  return ui::DIALOG_BUTTON_OK | ui::DIALOG_BUTTON_CANCEL;
-}
-
 base::string16 SaveCardBubbleViews::GetDialogButtonLabel(
     ui::DialogButton button) const {
   return l10n_util::GetStringUTF16(button == ui::DIALOG_BUTTON_OK
                                        ? IDS_AUTOFILL_SAVE_CARD_PROMPT_ACCEPT
                                        : IDS_NO_THANKS);
-}
-
-bool SaveCardBubbleViews::ShouldDefaultButtonBeBlue() const {
-  return true;
 }
 
 gfx::Size SaveCardBubbleViews::CalculatePreferredSize() const {
@@ -200,13 +190,13 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
   ChromeLayoutProvider* provider = ChromeLayoutProvider::Get();
 
   view->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kVertical, 0, 0,
-      provider->GetDistanceMetric(DISTANCE_UNRELATED_CONTROL_VERTICAL)));
+      views::BoxLayout::kVertical, gfx::Insets(),
+      provider->GetDistanceMetric(views::DISTANCE_UNRELATED_CONTROL_VERTICAL)));
 
   // Add the card type icon, last four digits and expiration date.
   views::View* description_view = new views::View();
   description_view->SetLayoutManager(new views::BoxLayout(
-      views::BoxLayout::kHorizontal, 0, 0,
+      views::BoxLayout::kHorizontal, gfx::Insets(),
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL)));
   view->AddChildView(description_view);
 
@@ -240,11 +230,10 @@ std::unique_ptr<views::View> SaveCardBubbleViews::CreateMainContentView() {
 
 std::unique_ptr<views::View> SaveCardBubbleViews::CreateRequestCvcView() {
   auto request_cvc_view = base::MakeUnique<views::View>();
-  request_cvc_view->set_background(
-      views::Background::CreateThemedSolidBackground(
-          request_cvc_view.get(), ui::NativeTheme::kColorId_BubbleBackground));
+  request_cvc_view->SetBackground(views::CreateThemedSolidBackground(
+      request_cvc_view.get(), ui::NativeTheme::kColorId_BubbleBackground));
   views::BoxLayout* layout =
-      new views::BoxLayout(views::BoxLayout::kHorizontal, 0, 0,
+      new views::BoxLayout(views::BoxLayout::kHorizontal, gfx::Insets(),
                            ChromeLayoutProvider::Get()->GetDistanceMetric(
                                views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
   layout->set_cross_axis_alignment(
@@ -284,9 +273,9 @@ void SaveCardBubbleViews::ContentsChanged(views::Textfield* sender,
 }
 
 void SaveCardBubbleViews::Init() {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
   view_stack_ = new ViewStack();
-  view_stack_->set_background(views::Background::CreateThemedSolidBackground(
+  view_stack_->SetBackground(views::CreateThemedSolidBackground(
       view_stack_, ui::NativeTheme::kColorId_BubbleBackground));
   view_stack_->Push(CreateMainContentView(), /*animate=*/false);
   AddChildView(view_stack_);

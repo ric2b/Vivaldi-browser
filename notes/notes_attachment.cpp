@@ -3,6 +3,7 @@
 #include <string>
 #include "base/base64.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
 
@@ -11,10 +12,12 @@
 
 namespace vivaldi {
 
-base::Value* Notes_attachment::Encode(NotesCodec* checksummer) const {
+std::unique_ptr<base::Value> Notes_attachment::Encode(
+      NotesCodec* checksummer) const {
   DCHECK(checksummer);
 
-  base::DictionaryValue* attachment_value = new base::DictionaryValue();
+  std::unique_ptr<base::DictionaryValue> attachment_value =
+        base::WrapUnique(new base::DictionaryValue());
   attachment_value->SetString("filename", filename);
   checksummer->UpdateChecksum(filename);
   attachment_value->SetString("content-type", content_type);

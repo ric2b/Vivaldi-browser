@@ -26,6 +26,7 @@
 
 #include "core/css/CSSFontSelector.h"
 
+#include "build/build_config.h"
 #include "core/css/CSSFontSelectorClient.h"
 #include "core/css/CSSSegmentedFontFace.h"
 #include "core/css/CSSValueList.h"
@@ -53,8 +54,7 @@ CSSFontSelector::CSSFontSelector(Document* document)
   DCHECK(document_);
   DCHECK(document_->GetFrame());
   FontCache::GetFontCache()->AddClient(this);
-  FontFaceSet::From(*document)->AddFontFacesToFontFaceCache(&font_face_cache_,
-                                                            this);
+  FontFaceSet::From(*document)->AddFontFacesToFontFaceCache(&font_face_cache_);
 }
 
 CSSFontSelector::~CSSFontSelector() {}
@@ -91,7 +91,7 @@ static AtomicString FamilyNameFromSettings(
     const GenericFontFamilySettings& settings,
     const FontDescription& font_description,
     const AtomicString& generic_family_name) {
-#if OS(ANDROID)
+#if defined(OS_ANDROID)
   if (font_description.GenericFamily() == FontDescription::kStandardFamily)
     return FontCache::GetGenericFamilyNameForScript(
         FontFamilyNames::webkit_standard, font_description);
@@ -176,7 +176,7 @@ void CSSFontSelector::UpdateGenericFontFamilySettings(Document& document) {
 
 void CSSFontSelector::ReportNotDefGlyph() const {
   DCHECK(document_);
-  UseCounter::Count(document_, UseCounter::kFontShapingNotDefGlyphObserved);
+  UseCounter::Count(document_, WebFeature::kFontShapingNotDefGlyphObserved);
 }
 
 DEFINE_TRACE(CSSFontSelector) {

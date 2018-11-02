@@ -15,6 +15,7 @@
 #include "base/location.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "net/base/net_errors.h"
@@ -96,9 +97,7 @@ class ChannelMultiplexer::MuxChannel {
   DISALLOW_COPY_AND_ASSIGN(MuxChannel);
 };
 
-class ChannelMultiplexer::MuxSocket : public P2PStreamSocket,
-                                      public base::NonThreadSafe,
-                                      public base::SupportsWeakPtr<MuxSocket> {
+class ChannelMultiplexer::MuxSocket : public P2PStreamSocket {
  public:
   MuxSocket(MuxChannel* channel);
   ~MuxSocket() override;
@@ -126,21 +125,22 @@ class ChannelMultiplexer::MuxSocket : public P2PStreamSocket,
   int write_result_;
   net::CompletionCallback write_callback_;
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
+  base::WeakPtrFactory<MuxSocket> weak_factory_;
+
   DISALLOW_COPY_AND_ASSIGN(MuxSocket);
 };
 
-
-ChannelMultiplexer::MuxChannel::MuxChannel(
-    ChannelMultiplexer* multiplexer,
-    const std::string& name,
-    int send_id)
+ChannelMultiplexer::MuxChannel::MuxChannel(ChannelMultiplexer* multiplexer,
+                                           const std::string& name,
+                                           int send_id)
     : multiplexer_(multiplexer),
       name_(name),
       send_id_(send_id),
       id_sent_(false),
       receive_id_(kChannelIdUnknown),
-      socket_(nullptr) {
-}
+      socket_(nullptr) {}
 
 ChannelMultiplexer::MuxChannel::~MuxChannel() {
   // Socket must be destroyed before the channel.
@@ -210,8 +210,8 @@ ChannelMultiplexer::MuxSocket::MuxSocket(MuxChannel* channel)
     : channel_(channel),
       read_buffer_size_(0),
       write_pending_(false),
-      write_result_(0) {
-}
+      write_result_(0),
+      weak_factory_(this) {}
 
 ChannelMultiplexer::MuxSocket::~MuxSocket() {
   channel_->OnSocketDestroyed();
@@ -220,7 +220,7 @@ ChannelMultiplexer::MuxSocket::~MuxSocket() {
 int ChannelMultiplexer::MuxSocket::Read(
     const scoped_refptr<net::IOBuffer>& buffer, int buffer_len,
     const net::CompletionCallback& callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(read_callback_.is_null());
 
   if (base_channel_error_ != net::OK)
@@ -239,7 +239,7 @@ int ChannelMultiplexer::MuxSocket::Read(
 int ChannelMultiplexer::MuxSocket::Write(
     const scoped_refptr<net::IOBuffer>& buffer, int buffer_len,
     const net::CompletionCallback& callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(write_callback_.is_null());
 
   if (base_channel_error_ != net::OK)
@@ -250,8 +250,9 @@ int ChannelMultiplexer::MuxSocket::Write(
   packet->mutable_data()->assign(buffer->data(), size);
 
   write_pending_ = true;
-  channel_->DoWrite(std::move(packet), base::Bind(
-      &ChannelMultiplexer::MuxSocket::OnWriteComplete, AsWeakPtr()));
+  channel_->DoWrite(std::move(packet),
+                    base::Bind(&ChannelMultiplexer::MuxSocket::OnWriteComplete,
+                               weak_factory_.GetWeakPtr()));
 
   // OnWriteComplete() might be called above synchronously.
   if (write_pending_) {
@@ -307,6 +308,7 @@ ChannelMultiplexer::ChannelMultiplexer(StreamChannelFactory* factory,
       weak_factory_(this) {}
 
 ChannelMultiplexer::~ChannelMultiplexer() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(pending_channels_.empty());
 
   // Cancel creation of the base channel if it hasn't finished.

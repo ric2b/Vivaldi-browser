@@ -12,6 +12,7 @@
 #include "base/bind.h"
 #include "base/bind_helpers.h"
 #include "base/command_line.h"
+#include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/macros.h"
 #include "base/process/kill.h"
@@ -20,6 +21,7 @@
 #include "base/strings/pattern.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_piece.h"
+#include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/synchronization/waitable_event.h"
 #include "base/test/test_timeouts.h"
@@ -28,6 +30,7 @@
 #include "build/build_config.h"
 #include "cc/surfaces/surface.h"
 #include "cc/surfaces/surface_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/accessibility/browser_accessibility.h"
 #include "content/browser/accessibility/browser_accessibility_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"
@@ -93,6 +96,7 @@
 #include "ui/resources/grit/webui_resources.h"
 
 #if defined(USE_AURA)
+#include "content/browser/renderer_host/overscroll_controller.h"
 #include "content/browser/renderer_host/render_widget_host_view_aura.h"
 #include "ui/aura/test/window_event_dispatcher_test_api.h"
 #include "ui/aura/window.h"
@@ -133,17 +137,13 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
                          std::unique_ptr<base::Value>* result)
     WARN_UNUSED_RESULT;
 
-// Executes the passed |original_script| in the frame specified by
-// |render_frame_host|.  If |result| is not NULL, stores the value that the
-// evaluation of the script in |result|.  Returns true on success.
+// Executes the passed |script| in the frame specified by |render_frame_host|.
+// If |result| is not NULL, stores the value that the evaluation of the script
+// in |result|.  Returns true on success.
 bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
-                         const std::string& original_script,
+                         const std::string& script,
                          bool user_gesture,
                          std::unique_ptr<base::Value>* result) {
-  // TODO(jcampan): we should make the domAutomationController not require an
-  //                automation id.
-  std::string script =
-      "window.domAutomationController.setAutomationId(0);" + original_script;
   // TODO(lukasza): Only get messages from the specific |render_frame_host|.
   DOMMessageQueue dom_message_queue(
       WebContents::FromRenderFrameHost(render_frame_host));
@@ -173,6 +173,36 @@ bool ExecuteScriptHelper(RenderFrameHost* render_frame_host,
   return true;
 }
 
+bool ExecuteScriptWithUserGestureControl(RenderFrameHost* frame,
+                                         const std::string& script,
+                                         bool user_gesture) {
+  // TODO(lukasza): ExecuteScript should just call
+  // ExecuteJavaScriptWithUserGestureForTests and avoid modifying the original
+  // script (and at that point we should merge it with and remove
+  // ExecuteScriptAsync).  This is difficult to change, because many tests
+  // depend on the message loop pumping done by ExecuteScriptHelper below (this
+  // is fragile - these tests should wait on a more specific thing instead).
+
+  std::string expected_response = "ExecuteScript-" + base::GenerateGUID();
+  std::string new_script = base::StringPrintf(
+      R"( %s;  // Original script.
+          window.domAutomationController.send('%s'); )",
+      script.c_str(), expected_response.c_str());
+
+  std::unique_ptr<base::Value> value;
+  if (!ExecuteScriptHelper(frame, new_script, user_gesture, &value) ||
+      !value.get()) {
+    return false;
+  }
+
+  DCHECK_EQ(base::Value::Type::STRING, value->GetType());
+  std::string actual_response;
+  if (value->GetAsString(&actual_response))
+    DCHECK_EQ(expected_response, actual_response);
+
+  return true;
+}
+
 // Specifying a prototype so that we can add the WARN_UNUSED_RESULT attribute.
 bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
                                         const int world_id,
@@ -182,12 +212,8 @@ bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
 
 bool ExecuteScriptInIsolatedWorldHelper(RenderFrameHost* render_frame_host,
                                         const int world_id,
-                                        const std::string& original_script,
+                                        const std::string& script,
                                         std::unique_ptr<base::Value>* result) {
-  // TODO(jcampan): we should make the domAutomationController not require an
-  //                automation id.
-  std::string script =
-      "window.domAutomationController.setAutomationId(0);" + original_script;
   // TODO(lukasza): Only get messages from the specific |render_frame_host|.
   DOMMessageQueue dom_message_queue(
       WebContents::FromRenderFrameHost(render_frame_host));
@@ -412,19 +438,18 @@ void AppendGzippedResource(const base::RefCountedMemory& encoded,
 //
 // Returns has-video-input-device to the test if there is a webcam available,
 // no-video-input-devices otherwise.
-const char kHasVideoInputDeviceOnSystem[] =
-    "(function() {"
-      "navigator.mediaDevices.enumerateDevices()"
-      ".then(function(devices) {"
-        "devices.forEach(function(device) {"
-          "if (device.kind == 'videoinput') {"
-            "window.domAutomationController.send('has-video-input-device');"
-            "return;"
-          "}"
-        "});"
-        "window.domAutomationController.send('no-video-input-devices');"
-      "});"
-    "})()";
+const char kHasVideoInputDeviceOnSystem[] = R"(
+    (function() {
+      navigator.mediaDevices.enumerateDevices()
+      .then(function(devices) {
+        if (devices.some((device) => device.kind == 'videoinput')) {
+          window.domAutomationController.send('has-video-input-device');
+        } else {
+          window.domAutomationController.send('no-video-input-devices');
+        }
+      });
+    })()
+)";
 
 const char kHasVideoInputDevice[] = "has-video-input-device";
 
@@ -815,17 +840,20 @@ RenderFrameHost* ConvertToRenderFrameHost(RenderFrameHost* render_frame_host) {
 
 bool ExecuteScript(const ToRenderFrameHost& adapter,
                    const std::string& script) {
-  std::string new_script =
-      script + ";window.domAutomationController.send(0);";
-  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, true,
-                             nullptr);
+  return ExecuteScriptWithUserGestureControl(adapter.render_frame_host(),
+                                             script, true);
 }
 
 bool ExecuteScriptWithoutUserGesture(const ToRenderFrameHost& adapter,
                                      const std::string& script) {
-  std::string new_script = script + ";window.domAutomationController.send(0);";
-  return ExecuteScriptHelper(adapter.render_frame_host(), new_script, false,
-                             nullptr);
+  return ExecuteScriptWithUserGestureControl(adapter.render_frame_host(),
+                                             script, false);
+}
+
+void ExecuteScriptAsync(const ToRenderFrameHost& adapter,
+                        const std::string& script) {
+  adapter.render_frame_host()->ExecuteJavaScriptWithUserGestureForTests(
+      base::UTF8ToUTF16(script));
 }
 
 bool ExecuteScriptAndExtractDouble(const ToRenderFrameHost& adapter,
@@ -998,12 +1026,10 @@ bool ExecuteWebUIResourceTest(WebContents* web_contents,
 
     script.append("\n");
   }
-  if (!ExecuteScript(web_contents, script))
-    return false;
+  ExecuteScriptAsync(web_contents, script);
 
   DOMMessageQueue message_queue;
-  if (!ExecuteScript(web_contents, "runTests()"))
-    return false;
+  ExecuteScriptAsync(web_contents, "runTests()");
 
   std::string message;
   do {
@@ -1251,6 +1277,12 @@ RenderWidgetHost* GetFocusedRenderWidgetHost(WebContents* web_contents) {
       web_contents_impl->GetMainFrame()->GetRenderWidgetHost());
 }
 
+WebContents* GetFocusedWebContents(WebContents* web_contents) {
+  WebContentsImpl* web_contents_impl =
+      static_cast<WebContentsImpl*>(web_contents);
+  return web_contents_impl->GetFocusedWebContents();
+}
+
 void RouteMouseEvent(WebContents* web_contents, blink::WebMouseEvent* event) {
   WebContentsImpl* web_contents_impl =
       static_cast<WebContentsImpl*>(web_contents);
@@ -1307,7 +1339,7 @@ class SurfaceHitTestReadyNotifier {
   void WaitForSurfaceReady(RenderWidgetHostViewBase* root_container);
 
  private:
-  bool ContainsSurfaceId(const cc::SurfaceId& container_surface_id);
+  bool ContainsSurfaceId(const viz::SurfaceId& container_surface_id);
 
   cc::SurfaceManager* surface_manager_;
   RenderWidgetHostViewBase* target_view_;
@@ -1318,12 +1350,12 @@ class SurfaceHitTestReadyNotifier {
 SurfaceHitTestReadyNotifier::SurfaceHitTestReadyNotifier(
     RenderWidgetHostViewBase* target_view)
     : target_view_(target_view) {
-  surface_manager_ = GetSurfaceManager();
+  surface_manager_ = GetFrameSinkManager()->surface_manager();
 }
 
 void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
     RenderWidgetHostViewBase* root_view) {
-  cc::SurfaceId root_surface_id = root_view->SurfaceIdForTesting();
+  viz::SurfaceId root_surface_id = root_view->SurfaceIdForTesting();
   while (!ContainsSurfaceId(root_surface_id)) {
     // TODO(kenrb): Need a better way to do this. Needs investigation on
     // whether we can add a callback through RenderWidgetHostViewBaseObserver
@@ -1338,7 +1370,7 @@ void SurfaceHitTestReadyNotifier::WaitForSurfaceReady(
 }
 
 bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
-    const cc::SurfaceId& container_surface_id) {
+    const viz::SurfaceId& container_surface_id) {
   if (!container_surface_id.is_valid())
     return false;
 
@@ -1347,7 +1379,7 @@ bool SurfaceHitTestReadyNotifier::ContainsSurfaceId(
   if (!container_surface || !container_surface->active_referenced_surfaces())
     return false;
 
-  for (const cc::SurfaceId& id :
+  for (const viz::SurfaceId& id :
        *container_surface->active_referenced_surfaces()) {
     if (id == target_view_->SurfaceIdForTesting() || ContainsSurfaceId(id))
       return true;
@@ -1491,7 +1523,7 @@ void DOMMessageQueue::Observe(int type,
                               const NotificationDetails& details) {
   Details<std::string> dom_op_result(details);
   message_queue_.push(*dom_op_result.ptr());
-  if (message_loop_runner_.get())
+  if (message_loop_runner_)
     message_loop_runner_->Quit();
 }
 
@@ -1502,6 +1534,7 @@ void DOMMessageQueue::RenderProcessGone(base::TerminationStatus status) {
     case base::TERMINATION_STATUS_STILL_RUNNING:
       break;
     default:
+      renderer_crashed_ = true;
       if (message_loop_runner_.get())
         message_loop_runner_->Quit();
       break;
@@ -1514,7 +1547,7 @@ void DOMMessageQueue::ClearQueue() {
 
 bool DOMMessageQueue::WaitForMessage(std::string* message) {
   DCHECK(message);
-  if (message_queue_.empty()) {
+  if (!renderer_crashed_ && message_queue_.empty()) {
     // This will be quit when a new message comes in.
     message_loop_runner_ =
         new MessageLoopRunner(MessageLoopRunner::QuitMode::IMMEDIATE);
@@ -1525,7 +1558,7 @@ bool DOMMessageQueue::WaitForMessage(std::string* message) {
 
 bool DOMMessageQueue::PopMessage(std::string* message) {
   DCHECK(message);
-  if (message_queue_.empty())
+  if (renderer_crashed_ || message_queue_.empty())
     return false;
   *message = message_queue_.front();
   message_queue_.pop();
@@ -1835,7 +1868,7 @@ TestNavigationManager::TestNavigationManager(WebContents* web_contents,
 
 TestNavigationManager::~TestNavigationManager() {
   if (navigation_paused_)
-    handle_->Resume();
+    handle_->CallResumeForTesting();
 }
 
 bool TestNavigationManager::WaitForRequestStart() {
@@ -1892,6 +1925,8 @@ void TestNavigationManager::OnWillProcessResponse() {
   OnNavigationStateChanged();
 }
 
+// TODO(csharrison): Remove CallResumeForTesting method calls in favor of doing
+// it through the throttle.
 bool TestNavigationManager::WaitForDesiredState() {
   // If the desired state has laready been reached, just return.
   if (current_state_ == desired_state_)
@@ -1899,7 +1934,7 @@ bool TestNavigationManager::WaitForDesiredState() {
 
   // Resume the navigation if it was paused.
   if (navigation_paused_)
-     handle_->Resume();
+    handle_->CallResumeForTesting();
 
   // Wait for the desired state if needed.
   if (current_state_ < desired_state_) {
@@ -1925,7 +1960,7 @@ void TestNavigationManager::OnNavigationStateChanged() {
 
   // Otherwise, the navigation should be resumed if it was previously paused.
   if (navigation_paused_)
-    handle_->Resume();
+    handle_->CallResumeForTesting();
 }
 
 bool TestNavigationManager::ShouldMonitorNavigation(NavigationHandle* handle) {
@@ -2047,12 +2082,66 @@ void PwnMessageHelper::FileSystemWrite(RenderProcessHost* process,
 void PwnMessageHelper::LockMouse(RenderProcessHost* process,
                                  int routing_id,
                                  bool user_gesture,
-                                 bool last_unlocked_by_target,
                                  bool privileged) {
   IPC::IpcSecurityTestUtil::PwnMessageReceived(
       process->GetChannel(),
-      ViewHostMsg_LockMouse(routing_id, user_gesture, last_unlocked_by_target,
-                            privileged));
+      ViewHostMsg_LockMouse(routing_id, user_gesture, privileged));
 }
+
+#if defined(USE_AURA)
+namespace {
+class MockOverscrollControllerImpl : public OverscrollController,
+                                     public MockOverscrollController {
+ public:
+  MockOverscrollControllerImpl()
+      : content_scrolling_(false),
+        message_loop_runner_(new MessageLoopRunner) {}
+  ~MockOverscrollControllerImpl() override {}
+
+  // OverscrollController:
+  void ReceivedEventACK(const blink::WebInputEvent& event,
+                        bool processed) override {
+    // Since we're only mocking this one method of OverscrollController and its
+    // other methods are non-virtual, we'll delegate to it so that it doesn't
+    // get into an inconsistent state.
+    OverscrollController::ReceivedEventACK(event, processed);
+
+    if (event.GetType() == blink::WebInputEvent::kGestureScrollUpdate &&
+        processed) {
+      content_scrolling_ = true;
+      if (message_loop_runner_->loop_running())
+        message_loop_runner_->Quit();
+    }
+  }
+
+  // MockOverscrollController:
+  void WaitForConsumedScroll() override {
+    if (!content_scrolling_)
+      message_loop_runner_->Run();
+  }
+
+ private:
+  bool content_scrolling_;
+  scoped_refptr<MessageLoopRunner> message_loop_runner_;
+
+  DISALLOW_COPY_AND_ASSIGN(MockOverscrollControllerImpl);
+};
+}  // namespace
+
+// static
+MockOverscrollController* MockOverscrollController::Create(
+    RenderWidgetHostView* rwhv) {
+  std::unique_ptr<MockOverscrollControllerImpl> mock =
+      base::MakeUnique<MockOverscrollControllerImpl>();
+  MockOverscrollController* raw_mock = mock.get();
+
+  RenderWidgetHostViewAura* rwhva =
+      static_cast<RenderWidgetHostViewAura*>(rwhv);
+  rwhva->SetOverscrollControllerForTesting(std::move(mock));
+
+  return raw_mock;
+}
+
+#endif  // defined(USE_AURA)
 
 }  // namespace content

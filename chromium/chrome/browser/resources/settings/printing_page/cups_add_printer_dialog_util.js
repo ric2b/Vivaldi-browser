@@ -55,7 +55,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onTap_: function(event) {
@@ -104,6 +104,10 @@ Polymer({
 /** 'add-printer-dialog' is the template of the Add Printer dialog. */
 Polymer({
   is: 'add-printer-dialog',
+
+  behaviors: [
+    CrScrollableBehavior,
+  ],
 
   /** @private */
   attached: function() {

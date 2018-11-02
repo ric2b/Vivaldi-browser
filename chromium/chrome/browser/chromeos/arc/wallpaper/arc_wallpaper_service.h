@@ -12,23 +12,33 @@
 
 #include "ash/wallpaper/wallpaper_controller_observer.h"
 #include "base/macros.h"
-#include "components/arc/arc_service.h"
 #include "components/arc/common/wallpaper.mojom.h"
 #include "components/arc/instance_holder.h"
+#include "components/keyed_service/core/keyed_service.h"
 #include "mojo/public/cpp/bindings/binding.h"
+
+namespace content {
+class BrowserContext;
+}  // namespace content
 
 namespace arc {
 
+class ArcBridgeService;
+
 // Lives on the UI thread.
 class ArcWallpaperService
-    : public ArcService,
+    : public KeyedService,
       public ash::WallpaperControllerObserver,
       public InstanceHolder<mojom::WallpaperInstance>::Observer,
       public mojom::WallpaperHost {
  public:
-  class AndroidIdStore;
+  // Returns singleton instance for the given BrowserContext,
+  // or nullptr if the browser |context| is not allowed to use ARC.
+  static ArcWallpaperService* GetForBrowserContext(
+      content::BrowserContext* context);
 
-  explicit ArcWallpaperService(ArcBridgeService* bridge_service);
+  ArcWallpaperService(content::BrowserContext* context,
+                      ArcBridgeService* bridge_service);
   ~ArcWallpaperService() override;
 
   // InstanceHolder<mojom::WallpaperInstance>::Observer overrides.
@@ -46,13 +56,21 @@ class ArcWallpaperService
   // WallpaperControllerObserver implementation.
   void OnWallpaperDataChanged() override;
 
-  AndroidIdStore* android_id_store() { return android_id_store_.get(); }
-
  private:
+  class AndroidIdStore;
   class DecodeRequest;
+  struct WallpaperIdPair;
+
+  // Notifies wallpaper change if we have wallpaper instance.
+  void NotifyWallpaperChanged(int android_id);
+  // Notifies wallpaper change of |android_id|, then notify wallpaper change of
+  // -1 to reset wallpaper cache at Android side.
+  void NotifyWallpaperChangedAndReset(int android_id);
+
+  ArcBridgeService* const arc_bridge_service_;  // Owned by ArcServiceManager.
   mojo::Binding<mojom::WallpaperHost> binding_;
   std::unique_ptr<DecodeRequest> decode_request_;
-  std::unique_ptr<AndroidIdStore> android_id_store_;
+  std::vector<WallpaperIdPair> id_pairs_;
 
   DISALLOW_COPY_AND_ASSIGN(ArcWallpaperService);
 };

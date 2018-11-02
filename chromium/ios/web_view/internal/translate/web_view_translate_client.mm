@@ -17,6 +17,7 @@
 #include "components/translate/core/browser/translate_manager.h"
 #include "components/translate/core/browser/translate_prefs.h"
 #include "components/translate/core/browser/translate_step.h"
+#include "components/translate/core/common/language_detection_details.h"
 #include "ios/web/public/browser_state.h"
 #import "ios/web/public/web_state/web_state.h"
 #include "ios/web_view/internal/pref_names.h"
@@ -34,6 +35,9 @@ DEFINE_WEB_STATE_USER_DATA_KEY(ios_web_view::WebViewTranslateClient);
 
 namespace ios_web_view {
 
+// TODO(crbug.com/729859): Support logging histogram data on detected language
+// page, by passing a valid language_histogram, when histogram logging is
+// available on ios/web_view.
 WebViewTranslateClient::WebViewTranslateClient(web::WebState* web_state)
     : web::WebStateObserver(web_state),
       translate_manager_(base::MakeUnique<translate::TranslateManager>(
@@ -44,7 +48,8 @@ WebViewTranslateClient::WebViewTranslateClient(web::WebState* web_state)
           prefs::kAcceptLanguages)),
       translate_driver_(web_state,
                         web_state->GetNavigationManager(),
-                        translate_manager_.get()) {}
+                        translate_manager_.get(),
+                        nullptr /* language_histogram */) {}
 
 WebViewTranslateClient::~WebViewTranslateClient() = default;
 
@@ -62,13 +67,6 @@ void WebViewTranslateClient::ShowTranslateUI(
     const std::string& target_language,
     translate::TranslateErrors::Type error_type,
     bool triggered_from_menu) {
-  translate_manager_->GetLanguageState().SetTranslateEnabled(true);
-
-  if (step == translate::TRANSLATE_STEP_BEFORE_TRANSLATE &&
-      !translate_manager_->GetLanguageState().HasLanguageChanged()) {
-    return;
-  }
-
   [translation_controller_ updateTranslateStep:step
                                 sourceLanguage:source_language
                                 targetLanguage:target_language
@@ -106,6 +104,16 @@ WebViewTranslateClient::GetTranslateAcceptLanguages() {
 int WebViewTranslateClient::GetInfobarIconID() const {
   NOTREACHED();
   return 0;
+}
+
+void WebViewTranslateClient::RecordLanguageDetectionEvent(
+    const translate::LanguageDetectionDetails& details) const {
+  // TODO(crbug.com/722679): Implementing gaia-keyed logging.
+}
+
+void WebViewTranslateClient::RecordTranslateEvent(
+    const metrics::TranslateEventProto&) {
+  // TODO(crbug.com/728491): Implementing gaia-keyed logging.
 }
 
 bool WebViewTranslateClient::IsTranslatableURL(const GURL& url) {

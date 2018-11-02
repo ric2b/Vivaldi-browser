@@ -8,15 +8,14 @@
 #include "ash/default_accessibility_delegate.h"
 #include "ash/default_wallpaper_delegate.h"
 #include "ash/gpu_support_stub.h"
+#include "ash/keyboard/test_keyboard_ui.h"
 #include "ash/palette_delegate.h"
 #include "ash/public/cpp/shell_window_ids.h"
-#include "ash/session/session_state_delegate.h"
 #include "ash/shell.h"
 #include "ash/shell/context_menu.h"
 #include "ash/shell/example_factory.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/test/test_keyboard_ui.h"
-#include "ash/test/test_system_tray_delegate.h"
+#include "ash/system/tray/system_tray_delegate.h"
 #include "ash/wm/window_state.h"
 #include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
@@ -51,33 +50,11 @@ class PaletteDelegateImpl : public PaletteDelegate {
       done.Run();
   }
   void CancelPartialScreenshot() override {}
-  bool IsMetalayerSupported() override { return false; }
-  void ShowMetalayer(const base::Closure& closed) override {}
+  void ShowMetalayer(base::OnceClosure done) override {}
   void HideMetalayer() override {}
 
  private:
   DISALLOW_COPY_AND_ASSIGN(PaletteDelegateImpl);
-};
-
-class SessionStateDelegateImpl : public SessionStateDelegate {
- public:
-  SessionStateDelegateImpl() : user_info_(new user_manager::UserInfoImpl()) {}
-
-  ~SessionStateDelegateImpl() override {}
-
-  // SessionStateDelegate:
-  bool ShouldShowAvatar(WmWindow* window) const override {
-    return !user_info_->GetImage().isNull();
-  }
-  gfx::ImageSkia GetAvatarImageForWindow(WmWindow* window) const override {
-    return gfx::ImageSkia();
-  }
-
- private:
-  // A pseudo user info.
-  std::unique_ptr<user_manager::UserInfo> user_info_;
-
-  DISALLOW_COPY_AND_ASSIGN(SessionStateDelegateImpl);
 };
 
 }  // namespace
@@ -102,7 +79,7 @@ bool ShellDelegateImpl::IsRunningInForcedAppMode() const {
   return false;
 }
 
-bool ShellDelegateImpl::CanShowWindowForUser(WmWindow* window) const {
+bool ShellDelegateImpl::CanShowWindowForUser(aura::Window* window) const {
   return true;
 }
 
@@ -118,8 +95,8 @@ void ShellDelegateImpl::Exit() {
   base::MessageLoop::current()->QuitWhenIdle();
 }
 
-keyboard::KeyboardUI* ShellDelegateImpl::CreateKeyboardUI() {
-  return new TestKeyboardUI;
+std::unique_ptr<keyboard::KeyboardUI> ShellDelegateImpl::CreateKeyboardUI() {
+  return base::MakeUnique<TestKeyboardUI>();
 }
 
 void ShellDelegateImpl::OpenUrlFromArc(const GURL& url) {}
@@ -129,16 +106,12 @@ void ShellDelegateImpl::ShelfInit() {}
 void ShellDelegateImpl::ShelfShutdown() {}
 
 SystemTrayDelegate* ShellDelegateImpl::CreateSystemTrayDelegate() {
-  return new test::TestSystemTrayDelegate;
+  return new SystemTrayDelegate;
 }
 
 std::unique_ptr<WallpaperDelegate>
 ShellDelegateImpl::CreateWallpaperDelegate() {
   return base::MakeUnique<DefaultWallpaperDelegate>();
-}
-
-SessionStateDelegate* ShellDelegateImpl::CreateSessionStateDelegate() {
-  return new SessionStateDelegateImpl;
 }
 
 AccessibilityDelegate* ShellDelegateImpl::CreateAccessibilityDelegate() {
@@ -171,6 +144,10 @@ PrefService* ShellDelegateImpl::GetActiveUserPrefService() const {
   return nullptr;
 }
 
+PrefService* ShellDelegateImpl::GetLocalStatePrefService() const {
+  return nullptr;
+}
+
 bool ShellDelegateImpl::IsTouchscreenEnabledInPrefs(
     bool use_local_state) const {
   return true;
@@ -180,6 +157,13 @@ void ShellDelegateImpl::SetTouchscreenEnabledInPrefs(bool enabled,
                                                      bool use_local_state) {}
 
 void ShellDelegateImpl::UpdateTouchscreenStatusFromPrefs() {}
+
+#if defined(USE_OZONE)
+ui::InputDeviceControllerClient*
+ShellDelegateImpl::GetInputDeviceControllerClient() {
+  return nullptr;
+}
+#endif
 
 }  // namespace shell
 }  // namespace ash

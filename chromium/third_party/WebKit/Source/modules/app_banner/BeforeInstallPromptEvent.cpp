@@ -8,6 +8,7 @@
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/UseCounter.h"
 #include "modules/app_banner/BeforeInstallPromptEventInit.h"
 
@@ -20,6 +21,7 @@ BeforeInstallPromptEvent::BeforeInstallPromptEvent(
     mojom::blink::AppBannerEventRequest event_request,
     const Vector<String>& platforms)
     : Event(name, false, true),
+      ContextClient(&frame),
       banner_service_(std::move(service_ptr)),
       binding_(this, std::move(event_request)),
       platforms_(platforms),
@@ -29,18 +31,22 @@ BeforeInstallPromptEvent::BeforeInstallPromptEvent(
       prompt_called_(false) {
   DCHECK(banner_service_);
   DCHECK(binding_.is_bound());
-  UseCounter::Count(&frame, UseCounter::kBeforeInstallPromptEvent);
+  UseCounter::Count(&frame, WebFeature::kBeforeInstallPromptEvent);
 }
 
 BeforeInstallPromptEvent::BeforeInstallPromptEvent(
+    ExecutionContext* execution_context,
     const AtomicString& name,
     const BeforeInstallPromptEventInit& init)
-    : Event(name, init), binding_(this), prompt_called_(false) {
+    : Event(name, init),
+      ContextClient(execution_context),
+      binding_(this),
+      prompt_called_(false) {
   if (init.hasPlatforms())
     platforms_ = init.platforms();
 }
 
-BeforeInstallPromptEvent::~BeforeInstallPromptEvent() {}
+BeforeInstallPromptEvent::~BeforeInstallPromptEvent() = default;
 
 void BeforeInstallPromptEvent::Dispose() {
   banner_service_.reset();
@@ -53,7 +59,7 @@ Vector<String> BeforeInstallPromptEvent::platforms() const {
 
 ScriptPromise BeforeInstallPromptEvent::userChoice(ScriptState* script_state) {
   UseCounter::Count(ExecutionContext::From(script_state),
-                    UseCounter::kBeforeInstallPromptEventUserChoice);
+                    WebFeature::kBeforeInstallPromptEventUserChoice);
   // |m_binding| must be bound to allow the AppBannerService to resolve the
   // userChoice promise.
   if (user_choice_ && binding_.is_bound())
@@ -67,19 +73,19 @@ ScriptPromise BeforeInstallPromptEvent::userChoice(ScriptState* script_state) {
 ScriptPromise BeforeInstallPromptEvent::prompt(ScriptState* script_state) {
   // |m_bannerService| must be bound to allow us to inform the AppBannerService
   // to display the banner now.
-  if (!defaultPrevented() || prompt_called_ || !banner_service_.is_bound()) {
+  if (prompt_called_ || !banner_service_.is_bound()) {
     return ScriptPromise::RejectWithDOMException(
         script_state,
         DOMException::Create(kInvalidStateError,
-                             "The prompt() method may only be called once, "
-                             "following preventDefault()."));
+                             "The prompt() method may only be called once."));
   }
 
   UseCounter::Count(ExecutionContext::From(script_state),
-                    UseCounter::kBeforeInstallPromptEventPrompt);
+                    WebFeature::kBeforeInstallPromptEventPrompt);
 
   prompt_called_ = true;
-  banner_service_->DisplayAppBanner();
+  banner_service_->DisplayAppBanner(
+      UserGestureIndicator::ProcessingUserGesture());
   return ScriptPromise::CastUndefined(script_state);
 }
 
@@ -91,8 +97,13 @@ void BeforeInstallPromptEvent::preventDefault() {
   Event::preventDefault();
   if (target()) {
     UseCounter::Count(target()->GetExecutionContext(),
-                      UseCounter::kBeforeInstallPromptEventPreventDefault);
+                      WebFeature::kBeforeInstallPromptEventPreventDefault);
   }
+}
+
+bool BeforeInstallPromptEvent::HasPendingActivity() const {
+  return user_choice_ &&
+         user_choice_->GetState() == ScriptPromisePropertyBase::kPending;
 }
 
 void BeforeInstallPromptEvent::BannerAccepted(const String& platform) {
@@ -108,6 +119,7 @@ void BeforeInstallPromptEvent::BannerDismissed() {
 DEFINE_TRACE(BeforeInstallPromptEvent) {
   visitor->Trace(user_choice_);
   Event::Trace(visitor);
+  ContextClient::Trace(visitor);
 }
 
 }  // namespace blink

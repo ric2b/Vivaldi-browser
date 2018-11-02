@@ -64,6 +64,7 @@ class EnrollmentScreen
   // EnrollmentScreenView::Controller implementation:
   void OnLoginDone(const std::string& user,
                    const std::string& auth_code) override;
+  void OnLicenseTypeSelected(const std::string& license_type) override;
   void OnRetry() override;
   void OnCancel() override;
   void OnConfirmationClosed() override;
@@ -73,6 +74,8 @@ class EnrollmentScreen
 
   // EnterpriseEnrollmentHelper::EnrollmentStatusConsumer implementation:
   void OnAuthError(const GoogleServiceAuthError& error) override;
+  void OnMultipleLicensesAvailable(
+      const EnrollmentLicenseMap& licenses) override;
   void OnEnrollmentError(policy::EnrollmentStatus status) override;
   void OnOtherError(EnterpriseEnrollmentHelper::OtherError error) override;
   void OnDeviceEnrolled(const std::string& additional_token) override;
@@ -86,8 +89,8 @@ class EnrollmentScreen
   EnrollmentScreenView* GetView() { return view_; }
 
  private:
-  friend class EnrollmentScreenUnitTest;
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenTest, TestSuccess);
+  friend class MultiLicenseEnrollmentScreenUnitTest;
+  friend class ZeroTouchEnrollmentScreenUnitTest;
   FRIEND_TEST_ALL_PREFIXES(AttestationAuthEnrollmentScreenTest, TestCancel);
   FRIEND_TEST_ALL_PREFIXES(ForcedAttestationAuthEnrollmentScreenTest,
                            TestCancel);
@@ -104,9 +107,12 @@ class EnrollmentScreen
                            TestActiveDirectoryEnrollment_UIErrors);
   FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, RequiresNoInput);
   FRIEND_TEST_ALL_PREFIXES(HandsOffNetworkScreenTest, ContinueClickedOnlyOnce);
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, Retries);
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, DoesNotRetryOnTopOfUser);
-  FRIEND_TEST_ALL_PREFIXES(EnrollmentScreenUnitTest, DoesNotRetryAfterSuccess);
+  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest, Retries);
+  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest, TestSuccess);
+  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest,
+                           DoesNotRetryOnTopOfUser);
+  FRIEND_TEST_ALL_PREFIXES(ZeroTouchEnrollmentScreenUnitTest,
+                           DoesNotRetryAfterSuccess);
 
   // The authentication mechanisms that this class can use.
   enum Auth {

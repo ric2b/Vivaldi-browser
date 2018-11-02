@@ -134,6 +134,8 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
     bool in_process_gpu;
     bool passthrough_cmd_decoder;
     bool supports_overlays;
+    bool hdr;
+    bool can_support_threaded_texture_mailbox;
     CollectInfoResult basic_info_state;
     CollectInfoResult context_info_state;
 #if defined(OS_WIN)
@@ -193,6 +195,9 @@ void GPUInfo::EnumerateFields(Enumerator* enumerator) const {
   enumerator->AddBool("inProcessGpu", in_process_gpu);
   enumerator->AddBool("passthroughCmdDecoder", passthrough_cmd_decoder);
   enumerator->AddBool("supportsOverlays", supports_overlays);
+  enumerator->AddBool("hdr", hdr);
+  enumerator->AddBool("canSupportThreadedTextureMailbox",
+                      can_support_threaded_texture_mailbox);
   enumerator->AddInt("basicInfoState", basic_info_state);
   enumerator->AddInt("contextInfoState", context_info_state);
 #if defined(OS_WIN)

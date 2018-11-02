@@ -1516,8 +1516,13 @@ inline void BreakingContext::CommitAndUpdateLineBreakIfNeeded() {
         current_style_->CollapseWhiteSpace())
       trailing_objects_.Clear();
 
-    if (!width_.FitsOnLine() && width_.FitsOnLine(0, kExcludeWhitespace) &&
-        ignoring_spaces_ && next_object_) {
+    // If we are going to break before a float on an object that is just
+    // collapsible white space then make sure the line break is moved to
+    // the float.
+    if (width_.FitsOnLine(0, kExcludeWhitespace) && next_object_ &&
+        next_object_.IsFloating() && current_.GetLineLayoutItem().IsText() &&
+        LineLayoutText(current_.GetLineLayoutItem())
+            .IsAllCollapsibleWhitespace()) {
       width_.Commit();
       line_break_.MoveToStartOf(next_object_);
     }
@@ -1560,11 +1565,12 @@ inline IndentTextOrNot RequiresIndent(bool is_first_line,
                                       bool is_after_hard_line_break,
                                       const ComputedStyle& style) {
   IndentTextOrNot indent_text = kDoNotIndentText;
-  if (is_first_line || (is_after_hard_line_break &&
-                        style.GetTextIndentLine()) == kTextIndentEachLine)
+  if (is_first_line ||
+      (is_after_hard_line_break &&
+       style.GetTextIndentLine() != TextIndentLine::kFirstLine))
     indent_text = kIndentText;
 
-  if (style.GetTextIndentType() == kTextIndentHanging)
+  if (style.GetTextIndentType() == TextIndentType::kHanging)
     indent_text = indent_text == kIndentText ? kDoNotIndentText : kIndentText;
 
   return indent_text;

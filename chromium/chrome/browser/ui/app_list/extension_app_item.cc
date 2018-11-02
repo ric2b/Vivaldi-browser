@@ -19,7 +19,6 @@
 #include "chrome/browser/ui/extensions/extension_enable_flow.h"
 #include "chrome/common/extensions/extension_constants.h"
 #include "chrome/common/extensions/extension_metrics.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/model/string_ordinal.h"
 #include "extensions/browser/app_sorting.h"
@@ -30,6 +29,7 @@
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "extensions/common/manifest_url_handlers.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "ui/display/types/display_constants.h"
 #include "ui/events/event_constants.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
@@ -120,10 +120,9 @@ void ExtensionAppItem::Launch(int event_flags) {
   if (RunExtensionEnableFlow())
     return;
 
-  GetController()->LaunchApp(profile(),
-                             extension,
+  GetController()->LaunchApp(profile(), extension,
                              AppListControllerDelegate::LAUNCH_FROM_APP_LIST,
-                             event_flags);
+                             event_flags, display::kInvalidDisplayId);
 }
 
 void ExtensionAppItem::ExtensionEnableFlowFinished() {

@@ -33,7 +33,6 @@
 #include "chrome/browser/ui/android/android_about_app_info.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chrome/grit/locale_settings.h"
 #include "components/browsing_data/core/browsing_data_utils.h"
 #include "components/browsing_data/core/pref_names.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
@@ -144,7 +143,7 @@ static jboolean IsContentSettingEnabled(JNIEnv* env,
   // that the functionality provided below is correct.
   DCHECK(content_settings_type == CONTENT_SETTINGS_TYPE_JAVASCRIPT ||
          content_settings_type == CONTENT_SETTINGS_TYPE_POPUPS ||
-         content_settings_type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER);
+         content_settings_type == CONTENT_SETTINGS_TYPE_ADS);
   ContentSettingsType type =
       static_cast<ContentSettingsType>(content_settings_type);
   return GetBooleanForContentSetting(type);
@@ -158,7 +157,7 @@ static void SetContentSettingEnabled(JNIEnv* env,
   // that the new category supports ALLOW/BLOCK pairs and, if not, handle them.
   DCHECK(content_settings_type == CONTENT_SETTINGS_TYPE_JAVASCRIPT ||
          content_settings_type == CONTENT_SETTINGS_TYPE_POPUPS ||
-         content_settings_type == CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER);
+         content_settings_type == CONTENT_SETTINGS_TYPE_ADS);
 
   HostContentSettingsMap* host_content_settings_map =
       HostContentSettingsMapFactory::GetForProfile(GetOriginalProfile());
@@ -194,7 +193,8 @@ static void GetContentSettingsExceptions(JNIEnv* env,
     Java_PrefServiceBridge_addContentSettingExceptionToList(
         env, list, content_settings_type,
         ConvertUTF8ToJavaString(env, entries[i].primary_pattern.ToString()),
-        entries[i].setting, ConvertUTF8ToJavaString(env, entries[i].source));
+        entries[i].GetContentSetting(),
+        ConvertUTF8ToJavaString(env, entries[i].source));
   }
 }
 
@@ -551,6 +551,8 @@ static void SetBrowsingDataDeletionTimePeriod(JNIEnv* env,
   DCHECK_GE(time_period, 0);
   DCHECK_LE(time_period,
             static_cast<int>(browsing_data::TimePeriod::TIME_PERIOD_LAST));
+  browsing_data::RecordTimePeriodChange(
+      static_cast<browsing_data::TimePeriod>(time_period));
   GetPrefService()->SetInteger(browsing_data::GetTimePeriodPreferenceName(
                                    ToTabEnum(clear_browsing_data_tab)),
                                time_period);
@@ -916,11 +918,6 @@ GetSupervisedUserSecondCustodianProfileImageURL(
   return ConvertUTF8ToJavaString(
       env, GetPrefService()->GetString(
                prefs::kSupervisedUserSecondCustodianProfileImageURL));
-}
-
-// static
-bool PrefServiceBridge::RegisterPrefServiceBridge(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 // static

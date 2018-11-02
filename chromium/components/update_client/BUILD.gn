@@ -6,6 +6,9 @@ import("//net/features.gni")
 
 static_library("update_client") {
   sources = [
+    "action_runner.cc",
+    "action_runner.h",
+    "action_runner_win.cc",
     "background_downloader_win.cc",
     "background_downloader_win.h",
     "component.cc",
@@ -114,6 +117,7 @@ bundle_data("unit_tests_bundle_data") {
     "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_1to2.crx",
     "//components/test/data/update_client/ihfokbkgjpifnbbojhneepfflplebdkc_2.crx",
     "//components/test/data/update_client/jebgalgnebhfojomionfpkfelancnnkf.crx",
+    "//components/test/data/update_client/runaction_test_win.crx3",
     "//components/test/data/update_client/updatecheck_reply_1.xml",
     "//components/test/data/update_client/updatecheck_reply_4.xml",
     "//components/test/data/update_client/updatecheck_reply_noupdate.xml",
@@ -151,6 +155,7 @@ source_set("unit_tests") {
     ":unit_tests_bundle_data",
     ":update_client",
     "//base",
+    "//components/crx_file",
     "//components/prefs",
     "//components/prefs:test_support",
     "//components/version_info:version_info",

@@ -3,8 +3,8 @@
 <translationbundle lang="ru">
 <translation id="1012876632442809908">Устройство USB-C (порт спереди)</translation>
 <translation id="1013923882670373915">Устройству <ph name="DEVICE_NAME" /> требуется разрешение на подключение через Bluetooth. Введите на нем PIN-код: <ph name="PINCODE" /></translation>
+<translation id="1032891413405719768">Батарея стилуса почти разряжена</translation>
 <translation id="112308213915226829">Автоматически скрывать панель запуска</translation>
-<translation id="1127238861555034875">Режим лупы</translation>
 <translation id="1153356358378277386">Сопряженные устройства</translation>
 <translation id="1195412055398077112">Каемка экрана</translation>
 <translation id="1247372569136754018">Микрофон (встроенный)</translation>
@@ -26,8 +26,10 @@
 <translation id="1677472565718498478">Ещё <ph name="TIME" /></translation>
 <translation id="1698760176351776263">Адрес IPv6: <ph name="ADDRESS" /></translation>
 <translation id="1734367976349034509">Это корпоративное устройство</translation>
+<translation id="1746730358044914197">Способы ввода настраиваются администратором</translation>
 <translation id="1747827819627189109">Экранная клавиатура включена</translation>
 <translation id="1823873187264960516">Ethernet: <ph name="ADDRESS" /></translation>
+<translation id="1836215606488044471">Ассистент (загрузка…)</translation>
 <translation id="1850504506766569011">Wi-Fi отключен</translation>
 <translation id="1856813161013948396">Для разблокировки экрана коснитесь сканера отпечатков пальцев. Нажмите, чтобы настроить.</translation>
 <translation id="1864454756846565995">Устройство USB-C (порт сзади)</translation>
@@ -35,10 +37,13 @@
 <translation id="1919743966458266018">Изменились быстрые клавиши для запуска диспетчера задач. Используйте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="1923539912171292317">Автоматическое нажатие</translation>
 <translation id="1942830294380034169">Кнопка переполнения</translation>
+<translation id="1951012854035635156">Ассистент</translation>
 <translation id="1957803754585243749">0°</translation>
 <translation id="1969011864782743497"><ph name="DEVICE_NAME" /> (USB)</translation>
+<translation id="2012624427112548395">CTRL + ПОИСК + H</translation>
 <translation id="2049639323467105390">Это устройство находится в домене <ph name="DOMAIN" />.</translation>
 <translation id="2050339315714019657">Книжная</translation>
+<translation id="2067602449040652523">Яркость клавиатуры</translation>
 <translation id="207439088875642105">Этим детским аккаунтом управляют <ph name="FIRST_PARENT_EMAIL" /> и <ph name="SECOND_PARENT_EMAIL" />.</translation>
 <translation id="2122028596993374965">Остановить трансляцию вкладки "<ph name="TAB_NAME" />" на устройство "<ph name="RECEIVER_NAME" />"</translation>
 <translation id="2127372758936585790">Маломощное зарядное устройство</translation>
@@ -49,14 +54,17 @@
 <translation id="2268813581635650749">Выйти из всех аккаунтов</translation>
 <translation id="2292698582925480719">Масштаб экрана</translation>
 <translation id="2303600792989757991">Переключить режим обзора</translation>
+<translation id="2338501278241028356">Включите Bluetooth, чтобы найти устройства</translation>
 <translation id="2352467521400612932">Настройки стилуса</translation>
 <translation id="2354174487190027830">Активация <ph name="NAME" /></translation>
+<translation id="2365393535144473978">Вместе с мобильным Интернетом включится Bluetooth.</translation>
 <translation id="2391579633712104609">180°</translation>
 <translation id="2429753432712299108">Устройству <ph name="DEVICE_NAME" /> требуется разрешение на подключение через Bluetooth. Проверьте, отображается ли на нем код: <ph name="PASSKEY" />.</translation>
 <translation id="2475982808118771221">Произошел сбой.</translation>
 <translation id="2501920221385095727">Залипание клавиш</translation>
 <translation id="2509468283778169019">Включен режим CAPS LOCK</translation>
 <translation id="2532589005999780174">Режим высокой контрастности</translation>
+<translation id="2597972630681408282">Ночной режим: <ph name="NIGHT_LIGHT_STATUS" /></translation>
 <translation id="2700058918926273959">Сеанс закончится через <ph name="SESSION_TIME_REMAINING" />. После этого будет выполнен выход.</translation>
 <translation id="2727977024730340865">Подключено маломощное зарядное устройство. Возможны проблемы при зарядке.</translation>
 <translation id="2761704814324807722">Строка состояния, время <ph name="TIME" />, <ph name="BATTERY" /></translation>
@@ -76,8 +84,6 @@
 <translation id="3009178788565917040">Выход</translation>
 <translation id="3019353588588144572">Оставшееся время до полной зарядки батареи: <ph name="TIME_REMAINING" />.</translation>
 <translation id="3047477924825107454">Этим детским аккаунтом управляет <ph name="MANAGER_EMAIL" /></translation>
-<translation id="3050422059534974565">Включен режим CAPS LOCK.
-Чтобы отключить его, нажмите Search или Shift.</translation>
 <translation id="3077734595579995578">shift</translation>
 <translation id="3087734570205094154">Снизу</translation>
 <translation id="3105990244222795498"><ph name="DEVICE_NAME" /> (Bluetooth)</translation>
@@ -86,7 +92,6 @@
 <translation id="315116470104423982">Мобильное подключение</translation>
 <translation id="3236488194889173876">Нет доступных мобильных сетей</translation>
 <translation id="3294437725009624529">Гость</translation>
-<translation id="3335772982573114336">Новая заметка</translation>
 <translation id="3364721542077212959">Инструменты стилуса</translation>
 <translation id="3368922792935385530">Подключено</translation>
 <translation id="3371140690572404006">Устройство USB-C (ближний порт справа)</translation>
@@ -118,8 +123,11 @@
 <translation id="3967919079500697218">Функция создания скриншотов была отключена администратором.</translation>
 <translation id="397105322502079400">Вычисление…</translation>
 <translation id="3995138139523574647">Устройство USB-C (дальний порт справа)</translation>
+<translation id="4017989525502048489">Лазерная указка</translation>
 <translation id="4279490309300973883">Отражение</translation>
 <translation id="4321179778687042513">ctrl</translation>
+<translation id="4338109981321384717">Лупа</translation>
+<translation id="4351433414020964307">Загрузка Ассистента…</translation>
 <translation id="4378551569595875038">Подключение…</translation>
 <translation id="4421231901400348175">Доступ к экрану для <ph name="HELPER_NAME" /> с помощью удаленного помощника</translation>
 <translation id="4430019312045809116">Объем</translation>
@@ -131,11 +139,14 @@
 <translation id="453661520163887813">До полной зарядки <ph name="TIME" /></translation>
 <translation id="4544944664594876241">Изменились быстрые клавиши для блокировки экрана. Используйте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4659419629803378708">Функция ChromeVox включена</translation>
+<translation id="4729904664295161097">Ассистент доступен только в основном профиле.</translation>
 <translation id="479989351350248267">поиск</translation>
 <translation id="4804818685124855865">Отключиться</translation>
+<translation id="4821830640883629383">Зарядите или замените батарею стилуса.</translation>
 <translation id="4849058404725798627">Выделять элементы, выбранные с помощью клавиатуры</translation>
 <translation id="4872237917498892622">Alt + Search или Shift</translation>
 <translation id="4895488851634969361">Батарея полностью заряжена.</translation>
+<translation id="4905614135390995787">Изменились быстрые клавиши для управления режимом высокой контрастности. Используйте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="4918086044614829423">Принять</translation>
 <translation id="4961318399572185831">Трансляция экрана</translation>
 <translation id="5011233892417813670">Chromebook</translation>
@@ -159,18 +170,21 @@
 <translation id="5744083938413354016">Перетаскивание нажатием</translation>
 <translation id="5777841717266010279">Закрыть доступ к экрану?</translation>
 <translation id="57838592816432529">Отключить звук</translation>
+<translation id="5860033963881614850">Выкл.</translation>
 <translation id="5895138241574237353">Перезапустить</translation>
 <translation id="5901316534475909376">Shift + Esc</translation>
+<translation id="5916664084637901428">ВКЛ</translation>
 <translation id="5927132638760172455">Трансляция на неизвестное устройство</translation>
 <translation id="5932901536148835538">Chromebit</translation>
 <translation id="5947494881799873997">Отменить</translation>
 <translation id="595202126637698455">Включено отслеживание эффективности</translation>
+<translation id="5957083217255311415">Мобильный Интернет отключен.</translation>
 <translation id="5958529069007801266">Контролируемый профиль</translation>
 <translation id="5977415296283489383">Наушники</translation>
 <translation id="5978382165065462689">Доступ к экрану с помощью удаленного помощника</translation>
 <translation id="5980301590375426705">Выйти из гостевого режима</translation>
+<translation id="5992218262414051481">Режим высокой контрастности включен. Чтобы отключить его, нажмите CTRL + ПОИСК + H.</translation>
 <translation id="6018164090099858612">Выход из режима трансляции…</translation>
-<translation id="6041154455840261787">Режим высокой контрастности включен. Чтобы отключить его, нажмите ПОИСК + SHIFT + H.</translation>
 <translation id="6043212731627905357">Монитор не совместим с устройством <ph name="DEVICE_TYPE" />.</translation>
 <translation id="6043994281159824495">Выйти</translation>
 <translation id="6047696787498798094">Если перейти к другому пользователю, доступ к экрану будет закрыт. Продолжить?</translation>
@@ -184,7 +198,6 @@
 <translation id="6297287540776456956">Чтобы выбрать регион, используйте стилус</translation>
 <translation id="6310121235600822547"><ph name="DISPLAY_NAME" />: положение изменено на <ph name="ROTATION" /></translation>
 <translation id="632744581670418035">Накладка на клавиатуру</translation>
-<translation id="6395038768903208085">Режим метаслоя</translation>
 <translation id="639644700271529076">CAPS LOCK отключен</translation>
 <translation id="6406704438230478924">altgr</translation>
 <translation id="6452181791372256707">Отклонить</translation>
@@ -196,8 +209,10 @@
 <translation id="6585808820553845416">Сеанс закончится через <ph name="SESSION_TIME_REMAINING" />.</translation>
 <translation id="6627638273713273709">Поиск + Shift + K</translation>
 <translation id="6650933572246256093">Устройству <ph name="DEVICE_NAME" /> требуется разрешение на подключение через Bluetooth. Введите на нем код: <ph name="PASSKEY" />.</translation>
+<translation id="6691659475504239918">ПОИСК + SHIFT + H</translation>
 <translation id="6700713906295497288">Кнопка меню редактора методов ввода</translation>
 <translation id="6713285437468012787">Устройство <ph name="DEVICE_NAME" /> подключено через Bluetooth и доступно всем пользователям. Вы можете отключить его на странице настроек.</translation>
+<translation id="6715542151869432661">Мобильные устройства не найдены.</translation>
 <translation id="6785414152754474415">Батарея заряжена на <ph name="PERCENTAGE" />% и подключена к источнику питания.</translation>
 <translation id="6803622936009808957">Не удалось дублировать изображение экрана, т. к. указанное разрешение не поддерживается. Включен режим расширенного рабочего стола.</translation>
 <translation id="683971173229319003">Клавиша поиска + L</translation>
@@ -211,12 +226,9 @@
 <translation id="7066646422045619941">Эта сеть отключена администратором.</translation>
 <translation id="7067196344162293536">Автоповорот</translation>
 <translation id="7098389117866926363">Устройство USB-C (порт слева на задней панели)</translation>
-<translation id="7129360219436193655">Режим лазерной указки</translation>
 <translation id="714034171374937760">Chromebase</translation>
 <translation id="7165278925115064263">Alt + Shift + K</translation>
 <translation id="7168224885072002358">Возврат к предыдущему разрешению через <ph name="TIMEOUT_SECONDS" /></translation>
-<translation id="7209101170223508707">Включен режим CAPS LOCK.
-Чтобы отключить его, нажмите Alt + Search или Shift.</translation>
 <translation id="7246339268451149667">Разрешить разблокировку с помощью отпечатка пальца?</translation>
 <translation id="7256634071279256947">Основной микрофон</translation>
 <translation id="7348093485538360975">Экранная клавиатура</translation>
@@ -234,10 +246,10 @@
 <translation id="7649070708921625228">Справка</translation>
 <translation id="7692480393933218409">Подключенные устройства USB-C заряжаются</translation>
 <translation id="776344839111254542">Нажмите, чтобы просмотреть информацию об обновлении</translation>
+<translation id="7798302898096527229">Для отмены нажмите SEARCH или SHIFT.</translation>
 <translation id="7814236020522506259"><ph name="HOUR" /> <ph name="MINUTE" /></translation>
 <translation id="7823564328645135659">В результате синхронизации настроек язык изменен. Теперь используется <ph name="TO_LOCALE" />, а не <ph name="FROM_LOCALE" />.</translation>
 <translation id="7904094684485781019">Администратор этого аккаунта запретил множественный вход</translation>
-<translation id="7951523953736115461">Ночной режим</translation>
 <translation id="7977927628060636163">Поиск мобильных сетей...</translation>
 <translation id="7982789257301363584">Сеть</translation>
 <translation id="8000066093800657092">Нет сети</translation>
@@ -251,11 +263,13 @@
 <translation id="8185286464235484130">Поделитесь с нами своим мнением, ответив на несколько вопросов.</translation>
 <translation id="8190698733819146287">Настройки языков и ввода…</translation>
 <translation id="8308637677604853869">Предыдущее меню</translation>
+<translation id="8351131234907093545">Создать заметку</translation>
 <translation id="8428213095426709021">Настройки</translation>
 <translation id="8433186206711564395">Настройки сети</translation>
 <translation id="8433977262951327081">Быстрые клавиши для вызова всплывающего окна с параметрами ввода на панели запуска изменились. Используйте <ph name="NEW_SHORTCUT" /> вместо <ph name="OLD_SHORTCUT" />.</translation>
 <translation id="8454013096329229812">Wi-Fi включен</translation>
 <translation id="847056008324733326">Настройки масштаба экрана</translation>
+<translation id="8477270416194247200">Для отмены нажмите ALT + SEARCH или SHIFT.</translation>
 <translation id="8484916590211895857"><ph name="NAME" />: повторное подключение...</translation>
 <translation id="8517041960877371778">Не удается зарядить устройство <ph name="DEVICE_TYPE" />, пока оно включено.</translation>
 <translation id="8639760480004882931">Батарея заряжена на <ph name="PERCENTAGE" /></translation>
@@ -266,6 +280,7 @@
 <translation id="8828714802988429505">90°</translation>
 <translation id="8850991929411075241">Клавиша поиска + Esc</translation>
 <translation id="8878886163241303700">Раскрытый экран</translation>
+<translation id="8921624153894383499">Google Ассистент не говорит на этом языке</translation>
 <translation id="8938800817013097409">Устройство USB-C (порт справа на задней панели)</translation>
 <translation id="8940956008527784070">Низкий заряд батареи (<ph name="PERCENTAGE" />%)</translation>
 <translation id="9074739597929991885">Bluetooth</translation>

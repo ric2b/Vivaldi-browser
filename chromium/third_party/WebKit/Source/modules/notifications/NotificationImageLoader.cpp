@@ -22,10 +22,10 @@
 
 #define NOTIFICATION_PER_TYPE_HISTOGRAM_COUNTS(metric, type_name, value, max) \
   case NotificationImageLoader::Type::k##type_name: {                         \
-    DEFINE_THREAD_SAFE_STATIC_LOCAL(                                          \
-        CustomCountHistogram, metric##type_name##Histogram,                   \
-        new CustomCountHistogram("Notifications." #metric "." #type_name,     \
-                                 1 /* min */, max, 50 /* buckets */));        \
+    DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram,                     \
+                                    metric##type_name##Histogram,             \
+                                    ("Notifications." #metric "." #type_name, \
+                                     1 /* min */, max, 50 /* buckets */));    \
     metric##type_name##Histogram.Count(value);                                \
     break;                                                                    \
   }
@@ -105,15 +105,11 @@ void NotificationImageLoader::Start(
   image_callback_ = std::move(image_callback);
 
   ThreadableLoaderOptions threadable_loader_options;
-  threadable_loader_options.preflight_policy = kPreventPreflight;
-  threadable_loader_options.cross_origin_request_policy =
-      kAllowCrossOriginRequests;
   threadable_loader_options.timeout_milliseconds = kImageFetchTimeoutInMs;
 
   // TODO(mvanouwerkerk): Add an entry for notifications to
   // FetchInitiatorTypeNames and use it.
   ResourceLoaderOptions resource_loader_options;
-  resource_loader_options.allow_credentials = kAllowStoredCredentials;
   if (execution_context->IsWorkerGlobalScope())
     resource_loader_options.request_initiator_context = kWorkerContext;
 

@@ -8,14 +8,13 @@ callback LongCallbackFunction = long (long num1, long num2);
 
 // Following callback functions are to be generated as expected.
 callback VoidCallbackFunctionInterfaceArg = void (HTMLDivElement divElement);
+callback VoidCallbackFunctionDictionaryArg = void (TestDictionary arg);
 callback VoidCallbackFunctionTestInterfaceSequenceArg = void (sequence<TestInterface> arg);
 callback StringSequenceCallbackFunctionLongSequenceArg = sequence<DOMString> (sequence<long> arg);
+callback VoidCallbackFunctionEnumArg = void (TestEnum arg);
 callback VoidCallbackFunctionTypedef = void (String arg);
 
 interface TestCallbackFunctions {
-    // Attributes
-    attribute VoidCallbackFunction voidCallbackFunctionAttribute;
-    attribute AnyCallbackFunctionOptionalAnyArg anyCallbackFunctionOptionalAnyArgAttribute;
     // Extended attributes
     [CustomElementCallbacks] readonly attribute long customElementsCallbacksReadonlyAttribute;
 

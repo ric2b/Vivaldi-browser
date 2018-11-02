@@ -4,7 +4,7 @@
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-flex-layout/iron-flex-layout-classes.html">
-<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button.html">
+<link rel="import" href="chrome://resources/polymer/v1_0/paper-icon-button/paper-icon-button-light.html">
 <link rel="import" href="../route.html">
 <link rel="import" href="../settings_shared_css.html">
 
@@ -34,11 +34,6 @@
       .user-info {
         -webkit-padding-start: 20px;
       }
-
-      paper-icon-button {
-        -webkit-margin-end: 0;
-        -webkit-margin-start: var(--cr-icon-button-margin-start);
-      }
     </style>
     <div class="user-list" scrollable>
       <template is="dom-repeat" items="[[users_]]">
@@ -50,10 +45,10 @@
               <div class="secondary">[[item.displayEmail]]</div>
             </template>
           </div>
-          <paper-icon-button icon="cr:clear" class="clear-icon"
+          <button is="paper-icon-button-light" class="icon-clear"
               on-tap="removeUser_"
               hidden="[[shouldHideCloseButton_(disabled, item.isOwner)]]">
-          </paper-icon-button>
+          </button>
         </div>
       </template>
     </div>

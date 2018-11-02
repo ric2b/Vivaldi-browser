@@ -27,8 +27,7 @@ class OneGoogleBarService::SigninObserver : public SigninManagerBase::Observer {
  private:
   // SigninManagerBase::Observer implementation.
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override {
+                             const std::string& username) override {
     callback_.Run();
   }
 
@@ -79,8 +78,12 @@ void OneGoogleBarService::SigninStatusChanged() {
 }
 
 void OneGoogleBarService::OneGoogleBarDataFetched(
+    OneGoogleBarFetcher::Status status,
     const base::Optional<OneGoogleBarData>& data) {
-  SetOneGoogleBarData(data);
+  // In case of transient erros, keep our cached data (if any).
+  if (status != OneGoogleBarFetcher::Status::TRANSIENT_ERROR) {
+    SetOneGoogleBarData(data);
+  }
   if (!data) {
     for (auto& observer : observers_) {
       observer.OnOneGoogleBarFetchFailed();

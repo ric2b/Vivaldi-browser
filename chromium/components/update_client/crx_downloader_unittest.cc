@@ -14,9 +14,11 @@
 #include "base/message_loop/message_loop.h"
 #include "base/path_service.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "components/update_client/update_client_errors.h"
+#include "components/update_client/utils.h"
 #include "net/base/net_errors.h"
 #include "net/url_request/test_url_request_interceptor.h"
 #include "net/url_request/url_request_test_util.h"
@@ -83,7 +85,7 @@ class CrxDownloaderTest : public testing::Test {
   static const int kExpectedContext = 0xaabb;
 
  private:
-  base::MessageLoopForIO loop_;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   scoped_refptr<net::TestURLRequestContextGetter> context_;
   base::Closure quit_closure_;
 };
@@ -100,9 +102,10 @@ CrxDownloaderTest::CrxDownloaderTest()
       crx_context_(0),
       num_download_complete_calls_(0),
       num_progress_calls_(0),
+      scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::IO),
       context_(new net::TestURLRequestContextGetter(
-          base::ThreadTaskRunnerHandle::Get())) {
-}
+          base::ThreadTaskRunnerHandle::Get())) {}
 
 CrxDownloaderTest::~CrxDownloaderTest() {
   context_ = NULL;
@@ -119,10 +122,7 @@ void CrxDownloaderTest::SetUp() {
   download_progress_result_ = CrxDownloader::Result();
 
   // Do not use the background downloader in these tests.
-  crx_downloader_.reset(
-      CrxDownloader::Create(false, context_.get(),
-                            base::ThreadTaskRunnerHandle::Get())
-          .release());
+  crx_downloader_.reset(CrxDownloader::Create(false, context_.get()).release());
   crx_downloader_->set_progress_callback(progress_callback_);
 
   get_interceptor_.reset(
@@ -166,6 +166,7 @@ void CrxDownloaderTest::RunThreads() {
 }
 
 void CrxDownloaderTest::RunThreadsUntilIdle() {
+  scoped_task_environment_.RunUntilIdle();
   base::RunLoop().RunUntilIdle();
 }
 
@@ -223,7 +224,8 @@ TEST_F(CrxDownloaderTest, OneUrl) {
   EXPECT_EQ(1843, download_complete_result_.total_bytes);
   EXPECT_TRUE(ContentsEqual(download_complete_result_.response, test_file));
 
-  EXPECT_TRUE(base::DeleteFile(download_complete_result_.response, false));
+  EXPECT_TRUE(
+      DeleteFileAndEmptyParentDirectory(download_complete_result_.response));
 
   EXPECT_LE(1, num_progress_calls_);
   EXPECT_EQ(1843, download_progress_result_.downloaded_bytes);
@@ -292,7 +294,8 @@ TEST_F(CrxDownloaderTest, MAYBE_TwoUrls) {
   EXPECT_EQ(1843, download_complete_result_.total_bytes);
   EXPECT_TRUE(ContentsEqual(download_complete_result_.response, test_file));
 
-  EXPECT_TRUE(base::DeleteFile(download_complete_result_.response, false));
+  EXPECT_TRUE(
+      DeleteFileAndEmptyParentDirectory(download_complete_result_.response));
 
   EXPECT_LE(1, num_progress_calls_);
   EXPECT_EQ(1843, download_progress_result_.downloaded_bytes);
@@ -371,7 +374,8 @@ TEST_F(CrxDownloaderTest, MAYBE_TwoUrls_FirstInvalid) {
   EXPECT_EQ(1843, download_complete_result_.total_bytes);
   EXPECT_TRUE(ContentsEqual(download_complete_result_.response, test_file));
 
-  EXPECT_TRUE(base::DeleteFile(download_complete_result_.response, false));
+  EXPECT_TRUE(
+      DeleteFileAndEmptyParentDirectory(download_complete_result_.response));
 
   EXPECT_LE(1, num_progress_calls_);
   EXPECT_EQ(1843, download_progress_result_.downloaded_bytes);
@@ -403,7 +407,8 @@ TEST_F(CrxDownloaderTest, TwoUrls_SecondInvalid) {
   EXPECT_EQ(1843, download_complete_result_.total_bytes);
   EXPECT_TRUE(ContentsEqual(download_complete_result_.response, test_file));
 
-  EXPECT_TRUE(base::DeleteFile(download_complete_result_.response, false));
+  EXPECT_TRUE(
+      DeleteFileAndEmptyParentDirectory(download_complete_result_.response));
 
   EXPECT_LE(1, num_progress_calls_);
   EXPECT_EQ(1843, download_progress_result_.downloaded_bytes);

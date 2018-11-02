@@ -37,13 +37,14 @@
 
 namespace blink {
 
-class WorkerThreadStartupData;
+class ServiceWorkerInstalledScriptsManager;
+struct GlobalScopeCreationParams;
 
 class MODULES_EXPORT ServiceWorkerThread final : public WorkerThread {
  public:
-  static std::unique_ptr<ServiceWorkerThread> Create(
-      PassRefPtr<WorkerLoaderProxy>,
-      WorkerReportingProxy&);
+  ServiceWorkerThread(ThreadableLoadingContext*,
+                      WorkerReportingProxy&,
+                      std::unique_ptr<ServiceWorkerInstalledScriptsManager>);
   ~ServiceWorkerThread() override;
 
   WorkerBackingThread& GetWorkerBackingThread() override {
@@ -53,11 +54,14 @@ class MODULES_EXPORT ServiceWorkerThread final : public WorkerThread {
 
  protected:
   WorkerOrWorkletGlobalScope* CreateWorkerGlobalScope(
-      std::unique_ptr<WorkerThreadStartupData>) override;
+      std::unique_ptr<GlobalScopeCreationParams>) override;
+
+  InstalledScriptsManager* GetInstalledScriptsManager() override;
 
  private:
-  ServiceWorkerThread(PassRefPtr<WorkerLoaderProxy>, WorkerReportingProxy&);
   std::unique_ptr<WorkerBackingThread> worker_backing_thread_;
+  std::unique_ptr<ServiceWorkerInstalledScriptsManager>
+      installed_scripts_manager_;
 };
 
 }  // namespace blink

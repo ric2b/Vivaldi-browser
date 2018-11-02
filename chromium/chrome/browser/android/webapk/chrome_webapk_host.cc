@@ -4,6 +4,7 @@
 
 #include "chrome/browser/android/webapk/chrome_webapk_host.h"
 
+#include "base/feature_list.h"
 #include "chrome/browser/android/chrome_feature_list.h"
 #include "components/variations/variations_associated_data.h"
 #include "jni/ChromeWebApkHost_jni.h"
@@ -17,21 +18,8 @@ const char* kLaunchRendererInWebApkProcess =
 }  // anonymous namespace
 
 // static
-bool ChromeWebApkHost::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
-}
-
-// static
 bool ChromeWebApkHost::CanInstallWebApk() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  return Java_ChromeWebApkHost_canInstallWebApk(env);
-}
-
-// static
-GooglePlayInstallState ChromeWebApkHost::GetGooglePlayInstallState() {
-  JNIEnv* env = base::android::AttachCurrentThread();
-  return static_cast<GooglePlayInstallState>(
-      Java_ChromeWebApkHost_getGooglePlayInstallState(env));
+  return base::FeatureList::IsEnabled(chrome::android::kImprovedA2HS);
 }
 
 // static

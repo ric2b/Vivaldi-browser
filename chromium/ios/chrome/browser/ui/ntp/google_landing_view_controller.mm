@@ -11,8 +11,10 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/strings/grit/components_strings.h"
 #import "ios/chrome/browser/ui/commands/UIKit+ChromeExecuteCommand.h"
+#import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/generic_chrome_command.h"
 #include "ios/chrome/browser/ui/commands/ios_command_ids.h"
+#import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
 #import "ios/chrome/browser/ui/content_suggestions/content_suggestions_collection_utils.h"
 #import "ios/chrome/browser/ui/context_menu/context_menu_coordinator.h"
 #import "ios/chrome/browser/ui/ntp/google_landing_data_source.h"
@@ -35,6 +37,10 @@
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/page_transition_types.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 using base::UserMetricsAction;
 
 namespace {
@@ -54,44 +60,6 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
 }  // namespace
 
-@interface GoogleLandingViewController (UsedByGoogleLandingView)
-// Update frames for subviews depending on the interface orientation.
-- (void)updateSubviewFrames;
-// Resets the collection view's inset to 0.
-- (void)resetSectionInset;
-- (void)reloadData;
-@end
-
-// Subclassing the main UIScrollView allows calls for setFrame.
-@interface GoogleLandingView : UIView {
-  GoogleLandingViewController* _googleLanding;
-}
-
-- (void)setFrameDelegate:(GoogleLandingViewController*)delegate;
-
-@end
-
-@implementation GoogleLandingView
-
-- (void)setFrameDelegate:(GoogleLandingViewController*)delegate {
-  _googleLanding = delegate;
-}
-
-- (void)setFrame:(CGRect)frame {
-  // On iPad and in fullscreen, the collection view's inset is very large.
-  // When Chrome enters slide over mode, the previously set inset is larger than
-  // the newly set collection view's width, which makes the collection view
-  // throw an exception.
-  // To prevent this from happening, we reset the inset to 0 before changing the
-  // frame.
-  [_googleLanding resetSectionInset];
-  [super setFrame:frame];
-  [_googleLanding updateSubviewFrames];
-  [_googleLanding reloadData];
-}
-
-@end
-
 @interface GoogleLandingViewController ()<OverscrollActionsControllerDelegate,
                                           UICollectionViewDataSource,
                                           UICollectionViewDelegate,
@@ -99,28 +67,27 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                                           UIGestureRecognizerDelegate,
                                           WhatsNewHeaderViewDelegate> {
   // Fake omnibox.
-  base::scoped_nsobject<UIButton> _searchTapTarget;
+  UIButton* _searchTapTarget;
 
   // A collection view for the most visited sites.
-  base::scoped_nsobject<UICollectionView> _mostVisitedView;
+  UICollectionView* _mostVisitedView;
 
   // The overscroll actions controller managing accelerators over the toolbar.
-  base::scoped_nsobject<OverscrollActionsController>
-      _overscrollActionsController;
+  OverscrollActionsController* _overscrollActionsController;
 
   // |YES| when notifications indicate the omnibox is focused.
   BOOL _omniboxFocused;
 
   // Tap and swipe gesture recognizers when the omnibox is focused.
-  base::scoped_nsobject<UITapGestureRecognizer> _tapGestureRecognizer;
-  base::scoped_nsobject<UISwipeGestureRecognizer> _swipeGestureRecognizer;
+  UITapGestureRecognizer* _tapGestureRecognizer;
+  UISwipeGestureRecognizer* _swipeGestureRecognizer;
 
   // Handles displaying the context menu for all form factors.
-  base::scoped_nsobject<ContextMenuCoordinator> _contextMenuCoordinator;
+  ContextMenuCoordinator* _contextMenuCoordinator;
 
   // URL of the last deleted most viewed entry. If present the UI to restore it
   // is shown.
-  base::scoped_nsobject<NSURL> _deletedUrl;
+  NSURL* _deletedUrl;
 
   // |YES| if the view has finished its first layout. This is useful when
   // determining if the view has sized itself for tablet.
@@ -139,27 +106,24 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
   CFTimeInterval _shiftTilesDownStartTime;
   CGSize _mostVisitedCellSize;
-  base::scoped_nsobject<NSLayoutConstraint> _hintLabelLeadingConstraint;
-  base::scoped_nsobject<NSLayoutConstraint> _voiceTapTrailingConstraint;
-  base::scoped_nsobject<NSMutableArray> _supplementaryViews;
-  base::scoped_nsobject<NewTabPageHeaderView> _headerView;
-  base::scoped_nsobject<WhatsNewHeaderView> _promoHeaderView;
-  base::WeakNSProtocol<id<GoogleLandingDataSource>> _dataSource;
-  base::WeakNSProtocol<id<UrlLoader, OmniboxFocuser>> _dispatcher;
+  NSLayoutConstraint* _hintLabelLeadingConstraint;
+  NSLayoutConstraint* _voiceTapTrailingConstraint;
+  NSLayoutConstraint* _doodleHeightConstraint;
+  NSLayoutConstraint* _doodleTopMarginConstraint;
+  NSLayoutConstraint* _searchFieldWidthConstraint;
+  NSLayoutConstraint* _searchFieldHeightConstraint;
+  NSLayoutConstraint* _searchFieldTopMarginConstraint;
+  NewTabPageHeaderView* _headerView;
+  WhatsNewHeaderView* _promoHeaderView;
+  __weak id<GoogleLandingDataSource> _dataSource;
+  __weak id<UrlLoader, OmniboxFocuser> _dispatcher;
 }
-
-// Redeclare the |view| property to be the GoogleLandingView subclass instead of
-// a generic UIView.
-@property(nonatomic, readwrite, strong) GoogleLandingView* view;
 
 // Whether the Google logo or doodle is being shown.
 @property(nonatomic, assign) BOOL logoIsShowing;
 
 // Exposes view and methods to drive the doodle.
-@property(nonatomic, assign) id<LogoVendor> logoVendor;
-
-// |YES| if this consumer is incognito.
-@property(nonatomic, assign) BOOL isOffTheRecord;
+@property(nonatomic, weak) id<LogoVendor> logoVendor;
 
 // |YES| if this consumer is has voice search enabled.
 @property(nonatomic, assign) BOOL voiceSearchIsEnabled;
@@ -168,7 +132,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 @property(nonatomic, assign) NSUInteger maximumMostVisitedSitesShown;
 
 // Gets the text of a what's new promo.
-@property(nonatomic, retain) NSString* promoText;
+@property(nonatomic, strong) NSString* promoText;
 
 // Gets the icon of a what's new promo.
 // TODO(crbug.com/694750): This should not be WhatsNewIcon.
@@ -187,6 +151,9 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 // |YES| if the google landing toolbar can show the back arrow, cached and
 // pushed into the header view.
 @property(nonatomic, assign) BOOL canGoBack;
+
+// Left margin to center the items. Used for the inset.
+@property(nonatomic, assign) CGFloat leftMargin;
 
 // Returns the height to use for the What's New promo view.
 - (CGFloat)promoHeaderHeight;
@@ -212,10 +179,15 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 // If Google is not the default search engine, hide the logo, doodle and
 // fakebox.
 - (void)updateLogoAndFakeboxDisplay;
-// Helper method to set UICollectionViewFlowLayout insets for most visited.
-- (void)setFlowLayoutInset:(UICollectionViewFlowLayout*)layout;
 // Instructs the UICollectionView and UIView to reload it's data and layout.
 - (void)reloadData;
+// Adds the constraints for the |logoView|, the |searchField| related to the
+// |headerView|. It also creates the ivar constraints related to those views.
+- (void)addConstraintsForLogoView:(UIView*)logoView
+                      searchField:(UIView*)searchField
+                    andHeaderView:(UIView*)headerView;
+// Updates the constraints of the headers to fit |width|.
+- (void)updateConstraintsForWidth:(CGFloat)width;
 // Returns the size of |self.mostVisitedData|.
 - (NSUInteger)numberOfItems;
 // Returns the number of non empty tiles (as opposed to the placeholder tiles).
@@ -234,11 +206,9 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
 @implementation GoogleLandingViewController
 
-@dynamic view;
 @synthesize logoVendor = _logoVendor;
 // Property declared in NewTabPagePanelProtocol.
 @synthesize delegate = _delegate;
-@synthesize isOffTheRecord = _isOffTheRecord;
 @synthesize logoIsShowing = _logoIsShowing;
 @synthesize promoText = _promoText;
 @synthesize promoIcon = _promoIcon;
@@ -248,17 +218,12 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 @synthesize canGoForward = _canGoForward;
 @synthesize canGoBack = _canGoBack;
 @synthesize voiceSearchIsEnabled = _voiceSearchIsEnabled;
-
-- (void)loadView {
-  self.view = [[[GoogleLandingView alloc]
-      initWithFrame:[UIScreen mainScreen].bounds] autorelease];
-}
+@synthesize leftMargin = _leftMargin;
 
 - (void)viewDidLoad {
   [super viewDidLoad];
   [self.view setAutoresizingMask:UIViewAutoresizingFlexibleHeight |
                                  UIViewAutoresizingFlexibleWidth];
-  [self.view setFrameDelegate:self];
 
   // Initialise |shiftTilesDownStartTime| to a sentinel value to indicate that
   // the animation has not yet started.
@@ -268,29 +233,36 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   _scrolledToTop = NO;
   _animateHeader = YES;
 
-  _tapGestureRecognizer.reset([[UITapGestureRecognizer alloc]
-      initWithTarget:self
-              action:@selector(blurOmnibox)]);
+  _tapGestureRecognizer =
+      [[UITapGestureRecognizer alloc] initWithTarget:self
+                                              action:@selector(blurOmnibox)];
   [_tapGestureRecognizer setDelegate:self];
-  _swipeGestureRecognizer.reset([[UISwipeGestureRecognizer alloc]
-      initWithTarget:self
-              action:@selector(blurOmnibox)]);
+  _swipeGestureRecognizer =
+      [[UISwipeGestureRecognizer alloc] initWithTarget:self
+                                                action:@selector(blurOmnibox)];
   [_swipeGestureRecognizer setDirection:UISwipeGestureRecognizerDirectionDown];
+
+  self.leftMargin =
+      content_suggestions::centeredTilesMarginForWidth([self viewWidth]);
 
   [self addSearchField];
   [self addMostVisited];
   [self addOverscrollActions];
   [self reload];
-}
-
-- (void)viewDidLayoutSubviews {
-  [self updateSubviewFrames];
+  _viewLoaded = YES;
+  [self.logoVendor fetchDoodle];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size
        withTransitionCoordinator:
            (id<UIViewControllerTransitionCoordinator>)coordinator {
   [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+
+  self.leftMargin =
+      content_suggestions::centeredTilesMarginForWidth(size.width);
+
+  // Reload the data to have the right number of items for the new orientation.
+  [self reloadData];
 
   void (^alongsideBlock)(id<UIViewControllerTransitionCoordinatorContext>) = ^(
       id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -300,18 +272,35 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
       return;
     };
 
-    // Invalidate the layout so that the collection view's header size is reset
-    // for the new orientation.
-    if (!_scrolledToTop) {
-      [[_mostVisitedView collectionViewLayout] invalidateLayout];
-    }
-
     // Call -scrollViewDidScroll: so that the omnibox's frame is adjusted for
     // the scroll view's offset.
     [self scrollViewDidScroll:_mostVisitedView];
 
+    // Updates the constraints.
+    [self updateConstraintsForWidth:size.width];
+    BOOL isScrollableNTP = !IsIPadIdiom() || IsCompactTablet();
+    if (isScrollableNTP && _scrolledToTop) {
+      // Set the scroll view's offset to the pinned offset to keep the omnibox
+      // at the top of the screen if it isn't already.
+      CGFloat pinnedOffsetY = [self pinnedOffsetY];
+      if ([_mostVisitedView contentOffset].y < pinnedOffsetY) {
+        [_mostVisitedView setContentOffset:CGPointMake(0, pinnedOffsetY)];
+      } else {
+        [self updateSearchField];
+      }
+    }
+
   };
   [coordinator animateAlongsideTransition:alongsideBlock completion:nil];
+}
+
+- (void)viewDidLayoutSubviews {
+  self.leftMargin =
+      content_suggestions::centeredTilesMarginForWidth([self viewWidth]);
+  [self updateConstraintsForWidth:[self viewWidth]];
+  // Invalidate layout to handle the cases where the layout is changed when the
+  // NTP is not presented (e.g. tab backgrounded).
+  [[_mostVisitedView collectionViewLayout] invalidateLayout];
 }
 
 - (void)dealloc {
@@ -319,7 +308,6 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   [_mostVisitedView setDelegate:nil];
   [_mostVisitedView setDataSource:nil];
   [_overscrollActionsController invalidate];
-  [super dealloc];
 }
 
 #pragma mark - Properties
@@ -329,7 +317,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 }
 
 - (void)setDataSource:(id<GoogleLandingDataSource>)dataSource {
-  _dataSource.reset(dataSource);
+  _dataSource = dataSource;
 }
 
 - (id<UrlLoader, OmniboxFocuser>)dispatcher {
@@ -337,7 +325,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 }
 
 - (void)setDispatcher:(id<UrlLoader, OmniboxFocuser>)dispatcher {
-  _dispatcher.reset(dispatcher);
+  _dispatcher = dispatcher;
 }
 
 #pragma mark - Private
@@ -387,36 +375,18 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   if (self.logoVendor.showingLogo != self.logoIsShowing) {
     self.logoVendor.showingLogo = self.logoIsShowing;
     if (_viewLoaded) {
-      [self updateSubviewFrames];
-
-      // Adjust the height of |_headerView| to fit its content which may have
-      // been shifted due to the visibility of the doodle.
-      CGRect headerFrame = [_headerView frame];
-      headerFrame.size.height = content_suggestions::heightForLogoHeader(
-          [self viewWidth], self.logoIsShowing, self.promoCanShow);
-      [_headerView setFrame:headerFrame];
-
-      // Adjust vertical positioning of |_promoHeaderView|.
-      CGFloat omniboxHeaderHeight =
-          [self collectionView:_mostVisitedView
-                                       layout:[_mostVisitedView
-                                                  collectionViewLayout]
-              referenceSizeForHeaderInSection:0]
-              .height;
-      CGRect whatsNewFrame = [_promoHeaderView frame];
-      whatsNewFrame.origin.y = omniboxHeaderHeight;
-      [_promoHeaderView setFrame:whatsNewFrame];
+      [_doodleHeightConstraint
+          setConstant:content_suggestions::doodleHeight(self.logoIsShowing)];
     }
     if (IsIPadIdiom())
       [_searchTapTarget setHidden:!self.logoIsShowing];
+    [[_mostVisitedView collectionViewLayout] invalidateLayout];
   }
 }
 
 // Initialize and add a search field tap target and a voice search button.
 - (void)addSearchField {
-  CGRect searchFieldFrame = content_suggestions::searchFieldFrame(
-      [self viewWidth], self.logoIsShowing);
-  _searchTapTarget.reset([[UIButton alloc] initWithFrame:searchFieldFrame]);
+  _searchTapTarget = [[UIButton alloc] init];
   if (IsIPadIdiom()) {
     UIImage* searchBoxImage = [[UIImage imageNamed:@"ntp_google_search_box"]
         resizableImageWithCapInsets:kSearchBoxStretchInsets];
@@ -433,22 +403,22 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   [_searchTapTarget setIsAccessibilityElement:NO];
 
   // Set up fakebox hint label.
-  UILabel* searchHintLabel = [[[UILabel alloc] init] autorelease];
-  content_suggestions::configureSearchHintLabel(
-      searchHintLabel, _searchTapTarget.get(), searchFieldFrame.size.width);
+  UILabel* searchHintLabel = [[UILabel alloc] init];
+  content_suggestions::configureSearchHintLabel(searchHintLabel,
+                                                _searchTapTarget);
 
-  _hintLabelLeadingConstraint.reset([[searchHintLabel.leadingAnchor
+  _hintLabelLeadingConstraint = [searchHintLabel.leadingAnchor
       constraintEqualToAnchor:[_searchTapTarget leadingAnchor]
-                     constant:kHintLabelSidePadding] retain]);
+                     constant:kHintLabelSidePadding];
   [_hintLabelLeadingConstraint setActive:YES];
 
   // Add a voice search button.
-  UIButton* voiceTapTarget = [[[UIButton alloc] init] autorelease];
+  UIButton* voiceTapTarget = [[UIButton alloc] init];
   content_suggestions::configureVoiceSearchButton(voiceTapTarget,
-                                                  _searchTapTarget.get());
+                                                  _searchTapTarget);
 
-  _voiceTapTrailingConstraint.reset([[voiceTapTarget.trailingAnchor
-      constraintEqualToAnchor:[_searchTapTarget trailingAnchor]] retain]);
+  _voiceTapTrailingConstraint = [voiceTapTarget.trailingAnchor
+      constraintEqualToAnchor:[_searchTapTarget trailingAnchor]];
   [NSLayoutConstraint activateConstraints:@[
     [searchHintLabel.trailingAnchor
         constraintEqualToAnchor:voiceTapTarget.leadingAnchor],
@@ -481,91 +451,27 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
   // Use a GenericChromeCommand because |sender| already has a tag set for a
   // different command.
-  base::scoped_nsobject<GenericChromeCommand> command(
-      [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH]);
+  GenericChromeCommand* command =
+      [[GenericChromeCommand alloc] initWithTag:IDC_PRELOAD_VOICE_SEARCH];
   [sender chromeExecuteCommand:command];
-}
-
-- (void)setFlowLayoutInset:(UICollectionViewFlowLayout*)layout {
-  CGFloat leftMargin =
-      content_suggestions::centeredTilesMarginForWidth([self viewWidth]);
-  [layout setSectionInset:UIEdgeInsetsMake(0, leftMargin, 0, leftMargin)];
-}
-
-- (void)resetSectionInset {
-  UICollectionViewFlowLayout* flowLayout =
-      (UICollectionViewFlowLayout*)[_mostVisitedView collectionViewLayout];
-  [flowLayout setSectionInset:UIEdgeInsetsZero];
-}
-
-- (void)updateSubviewFrames {
-  _mostVisitedCellSize = [self mostVisitedCellSize];
-  UICollectionViewFlowLayout* flowLayout =
-      base::mac::ObjCCastStrict<UICollectionViewFlowLayout>(
-          [_mostVisitedView collectionViewLayout]);
-  [flowLayout setItemSize:_mostVisitedCellSize];
-  self.logoVendor.view.frame =
-      content_suggestions::doodleFrame([self viewWidth], self.logoIsShowing);
-
-  [self setFlowLayoutInset:flowLayout];
-  [flowLayout invalidateLayout];
-  [_promoHeaderView
-      setSideMargin:content_suggestions::centeredTilesMarginForWidth(
-                        [self viewWidth])];
-
-  // On the iPhone 6 Plus, if the app is started in landscape after a fresh
-  // install, the UICollectionViewLayout incorrectly sizes the widths of the
-  // supplementary views to the portrait width.  Correct that here to ensure
-  // that the header is property laid out to the UICollectionView's width.
-  // crbug.com/491131
-  CGFloat collectionViewWidth = CGRectGetWidth([_mostVisitedView bounds]);
-  CGFloat collectionViewMinX = CGRectGetMinX([_mostVisitedView bounds]);
-  for (UIView* supplementaryView in _supplementaryViews.get()) {
-    CGRect supplementaryViewFrame = supplementaryView.frame;
-    supplementaryViewFrame.origin.x = collectionViewMinX;
-    supplementaryViewFrame.size.width = collectionViewWidth;
-    supplementaryView.frame = supplementaryViewFrame;
-  }
-
-  BOOL isScrollableNTP = !IsIPadIdiom() || IsCompactTablet();
-  if (isScrollableNTP && _scrolledToTop) {
-    // Set the scroll view's offset to the pinned offset to keep the omnibox
-    // at the top of the screen if it isn't already.
-    CGFloat pinnedOffsetY = [self pinnedOffsetY];
-    if ([_mostVisitedView contentOffset].y < pinnedOffsetY) {
-      [_mostVisitedView setContentOffset:CGPointMake(0, pinnedOffsetY)];
-    } else {
-      [self updateSearchField];
-    }
-  } else {
-    [_searchTapTarget setFrame:content_suggestions::searchFieldFrame(
-                                   [self viewWidth], self.logoIsShowing)];
-  }
-
-  if (!_viewLoaded) {
-    _viewLoaded = YES;
-    [self.logoVendor fetchDoodle];
-  }
-  [self.delegate updateNtpBarShadowForPanelController:self];
 }
 
 // Initialize and add a panel with most visited sites.
 - (void)addMostVisited {
   CGRect mostVisitedFrame = [self.view bounds];
-  base::scoped_nsobject<UICollectionViewFlowLayout> flowLayout;
+  UICollectionViewFlowLayout* flowLayout;
   if (IsIPadIdiom())
-    flowLayout.reset([[UICollectionViewFlowLayout alloc] init]);
+    flowLayout = [[UICollectionViewFlowLayout alloc] init];
   else
-    flowLayout.reset([[MostVisitedLayout alloc] init]);
+    flowLayout = [[MostVisitedLayout alloc] init];
 
   [flowLayout setScrollDirection:UICollectionViewScrollDirectionVertical];
   [flowLayout setItemSize:_mostVisitedCellSize];
   [flowLayout setMinimumInteritemSpacing:8];
   [flowLayout setMinimumLineSpacing:content_suggestions::spacingBetweenTiles()];
   DCHECK(!_mostVisitedView);
-  _mostVisitedView.reset([[UICollectionView alloc]
-             initWithFrame:mostVisitedFrame
-      collectionViewLayout:flowLayout]);
+  _mostVisitedView = [[UICollectionView alloc] initWithFrame:mostVisitedFrame
+                                        collectionViewLayout:flowLayout];
   [_mostVisitedView setAutoresizingMask:UIViewAutoresizingFlexibleHeight |
                                         UIViewAutoresizingFlexibleWidth];
   [_mostVisitedView setDelegate:self];
@@ -576,10 +482,7 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   [_mostVisitedView setBounces:YES];
   [_mostVisitedView setShowsHorizontalScrollIndicator:NO];
   [_mostVisitedView setShowsVerticalScrollIndicator:NO];
-  [_mostVisitedView registerClass:[WhatsNewHeaderView class]
-       forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
-              withReuseIdentifier:@"whatsNew"];
-  [_mostVisitedView registerClass:[NewTabPageHeaderView class]
+  [_mostVisitedView registerClass:[UICollectionReusableView class]
        forSupplementaryViewOfKind:UICollectionElementKindSectionHeader
               withReuseIdentifier:@"header"];
   [_mostVisitedView setAccessibilityIdentifier:@"Google Landing"];
@@ -590,17 +493,19 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 - (void)updateSearchField {
   NSArray* constraints =
       @[ _hintLabelLeadingConstraint, _voiceTapTrailingConstraint ];
-  [_headerView updateSearchField:_searchTapTarget
-                withInitialFrame:content_suggestions::searchFieldFrame(
-                                     [self viewWidth], self.logoIsShowing)
-              subviewConstraints:constraints
-                       forOffset:[_mostVisitedView contentOffset].y];
+
+  [_headerView updateSearchFieldWidth:_searchFieldWidthConstraint
+                               height:_searchFieldHeightConstraint
+                            topMargin:_searchFieldTopMarginConstraint
+                   subviewConstraints:constraints
+                        logoIsShowing:self.logoIsShowing
+                            forOffset:[_mostVisitedView contentOffset].y];
 }
 
 - (void)addOverscrollActions {
   if (!IsIPadIdiom()) {
-    _overscrollActionsController.reset([[OverscrollActionsController alloc]
-        initWithScrollView:_mostVisitedView]);
+    _overscrollActionsController = [[OverscrollActionsController alloc]
+        initWithScrollView:_mostVisitedView];
     [_overscrollActionsController setStyle:OverscrollStyle::NTP_NON_INCOGNITO];
     [_overscrollActionsController setDelegate:self];
   }
@@ -750,6 +655,48 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   [self.view setNeedsLayout];
 }
 
+- (void)addConstraintsForLogoView:(UIView*)logoView
+                      searchField:(UIView*)searchField
+                    andHeaderView:(UIView*)headerView {
+  _doodleTopMarginConstraint = [logoView.topAnchor
+      constraintEqualToAnchor:headerView.topAnchor
+                     constant:content_suggestions::doodleTopMargin()];
+  _doodleHeightConstraint = [logoView.heightAnchor
+      constraintEqualToConstant:content_suggestions::doodleHeight(
+                                    self.logoIsShowing)];
+  _searchFieldWidthConstraint = [searchField.widthAnchor
+      constraintEqualToConstant:content_suggestions::searchFieldWidth(
+                                    [self viewWidth])];
+  _searchFieldHeightConstraint = [searchField.heightAnchor
+      constraintEqualToConstant:content_suggestions::kSearchFieldHeight];
+  _searchFieldTopMarginConstraint = [searchField.topAnchor
+      constraintEqualToAnchor:logoView.bottomAnchor
+                     constant:content_suggestions::searchFieldTopMargin()];
+  [NSLayoutConstraint activateConstraints:@[
+    _doodleTopMarginConstraint,
+    _doodleHeightConstraint,
+    _searchFieldWidthConstraint,
+    _searchFieldHeightConstraint,
+    _searchFieldTopMarginConstraint,
+    [logoView.widthAnchor constraintEqualToAnchor:headerView.widthAnchor],
+    [logoView.leadingAnchor constraintEqualToAnchor:headerView.leadingAnchor],
+    [searchField.centerXAnchor
+        constraintEqualToAnchor:headerView.centerXAnchor],
+  ]];
+}
+
+- (void)updateConstraintsForWidth:(CGFloat)width {
+  [_promoHeaderView
+      setSideMargin:content_suggestions::centeredTilesMarginForWidth(width)
+           forWidth:width];
+  [_doodleTopMarginConstraint
+      setConstant:content_suggestions::doodleTopMargin()];
+  [_searchFieldWidthConstraint
+      setConstant:content_suggestions::searchFieldWidth(width)];
+  [_searchFieldTopMarginConstraint
+      setConstant:content_suggestions::searchFieldTopMargin()];
+}
+
 #pragma mark - ToolbarOwner
 
 - (ToolbarController*)relinquishedToolbarController {
@@ -762,14 +709,20 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
 #pragma mark - UICollectionView Methods.
 
+- (UIEdgeInsets)collectionView:(UICollectionView*)collectionView
+                        layout:(UICollectionViewLayout*)collectionViewLayout
+        insetForSectionAtIndex:(NSInteger)section {
+  return UIEdgeInsetsMake(0, self.leftMargin, 0, self.leftMargin);
+}
+
 - (CGSize)collectionView:(UICollectionView*)collectionView
                              layout:
                                  (UICollectionViewLayout*)collectionViewLayout
     referenceSizeForHeaderInSection:(NSInteger)section {
   CGFloat headerHeight = 0;
   if (section == SectionWithOmnibox) {
-    headerHeight = content_suggestions::heightForLogoHeader(
-        [self viewWidth], self.logoIsShowing, self.promoCanShow);
+    headerHeight = content_suggestions::heightForLogoHeader(self.logoIsShowing,
+                                                            self.promoCanShow);
     ((UICollectionViewFlowLayout*)collectionViewLayout).headerReferenceSize =
         CGSizeMake(0, headerHeight);
   } else if (section == SectionWithMostVisited) {
@@ -799,11 +752,11 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
   // TODO(jif): This needs a radar, since it is almost certainly a
   // UIKit accessibility bug. crbug.com/529271
   if (UIAccessibilityIsVoiceOverRunning()) {
-    UICollectionView* blockView = [_mostVisitedView retain];
+    __block UICollectionView* blockView = _mostVisitedView;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
                                  static_cast<int64_t>(1 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-                     [blockView release];
+                     blockView = nil;
                    });
   }
 
@@ -824,53 +777,65 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                                 atIndexPath:(NSIndexPath*)indexPath {
   DCHECK(kind == UICollectionElementKindSectionHeader);
 
-  if (!_supplementaryViews)
-    _supplementaryViews.reset([[NSMutableArray alloc] init]);
-
   if (indexPath.section == SectionWithOmnibox) {
+    UICollectionReusableView* reusableView =
+        [collectionView dequeueReusableSupplementaryViewOfKind:
+                            UICollectionElementKindSectionHeader
+                                           withReuseIdentifier:@"header"
+                                                  forIndexPath:indexPath];
     if (!_headerView) {
-      _headerView.reset([[collectionView
-          dequeueReusableSupplementaryViewOfKind:
-              UICollectionElementKindSectionHeader
-                             withReuseIdentifier:@"header"
-                                    forIndexPath:indexPath] retain]);
+      _headerView = [[NewTabPageHeaderView alloc] init];
       [_headerView addSubview:[self.logoVendor view]];
       [_headerView addSubview:_searchTapTarget];
+      self.logoVendor.view.translatesAutoresizingMaskIntoConstraints = NO;
+      [_searchTapTarget setTranslatesAutoresizingMaskIntoConstraints:NO];
+
+      [self addConstraintsForLogoView:self.logoVendor.view
+                          searchField:_searchTapTarget
+                        andHeaderView:_headerView];
+
       [_headerView addViewsToSearchField:_searchTapTarget];
 
       if (!IsIPadIdiom()) {
         // iPhone header also contains a toolbar since the normal toolbar is
         // hidden.
-        [_headerView addToolbarWithDataSource:self.dataSource
-                                   dispatcher:self.dispatcher];
+        [_headerView
+            addToolbarWithReadingListModel:[self.dataSource readingListModel]
+                                dispatcher:self.dispatcher];
         [_headerView setToolbarTabCount:self.tabCount];
         [_headerView setCanGoForward:self.canGoForward];
         [_headerView setCanGoBack:self.canGoBack];
       }
-      [_supplementaryViews addObject:_headerView];
+      [_headerView setTranslatesAutoresizingMaskIntoConstraints:NO];
     }
-    return _headerView;
+    [reusableView addSubview:_headerView];
+    AddSameConstraints(reusableView, _headerView);
+
+    return reusableView;
   }
 
   if (indexPath.section == SectionWithMostVisited) {
+    UICollectionReusableView* reusableView =
+        [collectionView dequeueReusableSupplementaryViewOfKind:
+                            UICollectionElementKindSectionHeader
+                                           withReuseIdentifier:@"header"
+                                                  forIndexPath:indexPath];
     if (!_promoHeaderView) {
-      _promoHeaderView.reset([[collectionView
-          dequeueReusableSupplementaryViewOfKind:
-              UICollectionElementKindSectionHeader
-                             withReuseIdentifier:@"whatsNew"
-                                    forIndexPath:indexPath] retain]);
+      _promoHeaderView = [[WhatsNewHeaderView alloc] init];
       [_promoHeaderView
           setSideMargin:content_suggestions::centeredTilesMarginForWidth(
-                            [self viewWidth])];
+                            [self viewWidth])
+               forWidth:[self viewWidth]];
       [_promoHeaderView setDelegate:self];
       if (self.promoCanShow) {
         [_promoHeaderView setText:self.promoText];
         [_promoHeaderView setIcon:self.promoIcon];
         [self.dataSource promoViewed];
       }
-      [_supplementaryViews addObject:_promoHeaderView];
     }
-    return _promoHeaderView;
+    [reusableView addSubview:_promoHeaderView];
+    AddSameConstraints(reusableView, _promoHeaderView);
+    return reusableView;
   }
 
   NOTREACHED();
@@ -923,10 +888,10 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 
   [cell setupWithURL:ntpTile.url title:title dataSource:self.dataSource];
 
-  base::scoped_nsobject<UILongPressGestureRecognizer> longPress(
+  UILongPressGestureRecognizer* longPress =
       [[UILongPressGestureRecognizer alloc]
           initWithTarget:self
-                  action:@selector(handleMostVisitedLongPress:)]);
+                  action:@selector(handleMostVisitedLongPress:)];
   [cell addGestureRecognizer:longPress];
 
   return cell;
@@ -953,25 +918,24 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
     web::ContextMenuParams params;
     // Get view coordinates in local space.
     params.location = [sender locationInView:self.view];
-    params.view.reset([self.view retain]);
+    params.view.reset(self.view);
 
     // Present sheet/popover using controller that is added to view hierarchy.
     UIViewController* topController = [params.view window].rootViewController;
     while (topController.presentedViewController)
       topController = topController.presentedViewController;
 
-    _contextMenuCoordinator.reset([[ContextMenuCoordinator alloc]
-        initWithBaseViewController:topController
-                            params:params]);
+    _contextMenuCoordinator =
+        [[ContextMenuCoordinator alloc] initWithBaseViewController:topController
+                                                            params:params];
 
     ProceduralBlock action;
 
     // Open In New Tab.
     GURL url = [self urlForIndex:index];
-    base::WeakNSObject<GoogleLandingViewController> weakSelf(self);
+    __weak GoogleLandingViewController* weakSelf = self;
     action = ^{
-      base::scoped_nsobject<GoogleLandingViewController> strongSelf(
-          [weakSelf retain]);
+      GoogleLandingViewController* strongSelf = weakSelf;
       if (!strongSelf)
         return;
       MostVisitedCell* cell = (MostVisitedCell*)sender.view;
@@ -987,34 +951,30 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                              IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWTAB)
                   action:action];
 
-    if (!self.isOffTheRecord) {
-      // Open in Incognito Tab.
-      action = ^{
-        base::scoped_nsobject<GoogleLandingViewController> strongSelf(
-            [weakSelf retain]);
-        if (!strongSelf)
-          return;
-        MostVisitedCell* cell = (MostVisitedCell*)sender.view;
-        [[strongSelf dataSource] logMostVisitedClick:index
-                                            tileType:cell.tileType];
-        [[strongSelf dispatcher] webPageOrderedOpen:url
-                                           referrer:web::Referrer()
-                                        inIncognito:YES
-                                       inBackground:NO
-                                           appendTo:kCurrentTab];
-      };
-      [_contextMenuCoordinator
-          addItemWithTitle:l10n_util::GetNSStringWithFixup(
-                               IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
-                    action:action];
-    }
+    // Open in Incognito Tab.
+    action = ^{
+      GoogleLandingViewController* strongSelf = weakSelf;
+      if (!strongSelf)
+        return;
+      MostVisitedCell* cell = (MostVisitedCell*)sender.view;
+      [[strongSelf dataSource] logMostVisitedClick:index
+                                          tileType:cell.tileType];
+      [[strongSelf dispatcher] webPageOrderedOpen:url
+                                         referrer:web::Referrer()
+                                      inIncognito:YES
+                                     inBackground:NO
+                                         appendTo:kCurrentTab];
+    };
+    [_contextMenuCoordinator
+        addItemWithTitle:l10n_util::GetNSStringWithFixup(
+                             IDS_IOS_CONTENT_CONTEXT_OPENLINKNEWINCOGNITOTAB)
+                  action:action];
 
     // Remove the most visited url.
     NSString* title =
         l10n_util::GetNSStringWithFixup(IDS_BOOKMARK_BUBBLE_REMOVE_BOOKMARK);
     action = ^{
-      base::scoped_nsobject<GoogleLandingViewController> strongSelf(
-          [weakSelf retain]);
+      GoogleLandingViewController* strongSelf = weakSelf;
       // Early return if the controller has been deallocated.
       if (!strongSelf)
         return;
@@ -1032,14 +992,12 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 }
 
 - (void)showMostVisitedUndoForURL:(NSURL*)url {
-  _deletedUrl.reset([url retain]);
+  _deletedUrl = url;
 
-  MDCSnackbarMessageAction* action =
-      [[[MDCSnackbarMessageAction alloc] init] autorelease];
-  base::WeakNSObject<GoogleLandingViewController> weakSelf(self);
+  MDCSnackbarMessageAction* action = [[MDCSnackbarMessageAction alloc] init];
+  __weak GoogleLandingViewController* weakSelf = self;
   action.handler = ^{
-    base::scoped_nsobject<GoogleLandingViewController> strongSelf(
-        [weakSelf retain]);
+    GoogleLandingViewController* strongSelf = weakSelf;
     if (!strongSelf)
       return;
     [[strongSelf dataSource]
@@ -1067,7 +1025,8 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 // Returns the Y value to use for the scroll view's contentOffset when scrolling
 // the omnibox to the top of the screen.
 - (CGFloat)pinnedOffsetY {
-  CGFloat headerHeight = [_headerView frame].size.height;
+  CGFloat headerHeight = content_suggestions::heightForLogoHeader(
+      self.logoIsShowing, self.promoCanShow);
   CGFloat offsetY =
       headerHeight - ntp_header::kScrolledToTopOmniboxBottomMargin;
   if (!IsIPadIdiom())
@@ -1090,6 +1049,9 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
 - (void)wasShown {
   _isShowing = YES;
   [_headerView hideToolbarViewsForNewTabPage];
+  // The view is not loaded with the width it is displayed with. Reloading the
+  // data after being displayed ensure that we got the right number of items.
+  [self reloadData];
 }
 
 - (void)wasHidden {
@@ -1260,15 +1222,12 @@ const CGFloat kShiftTilesDownAnimationDuration = 0.2;
                    didTriggerAction:(OverscrollAction)action {
   switch (action) {
     case OverscrollAction::NEW_TAB: {
-      base::scoped_nsobject<GenericChromeCommand> command(
-          [[GenericChromeCommand alloc] initWithTag:IDC_NEW_TAB]);
-      [[self view] chromeExecuteCommand:command];
+      OpenNewTabCommand* command = [OpenNewTabCommand command];
+      [self.dispatcher openNewTab:command];
     } break;
-    case OverscrollAction::CLOSE_TAB: {
-      base::scoped_nsobject<GenericChromeCommand> command(
-          [[GenericChromeCommand alloc] initWithTag:IDC_CLOSE_TAB]);
-      [[self view] chromeExecuteCommand:command];
-    } break;
+    case OverscrollAction::CLOSE_TAB:
+      [self.dispatcher closeCurrentTab];
+      break;
     case OverscrollAction::REFRESH:
       [self reload];
       break;

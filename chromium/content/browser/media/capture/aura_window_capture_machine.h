@@ -10,8 +10,8 @@
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
 #include "content/browser/media/capture/cursor_renderer_aura.h"
-#include "device/wake_lock/public/interfaces/wake_lock_service.mojom.h"
 #include "media/capture/content/screen_capture_device_core.h"
+#include "services/device/public/interfaces/wake_lock.mojom.h"
 #include "ui/aura/window.h"
 #include "ui/aura/window_observer.h"
 #include "ui/base/cursor/cursors_aura.h"
@@ -28,10 +28,10 @@ class ReadbackYUVInterface;
 
 namespace content {
 
-class AuraWindowCaptureMachine
-    : public media::VideoCaptureMachine,
-      public aura::WindowObserver,
-      public ui::CompositorAnimationObserver {
+class AuraWindowCaptureMachine : public media::VideoCaptureMachine,
+                                 public aura::WindowObserver,
+                                 public ui::ContextFactoryObserver,
+                                 public ui::CompositorAnimationObserver {
  public:
   AuraWindowCaptureMachine();
   ~AuraWindowCaptureMachine() override;
@@ -95,6 +95,9 @@ class AuraWindowCaptureMachine
                                  const CaptureFrameCallback& capture_frame_cb,
                                  std::unique_ptr<cc::CopyOutputResult> result);
 
+  // ui::ContextFactoryObserver implementation.
+  void OnLostResources() override;
+
   // Renders the cursor if needed and then delivers the captured frame.
   static void CopyOutputFinishedForVideo(
       base::WeakPtr<AuraWindowCaptureMachine> machine,
@@ -124,7 +127,7 @@ class AuraWindowCaptureMachine
 
   // TODO(jiayl): Remove wake_lock_ when there is an API to keep the
   // screen from sleeping for the drive-by web.
-  device::mojom::WakeLockServicePtr wake_lock_;
+  device::mojom::WakeLockPtr wake_lock_;
 
   // False while frame capture has been suspended. All other aspects of the
   // machine are maintained.

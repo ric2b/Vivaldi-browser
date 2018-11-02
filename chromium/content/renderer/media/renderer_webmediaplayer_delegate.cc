@@ -11,10 +11,13 @@
 #include "base/metrics/user_metrics_action.h"
 #include "base/sys_info.h"
 #include "content/common/media/media_player_delegate_messages.h"
+#include "content/public/common/content_client.h"
+#include "content/public/renderer/content_renderer_client.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_thread.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
 #include "third_party/WebKit/public/web/WebScopedUserGesture.h"
+#include "ui/gfx/geometry/size.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -33,6 +36,8 @@ namespace media {
 RendererWebMediaPlayerDelegate::RendererWebMediaPlayerDelegate(
     content::RenderFrame* render_frame)
     : RenderFrameObserver(render_frame),
+      allow_idle_cleanup_(
+          content::GetContentClient()->renderer()->AllowIdleMediaSuspend()),
       default_tick_clock_(new base::DefaultTickClock()),
       tick_clock_(default_tick_clock_.get()) {
   idle_cleanup_interval_ = base::TimeDelta::FromSeconds(5);
@@ -103,6 +108,12 @@ void RendererWebMediaPlayerDelegate::DidPlay(
   ScheduleUpdateTask();
 }
 
+void RendererWebMediaPlayerDelegate::DidPlayerMutedStatusChange(int delegate_id,
+                                                                bool muted) {
+  Send(new MediaPlayerDelegateHostMsg_OnMutedStatusChanged(routing_id(),
+                                                           delegate_id, muted));
+}
+
 void RendererWebMediaPlayerDelegate::DidPause(int player_id) {
   DVLOG(2) << __func__ << "(" << player_id << ")";
   DCHECK(id_map_.Lookup(player_id));
@@ -165,8 +176,15 @@ bool RendererWebMediaPlayerDelegate::IsStale(int player_id) {
 void RendererWebMediaPlayerDelegate::SetIsEffectivelyFullscreen(
     int player_id,
     bool is_fullscreen) {
-  Send(new MediaPlayerDelegateHostMsg_OnMediaEffectivelyFullscreenChange(
+  Send(new MediaPlayerDelegateHostMsg_OnMediaEffectivelyFullscreenChanged(
       routing_id(), player_id, is_fullscreen));
+}
+
+void RendererWebMediaPlayerDelegate::DidPlayerSizeChange(
+    int delegate_id,
+    const gfx::Size& size) {
+  Send(new MediaPlayerDelegateHostMsg_OnMediaSizeChanged(routing_id(),
+                                                         delegate_id, size));
 }
 
 void RendererWebMediaPlayerDelegate::WasHidden() {
@@ -302,6 +320,9 @@ void RendererWebMediaPlayerDelegate::UpdateTask() {
 
   // Record UMAs for background video playback.
   RecordBackgroundVideoPlayback();
+
+  if (!allow_idle_cleanup_)
+    return;
 
   // Clean up idle players.
   bool aggressive_cleanup = false;

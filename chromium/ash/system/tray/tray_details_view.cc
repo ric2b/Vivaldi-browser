@@ -22,6 +22,7 @@
 #include "ui/compositor/paint_context.h"
 #include "ui/compositor/paint_recorder.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/gfx/skia_paint_util.h"
@@ -35,6 +36,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/view_targeter.h"
 #include "ui/views/view_targeter_delegate.h"
 
@@ -52,8 +54,7 @@ const int kTitleRowSeparatorIndex = 1;
 class ScrollContentsView : public views::View {
  public:
   ScrollContentsView()
-      : box_layout_(
-            new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0)) {
+      : box_layout_(new views::BoxLayout(views::BoxLayout::kVertical)) {
     SetLayoutManager(box_layout_);
   }
   ~ScrollContentsView() override {}
@@ -236,16 +237,20 @@ const int kTitleRowPaddingBottom =
 
 }  // namespace
 
+
+////////////////////////////////////////////////////////////////////////////////
+// TrayDetailsView:
+
 TrayDetailsView::TrayDetailsView(SystemTrayItem* owner)
     : owner_(owner),
-      box_layout_(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0)),
+      box_layout_(new views::BoxLayout(views::BoxLayout::kVertical)),
       scroller_(nullptr),
       scroll_content_(nullptr),
       progress_bar_(nullptr),
       tri_view_(nullptr),
       back_button_(nullptr) {
   SetLayoutManager(box_layout_);
-  set_background(views::Background::CreateThemedSolidBackground(
+  SetBackground(views::CreateThemedSolidBackground(
       this, ui::NativeTheme::kColorId_BubbleBackground));
 }
 
@@ -333,6 +338,23 @@ HoverHighlightView* TrayDetailsView::AddScrollListCheckableItem(
     const base::string16& text,
     bool checked) {
   return AddScrollListCheckableItem(gfx::kNoneIcon, text, checked);
+}
+
+void TrayDetailsView::SetupConnectedScrollListItem(HoverHighlightView* view) {
+  DCHECK(view->is_populated());
+
+  view->SetSubText(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTED));
+  TrayPopupItemStyle style(TrayPopupItemStyle::FontStyle::CAPTION);
+  style.set_color_style(TrayPopupItemStyle::ColorStyle::CONNECTED);
+  style.SetupLabel(view->sub_text_label());
+}
+
+void TrayDetailsView::SetupConnectingScrollListItem(HoverHighlightView* view) {
+  DCHECK(view->is_populated());
+
+  view->SetSubText(
+      l10n_util::GetStringUTF16(IDS_ASH_STATUS_TRAY_NETWORK_STATUS_CONNECTING));
 }
 
 TriView* TrayDetailsView::AddScrollListSubHeader(const gfx::VectorIcon& icon,

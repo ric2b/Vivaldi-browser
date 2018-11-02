@@ -19,6 +19,7 @@
 #include "platform/loader/fetch/RawResource.h"
 #include "platform/loader/fetch/Resource.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 #include "public/platform/WebCachePolicy.h"
 #include "public/platform/WebURLRequest.h"
 
@@ -54,7 +55,7 @@ class InspectorResourceContentLoader::ResourceClient final
   void SetCSSStyleSheet(const String&,
                         const KURL&,
                         ReferrerPolicy,
-                        const String&,
+                        const WTF::TextEncoding&,
                         const CSSStyleSheetResource*) override;
   void NotifyFinished(Resource*) override;
   String DebugName() const override {
@@ -80,7 +81,7 @@ void InspectorResourceContentLoader::ResourceClient::SetCSSStyleSheet(
     const String&,
     const KURL& url,
     ReferrerPolicy,
-    const String&,
+    const WTF::TextEncoding&,
     const CSSStyleSheetResource* resource) {
   ResourceFinished(const_cast<CSSStyleSheetResource*>(resource));
 }
@@ -124,8 +125,9 @@ void InspectorResourceContentLoader::Start() {
 
     if (!resource_request.Url().GetString().IsEmpty()) {
       urls_to_fetch.insert(resource_request.Url().GetString());
-      FetchParameters params(resource_request,
-                             FetchInitiatorTypeNames::internal);
+      ResourceLoaderOptions options;
+      options.initiator_info.name = FetchInitiatorTypeNames::internal;
+      FetchParameters params(resource_request, options);
       Resource* resource = RawResource::Fetch(params, document->Fetcher());
       if (resource) {
         // Prevent garbage collection by holding a reference to this resource.
@@ -148,8 +150,9 @@ void InspectorResourceContentLoader::Start() {
       ResourceRequest resource_request(url);
       resource_request.SetRequestContext(
           WebURLRequest::kRequestContextInternal);
-      FetchParameters params(resource_request,
-                             FetchInitiatorTypeNames::internal);
+      ResourceLoaderOptions options;
+      options.initiator_info.name = FetchInitiatorTypeNames::internal;
+      FetchParameters params(resource_request, options);
       Resource* resource =
           CSSStyleSheetResource::Fetch(params, document->Fetcher());
       if (!resource)

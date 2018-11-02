@@ -7,25 +7,35 @@
 
 #import <UIKit/UIKit.h>
 
+@protocol ApplicationCommands;
+@protocol BrowserCommands;
 @class ToolsMenuViewCell;
 
 @interface ToolsMenuViewItem : NSObject
 @property(nonatomic, copy) NSString* accessibilityIdentifier;
 @property(nonatomic, copy) NSString* title;
 @property(nonatomic, assign) NSInteger tag;
+@property(nonatomic, assign) SEL selector;
 @property(nonatomic, assign) BOOL active;
-@property(nonatomic, assign) ToolsMenuViewCell* tableViewCell;
+@property(nonatomic, weak) ToolsMenuViewCell* tableViewCell;
 
 + (NSString*)cellID;
 + (Class)cellClass;
 
 + (instancetype)menuItemWithTitle:(NSString*)title
           accessibilityIdentifier:(NSString*)accessibilityIdentifier
+                         selector:(SEL)selector
                           command:(int)commandID;
+
+// Execute the command associated with this item using |dispatcher|. |selector|
+// must be defined on the receiver.
+- (void)executeCommandWithDispatcher:
+    (id<ApplicationCommands, BrowserCommands>)dispatcher;
+
 @end
 
 @interface ToolsMenuViewCell : UICollectionViewCell
-@property(nonatomic, retain) UILabel* title;
+@property(nonatomic, strong) UILabel* title;
 @property(nonatomic, readonly) CGFloat horizontalMargin;
 
 - (void)configureForMenuItem:(ToolsMenuViewItem*)item;

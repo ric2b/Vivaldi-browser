@@ -36,7 +36,6 @@ class ShelfView;
 class ShelfWidget;
 class StatusAreaWidget;
 class ShelfObserver;
-class WmWindow;
 
 // Controller for the shelf state. One per display, because each display might
 // have different shelf alignment, autohide, etc. Exists for the lifetime of the
@@ -54,7 +53,7 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   // adjust the alignment (eg. not allowed in guest and supervised user modes).
   static bool CanChangeShelfAlignment();
 
-  void CreateShelfWidget(WmWindow* root);
+  void CreateShelfWidget(aura::Window* root);
   void ShutdownShelfWidget();
   void DestroyShelfWidget();
 
@@ -68,7 +67,7 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
   void NotifyShelfInitialized();
 
   // Returns the window showing the shelf.
-  WmWindow* GetWindow();
+  aura::Window* GetWindow();
 
   ShelfAlignment alignment() const { return alignment_; }
   void SetAlignment(ShelfAlignment alignment);
@@ -99,6 +98,8 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
 
   ShelfVisibilityState GetVisibilityState() const;
 
+  int GetAccessibilityPanelHeight() const;
+
   // Returns the ideal bounds of the shelf assuming it is visible.
   gfx::Rect GetIdealBounds();
 
@@ -106,11 +107,11 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
 
   // Updates the icon position given the current window bounds. This is used
   // when dragging panels to reposition them with respect to the other panels.
-  void UpdateIconPositionForPanel(WmWindow* window);
+  void UpdateIconPositionForPanel(aura::Window* window);
 
   // Returns the screen bounds of the item for the specified window. If there is
   // no item for the specified window an empty rect is returned.
-  gfx::Rect GetScreenBoundsOfItemIconForWindow(WmWindow* window);
+  gfx::Rect GetScreenBoundsOfItemIconForWindow(aura::Window* window);
 
   // Launch a 0-indexed shelf item in the shelf. A negative index launches the
   // last shelf item in the shelf.
@@ -118,6 +119,10 @@ class ASH_EXPORT Shelf : public ShelfLayoutManagerObserver {
 
   // Activates the shelf item specified by the index in the list of shelf items.
   static void ActivateShelfItem(int item_index);
+
+  // Activates the shelf item specified by the index in the list of shelf items
+  // on the display identified by |display_id|.
+  static void ActivateShelfItemOnDisplay(int item_index, int64_t display_id);
 
   // Handles a gesture |event| coming from a source outside the shelf widget
   // (e.g. the status area widget). Allows support for behaviors like toggling

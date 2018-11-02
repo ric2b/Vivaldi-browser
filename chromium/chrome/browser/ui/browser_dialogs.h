@@ -22,9 +22,10 @@
 #endif  // OS_CHROMEOS
 
 class Browser;
-class GURL;
 class LoginHandler;
 class Profile;
+class WebShareTarget;
+struct WebApplicationInfo;
 
 namespace content {
 class BrowserContext;
@@ -34,10 +35,6 @@ class WebContents;
 
 namespace extensions {
 class Extension;
-}
-
-namespace gfx {
-class Point;
 }
 
 namespace net {
@@ -51,6 +48,7 @@ class PaymentRequestDialog;
 }
 
 namespace safe_browsing {
+class ChromeCleanerController;
 class ChromeCleanerDialogController;
 }
 
@@ -102,28 +100,26 @@ void ShowCreateChromeAppShortcutsDialog(
     const extensions::Extension* app,
     const base::Callback<void(bool /* created */)>& close_callback);
 
+// Callback type used with the ShowBookmarkAppDialog() method. The boolean
+// parameter is true when the user accepts the dialog. The WebApplicationInfo
+// parameter contains the WebApplicationInfo as edited by the user.
+using ShowBookmarkAppDialogCallback =
+    base::OnceCallback<void(bool, const WebApplicationInfo&)>;
+
+// Shows the Bookmark App bubble.
+// See Extension::InitFromValueFlags::FROM_BOOKMARK for a description of
+// bookmark apps.
+//
+// |web_app_info| is the WebApplicationInfo being converted into an app.
+void ShowBookmarkAppDialog(gfx::NativeWindow parent_window,
+                           const WebApplicationInfo& web_app_info,
+                           ShowBookmarkAppDialogCallback callback);
+
 // Shows a color chooser that reports to the given WebContents.
 content::ColorChooser* ShowColorChooser(content::WebContents* web_contents,
                                         SkColor initial_color);
 
 #if defined(OS_MACOSX)
-
-// Shows a views zoom bubble at the |anchor_point|. This occurs when the zoom
-// icon is clicked or when a shortcut key is pressed or whenever |web_contents|
-// zoom factor changes. |user_action| is used to determine if the bubble will
-// auto-close.
-void ShowZoomBubbleViewsAtPoint(content::WebContents* web_contents,
-                                const gfx::Point& anchor_point,
-                                bool user_action);
-
-// Closes a views zoom bubble if currently shown.
-void CloseZoomBubbleViews();
-
-// Refreshes views zoom bubble if currently shown.
-void RefreshZoomBubbleViews();
-
-// Returns true if views zoom bubble is currently shown.
-bool IsZoomBubbleViewsShown();
 
 // Bridging methods that show/hide the toolkit-views based Task Manager on Mac.
 task_manager::TaskManagerTableModel* ShowTaskManagerViews(Browser* browser);
@@ -149,19 +145,18 @@ void ShowBookmarkEditorViews(gfx::NativeWindow parent_window,
 payments::PaymentRequestDialog* CreatePaymentRequestDialog(
     payments::PaymentRequest* request);
 
-// Used to return the target the user picked or nullopt if the user cancelled
+// Used to return the target the user picked or nullptr if the user cancelled
 // the share.
 using WebShareTargetPickerCallback =
-    base::OnceCallback<void(const base::Optional<std::string>&)>;
+    base::OnceCallback<void(const WebShareTarget*)>;
 
 // Shows the dialog to choose a share target app. |targets| is a list of app
 // title and manifest URL pairs that will be shown in a list. If the user picks
 // a target, this calls |callback| with the manifest URL of the chosen target,
 // or supplies null if the user cancelled the share.
-void ShowWebShareTargetPickerDialog(
-    gfx::NativeWindow parent_window,
-    const std::vector<std::pair<base::string16, GURL>>& targets,
-    WebShareTargetPickerCallback callback);
+void ShowWebShareTargetPickerDialog(gfx::NativeWindow parent_window,
+                                    std::vector<WebShareTarget> targets,
+                                    WebShareTargetPickerCallback callback);
 
 #endif  // TOOLKIT_VIEWS
 
@@ -263,7 +258,8 @@ void RecordDialogCreation(DialogIdentifier identifier);
 // detected on the system.
 void ShowChromeCleanerPrompt(
     Browser* browser,
-    safe_browsing::ChromeCleanerDialogController* controller);
+    safe_browsing::ChromeCleanerDialogController* dialog_controller,
+    safe_browsing::ChromeCleanerController* cleaner_controller);
 
 #endif  // OS_WIN
 

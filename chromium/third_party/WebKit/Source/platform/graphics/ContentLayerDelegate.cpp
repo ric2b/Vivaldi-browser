@@ -25,6 +25,8 @@
 
 #include "platform/graphics/ContentLayerDelegate.h"
 
+#include "platform/bindings/RuntimeCallStats.h"
+#include "platform/bindings/V8PerIsolateData.h"
 #include "platform/geometry/IntRect.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/GraphicsLayer.h"
@@ -55,6 +57,8 @@ void ContentLayerDelegate::PaintContents(
     WebDisplayItemList* web_display_item_list,
     WebContentLayerClient::PaintingControlSetting painting_control) {
   TRACE_EVENT0("blink,benchmark", "ContentLayerDelegate::paintContents");
+  RUNTIME_CALL_TIMER_SCOPE(V8PerIsolateData::MainThreadIsolate(),
+                           RuntimeCallStats::CounterId::kPaintContents);
 
   PaintController& paint_controller = graphics_layer_->GetPaintController();
   paint_controller.SetDisplayItemConstructionIsDisabled(
@@ -90,6 +94,7 @@ void ContentLayerDelegate::PaintContents(
     graphics_layer_->Paint(nullptr, disabled_mode);
 
   paint_controller.GetPaintArtifact().AppendToWebDisplayItemList(
+      graphics_layer_->OffsetFromLayoutObjectWithSubpixelAccumulation(),
       web_display_item_list);
 
   paint_controller.SetDisplayItemConstructionIsDisabled(false);

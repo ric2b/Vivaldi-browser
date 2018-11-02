@@ -43,14 +43,8 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
   if (o.IsOffScreen())
     state |= (1 << ui::AX_STATE_OFFSCREEN);
 
-  if (o.IsPressed())
-    state |= (1 << ui::AX_STATE_PRESSED);
-
   if (o.IsPasswordField())
     state |= (1 << ui::AX_STATE_PROTECTED);
-
-  if (o.IsReadOnly())
-    state |= (1 << ui::AX_STATE_READ_ONLY);
 
   if (o.IsRequired())
     state |= (1 << ui::AX_STATE_REQUIRED);
@@ -60,9 +54,6 @@ uint32_t AXStateFromBlink(const blink::WebAXObject& o) {
 
   if (o.IsEditable())
     state |= (1 << ui::AX_STATE_EDITABLE);
-
-  if (!o.IsEnabled())
-    state |= (1 << ui::AX_STATE_DISABLED);
 
   if (o.IsSelected())
     state |= (1 << ui::AX_STATE_SELECTED);
@@ -446,6 +437,8 @@ ui::AXMarkerType AXMarkerTypeFromBlink(blink::WebAXMarkerType marker_type) {
       return ui::AX_MARKER_TYPE_GRAMMAR;
     case blink::kWebAXMarkerTypeTextMatch:
       return ui::AX_MARKER_TYPE_TEXT_MATCH;
+    case blink::kWebAXMarkerTypeActiveSuggestion:
+      return ui::AX_MARKER_TYPE_ACTIVE_SUGGESTION;
   }
   NOTREACHED();
   return ui::AX_MARKER_TYPE_NONE;
@@ -528,15 +521,17 @@ ui::AXInvalidState AXInvalidStateFromBlink(
 ui::AXCheckedState AXCheckedStateFromBlink(
     blink::WebAXCheckedState checked_state) {
   switch (checked_state) {
-    case blink::WebAXCheckedFalse:
-      return ui::AX_CHECKED_STATE_FALSE;
-    case blink::WebAXCheckedTrue:
+    case blink::kWebAXCheckedUndefined:
+      return ui::AX_CHECKED_STATE_NONE;
+    case blink::kWebAXCheckedTrue:
       return ui::AX_CHECKED_STATE_TRUE;
-    case blink::WebAXCheckedMixed:
+    case blink::kWebAXCheckedMixed:
       return ui::AX_CHECKED_STATE_MIXED;
+    case blink::kWebAXCheckedFalse:
+      return ui::AX_CHECKED_STATE_FALSE;
   }
   NOTREACHED();
-  return ui::AX_CHECKED_STATE_FALSE;
+  return ui::AX_CHECKED_STATE_NONE;
 }
 
 ui::AXSortDirection AXSortDirectionFromBlink(

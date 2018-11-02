@@ -63,6 +63,7 @@
 #include "net/test/embedded_test_server/http_response.h"
 #include "net/test/url_request/url_request_mock_http_job.h"
 #include "net/test/url_request/url_request_slow_download_job.h"
+#include "net/traffic_annotation/network_traffic_annotation_test_helper.h"
 #include "ppapi/features/features.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -581,9 +582,7 @@ class DownloadContentTest : public ContentBrowserTest {
     base::FilePath mock_base(GetTestFilePath("download", ""));
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
-            &net::URLRequestMockHTTPJob::AddUrlHandlers, mock_base,
-            make_scoped_refptr(content::BrowserThread::GetBlockingPool())));
+        base::Bind(&net::URLRequestMockHTTPJob::AddUrlHandlers, mock_base));
     ASSERT_TRUE(embedded_test_server()->Start());
     const std::string real_host =
         embedded_test_server()->host_port_pair().host();
@@ -1734,7 +1733,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, RemoveResumingDownload) {
   request_start_handler.WaitForCallback();
 
   // At this point, the download resumption request has been sent out, but the
-  // reponse hasn't been received yet.
+  // response hasn't been received yet.
   download->Remove();
 
   request_start_handler.RespondWith(std::string(), net::OK);
@@ -2319,6 +2318,34 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, ReferrerForPartialResumption) {
   EXPECT_EQ(document_url.spec(), requests.back()->referrer);
 }
 
+// Test that the referrer header is dropped for HTTP downloads from HTTPS.
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, ReferrerForHTTPS) {
+  net::EmbeddedTestServer https_origin(
+      net::EmbeddedTestServer::Type::TYPE_HTTPS);
+  net::EmbeddedTestServer http_origin(net::EmbeddedTestServer::Type::TYPE_HTTP);
+  https_origin.ServeFilesFromDirectory(GetTestFilePath("download", ""));
+  http_origin.RegisterRequestHandler(CreateBasicResponseHandler(
+      "/download", base::StringPairs(), "application/octet-stream", "Hello"));
+  ASSERT_TRUE(https_origin.InitializeAndListen());
+  ASSERT_TRUE(http_origin.InitializeAndListen());
+
+  GURL download_url = http_origin.GetURL("/download");
+  GURL referrer_url = https_origin.GetURL(
+      std::string("/download-link.html?dl=") + download_url.spec());
+
+  https_origin.StartAcceptingConnections();
+  http_origin.StartAcceptingConnections();
+
+  DownloadItem* download = StartDownloadAndReturnItem(shell(), referrer_url);
+  WaitForCompletion(download);
+
+  ASSERT_EQ(5, download->GetReceivedBytes());
+  EXPECT_EQ("", download->GetReferrerUrl().spec());
+
+  ASSERT_TRUE(https_origin.ShutdownAndWaitUntilComplete());
+  ASSERT_TRUE(http_origin.ShutdownAndWaitUntilComplete());
+}
+
 // Check that the cookie policy is correctly updated when downloading a file
 // that redirects cross origin.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, CookiePolicy) {
@@ -2345,7 +2372,8 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, CookiePolicy) {
   SetupEnsureNoPendingDownloads();
   std::unique_ptr<DownloadUrlParameters> download_parameters(
       DownloadUrlParameters::CreateForWebContentsMainFrame(
-          shell()->web_contents(), origin_two.GetURL("/bar")));
+          shell()->web_contents(), origin_two.GetURL("/bar"),
+          TRAFFIC_ANNOTATION_FOR_TESTS));
   std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
   DownloadManagerForShell(shell())->DownloadUrl(std::move(download_parameters));
   observer->WaitForFinished();
@@ -2460,6 +2488,27 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest,
             downloads[0]->GetTargetFilePath().BaseName().value());
   ASSERT_TRUE(origin_one.ShutdownAndWaitUntilComplete());
   ASSERT_TRUE(origin_two.ShutdownAndWaitUntilComplete());
+}
+
+// Test that the suggested filename for data: URLs works.
+IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadAttributeDataUrl) {
+  net::EmbeddedTestServer server;
+  ASSERT_TRUE(server.InitializeAndListen());
+
+  GURL url = server.GetURL(std::string(
+      "/download-attribute.html?target=data:application/octet-stream, ..."));
+  server.ServeFilesFromDirectory(GetTestFilePath("download", ""));
+  server.StartAcceptingConnections();
+
+  NavigateToURLAndWaitForDownload(shell(), url, DownloadItem::COMPLETE);
+
+  std::vector<DownloadItem*> downloads;
+  DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+
+  EXPECT_EQ(FILE_PATH_LITERAL("suggested-filename"),
+            downloads[0]->GetTargetFilePath().BaseName().value());
+  ASSERT_TRUE(server.ShutdownAndWaitUntilComplete());
 }
 
 // A request for a non-existent resource should still result in a DownloadItem

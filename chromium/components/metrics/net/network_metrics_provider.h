@@ -49,18 +49,12 @@ class NetworkMetricsProvider
     DISALLOW_COPY_AND_ASSIGN(NetworkQualityEstimatorProvider);
   };
 
-  // Creates a NetworkMetricsProvider, where |io_task_runner| is used to post
-  // network info collection tasks.
-  explicit NetworkMetricsProvider(base::TaskRunner* io_task_runner);
-
-  // Creates a NetworkMetricsProvider, where |io_task_runner| is used to post
-  // network info collection tasks.  |network_quality_estimator_provider|
-  // should be set if it is useful to attach the quality of the network to the
-  // metrics report.
-  NetworkMetricsProvider(std::unique_ptr<NetworkQualityEstimatorProvider>
-                             network_quality_estimator_provider,
-                         base::TaskRunner* io_task_runner);
-
+  // Creates a NetworkMetricsProvider, where
+  // |network_quality_estimator_provider| should be set if it is useful to
+  // attach the quality of the network to the metrics report.
+  explicit NetworkMetricsProvider(
+      std::unique_ptr<NetworkQualityEstimatorProvider>
+          network_quality_estimator_provider = nullptr);
   ~NetworkMetricsProvider() override;
 
  private:
@@ -82,8 +76,6 @@ class NetworkMetricsProvider
   SystemProfileProto::Network::ConnectionType GetConnectionType() const;
   SystemProfileProto::Network::WifiPHYLayerProtocol GetWifiPHYLayerProtocol()
       const;
-  SystemProfileProto::Network::EffectiveConnectionType
-  GetEffectiveConnectionType() const;
 
   // Posts a call to net::GetWifiPHYLayerProtocol on the blocking pool.
   void ProbeWifiPHYLayerProtocol();
@@ -103,9 +95,6 @@ class NetworkMetricsProvider
   // Notifies |this| that the effective connection type of the current network
   // has changed to |type|.
   void OnEffectiveConnectionTypeChanged(net::EffectiveConnectionType type);
-
-  // Task runner used for blocking file I/O.
-  base::TaskRunner* io_task_runner_;
 
   // True if |connection_type_| changed during the lifetime of the log.
   bool connection_type_is_ambiguous_;
@@ -142,9 +131,10 @@ class NetworkMetricsProvider
   // Last known effective connection type.
   net::EffectiveConnectionType effective_connection_type_;
 
-  // True if |effective_connection_type_| changed during the lifetime of the
-  // log.
-  bool effective_connection_type_is_ambiguous_;
+  // Minimum and maximum effective connection type since the metrics were last
+  // provided.
+  net::EffectiveConnectionType min_effective_connection_type_;
+  net::EffectiveConnectionType max_effective_connection_type_;
 
   base::ThreadChecker thread_checker_;
 

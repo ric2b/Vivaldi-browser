@@ -31,12 +31,12 @@
 #ifndef SharedWorkerGlobalScope_h
 #define SharedWorkerGlobalScope_h
 
+#include <memory>
 #include "core/CoreExport.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerGlobalScope.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "platform/heap/Handle.h"
-#include <memory>
 
 namespace blink {
 
@@ -50,7 +50,8 @@ class SharedWorkerGlobalScope final : public WorkerGlobalScope {
   static SharedWorkerGlobalScope* Create(
       const String& name,
       SharedWorkerThread*,
-      std::unique_ptr<WorkerThreadStartupData>);
+      std::unique_ptr<GlobalScopeCreationParams>,
+      double time_origin);
   ~SharedWorkerGlobalScope() override;
 
   bool IsSharedWorkerGlobalScope() const override { return true; }
@@ -70,7 +71,8 @@ class SharedWorkerGlobalScope final : public WorkerGlobalScope {
                           const String& user_agent,
                           SharedWorkerThread*,
                           std::unique_ptr<SecurityOrigin::PrivilegeData>,
-                          WorkerClients*);
+                          WorkerClients*,
+                          double time_origin);
   void ExceptionThrown(ErrorEvent*) override;
 
   String name_;

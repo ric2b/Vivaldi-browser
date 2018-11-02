@@ -39,8 +39,10 @@ class PasswordProtectionRequest;
 
 extern const base::Feature kPasswordFieldOnFocusPinging;
 extern const base::Feature kProtectedPasswordEntryPinging;
+extern const base::Feature kPasswordProtectionInterstitial;
 extern const char kPasswordOnFocusRequestOutcomeHistogramName[];
 extern const char kPasswordEntryRequestOutcomeHistogramName[];
+extern const char kSyncPasswordEntryRequestOutcomeHistogramName[];
 
 // Manage password protection pings and verdicts. There is one instance of this
 // class per profile. Therefore, every PasswordProtectionService instance is
@@ -48,6 +50,10 @@ extern const char kPasswordEntryRequestOutcomeHistogramName[];
 // HostContentSettingsMap instance.
 class PasswordProtectionService : public history::HistoryServiceObserver {
  public:
+  using TriggerType = LoginReputationClientRequest::TriggerType;
+  using SyncAccountType =
+      LoginReputationClientRequest::PasswordReuseEvent::SyncAccountType;
+
   // The outcome of the request. These values are used for UMA.
   // DO NOT CHANGE THE ORDERING OF THESE VALUES.
   enum RequestOutcome {
@@ -68,6 +74,7 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
     URL_NOT_VALID_FOR_REPUTATION_COMPUTING = 14,
     MAX_OUTCOME
   };
+
   PasswordProtectionService(
       const scoped_refptr<SafeBrowsingDatabaseManager>& database_manager,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
@@ -85,13 +92,15 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   // any thread.
   LoginReputationClientResponse::VerdictType GetCachedVerdict(
       const GURL& url,
+      TriggerType trigger_type,
       LoginReputationClientResponse* out_response);
 
-  // Stores |verdict| in |settings| based on |url|, |verdict| and
-  // |receive_time|.
-  void CacheVerdict(const GURL& url,
-                    LoginReputationClientResponse* verdict,
-                    const base::Time& receive_time);
+  // Stores |verdict| in |settings| based on its |trigger_type|, |url|,
+  // |verdict| and |receive_time|.
+  virtual void CacheVerdict(const GURL& url,
+                            TriggerType trigger_type,
+                            LoginReputationClientResponse* verdict,
+                            const base::Time& receive_time);
 
   // Removes all the expired verdicts from cache.
   void CleanUpExpiredVerdicts();
@@ -104,7 +113,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
                     const GURL& password_form_action,
                     const GURL& password_form_frame_url,
                     const std::string& saved_domain,
-                    LoginReputationClientRequest::TriggerType type);
+                    TriggerType trigger_type,
+                    bool password_field_exists);
 
   virtual void MaybeStartPasswordFieldOnFocusRequest(
       content::WebContents* web_contents,
@@ -115,7 +125,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   virtual void MaybeStartProtectedPasswordEntryRequest(
       content::WebContents* web_contents,
       const GURL& main_frame_url,
-      const std::string& saved_domain);
+      const std::string& saved_domain,
+      bool password_field_exists);
 
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager();
 
@@ -130,26 +141,29 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
 
  protected:
   friend class PasswordProtectionRequest;
-
+  FRIEND_TEST_ALL_PREFIXES(PasswordProtectionServiceTest, VerifyCanSendPing);
   // Chrome can send password protection ping if it is allowed by Finch config
   // and if Safe Browsing can compute reputation of |main_frame_url| (e.g.
   // Safe Browsing is not able to compute reputation of a private IP or
-  // a local host.)
-  bool CanSendPing(const base::Feature& feature, const GURL& main_frame_url);
+  // a local host). |is_sync_password| is used for UMA metric recording.
+  bool CanSendPing(const base::Feature& feature,
+                   const GURL& main_frame_url,
+                   bool is_sync_password);
 
   // Called by a PasswordProtectionRequest instance when it finishes to remove
   // itself from |requests_|.
   virtual void RequestFinished(
       PasswordProtectionRequest* request,
+      bool already_cached,
       std::unique_ptr<LoginReputationClientResponse> response);
 
   // Cancels all requests in |requests_|, empties it, and releases references to
   // the requests.
   void CancelPendingRequests();
 
-  // Gets the total number of verdict (no matter expired or not) we cached for
-  // current active profile.
-  virtual int GetStoredVerdictCount();
+  // Gets the total number of verdicts of the specified |trigger_type| we cached
+  // for this profile. This counts both expired and active verdicts.
+  virtual int GetStoredVerdictCount(TriggerType trigger_type);
 
   scoped_refptr<net::URLRequestContextGetter> request_context_getter() {
     return request_context_getter_;
@@ -168,9 +182,8 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
       int event_tab_id,  // -1 if tab id is not available.
       LoginReputationClientRequest::Frame* frame) = 0;
 
-  void FillUserPopulation(
-      const LoginReputationClientRequest::TriggerType& request_type,
-      LoginReputationClientRequest* request_proto);
+  void FillUserPopulation(TriggerType trigger_type,
+                          LoginReputationClientRequest* request_proto);
 
   virtual bool IsExtendedReporting() = 0;
 
@@ -180,6 +193,14 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
                                 RequestOutcome* reason) = 0;
 
   virtual bool IsHistorySyncEnabled() = 0;
+
+  virtual void ShowPhishingInterstitial(const GURL& phishing_url,
+                                        const std::string& token,
+                                        content::WebContents* web_contents) = 0;
+
+  // Gets the type of sync account associated with current profile or
+  // |NOT_SIGNED_IN|.
+  virtual SyncAccountType GetSyncAccountType() = 0;
 
   void CheckCsdWhitelistOnIOThread(const GURL& url, bool* check_result);
 
@@ -214,6 +235,15 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
   void RemoveContentSettingsOnURLsDeleted(bool all_history,
                                           const history::URLRows& deleted_rows);
 
+  // Helper function called by RemoveContentSettingsOnURLsDeleted(..). It
+  // calculate the number of verdicts of |type| that associate with |url|.
+  int GetVerdictCountForURL(const GURL& url, TriggerType type);
+
+  // Remove verdict of |type| from |cache_dictionary|. Return false if no
+  // verdict removed, true otherwise.
+  bool RemoveExpiredVerdicts(TriggerType type,
+                             base::DictionaryValue* cache_dictionary);
+
   static bool ParseVerdictEntry(base::DictionaryValue* verdict_entry,
                                 int* out_verdict_received_time,
                                 LoginReputationClientResponse* out_verdict);
@@ -235,9 +265,14 @@ class PasswordProtectionService : public history::HistoryServiceObserver {
       const base::Time& receive_time);
 
   static void RecordNoPingingReason(const base::Feature& feature,
-                                    RequestOutcome reason);
-  // Number of verdict stored for this profile.
-  int stored_verdict_count_;
+                                    RequestOutcome reason,
+                                    bool is_sync_password);
+  // Number of verdict stored for this profile for password on focus pings.
+  int stored_verdict_count_password_on_focus_;
+
+  // Number of verdict stored for this profile for protected password entry
+  // pings.
+  int stored_verdict_count_password_entry_;
 
   scoped_refptr<SafeBrowsingDatabaseManager> database_manager_;
 

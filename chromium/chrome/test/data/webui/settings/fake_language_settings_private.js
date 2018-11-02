@@ -32,7 +32,7 @@ cr.define('settings', function() {
     this.onInputMethodRemoved = new FakeChromeEvent();
 
     // List of method names expected to be tested with whenCalled()
-    settings.TestBrowserProxy.call(this, [
+    TestBrowserProxy.call(this, [
       'getSpellcheckWords',
     ]);
 
@@ -83,6 +83,13 @@ cr.define('settings', function() {
       nativeDisplayName: "norsk bokmål",
       supportsSpellcheck: true,
       supportsUI: true,
+    }, {
+      // A language where displayName and nativeDisplayName have different
+      // values. Used for testing search functionality.
+      code: "el",
+      displayName: "Greek",
+      nativeDisplayName: "Ελληνικά",
+      supportsUI: true,
     }];
 
     /** @type {!Array<!chrome.languageSettingsPrivate.InputMethod>} */
@@ -110,7 +117,7 @@ cr.define('settings', function() {
   }
 
   FakeLanguageSettingsPrivate.prototype = {
-    __proto__: settings.TestBrowserProxy.prototype,
+    __proto__: TestBrowserProxy.prototype,
     // Methods for use in testing.
 
     /** @param {SettingsPrefsElement} */

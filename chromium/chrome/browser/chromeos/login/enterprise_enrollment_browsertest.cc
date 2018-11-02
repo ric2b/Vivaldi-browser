@@ -15,6 +15,7 @@
 #include "chrome/browser/chromeos/login/wizard_controller.h"
 #include "chrome/browser/chromeos/policy/enrollment_status_chromeos.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/fake_auth_policy_client.h"
 #include "chromeos/dbus/upstart_client.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_utils.h"
@@ -109,7 +110,7 @@ class EnterpriseEnrollmentTest : public LoginManagerTest {
     js_checker().ExecuteAsync(set_machine_name);
     js_checker().ExecuteAsync(set_username);
     js_checker().ExecuteAsync(set_password);
-    js_checker().Evaluate(
+    js_checker().ExecuteAsync(
         "document.querySelector('#oauth-enroll-ad-join-ui /deep/ "
         "#button').fire('tap')");
     ExecutePendingJavaScript();
@@ -154,24 +155,25 @@ class EnterpriseEnrollmentTest : public LoginManagerTest {
                 const std::string& realm) { EXPECT_EQ(kAdTestRealm, realm); }));
           }));
     });
+    static_cast<FakeAuthPolicyClient*>(
+        DBusThreadManager::Get()->GetAuthPolicyClient())
+        ->set_operation_delay(base::TimeDelta::FromSeconds(0));
   }
 
   void SetupActiveDirectoryJSNotifications() {
-    js_checker().Evaluate(
+    js_checker().ExecuteAsync(
         "var testShowStep = login.OAuthEnrollmentScreen.showStep;"
         "login.OAuthEnrollmentScreen.showStep = function(step) {"
         "  testShowStep(step);"
         "  if (step == 'working') {"
-        "    window.domAutomationController.setAutomationId(0);"
         "    window.domAutomationController.send('ShowSpinnerScreen');"
         "  }"
         "}");
-    js_checker().Evaluate(
+    js_checker().ExecuteAsync(
         "var testInvalidateAd = login.OAuthEnrollmentScreen.invalidateAd;"
         "login.OAuthEnrollmentScreen.invalidateAd = function(machineName, "
         "user, errorState) {"
         "  testInvalidateAd(machineName, user, errorState);"
-        "  window.domAutomationController.setAutomationId(0);"
         "  window.domAutomationController.send('ShowJoinDomainError');"
         "}");
   }
@@ -293,8 +295,9 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
 // attribute prompt screen. Verifies the attribute prompt screen is displayed.
 // Verifies that the data the user enters into the attribute prompt screen is
 // received by the enrollment helper.
+// Crashes on ChromeOS: http://crbug.com/746723.
 IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
-                       TestAttributePromptPageGetsLoaded) {
+                       DISABLED_TestAttributePromptPageGetsLoaded) {
   ShowEnrollmentScreen();
   ExpectAttributePromptUpdate();
   SubmitEnrollmentCredentials();
@@ -345,8 +348,9 @@ IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
 // Directory domain join screen. Verifies the domain join screen is displayed.
 // Submits Active Directory different incorrect credentials. Verifies that the
 // correct error is displayed.
+// Crashes on ChromeOS: http://crbug.com/746723.
 IN_PROC_BROWSER_TEST_F(EnterpriseEnrollmentTest,
-                       TestActiveDirectoryEnrollment_UIErrors) {
+                       DISABLED_TestActiveDirectoryEnrollment_UIErrors) {
   ShowEnrollmentScreen();
   SetupActiveDirectoryJoin();
   SubmitEnrollmentCredentials();

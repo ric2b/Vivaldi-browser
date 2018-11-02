@@ -55,6 +55,9 @@
 [submodule "third_party/cros_system_api"]
 	path = third_party/cros_system_api
 	url = ../../chromiumos/platform/system_api.git
+[submodule "third_party/depot_tools"]
+	path = third_party/depot_tools
+	url = ../tools/depot_tools.git
 [submodule "third_party/deqp/src"]
 	path = third_party/deqp/src
 	url = ../../android/platform/external/deqp.git
@@ -136,6 +139,9 @@
 [submodule "third_party/libsrtp"]
 	path = third_party/libsrtp
 	url = ../deps/libsrtp.git
+[submodule "third_party/libsync/src"]
+	path = third_party/libsync/src
+	url = ../../aosp/platform/system/core/libsync.git
 [submodule "third_party/libvpx/source/libvpx"]
 	path = third_party/libvpx/source/libvpx
 	url = ../../webm/libvpx.git
@@ -160,6 +166,9 @@
 [submodule "third_party/minigbm/src"]
 	path = third_party/minigbm/src
 	url = ../../chromiumos/platform/minigbm.git
+[submodule "third_party/minizip/src"]
+	path = third_party/minizip/src
+	url = ../../external/github.com/nmoinvaz/minizip.git
 [submodule "third_party/nacl_sdk_binaries"]
 	path = third_party/nacl_sdk_binaries
 	url = ../deps/nacl_sdk_binaries.git
@@ -178,9 +187,6 @@
 [submodule "third_party/psyco_win32"]
 	path = third_party/psyco_win32
 	url = ../deps/psyco_win32.git
-[submodule "third_party/py_trace_event/src"]
-	path = third_party/py_trace_event/src
-	url = ../../external/py_trace_event.git
 [submodule "third_party/pyftpdlib/src"]
 	path = third_party/pyftpdlib/src
 	url = ../../external/pyftpdlib.git

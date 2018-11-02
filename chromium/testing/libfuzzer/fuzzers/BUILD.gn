@@ -290,13 +290,13 @@ fuzzer_test("v8_wasm_fuzzer") {
   libfuzzer_options = [ "max_len=500" ]
 }
 
-fuzzer_test("v8_wasm_asmjs_fuzzer") {
+fuzzer_test("v8_wasm_async_fuzzer") {
   sources = []
   deps = [
-    "//v8:wasm_asmjs_fuzzer",
+    "//v8:wasm_async_fuzzer",
   ]
   dict = "dicts/v8_wasm.dict"
-  seed_corpus = "//v8/test/fuzzer/wasm_asmjs_corpus/"
+  seed_corpus = "//v8/test/fuzzer/wasm_corpus/"
   libfuzzer_options = [ "max_len=500" ]
 }
 
@@ -460,4 +460,17 @@ fuzzer_test("hash_fuzzer") {
   deps = [
     "//base",
   ]
+}
+
+# third_party/minizip/src is checked out only on unix platform by gclient.
+if (is_linux) {
+  # TODO(yawano): Add compress test case
+  fuzzer_test("minizip_uncompress_fuzzer") {
+    sources = [
+      "minizip_uncompress_fuzzer.cc",
+    ]
+    deps = [
+      "//third_party/minizip:minizip",
+    ]
+  }
 }

@@ -15,6 +15,7 @@
 #include "ui/chromeos/ime/candidate_window_constants.h"
 #include "ui/chromeos/strings/grit/ui_chromeos_strings.h"
 #include "ui/gfx/color_utils.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/native_theme/native_theme.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -116,7 +117,7 @@ InfolistEntryView::InfolistEntryView(const ui::InfolistEntry& entry,
                                      const gfx::FontList& title_font_list,
                                      const gfx::FontList& description_font_list)
     : entry_(entry) {
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
 
   title_label_ = new views::Label(entry.title, {title_font_list});
   title_label_->SetPosition(gfx::Point(0, 0));
@@ -152,14 +153,13 @@ gfx::Size InfolistEntryView::CalculatePreferredSize() const {
 
 void InfolistEntryView::UpdateBackground() {
   if (entry_.highlighted) {
-    set_background(
-      views::Background::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused)));
+    SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
+        ui::NativeTheme::kColorId_TextfieldSelectionBackgroundFocused)));
     SetBorder(views::CreateSolidBorder(
         1, GetNativeTheme()->GetSystemColor(
                ui::NativeTheme::kColorId_FocusedBorderColor)));
   } else {
-    set_background(NULL);
+    SetBackground(nullptr);
     SetBorder(views::CreateEmptyBorder(1, 1, 1, 1));
   }
   SchedulePaint();
@@ -179,14 +179,13 @@ InfolistWindow::InfolistWindow(views::View* candidate_window,
   set_accept_events(false);
   set_margins(gfx::Insets());
 
-  set_background(
-      views::Background::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
-          ui::NativeTheme::kColorId_WindowBackground)));
+  SetBackground(views::CreateSolidBackground(GetNativeTheme()->GetSystemColor(
+      ui::NativeTheme::kColorId_WindowBackground)));
   SetBorder(views::CreateSolidBorder(
       1, GetNativeTheme()->GetSystemColor(
              ui::NativeTheme::kColorId_MenuBorderColor)));
 
-  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical, 0, 0, 0));
+  SetLayoutManager(new views::BoxLayout(views::BoxLayout::kVertical));
 
   views::Label* caption_label = new views::Label(
       l10n_util::GetStringUTF16(IDS_CHROMEOS_IME_INFOLIST_WINDOW_TITLE));
@@ -194,7 +193,7 @@ InfolistWindow::InfolistWindow(views::View* candidate_window,
   caption_label->SetEnabledColor(GetNativeTheme()->GetSystemColor(
       ui::NativeTheme::kColorId_LabelEnabledColor));
   caption_label->SetBorder(views::CreateEmptyBorder(2, 2, 2, 2));
-  caption_label->set_background(views::Background::CreateSolidBackground(
+  caption_label->SetBackground(views::CreateSolidBackground(
       color_utils::AlphaBlend(SK_ColorBLACK,
                               GetNativeTheme()->GetSystemColor(
                                   ui::NativeTheme::kColorId_WindowBackground),

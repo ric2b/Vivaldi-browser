@@ -11,7 +11,7 @@
 #include "base/message_loop/message_loop.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
-#include "cc/output/in_process_context_provider.h"
+#include "components/viz/common/gpu/in_process_context_provider.h"
 #include "gpu/command_buffer/client/gpu_memory_buffer_manager.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "gpu/command_buffer/service/scheduler.h"
@@ -29,7 +29,7 @@
 #include "ipc/ipc_channel_handle.h"
 #include "ipc/ipc_sync_channel.h"
 #include "ipc/ipc_sync_message_filter.h"
-#include "media/gpu/ipc/service/gpu_jpeg_decode_accelerator.h"
+#include "media/gpu/ipc/service/gpu_jpeg_decode_accelerator_factory_provider.h"
 #include "media/gpu/ipc/service/gpu_video_decode_accelerator.h"
 #include "media/gpu/ipc/service/gpu_video_encode_accelerator.h"
 #include "media/gpu/ipc/service/media_gpu_channel_manager.h"
@@ -120,6 +120,11 @@ GpuService::~GpuService() {
     wait.Wait();
   }
   media_gpu_channel_manager_.reset();
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  proprietary_media_gpu_channel_manager_.reset();
+#endif
+
   gpu_channel_manager_.reset();
   owned_sync_point_manager_.reset();
 
@@ -188,18 +193,20 @@ void GpuService::InitializeWithHost(mojom::GpuHostPtr gpu_host,
   // Defer creation of the render thread. This is to prevent it from handling
   // IPC messages before the sandbox has been enabled and all other necessary
   // initialization has succeeded.
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  gpu_channel_manager_.reset(new gpu::ProprietaryMediaGpuChannelManager(
-#else
   gpu_channel_manager_.reset(new gpu::GpuChannelManager(
-#endif
       gpu_preferences_, gpu_workarounds_, this, watchdog_thread_.get(),
-      base::ThreadTaskRunnerHandle::Get(), io_runner_, scheduler_.get(),
-      sync_point_manager_, gpu_memory_buffer_factory_.get(), gpu_feature_info_,
+      main_runner_, io_runner_, scheduler_.get(), sync_point_manager_,
+      gpu_memory_buffer_factory_.get(), gpu_feature_info_,
       std::move(activity_flags)));
 
   media_gpu_channel_manager_.reset(
       new media::MediaGpuChannelManager(gpu_channel_manager_.get()));
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  proprietary_media_gpu_channel_manager_.reset(
+      new gpu::ProprietaryMediaGpuChannelManager(gpu_channel_manager_.get()));
+#endif
+
   if (watchdog_thread())
     watchdog_thread()->AddPowerObserver();
 }
@@ -228,6 +235,20 @@ void GpuService::RecordLogMessage(int severity,
   std::string header = str.substr(0, message_start);
   std::string message = str.substr(message_start);
   (*gpu_host_)->RecordLogMessage(severity, header, message);
+}
+
+void GpuService::CreateJpegDecodeAccelerator(
+    media::mojom::GpuJpegDecodeAcceleratorRequest jda_request) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+  // TODO(c.padhi): Implement this, see https://crbug.com/699255.
+  NOTIMPLEMENTED();
+}
+
+void GpuService::CreateVideoEncodeAccelerator(
+    media::mojom::VideoEncodeAcceleratorRequest vea_request) {
+  DCHECK(io_runner_->BelongsToCurrentThread());
+  // TODO(mcasas): Create a mojom::VideoEncodeAccelerator implementation,
+  // https://crbug.com/736517.
 }
 
 void GpuService::CreateGpuMemoryBuffer(
@@ -344,6 +365,11 @@ void GpuService::DidCreateOffscreenContext(const GURL& active_url) {
 void GpuService::DidDestroyChannel(int client_id) {
   DCHECK(main_runner_->BelongsToCurrentThread());
   media_gpu_channel_manager_->RemoveChannel(client_id);
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  proprietary_media_gpu_channel_manager_->RemoveChannel(client_id);
+#endif
+
   (*gpu_host_)->DidDestroyChannel(client_id);
 }
 
@@ -411,6 +437,10 @@ void GpuService::EstablishGpuChannel(
 
   media_gpu_channel_manager_->AddChannel(client_id);
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  proprietary_media_gpu_channel_manager_->AddChannel(client_id);
+#endif
+
   callback.Run(std::move(pipe.handle1));
 }
 
@@ -423,13 +453,13 @@ void GpuService::CloseChannel(int32_t client_id) {
   gpu_channel_manager_->RemoveChannel(client_id);
 }
 
-void GpuService::LoadedShader(const std::string& data) {
+void GpuService::LoadedShader(const std::string& key, const std::string& data) {
   if (io_runner_->BelongsToCurrentThread()) {
     main_runner_->PostTask(
-        FROM_HERE, base::Bind(&GpuService::LoadedShader, weak_ptr_, data));
+        FROM_HERE, base::Bind(&GpuService::LoadedShader, weak_ptr_, key, data));
     return;
   }
-  gpu_channel_manager_->PopulateShaderCache(data);
+  gpu_channel_manager_->PopulateShaderCache(key, data);
 }
 
 void GpuService::DestroyingVideoSurface(

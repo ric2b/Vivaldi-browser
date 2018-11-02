@@ -113,15 +113,6 @@ void SimpleRandom::Reseed(const void* additional_entropy, size_t len) {
   }
 }
 
-QuicConnectionId GetPeerInMemoryConnectionId(QuicConnectionId connection_id) {
-  if (FLAGS_quic_restart_flag_quic_big_endian_connection_id_client ==
-      FLAGS_quic_restart_flag_quic_big_endian_connection_id_server) {
-    // Both endpoints have same endianess.
-    return connection_id;
-  }
-  return net::QuicEndian::NetToHost64(connection_id);
-}
-
 MockFramerVisitor::MockFramerVisitor() {
   // By default, we want to accept packets.
   ON_CALL(*this, OnProtocolVersionMismatch(_))
@@ -258,29 +249,23 @@ void MockQuicConnectionHelper::AdvanceTime(QuicTime::Delta delta) {
 MockQuicConnection::MockQuicConnection(MockQuicConnectionHelper* helper,
                                        MockAlarmFactory* alarm_factory,
                                        Perspective perspective)
-    : MockQuicConnection(
-          QuicUtils::IsConnectionIdWireFormatBigEndian(perspective)
-              ? QuicEndian::NetToHost64(kTestConnectionId)
-              : kTestConnectionId,
-          QuicSocketAddress(TestPeerIPAddress(), kTestPort),
-          helper,
-          alarm_factory,
-          perspective,
-          AllSupportedVersions()) {}
+    : MockQuicConnection(QuicEndian::NetToHost64(kTestConnectionId),
+                         QuicSocketAddress(TestPeerIPAddress(), kTestPort),
+                         helper,
+                         alarm_factory,
+                         perspective,
+                         AllSupportedVersions()) {}
 
 MockQuicConnection::MockQuicConnection(QuicSocketAddress address,
                                        MockQuicConnectionHelper* helper,
                                        MockAlarmFactory* alarm_factory,
                                        Perspective perspective)
-    : MockQuicConnection(
-          QuicUtils::IsConnectionIdWireFormatBigEndian(perspective)
-              ? QuicEndian::NetToHost64(kTestConnectionId)
-              : kTestConnectionId,
-          address,
-          helper,
-          alarm_factory,
-          perspective,
-          AllSupportedVersions()) {}
+    : MockQuicConnection(QuicEndian::NetToHost64(kTestConnectionId),
+                         address,
+                         helper,
+                         alarm_factory,
+                         perspective,
+                         AllSupportedVersions()) {}
 
 MockQuicConnection::MockQuicConnection(QuicConnectionId connection_id,
                                        MockQuicConnectionHelper* helper,
@@ -298,15 +283,12 @@ MockQuicConnection::MockQuicConnection(
     MockAlarmFactory* alarm_factory,
     Perspective perspective,
     const QuicVersionVector& supported_versions)
-    : MockQuicConnection(
-          QuicUtils::IsConnectionIdWireFormatBigEndian(perspective)
-              ? QuicEndian::NetToHost64(kTestConnectionId)
-              : kTestConnectionId,
-          QuicSocketAddress(TestPeerIPAddress(), kTestPort),
-          helper,
-          alarm_factory,
-          perspective,
-          supported_versions) {}
+    : MockQuicConnection(QuicEndian::NetToHost64(kTestConnectionId),
+                         QuicSocketAddress(TestPeerIPAddress(), kTestPort),
+                         helper,
+                         alarm_factory,
+                         perspective,
+                         supported_versions) {}
 
 MockQuicConnection::MockQuicConnection(
     QuicConnectionId connection_id,
@@ -367,7 +349,7 @@ void PacketSavingConnection::SendOrQueuePacket(SerializedPacket* packet) {
 
 MockQuicSession::MockQuicSession(QuicConnection* connection)
     : QuicSession(connection, nullptr, DefaultQuicConfig()) {
-  crypto_stream_.reset(new QuicCryptoStream(this));
+  crypto_stream_.reset(new MockQuicCryptoStream(this));
   Initialize();
   ON_CALL(*this, WritevData(_, _, _, _, _, _))
       .WillByDefault(testing::Return(QuicConsumedData(0, false)));
@@ -397,9 +379,46 @@ QuicConsumedData MockQuicSession::ConsumeAllData(
   return QuicConsumedData(data.total_length, state != NO_FIN);
 }
 
+QuicConsumedData MockQuicSession::ConsumeAndSaveAllData(
+    QuicStream* stream,
+    QuicStreamId id,
+    const QuicIOVector& data,
+    QuicStreamOffset offset,
+    StreamSendingState state,
+    const QuicReferenceCountedPointer<QuicAckListenerInterface>& ack_listener) {
+  QuicConsumedData consumed =
+      QuicConsumedData(data.total_length, state != NO_FIN);
+  if (streams_own_data() && data.total_length > 0) {
+    SaveStreamData(id, data, 0, offset, data.total_length);
+  }
+  return consumed;
+}
+
+MockQuicCryptoStream::MockQuicCryptoStream(QuicSession* session)
+    : QuicCryptoStream(session), params_(new QuicCryptoNegotiatedParameters) {}
+
+MockQuicCryptoStream::~MockQuicCryptoStream() {}
+
+bool MockQuicCryptoStream::encryption_established() const {
+  return false;
+}
+
+bool MockQuicCryptoStream::handshake_confirmed() const {
+  return false;
+}
+
+const QuicCryptoNegotiatedParameters&
+MockQuicCryptoStream::crypto_negotiated_params() const {
+  return *params_;
+}
+
+CryptoMessageParser* MockQuicCryptoStream::crypto_message_parser() {
+  return &crypto_framer_;
+}
+
 MockQuicSpdySession::MockQuicSpdySession(QuicConnection* connection)
     : QuicSpdySession(connection, nullptr, DefaultQuicConfig()) {
-  crypto_stream_.reset(new QuicCryptoStream(this));
+  crypto_stream_.reset(new MockQuicCryptoStream(this));
   Initialize();
   ON_CALL(*this, WritevData(_, _, _, _, _, _))
       .WillByDefault(testing::Return(QuicConsumedData(0, false)));
@@ -425,6 +444,21 @@ size_t MockQuicSpdySession::WriteHeaders(
     QuicReferenceCountedPointer<QuicAckListenerInterface> ack_listener) {
   write_headers_ = std::move(headers);
   return WriteHeadersMock(id, write_headers_, fin, priority, ack_listener);
+}
+
+QuicConsumedData MockQuicSpdySession::ConsumeAndSaveAllData(
+    QuicStream* stream,
+    QuicStreamId id,
+    const QuicIOVector& data,
+    QuicStreamOffset offset,
+    StreamSendingState state,
+    const QuicReferenceCountedPointer<QuicAckListenerInterface>& ack_listener) {
+  QuicConsumedData consumed =
+      QuicConsumedData(data.total_length, state != NO_FIN);
+  if (streams_own_data() && data.total_length > 0) {
+    SaveStreamData(id, data, 0, offset, data.total_length);
+  }
+  return consumed;
 }
 
 TestQuicSpdyServerSession::TestQuicSpdyServerSession(
@@ -810,6 +844,9 @@ MockReceivedPacketManager::~MockReceivedPacketManager() {}
 MockConnectionCloseDelegate::MockConnectionCloseDelegate() {}
 
 MockConnectionCloseDelegate::~MockConnectionCloseDelegate() {}
+
+MockPacketCreatorDelegate::MockPacketCreatorDelegate() {}
+MockPacketCreatorDelegate::~MockPacketCreatorDelegate() {}
 
 void CreateClientSessionForTest(QuicServerId server_id,
                                 bool supports_stateless_rejects,

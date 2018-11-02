@@ -7,7 +7,7 @@
       {
         "id": "CalendarEvent",
         "type": "object",
-        "description": "A calendar event.",
+        "description": "A calendar event. An event belongs to a single Calendar",
         "properties": {
           "id": {
             "type": "string",
@@ -18,6 +18,11 @@
             "type": "string",
             "optional": true,
             "description": "The calendar id of the event."
+          },
+          "alarmId": {
+            "type": "string",
+            "optional": true,
+            "description": "The alarm id of the event."
           },
           "title": {
             "type": "string",
@@ -43,6 +48,36 @@
             "type": "number",
             "optional": true,
             "description": "When this event was created, in milliseconds since the epoch."
+          },
+          "allDay": {
+            "type": "boolean",
+            "optional": true,
+            "description": "All day event."
+          },
+          "is_recurring": {
+            "description": "Is this a recurring event",
+            "type": "boolean",
+            "optional": true
+          },
+          "start_recurring": {
+            "description": "When this event recurrence starts, in milliseconds since the epoch",
+            "type": "number",
+            "optional": true
+          },
+          "end_recurring": {
+            "description": "When this event should stop recurring, in milliseconds since the epoch",
+            "type": "number",
+            "optional": true
+          },
+          "location": {
+            "type": "string",
+            "optional": true,
+            "description": "The location of the event."
+          },
+          "url": {
+            "description": "The url of the event",
+            "type": "string",
+            "optional": true
           }
         }
       },
@@ -69,13 +104,118 @@
             "type": "number",
             "optional": true,
             "description": "When this event should ends, in milliseconds since the epoch."
+          },
+          "allDay": {
+            "type": "boolean",
+            "optional": true,
+            "description": "Is this a all day event."
+          },
+          "is_recurring": {
+            "description": "Is this a recurring event",
+            "type": "boolean",
+            "optional": true
+          },
+          "start_recurring": {
+            "description": "When this event recurrence starts, in milliseconds since the epoch",
+            "type": "number",
+            "optional": true
+          },
+          "end_recurring": {
+            "description": "When this event should stop recurring, in milliseconds since the epoch",
+            "type": "number",
+            "optional": true
+          },
+          "location": {
+            "type": "string",
+            "optional": true,
+            "description": "The location of the event."
+          },
+          "url": {
+            "description": "The url of the event",
+            "type": "string",
+            "optional": true
+          }
+        }
+      },
+      {
+        "id": "CreateCalendarDetails",
+        "description": "Object passed to the createCalendar() function.",
+        "inline_doc": true,
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "optional": false,
+            "description": "The name of the calendar to be created."
+          },
+          "description": {
+            "type": "string",
+            "optional": true,
+            "description": "The description of the calendar to be created."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "The URL of a remote calendar."
+          },
+          "orderindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "The UI order of the calendar."
+          },
+          "color": {
+            "type": "string",
+            "optional": true,
+            "description": "The color of the calendar."
+          }
+        }
+      },
+      {
+        "id": "Calendar",
+        "type": "object",
+        "description": "Calendar that owns events",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minimum": 0,
+            "description": "The unique identifier for the calendar. IDs are unique within the current profile, and they remain valid even after the browser is restarted."
+          },
+          "name": {
+            "type": "string",
+            "optional": true,
+            "description": "The name of the calendar."
+          },
+          "description": {
+            "type": "string",
+            "optional": true,
+            "description": "The calendar description."
+          },
+          "url": {
+            "type": "string",
+            "optional": true,
+            "description": "The URL of a remote calendar."
+          },
+          "orderindex": {
+            "type": "integer",
+            "optional": true,
+            "description": "The UI order of the calendar."
+          },
+          "color": {
+            "type": "string",
+            "optional": true,
+            "description": "The UI color of the calendar."
+          },
+          "hidden": {
+            "type": "boolean",
+            "optional": true,
+            "description": "States if the calendar is hidden in the UI"
           }
         }
       }
     ],
     "functions": [
       {
-        "name": "getAll",
+        "name": "getAllEvents",
         "type": "function",
         "description": "Retrieves all events in calendar",
         "parameters": [
@@ -95,7 +235,7 @@
         ]
       },
       {
-        "name": "create",
+        "name": "eventCreate",
         "type": "function",
         "description": "Creates a event in the specified calendar.",
         "parameters": [
@@ -117,18 +257,29 @@
         ]
       },
       {
-        "name": "delete",
+        "name": "deleteEvent",
         "type": "function",
         "description": "Deletes an event.",
         "parameters": [
           {
             "type": "string",
             "name": "id"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
           }
         ]
       },
       {
-        "name": "update",
+        "name": "updateEvent",
         "type": "function",
         "description": "Updates the properties of an event. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
         "parameters": [
@@ -142,6 +293,11 @@
             "properties": {
               "calendar_id": {
                 "description": "The updated calendar id of event",
+                "type": "string",
+                "optional": true
+              },
+              "alarm_id": {
+                "description": "The updated alarm id of event",
                 "type": "string",
                 "optional": true
               },
@@ -164,6 +320,148 @@
                 "description": "Updated time when this event should end, in milliseconds since the epoch",
                 "type": "number",
                 "optional": true
+              },
+              "allDay": {
+                "description": "Is this all day event",
+                "type": "boolean",
+                "optional": true
+              },
+              "location": {
+                "description": "The location of the event",
+                "type": "string",
+                "optional": true
+              },
+              "is_recurring": {
+                "description": "Is this a recurring event",
+                "type": "boolean",
+                "optional": true
+              },
+              "start_recurring": {
+                "description": "When this event recurrence starts, in milliseconds since the epoch",
+                "type": "number",
+                "optional": true
+              },
+              "end_recurring": {
+                "description": "When this event should stop recurring, in milliseconds since the epoch",
+                "type": "number",
+                "optional": true
+              },
+              "url": {
+                "description": "The url of the event",
+                "type": "string",
+                "optional": true
+              }
+            }
+          }
+        ]
+      },
+      {
+        "name": "create",
+        "type": "function",
+        "description": "Creates a calendar.",
+        "parameters": [
+          {
+            "$ref": "CreateCalendarDetails",
+            "name": "calendar"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "$ref": "Calendar"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "getAll",
+        "type": "function",
+        "description": "Returns all calendars",
+        "parameters": [
+          {
+            "type": "function",
+            "name": "callback",
+            "parameters": [
+              {
+                "name": "results",
+                "type": "array",
+                "items": {
+                  "$ref": "Calendar"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "delete",
+        "type": "function",
+        "description": "Deletes an calendar.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id",
+            "description":  "The id of the calendar to be deleted"
+          },
+          {
+            "type": "function",
+            "name": "callback",
+            "optional": true,
+            "parameters": [
+              {
+                "name": "result",
+                "type": "boolean"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "name": "update",
+        "type": "function",
+        "description": "Updates the properties of an calendar. Specify only the properties that you want to change. Unspecified properties will be left unchanged.",
+        "parameters": [
+          {
+            "type": "string",
+            "name": "id"
+          },
+          {
+            "type": "object",
+            "name": "changes",
+            "properties": {
+              "name": {
+                "description": "The updated name of the calendar",
+                "type": "string",
+                "optional": true
+              },
+              "description": {
+                "description": "The updated description of the calendar",
+                "type": "string",
+                "optional": true
+              },
+              "url": {
+                "description": "The updated URL of the calendar",
+                "type": "string",
+                "optional": true
+              },
+              "orderindex": {
+                "description": "The UI order of the calendar",
+                "type": "number",
+                "optional": true
+              },
+              "color": {
+                "description": "The UI color of the calendar",
+                "type": "string",
+                "optional": true
+              },
+              "hidden": {
+                "type": "boolean",
+                "optional": true,
+                "description": "States if the calendar is hidden in the UI"
               }
             }
           }
@@ -172,17 +470,38 @@
     ],
     "events": [
       {
-        "name": "onCreated",
+        "name": "onEventCreated",
         "type": "function",
         "description": "Fired when a event is created.",
         "parameters": [
           {
-            "type": "string",
-            "name": "id"
-          },
-          {
+            "name": "createdEvent",
             "$ref": "CalendarEvent",
-            "name": "event"
+            "description": "The created event"
+          }
+        ]
+      },
+      {
+        "name": "onEventRemoved",
+        "type": "function",
+        "description": "Fired when event is deleted.",
+        "parameters": [
+          {
+            "name": "removedEvent",
+            "$ref": "CalendarEvent",
+            "description": "The deleted event"
+          }
+        ]
+      },
+      {
+        "name": "onEventChanged",
+        "type": "function",
+        "description": "Fired when event is updated.",
+        "parameters": [
+          {
+            "name": "changedEvent",
+            "$ref": "CalendarEvent",
+            "description": "The changed event"
           }
         ]
       }

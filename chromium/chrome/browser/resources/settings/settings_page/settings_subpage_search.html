@@ -46,6 +46,10 @@
         -webkit-appearance: none;
       }
 
+      input[placeholder] {
+        text-overflow: ellipsis;
+      }
+
       #searchInput {
         font-size: 92.3076923%;  /* To 12px from 13px. */
         min-height: 24px;
@@ -68,7 +72,7 @@
     <iron-icon id="searchIcon" icon="cr:search"></iron-icon>
     <paper-input-container no-label-float>
       <input id="searchInput" type="search" on-search="onSearchTermSearch"
-          on-input="onSearchTermInput" aria-labelledby="prompt" incremental
+          on-input="onSearchTermInput" aria-label$="[[label]]" incremental
           autofocus$="[[autofocus]]" placeholder="[[label]]">
       <button suffix is="paper-icon-button-light" id="clearSearch"
           class="icon-cancel" on-tap="onTapClear_" title="[[clearLabel]]"

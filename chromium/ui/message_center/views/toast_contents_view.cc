@@ -12,6 +12,8 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "ui/accessibility/ax_node_data.h"
+#include "ui/aura/window.h"
+#include "ui/aura/window_targeter.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/animation/animation_delegate.h"
@@ -65,7 +67,7 @@ ToastContentsView::ToastContentsView(
   // Sets the transparent background. Then, when the message view is slid out,
   // the whole toast seems to slide although the actual bound of the widget
   // remains. This is hacky but easier to keep the consistency.
-  set_background(views::Background::CreateSolidBackground(0, 0, 0, 0));
+  SetBackground(views::CreateSolidBackground(SK_ColorTRANSPARENT));
 
   fade_animation_.reset(new gfx::SlideAnimation(this));
   fade_animation_->SetSlideDuration(kFadeInOutDuration);
@@ -169,12 +171,6 @@ void ToastContentsView::SetBoundsWithAnimation(gfx::Rect new_bounds) {
 
   bounds_animation_.reset(new gfx::SlideAnimation(this));
   bounds_animation_->Show();
-}
-
-void ToastContentsView::ActivateToast() {
-  set_can_activate(true);
-  if (GetWidget())
-    GetWidget()->Activate();
 }
 
 void ToastContentsView::StartFadeIn() {
@@ -408,6 +404,15 @@ void ToastContentsView::CreateWidget(
 #endif
 
   widget->Init(params);
+
+#if defined(OS_CHROMEOS)
+  // On Chrome OS, this widget is shown in the shelf container. It means this
+  // widget would inherit the parent's window targeter (ShelfWindowTarget) by
+  // default. But it is not good for popup. So we override it with the normal
+  // WindowTargeter.
+  gfx::NativeWindow native_window = widget->GetNativeWindow();
+  native_window->SetEventTargeter(base::MakeUnique<aura::WindowTargeter>());
+#endif
 }
 
 gfx::Rect ToastContentsView::GetClosedToastBounds(gfx::Rect bounds) {

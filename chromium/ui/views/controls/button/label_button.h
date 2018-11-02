@@ -23,7 +23,7 @@ namespace views {
 
 class InkDropContainerView;
 class LabelButtonBorder;
-class Painter;
+class LabelButtonLabel;
 
 // LabelButton is a button with text and an icon, it's not focusable by default.
 class VIEWS_EXPORT LabelButton : public CustomButton,
@@ -89,9 +89,6 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   // Call SetMinSize(gfx::Size()) to clear the size if needed.
   void SetImageLabelSpacing(int spacing);
 
-  void SetFocusPainter(std::unique_ptr<Painter> focus_painter);
-  Painter* focus_painter() { return focus_painter_.get(); }
-
   // Creates the default border for this button. This can be overridden by
   // subclasses.
   virtual std::unique_ptr<LabelButtonBorder> CreateDefaultBorder() const;
@@ -111,7 +108,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
  protected:
   ImageView* image() const { return image_; }
-  Label* label() const { return label_; }
+  Label* label() const;
   InkDropContainerView* ink_drop_container() const {
     return ink_drop_container_;
   }
@@ -129,7 +126,6 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   virtual bool ShouldUseFloodFillInkDrop() const;
 
   // View:
-  void OnPaint(gfx::Canvas* canvas) override;
   void OnFocus() override;
   void OnBlur() override;
   void OnNativeThemeChanged(const ui::NativeTheme* theme) override;
@@ -191,7 +187,7 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
 
   // The image and label shown in the button.
   ImageView* image_;
-  Label* label_;
+  LabelButtonLabel* label_;
 
   // A separate view is necessary to hold the ink drop layer so that it can
   // be stacked below |image_| and on top of |label_|, without resorting to
@@ -238,8 +234,6 @@ class VIEWS_EXPORT LabelButton : public CustomButton,
   // text direction) while |this| is laid out as ALIGN_LEFT (alignment matches
   // UI direction).
   gfx::HorizontalAlignment horizontal_alignment_;
-
-  std::unique_ptr<Painter> focus_painter_;
 
   DISALLOW_COPY_AND_ASSIGN(LabelButton);
 };

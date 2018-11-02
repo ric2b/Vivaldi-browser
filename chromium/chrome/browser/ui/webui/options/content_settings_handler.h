@@ -34,11 +34,6 @@ namespace site_settings {
 struct ChooserTypeNameEntry;
 }
 
-//Vivaldi - Arnar Exposed for API use
-ContentSetting vivContentSettingFromString(const std::string& name);
-ContentSettingsType vivContentSettingsTypeFromGroupName(const std::string& name);
-std::string vivContentSettingToString(ContentSetting setting);
-
 namespace options {
 
 class ContentSettingsHandler : public OptionsPageUIHandler,

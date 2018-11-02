@@ -253,13 +253,14 @@ void LoginFeedback::EnsureFeedbackUI() {
   extensions::FeedbackPrivateAPI* api =
       extensions::FeedbackPrivateAPI::GetFactoryInstance()->Get(profile_);
   api->RequestFeedbackForFlow(
-      description_, "Login", GURL(),
+      description_, "Login", std::string(), GURL(),
       extensions::api::feedback_private::FeedbackFlow::FEEDBACK_FLOW_LOGIN);
 
   // Make sure there is a feedback app window opened.
   base::ThreadTaskRunnerHandle::Get()->PostDelayedTask(
       FROM_HERE,
-      base::Bind(&LoginFeedback::EnsureFeedbackUI, weak_factory_.GetWeakPtr()),
+      base::BindOnce(&LoginFeedback::EnsureFeedbackUI,
+                     weak_factory_.GetWeakPtr()),
       base::TimeDelta::FromSeconds(1));
 }
 

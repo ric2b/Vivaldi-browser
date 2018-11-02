@@ -14,6 +14,7 @@
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "notes/notes_model.h"
 #include "notes/notesnode.h"
+#include "sync/test/fake_server/notes_entity_builder.h"
 #include "sync/test/integration/notes_helper.h"
 #include "sync/test/integration/notes_sync_test.h"
 #include "ui/base/layout.h"
@@ -181,12 +182,11 @@ IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, Sanity) {
 IN_PROC_BROWSER_TEST_F(SingleClientNotesSyncTest, InjectedNote) {
   std::string title = "Montreal Canadiens";
   fake_server::EntityBuilderFactory entity_builder_factory;
-  std::unique_ptr<fake_server::FakeServerEntity> entity =
+  fake_server::NotesEntityBuilder notes_builder =
       entity_builder_factory
           .NewNotesEntityBuilder(title, GURL("http://canadiens.nhl.com"),
-                                 std::string())
-          .Build();
-  fake_server_->InjectEntity(std::move(entity));
+                                 std::string());
+  fake_server_->InjectEntity(notes_builder.Build());
 
   DisableVerifier();
   ASSERT_TRUE(SetupClients());

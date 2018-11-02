@@ -35,6 +35,7 @@
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 
 namespace blink {
 
@@ -136,7 +137,7 @@ void ProcessingInstruction::Process(const String& href, const String& charset) {
     // We need to make a synthetic XSLStyleSheet that is embedded.
     // It needs to be able to kick off import/include loads that
     // can hang off some parent sheet.
-    if (is_xsl_ && RuntimeEnabledFeatures::xsltEnabled()) {
+    if (is_xsl_ && RuntimeEnabledFeatures::XSLTEnabled()) {
       KURL final_url(kParsedURLString, local_href_);
       sheet_ = XSLStyleSheet::CreateEmbedded(this, final_url);
       loading_ = false;
@@ -149,14 +150,16 @@ void ProcessingInstruction::Process(const String& href, const String& charset) {
   String url = GetDocument().CompleteURL(href).GetString();
 
   StyleSheetResource* resource = nullptr;
+  ResourceLoaderOptions options;
+  options.initiator_info.name = FetchInitiatorTypeNames::processinginstruction;
   FetchParameters params(ResourceRequest(GetDocument().CompleteURL(href)),
-                         FetchInitiatorTypeNames::processinginstruction);
+                         options);
   if (is_xsl_) {
-    if (RuntimeEnabledFeatures::xsltEnabled())
+    if (RuntimeEnabledFeatures::XSLTEnabled())
       resource = XSLStyleSheetResource::Fetch(params, GetDocument().Fetcher());
   } else {
-    params.SetCharset(charset.IsEmpty() ? GetDocument().characterSet()
-                                        : charset);
+    params.SetCharset(charset.IsEmpty() ? GetDocument().Encoding()
+                                        : WTF::TextEncoding(charset));
     resource = CSSStyleSheetResource::Fetch(params, GetDocument().Fetcher());
   }
 
@@ -190,7 +193,7 @@ void ProcessingInstruction::SetCSSStyleSheet(
     const String& href,
     const KURL& base_url,
     ReferrerPolicy referrer_policy,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     const CSSStyleSheetResource* sheet) {
   if (!isConnected()) {
     DCHECK(!sheet_);

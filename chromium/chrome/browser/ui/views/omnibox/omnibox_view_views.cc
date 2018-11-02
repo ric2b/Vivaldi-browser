@@ -429,9 +429,13 @@ void OmniboxViewViews::SetWindowTextAndCaretPos(const base::string16& text,
     TextChanged();
 }
 
+void OmniboxViewViews::SetCaretPos(size_t caret_pos) {
+  SelectRange(gfx::Range(caret_pos, caret_pos));
+}
+
 bool OmniboxViewViews::IsSelectAll() const {
   // TODO(oshima): IME support.
-  return text() == GetSelectedText();
+  return !text().empty() && text() == GetSelectedText();
 }
 
 bool OmniboxViewViews::DeleteAtEndPressed() {
@@ -581,7 +585,7 @@ void OmniboxViewViews::UpdateSchemeStyle(const gfx::Range& range) {
     return;
   ApplyColor(location_bar_view_->GetSecureTextColor(security_level_), range);
   if (security_level_ == security_state::DANGEROUS)
-    ApplyStyle(gfx::DIAGONAL_STRIKE, true, range);
+    ApplyStyle(gfx::STRIKE, true, range);
 }
 
 void OmniboxViewViews::EmphasizeURLComponents() {
@@ -596,7 +600,7 @@ void OmniboxViewViews::EmphasizeURLComponents() {
   GetRenderText()->SetDirectionalityMode(text_is_url
                                              ? gfx::DIRECTIONALITY_FORCE_LTR
                                              : gfx::DIRECTIONALITY_FROM_TEXT);
-  SetStyle(gfx::DIAGONAL_STRIKE, false);
+  SetStyle(gfx::STRIKE, false);
   UpdateTextStyle(text(), model()->client()->GetSchemeClassifier());
 }
 
@@ -723,7 +727,8 @@ void OmniboxViewViews::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->AddIntAttribute(ui::AX_ATTR_TEXT_SEL_END, entry_end);
 
   if (popup_window_mode_) {
-    node_data->AddState(ui::AX_STATE_READ_ONLY);
+    node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
+                               ui::AX_RESTRICTION_READ_ONLY);
   } else {
     node_data->AddState(ui::AX_STATE_EDITABLE);
   }
@@ -791,6 +796,9 @@ void OmniboxViewViews::OnBlur() {
 
   // Tell the model to reset itself.
   model()->OnKillFocus();
+
+  // Deselect the text. Ensures the cursor is an I-beam.
+  SelectRange(gfx::Range(0));
 
   // When deselected, elide and reset scroll position. After eliding, the old
   // scroll offset is meaningless (since the string is guaranteed to fit within

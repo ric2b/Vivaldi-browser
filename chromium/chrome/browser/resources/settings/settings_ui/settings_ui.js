@@ -11,8 +11,9 @@
  *    <settings-ui prefs="{{prefs}}"></settings-ui>
  */
 cr.exportPath('settings');
-assert(!settings.defaultResourceLoaded,
-       'settings_ui.js run twice. You probably have an invalid import.');
+assert(
+    !settings.defaultResourceLoaded,
+    'settings_ui.js run twice. You probably have an invalid import.');
 /** Global defined when the main Settings script runs. */
 settings.defaultResourceLoaded = true;
 
@@ -48,15 +49,18 @@ Polymer({
     },
 
     /**
-     * Dictionary defining page visibility.
-     * This is only set when in guest mode. All pages are visible when not set
-     * because polymer only notifies after a property is set.
      * @private {!GuestModePageVisibility}
      */
-    pageVisibility_: Object,
+    pageVisibility_: {type: Object, value: settings.pageVisibility},
 
     /** @private */
     showAndroidApps_: Boolean,
+
+    /** @private */
+    showMultidevice_: Boolean,
+
+    /** @private */
+    havePlayStoreApp_: Boolean,
 
     /** @private */
     lastSearchQuery_: {
@@ -98,18 +102,18 @@ Polymer({
           loadTimeData.getString('controlledSettingRecommendedMatches'),
       controlledSettingRecommendedDiffers:
           loadTimeData.getString('controlledSettingRecommendedDiffers'),
-// <if expr="chromeos">
+      // <if expr="chromeos">
       controlledSettingShared:
           loadTimeData.getString('controlledSettingShared'),
       controlledSettingOwner: loadTimeData.getString('controlledSettingOwner'),
-// </if>
+      // </if>
     };
 
-// <if expr="chromeos">
+    // <if expr="chromeos">
     CrOncStrings = {
       OncTypeCellular: loadTimeData.getString('OncTypeCellular'),
-      OncTypeTether: loadTimeData.getString('OncTypeTether'),
       OncTypeEthernet: loadTimeData.getString('OncTypeEthernet'),
+      OncTypeTether: loadTimeData.getString('OncTypeTether'),
       OncTypeVPN: loadTimeData.getString('OncTypeVPN'),
       OncTypeWiFi: loadTimeData.getString('OncTypeWiFi'),
       OncTypeWiMAX: loadTimeData.getString('OncTypeWiMAX'),
@@ -123,41 +127,23 @@ Polymer({
           loadTimeData.getString('networkListItemNotConnected'),
       vpnNameTemplate: loadTimeData.getString('vpnNameTemplate'),
     };
-// </if>
+    // </if>
 
-    if (loadTimeData.getBoolean('isGuest')) {
-      this.pageVisibility_ = {
-        passwordsAndForms: false,
-        people: false,
-        onStartup: false,
-        reset: false,
-// <if expr="not chromeos">
-        appearance: false,
-        defaultBrowser: false,
-        advancedSettings: false,
-// </if>
-// <if expr="chromeos">
-        appearance: {
-          setWallpaper: false,
-          setTheme: false,
-          homeButton: false,
-          bookmarksBar: false,
-          pageZoom: false,
-        },
-        advancedSettings: true,
-        privacy: {
-          searchPrediction: false,
-          networkPrediction: false,
-        },
-        downloads: {
-          googleDrive: false,
-        },
-// </if>
-      };
-    }
+    this.showAndroidApps_ = loadTimeData.valueExists('androidAppsVisible') &&
+        loadTimeData.getBoolean('androidAppsVisible');
+    this.showMultidevice_ =
+        loadTimeData.valueExists('enableMultideviceSettings') &&
+        loadTimeData.getBoolean('enableMultideviceSettings');
+    this.havePlayStoreApp_ = loadTimeData.valueExists('havePlayStoreApp') &&
+        loadTimeData.getBoolean('havePlayStoreApp');
 
-    this.showAndroidApps_ = loadTimeData.valueExists('androidAppsAllowed') &&
-        loadTimeData.getBoolean('androidAppsAllowed');
+    this.addEventListener('show-container', function() {
+      this.$.container.style.visibility = 'visible';
+    }.bind(this));
+
+    this.addEventListener('hide-container', function() {
+      this.$.container.style.visibility = 'hidden';
+    }.bind(this));
   },
 
   /** @private {?IntersectionObserver} */
@@ -179,9 +165,8 @@ Polymer({
 
     // Setup drop shadow logic.
     var callback = function(entries) {
-      assert(entries.length == 1);
       this.$.dropShadow.classList.toggle(
-          'has-shadow', entries[0].intersectionRatio == 0);
+          'has-shadow', entries[entries.length - 1].intersectionRatio == 0);
     }.bind(this);
 
     this.intersectionObserver_ = new IntersectionObserver(
@@ -209,8 +194,8 @@ Polymer({
     this.lastSearchQuery_ = urlSearchQuery;
 
     var toolbar = /** @type {!CrToolbarElement} */ (this.$$('cr-toolbar'));
-    var searchField = /** @type {CrToolbarSearchFieldElement} */ (
-        toolbar.getSearchField());
+    var searchField =
+        /** @type {CrToolbarSearchFieldElement} */ (toolbar.getSearchField());
 
     // If the search was initiated by directly entering a search URL, need to
     // sync the URL parameter to the textbox.
@@ -228,8 +213,8 @@ Polymer({
    * @private
    */
   onRefreshPref_: function(e) {
-    var prefName = /** @type {string} */(e.detail);
-    return /** @type {SettingsPrefsElement} */(this.$.prefs).refresh(prefName);
+    var prefName = /** @type {string} */ (e.detail);
+    return /** @type {SettingsPrefsElement} */ (this.$.prefs).refresh(prefName);
   },
 
   /**
@@ -247,7 +232,7 @@ Polymer({
       return;
 
     settings.navigateTo(
-        settings.Route.BASIC,
+        settings.routes.BASIC,
         query.length > 0 ?
             new URLSearchParams('search=' + encodeURIComponent(query)) :
             undefined,
@@ -255,7 +240,7 @@ Polymer({
   },
 
   /**
-   * @param {Event} event
+   * @param {!Event} event
    * @private
    */
   onIronActivate_: function(event) {
@@ -281,7 +266,6 @@ Polymer({
 
   /** @private */
   directionDelegateChanged_: function() {
-    this.$.drawer.align = this.directionDelegate.isRtl() ?
-        'right' : 'left';
+    this.$.drawer.align = this.directionDelegate.isRtl() ? 'right' : 'left';
   },
 });

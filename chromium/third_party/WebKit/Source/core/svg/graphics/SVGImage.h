@@ -57,8 +57,9 @@ class SVGImageForContainer;
 // needed by SVGImage.
 class CORE_EXPORT SVGImage final : public Image {
  public:
-  static PassRefPtr<SVGImage> Create(ImageObserver* observer) {
-    return AdoptRef(new SVGImage(observer));
+  static PassRefPtr<SVGImage> Create(ImageObserver* observer,
+                                     bool is_multipart = false) {
+    return AdoptRef(new SVGImage(observer, is_multipart));
   }
 
   static bool IsInSVGImage(const Node*);
@@ -98,6 +99,12 @@ class CORE_EXPORT SVGImage final : public Image {
 
   bool HasIntrinsicDimensions() const;
 
+  sk_sp<PaintRecord> PaintRecordForContainer(const KURL&,
+                                             const IntSize& container_size,
+                                             const IntRect& draw_src_rect,
+                                             const IntRect& draw_dst_rect,
+                                             bool flip_y) override;
+
  private:
   // Accesses m_page.
   friend class SVGImageChromeClient;
@@ -105,7 +112,7 @@ class CORE_EXPORT SVGImage final : public Image {
   // the the Image interface.
   friend class SVGImageForContainer;
 
-  SVGImage(ImageObserver*);
+  SVGImage(ImageObserver*, bool is_multipart);
   ~SVGImage() override;
 
   String FilenameExtension() const override;

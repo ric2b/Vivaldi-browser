@@ -420,16 +420,10 @@ static bool CheckTypeAndCodecs(
     ParserFactoryFunction* factory_function,
     std::vector<CodecInfo::HistogramTag>* audio_codecs,
     std::vector<CodecInfo::HistogramTag>* video_codecs) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (type == "audio/aac" || type == "audio/mpeg") {
-    if (!TURN_ON_MSE_VIVALDI)
-      return false;
-  }
-#endif
+
   // Search for the SupportedTypeInfo for |type|.
   for (size_t i = 0; i < arraysize(kSupportedTypeInfo); ++i) {
     const SupportedTypeInfo& type_info = kSupportedTypeInfo[i];
-
     if (type == type_info.type) {
       if (codecs.empty()) {
         const CodecInfo* codec_info = type_info.codecs[0];

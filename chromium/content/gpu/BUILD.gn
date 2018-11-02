@@ -50,6 +50,7 @@ target(link_target_type, "gpu_sources") {
     "//base",
     "//base/third_party/dynamic_annotations",
     "//components/tracing",
+    "//components/viz/service",
     "//content:export",
     "//content/child",
     "//content/common",

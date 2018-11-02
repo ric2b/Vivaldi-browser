@@ -122,7 +122,6 @@ class Testprinter(unittest.TestCase):
         # FIXME: Make it so these options don't have to be set directly.
         # pylint: disable=protected-access
         printer._options.pixel_tests = True
-        printer._options.new_baseline = True
         printer._options.time_out_ms = 6000
         printer._options.slow_time_out_ms = 12000
         printer._options.order = 'random'
@@ -131,7 +130,6 @@ class Testprinter(unittest.TestCase):
         self.assertIn("Using port 'test-mac-mac10.10'", err.getvalue())
         self.assertIn('Test configuration: <mac10.10, x86, release>', err.getvalue())
         self.assertIn('View the test results at file:///tmp', err.getvalue())
-        self.assertIn('View the archived results dashboard at file:///tmp', err.getvalue())
         self.assertIn('Baseline search path: test-mac-mac10.10 -> test-mac-mac10.11 -> generic', err.getvalue())
         self.assertIn('Using Release build', err.getvalue())
         self.assertIn('Pixel tests enabled', err.getvalue())

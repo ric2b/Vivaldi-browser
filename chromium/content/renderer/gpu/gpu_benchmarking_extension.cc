@@ -6,8 +6,10 @@
 
 #include <stddef.h>
 
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/base64.h"
 #include "base/command_line.h"
@@ -309,9 +311,8 @@ void OnMicroBenchmarkCompleted(CallbackAndContext* callback_and_context,
   v8::Context::Scope context_scope(context);
   WebLocalFrame* frame = WebLocalFrame::FrameForContext(context);
   if (frame) {
-    std::unique_ptr<V8ValueConverter> converter =
-        base::WrapUnique(V8ValueConverter::create());
-    v8::Local<v8::Value> value = converter->ToV8Value(result.get(), context);
+    v8::Local<v8::Value> value =
+        V8ValueConverter::Create()->ToV8Value(result.get(), context);
     v8::Local<v8::Value> argv[] = { value };
 
     frame->CallFunctionEvenIfScriptDisabled(callback_and_context->GetCallback(),
@@ -467,7 +468,7 @@ bool BeginSmoothDrag(v8::Isolate* isolate,
   return true;
 }
 
-static void PrintDocument(blink::WebFrame* frame, SkDocument* doc) {
+static void PrintDocument(blink::WebLocalFrame* frame, SkDocument* doc) {
   const float kPageWidth = 612.0f;   // 8.5 inch
   const float kPageHeight = 792.0f;  // 11 inch
   const float kMarginTop = 29.0f;    // 0.40 inch
@@ -485,7 +486,7 @@ static void PrintDocument(blink::WebFrame* frame, SkDocument* doc) {
 
 #if defined(OS_WIN) || defined(OS_MACOSX)
     float page_shrink = frame->GetPrintPageShrink(i);
-    DCHECK(page_shrink > 0);
+    DCHECK_GT(page_shrink, 0);
     canvas.scale(page_shrink, page_shrink);
 #endif
 
@@ -544,7 +545,7 @@ static sk_sp<SkDocument> MakeXPSDocument(SkWStream* s) {
 gin::WrapperInfo GpuBenchmarking::kWrapperInfo = {gin::kEmbedderNativeGin};
 
 // static
-void GpuBenchmarking::Install(blink::WebFrame* frame) {
+void GpuBenchmarking::Install(blink::WebLocalFrame* frame) {
   v8::Isolate* isolate = blink::MainThreadIsolate();
   v8::HandleScope handle_scope(isolate);
   v8::Local<v8::Context> context = frame->MainWorldScriptContext();
@@ -1023,11 +1024,10 @@ bool GpuBenchmarking::PointerActionSequence(gin::Arguments* args) {
     return false;
   }
 
-  std::unique_ptr<V8ValueConverter> converter =
-      base::WrapUnique(V8ValueConverter::create());
   v8::Local<v8::Context> v8_context =
       context.web_frame()->MainWorldScriptContext();
-  std::unique_ptr<base::Value> value = converter->FromV8Value(obj, v8_context);
+  std::unique_ptr<base::Value> value =
+      V8ValueConverter::Create()->FromV8Value(obj, v8_context);
 
   // Get all the pointer actions from the user input and wrap them into a
   // SyntheticPointerActionListParams object.
@@ -1079,11 +1079,9 @@ int GpuBenchmarking::RunMicroBenchmark(gin::Arguments* args) {
       new CallbackAndContext(args->isolate(), callback,
                              context.web_frame()->MainWorldScriptContext());
 
-  std::unique_ptr<V8ValueConverter> converter =
-      base::WrapUnique(V8ValueConverter::create());
   v8::Local<v8::Context> v8_context = callback_and_context->GetContext();
   std::unique_ptr<base::Value> value =
-      converter->FromV8Value(arguments, v8_context);
+      V8ValueConverter::Create()->FromV8Value(arguments, v8_context);
 
   return context.compositor()->ScheduleMicroBenchmark(
       name, std::move(value),
@@ -1098,12 +1096,10 @@ bool GpuBenchmarking::SendMessageToMicroBenchmark(
   if (!context.Init(true))
     return false;
 
-  std::unique_ptr<V8ValueConverter> converter =
-      base::WrapUnique(V8ValueConverter::create());
   v8::Local<v8::Context> v8_context =
       context.web_frame()->MainWorldScriptContext();
   std::unique_ptr<base::Value> value =
-      converter->FromV8Value(message, v8_context);
+      V8ValueConverter::Create()->FromV8Value(message, v8_context);
 
   return context.compositor()->SendMessageToMicroBenchmark(id,
                                                            std::move(value));

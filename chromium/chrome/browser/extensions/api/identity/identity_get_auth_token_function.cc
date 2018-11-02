@@ -5,18 +5,26 @@
 #include "chrome/browser/extensions/api/identity/identity_get_auth_token_function.h"
 
 #include "base/strings/string_number_conversions.h"
+#include "build/build_config.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/api/identity/identity_api.h"
 #include "chrome/browser/extensions/api/identity/identity_constants.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/signin/account_tracker_service_factory.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/profile_oauth2_token_service_factory.h"
-#include "chrome/browser/signin/signin_manager_factory.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service.h"
+#include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/extensions/api/identity.h"
+#include "components/signin/core/browser/account_tracker_service.h"
 #include "components/signin/core/browser/profile_oauth2_token_service.h"
-#include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/common/profile_management_switches.h"
+#include "content/public/common/service_manager_connection.h"
 #include "extensions/common/extension_l10n_util.h"
 #include "google_apis/gaia/gaia_urls.h"
+#include "services/identity/public/cpp/scope_set.h"
+#include "services/identity/public/interfaces/constants.mojom.h"
+#include "services/service_manager/public/cpp/connector.h"
 
 #if defined(OS_CHROMEOS)
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -43,18 +51,15 @@ const char* const kPublicSessionAllowedOrigins[] = {
     "chrome-extension://gbchcmhmhahfdphkhkmpfmihenigjmpp/"};
 #endif
 
-std::string GetPrimaryAccountId(content::BrowserContext* context) {
-  SigninManagerBase* signin_manager =
-      SigninManagerFactory::GetForProfile(Profile::FromBrowserContext(context));
-  return signin_manager->GetAuthenticatedAccountId();
-}
-
 }  // namespace
 
 namespace identity = api::identity;
 
 IdentityGetAuthTokenFunction::IdentityGetAuthTokenFunction()
-    : OAuth2TokenService::Consumer("extensions_identity_api"),
+    :
+#if defined(OS_CHROMEOS)
+      OAuth2TokenService::Consumer("extensions_identity_api"),
+#endif
       interactive_(false),
       should_prompt_for_scopes_(false),
       should_prompt_for_signin_(false) {
@@ -97,26 +102,11 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
 
   std::set<std::string> scopes(oauth2_info.scopes.begin(),
                                oauth2_info.scopes.end());
-
-  std::string account_key = GetPrimaryAccountId(GetProfile());
+  std::string gaia_id;
 
   if (params->details.get()) {
-    if (params->details->account.get()) {
-      std::string detail_key =
-          extensions::IdentityAPI::GetFactoryInstance()
-              ->Get(GetProfile())
-              ->FindAccountKeyByGaiaId(params->details->account->id);
-
-      if (detail_key != account_key) {
-        if (detail_key.empty() || !switches::IsExtensionsMultiAccount()) {
-          // TODO(courage): should this be a different error?
-          error_ = identity_constants::kUserNotSignedIn;
-          return false;
-        }
-
-        account_key = detail_key;
-      }
-    }
+    if (params->details->account.get())
+      gaia_id = params->details->account->id;
 
     if (params->details->scopes.get()) {
       scopes = std::set<std::string>(params->details->scopes->begin(),
@@ -129,11 +119,66 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
     return false;
   }
 
-  token_key_.reset(
-      new ExtensionTokenKey(extension()->id(), account_key, scopes));
-
   // From here on out, results must be returned asynchronously.
   StartAsyncRun();
+
+  GetIdentityManager()->GetPrimaryAccountInfo(base::BindOnce(
+      &IdentityGetAuthTokenFunction::OnReceivedPrimaryAccountInfo, this, scopes,
+      gaia_id));
+
+  return true;
+}
+
+void IdentityGetAuthTokenFunction::OnReceivedPrimaryAccountInfo(
+    const std::set<std::string>& scopes,
+    const std::string& extension_gaia_id,
+    const base::Optional<AccountInfo>& account_info,
+    const ::identity::AccountState& account_state) {
+  std::string primary_gaia_id;
+  if (account_info)
+    primary_gaia_id = account_info->gaia;
+
+  // Detect and handle the case where the extension is using an account other
+  // than the primary account.
+  if (!extension_gaia_id.empty() && extension_gaia_id != primary_gaia_id) {
+    if (!switches::IsExtensionsMultiAccount()) {
+      // TODO(courage): should this be a different error?
+      CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
+      return;
+    }
+
+    // Get the AccountInfo for the account that the extension wishes to use.
+    identity_manager_->GetAccountInfoFromGaiaId(
+        extension_gaia_id,
+        base::BindOnce(
+            &IdentityGetAuthTokenFunction::OnReceivedExtensionAccountInfo, this,
+            false /* not primary account */, scopes));
+    return;
+  }
+
+  // The extension is using the primary account.
+  OnReceivedExtensionAccountInfo(true /* primary account */, scopes,
+                                 account_info, account_state);
+}
+
+void IdentityGetAuthTokenFunction::OnReceivedExtensionAccountInfo(
+    bool is_primary_account,
+    const std::set<std::string>& scopes,
+    const base::Optional<AccountInfo>& account_info,
+    const ::identity::AccountState& account_state) {
+  std::string account_id;
+  if (account_info)
+    account_id = account_info->account_id;
+
+  if (!is_primary_account && account_id.empty()) {
+    // It is not possible to sign in the user to an account other than the
+    // primary account, so just error out here.
+    CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
+    return;
+  }
+
+  token_key_.reset(
+      new ExtensionTokenKey(extension()->id(), account_id, scopes));
 
 #if defined(OS_CHROMEOS)
   policy::BrowserPolicyConnectorChromeOS* connector =
@@ -145,26 +190,24 @@ bool IdentityGetAuthTokenFunction::RunAsync() {
   if (connector->IsEnterpriseManaged() && (is_kiosk || is_public_session)) {
     if (is_public_session && !IsOriginWhitelistedInPublicSession()) {
       CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
-      return true;
+      return;
     }
 
     StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_NONINTERACTIVE);
-    return true;
+    return;
   }
 #endif
 
-  if (!HasLoginToken()) {
+  if (!account_state.has_refresh_token) {
     if (!should_prompt_for_signin_) {
       CompleteFunctionWithError(identity_constants::kUserNotSignedIn);
-      return true;
+      return;
     }
     // Display a login prompt.
     StartSigninFlow();
   } else {
     StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_NONINTERACTIVE);
   }
-
-  return true;
 }
 
 void IdentityGetAuthTokenFunction::StartAsyncRun() {
@@ -207,9 +250,31 @@ void IdentityGetAuthTokenFunction::StartSigninFlow() {
   IdentityAPI* id_api =
       extensions::IdentityAPI::GetFactoryInstance()->Get(GetProfile());
   id_api->EraseAllCachedTokens();
-  // Display a login prompt. If the subsequent mint fails, don't display the
-  // login prompt again.
+
+  // If the signin flow fails, don't display the login prompt again.
   should_prompt_for_signin_ = false;
+
+#if defined(OS_CHROMEOS)
+  // In normal mode (i.e. non-kiosk mode), the user has to log out to
+  // re-establish credentials. Let the global error popup handle everything.
+  // In kiosk mode, interactive sign-in is not supported.
+  SigninFailed();
+  return;
+#endif
+
+  if (g_browser_process->IsShuttingDown()) {
+    // The login prompt cannot be displayed when the browser process is shutting
+    // down.
+    SigninFailed();
+    return;
+  }
+
+  // Start listening for the primary account being available and display a
+  // login prompt.
+  GetIdentityManager()->GetPrimaryAccountWhenAvailable(
+      base::Bind(&IdentityGetAuthTokenFunction::OnPrimaryAccountAvailable,
+                 base::Unretained(this)));
+
   ShowLoginPopup();
 }
 
@@ -393,16 +458,16 @@ void IdentityGetAuthTokenFunction::OnIssueAdviceSuccess(
   StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_INTERACTIVE);
 }
 
-void IdentityGetAuthTokenFunction::SigninSuccess() {
-  TRACE_EVENT_ASYNC_STEP_PAST0("identity",
-                               "IdentityGetAuthTokenFunction",
-                               this,
-                               "SigninSuccess");
+void IdentityGetAuthTokenFunction::OnPrimaryAccountAvailable(
+    const AccountInfo& account_info,
+    const ::identity::AccountState& account_state) {
+  TRACE_EVENT_ASYNC_STEP_PAST0("identity", "IdentityGetAuthTokenFunction", this,
+                               "OnPrimaryAccountAvailable");
 
   // If there was no account associated this profile before the
   // sign-in, we may not have an account_id in the token_key yet.
   if (token_key_->account_id.empty()) {
-    token_key_->account_id = GetPrimaryAccountId(GetProfile());
+    token_key_->account_id = account_info.account_id;
   }
 
   StartMintTokenFlow(IdentityMintRequestQueue::MINT_TYPE_NONINTERACTIVE);
@@ -483,41 +548,62 @@ void IdentityGetAuthTokenFunction::OnGaiaFlowCompleted(
   CompleteFunctionWithResult(access_token);
 }
 
+void IdentityGetAuthTokenFunction::OnGetAccessTokenComplete(
+    const base::Optional<std::string>& access_token,
+    base::Time expiration_time,
+    const GoogleServiceAuthError& error) {
+  // By the time we get here we should no longer have an outstanding O2TS
+  // request (either because we never made a request to O2TS directly or because
+  // the request was already fulfilled).
+  DCHECK(!login_token_request_);
+  if (access_token) {
+    TRACE_EVENT_ASYNC_STEP_PAST1("identity", "IdentityGetAuthTokenFunction",
+                                 this, "OnGetAccessTokenComplete", "account",
+                                 token_key_->account_id);
+
+    StartGaiaRequest(access_token.value());
+  } else {
+    TRACE_EVENT_ASYNC_STEP_PAST1("identity", "IdentityGetAuthTokenFunction",
+                                 this, "OnGetAccessTokenComplete", "error",
+                                 error.ToString());
+
+    OnGaiaFlowFailure(GaiaWebAuthFlow::SERVICE_AUTH_ERROR, error,
+                      std::string());
+  }
+}
+
+#if defined(OS_CHROMEOS)
 void IdentityGetAuthTokenFunction::OnGetTokenSuccess(
     const OAuth2TokenService::Request* request,
     const std::string& access_token,
     const base::Time& expiration_time) {
-  TRACE_EVENT_ASYNC_STEP_PAST1("identity",
-                               "IdentityGetAuthTokenFunction",
-                               this,
-                               "OnGetTokenSuccess",
-                               "account",
-                               request->GetAccountId());
   login_token_request_.reset();
-  StartGaiaRequest(access_token);
+  OnGetAccessTokenComplete(access_token, expiration_time,
+                           GoogleServiceAuthError::AuthErrorNone());
 }
 
 void IdentityGetAuthTokenFunction::OnGetTokenFailure(
     const OAuth2TokenService::Request* request,
     const GoogleServiceAuthError& error) {
-  TRACE_EVENT_ASYNC_STEP_PAST1("identity",
-                               "IdentityGetAuthTokenFunction",
-                               this,
-                               "OnGetTokenFailure",
-                               "error",
-                               error.ToString());
   login_token_request_.reset();
-  OnGaiaFlowFailure(GaiaWebAuthFlow::SERVICE_AUTH_ERROR, error, std::string());
+  OnGetAccessTokenComplete(base::nullopt, base::Time(), error);
 }
+#endif
 
 void IdentityGetAuthTokenFunction::Shutdown() {
   gaia_web_auth_flow_.reset();
-  signin_flow_.reset();
   login_token_request_.reset();
-  extensions::IdentityAPI::GetFactoryInstance()
-      ->Get(GetProfile())
-      ->mint_queue()
-      ->RequestCancel(*token_key_, this);
+  identity_manager_.reset();
+
+  // Note that if |token_key_| hasn't yet been populated then this instance has
+  // definitely not made a request with the MintQueue.
+  if (token_key_) {
+    extensions::IdentityAPI::GetFactoryInstance()
+        ->Get(GetProfile())
+        ->mint_queue()
+        ->RequestCancel(*token_key_, this);
+  }
+
   CompleteFunctionWithError(identity_constants::kCanceled);
 }
 
@@ -550,8 +636,6 @@ bool IdentityGetAuthTokenFunction::IsOriginWhitelistedInPublicSession() {
 #endif
 
 void IdentityGetAuthTokenFunction::StartLoginAccessTokenRequest() {
-  ProfileOAuth2TokenService* service =
-      ProfileOAuth2TokenServiceFactory::GetForProfile(GetProfile());
 #if defined(OS_CHROMEOS)
   if (chrome::IsRunningInForcedAppMode()) {
     std::string app_client_id;
@@ -559,6 +643,8 @@ void IdentityGetAuthTokenFunction::StartLoginAccessTokenRequest() {
     if (chromeos::UserSessionManager::GetInstance()->
             GetAppModeChromeClientOAuthInfo(&app_client_id,
                                             &app_client_secret)) {
+      ProfileOAuth2TokenService* service =
+          ProfileOAuth2TokenServiceFactory::GetForProfile(GetProfile());
       login_token_request_ =
           service->StartRequestForClient(token_key_->account_id,
                                          app_client_id,
@@ -569,8 +655,11 @@ void IdentityGetAuthTokenFunction::StartLoginAccessTokenRequest() {
     }
   }
 #endif
-  login_token_request_ = service->StartRequest(
-      token_key_->account_id, OAuth2TokenService::ScopeSet(), this);
+
+  GetIdentityManager()->GetAccessToken(
+      token_key_->account_id, ::identity::ScopeSet(), "extensions_identity_api",
+      base::BindOnce(&IdentityGetAuthTokenFunction::OnGetAccessTokenComplete,
+                     base::Unretained(this)));
 }
 
 void IdentityGetAuthTokenFunction::StartGaiaRequest(
@@ -582,8 +671,9 @@ void IdentityGetAuthTokenFunction::StartGaiaRequest(
 }
 
 void IdentityGetAuthTokenFunction::ShowLoginPopup() {
-  signin_flow_.reset(new IdentitySigninFlow(this, GetProfile()));
-  signin_flow_->Start();
+  LoginUIService* login_ui_service =
+      LoginUIServiceFactory::GetForProfile(GetProfile());
+  login_ui_service->ShowLoginPopup();
 }
 
 void IdentityGetAuthTokenFunction::ShowOAuthApprovalDialog(
@@ -642,6 +732,16 @@ std::string IdentityGetAuthTokenFunction::GetOAuth2ClientId() const {
     client_id = GaiaUrls::GetInstance()->oauth2_chrome_client_id();
   }
   return client_id;
+}
+
+::identity::mojom::IdentityManager*
+IdentityGetAuthTokenFunction::GetIdentityManager() {
+  if (!identity_manager_.is_bound()) {
+    content::BrowserContext::GetConnectorFor(GetProfile())
+        ->BindInterface(::identity::mojom::kServiceName,
+                        mojo::MakeRequest(&identity_manager_));
+  }
+  return identity_manager_.get();
 }
 
 }  // namespace extensions

@@ -266,44 +266,12 @@ MediaStreamVideoWebRtcSink::MediaStreamVideoWebRtcSink(
   MediaStreamVideoTrack* video_track =
       MediaStreamVideoTrack::GetVideoTrack(track);
   DCHECK(video_track);
-  rtc::Optional<bool> needs_denoising;
-  bool is_screencast = false;
-  double min_frame_rate = 0.0;
-  double max_frame_rate = 0.0;
 
-  if (IsOldVideoConstraints()) {
-    const blink::WebMediaConstraints& constraints = video_track->constraints();
-
-    // Check for presence of mediaStreamSource constraint. The value is ignored.
-    std::string value;
-    is_screencast = GetConstraintValueAsString(
-        constraints, &blink::WebMediaTrackConstraintSet::media_stream_source,
-        &value);
-
-    // Extract denoising preference, if no value is set this currently falls
-    // back to a codec-specific default inside webrtc, hence the tri-state of
-    // {on, off unset}.
-    // TODO(pbos): Add tests that make sure that googNoiseReduction has properly
-    // propagated from getUserMedia down to a VideoTrackSource.
-    bool denoising_value;
-    if (GetConstraintValueAsBoolean(
-            constraints,
-            &blink::WebMediaTrackConstraintSet::goog_noise_reduction,
-            &denoising_value)) {
-      needs_denoising = rtc::Optional<bool>(denoising_value);
-    }
-    GetConstraintMinAsDouble(constraints,
-                             &blink::WebMediaTrackConstraintSet::frame_rate,
-                             &min_frame_rate);
-    GetConstraintMaxAsDouble(constraints,
-                             &blink::WebMediaTrackConstraintSet::frame_rate,
-                             &max_frame_rate);
-  } else {
-    needs_denoising = ToRtcOptional(video_track->noise_reduction());
-    is_screencast = video_track->is_screencast();
-    min_frame_rate = video_track->min_frame_rate();
-    max_frame_rate = video_track->adapter_settings().max_frame_rate;
-  }
+  rtc::Optional<bool> needs_denoising =
+      ToRtcOptional(video_track->noise_reduction());
+  bool is_screencast = is_screencast = video_track->is_screencast();
+  base::Optional<double> min_frame_rate = video_track->min_frame_rate();
+  base::Optional<double> max_frame_rate = video_track->max_frame_rate();
 
   // Enable automatic frame refreshes for the screen capture sources, which will
   // stop producing frames whenever screen content is not changing. Check the
@@ -315,15 +283,15 @@ MediaStreamVideoWebRtcSink::MediaStreamVideoWebRtcSink(
     // Start with the default refresh interval, and refine based on constraints.
     refresh_interval =
         base::TimeDelta::FromMicroseconds(kDefaultRefreshIntervalMicros);
-    if (min_frame_rate > 0.0) {
+    if (min_frame_rate.has_value()) {
       refresh_interval =
           base::TimeDelta::FromMicroseconds(base::saturated_cast<int64_t>(
-              base::Time::kMicrosecondsPerSecond / min_frame_rate));
+              base::Time::kMicrosecondsPerSecond / *min_frame_rate));
     }
-    if (max_frame_rate > 0.0) {
+    if (max_frame_rate.has_value()) {
       const base::TimeDelta alternate_refresh_interval =
           base::TimeDelta::FromMicroseconds(base::saturated_cast<int64_t>(
-              base::Time::kMicrosecondsPerSecond / max_frame_rate));
+              base::Time::kMicrosecondsPerSecond / *max_frame_rate));
       refresh_interval = std::max(refresh_interval, alternate_refresh_interval);
     }
     if (refresh_interval.InMicroseconds() < kLowerBoundRefreshIntervalMicros) {

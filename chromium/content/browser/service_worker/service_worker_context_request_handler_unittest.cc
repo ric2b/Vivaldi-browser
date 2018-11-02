@@ -66,7 +66,7 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
     script_url_ = GURL("https://host/script.js");
     import_script_url_ = GURL("https://host/import.js");
     registration_ = new ServiceWorkerRegistration(
-        scope_, 1L, context()->AsWeakPtr());
+        ServiceWorkerRegistrationOptions(scope_), 1L, context()->AsWeakPtr());
     version_ = new ServiceWorkerVersion(registration_.get(), script_url_,
                                         context()->storage()->NewVersionId(),
                                         context()->AsWeakPtr());
@@ -91,7 +91,8 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
     std::unique_ptr<ServiceWorkerProviderHost> host =
         CreateProviderHostForServiceWorkerContext(
             helper_->mock_render_process_id(), 1 /* provider_id */,
-            true /* is_parent_frame_secure */, context()->AsWeakPtr());
+            true /* is_parent_frame_secure */, context()->AsWeakPtr(),
+            &remote_endpoint_);
     provider_host_ = host->AsWeakPtr();
     context()->AddProviderHost(std::move(host));
     provider_host_->running_hosted_version_ = version_;
@@ -120,8 +121,9 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
         helper_->mock_render_process_id(), provider_host_->provider_id(),
         false /* skip_service_worker */, FETCH_REQUEST_MODE_NO_CORS,
         FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-        RESOURCE_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_TYPE_SERVICE_WORKER,
-        REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr);
+        std::string() /* integrity */, RESOURCE_TYPE_SERVICE_WORKER,
+        REQUEST_CONTEXT_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_FRAME_TYPE_NONE,
+        nullptr);
   }
 
  protected:
@@ -136,6 +138,7 @@ class ServiceWorkerContextRequestHandlerTest : public testing::Test {
   GURL scope_;
   GURL script_url_;
   GURL import_script_url_;
+  ServiceWorkerRemoteProviderEndpoint remote_endpoint_;
   storage::BlobStorageContext blob_storage_context_;
 };
 
@@ -251,8 +254,9 @@ TEST_F(ServiceWorkerContextRequestHandlerTest,
       helper_->mock_render_process_id(), provider_host_->provider_id(),
       true /* skip_service_worker */, FETCH_REQUEST_MODE_NO_CORS,
       FETCH_CREDENTIALS_MODE_OMIT, FetchRedirectMode::FOLLOW_MODE,
-      RESOURCE_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_TYPE_SERVICE_WORKER,
-      REQUEST_CONTEXT_FRAME_TYPE_NONE, nullptr);
+      std::string() /* integrity */, RESOURCE_TYPE_SERVICE_WORKER,
+      REQUEST_CONTEXT_TYPE_SERVICE_WORKER, REQUEST_CONTEXT_FRAME_TYPE_NONE,
+      nullptr);
   // Verify a ServiceWorkerRequestHandler was created.
   ServiceWorkerRequestHandler* handler =
       ServiceWorkerRequestHandler::GetHandler(request.get());

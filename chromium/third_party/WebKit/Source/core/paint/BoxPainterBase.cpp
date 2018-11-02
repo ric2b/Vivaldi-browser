@@ -6,12 +6,15 @@
 
 #include "core/dom/Document.h"
 #include "core/frame/Settings.h"
+#include "core/paint/BoxBorderPainter.h"
+#include "core/paint/NinePieceImagePainter.h"
 #include "core/paint/PaintInfo.h"
 #include "core/style/BorderEdge.h"
 #include "core/style/ComputedStyle.h"
 #include "core/style/ShadowList.h"
 #include "platform/LengthFunctions.h"
 #include "platform/geometry/LayoutRect.h"
+#include "platform/geometry/LayoutRectOutsets.h"
 #include "platform/graphics/GraphicsContextStateSaver.h"
 
 namespace blink {
@@ -24,10 +27,6 @@ void BoxPainterBase::PaintNormalBoxShadow(const PaintInfo& info,
   if (!style.BoxShadow())
     return;
   GraphicsContext& context = info.context;
-
-  // https://bugs.chromium.org/p/skia/issues/detail?id=237
-  if (context.Printing())
-    return;
 
   FloatRoundedRect border = style.GetRoundedBorderFor(
       paint_rect, include_logical_left_edge, include_logical_right_edge);
@@ -138,24 +137,8 @@ void BoxPainterBase::PaintInsetBoxShadow(const PaintInfo& info,
     return;
   FloatRoundedRect bounds = style.GetRoundedInnerBorderFor(
       paint_rect, include_logical_left_edge, include_logical_right_edge);
-  PaintInsetBoxShadowInBounds(info, bounds, style, include_logical_left_edge,
-                              include_logical_right_edge);
-}
 
-void BoxPainterBase::PaintInsetBoxShadowInBounds(
-    const PaintInfo& info,
-    const FloatRoundedRect& bounds,
-    const ComputedStyle& style,
-    bool include_logical_left_edge,
-    bool include_logical_right_edge) {
-  // The caller should have checked style.boxShadow() when computing bounds.
-  DCHECK(style.BoxShadow());
   GraphicsContext& context = info.context;
-
-  // https://bugs.chromium.org/p/skia/issues/detail?id=237
-  if (context.Printing())
-    return;
-
   bool is_horizontal = style.IsHorizontalWritingMode();
   GraphicsContextStateSaver state_saver(context, false);
 
@@ -222,7 +205,7 @@ bool BoxPainterBase::CalculateFillLayerOcclusionCulling(
     // geometry here and pass it down.
 
     // TODO(trchen): Need to check compositing mode as well.
-    if (current_layer->BlendMode() != kWebBlendModeNormal)
+    if (current_layer->BlendMode() != WebBlendMode::kNormal)
       is_non_associative = true;
 
     // TODO(trchen): A fill layer cannot paint if the calculated tile size is
@@ -352,6 +335,61 @@ BoxPainterBase::FillLayerInfo::FillLayerInfo(
   should_paint_color =
       is_bottom_layer && color.Alpha() &&
       (!should_paint_image || !layer.ImageOccludesNextLayers(doc, style));
+}
+
+FloatRoundedRect BoxPainterBase::RoundedBorderRectForClip(
+    const ComputedStyle& style,
+    const BoxPainterBase::FillLayerInfo& info,
+    const FillLayer& bg_layer,
+    const LayoutRect& rect,
+    BackgroundBleedAvoidance bleed_avoidance,
+    bool has_line_box_sibling,
+    const LayoutSize& box_size,
+    LayoutRectOutsets border_padding_insets) {
+  if (!info.is_rounded_fill)
+    return FloatRoundedRect();
+
+  FloatRoundedRect border =
+      info.is_border_fill
+          ? BackgroundRoundedRectAdjustedForBleedAvoidance(
+                style, rect, bleed_avoidance, has_line_box_sibling, box_size,
+                info.include_left_edge, info.include_right_edge)
+          : GetBackgroundRoundedRect(style, rect, has_line_box_sibling,
+                                     box_size, info.include_left_edge,
+                                     info.include_right_edge);
+
+  // Clip to the padding or content boxes as necessary.
+  if (bg_layer.Clip() == kContentFillBox) {
+    border = style.GetRoundedInnerBorderFor(
+        LayoutRect(border.Rect()), border_padding_insets,
+        info.include_left_edge, info.include_right_edge);
+  } else if (bg_layer.Clip() == kPaddingFillBox) {
+    border = style.GetRoundedInnerBorderFor(LayoutRect(border.Rect()),
+                                            info.include_left_edge,
+                                            info.include_right_edge);
+  }
+  return border;
+}
+
+void BoxPainterBase::PaintBorder(const ImageResourceObserver& obj,
+                                 const Document& document,
+                                 Node* node,
+                                 const PaintInfo& info,
+                                 const LayoutRect& rect,
+                                 const ComputedStyle& style,
+                                 BackgroundBleedAvoidance bleed_avoidance,
+                                 bool include_logical_left_edge,
+                                 bool include_logical_right_edge) {
+  // border-image is not affected by border-radius.
+  if (NinePieceImagePainter::Paint(info.context, obj, document, node, rect,
+                                   style, style.BorderImage())) {
+    return;
+  }
+
+  const BoxBorderPainter border_painter(rect, style, bleed_avoidance,
+                                        include_logical_left_edge,
+                                        include_logical_right_edge);
+  border_painter.PaintBorder(info, rect);
 }
 
 }  // namespace blink

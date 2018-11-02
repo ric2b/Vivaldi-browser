@@ -18,23 +18,25 @@
 #include "base/strings/string_util.h"
 #include "base/task_runner.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "components/machine_intelligence/proto/ranker_model.pb.h"
+#include "components/machine_intelligence/proto/translate_ranker_model.pb.h"
+#include "components/machine_intelligence/ranker_model.h"
 #include "components/metrics/proto/translate_event.pb.h"
-#include "components/translate/core/browser/proto/ranker_model.pb.h"
-#include "components/translate/core/browser/proto/translate_ranker_model.pb.h"
-#include "components/translate/core/browser/ranker_model.h"
+#include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/common/translate_switches.h"
-#include "components/ukm/public/ukm_entry_builder.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "components/variations/variations_associated_data.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 #include "url/gurl.h"
 
 namespace translate {
 
 namespace {
 
-using chrome_intelligence::RankerModel;
-using chrome_intelligence::RankerModelProto;
-using chrome_intelligence::TranslateRankerModel;
+using machine_intelligence::RankerModel;
+using machine_intelligence::RankerModelProto;
+using machine_intelligence::TranslateRankerModel;
+using machine_intelligence::RankerModelStatus;
 
 const double kTranslationOfferDefaultThreshold = 0.5;
 
@@ -133,20 +135,20 @@ TranslateRankerImpl::TranslateRankerImpl(const base::FilePath& model_path,
                                          const GURL& model_url,
                                          ukm::UkmRecorder* ukm_recorder)
     : ukm_recorder_(ukm_recorder),
-      is_logging_enabled_(true),
+      is_logging_enabled_(false),
       is_query_enabled_(base::FeatureList::IsEnabled(kTranslateRankerQuery)),
       is_enforcement_enabled_(
           base::FeatureList::IsEnabled(kTranslateRankerEnforcement)),
       is_decision_override_enabled_(base::FeatureList::IsEnabled(
           translate::kTranslateRankerDecisionOverride)),
       weak_ptr_factory_(this) {
-  if (is_query_enabled_ || is_enforcement_enabled_ ||
-      is_decision_override_enabled_) {
-    model_loader_ = base::MakeUnique<RankerModelLoader>(
+  if (is_query_enabled_ || is_enforcement_enabled_) {
+    model_loader_ = base::MakeUnique<machine_intelligence::RankerModelLoader>(
         base::Bind(&ValidateModel),
         base::Bind(&TranslateRankerImpl::OnModelAvailable,
                    weak_ptr_factory_.GetWeakPtr()),
-        model_path, model_url, kUmaPrefix);
+        TranslateDownloadManager::GetInstance()->request_context(), model_path,
+        model_url, kUmaPrefix);
     // Kick off the initial load from cache.
     model_loader_->NotifyOfRankerActivity();
   }
@@ -184,6 +186,10 @@ GURL TranslateRankerImpl::GetModelURL() {
 }
 
 void TranslateRankerImpl::EnableLogging(bool value) {
+  if (value != is_logging_enabled_) {
+    DVLOG(3) << "Cleared translate events cache.";
+    event_cache_.clear();
+  }
   is_logging_enabled_ = value;
 }
 
@@ -205,8 +211,7 @@ bool TranslateRankerImpl::ShouldOfferTranslation(
       (base::TimeTicks::Now() - base::TimeTicks()).InSeconds());
   translate_event->set_ranker_version(GetModelVersion());
 
-  if (!is_query_enabled_ && !is_enforcement_enabled_ &&
-      !is_decision_override_enabled_) {
+  if (!is_query_enabled_ && !is_enforcement_enabled_) {
     translate_event->set_ranker_response(
         metrics::TranslateEventProto::NOT_QUERIED);
     return kDefaultResponse;
@@ -236,7 +241,7 @@ bool TranslateRankerImpl::ShouldOfferTranslation(
       result ? metrics::TranslateEventProto::SHOW
              : metrics::TranslateEventProto::DONT_SHOW);
 
-  if (!is_enforcement_enabled_ && !is_decision_override_enabled_) {
+  if (!is_enforcement_enabled_) {
     return kDefaultResponse;
   }
 

@@ -32,11 +32,11 @@ int sqlite3FtsUnicodeIsalnum(int c){
   ** range of unicode codepoints that are not either letters or numbers (i.e.
   ** codepoints for which this function should return 0).
   **
-  ** The most significant 22 bits in each 32-bit value contain the first 
+  ** The most significant 22 bits in each 32-bit value contain the first
   ** codepoint in the range. The least significant 10 bits are used to store
-  ** the size of the range (always at least 1). In other words, the value 
-  ** ((C<<22) + N) represents a range of N codepoints starting with codepoint 
-  ** C. It is not possible to represent a range larger than 1023 codepoints 
+  ** the size of the range (always at least 1). In other words, the value
+  ** ((C<<22) + N) represents a range of N codepoints starting with codepoint
+  ** C. It is not possible to represent a range larger than 1023 codepoints
   ** using this format.
   */
   static const unsigned int aEntry[] = {
@@ -127,9 +127,9 @@ int sqlite3FtsUnicodeIsalnum(int c){
     0xFFFFFFFF, 0xFC00FFFF, 0xF8000001, 0xF8000001,
   };
 
-  if( c<128 ){
-    return ( (aAscii[c >> 5] & (1 << (c & 0x001F)))==0 );
-  }else if( c<(1<<22) ){
+  if( (unsigned int)c<128 ){
+    return ( (aAscii[c >> 5] & ((unsigned int)1 << (c & 0x001F)))==0 );
+  }else if( (unsigned int)c<(1<<22) ){
     unsigned int key = (((unsigned int)c)<<10) | 0x000003FF;
     int iRes = 0;
     int iHi = sizeof(aEntry)/sizeof(aEntry[0]) - 1;
@@ -161,30 +161,30 @@ int sqlite3FtsUnicodeIsalnum(int c){
 */
 static int remove_diacritic(int c){
   unsigned short aDia[] = {
-        0,  1797,  1848,  1859,  1891,  1928,  1940,  1995, 
-     2024,  2040,  2060,  2110,  2168,  2206,  2264,  2286, 
-     2344,  2383,  2472,  2488,  2516,  2596,  2668,  2732, 
-     2782,  2842,  2894,  2954,  2984,  3000,  3028,  3336, 
-     3456,  3696,  3712,  3728,  3744,  3896,  3912,  3928, 
-     3968,  4008,  4040,  4106,  4138,  4170,  4202,  4234, 
-     4266,  4296,  4312,  4344,  4408,  4424,  4472,  4504, 
-     6148,  6198,  6264,  6280,  6360,  6429,  6505,  6529, 
-    61448, 61468, 61534, 61592, 61642, 61688, 61704, 61726, 
-    61784, 61800, 61836, 61880, 61914, 61948, 61998, 62122, 
-    62154, 62200, 62218, 62302, 62364, 62442, 62478, 62536, 
-    62554, 62584, 62604, 62640, 62648, 62656, 62664, 62730, 
-    62924, 63050, 63082, 63274, 63390, 
+        0,  1797,  1848,  1859,  1891,  1928,  1940,  1995,
+     2024,  2040,  2060,  2110,  2168,  2206,  2264,  2286,
+     2344,  2383,  2472,  2488,  2516,  2596,  2668,  2732,
+     2782,  2842,  2894,  2954,  2984,  3000,  3028,  3336,
+     3456,  3696,  3712,  3728,  3744,  3896,  3912,  3928,
+     3968,  4008,  4040,  4106,  4138,  4170,  4202,  4234,
+     4266,  4296,  4312,  4344,  4408,  4424,  4472,  4504,
+     6148,  6198,  6264,  6280,  6360,  6429,  6505,  6529,
+    61448, 61468, 61534, 61592, 61642, 61688, 61704, 61726,
+    61784, 61800, 61836, 61880, 61914, 61948, 61998, 62122,
+    62154, 62200, 62218, 62302, 62364, 62442, 62478, 62536,
+    62554, 62584, 62604, 62640, 62648, 62656, 62664, 62730,
+    62924, 63050, 63082, 63274, 63390,
   };
   char aChar[] = {
-    '\0', 'a',  'c',  'e',  'i',  'n',  'o',  'u',  'y',  'y',  'a',  'c',  
-    'd',  'e',  'e',  'g',  'h',  'i',  'j',  'k',  'l',  'n',  'o',  'r',  
-    's',  't',  'u',  'u',  'w',  'y',  'z',  'o',  'u',  'a',  'i',  'o',  
-    'u',  'g',  'k',  'o',  'j',  'g',  'n',  'a',  'e',  'i',  'o',  'r',  
-    'u',  's',  't',  'h',  'a',  'e',  'o',  'y',  '\0', '\0', '\0', '\0', 
-    '\0', '\0', '\0', '\0', 'a',  'b',  'd',  'd',  'e',  'f',  'g',  'h',  
-    'h',  'i',  'k',  'l',  'l',  'm',  'n',  'p',  'r',  'r',  's',  't',  
-    'u',  'v',  'w',  'w',  'x',  'y',  'z',  'h',  't',  'w',  'y',  'a',  
-    'e',  'i',  'o',  'u',  'y',  
+    '\0', 'a',  'c',  'e',  'i',  'n',  'o',  'u',  'y',  'y',  'a',  'c',
+    'd',  'e',  'e',  'g',  'h',  'i',  'j',  'k',  'l',  'n',  'o',  'r',
+    's',  't',  'u',  'u',  'w',  'y',  'z',  'o',  'u',  'a',  'i',  'o',
+    'u',  'g',  'k',  'o',  'j',  'g',  'n',  'a',  'e',  'i',  'o',  'r',
+    'u',  's',  't',  'h',  'a',  'e',  'o',  'y',  '\0', '\0', '\0', '\0',
+    '\0', '\0', '\0', '\0', 'a',  'b',  'd',  'd',  'e',  'f',  'g',  'h',
+    'h',  'i',  'k',  'l',  'l',  'm',  'n',  'p',  'r',  'r',  's',  't',
+    'u',  'v',  'w',  'w',  'x',  'y',  'z',  'h',  't',  'w',  'y',  'a',
+    'e',  'i',  'o',  'u',  'y',
   };
 
   unsigned int key = (((unsigned int)c)<<3) | 0x00000007;
@@ -305,33 +305,34 @@ int sqlite3FtsUnicodeFold(int c, int bRemoveDiacritic){
     {42802, 1, 62},        {42873, 1, 4},         {42877, 76, 1},
     {42878, 1, 10},        {42891, 0, 1},         {42893, 74, 1},
     {42896, 1, 4},         {42912, 1, 10},        {42922, 72, 1},
-    {65313, 14, 26},       
+    {65313, 14, 26},
   };
   static const unsigned short aiOff[] = {
-   1,     2,     8,     15,    16,    26,    28,    32,    
-   37,    38,    40,    48,    63,    64,    69,    71,    
-   79,    80,    116,   202,   203,   205,   206,   207,   
-   209,   210,   211,   213,   214,   217,   218,   219,   
-   775,   7264,  10792, 10795, 23228, 23256, 30204, 54721, 
-   54753, 54754, 54756, 54787, 54793, 54809, 57153, 57274, 
-   57921, 58019, 58363, 61722, 65268, 65341, 65373, 65406, 
-   65408, 65410, 65415, 65424, 65436, 65439, 65450, 65462, 
-   65472, 65476, 65478, 65480, 65482, 65488, 65506, 65511, 
-   65514, 65521, 65527, 65528, 65529, 
+   1,     2,     8,     15,    16,    26,    28,    32,
+   37,    38,    40,    48,    63,    64,    69,    71,
+   79,    80,    116,   202,   203,   205,   206,   207,
+   209,   210,   211,   213,   214,   217,   218,   219,
+   775,   7264,  10792, 10795, 23228, 23256, 30204, 54721,
+   54753, 54754, 54756, 54787, 54793, 54809, 57153, 57274,
+   57921, 58019, 58363, 61722, 65268, 65341, 65373, 65406,
+   65408, 65410, 65415, 65424, 65436, 65439, 65450, 65462,
+   65472, 65476, 65478, 65480, 65482, 65488, 65506, 65511,
+   65514, 65521, 65527, 65528, 65529,
   };
 
   int ret = c;
 
-  assert( c>=0 );
   assert( sizeof(unsigned short)==2 && sizeof(unsigned char)==1 );
 
   if( c<128 ){
     if( c>='A' && c<='Z' ) ret = c + ('a' - 'A');
   }else if( c<65536 ){
+    const struct TableEntry *p;
     int iHi = sizeof(aEntry)/sizeof(aEntry[0]) - 1;
     int iLo = 0;
     int iRes = -1;
 
+    assert( c>aEntry[0].iCode );
     while( iHi>=iLo ){
       int iTest = (iHi + iLo) / 2;
       int cmp = (c - aEntry[iTest].iCode);
@@ -342,19 +343,17 @@ int sqlite3FtsUnicodeFold(int c, int bRemoveDiacritic){
         iHi = iTest-1;
       }
     }
-    assert( iRes<0 || c>=aEntry[iRes].iCode );
 
-    if( iRes>=0 ){
-      const struct TableEntry *p = &aEntry[iRes];
-      if( c<(p->iCode + p->nRange) && 0==(0x01 & p->flags & (p->iCode ^ c)) ){
-        ret = (c + (aiOff[p->flags>>1])) & 0x0000FFFF;
-        assert( ret>0 );
-      }
+    assert( iRes>=0 && c>=aEntry[iRes].iCode );
+    p = &aEntry[iRes];
+    if( c<(p->iCode + p->nRange) && 0==(0x01 & p->flags & (p->iCode ^ c)) ){
+      ret = (c + (aiOff[p->flags>>1])) & 0x0000FFFF;
+      assert( ret>0 );
     }
 
     if( bRemoveDiacritic ) ret = remove_diacritic(ret);
   }
-  
+
   else if( c>=66560 && c<66600 ){
     ret = c + 40;
   }

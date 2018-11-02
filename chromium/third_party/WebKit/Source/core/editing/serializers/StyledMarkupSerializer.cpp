@@ -32,8 +32,8 @@
 #include "core/css/StylePropertySet.h"
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
+#include "core/dom/ElementShadow.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ElementShadow.h"
 #include "core/editing/EditingStyle.h"
 #include "core/editing/EditingStyleUtilities.h"
 #include "core/editing/EditingUtilities.h"
@@ -199,9 +199,9 @@ String StyledMarkupSerializer<Strategy>::CreateMarkup() {
 
     first_node = NextPositionOf(visible_start).DeepEquivalent().AnchorNode();
 
-    if (past_end && PositionTemplate<Strategy>::BeforeNode(first_node)
+    if (past_end && PositionTemplate<Strategy>::BeforeNode(*first_node)
                             .CompareTo(PositionTemplate<Strategy>::BeforeNode(
-                                past_end)) >= 0) {
+                                *past_end)) >= 0) {
       // This condition hits in editing/pasteboard/copy-display-none.html.
       return markup_accumulator.TakeResults();
     }
@@ -231,7 +231,7 @@ String StyledMarkupSerializer<Strategy>::CreateMarkup() {
         *start_.ComputeContainerNode(), *end_.ComputeContainerNode());
     DCHECK(common_ancestor);
     HTMLBodyElement* body = toHTMLBodyElement(EnclosingElementWithTag(
-        Position::FirstPositionInNode(common_ancestor), bodyTag));
+        Position::FirstPositionInNode(*common_ancestor), bodyTag));
     HTMLBodyElement* fully_selected_root = nullptr;
     // FIXME: Do this for all fully selected blocks, not just the body.
     if (body && AreSameRanges(body, start_, end_))

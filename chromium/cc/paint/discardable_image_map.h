@@ -22,34 +22,26 @@
 
 namespace cc {
 class DiscardableImageStore;
+class PaintOpBuffer;
 
 // This class is used for generating discardable images data (see DrawImage
 // for the type of data it stores). It allows the client to query a particular
 // rect and get back a list of DrawImages in that rect.
 class CC_PAINT_EXPORT DiscardableImageMap {
  public:
-  class CC_PAINT_EXPORT ScopedMetadataGenerator {
-   public:
-    ScopedMetadataGenerator(DiscardableImageMap* image_map,
-                            const gfx::Size& bounds);
-    ~ScopedMetadataGenerator();
-
-    DiscardableImageStore* image_store() { return image_store_.get(); }
-
-   private:
-    DiscardableImageMap* image_map_;
-    std::unique_ptr<DiscardableImageStore> image_store_;
-  };
-
   DiscardableImageMap();
   ~DiscardableImageMap();
 
-  bool empty() const { return all_images_.empty(); }
+  bool empty() const { return image_id_to_rect_.empty(); }
   void GetDiscardableImagesInRect(const gfx::Rect& rect,
                                   float contents_scale,
                                   const gfx::ColorSpace& target_color_space,
                                   std::vector<DrawImage>* images) const;
   gfx::Rect GetRectForImage(PaintImage::Id image_id) const;
+  bool all_images_are_srgb() const { return all_images_are_srgb_; }
+
+  void Reset();
+  void Generate(const PaintOpBuffer* paint_op_buffer, const gfx::Rect& bounds);
 
  private:
   friend class ScopedMetadataGenerator;
@@ -57,12 +49,14 @@ class CC_PAINT_EXPORT DiscardableImageMap {
 
   std::unique_ptr<DiscardableImageStore> BeginGeneratingMetadata(
       const gfx::Size& bounds);
-  void EndGeneratingMetadata();
+  void EndGeneratingMetadata(
+      std::vector<std::pair<DrawImage, gfx::Rect>> images,
+      base::flat_map<PaintImage::Id, gfx::Rect> image_id_to_rect);
 
-  std::vector<std::pair<DrawImage, gfx::Rect>> all_images_;
   base::flat_map<PaintImage::Id, gfx::Rect> image_id_to_rect_;
+  bool all_images_are_srgb_ = false;
 
-  RTree images_rtree_;
+  RTree<DrawImage> images_rtree_;
 };
 
 }  // namespace cc

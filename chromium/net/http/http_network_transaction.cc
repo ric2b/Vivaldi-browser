@@ -32,6 +32,7 @@
 #include "net/base/upload_data_stream.h"
 #include "net/base/url_util.h"
 #include "net/filter/filter_source_stream.h"
+#include "net/http/bidirectional_stream_impl.h"
 #include "net/http/http_auth.h"
 #include "net/http/http_auth_handler.h"
 #include "net/http/http_auth_handler_factory.h"
@@ -149,8 +150,8 @@ int HttpNetworkTransaction::RestartIgnoringLastError(
 }
 
 int HttpNetworkTransaction::RestartWithCertificate(
-    X509Certificate* client_cert,
-    SSLPrivateKey* client_private_key,
+    scoped_refptr<X509Certificate> client_cert,
+    scoped_refptr<SSLPrivateKey> client_private_key,
     const CompletionCallback& callback) {
   // In HandleCertificateRequest(), we always tear down existing stream
   // requests to force a new connection.  So we shouldn't have one here.
@@ -164,8 +165,8 @@ int HttpNetworkTransaction::RestartWithCertificate(
   ssl_config->client_cert = client_cert;
   ssl_config->client_private_key = client_private_key;
   session_->ssl_client_auth_cache()->Add(
-      response_.cert_request_info->host_and_port, client_cert,
-      client_private_key);
+      response_.cert_request_info->host_and_port, std::move(client_cert),
+      std::move(client_private_key));
   // Reset the other member variables.
   // Note: this is necessary only with SSL renegotiation.
   ResetStateForRestart();
@@ -448,7 +449,7 @@ int HttpNetworkTransaction::ResumeNetworkStart() {
 
 void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
                                            const ProxyInfo& used_proxy_info,
-                                           HttpStream* stream) {
+                                           std::unique_ptr<HttpStream> stream) {
   DCHECK_EQ(STATE_CREATE_STREAM_COMPLETE, next_state_);
   DCHECK(stream_request_.get());
 
@@ -456,7 +457,7 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
     total_received_bytes_ += stream_->GetTotalReceivedBytes();
     total_sent_bytes_ += stream_->GetTotalSentBytes();
   }
-  stream_.reset(stream);
+  stream_ = std::move(stream);
   server_ssl_config_ = used_ssl_config;
   proxy_info_ = used_proxy_info;
   response_.was_alpn_negotiated = stream_request_->was_alpn_negotiated();
@@ -476,15 +477,15 @@ void HttpNetworkTransaction::OnStreamReady(const SSLConfig& used_ssl_config,
 void HttpNetworkTransaction::OnBidirectionalStreamImplReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    BidirectionalStreamImpl* stream) {
+    std::unique_ptr<BidirectionalStreamImpl> stream) {
   NOTREACHED();
 }
 
 void HttpNetworkTransaction::OnWebSocketHandshakeStreamReady(
     const SSLConfig& used_ssl_config,
     const ProxyInfo& used_proxy_info,
-    WebSocketHandshakeStreamBase* stream) {
-  OnStreamReady(used_ssl_config, used_proxy_info, stream);
+    std::unique_ptr<WebSocketHandshakeStreamBase> stream) {
+  OnStreamReady(used_ssl_config, used_proxy_info, std::move(stream));
 }
 
 void HttpNetworkTransaction::OnStreamFailed(int result,
@@ -610,7 +611,7 @@ bool HttpNetworkTransaction::IsTokenBindingEnabled() const {
   stream_->GetSSLInfo(&ssl_info);
   return ssl_info.token_binding_negotiated &&
          ssl_info.token_binding_key_param == TB_PARAM_ECDSAP256 &&
-         session_->params().channel_id_service;
+         session_->context().channel_id_service;
 }
 
 void HttpNetworkTransaction::RecordTokenBindingSupport() const {
@@ -628,7 +629,7 @@ void HttpNetworkTransaction::RecordTokenBindingSupport() const {
   stream_->GetSSLInfo(&ssl_info);
   if (!session_->params().enable_token_binding) {
     supported = DISABLED;
-  } else if (!session_->params().channel_id_service) {
+  } else if (!session_->context().channel_id_service) {
     supported = CLIENT_NO_CHANNEL_ID_SERVICE;
   } else if (ssl_info.token_binding_negotiated) {
     supported = CLIENT_AND_SERVER;
@@ -840,17 +841,17 @@ int HttpNetworkTransaction::DoCreateStream() {
   if (!enable_ip_based_pooling_)
     DCHECK(!enable_alternative_services_);
   if (ForWebSocketHandshake()) {
-    stream_request_.reset(
+    stream_request_ =
         session_->http_stream_factory_for_websocket()
             ->RequestWebSocketHandshakeStream(
                 *request_, priority_, server_ssl_config_, proxy_ssl_config_,
                 this, websocket_handshake_stream_base_create_helper_,
                 enable_ip_based_pooling_, enable_alternative_services_,
-                net_log_));
+                net_log_);
   } else {
-    stream_request_.reset(session_->http_stream_factory()->RequestStream(
+    stream_request_ = session_->http_stream_factory()->RequestStream(
         *request_, priority_, server_ssl_config_, proxy_ssl_config_, this,
-        enable_ip_based_pooling_, enable_alternative_services_, net_log_));
+        enable_ip_based_pooling_, enable_alternative_services_, net_log_);
   }
   DCHECK(stream_request_.get());
   return ERR_IO_PENDING;
@@ -969,7 +970,7 @@ int HttpNetworkTransaction::DoGetProvidedTokenBindingKey() {
     return OK;
 
   net_log_.BeginEvent(NetLogEventType::HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY);
-  ChannelIDService* channel_id_service = session_->params().channel_id_service;
+  ChannelIDService* channel_id_service = session_->context().channel_id_service;
   return channel_id_service->GetOrCreateChannelID(
       request_->url.host(), &provided_token_binding_key_, io_callback_,
       &token_binding_request_);
@@ -993,7 +994,7 @@ int HttpNetworkTransaction::DoGetReferredTokenBindingKey() {
     return OK;
 
   net_log_.BeginEvent(NetLogEventType::HTTP_TRANSACTION_GET_TOKEN_BINDING_KEY);
-  ChannelIDService* channel_id_service = session_->params().channel_id_service;
+  ChannelIDService* channel_id_service = session_->context().channel_id_service;
   return channel_id_service->GetOrCreateChannelID(
       request_->token_binding_referrer, &referred_token_binding_key_,
       io_callback_, &token_binding_request_);

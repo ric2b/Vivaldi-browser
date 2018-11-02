@@ -17,7 +17,7 @@ namespace arc {
 class ArcNotificationContentViewDelegate;
 
 // View for custom notification with NOTIFICATION_TYPE_CUSTOM which hosts the
-// ArcCustomNotificationView which shows content of the notification.
+// ArcNotificationContentView which shows content of the notification.
 class ArcNotificationView : public message_center::MessageView {
  public:
   static const char kViewClassName[];
@@ -41,6 +41,8 @@ class ArcNotificationView : public message_center::MessageView {
   void RequestFocusOnCloseButton() override;
   void UpdateControlButtonsVisibility() override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  message_center::NotificationControlButtonsView* GetControlButtonsView()
+      const override;
 
   // views::SlideOutController::Delegate:
   void OnSlideChanged() override;
@@ -57,6 +59,7 @@ class ArcNotificationView : public message_center::MessageView {
   bool HandleAccessibleAction(const ui::AXActionData& action) override;
 
  private:
+  friend class ArcNotificationContentViewTest;
   friend class ArcNotificationViewTest;
 
   // The view for the custom content. Owned by view hierarchy.

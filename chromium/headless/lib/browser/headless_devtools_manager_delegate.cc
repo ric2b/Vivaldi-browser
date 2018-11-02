@@ -72,8 +72,7 @@ std::unique_ptr<base::DictionaryValue> CreateInvalidParamResponse(
 std::unique_ptr<base::DictionaryValue> CreateBoundsDict(
     const HeadlessWebContentsImpl* web_contents) {
   auto bounds_object = base::MakeUnique<base::DictionaryValue>();
-  gfx::Rect bounds =
-      web_contents->web_contents()->GetRenderWidgetHostView()->GetViewBounds();
+  gfx::Rect bounds = web_contents->web_contents()->GetContainerBounds();
   bounds_object->SetInteger("left", bounds.x());
   bounds_object->SetInteger("top", bounds.y());
   bounds_object->SetInteger("width", bounds.width());
@@ -86,17 +85,16 @@ std::unique_ptr<base::DictionaryValue> CreateBoundsDict(
 void PDFCreated(
     const content::DevToolsManagerDelegate::CommandCallback& callback,
     int command_id,
-    printing::HeadlessPrintManager::PrintResult print_result,
+    HeadlessPrintManager::PrintResult print_result,
     const std::string& data) {
   std::unique_ptr<base::DictionaryValue> response;
-  if (print_result == printing::HeadlessPrintManager::PRINT_SUCCESS) {
+  if (print_result == HeadlessPrintManager::PRINT_SUCCESS) {
     response = CreateSuccessResponse(
-        command_id,
-        printing::HeadlessPrintManager::PDFContentsToDictionaryValue(data));
+        command_id, HeadlessPrintManager::PDFContentsToDictionaryValue(data));
   } else {
     response = CreateErrorResponse(
         command_id, kErrorServerError,
-        printing::HeadlessPrintManager::PrintResultToString(print_result));
+        HeadlessPrintManager::PrintResultToString(print_result));
   }
   callback.Run(std::move(response));
 }
@@ -115,7 +113,7 @@ const double kScaleMinVal = 10;
 std::unique_ptr<base::DictionaryValue> ParsePrintSettings(
     int command_id,
     const base::DictionaryValue* params,
-    printing::HeadlessPrintSettings* settings) {
+    HeadlessPrintSettings* settings) {
   // We can safely ignore the return values of the following Get methods since
   // the defaults are already set in |settings|.
   params->GetBoolean("landscape", &settings->landscape);
@@ -126,6 +124,8 @@ std::unique_ptr<base::DictionaryValue> ParsePrintSettings(
       settings->scale < kScaleMinVal / 100)
     return CreateInvalidParamResponse(command_id, "scale");
   params->GetString("pageRanges", &settings->page_ranges);
+  params->GetBoolean("ignoreInvalidPageRanges",
+                     &settings->ignore_invalid_page_ranges);
 
   double paper_width_in_inch = printing::kLetterWidthInch;
   double paper_height_in_inch = printing::kLetterHeightInch;
@@ -285,14 +285,14 @@ void HeadlessDevToolsManagerDelegate::PrintToPDF(
   content::WebContents* web_contents = agent_host->GetWebContents();
   content::RenderFrameHost* rfh = web_contents->GetMainFrame();
 
-  printing::HeadlessPrintSettings settings;
+  HeadlessPrintSettings settings;
   std::unique_ptr<base::DictionaryValue> response =
       ParsePrintSettings(command_id, params, &settings);
   if (response) {
     callback.Run(std::move(response));
     return;
   }
-  printing::HeadlessPrintManager::FromWebContents(web_contents)
+  HeadlessPrintManager::FromWebContents(web_contents)
       ->GetPDFContents(rfh, settings,
                        base::Bind(&PDFCreated, callback, command_id));
 #else
@@ -475,8 +475,7 @@ HeadlessDevToolsManagerDelegate::SetWindowBounds(
 
   // Compute updated bounds when window state is normal.
   bool set_bounds = false;
-  gfx::Rect bounds =
-      web_contents->web_contents()->GetRenderWidgetHostView()->GetViewBounds();
+  gfx::Rect bounds = web_contents->web_contents()->GetContainerBounds();
   int left, top, width, height;
   if (bounds_dict->GetInteger("left", &left)) {
     bounds.set_x(left);
@@ -514,7 +513,7 @@ HeadlessDevToolsManagerDelegate::SetWindowBounds(
   }
 
   web_contents->set_window_state(window_state);
-  web_contents->web_contents()->GetRenderWidgetHostView()->SetBounds(bounds);
+  web_contents->SetBounds(bounds);
   return CreateSuccessResponse(command_id, nullptr);
 }
 

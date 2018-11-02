@@ -10,6 +10,7 @@
 #include "media/base/mime_util.h"
 #include "media/filters/stream_parser_factory.h"
 #include "net/base/mime_util.h"
+#include "platform/wtf/Assertions.h"
 #include "platform/wtf/text/WTFString.h"
 #include "public/platform/FilePathConversion.h"
 #include "public/platform/InterfaceProvider.h"
@@ -53,9 +54,6 @@ std::string ToLowerASCIIOrEmpty(const String& str) {
   return ToLowerASCIIInternal(str.Characters16(), str.length());
 }
 
-#define STATIC_ASSERT_ENUM(a, b)                            \
-  static_assert(static_cast<int>(a) == static_cast<int>(b), \
-                "mismatching enums: " #a)
 STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsNotSupported, media::IsNotSupported);
 STATIC_ASSERT_ENUM(MIMETypeRegistry::kIsSupported, media::IsSupported);
 STATIC_ASSERT_ENUM(MIMETypeRegistry::kMayBeSupported, media::MayBeSupported);
@@ -166,9 +164,9 @@ MIMETypeRegistry::SupportsType MIMETypeRegistry::SupportsMediaMIMEType(
     const String& codecs) {
   const std::string ascii_mime_type = ToLowerASCIIOrEmpty(mime_type);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && defined(OS_MACOSX)
   // Some containers are known to be partially supported.
-  if (media::IsPartiallySupportedMediaMimeType(ascii_mime_type))
+  if (ascii_mime_type == "video/quicktime")
     return kMayBeSupported;
 #endif
 
@@ -195,12 +193,9 @@ bool MIMETypeRegistry::IsJavaAppletMIMEType(const String& mime_type) {
   // with the overhead of using a hash set.  Any of the MIME types below may be
   // followed by any number of specific versions of the JVM, which is why we use
   // startsWith()
-  return mime_type.StartsWith("application/x-java-applet",
-                              kTextCaseASCIIInsensitive) ||
-         mime_type.StartsWith("application/x-java-bean",
-                              kTextCaseASCIIInsensitive) ||
-         mime_type.StartsWith("application/x-java-vm",
-                              kTextCaseASCIIInsensitive);
+  return mime_type.StartsWithIgnoringASCIICase("application/x-java-applet") ||
+         mime_type.StartsWithIgnoringASCIICase("application/x-java-bean") ||
+         mime_type.StartsWithIgnoringASCIICase("application/x-java-vm");
 }
 
 bool MIMETypeRegistry::IsSupportedStyleSheetMIMEType(const String& mime_type) {
@@ -209,7 +204,7 @@ bool MIMETypeRegistry::IsSupportedStyleSheetMIMEType(const String& mime_type) {
 
 bool MIMETypeRegistry::IsSupportedFontMIMEType(const String& mime_type) {
   static const unsigned kFontLen = 5;
-  if (!mime_type.StartsWith("font/", kTextCaseASCIIInsensitive))
+  if (!mime_type.StartsWithIgnoringASCIICase("font/"))
     return false;
   String sub_type = mime_type.Substring(kFontLen).DeprecatedLower();
   return sub_type == "woff" || sub_type == "woff2" || sub_type == "otf" ||

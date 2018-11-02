@@ -5,29 +5,76 @@
 #include "core/css/cssom/CSSPerspective.h"
 
 #include "bindings/core/v8/ExceptionState.h"
+#include "core/css/cssom/CSSUnitValue.h"
+#include "core/geometry/DOMMatrix.h"
 
 namespace blink {
 
-CSSPerspective* CSSPerspective::Create(const CSSLengthValue* length,
+CSSPerspective* CSSPerspective::Create(CSSNumericValue* length,
                                        ExceptionState& exception_state) {
+  if (length->GetType() != CSSStyleValue::StyleValueType::kLengthType) {
+    exception_state.ThrowTypeError("Must pass length to CSSPerspective");
+    return nullptr;
+  }
   if (length->ContainsPercent()) {
     exception_state.ThrowTypeError(
-        "CSSPerspective does not support CSSLengthValues with percent units");
+        "CSSPerspective does not support CSSNumericValues with percent units");
     return nullptr;
   }
   return new CSSPerspective(length);
 }
 
+void CSSPerspective::setLength(CSSNumericValue* length,
+                               ExceptionState& exception_state) {
+  if (length->GetType() != CSSStyleValue::StyleValueType::kLengthType) {
+    exception_state.ThrowTypeError("Must pass length to CSSPerspective");
+    return;
+  }
+  if (length->ContainsPercent()) {
+    exception_state.ThrowTypeError(
+        "CSSPerspective does not support CSSNumericValues with percent units");
+    return;
+  }
+  length_ = length;
+}
+
 CSSPerspective* CSSPerspective::FromCSSValue(const CSSFunctionValue& value) {
   DCHECK_EQ(value.FunctionType(), CSSValuePerspective);
   DCHECK_EQ(value.length(), 1U);
-  CSSLengthValue* length =
-      CSSLengthValue::FromCSSValue(ToCSSPrimitiveValue(value.Item(0)));
+  CSSNumericValue* length =
+      CSSNumericValue::FromCSSValue(ToCSSPrimitiveValue(value.Item(0)));
+  // TODO(meade): This shouldn't happen once CSSNumericValue is fully
+  // implemented, so once that happens this check can be removed.
+  if (!length)
+    return nullptr;
   DCHECK(!length->ContainsPercent());
   return new CSSPerspective(length);
 }
 
+const DOMMatrix* CSSPerspective::AsMatrix() const {
+  if (!length_->IsCalculated() && ToCSSUnitValue(length_)->value() < 0) {
+    // Negative values are invalid.
+    // https://github.com/w3c/css-houdini-drafts/issues/420
+    return nullptr;
+  }
+  CSSUnitValue* length = length_->to(CSSPrimitiveValue::UnitType::kPixels);
+  if (!length) {
+    // This can happen if there are relative units. TODO(meade): How to resolve
+    // relative units here?
+    // https://github.com/w3c/css-houdini-drafts/issues/421
+    return nullptr;
+  }
+  DOMMatrix* matrix = DOMMatrix::Create();
+  matrix->perspectiveSelf(length->value());
+  return matrix;
+}
+
 CSSFunctionValue* CSSPerspective::ToCSSValue() const {
+  if (!length_->IsCalculated() && ToCSSUnitValue(length_)->value() < 0) {
+    // Negative values are invalid.
+    // https://github.com/w3c/css-houdini-drafts/issues/420
+    return nullptr;
+  }
   CSSFunctionValue* result = CSSFunctionValue::Create(CSSValuePerspective);
   result->Append(*length_->ToCSSValue());
   return result;

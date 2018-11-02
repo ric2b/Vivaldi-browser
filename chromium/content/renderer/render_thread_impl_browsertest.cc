@@ -20,7 +20,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/sequenced_worker_pool.h"
 #include "base/threading/thread_task_runner_handle.h"
-#include "cc/output/buffer_to_texture_target_map.h"
+#include "components/viz/common/resources/buffer_to_texture_target_map.h"
 #include "content/app/mojo/mojo_init.h"
 #include "content/common/in_process_child_thread_params.h"
 #include "content/common/resource_messages.h"
@@ -49,6 +49,7 @@
 #include "mojo/edk/embedder/outgoing_broker_client_invitation.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/WebKit/public/platform/scheduler/renderer/renderer_scheduler.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/gfx/buffer_format_util.h"
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
@@ -214,11 +215,13 @@ class RenderThreadImplBrowserTest : public testing::Test {
     base::CommandLine* cmd = base::CommandLine::ForCurrentProcess();
     base::CommandLine::StringVector old_argv = cmd->argv();
 
+    cmd->AppendSwitchASCII(switches::kLang, "en-US");
+
     cmd->AppendSwitchASCII(switches::kNumRasterThreads, "1");
     cmd->AppendSwitchASCII(
         switches::kContentImageTextureTarget,
-        cc::BufferToTextureTargetMapToString(
-            cc::DefaultBufferToTextureTargetMapForTesting()));
+        viz::BufferToTextureTargetMapToString(
+            viz::DefaultBufferToTextureTargetMapForTesting()));
 
     std::unique_ptr<blink::scheduler::RendererScheduler> renderer_scheduler =
         blink::scheduler::RendererScheduler::Create();
@@ -278,8 +281,16 @@ void CheckRenderThreadInputHandlerManager(RenderThreadImpl* thread) {
 // Check that InputHandlerManager outlives compositor thread because it uses
 // raw pointers to post tasks.
 // Disabled under LeakSanitizer due to memory leaks. http://crbug.com/348994
+// Disabled on Windows due to flakiness: http://crbug.com/728034.
+#if defined(OS_WIN)
+#define MAYBE_InputHandlerManagerDestroyedAfterCompositorThread \
+  DISABLED_InputHandlerManagerDestroyedAfterCompositorThread
+#else
+#define MAYBE_InputHandlerManagerDestroyedAfterCompositorThread \
+  InputHandlerManagerDestroyedAfterCompositorThread
+#endif
 TEST_F(RenderThreadImplBrowserTest,
-       WILL_LEAK(InputHandlerManagerDestroyedAfterCompositorThread)) {
+       WILL_LEAK(MAYBE_InputHandlerManagerDestroyedAfterCompositorThread)) {
   ASSERT_TRUE(thread_->input_handler_manager());
 
   thread_->compositor_task_runner()->PostTask(

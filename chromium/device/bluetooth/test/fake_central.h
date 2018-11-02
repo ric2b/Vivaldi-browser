@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "base/compiler_specific.h"
 #include "device/bluetooth/bluetooth_adapter.h"
@@ -13,6 +14,9 @@
 #include "mojo/public/cpp/bindings/binding.h"
 
 namespace bluetooth {
+
+class FakeRemoteGattCharacteristic;
+class FakeRemoteGattDescriptor;
 
 // Implementation of FakeCentral in
 // src/device/bluetooth/public/interfaces/test/fake_bluetooth.mojom.
@@ -29,6 +33,52 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
       const std::string& name,
       const std::vector<device::BluetoothUUID>& known_service_uuids,
       SimulatePreconnectedPeripheralCallback callback) override;
+  void SetNextGATTConnectionResponse(
+      const std::string& address,
+      uint16_t code,
+      SetNextGATTConnectionResponseCallback) override;
+  void SetNextGATTDiscoveryResponse(
+      const std::string& address,
+      uint16_t code,
+      SetNextGATTDiscoveryResponseCallback callback) override;
+  void AddFakeService(const std::string& peripheral_address,
+                      const device::BluetoothUUID& service_uuid,
+                      AddFakeServiceCallback callback) override;
+  void AddFakeCharacteristic(const device::BluetoothUUID& characteristic_uuid,
+                             mojom::CharacteristicPropertiesPtr properties,
+                             const std::string& service_id,
+                             const std::string& peripheral_address,
+                             AddFakeCharacteristicCallback callback) override;
+  void AddFakeDescriptor(const device::BluetoothUUID& characteristic_uuid,
+                         const std::string& characteristic_id,
+                         const std::string& service_id,
+                         const std::string& peripheral_address,
+                         AddFakeDescriptorCallback callback) override;
+  void SetNextReadCharacteristicResponse(
+      uint16_t gatt_code,
+      const base::Optional<std::vector<uint8_t>>& value,
+      const std::string& characteristic_id,
+      const std::string& service_id,
+      const std::string& peripheral_address,
+      SetNextReadCharacteristicResponseCallback callback) override;
+  void SetNextWriteCharacteristicResponse(
+      uint16_t gatt_code,
+      const std::string& characteristic_id,
+      const std::string& service_id,
+      const std::string& peripheral_address,
+      SetNextWriteCharacteristicResponseCallback callback) override;
+  void GetLastWrittenValue(const std::string& characteristic_id,
+                           const std::string& service_id,
+                           const std::string& peripheral_address,
+                           GetLastWrittenValueCallback callback) override;
+  void SetNextReadDescriptorResponse(
+      uint16_t gatt_code,
+      const base::Optional<std::vector<uint8_t>>& value,
+      const std::string& descriptor_id,
+      const std::string& characteristic_id,
+      const std::string& service_id,
+      const std::string& peripheral_address,
+      SetNextReadDescriptorResponseCallback callback) override;
 
   // BluetoothAdapter overrides:
   std::string GetAddress() const override;
@@ -68,6 +118,9 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
       const base::TimeDelta& max,
       const base::Closure& callback,
       const AdvertisementErrorCallback& error_callback) override;
+  void ResetAdvertising(
+      const base::Closure& callback,
+      const AdvertisementErrorCallback& error_callback) override;
 #endif
   device::BluetoothLocalGattService* GetGattService(
       const std::string& identifier) const override;
@@ -88,6 +141,16 @@ class FakeCentral : NON_EXPORTED_BASE(public mojom::FakeCentral),
 
  private:
   ~FakeCentral() override;
+
+  FakeRemoteGattCharacteristic* GetFakeRemoteGattCharacteristic(
+      const std::string& peripheral_address,
+      const std::string& service_id,
+      const std::string& characteristic_id) const;
+  FakeRemoteGattDescriptor* GetFakeRemoteGattDescriptor(
+      const std::string& peripheral_address,
+      const std::string& service_id,
+      const std::string& characteristic_id,
+      const std::string& descriptor_id) const;
 
   mojom::CentralState state_;
   mojo::Binding<mojom::FakeCentral> binding_;

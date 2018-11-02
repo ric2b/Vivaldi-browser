@@ -186,7 +186,7 @@ cr.define('bookmarks', function() {
     /**
      * @private {number|null} Timer id used to help minimize flicker.
      */
-    this.removeDropIndicatorTimer_ = null;
+    this.removeDropIndicatorTimeoutId_ = null;
 
     /**
      * The element that had a style applied it to indicate the drop location.
@@ -203,9 +203,9 @@ cr.define('bookmarks', function() {
 
     /**
      * Used to instantly remove the indicator style in tests.
-     * @private {function((Function|null|string), number)}
+     * @private {bookmarks.TimerProxy}
      */
-    this.setTimeout = window.setTimeout.bind(window);
+    this.timerProxy = new bookmarks.TimerProxy();
   }
 
   DropIndicator.prototype = {
@@ -244,7 +244,7 @@ cr.define('bookmarks', function() {
      * @param {DropDestination} dropDest
      */
     update: function(dropDest) {
-      window.clearTimeout(this.removeDropIndicatorTimer_);
+      this.timerProxy.clearTimeout(this.removeDropIndicatorTimeoutId_);
 
       var indicatorElement = dropDest.element.getDropTarget();
       var position = dropDest.position;
@@ -259,10 +259,11 @@ cr.define('bookmarks', function() {
     finish: function() {
       // The use of a timeout is in order to reduce flickering as we move
       // between valid drop targets.
-      window.clearTimeout(this.removeDropIndicatorTimer_);
-      this.removeDropIndicatorTimer_ = this.setTimeout(function() {
-        this.removeDropIndicatorStyle();
-      }.bind(this), 100);
+      this.timerProxy.clearTimeout(this.removeDropIndicatorTimeoutId_);
+      this.removeDropIndicatorTimeoutId_ =
+          this.timerProxy.setTimeout(function() {
+            this.removeDropIndicatorStyle();
+          }.bind(this), 100);
     },
   };
 
@@ -285,9 +286,21 @@ cr.define('bookmarks', function() {
 
     /**
      * Used to instantly clearDragData in tests.
-     * @private {function((Function|null|string), number)}
+     * @private {bookmarks.TimerProxy}
      */
-    this.setTimeout_ = window.setTimeout.bind(window);
+    this.timerProxy_ = new bookmarks.TimerProxy();
+
+    /**
+     * The bookmark drag and drop indicator chip.
+     * @private {BookmarksDndChipElement}
+     */
+    this.chip_ = null;
+
+    /**
+     * The element that initiated a drag.
+     * @private {BookmarkElement}
+     */
+    this.dragElement_ = null;
   }
 
   DNDManager.prototype = {
@@ -318,6 +331,9 @@ cr.define('bookmarks', function() {
     },
 
     destroy: function() {
+      if (this.chip_ && this.chip_.parentElement)
+        document.body.removeChild(this.chip_);
+
       for (var event in this.documentListeners_)
         document.removeEventListener(event, this.documentListeners_[event]);
     },
@@ -383,10 +399,13 @@ cr.define('bookmarks', function() {
 
     /** @private */
     clearDragData_: function() {
+      this.dndChip.hide();
+      this.dragElement_ = null;
+
       // Defer the clearing of the data so that the bookmark manager API's drop
       // event doesn't clear the drop data before the web drop event has a
       // chance to execute (on Mac).
-      this.setTimeout_(function() {
+      this.timerProxy_.setTimeout(function() {
         this.dragInfo_.clearDragData();
         this.dropDestination_ = null;
         this.dropIndicator_.finish();
@@ -404,6 +423,7 @@ cr.define('bookmarks', function() {
 
       var store = bookmarks.Store.getInstance();
       var dragId = dragElement.itemId;
+      this.dragElement_ = dragElement;
 
       // Determine the selected bookmarks.
       var state = store.data;
@@ -425,6 +445,13 @@ cr.define('bookmarks', function() {
       }
 
       e.preventDefault();
+
+      // If any node can't be dragged, early return (after preventDefault).
+      var anyUnmodifiable = draggedNodes.some(function(itemId) {
+        return !bookmarks.util.canEditNode(state, itemId);
+      });
+      if (anyUnmodifiable)
+        return;
 
       // If we are dragging a single link, we can do the *Link* effect.
       // Otherwise, we only allow copy and move.
@@ -470,11 +497,18 @@ cr.define('bookmarks', function() {
       if (!this.dragInfo_.isDragValid())
         return;
 
+      var state = bookmarks.Store.getInstance().data;
+      var items = this.dragInfo_.dragData.elements.map(function(x) {
+        return bookmarks.util.normalizeNode(x);
+      });
+      this.dndChip.showForItems(
+          e.clientX, e.clientY, items,
+          this.dragElement_ ? state.nodes[this.dragElement_.itemId] : items[0]);
+
       var overElement = getBookmarkElement(e.path);
       this.autoExpander_.update(e, overElement);
       if (!overElement)
         return;
-
 
       // Now we know that we can drop. Determine if we will drop above, on or
       // below based on mouse position etc.
@@ -546,6 +580,9 @@ cr.define('bookmarks', function() {
 
       if (isBookmarkList(overElement))
         itemId = state.selectedFolder;
+
+      if (!bookmarks.util.canReorderChildren(state, itemId))
+        return DropPosition.NONE;
 
       // Drags of a bookmark onto itself or of a folder into its children aren't
       // allowed.
@@ -626,15 +663,26 @@ cr.define('bookmarks', function() {
       if (getBookmarkNode(overElement).url)
         return false;
 
-      return !this.dragInfo_.isDraggingChildBookmark(overElement.itemId)
+      return !this.dragInfo_.isDraggingChildBookmark(overElement.itemId);
     },
 
-    disableTimeoutsForTesting: function() {
-      this.setTimeout_ = function(fn) {
-        fn();
-      };
-      this.dropIndicator_.setTimeout = this.setTimeout_;
-    }
+    /** @param {bookmarks.TimerProxy} timerProxy */
+    setTimerProxyForTesting: function(timerProxy) {
+      this.timerProxy_ = timerProxy;
+      this.dropIndicator_.timerProxy = timerProxy;
+    },
+
+    /** @return {BookmarksDndChipElement} */
+    get dndChip() {
+      if (!this.chip_) {
+        this.chip_ =
+            /** @type {BookmarksDndChipElement} */ (
+                document.createElement('bookmarks-dnd-chip'));
+        document.body.appendChild(this.chip_);
+      }
+
+      return this.chip_;
+    },
   };
 
   return {

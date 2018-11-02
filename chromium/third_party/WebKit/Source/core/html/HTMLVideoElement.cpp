@@ -32,20 +32,20 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/Document.h"
 #include "core/dom/ExceptionCode.h"
-#include "core/dom/Fullscreen.h"
-#include "core/dom/shadow/ShadowRoot.h"
-#include "core/frame/ImageBitmap.h"
+#include "core/dom/ShadowRoot.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/frame/LocalDOMWindow.h"
 #include "core/frame/Settings.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/media/MediaCustomControlsFullscreenDetector.h"
+#include "core/html/media/MediaRemotingInterstitial.h"
 #include "core/html/parser/HTMLParserIdioms.h"
-#include "core/html/shadow/MediaRemotingInterstitial.h"
+#include "core/imagebitmap/ImageBitmap.h"
 #include "core/imagebitmap/ImageBitmapOptions.h"
 #include "core/layout/LayoutImage.h"
 #include "core/layout/LayoutVideo.h"
 #include "platform/Histogram.h"
 #include "platform/RuntimeEnabledFeatures.h"
-#include "platform/UserGestureIndicator.h"
 #include "platform/graphics/GraphicsContext.h"
 #include "platform/graphics/ImageBuffer.h"
 #include "platform/graphics/gpu/Extensions3DUtil.h"
@@ -75,7 +75,7 @@ inline HTMLVideoElement::HTMLVideoElement(Document& document)
         AtomicString(document.GetSettings()->GetDefaultVideoPosterURL());
   }
 
-  if (RuntimeEnabledFeatures::videoFullscreenDetectionEnabled()) {
+  if (RuntimeEnabledFeatures::VideoFullscreenDetectionEnabled()) {
     custom_controls_fullscreen_detector_ =
         new MediaCustomControlsFullscreenDetector(*this);
   }
@@ -93,6 +93,11 @@ DEFINE_TRACE(HTMLVideoElement) {
   visitor->Trace(custom_controls_fullscreen_detector_);
   visitor->Trace(remoting_interstitial_);
   HTMLMediaElement::Trace(visitor);
+}
+
+bool HTMLVideoElement::HasPendingActivity() const {
+  return HTMLMediaElement::HasPendingActivity() ||
+         (image_loader_ && image_loader_->HasPendingActivity());
 }
 
 Node::InsertionNotificationRequest HTMLVideoElement::InsertedInto(
@@ -127,7 +132,7 @@ LayoutObject* HTMLVideoElement::CreateLayoutObject(const ComputedStyle&) {
   return new LayoutVideo(this);
 }
 
-void HTMLVideoElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLVideoElement::AttachLayoutTree(AttachContext& context) {
   HTMLMediaElement::AttachLayoutTree(context);
 
   UpdateDisplayState();
@@ -238,6 +243,8 @@ void HTMLVideoElement::SetDisplayMode(DisplayMode mode) {
 // TODO(zqzhang): this callback could be used to hide native controls instead of
 // using a settings. See `HTMLMediaElement::onMediaControlsEnabledChange`.
 void HTMLVideoElement::OnBecamePersistentVideo(bool value) {
+  is_picture_in_picture_ = value;
+
   if (value) {
     // Record the type of video. If it is already fullscreen, it is a video with
     // native controls, otherwise it is assumed to be with custom controls.
@@ -251,7 +258,7 @@ void HTMLVideoElement::OnBecamePersistentVideo(bool value) {
       histogram.Count(kVideoPersistenceControlsTypeCustom);
 
     Element* fullscreen_element =
-        Fullscreen::CurrentFullScreenElementFrom(GetDocument());
+        Fullscreen::FullscreenElementFrom(GetDocument());
     // Only set the video in persistent mode if it is not using native controls
     // and is currently fullscreen.
     if (!fullscreen_element || IsFullscreen())
@@ -275,7 +282,7 @@ void HTMLVideoElement::OnBecamePersistentVideo(bool value) {
     PseudoStateChanged(CSSSelector::kPseudoVideoPersistent);
 
     Element* fullscreen_element =
-        Fullscreen::CurrentFullScreenElementFrom(GetDocument());
+        Fullscreen::FullscreenElementFrom(GetDocument());
     // If the page is no longer fullscreen, the full tree will have to be
     // traversed to make sure things are cleaned up.
     for (Element* element = this; element && element != fullscreen_element;
@@ -285,6 +292,9 @@ void HTMLVideoElement::OnBecamePersistentVideo(bool value) {
     if (fullscreen_element)
       fullscreen_element->SetContainsPersistentVideo(false);
   }
+
+  if (GetWebMediaPlayer())
+    GetWebMediaPlayer()->OnDisplayTypeChanged(DisplayType());
 }
 
 bool HTMLVideoElement::IsPersistent() const {
@@ -382,7 +392,7 @@ bool HTMLVideoElement::webkitDisplayingFullscreen() {
 }
 
 bool HTMLVideoElement::UsesOverlayFullscreenVideo() const {
-  if (RuntimeEnabledFeatures::forceOverlayFullscreenVideoEnabled())
+  if (RuntimeEnabledFeatures::ForceOverlayFullscreenVideoEnabled())
     return true;
 
   return GetWebMediaPlayer() &&
@@ -446,7 +456,7 @@ PassRefPtr<Image> HTMLVideoElement::GetSourceImageForCanvas(
   }
 
   *status = kNormalSourceImageStatus;
-  return snapshot.Release();
+  return snapshot;
 }
 
 bool HTMLVideoElement::WouldTaintOrigin(
@@ -508,21 +518,24 @@ void HTMLVideoElement::MediaRemotingStarted() {
 }
 
 void HTMLVideoElement::MediaRemotingStopped() {
-  // Early return because this was already called when media remoting was
-  // disabled.
-  if (media_remoting_status_ == MediaRemotingStatus::kDisabled)
-    return;
-  DCHECK(media_remoting_status_ == MediaRemotingStatus::kStarted);
+  DCHECK(media_remoting_status_ == MediaRemotingStatus::kDisabled ||
+         media_remoting_status_ == MediaRemotingStatus::kStarted);
+  if (media_remoting_status_ != MediaRemotingStatus::kDisabled)
+    media_remoting_status_ = MediaRemotingStatus::kNotStarted;
   DCHECK(remoting_interstitial_);
-  media_remoting_status_ = MediaRemotingStatus::kNotStarted;
   remoting_interstitial_->Hide();
 }
 
+WebMediaPlayer::DisplayType HTMLVideoElement::DisplayType() const {
+  if (is_picture_in_picture_)
+    return WebMediaPlayer::DisplayType::kPictureInPicture;
+  return HTMLMediaElement::DisplayType();
+}
+
 void HTMLVideoElement::DisableMediaRemoting() {
+  media_remoting_status_ = MediaRemotingStatus::kDisabled;
   if (GetWebMediaPlayer())
     GetWebMediaPlayer()->RequestRemotePlaybackDisabled(true);
-  media_remoting_status_ = MediaRemotingStatus::kDisabled;
-  MediaRemotingStopped();
 }
 
 }  // namespace blink

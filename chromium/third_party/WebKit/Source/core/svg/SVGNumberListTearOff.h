@@ -46,21 +46,22 @@ class SVGNumberListTearOff final
       SVGNumberList* target,
       SVGElement* context_element,
       PropertyIsAnimValType property_is_anim_val,
-      const QualifiedName& attribute_name = QualifiedName::Null()) {
+      const QualifiedName& attribute_name) {
     return new SVGNumberListTearOff(target, context_element,
                                     property_is_anim_val, attribute_name);
   }
 
   DEFINE_INLINE_VIRTUAL_TRACE_WRAPPERS() {
-    visitor->TraceWrappers(contextElement());
+    SVGListPropertyTearOffHelper<SVGNumberListTearOff,
+                                 SVGNumberList>::TraceWrappers(visitor);
+    ScriptWrappable::TraceWrappers(visitor);
   }
 
  private:
-  SVGNumberListTearOff(
-      SVGNumberList* target,
-      SVGElement* context_element,
-      PropertyIsAnimValType property_is_anim_val,
-      const QualifiedName& attribute_name = QualifiedName::Null())
+  SVGNumberListTearOff(SVGNumberList* target,
+                       SVGElement* context_element,
+                       PropertyIsAnimValType property_is_anim_val,
+                       const QualifiedName& attribute_name)
       : SVGListPropertyTearOffHelper<SVGNumberListTearOff, SVGNumberList>(
             target,
             context_element,

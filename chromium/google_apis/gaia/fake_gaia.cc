@@ -245,7 +245,10 @@ void FakeGaia::Initialize() {
       gaia_urls->service_login_url(), HandleServiceLogin);
 
   // Handles /embedded/setup/chromeos GAIA call.
-  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(),
+  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(1),
+                            HandleEmbeddedSetupChromeos);
+  // Handles /embedded/setup/v2/chromeos GAIA call.
+  REGISTER_RESPONSE_HANDLER(gaia_urls->embedded_setup_chromeos_url(2),
                             HandleEmbeddedSetupChromeos);
 
   // Handles /OAuthLogin GAIA call.
@@ -525,6 +528,7 @@ void FakeGaia::HandleOAuthLogin(const HttpRequest& request,
   http_response->set_code(net::HTTP_UNAUTHORIZED);
   if (merge_session_params_.gaia_uber_token.empty()) {
     http_response->set_code(net::HTTP_FORBIDDEN);
+    http_response->set_content("Error=BadAuthentication");
     return;
   }
 

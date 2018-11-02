@@ -50,6 +50,7 @@ if (is_mac) {
             "//chrome/test:interactive_ui_tests",
             "//chrome/test:sync_integration_tests",
             "//chrome/test:unit_tests",
+            "//components:components_unittests",
           ]) {
     post_process_template(_target) {
       if (!defined(ldflags)) {

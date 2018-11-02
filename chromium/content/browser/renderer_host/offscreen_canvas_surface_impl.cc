@@ -8,19 +8,21 @@
 #include <utility>
 
 #include "base/memory/ptr_util.h"
-#include "cc/surfaces/surface_manager.h"
-#include "content/browser/compositor/frame_sink_manager_host.h"
+#include "components/viz/host/host_frame_sink_manager.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "content/browser/compositor/surface_utils.h"
 
 namespace content {
 
 OffscreenCanvasSurfaceImpl::OffscreenCanvasSurfaceImpl(
-    const cc::FrameSinkId& parent_frame_sink_id,
-    const cc::FrameSinkId& frame_sink_id,
+    viz::HostFrameSinkManager* host_frame_sink_manager,
+    const viz::FrameSinkId& parent_frame_sink_id,
+    const viz::FrameSinkId& frame_sink_id,
     blink::mojom::OffscreenCanvasSurfaceClientPtr client,
     blink::mojom::OffscreenCanvasSurfaceRequest request,
     DestroyCallback destroy_callback)
-    : client_(std::move(client)),
+    : host_frame_sink_manager_(host_frame_sink_manager),
+      client_(std::move(client)),
       binding_(this, std::move(request)),
       destroy_callback_(std::move(destroy_callback)),
       frame_sink_id_(frame_sink_id),
@@ -28,36 +30,36 @@ OffscreenCanvasSurfaceImpl::OffscreenCanvasSurfaceImpl(
   binding_.set_connection_error_handler(
       base::Bind(&OffscreenCanvasSurfaceImpl::OnSurfaceConnectionClosed,
                  base::Unretained(this)));
-  GetFrameSinkManagerHost()->AddObserver(this);
+  host_frame_sink_manager_->AddObserver(this);
 }
 
 OffscreenCanvasSurfaceImpl::~OffscreenCanvasSurfaceImpl() {
   if (has_created_compositor_frame_sink_) {
-    GetFrameSinkManagerHost()->UnregisterFrameSinkHierarchy(
+    host_frame_sink_manager_->UnregisterFrameSinkHierarchy(
         parent_frame_sink_id_, frame_sink_id_);
+    host_frame_sink_manager_->DestroyCompositorFrameSink(frame_sink_id_);
   }
-  GetFrameSinkManagerHost()->RemoveObserver(this);
+  host_frame_sink_manager_->RemoveObserver(this);
 }
 
 void OffscreenCanvasSurfaceImpl::CreateCompositorFrameSink(
-    cc::mojom::MojoCompositorFrameSinkClientPtr client,
-    cc::mojom::MojoCompositorFrameSinkRequest request) {
+    cc::mojom::CompositorFrameSinkClientPtr client,
+    cc::mojom::CompositorFrameSinkRequest request) {
   if (has_created_compositor_frame_sink_) {
     DLOG(ERROR) << "CreateCompositorFrameSink() called more than once.";
     return;
   }
 
-  GetFrameSinkManagerHost()->CreateCompositorFrameSink(
-      frame_sink_id_, std::move(request),
-      mojo::MakeRequest(&compositor_frame_sink_private_), std::move(client));
+  host_frame_sink_manager_->CreateCompositorFrameSink(
+      frame_sink_id_, std::move(request), std::move(client));
 
-  GetFrameSinkManagerHost()->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
-                                                        frame_sink_id_);
+  host_frame_sink_manager_->RegisterFrameSinkHierarchy(parent_frame_sink_id_,
+                                                       frame_sink_id_);
   has_created_compositor_frame_sink_ = true;
 }
 
 void OffscreenCanvasSurfaceImpl::OnSurfaceCreated(
-    const cc::SurfaceInfo& surface_info) {
+    const viz::SurfaceInfo& surface_info) {
   if (surface_info.id().frame_sink_id() != frame_sink_id_)
     return;
 
@@ -66,13 +68,14 @@ void OffscreenCanvasSurfaceImpl::OnSurfaceCreated(
     client_->OnSurfaceCreated(surface_info);
 }
 
-void OffscreenCanvasSurfaceImpl::Require(const cc::SurfaceId& surface_id,
-                                         const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->RequireSequence(surface_id, sequence);
+void OffscreenCanvasSurfaceImpl::Require(const viz::SurfaceId& surface_id,
+                                         const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->RequireSequence(surface_id,
+                                                            sequence);
 }
 
-void OffscreenCanvasSurfaceImpl::Satisfy(const cc::SurfaceSequence& sequence) {
-  GetSurfaceManager()->SatisfySequence(sequence);
+void OffscreenCanvasSurfaceImpl::Satisfy(const viz::SurfaceSequence& sequence) {
+  GetFrameSinkManager()->surface_manager()->SatisfySequence(sequence);
 }
 
 void OffscreenCanvasSurfaceImpl::OnSurfaceConnectionClosed() {

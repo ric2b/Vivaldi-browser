@@ -8,7 +8,7 @@
 #include "core/dom/Range.h"
 #include "core/editing/EphemeralRange.h"
 #include "core/editing/markers/DocumentMarkerListEditor.h"
-#include "core/editing/markers/RenderedDocumentMarker.h"
+#include "core/editing/markers/TextMatchMarker.h"
 #include "third_party/WebKit/Source/core/editing/VisibleUnits.h"
 
 namespace blink {
@@ -22,8 +22,8 @@ bool TextMatchMarkerListImpl::IsEmpty() const {
 }
 
 void TextMatchMarkerListImpl::Add(DocumentMarker* marker) {
-  DocumentMarkerListEditor::AddMarkerWithoutMergingOverlapping(
-      &markers_, RenderedDocumentMarker::Create(*marker));
+  DocumentMarkerListEditor::AddMarkerWithoutMergingOverlapping(&markers_,
+                                                               marker);
 }
 
 void TextMatchMarkerListImpl::Clear() {
@@ -33,6 +33,13 @@ void TextMatchMarkerListImpl::Clear() {
 const HeapVector<Member<DocumentMarker>>& TextMatchMarkerListImpl::GetMarkers()
     const {
   return markers_;
+}
+
+HeapVector<Member<DocumentMarker>>
+TextMatchMarkerListImpl::MarkersIntersectingRange(unsigned start_offset,
+                                                  unsigned end_offset) const {
+  return DocumentMarkerListEditor::MarkersIntersectingRange(
+      markers_, start_offset, end_offset);
 }
 
 bool TextMatchMarkerListImpl::MoveMarkers(int length,
@@ -57,28 +64,47 @@ DEFINE_TRACE(TextMatchMarkerListImpl) {
   DocumentMarkerList::Trace(visitor);
 }
 
-static void UpdateMarkerRenderedRect(const Node& node,
-                                     RenderedDocumentMarker& marker) {
-  const Position start_position(&const_cast<Node&>(node), marker.StartOffset());
-  const Position end_position(&const_cast<Node&>(node), marker.EndOffset());
+static void UpdateMarkerLayoutRect(const Node& node, TextMatchMarker& marker) {
+  const Position start_position(node, marker.StartOffset());
+  const Position end_position(node, marker.EndOffset());
   EphemeralRange range(start_position, end_position);
-  marker.SetRenderedRect(LayoutRect(ComputeTextRect(range)));
+  marker.SetLayoutRect(LayoutRect(ComputeTextRect(range)));
 }
 
-Vector<IntRect> TextMatchMarkerListImpl::RenderedRects(const Node& node) const {
+Vector<IntRect> TextMatchMarkerListImpl::LayoutRects(const Node& node) const {
   Vector<IntRect> result;
 
   for (DocumentMarker* marker : markers_) {
-    RenderedDocumentMarker* const rendered_marker =
-        ToRenderedDocumentMarker(marker);
-    if (!rendered_marker->IsValid())
-      UpdateMarkerRenderedRect(node, *rendered_marker);
-    if (!rendered_marker->IsRendered())
+    TextMatchMarker* const text_match_marker = ToTextMatchMarker(marker);
+    if (!text_match_marker->IsValid())
+      UpdateMarkerLayoutRect(node, *text_match_marker);
+    if (!text_match_marker->IsRendered())
       continue;
-    result.push_back(rendered_marker->RenderedRect());
+    result.push_back(text_match_marker->GetLayoutRect());
   }
 
   return result;
+}
+
+bool TextMatchMarkerListImpl::SetTextMatchMarkersActive(unsigned start_offset,
+                                                        unsigned end_offset,
+                                                        bool active) {
+  bool doc_dirty = false;
+  const auto start = std::upper_bound(
+      markers_.begin(), markers_.end(), start_offset,
+      [](size_t start_offset, const Member<DocumentMarker>& marker) {
+        return start_offset < marker->EndOffset();
+      });
+  for (auto it = start; it != markers_.end(); ++it) {
+    DocumentMarker& marker = **it;
+    // Markers are returned in order, so stop if we are now past the specified
+    // range.
+    if (marker.StartOffset() >= end_offset)
+      break;
+    ToTextMatchMarker(marker).SetIsActiveMatch(active);
+    doc_dirty = true;
+  }
+  return doc_dirty;
 }
 
 }  // namespace blink

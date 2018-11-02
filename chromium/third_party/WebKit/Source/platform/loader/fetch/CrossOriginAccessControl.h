@@ -33,7 +33,6 @@
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Forward.h"
 #include "platform/wtf/HashSet.h"
-#include "platform/wtf/PassRefPtr.h"
 
 namespace blink {
 
@@ -95,7 +94,7 @@ class PLATFORM_EXPORT CrossOriginAccessControl {
   // access is allowed. Use |accessControlErrorString()| to construct a
   // user-friendly error message for any of the other (error) conditions.
   static AccessStatus CheckAccess(const ResourceResponse&,
-                                  StoredCredentials,
+                                  WebURLRequest::FetchCredentialsMode,
                                   const SecurityOrigin*);
 
   // Perform the required CORS checks on the response to a preflight request.
@@ -122,7 +121,7 @@ class PLATFORM_EXPORT CrossOriginAccessControl {
   static bool HandleRedirect(RefPtr<SecurityOrigin>,
                              ResourceRequest&,
                              const ResourceResponse&,
-                             StoredCredentials,
+                             WebURLRequest::FetchCredentialsMode,
                              ResourceLoaderOptions&,
                              String&);
 
@@ -136,19 +135,19 @@ class PLATFORM_EXPORT CrossOriginAccessControl {
                                    PreflightStatus,
                                    const ResourceResponse&);
   static void RedirectErrorString(StringBuilder&, RedirectStatus, const KURL&);
+
+  static bool IsOnAccessControlResponseHeaderWhitelist(const String&);
+
+  static ResourceRequest CreateAccessControlPreflightRequest(
+      const ResourceRequest&);
+
+  static void ParseAccessControlExposeHeadersAllowList(
+      const String& header_value,
+      HTTPHeaderSet&);
+
+  static void ExtractCorsExposedHeaderNamesList(const ResourceResponse&,
+                                                HTTPHeaderSet&);
 };
-
-// TODO: also migrate these into the above static class.
-PLATFORM_EXPORT bool IsOnAccessControlResponseHeaderWhitelist(const String&);
-
-PLATFORM_EXPORT ResourceRequest
-CreateAccessControlPreflightRequest(const ResourceRequest&);
-
-PLATFORM_EXPORT void ParseAccessControlExposeHeadersAllowList(
-    const String& header_value,
-    HTTPHeaderSet&);
-PLATFORM_EXPORT void ExtractCorsExposedHeaderNamesList(const ResourceResponse&,
-                                                       HTTPHeaderSet&);
 
 }  // namespace blink
 

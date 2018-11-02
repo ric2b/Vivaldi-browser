@@ -49,7 +49,7 @@ void AXMenuListOption::Detach() {
   AXMockObject::Detach();
 }
 
-FrameView* AXMenuListOption::DocumentFrameView() const {
+LocalFrameView* AXMenuListOption::DocumentFrameView() const {
   if (IsDetached())
     return nullptr;
   return element_->GetDocument().View();
@@ -71,14 +71,14 @@ Element* AXMenuListOption::ActionElement() const {
   return element_;
 }
 
-AXObjectImpl* AXMenuListOption::ComputeParent() const {
+AXObject* AXMenuListOption::ComputeParent() const {
   Node* node = GetNode();
   if (!node)
     return nullptr;
   HTMLSelectElement* select = toHTMLOptionElement(node)->OwnerSelectElement();
   if (!select)
     return nullptr;
-  AXObjectImpl* select_ax_object = AxObjectCache().GetOrCreate(select);
+  AXObject* select_ax_object = AxObjectCache().GetOrCreate(select);
 
   // This happens if the <select> is not rendered. Return it and move on.
   if (!select_ax_object->IsMenuList())
@@ -96,12 +96,6 @@ AXObjectImpl* AXMenuListOption::ComputeParent() const {
     menu_list->UpdateChildrenIfNecessary();
   }
   return parent_.Get();
-}
-
-bool AXMenuListOption::IsEnabled() const {
-  // isDisabledFormControl() returns true if the parent <select> element is
-  // disabled, which we don't want.
-  return element_ && !element_->OwnElementDisabled();
 }
 
 bool AXMenuListOption::IsVisible() const {
@@ -132,43 +126,25 @@ void AXMenuListOption::SetSelected(bool b) {
   element_->SetSelected(b);
 }
 
-bool AXMenuListOption::CanSetFocusAttribute() const {
-  return CanSetSelectedAttribute();
-}
-
-bool AXMenuListOption::CanSetSelectedAttribute() const {
-  if (!isHTMLOptionElement(GetNode()))
-    return false;
-
-  if (toHTMLOptionElement(GetNode())->IsDisabledFormControl())
-    return false;
-
-  HTMLSelectElement* select_element = ParentSelectNode();
-  if (!select_element || select_element->IsDisabledFormControl())
-    return false;
-
-  return IsEnabled();
-}
-
 bool AXMenuListOption::ComputeAccessibilityIsIgnored(
     IgnoredReasons* ignored_reasons) const {
   return AccessibilityIsIgnoredByDefault(ignored_reasons);
 }
 
 void AXMenuListOption::GetRelativeBounds(
-    AXObjectImpl** out_container,
+    AXObject** out_container,
     FloatRect& out_bounds_in_container,
     SkMatrix44& out_container_transform) const {
   *out_container = nullptr;
   out_bounds_in_container = FloatRect();
   out_container_transform.setIdentity();
 
-  AXObjectImpl* parent = ParentObject();
+  AXObject* parent = ParentObject();
   if (!parent)
     return;
   DCHECK(parent->IsMenuListPopup());
 
-  AXObjectImpl* grandparent = parent->ParentObject();
+  AXObject* grandparent = parent->ParentObject();
   if (!grandparent)
     return;
   DCHECK(grandparent->IsMenuList());

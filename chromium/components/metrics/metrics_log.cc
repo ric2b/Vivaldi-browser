@@ -11,9 +11,13 @@
 
 #include "base/build_time.h"
 #include "base/cpu.h"
+#include "base/metrics/histogram_base.h"
+#include "base/metrics/histogram_flattener.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/histogram_snapshot_manager.h"
 #include "base/metrics/metrics_hashes.h"
+#include "base/strings/string_piece.h"
 #include "base/sys_info.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
@@ -22,12 +26,12 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/metrics/metrics_provider.h"
 #include "components/metrics/metrics_service_client.h"
+#include "components/metrics/persistent_system_profile.h"
 #include "components/metrics/proto/histogram_event.pb.h"
 #include "components/metrics/proto/system_profile.pb.h"
 #include "components/metrics/proto/user_action_event.pb.h"
 #include "components/prefs/pref_registry_simple.h"
 #include "components/prefs/pref_service.h"
-#include "components/variations/active_field_trials.h"
 
 #if defined(OS_ANDROID)
 #include "base/android/build_info.h"
@@ -38,26 +42,42 @@
 #endif
 
 using base::SampleCountIterator;
-typedef variations::ActiveGroupId ActiveGroupId;
 
 namespace metrics {
 
+namespace internal {
+// Maximum number of events before truncation.
+extern const int kOmniboxEventLimit = 5000;
+extern const int kUserActionEventLimit = 5000;
+}
+
 namespace {
+
+// A simple class to write histogram data to a log.
+class IndependentFlattener : public base::HistogramFlattener {
+ public:
+  explicit IndependentFlattener(MetricsLog* log) : log_(log) {}
+
+  // base::HistogramFlattener:
+  void RecordDelta(const base::HistogramBase& histogram,
+                   const base::HistogramSamples& snapshot) override {
+    log_->RecordHistogramDelta(histogram.histogram_name(), snapshot);
+  }
+  void InconsistencyDetected(
+      base::HistogramBase::Inconsistency problem) override {}
+  void UniqueInconsistencyDetected(
+      base::HistogramBase::Inconsistency problem) override {}
+  void InconsistencyDetectedInLoggedCount(int amount) override {}
+
+ private:
+  MetricsLog* const log_;
+
+  DISALLOW_COPY_AND_ASSIGN(IndependentFlattener);
+};
 
 // Any id less than 16 bytes is considered to be a testing id.
 bool IsTestingID(const std::string& id) {
   return id.size() < 16;
-}
-
-void WriteFieldTrials(const std::vector<ActiveGroupId>& field_trial_ids,
-                      SystemProfileProto* system_profile) {
-  for (std::vector<ActiveGroupId>::const_iterator it =
-       field_trial_ids.begin(); it != field_trial_ids.end(); ++it) {
-    SystemProfileProto::FieldTrial* field_trial =
-        system_profile->add_field_trial();
-    field_trial->set_name_id(it->name);
-    field_trial->set_group_id(it->group);
-  }
 }
 
 // Round a timestamp measured in seconds since epoch to one with a granularity
@@ -91,7 +111,12 @@ MetricsLog::MetricsLog(const std::string& client_id,
   if (product != uma_proto_.product())
     uma_proto_.set_product(product);
 
-  RecordCoreSystemProfile(client_, uma_proto_.mutable_system_profile());
+  SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
+  RecordCoreSystemProfile(client_, system_profile);
+  if (log_type_ == ONGOING_LOG) {
+    GlobalPersistentSystemProfile::GetInstance()->SetSystemProfile(
+        *system_profile, /*complete=*/false);
+  }
 }
 
 MetricsLog::~MetricsLog() {
@@ -209,11 +234,6 @@ void MetricsLog::RecordGeneralMetrics(
     metrics_providers[i]->ProvideGeneralMetrics(uma_proto());
 }
 
-void MetricsLog::GetFieldTrialIds(
-    std::vector<ActiveGroupId>* field_trial_ids) const {
-  variations::GetFieldTrialActiveGroupIds(field_trial_ids);
-}
-
 bool MetricsLog::HasEnvironment() const {
   return uma_proto()->system_profile().has_uma_enabled_date();
 }
@@ -266,7 +286,6 @@ void MetricsLog::WriteRealtimeStabilityAttributes(
 
 std::string MetricsLog::RecordEnvironment(
     const std::vector<std::unique_ptr<MetricsProvider>>& metrics_providers,
-    const std::vector<variations::ActiveGroupId>& synthetic_trials,
     int64_t install_date,
     int64_t metrics_reporting_enabled_date) {
   DCHECK(!HasEnvironment());
@@ -294,16 +313,28 @@ std::string MetricsLog::RecordEnvironment(
   cpu->set_signature(cpu_info.signature());
   cpu->set_num_cores(base::SysInfo::NumberOfProcessors());
 
-  std::vector<ActiveGroupId> field_trial_ids;
-  GetFieldTrialIds(&field_trial_ids);
-  WriteFieldTrials(field_trial_ids, system_profile);
-  WriteFieldTrials(synthetic_trials, system_profile);
-
   for (size_t i = 0; i < metrics_providers.size(); ++i)
     metrics_providers[i]->ProvideSystemProfileMetrics(system_profile);
 
   EnvironmentRecorder recorder(local_state_);
-  return recorder.SerializeAndRecordEnvironmentToPrefs(*system_profile);
+  std::string serialized_proto =
+      recorder.SerializeAndRecordEnvironmentToPrefs(*system_profile);
+
+  if (log_type_ == ONGOING_LOG) {
+    GlobalPersistentSystemProfile::GetInstance()->SetSystemProfile(
+        serialized_proto, /*complete=*/true);
+  }
+
+  return serialized_proto;
+}
+
+bool MetricsLog::LoadIndependentMetrics(MetricsProvider* metrics_provider) {
+  SystemProfileProto* system_profile = uma_proto()->mutable_system_profile();
+  IndependentFlattener flattener(this);
+  base::HistogramSnapshotManager snapshot_manager(&flattener);
+
+  return metrics_provider->ProvideIndependentMetrics(system_profile,
+                                                     &snapshot_manager);
 }
 
 bool MetricsLog::LoadSavedEnvironmentFromPrefs(std::string* app_version) {
@@ -321,6 +352,25 @@ bool MetricsLog::LoadSavedEnvironmentFromPrefs(std::string* app_version) {
 void MetricsLog::CloseLog() {
   DCHECK(!closed_);
   closed_ = true;
+}
+
+void MetricsLog::TruncateEvents() {
+  DCHECK(!closed_);
+  if (uma_proto_.user_action_event_size() > internal::kUserActionEventLimit) {
+    UMA_HISTOGRAM_COUNTS_100000("UMA.TruncatedEvents.UserAction",
+                                uma_proto_.user_action_event_size());
+    uma_proto_.mutable_user_action_event()->DeleteSubrange(
+        internal::kUserActionEventLimit,
+        uma_proto_.user_action_event_size() - internal::kUserActionEventLimit);
+  }
+
+  if (uma_proto_.omnibox_event_size() > internal::kOmniboxEventLimit) {
+    UMA_HISTOGRAM_COUNTS_100000("UMA.TruncatedEvents.Omnibox",
+                                uma_proto_.omnibox_event_size());
+    uma_proto_.mutable_omnibox_event()->DeleteSubrange(
+        internal::kOmniboxEventLimit,
+        uma_proto_.omnibox_event_size() - internal::kOmniboxEventLimit);
+  }
 }
 
 void MetricsLog::GetEncodedLog(std::string* encoded_log) {

@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_macros.h"
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task_scheduler/post_task.h"
@@ -42,21 +43,23 @@ ChromeCleanerRunnerTestDelegate* g_test_delegate = nullptr;
 
 }  // namespace
 
+ChromeCleanerRunner::ProcessStatus::ProcessStatus(LaunchStatus launch_status,
+                                                  int exit_code)
+    : launch_status(launch_status), exit_code(exit_code) {}
+
 // static
 void ChromeCleanerRunner::RunChromeCleanerAndReplyWithExitCode(
     const base::FilePath& cleaner_executable_path,
     const SwReporterInvocation& reporter_invocation,
     ChromeMetricsStatus metrics_status,
-    CleanerLogsStatus cleaner_logs_status,
     ChromePromptImpl::OnPromptUser on_prompt_user,
     base::OnceClosure on_connection_closed,
     ChromeCleanerRunner::ProcessDoneCallback on_process_done,
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
   auto cleaner_runner = make_scoped_refptr(new ChromeCleanerRunner(
       cleaner_executable_path, reporter_invocation, metrics_status,
-      cleaner_logs_status, std::move(on_prompt_user),
-      std::move(on_connection_closed), std::move(on_process_done),
-      std::move(task_runner)));
+      std::move(on_prompt_user), std::move(on_connection_closed),
+      std::move(on_process_done), std::move(task_runner)));
   auto launch_and_wait = base::BindOnce(
       &ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread,
       cleaner_runner);
@@ -76,7 +79,6 @@ ChromeCleanerRunner::ChromeCleanerRunner(
     const base::FilePath& cleaner_executable_path,
     const SwReporterInvocation& reporter_invocation,
     ChromeMetricsStatus metrics_status,
-    CleanerLogsStatus cleaner_logs_status,
     ChromePromptImpl::OnPromptUser on_prompt_user,
     base::OnceClosure on_connection_closed,
     ProcessDoneCallback on_process_done,
@@ -129,15 +131,9 @@ ChromeCleanerRunner::ChromeCleanerRunner(
     cleaner_command_line_.AppendSwitch(
         chrome_cleaner::kEnableCrashReportingSwitch);
   }
-
-  // Enable logs upload for users who have opted into safe browsing extended
-  // reporting v2.
-  if (cleaner_logs_status == CleanerLogsStatus::kUploadEnabled)
-    cleaner_command_line_.AppendSwitch(
-        chrome_cleaner::kEnableCleanerLoggingSwitch);
 }
 
-ChromeCleanerRunner::LaunchStatus
+ChromeCleanerRunner::ProcessStatus
 ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
   mojo::edk::OutgoingBrokerClientInvitation invitation;
   std::string mojo_pipe_token = mojo::edk::GenerateRandomToken();
@@ -159,9 +155,8 @@ ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
                                                launch_options)
           : base::LaunchProcess(cleaner_command_line_, launch_options);
 
-  constexpr int kBadProcessExitCode = std::numeric_limits<int>::max();
   if (!cleaner_process.IsValid())
-    return {false, kBadProcessExitCode};
+    return ProcessStatus(LaunchStatus::kLaunchFailed);
 
   // ChromePromptImpl tasks will need to run on the IO thread. There is no
   // need to synchronize its creation, since the client end will wait for this
@@ -178,10 +173,16 @@ ChromeCleanerRunner::LaunchAndWaitForExitOnBackgroundThread() {
       mojo::edk::ConnectionParams(mojo::edk::TransportProtocol::kLegacy,
                                   channel.PassServerHandle()));
 
-  int exit_code = kBadProcessExitCode;
-  if (cleaner_process.WaitForExit(&exit_code))
-    return {true, exit_code};
-  return {false, kBadProcessExitCode};
+  int exit_code = -1;
+  if (!cleaner_process.WaitForExit(&exit_code)) {
+    return ProcessStatus(
+        LaunchStatus::kLaunchSucceededFailedToWaitForCompletion);
+  }
+
+  UMA_HISTOGRAM_SPARSE_SLOWLY(
+      "SoftwareReporter.Cleaner.ExitCodeFromConnectedProcess", exit_code);
+
+  return ProcessStatus(LaunchStatus::kSuccess, exit_code);
 }
 
 ChromeCleanerRunner::~ChromeCleanerRunner() = default;
@@ -216,10 +217,17 @@ void ChromeCleanerRunner::OnConnectionClosed() {
     task_runner_->PostTask(FROM_HERE, std::move(on_connection_closed_));
 }
 
-void ChromeCleanerRunner::OnProcessDone(LaunchStatus launch_status) {
+void ChromeCleanerRunner::OnProcessDone(ProcessStatus process_status) {
+  if (g_test_delegate) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(&ChromeCleanerRunnerTestDelegate::OnCleanerProcessDone,
+                       base::Unretained(g_test_delegate), process_status));
+  }
+
   if (on_process_done_) {
     task_runner_->PostTask(
-        FROM_HERE, base::BindOnce(std::move(on_process_done_), launch_status));
+        FROM_HERE, base::BindOnce(std::move(on_process_done_), process_status));
   }
 }
 

@@ -6,9 +6,9 @@
 #define ScriptCustomElementDefinition_h
 
 #include "core/CoreExport.h"
-#include "core/dom/custom/CustomElementDefinition.h"
-#include "platform/bindings/ScopedPersistent.h"
+#include "core/html/custom/CustomElementDefinition.h"
 #include "platform/bindings/ScriptState.h"
+#include "platform/bindings/TraceWrapperV8Reference.h"
 #include "platform/wtf/Noncopyable.h"
 #include "platform/wtf/RefPtr.h"
 #include "v8.h"
@@ -32,14 +32,17 @@ class CORE_EXPORT ScriptCustomElementDefinition final
       ScriptState*,
       CustomElementRegistry*,
       const CustomElementDescriptor&,
+      CustomElementDefinition::Id,
       const v8::Local<v8::Object>& constructor,
       const v8::Local<v8::Function>& connected_callback,
       const v8::Local<v8::Function>& disconnected_callback,
       const v8::Local<v8::Function>& adopted_callback,
       const v8::Local<v8::Function>& attribute_changed_callback,
-      const HashSet<AtomicString>& observed_attributes);
+      HashSet<AtomicString>&& observed_attributes);
 
   virtual ~ScriptCustomElementDefinition() = default;
+
+  DECLARE_VIRTUAL_TRACE_WRAPPERS();
 
   v8::Local<v8::Object> Constructor() const;
 
@@ -68,7 +71,7 @@ class CORE_EXPORT ScriptCustomElementDefinition final
       const v8::Local<v8::Function>& disconnected_callback,
       const v8::Local<v8::Function>& adopted_callback,
       const v8::Local<v8::Function>& attribute_changed_callback,
-      const HashSet<AtomicString>& observed_attributes);
+      HashSet<AtomicString>&& observed_attributes);
 
   // Implementations of |CustomElementDefinition|
   ScriptValue GetConstructorForScript() final;
@@ -88,11 +91,11 @@ class CORE_EXPORT ScriptCustomElementDefinition final
                                                 ExceptionState&);
 
   RefPtr<ScriptState> script_state_;
-  ScopedPersistent<v8::Object> constructor_;
-  ScopedPersistent<v8::Function> connected_callback_;
-  ScopedPersistent<v8::Function> disconnected_callback_;
-  ScopedPersistent<v8::Function> adopted_callback_;
-  ScopedPersistent<v8::Function> attribute_changed_callback_;
+  TraceWrapperV8Reference<v8::Object> constructor_;
+  TraceWrapperV8Reference<v8::Function> connected_callback_;
+  TraceWrapperV8Reference<v8::Function> disconnected_callback_;
+  TraceWrapperV8Reference<v8::Function> adopted_callback_;
+  TraceWrapperV8Reference<v8::Function> attribute_changed_callback_;
 };
 
 }  // namespace blink

@@ -76,6 +76,27 @@ Press any key to continue exploring.
   <message name="IDS_FILE_SYSTEM_PROVIDER_MANY_UNRESPONSIVE_WARNING" desc="A warning shown in a notification that more than one operations are taking longer than expected.">
     Some operations are taking longer than expected. Do you want to abort them?
   </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_CONFIRM_TD_MEMBERS_LOSE_ACCESS" desc="Part of message in the confirmation dialog box when moving a file out of a Team Drive.">
+    Members of '<ph name="SOURCE_NAME">$1</ph>' will lose access unless these items are shared with them.
+  </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_CONFIRM_CANNOT_MOVE_BACK_TO_TEAM_DRIVE" desc="Part of message in the confirmation dialog box when moving a file from Team Drives to My Drive to tell that the operation is not undoable.">
+    The items cannot be moved back into '<ph name="DESTINATION_NAME">$1</ph>', so you won't be able to undo this action.
+  </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_CONFIRM_TD_MEMBERS_GAIN_ACCESS" desc="Part of message in the confirmation dialog box when moving or copying files into a Team Drive.">
+    Members of '<ph name="DESTINATION_NAME">$1</ph>' will gain access to these items.
+  </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_CONFIRM_TD_MEMBERS_GAIN_ACCESS_TO_COPY" desc="Part of message in the confirmation dialog box when copying files into a Team Drive.">
+    Members of '<ph name="DESTINATION_NAME">$1</ph>' will gain access to the copy of these items.
+  </message>
+  <message name="IDS_FILE_BROWSER_DRIVE_CONFIRM_OWNERSHIP_TRANSFER" desc="Part of message in the confirmation dialog box when moving files between two Team Drives that belong to different domains.">
+    Ownership will be transferred to <ph name="DESTINATION_DOMAIN">$1</ph>.
+  </message>
+  <message name="IDS_FILE_BROWSER_CONFIRM_COPY_BUTTON_LABEL" desc="Button label for approving file copy operation in the confirmation dialog box. This is placed next to CANCEL button.">
+    Copy
+  </message>
+  <message name="IDS_FILE_BROWSER_CONFIRM_MOVE_BUTTON_LABEL" desc="Button label for approving file move operation in the confirmation dialog box. This is placed next to CANCEL button.">
+    Move
+  </message>
   <message name="IDS_FILE_SYSTEM_PROVIDER_UNRESPONSIVE_ABORT_BUTTON" desc="Label of the button on the notification about an operation(s) taking to long.">
     Abort
   </message>
@@ -108,6 +129,9 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_FILE_BROWSER_MEDIA_VIEW_AUDIO_ROOT_LABEL" desc="A label for the 'Audio' root of media views.">
     Audio
+  </message>
+  <message name="IDS_FILE_BROWSER_RECENT_ROOT_LABEL" desc="A label for the 'Recent' root.">
+    Recent
   </message>
   <message name="IDS_FILE_BROWSER_DOWNLOADS_DIRECTORY_WARNING" desc="Warning displayed to user when viewing downloads folder.">
     <ph name="BEGIN_BOLD">&lt;strong&gt;</ph>Caution:<ph name="END_BOLD">&lt;/strong&gt;</ph>  These files are temporary and may be automatically deleted to free up disk space.  <ph name="BEGIN_LINK">&lt;a href="javascript://"&gt;</ph>Learn More<ph name="END_LINK">&lt;/a&gt;<ex>&lt;/a&gt;</ex></ph>
@@ -463,7 +487,10 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_CUT_BUTTON_LABEL" desc="Context menu item that cuts the currently-selected file(s) to the clipboard.">
     Cut
   </message>
-  <message name="IDS_FILE_BROWSER_MORE_ACTIONS_BUTTON_LABEL" desc="Menu item label, showing dialog to choose extension to open selected files or directories.">
+  <message name="IDS_FILE_BROWSER_OPEN_WITH_BUTTON_LABEL" desc="Menu item label, showing dialog to choose extension to open selected files or directories.">
+    Open with...
+  </message>
+  <message name="IDS_FILE_BROWSER_MORE_ACTIONS_BUTTON_LABEL" desc="Menu item label, showing dialog to choose extension to open/share/pack/etc... selected files or directories.">
     More actions...
   </message>
   <message name="IDS_FILE_BROWSER_OPEN_WITH_VERB_BUTTON_LABEL" desc="Verb that describe the action of opening one or more files or directories with the given extension.">
@@ -490,8 +517,8 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_REMOVE_FOLDER_SHORTCUT_BUTTON_LABEL" desc="Menu item label, unpinning the selected folder from the left nav.">
     Remove shortcut
   </message>
-  <message name="IDS_FILE_BROWSER_SHARE_BUTTON_LABEL" desc="Menu item label, showing dialog to share the selected file.">
-    Share
+  <message name="IDS_FILE_BROWSER_SHARE_BUTTON_LABEL" desc="Menu item's label, showing dialog to share the selected Google Drive files. This message is also used as a tooltip label and a spoken feedback label of a button which also shows the dialog to share the files. The translation should be consistent with the sharing dialog's title in Google Drive Web UI.">
+    Share with others
   </message>
   <message name="IDS_FILE_BROWSER_TOGGLE_HIDDEN_FILES_COMMAND_LABEL" desc="Label for menu or button with checkmark that toggles visibility of hidden files.">
     Show hidden files
@@ -1145,11 +1172,17 @@ Press any key to continue exploring.
   <message name="IDS_FILE_BROWSER_THUMBNAIL_VIEW_TOOLTIP" desc="Tooltip for the Thumbnail View button.">
     Thumbnail view
   </message>
+  <message name="IDS_FILE_BROWSER_SHARE_BUTTON_TOOLTIP" desc="Tooltip for the button which provides share options in the Files app.">
+    Share options
+  </message>
   <message name="IDS_FILE_BROWSER_SORT_BUTTON_TOOLTIP" desc="Tooltip for the button which provides sort options in the Files app.">
     Sort options
   </message>
   <message name="IDS_FILE_BROWSER_GEAR_BUTTON_TOOLTIP" desc="Tooltip for the gear button in the Files app.">
     Settings
+  </message>
+  <message name="IDS_FILE_BROWSER_SELECTION_MENU_BUTTON_TOOLTIP" desc="Tooltip for the button to open the context menu of currently selected items in the Files app.">
+    More...
   </message>
 
   <message name="IDS_FILE_BROWSER_TIME_TODAY" desc="File date and time in case the date is today.">
@@ -1441,13 +1474,34 @@ Press any key to continue exploring.
     Cancelling update...
   </message>
   <message name="IDS_REMORA_CONFIRM_MESSAGE" desc="Remora confirm message on the first OOBE screen">
-    Chromebox for Meetings device is ready to be set up.
+    Your Hangouts Meet hardware is ready to be set up.
   </message>
   <message name="IDS_WELCOME_SCREEN_GREETING" desc="Greeting message on the OOBE welcome screen">
     Welcome!
   </message>
   <message name="IDS_WELCOME_SCREEN_TITLE" desc="Title of the OOBE welcome screen">
     Connect
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_SCREEN_TITLE" desc="Screen title on the Chrome OS OOBE (first run) Advanced options screen">
+    Advanced options
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_EE_BOOTSTRAPPING_TITLE" desc="Title of the button that triggers Enterprise Enrollment via bootstrapping application mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Enable remote enrollment
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_EE_BOOTSTRAPPING_SUBTITLE" desc="Subtitle of the button that triggers Enterprise Enrollment via bootstrapping application mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Use the bootstrapping app to quickly enroll
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_CFM_SETUP_TITLE" desc="Title of the button that triggers Chromebox for Meetings device mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Set up as Chromebox for meetings
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_CFM_SETUP_SUBTITLE" desc="Subtitle of the button that trigers Chromebox for Meetings device mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Enroll device for video conferencing
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_DEVICE_REQUISITION_TITLE" desc="Title of the button that triggers Device requisition device setup mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Device requisition
+  </message>
+  <message name="IDS_OOBE_ADVANCED_OPTIONS_DEVICE_REQUISITION_SUBTITLE" desc="Subtitle of the button that trigers Device requisition device setup mode on the Chrome OS OOBE (first run UI) Advanced options screen">
+    Add requisition ID to this device
   </message>
   <message name="IDS_NETWORK_SCREEN_ACCESSIBLE_TITLE" desc="Text to be spoken on opening the OOBE network screen">
     Welcome! Set your language and network
@@ -1538,18 +1592,6 @@ Press any key to continue exploring.
   </message>
   <message name="IDS_LANGUAGE_SELECTION_SELECT" desc="Label for language selection dropdown">
     Select your language:
-  </message>
-  <message name="IDS_LANGUAGES_MEDIUM_LEN_NAME_CHINESE_SIMPLIFIED" desc="Medium length name for the input method for simplified Chinese which is shown following the text: Your input method has changed to...">
-    Simplified Chinese
-  </message>
-  <message name="IDS_LANGUAGES_MEDIUM_LEN_NAME_CHINESE_TRADITIONAL" desc="Medium length name for the input method for traditional Chinese which is show following the text: Your input method has changed to...">
-   Traditional Chinese
-  </message>
-  <message name="IDS_LANGUAGES_MEDIUM_LEN_NAME_KOREAN" desc="Medium length name for the input method for Korean which is show following the text: Your input method has changed to...">
-    Korean
-  </message>
-  <message name="IDS_LANGUAGES_MEDIUM_LEN_NAME_BRAILLE" desc="Medium length name for the input method for the hardware keyboard on a braille display. Shown after the text: Your input method has changed to...">
-    Braille
   </message>
   <message name="IDS_KEYBOARD_SELECTION_SELECT" desc="Label for keyboard selection dropdown">
     Select your keyboard:
@@ -2141,7 +2183,10 @@ Press any key to continue exploring.
     Type the characters you see in the picture below.
   </message>
   <message name="IDS_LOGIN_NEEDS_DIRCRYPTO_MIGRATION_BANNER" desc="Banner text for users that need to migrate their data to use dircrypto.">
-    You've got a new critical update. Sign in to get started.
+    You've got a new OS update. Sign in to get started.
+  </message>
+  <message name="IDS_LOGIN_NEW_LOCK_SCREEN_NOTE_BUTTON_TITLE" desc="Title for the button on the Chrome OS lock screen that launches an app for taking notes (the action of creating a new note is delegated to the app). The string is primarily intended to be spoken out by accessibility tools - the button is represented by an icon in the lock screen UI.">
+    Create new note
   </message>
   <message name="IDS_OPTIONS_SETTINGS_SECONDARY_USER_BANNER" desc="Banner displayed in settings page when the user is secondary in a multi-profile session.">
     Some settings belonging to <ph name="PRIMARY_EMAIL">$1<ex>john@google.com</ex></ph> are being shared with you. These settings only affect your account when using multiple sign-in.
@@ -2325,7 +2370,7 @@ Press any key to continue exploring.
     Activation of '<ph name="name">$1<ex>Generic Wireless</ex></ph>' requires a network connection.
   </message>
 
-  <!-- Strings shown within tether notifications -->
+  <!-- Strings shown within Tether notifications -->
   <message name="IDS_TETHER_NOTIFICATION_CONNECTION_FAILED_TITLE" desc="Title of the notification shown to the user when an attempt to tether to another device has failed.">
     Instant Tethering connection failed
   </message>
@@ -2347,11 +2392,14 @@ Press any key to continue exploring.
   <message name="IDS_TETHER_NOTIFICATION_WIFI_AVAILABLE_MULTIPLE_DEVICES_MESSAGE" desc="Message shown as part of the notification shown to the user when multiple tether hotspots are available via multiple nearby devices.">
     Data connection available
   </message>
-  <message name="IDS_TETHER_NOTIFICATION_SET_UP_NEEDED_TITLE" desc="Title of the notification shown to the user when set up is needed on another device to start tethering.">
-    Finish setting up connection on your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph>
+  <message name="IDS_TETHER_NOTIFICATION_SETUP_REQUIRED_TITLE" desc="Title of the notification shown to the user when set up is needed on another device to start tethering.">
+    Set up connection on your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph>
   </message>
-  <message name="IDS_TETHER_NOTIFICATION_SET_UP_NEEDED_MESSAGE" desc="Message shown as part of the notification shown to the user when set up is needed on another device to start tethering.">
-    Tap the notification on your Pixel to set up a private Wi-Fi connection that can be used by this device.
+  <message name="IDS_TETHER_NOTIFICATION_SETUP_REQUIRED_MESSAGE" desc="Message shown as part of the notification shown to the user when set up is needed on another device to start tethering.">
+    Tap the notification on your <ph name="PHONE_NAME">$1<ex>Google Pixel XL</ex></ph> to set up the mobile hotspot that can be used by this device.
+  </message>
+  <message name="IDS_TETHER_NOTIFICATION_ENABLE_BLUETOOTH_TITLE" desc="Title of the notification shown to the user when disconnected from the Internet when Bluetooth is off; this notification alerts users to enable Bluetooth to search for Tether networks.">
+    To use Instant Tethering, turn on Bluetooth
   </message>
 
   <!-- Options strings -->
@@ -3097,10 +3145,10 @@ Press any key to continue exploring.
     Google Profile photo (loading)
   </message>
   <message name="IDS_IMAGE_SCREEN_PROFILE_PHOTO" desc="The title of the Google profile photo of the user on image selection screen. Please keep in sync with IDS_OPTIONS_CHANGE_PICTURE_PROFILE_PHOTO.">
-    * Google Profile photo
+    Google Profile photo
   </message>
   <message name="IDS_IMAGE_SCREEN_PROFILE_LOADING_PHOTO" desc="The title of the loading stub for Google profile image on image selection screen. Please keep in sync with IDS_OPTIONS_CHANGE_PICTURE_PROFILE_LOADING_PHOTO.">
-    * Google Profile photo (loading)
+    Google Profile photo (loading)
   </message>
   <message name="IDS_IMAGE_SCREEN_SYNCING_PREFERENCES" desc="The message displayed on the image screen of the GAIA flow while user preferences are syncing.">
     Syncing your preferences...
@@ -3626,6 +3674,9 @@ Press any key to continue exploring.
   <message name="IDS_RESET_SCREEN_ROLLBACK_OPTION" desc="Checkbox label for rollback option of powerwash process. Is shown on reset screen.">
     Also return to the previously installed version of <ph name="IDS_SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph>.
   </message>
+  <message name="IDS_RESET_SCREEN_TPM_FIRMWARE_UPDATE_OPTION" desc="Checkbox label for the TPM firmware update option of the powerwash process, shown on the device reset screen.">
+    Update firmware for added security.
+  </message>
   <message name="IDS_RESET_SCREEN_POWERWASH" desc="Powerwash button text">
     Powerwash
   </message>
@@ -3904,27 +3955,24 @@ Press any key to continue exploring.
     Wi-Fi
   </message>
   <message name="IDS_STATUSBAR_NETWORK_DEVICE_CELLULAR" desc="Label for a cellular network device.">
-    Mobile Data
+    Mobile data
   </message>
-  <message name="IDS_NETWORK_TYPE_ETHERNET" desc="The ethernet network type.">
+  <message name="IDS_NETWORK_TYPE_ETHERNET" desc="Label for Ethernet networks.">
     Ethernet
   </message>
-  <message name="IDS_NETWORK_TYPE_TETHER" desc="The tether network type.">
-    Tether
-  </message>
-  <message name="IDS_NETWORK_TYPE_WIFI" desc="The wifi network type.">
+  <message name="IDS_NETWORK_TYPE_WIFI" desc="Label for WiFi networks.">
     Wi-Fi
   </message>
-  <message name="IDS_NETWORK_TYPE_WIMAX" desc="The wimax network type.">
+  <message name="IDS_NETWORK_TYPE_WIMAX" desc="Label for WiMAX networks.">
     WiMAX
   </message>
-  <message name="IDS_NETWORK_TYPE_BLUETOOTH" desc="The bluetooth network type.">
+  <message name="IDS_NETWORK_TYPE_BLUETOOTH" desc="Label for Bluetooth networks.">
     Bluetooth
   </message>
-  <message name="IDS_NETWORK_TYPE_CELLULAR" desc="The cellular network type.">
-    Mobile
+  <message name="IDS_NETWORK_TYPE_MOBILE_DATA" desc="Label for Cellular and Tether networks.">
+    Mobile data
   </message>
-  <message name="IDS_NETWORK_TYPE_VPN" desc="The vpn network type.">
+  <message name="IDS_NETWORK_TYPE_VPN" desc="Label for VPN networks.">
     VPN
   </message>
   <message name="IDS_NETWORK_TYPE_VPN_BUILTIN" desc="The built-in VPN types (Open VPN and L2TP/IPSec).">
@@ -4369,8 +4417,23 @@ Battery full
   <message name="IDS_KEYBOARD_OVERLAY_INSTRUCTIONS" desc="The instructions for the keyboard overlay.">
     Hold Control, Alt, Shift, or Search to see keyboard shortcuts for those modifiers.
   </message>
+  <message name="IDS_KEYBOARD_OVERLAY_INSTRUCTIONS_LAYOUT2" desc="The instructions for the keyboard overlay when device is using the 2017 keyboard layout.">
+    Hold Control, Alt, Shift, or Launcher to see keyboard shortcuts for those modifiers.
+  </message>
   <message name="IDS_KEYBOARD_OVERLAY_INSTRUCTIONS_HIDE" desc="The instruction for hiding the keyboard overlay.">
     Type Ctrl+Alt+/ or Escape to hide
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_ASSISTANT_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'assistant' key.">
+    assistant
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_PLAY_PAUSE_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'play / pause' key.">
+    play / pause
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_SYSTEM_MENU_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'system menu' key.">
+    system menu
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_LAUNCHER_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'launcher / search' key.">
+    launcher
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_ESC_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'esc' (Escape) key.">
     esc
@@ -4440,6 +4503,9 @@ Battery full
   </message>
   <message name="IDS_KEYBOARD_OVERLAY_DOWN_KEY_LABEL" desc="The text in the keyboard overlay to show the label of the 'down' arrow key.">
     down
+  </message>
+  <message name="IDS_KEYBOARD_OVERLAY_VOICE_INTERACTION" desc="The text in the keyboard overlay for voice interaction shortcut">
+    Start Assistant
   </message>
   <!-- BEGIN GENERATED KEYBOARD OVERLAY STRINGS -->
   <message name="IDS_KEYBOARD_OVERLAY_ACTIVATE_LAST_SHELF_ITEM" desc="The text in the keyboard overlay to explain the shortcut (Open the last shelf item).">
@@ -4858,608 +4924,6 @@ Battery full
   </message>
   <!-- END GENERATED KEYBOARD OVERLAY STRINGS -->
 
-  <message name="IDS_STATUSBAR_LAYOUT_JAPAN" desc="In the language menu button, this shows the input mode [Japanese keyboard].">
-    Japanese
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SLOVENIA" desc="In the language menu button, this shows the input mode [Slovenian keyboard].">
-    Slovenian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_GERMANY" desc="In the language menu button, this shows the input mode [German keyboard].">
-    German
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_GERMANY_NEO2" desc="In the language menu button, this shows the input mode [German Neo 2 keyboard].">
-    German Neo 2
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ITALY" desc="In the language menu button, this shows the input mode [Italian keyboard].">
-    Italian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ESTONIA" desc="In the language menu button, this shows the input mode [Estonian keyboard].">
-    Estonian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_FAROESE" desc="In the language menu button, this shows the input mode [Faroese keyboard].">
-    Faroese
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_HUNGARY" desc="In the language menu button, this shows the input mode [Hungarian keyboard].">
-    Hungarian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_HUNGARY_QWERTY" desc="In the language menu button, this shows the input mode [Hungarian QWERTY keyboard].">
-    Hungarian QWERTY
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_POLAND" desc="In the language menu button, this shows the input mode [Polish keyboard].">
-    Polish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_DENMARK" desc="In the language menu button, this shows the input mode [Danish keyboard].">
-    Danish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CROATIA" desc="In the language menu button, this shows the input mode [Croatian keyboard].">
-    Croatian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_BRAZIL" desc="In the language menu button, this shows the input mode [Brazilian keyboard].">
-    Brazilian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SERBIA" desc="In the language menu button, this shows the input mode [Serbian keyboard].">
-    Serbian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CZECHIA" desc="In the language menu button, this shows the input mode [Czech keyboard].">
-    Czech
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CZECHIA_QWERTY" desc="In the language menu button, this shows the input mode [Czech QWERTY keyboard].">
-    Czech QWERTY
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_DVORAK" desc="In the language menu button, this shows the input mode [US Dvorak keyboard].">
-    US Dvorak
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_DVP" desc="In the language menu button, this shows the input mode [US Programmer Dvorak keyboard].">
-    US Programmer Dvorak
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_COLEMAK" desc="In the language menu button, this shows the input mode [US Colemak keyboard].">
-    US Colemak
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ROMANIA" desc="In the language menu button, this shows the input mode [Romanian keyboard].">
-    Romanian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA" desc="In the language menu button, this shows the input mode [US keyboard].">
-    US
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_EXTENDED" desc="In the language menu button, this shows the input mode [US extended keyboard].">
-    US extended
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_INTERNATIONAL" desc="In the language menu button, this shows the input mode [US international keyboard].">
-    US international
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_WORKMAN" desc="In the language menu button, this shows the input mode [US Workman keyboard].">
-    US Workman
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_USA_WORKMAN_INTERNATIONAL" desc="In the language menu button, this shows the input mode [US Workman international keyboard].">
-    US Workman international
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_LITHUANIA" desc="In the language menu button, this shows the input mode [Lithuanian keyboard].">
-    Lithuanian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_UNITED_KINGDOM" desc="In the language menu button, this shows the input mode [UK keyboard].">
-    UK
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_UNITED_KINGDOM_DVORAK" desc="In the language menu button, this shows the input mode [UK Dvorak keyboard].">
-    UK Dvorak
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SLOVAKIA" desc="In the language menu button, this shows the input mode [Slovak keyboard].">
-    Slovak
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_RUSSIA" desc="In the language menu button, this shows the input mode [Russian keyboard].">
-    Russian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_RUSSIA_PHONETIC" desc="In the language menu button, this shows the input mode [Russian phonetic keyboard].">
-    Russian phonetic
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_GREECE" desc="In the language menu button, this shows the input mode [Greek keyboard].">
-    Greek
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_BELGIUM" desc="In the language menu button, this shows the input mode [Belgian keyboard].">
-    Belgian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_BULGARIA" desc="In the language menu button, this shows the input mode [Bulgarian keyboard].">
-    Bulgarian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_BULGARIA_PHONETIC" desc="In the language menu button, this shows the input mode [Bulgarian phonetic keyboard].">
-    Bulgarian phonetic
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SWITZERLAND" desc="In the language menu button, this shows the input mode [Swiss keyboard].">
-    Swiss
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SWITZERLAND_FRENCH" desc="In the language menu button, this shows the input mode [Swiss French keyboard].">
-    Swiss French
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_TURKEY" desc="In the language menu button, this shows the input mode [Turkish keyboard].">
-    Turkish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_TURKEY_F" desc="In the language menu button, this shows the input mode [Turkish-F keyboard].">
-    Turkish-F
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_PORTUGAL" desc="In the language menu button, this shows the input mode [Portuguese keyboard].">
-    Portuguese
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SPAIN" desc="In the language menu button, this shows the input mode [Spanish keyboard].">
-    Spanish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_FINLAND" desc="In the language menu button, this shows the input mode [Finnish keyboard].">
-    Finnish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_UKRAINE" desc="In the language menu button, this shows the input mode [Ukrainian keyboard].">
-    Ukrainian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SPAIN_CATALAN" desc="In the language menu button, this shows the input mode [Catalan keyboard].">
-    Catalan
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_FRANCE_BEPO" desc="In the language menu button, this shows the input mode [French BÉPO keyboard].">
-    French BÉPO
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_FRANCE" desc="In the language menu button, this shows the input mode [French keyboard].">
-    French
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_NORWAY" desc="In the language menu button, this shows the input mode [Norwegian keyboard].">
-    Norwegian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_SWEDEN" desc="In the language menu button, this shows the input mode [Swedish keyboard].">
-    Swedish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_NETHERLANDS" desc="In the language menu button, this shows the input mode [Dutch keyboard].">
-    Dutch
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_LATIN_AMERICAN" desc="In the language menu button, this shows the input mode [Latin American keyboard].">
-    Latin American
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_LATVIA" desc="In the language menu button, this shows the input mode [Latvian keyboard].">
-    Latvian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CANADA" desc="In the language menu button, this shows the input mode [Canadian French keyboard].">
-    Canadian French
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CANADA_ENGLISH" desc="In the language menu button, this shows the input mode [Canadian English keyboard].">
-    Canadian English
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ISRAEL" desc="In the language menu button, this shows the input mode [Hebrew keyboard].">
-    Hebrew
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_KOREA_104" desc="In the language menu button, this shows the input mode [Korean keyboard].">
-    Korean
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ICELANDIC" desc="In the language menu button, this shows the input mode [Icelandic keyboard].">
-    Icelandic
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_CANADIAN_MULTILINGUAL" desc="In the language menu button, this shows the input mode [Canadian Multilingual keyboard].">
-    Canadian Multilingual
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_GEORGIAN" desc="In the language menu button, this shows the input mode [Georgian keyboard].">
-    Georgian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_BELARUSIAN" desc="In the language menu button, this shows the input mode [Belarusian keyboard].">
-    Belarusian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_ARMENIAN_PHONETIC" desc="In the language menu button, this shows the input mode [Armenian Phonetic keyboard].">
-    Armenian Phonetic
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_MONGOLIAN" desc="In the language menu button, this shows the input mode [Mongolian keyboard].">
-    Mongolian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_IRISH" desc="In the language menu button, this shows the input mode [Irish keyboard].">
-    Irish
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_MACEDONIAN" desc="In the language menu button, this shows the input mode [Macedonian keyboard].">
-    Macedonian
-  </message>
-  <message name="IDS_STATUSBAR_LAYOUT_KAZAKH" desc="In the language menu button, this shows the input mode [Kazakh keyboard].">
-    Kazakh
-  </message>
-
-  <message name="IDS_IME_NAME_KEYBOARD_ARMENIAN_PHONETIC" desc="The input method name shows in system tray menu, this shows [Armenian Phonetic keyboard].">
-    Armenian Phonetic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BELARUSIAN" desc="The input method name shows in system tray menu, this shows [Belarusian keyboard].">
-    Belarusian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BELGIAN" desc="The input method name shows in system tray menu, this shows [Belgian keyboard].">
-    Belgian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BRAZILIAN" desc="The input method name shows in system tray menu, this shows [Brazilian keyboard].">
-    Brazilian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BULGARIAN" desc="The input method name shows in system tray menu, this shows [Bulgarian keyboard].">
-    Bulgarian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BULGARIAN_PHONETIC" desc="The input method name shows in system tray menu, this shows [Bulgarian Phonetic keyboard].">
-    Bulgarian Phonetic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CANADIAN_ENGLISH" desc="The input method name shows in system tray menu, this shows [Canadian English keyboard].">
-    Canadian English keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CANADIAN_FRENCH" desc="The input method name shows in system tray menu, this shows [Canadian French keyboard].">
-    Canadian French keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CANADIAN_MULTILINGUAL" desc="The input method name shows in system tray menu, this shows [Canadian Multilingual keyboard].">
-    Canadian Multilingual keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CATALAN" desc="The input method name shows in system tray menu, this shows [Catalan keyboard].">
-    Catalan keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CROATIAN" desc="The input method name shows in system tray menu, this shows [Croatian keyboard].">
-    Croatian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CZECH" desc="The input method name shows in system tray menu, this shows [Czech keyboard].">
-    Czech keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_CZECH_QWERTY" desc="The input method name shows in system tray menu, this shows [Czech QWERTY keyboard].">
-    Czech QWERTY keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_DANISH" desc="The input method name shows in system tray menu, this shows [Danish keyboard].">
-    Danish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ESTONIAN" desc="The input method name shows in system tray menu, this shows [Estonian keyboard].">
-    Estonian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_FAROESE" desc="The input method name shows in system tray menu, this shows [Faroese keyboard].">
-    Faroese keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_FINNISH" desc="The input method name shows in system tray menu, this shows [Finnish keyboard].">
-    Finnish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_FRENCH_BEPO" desc="The input method name shows in system tray menu, this shows [French BÉPO keyboard].">
-    French BÉPO keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_FRENCH" desc="The input method name shows in system tray menu, this shows [French keyboard].">
-    French keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_GEORGIAN" desc="The input method name shows in system tray menu, this shows [Georgian keyboard].">
-    Georgian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_GERMAN" desc="The input method name shows in system tray menu, this shows [German keyboard].">
-    German keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_GERMAN_NEO_2" desc="The input method name shows in system tray menu, this shows [German NEO 2 keyboard].">
-    German NEO 2 keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_GREEK" desc="The input method name shows in system tray menu, this shows [Greek keyboard].">
-    Greek keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_HEBREW" desc="The input method name shows in system tray menu, this shows [Hebrew keyboard].">
-    Hebrew keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_HUNGARIAN" desc="The input method name shows in system tray menu, this shows [Hungarian keyboard].">
-    Hungarian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_HUNGARIAN_QWERTY" desc="The input method name shows in system tray menu, this shows [Hungarian QWERTY keyboard].">
-    Hungarian QWERTY keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ICELANDIC" desc="The input method name shows in system tray menu, this shows [Icelandic keyboard].">
-    Icelandic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_IRISH" desc="The input method name shows in system tray menu, this shows [Irish keyboard].">
-    Irish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ITALIAN" desc="The input method name shows in system tray menu, this shows [Italian keyboard].">
-    Italian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_JAPANESE" desc="The input method name shows in system tray menu, this shows [Japanese keyboard].">
-    Japanese keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_KAZAKH" desc="The input method name shows in system tray menu, this shows [Kazakh keyboard].">
-    Kazakh keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_LATIN_AMERICAN" desc="The input method name shows in system tray menu, this shows [Latin American keyboard].">
-    Latin American keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_LATVIAN" desc="The input method name shows in system tray menu, this shows [Latvian keyboard].">
-    Latvian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_LITHUANIAN" desc="The input method name shows in system tray menu, this shows [Lithuanian keyboard].">
-    Lithuanian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MACEDONIAN" desc="The input method name shows in system tray menu, this shows [Macedonian keyboard].">
-    Macedonian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MALTESE" desc="The input method name shows in system tray menu, this shows [Maltese keyboard].">
-    Maltese keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MONGOLIAN" desc="The input method name shows in system tray menu, this shows [Mongolian keyboard].">
-    Mongolian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_NETHERLANDS" desc="The input method name shows in system tray menu, this shows [Netherlands keyboard].">
-    Netherlands keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_NORWEGIAN" desc="The input method name shows in system tray menu, this shows [Norwegian keyboard].">
-    Norwegian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_POLISH" desc="The input method name shows in system tray menu, this shows [Polish keyboard].">
-    Polish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_PORTUGUESE" desc="The input method name shows in system tray menu, this shows [Portuguese keyboard].">
-    Portuguese keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ROMANIAN" desc="The input method name shows in system tray menu, this shows [Romanian keyboard].">
-    Romanian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ROMANIAN_STANDARD" desc="The input method name shows in system tray menu, this shows [Romanian standard keyboard].">
-    Romanian standard keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_RUSSIAN" desc="The input method name shows in system tray menu, this shows [Russian keyboard].">
-    Russian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_RUSSIAN_PHONETIC" desc="The input method name shows in system tray menu, this shows [Russian Phonetic keyboard].">
-    Russian Phonetic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_RUSSIAN_PHONETIC_AATSEEL" desc="The input method name shows in system tray menu, this shows [Russian Phonetic (AATSEEL) keyboard].">
-    Russian Phonetic (AATSEEL) keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_RUSSIAN_PHONETIC_YAZHERT" desc="The input method name shows in system tray menu, this shows [Russian Phonetic (YaZHert) keyboard].">
-    Russian Phonetic (YaZHert) keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SERBIAN" desc="The input method name shows in system tray menu, this shows [Serbian keyboard].">
-    Serbian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SLOVAK" desc="The input method name shows in system tray menu, this shows [Slovak keyboard].">
-    Slovak keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SLOVENIAN" desc="The input method name shows in system tray menu, this shows [Slovenian keyboard].">
-    Slovenian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SPANISH" desc="The input method name shows in system tray menu, this shows [Spanish keyboard].">
-    Spanish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SWEDISH" desc="The input method name shows in system tray menu, this shows [Swedish keyboard].">
-    Swedish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SWISS_FRENCH" desc="The input method name shows in system tray menu, this shows [Swiss French keyboard].">
-    Swiss French keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SWISS" desc="The input method name shows in system tray menu, this shows [Swiss keyboard].">
-    Swiss keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TURKISH" desc="The input method name shows in system tray menu, this shows [Turkish keyboard].">
-    Turkish keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TURKISH_F" desc="The input method name shows in system tray menu, this shows [Turkish-F keyboard].">
-    Turkish-F keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_UK_DVORAK" desc="The input method name shows in system tray menu, this shows [UK Dvorak keyboard].">
-    UK Dvorak keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_UK" desc="The input method name shows in system tray menu, this shows [UK keyboard].">
-    UK keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_UKRAINIAN" desc="The input method name shows in system tray menu, this shows [Ukrainian keyboard].">
-    Ukrainian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_COLEMAK" desc="The input method name shows in system tray menu, this shows [US Colemak keyboard].">
-    US Colemak keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_DVORAK" desc="The input method name shows in system tray menu, this shows [US Dvorak keyboard].">
-    US Dvorak keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_DVP" desc="The input method name shows in system tray menu, this shows [US Programmer Dvorak keyboard].">
-    US Programmer Dvorak keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_EXTENDED" desc="The input method name shows in system tray menu, this shows [US Extended keyboard].">
-    US Extended keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_INTERNATIONAL" desc="The input method name shows in system tray menu, this shows [US International keyboard].">
-    US International keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_WORKMAN" desc="The input method name shows in system tray menu, this shows [US Workman keyboard].">
-    US Workman keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US_WORKMAN_INTERNATIONAL" desc="The input method name shows in system tray menu, this shows [US Workman international keyboard].">
-    US Workman international keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_US" desc="The input method name shows in system tray menu, this shows [US keyboard].">
-    US keyboard
-  </message>
-
-  <message name="IDS_IME_NAME_INPUTMETHOD_ARRAY" desc="The input method name shows in system tray menu, this is Array (\u884c\u5217) input method for Traditional Chinese.">
-    Array input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_CANGJIE" desc="The input method name shows in system tray menu, this is Cangjie input method for Tradition Chinese.">
-    Cangjie input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_DAYI" desc="The input method name shows in system tray menu, this is Dayi (\u5927\u6613) input method for Traditional Chinese.">
-    Dayi input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_MOZC_JP" desc="The input method name shows in system tray menu, this is Japanese input method for Japanese keyboard.">
-    Google Japanese Input (for Japanese keyboard)
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_MOZC_US" desc="The input method name shows in system tray menu, this is Japanese input method for US keyboard.">
-    Google Japanese Input (for US keyboard)
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_PINYIN" desc="The input method name shows in system tray menu, this is Pinyin input method for Simplified Chinese.">
-    Pinyin input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_QUICK" desc="The input method name shows in system tray menu, this is Quick input method for Traditional Chinese.">
-    Quick input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_TRADITIONAL_PINYIN" desc="The input method name shows in system tray menu, this is Pinyin input method for Traditional Chinese.">
-    Traditional Pinyin input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_WUBI" desc="The input method name shows in system tray menu, this is Wubi input method for Simplified Chinese.">
-    Wubi input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_ZHUYIN" desc="The input method name shows in system tray menu, this is Zhuyin input method for Traditional Chinese.">
-    Zhuyin input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_CANTONESE" desc="The input method name shows in system tray menu, this is Cantonese input method for Traditional Chinese.">
-    Cantonese input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL" desc="The input method name shows in system tray menu, this is Korean Hangul input method.">
-    Korean input method
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_2_SET" desc="The input method name shows in system tray menu, this is Korean Hangul input method, 2 Set mode.">
-    Hangul 2 Set
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_3_SET_390" desc="The input method name shows in system tray menu, this is Korean Hangul input method, 3 Set (390) mode.">
-    Hangul 3 Set (390)
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_3_SET_FINAL" desc="The input method name shows in system tray menu, this is Korean Hangul input method, 3 Set (Final) mode.">
-    Hangul 3 Set (Final)
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_3_SET_NO_SHIFT" desc="The input method name shows in system tray menu, this is Korean Hangul input method, 3 Set (No Shift) mode.">
-    Hangul 3 Set (No Shift)
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_ROMAJA" desc="The input method name shows in system tray menu, this is Korean Hangul input method, Romaja mode.">
-    Hangul Romaja
-  </message>
-  <message name="IDS_IME_NAME_INPUTMETHOD_HANGUL_AHNMATAE" desc="The input method name shows in system tray menu, this is Korean Hangul input method, Ahnmatae mode.">
-    Hangul Ahnmatae
-  </message>
-
-  <message name="IDS_IME_NAME_KEYBOARD_ARABIC" desc="The input method name shows in system tray menu.">
-    Arabic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_BENGALI_PHONETIC" desc="The input method name shows in system tray menu.">
-    Bengali keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_DEVANAGARI_PHONETIC" desc="The input method name shows in system tray menu.">
-    Devanagari keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_ETHIOPIC" desc="The input method name shows in system tray menu.">
-    Ethiopic keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_GUJARATI_PHONETIC" desc="The input method name shows in system tray menu.">
-    Gujarati keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_KANNADA_PHONETIC" desc="The input method name shows in system tray menu.">
-    Kannada keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_KHMER" desc="The input method name shows in system tray menu.">
-    Khmer keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_LAO" desc="The input method name shows in system tray menu.">
-    Lao keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MALAYALAM_PHONETIC" desc="The input method name shows in system tray menu.">
-    Malayalam keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MYANMAR" desc="The input method name shows in system tray menu.">
-    Myanmar keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_MYANMAR_MYANSAN" desc="The input method name shows in system tray menu.">
-    Myanmar Myansan keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_NEPALI_INSCRIPT" desc="The input method name shows in system tray menu.">
-    Nepali keyboard (InScript)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_NEPALI_PHONETIC" desc="The input method name shows in system tray menu.">
-    Nepali keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_PERSIAN" desc="The input method name shows in system tray menu.">
-    Persian keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SINHALA" desc="The input method name shows in system tray menu.">
-    Sinhala keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SORANIKURDISH_AR" desc="The input method name shows in system tray menu.">
-    Sorani Kurdish Arabic-based keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_SORANIKURDISH_EN" desc="The input method name shows in system tray menu.">
-    Sorani Kurdish English-based keyboard
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TAMIL_INSCRIPT" desc="The input method name shows in system tray menu.">
-    Tamil keyboard (InScript)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TAMIL_ITRANS" desc="The input method name shows in system tray menu.">
-    Tamil keyboard (itrans)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TAMIL_PHONETIC" desc="The input method name shows in system tray menu.">
-    Tamil keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TAMIL_TAMIL99" desc="The input method name shows in system tray menu.">
-    Tamil keyboard (Tamil99)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TAMIL_TYPEWRITER" desc="The input method name shows in system tray menu.">
-    Tamil keyboard (Typewriter)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_TELUGU_PHONETIC" desc="The input method name shows in system tray menu.">
-    Telugu keyboard (Phonetic)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_THAI_KEDMANEE" desc="The input method name shows in system tray menu.">
-    Thai keyboard (Kedmanee)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_THAI_PATTACHOTE" desc="The input method name shows in system tray menu.">
-    Thai keyboard (Pattachote)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_THAI_TIS" desc="The input method name shows in system tray menu.">
-    Thai keyboard (TIS 820-2531)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_VIETNAMESE_TCVN" desc="The input method name shows in system tray menu.">
-    Vietnamese keyboard (TCVN)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_VIETNAMESE_TELEX" desc="The input method name shows in system tray menu.">
-    Vietnamese keyboard (Telex)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_VIETNAMESE_VIQR" desc="The input method name shows in system tray menu.">
-    Vietnamese keyboard (VIQR)
-  </message>
-  <message name="IDS_IME_NAME_KEYBOARD_VIETNAMESE_VNI" desc="The input method name shows in system tray menu.">
-    Vietnamese keyboard (VNI)
-  </message>
-
-  <message name="IDS_IME_NAME_TRANSLITERATION_AM" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (salam &#x2192; &#x1230;&#x120b;&#x121d;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_AR" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (marhaban &#x2190; &#x0645;&#x0631;&#x062d;&#x0628;&#x0627;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_BN" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaskar &#x2192; &#x09a8;&#x09ae;&#x09b8;&#x09cd;&#x0995;&#x09be;&#x09b0;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_EL" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (geia &#x2192; &#x03b3;&#x03b5;&#x03b9;&#x03b1;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_FA" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (salam &#x2190; &#x0633;&#x0644;&#x0627;&#x0645;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_GU" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaste &#x2192; &#x0aa8;&#x0aae;&#x0ab8;&#x0acd;&#x0aa4;&#x0ac7;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_HE" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (shalom &#x2190; &#x05e9;&#x05dc;&#x05d5;&#x05dd;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_HI" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaste &#x2192; &#x0928;&#x092e;&#x0938;&#x094d;&#x0924;&#x0947;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_KN" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaskaram &#x2192; &#x0ca8;&#x0cae;&#x0cb8;&#x0ccd;&#x0c95;&#x0cbe;&#x0cb0;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_ML" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaskar &#x2192; &#x0d28;&#x0d2e;&#x0d38;&#x0d4d;&#x0d15;&#x0d3e;&#x0d30;&#x0d02;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_MR" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaste &#x2192; &#x0928;&#x092e;&#x0938;&#x094d;&#x0915;&#x093e;&#x0930;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_NE" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaste &#x2192; &#x0928;&#x092e;&#x0938;&#x094d;&#x0924;&#x0947;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_OR" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (mausam &#x2192; &#x0b28;&#x0b2e;&#x0b38;&#x0b4d;&#x0b24;&#x0b47;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_PA" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (mausam &#x2192; &#x0a2e;&#x0a4c;&#x0a38;&#x0a2e;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_SA" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (namaste &#x2192; &#x0928;&#x092e;&#x0938;&#x094d;&#x0924;&#x0947;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_SR" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (zdravo &#x2192; &#x0437;&#x0434;&#x0440;&#x0430;&#x0432;&#x043e;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_TA" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (vanakkam &#x2192; &#x0bb5;&#x0ba3;&#x0b95;&#x0bcd;&#x0b95;&#x0bae;&#x0bcd;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_TE" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (emandi &#x2192; &#x0c0f;&#x0c2e;&#x0c02;&#x0c21;&#x0c40;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_TI" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (selam &#x2192; &#x1230;&#x120b;&#x121d;)
-  </message>
-  <message name="IDS_IME_NAME_TRANSLITERATION_UR" desc="The input method name shows in system tray menu. Please translate only for 'transliteration'.">
-    Transliteration (salam &#x2190; &#x0633;&#x0644;&#x0627;&#x0645;)
-  </message>
-
   <message name="IDS_LOGIN_ERROR_WHITELIST" desc="Couldn't sign in because user is not whitelisted by the device owner.">
     You are not authorized to use this device. Please contact the device owner for sign-in permission.
   </message>
@@ -5645,14 +5109,14 @@ Battery full
   </message>
 
   <!-- Encryption migration dialog -->
-  <message name="IDS_ENCRYPTION_MIGRATION_READY_TITLE" desc="Title shown in encryption migration screen, which asks the user to install a critical update.">
-    Install critical update
+  <message name="IDS_ENCRYPTION_MIGRATION_READY_TITLE" desc="Title shown in encryption migration screen, which asks the user to install an OS update.">
+    Install OS update
   </message>
-  <message name="IDS_ENCRYPTION_MIGRATION_READY_DESCRIPTION" desc="Description shown in encryption migration screen, which asks the user to install a critical update.">
+  <message name="IDS_ENCRYPTION_MIGRATION_READY_DESCRIPTION" desc="Description shown in encryption migration screen, which asks the user to install an OS update.">
     To download and use Android apps, first you need to install an update. While your device is updating, you can’t use it. Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart after installation completes.
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_MIGRATING_TITLE" desc="Title shown in encryption migration screen when the migration is ongoing.">
-    Installing critical update
+    Installing OS update
   </message>
   <message name="IDS_ENCRYPTION_MIGRATION_MIGRATING_DESCRIPTION" desc="Description shown in encryption migration screen when the migration is ongoing.">
     Don’t turn off or close your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> until the update finishes. Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> will restart after installation completes.
@@ -5868,29 +5332,26 @@ All users must sign out to continue.
   <message name="IDS_FIRST_RUN_GREETING_STEP_BUTTON" desc="Text on the button located on the first dialog of first-run tutorial.">
     Take a tour
   </message>
-  <message name="IDS_FIRST_RUN_APP_LIST_STEP_HEADER" desc="Header of the first-run bubble bubble pointing to application list button.">
-    Play, edit, share, get stuff done.
+  <message name="IDS_FIRST_RUN_APP_LIST_STEP_HEADER" desc="Header of the first-run bubble pointing to application list button.">
+    Get to your apps fast
   </message>
   <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_1" desc="First part of message on the first-run tutorial bubble pointing to application list button.">
-    Access all your apps from this handy launcher. Play games, video chat, listen to music, edit documents, or get more apps.
+    Use the Launcher to quickly get to new apps and activities.
   </message>
-  <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_2" desc="Second part of message on the first-run tutorial bubble pointing to application list button. Part of the phrase &quot;Access all your apps from this handy launcher. Play games, video chat, listen to music, edit documents, or get more apps from the Chrome Web Store. It's all here.&quot;">
-    It's all here.
+  <message name="IDS_FIRST_RUN_APP_LIST_STEP_TEXT_2" desc="Second part of message on the first-run tutorial bubble pointing to application list button. Only shown if the device is Google Assistant capable.">
+    Just hold the Launcher icon to talk to your Google Assistant.
   </message>
   <message name="IDS_FIRST_RUN_TRAY_STEP_HEADER" desc="Header of the first-run tutorial bubble pointing to system tray bubble.">
-    Hassle-free goodness.
+    Check your Chromebook status
   </message>
   <message name="IDS_FIRST_RUN_TRAY_STEP_TEXT" desc="Text on the first-run tutorial bubble pointing to system tray bubble.">
-    The status tray shows you the current state of your network, battery, and more.
+    Manage connections, updates, and settings with the status tray.
   </message>
   <message name="IDS_FIRST_RUN_HELP_STEP_HEADER" desc="Header of the first-run tutorial bubble pointing to help button in system tray.">
-    Have fun! We're here for you.
+    Explore your Chromebook
   </message>
-  <message name="IDS_FIRST_RUN_HELP_STEP_TEXT_1" desc="First part of text shown on the first-run tutorial bubble pointing to help button in system tray.">
-    Enjoy your <ph name="SHORT_PRODUCT_NAME">$1<ex>Chrome</ex></ph> device. Questions? You can always get help by clicking the "?" in the status tray.
-  </message>
-  <message name="IDS_FIRST_RUN_HELP_STEP_TEXT_2" desc="Second part of text shown on the first-run tutorial bubble pointing to help button in system tray.">
-    Want to discover more awesome features?
+  <message name="IDS_FIRST_RUN_HELP_STEP_TEXT" desc="First part of text shown on the first-run tutorial bubble pointing to help button in system tray.">
+    Discover more features or get answers. Select “?” for help.
   </message>
   <message name="IDS_FIRST_RUN_HELP_STEP_KEEP_EXPLORING_BUTTON" desc="Text on the button located in the first-run tutorial bubble pointing to help button is system tray. After click on the button tutorial finishes and help app opens.">
     Keep exploring
@@ -6042,7 +5503,7 @@ All users must sign out to continue.
     Offline
   </message>
 
-  <!-- Strings for the "Chromebox for meeting" OOBE UI. -->
+  <!-- Strings for the "Hangouts Meet" OOBE UI. -->
   <message name="IDS_ENTERPRISE_DEVICE_REQUISITION_PROMPT_CANCEL" desc="Cancel button text in the device requisition poup.">
     Cancel
   </message>
@@ -6053,30 +5514,30 @@ All users must sign out to continue.
     Use this device requisition when enrolling the device for enterprise management:
   </message>
   <message name="IDS_ENTERPRISE_DEVICE_REQUISITION_REMORA_PROMPT_TEXT" desc="Prompt shown in the device requisition remora prompt popup.">
-    Are you sure you want to set up this device as a Chromebox for Meetings device?
+    Are you sure you want to set up this device to run Hangouts Meet?
   </message>
   <message name="IDS_ENTERPRISE_DEVICE_REQUISITION_SHARK_PROMPT_TEXT" desc="Prompt shown in the device requisition shark prompt popup.">
     Are you sure you want to set up this device as a "Shark"?
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_WELCOME" desc="Message shown on 'Chromebox for meetings' controller in the beginning of the setup process.">
-    Welcome to Chromebox for meetings
+  <message name="IDS_PAIRING_CONTROLLER_WELCOME" desc="Message shown on 'Hangouts Meet' controller in the beginning of the setup process.">
+    Welcome to Hangouts Meet
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_SEARCHING" desc="Message shown on 'Chromebox for meetings' controller when it is searching for host devices.">
+  <message name="IDS_PAIRING_CONTROLLER_SEARCHING" desc="Message shown on 'Hangouts Meet' controller when it is searching for host devices.">
     Searching for nearby Chromeboxes...
   </message>
-  <message name="IDS_PAIRING_NEED_HELP" desc="Text on the button launching help article about the 'Chromebox for meetings' setup process.">
+  <message name="IDS_PAIRING_NEED_HELP" desc="Text on the button launching help article about the 'Hangouts Meet' setup process.">
     Need help?
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_TROUBLE_CONNECTING" desc="Title of the the dialog giving an advice on how to improve a connection between a host and a controller during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_TROUBLE_CONNECTING" desc="Title of the the dialog giving an advice on how to improve a connection between a host and a controller during the 'Hangouts Meet' setup process.">
     Trouble connecting?
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONNECTING_ADVICE" desc="Text in the dialog giving an advice on how to improve a connection between a host and a controller during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONNECTING_ADVICE" desc="Text in the dialog giving an advice on how to improve a connection between a host and a controller during the 'Hangouts Meet' setup process.">
     Please make sure that your Hotrod device is turned on and connected to a TV.
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ADVICE_GOT_IT" desc="Text on the confirmation button of the dialog giving an advice on how to improve a connection between a host and a controller during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_ADVICE_GOT_IT" desc="Text on the confirmation button of the dialog giving an advice on how to improve a connection between a host and a controller during the 'Hangouts Meet' setup process.">
     OK, got it
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_SELECT_TITLE" desc="Title of the list of nearby 'Chromebox for meeting' devices, that is shown on a controller device during a setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_SELECT_TITLE" desc="Title of the list of nearby 'Hangouts Meet' devices, that is shown on a controller device during a setup process.">
     Select a Chromebox to connect to
   </message>
   <message name="IDS_PAIRING_CONTROLLER_CONNECT" desc="Text on the button initiating a connection to the choosen device. After a user pressed the button, text changes to 'Connecting...'.">
@@ -6085,10 +5546,10 @@ All users must sign out to continue.
   <message name="IDS_PAIRING_CONTROLLER_CONNECTING" desc="Text on the button initiating a connection to the choosen device, after a user pressed it. The initial text is 'Connect'.">
     Connecting...
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONFIRMATION_TITLE" desc="Title of the page showing the confirmation code on a controller's screen during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONFIRMATION_TITLE" desc="Title of the page showing the confirmation code on a controller's screen during the 'Hangouts Meet' setup process.">
     Pair with Chromebox
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONFIRMATION_QUESTION" desc="Text that is shown near 6-digit confirmation code on a controller's screen during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONFIRMATION_QUESTION" desc="Text that is shown near 6-digit confirmation code on a controller's screen during the 'Hangouts Meet' setup process.">
     Does this code appear on your Chromebox screen?
   </message>
   <message name="IDS_PAIRING_CONTROLLER_REJECT_CODE" desc="Text on a button which the user presses to report that they don't see a confirmation code.">
@@ -6097,70 +5558,70 @@ All users must sign out to continue.
   <message name="IDS_PAIRING_CONTROLLER_ACCEPT_CODE" desc="Text on a button which the user presses to report that they see a correct confirmation code.">
     Yes, I see it
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_UPDATE_TITLE" desc="Title of the controller's update page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_UPDATE_TITLE" desc="Title of the controller's update page of the 'Hangouts Meet' setup process.">
     Updating Chromebox
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_UPDATE_TEXT" desc="Text on the controller's update page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_UPDATE_TEXT" desc="Text on the controller's update page of the 'Hangouts Meet' setup process.">
     In order to bring you the latest features, your Chromebox needs to update.
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONNECTION_LOST_TITLE" desc="Title of the controller page which says that connection with host was lost during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONNECTION_LOST_TITLE" desc="Title of the controller page which says that connection with host was lost during the 'Hangouts Meet' setup process.">
     Connection to Chromebox lost
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONNECTION_LOST_TEXT" desc="Text on the controller page which says that connection with host was lost during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONNECTION_LOST_TEXT" desc="Text on the controller page which says that connection with host was lost during the 'Hangouts Meet' setup process.">
     Lost connection to your Chromebox. Please move closer, or check your device while we try to reconnect.
   </message>
   <message name="IDS_PAIRING_CONTROLLER_HOST_NETWORK_ERROR_TITLE" desc="Title of the controller page which says that the host device's network is not set up successfully.">
     Failed to set up your Chromebox's network
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TITLE" desc="Title of the enroll page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TITLE" desc="Title of the enroll page of the 'Hangouts Meet' setup process.">
     Enroll in your organization
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TEXT_1" desc="First paragraph of text shown on the controller's enroll page of the 'Chromebox for meeting' setup process. Second paragraph is: 'This will only happen once, and your credentials will not be stored.'">
-    Chromebox for meetings needs to know what domain it belongs to. This will require you to sign in to your account.
+  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TEXT_1" desc="First paragraph of text shown on the controller's enroll page of the 'Hangouts Meet' setup process. Second paragraph is: 'This will only happen once, and your credentials will not be stored.'">
+    Hangouts Meet needs to know what domain it belongs to. This will require you to sign in to your account.
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TEXT_2" desc="Second paragraph of text shown on the controller's enroll page of the 'Chromebox for meeting' setup process. First paragraph is: 'Chromebox for meetings needs to know what domain it belongs to. This will require you to sign in to your account.'">
+  <message name="IDS_PAIRING_CONTROLLER_ENROLL_TEXT_2" desc="Second paragraph of text shown on the controller's enroll page of the 'Hangouts Meet' setup process. First paragraph is: 'Hangouts Meet needs to know what domain it belongs to. This will require you to sign in to your account.'">
     This will only happen once, and your credentials will not be stored.
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONTINUE" desc="Text on buttons leading to the next step of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_CONTINUE" desc="Text on buttons leading to the next step of the 'Hangouts Meet' setup process.">
     Continue
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ENROLLMENT_IN_PROGRESS" desc="Message shown on enroll screens of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_ENROLLMENT_IN_PROGRESS" desc="Message shown on enroll screens of the 'Hangouts Meet' setup process.">
     Enrolling in <ph name="BEGIN_BOLD">&lt;strong&gt;</ph><ph name="DOMAIN_NAME">$1<ex>example.com</ex></ph><ph name="END_BOLD">&lt;/strong&gt;</ph>...
   </message>
-  <message name="IDS_PAIRING_ENROLLMENT_ERROR_TITLE" desc="Title of the page shown when enrollment attempt is failed during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_ENROLLMENT_ERROR_TITLE" desc="Title of the page shown when enrollment attempt is failed during the 'Hangouts Meet' setup process.">
     Unable to enroll
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_ENROLLMENT_ERROR_HOST_RESTARTS" desc="Text on the controller's page shown when enrollment attempt is failed during the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_CONTROLLER_ENROLLMENT_ERROR_HOST_RESTARTS" desc="Text on the controller's page shown when enrollment attempt is failed during the 'Hangouts Meet' setup process.">
     Please wait while your Chromebox restarts...
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_SUCCESS_TITLE" desc="Title of the final controller's page shown when the 'Chromebox for meeting' setup process is finished.">
+  <message name="IDS_PAIRING_CONTROLLER_SUCCESS_TITLE" desc="Title of the final controller's page shown when the 'Hangouts Meet' setup process is finished.">
     Success!
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_SUCCESS_TEXT" desc="Text on the final controller's page shown when the 'Chromebox for meeting' setup process is finished.">
+  <message name="IDS_PAIRING_CONTROLLER_SUCCESS_TEXT" desc="Text on the final controller's page shown when the 'Hangouts Meet' setup process is finished.">
     <ph name="DEVICE_NAME">$1<ex>Chromebox-01</ex></ph> will now appear in the Admin Console
   </message>
-  <message name="IDS_PAIRING_CONTROLLER_CONTINUE_TO_HANGOUTS" desc="Text on the button, shown on the final controller's page, displayed when the 'Chromebox for meeting' setup process is finished.">
-    Continue to Hangouts
+  <message name="IDS_PAIRING_CONTROLLER_CONTINUE_TO_HANGOUTS" desc="Text on the button, shown on the final controller's page, displayed when the 'Hangouts Meet' setup process is finished.">
+    Continue to Hangouts Meet
   </message>
-  <message name="IDS_PAIRING_HOST_WELCOME_TITLE" desc="Title of the host's welcome page of the 'Chromebox for meeting' setup process.">
-    Welcome to Chromebox for meetings!
+  <message name="IDS_PAIRING_HOST_WELCOME_TITLE" desc="Title of the host's welcome page of the 'Hangouts Meet' setup process.">
+    Welcome to Hangouts Meet!
   </message>
-  <message name="IDS_PAIRING_HOST_WELCOME_TEXT" desc="Text on the host's welcome page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_HOST_WELCOME_TEXT" desc="Text on the host's welcome page of the 'Hangouts Meet' setup process.">
     Turn on your touch controller to set me up
   </message>
-  <message name="IDS_PAIRING_HOST_UPDATING_TITLE" desc="Title of the host's update page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_HOST_UPDATING_TITLE" desc="Title of the host's update page of the 'Hangouts Meet' setup process.">
     Updating Chromebox...
   </message>
-  <message name="IDS_PAIRING_HOST_UPDATING_TEXT" desc="Update progress shown on the host's update page of the 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_HOST_UPDATING_TEXT" desc="Update progress shown on the host's update page of the 'Hangouts Meet' setup process.">
     <ph name="DOWNLOADED_AMOUNT_MB">$1<ex>13.7</ex></ph> MB / <ph name="TOTAL_AMOUNT_MB">$2<ex>23</ex></ph> MB downloaded
   </message>
-  <message name="IDS_PAIRING_HOST_DONE_TITLE" desc="Title of the final host's page shown when the 'Chromebox for meeting' setup process is finished.">
+  <message name="IDS_PAIRING_HOST_DONE_TITLE" desc="Title of the final host's page shown when the 'Hangouts Meet' setup process is finished.">
     Congratulations
   </message>
-  <message name="IDS_PAIRING_HOST_DONE_TEXT" desc="Title of the final host's page shown when the 'Chromebox for meeting' setup process is finished.">
-    You're all set to continue on to Hangouts
+  <message name="IDS_PAIRING_HOST_DONE_TEXT" desc="Title of the final host's page shown when the 'Hangouts Meet' setup process is finished.">
+    You're all set to continue on to Hangouts Meet
   </message>
-  <message name="IDS_PAIRING_HOST_ERROR_NEED_RESTART_TEXT" desc="Text on the host's error page shown when the bootstrapping attampt or 'Chromebox for meeting' setup process is failed.">
+  <message name="IDS_PAIRING_HOST_ERROR_NEED_RESTART_TEXT" desc="Text on the host's error page shown when the bootstrapping attampt or 'Hangouts Meet' setup process is failed.">
     Please restart the device and try again later.
   </message>
 
@@ -6183,10 +5644,10 @@ All users must sign out to continue.
   <message name="IDS_SLAVE_ENROLLMENT_ERROR_TITLE" desc="Title of the page shown when enrollment attempt is failed during the bootstrapping process.">
     Unable to enroll
   </message>
-  <message name="IDS_PAIRING_HOST_INITIALIZATION_ERROR_TITLE" desc="Title of the host's initialization error page during the bootstrapping process or 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_HOST_INITIALIZATION_ERROR_TITLE" desc="Title of the host's initialization error page during the bootstrapping process or 'Hangouts Meet' setup process.">
     Could not initialize the connection
   </message>
-  <message name="IDS_PAIRING_HOST_CONNECTION_ERROR_TITLE" desc="Title of the host's connection error page during the bootstrapping process or 'Chromebox for meeting' setup process.">
+  <message name="IDS_PAIRING_HOST_CONNECTION_ERROR_TITLE" desc="Title of the host's connection error page during the bootstrapping process or 'Hangouts Meet' setup process.">
     Connection was lost
   </message>
 
@@ -6266,8 +5727,11 @@ All users must sign out to continue.
   <message name="IDS_ENTERPRISE_ENROLLMENT_STATUS_NO_MACHINE_IDENTIFICATION" desc="Error message shown on the enrollment screen when the system failed to determine the device model or serial number.">
     Oops!  The system failed to determine device model or serial number.
   </message>
-  <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_ACTIVE_DIRECTORY_POLICY_FETCH" desc="Error message shown on the enrollment screen when the system failed to fetch device policy from Active Directory.">
-    Oops!  The system failed to fetch policy from Microsoft® Active Directory®.
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_ACTIVE_DIRECTORY_POLICY_FETCH" desc="Error message shown on the enrollment screen when the system failed to fetch device policy from the local server, e.g. Samba or Active Directory.">
+    Oops!  The system failed to fetch policy for your device.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_LICENSE_REQUEST" desc="Error message shown on the enrollment screen when the system failed to retrieve available license types.">
+    Oops!  The system failed to load available licenses.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ERROR_SAVE_DEVICE_CONFIGURATION" desc="Error message shown on the enrollment screen when the system failed to save some part of the device configuration. E.g. token from the Device Management server.">
     Oops!  The system failed to save device configuration.
@@ -6307,13 +5771,16 @@ All users must sign out to continue.
   <message name="IDS_AD_DOMAIN_JOIN_WELCOME_MESSAGE" desc="Welcome message on the AD domain join screen.">
     Join device to domain
   </message>
-  <message name="IDS_AD_DOMAIN_AUTH_WELCOME_MESSAGE" desc="Welcome message on the AD Authentication user screen. Include the domain (realm) the machine joined to">
+  <message name="IDS_AD_DOMAIN_AUTH_WELCOME_MESSAGE" desc="Welcome message on the AD Authentication user screen. Include the domain (realm) the machine joined to.">
     Sign in to <ph name="REALM">$1<ex>example.com</ex></ph>
   </message>
-  <message name="IDS_AD_LOGIN_USER" desc="Label for userPrincipalName input field on both AD domain join and AD Authentication user screens. Looks like user@example.com where example.com is realm">
+  <message name="IDS_AD_ENROLLMENT_LOGIN_USER" desc="Label for userPrincipalName input field on the AD domain join user screen. Looks like user@example.com where example.com is the realm.">
     Username (e.g. user@example.com)
   </message>
-  <message name="IDS_AD_LOGIN_PASSWORD" desc="Label for Password input field on both AD domain join and AD Authorization user screens..">
+  <message name="IDS_AD_AUTH_LOGIN_USER" desc="Label for userPrincipalName input field on the AD authentication user screen.">
+    Username
+  </message>
+  <message name="IDS_AD_LOGIN_PASSWORD" desc="Label for Password input field on both AD domain join and AD Authorization user screens.">
     Password
   </message>
   <message name="IDS_AD_PASSWORD_CHANGE_OLD_PASSWORD" desc="Old password field hint on the Active Directory password change dialog.">
@@ -6335,13 +5802,16 @@ All users must sign out to continue.
     Passwords do not match.
   </message>
   <message name="IDS_AD_DOMAIN_JOIN_UNKNOWN_ERROR" desc="Default error text on the Active Directory join screen">
-    Oops! Something went wrong when trying to join the domain. Please try again.
+    Oops!  Something went wrong when trying to join the domain. Please try again.
   </message>
   <message name="IDS_AD_INVALID_USERNAME" desc="Alert message about invalid username on the Active Directory domain join screen.">
     Please enter a valid username
   </message>
   <message name="IDS_AD_INVALID_PASSWORD" desc="Alert message about mismatching username and password in the Active Directory">
     The username and password you entered do not match
+  </message>
+  <message name="IDS_AD_PASSWORD_EXPIRED" desc="Alert message about expired password in the Active Directory">
+    Oops!  Looks like your password expired. Please renew it on another machine and try again.
   </message>
   <message name="IDS_AD_MACHINENAME_INVALID" desc="Alert message about invalid machine name">
     Invalid machine name
@@ -6355,11 +5825,32 @@ All users must sign out to continue.
   <message name="IDS_AD_USER_HIT_JOIN_QUOTA" desc="Alert message that user can't add more machines to the domain">
     Failed to join the machine to the domain. This might be due to exceeding the maximum number of allowed machine joins for your account on the server.
   </message>
+  <message name="IDS_AD_AUTH_NETWORK_ERROR" desc="Error message to show when there is a problem contacting the logon server when authenticating for Active Directory enrollment.">
+    Oops!  There was a problem contacting the logon server. Please check your network connection and the domain name, then try again.
+  </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_ATTRIBUTE_EXPLANATION" desc="Device attribute message to be shown on attribute update prompt screen.">
     Optional — enter new or update existing information to be associated with this device.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_EXPLAIN_ATTRIBUTE_LINK" desc="Text on the link to the device attribute update help article.">
     Learn more.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_LICENSE_SELECTION" desc="The subtitle on the license selection prompt screen.">
+    Choose license type
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_LICENSE_SELECTION_EXPLANATION" desc="Multiple licenses message to be shown on license selection prompt screen.">
+    We have detected multiple license types for your domain. Please chose one to continue.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_PERPETUAL_LICENSE_TYPE" desc="Text on radio button to select Perpetual License during enrollment.">
+    Perpetual
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_ANNUAL_LICENSE_TYPE" desc="Text on radio button to select Annual License during enrollment.">
+    Annual
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_KIOSK_LICENSE_TYPE" desc="Text on radio button to select Single App Kiosk License during enrollment.">
+    Single App Kiosk
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_LICENSES_REMAINING_TEMPLATE"  desc="Label indicating the number of remaining licenses for some license type.">
+    <ph name="LICENSE_TYPE">$1<ex>Perpetual</ex></ph> (<ph name="LICENSE_COUNT">$2<ex>10</ex></ph> rem.)
   </message>
 
   <!-- About network UI display strings -->
@@ -6471,7 +5962,7 @@ All users must sign out to continue.
     Google Play Store (beta)
   </message>
   <message name="IDS_ARC_PLAYSTORE_ICON_TITLE_BETA" desc="The Play Store icon title with the beta label in the launcher.">
-    Play Store (beta)
+    Play Store
   </message>
   <message name="IDS_OPTIONS_ARC_ENABLE" desc="Label for the checkbox that enables Google Play Store apps.">
     Enable Google Play Store on your Chromebook.
@@ -6480,16 +5971,16 @@ All users must sign out to continue.
     Manage your Android <ph name="BEGIN_LINK">&lt;a is="action-link" id="android-apps-settings-link" role="link"&gt;</ph>preferences<ph name="END_LINK">&lt;/a&gt;</ph>.
   </message>
   <message name="IDS_ARC_NOTIFICATION_TITLE" desc="Title of the first-run notification that enables Android apps.">
-    Google Play Store (beta)
+    Google Play on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
   </message>
   <message name="IDS_ARC_NOTIFICATION_MESSAGE" desc="Description message of the first-run notification that enables Android apps.">
-    Over a million apps and games now available on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>.
+    Install apps and games from Google Play
   </message>
   <message name="IDS_ARC_OPEN_PLAY_STORE_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that enables Android apps.">
     Open Play Store
   </message>
   <message name="IDS_ARC_CANCEL_NOTIFICATION_BUTTON" desc="Label for the button in the first-run notification that cancel running Android apps.">
-    Cancel
+    No thanks
   </message>
   <message name="IDS_ARC_OPT_IN_DIALOG_HEADER" desc="Title of the opt-in dialog for Android apps.">
     Google Play store now on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>
@@ -6568,8 +6059,11 @@ All users must sign out to continue.
   <message name="IDS_ARC_OPT_IN_PRIVACY_POLICY_LINK" desc="Text of the Link to Goolge Privacy Policy in opt-in dialog">
     Google privacy policy
   </message>
-  <message name="IDS_ARC_OPT_IN_AD_AUTH_NOTIFICATION" desc="Text displayed in opt-in dialog to inform an Active Directory user that they may have to enter their credentials in a browser window">
-    To enable your account to access the Google Play Store, you will need to authenticate with your Identity Provider. Please click Next to proceed.
+  <message name="IDS_ARC_OPT_IN_ACTIVE_DIRECTORY_AUTH_TITLE" desc="Title displayed in opt-in dialog to inform an Active Directory user that they may have to enter their credentials">
+    Google Play Store Account
+  </message>
+  <message name="IDS_ARC_OPT_IN_ACTIVE_DIRECTORY_AUTH_DESC" desc="Description displayed in opt-in dialog to inform an Active Directory user that they may have to enter their credentials">
+    To enable your account to access the Google Play Store, please authenticate with your Identity Provider.
   </message>
   <message name="IDS_ARC_OPT_OUT_TAB_TITLE" desc="Tab title when viewing opt-out setting dialog for android apps.">
     Settings - Remove Android apps
@@ -6624,7 +6118,7 @@ All users must sign out to continue.
     Free up disk space to launch Android apps.
   </message>
   <message name="IDS_ARC_MANAGED_PROVISION_NOTIFICATION_TITLE" desc="Title of the notification shown to user during ARC provision when the ARC opt-in flow happens silently due to enterprise policies">
-    Google Play Store (beta)
+    Google Play Store
   </message>
   <message name="IDS_ARC_MANAGED_PROVISION_NOTIFICATION_MESSAGE" desc="Notification shown to user during ARC provision when the ARC opt-in flow happens silently due to enterprise policies.">
     Installing the Google Play Store on your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph>. This could take a few minutes.
@@ -6672,7 +6166,7 @@ All users must sign out to continue.
     Done
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_TITLE" desc="Title of the notification to navigate the user to first update the device encryption before running Android apps.">
-    Install critical update
+    Install OS update
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_NOTIFICATION_MESSAGE" desc="Main message of the notification to navigate the user to first update the device encryption before running Android apps.">
     To use Android apps, sign in again and update.
@@ -6685,6 +6179,51 @@ All users must sign out to continue.
   </message>
   <message name="IDS_ARC_MIGRATE_ENCRYPTION_SUCCESS_MESSAGE" desc="Message of the toast shown on the first sign-in after the successfully completed migration needed for using Android apps.">
     Update successful. You can now use Android apps.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOADING" desc="Loading message of the voice interaction value prop dialog.">
+    Loading Google Assistant...
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_TITLE" desc="Load error title of the voice interaction value prop dialog.">
+    Google Assistant
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_LOAD_ERROR_MESSAGE" desc="Load error message of the voice interaction value prop dialog.">
+    Google Assistant was unable to load, please retry.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_SKIP_BUTTON" desc="Button label for skipping voice interaction value prop upon error.">
+    Skip
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_RETRY_BUTTON" desc="Button label for retry loading voice interaction value prop.">
+    Retry
+  </message>
+  <message name="IDS_VOICE_INTERACTION_VALUE_PROP_NEXT_BUTTION" desc="Button label for accepting voice interaction value proposition.">
+    Next
+  </message>
+  <message name="IDS_WAIT_FOR_CONTAINER_READY_TITLE" desc="Title of the wait for container ready OOBE screen.">
+    Just a sec
+  </message>
+  <message name="IDS_WAIT_FOR_CONTAINER_READY_INTRO_MESSAGE" desc="Introduction message for the wait for container ready OOBE screen">
+    Ask it questions. Tell it to do things. It's your personal Google, always ready to help.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_LOGO" desc="Logo label for voice interaction.">
+    Google assistant logo
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_TITLE_LOCALE" desc="Title of the error screen when voice interaction is disabled due to unsupported locale.">
+    The Google Assistant doesn’t speak this language.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_TITLE_ACCOUNT" desc="Title of the error screen when voice interaction is disabled due to unsupported account.">
+    The Google Assistant isn't enabled for your account.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_MESSAGE_LOCALE" desc="Error message of the error screen when voice interaction is disabld due to unsupported locale.">
+    Sorry, the Google Assistant doesn’t currently have support for your locale.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_MESSAGE_ACCOUNT" desc="Error message of the error screen when voice interaction is disabled due to Unsupported account.">
+    Sorry, the Google Assistant doesn’t currently work with your account.
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_LINK" desc="Text on the learn more link for voice interaction error screen.">
+    Learn more
+  </message>
+  <message name="IDS_VOICE_INTERACTION_ERROR_SCREEN_BUTTON" desc="Button label for accept voice interaction error message.">
+    OK
   </message>
 
   <!-- Print Job Notification -->
@@ -6701,7 +6240,7 @@ All users must sign out to continue.
     <ph name="PAGE_NUMBER">$1<ex>5</ex></ph> pages to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
   </message>
   <message name="IDS_PRINT_JOB_NOTIFICATION_SINGLE_PAGE_MESSAGE" desc="Message of the print job notification for a single page.">
-    1 page to <ph name="PRINTER_NAME">$2<ex>printer</ex></ph>
+    1 page to <ph name="PRINTER_NAME">$1<ex>printer</ex></ph>
   </message>
   <message name="IDS_PRINT_JOB_NOTIFICATION_CANCEL_BUTTON" desc="Text on the button for the user to cancel the current print job.">
     Cancel printing

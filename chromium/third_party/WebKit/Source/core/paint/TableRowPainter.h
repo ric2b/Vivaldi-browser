@@ -28,11 +28,17 @@ class TableRowPainter {
   void PaintBoxDecorationBackground(const PaintInfo&,
                                     const LayoutPoint&,
                                     const CellSpan& dirtied_columns);
+  void PaintCollapsedBorders(const PaintInfo&,
+                             const LayoutPoint&,
+                             const CellSpan& dirtied_columns);
 
  private:
   void PaintBackgroundBehindCell(const LayoutTableCell&,
                                  const PaintInfo&,
                                  const LayoutPoint&);
+
+  void HandleChangedPartialPaint(const PaintInfo&,
+                                 const CellSpan& dirtied_columns);
 
   const LayoutTableRow& layout_table_row_;
 };

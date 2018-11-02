@@ -23,12 +23,14 @@
 #include "cc/cc_export.h"
 #include "cc/debug/layer_tree_debug_state.h"
 #include "cc/input/input_handler.h"
+#include "cc/layers/draw_mode.h"
 #include "cc/layers/draw_properties.h"
 #include "cc/layers/layer_collections.h"
 #include "cc/layers/layer_impl_test_properties.h"
 #include "cc/layers/layer_position_constraint.h"
 #include "cc/layers/performance_properties.h"
 #include "cc/layers/render_surface_impl.h"
+#include "cc/layers/touch_action_region.h"
 #include "cc/quads/shared_quad_state.h"
 #include "cc/resources/resource_provider.h"
 #include "cc/tiles/tile_priority.h"
@@ -62,14 +64,6 @@ class ScrollbarLayerImplBase;
 class SimpleEnclosedRegion;
 class Tile;
 
-
-enum DrawMode {
-  DRAW_MODE_NONE,
-  DRAW_MODE_HARDWARE,
-  DRAW_MODE_SOFTWARE,
-  DRAW_MODE_RESOURCELESS_SOFTWARE
-};
-
 enum ViewportLayerType {
   NOT_VIEWPORT_LAYER,
   INNER_VIEWPORT_CONTAINER,
@@ -92,6 +86,9 @@ class CC_EXPORT LayerImpl {
   // Interactions with attached animations.
   gfx::ScrollOffset ScrollOffsetForAnimation() const;
   bool IsActive() const;
+
+  void SetHasTransformNode(bool val) { has_transform_node_ = val; }
+  bool has_transform_node() { return has_transform_node_; }
 
   void set_property_tree_sequence_number(int sequence_number) {}
 
@@ -163,6 +160,9 @@ class CC_EXPORT LayerImpl {
   void SetDrawsContent(bool draws_content);
   bool DrawsContent() const { return draws_content_; }
 
+  void SetShouldHitTest(bool should_hit_test);
+  bool should_hit_test() const { return should_hit_test_; }
+
   LayerImplTestProperties* test_properties() {
     if (!test_properties_)
       test_properties_.reset(new LayerImplTestProperties(this));
@@ -206,13 +206,6 @@ class CC_EXPORT LayerImpl {
   }
   bool use_parent_backface_visibility() const {
     return use_parent_backface_visibility_;
-  }
-
-  void SetUseLocalTransformForBackfaceVisibility(bool use_local) {
-    use_local_transform_for_backface_visibility_ = use_local;
-  }
-  bool use_local_transform_for_backface_visibility() const {
-    return use_local_transform_for_backface_visibility_;
   }
 
   void SetShouldCheckBackfaceVisibility(bool should_check_backface_visibility) {
@@ -287,6 +280,9 @@ class CC_EXPORT LayerImpl {
   ViewportLayerType viewport_layer_type() const {
     return static_cast<ViewportLayerType>(viewport_layer_type_);
   }
+  bool is_viewport_layer_type() const {
+    return viewport_layer_type() != NOT_VIEWPORT_LAYER;
+  }
 
   void SetCurrentScrollOffset(const gfx::ScrollOffset& scroll_offset);
   gfx::ScrollOffset CurrentScrollOffset() const;
@@ -299,19 +295,12 @@ class CC_EXPORT LayerImpl {
   // initial scroll
   gfx::Vector2dF ScrollBy(const gfx::Vector2dF& scroll);
 
-  void SetScrollClipLayer(int scroll_clip_layer_id);
-  int scroll_clip_layer_id() const { return scroll_clip_layer_id_; }
-  LayerImpl* scroll_clip_layer() const;
-  bool scrollable() const;
-
-  void set_user_scrollable_horizontal(bool scrollable);
-  bool user_scrollable_horizontal() const {
-    return user_scrollable_horizontal_;
-  }
-  void set_user_scrollable_vertical(bool scrollable);
-  bool user_scrollable_vertical() const { return user_scrollable_vertical_; }
-
-  bool user_scrollable(ScrollbarOrientation orientation) const;
+  // Marks this layer as being scrollable and needing an associated scroll node.
+  // The scroll node's bounds and container_bounds will be kept in sync with
+  // this layer.
+  void SetScrollable(const gfx::Size& bounds);
+  gfx::Size scroll_container_bounds() const { return scroll_container_bounds_; }
+  bool scrollable() const { return scrollable_; }
 
   void set_main_thread_scrolling_reasons(
       uint32_t main_thread_scrolling_reasons) {
@@ -328,17 +317,16 @@ class CC_EXPORT LayerImpl {
     return non_fast_scrollable_region_;
   }
 
-  void SetTouchEventHandlerRegion(const Region& region) {
-    touch_event_handler_region_ = region;
+  void SetTouchActionRegion(TouchActionRegion touch_action_region) {
+    touch_action_region_ = std::move(touch_action_region);
   }
-  const Region& touch_event_handler_region() const {
-    return touch_event_handler_region_;
+  const TouchActionRegion& touch_action_region() const {
+    return touch_action_region_;
   }
 
   bool HasPotentiallyRunningTransformAnimation() const;
 
   bool HasFilterAnimationThatInflatesBounds() const;
-  bool HasTransformAnimationThatInflatesBounds() const;
   bool HasAnimationThatInflatesBounds() const;
 
   bool FilterAnimationBoundsForBox(const gfx::BoxF& box,
@@ -355,7 +343,12 @@ class CC_EXPORT LayerImpl {
 
   virtual std::unique_ptr<base::DictionaryValue> LayerTreeAsJson();
 
+  // This includes |layer_property_changed_| and property_trees changes.
   bool LayerPropertyChanged() const;
+  // Only checks |layer_property_changed_|. Used in damage_tracker to determine
+  // if there is a contributing content damage not from property_trees changes
+  // in animaiton.
+  bool LayerPropertyChangedNotFromPropertyTrees() const;
 
   void ResetChangeTracking();
 
@@ -422,7 +415,7 @@ class CC_EXPORT LayerImpl {
 
   bool has_copy_requests_in_target_subtree();
 
-  void UpdatePropertyTreeForScrollingAndAnimationIfNeeded();
+  void UpdatePropertyTreeForAnimationIfNeeded();
 
   float GetIdealContentsScale() const;
 
@@ -440,12 +433,12 @@ class CC_EXPORT LayerImpl {
   void set_needs_show_scrollbars(bool yes) { needs_show_scrollbars_ = yes; }
   bool needs_show_scrollbars() { return needs_show_scrollbars_; }
 
-  void set_raster_even_if_not_in_rsll(bool yes) {
-    raster_even_if_not_in_rsll_ = yes;
+  void set_raster_even_if_not_drawn(bool yes) {
+    raster_even_if_not_drawn_ = yes;
   }
-  bool raster_even_if_not_in_rsll() const {
-    return raster_even_if_not_in_rsll_;
-  }
+  bool raster_even_if_not_drawn() const { return raster_even_if_not_drawn_; }
+
+  void EnsureValidPropertyTreeIndices() const;
 
  protected:
   LayerImpl(LayerTreeImpl* layer_impl,
@@ -485,13 +478,18 @@ class CC_EXPORT LayerImpl {
 
   // Properties synchronized from the associated Layer.
   gfx::Size bounds_;
-  int scroll_clip_layer_id_;
 
   gfx::Vector2dF offset_to_transform_parent_;
   uint32_t main_thread_scrolling_reasons_;
 
-  bool user_scrollable_horizontal_ : 1;
-  bool user_scrollable_vertical_ : 1;
+  // Size of the scroll container that this layer scrolls in.
+  gfx::Size scroll_container_bounds_;
+
+  // Indicates that this layer will have a scroll property node and that this
+  // layer's bounds correspond to the scroll node's bounds (both |bounds| and
+  // |scroll_container_bounds|).
+  bool scrollable_ : 1;
+
   bool should_flatten_transform_from_property_tree_ : 1;
 
   // Tracks if drawing-related properties have changed since last redraw.
@@ -501,17 +499,17 @@ class CC_EXPORT LayerImpl {
   bool masks_to_bounds_ : 1;
   bool contents_opaque_ : 1;
   bool use_parent_backface_visibility_ : 1;
-  bool use_local_transform_for_backface_visibility_ : 1;
   bool should_check_backface_visibility_ : 1;
   bool draws_content_ : 1;
   bool contributes_to_drawn_render_surface_ : 1;
+  bool should_hit_test_ : 1;
 
   static_assert(LAST_VIEWPORT_LAYER_TYPE < (1u << 3),
                 "enough bits for ViewportLayerType (viewport_layer_type_)");
   uint8_t viewport_layer_type_ : 3;  // ViewportLayerType
 
   Region non_fast_scrollable_region_;
-  Region touch_event_handler_region_;
+  TouchActionRegion touch_action_region_;
   SkColor background_color_;
   SkColor safe_opaque_background_color_;
 
@@ -564,7 +562,13 @@ class CC_EXPORT LayerImpl {
   // layers) and consumed by LayerTreeImpl::PushPropertiesTo during activation.
   bool needs_show_scrollbars_ : 1;
 
-  bool raster_even_if_not_in_rsll_ : 1;
+  // This is set for layers that have a property because of which they are not
+  // drawn (singular transforms), but they can become visible soon (the property
+  // is being animated). For this reason, while these layers are not drawn, they
+  // are still rasterized.
+  bool raster_even_if_not_drawn_ : 1;
+
+  bool has_transform_node_ : 1;
 
   DISALLOW_COPY_AND_ASSIGN(LayerImpl);
 };

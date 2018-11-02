@@ -21,7 +21,6 @@
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "mojo/public/cpp/bindings/associated_interface_ptr.h"
 #include "mojo/public/cpp/bindings/interface_request.h"
-#include "services/service_manager/public/cpp/bind_source_info.h"
 
 namespace content {
 
@@ -69,12 +68,12 @@ class PaymentAppContentUnitTestBase::PaymentAppForWorkerTestHelper
   }
 
   void OnPaymentRequestEvent(
-      payments::mojom::PaymentAppRequestPtr app_request,
-      payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+      payments::mojom::PaymentRequestEventDataPtr event_data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
       mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
           callback) override {
     EmbeddedWorkerTestHelper::OnPaymentRequestEvent(
-        std::move(app_request), std::move(response_callback),
+        std::move(event_data), std::move(response_callback),
         std::move(callback));
   }
 
@@ -112,7 +111,7 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   // Register service worker for payment manager.
   bool called = false;
   worker_helper_->context()->RegisterServiceWorker(
-      scope_url, sw_script_url, nullptr,
+      sw_script_url, ServiceWorkerRegistrationOptions(scope_url), nullptr,
       base::Bind(&RegisterServiceWorkerCallback, &called));
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(called);
@@ -133,15 +132,14 @@ PaymentManager* PaymentAppContentUnitTestBase::CreatePaymentManager(
   mojo::InterfaceRequest<payments::mojom::PaymentManager> request =
       mojo::MakeRequest(&manager);
   payment_managers_.push_back(std::move(manager));
-  payment_app_context()->CreatePaymentManager(service_manager::BindSourceInfo(),
-                                              std::move(request));
+  payment_app_context()->CreatePaymentManager(std::move(request));
   base::RunLoop().RunUntilIdle();
 
   // Find a last registered payment manager.
   for (const auto& candidate_manager :
        payment_app_context()->payment_managers_) {
     if (!base::ContainsKey(existing_managers, candidate_manager.first)) {
-      candidate_manager.first->Init(scope_url.spec());
+      candidate_manager.first->Init(sw_script_url.spec(), scope_url.spec());
       base::RunLoop().RunUntilIdle();
       return candidate_manager.first;
     }

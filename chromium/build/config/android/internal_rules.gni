@@ -835,6 +835,7 @@ if (enable_java_templates) {
           "--classpath=@FileArg($_rebased_build_config:javac:interface_classpath)",
           "--resource-sources=@FileArg($_rebased_build_config:deps_info:owned_resources_dirs)",
           "--resource-sources=@FileArg($_rebased_build_config:deps_info:owned_resources_zips)",
+          "--srcjars=@FileArg($_rebased_build_config:gradle:bundled_srcjars)",
           "--can-fail-build",
         ]
       }
@@ -852,6 +853,13 @@ if (enable_java_templates) {
                                "testonly",
                              ])
       script = "//build/android/gyp/proguard.py"
+
+      # http://crbug.com/725224. Speculative fix for bots running out of memory.
+      # TODO(agrieve): Change this to an explicit pool once those are supported.
+      #     http://crbug.com/635308
+      if (!enable_concurrent_apk_finalization) {
+        console = true
+      }
       if (defined(invoker.proguard_jar_path)) {
         _proguard_jar_path = invoker.proguard_jar_path
       } else {
@@ -1029,6 +1037,14 @@ if (enable_java_templates) {
         script = "//build/android/gyp/main_dex_list.py"
         depfile = "$target_gen_dir/$target_name.d"
 
+        # http://crbug.com/725224. Speculative fix for bots running out of
+        #     memory.
+        # TODO(agrieve): Change this to an explicit pool once those are
+        #     supported. http://crbug.com/635308
+        if (!enable_concurrent_apk_finalization) {
+          console = true
+        }
+
         main_dex_rules = "//build/android/main_dex_classes.flags"
 
         if (defined(invoker.proguard_jar_path)) {
@@ -1095,6 +1111,12 @@ if (enable_java_templates) {
         invoker.output,
       ]
 
+      if (defined(invoker.use_pool) && invoker.use_pool) {
+        # TODO(agrieve): Change this to an explicit pool once those are
+        #     supported. http://crbug.com/635308
+        console = true
+      }
+
       rebased_output = rebase_path(invoker.output, root_build_dir)
 
       args = [
@@ -1159,8 +1181,9 @@ if (enable_java_templates) {
         defined(invoker.supports_android) && invoker.supports_android &&
         (is_java_debug || dcheck_always_on)
 
-    _retrolambda = defined(invoker.supports_android) &&
-                   invoker.supports_android && use_java8
+    _retrolambda =
+        defined(invoker.supports_android) && invoker.supports_android &&
+        ((defined(invoker.process_java8) && invoker.process_java8) || use_java8)
 
     _deps = []
     _previous_output_jar = _input_jar_path
@@ -1608,7 +1631,17 @@ if (enable_java_templates) {
     }
 
     template("package_resources_helper") {
-      action(target_name) {
+      _resource_packaged_apk_path = invoker.resource_packaged_apk_path
+      _package_resources_target = target_name
+      _post_process = defined(invoker.post_process_package_resources_script)
+      if (_post_process) {
+        _package_resources_target = "${_package_resources_target}__intermediate"
+        _post_processed_resource_packaged_apk_path = _resource_packaged_apk_path
+        _resource_packaged_apk_path =
+            "${_resource_packaged_apk_path}__intermediate.ap_"
+      }
+
+      action(_package_resources_target) {
         deps = invoker.deps
 
         script = "//build/android/gyp/package_resources.py"
@@ -1620,7 +1653,7 @@ if (enable_java_templates) {
           inputs += [ _resources_zip ]
         }
         outputs = [
-          invoker.resource_packaged_apk_path,
+          _resource_packaged_apk_path,
         ]
 
         if (defined(invoker.android_aapt_path)) {
@@ -1651,7 +1684,7 @@ if (enable_java_templates) {
           "--version-name",
           _version_name,
           "--apk-path",
-          rebase_path(invoker.resource_packaged_apk_path, root_build_dir),
+          rebase_path(_resource_packaged_apk_path, root_build_dir),
         ]
 
         if (defined(_resources_zip)) {
@@ -1687,6 +1720,47 @@ if (enable_java_templates) {
             invoker.extensions_to_not_compress,
           ]
         }
+        if (defined(invoker.png_to_webp) && invoker.png_to_webp) {
+          _webp_target = "//third_party/libwebp:cwebp($host_toolchain)"
+          deps += [ _webp_target ]
+          args += [
+            "--png-to-webp",
+            "--webp-binary",
+            rebase_path(get_label_info(_webp_target, "root_out_dir") + "/cwebp",
+                        root_build_dir),
+          ]
+        }
+        if (defined(invoker.exclude_xxxhdpi) && invoker.exclude_xxxhdpi) {
+          args += [ "--exclude-xxxhdpi" ]
+          if (defined(invoker.xxxhdpi_whitelist)) {
+            args += [ "--xxxhdpi-whitelist=${invoker.xxxhdpi_whitelist}" ]
+          }
+        }
+      }
+
+      if (_post_process) {
+        action(target_name) {
+          depfile = "${target_gen_dir}/${target_name}.d"
+          script = invoker.post_process_package_resources_script
+          args = [
+            "--depfile",
+            rebase_path(depfile, root_build_dir),
+            "--apk-path",
+            rebase_path(_resource_packaged_apk_path, root_build_dir),
+            "--output",
+            rebase_path(_post_processed_resource_packaged_apk_path,
+                        root_build_dir),
+          ]
+          inputs = [
+            _resource_packaged_apk_path,
+          ]
+          outputs = [
+            _post_processed_resource_packaged_apk_path,
+          ]
+          deps = [
+            ":${_package_resources_target}",
+          ]
+        }
       }
     }
 
@@ -1697,7 +1771,11 @@ if (enable_java_templates) {
                                "aapt_locale_whitelist",
                                "alternative_android_sdk_jar",
                                "android_aapt_path",
+                               "exclude_xxxhdpi",
                                "extensions_to_not_compress",
+                               "png_to_webp",
+                               "post_process_package_resources_script",
+                               "xxxhdpi_whitelist",
                              ])
       deps = _deps
       android_manifest = _android_manifest
@@ -1746,7 +1824,11 @@ if (enable_java_templates) {
                                "aapt_locale_whitelist",
                                "alternative_android_sdk_jar",
                                "android_aapt_path",
+                               "exclude_xxxhdpi",
                                "extensions_to_not_compress",
+                               "png_to_webp",
+                               "post_process_package_resources_script",
+                               "xxxhdpi_whitelist",
                              ])
       deps =
           _incremental_deps + [ ":$_generate_incremental_manifest_target_name" ]
@@ -1963,6 +2045,7 @@ if (enable_java_templates) {
                              [
                                "jar_excluded_patterns",
                                "strip_resource_classes",
+                               "process_java8",
                              ])
 
       visibility = [
@@ -2024,7 +2107,11 @@ if (enable_java_templates) {
     }
 
     group(target_name) {
-      forward_variables_from(invoker, [ "data_deps" ])
+      forward_variables_from(invoker,
+                             [
+                               "data",
+                               "data_deps",
+                             ])
       public_deps = [
         ":$_ijar_target_name",
         ":$_process_jar_target_name",

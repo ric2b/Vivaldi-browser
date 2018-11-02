@@ -16,9 +16,16 @@ namespace aura {
 namespace client {
 class DragDropClient;
 class FocusClient;
+}
+}
+
+namespace ui {
+class InputMethod;
+}  // namespace ui
+
+namespace wm {
 class ScopedTooltipDisabler;
-}
-}
+}  // namespace wm
 
 namespace views {
 class DesktopDragDropClientWin;
@@ -31,7 +38,7 @@ class TooltipWin;
 
 class VIEWS_EXPORT DesktopWindowTreeHostWin
     : public DesktopWindowTreeHost,
-      public aura::client::AnimationHost,
+      public wm::AnimationHost,
       public aura::WindowTreeHost,
       public HWNDMessageHandlerDelegate {
  public:
@@ -132,6 +139,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   void OnWindowHidingAnimationCompleted() override;
 
   // Overridden from HWNDMessageHandlerDelegate:
+  ui::InputMethod* GetHWNDMessageDelegateInputMethod() override;
   bool HasNonClientView() const override;
   FrameMode GetFrameMode() const override;
   bool HasFrame() const override;
@@ -266,7 +274,7 @@ class VIEWS_EXPORT DesktopWindowTreeHostWin
   // whenever the cursor visibility state changes.
   static bool is_cursor_visible_;
 
-  std::unique_ptr<aura::client::ScopedTooltipDisabler> tooltip_disabler_;
+  std::unique_ptr<wm::ScopedTooltipDisabler> tooltip_disabler_;
 
   // Indicates if current window will receive mouse events when should not
   // become activated.

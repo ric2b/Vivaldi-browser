@@ -26,8 +26,7 @@ bool ShouldCheckNode(const Node& node) {
   if (!node.IsElementNode())
     return false;
   // TODO(editing-dev): Make |Position| constructors take const parameters.
-  const Position& position =
-      Position::FirstPositionInNode(const_cast<Node*>(&node));
+  const Position& position = Position::FirstPositionInNode(node);
   if (!IsEditablePosition(position))
     return false;
   return SpellChecker::IsSpellCheckingEnabledAt(position);
@@ -131,8 +130,7 @@ void ColdModeSpellCheckRequester::SearchForNextRootEditable() {
 void ColdModeSpellCheckRequester::InitializeForCurrentRootEditable() {
   const EphemeralRange& full_range =
       EphemeralRange::RangeOfContents(*current_root_editable_);
-  current_full_length_ = TextIterator::RangeLength(full_range.StartPosition(),
-                                                   full_range.EndPosition());
+  current_full_length_ = TextIterator::RangeLength(full_range);
 
   current_chunk_index_ = 0;
   current_chunk_start_ = full_range.StartPosition();
@@ -150,7 +148,7 @@ void ColdModeSpellCheckRequester::RequestCheckingForNextChunk() {
   const Position& chunk_end =
       CalculateCharacterSubrange(
           EphemeralRange(current_chunk_start_,
-                         Position::LastPositionInNode(current_root_editable_)),
+                         Position::LastPositionInNode(*current_root_editable_)),
           0, kColdModeChunkSize)
           .EndPosition();
   if (chunk_end <= current_chunk_start_) {

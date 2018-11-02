@@ -17,13 +17,12 @@
 #include "ios/chrome/grit/ios_strings.h"
 #import "ios/chrome/test/app/chrome_test_util.h"
 #import "ios/chrome/test/app/tab_test_util.h"
-#import "ios/chrome/test/earl_grey/chrome_assertions.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey.h"
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_ui.h"
 #import "ios/chrome/test/earl_grey/chrome_matchers.h"
 #import "ios/chrome/test/earl_grey/chrome_test_case.h"
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #include "ui/base/l10n/l10n_util_mac.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
@@ -32,7 +31,6 @@
 
 using chrome_test_util::ButtonWithAccessibilityLabelId;
 using chrome_test_util::OmniboxText;
-using chrome_test_util::WebViewContainingText;
 
 // Toolbar integration tests for Chrome.
 @interface ToolbarTestCase : ChromeTestCase
@@ -78,13 +76,12 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [ChromeEarlGrey loadURL:URL];
   [[EarlGrey selectElementWithMatcher:OmniboxText(URL.GetContent())]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText("You've arrived")]
-      assertWithMatcher:grey_notNil()];
+  [ChromeEarlGrey waitForWebViewContainingText:"You've arrived"];
 }
 
 // Verifies opening a new tab from the tools menu.
 - (void)testNewTabFromMenu {
-  chrome_test_util::AssertMainTabCount(1);
+  [ChromeEarlGrey waitForMainTabCount:1];
 
   // Open tab via the UI.
   [ChromeEarlGreyUI openToolsMenu];
@@ -93,13 +90,13 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:newTabButtonMatcher]
       performAction:grey_tap()];
 
-  chrome_test_util::AssertMainTabCount(2);
+  [ChromeEarlGrey waitForMainTabCount:2];
 }
 
 // Verifies opening a new incognito tab from the tools menu.
 // TODO(crbug.com/631078): Enable this test.
-- (void)DISABLED_testNewIncognitoTabFromMenu {
-  chrome_test_util::AssertIncognitoTabCount(0);
+- (void)FLAKY_testNewIncognitoTabFromMenu {
+  [ChromeEarlGrey waitForIncognitoTabCount:0];
 
   // Open incognito tab.
   [ChromeEarlGreyUI openToolsMenu];
@@ -108,7 +105,7 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:newIncognitoTabButtonMatcher]
       performAction:grey_tap()];
 
-  chrome_test_util::AssertIncognitoTabCount(1);
+  [ChromeEarlGrey waitForIncognitoTabCount:1];
 }
 
 // Tests whether input mode in an omnibox can be canceled via "Cancel" button
@@ -382,7 +379,7 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   if (IsIPadIdiom()) {
     EARL_GREY_TEST_DISABLED(@"Disabled for iPad due to a simulator bug.");
   }
-  SelectNewTabPagePanel(NewTabPage::kMostVisitedPanel);
+  SelectNewTabPagePanel(NewTabPage::kHomePanel);
 
   id<GREYMatcher> locationbarButton = grey_allOf(
       grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
@@ -471,6 +468,42 @@ void SelectNewTabPagePanel(NewTabPage::PanelIdentifier panel_type) {
   [[EarlGrey selectElementWithMatcher:chrome_test_util::Omnibox()]
       assertWithMatcher:chrome_test_util::OmniboxText("")];
 
-  SelectNewTabPagePanel(NewTabPage::kMostVisitedPanel);
+  SelectNewTabPagePanel(NewTabPage::kHomePanel);
 }
+
+// Tests typing in the omnibox using the keyboard accessory view.
+- (void)testToolbarOmniboxKeyboardAccessoryView {
+  // Select the omnibox to get the keyboard up.
+  id<GREYMatcher> locationbarButton = grey_allOf(
+      grey_accessibilityLabel(l10n_util::GetNSString(IDS_OMNIBOX_EMPTY_HINT)),
+      grey_minimumVisiblePercent(0.2), nil);
+  [[EarlGrey selectElementWithMatcher:locationbarButton]
+      assertWithMatcher:grey_text(@"Search or type URL")];
+  [[EarlGrey selectElementWithMatcher:locationbarButton]
+      performAction:grey_tap()];
+
+  // Tap the "/" keyboard accessory button.
+  id<GREYMatcher> slashButtonMatcher = grey_allOf(
+      grey_accessibilityLabel(@"/"), grey_kindOfClass([UIButton class]), nil);
+
+  [[EarlGrey selectElementWithMatcher:slashButtonMatcher]
+      performAction:grey_tap()];
+
+  // Tap the ".com" keyboard accessory button.
+  id<GREYMatcher> dotComButtonMatcher =
+      grey_allOf(grey_accessibilityLabel(@".com"),
+                 grey_kindOfClass([UIButton class]), nil);
+
+  [[EarlGrey selectElementWithMatcher:dotComButtonMatcher]
+      performAction:grey_tap()];
+
+  // Verify that the omnibox contains "/.com"
+  [[EarlGrey
+      selectElementWithMatcher:grey_allOf(grey_accessibilityLabel(@"/.com"),
+                                          grey_kindOfClass(
+                                              [OmniboxPopupMaterialRow class]),
+                                          nil)]
+      assertWithMatcher:grey_sufficientlyVisible()];
+}
+
 @end

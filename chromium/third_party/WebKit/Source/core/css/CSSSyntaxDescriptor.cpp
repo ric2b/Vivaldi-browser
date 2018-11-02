@@ -4,9 +4,6 @@
 
 #include "core/css/CSSSyntaxDescriptor.h"
 
-#include "core/animation/CSSColorInterpolationType.h"
-#include "core/animation/CSSLengthInterpolationType.h"
-#include "core/animation/CSSValueInterpolationType.h"
 #include "core/css/CSSCustomPropertyDeclaration.h"
 #include "core/css/CSSURIValue.h"
 #include "core/css/CSSValueList.h"
@@ -57,8 +54,8 @@ CSSSyntaxType ParseSyntaxType(String type) {
     return CSSSyntaxType::kTime;
   if (type == "resolution")
     return CSSSyntaxType::kResolution;
-  if (type == "transform-function")
-    return CSSSyntaxType::kTransformFunction;
+  if (type == "transform-list")
+    return CSSSyntaxType::kTransformList;
   if (type == "custom-ident")
     return CSSSyntaxType::kCustomIdent;
   // Not an Ident, just used to indicate failure
@@ -122,6 +119,12 @@ CSSSyntaxDescriptor::CSSSyntaxDescriptor(String input) {
     }
 
     bool repeatable = ConsumeCharacterAndWhitespace(input, '+', offset);
+    // <transform-list> is already a space separated list,
+    // <transform-list>+ is invalid.
+    if (type == CSSSyntaxType::kTransformList && repeatable) {
+      syntax_components_.clear();
+      return;
+    }
     ConsumeWhitespace(input, offset);
     syntax_components_.push_back(CSSSyntaxComponent(type, ident, repeatable));
 
@@ -163,14 +166,13 @@ const CSSValue* ConsumeSingleType(const CSSSyntaxComponent& syntax,
     case CSSSyntaxType::kInteger:
       return ConsumeInteger(range);
     case CSSSyntaxType::kAngle:
-      return ConsumeAngle(range, *context,
-                          UseCounter::kUnitlessZeroAngleCustomProperty);
+      return ConsumeAngle(range, *context, WTF::Optional<WebFeature>());
     case CSSSyntaxType::kTime:
       return ConsumeTime(range, ValueRange::kValueRangeAll);
     case CSSSyntaxType::kResolution:
       return ConsumeResolution(range);
-    case CSSSyntaxType::kTransformFunction:
-      return nullptr;  // TODO(timloh): Implement this.
+    case CSSSyntaxType::kTransformList:
+      return ConsumeTransformList(range, *context);
     case CSSSyntaxType::kCustomIdent:
       return ConsumeCustomIdent(range);
     default:

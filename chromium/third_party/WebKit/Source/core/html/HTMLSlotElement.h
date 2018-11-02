@@ -46,7 +46,6 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   const HeapVector<Member<Node>>& AssignedNodes();
   const HeapVector<Member<Node>>& GetDistributedNodes();
-  const HeapVector<Member<Node>> GetDistributedNodesForBinding();
   const HeapVector<Member<Node>> assignedNodesForBinding(
       const AssignedNodesOptions&);
 
@@ -74,9 +73,9 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   void LazyReattachDistributedNodesIfNeeded();
 
-  void AttachLayoutTree(const AttachContext& = AttachContext()) final;
+  void AttachLayoutTree(AttachContext&) final;
   void DetachLayoutTree(const AttachContext& = AttachContext()) final;
-  void RebuildDistributedChildrenLayoutTrees();
+  void RebuildDistributedChildrenLayoutTrees(WhitespaceAttacher&);
 
   void AttributeChanged(const AttributeModificationParams&) final;
 
@@ -93,7 +92,13 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
   void SaveAndClearDistribution();
 
   bool SupportsDistribution() const { return IsInV1ShadowTree(); }
+
+  void CheckFallbackAfterInsertedIntoShadowTree();
+  void CheckFallbackAfterRemovedFromShadowTree();
+
   void DidSlotChange(SlotChangeType);
+  void DidSlotChangeAfterRemovedFromShadowTree();
+  void DidSlotChangeAfterRenaming();
   void DispatchSlotChangeEvent();
   void ClearSlotChangeEventEnqueued() { slotchange_event_enqueued_ = false; }
 
@@ -110,11 +115,58 @@ class CORE_EXPORT HTMLSlotElement final : public HTMLElement {
 
   void EnqueueSlotChangeEvent();
 
+  bool HasSlotableChild() const;
+
+  void LazyReattachDistributedNodesNaive();
+
+  static void LazyReattachDistributedNodesByDynamicProgramming(
+      const HeapVector<Member<Node>>&,
+      const HeapVector<Member<Node>>&);
+
   HeapVector<Member<Node>> assigned_nodes_;
   HeapVector<Member<Node>> distributed_nodes_;
   HeapVector<Member<Node>> old_distributed_nodes_;
   HeapHashMap<Member<const Node>, size_t> distributed_indices_;
   bool slotchange_event_enqueued_ = false;
+
+  // TODO(hayato): Move this to more appropriate directory (e.g. platform/wtf)
+  // if there are more than one usages.
+  template <typename Container, typename LCSTable, typename BacktrackTable>
+  static void FillLongestCommonSubsequenceDynamicProgrammingTable(
+      const Container& seq1,
+      const Container& seq2,
+      LCSTable& lcs_table,
+      BacktrackTable& backtrack_table) {
+    const size_t rows = seq1.size();
+    const size_t columns = seq2.size();
+
+    DCHECK_GT(lcs_table.size(), rows);
+    DCHECK_GT(lcs_table[0].size(), columns);
+    DCHECK_GT(backtrack_table.size(), rows);
+    DCHECK_GT(backtrack_table[0].size(), columns);
+
+    for (size_t r = 0; r <= rows; ++r)
+      lcs_table[r][0] = 0;
+    for (size_t c = 0; c <= columns; ++c)
+      lcs_table[0][c] = 0;
+
+    for (size_t r = 1; r <= rows; ++r) {
+      for (size_t c = 1; c <= columns; ++c) {
+        if (seq1[r - 1] == seq2[c - 1]) {
+          lcs_table[r][c] = lcs_table[r - 1][c - 1] + 1;
+          backtrack_table[r][c] = std::make_pair(r - 1, c - 1);
+        } else if (lcs_table[r - 1][c] > lcs_table[r][c - 1]) {
+          lcs_table[r][c] = lcs_table[r - 1][c];
+          backtrack_table[r][c] = std::make_pair(r - 1, c);
+        } else {
+          lcs_table[r][c] = lcs_table[r][c - 1];
+          backtrack_table[r][c] = std::make_pair(r, c - 1);
+        }
+      }
+    }
+  }
+
+  friend class HTMLSlotElementTest;
 };
 
 }  // namespace blink

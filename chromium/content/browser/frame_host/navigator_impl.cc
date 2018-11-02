@@ -44,6 +44,7 @@
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_constants.h"
 #include "content/public/common/resource_response.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "net/base/net_errors.h"
 #include "url/gurl.h"
 #include "url/url_util.h"
@@ -229,7 +230,7 @@ void NavigatorImpl::DidStartProvisionalLoad(
   render_frame_host->SetNavigationHandle(NavigationHandleImpl::Create(
       validated_url, validated_redirect_chain,
       render_frame_host->frame_tree_node(), is_renderer_initiated,
-      false,  // is_same_page
+      false,  // is_same_document
       navigation_start, pending_nav_entry_id, started_from_context_menu,
       CSPDisposition::CHECK,  // should_check_main_world_csp
       false));                // is_form_submission
@@ -306,7 +307,7 @@ bool NavigatorImpl::NavigateToEntry(
     bool is_same_document_history_load,
     bool is_history_navigation_in_new_child,
     bool is_pending_entry,
-    const scoped_refptr<ResourceRequestBodyImpl>& post_body) {
+    const scoped_refptr<ResourceRequestBody>& post_body) {
   TRACE_EVENT0("browser,navigation", "NavigatorImpl::NavigateToEntry");
 
   GURL dest_url = frame_entry.url();
@@ -367,6 +368,10 @@ bool NavigatorImpl::NavigateToEntry(
     // Disable LoFi when asked for it explicitly.
     previews_state = PREVIEWS_NO_TRANSFORM;
   }
+
+  // Give the delegate an opportunity to adjust the previews state.
+  if (delegate_)
+    delegate_->AdjustPreviewsStateForNavigation(&previews_state);
 
   // PlzNavigate: the RenderFrameHosts are no longer asked to navigate.
   if (IsBrowserSideNavigationEnabled()) {
@@ -718,13 +723,14 @@ void NavigatorImpl::RequestOpenURL(
     RenderFrameHostImpl* render_frame_host,
     const GURL& url,
     bool uses_post,
-    const scoped_refptr<ResourceRequestBodyImpl>& body,
+    const scoped_refptr<ResourceRequestBody>& body,
     const std::string& extra_headers,
     const Referrer& referrer,
     WindowOpenDisposition disposition,
     bool force_new_process_for_new_contents,
     bool should_replace_current_entry,
-    bool user_gesture) {
+    bool user_gesture,
+    blink::WebTriggeringEventInfo triggering_event_info) {
   // Note: This can be called for subframes (even when OOPIFs are not possible)
   // if the disposition calls for a different window.
 
@@ -774,6 +780,7 @@ void NavigatorImpl::RequestOpenURL(
     params.redirect_chain = redirect_chain;
   params.should_replace_current_entry = should_replace_current_entry;
   params.user_gesture = user_gesture;
+  params.triggering_event_info = triggering_event_info;
 
   // RequestOpenURL is used only for local frames, so we can get here only if
   // the navigation is initiated by a frame in the same SiteInstance as this
@@ -813,7 +820,7 @@ void NavigatorImpl::RequestTransferURL(
     const GlobalRequestID& transferred_global_request_id,
     bool should_replace_current_entry,
     const std::string& method,
-    scoped_refptr<ResourceRequestBodyImpl> post_body,
+    scoped_refptr<ResourceRequestBody> post_body,
     const std::string& extra_headers) {
   // |method != "POST"| should imply absence of |post_body|.
   if (method != "POST" && post_body) {
@@ -990,16 +997,15 @@ void NavigatorImpl::OnBeginNavigation(
   }
 
   // The renderer-initiated navigation request is ignored iff a) there is an
-  // ongoing request b) which is browser or user-initiated and c) the renderer
-  // request is not user-initiated.
+  // ongoing request b) which is browser initiated and c) the renderer request
+  // is not user-initiated.
   if (ongoing_navigation_request &&
-      (ongoing_navigation_request->browser_initiated() ||
-       ongoing_navigation_request->begin_params().has_user_gesture) &&
+      ongoing_navigation_request->browser_initiated() &&
       !begin_params.has_user_gesture) {
     RenderFrameHost* current_frame_host =
         frame_tree_node->render_manager()->current_frame_host();
     current_frame_host->Send(
-        new FrameMsg_Stop(current_frame_host->GetRoutingID()));
+        new FrameMsg_DroppedNavigation(current_frame_host->GetRoutingID()));
     return;
   }
 
@@ -1135,7 +1141,7 @@ void NavigatorImpl::RequestNavigation(
     PreviewsState previews_state,
     bool is_same_document_history_load,
     bool is_history_navigation_in_new_child,
-    const scoped_refptr<ResourceRequestBodyImpl>& post_body,
+    const scoped_refptr<ResourceRequestBody>& post_body,
     base::TimeTicks navigation_start) {
   CHECK(IsBrowserSideNavigationEnabled());
   DCHECK(frame_tree_node);
@@ -1176,7 +1182,8 @@ void NavigatorImpl::RequestNavigation(
         nullptr,  // response
         nullptr,  // body
         mojo::ScopedDataPipeConsumerHandle(), scoped_request->common_params(),
-        scoped_request->request_params(), scoped_request->is_view_source());
+        scoped_request->request_params(), scoped_request->is_view_source(),
+        mojom::URLLoaderFactoryPtrInfo());
     return;
   }
 

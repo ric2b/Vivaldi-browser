@@ -18,6 +18,7 @@ component("accessibility") {
   sources = [
     "ax_action_data.cc",
     "ax_action_data.h",
+    "ax_export.h",
     "ax_host_delegate.cc",
     "ax_host_delegate.h",
     "ax_node.cc",
@@ -58,8 +59,6 @@ component("accessibility") {
 
   if (has_native_accessibility) {
     sources += [
-      "platform/ax_fake_caret_win.cc",
-      "platform/ax_fake_caret_win.h",
       "platform/ax_platform_node.cc",
       "platform/ax_platform_node.h",
       "platform/ax_platform_node_base.cc",
@@ -69,6 +68,8 @@ component("accessibility") {
       "platform/ax_platform_node_mac.mm",
       "platform/ax_platform_node_win.cc",
       "platform/ax_platform_node_win.h",
+      "platform/ax_system_caret_win.cc",
+      "platform/ax_system_caret_win.h",
     ]
   }
 
@@ -137,6 +138,7 @@ if (is_android) {
 }
 
 static_library("test_support") {
+  testonly = true
   sources = [
     "tree_generator.cc",
     "tree_generator.h",
@@ -155,6 +157,7 @@ static_library("test_support") {
 }
 
 test("accessibility_unittests") {
+  testonly = true
   sources = [
     "ax_generated_tree_unittest.cc",
     "ax_node_position_unittest.cc",
@@ -180,6 +183,7 @@ test("accessibility_unittests") {
 
   if (is_win) {
     deps += [ "//third_party/iaccessible2" ]
+    libs = [ "oleacc.lib" ]
   }
 }
 

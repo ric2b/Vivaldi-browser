@@ -13,7 +13,7 @@
 
 namespace blink {
 
-const int kCompositorNamespaceBitCount = 3;
+const int kCompositorNamespaceBitCount = 4;
 
 enum class CompositorElementIdNamespace {
   kPrimary,
@@ -23,28 +23,29 @@ enum class CompositorElementIdNamespace {
   kScrollState,
   kViewport,
   kLinkHighlight,
-  kPrimaryCompositorProxy,
-  kScrollCompositorProxy,
+  // The following are SPv2-only.
+  kEffectFilter,
+  kEffectMask,
+  kEffectRoot,
+  kScrollTranslation,
   // A sentinel to indicate the maximum representable namespace id
   // (the maximum is one less than this value).
   kMaxRepresentableNamespaceId = 1 << kCompositorNamespaceBitCount
 };
 
 using CompositorElementId = cc::ElementId;
-using PaintLayerId = uint64_t;
+using LayoutObjectId = uint64_t;
 using ScrollbarId = uint64_t;
 using DOMNodeId = uint64_t;
 
 CompositorElementId PLATFORM_EXPORT
-    CompositorElementIdFromPaintLayerId(PaintLayerId,
-                                        CompositorElementIdNamespace);
+    CompositorElementIdFromLayoutObjectId(LayoutObjectId,
+                                          CompositorElementIdNamespace);
 
 // This method should only be used for "special" layers that are not allocated
 // during the normal lifecycle. Examples include VisualViewport,
-// root scrolling (when rootLayerScrollingEnabled is off), and LinkHighlight,
-// or when CompositorProxies are involved.
-
-// Otherwise, CompositorElementIdFromPaintLayerId is preferred for performance
+// root scrolling (when rootLayerScrollingEnabled is off), and LinkHighlight.
+// Otherwise, CompositorElementIdFromLayoutObjectId is preferred for performance
 // reasons (since computing a DOMNodeId requires a hash map lookup),
 // and future compatibility with multicol/pagination.
 CompositorElementId PLATFORM_EXPORT
@@ -53,6 +54,9 @@ CompositorElementId PLATFORM_EXPORT
 CompositorElementId PLATFORM_EXPORT
     CompositorElementIdFromScrollbarId(ScrollbarId,
                                        CompositorElementIdNamespace);
+
+CompositorElementId PLATFORM_EXPORT
+CompositorElementIdFromRootEffectId(uint64_t id);
 
 // Note cc::ElementId has a hash function already implemented via
 // ElementIdHash::operator(). However for consistency's sake we choose to use

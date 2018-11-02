@@ -44,7 +44,7 @@ TEST(StackFrameDeduplicatorTest, SingleBacktrace) {
   ASSERT_EQ(kMalloc, (iter + 2)->frame);
   ASSERT_EQ(1, (iter + 2)->parent_frame_index);
 
-  ASSERT_EQ(iter + 3, dedup->end());
+  ASSERT_TRUE(iter + 3 == dedup->end());
 }
 
 TEST(StackFrameDeduplicatorTest, SingleBacktraceWithNull) {
@@ -73,7 +73,7 @@ TEST(StackFrameDeduplicatorTest, SingleBacktraceWithNull) {
   ASSERT_EQ(kMalloc, (iter + 2)->frame);
   ASSERT_EQ(1, (iter + 2)->parent_frame_index);
 
-  ASSERT_EQ(iter + 3, dedup->end());
+  ASSERT_TRUE(iter + 3 == dedup->end());
 }
 
 // Test that there can be different call trees (there can be multiple bottom
@@ -110,7 +110,7 @@ TEST(StackFrameDeduplicatorTest, MultipleRoots) {
   ASSERT_EQ(kCreateWidget, (iter + 3)->frame);
   ASSERT_EQ(2, (iter + 3)->parent_frame_index);
 
-  ASSERT_EQ(iter + 4, dedup->end());
+  ASSERT_TRUE(iter + 4 == dedup->end());
 }
 
 TEST(StackFrameDeduplicatorTest, Deduplication) {
@@ -139,13 +139,13 @@ TEST(StackFrameDeduplicatorTest, Deduplication) {
   ASSERT_EQ(kInitialize, (iter + 2)->frame);
   ASSERT_EQ(0, (iter + 2)->parent_frame_index);
 
-  ASSERT_EQ(iter + 3, dedup->end());
+  ASSERT_TRUE(iter + 3 == dedup->end());
 
   // Inserting the same backtrace again should return the index of the existing
   // node.
   ASSERT_EQ(1, dedup->Insert(std::begin(bt0), std::end(bt0)));
   ASSERT_EQ(2, dedup->Insert(std::begin(bt1), std::end(bt1)));
-  ASSERT_EQ(dedup->begin() + 3, dedup->end());
+  ASSERT_TRUE(dedup->begin() + 3 == dedup->end());
 }
 
 }  // namespace trace_event

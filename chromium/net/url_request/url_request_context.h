@@ -15,7 +15,7 @@
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/threading/thread_checker.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "net/base/net_export.h"
 #include "net/base/request_priority.h"
@@ -60,8 +60,7 @@ class URLRequestThrottlerManager;
 // URLRequestContext rather than creating a new one, as guaranteeing that the
 // URLRequestContext is destroyed before its members can be difficult.
 class NET_EXPORT URLRequestContext
-    : NON_EXPORTED_BASE(public base::NonThreadSafe),
-      public base::trace_event::MemoryDumpProvider {
+    : public base::trace_event::MemoryDumpProvider {
  public:
   URLRequestContext();
   ~URLRequestContext() override;
@@ -72,6 +71,10 @@ class NET_EXPORT URLRequestContext
   // May return nullptr if this context doesn't have an associated network
   // session.
   const HttpNetworkSession::Params* GetNetworkSessionParams() const;
+
+  // May return nullptr if this context doesn't have an associated network
+  // session.
+  const HttpNetworkSession::Context* GetNetworkSessionContext() const;
 
   // This function should not be used in Chromium, please use the version with
   // NetworkTrafficAnnotationTag in the future.
@@ -240,7 +243,7 @@ class NET_EXPORT URLRequestContext
     return http_user_agent_settings_;
   }
   void set_http_user_agent_settings(
-      HttpUserAgentSettings* http_user_agent_settings) {
+      const HttpUserAgentSettings* http_user_agent_settings) {
     http_user_agent_settings_ = http_user_agent_settings;
   }
 
@@ -278,8 +281,14 @@ class NET_EXPORT URLRequestContext
   void set_name(const char* name) { name_ = name; }
 
   // MemoryDumpProvider implementation:
+  // This is reported as
+  // "memory:chrome:all_processes:reported_by_chrome:net:effective_size_avg."
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
                     base::trace_event::ProcessMemoryDump* pmd) override;
+
+  void AssertCalledOnValidThread() {
+    DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
+  }
 
  private:
   // ---------------------------------------------------------------------------
@@ -298,7 +307,7 @@ class NET_EXPORT URLRequestContext
   scoped_refptr<SSLConfigService> ssl_config_service_;
   NetworkDelegate* network_delegate_;
   HttpServerProperties* http_server_properties_;
-  HttpUserAgentSettings* http_user_agent_settings_;
+  const HttpUserAgentSettings* http_user_agent_settings_;
   CookieStore* cookie_store_;
   TransportSecurityState* transport_security_state_;
   CTVerifier* cert_transparency_verifier_;
@@ -332,6 +341,8 @@ class NET_EXPORT URLRequestContext
   // The largest number of outstanding URLRequests that have been created by
   // |this| and are not yet destroyed. This doesn't need to be in CopyFrom.
   mutable size_t largest_outstanding_requests_count_seen_;
+
+  THREAD_CHECKER(thread_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(URLRequestContext);
 };

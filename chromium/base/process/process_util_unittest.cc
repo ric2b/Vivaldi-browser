@@ -55,7 +55,6 @@
 #endif
 #if defined(OS_WIN)
 #include <windows.h>
-#include "base/win/windows_version.h"
 #endif
 #if defined(OS_MACOSX)
 #include <mach/vm_param.h>
@@ -63,6 +62,9 @@
 #endif
 #if defined(OS_ANDROID)
 #include "third_party/lss/linux_syscall_support.h"
+#endif
+#if defined(OS_FUCHSIA)
+#include <magenta/syscalls.h>
 #endif
 
 using base::FilePath;
@@ -491,13 +493,6 @@ TEST_F(ProcessUtilTest, InheritSpecifiedHandles) {
       kEventToTriggerHandleSwitch,
       base::Uint64ToString(reinterpret_cast<uint64_t>(event.handle())));
 
-  // This functionality actually requires Vista or later. Make sure that it
-  // fails properly on XP.
-  if (base::win::GetVersion() < base::win::VERSION_VISTA) {
-    EXPECT_FALSE(base::LaunchProcess(cmd_line, options).IsValid());
-    return;
-  }
-
   // Launch the process and wait for it to trigger the event.
   ASSERT_TRUE(base::LaunchProcess(cmd_line, options).IsValid());
   EXPECT_TRUE(event.TimedWait(TestTimeouts::action_max_timeout()));
@@ -858,19 +853,34 @@ TEST_F(ProcessUtilTest, GetAppOutputWithExitCode) {
   EXPECT_EQ(exit_code, 2);
 }
 
+// There's no such thing as a parent process id on Fuchsia.
+#if !defined(OS_FUCHSIA)
 TEST_F(ProcessUtilTest, GetParentProcessId) {
   base::ProcessId ppid =
       base::GetParentProcessId(base::GetCurrentProcessHandle());
   EXPECT_EQ(ppid, static_cast<base::ProcessId>(getppid()));
 }
+#endif  // !defined(OS_FUCHSIA)
 
 // TODO(port): port those unit tests.
 bool IsProcessDead(base::ProcessHandle child) {
+#if defined(OS_FUCHSIA)
+  // ProcessHandle is an mx_handle_t, not a pid on Fuchsia, so waitpid() doesn't
+  // make sense.
+  mx_signals_t signals;
+  // Timeout of 0 to check for termination, but non-blocking.
+  if (mx_object_wait_one(child, MX_TASK_TERMINATED, 0, &signals) == MX_OK) {
+    DCHECK(signals & MX_TASK_TERMINATED);
+    return true;
+  }
+  return false;
+#else
   // waitpid() will actually reap the process which is exactly NOT what we
   // want to test for.  The good thing is that if it can't find the process
   // we'll get a nice value for errno which we can test for.
   const pid_t result = HANDLE_EINTR(waitpid(child, NULL, WNOHANG));
   return result == -1 && errno == ECHILD;
+#endif
 }
 
 TEST_F(ProcessUtilTest, DelayedTermination) {

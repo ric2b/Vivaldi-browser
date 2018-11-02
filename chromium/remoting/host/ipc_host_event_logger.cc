@@ -13,41 +13,39 @@
 
 namespace remoting {
 
-IpcHostEventLogger::IpcHostEventLogger(base::WeakPtr<HostStatusMonitor> monitor,
+IpcHostEventLogger::IpcHostEventLogger(scoped_refptr<HostStatusMonitor> monitor,
                                        IPC::Sender* daemon_channel)
-    : daemon_channel_(daemon_channel),
-      monitor_(monitor) {
+    : daemon_channel_(daemon_channel), monitor_(monitor) {
   monitor_->AddStatusObserver(this);
 }
 
 IpcHostEventLogger::~IpcHostEventLogger() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (monitor_.get())
-    monitor_->RemoveStatusObserver(this);
+  monitor_->RemoveStatusObserver(this);
 }
 
 void IpcHostEventLogger::OnAccessDenied(const std::string& jid) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(new ChromotingNetworkDaemonMsg_AccessDenied(jid));
 }
 
 void IpcHostEventLogger::OnClientAuthenticated(const std::string& jid) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(
       new ChromotingNetworkDaemonMsg_ClientAuthenticated(jid));
 }
 
 void IpcHostEventLogger::OnClientConnected(const std::string& jid) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(new ChromotingNetworkDaemonMsg_ClientConnected(jid));
 }
 
 void IpcHostEventLogger::OnClientDisconnected(const std::string& jid) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(new ChromotingNetworkDaemonMsg_ClientDisconnected(jid));
 }
@@ -56,7 +54,7 @@ void IpcHostEventLogger::OnClientRouteChange(
     const std::string& jid,
     const std::string& channel_name,
     const protocol::TransportRoute& route) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   SerializedTransportRoute serialized_route;
   serialized_route.type = route.type;
@@ -70,13 +68,13 @@ void IpcHostEventLogger::OnClientRouteChange(
 }
 
 void IpcHostEventLogger::OnShutdown() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(new ChromotingNetworkDaemonMsg_HostShutdown());
 }
 
 void IpcHostEventLogger::OnStart(const std::string& xmpp_login) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   daemon_channel_->Send(new ChromotingNetworkDaemonMsg_HostStarted(xmpp_login));
 }

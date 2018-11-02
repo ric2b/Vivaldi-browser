@@ -5,14 +5,18 @@
 #include "ash/rotator/screen_rotation_animator.h"
 
 #include "ash/ash_switches.h"
+#include "ash/display/screen_orientation_controller_chromeos.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/config.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
-#include "ash/rotator/test/screen_rotation_animator_test_api.h"
+#include "ash/rotator/screen_rotation_animator_test_api.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
+#include "ash/system/overview/overview_button_tray.h"
+#include "ash/system/status_area_widget.h"
+#include "ash/system/status_area_widget_test_helper.h"
 #include "ash/test/ash_test_base.h"
 #include "ash/test/ash_test_helper.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/callback_forward.h"
 #include "base/command_line.h"
 #include "base/memory/ptr_util.h"
@@ -43,9 +47,9 @@ void SetDisplayRotation(int64_t display_id,
       display::Display::RotationSource::ROTATION_SOURCE_USER);
 }
 
-aura::Window* GetRootWindow(int64_t display_id) {
-  return Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
-      display_id);
+OverviewButtonTray* GetTray() {
+  return StatusAreaWidgetTestHelper::GetStatusAreaWidget()
+      ->overview_button_tray();
 }
 
 class AnimationObserver : public ScreenRotationAnimatorObserver {
@@ -103,8 +107,8 @@ TestScreenRotationAnimator::CreateAfterCopyCallbackBeforeRotation(
   CopyCallback next_callback =
       ScreenRotationAnimator::CreateAfterCopyCallbackBeforeRotation(
           std::move(rotation_request));
-  return base::Bind(&TestScreenRotationAnimator::IntersectBefore,
-                    base::Unretained(this), next_callback);
+  return base::BindOnce(&TestScreenRotationAnimator::IntersectBefore,
+                        base::Unretained(this), std::move(next_callback));
 }
 
 ScreenRotationAnimator::CopyCallback
@@ -113,27 +117,27 @@ TestScreenRotationAnimator::CreateAfterCopyCallbackAfterRotation(
   CopyCallback next_callback =
       ScreenRotationAnimator::CreateAfterCopyCallbackAfterRotation(
           std::move(rotation_request));
-  return base::Bind(&TestScreenRotationAnimator::IntersectAfter,
-                    base::Unretained(this), next_callback);
+  return base::BindOnce(&TestScreenRotationAnimator::IntersectAfter,
+                        base::Unretained(this), std::move(next_callback));
 }
 
 void TestScreenRotationAnimator::IntersectBefore(
     CopyCallback next_callback,
     std::unique_ptr<cc::CopyOutputResult> result) {
   intersect_before_callback_.Run();
-  next_callback.Run(std::move(result));
+  std::move(next_callback).Run(std::move(result));
 }
 
 void TestScreenRotationAnimator::IntersectAfter(
     CopyCallback next_callback,
     std::unique_ptr<cc::CopyOutputResult> result) {
   intersect_after_callback_.Run();
-  next_callback.Run(std::move(result));
+  std::move(next_callback).Run(std::move(result));
 }
 
 }  // namespace
 
-class ScreenRotationAnimatorSlowAnimationTest : public test::AshTestBase {
+class ScreenRotationAnimatorSlowAnimationTest : public AshTestBase {
  public:
   ScreenRotationAnimatorSlowAnimationTest() {}
   ~ScreenRotationAnimatorSlowAnimationTest() override {}
@@ -146,14 +150,14 @@ class ScreenRotationAnimatorSlowAnimationTest : public test::AshTestBase {
 
   ScreenRotationAnimator* animator() { return animator_.get(); }
 
-  test::ScreenRotationAnimatorTestApi* test_api() { return test_api_.get(); }
+  ScreenRotationAnimatorTestApi* test_api() { return test_api_.get(); }
 
  private:
   display::Display display_;
 
   std::unique_ptr<ScreenRotationAnimator> animator_;
 
-  std::unique_ptr<test::ScreenRotationAnimatorTestApi> test_api_;
+  std::unique_ptr<ScreenRotationAnimatorTestApi> test_api_;
 
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> non_zero_duration_mode_;
 
@@ -164,23 +168,16 @@ void ScreenRotationAnimatorSlowAnimationTest::SetUp() {
   AshTestBase::SetUp();
 
   display_ = display::Screen::GetScreen()->GetPrimaryDisplay();
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
-  animator_ =
-      base::MakeUnique<ScreenRotationAnimator>(GetRootWindow(display_.id()));
-  test_api_ =
-      base::MakeUnique<test::ScreenRotationAnimatorTestApi>(animator_.get());
+  animator_ = base::MakeUnique<ScreenRotationAnimator>(
+      Shell::GetRootWindowForDisplayId(display_.id()));
+  test_api_ = base::MakeUnique<ScreenRotationAnimatorTestApi>(animator_.get());
   test_api()->DisableAnimationTimers();
   non_zero_duration_mode_ =
       base::MakeUnique<ui::ScopedAnimationDurationScaleMode>(
           ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
 }
 
-class ScreenRotationAnimatorSmoothAnimationTest : public test::AshTestBase {
+class ScreenRotationAnimatorSmoothAnimationTest : public AshTestBase {
  public:
   ScreenRotationAnimatorSmoothAnimationTest() {}
   ~ScreenRotationAnimatorSmoothAnimationTest() override {}
@@ -200,7 +197,7 @@ class ScreenRotationAnimatorSmoothAnimationTest : public test::AshTestBase {
                                  const base::Closure& before_callback,
                                  const base::Closure& after_callback);
 
-  test::ScreenRotationAnimatorTestApi* test_api() { return test_api_.get(); }
+  ScreenRotationAnimatorTestApi* test_api() { return test_api_.get(); }
 
   void WaitForCopyCallback();
 
@@ -211,7 +208,7 @@ class ScreenRotationAnimatorSmoothAnimationTest : public test::AshTestBase {
 
   std::unique_ptr<TestScreenRotationAnimator> animator_;
 
-  std::unique_ptr<test::ScreenRotationAnimatorTestApi> test_api_;
+  std::unique_ptr<ScreenRotationAnimatorTestApi> test_api_;
 
   std::unique_ptr<ui::ScopedAnimationDurationScaleMode> non_zero_duration_mode_;
 
@@ -236,14 +233,8 @@ void ScreenRotationAnimatorSmoothAnimationTest::SetUp() {
   ash_test_helper()->reset_commandline();
 
   display_ = display::Screen::GetScreen()->GetPrimaryDisplay();
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   run_loop_ = base::MakeUnique<base::RunLoop>();
-  SetScreenRotationAnimator(GetRootWindow(display_.id()),
+  SetScreenRotationAnimator(Shell::GetRootWindowForDisplayId(display_.id()),
                             run_loop_->QuitWhenIdleClosure(),
                             run_loop_->QuitWhenIdleClosure());
   non_zero_duration_mode_ =
@@ -257,8 +248,7 @@ void ScreenRotationAnimatorSmoothAnimationTest::SetScreenRotationAnimator(
     const base::Closure& after_callback) {
   animator_ = base::MakeUnique<TestScreenRotationAnimator>(
       root_window, before_callback, after_callback);
-  test_api_ =
-      base::MakeUnique<test::ScreenRotationAnimatorTestApi>(animator_.get());
+  test_api_ = base::MakeUnique<ScreenRotationAnimatorTestApi>(animator_.get());
   test_api()->DisableAnimationTimers();
 }
 
@@ -268,20 +258,14 @@ void ScreenRotationAnimatorSmoothAnimationTest::WaitForCopyCallback() {
 }
 
 TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldNotifyObserver) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   AnimationObserver observer;
   animator()->AddScreenRotationAnimatorObserver(&observer);
   EXPECT_FALSE(observer.notified());
 
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_FALSE(observer.notified());
 
   test_api()->CompleteAnimations();
@@ -291,24 +275,19 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldNotifyObserver) {
 }
 
 TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldNotifyObserverOnce) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   AnimationObserver observer;
   animator()->AddScreenRotationAnimatorObserver(&observer);
   EXPECT_FALSE(observer.notified());
 
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_FALSE(observer.notified());
 
   animator()->Rotate(display::Display::ROTATE_180,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_FALSE(observer.notified());
 
   test_api()->CompleteAnimations();
@@ -318,16 +297,10 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldNotifyObserverOnce) {
 }
 
 TEST_F(ScreenRotationAnimatorSlowAnimationTest, RotatesToDifferentRotation) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
   test_api()->CompleteAnimations();
@@ -336,16 +309,10 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest, RotatesToDifferentRotation) {
 
 TEST_F(ScreenRotationAnimatorSlowAnimationTest,
        ShouldNotRotateTheSameRotation) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_0,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_FALSE(test_api()->HasActiveAnimations());
 }
 
@@ -353,21 +320,16 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest,
 // animation, it should stop the animation immediately and add the new rotation
 // request to the |last_pending_request_|.
 TEST_F(ScreenRotationAnimatorSlowAnimationTest, RotatesDuringRotation) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(animator()->IsRotating());
   EXPECT_EQ(display::Display::ROTATE_90, animator()->GetTargetRotation());
 
   animator()->Rotate(display::Display::ROTATE_180,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(test_api()->HasActiveAnimations());
   EXPECT_TRUE(animator()->IsRotating());
   EXPECT_EQ(display::Display::ROTATE_180, animator()->GetTargetRotation());
@@ -382,24 +344,20 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest, RotatesDuringRotation) {
 // If there are multiple requests queued during animation, it should process the
 // last request and finish the rotation animation.
 TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldCompleteAnimations) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   SetDisplayRotation(display_id(), display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
   animator()->Rotate(display::Display::ROTATE_180,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
   animator()->Rotate(display::Display::ROTATE_270,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
   test_api()->CompleteAnimations();
@@ -407,25 +365,48 @@ TEST_F(ScreenRotationAnimatorSlowAnimationTest, ShouldCompleteAnimations) {
   EXPECT_EQ(display::Display::ROTATE_270, GetDisplayRotation(display_id()));
 }
 
+// Test that slow screen rotation animation will not interrupt hide animation.
+// The OverviewButton should be hidden.
+TEST_F(ScreenRotationAnimatorSlowAnimationTest,
+       OverviewButtonTrayHideAnimationAlwaysCompletes) {
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+
+  // Long duration for hide animation, to allow it to be interrupted.
+  ui::ScopedAnimationDurationScaleMode hide_duration(
+      ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
+  GetTray()->SetVisible(false);
+
+  // ScreenRotationAnimator copies the current layers, and deletes them upon
+  // completion. Allow its animation to complete first.
+  ui::ScopedAnimationDurationScaleMode rotate_duration(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+  SetDisplayRotation(display_id(), display::Display::ROTATE_0);
+  animator()->Rotate(display::Display::ROTATE_90,
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_SYNC);
+
+  EXPECT_FALSE(GetTray()->visible());
+}
+
 // Test enable smooth screen rotation code path.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RotatesToDifferentRotationWithCopyCallback) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
+  // TODO(sky): remove this, temporary until mash_unittests as a separate
+  // executable is nuked. http://crbug.com/729810.
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
-  }
 
   const int64_t display_id = display_manager()->GetDisplayAt(0).id();
   SetScreenRotationAnimator(
-      GetRootWindow(display_id), run_loop_->QuitWhenIdleClosure(),
+      Shell::GetRootWindowForDisplayId(display_id),
+      run_loop_->QuitWhenIdleClosure(),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::QuitWaitForCopyCallback,
           base::Unretained(this)));
   SetDisplayRotation(display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   EXPECT_TRUE(animator()->IsRotating());
 
   EXPECT_EQ(display::Display::ROTATE_90, animator()->GetTargetRotation());
@@ -447,13 +428,6 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 // request callback called, it should stop rotating.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RemoveExternalSecondaryDisplayBeforeFirstCopyCallback) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   UpdateDisplay("640x480,800x600");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
 
@@ -461,14 +435,15 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
   const int64_t secondary_display_id = display_manager()->GetDisplayAt(1).id();
 
   SetScreenRotationAnimator(
-      GetRootWindow(secondary_display_id),
+      Shell::GetRootWindowForDisplayId(secondary_display_id),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::RemoveSecondaryDisplay,
           base::Unretained(this), "640x480"),
       run_loop_->QuitWhenIdleClosure());
   SetDisplayRotation(secondary_display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ(primary_display_id, display_manager()->GetDisplayAt(0).id());
@@ -478,13 +453,6 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 // request callback called, it should stop rotating.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RemoveExternalPrimaryDisplayBeforeFirstCopyCallback) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   UpdateDisplay("640x480,800x600");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
 
@@ -493,14 +461,15 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
   const int64_t primary_display_id = display_manager()->GetDisplayAt(1).id();
   const int64_t secondary_display_id = display_manager()->GetDisplayAt(0).id();
   SetScreenRotationAnimator(
-      GetRootWindow(primary_display_id),
+      Shell::GetRootWindowForDisplayId(primary_display_id),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::RemoveSecondaryDisplay,
           base::Unretained(this), "640x480"),
       run_loop_->QuitWhenIdleClosure());
   SetDisplayRotation(primary_display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ(secondary_display_id, display_manager()->GetDisplayAt(0).id());
@@ -510,12 +479,10 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 // request callback called, it should stop rotating.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RemoveExternalSecondaryDisplayBeforeSecondCopyCallback) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
+  // TODO(sky): remove this, temporary until mash_unittests as a separate
+  // executable is nuked. http://crbug.com/729810.
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
-  }
 
   UpdateDisplay("640x480,800x600");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
@@ -523,13 +490,15 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
   const int64_t primary_display_id = display_manager()->GetDisplayAt(0).id();
   const int64_t secondary_display_id = display_manager()->GetDisplayAt(1).id();
   SetScreenRotationAnimator(
-      GetRootWindow(secondary_display_id), run_loop_->QuitWhenIdleClosure(),
+      Shell::GetRootWindowForDisplayId(secondary_display_id),
+      run_loop_->QuitWhenIdleClosure(),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::RemoveSecondaryDisplay,
           base::Unretained(this), "640x480"));
   SetDisplayRotation(secondary_display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ(primary_display_id, display_manager()->GetDisplayAt(0).id());
@@ -539,12 +508,10 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 // request callback called, it should stop rotating.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RemoveExternalPrimaryDisplayBeforeSecondCopyCallback) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
+  // TODO(sky): remove this, temporary until mash_unittests as a separate
+  // executable is nuked. http://crbug.com/729810.
+  if (Shell::GetAshConfig() == Config::MASH)
     return;
-  }
 
   UpdateDisplay("640x480,800x600");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
@@ -554,13 +521,15 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
   const int64_t primary_display_id = display_manager()->GetDisplayAt(1).id();
   const int64_t secondary_display_id = display_manager()->GetDisplayAt(0).id();
   SetScreenRotationAnimator(
-      GetRootWindow(primary_display_id), run_loop_->QuitWhenIdleClosure(),
+      Shell::GetRootWindowForDisplayId(primary_display_id),
+      run_loop_->QuitWhenIdleClosure(),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::RemoveSecondaryDisplay,
           base::Unretained(this), "640x480"));
   SetDisplayRotation(primary_display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ(secondary_display_id, display_manager()->GetDisplayAt(0).id());
@@ -571,13 +540,6 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 // |root_window| changed.
 TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
        RemoveExternalPrimaryDisplayDuringAnimationChangedRootWindow) {
-  // TODO(wutao): needs GetDisplayInfo http://crbug.com/622480.
-  if (Shell::GetAshConfig() == Config::MASH) {
-    ASSERT_TRUE(ShellPort::Get()->GetDisplayInfo(display_id()).id() !=
-                display_id());
-    return;
-  }
-
   UpdateDisplay("640x480,800x600");
   EXPECT_EQ(2U, display_manager()->GetNumDisplays());
 
@@ -585,19 +547,56 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
       display_manager()->GetDisplayAt(1).id());
   const int64_t secondary_display_id = display_manager()->GetDisplayAt(0).id();
   SetScreenRotationAnimator(
-      GetRootWindow(secondary_display_id),
+      Shell::GetRootWindowForDisplayId(secondary_display_id),
       base::Bind(
           &ScreenRotationAnimatorSmoothAnimationTest::RemoveSecondaryDisplay,
           base::Unretained(this), "640x480"),
       run_loop_->QuitWhenIdleClosure());
   SetDisplayRotation(secondary_display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_EQ(1U, display_manager()->GetNumDisplays());
   EXPECT_EQ(secondary_display_id, display_manager()->GetDisplayAt(0).id());
   EXPECT_EQ(display::Display::ROTATE_0,
             GetDisplayRotation(secondary_display_id));
+}
+
+// Test that smooth screen rotation animation will not interrupt hide animation.
+// The OverviewButton should be hidden.
+TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
+       OverviewButtonTrayHideAnimationAlwaysCompletes) {
+  // TODO(sky): remove this, temporary until mash_unittests as a separate
+  // executable is nuked. http://crbug.com/729810.
+  if (Shell::GetAshConfig() == Config::MASH)
+    return;
+
+  Shell::Get()->tablet_mode_controller()->EnableTabletModeWindowManager(true);
+
+  // Long duration for hide animation, to allow it to be interrupted.
+  ui::ScopedAnimationDurationScaleMode hide_duration(
+      ui::ScopedAnimationDurationScaleMode::SLOW_DURATION);
+  GetTray()->SetVisible(false);
+
+  // Allow ScreenRotationAnimator animation to complete first.
+  ui::ScopedAnimationDurationScaleMode rotate_duration(
+      ui::ScopedAnimationDurationScaleMode::ZERO_DURATION);
+  int64_t display_id = display_manager()->GetDisplayAt(0).id();
+  SetScreenRotationAnimator(
+      Shell::GetRootWindowForDisplayId(display_id),
+      run_loop_->QuitWhenIdleClosure(),
+      base::Bind(
+          &ScreenRotationAnimatorSmoothAnimationTest::QuitWaitForCopyCallback,
+          base::Unretained(this)));
+  SetDisplayRotation(display_id, display::Display::ROTATE_0);
+  animator()->Rotate(display::Display::ROTATE_90,
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
+  WaitForCopyCallback();
+
+  GetTray()->layer()->GetAnimator()->StopAnimating();
+  EXPECT_FALSE(GetTray()->visible());
 }
 
 // Test that smooth screen rotation animation will work when |root_window|
@@ -610,7 +609,7 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
     return;
 
   const int64_t display_id = display_manager()->GetDisplayAt(0).id();
-  aura::Window* root_window = GetRootWindow(display_id);
+  aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
   SetScreenRotationAnimator(
       root_window, run_loop_->QuitWhenIdleClosure(),
       base::Bind(
@@ -618,7 +617,8 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
           base::Unretained(this)));
   SetDisplayRotation(display_id, display::Display::ROTATE_0);
   animator()->Rotate(display::Display::ROTATE_90,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
@@ -633,7 +633,8 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
 
   // Should work for another rotation.
   animator()->Rotate(display::Display::ROTATE_180,
-                     display::Display::RotationSource::ROTATION_SOURCE_USER);
+                     display::Display::ROTATION_SOURCE_USER,
+                     DisplayConfigurationController::ANIMATION_ASYNC);
   WaitForCopyCallback();
   EXPECT_TRUE(test_api()->HasActiveAnimations());
 
@@ -641,5 +642,4 @@ TEST_F(ScreenRotationAnimatorSmoothAnimationTest,
   EXPECT_FALSE(test_api()->HasActiveAnimations());
   EXPECT_EQ(display::Display::ROTATE_180, GetDisplayRotation(display_id));
 }
-
 }  // namespace ash

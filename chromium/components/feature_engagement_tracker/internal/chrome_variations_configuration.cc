@@ -36,6 +36,7 @@ const char kEventConfigTriggerKey[] = "event_trigger";
 const char kEventConfigKeyPrefix[] = "event_";
 const char kSessionRateKey[] = "session_rate";
 const char kAvailabilityKey[] = "availability";
+const char kIgnoredKeyPrefix[] = "x_";
 
 const char kEventConfigDataNameKey[] = "name";
 const char kEventConfigDataComparatorKey[] = "comparator";
@@ -203,10 +204,12 @@ void ChromeVariationsConfiguration::ParseFeatureConfigs(
 void ChromeVariationsConfiguration::ParseFeatureConfig(
     const base::Feature* feature) {
   DCHECK(feature);
-  DCHECK(configs_.find(feature) == configs_.end());
+  DCHECK(configs_.find(feature->name) == configs_.end());
+
+  DVLOG(3) << "Parsing feature config for " << feature->name;
 
   // Initially all new configurations are considered invalid.
-  FeatureConfig& config = configs_[feature];
+  FeatureConfig& config = configs_[feature->name];
   config.valid = false;
   uint32_t parse_errors = 0;
 
@@ -217,6 +220,7 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
         stats::ConfigParsingEvent::FAILURE_NO_FIELD_TRIAL);
     // Returns early. If no field trial, ConfigParsingEvent::FAILURE will not be
     // recorded.
+    DVLOG(3) << "No field trial for " << feature->name;
     return;
   }
 
@@ -268,8 +272,13 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
         continue;
       }
       config.event_configs.insert(event_config);
+    } else if (base::StartsWith(key, kIgnoredKeyPrefix,
+                                base::CompareCase::INSENSITIVE_ASCII)) {
+      // Intentionally ignoring parameter using registered ignored prefix.
+      DVLOG(2) << "Ignoring unknown key when parsing config for feature "
+               << feature->name << ": " << key;
     } else {
-      DVLOG(1) << "Ignoring unknown key when parsing config for feature "
+      DVLOG(1) << "Unknown key found when parsing config for feature "
                << feature->name << ": " << key;
       stats::RecordConfigParsingEvent(
           stats::ConfigParsingEvent::FAILURE_UNKNOWN_KEY);
@@ -284,8 +293,11 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
 
   if (config.valid) {
     stats::RecordConfigParsingEvent(stats::ConfigParsingEvent::SUCCESS);
+    DVLOG(2) << "Config for " << feature->name << " is valid.";
+    DVLOG(3) << "Config for " << feature->name << " = " << config;
   } else {
     stats::RecordConfigParsingEvent(stats::ConfigParsingEvent::FAILURE);
+    DVLOG(2) << "Config for " << feature->name << " is invalid.";
   }
 
   // Notice parse errors for used and trigger events will also cause the
@@ -302,7 +314,14 @@ void ChromeVariationsConfiguration::ParseFeatureConfig(
 
 const FeatureConfig& ChromeVariationsConfiguration::GetFeatureConfig(
     const base::Feature& feature) const {
-  auto it = configs_.find(&feature);
+  auto it = configs_.find(feature.name);
+  DCHECK(it != configs_.end());
+  return it->second;
+}
+
+const FeatureConfig& ChromeVariationsConfiguration::GetFeatureConfigByName(
+    const std::string& feature_name) const {
+  auto it = configs_.find(feature_name);
   DCHECK(it != configs_.end());
   return it->second;
 }

@@ -9,13 +9,16 @@
 var appWindow = null;
 
 /**
- * Contains Web content provided by Google authorization server.
+ * Contains web content provided by Google authorization server.
  * @type {WebView}
  */
 var lsoView = null;
 
 /** @type {TermsOfServicePage} */
 var termsPage = null;
+
+/** @type {ActiveDirectoryAuthPage} */
+var activeDirectoryAuthPage = null;
 
 /**
  * Used for bidirectional communication with native code.
@@ -37,16 +40,16 @@ var currentDeviceId = null;
 var lastFocusedElement = null;
 
 /**
- * Host window inner default width.
+ * Host window outer default width.
  * @const {number}
  */
-var INNER_WIDTH = 960;
+var OUTER_WIDTH = 768;
 
 /**
- * Host window inner default height.
+ * Host window outer default height.
  * @const {number}
  */
-var INNER_HEIGHT = 687;
+var OUTER_HEIGHT = 640;
 
 
 /**
@@ -63,7 +66,6 @@ function sendNativeMessage(event, opt_props) {
  * Class to handle checkbox corresponding to a preference.
  */
 class PreferenceCheckbox {
-
   /**
    * Creates a Checkbox which handles the corresponding preference update.
    * @param {Element} container The container this checkbox corresponds to.
@@ -107,7 +109,9 @@ class PreferenceCheckbox {
    * different from the preference value, because the user's check is
    * not propagated to the preference until the user clicks "AGREE" button.
    */
-  isChecked() { return this.checkbox_.checked; }
+  isChecked() {
+    return this.checkbox_.checked;
+  }
 
   /**
    * Called when the preference value in native code is updated.
@@ -129,8 +133,9 @@ class PreferenceCheckbox {
   /**
    * Called when the "Learn More" link is clicked.
    */
-  onLearnMoreLinkClicked() {
+  onLearnMoreLinkClicked(event) {
     showTextOverlay(this.learnMoreContent_);
+    event.stopPropagation();
   }
 }
 
@@ -141,21 +146,22 @@ class PreferenceCheckbox {
  */
 class MetricsPreferenceCheckbox extends PreferenceCheckbox {
   constructor(
-      container, learnMoreContent, learnMoreLinkId, isOwner,
-      textDisabled, textEnabled, textManagedDisabled, textManagedEnabled) {
+      container, learnMoreContent, learnMoreLinkId, isOwner, textDisabled,
+      textEnabled, textManagedDisabled, textManagedEnabled) {
     // Do not use policy indicator.
     // Learn More link handling is done by this class.
     // So pass |null| intentionally.
     super(container, learnMoreContent, null, null);
 
+    this.textLabel_ = container.querySelector('.content-text');
     this.learnMoreLinkId_ = learnMoreLinkId;
     this.isOwner_ = isOwner;
 
     // Two dimensional array. First dimension is whether it is managed or not,
     // the second one is whether it is enabled or not.
     this.texts_ = [
-        [textDisabled, textEnabled],
-        [textManagedDisabled, textManagedEnabled]
+      [textDisabled, textEnabled],
+      [textManagedDisabled, textManagedEnabled],
     ];
   }
 
@@ -166,9 +172,11 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // Hide the checkbox if it is not allowed to (re-)enable.
     var canEnable = !isEnabled && !isManaged;
     this.checkbox_.hidden = !canEnable;
+    this.textLabel_.hidden = canEnable;
+    var label = canEnable ? this.label_ : this.textLabel_;
 
-    // Update the label.
-    this.label_.innerHTML = this.texts_[isManaged ? 1 : 0][isEnabled ? 1 : 0];
+    // Update label text.
+    label.innerHTML = this.texts_[isManaged ? 1 : 0][isEnabled ? 1 : 0];
 
     // Work around for the current translation text.
     // The translation text has tags for following links, although those
@@ -176,10 +184,10 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
     // the translation target).
     // So, meanwhile, we set the link everytime we update the text.
     // TODO: fix the translation text, and main html.
-    var learnMoreLink = this.label_.querySelector(this.learnMoreLinkId_);
+    var learnMoreLink = label.querySelector(this.learnMoreLinkId_);
     learnMoreLink.addEventListener(
         'click', (event) => this.onLearnMoreLinkClicked(event));
-    var settingsLink = this.label_.querySelector('#settings-link');
+    var settingsLink = label.querySelector('#settings-link');
     settingsLink.addEventListener(
         'click', (event) => this.onSettingsLinkClicked(event));
   }
@@ -187,7 +195,7 @@ class MetricsPreferenceCheckbox extends PreferenceCheckbox {
   /** Called when "settings" link is clicked. */
   onSettingsLinkClicked(event) {
     chrome.browser.openTab({'url': 'chrome://settings'}, function() {});
-    event.preventDefault();
+    event.stopPropagation();
   }
 }
 
@@ -207,7 +215,6 @@ var LoadState = {
  * loading of Terms-Of-Service content.
  */
 class TermsOfServicePage {
-
   /**
    * @param {Element} container The container of the page.
    * @param {boolean} isManaged Set true if ARC is managed.
@@ -220,8 +227,8 @@ class TermsOfServicePage {
    *     location service.
    */
   constructor(
-      container, isManaged, countryCode,
-      metricsCheckbox, backupRestoreCheckbox, locationServiceCheckbox) {
+      container, isManaged, countryCode, metricsCheckbox, backupRestoreCheckbox,
+      locationServiceCheckbox) {
     this.loadingContainer_ =
         container.querySelector('#terms-of-service-loading');
     this.contentContainer_ =
@@ -244,18 +251,22 @@ class TermsOfServicePage {
 
     var scriptSetCountryCode =
         'document.countryCode = \'' + countryCode.toLowerCase() + '\';';
+    scriptSetCountryCode += 'document.viewMode = \'large-view\';';
     this.termsView_.addContentScripts([
-      { name: 'preProcess',
+      {
+        name: 'preProcess',
         matches: ['https://play.google.com/*'],
-        js: { code: scriptSetCountryCode },
+        js: {code: scriptSetCountryCode},
         run_at: 'document_start'
       },
-      { name: 'postProcess',
+      {
+        name: 'postProcess',
         matches: ['https://play.google.com/*'],
-        css: { files: ['playstore.css'] },
-        js: { files: ['playstore.js'] },
+        css: {files: ['playstore.css']},
+        js: {files: ['playstore.js']},
         run_at: 'document_end'
-      }]);
+      }
+    ]);
 
     // webview is not allowed to open links in the new window. Hook these
     // events and open links in overlay dialog.
@@ -268,7 +279,6 @@ class TermsOfServicePage {
     // On managed case, do not show TermsOfService section. Note that the
     // checkbox for the prefereces are still visible.
     var visibility = isManaged ? 'hidden' : 'visible';
-    container.querySelector('#terms-title').style.visibility = visibility;
     container.querySelector('#terms-container').style.visibility = visibility;
 
     // Set event handler for buttons.
@@ -375,9 +385,7 @@ class TermsOfServicePage {
 
   /** Called when "CANCEL" button is clicked. */
   onCancel_() {
-    if (appWindow) {
-      appWindow.close();
-    }
+    closeWindow();
   }
 
   /** Called when metrics preference is updated. */
@@ -400,6 +408,110 @@ class TermsOfServicePage {
 }
 
 /**
+ * Handles events for the Active Directory authentication page.
+ */
+class ActiveDirectoryAuthPage {
+  /**
+   * @param {Element} container The container of the page.
+   */
+  constructor(container) {
+    var requestFilter = {urls: ['<all_urls>'], types: ['main_frame']};
+
+    this.authView_ = container.querySelector('#active-directory-auth-view');
+    this.authView_.request.onCompleted.addListener(
+        (details) => this.onAuthViewCompleted_(details), requestFilter);
+    this.authView_.request.onErrorOccurred.addListener(
+        (details) => this.onAuthViewErrorOccurred_(details), requestFilter);
+
+    this.deviceManagementUrlPrefix_ = null;
+
+    // https://crbug.com/756144: Disable event processing while the page is not
+    // shown. The bug seems to be caused by erroneous onErrorOccurred events
+    // that are fired even though authView_.src is never set. This might be
+    // related to a bug in webview, see also CL:638413.
+    this.process_events_ = false;
+
+    container.querySelector('#button-active-directory-auth-cancel')
+        .addEventListener('click', () => this.onCancel_());
+  }
+
+  /**
+   * Sets URLs used for Active Directory user SAML authentication.
+   * @param {string} federationUrl The Active Directory Federation Services URL.
+   * @param {string} deviceManagementUrlPrefix Device management server URL
+   *        prefix used to detect if the SAML flow finished. DM server is the
+   *        SAML service provider.
+   */
+  setUrls(federationUrl, deviceManagementUrlPrefix) {
+    this.authView_.src = federationUrl;
+    this.deviceManagementUrlPrefix_ = deviceManagementUrlPrefix;
+  }
+
+  /**
+   * Toggles onCompleted and onErrorOccurred event processing.
+   * @param {boolean} enabled Process (true) or ignore (false) events.
+   */
+  enableEventProcessing(enabled) {
+    this.process_events_ = enabled;
+  }
+
+  /**
+   * Auth view onCompleted event handler. Checks whether the SAML flow
+   * reached its endpoint, the device management server.
+   * @param {!Object} details Event parameters.
+   */
+  onAuthViewCompleted_(details) {
+    if (!this.process_events_) {
+      console.error(
+          'Unexpected onAuthViewCompleted_ event from URL ' + details.url);
+      return;
+    }
+    // See if we hit the device management server. This should happen at the
+    // end of the SAML flow. Before that, we're on the Active Directory
+    // Federation Services server.
+    if (this.deviceManagementUrlPrefix_ &&
+        details.url.startsWith(this.deviceManagementUrlPrefix_)) {
+      // Once we hit the final URL, stop processing further events.
+      this.process_events_ = false;
+      // Did it actually work?
+      if (details.statusCode == 200) {
+        // 'code' is unused, but it needs to be there.
+        sendNativeMessage('onAuthSucceeded', {code: ''});
+      } else {
+        sendNativeMessage('onAuthFailed', {
+          errorMessage:
+              'Status code ' + details.statusCode + ' in DM server response.'
+        });
+      }
+    }
+  }
+
+  /**
+   * Auth view onErrorOccurred event handler.
+   * @param {!Object} details Event parameters.
+   */
+  onAuthViewErrorOccurred_(details) {
+    if (!this.process_events_) {
+      console.error(
+          'Unexpected onAuthViewErrorOccurred_ event: ' + details.error);
+      return;
+    }
+    // Retry triggers net::ERR_ABORTED, so ignore it.
+    if (details.error == 'net::ERR_ABORTED')
+      return;
+    // Stop processing further events on first error.
+    this.process_events_ = false;
+    sendNativeMessage(
+        'onAuthFailed', {errorMessage: 'Error occurred: ' + details.error});
+  }
+
+  /** Called when the "CANCEL" button is clicked. */
+  onCancel_() {
+    closeWindow();
+  }
+}
+
+/**
  * Applies localization for html content and sets terms webview.
  * @param {!Object} data Localized strings and relevant information.
  * @param {string} deviceId Current device id.
@@ -413,28 +525,47 @@ function initialize(data, deviceId) {
 
   // Initialize preference connected checkboxes in terms of service page.
   termsPage = new TermsOfServicePage(
-      doc.getElementById('terms'),
-      data.arcManaged,
-      data.countryCode,
+      doc.getElementById('terms'), data.arcManaged, data.countryCode,
       new MetricsPreferenceCheckbox(
-          doc.getElementById('metrics-preference'),
-          data.learnMoreStatistics,
-          '#learn-more-link-metrics',
-          data.isOwnerProfile,
-          data.textMetricsDisabled,
-          data.textMetricsEnabled,
-          data.textMetricsManagedDisabled,
-          data.textMetricsManagedEnabled),
+          doc.getElementById('metrics-preference'), data.learnMoreStatistics,
+          '#learn-more-link-metrics', data.isOwnerProfile,
+          data.textMetricsDisabled, data.textMetricsEnabled,
+          data.textMetricsManagedDisabled, data.textMetricsManagedEnabled),
       new PreferenceCheckbox(
           doc.getElementById('backup-restore-preference'),
-          data.learnMoreBackupAndRestore,
-          '#learn-more-link-backup-restore',
+          data.learnMoreBackupAndRestore, '#learn-more-link-backup-restore',
           data.controlledByPolicy),
       new PreferenceCheckbox(
           doc.getElementById('location-service-preference'),
-          data.learnMoreLocationServices,
-          '#learn-more-link-location-service',
+          data.learnMoreLocationServices, '#learn-more-link-location-service',
           data.controlledByPolicy));
+
+  // Initialize the Active Directory SAML authentication page.
+  activeDirectoryAuthPage =
+      new ActiveDirectoryAuthPage(doc.getElementById('active-directory-auth'));
+
+  adjustTopMargin();
+}
+
+// With UI request to change inner window size to outer window size and reduce
+// top spacing, adjust top margin to negtive window top bar height.
+function adjustTopMargin() {
+  if (!appWindow)
+    return;
+
+  var decorationHeight =
+      appWindow.outerBounds.height - appWindow.innerBounds.height;
+
+  var doc = appWindow.contentWindow.document;
+  var headers = doc.getElementsByClassName('header');
+  for (var i = 0; i < headers.length; i++) {
+    headers[i].style.marginTop = -decorationHeight + 'px';
+  }
+
+  var authPages = doc.getElementsByClassName('section-active-directory-auth');
+  for (var i = 0; i < authPages.length; i++) {
+    authPages[i].style.marginTop = -decorationHeight + 'px';
+  }
 }
 
 /**
@@ -461,14 +592,12 @@ function onNativeMessage(message) {
   } else if (message.action == 'setLocationServiceMode') {
     termsPage.onLocationServicePreferenceChanged(
         message.enabled, message.managed);
-  } else if (message.action == 'closeWindow') {
-    if (appWindow) {
-      appWindow.close();
-    }
   } else if (message.action == 'showPage') {
-    showPage(message.page);
+    showPage(message.page, message.options);
   } else if (message.action == 'showErrorPage') {
     showErrorPage(message.errorMessage, message.shouldShowSendFeedback);
+  } else if (message.action == 'closeWindow') {
+    closeWindow();
   } else if (message.action == 'setWindowBounds') {
     setWindowBounds();
   }
@@ -487,13 +616,18 @@ function connectPort() {
  * Shows requested page and hide others. Show appWindow if it was hidden before.
  * 'none' hides all views.
  * @param {string} pageDivId id of divider of the page to show.
+ * @param {dictionary=} options Addional options depending on pageDivId. For
+ *     'active-directory-auth', this has to contain keys 'federationUrl' and
+ *     'deviceManagementUrlPrefix' with corresponding values. See
+ *     ActiveDirectoryAuthPage::setUrls for a description of those parameters.
  */
-function showPage(pageDivId) {
+function showPage(pageDivId, options) {
   if (!appWindow) {
     return;
   }
 
   hideOverlay();
+  appWindow.contentWindow.stopProgressAnimation();
   var doc = appWindow.contentWindow.document;
   // If the request is lso-loading and arc-loading page is currently shown,
   // then we do not switch the view. This is because both pages are saying
@@ -508,15 +642,30 @@ function showPage(pageDivId) {
 
   if (pageDivId == 'lso-loading') {
     lsoView.src = 'https://accounts.google.com/o/oauth2/v2/auth?client_id=' +
-                  '1070009224336-sdh77n7uot3oc99ais00jmuft6sk2fg9.apps.' +
-                  'googleusercontent.com&response_type=code&redirect_uri=oob&' +
-                  'scope=https://www.google.com/accounts/OAuthLogin&' +
-                  'device_type=arc_plus_plus&device_id=' + currentDeviceId +
-                  '&hl=' + navigator.language;
+        '1070009224336-sdh77n7uot3oc99ais00jmuft6sk2fg9.apps.' +
+        'googleusercontent.com&response_type=code&redirect_uri=oob&' +
+        'scope=https://www.google.com/accounts/OAuthLogin&' +
+        'device_type=arc_plus_plus&device_id=' + currentDeviceId +
+        '&hl=' + navigator.language;
   }
+  if (pageDivId == 'active-directory-auth') {
+    activeDirectoryAuthPage.enableEventProcessing(true);
+    activeDirectoryAuthPage.setUrls(
+        options.federationUrl, options.deviceManagementUrlPrefix);
+  } else {
+    activeDirectoryAuthPage.enableEventProcessing(false);
+  }
+
   appWindow.show();
   if (pageDivId == 'terms') {
     termsPage.onShow();
+  }
+
+  // Start progress bar animation for the page that has the dynamic progress
+  // bar. 'error' page has the static progress bar that no need to be animated.
+  if (pageDivId == 'terms' || pageDivId == 'arc-loading' ||
+      pageDivId == 'lso-loading') {
+    appWindow.contentWindow.startProgressAnimation(pageDivId);
   }
 }
 
@@ -618,13 +767,8 @@ function setWindowBounds() {
     return;
   }
 
-  var decorationWidth = appWindow.outerBounds.width -
-      appWindow.innerBounds.width;
-  var decorationHeight = appWindow.outerBounds.height -
-      appWindow.innerBounds.height;
-
-  var outerWidth = INNER_WIDTH + decorationWidth;
-  var outerHeight = INNER_HEIGHT + decorationHeight;
+  var outerWidth = OUTER_WIDTH;
+  var outerHeight = OUTER_HEIGHT;
   if (outerWidth > screen.availWidth) {
     outerWidth = screen.availWidth;
   }
@@ -639,29 +783,34 @@ function setWindowBounds() {
   appWindow.outerBounds.width = outerWidth;
   appWindow.outerBounds.height = outerHeight;
   appWindow.outerBounds.left = Math.ceil((screen.availWidth - outerWidth) / 2);
-  appWindow.outerBounds.top =
-    Math.ceil((screen.availHeight - outerHeight) / 2);
+  appWindow.outerBounds.top = Math.ceil((screen.availHeight - outerHeight) / 2);
+}
+
+function closeWindow() {
+  if (appWindow) {
+    appWindow.close();
+  }
 }
 
 chrome.app.runtime.onLaunched.addListener(function() {
   var onAppContentLoad = function() {
     var doc = appWindow.contentWindow.document;
     lsoView = doc.getElementById('arc-support');
-    lsoView.addContentScripts([
-        { name: 'postProcess',
-          matches: ['https://accounts.google.com/*'],
-          css: { files: ['lso.css'] },
-          run_at: 'document_end'
-        }]);
+    lsoView.addContentScripts([{
+      name: 'postProcess',
+      matches: ['https://accounts.google.com/*'],
+      css: {files: ['lso.css']},
+      run_at: 'document_end'
+    }]);
 
-    var isApprovalResponse = function(url) {
+    var isLsoApprovalResponse = function(url) {
       var resultUrlPrefix = 'https://accounts.google.com/o/oauth2/approval?';
       return url.substring(0, resultUrlPrefix.length) == resultUrlPrefix;
     };
 
     var lsoError = false;
     var onLsoViewRequestResponseStarted = function(details) {
-      if (isApprovalResponse(details.url)) {
+      if (isLsoApprovalResponse(details.url)) {
         showPage('arc-loading');
       }
       lsoError = false;
@@ -678,7 +827,7 @@ chrome.app.runtime.onLaunched.addListener(function() {
         return;
       }
 
-      if (!isApprovalResponse(lsoView.src)) {
+      if (!isLsoApprovalResponse(lsoView.src)) {
         // Show LSO page when its content is ready.
         showPage('lso');
         // We have fixed width for LSO page in css file in order to prevent
@@ -695,18 +844,14 @@ chrome.app.runtime.onLaunched.addListener(function() {
           var authCode = results[0].substring(authCodePrefix.length);
           sendNativeMessage('onAuthSucceeded', {code: authCode});
         } else {
-          sendNativeMessage('onAuthFailed');
-          showErrorPage(
-              appWindow.contentWindow.loadTimeData.getString(
-                  'authorizationFailed'));
+          sendNativeMessage('onAuthFailed', {errorMessage: 'Bad results.'});
+          showErrorPage(appWindow.contentWindow.loadTimeData.getString(
+              'authorizationFailed'));
         }
       });
     };
 
-    var requestFilter = {
-      urls: ['<all_urls>'],
-      types: ['main_frame']
-    };
+    var requestFilter = {urls: ['<all_urls>'], types: ['main_frame']};
 
     lsoView.request.onResponseStarted.addListener(
         onLsoViewRequestResponseStarted, requestFilter);
@@ -726,8 +871,8 @@ chrome.app.runtime.onLaunched.addListener(function() {
     doc.getElementById('button-send-feedback')
         .addEventListener('click', onSendFeedback);
     doc.getElementById('overlay-close').addEventListener('click', hideOverlay);
-    doc.getElementById('privacy-policy-link').addEventListener(
-        'click', showPrivacyPolicyOverlay);
+    doc.getElementById('privacy-policy-link')
+        .addEventListener('click', showPrivacyPolicyOverlay);
 
     var overlay = doc.getElementById('overlay-container');
     appWindow.contentWindow.cr.ui.overlay.setupOverlay(overlay);
@@ -741,12 +886,14 @@ chrome.app.runtime.onLaunched.addListener(function() {
     appWindow = createdWindow;
     appWindow.contentWindow.onload = onAppContentLoad;
     appWindow.onClosed.addListener(onWindowClosed);
-
     setWindowBounds();
   };
 
   var onWindowClosed = function() {
     appWindow = null;
+
+    // Turn off event processing.
+    activeDirectoryAuthPage.enableEventProcessing(false);
 
     // Notify to Chrome.
     sendNativeMessage('onWindowClosed');
@@ -762,14 +909,8 @@ chrome.app.runtime.onLaunched.addListener(function() {
     'id': 'play_store_wnd',
     'resizable': false,
     'hidden': true,
-    'frame': {
-      type: 'chrome',
-      color: '#ffffff'
-    },
-    'innerBounds': {
-      'width': INNER_WIDTH,
-      'height': INNER_HEIGHT
-    }
+    'frame': {type: 'chrome', color: '#ffffff'},
+    'outerBounds': {'width': OUTER_WIDTH, 'height': OUTER_HEIGHT}
   };
   chrome.app.window.create('main.html', options, onWindowCreated);
 });

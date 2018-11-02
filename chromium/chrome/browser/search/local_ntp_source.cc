@@ -20,9 +20,11 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/search/instant_io_context.h"
 #include "chrome/browser/search/local_files_ntp_source.h"
+#include "chrome/browser/search/local_ntp_js_integrity.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_data.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service.h"
 #include "chrome/browser/search/one_google_bar/one_google_bar_service_factory.h"
+#include "chrome/browser/search/search.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
 #include "chrome/browser/themes/theme_service.h"
@@ -32,7 +34,6 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/browser_resources.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/search_engines/template_url_service_observer.h"
 #include "components/strings/grit/components_strings.h"
@@ -61,6 +62,8 @@ const char kOneGoogleBarInHeadScriptFilename[] = "one-google/in-head.js";
 const char kOneGoogleBarAfterBarScriptFilename[] = "one-google/after-bar.js";
 const char kOneGoogleBarEndOfBodyScriptFilename[] = "one-google/end-of-body.js";
 
+const char kIntegrityFormat[] = "integrity=\"sha256-%s\"";
+
 const struct Resource{
   const char* filename;
   int identifier;
@@ -72,7 +75,6 @@ const struct Resource{
     {kThemeCSSFilename, kLocalResource, "text/css"},
     {"local-ntp.css", IDR_LOCAL_NTP_CSS, "text/css"},
     {"images/close_3_mask.png", IDR_CLOSE_3_MASK, "image/png"},
-    {"images/close_4_button.png", IDR_CLOSE_4_BUTTON, "image/png"},
     {"images/ntp_default_favicon.png", IDR_NTP_DEFAULT_FAVICON, "image/png"},
     {kOneGoogleBarScriptFilename, kLocalResource, "text/javascript"},
     {kOneGoogleBarInHeadStyleFilename, kLocalResource, "text/css"},
@@ -167,15 +169,6 @@ std::string GetLocalNtpPath() {
          std::string(chrome::kChromeSearchLocalNtpHost) + "/";
 }
 
-bool DefaultSearchProviderIsGoogleImpl(
-    const TemplateURLService* template_url_service) {
-  const TemplateURL* default_provider =
-      template_url_service->GetDefaultSearchProvider();
-  return default_provider && (default_provider->GetEngineType(
-                                  template_url_service->search_terms_data()) ==
-                              SEARCH_ENGINE_GOOGLE);
-}
-
 std::unique_ptr<base::DictionaryValue> ConvertOGBDataToDict(
     const OneGoogleBarData& og) {
   auto result = base::MakeUnique<base::DictionaryValue>();
@@ -200,7 +193,7 @@ class LocalNtpSource::GoogleSearchProviderTracker
       : service_(service), callback_(callback), is_google_(false) {
     DCHECK(service_);
     service_->AddObserver(this);
-    is_google_ = DefaultSearchProviderIsGoogleImpl(service_);
+    is_google_ = search::DefaultSearchProviderIsGoogle(service_);
   }
 
   ~GoogleSearchProviderTracker() override {
@@ -213,7 +206,7 @@ class LocalNtpSource::GoogleSearchProviderTracker
  private:
   void OnTemplateURLServiceChanged() override {
     bool old_is_google = is_google_;
-    is_google_ = DefaultSearchProviderIsGoogleImpl(service_);
+    is_google_ = search::DefaultSearchProviderIsGoogle(service_);
     if (is_google_ != old_is_google)
       callback_.Run(is_google_);
   }
@@ -341,11 +334,16 @@ void LocalNtpSource::StartDataRequest(
     std::string html = ResourceBundle::GetSharedInstance()
                            .GetRawDataResource(IDR_LOCAL_NTP_HTML)
                            .as_string();
-    std::string config_sha256 =
-        "sha256-" + GetIntegritySha256Value(
-                        GetConfigData(default_search_provider_is_google_));
+    std::string config_integrity = base::StringPrintf(
+        kIntegrityFormat, GetIntegritySha256Value(
+                              GetConfigData(default_search_provider_is_google_))
+                              .c_str());
     base::ReplaceFirstSubstringAfterOffset(&html, 0, "{{CONFIG_INTEGRITY}}",
-                                           config_sha256);
+                                           config_integrity);
+    std::string local_ntp_integrity =
+        base::StringPrintf(kIntegrityFormat, LOCAL_NTP_JS_INTEGRITY);
+    base::ReplaceFirstSubstringAfterOffset(&html, 0, "{{LOCAL_NTP_INTEGRITY}}",
+                                           local_ntp_integrity);
     callback.Run(base::RefCountedString::TakeString(&html));
     return;
   }
@@ -420,12 +418,12 @@ std::string LocalNtpSource::GetContentSecurityPolicyScriptSrc() const {
   }
 #endif  // !defined(GOOGLE_CHROME_BUILD)
 
-  return "script-src 'strict-dynamic' "
-         "'sha256-" +
-         GetIntegritySha256Value(
-             GetConfigData(default_search_provider_is_google_io_thread_)) +
-         "' "
-         "'sha256-yAvSu2Dl9rlQTpQn8P1hcE5GUFQVGbuCMHypwtN6uDg=';";
+  return base::StringPrintf(
+      "script-src 'strict-dynamic' 'sha256-%s' 'sha256-%s';",
+      GetIntegritySha256Value(
+          GetConfigData(default_search_provider_is_google_io_thread_))
+          .c_str(),
+      LOCAL_NTP_JS_INTEGRITY);
 }
 
 std::string LocalNtpSource::GetContentSecurityPolicyChildSrc() const {
@@ -494,8 +492,9 @@ void LocalNtpSource::DefaultSearchProviderIsGoogleChanged(bool is_google) {
   default_search_provider_is_google_ = is_google;
   content::BrowserThread::PostTask(
       content::BrowserThread::IO, FROM_HERE,
-      base::Bind(&LocalNtpSource::SetDefaultSearchProviderIsGoogleOnIOThread,
-                 weak_ptr_factory_.GetWeakPtr(), is_google));
+      base::BindOnce(
+          &LocalNtpSource::SetDefaultSearchProviderIsGoogleOnIOThread,
+          weak_ptr_factory_.GetWeakPtr(), is_google));
 }
 
 void LocalNtpSource::SetDefaultSearchProviderIsGoogleOnIOThread(

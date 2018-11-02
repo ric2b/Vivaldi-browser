@@ -5,9 +5,9 @@
 // Event management for WebView.
 
 var CreateEvent = require('guestViewEvents').CreateEvent;
+var DCHECK = requireNative('logging').DCHECK;
 var DeclarativeWebRequestSchema =
     requireNative('schema_registry').GetSchema('declarativeWebRequest');
-var EventBindings = require('event_bindings');
 var GuestViewEvents = require('guestViewEvents').GuestViewEvents;
 var GuestViewInternalNatives = requireNative('guest_view_internal');
 var IdGenerator = requireNative('id_generator');
@@ -25,6 +25,50 @@ function WebViewEvents(webViewImpl) {
 
   this.setupWebRequestEvents();
   this.view.maybeSetupContextMenus();
+}
+
+var jsEvent;
+function createCustomDeclarativeEvent(name, schema, options, webviewId) {
+  if (bindingUtil) {
+    return bindingUtil.createCustomDeclarativeEvent(
+        name, options.actions, options.conditions, webviewId || 0);
+  }
+  if (!jsEvent)
+    jsEvent = require('event_bindings').Event;
+  return new jsEvent(name, schema, options, webviewId);
+}
+
+function createCustomEvent(name, schema, options) {
+  var supportsLazyListeners = false;
+  if (bindingUtil) {
+    return bindingUtil.createCustomEvent(name, undefined, false,
+                                         supportsLazyListeners);
+  }
+  if (!jsEvent)
+    jsEvent = require('event_bindings').Event;
+
+  if (!options)
+    options = {__proto__: null, supportsLazyListeners: false};
+  DCHECK(!options.supportsLazyListeners);
+  return new jsEvent(name, schema, options);
+}
+
+function createOnMessageEvent(name, schema, options, webviewId) {
+  var subEventName = name + '/' + IdGenerator.GetNextId();
+  var newEvent = createCustomEvent(subEventName, schema, options);
+
+  var view = GuestViewInternalNatives.GetViewFromID(webviewId || 0);
+  if (view) {
+    view.events.addScopedListener(
+        WebRequestMessageEvent,
+        $Function.bind(function() {
+          // Re-dispatch to subEvent's listeners.
+          $Function.apply(newEvent.dispatch, newEvent, $Array.slice(arguments));
+        }, newEvent),
+        {instanceId: webviewId || 0});
+  }
+
+  return newEvent;
 }
 
 WebViewEvents.prototype.__proto__ = GuestViewEvents.prototype;
@@ -176,17 +220,25 @@ WebViewEvents.prototype.setupWebRequestEvents = function() {
       $Function.bind(function(webRequestEvent) {
     return this.weakWrapper(function() {
       if (!this[webRequestEvent.name]) {
-        // The onMessage event gets a special event type because we want the
-        // listener to fire only for messages targeted for this particular
-        // <webview>.
-        var EventClass = webRequestEvent.name === 'onMessage' ?
-            DeclarativeWebRequestEvent : EventBindings.Event;
-        this[webRequestEvent.name] =
-            new EventClass(
-                'webViewInternal.declarativeWebRequest.' + webRequestEvent.name,
-                webRequestEvent.parameters,
-                webRequestEvent.options,
-                this.view.viewInstanceId);
+        var newEvent;
+        var eventName =
+            'webViewInternal.declarativeWebRequest.' + webRequestEvent.name;
+        if (webRequestEvent.name === 'onMessage') {
+          // The onMessage event gets a special event type because we want the
+          // listener to fire only for messages targeted for this particular
+          // <webview>.
+          newEvent = createOnMessageEvent(eventName,
+                                          webRequestEvent.parameters,
+                                          webRequestEvent.options,
+                                          this.view.viewInstanceId);
+        } else {
+          newEvent =
+              createCustomDeclarativeEvent(eventName,
+                                           webRequestEvent.parameters,
+                                           webRequestEvent.options,
+                                           this.view.viewInstanceId);
+        }
+        this[webRequestEvent.name] = newEvent;
       }
       return this[webRequestEvent.name];
     });
@@ -281,31 +333,6 @@ WebViewEvents.prototype.handleSizeChangedEvent = function(event, eventName) {
   var webViewEvent = this.makeDomEvent(event, eventName);
   this.view.onSizeChanged(webViewEvent);
 };
-
-function DeclarativeWebRequestEvent(opt_eventName,
-                                    opt_argSchemas,
-                                    opt_eventOptions,
-                                    opt_webViewInstanceId) {
-  var subEventName = opt_eventName + '/' + IdGenerator.GetNextId();
-  EventBindings.Event.call(this,
-                           subEventName,
-                           opt_argSchemas,
-                           opt_eventOptions,
-                           opt_webViewInstanceId);
-
-  var view = GuestViewInternalNatives.GetViewFromID(opt_webViewInstanceId || 0);
-  if (!view) {
-    return;
-  }
-  view.events.addScopedListener(
-      WebRequestMessageEvent,
-      $Function.bind(function() {
-        // Re-dispatch to subEvent's listeners.
-        $Function.apply(this.dispatch, this, $Array.slice(arguments));
-      }, this), {instanceId: opt_webViewInstanceId || 0});
-}
-
-DeclarativeWebRequestEvent.prototype.__proto__ = EventBindings.Event.prototype;
 
 // Exports.
 exports.$set('WebViewEvents', WebViewEvents);

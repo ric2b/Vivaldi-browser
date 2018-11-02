@@ -206,8 +206,6 @@ enum WebAXRole {
 // Accessibility states, used as a bitmask.
 enum WebAXState {
   kWebAXStateBusy,
-  kWebAXStateChecked,
-  kWebAXStateEnabled,
   kWebAXStateExpanded,
   kWebAXStateFocusable,
   kWebAXStateFocused,
@@ -218,9 +216,7 @@ enum WebAXState {
   kWebAXStateMultiline,
   kWebAXStateMultiselectable,
   kWebAXStateOffscreen,
-  kWebAXStatePressed,
   kWebAXStateProtected,
-  kWebAXStateReadonly,
   kWebAXStateRequired,
   kWebAXStateSelectable,
   kWebAXStateSelected,
@@ -258,9 +254,10 @@ enum WebAXSortDirection {
 };
 
 enum WebAXCheckedState {
-  WebAXCheckedFalse = 0,
-  WebAXCheckedTrue,
-  WebAXCheckedMixed
+  kWebAXCheckedUndefined = 0,
+  kWebAXCheckedFalse,
+  kWebAXCheckedTrue,
+  kWebAXCheckedMixed
 };
 
 // Expanded State.
@@ -302,10 +299,19 @@ enum WebAXInvalidState {
   kWebAXInvalidStateOther
 };
 
+// State of a form control or editors
+enum WebAXRestriction {
+  kWebAXRestrictionNone = 0,  // Enabled control or other object not disabled
+  kWebAXRestrictionReadOnly,
+  kWebAXRestrictionDisabled,
+};
+
 enum WebAXMarkerType {
   kWebAXMarkerTypeSpelling = 1 << 0,
   kWebAXMarkerTypeGrammar = 1 << 1,
-  kWebAXMarkerTypeTextMatch = 1 << 2
+  kWebAXMarkerTypeTextMatch = 1 << 2,
+  // Skip DocumentMarker::MarkerType::Composition
+  kWebAXMarkerTypeActiveSuggestion = 1 << 4,
 };
 
 // Used for exposing text attributes.
@@ -378,6 +384,7 @@ enum class WebAXStringAttribute {
 // sparse attribute the default value must be the null WebAXObject.
 enum class WebAXObjectAttribute {
   kAriaActiveDescendant,
+  kAriaDetails,
   kAriaErrorMessage,
 };
 
@@ -387,7 +394,6 @@ enum class WebAXObjectAttribute {
 // empty vector.
 enum class WebAXObjectVectorAttribute {
   kAriaControls,
-  kAriaDetails,
   kAriaFlowTo,
 };
 

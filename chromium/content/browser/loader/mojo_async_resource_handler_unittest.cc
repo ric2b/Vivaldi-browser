@@ -23,10 +23,6 @@
 #include "content/browser/loader/resource_dispatcher_host_impl.h"
 #include "content/browser/loader/resource_request_info_impl.h"
 #include "content/browser/loader/resource_scheduler.h"
-#include "content/browser/loader/test_url_loader_client.h"
-#include "content/common/resource_request_completion_status.h"
-#include "content/common/url_loader.mojom.h"
-#include "content/common/url_loader_factory.mojom.h"
 #include "content/public/browser/appcache_service.h"
 #include "content/public/browser/navigation_data.h"
 #include "content/public/browser/resource_context.h"
@@ -34,10 +30,14 @@
 #include "content/public/browser/resource_throttle.h"
 #include "content/public/browser/stream_info.h"
 #include "content/public/common/previews_state.h"
+#include "content/public/common/resource_request_completion_status.h"
 #include "content/public/common/resource_response.h"
 #include "content/public/common/resource_type.h"
+#include "content/public/common/url_loader.mojom.h"
+#include "content/public/common/url_loader_factory.mojom.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_browser_thread_bundle.h"
+#include "content/public/test/test_url_loader_client.h"
 #include "mojo/public/c/system/data_pipe.h"
 #include "mojo/public/c/system/types.h"
 #include "mojo/public/cpp/bindings/strong_binding.h"
@@ -180,9 +180,9 @@ class TestResourceDispatcherHostDelegate final
     ADD_FAILURE() << "RequestComplete should not be called.";
   }
 
-  PreviewsState GetPreviewsState(
-      const net::URLRequest& url_request,
-      content::ResourceContext* resource_context) override {
+  PreviewsState GetPreviewsState(const net::URLRequest& url_request,
+                                 content::ResourceContext* resource_context,
+                                 PreviewsState previews_to_allow) override {
     ADD_FAILURE() << "GetPreviewsState should not be called.";
     return PREVIEWS_UNSPECIFIED;
   }
@@ -296,7 +296,9 @@ class TestURLLoaderFactory final : public mojom::URLLoaderFactory {
                             int32_t request_id,
                             uint32_t options,
                             const ResourceRequest& url_request,
-                            mojom::URLLoaderClientPtr client_ptr) override {
+                            mojom::URLLoaderClientPtr client_ptr,
+                            const net::MutableNetworkTrafficAnnotationTag&
+                                traffic_annotation) override {
     loader_request_ = std::move(request);
     client_ptr_ = std::move(client_ptr);
   }
@@ -360,7 +362,8 @@ class MojoAsyncResourceHandlerTestBase {
     url_loader_factory_->CreateLoaderAndStart(
         mojo::MakeRequest(&url_loader_proxy_), kRouteId, kRequestId,
         mojom::kURLLoadOptionNone, request,
-        url_loader_client_.CreateInterfacePtr());
+        url_loader_client_.CreateInterfacePtr(),
+        net::MutableNetworkTrafficAnnotationTag(TRAFFIC_ANNOTATION_FOR_TESTS));
 
     url_loader_factory_.FlushForTesting();
     DCHECK(weak_binding);

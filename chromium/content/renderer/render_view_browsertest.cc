@@ -39,6 +39,7 @@
 #include "content/public/common/browser_side_navigation_policy.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_zoom.h"
+#include "content/public/common/resource_request_body.h"
 #include "content/public/common/url_constants.h"
 #include "content/public/common/url_utils.h"
 #include "content/public/renderer/content_renderer_client.h"
@@ -111,6 +112,7 @@
 using base::TimeDelta;
 using blink::WebFrame;
 using blink::WebFrameContentDumper;
+using blink::WebGestureEvent;
 using blink::WebInputEvent;
 using blink::WebLocalFrame;
 using blink::WebMouseEvent;
@@ -568,7 +570,8 @@ TEST_F(RenderViewImplTest, RenderFrameClearedAfterClose) {
   blink::WebURLRequest popup_request(GURL("http://foo.com"));
   blink::WebView* new_web_view = view()->CreateView(
       GetMainFrame(), popup_request, blink::WebWindowFeatures(), "foo",
-      blink::kWebNavigationPolicyNewForegroundTab, false);
+      blink::kWebNavigationPolicyNewForegroundTab, false,
+      blink::WebSandboxFlags::kNone);
   RenderViewImpl* new_view = RenderViewImpl::FromWebView(new_web_view);
 
   // Checks that the frame is deleted properly and cleans up the view.
@@ -608,7 +611,7 @@ TEST_F(RenderViewImplTest, OnNavigationHttpPost) {
   // Set up post data.
   const char raw_data[] = "post \0\ndata";
   const size_t length = arraysize(raw_data);
-  scoped_refptr<ResourceRequestBodyImpl> post_data(new ResourceRequestBodyImpl);
+  scoped_refptr<ResourceRequestBody> post_data(new ResourceRequestBody);
   post_data->AppendBytes(raw_data, length);
   common_params.post_data = post_data;
 
@@ -789,7 +792,8 @@ TEST_F(RenderViewImplTest, DecideNavigationPolicyForWebUI) {
   blink::WebURLRequest popup_request(GURL("http://foo.com"));
   blink::WebView* new_web_view = view()->CreateView(
       GetMainFrame(), popup_request, blink::WebWindowFeatures(), "foo",
-      blink::kWebNavigationPolicyNewForegroundTab, false);
+      blink::kWebNavigationPolicyNewForegroundTab, false,
+      blink::WebSandboxFlags::kNone);
   RenderViewImpl* new_view = RenderViewImpl::FromWebView(new_web_view);
   blink::WebFrameClient::NavigationPolicyInfo popup_policy_info(popup_request);
   popup_policy_info.navigation_type = blink::kWebNavigationTypeLinkClicked;
@@ -815,7 +819,7 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
       "<iframe src='data:text/html,frame 2'></iframe>");
   WebFrame* web_frame = frame()->GetWebFrame();
   TestRenderFrame* child_frame = static_cast<TestRenderFrame*>(
-      RenderFrame::FromWebFrame(web_frame->FirstChild()));
+      RenderFrame::FromWebFrame(web_frame->FirstChild()->ToWebLocalFrame()));
 
   // Swap the child frame out and pass a replicated origin to be set for
   // WebRemoteFrame.
@@ -836,8 +840,9 @@ TEST_F(RenderViewImplTest, OriginReplicationForSwapOut) {
   // Now, swap out the second frame using a unique origin and verify that it is
   // replicated correctly.
   replication_state.origin = url::Origin();
-  TestRenderFrame* child_frame2 = static_cast<TestRenderFrame*>(
-      RenderFrame::FromWebFrame(web_frame->FirstChild()->NextSibling()));
+  TestRenderFrame* child_frame2 =
+      static_cast<TestRenderFrame*>(RenderFrame::FromWebFrame(
+          web_frame->FirstChild()->NextSibling()->ToWebLocalFrame()));
   child_frame2->SwapOut(kProxyRoutingId + 1, true, replication_state);
   EXPECT_TRUE(web_frame->FirstChild()->NextSibling()->IsWebRemoteFrame());
   EXPECT_TRUE(
@@ -856,7 +861,7 @@ TEST_F(RenderViewImplTest, DetachingProxyAlsoDestroysProvisionalFrame) {
   LoadHTML("Hello <iframe src='data:text/html,frame 1'></iframe>");
   WebFrame* web_frame = frame()->GetWebFrame();
   TestRenderFrame* child_frame = static_cast<TestRenderFrame*>(
-      RenderFrame::FromWebFrame(web_frame->FirstChild()));
+      RenderFrame::FromWebFrame(web_frame->FirstChild()->ToWebLocalFrame()));
 
   // Swap the child frame out.
   FrameReplicationState replication_state =
@@ -1174,7 +1179,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
     const wchar_t* result;
   };
   static const ImeMessage kImeMessages[] = {
-      // Scenario 1: input a Chinese word with Microsoft IME (on Vista).
+      // Scenario 1: input a Chinese word with Microsoft IME.
       {IME_INITIALIZE, true, 0, 0, NULL, NULL},
       {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
       {IME_SETFOCUS, true, 0, 0, NULL, NULL},
@@ -1184,7 +1189,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       {IME_SETCOMPOSITION, false, 4, 4, L"niha", L"niha"},
       {IME_SETCOMPOSITION, false, 5, 5, L"nihao", L"nihao"},
       {IME_COMMITTEXT, false, -1, -1, L"\x4F60\x597D", L"\x4F60\x597D"},
-      // Scenario 2: input a Japanese word with Microsoft IME (on Vista).
+      // Scenario 2: input a Japanese word with Microsoft IME.
       {IME_INITIALIZE, true, 0, 0, NULL, NULL},
       {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
       {IME_SETFOCUS, true, 0, 0, NULL, NULL},
@@ -1199,7 +1204,7 @@ TEST_F(RenderViewImplTest, ImeComposition) {
       {IME_SETCOMPOSITION, false, 0, 2, L"\x6F22\x5B57", L"\x6F22\x5B57"},
       {IME_FINISHCOMPOSINGTEXT, false, -1, -1, L"", L"\x6F22\x5B57"},
       {IME_CANCELCOMPOSITION, false, -1, -1, L"", L"\x6F22\x5B57"},
-      // Scenario 3: input a Korean word with Microsot IME (on Vista).
+      // Scenario 3: input a Korean word with Microsot IME.
       {IME_INITIALIZE, true, 0, 0, NULL, NULL},
       {IME_SETINPUTMODE, true, 0, 0, NULL, NULL},
       {IME_SETFOCUS, true, 0, 0, NULL, NULL},
@@ -1405,6 +1410,7 @@ TEST_F(RenderViewImplTest, SetHistoryLengthAndOffset) {
   EXPECT_EQ(1, view()->history_list_offset_);
 }
 
+#if !defined(OS_ANDROID)
 TEST_F(RenderViewImplTest, ContextMenu) {
   LoadHTML("<div>Page A</div>");
 
@@ -1426,6 +1432,46 @@ TEST_F(RenderViewImplTest, ContextMenu) {
   EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
       FrameHostMsg_ContextMenu::ID));
 }
+
+#else
+TEST_F(RenderViewImplTest, AndroidContextMenuSelectionOrdering) {
+  LoadHTML("<div>Page A</div><div id=result>Not selected</div>");
+
+  ExecuteJavaScriptForTests(
+      "document.onselectionchange = function() { "
+      "document.getElementById('result').innerHTML = 'Selected'}");
+
+  // Create a long press in the center of the iframe. (I'm hoping this will
+  // make this a bit more robust in case of some other formatting or other bug.)
+  WebGestureEvent gesture_event(
+      WebInputEvent::kGestureLongPress, WebInputEvent::kNoModifiers,
+      ui::EventTimeStampToSeconds(ui::EventTimeForNow()));
+  gesture_event.x = 250;
+  gesture_event.y = 250;
+
+  SendWebGestureEvent(gesture_event);
+
+  scoped_refptr<content::MessageLoopRunner> message_loop_runner =
+      new content::MessageLoopRunner;
+  base::ThreadTaskRunnerHandle::Get()->PostTask(
+      FROM_HERE, message_loop_runner->QuitClosure());
+
+  EXPECT_FALSE(render_thread_->sink().GetUniqueMessageMatching(
+      FrameHostMsg_ContextMenu::ID));
+
+  message_loop_runner->Run();
+
+  EXPECT_TRUE(render_thread_->sink().GetUniqueMessageMatching(
+      FrameHostMsg_ContextMenu::ID));
+
+  int did_select = -1;
+  base::string16 check_did_select = base::ASCIIToUTF16(
+      "Number(document.getElementById('result').innerHTML == 'Selected')");
+  EXPECT_TRUE(
+      ExecuteJavaScriptAndReturnIntValue(check_did_select, &did_select));
+  EXPECT_EQ(1, did_select);
+}
+#endif
 
 TEST_F(RenderViewImplTest, TestBackForward) {
   LoadHTML("<div id=pagename>Page A</div>");
@@ -1494,12 +1540,6 @@ TEST_F(RenderViewImplTest, TestBackForward) {
 
 #if defined(OS_MACOSX) || defined(USE_AURA)
 TEST_F(RenderViewImplTest, GetCompositionCharacterBoundsTest) {
-#if defined(OS_WIN)
-  // http://crbug.com/304193
-  if (base::win::GetVersion() < base::win::VERSION_VISTA)
-    return;
-#endif
-
   LoadHTML("<textarea id=\"test\" cols=\"100\"></textarea>");
   ExecuteJavaScriptForTests("document.getElementById('test').focus();");
 
@@ -1718,7 +1758,7 @@ TEST_F(RenderViewImplTest, NavigateSubframe) {
 
   TestRenderFrame* subframe =
       static_cast<TestRenderFrame*>(RenderFrameImpl::FromWebFrame(
-          view()->webview()->FindFrameByName("frame")));
+          frame()->GetWebFrame()->FindFrameByName("frame")));
   subframe->Navigate(common_params, StartNavigationParams(), request_params);
   FrameLoadWaiter(subframe).Wait();
 
@@ -1728,7 +1768,7 @@ TEST_F(RenderViewImplTest, NavigateSubframe) {
   std::string output = WebFrameContentDumper::DumpWebViewAsText(
                            view()->GetWebView(), kMaxOutputCharacters)
                            .Utf8();
-  EXPECT_EQ(output, "hello  \n\nworld");
+  EXPECT_EQ(output, "hello \n\nworld");
 }
 
 // This test ensures that a RenderFrame object is created for the top level
@@ -1911,7 +1951,7 @@ TEST_F(RenderViewImplTest, SendFaviconURLUpdateEvent) {
            "</head>"
            "</html>");
   EXPECT_TRUE(render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_UpdateFaviconURL::ID));
+      FrameHostMsg_UpdateFaviconURL::ID));
   render_thread_->sink().ClearMessages();
 
   // An event should not be sent if no favicon url exists. This is an assumption
@@ -1921,7 +1961,7 @@ TEST_F(RenderViewImplTest, SendFaviconURLUpdateEvent) {
            "</head>"
            "</html>");
   EXPECT_FALSE(render_thread_->sink().GetFirstMessageMatching(
-      ViewHostMsg_UpdateFaviconURL::ID));
+      FrameHostMsg_UpdateFaviconURL::ID));
 }
 
 TEST_F(RenderViewImplTest, FocusElementCallsFocusedNodeChanged) {
@@ -2194,7 +2234,8 @@ TEST_F(RenderViewImplTest, NavigationStartForCrossProcessHistoryNavigation) {
 TEST_F(RenderViewImplTest, PreferredSizeZoomed) {
   LoadHTML("<body style='margin:0;'><div style='display:inline-block; "
            "width:400px; height:400px;'/></body>");
-  view()->webview()->MainFrame()->SetCanHaveScrollbars(false);
+  view()->webview()->MainFrame()->ToWebLocalFrame()->SetCanHaveScrollbars(
+      false);
   EnablePreferredSizeMode();
 
   gfx::Size size = GetPreferredSize();
@@ -2203,6 +2244,25 @@ TEST_F(RenderViewImplTest, PreferredSizeZoomed) {
   SetZoomLevel(ZoomFactorToZoomLevel(2.0));
   size = GetPreferredSize();
   EXPECT_EQ(gfx::Size(800, 800), size);
+}
+
+TEST_F(RenderViewImplScaleFactorTest, PreferredSizeWithScaleFactor) {
+  DoSetUp();
+  LoadHTML("<body style='margin:0;'><div style='display:inline-block; "
+           "width:400px; height:400px;'/></body>");
+  view()->webview()->MainFrame()->ToWebLocalFrame()->SetCanHaveScrollbars(
+      false);
+  EnablePreferredSizeMode();
+
+  gfx::Size size = GetPreferredSize();
+  EXPECT_EQ(gfx::Size(400, 400), size);
+
+  // The size is in DIP. Changing the scale factor should not change
+  // the preferred size. (Caveat: a page may apply different layout for
+  // high DPI, in which case, the size may differ.)
+  SetDeviceScaleFactor(2.f);
+  size = GetPreferredSize();
+  EXPECT_EQ(gfx::Size(400, 400), size);
 }
 
 // Ensure the RenderViewImpl history list is properly updated when starting a

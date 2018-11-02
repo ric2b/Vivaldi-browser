@@ -22,6 +22,7 @@ typedef NS_ENUM(NSInteger, ContentSuggestionType) {
   ContentSuggestionTypeArticle,
   ContentSuggestionTypeReadingList,
   ContentSuggestionTypeMostVisited,
+  ContentSuggestionTypePromo,
 };
 
 // Updater for a CollectionViewController populating it with some items and
@@ -50,6 +51,11 @@ typedef NS_ENUM(NSInteger, ContentSuggestionType) {
 - (NSIndexSet*)addSectionsForSectionInfoToModel:
     (NSArray<ContentSuggestionsSectionInformation*>*)sectionsInfo;
 
+// Removes the empty item in the section corresponding to |sectionInfo| from the
+// model and returns its index path. Returns nil if there is no empty item.
+- (NSIndexPath*)removeEmptySuggestionsForSectionInfo:
+    (ContentSuggestionsSectionInformation*)sectionInfo;
+
 // Adds the |suggestions| to the model in the section corresponding to
 // |sectionInfo| and returns their index paths. The caller must ensure the
 // corresponding section has been added to the model.
@@ -60,13 +66,22 @@ addSuggestionsToModel:
 
 // Adds an empty item to this |section| and returns its index path. The updater
 // does not do any check about the number of elements in the section.
+// Returns nil if there is no empty item for this section.
 - (NSIndexPath*)addEmptyItemForSection:(NSInteger)section;
 
 // Returns whether |section| contains the Most Visited tiles.
 - (BOOL)isMostVisitedSection:(NSInteger)section;
 
-// Updates the number of Most Visited tiles shown for the |size|.
+// Returns whether |section| contains the promo if there is one and with a
+// header containing the fake omnibox and the logo.
+- (BOOL)isHeaderSection:(NSInteger)section;
+
+// Updates the number of Most Visited tiles shown for the |size| on the model
+// only. The collection needs to be updated separately.
 - (void)updateMostVisitedForSize:(CGSize)size;
+
+// Dismisses the |item| from the model. Does not change the UI.
+- (void)dismissItem:(CollectionViewItem<SuggestedContent>*)item;
 
 @end
 

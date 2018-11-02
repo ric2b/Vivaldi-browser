@@ -7,6 +7,8 @@
 #include <X11/Xatom.h>
 #include <X11/Xutil.h>
 
+#include "ui/base/x/x11_util.h"
+#include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_error_tracker.h"
 #include "ui/gfx/x/x11_types.h"
 
@@ -14,7 +16,7 @@ gfx::ImageSkia GetWindowIcon(content::DesktopMediaID id) {
   DCHECK(id.type == content::DesktopMediaID::TYPE_WINDOW);
 
   Display* display = gfx::GetXDisplay();
-  Atom property = XInternAtom(display, "_NET_WM_ICON", True);
+  Atom property = gfx::GetAtom("_NET_WM_ICON");
   Atom actual_type;
   int actual_format;
   unsigned long bytes_after;  // NOLINT: type required by XGetWindowProperty

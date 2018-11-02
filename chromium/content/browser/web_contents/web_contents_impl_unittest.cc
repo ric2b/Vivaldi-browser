@@ -27,6 +27,7 @@
 #include "content/common/site_isolation_policy.h"
 #include "content/common/view_messages.h"
 #include "content/public/browser/content_browser_client.h"
+#include "content/public/browser/download_url_parameters.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/interstitial_page_delegate.h"
 #include "content/public/browser/javascript_dialog_manager.h"
@@ -228,9 +229,12 @@ class TestInterstitialPageStateGuard : public TestInterstitialPage::Delegate {
 class WebContentsImplTestBrowserClient : public TestContentBrowserClient {
  public:
   WebContentsImplTestBrowserClient()
-      : assign_site_for_url_(false) {}
+      : assign_site_for_url_(false),
+        original_browser_client_(SetBrowserClientForTesting(this)) {}
 
-  ~WebContentsImplTestBrowserClient() override {}
+  ~WebContentsImplTestBrowserClient() override {
+    SetBrowserClientForTesting(original_browser_client_);
+  }
 
   bool ShouldAssignSiteForURL(const GURL& url) override {
     return assign_site_for_url_;
@@ -242,6 +246,7 @@ class WebContentsImplTestBrowserClient : public TestContentBrowserClient {
 
  private:
   bool assign_site_for_url_;
+  ContentBrowserClient* original_browser_client_;
 };
 
 class WebContentsImplTest : public RenderViewHostImplTestHarness {
@@ -832,9 +837,6 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
   DeleteContents();
   EXPECT_EQ(orig_rvh_delete_count, 1);
   EXPECT_EQ(pending_rvh_delete_count, 1);
-  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
-  // must run out the loop so the thread bundle is destroyed after this happens.
-  base::RunLoop().RunUntilIdle();
 }
 
 // Regression test for http://crbug.com/386542 - variation of
@@ -860,7 +862,8 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
   ASSERT_EQ(0u, entries.size());
   ASSERT_EQ(1, controller().GetEntryCount());
 
-  controller().GoToIndex(0);
+  EXPECT_TRUE(controller().NeedsReload());
+  controller().LoadIfNecessary();
   NavigationEntry* entry = controller().GetPendingEntry();
   orig_rfh->PrepareForCommit();
   contents()->TestDidNavigate(orig_rfh, entry->GetUniqueID(), false,
@@ -882,9 +885,6 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredSitelessUrl) {
 
   // Cleanup.
   DeleteContents();
-  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
-  // must run out the loop so the thread bundle is destroyed after this happens.
-  base::RunLoop().RunUntilIdle();
 }
 
 // Complement for NavigateFromRestoredSitelessUrl, verifying that when a regular
@@ -909,7 +909,8 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
   ASSERT_EQ(0u, entries.size());
 
   ASSERT_EQ(1, controller().GetEntryCount());
-  controller().GoToIndex(0);
+  EXPECT_TRUE(controller().NeedsReload());
+  controller().LoadIfNecessary();
   NavigationEntry* entry = controller().GetPendingEntry();
   orig_rfh->PrepareForCommit();
   contents()->TestDidNavigate(orig_rfh, entry->GetUniqueID(), false,
@@ -930,9 +931,6 @@ TEST_F(WebContentsImplTest, NavigateFromRestoredRegularUrl) {
 
   // Cleanup.
   DeleteContents();
-  // Since the ChromeBlobStorageContext posts a task to the BrowserThread, we
-  // must run out the loop so the thread bundle is destroyed after this happens.
-  base::RunLoop().RunUntilIdle();
 }
 
 // Test that we can find an opener RVH even if it's pending.
@@ -986,6 +984,11 @@ TEST_F(WebContentsImplTest, FindOpenerRVHWhenPending) {
 // Tests that WebContentsImpl uses the current URL, not the SiteInstance's site,
 // to determine whether a navigation is cross-site.
 TEST_F(WebContentsImplTest, CrossSiteComparesAgainstCurrentPage) {
+  // The assumptions this test makes aren't valid with --site-per-process.  For
+  // example, a cross-site URL won't ever commit in the old RFH.
+  if (AreAllSitesIsolatedForTesting())
+    return;
+
   TestRenderFrameHost* orig_rfh = main_test_rfh();
   SiteInstance* instance1 = contents()->GetSiteInstance();
 
@@ -1467,8 +1470,9 @@ TEST_F(WebContentsImplTest, NavigationEntryContentState) {
   controller().GoBack();
   entry_id = controller().GetPendingEntry()->GetUniqueID();
   orig_rfh->PrepareForCommit();
-  contents()->TestDidNavigate(orig_rfh, entry_id, false, url,
-                              ui::PAGE_TRANSITION_TYPED);
+  contents()->TestDidNavigate(
+      orig_rfh, entry_id, false, url,
+      controller().GetPendingEntry()->GetTransitionType());
   entry = controller().GetLastCommittedEntry();
   EXPECT_TRUE(entry->GetPageState().IsValid());
 }
@@ -2211,6 +2215,51 @@ TEST_F(WebContentsImplTest, CreateInterstitialForClosingTab) {
   // Simulate a commit in the interstitial page, which should also not crash.
   interstitial_rfh->SimulateNavigationCommit(url2);
 
+  RunAllPendingInMessageLoop();
+  EXPECT_TRUE(deleted);
+}
+
+// Test for https://crbug.com/703655, where navigating a tab and showing an
+// interstitial could race.
+TEST_F(WebContentsImplTest, TabNavigationDoesntRaceInterstitial) {
+  // Navigate to a page.
+  GURL url1("http://www.google.com");
+  main_test_rfh()->NavigateAndCommitRendererInitiated(true, url1);
+  EXPECT_EQ(1, controller().GetEntryCount());
+
+  // Initiate a browser navigation that will trigger an interstitial.
+  GURL evil_url("http://www.evil.com");
+  controller().LoadURL(evil_url, Referrer(), ui::PAGE_TRANSITION_TYPED,
+                       std::string());
+  NavigationEntry* entry = contents()->GetController().GetPendingEntry();
+  ASSERT_TRUE(entry);
+  EXPECT_EQ(evil_url, entry->GetURL());
+
+  // Show an interstitial.
+  TestInterstitialPage::InterstitialState state = TestInterstitialPage::INVALID;
+  bool deleted = false;
+  GURL url2("http://interstitial");
+  TestInterstitialPage* interstitial =
+      new TestInterstitialPage(contents(), true, url2, &state, &deleted);
+  TestInterstitialPageStateGuard state_guard(interstitial);
+  interstitial->Show();
+  // The interstitial should not show until its navigation has committed.
+  EXPECT_FALSE(interstitial->is_showing());
+  EXPECT_FALSE(contents()->ShowingInterstitialPage());
+  EXPECT_EQ(nullptr, contents()->GetInterstitialPage());
+
+  // At this point, there is an interstitial that has been instructed to show
+  // but has not yet committed its own navigation. This is a window; navigate
+  // back one page within this window.
+  //
+  // Because the page with the interstitial did not commit, this invokes an
+  // early return in NavigationControllerImpl::NavigateToPendingEntry which just
+  // drops the pending entry, so no committing is required.
+  controller().GoBack();
+  entry = contents()->GetController().GetPendingEntry();
+  ASSERT_FALSE(entry);
+
+  // The interstitial should be gone.
   RunAllPendingInMessageLoop();
   EXPECT_TRUE(deleted);
 }
@@ -3191,6 +3240,58 @@ TEST_F(WebContentsImplTestWithSiteIsolation, StartStopEventsBalance) {
   EXPECT_FALSE(observer.is_loading());
 }
 
+// Tests that WebContentsImpl::IsLoadingToDifferentDocument only reports main
+// frame loads. Browser-initiated navigation of subframes is only possible in
+// --site-per-process mode within unit tests.
+TEST_F(WebContentsImplTestWithSiteIsolation, IsLoadingToDifferentDocument) {
+  const GURL main_url("http://www.chromium.org");
+  TestRenderFrameHost* orig_rfh = main_test_rfh();
+
+  // Navigate the main RenderFrame, simulate the DidStartLoading, and commit.
+  // The frame should still be loading.
+  controller().LoadURL(main_url, Referrer(), ui::PAGE_TRANSITION_TYPED,
+                       std::string());
+  int entry_id = controller().GetPendingEntry()->GetUniqueID();
+
+  // PlzNavigate: the RenderFrameHost does not expect to receive
+  // DidStartLoading IPCs for navigations to different documents.
+  if (!IsBrowserSideNavigationEnabled()) {
+    orig_rfh->OnMessageReceived(
+        FrameHostMsg_DidStartLoading(orig_rfh->GetRoutingID(), false));
+  }
+  main_test_rfh()->PrepareForCommit();
+  contents()->TestDidNavigate(orig_rfh, entry_id, true, main_url,
+                              ui::PAGE_TRANSITION_TYPED);
+  EXPECT_FALSE(contents()->CrossProcessNavigationPending());
+  EXPECT_EQ(orig_rfh, main_test_rfh());
+  EXPECT_TRUE(contents()->IsLoading());
+  EXPECT_TRUE(contents()->IsLoadingToDifferentDocument());
+
+  // Send the DidStopLoading for the main frame and ensure it isn't loading
+  // anymore.
+  orig_rfh->OnMessageReceived(
+      FrameHostMsg_DidStopLoading(orig_rfh->GetRoutingID()));
+  EXPECT_FALSE(contents()->IsLoading());
+  EXPECT_FALSE(contents()->IsLoadingToDifferentDocument());
+
+  // Create a child frame to navigate.
+  TestRenderFrameHost* subframe = orig_rfh->AppendChild("subframe");
+
+  // Navigate the child frame to about:blank, make sure the web contents is
+  // marked as "loading" but not "loading to different document".
+  if (!IsBrowserSideNavigationEnabled()) {
+    subframe->OnMessageReceived(
+        FrameHostMsg_DidStartLoading(subframe->GetRoutingID(), true));
+  }
+  subframe->SendNavigateWithTransition(0, false, GURL("about:blank"),
+                                       ui::PAGE_TRANSITION_AUTO_SUBFRAME);
+  EXPECT_TRUE(contents()->IsLoading());
+  EXPECT_FALSE(contents()->IsLoadingToDifferentDocument());
+  subframe->OnMessageReceived(
+      FrameHostMsg_DidStopLoading(subframe->GetRoutingID()));
+  EXPECT_FALSE(contents()->IsLoading());
+}
+
 // Ensure that WebContentsImpl does not stop loading too early when there still
 // is a pending renderer. This can happen if a same-process non user-initiated
 // navigation completes while there is an ongoing cross-process navigation.
@@ -3430,6 +3531,38 @@ TEST_F(WebContentsImplTest, LoadResourceWithEmptySecurityInfo) {
   EXPECT_TRUE(state_delegate->HasAllowException(test_url.host()));
 
   DeleteContents();
+}
+
+TEST_F(WebContentsImplTest, ParseDownloadHeaders) {
+  DownloadUrlParameters::RequestHeadersType request_headers =
+      WebContentsImpl::ParseDownloadHeaders("A: 1\r\nB: 2\r\nC: 3\r\n\r\n");
+  ASSERT_EQ(3u, request_headers.size());
+  EXPECT_EQ("A", request_headers[0].first);
+  EXPECT_EQ("1", request_headers[0].second);
+  EXPECT_EQ("B", request_headers[1].first);
+  EXPECT_EQ("2", request_headers[1].second);
+  EXPECT_EQ("C", request_headers[2].first);
+  EXPECT_EQ("3", request_headers[2].second);
+
+  request_headers = WebContentsImpl::ParseDownloadHeaders("A:1\r\nA:2\r\n");
+  ASSERT_EQ(2u, request_headers.size());
+  EXPECT_EQ("A", request_headers[0].first);
+  EXPECT_EQ("1", request_headers[0].second);
+  EXPECT_EQ("A", request_headers[1].first);
+  EXPECT_EQ("2", request_headers[1].second);
+
+  request_headers = WebContentsImpl::ParseDownloadHeaders("A 1\r\nA: 2");
+  ASSERT_EQ(1u, request_headers.size());
+  EXPECT_EQ("A", request_headers[0].first);
+  EXPECT_EQ("2", request_headers[0].second);
+
+  request_headers = WebContentsImpl::ParseDownloadHeaders("A: 1");
+  ASSERT_EQ(1u, request_headers.size());
+  EXPECT_EQ("A", request_headers[0].first);
+  EXPECT_EQ("1", request_headers[0].second);
+
+  request_headers = WebContentsImpl::ParseDownloadHeaders("A 1");
+  ASSERT_EQ(0u, request_headers.size());
 }
 
 namespace {

@@ -8,6 +8,7 @@
 #include "content/browser/service_worker/service_worker_handle.h"
 #include "content/common/service_worker/service_worker_messages.h"
 #include "content/common/service_worker/service_worker_types.h"
+#include "content/public/common/service_worker_modes.h"
 
 namespace content {
 
@@ -47,7 +48,7 @@ ServiceWorkerRegistrationObjectInfo
 ServiceWorkerRegistrationHandle::GetObjectInfo() {
   ServiceWorkerRegistrationObjectInfo info;
   info.handle_id = handle_id_;
-  info.scope = registration_->pattern();
+  info.options.scope = registration_->pattern();
   info.registration_id = registration_->id();
   return info;
 }

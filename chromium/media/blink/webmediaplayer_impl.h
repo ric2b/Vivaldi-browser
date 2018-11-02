@@ -44,6 +44,7 @@
 #include "third_party/WebKit/public/platform/WebAudioSourceProvider.h"
 #include "third_party/WebKit/public/platform/WebContentDecryptionModuleResult.h"
 #include "third_party/WebKit/public/platform/WebMediaPlayer.h"
+#include "third_party/WebKit/public/platform/WebSurfaceLayerBridge.h"
 #include "url/gurl.h"
 
 #if defined(OS_ANDROID)  // WMPI_CAST
@@ -202,6 +203,7 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void BecameDominantVisibleContent(bool isDominant) override;
   void SetIsEffectivelyFullscreen(bool isEffectivelyFullscreen) override;
   void OnHasNativeControlsChanged(bool) override;
+  void OnDisplayTypeChanged(WebMediaPlayer::DisplayType) override;
 
   // WebMediaPlayerDelegate::Observer implementation.
   void OnFrameHidden() override;
@@ -268,8 +270,11 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // AndroidOverlay, this is the routing token.
   bool HaveOverlayInfo();
 
-  // Send the overlay surface ID / routing token to the decoder if we have it
-  // and if it has been requested.
+  // Send OverlayInfo to the decoder.
+  //
+  // If we've requested but not yet received the surface id or routing token, or
+  // if there's no decoder-provided callback to send the overlay info, then this
+  // call will do nothing.
   void MaybeSendOverlayInfoToDecoder();
 
   void OnPipelineSuspended();
@@ -286,6 +291,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   void OnAddTextTrack(const TextTrackConfig& config,
                       const AddTextTrackDoneCB& done_cb) override;
   void OnWaitingForDecryptionKey() override;
+  void OnAudioConfigChange(const AudioDecoderConfig& config) override;
+  void OnVideoConfigChange(const VideoDecoderConfig& config) override;
   void OnVideoNaturalSizeChange(const gfx::Size& size) override;
   void OnVideoOpacityChange(bool opaque) override;
   void OnVideoAverageKeyframeDistanceUpdate() override;
@@ -486,8 +493,20 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // handling a src= or MSE based playback.
   void RecordUnderflowDuration(base::TimeDelta duration);
 
+  // Called by the data source (for src=) or demuxer (for mse) when loading
+  // progresses.
+  // Can be called quite often.
+  void OnProgress();
+
+  // Returns true when we estimate that we can play the rest of the media
+  // without buffering.
+  bool CanPlayThrough();
+
   // Records |natural_size| to MediaLog and video height to UMA.
   void RecordVideoNaturalSize(const gfx::Size& natural_size);
+
+  // Takes ownership of |tick_clock|
+  void SetTickClockForTest(base::TickClock* tick_clock);
 
   blink::WebLocalFrame* frame_;
 
@@ -623,6 +642,8 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
 
   std::unique_ptr<base::MemoryPressureListener> memory_pressure_listener_;
 
+  std::unique_ptr<base::TickClock> tick_clock_;
+
   BufferedDataSourceHostImpl buffered_data_source_host_;
   linked_ptr<UrlIndex> url_index_;
 
@@ -692,9 +713,6 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // unimportant.
   bool suppress_destruction_errors_;
 
-  // If true, the media pipeline can be suspended.
-  const bool suspend_enabled_;
-
   // Used for HLS playback and in certain fallback paths (e.g. on older devices
   // that can't support the unified media pipeline).
   GURL loaded_url_;
@@ -725,10 +743,12 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   bool preroll_attempt_pending_;
   base::TimeTicks preroll_attempt_start_time_;
 
-  std::unique_ptr<base::TickClock> tick_clock_;
-
   // Monitors the player events.
   base::WeakPtr<MediaObserver> observer_;
+
+  // Owns the weblayer and obtains/maintains SurfaceIds for
+  // kUseSurfaceLayerForVideo feature.
+  std::unique_ptr<blink::WebSurfaceLayerBridge> bridge_;
 
   // The maximum video keyframe distance that allows triggering background
   // playback optimizations (non-MSE).
@@ -766,6 +786,9 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Whether embedded media experience is currently enabled.
   bool embedded_media_experience_enabled_ = false;
 
+  // Whether the use of a surface layer instead of a video layer is enabled.
+  bool surface_layer_for_video_enabled_ = false;
+
   gfx::Size last_uploaded_frame_size_;
   base::TimeDelta last_uploaded_frame_timestamp_;
 
@@ -789,11 +812,15 @@ class MEDIA_BLINK_EXPORT WebMediaPlayerImpl
   // Optional callback to request the routing token for AndroidOverlay.
   RequestRoutingTokenCallback request_routing_token_cb_;
 
-  // Routing token, if we have one.  No value if we have a request pending to
-  // get it via |request_routing_token_cb_|.  A has_value() is_empty() token
-  // indicates that we requested and received an empty token.  Note that we
-  // can't send an empty token via IPC, so we handle that specially.
-  base::Optional<base::UnguessableToken> overlay_routing_token_;
+  // If |overlay_routing_token_is_pending_| is false, then
+  // |overlay_routing_token_| contains the routing token we should send, if any.
+  // Otherwise, |overlay_routing_token_| is undefined.  We set the flag while
+  // we have a request for the token that hasn't been answered yet; i.e., it
+  // means that we don't know what, if any, token we should be using.
+  bool overlay_routing_token_is_pending_ = false;
+  OverlayInfo::RoutingToken overlay_routing_token_;
+
+  OverlayInfo overlay_info_;
 
   DISALLOW_COPY_AND_ASSIGN(WebMediaPlayerImpl);
 };

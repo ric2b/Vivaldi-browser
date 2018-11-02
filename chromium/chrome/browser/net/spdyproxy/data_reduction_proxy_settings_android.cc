@@ -9,7 +9,6 @@
 #include <map>
 #include <string>
 
-#include "base/android/jni_android.h"
 #include "base/android/jni_string.h"
 #include "base/strings/string_piece.h"
 #include "base/values.h"
@@ -24,6 +23,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/data_reduction_proxy/core/browser/data_usage_store.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_event_store.h"
+#include "components/data_reduction_proxy/core/common/data_reduction_proxy_headers.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_params.h"
 #include "components/data_reduction_proxy/core/common/data_reduction_proxy_pref_names.h"
 #include "jni/DataReductionProxySettings_jni.h"
@@ -66,7 +66,13 @@ DataReductionProxySettingsAndroid::~DataReductionProxySettingsAndroid() {
 jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyPromoAllowed(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
-  return Settings()->PromoAllowed();
+  return data_reduction_proxy::params::IsIncludedInPromoFieldTrial();
+}
+
+jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyFREPromoAllowed(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return data_reduction_proxy::params::IsIncludedInFREPromoFieldTrial();
 }
 
 jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyEnabled(
@@ -140,6 +146,14 @@ DataReductionProxySettingsAndroid::GetDailyReceivedContentLengths(
       env, data_reduction_proxy::prefs::kDailyHttpReceivedContentLength);
 }
 
+ScopedJavaLocalRef<jstring>
+DataReductionProxySettingsAndroid::GetDataReductionProxyPassThroughHeader(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj) {
+  return ConvertUTF8ToJavaString(
+      env, data_reduction_proxy::chrome_proxy_pass_through_header());
+}
+
 jboolean DataReductionProxySettingsAndroid::IsDataReductionProxyUnreachable(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
@@ -152,11 +166,6 @@ jboolean DataReductionProxySettingsAndroid::AreLoFiPreviewsEnabled(
   return data_reduction_proxy::params::IsIncludedInLitePageFieldTrial() ||
       (data_reduction_proxy::params::IsLoFiOnViaFlags() &&
           data_reduction_proxy::params::AreLitePagesEnabledViaFlags());
-}
-
-// static
-bool DataReductionProxySettingsAndroid::Register(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 ScopedJavaLocalRef<jlongArray>

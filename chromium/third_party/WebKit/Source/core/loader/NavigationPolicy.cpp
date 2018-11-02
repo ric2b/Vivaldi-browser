@@ -30,6 +30,7 @@
 
 #include "core/loader/NavigationPolicy.h"
 
+#include "build/build_config.h"
 #include "platform/wtf/Assertions.h"
 
 #include "app/vivaldi_apptools.h"
@@ -42,7 +43,7 @@ bool NavigationPolicyFromMouseEvent(unsigned short button,
                                     bool alt,
                                     bool meta,
                                     NavigationPolicy* policy) {
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   const bool new_tab_modifier = (button == 1) || meta;
 #else
   const bool new_tab_modifier = (button == 1) || ctrl;

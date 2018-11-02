@@ -54,15 +54,16 @@ IPC_MESSAGE_CONTROL4(
     uint32_t /* length */)
 
 // Tell the renderer process that an audio input stream has been created.
-// The renderer process would be given a SyncSocket that it should read
-// from from then on. It is also given number of segments in shared memory.
-IPC_MESSAGE_CONTROL5(
-    AudioInputMsg_NotifyStreamCreated,
-    int /* stream id */,
-    base::SharedMemoryHandle /* handle */,
-    base::SyncSocket::TransitDescriptor /* socket descriptor */,
-    uint32_t /* length */,
-    uint32_t /* segment count */)
+// The renderer process would be given a SyncSocket that it should read from
+// from then on. It is also given number of segments in shared memory and
+// whether the stream initially is muted.
+IPC_MESSAGE_CONTROL(AudioInputMsg_NotifyStreamCreated,
+                    int /* stream id */,
+                    base::SharedMemoryHandle /* handle */,
+                    base::SyncSocket::TransitDescriptor /* socket descriptor */,
+                    uint32_t /* length */,
+                    uint32_t /* segment count */,
+                    bool /* initially muted */)
 
 // Notification message sent from AudioRendererHost to renderer for state
 // update on error.
@@ -70,6 +71,12 @@ IPC_MESSAGE_CONTROL1(AudioMsg_NotifyStreamError, int /* stream id */)
 
 // Notification message sent from browser to renderer for state update.
 IPC_MESSAGE_CONTROL1(AudioInputMsg_NotifyStreamError, int /* stream id */)
+
+// Notification message sent from browser to renderer when stream mutes or
+// unmutes.
+IPC_MESSAGE_CONTROL2(AudioInputMsg_NotifyStreamMuted,
+                     int /* stream id */,
+                     bool /* is muted? */)
 
 // Messages sent from the renderer to the browser.
 

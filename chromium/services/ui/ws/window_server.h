@@ -36,11 +36,14 @@ class Display;
 class DisplayManager;
 class GpuHost;
 class ServerWindow;
+class ThreadedImageCursorsFactory;
 class UserActivityMonitor;
 class WindowManagerState;
 class WindowServerDelegate;
 class WindowTree;
 class WindowTreeBinding;
+
+enum class DisplayCreationConfig;
 
 // WindowServer manages the set of clients of the window server (all the
 // WindowTrees) as well as providing the root of the hierarchy.
@@ -65,6 +68,21 @@ class WindowServer : public ServerWindowDelegate,
   }
 
   GpuHost* gpu_host() { return gpu_host_.get(); }
+
+  void SetDisplayCreationConfig(DisplayCreationConfig config);
+  DisplayCreationConfig display_creation_config() const {
+    return display_creation_config_;
+  }
+
+  // Pass the FrameSinkManager to WindowServer. This is needed because
+  // FrameSinkManagerClientBinding (the FrameSinkManager implementation being
+  // used) requires WindowServer's GpuHost to create.
+  void SetFrameSinkManager(
+      std::unique_ptr<cc::mojom::FrameSinkManager> frame_sink_manager);
+
+  void SetGpuHost(std::unique_ptr<GpuHost> gpu_host);
+
+  ThreadedImageCursorsFactory* GetThreadedImageCursorsFactory();
 
   // Creates a new ServerWindow. The return value is owned by the caller, but
   // must be destroyed before WindowServer.
@@ -171,7 +189,10 @@ class WindowServer : public ServerWindowDelegate,
       const ServerWindow* window,
       const gfx::Rect& old_bounds,
       const gfx::Rect& new_bounds,
-      const base::Optional<cc::LocalSurfaceId>& local_surface_id);
+      const base::Optional<viz::LocalSurfaceId>& local_surface_id);
+  void ProcessWindowTransformChanged(const ServerWindow* window,
+                                     const gfx::Transform& old_transform,
+                                     const gfx::Transform& new_transform);
   void ProcessClientAreaChanged(
       const ServerWindow* window,
       const gfx::Insets& new_client_area,
@@ -236,6 +257,7 @@ class WindowServer : public ServerWindowDelegate,
   bool GetFrameDecorationsForUser(
       const UserId& user_id,
       mojom::FrameDecorationValuesPtr* values) override;
+  int64_t GetInternalDisplayId() override;
 
  private:
   struct CurrentMoveLoopState;
@@ -289,7 +311,7 @@ class WindowServer : public ServerWindowDelegate,
   // of the temporary reference. If no parent client is found then tell GPU to
   // immediately drop the temporary reference. |window| is the ServerWindow
   // that corresponds to |surface_id|.
-  void HandleTemporaryReferenceForNewSurface(const cc::SurfaceId& surface_id,
+  void HandleTemporaryReferenceForNewSurface(const viz::SurfaceId& surface_id,
                                              ServerWindow* window);
 
   // Overridden from ServerWindowDelegate:
@@ -306,6 +328,9 @@ class WindowServer : public ServerWindowDelegate,
   void OnWindowBoundsChanged(ServerWindow* window,
                              const gfx::Rect& old_bounds,
                              const gfx::Rect& new_bounds) override;
+  void OnWindowTransformChanged(ServerWindow* window,
+                                const gfx::Transform& old_transform,
+                                const gfx::Transform& new_transform) override;
   void OnWindowClientAreaChanged(
       ServerWindow* window,
       const gfx::Insets& new_client_area,
@@ -337,7 +362,8 @@ class WindowServer : public ServerWindowDelegate,
   void OnGpuServiceInitialized() override;
 
   // cc::mojom::FrameSinkManagerClient:
-  void OnSurfaceCreated(const cc::SurfaceInfo& surface_info) override;
+  void OnSurfaceCreated(const viz::SurfaceInfo& surface_info) override;
+  void OnClientConnectionClosed(const viz::FrameSinkId& frame_sink_id) override;
 
   // UserIdTrackerObserver:
   void OnActiveUserIdChanged(const UserId& previously_active_id,
@@ -381,12 +407,12 @@ class WindowServer : public ServerWindowDelegate,
 
   WindowManagerWindowTreeFactorySet window_manager_window_tree_factory_set_;
 
-  cc::SurfaceId root_surface_id_;
+  viz::SurfaceId root_surface_id_;
 
   // Provides interfaces to create and manage FrameSinks.
-  mojo::Binding<cc::mojom::FrameSinkManagerClient>
-      frame_sink_manager_client_binding_;
-  cc::mojom::FrameSinkManagerPtr frame_sink_manager_;
+  std::unique_ptr<cc::mojom::FrameSinkManager> frame_sink_manager_;
+
+  DisplayCreationConfig display_creation_config_;
 
   DISALLOW_COPY_AND_ASSIGN(WindowServer);
 };

@@ -3,7 +3,6 @@
  * found in the LICENSE file. */
 
 #login-header-bar {
-  -webkit-padding-start: 15px;
   bottom: 0;
   left: 0;
   min-height: 34px;  /* Should be consistent with .header-bar-item's height. */
@@ -18,6 +17,7 @@
 
 #login-header-bar.full-header-background {
   background-color: #000;
+  border-top: 1px solid #000;
 }
 
 html[screen=lock] .login-header-bar-hidden,
@@ -60,6 +60,7 @@ html[screen=oobe] .login-header-bar-animate-slow {
 
 .header-bar-item {
   height: 34px;
+  z-index: 3; /* Stays above the scrollable container. */
 }
 
 .add-supervised-user-menu {
@@ -80,12 +81,11 @@ html[screen=oobe] .login-header-bar-animate-slow {
   position: absolute;
   text-align: center;
   white-space: nowrap;
+  z-index: 3;
 }
 
 #more-settings-header-bar-item.active button.add-supervised-user-menu:focus {
-  border: 2px solid var(--google-blue-500);
-  border-radius: 2px;
-  padding: 0 15px;
+  font-weight: bold;
 }
 
 html[dir=rtl] .header-bar-item {
@@ -94,6 +94,7 @@ html[dir=rtl] .header-bar-item {
 
 #login-header-bar #shutdown-button-text,
 #login-header-bar #restart-button-text,
+#login-header-bar #show-apps-button-text,
 #login-header-bar #add-user-button-text,
 #login-header-bar #guest-user-button-text,
 #login-header-bar #more-settings-button-text,
@@ -108,6 +109,7 @@ html[dir=rtl] .header-bar-item {
 
 html[dir=rtl] #login-header-bar #shutdown-button-text,
 html[dir=rtl] #login-header-bar #restart-button-text,
+html[dir=rtl] #login-header-bar #show-apps-button-text,
 html[dir=rtl] #login-header-bar #add-user-button-text,
 html[dir=rtl] #login-header-bar #more-settings-button-text,
 html[dir=rtl] #login-header-bar #guest-user-button-text,
@@ -121,9 +123,12 @@ html[dir=rtl] #login-header-bar #unlock-user-button-text {
 #login-header-bar #restart-button,
 #login-header-bar #add-user-button,
 #login-header-bar #guest-user-button,
-#login-header-bar #more-settings-button,
 #login-header-bar #cancel-multiple-sign-in-button {
-  padding: 0 14px;
+  padding: 0 12px;
+}
+
+#login-header-bar #more-settings-button {
+  padding: 0 10px 0 18px;
 }
 
 #login-header-bar #more-settings-header-bar-item {
@@ -135,6 +140,12 @@ html[dir=rtl] #login-header-bar #unlock-user-button-text {
   background-image: -webkit-image-set(
       url(images/1x/shutdown.svg) 1x,
       url(images/2x/shutdown.svg) 2x );
+}
+
+#login-header-bar #show-apps-button-text {
+  background-image: -webkit-image-set(
+      url(images/1x/show-apps.svg) 1x,
+      url(images/2x/show-apps.svg) 2x );
 }
 
 #login-header-bar #add-user-button-text {

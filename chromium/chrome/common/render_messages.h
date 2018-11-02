@@ -55,7 +55,9 @@ enum class ChromeViewHostMsg_GetPluginInfo_Status {
   kOutdatedBlocked,
   kOutdatedDisallowed,
   kPlayImportantContent,
+#if defined(OS_LINUX)
   kRestartRequired,
+#endif
   kUnauthorized,
 };
 
@@ -144,9 +146,9 @@ IPC_MESSAGE_ROUTED3(ChromeViewMsg_UpdateBrowserControlsState,
 IPC_MESSAGE_ROUTED1(ChromeViewMsg_SetWindowFeatures,
                     blink::mojom::WindowFeatures /* window_features */)
 
-// Requests application info for the page. The renderer responds back with
-// ChromeViewHostMsg_DidGetWebApplicationInfo.
-IPC_MESSAGE_ROUTED0(ChromeViewMsg_GetWebApplicationInfo)
+// Requests application info for the frame. The renderer responds back with
+// ChromeFrameHostMsg_DidGetWebApplicationInfo.
+IPC_MESSAGE_ROUTED0(ChromeFrameMsg_GetWebApplicationInfo)
 
 // chrome.principals messages ------------------------------------------------
 
@@ -325,7 +327,7 @@ IPC_MESSAGE_ROUTED2(ChromeViewHostMsg_BlockedUnauthorizedPlugin,
 // a secure page by a security policy.  The page may appear incomplete.
 IPC_MESSAGE_ROUTED0(ChromeViewHostMsg_DidBlockDisplayingInsecureContent)
 
-IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_DidGetWebApplicationInfo,
+IPC_MESSAGE_ROUTED1(ChromeFrameHostMsg_DidGetWebApplicationInfo,
                     WebApplicationInfo)
 
 // Tells the renderer a list of URLs which should be bounced back to the browser
@@ -339,3 +341,7 @@ IPC_MESSAGE_CONTROL2(ChromeViewMsg_SetSearchURLs,
 IPC_SYNC_MESSAGE_CONTROL0_1(ChromeViewHostMsg_IsCrashReportingEnabled,
                             bool /* enabled */)
 #endif
+
+// Tells the browser to open a PDF file in a new tab. Used when no PDF Viewer is
+// available, and user clicks to view PDF.
+IPC_MESSAGE_ROUTED1(ChromeViewHostMsg_OpenPDF, GURL /* url */)

@@ -21,7 +21,9 @@
 
 #include "platform/wtf/ThreadSpecific.h"
 
-#if OS(WIN)
+#include "build/build_config.h"
+
+#if defined(OS_WIN)
 
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/DoublyLinkedList.h"
@@ -52,8 +54,7 @@ class PlatformThreadSpecificKey
   PlatformThreadSpecificKey(void (*destructor)(void*))
       : destructor_(destructor) {
     tls_key_ = TlsAlloc();
-    if (tls_key_ == TLS_OUT_OF_INDEXES)
-      CRASH();
+    CHECK_NE(tls_key_, TLS_OUT_OF_INDEXES);
   }
 
   ~PlatformThreadSpecificKey() { TlsFree(tls_key_); }
@@ -127,4 +128,4 @@ void ThreadSpecificThreadExit() {
 
 }  // namespace WTF
 
-#endif  // OS(WIN)
+#endif  // defined(OS_WIN)

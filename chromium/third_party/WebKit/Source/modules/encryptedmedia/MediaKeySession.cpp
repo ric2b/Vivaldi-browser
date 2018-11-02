@@ -29,13 +29,13 @@
 #include <limits>
 #include "bindings/core/v8/ScriptPromise.h"
 #include "bindings/core/v8/ScriptPromiseResolver.h"
-#include "core/dom/DOMArrayBuffer.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ExceptionCode.h"
 #include "core/dom/ExecutionContext.h"
 #include "core/dom/TaskRunnerHelper.h"
 #include "core/events/Event.h"
 #include "core/events/GenericEventQueue.h"
+#include "core/typed_arrays/DOMArrayBuffer.h"
 #include "modules/encryptedmedia/ContentDecryptionModuleResultPromise.h"
 #include "modules/encryptedmedia/EncryptedMediaUtils.h"
 #include "modules/encryptedmedia/MediaKeyMessageEvent.h"
@@ -103,29 +103,6 @@ static bool IsPersistentSessionType(WebEncryptedMediaSessionType session_type) {
   return false;
 }
 
-static String ConvertKeyStatusToString(
-    const WebEncryptedMediaKeyInformation::KeyStatus status) {
-  switch (status) {
-    case WebEncryptedMediaKeyInformation::KeyStatus::kUsable:
-      return "usable";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kExpired:
-      return "expired";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kReleased:
-      return "released";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kOutputRestricted:
-      return "output-restricted";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kOutputDownscaled:
-      return "output-downscaled";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kStatusPending:
-      return "status-pending";
-    case WebEncryptedMediaKeyInformation::KeyStatus::kInternalError:
-      return "internal-error";
-  }
-
-  NOTREACHED();
-  return "internal-error";
-}
-
 static ScriptPromise CreateRejectedPromiseNotCallable(
     ScriptState* script_state) {
   return ScriptPromise::RejectWithDOMException(
@@ -149,7 +126,7 @@ static ScriptPromise CreateRejectedPromiseAlreadyInitialized(
 }
 
 // A class holding a pending action.
-class MediaKeySession::PendingAction
+class MediaKeySession::PendingAction final
     : public GarbageCollectedFinalized<MediaKeySession::PendingAction> {
  public:
   enum Type { kGenerateRequest, kLoad, kUpdate, kClose, kRemove };
@@ -389,7 +366,7 @@ MediaKeySession::MediaKeySession(ScriptState* script_state,
   // initializeNewSession() is called in response to the user calling
   // generateRequest().
   WebContentDecryptionModule* cdm = media_keys->ContentDecryptionModule();
-  session_ = WTF::WrapUnique(cdm->CreateSession());
+  session_ = cdm->CreateSession();
   session_->SetClientInterface(this);
 
   // From https://w3c.github.io/encrypted-media/#createSession:
@@ -911,7 +888,7 @@ void MediaKeySession::Message(MessageType message_type,
   MediaKeyMessageEvent* event =
       MediaKeyMessageEvent::Create(EventTypeNames::message, init);
   event->SetTarget(this);
-  async_event_queue_->EnqueueEvent(event);
+  async_event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
 }
 
 void MediaKeySession::Close() {
@@ -988,15 +965,15 @@ void MediaKeySession::KeysStatusesChange(
     const auto& key = keys[i];
     // 4.2.2 Insert an entry for pair's key ID into statuses with the
     //       value of pair's MediaKeyStatus value.
-    key_statuses_map_->AddEntry(key.Id(),
-                                ConvertKeyStatusToString(key.Status()));
+    key_statuses_map_->AddEntry(
+        key.Id(), EncryptedMediaUtils::ConvertKeyStatusToString(key.Status()));
   }
 
   // 5. Queue a task to fire a simple event named keystatuseschange
   //    at the session.
   Event* event = Event::Create(EventTypeNames::keystatuseschange);
   event->SetTarget(this);
-  async_event_queue_->EnqueueEvent(event);
+  async_event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
 
   // 6. Queue a task to run the attempt to resume playback if necessary
   //    algorithm on each of the media element(s) whose mediaKeys attribute

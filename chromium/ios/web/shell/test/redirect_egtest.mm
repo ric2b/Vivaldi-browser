@@ -4,10 +4,10 @@
 
 #import <EarlGrey/EarlGrey.h>
 
-#import "ios/web/public/test/http_server.h"
-#include "ios/web/public/test/http_server_util.h"
-#import "ios/web/public/test/response_providers/html_response_provider.h"
-#import "ios/web/public/test/response_providers/html_response_provider_impl.h"
+#import "ios/web/public/test/http_server/html_response_provider.h"
+#import "ios/web/public/test/http_server/html_response_provider_impl.h"
+#import "ios/web/public/test/http_server/http_server.h"
+#include "ios/web/public/test/http_server/http_server_util.h"
 #import "ios/web/shell/test/earl_grey/shell_earl_grey.h"
 #import "ios/web/shell/test/earl_grey/shell_matchers.h"
 #import "ios/web/shell/test/earl_grey/web_shell_test_case.h"
@@ -19,7 +19,6 @@
 
 using web::AddressFieldText;
 using web::test::HttpServer;
-using web::WebViewContainingText;
 
 // Redirect test cases for the web shell.
 @interface RedirectTestCase : WebShellTestCase
@@ -53,8 +52,7 @@ using web::WebViewContainingText;
   [ShellEarlGrey loadURL:firstRedirectURL];
   [[EarlGrey selectElementWithMatcher:AddressFieldText(destinationURL.spec())]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFinalPageContent)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kFinalPageContent];
 }
 
 // Tests simple 301 redirection.
@@ -77,8 +75,7 @@ using web::WebViewContainingText;
   [ShellEarlGrey loadURL:firstRedirectURL];
   [[EarlGrey selectElementWithMatcher:AddressFieldText(destinationURL.spec())]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFinalPageContent)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kFinalPageContent];
 }
 
 // Tests simple 302 redirection.
@@ -101,8 +98,7 @@ using web::WebViewContainingText;
   [ShellEarlGrey loadURL:firstRedirectURL];
   [[EarlGrey selectElementWithMatcher:AddressFieldText(destinationURL.spec())]
       assertWithMatcher:grey_notNil()];
-  [[EarlGrey selectElementWithMatcher:WebViewContainingText(kFinalPageContent)]
-      assertWithMatcher:grey_notNil()];
+  [ShellEarlGrey waitForWebViewContainingText:kFinalPageContent];
 }
 
 @end

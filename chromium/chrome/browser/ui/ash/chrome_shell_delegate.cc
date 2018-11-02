@@ -7,6 +7,7 @@
 #include <stddef.h>
 
 #include <limits>
+#include <vector>
 
 #include "ash/accelerators/magnifier_key_scroller.h"
 #include "ash/accelerators/spoken_feedback_toggler.h"
@@ -14,16 +15,18 @@
 #include "ash/accessibility_types.h"
 #include "ash/content/gpu_support_impl.h"
 #include "ash/shell.h"
+#include "ash/system/tray/system_tray_controller.h"
 #include "ash/wallpaper/wallpaper_delegate.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
-#include "ash/wm_window.h"
 #include "base/command_line.h"
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
+#include "chrome/browser/browser_process.h"
+#include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/accessibility/accessibility_manager.h"
 #include "chrome/browser/chromeos/accessibility/magnification_manager.h"
@@ -39,7 +42,6 @@
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
-#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/signin/signin_error_notifier_factory_ash.h"
 #include "chrome/browser/speech/tts_controller.h"
 #include "chrome/browser/sync/sync_error_notifier_factory_ash.h"
@@ -48,7 +50,7 @@
 #include "chrome/browser/ui/ash/launcher/launcher_context_menu.h"
 #include "chrome/browser/ui/ash/multi_user/multi_user_util.h"
 #include "chrome/browser/ui/ash/palette_delegate_chromeos.h"
-#include "chrome/browser/ui/ash/session_state_delegate_chromeos.h"
+#include "chrome/browser/ui/ash/session_controller_client.h"
 #include "chrome/browser/ui/ash/session_util.h"
 #include "chrome/browser/ui/ash/system_tray_delegate_chromeos.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
@@ -60,6 +62,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/scoped_tabbed_browser_displayer.h"
+#include "chrome/browser/ui/tab_contents/tab_contents_iterator.h"
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
@@ -68,12 +71,18 @@
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user.h"
 #include "components/user_manager/user_manager.h"
+#include "content/public/browser/media_session.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/service_manager_connection.h"
+#include "content/public/common/url_constants.h"
 #include "ui/aura/window.h"
-#include "ui/base/ime/chromeos/input_method_manager.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
+#include "url/url_constants.h"
+
+#if defined(USE_OZONE)
+#include "services/ui/public/cpp/input_devices/input_device_controller_client.h"
+#endif
 
 using chromeos::AccessibilityManager;
 
@@ -400,28 +409,7 @@ service_manager::Connector* ChromeShellDelegate::GetShellConnector() const {
 }
 
 bool ChromeShellDelegate::IsMultiProfilesEnabled() const {
-  if (!profiles::IsMultipleProfilesEnabled())
-    return false;
-  // If there is a user manager, we need to see that we can at least have 2
-  // simultaneous users to allow this feature.
-  if (!user_manager::UserManager::IsInitialized())
-    return false;
-  size_t admitted_users_to_be_added =
-      user_manager::UserManager::Get()->GetUsersAllowedForMultiProfile().size();
-  size_t logged_in_users =
-      user_manager::UserManager::Get()->GetLoggedInUsers().size();
-  if (!logged_in_users) {
-    // The shelf gets created on the login screen and as such we have to create
-    // all multi profile items of the the system tray menu before the user logs
-    // in. For special cases like Kiosk mode and / or guest mode this isn't a
-    // problem since either the browser gets restarted and / or the flag is not
-    // allowed, but for an "ephermal" user (see crbug.com/312324) it is not
-    // decided yet if they could add other users to their session or not.
-    // TODO(skuhne): As soon as the issue above needs to be resolved, this logic
-    // should change.
-    logged_in_users = 1;
-  }
-  return admitted_users_to_be_added + logged_in_users > 1;
+  return SessionControllerClient::IsMultiProfileEnabled();
 }
 
 bool ChromeShellDelegate::IsIncognitoAllowed() const {
@@ -432,9 +420,8 @@ bool ChromeShellDelegate::IsRunningInForcedAppMode() const {
   return chrome::IsRunningInForcedAppMode();
 }
 
-bool ChromeShellDelegate::CanShowWindowForUser(ash::WmWindow* window) const {
-  return ::CanShowWindowForUser(ash::WmWindow::GetAuraWindow(window),
-                                base::Bind(&GetActiveBrowserContext));
+bool ChromeShellDelegate::CanShowWindowForUser(aura::Window* window) const {
+  return ::CanShowWindowForUser(window, base::Bind(&GetActiveBrowserContext));
 }
 
 bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
@@ -450,8 +437,8 @@ bool ChromeShellDelegate::IsForceMaximizeOnFirstRun() const {
 }
 
 void ChromeShellDelegate::PreInit() {
-  // TODO: port to mus. http://crbug.com/678949.
-  if (chromeos::GetAshConfig() != ash::Config::CLASSIC)
+  // TODO: port to mash. http://crbug.com/678949.
+  if (chromeos::GetAshConfig() == ash::Config::MASH)
     return;
 
   bool first_run_after_boot = base::CommandLine::ForCurrentProcess()->HasSwitch(
@@ -482,6 +469,15 @@ void ChromeShellDelegate::OpenUrlFromArc(const GURL& url) {
     // Chrome cannot open this URL. Read the contents via ARC content file
     // system with an external file URL.
     url_to_open = arc::ArcUrlToExternalFileUrl(url_to_open);
+  }
+
+  // If the url is for system settings, show the settings in a system tray
+  // instead of a browser tab.
+  if (url_to_open.GetContent() == "settings" &&
+      (url_to_open.SchemeIs(url::kAboutScheme) ||
+       url_to_open.SchemeIs(content::kChromeUIScheme))) {
+    ash::Shell::Get()->system_tray_controller()->ShowSettings();
+    return;
   }
 
   chrome::ScopedTabbedBrowserDisplayer displayer(
@@ -568,6 +564,10 @@ PrefService* ChromeShellDelegate::GetActiveUserPrefService() const {
   return profile ? profile->GetPrefs() : nullptr;
 }
 
+PrefService* ChromeShellDelegate::GetLocalStatePrefService() const {
+  return g_browser_process->local_state();
+}
+
 bool ChromeShellDelegate::IsTouchscreenEnabledInPrefs(
     bool use_local_state) const {
   return chromeos::system::InputDeviceSettings::Get()
@@ -589,12 +589,16 @@ void ChromeShellDelegate::ToggleTouchpad() {
   chromeos::system::InputDeviceSettings::Get()->ToggleTouchpad();
 }
 
-keyboard::KeyboardUI* ChromeShellDelegate::CreateKeyboardUI() {
-  return new ChromeKeyboardUI(ProfileManager::GetActiveUserProfile());
+void ChromeShellDelegate::SuspendMediaSessions() {
+  for (TabContentsIterator it; !it.done(); it.Next()) {
+    content::MediaSession::Get(*it)->Suspend(
+        content::MediaSession::SuspendType::SYSTEM);
+  }
 }
 
-ash::SessionStateDelegate* ChromeShellDelegate::CreateSessionStateDelegate() {
-  return new SessionStateDelegateChromeos;
+std::unique_ptr<keyboard::KeyboardUI> ChromeShellDelegate::CreateKeyboardUI() {
+  return base::MakeUnique<ChromeKeyboardUI>(
+      ProfileManager::GetActiveUserProfile());
 }
 
 ash::AccessibilityDelegate* ChromeShellDelegate::CreateAccessibilityDelegate() {
@@ -615,6 +619,13 @@ ChromeShellDelegate::CreateWallpaperDelegate() {
   return base::WrapUnique(chromeos::CreateWallpaperDelegate());
 }
 
+#if defined(USE_OZONE)
+ui::InputDeviceControllerClient*
+ChromeShellDelegate::GetInputDeviceControllerClient() {
+  return g_browser_process->platform_part()->GetInputDeviceControllerClient();
+}
+#endif
+
 void ChromeShellDelegate::Observe(int type,
                                   const content::NotificationSource& source,
                                   const content::NotificationDetails& details) {
@@ -622,6 +633,7 @@ void ChromeShellDelegate::Observe(int type,
     case chrome::NOTIFICATION_LOGIN_USER_PROFILE_PREPARED: {
       Profile* profile = content::Details<Profile>(details).ptr();
       if (!chromeos::ProfileHelper::IsSigninProfile(profile) &&
+          !chromeos::ProfileHelper::IsLockScreenAppProfile(profile) &&
           !profile->IsGuestSession() && !profile->IsSupervised()) {
         // Start the error notifier services to show auth/sync notifications.
         SigninErrorNotifierFactory::GetForProfile(profile);

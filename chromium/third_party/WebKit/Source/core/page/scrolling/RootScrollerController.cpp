@@ -6,8 +6,11 @@
 
 #include "core/dom/Document.h"
 #include "core/dom/Element.h"
-#include "core/frame/FrameView.h"
+#include "core/dom/StyleChangeReason.h"
+#include "core/frame/LocalFrameView.h"
+#include "core/html/HTMLFrameOwnerElement.h"
 #include "core/layout/LayoutBox.h"
+#include "core/layout/LayoutEmbeddedContent.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
 #include "core/page/Page.h"
@@ -65,6 +68,9 @@ DEFINE_TRACE(RootScrollerController) {
 }
 
 void RootScrollerController::Set(Element* new_root_scroller) {
+  if (root_scroller_ == new_root_scroller)
+    return;
+
   root_scroller_ = new_root_scroller;
   RecomputeEffectiveRootScroller();
 }
@@ -79,7 +85,24 @@ Node& RootScrollerController::EffectiveRootScroller() const {
 }
 
 void RootScrollerController::DidUpdateLayout() {
+  DCHECK(document_->Lifecycle().GetState() == DocumentLifecycle::kLayoutClean);
   RecomputeEffectiveRootScroller();
+}
+
+void RootScrollerController::DidResizeFrameView() {
+  DCHECK(document_);
+
+  Page* page = document_->GetPage();
+  if (document_->GetFrame() && document_->GetFrame()->IsMainFrame() && page)
+    page->GlobalRootScrollerController().DidResizeViewport();
+
+  // If the effective root scroller in this Document is a Frame, it'll match
+  // its parent's frame rect. We can't rely on layout to kick it to update its
+  // geometry so we do so explicitly here.
+  if (EffectiveRootScroller().IsFrameOwnerElement()) {
+    UpdateIFrameGeometryAndLayoutSize(
+        *ToHTMLFrameOwnerElement(&EffectiveRootScroller()));
+  }
 }
 
 void RootScrollerController::RecomputeEffectiveRootScroller() {
@@ -105,13 +128,28 @@ void RootScrollerController::RecomputeEffectiveRootScroller() {
       return;
   }
 
+  Node* old_effective_root_scroller = effective_root_scroller_;
   effective_root_scroller_ = new_effective_root_scroller;
+
+  ApplyRootScrollerProperties(*old_effective_root_scroller);
+  ApplyRootScrollerProperties(*effective_root_scroller_);
+
+  // Document (i.e. LayoutView) gets its background style from the rootScroller
+  // so we need to recalc its style. Ensure that we get back to a LayoutClean
+  // state after.
+  document_->SetNeedsStyleRecalc(kLocalStyleChange,
+                                 StyleChangeReasonForTracing::Create(
+                                     StyleChangeReason::kStyleInvalidator));
+  document_->UpdateStyleAndLayout();
 
   if (Page* page = document_->GetPage())
     page->GlobalRootScrollerController().DidChangeRootScroller();
 }
 
 bool RootScrollerController::IsValidRootScroller(const Element& element) const {
+  if (!element.IsInTreeScope())
+    return false;
+
   if (!element.GetLayoutObject())
     return false;
 
@@ -119,13 +157,55 @@ bool RootScrollerController::IsValidRootScroller(const Element& element) const {
       !element.IsFrameOwnerElement())
     return false;
 
-  if (!RootScrollerUtil::ScrollableAreaForRootScroller(&element))
-    return false;
-
   if (!FillsViewport(element))
     return false;
 
   return true;
+}
+
+void RootScrollerController::ApplyRootScrollerProperties(Node& node) const {
+  DCHECK(document_->GetFrame());
+  DCHECK(document_->GetFrame()->View());
+
+  // If the node has been removed from the Document, we shouldn't be touching
+  // anything related to the Frame- or Layout- hierarchies.
+  if (!node.IsInTreeScope())
+    return;
+
+  if (node.IsFrameOwnerElement()) {
+    HTMLFrameOwnerElement* frame_owner = ToHTMLFrameOwnerElement(&node);
+    DCHECK(frame_owner->ContentFrame());
+
+    if (frame_owner->ContentFrame()->IsLocalFrame()) {
+      LocalFrameView* frame_view =
+          ToLocalFrame(frame_owner->ContentFrame())->View();
+
+      bool is_root_scroller = &EffectiveRootScroller() == &node;
+
+      // If we're making the Frame the root scroller, it must have a FrameView
+      // by now.
+      DCHECK(frame_view || !is_root_scroller);
+      if (frame_view) {
+        frame_view->SetLayoutSizeFixedToFrameSize(!is_root_scroller);
+        UpdateIFrameGeometryAndLayoutSize(*frame_owner);
+      }
+    } else {
+      // TODO(bokan): Make work with OOPIF. crbug.com/642378.
+    }
+  }
+}
+
+void RootScrollerController::UpdateIFrameGeometryAndLayoutSize(
+    HTMLFrameOwnerElement& frame_owner) const {
+  DCHECK(document_->GetFrame());
+  DCHECK(document_->GetFrame()->View());
+
+  LocalFrameView* view =
+      ToLocalFrameView(frame_owner.OwnedEmbeddedContentView());
+  view->UpdateGeometry();
+
+  if (&EffectiveRootScroller() == frame_owner)
+    view->SetLayoutSize(document_->GetFrame()->View()->GetLayoutSize());
 }
 
 PaintLayer* RootScrollerController::RootScrollerPaintLayer() const {
@@ -137,6 +217,14 @@ bool RootScrollerController::ScrollsViewport(const Element& element) const {
     return element == document_->documentElement();
 
   return element == effective_root_scroller_.Get();
+}
+
+void RootScrollerController::ElementRemoved(const Element& element) {
+  if (element != effective_root_scroller_.Get())
+    return;
+
+  RecomputeEffectiveRootScroller();
+  DCHECK(element != effective_root_scroller_.Get());
 }
 
 }  // namespace blink

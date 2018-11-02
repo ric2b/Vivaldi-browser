@@ -33,7 +33,7 @@ class DownloadCommands {
 
   // |download_item| must outlive DownloadCommands.
   explicit DownloadCommands(content::DownloadItem* download_item);
-  virtual ~DownloadCommands() {}
+  virtual ~DownloadCommands();
 
   gfx::Image GetCommandIcon(Command command);
 
@@ -42,8 +42,7 @@ class DownloadCommands {
   bool IsCommandVisible(Command command) const;
   void ExecuteCommand(Command command);
 
-#if defined(OS_WIN) || defined(OS_LINUX) || \
-    (defined(OS_MACOSX) && !defined(OS_IOS))
+#if defined(OS_WIN) || defined(OS_LINUX) || defined(OS_MACOSX)
   bool IsDownloadPdf() const;
   bool CanOpenPdfInSystemViewer() const;
 #endif
@@ -56,9 +55,11 @@ class DownloadCommands {
   Browser* GetBrowser() const;
   int GetCommandIconId(Command command) const;
   GURL GetLearnMoreURLForInterruptedDownload() const;
-  void CopyFileAsImageToClipboard() const;
+  void CopyFileAsImageToClipboard();
 
   content::DownloadItem* const download_item_;
+
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
 };
 
 #endif  // CHROME_BROWSER_DOWNLOAD_DOWNLOAD_COMMANDS_H_

@@ -16,7 +16,7 @@
   },
   "app.runtime": [{
     "channel": "stable",
-    "contexts": ["blessed_extension"],
+    "contexts": ["blessed_extension", "lock_screen_extension"],
     "extension_types": ["platform_app"],
     "noparent": true
   }, {
@@ -33,7 +33,7 @@
   }],
   "app.window": [{
     "channel": "stable",
-    "contexts": ["blessed_extension"],
+    "contexts": ["blessed_extension", "lock_screen_extension"],
     "extension_types": ["platform_app"],
     "noparent": true
   }, {
@@ -52,7 +52,7 @@
     "noparent": true,
     "internal": true,
     "channel": "stable",
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension", "lock_screen_extension"]
   },
   "app.currentWindowInternal.setShape": {
     "dependencies": ["permission:app.window.shape"],
@@ -86,8 +86,7 @@
     "matches": [
       "chrome://bluetooth-pairing/*",
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "bluetoothLowEnergy": {
@@ -104,8 +103,7 @@
     "matches": [
       "chrome://bluetooth-pairing/*",
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "bluetoothSocket": {
@@ -173,6 +171,10 @@
     "contexts": "all",
     "matches": ["<all_urls>"]
   },
+  "fileSystem": {
+    "dependencies": ["permission:fileSystem"],
+    "contexts": ["blessed_extension"]
+  },
   "guestViewInternal": [
     {
       "internal": true,
@@ -205,6 +207,13 @@
     "dependencies": ["permission:idle"],
     "contexts": ["blessed_extension"]
   },
+  "lockScreen.data": {
+    "dependencies": ["permission:lockScreen"],
+    "contexts": ["blessed_extension", "lock_screen_extension"]
+  },
+  "lockScreen.data.create": {
+    "contexts": ["lock_screen_extension"]
+  },
   "management": [{
     "dependencies": ["permission:management"],
     "contexts": ["blessed_extension"],
@@ -217,8 +226,7 @@
       "chrome://extensions-frame/*",
       "chrome://chrome/extensions/*",
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "management.getPermissionWarningsByManifest": {
@@ -248,9 +256,9 @@
     "channel": "stable",
     "contexts": ["webui"],
     "matches": [
+      "chrome://bookmarks/*",
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "metricsPrivate.getIsCrashReportingEnabled": {
@@ -325,8 +333,7 @@
       "chrome://md-settings/*",
       "chrome://network/*",
       "chrome://oobe/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "power": {
@@ -345,10 +352,15 @@
   "runtime": {
     "channel": "stable",
     "extension_types": ["extension", "legacy_packaged_app", "platform_app"],
-    "contexts": ["blessed_extension"]
+    "contexts": ["blessed_extension", "lock_screen_extension"]
   },
   "runtime.getManifest": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": [
+      "blessed_extension",
+      "lock_screen_extension",
+      "unblessed_extension",
+      "content_script"
+    ]
   },
   "runtime.connect": {
     // Everything except WebUI.
@@ -356,6 +368,7 @@
       "blessed_web_page",
       "content_script",
       "blessed_extension",
+      "lock_screen_extension",
       "unblessed_extension",
       "web_page"
     ],
@@ -366,10 +379,20 @@
     "contexts": ["blessed_extension"]
   },
   "runtime.getURL": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": [
+      "blessed_extension",
+      "lock_screen_extension",
+      "unblessed_extension",
+      "content_script"
+    ]
   },
   "runtime.id": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": [
+      "blessed_extension",
+      "lock_screen_extension",
+      "unblessed_extension",
+      "content_script"
+    ]
   },
   "runtime.lastError": {
     "contexts": "all",
@@ -377,10 +400,20 @@
     "matches": ["<all_urls>"]
   },
   "runtime.onConnect": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": [
+      "blessed_extension",
+      "lock_screen_extension",
+      "unblessed_extension",
+      "content_script"
+    ]
   },
   "runtime.onMessage": {
-    "contexts": ["blessed_extension", "unblessed_extension", "content_script"]
+    "contexts": [
+      "blessed_extension",
+      "lock_screen_extension",
+      "unblessed_extension",
+      "content_script"
+    ]
   },
   "runtime.sendMessage": {
     // Everything except WebUI.
@@ -388,6 +421,7 @@
       "blessed_web_page",
       "content_script",
       "blessed_extension",
+      "lock_screen_extension",
       "unblessed_extension",
       "web_page"
     ],
@@ -433,8 +467,7 @@
     "contexts": ["webui"],
     "matches": [
       "chrome://md-settings/*",
-      "chrome://settings/*",
-      "chrome://settings-frame/*"
+      "chrome://settings/*"
     ]
   }],
   "system.memory": {
@@ -462,6 +495,7 @@
       "blessed_web_page",
       "content_script",
       "extension_service_worker",
+      "lock_screen_extension",
       "unblessed_extension"
     ]
   }, {

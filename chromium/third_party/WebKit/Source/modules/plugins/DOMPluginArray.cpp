@@ -20,46 +20,59 @@
 
 #include "modules/plugins/DOMPluginArray.h"
 
+#include "core/dom/Document.h"
+#include "core/frame/LocalDOMWindow.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/Navigator.h"
 #include "core/page/Page.h"
+#include "modules/plugins/DOMMimeTypeArray.h"
+#include "modules/plugins/NavigatorPlugins.h"
 #include "platform/RuntimeEnabledFeatures.h"
 #include "platform/plugins/PluginData.h"
 #include "platform/wtf/Vector.h"
+#include "platform/wtf/debug/Alias.h"
 #include "platform/wtf/text/AtomicString.h"
 
 namespace blink {
 
-DOMPluginArray::DOMPluginArray(LocalFrame* frame) : ContextClient(frame) {}
+DOMPluginArray::DOMPluginArray(LocalFrame* frame)
+    : ContextLifecycleObserver(frame ? frame->GetDocument() : nullptr),
+      PluginsChangedObserver(frame ? frame->GetPage() : nullptr) {
+  UpdatePluginData();
+}
 
 DEFINE_TRACE(DOMPluginArray) {
-  ContextClient::Trace(visitor);
+  ContextLifecycleObserver::Trace(visitor);
+  PluginsChangedObserver::Trace(visitor);
+  visitor->Trace(dom_plugins_);
 }
 
 unsigned DOMPluginArray::length() const {
-  PluginData* data = GetPluginData();
-  if (!data)
-    return 0;
-  return data->Plugins().size();
+  return dom_plugins_.size();
 }
 
 DOMPlugin* DOMPluginArray::item(unsigned index) {
-  PluginData* data = GetPluginData();
-  if (!data)
+  if (index >= dom_plugins_.size())
     return nullptr;
-  const Vector<PluginInfo>& plugins = data->Plugins();
-  if (index >= plugins.size())
-    return nullptr;
-  return DOMPlugin::Create(data, GetFrame(), index);
+
+  if (!dom_plugins_[index]) {
+    dom_plugins_[index] =
+        DOMPlugin::Create(GetFrame(), *GetPluginData()->Plugins()[index]);
+  }
+
+  return dom_plugins_[index];
 }
 
 DOMPlugin* DOMPluginArray::namedItem(const AtomicString& property_name) {
   PluginData* data = GetPluginData();
   if (!data)
     return nullptr;
-  const Vector<PluginInfo>& plugins = data->Plugins();
-  for (unsigned i = 0; i < plugins.size(); ++i) {
-    if (plugins[i].name == property_name)
-      return DOMPlugin::Create(data, GetFrame(), i);
+
+  for (const Member<PluginInfo>& plugin_info : data->Plugins()) {
+    if (plugin_info->Name() == property_name) {
+      size_t index = &plugin_info - &data->Plugins()[0];
+      return item(index);
+    }
   }
   return nullptr;
 }
@@ -67,7 +80,20 @@ DOMPlugin* DOMPluginArray::namedItem(const AtomicString& property_name) {
 void DOMPluginArray::refresh(bool reload) {
   if (!GetFrame())
     return;
+
   Page::RefreshPlugins();
+  if (PluginData* data = GetPluginData())
+    data->ResetPluginData();
+
+  for (Frame* frame = GetFrame()->GetPage()->MainFrame(); frame;
+       frame = frame->Tree().TraverseNext()) {
+    if (!frame->IsLocalFrame())
+      continue;
+    Navigator& navigator = *ToLocalFrame(frame)->DomWindow()->navigator();
+    NavigatorPlugins::plugins(navigator)->UpdatePluginData();
+    NavigatorPlugins::mimeTypes(navigator)->UpdatePluginData();
+  }
+
   if (reload) {
     GetFrame()->Reload(kFrameLoadTypeReload,
                        ClientRedirectPolicy::kClientRedirect);
@@ -78,6 +104,37 @@ PluginData* DOMPluginArray::GetPluginData() const {
   if (!GetFrame())
     return nullptr;
   return GetFrame()->GetPluginData();
+}
+
+void DOMPluginArray::UpdatePluginData() {
+  PluginData* data = GetPluginData();
+  if (!data) {
+    dom_plugins_.clear();
+    return;
+  }
+
+  HeapVector<Member<DOMPlugin>> old_dom_plugins(std::move(dom_plugins_));
+  dom_plugins_.clear();
+  dom_plugins_.resize(data->Plugins().size());
+
+  for (Member<DOMPlugin>& plugin : old_dom_plugins) {
+    if (plugin) {
+      for (const Member<PluginInfo>& plugin_info : data->Plugins()) {
+        if (plugin->name() == plugin_info->Name()) {
+          size_t index = &plugin_info - &data->Plugins()[0];
+          dom_plugins_[index] = plugin;
+        }
+      }
+    }
+  }
+}
+
+void DOMPluginArray::ContextDestroyed(ExecutionContext*) {
+  dom_plugins_.clear();
+}
+
+void DOMPluginArray::PluginsChanged() {
+  UpdatePluginData();
 }
 
 }  // namespace blink

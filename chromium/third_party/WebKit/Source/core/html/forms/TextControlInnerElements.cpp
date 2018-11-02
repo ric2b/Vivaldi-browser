@@ -30,6 +30,7 @@
 #include "core/css/resolver/StyleAdjuster.h"
 #include "core/dom/Document.h"
 #include "core/dom/NodeComputedStyle.h"
+#include "core/dom/UserGestureIndicator.h"
 #include "core/events/MouseEvent.h"
 #include "core/events/TextEvent.h"
 #include "core/events/TextEventInputType.h"
@@ -39,7 +40,6 @@
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutTextControlSingleLine.h"
 #include "core/layout/api/LayoutTextControlItem.h"
-#include "platform/UserGestureIndicator.h"
 
 namespace blink {
 
@@ -89,10 +89,7 @@ PassRefPtr<ComputedStyle> EditingViewPortElement::CustomStyleForLayoutObject() {
   style->SetUserModify(EUserModify::kReadOnly);
   style->SetUnique();
 
-  if (const ComputedStyle* parent_style = ParentComputedStyle())
-    StyleAdjuster::AdjustStyleForAlignment(*style, *parent_style);
-
-  return style.Release();
+  return style;
 }
 
 // ---------------------------
@@ -149,9 +146,7 @@ TextControlInnerEditorElement::CustomStyleForLayoutObject() {
   // Using StyleAdjuster::adjustComputedStyle updates unwanted style. We'd like
   // to apply only editing-related and alignment-related.
   StyleAdjuster::AdjustStyleForEditing(*inner_editor_style);
-  if (const ComputedStyle* parent_style = ParentComputedStyle())
-    StyleAdjuster::AdjustStyleForAlignment(*inner_editor_style, *parent_style);
-  return inner_editor_style.Release();
+  return inner_editor_style;
 }
 
 // ----------------------------

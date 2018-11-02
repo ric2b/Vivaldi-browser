@@ -11,7 +11,7 @@
 
 #include "base/macros.h"
 #include "base/memory/weak_ptr.h"
-#include "base/threading/non_thread_safe.h"
+#include "base/sequence_checker.h"
 #include "media/video/jpeg_decode_accelerator.h"
 
 namespace base {
@@ -29,10 +29,11 @@ class Message;
 
 namespace media {
 
+// TODO(c.padhi): Move GpuJpegDecodeAcceleratorHost to media/gpu/mojo, see
+// http://crbug.com/699255.
 // This class is used to talk to JpegDecodeAccelerator in the GPU process
 // through IPC messages.
-class GpuJpegDecodeAcceleratorHost : public JpegDecodeAccelerator,
-                                     public base::NonThreadSafe {
+class GpuJpegDecodeAcceleratorHost : public JpegDecodeAccelerator {
  public:
   GpuJpegDecodeAcceleratorHost(
       scoped_refptr<gpu::GpuChannelHost> channel,
@@ -43,7 +44,8 @@ class GpuJpegDecodeAcceleratorHost : public JpegDecodeAccelerator,
   // JpegDecodeAccelerator implementation.
   // |client| is called on the IO thread, but is never called into after the
   // GpuJpegDecodeAcceleratorHost is destroyed.
-  bool Initialize(JpegDecodeAccelerator::Client* client) override;
+  bool Initialize(Client* client) override;
+  void InitializeAsync(Client* client, InitCB init_cb) override;
   void Decode(const BitstreamBuffer& bitstream_buffer,
               const scoped_refptr<VideoFrame>& video_frame) override;
   bool IsSupported() override;
@@ -64,6 +66,8 @@ class GpuJpegDecodeAcceleratorHost : public JpegDecodeAccelerator,
   scoped_refptr<base::SingleThreadTaskRunner> io_task_runner_;
 
   std::unique_ptr<Receiver> receiver_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(GpuJpegDecodeAcceleratorHost);
 };

@@ -17,6 +17,7 @@
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task_scheduler/lazy_task_runner.h"
 #include "base/threading/thread_restrictions.h"
 #include "base/time/time.h"
 #include "base/win/registry.h"
@@ -61,6 +62,11 @@ GoogleUpdateSettings::kDefaultUpdatePolicy =
 #endif
 
 namespace {
+
+base::LazySequencedTaskRunner g_collect_stats_consent_task_runner =
+    LAZY_SEQUENCED_TASK_RUNNER_INITIALIZER(
+        base::TaskTraits(base::TaskPriority::USER_VISIBLE,
+                         base::TaskShutdownBehavior::BLOCK_SHUTDOWN));
 
 bool ReadGoogleUpdateStrKey(const wchar_t* const name, base::string16* value) {
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
@@ -198,6 +204,13 @@ bool GetUpdatePolicyFromDword(
 // TODO(grt): Remove this now that it has no added value.
 bool GoogleUpdateSettings::IsSystemInstall() {
   return !InstallUtil::IsPerUserInstall();
+}
+
+base::SequencedTaskRunner*
+GoogleUpdateSettings::CollectStatsConsentTaskRunner() {
+  // TODO(fdoray): Use LazySequencedTaskRunner::GetRaw() here instead of
+  // .Get().get() when it's added to the API, http://crbug.com/730170.
+  return g_collect_stats_consent_task_runner.Get().get();
 }
 
 bool GoogleUpdateSettings::GetCollectStatsConsent() {
@@ -856,13 +869,7 @@ bool GoogleUpdateSettings::GetUpdateDetail(ProductData* data) {
 bool GoogleUpdateSettings::SetExperimentLabels(
     bool system_install,
     const base::string16& experiment_labels) {
-  // There is nothing to do if this brand does not support integration with
-  // Google Update.
-  if (!install_static::kUseGoogleUpdateIntegration)
-    return false;
-
   HKEY reg_root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
-
   // Use the browser distribution and install level to write to the correct
   // client state/app guid key.
   bool success = false;
@@ -890,11 +897,6 @@ bool GoogleUpdateSettings::SetExperimentLabels(
 bool GoogleUpdateSettings::ReadExperimentLabels(
     bool system_install,
     base::string16* experiment_labels) {
-  // There is nothing to do if this brand does not support integration with
-  // Google Update.
-  if (!install_static::kUseGoogleUpdateIntegration)
-    return false;
-
   HKEY reg_root = system_install ? HKEY_LOCAL_MACHINE : HKEY_CURRENT_USER;
   BrowserDistribution* dist = BrowserDistribution::GetDistribution();
   base::string16 client_state_path(

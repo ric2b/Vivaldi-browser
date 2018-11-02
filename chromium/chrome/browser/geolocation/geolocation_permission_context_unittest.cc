@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <map>
 #include <set>
 #include <string>
 #include <utility>
@@ -13,7 +14,6 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
-#include "base/containers/hash_tables.h"
 #include "base/gtest_prod_util.h"
 #include "base/id_map.h"
 #include "base/memory/ptr_util.h"
@@ -210,7 +210,7 @@ class GeolocationPermissionContextTests
 
   // A map between renderer child id and a pair represending the bridge id and
   // whether the requested permission was allowed.
-  base::hash_map<int, std::pair<int, bool> > responses_;
+  std::map<int, std::pair<int, bool>> responses_;
 
   // For testing the PermissionRequestManager on Android
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -557,20 +557,26 @@ TEST_P(GeolocationPermissionContextTests, GeolocationEnabledDisabled) {
   GURL requesting_frame("https://www.example.com/geolocation");
   NavigateAndCommit(requesting_frame);
   RequestManagerDocumentLoadCompleted();
+  base::HistogramTester histograms;
   MockLocationSettings::SetLocationStatus(true /* android */,
                                           true /* system */);
   EXPECT_FALSE(HasActivePrompt());
   RequestGeolocationPermission(
       web_contents(), RequestID(0), requesting_frame, true);
   EXPECT_TRUE(HasActivePrompt());
+  histograms.ExpectTotalCount("Permissions.Action.Geolocation", 0);
 
   Reload();
+  histograms.ExpectUniqueSample("Permissions.Action.Geolocation",
+                                static_cast<int>(PermissionAction::IGNORED), 1);
   MockLocationSettings::SetLocationStatus(false /* android */,
                                           true /* system */);
   MockLocationSettings::SetCanPromptForAndroidPermission(false);
   EXPECT_FALSE(HasActivePrompt());
   RequestGeolocationPermission(
       web_contents(), RequestID(0), requesting_frame, true);
+  histograms.ExpectUniqueSample("Permissions.Action.Geolocation",
+                                static_cast<int>(PermissionAction::IGNORED), 1);
   EXPECT_FALSE(HasActivePrompt());
 }
 

@@ -6,7 +6,7 @@
 
 #include "base/logging.h"
 #import "ios/chrome/browser/ui/collection_view/collection_view_model.h"
-#import "ios/chrome/browser/ui/payments/cells/payments_has_accessory_type.h"
+#import "ios/chrome/browser/ui/payments/cells/payments_is_selectable.h"
 #import "ios/chrome/browser/ui/payments/cells/payments_text_item.h"
 #import "ios/chrome/browser/ui/payments/payment_request_selector_view_controller.h"
 #import "ios/chrome/browser/ui/payments/payment_request_selector_view_controller_data_source.h"
@@ -29,7 +29,7 @@
 // The selectable items created and managed by the
 // PaymentRequestSelectorViewControllerDataSource.
 @property(nonatomic, strong)
-    NSArray<CollectionViewItem<PaymentsHasAccessoryType>*>* items;
+    NSArray<CollectionViewItem<PaymentsIsSelectable>*>* items;
 
 // The alerter that conforms to PaymentRequestSelectorViewControllerDelegate
 // and displays a UIAlert every time delegate methods are called.
@@ -56,7 +56,8 @@
   self.alerter.baseViewController = self.baseViewController;
 
   self.selectorViewController = [[PaymentRequestSelectorViewController alloc]
-      initWithStyle:CollectionViewControllerStyleAppBar];
+      initWithLayout:[[MDCCollectionViewFlowLayout alloc] init]
+               style:CollectionViewControllerStyleAppBar];
   [self.selectorViewController setTitle:@"Select an item"];
   [self.selectorViewController setDataSource:self];
   [self.selectorViewController loadModel];
@@ -69,18 +70,20 @@
 
 #pragma mark - PaymentRequestSelectorViewControllerDataSource
 
+- (BOOL)allowsEditMode {
+  return NO;
+}
+
+- (NSString*)title {
+  return @"Title";
+}
+
 - (CollectionViewItem*)headerItem {
   return [self createItemWithText:@"Header item"];
 }
 
-- (NSArray<CollectionViewItem<PaymentsHasAccessoryType>*>*)selectableItems {
+- (NSArray<CollectionViewItem<PaymentsIsSelectable>*>*)selectableItems {
   return self.items;
-}
-
-- (CollectionViewItem<PaymentsHasAccessoryType>*)selectableItemAtIndex:
-    (NSUInteger)index {
-  DCHECK(index < self.items.count);
-  return [self.items objectAtIndex:index];
 }
 
 - (CollectionViewItem*)addButtonItem {
@@ -89,7 +92,7 @@
 
 #pragma mark - Helper methods
 
-- (NSArray<CollectionViewItem<PaymentsHasAccessoryType>*>*)createItems {
+- (NSArray<CollectionViewItem<PaymentsIsSelectable>*>*)createItems {
   return @[
     [self createItemWithText:@"First selectable item"],
     [self createItemWithText:@"Second selectable item"],
@@ -98,7 +101,7 @@
   ];
 }
 
-- (CollectionViewItem<PaymentsHasAccessoryType>*)createItemWithText:
+- (CollectionViewItem<PaymentsIsSelectable>*)createItemWithText:
     (NSString*)text {
   PaymentsTextItem* item = [[PaymentsTextItem alloc] init];
   item.text = text;

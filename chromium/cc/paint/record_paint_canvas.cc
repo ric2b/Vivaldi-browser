@@ -49,22 +49,24 @@ int RecordPaintCanvas::saveLayer(const SkRect* bounds,
       // TODO(enne): maybe more callers should know this and call
       // saveLayerAlpha instead of needing to check here.
       uint8_t alpha = SkColorGetA(flags->getColor());
-      return saveLayerAlpha(bounds, alpha);
+      return saveLayerAlpha(bounds, alpha, false);
     }
 
     // TODO(enne): it appears that image filters affect matrices and color
     // matrices affect transparent flags on SkCanvas layers, but it's not clear
     // whether those are actually needed and we could just skip ToSkPaint here.
     buffer_->push<SaveLayerOp>(bounds, flags);
-    const SkPaint& paint = ToSkPaint(*flags);
+    SkPaint paint = flags->ToSkPaint();
     return GetCanvas()->saveLayer(bounds, &paint);
   }
   buffer_->push<SaveLayerOp>(bounds, flags);
   return GetCanvas()->saveLayer(bounds, nullptr);
 }
 
-int RecordPaintCanvas::saveLayerAlpha(const SkRect* bounds, uint8_t alpha) {
-  buffer_->push<SaveLayerAlphaOp>(bounds, alpha);
+int RecordPaintCanvas::saveLayerAlpha(const SkRect* bounds,
+                                      uint8_t alpha,
+                                      bool preserve_lcd_text_requests) {
+  buffer_->push<SaveLayerAlphaOp>(bounds, alpha, preserve_lcd_text_requests);
   return GetCanvas()->saveLayerAlpha(bounds, alpha);
 }
 
@@ -307,7 +309,9 @@ void RecordPaintCanvas::drawPosText(const void* text,
                                     size_t byte_length,
                                     const SkPoint pos[],
                                     const PaintFlags& flags) {
-  size_t count = ToSkPaint(flags).countText(text, byte_length);
+  // TODO(enne): implement countText in PaintFlags??
+  SkPaint paint = flags.ToSkPaint();
+  size_t count = paint.countText(text, byte_length);
   buffer_->push_with_array<DrawPosTextOp>(text, byte_length, pos, count, flags);
 }
 
@@ -316,11 +320,6 @@ void RecordPaintCanvas::drawTextBlob(sk_sp<SkTextBlob> blob,
                                      SkScalar y,
                                      const PaintFlags& flags) {
   buffer_->push<DrawTextBlobOp>(blob, x, y, flags);
-}
-
-void RecordPaintCanvas::drawDisplayItemList(
-    scoped_refptr<DisplayItemList> list) {
-  buffer_->push<DrawDisplayItemListOp>(list);
 }
 
 void RecordPaintCanvas::drawPicture(sk_sp<const PaintRecord> record) {

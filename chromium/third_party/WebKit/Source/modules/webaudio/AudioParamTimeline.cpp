@@ -24,16 +24,18 @@
  */
 
 #include "modules/webaudio/AudioParamTimeline.h"
+
 #include <algorithm>
 #include "bindings/core/v8/ExceptionMessages.h"
 #include "bindings/core/v8/ExceptionState.h"
+#include "build/build_config.h"
 #include "core/dom/ExceptionCode.h"
 #include "platform/audio/AudioUtilities.h"
 #include "platform/wtf/CPU.h"
 #include "platform/wtf/MathExtras.h"
 #include "platform/wtf/PtrUtil.h"
 
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
 #include <emmintrin.h>
 #endif
 
@@ -61,9 +63,9 @@ static bool IsNonNegativeAudioParamTime(double time,
   if (time >= 0)
     return true;
 
-  exception_state.ThrowDOMException(
-      kInvalidAccessError, message + " must be a finite non-negative number: " +
-                               String::Number(time));
+  exception_state.ThrowRangeError(
+      message +
+      " must be a finite non-negative number: " + String::Number(time));
   return false;
 }
 
@@ -73,8 +75,7 @@ static bool IsPositiveAudioParamTime(double time,
   if (time > 0)
     return true;
 
-  exception_state.ThrowDOMException(
-      kInvalidAccessError,
+  exception_state.ThrowRangeError(
       message + " must be a finite positive number: " + String::Number(time));
   return false;
 }
@@ -444,12 +445,11 @@ void AudioParamTimeline::ExponentialRampToValueAtTime(
     return;
 
   if (!value) {
-    exception_state.ThrowDOMException(
-        kInvalidAccessError,
+    exception_state.ThrowRangeError(
         "The float target value provided (" + String::Number(value) +
-            ") should not be in the range (" +
-            String::Number(-std::numeric_limits<float>::denorm_min()) + ", " +
-            String::Number(std::numeric_limits<float>::denorm_min()) + ").");
+        ") should not be in the range (" +
+        String::Number(-std::numeric_limits<float>::denorm_min()) + ", " +
+        String::Number(std::numeric_limits<float>::denorm_min()) + ").");
     return;
   }
 
@@ -1290,7 +1290,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessLinearRamp(
     size_t current_frame,
     float value,
     unsigned write_index) {
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   auto number_of_values = current_state.number_of_values;
 #endif
   auto fill_to_frame = current_state.fill_to_frame;
@@ -1303,7 +1303,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessLinearRamp(
   double delta_time = time2 - time1;
   float k = delta_time > 0 ? 1 / delta_time : 0;
   const float value_delta = value2 - value1;
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (fill_to_frame > write_index) {
     // Minimize in-loop operations. Calculate starting value and increment.
     // Next step: value += inc.
@@ -1431,7 +1431,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessSetTarget(
     size_t current_frame,
     float value,
     unsigned write_index) {
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   auto number_of_values = current_state.number_of_values;
 #endif
   auto fill_to_frame = current_state.fill_to_frame;
@@ -1482,7 +1482,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessSetTarget(
     for (; write_index < fill_to_frame; ++write_index)
       values[write_index] = target;
   } else {
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
     if (fill_to_frame > write_index) {
       // Resolve recursion by expanding constants to achieve a 4-step
       // loop unrolling.
@@ -1616,7 +1616,7 @@ std::tuple<size_t, float, unsigned> AudioParamTimeline::ProcessSetValueCurve(
   // Oversampled curve data can be provided if sharp discontinuities are
   // desired.
   unsigned k = 0;
-#if CPU(X86) || CPU(X86_64)
+#if defined(ARCH_CPU_X86_FAMILY)
   if (fill_to_frame > write_index) {
     const __m128 v_curve_virtual_index = _mm_set_ps1(curve_virtual_index);
     const __m128 v_curve_points_per_frame = _mm_set_ps1(curve_points_per_frame);

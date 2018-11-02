@@ -10,6 +10,8 @@ var ROOT_PATH = '../../../../../';
 GEN_INCLUDE(
     [ROOT_PATH + 'chrome/test/data/webui/polymer_browser_test_base.js']);
 GEN('#include "base/command_line.h"');
+GEN('#include "chrome/browser/prefs/incognito_mode_prefs.h"');
+GEN('#include "chrome/browser/ui/webui/md_bookmarks/md_bookmarks_browsertest.h"');
 
 function MaterialBookmarksBrowserTest() {}
 
@@ -21,9 +23,12 @@ MaterialBookmarksBrowserTest.prototype = {
   commandLineSwitches: [{switchName: 'enable-features',
                          switchValue: 'MaterialDesignBookmarks'}],
 
+  typedefCppFixture: 'MdBookmarksBrowserTest',
+
   extraLibraries: PolymerTest.getLibraries(ROOT_PATH).concat([
     'test_command_manager.js',
     'test_store.js',
+    'test_timer_proxy.js',
     'test_util.js',
   ]),
 };
@@ -168,17 +173,50 @@ TEST_F('MaterialBookmarksFolderNodeTest', 'All', function() {
   mocha.run();
 });
 
-function MaterialBookmarksStoreClientTest() {}
+function MaterialBookmarksToastManagerTest() {}
 
-MaterialBookmarksStoreClientTest.prototype = {
+MaterialBookmarksToastManagerTest.prototype = {
   __proto__: MaterialBookmarksBrowserTest.prototype,
 
   extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
-    'store_client_test.js',
+    'toast_manager_test.js',
   ]),
 };
 
-TEST_F('MaterialBookmarksStoreClientTest', 'All', function() {
+TEST_F('MaterialBookmarksToastManagerTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksPolicyTest() {}
+
+MaterialBookmarksPolicyTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  testGenPreamble: function() {
+    GEN('SetIncognitoAvailability(IncognitoModePrefs::DISABLED);');
+    GEN('SetCanEditBookmarks(false);');
+  },
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'policy_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksPolicyTest', 'All', function() {
+  mocha.run();
+});
+
+function MaterialBookmarksStoreTest() {}
+
+MaterialBookmarksStoreTest.prototype = {
+  __proto__: MaterialBookmarksBrowserTest.prototype,
+
+  extraLibraries: MaterialBookmarksBrowserTest.prototype.extraLibraries.concat([
+    'store_test.js',
+  ]),
+};
+
+TEST_F('MaterialBookmarksStoreTest', 'All', function() {
   mocha.run();
 });
 

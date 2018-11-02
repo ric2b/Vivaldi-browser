@@ -9,10 +9,10 @@
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** 
+**
 ** This file contains code used for testing the SQLite system.
 ** None of the code in this file goes into a deliverable build.
-** 
+**
 ** The focus of this file is providing the TCL testing layer
 ** access to compile-time constants.
 */
@@ -84,7 +84,7 @@ static void set_options(Tcl_Interp *interp){
 #endif
 
 #ifdef SQLITE_DEFAULT_CKPTFULLFSYNC
-  Tcl_SetVar2(interp, "sqlite_options", "default_ckptfullfsync", 
+  Tcl_SetVar2(interp, "sqlite_options", "default_ckptfullfsync",
               SQLITE_DEFAULT_CKPTFULLFSYNC ? "1" : "0", TCL_GLOBAL_ONLY);
 #else
   Tcl_SetVar2(interp, "sqlite_options", "default_ckptfullfsync", "0", TCL_GLOBAL_ONLY);
@@ -120,7 +120,7 @@ static void set_options(Tcl_Interp *interp){
   Tcl_SetVar2(interp, "sqlite_options", "mmap", "0", TCL_GLOBAL_ONLY);
 #endif
 
-  Tcl_SetVar2(interp, "sqlite_options", "worker_threads", 
+  Tcl_SetVar2(interp, "sqlite_options", "worker_threads",
       STRINGVALUE(SQLITE_MAX_WORKER_THREADS), TCL_GLOBAL_ONLY
   );
 
@@ -258,7 +258,7 @@ static void set_options(Tcl_Interp *interp){
 #if !defined(SQLITE_DEFAULT_AUTOVACUUM)
   Tcl_SetVar2(interp,"sqlite_options","default_autovacuum","0",TCL_GLOBAL_ONLY);
 #else
-  Tcl_SetVar2(interp, "sqlite_options", "default_autovacuum", 
+  Tcl_SetVar2(interp, "sqlite_options", "default_autovacuum",
       STRINGVALUE(SQLITE_DEFAULT_AUTOVACUUM), TCL_GLOBAL_ONLY);
 #endif
 
@@ -561,6 +561,12 @@ Tcl_SetVar2(interp, "sqlite_options", "mergesort", "1", TCL_GLOBAL_ONLY);
   Tcl_SetVar2(interp, "sqlite_options", "stat3", "0", TCL_GLOBAL_ONLY);
 #endif
 
+#if defined(SQLITE_ENABLE_STMTVTAB) && !defined(SQLITE_OMIT_VIRTUALTABLE)
+  Tcl_SetVar2(interp, "sqlite_options", "stmtvtab", "1", TCL_GLOBAL_ONLY);
+#else
+  Tcl_SetVar2(interp, "sqlite_options", "stmtvtab", "0", TCL_GLOBAL_ONLY);
+#endif
+
 #ifdef SQLITE_ENABLE_STMT_SCANSTATUS
   Tcl_SetVar2(interp, "sqlite_options", "scanstatus", "1", TCL_GLOBAL_ONLY);
 #else
@@ -584,8 +590,8 @@ Tcl_SetVar2(interp, "sqlite_options", "mergesort", "1", TCL_GLOBAL_ONLY);
 #else
   Tcl_SetVar2(interp,"sqlite_options","prefer_proxy_locking","0",TCL_GLOBAL_ONLY);
 #endif
-    
-    
+
+
 #ifdef SQLITE_OMIT_SHARED_CACHE
   Tcl_SetVar2(interp, "sqlite_options", "shared_cache", "0", TCL_GLOBAL_ONLY);
 #else
@@ -604,11 +610,11 @@ Tcl_SetVar2(interp, "sqlite_options", "mergesort", "1", TCL_GLOBAL_ONLY);
   Tcl_SetVar2(interp, "sqlite_options", "tclvar", "1", TCL_GLOBAL_ONLY);
 #endif
 
-  Tcl_SetVar2(interp, "sqlite_options", "threadsafe", 
+  Tcl_SetVar2(interp, "sqlite_options", "threadsafe",
       SQLITE_THREADSAFE ? "1" : "0", TCL_GLOBAL_ONLY);
-  Tcl_SetVar2(interp, "sqlite_options", "threadsafe1", 
+  Tcl_SetVar2(interp, "sqlite_options", "threadsafe1",
       SQLITE_THREADSAFE==1 ? "1" : "0", TCL_GLOBAL_ONLY);
-  Tcl_SetVar2(interp, "sqlite_options", "threadsafe2", 
+  Tcl_SetVar2(interp, "sqlite_options", "threadsafe2",
       SQLITE_THREADSAFE==2 ? "1" : "0", TCL_GLOBAL_ONLY);
   assert( sqlite3_threadsafe()==SQLITE_THREADSAFE );
 
@@ -740,6 +746,8 @@ Tcl_SetVar2(interp, "sqlite_options", "mergesort", "1", TCL_GLOBAL_ONLY);
   LINKVAR( DEFAULT_CACHE_SIZE );
   LINKVAR( DEFAULT_PAGE_SIZE );
   LINKVAR( DEFAULT_FILE_FORMAT );
+  LINKVAR( DEFAULT_SYNCHRONOUS );
+  LINKVAR( DEFAULT_WAL_SYNCHRONOUS );
   LINKVAR( MAX_ATTACHED );
   LINKVAR( MAX_DEFAULT_PAGE_SIZE );
   LINKVAR( MAX_WORKER_THREADS );

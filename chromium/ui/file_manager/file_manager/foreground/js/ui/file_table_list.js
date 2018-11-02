@@ -60,12 +60,12 @@ FileTableList.prototype.mergeItems = function(beginIndex, endIndex) {
   if (this.onMergeItems_) {
     this.onMergeItems_(beginIndex, endIndex);
   }
-}
+};
 
 /** @override */
 FileTableList.prototype.createSelectionController = function(sm) {
   return new FileListSelectionController(assert(sm));
-}
+};
 
 /**
  * Selection controller for the file table list.
@@ -77,6 +77,21 @@ FileTableList.prototype.createSelectionController = function(sm) {
  */
 function FileListSelectionController(selectionModel) {
   cr.ui.ListSelectionController.call(this, selectionModel);
+
+  /**
+   * Whether to allow touch-specific interaction.
+   * @type {boolean}
+   */
+  this.enableTouchMode_ = false;
+  util.isTouchModeEnabled().then(function(enabled) {
+    this.enableTouchMode_ = enabled;
+  }.bind(this));
+
+  /**
+   * @type {!FileTapHandler}
+   * @const
+   */
+  this.tapHandler_ = new FileTapHandler();
 }
 
 FileListSelectionController.prototype = /** @struct */ {
@@ -86,6 +101,18 @@ FileListSelectionController.prototype = /** @struct */ {
 /** @override */
 FileListSelectionController.prototype.handlePointerDownUp = function(e, index) {
   filelist.handlePointerDownUp.call(this, e, index);
+};
+
+/** @override */
+FileListSelectionController.prototype.handleTouchEvents = function(e, index) {
+  if (!this.enableTouchMode_)
+    return;
+  if (this.tapHandler_.handleTouchEvents(
+          e, index, filelist.handleTap.bind(this)))
+    // If a tap event is processed, FileTapHandler cancels the event to prevent
+    // triggering click events. Then it results not moving the focus to the
+    // list. So we do that here explicitly.
+    filelist.focusParentList(e);
 };
 
 /** @override */
@@ -194,6 +221,96 @@ filelist.updateListItemExternalProps = function(li, externalProps) {
 
   if (li.classList.contains('directory'))
     iconDiv.classList.toggle('shared', !!externalProps.shared);
+};
+
+/**
+ * Handles tap events on file list to change the selection state.
+ *
+ * @param {!Event} e The browser mouse event.
+ * @param {number} index The index that was under the mouse pointer, -1 if
+ *     none.
+ * @param {!FileTapHandler.TapEvent} eventType
+ * @return True if conducted any action. False when if did nothing special for
+ *     tap.
+ * @this {cr.ui.ListSelectionController}
+ */
+filelist.handleTap = function(e, index, eventType) {
+  var sm = /** @type {!FileListSelectionModel|!FileListSingleSelectionModel} */
+      (this.selectionModel);
+  if (eventType == FileTapHandler.TapEvent.TWO_FINGER_TAP) {
+    // Prepare to open the context menu in the same manner as the right click.
+    // If the target is any of the selected files, open a one for those files.
+    // If the target is a non-selected file, cancel current selection and open
+    // context menu for the single file.
+    // Otherwise (when the target is the background), for the current folder.
+    if (index == -1) {
+      // Two-finger tap outside the list should be handled here because it does
+      // not produce mousedown/click events.
+      sm.unselectAll();
+    } else {
+      var indexSelected = sm.getIndexSelected(index);
+      if (!indexSelected) {
+        // Prepare to open context menu of the new item by selecting only it.
+        if (sm.getCheckSelectMode()) {
+          // Unselect all items once to ensure that the check-select mode is
+          // terminated.
+          sm.unselectAll();
+        }
+        sm.beginChange();
+        sm.selectedIndex = index;
+        sm.endChange();
+      }
+    }
+
+    // Context menu will be opened for the selected files by the following
+    // 'contextmenu' event.
+    return false;
+  }
+  if (index == -1) {
+    return false;
+  }
+  var isTap = eventType == FileTapHandler.TapEvent.TAP ||
+      eventType == FileTapHandler.TapEvent.LONG_TAP;
+  if (eventType == FileTapHandler.TapEvent.TAP &&
+      e.target.classList.contains('detail-checkmark')) {
+    // Single tap on the checkbox in the list view mode should toggle select,
+    // just like a mouse click on it.
+    return false;
+  }
+  if (sm.multiple && sm.getCheckSelectMode() && isTap && !e.shiftKey) {
+    // toggle item selection. Equivalent to mouse click on checkbox.
+    sm.beginChange();
+    sm.setIndexSelected(index, !sm.getIndexSelected(index));
+    // Toggle the current one and make it anchor index.
+    sm.leadIndex = index;
+    sm.anchorIndex = index;
+    sm.endChange();
+    return true;
+  } else if (sm.multiple && (eventType == FileTapHandler.TapEvent.LONG_PRESS)) {
+    sm.beginChange();
+    if (!sm.getCheckSelectMode()) {
+      // Make sure to unselect the leading item that was not the touch target.
+      sm.unselectAll();
+      sm.setCheckSelectMode(true);
+    }
+    sm.setIndexSelected(index, true);
+    sm.leadIndex = index;
+    sm.anchorIndex = index;
+    sm.endChange();
+    return true;
+    // Do not toggle selection yet, so as to avoid unselecting before drag.
+  } else if (
+      eventType == FileTapHandler.TapEvent.TAP && !sm.getCheckSelectMode()) {
+    // Single tap should open the item with default action.
+    // Select the item, so that MainWindowComponent will execute action of it.
+    sm.beginChange();
+    sm.unselectAll();
+    sm.setIndexSelected(index, true);
+    sm.leadIndex = index;
+    sm.anchorIndex = index;
+    sm.endChange();
+  }
+  return false;
 };
 
 /**
@@ -411,5 +528,19 @@ filelist.handleKeyDown = function(e) {
 
     if (prevent)
       e.preventDefault();
+  }
+};
+
+/**
+ * Focus on the file list that contains the event target.
+ * @param {!Event} event the touch event.
+ */
+filelist.focusParentList = function(event) {
+  var element = event.target;
+  while (element && !(element instanceof cr.ui.List)) {
+    element = element.parentElement;
+  }
+  if (element) {
+    element.focus();
   }
 };

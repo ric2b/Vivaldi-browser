@@ -269,7 +269,7 @@ class InlineFlowBox : public InlineBox {
                               LayoutUnit block_right_edge,
                               LayoutUnit ellipsis_width,
                               LayoutUnit& truncated_width,
-                              bool&,
+                              InlineBox**,
                               LayoutUnit logical_left_offset) override;
 
   bool HasTextChildren() const { return has_text_children_; }
@@ -307,6 +307,20 @@ class InlineFlowBox : public InlineBox {
     if (!GetLineLayoutItem().IsHorizontalWritingMode())
       result = result.TransposedRect();
     return result;
+  }
+  LayoutUnit LogicalRightLayoutOverflow() const {
+    if (overflow_) {
+      return IsHorizontal() ? overflow_->LayoutOverflowRect().MaxX()
+                            : overflow_->LayoutOverflowRect().MaxY();
+    }
+    return LogicalRight();
+  }
+  LayoutUnit LogicalLeftLayoutOverflow() const {
+    if (overflow_) {
+      return IsHorizontal() ? overflow_->LayoutOverflowRect().X()
+                            : overflow_->LayoutOverflowRect().Y();
+    }
+    return LogicalLeft();
   }
 
   LayoutRect VisualOverflowRect(LayoutUnit line_top,

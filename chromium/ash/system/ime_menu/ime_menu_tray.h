@@ -6,8 +6,8 @@
 #define ASH_SYSTEM_IME_MENU_IME_MENU_TRAY_H_
 
 #include "ash/ash_export.h"
+#include "ash/public/interfaces/ime_info.mojom.h"
 #include "ash/system/ime/ime_observer.h"
-#include "ash/system/tray/ime_info.h"
 #include "ash/system/tray/tray_background_view.h"
 #include "ash/system/tray/tray_bubble_wrapper.h"
 #include "ash/system/virtual_keyboard/virtual_keyboard_observer.h"
@@ -20,6 +20,7 @@ class Label;
 }  // namespace views
 
 namespace ash {
+class ImeController;
 class ImeListView;
 
 // A button in the tray which displays the short name of the currently-activated
@@ -28,21 +29,11 @@ class ImeListView;
 // for emoji, handwriting, and voice.
 class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
                                public IMEObserver,
-                               public views::TrayBubbleView::Delegate,
                                public keyboard::KeyboardControllerObserver,
                                public VirtualKeyboardObserver {
  public:
   explicit ImeMenuTray(Shelf* shelf);
   ~ImeMenuTray() override;
-
-  // Shows the IME menu bubble and highlights the button.
-  void ShowImeMenuBubble();
-
-  // Hides the IME menu bubble and lowlights the button.
-  void HideImeMenuBubble();
-
-  // Returns true if the IME menu bubble has been shown.
-  bool IsImeMenuBubbleShown();
 
   // Shows the virtual keyboard with the given keyset: emoji, handwriting or
   // voice.
@@ -51,7 +42,7 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   // Returns true if the menu should show emoji, handwriting and voice buttons
   // on the bottom. Otherwise, the menu will show a 'Customize...' bottom row
   // for non-MD UI, and a Settings button in the title row for MD.
-  bool ShouldShowEmojiHandwritingVoiceButtons() const;
+  bool ShouldShowBottomButtons();
 
   // Returns whether the virtual keyboard toggle should be shown in shown in the
   // opt-in IME menu.
@@ -62,6 +53,9 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void HideBubbleWithView(const views::TrayBubbleView* bubble_view) override;
   void ClickedOutsideBubble() override;
   bool PerformAction(const ui::Event& event) override;
+  void CloseBubble() override;
+  void ShowBubble() override;
+  views::TrayBubbleView* GetBubbleView() override;
 
   // IMEObserver:
   void OnIMERefresh() override;
@@ -72,10 +66,7 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void OnMouseEnteredView() override;
   void OnMouseExitedView() override;
   base::string16 GetAccessibleNameForBubble() override;
-  void OnBeforeBubbleWidgetInit(
-      views::Widget* anchor_widget,
-      views::Widget* bubble_widget,
-      views::Widget::InitParams* params) const override;
+  bool ShouldEnableExtraKeyboardAccessibility() override;
   void HideBubble(const views::TrayBubbleView* bubble_view) override;
 
   // keyboard::KeyboardControllerObserver:
@@ -87,7 +78,6 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   void OnKeyboardSuppressionChanged(bool suppressed) override;
 
  private:
-  // To allow the test class to access |label_|.
   friend class ImeMenuTrayTest;
 
   // Show the IME menu bubble immediately.
@@ -99,16 +89,20 @@ class ASH_EXPORT ImeMenuTray : public TrayBackgroundView,
   // Disables the virtual keyboard.
   void DisableVirtualKeyboard();
 
+  ImeController* ime_controller_;
+
   // Bubble for default and detailed views.
   std::unique_ptr<TrayBubbleWrapper> bubble_;
   ImeListView* ime_list_view_;
 
   views::Label* label_;
-  IMEInfo current_ime_;
   bool show_keyboard_;
   bool force_show_keyboard_;
   bool keyboard_suppressed_;
   bool show_bubble_after_keyboard_hidden_;
+  bool emoji_enabled_;
+  bool handwriting_enabled_;
+  bool voice_enabled_;
 
   base::WeakPtrFactory<ImeMenuTray> weak_ptr_factory_;
 

@@ -27,7 +27,7 @@
 
 #include <stdio.h>
 #include <ostream>  // NOLINT
-#include "core/dom/shadow/ElementShadow.h"
+#include "core/dom/ElementShadow.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/TextAffinity.h"
 #include "platform/wtf/text/CString.h"
@@ -87,10 +87,15 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::EditingPositionOf(
                                     PositionAnchorType::kAfterAnchor);
 }
 
+// TODO(editing-dev): Once we change type of |anchor_node_| to
+// |Member<const Node>|, we should get rid of |const_cast<Node*>()|.
+// See http://crbug.com/735327
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(Node* anchor_node,
+PositionTemplate<Strategy>::PositionTemplate(const Node* anchor_node,
                                              PositionAnchorType anchor_type)
-    : anchor_node_(anchor_node), offset_(0), anchor_type_(anchor_type) {
+    : anchor_node_(const_cast<Node*>(anchor_node)),
+      offset_(0),
+      anchor_type_(anchor_type) {
   if (!anchor_node_) {
     anchor_type_ = PositionAnchorType::kOffsetInAnchor;
     return;
@@ -112,9 +117,13 @@ PositionTemplate<Strategy>::PositionTemplate(Node* anchor_node,
   DCHECK_NE(anchor_type_, PositionAnchorType::kOffsetInAnchor);
 }
 
+// TODO(editing-dev): Once we change type of |anchor_node_| to
+// |Member<const Node>|, we should get rid of |const_cast<Node*>()|.
+// See http://crbug.com/735327
 template <typename Strategy>
-PositionTemplate<Strategy>::PositionTemplate(Node* anchor_node, int offset)
-    : anchor_node_(anchor_node),
+PositionTemplate<Strategy>::PositionTemplate(const Node* anchor_node,
+                                             int offset)
+    : anchor_node_(const_cast<Node*>(anchor_node)),
       offset_(offset),
       anchor_type_(PositionAnchorType::kOffsetInAnchor) {
   if (anchor_node_)
@@ -125,6 +134,11 @@ PositionTemplate<Strategy>::PositionTemplate(Node* anchor_node, int offset)
   DCHECK(CanBeAnchorNode<Strategy>(anchor_node_.Get())) << anchor_node_;
 #endif
 }
+
+template <typename Strategy>
+PositionTemplate<Strategy>::PositionTemplate(const Node& anchor_node,
+                                             int offset)
+    : PositionTemplate(&anchor_node, offset) {}
 
 template <typename Strategy>
 PositionTemplate<Strategy>::PositionTemplate(const PositionTemplate& other)
@@ -153,6 +167,19 @@ Node* PositionTemplate<Strategy>::ComputeContainerNode() const {
 }
 
 template <typename Strategy>
+static int MinOffsetForNode(Node* anchor_node, int offset) {
+  if (anchor_node->IsCharacterDataNode())
+    return std::min(offset, anchor_node->MaxCharacterOffset());
+
+  int new_offset = 0;
+  for (Node* node = Strategy::FirstChild(*anchor_node);
+       node && new_offset < offset; node = Strategy::NextSibling(*node))
+    new_offset++;
+
+  return new_offset;
+}
+
+template <typename Strategy>
 int PositionTemplate<Strategy>::ComputeOffsetInContainerNode() const {
   if (!anchor_node_)
     return 0;
@@ -161,9 +188,9 @@ int PositionTemplate<Strategy>::ComputeOffsetInContainerNode() const {
     case PositionAnchorType::kBeforeChildren:
       return 0;
     case PositionAnchorType::kAfterChildren:
-      return LastOffsetInNode(anchor_node_.Get());
+      return LastOffsetInNode(*anchor_node_);
     case PositionAnchorType::kOffsetInAnchor:
-      return MinOffsetForNode(anchor_node_.Get(), offset_);
+      return MinOffsetForNode<Strategy>(anchor_node_.Get(), offset_);
     case PositionAnchorType::kBeforeAnchor:
       return Strategy::Index(*anchor_node_);
     case PositionAnchorType::kAfterAnchor:
@@ -439,63 +466,47 @@ PositionTemplate<Strategy> PositionTemplate<Strategy>::InParentAfterNode(
 // static
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::BeforeNode(
-    Node* anchor_node) {
-  DCHECK(anchor_node);
-  return PositionTemplate<Strategy>(anchor_node,
+    const Node& anchor_node) {
+  return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kBeforeAnchor);
 }
 
 // static
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::AfterNode(
-    Node* anchor_node) {
-  DCHECK(anchor_node);
-  return PositionTemplate<Strategy>(anchor_node,
+    const Node& anchor_node) {
+  return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kAfterAnchor);
 }
 
 // static
 template <typename Strategy>
-int PositionTemplate<Strategy>::LastOffsetInNode(Node* node) {
-  return node->IsCharacterDataNode()
-             ? node->MaxCharacterOffset()
-             : static_cast<int>(Strategy::CountChildren(*node));
+int PositionTemplate<Strategy>::LastOffsetInNode(const Node& node) {
+  return node.IsCharacterDataNode()
+             ? node.MaxCharacterOffset()
+             : static_cast<int>(Strategy::CountChildren(node));
 }
 
 // static
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::FirstPositionInNode(
-    Node* anchor_node) {
-  if (anchor_node->IsTextNode())
+    const Node& anchor_node) {
+  if (anchor_node.IsTextNode())
     return PositionTemplate<Strategy>(anchor_node, 0);
-  return PositionTemplate<Strategy>(anchor_node,
+  return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kBeforeChildren);
 }
 
 // static
 template <typename Strategy>
 PositionTemplate<Strategy> PositionTemplate<Strategy>::LastPositionInNode(
-    Node* anchor_node) {
-  if (anchor_node->IsTextNode())
+    const Node& anchor_node) {
+  if (anchor_node.IsTextNode()) {
     return PositionTemplate<Strategy>(anchor_node,
                                       LastOffsetInNode(anchor_node));
-  return PositionTemplate<Strategy>(anchor_node,
+  }
+  return PositionTemplate<Strategy>(&anchor_node,
                                     PositionAnchorType::kAfterChildren);
-}
-
-// static
-template <typename Strategy>
-int PositionTemplate<Strategy>::MinOffsetForNode(Node* anchor_node,
-                                                 int offset) {
-  if (anchor_node->IsCharacterDataNode())
-    return std::min(offset, anchor_node->MaxCharacterOffset());
-
-  int new_offset = 0;
-  for (Node* node = Strategy::FirstChild(*anchor_node);
-       node && new_offset < offset; node = Strategy::NextSibling(*node))
-    new_offset++;
-
-  return new_offset;
 }
 
 // static
@@ -504,8 +515,8 @@ PositionTemplate<Strategy>
 PositionTemplate<Strategy>::FirstPositionInOrBeforeNode(Node* node) {
   if (!node)
     return PositionTemplate<Strategy>();
-  return EditingIgnoresContent(*node) ? BeforeNode(node)
-                                      : FirstPositionInNode(node);
+  return EditingIgnoresContent(*node) ? BeforeNode(*node)
+                                      : FirstPositionInNode(*node);
 }
 
 // static
@@ -514,8 +525,8 @@ PositionTemplate<Strategy>
 PositionTemplate<Strategy>::LastPositionInOrAfterNode(Node* node) {
   if (!node)
     return PositionTemplate<Strategy>();
-  return EditingIgnoresContent(*node) ? AfterNode(node)
-                                      : LastPositionInNode(node);
+  return EditingIgnoresContent(*node) ? AfterNode(*node)
+                                      : LastPositionInNode(*node);
 }
 
 PositionInFlatTree ToPositionInFlatTree(const Position& pos) {
@@ -526,7 +537,7 @@ PositionInFlatTree ToPositionInFlatTree(const Position& pos) {
   if (pos.IsOffsetInAnchor()) {
     if (anchor->IsCharacterDataNode())
       return PositionInFlatTree(anchor, pos.ComputeOffsetInContainerNode());
-    DCHECK(!anchor->IsActiveSlotOrActiveInsertionPoint());
+    DCHECK(!anchor->IsActiveSlotOrActiveV0InsertionPoint());
     int offset = pos.ComputeOffsetInContainerNode();
     Node* child = NodeTraversal::ChildAt(*anchor, offset);
     if (!child) {
@@ -536,7 +547,7 @@ PositionInFlatTree ToPositionInFlatTree(const Position& pos) {
       return PositionInFlatTree(anchor, PositionAnchorType::kAfterChildren);
     }
     child->UpdateDistribution();
-    if (child->IsActiveSlotOrActiveInsertionPoint()) {
+    if (child->IsActiveSlotOrActiveV0InsertionPoint()) {
       if (anchor->IsShadowRoot())
         return PositionInFlatTree(anchor->OwnerShadowHost(), offset);
       return PositionInFlatTree(anchor, offset);
@@ -586,11 +597,11 @@ Position ToPositionInDOMTree(const PositionInFlatTree& position) {
       // FIXME: When anchorNode is <img>, assertion fails in the constructor.
       return Position(anchor_node, PositionAnchorType::kAfterChildren);
     case PositionAnchorType::kAfterAnchor:
-      return Position::AfterNode(anchor_node);
+      return Position::AfterNode(*anchor_node);
     case PositionAnchorType::kBeforeChildren:
       return Position(anchor_node, PositionAnchorType::kBeforeChildren);
     case PositionAnchorType::kBeforeAnchor:
-      return Position::BeforeNode(anchor_node);
+      return Position::BeforeNode(*anchor_node);
     case PositionAnchorType::kOffsetInAnchor: {
       int offset = position.OffsetInContainerNode();
       if (anchor_node->IsCharacterDataNode())

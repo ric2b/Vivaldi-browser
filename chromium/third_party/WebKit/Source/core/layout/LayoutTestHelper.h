@@ -9,8 +9,8 @@
 #include <memory>
 
 #include "core/dom/Document.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/html/HTMLElement.h"
 #include "core/layout/api/LayoutAPIShim.h"
@@ -34,8 +34,7 @@ class SingleChildLocalFrameClient final : public EmptyLocalFrameClient {
 
   // LocalFrameClient overrides:
   LocalFrame* FirstChild() const override { return child_.Get(); }
-  LocalFrame* CreateFrame(const FrameLoadRequest&,
-                          const AtomicString& name,
+  LocalFrame* CreateFrame(const AtomicString& name,
                           HTMLFrameOwnerElement*) override;
 
   void DidDetachChild() { child_ = nullptr; }
@@ -67,7 +66,7 @@ class LocalFrameClientWithParent final : public EmptyLocalFrameClient {
   Member<LocalFrame> parent_;
 };
 
-class RenderingTest : public testing::Test {
+class RenderingTest : public ::testing::Test {
   USING_FAST_MALLOC(RenderingTest);
 
  public:

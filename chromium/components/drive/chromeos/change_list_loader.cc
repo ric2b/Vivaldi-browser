@@ -94,6 +94,9 @@ class FullFeedFetcher : public ChangeListLoader::FeedFetcher {
     // Remember the time stamp for usage stats.
     start_time_ = base::TimeTicks::Now();
     // This is full resource list fetch.
+    //
+    // NOTE: Because we already know the largest change ID, here we can use
+    // files.list instead of changes.list for speed. crbug.com/287602
     scheduler_->GetAllFileList(
         base::Bind(&FullFeedFetcher::OnFileListFetched,
                    weak_ptr_factory_.GetWeakPtr(), callback));
@@ -579,7 +582,7 @@ void ChangeListLoader::LoadChangeListFromServerAfterLoadChangeList(
   loader_controller_->ScheduleRun(base::Bind(
       &drive::util::RunAsyncTask, base::RetainedRef(blocking_task_runner_),
       FROM_HERE,
-      base::Bind(&ChangeListProcessor::Apply,
+      base::Bind(&ChangeListProcessor::ApplyUserChangeList,
                  base::Unretained(change_list_processor),
                  base::Passed(&about_resource), base::Passed(&change_lists),
                  is_delta_update),

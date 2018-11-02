@@ -13,7 +13,7 @@ from telemetry import benchmark
 # are the primary means of benchmarking power.
 class _BattOrBenchmark(perf_benchmark.PerfBenchmark):
 
-  def CreateTimelineBasedMeasurementOptions(self):
+  def CreateCoreTimelineBasedMeasurementOptions(self):
     category_filter = chrome_trace_category_filter.ChromeTraceCategoryFilter(
         filter_string='toplevel')
     options = timeline_based_measurement.Options(category_filter)
@@ -48,6 +48,10 @@ class BattOrTrivialPages(_BattOrBenchmark):
   def Name(cls):
     return 'battor.trivial_pages'
 
+  def GetExpectations(self):
+    return page_sets.TrivialStoryExpectations()
+
+
 @benchmark.Enabled('mac')
 @benchmark.Owner(emails=['charliea@chromium.org'])
 class BattOrSteadyStatePages(_BattOrBenchmark):
@@ -59,3 +63,6 @@ class BattOrSteadyStatePages(_BattOrBenchmark):
   @classmethod
   def Name(cls):
     return 'battor.steady_state'
+
+  def GetExpectations(self):
+    return page_sets.IdleAfterLoadingStoryExpectations()

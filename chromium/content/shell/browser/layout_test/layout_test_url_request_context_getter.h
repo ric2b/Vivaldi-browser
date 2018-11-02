@@ -30,7 +30,6 @@ class LayoutTestURLRequestContextGetter : public ShellURLRequestContextGetter {
       bool ignore_certificate_errors,
       const base::FilePath& base_path,
       scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
-      scoped_refptr<base::SingleThreadTaskRunner> file_task_runner,
       ProtocolHandlerMap* protocol_handlers,
       URLRequestInterceptorScopedVector request_interceptors,
       net::NetLog* net_log);
@@ -40,6 +39,7 @@ class LayoutTestURLRequestContextGetter : public ShellURLRequestContextGetter {
 
   // ShellURLRequestContextGetter implementation.
   std::unique_ptr<net::NetworkDelegate> CreateNetworkDelegate() override;
+  std::unique_ptr<net::CertVerifier> GetCertVerifier() override;
   std::unique_ptr<net::ProxyConfigService> GetProxyConfigService() override;
   std::unique_ptr<net::ProxyService> GetProxyService() override;
 

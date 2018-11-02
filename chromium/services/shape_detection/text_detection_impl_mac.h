@@ -5,6 +5,7 @@
 #ifndef SERVICES_SHAPE_DETECTION_TEXT_DETECTION_IMPL_MAC_H_
 #define SERVICES_SHAPE_DETECTION_TEXT_DETECTION_IMPL_MAC_H_
 
+#include "base/mac/availability.h"
 #include "base/mac/scoped_nsobject.h"
 #include "services/shape_detection/public/interfaces/textdetection.mojom.h"
 
@@ -12,15 +13,17 @@
 
 namespace shape_detection {
 
-class TextDetectionImplMac : public mojom::TextDetection {
+// The __attribute__ visibility annotation is necessary to work around a clang
+// bug: https://bugs.llvm.org/show_bug.cgi?id=33796.
+class API_AVAILABLE(macosx(10.11))
+    __attribute__((visibility("hidden"))) TextDetectionImplMac
+    : public mojom::TextDetection {
  public:
   TextDetectionImplMac();
   ~TextDetectionImplMac() override;
 
-  void Detect(mojo::ScopedSharedBufferHandle frame_data,
-              uint32_t width,
-              uint32_t height,
-              const mojom::TextDetection::DetectCallback& callback) override;
+  void Detect(const SkBitmap& bitmap,
+              mojom::TextDetection::DetectCallback callback) override;
 
  private:
   base::scoped_nsobject<CIDetector> detector_;

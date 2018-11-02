@@ -19,13 +19,13 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
+#include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/material_design/material_design_controller.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/paint_vector_icon.h"
-#include "ui/vector_icons/vector_icons.h"
 
 using content::WebContents;
 
@@ -148,7 +148,7 @@ constexpr ContentSettingsType kContentTypeIconOrder[] = {
     CONTENT_SETTINGS_TYPE_MIXEDSCRIPT,
     CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS,
     CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA,  // Note: also handles mic.
-    CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER,
+    CONTENT_SETTINGS_TYPE_ADS,
     CONTENT_SETTINGS_TYPE_AUTOMATIC_DOWNLOADS,
     CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
 };
@@ -361,11 +361,11 @@ void ContentSettingMediaImageModel::UpdateFromWebContents(
   int id = IDS_CAMERA_BLOCKED;
   if (state & (TabSpecificContentSettings::MICROPHONE_BLOCKED |
                TabSpecificContentSettings::CAMERA_BLOCKED)) {
-    set_icon(ui::kVideocamIcon, kBlockedBadgeIcon);
+    set_icon(vector_icons::kVideocamIcon, kBlockedBadgeIcon);
     if (is_mic)
       id = is_cam ? IDS_MICROPHONE_CAMERA_BLOCKED : IDS_MICROPHONE_BLOCKED;
   } else {
-    set_icon(ui::kVideocamIcon, gfx::kNoneIcon);
+    set_icon(vector_icons::kVideocamIcon, gfx::kNoneIcon);
     id = IDS_CAMERA_ACCESSED;
     if (is_mic)
       id = is_cam ? IDS_MICROPHONE_CAMERA_ALLOWED : IDS_MICROPHONE_ACCESSED;
@@ -426,15 +426,14 @@ void ContentSettingSubresourceFilterImageModel::UpdateFromWebContents(
 
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents);
-  if (!content_settings || !content_settings->IsContentBlocked(
-                               CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER)) {
+  if (!content_settings ||
+      !content_settings->IsContentBlocked(CONTENT_SETTINGS_TYPE_ADS)) {
     return;
   }
 
   set_icon(kSubresourceFilterActiveIcon, kBlockedBadgeIcon);
-  set_explanatory_string_id(IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_TITLE);
-  set_tooltip(
-      l10n_util::GetStringUTF16(IDS_FILTERED_DECEPTIVE_CONTENT_PROMPT_TITLE));
+  set_explanatory_string_id(IDS_BLOCKED_ADS_PROMPT_TITLE);
+  set_tooltip(l10n_util::GetStringUTF16(IDS_BLOCKED_ADS_PROMPT_TOOLTIP));
   set_visible(true);
 }
 
@@ -453,8 +452,8 @@ bool ContentSettingSubresourceFilterImageModel::ShouldRunAnimation(
     return false;
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents);
-  return content_settings && !content_settings->IsBlockageIndicated(
-                                 CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER);
+  return content_settings &&
+         !content_settings->IsBlockageIndicated(CONTENT_SETTINGS_TYPE_ADS);
 }
 
 void ContentSettingSubresourceFilterImageModel::SetAnimationHasRun(
@@ -464,8 +463,7 @@ void ContentSettingSubresourceFilterImageModel::SetAnimationHasRun(
   TabSpecificContentSettings* content_settings =
       TabSpecificContentSettings::FromWebContents(web_contents);
   if (content_settings) {
-    content_settings->SetBlockageHasBeenIndicated(
-        CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER);
+    content_settings->SetBlockageHasBeenIndicated(CONTENT_SETTINGS_TYPE_ADS);
   }
 }
 
@@ -473,7 +471,7 @@ void ContentSettingSubresourceFilterImageModel::SetAnimationHasRun(
 
 ContentSettingRPHImageModel::ContentSettingRPHImageModel()
     : ContentSettingSimpleImageModel(CONTENT_SETTINGS_TYPE_PROTOCOL_HANDLERS) {
-  set_icon(ui::kProtocolHandlerIcon, gfx::kNoneIcon);
+  set_icon(vector_icons::kProtocolHandlerIcon, gfx::kNoneIcon);
   set_tooltip(l10n_util::GetStringUTF16(IDS_REGISTER_PROTOCOL_HANDLER_TOOLTIP));
 }
 
@@ -520,7 +518,8 @@ void ContentSettingMIDISysExImageModel::UpdateFromWebContents(
   usages_state.GetDetailedInfo(nullptr, &state_flags);
   bool allowed =
       !!(state_flags & ContentSettingsUsagesState::TABSTATE_HAS_ANY_ALLOWED);
-  set_icon(ui::kMidiIcon, allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
+  set_icon(vector_icons::kMidiIcon,
+           allowed ? gfx::kNoneIcon : kBlockedBadgeIcon);
   set_tooltip(l10n_util::GetStringUTF16(allowed
                                             ? IDS_MIDI_SYSEX_ALLOWED_TOOLTIP
                                             : IDS_MIDI_SYSEX_BLOCKED_TOOLTIP));
@@ -600,7 +599,7 @@ ContentSettingImageModel::GenerateContentSettingImageModels() {
       case CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA:
         model = base::MakeUnique<ContentSettingMediaImageModel>();
         break;
-      case CONTENT_SETTINGS_TYPE_SUBRESOURCE_FILTER:
+      case CONTENT_SETTINGS_TYPE_ADS:
         model = base::MakeUnique<ContentSettingSubresourceFilterImageModel>();
         break;
       case CONTENT_SETTINGS_TYPE_MIDI_SYSEX:

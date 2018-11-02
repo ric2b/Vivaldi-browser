@@ -67,9 +67,6 @@ class ScrollingCoordinator;
 class StickyPositionScrollingConstraints;
 class SubtreeLayoutScope;
 
-typedef WTF::HashMap<PaintLayer*, StickyPositionScrollingConstraints>
-    StickyConstraintsMap;
-
 struct CORE_EXPORT PaintLayerScrollableAreaRareData {
   WTF_MAKE_NONCOPYABLE(PaintLayerScrollableAreaRareData);
   USING_FAST_MALLOC(PaintLayerScrollableAreaRareData);
@@ -240,12 +237,16 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   PlatformChromeClient* GetChromeClient() const override;
 
+  SmoothScrollSequencer* GetSmoothScrollSequencer() const override;
+
   // For composited scrolling, we allocate an extra GraphicsLayer to hold
   // onto the scrolling content. The layer can be shifted on the GPU and
   // composited at little cost.
   // Note that this is done in CompositedLayerMapping, this function being
   // only a helper.
   GraphicsLayer* LayerForScrolling() const override;
+
+  void DidScroll(const gfx::ScrollOffset&) override;
 
   // GraphicsLayers for the scrolling components.
   //
@@ -260,13 +261,13 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool IsActive() const override;
   bool IsScrollCornerVisible() const override;
   IntRect ScrollCornerRect() const override;
-  IntRect ConvertFromScrollbarToContainingFrameViewBase(
+  IntRect ConvertFromScrollbarToContainingEmbeddedContentView(
       const Scrollbar&,
       const IntRect&) const override;
-  IntPoint ConvertFromScrollbarToContainingFrameViewBase(
+  IntPoint ConvertFromScrollbarToContainingEmbeddedContentView(
       const Scrollbar&,
       const IntPoint&) const override;
-  IntPoint ConvertFromContainingFrameViewBaseToScrollbar(
+  IntPoint ConvertFromContainingEmbeddedContentViewToScrollbar(
       const Scrollbar&,
       const IntPoint&) const override;
   IntPoint ConvertFromRootFrame(const IntPoint&) const override;
@@ -387,12 +388,22 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool HitTestResizerInFragments(const PaintLayerFragments&,
                                  const HitTestLocation&) const;
 
+  // Returns the new offset, after scrolling, of the given rect in parents
+  // coordinates.
+  LayoutRect ScrollLocalRectIntoView(const LayoutRect&,
+                                     const ScrollAlignment& align_x,
+                                     const ScrollAlignment& align_y,
+                                     bool is_smooth,
+                                     ScrollType = kProgrammaticScroll,
+                                     bool is_for_scroll_sequence = false);
   // Returns the new offset, after scrolling, of the given rect in absolute
   // coordinates, clipped by the parent's client rect.
   LayoutRect ScrollIntoView(const LayoutRect&,
                             const ScrollAlignment& align_x,
                             const ScrollAlignment& align_y,
-                            ScrollType = kProgrammaticScroll) override;
+                            bool is_smooth,
+                            ScrollType = kProgrammaticScroll,
+                            bool is_for_scroll_sequence = false) override;
 
   // Returns true if scrollable area is in the FrameView's collection of
   // scrollable areas. This can only happen if we're scrollable, visible to hit
@@ -504,8 +515,6 @@ class CORE_EXPORT PaintLayerScrollableArea final
 
   bool HasHorizontalOverflow() const;
   bool HasVerticalOverflow() const;
-  bool HasScrollableHorizontalOverflow() const;
-  bool HasScrollableVerticalOverflow() const;
   bool VisualViewportSuppliesScrollbars() const;
 
   bool NeedsScrollbarReconstruction() const;
@@ -531,12 +540,13 @@ class CORE_EXPORT PaintLayerScrollableArea final
   bool SetHasVerticalScrollbar(bool has_scrollbar);
 
   void UpdateScrollCornerStyle();
+  LayoutSize MinimumSizeForResizing(float zoom_factor);
 
   // See comments on isPointInResizeControl.
   void UpdateResizerAreaSet();
   void UpdateResizerStyle();
 
-  void UpdateScrollableAreaSet(bool has_overflow);
+  void UpdateScrollableAreaSet();
 
   void UpdateCompositingLayersAfterScroll();
 
@@ -605,9 +615,7 @@ class CORE_EXPORT PaintLayerScrollableArea final
   // MainThreadScrollingReason due to the properties of the LayoutObject
   uint32_t non_composited_main_thread_scrolling_reasons_;
 
-#if DCHECK_IS_ON()
   bool has_been_disposed_;
-#endif
 };
 
 DEFINE_TYPE_CASTS(PaintLayerScrollableArea,

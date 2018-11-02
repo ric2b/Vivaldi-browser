@@ -95,14 +95,6 @@ id<GREYMatcher> StaticTextWithAccessibilityLabelId(int message_id) {
       l10n_util::GetNSStringWithFixup(message_id));
 }
 
-id<GREYMatcher> WebViewContainingText(std::string text) {
-  return web::WebViewContainingText(std::move(text), GetCurrentWebState());
-}
-
-id<GREYMatcher> WebViewNotContainingText(std::string text) {
-  return web::WebViewNotContainingText(std::move(text), GetCurrentWebState());
-}
-
 id<GREYMatcher> WebViewContainingBlockedImage(std::string image_id) {
   return web::WebViewContainingBlockedImage(
       std::move(image_id), chrome_test_util::GetCurrentWebState());
@@ -211,6 +203,24 @@ id<GREYMatcher> SettingsAccountButton() {
 
 id<GREYMatcher> AccountsSyncButton() {
   return grey_accessibilityID(kSettingsAccountsSyncCellId);
+}
+
+id<GREYMatcher> ContentSettingsButton() {
+  return ButtonWithAccessibilityLabelId(IDS_IOS_CONTENT_SETTINGS_TITLE);
+}
+
+id<GREYMatcher> SettingsMenuBackButton() {
+  return grey_allOf(grey_accessibilityID(@"ic_arrow_back"),
+                    grey_accessibilityTrait(UIAccessibilityTraitButton), nil);
+}
+
+id<GREYMatcher> SettingsMenuPrivacyButton() {
+  return ButtonWithAccessibilityLabelId(
+      IDS_OPTIONS_ADVANCED_SECTION_TITLE_PRIVACY);
+}
+
+id<GREYMatcher> SettingsMenuPasswordsButton() {
+  return ButtonWithAccessibilityLabelId(IDS_IOS_SAVE_PASSWORDS);
 }
 
 }  // namespace chrome_test_util

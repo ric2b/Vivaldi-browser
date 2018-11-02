@@ -152,7 +152,7 @@ fileOperationUtil.resolveRecursively_ = function(
           onError);
     } else {
       // For a file, annotate the file size.
-      entry.getMetadata(function(metadata) {
+      metadataProxy.getEntryMetadata(entry).then(function(metadata) {
         entry.size = metadata.size;
         --numRunningTasks;
         maybeInvokeCallback();
@@ -411,6 +411,9 @@ fileOperationUtil.copyTo = function(
           break;
 
         case 'error':
+          console.error(
+              'copy failed. sourceUrl: ' + source.toURL() +
+              ' error: ' + status.error);
           chrome.fileManagerPrivate.onCopyProgress.removeListener(
               onCopyProgress);
           errorCallback(util.createDOMError(status.error));
@@ -547,6 +550,12 @@ fileOperationUtil.Task = function(
   this.processedBytes = 0;
 
   /**
+   * Total number of remaining items. Updated periodically.
+   * @type {number}
+   */
+  this.numRemainingItems = this.sourceEntries.length;
+
+  /**
    * Index of the progressing entry in sourceEntries.
    * @private {number}
    */
@@ -609,14 +618,14 @@ fileOperationUtil.Task.prototype.run = function(
 
 /**
  * Get states of the task.
- * TOOD(hirono): Removes this method and sets a task to progress events.
+ * TODO(hirono): Removes this method and sets a task to progress events.
  * @return {Object} Status object.
  */
 fileOperationUtil.Task.prototype.getStatus = function() {
   var processingEntry = this.sourceEntries[this.processingSourceIndex_];
   return {
     operationType: this.operationType,
-    numRemainingItems: this.sourceEntries.length - this.processingSourceIndex_,
+    numRemainingItems: this.numRemainingItems,
     totalBytes: this.totalBytes,
     processedBytes: this.processedBytes,
     processingEntryName: processingEntry ? processingEntry.name : ''
@@ -640,6 +649,36 @@ fileOperationUtil.Task.prototype.calcProcessedBytes_ = function() {
     }
   }
   return bytes;
+};
+
+/**
+ * Obtains the number of remaining items.
+ * @return {number} Number of remaining items.
+ * @private
+ */
+fileOperationUtil.Task.prototype.calcNumRemainingItems_ = function() {
+  var numRemainingItems = 0;
+
+  var resolvedEntryMap;
+  if (this.processingEntries && this.processingEntries.length > 0)
+    resolvedEntryMap = this.processingEntries[this.processingSourceIndex_];
+
+  if (resolvedEntryMap) {
+    for (var key in resolvedEntryMap) {
+      if (resolvedEntryMap.hasOwnProperty(key) &&
+          resolvedEntryMap[key].processedBytes === 0) {
+        numRemainingItems++;
+      }
+    }
+    for (var i = this.processingSourceIndex_ + 1;
+         i < this.processingEntries.length; i++) {
+      numRemainingItems += Object.keys(this.processingEntries[i] || {}).length;
+    }
+  } else {
+    numRemainingItems = this.sourceEntries.length - this.processingSourceIndex_;
+  }
+
+  return numRemainingItems;
 };
 
 /**
@@ -679,6 +718,13 @@ fileOperationUtil.CopyTask = function(
  */
 fileOperationUtil.CopyTask.prototype.__proto__ =
     fileOperationUtil.Task.prototype;
+
+/**
+ * Number of consecutive errors to stop CopyTask.
+ * @const {number}
+ * @private
+ */
+fileOperationUtil.CopyTask.CONSECUTIVE_ERROR_LIMIT_ = 100;
 
 /**
  * Initializes the CopyTask.
@@ -784,10 +830,23 @@ fileOperationUtil.CopyTask.prototype.run = function(
     if (!processedEntry)
       return;
 
+    var alreadyCompleted =
+        processedEntry.processedBytes === processedEntry.size;
+
     // Accumulates newly processed bytes.
     var size = opt_size !== undefined ? opt_size : processedEntry.size;
     this.processedBytes += size - processedEntry.processedBytes;
     processedEntry.processedBytes = size;
+
+    // updateProgress can be called multiple times for a single file copy, and
+    // it might not be called for a small file.
+    // The following prevents multiple call for a single file to decrement
+    // numRemainingItems multiple times.
+    // For small files, it will be decremented by next calcNumRemainingItems_().
+    if (!alreadyCompleted &&
+        processedEntry.processedBytes === processedEntry.size) {
+      this.numRemainingItems--;
+    }
 
     // Updates progress bar in limited frequency so that intervals between
     // updates have at least 200ms.
@@ -796,6 +855,13 @@ fileOperationUtil.CopyTask.prototype.run = function(
   updateProgress = updateProgress.bind(this);
 
   this.updateProgressRateLimiter_ = new AsyncUtil.RateLimiter(progressCallback);
+
+  this.numRemainingItems = this.calcNumRemainingItems_();
+
+  // Number of consecutive errors. Increases while failing and resets to zero
+  // when one of them succeeds.
+  var errorCount = 0;
+  var lastError;
 
   AsyncUtil.forEach(
       this.sourceEntries,
@@ -827,16 +893,31 @@ fileOperationUtil.CopyTask.prototype.run = function(
               // Update current source index and processing bytes.
               this.processingSourceIndex_ = index + 1;
               this.processedBytes = this.calcProcessedBytes_();
+              this.numRemainingItems = this.calcNumRemainingItems_();
+              errorCount = 0;
               callback();
             }.bind(this),
             function(error) {
               // Finishes off delayed updates if necessary.
               this.updateProgressRateLimiter_.runImmediately();
-              errorCallback(error);
+              // Update current source index and processing bytes.
+              this.processingSourceIndex_ = index + 1;
+              this.processedBytes = this.calcProcessedBytes_();
+              this.numRemainingItems = this.calcNumRemainingItems_();
+              errorCount++;
+              lastError = error;
+              if (errorCount <
+                  fileOperationUtil.CopyTask.CONSECUTIVE_ERROR_LIMIT_) {
+                callback();
+              } else {
+                errorCallback(error);
+              }
             }.bind(this));
       },
       function() {
-        if (this.deleteAfterCopy) {
+        if (lastError) {
+          errorCallback(lastError);
+        } else if (this.deleteAfterCopy) {
           deleteOriginals();
         } else {
           successCallback();
@@ -974,6 +1055,7 @@ fileOperationUtil.MoveTask.prototype.run = function(
               // Update current source index.
               this.processingSourceIndex_ = index + 1;
               this.processedBytes = this.calcProcessedBytes_();
+              this.numRemainingItems = this.calcNumRemainingItems_();
               callback();
             }.bind(this),
             errorCallback);

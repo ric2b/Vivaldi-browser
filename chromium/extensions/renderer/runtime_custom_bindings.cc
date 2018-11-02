@@ -38,9 +38,7 @@ void RuntimeCustomBindings::GetManifest(
     const v8::FunctionCallbackInfo<v8::Value>& args) {
   CHECK(context()->extension());
 
-  std::unique_ptr<content::V8ValueConverter> converter(
-      content::V8ValueConverter::create());
-  args.GetReturnValue().Set(converter->ToV8Value(
+  args.GetReturnValue().Set(content::V8ValueConverter::Create()->ToV8Value(
       context()->extension()->manifest()->value(), context()->v8_context()));
 }
 
@@ -94,7 +92,7 @@ void RuntimeCustomBindings::GetExtensionViews(
     // main views, not any subframes. (Returning subframes can cause broken
     // behavior by treating an app window's iframe as its main frame, and maybe
     // other nastiness).
-    blink::WebFrame* web_frame = frame->GetWebFrame();
+    blink::WebLocalFrame* web_frame = frame->GetWebFrame();
     if (web_frame->Top() != web_frame)
       continue;
 

@@ -18,6 +18,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/optional.h"
 #include "base/time/time.h"
+#include "content/browser/service_worker/service_worker_test_utils.h"
 #include "content/common/service_worker/embedded_worker.mojom.h"
 #include "content/common/service_worker/service_worker_event_dispatcher.mojom.h"
 #include "content/common/service_worker/service_worker_status_code.h"
@@ -78,10 +79,11 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
                      mojo::ScopedMessagePipeHandle request);
 
    protected:
-    // Implementation of mojo interfaces.
+    // mojom::EmbeddedWorkerInstanceClient implementation.
     void StartWorker(
         const EmbeddedWorkerStartParams& params,
         mojom::ServiceWorkerEventDispatcherRequest dispatcher_request,
+        mojom::ServiceWorkerInstalledScriptsInfoPtr installed_scripts_info,
         mojom::EmbeddedWorkerInstanceHostAssociatedPtrInfo instance_host)
         override;
     void StopWorker() override;
@@ -117,6 +119,16 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
   // MockEmbeddedWorkerInstanceClient.
   void RegisterMockInstanceClient(
       std::unique_ptr<MockEmbeddedWorkerInstanceClient> client);
+
+  // Registers the dispatcher host for the process to a map managed by this test
+  // helper. If there is a existing dispatcher host, it'll removed before adding
+  // to the map. This should be called before ServiceWorkerDispatcherHost::Init
+  // because it internally calls ServiceWorkerContextCore::AddDispatcherHost.
+  // If |dispatcher_host| is nullptr, this method just removes the existing
+  // dispatcher host from the map.
+  void RegisterDispatcherHost(
+      int process_id,
+      scoped_refptr<ServiceWorkerDispatcherHost> dispatcher_host);
 
   template <typename MockType, typename... Args>
   MockType* CreateAndRegisterMockInstanceClient(Args&&... args);
@@ -230,8 +242,8 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
       const PushEventPayload& payload,
       mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback callback);
   virtual void OnPaymentRequestEvent(
-      payments::mojom::PaymentAppRequestPtr data,
-      payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+      payments::mojom::PaymentRequestEventDataPtr data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
       mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
           callback);
 
@@ -315,8 +327,8 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
       const PushEventPayload& payload,
       mojom::ServiceWorkerEventDispatcher::DispatchPushEventCallback callback);
   void OnPaymentRequestEventStub(
-      payments::mojom::PaymentAppRequestPtr data,
-      payments::mojom::PaymentAppResponseCallbackPtr response_callback,
+      payments::mojom::PaymentRequestEventDataPtr data,
+      payments::mojom::PaymentHandlerResponseCallbackPtr response_callback,
       mojom::ServiceWorkerEventDispatcher::DispatchPaymentRequestEventCallback
           callback);
 
@@ -348,6 +360,8 @@ class EmbeddedWorkerTestHelper : public IPC::Sender,
       int /* embedded_worker_id */,
       mojom::EmbeddedWorkerInstanceHostAssociatedPtr /* instance_host_ptr */>
       embedded_worker_id_instance_host_ptr_map_;
+  std::map<int /* embedded_worker_id */, ServiceWorkerRemoteProviderEndpoint>
+      embedded_worker_id_remote_provider_map_;
 
   std::vector<Event> events_;
 

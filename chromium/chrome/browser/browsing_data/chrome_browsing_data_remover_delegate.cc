@@ -4,12 +4,17 @@
 
 #include "chrome/browser/browsing_data/chrome_browsing_data_remover_delegate.h"
 
+#include <stdint.h>
+
 #include <set>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "base/callback.h"
 #include "base/metrics/user_metrics.h"
+#include "base/task_scheduler/post_task.h"
+#include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
@@ -22,7 +27,9 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/web_history_service_factory.h"
 #include "chrome/browser/io_thread.h"
+#include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/media/media_device_id_salt.h"
+#include "chrome/browser/media/media_engagement_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service.h"
 #include "chrome/browser/net/nqe/ui_network_quality_estimator_service_factory.h"
 #include "chrome/browser/net/predictor.h"
@@ -39,7 +46,6 @@
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/sessions/tab_restore_service_factory.h"
-#include "chrome/browser/translate/language_model_factory.h"
 #include "chrome/browser/web_data_service_factory.h"
 #include "chrome/common/features.h"
 #include "chrome/common/pref_names.h"
@@ -56,6 +62,7 @@
 #include "components/data_reduction_proxy/core/browser/data_reduction_proxy_settings.h"
 #include "components/domain_reliability/service.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/language/core/browser/url_language_histogram.h"
 #include "components/nacl/browser/nacl_browser.h"
 #include "components/nacl/browser/pnacl_host.h"
 #include "components/ntp_snippets/bookmarks/bookmark_last_visit_utils.h"
@@ -67,7 +74,6 @@
 #include "components/previews/core/previews_ui_service.h"
 #include "components/search_engines/template_url_service.h"
 #include "components/sessions/core/tab_restore_service.h"
-#include "components/translate/core/browser/language_model.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
 #include "content/public/browser/plugin_data_remover.h"
@@ -82,12 +88,11 @@
 #include "url/url_util.h"
 
 #if defined(OS_ANDROID)
-#include "chrome/browser/android/offline_pages/offline_page_model_factory.h"
 #include "chrome/browser/android/webapps/webapp_registry.h"
-#include "chrome/browser/precache/precache_manager_factory.h"
+#include "chrome/browser/offline_pages/offline_page_model_factory.h"
 #include "components/offline_pages/core/offline_page_feature.h"
 #include "components/offline_pages/core/offline_page_model.h"
-#include "components/precache/content/precache_manager.h"
+#include "sql/connection.h"
 #endif
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -192,8 +197,8 @@ void ClearCookiesOnIOThread(base::Time delete_begin,
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   net::CookieStore* cookie_store =
       rq_context->GetURLRequestContext()->cookie_store();
-  cookie_store->DeleteAllCreatedBetweenAsync(delete_begin, delete_end,
-                                             IgnoreArgument<int>(callback));
+  cookie_store->DeleteAllCreatedBetweenAsync(
+      delete_begin, delete_end, IgnoreArgument<uint32_t>(callback));
 }
 
 void ClearCookiesWithPredicateOnIOThread(
@@ -206,7 +211,7 @@ void ClearCookiesWithPredicateOnIOThread(
   net::CookieStore* cookie_store =
       rq_context->GetURLRequestContext()->cookie_store();
   cookie_store->DeleteAllCreatedBetweenWithPredicateAsync(
-      delete_begin, delete_end, predicate, IgnoreArgument<int>(callback));
+      delete_begin, delete_end, predicate, IgnoreArgument<uint32_t>(callback));
 }
 
 void ClearNetworkPredictorOnIOThread(chrome_browser_net::Predictor* predictor) {
@@ -250,6 +255,16 @@ void ClearReportingCacheOnIOThread(
   if (service)
     service->RemoveBrowsingData(data_type_mask, origin_filter);
 }
+
+#if defined(OS_ANDROID)
+void ClearPrecacheInBackground(content::BrowserContext* browser_context) {
+  // Precache code was removed in M61 but the sqlite database file could be
+  // still here.
+  base::FilePath db_path(browser_context->GetPath().Append(
+      base::FilePath(FILE_PATH_LITERAL("PrecacheDatabase"))));
+  sql::Connection::Delete(db_path);
+}
+#endif
 
 // Returned by ChromeBrowsingDataRemoverDelegate::GetOriginTypeMatcher().
 bool DoesOriginMatchEmbedderMask(int origin_type_mask,
@@ -475,10 +490,11 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
                                                   filter, bookmark_model);
     }
 
-    translate::LanguageModel* language_model =
-        LanguageModelFactory::GetInstance()->GetForBrowserContext(profile_);
-    if (language_model) {
-      language_model->ClearHistory(delete_begin_, delete_end_);
+    language::UrlLanguageHistogram* language_histogram =
+        UrlLanguageHistogramFactory::GetInstance()->GetForBrowserContext(
+            profile_);
+    if (language_histogram) {
+      language_histogram->ClearHistory(delete_begin_, delete_end_);
     }
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -613,18 +629,11 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
 #endif
 
 #if defined(OS_ANDROID)
-    precache::PrecacheManager* precache_manager =
-        precache::PrecacheManagerFactory::GetForBrowserContext(profile_);
-    // |precache_manager| could be nullptr if the profile is off the record.
-    if (!precache_manager) {
-      clear_precache_history_.Start();
-      precache_manager->ClearHistory();
-      // The above calls are done on the UI thread but do their work on the DB
-      // thread. So wait for it.
-      BrowserThread::PostTaskAndReply(
-          BrowserThread::DB, FROM_HERE, base::Bind(&base::DoNothing),
-          clear_precache_history_.GetCompletionCallback());
-    }
+    clear_precache_history_.Start();
+    base::PostTaskWithTraitsAndReply(
+        FROM_HERE, {base::TaskPriority::USER_VISIBLE, base::MayBlock()},
+        base::BindOnce(&ClearPrecacheInBackground, profile_),
+        clear_precache_history_.GetCompletionCallback());
 
     // Clear the history information (last launch time and origin URL) of any
     // registered webapps.
@@ -728,13 +737,14 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
   //////////////////////////////////////////////////////////////////////////////
   // DATA_TYPE_CONTENT_SETTINGS
   if (remove_mask & DATA_TYPE_CONTENT_SETTINGS) {
+    base::RecordAction(UserMetricsAction("ClearBrowsingData_ContentSettings"));
     const auto* registry =
         content_settings::ContentSettingsRegistry::GetInstance();
     auto* map = HostContentSettingsMapFactory::GetForProfile(profile_);
     for (const content_settings::ContentSettingsInfo* info : *registry) {
       map->ClearSettingsForOneTypeWithPredicate(
           info->website_settings_info()->type(), delete_begin_,
-          base::Bind(&WebsiteSettingsFilterAdapter, filter));
+          HostContentSettingsMap::PatternSourcePredicate());
     }
   }
 
@@ -745,6 +755,14 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
         ->ClearSettingsForOneTypeWithPredicate(
             CONTENT_SETTINGS_TYPE_DURABLE_STORAGE, base::Time(),
             base::Bind(&WebsiteSettingsFilterAdapter, filter));
+  }
+
+  //////////////////////////////////////////////////////////////////////////////
+  // Media Engagement
+  if (remove_mask & DATA_TYPE_SITE_USAGE_DATA &&
+      MediaEngagementService::IsEnabled()) {
+    MediaEngagementService::Get(profile_)->ClearDataBetweenTime(delete_begin_,
+                                                                delete_end_);
   }
 
   //////////////////////////////////////////////////////////////////////////////
@@ -950,9 +968,10 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
       base::WaitableEvent* event =
           plugin_data_remover_->StartRemoving(delete_begin_);
 
-      base::WaitableEventWatcher::EventCallback watcher_callback = base::Bind(
-          &ChromeBrowsingDataRemoverDelegate::OnWaitableEventSignaled,
-          weak_ptr_factory_.GetWeakPtr());
+      base::WaitableEventWatcher::EventCallback watcher_callback =
+          base::BindOnce(
+              &ChromeBrowsingDataRemoverDelegate::OnWaitableEventSignaled,
+              weak_ptr_factory_.GetWeakPtr());
       watcher_.StartWatching(event, std::move(watcher_callback));
     } else {
       // TODO(msramek): Store filters from the currently executed task on the
@@ -1049,9 +1068,9 @@ void ChromeBrowsingDataRemoverDelegate::RemoveEmbedderData(
     clear_reporting_cache_.Start();
     BrowserThread::PostTaskAndReply(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(&ClearReportingCacheOnIOThread,
-                   base::RetainedRef(std::move(context)), data_type_mask,
-                   filter),
+        base::BindOnce(&ClearReportingCacheOnIOThread,
+                       base::RetainedRef(std::move(context)), data_type_mask,
+                       filter),
         UIThreadTrampoline(clear_reporting_cache_.GetCompletionCallback()));
   }
 

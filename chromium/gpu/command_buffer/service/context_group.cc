@@ -16,7 +16,6 @@
 #include "gpu/command_buffer/service/framebuffer_manager.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder_passthrough.h"
 #include "gpu/command_buffer/service/gpu_preferences.h"
-#include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/path_manager.h"
 #include "gpu/command_buffer/service/program_manager.h"
 #include "gpu/command_buffer/service/progress_reporter.h"
@@ -62,13 +61,13 @@ DisallowedFeatures AdjustDisallowedFeatures(
 
 ContextGroup::ContextGroup(
     const GpuPreferences& gpu_preferences,
-    const scoped_refptr<MailboxManager>& mailbox_manager,
+    MailboxManager* mailbox_manager,
     const scoped_refptr<MemoryTracker>& memory_tracker,
-    const scoped_refptr<ShaderTranslatorCache>& shader_translator_cache,
-    const scoped_refptr<FramebufferCompletenessCache>&
-        framebuffer_completeness_cache,
+    ShaderTranslatorCache* shader_translator_cache,
+    FramebufferCompletenessCache* framebuffer_completeness_cache,
     const scoped_refptr<FeatureInfo>& feature_info,
     bool bind_generates_resource,
+    ImageManager* image_manager,
     gpu::ImageFactory* image_factory,
     ProgressReporter* progress_reporter,
     const GpuFeatureInfo& gpu_feature_info,
@@ -84,7 +83,7 @@ ContextGroup::ContextGroup(
       // TODO(tobiasjs): determine whether GPU switching is possible
       // programmatically, rather than just hardcoding this behaviour
       // for OS X.
-      framebuffer_completeness_cache_(NULL),
+      framebuffer_completeness_cache_(nullptr),
 #else
       framebuffer_completeness_cache_(framebuffer_completeness_cache),
 #endif
@@ -107,8 +106,9 @@ ContextGroup::ContextGroup(
       max_transform_feedback_separate_attribs_(0u),
       max_uniform_buffer_bindings_(0u),
       uniform_buffer_offset_alignment_(1u),
-      program_cache_(NULL),
+      program_cache_(nullptr),
       feature_info_(feature_info),
+      image_manager_(image_manager),
       image_factory_(image_factory),
       passthrough_resources_(new PassthroughResources),
       progress_reporter_(progress_reporter),
@@ -116,8 +116,7 @@ ContextGroup::ContextGroup(
       discardable_manager_(discardable_manager) {
   DCHECK(discardable_manager);
   DCHECK(feature_info_);
-  if (!mailbox_manager_.get())
-    mailbox_manager_ = new MailboxManagerImpl;
+  DCHECK(mailbox_manager_);
   transfer_buffer_manager_ =
       base::MakeUnique<TransferBufferManager>(memory_tracker_.get());
 }

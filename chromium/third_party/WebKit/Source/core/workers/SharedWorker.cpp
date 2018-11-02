@@ -38,7 +38,6 @@
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
 #include "core/frame/UseCounter.h"
-#include "core/loader/FrameLoader.h"
 #include "core/probe/CoreProbes.h"
 #include "core/workers/SharedWorkerRepositoryClient.h"
 #include "platform/weborigin/KURL.h"
@@ -56,7 +55,7 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
   DCHECK(IsMainThread());
   SECURITY_DCHECK(context->IsDocument());
 
-  UseCounter::Count(context, UseCounter::kSharedWorkerStart);
+  UseCounter::Count(context, WebFeature::kSharedWorkerStart);
 
   SharedWorker* worker = new SharedWorker(context);
 
@@ -81,15 +80,9 @@ SharedWorker* SharedWorker::Create(ExecutionContext* context,
   if (script_url.IsEmpty())
     return nullptr;
 
-  if (document->GetFrame()
-          ->Loader()
-          .Client()
-          ->GetSharedWorkerRepositoryClient()) {
-    document->GetFrame()
-        ->Loader()
-        .Client()
-        ->GetSharedWorkerRepositoryClient()
-        ->Connect(worker, std::move(remote_port), script_url, name);
+  if (document->GetFrame()->Client()->GetSharedWorkerRepositoryClient()) {
+    document->GetFrame()->Client()->GetSharedWorkerRepositoryClient()->Connect(
+        worker, std::move(remote_port), script_url, name);
   }
 
   return worker;

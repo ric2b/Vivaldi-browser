@@ -236,7 +236,9 @@ void SigninManagerBase::SignOut(
       signin_metrics::ProfileSignout signout_source_metric,
       signin_metrics::SignoutDelete signout_delete_metric){}
 
-void SigninManagerBase::Shutdown() {}
+void SigninManagerBase::Shutdown() {
+  on_shutdown_callback_list_.Notify();
+}
 
 void SigninManagerBase::AddObserver(Observer* observer) {
   observer_list_.AddObserver(observer);

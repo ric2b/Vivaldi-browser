@@ -5,6 +5,7 @@
 #include "ui/message_center/views/notification_button.h"
 
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/message_center/message_center_style.h"
 #include "ui/message_center/views/constants.h"
 #include "ui/views/background.h"
@@ -17,23 +18,19 @@
 namespace message_center {
 
 NotificationButton::NotificationButton(views::ButtonListener* listener)
-    : views::CustomButton(listener),
-      icon_(NULL),
-      title_(NULL),
-      focus_painter_(views::Painter::CreateSolidFocusPainter(
-          message_center::kFocusBorderColor,
-          gfx::Insets(1, 2, 2, 2))) {
+    : views::CustomButton(listener), icon_(NULL), title_(NULL) {
   SetFocusForPlatform();
   // Create a background so that it does not change when the MessageView
   // background changes to show touch feedback
-  set_background(views::Background::CreateSolidBackground(
-      kNotificationBackgroundColor));
+  SetBackground(views::CreateSolidBackground(kNotificationBackgroundColor));
   set_notify_enter_exit_on_child(true);
-  SetLayoutManager(
-      new views::BoxLayout(views::BoxLayout::kHorizontal,
-                           message_center::kButtonHorizontalPadding,
-                           kButtonVecticalPadding,
-                           message_center::kButtonIconToTitlePadding));
+  SetLayoutManager(new views::BoxLayout(
+      views::BoxLayout::kHorizontal,
+      gfx::Insets(kButtonVerticalPadding,
+                  message_center::kButtonHorizontalPadding),
+      message_center::kButtonIconToTitlePadding));
+  SetFocusPainter(views::Painter::CreateSolidFocusPainter(
+      message_center::kFocusBorderColor, gfx::Insets(1, 2, 2, 2)));
 }
 
 NotificationButton::~NotificationButton() {
@@ -83,22 +80,9 @@ int NotificationButton::GetHeightForWidth(int width) const {
   return message_center::kButtonHeight;
 }
 
-void NotificationButton::OnPaint(gfx::Canvas* canvas) {
-  CustomButton::OnPaint(canvas);
-  views::Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
-}
-
 void NotificationButton::OnFocus() {
   views::CustomButton::OnFocus();
   ScrollRectToVisible(GetLocalBounds());
-  // We render differently when focused.
-  SchedulePaint();
- }
-
-void NotificationButton::OnBlur() {
-  views::CustomButton::OnBlur();
-  // We render differently when focused.
-  SchedulePaint();
 }
 
 void NotificationButton::ViewHierarchyChanged(
@@ -111,11 +95,10 @@ void NotificationButton::ViewHierarchyChanged(
 
 void NotificationButton::StateChanged(ButtonState old_state) {
   if (state() == STATE_HOVERED || state() == STATE_PRESSED) {
-    set_background(views::Background::CreateSolidBackground(
+    SetBackground(views::CreateSolidBackground(
         message_center::kHoveredButtonBackgroundColor));
   } else {
-    set_background(views::Background::CreateSolidBackground(
-        kNotificationBackgroundColor));
+    SetBackground(views::CreateSolidBackground(kNotificationBackgroundColor));
   }
 }
 

@@ -106,17 +106,17 @@ foreach(_target,
   }
 }
 
-foreach(_target,
-        [
-          "//components:components_unittests",
-        ]) {
-  post_process_template(_target) {
-    deps += [
-      "//chrome/utility",
-      "//vivaldi/importer",
-      "//vivaldi/importer:browser",
-      "//vivaldi/notes",
-      "//vivaldi/sync:sync",
+post_process_template("//components:components_unittests") {
+  if (!is_linux) {
+    deps -= [
+      "//components/rlz:unit_tests",
     ]
   }
+  deps += [
+    "//chrome/utility",
+    "//vivaldi/importer",
+    "//vivaldi/importer:browser",
+    "//vivaldi/notes",
+    "//vivaldi/sync:sync",
+  ]
 }

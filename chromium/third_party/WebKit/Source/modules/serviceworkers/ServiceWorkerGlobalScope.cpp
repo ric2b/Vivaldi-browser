@@ -44,10 +44,11 @@
 #include "core/inspector/WorkerThreadDebugger.h"
 #include "core/loader/ThreadableLoader.h"
 #include "core/origin_trials/OriginTrialContext.h"
+#include "core/workers/GlobalScopeCreationParams.h"
 #include "core/workers/WorkerClients.h"
-#include "core/workers/WorkerThreadStartupData.h"
 #include "modules/EventTargetModules.h"
 #include "modules/fetch/GlobalFetch.h"
+#include "modules/serviceworkers/RespondWithObserver.h"
 #include "modules/serviceworkers/ServiceWorkerClients.h"
 #include "modules/serviceworkers/ServiceWorkerGlobalScopeClient.h"
 #include "modules/serviceworkers/ServiceWorkerRegistration.h"
@@ -70,24 +71,22 @@ namespace blink {
 
 ServiceWorkerGlobalScope* ServiceWorkerGlobalScope::Create(
     ServiceWorkerThread* thread,
-    std::unique_ptr<WorkerThreadStartupData> startup_data) {
-  // Note: startupData is finalized on return. After the relevant parts has been
-  // passed along to the created 'context'.
+    std::unique_ptr<GlobalScopeCreationParams> creation_params,
+    double time_origin) {
   ServiceWorkerGlobalScope* context = new ServiceWorkerGlobalScope(
-      startup_data->script_url_, startup_data->user_agent_, thread,
-      MonotonicallyIncreasingTime(),
-      std::move(startup_data->starter_origin_privilege_data_),
-      startup_data->worker_clients_);
+      creation_params->script_url, creation_params->user_agent, thread,
+      time_origin, std::move(creation_params->starter_origin_privilege_data),
+      creation_params->worker_clients);
 
-  context->SetV8CacheOptions(
-      startup_data->worker_v8_settings_.v8_cache_options_);
+  context->SetV8CacheOptions(creation_params->v8_cache_options);
   context->ApplyContentSecurityPolicyFromVector(
-      *startup_data->content_security_policy_headers_);
-  if (!startup_data->referrer_policy_.IsNull())
-    context->ParseAndSetReferrerPolicy(startup_data->referrer_policy_);
-  context->SetAddressSpace(startup_data->address_space_);
+      *creation_params->content_security_policy_headers);
+  context->SetWorkerSettings(std::move(creation_params->worker_settings));
+  if (!creation_params->referrer_policy.IsNull())
+    context->ParseAndSetReferrerPolicy(creation_params->referrer_policy);
+  context->SetAddressSpace(creation_params->address_space);
   OriginTrialContext::AddTokens(context,
-                                startup_data->origin_trial_tokens_.get());
+                                creation_params->origin_trial_tokens.get());
 
   return context;
 }
@@ -121,20 +120,17 @@ void ServiceWorkerGlobalScope::CountScript(size_t script_size,
 }
 
 void ServiceWorkerGlobalScope::DidEvaluateWorkerScript() {
-  DEFINE_THREAD_SAFE_STATIC_LOCAL(
-      CustomCountHistogram, script_count_histogram,
-      new CustomCountHistogram("ServiceWorker.ScriptCount", 1, 1000, 50));
+  DEFINE_THREAD_SAFE_STATIC_LOCAL(CustomCountHistogram, script_count_histogram,
+                                  ("ServiceWorker.ScriptCount", 1, 1000, 50));
   script_count_histogram.Count(script_count_);
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       CustomCountHistogram, script_total_size_histogram,
-      new CustomCountHistogram("ServiceWorker.ScriptTotalSize", 1000, 5000000,
-                               50));
+      ("ServiceWorker.ScriptTotalSize", 1000, 5000000, 50));
   script_total_size_histogram.Count(script_total_size_);
   if (script_cached_metadata_total_size_) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         CustomCountHistogram, cached_metadata_histogram,
-        new CustomCountHistogram("ServiceWorker.ScriptCachedMetadataTotalSize",
-                                 1000, 50000000, 50));
+        ("ServiceWorker.ScriptCachedMetadataTotalSize", 1000, 50000000, 50));
     cached_metadata_histogram.Count(script_cached_metadata_total_size_);
   }
   did_evaluate_script_ = true;
@@ -210,6 +206,19 @@ void ServiceWorkerGlobalScope::DispatchExtendableEvent(
   // Check if the worker thread is forcibly terminated during the event
   // because of timeout etc.
   observer->DidDispatchEvent(GetThread()->IsForciblyTerminated());
+}
+
+void ServiceWorkerGlobalScope::DispatchExtendableEventWithRespondWith(
+    Event* event,
+    WaitUntilObserver* wait_until_observer,
+    RespondWithObserver* respond_with_observer) {
+  wait_until_observer->WillDispatchEvent();
+  respond_with_observer->WillDispatchEvent();
+  DispatchEventResult dispatch_result = DispatchEvent(event);
+  respond_with_observer->DidDispatchEvent(dispatch_result);
+  // false is okay because waitUntil() for events with respondWith() doesn't
+  // care about the promise rejection or an uncaught runtime script error.
+  wait_until_observer->DidDispatchEvent(false /* event_dispatch_failed */);
 }
 
 DEFINE_TRACE(ServiceWorkerGlobalScope) {

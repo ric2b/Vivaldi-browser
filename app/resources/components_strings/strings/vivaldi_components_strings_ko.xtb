@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">인증 필요</translation>
 <translation id="2166378884831602661">사이트에 보안 연결할 수 없음</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />진단 프로그램<ph name="END_LINK" />을 사용하여 연결 문제를 해결하세요</translation>
-<translation id="224482879335890159">Vivaldi에서 <ph name="LINK" /> 검색해보기</translation>
 <translation id="2292556288342944218">인터넷 액세스가 차단됨</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />에 사용자 이름과 비밀번호를 입력해야 합니다.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />네트워크 진단 실행<ph name="END_LINK" /></translation>
@@ -55,7 +54,6 @@
 <translation id="3630155396527302611">이미 네트워크 액세스가 허용된 프로그램으로 되어 있는 경우
     목록에서 삭제한 뒤 다시 추가합니다.</translation>
 <translation id="3658742229777143148">개정</translation>
-<translation id="3693415264595406141">비밀번호:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />프록시, 방화벽, DNS 설정 확인<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">프록시 서버를 사용하는 경우...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />이(가) 차단됨</translation>
@@ -67,7 +65,6 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />방화벽 및 바이러스 백신 소프트웨어 설정 확인<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />네트워크 진단 실행해보기<ph name="END_LINK" />.</translation>
 <translation id="4304224509867189079">로그인</translation>
-<translation id="4381091992796011497">사용자 이름:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />에서 로그인 인증서를 승인하지 않았거나 로그인 인증서가 제공되지 않았을 수 있습니다.</translation>
 <translation id="4506599922270137252">시스템 관리자에게 문의</translation>
 <translation id="4522570452068850558">세부정보</translation>

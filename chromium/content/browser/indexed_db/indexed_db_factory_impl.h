@@ -51,6 +51,13 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
       const base::FilePath& data_directory,
       bool force_close) override;
 
+  void AbortTransactionsAndCompactDatabase(
+      base::OnceCallback<void(leveldb::Status)> callback,
+      const url::Origin& origin) override;
+  void AbortTransactionsForDatabase(
+      base::OnceCallback<void(leveldb::Status)> callback,
+      const url::Origin& origin) override;
+
   void HandleBackingStoreFailure(const url::Origin& origin) override;
   void HandleBackingStoreCorruption(
       const url::Origin& origin,
@@ -111,6 +118,8 @@ class CONTENT_EXPORT IndexedDBFactoryImpl : public IndexedDBFactory {
                            GetDatabaseNamesClosesBackingStore);
   FRIEND_TEST_ALL_PREFIXES(IndexedDBTest,
                            ForceCloseOpenDatabasesOnCommitFailure);
+
+  leveldb::Status AbortTransactions(const url::Origin& origin);
 
   // Called internally after a database is closed, with some delay. If this
   // factory has the last reference, it will be released.

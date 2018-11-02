@@ -9,15 +9,15 @@
 #include "base/message_loop/message_loop.h"
 #include "base/power_monitor/power_monitor_device_source.h"
 #include "base/single_thread_task_runner.h"
-#include "components/viz/frame_sinks/mojo_frame_sink_manager.h"
+#include "base/threading/sequenced_task_runner_handle.h"
+#include "components/viz/service/display_embedder/gpu_display_provider.h"
+#include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/command_buffer/common/activity_flags.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "gpu/ipc/gpu_in_process_thread_service.h"
 #include "gpu/ipc/service/gpu_memory_buffer_factory.h"
 #include "gpu/ipc/service/gpu_watchdog_thread.h"
-#include "services/ui/common/server_gpu_memory_buffer_manager.h"
 #include "services/ui/gpu/gpu_service.h"
-#include "services/ui/surfaces/mus_display_provider.h"
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
@@ -51,9 +51,15 @@ namespace ui {
 GpuMain::GpuMain(mojom::GpuMainRequest request)
     : gpu_thread_("GpuThread"),
       io_thread_("GpuIOThread"),
-      compositor_thread_("DisplayCompositorThread"),
-      power_monitor_(base::MakeUnique<base::PowerMonitorDeviceSource>()),
       binding_(this) {
+  // TODO: crbug.com/609317: Remove this when Mus Window Server and GPU are
+  // split into separate processes. Until then this is necessary to be able to
+  // run Mushrome (chrome --mus) with Mus running in the browser process.
+  if (!base::PowerMonitor::Get()) {
+    power_monitor_ = base::MakeUnique<base::PowerMonitor>(
+        base::MakeUnique<base::PowerMonitorDeviceSource>());
+  }
+
   base::Thread::Options thread_options;
 
 #if defined(OS_WIN)
@@ -90,9 +96,7 @@ GpuMain::GpuMain(mojom::GpuMainRequest request)
 #endif
   CHECK(io_thread_.StartWithOptions(thread_options));
 
-  // Start the compositor thread.
-  compositor_thread_.Start();
-  compositor_thread_task_runner_ = compositor_thread_.task_runner();
+  compositor_thread_task_runner_ = base::ThreadTaskRunnerHandle::Get();
 
   // |this| will outlive the gpu thread and so it's safe to use
   // base::Unretained here.
@@ -106,15 +110,9 @@ GpuMain::GpuMain(mojom::GpuMainRequest request)
 }
 
 GpuMain::~GpuMain() {
-  // Unretained() is OK here since the thread/task runner is owned by |this|.
-  compositor_thread_task_runner_->PostTask(
-      FROM_HERE,
-      base::Bind(&GpuMain::TearDownOnCompositorThread, base::Unretained(this)));
-
-  // Block the main thread until the compositor thread terminates which blocks
-  // on the gpu thread. The Stop must be initiated from here instead of the gpu
-  // thread to avoid deadlock.
-  compositor_thread_.Stop();
+  DCHECK(compositor_thread_task_runner_->BelongsToCurrentThread());
+  // Tear down the compositor first because it blocks on the gpu service.
+  TearDownOnCompositorThread();
 
   gpu_thread_task_runner_->PostTask(
       FROM_HERE,
@@ -174,47 +172,32 @@ void GpuMain::CreateFrameSinkManagerInternal(
       gpu_thread_task_runner_, gpu_service_->sync_point_manager(),
       gpu_service_->mailbox_manager(), gpu_service_->share_group());
 
-  gpu::ImageFactory* image_factory = gpu_service_->gpu_image_factory();
-
-  // If the FrameSinkManager creation was delayed because GpuService had not
-  // been created yet, then this is called, in gpu thread, right after
-  // GpuService is created.
-  mojom::GpuServicePtr gpu_service;
-  BindGpuInternalOnGpuThread(mojo::MakeRequest(&gpu_service));
   compositor_thread_task_runner_->PostTask(
-      FROM_HERE, base::Bind(&GpuMain::CreateFrameSinkManagerOnCompositorThread,
-                            base::Unretained(this), image_factory,
-                            base::Passed(gpu_service.PassInterface()),
-                            base::Passed(std::move(request)),
-                            base::Passed(std::move(client_info))));
+      FROM_HERE,
+      base::Bind(&GpuMain::CreateFrameSinkManagerOnCompositorThread,
+                 base::Unretained(this), base::Passed(std::move(request)),
+                 base::Passed(std::move(client_info))));
 }
 
 void GpuMain::CreateFrameSinkManagerOnCompositorThread(
-    gpu::ImageFactory* image_factory,
-    mojom::GpuServicePtrInfo gpu_service_info,
     cc::mojom::FrameSinkManagerRequest request,
     cc::mojom::FrameSinkManagerClientPtrInfo client_info) {
   DCHECK(!frame_sink_manager_);
   cc::mojom::FrameSinkManagerClientPtr client;
   client.Bind(std::move(client_info));
 
-  gpu_internal_.Bind(std::move(gpu_service_info));
+  display_provider_ = base::MakeUnique<viz::GpuDisplayProvider>(
+      gpu_command_service_, gpu_service_->gpu_channel_manager());
 
-  display_provider_ = base::MakeUnique<MusDisplayProvider>(
-      gpu_command_service_,
-      base::MakeUnique<ServerGpuMemoryBufferManager>(gpu_internal_.get(),
-                                                     1 /* client_id */),
-      image_factory);
-
-  frame_sink_manager_ = base::MakeUnique<viz::MojoFrameSinkManager>(
-      true, display_provider_.get());
-  frame_sink_manager_->Connect(std::move(request), std::move(client));
+  frame_sink_manager_ = base::MakeUnique<viz::FrameSinkManagerImpl>(
+      display_provider_.get(), cc::SurfaceManager::LifetimeType::REFERENCES);
+  frame_sink_manager_->BindAndSetClient(std::move(request), nullptr,
+                                        std::move(client));
 }
 
 void GpuMain::TearDownOnCompositorThread() {
   frame_sink_manager_.reset();
   display_provider_.reset();
-  gpu_internal_.reset();
 }
 
 void GpuMain::TearDownOnGpuThread() {
@@ -239,10 +222,6 @@ void GpuMain::CreateGpuServiceOnGpuThread(
         std::move(pending_frame_sink_manager_request_),
         std::move(pending_frame_sink_manager_client_info_));
   }
-}
-
-void GpuMain::BindGpuInternalOnGpuThread(mojom::GpuServiceRequest request) {
-  gpu_service_->Bind(std::move(request));
 }
 
 void GpuMain::PreSandboxStartup() {

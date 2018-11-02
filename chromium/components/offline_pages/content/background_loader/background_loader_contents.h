@@ -45,6 +45,7 @@ class BackgroundLoaderContents : public content::WebContentsDelegate {
 
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
+      content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,
@@ -74,6 +75,9 @@ class BackgroundLoaderContents : public content::WebContentsDelegate {
   bool CheckMediaAccessPermission(content::WebContents* contents,
                                   const GURL& security_origin,
                                   content::MediaStreamType type) override;
+
+  void AdjustPreviewsStateForNavigation(
+      content::PreviewsState* previews_state) override;
 
  private:
   friend class BackgroundLoaderContentsTest;

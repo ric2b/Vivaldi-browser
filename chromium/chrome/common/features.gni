@@ -37,10 +37,9 @@ declare_args() {
   # It is enableable separately to facilitate testing.
   enable_hangout_services_extension = is_chrome_branded
 
-  # 'Ok Google' hotwording is disabled by default. Set to true to enable. (This
-  # will download a closed-source NaCl module at startup.) Chrome-branded
-  # ChromeOS builds have this enabled by default.
-  enable_hotwording = is_chrome_branded && is_chromeos
+  # 'Ok Google' hotwording is disabled to prepare for its removal.
+  # http://crbug.com/755579
+  enable_hotwording = false
 
   # Enables usage of the system-provided notification center.
   enable_native_notifications =
@@ -48,6 +47,14 @@ declare_args() {
 
   enable_one_click_signin =
       is_win || is_mac || (is_linux && !is_chromeos && !is_chromecast)
+
+  # Indicates if Exo should use ozone gamepad. If this is false, exo will use
+  # /device/gamepad as backend.
+  enable_exo_ozone_gamepad = use_ozone
+
+  # Enable out-of-process logging of heap profiling data. Currently being
+  # implemented.
+  enable_oop_heap_profiling = false
 
   # Set to true to bundle all the mash related mojo services into chrome.
   # Specify --mash to chrome to have chrome start the mash environment.

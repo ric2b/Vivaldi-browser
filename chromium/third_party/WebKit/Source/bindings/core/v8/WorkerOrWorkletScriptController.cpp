@@ -114,7 +114,7 @@ WorkerOrWorkletScriptController::~WorkerOrWorkletScriptController() {
 
 void WorkerOrWorkletScriptController::Dispose() {
   rejected_promises_->Dispose();
-  rejected_promises_.Release();
+  rejected_promises_ = nullptr;
 
   world_->Dispose();
 
@@ -135,7 +135,8 @@ void WorkerOrWorkletScriptController::DisposeContextIfNeeded() {
   script_state_->DisposePerContextData();
 }
 
-bool WorkerOrWorkletScriptController::InitializeContextIfNeeded() {
+bool WorkerOrWorkletScriptController::InitializeContextIfNeeded(
+    const String& human_readable_name) {
   v8::HandleScope handle_scope(isolate_);
 
   if (IsContextInitialized())
@@ -229,6 +230,13 @@ bool WorkerOrWorkletScriptController::InitializeContextIfNeeded() {
     debugger->ContextCreated(global_scope_->GetThread(), context);
   }
 
+  // Set the human readable name for the world if the call passes an actual
+  // |human_readable name|.
+  if (!human_readable_name.IsEmpty()) {
+    world_->SetNonMainWorldHumanReadableName(world_->GetWorldId(),
+                                             human_readable_name);
+  }
+
   return true;
 }
 
@@ -241,7 +249,7 @@ ScriptValue WorkerOrWorkletScriptController::Evaluate(
   TRACE_EVENT1("devtools.timeline", "EvaluateScript", "data",
                InspectorEvaluateScriptEvent::Data(nullptr, file_name,
                                                   script_start_position));
-  if (!InitializeContextIfNeeded())
+  if (!InitializeContextIfNeeded(String()))
     return ScriptValue();
 
   ScriptState::Scope scope(script_state_.Get());
@@ -302,6 +310,8 @@ bool WorkerOrWorkletScriptController::Evaluate(
            source_code.StartPosition(), cache_handler, v8_cache_options);
   if (IsExecutionForbidden())
     return false;
+
+  ScriptState::Scope scope(script_state_.Get());
   if (state.had_exception) {
     if (error_event) {
       if (state.error_event_from_imported_script_) {
@@ -336,6 +346,13 @@ bool WorkerOrWorkletScriptController::Evaluate(
     return false;
   }
   return true;
+}
+
+ScriptValue WorkerOrWorkletScriptController::EvaluateAndReturnValueForTest(
+    const ScriptSourceCode& source_code) {
+  ExecutionState state(this);
+  return Evaluate(source_code.Source(), source_code.Url().GetString(),
+                  source_code.StartPosition(), nullptr, kV8CacheOptionsDefault);
 }
 
 void WorkerOrWorkletScriptController::ForbidExecution() {

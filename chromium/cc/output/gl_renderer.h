@@ -13,7 +13,6 @@
 #include "base/macros.h"
 #include "cc/cc_export.h"
 #include "cc/output/color_lut_cache.h"
-#include "cc/output/context_cache_controller.h"
 #include "cc/output/direct_renderer.h"
 #include "cc/output/gl_renderer_draw_cache.h"
 #include "cc/output/program_binding.h"
@@ -22,6 +21,7 @@
 #include "cc/quads/solid_color_draw_quad.h"
 #include "cc/quads/tile_draw_quad.h"
 #include "cc/quads/yuv_video_draw_quad.h"
+#include "components/viz/common/gpu/context_cache_controller.h"
 #include "ui/gfx/geometry/quad_f.h"
 #include "ui/latency/latency_info.h"
 
@@ -49,7 +49,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
  public:
   class ScopedUseGrContext;
 
-  GLRenderer(const RendererSettings* settings,
+  GLRenderer(const viz::RendererSettings* settings,
              OutputSurface* output_surface,
              ResourceProvider* resource_provider,
              TextureMailboxDeleter* texture_mailbox_deleter);
@@ -86,7 +86,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   bool blend_enabled() const { return blend_shadow_; }
 
   bool CanPartialSwap() override;
-  ResourceFormat BackbufferFormat() const override;
+  viz::ResourceFormat BackbufferFormat() const override;
   void BindFramebufferToOutputSurface() override;
   bool BindFramebufferToTexture(const ScopedResource* resource) override;
   void SetScissorTestRect(const gfx::Rect& scissor_rect) override;
@@ -187,8 +187,6 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                           const gfx::QuadF* clip_region);
   void DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
                            const gfx::QuadF* clip_region);
-  void DrawTextureQuad(const TextureDrawQuad* quad,
-                       const gfx::QuadF* clip_region);
   void EnqueueTextureQuad(const TextureDrawQuad* quad,
                           const gfx::QuadF* clip_region);
   void FlushTextureQuadCache(BoundGeometry flush_binding);
@@ -206,6 +204,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
                            const gfx::QuadF* clip_region);
   void DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
                         const gfx::QuadF* clip_region);
+  void DrawOverlayCandidateQuadBorder(float* gl_matrix);
 
   void SetShaderOpacity(const DrawQuad* quad);
   void SetShaderQuadF(const gfx::QuadF& quad);
@@ -310,7 +309,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   gpu::gles2::GLES2Interface* gl_;
   gpu::ContextSupport* context_support_;
-  std::unique_ptr<ContextCacheController::ScopedVisibility> context_visibility_;
+  std::unique_ptr<viz::ContextCacheController::ScopedVisibility>
+      context_visibility_;
 
   TextureMailboxDeleter* texture_mailbox_deleter_;
 
@@ -331,7 +331,7 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   std::unique_ptr<ResourceProvider::ScopedWriteLockGL>
       current_framebuffer_lock_;
   // This is valid when current_framebuffer_lock_ is not null.
-  ResourceFormat current_framebuffer_format_;
+  viz::ResourceFormat current_framebuffer_format_;
 
   class SyncQuery;
   std::deque<std::unique_ptr<SyncQuery>> pending_sync_queries_;
@@ -348,8 +348,9 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
   // overlay resource. This means the GLRenderer needs its own ResourcePool.
   std::unique_ptr<ResourcePool> overlay_resource_pool_;
 
-  // If true, draw a green border after compositing a texture quad using GL.
-  bool gl_composited_texture_quad_border_;
+  // If true, draw a green border after compositing a overlay candidate quad
+  // using GL.
+  bool gl_composited_overlay_candidate_quad_border_;
 
   // The method FlippedFramebuffer determines whether the framebuffer associated
   // with a DrawingFrame is flipped. It makes the assumption that the
@@ -363,6 +364,8 @@ class CC_EXPORT GLRenderer : public DirectRenderer {
 
   unsigned offscreen_stencil_renderbuffer_id_ = 0;
   gfx::Size offscreen_stencil_renderbuffer_size_;
+
+  unsigned num_triangles_drawn_ = 0;
 
   base::WeakPtrFactory<GLRenderer> weak_ptr_factory_;
 

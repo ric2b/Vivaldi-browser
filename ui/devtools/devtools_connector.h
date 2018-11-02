@@ -124,8 +124,7 @@ class DevtoolsConnectorItem
       int opener_render_frame_id,
       const std::string& frame_name,
       const GURL& target_url,
-      content::WebContents* new_contents,
-      const base::Optional<content::WebContents::CreateParams>& create_params
+      content::WebContents* new_contents
     ) override;
   void CloseContents(content::WebContents* source) override;
   void ContentsZoomChange(bool zoom_in) override;

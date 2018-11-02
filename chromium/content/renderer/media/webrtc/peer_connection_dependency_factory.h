@@ -10,6 +10,7 @@
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/message_loop/message_loop.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
 #include "base/threading/thread.h"
 #include "content/common/content_export.h"
@@ -32,7 +33,7 @@ class Thread;
 }
 
 namespace blink {
-class WebFrame;
+class WebLocalFrame;
 class WebRTCPeerConnectionHandler;
 class WebRTCPeerConnectionHandlerClient;
 }
@@ -45,8 +46,7 @@ class WebRtcAudioDeviceImpl;
 
 // Object factory for RTC PeerConnections.
 class CONTENT_EXPORT PeerConnectionDependencyFactory
-    : NON_EXPORTED_BASE(base::MessageLoop::DestructionObserver),
-      NON_EXPORTED_BASE(public base::NonThreadSafe) {
+    : NON_EXPORTED_BASE(base::MessageLoop::DestructionObserver) {
  public:
   PeerConnectionDependencyFactory(
       P2PSocketDispatcher* p2p_socket_dispatcher);
@@ -75,11 +75,10 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   // Asks the libjingle PeerConnection factory to create a libjingle
   // PeerConnection object.
   // The PeerConnection object is owned by PeerConnectionHandler.
-  virtual scoped_refptr<webrtc::PeerConnectionInterface>
-      CreatePeerConnection(
-          const webrtc::PeerConnectionInterface::RTCConfiguration& config,
-          blink::WebFrame* web_frame,
-          webrtc::PeerConnectionObserver* observer);
+  virtual scoped_refptr<webrtc::PeerConnectionInterface> CreatePeerConnection(
+      const webrtc::PeerConnectionInterface::RTCConfiguration& config,
+      blink::WebLocalFrame* web_frame,
+      webrtc::PeerConnectionObserver* observer);
 
   // Creates a libjingle representation of a Session description. Used by a
   // RTCPeerConnectionHandler instance.
@@ -153,6 +152,8 @@ class CONTENT_EXPORT PeerConnectionDependencyFactory
   rtc::Thread* worker_thread_;
   base::Thread chrome_signaling_thread_;
   base::Thread chrome_worker_thread_;
+
+  SEQUENCE_CHECKER(sequence_checker_);
 
   DISALLOW_COPY_AND_ASSIGN(PeerConnectionDependencyFactory);
 };

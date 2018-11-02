@@ -5,8 +5,9 @@
 #ifndef PaymentRequestEvent_h
 #define PaymentRequestEvent_h
 
+#include "bindings/core/v8/ScriptValue.h"
 #include "modules/EventModules.h"
-#include "modules/payments/PaymentAppRequest.h"
+#include "modules/payments/PaymentRequestEventInit.h"
 #include "modules/serviceworkers/ExtendableEvent.h"
 #include "platform/heap/Handle.h"
 
@@ -17,6 +18,7 @@ class AtomicString;
 namespace blink {
 
 class RespondWithObserver;
+class ScriptState;
 
 class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   DEFINE_WRAPPERTYPEINFO();
@@ -24,7 +26,9 @@ class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
 
  public:
   static PaymentRequestEvent* Create(const AtomicString& type,
-                                     const PaymentAppRequest&,
+                                     const PaymentRequestEventInit&);
+  static PaymentRequestEvent* Create(const AtomicString& type,
+                                     const PaymentRequestEventInit&,
                                      RespondWithObserver*,
                                      WaitUntilObserver*);
   ~PaymentRequestEvent() override;
@@ -35,17 +39,18 @@ class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   const String& paymentRequestOrigin() const;
   const String& paymentRequestId() const;
   const HeapVector<PaymentMethodData>& methodData() const;
-  void total(PaymentItem& value) const;
+  const ScriptValue total(ScriptState*) const;
   const HeapVector<PaymentDetailsModifier>& modifiers() const;
   const String& instrumentKey() const;
 
+  ScriptPromise openWindow(ScriptState*, const String& url);
   void respondWith(ScriptState*, ScriptPromise, ExceptionState&);
 
   DECLARE_VIRTUAL_TRACE();
 
  private:
   PaymentRequestEvent(const AtomicString& type,
-                      const PaymentAppRequest&,
+                      const PaymentRequestEventInit&,
                       RespondWithObserver*,
                       WaitUntilObserver*);
 
@@ -53,7 +58,7 @@ class MODULES_EXPORT PaymentRequestEvent final : public ExtendableEvent {
   String payment_request_origin_;
   String payment_request_id_;
   HeapVector<PaymentMethodData> method_data_;
-  PaymentItem total_;
+  PaymentCurrencyAmount total_;
   HeapVector<PaymentDetailsModifier> modifiers_;
   String instrument_key_;
 

@@ -6,35 +6,43 @@
 #define SERVICES_UI_DISPLAY_SCREEN_MANAGER_FORWARDING_H_
 
 #include <memory>
-#include <unordered_map>
 #include <vector>
 
+#include "base/containers/flat_map.h"
 #include "base/macros.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/display/screen_manager.h"
+#include "services/ui/public/interfaces/display/test_display_controller.mojom.h"
 #include "ui/display/mojo/native_display_delegate.mojom.h"
 #include "ui/display/types/native_display_observer.h"
 
-namespace service_manager {
-struct BindSourceInfo;
-}
-
 namespace display {
 
+class FakeDisplayController;
 class NativeDisplayDelegate;
 
 // ScreenManager implementation that implements mojom::NativeDisplayDelegate.
 // This will own a real NativeDisplayDelegate and forwards calls to and
 // responses from it over Mojo.
 class ScreenManagerForwarding : public ScreenManager,
+                                public mojom::TestDisplayController,
                                 public NativeDisplayObserver,
                                 public mojom::NativeDisplayDelegate {
  public:
-  ScreenManagerForwarding();
+  enum class Mode {
+    IN_WM_PROCESS,
+    OWN_PROCESS,
+  };
+
+  // |in_process|  is true if the UI Service runs inside WM's process, false if
+  // it runs inside its own process.
+  explicit ScreenManagerForwarding(Mode mode);
   ~ScreenManagerForwarding() override;
 
   // ScreenManager:
-  void AddInterfaces(service_manager::BinderRegistry* registry) override;
+  void AddInterfaces(
+      service_manager::BinderRegistryWithArgs<
+          const service_manager::BindSourceInfo&>* registry) override;
   void Init(ScreenManagerDelegate* delegate) override;
   void RequestCloseDisplay(int64_t display_id) override;
   display::ScreenBase* GetScreen() override;
@@ -51,7 +59,7 @@ class ScreenManagerForwarding : public ScreenManager,
       const RelinquishDisplayControlCallback& callback) override;
   void GetDisplays(const GetDisplaysCallback& callback) override;
   void Configure(int64_t display_id,
-                 std::unique_ptr<display::DisplayMode> mode,
+                 base::Optional<std::unique_ptr<display::DisplayMode>> mode,
                  const gfx::Point& origin,
                  const ConfigureCallback& callback) override;
   void GetHDCPState(int64_t display_id,
@@ -65,10 +73,16 @@ class ScreenManagerForwarding : public ScreenManager,
       const std::vector<display::GammaRampRGBEntry>& gamma_lut,
       const std::vector<float>& correction_matrix) override;
 
+  // mojom::TestDisplayController:
+  void ToggleAddRemoveDisplay() override;
+
  private:
   void BindNativeDisplayDelegateRequest(
-      const service_manager::BindSourceInfo& source_info,
-      mojom::NativeDisplayDelegateRequest request);
+      mojom::NativeDisplayDelegateRequest request,
+      const service_manager::BindSourceInfo& source_info);
+  void BindTestDisplayControllerRequest(
+      mojom::TestDisplayControllerRequest request,
+      const service_manager::BindSourceInfo& source_info);
 
   // Forwards results from GetDisplays() back with |callback|.
   void ForwardGetDisplays(const GetDisplaysCallback& callback,
@@ -82,14 +96,23 @@ class ScreenManagerForwarding : public ScreenManager,
       const mojom::NativeDisplayDelegate::ConfigureCallback& callback,
       bool status);
 
+  // True if the UI Service runs inside WM's process, false if it runs inside
+  // its own process.
+  const bool is_in_process_;
   std::unique_ptr<display::ScreenBase> screen_;
   mojo::Binding<mojom::NativeDisplayDelegate> binding_;
   mojom::NativeDisplayObserverPtr observer_;
 
+  mojo::Binding<mojom::TestDisplayController> test_controller_binding_;
+
   std::unique_ptr<display::NativeDisplayDelegate> native_display_delegate_;
 
   // Cached pointers to snapshots owned by the |native_display_delegate_|.
-  std::unordered_map<int64_t, DisplaySnapshot*> snapshot_map_;
+  base::flat_map<int64_t, DisplaySnapshot*> snapshot_map_;
+
+  // If not null it provides a way to modify the display state when running off
+  // device (eg. running mustash on Linux).
+  FakeDisplayController* fake_display_controller_ = nullptr;
 
   DISALLOW_COPY_AND_ASSIGN(ScreenManagerForwarding);
 };

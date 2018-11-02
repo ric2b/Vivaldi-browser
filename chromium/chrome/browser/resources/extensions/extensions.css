@@ -98,6 +98,15 @@ html:not(.focus-outline-visible)
   line-height: 150%;
 }
 
+#page-header {
+  -webkit-padding-start: 23px;
+  left: 0;
+}
+
+[dir='rtl'] #page-header {
+  right: 0;
+}
+
 #page-header > .page-banner > .page-banner-gradient {
   -webkit-margin-end: 0;
 }

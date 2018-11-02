@@ -21,22 +21,18 @@
 #include "components/autofill/core/browser/field_types.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/payments/content/payment_request.h"
-#include "components/payments/mojom/payment_request.mojom.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
 #include "testing/gmock/include/gmock/gmock.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_request.mojom.h"
 
 namespace autofill {
 class AutofillProfile;
 class CreditCard;
-}
+}  // namespace autofill
 
 namespace content {
 class WebContents;
 }  // namespace content
-
-namespace service_manager {
-struct BindSourceInfo;
-}
 
 namespace payments {
 
@@ -87,7 +83,7 @@ class PaymentRequestBrowserTestBase
 
  protected:
   // Test will open a browser window to |test_file_path| (relative to
-  // chrome/test/data/payments).
+  // components/test/data/payments).
   explicit PaymentRequestBrowserTestBase(const std::string& test_file_path);
   ~PaymentRequestBrowserTestBase() override;
 
@@ -161,14 +157,19 @@ class PaymentRequestBrowserTestBase
 
   void CreatePaymentRequestForTest(
       content::WebContents* web_contents,
-      const service_manager::BindSourceInfo& source_info,
       payments::mojom::PaymentRequestRequest request);
 
   // Click on a view from within the dialog and waits for an observed event
   // to be observed.
   void ClickOnDialogViewAndWait(DialogViewID view_id,
                                 bool wait_for_animation = true);
+  void ClickOnDialogViewAndWait(DialogViewID view_id,
+                                PaymentRequestDialogView* dialog_view,
+                                bool wait_for_animation = true);
   void ClickOnDialogViewAndWait(views::View* view,
+                                bool wait_for_animation = true);
+  void ClickOnDialogViewAndWait(views::View* view,
+                                PaymentRequestDialogView* dialog_view,
                                 bool wait_for_animation = true);
   void ClickOnChildInListViewAndWait(int child_index,
                                      int total_num_children,
@@ -182,7 +183,11 @@ class PaymentRequestBrowserTestBase
       DialogViewID parent_view_id);
 
   void OpenCVCPromptWithCVC(const base::string16& cvc);
+  void OpenCVCPromptWithCVC(const base::string16& cvc,
+                            PaymentRequestDialogView* dialog_view);
   void PayWithCreditCardAndWait(const base::string16& cvc);
+  void PayWithCreditCardAndWait(const base::string16& cvc,
+                                PaymentRequestDialogView* dialog_view);
 
   // Getting/setting the |value| in the textfield of a given |type|.
   base::string16 GetEditorTextfieldValue(autofill::ServerFieldType type);
@@ -205,6 +210,7 @@ class PaymentRequestBrowserTestBase
 
   // Sets proper animation delegates and waits for animation to finish.
   void WaitForAnimation();
+  void WaitForAnimation(PaymentRequestDialogView* dialog_view);
 
   // Returns the text of the Label or StyledLabel with the specific |view_id|
   // that is a child of the Payment Request dialog view.

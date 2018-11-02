@@ -8,6 +8,7 @@
 #include "core/CoreExport.h"
 #include "core/layout/ng/geometry/ng_logical_offset.h"
 #include "core/layout/ng/geometry/ng_margin_strut.h"
+#include "core/layout/ng/inline/ng_baseline.h"
 #include "core/layout/ng/ng_physical_fragment.h"
 #include "core/layout/ng/ng_positioned_float.h"
 #include "platform/wtf/Optional.h"
@@ -21,9 +22,8 @@ class CORE_EXPORT NGPhysicalBoxFragment final : public NGPhysicalFragment {
                         NGPhysicalSize size,
                         NGPhysicalSize overflow,
                         Vector<RefPtr<NGPhysicalFragment>>& children,
-                        Vector<NGPositionedFloat>& positioned_floats,
-                        const WTF::Optional<NGLogicalOffset>& bfc_offset,
-                        const NGMarginStrut& end_margin_strut,
+                        Vector<NGBaseline>& baselines,
+                        unsigned,  // NGBorderEdges::Physical
                         RefPtr<NGBreakToken> break_token = nullptr);
 
   // Returns the total size, including the contents outside of the border-box.
@@ -33,25 +33,14 @@ class CORE_EXPORT NGPhysicalBoxFragment final : public NGPhysicalFragment {
     return children_;
   }
 
-  // List of positioned floats that need to be copied to the old layout tree.
-  // TODO(layout-ng): remove this once we change painting code to handle floats
-  // differently.
-  const Vector<NGPositionedFloat>& PositionedFloats() const {
-    return positioned_floats_;
-  }
+  const NGBaseline* Baseline(const NGBaselineRequest&) const;
 
-  const WTF::Optional<NGLogicalOffset>& BfcOffset() const {
-    return bfc_offset_;
-  }
-
-  const NGMarginStrut& EndMarginStrut() const { return end_margin_strut_; }
+  RefPtr<NGPhysicalFragment> CloneWithoutOffset() const;
 
  private:
   NGPhysicalSize overflow_;
   Vector<RefPtr<NGPhysicalFragment>> children_;
-  Vector<NGPositionedFloat> positioned_floats_;
-  const WTF::Optional<NGLogicalOffset> bfc_offset_;
-  const NGMarginStrut end_margin_strut_;
+  Vector<NGBaseline> baselines_;
 };
 
 DEFINE_TYPE_CASTS(NGPhysicalBoxFragment,

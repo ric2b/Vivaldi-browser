@@ -155,7 +155,14 @@ ProtocolSniffer::~ProtocolSniffer() {
 
 // static
 bool ProtocolSniffer::ShouldSniffProtocol(const std::string& content_type) {
-  return !IPCDemuxer::CanPlayType(content_type);
+
+  bool should_sniff = !IPCDemuxer::CanPlayType(content_type);
+
+  VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
+          << " sniff MimeType : '" << content_type << "' : "
+          << (should_sniff ? "Yes" : "No");
+
+  return should_sniff;
 }
 
 void ProtocolSniffer::SniffProtocol(DataSource* data_source,

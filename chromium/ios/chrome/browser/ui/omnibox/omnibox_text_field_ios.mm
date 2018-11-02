@@ -14,7 +14,9 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/autocomplete_input.h"
+#include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/autocomplete/autocomplete_scheme_classifier_impl.h"
+#include "ios/chrome/browser/experimental_flags.h"
 #import "ios/chrome/browser/ui/animation_util.h"
 #include "ios/chrome/browser/ui/omnibox/omnibox_util.h"
 #import "ios/chrome/browser/ui/reversed_animation.h"
@@ -41,7 +43,6 @@ const CGFloat kFontSize = 16;
 const CGFloat kEditingRectX = 16;
 const CGFloat kEditingRectWidthInset = 10;
 const CGFloat kTextInset = 8;
-const CGFloat kTextInsetWithChip = 3;
 const CGFloat kTextInsetNoLeftView = 12;
 const CGFloat kImageInset = 9;
 const CGFloat kClearButtonRightMarginIphone = 7;
@@ -95,17 +96,11 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
 #pragma mark OmniboxTextFieldIOS
 
 @implementation OmniboxTextFieldIOS {
-  // Currently selected chip text. Nil if no chip.
-  NSString* _chipText;
   UILabel* _selection;
   UILabel* _preEditStaticLabel;
   UIFont* _font;
   UIColor* _displayedTextColor;
   UIColor* _displayedTintColor;
-
-  // The 'Copy URL' menu item is sometimes shown in the edit menu, so keep it
-  // around to make adding/removing easier.
-  UIMenuItem* _copyUrlMenuItem;
 }
 
 @synthesize leftViewImageId = _leftViewImageId;
@@ -285,10 +280,10 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   // ends at the same x coord as the blue selection box.
   CGSize textSize =
       [_preEditStaticLabel.text cr_pixelAlignedSizeWithFont:_font];
-  BOOL isLTR = [self bestTextAlignment] == NSTextAlignmentLeft;
+  // Note, this does not need to support RTL, as URLs are always LTR.
   return textSize.width < _preEditStaticLabel.frame.size.width
-             ? (isLTR ? NSTextAlignmentLeft : NSTextAlignmentRight)
-             : (isLTR ? NSTextAlignmentRight : NSTextAlignmentLeft);
+             ? NSTextAlignmentLeft
+             : NSTextAlignmentRight;
 }
 
 - (void)layoutSubviews {
@@ -384,25 +379,12 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [self hideTextAndCursor];
 }
 
-- (BOOL)isShowingQueryRefinementChip {
-  return (_chipText && ([self isFirstResponder] || [self isPreEditing]));
-}
-
 - (void)updateLeftView {
-  const CGFloat kChipTextTopInset = 3.0;
-  const CGFloat kChipTextLeftInset = 3.0;
-
   UIButton* leftViewButton = (UIButton*)self.leftView;
-  // Only set the chip image if the omnibox is in focus.
-  if ([self isShowingQueryRefinementChip]) {
-    [leftViewButton setTitle:_chipText forState:UIControlStateNormal];
-    [leftViewButton setImage:nil forState:UIControlStateNormal];
-    [leftViewButton
-        setTitleEdgeInsets:UIEdgeInsetsMake(kChipTextTopInset,
-                                            kChipTextLeftInset, 0, 0)];
-    // For iPhone, the left view is only updated when not in editing mode (i.e.
-    // the text field is not first responder).
-  } else if (_leftViewImageId && (IsIPadIdiom() || ![self isFirstResponder])) {
+
+  // For iPhone, the left view is only updated when not in editing mode (i.e.
+  // the text field is not first responder).
+  if (_leftViewImageId && (IsIPadIdiom() || ![self isFirstResponder])) {
     UIImage* image = [NativeImage(_leftViewImageId)
         imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     UIImageView* imageView = [[UIImageView alloc] initWithImage:image];
@@ -430,7 +412,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [leftViewButton setTintColor:tint];
   } else {
     // Reset the chip text.
-    [leftViewButton setTitle:_chipText forState:UIControlStateNormal];
+    [leftViewButton setTitle:nil forState:UIControlStateNormal];
   }
   // Normally this isn't needed, but there is a bug in iOS 7.1+ where setting
   // the image while disabled doesn't always honor UIControlStateNormal.
@@ -440,14 +422,6 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [leftViewButton sizeToFit];
   self.leftView.isAccessibilityElement =
       self.attributedText.length != 0 && leftViewButton.isEnabled;
-
-  // -sizeToFit doesn't take into account the left inset, so expand the width of
-  // the button by |kChipTextLeftInset|.
-  if ([self isShowingQueryRefinementChip]) {
-    CGRect frame = leftViewButton.frame;
-    frame.size.width += kChipTextLeftInset;
-    leftViewButton.frame = frame;
-  }
 }
 
 - (void)deleteBackward {
@@ -486,7 +460,32 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
     [self clearAutocompleteText];
   }
 
-  self.attributedText = fieldText;
+  // The following BOOL was introduced to workaround a UIKit bug
+  // (crbug.com/737589, rdar/32817402). The bug relates to third party keyboards
+  // that check the value of textDocumentProxy.documentContextBeforeInput to
+  // show keyboard suggestions. It appears that calling setAttributedText during
+  // an EditingChanged UIControlEvent somehow triggers this bug. The reason we
+  // update the attributed text here is to change the colors of the omnibox
+  // (such as host, protocol) when !self.editing, but also to hide real
+  // UITextField text under the _selection text when self.editing. Since we will
+  // correct the omnibox editing text color anytime |self.text| is different
+  // than |fieldText|, it seems it's OK to skip calling self.attributedText
+  // during the condition added below. If we change mobile omnibox to match
+  // desktop and also color the omnibox while self.editing, this workaround will
+  // no longer work. The check for |autocompleteLength| reduces the scope of
+  // this workaround, without it having introduced crbug.com/740075.
+  BOOL updateText = YES;
+  // After M61 branch point remove the Japanese keyboard check to make this fix
+  // cover other languages.
+  if (experimental_flags::IsThirdPartyKeyboardWorkaroundEnabled() &&
+      [self.textInputMode.primaryLanguage isEqualToString:@"ja"]) {
+    updateText =
+        (!self.editing || ![self.text isEqualToString:fieldText.string] ||
+         autocompleteLength == 0);
+  }
+  if (updateText) {
+    self.attributedText = fieldText;
+  }
 
   // iOS changes the font to .LastResort when some unexpected unicode strings
   // are used (e.g. 𝗲𝗺𝗽𝗵𝗮𝘀𝗶𝘀).  Setting the NSFontAttributeName in the
@@ -601,16 +600,6 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   [self setTextInternal:text autocompleteLength:autocompleteLength];
 }
 
-- (void)setChipText:(NSString*)chipName {
-  _chipText = nil;
-  if ([chipName length]) {
-    if ([self bestAlignmentForText:chipName] == NSTextAlignmentLeft)
-      chipName = [chipName stringByAppendingString:@":"];
-    _chipText = [chipName copy];
-  }
-  [self updateLeftView];
-}
-
 - (BOOL)hasAutocompleteText {
   return !!_selection;
 }
@@ -671,7 +660,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
       textRectLayout.size.width += self.rightView.bounds.size.width -
                                    kVoiceSearchButtonWidth - kStarButtonWidth;
     }
-  } else if (![self isShowingQueryRefinementChip] && self.leftView.alpha == 0) {
+  } else if (self.leftView.alpha == 0) {
     CGFloat xDiff = textRectLayout.position.leading - kEditingRectX;
     textRectLayout.position.leading = kEditingRectX;
     textRectLayout.size.width += xDiff;
@@ -693,8 +682,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   LayoutRect editingRectLayout =
       LayoutRectForRectInBoundingRect(newBounds, bounds);
   editingRectLayout.position.leading += kTextAreaLeadingOffset;
-  editingRectLayout.position.leading +=
-      ([self isShowingQueryRefinementChip]) ? kTextInsetWithChip : kTextInset;
+  editingRectLayout.position.leading += kTextInset;
   editingRectLayout.size.width -= kTextInset + kEditingRectWidthInset;
   if (IsIPadIdiom()) {
     if (!IsCompactTablet() && !self.rightView) {
@@ -702,7 +690,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
       // isn't set, shrink behind the mic icons.
       editingRectLayout.size.width -= kVoiceSearchButtonWidth;
     }
-  } else if (![self isShowingQueryRefinementChip]) {
+  } else {
     CGFloat xDiff = editingRectLayout.position.leading - kEditingRectX;
     editingRectLayout.position.leading = kEditingRectX;
     editingRectLayout.size.width += xDiff;
@@ -795,26 +783,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   // will also activate the text field.
   if (point.y < 0)
     point.y = 0;
-  UIView* view = [super hitTest:point withEvent:event];
-
-  // For some reason when the |leftView| has interaction enabled, hitTest
-  // returns the leftView even when |point| is 50 pixels to the right.  Tapping
-  // the hint text will fire the leftView, causing b/6281652. Fails especially
-  // on iPad and iPhone devices in landscape mode.
-  // TODO(crbug.com/546295): Check to see if this UIKit bug is fixed, and remove
-  // this workaround.
-  UIView* leftView = [self leftView];
-  if (leftView) {
-    if (leftView == view && !CGRectContainsPoint([leftView frame], point)) {
-      return self;
-    } else if ([self leftViewMode] == UITextFieldViewModeAlways) {
-      CGRect targetFrame = CGRectInset([leftView frame], -5, -5);
-      if (CGRectContainsPoint(targetFrame, point)) {
-        return leftView;
-      }
-    }
-  }
-  return view;
+  return [super hitTest:point withEvent:event];
 }
 
 - (BOOL)isTextFieldLTR {
@@ -985,51 +954,7 @@ NSString* const kOmniboxFadeAnimationKey = @"OmniboxFadeAnimation";
   return NSMakeRange(start, length);
 }
 
-- (BOOL)becomeFirstResponder {
-  if (![super becomeFirstResponder])
-    return NO;
-
-  if (!_copyUrlMenuItem) {
-    NSString* const kTitle = l10n_util::GetNSString(IDS_IOS_COPY_URL);
-    _copyUrlMenuItem =
-        [[UIMenuItem alloc] initWithTitle:kTitle action:@selector(copyUrl:)];
-  }
-
-  // Add the "Copy URL" menu item to the |sharedMenuController| if necessary.
-  UIMenuController* menuController = [UIMenuController sharedMenuController];
-  if (menuController.menuItems) {
-    if (![menuController.menuItems containsObject:_copyUrlMenuItem]) {
-      menuController.menuItems =
-          [menuController.menuItems arrayByAddingObject:_copyUrlMenuItem];
-    }
-  } else {
-    menuController.menuItems = [NSArray arrayWithObject:_copyUrlMenuItem];
-  }
-  return YES;
-}
-
-- (BOOL)resignFirstResponder {
-  if (![super resignFirstResponder])
-    return NO;
-
-  // Remove the "Copy URL" menu item from the |sharedMenuController|.
-  UIMenuController* menuController = [UIMenuController sharedMenuController];
-  NSMutableArray* menuItems =
-      [NSMutableArray arrayWithArray:menuController.menuItems];
-  [menuItems removeObject:_copyUrlMenuItem];
-  menuController.menuItems = menuItems;
-  return YES;
-}
-
-- (void)copyUrl:(id)sender {
-  [[self delegate] onCopyURL];
-}
-
 - (BOOL)canPerformAction:(SEL)action withSender:(id)sender {
-  if (action == @selector(copyUrl:)) {
-    return [[self delegate] canCopyURL];
-  }
-
   // Disable the "Define" menu item.  iOS7 implements this with a private
   // selector.  Avoid using private APIs by instead doing a string comparison.
   if ([NSStringFromSelector(action) hasSuffix:@"define:"]) {

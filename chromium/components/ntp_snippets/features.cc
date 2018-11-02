@@ -18,11 +18,12 @@ const base::Feature*(kAllFeatures[]) = {&kArticleSuggestionsFeature,
                                         &kBookmarkSuggestionsFeature,
                                         &kCategoryOrder,
                                         &kCategoryRanker,
+                                        &kBreakingNewsPushFeature,
                                         &kForeignSessionsSuggestionsFeature,
                                         &kIncreasedVisibility,
+                                        &kKeepPrefetchedContentSuggestions,
                                         &kNotificationsFeature,
                                         &kPhysicalWebPageSuggestionsFeature,
-                                        &kPreferAmpUrlsFeature,
                                         &kPublisherFaviconsFromNewServerFeature,
                                         &kRecentOfflineTabSuggestionsFeature,
                                         nullptr};
@@ -45,14 +46,18 @@ const base::Feature kPhysicalWebPageSuggestionsFeature{
 const base::Feature kForeignSessionsSuggestionsFeature{
     "NTPForeignSessionsSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kPreferAmpUrlsFeature{"NTPPreferAmpUrls",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
+const base::Feature kBreakingNewsPushFeature{"BreakingNewsPush",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kCategoryRanker{"ContentSuggestionsCategoryRanker",
                                     base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kPublisherFaviconsFromNewServerFeature{
     "ContentSuggestionsFaviconsFromNewServer",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kRemoteSuggestionsEmulateM58FetchingSchedule{
+    "RemoteSuggestionsEmulateM58FetchingSchedule",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 const char kCategoryRankerParameter[] = "category_ranker";
@@ -65,6 +70,9 @@ CategoryRankerChoice GetSelectedCategoryRanker() {
                                                   kCategoryRankerParameter);
 
   if (category_ranker_value.empty()) {
+    // TODO(crbug.com/735066): Remove the experiment configurations from
+    // fieldtrial_testing_config.json when enabling ClickBasedRanker by default.
+
     // Default, Enabled or Disabled.
     return CategoryRankerChoice::CONSTANT;
   }
@@ -140,5 +148,8 @@ const char kNotificationsKeepWhenFrontmostParam[] =
 const char kNotificationsOpenToNTPParam[] = "open_to_ntp";
 const char kNotificationsDailyLimit[] = "daily_limit";
 const char kNotificationsIgnoredLimitParam[] = "ignored_limit";
+
+const base::Feature kKeepPrefetchedContentSuggestions{
+    "KeepPrefetchedContentSuggestions", base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace ntp_snippets

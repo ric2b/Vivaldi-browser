@@ -1,35 +1,40 @@
 # Chromium docs
 
 This directory contains chromium project documentation in
-[Gitiles-flavored Markdown](https://gerrit.googlesource.com/gitiles/+/master/Documentation/markdown.md).
-It is automatically
-[rendered by Gitiles](https://chromium.googlesource.com/chromium/src/+/master/docs/).
+[Gitiles-flavored Markdown].  It is automatically [rendered by Gitiles].
+
+[Gitiles-flavored Markdown]: https://gerrit.googlesource.com/gitiles/+/master/Documentation/markdown.md
+[rendered by Gitiles]: https://chromium.googlesource.com/chromium/src/+/master/docs/
 
 If you add new documents, please also add a link to them in the Document Index
 below.
 
 [TOC]
 
-## Style guide
+## Creating Documentation
 
-Markdown documents must follow the [style guide](https://github.com/google/styleguide/tree/gh-pages/docguide).
+Markdown documents must follow the
+[style guide](https://github.com/google/styleguide/tree/gh-pages/docguide).
 
-## Previewing changes
-
-You can preview your local changes using [md_browser](../tools/md_browser/):
+### Preview local changes using [md_browser](../tools/md_browser/):
 
 ```bash
 # in chromium checkout
 ./tools/md_browser/md_browser.py
 ```
 
-To review someone else's changes, apply them locally first:
+This is only an estimate. The **gitiles** view may differ.
 
-```bash
-# in chromium checkout
-git cl patch <CL number or URL>
-./tools/md_browser/md_browser.py
-```
+### Review changes online with gerrit's links to gitiles:
+
+1.  Upload a patch to gerrit, or receive a review request.  
+    e.g. https://chromium-review.googlesource.com/c/572236
+2.  View a specific .md file.  
+    e.g. https://chromium-review.googlesource.com/c/572236/2/docs/README.md
+3.  Click on **gitiles** link at top of page.
+
+This **gitiles** view is the authoritative view, exactly the same as will be
+used when committed.
 
 ## Document Index
 
@@ -294,6 +299,8 @@ git cl patch <CL number or URL>
     used to automatically set proxy settings.
 *   [Installing Chromium OS on VMWare](installation_at_vmware.md) - How to
     install Chromium OS on VMWare.
+*   [User Data Directory](user_data_dir.md) - How the user data and cache
+    directories are determined on all platforms.
 
 ### Probably Obsolete
 *   [Old ChromeOS build instructions](old_chromeos_build_instructions.md)

@@ -5,6 +5,7 @@
 #include "chrome/browser/chromeos/login/existing_user_controller.h"
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "base/bind.h"
@@ -12,6 +13,7 @@
 #include "base/callback.h"
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/ptr_util.h"
 #include "base/message_loop/message_loop.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
@@ -23,6 +25,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/chromeos/app_mode/kiosk_app_launch_error.h"
 #include "chrome/browser/chromeos/arc/arc_util.h"
+#include "chrome/browser/chromeos/arc/policy/arc_policy_util.h"
 #include "chrome/browser/chromeos/boot_times_recorder.h"
 #include "chrome/browser/chromeos/customization/customization_document.h"
 #include "chrome/browser/chromeos/login/arc_kiosk_controller.h"
@@ -47,6 +50,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/system/device_disabling_manager.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/easy_unlock_service.h"
 #include "chrome/browser/ui/aura/accessibility/automation_manager_aura.h"
 #include "chrome/browser/ui/webui/chromeos/login/l10n_util.h"
@@ -55,19 +59,25 @@
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/chromeos_switches.h"
+#include "chromeos/cryptohome/async_method_caller.h"
+#include "chromeos/cryptohome/cryptohome_parameters.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager_client.h"
 #include "chromeos/dbus/session_manager_client.h"
 #include "chromeos/login/auth/authpolicy_login_helper.h"
+#include "chromeos/login/auth/key.h"
 #include "chromeos/settings/cros_settings_names.h"
 #include "components/arc/arc_util.h"
 #include "components/google/core/browser/google_util.h"
+#include "components/policy/core/common/cloud/cloud_policy_client.h"
 #include "components/policy/core/common/cloud/cloud_policy_core.h"
 #include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/policy/core/common/cloud/device_management_service.h"
 #include "components/policy/core/common/policy_map.h"
 #include "components/policy/core/common/policy_service.h"
 #include "components/policy/core/common/policy_types.h"
 #include "components/policy/policy_constants.h"
+#include "components/policy/proto/cloud_policy.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
@@ -91,6 +101,10 @@
 #include "ui/accessibility/ax_enums.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/widget/widget.h"
+
+using PolicyFetchResult = policy::PreSigninPolicyFetcher::PolicyFetchResult;
+
+namespace apu = arc::policy_util;
 
 namespace chromeos {
 
@@ -152,7 +166,7 @@ void TransferContextAuthenticationsOnIOThread(
   // Last but not least tell the policy subsystem to refresh now as it might
   // have been stuck until now too.
   content::BrowserThread::PostTask(content::BrowserThread::UI, FROM_HERE,
-                                   base::Bind(&RefreshPoliciesOnUIThread));
+                                   base::BindOnce(&RefreshPoliciesOnUIThread));
 }
 
 // Record UMA for password login of regular user when Easy sign-in is enabled.
@@ -190,11 +204,6 @@ bool ShouldForceDircrypto(const AccountId& account_id) {
   if (!arc::IsArcAvailable())
     return false;
 
-  // If the device requires ecryptfs to ext4 migration policy check, and the
-  // policy doesn't allow the migration, then return.
-  if (!arc::IsArcMigrationAllowed())
-    return false;
-
   // In some login flows (e.g. when siging in supervised user), ARC can not
   // start. For such cases, we don't need to force Ext4 dircrypto.
   chromeos::UserFlow* user_flow =
@@ -208,6 +217,39 @@ bool ShouldForceDircrypto(const AccountId& account_id) {
     return false;
 
   return true;
+}
+
+// Decodes the EcryptfsMigrationStrategy user policy into the
+// EcryptfsMigrationAction enum. If the policy is present, returns true and sets
+// *|out_value|. Otherwise, returns false.
+bool DecodeMigrationActionFromPolicy(
+    const enterprise_management::CloudPolicySettings* policy,
+    apu::EcryptfsMigrationAction* out_value) {
+  if (!policy->has_ecryptfsmigrationstrategy())
+    return false;
+
+  const enterprise_management::IntegerPolicyProto& policy_proto =
+      policy->ecryptfsmigrationstrategy();
+  if (!policy_proto.has_value())
+    return false;
+
+  if (policy_proto.value() < 0 ||
+      policy_proto.value() >
+          static_cast<int64_t>(apu::kEcryptfsMigrationActionMaxValue)) {
+    return false;
+  }
+
+  *out_value = static_cast<apu::EcryptfsMigrationAction>(policy_proto.value());
+  return true;
+}
+
+// Returns true if ArcEnabled policy is present and set to true. Otherwise
+// returns false.
+bool IsArcEnabledFromPolicy(
+    const enterprise_management::CloudPolicySettings* policy) {
+  if (policy->has_arcenabled())
+    return policy->arcenabled().value();
+  return false;
 }
 
 }  // namespace
@@ -372,10 +414,10 @@ void ExistingUserController::Observe(
 
     content::BrowserThread::PostDelayedTask(
         content::BrowserThread::IO, FROM_HERE,
-        base::Bind(&TransferContextAuthenticationsOnIOThread,
-                   base::RetainedRef(signin_profile_context_getter),
-                   base::RetainedRef(webview_context_getter),
-                   base::RetainedRef(browser_process_context_getter)),
+        base::BindOnce(&TransferContextAuthenticationsOnIOThread,
+                       base::RetainedRef(signin_profile_context_getter),
+                       base::RetainedRef(webview_context_getter),
+                       base::RetainedRef(browser_process_context_getter)),
         base::TimeDelta::FromMilliseconds(kAuthCacheTransferDelayMs));
   }
 }
@@ -408,8 +450,7 @@ ExistingUserController::~ExistingUserController() {
 
 void ExistingUserController::CancelPasswordChangedFlow() {
   login_performer_.reset(nullptr);
-  if (authpolicy_login_helper_)
-    authpolicy_login_helper_->CancelRequestsAndRestart();
+  ClearActiveDirectoryState();
   PerformLoginFinishedActions(true /* start auto login timer */);
 }
 
@@ -494,15 +535,14 @@ void ExistingUserController::PerformLogin(
   if (user_context.GetAccountId().GetAccountType() ==
       AccountType::ACTIVE_DIRECTORY) {
     DCHECK(user_context.GetKey()->GetKeyType() == Key::KEY_TYPE_PASSWORD_PLAIN);
-    if (!authpolicy_login_helper_)
-      authpolicy_login_helper_ = base::MakeUnique<AuthPolicyLoginHelper>();
     // Try to get kerberos TGT while we have user's password typed on the pod
     // screen. Failure to get TGT here is OK - that could mean e.g. Active
     // Directory server is not reachable. We don't want to have user wait for
-    // the Active Directory Authentication on the pod screen. In the follow-up
-    // CL we're gonna create KeyedService inside the user session which would
-    // get status about last authentication and handle possible failures.
-    authpolicy_login_helper_->TryAuthenticateUser(
+    // the Active Directory Authentication on the pod screen.
+    // AuthPolicyCredentialsManager will be created inside the user session
+    // which would get status about last authentication and handle possible
+    // failures.
+    AuthPolicyLoginHelper::TryAuthenticateUser(
         user_context.GetAccountId().GetUserEmail(),
         user_context.GetAccountId().GetObjGuid(),
         user_context.GetKey()->GetSecret());
@@ -534,6 +574,20 @@ void ExistingUserController::ContinuePerformLogin(
     LoginPerformer::AuthorizationMode auth_mode,
     const UserContext& user_context) {
   login_performer_->PerformLogin(user_context, auth_mode);
+}
+
+void ExistingUserController::ContinuePerformLoginWithoutMigration(
+    LoginPerformer::AuthorizationMode auth_mode,
+    const UserContext& user_context) {
+  UserContext user_context_ecryptfs = user_context;
+  user_context_ecryptfs.SetIsForcingDircrypto(false);
+  ContinuePerformLogin(auth_mode, user_context_ecryptfs);
+}
+
+void ExistingUserController::RestartLogin(const UserContext& user_context) {
+  is_login_in_progress_ = false;
+  login_performer_.reset();
+  login_display_->ShowSigninUI(user_context.GetAccountId().GetUserEmail());
 }
 
 void ExistingUserController::MigrateUserData(const std::string& old_password) {
@@ -668,7 +722,7 @@ void ExistingUserController::ShowKioskAutolaunchScreen() {
 
 void ExistingUserController::ShowEncryptionMigrationScreen(
     const UserContext& user_context,
-    bool has_incomplete_migration) {
+    EncryptionMigrationMode migration_mode) {
   host_->StartWizard(OobeScreen::SCREEN_ENCRYPTION_MIGRATION);
 
   EncryptionMigrationScreen* migration_screen =
@@ -676,10 +730,12 @@ void ExistingUserController::ShowEncryptionMigrationScreen(
           host_->GetWizardController()->current_screen());
   DCHECK(migration_screen);
   migration_screen->SetUserContext(user_context);
-  migration_screen->SetShouldResume(has_incomplete_migration);
+  migration_screen->SetMode(migration_mode);
   migration_screen->SetContinueLoginCallback(base::BindOnce(
       &ExistingUserController::ContinuePerformLogin, weak_factory_.GetWeakPtr(),
       login_performer_->auth_mode()));
+  migration_screen->SetRestartLoginCallback(base::BindOnce(
+      &ExistingUserController::RestartLogin, weak_factory_.GetWeakPtr()));
   migration_screen->SetupInitialView();
 }
 
@@ -727,9 +783,10 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
     ShowError(IDS_LOGIN_ERROR_OWNER_REQUIRED, error);
     content::BrowserThread::PostDelayedTask(
         content::BrowserThread::UI, FROM_HERE,
-        base::Bind(&SessionManagerClient::StopSession,
-                   base::Unretained(DBusThreadManager::Get()->
-                                    GetSessionManagerClient())),
+        base::BindOnce(
+            &SessionManagerClient::StopSession,
+            base::Unretained(
+                DBusThreadManager::Get()->GetSessionManagerClient())),
         base::TimeDelta::FromMilliseconds(kSafeModeRestartUiDelayMs));
   } else if (failure.reason() == AuthFailure::TPM_ERROR) {
     ShowTPMError();
@@ -768,8 +825,7 @@ void ExistingUserController::OnAuthFailure(const AuthFailure& failure) {
   if (auth_status_consumer_)
     auth_status_consumer_->OnAuthFailure(failure);
 
-  if (authpolicy_login_helper_)
-    authpolicy_login_helper_->CancelRequestsAndRestart();
+  ClearActiveDirectoryState();
   ClearRecordedNames();
 
   // TODO(ginkage): Fix this case once crbug.com/469990 is ready.
@@ -925,7 +981,165 @@ void ExistingUserController::OnPasswordChangeDetected() {
 void ExistingUserController::OnOldEncryptionDetected(
     const UserContext& user_context,
     bool has_incomplete_migration) {
-  ShowEncryptionMigrationScreen(user_context, has_incomplete_migration);
+  if (has_incomplete_migration) {
+    // If migration was incomplete, continue migration without checking user
+    // policy.
+    // If the last attempted migration was a minimal migration, try to resume
+    // minimal migration.
+    const EncryptionMigrationMode mode =
+        user_manager::known_user::WasUserHomeMinimalMigrationAttempted(
+            user_context.GetAccountId())
+            ? EncryptionMigrationMode::RESUME_MINIMAL_MIGRATION
+            : EncryptionMigrationMode::RESUME_MIGRATION;
+    ShowEncryptionMigrationScreen(user_context, mode);
+    return;
+  }
+
+  if (user_context.GetUserType() == user_manager::USER_TYPE_ARC_KIOSK_APP) {
+    // For ARC kiosk, don't check user policy.
+    ShowEncryptionMigrationScreen(user_context,
+                                  EncryptionMigrationMode::START_MIGRATION);
+    return;
+  }
+
+  // Fetch user policy.
+  policy::DeviceManagementService* const device_management_service =
+      g_browser_process->platform_part()
+          ->browser_policy_connector_chromeos()
+          ->device_management_service();
+  // Use signin profile request context
+  net::URLRequestContextGetter* const signin_profile_context =
+      ProfileHelper::GetSigninProfile()->GetRequestContext();
+  auto cloud_policy_client = base::MakeUnique<policy::CloudPolicyClient>(
+      std::string() /* machine_id */, std::string() /* machine_model */,
+      device_management_service, signin_profile_context,
+      nullptr /* signing_service */);
+  pre_signin_policy_fetcher_ = base::MakeUnique<policy::PreSigninPolicyFetcher>(
+      DBusThreadManager::Get()->GetCryptohomeClient(),
+      DBusThreadManager::Get()->GetSessionManagerClient(),
+      std::move(cloud_policy_client), user_context.GetAccountId(),
+      cryptohome::KeyDefinition(user_context.GetKey()->GetSecret(),
+                                std::string(), cryptohome::PRIV_DEFAULT));
+  pre_signin_policy_fetcher_->FetchPolicy(
+      base::BindOnce(&ExistingUserController::OnPolicyFetchResult,
+                     weak_factory_.GetWeakPtr(), user_context));
+}
+
+void ExistingUserController::OnPolicyFetchResult(
+    const UserContext& user_context,
+    PolicyFetchResult result,
+    std::unique_ptr<enterprise_management::CloudPolicySettings>
+        policy_payload) {
+  apu::EcryptfsMigrationAction action =
+      apu::EcryptfsMigrationAction::kDisallowMigration;
+  if (result == PolicyFetchResult::NO_POLICY) {
+    // There was no policy, the user is unmanaged. They get to choose themselves
+    // if they'd like to migrate.
+    VLOG(1) << "Policy pre-fetch result: No user policy present";
+    action = apu::EcryptfsMigrationAction::kAskUser;
+  } else if (result == PolicyFetchResult::SUCCESS) {
+    // User policy was retreived, adhere to it.
+    VLOG(1) << "Policy pre-fetch result: User policy fetched";
+    if (!DecodeMigrationActionFromPolicy(policy_payload.get(), &action)) {
+      // User policy was present, but the EcryptfsMigrationStrategy policy value
+      // was not there. Stay on the safe side and don't start migration.
+      action = apu::EcryptfsMigrationAction::kDisallowMigration;
+    }
+  } else {
+    // We don't know if the user has policy or not. Stay on the safe side and
+    // don't start migration.
+    VLOG(1) << "Policy pre-fetch: User policy could not be fetched. Result: "
+            << static_cast<int>(result);
+    action = apu::EcryptfsMigrationAction::kDisallowMigration;
+  }
+  VLOG(1) << "Migration action: " << static_cast<int>(action);
+
+  switch (action) {
+    case apu::EcryptfsMigrationAction::kDisallowMigration:
+      ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
+                                           user_context);
+      break;
+
+    case apu::EcryptfsMigrationAction::kMigrate:
+      user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
+          user_context.GetAccountId(), false);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::START_MIGRATION));
+      break;
+
+    case apu::EcryptfsMigrationAction::kAskUser:
+      user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
+          user_context.GetAccountId(), false);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::ASK_USER));
+      break;
+
+    case apu::EcryptfsMigrationAction::kWipe:
+      cryptohome::AsyncMethodCaller::GetInstance()->AsyncRemove(
+          cryptohome::Identification(user_context.GetAccountId()),
+          base::Bind(&ExistingUserController::WipePerformed,
+                     weak_factory_.GetWeakPtr(), user_context));
+      break;
+
+    case apu::EcryptfsMigrationAction::kMinimalMigrate:
+      // Reset the profile ever initialized flag, so that user policy manager
+      // will block sign-in if no policy can be retrieved for the migrated
+      // profile.
+      user_manager::UserManager::Get()->ResetProfileEverInitialized(
+          user_context.GetAccountId());
+      user_manager::known_user::SetUserHomeMinimalMigrationAttempted(
+          user_context.GetAccountId(), true);
+      user_manager::UserManager::Get()->GetLocalState()->CommitPendingWrite(
+          base::BindOnce(&ExistingUserController::ShowEncryptionMigrationScreen,
+                         weak_factory_.GetWeakPtr(), user_context,
+                         EncryptionMigrationMode::START_MINIMAL_MIGRATION));
+      break;
+
+    case apu::EcryptfsMigrationAction::kAskForEcryptfsArcUsers:
+      // If the device is transitioning from ARC M to ARC N and has ARC enabled
+      // by policy, then ask the user about the migration. Otherwise disallow
+      // migration.
+      if (IsArcEnabledFromPolicy(policy_payload.get()) &&
+          base::CommandLine::ForCurrentProcess()->HasSwitch(
+              switches::kArcTransitionMigrationRequired)) {
+        ShowEncryptionMigrationScreen(user_context,
+                                      EncryptionMigrationMode::ASK_USER);
+      } else {
+        ContinuePerformLoginWithoutMigration(login_performer_->auth_mode(),
+                                             user_context);
+      }
+      break;
+  }
+}
+
+void ExistingUserController::WipePerformed(const UserContext& user_context,
+                                           bool success,
+                                           cryptohome::MountError return_code) {
+  if (!success) {
+    LOG(ERROR) << "Removal of cryptohome for "
+               << user_context.GetAccountId().Serialize()
+               << " failed, return code: " << return_code;
+  }
+
+  // Let the user authenticate online because we lose the OAuth token by
+  // removing the user's cryptohome.  Without this, the user can sign-in offline
+  // but after sign-in would immediately see the "sign-in details are out of
+  // date" error message and be prompted to sign out.
+
+  // Save the necessity to sign-in online into UserManager in case the user
+  // aborts the online flow.
+  user_manager::UserManager::Get()->SaveForceOnlineSignin(
+      user_context.GetAccountId(), true);
+  host_->OnPreferencesChanged();
+
+  // Start online sign-in UI for the user.
+  is_login_in_progress_ = false;
+  login_performer_.reset();
+  login_display_->ShowSigninUI(user_context.GetAccountId().GetUserEmail());
 }
 
 void ExistingUserController::WhiteListCheckFailed(const std::string& email) {
@@ -938,8 +1152,7 @@ void ExistingUserController::WhiteListCheckFailed(const std::string& email) {
         AuthFailure(AuthFailure::WHITELIST_CHECK_FAILED));
   }
 
-  if (authpolicy_login_helper_)
-    authpolicy_login_helper_->CancelRequestsAndRestart();
+  ClearActiveDirectoryState();
   ClearRecordedNames();
 }
 
@@ -947,8 +1160,7 @@ void ExistingUserController::PolicyLoadFailed() {
   ShowError(IDS_LOGIN_ERROR_OWNER_KEY_LOST, "");
 
   PerformLoginFinishedActions(false /* don't start auto login timer */);
-  if (authpolicy_login_helper_)
-    authpolicy_login_helper_->CancelRequestsAndRestart();
+  ClearActiveDirectoryState();
   ClearRecordedNames();
 }
 
@@ -1508,6 +1720,15 @@ void ExistingUserController::ClearRecordedNames() {
   display_email_.clear();
   display_name_.clear();
   given_name_.clear();
+}
+
+void ExistingUserController::ClearActiveDirectoryState() {
+  if (last_login_attempt_account_id_.GetAccountType() !=
+      AccountType::ACTIVE_DIRECTORY) {
+    return;
+  }
+  // Clear authpolicyd state so nothing could leak from one user to another.
+  AuthPolicyLoginHelper::Restart();
 }
 
 }  // namespace chromeos

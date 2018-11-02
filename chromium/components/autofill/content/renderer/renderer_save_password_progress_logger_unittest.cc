@@ -24,7 +24,9 @@ class FakeContentPasswordManagerDriver : public mojom::PasswordManagerDriver {
   ~FakeContentPasswordManagerDriver() override {}
 
   mojom::PasswordManagerDriverPtr CreateInterfacePtrAndBind() {
-    return binding_.CreateInterfacePtrAndBind();
+    mojom::PasswordManagerDriverPtr ptr;
+    binding_.Bind(mojo::MakeRequest(&ptr));
+    return ptr;
   }
 
   bool GetLogMessage(std::string* log) {
@@ -69,6 +71,8 @@ class FakeContentPasswordManagerDriver : public mojom::PasswordManagerDriver {
     called_record_save_ = true;
     log_ = log;
   }
+
+  void UserModifiedPasswordField() override {}
 
   void SaveGenerationFieldDetectedByClassifier(
       const autofill::PasswordForm& password_form,

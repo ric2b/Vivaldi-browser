@@ -22,6 +22,7 @@
 #include "gpu/command_buffer/service/context_group.h"
 #include "gpu/command_buffer/service/gles2_cmd_decoder.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
+#include "gpu/command_buffer/service/image_manager.h"
 #include "gpu/command_buffer/service/logger.h"
 #include "gpu/command_buffer/service/mailbox_manager_impl.h"
 #include "gpu/command_buffer/service/service_discardable_manager.h"
@@ -48,7 +49,11 @@ const size_t kTransferBufferSize = 16384;
 const size_t kSmallTransferBufferSize = 16;
 const size_t kTinyTransferBufferSize = 3;
 
-#if !defined(GPU_FUZZER_USE_ANGLE)
+#if !defined(GPU_FUZZER_USE_ANGLE) && !defined(GPU_FUZZER_USE_SWIFTSHADER)
+#define GPU_FUZZER_USE_STUB
+#endif
+
+#if defined(GPU_FUZZER_USE_STUB)
 static const char kExtensions[] =
     "GL_AMD_compressed_ATC_texture "
     "GL_ANGLE_texture_compression_dxt3 "
@@ -85,13 +90,21 @@ static const char kExtensions[] =
     "GL_OES_texture_half_float_linear";
 #endif
 
+GpuPreferences GetGpuPreferences() {
+  GpuPreferences preferences;
+#if defined(GPU_FUZZER_USE_PASSTHROUGH_CMD_DECODER)
+  preferences.use_passthrough_cmd_decoder = true;
+#endif
+  return preferences;
+}
+
 class CommandBufferSetup {
  public:
   CommandBufferSetup()
       : atexit_manager_(),
-        sync_point_manager_(new SyncPointManager()),
-        mailbox_manager_(new gles2::MailboxManagerImpl),
-        share_group_(new gl::GLShareGroup) {
+        gpu_preferences_(GetGpuPreferences()),
+        share_group_(new gl::GLShareGroup),
+        translator_cache_(gpu_preferences_) {
     logging::SetMinLogLevel(logging::LOG_FATAL);
     base::CommandLine::Init(0, NULL);
 
@@ -100,7 +113,6 @@ class CommandBufferSetup {
 
 #if defined(GPU_FUZZER_USE_PASSTHROUGH_CMD_DECODER)
     command_line->AppendSwitch(switches::kUsePassthroughCmdDecoder);
-    gpu_preferences_.use_passthrough_cmd_decoder = true;
     recreate_context_ = true;
 #endif
 
@@ -109,22 +121,26 @@ class CommandBufferSetup {
                                     gl::kGLImplementationANGLEName);
     command_line->AppendSwitchASCII(switches::kUseANGLE,
                                     gl::kANGLEImplementationNullName);
-    gl::init::InitializeGLOneOffImplementation(gl::kGLImplementationEGLGLES2,
-                                               false, false, false);
+    CHECK(gl::init::InitializeGLOneOffImplementation(
+        gl::kGLImplementationEGLGLES2, false, false, false));
+#elif defined(GPU_FUZZER_USE_SWIFTSHADER)
+    command_line->AppendSwitchASCII(switches::kUseGL,
+                                    gl::kGLImplementationSwiftShaderName);
+    CHECK(gl::init::InitializeGLOneOffImplementation(
+        gl::kGLImplementationSwiftShaderGL, false, false, false));
+#endif
 
+#if !defined(GPU_FUZZER_USE_STUB)
     surface_ = new gl::PbufferGLSurfaceEGL(gfx::Size());
     surface_->Initialize();
     if (!recreate_context_) {
       InitContext();
     }
-#else
+#else   // defined(GPU_FUZZER_USE_STUB)
     surface_ = new gl::GLSurfaceStub;
     InitContext();
     gl::GLSurfaceTestSupport::InitializeOneOffWithMockBindings();
-#endif
-
-    translator_cache_ = new gles2::ShaderTranslatorCache(gpu_preferences_);
-    completeness_cache_ = new gles2::FramebufferCompletenessCache;
+#endif  // defined(GPU_FUZZER_USE_STUB)
   }
 
   void InitDecoder() {
@@ -136,25 +152,21 @@ class CommandBufferSetup {
     scoped_refptr<gles2::FeatureInfo> feature_info =
         new gles2::FeatureInfo();
     scoped_refptr<gles2::ContextGroup> context_group = new gles2::ContextGroup(
-        gpu_preferences_, mailbox_manager_.get(), nullptr, translator_cache_,
-        completeness_cache_, feature_info, true /* bind_generates_resource */,
+        gpu_preferences_, &mailbox_manager_, nullptr /* memory_tracker */,
+        &translator_cache_, &completeness_cache_, feature_info,
+        true /* bind_generates_resource */, &image_manager_,
         nullptr /* image_factory */, nullptr /* progress_reporter */,
         GpuFeatureInfo(), &discardable_manager_);
-    decoder_.reset(gles2::GLES2Decoder::Create(context_group.get()));
     command_buffer_.reset(new CommandBufferDirect(
-        context_group->transfer_buffer_manager(), decoder_.get(),
-        base::Bind(&gles2::GLES2Decoder::MakeCurrent,
-                   base::Unretained(decoder_.get())),
-        sync_point_manager_.get()));
+        context_group->transfer_buffer_manager(), &sync_point_manager_));
+
+    decoder_.reset(gles2::GLES2Decoder::Create(command_buffer_.get(),
+                                               command_buffer_->service(),
+                                               context_group.get()));
+    command_buffer_->set_handler(decoder_.get());
+
     InitializeInitialCommandBuffer();
 
-    decoder_->set_command_buffer_service(command_buffer_->service());
-    decoder_->SetFenceSyncReleaseCallback(
-        base::Bind(&CommandBufferDirect::OnFenceSyncRelease,
-                   base::Unretained(command_buffer_.get())));
-    decoder_->SetWaitSyncTokenCallback(
-        base::Bind(&CommandBufferDirect::OnWaitSyncToken,
-                   base::Unretained(command_buffer_.get())));
     decoder_->GetLogger()->set_log_synthesized_gl_errors(false);
 
     gles2::ContextCreationAttribHelper attrib_helper;
@@ -165,7 +177,11 @@ class CommandBufferSetup {
     attrib_helper.alpha_size = 8;
     attrib_helper.depth_size = 0;
     attrib_helper.stencil_size = 0;
+#if defined(GPU_FUZZER_USE_SWIFTSHADER)
+    attrib_helper.context_type = gles2::CONTEXT_TYPE_OPENGLES2;
+#else
     attrib_helper.context_type = gles2::CONTEXT_TYPE_OPENGLES3;
+#endif
 
     bool result =
         decoder_->Initialize(surface_.get(), context_.get(), true,
@@ -180,6 +196,7 @@ class CommandBufferSetup {
       vertex_translator_ = decoder_->GetTranslator(GL_VERTEX_SHADER);
       fragment_translator_ = decoder_->GetTranslator(GL_FRAGMENT_SHADER);
     }
+    decoder_->MakeCurrent();
   }
 
   void ResetDecoder() {
@@ -235,7 +252,7 @@ class CommandBufferSetup {
   }
 
   void InitContext() {
-#if defined(GPU_FUZZER_USE_ANGLE)
+#if !defined(GPU_FUZZER_USE_STUB)
     context_ = new gl::GLContextEGL(share_group_.get());
     context_->Initialize(surface_.get(), gl::GLContextAttribs());
 #else
@@ -252,17 +269,18 @@ class CommandBufferSetup {
 
   GpuPreferences gpu_preferences_;
 
-  std::unique_ptr<SyncPointManager> sync_point_manager_;
-  scoped_refptr<gles2::MailboxManager> mailbox_manager_;
+  gles2::MailboxManagerImpl mailbox_manager_;
   scoped_refptr<gl::GLShareGroup> share_group_;
+  SyncPointManager sync_point_manager_;
+  gles2::ImageManager image_manager_;
   ServiceDiscardableManager discardable_manager_;
 
   bool recreate_context_ = false;
   scoped_refptr<gl::GLSurface> surface_;
   scoped_refptr<gl::GLContext> context_;
 
-  scoped_refptr<gles2::ShaderTranslatorCache> translator_cache_;
-  scoped_refptr<gles2::FramebufferCompletenessCache> completeness_cache_;
+  gles2::ShaderTranslatorCache translator_cache_;
+  gles2::FramebufferCompletenessCache completeness_cache_;
 
   std::unique_ptr<CommandBufferDirect> command_buffer_;
 

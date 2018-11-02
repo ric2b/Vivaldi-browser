@@ -88,8 +88,10 @@ String CSSPropertyFontUtils::ConcatenateFamilyName(CSSParserTokenRange& range) {
     builder.Append(range.ConsumeIncludingWhitespace().Value());
   }
   if (!added_space &&
-      CSSPropertyParserHelpers::IsCSSWideKeyword(first_token.Value()))
+      (CSSPropertyParserHelpers::IsCSSWideKeyword(first_token.Value()) ||
+       EqualIgnoringASCIICase(first_token.Value(), "default"))) {
     return String();
+  }
   return builder.ToString();
 }
 
@@ -159,6 +161,12 @@ CSSFontFeatureValue* CSSPropertyFontUtils::ConsumeFontFeatureTag(
     tag_value = range.ConsumeIncludingWhitespace().Id() == CSSValueOn;
   }
   return CSSFontFeatureValue::Create(tag, tag_value);
+}
+
+CSSIdentifierValue* CSSPropertyFontUtils::ConsumeFontVariantCSS21(
+    CSSParserTokenRange& range) {
+  return CSSPropertyParserHelpers::ConsumeIdent<CSSValueNormal,
+                                                CSSValueSmallCaps>(range);
 }
 
 }  // namespace blink

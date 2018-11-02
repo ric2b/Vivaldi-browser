@@ -24,10 +24,13 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+// https://www.w3.org/TR/webdatabase/#databasecallback
+callback DatabaseCallback = boolean (Database database);
+
 // https://www.w3.org/TR/webdatabase/#databases
 [
     ImplementedAs=DOMWindowWebDatabase,
-    RuntimeEnabled=Database,
+    RuntimeEnabled=Database
 ] partial interface Window {
     [MeasureAs=OpenWebDatabase, LogActivity, RaisesException] Database openDatabase(DOMString name, DOMString version, DOMString displayName, unsigned long estimatedSize, optional DatabaseCallback creationCallback);
 };

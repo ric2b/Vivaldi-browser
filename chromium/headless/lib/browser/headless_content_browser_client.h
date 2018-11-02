@@ -25,10 +25,11 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
   content::DevToolsManagerDelegate* GetDevToolsManagerDelegate() override;
   std::unique_ptr<base::Value> GetServiceManifestOverlay(
       base::StringPiece name) override;
+  content::QuotaPermissionContext* CreateQuotaPermissionContext() override;
   void GetQuotaSettings(
       content::BrowserContext* context,
       content::StoragePartition* partition,
-      const storage::OptionalQuotaSettingsCallback& callback) override;
+      storage::OptionalQuotaSettingsCallback callback) override;
 #if defined(OS_POSIX) && !defined(OS_MACOSX)
   void GetAdditionalMappedFilesForChildProcess(
       const base::CommandLine& command_line,
@@ -52,7 +53,12 @@ class HeadlessContentBrowserClient : public content::ContentBrowserClient {
 
   void ResourceDispatcherHostCreated() override;
 
+  net::NetLog* GetNetLog() override;
+
  private:
+  std::unique_ptr<base::Value> GetBrowserServiceManifestOverlay();
+  std::unique_ptr<base::Value> GetRendererServiceManifestOverlay();
+
   HeadlessBrowserImpl* browser_;  // Not owned.
 
   std::unique_ptr<HeadlessResourceDispatcherHostDelegate>

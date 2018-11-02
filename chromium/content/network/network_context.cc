@@ -7,13 +7,16 @@
 #include "base/command_line.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/network_session_configurator/common/network_switches.h"
 #include "content/network/cache_url_loader.h"
+#include "content/network/network_service_impl.h"
 #include "content/network/network_service_url_loader_factory_impl.h"
 #include "content/network/url_loader_impl.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_switches.h"
 #include "net/dns/host_resolver.h"
 #include "net/dns/mapped_host_resolver.h"
+#include "net/http/http_network_session.h"
 #include "net/proxy/proxy_config.h"
 #include "net/proxy/proxy_config_service_fixed.h"
 #include "net/url_request/url_request_context.h"
@@ -25,7 +28,7 @@ namespace {
 
 std::unique_ptr<net::URLRequestContext> MakeURLRequestContext() {
   net::URLRequestContextBuilder builder;
-  net::URLRequestContextBuilder::HttpNetworkSessionParams params;
+  net::HttpNetworkSession::Params params;
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
   if (command_line->HasSwitch(switches::kIgnoreCertificateErrors))
@@ -84,21 +87,41 @@ std::unique_ptr<net::URLRequestContext> MakeURLRequestContext() {
 
 }  // namespace
 
-NetworkContext::NetworkContext(mojom::NetworkContextRequest request,
+NetworkContext::NetworkContext(NetworkServiceImpl* network_service,
+                               mojom::NetworkContextRequest request,
                                mojom::NetworkContextParamsPtr params)
-    : url_request_context_(MakeURLRequestContext()),
-      in_shutdown_(false),
+    : network_service_(network_service),
+      url_request_context_(MakeURLRequestContext()),
+      params_(std::move(params)),
+      binding_(this, std::move(request)) {
+  network_service_->RegisterNetworkContext(this);
+  binding_.set_connection_error_handler(
+      base::Bind(&NetworkContext::OnConnectionError, base::Unretained(this)));
+}
+
+// TODO(mmenke): Share URLRequestContextBulder configuration between two
+// constructors. Can only share them once consumer code is ready for its
+// corresponding options to be overwritten.
+NetworkContext::NetworkContext(
+    mojom::NetworkContextRequest request,
+    mojom::NetworkContextParamsPtr params,
+    std::unique_ptr<net::URLRequestContextBuilder> builder)
+    : network_service_(nullptr),
+      url_request_context_(builder->Build()),
       params_(std::move(params)),
       binding_(this, std::move(request)) {}
 
 NetworkContext::~NetworkContext() {
-  in_shutdown_ = true;
   // Call each URLLoaderImpl and ask it to release its net::URLRequest, as the
   // corresponding net::URLRequestContext is going away with this
   // NetworkContext. The loaders can be deregistering themselves in Cleanup(),
-  // so iterate over a copy.
-  for (auto* url_loader : url_loaders_)
-    url_loader->Cleanup();
+  // so have to be careful.
+  while (!url_loaders_.empty())
+    (*url_loaders_.begin())->Cleanup();
+
+  // May be nullptr in tests.
+  if (network_service_)
+    network_service_->DeregisterNetworkContext(this);
 }
 
 std::unique_ptr<NetworkContext> NetworkContext::CreateForTesting() {
@@ -111,10 +134,8 @@ void NetworkContext::RegisterURLLoader(URLLoaderImpl* url_loader) {
 }
 
 void NetworkContext::DeregisterURLLoader(URLLoaderImpl* url_loader) {
-  if (!in_shutdown_) {
-    size_t removed_count = url_loaders_.erase(url_loader);
-    DCHECK(removed_count);
-  }
+  size_t removed_count = url_loaders_.erase(url_loader);
+  DCHECK(removed_count);
 }
 
 void NetworkContext::CreateURLLoaderFactory(
@@ -130,9 +151,22 @@ void NetworkContext::HandleViewCacheRequest(const GURL& url,
   StartCacheURLLoader(url, url_request_context_.get(), std::move(client));
 }
 
+void NetworkContext::Cleanup() {
+  // The NetworkService is going away, so have to destroy the
+  // net::URLRequestContext held by this NetworkContext.
+  delete this;
+}
+
 NetworkContext::NetworkContext()
-    : url_request_context_(MakeURLRequestContext()),
-      in_shutdown_(false),
+    : network_service_(nullptr),
+      url_request_context_(MakeURLRequestContext()),
       binding_(this) {}
+
+void NetworkContext::OnConnectionError() {
+  // Don't delete |this| in response to connection errors when it was created by
+  // CreateForTesting.
+  if (network_service_)
+    delete this;
+}
 
 }  // namespace content

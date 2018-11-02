@@ -22,7 +22,7 @@
 namespace blink {
 namespace scheduler {
 
-class WebFrameSchedulerImplTest : public testing::Test {
+class WebFrameSchedulerImplTest : public ::testing::Test {
  public:
   WebFrameSchedulerImplTest() {}
   ~WebFrameSchedulerImplTest() override {}
@@ -58,6 +58,35 @@ class WebFrameSchedulerImplTest : public testing::Test {
 
 namespace {
 
+class MockThrottlingObserver : public WebFrameScheduler::Observer {
+ public:
+  MockThrottlingObserver() : throttled_count_(0u), not_throttled_count_(0u) {}
+
+  void CheckObserverState(size_t throttled_count_expectation,
+                          size_t not_throttled_count_expectation) {
+    EXPECT_EQ(throttled_count_expectation, throttled_count_);
+    EXPECT_EQ(not_throttled_count_expectation, not_throttled_count_);
+  }
+
+  // WebFrameScheduler::Observer.
+  void OnThrottlingStateChanged(
+      WebFrameScheduler::ThrottlingState state) override {
+    switch (state) {
+      case WebFrameScheduler::ThrottlingState::kThrottled:
+        throttled_count_++;
+        break;
+      case WebFrameScheduler::ThrottlingState::kNotThrottled:
+        not_throttled_count_++;
+        break;
+        // We should not have another state, and compiler checks it.
+    }
+  }
+
+ private:
+  size_t throttled_count_;
+  size_t not_throttled_count_;
+};
+
 void RunRepeatingTask(RefPtr<WebTaskRunner> task_runner, int* run_count);
 
 std::unique_ptr<WTF::Closure> MakeRepeatingTask(
@@ -83,7 +112,7 @@ void IncrementCounter(int* counter) {
 }  // namespace
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInForeground) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(true);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(true);
 
   int run_count = 0;
   web_frame_scheduler_->TimerTaskRunner()->PostDelayedTask(
@@ -96,7 +125,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInForeground) {
 }
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInBackground) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(true);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(true);
   web_view_scheduler_->SetPageVisible(false);
 
   int run_count = 0;
@@ -106,19 +135,11 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_PageInBackground) {
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
-  EXPECT_EQ(1000, run_count);
-
-  // The task queue isn't throttled at all until it's been in the background for
-  // a 10 second grace period.
-  clock_->Advance(base::TimeDelta::FromSeconds(10));
-
-  run_count = 0;
-  mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
   EXPECT_EQ(1, run_count);
 }
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_SameOrigin) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(true);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(true);
   web_frame_scheduler_->SetFrameVisible(false);
 
   int run_count = 0;
@@ -132,7 +153,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_SameOrigin) {
 }
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameVisible_CrossOrigin) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(true);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(true);
   web_frame_scheduler_->SetFrameVisible(true);
   web_frame_scheduler_->SetCrossOrigin(true);
 
@@ -147,7 +168,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameVisible_CrossOrigin) {
 }
 
 TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(true);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(true);
   web_frame_scheduler_->SetFrameVisible(false);
   web_frame_scheduler_->SetCrossOrigin(true);
 
@@ -162,7 +183,7 @@ TEST_F(WebFrameSchedulerImplTest, RepeatingTimer_FrameHidden_CrossOrigin) {
 }
 
 TEST_F(WebFrameSchedulerImplTest, PageInBackground_ThrottlingDisabled) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(false);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(false);
   web_view_scheduler_->SetPageVisible(false);
 
   int run_count = 0;
@@ -172,20 +193,12 @@ TEST_F(WebFrameSchedulerImplTest, PageInBackground_ThrottlingDisabled) {
       TimeDelta::FromMilliseconds(1));
 
   mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
-  EXPECT_EQ(1000, run_count);
-
-  // The task queue isn't throttled at all until it's been in the background for
-  // a 10 second grace period.
-  clock_->Advance(base::TimeDelta::FromSeconds(10));
-
-  run_count = 0;
-  mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
   EXPECT_EQ(1, run_count);
 }
 
 TEST_F(WebFrameSchedulerImplTest,
        RepeatingTimer_FrameHidden_CrossOrigin_ThrottlingDisabled) {
-  RuntimeEnabledFeatures::setTimerThrottlingForHiddenFramesEnabled(false);
+  RuntimeEnabledFeatures::SetTimerThrottlingForHiddenFramesEnabled(false);
   web_frame_scheduler_->SetFrameVisible(false);
   web_frame_scheduler_->SetCrossOrigin(true);
 
@@ -209,18 +222,61 @@ TEST_F(WebFrameSchedulerImplTest, SuspendAndResume) {
       BLINK_FROM_HERE, WTF::Bind(&IncrementCounter, WTF::Unretained(&counter)));
   web_frame_scheduler_->SuspendableTaskRunner()->PostTask(
       BLINK_FROM_HERE, WTF::Bind(&IncrementCounter, WTF::Unretained(&counter)));
+  web_frame_scheduler_->UnthrottledButBlockableTaskRunner()->PostTask(
+      BLINK_FROM_HERE, WTF::Bind(&IncrementCounter, WTF::Unretained(&counter)));
 
   web_frame_scheduler_->SetSuspended(true);
 
   EXPECT_EQ(0, counter);
   mock_task_runner_->RunUntilIdle();
-  EXPECT_EQ(1, counter);
+  EXPECT_EQ(2, counter);
 
   web_frame_scheduler_->SetSuspended(false);
 
-  EXPECT_EQ(1, counter);
+  EXPECT_EQ(2, counter);
   mock_task_runner_->RunUntilIdle();
-  EXPECT_EQ(4, counter);
+  EXPECT_EQ(5, counter);
+}
+
+// Tests if throttling observer interfaces work.
+TEST_F(WebFrameSchedulerImplTest, ThrottlingObserver) {
+  std::unique_ptr<MockThrottlingObserver> observer =
+      base::MakeUnique<MockThrottlingObserver>();
+
+  size_t throttled_count = 0u;
+  size_t not_throttled_count = 0u;
+
+  observer->CheckObserverState(throttled_count, not_throttled_count);
+
+  web_frame_scheduler_->AddThrottlingObserver(
+      WebFrameScheduler::ObserverType::kLoader, observer.get());
+
+  // Initial state should be synchronously notified here.
+  // We assume kNotThrottled is notified as an initial state, but it could
+  // depend on implementation details and can be changed.
+  observer->CheckObserverState(throttled_count, ++not_throttled_count);
+
+  // Once the page gets to be invisible, it should notify the observer of
+  // kThrottled synchronously.
+  web_view_scheduler_->SetPageVisible(false);
+  observer->CheckObserverState(++throttled_count, not_throttled_count);
+
+  // Going back to visible state should notify the observer of kNotThrottled
+  // synchronously.
+  web_view_scheduler_->SetPageVisible(true);
+  observer->CheckObserverState(throttled_count, ++not_throttled_count);
+
+  // Remove from the observer list, and see if any other callback should not be
+  // invoked when the condition is changed.
+  web_frame_scheduler_->RemoveThrottlingObserver(
+      WebFrameScheduler::ObserverType::kLoader, observer.get());
+  web_view_scheduler_->SetPageVisible(false);
+
+  // Wait 100 secs virtually and run pending tasks just in case.
+  clock_->Advance(base::TimeDelta::FromSeconds(100));
+  mock_task_runner_->RunUntilIdle();
+
+  observer->CheckObserverState(throttled_count, not_throttled_count);
 }
 
 }  // namespace scheduler

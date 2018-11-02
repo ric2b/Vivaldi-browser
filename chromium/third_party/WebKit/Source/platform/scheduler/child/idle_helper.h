@@ -63,6 +63,9 @@ class PLATFORM_EXPORT IdleHelper : public base::MessageLoop::TaskObserver,
     // Signals that we have finished an Idle Period.
     virtual void OnIdlePeriodEnded() = 0;
 
+    // Signals that the task list has changed.
+    virtual void OnPendingTasksChanged(bool has_tasks) = 0;
+
    private:
     DISALLOW_COPY_AND_ASSIGN(Delegate);
   };
@@ -88,7 +91,8 @@ class PLATFORM_EXPORT IdleHelper : public base::MessageLoop::TaskObserver,
       SchedulerHelper* helper,
       Delegate* delegate,
       const char* idle_period_tracing_name,
-      base::TimeDelta required_quiescence_duration_before_long_idle_period);
+      base::TimeDelta required_quiescence_duration_before_long_idle_period,
+      scoped_refptr<TaskQueue> idle_queue);
   ~IdleHelper() override;
 
   // Prevents any further idle tasks from running.

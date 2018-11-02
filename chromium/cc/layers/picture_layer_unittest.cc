@@ -13,8 +13,8 @@
 #include "cc/layers/content_layer_client.h"
 #include "cc/layers/picture_layer_impl.h"
 #include "cc/paint/paint_flags.h"
-#include "cc/test/fake_compositor_frame_sink.h"
 #include "cc/test/fake_content_layer_client.h"
+#include "cc/test/fake_layer_tree_frame_sink.h"
 #include "cc/test/fake_layer_tree_host.h"
 #include "cc/test/fake_picture_layer.h"
 #include "cc/test/fake_picture_layer_impl.h"
@@ -57,11 +57,11 @@ TEST(PictureLayerTest, NoTilesIfEmptyBounds) {
 
   FakeImplTaskRunnerProvider impl_task_runner_provider;
 
-  std::unique_ptr<FakeCompositorFrameSink> compositor_frame_sink =
-      FakeCompositorFrameSink::CreateSoftware();
+  std::unique_ptr<FakeLayerTreeFrameSink> layer_tree_frame_sink =
+      FakeLayerTreeFrameSink::CreateSoftware();
   FakeLayerTreeHostImpl host_impl(
       LayerTreeSettings(), &impl_task_runner_provider, &task_graph_runner);
-  host_impl.InitializeRenderer(compositor_frame_sink.get());
+  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   std::unique_ptr<FakePictureLayerImpl> layer_impl =
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1);
@@ -96,13 +96,13 @@ TEST(PictureLayerTest, InvalidateRasterAfterUpdate) {
 
   host->CommitComplete();
   FakeImplTaskRunnerProvider impl_task_runner_provider;
-  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
-      FakeCompositorFrameSink::Create3d());
+  std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink(
+      FakeLayerTreeFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettings();
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(compositor_frame_sink.get());
+  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -137,13 +137,13 @@ TEST(PictureLayerTest, InvalidateRasterWithoutUpdate) {
 
   host->CommitComplete();
   FakeImplTaskRunnerProvider impl_task_runner_provider;
-  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
-      FakeCompositorFrameSink::Create3d());
+  std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink(
+      FakeLayerTreeFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettings();
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  host_impl.InitializeRenderer(compositor_frame_sink.get());
+  host_impl.InitializeRenderer(layer_tree_frame_sink.get());
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
       FakePictureLayerImpl::Create(host_impl.pending_tree(), 1));
@@ -182,13 +182,13 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   FakeImplTaskRunnerProvider impl_task_runner_provider;
 
-  std::unique_ptr<CompositorFrameSink> compositor_frame_sink(
-      FakeCompositorFrameSink::Create3d());
+  std::unique_ptr<LayerTreeFrameSink> layer_tree_frame_sink(
+      FakeLayerTreeFrameSink::Create3d());
   LayerTreeSettings layer_tree_settings = LayerTreeSettings();
   FakeLayerTreeHostImpl host_impl(
       layer_tree_settings, &impl_task_runner_provider, &task_graph_runner);
   host_impl.SetVisible(true);
-  EXPECT_TRUE(host_impl.InitializeRenderer(compositor_frame_sink.get()));
+  EXPECT_TRUE(host_impl.InitializeRenderer(layer_tree_frame_sink.get()));
 
   host_impl.CreatePendingTree();
   host_impl.pending_tree()->SetRootLayerForTesting(
@@ -207,9 +207,8 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
 
   // By updating the draw proprties on the active tree, we will set the viewport
   // rect for tile priorities to something non-empty.
-  const bool can_use_lcd_text = false;
   host_impl.active_tree()->BuildPropertyTreesForTesting();
-  host_impl.active_tree()->UpdateDrawProperties(can_use_lcd_text);
+  host_impl.active_tree()->UpdateDrawProperties();
 
   layer->SetBounds(gfx::Size(11, 11));
 
@@ -233,13 +232,17 @@ TEST(PictureLayerTest, ClearVisibleRectWhenNoTiling) {
   host_impl.active_tree()->root_layer_for_testing()->DidDraw(nullptr);
 }
 
-TEST(PictureLayerTest, SuitableForGpuRasterization) {
+TEST(PictureLayerTest, HasSlowPaths) {
   std::unique_ptr<FakeRecordingSource> recording_source_owned(
       new FakeRecordingSource);
   FakeRecordingSource* recording_source = recording_source_owned.get();
 
+  gfx::Size layer_bounds(200, 200);
+  gfx::Rect layer_rect(layer_bounds);
+  Region invalidation(layer_rect);
+
   FakeContentLayerClient client;
-  client.set_bounds(gfx::Size());
+  client.set_bounds(layer_bounds);
   scoped_refptr<FakePictureLayer> layer =
       FakePictureLayer::CreateWithRecordingSource(
           &client, std::move(recording_source_owned));
@@ -251,28 +254,52 @@ TEST(PictureLayerTest, SuitableForGpuRasterization) {
       &host_client, &task_graph_runner, animation_host.get());
   host->SetRootLayer(layer);
 
-  // Update layers to initialize the recording source.
+  recording_source->SetNeedsDisplayRect(layer_rect);
+  layer->Update();
+
+  // Layer does not have slow paths by default.
+  EXPECT_FALSE(layer->HasSlowPaths());
+
+  // Add slow-path content to the client.
+  client.set_contains_slow_paths(true);
+  recording_source->SetNeedsDisplayRect(layer_rect);
+  layer->Update();
+  EXPECT_TRUE(layer->HasSlowPaths());
+}
+
+TEST(PictureLayerTest, HasNonAAPaint) {
+  std::unique_ptr<FakeRecordingSource> recording_source_owned(
+      new FakeRecordingSource);
+  FakeRecordingSource* recording_source = recording_source_owned.get();
+
   gfx::Size layer_bounds(200, 200);
   gfx::Rect layer_rect(layer_bounds);
   Region invalidation(layer_rect);
 
-  gfx::Rect new_recorded_viewport = client.PaintableRegion();
-  scoped_refptr<DisplayItemList> display_list =
-      client.PaintContentsToDisplayList(
-          ContentLayerClient::PAINTING_BEHAVIOR_NORMAL);
-  size_t painter_reported_memory_usage =
-      client.GetApproximateUnsharedMemoryUsage();
-  recording_source->UpdateAndExpandInvalidation(&invalidation, layer_bounds,
-                                                new_recorded_viewport);
-  recording_source->UpdateDisplayItemList(display_list,
-                                          painter_reported_memory_usage);
+  FakeContentLayerClient client;
+  client.set_bounds(layer_bounds);
+  scoped_refptr<FakePictureLayer> layer =
+      FakePictureLayer::CreateWithRecordingSource(
+          &client, std::move(recording_source_owned));
 
-  // Layer is suitable for gpu rasterization by default.
-  EXPECT_TRUE(layer->IsSuitableForGpuRasterization());
+  FakeLayerTreeHostClient host_client;
+  TestTaskGraphRunner task_graph_runner;
+  auto animation_host = AnimationHost::CreateForTesting(ThreadInstance::MAIN);
+  std::unique_ptr<FakeLayerTreeHost> host = FakeLayerTreeHost::Create(
+      &host_client, &task_graph_runner, animation_host.get());
+  host->SetRootLayer(layer);
 
-  // Veto gpu rasterization.
-  layer->set_force_unsuitable_for_gpu_rasterization(true);
-  EXPECT_FALSE(layer->IsSuitableForGpuRasterization());
+  recording_source->SetNeedsDisplayRect(layer_rect);
+  layer->Update();
+
+  // Layer does not have non-aa paint by default.
+  EXPECT_FALSE(layer->HasNonAAPaint());
+
+  // Add non-aa content to the client.
+  client.add_draw_rect(layer_rect, PaintFlags());
+  recording_source->SetNeedsDisplayRect(layer_rect);
+  layer->Update();
+  EXPECT_TRUE(layer->HasNonAAPaint());
 }
 
 // PicturePile uses the source frame number as a unit for measuring invalidation

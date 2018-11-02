@@ -14,7 +14,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_tab_util.h"
-#include "chrome/browser/memory/tab_manager.h"
+#include "chrome/browser/resource_coordinator/tab_manager.h"
 #include "chrome/browser/permissions/permission_util.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/renderer_preferences_util.h"
@@ -27,6 +27,8 @@
 #include "components/zoom/zoom_controller.h"
 #include "content/browser/renderer_host/render_view_host_delegate_view.h"
 #include "content/browser/web_contents/web_contents_impl.h"
+#include "content/public/browser/child_process_security_policy.h"
+#include "content/public/browser/native_web_keyboard_event.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -41,7 +43,9 @@
 #include "prefs/vivaldi_pref_names.h"
 #include "prefs/vivaldi_tab_zoom_pref.h"
 #include "renderer/vivaldi_render_messages.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/content_accelerators/accelerator_util.h"
 #include "ui/display/screen.h"
 #include "ui/display/win/dpi.h"
 #include "ui/gfx/codec/jpeg_codec.h"
@@ -51,6 +55,7 @@
 #include "ui/display/win/screen_win.h"
 #endif  // defined(OS_WIN)
 #include "ui/vivaldi_ui_utils.h"
+
 
 DEFINE_WEB_CONTENTS_USER_DATA_KEY(extensions::VivaldiPrivateTabObserver);
 
@@ -85,6 +90,29 @@ TabsPrivateAPI::GetFactoryInstance() {
 
 void TabsPrivateAPI::OnListenerAdded(const EventListenerInfo& details) {
   EventRouter::Get(browser_context_)->UnregisterObserver(this);
+}
+
+void TabsPrivateAPI::SendKeyboardShortcutEvent(
+    const content::NativeWebKeyboardEvent& event) {
+  int key_code = event.windows_key_code;
+  ui::Accelerator accelerator =
+      ui::GetAcceleratorFromNativeWebKeyboardEvent(event);
+
+  // Don't send if event contains only modifiers.
+  if (key_code != ui::VKEY_CONTROL && key_code != ui::VKEY_SHIFT &&
+      key_code != ui::VKEY_MENU) {
+    if (event.GetType() == blink::WebInputEvent::kRawKeyDown) {
+      std::string shortcutText =
+          base::UTF16ToUTF8(accelerator.GetShortcutText());
+      std::unique_ptr<base::ListValue> args =
+          vivaldi::tabs_private::OnKeyboardShortcut::Create(shortcutText);
+
+      event_router_->DispatchEvent(
+          extensions::events::VIVALDI_EXTENSION_EVENT,
+          extensions::vivaldi::tabs_private::OnKeyboardShortcut::kEventName,
+          std::move(args));
+    }
+  }
 }
 
 // VivaldiAppHelper::TabDrag interface. We only care about the dragend event,
@@ -204,6 +232,7 @@ void VivaldiPrivateTabObserver::BroadcastTabInfo() {
   info.show_images.reset(new bool(show_images()));
   info.load_from_cache_only.reset(new bool(load_from_cache_only()));
   info.enable_plugins.reset(new bool(enable_plugins()));
+  info.mime_type.reset(new std::string(contents_mime_type()));
   int id = SessionTabHelper::IdForTab(web_contents());
 
   std::unique_ptr<base::ListValue> args =
@@ -266,6 +295,16 @@ void VivaldiPrivateTabObserver::RenderViewCreated(
   SetLoadFromCacheOnly(load_from_cache_only_);
   SetEnablePlugins(enable_plugins_);
   CommitSettings();
+
+  const GURL& site = render_view_host->GetSiteInstance()->GetSiteURL();
+  std::string renderviewhost = site.host();
+  if (::vivaldi::IsVivaldiApp(renderviewhost)) {
+    auto* security_policy = content::ChildProcessSecurityPolicy::GetInstance();
+    int process_id = render_view_host->GetProcess()->GetID();
+    security_policy->GrantScheme(process_id, url::kFileScheme);
+    security_policy->GrantScheme(process_id, content::kViewSourceScheme);
+  }
+
 }
 
 void VivaldiPrivateTabObserver::SaveZoomLevelToExtData(double zoom_level) {
@@ -371,6 +410,16 @@ bool VivaldiPrivateTabObserver::OnMessageReceived(const IPC::Message& message) {
   IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
+}
+
+void VivaldiPrivateTabObserver::DocumentAvailableInMainFrame() {
+  VivaldiPrivateTabObserver* tab_api =
+      VivaldiPrivateTabObserver::FromWebContents(web_contents());
+  DCHECK(tab_api);
+  if (tab_api) {
+    tab_api->SetContentsMimeType(web_contents()->GetContentsMimeType());
+    tab_api->BroadcastTabInfo();
+  }
 }
 
 void VivaldiPrivateTabObserver::CaptureTab(
@@ -550,11 +599,14 @@ bool TabsPrivateGetFunction::RunAsync() {
       if (favicon_driver) {
         gfx::Image image = favicon_driver->GetFavicon();
 
-        if (!image.IsEmpty()) {
-          info.fav_icon.reset(new std::string(
-              *extensions::ExtensionActionUtil::EncodeBitmapToPng(
-                  image.ToSkBitmap())));
-        }
+        std::string *faviconstr =
+            image.IsEmpty()
+                ? new std::string("")
+                : new std::string(
+                      *extensions::ExtensionActionUtil::EncodeBitmapToPng(
+                          image.ToSkBitmap()));
+
+        info.fav_icon.reset(faviconstr);
       }
       results_ = tabs_private::Get::Results::Create(info);
       SendResponse(true);

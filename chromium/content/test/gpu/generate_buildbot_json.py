@@ -25,6 +25,11 @@ class Types(object):
   GPU_FYI = 'gpu_fyi'
   OPTIONAL = 'optional'
   V8_FYI = 'v8_fyi'
+  # The Win ANGLE AMD tryserver is split off because there isn't
+  # enough capacity to run all the tests from chromium.gpu.fyi's Win
+  # AMD bot on a tryserver. It represents some of the tests on
+  # win_angle_rel_ng and is not a real machine on the waterfall.
+  WIN_ANGLE_AMD_TRYSERVER = 'win_angle_amd_tryserver'
 
 # The predicate functions receive a list of types as input and
 # determine whether the test should run on the given bot.
@@ -32,20 +37,27 @@ class Predicates(object):
   @staticmethod
   def DEFAULT(x):
     # By default, tests run on the chromium.gpu and chromium.gpu.fyi
-    # waterfalls, but not on the optional tryservers or on the
-    # client.v8.fyi waterfall.
-    return Types.OPTIONAL not in x and Types.V8_FYI not in x
+    # waterfalls, but not on the optional tryservers, nor on the
+    # client.v8.fyi waterfall, nor on the Win ANGLE AMD tryserver.
+    return Types.OPTIONAL not in x and Types.V8_FYI not in x and \
+      Types.WIN_ANGLE_AMD_TRYSERVER not in x
 
   @staticmethod
   def FYI_ONLY(x):
     # This predicate is more complex than desired because the optional
-    # tryservers are considered to be on the chromium.gpu.fyi
-    # waterfall.
-    return Types.GPU_FYI in x and Types.OPTIONAL not in x
+    # tryservers and the Win ANGLE AMD tryserver are considered to be
+    # on the chromium.gpu.fyi waterfall.
+    return Types.GPU_FYI in x and Types.OPTIONAL not in x and \
+      Types.WIN_ANGLE_AMD_TRYSERVER not in x
 
   @staticmethod
   def FYI_AND_OPTIONAL(x):
     return Predicates.FYI_ONLY(x) or Types.OPTIONAL in x
+
+  @staticmethod
+  def FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD(x):
+    return Predicates.FYI_ONLY(x) or Types.OPTIONAL in x or \
+      Types.WIN_ANGLE_AMD_TRYSERVER in x
 
   @staticmethod
   def FYI_OPTIONAL_AND_V8(x):
@@ -256,6 +268,19 @@ FYI_WATERFALL = {
       'swarming_dimensions': [
         {
           'gpu': '8086:1912',
+          'os': 'Windows-10',
+        },
+      ],
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'win',
+    },
+    'Win10 Release (Intel HD 630)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '8086:5912',
           'os': 'Windows-10',
         },
       ],
@@ -526,6 +551,19 @@ FYI_WATERFALL = {
       'swarming': False,
       'os_type': 'linux',
     },
+    'Linux Release (Intel HD 630)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '8086:5912',
+          'os': 'Ubuntu'
+        },
+      ],
+      'build_config': 'Release',
+      # This bot is a one-off and doesn't have similar slaves in the
+      # swarming pool.
+      'swarming': False,
+      'os_type': 'linux',
+    },
     'Linux Debug (Intel HD 530)': {
       'swarming_dimensions': [
         {
@@ -595,6 +633,7 @@ FYI_WATERFALL = {
     'Android Release (Nexus 5X)': {
       'swarming_dimensions': [
         {
+          'android_devices': '1',
           'device_type': 'bullhead',
           'device_os': 'M',
           'os': 'Android'
@@ -682,18 +721,6 @@ FYI_WATERFALL = {
       'os_type': 'win',
       'type': Types.OPTIONAL,
     },
-    'Optional Win7 Release (AMD)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:6613',
-          'os': 'Windows-2008ServerR2-SP1'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'win',
-      'type': Types.OPTIONAL,
-    },
     'Optional Mac Release (Intel)': {
       'swarming_dimensions': [
         {
@@ -732,46 +759,6 @@ FYI_WATERFALL = {
       'os_type': 'mac',
       'type': Types.OPTIONAL,
     },
-    # BEGIN obsolete Mac bots -- remove after waterfall restarted successfully.
-    'Optional Mac 10.10 Release (Intel)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '8086:0a2e',
-          'os': 'Mac-10.12'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'mac',
-      'type': Types.OPTIONAL,
-    },
-    'Optional Mac Retina Release': {
-      'swarming_dimensions': [
-        {
-          'gpu': '10de:0fe9',
-          'hidpi': '1',
-          'os': 'Mac'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'mac',
-      'type': Types.OPTIONAL,
-    },
-    'Optional Mac 10.10 Retina Release (AMD)': {
-      'swarming_dimensions': [
-        {
-          'gpu': '1002:6821',
-          'hidpi': '1',
-          'os': 'Mac'
-        },
-      ],
-      'build_config': 'Release',
-      'swarming': True,
-      'os_type': 'mac',
-      'type': Types.OPTIONAL,
-    },
-    # END obsolete Mac bots -- remove after waterfall restarted successfully.
     'Optional Linux Release (NVIDIA)': {
       'swarming_dimensions': [
         {
@@ -783,6 +770,22 @@ FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'linux',
       'type': Types.OPTIONAL,
+    },
+    # This tryserver doesn't actually exist; it's a separate
+    # configuration from the Win AMD bot on this waterfall because we
+    # don't have enough tryserver capacity to run all the tests from
+    # that bot on win_angle_rel_ng.
+    'Win7 ANGLE Tryserver (AMD)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '1002:6613',
+          'os': 'Windows-2008ServerR2-SP1'
+        },
+      ],
+      'build_config': 'Release',
+      'swarming': True,
+      'os_type': 'win',
+      'type': Types.WIN_ANGLE_AMD_TRYSERVER,
     },
   }
 }
@@ -888,9 +891,21 @@ V8_FYI_WATERFALL = {
       'swarming': True,
       'os_type': 'linux',
     },
+    'Linux Release - concurrent marking (NVIDIA)': {
+      'swarming_dimensions': [
+        {
+          'gpu': '10de:104a',
+          'os': 'Ubuntu'
+        },
+      ],
+      'build_config': 'Release',
+      'swarming': True,
+      'os_type': 'linux',
+    },
     'Android Release (Nexus 5X)': {
       'swarming_dimensions': [
         {
+          'android_devices': '1',
           'device_type': 'bullhead',
           'device_os': 'M',
           'os': 'Android'
@@ -937,8 +952,9 @@ COMMON_GTESTS = {
   'angle_deqp_gles2_d3d11_tests': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        # Run this on the FYI waterfall, optional tryservers, and Win
+        # ANGLE AMD tryserver.
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
         # Run only on the Win7 NVIDIA/AMD R7 240 32- and 64-bit bots (and
         # trybots) for the time being, at least until more capacity is
         # added.
@@ -1018,6 +1034,7 @@ COMMON_GTESTS = {
         'swarming_dimension_sets': [
           # Nexus 5X
           {
+            'android_devices': '1',
             'device_type': 'bullhead',
             'device_os': 'M',
             'os': 'Android'
@@ -1040,7 +1057,10 @@ COMMON_GTESTS = {
       '--test-launcher-batch-limit=400',
       '--deqp-egl-display-type=angle-gles'
     ],
-    'android_args': ['--enable-xml-result-parsing']
+    'android_args': [
+      '--enable-xml-result-parsing',
+      '--shard-timeout=300'
+    ],
   },
 
   'angle_deqp_gles3_gles_tests': {
@@ -1053,6 +1073,7 @@ COMMON_GTESTS = {
         'swarming_dimension_sets': [
           # Nexus 5X
           {
+            'android_devices': '1',
             'device_type': 'bullhead',
             'device_os': 'M',
             'os': 'Android'
@@ -1067,6 +1088,9 @@ COMMON_GTESTS = {
         ],
       },
     ],
+    'swarming': {
+      'shards': 4,
+    },
     'test': 'angle_deqp_gles3_tests',
     # Only pass the display type to desktop. The Android runner doesn't support
     # passing args to the executable but only one display type is supported on
@@ -1095,11 +1119,14 @@ COMMON_GTESTS = {
             'gpu': '10de:104a',
             'os': 'Windows-2008ServerR2-SP1'
           },
+          # Temporarily disable AMD deqp ES3 tests due to issues with the log
+          # size causing out-of-memory errors in the recipe engine.
+          # crbug.com/713196
           # AMD Win 7
-          {
-            'gpu': '1002:6613',
-            'os': 'Windows-2008ServerR2-SP1'
-          }
+          #{
+          #  'gpu': '1002:6613',
+          #  'os': 'Windows-2008ServerR2-SP1'
+          #}
         ],
       }
     ],
@@ -1230,7 +1257,7 @@ COMMON_GTESTS = {
   'angle_end2end_tests': {
     'tester_configs': [
       {
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
       },
     ],
     'disabled_tester_configs': [
@@ -1254,7 +1281,7 @@ COMMON_GTESTS = {
   'angle_white_box_tests': {
     'tester_configs': [
       {
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
         # There are only Windows white box tests for now.
         # Enable on more configs when there will be relevant tests.
         'os_types': ['win'],
@@ -1279,7 +1306,8 @@ COMMON_GTESTS = {
       # ANGLE test retries deliberately disabled to prevent flakiness.
       # http://crbug.com/669196
       '--test-launcher-retry-limit=0'
-    ]
+    ],
+    'linux_args': [ '--no-xvfb' ]
   },
   # Until the media-only tests are extracted from content_unittests,
   # and audio_unittests and content_unittests can be run on the commit
@@ -1292,7 +1320,7 @@ COMMON_GTESTS = {
   'audio_unittests': {
     'tester_configs': [
       {
-        'predicate': Predicates.FYI_ONLY,
+        'predicate': Predicates.FYI_AND_OPTIONAL,
       }
     ],
     # Don't run these tests on Android.
@@ -1331,7 +1359,8 @@ COMMON_GTESTS = {
         ],
       },
     ],
-    'desktop_args': ['--use-gpu-in-tests']
+    'desktop_args': ['--use-gpu-in-tests'],
+    'linux_args': [ '--no-xvfb' ]
   },
   # The gles2_conform_tests are closed-source and deliberately only run
   # on the FYI waterfall and the optional tryservers.
@@ -1400,7 +1429,7 @@ COMMON_GTESTS = {
   },
   # Face and barcode detection unit tests, which currently only run on
   # Mac OS, and require physical hardware.
-  'service_unittests': {
+  'services_unittests': {
     'tester_configs': [
       {
         # Run this on the FYI waterfall and optional tryservers.
@@ -1516,6 +1545,7 @@ COMMON_GTESTS = {
         'names': [
           'Win10 Debug (Intel HD 530)',
           'Win10 Release (Intel HD 530)',
+          'Win10 Release (Intel HD 630)',
         ],
       },
     ],
@@ -1823,33 +1853,12 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     ],
     'asan_args': ['--is-asan'],
   },
-  'webgl_conformance_angle_tests': {
-    'tester_configs': [
-      {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
-        'os_types': ['linux'],
-        'disabled_instrumentation_types': ['tsan'],
-      }
-    ],
-    'disabled_tester_configs': [
-      {
-        'names': [
-          'Linux ChromiumOS Ozone (Intel)',
-        ],
-      },
-    ],
-    'target_name': 'webgl_conformance',
-    'extra_browser_args': [
-      '--use-gl=angle',
-    ],
-    'asan_args': ['--is-asan'],
-  },
   'webgl_conformance_d3d11_passthrough': {
     'tester_configs': [
       {
-        # Run this on the FYI waterfall and optional tryservers.
-        'predicate': Predicates.FYI_AND_OPTIONAL,
+        # Run this on the FYI waterfall, optional tryservers, and Win
+        # ANGLE AMD tryserver.
+        'predicate': Predicates.FYI_AND_OPTIONAL_AND_WIN_ANGLE_AMD,
         'os_types': ['win'],
         'disabled_instrumentation_types': ['tsan'],
       }
@@ -1865,12 +1874,6 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'extra_browser_args': [
       '--use-angle=d3d11',
       '--use-passthrough-cmd-decoder',
-      # TODO(geofflang): Remove --disable-es3-apis once crbug.com/671217 is
-      # complete.
-      '--disable-es3-apis',
-      # TODO(geofflang): --disable-es3-gl-context is required because of
-      # crbug.com/680522
-      '--disable-es3-gl-context',
     ],
     'asan_args': ['--is-asan'],
   },
@@ -1937,7 +1940,7 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
       'shards': 15,
     },
   },
-  'webgl2_conformance_angle_tests': {
+  'webgl2_conformance_gl_passthrough_tests': {
     'tester_configs': [
       {
          # The WebGL 2.0 conformance tests take over an hour to run on
@@ -1972,6 +1975,8 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
       '--use-gl=angle',
+      '--use-angle=gl',
+      '--use-passthrough-cmd-decoder',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',
@@ -2015,6 +2020,29 @@ TELEMETRY_GPU_INTEGRATION_TESTS = {
     'target_name': 'webgl_conformance',
     'extra_browser_args': [
       '--use-angle=gl',
+    ],
+  },
+  'webgl2_conformance_d3d11_passthrough_tests': {
+    'tester_configs': [
+      {
+         # The WebGL 2.0 conformance tests take over an hour to run on
+         # the Debug bots, which is too long.
+        'build_configs': ['Release'],
+        'predicate': Predicates.FYI_ONLY,
+        # Only run on the NVIDIA Release Windows bots.
+        'swarming_dimension_sets': [
+          {
+            'gpu': '10de:104a',
+            'os': 'Windows-2008ServerR2-SP1'
+          },
+        ],
+        'disabled_instrumentation_types': ['tsan'],
+      },
+    ],
+    'target_name': 'webgl_conformance',
+    'extra_browser_args': [
+      '--use-angle=d3d11',
+      '--use-passthrough-cmd-decoder',
     ],
     'args': [
       '--webgl-conformance-version=2.0.1',

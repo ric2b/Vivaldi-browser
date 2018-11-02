@@ -23,7 +23,6 @@
 <translation id="2065985942032347596">احراز هویت لازم است</translation>
 <translation id="2166378884831602661">این سایت نمی‌تواند اتصالی ایمن ارائه دهد</translation>
 <translation id="2230458221926704099">با استفاده از <ph name="BEGIN_LINK" />برنامه عیب‌یابی<ph name="END_LINK" />، مشکل اتصالتان را برطرف کنید</translation>
-<translation id="224482879335890159">‏جستجوی <ph name="LINK" /> در Vivaldi</translation>
 <translation id="2292556288342944218">دسترسی شما به اینترنت مسدود است</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" /> نیاز به یک نام کاربری و گذرواژه دارد.</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" /> راه‌اندازی عیب‌یابی شبکه <ph name="END_LINK" /></translation>
@@ -54,7 +53,6 @@
 <translation id="3630155396527302611">اگر درحال حاضر به‌عنوان برنامه‌ای برای دسترسی به شبکه در فهرست قرار دارد،
       سعی کنید آن را از فهرست حذف کرده و دوباره به فهرست اضافه کنید.</translation>
 <translation id="3658742229777143148">ویرایش</translation>
-<translation id="3693415264595406141">گذرواژه:</translation>
 <translation id="3717027428350673159">‏<ph name="BEGIN_LINK" />بررسی پروکسی، دیوار آتش و پیکربندی DNS<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">اگر از سرور پراکسی استفاده می‌کنید...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> مسدود است</translation>
@@ -66,7 +64,6 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />بررسی پیکربندی آنتی‌ویروس و دیوار آتش<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" /> از عیب‌یابی شبکه استفاده کنید <ph name="END_LINK" />.</translation>
 <translation id="4304224509867189079">ورود به سیستم</translation>
-<translation id="4381091992796011497">نام کاربری:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" /> گواهی ورود به سیستمتان را نپذیرفت یا ممکن است گواهی‌ای ارائه نشده باشد.</translation>
 <translation id="4506599922270137252">تماس با سرپرست سیستم</translation>
 <translation id="4522570452068850558">جزئیات</translation>

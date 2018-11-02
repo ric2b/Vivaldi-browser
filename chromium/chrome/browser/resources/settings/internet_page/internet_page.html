@@ -1,8 +1,8 @@
 <link rel="import" href="chrome://resources/html/polymer.html">
 
+<link rel="import" href="chrome://resources/cr_elements/chromeos/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/cr_elements/cr_expand_button/cr_expand_button.html">
 <link rel="import" href="chrome://resources/cr_elements/icons.html">
-<link rel="import" href="chrome://resources/cr_elements/network/cr_onc_types.html">
 <link rel="import" href="chrome://resources/html/i18n_behavior.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/iron-icon/iron-icon.html">
 <link rel="import" href="chrome://resources/polymer/v1_0/neon-animation/neon-animatable.html">
@@ -65,9 +65,9 @@
               <template is="dom-repeat" items="[[thirdPartyVpnProviders_]]">
                 <div actionable class="list-item"
                     on-tap="onAddThirdPartyVpnTap_" provider="[[item]]">
-                  <div class="start">[[getAddThirdParrtyVpnLabel_(item)]]</div>
+                  <div class="start">[[getAddThirdPartyVpnLabel_(item)]]</div>
                   <button class="icon-external" is="paper-icon-button-light"
-                      aria-label$="[[getAddThirdParrtyVpnLabel_(item)]]">
+                      aria-label$="[[getAddThirdPartyVpnLabel_(item)]]">
                   </button>
                 </div>
               </template>
@@ -88,7 +88,7 @@
           </settings-internet-config>
         </settings-subpage>
       </template>
-      
+
       <template is="dom-if" route-path="/networkDetail" no-search>
         <settings-subpage page-title="$i18n{internetDetailPageTitle}">
           <settings-internet-detail-page prefs="{{prefs}}"
@@ -98,7 +98,7 @@
           </settings-internet-detail-page>
         </settings-subpage>
       </template>
-      
+
       <template is="dom-if" route-path="/knownNetworks" no-search>
         <settings-subpage page-title="$i18n{internetKnownNetworksPageTitle}">
           <settings-internet-known-networks-page
@@ -111,9 +111,10 @@
       <template is="dom-if" route-path="/networks" no-search>
         <settings-subpage page-title="[[getNetworksPageTitle_(subpageType_)]]"
             show-spinner="[[showSpinner_]]">
-          <settings-internet-subpage 
+          <settings-internet-subpage
               default-network="[[defaultNetwork]]"
-              device-state="[[get(subpageType_, deviceStates)]]"
+              device-state="[[getDeviceState_(subpageType_, deviceStates)]]"
+              tether-device-state="[[get('Tether', deviceStates)]]"
               global-policy="[[globalPolicy_]]"
               third-party-vpn-providers="[[thirdPartyVpnProviders_]]"
               networking-private="[[networkingPrivate]]"

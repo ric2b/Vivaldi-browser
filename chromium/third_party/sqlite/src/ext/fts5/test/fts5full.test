@@ -9,7 +9,7 @@
 #
 #***********************************************************************
 #
-# Test that SQLITE_FULL is returned if the FTS5 table cannot find a free 
+# Test that SQLITE_FULL is returned if the FTS5 table cannot find a free
 # segid to use. In practice this can only really happen when automerge and
 # crisismerge are both disabled.
 #
@@ -40,4 +40,3 @@ do_test 1.1 {
 
 
 finish_test
-

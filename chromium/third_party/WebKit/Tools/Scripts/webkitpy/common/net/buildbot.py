@@ -66,6 +66,7 @@ class BuildBot(object):
         the latest results.
         """
         if build_number:
+            assert str(build_number).isdigit(), 'expected numeric build number, got %s' % build_number
             url_base = self.builder_results_url_base(builder_name)
             return '%s/%s/layout-test-results' % (url_base, build_number)
         return self.accumulated_results_url_base(builder_name)
@@ -94,10 +95,6 @@ class BuildBot(object):
 
     def accumulated_results_url_base(self, builder_name):
         return self.builder_results_url_base(builder_name) + '/results/layout-test-results'
-
-    @memoized
-    def latest_layout_test_results(self, builder_name):
-        return self.fetch_layout_test_results(self.accumulated_results_url_base(builder_name))
 
     @memoized
     def fetch_results(self, build):

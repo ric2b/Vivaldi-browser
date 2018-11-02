@@ -3,12 +3,12 @@
 # Use of this source code is governed by a BSD-style license that can be
 # found in the LICENSE file.
 
-""" Lexer for PPAPI IDL
+""" Lexer for Web IDL
 
-The lexer uses the PLY library to build a tokenizer which understands both
-WebIDL and Pepper tokens.
+The lexer uses the PLY library to build a tokenizer which understands
+Web IDL tokens.
 
-WebIDL, and WebIDL regular expressions can be found at:
+Web IDL, and Web IDL regular expressions can be found at:
    http://heycam.github.io/webidl/
 PLY can be found at:
    http://www.dabeaz.com/ply/
@@ -42,7 +42,7 @@ class IDLLexer(object):
       'string',
 
     # Symbol and keywords types
-      'COMMENT',
+      'SPECIAL_COMMENT',
       'identifier',
 
     # MultiChar operators
@@ -67,7 +67,6 @@ class IDLLexer(object):
     'DOMString' : 'DOMSTRING',
     'double' : 'DOUBLE',
     'enum'  : 'ENUM',
-    'exception' : 'EXCEPTION',
     'false' : 'FALSE',
     'float' : 'FLOAT',
     'FrozenArray' : 'FROZENARRAY',
@@ -144,11 +143,19 @@ class IDLLexer(object):
     self.AddLines(t.value.count('\n'))
     return t
 
+  # A Javadoc style comment:  /** xxx */
+  # Unlike t_COMMENT, this is NOT ignored.
+  # Also note that this should be defined before t_COMMENT.
+  def t_SPECIAL_COMMENT(self, t):
+    r'/\*\*(.|\n)+?\*/'
+    self.AddLines(t.value.count('\n'))
+    return t
+
   # A C or C++ style comment:  /* xxx */ or //
+  # This token is ignored.
   def t_COMMENT(self, t):
     r'(/\*(.|\n)*?\*/)|(//.*(\n[ \t]*//.*)*)'
     self.AddLines(t.value.count('\n'))
-    return t
 
   # A symbol or keyword.
   def t_KEYWORD_OR_SYMBOL(self, t):

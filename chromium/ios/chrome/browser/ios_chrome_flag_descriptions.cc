@@ -27,4 +27,25 @@ const char kPhysicalWebDescription[] =
     "When enabled, the omnibox will include suggestions for web pages "
     "broadcast by devices near you.";
 
+const char kMarkHttpAsName[] = "Mark non-secure origins as non-secure";
+
+const char kMarkHttpAsDescription[] = "Change the UI treatment for HTTP pages";
+const char kMarkHttpAsDangerous[] = "Always mark HTTP as actively dangerous";
+const char kMarkHttpAsNonSecureAfterEditing[] =
+    "Warn on HTTP after editing forms";
+const char kMarkHttpAsNonSecureWhileIncognito[] =
+    "Warn on HTTP while in Incognito mode";
+const char kMarkHttpAsNonSecureWhileIncognitoOrEditing[] =
+    "Warn on HTTP while in Incognito mode or after editing forms";
+
+const char kWebPaymentsName[] = "Web Payments";
+
+const char kWebPaymentsDescription[] =
+    "Enable Payment Request API integration, a JavaScript API for merchants.";
+
+const char kIosCaptivePortalName[] = "Captive Portal";
+const char kIosCaptivePortalDescription[] =
+    "When enabled, the Captive Portal landing page will be displayed if it is "
+    "detected that the user is connected to a Captive Portal network.";
+
 }  // namespace flag_descriptions

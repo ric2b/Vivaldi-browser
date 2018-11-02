@@ -24,6 +24,11 @@ const char kTetherNetworkGuid[] = "tether.tether_network_id";
 
 const char kWifiNetworkGuid[] = "tether.wifi_network_id";
 
+const char kDisconnectingWifiNetworkGuid[] =
+    "tether.disconnecting_wifi_network_id";
+
+const char kHostScanCache[] = "tether.host_scan_cache";
+
 }  // namespace prefs
 
 }  // namespace tether

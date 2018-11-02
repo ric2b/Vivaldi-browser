@@ -41,6 +41,7 @@ class CONTENT_EXPORT VideoCaptureDeviceLauncher {
       MediaStreamType stream_type,
       const media::VideoCaptureParams& params,
       base::WeakPtr<media::VideoFrameReceiver> receiver,
+      base::OnceClosure connection_lost_cb,
       Callbacks* callbacks,
       base::OnceClosure done_cb) = 0;
 
@@ -51,9 +52,8 @@ class LaunchedVideoCaptureDevice
     : public media::VideoFrameConsumerFeedbackObserver {
  public:
   // Device operation methods.
-  virtual void GetPhotoCapabilities(
-      media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback)
-      const = 0;
+  virtual void GetPhotoState(
+      media::VideoCaptureDevice::GetPhotoStateCallback callback) const = 0;
   virtual void SetPhotoOptions(
       media::mojom::PhotoSettingsPtr settings,
       media::VideoCaptureDevice::SetPhotoOptionsCallback callback) = 0;
@@ -72,17 +72,14 @@ class LaunchedVideoCaptureDevice
 // MediaStreamType == MEDIA_DEVICE_VIDEO_CAPTURE, i.e. camera devices.
 class CONTENT_EXPORT VideoCaptureProvider {
  public:
-  using GetDeviceInfosCallback =
-      base::Callback<void(const std::vector<media::VideoCaptureDeviceInfo>&)>;
+  using GetDeviceInfosCallback = base::OnceCallback<void(
+      const std::vector<media::VideoCaptureDeviceInfo>&)>;
 
   virtual ~VideoCaptureProvider() {}
 
-  virtual void Uninitialize() = 0;
-
   // The passed-in |result_callback| must guarantee that the called
   // instance stays alive until |result_callback| is invoked.
-  virtual void GetDeviceInfosAsync(
-      const GetDeviceInfosCallback& result_callback) = 0;
+  virtual void GetDeviceInfosAsync(GetDeviceInfosCallback result_callback) = 0;
 
   virtual std::unique_ptr<VideoCaptureDeviceLauncher>
   CreateDeviceLauncher() = 0;

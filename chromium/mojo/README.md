@@ -68,7 +68,9 @@ wrapping and unwrapping helpers, common handle operations, and utilities for
 more easily watching handle state changes.
 
 ### JavaScript
-The [**JavaScript APIs**](/mojo/public/js) are WIP. :)
+The [**JavaScript System API**](/third_party/WebKit/Source/core/mojo) exposes
+the Mojo primitives to JavaScript, covering all basic functionality of the
+low-level C API.
 
 ### Java
 The [**Java System API**](/mojo/public/java/system) provides helper classes for
@@ -98,7 +100,8 @@ nested sync IPC, versioning, bad-message reporting, arbitrary message filter
 injection, and convenient test facilities.
 
 ### JavaScript Bindings
-The [**JavaScript APIs**](/mojo/public/js) are WIP. :)
+The [**JavaScript Bindings API**](/mojo/public/js) provides helper classes
+for working with JavaScript code emitted by the bindings generator.
 
 ### Java Bindings
 The [**Java Bindings API**](/mojo/public/java/bindings) provides helper classes
@@ -120,6 +123,10 @@ few tiny heap allocations.
 
 ### So really, can I create like, thousands of them?
 Yes! Nobody will mind. Create millions if you like. (OK but maybe don't.)
+
+### What are the performance characteristics of Mojo?
+Compared to the old IPC in Chrome, making a Mojo call is about 1/3 faster and uses
+1/3 fewer context switches. The full data is [available here](https://docs.google.com/document/d/1n7qYjQ5iy8xAkQVMYGqjIy_AXu2_JJtMoAcOOupO_jQ/edit).
 
 ### Can I use in-process message pipes?
 Yes, and message pipe usage is identical regardless of whether the pipe actually

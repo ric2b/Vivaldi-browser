@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "ash/ash_switches.h"
 #include "ash/shell.h"
 #include "ash/sticky_keys/sticky_keys_controller.h"
 #include "base/bind.h"
@@ -27,6 +28,8 @@
 #include "base/strings/string_split.h"
 #include "base/sys_info.h"
 #include "base/task_scheduler/post_task.h"
+#include "base/task_scheduler/task_scheduler.h"
+#include "base/task_scheduler/task_traits.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part_chromeos.h"
 #include "chrome/browser/chrome_notification_types.h"
@@ -44,7 +47,6 @@
 #include "chrome/browser/chromeos/dbus/chrome_display_power_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/chrome_proxy_resolution_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/kiosk_info_service_provider.h"
-#include "chrome/browser/chromeos/dbus/mus_console_service_provider_delegate.h"
 #include "chrome/browser/chromeos/dbus/screen_lock_service_provider.h"
 #include "chrome/browser/chromeos/display/quirks_manager_delegate_impl.h"
 #include "chrome/browser/chromeos/events/event_rewriter_controller.h"
@@ -54,9 +56,9 @@
 #include "chrome/browser/chromeos/extensions/extension_volume_observer.h"
 #include "chrome/browser/chromeos/external_metrics.h"
 #include "chrome/browser/chromeos/input_method/input_method_configuration.h"
-#include "chrome/browser/chromeos/input_method/input_method_util.h"
 #include "chrome/browser/chromeos/language_preferences.h"
 #include "chrome/browser/chromeos/lock_screen_apps/state_controller.h"
+#include "chrome/browser/chromeos/logging.h"
 #include "chrome/browser/chromeos/login/helper.h"
 #include "chrome/browser/chromeos/login/lock/screen_locker.h"
 #include "chrome/browser/chromeos/login/login_wizard.h"
@@ -71,6 +73,7 @@
 #include "chrome/browser/chromeos/net/network_pref_state_observer.h"
 #include "chrome/browser/chromeos/net/network_throttling_observer.h"
 #include "chrome/browser/chromeos/net/wake_on_wifi_manager.h"
+#include "chrome/browser/chromeos/night_light/night_light_client.h"
 #include "chrome/browser/chromeos/note_taking_helper.h"
 #include "chrome/browser/chromeos/options/cert_library.h"
 #include "chrome/browser/chromeos/ownership/owner_settings_service_chromeos_factory.h"
@@ -78,7 +81,7 @@
 #include "chrome/browser/chromeos/policy/device_local_account.h"
 #include "chrome/browser/chromeos/power/freezer_cgroup_process_manager.h"
 #include "chrome/browser/chromeos/power/idle_action_warning_observer.h"
-#include "chrome/browser/chromeos/power/peripheral_battery_observer.h"
+#include "chrome/browser/chromeos/power/peripheral_battery_notifier.h"
 #include "chrome/browser/chromeos/power/power_data_collector.h"
 #include "chrome/browser/chromeos/power/power_prefs.h"
 #include "chrome/browser/chromeos/power/renderer_freezer.h"
@@ -91,6 +94,7 @@
 #include "chrome/browser/chromeos/system/input_device_settings.h"
 #include "chrome/browser/chromeos/ui/low_disk_notification.h"
 #include "chrome/browser/chromeos/upgrade_detector_chromeos.h"
+#include "chrome/browser/component_updater/cros_component_installer.h"
 #include "chrome/browser/defaults.h"
 #include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
@@ -136,6 +140,7 @@
 #include "components/metrics/metrics_service.h"
 #include "components/ownership/owner_key_util.h"
 #include "components/prefs/pref_service.h"
+#include "components/quirks/quirks_manager.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user.h"
@@ -147,6 +152,7 @@
 #include "content/public/browser/notification_service.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/main_function_params.h"
+#include "content/public/common/service_manager_connection.h"
 #include "crypto/nss_util_internal.h"
 #include "crypto/scoped_nss_types.h"
 #include "dbus/object_path.h"
@@ -163,6 +169,7 @@
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/base/ime/chromeos/ime_keyboard.h"
 #include "ui/base/ime/chromeos/input_method_manager.h"
+#include "ui/base/ime/chromeos/input_method_util.h"
 #include "ui/base/touch/touch_device.h"
 #include "ui/chromeos/events/event_rewriter_chromeos.h"
 #include "ui/chromeos/events/pref_names.h"
@@ -277,12 +284,6 @@ class DBusServices {
         DBusThreadManager::Get()->GetPowerManagerClient());
 
     CrosDBusService::ServiceProviderList service_providers;
-    // TODO(derat): Remove this provider once all callers are using
-    // |proxy_resolution_service_| instead: http://crbug.com/703217
-    service_providers.push_back(
-        base::MakeUnique<ProxyResolutionServiceProvider>(
-            kLibCrosServiceInterface, kResolveNetworkProxy,
-            base::MakeUnique<ChromeProxyResolutionServiceProviderDelegate>()));
     if (GetAshConfig() == ash::Config::CLASSIC) {
       // TODO(crbug.com/629707): revisit this with mustash dbus work.
       service_providers.push_back(base::MakeUnique<DisplayPowerServiceProvider>(
@@ -293,15 +294,13 @@ class DBusServices {
     service_providers.push_back(
         base::MakeUnique<LivenessServiceProvider>(kLibCrosServiceInterface));
     service_providers.push_back(base::MakeUnique<ScreenLockServiceProvider>());
-    // TODO(sky): once mash supports simplified display mode we should always
-    // use ChromeConsoleServiceProviderDelegate.
-    if (GetAshConfig() != ash::Config::MASH) {
-      service_providers.push_back(base::MakeUnique<ConsoleServiceProvider>(
-          base::MakeUnique<ChromeConsoleServiceProviderDelegate>()));
-    } else {
-      service_providers.push_back(base::MakeUnique<ConsoleServiceProvider>(
-          base::MakeUnique<MusConsoleServiceProviderDelegate>()));
-    }
+    std::unique_ptr<ChromeConsoleServiceProviderDelegate>
+        console_service_provider_delegate =
+            base::MakeUnique<ChromeConsoleServiceProviderDelegate>();
+    console_service_provider_delegate_ =
+        console_service_provider_delegate->AsWeakPtr();
+    service_providers.push_back(base::MakeUnique<ConsoleServiceProvider>(
+        std::move(console_service_provider_delegate)));
     // TODO(teravest): Remove this provider once all callers are using
     // |kiosk_info_service_| instead: http://crbug.com/703229
     service_providers.push_back(base::MakeUnique<KioskInfoService>(
@@ -314,8 +313,6 @@ class DBusServices {
         kNetworkProxyServiceName, dbus::ObjectPath(kNetworkProxyServicePath),
         CrosDBusService::CreateServiceProviderList(
             base::MakeUnique<ProxyResolutionServiceProvider>(
-                kNetworkProxyServiceInterface,
-                kNetworkProxyServiceResolveProxyMethod,
                 base::MakeUnique<
                     ChromeProxyResolutionServiceProviderDelegate>())));
 
@@ -393,6 +390,12 @@ class DBusServices {
     DBusThreadManager::Shutdown();
   }
 
+  void ServiceManagerConnectionStarted(
+      content::ServiceManagerConnection* connection) {
+    if (console_service_provider_delegate_)
+      console_service_provider_delegate_->Connect(connection->GetConnector());
+  }
+
  private:
   // Hosts providers for the "org.chromium.LibCrosService" D-Bus service owned
   // by Chrome. The name of this service was chosen for historical reasons that
@@ -406,6 +409,9 @@ class DBusServices {
   std::unique_ptr<CrosDBusService> liveness_service_;
 
   std::unique_ptr<NetworkConnectDelegateChromeOS> network_connect_delegate_;
+
+  base::WeakPtr<ChromeConsoleServiceProviderDelegate>
+      console_service_provider_delegate_;
 
   DISALLOW_COPY_AND_ASSIGN(DBusServices);
 };
@@ -548,10 +554,6 @@ void ChromeBrowserMainPartsChromeos::PreEarlyInitialization() {
     chrome::SetChannel(channel);
 #endif
 
-  // Start monitoring OOM kills.
-  memory_kills_monitor_ = base::MakeUnique<memory::MemoryKillsMonitor::Handle>(
-      memory::MemoryKillsMonitor::StartMonitoring());
-
   ChromeBrowserMainPartsLinux::PreEarlyInitialization();
 }
 
@@ -579,7 +581,16 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopStart() {
 
   dbus_services_.reset(new internal::DBusServices(parameters()));
 
+  // Need to be done after LoginState has been initialized in DBusServices().
+  memory_kills_monitor_ = memory::MemoryKillsMonitor::Initialize();
+
   ChromeBrowserMainPartsLinux::PostMainMessageLoopStart();
+}
+
+void ChromeBrowserMainPartsChromeos::ServiceManagerConnectionStarted(
+    content::ServiceManagerConnection* connection) {
+  ChromeBrowserMainPartsLinux::ServiceManagerConnectionStarted(connection);
+  dbus_services_->ServiceManagerConnectionStarted(connection);
 }
 
 // Threads are initialized between MainMessageLoopStart and MainMessageLoopRun.
@@ -604,7 +615,7 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   quirks::QuirksManager::Initialize(
       std::unique_ptr<quirks::QuirksManager::Delegate>(
           new quirks::QuirksManagerDelegateImpl()),
-      content::BrowserThread::GetBlockingPool(),
+      base::CreateTaskRunnerWithTraits({base::MayBlock()}),
       g_browser_process->local_state(),
       g_browser_process->system_request_context());
 
@@ -612,8 +623,6 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   // will ensure that loading is aborted on early exit.
   bool load_oem_statistics = !StartupUtils::IsOobeCompleted();
   system::StatisticsProvider::GetInstance()->StartLoadingMachineStatistics(
-      content::BrowserThread::GetTaskRunnerForThread(
-          content::BrowserThread::FILE),
       load_oem_statistics);
 
   base::FilePath downloads_directory;
@@ -625,8 +634,7 @@ void ChromeBrowserMainPartsChromeos::PreMainMessageLoopRun() {
   network_throttling_observer_.reset(
       new NetworkThrottlingObserver(g_browser_process->local_state()));
 
-  arc_service_launcher_.reset(new arc::ArcServiceLauncher());
-  arc_service_launcher_->Initialize();
+  arc_service_launcher_ = base::MakeUnique<arc::ArcServiceLauncher>();
 
   chromeos::ResourceReporter::GetInstance()->StartMonitoring(
       task_manager::TaskManagerInterface::GetTaskManager());
@@ -721,10 +729,6 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     WizardController::SetZeroDelays();
   }
 
-  // Enable/disable native CUPS integration
-  printing::PrintBackend::SetNativeCupsEnabled(
-      !parsed_command_line().HasSwitch(::switches::kDisableNativeCups));
-
   power_prefs_.reset(new PowerPrefs(PowerPolicyController::Get()));
 
   arc_kiosk_app_manager_.reset(new ArcKioskAppManager());
@@ -766,6 +770,12 @@ void ChromeBrowserMainPartsChromeos::PreProfileInit() {
     VLOG(1) << "Relaunching browser for user: " << account_id.Serialize()
             << " with hash: " << user_id_hash;
   }
+
+  // Register all installed components for regular update.
+  base::PostTaskWithTraitsAndReplyWithResult(
+      FROM_HERE, {base::MayBlock()},
+      base::BindOnce(component_updater::CrOSComponent::GetInstalledComponents),
+      base::BindOnce(component_updater::CrOSComponent::RegisterComponents));
 }
 
 class GuestLanguageSetCallbackData {
@@ -893,7 +903,7 @@ void ChromeBrowserMainPartsChromeos::PostProfileInit() {
   // This observer uses the intialized profile to dispatch extension events.
   extension_volume_observer_ = base::MakeUnique<ExtensionVolumeObserver>();
 
-  peripheral_battery_observer_ = base::MakeUnique<PeripheralBatteryObserver>();
+  peripheral_battery_notifier_ = base::MakeUnique<PeripheralBatteryNotifier>();
 
   renderer_freezer_ = base::MakeUnique<RendererFreezer>(
       base::MakeUnique<FreezerCgroupProcessManager>());
@@ -982,6 +992,13 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
   // fetch of the initial CrosSettings DeviceRebootOnShutdown policy.
   shutdown_policy_forwarder_ = base::MakeUnique<ShutdownPolicyForwarder>();
 
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          ash::switches::kAshEnableNightLight)) {
+    night_light_client_ = base::MakeUnique<NightLightClient>(
+        g_browser_process->system_request_context());
+    night_light_client_->Start();
+  }
+
   ChromeBrowserMainPartsLinux::PostBrowserStart();
 }
 
@@ -989,9 +1006,12 @@ void ChromeBrowserMainPartsChromeos::PostBrowserStart() {
 void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   chromeos::ResourceReporter::GetInstance()->StopMonitoring();
 
+  night_light_client_.reset();
+
   BootTimesRecorder::Get()->AddLogoutTimeMarker("UIMessageLoopEnded", true);
 
-  lock_screen_apps_state_controller_.reset();
+  if (lock_screen_apps_state_controller_)
+    lock_screen_apps_state_controller_->Shutdown();
 
   // This must be shut down before |arc_service_launcher_|.
   NoteTakingHelper::Shutdown();
@@ -1028,7 +1048,7 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // DBusThreadManager is shut down.
   network_pref_state_observer_.reset();
   extension_volume_observer_.reset();
-  peripheral_battery_observer_.reset();
+  peripheral_battery_notifier_.reset();
   power_prefs_.reset();
   renderer_freezer_.reset();
   wake_on_wifi_manager_.reset();
@@ -1094,6 +1114,12 @@ void ChromeBrowserMainPartsChromeos::PostMainMessageLoopRun() {
   // Destroy ArcKioskAppManager after its observers are removed when Ash is
   // closed above.
   arc_kiosk_app_manager_.reset();
+
+  // All ARC related modules should have been shut down by this point, so
+  // destroy ARC.
+  // Specifically, this should be done after Profile destruction run in
+  // ChromeBrowserMainPartsLinux::PostMainMessageLoopRun().
+  arc_service_launcher_.reset();
 
   if (!ash_util::IsRunningInMash())
     AccessibilityManager::Shutdown();

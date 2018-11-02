@@ -20,6 +20,7 @@
 #include "ui/gfx/switches.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_switches.h"
+#include "ui/gl/gl_utils.h"
 #include "ui/gl/init/gl_factory.h"
 
 #if defined(USE_OZONE)
@@ -27,6 +28,7 @@
 #endif
 
 #if defined(OS_WIN)
+#include "gpu/ipc/service/child_window_surface_win.h"
 #include "gpu/ipc/service/direct_composition_surface_win.h"
 #endif
 
@@ -108,6 +110,9 @@ void CollectGraphicsInfo(gpu::GPUInfo& gpu_info) {
       gl::GLSurfaceEGL::IsDirectCompositionSupported() &&
       DirectCompositionSurfaceWin::AreOverlaysSupported()) {
     gpu_info.supports_overlays = true;
+  }
+  if (DirectCompositionSurfaceWin::IsHDRSupported()) {
+    gpu_info.hdr = true;
   }
 #endif  // defined(OS_WIN)
 }
@@ -191,7 +196,7 @@ bool GpuInit::InitializeAndStartSandbox(const base::CommandLine& command_line) {
   gpu_info_.in_process_gpu = false;
 
   gpu_info_.passthrough_cmd_decoder =
-      command_line.HasSwitch(switches::kUsePassthroughCmdDecoder);
+      gl::UsePassthroughCommandDecoder(&command_line);
 
   sandbox_helper_->PreSandboxStartup();
 

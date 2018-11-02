@@ -59,6 +59,7 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
 
  private:
   friend class SiteSettingsHandlerTest;
+  FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, DefaultSettingSource);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, GetAndSetDefault);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, Origins);
   FRIEND_TEST_ALL_PREFIXES(SiteSettingsHandlerTest, ExceptionHelpers);
@@ -86,12 +87,13 @@ class SiteSettingsHandler : public SettingsPageUIHandler,
   // Returns the list of site exceptions for a given content settings type.
   void HandleGetExceptionList(const base::ListValue* args);
 
-  // Handles setting and resetting of an origin permission.
+  // Handles setting and resetting an origin permission.
   void HandleResetCategoryPermissionForOrigin(const base::ListValue* args);
   void HandleSetCategoryPermissionForOrigin(const base::ListValue* args);
 
-  // Return site exceptions for a single site.
-  void HandleGetSiteDetails(const base::ListValue* args);
+  // Retrieves the content settings for a given list of ContentSettingTypes for
+  // an origin.
+  void HandleGetOriginPermissions(const base::ListValue* args);
 
   // Returns whether a given pattern is valid.
   void HandleIsPatternValid(const base::ListValue* args);

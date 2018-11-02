@@ -36,45 +36,40 @@
 #include "platform/loader/fetch/IntegrityMetadata.h"
 #include "platform/weborigin/SecurityOrigin.h"
 #include "platform/wtf/Allocator.h"
+#include "platform/wtf/RefPtr.h"
+#include "platform/wtf/text/WTFString.h"
 
 namespace blink {
 
-enum DataBufferingPolicy { kBufferData, kDoNotBufferData };
+enum DataBufferingPolicy : uint8_t { kBufferData, kDoNotBufferData };
 
-enum ContentSecurityPolicyDisposition {
+enum ContentSecurityPolicyDisposition : uint8_t {
   kCheckContentSecurityPolicy,
   kDoNotCheckContentSecurityPolicy
 };
 
-enum RequestInitiatorContext {
+enum RequestInitiatorContext : uint8_t {
   kDocumentContext,
   kWorkerContext,
 };
 
-enum StoredCredentials {
-  kAllowStoredCredentials,
-  kDoNotAllowStoredCredentials
+enum SynchronousPolicy : uint8_t {
+  kRequestSynchronously,
+  kRequestAsynchronously
 };
 
-// APIs like XMLHttpRequest and EventSource let the user decide whether to send
-// credentials, but they're always sent for same-origin requests. Additional
-// information is needed to handle cross-origin redirects correctly.
-enum CredentialRequest {
-  kClientRequestedCredentials,
-  kClientDidNotRequestCredentials
+// Used by the DocumentThreadableLoader to turn off part of the CORS handling
+// logic in the ResourceFetcher to use its own CORS handling logic.
+enum CORSHandlingByResourceFetcher {
+  kDisableCORSHandlingByResourceFetcher,
+  kEnableCORSHandlingByResourceFetcher,
 };
-
-enum SynchronousPolicy { kRequestSynchronously, kRequestAsynchronously };
-
-// A resource fetch can be marked as being CORS enabled. The loader must perform
-// an access check upon seeing the response.
-enum CORSEnabled { kNotCORSEnabled, kIsCORSEnabled };
 
 // Was the request generated from a "parser-inserted" element?
 // https://html.spec.whatwg.org/multipage/scripting.html#parser-inserted
-enum ParserDisposition { kParserInserted, kNotParserInserted };
+enum ParserDisposition : uint8_t { kParserInserted, kNotParserInserted };
 
-enum CacheAwareLoadingEnabled {
+enum CacheAwareLoadingEnabled : uint8_t {
   kNotCacheAwareLoadingEnabled,
   kIsCacheAwareLoadingEnabled
 };
@@ -85,65 +80,32 @@ struct ResourceLoaderOptions {
  public:
   ResourceLoaderOptions()
       : data_buffering_policy(kBufferData),
-        allow_credentials(kDoNotAllowStoredCredentials),
-        credentials_requested(kClientDidNotRequestCredentials),
         content_security_policy_option(kCheckContentSecurityPolicy),
         request_initiator_context(kDocumentContext),
         synchronous_policy(kRequestAsynchronously),
-        cors_enabled(kNotCORSEnabled),
+        cors_handling_by_resource_fetcher(kEnableCORSHandlingByResourceFetcher),
+        cors_flag(false),
         parser_disposition(kParserInserted),
         cache_aware_loading_enabled(kNotCacheAwareLoadingEnabled) {}
 
-  ResourceLoaderOptions(
-      DataBufferingPolicy data_buffering_policy,
-      StoredCredentials allow_credentials,
-      CredentialRequest credentials_requested,
-      ContentSecurityPolicyDisposition content_security_policy_option,
-      RequestInitiatorContext request_initiator_context)
-      : data_buffering_policy(data_buffering_policy),
-        allow_credentials(allow_credentials),
-        credentials_requested(credentials_requested),
-        content_security_policy_option(content_security_policy_option),
-        request_initiator_context(request_initiator_context),
-        synchronous_policy(kRequestAsynchronously),
-        cors_enabled(kNotCORSEnabled),
-        parser_disposition(kParserInserted),
-        cache_aware_loading_enabled(kNotCacheAwareLoadingEnabled) {}
+  FetchInitiatorInfo initiator_info;
 
-  // Answers the question "can a separate request with these different options
-  // be re-used" (e.g. preload request) The safe (but possibly slow) answer is
-  // always false.
-  bool CanReuseRequest(const ResourceLoaderOptions& other) const {
-    // dataBufferingPolicy differences are believed to be safe for re-use.
-    // FIXME: check allowCredentials.
-    // FIXME: check credentialsRequested.
-    // FIXME: check contentSecurityPolicyOption.
-    // initiatorInfo is purely informational and should be benign for re-use.
-    // requestInitiatorContext is benign (indicates document vs. worker)
-    if (synchronous_policy != other.synchronous_policy)
-      return false;
-    return cors_enabled == other.cors_enabled;
-    // securityOrigin has more complicated checks which callers are responsible
-    // for.
-  }
+  // ATTENTION: When adding members, update
+  // CrossThreadResourceLoaderOptionsData, too.
 
-  // When adding members, CrossThreadResourceLoaderOptionsData should be
-  // updated.
   DataBufferingPolicy data_buffering_policy;
 
-  // Whether HTTP credentials and cookies are sent with the request.
-  StoredCredentials allow_credentials;
-
-  // Whether the client (e.g. XHR) wanted credentials in the first place.
-  CredentialRequest credentials_requested;
-
   ContentSecurityPolicyDisposition content_security_policy_option;
-  FetchInitiatorInfo initiator_info;
   RequestInitiatorContext request_initiator_context;
   SynchronousPolicy synchronous_policy;
 
-  // If the resource is loaded out-of-origin, whether or not to use CORS.
-  CORSEnabled cors_enabled;
+  // When set to true, the ResourceFetcher suppresses part of its CORS handling
+  // logic. Used by DocumentThreadableLoader which does CORS handling by
+  // itself.
+  CORSHandlingByResourceFetcher cors_handling_by_resource_fetcher;
+
+  // Corresponds to the CORS flag in the Fetch spec.
+  bool cors_flag;
 
   RefPtr<SecurityOrigin> security_origin;
   String content_security_policy_nonce;
@@ -158,17 +120,18 @@ struct CrossThreadResourceLoaderOptionsData {
   explicit CrossThreadResourceLoaderOptionsData(
       const ResourceLoaderOptions& options)
       : data_buffering_policy(options.data_buffering_policy),
-        allow_credentials(options.allow_credentials),
-        credentials_requested(options.credentials_requested),
         content_security_policy_option(options.content_security_policy_option),
         initiator_info(options.initiator_info),
         request_initiator_context(options.request_initiator_context),
         synchronous_policy(options.synchronous_policy),
-        cors_enabled(options.cors_enabled),
+        cors_handling_by_resource_fetcher(
+            options.cors_handling_by_resource_fetcher),
+        cors_flag(options.cors_flag),
         security_origin(options.security_origin
                             ? options.security_origin->IsolatedCopy()
                             : nullptr),
-        content_security_policy_nonce(options.content_security_policy_nonce),
+        content_security_policy_nonce(
+            options.content_security_policy_nonce.IsolatedCopy()),
         integrity_metadata(options.integrity_metadata),
         parser_disposition(options.parser_disposition),
         cache_aware_loading_enabled(options.cache_aware_loading_enabled) {}
@@ -176,13 +139,13 @@ struct CrossThreadResourceLoaderOptionsData {
   operator ResourceLoaderOptions() const {
     ResourceLoaderOptions options;
     options.data_buffering_policy = data_buffering_policy;
-    options.allow_credentials = allow_credentials;
-    options.credentials_requested = credentials_requested;
     options.content_security_policy_option = content_security_policy_option;
     options.initiator_info = initiator_info;
     options.request_initiator_context = request_initiator_context;
     options.synchronous_policy = synchronous_policy;
-    options.cors_enabled = cors_enabled;
+    options.cors_handling_by_resource_fetcher =
+        cors_handling_by_resource_fetcher;
+    options.cors_flag = cors_flag;
     options.security_origin = security_origin;
     options.content_security_policy_nonce = content_security_policy_nonce;
     options.integrity_metadata = integrity_metadata;
@@ -192,14 +155,15 @@ struct CrossThreadResourceLoaderOptionsData {
   }
 
   DataBufferingPolicy data_buffering_policy;
-  StoredCredentials allow_credentials;
-  CredentialRequest credentials_requested;
   ContentSecurityPolicyDisposition content_security_policy_option;
   CrossThreadFetchInitiatorInfoData initiator_info;
   RequestInitiatorContext request_initiator_context;
   SynchronousPolicy synchronous_policy;
-  CORSEnabled cors_enabled;
+
+  CORSHandlingByResourceFetcher cors_handling_by_resource_fetcher;
+  bool cors_flag;
   RefPtr<SecurityOrigin> security_origin;
+
   String content_security_policy_nonce;
   IntegrityMetadataSet integrity_metadata;
   ParserDisposition parser_disposition;

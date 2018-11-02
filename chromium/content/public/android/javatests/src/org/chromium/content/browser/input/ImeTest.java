@@ -22,7 +22,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.chromium.base.ThreadUtils;
-import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.UrlUtils;
 import org.chromium.content.browser.test.ContentJUnit4ClassRunner;
@@ -424,7 +423,6 @@ public class ImeTest {
 
     @Test
     @SmallTest
-    @DisabledTest(message = "crbug.com/694812")
     @Feature({"TextInput"})
     public void testShowAndHideSoftInput() throws Exception {
         mRule.focusElement("input_radio", false);
@@ -462,9 +460,9 @@ public class ImeTest {
         mRule.waitForKeyboardStates(3, 1, 4,
                 new Integer[] {TextInputType.NUMBER, TextInputType.NUMBER, TextInputType.TEXT});
 
-        mRule.resetUpdateSelectionList();
         mRule.setComposingText("a", 1);
-        mRule.waitAndVerifyUpdateSelection(0, 1, 1, 0, 1);
+        mRule.waitAndVerifyUpdateSelection(0, 0, 0, -1, -1);
+        mRule.waitAndVerifyUpdateSelection(1, 1, 1, 0, 1);
         mRule.resetUpdateSelectionList();
 
         // JavaScript changes focus.
@@ -632,7 +630,7 @@ public class ImeTest {
 
     private void reloadPage() throws Throwable {
         // Reload the page, then focus will be lost and keyboard should be hidden.
-        mRule.fullyLoadUrl(mRule.getContentViewCore().getWebContents().getUrl());
+        mRule.fullyLoadUrl(mRule.getContentViewCore().getWebContents().getLastCommittedUrl());
     }
 
     @Test
@@ -1188,7 +1186,7 @@ public class ImeTest {
             @Override
             public boolean isSatisfied() {
                 return mRule.getSelectionPopupController().isPastePopupShowing()
-                        && mRule.getSelectionPopupController().isInsertion();
+                        && mRule.getSelectionPopupController().isInsertionForTesting();
             }
         });
 
@@ -1199,7 +1197,7 @@ public class ImeTest {
                 return !mRule.getSelectionPopupController().isPastePopupShowing();
             }
         });
-        Assert.assertFalse(mRule.getSelectionPopupController().isInsertion());
+        Assert.assertFalse(mRule.getSelectionPopupController().isInsertionForTesting());
     }
 
     @Test

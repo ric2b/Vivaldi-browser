@@ -7,22 +7,22 @@ import("//tools/grit/grit_rule.gni")
 
 assert(!is_ios, "Chromium/iOS shouldn't use anything in //chrome")
 
-grit("net_internals_resources") {
-  source = "net_internals_resources.grd"
-  defines = chrome_grit_defines
-  outputs = [
-    "grit/net_internals_resources.h",
-    "net_internals_resources.pak",
-  ]
-  output_dir = "$root_gen_dir/chrome"
-}
-
 grit("invalidations_resources") {
   source = "invalidations_resources.grd"
   defines = chrome_grit_defines
   outputs = [
     "grit/invalidations_resources.h",
     "invalidations_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+grit("net_internals_resources") {
+  source = "net_internals_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/net_internals_resources.h",
+    "net_internals_resources.pak",
   ]
   output_dir = "$root_gen_dir/chrome"
 }
@@ -49,6 +49,16 @@ grit("policy_resources") {
   output_dir = "$root_gen_dir/chrome"
 }
 
+grit("quota_internals_resources") {
+  source = "quota_internals_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/quota_internals_resources.h",
+    "quota_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
 grit("task_scheduler_internals_resources") {
   source = "task_scheduler_internals/resources.grd"
   defines = chrome_grit_defines
@@ -65,6 +75,16 @@ grit("translate_internals_resources") {
   outputs = [
     "grit/translate_internals_resources.h",
     "translate_internals_resources.pak",
+  ]
+  output_dir = "$root_gen_dir/chrome"
+}
+
+grit("webapks_ui_resources") {
+  source = "webapks_ui_resources.grd"
+  defines = chrome_grit_defines
+  outputs = [
+    "grit/webapks_ui_resources.h",
+    "webapks_ui_resources.pak",
   ]
   output_dir = "$root_gen_dir/chrome"
 }
@@ -89,6 +109,10 @@ if (!is_android) {
   grit("settings_resources") {
     if (use_vulcanize) {
       source = "settings/settings_resources_vulcanized.grd"
+
+      # The .grd contains references to generated files.
+      source_is_generated = true
+
       deps = [
         "//chrome/browser/resources/settings:build",
       ]
@@ -109,7 +133,9 @@ if (!is_android) {
     ]
     output_dir = "$root_gen_dir/chrome"
   }
+}
 
+if (is_chromeos) {
   grit("options_resources") {
     source = "options_resources.grd"
     defines = chrome_grit_defines
@@ -119,36 +145,6 @@ if (!is_android) {
     ]
     output_dir = "$root_gen_dir/chrome"
   }
-
-  grit("options_test_resources") {
-    source = "options_test_resources.grd"
-    defines = chrome_grit_defines
-    outputs = [
-      "grit/options_test_resources.h",
-      "options_test_resources.pak",
-    ]
-    output_dir = "$root_gen_dir/chrome"
-  }
-}
-
-grit("quota_internals_resources") {
-  source = "quota_internals_resources.grd"
-  defines = chrome_grit_defines
-  outputs = [
-    "grit/quota_internals_resources.h",
-    "quota_internals_resources.pak",
-  ]
-  output_dir = "$root_gen_dir/chrome"
-}
-
-grit("webapks_ui_resources") {
-  source = "webapks_ui_resources.grd"
-  defines = chrome_grit_defines
-  outputs = [
-    "grit/webapks_ui_resources.h",
-    "webapks_ui_resources.pak",
-  ]
-  output_dir = "$root_gen_dir/chrome"
 }
 
 if (enable_extensions) {
@@ -158,6 +154,18 @@ if (enable_extensions) {
     outputs = [
       "grit/sync_file_system_internals_resources.h",
       "sync_file_system_internals_resources.pak",
+    ]
+    output_dir = "$root_gen_dir/chrome"
+  }
+}
+
+if (enable_vr) {
+  grit("vr_shell_resources") {
+    source = "vr_shell_resources.grd"
+    defines = chrome_grit_defines
+    outputs = [
+      "grit/vr_shell_resources.h",
+      "vr_shell_resources.pak",
     ]
     output_dir = "$root_gen_dir/chrome"
   }

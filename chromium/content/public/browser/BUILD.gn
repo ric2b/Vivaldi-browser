@@ -22,12 +22,12 @@ source_set("browser_sources") {
   visibility = [ "//content/*" ]
 
   sources = [
+    "android/android_overlay_provider.h",
     "android/browser_media_player_manager_register.cc",
     "android/browser_media_player_manager_register.h",
     "android/compositor.h",
     "android/compositor_client.h",
     "android/content_protocol_handler.h",
-    "android/content_view_core.h",
     "android/content_view_layer_renderer.h",
     "android/devtools_auth.h",
     "android/java_interfaces.h",
@@ -89,7 +89,6 @@ source_set("browser_sources") {
     "desktop_capture.h",
     "desktop_media_id.cc",
     "desktop_media_id.h",
-    "desktop_notification_delegate.h",
     "devtools_agent_host.h",
     "devtools_agent_host_client.h",
     "devtools_agent_host_observer.cc",
@@ -130,6 +129,7 @@ source_set("browser_sources") {
     "guest_mode.cc",
     "guest_mode.h",
     "histogram_fetcher.h",
+    "ignore_errors_cert_verifier.h",
     "indexed_db_context.h",
     "indexed_db_info.h",
     "interstitial_page.h",
@@ -141,6 +141,8 @@ source_set("browser_sources") {
     "keyboard_event_processing_result.h",
     "load_notification_details.h",
     "local_storage_usage_info.h",
+    "manifest_icon_downloader.h",
+    "manifest_icon_selector.h",
     "media_capture_devices.h",
     "media_device_id.cc",
     "media_device_id.h",
@@ -166,6 +168,8 @@ source_set("browser_sources") {
     "navigation_type.h",
     "navigation_ui_data.h",
     "network_quality_observer_factory.h",
+    "network_service_instance.cc",
+    "network_service_instance.h",
     "notification_database_data.cc",
     "notification_database_data.h",
     "notification_details.h",
@@ -228,6 +232,7 @@ source_set("browser_sources") {
     "security_style_explanations.cc",
     "security_style_explanations.h",
     "service_worker_context.h",
+    "service_worker_context_observer.h",
     "service_worker_usage_info.cc",
     "service_worker_usage_info.h",
     "session_storage_namespace.h",
@@ -246,11 +251,12 @@ source_set("browser_sources") {
     "ssl_status.cc",
     "ssl_status.h",
     "storage_partition.h",
-    "stored_payment_instrument.cc",
-    "stored_payment_instrument.h",
+    "stored_payment_app.cc",
+    "stored_payment_app.h",
     "stream_handle.h",
     "stream_info.cc",
     "stream_info.h",
+    "touch_selection_controller_client_manager.h",
     "trace_uploader.h",
     "tracing_controller.h",
     "tracing_delegate.cc",
@@ -313,18 +319,17 @@ source_set("browser_sources") {
     "//cc",
     "//content/browser",  # Must not be public_deps!
     "//device/geolocation",
-    "//device/power_save_blocker",
-    "//device/wake_lock/public/interfaces",
     "//gpu",
     "//media",
     "//net",
     "//ppapi/c",
+    "//services/device/public/interfaces",
+    "//third_party/webrtc/modules/desktop_capture",
     "//ui/accessibility",
     "//ui/base",
     "//ui/events",
     "//ui/gl",
     "//ui/surface",
-    "//third_party/webrtc/modules/desktop_capture",
   ]
 
   allow_circular_includes_from = [
@@ -347,6 +352,13 @@ source_set("browser_sources") {
       "devtools_frontend_host.h",
       "host_zoom_map.h",
       "zoom_level_delegate.h",
+    ]
+  }
+
+  if (is_chromeos) {
+    sources += [
+      "arc_tracing_agent.cc",
+      "arc_tracing_agent.h",
     ]
   }
 }

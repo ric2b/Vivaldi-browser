@@ -76,7 +76,8 @@ HTMLTableCaptionElement* HTMLTableElement::caption() const {
 void HTMLTableElement::setCaption(HTMLTableCaptionElement* new_caption,
                                   ExceptionState& exception_state) {
   deleteCaption();
-  InsertBefore(new_caption, firstChild(), exception_state);
+  if (new_caption)
+    InsertBefore(new_caption, firstChild(), exception_state);
 }
 
 HTMLTableSectionElement* HTMLTableElement::tHead() const {
@@ -87,6 +88,8 @@ HTMLTableSectionElement* HTMLTableElement::tHead() const {
 void HTMLTableElement::setTHead(HTMLTableSectionElement* new_head,
                                 ExceptionState& exception_state) {
   deleteTHead();
+  if (!new_head)
+    return;
 
   HTMLElement* child;
   for (child = Traversal<HTMLElement>::FirstChild(*this); child;
@@ -319,7 +322,7 @@ void HTMLTableElement::CollectStyleForPresentationAttribute(
     if (!url.IsEmpty()) {
       UseCounter::Count(
           GetDocument(),
-          UseCounter::kHTMLTableElementPresentationAttributeBackground);
+          WebFeature::kHTMLTableElementPresentationAttributeBackground);
       CSSImageValue* image_value =
           CSSImageValue::Create(url, GetDocument().CompleteURL(url),
                                 Referrer(GetDocument().OutgoingReferrer(),

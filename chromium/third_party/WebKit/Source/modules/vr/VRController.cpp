@@ -10,9 +10,8 @@
 #include "core/frame/LocalFrame.h"
 #include "modules/vr/NavigatorVR.h"
 #include "modules/vr/VRGetDevicesCallback.h"
-#include "public/platform/InterfaceProvider.h"
-
 #include "platform/wtf/Assertions.h"
+#include "services/service_manager/public/cpp/interface_provider.h"
 
 namespace blink {
 
@@ -21,14 +20,16 @@ VRController::VRController(NavigatorVR* navigator_vr)
       navigator_vr_(navigator_vr),
       display_synced_(false),
       binding_(this) {
-  navigator_vr->GetDocument()->GetFrame()->GetInterfaceProvider()->GetInterface(
+  navigator_vr->GetDocument()->GetFrame()->GetInterfaceProvider().GetInterface(
       mojo::MakeRequest(&service_));
   service_.set_connection_error_handler(ConvertToBaseCallback(
       WTF::Bind(&VRController::Dispose, WrapWeakPersistent(this))));
-  service_->SetClient(
-      binding_.CreateInterfacePtrAndBind(),
-      ConvertToBaseCallback(
-          WTF::Bind(&VRController::OnDisplaysSynced, WrapPersistent(this))));
+
+  device::mojom::blink::VRServiceClientPtr client;
+  binding_.Bind(mojo::MakeRequest(&client));
+  service_->SetClient(std::move(client), ConvertToBaseCallback(WTF::Bind(
+                                             &VRController::OnDisplaysSynced,
+                                             WrapPersistent(this))));
 }
 
 VRController::~VRController() {}

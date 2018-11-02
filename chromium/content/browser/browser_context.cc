@@ -345,7 +345,7 @@ void BrowserContext::DeliverPushMessage(
     const GURL& origin,
     int64_t service_worker_registration_id,
     const PushEventPayload& payload,
-    const base::Callback<void(PushDeliveryStatus)>& callback) {
+    const base::Callback<void(mojom::PushDeliveryStatus)>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   PushMessagingRouter::DeliverMessage(browser_context, origin,
                                       service_worker_registration_id, payload,
@@ -368,8 +368,10 @@ void BrowserContext::NotifyWillBeDestroyed(BrowserContext* browser_context) {
            RenderProcessHost::AllHostsIterator();
        !host_iterator.IsAtEnd(); host_iterator.Advance()) {
     RenderProcessHost* host = host_iterator.GetCurrentValue();
-    if (host->GetBrowserContext() == browser_context)
+    if (host->GetBrowserContext() == browser_context) {
+      // This will also clean up spare RPH references.
       host->ForceReleaseWorkerRefCounts();
+    }
   }
 }
 
@@ -479,16 +481,10 @@ void BrowserContext::Initialize(
 
     // New embedded service factories should be added to |connection| here.
 
-    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-            switches::kMojoLocalStorage)) {
-      ServiceInfo info;
-      // TODO(mek): Use sequenced task runner rather than single thread task
-      // runner when mojo supports that (http://crbug.com/678155).
-      info.factory = base::Bind(
-          &file::CreateFileService,
-          base::CreateSingleThreadTaskRunnerWithTraits(
-              {base::MayBlock(), base::TaskShutdownBehavior::BLOCK_SHUTDOWN}),
-          BrowserThread::GetTaskRunnerForThread(BrowserThread::DB));
+    if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kDisableMojoLocalStorage)) {
+      service_manager::EmbeddedServiceInfo info;
+      info.factory = base::Bind(&file::CreateFileService);
       connection->AddEmbeddedService(file::mojom::kServiceName, info);
     }
 
@@ -572,10 +568,6 @@ std::string BrowserContext::CreateRandomMediaDeviceIDSalt() {
   base::Base64Encode(base::RandBytesAsString(16), &salt);
   DCHECK(!salt.empty());
   return salt;
-}
-
-BrowsingDataRemoverDelegate* BrowserContext::GetBrowsingDataRemoverDelegate() {
-  return nullptr;
 }
 
 }  // namespace content

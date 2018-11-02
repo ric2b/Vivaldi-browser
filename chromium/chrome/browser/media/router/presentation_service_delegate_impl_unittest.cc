@@ -29,10 +29,11 @@
 #include "url/origin.h"
 
 using ::testing::_;
+using ::testing::Invoke;
 using ::testing::Mock;
 using ::testing::Return;
-using ::testing::SaveArg;
 using ::testing::StrictMock;
+using ::testing::WithArgs;
 
 namespace {
 
@@ -41,6 +42,12 @@ const char kPresentationUrl2[] = "http://bar.fakeurl.com/";
 const char kPresentationUrl3[] =
     "https://google.com/cast#__castAppId__=233637DE";
 const char kFrameUrl[] = "http://anotherframeurl.fakeurl.com/";
+
+// Matches content::PresentationInfo.
+MATCHER_P(InfoEquals, expected, "") {
+  return expected.presentation_url == arg.presentation_url &&
+         expected.presentation_id == arg.presentation_id;
+}
 
 }  // namespace
 
@@ -73,27 +80,24 @@ class MockCreatePresentationConnnectionCallbacks {
 class MockOffscreenPresentationManager : public OffscreenPresentationManager {
  public:
   void RegisterOffscreenPresentationController(
-      const std::string& presentation_id,
-      const GURL& presentation_url,
+      const content::PresentationInfo& presentation_info,
       const RenderFrameHostId& render_frame_id,
       content::PresentationConnectionPtr controller,
       content::PresentationConnectionRequest,
       const MediaRoute& route) override {
-    RegisterOffscreenPresentationController(presentation_id, presentation_url,
-                                            render_frame_id, route);
+    RegisterOffscreenPresentationController(presentation_info, render_frame_id,
+                                            route);
   }
 
-  MOCK_METHOD4(RegisterOffscreenPresentationController,
-               void(const std::string& presentation_id,
-                    const GURL& presentation_url,
+  MOCK_METHOD3(RegisterOffscreenPresentationController,
+               void(const content::PresentationInfo& presentation_info,
                     const RenderFrameHostId& render_frame_id,
                     const MediaRoute& route));
   MOCK_METHOD2(UnregisterOffscreenPresentationController,
                void(const std::string& presentation_id,
                     const RenderFrameHostId& render_frame_id));
-  MOCK_METHOD3(OnOffscreenPresentationReceiverCreated,
-               void(const std::string& presentation_id,
-                    const GURL& presentation_url,
+  MOCK_METHOD2(OnOffscreenPresentationReceiverCreated,
+               void(const content::PresentationInfo& presentation_info,
                     const content::ReceiverConnectionAvailableCallback&
                         receiver_callback));
   MOCK_METHOD1(OnOffscreenPresentationReceiverTerminated,
@@ -320,8 +324,16 @@ TEST_F(PresentationServiceDelegateImplTest, AddSameListenerTwice) {
       main_frame_process_id_, main_frame_routing_id_, source1_.id()));
 }
 
-// TODO(imcheng): Add a test to set default presentation URL in a different
-// RenderFrameHost and verify that it is ignored.
+TEST_F(PresentationServiceDelegateImplTest, AddListenerForInvalidUrl) {
+  MockScreenAvailabilityListener listener(GURL("unsupported-url://foo"));
+  EXPECT_CALL(listener,
+              OnScreenAvailabilityChanged(
+                  blink::mojom::ScreenAvailability::SOURCE_NOT_SUPPORTED));
+  EXPECT_FALSE(delegate_impl_->AddScreenAvailabilityListener(
+      main_frame_process_id_, main_frame_routing_id_, &listener));
+  EXPECT_CALL(router_, RegisterMediaSinksObserver(_)).Times(0);
+}
+
 TEST_F(PresentationServiceDelegateImplTest, SetDefaultPresentationUrl) {
   EXPECT_FALSE(delegate_impl_->HasDefaultPresentationRequest());
 
@@ -429,8 +441,12 @@ TEST_F(PresentationServiceDelegateImplTest, ListenForConnnectionStateChange) {
 
   // Set up a PresentationConnection so we can listen to it.
   std::vector<MediaRouteResponseCallback> route_response_callbacks;
-  EXPECT_CALL(router_, JoinRoute(_, _, _, _, _, _, false))
-      .WillOnce(SaveArg<4>(&route_response_callbacks));
+  EXPECT_CALL(router_, JoinRouteInternal(_, _, _, _, _, _, false))
+      .WillOnce(WithArgs<4>(
+          Invoke([&route_response_callbacks](
+                     std::vector<MediaRouteResponseCallback>& callbacks) {
+            route_response_callbacks = std::move(callbacks);
+          })));
 
   const std::string kPresentationId("pid");
   presentation_urls_.push_back(GURL(kPresentationUrl3));
@@ -443,10 +459,10 @@ TEST_F(PresentationServiceDelegateImplTest, ListenForConnnectionStateChange) {
   delegate_impl_->ReconnectPresentation(
       main_frame_process_id_, main_frame_routing_id_, presentation_urls_,
       kPresentationId,
-      base::Bind(&MockCreatePresentationConnnectionCallbacks::
-                     OnCreateConnectionSuccess,
-                 base::Unretained(&mock_create_connection_callbacks)),
-      base::Bind(
+      base::BindOnce(&MockCreatePresentationConnnectionCallbacks::
+                         OnCreateConnectionSuccess,
+                     base::Unretained(&mock_create_connection_callbacks)),
+      base::BindOnce(
           &MockCreatePresentationConnnectionCallbacks::OnCreateConnectionError,
           base::Unretained(&mock_create_connection_callbacks)));
 
@@ -456,8 +472,8 @@ TEST_F(PresentationServiceDelegateImplTest, ListenForConnnectionStateChange) {
       MediaRoute("routeId", source1_, "mediaSinkId", "description", true, "",
                  true),
       kPresentationId);
-  for (const auto& route_response_callback : route_response_callbacks)
-    route_response_callback.Run(*result);
+  for (auto& route_response_callback : route_response_callbacks)
+    std::move(route_response_callback).Run(*result);
 
   base::MockCallback<content::PresentationConnectionStateChangedCallback>
       mock_callback;
@@ -503,7 +519,8 @@ TEST_F(PresentationServiceDelegateImplTest, DelegateObservers) {
 
 TEST_F(PresentationServiceDelegateImplTest, SinksObserverCantRegister) {
   EXPECT_CALL(router_, RegisterMediaSinksObserver(_)).WillOnce(Return(false));
-  EXPECT_CALL(listener1_, OnScreenAvailabilityNotSupported());
+  EXPECT_CALL(listener1_, OnScreenAvailabilityChanged(
+                              blink::mojom::ScreenAvailability::DISABLED));
   EXPECT_FALSE(delegate_impl_->AddScreenAvailabilityListener(
       main_frame_process_id_, main_frame_routing_id_, &listener1_));
 }
@@ -572,7 +589,7 @@ TEST_F(PresentationServiceDelegateImplTest,
   delegate_impl_->Reset(main_frame_process_id_, main_frame_routing_id_);
 }
 
-TEST_F(PresentationServiceDelegateImplTest, ConnectToPresentation) {
+TEST_F(PresentationServiceDelegateImplTest, ConnectToOffscreenPresentation) {
   content::RenderFrameHost* main_frame = GetWebContents()->GetMainFrame();
   ASSERT_TRUE(main_frame);
   int render_process_id = main_frame->GetProcess()->GetID();
@@ -598,7 +615,7 @@ TEST_F(PresentationServiceDelegateImplTest, ConnectToPresentation) {
   auto& mock_offscreen_manager = GetMockOffscreenPresentationManager();
   EXPECT_CALL(mock_offscreen_manager,
               RegisterOffscreenPresentationController(
-                  presentation_id, presentation_url,
+                  InfoEquals(presentation_info),
                   RenderFrameHostId(render_process_id, render_frame_id),
                   Equals(media_route)));
 
@@ -614,6 +631,46 @@ TEST_F(PresentationServiceDelegateImplTest, ConnectToPresentation) {
                   RenderFrameHostId(render_process_id, render_frame_id)));
   EXPECT_CALL(router_, DetachRoute("route_id")).Times(0);
   delegate_impl_->Reset(render_process_id, render_frame_id);
+}
+
+TEST_F(PresentationServiceDelegateImplTest, ConnectToPresentation) {
+  content::RenderFrameHost* main_frame = GetWebContents()->GetMainFrame();
+  ASSERT_TRUE(main_frame);
+  int render_process_id = main_frame->GetProcess()->GetID();
+  int render_frame_id = main_frame->GetRoutingID();
+  std::string presentation_id = "presentation_id";
+  GURL presentation_url = GURL("http://www.example.com/presentation.html");
+  content::PresentationInfo presentation_info(presentation_url,
+                                              presentation_id);
+
+  MediaRoute media_route(
+      "route_id",
+      MediaSourceForPresentationUrl(presentation_info.presentation_url),
+      "mediaSinkId", "", true, "", true);
+
+  base::MockCallback<content::PresentationConnectionCallback> success_cb;
+  EXPECT_CALL(success_cb, Run(_));
+
+  delegate_impl_->OnStartPresentationSucceeded(
+      render_process_id, render_frame_id, success_cb.Get(), presentation_info,
+      media_route);
+
+  content::PresentationConnectionPtr connection_ptr;
+  MockPresentationConnectionProxy mock_proxy;
+  mojo::Binding<blink::mojom::PresentationConnection> binding(
+      &mock_proxy, mojo::MakeRequest(&connection_ptr));
+
+  content::PresentationConnectionRequest connection_request;
+  EXPECT_CALL(router_, RegisterRouteMessageObserver(_));
+  delegate_impl_->ConnectToPresentation(
+      render_process_id, render_frame_id, presentation_info,
+      std::move(connection_ptr), std::move(connection_request));
+
+  EXPECT_CALL(router_, UnregisterRouteMessageObserver(_));
+  EXPECT_CALL(router_, DetachRoute("route_id")).Times(1);
+  delegate_impl_->Reset(render_process_id, render_frame_id);
+
+  //  binding.Close();
 }
 
 #if !defined(OS_ANDROID)
@@ -640,14 +697,15 @@ TEST_F(PresentationServiceDelegateImplTest, AutoJoinRequest) {
 
   // Auto-join requests should be rejected.
   EXPECT_CALL(mock_create_connection_callbacks, OnCreateConnectionError(_));
-  EXPECT_CALL(router_, JoinRoute(_, kPresentationId, _, _, _, _, _)).Times(0);
+  EXPECT_CALL(router_, JoinRouteInternal(_, kPresentationId, _, _, _, _, _))
+      .Times(0);
   delegate_impl_->ReconnectPresentation(
       main_frame_process_id_, main_frame_routing_id_, presentation_urls_,
       kPresentationId,
-      base::Bind(&MockCreatePresentationConnnectionCallbacks::
-                     OnCreateConnectionSuccess,
-                 base::Unretained(&mock_create_connection_callbacks)),
-      base::Bind(
+      base::BindOnce(&MockCreatePresentationConnnectionCallbacks::
+                         OnCreateConnectionSuccess,
+                     base::Unretained(&mock_create_connection_callbacks)),
+      base::BindOnce(
           &MockCreatePresentationConnnectionCallbacks::OnCreateConnectionError,
           base::Unretained(&mock_create_connection_callbacks)));
 
@@ -659,14 +717,15 @@ TEST_F(PresentationServiceDelegateImplTest, AutoJoinRequest) {
   }
 
   // Auto-join requests should now go through.
-  EXPECT_CALL(router_, JoinRoute(_, kPresentationId, _, _, _, _, _)).Times(1);
+  EXPECT_CALL(router_, JoinRouteInternal(_, kPresentationId, _, _, _, _, _))
+      .Times(1);
   delegate_impl_->ReconnectPresentation(
       main_frame_process_id_, main_frame_routing_id_, presentation_urls_,
       kPresentationId,
-      base::Bind(&MockCreatePresentationConnnectionCallbacks::
-                     OnCreateConnectionSuccess,
-                 base::Unretained(&mock_create_connection_callbacks)),
-      base::Bind(
+      base::BindOnce(&MockCreatePresentationConnnectionCallbacks::
+                         OnCreateConnectionSuccess,
+                     base::Unretained(&mock_create_connection_callbacks)),
+      base::BindOnce(
           &MockCreatePresentationConnnectionCallbacks::OnCreateConnectionError,
           base::Unretained(&mock_create_connection_callbacks)));
 }
@@ -701,14 +760,15 @@ TEST_F(PresentationServiceDelegateImplIncognitoTest, AutoJoinRequest) {
 
   // Auto-join requests should be rejected.
   EXPECT_CALL(mock_create_connection_callbacks, OnCreateConnectionError(_));
-  EXPECT_CALL(router_, JoinRoute(_, kPresentationId, _, _, _, _, _)).Times(0);
+  EXPECT_CALL(router_, JoinRouteInternal(_, kPresentationId, _, _, _, _, _))
+      .Times(0);
   delegate_impl_->ReconnectPresentation(
       main_frame_process_id_, main_frame_routing_id_, presentation_urls_,
       kPresentationId,
-      base::Bind(&MockCreatePresentationConnnectionCallbacks::
-                     OnCreateConnectionSuccess,
-                 base::Unretained(&mock_create_connection_callbacks)),
-      base::Bind(
+      base::BindOnce(&MockCreatePresentationConnnectionCallbacks::
+                         OnCreateConnectionSuccess,
+                     base::Unretained(&mock_create_connection_callbacks)),
+      base::BindOnce(
           &MockCreatePresentationConnnectionCallbacks::OnCreateConnectionError,
           base::Unretained(&mock_create_connection_callbacks)));
 
@@ -720,14 +780,15 @@ TEST_F(PresentationServiceDelegateImplIncognitoTest, AutoJoinRequest) {
   }
 
   // Auto-join requests should now go through.
-  EXPECT_CALL(router_, JoinRoute(_, kPresentationId, _, _, _, _, _)).Times(1);
+  EXPECT_CALL(router_, JoinRouteInternal(_, kPresentationId, _, _, _, _, _))
+      .Times(1);
   delegate_impl_->ReconnectPresentation(
       main_frame_process_id_, main_frame_routing_id_, presentation_urls_,
       kPresentationId,
-      base::Bind(&MockCreatePresentationConnnectionCallbacks::
-                     OnCreateConnectionSuccess,
-                 base::Unretained(&mock_create_connection_callbacks)),
-      base::Bind(
+      base::BindOnce(&MockCreatePresentationConnnectionCallbacks::
+                         OnCreateConnectionSuccess,
+                     base::Unretained(&mock_create_connection_callbacks)),
+      base::BindOnce(
           &MockCreatePresentationConnnectionCallbacks::OnCreateConnectionError,
           base::Unretained(&mock_create_connection_callbacks)));
 }

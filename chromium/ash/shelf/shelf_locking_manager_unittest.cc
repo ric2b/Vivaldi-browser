@@ -4,7 +4,6 @@
 
 #include "ash/shelf/shelf_locking_manager.h"
 
-#include "ash/session/session_state_delegate.h"
 #include "ash/shelf/shelf.h"
 #include "ash/test/ash_test_base.h"
 
@@ -12,7 +11,7 @@ namespace ash {
 namespace {
 
 // Tests the shelf behavior when the screen or session is locked.
-class ShelfLockingManagerTest : public test::AshTestBase {
+class ShelfLockingManagerTest : public AshTestBase {
  public:
   ShelfLockingManagerTest() {}
 

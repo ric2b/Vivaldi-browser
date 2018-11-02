@@ -12,6 +12,7 @@
 #include "base/location.h"
 #include "base/trace_event/trace_event.h"
 #include "content/renderer/media/webrtc/track_observer.h"
+#include "content/renderer/media/webrtc/webrtc_video_frame_adapter.h"
 #include "media/base/bind_to_current_loop.h"
 #include "media/base/timestamp_constants.h"
 #include "media/base/video_frame.h"
@@ -115,40 +116,40 @@ void MediaStreamRemoteVideoSource::RemoteVideoSourceDelegate::OnFrame(
   scoped_refptr<webrtc::VideoFrameBuffer> buffer(
       incoming_frame.video_frame_buffer());
 
-  if (buffer->native_handle() != NULL) {
-    video_frame = static_cast<media::VideoFrame*>(buffer->native_handle());
+  if (buffer->type() == webrtc::VideoFrameBuffer::Type::kNative) {
+    video_frame = static_cast<WebRtcVideoFrameAdapter*>(buffer.get())
+                      ->getMediaVideoFrame();
     video_frame->set_timestamp(elapsed_timestamp);
-    if (incoming_frame.rotation() != webrtc::kVideoRotation_0) {
-      video_frame->metadata()->SetRotation(
-          media::VideoFrameMetadata::ROTATION,
-          WebRTCToMediaVideoRotation(incoming_frame.rotation()));
-    }
   } else {
-    buffer = webrtc::I420Buffer::Rotate(*incoming_frame.video_frame_buffer(),
-                                        incoming_frame.rotation());
-
-    gfx::Size size(buffer->width(), buffer->height());
-
+    scoped_refptr<webrtc::PlanarYuvBuffer> yuv_buffer;
+    media::VideoPixelFormat pixel_format;
+    if (buffer->type() == webrtc::VideoFrameBuffer::Type::kI444) {
+      yuv_buffer = buffer->GetI444();
+      pixel_format = media::PIXEL_FORMAT_YV24;
+    } else {
+      yuv_buffer = buffer->ToI420();
+      pixel_format = media::PIXEL_FORMAT_YV12;
+    }
+    gfx::Size size(yuv_buffer->width(), yuv_buffer->height());
     // Make a shallow copy. Both |frame| and |video_frame| will share a single
     // reference counted frame buffer. Const cast and hope no one will overwrite
     // the data.
-    // TODO(magjed): Update media::VideoFrame to support const data so we don't
-    // need to const cast here.
     video_frame = media::VideoFrame::WrapExternalYuvData(
-        media::PIXEL_FORMAT_YV12, size, gfx::Rect(size), size,
-        buffer->StrideY(),
-        buffer->StrideU(),
-        buffer->StrideV(),
-        const_cast<uint8_t*>(buffer->DataY()),
-        const_cast<uint8_t*>(buffer->DataU()),
-        const_cast<uint8_t*>(buffer->DataV()),
-        elapsed_timestamp);
+        pixel_format, size, gfx::Rect(size), size, yuv_buffer->StrideY(),
+        yuv_buffer->StrideU(), yuv_buffer->StrideV(),
+        const_cast<uint8_t*>(yuv_buffer->DataY()),
+        const_cast<uint8_t*>(yuv_buffer->DataU()),
+        const_cast<uint8_t*>(yuv_buffer->DataV()), elapsed_timestamp);
     if (!video_frame)
       return;
     // The bind ensures that we keep a reference to the underlying buffer.
     video_frame->AddDestructionObserver(base::Bind(&DoNothing, buffer));
   }
-
+  if (incoming_frame.rotation() != webrtc::kVideoRotation_0) {
+    video_frame->metadata()->SetRotation(
+        media::VideoFrameMetadata::ROTATION,
+        WebRTCToMediaVideoRotation(incoming_frame.rotation()));
+  }
   video_frame->metadata()->SetTimeTicks(
       media::VideoFrameMetadata::REFERENCE_TIME, render_time);
 
@@ -176,32 +177,18 @@ MediaStreamRemoteVideoSource::MediaStreamRemoteVideoSource(
 }
 
 MediaStreamRemoteVideoSource::~MediaStreamRemoteVideoSource() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!observer_);
 }
 
 void MediaStreamRemoteVideoSource::OnSourceTerminated() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   StopSourceImpl();
 }
 
-void MediaStreamRemoteVideoSource::GetCurrentSupportedFormats(
-    int max_requested_width,
-    int max_requested_height,
-    double max_requested_frame_rate,
-    const VideoCaptureDeviceFormatsCB& callback) {
-  DCHECK(CalledOnValidThread());
-  media::VideoCaptureFormats formats;
-  // Since the remote end is free to change the resolution at any point in time
-  // the supported formats are unknown.
-  callback.Run(formats);
-}
-
 void MediaStreamRemoteVideoSource::StartSourceImpl(
-    const media::VideoCaptureFormat& format,
-    const blink::WebMediaConstraints& constraints,
     const VideoCaptureDeliverFrameCB& frame_callback) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DCHECK(!delegate_.get());
   delegate_ = new RemoteVideoSourceDelegate(io_task_runner(), frame_callback);
   scoped_refptr<webrtc::VideoTrackInterface> video_track(
@@ -211,7 +198,7 @@ void MediaStreamRemoteVideoSource::StartSourceImpl(
 }
 
 void MediaStreamRemoteVideoSource::StopSourceImpl() {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // StopSourceImpl is called either when MediaStreamTrack.stop is called from
   // JS or blink gc the MediaStreamSource object or when OnSourceTerminated()
   // is called. Garbage collection will happen after the PeerConnection no
@@ -233,7 +220,7 @@ MediaStreamRemoteVideoSource::SinkInterfaceForTest() {
 
 void MediaStreamRemoteVideoSource::OnChanged(
     webrtc::MediaStreamTrackInterface::TrackState state) {
-  DCHECK(CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   switch (state) {
     case webrtc::MediaStreamTrackInterface::kLive:
       SetReadyState(blink::WebMediaStreamSource::kReadyStateLive);

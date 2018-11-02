@@ -20,6 +20,7 @@
 #include "ui/views/controls/button/menu_button.h"
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/button/toggle_button.h"
+#include "ui/views/painter.h"
 #include "ui/views/style/platform_style.h"
 #include "ui/views/widget/widget.h"
 
@@ -134,6 +135,10 @@ void CustomButton::SetHotTracked(bool is_hot_tracked) {
 
 bool CustomButton::IsHotTracked() const {
   return state_ == STATE_HOVERED;
+}
+
+void CustomButton::SetFocusPainter(std::unique_ptr<Painter> focus_painter) {
+  focus_painter_ = std::move(focus_painter);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -313,11 +318,7 @@ void CustomButton::OnGestureEvent(ui::GestureEvent* event) {
 
 bool CustomButton::AcceleratorPressed(const ui::Accelerator& accelerator) {
   SetState(STATE_NORMAL);
-  // TODO(beng): remove once NotifyClick takes ui::Event.
-  ui::MouseEvent synthetic_event(
-      ui::ET_MOUSE_RELEASED, gfx::Point(), gfx::Point(), ui::EventTimeForNow(),
-      ui::EF_LEFT_MOUSE_BUTTON, ui::EF_LEFT_MOUSE_BUTTON);
-  NotifyClick(synthetic_event);
+  NotifyClick(accelerator.ToKeyEvent());
   return true;
 }
 
@@ -352,6 +353,12 @@ void CustomButton::OnDragDone() {
   AnimateInkDrop(InkDropState::HIDDEN, nullptr /* event */);
 }
 
+void CustomButton::OnPaint(gfx::Canvas* canvas) {
+  Button::OnPaint(canvas);
+  PaintButtonContents(canvas);
+  Painter::PaintFocusPainter(this, canvas, focus_painter_.get());
+}
+
 void CustomButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   Button::GetAccessibleNodeData(node_data);
   switch (state_) {
@@ -359,10 +366,12 @@ void CustomButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       node_data->AddState(ui::AX_STATE_HOVERED);
       break;
     case STATE_PRESSED:
-      node_data->AddState(ui::AX_STATE_PRESSED);
+      node_data->AddIntAttribute(ui::AX_ATTR_CHECKED_STATE,
+                                 ui::AX_CHECKED_STATE_TRUE);
       break;
     case STATE_DISABLED:
-      node_data->AddState(ui::AX_STATE_DISABLED);
+      node_data->AddIntAttribute(ui::AX_ATTR_RESTRICTION,
+                                 ui::AX_RESTRICTION_DISABLED);
       break;
     case STATE_NORMAL:
     case STATE_COUNT:
@@ -408,6 +417,12 @@ void CustomButton::ViewHierarchyChanged(
     SetState(STATE_NORMAL);
 }
 
+void CustomButton::OnFocus() {
+  Button::OnFocus();
+  if (focus_painter_)
+    SchedulePaint();
+}
+
 void CustomButton::OnBlur() {
   Button::OnBlur();
   if (IsHotTracked() || state_ == STATE_PRESSED) {
@@ -419,6 +434,8 @@ void CustomButton::OnBlur() {
     // it is possible for a Mouse Release to trigger an action however there
     // would be no visual cue to the user that this will occur.
   }
+  if (focus_painter_)
+    SchedulePaint();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -454,6 +471,8 @@ bool CustomButton::ShouldUpdateInkDropOnClickCanceled() const {
 bool CustomButton::ShouldEnterPushedState(const ui::Event& event) {
   return IsTriggerableEvent(event);
 }
+
+void CustomButton::PaintButtonContents(gfx::Canvas* canvas) {}
 
 bool CustomButton::ShouldEnterHoveredState() {
   if (!visible())

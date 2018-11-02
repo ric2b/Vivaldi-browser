@@ -4,21 +4,27 @@
 
 #include "chrome/browser/signin/chrome_signin_helper.h"
 
+#include "base/logging.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_io_data.h"
 #include "chrome/browser/signin/account_reconcilor_factory.h"
 #include "chrome/browser/signin/chrome_signin_client.h"
+#include "chrome/browser/signin/chrome_signin_client_factory.h"
+#include "chrome/browser/signin/dice_response_handler.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/common/url_constants.h"
 #include "components/signin/core/browser/account_reconcilor.h"
+#include "components/signin/core/browser/chrome_connected_header_helper.h"
 #include "components/signin/core/browser/signin_header_helper.h"
+#include "components/signin/core/common/profile_management_switches.h"
+#include "components/signin/core/common/signin_features.h"
 #include "content/public/browser/browser_thread.h"
-#include "content/public/browser/resource_request_info.h"
 #include "content/public/browser/web_contents.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "net/http/http_response_headers.h"
 #include "net/url_request/url_request.h"
 
 #if defined(OS_ANDROID)
@@ -33,19 +39,28 @@ namespace signin {
 
 namespace {
 
+const char kChromeManageAccountsHeader[] = "X-Chrome-Manage-Accounts";
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+const char kDiceResponseHeader[] = "X-Chrome-ID-Consistency-Response";
+const char kGoogleSignoutResponseHeader[] = "Google-Accounts-SignOut";
+#endif
+
 // Processes the mirror response header on the UI thread. Currently depending
 // on the value of |header_value|, it either shows the profile avatar menu, or
 // opens an incognito window/tab.
-void ProcessMirrorHeaderUIThread(int child_id,
-                                 int route_id,
-                                 ManageAccountsParams manage_accounts_params) {
+void ProcessMirrorHeaderUIThread(
+    ManageAccountsParams manage_accounts_params,
+    const content::ResourceRequestInfo::WebContentsGetter&
+        web_contents_getter) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_EQ(switches::AccountConsistencyMethod::kMirror,
+            switches::GetAccountConsistencyMethod());
 
   GAIAServiceType service_type = manage_accounts_params.service_type;
   DCHECK_NE(GAIA_SERVICE_TYPE_NONE, service_type);
 
-  content::WebContents* web_contents =
-      tab_util::GetWebContentsByID(child_id, route_id);
+  content::WebContents* web_contents = web_contents_getter.Run();
   if (!web_contents)
     return;
 
@@ -53,8 +68,7 @@ void ProcessMirrorHeaderUIThread(int child_id,
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
   AccountReconcilor* account_reconcilor =
       AccountReconcilorFactory::GetForProfile(profile);
-  account_reconcilor->OnReceivedManageAccountsResponse(
-      manage_accounts_params.service_type);
+  account_reconcilor->OnReceivedManageAccountsResponse(service_type);
 #if !defined(OS_ANDROID)
   Browser* browser = chrome::FindBrowserWithWebContents(web_contents);
   if (browser) {
@@ -95,33 +109,136 @@ void ProcessMirrorHeaderUIThread(int child_id,
 #endif  // !defined(OS_ANDROID)
 }
 
-// Returns the parameters contained in the X-Chrome-Manage-Accounts response
-// header.
-// If the request does not have a response header or if the header contains
-// garbage, then |service_type| is set to |GAIA_SERVICE_TYPE_NONE|.
-// Must be called on IO thread.
-ManageAccountsParams BuildManageAccountsParamsHelper(net::URLRequest* request,
-                                                     ProfileIOData* io_data) {
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+void ProcessDiceHeaderUIThread(
+    const DiceResponseParams& dice_params,
+    const content::ResourceRequestInfo::WebContentsGetter&
+        web_contents_getter) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  DCHECK_EQ(switches::AccountConsistencyMethod::kDice,
+            switches::GetAccountConsistencyMethod());
+
+  content::WebContents* web_contents = web_contents_getter.Run();
+  if (!web_contents)
+    return;
+
+  Profile* profile =
+      Profile::FromBrowserContext(web_contents->GetBrowserContext());
+  DCHECK(!profile->IsOffTheRecord());
+
+  DiceResponseHandler* dice_response_handler =
+      DiceResponseHandler::GetForProfile(profile);
+  dice_response_handler->ProcessDiceHeader(dice_params);
+}
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+// Looks for the X-Chrome-Manage-Accounts response header, and if found,
+// tries to show the avatar bubble in the browser identified by the
+// child/route id. Must be called on IO thread.
+void ProcessMirrorResponseHeaderIfExists(net::URLRequest* request,
+                                         bool is_off_the_record) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   const content::ResourceRequestInfo* info =
       content::ResourceRequestInfo::ForRequest(request);
-  if (!(info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME)) {
-    ManageAccountsParams empty_params;
-    empty_params.service_type = GAIA_SERVICE_TYPE_NONE;
-    return empty_params;
+  if (!(info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME))
+    return;
+
+  if (!gaia::IsGaiaSignonRealm(request->url().GetOrigin()))
+    return;
+
+  net::HttpResponseHeaders* response_headers = request->response_headers();
+  if (!response_headers)
+    return;
+
+  std::string header_value;
+  if (!response_headers->GetNormalizedHeader(kChromeManageAccountsHeader,
+                                             &header_value)) {
+    return;
   }
 
-  return BuildManageAccountsParamsIfExists(request, io_data->IsOffTheRecord());
+  if (is_off_the_record) {
+    NOTREACHED() << "Gaia should not send the X-Chrome-Manage-Accounts header "
+                 << "in incognito.";
+    return;
+  }
+
+  if (switches::GetAccountConsistencyMethod() !=
+      switches::AccountConsistencyMethod::kMirror) {
+    NOTREACHED() << "Gaia should not send the X-Chrome-Manage-Accounts header "
+                 << "when Mirror is disabled.";
+    return;
+  }
+
+  ManageAccountsParams params = BuildManageAccountsParams(header_value);
+  // If the request does not have a response header or if the header contains
+  // garbage, then |service_type| is set to |GAIA_SERVICE_TYPE_NONE|.
+  if (params.service_type == GAIA_SERVICE_TYPE_NONE)
+    return;
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::BindOnce(ProcessMirrorHeaderUIThread, params,
+                     info->GetWebContentsGetterForRequest()));
 }
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+void ProcessDiceResponseHeaderIfExists(net::URLRequest* request,
+                                       bool is_off_the_record) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
+
+  if (is_off_the_record)
+    return;
+
+  const content::ResourceRequestInfo* info =
+      content::ResourceRequestInfo::ForRequest(request);
+  if (!(info && info->GetResourceType() == content::RESOURCE_TYPE_MAIN_FRAME))
+    return;
+
+  if (!gaia::IsGaiaSignonRealm(request->url().GetOrigin()))
+    return;
+
+  if (switches::GetAccountConsistencyMethod() !=
+      switches::AccountConsistencyMethod::kDice) {
+    return;
+  }
+
+  net::HttpResponseHeaders* response_headers = request->response_headers();
+  if (!response_headers)
+    return;
+
+  std::string header_value;
+  DiceResponseParams params;
+  if (response_headers->GetNormalizedHeader(kDiceResponseHeader,
+                                            &header_value)) {
+    params = BuildDiceSigninResponseParams(header_value);
+    // The header must be removed for privacy reasons, so that renderers never
+    // have access to the authorization code.
+    response_headers->RemoveHeader(kDiceResponseHeader);
+  } else if (response_headers->GetNormalizedHeader(kGoogleSignoutResponseHeader,
+                                                   &header_value)) {
+    params = BuildDiceSignoutResponseParams(header_value);
+  }
+
+  // If the request does not have a response header or if the header contains
+  // garbage, then |user_intention| is set to |NONE|.
+  if (params.user_intention == DiceAction::NONE)
+    return;
+
+  content::BrowserThread::PostTask(
+      content::BrowserThread::UI, FROM_HERE,
+      base::Bind(ProcessDiceHeaderUIThread, params,
+                 info->GetWebContentsGetterForRequest()));
+}
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 
 }  // namespace
 
-void FixMirrorRequestHeaderHelper(net::URLRequest* request,
-                                  const GURL& redirect_url,
-                                  ProfileIOData* io_data,
-                                  int child_id,
-                                  int route_id) {
+void FixAccountConsistencyRequestHeader(net::URLRequest* request,
+                                        const GURL& redirect_url,
+                                        ProfileIOData* io_data,
+                                        int child_id,
+                                        int route_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
 
   if (io_data->IsOffTheRecord())
@@ -131,7 +248,7 @@ void FixMirrorRequestHeaderHelper(net::URLRequest* request,
   extensions::WebViewRendererState::WebViewInfo webview_info;
   bool is_guest = extensions::WebViewRendererState::GetInstance()->GetInfo(
       child_id, route_id, &webview_info);
-  // Do not set the x-chrome-connected header on requests from a native signin
+  // Do not set the account consistency header on requests from a native signin
   // webview, as identified by an empty extension id which means the webview is
   // embedded in a webui page, otherwise user may end up with a blank page as
   // gaia uses the header to decide whether it returns 204 for certain end
@@ -147,26 +264,31 @@ void FixMirrorRequestHeaderHelper(net::URLRequest* request,
     profile_mode_mask |= PROFILE_MODE_INCOGNITO_DISABLED;
   }
 
+  std::string account_id = io_data->google_services_account_id()->GetValue();
+
   // If new url is eligible to have the header, add it, otherwise remove it.
-  AppendOrRemoveMirrorRequestHeaderIfPossible(
-      request, redirect_url, io_data->google_services_account_id()->GetValue(),
+  AppendOrRemoveAccountConsistentyRequestHeader(
+      request, redirect_url, account_id, io_data->IsSyncEnabled(),
       io_data->GetCookieSettings(), profile_mode_mask);
 }
 
-void ProcessMirrorResponseHeaderIfExists(net::URLRequest* request,
-                                         ProfileIOData* io_data,
-                                         int child_id,
-                                         int route_id) {
-  ManageAccountsParams params =
-      BuildManageAccountsParamsHelper(request, io_data);
-  if (params.service_type == GAIA_SERVICE_TYPE_NONE)
-    return;
+void ProcessAccountConsistencyResponseHeaders(net::URLRequest* request,
+                                              const GURL& redirect_url,
+                                              bool is_off_the_record) {
+  if (redirect_url.is_empty()) {
+    // This is not a redirect.
 
-  params.child_id = child_id;
-  params.route_id = route_id;
-  content::BrowserThread::PostTask(
-      content::BrowserThread::UI, FROM_HERE,
-      base::Bind(ProcessMirrorHeaderUIThread, child_id, route_id, params));
+    // See if the response contains the X-Chrome-Manage-Accounts header. If so
+    // show the profile avatar bubble so that user can complete signin/out
+    // action the native UI.
+    ProcessMirrorResponseHeaderIfExists(request, is_off_the_record);
+  }
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+  // Process the Dice header: on sign-in, exchange the authorization code for a
+  // refresh token, on sign-out just follow the sign-out URL.
+  ProcessDiceResponseHeaderIfExists(request, is_off_the_record);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
 }
 
 }  // namespace signin

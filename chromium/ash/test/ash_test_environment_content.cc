@@ -7,12 +7,10 @@
 #include "ash/test/ash_test_views_delegate.h"
 #include "ash/test/content/test_shell_content_state.h"
 #include "base/memory/ptr_util.h"
-#include "content/public/browser/browser_thread.h"
 #include "content/public/test/test_browser_thread_bundle.h"
 #include "content/public/test/web_contents_tester.h"
 
 namespace ash {
-namespace test {
 namespace {
 
 class AshTestViewsDelegateContent : public AshTestViewsDelegate {
@@ -62,14 +60,9 @@ void AshTestEnvironmentContent::TearDown() {
   ShellContentState::DestroyInstance();
 }
 
-base::SequencedWorkerPool* AshTestEnvironmentContent::GetBlockingPool() {
-  return content::BrowserThread::GetBlockingPool();
-}
-
 std::unique_ptr<AshTestViewsDelegate>
 AshTestEnvironmentContent::CreateViewsDelegate() {
   return base::MakeUnique<AshTestViewsDelegateContent>();
 }
 
-}  // namespace test
 }  // namespace ash

@@ -7,9 +7,11 @@
 <translation id="1190609913194133056">Središče za obvestila</translation>
 <translation id="1243314992276662751">Prenesi</translation>
 <translation id="1293699935367580298">Esc</translation>
+<translation id="1306549533752902673">PRIPOROČENE APLIKACIJE</translation>
 <translation id="1398853756734560583">Povečaj</translation>
 <translation id="1413622004203049571">Izklop obvestil za <ph name="NOTIFIER_NAME" /></translation>
 <translation id="1591184457164800433">{MINUTES,plural, =1{1 min in }one{# min in }two{# min in }few{# min in }other{# min in }}</translation>
+<translation id="1643823602425662293">Obvestilo</translation>
 <translation id="1685967565548146460">Klobuki</translation>
 <translation id="1752946267035950200">{MINUTES,plural, =1{1 min}one{# min}two{# min}few{# min}other{# min}}</translation>
 <translation id="1761785978543082658"><ph name="QUANTITY" /> B</translation>
@@ -57,13 +59,16 @@
 <translation id="4202807286478387388">skoči</translation>
 <translation id="4250229828105606438">Posnetek zaslona</translation>
 <translation id="4266252015790371705">{MONTHS,plural, =1{Pred 1 mesecem}one{Pred # mesecem}two{Pred # mesecema}few{Pred # meseci}other{Pred # meseci}}</translation>
+<translation id="4316910396681052118">VSE APLIKACIJE</translation>
 <translation id="4320177379694898372">Ni internetne povezave</translation>
 <translation id="4588090240171750605">Pomik desno</translation>
+<translation id="4730374152663651037">POGOSTO UPORABLJENE</translation>
 <translation id="4788285488841504513">{MONTHS,plural, =1{Še 1 mesec}one{Še # mesec}two{Še # meseca}few{Še # mesece}other{Še # mesecev}}</translation>
 <translation id="4820616160060340806">Command + <ph name="KEY_COMBO_NAME" /></translation>
 <translation id="4968171027979920686">{SECONDS,plural, =1{1 s}one{# s}two{# s}few{# s}other{# s}}</translation>
 <translation id="4971687151119236543">Prejšnja skladba</translation>
 <translation id="4999762576397546063">Ctrl+<ph name="KEY_COMBO_NAME" /></translation>
+<translation id="5016049845330225051">Gumb za izbris besedila v iskalnem polju</translation>
 <translation id="5046499563572181734">Dotaknite se tukaj</translation>
 <translation id="5076340679995252485">&amp;Prilepi</translation>
 <translation id="5120799197269191491">Tipka za iskanje + <ph name="KEY_COMBO_NAME" /></translation>
@@ -86,7 +91,9 @@
 <translation id="6129953537138746214">Presledek</translation>
 <translation id="6135826906199951471">Del</translation>
 <translation id="6142413573757616983"><ph name="QUANTITY" /> B/s</translation>
+<translation id="6156262341071374681">Razširitev na vse aplikacije</translation>
 <translation id="6264365405983206840">Izberi &amp;vse</translation>
+<translation id="6351032674660237738">PREDLOGI ZA APLIKACIJE</translation>
 <translation id="6364916375976753737">Pomik levo</translation>
 <translation id="6394627529324717982">Vejica</translation>
 <translation id="6404817160109697034">{SECONDS,plural, =1{Pred 1 s}one{Pred # s}two{Pred # s}few{Pred # s}other{Pred # s}}</translation>
@@ -107,6 +114,7 @@
 <translation id="6945221475159498467">Izberi</translation>
 <translation id="6965382102122355670">V redu</translation>
 <translation id="7052633198403197513">F1</translation>
+<translation id="7130207228079676353">NAJVERJETNEJŠE</translation>
 <translation id="7135556860107312402">Omogočanje obvestil teh aplikacij:</translation>
 <translation id="7222373446505536781">F11</translation>
 <translation id="7238427729722629793">{MINUTES,plural, =1{Še 1 min}one{Še # min}two{Še # min}few{Še # min}other{Še # min}}</translation>
@@ -145,6 +153,7 @@
 <translation id="9038489124413477075">Neimenovana mapa</translation>
 <translation id="9044832324875206639">{SECONDS,plural, =1{1 s}one{# s}two{# s}few{# s}other{# s}}</translation>
 <translation id="9150735707954472829">Zavihek</translation>
+<translation id="9161053988251441839">PREDLAGANE APLIKACIJE</translation>
 <translation id="9170848237812810038">&amp;Razveljavi</translation>
 <translation id="932327136139879170">Domov</translation>
 </translationbundle>

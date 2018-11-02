@@ -22,15 +22,6 @@ DistillerJavaScriptServiceImpl::DistillerJavaScriptServiceImpl(
 
 DistillerJavaScriptServiceImpl::~DistillerJavaScriptServiceImpl() {}
 
-void DistillerJavaScriptServiceImpl::HandleDistillerClosePanelCall(
-    bool animate) {
-  base::RecordAction(base::UserMetricsAction("DomDistiller_ViewOriginal"));
-  if (!distiller_ui_handle_) {
-    return;
-  }
-  distiller_ui_handle_->ClosePanel(animate);
-}
-
 void DistillerJavaScriptServiceImpl::HandleDistillerOpenSettingsCall() {
   if (!distiller_ui_handle_) {
     return;
@@ -43,7 +34,6 @@ void DistillerJavaScriptServiceImpl::HandleDistillerOpenSettingsCall() {
 void CreateDistillerJavaScriptService(
     content::RenderFrameHost* render_frame_host,
     DistillerUIHandle* distiller_ui_handle,
-    const service_manager::BindSourceInfo& source_info,
     mojom::DistillerJavaScriptServiceRequest request) {
   mojo::MakeStrongBinding(base::MakeUnique<DistillerJavaScriptServiceImpl>(
                               render_frame_host, distiller_ui_handle),

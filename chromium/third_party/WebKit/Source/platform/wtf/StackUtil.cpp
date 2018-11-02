@@ -8,7 +8,7 @@
 #include "platform/wtf/Threading.h"
 #include "platform/wtf/WTFThreadData.h"
 
-#if OS(WIN)
+#if defined(OS_WIN)
 #include <stddef.h>
 #include <windows.h>
 #include <winnt.h>
@@ -28,14 +28,15 @@ size_t GetUnderestimatedStackSize() {
 // FIXME: On Mac OSX and Linux, this method cannot estimate stack size
 // correctly for the main thread.
 
-#if defined(__GLIBC__) || OS(ANDROID) || OS(FREEBSD)
+#if defined(__GLIBC__) || defined(OS_ANDROID) || defined(OS_FREEBSD) || \
+    defined(OS_FUCHSIA)
   // pthread_getattr_np() can fail if the thread is not invoked by
   // pthread_create() (e.g., the main thread of webkit_unit_tests).
   // If so, a conservative size estimate is returned.
 
   pthread_attr_t attr;
   int error;
-#if OS(FREEBSD)
+#if defined(OS_FREEBSD)
   pthread_attr_init(&attr);
   error = pthread_attr_get_np(pthread_self(), &attr);
 #else
@@ -49,7 +50,7 @@ size_t GetUnderestimatedStackSize() {
     pthread_attr_destroy(&attr);
     return size;
   }
-#if OS(FREEBSD)
+#if defined(OS_FREEBSD)
   pthread_attr_destroy(&attr);
 #endif
 
@@ -60,7 +61,7 @@ size_t GetUnderestimatedStackSize() {
   //    low as 512k.
   //
   return 512 * 1024;
-#elif OS(MACOSX)
+#elif defined(OS_MACOSX)
   // pthread_get_stacksize_np() returns too low a value for the main thread on
   // OSX 10.9,
   // http://mail.openjdk.java.net/pipermail/hotspot-dev/2013-October/011369.html
@@ -86,7 +87,7 @@ size_t GetUnderestimatedStackSize() {
 #endif
   }
   return pthread_get_stacksize_np(pthread_self());
-#elif OS(WIN) && COMPILER(MSVC)
+#elif defined(OS_WIN) && defined(COMPILER_MSVC)
   return WTFThreadData::ThreadStackSize();
 #else
 #error "Stack frame size estimation not supported on this platform."
@@ -95,10 +96,11 @@ size_t GetUnderestimatedStackSize() {
 }
 
 void* GetStackStart() {
-#if defined(__GLIBC__) || OS(ANDROID) || OS(FREEBSD)
+#if defined(__GLIBC__) || defined(OS_ANDROID) || defined(OS_FREEBSD) || \
+    defined(OS_FUCHSIA)
   pthread_attr_t attr;
   int error;
-#if OS(FREEBSD)
+#if defined(OS_FREEBSD)
   pthread_attr_init(&attr);
   error = pthread_attr_get_np(pthread_self(), &attr);
 #else
@@ -112,7 +114,7 @@ void* GetStackStart() {
     pthread_attr_destroy(&attr);
     return reinterpret_cast<uint8_t*>(base) + size;
   }
-#if OS(FREEBSD)
+#if defined(OS_FREEBSD)
   pthread_attr_destroy(&attr);
 #endif
 #if defined(__GLIBC__)
@@ -125,9 +127,9 @@ void* GetStackStart() {
   NOTREACHED();
   return nullptr;
 #endif
-#elif OS(MACOSX)
+#elif defined(OS_MACOSX)
   return pthread_get_stackaddr_np(pthread_self());
-#elif OS(WIN) && COMPILER(MSVC)
+#elif defined(OS_WIN) && defined(COMPILER_MSVC)
 // On Windows stack limits for the current thread are available in
 // the thread information block (TIB). Its fields can be accessed through
 // FS segment register on x86 and GS segment register on x86_64.
@@ -160,7 +162,7 @@ void InitializeMainThreadStackEstimate() {
   g_main_thread_underestimated_stack_size = underestimated_stack_size;
 }
 
-#if OS(WIN) && COMPILER(MSVC)
+#if defined(OS_WIN) && defined(COMPILER_MSVC)
 size_t ThreadStackSize() {
   // Notice that we cannot use the TIB's StackLimit for the stack end, as i
   // tracks the end of the committed range. We're after the end of the reserved

@@ -28,10 +28,14 @@ bindings_modules_generated_union_type_files = [
   "$bindings_modules_v8_output_dir/BooleanOrMediaTrackConstraints.h",
   "$bindings_modules_v8_output_dir/ByteStringSequenceSequenceOrByteStringByteStringRecord.cpp",
   "$bindings_modules_v8_output_dir/ByteStringSequenceSequenceOrByteStringByteStringRecord.h",
+  "$bindings_modules_v8_output_dir/CanvasImageSource.cpp",
+  "$bindings_modules_v8_output_dir/CanvasImageSource.h",
   "$bindings_modules_v8_output_dir/ClientOrServiceWorkerOrMessagePort.cpp",
   "$bindings_modules_v8_output_dir/ClientOrServiceWorkerOrMessagePort.h",
-  "$bindings_modules_v8_output_dir/CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas.cpp",
-  "$bindings_modules_v8_output_dir/CSSImageValueOrHTMLImageElementOrSVGImageElementOrHTMLVideoElementOrHTMLCanvasElementOrImageBitmapOrOffscreenCanvas.h",
+  "$bindings_modules_v8_output_dir/DecodeErrorCallback.cpp",
+  "$bindings_modules_v8_output_dir/DecodeErrorCallback.h",
+  "$bindings_modules_v8_output_dir/DecodeSuccessCallback.cpp",
+  "$bindings_modules_v8_output_dir/DecodeSuccessCallback.h",
   "$bindings_modules_v8_output_dir/DictionaryOrString.cpp",
   "$bindings_modules_v8_output_dir/DictionaryOrString.h",
   "$bindings_modules_v8_output_dir/DoubleOrConstrainDoubleRange.cpp",
@@ -44,8 +48,8 @@ bindings_modules_generated_union_type_files = [
   "$bindings_modules_v8_output_dir/HTMLCanvasElementOrOffscreenCanvas.h",
   "$bindings_modules_v8_output_dir/LongOrConstrainLongRange.cpp",
   "$bindings_modules_v8_output_dir/LongOrConstrainLongRange.h",
-  "$bindings_modules_v8_output_dir/OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContext.cpp",
-  "$bindings_modules_v8_output_dir/OffscreenCanvasRenderingContext2DOrWebGLRenderingContextOrWebGL2RenderingContext.h",
+  "$bindings_modules_v8_output_dir/OffscreenRenderingContext.cpp",
+  "$bindings_modules_v8_output_dir/OffscreenRenderingContext.h",
   "$bindings_modules_v8_output_dir/PasswordCredentialDataOrHTMLFormElement.cpp",
   "$bindings_modules_v8_output_dir/PasswordCredentialDataOrHTMLFormElement.h",
   "$bindings_modules_v8_output_dir/Point2DSequenceOrConstrainPoint2DParameters.cpp",
@@ -73,6 +77,8 @@ bindings_modules_generated_union_type_files = [
 ]
 
 generated_modules_callback_function_files = [
+  "$bindings_modules_v8_output_dir/DatabaseCallback.cpp",
+  "$bindings_modules_v8_output_dir/DatabaseCallback.h",
   "$bindings_modules_v8_output_dir/IDBObserverCallback.cpp",
   "$bindings_modules_v8_output_dir/IDBObserverCallback.h",
   "$bindings_modules_v8_output_dir/MediaSessionActionHandler.cpp",
@@ -80,19 +86,3 @@ generated_modules_callback_function_files = [
   "$bindings_modules_v8_output_dir/RemotePlaybackAvailabilityCallback.cpp",
   "$bindings_modules_v8_output_dir/RemotePlaybackAvailabilityCallback.h",
 ]
-
-bindings_modules_generated_interface_files =
-    process_file_template(
-        modules_definition_idl_files,
-        [
-          "$bindings_modules_v8_output_dir/V8{{source_name_part}}.cpp",
-          "$bindings_modules_v8_output_dir/V8{{source_name_part}}.h",
-        ])
-
-bindings_modules_generated_partial_interface_files =
-    process_file_template(
-        core_idl_with_modules_dependency_files,
-        [
-          "$bindings_modules_v8_output_dir/V8{{source_name_part}}Partial.cpp",
-          "$bindings_modules_v8_output_dir/V8{{source_name_part}}Partial.h",
-        ])

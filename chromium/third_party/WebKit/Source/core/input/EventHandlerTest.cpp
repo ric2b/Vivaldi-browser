@@ -10,8 +10,8 @@
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
 #include "core/editing/SelectionController.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
@@ -106,7 +106,7 @@ TEST_F(EventHandlerTest, dragSelectionAfterScroll) {
       "class='line'>Line 10</span>"
       "</div>");
 
-  FrameView* frame_view = GetDocument().View();
+  LocalFrameView* frame_view = GetDocument().View();
   frame_view->LayoutViewportScrollableArea()->SetScrollOffset(
       ScrollOffset(0, 400), kProgrammaticScroll);
 
@@ -193,11 +193,11 @@ TEST_F(EventHandlerTest, multiClickSelectionFromTap) {
           ->GetEditor()
           .IsSelectTrailingWhitespaceEnabled()) {
     EXPECT_EQ(Position(line, 4),
-              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().end());
+              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
     EXPECT_EQ("One ", WebString(Selection().SelectedText()).Utf8());
   } else {
     EXPECT_EQ(Position(line, 3),
-              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().end());
+              Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
     EXPECT_EQ("One", WebString(Selection().SelectedText()).Utf8());
   }
 
@@ -209,7 +209,7 @@ TEST_F(EventHandlerTest, multiClickSelectionFromTap) {
   EXPECT_EQ(Position(line, 0),
             Selection().ComputeVisibleSelectionInDOMTreeDeprecated().Start());
   EXPECT_EQ(Position(line, 13),
-            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().end());
+            Selection().ComputeVisibleSelectionInDOMTreeDeprecated().End());
   EXPECT_EQ("One Two Three", WebString(Selection().SelectedText()).Utf8());
 }
 
@@ -483,6 +483,32 @@ TEST_F(EventHandlerTest, HandleNotShownOnMouseEvents) {
   ASSERT_TRUE(
       Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsRange());
   ASSERT_FALSE(Selection().IsHandleVisible());
+}
+
+TEST_F(EventHandlerTest, MisspellingContextMenuEvent) {
+  if (GetDocument()
+          .GetFrame()
+          ->GetEditor()
+          .Behavior()
+          .ShouldSelectOnContextualMenuClick())
+    return;
+
+  SetHtmlInnerHTML("<textarea cols=50 rows=50>Mispellinggg</textarea>");
+
+  TapEventBuilder single_tap_event(IntPoint(10, 10), 1);
+  GetDocument().GetFrame()->GetEventHandler().HandleGestureEvent(
+      single_tap_event);
+
+  ASSERT_TRUE(
+      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().IsHandleVisible());
+
+  GetDocument().GetFrame()->GetEventHandler().ShowNonLocatedContextMenu(
+      nullptr, kMenuSourceTouchHandle);
+
+  ASSERT_TRUE(
+      Selection().ComputeVisibleSelectionInDOMTreeDeprecated().IsCaret());
+  ASSERT_TRUE(Selection().IsHandleVisible());
 }
 
 TEST_F(EventHandlerTest, dragEndInNewDrag) {

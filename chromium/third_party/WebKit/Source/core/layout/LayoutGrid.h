@@ -128,6 +128,13 @@ class LayoutGrid final : public LayoutBlock {
                 LayoutObject* before_child = nullptr) override;
   void RemoveChild(LayoutObject*) override;
 
+  bool SelfAlignmentChangedSize(GridAxis,
+                                const ComputedStyle& old_style,
+                                const ComputedStyle& new_style,
+                                const LayoutBox&) const;
+  bool DefaultAlignmentChangedSize(GridAxis,
+                                   const ComputedStyle& old_style,
+                                   const ComputedStyle& new_style) const;
   void StyleDidChange(StyleDifference, const ComputedStyle*) override;
 
   Optional<LayoutUnit> AvailableSpaceForGutters(GridTrackSizingDirection) const;
@@ -205,15 +212,21 @@ class LayoutGrid final : public LayoutBlock {
 
   void PaintChildren(const PaintInfo&, const LayoutPoint&) const override;
 
-  LayoutUnit MarginLogicalSizeForChild(GridTrackSizingDirection,
-                                       const LayoutBox&) const;
-  LayoutUnit ComputeMarginLogicalSizeForChild(MarginDirection,
-                                              const LayoutBox&) const;
   LayoutUnit AvailableAlignmentSpaceForChildBeforeStretching(
       LayoutUnit grid_area_breadth_for_child,
       const LayoutBox&) const;
-  StyleSelfAlignmentData JustifySelfForChild(const LayoutBox&) const;
-  StyleSelfAlignmentData AlignSelfForChild(const LayoutBox&) const;
+  StyleSelfAlignmentData JustifySelfForChild(
+      const LayoutBox&,
+      const ComputedStyle* = nullptr) const;
+  StyleSelfAlignmentData AlignSelfForChild(
+      const LayoutBox&,
+      const ComputedStyle* = nullptr) const;
+  StyleSelfAlignmentData SelfAlignmentForChild(
+      GridAxis,
+      const LayoutBox& child,
+      const ComputedStyle* = nullptr) const;
+  StyleSelfAlignmentData DefaultAlignmentForChild(GridAxis,
+                                                  const ComputedStyle&) const;
   void ApplyStretchAlignmentToChildIfNeeded(LayoutBox&);
   bool HasAutoSizeInColumnAxis(const LayoutBox& child) const {
     return IsHorizontalWritingMode() ? child.StyleRef().Height().IsAuto()
@@ -256,8 +269,7 @@ class LayoutGrid final : public LayoutBlock {
                              LayoutUnit ascent,
                              GridAxis) const;
 
-  bool BaselineMayAffectIntrinsicWidth() const;
-  bool BaselineMayAffectIntrinsicHeight() const;
+  bool BaselineMayAffectIntrinsicSize(GridTrackSizingDirection) const;
   void ComputeBaselineAlignmentContext();
   void UpdateBaselineAlignmentContextIfNeeded(LayoutBox&, GridAxis);
 

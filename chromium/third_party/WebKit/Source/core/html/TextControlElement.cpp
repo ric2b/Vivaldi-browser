@@ -30,8 +30,8 @@
 #include "core/dom/AXObjectCache.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/Text.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/editing/EditingUtilities.h"
 #include "core/editing/Editor.h"
 #include "core/editing/FrameSelection.h"
@@ -339,7 +339,7 @@ static Position PositionForIndex(HTMLElement* inner_editor, unsigned index) {
   for (Node& node : NodeTraversal::DescendantsOf(*inner_editor)) {
     if (node.HasTagName(brTag)) {
       if (remaining_characters_to_move_forward == 0)
-        return Position::BeforeNode(&node);
+        return Position::BeforeNode(*&node);
       --remaining_characters_to_move_forward;
       last_br_or_text = &node;
       continue;
@@ -365,7 +365,7 @@ unsigned TextControlElement::IndexForPosition(HTMLElement* inner_editor,
       passed_position.IsNull())
     return 0;
 
-  if (Position::BeforeNode(inner_editor) == passed_position)
+  if (Position::BeforeNode(*inner_editor) == passed_position)
     return 0;
 
   unsigned index = 0;
@@ -459,7 +459,7 @@ bool TextControlElement::CacheSelection(unsigned start,
 
 VisiblePosition TextControlElement::VisiblePositionForIndex(int index) const {
   if (index <= 0)
-    return VisiblePosition::FirstPositionInNode(InnerEditorElement());
+    return VisiblePosition::FirstPositionInNode(*InnerEditorElement());
   Position start, end;
   bool selected = Range::selectNodeContents(InnerEditorElement(), start, end);
   if (!selected)
@@ -503,7 +503,7 @@ unsigned TextControlElement::ComputeSelectionStart() const {
         GetDocument().Lifecycle());
     const SelectionInDOMTree& selection =
         frame->Selection().GetSelectionInDOMTree();
-    if (selection.Granularity() == kCharacterGranularity) {
+    if (frame->Selection().Granularity() == TextGranularity::kCharacter) {
       return IndexForPosition(InnerEditorElement(),
                               selection.ComputeStartPosition());
     }
@@ -534,14 +534,14 @@ unsigned TextControlElement::ComputeSelectionEnd() const {
         GetDocument().Lifecycle());
     const SelectionInDOMTree& selection =
         frame->Selection().GetSelectionInDOMTree();
-    if (selection.Granularity() == kCharacterGranularity) {
+    if (frame->Selection().Granularity() == TextGranularity::kCharacter) {
       return IndexForPosition(InnerEditorElement(),
                               selection.ComputeEndPosition());
     }
   }
   const VisibleSelection& visible_selection =
       frame->Selection().ComputeVisibleSelectionInDOMTreeDeprecated();
-  return IndexForPosition(InnerEditorElement(), visible_selection.end());
+  return IndexForPosition(InnerEditorElement(), visible_selection.End());
 }
 
 static const AtomicString& DirectionString(
@@ -630,7 +630,7 @@ SelectionInDOMTree TextControlElement::Selection() const {
   for (Node& node : NodeTraversal::DescendantsOf(*inner_text)) {
     DCHECK(!node.hasChildren());
     DCHECK(node.IsTextNode() || isHTMLBRElement(node));
-    int length = node.IsTextNode() ? Position::LastOffsetInNode(&node) : 1;
+    int length = node.IsTextNode() ? Position::LastOffsetInNode(node) : 1;
 
     if (offset <= start && start <= offset + length)
       SetContainerAndOffsetForRange(&node, start - offset, start_node, start);
@@ -744,7 +744,7 @@ void TextControlElement::SelectionChanged(bool user_triggered) {
     return;
   const SelectionInDOMTree& selection =
       frame->Selection().GetSelectionInDOMTree();
-  if (selection.SelectionTypeWithLegacyGranularity() != kRangeSelection)
+  if (selection.Type() != kRangeSelection)
     return;
   DispatchEvent(Event::CreateBubble(EventTypeNames::select));
 }
@@ -758,12 +758,12 @@ void TextControlElement::ScheduleSelectEvent() {
 void TextControlElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == autocapitalizeAttr)
-    UseCounter::Count(GetDocument(), UseCounter::kAutocapitalizeAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kAutocapitalizeAttribute);
 
   if (params.name == placeholderAttr) {
     UpdatePlaceholderText();
     UpdatePlaceholderVisibility();
-    UseCounter::Count(GetDocument(), UseCounter::kPlaceholderAttribute);
+    UseCounter::Count(GetDocument(), WebFeature::kPlaceholderAttribute);
   } else {
     HTMLFormControlElementWithState::ParseAttribute(params);
   }

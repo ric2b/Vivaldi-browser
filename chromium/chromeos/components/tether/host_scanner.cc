@@ -7,8 +7,11 @@
 #include <algorithm>
 
 #include "base/bind.h"
+#include "base/metrics/histogram_macros.h"
 #include "chromeos/components/tether/device_id_tether_network_guid_map.h"
+#include "chromeos/components/tether/device_status_util.h"
 #include "chromeos/components/tether/host_scan_cache.h"
+#include "chromeos/components/tether/master_host_scan_cache.h"
 #include "chromeos/components/tether/tether_host_fetcher.h"
 #include "chromeos/network/network_state.h"
 #include "components/cryptauth/remote_device_loader.h"
@@ -17,23 +20,8 @@ namespace chromeos {
 
 namespace tether {
 
-namespace {
-
-const char kDefaultCellCarrierName[] = "unknown-carrier";
-
-// Android signal strength is measured between 0 and 4 (inclusive), but Chrome
-// OS signal strength is measured between 0 and 100 (inclusive). In order to
-// convert between Android signal strength to Chrome OS signal strength, the
-// value must be multiplied by the below value.
-const int32_t kAndroidTetherHostToChromeOSSignalStrengthMultiplier = 25;
-
-int32_t ForceBetweenZeroAndOneHundred(int32_t value) {
-  return std::min(std::max(value, 0), 100);
-}
-
-}  // namespace
-
 HostScanner::HostScanner(
+    NetworkStateHandler* network_state_handler,
     TetherHostFetcher* tether_host_fetcher,
     BleConnectionManager* connection_manager,
     HostScanDevicePrioritizer* host_scan_device_prioritizer,
@@ -42,7 +30,8 @@ HostScanner::HostScanner(
     DeviceIdTetherNetworkGuidMap* device_id_tether_network_guid_map,
     HostScanCache* host_scan_cache,
     base::Clock* clock)
-    : tether_host_fetcher_(tether_host_fetcher),
+    : network_state_handler_(network_state_handler),
+      tether_host_fetcher_(tether_host_fetcher),
       connection_manager_(connection_manager),
       host_scan_device_prioritizer_(host_scan_device_prioritizer),
       tether_host_response_recorder_(tether_host_response_recorder),
@@ -50,22 +39,12 @@ HostScanner::HostScanner(
       device_id_tether_network_guid_map_(device_id_tether_network_guid_map),
       host_scan_cache_(host_scan_cache),
       clock_(clock),
-      is_fetching_hosts_(false),
       weak_ptr_factory_(this) {}
 
 HostScanner::~HostScanner() {}
 
 bool HostScanner::IsScanActive() {
   return is_fetching_hosts_ || host_scanner_operation_;
-}
-
-bool HostScanner::HasRecentlyScanned() {
-  if (previous_scan_time_.is_null())
-    return false;
-
-  base::TimeDelta difference = clock_->Now() - previous_scan_time_;
-  return difference.InMinutes() <
-         HostScanCache::kNumMinutesBeforeCacheEntryExpires;
 }
 
 void HostScanner::StartScan() {
@@ -82,6 +61,9 @@ void HostScanner::OnTetherHostsFetched(
     const cryptauth::RemoteDeviceList& tether_hosts) {
   is_fetching_hosts_ = false;
 
+  tether_guids_in_cache_before_scan_ =
+      host_scan_cache_->GetTetherGuidsInCache();
+
   host_scanner_operation_ = HostScannerOperation::Factory::NewInstance(
       tether_hosts, connection_manager_, host_scan_device_prioritizer_,
       tether_host_response_recorder_);
@@ -93,32 +75,44 @@ void HostScanner::OnTetherAvailabilityResponse(
     std::vector<HostScannerOperation::ScannedDeviceInfo>&
         scanned_device_list_so_far,
     bool is_final_scan_result) {
-  if (scanned_device_list_so_far.empty()) {
-    // If a new scan is just starting up, remove existing cache entries; if they
-    // are still within range to communicate with the current device, they will
-    // show up in a subsequent OnTetherAvailabilityResponse() invocation.
-    host_scan_cache_->ClearCacheExceptForActiveHost();
-  } else {
-    // Add all results received so far to the cache.
-    for (auto& scanned_device_info : scanned_device_list_so_far) {
-      SetCacheEntry(scanned_device_info);
-    }
+  if (scanned_device_list_so_far.empty() && !is_final_scan_result) {
+    was_notification_showing_when_current_scan_started_ =
+        IsPotentialHotspotNotificationShowing();
+  }
 
-    if (scanned_device_list_so_far.size() == 1) {
-      notification_presenter_->NotifyPotentialHotspotNearby(
-          scanned_device_list_so_far.at(0).remote_device);
+  // Ensure all results received so far are in the cache (setting entries which
+  // already exist is a no-op).
+  for (const auto& scanned_device_info : scanned_device_list_so_far) {
+    SetCacheEntry(scanned_device_info);
+  }
+
+  if (CanAvailableHostNotificationBeShown() &&
+      !scanned_device_list_so_far.empty()) {
+    if (scanned_device_list_so_far.size() == 1u &&
+        (notification_presenter_->GetPotentialHotspotNotificationState() !=
+             NotificationPresenter::PotentialHotspotNotificationState::
+                 MULTIPLE_HOTSPOTS_NEARBY_SHOWN ||
+         is_final_scan_result)) {
+      const cryptauth::RemoteDevice& remote_device =
+          scanned_device_list_so_far.at(0).remote_device;
+      int32_t signal_strength;
+      NormalizeDeviceStatus(scanned_device_list_so_far.at(0).device_status,
+                            nullptr /* carrier */,
+                            nullptr /* battery_percentage */, &signal_strength);
+      notification_presenter_->NotifyPotentialHotspotNearby(remote_device,
+                                                            signal_strength);
     } else {
+      // Note: If a single-device notification was previously displayed, calling
+      // NotifyMultiplePotentialHotspotsNearby() will reuse the existing
+      // notification.
       notification_presenter_->NotifyMultiplePotentialHotspotsNearby();
     }
+
+    was_notification_shown_in_current_scan_ = true;
   }
 
   if (is_final_scan_result) {
-    // If the final scan result has been received, the operation is finished.
-    // Delete it.
-    host_scanner_operation_->RemoveObserver(this);
-    host_scanner_operation_.reset();
-    NotifyScanFinished();
-    previous_scan_time_ = clock_->Now();
+    OnFinalScanResultReceived(scanned_device_list_so_far);
   }
 }
 
@@ -142,32 +136,122 @@ void HostScanner::SetCacheEntry(
   const cryptauth::RemoteDevice& remote_device =
       scanned_device_info.remote_device;
 
-  // Use a sentinel value if carrier information is not available. This value is
-  // special-cased and replaced with a localized string in the settings UI.
-  const std::string carrier =
-      (!status.has_cell_provider() || status.cell_provider().empty())
-          ? kDefaultCellCarrierName
-          : status.cell_provider();
-
-  // If battery or signal strength are missing, assume they are 100. For
-  // battery percentage, force the value to be between 0 and 100. For signal
-  // strength, convert from Android signal strength to Chrome OS signal
-  // strength and force the value to be between 0 and 100.
-  const int32_t battery_percentage =
-      status.has_battery_percentage()
-          ? ForceBetweenZeroAndOneHundred(status.battery_percentage())
-          : 100;
-  const int32_t signal_strength =
-      status.has_connection_strength()
-          ? ForceBetweenZeroAndOneHundred(
-                kAndroidTetherHostToChromeOSSignalStrengthMultiplier *
-                status.connection_strength())
-          : 100;
+  std::string carrier;
+  int32_t battery_percentage;
+  int32_t signal_strength;
+  NormalizeDeviceStatus(status, &carrier, &battery_percentage,
+                        &signal_strength);
 
   host_scan_cache_->SetHostScanResult(
-      device_id_tether_network_guid_map_->GetTetherNetworkGuidForDeviceId(
-          remote_device.GetDeviceId()),
-      remote_device.name, carrier, battery_percentage, signal_strength);
+      *HostScanCacheEntry::Builder()
+           .SetTetherNetworkGuid(device_id_tether_network_guid_map_
+                                     ->GetTetherNetworkGuidForDeviceId(
+                                         remote_device.GetDeviceId()))
+           .SetDeviceName(remote_device.name)
+           .SetCarrier(carrier)
+           .SetBatteryPercentage(battery_percentage)
+           .SetSignalStrength(signal_strength)
+           .SetSetupRequired(scanned_device_info.setup_required)
+           .Build());
+}
+
+void HostScanner::OnFinalScanResultReceived(
+    std::vector<HostScannerOperation::ScannedDeviceInfo>& final_scan_results) {
+  // Search through all GUIDs that were in the cache before the scan began. If
+  // any of those GUIDs are not present in the final scan results, remove them
+  // from the cache.
+  for (const auto& tether_guid_in_cache : tether_guids_in_cache_before_scan_) {
+    bool is_guid_in_final_scan_results = false;
+
+    for (const auto& scan_result : final_scan_results) {
+      if (device_id_tether_network_guid_map_->GetTetherNetworkGuidForDeviceId(
+              scan_result.remote_device.GetDeviceId()) ==
+          tether_guid_in_cache) {
+        is_guid_in_final_scan_results = true;
+        break;
+      }
+    }
+
+    if (!is_guid_in_final_scan_results)
+      host_scan_cache_->RemoveHostScanResult(tether_guid_in_cache);
+  }
+
+  if (final_scan_results.empty()) {
+    RecordHostScanResult(HostScanResultEventType::NO_HOSTS_FOUND);
+  } else if (!was_notification_shown_in_current_scan_) {
+    RecordHostScanResult(
+        HostScanResultEventType::HOSTS_FOUND_BUT_NO_NOTIFICATION_SHOWN);
+  } else if (final_scan_results.size() == 1u) {
+    RecordHostScanResult(
+        HostScanResultEventType::NOTIFICATION_SHOWN_SINGLE_HOST);
+  } else {
+    RecordHostScanResult(
+        HostScanResultEventType::NOTIFICATION_SHOWN_MULTIPLE_HOSTS);
+  }
+  has_notification_been_shown_in_previous_scan_ |=
+      was_notification_shown_in_current_scan_;
+  was_notification_shown_in_current_scan_ = false;
+  was_notification_showing_when_current_scan_started_ = false;
+
+  // If the final scan result has been received, the operation is finished.
+  // Delete it.
+  host_scanner_operation_->RemoveObserver(this);
+  host_scanner_operation_.reset();
+
+  NotifyScanFinished();
+}
+
+void HostScanner::RecordHostScanResult(HostScanResultEventType event_type) {
+  DCHECK(event_type != HostScanResultEventType::HOST_SCAN_RESULT_MAX);
+  UMA_HISTOGRAM_ENUMERATION("InstantTethering.HostScanResult", event_type,
+                            HostScanResultEventType::HOST_SCAN_RESULT_MAX);
+}
+
+bool HostScanner::IsPotentialHotspotNotificationShowing() {
+  return notification_presenter_->GetPotentialHotspotNotificationState() !=
+         NotificationPresenter::PotentialHotspotNotificationState::
+             NO_HOTSPOT_NOTIFICATION_SHOWN;
+}
+
+bool HostScanner::CanAvailableHostNotificationBeShown() {
+  // Note: If a network is active (i.e., connecting or connected), it will be
+  // returned at the front of the list, so using FirstNetworkByType() guarantees
+  // that we will find an active network if there is one.
+  const chromeos::NetworkState* first_network =
+      network_state_handler_->FirstNetworkByType(
+          chromeos::NetworkTypePattern::Default());
+  if (first_network && first_network->IsConnectingOrConnected()) {
+    // If a network is connecting or connected, the notification should not be
+    // shown.
+    return false;
+  }
+
+  if (!IsPotentialHotspotNotificationShowing() &&
+      was_notification_shown_in_current_scan_) {
+    // If a notification was shown in the current scan but it is no longer
+    // showing, it has been removed, either due to NotificationRemover or due to
+    // the user closing it. Since a scan only lasts on the order of seconds to
+    // tens of seconds, we know that the notification was very recently closed,
+    // so we should not re-show it.
+    return false;
+  }
+
+  if (!IsPotentialHotspotNotificationShowing() &&
+      was_notification_showing_when_current_scan_started_) {
+    // If a notification was showing when the scan started but is no longer
+    // showing, it has been removed and should not be re-shown.
+    return false;
+  }
+
+  if (has_notification_been_shown_in_previous_scan_ &&
+      !was_notification_showing_when_current_scan_started_) {
+    // If a notification was shown in a previous scan but was not visible when
+    // the current scan started, it should not be shown because this could be
+    // considered spammy; see crbug.com/759078.
+    return false;
+  }
+
+  return true;
 }
 
 }  // namespace tether

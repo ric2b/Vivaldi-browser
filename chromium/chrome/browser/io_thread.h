@@ -20,15 +20,17 @@
 #include "base/memory/ref_counted.h"
 #include "base/memory/weak_ptr.h"
 #include "base/strings/string_piece.h"
-#include "base/time/time.h"
 #include "build/build_config.h"
 #include "chrome/browser/net/chrome_network_delegate.h"
+#include "chrome/browser/net/system_network_context_manager.h"
 #include "chrome/common/features.h"
 #include "components/metrics/data_use_tracker.h"
 #include "components/prefs/pref_member.h"
 #include "components/ssl_config/ssl_config_service_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/browser_thread_delegate.h"
+#include "content/public/common/network_service.mojom.h"
+#include "content/public/network/network_service.h"
 #include "extensions/features/features.h"
 #include "net/base/network_change_notifier.h"
 #include "net/http/http_network_session.h"
@@ -37,7 +39,6 @@
 class PrefProxyConfigTracker;
 class PrefService;
 class PrefRegistrySimple;
-class SystemURLRequestContextGetter;
 
 #if defined(OS_ANDROID)
 namespace chrome {
@@ -53,6 +54,10 @@ class CommandLine;
 
 namespace certificate_transparency {
 class TreeStateTracker;
+}
+
+namespace chrome {
+class TestingIOThreadState;
 }
 
 namespace chrome_browser_net {
@@ -72,27 +77,18 @@ class EventRouterForwarder;
 }
 
 namespace net {
-class CTPolicyEnforcer;
-class CertVerifier;
-class ChannelIDService;
-class CookieStore;
 class CTLogVerifier;
 class HostMappingRules;
 class HostResolver;
+class HttpAuthHandlerFactory;
 class HttpAuthPreferences;
-class HttpServerProperties;
-class HttpTransactionFactory;
-class HttpUserAgentSettings;
 class LoggingNetworkChangeObserver;
-class NetworkDelegate;
 class NetworkQualityEstimator;
 class ProxyConfigService;
-class ProxyService;
+class RTTAndThroughputEstimatesObserver;
 class SSLConfigService;
-class TransportSecurityState;
 class URLRequestContext;
 class URLRequestContextGetter;
-class URLRequestJobFactory;
 
 namespace ct {
 class STHObserver;
@@ -133,6 +129,11 @@ class IOThread : public content::BrowserThreadDelegate {
     Globals();
     ~Globals();
 
+    // In-process NetworkService for use in URLRequestContext configuration when
+    // the network service created through the ServiceManager is disabled. See
+    // SystemNetworkContextManager's header comment for more details
+    std::unique_ptr<content::NetworkService> network_service;
+
     // Ascribes all data use in Chrome to a source, such as page loads.
     std::unique_ptr<data_use_measurement::ChromeDataUseAscriber>
         data_use_ascriber;
@@ -144,56 +145,18 @@ class IOThread : public content::BrowserThreadDelegate {
     std::unique_ptr<chrome::android::ExternalDataUseObserver>
         external_data_use_observer;
 #endif  // defined(OS_ANDROID)
-    // The "system" NetworkDelegate, used for Profile-agnostic network events.
-    std::unique_ptr<net::NetworkDelegate> system_network_delegate;
-    std::unique_ptr<net::HostResolver> host_resolver;
-    std::unique_ptr<net::CertVerifier> cert_verifier;
-    // The ChannelIDService must outlive the HttpTransactionFactory.
-    std::unique_ptr<net::ChannelIDService> system_channel_id_service;
-    // This TransportSecurityState doesn't load or save any state. It's only
-    // used to enforce pinning for system requests and will only use built-in
-    // pins.
-    std::unique_ptr<net::TransportSecurityState> transport_security_state;
     std::vector<scoped_refptr<const net::CTLogVerifier>> ct_logs;
-    std::unique_ptr<net::CTVerifier> cert_transparency_verifier;
-    std::unique_ptr<net::CTPolicyEnforcer> ct_policy_enforcer;
-    scoped_refptr<net::SSLConfigService> ssl_config_service;
-    std::unique_ptr<net::HttpAuthHandlerFactory> http_auth_handler_factory;
-    std::unique_ptr<net::HttpServerProperties> http_server_properties;
-    std::unique_ptr<net::ProxyService> proxy_script_fetcher_proxy_service;
-    std::unique_ptr<net::HttpNetworkSession>
-        proxy_script_fetcher_http_network_session;
-    std::unique_ptr<net::HttpTransactionFactory>
-        proxy_script_fetcher_http_transaction_factory;
-    std::unique_ptr<net::URLRequestJobFactory>
-        proxy_script_fetcher_url_request_job_factory;
     std::unique_ptr<net::HttpAuthPreferences> http_auth_preferences;
-    // TODO(willchan): Remove proxy script fetcher context since it's not
-    // necessary now that I got rid of refcounting URLRequestContexts.
-    //
-    // The first URLRequestContext is |system_url_request_context|. We introduce
-    // |proxy_script_fetcher_context| for the second context. It has a direct
-    // ProxyService, since we always directly connect to fetch the PAC script.
-    std::unique_ptr<net::URLRequestContext> proxy_script_fetcher_context;
-    std::unique_ptr<net::ProxyService> system_proxy_service;
-    std::unique_ptr<net::HttpNetworkSession> system_http_network_session;
-    std::unique_ptr<net::HttpTransactionFactory>
-        system_http_transaction_factory;
-    std::unique_ptr<net::URLRequestJobFactory> system_url_request_job_factory;
-    std::unique_ptr<net::URLRequestContext> system_request_context;
+    std::unique_ptr<content::mojom::NetworkContext> system_network_context;
+    net::URLRequestContext* system_request_context;
     SystemRequestContextLeakChecker system_request_context_leak_checker;
-    // |system_cookie_store| and |system_channel_id_service| are shared
-    // between |proxy_script_fetcher_context| and |system_request_context|.
-    std::unique_ptr<net::CookieStore> system_cookie_store;
 #if BUILDFLAG(ENABLE_EXTENSIONS)
     scoped_refptr<extensions::EventRouterForwarder>
         extension_event_router_forwarder;
 #endif
     std::unique_ptr<net::HostMappingRules> host_mapping_rules;
-    std::unique_ptr<net::HttpUserAgentSettings> http_user_agent_settings;
     std::unique_ptr<net::NetworkQualityEstimator> network_quality_estimator;
-    std::unique_ptr<
-        net::NetworkQualityEstimator::RTTAndThroughputEstimatesObserver>
+    std::unique_ptr<net::RTTAndThroughputEstimatesObserver>
         network_quality_observer;
 
     // NetErrorTabHelper uses |dns_probe_service| to send DNS probes when a
@@ -246,8 +209,6 @@ class IOThread : public content::BrowserThreadDelegate {
   // supported for simplicity and requires a browser restart.
   void DisableQuic();
 
-  base::TimeTicks creation_time() const;
-
   // Returns the callback for updating data use prefs.
   metrics::UpdateUsagePrefCallbackType GetMetricsDataUseForwarder();
 
@@ -269,11 +230,8 @@ class IOThread : public content::BrowserThreadDelegate {
   bool PacHttpsUrlStrippingEnabled() const;
 
  private:
-  // Provide SystemURLRequestContextGetter with access to
-  // InitSystemRequestContext().
-  friend class SystemURLRequestContextGetter;
-
   friend class test::IOThreadPeer;
+  friend class chrome::TestingIOThreadState;
 
   // BrowserThreadDelegate implementation, runs on the IO thread.
   // This handles initialization and destruction of state that must
@@ -281,17 +239,8 @@ class IOThread : public content::BrowserThreadDelegate {
   void Init() override;
   void CleanUp() override;
 
-  // Global state must be initialized on the IO thread, then this
-  // method must be invoked on the UI thread.
-  void InitSystemRequestContext();
-
-  // Lazy initialization of system request context for
-  // SystemURLRequestContextGetter. To be called on IO thread only
-  // after global state has been initialized on the IO thread, and
-  // SystemRequestContext state has been initialized on the UI thread.
-  void InitSystemRequestContextOnIOThread();
-
-  void CreateDefaultAuthHandlerFactory();
+  std::unique_ptr<net::HttpAuthHandlerFactory> CreateDefaultAuthHandlerFactory(
+      net::HostResolver* host_resolver);
 
   // Returns an SSLConfigService instance.
   net::SSLConfigService* GetSSLConfigService();
@@ -312,10 +261,7 @@ class IOThread : public content::BrowserThreadDelegate {
     return NULL;
 #endif
   }
-  static net::URLRequestContext* ConstructSystemRequestContext(
-      IOThread::Globals* globals,
-      const net::HttpNetworkSession::Params& params,
-      net::NetLog* net_log);
+  void ConstructSystemRequestContext();
 
   // Parse command line flags and use components/network_session_configurator to
   // configure |params|.
@@ -324,14 +270,6 @@ class IOThread : public content::BrowserThreadDelegate {
       bool is_quic_allowed_by_policy,
       bool http_09_on_non_default_ports_enabled,
       net::HttpNetworkSession::Params* params);
-
-  // TODO(willchan): Remove proxy script fetcher context since it's not
-  // necessary now that I got rid of refcounting URLRequestContexts.
-  // See IOThread::Globals for details.
-  static net::URLRequestContext* ConstructProxyScriptFetcherContext(
-      IOThread::Globals* globals,
-      const net::HttpNetworkSession::Params& params,
-      net::NetLog* net_log);
 
   // The NetLog is owned by the browser process, to allow logging from other
   // threads during shutdown, but is used most frequently on the IOThread.
@@ -353,7 +291,7 @@ class IOThread : public content::BrowserThreadDelegate {
 
   Globals* globals_;
 
-  net::HttpNetworkSession::Params params_;
+  net::HttpNetworkSession::Params session_params_;
 
   // Observer that logs network changes to the ChromeNetLog.
   std::unique_ptr<net::LoggingNetworkChangeObserver> network_change_observer_;
@@ -391,6 +329,11 @@ class IOThread : public content::BrowserThreadDelegate {
   bool allow_gssapi_library_load_;
 #endif
 
+  // These are set on the UI thread, and then consumed during initialization on
+  // the IO thread.
+  content::mojom::NetworkContextRequest network_context_request_;
+  content::mojom::NetworkContextParamsPtr network_context_params_;
+
   // This is an instance of the default SSLConfigServiceManager for the current
   // platform and it gets SSL preferences from local_state object.
   std::unique_ptr<ssl_config::SSLConfigServiceManager>
@@ -410,8 +353,6 @@ class IOThread : public content::BrowserThreadDelegate {
 
   // True if HTTP/0.9 is allowed on non-default ports by policy.
   bool http_09_on_non_default_ports_enabled_;
-
-  const base::TimeTicks creation_time_;
 
   base::WeakPtrFactory<IOThread> weak_factory_;
 

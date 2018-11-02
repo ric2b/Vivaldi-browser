@@ -8,8 +8,8 @@
 #include "base/macros.h"
 #include "cc/ipc/compositor_frame.mojom.h"
 #include "cc/ipc/frame_sink_manager.mojom.h"
-#include "cc/output/context_provider.h"
-#include "cc/surfaces/surface_id.h"
+#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/surfaces/surface_id.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "services/ui/public/interfaces/window_tree.mojom.h"
 
@@ -29,22 +29,22 @@ class ServerWindowCompositorFrameSinkManager {
   // existing one of the specified type.
   void CreateRootCompositorFrameSink(
       gfx::AcceleratedWidget widget,
-      cc::mojom::MojoCompositorFrameSinkAssociatedRequest sink_request,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client,
+      cc::mojom::CompositorFrameSinkAssociatedRequest sink_request,
+      cc::mojom::CompositorFrameSinkClientPtr client,
       cc::mojom::DisplayPrivateAssociatedRequest display_request);
 
   void CreateCompositorFrameSink(
-      cc::mojom::MojoCompositorFrameSinkRequest request,
-      cc::mojom::MojoCompositorFrameSinkClientPtr client);
+      cc::mojom::CompositorFrameSinkRequest request,
+      cc::mojom::CompositorFrameSinkClientPtr client);
 
   // Claims this FrameSinkId will embed |surface_id| so it should own the
   // temporary reference to |surface_id|.
-  void ClaimTemporaryReference(const cc::SurfaceId& surface_id);
+  void ClaimTemporaryReference(const viz::SurfaceId& surface_id);
 
  private:
   ServerWindow* const window_;
-  cc::mojom::MojoCompositorFrameSinkPrivatePtr compositor_frame_sink_;
-  cc::mojom::MojoCompositorFrameSinkPrivateRequest
+  cc::mojom::CompositorFrameSinkPrivatePtr compositor_frame_sink_;
+  cc::mojom::CompositorFrameSinkPrivateRequest
       pending_compositor_frame_sink_request_;
 
   DISALLOW_COPY_AND_ASSIGN(ServerWindowCompositorFrameSinkManager);

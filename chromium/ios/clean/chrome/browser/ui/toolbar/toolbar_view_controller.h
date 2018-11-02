@@ -7,11 +7,12 @@
 
 #import <UIKit/UIKit.h>
 
-#import "ios/clean/chrome/browser/ui/animators/zoom_transition_delegate.h"
 #import "ios/clean/chrome/browser/ui/toolbar/toolbar_consumer.h"
+#import "ios/clean/chrome/browser/ui/transitions/animators/zoom_transition_delegate.h"
 
 @protocol NavigationCommands;
 @protocol TabGridCommands;
+@protocol TabStripCommands;
 @protocol ToolsMenuCommands;
 
 // View controller for a toolbar, which will show a horizontal row of
@@ -22,9 +23,14 @@
 @interface ToolbarViewController
     : UIViewController<ZoomTransitionDelegate, ToolbarConsumer>
 
+- (instancetype)initWithDispatcher:(id<NavigationCommands,
+                                       TabGridCommands,
+                                       TabStripCommands,
+                                       ToolsMenuCommands>)dispatcher;
+
 // The dispatcher for this view controller
 @property(nonatomic, weak)
-    id<NavigationCommands, TabGridCommands, ToolsMenuCommands>
+    id<NavigationCommands, TabGridCommands, TabStripCommands, ToolsMenuCommands>
         dispatcher;
 
 @property(nonatomic, strong) UIViewController* locationBarViewController;

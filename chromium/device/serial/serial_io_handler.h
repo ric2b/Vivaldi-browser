@@ -13,8 +13,8 @@
 #include "base/files/file.h"
 #include "base/macros.h"
 #include "base/memory/ref_counted.h"
+#include "base/sequence_checker.h"
 #include "base/single_thread_task_runner.h"
-#include "base/threading/non_thread_safe.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "build/build_config.h"
 #include "device/serial/buffer.h"
@@ -26,12 +26,10 @@ namespace device {
 // devices by hiding platform-specific MessageLoop interfaces. Pending I/O
 // operations hold a reference to this object until completion so that memory
 // doesn't disappear out from under the OS.
-class SerialIoHandler : public base::NonThreadSafe,
-                        public base::RefCounted<SerialIoHandler> {
+class SerialIoHandler : public base::RefCountedThreadSafe<SerialIoHandler> {
  public:
   // Constructs an instance of some platform-specific subclass.
   static scoped_refptr<SerialIoHandler> Create(
-      scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner);
 
   typedef base::Callback<void(bool success)> OpenCompleteCallback;
@@ -113,7 +111,6 @@ class SerialIoHandler : public base::NonThreadSafe,
 
  protected:
   explicit SerialIoHandler(
-      scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner,
       scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner);
   virtual ~SerialIoHandler();
 
@@ -196,18 +193,16 @@ class SerialIoHandler : public base::NonThreadSafe,
   // Possibly fixes up a serial port path name in a platform-specific manner.
   static std::string MaybeFixUpPortName(const std::string& port_name);
 
-  base::SingleThreadTaskRunner* file_thread_task_runner() const {
-    return file_thread_task_runner_.get();
-  }
-
   base::SingleThreadTaskRunner* ui_thread_task_runner() const {
     return ui_thread_task_runner_.get();
   }
 
   const std::string& port() const { return port_; }
 
+  SEQUENCE_CHECKER(sequence_checker_);
+
  private:
-  friend class base::RefCounted<SerialIoHandler>;
+  friend class base::RefCountedThreadSafe<SerialIoHandler>;
 
   void MergeConnectionOptions(const serial::ConnectionOptions& options);
 
@@ -241,7 +236,6 @@ class SerialIoHandler : public base::NonThreadSafe,
   // Callback to handle the completion of a pending Open() request.
   OpenCompleteCallback open_complete_;
 
-  scoped_refptr<base::SingleThreadTaskRunner> file_thread_task_runner_;
   // On Chrome OS, PermissionBrokerClient should be called on the UI thread.
   scoped_refptr<base::SingleThreadTaskRunner> ui_thread_task_runner_;
 

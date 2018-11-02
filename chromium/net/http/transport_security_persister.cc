@@ -15,6 +15,7 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/location.h"
+#include "base/memory/ptr_util.h"
 #include "base/sequenced_task_runner.h"
 #include "base/task_runner_util.h"
 #include "base/threading/thread_task_runner_handle.h"
@@ -27,8 +28,9 @@ namespace net {
 
 namespace {
 
-base::ListValue* SPKIHashesToListValue(const HashValueVector& hashes) {
-  base::ListValue* pins = new base::ListValue;
+std::unique_ptr<base::ListValue> SPKIHashesToListValue(
+    const HashValueVector& hashes) {
+  auto pins = base::MakeUnique<base::ListValue>();
   for (size_t i = 0; i != hashes.size(); i++)
     pins->AppendString(hashes[i].ToString());
   return pins;
@@ -306,7 +308,7 @@ TransportSecurityPersister::TransportSecurityPersister(
 }
 
 TransportSecurityPersister::~TransportSecurityPersister() {
-  DCHECK(foreground_runner_->RunsTasksOnCurrentThread());
+  DCHECK(foreground_runner_->RunsTasksInCurrentSequence());
 
   if (writer_.HasPendingWrite())
     writer_.DoScheduledWrite();
@@ -315,7 +317,7 @@ TransportSecurityPersister::~TransportSecurityPersister() {
 }
 
 void TransportSecurityPersister::StateIsDirty(TransportSecurityState* state) {
-  DCHECK(foreground_runner_->RunsTasksOnCurrentThread());
+  DCHECK(foreground_runner_->RunsTasksInCurrentSequence());
   DCHECK_EQ(transport_security_state_, state);
 
   if (!readonly_)
@@ -323,7 +325,7 @@ void TransportSecurityPersister::StateIsDirty(TransportSecurityState* state) {
 }
 
 bool TransportSecurityPersister::SerializeData(std::string* output) {
-  DCHECK(foreground_runner_->RunsTasksOnCurrentThread());
+  DCHECK(foreground_runner_->RunsTasksInCurrentSequence());
 
   base::DictionaryValue toplevel;
 
@@ -340,7 +342,7 @@ bool TransportSecurityPersister::SerializeData(std::string* output) {
 
 bool TransportSecurityPersister::LoadEntries(const std::string& serialized,
                                              bool* dirty) {
-  DCHECK(foreground_runner_->RunsTasksOnCurrentThread());
+  DCHECK(foreground_runner_->RunsTasksInCurrentSequence());
 
   transport_security_state_->ClearDynamicData();
   return Deserialize(serialized, dirty, transport_security_state_);
@@ -491,7 +493,7 @@ bool TransportSecurityPersister::Deserialize(const std::string& serialized,
 }
 
 void TransportSecurityPersister::CompleteLoad(const std::string& state) {
-  DCHECK(foreground_runner_->RunsTasksOnCurrentThread());
+  DCHECK(foreground_runner_->RunsTasksInCurrentSequence());
 
   if (state.empty())
     return;

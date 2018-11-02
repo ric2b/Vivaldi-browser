@@ -50,6 +50,7 @@
 #include "public/platform/WebContentLayer.h"
 #include "public/platform/WebImageLayer.h"
 #include "public/platform/WebLayerStickyPositionConstraint.h"
+#include "public/platform/WebScrollBoundaryBehavior.h"
 #include "third_party/skia/include/core/SkFilterQuality.h"
 #include "third_party/skia/include/core/SkRefCnt.h"
 
@@ -179,6 +180,8 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   void SetBlendMode(WebBlendMode);
   void SetIsRootForIsolatedGroup(bool);
 
+  void SetShouldHitTest(bool);
+
   void SetFilters(CompositorFilterOperations);
   void SetBackdropFilters(CompositorFilterOperations);
 
@@ -216,13 +219,13 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   // Return a string with a human readable form of the layer tree. If debug is
   // true, pointers for the layers and timing data will be included in the
   // returned string.
-  String LayerTreeAsText(LayerTreeFlags = kLayerTreeNormal) const;
+  String GetLayerTreeAsTextForTesting(LayerTreeFlags = kLayerTreeNormal) const;
 
   std::unique_ptr<JSONObject> LayerTreeAsJSON(LayerTreeFlags) const;
 
   void SetTracksRasterInvalidations(bool);
   bool IsTrackingOrCheckingRasterInvalidations() const {
-    return RuntimeEnabledFeatures::paintUnderInvalidationCheckingEnabled() ||
+    return RuntimeEnabledFeatures::PaintUnderInvalidationCheckingEnabled() ||
            is_tracking_raster_invalidations_;
   }
 
@@ -277,6 +280,8 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
 
   void SetHasWillChangeTransformHint(bool);
 
+  void SetScrollBoundaryBehavior(const WebScrollBoundaryBehavior&);
+
  protected:
   String DebugName(cc::Layer*) const;
   bool ShouldFlattenTransform() const { return should_flatten_transform_; }
@@ -324,7 +329,6 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
                                                   RenderingContextMap&) const;
 
   sk_sp<PaintRecord> CaptureRecord();
-  void CheckPaintUnderInvalidations(sk_sp<PaintRecord>);
 
   GraphicsLayerClient* client_;
 
@@ -350,6 +354,7 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   bool draws_content_ : 1;
   bool contents_visible_ : 1;
   bool is_root_for_isolated_group_ : 1;
+  bool should_hit_test_ : 1;
 
   bool has_scroll_parent_ : 1;
   bool has_clip_parent_ : 1;
@@ -394,11 +399,30 @@ class PLATFORM_EXPORT GraphicsLayer : public cc::LayerClient,
   IntRect previous_interest_rect_;
 };
 
+// ObjectPaintInvalidatorWithContext::InvalidatePaintRectangleWithContext uses
+// this to reduce differences between layout test results of SPv1 and SPv2.
+class PLATFORM_EXPORT ScopedSetNeedsDisplayInRectForTrackingOnly {
+ public:
+  ScopedSetNeedsDisplayInRectForTrackingOnly() {
+    DCHECK(!s_enabled_);
+    s_enabled_ = true;
+  }
+  ~ScopedSetNeedsDisplayInRectForTrackingOnly() {
+    DCHECK(s_enabled_);
+    s_enabled_ = false;
+  }
+
+ private:
+  friend class GraphicsLayer;
+  static bool s_enabled_;
+};
+
 }  // namespace blink
 
 #ifndef NDEBUG
 // Outside the blink namespace for ease of invocation from gdb.
 void PLATFORM_EXPORT showGraphicsLayerTree(const blink::GraphicsLayer*);
+void PLATFORM_EXPORT showGraphicsLayers(const blink::GraphicsLayer*);
 #endif
 
 #endif  // GraphicsLayer_h

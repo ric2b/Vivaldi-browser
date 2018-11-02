@@ -20,6 +20,7 @@
 #include "chrome/browser/profiles/profile_window.h"
 #include "chrome/browser/signin/signin_manager_factory.h"
 #include "chrome/browser/signin/signin_tracker_factory.h"
+#include "chrome/browser/signin/signin_util.h"
 #include "chrome/browser/sync/profile_sync_service_factory.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_finder.h"
@@ -32,12 +33,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/signin/login_ui_service_factory.h"
 #include "chrome/common/url_constants.h"
-#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/browser_sync/profile_sync_service.h"
 #include "components/prefs/pref_service.h"
 #include "components/signin/core/browser/signin_manager.h"
 #include "components/signin/core/browser/signin_metrics.h"
+#include "components/signin/core/common/profile_management_switches.h"
 #include "components/sync/base/sync_prefs.h"
 #include "net/base/url_util.h"
 #include "net/url_request/url_request_context_getter.h"
@@ -67,6 +68,22 @@ void SetUserChoiceHistogram(SigninChoice choice) {
   UMA_HISTOGRAM_ENUMERATION("Enterprise.UserSigninChoice",
                             choice,
                             SIGNIN_CHOICE_SIZE);
+}
+
+// Lock the profile in memory when |enable| is false. Or unlock the profile
+// if |enable| is true. This is used by force-sign-in policy only.
+void EnableProfileForForceSigninInMemory(Profile* profile, bool enable) {
+  ProfileAttributesEntry* entry;
+  bool has_entry =
+      g_browser_process->profile_manager()
+          ->GetProfileAttributesStorage()
+          .GetProfileAttributesWithPath(profile->GetPath(), &entry);
+  DCHECK(has_entry);
+  if (enable) {
+    entry->SetIsSigninRequired(false);
+  } else {
+    entry->LockForceSigninProfile(true);
+  }
 }
 
 }  // namespace
@@ -99,6 +116,7 @@ OneClickSigninSyncStarter::OneClickSigninSyncStarter(
   BrowserList::AddObserver(this);
   Initialize(profile, browser);
 
+  DCHECK(!refresh_token.empty() || switches::IsAccountConsistencyDiceEnabled());
   SigninManagerFactory::GetForProfile(profile_)->StartSignInWithRefreshToken(
       refresh_token, gaia_id, email, password,
       base::Bind(&OneClickSigninSyncStarter::ConfirmSignin,
@@ -142,7 +160,6 @@ void OneClickSigninSyncStarter::Initialize(Profile* profile, Browser* browser) {
 
 void OneClickSigninSyncStarter::ConfirmSignin(ProfileMode profile_mode,
                                               const std::string& oauth_token) {
-  DCHECK(!oauth_token.empty());
   SigninManager* signin = SigninManagerFactory::GetForProfile(profile_);
   if (signin->IsAuthenticated()) {
     // The user is already signed in - just tell SigninManager to continue
@@ -159,10 +176,19 @@ void OneClickSigninSyncStarter::ConfirmSignin(ProfileMode profile_mode,
       // initialized.
       policy::UserPolicySigninService* policy_service =
           policy::UserPolicySigninServiceFactory::GetForProfile(profile_);
-      policy_service->RegisterForPolicy(
-          signin->GetUsernameForAuthInProgress(), oauth_token,
-          base::Bind(&OneClickSigninSyncStarter::OnRegisteredForPolicy,
-                     weak_pointer_factory_.GetWeakPtr()));
+      if (oauth_token.empty()) {
+        DCHECK(switches::IsAccountConsistencyDiceEnabled());
+        policy_service->RegisterForPolicyWithAccountId(
+            signin->GetUsernameForAuthInProgress(),
+            signin->GetAccountIdForAuthInProgress(),
+            base::Bind(&OneClickSigninSyncStarter::OnRegisteredForPolicy,
+                       weak_pointer_factory_.GetWeakPtr()));
+      } else {
+        policy_service->RegisterForPolicyWithLoginToken(
+            signin->GetUsernameForAuthInProgress(), oauth_token,
+            base::Bind(&OneClickSigninSyncStarter::OnRegisteredForPolicy,
+                       weak_pointer_factory_.GetWeakPtr()));
+      }
       break;
     }
     case NEW_PROFILE:
@@ -245,6 +271,10 @@ void OneClickSigninSyncStarter::OnRegisteredForPolicy(
                                       signin->GetUsernameForAuthInProgress(),
                                       base::MakeUnique<SigninDialogDelegate>(
                                           weak_pointer_factory_.GetWeakPtr()));
+  // If force signin enabled, lock the profile when dialog is being displayed to
+  // avoid new browser window opened.
+  if (signin_util::IsForceSigninEnabled())
+    EnableProfileForForceSigninInMemory(profile_, false);
 }
 
 void OneClickSigninSyncStarter::LoadPolicyWithCachedCredentials() {
@@ -260,6 +290,9 @@ void OneClickSigninSyncStarter::LoadPolicyWithCachedCredentials() {
       profile_->GetRequestContext(),
       base::Bind(&OneClickSigninSyncStarter::OnPolicyFetchComplete,
                  weak_pointer_factory_.GetWeakPtr()));
+
+  // Unlock the profile after loading policies.
+  EnableProfileForForceSigninInMemory(profile_, true);
 }
 
 void OneClickSigninSyncStarter::OnPolicyFetchComplete(bool success) {
@@ -333,18 +366,11 @@ void OneClickSigninSyncStarter::CompleteInitForNewProfile(
         DCHECK(!client_id_.empty());
         LoadPolicyWithCachedCredentials();
       } else {
-        // No policy to load - simply complete the signin process.
+        // No policy to load - simply complete the signin process and unlock the
+        // profile.
         SigninManagerFactory::GetForProfile(profile_)->CompletePendingSignin();
+        EnableProfileForForceSigninInMemory(profile_, true);
       }
-
-      // Unlock the new profile.
-      ProfileAttributesEntry* entry;
-      bool has_entry =
-          g_browser_process->profile_manager()
-              ->GetProfileAttributesStorage()
-              .GetProfileAttributesWithPath(new_profile->GetPath(), &entry);
-      DCHECK(has_entry);
-      entry->SetIsSigninRequired(false);
 
       // Open the profile's first window, after all initialization.
       profiles::FindOrCreateNewWindowForProfile(

@@ -8,6 +8,8 @@
 #include "components/safe_browsing/base_blocking_page.h"
 #include "components/security_interstitials/core/base_safe_browsing_error_ui.h"
 
+class PrefService;
+
 namespace security_interstitials {
 struct UnsafeResource;
 }  // namespace security_interstitials
@@ -21,7 +23,8 @@ class AwSafeBrowsingBlockingPage : public safe_browsing::BaseBlockingPage {
   typedef security_interstitials::UnsafeResource UnsafeResource;
 
   static void ShowBlockingPage(AwSafeBrowsingUIManager* ui_manager,
-                               const UnsafeResource& unsafe_resource);
+                               const UnsafeResource& unsafe_resource,
+                               PrefService* pref_service);
 
  protected:
   // Used to specify which BaseSafeBrowsingErrorUI to instantiate, and
@@ -40,6 +43,18 @@ class AwSafeBrowsingBlockingPage : public safe_browsing::BaseBlockingPage {
           controller_client,
       const BaseSafeBrowsingErrorUI::SBErrorDisplayOptions& display_options,
       ErrorUiType errorUiType);
+
+  // Called when the interstitial is going away. If there is a
+  // pending threat details object, we look at the user's
+  // preferences, and if the option to send threat details is
+  // enabled, the report is scheduled to be sent on the |ui_manager_|.
+  void FinishThreatDetails(const base::TimeDelta& delay,
+                           bool did_proceed,
+                           int num_visits) override;
+
+  // Whether ThreatDetails collection is in progress as part of this
+  // interstitial.
+  bool threat_details_in_progress_;
 };
 
 }  // namespace android_webview

@@ -87,6 +87,8 @@ URLRequest::ReferrerPolicy ProcessReferrerPolicyHeaderOnRedirect(
   UMA_HISTOGRAM_BOOLEAN("Net.URLRequest.ReferrerPolicyHeaderPresentOnRedirect",
                         !policy_tokens.empty());
 
+  // Per https://w3c.github.io/webappsec-referrer-policy/#unknown-policy-values,
+  // use the last recognized policy value, and ignore unknown policies.
   for (const auto& token : policy_tokens) {
     if (base::CompareCaseInsensitiveASCII(token, "no-referrer") == 0) {
       new_policy = URLRequest::NO_REFERRER;
@@ -113,6 +115,24 @@ URLRequest::ReferrerPolicy ProcessReferrerPolicyHeaderOnRedirect(
 
     if (base::CompareCaseInsensitiveASCII(token, "unsafe-url") == 0) {
       new_policy = URLRequest::NEVER_CLEAR_REFERRER;
+      continue;
+    }
+
+    if (base::CompareCaseInsensitiveASCII(token, "same-origin") == 0) {
+      new_policy = URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN;
+      continue;
+    }
+
+    if (base::CompareCaseInsensitiveASCII(token, "strict-origin") == 0) {
+      new_policy =
+          URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE;
+      continue;
+    }
+
+    if (base::CompareCaseInsensitiveASCII(
+            token, "strict-origin-when-cross-origin") == 0) {
+      new_policy =
+          URLRequest::REDUCE_REFERRER_GRANULARITY_ON_TRANSITION_CROSS_ORIGIN;
       continue;
     }
   }
@@ -300,8 +320,9 @@ void URLRequestJob::CancelAuth() {
   NOTREACHED();
 }
 
-void URLRequestJob::ContinueWithCertificate(X509Certificate* client_cert,
-                                            SSLPrivateKey* client_private_key) {
+void URLRequestJob::ContinueWithCertificate(
+    scoped_refptr<X509Certificate> client_cert,
+    scoped_refptr<SSLPrivateKey> client_private_key) {
   // The derived class should implement this!
   NOTREACHED();
 }
@@ -314,15 +335,11 @@ void URLRequestJob::ContinueDespiteLastError() {
 }
 
 void URLRequestJob::FollowDeferredRedirect() {
+  // OnReceivedRedirect must have been called.
   DCHECK_NE(-1, deferred_redirect_info_.status_code);
 
-  // NOTE: deferred_redirect_info_ may be invalid, and attempting to follow it
-  // will fail inside FollowRedirect.  The DCHECK above asserts that we called
-  // OnReceivedRedirect.
-
-  // It is also possible that FollowRedirect will delete |this|, so not safe to
-  // pass along reference to |deferred_redirect_info_|.
-
+  // It is possible that FollowRedirect will delete |this|, so it is not safe to
+  // pass along a reference to |deferred_redirect_info_|.
   RedirectInfo redirect_info = deferred_redirect_info_;
   deferred_redirect_info_ = RedirectInfo();
   FollowRedirect(redirect_info);
@@ -366,16 +383,14 @@ void URLRequestJob::GetConnectionAttempts(ConnectionAttempts* out) const {
 }
 
 // static
-GURL URLRequestJob::ComputeReferrerForRedirect(
-    URLRequest::ReferrerPolicy policy,
-    const GURL& original_referrer,
-    const GURL& redirect_destination) {
+GURL URLRequestJob::ComputeReferrerForPolicy(URLRequest::ReferrerPolicy policy,
+                                             const GURL& original_referrer,
+                                             const GURL& destination) {
   bool secure_referrer_but_insecure_destination =
       original_referrer.SchemeIsCryptographic() &&
-      !redirect_destination.SchemeIsCryptographic();
+      !destination.SchemeIsCryptographic();
   url::Origin referrer_origin(original_referrer);
-  bool same_origin =
-      referrer_origin.IsSameOriginWith(url::Origin(redirect_destination));
+  bool same_origin = referrer_origin.IsSameOriginWith(url::Origin(destination));
   switch (policy) {
     case URLRequest::CLEAR_REFERRER_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
       return secure_referrer_but_insecure_destination ? GURL()
@@ -396,6 +411,14 @@ GURL URLRequestJob::ComputeReferrerForRedirect(
     case URLRequest::NEVER_CLEAR_REFERRER:
       return original_referrer;
     case URLRequest::ORIGIN:
+      return referrer_origin.GetURL();
+    case URLRequest::CLEAR_REFERRER_ON_TRANSITION_CROSS_ORIGIN:
+      if (same_origin)
+        return original_referrer;
+      return GURL();
+    case URLRequest::ORIGIN_CLEAR_ON_TRANSITION_FROM_SECURE_TO_INSECURE:
+      if (secure_referrer_but_insecure_destination)
+        return GURL();
       return referrer_origin.GetURL();
     case URLRequest::NO_REFERRER:
       return GURL();
@@ -456,6 +479,16 @@ void URLRequestJob::NotifyHeadersComplete() {
     // Redirect response bodies are not read. Notify the transaction
     // so it does not treat being stopped as an error.
     DoneReadingRedirectResponse();
+
+    // Invalid redirect targets are failed early before
+    // NotifyReceivedRedirect. This means the delegate can assume that, if it
+    // accepts the redirect, future calls to OnResponseStarted correspond to
+    // |redirect_info.new_url|.
+    int redirect_valid = CanFollowRedirect(new_location);
+    if (redirect_valid != OK) {
+      OnDone(URLRequestStatus::FromError(redirect_valid), true);
+      return;
+    }
 
     // When notifying the URLRequest::Delegate, it can destroy the request,
     // which will destroy |this|.  After calling to the URLRequest::Delegate,
@@ -720,10 +753,25 @@ int URLRequestJob::ReadRawDataHelper(IOBuffer* buf,
   return result;
 }
 
+int URLRequestJob::CanFollowRedirect(const GURL& new_url) {
+  if (request_->redirect_limit_ <= 0) {
+    DVLOG(1) << "disallowing redirect: exceeds limit";
+    return ERR_TOO_MANY_REDIRECTS;
+  }
+
+  if (!new_url.is_valid())
+    return ERR_INVALID_REDIRECT;
+
+  if (!IsSafeRedirect(new_url)) {
+    DVLOG(1) << "disallowing redirect: unsafe protocol";
+    return ERR_UNSAFE_REDIRECT;
+  }
+
+  return OK;
+}
+
 void URLRequestJob::FollowRedirect(const RedirectInfo& redirect_info) {
-  int rv = request_->Redirect(redirect_info);
-  if (rv != OK)
-    OnDone(URLRequestStatus(URLRequestStatus::FAILED, rv), true);
+  request_->Redirect(redirect_info);
 }
 
 void URLRequestJob::GatherRawReadStats(int bytes_read) {
@@ -818,9 +866,9 @@ RedirectInfo URLRequestJob::ComputeRedirectInfo(const GURL& location,
 
   // Alter the referrer if redirecting cross-origin (especially HTTP->HTTPS).
   redirect_info.new_referrer =
-      ComputeReferrerForRedirect(redirect_info.new_referrer_policy,
-                                 GURL(request_->referrer()),
-                                 redirect_info.new_url)
+      ComputeReferrerForPolicy(redirect_info.new_referrer_policy,
+                               GURL(request_->referrer()),
+                               redirect_info.new_url)
           .spec();
 
   std::string include_referer;

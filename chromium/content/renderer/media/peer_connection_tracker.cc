@@ -8,11 +8,15 @@
 #include <stdint.h>
 
 #include <memory>
+#include <string>
 #include <utility>
+#include <vector>
 
+#include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
+#include "base/values.h"
 #include "content/common/media/peer_connection_tracker_messages.h"
 #include "content/renderer/media/rtc_peer_connection_handler.h"
 #include "content/renderer/render_thread_impl.h"
@@ -25,7 +29,7 @@
 #include "third_party/WebKit/public/platform/WebRTCOfferOptions.h"
 #include "third_party/WebKit/public/platform/WebRTCPeerConnectionHandlerClient.h"
 #include "third_party/WebKit/public/web/WebDocument.h"
-#include "third_party/WebKit/public/web/WebFrame.h"
+#include "third_party/WebKit/public/web/WebLocalFrame.h"
 #include "third_party/WebKit/public/web/WebUserMediaRequest.h"
 
 using webrtc::MediaConstraintsInterface;
@@ -134,7 +138,7 @@ static const char* SerializeIceTransportType(
     break;
   default:
     NOTREACHED();
-  };
+  }
   return transport_type;
 }
 
@@ -153,7 +157,7 @@ static const char* SerializeBundlePolicy(
     break;
   default:
     NOTREACHED();
-  };
+  }
   return policy_str;
 }
 
@@ -169,7 +173,7 @@ static const char* SerializeRtcpMuxPolicy(
     break;
   default:
     NOTREACHED();
-  };
+  }
   return policy_str;
 }
 
@@ -244,19 +248,15 @@ static const char* GetIceGatheringStateString(
 }
 
 // Builds a DictionaryValue from the StatsReport.
-// The caller takes the ownership of the returned value.
 // Note:
 // The format must be consistent with what webrtc_internals.js expects.
 // If you change it here, you must change webrtc_internals.js as well.
-static base::DictionaryValue* GetDictValueStats(const StatsReport& report) {
+static std::unique_ptr<base::DictionaryValue> GetDictValueStats(
+    const StatsReport& report) {
   if (report.values().empty())
     return NULL;
 
-  base::DictionaryValue* dict = new base::DictionaryValue();
-  dict->SetDouble("timestamp", report.timestamp());
-
-  base::ListValue* values = new base::ListValue();
-  dict->Set("values", values);
+  auto values = base::MakeUnique<base::ListValue>();
 
   for (const auto& v : report.values()) {
     const StatsReport::ValuePtr& value = v.second;
@@ -286,6 +286,10 @@ static base::DictionaryValue* GetDictValueStats(const StatsReport& report) {
     }
   }
 
+  auto dict = base::MakeUnique<base::DictionaryValue>();
+  dict->SetDouble("timestamp", report.timestamp());
+  dict->Set("values", std::move(values));
+
   return dict;
 }
 
@@ -293,17 +297,15 @@ static base::DictionaryValue* GetDictValueStats(const StatsReport& report) {
 // The caller takes the ownership of the returned value.
 static std::unique_ptr<base::DictionaryValue> GetDictValue(
     const StatsReport& report) {
-  std::unique_ptr<base::DictionaryValue> stats, result;
-
-  stats.reset(GetDictValueStats(report));
+  std::unique_ptr<base::DictionaryValue> stats = GetDictValueStats(report);
   if (!stats)
     return NULL;
 
-  result.reset(new base::DictionaryValue());
   // Note:
   // The format must be consistent with what webrtc_internals.js expects.
   // If you change it here, you must change webrtc_internals.js as well.
-  result->Set("stats", stats.release());
+  auto result = base::MakeUnique<base::DictionaryValue>();
+  result->Set("stats", std::move(stats));
   result->SetString("id", report.id()->ToString());
   result->SetString("type", report.TypeToString());
 
@@ -312,7 +314,7 @@ static std::unique_ptr<base::DictionaryValue> GetDictValue(
 
 class InternalStatsObserver : public webrtc::StatsObserver {
  public:
-  InternalStatsObserver(int lid)
+  explicit InternalStatsObserver(int lid)
       : lid_(lid), main_thread_(base::ThreadTaskRunnerHandle::Get()) {}
 
   void OnComplete(const StatsReports& reports) override {
@@ -436,7 +438,7 @@ void PeerConnectionTracker::RegisterPeerConnection(
     RTCPeerConnectionHandler* pc_handler,
     const webrtc::PeerConnectionInterface::RTCConfiguration& config,
     const blink::WebMediaConstraints& constraints,
-    const blink::WebFrame* frame) {
+    const blink::WebLocalFrame* frame) {
   DCHECK(main_thread_.CalledOnValidThread());
   DCHECK_EQ(GetLocalIDForHandler(pc_handler), -1);
   DVLOG(1) << "PeerConnectionTracker::RegisterPeerConnection()";
@@ -588,7 +590,7 @@ void PeerConnectionTracker::TrackAddStream(
 void PeerConnectionTracker::TrackRemoveStream(
     RTCPeerConnectionHandler* pc_handler,
     const blink::WebMediaStream& stream,
-    Source source){
+    Source source) {
   DCHECK(main_thread_.CalledOnValidThread());
   int id = GetLocalIDForHandler(pc_handler);
   if (id == -1)

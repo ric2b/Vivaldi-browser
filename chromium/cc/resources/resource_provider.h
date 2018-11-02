@@ -26,16 +26,17 @@
 #include "base/trace_event/memory_dump_provider.h"
 #include "cc/base/resource_id.h"
 #include "cc/cc_export.h"
-#include "cc/output/context_provider.h"
 #include "cc/output/output_surface.h"
-#include "cc/output/renderer_settings.h"
 #include "cc/resources/release_callback_impl.h"
-#include "cc/resources/resource_format.h"
 #include "cc/resources/return_callback.h"
-#include "cc/resources/shared_bitmap.h"
 #include "cc/resources/single_release_callback_impl.h"
-#include "cc/resources/texture_mailbox.h"
 #include "cc/resources/transferable_resource.h"
+#include "components/viz/common/display/renderer_settings.h"
+#include "components/viz/common/gpu/context_provider.h"
+#include "components/viz/common/quads/resource_format.h"
+#include "components/viz/common/quads/shared_bitmap.h"
+#include "components/viz/common/quads/texture_mailbox.h"
+#include "components/viz/common/resources/resource_settings.h"
 #include "third_party/khronos/GLES2/gl2.h"
 #include "third_party/khronos/GLES2/gl2ext.h"
 #include "third_party/skia/include/core/SkBitmap.h"
@@ -51,10 +52,13 @@ class GLES2Interface;
 }
 }
 
-namespace cc {
-class BlockingTaskRunner;
+namespace viz {
 class SharedBitmap;
 class SharedBitmapManager;
+}  // namespace viz
+
+namespace cc {
+class BlockingTaskRunner;
 class TextureIdAllocator;
 
 // This class is not thread-safe and can only be called from the thread it was
@@ -80,41 +84,38 @@ class CC_EXPORT ResourceProvider
     RESOURCE_TYPE_BITMAP,
   };
 
-  ResourceProvider(
-      ContextProvider* compositor_context_provider,
-      SharedBitmapManager* shared_bitmap_manager,
-      gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
-      BlockingTaskRunner* blocking_main_thread_task_runner,
-      size_t id_allocation_chunk_size,
-      bool delegated_sync_points_required,
-      bool use_gpu_memory_buffer_resources,
-      bool enable_color_correct_rasterization,
-      const BufferToTextureTargetMap& buffer_to_texture_target_map);
+  ResourceProvider(viz::ContextProvider* compositor_context_provider,
+                   viz::SharedBitmapManager* shared_bitmap_manager,
+                   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager,
+                   BlockingTaskRunner* blocking_main_thread_task_runner,
+                   bool delegated_sync_points_required,
+                   bool enable_color_correct_rasterization,
+                   const viz::ResourceSettings& resource_settings);
   ~ResourceProvider() override;
 
   void Initialize();
 
-  void DidLoseContextProvider() { lost_context_provider_ = true; }
+  void DidLoseVulkanContextProvider() { lost_context_provider_ = true; }
 
   int max_texture_size() const { return settings_.max_texture_size; }
-  ResourceFormat best_texture_format() const {
+  viz::ResourceFormat best_texture_format() const {
     return settings_.best_texture_format;
   }
-  ResourceFormat best_render_buffer_format() const {
+  viz::ResourceFormat best_render_buffer_format() const {
     return settings_.best_render_buffer_format;
   }
-  ResourceFormat YuvResourceFormat(int bits) const;
+  viz::ResourceFormat YuvResourceFormat(int bits) const;
   bool use_sync_query() const { return settings_.use_sync_query; }
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager() {
     return gpu_memory_buffer_manager_;
   }
   size_t num_resources() const { return resources_.size(); }
 
-  bool IsTextureFormatSupported(ResourceFormat format) const;
+  bool IsTextureFormatSupported(viz::ResourceFormat format) const;
 
   // Returns true if the provided |format| can be used as a render buffer.
   // Note that render buffer support implies texture support.
-  bool IsRenderBufferFormatSupported(ResourceFormat format) const;
+  bool IsRenderBufferFormatSupported(viz::ResourceFormat format) const;
 
   // Checks whether a resource is in use by a consumer.
   bool InUseByConsumer(ResourceId id);
@@ -137,24 +138,24 @@ class CC_EXPORT ResourceProvider
   // Creates a resource of the default resource type.
   ResourceId CreateResource(const gfx::Size& size,
                             TextureHint hint,
-                            ResourceFormat format,
+                            viz::ResourceFormat format,
                             const gfx::ColorSpace& color_space);
 
   // Creates a resource for a particular texture target (the distinction between
   // texture targets has no effect in software mode).
   ResourceId CreateGpuMemoryBufferResource(const gfx::Size& size,
                                            TextureHint hint,
-                                           ResourceFormat format,
+                                           viz::ResourceFormat format,
                                            gfx::BufferUsage usage,
                                            const gfx::ColorSpace& color_space);
 
   // Wraps an external texture mailbox into a GL resource.
   ResourceId CreateResourceFromTextureMailbox(
-      const TextureMailbox& mailbox,
+      const viz::TextureMailbox& mailbox,
       std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl);
 
   ResourceId CreateResourceFromTextureMailbox(
-      const TextureMailbox& mailbox,
+      const viz::TextureMailbox& mailbox,
       std::unique_ptr<SingleReleaseCallbackImpl> release_callback_impl,
       bool read_lock_fences_enabled);
 
@@ -194,8 +195,9 @@ class CC_EXPORT ResourceProvider
   // mailboxes and serializing meta-data into TransferableResources.
   // Resources are not removed from the ResourceProvider, but are marked as
   // "in use".
-  void PrepareSendToParent(const ResourceIdArray& resource_ids,
-                           TransferableResourceArray* transferable_resources);
+  void PrepareSendToParent(
+      const ResourceIdArray& resource_ids,
+      std::vector<TransferableResource>* transferable_resources);
 
   // Receives resources from a child, moving them from mailboxes. Resource IDs
   // passed are in the child namespace, and will be translated to the parent
@@ -207,7 +209,8 @@ class CC_EXPORT ResourceProvider
   // NOTE: if the sync_token is set on any TransferableResource, this will
   // wait on it.
   void ReceiveFromChild(
-      int child, const TransferableResourceArray& transferable_resources);
+      int child,
+      const std::vector<TransferableResource>& transferable_resources);
 
   // Once a set of resources have been received, they may or may not be used.
   // This declares what set of resources are currently in use from the child,
@@ -220,7 +223,7 @@ class CC_EXPORT ResourceProvider
   // NOTE: if the sync_token is set on any TransferableResource, this will
   // wait on it.
   void ReceiveReturnsFromParent(
-      const ReturnedResourceArray& transferable_resources);
+      const std::vector<ReturnedResource>& transferable_resources);
 
 #if defined(OS_ANDROID)
   // Send an overlay promotion hint to all resources that requested it via
@@ -291,7 +294,7 @@ class CC_EXPORT ResourceProvider
 
     unsigned texture_id() const { return texture_id_; }
     GLenum target() const { return target_; }
-    ResourceFormat format() const { return format_; }
+    viz::ResourceFormat format() const { return format_; }
     const gfx::Size& size() const { return size_; }
     // Will return the invalid color space unless
     // |enable_color_correct_rasterization| is true.
@@ -299,7 +302,7 @@ class CC_EXPORT ResourceProvider
       return color_space_;
     }
 
-    const TextureMailbox& mailbox() const { return mailbox_; }
+    const viz::TextureMailbox& mailbox() const { return mailbox_; }
 
     void set_sync_token(const gpu::SyncToken& sync_token) {
       sync_token_ = sync_token;
@@ -313,9 +316,9 @@ class CC_EXPORT ResourceProvider
     ResourceId resource_id_;
     unsigned texture_id_;
     GLenum target_;
-    ResourceFormat format_;
+    viz::ResourceFormat format_;
     gfx::Size size_;
-    TextureMailbox mailbox_;
+    viz::TextureMailbox mailbox_;
     gpu::SyncToken sync_token_;
     bool has_sync_token_;
     bool synchronized_;
@@ -344,7 +347,7 @@ class CC_EXPORT ResourceProvider
 
   class CC_EXPORT ScopedSkSurfaceProvider {
    public:
-    ScopedSkSurfaceProvider(ContextProvider* context_provider,
+    ScopedSkSurfaceProvider(viz::ContextProvider* context_provider,
                             ScopedWriteLockGL* resource_lock,
                             bool use_mailbox,
                             bool use_distance_field_text,
@@ -439,7 +442,7 @@ class CC_EXPORT ResourceProvider
    private:
     ResourceProvider* resource_provider_;
     ResourceId resource_id_;
-    ResourceFormat format_;
+    viz::ResourceFormat format_;
     gfx::BufferUsage usage_;
     gfx::Size size_;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer_;
@@ -540,7 +543,8 @@ class CC_EXPORT ResourceProvider
 
   void ValidateResource(ResourceId id) const;
 
-  GLenum GetImageTextureTarget(gfx::BufferUsage usage, ResourceFormat format);
+  GLenum GetImageTextureTarget(gfx::BufferUsage usage,
+                               viz::ResourceFormat format);
 
   // base::trace_event::MemoryDumpProvider implementation.
   bool OnMemoryDump(const base::trace_event::MemoryDumpArgs& args,
@@ -591,13 +595,13 @@ class CC_EXPORT ResourceProvider
              GLenum filter,
              TextureHint hint,
              ResourceType type,
-             ResourceFormat format);
+             viz::ResourceFormat format);
     Resource(uint8_t* pixels,
-             SharedBitmap* bitmap,
+             viz::SharedBitmap* bitmap,
              const gfx::Size& size,
              Origin origin,
              GLenum filter);
-    Resource(const SharedBitmapId& bitmap_id,
+    Resource(const viz::SharedBitmapId& bitmap_id,
              const gfx::Size& size,
              Origin origin,
              GLenum filter);
@@ -609,8 +613,8 @@ class CC_EXPORT ResourceProvider
       return synchronization_state_;
     }
 
-    const TextureMailbox& mailbox() const { return mailbox_; }
-    void set_mailbox(const TextureMailbox& mailbox);
+    const viz::TextureMailbox& mailbox() const { return mailbox_; }
+    void set_mailbox(const viz::TextureMailbox& mailbox);
 
     void SetLocallyUsed();
     void SetSynchronized();
@@ -670,22 +674,22 @@ class CC_EXPORT ResourceProvider
     // be used.
     gfx::BufferUsage usage;
     // This is the the actual format of the underlaying GpuMemoryBuffer, if any,
-    // and might not correspond to ResourceFormat. This format is needed to
+    // and might not correspond to viz::ResourceFormat. This format is needed to
     // scanout the buffer as HW overlay.
     gfx::BufferFormat buffer_format;
     // Resource format is the format as seen from the compositor and might not
     // correspond to buffer_format (e.g: A resouce that was created from a YUV
     // buffer could be seen as RGB from the compositor/GL.)
-    ResourceFormat format;
-    SharedBitmapId shared_bitmap_id;
-    SharedBitmap* shared_bitmap;
+    viz::ResourceFormat format;
+    viz::SharedBitmapId shared_bitmap_id;
+    viz::SharedBitmap* shared_bitmap;
     std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
     gfx::ColorSpace color_space;
 
    private:
     SynchronizationState synchronization_state_ = SYNCHRONIZED;
     bool needs_sync_token_ = false;
-    TextureMailbox mailbox_;
+    viz::TextureMailbox mailbox_;
 
     DISALLOW_COPY_AND_ASSIGN(Resource);
   };
@@ -711,7 +715,7 @@ class CC_EXPORT ResourceProvider
   ResourceId CreateGLTexture(const gfx::Size& size,
                              TextureHint hint,
                              ResourceType type,
-                             ResourceFormat format,
+                             viz::ResourceFormat format,
                              gfx::BufferUsage usage,
                              const gfx::ColorSpace& color_space);
   ResourceId CreateBitmap(const gfx::Size& size,
@@ -751,7 +755,7 @@ class CC_EXPORT ResourceProvider
   // texture target used. The resource must be locked for reading.
   GLenum BindForSampling(ResourceId resource_id, GLenum unit, GLenum filter);
 
-  // Returns null if we do not have a ContextProvider.
+  // Returns null if we do not have a viz::ContextProvider.
   gpu::gles2::GLES2Interface* ContextGL() const;
   bool IsGLContextLost() const;
 
@@ -764,10 +768,10 @@ class CC_EXPORT ResourceProvider
 
   // Holds const settings for the ResourceProvider. Never changed after init.
   struct Settings {
-    Settings(ContextProvider* compositor_context_provider,
-             bool delegated_sync_points_required,
-             bool use_gpu_memory_buffer_resources,
-             bool enable_color_correct_rasterization);
+    Settings(viz::ContextProvider* compositor_context_provider,
+             bool delegated_sync_points_needed,
+             bool enable_color_correct_rasterization,
+             const viz::ResourceSettings& resource_settings);
 
     int max_texture_size = 0;
     bool use_texture_storage_ext = false;
@@ -775,16 +779,16 @@ class CC_EXPORT ResourceProvider
     bool use_texture_usage_hint = false;
     bool use_sync_query = false;
     ResourceType default_resource_type = RESOURCE_TYPE_GL_TEXTURE;
-    ResourceFormat yuv_resource_format = LUMINANCE_8;
-    ResourceFormat yuv_highbit_resource_format = LUMINANCE_8;
-    ResourceFormat best_texture_format = RGBA_8888;
-    ResourceFormat best_render_buffer_format = RGBA_8888;
+    viz::ResourceFormat yuv_resource_format = viz::LUMINANCE_8;
+    viz::ResourceFormat yuv_highbit_resource_format = viz::LUMINANCE_8;
+    viz::ResourceFormat best_texture_format = viz::RGBA_8888;
+    viz::ResourceFormat best_render_buffer_format = viz::RGBA_8888;
     bool enable_color_correct_rasterization = false;
     bool delegated_sync_points_required = false;
   } const settings_;
 
-  ContextProvider* compositor_context_provider_;
-  SharedBitmapManager* shared_bitmap_manager_;
+  viz::ContextProvider* compositor_context_provider_;
+  viz::SharedBitmapManager* shared_bitmap_manager_;
   gpu::GpuMemoryBufferManager* gpu_memory_buffer_manager_;
   BlockingTaskRunner* blocking_main_thread_task_runner_;
   bool lost_context_provider_;
@@ -794,7 +798,7 @@ class CC_EXPORT ResourceProvider
   ChildMap children_;
   scoped_refptr<Fence> current_read_lock_fence_;
   std::unique_ptr<TextureIdAllocator> texture_id_allocator_;
-  BufferToTextureTargetMap buffer_to_texture_target_map_;
+  viz::BufferToTextureTargetMap buffer_to_texture_target_map_;
 
   // Keep track of whether deleted resources should be batched up or returned
   // immediately.

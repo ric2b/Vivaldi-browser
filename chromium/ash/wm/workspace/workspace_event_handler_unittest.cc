@@ -8,11 +8,11 @@
 #include "ash/screen_util.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/workspace_controller_test_api.h"
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
 #include "ash/wm/workspace_controller.h"
+#include "ash/wm/workspace_controller_test_api.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "services/ui/public/interfaces/window_manager_constants.mojom.h"
 #include "ui/aura/client/aura_constants.h"
@@ -46,7 +46,7 @@ void ClickButtonWithFlags(ui::test::EventGenerator* generator,
 
 }  // namespace
 
-class WorkspaceEventHandlerTest : public test::AshTestBase {
+class WorkspaceEventHandlerTest : public AshTestBase {
  public:
   WorkspaceEventHandlerTest() {}
   ~WorkspaceEventHandlerTest() override {}
@@ -463,11 +463,11 @@ TEST_F(WorkspaceEventHandlerTest, DeleteWhileInRunLoop) {
   std::unique_ptr<aura::Window> window(CreateTestWindow(&delegate, bounds));
   delegate.set_window_component(HTCAPTION);
 
-  ASSERT_TRUE(aura::client::GetWindowMoveClient(window->GetRootWindow()));
+  ASSERT_TRUE(::wm::GetWindowMoveClient(window->GetRootWindow()));
   base::ThreadTaskRunnerHandle::Get()->DeleteSoon(FROM_HERE, window.get());
-  aura::client::GetWindowMoveClient(window->GetRootWindow())
+  ::wm::GetWindowMoveClient(window->GetRootWindow())
       ->RunMoveLoop(window.release(), gfx::Vector2d(),
-                    aura::client::WINDOW_MOVE_SOURCE_MOUSE);
+                    ::wm::WINDOW_MOVE_SOURCE_MOUSE);
 }
 
 // Verifies that double clicking in the header does not maximize if the target

@@ -31,15 +31,16 @@
 #include "core/animation/DocumentAnimations.h"
 #include "core/animation/EffectStack.h"
 #include "core/animation/ElementAnimations.h"
-#include "core/animation/InterpolationEnvironment.h"
 #include "core/animation/InvalidatableInterpolation.h"
+#include "core/animation/SVGInterpolationEnvironment.h"
 #include "core/animation/SVGInterpolationTypesMap.h"
 #include "core/css/resolver/StyleResolver.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/events/Event.h"
 #include "core/frame/Settings.h"
+#include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
 #include "core/html/HTMLElement.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -81,7 +82,7 @@ void SVGElement::DetachLayoutTree(const AttachContext& context) {
     element->RemoveInstanceMapping(this);
 }
 
-void SVGElement::AttachLayoutTree(const AttachContext& context) {
+void SVGElement::AttachLayoutTree(AttachContext& context) {
   Element::AttachLayoutTree(context);
   if (SVGElement* element = CorrespondingElement())
     element->MapInstanceToElement(this);
@@ -214,7 +215,7 @@ void SVGElement::ApplyActiveWebAnimations() {
   for (auto& entry : active_interpolations_map) {
     const QualifiedName& attribute = entry.key.SvgAttribute();
     SVGInterpolationTypesMap map;
-    InterpolationEnvironment environment(
+    SVGInterpolationEnvironment environment(
         map, *this, PropertyFromAttribute(attribute)->BaseValueBase());
     InvalidatableInterpolation::ApplyStack(entry.value, environment);
   }
@@ -322,7 +323,7 @@ static inline bool TransformUsesBoxSize(
 static FloatRect ComputeTransformReferenceBox(const SVGElement& element) {
   const LayoutObject& layout_object = *element.GetLayoutObject();
   const ComputedStyle& style = layout_object.StyleRef();
-  if (!RuntimeEnabledFeatures::cssTransformBoxEnabled()) {
+  if (!RuntimeEnabledFeatures::CSSTransformBoxEnabled()) {
     FloatRect reference_box = layout_object.ObjectBoundingBox();
     // Set the reference origin to zero when transform-origin (x/y) has a
     // non-percentage unit.
@@ -363,7 +364,7 @@ AffineTransform SVGElement::CalculateTransform(
     }
 
     if (TransformUsesBoxSize(*style, apply_transform_origin))
-      UseCounter::Count(GetDocument(), UseCounter::kTransformUsesBoxSizeOnSVG);
+      UseCounter::Count(GetDocument(), WebFeature::kTransformUsesBoxSizeOnSVG);
 
     // CSS transforms operate with pre-scaled lengths. To make this work with
     // SVG (which applies the zoom factor globally, at the root level) we
@@ -411,7 +412,7 @@ Node::InsertionNotificationRequest SVGElement::InsertedInto(
 
   if (hasAttribute(nonceAttr) && getAttribute(nonceAttr) != g_empty_atom) {
     setNonce(getAttribute(nonceAttr));
-    if (RuntimeEnabledFeatures::hideNonceContentAttributeEnabled() &&
+    if (RuntimeEnabledFeatures::HideNonceContentAttributeEnabled() &&
         InActiveDocument() &&
         GetDocument().GetContentSecurityPolicy()->HasHeaderDeliveredPolicy()) {
       setAttribute(nonceAttr, g_empty_atom);
@@ -743,7 +744,18 @@ void SVGElement::ParseAttribute(const AttributeModificationParams& params) {
   }
 }
 
-typedef HashMap<QualifiedName, AnimatedPropertyType> AttributeToPropertyTypeMap;
+// If the attribute is not present in the map, the map will return the "empty
+// value" - which is kAnimatedUnknown.
+struct AnimatedPropertyTypeHashTraits : HashTraits<AnimatedPropertyType> {
+  static const bool kEmptyValueIsZero = true;
+  static AnimatedPropertyType EmptyValue() { return kAnimatedUnknown; }
+};
+
+using AttributeToPropertyTypeMap = HashMap<QualifiedName,
+                                           AnimatedPropertyType,
+                                           DefaultHash<QualifiedName>::Hash,
+                                           HashTraits<QualifiedName>,
+                                           AnimatedPropertyTypeHashTraits>;
 AnimatedPropertyType SVGElement::AnimatedPropertyTypeForCSSAttribute(
     const QualifiedName& attribute_name) {
   DEFINE_STATIC_LOCAL(AttributeToPropertyTypeMap, css_property_map, ());
@@ -812,9 +824,6 @@ AnimatedPropertyType SVGElement::AnimatedPropertyTypeForCSSAttribute(
     for (size_t i = 0; i < WTF_ARRAY_LENGTH(attr_to_types); i++)
       css_property_map.Set(attr_to_types[i].attr, attr_to_types[i].prop_type);
   }
-  // If the attribute is not present in the map, this will return the "empty
-  // value" per HashTraits - which is AnimatedUnknown.
-  DCHECK_EQ(HashTraits<AnimatedPropertyType>::EmptyValue(), kAnimatedUnknown);
   return css_property_map.at(attribute_name);
 }
 
@@ -1022,7 +1031,7 @@ void SVGElement::SvgAttributeBaseValChanged(const QualifiedName& attribute) {
 }
 
 void SVGElement::EnsureAttributeAnimValUpdated() {
-  if (!RuntimeEnabledFeatures::webAnimationsSVGEnabled())
+  if (!RuntimeEnabledFeatures::WebAnimationsSVGEnabled())
     return;
 
   if ((HasSVGRareData() && SvgRareData()->WebAnimatedAttributesDirty()) ||
@@ -1178,7 +1187,7 @@ bool SVGElement::IsAnimatableAttribute(const QualifiedName& name) const {
   // This static is atomically initialized to dodge a warning about
   // a race when dumping debug data for a layer.
   DEFINE_THREAD_SAFE_STATIC_LOCAL(HashSet<QualifiedName>, animatable_attributes,
-                                  new HashSet<QualifiedName>({
+                                  ({
                                       SVGNames::amplitudeAttr,
                                       SVGNames::azimuthAttr,
                                       SVGNames::baseFrequencyAttr,

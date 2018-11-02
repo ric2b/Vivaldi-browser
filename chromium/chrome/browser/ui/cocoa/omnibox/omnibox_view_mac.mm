@@ -25,8 +25,6 @@
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/clipboard_utils.h"
 #include "chrome/grit/generated_resources.h"
-#include "chrome/grit/theme_resources.h"
-#include "components/grit/components_scaled_resources.h"
 #include "components/omnibox/browser/autocomplete_input.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_edit_controller.h"
@@ -353,6 +351,11 @@ void OmniboxViewMac::SetWindowTextAndCaretPos(const base::string16& text,
     TextChanged();
 }
 
+void OmniboxViewMac::SetCaretPos(size_t caret_pos) {
+  size_t pos = std::min(caret_pos, GetTextLength());
+  SetSelectedRange(NSMakeRange(pos, 0));
+}
+
 void OmniboxViewMac::EnterKeywordModeForDefaultSearchProvider() {
   // We need to do this first, else |SetSelectedRange()| won't work.
   FocusLocation(true);
@@ -366,6 +369,8 @@ bool OmniboxViewMac::IsSelectAll() const {
   if (![field_ currentEditor])
     return true;
   const NSRange all_range = NSMakeRange(0, GetTextLength());
+  if (all_range.length == 0)
+    return false;
   return NSEqualRanges(all_range, GetSelectedRange());
 }
 

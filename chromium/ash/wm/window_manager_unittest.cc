@@ -6,7 +6,7 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_activation_delegate.h"
+#include "ash/wm/test_activation_delegate.h"
 #include "ash/wm/window_util.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/client/cursor_client_observer.h"
@@ -79,7 +79,7 @@ class CustomEventHandler : public ui::test::TestEventHandler {
 
 namespace ash {
 
-typedef test::AshTestBase WindowManagerTest;
+using WindowManagerTest = AshTestBase;
 
 class NonFocusableDelegate : public aura::test::TestWindowDelegate {
  public:
@@ -199,11 +199,11 @@ TEST_F(WindowManagerTest, Focus) {
             aura::client::GetFocusClient(w12.get())->GetFocusedWindow());
 
   // Set the focus to w123, but make the w1 not activatable.
-  test::TestActivationDelegate activation_delegate(false);
+  TestActivationDelegate activation_delegate(false);
   w123->Focus();
   EXPECT_EQ(w123.get(),
             aura::client::GetFocusClient(w12.get())->GetFocusedWindow());
-  aura::client::SetActivationDelegate(w1.get(), &activation_delegate);
+  ::wm::SetActivationDelegate(w1.get(), &activation_delegate);
 
   // Hiding the focused window will set the focus to NULL because
   // parent window is not focusable.
@@ -216,12 +216,12 @@ TEST_F(WindowManagerTest, Focus) {
   EXPECT_FALSE(keyev.handled() || details.dispatcher_destroyed);
 
   // Set the focus back to w123
-  aura::client::SetActivationDelegate(w1.get(), NULL);
+  ::wm::SetActivationDelegate(w1.get(), NULL);
   w123->Show();
   w123->Focus();
   EXPECT_EQ(w123.get(),
             aura::client::GetFocusClient(w12.get())->GetFocusedWindow());
-  aura::client::SetActivationDelegate(w1.get(), &activation_delegate);
+  ::wm::SetActivationDelegate(w1.get(), &activation_delegate);
 
   // Removing the focused window will set the focus to NULL because
   // parent window is not focusable.
@@ -233,19 +233,19 @@ TEST_F(WindowManagerTest, Focus) {
 
   // Must set to NULL since the activation delegate will be destroyed before
   // the windows.
-  aura::client::SetActivationDelegate(w1.get(), NULL);
+  ::wm::SetActivationDelegate(w1.get(), NULL);
 }
 
 // Various assertion testing for activating windows.
 TEST_F(WindowManagerTest, ActivateOnMouse) {
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
 
-  test::TestActivationDelegate d1;
+  TestActivationDelegate d1;
   aura::test::TestWindowDelegate wd;
   std::unique_ptr<aura::Window> w1(
       CreateTestWindowInShellWithDelegate(&wd, -1, gfx::Rect(10, 10, 50, 50)));
   d1.SetWindow(w1.get());
-  test::TestActivationDelegate d2;
+  TestActivationDelegate d2;
   std::unique_ptr<aura::Window> w2(
       CreateTestWindowInShellWithDelegate(&wd, -2, gfx::Rect(70, 70, 50, 50)));
   d2.SetWindow(w2.get());
@@ -431,12 +431,12 @@ TEST_F(WindowManagerTest, PanelActivation) {
 TEST_F(WindowManagerTest, ActivateOnTouch) {
   aura::Window* root_window = Shell::GetPrimaryRootWindow();
 
-  test::TestActivationDelegate d1;
+  TestActivationDelegate d1;
   aura::test::TestWindowDelegate wd;
   std::unique_ptr<aura::Window> w1(
       CreateTestWindowInShellWithDelegate(&wd, -1, gfx::Rect(10, 10, 50, 50)));
   d1.SetWindow(w1.get());
-  test::TestActivationDelegate d2;
+  TestActivationDelegate d2;
   std::unique_ptr<aura::Window> w2(
       CreateTestWindowInShellWithDelegate(&wd, -2, gfx::Rect(70, 70, 50, 50)));
   d2.SetWindow(w2.get());
@@ -637,7 +637,7 @@ TEST_F(WindowManagerTest, TransformActivate) {
   transform.Rotate(90.0f);
   root_window->GetHost()->SetRootTransform(transform);
 
-  test::TestActivationDelegate d1;
+  TestActivationDelegate d1;
   aura::test::TestWindowDelegate wd;
   std::unique_ptr<aura::Window> w1(
       CreateTestWindowInShellWithDelegate(&wd, 1, gfx::Rect(0, 15, 50, 50)));
@@ -848,8 +848,8 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_FALSE(observer_b.did_visibility_change());
   EXPECT_FALSE(observer_a.is_cursor_visible());
   EXPECT_FALSE(observer_b.is_cursor_visible());
-  EXPECT_FALSE(observer_a.did_cursor_set_change());
-  EXPECT_FALSE(observer_b.did_cursor_set_change());
+  EXPECT_FALSE(observer_a.did_cursor_size_change());
+  EXPECT_FALSE(observer_b.did_cursor_size_change());
 
   // Keypress should hide the cursor.
   generator.PressKey(ui::VKEY_A, ui::EF_NONE);
@@ -859,11 +859,11 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_FALSE(observer_b.is_cursor_visible());
 
   // Set cursor set.
-  cursor_manager->SetCursorSet(ui::CURSOR_SET_LARGE);
-  EXPECT_TRUE(observer_a.did_cursor_set_change());
-  EXPECT_EQ(ui::CURSOR_SET_LARGE, observer_a.cursor_set());
-  EXPECT_TRUE(observer_b.did_cursor_set_change());
-  EXPECT_EQ(ui::CURSOR_SET_LARGE, observer_b.cursor_set());
+  cursor_manager->SetCursorSize(ui::CursorSize::kLarge);
+  EXPECT_TRUE(observer_a.did_cursor_size_change());
+  EXPECT_EQ(ui::CursorSize::kLarge, observer_a.cursor_size());
+  EXPECT_TRUE(observer_b.did_cursor_size_change());
+  EXPECT_EQ(ui::CursorSize::kLarge, observer_b.cursor_size());
 
   // Mouse move should show the cursor.
   observer_a.reset();
@@ -887,10 +887,10 @@ TEST_F(WindowManagerTest, TestCursorClientObserver) {
   EXPECT_FALSE(observer_a.is_cursor_visible());
 
   // Set back cursor set to normal.
-  cursor_manager->SetCursorSet(ui::CURSOR_SET_NORMAL);
-  EXPECT_TRUE(observer_a.did_cursor_set_change());
-  EXPECT_EQ(ui::CURSOR_SET_NORMAL, observer_a.cursor_set());
-  EXPECT_FALSE(observer_b.did_cursor_set_change());
+  cursor_manager->SetCursorSize(ui::CursorSize::kNormal);
+  EXPECT_TRUE(observer_a.did_cursor_size_change());
+  EXPECT_EQ(ui::CursorSize::kNormal, observer_a.cursor_size());
+  EXPECT_FALSE(observer_b.did_cursor_size_change());
 
   // Mouse move should show the cursor.
   observer_a.reset();

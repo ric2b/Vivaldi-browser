@@ -89,16 +89,19 @@
         position: relative;
       }
 
-      .backspace-button-container paper-ripple {
+      paper-ripple {
+        border-radius: 50%;
+        color: rgba(0, 0, 0, .34);
+        height: 60px;
+        left: -6px;
         position: absolute;
-        top: 0;
+        top: -6px;
+        width: 60px;
       }
 
-      paper-ripple {
-        border-radius: 100px;
-        color: #000;
-        height: 48px;
-        width: 48px;
+      .backspace-button-container paper-ripple {
+        left: 9px;
+        top: 9px;
       }
 
       .digit-button.backspace-button {
@@ -110,8 +113,7 @@
       }
 
       .digit-button.backspace-button:not([has-content]) {
-        color: #000;
-        opacity: 0.26;
+        opacity: 0.34;
       }
 
       .digit-button inner-text {
@@ -177,7 +179,7 @@
       }
     </style>
 
-    <div id="root">
+    <div id="root" on-contextmenu="onContextMenu_">
       <div id="container-constrained-width">
         <div class="row first-row">
           <paper-input id="pinInput" type="password" no-label-float
@@ -261,7 +263,7 @@
                 has-content$="[[hasInput_(value)]]"
                 icon="pin-keyboard:backspace"
                 on-pointerdown="onBackspacePointerDown_"
-                on-pointerout="onBackspacePointerOut_"
+                on-pointerout="clearAndReset_"
                 on-pointerup="onBackspacePointerUp_"
                 aria-label="$i18n{pinKeyboardDeleteAccessibleName}"
                 noink>

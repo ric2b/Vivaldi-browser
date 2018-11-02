@@ -80,6 +80,7 @@ void UpdateCommandsForVivaldi(CommandUpdater* command_updater_) {
                                          true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_HISTORY_PANEL, true);
   command_updater_->UpdateCommandEnabled(IDC_VIV_TOGGLE_IMAGES, true);
+  command_updater_->UpdateCommandEnabled(IDC_VIV_WINDOW_PANEL, true);
 }
 
 bool ExecuteVivaldiCommands(Browser* browser, int id) {
@@ -136,6 +137,7 @@ bool ExecuteVivaldiCommands(Browser* browser, int id) {
     case IDC_VIV_CAPTURE_AREA_TO_CLIPBOARD:
     case IDC_VIV_HISTORY_PANEL:
     case IDC_VIV_TOGGLE_IMAGES:
+    case IDC_VIV_WINDOW_PANEL:
       // The API is registered with a regular profile.
       extensions::ShowMenuAPI::GetFactoryInstance()
           ->Get(browser->profile()->GetOriginalProfile())

@@ -110,12 +110,12 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
       DontClassifyForMalware(NO_CLASSIFY_PRIVATE_IP);
     }
 
-    // For phishing we only classify HTTP pages.
-    if (!url_.SchemeIs(url::kHttpScheme)) {
+    // For phishing we only classify HTTP or HTTPS pages.
+    if (!url_.SchemeIsHTTPOrHTTPS()) {
       DVLOG(1) << "Skipping phishing classification for URL: " << url_
-               << " because it is not HTTP: "
+               << " because it is not HTTP or HTTPS: "
                << socket_address_.host();
-      DontClassifyForPhishing(NO_CLASSIFY_NOT_HTTP_URL);
+      DontClassifyForPhishing(NO_CLASSIFY_SCHEME_NOT_SUPPORTED);
     }
 
     // Don't run any classifier if the tab is incognito.
@@ -156,17 +156,18 @@ class ClientSideDetectionHost::ShouldClassifyUrlRequest
 
   // Enum used to keep stats about why the pre-classification check failed.
   enum PreClassificationCheckFailures {
-    OBSOLETE_NO_CLASSIFY_PROXY_FETCH,
-    NO_CLASSIFY_PRIVATE_IP,
-    NO_CLASSIFY_OFF_THE_RECORD,
-    NO_CLASSIFY_MATCH_CSD_WHITELIST,
-    NO_CLASSIFY_TOO_MANY_REPORTS,
-    NO_CLASSIFY_UNSUPPORTED_MIME_TYPE,
-    NO_CLASSIFY_NO_DATABASE_MANAGER,
-    NO_CLASSIFY_KILLSWITCH,
-    NO_CLASSIFY_CANCEL,
-    NO_CLASSIFY_RESULT_FROM_CACHE,
-    NO_CLASSIFY_NOT_HTTP_URL,
+    OBSOLETE_NO_CLASSIFY_PROXY_FETCH = 0,
+    NO_CLASSIFY_PRIVATE_IP = 1,
+    NO_CLASSIFY_OFF_THE_RECORD = 2,
+    NO_CLASSIFY_MATCH_CSD_WHITELIST = 3,
+    NO_CLASSIFY_TOO_MANY_REPORTS = 4,
+    NO_CLASSIFY_UNSUPPORTED_MIME_TYPE = 5,
+    NO_CLASSIFY_NO_DATABASE_MANAGER = 6,
+    NO_CLASSIFY_KILLSWITCH = 7,
+    NO_CLASSIFY_CANCEL = 8,
+    NO_CLASSIFY_RESULT_FROM_CACHE = 9,
+    DEPRECATED_NO_CLASSIFY_NOT_HTTP_URL = 10,
+    NO_CLASSIFY_SCHEME_NOT_SUPPORTED = 11,
 
     NO_CLASSIFY_MAX  // Always add new values before this one.
   };
@@ -565,7 +566,7 @@ void ClientSideDetectionHost::MaybeShowPhishingWarning(GURL phishing_url,
       resource.url = phishing_url;
       resource.original_url = phishing_url;
       resource.is_subresource = false;
-      resource.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_PHISHING_URL;
+      resource.threat_type = SB_THREAT_TYPE_URL_CLIENT_SIDE_PHISHING;
       resource.threat_source =
           safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.web_contents_getter = safe_browsing::SafeBrowsingUIManager::
@@ -601,7 +602,7 @@ void ClientSideDetectionHost::MaybeShowMalwareWarning(GURL original_url,
       resource.url = malware_url;
       resource.original_url = original_url;
       resource.is_subresource = (malware_url.host() != original_url.host());
-      resource.threat_type = SB_THREAT_TYPE_CLIENT_SIDE_MALWARE_URL;
+      resource.threat_type = SB_THREAT_TYPE_URL_CLIENT_SIDE_MALWARE;
       resource.threat_source =
           safe_browsing::ThreatSource::CLIENT_SIDE_DETECTION;
       resource.web_contents_getter = safe_browsing::SafeBrowsingUIManager::

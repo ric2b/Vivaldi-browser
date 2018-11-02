@@ -70,11 +70,11 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
   const gfx::FontList& base_font_list = views::Label::GetDefaultFontList();
   switch (font_style_) {
     case FontStyle::TITLE:
-      label->SetFontList(base_font_list.Derive(2, gfx::Font::NORMAL,
+      label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
                                                gfx::Font::Weight::MEDIUM));
       break;
     case FontStyle::DEFAULT_VIEW_LABEL:
-      label->SetFontList(base_font_list.Derive(2, gfx::Font::NORMAL,
+      label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
                                                gfx::Font::Weight::NORMAL));
       break;
     case FontStyle::SUB_HEADER:
@@ -88,6 +88,13 @@ void TrayPopupItemStyle::SetupLabel(views::Label* label) const {
     case FontStyle::SYSTEM_INFO:
       label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
                                                gfx::Font::Weight::NORMAL));
+      break;
+    case FontStyle::CLICKABLE_SYSTEM_INFO:
+      label->SetFontList(base_font_list.Derive(1, gfx::Font::NORMAL,
+                                               gfx::Font::Weight::NORMAL));
+      label->SetEnabledColor(label->GetNativeTheme()->GetSystemColor(
+          ui::NativeTheme::kColorId_ProminentButtonColor));
+      label->SetAutoColorReadabilityEnabled(false);
       break;
     case FontStyle::BUTTON:
       label->SetFontList(base_font_list.Derive(0, gfx::Font::NORMAL,

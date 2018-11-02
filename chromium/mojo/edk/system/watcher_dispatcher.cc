@@ -6,7 +6,6 @@
 
 #include <algorithm>
 #include <limits>
-#include <map>
 
 #include "base/macros.h"
 #include "base/memory/ptr_util.h"
@@ -25,8 +24,8 @@ void WatcherDispatcher::NotifyHandleState(Dispatcher* dispatcher,
   if (it == watched_handles_.end())
     return;
 
-  // Maybe fire a notification to the watch assoicated with this dispatcher,
-  // provided we're armed it cares about the new state.
+  // Maybe fire a notification to the watch associated with this dispatcher,
+  // provided we're armed and it cares about the new state.
   if (it->second->NotifyState(state, armed_)) {
     ready_watches_.insert(it->second.get());
 
@@ -46,6 +45,9 @@ void WatcherDispatcher::NotifyHandleClosed(Dispatcher* dispatcher) {
       return;
 
     watch = std::move(it->second);
+
+    // TODO(crbug.com/740044): Remove this CHECK.
+    CHECK(watch);
 
     // Wipe out all state associated with the closed dispatcher.
     watches_.erase(watch->context());
@@ -91,7 +93,7 @@ Dispatcher::Type WatcherDispatcher::GetType() const {
 MojoResult WatcherDispatcher::Close() {
   // We swap out all the watched handle information onto the stack so we can
   // call into their dispatchers without our own lock held.
-  std::map<uintptr_t, scoped_refptr<Watch>> watches;
+  base::flat_map<uintptr_t, scoped_refptr<Watch>> watches;
   {
     base::AutoLock lock(lock_);
     DCHECK(!closed_);
@@ -112,16 +114,22 @@ MojoResult WatcherDispatcher::Close() {
 MojoResult WatcherDispatcher::WatchDispatcher(
     scoped_refptr<Dispatcher> dispatcher,
     MojoHandleSignals signals,
+    MojoWatchCondition condition,
     uintptr_t context) {
   // NOTE: Because it's critical to avoid acquiring any other dispatcher locks
   // while |lock_| is held, we defer adding oursevles to the dispatcher until
   // after we've updated all our own relevant state and released |lock_|.
   {
     base::AutoLock lock(lock_);
+
+    // TODO(crbug.com/740044): Remove this CHECK.
+    CHECK(!closed_);
+
     if (watches_.count(context) || watched_handles_.count(dispatcher.get()))
       return MOJO_RESULT_ALREADY_EXISTS;
 
-    scoped_refptr<Watch> watch = new Watch(this, dispatcher, context, signals);
+    scoped_refptr<Watch> watch =
+        new Watch(this, dispatcher, context, signals, condition);
     watches_.insert({context, watch});
     auto result =
         watched_handles_.insert(std::make_pair(dispatcher.get(), watch));
@@ -154,6 +162,11 @@ MojoResult WatcherDispatcher::CancelWatch(uintptr_t context) {
     watches_.erase(it);
   }
 
+  // TODO(crbug.com/740044): Remove these CHECKs.
+  CHECK(watch);
+  CHECK(watch->dispatcher());
+  CHECK(this);
+
   // Mark the watch as cancelled so no further notifications get through.
   watch->Cancel();
 
@@ -165,7 +178,12 @@ MojoResult WatcherDispatcher::CancelWatch(uintptr_t context) {
   {
     base::AutoLock lock(lock_);
     auto handle_it = watched_handles_.find(watch->dispatcher().get());
-    DCHECK(handle_it != watched_handles_.end());
+
+    // If another thread races to close this watcher handler, |watched_handles_|
+    // may have been cleared by the time we reach this section.
+    if (handle_it == watched_handles_.end())
+      return MOJO_RESULT_OK;
+
     ready_watches_.erase(handle_it->second.get());
     watched_handles_.erase(handle_it);
   }
@@ -226,7 +244,10 @@ MojoResult WatcherDispatcher::Arm(
   return MOJO_RESULT_FAILED_PRECONDITION;
 }
 
-WatcherDispatcher::~WatcherDispatcher() {}
+WatcherDispatcher::~WatcherDispatcher() {
+  // TODO(crbug.com/740044): Remove this.
+  CHECK(closed_);
+}
 
 }  // namespace edk
 }  // namespace mojo

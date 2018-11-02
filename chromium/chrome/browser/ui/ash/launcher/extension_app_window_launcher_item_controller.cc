@@ -58,8 +58,15 @@ ash::MenuItemList ExtensionAppWindowLauncherItemController::GetAppMenuItems(
         favicon::ContentFaviconDriver::FromWebContents(
             app_window->web_contents());
     gfx::Image icon = favicon_driver->GetFavicon();
-    if (icon.IsEmpty())
-      icon = app_window->app_icon();
+    if (icon.IsEmpty()) {
+      const gfx::ImageSkia* app_icon = nullptr;
+      if (app_window->GetNativeWindow()) {
+        app_icon = app_window->GetNativeWindow()->GetProperty(
+            aura::client::kAppIconKey);
+      }
+      if (app_icon && !app_icon->isNull())
+        icon = gfx::Image(*app_icon);
+    }
     if (!icon.IsEmpty())
       item->image = *icon.ToSkBitmap();
     items.push_back(std::move(item));
@@ -72,4 +79,23 @@ void ExtensionAppWindowLauncherItemController::ExecuteCommand(
     uint32_t command_id,
     int32_t event_flags) {
   ChromeLauncherController::instance()->ActivateShellApp(app_id(), command_id);
+}
+
+void ExtensionAppWindowLauncherItemController::OnWindowTitleChanged(
+    aura::Window* window) {
+  ui::BaseWindow* base_window = GetAppWindow(window);
+  extensions::AppWindowRegistry* app_window_registry =
+      extensions::AppWindowRegistry::Get(
+          ChromeLauncherController::instance()->profile());
+  extensions::AppWindow* app_window =
+      app_window_registry->GetAppWindowForNativeWindow(
+          base_window->GetNativeWindow());
+
+  // Use the window title (if set) to differentiate show_in_shelf window shelf
+  // items instead of the default behavior of using the app name.
+  if (app_window->show_in_shelf()) {
+    base::string16 title = window->GetTitle();
+    if (!title.empty())
+      ChromeLauncherController::instance()->SetItemTitle(shelf_id(), title);
+  }
 }

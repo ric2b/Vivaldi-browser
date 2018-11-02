@@ -11,10 +11,12 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/scoped_task_environment.h"
 #include "media/base/cdm_callback_promise.h"
 #include "media/base/cdm_key_information.h"
 #include "media/base/content_decryption_module.h"
+#include "media/base/media_switches.h"
 #include "media/base/mock_filters.h"
 #include "media/cdm/cdm_file_io.h"
 #include "media/cdm/external_clear_key_test_helper.h"
@@ -88,6 +90,14 @@ class CdmAdapterTest : public testing::Test {
   ~CdmAdapterTest() override {}
 
  protected:
+  void SetUp() override {
+    // Enable use of External Clear Key CDM.
+    scoped_feature_list_.InitWithFeatures(
+        {media::kExternalClearKeyForTesting,
+         media::kSupportExperimentalCdmInterface},
+        {});
+  }
+
   // Initializes the adapter. |expected_result| tests that the call succeeds
   // or generates an error.
   void InitializeAndExpect(base::FilePath library_path,
@@ -152,14 +162,12 @@ class CdmAdapterTest : public testing::Test {
     if (expected_result == SUCCESS) {
       EXPECT_CALL(cdm_client_,
                   OnSessionKeysChangeCalled(session_id, new_key_expected));
+      EXPECT_CALL(cdm_client_,
+                  OnSessionExpirationUpdate(session_id, IsNullTime()));
     } else {
       EXPECT_CALL(cdm_client_, OnSessionKeysChangeCalled(_, _)).Times(0);
+      EXPECT_CALL(cdm_client_, OnSessionExpirationUpdate(_, _)).Times(0);
     }
-
-    // ClearKeyCdm always call OnSessionExpirationUpdate() for testing purpose.
-    EXPECT_CALL(cdm_client_,
-                OnSessionExpirationUpdate(session_id, IsNullTime()))
-        .Times(1);
 
     adapter_->UpdateSession(session_id,
                             std::vector<uint8_t>(key.begin(), key.end()),
@@ -245,6 +253,7 @@ class CdmAdapterTest : public testing::Test {
   std::string session_id_;
 
   base::test::ScopedTaskEnvironment scoped_task_environment_;
+  base::test::ScopedFeatureList scoped_feature_list_;
 
   DISALLOW_COPY_AND_ASSIGN(CdmAdapterTest);
 };

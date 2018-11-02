@@ -28,7 +28,7 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-// https://dev.w3.org/csswg/css-font-loading/#fontface-interface
+// https://drafts.csswg.org/css-font-loading/#fontface-interface
 
 enum FontFaceLoadStatus {
     "unloaded",
@@ -44,7 +44,7 @@ enum FontFaceLoadStatus {
     // FIXME: This should be (DOMString or BinaryData), where BinaryData is typedef of (ArrayBuffer or ArrayBufferView)
     Constructor(DOMString family, (DOMString or ArrayBuffer or ArrayBufferView) source, optional FontFaceDescriptors descriptors),
     ConstructorCallWith=ExecutionContext,
-    MeasureAs=FontFaceConstructor,
+    MeasureAs=FontFaceConstructor
 ] interface FontFace {
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString family;
     [RaisesException=Setter, SetterCallWith=ExecutionContext] attribute DOMString style;

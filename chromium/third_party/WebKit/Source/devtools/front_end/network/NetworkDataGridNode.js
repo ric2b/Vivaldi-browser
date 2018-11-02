@@ -99,6 +99,8 @@ Network.NetworkNode = class extends DataGrid.SortableDataGridNode {
    */
   backgroundColor() {
     var bgColors = Network.NetworkNode._themedBackgroundColors();
+    if (this.selected)
+      return /** @type {string} */ (bgColors.Selected.asString(Common.Color.Format.HEX));
     var color = this.isStriped() ? bgColors.Stripe : bgColors.Default;
     if (this.isNavigationRequest())
       color = color.blendWith(bgColors.Navigation);
@@ -108,8 +110,6 @@ Network.NetworkNode = class extends DataGrid.SortableDataGridNode {
       color = color.blendWith(bgColors.InitiatorPath);
     if (this.isOnInitiatedPath())
       color = color.blendWith(bgColors.InitiatedPath);
-    if (this.selected)
-      color = color.blendWith(bgColors.Selected);
 
     return /** @type {string} */ (color.asString(Common.Color.Format.HEX));
   }
@@ -487,7 +487,7 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     var bRequest = b.requestOrFirstKnownChildRequest();
     if (!aRequest || !bRequest)
       return !aRequest ? -1 : 1;
-    var priorityMap = NetworkConditions.prioritySymbolToNumericMap();
+    var priorityMap = NetworkPriorities.prioritySymbolToNumericMap();
     var aPriority = aRequest.initialPriority();
     var aScore = aPriority ? priorityMap.get(aPriority) : 0;
     aScore = aScore || 0;
@@ -681,13 +681,8 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
    * @return {boolean}
    */
   isNavigationRequest() {
-    return this._isNavigationRequest;
-  }
-
-  markAsNavigationRequest() {
-    this._isNavigationRequest = true;
-    this.refresh();
-    this._updateBackgroundColor();
+    var pageLoad = NetworkLog.PageLoad.forRequest(this._request);
+    return pageLoad ? pageLoad.mainRequest === this._request : false;
   }
 
   /**
@@ -765,7 +760,7 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
         break;
       case 'priority':
         var priority = this._request.initialPriority();
-        this._setTextAndTitle(cell, priority ? NetworkConditions.uiLabelForPriority(priority) : '');
+        this._setTextAndTitle(cell, priority ? NetworkPriorities.uiLabelForPriority(priority) : '');
         break;
       case 'connectionid':
         this._setTextAndTitle(cell, this._request.connectionId);
@@ -859,7 +854,9 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
       this._nameBadgeElement.classList.add('network-badge');
     }
     cell.appendChild(this._nameBadgeElement);
-    cell.createTextChild(this._request.networkManager().target().decorateLabel(this._request.name().trimMiddle(100)));
+    var name = this._request.name().trimMiddle(100);
+    var networkManager = SDK.NetworkManager.forRequest(this._request);
+    cell.createTextChild(networkManager ? networkManager.target().decorateLabel(name) : name);
     this._appendSubtitle(cell, this._request.path());
     cell.title = this._request.url();
   }
@@ -923,22 +920,25 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
     var request = this._request;
     var initiator = NetworkLog.networkLog.initiatorInfoForRequest(request);
 
-    if (request.timing && request.timing.pushStart)
+    var timing = request.timing;
+    if (timing && timing.pushStart)
       cell.appendChild(createTextNode(Common.UIString('Push / ')));
     switch (initiator.type) {
       case SDK.NetworkRequest.InitiatorType.Parser:
         cell.title = initiator.url + ':' + (initiator.lineNumber + 1);
         var uiSourceCode = Workspace.workspace.uiSourceCodeForURL(initiator.url);
-        cell.appendChild(Components.Linkifier.linkifyURL(
-            initiator.url, uiSourceCode ? uiSourceCode.displayName() : undefined, '', initiator.lineNumber,
-            initiator.columnNumber));
+        cell.appendChild(Components.Linkifier.linkifyURL(initiator.url, {
+          text: uiSourceCode ? uiSourceCode.displayName() : undefined,
+          lineNumber: initiator.lineNumber,
+          columnNumber: initiator.columnNumber
+        }));
         this._appendSubtitle(cell, Common.UIString('Parser'));
         break;
 
       case SDK.NetworkRequest.InitiatorType.Redirect:
         cell.title = initiator.url;
-        console.assert(request.redirectSource);
-        var redirectSource = /** @type {!SDK.NetworkRequest} */ (request.redirectSource);
+        var redirectSource = /** @type {!SDK.NetworkRequest} */ (request.redirectSource());
+        console.assert(redirectSource);
         if (this.parentView().nodeForRequest(redirectSource)) {
           cell.appendChild(
               Components.Linkifier.linkifyRevealable(redirectSource, Bindings.displayNameForURL(redirectSource.url())));
@@ -949,8 +949,9 @@ Network.NetworkRequestNode = class extends Network.NetworkNode {
         break;
 
       case SDK.NetworkRequest.InitiatorType.Script:
+        var networkManager = SDK.NetworkManager.forRequest(request);
         this._linkifiedInitiatorAnchor = this.parentView().linkifier.linkifyScriptLocation(
-            request.networkManager().target(), initiator.scriptId, initiator.url, initiator.lineNumber,
+            networkManager ? networkManager.target() : null, initiator.scriptId, initiator.url, initiator.lineNumber,
             initiator.columnNumber);
         this._linkifiedInitiatorAnchor.title = '';
         cell.appendChild(this._linkifiedInitiatorAnchor);

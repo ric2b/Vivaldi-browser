@@ -67,22 +67,6 @@ class LogoDelegate {
       base::Callback<void(const SkBitmap&)> image_decoded_callback) = 0;
 };
 
-// Parses the response from the server and returns it as an EncodedLogo. Returns
-// NULL if the response is invalid.
-typedef base::Callback<std::unique_ptr<EncodedLogo>(
-    const std::unique_ptr<std::string>& response,
-    base::Time response_time,
-    bool* parsing_failed)>
-    ParseLogoResponse;
-
-// Encodes the fingerprint of the cached logo in the logo URL. This enables the
-// server to verify whether the cached logo is up to date.
-typedef base::Callback<GURL(const GURL& logo_url,
-                            const std::string& fingerprint,
-                            bool wants_cta,
-                            bool gray_background)>
-    AppendQueryparamsToLogoURL;
-
 // This class provides the logo for a search provider. Logos are downloaded from
 // the search provider's logo URL and cached on disk.
 //
@@ -97,9 +81,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // |cached_logo_directory| is the directory in which the cached logo and its
   // metadata should be saved.
   //
-  // |file_task_runner| is the SequencedTaskRunner that should be used to run
-  // file system operations.
-  //
   // |background_task_runner| is the TaskRunner that should be used to for
   // CPU-intensive background operations.
   //
@@ -107,8 +88,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // the logo.
   explicit LogoTracker(
       base::FilePath cached_logo_directory,
-      scoped_refptr<base::SequencedTaskRunner> file_task_runner,
-      scoped_refptr<base::TaskRunner> background_task_runner,
       scoped_refptr<net::URLRequestContextGetter> request_context_getter,
       std::unique_ptr<LogoDelegate> delegate);
 
@@ -124,17 +103,9 @@ class LogoTracker : public net::URLFetcherDelegate {
   // |parse_logo_response_func| is a callback that will be used to parse the
   // server's response into a EncodedLogo object. |append_queryparams_func| is a
   // callback that will return the URL from which to download the logo.
-  // |wants_cta| determines if the url should return a call to action image.
-  // |gray_background| determines whether to request a logo with a gray
-  // background. The gray will match the NTP background color.
-  // Note: |parse_logo_response_func| and |append_queryparams_func| must be
-  // suitable for running multiple times, concurrently, and on multiple threads.
-  // TODO(ianwen): remove wants_cta from parameter.
   void SetServerAPI(const GURL& logo_url,
                     const ParseLogoResponse& parse_logo_response_func,
-                    const AppendQueryparamsToLogoURL& append_queryparams_func,
-                    bool wants_cta,
-                    bool gray_background);
+                    const AppendQueryparamsToLogoURL& append_queryparams_func);
 
   // Retrieves the current search provider's logo from the local cache and/or
   // over the network, and registers |observer| to be called when the cached
@@ -221,12 +192,6 @@ class LogoTracker : public net::URLFetcherDelegate {
   // action request in the logo URL.
   AppendQueryparamsToLogoURL append_queryparams_func_;
 
-  // If |true| request call to action in server API.
-  bool wants_cta_;
-
-  // If |true| request a doodle with a gray background.
-  bool gray_background_;
-
   // False if an asynchronous task is currently running.
   bool is_idle_;
 
@@ -252,17 +217,15 @@ class LogoTracker : public net::URLFetcherDelegate {
 
   std::unique_ptr<LogoDelegate> logo_delegate_;
 
-  // The cache used to persist the logo on disk. Used only on the file thread.
-  LogoCache* logo_cache_;
+  // The SequencedTaskRunner on which the cache lives.
+  scoped_refptr<base::SequencedTaskRunner> cache_task_runner_;
+
+  // The cache used to persist the logo on disk. Used only on a background
+  // SequencedTaskRunner.
+  std::unique_ptr<LogoCache, base::OnTaskRunnerDeleter> logo_cache_;
 
   // Clock used to determine current time. Can be overridden in tests.
   std::unique_ptr<base::Clock> clock_;
-
-  // The SequencedTaskRunner on which file system operations will be run.
-  scoped_refptr<base::SequencedTaskRunner> file_task_runner_;
-
-  // The TaskRunner on which the server's response will be parsed.
-  scoped_refptr<base::TaskRunner> background_task_runner_;
 
   // The URLRequestContextGetter used for network requests.
   scoped_refptr<net::URLRequestContextGetter> request_context_getter_;

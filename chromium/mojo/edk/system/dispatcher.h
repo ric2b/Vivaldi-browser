@@ -29,8 +29,11 @@
 namespace mojo {
 namespace edk {
 
+namespace ports {
+class UserMessageEvent;
+}
+
 class Dispatcher;
-class MessageForTransit;
 
 using DispatcherVector = std::vector<scoped_refptr<Dispatcher>>;
 
@@ -69,6 +72,7 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
 
   virtual MojoResult WatchDispatcher(scoped_refptr<Dispatcher> dispatcher,
                                      MojoHandleSignals signals,
+                                     MojoWatchCondition condition,
                                      uintptr_t context);
   virtual MojoResult CancelWatch(uintptr_t context);
   virtual MojoResult Arm(uint32_t* num_ready_contexts,
@@ -78,15 +82,12 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
 
   ///////////// Message pipe API /////////////
 
-  virtual MojoResult WriteMessage(std::unique_ptr<MessageForTransit> message,
-                                  MojoWriteMessageFlags flags);
+  virtual MojoResult WriteMessage(
+      std::unique_ptr<ports::UserMessageEvent> message,
+      MojoWriteMessageFlags flags);
 
-  virtual MojoResult ReadMessage(std::unique_ptr<MessageForTransit>* message,
-                                 uint32_t* num_bytes,
-                                 MojoHandle* handles,
-                                 uint32_t* num_handles,
-                                 MojoReadMessageFlags flags,
-                                 bool read_any_size);
+  virtual MojoResult ReadMessage(
+      std::unique_ptr<ports::UserMessageEvent>* message);
 
   ///////////// Shared buffer API /////////////
 
@@ -215,14 +216,13 @@ class MOJO_SYSTEM_IMPL_EXPORT Dispatcher
   virtual void CancelTransit();
 
   // Deserializes a specific dispatcher type from an incoming message.
-  static scoped_refptr<Dispatcher> Deserialize(
-      Type type,
-      const void* bytes,
-      size_t num_bytes,
-      const ports::PortName* ports,
-      size_t num_ports,
-      PlatformHandle* platform_handles,
-      size_t num_platform_handles);
+  static scoped_refptr<Dispatcher> Deserialize(Type type,
+                                               const void* bytes,
+                                               size_t num_bytes,
+                                               const ports::PortName* ports,
+                                               size_t num_ports,
+                                               PlatformHandle* platform_handles,
+                                               size_t num_platform_handles);
 
  protected:
   friend class base::RefCountedThreadSafe<Dispatcher>;

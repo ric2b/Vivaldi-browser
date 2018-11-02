@@ -7,6 +7,7 @@
 #include <unicode/uscript.h>
 #include "platform/fonts/Font.h"
 #include "platform/fonts/FontCache.h"
+#include "platform/fonts/FontTestUtilities.h"
 #include "platform/fonts/shaping/ShapeResultInlineHeaders.h"
 #include "platform/fonts/shaping/ShapeResultTestInfo.h"
 #include "platform/text/TextBreakIterator.h"
@@ -33,11 +34,6 @@ class ShapingLineBreakerTest : public ::testing::Test {
   unsigned num_glyphs = 0;
   hb_script_t script = HB_SCRIPT_INVALID;
 };
-
-static inline String To16Bit(const char* text, unsigned length) {
-  return String::Make16BitFrom8BitSource(reinterpret_cast<const LChar*>(text),
-                                         length);
-}
 
 TEST_F(ShapingLineBreakerTest, ShapeLineLatin) {
   String string = To16Bit(
@@ -243,7 +239,7 @@ TEST_F(ShapingLineBreakerTest, ShapeLineRangeEndMidWord) {
   unsigned break_offset = 0;
 
   line = breaker.ShapeLine(0, LayoutUnit::Max(), &break_offset);
-  EXPECT_EQ(3u, break_offset);
+  EXPECT_EQ(2u, break_offset);
   EXPECT_EQ(result->Width(), line->Width());
 }
 }  // namespace blink

@@ -24,7 +24,6 @@
 <translation id="2065985942032347596">認証が必要</translation>
 <translation id="2166378884831602661">このサイトは安全に接続できません</translation>
 <translation id="2230458221926704099"><ph name="BEGIN_LINK" />診断アプリ<ph name="END_LINK" />を使用して接続を修正してください</translation>
-<translation id="224482879335890159"><ph name="LINK" />をVivaldiで検索してください</translation>
 <translation id="2292556288342944218">インターネットアクセスがブロックされています</translation>
 <translation id="2317259163369394535"><ph name="DOMAIN" />にはユーザー名とパスワードが必要です。</translation>
 <translation id="2467694685043708798"><ph name="BEGIN_LINK" />ネットワーク診断を実行<ph name="END_LINK" /></translation>
@@ -55,7 +54,6 @@
 <translation id="3630155396527302611">ネットワークアクセスが許可されたプログラムのリストに既に登録されている場合は、
       いったんリストから削除し、もう一度追加してみてください。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
-<translation id="3693415264595406141">パスワード:</translation>
 <translation id="3717027428350673159"><ph name="BEGIN_LINK" />プロキシ、ファイアウォール、DNSの設定を確認する<ph name="END_LINK" /></translation>
 <translation id="382518646247711829">プロキシサーバーを使用している場合...</translation>
 <translation id="3973234410852337861"><ph name="HOST_NAME" />はブロックされています</translation>
@@ -67,7 +65,6 @@
 <translation id="4203896806696719780"><ph name="BEGIN_LINK" />ファイアウォールとウイルス対策の設定を確認する<ph name="END_LINK" /></translation>
 <translation id="4226937834893929579"><ph name="BEGIN_LINK" />ネットワーク診断を試す<ph name="END_LINK" />。</translation>
 <translation id="4304224509867189079">ログイン</translation>
-<translation id="4381091992796011497">ユーザー名:</translation>
 <translation id="4432688616882109544"><ph name="HOST_NAME" />でログイン証明書が承認されなかったか、ログイン証明書が提示されていない可能性があります。</translation>
 <translation id="4506599922270137252">システム管理者に問い合わせる</translation>
 <translation id="4522570452068850558">詳細</translation>

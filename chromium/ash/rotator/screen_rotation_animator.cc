@@ -5,7 +5,6 @@
 #include "ash/rotator/screen_rotation_animator.h"
 
 #include "ash/ash_switches.h"
-#include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/rotator/screen_rotation_animation.h"
 #include "ash/rotator/screen_rotation_animator_observer.h"
@@ -64,11 +63,6 @@ int GetRotationFactor(display::Display::Rotation initial_rotation,
   return (initial_rotation + 3) % 4 == new_rotation
              ? kCounterClockWiseRotationFactor
              : kClockWiseRotationFactor;
-}
-
-aura::Window* GetRootWindow(int64_t display_id) {
-  return Shell::Get()->window_tree_host_manager()->GetRootWindowForDisplayId(
-      display_id);
 }
 
 aura::Window* GetScreenRotationContainer(aura::Window* root_window) {
@@ -133,7 +127,7 @@ bool IgnoreCopyResult(int64_t request_id, int64_t current_request_id) {
 
 bool RootWindowChangedForDisplayId(aura::Window* root_window,
                                    int64_t display_id) {
-  return root_window != GetRootWindow(display_id);
+  return root_window != Shell::GetRootWindowForDisplayId(display_id);
 }
 
 // Creates a mask layer and returns the |mask_layer_tree_owner|.
@@ -169,6 +163,7 @@ ScreenRotationAnimator::ScreenRotationAnimator(aura::Window* root_window)
       metrics_reporter_(
           base::MakeUnique<ScreenRotationAnimationMetricsReporter>()),
       disable_animation_timers_for_test_(false),
+      // TODO(wutao): remove the flag. http://crbug.com/707800.
       has_switch_ash_disable_smooth_screen_rotation_(
           base::CommandLine::ForCurrentProcess()->HasSwitch(
               switches::kAshDisableSmoothScreenRotation) &&
@@ -200,7 +195,9 @@ void ScreenRotationAnimator::StartRotationAnimation(
   }
 
   rotation_request->old_rotation = current_rotation;
-  if (has_switch_ash_disable_smooth_screen_rotation_) {
+  if (has_switch_ash_disable_smooth_screen_rotation_ ||
+      DisplayConfigurationController::ANIMATION_SYNC ==
+          rotation_request->mode) {
     StartSlowAnimation(std::move(rotation_request));
   } else {
     std::unique_ptr<cc::CopyOutputRequest> copy_output_request =
@@ -252,19 +249,19 @@ void ScreenRotationAnimator::RequestCopyScreenRotationContainerLayer(
 ScreenRotationAnimator::CopyCallback
 ScreenRotationAnimator::CreateAfterCopyCallbackBeforeRotation(
     std::unique_ptr<ScreenRotationRequest> rotation_request) {
-  return base::Bind(&ScreenRotationAnimator::
-                        OnScreenRotationContainerLayerCopiedBeforeRotation,
-                    weak_factory_.GetWeakPtr(),
-                    base::Passed(&rotation_request));
+  return base::BindOnce(&ScreenRotationAnimator::
+                            OnScreenRotationContainerLayerCopiedBeforeRotation,
+                        weak_factory_.GetWeakPtr(),
+                        base::Passed(&rotation_request));
 }
 
 ScreenRotationAnimator::CopyCallback
 ScreenRotationAnimator::CreateAfterCopyCallbackAfterRotation(
     std::unique_ptr<ScreenRotationRequest> rotation_request) {
-  return base::Bind(&ScreenRotationAnimator::
-                        OnScreenRotationContainerLayerCopiedAfterRotation,
-                    weak_factory_.GetWeakPtr(),
-                    base::Passed(&rotation_request));
+  return base::BindOnce(&ScreenRotationAnimator::
+                            OnScreenRotationContainerLayerCopiedAfterRotation,
+                        weak_factory_.GetWeakPtr(),
+                        base::Passed(&rotation_request));
 }
 
 void ScreenRotationAnimator::OnScreenRotationContainerLayerCopiedBeforeRotation(
@@ -333,7 +330,7 @@ void ScreenRotationAnimator::CreateOldLayerTreeForSlowAnimation() {
 
 std::unique_ptr<ui::LayerTreeOwner> ScreenRotationAnimator::CopyLayerTree(
     std::unique_ptr<cc::CopyOutputResult> result) {
-  cc::TextureMailbox texture_mailbox;
+  viz::TextureMailbox texture_mailbox;
   std::unique_ptr<cc::SingleReleaseCallback> release_callback;
   result->TakeTexture(&texture_mailbox, &release_callback);
   DCHECK(texture_mailbox.IsTexture());
@@ -416,8 +413,8 @@ void ScreenRotationAnimator::AnimateRotation(
       base::MakeUnique<ui::LayerAnimationSequence>(
           std::move(old_layer_screen_rotation));
 
-  // In unit test, we can use ash::test::ScreenRotationAnimatorTestApi to
-  // control the animation.
+  // In unit tests, we can use ash::ScreenRotationAnimatorTestApi to control the
+  // animation.
   if (disable_animation_timers_for_test_) {
     if (new_layer_tree_owner_)
       new_layer_animator->set_disable_timer_for_test(true);
@@ -439,8 +436,10 @@ void ScreenRotationAnimator::AnimateRotation(
   observer->SetActive();
 }
 
-void ScreenRotationAnimator::Rotate(display::Display::Rotation new_rotation,
-                                    display::Display::RotationSource source) {
+void ScreenRotationAnimator::Rotate(
+    display::Display::Rotation new_rotation,
+    display::Display::RotationSource source,
+    DisplayConfigurationController::RotationAnimation mode) {
   // |rotation_request_id_| is used to skip stale requests. Before the layer
   // CopyOutputResult callback called, there could have new rotation request.
   // Increases |rotation_request_id_| for each new request and in the callback,
@@ -451,7 +450,7 @@ void ScreenRotationAnimator::Rotate(display::Display::Rotation new_rotation,
       display::Screen::GetScreen()->GetDisplayNearestWindow(root_window_).id();
   std::unique_ptr<ScreenRotationRequest> rotation_request =
       base::MakeUnique<ScreenRotationRequest>(rotation_request_id_, display_id,
-                                              new_rotation, source);
+                                              new_rotation, source, mode);
   target_rotation_ = new_rotation;
   switch (screen_rotation_state_) {
     case IDLE:

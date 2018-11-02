@@ -55,7 +55,6 @@ struct PrefsMapping kPrefsValues[] {
     {prefs::kSearchSuggestEnabled, booleanPreftype},
     {prefs::kWebKitMinimumFontSize, integerPreftype},
     {prefs::kDefaultCharset, stringPreftype},
-    {password_manager::prefs::kPasswordManagerSavingEnabled, booleanPreftype},
     {password_manager::prefs::kCredentialsEnableService, booleanPreftype},
 
     // Download preferences

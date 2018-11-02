@@ -26,6 +26,7 @@
 #include "chrome/browser/chromeos/profiles/profile_helper.h"
 #include "chrome/browser/chromeos/settings/cros_settings.h"
 #include "chrome/browser/chromeos/settings/install_attributes.h"
+#include "chrome/browser/lifetime/application_lifetime.h"
 #include "chrome/browser/policy/schema_registry_service.h"
 #include "chrome/browser/policy/schema_registry_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
@@ -146,13 +147,17 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
 
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
-  // Don't initialize cloud policy for the signin profile.
-  if (chromeos::ProfileHelper::IsSigninProfile(profile))
+  // Don't initialize cloud policy for the signin  and the lock screen app
+  // profile.
+  if (chromeos::ProfileHelper::IsSigninProfile(profile) ||
+      chromeos::ProfileHelper::IsLockScreenAppProfile(profile)) {
     return {};
+  }
 
-  // |user| should never be nullptr except for the signin profile. This object
-  // is created as part of the Profile creation, which happens right after
-  // sign-in. The just-signed-in User is the active user during that time.
+  // |user| should never be nullptr except for the signin and lock screen app
+  // profile. This object is created as part of the Profile creation, which
+  // happens right after sign-in. The just-signed-in User is the active user
+  // during that time.
   const user_manager::User* user =
       chromeos::ProfileHelper::Get()->GetUserByProfile(profile);
   CHECK(user);
@@ -178,7 +183,7 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
     case AccountType::UNKNOWN:
     case AccountType::GOOGLE:
       // TODO(tnagel): Return nullptr for unknown accounts once AccountId
-      // migration is finished.
+      // migration is finished.  (KioskAppManager still needs to be migrated.)
       if (!user->HasGaiaAccount()) {
         return {};
       }
@@ -257,8 +262,9 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
 
   if (is_active_directory) {
     std::unique_ptr<ActiveDirectoryPolicyManager> manager =
-        ActiveDirectoryPolicyManager::CreateForUserPolicy(account_id,
-                                                          std::move(store));
+        ActiveDirectoryPolicyManager::CreateForUserPolicy(
+            account_id, initial_policy_fetch_timeout,
+            base::BindOnce(&chrome::AttemptUserExit), std::move(store));
     manager->Init(
         SchemaRegistryServiceFactory::GetForContext(profile)->registry());
 
@@ -268,9 +274,9 @@ UserPolicyManagerFactoryChromeOS::CreateManagerForProfile(
     std::unique_ptr<UserCloudPolicyManagerChromeOS> manager =
         base::MakeUnique<UserCloudPolicyManagerChromeOS>(
             std::move(store), std::move(external_data_manager),
-            component_policy_cache_dir, wait_for_policy_fetch,
-            initial_policy_fetch_timeout, base::ThreadTaskRunnerHandle::Get(),
-            file_task_runner, io_task_runner);
+            component_policy_cache_dir, initial_policy_fetch_timeout,
+            base::ThreadTaskRunnerHandle::Get(), file_task_runner,
+            io_task_runner);
 
     // TODO(tnagel): Enable whitelist for Active Directory.
     bool wildcard_match = false;

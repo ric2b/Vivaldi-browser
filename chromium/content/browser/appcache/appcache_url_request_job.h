@@ -13,10 +13,8 @@
 #include "content/browser/appcache/appcache_entry.h"
 #include "content/browser/appcache/appcache_executable_handler.h"
 #include "content/browser/appcache/appcache_job.h"
-#include "content/browser/appcache/appcache_response.h"
 #include "content/browser/appcache/appcache_storage.h"
 #include "content/common/content_export.h"
-#include "net/http/http_byte_range.h"
 #include "net/url_request/url_request_job.h"
 
 namespace net {
@@ -44,11 +42,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
   // AppCacheJob overrides.
   void Kill() override;
   bool IsStarted() const override;
-  bool IsWaiting() const override;
-  bool IsDeliveringAppCacheResponse() const override;
-  bool IsDeliveringNetworkResponse() const override;
-  bool IsDeliveringErrorResponse() const override;
-  bool IsCacheEntryNotFound() const override;
   void DeliverAppCachedResponse(const GURL& manifest_url,
                                 int64_t cache_id,
                                 const AppCacheEntry& entry,
@@ -83,13 +76,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
                         bool is_main_resource,
                         const OnPrepareToRestartCallback& restart_callback_);
 
-  enum DeliveryType {
-    AWAITING_DELIVERY_ORDERS,
-    APPCACHED_DELIVERY,
-    NETWORK_DELIVERY,
-    ERROR_DELIVERY
-  };
-
   // Returns true if one of the Deliver methods has been called.
   bool has_delivery_orders() const { return !IsWaiting(); }
 
@@ -110,8 +96,6 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
   void OnCacheLoaded(AppCache* cache, int64_t cache_id) override;
 
   const net::HttpResponseInfo* http_info() const;
-  bool is_range_request() const { return range_requested_.IsValid(); }
-  void SetupRangeResponse();
 
   // AppCacheResponseReader completion callback
   void OnReadComplete(int result);
@@ -140,19 +124,13 @@ class CONTENT_EXPORT AppCacheURLRequestJob : public net::URLRequestJob,
   base::TimeTicks start_time_tick_;
   bool has_been_started_;
   bool has_been_killed_;
-  DeliveryType delivery_type_;
   GURL manifest_url_;
   int64_t cache_id_;
   AppCacheEntry entry_;
   bool is_fallback_;
   bool is_main_resource_;  // Used for histogram logging.
-  bool cache_entry_not_found_;
-  scoped_refptr<AppCacheResponseInfo> info_;
   scoped_refptr<net::GrowableIOBuffer> handler_source_buffer_;
   std::unique_ptr<AppCacheResponseReader> handler_source_reader_;
-  net::HttpByteRange range_requested_;
-  std::unique_ptr<net::HttpResponseInfo> range_response_info_;
-  std::unique_ptr<AppCacheResponseReader> reader_;
   scoped_refptr<AppCache> cache_;
   scoped_refptr<AppCacheGroup> group_;
   const OnPrepareToRestartCallback on_prepare_to_restart_callback_;

@@ -31,7 +31,7 @@
 
 #include "core/layout/LayoutSliderContainer.h"
 
-#include "core/dom/shadow/ShadowRoot.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/html/HTMLInputElement.h"
 #include "core/html/forms/SliderThumbElement.h"
 #include "core/html/parser/HTMLParserIdioms.h"
@@ -99,7 +99,8 @@ void LayoutSliderContainer::ComputeLogicalHeight(
 void LayoutSliderContainer::UpdateLayout() {
   HTMLInputElement* input = toHTMLInputElement(GetNode()->OwnerShadowHost());
   bool is_vertical = HasVerticalAppearance(input);
-  MutableStyleRef().SetFlexDirection(is_vertical ? kFlowColumn : kFlowRow);
+  MutableStyleRef().SetFlexDirection(is_vertical ? EFlexDirection::kColumn
+                                                 : EFlexDirection::kRow);
   TextDirection old_text_direction = Style()->Direction();
   if (is_vertical) {
     // FIXME: Work around rounding issues in RTL vertical sliders. We want them

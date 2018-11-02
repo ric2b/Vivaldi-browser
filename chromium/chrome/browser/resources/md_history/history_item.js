@@ -66,6 +66,10 @@ cr.define('md_history', function() {
      * @return {boolean} Whether the event was handled.
      */
     onKeydown: function(row, e) {
+      // Allow Home and End to move the history list.
+      if (e.key == 'Home' || e.key == 'End')
+        return true;
+
       // Prevent iron-list from changing the focus on enter.
       if (e.key == 'Enter')
         e.stopPropagation();
@@ -82,7 +86,7 @@ cr.define('md_history', function() {
       // from the history backend, as well as fields computed by history-list.
       item: {
         type: Object,
-        observer: 'showIcon_',
+        observer: 'itemChanged_',
       },
 
       selected: {
@@ -129,6 +133,9 @@ cr.define('md_history', function() {
     /** @private {?HistoryFocusRow} */
     row_: null,
 
+    /** @private {boolean} */
+    mouseDown_: false,
+
     /** @override */
     attached: function() {
       Polymer.RenderStatus.afterNextRender(this, function() {
@@ -152,6 +159,12 @@ cr.define('md_history', function() {
      * @private
      */
     onFocus_: function() {
+      // Don't change the focus while the mouse is down, as it prevents text
+      // selection. Not changing focus here is acceptable because the checkbox
+      // will be focused in onItemClick_() anyway.
+      if (this.mouseDown_)
+        return;
+
       if (this.lastFocused)
         this.row_.getEquivalentElement(this.lastFocused).focus();
       else
@@ -206,6 +219,10 @@ cr.define('md_history', function() {
      * @private
      */
     onItemMousedown_: function(e) {
+      this.mouseDown_ = true;
+      listenOnce(document, 'mouseup', function() {
+        this.mouseDown_ = false;
+      }.bind(this));
       // Prevent shift clicking a checkbox from selecting text.
       if (e.shiftKey)
         e.preventDefault();
@@ -299,8 +316,9 @@ cr.define('md_history', function() {
      * Set the favicon image, based on the URL of the history item.
      * @private
      */
-    showIcon_: function() {
+    itemChanged_: function() {
       this.$.icon.style.backgroundImage = cr.icon.getFavicon(this.item.url);
+      this.listen(this.$['time-accessed'], 'mouseover', 'addTimeTitle_');
     },
 
     /**

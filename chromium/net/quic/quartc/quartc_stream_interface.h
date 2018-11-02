@@ -8,13 +8,15 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "net/quic/platform/api/quic_export.h"
+
 namespace net {
 
 // Sends and receives data with a particular QUIC stream ID, reliably and
 // in-order. To send/receive data out of order, use separate streams. To
 // send/receive unreliably, close a stream after reliability is no longer
 // needed.
-class QuartcStreamInterface {
+class QUIC_EXPORT_PRIVATE QuartcStreamInterface {
  public:
   virtual ~QuartcStreamInterface() {}
 
@@ -27,6 +29,10 @@ class QuartcStreamInterface {
   // Return true if the FIN has been sent. Used by the outgoing streams to
   // determine if all the data has been sent
   virtual bool fin_sent() = 0;
+
+  virtual int stream_error() = 0;
+
+  virtual int connection_error() = 0;
 
   struct WriteParameters {
     WriteParameters() : fin(false) {}
@@ -61,7 +67,7 @@ class QuartcStreamInterface {
     // endpoint.
     // TODO(zhihuang) Creates a map from the integer error_code to WebRTC native
     // error code.
-    virtual void OnClose(QuartcStreamInterface* stream, int error_code) = 0;
+    virtual void OnClose(QuartcStreamInterface* stream) = 0;
 
     // Called when buffered_amount() decreases.
     virtual void OnBufferedAmountDecrease(QuartcStreamInterface* stream) = 0;

@@ -121,7 +121,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   String statusText() const;
   int status() const;
   State readyState() const;
-  bool withCredentials() const { return include_credentials_; }
+  bool withCredentials() const { return with_credentials_; }
   void setWithCredentials(bool, ExceptionState&);
   void open(const AtomicString& method, const String& url, ExceptionState&);
   void open(const AtomicString& method,
@@ -206,7 +206,7 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
 
   void EndLoading();
 
-  // Returns the MIME type part of m_mimeTypeOverride if present and
+  // Returns the MIME type part of mime_type_override_ if present and
   // successfully parsed, or returns one of the "Content-Type" header value
   // of the received response.
   //
@@ -218,6 +218,9 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   // The same as finalResponseMIMEType() but fallbacks to "text/xml" if
   // finalResponseMIMEType() returns an empty string.
   AtomicString FinalResponseMIMETypeWithFallback() const;
+  // Returns the "final charset" defined in
+  // https://xhr.spec.whatwg.org/#final-charset.
+  String FinalResponseCharset() const;
   bool ResponseIsXML() const;
   bool ResponseIsHTML() const;
 
@@ -300,7 +303,6 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   State state_;
 
   ResourceResponse response_;
-  String final_response_charset_;
 
   std::unique_ptr<TextResourceDecoder> decoder_;
 
@@ -342,7 +344,9 @@ class XMLHttpRequest final : public XMLHttpRequestEventTarget,
   int event_dispatch_recursion_level_;
 
   bool async_;
-  bool include_credentials_;
+
+  bool with_credentials_;
+
   // Used to skip m_responseDocument creation if it's done previously. We need
   // this separate flag since m_responseDocument can be 0 for some cases.
   bool parsed_response_;

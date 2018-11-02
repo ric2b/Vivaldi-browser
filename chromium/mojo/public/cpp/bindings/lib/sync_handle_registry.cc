@@ -4,27 +4,36 @@
 
 #include "mojo/public/cpp/bindings/sync_handle_registry.h"
 
+#include <algorithm>
+
 #include "base/lazy_instance.h"
 #include "base/logging.h"
 #include "base/stl_util.h"
-#include "base/threading/thread_local.h"
+#include "base/threading/sequence_local_storage_slot.h"
+#include "base/threading/sequenced_task_runner_handle.h"
 #include "mojo/public/c/system/core.h"
 
 namespace mojo {
 namespace {
 
-base::LazyInstance<base::ThreadLocalPointer<SyncHandleRegistry>>::Leaky
+base::LazyInstance<
+    base::SequenceLocalStorageSlot<scoped_refptr<SyncHandleRegistry>>>::Leaky
     g_current_sync_handle_watcher = LAZY_INSTANCE_INITIALIZER;
 
 }  // namespace
 
 // static
 scoped_refptr<SyncHandleRegistry> SyncHandleRegistry::current() {
-  scoped_refptr<SyncHandleRegistry> result(
-      g_current_sync_handle_watcher.Pointer()->Get());
+  // SyncMessageFilter can be used on threads without sequence-local storage
+  // being available. Those receive a unique, standalone SyncHandleRegistry.
+  if (!base::SequencedTaskRunnerHandle::IsSet())
+    return new SyncHandleRegistry();
+
+  scoped_refptr<SyncHandleRegistry> result =
+      g_current_sync_handle_watcher.Get().Get();
   if (!result) {
     result = new SyncHandleRegistry();
-    DCHECK_EQ(result.get(), g_current_sync_handle_watcher.Pointer()->Get());
+    g_current_sync_handle_watcher.Get().Set(result);
   }
   return result;
 }
@@ -32,7 +41,7 @@ scoped_refptr<SyncHandleRegistry> SyncHandleRegistry::current() {
 bool SyncHandleRegistry::RegisterHandle(const Handle& handle,
                                         MojoHandleSignals handle_signals,
                                         const HandleCallback& callback) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   if (base::ContainsKey(handles_, handle))
     return false;
@@ -46,7 +55,7 @@ bool SyncHandleRegistry::RegisterHandle(const Handle& handle,
 }
 
 void SyncHandleRegistry::UnregisterHandle(const Handle& handle) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!base::ContainsKey(handles_, handle))
     return;
 
@@ -55,27 +64,63 @@ void SyncHandleRegistry::UnregisterHandle(const Handle& handle) {
   handles_.erase(handle);
 }
 
-bool SyncHandleRegistry::RegisterEvent(base::WaitableEvent* event,
+void SyncHandleRegistry::RegisterEvent(base::WaitableEvent* event,
                                        const base::Closure& callback) {
-  auto result = events_.insert({event, callback});
-  DCHECK(result.second);
-  MojoResult rv = wait_set_.AddEvent(event);
-  if (rv == MOJO_RESULT_OK)
-    return true;
-  DCHECK_EQ(MOJO_RESULT_ALREADY_EXISTS, rv);
-  return false;
+  auto it = events_.find(event);
+  if (it == events_.end()) {
+    auto result = events_.emplace(event, EventCallbackList{});
+    it = result.first;
+  }
+
+  // The event may already be in the WaitSet, but we don't care. This will be a
+  // no-op in that case, which is more efficient than scanning the list of
+  // callbacks to see if any are valid.
+  wait_set_.AddEvent(event);
+
+  it->second.container().push_back(callback);
 }
 
-void SyncHandleRegistry::UnregisterEvent(base::WaitableEvent* event) {
+void SyncHandleRegistry::UnregisterEvent(base::WaitableEvent* event,
+                                         const base::Closure& callback) {
   auto it = events_.find(event);
-  DCHECK(it != events_.end());
-  events_.erase(it);
-  MojoResult rv = wait_set_.RemoveEvent(event);
-  DCHECK_EQ(MOJO_RESULT_OK, rv);
+  if (it == events_.end())
+    return;
+
+  bool has_valid_callbacks = false;
+  auto& callbacks = it->second.container();
+  if (is_dispatching_event_callbacks_) {
+    // Not safe to remove any elements from |callbacks| here since an outer
+    // stack frame is currently iterating over it in Wait().
+    for (auto& cb : callbacks) {
+      if (cb.Equals(callback))
+        cb.Reset();
+      else if (cb)
+        has_valid_callbacks = true;
+    }
+    remove_invalid_event_callbacks_after_dispatch_ = true;
+  } else {
+    callbacks.erase(std::remove_if(callbacks.begin(), callbacks.end(),
+                                   [&callback](const base::Closure& cb) {
+                                     return cb.Equals(callback);
+                                   }),
+                    callbacks.end());
+    if (callbacks.empty())
+      events_.erase(it);
+    else
+      has_valid_callbacks = true;
+  }
+
+  if (!has_valid_callbacks) {
+    // Regardless of whether or not we're nested within a Wait(), we need to
+    // ensure that |event| is removed from the WaitSet before returning if this
+    // was the last callback registered for it.
+    MojoResult rv = wait_set_.RemoveEvent(event);
+    DCHECK_EQ(MOJO_RESULT_OK, rv);
+  }
 }
 
 bool SyncHandleRegistry::Wait(const bool* should_stop[], size_t count) {
-  DCHECK(thread_checker_.CalledOnValidThread());
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   size_t num_ready_handles;
   Handle ready_handle;
@@ -102,34 +147,51 @@ bool SyncHandleRegistry::Wait(const bool* should_stop[], size_t count) {
     if (ready_event) {
       const auto iter = events_.find(ready_event);
       DCHECK(iter != events_.end());
-      iter->second.Run();
+      bool was_dispatching_event_callbacks = is_dispatching_event_callbacks_;
+      is_dispatching_event_callbacks_ = true;
+
+      // NOTE: It's possible for the container to be extended by any of these
+      // callbacks if they call RegisterEvent, so we are careful to iterate by
+      // index. Also note that conversely, elements cannot be *removed* from the
+      // container, by any of these callbacks, so it is safe to assume the size
+      // only stays the same or increases, with no elements changing position.
+      auto& callbacks = iter->second.container();
+      for (size_t i = 0; i < callbacks.size(); ++i) {
+        auto& callback = callbacks[i];
+        if (callback)
+          callback.Run();
+      }
+
+      is_dispatching_event_callbacks_ = was_dispatching_event_callbacks;
+      if (!was_dispatching_event_callbacks &&
+          remove_invalid_event_callbacks_after_dispatch_) {
+        // If we've had events unregistered within any callback dispatch, now is
+        // a good time to prune them from the map.
+        RemoveInvalidEventCallbacks();
+        remove_invalid_event_callbacks_after_dispatch_ = false;
+      }
     }
   };
 
   return false;
 }
 
-SyncHandleRegistry::SyncHandleRegistry() {
-  DCHECK(!g_current_sync_handle_watcher.Pointer()->Get());
-  g_current_sync_handle_watcher.Pointer()->Set(this);
-}
+SyncHandleRegistry::SyncHandleRegistry() = default;
 
-SyncHandleRegistry::~SyncHandleRegistry() {
-  DCHECK(thread_checker_.CalledOnValidThread());
+SyncHandleRegistry::~SyncHandleRegistry() = default;
 
-  // This object may be destructed after the thread local storage slot used by
-  // |g_current_sync_handle_watcher| is reset during thread shutdown.
-  // For example, another slot in the thread local storage holds a referrence to
-  // this object, and that slot is cleaned up after
-  // |g_current_sync_handle_watcher|.
-  if (!g_current_sync_handle_watcher.Pointer()->Get())
-    return;
-
-  // If this breaks, it is likely that the global variable is bulit into and
-  // accessed from multiple modules.
-  DCHECK_EQ(this, g_current_sync_handle_watcher.Pointer()->Get());
-
-  g_current_sync_handle_watcher.Pointer()->Set(nullptr);
+void SyncHandleRegistry::RemoveInvalidEventCallbacks() {
+  for (auto it = events_.begin(); it != events_.end();) {
+    auto& callbacks = it->second.container();
+    callbacks.erase(
+        std::remove_if(callbacks.begin(), callbacks.end(),
+                       [](const base::Closure& callback) { return !callback; }),
+        callbacks.end());
+    if (callbacks.empty())
+      events_.erase(it++);
+    else
+      ++it;
+  }
 }
 
 }  // namespace mojo

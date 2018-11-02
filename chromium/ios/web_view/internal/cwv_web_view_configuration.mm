@@ -7,13 +7,11 @@
 
 #include "base/memory/ptr_util.h"
 #include "base/threading/thread_restrictions.h"
-#include "components/translate/core/browser/translate_download_manager.h"
-#include "ios/web/public/app/web_main.h"
+#include "ios/web_view/internal/app/application_context.h"
+#import "ios/web_view/internal/cwv_preferences_internal.h"
 #import "ios/web_view/internal/cwv_user_content_controller_internal.h"
-#import "ios/web_view/internal/web_view_browser_state.h"
-#import "ios/web_view/internal/web_view_web_client.h"
-#import "ios/web_view/internal/web_view_web_main_delegate.h"
-#include "ui/base/l10n/l10n_util_mac.h"
+#include "ios/web_view/internal/web_view_browser_state.h"
+#include "ios/web_view/internal/web_view_global_state_util.h"
 
 #if !defined(__has_feature) || !__has_feature(objc_arc)
 #error "This file requires ARC support."
@@ -31,17 +29,31 @@
 
 @implementation CWVWebViewConfiguration
 
+@synthesize preferences = _preferences;
 @synthesize userContentController = _userContentController;
 
 + (instancetype)defaultConfiguration {
-  auto browserState =
-      base::MakeUnique<ios_web_view::WebViewBrowserState>(false);
-  return [[self alloc] initWithBrowserState:std::move(browserState)];
+  static CWVWebViewConfiguration* defaultConfiguration;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    auto browserState =
+        base::MakeUnique<ios_web_view::WebViewBrowserState>(false);
+    defaultConfiguration =
+        [[self alloc] initWithBrowserState:std::move(browserState)];
+  });
+  return defaultConfiguration;
 }
 
 + (instancetype)incognitoConfiguration {
-  auto browserState = base::MakeUnique<ios_web_view::WebViewBrowserState>(true);
-  return [[self alloc] initWithBrowserState:std::move(browserState)];
+  static CWVWebViewConfiguration* incognitoConfiguration;
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    auto browserState =
+        base::MakeUnique<ios_web_view::WebViewBrowserState>(true);
+    incognitoConfiguration =
+        [[self alloc] initWithBrowserState:std::move(browserState)];
+  });
+  return incognitoConfiguration;
 }
 
 + (void)initialize {
@@ -49,18 +61,7 @@
     return;
   }
 
-  static std::unique_ptr<ios_web_view::WebViewWebClient> webClient;
-  static std::unique_ptr<ios_web_view::WebViewWebMainDelegate> webMainDelegate;
-  static std::unique_ptr<web::WebMain> webMain;
-  static dispatch_once_t onceToken;
-  dispatch_once(&onceToken, ^{
-    webClient = base::MakeUnique<ios_web_view::WebViewWebClient>();
-    web::SetWebClient(webClient.get());
-
-    webMainDelegate = base::MakeUnique<ios_web_view::WebViewWebMainDelegate>();
-    web::WebMainParams params(webMainDelegate.get());
-    webMain = base::MakeUnique<web::WebMain>(params);
-  });
+  ios_web_view::InitializeGlobalState();
 }
 
 - (instancetype)initWithBrowserState:
@@ -69,14 +70,8 @@
   if (self) {
     _browserState = std::move(browserState);
 
-    // Initialize translate.
-    translate::TranslateDownloadManager* downloadManager =
-        translate::TranslateDownloadManager::GetInstance();
-    // TODO(crbug.com/710948): Use global request context here.
-    downloadManager->set_request_context(_browserState->GetRequestContext());
-    // TODO(crbug.com/679895): Bring up application locale correctly.
-    downloadManager->set_application_locale(l10n_util::GetLocaleOverride());
-    downloadManager->language_list()->SetResourceRequestsAllowed(true);
+    _preferences =
+        [[CWVPreferences alloc] initWithPrefService:_browserState->GetPrefs()];
 
     _userContentController =
         [[CWVUserContentController alloc] initWithConfiguration:self];
@@ -84,24 +79,16 @@
   return self;
 }
 
+#pragma mark - Public Methods
+
 - (BOOL)isPersistent {
   return !_browserState->IsOffTheRecord();
 }
 
+#pragma mark - Private Methods
+
 - (ios_web_view::WebViewBrowserState*)browserState {
   return _browserState.get();
-}
-
-// NSCopying
-
-- (id)copyWithZone:(NSZone*)zone {
-  [[self class] initialize];
-
-  auto browserState = base::MakeUnique<ios_web_view::WebViewBrowserState>(
-      _browserState->IsOffTheRecord());
-
-  return [[[self class] allocWithZone:zone]
-      initWithBrowserState:std::move(browserState)];
 }
 
 @end

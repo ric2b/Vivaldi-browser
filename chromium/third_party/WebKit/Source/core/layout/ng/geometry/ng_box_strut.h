@@ -13,6 +13,8 @@
 
 namespace blink {
 
+struct NGPhysicalBoxStrut;
+
 // This struct is used for storing margins, borders or padding of a box on all
 // four edges.
 struct CORE_EXPORT NGBoxStrut {
@@ -26,6 +28,13 @@ struct CORE_EXPORT NGBoxStrut {
         block_start(block_start),
         block_end(block_end) {}
 
+  LayoutUnit LineLeft(TextDirection direction) const {
+    return IsLtr(direction) ? inline_start : inline_end;
+  }
+  LayoutUnit LineRight(TextDirection direction) const {
+    return IsLtr(direction) ? inline_end : inline_start;
+  }
+
   LayoutUnit InlineSum() const { return inline_start + inline_end; }
   LayoutUnit BlockSum() const { return block_start + block_end; }
 
@@ -34,6 +43,8 @@ struct CORE_EXPORT NGBoxStrut {
   }
 
   bool IsEmpty() const;
+
+  NGPhysicalBoxStrut ConvertToPhysical(NGWritingMode, TextDirection) const;
 
   // The following two operators exist primarily to have an easy way to access
   // the sum of border and padding.
@@ -78,6 +89,9 @@ struct CORE_EXPORT NGPhysicalBoxStrut {
 
   NGBoxStrut ConvertToLogical(NGWritingMode, TextDirection) const;
   NGPixelSnappedPhysicalBoxStrut SnapToDevicePixels() const;
+
+  LayoutUnit HorizontalSum() const { return left + right; }
+  LayoutUnit VerticalSum() const { return top + bottom; }
 
   LayoutUnit top;
   LayoutUnit right;

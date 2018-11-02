@@ -8,6 +8,7 @@
 
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
+#include "content/public/browser/notification_observer.h"
 #include "extensions/browser/browser_context_keyed_api_factory.h"
 #include "extensions/browser/event_router.h"
 

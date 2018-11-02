@@ -9,12 +9,14 @@
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller.h"
 #include "ash/shell.h"
+#include "ash/shell_delegate.h"
+#include "ash/shutdown_reason.h"
 #include "ash/system/audio/tray_audio.h"
 #include "ash/system/power/tablet_power_button_controller.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/wm/lock_state_controller.h"
-#include "ash/wm/maximize_mode/maximize_mode_controller.h"
 #include "ash/wm/session_state_animator.h"
+#include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/command_line.h"
 #include "chromeos/audio/cras_audio_handler.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
@@ -25,10 +27,8 @@
 namespace ash {
 
 PowerButtonController::PowerButtonController(LockStateController* controller)
-    : has_legacy_power_button_(
-          base::CommandLine::ForCurrentProcess()->HasSwitch(
-              switches::kAuraLegacyPowerButton)),
-      lock_state_controller_(controller) {
+    : lock_state_controller_(controller) {
+  ProcessCommandLine();
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->AddObserver(
       this);
   chromeos::AccelerometerReader::GetInstance()->AddObserver(this);
@@ -42,7 +42,6 @@ PowerButtonController::~PowerButtonController() {
   chromeos::AccelerometerReader::GetInstance()->RemoveObserver(this);
   chromeos::DBusThreadManager::Get()->GetPowerManagerClient()->RemoveObserver(
       this);
-  tablet_controller_.reset();
 }
 
 void PowerButtonController::OnScreenBrightnessChanged(double percent) {
@@ -59,8 +58,8 @@ void PowerButtonController::OnPowerButtonEvent(
 
   bool should_take_screenshot = down && volume_down_pressed_ &&
                                 Shell::Get()
-                                    ->maximize_mode_controller()
-                                    ->IsMaximizeModeWindowManagerEnabled();
+                                    ->tablet_mode_controller()
+                                    ->IsTabletModeWindowManagerEnabled();
 
   if (!has_legacy_power_button_ && !should_take_screenshot &&
       tablet_controller_ &&
@@ -103,9 +102,9 @@ void PowerButtonController::OnPowerButtonEvent(
       if (session_controller->CanLockScreen() &&
           !session_controller->IsUserSessionBlocked() &&
           !lock_state_controller_->LockRequested()) {
-        lock_state_controller_->StartLockAnimationAndLockImmediately(false);
+        lock_state_controller_->StartLockAnimationAndLockImmediately();
       } else {
-        lock_state_controller_->RequestShutdown();
+        lock_state_controller_->RequestShutdown(ShutdownReason::POWER_BUTTON);
       }
     }
   } else {  // !has_legacy_power_button_
@@ -116,9 +115,11 @@ void PowerButtonController::OnPowerButtonEvent(
 
       if (session_controller->CanLockScreen() &&
           !session_controller->IsUserSessionBlocked()) {
-        lock_state_controller_->StartLockAnimation(true);
+        lock_state_controller_->StartLockThenShutdownAnimation(
+            ShutdownReason::POWER_BUTTON);
       } else {
-        lock_state_controller_->StartShutdownAnimation();
+        lock_state_controller_->StartShutdownAnimation(
+            ShutdownReason::POWER_BUTTON);
       }
     } else {  // Button is up.
       if (lock_state_controller_->CanCancelLockAnimation())
@@ -148,7 +149,7 @@ void PowerButtonController::OnLockButtonEvent(
     return;
 
   if (down)
-    lock_state_controller_->StartLockAnimation(false);
+    lock_state_controller_->StartLockAnimation();
   else
     lock_state_controller_->CancelLockAnimation();
 }
@@ -189,7 +190,7 @@ void PowerButtonController::PowerButtonEventReceived(
 
 void PowerButtonController::OnAccelerometerUpdated(
     scoped_refptr<const chromeos::AccelerometerUpdate> update) {
-  if (tablet_controller_)
+  if (force_clamshell_power_button_ || tablet_controller_)
     return;
   tablet_controller_.reset(
       new TabletPowerButtonController(lock_state_controller_));
@@ -197,6 +198,22 @@ void PowerButtonController::OnAccelerometerUpdated(
 
 void PowerButtonController::ResetTabletPowerButtonControllerForTest() {
   tablet_controller_.reset();
+  ProcessCommandLine();
+}
+
+void PowerButtonController::ProcessCommandLine() {
+  const base::CommandLine* cl = base::CommandLine::ForCurrentProcess();
+  has_legacy_power_button_ = cl->HasSwitch(switches::kAuraLegacyPowerButton);
+  force_clamshell_power_button_ =
+      cl->HasSwitch(switches::kForceClamshellPowerButton);
+  if (force_clamshell_power_button_) {
+    // We may update power button behavior from tablet behavior to clamshell
+    // behavior with touchscreen local state disabled. Enabling touchscreen
+    // local state to ensure touchscreen is initially enabled for clamshell.
+    ShellDelegate* delegate = Shell::Get()->shell_delegate();
+    delegate->SetTouchscreenEnabledInPrefs(true, true /* use_local_state */);
+    delegate->UpdateTouchscreenStatusFromPrefs();
+  }
 }
 
 }  // namespace ash

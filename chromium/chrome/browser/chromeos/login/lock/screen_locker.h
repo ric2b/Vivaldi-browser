@@ -35,6 +35,7 @@ class ExtendedAuthenticator;
 class AuthFailure;
 class ScreenlockIconProvider;
 class WebUIScreenLocker;
+class ViewsScreenLocker;
 
 namespace test {
 class ScreenLockerTester;
@@ -101,6 +102,8 @@ class ScreenLocker : public AuthStatusConsumer,
     DISALLOW_COPY_AND_ASSIGN(Delegate);
   };
 
+  using AuthenticateCallback = base::OnceCallback<void(bool auth_success)>;
+
   explicit ScreenLocker(const user_manager::UserList& users);
 
   // Returns the default instance if it has been created.
@@ -126,7 +129,8 @@ class ScreenLocker : public AuthStatusConsumer,
   void UnlockOnLoginSuccess();
 
   // Authenticates the user with given |user_context|.
-  void Authenticate(const UserContext& user_context);
+  void Authenticate(const UserContext& user_context,
+                    AuthenticateCallback callback);
 
   // Close message bubble to clear error messages.
   void ClearErrors();
@@ -183,6 +187,7 @@ class ScreenLocker : public AuthStatusConsumer,
   friend class test::ScreenLockerViewsTester;
   friend class test::WebUIScreenLockerTester;
   friend class WebUIScreenLocker;
+  friend class ViewsScreenLocker;
 
   // Track whether the user used pin or password to unlock the lock screen.
   // Values corrospond to UMA histograms, do not modify, or add or delete other
@@ -201,10 +206,10 @@ class ScreenLocker : public AuthStatusConsumer,
       const std::unordered_map<std::string, std::vector<std::string>>& matches)
       override;
   void OnSessionFailed() override;
-  void OnRestarted() override{};
+  void OnRestarted() override {}
   void OnEnrollScanDone(uint32_t scan_result,
                         bool enroll_session_complete,
-                        int percent_complete) override{};
+                        int percent_complete) override {}
 
   void OnFingerprintAuthFailure(const user_manager::User& user);
 
@@ -233,7 +238,6 @@ class ScreenLocker : public AuthStatusConsumer,
 
   // Delegate used to talk to the view.
   Delegate* delegate_ = nullptr;
-  bool owns_delegate_ = false;
 
   // Users that can unlock the device.
   user_manager::UserList users_;
@@ -268,6 +272,9 @@ class ScreenLocker : public AuthStatusConsumer,
   // Type of the last unlock attempt.
   UnlockType unlock_attempt_type_ = AUTH_PASSWORD;
 
+  // Callback to run, if any, when authentication is done.
+  AuthenticateCallback on_auth_complete_;
+
   // Copy of parameters passed to last call of OnLoginSuccess for usage in
   // UnlockOnLoginSuccess().
   std::unique_ptr<AuthenticationParametersCapture> authentication_capture_;
@@ -278,7 +285,11 @@ class ScreenLocker : public AuthStatusConsumer,
   scoped_refptr<input_method::InputMethodManager::State> saved_ime_state_;
 
   device::mojom::FingerprintPtr fp_service_;
-  mojo::Binding<device::mojom::FingerprintObserver> binding_;
+  mojo::Binding<device::mojom::FingerprintObserver>
+      fingerprint_observer_binding_;
+
+  // ViewsScreenLocker instance in use.
+  std::unique_ptr<ViewsScreenLocker> views_screen_locker_;
 
   base::WeakPtrFactory<ScreenLocker> weak_factory_;
 

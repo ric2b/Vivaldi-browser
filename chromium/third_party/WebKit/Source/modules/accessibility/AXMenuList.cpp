@@ -78,7 +78,7 @@ void AXMenuList::AddChildren() {
 
   AXObjectCacheImpl& cache = AxObjectCache();
 
-  AXObjectImpl* list = cache.GetOrCreate(kMenuListPopupRole);
+  AXObject* list = cache.GetOrCreate(kMenuListPopupRole);
   if (!list)
     return;
 
@@ -107,13 +107,6 @@ AccessibilityExpanded AXMenuList::IsExpanded() const {
     return kExpandedCollapsed;
 
   return kExpandedExpanded;
-}
-
-bool AXMenuList::CanSetFocusAttribute() const {
-  if (!GetNode())
-    return false;
-
-  return !ToElement(GetNode())->IsDisabledFormControl();
 }
 
 void AXMenuList::DidUpdateActiveOption(int option_index) {

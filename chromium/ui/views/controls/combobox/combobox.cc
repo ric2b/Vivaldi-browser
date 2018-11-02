@@ -11,6 +11,7 @@
 #include "base/logging.h"
 #include "base/macros.h"
 #include "build/build_config.h"
+#include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_node_data.h"
 #include "ui/base/default_style.h"
 #include "ui/base/ime/input_method.h"
@@ -93,6 +94,12 @@ const int kFocusedPressedMenuButtonImages[] =
 
 bool UseMd() {
   return ui::MaterialDesignController::IsSecondaryUiMaterial();
+}
+
+SkColor GetTextColorForEnableState(bool enabled, ui::NativeTheme* theme) {
+  return style::GetColor(style::CONTEXT_TEXTFIELD,
+                         enabled ? style::STYLE_PRIMARY : style::STYLE_DISABLED,
+                         theme);
 }
 
 gfx::Rect PositionArrowWithinContainer(const gfx::Rect& container_bounds,
@@ -554,8 +561,8 @@ void Combobox::OnNativeThemeChanged(const ui::NativeTheme* theme) {
   if (!UseMd())
     return;
 
-  set_background(
-      Background::CreateBackgroundPainter(Painter::CreateSolidRoundRectPainter(
+  SetBackground(
+      CreateBackgroundFromPainter(Painter::CreateSolidRoundRectPainter(
           theme->GetSystemColor(
               ui::NativeTheme::kColorId_TextfieldDefaultBackground),
           FocusableBorder::kCornerRadiusDp)));
@@ -751,7 +758,11 @@ void Combobox::OnBlur() {
 }
 
 void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
-  node_data->role = ui::AX_ROLE_COMBO_BOX;
+  // AX_ROLE_COMBO_BOX is for UI elements with a dropdown and an editable text
+  // field, which views::Combobox does not have. Use AX_ROLE_POP_UP_BUTTON to
+  // match an HTML <select> element.
+  node_data->role = ui::AX_ROLE_POP_UP_BUTTON;
+
   node_data->SetName(accessible_name_);
   node_data->SetValue(model_->GetItemAt(selected_index_));
   if (enabled()) {
@@ -760,6 +771,20 @@ void Combobox::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   }
   node_data->AddIntAttribute(ui::AX_ATTR_POS_IN_SET, selected_index_);
   node_data->AddIntAttribute(ui::AX_ATTR_SET_SIZE, model_->GetItemCount());
+}
+
+bool Combobox::HandleAccessibleAction(const ui::AXActionData& action_data) {
+  // The action handling in View would generate a mouse event and send it to
+  // |this|. However, mouse events for Combobox are handled by |arrow_button_|,
+  // which is hidden from the a11y tree (so can't expose actions). Rather than
+  // forwarding AX_ACTION_DO_DEFAULT to View and then forwarding the mouse event
+  // it generates to |arrow_button_| to have it forward back to |this| (as its
+  // ButtonListener), just handle the action explicitly here and bypass View.
+  if (enabled() && action_data.action == ui::AX_ACTION_DO_DEFAULT) {
+    ShowDropDownMenu(ui::MENU_SOURCE_KEYBOARD);
+    return true;
+  }
+  return View::HandleAccessibleAction(action_data);
 }
 
 void Combobox::ButtonPressed(Button* sender, const ui::Event& event) {
@@ -811,12 +836,7 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
   int x = insets.left();
   int y = insets.top();
   int text_height = height() - insets.height();
-  SkColor text_color = GetNativeTheme()->GetSystemColor(
-      UseMd() ? (enabled() ? ui::NativeTheme::kColorId_TextfieldDefaultColor
-                           : ui::NativeTheme::kColorId_TextfieldReadOnlyColor)
-              : (enabled() ? ui::NativeTheme::kColorId_LabelEnabledColor
-                           : ui::NativeTheme::kColorId_LabelDisabledColor));
-
+  SkColor text_color = GetTextColorForEnableState(enabled(), GetNativeTheme());
   DCHECK_GE(selected_index_, 0);
   DCHECK_LT(selected_index_, model()->GetItemCount());
   if (selected_index_ < 0 || selected_index_ > model()->GetItemCount())
@@ -859,8 +879,7 @@ void Combobox::PaintText(gfx::Canvas* canvas) {
     path.rLineTo(height, -height);
     path.close();
     cc::PaintFlags flags;
-    SkColor arrow_color = GetNativeTheme()->GetSystemColor(
-        ui::NativeTheme::kColorId_ButtonEnabledColor);
+    SkColor arrow_color = GetTextColorForEnableState(true, GetNativeTheme());
     if (!enabled())
       arrow_color = SkColorSetA(arrow_color, gfx::kDisabledControlAlpha);
     flags.setColor(arrow_color);

@@ -5,12 +5,14 @@
 #ifndef IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATION_CONTROLLER_H
 #define IOS_WEB_VIEW_PUBLIC_CWV_TRANSLATION_CONTROLLER_H
 
-#import <ChromeWebView/cwv_export.h>
 #import <Foundation/Foundation.h>
+
+#import "cwv_export.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 @class CWVTranslationLanguage;
+@class CWVTranslationPolicy;
 @protocol CWVTranslationControllerDelegate;
 
 // The error domain for translation errors.
@@ -46,23 +48,38 @@ CWV_EXPORT
 @property(nullable, nonatomic, weak) id<CWVTranslationControllerDelegate>
     delegate;
 
+// The set of supported languages for translation.
+@property(nonatomic, readonly)
+    NSSet<CWVTranslationLanguage*>* supportedLanguages;
+
 // Begins translation on the current page from |sourceLanguage| to
 // |targetLanguage|. These language parameters must be chosen from
-// a CWWLanguageDetectionResult's |supportedLanguages|.
-// This must not be called before the |delegate| receives
-// |translationController:didFinishLanguageDetectionWithResult:error:|.
-// TODO(crbug.com/706289): Document what happens if you call this out of order
-// or many times.
+// |supportedLanguages|. Set |userInitiated| to YES if translation
+// is a result of explicit user action. |userInitiated| will be
+// passed along to the CWVTranslationControllerDelegate methods.
+// Results in a No-op if there is no current page.
 - (void)translatePageFromLanguage:(CWVTranslationLanguage*)sourceLanguage
-                       toLanguage:(CWVTranslationLanguage*)targetLanguage;
+                       toLanguage:(CWVTranslationLanguage*)targetLanguage
+                    userInitiated:(BOOL)userInitiated;
 
 // Reverts any translations done back to the original page language.
-// Note that the original page language  may be different from |sourceLanguage|
-// passed to |translatePageFromLanguage:toLanguage:| above.
-// This must not be called before the |delegate| receives
-// |translationController:didFinishLanguageDetectionWithResult:error:|.
-// TODO(crbug.com/706289): Document what happens if you call this out of order.
+// Note that the original page language may be different from |sourceLanguage|
+// passed to |translatePageFromLanguage:toLanguage:userInitiated:| above.
+// Results in No-op if the page was never translated.
 - (void)revertTranslation;
+
+// Sets or retrieves translation policies associated with a specified language.
+// |pageLanguage| should be the language code of the language.
+- (void)setTranslationPolicy:(CWVTranslationPolicy*)policy
+             forPageLanguage:(CWVTranslationLanguage*)pageLanguage;
+- (CWVTranslationPolicy*)translationPolicyForPageLanguage:
+    (CWVTranslationLanguage*)pageLanguage;
+
+// Sets or retrieves translation policies associated with a specified page.
+// |pageHost| should be the hostname of the website. Must not be empty.
+- (void)setTranslationPolicy:(CWVTranslationPolicy*)policy
+                 forPageHost:(NSString*)pageHost;
+- (CWVTranslationPolicy*)translationPolicyForPageHost:(NSString*)pageHost;
 
 @end
 

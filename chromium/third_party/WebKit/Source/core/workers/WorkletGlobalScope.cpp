@@ -7,8 +7,10 @@
 #include <memory>
 #include "bindings/core/v8/SourceLocation.h"
 #include "bindings/core/v8/WorkerOrWorkletScriptController.h"
+#include "core/dom/Modulator.h"
 #include "core/inspector/MainThreadDebugger.h"
 #include "core/probe/CoreProbes.h"
+#include "platform/bindings/TraceWrapperMember.h"
 
 namespace blink {
 
@@ -16,8 +18,12 @@ WorkletGlobalScope::WorkletGlobalScope(
     const KURL& url,
     const String& user_agent,
     PassRefPtr<SecurityOrigin> security_origin,
-    v8::Isolate* isolate)
-    : WorkerOrWorkletGlobalScope(isolate), url_(url), user_agent_(user_agent) {
+    v8::Isolate* isolate,
+    WorkerClients* worker_clients)
+    : WorkerOrWorkletGlobalScope(isolate, worker_clients),
+      url_(url),
+      user_agent_(user_agent),
+      modulator_(this, nullptr) {
   SetSecurityOrigin(std::move(security_origin));
 }
 
@@ -42,6 +48,16 @@ v8::Local<v8::Object> WorkletGlobalScope::AssociateWithWrapper(
   return v8::Local<v8::Object>();
 }
 
+bool WorkletGlobalScope::HasPendingActivity() const {
+  // The worklet global scope wrapper is kept alive as longs as its execution
+  // context is active.
+  return !ExecutionContext::IsContextDestroyed();
+}
+
+ExecutionContext* WorkletGlobalScope::GetExecutionContext() const {
+  return const_cast<WorkletGlobalScope*>(this);
+}
+
 bool WorkletGlobalScope::IsSecureContext(String& error_message) const {
   // Until there are APIs that are available in worklets and that
   // require a privileged context test that checks ancestors, just do
@@ -50,6 +66,10 @@ bool WorkletGlobalScope::IsSecureContext(String& error_message) const {
     return true;
   error_message = GetSecurityOrigin()->IsPotentiallyTrustworthyErrorMessage();
   return false;
+}
+
+void WorkletGlobalScope::SetModulator(Modulator* modulator) {
+  modulator_ = modulator;
 }
 
 KURL WorkletGlobalScope::VirtualCompleteURL(const String& url) const {
@@ -63,9 +83,14 @@ KURL WorkletGlobalScope::VirtualCompleteURL(const String& url) const {
 }
 
 DEFINE_TRACE(WorkletGlobalScope) {
+  visitor->Trace(modulator_);
   ExecutionContext::Trace(visitor);
   SecurityContext::Trace(visitor);
   WorkerOrWorkletGlobalScope::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(WorkletGlobalScope) {
+  visitor->TraceWrappers(modulator_);
 }
 
 }  // namespace blink

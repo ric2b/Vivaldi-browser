@@ -14,7 +14,7 @@ CSSScale* FromScale(const CSSFunctionValue& value) {
   DCHECK(value.length() == 1U || value.length() == 2U);
   double x = ToCSSPrimitiveValue(value.Item(0)).GetDoubleValue();
   if (value.length() == 1U)
-    return CSSScale::Create(x, 1);
+    return CSSScale::Create(x, x);
 
   double y = ToCSSPrimitiveValue(value.Item(1)).GetDoubleValue();
   return CSSScale::Create(x, y);
@@ -64,13 +64,13 @@ CSSScale* CSSScale::FromCSSValue(const CSSFunctionValue& value) {
 
 CSSFunctionValue* CSSScale::ToCSSValue() const {
   CSSFunctionValue* result =
-      CSSFunctionValue::Create(is2d_ ? CSSValueScale : CSSValueScale3d);
+      CSSFunctionValue::Create(is2D() ? CSSValueScale : CSSValueScale3d);
 
   result->Append(
       *CSSPrimitiveValue::Create(x_, CSSPrimitiveValue::UnitType::kNumber));
   result->Append(
       *CSSPrimitiveValue::Create(y_, CSSPrimitiveValue::UnitType::kNumber));
-  if (!is2d_)
+  if (!is2D())
     result->Append(
         *CSSPrimitiveValue::Create(z_, CSSPrimitiveValue::UnitType::kNumber));
 

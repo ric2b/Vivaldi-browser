@@ -9,6 +9,7 @@
 #include "ash/session/session_observer.h"
 #include "ash/shell_observer.h"
 #include "ash/system/tray/tray_background_view.h"
+#include "ash/wm/tablet_mode/tablet_mode_observer.h"
 #include "base/macros.h"
 
 namespace views {
@@ -24,13 +25,14 @@ namespace ash {
 // provide any bubble view windows.
 class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
                                       public SessionObserver,
-                                      public ShellObserver {
+                                      public ShellObserver,
+                                      public TabletModeObserver {
  public:
   explicit OverviewButtonTray(Shelf* shelf);
   ~OverviewButtonTray() override;
 
   // Updates the tray's visibility based on the LoginStatus and the current
-  // state of MaximizeMode
+  // state of TabletMode
   virtual void UpdateAfterLoginStatusChange(LoginStatus status);
 
   // ActionableView:
@@ -40,10 +42,12 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
   void OnSessionStateChanged(session_manager::SessionState state) override;
 
   // ShellObserver:
-  void OnMaximizeModeStarted() override;
-  void OnMaximizeModeEnded() override;
   void OnOverviewModeStarting() override;
   void OnOverviewModeEnded() override;
+
+  // TabletModeObserver:
+  void OnTabletModeStarted() override;
+  void OnTabletModeEnded() override;
 
   // TrayBackgroundView:
   void ClickedOutsideBubble() override;
@@ -53,7 +57,7 @@ class ASH_EXPORT OverviewButtonTray : public TrayBackgroundView,
  private:
   friend class OverviewButtonTrayTest;
 
-  // Sets the icon to visible if maximize mode is enabled and
+  // Sets the icon to visible if tablet mode is enabled and
   // WindowSelectorController::CanSelect.
   void UpdateIconVisibility();
 

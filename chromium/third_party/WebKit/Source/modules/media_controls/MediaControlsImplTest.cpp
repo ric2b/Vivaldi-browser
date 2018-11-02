@@ -6,17 +6,18 @@
 
 #include <limits>
 #include <memory>
+
+#include "build/build_config.h"
 #include "core/HTMLNames.h"
 #include "core/css/StylePropertySet.h"
-#include "core/dom/ClientRect.h"
 #include "core/dom/Document.h"
 #include "core/dom/ElementTraversal.h"
 #include "core/dom/StyleEngine.h"
 #include "core/events/Event.h"
 #include "core/frame/Settings.h"
+#include "core/geometry/DOMRect.h"
 #include "core/html/HTMLElement.h"
 #include "core/html/HTMLVideoElement.h"
-#include "core/html/shadow/MediaControlElementTypes.h"
 #include "core/input/EventHandler.h"
 #include "core/layout/LayoutObject.h"
 #include "core/loader/EmptyClients.h"
@@ -27,6 +28,7 @@
 #include "modules/media_controls/elements/MediaControlVolumeSliderElement.h"
 #include "modules/remoteplayback/HTMLMediaElementRemotePlayback.h"
 #include "modules/remoteplayback/RemotePlayback.h"
+#include "platform/RuntimeEnabledFeatures.h"
 #include "platform/heap/Handle.h"
 #include "platform/testing/EmptyWebMediaPlayer.h"
 #include "platform/testing/HistogramTester.h"
@@ -39,11 +41,19 @@
 #include "public/platform/modules/remoteplayback/WebRemotePlaybackClient.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
+// The MediaTimelineWidths histogram suffix expected to be encountered in these
+// tests. Depends on the OS, since Android sizes its timeline differently.
+#if defined(OS_ANDROID)
+#define TIMELINE_W "80_127"
+#else
+#define TIMELINE_W "128_255"
+#endif
+
 namespace blink {
 
 namespace {
 
-class MockChromeClient : public EmptyChromeClient {
+class MockChromeClientForImpl : public EmptyChromeClient {
  public:
   // EmptyChromeClient overrides:
   WebScreenInfo GetScreenInfo() const override {
@@ -53,7 +63,7 @@ class MockChromeClient : public EmptyChromeClient {
   }
 };
 
-class MockVideoWebMediaPlayer : public EmptyWebMediaPlayer {
+class MockWebMediaPlayerForImpl : public EmptyWebMediaPlayer {
  public:
   // WebMediaPlayer overrides:
   WebTimeRanges Seekable() const override { return seekable_; }
@@ -73,15 +83,17 @@ class MockLayoutObject : public LayoutObject {
   }
 };
 
-class StubLocalFrameClient : public EmptyLocalFrameClient {
+class StubLocalFrameClientForImpl : public EmptyLocalFrameClient {
  public:
-  static StubLocalFrameClient* Create() { return new StubLocalFrameClient; }
+  static StubLocalFrameClientForImpl* Create() {
+    return new StubLocalFrameClientForImpl;
+  }
 
   std::unique_ptr<WebMediaPlayer> CreateWebMediaPlayer(
       HTMLMediaElement&,
       const WebMediaPlayerSource&,
       WebMediaPlayerClient*) override {
-    return WTF::WrapUnique(new MockVideoWebMediaPlayer);
+    return WTF::WrapUnique(new MockWebMediaPlayerForImpl);
   }
 
   WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
@@ -133,14 +145,19 @@ enum DownloadActionMetrics {
 
 class MediaControlsImplTest : public ::testing::Test {
  protected:
-  virtual void SetUp() { InitializePage(); }
+  virtual void SetUp() {
+    // Enable the cast overlay button as this is enabled by default.
+    RuntimeEnabledFeatures::SetMediaCastOverlayButtonEnabled(true);
+
+    InitializePage();
+  }
 
   void InitializePage() {
     Page::PageClients clients;
     FillWithEmptyClients(clients);
-    clients.chrome_client = new MockChromeClient();
-    page_holder_ = DummyPageHolder::Create(IntSize(800, 600), &clients,
-                                           StubLocalFrameClient::Create());
+    clients.chrome_client = new MockChromeClientForImpl();
+    page_holder_ = DummyPageHolder::Create(
+        IntSize(800, 600), &clients, StubLocalFrameClientForImpl::Create());
 
     GetDocument().write("<video>");
     HTMLVideoElement& video =
@@ -179,8 +196,8 @@ class MediaControlsImplTest : public ::testing::Test {
   MediaControlCurrentTimeDisplayElement* GetCurrentTimeDisplayElement() const {
     return media_controls_->current_time_display_;
   }
-  MockVideoWebMediaPlayer* WebMediaPlayer() {
-    return static_cast<MockVideoWebMediaPlayer*>(
+  MockWebMediaPlayerForImpl* WebMediaPlayer() {
+    return static_cast<MockWebMediaPlayerForImpl*>(
         MediaControls().MediaElement().GetWebMediaPlayer());
   }
   Document& GetDocument() { return page_holder_->GetDocument(); }
@@ -349,6 +366,17 @@ TEST_F(MediaControlsImplTest, CastOverlayDefault) {
   ASSERT_TRUE(IsElementVisible(*cast_overlay_button));
 }
 
+TEST_F(MediaControlsImplTest, CastOverlayDisabled) {
+  RuntimeEnabledFeatures::SetMediaCastOverlayButtonEnabled(false);
+
+  Element* cast_overlay_button = GetElementByShadowPseudoId(
+      MediaControls(), "-internal-media-controls-overlay-cast-button");
+  ASSERT_NE(nullptr, cast_overlay_button);
+
+  SimulateRouteAvailable();
+  ASSERT_FALSE(IsElementVisible(*cast_overlay_button));
+}
+
 TEST_F(MediaControlsImplTest, CastOverlayDisableRemotePlaybackAttr) {
   Element* cast_overlay_button = GetElementByShadowPseudoId(
       MediaControls(), "-internal-media-controls-overlay-cast-button");
@@ -383,6 +411,24 @@ TEST_F(MediaControlsImplTest, CastOverlayMediaControlsDisabled) {
 
   GetDocument().GetSettings()->SetMediaControlsEnabled(true);
   EXPECT_TRUE(IsElementVisible(*cast_overlay_button));
+}
+
+TEST_F(MediaControlsImplTest, CastOverlayDisabledMediaControlsDisabled) {
+  RuntimeEnabledFeatures::SetMediaCastOverlayButtonEnabled(false);
+
+  Element* cast_overlay_button = GetElementByShadowPseudoId(
+      MediaControls(), "-internal-media-controls-overlay-cast-button");
+  ASSERT_NE(nullptr, cast_overlay_button);
+
+  EXPECT_FALSE(IsElementVisible(*cast_overlay_button));
+  SimulateRouteAvailable();
+  EXPECT_FALSE(IsElementVisible(*cast_overlay_button));
+
+  GetDocument().GetSettings()->SetMediaControlsEnabled(false);
+  EXPECT_FALSE(IsElementVisible(*cast_overlay_button));
+
+  GetDocument().GetSettings()->SetMediaControlsEnabled(true);
+  EXPECT_FALSE(IsElementVisible(*cast_overlay_button));
 }
 
 TEST_F(MediaControlsImplTest, KeepControlsVisibleIfOverflowListVisible) {
@@ -434,66 +480,6 @@ TEST_F(MediaControlsImplTest, DownloadButtonNotDisplayedEmptyUrl) {
   testing::RunPendingTasks();
   SimulateLoadedMetadata();
   EXPECT_FALSE(IsElementVisible(*download_button));
-}
-
-TEST_F(MediaControlsImplTest, DownloadButtonDisplayedHiddenAndDisplayed) {
-  EnsureSizing();
-
-  Element* download_button = GetElementByShadowPseudoId(
-      MediaControls(), "-internal-media-controls-download-button");
-  ASSERT_NE(nullptr, download_button);
-
-  // Initially show button.
-  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
-  testing::RunPendingTasks();
-  SimulateLoadedMetadata();
-  EXPECT_TRUE(IsElementVisible(*download_button));
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kShown, 1);
-
-  // Hide button.
-  MediaControls().MediaElement().SetSrc("");
-  testing::RunPendingTasks();
-  EXPECT_FALSE(IsElementVisible(*download_button));
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kShown, 1);
-
-  // Showing button again should not increment Shown count.
-  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
-  testing::RunPendingTasks();
-  EXPECT_TRUE(IsElementVisible(*download_button));
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kShown, 1);
-}
-
-TEST_F(MediaControlsImplTest, DownloadButtonRecordsClickOnlyOnce) {
-  EnsureSizing();
-
-  MediaControlDownloadButtonElement* download_button =
-      static_cast<MediaControlDownloadButtonElement*>(
-          GetElementByShadowPseudoId(
-              MediaControls(), "-internal-media-controls-download-button"));
-  ASSERT_NE(nullptr, download_button);
-
-  // Initially show button.
-  MediaControls().MediaElement().SetSrc("https://example.com/foo.mp4");
-  testing::RunPendingTasks();
-  SimulateLoadedMetadata();
-  EXPECT_TRUE(IsElementVisible(*download_button));
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kShown, 1);
-
-  // Click button once.
-  download_button->DispatchSimulatedClick(
-      Event::CreateBubble(EventTypeNames::click), kSendNoEvents);
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kClicked, 1);
-
-  // Clicking button again should not increment Clicked count.
-  download_button->DispatchSimulatedClick(
-      Event::CreateBubble(EventTypeNames::click), kSendNoEvents);
-  GetHistogramTester().ExpectBucketCount("Media.Controls.Download",
-                                         DownloadActionMetrics::kClicked, 1);
 }
 
 TEST_F(MediaControlsImplTest, DownloadButtonNotDisplayedInfiniteDuration) {
@@ -618,20 +604,14 @@ TEST_F(MediaControlsImplTest, TimelineMetricsWidth) {
       "Media.Timeline.Width.FullscreenPortrait", 0);
 }
 
-// TODO(johnme): Fix and re-enable this on Android.
-#if OS(ANDROID)
-#define MAYBE_TimelineMetricsClick DISABLED_TimelineMetricsClick
-#else
-#define MAYBE_TimelineMetricsClick TimelineMetricsClick
-#endif
-TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsClick) {
+TEST_F(MediaControlsImplTest, TimelineMetricsClick) {
   double duration = 540;  // 9 minutes
   LoadMediaWithDuration(duration);
   EnsureSizing();
   testing::RunPendingTasks();
 
   ASSERT_TRUE(IsElementVisible(*TimelineElement()));
-  ClientRect* timelineRect = TimelineElement()->getBoundingClientRect();
+  DOMRect* timelineRect = TimelineElement()->getBoundingClientRect();
   ASSERT_LT(0, timelineRect->width());
 
   EXPECT_EQ(0, MediaControls().MediaElement().currentTime());
@@ -645,34 +625,26 @@ TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsClick) {
   EXPECT_LE(0.49 * duration, MediaControls().MediaElement().currentTime());
   EXPECT_GE(0.51 * duration, MediaControls().MediaElement().currentTime());
 
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType.128_255",
+  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType." TIMELINE_W,
                                           0 /* SeekType::kClick */, 1);
   GetHistogramTester().ExpectTotalCount(
-      "Media.Timeline.DragGestureDuration.128_255", 0);
-  GetHistogramTester().ExpectTotalCount("Media.Timeline.DragPercent.128_255",
-                                        0);
+      "Media.Timeline.DragGestureDuration." TIMELINE_W, 0);
   GetHistogramTester().ExpectTotalCount(
-      "Media.Timeline.DragSumAbsTimeDelta.128_255", 0);
-  GetHistogramTester().ExpectTotalCount("Media.Timeline.DragTimeDelta.128_255",
-                                        0);
+      "Media.Timeline.DragPercent." TIMELINE_W, 0);
+  GetHistogramTester().ExpectTotalCount(
+      "Media.Timeline.DragSumAbsTimeDelta." TIMELINE_W, 0);
+  GetHistogramTester().ExpectTotalCount(
+      "Media.Timeline.DragTimeDelta." TIMELINE_W, 0);
 }
 
-// TODO(johnme): Fix and re-enable this on Android.
-#if OS(ANDROID)
-#define MAYBE_TimelineMetricsDragFromCurrentPosition \
-  DISABLED_TimelineMetricsDragFromCurrentPosition
-#else
-#define MAYBE_TimelineMetricsDragFromCurrentPosition \
-  TimelineMetricsDragFromCurrentPosition
-#endif
-TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragFromCurrentPosition) {
+TEST_F(MediaControlsImplTest, TimelineMetricsDragFromCurrentPosition) {
   double duration = 540;  // 9 minutes
   LoadMediaWithDuration(duration);
   EnsureSizing();
   testing::RunPendingTasks();
 
   ASSERT_TRUE(IsElementVisible(*TimelineElement()));
-  ClientRect* timeline_rect = TimelineElement()->getBoundingClientRect();
+  DOMRect* timeline_rect = TimelineElement()->getBoundingClientRect();
   ASSERT_LT(0, timeline_rect->width());
 
   EXPECT_EQ(0, MediaControls().MediaElement().currentTime());
@@ -689,33 +661,26 @@ TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragFromCurrentPosition) {
   EXPECT_GE(0.68 * duration, MediaControls().MediaElement().currentTime());
 
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.SeekType.128_255",
+      "Media.Timeline.SeekType." TIMELINE_W,
       1 /* SeekType::kDragFromCurrentPosition */, 1);
   GetHistogramTester().ExpectTotalCount(
-      "Media.Timeline.DragGestureDuration.128_255", 1);
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.DragPercent.128_255",
-                                          47 /* [60.0%, 70.0%) */, 1);
+      "Media.Timeline.DragGestureDuration." TIMELINE_W, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragSumAbsTimeDelta.128_255", 16 /* [4m, 8m) */, 1);
+      "Media.Timeline.DragPercent." TIMELINE_W, 47 /* [60.0%, 70.0%) */, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragTimeDelta.128_255", 40 /* [4m, 8m) */, 1);
+      "Media.Timeline.DragSumAbsTimeDelta." TIMELINE_W, 16 /* [4m, 8m) */, 1);
+  GetHistogramTester().ExpectUniqueSample(
+      "Media.Timeline.DragTimeDelta." TIMELINE_W, 40 /* [4m, 8m) */, 1);
 }
 
-// TODO(johnme): Fix and re-enable this on Android.
-#if OS(ANDROID)
-#define MAYBE_TimelineMetricsDragFromElsewhere \
-  DISABLED_TimelineMetricsDragFromElsewhere
-#else
-#define MAYBE_TimelineMetricsDragFromElsewhere TimelineMetricsDragFromElsewhere
-#endif
-TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragFromElsewhere) {
+TEST_F(MediaControlsImplTest, TimelineMetricsDragFromElsewhere) {
   double duration = 540;  // 9 minutes
   LoadMediaWithDuration(duration);
   EnsureSizing();
   testing::RunPendingTasks();
 
   ASSERT_TRUE(IsElementVisible(*TimelineElement()));
-  ClientRect* timelineRect = TimelineElement()->getBoundingClientRect();
+  DOMRect* timelineRect = TimelineElement()->getBoundingClientRect();
   ASSERT_LT(0, timelineRect->width());
 
   EXPECT_EQ(0, MediaControls().MediaElement().currentTime());
@@ -732,34 +697,27 @@ TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragFromElsewhere) {
   EXPECT_LE(0.66 * duration, MediaControls().MediaElement().currentTime());
   EXPECT_GE(0.68 * duration, MediaControls().MediaElement().currentTime());
 
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType.128_255",
+  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType." TIMELINE_W,
                                           2 /* SeekType::kDragFromElsewhere */,
                                           1);
   GetHistogramTester().ExpectTotalCount(
-      "Media.Timeline.DragGestureDuration.128_255", 1);
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.DragPercent.128_255",
-                                          42 /* [30.0%, 35.0%) */, 1);
+      "Media.Timeline.DragGestureDuration." TIMELINE_W, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragSumAbsTimeDelta.128_255", 15 /* [2m, 4m) */, 1);
+      "Media.Timeline.DragPercent." TIMELINE_W, 42 /* [30.0%, 35.0%) */, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragTimeDelta.128_255", 39 /* [2m, 4m) */, 1);
+      "Media.Timeline.DragSumAbsTimeDelta." TIMELINE_W, 15 /* [2m, 4m) */, 1);
+  GetHistogramTester().ExpectUniqueSample(
+      "Media.Timeline.DragTimeDelta." TIMELINE_W, 39 /* [2m, 4m) */, 1);
 }
 
-// TODO(johnme): Fix and re-enable this on Android.
-#if OS(ANDROID)
-#define MAYBE_TimelineMetricsDragBackAndForth \
-  DISABLED_TimelineMetricsDragBackAndForth
-#else
-#define MAYBE_TimelineMetricsDragBackAndForth TimelineMetricsDragBackAndForth
-#endif
-TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragBackAndForth) {
+TEST_F(MediaControlsImplTest, TimelineMetricsDragBackAndForth) {
   double duration = 540;  // 9 minutes
   LoadMediaWithDuration(duration);
   EnsureSizing();
   testing::RunPendingTasks();
 
   ASSERT_TRUE(IsElementVisible(*TimelineElement()));
-  ClientRect* timelineRect = TimelineElement()->getBoundingClientRect();
+  DOMRect* timelineRect = TimelineElement()->getBoundingClientRect();
   ASSERT_LT(0, timelineRect->width());
 
   EXPECT_EQ(0, MediaControls().MediaElement().currentTime());
@@ -778,28 +736,38 @@ TEST_F(MediaControlsImplTest, MAYBE_TimelineMetricsDragBackAndForth) {
   EXPECT_LE(0.32 * duration, MediaControls().MediaElement().currentTime());
   EXPECT_GE(0.34 * duration, MediaControls().MediaElement().currentTime());
 
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType.128_255",
+  GetHistogramTester().ExpectUniqueSample("Media.Timeline.SeekType." TIMELINE_W,
                                           2 /* SeekType::kDragFromElsewhere */,
                                           1);
   GetHistogramTester().ExpectTotalCount(
-      "Media.Timeline.DragGestureDuration.128_255", 1);
-  GetHistogramTester().ExpectUniqueSample("Media.Timeline.DragPercent.128_255",
-                                          8 /* (-35.0%, -30.0%] */, 1);
+      "Media.Timeline.DragGestureDuration." TIMELINE_W, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragSumAbsTimeDelta.128_255", 17 /* [8m, 15m) */, 1);
+      "Media.Timeline.DragPercent." TIMELINE_W, 8 /* (-35.0%, -30.0%] */, 1);
   GetHistogramTester().ExpectUniqueSample(
-      "Media.Timeline.DragTimeDelta.128_255", 9 /* (-4m, -2m] */, 1);
+      "Media.Timeline.DragSumAbsTimeDelta." TIMELINE_W, 17 /* [8m, 15m) */, 1);
+  GetHistogramTester().ExpectUniqueSample(
+      "Media.Timeline.DragTimeDelta." TIMELINE_W, 9 /* (-4m, -2m] */, 1);
 }
 
-TEST_F(MediaControlsImplTest, ControlsRemainVisibleDuringKeyboardInteraction) {
+namespace {
+
+class MediaControlsImplTestWithMockScheduler : public MediaControlsImplTest {
+ protected:
+  void SetUp() override {
+    // DocumentParserTiming has DCHECKS to make sure time > 0.0.
+    platform_->AdvanceClockSeconds(1);
+
+    MediaControlsImplTest::SetUp();
+  }
+
   ScopedTestingPlatformSupport<TestingPlatformSupportWithMockScheduler>
-      platform;
+      platform_;
+};
 
-  // DocumentParserTiming has DCHECKS to make sure time > 0.0.
-  platform->AdvanceClockSeconds(1);
+}  // namespace
 
-  // Need to reinitialize page since we changed the platform.
-  InitializePage();
+TEST_F(MediaControlsImplTestWithMockScheduler,
+       ControlsRemainVisibleDuringKeyboardInteraction) {
   EnsureSizing();
 
   Element* panel = MediaControls().PanelElement();
@@ -813,23 +781,23 @@ TEST_F(MediaControlsImplTest, ControlsRemainVisibleDuringKeyboardInteraction) {
   EXPECT_TRUE(IsElementVisible(*panel));
 
   // Tabbing between controls prevents controls from hiding.
-  platform->RunForPeriodSeconds(2);
+  platform_->RunForPeriodSeconds(2);
   MediaControls().DispatchEvent(Event::Create("focusin"));
-  platform->RunForPeriodSeconds(2);
+  platform_->RunForPeriodSeconds(2);
   EXPECT_TRUE(IsElementVisible(*panel));
 
   // Seeking on the timeline or volume bar prevents controls from hiding.
   MediaControls().DispatchEvent(Event::Create("input"));
-  platform->RunForPeriodSeconds(2);
+  platform_->RunForPeriodSeconds(2);
   EXPECT_TRUE(IsElementVisible(*panel));
 
   // Pressing a key prevents controls from hiding.
   MediaControls().PanelElement()->DispatchEvent(Event::Create("keypress"));
-  platform->RunForPeriodSeconds(2);
+  platform_->RunForPeriodSeconds(2);
   EXPECT_TRUE(IsElementVisible(*panel));
 
   // Once user interaction stops, controls can hide.
-  platform->RunForPeriodSeconds(2);
+  platform_->RunForPeriodSeconds(2);
   EXPECT_FALSE(IsElementVisible(*panel));
 }
 

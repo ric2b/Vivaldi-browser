@@ -120,13 +120,15 @@ class CONTENT_EXPORT VideoCaptureController
   void OnDeviceLaunchFailed() override;
   void OnDeviceLaunchAborted() override;
 
+  void OnDeviceConnectionLost();
+
   void CreateAndStartDeviceAsync(const media::VideoCaptureParams& params,
                                  VideoCaptureDeviceLaunchObserver* callbacks,
                                  base::OnceClosure done_cb);
   void ReleaseDeviceAsync(base::OnceClosure done_cb);
   bool IsDeviceAlive() const;
-  void GetPhotoCapabilities(
-      media::VideoCaptureDevice::GetPhotoCapabilitiesCallback callback) const;
+  void GetPhotoState(
+      media::VideoCaptureDevice::GetPhotoStateCallback callback) const;
   void SetPhotoOptions(
       media::mojom::PhotoSettingsPtr settings,
       media::VideoCaptureDevice::SetPhotoOptionsCallback callback);
@@ -239,6 +241,7 @@ class CONTENT_EXPORT VideoCaptureController
 
   // True if the controller has received a video frame from the device.
   bool has_received_frames_;
+  base::TimeTicks time_of_start_request_;
 
   base::Optional<media::VideoCaptureFormat> video_capture_format_;
 

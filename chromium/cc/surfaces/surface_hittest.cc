@@ -22,11 +22,11 @@ SurfaceHittest::SurfaceHittest(SurfaceHittestDelegate* delegate,
 
 SurfaceHittest::~SurfaceHittest() {}
 
-SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(
-    const SurfaceId& root_surface_id,
+viz::SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(
+    const viz::SurfaceId& root_surface_id,
     const gfx::Point& point,
     gfx::Transform* transform) {
-  SurfaceId out_surface_id = root_surface_id;
+  viz::SurfaceId out_surface_id = root_surface_id;
 
   // Reset the output transform to identity.
   if (transform)
@@ -40,8 +40,8 @@ SurfaceId SurfaceHittest::GetTargetSurfaceAtPoint(
 }
 
 bool SurfaceHittest::GetTransformToTargetSurface(
-    const SurfaceId& root_surface_id,
-    const SurfaceId& target_surface_id,
+    const viz::SurfaceId& root_surface_id,
+    const viz::SurfaceId& target_surface_id,
     gfx::Transform* transform) {
   // Reset the output transform to identity.
   if (transform)
@@ -53,8 +53,8 @@ bool SurfaceHittest::GetTransformToTargetSurface(
 }
 
 bool SurfaceHittest::TransformPointToTargetSurface(
-    const SurfaceId& original_surface_id,
-    const SurfaceId& target_surface_id,
+    const viz::SurfaceId& original_surface_id,
+    const viz::SurfaceId& target_surface_id,
     gfx::Point* point) {
   gfx::Transform transform;
   // Two possibilities need to be considered: original_surface_id can be
@@ -77,11 +77,11 @@ bool SurfaceHittest::TransformPointToTargetSurface(
 }
 
 bool SurfaceHittest::GetTargetSurfaceAtPointInternal(
-    const SurfaceId& surface_id,
-    int render_pass_id,
+    const viz::SurfaceId& surface_id,
+    RenderPassId render_pass_id,
     const gfx::Point& point_in_root_target,
     std::set<const RenderPass*>* referenced_passes,
-    SurfaceId* out_surface_id,
+    viz::SurfaceId* out_surface_id,
     gfx::Transform* out_transform) {
   const RenderPass* render_pass =
       GetRenderPassForSurfaceById(surface_id, render_pass_id);
@@ -171,9 +171,9 @@ bool SurfaceHittest::GetTargetSurfaceAtPointInternal(
 }
 
 bool SurfaceHittest::GetTransformToTargetSurfaceInternal(
-    const SurfaceId& root_surface_id,
-    const SurfaceId& target_surface_id,
-    int render_pass_id,
+    const viz::SurfaceId& root_surface_id,
+    const viz::SurfaceId& target_surface_id,
+    RenderPassId render_pass_id,
     std::set<const RenderPass*>* referenced_passes,
     gfx::Transform* out_transform) {
   if (root_surface_id == target_surface_id) {
@@ -251,8 +251,8 @@ bool SurfaceHittest::GetTransformToTargetSurfaceInternal(
 }
 
 const RenderPass* SurfaceHittest::GetRenderPassForSurfaceById(
-    const SurfaceId& surface_id,
-    int render_pass_id) {
+    const viz::SurfaceId& surface_id,
+    RenderPassId render_pass_id) {
   Surface* surface = manager_->GetSurfaceForId(surface_id);
   if (!surface)
     return nullptr;

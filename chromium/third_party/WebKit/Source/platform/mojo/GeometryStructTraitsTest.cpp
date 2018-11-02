@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <utility>
+
 #include "base/message_loop/message_loop.h"
 #include "mojo/public/cpp/bindings/binding_set.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -12,65 +14,67 @@ namespace blink {
 namespace {
 
 class GeometryStructTraitsTest
-    : public testing::Test,
+    : public ::testing::Test,
       public gfx::mojom::blink::GeometryTraitsTestService {
  public:
   GeometryStructTraitsTest() {}
 
  protected:
   gfx::mojom::blink::GeometryTraitsTestServicePtr GetTraitsTestProxy() {
-    return traits_test_bindings_.CreateInterfacePtrAndBind(this);
+    gfx::mojom::blink::GeometryTraitsTestServicePtr proxy;
+    traits_test_bindings_.AddBinding(this, mojo::MakeRequest(&proxy));
+    return proxy;
   }
 
  private:
   // GeometryTraitsTestService:
-  void EchoPoint(gfx::mojom::blink::PointPtr, const EchoPointCallback&) {
+  void EchoPoint(gfx::mojom::blink::PointPtr, EchoPointCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
-  void EchoPointF(gfx::mojom::blink::PointFPtr, const EchoPointFCallback&) {
+  void EchoPointF(const WebFloatPoint& p,
+                  EchoPointFCallback callback) override {
+    std::move(callback).Run(p);
+  }
+
+  void EchoSize(const WebSize& s, EchoSizeCallback callback) override {
+    std::move(callback).Run(s);
+  }
+
+  void EchoSizeF(gfx::mojom::blink::SizeFPtr, EchoSizeFCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
-  void EchoSize(const WebSize& s, const EchoSizeCallback& callback) {
-    callback.Run(s);
-  }
-
-  void EchoSizeF(gfx::mojom::blink::SizeFPtr, const EchoSizeFCallback&) {
+  void EchoRect(gfx::mojom::blink::RectPtr, EchoRectCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
-  void EchoRect(gfx::mojom::blink::RectPtr, const EchoRectCallback&) {
+  void EchoRectF(const WebFloatRect& r, EchoRectFCallback callback) override {
+    std::move(callback).Run(r);
+  }
+
+  void EchoInsets(gfx::mojom::blink::InsetsPtr, EchoInsetsCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
-  void EchoRectF(gfx::mojom::blink::RectFPtr, const EchoRectFCallback&) {
-    // The type map is not specified.
-    NOTREACHED();
-  }
-
-  void EchoInsets(gfx::mojom::blink::InsetsPtr, const EchoInsetsCallback&) {
-    // The type map is not specified.
-    NOTREACHED();
-  }
-
-  void EchoInsetsF(gfx::mojom::blink::InsetsFPtr, const EchoInsetsFCallback&) {
+  void EchoInsetsF(gfx::mojom::blink::InsetsFPtr,
+                   EchoInsetsFCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
   void EchoVector2d(gfx::mojom::blink::Vector2dPtr,
-                    const EchoVector2dCallback&) {
+                    EchoVector2dCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
 
   void EchoVector2dF(gfx::mojom::blink::Vector2dFPtr,
-                     const EchoVector2dFCallback&) {
+                     EchoVector2dFCallback) override {
     // The type map is not specified.
     NOTREACHED();
   }
@@ -92,6 +96,28 @@ TEST_F(GeometryStructTraitsTest, Size) {
   gfx::mojom::blink::GeometryTraitsTestServicePtr proxy = GetTraitsTestProxy();
   WebSize output;
   proxy->EchoSize(input, &output);
+  EXPECT_EQ(input, output);
+}
+
+TEST_F(GeometryStructTraitsTest, PointF) {
+  const float kX = 1.234;
+  const float kY = 5.678;
+  WebFloatPoint input(kX, kY);
+  gfx::mojom::blink::GeometryTraitsTestServicePtr proxy = GetTraitsTestProxy();
+  WebFloatPoint output;
+  proxy->EchoPointF(input, &output);
+  EXPECT_EQ(input, output);
+}
+
+TEST_F(GeometryStructTraitsTest, RectF) {
+  const float kX = 1.234;
+  const float kY = 2.345;
+  const float kWidth = 3.456;
+  const float kHeight = 4.567;
+  WebFloatRect input(kX, kY, kWidth, kHeight);
+  gfx::mojom::blink::GeometryTraitsTestServicePtr proxy = GetTraitsTestProxy();
+  WebFloatRect output;
+  proxy->EchoRectF(input, &output);
   EXPECT_EQ(input, output);
 }
 

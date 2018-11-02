@@ -48,6 +48,7 @@
 #include "components/policy/core/common/schema.h"
 #include "components/policy/policy_constants.h"
 #include "components/prefs/pref_value_map.h"
+#include "components/safe_browsing/common/safe_browsing_prefs.h"
 #include "components/search_engines/default_search_policy_handler.h"
 #include "components/signin/core/common/signin_pref_names.h"
 #include "components/spellcheck/spellcheck_build_features.h"
@@ -138,6 +139,12 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kSafeBrowsingEnabled,
     prefs::kSafeBrowsingEnabled,
     base::Value::Type::BOOLEAN },
+  { key::kSafeBrowsingForTrustedSourcesEnabled,
+    prefs::kSafeBrowsingForTrustedSourcesEnabled,
+    base::Value::Type::BOOLEAN },
+  { key::kDownloadRestrictions,
+    prefs::kDownloadRestrictions,
+    base::Value::Type::INTEGER },
   { key::kForceGoogleSafeSearch,
     prefs::kForceGoogleSafeSearch,
     base::Value::Type::BOOLEAN },
@@ -578,6 +585,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
   { key::kNativePrinters,
     prefs::kRecommendedNativePrinters,
     base::Value::Type::LIST },
+  { key::kEcryptfsMigrationStrategy,
+    prefs::kEcryptfsMigrationStrategy,
+    base::Value::Type::INTEGER },
 #endif  // defined(OS_CHROMEOS)
 
 // Metrics reporting is controlled by a platform specific policy for ChromeOS
@@ -612,6 +622,9 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     base::Value::Type::BOOLEAN },
   { key::kBrowserAddPersonEnabled,
     prefs::kBrowserAddPersonEnabled,
+    base::Value::Type::BOOLEAN },
+  { key::kPrintPreviewUseSystemDefaultPrinter,
+    prefs::kPrintPreviewUseSystemDefaultPrinter,
     base::Value::Type::BOOLEAN },
 #endif  // !defined(OS_CHROMEOS) && !defined(OS_ANDROID)
 
@@ -671,7 +684,7 @@ const PolicyToPreferenceMapEntry kSimplePolicyMap[] = {
     syncer::prefs::kEnableLocalSyncBackend,
     base::Value::Type::BOOLEAN },
 
-  { key::kNetworkTimeQueriesEnabled,
+  { key::kBrowserNetworkTimeQueriesEnabled,
     network_time::prefs::kNetworkTimeQueriesEnabled,
     base::Value::Type::BOOLEAN },
 };
@@ -1038,6 +1051,9 @@ std::unique_ptr<ConfigurationPolicyHandlerList> BuildHandlerList(
   handlers->AddHandler(
       base::MakeUnique<chromeos::KeyPermissionsPolicyHandler>(chrome_schema));
   handlers->AddHandler(base::WrapUnique(new DefaultGeolocationPolicyHandler()));
+  handlers->AddHandler(base::MakeUnique<extensions::ExtensionListPolicyHandler>(
+      key::kNoteTakingAppsLockScreenWhitelist,
+      prefs::kNoteTakingAppsLockScreenWhitelist, false /*allow_wildcards*/));
 #endif  // defined(OS_CHROMEOS)
 
 #if BUILDFLAG(ENABLE_PLUGINS)

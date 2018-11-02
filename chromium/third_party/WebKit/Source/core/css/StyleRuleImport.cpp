@@ -28,6 +28,7 @@
 #include "platform/loader/fetch/FetchInitiatorTypeNames.h"
 #include "platform/loader/fetch/FetchParameters.h"
 #include "platform/loader/fetch/ResourceFetcher.h"
+#include "platform/loader/fetch/ResourceLoaderOptions.h"
 
 namespace blink {
 
@@ -68,7 +69,7 @@ void StyleRuleImport::SetCSSStyleSheet(
     const String& href,
     const KURL& base_url,
     ReferrerPolicy referrer_policy,
-    const String& charset,
+    const WTF::TextEncoding& charset,
     const CSSStyleSheetResource* cached_style_sheet) {
   if (style_sheet_)
     style_sheet_->ClearOwnerRule();
@@ -130,8 +131,10 @@ void StyleRuleImport::RequestStyleSheet() {
     root_sheet = sheet;
   }
 
-  FetchParameters params(ResourceRequest(abs_url), FetchInitiatorTypeNames::css,
-                         parent_style_sheet_->Charset());
+  ResourceLoaderOptions options;
+  options.initiator_info.name = FetchInitiatorTypeNames::css;
+  FetchParameters params(ResourceRequest(abs_url), options);
+  params.SetCharset(parent_style_sheet_->Charset());
   resource_ = CSSStyleSheetResource::Fetch(params, fetcher);
   if (resource_) {
     // if the import rule is issued dynamically, the sheet may be

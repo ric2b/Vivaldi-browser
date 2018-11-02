@@ -17,10 +17,12 @@
 #include "base/metrics/histogram.h"
 #include "base/metrics/histogram_base.h"
 #include "base/metrics/histogram_samples.h"
+#include "base/metrics/metrics_hashes.h"
 #include "base/metrics/persistent_sample_map.h"
 #include "base/metrics/sparse_histogram.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/pickle.h"
+#include "base/strings/stringprintf.h"
 #include "base/synchronization/lock.h"
 
 namespace base {
@@ -279,23 +281,29 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::GetHistogram(
   // count data (while these must reference the persistent counts) and always
   // add it to the local list of known histograms (while these may be simple
   // references to histograms in other processes).
-  PersistentHistogramData* histogram_data =
+  PersistentHistogramData* data =
       memory_allocator_->GetAsObject<PersistentHistogramData>(ref);
-  size_t length = memory_allocator_->GetAllocSize(ref);
+  const size_t length = memory_allocator_->GetAllocSize(ref);
 
-  // Check that metadata is reasonable: name is NUL terminated and non-empty,
+  // Check that metadata is reasonable: name is null-terminated and non-empty,
   // ID fields have been loaded with a hash of the name (0 is considered
   // unset/invalid).
-  if (!histogram_data ||
-      reinterpret_cast<char*>(histogram_data)[length - 1] != '\0' ||
-      histogram_data->name[0] == '\0' ||
-      histogram_data->samples_metadata.id == 0 ||
-      histogram_data->logged_metadata.id == 0) {
+  if (!data || data->name[0] == '\0' ||
+      reinterpret_cast<char*>(data)[length - 1] != '\0' ||
+      data->samples_metadata.id == 0 || data->logged_metadata.id == 0 ||
+      // Note: Sparse histograms use |id + 1| in |logged_metadata|.
+      (data->logged_metadata.id != data->samples_metadata.id &&
+       data->logged_metadata.id != data->samples_metadata.id + 1) ||
+      // Most non-matching values happen due to truncated names. Ideally, we
+      // could just verify the name length based on the overall alloc length,
+      // but that doesn't work because the allocated block may have been
+      // aligned to the next boundary value.
+      HashMetricName(data->name) != data->samples_metadata.id) {
     RecordCreateHistogramResult(CREATE_HISTOGRAM_INVALID_METADATA);
     NOTREACHED();
     return nullptr;
   }
-  return CreateHistogram(histogram_data);
+  return CreateHistogram(data);
 }
 
 std::unique_ptr<HistogramBase> PersistentHistogramAllocator::AllocateHistogram(
@@ -682,6 +690,7 @@ std::unique_ptr<HistogramBase> PersistentHistogramAllocator::CreateHistogram(
     RecordCreateHistogramResult(CREATE_HISTOGRAM_UNKNOWN_TYPE);
   }
 
+  histogram->ValidateHistogramContents();
   return histogram;
 }
 
@@ -819,19 +828,43 @@ void GlobalHistogramAllocator::ConstructFilePaths(const FilePath& dir,
                                                   FilePath* out_base_path,
                                                   FilePath* out_active_path,
                                                   FilePath* out_spare_path) {
-  if (out_base_path) {
-    *out_base_path = dir.AppendASCII(name).AddExtension(
-        PersistentMemoryAllocator::kFileExtension);
-  }
+  if (out_base_path)
+    *out_base_path = MakeMetricsFilePath(dir, name);
+
   if (out_active_path) {
     *out_active_path =
-        dir.AppendASCII(name.as_string() + std::string("-active"))
-            .AddExtension(PersistentMemoryAllocator::kFileExtension);
+        MakeMetricsFilePath(dir, name.as_string().append("-active"));
   }
+
   if (out_spare_path) {
     *out_spare_path =
-        dir.AppendASCII(name.as_string() + std::string("-spare"))
-            .AddExtension(PersistentMemoryAllocator::kFileExtension);
+        MakeMetricsFilePath(dir, name.as_string().append("-spare"));
+  }
+}
+
+// static
+void GlobalHistogramAllocator::ConstructFilePathsForUploadDir(
+    const FilePath& active_dir,
+    const FilePath& upload_dir,
+    const std::string& name,
+    FilePath* out_upload_path,
+    FilePath* out_active_path,
+    FilePath* out_spare_path) {
+  if (out_upload_path) {
+    std::string name_stamp =
+        StringPrintf("%s-%X", name.c_str(),
+                     static_cast<unsigned int>(Time::Now().ToTimeT()));
+    *out_upload_path = MakeMetricsFilePath(upload_dir, name_stamp);
+  }
+
+  if (out_active_path) {
+    *out_active_path =
+        MakeMetricsFilePath(active_dir, name + std::string("-active"));
+  }
+
+  if (out_spare_path) {
+    *out_spare_path =
+        MakeMetricsFilePath(active_dir, name + std::string("-spare"));
   }
 }
 
@@ -1019,6 +1052,13 @@ void GlobalHistogramAllocator::ImportHistogramsToStatisticsRecorder() {
       break;
     StatisticsRecorder::RegisterOrDeleteDuplicate(histogram.release());
   }
+}
+
+// static
+FilePath GlobalHistogramAllocator::MakeMetricsFilePath(const FilePath& dir,
+                                                       StringPiece name) {
+  return dir.AppendASCII(name).AddExtension(
+      PersistentMemoryAllocator::kFileExtension);
 }
 
 }  // namespace base

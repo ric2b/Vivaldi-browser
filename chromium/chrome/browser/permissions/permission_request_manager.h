@@ -5,8 +5,8 @@
 #ifndef CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 #define CHROME_BROWSER_PERMISSIONS_PERMISSION_REQUEST_MANAGER_H_
 
+#include <deque>
 #include <unordered_map>
-#include <vector>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
@@ -15,6 +15,7 @@
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
 
+enum class PermissionAction;
 class PermissionRequest;
 
 namespace safe_browsing {
@@ -77,6 +78,7 @@ class PermissionRequestManager
   // Temporarily hides the bubble, and destroys the prompt UI surface. Any
   // existing requests will be reshown when DisplayPendingRequests is called
   // (e.g. when switching tabs away and back to a page with a prompt).
+  // TODO(timloh): Rename this to something more fitting (e.g. TabSwitchedAway).
   void HideBubble();
 
   // Will show a permission bubble if there is a pending permission request on
@@ -117,7 +119,6 @@ class PermissionRequestManager
   // lot of friends.
   friend class GeolocationBrowserTest;
   friend class GeolocationPermissionContextTests;
-  friend class MockPermissionPrompt;
   friend class MockPermissionPromptFactory;
   friend class PermissionContextBaseTests;
   friend class PermissionRequestManagerTest;
@@ -137,8 +138,6 @@ class PermissionRequestManager
 
   // PermissionPrompt::Delegate:
   const std::vector<PermissionRequest*>& Requests() override;
-  const std::vector<bool>& AcceptStates() override;
-  void ToggleAccept(int request_index, bool new_value) override;
   void TogglePersist(bool new_value) override;
   void Accept() override;
   void Deny() override;
@@ -154,13 +153,17 @@ class PermissionRequestManager
   // bubble after switching tabs away and back.
   void ShowBubble();
 
-  // Finalize the pending permissions request.
-  void FinalizeBubble();
+  // Delete the view object
+  void DeleteBubble();
 
-  // Cancel any pending requests. This is called if the WebContents
-  // on which permissions calls are pending is destroyed or navigated away
-  // from the requesting page.
-  void CancelPendingQueues();
+  // Delete the view object, finalize requests, asynchronously show a queued
+  // request if present.
+  void FinalizeBubble(PermissionAction permission_action);
+
+  // Cancel all pending or active requests and destroy the PermissionPrompt if
+  // one exists. This is called if the WebContents is destroyed or navigates its
+  // main frame.
+  void CleanUpRequests();
 
   // Searches |requests_|, |queued_requests_| and |queued_frame_requests_| - but
   // *not* |duplicate_requests_| - for a request matching |request|, and returns
@@ -184,24 +187,23 @@ class PermissionRequestManager
   // Factory to be used to create views when needed.
   PermissionPrompt::Factory view_factory_;
 
-  // The UI surface to be used to display the permissions requests.
+  // The UI surface for an active permission prompt if we're displaying one.
   std::unique_ptr<PermissionPrompt> view_;
+  // We only show prompts when both of these are true. On Desktop, we hide any
+  // active prompt on tab switching, while on Android we let the infobar system
+  // handle it.
+  bool main_frame_has_fully_loaded_;
+  bool tab_can_show_prompts_;
 
   std::vector<PermissionRequest*> requests_;
-  std::vector<PermissionRequest*> queued_requests_;
-  std::vector<PermissionRequest*> queued_frame_requests_;
+  std::deque<PermissionRequest*> queued_requests_;
   // Maps from the first request of a kind to subsequent requests that were
   // duped against it.
   std::unordered_multimap<PermissionRequest*, PermissionRequest*>
       duplicate_requests_;
 
-  bool main_frame_has_fully_loaded_;
-
   // Whether the response to each request should be persisted.
   bool persist_;
-
-  // Whether each of the requests in |requests_| is accepted by the user.
-  std::vector<bool> accept_states_;
 
   base::ObserverList<Observer> observer_list_;
   AutoResponseType auto_response_for_test_;

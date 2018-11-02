@@ -28,8 +28,9 @@
 
 #include "core/events/EventDispatcher.h"
 #include "core/frame/FrameConsole.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalDOMWindow.h"
+#include "core/frame/LocalFrameView.h"
+#include "core/frame/UseCounter.h"
 #include "core/html/HTMLElement.h"
 #include "core/input/InputDeviceCapabilities.h"
 #include "core/inspector/ConsoleMessage.h"
@@ -178,7 +179,7 @@ void LogTouchTargetHistogram(EventTarget* event_target,
   }
 
   if (document) {
-    FrameView* view = document->View();
+    LocalFrameView* view = document->View();
     if (view && view->IsScrollable())
       result += kTouchTargetHistogramScrollableDocumentOffset;
   }
@@ -266,10 +267,10 @@ void TouchEvent::preventDefault() {
     case PassiveMode::kNotPassive:
     case PassiveMode::kNotPassiveDefault:
       if (!cancelable()) {
-        if (view() && view()->GetFrame()) {
+        if (view() && view()->IsLocalDOMWindow() && view()->GetFrame()) {
           UseCounter::Count(
-              view()->GetFrame(),
-              UseCounter::kUncancelableTouchEventPreventDefaulted);
+              ToLocalFrame(view()->GetFrame()),
+              WebFeature::kUncancelableTouchEventPreventDefaulted);
         }
 
         if (native_event_ &&
@@ -277,10 +278,10 @@ void TouchEvent::preventDefault() {
                 WebInputEvent::
                     kListenersForcedNonBlockingDueToMainThreadResponsiveness) {
           // Non blocking due to main thread responsiveness.
-          if (view() && view()->GetFrame()) {
+          if (view() && view()->IsLocalDOMWindow() && view()->GetFrame()) {
             UseCounter::Count(
-                view()->GetFrame(),
-                UseCounter::
+                ToLocalFrame(view()->GetFrame()),
+                WebFeature::
                     kUncancelableTouchEventDueToMainThreadResponsivenessPreventDefaulted);
           }
           message_source = kInterventionMessageSource;
@@ -323,17 +324,17 @@ void TouchEvent::preventDefault() {
 
   if ((type() == EventTypeNames::touchstart ||
        type() == EventTypeNames::touchmove) &&
-      view() && view()->GetFrame() &&
+      view() && view()->IsLocalDOMWindow() && view()->GetFrame() &&
       current_touch_action_ == TouchAction::kTouchActionAuto) {
     switch (HandlingPassive()) {
       case PassiveMode::kNotPassiveDefault:
-        UseCounter::Count(view()->GetFrame(),
-                          UseCounter::kTouchEventPreventedNoTouchAction);
+        UseCounter::Count(ToLocalFrame(view()->GetFrame()),
+                          WebFeature::kTouchEventPreventedNoTouchAction);
         break;
       case PassiveMode::kPassiveForcedDocumentLevel:
         UseCounter::Count(
-            view()->GetFrame(),
-            UseCounter::kTouchEventPreventedForcedDocumentPassiveNoTouchAction);
+            ToLocalFrame(view()->GetFrame()),
+            WebFeature::kTouchEventPreventedForcedDocumentPassiveNoTouchAction);
         break;
       default:
         break;

@@ -11,9 +11,9 @@
 #include <vector>
 
 #include "base/callback_forward.h"
-#include "components/payments/mojom/payment_app.mojom.h"
 #include "content/common/content_export.h"
-#include "content/public/browser/stored_payment_instrument.h"
+#include "content/public/browser/stored_payment_app.h"
+#include "third_party/WebKit/public/platform/modules/payments/payment_app.mojom.h"
 
 namespace content {
 
@@ -32,12 +32,10 @@ class CONTENT_EXPORT PaymentAppProvider {
   // Please see: content/browser/payments/payment_app_provider_impl.cc
   static PaymentAppProvider* GetInstance();
 
-  using Instruments = std::vector<std::unique_ptr<StoredPaymentInstrument>>;
-  using PaymentApps = std::map<GURL, Instruments>;
-
+  using PaymentApps = std::map<GURL, std::unique_ptr<StoredPaymentApp>>;
   using GetAllPaymentAppsCallback = base::OnceCallback<void(PaymentApps)>;
   using InvokePaymentAppCallback =
-      base::Callback<void(payments::mojom::PaymentAppResponsePtr)>;
+      base::Callback<void(payments::mojom::PaymentHandlerResponsePtr)>;
 
   // Should be accessed only on the UI thread.
   virtual void GetAllPaymentApps(BrowserContext* browser_context,
@@ -45,7 +43,7 @@ class CONTENT_EXPORT PaymentAppProvider {
   virtual void InvokePaymentApp(
       BrowserContext* browser_context,
       int64_t registration_id,
-      payments::mojom::PaymentAppRequestPtr app_request,
+      payments::mojom::PaymentRequestEventDataPtr event_data,
       const InvokePaymentAppCallback& callback) = 0;
 
  protected:

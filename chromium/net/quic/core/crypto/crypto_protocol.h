@@ -35,7 +35,8 @@ const QuicTag kSREJ = TAG('S', 'R', 'E', 'J');   // Stateless reject
 const QuicTag kCETV = TAG('C', 'E', 'T', 'V');   // Client encrypted tag-value
                                                  // pairs
 const QuicTag kPRST = TAG('P', 'R', 'S', 'T');   // Public reset
-const QuicTag kSCUP = TAG('S', 'C', 'U', 'P');   // Server config update.
+const QuicTag kSCUP = TAG('S', 'C', 'U', 'P');   // Server config update
+const QuicTag kALPN = TAG('A', 'L', 'P', 'N');   // Application-layer protocol
 
 // Key exchange methods
 const QuicTag kP256 = TAG('P', '2', '5', '6');   // ECDH, Curve P-256
@@ -81,6 +82,7 @@ const QuicTag kIFWA = TAG('I', 'F', 'W', 'a');   // Set initial size
 const QuicTag kTBBR = TAG('T', 'B', 'B', 'R');   // Reduced Buffer Bloat TCP
 const QuicTag k1RTT = TAG('1', 'R', 'T', 'T');   // STARTUP in BBR for 1 RTT
 const QuicTag k2RTT = TAG('2', 'R', 'T', 'T');   // STARTUP in BBR for 2 RTTs
+const QuicTag kBBRR = TAG('B', 'B', 'R', 'R');   // Rate-based recovery in BBR
 const QuicTag kRENO = TAG('R', 'E', 'N', 'O');   // Reno Congestion Control
 const QuicTag kTPCC = TAG('P', 'C', 'C', '\0');  // Performance-Oriented
                                                  // Congestion Control

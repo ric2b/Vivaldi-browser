@@ -46,13 +46,14 @@ class UserBoardScreenHandler : public BaseScreenHandler, public UserBoardView {
                                const std::string& default_locale,
                                bool multiple_recommended_locales) override;
   void ShowBannerMessage(const base::string16& message) override;
-  void ShowUserPodCustomIcon(const AccountId& account_id,
-                             const base::DictionaryValue& icon) override;
-  void HideUserPodCustomIcon(const AccountId& account_id) override;
-  void SetAuthType(
+  void ShowUserPodCustomIcon(
       const AccountId& account_id,
-      proximity_auth::ScreenlockBridge::LockHandler::AuthType auth_type,
-      const base::string16& initial_value) override;
+      const proximity_auth::ScreenlockBridge::UserPodCustomIconOptions&
+          icon_options) override;
+  void HideUserPodCustomIcon(const AccountId& account_id) override;
+  void SetAuthType(const AccountId& account_id,
+                   proximity_auth::mojom::AuthType auth_type,
+                   const base::string16& initial_value) override;
   void Bind(UserSelectionScreen* screen) override;
   void Unbind() override;
   base::WeakPtr<UserBoardView> GetWeakPtr() override;

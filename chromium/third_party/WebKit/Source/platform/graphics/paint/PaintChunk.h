@@ -9,6 +9,7 @@
 #include "platform/geometry/FloatRect.h"
 #include "platform/graphics/paint/DisplayItem.h"
 #include "platform/graphics/paint/PaintChunkProperties.h"
+#include "platform/graphics/paint/RasterInvalidationTracking.h"
 #include "platform/wtf/Allocator.h"
 #include "platform/wtf/Optional.h"
 #include "platform/wtf/Vector.h"
@@ -23,18 +24,27 @@ namespace blink {
 // This is a Slimming Paint v2 class.
 struct PaintChunk {
   DISALLOW_NEW_EXCEPT_PLACEMENT_NEW();
-  PaintChunk() : begin_index(0), end_index(0), known_to_be_opaque(false) {}
+
+  using Id = DisplayItem::Id;
+
+  enum Cacheable {
+    kCacheable,
+    kUncacheable,
+  };
+
   PaintChunk(size_t begin,
              size_t end,
-             const DisplayItem::Id* chunk_id,
-             const PaintChunkProperties& props)
+             const Id& id,
+             const PaintChunkProperties& props,
+             Cacheable cacheable = kCacheable)
       : begin_index(begin),
         end_index(end),
+        id(id),
         properties(props),
-        known_to_be_opaque(false) {
-    if (chunk_id)
-      id.emplace(*chunk_id);
-  }
+        outset_for_raster_effects(0),
+        known_to_be_opaque(false),
+        is_cacheable(cacheable == kCacheable),
+        client_is_just_created(id.client.IsJustCreated()) {}
 
   size_t size() const {
     DCHECK_GE(end_index, begin_index);
@@ -44,19 +54,20 @@ struct PaintChunk {
   // Check if a new PaintChunk (this) created in the latest paint matches an old
   // PaintChunk created in the previous paint.
   bool Matches(const PaintChunk& old) const {
-    // A PaintChunk without an id doesn't match any other PaintChunks.
-    if (!id || !old.id)
+    return old.is_cacheable && Matches(old.id);
+  }
+
+  bool Matches(const Id& other_id) const {
+    if (!is_cacheable || id != other_id)
       return false;
-    if (*id != *old.id)
-      return false;
-#if CHECK_DISPLAY_ITEM_CLIENT_ALIVENESS
-    CHECK(id->client.IsAlive());
+#if DCHECK_IS_ON()
+    DCHECK(id.client.IsAlive());
 #endif
     // A chunk whose client is just created should not match any cached chunk,
     // even if it's id equals the old chunk's id (which may happen if this
     // chunk's client is just created at the same address of the old chunk's
     // deleted client).
-    return !id->client.IsJustCreated();
+    return !client_is_just_created;
   }
 
   // Index of the first drawing in this chunk.
@@ -73,8 +84,7 @@ struct PaintChunk {
   // PaintController is skipping the cache, normally because display items can't
   // be uniquely identified), |id| is nullopt so that the chunk won't match any
   // other chunk.
-  using Id = DisplayItem::Id;
-  Optional<Id> id;
+  Id id;
 
   // The paint properties which apply to this chunk.
   PaintChunkProperties properties;
@@ -83,18 +93,33 @@ struct PaintChunk {
   // the containing transform node.
   FloatRect bounds;
 
-  // True if the bounds are filled entirely with opaque contents.
-  bool known_to_be_opaque;
+  // Some raster effects can exceed |bounds| in the rasterization space. This
+  // is the maximum DisplayItemClient::VisualRectOutsetForRasterEffects() of
+  // all clients of items in this chunk.
+  float outset_for_raster_effects;
 
-  // SPv2 only. Rectangles that need to be re-rasterized in this chunk, in the
-  // coordinate space of the containing transform node.
-  Vector<FloatRect> raster_invalidation_rects;
+  // True if the bounds are filled entirely with opaque contents.
+  bool known_to_be_opaque : 1;
+
+  bool is_cacheable : 1;
+
+  // TODO(wangxianzhu): The following fields are 'mutable' for
+  // ContentLayerClientImpl to clear them, which will be unnecessary if we don't
+  // call PaintArtifactCompositor::Update() when paint artifact is unchanged.
+  mutable bool client_is_just_created : 1;
+
+  // Rectangles that need to be re-rasterized in this chunk, in the coordinate
+  // space of the containing transform node.
+  mutable Vector<FloatRect> raster_invalidation_rects;
+
+  mutable Vector<RasterInvalidationInfo> raster_invalidation_tracking;
 };
 
 inline bool operator==(const PaintChunk& a, const PaintChunk& b) {
   return a.begin_index == b.begin_index && a.end_index == b.end_index &&
          a.id == b.id && a.properties == b.properties && a.bounds == b.bounds &&
          a.known_to_be_opaque == b.known_to_be_opaque &&
+         a.is_cacheable == b.is_cacheable &&
          a.raster_invalidation_rects == b.raster_invalidation_rects;
 }
 

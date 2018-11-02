@@ -25,6 +25,7 @@
 
 #include <memory>
 #include "core/CoreExport.h"
+#include "core/css/parser/CSSParserMode.h"
 #include "core/dom/QualifiedName.h"
 #include "core/style/ComputedStyleConstants.h"
 #include "platform/wtf/RefCounted.h"
@@ -238,7 +239,8 @@ class CORE_EXPORT CSSSelector {
   PseudoType GetPseudoType() const {
     return static_cast<PseudoType>(pseudo_type_);
   }
-  void UpdatePseudoType(const AtomicString&, bool has_arguments);
+  void UpdatePseudoType(const AtomicString&, bool has_arguments, CSSParserMode);
+  void UpdatePseudoPage(const AtomicString&);
 
   static PseudoType ParsePseudoType(const AtomicString&, bool has_arguments);
   static PseudoId ParsePseudoId(const String&);
@@ -299,7 +301,7 @@ class CORE_EXPORT CSSSelector {
     return pseudo_type_ == kPseudoHost || pseudo_type_ == kPseudoHostContext;
   }
   bool IsUserActionPseudoClass() const;
-  bool IsInsertionPointCrossing() const {
+  bool IsV0InsertionPointCrossing() const {
     return pseudo_type_ == kPseudoHostContext || pseudo_type_ == kPseudoContent;
   }
   bool IsIdClassOrAttributeSelector() const;

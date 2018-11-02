@@ -17,15 +17,15 @@ namespace blink {
 class WebGestureEvent;
 }
 
-namespace cc {
-class SurfaceId;
-class SurfaceInfo;
-struct SurfaceSequence;
-}
-
 namespace IPC {
 class Message;
 }
+
+namespace viz {
+class SurfaceId;
+class SurfaceInfo;
+struct SurfaceSequence;
+}  // namespace viz
 
 namespace content {
 class RenderFrameProxyHost;
@@ -85,27 +85,27 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
 
   void RenderProcessGone();
 
-  virtual void SetChildFrameSurface(const cc::SurfaceInfo& surface_info,
-                                    const cc::SurfaceSequence& sequence);
+  virtual void SetChildFrameSurface(const viz::SurfaceInfo& surface_info,
+                                    const viz::SurfaceSequence& sequence);
 
   gfx::Rect ChildFrameRect();
   void UpdateCursor(const WebCursor& cursor);
   gfx::Point TransformPointToRootCoordSpace(const gfx::Point& point,
-                                            const cc::SurfaceId& surface_id);
+                                            const viz::SurfaceId& surface_id);
   // TransformPointToLocalCoordSpace() can only transform points between
   // surfaces where one is embedded (not necessarily directly) within the
   // other, and will return false if this is not the case. For points that can
   // be in sibling surfaces, they must first be converted to the root
   // surface's coordinate space.
   bool TransformPointToLocalCoordSpace(const gfx::Point& point,
-                                       const cc::SurfaceId& original_surface,
-                                       const cc::SurfaceId& local_surface_id,
+                                       const viz::SurfaceId& original_surface,
+                                       const viz::SurfaceId& local_surface_id,
                                        gfx::Point* transformed_point);
   // Returns false if |target_view| and |view_| do not have the same root
   // RenderWidgetHostView.
   bool TransformPointToCoordSpaceForView(const gfx::Point& point,
                                          RenderWidgetHostViewBase* target_view,
-                                         const cc::SurfaceId& local_surface_id,
+                                         const viz::SurfaceId& local_surface_id,
                                          gfx::Point* transformed_point);
 
   // Pass acked touch events to the root view for gesture processing.
@@ -137,6 +137,8 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
     return viewport_intersection_rect_;
   }
 
+  bool is_inert() const { return is_inert_; }
+
   // Exposed for tests.
   RenderWidgetHostViewBase* GetRootRenderWidgetHostViewForTesting() {
     return GetRootRenderWidgetHostView();
@@ -149,9 +151,10 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
   void OnFrameRectChanged(const gfx::Rect& frame_rect);
   void OnUpdateViewportIntersection(const gfx::Rect& viewport_intersection);
   void OnVisibilityChanged(bool visible);
-  void OnSatisfySequence(const cc::SurfaceSequence& sequence);
-  void OnRequireSequence(const cc::SurfaceId& id,
-                         const cc::SurfaceSequence& sequence);
+  void OnSetIsInert(bool);
+  void OnSatisfySequence(const viz::SurfaceSequence& sequence);
+  void OnRequireSequence(const viz::SurfaceId& id,
+                         const viz::SurfaceSequence& sequence);
 
   void SetRect(const gfx::Rect& frame_rect);
 
@@ -164,6 +167,7 @@ class CONTENT_EXPORT CrossProcessFrameConnector {
 
   gfx::Rect child_frame_rect_;
   gfx::Rect viewport_intersection_rect_;
+  bool is_inert_ = false;
 
   bool is_scroll_bubbling_;
 };

@@ -1,0 +1,56 @@
+# Copyright 2017 The Chromium Authors. All rights reserved.
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+import("//build/config/c++/c++.gni")
+
+config("c++flags") {
+  if (use_custom_libcxx) {
+    prefix = "//buildtools/third_party"
+    include = "trunk/include"
+    if (!is_clang) {
+      # Gcc has a built-in abs() definition with default visibility.
+      # If it was not disabled, it would conflict with libc++'s abs()
+      # with hidden visibility.
+      cflags = [ "-fno-builtin-abs" ]
+    }
+    cflags_cc = [
+      "-nostdinc++",
+      "-isystem" + rebase_path("$prefix/libc++/$include", root_build_dir),
+      "-isystem" + rebase_path("$prefix/libc++abi/$include", root_build_dir),
+    ]
+    if (is_linux && current_cpu == "arm") {
+      cflags_c = [ "-isystem" +
+                   rebase_path("$prefix/libunwind/$include", root_build_dir) ]
+      cflags_cc += [ "-isystem" +
+                     rebase_path("$prefix/libunwind/$include", root_build_dir) ]
+    }
+
+    # Make sure we don't link against libc++ or libstdc++.
+    ldflags = [ "-nodefaultlibs" ]
+
+    # Unfortunately, there's no way to disable linking against just
+    # libc++ (besides using clang instead of clang++); -nodefaultlibs
+    # removes all of the default libraries, so add back the ones that we
+    # need.
+    libs = [
+      "c",
+      "m",
+    ]
+
+    if (!is_mac) {
+      libs += [
+        "gcc_s",
+        "rt",
+      ]
+    }
+
+    if (is_mac && using_sanitizer) {
+      lib_dirs = [ "//third_party/llvm-build/Release+Asserts/lib/clang/$clang_version/lib/darwin" ]
+
+      if (is_asan) {
+        libs += [ "clang_rt.asan_osx_dynamic" ]
+      }
+    }
+  }
+}

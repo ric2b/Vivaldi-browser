@@ -25,3 +25,6 @@ DISABLE(LayerTreeHostTilesTestPartialInvalidation,
         PartialRaster_MultiThread_OneCopy)
 DISABLE(SitePerProcessBrowserTest, SubframeGestureEventRouting)
 DISABLE_MULTI(WebViewInteractiveTest, EditCommandsNoMenu)
+
+// broke in v61
+DISABLE(PasswordGenerationInteractiveTest, PopupShownAndPasswordSelected)

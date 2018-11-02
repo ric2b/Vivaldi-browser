@@ -38,12 +38,6 @@ DEFINE_OWNED_UI_CLASS_PROPERTY_KEY(ash::ScreenRotationAnimator,
                                    kScreenRotationAnimatorKey,
                                    nullptr);
 
-aura::Window* GetRootWindow(int64_t display_id) {
-  return ash::Shell::Get()
-      ->window_tree_host_manager()
-      ->GetRootWindowForDisplayId(display_id);
-}
-
 }  // namespace
 
 namespace ash {
@@ -116,13 +110,14 @@ void DisplayConfigurationController::SetMirrorMode(bool mirror) {
 void DisplayConfigurationController::SetDisplayRotation(
     int64_t display_id,
     display::Display::Rotation rotation,
-    display::Display::RotationSource source) {
+    display::Display::RotationSource source,
+    DisplayConfigurationController::RotationAnimation mode) {
   if (display_manager_->IsDisplayIdValid(display_id)) {
     if (GetTargetRotation(display_id) == rotation)
       return;
     ScreenRotationAnimator* screen_rotation_animator =
         GetScreenRotationAnimatorForDisplay(display_id);
-    screen_rotation_animator->Rotate(rotation, source);
+    screen_rotation_animator->Rotate(rotation, source, mode);
   } else {
     display_manager_->SetDisplayRotation(display_id, rotation, source);
   }
@@ -202,7 +197,7 @@ void DisplayConfigurationController::SetPrimaryDisplayIdImpl(
 ScreenRotationAnimator*
 DisplayConfigurationController::GetScreenRotationAnimatorForDisplay(
     int64_t display_id) {
-  aura::Window* root_window = GetRootWindow(display_id);
+  aura::Window* root_window = Shell::GetRootWindowForDisplayId(display_id);
   ScreenRotationAnimator* animator =
       root_window->GetProperty(kScreenRotationAnimatorKey);
   if (!animator) {

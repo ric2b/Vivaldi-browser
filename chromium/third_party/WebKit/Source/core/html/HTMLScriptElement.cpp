@@ -44,10 +44,11 @@ inline HTMLScriptElement::HTMLScriptElement(Document& document,
                                             bool was_inserted_by_parser,
                                             bool already_started,
                                             bool created_during_document_write)
-    : HTMLElement(scriptTag, document) {
-  InitializeScriptLoader(was_inserted_by_parser, already_started,
-                         created_during_document_write);
-}
+    : HTMLElement(scriptTag, document),
+      loader_(this,
+              InitializeScriptLoader(was_inserted_by_parser,
+                                     already_started,
+                                     created_during_document_write)) {}
 
 HTMLScriptElement* HTMLScriptElement::Create(
     Document& document,
@@ -99,9 +100,10 @@ Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
   ScriptType script_type = ScriptType::kClassic;
   if (insertion_point->isConnected() && HasSourceAttribute() &&
       !Loader()->IsScriptTypeSupported(
-          ScriptLoader::kDisallowLegacyTypeInTypeAttribute, script_type))
+          ScriptLoader::kDisallowLegacyTypeInTypeAttribute, script_type)) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kScriptElementWithInvalidTypeHasSrc);
+                      WebFeature::kScriptElementWithInvalidTypeHasSrc);
+  }
   HTMLElement::InsertedInto(insertion_point);
   LogAddElementIfIsolatedWorldAndInDocument("script", srcAttr);
 
@@ -169,10 +171,6 @@ String HTMLScriptElement::TextFromChildren() {
   return Element::TextFromChildren();
 }
 
-String HTMLScriptElement::TextContent() const {
-  return Element::textContent();
-}
-
 bool HTMLScriptElement::AsyncAttributeValue() const {
   return FastHasAttribute(asyncAttr);
 }
@@ -201,9 +199,11 @@ const AtomicString& HTMLScriptElement::GetNonceForElement() const {
 bool HTMLScriptElement::AllowInlineScriptForCSP(
     const AtomicString& nonce,
     const WTF::OrdinalNumber& context_line,
-    const String& script_content) {
+    const String& script_content,
+    ContentSecurityPolicy::InlineType inline_type) {
   return GetDocument().GetContentSecurityPolicy()->AllowInlineScript(
-      this, GetDocument().Url(), nonce, context_line, script_content);
+      this, GetDocument().Url(), nonce, context_line, script_content,
+      inline_type);
 }
 
 AtomicString HTMLScriptElement::InitiatorName() const {
@@ -235,8 +235,14 @@ Element* HTMLScriptElement::CloneElementWithoutAttributesAndChildren() {
 }
 
 DEFINE_TRACE(HTMLScriptElement) {
+  visitor->Trace(loader_);
   HTMLElement::Trace(visitor);
   ScriptElementBase::Trace(visitor);
+}
+
+DEFINE_TRACE_WRAPPERS(HTMLScriptElement) {
+  visitor->TraceWrappers(loader_);
+  HTMLElement::TraceWrappers(visitor);
 }
 
 }  // namespace blink

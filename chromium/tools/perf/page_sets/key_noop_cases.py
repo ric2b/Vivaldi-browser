@@ -12,7 +12,8 @@ class NoOpPage(page_module.Page):
     super(NoOpPage, self).__init__(
         url=url,
         page_set=page_set,
-        shared_page_state_class=shared_page_state.SharedMobilePageState)
+        shared_page_state_class=shared_page_state.SharedMobilePageState,
+        name=url.split('/')[-1])
 
   def RunNavigateSteps(self, action_runner):
     super(NoOpPage, self).RunNavigateSteps(action_runner)
@@ -59,3 +60,8 @@ class KeyNoOpCasesPageSet(story.StorySet):
     # Why: Feeding a stream of touch events to a no-op handler should be cheap.
     self.AddStory(NoOpTouchScrollPage(
         'file://key_noop_cases/no_op_touch_handler.html', self))
+
+
+class KeyNoOpCasesStoryExpectations(story.expectations.StoryExpectations):
+  def SetExpectations(self):
+    pass

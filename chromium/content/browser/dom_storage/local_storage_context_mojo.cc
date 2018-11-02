@@ -4,10 +4,16 @@
 
 #include "content/browser/dom_storage/local_storage_context_mojo.h"
 
+#include <inttypes.h>
+#include <cctype>  // for std::isalnum
 #include "base/memory/ptr_util.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/single_thread_task_runner.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/stringprintf.h"
+#include "base/sys_info.h"
+#include "base/trace_event/memory_dump_manager.h"
 #include "components/leveldb/public/cpp/util.h"
 #include "components/leveldb/public/interfaces/leveldb.mojom.h"
 #include "content/browser/dom_storage/dom_storage_area.h"
@@ -47,16 +53,29 @@ const uint8_t kMetaPrefix[] = {'M', 'E', 'T', 'A', ':'};
 const int64_t kMinSchemaVersion = 1;
 const int64_t kCurrentSchemaVersion = 1;
 
-const char kStorageOpenHistogramName[] = "LocalStorageContext.OpenError";
-// These values are written to logs.  New enum values can be added, but existing
-// enums must never be renumbered or deleted and reused.
-enum class LocalStorageOpenHistogram {
-  DIRECTORY_OPEN_FAILED = 0,
-  DATABASE_OPEN_FAILED = 1,
-  INVALID_VERSION = 2,
-  VERSION_READ_ERROR = 3,
-  MAX
-};
+// After this many consecutive commit errors we'll throw away the entire
+// database.
+const int kCommitErrorThreshold = 8;
+
+// Use a smaller block cache on android. Because of the extra caching done in
+// LevelDBWrapperImpl the block cache isn't particularly useful, but it still
+// provides some benefit with speeding up compaction. And since this is a once
+// per profile overhead, the overhead should be fairly minimal on desktop.
+#if defined(OS_ANDROID)
+const size_t kMaxBlockCacheSize = 100 * 1024;
+#else
+const size_t kMaxBlockCacheSize = 2 * 1024 * 1024;
+#endif
+
+// Limits on the cache size and number of areas in memory, over which the areas
+// are purged.
+#if defined(OS_ANDROID)
+const unsigned kMaxStorageAreaCount = 10;
+const size_t kMaxCacheSize = 2 * 1024 * 1024;
+#else
+const unsigned kMaxStorageAreaCount = 50;
+const size_t kMaxCacheSize = 20 * 1024 * 1024;
+#endif
 
 std::vector<uint8_t> CreateMetaDataKey(const url::Origin& origin) {
   auto serialized_origin = leveldb::StdStringToUint8Vector(origin.Serialize());
@@ -109,6 +128,45 @@ void AddDeleteOriginOperations(
   operations->push_back(std::move(item));
 }
 
+enum class CachePurgeReason {
+  NotNeeded,
+  SizeLimitExceeded,
+  AreaCountLimitExceeded,
+  InactiveOnLowEndDevice,
+  AggressivePurgeTriggered
+};
+
+void RecordCachePurgedHistogram(CachePurgeReason reason,
+                                size_t purged_size_kib) {
+  UMA_HISTOGRAM_COUNTS_100000("LocalStorageContext.CachePurgedInKB",
+                              purged_size_kib);
+  switch (reason) {
+    case CachePurgeReason::SizeLimitExceeded:
+      UMA_HISTOGRAM_COUNTS_100000(
+          "LocalStorageContext.CachePurgedInKB.SizeLimitExceeded",
+          purged_size_kib);
+      break;
+    case CachePurgeReason::AreaCountLimitExceeded:
+      UMA_HISTOGRAM_COUNTS_100000(
+          "LocalStorageContext.CachePurgedInKB.AreaCountLimitExceeded",
+          purged_size_kib);
+      break;
+    case CachePurgeReason::InactiveOnLowEndDevice:
+      UMA_HISTOGRAM_COUNTS_100000(
+          "LocalStorageContext.CachePurgedInKB.InactiveOnLowEndDevice",
+          purged_size_kib);
+      break;
+    case CachePurgeReason::AggressivePurgeTriggered:
+      UMA_HISTOGRAM_COUNTS_100000(
+          "LocalStorageContext.CachePurgedInKB.AggressivePurgeTriggered",
+          purged_size_kib);
+      break;
+    case CachePurgeReason::NotNeeded:
+      NOTREACHED();
+      break;
+  }
+}
+
 }  // namespace
 
 class LocalStorageContextMojo::LevelDBWrapperHolder
@@ -138,10 +196,11 @@ class LocalStorageContextMojo::LevelDBWrapperHolder
   LevelDBWrapperImpl* level_db_wrapper() { return level_db_wrapper_ptr_; }
 
   void OnNoBindings() override {
-    // Will delete |this|.
-    DCHECK(context_->level_db_wrappers_.find(origin_) !=
-           context_->level_db_wrappers_.end());
-    context_->level_db_wrappers_.erase(origin_);
+    has_bindings_ = false;
+    // Don't delete ourselves, but do schedule an immediate commit. Possible
+    // deletion will happen under memory pressure or when another localstorage
+    // area is opened.
+    level_db_wrapper()->ScheduleImmediateCommit();
   }
 
   std::vector<leveldb::mojom::BatchedOperationPtr> PrepareToCommit() override {
@@ -193,6 +252,8 @@ class LocalStorageContextMojo::LevelDBWrapperHolder
           base::Bind(base::IgnoreResult(&sql::Connection::Delete),
                      sql_db_path()));
     }
+
+    context_->OnCommitResult(error);
   }
 
   void MigrateData(LevelDBWrapperImpl::ValueMapCallback callback) override {
@@ -215,6 +276,13 @@ class LocalStorageContextMojo::LevelDBWrapperHolder
                                 leveldb_env::LEVELDB_STATUS_MAX);
   }
 
+  void Bind(mojom::LevelDBWrapperRequest request) {
+    has_bindings_ = true;
+    level_db_wrapper()->Bind(std::move(request));
+  }
+
+  bool has_bindings() const { return has_bindings_; }
+
  private:
   base::FilePath sql_db_path() const {
     if (context_->old_localstorage_path_.empty())
@@ -232,20 +300,28 @@ class LocalStorageContextMojo::LevelDBWrapperHolder
   // could already be null, but this field should still be valid.
   LevelDBWrapperImpl* level_db_wrapper_ptr_;
   bool deleted_old_data_ = false;
+  bool has_bindings_ = false;
 };
 
 LocalStorageContextMojo::LocalStorageContextMojo(
+    scoped_refptr<base::SingleThreadTaskRunner> task_runner,
     service_manager::Connector* connector,
-    scoped_refptr<DOMStorageTaskRunner> task_runner,
+    scoped_refptr<DOMStorageTaskRunner> legacy_task_runner,
     const base::FilePath& old_localstorage_path,
     const base::FilePath& subdirectory,
     scoped_refptr<storage::SpecialStoragePolicy> special_storage_policy)
     : connector_(connector ? connector->Clone() : nullptr),
       subdirectory_(subdirectory),
       special_storage_policy_(std::move(special_storage_policy)),
-      task_runner_(std::move(task_runner)),
+      memory_dump_id_(base::StringPrintf("LocalStorage/0x%" PRIXPTR,
+                                         reinterpret_cast<uintptr_t>(this))),
+      task_runner_(std::move(legacy_task_runner)),
       old_localstorage_path_(old_localstorage_path),
-      weak_ptr_factory_(this) {}
+      is_low_end_device_(base::SysInfo::IsLowEndDevice()),
+      weak_ptr_factory_(this) {
+  base::trace_event::MemoryDumpManager::GetInstance()->RegisterDumpProvider(
+      this, "LocalStorage", task_runner);
+}
 
 void LocalStorageContextMojo::OpenLocalStorage(
     const url::Origin& origin,
@@ -300,6 +376,15 @@ void LocalStorageContextMojo::Flush() {
     it.second->level_db_wrapper()->ScheduleImmediateCommit();
 }
 
+void LocalStorageContextMojo::FlushOriginForTesting(const url::Origin& origin) {
+  if (connection_state_ != CONNECTION_FINISHED)
+    return;
+  const auto& it = level_db_wrappers_.find(origin);
+  if (it == level_db_wrappers_.end())
+    return;
+  it->second->level_db_wrapper()->ScheduleImmediateCommit();
+}
+
 void LocalStorageContextMojo::ShutdownAndDelete() {
   DCHECK_NE(connection_state_, CONNECTION_SHUTDOWN);
 
@@ -337,18 +422,112 @@ void LocalStorageContextMojo::ShutdownAndDelete() {
 }
 
 void LocalStorageContextMojo::PurgeMemory() {
-  for (const auto& it : level_db_wrappers_)
-    it.second->level_db_wrapper()->PurgeMemory();
+  size_t total_cache_size, unused_wrapper_count;
+  GetStatistics(&total_cache_size, &unused_wrapper_count);
+
+  for (auto it = level_db_wrappers_.begin(); it != level_db_wrappers_.end();) {
+    if (it->second->has_bindings()) {
+      it->second->level_db_wrapper()->PurgeMemory();
+      ++it;
+    } else {
+      it = level_db_wrappers_.erase(it);
+    }
+  }
+
+  // Track the size of cache purged.
+  size_t final_total_cache_size;
+  GetStatistics(&final_total_cache_size, &unused_wrapper_count);
+  size_t purged_size_kib = (total_cache_size - final_total_cache_size) / 1024;
+  RecordCachePurgedHistogram(CachePurgeReason::AggressivePurgeTriggered,
+                             purged_size_kib);
 }
 
-leveldb::mojom::LevelDBDatabaseAssociatedRequest
-LocalStorageContextMojo::DatabaseRequestForTesting() {
+void LocalStorageContextMojo::PurgeUnusedWrappersIfNeeded() {
+  size_t total_cache_size, unused_wrapper_count;
+  GetStatistics(&total_cache_size, &unused_wrapper_count);
+
+  // Nothing to purge.
+  if (!unused_wrapper_count)
+    return;
+
+  CachePurgeReason purge_reason = CachePurgeReason::NotNeeded;
+
+  if (total_cache_size > kMaxCacheSize)
+    purge_reason = CachePurgeReason::SizeLimitExceeded;
+  else if (level_db_wrappers_.size() > kMaxStorageAreaCount)
+    purge_reason = CachePurgeReason::AreaCountLimitExceeded;
+  else if (is_low_end_device_)
+    purge_reason = CachePurgeReason::InactiveOnLowEndDevice;
+
+  if (purge_reason == CachePurgeReason::NotNeeded)
+    return;
+
+  for (auto it = level_db_wrappers_.begin(); it != level_db_wrappers_.end();) {
+    if (it->second->has_bindings())
+      ++it;
+    else
+      it = level_db_wrappers_.erase(it);
+  }
+
+  // Track the size of cache purged.
+  size_t final_total_cache_size;
+  GetStatistics(&final_total_cache_size, &unused_wrapper_count);
+  size_t purged_size_kib = (total_cache_size - final_total_cache_size) / 1024;
+  RecordCachePurgedHistogram(purge_reason, purged_size_kib);
+}
+
+void LocalStorageContextMojo::SetDatabaseForTesting(
+    leveldb::mojom::LevelDBDatabaseAssociatedPtr database) {
   DCHECK_EQ(connection_state_, NO_CONNECTION);
   connection_state_ = CONNECTION_IN_PROGRESS;
-  leveldb::mojom::LevelDBDatabaseAssociatedRequest request =
-      MakeIsolatedRequest(&database_);
+  database_ = std::move(database);
   OnDatabaseOpened(true, leveldb::mojom::DatabaseError::OK);
-  return request;
+}
+
+bool LocalStorageContextMojo::OnMemoryDump(
+    const base::trace_event::MemoryDumpArgs& args,
+    base::trace_event::ProcessMemoryDump* pmd) {
+  if (connection_state_ != CONNECTION_FINISHED)
+    return true;
+
+  std::string context_name =
+      base::StringPrintf("dom_storage/localstorage_0x%" PRIXPTR,
+                         reinterpret_cast<uintptr_t>(this));
+
+  // Account for leveldb memory usage, which actually lives in the file service.
+  auto* global_dump = pmd->CreateSharedGlobalAllocatorDump(memory_dump_id_);
+  // The size of the leveldb dump will be added by the leveldb service.
+  auto* leveldb_mad = pmd->CreateAllocatorDump(context_name + "/leveldb");
+  // Specifies that the current context is responsible for keeping memory alive.
+  int kImportance = 2;
+  pmd->AddOwnershipEdge(leveldb_mad->guid(), global_dump->guid(), kImportance);
+
+  if (args.level_of_detail ==
+      base::trace_event::MemoryDumpLevelOfDetail::BACKGROUND) {
+    size_t total_cache_size, unused_wrapper_count;
+    GetStatistics(&total_cache_size, &unused_wrapper_count);
+    auto* mad = pmd->CreateAllocatorDump(context_name + "/cache_size");
+    mad->AddScalar(base::trace_event::MemoryAllocatorDump::kNameSize,
+                   base::trace_event::MemoryAllocatorDump::kUnitsBytes,
+                   total_cache_size);
+    mad->AddScalar("total_areas",
+                   base::trace_event::MemoryAllocatorDump::kUnitsObjects,
+                   level_db_wrappers_.size());
+    return true;
+  }
+  for (const auto& it : level_db_wrappers_) {
+    // Limit the url length to 50 and strip special characters.
+    std::string url = it.first.Serialize().substr(0, 50);
+    for (size_t index = 0; index < url.size(); ++index) {
+      if (!std::isalnum(url[index]))
+        url[index] = '_';
+    }
+    std::string wrapper_dump_name = base::StringPrintf(
+        "%s/%s/0x%" PRIXPTR, context_name.c_str(), url.c_str(),
+        reinterpret_cast<uintptr_t>(it.second->level_db_wrapper()));
+    it.second->level_db_wrapper()->OnMemoryDump(wrapper_dump_name, pmd);
+  }
+  return true;
 }
 
 // static
@@ -366,6 +545,8 @@ std::vector<uint8_t> LocalStorageContextMojo::MigrateString(
 
 LocalStorageContextMojo::~LocalStorageContextMojo() {
   DCHECK_EQ(connection_state_, CONNECTION_SHUTDOWN);
+  base::trace_event::MemoryDumpManager::GetInstance()->UnregisterDumpProvider(
+      this);
 }
 
 void LocalStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
@@ -388,7 +569,13 @@ void LocalStorageContextMojo::RunWhenConnected(base::OnceClosure callback) {
 
 void LocalStorageContextMojo::InitiateConnection(bool in_memory_only) {
   DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
-  CHECK(connector_);
+  // Unit tests might not always have a Connector, use in-memory only if that
+  // happens.
+  if (!connector_) {
+    OnDatabaseOpened(false, leveldb::mojom::DatabaseError::OK);
+    return;
+  }
+
   if (!subdirectory_.empty() && !in_memory_only) {
     // We were given a subdirectory to write to. Get it and use a disk backed
     // database.
@@ -401,7 +588,7 @@ void LocalStorageContextMojo::InitiateConnection(bool in_memory_only) {
     // We were not given a subdirectory. Use a memory backed database.
     connector_->BindInterface(file::mojom::kServiceName, &leveldb_service_);
     leveldb_service_->OpenInMemory(
-        MakeRequest(&database_),
+        memory_dump_id_, MakeRequest(&database_),
         base::Bind(&LocalStorageContextMojo::OnDatabaseOpened,
                    weak_ptr_factory_.GetWeakPtr(), true));
   }
@@ -415,10 +602,7 @@ void LocalStorageContextMojo::OnDirectoryOpened(
     UMA_HISTOGRAM_ENUMERATION("LocalStorageContext.DirectoryOpenError",
                               -static_cast<base::File::Error>(err),
                               -base::File::FILE_ERROR_MAX);
-    UMA_HISTOGRAM_ENUMERATION(
-        kStorageOpenHistogramName,
-        static_cast<int>(LocalStorageOpenHistogram::DIRECTORY_OPEN_FAILED),
-        static_cast<int>(LocalStorageOpenHistogram::MAX));
+    LogDatabaseOpenResult(OpenResult::DIRECTORY_OPEN_FAILED);
     OnDatabaseOpened(false, leveldb::mojom::DatabaseError::OK);
     return;
   }
@@ -433,9 +617,17 @@ void LocalStorageContextMojo::OnDirectoryOpened(
 
   auto options = leveldb::mojom::OpenOptions::New();
   options->create_if_missing = true;
+  options->max_open_files = 0;  // use minimum
+  // Default write_buffer_size is 4 MB but that might leave a 3.999
+  // memory allocation in RAM from a log file recovery.
+  options->write_buffer_size = 64 * 1024;
+  // Default block_cache_size is 8 MB, but we don't really want to cache that
+  // much data, so instead set it to a lower value. LevelDBWrapperImpl takes
+  // care of almost all the actual block caching we care about.
+  options->block_cache_size = kMaxBlockCacheSize;
   leveldb_service_->OpenWithOptions(
       std::move(options), std::move(directory_clone), "leveldb",
-      MakeRequest(&database_),
+      memory_dump_id_, MakeRequest(&database_),
       base::Bind(&LocalStorageContextMojo::OnDatabaseOpened,
                  weak_ptr_factory_.GetWeakPtr(), false));
 }
@@ -456,13 +648,11 @@ void LocalStorageContextMojo::OnDatabaseOpened(
                                 leveldb::GetLevelDBStatusUMAValue(status),
                                 leveldb_env::LEVELDB_STATUS_MAX);
     }
-    UMA_HISTOGRAM_ENUMERATION(
-        kStorageOpenHistogramName,
-        static_cast<int>(LocalStorageOpenHistogram::DATABASE_OPEN_FAILED),
-        static_cast<int>(LocalStorageOpenHistogram::MAX));
-    // If we failed to open the database, reset the service object so we pass
-    // null pointers to our wrappers.
-    database_.reset();
+    LogDatabaseOpenResult(OpenResult::DATABASE_OPEN_FAILED);
+    // If we failed to open the database, try to delete and recreate the
+    // database, or ultimately fallback to an in-memory database.
+    DeleteAndRecreateDatabase("LocalStorageContext.OpenResultAfterOpenFailed");
+    return;
   }
 
   // Verify DB schema version.
@@ -489,11 +679,9 @@ void LocalStorageContextMojo::OnGotDatabaseVersion(
     if (!base::StringToInt64(leveldb::Uint8VectorToStdString(value),
                              &db_version) ||
         db_version < kMinSchemaVersion || db_version > kCurrentSchemaVersion) {
-      UMA_HISTOGRAM_ENUMERATION(
-          kStorageOpenHistogramName,
-          static_cast<int>(LocalStorageOpenHistogram::INVALID_VERSION),
-          static_cast<int>(LocalStorageOpenHistogram::MAX));
-      DeleteAndRecreateDatabase();
+      LogDatabaseOpenResult(OpenResult::INVALID_VERSION);
+      DeleteAndRecreateDatabase(
+          "LocalStorageContext.OpenResultAfterInvalidVersion");
       return;
     }
 
@@ -503,11 +691,9 @@ void LocalStorageContextMojo::OnGotDatabaseVersion(
     UMA_HISTOGRAM_ENUMERATION("LocalStorageContext.ReadVersionError",
                               leveldb::GetLevelDBStatusUMAValue(status),
                               leveldb_env::LEVELDB_STATUS_MAX);
-    UMA_HISTOGRAM_ENUMERATION(
-        kStorageOpenHistogramName,
-        static_cast<int>(LocalStorageOpenHistogram::VERSION_READ_ERROR),
-        static_cast<int>(LocalStorageOpenHistogram::MAX));
-    DeleteAndRecreateDatabase();
+    LogDatabaseOpenResult(OpenResult::VERSION_READ_ERROR);
+    DeleteAndRecreateDatabase(
+        "LocalStorageContext.OpenResultAfterReadVersionError");
     return;
   }
 
@@ -516,13 +702,18 @@ void LocalStorageContextMojo::OnGotDatabaseVersion(
 
 void LocalStorageContextMojo::OnConnectionFinished() {
   DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
-
-  // We no longer need the file service; we've either transferred |directory_|
-  // to the leveldb service, or we got a file error and no more is possible.
-  directory_.reset();
-  file_system_.reset();
-  if (!database_)
+  if (!database_) {
+    directory_.reset();
+    file_system_.reset();
     leveldb_service_.reset();
+  }
+
+  // If connection was opened successfully, reset tried_to_recreate_during_open_
+  // to enable recreating the database on future errors.
+  if (database_)
+    tried_to_recreate_during_open_ = false;
+
+  open_result_histogram_ = nullptr;
 
   // |database_| should be known to either be valid or invalid by now. Run our
   // delayed bindings.
@@ -532,35 +723,41 @@ void LocalStorageContextMojo::OnConnectionFinished() {
   on_database_opened_callbacks_.clear();
 }
 
-void LocalStorageContextMojo::DeleteAndRecreateDatabase() {
-  // For now don't support deletion and recreation when already connected.
-  DCHECK_EQ(connection_state_, CONNECTION_IN_PROGRESS);
+void LocalStorageContextMojo::DeleteAndRecreateDatabase(
+    const char* histogram_name) {
+  // We're about to set database_ to null, so delete and LevelDBWrappers
+  // that might still be using the old database.
+  level_db_wrappers_.clear();
+
+  // Reset state to be in process of connecting. This will cause requests for
+  // LevelDBWrappers to be queued until the connection is complete.
+  connection_state_ = CONNECTION_IN_PROGRESS;
+  commit_error_count_ = 0;
+  database_ = nullptr;
+  open_result_histogram_ = histogram_name;
 
   bool recreate_in_memory = false;
 
   // If tried to recreate database on disk already, try again but this time
   // in memory.
-  if (tried_to_recreate_ && !subdirectory_.empty()) {
+  if (tried_to_recreate_during_open_ && !subdirectory_.empty()) {
     recreate_in_memory = true;
-  } else if (tried_to_recreate_) {
+  } else if (tried_to_recreate_during_open_) {
     // Give up completely, run without any database.
-    database_ = nullptr;
     OnConnectionFinished();
     return;
   }
 
-  tried_to_recreate_ = true;
+  tried_to_recreate_during_open_ = true;
 
   // Unit tests might not have a bound file_service_, in which case there is
   // nothing to retry.
   if (!file_system_.is_bound()) {
-    database_ = nullptr;
     OnConnectionFinished();
     return;
   }
 
-  // Close and destroy database, and try again.
-  database_ = nullptr;
+  // Destroy database, and try again.
   if (directory_.is_bound()) {
     leveldb_service_->Destroy(
         std::move(directory_), "leveldb",
@@ -592,21 +789,46 @@ void LocalStorageContextMojo::BindLocalStorage(
   GetOrCreateDBWrapper(origin)->Bind(std::move(request));
 }
 
-LevelDBWrapperImpl* LocalStorageContextMojo::GetOrCreateDBWrapper(
-    const url::Origin& origin) {
+LocalStorageContextMojo::LevelDBWrapperHolder*
+LocalStorageContextMojo::GetOrCreateDBWrapper(const url::Origin& origin) {
   DCHECK_EQ(connection_state_, CONNECTION_FINISHED);
   auto found = level_db_wrappers_.find(origin);
-  if (found != level_db_wrappers_.end())
-    return found->second->level_db_wrapper();
+  if (found != level_db_wrappers_.end()) {
+    return found->second.get();
+  }
+
+  size_t total_cache_size, unused_wrapper_count;
+  GetStatistics(&total_cache_size, &unused_wrapper_count);
+
+  // Track the total localStorage cache size.
+  UMA_HISTOGRAM_COUNTS_100000("LocalStorageContext.CacheSizeInKB",
+                              total_cache_size / 1024);
+
+  PurgeUnusedWrappersIfNeeded();
 
   auto holder = base::MakeUnique<LevelDBWrapperHolder>(this, origin);
-  LevelDBWrapperImpl* wrapper_ptr = holder->level_db_wrapper();
+  LevelDBWrapperHolder* holder_ptr = holder.get();
   level_db_wrappers_[origin] = std::move(holder);
-  return wrapper_ptr;
+  return holder_ptr;
 }
 
 void LocalStorageContextMojo::RetrieveStorageUsage(
     GetStorageUsageCallback callback) {
+  if (!database_) {
+    // If for whatever reason no leveldb database is available, no storage is
+    // used, so return an array only containing the current leveldb wrappers.
+    std::vector<LocalStorageUsageInfo> result;
+    base::Time now = base::Time::Now();
+    for (const auto& it : level_db_wrappers_) {
+      LocalStorageUsageInfo info;
+      info.origin = it.first.GetURL();
+      info.last_modified = now;
+      result.push_back(std::move(info));
+    }
+    std::move(callback).Run(std::move(result));
+    return;
+  }
+
   database_->GetPrefixed(
       std::vector<uint8_t>(kMetaPrefix, kMetaPrefix + arraysize(kMetaPrefix)),
       base::Bind(&LocalStorageContextMojo::OnGotMetaData,
@@ -618,11 +840,13 @@ void LocalStorageContextMojo::OnGotMetaData(
     leveldb::mojom::DatabaseError status,
     std::vector<leveldb::mojom::KeyValuePtr> data) {
   std::vector<LocalStorageUsageInfo> result;
+  std::set<url::Origin> origins;
   for (const auto& row : data) {
     DCHECK_GT(row->key.size(), arraysize(kMetaPrefix));
     LocalStorageUsageInfo info;
     info.origin = GURL(leveldb::Uint8VectorToStdString(row->key).substr(
         arraysize(kMetaPrefix)));
+    origins.insert(url::Origin(info.origin));
     if (!info.origin.is_valid()) {
       // TODO(mek): Deal with database corruption.
       continue;
@@ -635,6 +859,17 @@ void LocalStorageContextMojo::OnGotMetaData(
     }
     info.data_size = data.size_bytes();
     info.last_modified = base::Time::FromInternalValue(data.last_modified());
+    result.push_back(std::move(info));
+  }
+  // Add any origins for which LevelDBWrappers exist, but which haven't
+  // committed any data to disk yet.
+  base::Time now = base::Time::Now();
+  for (const auto& it : level_db_wrappers_) {
+    if (origins.find(it.first) != origins.end())
+      continue;
+    LocalStorageUsageInfo info;
+    info.origin = it.first.GetURL();
+    info.last_modified = now;
     result.push_back(std::move(info));
   }
   std::move(callback).Run(std::move(result));
@@ -676,6 +911,54 @@ void LocalStorageContextMojo::OnGotStorageUsageForShutdown(
 void LocalStorageContextMojo::OnShutdownComplete(
     leveldb::mojom::DatabaseError error) {
   delete this;
+}
+
+void LocalStorageContextMojo::GetStatistics(size_t* total_cache_size,
+                                            size_t* unused_wrapper_count) {
+  *total_cache_size = 0;
+  *unused_wrapper_count = 0;
+  for (const auto& it : level_db_wrappers_) {
+    *total_cache_size += it.second->level_db_wrapper()->bytes_used();
+    if (!it.second->has_bindings())
+      (*unused_wrapper_count)++;
+  }
+}
+
+void LocalStorageContextMojo::OnCommitResult(
+    leveldb::mojom::DatabaseError error) {
+  DCHECK_EQ(connection_state_, CONNECTION_FINISHED);
+  if (error == leveldb::mojom::DatabaseError::OK) {
+    commit_error_count_ = 0;
+    return;
+  }
+
+  commit_error_count_++;
+  if (commit_error_count_ > kCommitErrorThreshold) {
+    if (tried_to_recover_from_commit_errors_) {
+      // We already tried to recover from a high commit error rate before, but
+      // are still having problems: there isn't really anything left to try, so
+      // just ignore errors.
+      return;
+    }
+    tried_to_recover_from_commit_errors_ = true;
+
+    // Deleting LevelDBWrappers in here could cause more commits (and commit
+    // errors), but those commits won't reach OnCommitResult because the wrapper
+    // will have been deleted before the commit finishes.
+    DeleteAndRecreateDatabase(
+        "LocalStorageContext.OpenResultAfterCommitErrors");
+  }
+}
+
+void LocalStorageContextMojo::LogDatabaseOpenResult(OpenResult result) {
+  if (result != OpenResult::SUCCESS) {
+    UMA_HISTOGRAM_ENUMERATION("LocalStorageContext.OpenError", result,
+                              OpenResult::MAX);
+  }
+  if (open_result_histogram_) {
+    base::UmaHistogramEnumeration(open_result_histogram_, result,
+                                  OpenResult::MAX);
+  }
 }
 
 }  // namespace content

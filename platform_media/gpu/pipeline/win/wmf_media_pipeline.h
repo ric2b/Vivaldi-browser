@@ -1,5 +1,6 @@
 // -*- Mode: c++; tab-width: 2; indent-tabs-mode: nil; c-basic-offset: 2 -*-
 //
+// Copyright (c) 2017 Vivaldi Technologies AS. All rights reserved.
 // Copyright (C) 2014 Opera Software ASA.  All rights reserved.
 //
 // This file is an original work developed by Opera Software ASA
@@ -26,6 +27,7 @@
 #include "base/threading/thread_checker.h"
 #include "base/win/scoped_comptr.h"
 #include "platform_media/gpu/pipeline/platform_media_pipeline.h"
+#include "platform_media/gpu/pipeline/win/source_reader_worker.h"
 #include "platform_media/gpu/decoders/win/wmf_byte_stream.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 
@@ -105,7 +107,7 @@ class WMFMediaPipeline : public PlatformMediaPipeline {
   media::DataSource* data_source_;
   scoped_refptr<WMFByteStream> byte_stream_;
   base::win::ScopedComPtr<IMFSourceReaderCallback> source_reader_callback_;
-  base::win::ScopedComPtr<IMFSourceReader> source_reader_;
+  platform_media::SourceReaderWorker source_reader_worker_;
 
   AudioConfigChangedCB audio_config_changed_cb_;
   VideoConfigChangedCB video_config_changed_cb_;

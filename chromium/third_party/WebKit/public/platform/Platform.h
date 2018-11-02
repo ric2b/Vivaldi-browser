@@ -35,11 +35,14 @@
 #include <windows.h>
 #endif
 
+#include <memory>
+
 #include "BlameContext.h"
 #include "UserMetricsAction.h"
 #include "WebAudioDevice.h"
 #include "WebCommon.h"
 #include "WebData.h"
+#include "WebDataConsumerHandle.h"
 #include "WebFeaturePolicy.h"
 #include "WebGamepadListener.h"
 #include "WebGestureDevice.h"
@@ -55,9 +58,15 @@
 #include "WebURLLoader.h"
 #include "WebVector.h"
 #include "base/metrics/user_metrics_action.h"
-#include "cc/resources/shared_bitmap.h"
-#include "cc/surfaces/frame_sink_id.h"
+#include "base/time/time.h"
+#include "components/viz/common/quads/shared_bitmap.h"
+#include "components/viz/common/surfaces/frame_sink_id.h"
+#include "mojo/public/cpp/system/data_pipe.h"
 #include "mojo/public/cpp/system/message_pipe.h"
+
+namespace base {
+class SingleThreadTaskRunner;
+}
 
 namespace device {
 class Gamepads;
@@ -118,6 +127,7 @@ class WebSandboxSupport;
 class WebScrollbarBehavior;
 class WebSecurityOrigin;
 class WebServiceWorkerCacheStorage;
+class WebSocketHandshakeThrottle;
 class WebSpeechSynthesizer;
 class WebSpeechSynthesizerClient;
 class WebStorageNamespace;
@@ -312,7 +322,7 @@ class BLINK_PLATFORM_EXPORT Platform {
   virtual uint32_t GetUniqueIdForProcess() { return 0; }
 
   // Returns a unique FrameSinkID for the current renderer process
-  virtual cc::FrameSinkId GenerateFrameSinkId() { return cc::FrameSinkId(); }
+  virtual viz::FrameSinkId GenerateFrameSinkId() { return viz::FrameSinkId(); }
 
   // Message Ports -------------------------------------------------------
 
@@ -329,7 +339,17 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Network -------------------------------------------------------------
 
   // Returns a new WebURLLoader instance.
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader() { return nullptr; }
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(
+      const WebURLRequest&,
+      base::SingleThreadTaskRunner*) {
+    return nullptr;
+  }
+
+  // Returns a WebDataConsumerHandle for given a mojo data pipe endpoint.
+  virtual std::unique_ptr<WebDataConsumerHandle> CreateDataConsumerHandle(
+      mojo::ScopedDataPipeConsumerHandle handle) {
+    return nullptr;
+  }
 
   // May return null.
   virtual WebPrescientNetworking* PrescientNetworking() { return nullptr; }
@@ -339,7 +359,7 @@ class BLINK_PLATFORM_EXPORT Platform {
 
   // A suggestion to cache this metadata in association with this URL.
   virtual void CacheMetadata(const WebURL&,
-                             int64_t response_time,
+                             base::Time response_time,
                              const char* data,
                              size_t data_size) {}
 
@@ -347,15 +367,11 @@ class BLINK_PLATFORM_EXPORT Platform {
   // resource is in CacheStorage.
   virtual void CacheMetadataInCacheStorage(
       const WebURL&,
-      int64_t response_time,
+      base::Time response_time,
       const char* data,
       size_t data_size,
       const blink::WebSecurityOrigin& cache_storage_origin,
       const WebString& cache_storage_cache_name) {}
-
-  virtual WebURLError CancelledError(const WebURL&) const {
-    return WebURLError();
-  }
 
   // Plugins -------------------------------------------------------------
 
@@ -403,15 +419,15 @@ class BLINK_PLATFORM_EXPORT Platform {
   // Resources -----------------------------------------------------------
 
   // Returns a blob of data corresponding to the named resource.
-  virtual WebData LoadResource(const char* name) { return WebData(); }
+  virtual WebData GetDataResource(const char* name) { return WebData(); }
 
   // Decodes the in-memory audio file data and returns the linear PCM audio data
   // in the destinationBus.  A sample-rate conversion to sampleRate will occur
   // if the file data is at a different sample-rate.
   // Returns true on success.
-  virtual bool LoadAudioResource(WebAudioBus* destination_bus,
-                                 const char* audio_file_data,
-                                 size_t data_size) {
+  virtual bool DecodeAudioFileData(WebAudioBus* destination_bus,
+                                   const char* audio_file_data,
+                                   size_t data_size) {
     return false;
   }
 
@@ -509,7 +525,7 @@ class BLINK_PLATFORM_EXPORT Platform {
     return nullptr;
   }
 
-  virtual std::unique_ptr<cc::SharedBitmap> AllocateSharedBitmap(
+  virtual std::unique_ptr<viz::SharedBitmap> AllocateSharedBitmap(
       const WebSize& size) {
     return nullptr;
   }
@@ -569,6 +585,13 @@ class BLINK_PLATFORM_EXPORT Platform {
   // May return null if the functionality is not available.
   virtual std::unique_ptr<WebImageCaptureFrameGrabber>
   CreateImageCaptureFrameGrabber();
+
+  // WebSocket ----------------------------------------------------------
+
+  // If this method returns non-null the returned object will be used to
+  // determine if/when a new WebSocket connection can be exposed to Javascript.
+  virtual std::unique_ptr<WebSocketHandshakeThrottle>
+  CreateWebSocketHandshakeThrottle();
 
   // WebWorker ----------------------------------------------------------
 

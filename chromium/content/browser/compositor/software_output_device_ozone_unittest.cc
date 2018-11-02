@@ -7,7 +7,7 @@
 #include <memory>
 
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -66,11 +66,11 @@ class SoftwareOutputDeviceOzoneTest : public testing::Test {
 
  protected:
   std::unique_ptr<content::SoftwareOutputDeviceOzone> output_device_;
-  bool enable_pixel_output_;
+  bool enable_pixel_output_ = false;
 
  private:
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   std::unique_ptr<ui::Compositor> compositor_;
-  std::unique_ptr<base::MessageLoop> message_loop_;
   TestPlatformWindowDelegate window_delegate_;
   std::unique_ptr<ui::PlatformWindow> window_;
 
@@ -78,9 +78,8 @@ class SoftwareOutputDeviceOzoneTest : public testing::Test {
 };
 
 SoftwareOutputDeviceOzoneTest::SoftwareOutputDeviceOzoneTest()
-    : enable_pixel_output_(false) {
-  message_loop_.reset(new base::MessageLoopForUI);
-}
+    : scoped_task_environment_(
+          base::test::ScopedTaskEnvironment::MainThreadType::UI) {}
 
 SoftwareOutputDeviceOzoneTest::~SoftwareOutputDeviceOzoneTest() {
 }
@@ -94,9 +93,10 @@ void SoftwareOutputDeviceOzoneTest::SetUp() {
   const gfx::Size size(500, 400);
   window_ = ui::OzonePlatform::GetInstance()->CreatePlatformWindow(
       &window_delegate_, gfx::Rect(size));
-  compositor_.reset(new ui::Compositor(cc::FrameSinkId(1, 1), context_factory,
-                                       nullptr,
-                                       base::ThreadTaskRunnerHandle::Get()));
+  compositor_.reset(
+      new ui::Compositor(viz::FrameSinkId(1, 1), context_factory, nullptr,
+                         base::ThreadTaskRunnerHandle::Get(),
+                         false /* enable_surface_synchronization */));
   compositor_->SetAcceleratedWidget(window_delegate_.GetAcceleratedWidget());
   compositor_->SetScaleAndSize(1.0f, size);
 

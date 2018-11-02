@@ -54,14 +54,19 @@
 #include "public/platform/WebFeaturePolicy.h"
 #include "public/platform/WebInsecureRequestPolicy.h"
 #include "public/platform/WebLoadingBehaviorFlag.h"
+#include "public/platform/WebSuddenTerminationDisablerType.h"
 #include "public/platform/WebURLRequest.h"
+#include "public/web/WebTriggeringEventInfo.h"
 #include "v8/include/v8.h"
+
+namespace service_manager {
+class InterfaceProvider;
+}
 
 namespace blink {
 
 class Document;
 class DocumentLoader;
-struct FrameLoadRequest;
 class HTMLFormElement;
 class HTMLFrameOwnerElement;
 class HTMLMediaElement;
@@ -80,17 +85,22 @@ class TextCheckerClient;
 class WebApplicationCacheHost;
 class WebApplicationCacheHostClient;
 class WebCookieJar;
+class WebFrame;
 class WebMediaPlayer;
 class WebMediaPlayerClient;
 class WebMediaPlayerSource;
 class WebRemotePlaybackClient;
 class WebRTCPeerConnectionHandler;
 class WebServiceWorkerProvider;
+class WebSpellCheckPanelHostClient;
+class WebTaskRunner;
 class WebURLLoader;
 
 class CORE_EXPORT LocalFrameClient : public FrameClient {
  public:
   ~LocalFrameClient() override {}
+
+  virtual WebFrame* GetWebFrame() const { return nullptr; }
 
   virtual bool HasWebView() const = 0;  // mainly for assertions
 
@@ -126,6 +136,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       NavigationPolicy,
       bool should_replace_current_entry,
       bool is_client_redirect,
+      WebTriggeringEventInfo,
       HTMLFormElement*,
       ContentSecurityPolicyDisposition
           should_check_main_world_content_security_policy) = 0;
@@ -137,9 +148,11 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual void ProgressEstimateChanged(double progress_estimate) = 0;
   virtual void DidStopLoading() = 0;
 
+  virtual void DownloadURL(const ResourceRequest&,
+                           const String& suggested_name) = 0;
   virtual void LoadURLExternally(const ResourceRequest&,
                                  NavigationPolicy,
-                                 const String& suggested_name,
+                                 WebTriggeringEventInfo,
                                  bool replaces_current_history_item) = 0;
   virtual void LoadErrorPage(int reason) = 0;
 
@@ -193,9 +206,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual void TransitionToCommittedForNewPage() = 0;
 
-  virtual LocalFrame* CreateFrame(const FrameLoadRequest&,
-                                  const AtomicString& name,
+  virtual LocalFrame* CreateFrame(const AtomicString& name,
                                   HTMLFrameOwnerElement*) = 0;
+
   // Whether or not plugin creation should fail if the HTMLPlugInElement isn't
   // in the DOM after plugin initialization.
   enum DetachedPluginPolicy {
@@ -204,7 +217,7 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   };
   virtual bool CanCreatePluginWithoutRenderer(
       const String& mime_type) const = 0;
-  virtual PluginView* CreatePlugin(HTMLPlugInElement*,
+  virtual PluginView* CreatePlugin(HTMLPlugInElement&,
                                    const KURL&,
                                    const Vector<String>&,
                                    const Vector<String>&,
@@ -218,11 +231,6 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
       WebMediaPlayerClient*) = 0;
   virtual WebRemotePlaybackClient* CreateWebRemotePlaybackClient(
       HTMLMediaElement&) = 0;
-
-  virtual ObjectContentType GetObjectContentType(
-      const KURL&,
-      const String& mime_type,
-      bool should_prefer_plug_ins_for_images) = 0;
 
   virtual void DidCreateNewDocument() = 0;
   virtual void DispatchDidClearWindowObjectInMainWorld() = 0;
@@ -298,16 +306,9 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual bool IsLocalFrameClientImpl() const { return false; }
 
-  // Called when elements preventing the sudden termination of the frame become
-  // present or stop being present. |type| is the type of element (BeforeUnload
-  // handler, Unload handler).
-  enum SuddenTerminationDisablerType {
-    kBeforeUnloadHandler,
-    kUnloadHandler,
-  };
-  virtual void SuddenTerminationDisablerChanged(bool present,
-                                                SuddenTerminationDisablerType) {
-  }
+  virtual void SuddenTerminationDisablerChanged(
+      bool present,
+      WebSuddenTerminationDisablerType) {}
 
   virtual LinkResource* CreateServiceWorkerLinkResource(HTMLLinkElement*) {
     return nullptr;
@@ -317,6 +318,10 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
   virtual WebEffectiveConnectionType GetEffectiveConnectionType() {
     return WebEffectiveConnectionType::kTypeUnknown;
   }
+
+  // Returns whether or not Client Lo-Fi is enabled for the frame
+  // (and so image requests may be replaced with a placeholder).
+  virtual bool IsClientLoFiActiveForFrame() { return false; }
 
   // Returns whether or not the requested image should be replaced with a
   // placeholder as part of the Client Lo-Fi previews feature.
@@ -330,15 +335,24 @@ class CORE_EXPORT LocalFrameClient : public FrameClient {
 
   virtual BlameContext* GetFrameBlameContext() { return nullptr; }
 
+  virtual service_manager::InterfaceProvider* GetInterfaceProvider() {
+    return nullptr;
+  }
+
   virtual void SetHasReceivedUserGesture(bool received_previously) {}
 
   virtual void SetDevToolsFrameId(const String& devtools_frame_id) {}
 
   virtual void AbortClientNavigation() {}
 
+  virtual WebSpellCheckPanelHostClient* SpellCheckPanelHostClient() const = 0;
+
   virtual TextCheckerClient& GetTextCheckerClient() const = 0;
 
-  virtual std::unique_ptr<WebURLLoader> CreateURLLoader() = 0;
+  virtual std::unique_ptr<WebURLLoader> CreateURLLoader(const ResourceRequest&,
+                                                        WebTaskRunner*) = 0;
+
+  virtual void AnnotatedRegionsChanged() = 0;
 
   // VB-6063:
   virtual void extendedProgressEstimateChanged(double progressEstimate, double loaded_bytes, int loaded_elements, int total_elements) {}

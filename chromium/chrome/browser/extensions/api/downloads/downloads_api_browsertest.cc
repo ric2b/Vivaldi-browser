@@ -316,7 +316,6 @@ class DownloadExtensionTest : public ExtensionApiTest {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
         base::BindOnce(&chrome_browser_net::SetUrlRequestMocksEnabled, true));
-    InProcessBrowserTest::SetUpOnMainThread();
     GoOnTheRecord();
     CreateAndSetDownloadsDirectory();
     current_browser()->profile()->GetPrefs()->SetBoolean(
@@ -947,7 +946,7 @@ scoped_refptr<UIThreadExtensionFunction> MockedGetFileIconFunction(
 }
 
 // https://crbug.com/678967
-#if defined(OS_WIN)
+#if defined(OS_WIN) || defined(OS_LINUX)
 #define MAYBE_DownloadExtensionTest_FileIcon_Active DISABLED_DownloadExtensionTest_FileIcon_Active
 #else
 #define MAYBE_DownloadExtensionTest_FileIcon_Active DownloadExtensionTest_FileIcon_Active
@@ -1259,9 +1258,9 @@ IN_PROC_BROWSER_TEST_F(DownloadExtensionTest,
             items[1]->GetTargetFilePath().value());
   // The order of results when orderBy is empty is unspecified. When there are
   // no sorters, DownloadQuery does not call sort(), so the order of the results
-  // depends on the order of the items in base::hash_map<uint32_t,...>
-  // DownloadManagerImpl::downloads_, which is unspecified and differs between
-  // libc++ and libstdc++. http://crbug.com/365334
+  // depends on the order of the items in DownloadManagerImpl::downloads_,
+  // which is unspecified and differs between libc++ and libstdc++.
+  // http://crbug.com/365334
 }
 
 // Test the |danger| option for search().

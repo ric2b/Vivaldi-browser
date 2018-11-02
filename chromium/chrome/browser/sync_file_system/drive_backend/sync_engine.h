@@ -27,7 +27,6 @@ class OAuth2TokenService;
 
 namespace base {
 class SequencedTaskRunner;
-class SequencedWorkerPool;
 }
 
 namespace drive {
@@ -144,8 +143,7 @@ class SyncEngine : public RemoteFileSyncService,
   // SigninManagerBase::Observer overrides.
   void GoogleSigninFailed(const GoogleServiceAuthError& error) override;
   void GoogleSigninSucceeded(const std::string& account_id,
-                             const std::string& username,
-                             const std::string& password) override;
+                             const std::string& username) override;
   void GoogleSignedOut(const std::string& account_id,
                        const std::string& username) override;
 
@@ -159,7 +157,6 @@ class SyncEngine : public RemoteFileSyncService,
   SyncEngine(const scoped_refptr<base::SingleThreadTaskRunner>& ui_task_runner,
              const scoped_refptr<base::SequencedTaskRunner>& worker_task_runner,
              const scoped_refptr<base::SequencedTaskRunner>& drive_task_runner,
-             const scoped_refptr<base::SequencedWorkerPool>& worker_pool,
              const base::FilePath& sync_file_system_dir,
              TaskLogger* task_logger,
              drive::DriveNotificationManager* notification_manager,
@@ -185,7 +182,6 @@ class SyncEngine : public RemoteFileSyncService,
   scoped_refptr<base::SingleThreadTaskRunner> ui_task_runner_;
   scoped_refptr<base::SequencedTaskRunner> worker_task_runner_;
   scoped_refptr<base::SequencedTaskRunner> drive_task_runner_;
-  scoped_refptr<base::SequencedWorkerPool> worker_pool_;
 
   const base::FilePath sync_file_system_dir_;
   TaskLogger* task_logger_;

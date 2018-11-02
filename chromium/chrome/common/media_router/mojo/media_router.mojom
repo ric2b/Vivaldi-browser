@@ -6,22 +6,24 @@ module media_router.mojom;
 
 import "chrome/common/media_router/mojo/media_controller.mojom";
 import "chrome/common/media_router/mojo/media_status.mojom";
+import "media/mojo/interfaces/mirror_service_remoting.mojom";
 import "mojo/common/time.mojom";
 import "net/interfaces/ip_address.mojom";
 import "url/mojo/origin.mojom";
 import "url/mojo/url.mojom";
 
+enum SinkIconType {
+  CAST,
+  CAST_AUDIO_GROUP,
+  CAST_AUDIO,
+  MEETING,
+  HANGOUT,
+  EDUCATION,
+  GENERIC
+};
+
 // Represents an output sink to which media can be routed.
 struct MediaSink {
-  enum IconType {
-    CAST,
-    CAST_AUDIO,
-    CAST_AUDIO_GROUP,
-    MEETING,
-    HANGOUT,
-    GENERIC
-  };
-
   // The sink identifier, e.g. "rs71w7mFzYLFlabir_qO4NHl6SUc."
   string sink_id;
   // The human-readable name, e.g. "Janet's Chromecast".
@@ -31,7 +33,7 @@ struct MediaSink {
   // Optional domain of the sink if this sink is associated with an identity.
   string? domain;
   // The type of icon to show in the UI for this media sink.
-  IconType icon_type;
+  SinkIconType icon_type;
   // This is currently only set by MediaRouter in OnSinksDiscovered().
   MediaSinkExtraData? extra_data;
 };
@@ -88,8 +90,11 @@ struct MediaRoute {
   bool is_local;
   // An optional path to an HTML page bundled bundled with the media router
   // component extension. When set, the route can have custom route detail as
-  // well as its own route controls in the media router dialog.
+  // well as its own route controls within an extensionview in the Media Router
+  // dialog.
   string? custom_controller_path;
+  // Whether the provider for this route supports the Media Route Controller.
+  bool supports_media_route_controller;
   // Set to true if this route should be displayed for |media_sink_id| in UI.
   bool for_display;
   // Set to true if this route was created by an incognito profile.
@@ -471,4 +476,11 @@ interface MediaRouter {
   // |messages|: A non-empty list of messages received.
   OnRouteMessagesReceived(string route_id,
                           array<RouteMessage> messages);
+
+  // Called when a MediaRemoter for a tab with |tab_id| is started. |remoter|
+  // can be used to access the MediaRemoter to control a media remoting session
+  // and send RPC messages to the remote device. |remoting_source| is bound to
+  // receive the updates/messages from MediaRemoter.
+  OnMediaRemoterCreated(int32 tab_id, media.mojom.MirrorServiceRemoter remoter,
+      media.mojom.MirrorServiceRemotingSource& remoting_source);
 };

@@ -12,6 +12,7 @@ per-file chromeos_strings.grdp=*
 per-file chromium_strings.grd=*
 per-file generated_resources.grd=*
 per-file google_chrome_strings.grd=*
+per-file md_extensions_strings.grdp=*
 
 per-file media_router_strings.grdp*=apacible@chromium.org
 per-file media_router_strings.grdp*=imcheng@chromium.org
@@ -24,5 +25,7 @@ per-file main_dll_loader_win.cc=scottmg@chromium.org
 
 per-file chrome_crash_reporter_client*=ananta@chromium.org
 per-file chrome_crash_reporter_client*=scottmg@chromium.org
+
+per-file *.plist=file://chrome/browser/ui/cocoa/OWNERS
 
 # COMPONENT: Internals>PlatformIntegration

@@ -8,6 +8,9 @@
 #include <memory>
 #include <string>
 
+#include "components/certificate_reporting/cert_logger.pb.h"
+#include "components/version_info/version_info.h"
+
 namespace base {
 class Time;
 }  // namespace base
@@ -34,7 +37,8 @@ class ErrorReport {
   enum InterstitialReason {
     INTERSTITIAL_SSL,
     INTERSTITIAL_CAPTIVE_PORTAL,
-    INTERSTITIAL_CLOCK
+    INTERSTITIAL_CLOCK,
+    INTERSTITIAL_SUPERFISH,
   };
 
   // Whether the user clicked through the interstitial or not.
@@ -72,11 +76,21 @@ class ErrorReport {
   void AddNetworkTimeInfo(
       const network_time::NetworkTimeTracker* network_time_tracker);
 
+  void AddChromeChannel(version_info::Channel channel);
+
+  void SetIsEnterpriseManaged(bool is_enterprise_managed);
+
   // Sets is_retry_upload field of the protobuf to |is_retry_upload|.
   void SetIsRetryUpload(bool is_retry_upload);
 
   // Gets the hostname to which this report corresponds.
   const std::string& hostname() const;
+
+  // Gets the Chrome channel attached to this report.
+  CertLoggerRequest::ChromeChannel chrome_channel() const;
+
+  // Returns true if the device that issued the report is a managed device.
+  bool is_enterprise_managed() const;
 
   // Returns true if the report has been retried.
   bool is_retry_upload() const;

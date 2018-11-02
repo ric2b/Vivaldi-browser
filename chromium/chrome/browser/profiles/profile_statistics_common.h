@@ -5,26 +5,27 @@
 #ifndef CHROME_BROWSER_PROFILES_PROFILE_STATISTICS_COMMON_H_
 #define CHROME_BROWSER_PROFILES_PROFILE_STATISTICS_COMMON_H_
 
+#include <array>
 #include <string>
 #include <vector>
 
 #include "base/callback_forward.h"
 
 namespace profiles {
-// Constants for the categories in ProfileCategoryStats
+// Constants for the categories in ProfileCategoryStats.
 extern const char kProfileStatisticsBrowsingHistory[];
 extern const char kProfileStatisticsPasswords[];
 extern const char kProfileStatisticsBookmarks[];
-extern const char kProfileStatisticsSettings[];
+extern const char kProfileStatisticsAutofill[];
 
-// Definition of a single return value of |ProfileStatisticsCallback|. If
-// |success| is false, the statistics failed to load and |count| is undefined.
-// The data look like these: {"BrowsingHistory", 912, true},
-// {"Passwords", 71, true}, {"Bookmarks", 120, true}, {"Settings", 200, true}
+extern const std::array<const char*, 4> kProfileStatisticsCategories;
+
+// Definition of a single return value of |ProfileStatisticsCallback|.
+// The data look like these: {"BrowsingHistory", 912},
+// {"Passwords", 71}, {"Bookmarks", 120}, {"Autofill", 200}.
 struct ProfileCategoryStat {
   std::string category;
   int count;
-  bool success;
 };
 
 // Definition of the return value of |ProfileStatisticsCallback|.

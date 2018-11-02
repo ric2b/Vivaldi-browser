@@ -62,6 +62,7 @@ class CORE_EXPORT PointerEventManager
 
   void SetPointerCapture(int, EventTarget*);
   void ReleasePointerCapture(int, EventTarget*);
+  void ReleaseMousePointerCapture();
 
   // See Element::hasPointerCapture(int).
   bool HasPointerCapture(int, const EventTarget*) const;
@@ -82,6 +83,8 @@ class CORE_EXPORT PointerEventManager
   // |uniqueTouchEventId| was canceled. Also drops stale ids from
   // |m_touchIdsForCanceledPointerdowns|.
   bool PrimaryPointerdownCanceled(uint32_t unique_touch_event_id);
+
+  void ProcessPendingPointerCaptureForPointerLock(const WebMouseEvent&);
 
  private:
   typedef HeapHashMap<int,
@@ -138,15 +141,19 @@ class CORE_EXPORT PointerEventManager
   // blockTouchPointers().
   void UnblockTouchPointers();
 
-  // Generate the TouchInfos for a WebTouchEvent, hit-testing as necessary.
-  void ComputeTouchTargets(const WebTouchEvent&,
-                           HeapVector<TouchEventManager::TouchInfo>&);
+  // Returns PointerEventTarget for a WebTouchPoint, hit-testing as necessary.
+  EventHandlingUtil::PointerEventTarget ComputePointerEventTarget(
+      const WebTouchPoint&);
 
   // Sends touch pointer events and sets consumed bits in TouchInfo array
   // based on the return value of pointer event handlers.
-  void DispatchTouchPointerEvents(const WebTouchEvent&,
-                                  const Vector<WebTouchEvent>& coalesced_events,
-                                  HeapVector<TouchEventManager::TouchInfo>&);
+  void DispatchTouchPointerEvent(
+      const WebTouchPoint&,
+      const EventHandlingUtil::PointerEventTarget&,
+      const Vector<std::pair<WebTouchPoint, TimeTicks>>& coalesced_events,
+      WebInputEvent::Modifiers,
+      double timestamp,
+      uint32_t unique_touch_event_id);
 
   // Returns whether the event is consumed or not.
   WebInputEventResult SendTouchPointerEvent(EventTarget*, PointerEvent*);

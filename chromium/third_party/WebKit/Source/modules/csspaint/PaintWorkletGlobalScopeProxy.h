@@ -17,27 +17,33 @@ class LocalFrame;
 
 // A proxy for PaintWorklet to talk to PaintWorkletGlobalScope.
 class MODULES_EXPORT PaintWorkletGlobalScopeProxy
-    : public WorkletGlobalScopeProxy {
+    : public GarbageCollectedFinalized<PaintWorkletGlobalScopeProxy>,
+      public WorkletGlobalScopeProxy {
+  USING_GARBAGE_COLLECTED_MIXIN(PaintWorkletGlobalScopeProxy);
+
  public:
   static PaintWorkletGlobalScopeProxy* From(WorkletGlobalScopeProxy*);
 
-  explicit PaintWorkletGlobalScopeProxy(LocalFrame*);
+  PaintWorkletGlobalScopeProxy(LocalFrame*,
+                               PaintWorkletPendingGeneratorRegistry*);
   virtual ~PaintWorkletGlobalScopeProxy() = default;
 
   // Implements WorkletGlobalScopeProxy.
   void FetchAndInvokeScript(const KURL& module_url_record,
                             WebURLRequest::FetchCredentialsMode,
+                            RefPtr<WebTaskRunner> outside_settings_task_runner,
                             WorkletPendingTasks*) override;
-  void EvaluateScript(const ScriptSourceCode&) override;
+  void WorkletObjectDestroyed() override;
   void TerminateWorkletGlobalScope() override;
 
   CSSPaintDefinition* FindDefinition(const String& name);
-  void AddPendingGenerator(const String& name, CSSPaintImageGeneratorImpl*);
 
   PaintWorkletGlobalScope* global_scope() const { return global_scope_.Get(); }
 
+  DECLARE_VIRTUAL_TRACE();
+
  private:
-  Persistent<PaintWorkletGlobalScope> global_scope_;
+  Member<PaintWorkletGlobalScope> global_scope_;
 };
 
 }  // namespace blink

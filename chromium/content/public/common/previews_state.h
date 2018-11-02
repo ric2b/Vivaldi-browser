@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef CONTENT_PUBLIC_COMMON_PREVIEWS_TYPE_H_
-#define CONTENT_PUBLIC_COMMON_PREVIEWS_TYPE_H_
+#ifndef CONTENT_PUBLIC_COMMON_PREVIEWS_STATE_H_
+#define CONTENT_PUBLIC_COMMON_PREVIEWS_STATE_H_
 
 #include "content/common/content_export.h"
 #include "third_party/WebKit/public/platform/WebURLRequest.h"
@@ -13,12 +13,6 @@
                 "mismatching enums: " #a)
 
 namespace content {
-
-// Chrome Proxy Previews header and directives.
-const char kChromeProxyContentTransformHeader[] =
-    "chrome-proxy-content-transform";
-const char kChromeProxyEmptyImageDirective[] = "empty-image";
-const char kChromeProxyLitePageDirective[] = "lite-page";
 
 typedef int PreviewsState;
 
@@ -46,6 +40,10 @@ enum PreviewsTypes {
   PREVIEWS_STATE_LAST = PREVIEWS_OFF
 };
 
+// Combination of all previews that are guaranteed not to provide partial
+// content.
+const PreviewsState PARTIAL_CONTENT_SAFE_PREVIEWS = SERVER_LOFI_ON;
+
 // Ensure that content::PreviewsState and blink::WebURLRequest::PreviewsState
 // are kept in sync.
 STATIC_ASSERT_PREVIEWS_ENUM(PREVIEWS_UNSPECIFIED,
@@ -66,4 +64,4 @@ STATIC_ASSERT_PREVIEWS_ENUM(PREVIEWS_STATE_LAST,
 
 }  // namespace content
 
-#endif  // CONTENT_PUBLIC_COMMON_PREVIEWS_TYPE_H_
+#endif  // CONTENT_PUBLIC_COMMON_PREVIEWS_STATE_H_

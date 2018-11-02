@@ -163,9 +163,6 @@ const char kDisableGpuMemoryBufferVideoFrames[] =
 // For tests and platforms where software fallback is disabled.
 const char kDisableGpuProcessCrashLimit[] = "disable-gpu-process-crash-limit";
 
-// Disable async GL worker context. Overrides kEnableGpuAsyncWorkerContext.
-const char kDisableGpuAsyncWorkerContext[] = "disable-gpu-async-worker-context";
-
 // When using CPU rasterizing disable low resolution tiling. This uses
 // less power, particularly during animations, but more white may be seen
 // during fast scrolling especially on slower devices.
@@ -178,11 +175,6 @@ const char kDisableGpuSandbox[]             = "disable-gpu-sandbox";
 // unload handlers on a page to prevent the tab from closing, but the Task
 // Manager can be used to terminate the offending process in this case.
 const char kDisableHangMonitor[]            = "disable-hang-monitor";
-
-// Disable hiding the close buttons of inactive tabs when the tabstrip is in
-// stacked mode.
-const char kDisableHideInactiveStackedTabCloseButtons[] =
-    "disable-hide-inactive-stacked-tab-close-buttons";
 
 // Disable the RenderThread's HistogramCustomizer.
 const char kDisableHistogramCustomizer[]    = "disable-histogram-customizer";
@@ -207,6 +199,9 @@ const char kDisableLogging[]                = "disable-logging";
 
 // Disables using CODECAPI_AVLowLatencyMode when creating DXVA decoders.
 const char kDisableLowLatencyDxva[]         = "disable-low-latency-dxva";
+
+// Dont use a Mojo-based LocalStorage implementation.
+const char kDisableMojoLocalStorage[] = "disable-mojo-local-storage";
 
 // Disables usage of the namespace sandbox.
 const char kDisableNamespaceSandbox[]       = "disable-namespace-sandbox";
@@ -333,6 +328,10 @@ const char kDisable2dCanvasClipAntialiasing[] = "disable-2d-canvas-clip-aa";
 const char kDisableAcceleratedJpegDecoding[] =
     "disable-accelerated-jpeg-decoding";
 
+// Logs Runtime Call Stats for Blink. --single-process also needs to be
+// used along with this for the stats to be logged.
+const char kDumpBlinkRuntimeCallStats[] = "dump-blink-runtime-call-stats";
+
 // Enables LCD text.
 const char kEnableLCDText[]                 = "enable-lcd-text";
 
@@ -353,13 +352,6 @@ const char kEnableBlinkFeatures[]           = "enable-blink-features";
 // PlzNavigate: Use the experimental browser-side navigation path.
 const char kEnableBrowserSideNavigation[]   = "enable-browser-side-navigation";
 
-// Changes the behavior of the "default" color space conversion mode in
-// createImageBitmap. When enabled without the kEnableColorCorrectRendering
-// flag, "default" means color correct the image bitmap to the display color
-// space.
-const char kEnableColorCorrectRenderingDefaultMode[] =
-    "enable-color-correct-rendering-default-mode";
-
 // Enables display list based 2d canvas implementation. Options:
 //  1. Enable: allow browser to use display list for 2d canvas (browser makes
 //     decision).
@@ -375,6 +367,10 @@ const char kEnableExperimentalCanvasFeatures[] =
 // Enables Web Platform features that are in development.
 const char kEnableExperimentalWebPlatformFeatures[] =
     "enable-experimental-web-platform-features";
+
+// Disables all RuntimeEnabledFeatures that can be enabled via OriginTrials.
+const char kDisableOriginTrialControlledBlinkFeatures[] =
+    "disable-origin-trial-controlled-blink-features";
 
 // Comma-separated list of feature names to enable. See also kDisableFeatures.
 const char kEnableFeatures[] = "enable-features";
@@ -408,11 +404,11 @@ const char kEnableLowResTiling[] = "enable-low-res-tiling";
 // builds.
 const char kEnableLogging[]                 = "enable-logging";
 
-// Enables the network information API.
-const char kEnableNetworkInformation[]      = "enable-network-information";
-
-// Enables the network service.
-const char kEnableNetworkService[] = "enable-network-service";
+// Enables the type, downlinkMax attributes of the NetInfo API. Also, enables
+// triggering of change attribute of the NetInfo API when there is a change in
+// the connection type.
+const char kEnableNetworkInformationDownlinkMax[] =
+    "enable-network-information-downlink-max";
 
 // Disables the video decoder from drawing to an NV12 textures instead of ARGB.
 const char kDisableNv12DxgiVideo[] = "disable-nv12-dxgi-video";
@@ -575,9 +571,6 @@ const char kGpuSandboxFailuresFatal[]       = "gpu-sandbox-failures-fatal";
 // Causes the GPU process to display a dialog on launch.
 const char kGpuStartupDialog[]              = "gpu-startup-dialog";
 
-// Ignores certificate-related errors.
-const char kIgnoreCertificateErrors[]       = "ignore-certificate-errors";
-
 // Don't allow content to arbitrarily append to the back/forward list.
 // The page must prcoess a user gesture before an entry can be added.
 const char kHistoryEntryRequiresUserGesture[] =
@@ -586,8 +579,19 @@ const char kHistoryEntryRequiresUserGesture[] =
 // These mappings only apply to the host resolver.
 const char kHostResolverRules[]             = "host-resolver-rules";
 
-// Makes all APIs reflect the layout viewport.
-const char kInertVisualViewport[]           = "inert-visual-viewport";
+// A set of public key hashes for which to ignore certificate-related errors.
+//
+// If the certificate chain presented by the server does not validate, and one
+// or more certificates have public key hashes that match a key from this list,
+// the error is ignored.
+//
+// The switch value must a be a comma-separated list of Base64-encoded SHA-256
+// SPKI Fingerprints (RFC 7469, Section 2.4).
+//
+// This switch has no effect unless --user-data-dir (as defined by the content
+// embedder) is also present.
+const char kIgnoreCertificateErrorsSPKIList[] =
+    "ignore-certificate-errors-spki-list";
 
 // Run the GPU process as a thread in the browser process.
 const char kInProcessGPU[]                  = "in-process-gpu";
@@ -595,6 +599,11 @@ const char kInProcessGPU[]                  = "in-process-gpu";
 // Overrides the timeout, in seconds, that a child process waits for a
 // connection from the browser before killing itself.
 const char kIPCConnectionTimeout[]          = "ipc-connection-timeout";
+
+// Require dedicated processes for a set of origins, specified as a
+// comma-separated list. For example:
+//   --isolate-origins=https://www.foo.com,https://www.bar.com
+const char kIsolateOrigins[] = "isolate-origins";
 
 // Chrome is running in Mash.
 const char kIsRunningInMash[] = "is-running-in-mash";
@@ -627,10 +636,6 @@ const char kMainFrameResizesAreOrientationChanges[] =
 // Sets the width and height above which a composited layer will get tiled.
 const char kMaxUntiledLayerHeight[]         = "max-untiled-layer-height";
 const char kMaxUntiledLayerWidth[]          = "max-untiled-layer-width";
-
-// Sample memory usage with high frequency and store the results to the
-// Renderer.Memory histogram. Used in memory tests.
-const char kMemoryMetrics[]                 = "memory-metrics";
 
 // Sets options for MHTML generator to skip no-store resources:
 //   "skip-nostore-main" - fails to save a page if main frame is 'no-store'
@@ -733,6 +738,9 @@ const char kProcessPerSite[]                = "process-per-site";
 // renderer process.  We default to using a renderer process for each
 // site instance (i.e., group of pages from the same registered domain with
 // script connections to each other).
+// TODO(creis): This flag is currently a no-op.  We should refactor it to avoid
+// "unnecessary" process swaps for cross-site navigations but still swap when
+// needed for security (e.g., isolated origins).
 const char kProcessPerTab[]                 = "process-per-tab";
 
 // The value of this switch determines whether the process is started as a
@@ -838,10 +846,6 @@ const char kStartFullscreen[] = "start-fullscreen";
 // that needs to access the provided statistics.
 const char kStatsCollectionController[] =
     "enable-stats-collection-bindings";
-
-// Allows for forcing socket connections to http/https to use fixed ports.
-const char kTestingFixedHttpPort[]          = "testing-fixed-http-port";
-const char kTestingFixedHttpsPort[]         = "testing-fixed-https-port";
 
 // Type of the current test harness ("browser" or "ui").
 const char kTestType[]                      = "test-type";
@@ -1080,6 +1084,19 @@ const char kIpcDumpDirectory[] = "ipc-dump-directory";
 // Specifies the testcase used by the IPC fuzzer.
 const char kIpcFuzzerTestcase[] = "ipc-fuzzer-testcase";
 #endif
+
+#if defined(OS_MACOSX)
+// Enable the V2 sandbox during the helper executable initialization.
+const char kEnableV2Sandbox[] = "v2-sandbox";
+
+// The command line paramter indicating that the v2 sandbox is enabled. This
+// must be different than the "v2-sandbox" flag to avoid endless re-executing.
+// The flag tells the sandbox initialization code inside Chrome that the sandbox
+// should already be enabled.
+// TODO(kerrnel): Remove this once the V2 sandbox migration is complete, as
+// processes will be assumed to run under the V2 sandbox.
+const char kV2SandboxedEnabled[] = "v2-sandbox-enabled";
+#endif  // defined(OS_MACOSX)
 
 // Don't dump stuff here, follow the same order as the header.
 

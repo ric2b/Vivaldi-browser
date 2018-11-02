@@ -44,7 +44,8 @@ namespace blink {
 static V8PerIsolateData* g_main_thread_per_isolate_data = 0;
 
 static void BeforeCallEnteredCallback(v8::Isolate* isolate) {
-  CHECK(!ScriptForbiddenScope::IsScriptForbidden());
+  // TODO(jochen): Re-enable this once https://crbug.com/728583
+  // CHECK(!ScriptForbiddenScope::IsScriptForbidden());
 }
 
 static void MicrotasksCompletedCallback(v8::Isolate* isolate) {
@@ -220,6 +221,8 @@ void V8PerIsolateData::ClearScriptRegexpContext() {
 bool V8PerIsolateData::HasInstance(
     const WrapperTypeInfo* untrusted_wrapper_type_info,
     v8::Local<v8::Value> value) {
+  RUNTIME_CALL_TIMER_SCOPE(GetIsolate(),
+                           RuntimeCallStats::CounterId::kHasInstance);
   return HasInstance(untrusted_wrapper_type_info, value,
                      interface_template_map_for_main_world_) ||
          HasInstance(untrusted_wrapper_type_info, value,

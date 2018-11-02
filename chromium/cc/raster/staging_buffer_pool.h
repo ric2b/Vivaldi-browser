@@ -18,8 +18,8 @@
 #include "base/time/time.h"
 #include "base/trace_event/memory_dump_provider.h"
 #include "base/trace_event/trace_event.h"
-#include "cc/output/context_provider.h"
 #include "cc/resources/resource_provider.h"
+#include "components/viz/common/gpu/context_provider.h"
 
 namespace gpu {
 namespace gles2 {
@@ -31,16 +31,16 @@ namespace cc {
 class Resource;
 
 struct StagingBuffer {
-  StagingBuffer(const gfx::Size& size, ResourceFormat format);
+  StagingBuffer(const gfx::Size& size, viz::ResourceFormat format);
   ~StagingBuffer();
 
   void DestroyGLResources(gpu::gles2::GLES2Interface* gl);
   void OnMemoryDump(base::trace_event::ProcessMemoryDump* pmd,
-                    ResourceFormat format,
+                    viz::ResourceFormat format,
                     bool is_free) const;
 
   const gfx::Size size;
-  const ResourceFormat format;
+  const viz::ResourceFormat format;
   std::unique_ptr<gfx::GpuMemoryBuffer> gpu_memory_buffer;
   base::TimeTicks last_usage;
   unsigned texture_id;
@@ -56,7 +56,7 @@ class CC_EXPORT StagingBufferPool
   ~StagingBufferPool() final;
 
   StagingBufferPool(base::SequencedTaskRunner* task_runner,
-                    ContextProvider* worker_context_provider,
+                    viz::ContextProvider* worker_context_provider,
                     ResourceProvider* resource_provider,
                     bool use_partial_raster,
                     int max_staging_buffer_usage_in_bytes);
@@ -74,7 +74,7 @@ class CC_EXPORT StagingBufferPool
 
  private:
   void AddStagingBuffer(const StagingBuffer* staging_buffer,
-                        ResourceFormat format);
+                        viz::ResourceFormat format);
   void RemoveStagingBuffer(const StagingBuffer* staging_buffer);
   void MarkStagingBufferAsFree(const StagingBuffer* staging_buffer);
   void MarkStagingBufferAsBusy(const StagingBuffer* staging_buffer);
@@ -93,7 +93,7 @@ class CC_EXPORT StagingBufferPool
   void OnPurgeMemory() override;
 
   scoped_refptr<base::SequencedTaskRunner> task_runner_;
-  ContextProvider* const worker_context_provider_;
+  viz::ContextProvider* const worker_context_provider_;
   ResourceProvider* const resource_provider_;
   const bool use_partial_raster_;
 

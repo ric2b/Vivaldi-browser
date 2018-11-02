@@ -189,6 +189,7 @@
         'quick_view_uma',
         'scan_controller',
         'search_controller',
+        'selection_menu_controller',
         'sort_menu_controller',
         'spinner_controller',
         'task_controller',
@@ -245,6 +246,7 @@
       'dependencies': [
         'directory_model',
         'metadata/compiled_resources2.gyp:metadata_model',
+        'task_history',
         'ui/compiled_resources2.gyp:file_manager_ui',
         'volume_manager_wrapper',
       ],
@@ -262,6 +264,7 @@
         'metadata/compiled_resources2.gyp:metadata_model',
         'metadata/compiled_resources2.gyp:thumbnail_model',
         'ui/compiled_resources2.gyp:directory_tree',
+        'ui/compiled_resources2.gyp:file_manager_ui',
         'ui/compiled_resources2.gyp:list_container',
         'ui/compiled_resources2.gyp:multi_profile_share_dialog',
         'ui/compiled_resources2.gyp:progress_center_panel',
@@ -503,6 +506,15 @@
       'includes': ['../../../compile_js2.gypi'],
     },
     {
+      'target_name': 'selection_menu_controller',
+      'dependencies': [
+        '../elements/compiled_resources2.gyp:files_toggle_ripple',
+        'directory_model',
+        'file_manager_commands',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
       'target_name': 'share_client',
       'dependencies': [
         '../../../externs/compiled_resources2.gyp:entry_location',
@@ -542,8 +554,17 @@
         'file_tasks',
         'metadata/compiled_resources2.gyp:metadata_model',
         'metadata_update_controller',
+        'task_history',
         'ui/compiled_resources2.gyp:file_manager_ui',
         'volume_manager_wrapper',
+      ],
+      'includes': ['../../../compile_js2.gypi'],
+    },
+    {
+      'target_name': 'task_history',
+      'dependencies': [
+        '<(DEPTH)/ui/webui/resources/js/cr/compiled_resources2.gyp:event_target',
+        '<(EXTERNS_GYP):chrome_extensions',
       ],
       'includes': ['../../../compile_js2.gypi'],
     },

@@ -87,6 +87,7 @@ bool AudioInputMessageFilter::OnMessageReceived(const IPC::Message& message) {
     IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamCreated,
                         OnStreamCreated)
     IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamError, OnStreamError)
+    IPC_MESSAGE_HANDLER(AudioInputMsg_NotifyStreamMuted, OnStreamMuted)
     IPC_MESSAGE_UNHANDLED(handled = false)
   IPC_END_MESSAGE_MAP()
   return handled;
@@ -127,7 +128,8 @@ void AudioInputMessageFilter::OnStreamCreated(
     base::SharedMemoryHandle handle,
     base::SyncSocket::TransitDescriptor socket_descriptor,
     uint32_t length,
-    uint32_t total_segments) {
+    uint32_t total_segments,
+    bool initially_muted) {
   DCHECK(io_task_runner_->BelongsToCurrentThread());
   LogMessage(stream_id, "OnStreamCreated");
 
@@ -142,7 +144,8 @@ void AudioInputMessageFilter::OnStreamCreated(
     return;
   }
   // Forward message to the stream delegate.
-  delegate->OnStreamCreated(handle, socket_handle, length, total_segments);
+  delegate->OnStreamCreated(handle, socket_handle, length, total_segments,
+                            initially_muted);
 }
 
 void AudioInputMessageFilter::OnStreamError(int stream_id) {
@@ -154,6 +157,17 @@ void AudioInputMessageFilter::OnStreamError(int stream_id) {
     return;
   }
   delegate->OnError();
+}
+
+void AudioInputMessageFilter::OnStreamMuted(int stream_id, bool is_muted) {
+  DCHECK(io_task_runner_->BelongsToCurrentThread());
+  media::AudioInputIPCDelegate* delegate = delegates_.Lookup(stream_id);
+  if (!delegate) {
+    DLOG(WARNING) << "Got audio stream muted event for a non-existent or "
+                     "removed audio renderer.";
+    return;
+  }
+  delegate->OnMuted(is_muted);
 }
 
 AudioInputMessageFilter::AudioInputIPCImpl::AudioInputIPCImpl(

@@ -12,11 +12,11 @@
 namespace blink {
 
 NGBaseLayoutAlgorithmTest::NGBaseLayoutAlgorithmTest() {
-  RuntimeEnabledFeatures::setLayoutNGEnabled(true);
+  RuntimeEnabledFeatures::SetLayoutNGEnabled(true);
 }
 
 NGBaseLayoutAlgorithmTest::~NGBaseLayoutAlgorithmTest() {
-  RuntimeEnabledFeatures::setLayoutNGEnabled(false);
+  RuntimeEnabledFeatures::SetLayoutNGEnabled(false);
 }
 
 void NGBaseLayoutAlgorithmTest::SetUp() {
@@ -28,7 +28,7 @@ std::pair<RefPtr<NGPhysicalBoxFragment>, RefPtr<NGConstraintSpace>>
 NGBaseLayoutAlgorithmTest::RunBlockLayoutAlgorithmForElement(Element* element) {
   LayoutNGBlockFlow* block_flow =
       ToLayoutNGBlockFlow(element->GetLayoutObject());
-  NGBlockNode* node = new NGBlockNode(block_flow);
+  NGBlockNode node(block_flow);
   RefPtr<NGConstraintSpace> space =
       NGConstraintSpace::CreateFromLayoutObject(*block_flow);
 

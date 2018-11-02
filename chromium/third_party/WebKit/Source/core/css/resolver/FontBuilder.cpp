@@ -35,9 +35,9 @@
 
 namespace blink {
 
-FontBuilder::FontBuilder(const Document& document)
-    : document_(&document), flags_(0) {
-  DCHECK(document.GetFrame());
+FontBuilder::FontBuilder(const Document* document)
+    : document_(document), flags_(0) {
+  DCHECK(!document || document->GetFrame());
 }
 
 void FontBuilder::SetInitial(float effective_zoom) {
@@ -101,6 +101,7 @@ AtomicString FontBuilder::GenericFontFamilyName(
 
 float FontBuilder::FontSizeForKeyword(unsigned keyword,
                                       bool is_monospace) const {
+  DCHECK(document_);
   return FontSize::FontSizeForKeyword(document_, keyword, is_monospace);
 }
 
@@ -227,6 +228,7 @@ float FontBuilder::GetComputedSizeFromSpecifiedSize(
     FontDescription& font_description,
     float effective_zoom,
     float specified_size) {
+  DCHECK(document_);
   float zoom_factor = effective_zoom;
   // FIXME: Why is this here!!!!?!
   if (LocalFrame* frame = document_->GetFrame())
@@ -242,11 +244,11 @@ static FontOrientation ComputeFontOrientation(const ComputedStyle& style) {
     return FontOrientation::kHorizontal;
 
   switch (style.GetTextOrientation()) {
-    case kTextOrientationMixed:
+    case ETextOrientation::kMixed:
       return FontOrientation::kVerticalMixed;
-    case kTextOrientationUpright:
+    case ETextOrientation::kUpright:
       return FontOrientation::kVerticalUpright;
-    case kTextOrientationSideways:
+    case ETextOrientation::kSideways:
       return FontOrientation::kVerticalRotated;
     default:
       NOTREACHED();
@@ -254,14 +256,10 @@ static FontOrientation ComputeFontOrientation(const ComputedStyle& style) {
   }
 }
 
-void FontBuilder::UpdateOrientation(FontDescription& description,
-                                    const ComputedStyle& style) {
-  description.SetOrientation(ComputeFontOrientation(style));
-}
-
 void FontBuilder::CheckForGenericFamilyChange(
     const FontDescription& old_description,
     FontDescription& new_description) {
+  DCHECK(document_);
   if (new_description.IsAbsoluteSize())
     return;
 
@@ -337,9 +335,8 @@ void FontBuilder::UpdateAdjustedSize(FontDescription& font_description,
   adjusted_size = GetComputedSizeFromSpecifiedSize(
       font_description, style.EffectiveZoom(), adjusted_size);
 
-  float multiplier = style.TextAutosizingMultiplier();
-  adjusted_size =
-      TextAutosizer::ComputeAutosizedFontSize(adjusted_size, multiplier);
+  adjusted_size = TextAutosizer::ComputeAutosizedFontSize(
+      adjusted_size, style.TextAutosizingMultiplier());
   font_description.SetAdjustedSize(adjusted_size);
 }
 
@@ -348,19 +345,13 @@ void FontBuilder::UpdateComputedSize(FontDescription& font_description,
   float computed_size =
       GetComputedSizeFromSpecifiedSize(font_description, style.EffectiveZoom(),
                                        font_description.SpecifiedSize());
-  float multiplier = style.TextAutosizingMultiplier();
-  computed_size =
-      TextAutosizer::ComputeAutosizedFontSize(computed_size, multiplier);
+  computed_size = TextAutosizer::ComputeAutosizedFontSize(
+      computed_size, style.TextAutosizingMultiplier());
   font_description.SetComputedSize(computed_size);
 }
 
-void FontBuilder::CreateFont(FontSelector* font_selector,
-                             ComputedStyle& style) {
-  if (!flags_)
-    return;
-
-  FontDescription description = style.GetFontDescription();
-
+void FontBuilder::UpdateFontDescription(FontDescription& description,
+                                        FontOrientation font_orientation) {
   if (IsSet(PropertySetFlag::kFamily)) {
     description.SetGenericFamily(font_description_.GenericFamily());
     description.SetFamily(font_description_.Family());
@@ -370,6 +361,7 @@ void FontBuilder::CreateFont(FontSelector* font_selector,
     description.SetSpecifiedSize(font_description_.SpecifiedSize());
     description.SetIsAbsoluteSize(font_description_.IsAbsoluteSize());
   }
+
   if (IsSet(PropertySetFlag::kSizeAdjust))
     description.SetSizeAdjust(font_description_.SizeAdjust());
   if (IsSet(PropertySetFlag::kWeight))
@@ -398,7 +390,30 @@ void FontBuilder::CreateFont(FontSelector* font_selector,
     description.SetFontSmoothing(font_description_.FontSmoothing());
   if (IsSet(PropertySetFlag::kTextOrientation) ||
       IsSet(PropertySetFlag::kWritingMode))
-    UpdateOrientation(description, style);
+    description.SetOrientation(font_orientation);
+
+  float size = description.SpecifiedSize();
+  if (!size && description.KeywordSize()) {
+    size = FontSizeForKeyword(description.KeywordSize(),
+                              description.IsMonospace());
+  }
+
+  description.SetSpecifiedSize(size);
+  description.SetComputedSize(size);
+  if (size && description.HasSizeAdjust())
+    description.SetAdjustedSize(size);
+}
+
+void FontBuilder::CreateFont(FontSelector* font_selector,
+                             ComputedStyle& style) {
+  DCHECK(document_);
+
+  if (!flags_)
+    return;
+
+  FontDescription description = style.GetFontDescription();
+
+  UpdateFontDescription(description, ComputeFontOrientation(style));
 
   UpdateSpecifiedSize(description, style);
   UpdateComputedSize(description, style);
@@ -411,6 +426,7 @@ void FontBuilder::CreateFont(FontSelector* font_selector,
 
 void FontBuilder::CreateFontForDocument(FontSelector* font_selector,
                                         ComputedStyle& document_style) {
+  DCHECK(document_);
   FontDescription font_description = FontDescription();
   font_description.SetLocale(document_style.GetFontDescription().Locale());
 
@@ -421,7 +437,7 @@ void FontBuilder::CreateFontForDocument(FontSelector* font_selector,
   UpdateSpecifiedSize(font_description, document_style);
   UpdateComputedSize(font_description, document_style);
 
-  UpdateOrientation(font_description, document_style);
+  font_description.SetOrientation(ComputeFontOrientation(document_style));
   document_style.SetFontDescription(font_description);
   document_style.GetFont().Update(font_selector);
 }

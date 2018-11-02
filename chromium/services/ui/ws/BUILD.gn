@@ -33,6 +33,7 @@ static_library("lib") {
     "display.h",
     "display_binding.cc",
     "display_binding.h",
+    "display_creation_config.h",
     "display_manager.cc",
     "display_manager.h",
     "drag_controller.cc",
@@ -45,12 +46,17 @@ static_library("lib") {
     "event_dispatcher_delegate.h",
     "event_matcher.cc",
     "event_matcher.h",
+    "event_targeter.cc",
+    "event_targeter.h",
+    "event_targeter_delegate.h",
     "focus_controller.cc",
     "focus_controller.h",
     "focus_controller_delegate.h",
     "focus_controller_observer.h",
     "frame_generator.cc",
     "frame_generator.h",
+    "frame_sink_manager_client_binding.cc",
+    "frame_sink_manager_client_binding.h",
     "gpu_client.cc",
     "gpu_client.h",
     "gpu_host.cc",
@@ -76,6 +82,9 @@ static_library("lib") {
     "server_window_drawn_tracker_observer.h",
     "server_window_observer.h",
     "server_window_tracker.h",
+    "threaded_image_cursors.cc",
+    "threaded_image_cursors.h",
+    "threaded_image_cursors_factory.h",
     "user_activity_monitor.cc",
     "user_activity_monitor.h",
     "user_display_manager.cc",
@@ -115,6 +124,7 @@ static_library("lib") {
   ]
 
   deps = [
+    "//components/viz/host",
     "//gpu/command_buffer/client",
     "//gpu/command_buffer/client:gles2_interface",
     "//gpu/ipc/client",
@@ -128,13 +138,12 @@ static_library("lib") {
     "//cc",
     "//cc/ipc:interfaces",
     "//cc/surfaces",
-    "//cc/surfaces:surface_id",
+    "//components/viz/common",
     "//mojo/common:common_base",
     "//mojo/public/cpp/bindings",
     "//services/service_manager/public/cpp",
     "//services/service_manager/public/interfaces",
     "//services/ui/common:mus_common",
-    "//services/ui/common:server_gpu",
     "//services/ui/display",
     "//services/ui/public/interfaces",
     "//ui/base",
@@ -152,10 +161,13 @@ static_library("lib") {
   ]
 
   if (use_ozone) {
-    public_deps += [ "//ui/ozone:ozone" ]
+    public_deps += [ "//ui/ozone" ]
   }
   if (is_chromeos) {
     public_deps += [ "//ui/chromeos/events" ]
+    if (use_ozone) {
+      public_deps += [ "//ui/events/ozone:events_ozone" ]
+    }
   }
 
   # ui service should not depend on below components.
@@ -221,14 +233,9 @@ static_library("test_support") {
   ]
 }
 
-group("tests") {
+source_set("tests") {
   testonly = true
-  deps = [
-    ":ui_service_unittests",
-  ]
-}
 
-service_test("ui_service_unittests") {
   sources = [
     "cursor_location_manager_unittest.cc",
     "cursor_state_unittest.cc",
@@ -248,7 +255,6 @@ service_test("ui_service_unittests") {
     "transient_windows_unittest.cc",
     "user_activity_monitor_unittest.cc",
     "user_display_manager_unittest.cc",
-    "window_coordinate_conversions_unittest.cc",
     "window_finder_unittest.cc",
     "window_manager_state_unittest.cc",
     "window_tree_client_unittest.cc",
@@ -266,8 +272,6 @@ service_test("ui_service_unittests") {
   if (use_ozone) {
     sources += [ "platform_display_default_unittest.cc" ]
   }
-
-  catalog = ":ui_service_unittests_catalog"
 
   deps = [
     ":lib",
@@ -300,13 +304,12 @@ service_test("ui_service_unittests") {
   ]
 }
 
-service_manifest("ui_service_unittests_app_manifest") {
-  name = "ui_service_unittests_app"
-  source = "ui_service_unittests_app_manifest.json"
+service_manifest("unittests_manifest") {
+  name = "ui_service_unittests"
+  source = "test_manifest.json"
 }
 
-catalog("ui_service_unittests_catalog") {
-  embedded_services = [ ":ui_service_unittests_app_manifest" ]
-
-  standalone_services = [ "//services/ui:manifest" ]
+catalog("tests_catalog") {
+  testonly = true
+  embedded_services = [ ":unittests_manifest" ]
 }

@@ -24,8 +24,8 @@ class APP_LIST_EXPORT SearchResultPageView
   SearchResultPageView();
   ~SearchResultPageView() override;
 
-  int selected_index() { return selected_index_; }
-  bool HasSelection() { return selected_index_ > -1; }
+  int selected_index() const { return selected_index_; }
+  bool HasSelection() const { return selected_index_ > -1; }
   void SetSelection(bool select);  // Set or unset result selection.
 
   void AddSearchResultContainerView(
@@ -39,6 +39,7 @@ class APP_LIST_EXPORT SearchResultPageView
   // Overridden from views::View:
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   const char* GetClassName() const override;
+  gfx::Size CalculatePreferredSize() const override;
 
   // AppListPage overrides:
   gfx::Rect GetPageBoundsForState(AppListModel::State state) const override;
@@ -47,13 +48,20 @@ class APP_LIST_EXPORT SearchResultPageView
                           AppListModel::State to_state) override;
   int GetSearchBoxZHeight() const override;
   void OnHidden() override;
+  gfx::Rect GetSearchBoxBounds() const override;
+  views::View* GetSelectedView() const override;
 
   void ClearSelectedIndex();
 
   // Overridden from SearchResultContainerView::Delegate :
   void OnSearchResultContainerResultsChanged() override;
 
+  views::View* contents_view() { return contents_view_; }
+
  private:
+  // Separator between SearchResultContainerView.
+  class HorizontalSeparator;
+
   // |directional_movement| is true if the navigation was caused by directional
   // controls (eg, arrow keys), as opposed to linear controls (eg, Tab).
   void SetSelectedIndex(int index, bool directional_movement);
@@ -63,8 +71,15 @@ class APP_LIST_EXPORT SearchResultPageView
   // the views hierarchy.
   std::vector<SearchResultContainerView*> result_container_views_;
 
+  std::vector<HorizontalSeparator*> separators_;
+
   // -1 indicates no selection.
   int selected_index_;
+
+  const bool is_fullscreen_app_list_enabled_;
+
+  // View containing SearchCardView instances. Owned by view hierarchy.
+  views::View* const contents_view_;
 
   DISALLOW_COPY_AND_ASSIGN(SearchResultPageView);
 };

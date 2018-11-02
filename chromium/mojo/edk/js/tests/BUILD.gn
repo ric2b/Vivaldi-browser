@@ -15,38 +15,7 @@ import("//testing/test.gni")
 group("tests") {
   testonly = true
   deps = [
-    ":mojo_js_integration_tests",
     ":mojo_js_unittests",
-  ]
-}
-
-test("mojo_js_integration_tests") {
-  deps = [
-    ":js_to_cpp_bindings",
-    "//base/test:test_support",
-    "//gin:gin_test",
-    "//mojo/common",
-    "//mojo/edk/js",
-    "//mojo/edk/test:run_all_unittests",
-    "//mojo/public/cpp/bindings",
-    "//mojo/public/cpp/system",
-    "//mojo/public/js:bindings",
-  ]
-
-  sources = [
-    "js_to_cpp_tests.cc",
-  ]
-
-  data = [
-    "js_to_cpp_tests.js",
-  ]
-
-  configs += [ "//v8:external_startup_data" ]
-}
-
-mojom("js_to_cpp_bindings") {
-  sources = [
-    "js_to_cpp.mojom",
   ]
 }
 
@@ -58,8 +27,6 @@ test("mojo_js_unittests") {
     "//mojo/edk/test:run_all_unittests",
     "//mojo/edk/test:test_support",
     "//mojo/public/cpp/system",
-    "//mojo/public/interfaces/bindings/tests:test_associated_interfaces",
-    "//mojo/public/interfaces/bindings/tests:test_interfaces",
     "//mojo/public/js:tests",
   ]
 

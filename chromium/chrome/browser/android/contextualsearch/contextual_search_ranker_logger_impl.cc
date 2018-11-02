@@ -9,9 +9,9 @@
 #include "base/metrics/metrics_hashes.h"
 #include "chrome/browser/browser_process.h"
 #include "components/keyed_service/core/keyed_service.h"
-#include "components/ukm/public/ukm_entry_builder.h"
-#include "components/ukm/public/ukm_recorder.h"
 #include "jni/ContextualSearchRankerLoggerImpl_jni.h"
+#include "services/metrics/public/cpp/ukm_entry_builder.h"
+#include "services/metrics/public/cpp/ukm_recorder.h"
 
 ContextualSearchRankerLoggerImpl::ContextualSearchRankerLoggerImpl(JNIEnv* env,
                                                                    jobject obj)
@@ -75,10 +75,6 @@ void ContextualSearchRankerLoggerImpl::Destroy(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
   delete this;
-}
-
-bool RegisterContextualSearchRankerLoggerImpl(JNIEnv* env) {
-  return RegisterNativesImpl(env);
 }
 
 jlong Init(JNIEnv* env, const base::android::JavaParamRef<jobject>& obj) {

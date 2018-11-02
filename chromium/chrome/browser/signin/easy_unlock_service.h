@@ -33,6 +33,12 @@ class DictionaryValue;
 class ListValue;
 }
 
+#if defined(OS_CHROMEOS)
+namespace chromeos {
+class UserContext;
+}
+#endif
+
 namespace user_manager {
 class User;
 }
@@ -42,6 +48,7 @@ class PrefRegistrySyncable;
 }
 
 namespace proximity_auth {
+class ProximityAuthPrefManager;
 class ProximityAuthSystem;
 }
 
@@ -63,16 +70,6 @@ class EasyUnlockService : public KeyedService {
     TYPE_SIGNIN
   };
 
-  // Easy Unlock settings that the user can configure.
-  struct UserSettings {
-    UserSettings();
-    ~UserSettings();
-
-    // Whether to require the remote device to be in very close proximity
-    // before allowing unlock (~1 feet).
-    bool require_close_proximity;
-  };
-
   // Gets EasyUnlockService instance.
   static EasyUnlockService* Get(Profile* profile);
 
@@ -89,11 +86,13 @@ class EasyUnlockService : public KeyedService {
   // Removes the hardlock state for the given user.
   static void ResetLocalStateForUser(const AccountId& account_id);
 
-  // Returns the user's preferences.
-  static UserSettings GetUserSettings(const AccountId& account_id);
-
   // Returns the identifier for the device.
   static std::string GetDeviceId();
+
+  // Returns the ProximityAuthPrefManager, responsible for managing all
+  // EasyUnlock preferences.
+  virtual proximity_auth::ProximityAuthPrefManager*
+  GetProximityAuthPrefManager();
 
   // Returns the EasyUnlockService type.
   virtual Type GetType() const = 0;
@@ -160,6 +159,9 @@ class EasyUnlockService : public KeyedService {
   // override for testing.
   virtual bool IsEnabled() const;
 
+  // Returns true if ChromeOS login is enabled by the user.
+  virtual bool IsChromeOSLoginEnabled() const;
+
   // Sets the hardlock state for the associated user.
   void SetHardlockState(EasyUnlockScreenlockStateHandler::HardlockState state);
 
@@ -171,10 +173,6 @@ class EasyUnlockService : public KeyedService {
   // returns false and |state| is unchanged.
   bool GetPersistedHardlockState(
       EasyUnlockScreenlockStateHandler::HardlockState* state) const;
-
-  // Shows the hardlock or connecting state as initial UI before cryptohome
-  // keys checking and state update from the app.
-  void ShowInitialUserState();
 
   // Updates the user pod on the signin/lock screen for the user associated with
   // the service to reflect the provided screenlock state.
@@ -219,6 +217,12 @@ class EasyUnlockService : public KeyedService {
   // initiated by the Easy Unlock app.
   void RecordClickOnLockIcon();
 
+#if defined(OS_CHROMEOS)
+  // Called when the user reauths (e.g. in chrome://settings) so we can cache
+  // the user context for the setup flow.
+  virtual void HandleUserReauth(const chromeos::UserContext& user_context);
+#endif
+
   void AddObserver(EasyUnlockServiceObserver* observer);
   void RemoveObserver(EasyUnlockServiceObserver* observer);
 
@@ -247,6 +251,9 @@ class EasyUnlockService : public KeyedService {
 
   // Called when the local device resumes after a suspend.
   virtual void OnSuspendDoneInternal() = 0;
+
+  // Called when the state of the Bluetooth adapter changes.
+  virtual void OnBluetoothAdapterPresentChanged();
 
   // KeyedService override:
   void Shutdown() override;
@@ -317,9 +324,6 @@ class EasyUnlockService : public KeyedService {
   // is created. Do not cache the returned value, as it may go away if Easy
   // Unlock gets disabled.
   EasyUnlockScreenlockStateHandler* GetScreenlockStateHandler();
-
-  // Callback when Bluetooth adapter present state changes.
-  void OnBluetoothAdapterPresentChanged();
 
 #if defined(OS_CHROMEOS)
   // Callback for get key operation from CheckCryptohomeKeysAndMaybeHardlock.

@@ -75,13 +75,14 @@ bool ModuleInfoKey::operator<(const ModuleInfoKey& mik) const {
 }
 
 // ModuleInspectionResult ------------------------------------------------------
+
 ModuleInspectionResult::ModuleInspectionResult() = default;
 
 ModuleInspectionResult::~ModuleInspectionResult() = default;
 
 // ModuleInfoData --------------------------------------------------------------
 
-ModuleInfoData::ModuleInfoData() : process_types(0) {}
+ModuleInfoData::ModuleInfoData() : process_types(0), module_types(0) {}
 
 ModuleInfoData::~ModuleInfoData() = default;
 

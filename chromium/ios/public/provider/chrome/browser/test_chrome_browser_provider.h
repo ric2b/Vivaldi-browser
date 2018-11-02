@@ -33,8 +33,8 @@ class TestChromeBrowserProvider : public ChromeBrowserProvider {
   OmahaServiceProvider* GetOmahaServiceProvider() const override;
   UserFeedbackProvider* GetUserFeedbackProvider() const override;
   SpotlightProvider* GetSpotlightProvider() const override;
+  void CheckForFirstPartyApps() const override;
   BrandedImageProvider* GetBrandedImageProvider() const override;
-  id<NativeAppWhitelistManager> GetNativeAppWhitelistManager() const override;
 
  private:
   std::unique_ptr<AppDistributionProvider> app_distribution_provider_;

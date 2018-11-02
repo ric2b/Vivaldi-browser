@@ -9,12 +9,10 @@
 #include "ash/scoped_root_window_for_new_windows.h"
 #include "ash/shell.h"
 #include "ash/shell/toplevel_window.h"
-#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_shell_delegate.h"
+#include "ash/test_shell_delegate.h"
 #include "ash/wm/window_positioner.h"
 #include "ash/wm/window_state.h"
-#include "ash/wm_window.h"
 #include "base/strings/string_number_conversions.h"
 #include "ui/display/screen.h"
 #include "ui/views/widget/widget.h"
@@ -22,7 +20,14 @@
 
 namespace ash {
 
-using WindowPositionerTest = test::AshTestBase;
+class WindowPositionerTest : public AshTestBase {
+ public:
+  WindowPositionerTest() = default;
+  ~WindowPositionerTest() override = default;
+
+ private:
+  DISALLOW_COPY_AND_ASSIGN(WindowPositionerTest);
+};
 
 TEST_F(WindowPositionerTest, OpenMaximizedWindowOnSecondDisplay) {
   // Tests that for a screen that is narrower than kForceMaximizeWidthLimit
@@ -138,7 +143,7 @@ TEST_F(WindowPositionerTest, EnsureMinimumVisibility) {
 // opened being not maximized. To enforce maximization for all screen
 // resolutions, one can set "ForceMaximizeBrowserWindowOnFirstRun"
 // policy. In the following tests we check if the window will be opened in
-// maximized mode for low and high resolution when this policy is set.
+// tablet mode for low and high resolution when this policy is set.
 TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
   const int width = ash::WindowPositioner::GetForceMaximizedWidthLimit() + 100;
   // Set resolution to 1466x300.
@@ -147,8 +152,8 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowHighResloution) {
   gfx::Rect bounds_in_out(0, 0, 320, 240);  // Random bounds.
   ui::WindowShowState show_state_out = ui::SHOW_STATE_DEFAULT;
 
-  test::TestShellDelegate* const delegate =
-      static_cast<test::TestShellDelegate*>(Shell::Get()->shell_delegate());
+  TestShellDelegate* const delegate =
+      static_cast<TestShellDelegate*>(Shell::Get()->shell_delegate());
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(
@@ -166,8 +171,8 @@ TEST_F(WindowPositionerTest, FirstRunMaximizeWindowLowResolution) {
   gfx::Rect bounds_in_out(0, 0, 320, 240);  // Random bounds.
   ui::WindowShowState show_state_out = ui::SHOW_STATE_DEFAULT;
 
-  test::TestShellDelegate* const delegate =
-      static_cast<test::TestShellDelegate*>(Shell::Get()->shell_delegate());
+  TestShellDelegate* const delegate =
+      static_cast<TestShellDelegate*>(Shell::Get()->shell_delegate());
   delegate->SetForceMaximizeOnFirstRun(true);
 
   WindowPositioner::GetBoundsAndShowStateForNewWindow(

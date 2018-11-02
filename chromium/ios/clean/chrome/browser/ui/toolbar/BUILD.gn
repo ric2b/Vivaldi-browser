@@ -15,9 +15,12 @@ source_set("toolbar") {
   deps = [
     ":toolbar_ui",
     "//base",
+    "//ios/chrome/browser",
+    "//ios/chrome/browser/web_state_list",
     "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/omnibox",
     "//ios/clean/chrome/browser/ui/tools",
+    "//ios/shared/chrome/browser/ui/broadcaster",
     "//ios/shared/chrome/browser/ui/browser_list",
     "//ios/shared/chrome/browser/ui/commands",
     "//ios/shared/chrome/browser/ui/coordinators",
@@ -35,10 +38,10 @@ source_set("toolbar_ui") {
   deps = [
     ":toolbar_components_ui",
     "//base",
-    "//ios/clean/chrome/browser/ui/actions",
-    "//ios/clean/chrome/browser/ui/animators",
+    "//ios/chrome/browser/ui",
     "//ios/clean/chrome/browser/ui/commands",
     "//ios/clean/chrome/browser/ui/tools",
+    "//ios/clean/chrome/browser/ui/transitions/animators",
     "//ios/third_party/material_components_ios",
   ]
   libs = [ "UIKit.framework" ]
@@ -57,8 +60,11 @@ source_set("toolbar_components_ui") {
   ]
   deps = [
     "//base",
+    "//components/strings",
+    "//ios/chrome/app/strings",
     "//ios/chrome/app/theme",
     "//ios/chrome/browser/ui",
+    "//ui/base",
   ]
   libs = [ "UIKit.framework" ]
   configs += [ "//build/config/compiler:enable_arc" ]
@@ -75,9 +81,11 @@ source_set("unit_tests") {
     ":toolbar_ui",
     "//base",
     "//base/test:test_support",
+    "//ios/chrome/browser/web_state_list",
+    "//ios/chrome/browser/web_state_list:test_support",
     "//ios/shared/chrome/browser/ui/toolbar:test_support",
     "//ios/web",
-    "//ios/web:test_support",
+    "//ios/web/public/test/fakes",
     "//testing/gtest",
     "//third_party/ocmock",
   ]

@@ -11,7 +11,6 @@
 #include "base/android/jni_string.h"
 #include "components/web_contents_delegate_android/color_chooser_android.h"
 #include "components/web_contents_delegate_android/validation_message_bubble_android.h"
-#include "content/public/browser/android/content_view_core.h"
 #include "content/public/browser/color_chooser.h"
 #include "content/public/browser/global_request_id.h"
 #include "content/public/browser/invalidate_type.h"
@@ -110,6 +109,7 @@ WebContents* WebContentsDelegateAndroid::OpenURLFromTab(
   load_params.should_replace_current_entry =
       params.should_replace_current_entry;
   load_params.is_renderer_initiated = params.is_renderer_initiated;
+  load_params.has_user_gesture = params.user_gesture;
 
   if (params.uses_post) {
     load_params.load_type = content::NavigationController::LOAD_TYPE_HTTP_POST;
@@ -185,6 +185,7 @@ void WebContentsDelegateAndroid::RendererResponsive(WebContents* source) {
 
 bool WebContentsDelegateAndroid::ShouldCreateWebContents(
     content::WebContents* web_contents,
+    content::RenderFrameHost* opener,
     content::SiteInstance* source_site_instance,
     int32_t route_id,
     int32_t main_frame_route_id,
@@ -205,22 +206,13 @@ bool WebContentsDelegateAndroid::ShouldCreateWebContents(
                                                                  java_url);
 }
 
-bool WebContentsDelegateAndroid::OnGoToEntryOffset(int offset) {
-  JNIEnv* env = AttachCurrentThread();
-  ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
-  if (obj.is_null())
-    return true;
-  return Java_WebContentsDelegateAndroid_onGoToEntryOffset(env, obj, offset);
-}
-
 void WebContentsDelegateAndroid::WebContentsCreated(
     WebContents* source_contents,
     int opener_render_process_id,
     int opener_render_frame_id,
     const std::string& frame_name,
     const GURL& target_url,
-    WebContents* new_contents,
-    const base::Optional<content::WebContents::CreateParams>& create_params) {
+    WebContents* new_contents) {
   JNIEnv* env = AttachCurrentThread();
   ScopedJavaLocalRef<jobject> obj = GetJavaDelegate(env);
   if (obj.is_null())
@@ -389,14 +381,9 @@ void WebContentsDelegateAndroid::ShowValidationMessage(
     const gfx::Rect& anchor_in_root_view,
     const base::string16& main_text,
     const base::string16& sub_text) {
-  RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
-  if (rwhv) {
-    validation_message_bubble_.reset(
-        new ValidationMessageBubbleAndroid(rwhv->GetRenderWidgetHost(),
-                                           anchor_in_root_view,
-                                           main_text,
-                                           sub_text));
-  }
+  validation_message_bubble_.reset(new ValidationMessageBubbleAndroid(
+      web_contents->GetNativeView(), main_text, sub_text));
+  MoveValidationMessage(web_contents, anchor_in_root_view);
 }
 
 void WebContentsDelegateAndroid::HideValidationMessage(
@@ -409,11 +396,8 @@ void WebContentsDelegateAndroid::MoveValidationMessage(
     const gfx::Rect& anchor_in_root_view) {
   if (!validation_message_bubble_)
     return;
-  RenderWidgetHostView* rwhv = web_contents->GetRenderWidgetHostView();
-  if (rwhv) {
-    validation_message_bubble_->SetPositionRelativeToAnchor(
-        rwhv->GetRenderWidgetHost(), anchor_in_root_view);
-  }
+  validation_message_bubble_->ShowAtPositionRelativeToAnchor(
+      web_contents->GetNativeView(), anchor_in_root_view);
 }
 
 void WebContentsDelegateAndroid::RequestAppBannerFromDevTools(

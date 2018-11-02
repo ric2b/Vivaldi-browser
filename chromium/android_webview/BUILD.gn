@@ -99,6 +99,12 @@ java_cpp_enum("aw_error_ui") {
   ]
 }
 
+java_cpp_enum("aw_safe_browsing_action") {
+  sources = [
+    "browser/aw_safe_browsing_resource_throttle.h",
+  ]
+}
+
 jinja_template("system_webview_manifest") {
   input = "apk/java/AndroidManifest.xml"
   output = system_webview_android_manifest
@@ -174,8 +180,6 @@ repack("repack_100_percent") {
   }
 }
 
-webview_license_path = "$target_gen_dir/webview_licenses.notice"
-
 android_assets("pak_file_assets") {
   sources = [
     "$target_gen_dir/chrome_100_percent.pak",
@@ -191,11 +195,7 @@ android_assets("pak_file_assets") {
 # These assets are needed by both monochrome and stand alone WebView, but not by
 # Chrome.
 android_assets("monochrome_webview_assets") {
-  sources = [
-    webview_license_path,
-  ]
   deps = [
-    ":generate_webview_license_notice",
     "//third_party/icu:icu_assets",
     "//v8:v8_external_startup_data_assets",
   ]
@@ -206,35 +206,24 @@ android_assets("monochrome_webview_assets") {
 
 android_assets("assets") {
   deps = [
+    ":license_assets",
     ":locale_pak_assets",
     ":monochrome_webview_assets",
     ":pak_file_assets",
   ]
 }
 
-android_assets("stub_assets") {
-  sources = [
-    webview_license_path,
-  ]
+java_group("stub_assets") {
   deps = [
-    ":generate_webview_license_notice",
+    ":license_assets",
   ]
 }
 
-action("generate_webview_license_notice") {
-  script = "tools/webview_licenses.py"
-  depfile = "$target_gen_dir/$target_name.d"
-  inputs = [
-    "tools/licenses_notice.tmpl",
-  ]
-  outputs = [
-    webview_license_path,
-  ]
-  args = [
-    "notice",
-    rebase_path(webview_license_path, root_build_dir),
-    "--depfile",
-    rebase_path(depfile, root_build_dir),
+android_assets("license_assets") {
+  renaming_sources = [ "$root_gen_dir/components/resources/about_credits.html" ]
+  renaming_destinations = [ "webview_licenses.notice" ]
+  deps = [
+    "//components/resources:about_credits",
   ]
 }
 
@@ -272,6 +261,9 @@ grit("generate_aw_strings") {
 grit("generate_webui_resources") {
   source = "../ui/webui/resources/webui_resources.grd"
 
+  # The .grd contains references to generated files.
+  source_is_generated = true
+
   # webui/resources has way too many resources. The whitelist is trim this down
   # to a reasonable size
   whitelist = rebase_path("ui/grit_resources_whitelist.txt")
@@ -293,6 +285,9 @@ grit("generate_webui_resources") {
 grit("generate_components_resources") {
   source = "../components/resources/components_resources.grd"
 
+  # The .grd contains references to generated files.
+  source_is_generated = true
+
   # See :generate_webui_resources for an explanation of the whitelist
   whitelist = rebase_path("ui/grit_resources_whitelist.txt")
   inputs = [
@@ -305,6 +300,10 @@ grit("generate_components_resources") {
   outputs = [
     "grit/components_resources.h",
     "components_resources.pak",
+  ]
+
+  deps = [
+    "//components/resources:components_resources",
   ]
 }
 
@@ -523,6 +522,8 @@ source_set("common") {
     "browser/aw_safe_browsing_resource_throttle.h",
     "browser/aw_safe_browsing_ui_manager.cc",
     "browser/aw_safe_browsing_ui_manager.h",
+    "browser/aw_safe_browsing_whitelist_manager.cc",
+    "browser/aw_safe_browsing_whitelist_manager.h",
     "browser/aw_settings.cc",
     "browser/aw_settings.h",
     "browser/aw_ssl_host_state_delegate.cc",
@@ -531,6 +532,8 @@ source_set("common") {
     "browser/aw_web_contents_delegate.h",
     "browser/aw_web_contents_view_delegate.cc",
     "browser/aw_web_contents_view_delegate.h",
+    "browser/aw_web_ui_controller_factory.cc",
+    "browser/aw_web_ui_controller_factory.h",
     "browser/browser_view_renderer.cc",
     "browser/browser_view_renderer.h",
     "browser/browser_view_renderer_client.h",
@@ -683,6 +686,7 @@ source_set("common") {
     "//base",
     "//base/third_party/dynamic_annotations:dynamic_annotations",
     "//cc/surfaces",
+    "//components/autofill/android:provider",
     "//components/autofill/content/browser",
     "//components/autofill/content/renderer",
     "//components/cdm/browser",
@@ -695,6 +699,7 @@ source_set("common") {
     "//components/metrics:profiler",
     "//components/metrics:ui",
     "//components/navigation_interception",
+    "//components/network_session_configurator/common",
     "//components/policy:generated",
     "//components/policy/core/browser",
     "//components/prefs",
@@ -702,13 +707,20 @@ source_set("common") {
     "//components/printing/common",
     "//components/printing/renderer",
     "//components/safe_browsing",
+    "//components/safe_browsing/browser",
+    "//components/safe_browsing/common",
+    "//components/safe_browsing/renderer:websocket_sb_handshake_throttle",
+    "//components/safe_browsing/triggers",
+    "//components/safe_browsing/web_ui",
     "//components/safe_browsing_db:safe_browsing_db_mobile",
     "//components/spellcheck:build_features",
     "//components/supervised_user_error_page",
     "//components/supervised_user_error_page:gin",
+    "//components/url_matcher",
     "//components/version_info",
     "//components/visitedlink/browser",
     "//components/visitedlink/renderer",
+    "//components/viz/service",
     "//components/web_contents_delegate_android:web_contents_delegate_android",
     "//components/web_restrictions:browser",
     "//content",
@@ -722,6 +734,7 @@ source_set("common") {
     "//gpu/command_buffer/client:gles2_implementation",
     "//gpu/command_buffer/common:gles2_utils",
     "//gpu/command_buffer/service",
+    "//gpu/config:crash_keys",
     "//gpu/ipc:gl_in_process_context",
     "//gpu/skia_bindings",
     "//media",
@@ -758,6 +771,7 @@ source_set("common") {
 android_library("android_webview_java") {
   java_files = [
     "java/src/org/chromium/android_webview/AndroidProtocolHandler.java",
+    "java/src/org/chromium/android_webview/AutofillActionModeCallback.java",
     "java/src/org/chromium/android_webview/AwActionModeCallback.java",
     "java/src/org/chromium/android_webview/AwAutofillClient.java",
     "java/src/org/chromium/android_webview/AwBrowserContext.java",
@@ -786,10 +800,12 @@ android_library("android_webview_java") {
     "java/src/org/chromium/android_webview/AwPicture.java",
     "java/src/org/chromium/android_webview/AwPrintDocumentAdapter.java",
     "java/src/org/chromium/android_webview/AwSafeBrowsingConfigHelper.java",
+    "java/src/org/chromium/android_webview/AwSafeBrowsingResponse.java",
     "java/src/org/chromium/android_webview/AwQuotaManagerBridge.java",
     "java/src/org/chromium/android_webview/AwRendererPriorityManager.java",
     "java/src/org/chromium/android_webview/AwRenderProcessGoneDetail.java",
     "java/src/org/chromium/android_webview/AwResource.java",
+    "java/src/org/chromium/android_webview/AwSafeBrowsingConversionHelper.java",
     "java/src/org/chromium/android_webview/AwScrollOffsetManager.java",
     "java/src/org/chromium/android_webview/AwServiceWorkerClient.java",
     "java/src/org/chromium/android_webview/AwServiceWorkerController.java",
@@ -833,13 +849,14 @@ android_library("android_webview_java") {
     ":strings_grd",
     "//base:base_java",
     "//components/autofill/android:autofill_java",
+    "//components/autofill/android:provider_java",
     "//components/crash/android:java",
     "//components/minidump_uploader:minidump_uploader_java",
     "//components/navigation_interception/android:navigation_interception_java",
     "//components/policy/android:policy_java",
     "//components/safe_browsing_db/android:safe_browsing_java",
     "//components/web_contents_delegate_android:web_contents_delegate_android_java",
-    "//components/web_restrictions:web_restrictions_java",
+    "//components/web_restrictions:client_java",
     "//content/public/android:content_java",
     "//device/gamepad:java",
     "//device/geolocation:geolocation_java",
@@ -856,6 +873,8 @@ android_library("android_webview_java") {
     ":aw_permission_request_resource",
     ":aw_renderer_priority_manager_renderer_priority",
     ":aw_error_ui",
+    ":aw_safe_browsing_action",
+    "//components/safe_browsing_db:sb_threat_values",
   ]
 }
 

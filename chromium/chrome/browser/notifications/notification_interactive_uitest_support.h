@@ -43,6 +43,7 @@ class NotificationsTest : public InProcessBrowserTest {
   void AllowOrigin(const GURL& origin);
   void AllowAllOrigins();
   void SetDefaultContentSetting(ContentSetting setting);
+  void DropOriginPreference(const GURL& origin);
 
   std::string CreateNotification(Browser* browser,
                                  bool wait_for_new_balloon,
@@ -57,6 +58,7 @@ class NotificationsTest : public InProcessBrowserTest {
   bool RequestAndDenyPermission(Browser* browser);
   bool RequestAndDismissPermission(Browser* browser);
   bool RequestPermissionAndWait(Browser* browser);
+  std::string QueryPermissionStatus(Browser* browser);
   bool CancelNotification(const char* notification_id, Browser* browser);
   void GetPrefsByContentSetting(ContentSetting setting,
                                 ContentSettingsForOneType* settings);
@@ -68,11 +70,14 @@ class NotificationsTest : public InProcessBrowserTest {
   content::WebContents* GetActiveWebContents(Browser* browser);
 
  protected:
-  void EnableFullscreenNotifications();
-  void DisableFullscreenNotifications();
+  void EnablePermissionsEmbargo(
+      base::test::ScopedFeatureList* scoped_feature_list);
+  void EnableFullscreenNotifications(
+      base::test::ScopedFeatureList* scoped_feature_list);
+  void DisableFullscreenNotifications(
+      base::test::ScopedFeatureList* scoped_feature_list);
 
  private:
-  void DropOriginPreference(const GURL& origin);
   std::string RequestAndRespondToPermission(
       Browser* browser,
       PermissionRequestManager::AutoResponseType bubble_response);

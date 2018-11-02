@@ -10,7 +10,7 @@
 #include <string>
 
 #include "components/sync/base/model_type.h"
-#include "components/sync/test/fake_server/fake_server_entity.h"
+#include "components/sync/engine_impl/loopback_server/loopback_server_entity.h"
 #include "url/gurl.h"
 
 namespace fake_server {
@@ -26,8 +26,10 @@ class NotesEntityBuilder {
   NotesEntityBuilder(const NotesEntityBuilder&);
   ~NotesEntityBuilder();
 
+  void SetParentId(const std::string& parent_id);
+
   // EntityBuilder
-  std::unique_ptr<FakeServerEntity> Build();
+  std::unique_ptr<syncer::LoopbackServerEntity> Build();
 
  private:
   // The note's URL.
@@ -36,6 +38,9 @@ class NotesEntityBuilder {
   const std::string content_;
   std::string originator_cache_guid_;
   std::string originator_client_item_id_;
+
+  // The ID of the parent bookmark folder.
+  std::string parent_id_;
 };
 
 }  // namespace fake_server

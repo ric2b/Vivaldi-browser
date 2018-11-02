@@ -32,6 +32,7 @@ static void readfileFunc(
   long nIn;
   void *pBuf;
 
+  (void)(argc);  /* Unused parameter */
   zName = (const char*)sqlite3_value_text(argv[0]);
   if( zName==0 ) return;
   in = fopen(zName, "rb");
@@ -64,6 +65,7 @@ static void writefileFunc(
   sqlite3_int64 rc;
   const char *zFile;
 
+  (void)(argc);  /* Unused parameter */
   zFile = (const char*)sqlite3_value_text(argv[0]);
   if( zFile==0 ) return;
   out = fopen(zFile, "wb");
@@ -83,8 +85,8 @@ static void writefileFunc(
 __declspec(dllexport)
 #endif
 int sqlite3_fileio_init(
-  sqlite3 *db, 
-  char **pzErrMsg, 
+  sqlite3 *db,
+  char **pzErrMsg,
   const sqlite3_api_routines *pApi
 ){
   int rc = SQLITE_OK;

@@ -23,7 +23,7 @@ struct Notes_attachment {
   base::string16 content_type;
   std::string content;
 
-  base::Value* Encode(NotesCodec* checksummer) const;
+  std::unique_ptr<base::Value> Encode(NotesCodec* checksummer) const;
   bool Decode(const base::DictionaryValue*, NotesCodec* checksummer);
 
   bool GetContent(base::string16* fname,

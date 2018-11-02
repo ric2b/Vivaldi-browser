@@ -46,7 +46,7 @@
 
 namespace blink {
 
-struct WebPaymentAppResponse;
+struct WebPaymentHandlerResponse;
 struct WebServiceWorkerClientQueryOptions;
 class WebServiceWorkerContextProxy;
 class WebServiceWorkerNetworkProvider;
@@ -54,10 +54,12 @@ class WebServiceWorkerProvider;
 class WebServiceWorkerResponse;
 class WebString;
 
-// This interface is implemented by the client. It is supposed to be created
-// on the main thread and then passed on to the worker thread by a newly
-// created WorkerGlobalScope. Unless otherwise noted, all methods of this class
-// are called on the worker thread.
+// WebServiceWorkerContextClient is a "client" of a service worker execution
+// context. This interface is implemented by the embedder and allows the
+// embedder to communicate with the service worker execution context.  It is
+// supposed to be created on the main thread and then passed on to the worker
+// thread by a newly created WorkerGlobalScope. Unless otherwise noted, all
+// methods of this class are called on the worker thread.
 class WebServiceWorkerContextClient {
  public:
   virtual ~WebServiceWorkerContextClient() {}
@@ -71,7 +73,9 @@ class WebServiceWorkerContextClient {
   virtual void WorkerReadyForInspection() {}
 
   // The worker script is successfully loaded and a new thread is about to
-  // be started. Called on the main thread.
+  // be started. Called on the main thread when the script is served from
+  // ResourceLoader or on the worker thread when the script is served via
+  // WebServiceWorkerInstalledScriptsManager.
   virtual void WorkerScriptLoaded() {}
 
   virtual bool HasAssociatedRegistration() { return false; }
@@ -186,9 +190,12 @@ class WebServiceWorkerContextClient {
       const WebServiceWorkerResponse& response,
       WebServiceWorkerStreamHandle* body_as_stream,
       double event_dispatch_time) {}
+  virtual void RespondToCanMakePaymentEvent(int event_id,
+                                            bool can_make_payment,
+                                            double event_dispatch_time) {}
   virtual void RespondToPaymentRequestEvent(
       int event_id,
-      const WebPaymentAppResponse& response,
+      const WebPaymentHandlerResponse& response,
       double event_dispatch_time) {}
   virtual void DidHandleFetchEvent(int fetch_event_id,
                                    WebServiceWorkerEventResult result,
@@ -234,6 +241,13 @@ class WebServiceWorkerContextClient {
   // ServiceWorker specific method. Called after PaymentRequestEvent (dispatched
   // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's script
   // context.
+  virtual void DidHandleCanMakePaymentEvent(int payment_request_event_id,
+                                            WebServiceWorkerEventResult result,
+                                            double event_dispatch_time) {}
+
+  // ServiceWorker specific method. Called after PaymentRequestEvent (dispatched
+  // via WebServiceWorkerContextProxy) is handled by the ServiceWorker's script
+  // context.
   virtual void DidHandlePaymentRequestEvent(int payment_request_event_id,
                                             WebServiceWorkerEventResult result,
                                             double event_dispatch_time) {}
@@ -272,8 +286,13 @@ class WebServiceWorkerContextClient {
   // should delete the callbacks after calling either onSuccess or onError.
   // WebServiceWorkerClientInfo and WebServiceWorkerError ownerships are
   // passed to the WebServiceWorkerClientsCallbacks implementation.
-  virtual void OpenWindow(const WebURL&,
+  virtual void OpenNewTab(const WebURL&,
                           std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
+
+  // Similar to OpenNewTab above.
+  virtual void OpenNewPopup(
+      const WebURL&,
+      std::unique_ptr<WebServiceWorkerClientCallbacks>) = 0;
 
   // A suggestion to cache this metadata in association with this URL.
   virtual void SetCachedMetadata(const WebURL& url,

@@ -5,9 +5,8 @@
 #include "content/browser/url_loader_factory_getter.h"
 
 #include "base/bind.h"
-#include "content/browser/appcache/appcache_url_loader_factory.h"
 #include "content/browser/storage_partition_impl.h"
-#include "content/common/network_service.mojom.h"
+#include "content/public/common/network_service.mojom.h"
 
 namespace content {
 
@@ -18,17 +17,25 @@ void URLLoaderFactoryGetter::Initialize(StoragePartitionImpl* partition) {
   partition->network_context()->CreateURLLoaderFactory(
       MakeRequest(&network_factory), 0);
 
+  mojom::URLLoaderFactoryPtr blob_factory;
+  partition->GetBlobURLLoaderFactory()->HandleRequest(
+      mojo::MakeRequest(&blob_factory));
+
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
       base::BindOnce(&URLLoaderFactoryGetter::InitializeOnIOThread, this,
                      network_factory.PassInterface(),
-                     scoped_refptr<ChromeAppCacheService>(
-                         partition->GetAppCacheService())));
+                     blob_factory.PassInterface()));
 }
 
 mojom::URLLoaderFactoryPtr* URLLoaderFactoryGetter::GetNetworkFactory() {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   return test_factory_.is_bound() ? &test_factory_ : &network_factory_;
+}
+
+mojom::URLLoaderFactoryPtr* URLLoaderFactoryGetter::GetBlobFactory() {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  return &blob_factory_;
 }
 
 void URLLoaderFactoryGetter::SetNetworkFactoryForTesting(
@@ -42,20 +49,13 @@ void URLLoaderFactoryGetter::SetNetworkFactoryForTesting(
                      this, test_factory.PassInterface()));
 }
 
-mojom::URLLoaderFactoryPtr* URLLoaderFactoryGetter::GetAppCacheFactory() {
-  DCHECK_CURRENTLY_ON(BrowserThread::IO);
-  return &appcache_factory_;
-}
-
 URLLoaderFactoryGetter::~URLLoaderFactoryGetter() {}
 
 void URLLoaderFactoryGetter::InitializeOnIOThread(
     mojom::URLLoaderFactoryPtrInfo network_factory,
-    scoped_refptr<ChromeAppCacheService> appcache_service) {
+    mojom::URLLoaderFactoryPtrInfo blob_factory) {
   network_factory_.Bind(std::move(network_factory));
-
-  AppCacheURLLoaderFactory::CreateURLLoaderFactory(
-      mojo::MakeRequest(&appcache_factory_), appcache_service.get(), this);
+  blob_factory_.Bind(std::move(blob_factory));
 }
 
 void URLLoaderFactoryGetter::SetTestNetworkFactoryOnIOThread(

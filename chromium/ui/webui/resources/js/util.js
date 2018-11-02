@@ -10,6 +10,9 @@
  * @return {HTMLElement} The found element or null if not found.
  */
 function $(id) {
+  // Disable getElementById restriction here, since we are instructing other
+  // places to re-use the $() that is defined here.
+  // eslint-disable-next-line no-restricted-properties
   var el = document.getElementById(id);
   return el ? assertInstanceof(el, HTMLElement) : null;
 }
@@ -22,6 +25,9 @@ function $(id) {
  * @return {Element} The found element or null if not found.
  */
 function getSVGElement(id) {
+  // Disable getElementById restriction here, since it is not suitable for SVG
+  // elements.
+  // eslint-disable-next-line no-restricted-properties
   var el = document.getElementById(id);
   return el ? assertInstanceof(el, Element) : null;
 }
@@ -157,22 +163,6 @@ function disableTextSelectAndDrag(opt_allowSelectStart, opt_allowDragStart) {
     if (!(opt_allowDragStart && opt_allowDragStart.call(this, e)))
       e.preventDefault();
   };
-}
-
-/**
- * TODO(dbeam): DO NOT USE. THIS IS DEPRECATED. Use an action-link instead.
- * Call this to stop clicks on <a href="#"> links from scrolling to the top of
- * the page (and possibly showing a # in the link).
- */
-function preventDefaultOnPoundLinkClicks() {
-  document.addEventListener('click', function(e) {
-    var anchor = findAncestor(/** @type {Node} */ (e.target), function(el) {
-      return el.tagName == 'A';
-    });
-    // Use getAttribute() to prevent URL normalization.
-    if (anchor && anchor.getAttribute('href') == '#')
-      e.preventDefault();
-  });
 }
 
 /**

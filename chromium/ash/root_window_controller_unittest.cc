@@ -9,10 +9,9 @@
 #include "ash/public/cpp/config.h"
 #include "ash/public/cpp/shell_window_ids.h"
 #include "ash/session/session_controller.h"
+#include "ash/session/test_session_controller_client.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/test/ash_test_base.h"
-#include "ash/test/test_session_controller_client.h"
 #include "ash/wm/system_modal_container_layout_manager.h"
 #include "ash/wm/window_properties.h"
 #include "ash/wm/window_state.h"
@@ -38,6 +37,7 @@
 #include "ui/events/test/test_event_handler.h"
 #include "ui/keyboard/keyboard_controller.h"
 #include "ui/keyboard/keyboard_switches.h"
+#include "ui/keyboard/keyboard_test_util.h"
 #include "ui/keyboard/keyboard_ui.h"
 #include "ui/keyboard/keyboard_util.h"
 #include "ui/views/controls/menu/menu_controller.h"
@@ -99,8 +99,6 @@ aura::LayoutManager* GetLayoutManager(RootWindowController* controller,
 }
 
 }  // namespace
-
-namespace test {
 
 class RootWindowControllerTest : public AshTestBase {
  public:
@@ -560,32 +558,32 @@ TEST_F(RootWindowControllerTest, MultipleDisplaysGetWindowForFullscreenMode) {
   EXPECT_EQ(NULL, controllers[1]->GetWindowForFullscreenMode());
 }
 
-// Test that GetRootWindowController() works with multiple displays and
-// child widgets.
-TEST_F(RootWindowControllerTest, GetRootWindowController) {
+// Test that ForWindow() works with multiple displays and child widgets.
+TEST_F(RootWindowControllerTest, ForWindow) {
   UpdateDisplay("600x600,600x600");
   Shell::RootWindowControllerList controllers =
       Shell::Get()->GetAllRootWindowControllers();
   ASSERT_EQ(2u, controllers.size());
 
-  // Test null.
-  EXPECT_FALSE(GetRootWindowController(nullptr));
+  // Test a root window.
+  EXPECT_EQ(controllers[0],
+            RootWindowController::ForWindow(Shell::GetPrimaryRootWindow()));
 
   // Test a widget on the first display.
   Widget* w1 = CreateTestWidget(gfx::Rect(0, 0, 100, 100));
   EXPECT_EQ(controllers[0],
-            GetRootWindowController(w1->GetNativeWindow()->GetRootWindow()));
+            RootWindowController::ForWindow(w1->GetNativeWindow()));
 
   // Test a child widget.
   Widget* w2 = Widget::CreateWindowWithParentAndBounds(
       nullptr, w1->GetNativeWindow(), gfx::Rect(0, 0, 100, 100));
   EXPECT_EQ(controllers[0],
-            GetRootWindowController(w2->GetNativeWindow()->GetRootWindow()));
+            RootWindowController::ForWindow(w2->GetNativeWindow()));
 
   // Test a widget on the second display.
   Widget* w3 = CreateTestWidget(gfx::Rect(600, 0, 100, 100));
   EXPECT_EQ(controllers[1],
-            GetRootWindowController(w3->GetNativeWindow()->GetRootWindow()));
+            RootWindowController::ForWindow(w3->GetNativeWindow()));
 }
 
 // Test that user session window can't be focused if user session blocked by
@@ -657,15 +655,15 @@ TEST_F(RootWindowControllerTest, DontDeleteWindowsNotOwnedByParent) {
   window1->set_owned_by_parent(false);
   observer1.SetWindow(window1);
   window1->Init(ui::LAYER_NOT_DRAWN);
-  aura::client::ParentWindowWithContext(
-      window1, Shell::Get()->GetPrimaryRootWindow(), gfx::Rect());
+  aura::client::ParentWindowWithContext(window1, Shell::GetPrimaryRootWindow(),
+                                        gfx::Rect());
 
   DestroyedWindowObserver observer2;
   aura::Window* window2 = new aura::Window(NULL);
   window2->set_owned_by_parent(false);
   observer2.SetWindow(window2);
   window2->Init(ui::LAYER_NOT_DRAWN);
-  Shell::Get()->GetPrimaryRootWindow()->AddChild(window2);
+  Shell::GetPrimaryRootWindow()->AddChild(window2);
 
   Shell::GetPrimaryRootWindowController()->CloseChildWindows();
 
@@ -685,14 +683,14 @@ class VirtualKeyboardRootWindowControllerTest
   void SetUp() override {
     base::CommandLine::ForCurrentProcess()->AppendSwitch(
         keyboard::switches::kEnableVirtualKeyboard);
-    test::AshTestBase::SetUp();
+    AshTestBase::SetUp();
     keyboard::SetTouchKeyboardEnabled(true);
     Shell::Get()->CreateKeyboard();
   }
 
   void TearDown() override {
     keyboard::SetTouchKeyboardEnabled(false);
-    test::AshTestBase::TearDown();
+    AshTestBase::TearDown();
   }
 
  private:
@@ -912,12 +910,10 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
   ASSERT_TRUE(keyboard_container);
   keyboard_container->Show();
 
-  aura::Window* keyboard_window =
-      keyboard::KeyboardController::GetInstance()->ui()->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
-  keyboard_window->SetBounds(gfx::Rect());
-  keyboard_window->Show();
+  aura::Window* contents_window =
+      keyboard::KeyboardController::GetInstance()->ui()->GetContentsWindow();
+  contents_window->SetBounds(gfx::Rect());
+  contents_window->Show();
 
   // Make sure no pending mouse events in the queue.
   RunAllPendingInMessageLoop();
@@ -925,7 +921,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
   ui::test::TestEventHandler handler;
   root_window->AddPreTargetHandler(&handler);
 
-  ui::test::EventGenerator event_generator(root_window, keyboard_window);
+  ui::test::EventGenerator event_generator(root_window, contents_window);
   event_generator.ClickLeftButton();
   int expected_mouse_presses = 1;
   EXPECT_EQ(expected_mouse_presses, handler.num_mouse_events() / 2);
@@ -968,18 +964,16 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, RestoreWorkspaceAfterLogin) {
   keyboard_container->Show();
   keyboard::KeyboardController* controller =
       keyboard::KeyboardController::GetInstance();
-  aura::Window* keyboard_window = controller->ui()->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
-  keyboard_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  aura::Window* contents_window = controller->ui()->GetContentsWindow();
+  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
       root_window->bounds(), 100));
-  keyboard_window->Show();
+  contents_window->Show();
 
   gfx::Rect before =
       display::Screen::GetScreen()->GetPrimaryDisplay().work_area();
 
   // Notify keyboard bounds changing.
-  controller->NotifyKeyboardBoundsChanging(keyboard_container->bounds());
+  controller->NotifyContentsBoundsChanging(keyboard_container->bounds());
 
   if (!keyboard::IsKeyboardOverscrollEnabled()) {
     gfx::Rect after =
@@ -1004,18 +998,16 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ClickWithActiveModalDialog) {
   ASSERT_TRUE(keyboard_container);
   keyboard_container->Show();
 
-  aura::Window* keyboard_window =
-      keyboard::KeyboardController::GetInstance()->ui()->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
-  keyboard_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  aura::Window* contents_window =
+      keyboard::KeyboardController::GetInstance()->ui()->GetContentsWindow();
+  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
       root_window->bounds(), 100));
 
   ui::test::TestEventHandler handler;
   root_window->AddPreTargetHandler(&handler);
   ui::test::EventGenerator root_window_event_generator(root_window);
   ui::test::EventGenerator keyboard_event_generator(root_window,
-                                                    keyboard_window);
+                                                    contents_window);
 
   views::Widget* modal_widget = CreateModalWidget(gfx::Rect(300, 10, 100, 100));
 
@@ -1055,12 +1047,10 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, EnsureCaretInWorkArea) {
   keyboard_container->Show();
 
   const int keyboard_height = 100;
-  aura::Window* keyboard_window = ui->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
-  keyboard_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  aura::Window* contents_window = ui->GetContentsWindow();
+  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
       root_window->bounds(), keyboard_height));
-  keyboard_window->Show();
+  contents_window->Show();
 
   ui->EnsureCaretInWorkArea();
   ASSERT_EQ(root_window->bounds().width(),
@@ -1103,12 +1093,10 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
       primary_root_window, kShellWindowId_VirtualKeyboardContainer);
   ASSERT_TRUE(keyboard_container);
   keyboard_container->Show();
-  aura::Window* keyboard_window = ui->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
-  keyboard_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  aura::Window* contents_window = ui->GetContentsWindow();
+  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
       primary_root_window->bounds(), keyboard_height));
-  keyboard_window->Show();
+  contents_window->Show();
 
   ui->EnsureCaretInWorkArea();
   EXPECT_TRUE(primary_root_window->GetBoundsInScreen().Contains(
@@ -1121,7 +1109,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest,
   // Move the keyboard into the secondary display and check that the keyboard
   // doesn't cover the window on the primary screen.
   keyboard_controller->ShowKeyboardInDisplay(secondary_display_id);
-  keyboard_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
+  contents_window->SetBounds(keyboard::FullWidthKeyboardBoundsFromRootBounds(
       secondary_root_window->bounds(), keyboard_height));
 
   ui->EnsureCaretInWorkArea();
@@ -1151,13 +1139,11 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, ZOrderTest) {
   keyboard_container->Show();
 
   const int keyboard_height = 200;
-  aura::Window* keyboard_window = ui->GetKeyboardWindow();
-  keyboard_container->AddChild(keyboard_window);
-  keyboard_window->set_owned_by_parent(false);
+  aura::Window* contents_window = ui->GetContentsWindow();
   gfx::Rect keyboard_bounds = keyboard::FullWidthKeyboardBoundsFromRootBounds(
       root_window->bounds(), keyboard_height);
-  keyboard_window->SetBounds(keyboard_bounds);
-  keyboard_window->Show();
+  contents_window->SetBounds(keyboard_bounds);
+  contents_window->Show();
 
   ui::test::EventGenerator generator(root_window);
 
@@ -1230,7 +1216,7 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, DisplayRotation) {
   keyboard::KeyboardController* keyboard_controller =
       keyboard::KeyboardController::GetInstance();
   keyboard_controller->ShowKeyboard(false);
-  keyboard_controller->ui()->GetKeyboardWindow()->SetBounds(
+  keyboard_controller->ui()->GetContentsWindow()->SetBounds(
       gfx::Rect(0, 400, 800, 200));
   EXPECT_EQ("0,400 800x200", keyboard_container->bounds().ToString());
 
@@ -1238,5 +1224,4 @@ TEST_F(VirtualKeyboardRootWindowControllerTest, DisplayRotation) {
   EXPECT_EQ("0,600 600x200", keyboard_container->bounds().ToString());
 }
 
-}  // namespace test
 }  // namespace ash

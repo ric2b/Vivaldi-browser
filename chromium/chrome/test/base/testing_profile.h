@@ -19,6 +19,10 @@
 #include "components/keyed_service/content/browser_context_keyed_service_factory.h"
 #include "extensions/features/features.h"
 
+#if defined(OS_CHROMEOS)
+#include "chrome/browser/chromeos/settings/scoped_cros_settings_test_helper.h"
+#endif
+
 class BrowserContextDependencyManager;
 class ExtensionSpecialStoragePolicy;
 class HostContentSettingsMap;
@@ -249,6 +253,8 @@ class TestingProfile : public Profile {
   content::SSLHostStateDelegate* GetSSLHostStateDelegate() override;
   content::PermissionManager* GetPermissionManager() override;
   content::BackgroundSyncController* GetBackgroundSyncController() override;
+  content::BrowsingDataRemoverDelegate* GetBrowsingDataRemoverDelegate()
+      override;
   net::URLRequestContextGetter* CreateRequestContext(
       content::ProtocolHandlerMap* protocol_handlers,
       content::URLRequestInterceptorScopedVector request_interceptors) override;
@@ -435,6 +441,11 @@ class TestingProfile : public Profile {
   Delegate* delegate_;
 
   std::string profile_name_;
+
+#if defined(OS_CHROMEOS)
+  std::unique_ptr<chromeos::ScopedCrosSettingsTestHelper>
+      scoped_cros_settings_test_helper_;
+#endif  // defined(OS_CHROMEOS)
 
   std::unique_ptr<policy::PolicyService> policy_service_;
 };

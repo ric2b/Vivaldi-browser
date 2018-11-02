@@ -9,6 +9,7 @@ import os
 import posixpath
 import time
 
+from devil.android import crash_handler
 from devil.android import device_errors
 from devil.android import device_temp_file
 from devil.android import ports
@@ -177,6 +178,10 @@ class _ApkDelegate(object):
       except Exception:
         device.ForceStop(self._package)
         raise
+      # TODO(jbudorick): Remove this after resolving crbug.com/726880
+      logging.info(
+          '%s size on device: %s',
+          stdout_file.name, device.StatPath(stdout_file.name).get('st_size', 0))
       return device.ReadFile(stdout_file.name).splitlines()
 
   def PullAppFiles(self, device, files, directory):
@@ -273,9 +278,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         on_failure=self._env.BlacklistDevice)
     @trace_event.traced
     def individual_device_set_up(dev, host_device_tuples):
-      def install_apk():
+      def install_apk(d):
         # Install test APK.
-        self._delegate.Install(dev)
+        self._delegate.Install(d)
 
       def push_test_data():
         # Push data dependencies.
@@ -304,7 +309,9 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
         for s in self._servers[str(dev)]:
           s.SetUp()
 
-      steps = (install_apk, push_test_data, init_tool_and_start_servers)
+      steps = (
+          lambda: crash_handler.RetryOnSystemCrash(install_apk, dev),
+          push_test_data, init_tool_and_start_servers)
       if self._env.concurrent_adb:
         reraiser_thread.RunAsync(steps)
       else:
@@ -356,8 +363,10 @@ class LocalDeviceGtestRun(local_device_test_run.LocalDeviceTestRun):
     @local_device_environment.handle_shard_failures_with(
         on_failure=self._env.BlacklistDevice)
     def list_tests(dev):
-      raw_test_list = self._delegate.Run(
-          None, dev, flags='--gtest_list_tests', timeout=30)
+      raw_test_list = crash_handler.RetryOnSystemCrash(
+          lambda d: self._delegate.Run(
+              None, d, flags='--gtest_list_tests', timeout=30),
+          device=dev)
       tests = gtest_test_instance.ParseGTestListTests(raw_test_list)
       if not tests:
         logging.info('No tests found. Output:')

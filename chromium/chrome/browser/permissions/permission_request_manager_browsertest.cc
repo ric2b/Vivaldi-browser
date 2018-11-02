@@ -78,7 +78,6 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
   ~PermissionRequestManagerBrowserTest() override = default;
 
   void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
     PermissionRequestManager* manager = GetPermissionRequestManager();
     mock_permission_prompt_factory_.reset(
         new MockPermissionPromptFactory(manager));
@@ -87,7 +86,6 @@ class PermissionRequestManagerBrowserTest : public InProcessBrowserTest {
 
   void TearDownOnMainThread() override {
     mock_permission_prompt_factory_.reset();
-    InProcessBrowserTest::TearDownOnMainThread();
   }
 
   PermissionRequestManager* GetPermissionRequestManager() {
@@ -127,7 +125,6 @@ class PermissionDialogTest
   void SetUpOnMainThread() override {
     // Skip super: It will install a mock permission UI factory, but for this
     // test we want to show "real" UI.
-    InProcessBrowserTest::SetUpOnMainThread();
     ui_test_utils::NavigateToURL(browser(), GetUrl());
   }
 
@@ -211,16 +208,6 @@ PermissionRequest* PermissionDialogTest::MakePermissionRequest(
 
 void PermissionDialogTest::ShowDialog(const std::string& name) {
   constexpr const char* kMultipleName = "multiple";
-  // Permissions to request for a "multiple" request. Only types handled in
-  // PermissionRequestImpl::GetMessageTextFragment() are valid.
-  constexpr ContentSettingsType kMultipleRequests[] = {
-      CONTENT_SETTINGS_TYPE_GEOLOCATION, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-      CONTENT_SETTINGS_TYPE_MIDI_SYSEX,
-  };
-  constexpr ContentSettingsType kMultipleRequestsWithMedia[] = {
-      CONTENT_SETTINGS_TYPE_GEOLOCATION, CONTENT_SETTINGS_TYPE_NOTIFICATIONS,
-      CONTENT_SETTINGS_TYPE_MIDI_SYSEX, CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC,
-      CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA};
   constexpr struct {
     const char* name;
     ContentSettingsType type;
@@ -274,15 +261,13 @@ void PermissionDialogTest::ShowDialog(const std::string& name) {
       manager->AddRequest(MakePermissionRequest(it->type));
       break;
     case CONTENT_SETTINGS_TYPE_DEFAULT:
+      // Permissions to request for a "multiple" request. Only mic/camera
+      // requests are grouped together.
       EXPECT_EQ(kMultipleName, name);
-      if (base::FeatureList::IsEnabled(
-              features::kUsePermissionManagerForMediaRequests)) {
-        for (auto request : kMultipleRequestsWithMedia)
-          manager->AddRequest(MakePermissionRequest(request));
-      } else {
-        for (auto request : kMultipleRequests)
-          manager->AddRequest(MakePermissionRequest(request));
-      }
+      manager->AddRequest(
+          MakePermissionRequest(CONTENT_SETTINGS_TYPE_MEDIASTREAM_MIC));
+      manager->AddRequest(
+          MakePermissionRequest(CONTENT_SETTINGS_TYPE_MEDIASTREAM_CAMERA));
 
       break;
     default:
@@ -348,7 +333,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest, MAYBE_NavTwice) {
   bubble_factory()->WaitForPermissionBubble();
 
   EXPECT_EQ(2, bubble_factory()->show_count());
-  EXPECT_EQ(4, bubble_factory()->TotalRequestCount());
+  EXPECT_EQ(2, bubble_factory()->TotalRequestCount());
 }
 
 // Navigating twice to the same URL with a hash should be navigation within the
@@ -377,7 +362,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestManagerBrowserTest,
   bubble_factory()->WaitForPermissionBubble();
 
   EXPECT_EQ(1, bubble_factory()->show_count());
-  EXPECT_EQ(2, bubble_factory()->TotalRequestCount());
+  EXPECT_EQ(1, bubble_factory()->TotalRequestCount());
 }
 
 // Bubble requests should be shown after in-page navigation.
@@ -522,13 +507,6 @@ IN_PROC_BROWSER_TEST_F(PermissionDialogTest, InvokeDialog_midi) {
 // Shows a permissions bubble with multiple requests.
 IN_PROC_BROWSER_TEST_F(PermissionDialogTest, InvokeDialog_multiple) {
   RunDialog();
-
-  {
-    base::test::ScopedFeatureList scoped_feature_list;
-    scoped_feature_list.InitAndEnableFeature(
-        features::kUsePermissionManagerForMediaRequests);
-    RunDialog();
-  }
 }
 
 // CONTENT_SETTINGS_TYPE_PROTECTED_MEDIA_IDENTIFIER is ChromeOS only.

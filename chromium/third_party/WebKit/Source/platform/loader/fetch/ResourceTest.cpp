@@ -10,6 +10,7 @@
 #include "platform/loader/fetch/ResourceResponse.h"
 #include "platform/testing/TestingPlatformSupport.h"
 #include "platform/testing/URLTestHelpers.h"
+#include "platform/wtf/Time.h"
 #include "platform/wtf/Vector.h"
 #include "public/platform/Platform.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -24,7 +25,7 @@ class MockPlatform final : public TestingPlatformSupportWithMockScheduler {
   ~MockPlatform() override {}
 
   // From blink::Platform:
-  void CacheMetadata(const WebURL& url, int64_t, const char*, size_t) override {
+  void CacheMetadata(const WebURL& url, Time, const char*, size_t) override {
     cached_urls_.push_back(url);
   }
 
@@ -44,7 +45,7 @@ ResourceResponse CreateTestResourceResponse() {
 void CreateTestResourceAndSetCachedMetadata(const ResourceResponse& response) {
   const char kTestData[] = "test data";
   Resource* resource =
-      RawResource::Create(ResourceRequest(response.Url()), Resource::kRaw);
+      RawResource::CreateForTest(response.Url(), Resource::kRaw);
   resource->SetResponse(response);
   resource->CacheHandler()->SetCachedMetadata(
       100, kTestData, sizeof(kTestData),
@@ -77,8 +78,7 @@ TEST(ResourceTest, RevalidateWithFragment) {
   ResourceResponse response;
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
-  Resource* resource =
-      RawResource::Create(ResourceRequest(url), Resource::kRaw);
+  Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
   resource->Finish();
 
@@ -99,8 +99,7 @@ TEST(ResourceTest, Vary) {
   response.SetURL(url);
   response.SetHTTPStatusCode(200);
 
-  Resource* resource =
-      RawResource::Create(ResourceRequest(url), Resource::kRaw);
+  Resource* resource = RawResource::CreateForTest(url, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
   resource->Finish();
 
@@ -126,7 +125,7 @@ TEST(ResourceTest, Vary) {
   ResourceRequest old_request(url);
   old_request.SetHTTPHeaderField(HTTPNames::User_Agent, "something");
   old_request.SetHTTPHeaderField(HTTPNames::Referer, "http://foo.com");
-  resource = RawResource::Create(old_request, Resource::kRaw);
+  resource = RawResource::CreateForTest(old_request, Resource::kRaw);
   resource->ResponseReceived(response, nullptr);
   resource->Finish();
 

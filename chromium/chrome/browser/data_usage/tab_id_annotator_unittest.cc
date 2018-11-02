@@ -54,10 +54,11 @@ class TabIdAnnotatorTest : public ChromeRenderViewHostTestHarness {
 };
 
 // Synthesizes a DataUse object with the given |tab_id|.
-std::unique_ptr<DataUse> CreateDataUse(int32_t tab_id) {
-  return std::unique_ptr<DataUse>(new DataUse(
+std::unique_ptr<DataUse> CreateDataUse(int32_t tab_id, int render_process_id) {
+  auto data_use = std::unique_ptr<DataUse>(new DataUse(
       GURL("http://foo.com"), base::TimeTicks(), GURL(), tab_id,
       net::NetworkChangeNotifier::CONNECTION_UNKNOWN, std::string(), 100, 100));
+  return data_use;
 }
 
 // Expects that |expected| and |actual| are equal.
@@ -120,15 +121,16 @@ void TestAnnotateOnIOThread(base::RunLoop* ui_run_loop,
   // Annotate two separate DataUse objects to ensure that repeated annotations
   // for the same URLRequest work properly.
   std::unique_ptr<DataUse> first_expected_data_use =
-      CreateDataUse(expected_tab_id);
+      CreateDataUse(expected_tab_id, render_process_id);
   annotator.Annotate(
-      request.get(), CreateDataUse(kInvalidTabId),
+      request.get(), CreateDataUse(kInvalidTabId, render_process_id),
       base::Bind(&ExpectDataUse, base::Passed(&first_expected_data_use)));
 
   // Quit the |ui_run_loop| after the second annotation.
   std::unique_ptr<DataUse> second_expected_data_use =
-      CreateDataUse(expected_tab_id);
-  annotator.Annotate(request.get(), CreateDataUse(kInvalidTabId),
+      CreateDataUse(expected_tab_id, render_process_id);
+  annotator.Annotate(request.get(),
+                     CreateDataUse(kInvalidTabId, render_process_id),
                      base::Bind(&ExpectDataUseAndQuit, ui_run_loop,
                                 base::Passed(&second_expected_data_use)));
 }

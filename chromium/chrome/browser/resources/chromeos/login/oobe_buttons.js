@@ -12,6 +12,8 @@ Polymer({
 
     border: Boolean,
 
+    android: {type: Boolean, value: false},
+
     /* Note that we are not using "aria-label" property here, because
      * we want to pass the label value but not actually declare it as an
      * ARIA property anywhere but the actual target element.
@@ -73,7 +75,7 @@ Polymer({
   is: 'oobe-welcome-secondary-button',
 
   properties: {
-    icon1x: String,
+    icon1x: {type: String, observer: 'updateIconVisibility_'},
     icon2x: String,
 
     /* Note that we are not using "aria-label" property here, because
@@ -85,5 +87,9 @@ Polymer({
 
   focus: function() {
     this.$.button.focus();
+  },
+
+  updateIconVisibility_: function() {
+    this.$.icon.hidden = (this.icon1x === undefined || this.icon1x.length == 0);
   },
 });

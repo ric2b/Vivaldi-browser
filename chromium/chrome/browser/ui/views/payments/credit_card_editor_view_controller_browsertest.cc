@@ -15,6 +15,7 @@
 #include "components/autofill/core/browser/address_combobox_model.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/field_types.h"
+#include "components/autofill/core/browser/payments/payments_service_url.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/test_region_data_loader.h"
@@ -26,6 +27,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/views/controls/combobox/combobox.h"
+#include "ui/views/controls/styled_label.h"
 
 namespace payments {
 
@@ -298,6 +300,51 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest, EditingMaskedCard) {
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
+                       EditingMaskedCard_ClickOnPaymentsLink) {
+  autofill::TestAutofillClock test_clock;
+  test_clock.SetNow(kJune2017);
+
+  autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(billing_profile);
+  // Add a second address profile to the DB.
+  autofill::AutofillProfile additional_profile =
+      autofill::test::GetFullProfile2();
+  AddAutofillProfile(additional_profile);
+  autofill::CreditCard card = autofill::test::GetMaskedServerCard();
+  card.set_billing_address_id(billing_profile.guid());
+  AddCreditCard(card);
+
+  InvokePaymentRequestUI();
+
+  OpenPaymentMethodScreen();
+
+  views::View* list_view = dialog_view()->GetViewByID(
+      static_cast<int>(DialogViewID::PAYMENT_METHOD_SHEET_LIST_VIEW));
+  EXPECT_TRUE(list_view);
+  EXPECT_EQ(1, list_view->child_count());
+
+  views::View* edit_button = list_view->child_at(0)->GetViewByID(
+      static_cast<int>(DialogViewID::EDIT_ITEM_BUTTON));
+
+  ResetEventObserver(DialogEvent::CREDIT_CARD_EDITOR_OPENED);
+  ClickOnDialogViewAndWait(edit_button);
+
+  views::StyledLabel* styled_label =
+      static_cast<views::StyledLabel*>(dialog_view()->GetViewByID(
+          static_cast<int>(DialogViewID::GOOGLE_PAYMENTS_EDIT_LINK_LABEL)));
+  EXPECT_TRUE(styled_label);
+
+  content::WebContentsAddedObserver web_contents_added_observer;
+  styled_label->LinkClicked(nullptr, 0);
+  content::WebContents* new_tab_contents =
+      web_contents_added_observer.GetWebContents();
+
+  // A tab has opened at the Google Payments link.
+  EXPECT_EQ(autofill::payments::GetManageAddressesUrl(0),
+            new_tab_contents->GetVisibleURL());
+}
+
+IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
                        EnteringNothingInARequiredField) {
   autofill::TestAutofillClock test_clock;
   test_clock.SetNow(kJune2017);
@@ -468,6 +515,9 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest, EditingExpiredCard) {
 
   InvokePaymentRequestUI();
 
+  // Focus expectations are different in Keyboard Accessible mode.
+  dialog_view()->GetFocusManager()->SetKeyboardAccessible(false);
+
   // One instrument is available, and it's selected because being expired can
   // still select the instrument.
   PaymentRequest* request = GetPaymentRequests(GetActiveWebContents()).front();
@@ -496,6 +546,10 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest, EditingExpiredCard) {
             GetComboboxValue(autofill::CREDIT_CARD_EXP_MONTH));
   EXPECT_EQ(base::ASCIIToUTF16("2017"),
             GetComboboxValue(autofill::CREDIT_CARD_EXP_4_DIGIT_YEAR));
+  // Should show as expired when the editor opens.
+  EXPECT_EQ(l10n_util::GetStringUTF16(
+                IDS_PAYMENTS_VALIDATION_INVALID_CREDIT_CARD_EXPIRED),
+            GetErrorLabelForType(autofill::CREDIT_CARD_EXP_DATE_4_DIGIT_YEAR));
 
   views::Combobox* combobox = static_cast<views::Combobox*>(
       dialog_view()->GetViewByID(EditorViewController::GetInputFieldViewId(
@@ -562,6 +616,10 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
   ClickOnChildInListViewAndWait(/*child_index=*/0, /*num_children=*/1,
                                 DialogViewID::PAYMENT_METHOD_SHEET_LIST_VIEW);
 
+  // Proper error shown.
+  EXPECT_EQ(l10n_util::GetStringUTF16(IDS_PAYMENTS_BILLING_ADDRESS_REQUIRED),
+            GetErrorLabelForType(autofill::ADDRESS_BILLING_LINE1));
+
   // Fixing the billing address.
   SelectBillingAddress(billing_profile.guid());
 
@@ -595,7 +653,69 @@ IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
 }
 
 IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
-                       ChangeCardHolderName) {
+                       EditingCardWithoutCardholderName) {
+  autofill::CreditCard card = autofill::test::GetCreditCard();
+  autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
+  AddAutofillProfile(billing_profile);
+  card.set_billing_address_id(billing_profile.guid());
+  // Clear the name.
+  card.SetInfo(autofill::AutofillType(autofill::CREDIT_CARD_NAME_FULL),
+               base::string16(), "en-US");
+  AddCreditCard(card);
+
+  InvokePaymentRequestUI();
+
+  // One instrument is available, but it's not selected.
+  PaymentRequest* request = GetPaymentRequests(GetActiveWebContents()).front();
+  EXPECT_EQ(1U, request->state()->available_instruments().size());
+  EXPECT_EQ(nullptr, request->state()->selected_instrument());
+
+  OpenPaymentMethodScreen();
+
+  ResetEventObserver(DialogEvent::CREDIT_CARD_EDITOR_OPENED);
+  ClickOnChildInListViewAndWait(/*child_index=*/0, /*num_children=*/1,
+                                DialogViewID::PAYMENT_METHOD_SHEET_LIST_VIEW);
+
+  // Proper error shown.
+  EXPECT_EQ(
+      l10n_util::GetStringUTF16(IDS_PAYMENTS_FIELD_REQUIRED_VALIDATION_MESSAGE),
+      GetErrorLabelForType(autofill::CREDIT_CARD_NAME_FULL));
+
+  // Fixing the name.
+  SetEditorTextfieldValue(base::ASCIIToUTF16("Bob Newname"),
+                          autofill::CREDIT_CARD_NAME_FULL);
+
+  // Verifying the data is in the DB.
+  autofill::PersonalDataManager* personal_data_manager = GetDataManager();
+  personal_data_manager->AddObserver(&personal_data_observer_);
+
+  ResetEventObserver(DialogEvent::BACK_TO_PAYMENT_SHEET_NAVIGATION);
+
+  // Wait until the web database has been updated and the notification sent.
+  base::RunLoop data_loop;
+  EXPECT_CALL(personal_data_observer_, OnPersonalDataChanged())
+      .WillOnce(QuitMessageLoop(&data_loop));
+  ClickOnDialogViewAndWait(DialogViewID::EDITOR_SAVE_BUTTON);
+  data_loop.Run();
+
+  EXPECT_EQ(1u, personal_data_manager->GetCreditCards().size());
+  autofill::CreditCard* credit_card =
+      personal_data_manager->GetCreditCards()[0];
+  EXPECT_EQ(base::ASCIIToUTF16("Bob Newname"),
+            credit_card->GetRawInfo(autofill::CREDIT_CARD_NAME_FULL));
+  // It retains other properties.
+  EXPECT_EQ(card.guid(), credit_card->guid());
+  EXPECT_EQ(base::ASCIIToUTF16("4111111111111111"), credit_card->number());
+  EXPECT_EQ(billing_profile.guid(), credit_card->billing_address_id());
+
+  // Still have one instrument, but now it's selected.
+  EXPECT_EQ(1U, request->state()->available_instruments().size());
+  EXPECT_EQ(request->state()->available_instruments().back().get(),
+            request->state()->selected_instrument());
+}
+
+IN_PROC_BROWSER_TEST_F(PaymentRequestCreditCardEditorTest,
+                       ChangeCardholderName) {
   autofill::AutofillProfile billing_profile(autofill::test::GetFullProfile());
   AddAutofillProfile(billing_profile);
   autofill::CreditCard card = autofill::test::GetCreditCard();

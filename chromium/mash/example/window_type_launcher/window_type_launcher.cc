@@ -59,7 +59,7 @@ class WindowDelegateView : public views::WidgetDelegateView {
   };
 
   explicit WindowDelegateView(uint32_t traits) : traits_(traits) {
-    set_background(views::Background::CreateSolidBackground(SK_ColorRED));
+    SetBackground(views::CreateSolidBackground(SK_ColorRED));
   }
   ~WindowDelegateView() override {}
 
@@ -453,17 +453,18 @@ void WindowTypeLauncher::RemoveWindow(views::Widget* window) {
 }
 
 void WindowTypeLauncher::OnStart() {
-  aura_init_ = base::MakeUnique<views::AuraInit>(
+  aura_init_ = views::AuraInit::Create(
       context()->connector(), context()->identity(), "views_mus_resources.pak",
       std::string(), nullptr, views::AuraInit::Mode::AURA_MUS);
+  if (!aura_init_)
+    context()->QuitNow();
 }
 
 void WindowTypeLauncher::OnBindInterface(
     const service_manager::BindSourceInfo& source_info,
     const std::string& interface_name,
     mojo::ScopedMessagePipeHandle interface_pipe) {
-  registry_.BindInterface(source_info, interface_name,
-                          std::move(interface_pipe));
+  registry_.BindInterface(interface_name, std::move(interface_pipe));
 }
 
 void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
@@ -481,9 +482,7 @@ void WindowTypeLauncher::Launch(uint32_t what, mash::mojom::LaunchMode how) {
   windows_.push_back(window);
 }
 
-void WindowTypeLauncher::Create(
-    const service_manager::BindSourceInfo& source_info,
-    mash::mojom::LaunchableRequest request) {
+void WindowTypeLauncher::Create(mash::mojom::LaunchableRequest request) {
   bindings_.AddBinding(this, std::move(request));
 }
 

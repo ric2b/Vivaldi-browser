@@ -12,11 +12,11 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/macros.h"
-#include "base/message_loop/message_loop.h"
 #include "base/run_loop.h"
+#include "base/test/scoped_task_environment.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
-#include "content/common/resource_request_body_impl.h"
+#include "content/public/common/resource_request_body.h"
 #include "net/base/io_buffer.h"
 #include "net/base/net_errors.h"
 #include "net/base/test_completion_callback.h"
@@ -38,10 +38,9 @@ using storage::BlobStorageContext;
 namespace content {
 
 TEST(UploadDataStreamBuilderTest, CreateUploadDataStream) {
-  base::MessageLoop message_loop;
+  base::test::ScopedTaskEnvironment scoped_task_environment_;
   {
-    scoped_refptr<ResourceRequestBodyImpl> request_body =
-        new ResourceRequestBodyImpl;
+    scoped_refptr<ResourceRequestBody> request_body = new ResourceRequestBody;
 
     const std::string kBlob = "blobuuid";
     const std::string kBlobData = "blobdata";
@@ -98,7 +97,8 @@ TEST(UploadDataStreamBuilderTest, CreateUploadDataStream) {
 
 TEST(UploadDataStreamBuilderTest,
      WriteUploadDataStreamWithEmptyFileBackedBlob) {
-  base::MessageLoopForIO message_loop;
+  base::test::ScopedTaskEnvironment scoped_task_environment_(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
   {
     base::FilePath test_blob_path;
     ASSERT_TRUE(base::CreateTemporaryFile(&test_blob_path));
@@ -119,14 +119,13 @@ TEST(UploadDataStreamBuilderTest,
     std::unique_ptr<BlobDataHandle> handle =
         blob_storage_context.AddFinishedBlob(blob_data_builder.get());
 
-    scoped_refptr<ResourceRequestBodyImpl> request_body(
-        new ResourceRequestBodyImpl());
+    scoped_refptr<ResourceRequestBody> request_body(new ResourceRequestBody());
     std::unique_ptr<net::UploadDataStream> upload(
         UploadDataStreamBuilder::Build(
             request_body.get(), &blob_storage_context, NULL,
             base::ThreadTaskRunnerHandle::Get().get()));
 
-    request_body = new ResourceRequestBodyImpl();
+    request_body = new ResourceRequestBody();
     request_body->AppendBlob(blob_id);
     request_body->AppendBlob(blob_id);
     request_body->AppendBlob(blob_id);
@@ -163,10 +162,10 @@ TEST(UploadDataStreamBuilderTest,
 }
 
 TEST(UploadDataStreamBuilderTest, ResetUploadStreamWithBlob) {
-  base::MessageLoopForIO message_loop;
+  base::test::ScopedTaskEnvironment scoped_task_environment_(
+      base::test::ScopedTaskEnvironment::MainThreadType::IO);
   {
-    scoped_refptr<ResourceRequestBodyImpl> request_body =
-        new ResourceRequestBodyImpl;
+    scoped_refptr<ResourceRequestBody> request_body = new ResourceRequestBody;
 
     const std::string kBlob = "blobuuid";
     const std::string kBlobData = "blobdata";

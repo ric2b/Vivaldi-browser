@@ -36,16 +36,16 @@
 #include "core/dom/Attribute.h"
 #include "core/dom/DOMException.h"
 #include "core/dom/ElementTraversal.h"
-#include "core/dom/Fullscreen.h"
+#include "core/dom/ShadowRoot.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/shadow/ShadowRoot.h"
 #include "core/events/Event.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/frame/UseCounter.h"
 #include "core/frame/csp/ContentSecurityPolicy.h"
+#include "core/fullscreen/Fullscreen.h"
 #include "core/html/HTMLSourceElement.h"
 #include "core/html/HTMLTrackElement.h"
 #include "core/html/TimeRanges.h"
@@ -69,7 +69,6 @@
 #include "core/layout/LayoutMedia.h"
 #include "core/layout/api/LayoutViewItem.h"
 #include "core/layout/compositing/PaintLayerCompositor.h"
-#include "core/loader/FrameLoader.h"
 #include "core/page/ChromeClient.h"
 #include "platform/Histogram.h"
 #include "platform/LayoutTestSupport.h"
@@ -151,12 +150,20 @@ enum ContentTypeParseableResult {
   kContentTypeParseableMax
 };
 
+// This enum is used to record histograms. Do not reorder.
+enum class PlayPromiseRejectReason {
+  kFailedAutoplayPolicy = 0,
+  kNoSupportedSources,
+  kInterruptedByPause,
+  kInterruptedByLoad,
+  kCount,
+};
+
 void ReportContentTypeResultToUMA(String content_type,
                                   MIMETypeRegistry::SupportsType result) {
   DEFINE_THREAD_SAFE_STATIC_LOCAL(
       EnumerationHistogram, content_type_parseable_histogram,
-      new EnumerationHistogram("Media.MediaElement.ContentTypeParseable",
-                               kContentTypeParseableMax));
+      ("Media.MediaElement.ContentTypeParseable", kContentTypeParseableMax));
   ParsedContentType parsed_content_type(content_type);
   ContentTypeParseableResult uma_result = kIsNotSupportedNotParseable;
   switch (result) {
@@ -353,6 +360,13 @@ std::unique_ptr<MediaControls::Factory>& MediaControlsFactory() {
   return media_controls_factory;
 }
 
+void RecordPlayPromiseRejected(PlayPromiseRejectReason reason) {
+  DEFINE_STATIC_LOCAL(EnumerationHistogram, histogram,
+                      ("Media.MediaElement.PlayPromiseReject",
+                       static_cast<int>(PlayPromiseRejectReason::kCount)));
+  histogram.Count(static_cast<int>(reason));
+}
+
 }  // anonymous namespace
 
 MIMETypeRegistry::SupportsType HTMLMediaElement::GetSupportsType(
@@ -405,8 +419,8 @@ bool HTMLMediaElement::IsHLSURL(const KURL& url) {
 }
 
 bool HTMLMediaElement::MediaTracksEnabledInternally() {
-  return RuntimeEnabledFeatures::audioVideoTracksEnabled() ||
-         RuntimeEnabledFeatures::backgroundVideoTrackOptimizationEnabled();
+  return RuntimeEnabledFeatures::AudioVideoTracksEnabled() ||
+         RuntimeEnabledFeatures::BackgroundVideoTrackOptimizationEnabled();
 }
 
 // static
@@ -513,13 +527,13 @@ HTMLMediaElement::HTMLMediaElement(const QualifiedName& tag_name,
   LocalFrame* frame = document.GetFrame();
   if (frame) {
     remote_playback_client_ =
-        frame->Loader().Client()->CreateWebRemotePlaybackClient(*this);
+        frame->Client()->CreateWebRemotePlaybackClient(*this);
   }
 
   SetHasCustomStyleCallbacks();
   AddElementToDocumentMap(this, &document);
 
-  UseCounter::Count(document, UseCounter::kHTMLMediaElement);
+  UseCounter::Count(document, WebFeature::kHTMLMediaElement);
 }
 
 HTMLMediaElement::~HTMLMediaElement() {
@@ -624,13 +638,14 @@ void HTMLMediaElement::ParseAttribute(
     }
   } else if (name == controlsAttr) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementControlsAttribute);
+                      WebFeature::kHTMLMediaElementControlsAttribute);
     UpdateControlsVisibility();
   } else if (name == controlslistAttr) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementControlsListAttribute);
+                      WebFeature::kHTMLMediaElementControlsListAttribute);
     if (params.old_value != params.new_value) {
-      controls_list_->setValue(params.new_value);
+      controls_list_->DidUpdateAttributeValue(params.old_value,
+                                              params.new_value);
       if (GetMediaControls())
         GetMediaControls()->OnControlsListUpdated();
     }
@@ -640,7 +655,7 @@ void HTMLMediaElement::ParseAttribute(
     // This attribute is an extension described in the Remote Playback API spec.
     // Please see: https://w3c.github.io/remote-playback
     UseCounter::Count(GetDocument(),
-                      UseCounter::kDisableRemotePlaybackAttribute);
+                      WebFeature::kDisableRemotePlaybackAttribute);
     if (params.old_value != params.new_value) {
       if (web_media_player_) {
         web_media_player_->RequestRemotePlaybackDisabled(
@@ -674,7 +689,7 @@ Node::InsertionNotificationRequest HTMLMediaElement::InsertedInto(
 
   HTMLElement::InsertedInto(insertion_point);
   if (insertion_point->isConnected()) {
-    UseCounter::Count(GetDocument(), UseCounter::kHTMLMediaElementInDocument);
+    UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementInDocument);
     if ((!getAttribute(srcAttr).IsEmpty() || src_object_) &&
         network_state_ == kNetworkEmpty) {
       ignore_preload_none_ = false;
@@ -701,7 +716,7 @@ void HTMLMediaElement::RemovedFrom(ContainerNode* insertion_point) {
   }
 }
 
-void HTMLMediaElement::AttachLayoutTree(const AttachContext& context) {
+void HTMLMediaElement::AttachLayoutTree(AttachContext& context) {
   HTMLElement::AttachLayoutTree(context);
 
   if (GetLayoutObject())
@@ -738,7 +753,7 @@ void HTMLMediaElement::ScheduleEvent(Event* event) {
   BLINK_MEDIA_LOG << "ScheduleEvent(" << (void*)this << ")"
                   << " - scheduling '" << event->type() << "'";
 #endif
-  async_event_queue_->EnqueueEvent(event);
+  async_event_queue_->EnqueueEvent(BLINK_FROM_HERE, event);
 }
 
 void HTMLMediaElement::LoadTimerFired(TimerBase*) {
@@ -893,9 +908,10 @@ void HTMLMediaElement::InvokeLoadAlgorithm() {
 
       // 4.6.2 - Take pending play promises and reject pending play promises
       // with the result and an "AbortError" DOMException.
-      RejectPlayPromises(
-          kAbortError,
-          "The play() request was interrupted by a new load request.");
+      RecordPlayPromiseRejected(PlayPromiseRejectReason::kInterruptedByLoad);
+      RejectPlayPromises(kAbortError,
+                         "The play() request was interrupted by a new load "
+                         "request. https://goo.gl/LdLk22");
     }
 
     // 4.7 - If seeking is true, set it to false.
@@ -920,7 +936,7 @@ void HTMLMediaElement::InvokeLoadAlgorithm() {
     // This is where that change would have an effect, and it is measured to
     // verify the assumption that it's a very rare situation.
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementLoadNetworkEmptyNotPaused);
+                      WebFeature::kHTMLMediaElementLoadNetworkEmptyNotPaused);
   }
 
   // 7 - Set the playbackRate attribute to the value of the defaultPlaybackRate
@@ -1131,6 +1147,10 @@ void HTMLMediaElement::LoadResource(const WebMediaPlayerSource& source,
 
   if (audio_source_node_)
     audio_source_node_->OnCurrentSrcChanged(current_src_);
+  if (RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled() &&
+      RemotePlaybackClient()) {
+    RemotePlaybackClient()->SourceChanged(current_src_);
+  }
 
   BLINK_MEDIA_LOG << "loadResource(" << (void*)this << ") - current_src_ -> "
                   << UrlForLoggingMedia(current_src_);
@@ -1231,7 +1251,7 @@ void HTMLMediaElement::StartPlayerLoad() {
   }
 
   web_media_player_ =
-      frame->Loader().Client()->CreateWebMediaPlayer(*this, source, this);
+      frame->Client()->CreateWebMediaPlayer(*this, source, this);
   if (!web_media_player_) {
     MediaLoadingFailed(WebMediaPlayer::kNetworkStateFormatError,
                        BuildElementErrorMessage(
@@ -1779,7 +1799,7 @@ void HTMLMediaElement::SetReadyState(ReadyState state) {
 
     if (!jumped && initial_playback_position > 0) {
       UseCounter::Count(GetDocument(),
-                        UseCounter::kHTMLMediaElementSeekToFragmentStart);
+                        WebFeature::kHTMLMediaElementSeekToFragmentStart);
       Seek(initial_playback_position);
       jumped = true;
     }
@@ -2177,7 +2197,7 @@ void HTMLMediaElement::setPreload(const AtomicString& preload) {
 WebMediaPlayer::Preload HTMLMediaElement::PreloadType() const {
   const AtomicString& preload = FastGetAttribute(preloadAttr);
   if (DeprecatedEqualIgnoringCase(preload, "none")) {
-    UseCounter::Count(GetDocument(), UseCounter::kHTMLMediaElementPreloadNone);
+    UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementPreloadNone);
     return WebMediaPlayer::kPreloadNone;
   }
 
@@ -2189,25 +2209,25 @@ WebMediaPlayer::Preload HTMLMediaElement::PreloadType() const {
       (current_src_.Protocol() != "blob" && current_src_.Protocol() != "data" &&
        current_src_.Protocol() != "file")) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementPreloadForcedNone);
+                      WebFeature::kHTMLMediaElementPreloadForcedNone);
     return WebMediaPlayer::kPreloadNone;
   }
 
   if (DeprecatedEqualIgnoringCase(preload, "metadata")) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementPreloadMetadata);
+                      WebFeature::kHTMLMediaElementPreloadMetadata);
     return WebMediaPlayer::kPreloadMetaData;
   }
 
   // Force preload to 'metadata' on cellular connections.
   if (GetNetworkStateNotifier().IsCellularConnectionType()) {
     UseCounter::Count(GetDocument(),
-                      UseCounter::kHTMLMediaElementPreloadForcedMetadata);
+                      WebFeature::kHTMLMediaElementPreloadForcedMetadata);
     return WebMediaPlayer::kPreloadMetaData;
   }
 
   if (DeprecatedEqualIgnoringCase(preload, "auto")) {
-    UseCounter::Count(GetDocument(), UseCounter::kHTMLMediaElementPreloadAuto);
+    UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementPreloadAuto);
     return WebMediaPlayer::kPreloadAuto;
   }
 
@@ -2220,7 +2240,7 @@ WebMediaPlayer::Preload HTMLMediaElement::PreloadType() const {
 
   // TODO(foolip): Try to make "metadata" the default preload state:
   // https://crbug.com/310450
-  UseCounter::Count(GetDocument(), UseCounter::kHTMLMediaElementPreloadDefault);
+  UseCounter::Count(GetDocument(), WebFeature::kHTMLMediaElementPreloadDefault);
   return WebMediaPlayer::kPreloadAuto;
 }
 
@@ -2258,9 +2278,12 @@ ScriptPromise HTMLMediaElement::playForBindings(ScriptState* script_state) {
     switch (code.Get()) {
       case kNotAllowedError:
         message = "play() can only be initiated by a user gesture.";
+        RecordPlayPromiseRejected(
+            PlayPromiseRejectReason::kFailedAutoplayPolicy);
         break;
       case kNotSupportedError:
         message = "The element has no supported sources.";
+        RecordPlayPromiseRejected(PlayPromiseRejectReason::kNoSupportedSources);
         break;
       default:
         NOTREACHED();
@@ -2440,15 +2463,6 @@ HTMLMediaElementControlsList* HTMLMediaElement::ControlsListInternal() const {
   return controls_list_.Get();
 }
 
-void HTMLMediaElement::ControlsListValueWasSet() {
-  if (FastGetAttribute(controlslistAttr) == controls_list_->value())
-    return;
-
-  SetSynchronizedLazyAttribute(controlslistAttr, controls_list_->value());
-  if (GetMediaControls())
-    GetMediaControls()->OnControlsListUpdated();
-}
-
 double HTMLMediaElement::volume() const {
   return volume_;
 }
@@ -2529,7 +2543,7 @@ void HTMLMediaElement::PlaybackProgressTimerFired(TimerBase*) {
     fragment_end_time_ = std::numeric_limits<double>::quiet_NaN();
     if (!paused_) {
       UseCounter::Count(GetDocument(),
-                        UseCounter::kHTMLMediaElementPauseAtFragmentEnd);
+                        WebFeature::kHTMLMediaElementPauseAtFragmentEnd);
       // changes paused to true and fires a simple event named pause at the
       // media element.
       PauseInternal();
@@ -3154,8 +3168,12 @@ void HTMLMediaElement::RequestSeek(double time) {
 
 void HTMLMediaElement::RemoteRouteAvailabilityChanged(
     WebRemotePlaybackAvailability availability) {
-  if (RemotePlaybackClient())
+  if (RemotePlaybackClient() &&
+      !RuntimeEnabledFeatures::NewRemotePlaybackPipelineEnabled()) {
+    // The new remote playback pipeline is using the Presentation API for
+    // remote playback device availability monitoring.
     RemotePlaybackClient()->AvailabilityChanged(availability);
+  }
 }
 
 bool HTMLMediaElement::HasRemoteRoutes() const {
@@ -3187,13 +3205,13 @@ void HTMLMediaElement::RemotePlaybackStarted() {
 }
 
 bool HTMLMediaElement::HasSelectedVideoTrack() {
-  DCHECK(RuntimeEnabledFeatures::backgroundVideoTrackOptimizationEnabled());
+  DCHECK(RuntimeEnabledFeatures::BackgroundVideoTrackOptimizationEnabled());
 
   return video_tracks_ && video_tracks_->selectedIndex() != -1;
 }
 
 WebMediaPlayer::TrackId HTMLMediaElement::GetSelectedVideoTrackId() {
-  DCHECK(RuntimeEnabledFeatures::backgroundVideoTrackOptimizationEnabled());
+  DCHECK(RuntimeEnabledFeatures::BackgroundVideoTrackOptimizationEnabled());
   DCHECK(HasSelectedVideoTrack());
 
   int selected_track_index = video_tracks_->selectedIndex();
@@ -3460,27 +3478,35 @@ bool HTMLMediaElement::HasPendingActivity() const {
 }
 
 bool HTMLMediaElement::IsFullscreen() const {
-  return Fullscreen::IsCurrentFullScreenElement(*this);
+  return Fullscreen::IsFullscreenElement(*this);
 }
 
 void HTMLMediaElement::DidEnterFullscreen() {
   UpdateControlsVisibility();
 
-  // FIXME: There is no embedder-side handling in layout test mode.
-  if (GetWebMediaPlayer() && !LayoutTestSupport::IsRunningLayoutTest())
-    GetWebMediaPlayer()->EnteredFullscreen();
+  if (web_media_player_) {
+    // FIXME: There is no embedder-side handling in layout test mode.
+    if (!LayoutTestSupport::IsRunningLayoutTest())
+      web_media_player_->EnteredFullscreen();
+    web_media_player_->OnDisplayTypeChanged(DisplayType());
+  }
+
   // Cache this in case the player is destroyed before leaving fullscreen.
   in_overlay_fullscreen_video_ = UsesOverlayFullscreenVideo();
-  if (in_overlay_fullscreen_video_)
+  if (in_overlay_fullscreen_video_) {
     GetDocument().GetLayoutViewItem().Compositor()->SetNeedsCompositingUpdate(
         kCompositingUpdateRebuildTree);
+  }
 }
 
 void HTMLMediaElement::DidExitFullscreen() {
   UpdateControlsVisibility();
 
-  if (GetWebMediaPlayer())
+  if (GetWebMediaPlayer()) {
     GetWebMediaPlayer()->ExitedFullscreen();
+    GetWebMediaPlayer()->OnDisplayTypeChanged(DisplayType());
+  }
+
   if (in_overlay_fullscreen_video_)
     GetDocument().GetLayoutViewItem().Compositor()->SetNeedsCompositingUpdate(
         kCompositingUpdateRebuildTree);
@@ -3683,16 +3709,24 @@ void HTMLMediaElement::UpdateControlsVisibility() {
     return;
   }
 
-  EnsureMediaControls();
-  // TODO(mlamouri): this doesn't sound needed but the following tests, on
-  // Android fails when removed:
-  // fullscreen/compositor-touch-hit-rects-fullscreen-video-controls.html
-  GetMediaControls()->Reset();
-
   bool native_controls = ShouldShowControls(RecordMetricsBehavior::kDoRecord);
+
+  // When LazyInitializeMediaControls is enabled, initialize the controls only
+  // if native controls should be used or if using the cast overlay.
+  if (!RuntimeEnabledFeatures::LazyInitializeMediaControlsEnabled() ||
+      RuntimeEnabledFeatures::MediaCastOverlayButtonEnabled() ||
+      native_controls) {
+    EnsureMediaControls();
+
+    // TODO(mlamouri): this doesn't sound needed but the following tests, on
+    // Android fails when removed:
+    // fullscreen/compositor-touch-hit-rects-fullscreen-video-controls.html
+    GetMediaControls()->Reset();
+  }
+
   if (native_controls)
     GetMediaControls()->MaybeShow();
-  else
+  else if (GetMediaControls())
     GetMediaControls()->Hide();
 
   if (web_media_player_)
@@ -3867,7 +3901,7 @@ void HTMLMediaElement::SetNetworkState(NetworkState state) {
 
 void HTMLMediaElement::VideoWillBeDrawnToCanvas() const {
   DCHECK(IsHTMLVideoElement());
-  UseCounter::Count(GetDocument(), UseCounter::kVideoInCanvas);
+  UseCounter::Count(GetDocument(), WebFeature::kVideoInCanvas);
   autoplay_policy_->VideoWillBeDrawnToCanvas();
 }
 
@@ -3944,14 +3978,17 @@ void HTMLMediaElement::RejectScheduledPlayPromises() {
   // used by the object, the string isn't saved.
   DCHECK(play_promise_error_code_ == kAbortError ||
          play_promise_error_code_ == kNotSupportedError);
-  if (play_promise_error_code_ == kAbortError)
-    RejectPlayPromisesInternal(
-        kAbortError,
-        "The play() request was interrupted by a call to pause().");
-  else
+  if (play_promise_error_code_ == kAbortError) {
+    RecordPlayPromiseRejected(PlayPromiseRejectReason::kInterruptedByPause);
+    RejectPlayPromisesInternal(kAbortError,
+                               "The play() request was interrupted by a call "
+                               "to pause(). https://goo.gl/LdLk22");
+  } else {
+    RecordPlayPromiseRejected(PlayPromiseRejectReason::kNoSupportedSources);
     RejectPlayPromisesInternal(
         kNotSupportedError,
         "Failed to load because no supported source was found.");
+  }
 }
 
 void HTMLMediaElement::RejectPlayPromises(ExceptionCode code,
@@ -4060,6 +4097,11 @@ void HTMLMediaElement::ActivateViewportIntersectionMonitoring(bool activate) {
 
 bool HTMLMediaElement::HasNativeControls() {
   return ShouldShowControls(RecordMetricsBehavior::kDoRecord);
+}
+
+WebMediaPlayer::DisplayType HTMLMediaElement::DisplayType() const {
+  return IsFullscreen() ? WebMediaPlayer::DisplayType::kFullscreen
+                        : WebMediaPlayer::DisplayType::kInline;
 }
 
 void HTMLMediaElement::CheckViewportIntersectionTimerFired(TimerBase*) {

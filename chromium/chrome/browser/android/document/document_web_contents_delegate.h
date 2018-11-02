@@ -28,9 +28,6 @@ class DocumentWebContentsDelegate
       const base::android::JavaParamRef<jobject>& obj,
       const base::android::JavaParamRef<jobject>& jweb_contents);
 
-  // Registers the JNI calls.
-  static bool Register(JNIEnv* env);
-
   // Overridden from WebContentsDelegate.
   void AddNewContents(content::WebContents* source,
                       content::WebContents* new_contents,
@@ -41,6 +38,7 @@ class DocumentWebContentsDelegate
   void CloseContents(content::WebContents* source) override;
   bool ShouldCreateWebContents(
       content::WebContents* web_contents,
+      content::RenderFrameHost* opener,
       content::SiteInstance* source_site_instance,
       int32_t route_id,
       int32_t main_frame_route_id,

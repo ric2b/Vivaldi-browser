@@ -2,6 +2,7 @@ include_rules = [
   "+components/device_event_log",
   "+device/base",
   "+device/hid",
+  "+services/device/public/interfaces",
   "+storage/browser/fileapi",
   "+storage/common/fileapi",
 ]

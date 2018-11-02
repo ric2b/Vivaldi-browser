@@ -25,7 +25,7 @@
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-using testing::ElementsAre;
+using ::testing::ElementsAre;
 
 namespace {
 bool MessageLoopTaskCounter(size_t* count) {
@@ -52,16 +52,6 @@ void RunTenTimesTask(size_t* count, scoped_refptr<TaskQueue> timer_queue) {
   }
 }
 
-bool IsQueueBlocked(TaskQueue* task_queue) {
-  internal::TaskQueueImpl* task_queue_impl =
-      reinterpret_cast<internal::TaskQueueImpl*>(task_queue);
-  if (!task_queue_impl->IsQueueEnabled())
-    return true;
-  return task_queue_impl->GetFenceForTest() ==
-         static_cast<internal::EnqueueOrder>(
-             internal::EnqueueOrderValues::BLOCKING_FENCE);
-}
-
 // Test clock which simulates passage of time by automatically
 // advancing time with each call to Now().
 class AutoAdvancingTestClock : public base::SimpleTestTickClock {
@@ -85,7 +75,7 @@ class AutoAdvancingTestClock : public base::SimpleTestTickClock {
 
 }  // namespace
 
-class TaskQueueThrottlerTest : public testing::Test {
+class TaskQueueThrottlerTest : public ::testing::Test {
  public:
   TaskQueueThrottlerTest() {}
   ~TaskQueueThrottlerTest() override {}
@@ -99,7 +89,8 @@ class TaskQueueThrottlerTest : public testing::Test {
         mock_task_runner_, base::MakeUnique<TestTimeSource>(clock_.get()));
     scheduler_.reset(new RendererSchedulerImpl(delegate_));
     task_queue_throttler_ = scheduler_->task_queue_throttler();
-    timer_queue_ = scheduler_->NewTimerTaskQueue(TaskQueue::QueueType::TEST);
+    timer_queue_ = scheduler_->NewTimerTaskQueue(
+        MainThreadTaskQueue::QueueType::FRAME_TIMER);
   }
 
   void TearDown() override {
@@ -128,6 +119,15 @@ class TaskQueueThrottlerTest : public testing::Test {
     mock_task_runner_->RunForPeriod(base::TimeDelta::FromSeconds(1));
     EXPECT_EQ(10u, count);
     mock_task_runner_->RunUntilIdle();
+  }
+
+  bool IsQueueBlocked(TaskQueue* task_queue) {
+    internal::TaskQueueImpl* task_queue_impl = task_queue->GetTaskQueueImpl();
+    if (!task_queue_impl->IsQueueEnabled())
+      return true;
+    return task_queue_impl->GetFenceForTest() ==
+           static_cast<internal::EnqueueOrder>(
+               internal::EnqueueOrderValues::BLOCKING_FENCE);
   }
 
  protected:
@@ -744,8 +744,8 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
        TwoQueuesTimeBudgetThrottling) {
   std::vector<base::TimeTicks> run_times;
 
-  scoped_refptr<TaskQueue> second_queue =
-      scheduler_->NewTimerTaskQueue(TaskQueue::QueueType::TEST);
+  scoped_refptr<TaskQueue> second_queue = scheduler_->NewTimerTaskQueue(
+      MainThreadTaskQueue::QueueType::FRAME_TIMER);
 
   CPUTimeBudgetPool* pool =
       task_queue_throttler_->CreateCPUTimeBudgetPool("test");
@@ -1069,8 +1069,9 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
        DisabledQueueThenEnabledQueue) {
   std::vector<base::TimeTicks> run_times;
 
-  scoped_refptr<TaskQueue> second_queue =
-      scheduler_->NewTimerTaskQueue(TaskQueue::QueueType::TEST);
+  scoped_refptr<MainThreadTaskQueue> second_queue =
+      scheduler_->NewTimerTaskQueue(
+          MainThreadTaskQueue::QueueType::FRAME_TIMER);
 
   task_queue_throttler_->IncreaseThrottleRefCount(timer_queue_.get());
   task_queue_throttler_->IncreaseThrottleRefCount(second_queue.get());
@@ -1105,8 +1106,8 @@ TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest,
 TEST_P(TaskQueueThrottlerWithAutoAdvancingTimeTest, TwoBudgetPools) {
   std::vector<base::TimeTicks> run_times;
 
-  scoped_refptr<TaskQueue> second_queue =
-      scheduler_->NewTimerTaskQueue(TaskQueue::QueueType::TEST);
+  scoped_refptr<TaskQueue> second_queue = scheduler_->NewTimerTaskQueue(
+      MainThreadTaskQueue::QueueType::FRAME_TIMER);
 
   CPUTimeBudgetPool* pool1 =
       task_queue_throttler_->CreateCPUTimeBudgetPool("test");

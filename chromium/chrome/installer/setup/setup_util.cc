@@ -40,7 +40,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "base/win/registry.h"
-#include "base/win/windows_version.h"
 #include "chrome/install_static/install_details.h"
 #include "chrome/install_static/install_modes.h"
 #include "chrome/install_static/install_util.h"
@@ -446,18 +445,18 @@ bool DeleteFileFromTempProcess(const base::FilePath& path,
 }
 
 bool AdjustProcessPriority() {
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    DWORD priority_class = ::GetPriorityClass(::GetCurrentProcess());
-    if (priority_class == 0) {
-      PLOG(WARNING) << "Failed to get the process's priority class.";
-    } else if (priority_class == BELOW_NORMAL_PRIORITY_CLASS ||
-               priority_class == IDLE_PRIORITY_CLASS) {
-      BOOL result = ::SetPriorityClass(::GetCurrentProcess(),
-                                       PROCESS_MODE_BACKGROUND_BEGIN);
-      PLOG_IF(WARNING, !result) << "Failed to enter background mode.";
-      return !!result;
-    }
+  DWORD priority_class = ::GetPriorityClass(::GetCurrentProcess());
+  if (priority_class == BELOW_NORMAL_PRIORITY_CLASS ||
+      priority_class == IDLE_PRIORITY_CLASS) {
+    BOOL result = ::SetPriorityClass(::GetCurrentProcess(),
+                                     PROCESS_MODE_BACKGROUND_BEGIN);
+    PLOG_IF(WARNING, !result) << "Failed to enter background mode.";
+    return !!result;
   }
+
+  if (priority_class == 0)
+    PLOG(WARNING) << "Failed to get the process's priority class.";
+
   return false;
 }
 
@@ -922,47 +921,6 @@ void KillProcesses(const std::vector<base::win::ScopedHandle>& processes) {
     CloseHandle(pi.hThread);
   }
   delete[] cmd_line;
-}
-
-ScopedTokenPrivilege::ScopedTokenPrivilege(const wchar_t* privilege_name)
-    : is_enabled_(false) {
-  HANDLE temp_handle;
-  if (!::OpenProcessToken(::GetCurrentProcess(),
-                          TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY,
-                          &temp_handle)) {
-    return;
-  }
-  token_.Set(temp_handle);
-
-  LUID privilege_luid;
-  if (!::LookupPrivilegeValue(NULL, privilege_name, &privilege_luid)) {
-    token_.Close();
-    return;
-  }
-
-  // Adjust the token's privileges to enable |privilege_name|. If this privilege
-  // was already enabled, |previous_privileges_|.PrivilegeCount will be set to 0
-  // and we then know not to disable this privilege upon destruction.
-  TOKEN_PRIVILEGES tp;
-  tp.PrivilegeCount = 1;
-  tp.Privileges[0].Luid = privilege_luid;
-  tp.Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
-  DWORD return_length;
-  if (!::AdjustTokenPrivileges(token_.Get(), FALSE, &tp,
-                               sizeof(TOKEN_PRIVILEGES),
-                               &previous_privileges_, &return_length)) {
-    token_.Close();
-    return;
-  }
-
-  is_enabled_ = true;
-}
-
-ScopedTokenPrivilege::~ScopedTokenPrivilege() {
-  if (is_enabled_ && previous_privileges_.PrivilegeCount != 0) {
-    ::AdjustTokenPrivileges(token_.Get(), FALSE, &previous_privileges_,
-                            sizeof(TOKEN_PRIVILEGES), NULL, NULL);
-  }
 }
 
 }  // namespace installer

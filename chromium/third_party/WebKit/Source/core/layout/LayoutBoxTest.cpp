@@ -4,8 +4,8 @@
 
 #include "core/layout/LayoutBox.h"
 
+#include "build/build_config.h"
 #include "core/html/HTMLElement.h"
-#include "core/layout/ImageQualityController.h"
 #include "core/layout/LayoutTestHelper.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -225,7 +225,7 @@ TEST_F(LayoutBoxTest, ControlClip) {
   EXPECT_TRUE(target->HasControlClip());
   EXPECT_TRUE(target->HasClipRelatedProperty());
   EXPECT_TRUE(target->ShouldClipOverflow());
-#if OS(MACOSX)
+#if defined(OS_MACOSX)
   EXPECT_EQ(LayoutRect(0, 0, 100, 18), target->ClippingRect());
 #else
   EXPECT_EQ(LayoutRect(2, 2, 96, 46), target->ClippingRect());
@@ -233,7 +233,7 @@ TEST_F(LayoutBoxTest, ControlClip) {
 }
 
 TEST_F(LayoutBoxTest, LocalVisualRectWithMask) {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(
@@ -248,7 +248,7 @@ TEST_F(LayoutBoxTest, LocalVisualRectWithMask) {
 }
 
 TEST_F(LayoutBoxTest, LocalVisualRectWithMaskAndOverflowClip) {
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled())
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled())
     return;
 
   SetBodyInnerHTML(

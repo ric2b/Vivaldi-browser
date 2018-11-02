@@ -12,6 +12,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
+#include "components/gcm_driver/crypto/gcm_decryption_result.h"
+#include "components/gcm_driver/crypto/gcm_encryption_provider.h"
 
 namespace gcm {
 
@@ -187,14 +189,11 @@ void GCMStatsRecorderImpl::NotifyActivityRecorded() {
     delegate_->OnActivityRecorded();
 }
 
-void GCMStatsRecorderImpl::RecordDecryptionFailure(
-    const std::string& app_id,
-    GCMEncryptionProvider::DecryptionResult result) {
-  DCHECK_NE(result, GCMEncryptionProvider::DECRYPTION_RESULT_UNENCRYPTED);
-  DCHECK_NE(result,
-            GCMEncryptionProvider::DECRYPTION_RESULT_DECRYPTED_DRAFT_03);
-  DCHECK_NE(result,
-            GCMEncryptionProvider::DECRYPTION_RESULT_DECRYPTED_DRAFT_08);
+void GCMStatsRecorderImpl::RecordDecryptionFailure(const std::string& app_id,
+                                                   GCMDecryptionResult result) {
+  DCHECK_NE(result, GCMDecryptionResult::UNENCRYPTED);
+  DCHECK_NE(result, GCMDecryptionResult::DECRYPTED_DRAFT_03);
+  DCHECK_NE(result, GCMDecryptionResult::DECRYPTED_DRAFT_08);
   if (!is_recording_)
     return;
 
@@ -202,8 +201,7 @@ void GCMStatsRecorderImpl::RecordDecryptionFailure(
   DecryptionFailureActivity* inserted_data = InsertCircularBuffer(
       &decryption_failure_activities_, data);
   inserted_data->app_id = app_id;
-  inserted_data->details =
-      GCMEncryptionProvider::ToDecryptionResultDetailsString(result);
+  inserted_data->details = ToGCMDecryptionResultDetailsString(result);
 
   NotifyActivityRecorded();
 }
@@ -417,7 +415,6 @@ void GCMStatsRecorderImpl::RecordDataMessageReceived(
     const std::string& app_id,
     const std::string& from,
     int message_byte_size,
-    bool to_registered_app,
     ReceivedMessageType message_type) {
   base::TimeTicks new_timestamp = base::TimeTicks::Now();
   if (last_received_data_message_burst_start_time_.is_null()) {
@@ -451,23 +448,16 @@ void GCMStatsRecorderImpl::RecordDataMessageReceived(
 
   if (!is_recording_)
     return;
-  if (!to_registered_app) {
-    RecordReceiving(app_id,
-                    from,
-                    message_byte_size,
-                    "Data msg received",
-                    "No such registered app found");
-  } else {
-    switch (message_type) {
-      case GCMStatsRecorderImpl::DATA_MESSAGE:
-        RecordReceiving(app_id, from, message_byte_size, "Data msg received",
-                        std::string());
-        break;
-      case GCMStatsRecorderImpl::DELETED_MESSAGES:
-        RecordReceiving(app_id, from, message_byte_size, "Data msg received",
-                        "Message has been deleted on server");
-        break;
-    }
+
+  switch (message_type) {
+    case GCMStatsRecorderImpl::DATA_MESSAGE:
+      RecordReceiving(app_id, from, message_byte_size, "Data msg received",
+                      std::string());
+      break;
+    case GCMStatsRecorderImpl::DELETED_MESSAGES:
+      RecordReceiving(app_id, from, message_byte_size, "Data msg received",
+                      "Message has been deleted on server");
+      break;
   }
 }
 

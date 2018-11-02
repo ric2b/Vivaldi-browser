@@ -23,7 +23,7 @@ class NoBackendProgramCache : public ProgramCache {
       const LocationMap* /* bind_attrib_location_map */,
       const std::vector<std::string>& /* transform_feedback_varyings */,
       GLenum /* transform_feedback_buffer_mode */,
-      const ShaderCacheCallback& /* callback */) override {
+      GLES2DecoderClient* /* client */) override {
     return PROGRAM_LOAD_SUCCESS;
   }
   void SaveLinkedProgram(
@@ -33,9 +33,10 @@ class NoBackendProgramCache : public ProgramCache {
       const LocationMap* /* bind_attrib_location_map */,
       const std::vector<std::string>& /* transform_feedback_varyings */,
       GLenum /* transform_feedback_buffer_mode */,
-      const ShaderCacheCallback& /* callback */) override {}
+      GLES2DecoderClient* /* client */) override {}
 
-  void LoadProgram(const std::string& /* program */) override {}
+  void LoadProgram(const std::string& /*key*/,
+                   const std::string& /* program */) override {}
 
   void ClearBackend() override {}
 
@@ -84,6 +85,8 @@ class NoBackendProgramCache : public ProgramCache {
   void Evict(const std::string& program_hash) {
     ProgramCache::Evict(program_hash);
   }
+
+  size_t Trim(size_t limit) override { return 0; }
 };
 
 class ProgramCacheTest : public testing::Test {

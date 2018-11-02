@@ -6,26 +6,28 @@
 #define SensorProxy_h
 
 #include "core/dom/ExceptionCode.h"
+#include "core/page/FocusChangedObserver.h"
 #include "core/page/PageVisibilityObserver.h"
-#include "device/generic_sensor/public/cpp/sensor_reading.h"
-#include "device/generic_sensor/public/interfaces/sensor.mojom-blink.h"
-#include "device/generic_sensor/public/interfaces/sensor_provider.mojom-blink.h"
 #include "mojo/public/cpp/bindings/binding.h"
 #include "platform/Supplementable.h"
 #include "platform/Timer.h"
 #include "platform/heap/Handle.h"
 #include "platform/wtf/Vector.h"
+#include "services/device/public/cpp/generic_sensor/sensor_reading.h"
+#include "services/device/public/cpp/generic_sensor/sensor_reading_shared_buffer_reader.h"
+#include "services/device/public/interfaces/sensor.mojom-blink.h"
+#include "services/device/public/interfaces/sensor_provider.mojom-blink.h"
 
 namespace blink {
 
 class SensorProviderProxy;
-class SensorReading;
 
 // This class wraps 'Sensor' mojo interface and used by multiple
 // JS sensor instances of the same type (within a single frame).
 class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
                           public device::mojom::blink::SensorClient,
-                          public PageVisibilityObserver {
+                          public PageVisibilityObserver,
+                          public FocusChangedObserver {
   USING_GARBAGE_COLLECTED_MIXIN(SensorProxy);
   USING_PRE_FINALIZER(SensorProxy, Dispose);
   WTF_MAKE_NONCOPYABLE(SensorProxy);
@@ -80,8 +82,6 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
 
  private:
   friend class SensorProviderProxy;
-  friend class SensorReadingUpdaterContinuous;
-  friend class SensorReadingUpdaterOnChange;
   SensorProxy(device::mojom::blink::SensorType, SensorProviderProxy*, Page*);
 
   // Updates sensor reading from shared buffer.
@@ -95,6 +95,9 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   // PageVisibilityObserver overrides.
   void PageVisibilityChanged() override;
 
+  // FocusChangedObserver overrides.
+  void FocusedFrameChanged() override;
+
   // Generic handler for a fatal error.
   void HandleSensorError();
 
@@ -107,12 +110,18 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
       bool result);
   void OnRemoveConfigurationCompleted(double frequency, bool result);
 
-  bool TryReadFromBuffer(device::SensorReading& result);
-
   void OnPollingTimer(TimerBase*);
-  // Starts polling timer if needed (continuous reporting, initialized, not
-  // suspended and has configurations added).
+
+  // Returns 'true' if readings should be propagated to Observers
+  // (i.e. proxy is initialized, not suspended and has active configurations);
+  // returns 'false' otherwise.
+  bool ShouldProcessReadings() const;
+
+  // Starts or stops polling timer.
   void UpdatePollingStatus();
+
+  // Suspends or resumes the wrapped sensor.
+  void UpdateSuspendedStatus();
 
   device::mojom::blink::SensorType type_;
   device::mojom::blink::ReportingMode mode_;
@@ -128,6 +137,8 @@ class SensorProxy final : public GarbageCollectedFinalized<SensorProxy>,
   State state_;
   mojo::ScopedSharedBufferHandle shared_buffer_handle_;
   mojo::ScopedSharedBufferMapping shared_buffer_;
+  std::unique_ptr<device::SensorReadingSharedBufferReader>
+      shared_buffer_reader_;
   bool suspended_;
   device::SensorReading reading_;
   std::pair<double, double> frequency_limits_;

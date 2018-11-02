@@ -814,6 +814,7 @@ class MockExpectCTReporter : public TransportSecurityState::ExpectCTReporter {
 
   void OnExpectCTFailed(const HostPortPair& host_port_pair,
                         const GURL& report_uri,
+                        base::Time expiration,
                         const X509Certificate* validated_certificate_chain,
                         const X509Certificate* served_certificate_chain,
                         const SignedCertificateTimestampAndStatusList&
@@ -869,11 +870,6 @@ class MockCTPolicyEnforcer : public CTPolicyEnforcer {
                ct::CertPolicyCompliance(X509Certificate* cert,
                                         const ct::SCTList&,
                                         const NetLogWithSource&));
-  MOCK_METHOD4(DoesConformToCTEVPolicy,
-               ct::EVPolicyCompliance(X509Certificate* cert,
-                                      const ct::EVCertsWhitelist*,
-                                      const ct::SCTList&,
-                                      const NetLogWithSource&));
 };
 
 class MockRequireCTDelegate : public TransportSecurityState::RequireCTDelegate {
@@ -899,9 +895,6 @@ class SSLClientSocketTest : public PlatformTest {
     EXPECT_CALL(*ct_policy_enforcer_, DoesConformToCertPolicy(_, _, _))
         .WillRepeatedly(
             Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
-    EXPECT_CALL(*ct_policy_enforcer_, DoesConformToCTEVPolicy(_, _, _, _))
-        .WillRepeatedly(
-            Return(ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS));
   }
 
  protected:
@@ -2564,9 +2557,6 @@ TEST_F(SSLClientSocketTest, EVCertStatusMaintainedForCompliantCert) {
   EXPECT_CALL(policy_enforcer, DoesConformToCertPolicy(_, _, _))
       .WillRepeatedly(
           Return(ct::CertPolicyCompliance::CERT_POLICY_COMPLIES_VIA_SCTS));
-  EXPECT_CALL(policy_enforcer, DoesConformToCTEVPolicy(_, _, _, _))
-      .WillRepeatedly(
-          Return(ct::EVPolicyCompliance::EV_POLICY_COMPLIES_VIA_SCTS));
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
@@ -2594,9 +2584,6 @@ TEST_F(SSLClientSocketTest, EVCertStatusRemovedForNonCompliantCert) {
   EXPECT_CALL(policy_enforcer, DoesConformToCertPolicy(_, _, _))
       .WillRepeatedly(
           Return(ct::CertPolicyCompliance::CERT_POLICY_NOT_ENOUGH_SCTS));
-  EXPECT_CALL(policy_enforcer, DoesConformToCTEVPolicy(_, _, _, _))
-      .WillRepeatedly(
-          Return(ct::EVPolicyCompliance::EV_POLICY_NOT_ENOUGH_SCTS));
 
   int rv;
   ASSERT_TRUE(CreateAndConnectSSLClientSocket(ssl_config, &rv));
@@ -3520,6 +3507,7 @@ TEST_F(SSLClientSocketTest, CTIsRequiredByExpectCT) {
   EXPECT_EQ(ssl_info.cert.get(), reporter.validated_certificate_chain());
   EXPECT_EQ(0u, reporter.signed_certificate_timestamps().size());
 
+  transport_security_state_->ClearReportCachesForTesting();
   EXPECT_CALL(*ct_policy_enforcer_,
               DoesConformToCertPolicy(server_cert.get(), _, _))
       .WillRepeatedly(

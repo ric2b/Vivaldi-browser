@@ -9,7 +9,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/files/file.h"
-#include "base/memory/ref_counted.h"
 #include "base/memory/shared_memory.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/numerics/safe_math.h"
@@ -64,14 +63,13 @@ struct AudioInputRendererHost::AudioEntry {
   // The audio input stream ID in the RenderFrame.
   int stream_id;
 
-  // Shared memory for transmission of the audio data. It has
-  // |shared_memory_segment_count| equal lengthed segments.
-  base::SharedMemory shared_memory;
-  int shared_memory_segment_count;
-
   // The synchronous writer to be used by the controller. We have the
   // ownership of the writer.
   std::unique_ptr<AudioInputSyncWriter> writer;
+
+  // The socket, paired with |writer|s socket, which should be used on the
+  // remote end.
+  base::CancelableSyncSocket foreign_socket;
 
   // Set to true after we called Close() for the controller.
   bool pending_close;
@@ -82,7 +80,6 @@ struct AudioInputRendererHost::AudioEntry {
 
 AudioInputRendererHost::AudioEntry::AudioEntry()
     : stream_id(0),
-      shared_memory_segment_count(0),
       pending_close(false),
       has_keyboard_mic(false) {
 }
@@ -138,27 +135,36 @@ void AudioInputRendererHost::OnDestruct() const {
   BrowserThread::DeleteOnIOThread::Destruct(this);
 }
 
-void AudioInputRendererHost::OnCreated(
-    media::AudioInputController* controller) {
+void AudioInputRendererHost::OnCreated(media::AudioInputController* controller,
+                                       bool initially_muted) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&AudioInputRendererHost::DoCompleteCreation, this,
-                 base::RetainedRef(controller)));
+      base::BindOnce(&AudioInputRendererHost::DoCompleteCreation, this,
+                     base::RetainedRef(controller), initially_muted));
 }
 
 void AudioInputRendererHost::OnError(media::AudioInputController* controller,
     media::AudioInputController::ErrorCode error_code) {
   BrowserThread::PostTask(
       BrowserThread::IO, FROM_HERE,
-      base::Bind(&AudioInputRendererHost::DoHandleError, this,
-                 base::RetainedRef(controller), error_code));
+      base::BindOnce(&AudioInputRendererHost::DoHandleError, this,
+                     base::RetainedRef(controller), error_code));
 }
 
 void AudioInputRendererHost::OnLog(media::AudioInputController* controller,
                                    const std::string& message) {
-  BrowserThread::PostTask(BrowserThread::IO, FROM_HERE,
-                          base::Bind(&AudioInputRendererHost::DoLog, this,
-                                     base::RetainedRef(controller), message));
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::BindOnce(&AudioInputRendererHost::DoLog, this,
+                     base::RetainedRef(controller), message));
+}
+
+void AudioInputRendererHost::OnMuted(media::AudioInputController* controller,
+                                     bool is_muted) {
+  BrowserThread::PostTask(
+      BrowserThread::IO, FROM_HERE,
+      base::Bind(&AudioInputRendererHost::DoNotifyMutedState, this,
+                 base::RetainedRef(controller), is_muted));
 }
 
 void AudioInputRendererHost::set_renderer_pid(int32_t renderer_pid) {
@@ -167,17 +173,20 @@ void AudioInputRendererHost::set_renderer_pid(int32_t renderer_pid) {
 }
 
 void AudioInputRendererHost::DoCompleteCreation(
-    media::AudioInputController* controller) {
+    media::AudioInputController* controller,
+    bool initially_muted) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
 
   AudioEntry* entry = LookupByController(controller);
   DCHECK(entry);
+  AudioInputSyncWriter* writer = entry->writer.get();
+  DCHECK(writer);
   DCHECK(PeerHandle());
 
   // Once the audio stream is created then complete the creation process by
   // mapping shared memory and sharing with the renderer process.
   base::SharedMemoryHandle foreign_memory_handle =
-      entry->shared_memory.handle().Duplicate();
+      writer->shared_memory()->handle().Duplicate();
   if (!foreign_memory_handle.IsValid()) {
     // If we failed to map and share the shared memory then close the audio
     // stream and send an error message.
@@ -185,25 +194,31 @@ void AudioInputRendererHost::DoCompleteCreation(
     return;
   }
 
-  AudioInputSyncWriter* writer = entry->writer.get();
-
-  base::SyncSocket::TransitDescriptor socket_transit_descriptor;
+  base::CancelableSyncSocket::TransitDescriptor socket_transit_descriptor;
 
   // If we failed to prepare the sync socket for the renderer then we fail
   // the construction of audio input stream.
-  if (!writer->PrepareForeignSocket(PeerHandle(), &socket_transit_descriptor)) {
+  if (!entry->foreign_socket.PrepareTransitDescriptor(
+          PeerHandle(), &socket_transit_descriptor)) {
+    foreign_memory_handle.Close();
     DeleteEntryOnError(entry, SYNC_SOCKET_ERROR);
     return;
   }
 
   LogMessage(entry->stream_id,
-             "DoCompleteCreation: IPC channel and stream are now open",
+             base::StringPrintf("DoCompleteCreation: IPC channel and stream "
+                                "are now open (initially %s",
+                                initially_muted ? "muted" : "not muted"),
              true);
 
   Send(new AudioInputMsg_NotifyStreamCreated(
       entry->stream_id, foreign_memory_handle, socket_transit_descriptor,
-      entry->shared_memory.requested_size(),
-      entry->shared_memory_segment_count));
+      writer->shared_memory()->requested_size(),
+      writer->shared_memory_segment_count(), initially_muted));
+
+  // Free the foreign socket on here since it isn't needed anymore in this
+  // process.
+  entry->foreign_socket.Close();
 }
 
 void AudioInputRendererHost::DoHandleError(
@@ -231,6 +246,19 @@ void AudioInputRendererHost::DoLog(media::AudioInputController* controller,
   LogMessage(entry->stream_id, message, false);
 }
 
+void AudioInputRendererHost::DoNotifyMutedState(
+    media::AudioInputController* controller,
+    bool is_muted) {
+  DCHECK_CURRENTLY_ON(BrowserThread::IO);
+  AudioEntry* entry = LookupByController(controller);
+  DCHECK(entry);
+  LogMessage(entry->stream_id,
+             base::StringPrintf("OnMuted: State changed to: %s",
+                                (is_muted ? "muted" : "not muted")),
+             true);
+  Send(new AudioInputMsg_NotifyStreamMuted(entry->stream_id, is_muted));
+}
+
 bool AudioInputRendererHost::OnMessageReceived(const IPC::Message& message) {
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(AudioInputRendererHost, message)
@@ -256,8 +284,8 @@ void AudioInputRendererHost::OnCreateStream(
       media::CHANNEL_LAYOUT_STEREO_AND_KEYBOARD_MIC) {
     media_stream_manager_->audio_input_device_manager()
         ->RegisterKeyboardMicStream(
-            base::Bind(&AudioInputRendererHost::DoCreateStream, this, stream_id,
-                       render_frame_id, session_id, config));
+            base::BindOnce(&AudioInputRendererHost::DoCreateStream, this,
+                           stream_id, render_frame_id, session_id, config));
   } else {
     DoCreateStream(stream_id, render_frame_id, session_id, config);
   }
@@ -310,38 +338,17 @@ void AudioInputRendererHost::DoCreateStream(
       << ": device_name=" << device_name;
 
   // Create a new AudioEntry structure.
-  std::unique_ptr<AudioEntry> entry(new AudioEntry());
+  std::unique_ptr<AudioEntry> entry = base::MakeUnique<AudioEntry>();
 
-  const uint32_t segment_size =
-      (sizeof(media::AudioInputBufferParameters) +
-       media::AudioBus::CalculateMemorySize(audio_params));
-  entry->shared_memory_segment_count = config.shared_memory_count;
+  entry->writer = AudioInputSyncWriter::Create(
+      config.shared_memory_count, audio_params, &entry->foreign_socket);
 
-  // Create the shared memory and share it with the renderer process
-  // using a new SyncWriter object.
-  base::CheckedNumeric<uint32_t> size = segment_size;
-  size *= entry->shared_memory_segment_count;
-  if (!size.IsValid() ||
-      !entry->shared_memory.CreateAndMapAnonymous(size.ValueOrDie())) {
-    // If creation of shared memory failed then send an error message.
-    SendErrorMessage(stream_id, SHARED_MEMORY_CREATE_FAILED);
-    MaybeUnregisterKeyboardMicStream(config);
-    return;
-  }
-
-  std::unique_ptr<AudioInputSyncWriter> writer(new AudioInputSyncWriter(
-      entry->shared_memory.memory(), entry->shared_memory.requested_size(),
-      entry->shared_memory_segment_count, audio_params));
-
-  if (!writer->Init()) {
+  if (!entry->writer) {
     SendErrorMessage(stream_id, SYNC_WRITER_INIT_FAILED);
     MaybeUnregisterKeyboardMicStream(config);
     return;
   }
 
-  // If we have successfully created the SyncWriter then assign it to the
-  // entry and construct an AudioInputController.
-  entry->writer.reset(writer.release());
   if (WebContentsMediaCaptureId::Parse(device_id, nullptr)) {
     // For MEDIA_DESKTOP_AUDIO_CAPTURE, the source is selected from picker
     // window, we do not mute the source audio.
@@ -402,12 +409,9 @@ void AudioInputRendererHost::DoCreateStream(
 
 #if BUILDFLAG(ENABLE_WEBRTC)
   BrowserThread::PostTask(
-      BrowserThread::UI,
-      FROM_HERE,
-      base::Bind(
-          &AudioInputRendererHost::MaybeEnableDebugRecordingForId,
-          this,
-          stream_id));
+      BrowserThread::UI, FROM_HERE,
+      base::BindOnce(&AudioInputRendererHost::MaybeEnableDebugRecordingForId,
+                     this, stream_id));
 #endif
 }
 
@@ -477,8 +481,8 @@ void AudioInputRendererHost::CloseAndDeleteStream(AudioEntry* entry) {
 
   if (!entry->pending_close) {
     LogMessage(entry->stream_id, "CloseAndDeleteStream", true);
-    entry->controller->Close(base::Bind(&AudioInputRendererHost::DeleteEntry,
-                                        this, entry));
+    entry->controller->Close(
+        base::BindOnce(&AudioInputRendererHost::DeleteEntry, this, entry));
     entry->pending_close = true;
     audio_log_->OnClosed(entry->stream_id);
   }
@@ -553,7 +557,7 @@ void AudioInputRendererHost::MaybeEnableDebugRecordingForId(int stream_id) {
   if (WebRTCInternals::GetInstance()->IsAudioDebugRecordingsEnabled()) {
     BrowserThread::PostTask(
         BrowserThread::IO, FROM_HERE,
-        base::Bind(
+        base::BindOnce(
             &AudioInputRendererHost::
                 AddExtensionsToPathAndEnableDebugRecordingForId,
             this,

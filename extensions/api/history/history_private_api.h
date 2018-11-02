@@ -9,8 +9,9 @@
 #include "chrome/browser/extensions/api/history/history_api.h"
 #include "chrome/browser/extensions/chrome_extension_function.h"
 #include "chrome/browser/profiles/profile.h"
-
 #include "db/vivaldi_history_database.h"
+#include "extensions/schema/history_private.h"
+#include "ui/base/page_transition_types.h"
 
 namespace history {
 class QueryResults;
@@ -51,6 +52,11 @@ class HistoryPrivateAPI : public BrowserContextKeyedAPI,
 
   // BrowserContextKeyedAPI implementation.
   static BrowserContextKeyedAPIFactory<HistoryPrivateAPI>* GetFactoryInstance();
+
+  static ui::PageTransition PrivateHistoryTransitionToUiTransition(
+      vivaldi::history_private::TransitionType transition);
+  static vivaldi::history_private::TransitionType
+  UiTransitionToPrivateHistoryTransition(ui::PageTransition transition);
 
   // EventRouter::Observer implementation.
   void OnListenerAdded(const EventListenerInfo& details) override;
@@ -140,6 +146,48 @@ class HistoryPrivateVisitSearchFunction : public HistoryFunctionWithCallback {
   ExtensionFunction::ResponseAction Run() override;
   // Callback for the history service to acknowledge visits search complete.
   void VisitsComplete(const history::Visit::VisitsList& visit_list);
+};
+
+class HistoryPrivateSetKeywordSearchTermsForURLFunction
+    : public HistoryFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.setKeywordSearchTermsForURL",
+                             HISTORYPRIVATE_SETKEYWORDSEARCHTERMSFORURL)
+
+ protected:
+  ~HistoryPrivateSetKeywordSearchTermsForURLFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class HistoryPrivateDeleteAllSearchTermsForKeywordFunction
+    : public HistoryFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.deleteAllSearchTermsForKeyword",
+                             HISTORYPRIVATE_DELETEALLSEARCHTERMSFORKEYWORD)
+
+ protected:
+  ~HistoryPrivateDeleteAllSearchTermsForKeywordFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class HistoryPrivateGetTypedHistoryFunction : public HistoryFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.getTypedHistory",
+                             HISTORYPRIVATE_GETTYPEDURLSANDSEARCHES)
+
+ protected:
+  ~HistoryPrivateGetTypedHistoryFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
+};
+
+class HistoryPrivateMigrateOldTypedUrlFunction : public HistoryFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("historyPrivate.migrateOldTypedUrl",
+                             HISTORYPRIVATE_MIGRATEOLDTYPEDURL)
+
+ protected:
+  ~HistoryPrivateMigrateOldTypedUrlFunction() override = default;
+  ExtensionFunction::ResponseAction Run() override;
 };
 
 }  // namespace extensions

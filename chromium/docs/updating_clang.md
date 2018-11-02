@@ -2,7 +2,7 @@
 
 1.  Sync your Chromium tree to the latest revision to pick up any plugin
     changes
-1.  Run `python tools/clang/scripts/upload_revision.py --clang_revision=NNNN`
+1.  Run `python tools/clang/scripts/upload_revision.py NNNN`
     with the target LLVM SVN revision number. This creates a roll CL on a new
     branch, uploads it and starts tryjobs that build the compiler binaries into
     a staging bucket on Google Cloud Storage (GCS).
@@ -16,9 +16,9 @@ $ for x in Linux_x64 Mac Win ; do \
         gs://chromium-browser-clang/$x/clang-$rev.tgz ; \
     gsutil cp -n -a public-read gs://chromium-browser-clang-staging/$x/llvmobjdump-$rev.tgz \
         gs://chromium-browser-clang/$x/llvmobjdump-$rev.tgz ; \
+    gsutil cp -n -a public-read gs://chromium-browser-clang-staging/$x/translation_unit-$rev.tgz \
+        gs://chromium-browser-clang/$x/translation_unit-$rev.tgz ; \
     done
-$ gsutil cp -n -a public-read gs://chromium-browser-clang-staging/Linux_x64/llvmgold-$rev.tgz \
-    gs://chromium-browser-clang/Linux_x64/llvmgold-$rev.tgz
 ```
 
 1.  Run the goma package update script to push these packages to goma. If you do
@@ -29,7 +29,8 @@ $ gsutil cp -n -a public-read gs://chromium-browser-clang-staging/Linux_x64/llvm
     git cl try &&
     git cl try -m tryserver.chromium.mac -b mac_chromium_asan_rel_ng &&
     git cl try -m tryserver.chromium.linux -b linux_chromium_chromeos_dbg_ng \
-      -b linux_chromium_chromeos_asan_rel_ng -b linux_chromium_msan_rel_ng &&
+      -b linux_chromium_chromeos_asan_rel_ng -b linux_chromium_msan_rel_ng \
+      -b fuchsia -b linux_chromium_cfi_rel_ng &&
     git cl try -m tryserver.blink -b linux_trusty_blink_rel
 ```
 1.  Commit roll CL from the first step

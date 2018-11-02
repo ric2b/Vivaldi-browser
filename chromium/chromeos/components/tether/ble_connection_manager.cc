@@ -4,7 +4,10 @@
 
 #include "chromeos/components/tether/ble_connection_manager.h"
 
+#include "base/metrics/histogram_macros.h"
+#include "base/time/default_clock.h"
 #include "chromeos/components/tether/ble_constants.h"
+#include "chromeos/components/tether/timer_factory.h"
 #include "components/cryptauth/ble/bluetooth_low_energy_weave_client_connection.h"
 #include "components/cryptauth/cryptauth_service.h"
 #include "components/proximity_auth/logging/logging.h"
@@ -40,10 +43,10 @@ std::string BleConnectionManager::MessageTypeToString(
 
 BleConnectionManager::ConnectionMetadata::ConnectionMetadata(
     const cryptauth::RemoteDevice remote_device,
-    std::shared_ptr<base::Timer> timer,
+    std::unique_ptr<base::Timer> timer,
     base::WeakPtr<BleConnectionManager> manager)
     : remote_device_(remote_device),
-      connection_attempt_timeout_timer_(timer),
+      connection_attempt_timeout_timer_(std::move(timer)),
       manager_(manager),
       weak_ptr_factory_(this) {}
 
@@ -118,10 +121,10 @@ void BleConnectionManager::ConnectionMetadata::SetSecureChannel(
   secure_channel_->Initialize();
 }
 
-void BleConnectionManager::ConnectionMetadata::SendMessage(
+int BleConnectionManager::ConnectionMetadata::SendMessage(
     const std::string& payload) {
   DCHECK(GetStatus() == cryptauth::SecureChannel::Status::AUTHENTICATED);
-  secure_channel_->SendMessage(std::string(kTetherFeature), payload);
+  return secure_channel_->SendMessage(std::string(kTetherFeature), payload);
 }
 
 void BleConnectionManager::ConnectionMetadata::OnSecureChannelStatusChanged(
@@ -165,42 +168,29 @@ void BleConnectionManager::ConnectionMetadata::OnMessageReceived(
   manager_->SendMessageReceivedEvent(remote_device_, payload);
 }
 
-std::unique_ptr<base::Timer> BleConnectionManager::TimerFactory::CreateTimer() {
-  return base::MakeUnique<base::OneShotTimer>();
+void BleConnectionManager::ConnectionMetadata::OnMessageSent(
+    cryptauth::SecureChannel* secure_channel,
+    int sequence_number) {
+  DCHECK(secure_channel_.get() == secure_channel);
+  PA_LOG(INFO) << "Message sent successfully to device with ID \""
+               << remote_device_.GetTruncatedDeviceIdForLogs() << "\"; "
+               << "message sequence number: " << sequence_number;
+  manager_->SendMessageSentEvent(sequence_number);
 }
 
 BleConnectionManager::BleConnectionManager(
     cryptauth::CryptAuthService* cryptauth_service,
     scoped_refptr<device::BluetoothAdapter> adapter,
-    const LocalDeviceDataProvider* local_device_data_provider,
-    const cryptauth::RemoteBeaconSeedFetcher* remote_beacon_seed_fetcher,
-    cryptauth::BluetoothThrottler* bluetooth_throttler)
-    : BleConnectionManager(
-          cryptauth_service,
-          adapter,
-          base::MakeUnique<BleScanner>(adapter, local_device_data_provider),
-          base::MakeUnique<BleAdvertiser>(adapter,
-                                          local_device_data_provider,
-                                          remote_beacon_seed_fetcher),
-          base::MakeUnique<BleAdvertisementDeviceQueue>(),
-          base::WrapUnique<TimerFactory>(new TimerFactory()),
-          bluetooth_throttler) {}
-
-BleConnectionManager::BleConnectionManager(
-    cryptauth::CryptAuthService* cryptauth_service,
-    scoped_refptr<device::BluetoothAdapter> adapter,
-    std::unique_ptr<BleScanner> ble_scanner,
-    std::unique_ptr<BleAdvertiser> ble_advertiser,
-    std::unique_ptr<BleAdvertisementDeviceQueue> device_queue,
-    std::unique_ptr<TimerFactory> timer_factory,
-    cryptauth::BluetoothThrottler* bluetooth_throttler)
+    BleAdvertisementDeviceQueue* ble_advertisement_device_queue,
+    BleAdvertiser* ble_advertiser,
+    BleScanner* ble_scanner)
     : cryptauth_service_(cryptauth_service),
       adapter_(adapter),
-      ble_scanner_(std::move(ble_scanner)),
-      ble_advertiser_(std::move(ble_advertiser)),
-      device_queue_(std::move(device_queue)),
-      timer_factory_(std::move(timer_factory)),
-      bluetooth_throttler_(bluetooth_throttler),
+      ble_advertisement_device_queue_(ble_advertisement_device_queue),
+      ble_advertiser_(ble_advertiser),
+      ble_scanner_(ble_scanner),
+      timer_factory_(base::MakeUnique<TimerFactory>()),
+      clock_(base::MakeUnique<base::DefaultClock>()),
       has_registered_observer_(false),
       weak_ptr_factory_(this) {}
 
@@ -218,11 +208,11 @@ void BleConnectionManager::RegisterRemoteDevice(
   }
   has_registered_observer_ = true;
 
-  PA_LOG(INFO) << "Registering device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs() << " for reason "
-               << MessageTypeToString(connection_reason);
+  PA_LOG(INFO) << "Register - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs()
+               << "\", Reason: " << MessageTypeToString(connection_reason);
 
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata) {
     connection_metadata = AddMetadataForDevice(remote_device);
@@ -235,16 +225,19 @@ void BleConnectionManager::RegisterRemoteDevice(
 void BleConnectionManager::UnregisterRemoteDevice(
     const cryptauth::RemoteDevice& remote_device,
     const MessageType& connection_reason) {
-  PA_LOG(INFO) << "Unregistering device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs() << " for reason "
-               << MessageTypeToString(connection_reason);
-
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata) {
-    // If the device was not registered, there is nothing to do.
+    PA_LOG(WARNING) << "Tried to unregister device, but was not registered - "
+                    << "Device ID: \""
+                    << remote_device.GetTruncatedDeviceIdForLogs()
+                    << "\", Reason: " << MessageTypeToString(connection_reason);
     return;
   }
+
+  PA_LOG(INFO) << "Unregister - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs()
+               << "\", Reason: " << MessageTypeToString(connection_reason);
 
   connection_metadata->UnregisterConnectionReason(connection_reason);
   if (!connection_metadata->HasReasonForConnection()) {
@@ -267,30 +260,31 @@ void BleConnectionManager::UnregisterRemoteDevice(
   UpdateConnectionAttempts();
 }
 
-void BleConnectionManager::SendMessage(
+int BleConnectionManager::SendMessage(
     const cryptauth::RemoteDevice& remote_device,
     const std::string& message) {
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata ||
       connection_metadata->GetStatus() !=
           cryptauth::SecureChannel::Status::AUTHENTICATED) {
-    PA_LOG(ERROR) << "Attempted to send a message to device with ID "
-                  << remote_device.GetTruncatedDeviceIdForLogs() << ". "
+    PA_LOG(ERROR) << "SendMessage(): Error - no authenticated channel. "
+                  << "Device ID: \""
+                  << remote_device.GetTruncatedDeviceIdForLogs() << "\", "
                   << "Message: \"" << message << "\"";
-    return;
+    return -1;
   }
 
-  PA_LOG(INFO) << "Sending message to device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs() << ". "
+  PA_LOG(INFO) << "SendMessage(): Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs() << "\", "
                << "Message: \"" << message << "\"";
-  connection_metadata->SendMessage(message);
+  return connection_metadata->SendMessage(message);
 }
 
 bool BleConnectionManager::GetStatusForDevice(
     const cryptauth::RemoteDevice& remote_device,
     cryptauth::SecureChannel::Status* status) const {
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata) {
     return false;
@@ -310,8 +304,8 @@ void BleConnectionManager::RemoveObserver(Observer* observer) {
 
 void BleConnectionManager::OnReceivedAdvertisementFromDevice(
     const std::string& device_address,
-    cryptauth::RemoteDevice remote_device) {
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+    const cryptauth::RemoteDevice& remote_device) {
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   if (!connection_metadata) {
     // If an advertisement  is received from a device that is not registered,
@@ -332,16 +326,15 @@ void BleConnectionManager::OnReceivedAdvertisementFromDevice(
     return;
   }
 
-  PA_LOG(INFO) << "Received advertisement from device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs() << ". "
-               << "Starting authentication handshake to that device.";
+  PA_LOG(INFO) << "Received advertisement - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs() << "\". "
+               << "Starting authentication handshake.";
 
   // Create a connection to that device.
   std::unique_ptr<cryptauth::Connection> connection =
       cryptauth::weave::BluetoothLowEnergyWeaveClientConnection::Factory::
           NewInstance(remote_device, device_address, adapter_,
-                      device::BluetoothUUID(std::string(kGattServerUuid)),
-                      bluetooth_throttler_);
+                      device::BluetoothUUID(std::string(kGattServerUuid)));
   std::unique_ptr<cryptauth::SecureChannel> secure_channel =
       cryptauth::SecureChannel::Factory::NewInstance(std::move(connection),
                                                      cryptauth_service_);
@@ -352,7 +345,7 @@ void BleConnectionManager::OnReceivedAdvertisementFromDevice(
   UpdateConnectionAttempts();
 }
 
-std::shared_ptr<BleConnectionManager::ConnectionMetadata>
+BleConnectionManager::ConnectionMetadata*
 BleConnectionManager::GetConnectionMetadata(
     const cryptauth::RemoteDevice& remote_device) const {
   const auto map_iter = device_to_metadata_map_.find(remote_device);
@@ -360,39 +353,42 @@ BleConnectionManager::GetConnectionMetadata(
     return nullptr;
   }
 
-  return map_iter->second;
+  return map_iter->second.get();
 }
 
-std::shared_ptr<BleConnectionManager::ConnectionMetadata>
+BleConnectionManager::ConnectionMetadata*
 BleConnectionManager::AddMetadataForDevice(
     const cryptauth::RemoteDevice& remote_device) {
-  std::shared_ptr<ConnectionMetadata> existing_data =
-      GetConnectionMetadata(remote_device);
+  ConnectionMetadata* existing_data = GetConnectionMetadata(remote_device);
   if (existing_data) {
     return existing_data;
   }
 
-  std::unique_ptr<base::Timer> timer = timer_factory_->CreateTimer();
-  device_to_metadata_map_.insert(
-      std::pair<cryptauth::RemoteDevice, std::shared_ptr<ConnectionMetadata>>(
-          remote_device,
-          std::shared_ptr<ConnectionMetadata>(
-              new ConnectionMetadata(remote_device, std::move(timer),
-                                     weak_ptr_factory_.GetWeakPtr()))));
-  return device_to_metadata_map_.at(remote_device);
+  // Create the metadata.
+  std::unique_ptr<ConnectionMetadata> metadata =
+      base::WrapUnique(new ConnectionMetadata(
+          remote_device, timer_factory_->CreateOneShotTimer(),
+          weak_ptr_factory_.GetWeakPtr()));
+  ConnectionMetadata* metadata_raw_ptr = metadata.get();
+
+  // Add it to the map.
+  device_to_metadata_map_.emplace(
+      std::pair<cryptauth::RemoteDevice, std::unique_ptr<ConnectionMetadata>>(
+          remote_device, std::move(metadata)));
+
+  return metadata_raw_ptr;
 }
 
 void BleConnectionManager::UpdateConnectionAttempts() {
   UpdateAdvertisementQueue();
 
   std::vector<cryptauth::RemoteDevice> should_advertise_to =
-      device_queue_->GetDevicesToWhichToAdvertise();
+      ble_advertisement_device_queue_->GetDevicesToWhichToAdvertise();
   DCHECK(should_advertise_to.size() <=
          static_cast<size_t>(kMaxConcurrentAdvertisements));
 
   for (const auto& remote_device : should_advertise_to) {
-    std::shared_ptr<ConnectionMetadata> associated_data =
-        GetConnectionMetadata(remote_device);
+    ConnectionMetadata* associated_data = GetConnectionMetadata(remote_device);
     if (associated_data->GetStatus() !=
         cryptauth::SecureChannel::Status::CONNECTING) {
       // If there is no active attempt to connect to a device at the front of
@@ -414,23 +410,17 @@ void BleConnectionManager::UpdateAdvertisementQueue() {
     devices_for_queue.push_back(map_entry.first);
   }
 
-  device_queue_->SetDevices(devices_for_queue);
+  ble_advertisement_device_queue_->SetDevices(devices_for_queue);
 }
 
 void BleConnectionManager::StartConnectionAttempt(
     const cryptauth::RemoteDevice& remote_device) {
-  std::shared_ptr<ConnectionMetadata> connection_metadata =
+  ConnectionMetadata* connection_metadata =
       GetConnectionMetadata(remote_device);
   DCHECK(connection_metadata);
 
-  PA_LOG(INFO) << "Starting connection attempt to device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs();
-
-  // Send a "disconnected => connecting" update to alert clients that a
-  // connection attempt for |remote_device| is underway.
-  SendSecureChannelStatusChangeEvent(
-      remote_device, cryptauth::SecureChannel::Status::DISCONNECTED,
-      cryptauth::SecureChannel::Status::CONNECTING);
+  PA_LOG(INFO) << "Attempting connection - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs() << "\"";
 
   bool success = ble_scanner_->RegisterScanFilterForDevice(remote_device) &&
                  ble_advertiser_->StartAdvertisingToDevice(remote_device);
@@ -444,25 +434,30 @@ void BleConnectionManager::StartConnectionAttempt(
   // case in order to route all connection failures through the same code path.
   connection_metadata->StartConnectionAttemptTimer(
       !success /* fail_immediately */);
+
+  // Send a "disconnected => connecting" update to alert clients that a
+  // connection attempt for |remote_device| is underway.
+  SendSecureChannelStatusChangeEvent(
+      remote_device, cryptauth::SecureChannel::Status::DISCONNECTED,
+      cryptauth::SecureChannel::Status::CONNECTING);
 }
 
 void BleConnectionManager::StopConnectionAttemptAndMoveToEndOfQueue(
     const cryptauth::RemoteDevice& remote_device) {
-  PA_LOG(INFO) << "Stopping connection attempt to device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs();
-
   ble_scanner_->UnregisterScanFilterForDevice(remote_device);
   ble_advertiser_->StopAdvertisingToDevice(remote_device);
-
-  device_queue_->MoveDeviceToEnd(remote_device.GetDeviceId());
+  ble_advertisement_device_queue_->MoveDeviceToEnd(remote_device.GetDeviceId());
 }
 
 void BleConnectionManager::OnConnectionAttemptTimeout(
     const cryptauth::RemoteDevice& remote_device) {
-  PA_LOG(INFO) << "Connection attempt timed out for device with ID "
-               << remote_device.GetTruncatedDeviceIdForLogs();
+  PA_LOG(INFO) << "Connection attempt timeout - Device ID \""
+               << remote_device.GetTruncatedDeviceIdForLogs() << "\"";
 
   StopConnectionAttemptAndMoveToEndOfQueue(remote_device);
+
+  device_id_to_advertising_start_time_map_[remote_device.GetDeviceId()] =
+      base::Time();
 
   // Send a "connecting => disconnected" update to alert clients that a
   // connection attempt for |remote_device| has failed.
@@ -482,29 +477,89 @@ void BleConnectionManager::OnSecureChannelStatusChanged(
 }
 
 void BleConnectionManager::SendMessageReceivedEvent(
-    const cryptauth::RemoteDevice& remote_device,
-    const std::string& payload) {
-  PA_LOG(INFO) << "Broadcasting message received event: "
-               << "Device ID \"" << remote_device.GetTruncatedDeviceIdForLogs()
-               << "\" received message \"" << payload << "\".";
+    cryptauth::RemoteDevice remote_device,
+    std::string payload) {
+  PA_LOG(INFO) << "Message received - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs() << "\", "
+               << "Message: \"" << payload << "\".";
   for (auto& observer : observer_list_) {
     observer.OnMessageReceived(remote_device, payload);
   }
 }
 
 void BleConnectionManager::SendSecureChannelStatusChangeEvent(
-    const cryptauth::RemoteDevice& remote_device,
-    const cryptauth::SecureChannel::Status& old_status,
-    const cryptauth::SecureChannel::Status& new_status) {
-  PA_LOG(INFO) << "Broadcasting status change event: "
-               << "Device ID \"" << remote_device.GetTruncatedDeviceIdForLogs()
+    cryptauth::RemoteDevice remote_device,
+    cryptauth::SecureChannel::Status old_status,
+    cryptauth::SecureChannel::Status new_status) {
+  PA_LOG(INFO) << "Status change - Device ID: \""
+               << remote_device.GetTruncatedDeviceIdForLogs()
                << "\": " << cryptauth::SecureChannel::StatusToString(old_status)
                << " => "
                << cryptauth::SecureChannel::StatusToString(new_status);
+
+  if (new_status == cryptauth::SecureChannel::Status::CONNECTING) {
+    device_id_to_advertising_start_time_map_[remote_device.GetDeviceId()] =
+        clock_->Now();
+  } else if (new_status == cryptauth::SecureChannel::Status::CONNECTED) {
+    device_id_to_status_connected_time_map_[remote_device.GetDeviceId()] =
+        clock_->Now();
+    RecordAdvertisementToConnectionDuration(remote_device.GetDeviceId());
+  } else if (new_status == cryptauth::SecureChannel::Status::AUTHENTICATED) {
+    RecordConnectionToAuthenticationDuration(remote_device.GetDeviceId());
+  }
+
   for (auto& observer : observer_list_) {
     observer.OnSecureChannelStatusChanged(remote_device, old_status,
                                           new_status);
   }
+}
+
+void BleConnectionManager::SendMessageSentEvent(int sequence_number) {
+  for (auto& observer : observer_list_) {
+    observer.OnMessageSent(sequence_number);
+  }
+}
+
+void BleConnectionManager::SetTestDoubles(
+    std::unique_ptr<base::Clock> test_clock,
+    std::unique_ptr<TimerFactory> test_timer_factory) {
+  clock_ = std::move(test_clock);
+  timer_factory_ = std::move(test_timer_factory);
+}
+
+void BleConnectionManager::RecordAdvertisementToConnectionDuration(
+    const std::string device_id) {
+  if (!base::ContainsKey(device_id_to_advertising_start_time_map_, device_id) ||
+      device_id_to_advertising_start_time_map_[device_id].is_null() ||
+      !base::ContainsKey(device_id_to_status_connected_time_map_, device_id) ||
+      device_id_to_status_connected_time_map_[device_id].is_null()) {
+    LOG(ERROR) << "Failed to record advertisement to connection duration: "
+               << "times are invalid";
+    return;
+  }
+
+  UMA_HISTOGRAM_TIMES(
+      "InstantTethering.Performance.AdvertisementToConnectionDuration",
+      device_id_to_status_connected_time_map_[device_id] -
+          device_id_to_advertising_start_time_map_[device_id]);
+
+  device_id_to_advertising_start_time_map_.erase(device_id);
+}
+
+void BleConnectionManager::RecordConnectionToAuthenticationDuration(
+    const std::string device_id) {
+  if (!base::ContainsKey(device_id_to_status_connected_time_map_, device_id) ||
+      device_id_to_status_connected_time_map_[device_id].is_null()) {
+    LOG(ERROR) << "Failed to record connection to authentication duration: "
+               << "connection start time is invalid";
+    return;
+  }
+
+  UMA_HISTOGRAM_TIMES(
+      "InstantTethering.Performance.ConnectionToAuthenticationDuration",
+      clock_->Now() - device_id_to_status_connected_time_map_[device_id]);
+
+  device_id_to_status_connected_time_map_.erase(device_id);
 }
 
 }  // namespace tether

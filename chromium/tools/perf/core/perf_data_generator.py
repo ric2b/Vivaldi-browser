@@ -23,8 +23,9 @@ from core import path_util
 path_util.AddTelemetryToPath()
 
 from telemetry import benchmark as benchmark_module
-from telemetry.core import discover
 from telemetry import decorators
+
+from py_utils import discover
 
 from core.sharding_map_generator import load_benchmark_sharding_map
 
@@ -37,13 +38,15 @@ def add_builder(waterfall, name, additional_compile_targets=None):
   return waterfall
 
 def add_tester(waterfall, name, perf_id, platform, target_bits=64,
-              num_host_shards=1, num_device_shards=1, swarming=None):
+               num_host_shards=1, num_device_shards=1, swarming=None,
+               replace_system_webview=False):
   del perf_id # this will be needed
   waterfall['testers'][name] = {
     'platform': platform,
     'num_device_shards': num_device_shards,
     'num_host_shards': num_host_shards,
     'target_bits': target_bits,
+    'replace_system_webview': replace_system_webview,
   }
 
   if swarming:
@@ -96,29 +99,7 @@ def get_fyi_waterfall_config():
          ('tracing_perftests', 'build137-b1')]
       }
     ])
-  waterfall = add_tester(
-    waterfall, 'Android Swarming N5X Tester',
-    'fyi-android-swarming-n5x', 'android',
-    swarming=[
-      {
-       'os': 'Android',
-       'android_devices': '1',
-       'pool': 'Chrome-perf-fyi',
-       'device_ids': [
-           'build245-m4--device1', 'build245-m4--device2',
-           'build245-m4--device3', 'build245-m4--device4',
-           'build245-m4--device5', 'build245-m4--device6',
-           'build245-m4--device7', 'build248-m4--device1',
-           'build248-m4--device2', 'build248-m4--device3',
-           'build248-m4--device4', 'build248-m4--device5',
-           'build248-m4--device6', 'build248-m4--device7',
-           'build249-m4--device1', 'build249-m4--device2',
-           'build249-m4--device3', 'build249-m4--device4',
-           'build249-m4--device5', 'build249-m4--device6',
-           'build249-m4--device7'
-        ]
-      }
-    ])
+
   return waterfall
 
 
@@ -137,10 +118,6 @@ def get_waterfall_config():
   # These configurations are taken from chromium_perf.py in
   # build/scripts/slave/recipe_modules/chromium_tests and must be kept in sync
   # to generate the correct json for each tester
-  waterfall = add_tester(
-    waterfall, 'Android One Perf', 'android-one',
-    'android', target_bits=32, num_device_shards=7, num_host_shards=3)
-
   waterfall = add_tester(
     waterfall, 'Android Nexus5X Perf', 'android-nexus5X', 'android',
     swarming=[
@@ -265,10 +242,58 @@ def get_waterfall_config():
        'perf_tests': [
          ('tracing_perftests', 'build17-b1--device2'),
          ('gpu_perftests', 'build18-b1--device2'),
-         ('cc_perftests', 'build47-b1--device2'),
+         # ('cc_perftests', 'build47-b1--device2'), https://crbug.com/736150
         ]
       }
     ])
+
+  waterfall = add_tester(
+    waterfall, 'Android Nexus5X WebView Perf', 'android-webview-nexus5X',
+    'android', swarming=[
+      {
+       'os': 'Android',
+       'android_devices': '1',
+       'pool': 'Chrome-perf',
+       'device_ids': [
+           'build164-b1--device1', 'build164-b1--device2',
+           'build164-b1--device3', 'build164-b1--device4',
+           'build164-b1--device5', 'build164-b1--device6',
+           'build164-b1--device7',
+           'build165-b1--device1', 'build165-b1--device2',
+           'build165-b1--device3', 'build165-b1--device4',
+           'build165-b1--device5', 'build165-b1--device6',
+           'build165-b1--device7',
+           'build166-b1--device1', 'build166-b1--device2',
+           'build166-b1--device3', 'build166-b1--device4',
+           'build166-b1--device5', 'build166-b1--device6',
+           'build166-b1--device7',
+          ],
+      }
+    ], replace_system_webview=True)
+
+  waterfall = add_tester(
+    waterfall, 'Android Nexus6 WebView Perf', 'android-webview-nexus6',
+    'android', swarming=[
+      {
+       'os': 'Android',
+       'android_devices': '1',
+       'pool': 'Chrome-perf',
+       'device_ids': [
+           'build112-b1--device1', 'build112-b1--device2',
+           'build112-b1--device3', 'build112-b1--device4',
+           'build112-b1--device5', 'build112-b1--device6',
+           'build112-b1--device7',
+           'build113-b1--device1', 'build113-b1--device2',
+           'build113-b1--device3', 'build113-b1--device4',
+           'build113-b1--device5', 'build113-b1--device6',
+           'build113-b1--device7',
+           'build114-b1--device1', 'build114-b1--device2',
+           'build114-b1--device3', 'build114-b1--device4',
+           'build114-b1--device5', 'build114-b1--device6',
+           'build114-b1--device7',
+          ],
+      }
+    ], replace_system_webview=True)
 
   waterfall = add_tester(
     waterfall, 'Win 10 High-DPI Perf', 'win-high-dpi', 'win',
@@ -330,7 +355,8 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          ('load_library_perf_tests', 'build187-m1'),
-         ('performance_browser_tests', 'build187-m1'),
+         # crbug.com/735679
+         # ('performance_browser_tests', 'build187-m1'),
          ('media_perftests', 'build188-m1')]
       }
     ])
@@ -403,7 +429,8 @@ def get_waterfall_config():
        'perf_tests': [
          ('angle_perftests', 'build94-m1'),
          ('load_library_perf_tests', 'build94-m1'),
-         ('performance_browser_tests', 'build94-m1'),
+         # crbug.com/735679
+         # ('performance_browser_tests', 'build94-m1'),
          ('media_perftests', 'build95-m1')]
       }
     ])
@@ -434,7 +461,10 @@ def get_waterfall_config():
        'pool': 'Chrome-perf',
        'device_ids': [
            'build158-m1', 'build159-m1', 'build160-m1',
-           'build161-m1', 'build162-m1']
+           'build161-m1', 'build162-m1'],
+       'perf_tests': [
+         ('net_perftests', 'build159-m1'),
+       ]
       }
     ])
   waterfall = add_tester(
@@ -446,10 +476,11 @@ def get_waterfall_config():
        'os': 'Mac-10.11',
        'pool': 'Chrome-perf',
        'device_ids': [
-           'build4-b1', 'build5-b1', 'build6-b1', 'build7-b1', 'build8-b1'
+           'build4-b1', 'build5-b1', 'build6-b1', 'build7-b1',
+           'build30-b4' # replacing build8-b1. crbug.com/724998
           ],
        'perf_tests': [
-         ('performance_browser_tests', 'build8-b1')
+         ('performance_browser_tests', 'build30-b4')
        ]
       }
     ])
@@ -515,9 +546,9 @@ def get_waterfall_config():
           ],
        'perf_tests': [
          # crbug.com/698831
-         # ('cc_perftests', 2),
-         # crbug.com/709274
-         # ('load_library_perf_tests', 2),
+         # ('cc_perftests', 'build150-m1'),
+         ('load_library_perf_tests', 'build150-m1'),
+         ('net_perftests', 'build150-m1'),
          ('tracing_perftests', 'build150-m1'),
          ('media_perftests', 'build151-m1')]
       }
@@ -551,7 +582,14 @@ def generate_isolate_script_entry(swarming_dimensions, test_args,
   return result
 
 
-def generate_telemetry_test(swarming_dimensions, benchmark_name, browser):
+BENCHMARKS_TO_UPLOAD_TO_FLAKINESS_DASHBOARD = ['system_health.common_desktop',
+                                               'system_health.common_mobile',
+                                               'system_health.memory_desktop',
+                                               'system_health.memory_mobile']
+
+
+def generate_telemetry_test(swarming_dimensions,
+      benchmark_name, browser, for_fyi_waterfall=False):
   # The step name must end in 'test' or 'tests' in order for the
   # results to automatically show up on the flakiness dashboard.
   # (At least, this was true some time ago.) Continue to use this
@@ -567,6 +605,10 @@ def generate_telemetry_test(swarming_dimensions, benchmark_name, browser):
   # When this is enabled on more than just windows machines we will need
   # --device=android
 
+  if (for_fyi_waterfall and
+      benchmark_name in BENCHMARKS_TO_UPLOAD_TO_FLAKINESS_DASHBOARD):
+    test_args.append('--output-format=json-test-results')
+
   ignore_task_failure = False
   step_name = benchmark_name
   if browser == 'reference':
@@ -576,10 +618,16 @@ def generate_telemetry_test(swarming_dimensions, benchmark_name, browser):
     # to fix them except waiting for the reference build to update.
     ignore_task_failure = True
 
+  isolate_name = 'telemetry_perf_tests'
+  if browser == 'android-webview':
+    test_args.append(
+        '--webview-embedder-apk=../../out/Release/apks/SystemWebViewShell.apk')
+    isolate_name = 'telemetry_perf_webview_tests'
+
   return generate_isolate_script_entry(
-      swarming_dimensions, test_args, 'telemetry_perf_tests',
+      swarming_dimensions, test_args, isolate_name,
       step_name, ignore_task_failure=ignore_task_failure,
-      override_compile_targets=['telemetry_perf_tests'],
+      override_compile_targets=[isolate_name],
       swarming_timeout=BENCHMARK_SWARMING_TIMEOUTS.get(benchmark_name))
 
 
@@ -635,12 +683,16 @@ def ShouldBenchmarkBeScheduled(benchmark, platform):
 
 def generate_telemetry_tests(name, tester_config, benchmarks,
                              benchmark_sharding_map,
-                             benchmark_ref_build_blacklist):
+                             benchmark_ref_build_blacklist,
+                             for_fyi_waterfall=False):
   isolated_scripts = []
   # First determine the browser that you need based on the tester
   browser_name = ''
   if tester_config['platform'] == 'android':
-    browser_name = 'android-chromium'
+    if tester_config.get('replace_system_webview', False):
+      browser_name = 'android-webview'
+    else:
+      browser_name = 'android-chromium'
   elif (tester_config['platform'] == 'win'
     and tester_config['target_bits'] == 64):
     browser_name = 'release_x64'
@@ -669,13 +721,15 @@ def generate_telemetry_tests(name, tester_config, benchmarks,
           dimension, device))
 
     test = generate_telemetry_test(
-      swarming_dimensions, benchmark.Name(), browser_name)
+      swarming_dimensions, benchmark.Name(), browser_name, for_fyi_waterfall)
     isolated_scripts.append(test)
     # Now create another executable for this benchmark on the reference browser
     # if it is not blacklisted from running on the reference browser.
-    if benchmark.Name() not in benchmark_ref_build_blacklist:
+    # Webview doesn't have a reference build right now.
+    if not tester_config.get('replace_system_webview', False) and (
+        benchmark.Name() not in benchmark_ref_build_blacklist):
       reference_test = generate_telemetry_test(
-        swarming_dimensions, benchmark.Name(),'reference')
+        swarming_dimensions, benchmark.Name(),'reference', for_fyi_waterfall)
       isolated_scripts.append(reference_test)
 
   return isolated_scripts
@@ -691,9 +745,7 @@ BENCHMARK_SWARMING_TIMEOUTS = {
 
 # Devices which are broken right now. Tests will not be scheduled on them.
 # Please add a comment with a bug for replacing the device.
-BLACKLISTED_DEVICES = [
-    'build8-b1', # https://crbug.com/724998
-]
+BLACKLISTED_DEVICES = []
 
 
 # List of benchmarks that are to never be run with reference builds.
@@ -715,21 +767,26 @@ def current_benchmarks():
   return sorted(all_benchmarks, key=lambda b: b.Name())
 
 
-def RemoveBlacklistedTests(tests, blacklist):
+def remove_blacklisted_device_tests(tests, blacklisted_devices):
   new_tests = []
+  blacklist_device_to_test = collections.defaultdict(list)
   for test in tests:
     if test.get('swarming', None):
       swarming = test['swarming']
       new_dimensions = []
 
       for dimension in swarming['dimension_sets']:
-        if dimension['id'] in blacklist:
+        if dimension['id'] in blacklisted_devices:
+          blacklist_device_to_test[dimension['id']].append(test['name'])
           continue
         new_dimensions.append(dimension)
       if not new_dimensions:
         continue
     new_tests.append(test)
-  return new_tests
+
+  return new_tests, {
+      device: sorted(tests) for device, tests
+      in blacklist_device_to_test.items()}
 
 
 def generate_all_tests(waterfall):
@@ -747,14 +804,21 @@ def generate_all_tests(waterfall):
     # Generate benchmarks
     isolated_scripts = generate_telemetry_tests(
         name, config, all_benchmarks, benchmark_sharding_map,
-        BENCHMARK_REF_BUILD_BLACKLIST)
+        BENCHMARK_REF_BUILD_BLACKLIST, waterfall['name']=='chromium.perf.fyi')
     # Generate swarmed non-telemetry tests if present
     if config['swarming_dimensions'][0].get('perf_tests', False):
       isolated_scripts += generate_cplusplus_isolate_script_test(
         config['swarming_dimensions'][0])
 
-    isolated_scripts = RemoveBlacklistedTests(
+    isolated_scripts, devices_to_test_skipped = remove_blacklisted_device_tests(
         isolated_scripts, BLACKLISTED_DEVICES)
+    if devices_to_test_skipped:
+      for device, skipped_tests in devices_to_test_skipped.items():
+        print (
+          'Device "%s" is blacklisted. These benchmarks are not scheduled:' % (
+              device))
+        for test in skipped_tests:
+          print ' * %s' % test
     tests[name] = {
       'isolated_scripts': sorted(isolated_scripts, key=lambda x: x['name'])
     }
@@ -763,7 +827,7 @@ def generate_all_tests(waterfall):
     tests[name] = config
 
   tests['AAAAA1 AUTOGENERATED FILE DO NOT EDIT'] = {}
-  tests['AAAAA2 See //tools/perf/generate_perf_data.py to make changes'] = {}
+  tests['AAAAA2 See //tools/perf/generate_perf_data to make changes'] = {}
   return tests
 
 
@@ -774,17 +838,42 @@ def get_json_config_file_for_waterfall(waterfall):
   return os.path.join(buildbot_dir, filename)
 
 
+def get_extras_json_config_file_for_waterfall(waterfall):
+  filename = '%s.extras.json' % waterfall['name']
+  buildbot_dir = os.path.join(path_util.GetChromiumSrcDir(), 'tools', 'perf')
+  return os.path.join(buildbot_dir, filename)
+
+
+def append_extra_tests(waterfall, tests):
+  """Appends extra tests to |tests|.
+
+  Those extra tests are loaded from tools/perf/<waterfall name>.extras.json.
+  """
+  extra_config_file = get_extras_json_config_file_for_waterfall(waterfall)
+  if os.path.isfile(extra_config_file):
+    with open(extra_config_file) as extra_fp:
+      extra_tests = json.load(extra_fp)
+      for key, value in extra_tests.iteritems():
+        if key == 'comment':
+          continue
+        assert key not in tests
+        tests[key] = value
+
+
 def tests_are_up_to_date(waterfalls):
   up_to_date = True
   all_tests = {}
   for w in waterfalls:
     tests = generate_all_tests(w)
+    # Note: |all_tests| don't cover those manually-specified tests added by
+    # append_extra_tests().
+    all_tests.update(tests)
+    append_extra_tests(w, tests)
     tests_data = json.dumps(tests, indent=2, separators=(',', ': '),
                             sort_keys=True)
     config_file = get_json_config_file_for_waterfall(w)
     with open(config_file, 'r') as fp:
       config_data = fp.read().strip()
-    all_tests.update(tests)
     up_to_date &= tests_data == config_data
   verify_all_tests_in_benchmark_csv(all_tests,
                                     get_all_waterfall_benchmarks_metadata())
@@ -795,11 +884,14 @@ def update_all_tests(waterfalls):
   all_tests = {}
   for w in waterfalls:
     tests = generate_all_tests(w)
+    # Note: |all_tests| don't cover those manually-specified tests added by
+    # append_extra_tests().
+    all_tests.update(tests)
+    append_extra_tests(w, tests)
     config_file = get_json_config_file_for_waterfall(w)
     with open(config_file, 'w') as fp:
       json.dump(tests, fp, indent=2, separators=(',', ': '), sort_keys=True)
       fp.write('\n')
-    all_tests.update(tests)
   verify_all_tests_in_benchmark_csv(all_tests,
                                     get_all_waterfall_benchmarks_metadata())
 
@@ -811,6 +903,7 @@ BenchmarkMetadata = collections.namedtuple(
     'BenchmarkMetadata', 'emails component not_scheduled')
 NON_TELEMETRY_BENCHMARKS = {
     'angle_perftests': BenchmarkMetadata('jmadill@chromium.org', None, False),
+    'net_perftests': BenchmarkMetadata('xunjieli@chromium.org', None, False),
     'cc_perftests': BenchmarkMetadata('enne@chromium.org', None, False),
     'gpu_perftests': BenchmarkMetadata('reveman@chromium.org', None, False),
     'tracing_perftests': BenchmarkMetadata(

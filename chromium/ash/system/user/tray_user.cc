@@ -7,7 +7,6 @@
 #include "ash/session/session_controller.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
-#include "ash/shell_port.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/system/tray/system_tray.h"
 #include "ash/system/tray/tray_constants.h"
@@ -20,6 +19,7 @@
 #include "components/signin/core/account_id/account_id.h"
 #include "components/user_manager/user_info.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/image/image.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
@@ -74,13 +74,13 @@ views::View* TrayUser::CreateDefaultView(LoginStatus status) {
   return user_;
 }
 
-void TrayUser::DestroyTrayView() {
+void TrayUser::OnTrayViewDestroyed() {
   layout_view_ = nullptr;
   avatar_ = nullptr;
   label_ = nullptr;
 }
 
-void TrayUser::DestroyDefaultView() {
+void TrayUser::OnDefaultViewDestroyed() {
   user_ = nullptr;
 }
 
@@ -164,7 +164,7 @@ void TrayUser::UpdateAfterShelfAlignmentChange() {
           kTrayLabelItemHorizontalPaddingBottomAlignment));
     }
     layout_view_->SetLayoutManager(new views::BoxLayout(
-        views::BoxLayout::kHorizontal, 0, 0, kUserLabelToIconPadding));
+        views::BoxLayout::kHorizontal, gfx::Insets(), kUserLabelToIconPadding));
   } else {
     if (avatar_) {
       avatar_->SetCornerRadii(0, 0, kTrayRoundedBorderRadius,
@@ -178,7 +178,7 @@ void TrayUser::UpdateAfterShelfAlignmentChange() {
           kTrayLabelItemHorizontalPaddingBottomAlignment));
     }
     layout_view_->SetLayoutManager(new views::BoxLayout(
-        views::BoxLayout::kVertical, 0, 0, kUserLabelToIconPadding));
+        views::BoxLayout::kVertical, gfx::Insets(), kUserLabelToIconPadding));
   }
 }
 
@@ -206,7 +206,7 @@ void TrayUser::UpdateAvatarImage(LoginStatus status) {
 
   const mojom::UserSession* const user_session =
       session_controller->GetUserSession(0);
-  avatar_->SetImage(user_session->avatar,
+  avatar_->SetImage(user_session->user_info->avatar,
                     gfx::Size(kTrayItemSize, kTrayItemSize));
 
   // Unit tests might come here with no images for some users.

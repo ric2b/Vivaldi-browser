@@ -11,11 +11,6 @@
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/animation/test_animation_delegate.h"
 
-#if defined(OS_WIN)
-#include "base/test/scoped_task_environment.h"
-#include "base/win/windows_version.h"
-#endif
-
 namespace gfx {
 
 class AnimationTest: public testing::Test {
@@ -49,9 +44,10 @@ class RunAnimation : public LinearAnimation {
 
 class CancelAnimation : public LinearAnimation {
  public:
-  CancelAnimation(int duration, int frame_rate, AnimationDelegate* delegate)
-      : LinearAnimation(duration, frame_rate, delegate) {
-  }
+  CancelAnimation(base::TimeDelta duration,
+                  int frame_rate,
+                  AnimationDelegate* delegate)
+      : LinearAnimation(duration, frame_rate, delegate) {}
 
   void AnimateToState(double state) override {
     if (state >= 0.5)
@@ -64,9 +60,10 @@ class CancelAnimation : public LinearAnimation {
 
 class EndAnimation : public LinearAnimation {
  public:
-  EndAnimation(int duration, int frame_rate, AnimationDelegate* delegate)
-      : LinearAnimation(duration, frame_rate, delegate) {
-  }
+  EndAnimation(base::TimeDelta duration,
+               int frame_rate,
+               AnimationDelegate* delegate)
+      : LinearAnimation(duration, frame_rate, delegate) {}
 
   void AnimateToState(double state) override {
     if (state >= 0.5)
@@ -94,7 +91,7 @@ class DeletingAnimationDelegate : public AnimationDelegate {
 TEST_F(AnimationTest, RunCase) {
   TestAnimationDelegate ad;
   RunAnimation a1(150, &ad);
-  a1.SetDuration(2000);
+  a1.SetDuration(base::TimeDelta::FromSeconds(2));
   a1.Start();
   base::RunLoop().Run();
 
@@ -104,7 +101,7 @@ TEST_F(AnimationTest, RunCase) {
 
 TEST_F(AnimationTest, CancelCase) {
   TestAnimationDelegate ad;
-  CancelAnimation a2(2000, 150, &ad);
+  CancelAnimation a2(base::TimeDelta::FromSeconds(2), 150, &ad);
   a2.Start();
   base::RunLoop().Run();
 
@@ -116,7 +113,7 @@ TEST_F(AnimationTest, CancelCase) {
 // right delegate methods invoked.
 TEST_F(AnimationTest, EndCase) {
   TestAnimationDelegate ad;
-  EndAnimation a2(2000, 150, &ad);
+  EndAnimation a2(base::TimeDelta::FromSeconds(2), 150, &ad);
   a2.Start();
   base::RunLoop().Run();
 
@@ -135,18 +132,12 @@ TEST_F(AnimationTest, DeleteFromEnd) {
 
 TEST_F(AnimationTest, ShouldRenderRichAnimation) {
 #if defined(OS_WIN)
-  if (base::win::GetVersion() >= base::win::VERSION_VISTA) {
-    BOOL result;
-    ASSERT_NE(
-        0, ::SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, &result, 0));
-    // ShouldRenderRichAnimation() should check the SPI_GETCLIENTAREAANIMATION
-    // value on Vista.
-    EXPECT_EQ(!!result, Animation::ShouldRenderRichAnimation());
-  } else {
-    // On XP, the function should check the SM_REMOTESESSION value.
-    EXPECT_EQ(!::GetSystemMetrics(SM_REMOTESESSION),
-              Animation::ShouldRenderRichAnimation());
-  }
+  BOOL result;
+  ASSERT_NE(0,
+            ::SystemParametersInfo(SPI_GETCLIENTAREAANIMATION, 0, &result, 0));
+  // ShouldRenderRichAnimation() should check the SPI_GETCLIENTAREAANIMATION
+  // value on Vista.
+  EXPECT_EQ(!!result, Animation::ShouldRenderRichAnimation());
 #else
   EXPECT_TRUE(Animation::ShouldRenderRichAnimation());
 #endif
@@ -154,7 +145,7 @@ TEST_F(AnimationTest, ShouldRenderRichAnimation) {
 
 // Test that current value is always 0 after Start() is called.
 TEST_F(AnimationTest, StartState) {
-  LinearAnimation animation(100, 60, NULL);
+  LinearAnimation animation(base::TimeDelta::FromMilliseconds(100), 60, NULL);
   EXPECT_EQ(0.0, animation.GetCurrentValue());
   animation.Start();
   EXPECT_EQ(0.0, animation.GetCurrentValue());

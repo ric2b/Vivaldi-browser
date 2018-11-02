@@ -25,31 +25,6 @@ MediaControlVolumeSliderElement::MediaControlVolumeSliderElement(
   SetShadowPseudoId(AtomicString("-webkit-media-controls-volume-slider"));
 }
 
-void MediaControlVolumeSliderElement::DefaultEventHandler(Event* event) {
-  if (!isConnected() || !GetDocument().IsActive())
-    return;
-
-  MediaControlInputElement::DefaultEventHandler(event);
-
-  if (event->type() == EventTypeNames::mousedown) {
-    Platform::Current()->RecordAction(
-        UserMetricsAction("Media.Controls.VolumeChangeBegin"));
-  }
-
-  if (event->type() == EventTypeNames::mouseup) {
-    Platform::Current()->RecordAction(
-        UserMetricsAction("Media.Controls.VolumeChangeEnd"));
-  }
-
-  if (event->type() == EventTypeNames::input) {
-    double volume = value().ToDouble();
-    MediaElement().setVolume(volume);
-    MediaElement().setMuted(false);
-    if (LayoutObject* layout_object = this->GetLayoutObject())
-      layout_object->SetShouldDoFullPaintInvalidation();
-  }
-}
-
 void MediaControlVolumeSliderElement::SetVolume(double volume) {
   if (value().ToDouble() == volume)
     return;
@@ -71,6 +46,40 @@ bool MediaControlVolumeSliderElement::WillRespondToMouseClickEvents() {
     return false;
 
   return MediaControlInputElement::WillRespondToMouseClickEvents();
+}
+
+const char* MediaControlVolumeSliderElement::GetNameForHistograms() const {
+  return "VolumeSlider";
+}
+
+void MediaControlVolumeSliderElement::DefaultEventHandler(Event* event) {
+  if (!isConnected() || !GetDocument().IsActive())
+    return;
+
+  MediaControlInputElement::DefaultEventHandler(event);
+
+  if (event->IsMouseEvent() || event->IsKeyboardEvent() ||
+      event->IsGestureEvent() || event->IsPointerEvent()) {
+    MaybeRecordInteracted();
+  }
+
+  if (event->type() == EventTypeNames::mousedown) {
+    Platform::Current()->RecordAction(
+        UserMetricsAction("Media.Controls.VolumeChangeBegin"));
+  }
+
+  if (event->type() == EventTypeNames::mouseup) {
+    Platform::Current()->RecordAction(
+        UserMetricsAction("Media.Controls.VolumeChangeEnd"));
+  }
+
+  if (event->type() == EventTypeNames::input) {
+    double volume = value().ToDouble();
+    MediaElement().setVolume(volume);
+    MediaElement().setMuted(false);
+    if (LayoutObject* layout_object = this->GetLayoutObject())
+      layout_object->SetShouldDoFullPaintInvalidation();
+  }
 }
 
 bool MediaControlVolumeSliderElement::KeepEventInNode(Event* event) {

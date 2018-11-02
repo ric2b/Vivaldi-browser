@@ -110,10 +110,11 @@ Polymer({
 
   /** @override */
   ready: function() {
-    this.addWebUIListener('contentSettingSitePermissionChanged',
+    this.addWebUIListener(
+        'contentSettingSitePermissionChanged',
         this.siteWithinCategoryChanged_.bind(this));
-    this.addWebUIListener('onIncognitoStatusChanged',
-        this.onIncognitoStatusChanged_.bind(this));
+    this.addWebUIListener(
+        'onIncognitoStatusChanged', this.onIncognitoStatusChanged_.bind(this));
   },
 
   /**
@@ -136,7 +137,7 @@ Polymer({
   onIncognitoStatusChanged_: function() {
     // The SESSION_ONLY list won't have any incognito exceptions. (Minor
     // optimization, not required).
-    if (this.categorySubtype == settings.PermissionValues.SESSION_ONLY)
+    if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY)
       return;
 
     // A change notification is not sent for each site. So we repopulate the
@@ -160,7 +161,7 @@ Polymer({
     this.populateList_();
 
     // The Session permissions are only for cookies.
-    if (this.categorySubtype == settings.PermissionValues.SESSION_ONLY) {
+    if (this.categorySubtype == settings.ContentSetting.SESSION_ONLY) {
       this.$.category.hidden =
           this.category != settings.ContentSettingsTypes.COOKIES;
     }
@@ -243,7 +244,7 @@ Polymer({
     for (var i = 0; i < data.length; ++i) {
       var exceptionList = data[i];
       for (var k = 0; k < exceptionList.length; ++k) {
-        if (exceptionList[k].setting == settings.PermissionValues.DEFAULT ||
+        if (exceptionList[k].setting == settings.ContentSetting.DEFAULT ||
             exceptionList[k].setting != this.categorySubtype) {
           continue;
         }
@@ -262,7 +263,7 @@ Polymer({
    * @private
    */
   toSiteArray_: function(sites) {
-    var results = /** @type {!Array<SiteException>} */([]);
+    var results = /** @type {!Array<SiteException>} */ ([]);
     var lastOrigin = '';
     var lastEmbeddingOrigin = '';
     for (var i = 0; i < sites.length; ++i) {
@@ -282,11 +283,11 @@ Polymer({
    */
   setUpActionMenu_: function() {
     this.showAllowAction_ =
-        this.categorySubtype != settings.PermissionValues.ALLOW;
+        this.categorySubtype != settings.ContentSetting.ALLOW;
     this.showBlockAction_ =
-        this.categorySubtype != settings.PermissionValues.BLOCK;
+        this.categorySubtype != settings.ContentSetting.BLOCK;
     this.showSessionOnlyAction_ =
-        this.categorySubtype != settings.PermissionValues.SESSION_ONLY &&
+        this.categorySubtype != settings.ContentSetting.SESSION_ONLY &&
         this.category == settings.ContentSettingsTypes.COOKIES;
   },
 
@@ -313,7 +314,8 @@ Polymer({
   onOriginTap_: function(event) {
     if (!this.enableSiteSettings_)
       return;
-    settings.navigateTo(settings.Route.SITE_SETTINGS_SITE_DETAILS,
+    settings.navigateTo(
+        settings.routes.SITE_SETTINGS_SITE_DETAILS,
         new URLSearchParams('site=' + event.model.item.origin));
   },
 
@@ -328,32 +330,32 @@ Polymer({
   },
 
   /**
-   * @param {string} permissionValue
+   * @param {!settings.ContentSetting} contentSetting
    * @private
    */
-  setPermissionForActionMenuSite_: function(permissionValue) {
+  setContentSettingForActionMenuSite_: function(contentSetting) {
     assert(this.actionMenuSite_);
     this.browserProxy.setCategoryPermissionForOrigin(
         this.actionMenuSite_.origin, this.actionMenuSite_.embeddingOrigin,
-        this.category, permissionValue, this.actionMenuSite_.incognito);
+        this.category, contentSetting, this.actionMenuSite_.incognito);
   },
 
   /** @private */
   onAllowTap_: function() {
-    this.setPermissionForActionMenuSite_(settings.PermissionValues.ALLOW);
+    this.setContentSettingForActionMenuSite_(settings.ContentSetting.ALLOW);
     this.closeActionMenu_();
   },
 
   /** @private */
   onBlockTap_: function() {
-    this.setPermissionForActionMenuSite_(settings.PermissionValues.BLOCK);
+    this.setContentSettingForActionMenuSite_(settings.ContentSetting.BLOCK);
     this.closeActionMenu_();
   },
 
   /** @private */
   onSessionOnlyTap_: function() {
-    this.setPermissionForActionMenuSite_(
-        settings.PermissionValues.SESSION_ONLY);
+    this.setContentSettingForActionMenuSite_(
+        settings.ContentSetting.SESSION_ONLY);
     this.closeActionMenu_();
   },
 
@@ -361,8 +363,8 @@ Polymer({
   onEditTap_: function() {
     // Close action menu without resetting |this.actionMenuSite_| since it is
     // bound to the dialog.
-    /** @type {!CrActionMenuElement} */ (
-        this.$$('dialog[is=cr-action-menu]')).close();
+    /** @type {!CrActionMenuElement} */ (this.$$('dialog[is=cr-action-menu]'))
+        .close();
     this.showEditExceptionDialog_ = true;
   },
 
@@ -388,14 +390,20 @@ Polymer({
    * @return {string} The site description.
    */
   computeSiteDescription_: function(item) {
-    if (item.incognito && item.embeddingDisplayName.length > 0) {
-      return loadTimeData.getStringF('embeddedIncognitoSite',
-          item.embeddingDisplayName);
+    var displayName = '';
+    if (item.embeddingOrigin) {
+      displayName = loadTimeData.getStringF(
+          'embeddedOnHost', this.sanitizePort(item.embeddingOrigin));
+    } else if (this.category == settings.ContentSettingsTypes.GEOLOCATION) {
+      displayName = loadTimeData.getString('embeddedOnAnyHost');
     }
 
-    if (item.incognito)
+    if (item.incognito) {
+      if (displayName.length > 0)
+        return loadTimeData.getStringF('embeddedIncognitoSite', displayName);
       return loadTimeData.getString('incognitoSite');
-    return item.embeddingDisplayName;
+    }
+    return displayName;
   },
 
   /**
@@ -415,8 +423,8 @@ Polymer({
         Polymer.dom(/** @type {!Event} */ (e)).localTarget);
 
     this.actionMenuSite_ = e.model.item;
-    /** @type {!CrActionMenuElement} */ (
-        this.$$('dialog[is=cr-action-menu]')).showAt(this.activeDialogAnchor_);
+    /** @type {!CrActionMenuElement} */ (this.$$('dialog[is=cr-action-menu]'))
+        .showAt(this.activeDialogAnchor_);
   },
 
   /** @private */

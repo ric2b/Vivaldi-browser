@@ -35,8 +35,6 @@
 #include "core/editing/FrameSelection.h"
 #include "core/editing/VisibleSelection.h"
 #include "core/editing/WritingDirection.h"
-#include "core/editing/iterators/TextIterator.h"
-#include "core/editing/markers/DocumentMarker.h"
 #include "core/events/InputEvent.h"
 #include "platform/PasteMode.h"
 #include "platform/heap/Handle.h"
@@ -63,6 +61,7 @@ enum class DeleteDirection;
 enum class DeleteMode { kSimple, kSmart };
 enum class InsertMode { kSimple, kSmart };
 enum class DragSourceType { kHTMLSource, kPlainTextSource };
+enum class TypingContinuation { kContinue, kEnd };
 
 enum EditorCommandSource { kCommandFromMenuOrKeyBinding, kCommandFromDOM };
 enum EditorParagraphSeparator {
@@ -98,7 +97,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   bool CanSmartCopyOrDelete() const;
 
   void Cut(EditorCommandSource);
-  void Copy();
+  void Copy(EditorCommandSource);
   void Paste(EditorCommandSource);
   void PasteAsPlainText(EditorCommandSource);
   void PerformDelete();
@@ -254,7 +253,7 @@ class CORE_EXPORT Editor final : public GarbageCollectedFinalized<Editor> {
   IntRect FirstRectForRange(const EphemeralRange&) const;
 
   void RespondToChangedSelection(const Position& old_selection_start,
-                                 FrameSelection::SetSelectionOptions);
+                                 TypingContinuation);
 
   bool MarkedTextMatchesAreHighlighted() const;
   void SetMarkedTextMatchesAreHighlighted(bool);

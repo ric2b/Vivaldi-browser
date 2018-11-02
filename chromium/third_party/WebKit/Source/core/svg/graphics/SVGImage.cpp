@@ -29,17 +29,18 @@
 
 #include "core/animation/DocumentAnimations.h"
 #include "core/animation/DocumentTimeline.h"
+#include "core/dom/FlatTreeTraversal.h"
 #include "core/dom/NodeTraversal.h"
 #include "core/dom/TaskRunnerHelper.h"
-#include "core/dom/shadow/FlatTreeTraversal.h"
-#include "core/frame/FrameView.h"
 #include "core/frame/LocalFrame.h"
 #include "core/frame/LocalFrameClient.h"
+#include "core/frame/LocalFrameView.h"
 #include "core/frame/Settings.h"
 #include "core/layout/LayoutView.h"
 #include "core/layout/svg/LayoutSVGRoot.h"
 #include "core/loader/FrameLoadRequest.h"
 #include "core/paint/FloatClipRecorder.h"
+#include "core/paint/PaintLayer.h"
 #include "core/paint/TransformRecorder.h"
 #include "core/style/ComputedStyle.h"
 #include "core/svg/SVGDocumentExtensions.h"
@@ -90,8 +91,8 @@ class SVGImage::SVGImageLocalFrameClient : public EmptyLocalFrameClient {
   SVGImage* image_;
 };
 
-SVGImage::SVGImage(ImageObserver* observer)
-    : Image(observer),
+SVGImage::SVGImage(ImageObserver* observer, bool is_multipart)
+    : Image(observer, is_multipart),
       paint_controller_(PaintController::Create()),
       has_pending_timeline_rewind_(false) {}
 
@@ -314,7 +315,7 @@ void SVGImage::DrawForContainer(PaintCanvas* canvas,
 }
 
 sk_sp<SkImage> SVGImage::ImageForCurrentFrame() {
-  return ImageForCurrentFrameForContainer(KURL(), Size());
+  return ImageForCurrentFrameForContainer(NullURL(), Size());
 }
 
 void SVGImage::DrawPatternForContainer(GraphicsContext& context,
@@ -355,18 +356,38 @@ void SVGImage::DrawPatternForContainer(GraphicsContext& context,
                                  phase.Y() + spaced_tile.Y());
 
   PaintFlags flags;
-  flags.setShader(
-      MakePaintShaderRecord(record, spaced_tile, SkShader::kRepeat_TileMode,
-                            SkShader::kRepeat_TileMode, &pattern_transform));
+  flags.setShader(PaintShader::MakePaintRecord(
+      record, spaced_tile, SkShader::kRepeat_TileMode,
+      SkShader::kRepeat_TileMode, &pattern_transform));
   // If the shader could not be instantiated (e.g. non-invertible matrix),
   // draw transparent.
   // Note: we can't simply bail, because of arbitrary blend mode.
-  if (!flags.getShader())
+  if (!flags.HasShader())
     flags.setColor(SK_ColorTRANSPARENT);
 
   flags.setBlendMode(composite_op);
   flags.setColorFilter(sk_ref_sp(context.GetColorFilter()));
   context.DrawRect(dst_rect, flags);
+}
+
+sk_sp<PaintRecord> SVGImage::PaintRecordForContainer(
+    const KURL& url,
+    const IntSize& container_size,
+    const IntRect& draw_src_rect,
+    const IntRect& draw_dst_rect,
+    bool flip_y) {
+  if (!page_)
+    return nullptr;
+
+  PaintRecorder recorder;
+  PaintCanvas* canvas = recorder.beginRecording(draw_src_rect);
+  if (flip_y) {
+    canvas->translate(0, draw_dst_rect.Height());
+    canvas->scale(1, -1);
+  }
+  DrawForContainer(canvas, PaintFlags(), FloatSize(container_size), 1,
+                   draw_dst_rect, draw_src_rect, url);
+  return recorder.finishRecordingAsPicture();
 }
 
 sk_sp<SkImage> SVGImage::ImageForCurrentFrameForContainer(
@@ -391,7 +412,8 @@ sk_sp<SkImage> SVGImage::ImageForCurrentFrameForContainer(
 static bool DrawNeedsLayer(const PaintFlags& flags) {
   if (SkColorGetA(flags.getColor()) < 255)
     return true;
-  return !flags.isSrcOver();
+
+  return flags.getBlendMode() != SkBlendMode::kSrcOver;
 }
 
 bool SVGImage::ApplyShaderInternal(PaintFlags& flags,
@@ -403,7 +425,7 @@ bool SVGImage::ApplyShaderInternal(PaintFlags& flags,
 
   IntRect bounds(IntPoint(), size);
 
-  flags.setShader(MakePaintShaderRecord(
+  flags.setShader(PaintShader::MakePaintRecord(
       PaintRecordForCurrentFrame(bounds, url), bounds,
       SkShader::kRepeat_TileMode, SkShader::kRepeat_TileMode, &local_matrix));
 
@@ -415,7 +437,7 @@ bool SVGImage::ApplyShaderInternal(PaintFlags& flags,
 }
 
 bool SVGImage::ApplyShader(PaintFlags& flags, const SkMatrix& local_matrix) {
-  return ApplyShaderInternal(flags, local_matrix, KURL());
+  return ApplyShaderInternal(flags, local_matrix, NullURL());
 }
 
 bool SVGImage::ApplyShaderForContainer(const FloatSize& container_size,
@@ -447,14 +469,14 @@ void SVGImage::Draw(
     return;
 
   DrawInternal(canvas, flags, dst_rect, src_rect,
-               should_respect_image_orientation, clamp_mode, KURL());
+               should_respect_image_orientation, clamp_mode, NullURL());
 }
 
 sk_sp<PaintRecord> SVGImage::PaintRecordForCurrentFrame(const IntRect& bounds,
                                                         const KURL& url,
                                                         PaintCanvas* canvas) {
   DCHECK(page_);
-  FrameView* view = ToLocalFrame(page_->MainFrame())->View();
+  LocalFrameView* view = ToLocalFrame(page_->MainFrame())->View();
   view->Resize(ContainerSize());
 
   // Always call processUrlFragment, even if the url is empty, because
@@ -602,20 +624,29 @@ void SVGImage::ServiceAnimations(double monotonic_animation_start_time) {
   // actually generating painted output, not only for performance reasons,
   // but to preserve correct coherence of the cache of the output with
   // the needsRepaint bits of the PaintLayers in the image.
-  FrameView* frame_view = ToLocalFrame(page_->MainFrame())->View();
+  LocalFrameView* frame_view = ToLocalFrame(page_->MainFrame())->View();
   frame_view->UpdateAllLifecyclePhasesExceptPaint();
 
-  // For SPv2 we run updateAnimations after the paint phase, but per above
-  // comment we don't want to run lifecycle through to paint for SVG images.
-  // Since we know SVG images never have composited animations we can update
-  // animations directly without worrying about including
-  // PaintArtifactCompositor analysis of whether animations should be
-  // composited.
-  if (RuntimeEnabledFeatures::slimmingPaintV2Enabled()) {
+  if (RuntimeEnabledFeatures::SlimmingPaintV2Enabled()) {
+    // For SPv2 we run UpdateAnimations after the paint phase, but per above
+    // comment we don't want to run lifecycle through to paint for SVG images.
+    // Since we know SVG images never have composited animations we can update
+    // animations directly without worrying about including
+    // PaintArtifactCompositor analysis of whether animations should be
+    // composited.
     Optional<CompositorElementIdSet> composited_element_ids;
     DocumentAnimations::UpdateAnimations(
         frame_view->GetLayoutView()->GetDocument(),
         DocumentLifecycle::kLayoutClean, composited_element_ids);
+
+    // Notify observers for image change. In SPv1 this is done through window
+    // rect invalidation during paint invalidation of the SVGImage's frame view.
+    auto* layer = frame_view->GetLayoutView()->Layer();
+    if (layer->NeedsRepaint()) {
+      if (auto* observer = GetImageObserver())
+        observer->ChangedInRect(this, Rect());
+      layer->ClearNeedsRepaintRecursively();
+    }
   }
 }
 
@@ -638,9 +669,10 @@ SVGImageChromeClient& SVGImage::ChromeClientForTesting() {
 
 void SVGImage::UpdateUseCounters(const Document& document) const {
   if (SVGSVGElement* root_element = SvgRootElement(page_.Get())) {
-    if (root_element->TimeContainer()->HasAnimations())
+    if (root_element->TimeContainer()->HasAnimations()) {
       UseCounter::Count(document,
-                        UseCounter::kSVGSMILAnimationInImageRegardlessOfCache);
+                        WebFeature::kSVGSMILAnimationInImageRegardlessOfCache);
+    }
   }
 }
 
@@ -741,7 +773,7 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
       DCHECK(!frame_client_);
       frame_client_ = new SVGImageLocalFrameClient(this);
       frame = LocalFrame::Create(frame_client_, *page, 0);
-      frame->SetView(FrameView::Create(*frame));
+      frame->SetView(LocalFrameView::Create(*frame));
       frame->Init();
     }
 
@@ -758,10 +790,11 @@ Image::SizeAvailability SVGImage::DataChanged(bool all_data_received) {
     page_ = page;
 
     TRACE_EVENT0("blink", "SVGImage::dataChanged::load");
-    loader.Load(FrameLoadRequest(
-        0, ResourceRequest(BlankURL()),
-        SubstituteData(Data(), AtomicString("image/svg+xml"),
-                       AtomicString("UTF-8"), KURL(), kForceSynchronousLoad)));
+    loader.Load(
+        FrameLoadRequest(0, ResourceRequest(BlankURL()),
+                         SubstituteData(Data(), AtomicString("image/svg+xml"),
+                                        AtomicString("UTF-8"), NullURL(),
+                                        kForceSynchronousLoad)));
 
     // Set the concrete object size before a container size is available.
     intrinsic_size_ = RoundedIntSize(ConcreteObjectSize(FloatSize(

@@ -19,18 +19,18 @@
           "blink::mojom::BackgroundFetchService",
           "blink::mojom::BackgroundSyncService",
           "blink::mojom::BroadcastChannelProvider",
-          "blink::mojom::BudgetService",
           "blink::mojom::Hyphenation",
           "blink::mojom::MimeRegistry",
           "blink::mojom::NotificationService",
           "blink::mojom::OffscreenCanvasProvider",
           "blink::mojom::PermissionService",
           "blink::mojom::WebSocket",
-	  "cc::mojom::SharedBitmapManager",
+	  "cc::mojom::SharedBitmapAllocationNotifier",
           "content::mojom::FieldTrialRecorder",
+          "content::mojom::FrameSinkProvider",
           "content::mojom::MemoryCoordinatorHandle",
           "content::mojom::PushMessaging",
-          "content::mojom::FrameSinkProvider",
+          "content::mojom::RendererHost",
           "content::mojom::ServiceWorkerDispatcherHost",
           "content::mojom::StoragePartitionService",
           "content::mojom::URLLoaderFactory",
@@ -38,14 +38,18 @@
           "content::mojom::WorkerURLLoaderFactoryProvider",
           "device::mojom::GamepadMonitor",
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
-          "media::mojom::ImageCapture",
           "memory_coordinator::mojom::MemoryCoordinatorHandle",
           "metrics::mojom::SingleSampleMetricsProvider",
           "payments::mojom::PaymentManager",
           "shape_detection::mojom::BarcodeDetection",
           "shape_detection::mojom::FaceDetectionProvider",
+          "resource_coordinator::mojom::CoordinationUnit",
           "shape_detection::mojom::TextDetection",
+          "storage::mojom::BlobRegistry",
           "ui::mojom::Gpu"
+        ],
+        "geolocation_config": [
+          "device::mojom::GeolocationConfig"
         ],
         "service_manager:service_factory": [
           "service_manager::mojom::ServiceFactory"
@@ -57,14 +61,21 @@
       },
       "requires": {
         "*": [ "app" ],
+        "cdm": [ "media:cdm" ],
         // In classic ash, the browser supplies ash interfaces to itself.
-        "content_browser": [ "ash", "memory_instrumentation" ],
+        "content_browser": [
+          "ash",
+          "display",
+          "memory_instrumentation",
+          "url_keyed_metrics",
+          "geolocation_config"
+        ],
         "content_gpu": [ "browser" ],
         "content_plugin": [ "browser" ],
         "content_renderer": [ "browser" ],
         "content_utility": [ "browser" ],
         "data_decoder": [ "image_decoder" ],
-        "device": [ "device:nfc", "device:wake_lock" ],
+        "device": [ "device:generic_sensor", "device:nfc", "device:wake_lock" ],
         "file": [ "file:filesystem", "file:leveldb" ],
         "media": [ "media:media" ],
         "network": [
@@ -83,10 +94,9 @@
           "barcode_detection",
           "face_detection",
           "text_detection"
-
         ],
-        "resource_coordinator": [ "coordination_unit" ],
-        "video_capture": [ "capture" ]
+        "resource_coordinator": [ "coordination_unit", "service_callbacks", "tab_signal" ],
+        "video_capture": [ "capture", "tests" ]
       }
     },
     "navigation:frame": {
@@ -104,20 +114,31 @@
           "blink::mojom::SensitiveInputVisibilityService",
           "blink::mojom::WebBluetoothService",
           "blink::mojom::WebSocket",
+
           // TODO(beng): figure out how to overlay test interfaces like this.
           "content::mojom::BrowserTarget",
+
+          "content::mojom::RendererAudioOutputStreamFactory",
           "device::mojom::VRService",
-          "device::mojom::GeolocationService",
+          "device::mojom::Geolocation",
           "device::mojom::NFC",
-          "device::mojom::WakeLockService",
+          "device::mojom::SensorProvider",
+          "device::mojom::WakeLock",
           "device::usb::DeviceManager",
           "discardable_memory::mojom::DiscardableSharedMemoryManager",
+          "media::mojom::ImageCapture",
           "media::mojom::InterfaceFactory",
           "media::mojom::RemoterFactory",
           "media::mojom::Renderer",
           "mojom::MediaDevicesDispatcherHost",
+          "payments::mojom::PaymentManager",
           "payments::mojom::PaymentRequest",
-          "ui::mojom::Gpu"
+          "resource_coordinator::mojom::CoordinationUnit",
+          "shape_detection::mojom::BarcodeDetection",
+          "shape_detection::mojom::FaceDetectionProvider",
+          "shape_detection::mojom::TextDetection",
+          "ui::mojom::Gpu",
+          "webauth::mojom::Authenticator"
         ]
       },
       "requires": {

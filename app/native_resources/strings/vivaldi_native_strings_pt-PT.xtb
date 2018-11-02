@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="pt-PT">
+<translation id="1055184225775184556">Des&amp;fazer adicionar</translation>
 <translation id="1411638389238344450">Enviar ligação por correio eletrónico</translation>
 <translation id="1728549374069268714">Colar e ir</translation>
 <translation id="1756026472674246267">Abrir ligação num novo separador</translation>
@@ -15,9 +16,11 @@
 <translation id="2977472760057091832">Abrir ligação numa nova janela privada</translation>
 <translation id="3027988479108856431">Infelizmente, as suas definições do Yandex não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Yandex. Depois, clique em Continuar.</translation>
 <translation id="3259769196742189631">Validar</translation>
+<translation id="3270847123878663523">Des&amp;fazer reordenar</translation>
 <translation id="3402602684546832928">Selecionar um ficheiro de favoritos do Opera</translation>
 <translation id="3427342743765426898">&amp;Reeditar</translation>
 <translation id="3542768452570884558">Abrir ligação numa nova janela</translation>
+<translation id="3583757800736429874">Refa&amp;zer mover</translation>
 <translation id="3588820906588687999">Abrir imagem num novo separador</translation>
 <translation id="3732157130969736834">Adicionar ligação aos favoritos</translation>
 <translation id="3914946330804881301">Importados do Opera</translation>
@@ -41,6 +44,7 @@
 <translation id="588258955323874662">Ecrã inteiro</translation>
 <translation id="5916080360077521750">Infelizmente, as suas definições do Chrome não estão disponíveis enquanto o navegador estiver em execução. Para importar essas definições para o Vivaldi, guarde o seu trabalho e feche todas as janelas do Chrome. Depois, clique em Continuar.</translation>
 <translation id="6234173136417926046">Usar imagem como fundo da Speed Dial</translation>
+<translation id="6259156558325130047">Refa&amp;zer reordenar</translation>
 <translation id="630690498669249215">Ficheiro de favoritos do Opera</translation>
 <translation id="6477028720702061455">Selecionar a pasta do perfil do Opera para importar</translation>
 <translation id="6510706699590490869">&amp;Atualizar Vivaldi</translation>
@@ -51,6 +55,7 @@
 <translation id="7337881442233988129">Chromium</translation>
 <translation id="7715497554424665066">&amp;Ignorar atualização</translation>
 <translation id="8099620695029051217">Copiar endereço da página</translation>
+<translation id="8194797478851900357">Des&amp;fazer mover</translation>
 <translation id="8197810018650377191">Adicionar página aos favoritos</translation>
 <translation id="8624587806981488221">&amp;Recarregar imagem</translation>
 <translation id="864444594187862076">Opera 15+ (Developer)</translation>

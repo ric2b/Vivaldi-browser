@@ -12,11 +12,16 @@
 #import "ios/public/provider/chrome/browser/chrome_browser_provider.h"
 #include "net/url_request/url_request_context_getter.h"
 
+#if !defined(__has_feature) || !__has_feature(objc_arc)
+#error "This file requires ARC support."
+#endif
+
 TestingApplicationContext::TestingApplicationContext()
     : application_locale_("en"),
       local_state_(nullptr),
       chrome_browser_state_manager_(nullptr),
-      was_last_shutdown_clean_(false) {
+      was_last_shutdown_clean_(false),
+      is_shutting_down_(false) {
   DCHECK(!GetApplicationContext());
   SetApplicationContext(this);
 }
@@ -50,6 +55,14 @@ void TestingApplicationContext::SetLocalState(PrefService* local_state) {
 
 void TestingApplicationContext::SetLastShutdownClean(bool clean) {
   was_last_shutdown_clean_ = clean;
+}
+
+void TestingApplicationContext::SetIsShuttingDown() {
+  is_shutting_down_ = true;
+}
+
+bool TestingApplicationContext::IsShuttingDown() {
+  return is_shutting_down_;
 }
 
 void TestingApplicationContext::SetChromeBrowserStateManager(

@@ -346,16 +346,18 @@ NativeAppWindowCocoa::NativeAppWindowCocoa(
   // the window bounds and constraints can be set precisely.
   NSRect cocoa_bounds = GfxToCocoaBounds(
       params.GetInitialWindowBounds(gfx::Insets()));
-  NSWindow* window =
-      [[window_class alloc] initWithContentRect:cocoa_bounds
-                                      styleMask:GetWindowStyleMask()
-                                        backing:NSBackingStoreBuffered
-                                          defer:NO];
+  base::scoped_nsobject<NSWindow> window([[window_class alloc]
+      initWithContentRect:cocoa_bounds
+                styleMask:GetWindowStyleMask()
+                  backing:NSBackingStoreBuffered
+                    defer:NO]);
+  [window setReleasedWhenClosed:NO];  // Owned by the window controller.
 
   if (vivaldi::IsVivaldiRunning() && !has_frame_) {
     [(AppFramelessNSWindow*)window VivaldiSetAppWindowCocoa:this];
-    window.contentView = [[VivaldiContentView alloc] initWithFrame:NSZeroRect];
-    [window.contentView release];
+    window.get().contentView =
+        [[VivaldiContentView alloc] initWithFrame:NSZeroRect];
+    [window.get().contentView release];
   }
 
   std::string name;

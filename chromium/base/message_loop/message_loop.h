@@ -23,12 +23,15 @@
 #include "base/pending_task.h"
 #include "base/run_loop.h"
 #include "base/synchronization/lock.h"
+#include "base/threading/sequence_local_storage_map.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
 
 // TODO(sky): these includes should not be necessary. Nuke them.
 #if defined(OS_WIN)
 #include "base/message_loop/message_pump_win.h"
+#elif defined(OS_FUCHSIA)
+#include "base/message_loop/message_pump_fuchsia.h"
 #elif defined(OS_IOS)
 #include "base/message_loop/message_pump_io_ios.h"
 #elif defined(OS_POSIX)
@@ -365,6 +368,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
   // Adds the pending task to delayed_work_queue_.
   void AddToDelayedWorkQueue(PendingTask pending_task);
 
+  // Sweeps any cancelled tasks from the front of the delayed work queue and
+  // returns true if there is remaining work.
+  bool SweepDelayedWorkQueueAndReturnTrueIfStillHasWork();
+
   // Delete tasks that haven't run yet without running them.  Used in the
   // destructor to make sure all the task's destructors get called.  Returns
   // true if some work was done.
@@ -390,6 +397,10 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
   TaskQueue work_queue_;
 
 #if defined(OS_WIN)
+  // Helper to decrement the high resolution task count if |pending_task| is a
+  // high resolution task.
+  void DecrementHighResTaskCountIfNeeded(const PendingTask& pending_Task);
+
   // How many high resolution tasks are in the pending task queue. This value
   // increases by N every time we call ReloadWorkQueue() and decreases by 1
   // every time we call RunTask() if the task needs a high resolution timer.
@@ -449,6 +460,14 @@ class BASE_EXPORT MessageLoop : public MessagePump::Delegate,
 
   // An interface back to RunLoop state accessible by this RunLoop::Delegate.
   RunLoop::Delegate::Client* run_loop_client_ = nullptr;
+
+  // Holds data stored through the SequenceLocalStorageSlot API.
+  internal::SequenceLocalStorageMap sequence_local_storage_map_;
+
+  // Enables the SequenceLocalStorageSlot API within its scope.
+  // Instantiated in BindToCurrentThread().
+  std::unique_ptr<internal::ScopedSetSequenceLocalStorageMapForCurrentThread>
+      scoped_set_sequence_local_storage_map_for_current_thread_;
 
   DISALLOW_COPY_AND_ASSIGN(MessageLoop);
 };
@@ -550,6 +569,13 @@ class BASE_EXPORT MessageLoopForIO : public MessageLoop {
 #if defined(OS_WIN)
   typedef MessagePumpForIO::IOHandler IOHandler;
   typedef MessagePumpForIO::IOContext IOContext;
+#elif defined(OS_FUCHSIA)
+  typedef MessagePumpFuchsia::Watcher Watcher;
+  typedef MessagePumpFuchsia::FileDescriptorWatcher FileDescriptorWatcher;
+
+  enum Mode{WATCH_READ = MessagePumpFuchsia::WATCH_READ,
+            WATCH_WRITE = MessagePumpFuchsia::WATCH_WRITE,
+            WATCH_READ_WRITE = MessagePumpFuchsia::WATCH_READ_WRITE};
 #elif defined(OS_IOS)
   typedef MessagePumpIOSForIO::Watcher Watcher;
   typedef MessagePumpIOSForIO::FileDescriptorWatcher

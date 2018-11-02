@@ -24,10 +24,14 @@ bool MediaControlOverflowMenuButtonElement::WillRespondToMouseClickEvents() {
   return true;
 }
 
+const char* MediaControlOverflowMenuButtonElement::GetNameForHistograms()
+    const {
+  return "OverflowButton";
+}
+
 void MediaControlOverflowMenuButtonElement::DefaultEventHandler(Event* event) {
   if (event->type() == EventTypeNames::click) {
-    if (static_cast<MediaControlsImpl&>(GetMediaControls())
-            .OverflowMenuVisible()) {
+    if (GetMediaControls().OverflowMenuVisible()) {
       Platform::Current()->RecordAction(
           UserMetricsAction("Media.Controls.OverflowClose"));
     } else {
@@ -35,7 +39,7 @@ void MediaControlOverflowMenuButtonElement::DefaultEventHandler(Event* event) {
           UserMetricsAction("Media.Controls.OverflowOpen"));
     }
 
-    static_cast<MediaControlsImpl&>(GetMediaControls()).ToggleOverflowMenu();
+    GetMediaControls().ToggleOverflowMenu();
     event->SetDefaultHandled();
   }
 

@@ -26,15 +26,12 @@ class NetworkQualityEstimator;
 namespace data_reduction_proxy {
 
 TestDataReductionProxyConfig::TestDataReductionProxyConfig(
-    int params_flags,
-    unsigned int params_definitions,
     scoped_refptr<base::SingleThreadTaskRunner> io_task_runner,
     net::NetLog* net_log,
     DataReductionProxyConfigurator* configurator,
     DataReductionProxyEventCreator* event_creator)
     : TestDataReductionProxyConfig(
-          base::MakeUnique<TestDataReductionProxyParams>(params_flags,
-                                                         params_definitions),
+          base::MakeUnique<TestDataReductionProxyParams>(),
           io_task_runner,
           net_log,
           configurator,
@@ -56,7 +53,6 @@ TestDataReductionProxyConfig::TestDataReductionProxyConfig(
       network_quality_prohibitively_slow_(false),
       lofi_accuracy_recording_intervals_set_(false),
       is_captive_portal_(false) {
-  network_interfaces_.reset(new net::NetworkInterfaceList());
 }
 
 TestDataReductionProxyConfig::~TestDataReductionProxyConfig() {
@@ -70,16 +66,8 @@ bool TestDataReductionProxyConfig::IsNetworkQualityProhibitivelySlow(
       network_quality_estimator);
 }
 
-void TestDataReductionProxyConfig::GetNetworkList(
-    net::NetworkInterfaceList* interfaces,
-    int policy) {
-  for (size_t i = 0; i < network_interfaces_->size(); ++i)
-    interfaces->push_back(network_interfaces_->at(i));
-}
-
-void TestDataReductionProxyConfig::ResetParamFlagsForTest(int flags) {
-  config_values_ = base::MakeUnique<TestDataReductionProxyParams>(
-      flags, TestDataReductionProxyParams::HAS_EVERYTHING);
+void TestDataReductionProxyConfig::ResetParamFlagsForTest() {
+  config_values_ = base::MakeUnique<TestDataReductionProxyParams>();
 }
 
 TestDataReductionProxyParams* TestDataReductionProxyConfig::test_params() {
